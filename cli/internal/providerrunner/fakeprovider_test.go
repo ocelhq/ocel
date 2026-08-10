@@ -16,17 +16,10 @@ import (
 	"github.com/ocelhq/ocel/pkg/proto/deployments/v1/deploymentsv1connect"
 )
 
-// fakeProviderModeEnvVar selects the fake provider's behavior, propagated
-// through the child's environment by the test that spawns it.
 const fakeProviderModeEnvVar = "OCEL_TEST_FAKE_PROVIDER_MODE"
 
-// fakeProviderSockEnvVar carries the Unix socket path the fake provider
-// binds and reports in its readiness sentinel.
 const fakeProviderSockEnvVar = "OCEL_TEST_FAKE_PROVIDER_SOCK"
 
-// runFakeProvider is the entry point TestMain dispatches to when this test
-// binary is re-exec'd as a fake provider (see testmain_test.go). It never
-// returns normally except via the returned exit code.
 func runFakeProvider() int {
 	mode := os.Getenv(fakeProviderModeEnvVar)
 
@@ -35,7 +28,7 @@ func runFakeProvider() int {
 		fmt.Fprintln(os.Stderr, "fake provider: simulated startup failure")
 		return 7
 	case "never-ready":
-		select {} // blocks until killed; deliberately prints no sentinel
+		select {}
 	}
 
 	sockPath := os.Getenv(fakeProviderSockEnvVar)
@@ -59,8 +52,6 @@ func runFakeProvider() int {
 	})
 	mux.Handle(path, handler)
 
-	// Printed only once the listener is bound and the handler mounted, per
-	// the readiness sentinel contract.
 	fmt.Println(channel.FormatReadinessLine(channel.FormatUnixAddr(sockPath)))
 
 	srv := &http.Server{Handler: mux}
@@ -70,8 +61,6 @@ func runFakeProvider() int {
 	return 0
 }
 
-// fakeProviderServer implements deploymentsv1connect.DeploymentServiceHandler
-// for tests, driven entirely by mode.
 type fakeProviderServer struct {
 	deploymentsv1connect.UnimplementedDeploymentServiceHandler
 	mode  string
@@ -100,21 +89,15 @@ func (s *fakeProviderServer) Deploy(ctx context.Context, req *deploymentsv1.Depl
 			Event: &deploymentsv1.DeployEvent_Result{Result: &deploymentsv1.ResultEvent{Success: false, Error: "simulated deploy failure"}},
 		})
 	case "hang-deploy":
-		// Blocks long enough for the test to kill this process mid-call;
-		// the runner must observe the broken connection well before this
-		// elapses.
 		time.Sleep(30 * time.Second)
 		return nil
-	default: // "success"
+	default:
 		return stream.Send(&deploymentsv1.DeployEvent{
 			Event: &deploymentsv1.DeployEvent_Result{Result: &deploymentsv1.ResultEvent{Success: true}},
 		})
 	}
 }
 
-// Bootstrap mirrors Deploy's auth check and terminal-result behaviour so the
-// runner's Bootstrap driver can be exercised the same way. Deploy and
-// Bootstrap share one event stream by contract.
 func (s *fakeProviderServer) Bootstrap(ctx context.Context, req *deploymentsv1.BootstrapRequest, stream *connect.ServerStream[deploymentsv1.DeployEvent]) error {
 	info, _ := connect.CallInfoForHandlerContext(ctx)
 	var authHeader string

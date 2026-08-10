@@ -15,8 +15,6 @@ func write(t *testing.T, dir, contents string) {
 	}
 }
 
-// A project with no required variables must still run, so an absent dotfile is
-// the ordinary case rather than a failure.
 func TestLoad_AbsentFileIsNotAnError(t *testing.T) {
 	file, err := Load(t.TempDir())
 	if err != nil {
@@ -75,8 +73,6 @@ export EXPORTED=sourced
 	}
 }
 
-// A value's origin is one answer, so a dotfile line never refers to another
-// value. Interpolation is not a supported form and the '$' is literal.
 func TestLoad_DoesNotInterpolate(t *testing.T) {
 	dir := t.TempDir()
 	write(t, dir, "BASE=one\nDERIVED=$BASE/two\n")
@@ -90,10 +86,6 @@ func TestLoad_DoesNotInterpolate(t *testing.T) {
 	}
 }
 
-// `.env` is the file the framework already reads, so most of it is not Ocel's.
-// A key Ocel could never be asked for is ignored where it stands and the rest of
-// the file still loads — refusing the run over one would refuse the first
-// `ocel dev` in every project that already has this file.
 func TestLoad_IgnoresTheLinesItDoesNotOwn(t *testing.T) {
 	dir := t.TempDir()
 	write(t, dir, `
@@ -117,9 +109,6 @@ DATABASE_URL=postgres://localhost/app
 			t.Errorf("%s was taken from the file; want it left to whatever else reads it", ignored)
 		}
 	}
-	// A bundler's or a provider's name is one defineEnv may declare, so this
-	// file is where its value comes from in dev. Only Ocel's own namespace is
-	// not a key Ocel could be asked for.
 	for _, taken := range []string{"NEXT_PUBLIC_SITE_URL", "AWS_PROFILE", "LAMBDA_TASK_ROOT"} {
 		if _, ok := file.Values[taken]; !ok {
 			t.Errorf("%s was left in the file; want a declarable key read from it", taken)
@@ -130,11 +119,6 @@ DATABASE_URL=postgres://localhost/app
 	}
 }
 
-// A '#' outside quotes ends the value the same way the real dotenv parser ends
-// it, and a quote character — including a backtick, the third dotenv accepts —
-// keeps a value whole through one it would otherwise cut. Verified against
-// dotenv@17.4.2 (54 curated + ~20000 fuzzed lines, see wave6/scout-40-41.md);
-// there is no '\#' escape, so a backslash before '#' is not special.
 func TestLoad_StopsAnUnquotedValueAtAHash(t *testing.T) {
 	dir := t.TempDir()
 	write(t, dir, "PORT=3000 # dev only\nQUOTED=\"3000 # kept\"\nTIGHT=3000#nospace\nTICK=`3000 # kept`\nESC=3000 \\# not-an-escape\nURL=http://x.com/#frag\nHASHONLY=#only\nMULTI=v # c # d\nESCQUOTE=\"a\\\"b#c\"\nESCTICK=`a\\`b#c`\n")
@@ -152,8 +136,6 @@ func TestLoad_StopsAnUnquotedValueAtAHash(t *testing.T) {
 		"URL":      "http://x.com/",
 		"HASHONLY": "",
 		"MULTI":    "v",
-		// A backslash escapes a quote inside a quoted value, so the token runs
-		// past it to the real close and the '#' stays in the value.
 		"ESCQUOTE": `a\"b#c`,
 		"ESCTICK":  "a\\`b#c",
 	}
@@ -164,13 +146,6 @@ func TestLoad_StopsAnUnquotedValueAtAHash(t *testing.T) {
 	}
 }
 
-// The tail after a quoted token decides whether the quote wins: dotenv only
-// leaves a value whole when nothing but whitespace and an optional comment
-// follows the closing quote. Otherwise it falls back to the '#'-cut branch.
-//
-// BACKTRACK pins the other half of that rule: when the tail after the last
-// candidate close fails, an earlier escaped quote is still a candidate, exactly
-// as dotenv's regex backtracks into its alternation.
 func TestLoad_AQuotedTokenOnlyWinsWhenNothingFollowsButAComment(t *testing.T) {
 	dir := t.TempDir()
 	write(t, dir, "TRAILING=\"a # b\" c\nBACKTRACK='#\\'# x'y\n")
@@ -187,9 +162,6 @@ func TestLoad_AQuotedTokenOnlyWinsWhenNothingFollowsButAComment(t *testing.T) {
 	}
 }
 
-// dotenv unescapes '\r' the same way it does '\n', only inside a double-quoted
-// value. A single-quoted or backtick-quoted value has no escapes at all: the
-// literal two characters survive.
 func TestLoad_UnescapesCarriageReturnInADoubleQuotedValue(t *testing.T) {
 	dir := t.TempDir()
 	write(t, dir, "A=\"a\\rb\"\nB='a\\rb'\nC=`a\\rb`\n")
@@ -209,12 +181,6 @@ func TestLoad_UnescapesCarriageReturnInADoubleQuotedValue(t *testing.T) {
 	}
 }
 
-// `export` is separated from the key by whitespace, not by one space: a file
-// written for a shell may use a tab. dotenv@17.4.2 reads `export\tB=2` as
-// {"B":"2"}; Ocel read the key as `export\tB`, failed it as undeclarable, and
-// dropped the line without even reporting it — a value visible in the file and
-// missing from the run, which is the outcome the `export` handling exists to
-// prevent.
 func TestLoad_ReadsAnExportSeparatedByAnyWhitespace(t *testing.T) {
 	dir := t.TempDir()
 	write(t, dir, "export\tTABBED=1\nexport   SPACED=2\nexport\t  MIXED=3\nEXPORTED_NAME=4\nexportABC=5\nexport=6\n")
@@ -232,8 +198,6 @@ func TestLoad_ReadsAnExportSeparatedByAnyWhitespace(t *testing.T) {
 	if len(file.Values) != len(want) {
 		t.Errorf("Values = %v, want exactly %v", file.Values, want)
 	}
-	// `export` ends at whitespace and nowhere else: dotenv reads `exportABC=5`
-	// as the key `exportABC`, which Ocel could never be asked for.
 	if _, taken := file.Values["ABC"]; taken {
 		t.Errorf("Values = %v, want exportABC left alone: the keyword needs a separator", file.Values)
 	}
@@ -242,11 +206,6 @@ func TestLoad_ReadsAnExportSeparatedByAnyWhitespace(t *testing.T) {
 	}
 }
 
-// A `.env` written by PowerShell redirection starts with a UTF-8 BOM. JS treats
-// U+FEFF as whitespace, so dotenv@17.4.2 reads a BOM-prefixed `A=1` as {"A":"1"};
-// Go's TrimSpace does not, so the key carried the mark, failed as undeclarable,
-// and the file's first line — usually the first value a developer sets —
-// vanished in silence.
 func TestLoad_ReadsPastAByteOrderMark(t *testing.T) {
 	dir := t.TempDir()
 	write(t, dir, "\ufeffDATABASE_URL=postgres://localhost/app\nAPI_TOKEN=t\nQUOTED=\"a # b\"\ufeff # c\nexport\ufeffBOMSEP=1\n\ufeff# a comment\n\ufeff\n")
@@ -261,27 +220,17 @@ func TestLoad_ReadsPastAByteOrderMark(t *testing.T) {
 	if got, want := file.Values["API_TOKEN"], "t"; got != want {
 		t.Errorf("API_TOKEN = %q, want %q", got, want)
 	}
-	// The mark is whitespace wherever it stands, including in the tail that
-	// decides whether a quoted token wins.
 	if got, want := file.Values["QUOTED"], "a # b"; got != want {
 		t.Errorf("QUOTED = %q, want %q", got, want)
 	}
-	// It is whitespace to `export` too: dotenv reads `export<BOM>BOMSEP=1` as
-	// {"BOMSEP":"1"}, so the keyword's separator ends there as well.
 	if got, want := file.Values["BOMSEP"], "1"; got != want {
 		t.Errorf("BOMSEP = %q, want %q", got, want)
 	}
-	// A line that is nothing but a mark, or a mark then a comment, assigns
-	// nothing and claims nothing: it is not an unreadable line.
 	if len(file.Unreadable) != 0 {
 		t.Errorf("Unreadable = %v, want nothing", file.Unreadable)
 	}
 }
 
-// dotenv normalises `\r\n?` to `\n` before it parses, so a lone CR ends a line
-// for it as surely as a newline does. Splitting only on '\n' made one key's
-// value swallow the next key's whole line — the second key silently absent and
-// the first silently wrong, with nothing reported.
 func TestLoad_SplitsLinesOnALoneCarriageReturn(t *testing.T) {
 	dir := t.TempDir()
 	write(t, dir, "A_KEY=1\rB_KEY=2\r")
@@ -304,10 +253,6 @@ func TestLoad_SplitsLinesOnALoneCarriageReturn(t *testing.T) {
 	}
 }
 
-// An editor that does not end the file with a newline is ordinary, and the last
-// line of a `.env` is an assignment like any other. dotenv@17.4.2 reads
-// "A_KEY=1\nB_KEY=2" as {"A_KEY":"1","B_KEY":"2"}; dropping the unterminated
-// tail would lose the last value in silence.
 func TestLoad_ReadsALastLineWithNoTerminator(t *testing.T) {
 	for name, contents := range map[string]string{
 		"lf":  "A_KEY=1\nB_KEY=2",
@@ -332,10 +277,6 @@ func TestLoad_ReadsALastLineWithNoTerminator(t *testing.T) {
 	}
 }
 
-// U+0085 NEL is whitespace to Go and not to JS, so `space` must exclude it or
-// Ocel reads a line the framework does not: dotenv@17.4.2 reads
-// "export\u0085A_KEY=v" as {} — the keyword has no separator — and keeps a
-// trailing NEL inside the value. Both divergences are silent.
 func TestLoad_TreatsNextLineAsPartOfTheLineNotAsWhitespace(t *testing.T) {
 	dir := t.TempDir()
 	write(t, dir, "export\u0085EXPORTED=1\n\u0085LEADING=2\nTAIL=3\u0085\nQUOTED=\"a # b\"\u0085#c\n")
@@ -344,8 +285,6 @@ func TestLoad_TreatsNextLineAsPartOfTheLineNotAsWhitespace(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Load: %v", err)
 	}
-	// Neither `export\u0085EXPORTED` nor `\u0085LEADING` is a key dotenv would
-	// hand back, so neither is a key Ocel may claim.
 	if _, taken := file.Values["EXPORTED"]; taken {
 		t.Errorf("Values = %v, want export\\u0085EXPORTED left alone: NEL is not a separator", file.Values)
 	}
@@ -360,9 +299,6 @@ func TestLoad_TreatsNextLineAsPartOfTheLineNotAsWhitespace(t *testing.T) {
 	}
 }
 
-// Line numbers are the whole of what an unreadable line discloses, so they must
-// count the lines the file actually has however it ends them — a CRLF file and a
-// lone-CR file with the same content report the same number.
 func TestLoad_NumbersUnreadableLinesTheSameUnderEveryLineEnding(t *testing.T) {
 	for name, contents := range map[string]string{
 		"lf":   "A_KEY=1\nsk-live-must-not-appear\nB_KEY=2\n",
@@ -387,9 +323,6 @@ func TestLoad_NumbersUnreadableLinesTheSameUnderEveryLineEnding(t *testing.T) {
 	}
 }
 
-// A key set twice is not ambiguous enough to stop a run over: the dotenv parser
-// the framework uses answers with the last one, so answering differently would
-// mean the app and Ocel read the same file two ways.
 func TestLoad_TakesTheLastOfARepeatedKey(t *testing.T) {
 	dir := t.TempDir()
 	write(t, dir, "API_TOKEN=first\nAPI_TOKEN=second\n")
@@ -403,9 +336,6 @@ func TestLoad_TakesTheLastOfARepeatedKey(t *testing.T) {
 	}
 }
 
-// A line that assigns nothing is nobody's — not Ocel's and not the framework's —
-// so it is reported rather than passed over in silence, which is what makes a
-// pasted token or a typo visible.
 func TestLoad_ReportsTheLinesThatAssignNothing(t *testing.T) {
 	dir := t.TempDir()
 	write(t, dir, "DATABASE_URL=postgres://localhost/app\nsk-live-must-not-appear\n\n# comment\nalso nothing\n")
@@ -423,9 +353,6 @@ func TestLoad_ReportsTheLinesThatAssignNothing(t *testing.T) {
 	}
 }
 
-// Nothing the parser hands back carries a line's contents: what it could not
-// read is reported by number, because an unreadable line is exactly the shape a
-// pasted token has and this is the one file whose contents nothing else may see.
 func TestLoad_NeverHandsBackALinesContents(t *testing.T) {
 	dir := t.TempDir()
 	write(t, dir, "sk-live-must-not-appear\nexport sk-live-either\n")

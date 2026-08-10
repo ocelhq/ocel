@@ -12,24 +12,12 @@ import (
 	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
 )
 
-// frameworkNext marks a ManifestFunction whose routes are fronted by the
-// Next.js edge worker. It matches the value the adapter writes into each
-// function's config.json.
 const frameworkNext = string(edge.FrameworkNext)
 
-// workerOutputName is the logical name one app's deployed worker URL is
-// reported under in the stack outputs. It is derived from the app so every app
-// in a project gets its own.
 func workerOutputName(app string) string {
 	return sanitizeWorkerName(app) + "-worker"
 }
 
-// deployEdgeWorker creates or updates the edge worker fronting each of this
-// project's apps. The provider decides which apps are deployed, where, and
-// under what names; each framework's registry entry decides what its worker
-// contains, pulling the deploy values it needs through a resolver. An app whose
-// framework registers no worker deploys nothing here and is served from its own
-// Function URL.
 func deployEdgeWorker(ctx context.Context, cfg Config, manifest *deploymentsv1.Manifest, outputs []*deploymentsv1.ResourceOutput, progress func(string)) ([]*deploymentsv1.ResourceOutput, error) {
 	warnOrphanedWorker(ctx, cfg, progress)
 
@@ -98,9 +86,6 @@ func deployEdgeWorker(ctx context.Context, cfg Config, manifest *deploymentsv1.M
 	return workerOutputs, nil
 }
 
-// manifestApps is the project's apps in manifest order. A manifest predating
-// the app list yields one app per distinct app name its functions carry, so
-// every path below sees a single shape.
 func manifestApps(manifest *deploymentsv1.Manifest) []*deploymentsv1.ManifestApp {
 	if apps := manifest.GetApps(); len(apps) > 0 {
 		return apps
@@ -116,10 +101,6 @@ func manifestApps(manifest *deploymentsv1.Manifest) []*deploymentsv1.ManifestApp
 	return apps
 }
 
-// workerApps are the apps fronted by an edge worker, in manifest order. An app
-// whose framework wants a worker but which emitted no functions — a Next.js
-// static export, say — is not one of them: it produced no build output for a
-// worker to route to, so it deploys as its static assets alone.
 func workerApps(manifest *deploymentsv1.Manifest) []*deploymentsv1.ManifestApp {
 	var apps []*deploymentsv1.ManifestApp
 	for _, app := range manifestApps(manifest) {
@@ -130,8 +111,6 @@ func workerApps(manifest *deploymentsv1.Manifest) []*deploymentsv1.ManifestApp {
 	return apps
 }
 
-// appRoutes are the framework-native route ids one app's worker serves, in
-// manifest order: its own functions, and only those its framework fronts.
 func appRoutes(functions []*deploymentsv1.ManifestFunction, app *deploymentsv1.ManifestApp) []string {
 	var routes []string
 	for _, fn := range functions {
@@ -142,25 +121,12 @@ func appRoutes(functions []*deploymentsv1.ManifestFunction, app *deploymentsv1.M
 	return routes
 }
 
-// appsDirName mirrors the builder's per-app namespacing of the build output.
-// Each app owns <ArtifactRoot>/apps/<app>, holding its functions, static
-// assets, cache entries and routing manifest.
-//
-// This name is a cross-process, cross-language contract with no single home:
-// cli/platform/src/builder/layout.ts (APPS_DIR) writes the layout,
-// cli/internal/appbuilder (appsDirName) discovers functions in it, and this
-// package reads each app's artifacts from it. Change one, change all three.
 const appsDirName = "apps"
 
-// appArtifactRoot is the subtree of the build output belonging to one app —
-// what an edge assembly and the prerender upload read their inputs from.
 func appArtifactRoot(artifactRoot, app string) string {
 	return filepath.Join(artifactRoot, appsDirName, app)
 }
 
-// routeID is the framework-native identity a worker dispatches to. The manifest
-// carries it separately from the infra-safe logical_name that URL outputs are
-// keyed by; a function predating route ids falls back to its logical name.
 func routeID(fn *deploymentsv1.ManifestFunction) string {
 	if id := fn.GetRouteId(); id != "" {
 		return id
@@ -168,8 +134,6 @@ func routeID(fn *deploymentsv1.ManifestFunction) string {
 	return fn.GetLogicalName()
 }
 
-// functionURLsByLogicalName indexes the realized Function URLs by the logical
-// name each was reported under.
 func functionURLsByLogicalName(outputs []*deploymentsv1.ResourceOutput) map[string]string {
 	urls := make(map[string]string)
 	for _, o := range outputs {
@@ -180,10 +144,6 @@ func functionURLsByLogicalName(outputs []*deploymentsv1.ResourceOutput) map[stri
 	return urls
 }
 
-// appFunctionURLsByRoute joins the two namespaces a deploy names functions in:
-// stack outputs are keyed by logical name, workers dispatch by route id. A
-// route id is unique only within its app — two apps both serve "/" — so the
-// join is scoped to one app.
 func appFunctionURLsByRoute(functions []*deploymentsv1.ManifestFunction, app string, urlByLogical map[string]string) map[string]string {
 	result := make(map[string]string)
 	for _, fn := range functions {
@@ -197,9 +157,6 @@ func appFunctionURLsByRoute(functions []*deploymentsv1.ManifestFunction, app str
 	return result
 }
 
-// deployResolver answers a framework's worker assembly from this deploy's
-// manifest and realized stack outputs, so the assembly receives exactly the
-// values it asked for rather than every output in the deploy.
 type deployResolver struct {
 	cfg      Config
 	manifest *deploymentsv1.Manifest
@@ -215,11 +172,6 @@ func (d *deployResolver) FunctionURL(routeID string) (string, error) {
 	return url, nil
 }
 
-// EdgeCredentials returns the edge reader's IAM credentials for the worker to
-// sign its Function-URL forwards with, and whether they are configured. Both
-// empty — a substrate whose bootstrap predates edge credentials — reads as
-// not-configured, never an error: such a worker forwards unsigned, which only
-// reaches a Lambda that is still public.
 func (d *deployResolver) EdgeCredentials() (edge.Credentials, bool) {
 	if d.cfg.EdgeAccessKeyID == "" || d.cfg.EdgeSecretKey == "" {
 		return edge.Credentials{}, false
@@ -230,9 +182,6 @@ func (d *deployResolver) EdgeCredentials() (edge.Credentials, bool) {
 	}, true
 }
 
-// domainClassKeyFor is the Manifest.domains key an environment class reads its
-// custom hostname from: production reads a plain hostname, preview reads a
-// wildcard (e.g. "*.preview.app.com") its per-pointer subdomains live under.
 func domainClassKeyFor(class deploymentsv1.Environment_Class) string {
 	if class == deploymentsv1.Environment_CLASS_PREVIEW {
 		return "preview"
@@ -240,16 +189,6 @@ func domainClassKeyFor(class deploymentsv1.Environment_Class) string {
 	return "production"
 }
 
-// workerDomains resolves the hostnames each worker-backed app *declares*, keyed
-// by app name and absent where the app takes the edge's vendor subdomain. An
-// app's own domains win.
-//
-// The project-level domains then apply by class. A production hostname set (an
-// apex plus its aliases) cannot be split between two apps, so it applies only
-// when the project has exactly one worker-backed app and is ambiguous otherwise —
-// Ocel does not guess which app owns it. A preview wildcard is claimed by the
-// whole project and covers every app and pointer under it (previewHostnames
-// gives each app its own label), so it applies to every app that declares none.
 func workerDomains(cfg Config, manifest *deploymentsv1.Manifest, apps []*deploymentsv1.ManifestApp) (map[string][]string, error) {
 	if cfg.Class != deploymentsv1.Environment_CLASS_PRODUCTION &&
 		cfg.Class != deploymentsv1.Environment_CLASS_PREVIEW {
@@ -286,8 +225,6 @@ func workerDomains(cfg Config, manifest *deploymentsv1.Manifest, apps []*deploym
 	}
 }
 
-// quotedList renders names for an error message: `"a"`, `"a" and "b"`, or
-// `"a", "b" and "c"`.
 func quotedList(names []string) string {
 	quoted := make([]string, len(names))
 	for i, n := range names {
@@ -299,28 +236,12 @@ func quotedList(names []string) string {
 	return strings.Join(quoted[:len(quoted)-1], ", ") + " and " + quoted[len(quoted)-1]
 }
 
-// maxWorkerNameLen is the platform limit on an edge deployment name.
 const maxWorkerNameLen = 63
 
-// projectWorkerStem is the prefix every worker Ocel deploys for a project
-// carries: "ocel-<slug>--". The doubled hyphen is the project boundary, and it
-// is what makes a worker name answer "whose is this?" exactly: sanitizeWorkerName
-// collapses every run of out-of-charset characters to a single hyphen, so no
-// slug, environment or app segment can contain "--", and a sibling project
-// slugged "<slug>-something" renders "ocel-<slug>-something--…", which is not
-// under this stem. Without it the slug's own hyphens are indistinguishable from
-// the segment boundary, and one project's claim check, route pruning and
-// teardown all reach the sibling's workers. Pure.
 func projectWorkerStem(slug string) string {
 	return sanitizeWorkerName("ocel-"+slug) + "--"
 }
 
-// workerScriptName is the deterministic deployment identity of one app's
-// worker: the project and environment, then the app. The app segment is what
-// keeps two apps in one project apart, so the project-and-environment segment
-// absorbs any clamping needed to fit the platform limit and the app segment is
-// carried whole. Clamping can eat into the project boundary, which reads as
-// nobody's worker rather than someone else's — see ProjectOwnsWorker.
 func workerScriptName(slug, env, app string) string {
 	appSegment := sanitizeWorkerName(app)
 	budget := maxWorkerNameLen - len(appSegment) - 1
@@ -341,17 +262,10 @@ func clamp(name string, max int) string {
 	return trimHyphens(name[:max])
 }
 
-// legacyWorkerName is the unqualified name a project's single worker was
-// deployed under before script names were qualified by app.
 func legacyWorkerName(stackName string) string {
 	return sanitizeWorkerName("ocel-" + stackName)
 }
 
-// warnOrphanedWorker reports a worker still living at the previous unqualified
-// name. Deploys no longer address it, but it keeps serving, so it is named
-// rather than left behind silently — and never deleted, because only the user
-// knows whether anything still points at it. An edge that cannot answer, or
-// fails to, simply produces no warning.
 func warnOrphanedWorker(ctx context.Context, cfg Config, progress func(string)) {
 	if cfg.Edge == nil || progress == nil {
 		return
@@ -367,11 +281,6 @@ func warnOrphanedWorker(ctx context.Context, cfg Config, progress func(string)) 
 	progress(fmt.Sprintf("Warning: an edge worker remains at %q, the name this project deployed under before workers were named per app. Deploys no longer update it; delete it once nothing points at it.", name))
 }
 
-// sanitizeWorkerName lowers an arbitrary identity into an edge deployment
-// name: lowercase, every character outside [a-z0-9] replaced with '-',
-// leading/trailing hyphens trimmed, and clamped to the platform limit. The
-// result is deterministic so redeploys of the same project+env update the
-// script in place.
 func sanitizeWorkerName(s string) string {
 	buf := make([]byte, 0, len(s))
 	for _, r := range s {
@@ -381,7 +290,6 @@ func sanitizeWorkerName(s string) string {
 		case r >= 'A' && r <= 'Z':
 			buf = append(buf, byte(r-'A'+'a'))
 		default:
-			// Collapse any run of out-of-charset characters into a single hyphen.
 			if len(buf) > 0 && buf[len(buf)-1] != '-' {
 				buf = append(buf, '-')
 			}

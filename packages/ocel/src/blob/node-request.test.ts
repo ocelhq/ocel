@@ -32,8 +32,6 @@ function fakeContext(overrides: Partial<Record<string, unknown>> = {}) {
   return { ctx, presignUpload };
 }
 
-// A Node IncomingMessage-like object: path-only url, a header bag (not a
-// Headers instance), and a readable body stream.
 function nodeReq(
   pathWithQuery: string,
   body: unknown,
@@ -49,8 +47,6 @@ function nodeReq(
   stream.url = pathWithQuery;
   stream.method = pathWithQuery.includes("op=poll") ? "GET" : "POST";
   stream.headers = { host };
-  // express.json() has already consumed the stream and left the parsed value
-  // on req.body; the raw stream would now yield nothing.
   if (drained) stream.body = body;
   return stream;
 }

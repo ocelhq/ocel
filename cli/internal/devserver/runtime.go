@@ -15,11 +15,6 @@ import (
 	bucketsv1 "github.com/ocelhq/ocel/pkg/proto/buckets/v1"
 )
 
-// runtimeShim is the dev implementation of runtime.v1.BucketService. It owns
-// no cloud mechanics itself: on PresignUpload it forwards to the Ocel API's
-// presign endpoint (authenticated with the leader's user token + projectID),
-// honoring the invariant that the CLI never talks to the cloud store directly.
-// The SDK dials this over Connect at the injected dev server address.
 type runtimeShim struct {
 	apiURL     string
 	token      string
@@ -36,8 +31,6 @@ func newRuntimeShim(apiURL, token, projectID string) *runtimeShim {
 	}
 }
 
-// presignFile mirrors one PresignFile on the wire to the Ocel API. size is a
-// JSON number (files are single-PUT, well within a safe integer).
 type presignFile struct {
 	Key      string `json:"key"`
 	Name     string `json:"name"`
@@ -46,10 +39,8 @@ type presignFile struct {
 }
 
 type presignRequestBody struct {
-	ProjectID string `json:"projectId"`
-	Bucket    string `json:"bucket"`
-	// Metadata is the opaque SDK-encoded bytes; encoding/json renders []byte as
-	// base64, which the Ocel API stores verbatim.
+	ProjectID          string        `json:"projectId"`
+	Bucket             string        `json:"bucket"`
 	Metadata           []byte        `json:"metadata"`
 	Files              []presignFile `json:"files"`
 	ContentDisposition string        `json:"contentDisposition"`
@@ -68,10 +59,6 @@ type presignResponseBody struct {
 	Files     []presignedTarget `json:"files"`
 }
 
-// PresignUpload forwards the SDK's presign request to the Ocel API and returns
-// its response verbatim. The API derives (org, project, user) from the token,
-// prepends the tenancy prefix, persists the pending session, and mints the
-// presigned targets.
 func (s *runtimeShim) PresignUpload(ctx context.Context, req *bucketsv1.PresignUploadRequest) (*bucketsv1.PresignUploadResponse, error) {
 	files := make([]presignFile, 0, len(req.GetFiles()))
 	for _, f := range req.GetFiles() {
@@ -124,9 +111,6 @@ func (s *runtimeShim) PresignUpload(ctx context.Context, req *bucketsv1.PresignU
 	return &bucketsv1.PresignUploadResponse{SessionId: decoded.SessionID, Files: targets}, nil
 }
 
-// signedCompletion is the {sessionId, signature, file} payload a completion
-// callback carries and VerifyUploadSignature checks - the request body for both
-// the app route's op=callback and the Ocel API's /api/blob/verify.
 type signedCompletion struct {
 	SessionID string        `json:"sessionId"`
 	Signature string        `json:"signature"`
@@ -140,18 +124,11 @@ type completedFile struct {
 	MimeType string `json:"mimeType"`
 }
 
-// verifyResponseBody mirrors POST /api/blob/verify's response. Metadata is
-// JSON-base64 on the wire; the API returns the session's verbatim stored
-// metadata bytes, which decode straight into the proto's bytes field.
 type verifyResponseBody struct {
 	Valid    bool   `json:"valid"`
 	Metadata []byte `json:"metadata"`
 }
 
-// VerifyUploadSignature forwards the route's completion-signature check to the
-// Ocel API, which re-derives the per-session HMAC and constant-time compares.
-// The secret never leaves the API; on a valid signature the stored metadata
-// rides back here and out to the env-blind route.
 func (s *runtimeShim) VerifyUploadSignature(ctx context.Context, req *bucketsv1.VerifyUploadSignatureRequest) (*bucketsv1.VerifyUploadSignatureResponse, error) {
 	f := req.GetFile()
 	body, err := json.Marshal(signedCompletion{
@@ -195,8 +172,6 @@ type statusResponseBody struct {
 	Error string `json:"error"`
 }
 
-// GetUploadStatus forwards op=poll to the Ocel API, which reads the shared
-// store and aggregates the per-file states into one session state.
 func (s *runtimeShim) GetUploadStatus(ctx context.Context, req *bucketsv1.GetUploadStatusRequest) (*bucketsv1.GetUploadStatusResponse, error) {
 	httpReq, err := http.NewRequestWithContext(ctx, http.MethodGet, s.apiEndpoint("/api/blob/status")+"?sessionId="+url.QueryEscape(req.GetSessionId()), nil)
 	if err != nil {
@@ -233,18 +208,14 @@ func uploadStateFromString(s string) bucketsv1.UploadState {
 	}
 }
 
-// apiEndpoint joins the configured Ocel API base URL with an absolute path.
 func (s *runtimeShim) apiEndpoint(path string) string {
 	return endpoint(s.apiURL, path)
 }
 
-// endpoint joins a base URL (trailing slash trimmed) with an absolute path.
 func endpoint(base, path string) string {
 	return strings.TrimRight(base, "/") + path
 }
 
-// authorize sets the JSON content type and the leader's bearer token on an
-// Ocel API request.
 func (s *runtimeShim) authorize(req *http.Request) {
 	req.Header.Set("Content-Type", "application/json")
 	if s.token != "" {

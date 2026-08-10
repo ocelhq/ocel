@@ -125,8 +125,6 @@ func TestCanonicalNodeVersion(t *testing.T) {
 	}
 }
 
-// readArchive extracts an archive back into a name -> contents map, for tests
-// that need to assert on what buildBytecodeArchive actually wrote.
 func readArchive(t *testing.T, data []byte) map[string]string {
 	t.Helper()
 	gr, err := gzip.NewReader(bytes.NewReader(data))
@@ -154,10 +152,6 @@ func readArchive(t *testing.T, data []byte) map[string]string {
 	return out
 }
 
-// TestBuildBytecodeArchive_RoundTrip proves the archive built from a compile
-// cache directory reads back with the standard library's own tar+gzip readers
-// and preserves the version-hash subdirectory Node nests its output under,
-// using relative paths only.
 func TestBuildBytecodeArchive_RoundTrip(t *testing.T) {
 	dir := t.TempDir()
 	versionDir := filepath.Join(dir, "abc123-hash")
@@ -196,9 +190,6 @@ func TestBuildBytecodeArchive_RoundTrip(t *testing.T) {
 	}
 }
 
-// TestBuildBytecodeArchive_SkipsNonRegularFiles proves a symlink planted in
-// the compile cache directory is left out of the archive rather than
-// followed or stored as a link, since only regular files are meant to travel.
 func TestBuildBytecodeArchive_SkipsNonRegularFiles(t *testing.T) {
 	dir := t.TempDir()
 	target := filepath.Join(dir, "real.bin")
@@ -228,10 +219,6 @@ func TestBuildBytecodeArchive_SkipsNonRegularFiles(t *testing.T) {
 	}
 }
 
-// TestBuildBytecodeArchive_MissingDirectoryIsEmptyNotAnError proves a
-// function that has not written a compile cache yet (or whose /tmp was wiped)
-// gets an empty archive back, not a failure the caller has to distinguish
-// from a real error before deciding whether to skip the upload.
 func TestBuildBytecodeArchive_MissingDirectoryIsEmptyNotAnError(t *testing.T) {
 	dir := filepath.Join(t.TempDir(), "does-not-exist")
 
@@ -264,9 +251,6 @@ func TestExceedsBytecodeCacheCeiling(t *testing.T) {
 	}
 }
 
-// fakeBytecodeStore stands in for S3, recording what the upload asked of it so
-// a test can assert on the exact bucket and key rather than on the fact that a
-// method was called.
 type fakeBytecodeStore struct {
 	mu      sync.Mutex
 	exists  bool
@@ -311,8 +295,6 @@ func (f *fakeBytecodeStore) getObject(_ context.Context, bucket, key string) (io
 	return f.getBody, f.getSize, nil
 }
 
-// cacheDirWith writes a compile cache directory with one file in it and
-// returns the path, which is what node's flush ack would name.
 func cacheDirWith(t *testing.T, contents string) string {
 	t.Helper()
 	dir := t.TempDir()
@@ -322,9 +304,6 @@ func cacheDirWith(t *testing.T, contents string) string {
 	return dir
 }
 
-// uploadFixture assembles an upload whose flush ack and S3 are both under the
-// test's control, wired to a fixed bucket and key exactly as the resolution
-// would hand them to it, and reports how many times the flush was asked for.
 func uploadFixture(store bytecodeStore, ack compileCacheFlushedPayload, ackOK bool) (*bytecodeUpload, *int) {
 	flushes := 0
 	u := &bytecodeUpload{
@@ -340,12 +319,6 @@ func uploadFixture(store bytecodeStore, ack compileCacheFlushedPayload, ackOK bo
 	return u, &flushes
 }
 
-// What node reports from getCompileCacheDir is not NODE_COMPILE_CACHE but a
-// subdirectory of it, named for the node version, architecture, a hash of the
-// V8 flags in force and the uid. The read leg extracts into the root, so an
-// archive rooted at what node reported arrives one directory above where node
-// looks for it and every entry misses — the whole cache delivered, none of it
-// read.
 func TestBytecodeUpload_ArchiveKeepsTheSubdirectoryNodeReports(t *testing.T) {
 	root := t.TempDir()
 	nodeDir := filepath.Join(root, "v24.3.1-arm64-9ac5647c-993")
@@ -394,8 +367,6 @@ func TestBytecodeUpload_PutsToTheGivenBucketAndKey(t *testing.T) {
 	}
 }
 
-// The HEAD runs before the flush, so an instance that lost the upload race
-// finds out for the price of a HEAD alone: no flush, and so no archive.
 func TestBytecodeUpload_SkipsThePutWhenTheObjectAlreadyExists(t *testing.T) {
 	dir := cacheDirWith(t, "compiled bytes")
 	store := &fakeBytecodeStore{exists: true}
@@ -414,9 +385,6 @@ func TestBytecodeUpload_SkipsThePutWhenTheObjectAlreadyExists(t *testing.T) {
 	}
 }
 
-// A flush that node could not honour — an old runtime, or no cache written —
-// means there is nothing on disk worth uploading, so the PUT never happens.
-// The HEAD still runs: it is checked before the flush is even asked for.
 func TestBytecodeUpload_SkipsWhenTheFlushAckIsNotOK(t *testing.T) {
 	cases := []struct {
 		name  string
@@ -443,9 +411,6 @@ func TestBytecodeUpload_SkipsWhenTheFlushAckIsNotOK(t *testing.T) {
 	}
 }
 
-// The deadline is already inside the margin the runtime needs to call /next, so
-// there is no time to spend and the attempt never starts — not even the flush,
-// which would hold the loop open on a child that owes the platform an answer.
 func TestBytecodeUpload_SkipsEntirelyWhenTheBudgetIsNonPositive(t *testing.T) {
 	store := &fakeBytecodeStore{}
 	u, flushes := uploadFixture(store, compileCacheFlushedPayload{Dir: t.TempDir(), OK: true}, true)
@@ -462,9 +427,6 @@ func TestBytecodeUpload_SkipsEntirelyWhenTheBudgetIsNonPositive(t *testing.T) {
 	}
 }
 
-// An empty cache directory is the shape of a function whose /tmp was wiped or
-// whose flush produced nothing; uploading an empty archive would poison every
-// later instance that rehydrated from it.
 func TestBytecodeUpload_SkipsAnEmptyCacheDirectory(t *testing.T) {
 	store := &fakeBytecodeStore{}
 	u, _ := uploadFixture(store, compileCacheFlushedPayload{Dir: t.TempDir(), OK: true}, true)
@@ -479,9 +441,6 @@ func TestBytecodeUpload_SkipsAnEmptyCacheDirectory(t *testing.T) {
 	}
 }
 
-// An oversized cache is rejected off the stat pass, so nothing is read or
-// compressed on the way to the decision — which is why a sparse file the size of
-// the ceiling costs this test nothing.
 func TestBytecodeUpload_SkipsWhenTheCacheIsOverTheCeiling(t *testing.T) {
 	dir := t.TempDir()
 	f, err := os.Create(filepath.Join(dir, "big.blob"))
@@ -510,8 +469,6 @@ func TestBytecodeUpload_SkipsWhenTheCacheIsOverTheCeiling(t *testing.T) {
 	}
 }
 
-// Nothing S3 says can reach the invocation, which has already been answered by
-// the time this runs. A failure is a log line and the end of the attempt.
 func TestBytecodeUpload_SwallowsStoreErrors(t *testing.T) {
 	cases := []struct {
 		name  string
@@ -523,18 +480,11 @@ func TestBytecodeUpload_SwallowsStoreErrors(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			u, _ := uploadFixture(tc.store, compileCacheFlushedPayload{Dir: cacheDirWith(t, "x"), OK: true}, true)
-			u.run(context.Background()) // must simply return
+			u.run(context.Background())
 		})
 	}
 }
 
-// The same context bounds the HEAD and the PUT, so whichever one S3 hangs on is
-// cancelled at the budget rather than running past the deadline the platform is
-// about to enforce.
-//
-// The budget is spent from inside the blocked call rather than by a wall clock
-// the flush, the stat pass and the gzip ahead of it have to beat: the store is
-// reached first and the budget ends second, however slow the box is.
 func TestBytecodeUpload_BoundsBothStoreCallsByTheBudget(t *testing.T) {
 	for _, blockOn := range []string{"head", "put"} {
 		t.Run(blockOn, func(t *testing.T) {
@@ -559,11 +509,6 @@ func TestBytecodeUpload_BoundsBothStoreCallsByTheBudget(t *testing.T) {
 	}
 }
 
-// blockingBytecodeStore hangs on one of the two calls until the context it was
-// handed ends it, and passes the other through, so each leg's bounding can be
-// proven on its own. Reaching the blocked call is what spends the budget, so a
-// call handed a context not derived from the caller's never returns — which is
-// exactly the failure the test is looking for.
 type blockingBytecodeStore struct {
 	blockOn     string
 	spendBudget context.CancelFunc
@@ -595,15 +540,6 @@ func (b *blockingBytecodeStore) getObject(context.Context, string, string) (io.R
 	return nil, 0, errBytecodeCacheMiss
 }
 
-// A budget already spent by the time flush returns stops the attempt at the
-// very next ctx-aware step: compileCacheSize's walk sees ctx.Err() on its
-// first callback (the root directory entry, visited before any file) and run
-// gives up there, never reaching the archive build. buildArchiveWithin's own
-// pre-check — a budget spent before *it* specifically starts — is pinned
-// directly by TestBuildArchiveWithin_AbandonsOnAnExpiredContext, since
-// compileCacheSize always intercepts an already-expired context first when
-// reached through run: there is no way to spend the budget between the two
-// without a hook this package doesn't have.
 func TestBytecodeUpload_AbandonsBeforeMeasuringTheCacheWhenTheBudgetIsAlreadySpent(t *testing.T) {
 	dir := cacheDirWith(t, "compiled bytes")
 	store := &fakeBytecodeStore{}
@@ -627,11 +563,6 @@ func TestBytecodeUpload_AbandonsBeforeMeasuringTheCacheWhenTheBudgetIsAlreadySpe
 	}
 }
 
-// bigCacheDir writes a cache directory large enough that archiving it takes long
-// enough to be cancelled partway, with incompressible contents so gzip cannot
-// shortcut the work. It returns the directory and how long a full build of it
-// costs, so a test can cancel at a fraction of that rather than at a wall-clock
-// guess that would differ between machines and between -race and not.
 func bigCacheDir(t *testing.T) (string, time.Duration) {
 	t.Helper()
 	dir := t.TempDir()
@@ -654,9 +585,6 @@ func bigCacheDir(t *testing.T) (string, time.Duration) {
 	return dir, baseline
 }
 
-// The walk has to stop, not just the wait on it. A goroutine left compressing
-// after the loop moved on resumes when Lambda thaws the sandbox and competes
-// with a later request for the CPU this feature exists to save.
 func TestBuildBytecodeArchive_StopsTheWalkWhenTheContextEnds(t *testing.T) {
 	dir, baseline := bigCacheDir(t)
 
@@ -688,9 +616,6 @@ func TestBuildArchiveWithin_AbandonsOnAnExpiredContext(t *testing.T) {
 	}
 }
 
-// The budget is live on entry and expires during the build, which is the
-// scenario the select exists for — distinct from the pre-check above, and told
-// apart from it by which error comes back.
 func TestBuildArchiveWithin_AbandonsABuildAlreadyInFlight(t *testing.T) {
 	dir, baseline := bigCacheDir(t)
 
@@ -712,8 +637,6 @@ func TestBuildArchiveWithin_AbandonsABuildAlreadyInFlight(t *testing.T) {
 	}
 }
 
-// The same thing through run: the upload reaches the build with budget in hand,
-// loses it mid-build, and gives up rather than uploading or overrunning.
 func TestBytecodeUpload_AbandonsAnArchiveBuildInFlight(t *testing.T) {
 	dir, baseline := bigCacheDir(t)
 	store := &fakeBytecodeStore{}
@@ -773,9 +696,6 @@ func TestCompileCacheSize(t *testing.T) {
 	}
 }
 
-// The stat pass is bounded like every other leg: a budget already spent stops it
-// at the first entry rather than walking a cache directory the attempt can no
-// longer do anything with.
 func TestCompileCacheSize_StopsOnAnExpiredContext(t *testing.T) {
 	dir := cacheDirWith(t, "compiled bytes")
 	ctx, cancel := context.WithCancel(context.Background())
@@ -804,8 +724,6 @@ func TestUploadBytecodeCacheOnce_RunsAtMostOncePerInstance(t *testing.T) {
 	}
 }
 
-// A failed attempt is still an attempt: the instance has shown it cannot
-// publish, and retrying would spend the next invocation's billed time on it.
 func TestUploadBytecodeCacheOnce_DoesNotRetryAfterAFailure(t *testing.T) {
 	store := &fakeBytecodeStore{putErr: errors.New("access denied")}
 	u, flushes := uploadFixture(store, compileCacheFlushedPayload{Dir: cacheDirWith(t, "x"), OK: true}, true)
@@ -821,7 +739,7 @@ func TestUploadBytecodeCacheOnce_DoesNotRetryAfterAFailure(t *testing.T) {
 
 func TestUploadBytecodeCacheOnce_NoOpsForAnUnconfiguredFunction(t *testing.T) {
 	m := &Membrane{}
-	m.uploadBytecodeCacheOnce(context.Background()) // must not panic
+	m.uploadBytecodeCacheOnce(context.Background())
 }
 
 func TestCompileCacheEnv(t *testing.T) {
@@ -841,9 +759,6 @@ func TestCompileCacheEnv(t *testing.T) {
 	})
 }
 
-// The gate and its neighbours are read before the node version is even
-// asked for, so a function missing one of them never execs anything or
-// constructs an AWS client.
 func TestResolveBytecodeResolution_NilWhenNotFullyConfigured(t *testing.T) {
 	cases := []struct {
 		name     string
@@ -868,9 +783,6 @@ func TestResolveBytecodeResolution_NilWhenNotFullyConfigured(t *testing.T) {
 	}
 }
 
-// A version this process cannot read, or one that doesn't parse, disables
-// the resolution the same way a missing env var does: there is no key to
-// compose without it, so neither leg can be handed one.
 func TestResolveBytecodeResolution_NilWhenTheNodeVersionCannotBeRead(t *testing.T) {
 	t.Setenv(bytecodePrefixEnvVar, "ocel")
 	t.Setenv("OCEL_ISR_BUCKET", "assets")
@@ -894,11 +806,6 @@ func TestResolveBytecodeResolution_NilWhenTheNodeVersionCannotBeRead(t *testing.
 	}
 }
 
-// A fully configured function gets a resolution composed from exactly what
-// the environment named and the version prober reported. Landing the
-// prefix, the bucket, the function name or the version in the wrong place
-// would compose a key nothing ever reads back, which no later leg could
-// detect — this is the test that pins the composition down.
 func TestResolveBytecodeResolution_CarriesTheEnvironmentAndVersionIntoTheKey(t *testing.T) {
 	t.Setenv(bytecodePrefixEnvVar, "ocel/stg")
 	t.Setenv("OCEL_ISR_BUCKET", "assets-xyz")
@@ -923,9 +830,6 @@ func TestResolveBytecodeResolution_CarriesTheEnvironmentAndVersionIntoTheKey(t *
 	}
 }
 
-// upload must carry the resolution's own bucket and key rather than
-// recompute them, which is what makes the two legs diverging structurally
-// impossible rather than merely correct today.
 func TestBytecodeResolution_UploadCarriesTheSameBucketAndKey(t *testing.T) {
 	r := &bytecodeResolution{store: &fakeBytecodeStore{}, bucket: "assets-xyz", key: "ocel/bytecode/my-app/node24.3.1-arm64.tar.gz"}
 	flushed := false
@@ -953,9 +857,6 @@ func TestBytecodeResolution_UploadCarriesTheSameBucketAndKey(t *testing.T) {
 	}
 }
 
-// The upload runs strictly after awaitCompletion returns and strictly before the
-// loop is free to call /next. That ordering is the entire basis for the claim
-// that publishing the cache costs billed duration rather than request latency.
 func TestHandleInvocation_UploadsAfterCompletionAndBeforeTheNextNext(t *testing.T) {
 	node := okNode(t)
 	rt, _ := fakeRuntime(t, []byte(getEvent))
@@ -977,8 +878,6 @@ func TestHandleInvocation_UploadsAfterCompletionAndBeforeTheNextNext(t *testing.
 	done := make(chan error, 1)
 	go func() { done <- handleInvocation(context.Background(), rt, m) }()
 
-	// The response is delivered by now but completion has not fired, so nothing
-	// may have been published yet: an upload here would be on someone's latency.
 	time.Sleep(75 * time.Millisecond)
 	store.mu.Lock()
 	early := len(store.puts)
@@ -1000,17 +899,11 @@ func TestHandleInvocation_UploadsAfterCompletionAndBeforeTheNextNext(t *testing.
 		t.Fatal("handleInvocation never returned")
 	}
 
-	// Returning is the loop's only licence to call /next, so a put recorded by
-	// now is one that landed before the next invocation could be pulled.
 	if len(store.puts) != 1 {
 		t.Errorf("puts = %d, want the cache published before the loop moved on", len(store.puts))
 	}
 }
 
-// controlConnPair wires a Membrane to a stand-in for the node child over a real
-// connection, with the drain loop running exactly as startNode runs it. The
-// membrane is fully built before the drain starts, since the loop reads the
-// fields it was given.
 func controlConnPair(t *testing.T) (*Membrane, *bufio.Reader, net.Conn) {
 	t.Helper()
 	membraneSide, nodeSide := net.Pipe()
@@ -1025,9 +918,6 @@ type flushOutcome struct {
 	ok  bool
 }
 
-// startFlush runs the flush off the test goroutine so the test itself can play
-// node — reading the request and answering it — with every assertion staying
-// where t.Fatal and t.Errorf are legal.
 func startFlush(m *Membrane, ctx context.Context) <-chan flushOutcome {
 	done := make(chan flushOutcome, 1)
 	go func() {
@@ -1059,8 +949,6 @@ func TestFlushCompileCache_DeliversTheAckToTheWaiter(t *testing.T) {
 	}
 }
 
-// Node reports a null dir when it has no compile cache API at all, which must
-// read as not-ok rather than as a directory named "null".
 func TestFlushCompileCache_CarriesANullDirAsNotOK(t *testing.T) {
 	m, nodeReader, nodeConn := controlConnPair(t)
 	done := startFlush(m, context.Background())
@@ -1079,8 +967,6 @@ func TestFlushCompileCache_CarriesANullDirAsNotOK(t *testing.T) {
 	}
 }
 
-// A wedged child must not hold the runtime loop off /next, so the wait ends on
-// the caller's context even before the flush cap would fire.
 func TestFlushCompileCache_GivesUpWhenTheChildNeverAnswers(t *testing.T) {
 	m, nodeReader, _ := controlConnPair(t)
 	ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
@@ -1100,8 +986,6 @@ func TestFlushCompileCache_GivesUpWhenTheChildNeverAnswers(t *testing.T) {
 	}
 }
 
-// A child that never drains its receive buffer must not block the write either.
-// Nothing reads the node side here, so only the write deadline can end it.
 func TestFlushCompileCache_GivesUpWhenTheChildNeverReadsTheRequest(t *testing.T) {
 	m, _, _ := controlConnPair(t)
 	ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
@@ -1116,8 +1000,6 @@ func TestFlushCompileCache_GivesUpWhenTheChildNeverReadsTheRequest(t *testing.T)
 	}
 }
 
-// The deadline is the flush's alone: live values are pushed down this same
-// connection, and a deadline left behind would fail those writes forever.
 func TestFlushCompileCache_ClearsTheWriteDeadlineAfterwards(t *testing.T) {
 	m, nodeReader, _ := controlConnPair(t)
 	ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
@@ -1129,7 +1011,6 @@ func TestFlushCompileCache_ClearsTheWriteDeadlineAfterwards(t *testing.T) {
 	}
 	<-done
 
-	// Well past the flush's expired deadline, a later write must still go out.
 	time.Sleep(100 * time.Millisecond)
 	written := make(chan error, 1)
 	go func() {
@@ -1151,8 +1032,6 @@ func TestFlushCompileCache_NoOpsWithoutAControlConnection(t *testing.T) {
 	}
 }
 
-// An ack nobody is waiting for (the waiter timed out, or node volunteered one)
-// must not wedge the drain loop, which also carries invocation-complete.
 func TestDrainControl_DropsAnUnawaitedFlushAck(t *testing.T) {
 	m, _, nodeConn := controlConnPair(t)
 	waiter := m.registerWaiter("req-1")
@@ -1197,7 +1076,6 @@ func TestBytecodeBudget(t *testing.T) {
 	})
 }
 
-// The gate has to reach the child, not just compute the right string.
 func TestNodeChildEnv_CarriesTheCompileCacheOnlyWhenGated(t *testing.T) {
 	const want = "NODE_COMPILE_CACHE=/tmp/.ocel/compile-cache"
 
@@ -1225,9 +1103,6 @@ func TestNodeChildEnv_CarriesTheCompileCacheOnlyWhenGated(t *testing.T) {
 	})
 }
 
-// s3Store drives the real s3BytecodeStore against a loopback stand-in for S3, so
-// the SDK's own error shapes reach the mapping under test. Static credentials
-// keep it away from the environment, and the endpoint keeps it off the network.
 func s3Store(t *testing.T, handler http.HandlerFunc) (bytecodeStore, *httptest.Server) {
 	t.Helper()
 	srv := httptest.NewServer(handler)
@@ -1237,14 +1112,11 @@ func s3Store(t *testing.T, handler http.HandlerFunc) (bytecodeStore, *httptest.S
 		BaseEndpoint:     &srv.URL,
 		UsePathStyle:     true,
 		Credentials:      credentials.NewStaticCredentialsProvider("AKID", "SECRET", ""),
-		RetryMaxAttempts: 1, // the budget bounds retries in production; here they are only latency
+		RetryMaxAttempts: 1,
 	})
 	return s3BytecodeStore{client: client}, srv
 }
 
-// A 404 from HEAD is the answer "upload it", not a failure. Getting this wrong
-// in either direction silently disables the feature for good: an error reads as
-// "skip", and a false "exists" skips every PUT forever.
 func TestS3BytecodeStore_ObjectExists(t *testing.T) {
 	cases := []struct {
 		name       string
@@ -1254,12 +1126,6 @@ func TestS3BytecodeStore_ObjectExists(t *testing.T) {
 	}{
 		{name: "404 means the object is absent", status: http.StatusNotFound, wantExists: false},
 		{name: "200 means it is already there", status: http.StatusOK, wantExists: true},
-		// S3 only answers 404 for a missing key when the caller may also list
-		// the bucket. The deployed function's role holds s3:GetObject and
-		// s3:PutObject on its own prefix and no s3:ListBucket (isrPolicy), so
-		// 403 is how an absent key actually reaches this code in production —
-		// reading it as a fault made every fresh deployment's first cold start
-		// fail its warm pass and publish nothing.
 		{name: "403 is how an absent key reads without s3:ListBucket", status: http.StatusForbidden, wantExists: false},
 		{name: "500 is a real error", status: http.StatusInternalServerError, wantErr: true},
 	}
@@ -1319,9 +1185,6 @@ func TestS3BytecodeStore_PutObjectReportsAFailure(t *testing.T) {
 	}
 }
 
-// A NoSuchKey body is the answer "nothing to rehydrate yet", not a failure.
-// Getting this wrong reads a routine cold start as a fault on every deploy's
-// first instance, which is the miss this store exists to tell apart.
 func TestS3BytecodeStore_GetObject(t *testing.T) {
 	t.Run("200 returns the body and content length", func(t *testing.T) {
 		store, _ := s3Store(t, func(w http.ResponseWriter, r *http.Request) {
@@ -1378,10 +1241,6 @@ func TestS3BytecodeStore_GetObject(t *testing.T) {
 	})
 }
 
-// tarEntry is a hand-built archive member, for tests that need to plant an
-// entry buildBytecodeArchive would never produce — an absolute path, a
-// traversal, a symlink, an oversized declared size — to prove untarInto
-// rejects it rather than trusting the writer.
 type tarEntry struct {
 	name     string
 	typeflag byte
@@ -1420,12 +1279,6 @@ func buildArchive(t *testing.T, entries []tarEntry) []byte {
 	return buf.Bytes()
 }
 
-// ustarHeader hand-builds a raw 512-byte USTAR header block for a name
-// archive/tar's own Writer refuses to emit (a trailing-slash name, in
-// particular — see ustarArchive). A byte stream a hostile uploader controls
-// is under no obligation to come from that writer, so the regression for
-// "an entry that resolves to dir itself" has to construct bytes the writer
-// cannot produce, or it only ever proves the safe case.
 func ustarHeader(name string, typeflag byte, size int64) []byte {
 	b := make([]byte, 512)
 	copy(b[0:100], name)
@@ -1435,7 +1288,7 @@ func ustarHeader(name string, typeflag byte, size int64) []byte {
 	copy(b[124:136], fmt.Appendf(nil, "%011o\x00", size))
 	copy(b[136:148], fmt.Appendf(nil, "%011o\x00", 0))
 	for i := 148; i < 156; i++ {
-		b[i] = ' ' // checksum field reads as spaces while the checksum itself is computed
+		b[i] = ' '
 	}
 	b[156] = typeflag
 	copy(b[257:263], "ustar\x00")
@@ -1449,12 +1302,6 @@ func ustarHeader(name string, typeflag byte, size int64) []byte {
 	return b
 }
 
-// ustarArchive gzip-compresses a hand-built raw tar stream: one entry with
-// the given name, typeflag and content, followed by the two zero blocks that
-// mark end of archive — bypassing archive/tar.Writer entirely, which is the
-// point: it rejects a trailing-slash name outright, but a name of "" or "."
-// it will happily emit and this test suite exercises those through
-// buildArchive already. Only "./" needs this hand-built path.
 func ustarArchive(t *testing.T, name string, typeflag byte, content []byte) []byte {
 	t.Helper()
 	var raw bytes.Buffer
@@ -1463,7 +1310,7 @@ func ustarArchive(t *testing.T, name string, typeflag byte, content []byte) []by
 	if pad := (512 - len(content)%512) % 512; pad > 0 {
 		raw.Write(make([]byte, pad))
 	}
-	raw.Write(make([]byte, 1024)) // two zero blocks mark end of archive
+	raw.Write(make([]byte, 1024))
 
 	var buf bytes.Buffer
 	gz := gzip.NewWriter(&buf)
@@ -1476,20 +1323,11 @@ func ustarArchive(t *testing.T, name string, typeflag byte, content []byte) []by
 	return buf.Bytes()
 }
 
-// TestUntarInto_RejectsAnEntryThatResolvesToTheCacheDirectoryItself proves an
-// entry named "", "." or "./" — all of which filepath.Clean collapses to "."
-// — is rejected rather than written to dir itself. Without this check,
-// os.OpenFile(dir, O_TRUNC, ...) replaces the just-wiped cache directory with
-// a regular file, and untarInto reports success: node would then find
-// NODE_COMPILE_CACHE pointing at a file instead of a directory.
 func TestUntarInto_RejectsAnEntryThatResolvesToTheCacheDirectoryItself(t *testing.T) {
 	for _, name := range []string{"", ".", "./"} {
 		t.Run(fmt.Sprintf("name=%q", name), func(t *testing.T) {
 			var archive []byte
 			if name == "./" {
-				// archive/tar.Writer refuses a trailing slash outright, so this
-				// one case has to be hand-built to prove the reader still
-				// defends against it.
 				archive = ustarArchive(t, name, tar.TypeReg, []byte("abc"))
 			} else {
 				archive = buildArchive(t, []tarEntry{{name: name, typeflag: tar.TypeReg, content: []byte("abc")}})
@@ -1506,10 +1344,6 @@ func TestUntarInto_RejectsAnEntryThatResolvesToTheCacheDirectoryItself(t *testin
 	}
 }
 
-// zeroReader streams zero bytes forever, so a test can declare a tar entry of
-// any size without holding that many bytes in memory: gzip compresses a run
-// of zeros to almost nothing, which is what lets the ceiling-during-streaming
-// test use a realistic 64MiB bound without costing real time or memory.
 type zeroReader struct{}
 
 func (zeroReader) Read(p []byte) (int, error) {
@@ -1517,9 +1351,6 @@ func (zeroReader) Read(p []byte) (int, error) {
 	return len(p), nil
 }
 
-// TestUntarInto_RoundTrip proves untarInto is buildBytecodeArchive's inverse:
-// an archive built from a node-shaped compile cache directory (one version-hash
-// subdirectory, arbitrary file names) extracts back to the same tree.
 func TestUntarInto_RoundTrip(t *testing.T) {
 	src := t.TempDir()
 	versionDir := filepath.Join(src, "v24.3.1-x64-abc123-1000")
@@ -1569,12 +1400,6 @@ func TestUntarInto_RoundTrip(t *testing.T) {
 	}
 }
 
-// TestUntarInto_ClampsExtractedFilePermissions proves an archive's declared
-// mode never reaches disk: mode 0000 is reachable from a corrupt or hostile
-// archive, and honouring it would leave a cache file the runtime user can't
-// even read back — a silent, self-inflicted degradation the upload leg would
-// never itself produce, since it only ever writes something in the 0644
-// family.
 func TestUntarInto_ClampsExtractedFilePermissions(t *testing.T) {
 	var buf bytes.Buffer
 	gz := gzip.NewWriter(&buf)
@@ -1612,10 +1437,6 @@ func TestUntarInto_ClampsExtractedFilePermissions(t *testing.T) {
 	}
 }
 
-// TestUntarInto_AbortsPastTheCeiling proves the running total is checked
-// against the caller's ceiling as entries stream in, not just once at the end,
-// so a hostile or corrupt archive cannot fill the sandbox's disk before the
-// check catches up.
 func TestUntarInto_AbortsPastTheCeiling(t *testing.T) {
 	archive := buildArchive(t, []tarEntry{
 		{name: "a.bin", typeflag: tar.TypeReg, content: bytes.Repeat([]byte("x"), 100)},
@@ -1627,12 +1448,6 @@ func TestUntarInto_AbortsPastTheCeiling(t *testing.T) {
 	}
 }
 
-// TestUntarInto_BoundsEntryCountEvenWithZeroSizedEntries proves the ceiling
-// stops a stream of empty entries, not just a stream of large ones: without
-// charging tarEntryOverhead per entry, hdr.Size never advances the running
-// total for a zero-byte file, so an archive of empty entries would never
-// trip the ceiling and would keep creating real inodes under dest until the
-// disk or the context gave out.
 func TestUntarInto_BoundsEntryCountEvenWithZeroSizedEntries(t *testing.T) {
 	entries := make([]tarEntry, 1000)
 	for i := range entries {
@@ -1657,16 +1472,10 @@ func TestUntarInto_BoundsEntryCountEvenWithZeroSizedEntries(t *testing.T) {
 	}
 }
 
-// rehydrateFixture builds a fake store whose GET returns the given archive
-// bytes with a declared size, for tests exercising rehydrateCompileCache
-// against a hand-built or hand-corrupted archive.
 func rehydrateFixture(archive []byte) *fakeBytecodeStore {
 	return &fakeBytecodeStore{getBody: io.NopCloser(bytes.NewReader(archive)), getSize: int64(len(archive))}
 }
 
-// assertNoCacheDir fails the test if dir exists, which is how every failed
-// rehydration attempt must leave it: a half-populated cache directory is
-// worse than none, since node would trust whatever is there.
 func assertNoCacheDir(t *testing.T, dir string) {
 	t.Helper()
 	if _, err := os.Stat(dir); !os.IsNotExist(err) {
@@ -1711,8 +1520,6 @@ func TestRehydrateCompileCache_RoundTrip(t *testing.T) {
 	}
 }
 
-// A miss is the expected state on a deployment's first cold start; it must
-// not touch the target directory at all, and must not read as a fault.
 func TestRehydrateCompileCache_MissTouchesNothing(t *testing.T) {
 	store := &fakeBytecodeStore{getErr: errBytecodeCacheMiss}
 	dest := filepath.Join(t.TempDir(), "cache")
@@ -1724,10 +1531,6 @@ func TestRehydrateCompileCache_MissTouchesNothing(t *testing.T) {
 	assertNoCacheDir(t, dest)
 }
 
-// captureStderr redirects the package-level os.Stderr for the duration of fn
-// and returns what was written to it, so a test can assert on which of two
-// log lines a function chose rather than only on its return value. Tests in
-// this file don't run in parallel, so swapping the global is safe here.
 func captureStderr(t *testing.T, fn func()) string {
 	t.Helper()
 	r, w, err := os.Pipe()
@@ -1747,11 +1550,6 @@ func captureStderr(t *testing.T, fn func()) string {
 	return string(out)
 }
 
-// A miss and a failure both return (0, false), but the brief requires them to
-// log differently: a miss is the expected state on a deployment's first cold
-// start and must not read as a fault. This is the test that actually pins
-// that down — the (0, false) assertions elsewhere in this file would stay
-// green even if the two Fprintf calls in rehydrateCompileCache were swapped.
 func TestRehydrateCompileCache_LogsAMissDifferentlyFromAFailure(t *testing.T) {
 	dest := filepath.Join(t.TempDir(), "cache")
 
@@ -1794,9 +1592,6 @@ func TestRehydrateCompileCache_NonGzipBodyLeavesNoDirectory(t *testing.T) {
 	assertNoCacheDir(t, dest)
 }
 
-// A traversal entry must be rejected before anything is written, and nothing
-// from it may land outside the target directory — checked here by looking in
-// the temp dir's parent, not just at whether the extraction reported success.
 func TestRehydrateCompileCache_RejectsTraversal(t *testing.T) {
 	root := t.TempDir()
 	dest := filepath.Join(root, "cache")
@@ -1837,18 +1632,8 @@ func TestRehydrateCompileCache_RejectsSymlink(t *testing.T) {
 	assertNoCacheDir(t, dest)
 }
 
-// An entry that resolves to dir itself must not be reported as a successful
-// rehydration: os.OpenFile(dir, O_TRUNC, ...) would otherwise replace the
-// just-wiped cache directory with a regular file at dir's own path, which
-// rehydrateCompileCache's ok=true return would then vouch for. This is the
-// full-attempt version of TestUntarInto_RejectsAnEntryThatResolvesToTheCacheDirectoryItself,
-// checking the same attack through the caller that decides success and
-// disables the upload leg on a hit.
 func TestRehydrateCompileCache_RejectsAnEntryThatResolvesToTheCacheDirectoryItself(t *testing.T) {
 	dest := filepath.Join(t.TempDir(), "cache")
-	// archive/tar.Writer refuses a trailing-slash name outright, so only the
-	// hand-built path can exercise it; "" and "." are covered directly against
-	// untarInto above.
 	archive := ustarArchive(t, "./", tar.TypeReg, []byte("abc"))
 	store := rehydrateFixture(archive)
 
@@ -1861,9 +1646,6 @@ func TestRehydrateCompileCache_RejectsAnEntryThatResolvesToTheCacheDirectoryItse
 	}
 }
 
-// A ContentLength over the ceiling must bail before a single byte of the body
-// is read — proven here by a body that fails the test if Read is ever called,
-// not just by asserting the outcome.
 type poisonReader struct{ t *testing.T }
 
 func (p poisonReader) Read([]byte) (int, error) {
@@ -1885,10 +1667,6 @@ func TestRehydrateCompileCache_BailsOnContentLengthBeforeAnyRead(t *testing.T) {
 	assertNoCacheDir(t, dest)
 }
 
-// The ContentLength precheck only catches an oversized compressed archive; a
-// highly compressible one can report a tiny ContentLength while decompressing
-// past the ceiling, so untarInto's running-total check is what actually stops
-// it. zeroReader keeps this fast and cheap despite the size being realistic.
 func TestRehydrateCompileCache_AbortsWhenStreamedContentExceedsTheCeiling(t *testing.T) {
 	var buf bytes.Buffer
 	gz := gzip.NewWriter(&buf)
@@ -1943,10 +1721,6 @@ func TestRehydrateCompileCache_WipesStaleContentBeforeExtracting(t *testing.T) {
 	}
 }
 
-// A cancelled context has to stop the extraction mid-stream, not just fail to
-// start one: the body is closed to interrupt whatever Read the goroutine is
-// blocked in, and the caller waits for that goroutine before cleaning up, so
-// no write can race the RemoveAll that follows.
 func TestRehydrateCompileCache_CancelledContextAbortsAndCleansUp(t *testing.T) {
 	dest := filepath.Join(t.TempDir(), "cache")
 	pr, pw := io.Pipe()
@@ -1956,9 +1730,6 @@ func TestRehydrateCompileCache_CancelledContextAbortsAndCleansUp(t *testing.T) {
 		tw.WriteHeader(&tar.Header{Name: "a.bin", Typeflag: tar.TypeReg, Size: 3, Mode: 0o644})
 		tw.Write([]byte("abc"))
 		gz.Flush()
-		// tw, gz and pw are deliberately left open: the reader blocks waiting
-		// for the archive's end, which never arrives until the pipe is closed,
-		// giving the cancellation something to interrupt.
 	}()
 
 	store := &fakeBytecodeStore{getBody: pr, getSize: 1 << 20}
@@ -1978,10 +1749,6 @@ func TestRehydrateCompileCache_CancelledContextAbortsAndCleansUp(t *testing.T) {
 	assertNoCacheDir(t, dest)
 }
 
-// A miss logs through rehydrateCompileCache itself, so only the hit needs a
-// line here — and that line is what a later grep against CloudWatch will
-// look for, so this pins its exact shape: the key, the bytes restored and
-// the elapsed milliseconds.
 func TestRehydrateBytecodeCache_LogsTheHitWithKeyBytesAndElapsedMS(t *testing.T) {
 	archive, err := buildBytecodeArchive(context.Background(), cacheDirWith(t, "compiled bytes"))
 	if err != nil {
@@ -2020,18 +1787,11 @@ func TestRehydrateBytecodeCache_MissLogsNothingOfItsOwn(t *testing.T) {
 	if hit {
 		t.Fatal("rehydrateBytecodeCache() = true, want a miss")
 	}
-	// rehydrateCompileCache already logged the miss with the key and the
-	// reason; rehydrateBytecodeCache must not log a second, redundant line.
 	if strings.Count(out, "\n") != 1 {
 		t.Errorf("log = %q, want exactly the one line rehydrateCompileCache already wrote", out)
 	}
 }
 
-// blockingGetStore's getObject hangs until its context ends. Without the
-// context.WithTimeout that rehydrateBytecodeCache applies around
-// rehydrateCompileCache, this store's GET would still be blocked when this
-// test's own failsafe deadline arrived — so a passing test here is what
-// proves bytecodeRehydrateBudget is actually wired in, not merely declared.
 type blockingGetStore struct{}
 
 func (blockingGetStore) objectExists(context.Context, string, string) (bool, error) {
@@ -2060,13 +1820,6 @@ func TestRehydrateBytecodeCache_AppliesItsOwnBudget(t *testing.T) {
 	}
 }
 
-// TestBytecodeRehydrate_TargetsTheDirCompileCacheEnvDeclares pins the property
-// that makes bytecodeRehydrate (main.go) safe: nothing here checks that the
-// archive lands where NODE_COMPILE_CACHE actually points except that both
-// read the same compileCacheDir constant. This proves it by construction
-// rather than by name — it reads the directory out of compileCacheEnv's own
-// output and asserts bytecodeRehydrate wrote there, so the test still catches
-// a future edit that gave either side its own literal.
 func TestBytecodeRehydrate_TargetsTheDirCompileCacheEnvDeclares(t *testing.T) {
 	t.Setenv(bytecodePrefixEnvVar, "ocel")
 	env := compileCacheEnv()
@@ -2095,11 +1848,6 @@ func TestBytecodeRehydrate_TargetsTheDirCompileCacheEnvDeclares(t *testing.T) {
 	}
 }
 
-// The upload leg needs the mirror of what the test above pins for the read
-// leg, and for the same reason: the archive is rooted at NODE_COMPILE_CACHE
-// itself, so a resolution that handed the upload anything else — node's own
-// reported subdirectory, most temptingly — publishes an archive the read leg
-// restores one level too high.
 func TestBytecodeUpload_IsRootedAtTheDirCompileCacheEnvDeclares(t *testing.T) {
 	t.Setenv(bytecodePrefixEnvVar, "ocel")
 	env := compileCacheEnv()
@@ -2117,8 +1865,6 @@ func TestBytecodeUpload_IsRootedAtTheDirCompileCacheEnvDeclares(t *testing.T) {
 	}
 }
 
-// fakeSpawn records the budget bringUp handed it and returns an empty
-// Membrane, standing in for startNode the same way live_test.go's spawns do.
 func fakeSpawn(gotBudget *time.Duration) spawner {
 	return func(_ []string, budget time.Duration, onControl func(io.Writer), _ <-chan struct{}) (*Membrane, error) {
 		*gotBudget = budget
@@ -2129,11 +1875,6 @@ func fakeSpawn(gotBudget *time.Duration) spawner {
 	}
 }
 
-// TestBringUpWithBytecode_RehydrationsCostIsCarvedOutOfStartupBudget is the
-// property the brief calls out by name: rehydration runs before bringUp's
-// budget argument is computed, so whatever it spends is already reflected in
-// time.Since(start) by the time bringUp sees it — carved out of
-// startupBudget, not added on top of it.
 func TestBringUpWithBytecode_RehydrationsCostIsCarvedOutOfStartupBudget(t *testing.T) {
 	const rehydrateCost = 200 * time.Millisecond
 
@@ -2156,27 +1897,17 @@ func TestBringUpWithBytecode_RehydrationsCostIsCarvedOutOfStartupBudget(t *testi
 		t.Fatal("bytecode = nil, want the upload leg attached on a miss")
 	}
 
-	// The budget bringUp received must already be short by roughly what
-	// rehydration cost — not the full startupBudget, which is what "added on
-	// top" would look like.
 	if gotBudget > startupBudget-rehydrateCost/2 {
 		t.Errorf("budget handed to bringUp = %s, want it reduced by rehydration's %s cost", gotBudget, rehydrateCost)
 	}
 }
 
-// TestBringUpWithBytecode_FloorsTheSpawnBudget proves the pathological "slow
-// miss" — pre-spawn work eating past startupBudget with nothing to show for
-// it — hands bringUp minSpawnBudget rather than a non-positive duration. A
-// non-positive budget is what turns into awaitReady's time.After(negative)
-// firing immediately, so this is what keeps that boot from failing spuriously.
 func TestBringUpWithBytecode_FloorsTheSpawnBudget(t *testing.T) {
 	l := newLiveValues(resolves(nil), nil, nil)
 	bytecodeReady := make(chan *bytecodeResolution, 1)
 	bytecodeReady <- &bytecodeResolution{store: &fakeBytecodeStore{}, bucket: "b", key: "k"}
 	rehydrate := func(context.Context, *bytecodeResolution) bool { return false }
 
-	// start set so far in the past that startupBudget - time.Since(start) is
-	// already deep in negative territory before bringUp even runs.
 	start := time.Now().Add(-2 * startupBudget)
 
 	var gotBudget time.Duration
@@ -2188,10 +1919,6 @@ func TestBringUpWithBytecode_FloorsTheSpawnBudget(t *testing.T) {
 	}
 }
 
-// TestBringUpWithBytecode_NormalCarveOutIsUnaffectedByTheFloor proves the
-// floor only ever engages in the pathological case: a start recent enough
-// that startupBudget - time.Since(start) is comfortably above minSpawnBudget
-// must reach bringUp unchanged, not clamped.
 func TestBringUpWithBytecode_NormalCarveOutIsUnaffectedByTheFloor(t *testing.T) {
 	l := newLiveValues(resolves(nil), nil, nil)
 	bytecodeReady := make(chan *bytecodeResolution, 1)
@@ -2211,9 +1938,6 @@ func TestBringUpWithBytecode_NormalCarveOutIsUnaffectedByTheFloor(t *testing.T) 
 	}
 }
 
-// A rehydrate hit disables the whole upload leg, not merely its PUT: the
-// object is proven to exist, so nothing membrane.bytecode would do could
-// ever matter, and it is left nil rather than wired up and never used.
 func TestBringUpWithBytecode_AHitDisablesTheUploadLeg(t *testing.T) {
 	l := newLiveValues(resolves(nil), nil, nil)
 	bytecodeReady := make(chan *bytecodeResolution, 1)
@@ -2238,9 +1962,6 @@ func TestBringUpWithBytecode_AHitDisablesTheUploadLeg(t *testing.T) {
 	}
 }
 
-// A miss attaches the upload leg, wired to the same key rehydration read
-// from — the two legs sharing bytecode.upload's composition is what this
-// checks, not just that some upload got attached.
 func TestBringUpWithBytecode_AMissAttachesTheUploadLegWithTheSameKey(t *testing.T) {
 	l := newLiveValues(resolves(nil), nil, nil)
 	bytecodeReady := make(chan *bytecodeResolution, 1)
@@ -2263,8 +1984,6 @@ func TestBringUpWithBytecode_AMissAttachesTheUploadLegWithTheSameKey(t *testing.
 	}
 }
 
-// An unconfigured deployment's nil resolution never reaches rehydrate at
-// all, and attaches no upload leg either.
 func TestBringUpWithBytecode_NilResolutionSkipsBothLegs(t *testing.T) {
 	l := newLiveValues(resolves(nil), nil, nil)
 	bytecodeReady := make(chan *bytecodeResolution, 1)
@@ -2289,12 +2008,6 @@ func TestBringUpWithBytecode_NilResolutionSkipsBothLegs(t *testing.T) {
 	}
 }
 
-// The join must not be a bare receive: a resolution goroutine that never
-// answers — wedged exec, stalled config load, or simply one that ignored its
-// own context entirely — must still let bringUpWithBytecode reach the spawn,
-// and must not drive the budget it hands to bringUp negative. bytecodeReady
-// is unbuffered and never written to here, standing in for a goroutine that
-// hangs forever.
 func TestBringUpWithBytecode_AResolutionThatNeverArrivesDoesNotBlockTheSpawn(t *testing.T) {
 	l := newLiveValues(resolves(nil), nil, nil)
 	bytecodeReady := make(chan *bytecodeResolution)
@@ -2337,9 +2050,6 @@ func TestBringUpWithBytecode_AResolutionThatNeverArrivesDoesNotBlockTheSpawn(t *
 	}
 }
 
-// buildTar is buildArchive without the gzip layer, standing in for what the
-// deploy bakes into the deployment package: a plain tar the zip container
-// deflated, so the membrane never gunzips on the init path.
 func buildTar(t *testing.T, entries []tarEntry) []byte {
 	t.Helper()
 	var buf bytes.Buffer
@@ -2366,11 +2076,6 @@ func buildTar(t *testing.T, entries []tarEntry) []byte {
 	return buf.Bytes()
 }
 
-// The embedded path is derived from the key the resolution already composed,
-// never recomposed from a version and an arch of its own: the two would drift
-// on a runtime bump and the membrane would read a stale cache under a fresh
-// key. Composing the expectation through bytecodeCacheKey is the point — it
-// fails if either side ever grows its own spelling.
 func TestEmbeddedBytecodePath_FollowsTheResolutionsKey(t *testing.T) {
 	cases := []struct {
 		key  string
@@ -2386,9 +2091,6 @@ func TestEmbeddedBytecodePath_FollowsTheResolutionsKey(t *testing.T) {
 	}
 }
 
-// A key that is not a cache tarball composes no path at all rather than one
-// derived from whatever the basename happened to be: nothing embedded can
-// answer for it, and a junk path is a stat the init path should never make.
 func TestEmbeddedBytecodePath_EmptyForAKeyThatIsNotACacheTarball(t *testing.T) {
 	for _, key := range []string{"", "ocel/bytecode/my-app", "ocel/bytecode/my-app/node24.3.1-arm64.tar", "some/other/object.zip"} {
 		if got := embeddedBytecodePath(key); got != "" {
@@ -2436,9 +2138,6 @@ func TestLoadEmbeddedBytecodeCache_RoundTrip(t *testing.T) {
 	}
 }
 
-// An artifact built without the embed pass is the ordinary case, not a fault:
-// the attempt reports a miss, says nothing, and leaves the cache directory
-// exactly as it found it for the S3 leg to wipe on its own terms.
 func TestLoadEmbeddedBytecodeCache_AbsentTarTouchesNothing(t *testing.T) {
 	dest := filepath.Join(t.TempDir(), "cache")
 	if err := os.MkdirAll(dest, 0o755); err != nil {
@@ -2463,9 +2162,6 @@ func TestLoadEmbeddedBytecodeCache_AbsentTarTouchesNothing(t *testing.T) {
 	}
 }
 
-// A corrupt embedded tar must leave no half-populated cache behind — node
-// would trust it — and must not be reported as a hit, so the caller still
-// reaches the S3 leg.
 func TestLoadEmbeddedBytecodeCache_CorruptLeavesNoDirectory(t *testing.T) {
 	tarPath := filepath.Join(t.TempDir(), "node24.3.1-arm64.tar")
 	if err := os.WriteFile(tarPath, []byte("this is not a tar stream at all"), 0o644); err != nil {
@@ -2488,9 +2184,6 @@ func TestLoadEmbeddedBytecodeCache_CorruptLeavesNoDirectory(t *testing.T) {
 	}
 }
 
-// The embedded reader shares untarInto's hostile-input validation rather than
-// forking it: a tar baked into an artifact is no more trusted than an object
-// pulled from S3, and both are checked by the one path.
 func TestLoadEmbeddedBytecodeCache_RejectsHostileEntries(t *testing.T) {
 	cases := map[string]tarEntry{
 		"traversal":     {name: "../escaped.bin", typeflag: tar.TypeReg, content: []byte("nope")},
@@ -2519,8 +2212,6 @@ func TestLoadEmbeddedBytecodeCache_RejectsHostileEntries(t *testing.T) {
 	}
 }
 
-// A spent budget must not start an extraction whose result has nowhere to go,
-// the same way buildArchiveWithin refuses to start a build.
 func TestLoadEmbeddedBytecodeCache_RefusesASpentBudget(t *testing.T) {
 	tarPath := filepath.Join(t.TempDir(), "node24.3.1-arm64.tar")
 	if err := os.WriteFile(tarPath, buildTar(t, []tarEntry{{name: "blob", typeflag: tar.TypeReg, content: []byte("x")}}), 0o644); err != nil {
@@ -2542,15 +2233,7 @@ func TestLoadEmbeddedBytecodeCache_RefusesASpentBudget(t *testing.T) {
 	}
 }
 
-// A budget spent *during* the extraction has to end it too, not only one
-// already spent when it starts. The two legs share one bytecodeRehydrateBudget
-// and this one runs first, so an extraction that runs to completion regardless
-// hands the S3 fall-through nothing — and a slow local leg is exactly the case
-// where the fall-through is what saves the cold start.
 func TestLoadEmbeddedBytecodeCache_StopsWhenTheBudgetRunsOutMidExtraction(t *testing.T) {
-	// Enough entries that the extraction is unambiguously longer than the
-	// budget: each is a MkdirAll+OpenFile+Close, and the charge against the
-	// ceiling (512 B apiece) stays well under it.
 	entries := make([]tarEntry, 0, 20000)
 	for i := range 20000 {
 		entries = append(entries, tarEntry{name: fmt.Sprintf("e/%05d.bin", i), typeflag: tar.TypeReg})
@@ -2579,9 +2262,6 @@ func TestLoadEmbeddedBytecodeCache_StopsWhenTheBudgetRunsOutMidExtraction(t *tes
 	}
 }
 
-// The two hits have to be told apart in CloudWatch, so an organic cold start
-// says which path it took. The substrings are the contract the e2e assertions
-// read.
 func TestEmbeddedBytecodeCache_LogsALineDistinctFromTheS3Rehydrate(t *testing.T) {
 	root := t.TempDir()
 	dir := filepath.Join(root, ".ocel", "bytecode")
@@ -2612,13 +2292,8 @@ func TestEmbeddedBytecodeCache_LogsALineDistinctFromTheS3Rehydrate(t *testing.T)
 	}
 }
 
-// neverEmbedded stands in for a deployment whose artifact carries no embedded
-// cache: the ordinary case, and the one every pre-existing budget and
-// upload-leg property was written against.
 func neverEmbedded(context.Context, *bytecodeResolution) bool { return false }
 
-// An embedded hit is answered locally: no S3 GET, no upload leg, and a source
-// the deploy can verify the embed pass by.
 func TestBringUpWithBytecode_AnEmbeddedHitSkipsTheS3Leg(t *testing.T) {
 	l := newLiveValues(resolves(nil), nil, nil)
 	bytecodeReady := make(chan *bytecodeResolution, 1)
@@ -2654,9 +2329,6 @@ func TestBringUpWithBytecode_AnEmbeddedHitSkipsTheS3Leg(t *testing.T) {
 	}
 }
 
-// No embedded copy — the artifact was built without the embed pass, or the
-// runtime moved on and the baked tar no longer matches the key — leaves the
-// S3 leg running exactly as it did before this existed.
 func TestBringUpWithBytecode_NoEmbeddedCopyFallsBackToS3(t *testing.T) {
 	l := newLiveValues(resolves(nil), nil, nil)
 	bytecodeReady := make(chan *bytecodeResolution, 1)
@@ -2677,8 +2349,6 @@ func TestBringUpWithBytecode_NoEmbeddedCopyFallsBackToS3(t *testing.T) {
 	}
 }
 
-// A miss on both legs is the pre-existing story: no source to report, and the
-// upload leg armed to publish what this instance compiles.
 func TestBringUpWithBytecode_MissOnBothLegsReportsNoSource(t *testing.T) {
 	l := newLiveValues(resolves(nil), nil, nil)
 	bytecodeReady := make(chan *bytecodeResolution, 1)
@@ -2701,10 +2371,6 @@ func TestBringUpWithBytecode_MissOnBothLegsReportsNoSource(t *testing.T) {
 	}
 }
 
-// A corrupt embedded tar must not leave a function permanently cold when S3
-// holds a good object — but the S3 leg gets what genuinely remains of the
-// rehydrate budget, not a fresh one on top of what the local attempt already
-// spent.
 func TestBringUpWithBytecode_AFailedEmbeddedAttemptLeavesTheS3LegTheRemainingBudget(t *testing.T) {
 	const embeddedCost = 300 * time.Millisecond
 
@@ -2739,7 +2405,6 @@ func TestBringUpWithBytecode_AFailedEmbeddedAttemptLeavesTheS3LegTheRemainingBud
 	}
 }
 
-// An unconfigured deployment reaches neither leg.
 func TestBringUpWithBytecode_NilResolutionSkipsTheEmbeddedLegToo(t *testing.T) {
 	l := newLiveValues(resolves(nil), nil, nil)
 	bytecodeReady := make(chan *bytecodeResolution, 1)
@@ -2768,10 +2433,6 @@ func TestBringUpWithBytecode_NilResolutionSkipsTheEmbeddedLegToo(t *testing.T) {
 	}
 }
 
-// TestBytecodeEmbedded_TargetsTheDirCompileCacheEnvDeclares pins for the
-// embedded leg what its S3 twin pins for the rehydrate: both write where
-// NODE_COMPILE_CACHE actually points, by reading the same constant rather
-// than a literal of their own.
 func TestBytecodeEmbedded_TargetsTheDirCompileCacheEnvDeclares(t *testing.T) {
 	t.Setenv(bytecodePrefixEnvVar, "ocel")
 	env := compileCacheEnv()
@@ -2781,9 +2442,6 @@ func TestBytecodeEmbedded_TargetsTheDirCompileCacheEnvDeclares(t *testing.T) {
 	dir := strings.TrimPrefix(env[0], "NODE_COMPILE_CACHE=")
 	t.Cleanup(func() { os.RemoveAll(dir) })
 
-	// The path bytecodeEmbedded derives is under /var/task, which no test can
-	// write to, so this drives the shared leg directly at the same dir and
-	// asserts where it landed.
 	tarPath := filepath.Join(t.TempDir(), "node24.3.1-arm64.tar")
 	if err := os.WriteFile(tarPath, buildTar(t, []tarEntry{{name: "cached.blob", typeflag: tar.TypeReg, content: []byte("compiled")}}), 0o644); err != nil {
 		t.Fatal(err)

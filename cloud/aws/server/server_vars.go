@@ -23,35 +23,21 @@ import (
 	envv1 "github.com/ocelhq/ocel/pkg/proto/env/v1"
 )
 
-// VarsServer implements envv1connect.EnvVarsServiceHandler. Every call reaches
-// the store for the class it names — the table and the key are per substrate,
-// so the class is which store is opened rather than a filter over one.
 type VarsServer struct {
-	// openAccount reaches the cloud a store is opened against. Nil is AWS
-	// itself.
 	openAccount func(ctx context.Context, region string) (account, error)
 
-	// listEnvironments enumerates the preview environments a project has. Nil is
-	// this provider's own DeploymentService, which is the only authority on
-	// which names exist. It is a seam so the write guard can be driven without a
-	// Pulumi backend behind it.
 	listEnvironments func(ctx context.Context, options []byte, slug string) ([]string, error)
 
 	mu     sync.Mutex
 	stores map[storeKey]*vars.Store
 }
 
-// account is the cloud a variable store is opened against: the
-// CloudFormation client its coordinates are read from, and the clients the
-// store itself reads and decrypts with.
 type account struct {
 	CFN    bootstrap.CFNDescriber
 	Dynamo vars.DynamoAPI
 	KMS    vars.CryptoAPI
 }
 
-// storeKey is everything opening a store varies on: the options the account is
-// resolved from, and which substrate's bootstrap stack holds its coordinates.
 type storeKey struct {
 	options options
 	preview bool
@@ -69,12 +55,6 @@ func awsAccount(ctx context.Context, region string) (account, error) {
 	}, nil
 }
 
-// store returns the substrate's variable store, opening it at most once per
-// session. A store's coordinates come from its bootstrap stack, which does not
-// change while the provider is running, so opening it per RPC would spend a
-// CloudFormation describe on every value a deploy reads. The lock is held
-// across the open so a burst of concurrent reads costs one describe rather
-// than one each.
 func (s *VarsServer) store(ctx context.Context, raw []byte, class deploymentsv1.Environment_Class) (*vars.Store, error) {
 	opts, err := parseOptions(raw)
 	if err != nil {
@@ -98,10 +78,6 @@ func (s *VarsServer) store(ctx context.Context, raw []byte, class deploymentsv1.
 	return store, nil
 }
 
-// open resolves the substrate's variable store from its bootstrap stack,
-// applying the same version gate every other RPC applies: an account
-// bootstrapped before the store existed gets the re-run remedy rather than an
-// obscure failure against a table that is not there.
 func (s *VarsServer) open(ctx context.Context, key storeKey) (*vars.Store, error) {
 	reach := s.openAccount
 	if reach == nil {
@@ -138,10 +114,6 @@ func (s *VarsServer) open(ctx context.Context, key storeKey) (*vars.Store, error
 	}, nil
 }
 
-// teardownValues opens the substrate's variable store for a teardown to empty,
-// or reports none when the bootstrap predates the store: an account with no
-// vars table holds no values to remove, and failing the whole teardown over
-// that would strand everything else the project owns.
 func teardownValues(awscfg aws.Config, deployed bootstrap.Deployed, class string) deploy.ValueStore {
 	store := substrateStore(awscfg, deployed, class)
 	if store == nil {
@@ -150,10 +122,6 @@ func teardownValues(awscfg aws.Config, deployed bootstrap.Deployed, class string
 	return store
 }
 
-// substrateStore opens the class's variable store from an already-described
-// bootstrap, or reports none when that bootstrap predates the store. It is
-// separate from teardownValues because the Config field is an interface: a
-// typed nil handed to one would read as configured.
 func substrateStore(awscfg aws.Config, deployed bootstrap.Deployed, class string) *vars.Store {
 	if deployed.VarsTable == "" || deployed.VarsKeyARN == "" {
 		return nil
@@ -167,10 +135,6 @@ func substrateStore(awscfg aws.Config, deployed bootstrap.Deployed, class string
 	}
 }
 
-// referenceOwners maps each of a project's cells that reads another project's
-// value to the project owning it, which is what the deploy scopes each app's
-// read grant by. An account whose bootstrap predates the store references
-// nothing, because it holds nothing.
 func referenceOwners(ctx context.Context, awscfg aws.Config, deployed bootstrap.Deployed, class, slug string) (map[vars.Coordinate]string, error) {
 	store := substrateStore(awscfg, deployed, class)
 	if store == nil {
@@ -179,18 +143,6 @@ func referenceOwners(ctx context.Context, awscfg aws.Config, deployed bootstrap.
 	return store.ReferenceOwners(ctx, slug)
 }
 
-// addressable refuses an override written against an address no runtime will
-// ever ask for. An override is identified by exactly the key a preview's
-// functions derive from their own identity, so a name nothing enumerates names
-// a value that is invisible from the moment it lands — and production has a
-// single environment, so it has no such name at all.
-//
-// It lives here because this is the last thing before the store: the CLI and
-// the bundled UI both state the rule where they can offer a picker instead of a
-// refusal, but neither of them is what the store is protected by.
-//
-// Only a write is guarded. Reading and removing an override whose environment
-// is gone is the whole remedy for one, so neither is ever refused.
 func (s *VarsServer) addressable(ctx context.Context, options []byte, class deploymentsv1.Environment_Class, at *envv1.Coordinate) error {
 	environment := at.GetEnvironment()
 	if environment == "" {
@@ -226,9 +178,6 @@ func (s *VarsServer) namedEnvironments(ctx context.Context, options []byte, slug
 	return list(ctx, options, slug)
 }
 
-// previewEnvironments is the provider's own enumeration, reached through the
-// same handler the CLI calls, so the names a write is judged against and the
-// names a picker offers can never be two different answers.
 func previewEnvironments(ctx context.Context, options []byte, slug string) ([]string, error) {
 	resp, err := (&Server{}).ListEnvironments(ctx, &deploymentsv1.ListEnvironmentsRequest{Options: options, Slug: slug})
 	if err != nil {
@@ -256,10 +205,6 @@ func (s *VarsServer) SetValue(ctx context.Context, req *envv1.SetValueRequest) (
 	return &envv1.SetValueResponse{Metadata: toMetadataProto(metadata)}, nil
 }
 
-// SetReference points a cell at a value owned elsewhere. It is guarded like
-// any other write to that cell — an override is still only addressable at an
-// environment the provider enumerates — because what varies here is what the
-// cell holds, not where it is.
 func (s *VarsServer) SetReference(ctx context.Context, req *envv1.SetReferenceRequest) (*envv1.SetReferenceResponse, error) {
 	if err := s.addressable(ctx, req.GetOptions(), req.GetClass(), req.GetCoordinate()); err != nil {
 		return nil, err
@@ -275,10 +220,6 @@ func (s *VarsServer) SetReference(ctx context.Context, req *envv1.SetReferenceRe
 	return &envv1.SetReferenceResponse{Metadata: toMetadataProto(metadata)}, nil
 }
 
-// ListReferences answers what reads a value, so the blast radius of an edit is
-// visible before the edit. The coordinate it takes is the value being asked
-// about rather than a reference to it, and the answer crosses projects, because
-// that is where a consumer usually is.
 func (s *VarsServer) ListReferences(ctx context.Context, req *envv1.ListReferencesRequest) (*envv1.ListReferencesResponse, error) {
 	store, err := s.store(ctx, req.GetOptions(), req.GetClass())
 	if err != nil {
@@ -330,10 +271,6 @@ func (s *VarsServer) GetValue(ctx context.Context, req *envv1.GetValueRequest) (
 	}, nil
 }
 
-// RevealValues is the batch behind GetValue: one query over the project's
-// current values and one decrypt per named cell that holds one, so a caller
-// resolving a whole set pays a single round trip to the table rather than one
-// per variable.
 func (s *VarsServer) RevealValues(ctx context.Context, req *envv1.RevealValuesRequest) (*envv1.RevealValuesResponse, error) {
 	store, err := s.store(ctx, req.GetOptions(), req.GetClass())
 	if err != nil {
@@ -425,13 +362,6 @@ func toMetadataProto(m vars.Metadata) *envv1.ValueMetadata {
 	return out
 }
 
-// varsError classifies a store failure so the CLI can tell a lost race from a
-// broken request without matching on message text.
-//
-// A reference refusal is an invalid argument rather than a failed precondition:
-// FAILED_PRECONDITION is how a caller recognises a lost race, and spending it
-// on an address the store's shape forbids would tell a user their value changed
-// under them when nothing of the sort happened.
 func varsError(err error) error {
 	switch {
 	case errors.Is(err, vars.ErrStaleVersion):

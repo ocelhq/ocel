@@ -6,9 +6,6 @@ const declareEnvMock = vi.hoisted(() =>
 );
 const reportEnvProblemsMock = vi.hoisted(() => vi.fn(() => Promise.resolve({})));
 
-// callSite names the file a declaration was written in, which is the identity
-// a key is owned by. Overriding it is how one test file stands in for two
-// definition files, and for one definition file running twice.
 const source = vi.hoisted(() => ({ override: undefined as string | undefined }));
 
 vi.mock("./scope.js", async (importOriginal) => {
@@ -30,8 +27,6 @@ vi.mock("../utils/rpc", () => ({
 const { defineEnv, EnvDefinitionError, EnvScopeError, EnvValueError } =
   await import("./index.js");
 
-// The declaration RPC is deferred like every other Ocel declaration, so a test
-// drives it the way the generated discovery entrypoint does.
 async function flushDeclarations() {
   const pending = globalThis.__ocelRegister ?? [];
   globalThis.__ocelRegister = [];
@@ -56,19 +51,12 @@ function reportedProblems(): Problem[] {
   return call![0].problems;
 }
 
-// A schema whose complaint quotes the value it rejected. Zod's own messages do
-// this and a custom message may do anything, so it is the shape the redaction
-// has to survive rather than an exotic one.
 function echoingSchema() {
   return z.string().refine(() => false, {
     error: (issue) => `received ${issue.input}`,
   });
 }
 
-// LIVE_VALUES is the well-known global the entrypoint publishes a pushed
-// generation of live values under. The tests write it directly because it is
-// the contract between the layer's entrypoint and this SDK, not a helper: the
-// two ship in different module graphs and share nothing else.
 const LIVE_VALUES = Symbol.for("ocel.env.liveValues");
 
 function push(generation: number, values: Record<string, string>) {
@@ -82,8 +70,6 @@ beforeEach(() => {
   globalThis.__ocelRegister = [];
   source.override = undefined;
   delete (globalThis as Record<symbol, unknown>)[LIVE_VALUES];
-  // A stubbed variable outlives the test that stubbed it, so the phase a test
-  // runs in would otherwise be whatever the test before it left behind.
   vi.unstubAllEnvs();
 });
 
@@ -104,9 +90,6 @@ describe("definition errors", () => {
     );
   });
 
-  // A definitions file is re-executed on every reload under `ocel dev`, and a
-  // file re-stating what it already declared is that reload, not a second
-  // claim on the key.
   it("lets the file that declared a key declare it again", () => {
     source.override = "/project/env.reloaded.ts";
     defineEnv({ RELOADED_KEY: { class: "plain" } });
@@ -143,9 +126,6 @@ describe("definition errors", () => {
     );
   });
 
-  // The type of a definition refuses this pairing outright — env.test-d.ts
-  // holds that proof — so what is left to check here is the caller the
-  // compiler never sees, since the union is erased by the time this runs.
   it("rejects client access on an encrypted class from an untyped caller", () => {
     expect(() =>
       // @ts-expect-error the pairing this asserts on does not typecheck
@@ -311,10 +291,6 @@ describe("validation against the stored cells", () => {
   });
 });
 
-// A schema's complaint is written by the developer and computed from the value
-// it rejected, so it is not safe to forward for a class whose values are
-// confidential. What survives is the fact of the failure and the cell it
-// happened in; the reason survives only for the plaintext class.
 describe("the confidentiality of a schema's complaint", () => {
   const SECRET_VALUE = "sk_live_super_secret";
 
@@ -390,10 +366,6 @@ describe("reading a variable", () => {
     expect(env.READ_PLAIN).toBe("hello");
   });
 
-  // Interop is what distinguishes the plaintext class: a third-party library
-  // that reads the process environment itself has to find the value under the
-  // name the user chose, which is why it is delivered bare rather than
-  // namespaced.
   it("gives a plaintext value the same answer through the object and the process environment", () => {
     vi.stubEnv("READ_INTEROP", "pk_live_123");
     const env = defineEnv({ READ_INTEROP: { class: "plain" } });
@@ -401,11 +373,6 @@ describe("reading a variable", () => {
     expect(process.env.READ_INTEROP).toBe("pk_live_123");
   });
 
-  // An encrypted-baked value never reaches the process environment under the
-  // key the user chose — the membrane injects it namespaced, after opening the
-  // bundle it rode in. Reading it is nonetheless the same property access as
-  // any other class, which is what lets a key be reclassified without a call
-  // site changing.
   it("reads an encrypted-baked value the membrane injected under its namespaced name", () => {
     vi.stubEnv("OCEL_VAR_READ_SEALED", "sk_live_123");
     const env = defineEnv({ READ_SEALED: { class: "sensitive" } });
@@ -413,9 +380,6 @@ describe("reading a variable", () => {
     expect(process.env.READ_SEALED).toBeUndefined();
   });
 
-  // A value delivered namespaced was delivered that way because it is not
-  // meant to be readable from the process environment under its own name. If
-  // something else set that name anyway, the sealed value is still the answer.
   it("prefers the namespaced value over a bare name of the same key", () => {
     vi.stubEnv("OCEL_VAR_READ_SHADOWED", "sealed");
     vi.stubEnv("READ_SHADOWED", "impostor");
@@ -468,11 +432,6 @@ describe("reading a variable", () => {
   });
 });
 
-// A live value is the one class that is not in the artifact and not in the
-// process environment: the membrane fetches it at runtime and pushes it into
-// this process, and the entrypoint publishes what arrived. What these pin is
-// that arriving that way changes nothing a call site can see, and that a value
-// replaced under a running process is actually observed.
 describe("reading a live value", () => {
   beforeEach(() => {
     vi.stubEnv("OCEL_PHASE", "");
@@ -483,14 +442,10 @@ describe("reading a live value", () => {
     const env = defineEnv({ LIVE_READ: { class: "secret" } });
 
     expect(env.LIVE_READ).toBe("sk_live_pushed");
-    // The push is the only delivery: nothing put it in the environment under
-    // either the bare or the namespaced name.
     expect(process.env.LIVE_READ).toBeUndefined();
     expect(process.env.OCEL_VAR_LIVE_READ).toBeUndefined();
   });
 
-  // Reclassifying is the claim the whole class scheme rests on, so it is read
-  // through one expression written once against three classes.
   it("answers the same call site whatever the class delivering it", () => {
     vi.stubEnv("RECLASSIFIED", "the value");
     vi.stubEnv("OCEL_VAR_RECLASSIFIED", "the value");
@@ -508,8 +463,6 @@ describe("reading a live value", () => {
 
   it("resolves a read written at module scope, which runs the moment the file is imported", () => {
     push(1, { LIVE_AT_IMPORT: "8080" });
-    // Exactly what a module-scope `const port = env.LIVE_AT_IMPORT` does: the
-    // declaration and the read are one expression, with nothing between them.
     const port = defineEnv({
       LIVE_AT_IMPORT: { class: "secret", schema: z.coerce.number() },
     }).LIVE_AT_IMPORT;
@@ -526,8 +479,6 @@ describe("reading a live value", () => {
     expect(env.LIVE_ROTATED).toBe("after");
   });
 
-  // The other half of the same memo: within one generation the value is
-  // resolved once and its schema run once, so a read stays a property access.
   it("resolves once within a generation, so a read costs nothing after the first", () => {
     let parses = 0;
     const counting = z.string().transform((value) => {
@@ -546,10 +497,6 @@ describe("reading a live value", () => {
     expect(parses).toBe(2);
   });
 
-  // Memoising a live value forever is what a class-blind memo does, and it is
-  // invisible unless something changes the values a generation holds without
-  // announcing a new one. Nothing does that in production; this stands in for
-  // it so the memo is pinned to the generation rather than to the first read.
   it("does not re-read within a generation, so the generation is what invalidates it", () => {
     push(1, { LIVE_PINNED: "first" });
     const env = defineEnv({ LIVE_PINNED: { class: "secret" } });
@@ -559,9 +506,6 @@ describe("reading a live value", () => {
     expect(env.LIVE_PINNED).toBe("first");
   });
 
-  // The published map is a plain global anything in the process can reach, so
-  // what it holds is not automatically a value. Serving a non-string would put
-  // one in front of a schema that was promised a string.
   it("does not take a published entry that is not a string as a value", () => {
     push(1, { LIVE_NOT_A_STRING: 42 as unknown as string });
 
@@ -582,11 +526,6 @@ describe("reading a live value", () => {
   });
 });
 
-// A live value is fetched after this process started, so it is the only class
-// whose value can have drifted from its schema since the deploy that shipped
-// the code reading it. Checking it at the declaration is what turns that drift
-// into an init failure, before the app serves anything, rather than a throw in
-// the middle of a request that happened to read it first.
 describe("a live value is checked against its schema at init", () => {
   beforeEach(() => {
     vi.stubEnv("OCEL_PHASE", "");
@@ -641,9 +580,6 @@ describe("a live value is checked against its schema at init", () => {
   });
 });
 
-// The live path is inert for a function that declares nothing live. That is
-// what makes a store outage its problem and no one else's: with no push there
-// is nothing to wait for, nothing to check and nothing to fail.
 describe("a function that declares no live value", () => {
   beforeEach(() => {
     vi.stubEnv("OCEL_PHASE", "");
@@ -663,17 +599,10 @@ describe("a function that declares no live value", () => {
     expect(env.OUTAGE_SEALED).toBe("still sealed");
   });
 
-  // With no push there is nothing that could have drifted, so there is nothing
-  // to check at init either. Checking anyway would turn every environment
-  // without a membrane — `ocel dev`, a test, a script — into a boot failure.
   it("leaves a live key to its first read when nothing was pushed", () => {
     expect(() => defineEnv({ LIVE_NO_PUSH: { class: "secret" } })).not.toThrow();
   });
 
-  // `ocel dev` has no membrane and so no push; it delivers a live value the way
-  // it delivers every other class, through the environment. A read falls
-  // through to it whenever no push holds the key, which is what keeps dev and
-  // production the same call site.
   it("falls through to the environment for a live key when nothing was pushed", () => {
     vi.stubEnv("OCEL_VAR_LIVE_IN_DEV", "sk_dev_123");
     const env = defineEnv({ LIVE_IN_DEV: { class: "secret" } });
@@ -681,12 +610,6 @@ describe("a function that declares no live value", () => {
     expect(env.LIVE_IN_DEV).toBe("sk_dev_123");
   });
 
-  // The bare name is the one `ocel dev` actually uses: it merges the values it
-  // resolved into the child's environment under the key the application
-  // declared, with no namespacing, because the namespaced spelling belongs to
-  // the encrypted-baked path a deploy builds and dev never builds one. A
-  // fall-through that only consulted the namespaced name would leave every dev
-  // run declaring a live key reading as unset.
   it("falls through to the bare name dev delivers a live value under", () => {
     vi.stubEnv("LIVE_IN_DEV_BARE", "sk_dev_bare");
     const env = defineEnv({ LIVE_IN_DEV_BARE: { class: "secret" } });
@@ -694,9 +617,6 @@ describe("a function that declares no live value", () => {
     expect(env.LIVE_IN_DEV_BARE).toBe("sk_dev_bare");
   });
 
-  // The push still outranks the environment where both exist: a deploy never
-  // sets these names for a live key, so an environment entry under one in
-  // production is something else wearing the name.
   it("prefers a pushed value to one standing under the same name in the environment", () => {
     vi.stubEnv("LIVE_PUSH_WINS", "from_the_environment");
     push(1, { LIVE_PUSH_WINS: "from_the_push" });
@@ -838,30 +758,6 @@ describe("reading a key outside the app's scope", () => {
   });
 });
 
-// The app's folder binding is the one folder-shaped thing the runtime is told,
-// and it is admitted on exactly one condition: it carries no value-selection
-// power. It may decide whether a scoped read fails, and it may decide nothing
-// else — which value a successful read returns, and which environment name
-// that value came from, are the same at every binding. These tests pin that
-// condition rather than the wording of the error, so a read that ever chose a
-// value by folder fails here even if every message still reads correctly.
-//
-// What they pin is observational, and bounded by what plant seeds: no
-// folder-derived lookup name, and no hit on a folder-keyed cell under the
-// spellings the store could use. A read that instead decoded a folder out of a
-// structured payload inside one variable would consult identical names at
-// every binding and is invisible here. No test at this layer can refute an
-// encoding it did not plant; the guarantee that closes that gap is that
-// delivery resolves each value's *coordinate*, folder included, before the
-// runtime sees anything.
-//
-// For every class but one that also means the value itself is resolved first.
-// A live value is the exception: only its coordinate is pinned at deploy, and
-// the value is fetched while the process runs. It is no exception to the
-// guarantee, because what the membrane spends that coordinate on never crosses
-// back — it pushes a flat map under bare key names, and the runtime asks for a
-// live value by bare key exactly as it asks for any other. The folder is spent
-// at deploy either way; what differs is only when the value is fetched.
 describe("the app folder binding selects no value", () => {
   const RESOLVED = "the one resolved value";
 
@@ -869,11 +765,6 @@ describe("the app folder binding selects no value", () => {
     vi.stubEnv("OCEL_PHASE", "");
   });
 
-  // plant puts the resolved value where delivery puts it, and puts a different
-  // value under every name a folder-aware read could address a cell by: the
-  // store spells a scoped cell '<folder>#<key>', so those are the names such a
-  // read would reach for. Without them a folder-selecting read would return
-  // the same string by accident and prove nothing.
   function plant(key: string, folders: readonly string[]) {
     vi.stubEnv(`OCEL_VAR_${key}`, RESOLVED);
     vi.stubEnv(key, RESOLVED);
@@ -885,10 +776,6 @@ describe("the app folder binding selects no value", () => {
     }
   }
 
-  // observe reports what a read returned or threw, and every environment name
-  // it consulted. The names matter on their own: a read that addressed a cell
-  // by folder consults a different name under a different binding even when
-  // the two cells happen to hold the same string.
   function observe(read: () => unknown) {
     const real = process.env;
     const consulted: string[] = [];
@@ -945,12 +832,6 @@ describe("the app folder binding selects no value", () => {
       return observe(() => env.SELECT_PARTITION).outcome;
     };
 
-    // Which binding lands on which side is the claim, so this pins the mapping
-    // rather than the set of outcomes a set would let any one binding flip
-    // silently. '/web/nested' carries the nesting invariant: a match that grew
-    // nesting-aware would hand it a value that deploy-time resolution, which
-    // matches a binding whole, never delivers — turning a build-time scope
-    // error into a runtime missing value.
     const bindings = ["/web", "/admin", "", "/marketing", "/web/nested", "/WEB"];
     expect(Object.fromEntries(bindings.map((b) => [b, outcomeAt(b)]))).toEqual({
       "/web": `value:${RESOLVED}`,
@@ -962,11 +843,6 @@ describe("the app folder binding selects no value", () => {
     });
   });
 
-  // A live value is fetched while the process runs rather than resolved before
-  // it starts, so it is the one delivery this suite's charter has to be
-  // re-argued for. The push is planted with folder-shaped entries beside the
-  // bare one, exactly as plant does for the environment: a read that addressed
-  // the pushed map by folder would return one of those instead.
   it("selects a live value by bare key alone, at every binding its scope permits", () => {
     plant("SELECT_LIVE", ["/web", "/admin"]);
     push(1, {
@@ -1007,25 +883,7 @@ describe("the app folder binding selects no value", () => {
   });
 });
 
-// The other half of ocelhq-xd5j.34. The CLI half is pinned in Go — that
-// `resolvedEnv` states OCEL_APP_FOLDER and that the child is spawned with it
-// (cli/internal/cli/devenv_test.go). Neither side alone shows that the pairing
-// works: the CLI cannot see whether the SDK accepts what it sent, and every
-// scope test above stubs a binding no dev run ever produced. These replay the
-// environment `ocel dev` actually builds and read out of it.
-//
-// Three properties of that environment are load-bearing here and are modelled
-// rather than assumed. Every value arrives under its bare name, because dev has
-// no membrane and the environment is its only delivery channel — so no class
-// gets the OCEL_VAR_ namespacing a deploy would give it, and no live value
-// arrives by push. The binding is written unconditionally, empty included, so
-// an unbound project states the root rather than inheriting a stale one. And a
-// scoped key's value is the same string at every folder its scope names,
-// because dev's store broadcasts one flat root entry across them.
 describe("a scoped read under `ocel dev`", () => {
-  // devChildEnv is `resolvedEnv` (cli/internal/cli/dev.go) in the SDK's terms:
-  // the flat map under bare names, with the binding written last and always.
-  // Anything the deploy path would add is deliberately absent.
   function devChildEnv(binding: string, values: Record<string, string>) {
     for (const [key, value] of Object.entries(values)) vi.stubEnv(key, value);
     vi.stubEnv("OCEL_APP_FOLDER", binding);
@@ -1045,10 +903,6 @@ describe("a scoped read under `ocel dev`", () => {
     expect(env.DEV_SCOPED_PLAIN).toBe("http://localhost:3000");
   });
 
-  // A live key in dev has no push behind it, so it resolves through the bare
-  // environment fallback. That fallback and the scope check are the two things
-  // standing between this read and a throw, and this is the only test that puts
-  // both in the position a dev run puts them in.
   it("resolves a scoped live value through dev's environment delivery", () => {
     devChildEnv("/web", { DEV_SCOPED_LIVE: "sk_dev" });
 
@@ -1059,10 +913,6 @@ describe("a scoped read under `ocel dev`", () => {
     expect(env.DEV_SCOPED_LIVE).toBe("sk_dev");
   });
 
-  // The broadcast, read from the SDK's side: one root line in the file becomes
-  // the value at every folder the declaration names, so an app bound to either
-  // reads it and gets the same string. That the two cannot diverge is the cost
-  // the CLI's notice states.
   it("reads the one broadcast value from either folder the scope names", () => {
     const read = (binding: string) => {
       devChildEnv(binding, { DEV_BROADCAST: "one value everywhere" });
@@ -1077,15 +927,6 @@ describe("a scoped read under `ocel dev`", () => {
     ]);
   });
 
-  // The stated limit of .34 under dev, pinned as behaviour rather than left as
-  // prose: dev spawns one child for the whole project, so two apps binding
-  // different folders make `appbuilder.AppFolder` state the project root. The
-  // value is delivered — the broadcast put it in the flat map under its bare
-  // name, and it is right there in this environment — and the read is still
-  // refused. That refusal is correct: handing it over would give one app the
-  // other's scoped value. This test is what makes the limit visible if anyone
-  // ever "fixes" it by loosening the scope check instead of by teaching dev
-  // which app the child is.
   it("still refuses a scoped read when dev could only state the project root", () => {
     devChildEnv("", { DEV_TWO_APPS: "delivered but not this app's" });
 
@@ -1097,10 +938,6 @@ describe("a scoped read under `ocel dev`", () => {
     expect(process.env.DEV_TWO_APPS).toBe("delivered but not this app's");
   });
 
-  // Dev writes the binding unconditionally so a value left in the developer's
-  // own shell cannot answer for the run. From the SDK's side that shows up as
-  // the empty string dev wrote winning over the stale one, which is only
-  // observable because the two disagree.
   it("honours the empty binding dev wrote over a stale one from the shell", () => {
     vi.stubEnv("OCEL_APP_FOLDER", "/web");
     devChildEnv("", { DEV_STALE_BINDING: "not this app's either" });

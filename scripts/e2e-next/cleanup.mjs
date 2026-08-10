@@ -1,17 +1,4 @@
 #!/usr/bin/env node
-// NEXT_TEST_CLEANUP_SCRIPT_PATH for the Next.js deployment-adapter
-// compatibility harness. Runs with cwd set to the temp app after its tests have
-// finished.
-//
-// It removes ONE ephemeral preview pointer — this temp app's — from the run's
-// shared project, and nothing else: the project, its root stack, its entrypoint
-// worker and the wildcard route they hold are the whole run's and outlive every
-// fixture. Project-level teardown is the workflow's `destroy` job
-// (project-teardown.mjs), which is also what reclaims a run this never ran for.
-//
-// It still never skips on partial state — a deploy that failed halfway still
-// provisioned Lambdas and a stack — and it blocks until teardown returns,
-// failing loudly (non-zero, which the harness surfaces) if it cannot finish.
 
 import { spawnSync } from "node:child_process";
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
@@ -52,11 +39,6 @@ if (res.error || res.signal || res.status !== 0) {
 
 console.error(`[ocel-e2e] preview ${ref} removed`);
 
-// resolveIdentity prefers what deploy.mjs persisted, but re-derives each half
-// the same way deploy.mjs did when the state file is missing or unreadable: a
-// deploy that died before writing it may still have provisioned infrastructure,
-// and this is the only chance to reclaim it before the run's destroy job takes
-// the entire project.
 function resolveIdentity() {
   let state = {};
   try {
@@ -70,10 +52,6 @@ function resolveIdentity() {
   };
 }
 
-// ensureConfig restores the ocel.config.ts `preview rm` resolves the project
-// through. A deploy that died before writing it, or a directory the harness
-// partly wiped, would otherwise leave teardown with nothing to address — and the
-// config is pure, so re-rendering it from the same environment reproduces it.
 function ensureConfig(slug) {
   const path = join(appDir, "ocel.config.ts");
   if (existsSync(path)) {

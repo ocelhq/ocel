@@ -22,9 +22,6 @@ const defaults: Record<Numeric, number> & { ttls: number[] } = {
   windowSeconds: 180,
 };
 
-// Shared with race-options.ts so the two runners cannot drift on what an
-// argument vector means. The failure type is a parameter because each runner
-// aborts through its own error class.
 export function tokenizeFlags(
   argv: string[],
   fail: (message: string) => Error,

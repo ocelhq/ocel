@@ -1,27 +1,10 @@
-// Partial Prerendering at the edge: a PPR route's cached shell is flushed to the
-// client immediately while the origin resumes rendering only the deferred
-// Suspense boundaries, and the two halves stream to the client as one response.
-//
-// The composed response is per-visitor by construction — the resumed half is
-// rendered against this request's cookies and headers — so it must never enter a
-// shared cache. That is why this path bypasses the colo cache outright rather
-// than relying on a cache-control header to keep it out.
-//
-// The commit point is the first shell byte: once it is written, an origin
-// failure can only truncate the document, never redirect or re-render it. That
-// is inherent to streaming, and it is the price of a shell at edge latency.
 import { CACHE_STATUS } from "./cache";
 import type { Interception } from "./interception";
 
 export type PprHit = Extract<Interception, { kind: "ppr" }>;
 
-// Next's resume protocol, as its platform guide specifies it: a POST carrying
-// the postponed state as the raw body. The build declares the headers in
-// pprChain; the only value Next emits today is this one.
 const DEFAULT_RESUME_HEADERS = { "next-resume": "1" };
 
-// Per-hop headers describe the connection this worker terminated, not the
-// request being forwarded, so they are the only ones dropped.
 const HOP_BY_HOP = [
   "connection",
   "keep-alive",
@@ -33,13 +16,6 @@ const HOP_BY_HOP = [
   "upgrade",
 ];
 
-// resumeRequest builds the origin call that renders this request's dynamic half.
-//
-// It deliberately carries the client's FULL headers — cookie, authorization,
-// RSC, user-agent — rather than the allowHeader set a cacheable prerender is
-// forwarded under. Those headers are the entire reason the deferred boundaries
-// exist: filtering them would render the dynamic half for nobody in particular.
-// That is safe here precisely because the result is never cached.
 export function resumeRequest(
   url: URL,
   request: Request,
@@ -62,16 +38,10 @@ export function resumeRequest(
   });
 }
 
-// composePpr returns the single response the client sees: the shell's bytes
-// followed by the resumed render's. `resumed` must already be in flight — the
-// whole point is that the origin is working while the shell is on the wire.
 export function composePpr(hit: PprHit, resumed: Promise<Response>): Response {
   const { readable, writable } = new TransformStream<Uint8Array, Uint8Array>();
   void pipe(hit.shell, resumed, writable);
 
-  // The cacheable half (the shell) came from the R2 ISR store, so the composed
-  // response is a PRERENDER serve — whether or not the shell was stale, which
-  // only decides the background refresh, not the header.
   const headers = new Headers(hit.shell.headers);
   headers.set("cache-control", "private, no-store");
   headers.set(CACHE_STATUS, "PRERENDER");
@@ -85,23 +55,14 @@ async function pipe(
   resumed: Promise<Response>,
   writable: WritableStream<Uint8Array>,
 ): Promise<void> {
-  // A failed resume has an error page for a body, and appending that to the
-  // shell would corrupt the document — a truncated page is the better failure.
-  // Settle the promise here, before the shell flush awaits, so its eventual
-  // rejection is never momentarily unhandled while the shell is on the wire.
   const dynamic = resumed.then(
     async (response) => {
       if (response.ok) return response.body;
       await response.body?.cancel();
-      // Status only: the resumed response is rebuilt by the origin hop and
-      // carries no url, and the request's own url would put this visitor's
-      // query string — tokens included — into the logs.
       console.error(`ppr resume dropped: origin answered ${response.status}`);
       return null;
     },
     (err) => {
-      // Name only, for the same reason: workerd puts the url it failed to fetch
-      // in a fetch error's message, and that url is this request's forward.
       console.error(`ppr resume dropped: ${errorName(err)}`);
       return null;
     },

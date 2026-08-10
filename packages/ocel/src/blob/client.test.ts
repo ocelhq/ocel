@@ -3,8 +3,6 @@ import { createUploadClient } from "./client.js";
 import type { Bucket } from "./bucket.js";
 import type { Uploader } from "./types.js";
 
-// A structural bucket type is enough to exercise the runtime client; the fake
-// fetch stands in for the route.
 type TestBucket = Bucket<{ avatar: Uploader<{ userId: string }, unknown> }>;
 
 function jsonRes(body: unknown, ok = true, status = 200) {
@@ -30,7 +28,6 @@ function fakeFetch(pollStates: string[]) {
       const state = pollStates[Math.min(poll++, pollStates.length - 1)];
       return jsonRes({ state });
     }
-    // PUT to the presigned target
     return jsonRes({});
   });
 }
@@ -53,7 +50,6 @@ describe("createUploadClient", () => {
       { onClientUploadComplete },
     );
 
-    // presign body carries uploader name + client-reported file identity
     const presignCall = fetch.mock.calls.find((c) => c[0].includes("op=presign"))!;
     expect(JSON.parse(presignCall[1]!.body as string)).toEqual({
       uploader: "avatar",
@@ -61,7 +57,6 @@ describe("createUploadClient", () => {
       files: [{ name: "a.jpg", size: 10, mimeType: "image/jpeg" }],
     });
 
-    // bytes go directly to the presigned target via PUT (not through the route)
     const putCall = fetch.mock.calls.find((c) => c[0] === "https://store/put/a")!;
     expect(putCall[1]!.method).toBe("PUT");
     expect(putCall[1]!.body).toBe(file);

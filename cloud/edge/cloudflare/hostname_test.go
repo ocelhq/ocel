@@ -13,10 +13,6 @@ import (
 	"github.com/cloudflare/cloudflare-go/v4/option"
 )
 
-// cfMock is a minimal stand-in for the Cloudflare REST API covering the calls
-// the worker-route path makes: list the account's zones, list/create worker
-// routes in a zone, and list/create/delete DNS records in a zone. It records
-// the create/delete requests so tests can assert what the provider did.
 type cfMock struct {
 	zoneID, zoneName string
 
@@ -38,7 +34,6 @@ func (m *cfMock) server(t *testing.T) *httptest.Server {
 	t.Helper()
 	mux := http.NewServeMux()
 
-	// V4 paginated lists terminate when a page comes back empty; page 2+ is empty.
 	firstPage := func(r *http.Request) bool {
 		p := r.URL.Query().Get("page")
 		return p == "" || p == "1"
@@ -150,9 +145,6 @@ func (m *cfMock) server(t *testing.T) *httptest.Server {
 	return srv
 }
 
-// matchingRecords applies the "name.exact" and "type" filters the way the real
-// API does. Serving the whole zone regardless would let an assertion that only
-// one hostname's record was touched pass vacuously.
 func matchingRecords(records []map[string]any, query url.Values) []map[string]any {
 	matched := []map[string]any{}
 	for _, rec := range records {
@@ -175,15 +167,10 @@ func (m *cfMock) provider(t *testing.T) *provider {
 	)}
 }
 
-// prunedPlan is the production-shaped route plan: these hostnames, each resolved
-// by Ocel's own placeholder record, and any other route on the script pruned.
 func prunedPlan(desired ...string) routePlan {
 	return routePlan{desired: desired, prune: true}
 }
 
-// A worker route only matches traffic that already reaches Cloudflare's edge, so
-// the route path must also plant a proxied placeholder DNS record for the
-// hostname — without it the hostname never resolves and the route never fires.
 func TestReconcileWorkerRoutes_PlantsProxiedRecord(t *testing.T) {
 	m := &cfMock{zoneID: "zone1", zoneName: "app.com"}
 	p := m.provider(t)
@@ -224,8 +211,6 @@ func TestRoutePattern_IsTheOneSpellingOfAHostnameAsARoute(t *testing.T) {
 	}
 }
 
-// The claim check reads who holds a hostname before anything is built, so a
-// hostname another project's worker is bound to comes back naming that worker.
 func TestRouteOwner_ReportsTheScriptBoundToThePattern(t *testing.T) {
 	t.Setenv(envAccountID, "acct")
 	m := &cfMock{
@@ -262,8 +247,6 @@ func TestRouteOwner_UnheldPatternIsUnclaimed(t *testing.T) {
 	}
 }
 
-// Matching is exact-pattern: a wildcard that merely covers the same traffic is
-// a different pattern, and the overlap stays the late collision it is today.
 func TestRouteOwner_OverlappingWildcardIsNotAMatch(t *testing.T) {
 	t.Setenv(envAccountID, "acct")
 	m := &cfMock{
@@ -283,9 +266,6 @@ func TestRouteOwner_OverlappingWildcardIsNotAMatch(t *testing.T) {
 	}
 }
 
-// A hostname in no zone of this account cannot be answered for — and must read
-// as unanswerable rather than as unclaimed, so the caller degrades instead of
-// concluding the hostname is free.
 func TestRouteOwner_HostnameOutsideTheAccountIsAnError(t *testing.T) {
 	t.Setenv(envAccountID, "acct")
 	m := &cfMock{zoneID: "zone1", zoneName: "app.com"}
@@ -295,8 +275,6 @@ func TestRouteOwner_HostnameOutsideTheAccountIsAnError(t *testing.T) {
 	}
 }
 
-// Production may attach several hostnames — an apex and a "www" alias, say —
-// each becoming its own worker route with its own placeholder record.
 func TestReconcileWorkerRoutes_AttachesEveryDomain(t *testing.T) {
 	m := &cfMock{zoneID: "zone1", zoneName: "app.com"}
 	p := m.provider(t)
@@ -318,8 +296,6 @@ func TestReconcileWorkerRoutes_AttachesEveryDomain(t *testing.T) {
 	}
 }
 
-// The route path is idempotent: a redeploy that finds the placeholder record
-// already present must not create a second one.
 func TestReconcileWorkerRoutes_ExistingRecordIsLeftAlone(t *testing.T) {
 	m := &cfMock{
 		zoneID:   "zone1",
@@ -346,8 +322,6 @@ func TestReconcileWorkerRoutes_ExistingRecordIsLeftAlone(t *testing.T) {
 	}
 }
 
-// Dropping a hostname from the config tears down its route and Ocel's own
-// placeholder record; routes for other scripts, and routes still wanted, stay.
 func TestReconcileWorkerRoutes_PrunesDroppedDomain(t *testing.T) {
 	m := &cfMock{
 		zoneID:   "zone1",
@@ -376,10 +350,6 @@ func TestReconcileWorkerRoutes_PrunesDroppedDomain(t *testing.T) {
 	}
 }
 
-// A stem widens the sweep to the workers an earlier shape of this same deploy
-// left standing: their routes are more specific than the wildcard this reconcile
-// attaches, so until they go they keep shadowing it on those hostnames. The
-// route's placeholder record goes with it.
 func TestReconcileWorkerRoutes_PrunesRoutesOnWorkersUnderTheStem(t *testing.T) {
 	m := &cfMock{
 		zoneID:   "zone1",
@@ -407,10 +377,6 @@ func TestReconcileWorkerRoutes_PrunesRoutesOnWorkersUnderTheStem(t *testing.T) {
 	}
 }
 
-// Pruning is destructive, so the stem must reach nothing but the family it
-// heads: another project's worker, a worker of a project whose slug merely
-// extends this one's, and this project's own production workers are all outside
-// it and keep their routes.
 func TestReconcileWorkerRoutes_StemNeverReachesAnotherWorkerFamily(t *testing.T) {
 	m := &cfMock{
 		zoneID:   "zone1",
@@ -438,9 +404,6 @@ func TestReconcileWorkerRoutes_StemNeverReachesAnotherWorkerFamily(t *testing.T)
 	}
 }
 
-// The desired set is checked before the stem, so the route this reconcile just
-// attached is never a sweep's to take — whichever worker under the stem happens
-// to hold it when the sweep runs.
 func TestReconcileWorkerRoutes_StemNeverTakesADesiredHostname(t *testing.T) {
 	m := &cfMock{
 		zoneID:   "zone1",
@@ -465,7 +428,6 @@ func TestReconcileWorkerRoutes_StemNeverTakesADesiredHostname(t *testing.T) {
 	}
 }
 
-// Without a stem the sweep is what it always was — this script's routes alone.
 func TestReconcileWorkerRoutes_NoStemSweepsThisScriptOnly(t *testing.T) {
 	m := &cfMock{
 		zoneID:   "zone1",
@@ -486,9 +448,6 @@ func TestReconcileWorkerRoutes_NoStemSweepsThisScriptOnly(t *testing.T) {
 	}
 }
 
-// Pruning is the caller's to ask for: with PruneRoutes off, a route already on
-// the script that this reconcile's desired set does not name is left alone, so a
-// caller reconciling only part of a script's route set cannot black-hole the rest.
 func TestReconcileWorkerRoutes_WithoutPruningLeavesUnnamedRoutes(t *testing.T) {
 	m := &cfMock{
 		zoneID:   "zone1",
@@ -519,8 +478,6 @@ func TestReconcileWorkerRoutes_WithoutPruningLeavesUnnamedRoutes(t *testing.T) {
 	}
 }
 
-// A required record is one outside this reconcile's authority — something else
-// owns it — so a reconcile confirms it and plants nothing of its own.
 func TestReconcileWorkerRoutes_RequiredRecordPresentPlantsNothing(t *testing.T) {
 	m := &cfMock{
 		zoneID:   "zone1",
@@ -545,8 +502,6 @@ func TestReconcileWorkerRoutes_RequiredRecordPresentPlantsNothing(t *testing.T) 
 	}
 }
 
-// Without the required record the hostname never resolves, so the deploy
-// fails up front naming the record to add rather than shipping a dead hostname.
 func TestReconcileWorkerRoutes_RequiredRecordMissingFails(t *testing.T) {
 	m := &cfMock{zoneID: "zone1", zoneName: "app.com"}
 	p := m.provider(t)
@@ -565,7 +520,6 @@ func TestReconcileWorkerRoutes_RequiredRecordMissingFails(t *testing.T) {
 	}
 }
 
-// An unproxied record never reaches a worker, so it is as fatal as a missing one.
 func TestReconcileWorkerRoutes_RequiredRecordUnproxiedFails(t *testing.T) {
 	m := &cfMock{
 		zoneID:   "zone1",
@@ -587,8 +541,6 @@ func TestReconcileWorkerRoutes_RequiredRecordUnproxiedFails(t *testing.T) {
 	}
 }
 
-// The pivot off custom domains is self-healing: a redeploy detaches any custom
-// domain still bound to the script (a route overlapping it would be rejected).
 func TestReconcileWorkerRoutes_DetachesLeftoverCustomDomains(t *testing.T) {
 	m := &cfMock{
 		zoneID:                "zone1",
@@ -607,8 +559,6 @@ func TestReconcileWorkerRoutes_DetachesLeftoverCustomDomains(t *testing.T) {
 	}
 }
 
-// A hostname the zone's Universal SSL does not cover (more than one label deep)
-// warns rather than silently serving a broken TLS handshake.
 func TestReconcileWorkerRoutes_WarnsOnUncoveredTLS(t *testing.T) {
 	m := &cfMock{zoneID: "zone1", zoneName: "app.com"}
 	p := m.provider(t)
@@ -626,8 +576,6 @@ func TestReconcileWorkerRoutes_WarnsOnUncoveredTLS(t *testing.T) {
 	}
 }
 
-// An existing unproxied record at a route hostname means the route cannot fire;
-// the deploy warns and leaves the user's record untouched.
 func TestReconcileWorkerRoutes_WarnsOnUnproxiedRecord(t *testing.T) {
 	m := &cfMock{
 		zoneID:   "zone1",
@@ -654,10 +602,6 @@ func TestReconcileWorkerRoutes_WarnsOnUnproxiedRecord(t *testing.T) {
 	}
 }
 
-// A production apex almost always carries TXT/MX records (SPF, verification)
-// that share its name but can never be proxied. Those must not be mistaken for
-// an address record: the route path still plants its AAAA placeholder and warns
-// about nothing.
 func TestReconcileWorkerRoutes_PlantsDespiteTXTRecord(t *testing.T) {
 	m := &cfMock{
 		zoneID:   "zone1",
@@ -684,8 +628,6 @@ func TestReconcileWorkerRoutes_PlantsDespiteTXTRecord(t *testing.T) {
 	}
 }
 
-// A proxied address record already at the hostname means the route resolves:
-// leave it, plant nothing, warn about nothing.
 func TestReconcileWorkerRoutes_ProxiedAddressRecordLeftAlone(t *testing.T) {
 	m := &cfMock{
 		zoneID:   "zone1",
@@ -712,9 +654,6 @@ func TestReconcileWorkerRoutes_ProxiedAddressRecordLeftAlone(t *testing.T) {
 	}
 }
 
-// Destroying a worker removes the placeholder records the route path planted for
-// it — script deletion drops the routes, but not the DNS records that made their
-// hostnames resolve — while leaving records the user manages untouched.
 func TestDetachRouteRecords_RemovesOnlyOcelPlaceholders(t *testing.T) {
 	m := &cfMock{
 		zoneID:   "zone1",
@@ -738,8 +677,6 @@ func TestDetachRouteRecords_RemovesOnlyOcelPlaceholders(t *testing.T) {
 	}
 }
 
-// A DNS record the user owns at the route's hostname (not our discard-prefix
-// placeholder) is never deleted on teardown.
 func TestDetachRouteRecords_LeavesUserRecords(t *testing.T) {
 	m := &cfMock{
 		zoneID:   "zone1",
@@ -762,10 +699,6 @@ func TestDetachRouteRecords_LeavesUserRecords(t *testing.T) {
 	}
 }
 
-// ocelhq-5w3: teardown reclaims a record only at a hostname this script's own
-// routes name, never at one that merely covers them. A record at *.preview.app.com
-// is byte-identical to one Ocel plants, so nothing about the record itself keeps
-// a teardown off it — only the fact that no route on this script names it.
 func TestDetachRouteRecords_LeavesARecordNoRouteOfItsOwnNames(t *testing.T) {
 	m := &cfMock{
 		zoneID:   "zone1",

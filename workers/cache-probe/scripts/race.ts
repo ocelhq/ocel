@@ -1,22 +1,3 @@
-// Drives the race against the deployed probe. Run it from a machine outside
-// Cloudflare.
-//
-//   node scripts/race.ts --base https://probe.example.com --phase control
-//   node scripts/race.ts --base https://probe.example.com --phase gap   --trials 200
-//   node scripts/race.ts --base https://probe.example.com --phase burst --trials 100 \
-//     --sizes 2,8,32,128 --window <the gap phase's W in ms>
-//
-// The jitter sweep is the burst phase with --jitters, and --isolates is what the
-// λ-free bound J >= I_colo·W is read against:
-//
-//   node scripts/race.ts --base https://probe.example.com --phase burst --trials 100 \
-//     --sizes 128 --window 8 --isolates 99 --jitters 0,100,250,500,1000,2000
-//
-// See README.md for the phases, for why the base URL must not be workers.dev,
-// and for the three rules the gates below enforce. They are stated there once
-// rather than restated here; each gate carries its own reason at the line that
-// enforces it.
-
 import diagnosticsChannel from "node:diagnostics_channel";
 import { randomUUID } from "node:crypto";
 import { mkdir, writeFile } from "node:fs/promises";
@@ -46,14 +27,6 @@ import {
   type WindowResult,
 } from "../src/race-analysis.ts";
 
-
-// ---------------------------------------------------------------------------
-// Transport. One Client is one socket. A bare Client neither retries nor
-// follows redirects — undici puts both behind opt-in interceptors, and neither
-// is opted into here — so any anomaly surfaces as a non-200 or a thrown error,
-// and the caller discards the whole trial for it. Anything that repaired a trial
-// by re-sending would be sending against a key the first send just claimed.
-
 const openClient = (origin: string) => new Client(origin, { pipelining: 1 });
 
 async function call<T>(client: Client, method: "GET" | "POST", path: string): Promise<T> {
@@ -65,21 +38,12 @@ async function call<T>(client: Client, method: "GET" | "POST", path: string): Pr
   return JSON.parse(body) as T;
 }
 
-// When each racer's first byte actually reached its socket. Calling `request`
-// does not send: undici queues the write and resumes it off the loop, so the
-// driver's own map() timestamps are microseconds apart no matter how long the
-// sends really take, and a dispersion computed from them can never exceed a
-// window measured in milliseconds. This channel publishes immediately before
-// the request head is written, which is the closest observable moment to a
-// send that the client offers.
 const sentAtByPath = new Map<string, number>();
 diagnosticsChannel.subscribe("undici:client:sendHeaders", (message) => {
   const { request } = message as { request: { path: string } };
   sentAtByPath.set(request.path, performance.now());
 });
 
-// Every racer in a trial is on a fresh key and a distinct seq, so the paths are
-// unique and the map is emptied per trial rather than growing across a sweep.
 function dispersionOf(paths: string[]): number {
   const sent = paths.map((path) => sentAtByPath.get(path));
   if (sent.some((at) => at === undefined)) {
@@ -91,10 +55,6 @@ function dispersionOf(paths: string[]): number {
   return Math.max(...(sent as number[])) - Math.min(...(sent as number[]));
 }
 
-// One racer's whole request, timed from before it is queued. That start point is
-// deliberately early: the elapsed time is used as a CEILING on the delay the
-// worker says it slept, and a ceiling that started late could reject an honest
-// worker.
 async function raceCall(client: Client, path: string) {
   const started = performance.now();
   const response = await call<RaceResponse>(client, "POST", path);
@@ -107,8 +67,6 @@ interface Identity {
   host: string;
 }
 
-// A socket that has completed TCP+TLS and been proven live. Firing a race on a
-// cold socket would put the handshake inside the measurement.
 async function openRacers(origin: string, count: number): Promise<Client[]> {
   const clients = Array.from({ length: count }, () => openClient(origin));
   await Promise.all(clients.map((client) => call<Identity>(client, "GET", "/identity")));
@@ -116,12 +74,6 @@ async function openRacers(origin: string, count: number): Promise<Client[]> {
 }
 
 const closeRacers = (clients: Client[]) => Promise.all(clients.map((c) => c.close()));
-
-// ---------------------------------------------------------------------------
-// Phase 0 — the key-scope control. Production's colo-cache keys all sit on
-// synthetic hostnames belonging to no zone; PR 1 only ever proved an ON-zone
-// key. Until both arms come back visible, every later number is about a cache
-// that may not be storing anything.
 
 interface ControlArm {
   scope: string;
@@ -180,22 +132,10 @@ async function controlArm(
 }
 
 type ControlVerdict =
-  // Both key shapes store and are colo-visible: production's synthetic
-  // hostnames work and the window is worth measuring.
   | "both-scopes-visible"
-  // The on-zone key works and the production shape does not. Every colo-cache
-  // tier in workers/nextjs is inert, silently, failing open. This outranks the
-  // window entirely.
   | "offzone-inert"
-  // The mirror image: the production shape stores and the on-zone one does not.
-  // Nothing in workers/nextjs depends on an on-zone key, so this is not a
-  // product defect — but it is not `inconclusive` either, and the advice for
-  // that verdict (raise --sockets) would not move it.
   | "onzone-inert"
-  // Nothing stored anywhere: workers.dev, or the route is not live.
   | "cache-inert"
-  // No read ever reached an isolate other than the writer's, so neither arm can
-  // be told apart from the other.
   | "inconclusive";
 
 function controlVerdict(onzone: ControlArm, offzone: ControlArm): ControlVerdict {
@@ -215,10 +155,6 @@ async function control(options: RaceOptions, origin: string) {
   const offzone = await controlArm(origin, `${run}-off`, "offzone", options.sockets);
   return { run, onzone, offzone, verdict: controlVerdict(onzone, offzone) };
 }
-
-// ---------------------------------------------------------------------------
-// Preflight. Every gate here is fatal, not a warning: each of them turns a green
-// run into a fabrication that looks like an answer.
 
 interface Preflight {
   host: string;
@@ -252,18 +188,11 @@ async function preflight(options: RaceOptions, origin: string): Promise<Prefligh
     throw new Abort(`the ${options.scope} key is not colo-visible; nothing to race for`);
   }
 
-  // A zone carrying a wildcard worker route can serve a fraction of requests
-  // from a foreign script for minutes after a deploy. In a race that arrives as
-  // a non-200, which is loud — but only if it is not already poisoning trials.
   const clients = await openRacers(origin, 20);
   const clean = await Promise.all(
     Array.from({ length: 200 }, (_, i) => call<Identity>(clients[i % 20]!, "GET", "/identity")),
   );
 
-  // One runner reaches one colo, and every trial's classification is an
-  // argument about one colo's cache. A null colo means request.cf was absent,
-  // which would make two racers compare equal on "unknown" and pass the
-  // mixed-colo gate; a second colo means the sweep is pooling two caches.
   const colos = new Set(clean.map((c) => c.colo));
   if (colos.size !== 1 || clean[0]!.colo === null) {
     throw new Abort(
@@ -272,8 +201,6 @@ async function preflight(options: RaceOptions, origin: string): Promise<Prefligh
     );
   }
 
-  // The round trip PR 1 never recorded, taken sequentially on one warm socket so
-  // it is a latency and not a queueing delay.
   const latencies: number[] = [];
   for (let i = 0; i < 40; i += 1) {
     const started = performance.now();
@@ -291,15 +218,6 @@ async function preflight(options: RaceOptions, origin: string): Promise<Prefligh
   };
 }
 
-// ---------------------------------------------------------------------------
-// The trial loop's shared failure policy. A transport failure discards the
-// whole trial rather than repairing it — a resend against a key the first send
-// just claimed reports claimed:false and manufactures a suppression that never
-// happened. But discards are not free: the pool is rebuilt after each one, so a
-// run full of them is also resampling its isolates as it goes. Above a small
-// ratio the run is not reporting on the cache and says so instead of printing a
-// window over whatever survived.
-
 function assertDiscardsTolerable(options: RaceOptions, discarded: number, attempted: number) {
   if (attempted === 0 || discarded / attempted <= options.maxDiscardRate) return;
   throw new Abort(
@@ -311,11 +229,6 @@ function assertDiscardsTolerable(options: RaceOptions, discarded: number, attemp
   );
 }
 
-// A key nobody has written cannot suppress anybody, so whichever racer runs
-// `match` first must miss and claim. This asserts that reasoning; it can only
-// fire if the claim primitive or the key minting changed underneath it. A zero
-// here is a theorem and is NOT evidence that anything was measured — do not
-// report it as one.
 function assertSomebodyClaimed(zeroClaimTrials: number, where: string) {
   if (zeroClaimTrials === 0) return;
   throw new Abort(
@@ -323,9 +236,6 @@ function assertSomebodyClaimed(zeroClaimTrials: number, where: string) {
       "written. The instrument is broken, not the cache.",
   );
 }
-
-// ---------------------------------------------------------------------------
-// Phase 1 — the gap sweep.
 
 const raceRoute = (options: RaceOptions, key: string, seq: number, jitterMs = 0) =>
   `/race?key=${key}&seq=${seq}&scope=${options.scope}&ttl=${options.sentinelTtlSeconds}` +
@@ -343,11 +253,7 @@ async function gapSweep(options: RaceOptions, origin: string) {
     let attemptedHere = 0;
 
     for (let trial = 0; trial < options.trials; trial += 1) {
-      // Never reused: a warm key would report the follower suppressed by a
-      // claim from an earlier trial rather than by this one's leader.
       const key = `race-${randomUUID()}`;
-      // Rotate both ends of the pair: a fixed pair of sockets would measure
-      // whatever isolates those two sockets happen to be pinned to.
       const first = trial % racers.length;
       const offset = 1 + (Math.floor(trial / racers.length) % (racers.length - 1));
       const second = (first + offset) % racers.length;
@@ -361,9 +267,6 @@ async function gapSweep(options: RaceOptions, origin: string) {
         const b = raceCall(racers[second]!, raceRoute(options, key, 1));
         const [first_, second_] = await Promise.all([a, b]);
 
-        // The gap sweep imposes its own separation and never jitters: a worker
-        // that slept here would be adding an unmeasured term to Δ, which the
-        // zero window passed through makes fatal rather than invisible.
         trials.push({
           deltaMs,
           achievedDeltaMs: sentB - sentA,
@@ -373,8 +276,6 @@ async function gapSweep(options: RaceOptions, origin: string) {
       } catch (error) {
         if (error instanceof Abort) throw error;
         discarded += 1;
-        // A pool that produced an error is not trusted again: replacing it keeps
-        // later trials on warm connections rather than silently going cold.
         await closeRacers(racers).catch(() => {});
         racers = await openRacers(origin, options.sockets);
       }
@@ -398,13 +299,6 @@ async function gapSweep(options: RaceOptions, origin: string) {
   return { summaries, trialsByDelta, attempted, discarded, window: chooseWindow(summaries) };
 }
 
-// ---------------------------------------------------------------------------
-// Phase 2 — the burst.
-
-// The parameter reaching the worker is not evidence the worker used it, and a
-// run whose "jittered" racers all drew zero would print a collapsed herd for a
-// system that never jittered — the same shape of dead detector as the fixed
-// socket pool. Read off the draws the worker echoed.
 function assertJitterDrawn(summary: BurstSummary) {
   const verdict = jitterVerdict(summary.jitterMs, summary.delayMs);
   if (verdict !== "degenerate") return;
@@ -415,9 +309,6 @@ function assertJitterDrawn(summary: BurstSummary) {
   );
 }
 
-// How many trials a burst cell runs against one pool of connections before it
-// re-opens them. Four independent draws over a 100-trial cell, at the cost of
-// three extra pool warm-ups per cell.
 const poolRedrawTrials = 25;
 
 async function burstSweep(options: RaceOptions, origin: string) {
@@ -428,17 +319,6 @@ async function burstSweep(options: RaceOptions, origin: string) {
 
   for (const size of options.sizes) {
     for (const jitterMs of options.jitters) {
-      // Wider than the burst, so consecutive trials draw a different window of
-      // sockets. A fixed pool of exactly N does not measure the colo: sockets
-      // pin to isolates for the pool's whole life, so 100 trials are 100 repeats
-      // of one isolate combination rather than 100 draws over the colo — and
-      // pairs differ enormously, some seeing each other's claim at once and some
-      // not until W. The gap sweep rotates its pairs for the same reason.
-      //
-      // A window over one pool is still ONE DRAW of isolates, however it
-      // rotates, so the pool is re-opened periodically too. That is the term
-      // that moves: two runs of the same nominal experiment differed by 13% at
-      // J = 0 (54.79 against 61.98), which is the size of a pool-level draw.
       const poolSize = size + options.sockets;
       let racers = await openRacers(origin, poolSize);
       const trials: BurstTrial[] = [];
@@ -450,10 +330,6 @@ async function burstSweep(options: RaceOptions, origin: string) {
           racers = await openRacers(origin, poolSize);
         }
         const key = `race-${randomUUID()}`;
-        // Step by one, not by `size`: gcd(size, poolSize) is 16 at N = 128 and
-        // --sockets 16, so a stride of `size` visits only nine of the 144
-        // offsets and any two windows overlap in at least 112 sockets. A stride
-        // of one is coprime with every pool and visits them all.
         const offset = trial % poolSize;
         const burst = Array.from(
           { length: size },
@@ -467,9 +343,6 @@ async function burstSweep(options: RaceOptions, origin: string) {
           trials.push({
             size,
             jitterMs,
-            // Still the SEND spread, not the claim spread. Jitter disperses the
-            // claims; this stays the guard on whether the arrivals were
-            // concurrent, which is what the escape count assumes.
             dispersionMs: dispersionOf(paths),
             outcomes: timed.map(({ response, elapsedMs }, seq) =>
               outcomeOf(response, key, seq, { jitterMs, elapsedMs }),
@@ -515,8 +388,6 @@ async function burstSweep(options: RaceOptions, origin: string) {
 
   return { summaries, trialsByCell, attempted, discarded };
 }
-
-// ---------------------------------------------------------------------------
 
 interface Report {
   startedAt: string;
@@ -580,20 +451,10 @@ async function main() {
       report.burst = sweep;
       console.log(`\ndiscarded ${sweep.discarded} of ${sweep.attempted} attempted trials`);
 
-      // The burst's own isolate count is what THIS run touched, and 128 sockets
-      // reached fewer isolates than PR 1's 200-way concurrency did. Both are
-      // lower bounds on the colo, so the cap is whichever is higher — but the
-      // higher one is inherited from another instrument and another session, so
-      // it is passed in rather than assumed.
       const touched = Math.max(0, ...sweep.summaries.map((s) => s.distinctIsolates?.max ?? 0));
       const isolatesPerColo = Math.max(touched, options.isolatesPerColo ?? 0);
       const jittered = options.jitters.some((jitterMs) => jitterMs > 0);
       if (jittered) {
-        // E = 1 + λ·W is the un-jittered escape count: it assumes every arrival
-        // inside the window claims. Under jitter the claimant pool inside one
-        // window is bounded by the isolate count instead of by λ, so printing
-        // this table over a jittered sweep would attach an un-jittered model to
-        // jittered measurements.
         console.log(
           "\nno sizing table: this sweep jittered, and E = 1 + lambda*W models the\n" +
             "un-jittered path. The jittered bound is 1 + I_colo*W/J and takes no lambda.",

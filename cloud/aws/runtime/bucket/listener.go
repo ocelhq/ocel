@@ -14,10 +14,6 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 )
 
-// S3Event is the minimal shape of the S3 ObjectCreated notification the listener
-// consumes. It mirrors the field subset of the AWS Lambda S3 event JSON the
-// handler needs (bucket name + object key), so a real Lambda runtime can
-// unmarshal an invocation straight into it and a test can hand-build one.
 type S3Event struct {
 	Records []S3EventRecord `json:"Records"`
 }
@@ -36,31 +32,17 @@ type S3Bucket struct {
 }
 
 type S3Object struct {
-	// Key arrives URL-encoded in real S3 events (spaces as '+', etc.); the
-	// handler decodes it before matching against the session's stored key.
 	Key string `json:"key"`
 }
 
-// objectTagger reads an object's tag set. S3 event notifications do not carry
-// tags, so the listener reads the SigV4-bound sessionId tag off the landed
-// object itself. Narrowed for testability; the s3.Client satisfies it.
 type objectTagger interface {
 	GetObjectTagging(context.Context, *s3.GetObjectTaggingInput, ...func(*s3.Options)) (*s3.GetObjectTaggingOutput, error)
 }
 
-// httpDoer is the HTTP client the listener posts op=callback through. *http.Client
-// satisfies it; tests substitute a recorder.
 type httpDoer interface {
 	Do(*http.Request) (*http.Response, error)
 }
 
-// Listener is the production completion detector: on an S3 ObjectCreated event
-// it reads the object's signed sessionId tag, loads the session, performs the
-// atomic idempotent pending -> succeeded transition, and — only when it is the
-// transition that fired — signs the completion with the per-session secret and
-// POSTs op=callback to the session's callback_base_url. The callback target is
-// validated against the deploy-known allowedOrigins so a spoofed
-// callback_base_url can never redirect the signed callback off-origin.
 type Listener struct {
 	store          *sessionStore
 	tagger         objectTagger
@@ -68,8 +50,6 @@ type Listener struct {
 	allowedOrigins []string
 }
 
-// ListenerConfig wires a Listener to its concrete clients and deploy-known
-// origin allowlist.
 type ListenerConfig struct {
 	DDB            ddbAPI
 	Tagger         objectTagger
@@ -78,8 +58,6 @@ type ListenerConfig struct {
 	AllowedOrigins []string
 }
 
-// NewListener builds a Listener, defaulting the HTTP client to the shared
-// default when the caller supplies none.
 func NewListener(cfg ListenerConfig) *Listener {
 	h := cfg.HTTP
 	if h == nil {
@@ -93,10 +71,6 @@ func NewListener(cfg ListenerConfig) *Listener {
 	}
 }
 
-// signedCompletion is the op=callback request body: {sessionId, signature,
-// file}. It is byte-identical to the dev detector's payload (cli devserver
-// runtimeShim) and to what the SDK route's callback op parses, so the prod and
-// dev completion wires agree.
 type signedCompletion struct {
 	SessionID string        `json:"sessionId"`
 	Signature string        `json:"signature"`
@@ -110,10 +84,6 @@ type completedFile struct {
 	MimeType string `json:"mimeType"`
 }
 
-// Handle processes an S3 ObjectCreated event, completing every record it
-// carries. A record whose session or file cannot be resolved, or whose callback
-// target is not allowlisted, is skipped without failing the batch — an
-// unresolvable object must not wedge the notification.
 func (l *Listener) Handle(ctx context.Context, event S3Event) error {
 	for _, rec := range event.Records {
 		if err := l.handleRecord(ctx, rec); err != nil {
@@ -135,7 +105,6 @@ func (l *Listener) handleRecord(ctx context.Context, rec S3EventRecord) error {
 		return err
 	}
 	if sessionID == "" {
-		// Object carries no session tag — not ours to complete.
 		return nil
 	}
 
@@ -149,7 +118,6 @@ func (l *Listener) handleRecord(ctx context.Context, rec S3EventRecord) error {
 
 	idx := indexOfFile(sess.Files, key)
 	if idx < 0 {
-		// The tag resolved a session, but no file in it matches this key.
 		return nil
 	}
 
@@ -158,15 +126,12 @@ func (l *Listener) handleRecord(ctx context.Context, rec S3EventRecord) error {
 		return err
 	}
 	if !transitioned {
-		// Already non-pending: a duplicate delivery. Do NOT call the route.
 		return nil
 	}
 
 	return l.postCallback(ctx, sess, sess.Files[idx])
 }
 
-// sessionIDForObject reads the object's tag set and returns the sessionId tag
-// value, or "" when the object carries no such tag.
 func (l *Listener) sessionIDForObject(ctx context.Context, bucket, key string) (string, error) {
 	out, err := l.tagger.GetObjectTagging(ctx, &s3.GetObjectTaggingInput{
 		Bucket: aws.String(bucket),
@@ -183,14 +148,8 @@ func (l *Listener) sessionIDForObject(ctx context.Context, bucket, key string) (
 	return "", nil
 }
 
-// postCallback signs the completed file with the per-session secret and POSTs
-// op=callback to the session's callback_base_url, but only after validating that
-// target against the deploy-known allowedOrigins. The secret never leaves this
-// process; the route re-verifies the signature via VerifyUploadSignature.
 func (l *Listener) postCallback(ctx context.Context, sess session, f sessionFile) error {
 	if !originAllowed(sess.CallbackBaseURL, l.allowedOrigins) {
-		// A spoofed callback_base_url whose origin isn't declared is rejected:
-		// the signed callback is never delivered off an allowlisted origin.
 		return nil
 	}
 
@@ -226,8 +185,6 @@ func (l *Listener) postCallback(ctx context.Context, sess session, f sessionFile
 	return nil
 }
 
-// callbackURL appends ?op=callback to the session's callback base URL, the op
-// the SDK route multiplexes completion callbacks on.
 func callbackURL(base string) (string, error) {
 	u, err := url.Parse(base)
 	if err != nil {
@@ -239,9 +196,6 @@ func callbackURL(base string) (string, error) {
 	return u.String(), nil
 }
 
-// originAllowed reports whether the origin (scheme://host[:port]) of rawURL is
-// present in allowed. An unparseable or opaque URL is never allowed. This is the
-// prod callback-trust check: the same allowedOrigins list drives bucket CORS.
 func originAllowed(rawURL string, allowed []string) bool {
 	u, err := url.Parse(rawURL)
 	if err != nil || u.Scheme == "" || u.Host == "" {
@@ -256,7 +210,6 @@ func originAllowed(rawURL string, allowed []string) bool {
 	return false
 }
 
-// indexOfFile returns the index of the first file whose key matches, or -1.
 func indexOfFile(files []sessionFile, key string) int {
 	for i, f := range files {
 		if f.Key == key {

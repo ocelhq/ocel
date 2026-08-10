@@ -14,7 +14,6 @@ function makeRecord(over: Partial<DeploymentRecord> = {}): DeploymentRecord {
       pathnames: [],
       routes: {},
       dispatch: {},
-      // Carried so a Manifest field dropped on the way in is caught here.
       i18n: { locales: ["en", "fr"], defaultLocale: "en" },
     },
     functionUrls: { "/": "https://fn.example.com" },
@@ -125,9 +124,6 @@ describe("resolveRouteDeps", () => {
     expect(await response.text()).toMatch(/sveltekit/);
   });
 
-  // A record with no framework is one promoted before the field existed, which
-  // only a rollback can still reach — a fresh deploy writes the field. The body
-  // has to name that remedy, since nothing else about the response suggests it.
   it("returns 501 naming the redeploy for a Deployment that declares no framework at all", async () => {
     const { framework: _dropped, ...record } = makeRecord();
     const deps = await resolveRouteDeps(

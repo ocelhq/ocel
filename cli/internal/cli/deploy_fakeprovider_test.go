@@ -18,35 +18,17 @@ import (
 	"github.com/ocelhq/ocel/pkg/proto/env/v1/envv1connect"
 )
 
-// deployFakeProviderEnvVar, when set to "1" in a re-exec of this test
-// binary, tells TestMain to run as a fake provider process instead of the
-// real test suite (Go's helper-process pattern, as used by
-// providerrunner's own tests). This lets TestRunDeploy_HappyPath drive
-// runDeploy's real spawn/ready/deploy/teardown wiring against a real child
-// process, without requiring the real @ocel/provider-aws binary.
 const deployFakeProviderEnvVar = "OCEL_TEST_DEPLOY_FAKE_PROVIDER"
 
-// deployFakeProviderSockEnvVar carries the Unix socket path the fake
-// provider binds and reports in its readiness sentinel.
 const deployFakeProviderSockEnvVar = "OCEL_TEST_DEPLOY_FAKE_PROVIDER_SOCK"
 
-// deployFakeProviderModeEnvVar selects the fake provider's Deploy outcome:
-// "success" (default) or "fail".
 const deployFakeProviderModeEnvVar = "OCEL_TEST_DEPLOY_FAKE_PROVIDER_MODE"
 
-// fakeInfraClassEnvVar / fakeInfraPresentEnvVar configure the fake provider's
-// Preflight response: the class it reports its account points at ("preview",
-// "production", "development", or "" for unspecified) and whether the
-// infrastructure exists ("0" means absent; anything else means present).
 const (
 	fakeInfraClassEnvVar   = "OCEL_TEST_FAKE_INFRA_CLASS"
 	fakeInfraPresentEnvVar = "OCEL_TEST_FAKE_INFRA_PRESENT"
 )
 
-// fakeID*EnvVar populate the identity the fake provider reports from Preflight
-// (the CLI's "Running with:" banner); fakeCredProblemEnvVar, when set to a
-// provider label, makes Preflight report one credential problem for it so tests
-// can drive the CLI's credential-refuse path.
 const (
 	fakeIDAwsAccountEnvVar = "OCEL_TEST_FAKE_AWS_ACCOUNT"
 	fakeIDAwsProfileEnvVar = "OCEL_TEST_FAKE_AWS_PROFILE"
@@ -55,15 +37,8 @@ const (
 	fakeCredProblemEnvVar  = "OCEL_TEST_FAKE_CRED_PROBLEM"
 )
 
-// fakeKnownSlugsEnvVar seeds the comma-separated known_slugs the fake
-// provider's Preflight reports, so tests can drive the CLI's slug-drift guard.
-// Like the real provider it answers them only when the request carries a slug.
 const fakeKnownSlugsEnvVar = "OCEL_TEST_FAKE_KNOWN_SLUGS"
 
-// fakeDomainOwnerEnvVar names the edge worker the fake provider reports as
-// holding every hostname the request declared, so tests can drive the CLI's
-// domain-claim refusal. Unset means every declared hostname comes back
-// unclaimed.
 const fakeDomainOwnerEnvVar = "OCEL_TEST_FAKE_DOMAIN_OWNER"
 
 const (
@@ -71,12 +46,6 @@ const (
 	fakePromotionID = "prm_fake_1234"
 )
 
-// runDeployFakeProvider binds a Unix socket, prints the readiness sentinel,
-// and serves DeploymentService.Deploy: it rejects a missing/mismatched
-// session token, rejects a manifest that doesn't look like what
-// TestRunDeploy_HappyPath's fixture declares (proving the manifest built by
-// runDeploy actually reached the provider), then streams a progress event
-// followed by a terminal result per deployFakeProviderModeEnvVar.
 func runDeployFakeProvider() int {
 	sockPath := os.Getenv(deployFakeProviderSockEnvVar)
 	if sockPath == "" {
@@ -101,13 +70,9 @@ func runDeployFakeProvider() int {
 	path, handler := deploymentsv1connect.NewDeploymentServiceHandler(fake)
 	mux.Handle(path, handler)
 
-	// The variable store rides the same channel as the deployment service, so
-	// the fake serves both (see env_fakeprovider_test.go).
 	path, handler = envv1connect.NewEnvVarsServiceHandler(fake)
 	mux.Handle(path, handler)
 
-	// Printed only once the listener is bound and the handler mounted, per
-	// the readiness sentinel contract.
 	fmt.Println(channel.FormatReadinessLine(channel.FormatUnixAddr(sockPath)))
 
 	srv := &http.Server{Handler: mux}
@@ -117,17 +82,11 @@ func runDeployFakeProvider() int {
 	return 0
 }
 
-// deployFakeProviderServer implements deploymentsv1connect.DeploymentServiceHandler
-// for TestRunDeploy_HappyPath.
 type deployFakeProviderServer struct {
 	deploymentsv1connect.UnimplementedDeploymentServiceHandler
 	token string
 	mode  string
 
-	// preflightSlug/preflightDomains record what the last Preflight carried,
-	// echoed back by Deploy so a test can assert which project the CLI
-	// identified itself as, and which hostnames it declared, before it
-	// deployed.
 	mu               sync.Mutex
 	preflightSlug    string
 	preflightDomains []string
@@ -156,9 +115,6 @@ func (s *deployFakeProviderServer) Deploy(ctx context.Context, req *deploymentsv
 		})
 	}
 
-	// Echo what the preceding Preflight carried, so tests can assert the CLI
-	// names the project it is about to deploy in its identity check, and
-	// declares the hostnames it is about to attach.
 	slug, domains := s.lastPreflight()
 	if err := stream.Send(&deploymentsv1.DeployEvent{
 		Event: &deploymentsv1.DeployEvent_Progress{Progress: &deploymentsv1.ProgressEvent{Message: "PREFLIGHT slug=" + slug + " domains=" + strings.Join(domains, ",")}},
@@ -166,16 +122,12 @@ func (s *deployFakeProviderServer) Deploy(ctx context.Context, req *deploymentsv
 		return err
 	}
 
-	// Echo the received Environment so tests can assert what the CLI resolved
-	// and sent, proving `ocel preview`/`ocel deploy` diverge only by it.
 	if err := stream.Send(&deploymentsv1.DeployEvent{
 		Event: &deploymentsv1.DeployEvent_Progress{Progress: &deploymentsv1.ProgressEvent{Message: "DEPLOY " + describeEnv(req.GetEnvironment())}},
 	}); err != nil {
 		return err
 	}
 
-	// Echo each received app so tests can assert the manifest attributes
-	// functions to the apps the project configured (or the builder detected).
 	for _, a := range req.GetManifest().GetApps() {
 		if err := stream.Send(&deploymentsv1.DeployEvent{
 			Event: &deploymentsv1.DeployEvent_Progress{Progress: &deploymentsv1.ProgressEvent{Message: "APP " + describeApp(a)}},
@@ -184,8 +136,6 @@ func (s *deployFakeProviderServer) Deploy(ctx context.Context, req *deploymentsv
 		}
 	}
 
-	// Echo each received function so tests can assert the manifest built by
-	// runDeploy actually carries the apps' functions alongside its resources.
 	for _, f := range req.GetManifest().GetFunctions() {
 		if err := stream.Send(&deploymentsv1.DeployEvent{
 			Event: &deploymentsv1.DeployEvent_Progress{Progress: &deploymentsv1.ProgressEvent{Message: "FUNCTION " + describeFunction(f)}},
@@ -214,14 +164,10 @@ func (s *deployFakeProviderServer) Deploy(ctx context.Context, req *deploymentsv
 	})
 }
 
-// Bootstrap satisfies the DeploymentService handler interface. This fake exists
-// to exercise the deploy path; the bootstrap path has its own coverage.
 func (s *deployFakeProviderServer) Bootstrap(ctx context.Context, req *deploymentsv1.BootstrapRequest, stream *connect.ServerStream[deploymentsv1.DeployEvent]) error {
 	return connect.NewError(connect.CodeUnimplemented, errors.New("fake provider does not implement Bootstrap"))
 }
 
-// Preflight reports the account's stamped class and whether the infrastructure
-// exists, both configured via env so tests can drive the CLI's preflight guard.
 func (s *deployFakeProviderServer) Preflight(ctx context.Context, req *deploymentsv1.PreflightRequest) (*deploymentsv1.PreflightResponse, error) {
 	if err := s.checkToken(ctx); err != nil {
 		return nil, err
@@ -262,9 +208,6 @@ func (s *deployFakeProviderServer) Preflight(ctx context.Context, req *deploymen
 	return resp, nil
 }
 
-// DestroyPreview echoes the Environment it was addressed with (so tests can
-// assert the CLI resolved the right teardown target) and streams a terminal
-// success.
 func (s *deployFakeProviderServer) DestroyPreview(ctx context.Context, req *deploymentsv1.DestroyPreviewRequest, stream *connect.ServerStream[deploymentsv1.DeployEvent]) error {
 	if err := s.checkToken(ctx); err != nil {
 		return err
@@ -279,9 +222,6 @@ func (s *deployFakeProviderServer) DestroyPreview(ctx context.Context, req *depl
 	})
 }
 
-// DestroyProject echoes the slug and Environment it was addressed with (so
-// tests can assert which footprint the CLI targeted) and streams a terminal
-// success.
 func (s *deployFakeProviderServer) DestroyProject(ctx context.Context, req *deploymentsv1.DestroyProjectRequest, stream *connect.ServerStream[deploymentsv1.DeployEvent]) error {
 	if err := s.checkToken(ctx); err != nil {
 		return err
@@ -296,15 +236,8 @@ func (s *deployFakeProviderServer) DestroyProject(ctx context.Context, req *depl
 	})
 }
 
-// fakeEnvironmentsEnvVar replaces the canned environment set with a
-// comma-separated list of identities, so a test can drive what happens when an
-// environment an override was written against stops existing. Empty means the
-// canned set; the string "none" means a project with no environments at all.
 const fakeEnvironmentsEnvVar = "OCEL_TEST_FAKE_ENVIRONMENTS"
 
-// ListEnvironments echoes the slug it was scoped to as a synthetic first
-// entry (so tests can assert the CLI sent it), then returns a canned set of
-// preview environments for `ocel preview ls` to render.
 func (s *deployFakeProviderServer) ListEnvironments(ctx context.Context, req *deploymentsv1.ListEnvironmentsRequest) (*deploymentsv1.ListEnvironmentsResponse, error) {
 	if err := s.checkToken(ctx); err != nil {
 		return nil, err
@@ -342,7 +275,6 @@ func (s *deployFakeProviderServer) ListEnvironments(ctx context.Context, req *de
 	}, nil
 }
 
-// checkToken enforces the session token handshake on a handler call.
 func (s *deployFakeProviderServer) checkToken(ctx context.Context) error {
 	info, _ := connect.CallInfoForHandlerContext(ctx)
 	var authHeader string
@@ -355,22 +287,16 @@ func (s *deployFakeProviderServer) checkToken(ctx context.Context) error {
 	return nil
 }
 
-// describeEnv renders an Environment into a stable, assertable one-line string.
 func describeEnv(env *deploymentsv1.Environment) string {
 	return fmt.Sprintf("class=%s lifecycle=%s identity=%s source=%s label=%s",
 		env.GetClass(), env.GetLifecycle(), env.GetIdentity(), env.GetIdentitySource(), env.GetLabel())
 }
 
-// describeFunction renders a ManifestFunction into a stable, assertable
-// one-line string carrying every field the manifest should preserve.
 func describeFunction(f *deploymentsv1.ManifestFunction) string {
 	return fmt.Sprintf("logical_name=%s runtime=%s handler=%s artifact_path=%s framework=%s app=%s",
 		f.GetLogicalName(), f.GetRuntime(), f.GetHandler(), f.GetArtifactPath(), f.GetFramework(), f.GetApp())
 }
 
-// describeApp renders a ManifestApp into a stable, assertable one-line string.
-// The variable keys are named, not their values: this line is echoed onto the
-// deploy's own stdout, where a value must never appear.
 func describeApp(a *deploymentsv1.ManifestApp) string {
 	keys := make([]string, 0, len(a.GetVariables()))
 	for _, v := range a.GetVariables() {
@@ -380,7 +306,6 @@ func describeApp(a *deploymentsv1.ManifestApp) string {
 		a.GetName(), a.GetFramework(), strings.Join(a.GetDomains()["production"].GetHostnames(), ","), strings.Join(keys, ","))
 }
 
-// parseInfraClass maps the fakeInfraClassEnvVar value to an Environment_Class.
 func parseInfraClass(s string) deploymentsv1.Environment_Class {
 	switch s {
 	case "preview":
@@ -394,9 +319,6 @@ func parseInfraClass(s string) deploymentsv1.Environment_Class {
 	}
 }
 
-// validateFixtureManifest confirms the manifest built by runDeploy matches
-// what TestRunDeploy_HappyPath's fixture declares: a single postgres
-// resource named "main" with its typed config intact.
 func validateFixtureManifest(m *deploymentsv1.Manifest) error {
 	if m.GetSchemaVersion() == "" {
 		return errors.New("manifest missing schema_version")

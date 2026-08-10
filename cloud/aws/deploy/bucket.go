@@ -13,38 +13,20 @@ import (
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/resources/v1"
 )
 
-// Provider-chosen defaults for a bucket's production upload path. BucketConfig
-// only carries allowed_origins this slice, so everything else (CORS methods,
-// notification event, Lambda runtime, IAM actions) is fixed here.
 const (
-	// The browser uploads bytes with a presigned PUT, so the bucket must permit
-	// cross-origin PUT (and its preflight) from the app's declared origins.
 	bucketCORSMaxAgeSeconds = 3600
 
-	// A single presigned PUT is a create; ObjectCreated:* covers PUT and the
-	// multipart completion a later slice may add.
 	bucketNotificationEvent = "s3:ObjectCreated:*"
 
-	// The listener ships as a Go custom-runtime Lambda: a `bootstrap` executable
-	// under the provided.al2023 runtime.
 	listenerRuntime        = "provided.al2023"
 	listenerHandler        = "bootstrap"
 	listenerTimeoutSeconds = 30
 
-	// Listener Lambda env vars. envStateTable matches the runtime binary's
-	// OCEL_RUNTIME_STATE_TABLE so both processes read the same table name;
-	// envAllowedOrigins carries the deploy-known callback-origin allowlist.
 	envStateTable     = "OCEL_RUNTIME_STATE_TABLE"
 	envAllowedOrigins = "OCEL_LISTENER_ALLOWED_ORIGINS"
 )
 
-// bucketArgs is the fully-resolved set of arguments a BucketConfig lowers to,
-// independent of any Pulumi or AWS call. It is the pure output of
-// translateBucket so the translation can be unit-tested without provisioning.
 type bucketArgs struct {
-	// AllowedOrigins is the app's declared origin list. It drives the bucket CORS
-	// AllowedOrigins and, injected into the listener, the callback-origin
-	// allowlist — one declaration, both trust boundaries.
 	AllowedOrigins []string
 
 	CORS corsRule
@@ -55,21 +37,13 @@ type bucketArgs struct {
 	ListenerHandler        string
 	ListenerTimeoutSeconds int
 
-	// RuntimeS3Actions / RuntimeSessionActions are granted to the runtime
-	// process's IAM role: mint presigned PUTs (PutObject) and read/write its
-	// upload sessions in the state table.
 	RuntimeS3Actions      []string
 	RuntimeSessionActions []string
 
-	// ListenerS3Actions / ListenerSessionActions are granted to the listener
-	// Lambda's role: read the landed object's tags and perform the guarded
-	// session transition in the state table.
 	ListenerS3Actions      []string
 	ListenerSessionActions []string
 }
 
-// corsRule is the single CORS rule derived from allowed_origins, mapped 1:1 onto
-// an S3 BucketCorsConfigurationV2 rule by registerBucket.
 type corsRule struct {
 	AllowedOrigins []string
 	AllowedMethods []string
@@ -78,10 +52,6 @@ type corsRule struct {
 	MaxAgeSeconds  int
 }
 
-// translateBucket lowers a BucketConfig into the concrete arguments the provider
-// provisions. It is pure: same config in, same args out, no I/O. The app's
-// allowed_origins become the CORS allowed origins for the browser PUT (and are
-// carried through for the listener's callback-origin allowlist).
 func translateBucket(cfg *resourcesv1.BucketConfig) bucketArgs {
 	origins := cfg.GetAllowedOrigins()
 	return bucketArgs{
@@ -89,9 +59,6 @@ func translateBucket(cfg *resourcesv1.BucketConfig) bucketArgs {
 		CORS: corsRule{
 			AllowedOrigins: origins,
 			AllowedMethods: []string{"PUT"},
-			// Allow any request header so the browser preflight for the presigned
-			// PUT's signed headers never fails; expose ETag so the client can read
-			// the stored object's ETag off the PUT response.
 			AllowedHeaders: []string{"*"},
 			ExposeHeaders:  []string{"ETag"},
 			MaxAgeSeconds:  bucketCORSMaxAgeSeconds,
@@ -107,21 +74,7 @@ func translateBucket(cfg *resourcesv1.BucketConfig) bucketArgs {
 	}
 }
 
-// registerBucket declares one bucket resource's full production upload path in a
-// Pulumi program: a private (public-access-blocked) S3 bucket with CORS from
-// allowed_origins, an ObjectCreated -> listener Lambda notification, the listener
-// Lambda itself, and the two IAM roles (runtime process: S3-presign +
-// session access; listener: object-tag read + guarded session transition).
-// stateTableName/stateTableARN identify the account-global state table
-// bootstrap provisions, where a bucket's upload sessions live alongside the
-// other entities keyed into it; listenerCodePath is the built listener archive
-// (its packaging via provider distribution is deferred — see deploy.Config).
-// The bucket name is exported under logicalName for collectBucketOutput.
 func registerBucket(ctx *pulumi.Context, logicalName string, args bucketArgs, stateTableName, stateTableARN, listenerCodePath string) (pulumi.StringOutput, error) {
-	// The logical name is `<type>_<id>` (underscores); S3 bucket names are
-	// DNS-constrained and reject underscores, so name from a safe prefix rather
-	// than Pulumi's autoname. bucket.Bucket still resolves to the generated
-	// physical name for the exported output.
 	bucket, err := s3.NewBucketV2(ctx, logicalName, &s3.BucketV2Args{
 		BucketPrefix: pulumi.String(physicalNamePrefix(logicalName, "")),
 	})
@@ -129,8 +82,6 @@ func registerBucket(ctx *pulumi.Context, logicalName string, args bucketArgs, st
 		return pulumi.StringOutput{}, err
 	}
 
-	// Private: block every form of public access. Bytes reach the bucket only
-	// through presigned URLs the runtime mints.
 	if _, err := s3.NewBucketPublicAccessBlock(ctx, logicalName+"-pab", &s3.BucketPublicAccessBlockArgs{
 		Bucket:                bucket.ID(),
 		BlockPublicAcls:       pulumi.Bool(true),
@@ -156,8 +107,6 @@ func registerBucket(ctx *pulumi.Context, logicalName string, args bucketArgs, st
 		return pulumi.StringOutput{}, err
 	}
 
-	// The runtime process (membrane-launched app runtime) role: presign PUTs and
-	// touch the session table.
 	if _, err := newServiceRole(ctx, logicalName+"-runtime", "ec2.amazonaws.com", map[string]policyStatement{
 		"s3":       {Actions: args.RuntimeS3Actions, Resources: []pulumi.StringInput{joinArn(bucket.Arn, "/*")}},
 		"sessions": {Actions: args.RuntimeSessionActions, Resources: []pulumi.StringInput{pulumi.String(stateTableARN)}},
@@ -165,8 +114,6 @@ func registerBucket(ctx *pulumi.Context, logicalName string, args bucketArgs, st
 		return pulumi.StringOutput{}, err
 	}
 
-	// The listener Lambda's role: read object tags and perform the guarded
-	// transition. It also needs the basic Lambda execution policy for logs.
 	listenerRole, err := newServiceRole(ctx, logicalName+"-listener", "lambda.amazonaws.com", map[string]policyStatement{
 		"s3":       {Actions: args.ListenerS3Actions, Resources: []pulumi.StringInput{joinArn(bucket.Arn, "/*")}},
 		"sessions": {Actions: args.ListenerSessionActions, Resources: []pulumi.StringInput{pulumi.String(stateTableARN)}},
@@ -198,8 +145,6 @@ func registerBucket(ctx *pulumi.Context, logicalName string, args bucketArgs, st
 		return pulumi.StringOutput{}, err
 	}
 
-	// Let S3 invoke the listener before wiring the notification, else the
-	// notification create races the permission.
 	perm, err := lambda.NewPermission(ctx, logicalName+"-invoke", &lambda.PermissionArgs{
 		Action:    pulumi.String("lambda:InvokeFunction"),
 		Function:  listener.Name,
@@ -227,16 +172,11 @@ func registerBucket(ctx *pulumi.Context, logicalName string, args bucketArgs, st
 	return bucketEnvValue(bucket.Bucket), nil
 }
 
-// policyStatement is one inline IAM policy statement: a set of actions on a set
-// of resource ARNs.
 type policyStatement struct {
 	Actions   []string
 	Resources []pulumi.StringInput
 }
 
-// newServiceRole creates an IAM role assumable by the given service principal,
-// with one inline policy per named statement. The policy JSON is built with
-// pulumi.All so it resolves the (still-unknown) resource ARNs.
 func newServiceRole(ctx *pulumi.Context, name, servicePrincipal string, statements map[string]policyStatement) (*iam.Role, error) {
 	role, err := iam.NewRole(ctx, name, &iam.RoleArgs{
 		AssumeRolePolicy: pulumi.String(assumeRolePolicy(servicePrincipal)),
@@ -268,8 +208,6 @@ func newServiceRole(ctx *pulumi.Context, name, servicePrincipal string, statemen
 	return role, nil
 }
 
-// assumeRolePolicy renders the trust policy allowing servicePrincipal to assume
-// the role.
 func assumeRolePolicy(servicePrincipal string) string {
 	doc := map[string]interface{}{
 		"Version": "2012-10-17",
@@ -283,7 +221,6 @@ func assumeRolePolicy(servicePrincipal string) string {
 	return string(b)
 }
 
-// inlinePolicy renders an inline IAM policy granting actions on resources.
 func inlinePolicy(actions, resources []string) (string, error) {
 	doc := map[string]interface{}{
 		"Version": "2012-10-17",
@@ -300,18 +237,10 @@ func inlinePolicy(actions, resources []string) (string, error) {
 	return string(b), nil
 }
 
-// joinArn appends a literal suffix (e.g. "/*") to an ARN output.
 func joinArn(arn pulumi.StringOutput, suffix string) pulumi.StringInput {
 	return arn.ApplyT(func(a string) string { return a + suffix }).(pulumi.StringOutput)
 }
 
-// collectBucketOutput builds the BucketOutput for a provisioned bucket. bucket
-// is the real S3 bucket name from the stack; address is the runtime endpoint the
-// app dials. address is a deferred placeholder: its live value is the local
-// socket the membrane serves BucketService on, and the membrane's
-// launch/address-injection lands separately. It is populated coherently so the
-// env payload shape ({address, bucket}) is complete, and re-pointed when the
-// membrane lands.
 func collectBucketOutput(name string, fields map[string]interface{}) (*deploymentsv1.ResourceOutput, error) {
 	bucket, err := requireStringField(fields, name, outputKeyBucket)
 	if err != nil {
@@ -328,12 +257,6 @@ func collectBucketOutput(name string, fields map[string]interface{}) (*deploymen
 	}, nil
 }
 
-// deferredRuntimeAddress is the placeholder BucketOutput.address until the
-// membrane lands: the membrane spawns the app and serves BucketService over
-// this local socket, so the SDK's injected OCEL_RESOURCE_BUCKET_<id>.address is
-// this value. It is NOT wired to a running deployment in this slice.
 const deferredRuntimeAddress = "unix:///run/ocel/runtime.sock"
 
-// outputKeyBucket is the key registerBucket exports the provisioned bucket name
-// under, read back by collectBucketOutput.
 const outputKeyBucket = "bucket"

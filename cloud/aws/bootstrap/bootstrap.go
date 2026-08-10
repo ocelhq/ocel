@@ -1,10 +1,3 @@
-// Package bootstrap provisions and inspects the account-global resources the
-// Ocel AWS provider needs before any deploy can run: an S3 bucket for Pulumi
-// state and a DynamoDB table for Ocel state (both via CloudFormation),
-// and a Pulumi passphrase (an SSM SecureString minted imperatively, because
-// CloudFormation cannot create SecureStrings).
-// The bootstrapped resources carry a monotonic integer version so every
-// invocation can gate on compatibility (see version.go).
 package bootstrap
 
 import (
@@ -28,30 +21,15 @@ import (
 )
 
 const (
-	// StackName is the CloudFormation stack that holds the production
-	// bootstrapped account-global resources.
 	StackName = "ocel-bootstrap"
 
-	// PreviewStackName is the CloudFormation stack that holds the preview
-	// infrastructure (a separate stack so the two substrates have independent
-	// lifecycles). Provisioned by RunPreview.
 	PreviewStackName = "ocel-bootstrap-preview"
 
-	// PassphraseParamName is the SSM SecureString parameter holding the Pulumi
-	// passphrase.
 	PassphraseParamName = "/ocel/pulumi/passphrase"
 
-	// EdgeUserName / EdgePreviewUserName are the deterministic IAM user names the
-	// per-substrate edge reader is provisioned under. The name is stable so the
-	// imperative access-key step (ensureEdgeCredentials) can find the user without
-	// a stack output, and so a redeploy updates it in place.
 	EdgeUserName        = "ocel-edge"
 	EdgePreviewUserName = "ocel-edge-preview"
 
-	// StateTableIndexName is the state table's secondary index. Exported so the
-	// deploy path can grant against it and name it to a function's runtime
-	// rather than hardcoding a name this template alone controls. Named
-	// generically, like the pk/sk pair, so a second entity can adopt it.
 	StateTableIndexName = "gsi1"
 
 	outputStateBucket    = "StateBucketName"
@@ -61,105 +39,53 @@ const (
 	outputVersion        = "BootstrapVersion"
 	outputInfraClass     = "InfrastructureClass"
 
-	// artifactExpirationDays is how long a function deployment artifact lives in
-	// the artifact bucket before the lifecycle rule expires it. It is comfortably
-	// longer than any realistic deploy cadence: the deploy path re-uploads a live
-	// function's artifact (skip-if-exists) on every deploy, so an artifact still
-	// backing a function is always refreshed well before it can age out, and only
-	// genuinely stale versions are reaped.
-	artifactExpirationDays = 30
-	// artifactAbortMultipartDays bounds how long an aborted/incomplete multipart
-	// upload lingers before S3 reclaims its parts.
+	artifactExpirationDays     = 30
 	artifactAbortMultipartDays = 7
 )
 
-// Class tags stamped on a bootstrapped substrate, so an invocation can verify
-// it is acting on the right one. They match the provider contract's class
-// tokens without coupling this package to the proto enum.
 const (
 	ClassProduction = "production"
 	ClassPreview    = "preview"
 )
 
-// Deployed describes the bootstrap state discovered in an account.
 type Deployed struct {
-	Present     bool
-	Version     int
-	StateBucket string
-	// StateTable is the account-global DynamoDB table every Ocel state entity
-	// keys into under a generic pk/sk pair: upload sessions, Next ISR tag
-	// revalidation records, and whatever comes next.
-	StateTable string
-	// ArtifactBucket is the account-global S3 bucket function deployment
-	// artifacts are uploaded to; the deploy path points Lambda code at it.
-	ArtifactBucket string
-	// AssetBucket is the account-global S3 bucket prerender configs + fallbacks
-	// are uploaded to, keyed by build id; the deploy path crawls a Next app's
-	// output for them and the runtime reads them to serve ISR.
-	AssetBucket string
-	// VarsTable is the account-global DynamoDB table variable values live in,
-	// separate from the state table.
-	VarsTable string
-	// VarsKeyARN is the KMS key every encrypted value of this substrate's class
-	// is encrypted under.
-	VarsKeyARN string
-	// ImageOptimizerURL is the Function URL of this substrate's image optimizer,
-	// bound into every worker so /_next/image has somewhere to go. Empty on a
-	// substrate whose bootstrap rendered no optimizer — an older bootstrap, or a
-	// provider build pinning no artifact — which leaves image requests at the 502
-	// they answered before the optimizer existed.
-	ImageOptimizerURL string
-	// RevalidateQueueURL is the ISR revalidation queue's URL, bound into every
-	// worker so an admitted refresh can be deduplicated fleet-wide instead of
-	// rendered per colo. Empty on a substrate whose bootstrap rendered no
-	// revalidator — an older bootstrap, or a provider build pinning no artifact
-	// — because a queue nothing drains must never be enqueued into: the send
-	// succeeds, the refresh reports landed, and the route stops revalidating
-	// until it hard-expires. Empty leaves the edge rendering through the origin
-	// exactly as it does today.
+	Present            bool
+	Version            int
+	StateBucket        string
+	StateTable         string
+	ArtifactBucket     string
+	AssetBucket        string
+	VarsTable          string
+	VarsKeyARN         string
+	ImageOptimizerURL  string
 	RevalidateQueueURL string
-	// Class is the class the substrate was stamped with at bootstrap
-	// (ClassProduction or ClassPreview), or "" for an older bootstrap predating
-	// the marker.
-	Class string
+	Class              string
 }
 
-// CFNDescriber is the read subset of the CloudFormation client used to
-// discover the deployed bootstrap.
 type CFNDescriber interface {
 	DescribeStacks(ctx context.Context, in *cloudformation.DescribeStacksInput, optFns ...func(*cloudformation.Options)) (*cloudformation.DescribeStacksOutput, error)
 }
 
-// CFNAPI is the subset of the CloudFormation client the stack upsert needs. It
-// embeds CFNDescriber so the create/update waiters, which only describe, accept
-// it directly.
 type CFNAPI interface {
 	CFNDescriber
 	CreateStack(ctx context.Context, in *cloudformation.CreateStackInput, optFns ...func(*cloudformation.Options)) (*cloudformation.CreateStackOutput, error)
 	UpdateStack(ctx context.Context, in *cloudformation.UpdateStackInput, optFns ...func(*cloudformation.Options)) (*cloudformation.UpdateStackOutput, error)
 }
 
-// SSMAPI is the subset of the SSM client the passphrase step needs.
 type SSMAPI interface {
 	GetParameter(ctx context.Context, in *ssm.GetParameterInput, optFns ...func(*ssm.Options)) (*ssm.GetParameterOutput, error)
 	PutParameter(ctx context.Context, in *ssm.PutParameterInput, optFns ...func(*ssm.Options)) (*ssm.PutParameterOutput, error)
 	DeleteParameter(ctx context.Context, in *ssm.DeleteParameterInput, optFns ...func(*ssm.Options)) (*ssm.DeleteParameterOutput, error)
 }
 
-// CheckDeployed reports the production bootstrap state of an account. A missing
-// stack is returned as Deployed{Present: false}, not an error.
 func CheckDeployed(ctx context.Context, api CFNDescriber) (Deployed, error) {
 	return checkStack(ctx, api, StackName)
 }
 
-// CheckDeployedPreview reports the preview infrastructure state of an account,
-// read from its own stack. A missing stack is Deployed{Present: false}.
 func CheckDeployedPreview(ctx context.Context, api CFNDescriber) (Deployed, error) {
 	return checkStack(ctx, api, PreviewStackName)
 }
 
-// checkStack reads one bootstrap CloudFormation stack's outputs, including the
-// class it was stamped with, into a Deployed.
 func checkStack(ctx context.Context, api CFNDescriber, stackName string) (Deployed, error) {
 	out, err := api.DescribeStacks(ctx, &cloudformation.DescribeStacksInput{StackName: aws.String(stackName)})
 	if err != nil {
@@ -205,10 +131,6 @@ func checkStack(ctx context.Context, api CFNDescriber, stackName string) (Deploy
 	return d, nil
 }
 
-// stackArtifacts is where the account-global Lambdas a stack renders read their
-// code from. Each is independently absent: a build that pins one artifact and
-// not the other renders one function and not the other, and each missing one
-// degrades on its own terms.
 type stackArtifacts struct {
 	optimizer   artifactCode
 	publisher   artifactCode
@@ -219,8 +141,6 @@ func (a stackArtifacts) present() bool {
 	return a.optimizer.present() || a.publisher.present() || a.revalidator.present()
 }
 
-// stackPins is what this provider build ships for those Lambdas. One pinned and
-// the others not is a normal state: each is cut and pinned on its own release.
 type stackPins struct {
 	optimizer   artifactPin
 	publisher   artifactPin
@@ -235,9 +155,6 @@ func pinnedArtifacts() stackPins {
 	return stackPins{optimizer: pinnedOptimizer(), publisher: pinnedTagPublisher(), revalidator: pinnedRevalidator()}
 }
 
-// substrate is the per-class difference between the two bootstrap paths: which
-// stack holds it, which template renders it, and what to call that step. The
-// steps themselves are identical, so both classes share run.
 type substrate struct {
 	class     string
 	stackName string
@@ -263,38 +180,14 @@ func previewSubstrate() substrate {
 	}
 }
 
-// Run creates or updates the bootstrap CloudFormation stack and ensures the
-// Pulumi passphrase exists, idempotently. progress reports discrete steps and
-// log forwards detail; both may be nil.
 func Run(ctx context.Context, cfn CFNAPI, ssmClient SSMAPI, iamClient IAMAPI, edgeProvider edge.Provider, artifact Artifacts, progress, log func(string)) error {
 	return run(ctx, cfn, ssmClient, iamClient, edgeProvider, artifact, pinnedArtifacts(), productionSubstrate(), progress, log)
 }
 
-// RunPreview creates or updates the preview infrastructure stack — the shared
-// serverless cluster plus the shared VPC/subnets/security-group/logging/
-// execution-role scaffolding both ephemeral logical slices and real per-PR
-// resources sit on — and ensures the Pulumi passphrase, idempotently. The stack
-// is stamped ClassPreview so a later command can verify it is acting on the
-// preview substrate. progress and log may be nil.
-//
-// It shares the passphrase step with Run, but its CloudFormation stack
-// (previewStackTemplate) provisions a substantially larger scaffolding whose
-// full, correct shape and settling behaviour can only be validated against a
-// live account. Like Run, that CloudFormation orchestration is the opt-in-e2e
-// seam: this signature is final and the passphrase/stamping contract is settled;
-// the preview stack template is filled in and exercised against real infra.
 func RunPreview(ctx context.Context, cfn CFNAPI, ssmClient SSMAPI, iamClient IAMAPI, edgeProvider edge.Provider, artifact Artifacts, progress, log func(string)) error {
 	return run(ctx, cfn, ssmClient, iamClient, edgeProvider, artifact, pinnedArtifacts(), previewSubstrate(), progress, log)
 }
 
-// run bootstraps one substrate, edge first. The edge is a pure producer here —
-// nothing calls back into it — and what it reports decides what the provider
-// then provisions: an edge outside the provider's trust boundary needs the edge
-// reader IAM user and a static access key to sign its reads with, an edge inside
-// it needs neither, so neither is created.
-// pins are the artifacts this build ships; they are a parameter rather than read
-// from the constants here so a test can exercise the whole placement path
-// against fixture artifacts without a cut release.
 func run(ctx context.Context, cfn CFNAPI, ssmClient SSMAPI, iamClient IAMAPI, edgeProvider edge.Provider, artifact Artifacts, pins stackPins, sub substrate, progress, log func(string)) error {
 	report := func(f func(string), msg string) {
 		if f != nil {
@@ -307,9 +200,6 @@ func run(ctx context.Context, cfn CFNAPI, ssmClient SSMAPI, iamClient IAMAPI, ed
 	if err != nil {
 		return fmt.Errorf("bootstrap %s edge: %w", edgeProvider.Kind(), err)
 	}
-	// An unrecognised kind is ignored rather than rejected, so a newer edge paired
-	// with an older provider degrades instead of breaking — and dropping an
-	// adoption here is enough to put the resource it replaced back in service.
 	var isrWriterAdopted bool
 	for _, offer := range edgeOut.Offers {
 		switch offer.Kind {
@@ -328,10 +218,6 @@ func run(ctx context.Context, cfn CFNAPI, ssmClient SSMAPI, iamClient IAMAPI, ed
 			if err := adoptISRWriter(ctx, ssmClient, sub.class, offer.Values); err != nil {
 				return err
 			}
-			// The seed every build's write secret is derived from. It belongs to
-			// the substrate rather than to a deploy run, because the secrets a
-			// live build's functions already hold were derived from it — see
-			// ensureISRWriterSeed.
 			if _, err := ensureISRWriterSeed(ctx, ssmClient, sub.class); err != nil {
 				return err
 			}
@@ -344,21 +230,6 @@ func run(ctx context.Context, cfn CFNAPI, ssmClient SSMAPI, iamClient IAMAPI, ed
 	report(progress, sub.stackStep)
 	namedIAM := []cfntypes.Capability{cfntypes.CapabilityCapabilityNamedIam}
 
-	// The image optimizer's code must already sit in this account's own artifact
-	// bucket before CloudFormation can point a function at it — and on a first
-	// bootstrap that bucket is created by this very stack. So a first bootstrap
-	// settles the stack once without the optimizer to raise the buckets, places
-	// the artifact, and settles again; every later one already knows the bucket
-	// and takes a single pass.
-	//
-	// On an account that already has the bucket, the artifact step runs before
-	// anything is upserted, so a refused artifact leaves that account exactly as
-	// it was. A first bootstrap cannot have that: its seeding pass is what creates
-	// the bucket, and it necessarily precedes the artifact. So the seeding pass
-	// stamps seedingBootstrapVersion — see version.go — and a refused artifact
-	// leaves a stack that exists but does not satisfy the gate, which sends the
-	// operator back to `ocel bootstrap` instead of letting an optimizer-less
-	// account deploy and 502 every image.
 	deployed, err := checkStack(ctx, cfn, sub.stackName)
 	if err != nil {
 		return err
@@ -376,11 +247,6 @@ func run(ctx context.Context, cfn CFNAPI, ssmClient SSMAPI, iamClient IAMAPI, ed
 	if code.optimizer, err = ensureOptimizerArtifact(ctx, artifact, deployed.ArtifactBucket, pins.optimizer); err != nil {
 		return err
 	}
-	// The publisher raises through the writer's endpoint under a secret derived
-	// from the substrate's seed, and a substrate that adopted no writer has
-	// neither. Placed there anyway it would refuse to start on every invocation,
-	// and retire every batch to the dead-letter queue from the moment of
-	// bootstrap.
 	if isrWriterAdopted {
 		if code.publisher, err = ensureTagPublisherArtifact(ctx, artifact, deployed.ArtifactBucket, pins.publisher); err != nil {
 			return err
@@ -441,8 +307,6 @@ func run(ctx context.Context, cfn CFNAPI, ssmClient SSMAPI, iamClient IAMAPI, ed
 	return nil
 }
 
-// upsertCFNStack creates the named stack, or updates it if it already exists,
-// waiting for the operation to settle. A no-op update is not an error.
 func upsertCFNStack(ctx context.Context, cfn CFNAPI, stackName, template string, capabilities []cfntypes.Capability) error {
 	body := aws.String(template)
 	_, err := cfn.DescribeStacks(ctx, &cloudformation.DescribeStacksInput{StackName: aws.String(stackName)})
@@ -482,9 +346,6 @@ func upsertCFNStack(ctx context.Context, cfn CFNAPI, stackName, template string,
 	}
 }
 
-// ensurePassphrase creates the SSM SecureString passphrase if it doesn't
-// already exist, and never overwrites an existing one. It reports whether it
-// created a new value.
 func ensurePassphrase(ctx context.Context, ssmClient SSMAPI) (created bool, err error) {
 	_, err = ssmClient.GetParameter(ctx, &ssm.GetParameterInput{
 		Name:           aws.String(PassphraseParamName),
@@ -513,7 +374,6 @@ func ensurePassphrase(ctx context.Context, ssmClient SSMAPI) (created bool, err 
 	return true, nil
 }
 
-// ReadPassphrase returns the stored Pulumi passphrase, decrypted.
 func ReadPassphrase(ctx context.Context, ssmClient SSMAPI) (string, error) {
 	out, err := ssmClient.GetParameter(ctx, &ssm.GetParameterInput{
 		Name:           aws.String(PassphraseParamName),
@@ -533,10 +393,6 @@ func generatePassphrase() (string, error) {
 	return base64.RawURLEncoding.EncodeToString(buf), nil
 }
 
-// stackTemplate renders the bootstrap CloudFormation template for an edge with
-// the given trust posture. The BootstrapVersion output is single-sourced from
-// RequiredBootstrapVersion so the deployed version and the provider's
-// requirement never drift.
 func stackTemplate(trust edge.TrustBoundary, code stackArtifacts, version int) string {
 	return fmt.Sprintf(`AWSTemplateFormatVersion: '2010-09-09'
 Description: Ocel bootstrap - account-global resources for the Ocel AWS provider.
@@ -568,17 +424,6 @@ Resources:
 `, stateTableResource(), artifactBucketResource(), assetBucketResource(), varsResources(ClassProduction), imageOptimizerResources(code.optimizer), tagPublisherResources(code.publisher, ClassProduction), revalidateQueueResources(ClassProduction), revalidatorResources(code.revalidator), edgeUserResource(EdgeUserName, trust, code.optimizer), outputStateBucket, stateTableOutput(), artifactBucketOutput(), assetBucketOutput(), varsOutputs(), imageOptimizerOutput(code.optimizer), revalidateQueueOutput(code.revalidator), outputVersion, version, outputInfraClass, ClassProduction)
 }
 
-// previewStackTemplate renders the preview infrastructure CloudFormation
-// template. It shares the state bucket + state table shape production uses
-// (each preview is its own Pulumi stack and needs the shared backend) and
-// stamps InfrastructureClass=preview so a command can verify the substrate.
-//
-// The shared serverless cluster and the shared VPC/subnets/security-group/
-// logging/execution-role scaffolding the PRD calls for are the opt-in-e2e seam:
-// their correct shape and settling can only be validated against a live
-// account, so — like RunPreview itself — they are added and exercised there.
-// The stamped class, the shared backend, and the stack's independent lifecycle
-// are settled here.
 func previewStackTemplate(trust edge.TrustBoundary, code stackArtifacts, version int) string {
 	return fmt.Sprintf(`AWSTemplateFormatVersion: '2010-09-09'
 Description: Ocel preview infrastructure - shared substrate per-PR previews are carved from.
@@ -610,27 +455,6 @@ Resources:
 `, stateTableResource(), artifactBucketResource(), assetBucketResource(), varsResources(ClassPreview), imageOptimizerResources(code.optimizer), tagPublisherResources(code.publisher, ClassPreview), revalidateQueueResources(ClassPreview), revalidatorResources(code.revalidator), edgeUserResource(EdgePreviewUserName, trust, code.optimizer), outputStateBucket, stateTableOutput(), artifactBucketOutput(), assetBucketOutput(), varsOutputs(), imageOptimizerOutput(code.optimizer), revalidateQueueOutput(code.revalidator), outputVersion, version, outputInfraClass, ClassPreview)
 }
 
-// stateTableResource renders the StateTable resource block shared by both
-// substrate templates: the account-global table every Ocel state entity is
-// keyed into. Its pk/sk pair is deliberately opaque — upload sessions and Next
-// ISR tag records already share it — so each entity namespaces itself with its
-// own key prefix rather than getting a table of its own. expires_at is the TTL
-// attribute; entities that outlive a request simply omit it. The block is a
-// Resources child, so it is emitted before the template's Outputs: line.
-//
-// The gsi1pk/gsi1sk index is the time-ordered access path Next's tag sync
-// needs: without it, "which tags changed since I last looked" is a scan of an
-// account-global table. It is sparse — DynamoDB indexes only items carrying
-// both index keys — so upload sessions and the ISR handler's own tag records,
-// which write neither, stay out of it entirely. The projection carries every
-// field a sync reads so one query answers it with no follow-up per-tag read.
-//
-// The stream carries NEW_IMAGE because a tag write IS the raise: the publisher
-// that consumes it (publisher.go) needs the item's gsi1pk to learn which build
-// the record belongs to and its watermarks to publish, and none of those are
-// keys. It is the whole table's stream, not one entity's — DynamoDB has no
-// finer grain — so every writer to this table is streamed and the publisher's
-// event filter is what confines it to the TAG# partitions.
 func stateTableResource() string {
 	return fmt.Sprintf(`  StateTable:
     Type: AWS::DynamoDB::Table
@@ -671,8 +495,6 @@ func stateTableResource() string {
 `, StateTableIndexName)
 }
 
-// stateTableOutput renders the StateTable name output shared by both substrate
-// templates, consumed by the deploy path to address the table.
 func stateTableOutput() string {
 	return fmt.Sprintf(`  %s:
     Description: DynamoDB table holding account-global Ocel state, keyed by pk/sk.
@@ -680,13 +502,6 @@ func stateTableOutput() string {
 `, outputStateTable)
 }
 
-// artifactBucketResource renders the ArtifactBucket resource block shared by
-// both substrate templates: the dedicated bucket function deployment artifacts
-// are uploaded to. It carries the same public-access lockdown the state bucket
-// uses, but no versioning (artifacts are content-addressed and immutable) and a
-// lifecycle rule that expires artifacts (and aborts stale multipart uploads) to
-// cap storage cost. The block is a Resources child, so it is emitted before the
-// template's Outputs: line.
 func artifactBucketResource() string {
 	return fmt.Sprintf(`  ArtifactBucket:
     Type: AWS::S3::Bucket
@@ -710,8 +525,6 @@ func artifactBucketResource() string {
 `, artifactExpirationDays, artifactAbortMultipartDays)
 }
 
-// artifactBucketOutput renders the ArtifactBucket name output shared by both
-// substrate templates, consumed by the deploy path to address the bucket.
 func artifactBucketOutput() string {
 	return fmt.Sprintf(`  %s:
     Description: S3 bucket holding function deployment artifacts.
@@ -719,15 +532,6 @@ func artifactBucketOutput() string {
 `, outputArtifactBucket)
 }
 
-// assetBucketResource renders the AssetBucket resource block shared by both
-// substrate templates: the dedicated bucket prerender configs + fallbacks are
-// uploaded to, keyed by build id. It carries the same public-access lockdown
-// and encryption the other buckets use and no versioning (keys are immutable
-// per build), but — unlike the artifact bucket — NO object-expiration rule: a
-// live build's assets are never re-uploaded by later deploys, so an age rule
-// would delete assets still backing production. Superseded build prefixes are
-// reaped by the deploy path instead. The block is a Resources child, so it is
-// emitted before the template's Outputs: line.
 func assetBucketResource() string {
 	return fmt.Sprintf(`  AssetBucket:
     Type: AWS::S3::Bucket
@@ -750,8 +554,6 @@ func assetBucketResource() string {
 `, artifactAbortMultipartDays)
 }
 
-// assetBucketOutput renders the AssetBucket name output shared by both substrate
-// templates, consumed by the deploy path to address the bucket.
 func assetBucketOutput() string {
 	return fmt.Sprintf(`  %s:
     Description: S3 bucket holding prerender configs and fallbacks, keyed by build id.
@@ -759,63 +561,6 @@ func assetBucketOutput() string {
 `, outputAssetBucket)
 }
 
-// edgeUserResource renders the per-substrate edge IAM user shared by both
-// substrate templates: the single principal the Cloudflare worker signs its
-// requests with. It carries an inline policy scoped to exactly the account-global
-// stores this stack provisions, mirroring the Lambda tier's isrPolicy (cloud/aws
-// deploy, a separate Go module) narrowed to what the edge itself calls.
-//
-// Reads are bucket-wide (s3:GetObject) but writes are not: the edge's fetch-cache
-// writes are confined to a `.cache.json` object under the fetch-cache path segment
-// of any prefix, because this key is long-lived and lives in Cloudflare's
-// environment, where a bucket-wide write would let a compromise overwrite static
-// assets, ISR entries and edge bundles. The prefix itself varies per app and build
-// (<env>/<project>/<app>/<build>), so the wildcard admits any prefix and pins only
-// the segment.
-//
-// The `.cache.json` suffix is a second, independent thing the wildcard pins, and
-// it is what the revalidator's read grant rests on. IAM's `*` spans `/`, so
-// `*/fetch-cache/*` alone admits `<prefix>/fetch-cache/origin.json` — a key the
-// consumer's `*/origin.json` read grant also admits, which would let a stolen edge
-// credential plant a deploy record naming an attacker's origin and collect the
-// app's bypass token. Anchoring this grant on a suffix that cannot coexist with
-// `/origin.json` is what makes the two grants disjoint at the IAM layer, whatever
-// the worker's code or the consumer's parser happen to do. Every key the edge
-// worker writes already ends `.cache.json` (fetchObjectKey, its only write path),
-// so this costs the edge nothing; the deploy-side fetch-cache upload runs under
-// the operator's own credentials, not this user, and is unaffected.
-//
-// The DynamoDB grants are bounded to the TAG# tag partitions so the edge key can
-// never read or write the upload-session items (which carry HMAC secrets) sharing
-// the table. Query is granted on the table's index separately: an index is not
-// covered by its table's ARN, so the tag drain would otherwise 403.
-//
-// The lambda:Invoke* grant is what authorizes the worker's signed Function-URL
-// forwards (the Lambdas are provisioned with AWS_IAM auth). It cannot be scoped
-// by name — functions are Pulumi-autonamed, not prefixed — so it is scoped by
-// attribute instead: any function carrying an ocel:app tag, which every deployed
-// function does and nothing else in the account is expected to. Both actions are
-// required since AWS's October 2025 change, and both honor aws:ResourceTag.
-//
-// The image optimizer belongs to no app and therefore carries no such tag, so it
-// gets a statement of its own naming just that function — see
-// imageOptimizerInvokeStatement for why not the two shortcuts.
-//
-// The revalidation queue grant is send-only, on that one queue's ARN: the edge
-// asks for a render and never drains, and a receive or delete on this key would
-// let a compromised edge swallow the fleet's revalidations without anything
-// noticing. The KMS pair beside it is not a second capability but the cost of
-// the queue's SSE-KMS envelope — a producer cannot encrypt a message without it
-// — and the ViaService condition confines it to calls SQS itself makes.
-//
-// userName is the deterministic name the imperative access-key step
-// (ensureEdgeCredentials, which also carries the credential rotation runbook)
-// looks the user up by. The block is a Resources child, so it is emitted before
-// the template's Outputs: line.
-//
-// It renders nothing for an edge inside the provider's trust boundary: such an
-// edge reads under the provider's native identity, so a user whose only purpose
-// is to hold a long-lived key would be a dangling credential in the account.
 func edgeUserResource(userName string, trust edge.TrustBoundary, optimizer artifactCode) string {
 	if trust != edge.TrustExternal {
 		return ""
@@ -873,11 +618,6 @@ func edgeUserResource(userName string, trust edge.TrustBoundary, optimizer artif
 %s`, userName, StateTableIndexName, imageOptimizerInvokeStatement(optimizer))
 }
 
-// CloudFormation surfaces both "stack does not exist" and the no-op update as
-// a generic ValidationError with no dedicated SDK error type, so these are
-// classified by the typed API error code plus its message (the code alone is
-// too broad — it covers many unrelated validation failures).
-
 func isStackNotFound(err error) bool {
 	return isValidationErrorContaining(err, "does not exist")
 }
@@ -894,5 +634,4 @@ func isValidationErrorContaining(err error, substr string) bool {
 	return apiErr.ErrorCode() == "ValidationError" && strings.Contains(apiErr.ErrorMessage(), substr)
 }
 
-// stackWaitTimeout bounds CloudFormation create/update waits.
 const stackWaitTimeout = 10 * time.Minute

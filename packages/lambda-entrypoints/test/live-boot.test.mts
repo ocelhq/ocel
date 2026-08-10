@@ -5,15 +5,8 @@ import { join } from "node:path";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import { writeNextProjectFixture } from "./next-project-fixture.mjs";
 
-// The real node entrypoint, booted against a real control socket. What this
-// pins is the ordering the whole synchronous read surface rests on: the
-// application's module scope — where a `const token = env.API_TOKEN` runs —
-// must not run until the values it may read are in hand.
 const LIVE_VALUES = Symbol.for("ocel.env.liveValues");
 
-// The app records what it saw at import, which is the moment a module-scope
-// read happens. Reading the published values the way the SDK does keeps the
-// assertion about delivery rather than about a marker file.
 const appModule = `
 globalThis.__appImportedAt = (globalThis.__appImportedAt ?? 0) + 1;
 globalThis.__appSawLive = globalThis[Symbol.for("ocel.env.liveValues")]?.values?.API_TOKEN;
@@ -92,7 +85,6 @@ test("holds the application's import until the first push, then runs it with the
   await waitForConnection();
   await settle();
 
-  // The membrane's fetch is still outstanding; nothing of the app has run.
   expect((globalThis as any).__appImportedAt).toBeUndefined();
   expect(messages.some((m) => m.type === "server-ready")).toBe(false);
 
@@ -103,8 +95,6 @@ test("holds the application's import until the first push, then runs it with the
   expect((globalThis as any).__appSawLive).toBe("sk_live_boot");
 });
 
-// The Next entrypoint loads the app the same way and owes the same ordering:
-// a Next app's module scope is where a `const token = env.API_TOKEN` lives too.
 test("holds the Next launcher's import until the first push", async () => {
   vi.stubEnv("OCEL_LIVE_KEYS", "API_TOKEN");
   const projectDir = join(dir, "project");

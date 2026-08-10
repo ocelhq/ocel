@@ -1,19 +1,3 @@
-// Cache interception: the worker reads the authoritative ISR cache itself, so a
-// cache hit skips the Lambda origin entirely. It mirrors OcelCacheHandler.get()
-// using the shared @ocel/next-cache primitives, so the edge and the Lambda can
-// never disagree about whether an entry is still servable.
-//
-// Entries come from the bound R2 cache store, and tag state from the tag-clock
-// snapshot sitting beside them, so an interception reads exactly one store and
-// never an AWS API.
-//
-// Interception is strictly additive: every miss, incomplete entry, untrusted
-// tag snapshot, past-expiration entry, or error returns null so the caller falls
-// open to the existing Lambda path. A stale-but-servable entry (a lapsed
-// revalidate window or an invalidated tag, still inside expiration) is served
-// stale-while-revalidate, marked stale so the caller refreshes it behind the
-// request. A bug here can only ever cost the interception shortcut or serve one
-// extra stale response, never a wrong one.
 import {
   cacheKey,
   deserialize,
@@ -32,43 +16,18 @@ import {
   type TagClock,
 } from "./tag-clock";
 
-// The one coordinate the store read needs: the ISR key root the entry and
-// snapshot keys are rooted at. Interception is gated on the cache-store binding
-// plus this prefix; absent either, the worker forwards as before.
 export interface InterceptionConfig {
   isrPrefix: string;
 }
 
-// The prerender facts interception needs: the concrete pathname keying the store
-// entry, and the route's revalidate window (Next's Revalidate: seconds, or false
-// for a static entry with no time-based expiry).
 export interface InterceptTarget {
   routePath: string;
   revalidate: number | false | undefined;
-  // How long a stale entry may still be served while a refresh runs behind it.
-  // Only a PPR entry serves stale; absent, it never expires on time alone.
   expiration?: number;
-  // The route's dynamic dispatch pattern (e.g. /posts/[id]). A concrete path
-  // with no entry of its own falls back to this route's param-agnostic shell.
   fallbackPath?: string;
-  // The route's manifest-declared cache tags. Present => prime the snapshot in
-  // parallel with the entry read. The actual tag-expiry check still uses the
-  // entry's own tags (tagsOf), which are authoritative.
   tags?: string[];
 }
 
-// What a read of the ISR cache produced. A complete entry answers the request on
-// its own; a PPR entry answers only its static half, and its shell has to be
-// composed with a resumed render before it is a response.
-// `staleForMs` is how much longer the entry may be served stale, and is present
-// exactly when `stale` is true: it caps the caller's admission draw, so a
-// background refresh is never deferred past the moment its own entry stops
-// being servable. See admissionJitterMs in cache.ts.
-//
-// `lastModified` is the entry generation this verdict was taken on. It rides
-// out because an admitted refresh names it to the revalidation queue, and
-// re-reading the entry to learn it would name a different generation than the
-// one that admitted.
 export type Interception =
   | {
       kind: "complete";
@@ -87,42 +46,16 @@ export type Interception =
     };
 
 export interface InterceptDeps {
-  // The bound cache store entries and tag state are read from (the Cloudflare R2
-  // binding in production, a fake in tests).
   store: ObjectStoreReader;
-  // The PoP cache fronting the snapshot read. Absent, or inert as it is on
-  // *.workers.dev, costs one store read per interception and nothing else.
   snapshotCache?: SnapshotCache;
-  // Injected so freshness never depends on wall-clock time. Milliseconds.
   now?: () => number;
-  // Schedules the background R2 refresh of a stale in-memory entry so the R2
-  // round-trip never blocks the request that noticed the staleness. Absent
-  // (routing tests) degrades to a blocking re-read on the next request.
   waitUntil?: (promise: Promise<unknown>) => void;
-  // Overrides the tag clock built from the deps above. Absent, one is built
-  // per call from `store`/`snapshotCache`/`waitUntil` via createTagClock.
   tagClock?: TagClock;
-  // Read the entry from the store rather than from the per-isolate memo, and
-  // refresh the memo with what comes back. Set by an admitted background
-  // refresh checking whether the tier below already answered for it: the memo
-  // is what declared the entry stale in the first place and holds that verdict
-  // for entryMemoTtlMs, which outlives the whole admission wait — read through
-  // it and the check could never once report a fresher entry.
   freshRead?: boolean;
 }
 
-// A static entry (revalidate false/undefined) has no time-based expiry, only
-// tag-based; it is memoized for a year, matching Next's own fully-static TTL.
 const STATIC_WINDOW = 31536000;
 
-// readEntry is the one R2 round-trip on the interception path, and a page's
-// client segment cache fires a burst of prefetches at the same route entry
-// within a colo. This memo, keyed by the store binding exactly like
-// snapshotMemo, collapses that burst to one read and then serves every variant
-// of a hot route from memory. Freshness and tag state are still evaluated per
-// request against the entry's real lastModified and the snapshot, so the memo
-// only freezes the entry bytes for one TTL — the same SWR contract serveCached
-// uses one tier up.
 const entryMemoTtlMs = 5_000;
 const entryMemoMax = 256;
 
@@ -132,9 +65,6 @@ const entryMemo = new WeakMap<
 >();
 const entryRefreshing = new WeakMap<ObjectStoreReader, Set<string>>();
 
-// intercept attempts to answer a prerender target from the ISR cache. It returns
-// a complete response, a PPR shell awaiting a resumed render, or null to fail
-// open to the Lambda origin. It never throws.
 export async function intercept(
   request: Request,
   target: InterceptTarget,
@@ -148,11 +78,6 @@ export async function intercept(
     const entryP = readEntry(cfg, deps, target.routePath).then(
       (e) => e ?? readFallbackShell(cfg, deps, target),
     );
-    // When the route's manifest declares tags, prime the isolate-shared
-    // snapshot memo in parallel with the entry read, so the tag check below
-    // (keyed on the entry's own tags, once known) hits the memo instead of a
-    // second serial store round-trip. Never awaited directly — errors are
-    // swallowed and surfaced only if the tag check itself needs the snapshot.
     const primeP = target.tags?.length ? clock.prime(now) : undefined;
     void primeP?.catch(() => {});
 
@@ -170,38 +95,11 @@ export async function intercept(
         : STATIC_WINDOW;
     const meta = { lastModified: entry.lastModified, revalidate, expiration };
 
-    // `stale` says one thing on every branch below: this entry's window has
-    // lapsed, so whoever serves it must refresh it behind the serve. It is NOT
-    // the serving gate — the prefetch branches serve regardless, which is what
-    // the comment below is about — and conflating the two is what let a stale
-    // prefetch report itself fresh, so nothing ever regenerated the entry and
-    // an admitted refresh could be "answered" by the very entry it was refreshing.
-    // Prefetches skip the tag check, so theirs is the time-based half of the
-    // same verdict; past expiration they still serve, with no window left to wait in.
     const ungatedStaleness = (): { stale: boolean; staleForMs?: number } =>
       evaluate(meta, now, false) === "fresh"
         ? { stale: false }
         : { stale: true, staleForMs: Math.max(0, staleWindowMs(meta, now)) };
 
-    // Prefetches are answered before the tag check, and independently of it. A
-    // prefetch is speculative: its result is revealed only on a later
-    // navigation, which always resumes the dynamic (tagged) half fresh — so the
-    // prefetch itself carries no tagged content that an invalidation could make
-    // stale. Serving it from the prerender even when a tag it shares was
-    // invalidated is the stale-while-revalidate contract, and the real
-    // navigation below still gates on the tag and wakes the Lambda, which
-    // rewrites the entry. Gating prefetches on tags instead strands every route
-    // under an invalidated tag on the Lambda, starving the client's segment
-    // cache and blocking the very navigation the prefetch existed to make
-    // instant.
-
-    // A segment prefetch (Next's client segment cache) asks for one prerendered
-    // segment by path. It is static build output, held in the entry's
-    // segmentData — never composed and never resumed. Only the segment can
-    // answer it: an unknown path falls open rather than serving the whole-page
-    // shell, which is a different variant. This is the whole reason a PPR route
-    // can be prefetched at the edge — the Lambda carries no prerender output to
-    // serve it from, and would 404 the request.
     const segmentPath = request.headers.get("next-router-segment-prefetch");
     if (segmentPath !== null && value.kind === "APP_PAGE") {
       const response = reconstructSegment(value, segmentPath);
@@ -216,16 +114,6 @@ export async function intercept(
       };
     }
 
-    // A full-route prefetch (Next's router prefetch, distinct from the segment
-    // cache above) wants only the static shell — never the per-visitor dynamic
-    // resume. A PPR entry answers it from its prerendered shell, served cacheable
-    // so the client's router cache holds it and the eventual navigation reveals
-    // the shell instantly instead of blocking on a resumed render. Resuming here
-    // would return a no-store body the client cannot cache, leaving the click
-    // with no shell to reveal.
-    // Only next-router-prefetch: 1 is a static prefetch. Next emits 2/3 for
-    // runtime prefetches that intentionally perform a dynamic request, so those
-    // must fall through to a real render rather than be handed the static shell.
     const prefetchMode = request.headers.get("next-router-prefetch");
     const isPrefetch = prefetchMode === "1";
     if (
@@ -245,18 +133,10 @@ export async function intercept(
       };
     }
 
-    // Runtime prefetch (2/3) intentionally requests a dynamic response; never
-    // serve it from the cache.
     if (prefetchMode === "2" || prefetchMode === "3") {
       return null;
     }
 
-    // Everything past here is a real request whose response *is* the tagged
-    // content. An invalidated tag makes the entry stale, but — like a lapsed
-    // revalidate window — it still serves stale-while-revalidate; the caller
-    // wakes the Lambda in the background to rewrite it. Only an *untrusted* tag
-    // snapshot declines to serve, because then staleness is unknown, and unknown
-    // never serves.
     let tagStale = false;
     const tags = tagsOf(value, {});
     if (tags.length > 0) {
@@ -265,9 +145,6 @@ export async function intercept(
       tagStale = verdict;
     }
 
-    // The single stale-while-revalidate verdict: a fresh entry serves as-is; a
-    // stale one still serves stale-while-revalidate; past expiration is too
-    // old to serve even stale, so the request falls open to the Lambda.
     const verdict = evaluate(meta, now, tagStale);
     if (verdict === "expired") return null;
     const isStale = verdict === "stale";
@@ -290,10 +167,6 @@ export async function intercept(
     const response = reconstruct(request, value);
     if (!response) return null;
     response.headers.set("x-ocel-entry-modified", String(entry.lastModified));
-    // A stale entry is served only until the background refresh rewrites it, so
-    // it must not be memoized as fresh for the whole (possibly still large, when
-    // only a tag invalidated it) remaining window — one second forces the next
-    // request to re-read the by-then-refreshed entry.
     response.headers.set("cache-control", `s-maxage=${isStale ? 1 : window}`);
     return {
       kind: "complete",
@@ -307,12 +180,6 @@ export async function intercept(
   }
 }
 
-// entryWindow decides the freshness window this entry is judged by. The window
-// the render recorded on the entry wins: it describes what actually happened,
-// and for a path generated on demand it is the only window there is — the
-// routing manifest names only the paths the build prerendered. Entries the
-// build seeded carry none and fall back to the manifest. `revalidate: false` is
-// a static entry: no time-based staleness, only tag-based.
 function entryWindow(
   entry: CacheEntryFile,
   target: InterceptTarget,
@@ -332,9 +199,6 @@ function entryWindow(
   };
 }
 
-// isServable gates interception to the entry kinds it can rebuild a response
-// from: an APP_PAGE, a PAGES html entry, or an APP_ROUTE body. FETCH entries and
-// anything unrecognised forward to the Lambda.
 function isServable(value: Record<string, any>): boolean {
   switch (value?.kind) {
     case "APP_PAGE":
@@ -346,12 +210,6 @@ function isServable(value: Record<string, any>): boolean {
   }
 }
 
-// readFallbackShell is the one place a request is answered from a shell built
-// for a different (param-agnostic) path, so it is also the one place to change
-// if that turns out not to resume correctly for arbitrary params — an
-// assumption still unproven against a real deploy. Only a postponed entry
-// qualifies: a complete entry under the dynamic pattern would be another
-// route's rendered page, not this one's.
 async function readFallbackShell(
   cfg: InterceptionConfig,
   deps: InterceptDeps,
@@ -364,10 +222,6 @@ async function readFallbackShell(
   return entry?.value?.postponed === undefined ? null : entry;
 }
 
-// readEntry fetches the entry object from the cache store, fronted by a
-// per-isolate memo. A hot entry is served from memory; a stale one is served
-// immediately and refreshed from R2 behind the request (or, without a waitUntil,
-// re-read synchronously on the request that finds it stale).
 async function readEntry(
   cfg: InterceptionConfig,
   deps: InterceptDeps,
@@ -384,9 +238,6 @@ async function readEntry(
       refreshEntry(deps, key);
       return hit.entry;
     }
-    // No background scheduler: re-read the store now, on this request. A hit
-    // refreshes the memo; a miss evicts the stale entry and falls open to the
-    // Lambda, so a re-read gap is never papered over with stale bytes.
     const fresh = await fetchEntry(deps.store, key);
     if (fresh) lruSet(memo, key, { at: now, entry: fresh }, entryMemoMax);
     else memo.delete(key);
@@ -406,19 +257,12 @@ function entryMap(
   return map;
 }
 
-// refreshEntry re-reads one entry from R2 in the background, deduped per store so
-// a burst of stale reads schedules a single refresh. A refresh that now misses
-// evicts the memo, so the next request falls open to the Lambda.
 function refreshEntry(deps: InterceptDeps, key: string): void {
   let pending = entryRefreshing.get(deps.store);
   if (!pending) entryRefreshing.set(deps.store, (pending = new Set()));
   if (pending.has(key)) return;
   pending.add(key);
 
-  // The refresh must not touch the store on this tick — a macrotask boundary
-  // (rather than a microtask one) is what actually keeps the R2 read off the
-  // request that noticed the staleness, since the request's own promise chain
-  // finishes draining microtasks before this ever runs.
   const run = new Promise<void>((resolve) => setTimeout(resolve, 0))
     .then(async () => {
       const entry = await fetchEntry(deps.store, key);
@@ -446,10 +290,6 @@ async function fetchEntry(
   return entry;
 }
 
-// headersFrom rebuilds a Headers from a stored variant map, dropping the internal
-// tag header (the only header a client must never see). Every other header is
-// replayed verbatim, so whatever Next stamped on the variant at build — including
-// headers this worker has never heard of — reaches the client unchanged.
 function headersFrom(map: Record<string, any> | undefined): Headers {
   const headers = new Headers();
   for (const [name, v] of Object.entries(map ?? {})) {
@@ -459,15 +299,6 @@ function headersFrom(map: Record<string, any> | undefined): Headers {
   return headers;
 }
 
-// reconstruct rebuilds the HTTP response Next would have served for this entry,
-// negotiating RSC vs html and replaying that variant's stored headers verbatim:
-// the html variant from value.headers, the RSC variant from value.rscHeaders,
-// each captured at build from the prerender's own initialHeaders. Freshness is
-// the caller's to declare: a complete entry gets its remaining revalidate
-// window, a PPR shell gets no shared cache at all. The dispatch layer stamps the
-// x-ocel-cache tier (PRERENDER) once it decides how the entry is served. An
-// entry predating per-variant capture falls back to the negotiated content-type
-// so it still serves. Returns null on an incomplete entry.
 function reconstruct(
   request: Request,
   value: Record<string, any>,
@@ -496,7 +327,6 @@ function reconstruct(
       }
     }
   } else {
-    // PAGES.
     headers = headersFrom(value.headers);
     body = value.html ?? "";
     if (!headers.has("content-type")) {
@@ -507,13 +337,6 @@ function reconstruct(
   return new Response(body, { status, headers });
 }
 
-// reconstructSegment answers a segment prefetch from the entry's stored
-// segmentData, replaying the entry's segmentHeaders verbatim — the headers the
-// client gates PPR support on, above all x-nextjs-postponed: 2. An entry with no
-// segmentHeaders predates per-variant capture: rather than serve a segment
-// missing that marker (which the client silently reads as "not PPR"), fall open
-// so the next build or revalidation reseeds it. Returns null when the entry holds
-// no segment under that path, leaving the caller to fall open.
 function reconstructSegment(
   value: Record<string, any>,
   segmentPath: string,

@@ -26,8 +26,6 @@ function bearerReq(path: string, token: string, init: RequestInit = {}) {
   });
 }
 
-// Each test gets its own isrPrefix so the worker's per-isolate hash memo — real,
-// and shared across tests in one isolate — never carries a hash between them.
 afterEach(() => {
   vi.useRealTimers();
 });
@@ -141,11 +139,6 @@ describe("entry writes", () => {
     expect((await writeEntryReq(prefix, "", "write-secret")).status).toBe(400);
   });
 
-  // The key grammar is @ocel/next-cache's entryObjectKey, the same function the
-  // Lambda derives its own key with. A route the writer refuses but its caller
-  // accepts is a route that renders on every request and never caches, and the
-  // refusal reaches nobody: the caller's throw is raised inside background().
-  // `trailingSlash: true` produces exactly that key on every route.
   it("accepts a trailing-slash route key, which the direct write path accepted", async () => {
     const prefix = freshPrefix();
     await initialize(prefix, "write-secret");
@@ -157,20 +150,11 @@ describe("entry writes", () => {
   });
 });
 
-// Entry reads route through the writer for the same reason writes do: with both
-// on this side of the boundary the deployed function holds no standing R2
-// credential at all, which is the whole credential-hygiene case for the worker
-// (epic decision 6). Reads are the hot path — far more frequent than writes —
-// so they lean on exactly the same per-isolate hash memo.
 describe("entry reads", () => {
   function readEntryReq(prefix: string, key: string, secret: string) {
     return SELF.fetch(bearerReq(`/${prefix}/entry?key=${encodeURIComponent(key)}`, secret));
   }
 
-  // The two halves derive the object key with one function (@ocel/next-cache's
-  // entryObjectKey), so a key the writer accepts is a key the reader finds. A
-  // read that resolved anywhere else is a permanent miss: the route re-renders
-  // on every request and the entry it just wrote is never seen again.
   it("reads back exactly what a write of the same key stored", async () => {
     const prefix = freshPrefix();
     await initialize(prefix, "write-secret");
@@ -184,9 +168,6 @@ describe("entry reads", () => {
     }
   });
 
-  // A 404 is both "no entry here" and "no such route", and the reader fails open
-  // on either — so without a marker on the first, a writer URL pointing at
-  // nothing at all reads as a cache that is merely always cold.
   it("marks an entry that was never written as a miss, as no other 404 is", async () => {
     const prefix = freshPrefix();
     await initialize(prefix, "write-secret");
@@ -229,9 +210,6 @@ describe("entry reads", () => {
     expect((await readEntryReq(prefix, "", "write-secret")).status).toBe(400);
   });
 
-  // The memo is what keeps the serving path off a single-threaded Durable
-  // Object. A DO round trip per read would put every cache hit behind one
-  // object per deploy — the ceiling the epic's decision 6c exists to avoid.
   it("costs no Durable Object round trip per read once the memo is warm", async () => {
     const prefix = freshPrefix();
     await initialize(prefix, "write-secret");
@@ -277,10 +255,6 @@ describe("routing", () => {
     expect((await SELF.fetch(req("/initialize", { method: "POST" }))).status).toBe(404);
   });
 
-  // idFromName materializes a storage-backed Durable Object for whatever name it
-  // is handed, and the entry op reaches it before any credential is checked — so
-  // a path that is not a deploy prefix must never get that far, or an
-  // unauthenticated caller can create Durable Objects in the account at will.
   it("404s a path that is not exactly a four-segment deploy prefix", async () => {
     const secretHash = vi.spyOn(IsrDeploy.prototype, "secretHash");
     const paths = [
@@ -300,9 +274,6 @@ describe("routing", () => {
     secretHash.mockRestore();
   });
 
-  // A Next buildId is a nanoid, whose alphabet leads with `-` or `_` about one
-  // build in thirty. Neither can climb out of the prefix, so neither may cost a
-  // deploy the whole of its cache.
   it.each(["-H1t_CFb4Ec1S1wr0e2T4", "_H1t-CFb4Ec1S1wr0e2T4"])(
     "accepts the build id %s, which a nanoid leads with once in thirty builds",
     async (buildId) => {
@@ -313,9 +284,6 @@ describe("routing", () => {
   );
 });
 
-// Seeds a deploy straight into the DO's storage, leaving this isolate's memo
-// untouched — which is what every isolate but the one that served the
-// initialize sees, and what a redeploy of the same build does to all of them.
 async function seedBehindTheWorker(prefix: string, secret: string) {
   const stub = env.ISR_WRITER_DO.get(env.ISR_WRITER_DO.idFromName(prefix));
   const hash = await sha256Hex(secret);
@@ -324,9 +292,6 @@ async function seedBehindTheWorker(prefix: string, secret: string) {
   );
 }
 
-// The memo only spares the DO once it is filled. A cold isolate taking a herd
-// on one deploy — the case this whole worker exists for — must not turn every
-// request in it into its own round trip to a single-threaded object.
 describe("concurrent registry reads", () => {
   it("costs one Durable Object round trip for a herd against a cold memo", async () => {
     const prefix = freshPrefix();
@@ -341,8 +306,6 @@ describe("concurrent registry reads", () => {
     secretHash.mockRestore();
   });
 
-  // Coalescing must not cache the failure: a DO that was unreachable once has to
-  // be reachable on the next request, not for the memo's lifetime.
   it("retries after a registry read that failed", async () => {
     const prefix = freshPrefix();
     await seedBehindTheWorker(prefix, "write-secret");
@@ -356,10 +319,6 @@ describe("concurrent registry reads", () => {
   });
 });
 
-// The entry op consults the registry before any credential is checked, so an
-// unauthenticated caller picks the name of the object it reaches. Instantiating
-// one is unavoidable; leaving durable storage behind under an attacker-chosen
-// name is not, and prefixes are unbounded.
 describe("unknown deploys", () => {
   async function storedTables(prefix: string) {
     const stub = env.ISR_WRITER_DO.get(env.ISR_WRITER_DO.idFromName(prefix));
@@ -389,7 +348,6 @@ describe("secret rotation", () => {
   it("accepts the reseeded secret and refuses the superseded one", async () => {
     const prefix = freshPrefix();
     await initialize(prefix, "first-secret");
-    // Warms the memo with the first generation's hash.
     expect((await writeEntryReq(prefix, "a", "first-secret")).status).toBe(204);
 
     await seedBehindTheWorker(prefix, "second-secret");
@@ -397,10 +355,6 @@ describe("secret rotation", () => {
     expect((await writeEntryReq(prefix, "c", "first-secret")).status).toBe(401);
   });
 
-  // The isolate that serves the initialize is one of many. Every other isolate
-  // learns the deploy's hash from an ordinary cache miss, and that memo owes the
-  // next generation a re-read exactly as the initialize-seeded one does — or a
-  // redeploy is refused for a whole memo lifetime everywhere it did not land.
   it("accepts a redeploy's secret in an isolate whose memo came from a cold fill", async () => {
     const prefix = freshPrefix();
     await seedBehindTheWorker(prefix, "first-secret");
@@ -410,8 +364,6 @@ describe("secret rotation", () => {
     expect((await writeEntryReq(prefix, "b", "second-secret")).status).toBe(204);
   });
 
-  // A retirement an isolate never saw takes effect there once its memo lapses.
-  // The memo is a cache, and this is the bound on how stale it can be.
   it("refuses a write once the deploy has been retired and the memo has lapsed", async () => {
     const prefix = freshPrefix();
     await initialize(prefix, "write-secret");
@@ -425,10 +377,6 @@ describe("secret rotation", () => {
     expect((await writeEntryReq(prefix, "b", "write-secret")).status).toBe(401);
   });
 
-  // A bad token buys at most one registry read per memo generation. The prefix
-  // appears verbatim in the R2 paths the edge serves, so it is not secret: were
-  // every failed compare to fall through to the DO, anyone who read one could
-  // starve that deploy's real writes against a single-threaded object.
   it("re-reads the registry once per memo generation, not once per failed token", async () => {
     const prefix = freshPrefix();
     await initialize(prefix, "write-secret");
@@ -439,16 +387,11 @@ describe("secret rotation", () => {
     }
     expect(secretHash).toHaveBeenCalledTimes(1);
 
-    // The one re-read is what the rotation case spends, and it is still there
-    // for a legitimate token that arrives after the garbage.
     expect((await writeEntryReq(prefix, "a", "write-secret")).status).toBe(204);
     expect(secretHash).toHaveBeenCalledTimes(1);
     secretHash.mockRestore();
   });
 
-  // An unseeded deploy is memoized too, or garbage aimed at a prefix nobody
-  // deployed costs a round trip apiece. The first bad token spends both the cold
-  // fill and the memo's one re-read; every one after it is refused off the memo.
   it("re-reads the registry twice for an unseeded deploy, however many tokens fail", async () => {
     const prefix = freshPrefix();
     const secretHash = vi.spyOn(IsrDeploy.prototype, "secretHash");
@@ -461,11 +404,6 @@ describe("secret rotation", () => {
   });
 });
 
-// The single writer of a build's tag-clock replica, reached with the same
-// per-deploy write secret every other runtime op carries. A 2xx here is a
-// promise the caller leans on: the raiser reads its own write immediately
-// afterwards, so an answer that outran the R2 write would read as an
-// invalidation that never happened.
 describe("tag raises", () => {
   function raiseReq(prefix: string, secret: string, body: unknown) {
     return SELF.fetch(
@@ -546,9 +484,6 @@ describe("tag raises", () => {
     }
   });
 
-  // Nothing durable happened, and the caller still holds the records: the merge
-  // is idempotent, so raising them again is the whole of the repair. Reporting
-  // it is what the three-attempt silent give-up never did.
   it("reports an exhausted publish as a rate limit rather than a success", async () => {
     const prefix = freshPrefix();
     await initialize(prefix, "write-secret");
@@ -565,8 +500,6 @@ describe("tag raises", () => {
     expect(res.status).toBe(404);
   });
 
-  // The document carries no expiry, so an untouched object otherwise means both
-  // "nothing has changed" and "nobody has published in a week".
   it("advances generatedAt from the heartbeat alarm with no tag activity", async () => {
     const prefix = freshPrefix();
     await initialize(prefix, "write-secret");
@@ -580,14 +513,9 @@ describe("tag raises", () => {
     expect(beaten.generatedAt).toBeGreaterThanOrEqual(published.generatedAt);
     expect(beaten.records).toEqual(published.records);
     expect(beaten.deployedAt).toBe(1_000);
-    // Liveness that stops after one beat is no liveness at all.
     expect(await runDurableObjectAlarm(snapshotStub(prefix))).toBe(true);
   });
 
-  // The builds most likely to be silently broken are the ones nothing ever
-  // invalidates, so a beat that only starts on a build's first raise leaves
-  // exactly them with no liveness signal to alarm on. The deploy that seeds a
-  // build's write secret is what starts it.
   it("beats for a build that has been deployed and never invalidated", async () => {
     const prefix = freshPrefix();
     await seedGenesis(prefix, 1_000);
@@ -602,8 +530,6 @@ describe("tag raises", () => {
     expect(await runDurableObjectAlarm(snapshotStub(prefix))).toBe(true);
   });
 
-  // Starting the beat must not conjure a document: deployedAt has one writer,
-  // and a snapshot created here would carry a zero anchor and never prune.
   it("creates no snapshot for a deploy whose genesis never landed", async () => {
     const prefix = freshPrefix();
     await initialize(prefix, "write-secret");
@@ -612,14 +538,9 @@ describe("tag raises", () => {
     expect(await snapshotOf(prefix)).toBeNull();
   });
 
-  // A build whose snapshot is gone has been retired or pruned. A document
-  // conjured for it would carry no deploy anchor, so it could never prune again
-  // — and it would be a replica of a build that no longer exists.
   it("stops beating for a build that has no snapshot to republish", async () => {
     const prefix = freshPrefix();
     const stub = snapshotStub(prefix);
-    // What an object evicted between beats wakes up to: its claim on a build,
-    // an alarm due, and nothing in R2 under that build's key.
     await runInDurableObject(stub, async (_instance, ctx) => {
       await claimBuild(ctx.storage, prefix);
       await ctx.storage.setAlarm(Date.now() + 60_000);

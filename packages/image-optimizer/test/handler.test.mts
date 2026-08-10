@@ -4,10 +4,6 @@ import { handle } from "../src/index.mjs";
 import { imageConfig, payload, storeWithConfig } from "./fixtures.mjs";
 import { solid } from "./images.mjs";
 
-// The HTTP envelope: the method, the body, and nothing else. No request header is
-// read here, which is the structural half of "never sees or forwards client
-// headers" — there is no code path from event.headers to anything.
-
 beforeEach(() => resetConfigMemo());
 
 function event(body: unknown, overrides: Record<string, unknown> = {}) {
@@ -55,8 +51,6 @@ test("an unreadable envelope is a bare 400", async () => {
   expect(store.reads).toEqual([]);
 });
 
-// A payload missing the fields the pipeline reads must fail closed rather than
-// reaching the store with undefined in a key.
 test("an envelope missing its fields is refused without a read", async () => {
   const store = storeWithConfig(imageConfig());
   const response = await handle(event({ url: "/logo.png" }), { store });
@@ -64,8 +58,6 @@ test("an envelope missing its fields is refused without a read", async () => {
   expect(store.reads).toEqual([]);
 });
 
-// An unset bucket is the function being misconfigured, which is the substrate
-// failing — not a request the edge should see cached as an answer.
 test("an unconfigured function is a 502", async () => {
   const previous = process.env["OCEL_IMAGE_ASSET_BUCKET"];
   delete process.env["OCEL_IMAGE_ASSET_BUCKET"];

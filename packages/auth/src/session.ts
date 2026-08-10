@@ -8,9 +8,6 @@ export type ActiveOrganizationSession = {
   activeOrganizationId: string;
 };
 
-// `session.activeOrganizationId` has no FK constraint (see auth-schema.ts),
-// so it can't be trusted at face value - membership is independently
-// verified against the `member` table.
 export async function verifyOrganizationMembership(
   userId: string,
   organizationId: string,
@@ -26,8 +23,6 @@ export async function verifyOrganizationMembership(
   return rows.length > 0;
 }
 
-// Resolves the caller's Better Auth session from request headers. Returns
-// null if there is no valid session at all.
 export async function getSessionUserId(
   headers: Headers,
 ): Promise<string | null> {
@@ -35,10 +30,6 @@ export async function getSessionUserId(
   return session?.user.id ?? null;
 }
 
-// Resolves the caller's session and its active organization, then
-// independently confirms the caller is actually a member of that
-// organization. Returns null if unauthenticated, if no organization is
-// active on the session, or if membership doesn't verify.
 export async function getActiveOrganizationSession(
   headers: Headers,
 ): Promise<ActiveOrganizationSession | null> {

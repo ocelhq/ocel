@@ -29,10 +29,6 @@ func TestSafeName(t *testing.T) {
 	}
 }
 
-// The physical-name prefixes fed to the underscore-rejecting AWS services must
-// derive from the logical name's safe token. These mirror the exact prefixes
-// registerBucket/registerPostgres pass to BucketPrefix, ClusterIdentifierPrefix,
-// IdentifierPrefix, and the subnet-group NamePrefix.
 func TestPhysicalNamePrefix_SafeForConstrainedResources(t *testing.T) {
 	cases := []struct {
 		name        string

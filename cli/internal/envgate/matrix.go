@@ -6,9 +6,6 @@ import (
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/resources/v1"
 )
 
-// CellState is what a declaration permits one cell to hold. It exists so the
-// rules are visible before anyone types: a forbidden cell is drawn unfillable
-// rather than accepted and then refused on save.
 type CellState string
 
 const (
@@ -17,32 +14,18 @@ const (
 	CellForbidden CellState = "forbidden"
 )
 
-// MatrixCell is one key in one folder.
 type MatrixCell struct {
 	Folder string    `json:"folder"`
 	State  CellState `json:"state"`
 	Set    bool      `json:"set"`
 
-	// Version is the class-wide value's current version, zero when the cell
-	// holds none. A write quotes it back so an edit made against a value
-	// someone else has since replaced is refused rather than applied.
 	Version int64 `json:"version"`
 
-	// Overrides is every named environment holding its own value for this cell,
-	// each at the version a write against it must expect, and each marked when
-	// the environment it belongs to no longer exists. They are shown beside the
-	// class-wide value rather than folded into it: a cell that reads empty while
-	// an override survives is a lie, and an override that read as the value
-	// every environment gets would be a worse one.
 	Overrides []Override `json:"overrides,omitempty"`
 
-	// Problem is the schema's own complaint about the value that is there,
-	// empty when there is none. A missing cell needs no message: required and
-	// unset already says it.
 	Problem string `json:"problem,omitempty"`
 }
 
-// MatrixRow is one declared variable across every column.
 type MatrixRow struct {
 	Key   string       `json:"key"`
 	Class string       `json:"class"`
@@ -50,17 +33,12 @@ type MatrixRow struct {
 	Cells []MatrixCell `json:"cells"`
 }
 
-// AppResolution is one app's view of whether it can run. Missing names the
-// cells it owes, in the folder it would have read them from, so completeness
-// is something to see rather than infer.
 type AppResolution struct {
 	Name    string `json:"name"`
 	Folder  string `json:"folder"`
 	Missing []Cell `json:"missing,omitempty"`
 }
 
-// Matrix is the required-cell matrix: a row per declared variable, a column
-// per folder with the project root first, and a readout per app.
 type Matrix struct {
 	Columns []string        `json:"columns"`
 	Rows    []MatrixRow     `json:"rows"`
@@ -73,22 +51,10 @@ var className = map[resourcesv1.VariableClass]string{
 	resourcesv1.VariableClass_VARIABLE_CLASS_SECRET:    "secret",
 }
 
-// Matrix derives the whole matrix from what this run declared, what the store
-// holds and what the declaring process complained about. It is the same
-// authority the gate refuses on, presented rather than enforced, so the UI and
-// the deploy can never disagree about which cell is owed.
-//
-// environments is what the provider enumerates, which is what an override is
-// judged against: one addressed at a name no longer among them is orphaned. A
-// caller with no enumeration to offer passes none, and every override reads as
-// orphaned — which is the honest answer when nothing is known to exist.
 func (g *Gate) Matrix(environments []string) Matrix {
 	g.mu.Lock()
 	definitions := append([]*resourcesv1.VariableDefinition(nil), g.definitions...)
 	apps := append([]App(nil), g.scope.Apps...)
-	// The cells are drawn class-wide and the app readout is resolved: a cell
-	// holds what every environment reads, while an app can run on whatever this
-	// run resolves — which is the gate's own verdict, and the two must agree.
 	classWide := g.classWideCells()
 	resolved := g.resolvedCells()
 	overrides := make(map[Cell][]Override, len(g.overrides))
@@ -137,9 +103,6 @@ func (g *Gate) Matrix(environments []string) Matrix {
 	return m
 }
 
-// state is the write rule CheckWritable enforces, plus whether a permitted
-// cell is owed. The two are read from the same declaration so a cell drawn
-// fillable is exactly one the write path accepts.
 func state(definition *resourcesv1.VariableDefinition, folder string) CellState {
 	if scope := definition.GetFolders(); len(scope) > 0 {
 		if !contains(scope, folder) {
@@ -154,9 +117,6 @@ func state(definition *resourcesv1.VariableDefinition, folder string) CellState 
 	return CellOptional
 }
 
-// missing is what one app cannot resolve. A key scoped away from the app's
-// folder is absent from the answer rather than reported: the app was never
-// meant to read it, so it is not a gap in that app's values.
 func missing(definitions []*resourcesv1.VariableDefinition, binding string, held heldCells) []Cell {
 	var out []Cell
 	for _, definition := range definitions {
@@ -179,13 +139,6 @@ func missing(definitions []*resourcesv1.VariableDefinition, binding string, held
 	return out
 }
 
-// columns are the project root and every folder either side names — declared
-// in a scope, bound by an app, or holding a value class-wide or in some named
-// environment. A folder only the store knows about still gets a column, so a
-// value written before its folder was bound is visible rather than hidden. An
-// override's folder earns one on the same terms: the column carries nothing
-// required and nothing filled, but without it a surviving value has nowhere to
-// be named.
 func columns(definitions []*resourcesv1.VariableDefinition, apps []App, held heldCells, overrides map[Cell][]Override) []string {
 	seen := map[string]bool{}
 	for _, definition := range definitions {
@@ -217,11 +170,6 @@ func columns(definitions []*resourcesv1.VariableDefinition, apps []App, held hel
 	return append([]string{""}, folders...)
 }
 
-// Forget drops what discovery said about one cell. It is what a UI write calls
-// after replacing a value: the complaint described the value that was there,
-// and keeping it would leave the matrix reporting a fault in something that no
-// longer exists. Whatever is wrong with the new value is the next discovery
-// run's to find.
 func (g *Gate) Forget(cell Cell) {
 	g.mu.Lock()
 	defer g.mu.Unlock()

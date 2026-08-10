@@ -11,10 +11,6 @@ import {
 
 const cfg: InterceptionConfig = { isrPrefix: "prod/proj/app/build" };
 
-// A fake object-store binding, shaped like the R2 bucket the deploy binds as
-// OCEL_CACHE_STORE: canned bodies by key, every get recorded so a test can
-// assert both what was read and that nothing else was. `fail` models a store
-// error, which must fall open exactly like a miss.
 function fakeStore(objects: Record<string, string>, opts: { fail?: boolean } = {}) {
   const gets: string[] = [];
   return {
@@ -29,8 +25,6 @@ function fakeStore(objects: Record<string, string>, opts: { fail?: boolean } = {
   };
 }
 
-// Builds a store from entry values, JSON-encoding each the way the build writes
-// them, so tests can hand over plain objects.
 function stored(
   entries: Record<string, unknown>,
   opts: { fail?: boolean } = {},
@@ -42,9 +36,6 @@ function stored(
   return fakeStore(objects, opts);
 }
 
-// A Map-backed stand-in for caches.default. `inert` models *.workers.dev, where
-// put() is silently discarded and match() never hits, so the snapshot read has
-// to degrade to a direct store GET.
 function fakeCache(opts: { inert?: boolean } = {}) {
   const store = new Map<string, string>();
   const calls = { match: 0, put: 0 };
@@ -76,9 +67,6 @@ const snapshot = (over: Partial<TagSnapshot> = {}): TagSnapshot => ({
 const entryKey = (routePath: string) =>
   `${cfg.isrPrefix}/cache/${routePath === "/" ? "index" : routePath.replace(/^\//, "")}.cache.json`;
 
-// The build seeds identical segment headers across a group; the marker the
-// client gates PPR on is x-nextjs-postponed: 2. Tests default to it whenever they
-// supply segmentData, mirroring what emitCacheEntries writes.
 const SEGMENT_HEADERS = {
   "content-type": "text/x-component",
   vary: "rsc, next-router-state-tree, next-router-prefetch, next-router-segment-prefetch",
@@ -121,9 +109,6 @@ const storeDeps = (
   over: Partial<InterceptDeps> = {},
 ): InterceptDeps => ({ store, ...over });
 
-// Most cases here are about whether an entry serves at all, which is the
-// complete-entry contract; `served` narrows to that so they read plainly. The
-// PPR suite calls intercept directly.
 async function served(
   ...args: Parameters<typeof intercept>
 ): Promise<Response | null> {
@@ -147,10 +132,7 @@ describe("intercept, complete entries", () => {
     expect(res!.status).toBe(200);
     expect(res!.headers.get("content-type")).toBe("text/html; charset=utf-8");
     expect(await res!.text()).toBe("<html>hi</html>");
-    // Entry is 1s old (lastModified 1_000, now 2_000), so the CDN gets the
-    // remaining window, not the full 60s.
     expect(res!.headers.get("cache-control")).toBe("s-maxage=59");
-    // Untagged, so the snapshot is never read.
     expect(store.gets).toEqual([entryKey("/blog")]);
   });
 
@@ -179,7 +161,6 @@ describe("intercept, complete entries", () => {
 
   it("serves stale past the revalidate window, marked stale, within expiration", async () => {
     const store = stored({ [entryKey("/blog")]: appPage({ lastModified: 1_000 }) });
-    // 61s later, revalidate is 60s: stale, but no expiration cutoff set.
     const outcome = await intercept(req(), target({ revalidate: 60 }), cfg, {
       ...storeDeps(store),
       now: () => 1_000 + 61_000,
@@ -187,10 +168,6 @@ describe("intercept, complete entries", () => {
     expect(outcome).toMatchObject({ kind: "complete", stale: true });
   });
 
-  // The caller caps its jittered admission draw on this, so a refresh is never
-  // deferred past the moment the entry it refreshes stops being servable — see
-  // admissionJitterMs in cache.ts. A stale hit that omitted it would leave the
-  // draw unbounded and the entry expired mid-wait, with no dedupe left below.
   it("reports how much stale window a stale hit has left, and nothing when fresh", async () => {
     const store = stored({ [entryKey("/blog")]: appPage({ lastModified: 1_000 }) });
     const t = target({ revalidate: 60, expiration: 3600 });
@@ -210,9 +187,6 @@ describe("intercept, complete entries", () => {
     ).toMatchObject({ stale: false, staleForMs: undefined });
   });
 
-  // A path generated on demand is named by no manifest entry, so the only
-  // window it has is the one the render recorded on the entry itself. Without
-  // it the entry would sit fresh forever and the route would never revalidate.
   it("takes its window from the entry when the manifest declares none", async () => {
     const store = stored({
       [entryKey("/blog")]: {
@@ -227,8 +201,6 @@ describe("intercept, complete entries", () => {
     expect(outcome).toMatchObject({ kind: "complete", stale: true });
   });
 
-  // The entry describes the render that produced it; the manifest describes
-  // what the build projected. When they disagree, the entry is the fact.
   it("prefers the entry's own window over the manifest's", async () => {
     const store = stored({
       [entryKey("/blog")]: {
@@ -331,10 +303,6 @@ describe("intercept, tag state from the snapshot", () => {
     expect(res).not.toBeNull();
   });
 
-  // A replica this reader cannot read is a fall-open rather than a serve. How
-  // old it is never appears here: age is the publisher's to judge, and a reader
-  // that guessed would fall open on every route of a build nobody has
-  // invalidated anything in.
   const unusable: Record<string, string> = {
     missing: "",
     unparseable: "{not json",
@@ -365,8 +333,6 @@ describe("intercept, tag state from the snapshot", () => {
     });
     const snapshotCache = fakeCache();
 
-    // Far enough apart that the in-isolate memo has lapsed, so the second read
-    // is answered by the PoP cache rather than the memo.
     expect(
       await served(req(), target(), cfg, storeDeps(store, { snapshotCache, now: () => 2_000 })),
     ).not.toBeNull();
@@ -400,8 +366,6 @@ describe("intercept, tag state from the snapshot", () => {
     });
     const snapshotCache = fakeCache({ inert: true });
 
-    // Tag invalidated: served stale, and the snapshot is re-read every request
-    // because the inert PoP cache never hits.
     expect(
       await served(req(), target(), cfg, storeDeps(store, { snapshotCache, now: () => 2_000 })),
     ).not.toBeNull();
@@ -412,8 +376,6 @@ describe("intercept, tag state from the snapshot", () => {
     expect(store.gets.filter((k) => k === snapshotKey).length).toBe(2);
   });
 
-  // The PoP entry's own max-age is what bounds how long a colo answers from a
-  // superseded replica; the document it holds carries no second expiry.
   it("keeps serving from a snapshot the PoP cache still holds", async () => {
     const store = stored({
       [entryKey("/blog")]: appPage({ tags: "products", lastModified: 1_000 }),
@@ -430,9 +392,6 @@ describe("intercept, tag state from the snapshot", () => {
   });
 });
 
-// A PPR entry is discriminated on value.postponed, never on renderingMode: the
-// build marks routes PARTIALLY_STATIC whether or not they actually postponed,
-// and revalidation can change the answer under a fixed manifest.
 describe("intercept, PPR entries", () => {
   const pprEntry = (over: Parameters<typeof appPage>[0] = {}) =>
     appPage({ postponed: "STATE", ...over });
@@ -452,7 +411,6 @@ describe("intercept, PPR entries", () => {
     expect(outcome).toMatchObject({ kind: "ppr", postponed: "STATE", stale: false });
     const shell = (outcome as { shell: Response }).shell;
     expect(await shell.text()).toBe("<html>hi</html>");
-    // Freshness is the caller's to declare; nothing here invites a cache.
     expect(shell.headers.get("cache-control")).toBeNull();
   });
 
@@ -526,7 +484,6 @@ describe("intercept, PPR entries", () => {
   });
 
   it("never serves a complete entry found under the dynamic pattern", async () => {
-    // Without a postponed state that entry is some other path's rendered page.
     const outcome = await read(
       pprTarget({ routePath: "/posts/7", fallbackPath: "/posts/[id]" }),
       { [entryKey("/posts/[id]")]: appPage() },
@@ -574,8 +531,6 @@ describe("intercept, PPR entries", () => {
     const res = (outcome as { response: Response }).response;
     expect(res.status).toBe(200);
     expect(res.headers.get("content-type")).toBe("text/x-component");
-    // The marker the client gates PPR support on — its absence is what silently
-    // degrades a PPR route to a whole-page dynamic render.
     expect(res.headers.get("x-nextjs-postponed")).toBe("2");
     expect(res.headers.get("x-nextjs-stale-time")).toBe("300");
     expect(res.headers.get("vary")).toBe(
@@ -584,9 +539,6 @@ describe("intercept, PPR entries", () => {
     expect(await res.text()).toBe("TREE-SEG");
   });
 
-  // A prefetch serves whatever the entry holds — no staleness gate — but it must
-  // still SAY the entry lapsed, or nothing behind the serve ever regenerates it
-  // and an admitted refresh can be "answered" by the entry it was refreshing.
   it.each([
     ["fresh", 2_000, false],
     ["stale", 1_000 + 61_000, true],
@@ -638,8 +590,6 @@ describe("intercept, PPR entries", () => {
   });
 
   it("falls open on a segment prefetch when the entry predates header capture", async () => {
-    // An entry without segmentHeaders can only serve a segment missing the
-    // postponed marker, which the client reads as "not PPR" — worse than a miss.
     const outcome = await intercept(
       req({ headers: { "next-router-segment-prefetch": "/_tree" } }),
       pprTarget(),
@@ -659,9 +609,6 @@ describe("intercept, PPR entries", () => {
   });
 
   it("serves a full-route prefetch as the cacheable shell, not a resume", async () => {
-    // A router prefetch (no segment header) must get the static shell as a
-    // complete, cacheable response — never a PPR pair that would resume a
-    // per-visitor render the client cannot cache.
     const rscHeaders = {
       "content-type": "text/x-component",
       vary: "rsc, next-router-state-tree, next-router-prefetch, next-router-segment-prefetch",
@@ -679,7 +626,6 @@ describe("intercept, PPR entries", () => {
 
     expect(outcome?.kind).toBe("complete");
     const res = (outcome as { response: Response }).response;
-    // The RSC variant's own stored headers are replayed verbatim.
     expect(res.headers.get("content-type")).toBe("text/x-component");
     expect(res.headers.get("x-nextjs-stale-time")).toBe("300");
     expect(res.headers.get("vary")).toBe(rscHeaders.vary);
@@ -688,11 +634,6 @@ describe("intercept, PPR entries", () => {
   });
 
   it("serves a segment prefetch even when the entry's tags were invalidated", async () => {
-    // A prefetch is speculative: its result is revealed only on a later
-    // navigation, which resumes the tagged half fresh — so the prefetch carries
-    // no tagged content to be stale. An invalidated tag must not strand it on
-    // the Lambda, which would starve the client's segment cache. The tag gate is
-    // bypassed entirely, so the snapshot is never even read.
     const store = stored({
       [entryKey("/blog")]: pprEntry({
         tags: "posts",
@@ -774,8 +715,6 @@ describe("intercept, PPR entries", () => {
       const store = stored({
         [entryKey("/blog")]: appPage({ postponed: "PP" }),
       });
-      // A '2' prefetch is a runtime dynamic request; it must NOT be handed the
-      // static shell, so with no other servable variant the read falls open.
       const outcome = await intercept(
         req({ headers: { RSC: "1", "next-router-prefetch": "2" } }),
         target({ revalidate: false }),
@@ -787,14 +726,7 @@ describe("intercept, PPR entries", () => {
   });
 });
 
-// A revalidation rewrite is the one write that does not read the entry it
-// replaces: Next's runtime set() payload carries a single page-level headers map,
-// and the per-variant maps come back only from the build's projection. So the
-// consumer that decides whether PPR survives a revalidation is this one —
-// reconstructSegment, which serves nothing at all when segmentHeaders is missing.
-// These drive a rewrite-shaped entry through it from both sides.
 describe("intercept, a revalidated entry's segment prefetch", () => {
-  // The projection the Lambda assigns over the rewrite, as the adapter emits it.
   const projection = {
     rscHeaders: { "content-type": "text/x-component" },
     segmentHeaders: SEGMENT_HEADERS,
@@ -848,7 +780,6 @@ describe("intercept, entry memo", () => {
     await served(req(), target(), cfg, deps);
     await served(req(), target(), cfg, deps);
 
-    // Three reads of the same route within the TTL, one store GET.
     expect(store.gets).toEqual([entryKey("/blog")]);
   });
 
@@ -879,7 +810,6 @@ describe("intercept, entry memo", () => {
 
     clock.ms = 2_000 + 6_000; // stale
     await served(req(), target({ revalidate: false }), cfg, deps);
-    // The stale read served from memo; the store GET was deferred, not blocking.
     expect(store.gets.length).toBe(1);
 
     await Promise.all(pending.splice(0));
@@ -921,8 +851,6 @@ describe("intercept, entry-modified + parallel reads", () => {
       storeDeps(store, { now: () => 2_000 }),
     );
 
-    // Yield microtasks so the prime read has a chance to run while the entry
-    // read is still gated.
     for (let i = 0; i < 10; i++) await Promise.resolve();
 
     expect(store.gets).toContain(snapshotKey);
@@ -936,12 +864,6 @@ describe("intercept, entry-modified + parallel reads", () => {
   });
 });
 
-// The snapshot format crosses a language boundary twice — the Go deploy seeds it
-// and the Lambda publisher rewrites it — so nothing but this one artifact stops
-// the three from drifting apart in silence. The deploy's test asserts it marshals
-// exactly these bytes and the publisher's test asserts it reads these fields;
-// what follows is the reader half, run against the same bytes rather than
-// against a snapshot this test wrote for itself.
 describe("the published snapshot format", () => {
   const genesis: TagSnapshot = JSON.parse(genesisSnapshot);
   const within = genesis.generatedAt + 1_000;
@@ -963,10 +885,6 @@ describe("the published snapshot format", () => {
     expect(res).not.toBeNull();
   });
 
-  // Every app-router prerender carries Next's implicit _N_T_ tags, so a genesis
-  // snapshot that stopped being trusted would take every static route in the
-  // build to the Lambda, for the life of a deploy nobody invalidates anything
-  // in. It is trusted until a publisher replaces it, however long that is.
   it("stays trusted however long the build goes without an invalidation", async () => {
     const store = fakeStore({
       [entryKey("/blog")]: JSON.stringify(

@@ -29,7 +29,6 @@ export class Bucket<
     public uploaders: TUploaders,
     public allowedOrigins: string[],
   ) {
-    // intentionally defined repeatedly like this for dead code elimination when in prod
     if (process.env.OCEL_PHASE === "discovery") {
       defer(
         rpc.resource.declare({

@@ -10,13 +10,11 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/manifestbuilder"
 )
 
-// generate runs the accessor generation for one app directory.
 func generate(t *testing.T, dir string) error {
 	t.Helper()
 	return Generate([]App{{Dir: dir, Variables: []manifestbuilder.Variable{clientVar("PUBLIC_SITE_URL", "https://example.com")}}})
 }
 
-// mapped is the paths value the config at path resolves the specifier to.
 func mapped(t *testing.T, path string) []string {
 	t.Helper()
 	var parsed struct {
@@ -30,11 +28,6 @@ func mapped(t *testing.T, path string) []string {
 	return parsed.CompilerOptions.Paths[specifier]
 }
 
-// TestGenerate_ResolvesTheEntryAgainstBaseUrl proves the mapping points at the
-// accessor and not at wherever the app's baseUrl happens to make that spelling
-// land. TypeScript resolves a paths value against baseUrl, so a fixed
-// "./.ocel/..." in an app with a baseUrl of "./src" names a file that does not
-// exist — and says nothing about it until a browser reads undefined.
 func TestGenerate_ResolvesTheEntryAgainstBaseUrl(t *testing.T) {
 	for name, tc := range map[string]struct{ baseURL, want string }{
 		"a source root":  {"./src", "../.ocel/env-client.ts"},
@@ -57,12 +50,6 @@ func TestGenerate_ResolvesTheEntryAgainstBaseUrl(t *testing.T) {
 	}
 }
 
-// TestGenerate_RefusesToReplaceABaseConfigsPaths proves the one edit that
-// would break a project outright is not made. TypeScript does not merge paths
-// across extends: a paths object written into a config that inherits one
-// replaces it whole, so every alias the base declared stops resolving. The
-// config is left as the developer wrote it and the refusal states the entry to
-// add.
 func TestGenerate_RefusesToReplaceABaseConfigsPaths(t *testing.T) {
 	dir := t.TempDir()
 	write(t, filepath.Join(dir, "tsconfig.base.json"), "{\n  \"compilerOptions\": {\n    \"paths\": {\n      \"@/*\": [\"./src/*\"]\n    }\n  }\n}\n")
@@ -83,9 +70,6 @@ func TestGenerate_RefusesToReplaceABaseConfigsPaths(t *testing.T) {
 	}
 }
 
-// TestGenerate_ExtendsAConfigStatingNoPaths proves the refusal is about the
-// paths that would be lost and nothing else: a base config with none loses
-// nothing, so the entry is written as it would be anywhere.
 func TestGenerate_ExtendsAConfigStatingNoPaths(t *testing.T) {
 	dir := t.TempDir()
 	write(t, filepath.Join(dir, "tsconfig.base.json"), "{\n  \"compilerOptions\": {\n    \"strict\": true\n  }\n}\n")
@@ -99,9 +83,6 @@ func TestGenerate_ExtendsAConfigStatingNoPaths(t *testing.T) {
 	}
 }
 
-// TestGenerate_ExtendsAConfigWithItsOwnPathsBeside proves an app that already
-// states paths of its own has already replaced the base's, so adding an entry
-// to that object takes nothing away.
 func TestGenerate_ExtendsAConfigWithItsOwnPathsBeside(t *testing.T) {
 	dir := t.TempDir()
 	write(t, filepath.Join(dir, "tsconfig.base.json"), "{\n  \"compilerOptions\": {\n    \"paths\": {\n      \"@/*\": [\"./src/*\"]\n    }\n  }\n}\n")
@@ -119,10 +100,6 @@ func TestGenerate_ExtendsAConfigWithItsOwnPathsBeside(t *testing.T) {
 	}
 }
 
-// TestGenerate_InheritsABaseConfigsBaseUrl proves a baseUrl is honoured
-// wherever it is stated. A base config's own relative paths are resolved
-// against the directory that config sits in, so the entry has to be stated
-// from there and not from the child's directory.
 func TestGenerate_InheritsABaseConfigsBaseUrl(t *testing.T) {
 	dir := t.TempDir()
 	write(t, filepath.Join(dir, "config", "base.json"), "{\n  \"compilerOptions\": {\n    \"baseUrl\": \"../src\"\n  }\n}\n")
@@ -136,9 +113,6 @@ func TestGenerate_InheritsABaseConfigsBaseUrl(t *testing.T) {
 	}
 }
 
-// TestGenerate_RefusesAnUnresolvableBaseConfig proves the CLI does not guess:
-// a base config it cannot read could state paths, and writing an entry without
-// knowing is the destructive case again.
 func TestGenerate_RefusesAnUnresolvableBaseConfig(t *testing.T) {
 	for name, extends := range map[string]string{
 		"a package specifier": `"@tsconfig/next/tsconfig.json"`,
@@ -164,10 +138,6 @@ func TestGenerate_RefusesAnUnresolvableBaseConfig(t *testing.T) {
 	}
 }
 
-// TestGenerate_RefusesAConfigItCannotRead proves the failure is reported
-// rather than swallowed. Each of these once produced a silent no-op: the
-// accessor written, the mapping absent, and the first evidence a thrown read
-// in a browser.
 func TestGenerate_RefusesAConfigItCannotRead(t *testing.T) {
 	for name, source := range map[string]string{
 		"a top-level array":             "[]\n",
@@ -195,9 +165,6 @@ func TestGenerate_RefusesAConfigItCannotRead(t *testing.T) {
 	}
 }
 
-// TestGenerate_ReadsAConfigThatOpensWithAByteOrderMark proves an editor's
-// invisible three bytes are not the difference between a working mapping and a
-// silent one.
 func TestGenerate_ReadsAConfigThatOpensWithAByteOrderMark(t *testing.T) {
 	dir := t.TempDir()
 	write(t, filepath.Join(dir, "tsconfig.json"), "\ufeff{\n  \"compilerOptions\": {}\n}\n")
@@ -213,9 +180,6 @@ func TestGenerate_ReadsAConfigThatOpensWithAByteOrderMark(t *testing.T) {
 	}
 }
 
-// TestGenerate_HonoursAnEscapedKey proves a key is read as JSON says it reads.
-// A developer who wrote the mapping with an escape wrote the mapping, and a
-// second one beside it is a config with the same key twice.
 func TestGenerate_HonoursAnEscapedKey(t *testing.T) {
 	dir := t.TempDir()
 	source := "{\n  \"compilerOptions\": {\n    \"paths\": {\n      \"ocel\\u002fenv\\u002fclient\": [\"./elsewhere.ts\"]\n    }\n  }\n}\n"
@@ -229,8 +193,6 @@ func TestGenerate_HonoursAnEscapedKey(t *testing.T) {
 	}
 }
 
-// TestGenerate_LeavesAnAppWithNoConfigAlone proves the mapping is written into
-// a config the app has and never into one ocel invents.
 func TestGenerate_LeavesAnAppWithNoConfigAlone(t *testing.T) {
 	dir := t.TempDir()
 

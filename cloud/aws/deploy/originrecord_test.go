@@ -10,8 +10,6 @@ import (
 	"github.com/ocelhq/ocel/cloud/edge"
 )
 
-// originStore points a Config at a recording uploader, so a test can assert what
-// the origin-record write published and in what order relative to the cutover.
 func originStore(cfg Config) Config {
 	cfg.AssetBucket = "assets-xyz"
 	cfg.Uploader = &fakeUploader{}
@@ -26,10 +24,6 @@ func isrResult(app, prefix string, urls map[string]string) appDeployResult {
 	}
 }
 
-// TestWriteOriginRecords_PublishesWhereTheConsumerLooks. The consumer reads
-// <isrPrefix>/origin.json out of the provider's own asset bucket — the one its
-// role is granted on — and resolves the route it was asked to render from the
-// map inside. Both halves of that key are this write's contract.
 func TestWriteOriginRecords_PublishesWhereTheConsumerLooks(t *testing.T) {
 	up := &fakeUploader{}
 	cfg := Config{AssetBucket: "assets-xyz", Uploader: up}
@@ -64,9 +58,6 @@ func TestWriteOriginRecords_PublishesWhereTheConsumerLooks(t *testing.T) {
 	}
 }
 
-// TestWriteOriginRecords_SkipsAppsWithNothingToRevalidate. An app whose
-// framework keeps no server-side cache has no ISR prefix and nothing to
-// revalidate, and an app whose stack failed is about to abort the promote.
 func TestWriteOriginRecords_SkipsAppsWithNothingToRevalidate(t *testing.T) {
 	up := &fakeUploader{}
 	cfg := Config{AssetBucket: "assets-xyz", Uploader: up}
@@ -84,11 +75,6 @@ func TestWriteOriginRecords_SkipsAppsWithNothingToRevalidate(t *testing.T) {
 	}
 }
 
-// TestWriteOriginRecords_FailureFailsTheDeployLoudly. Swallowing this is the
-// epic's signature failure exactly: the record is absent, the edge enqueues, the
-// send succeeds, the refresh thunk reports landed, the colo sentinel re-arms,
-// the consumer answers origin-unusable for every route of the build, and the
-// deploy output said nothing was wrong. There is no partial success to report.
 func TestWriteOriginRecords_FailureFailsTheDeployLoudly(t *testing.T) {
 	cfg := Config{AssetBucket: "assets-xyz", Uploader: &fakeUploader{putErr: errors.New("access denied")}}
 	err := writeOriginRecords(context.Background(), cfg, []appDeployResult{
@@ -104,11 +90,6 @@ func TestWriteOriginRecords_FailureFailsTheDeployLoudly(t *testing.T) {
 	}
 }
 
-// TestFinalizeDeploy_PublishesTheOriginRecordBeforeCuttingOver is the ordering
-// requirement, and it is the whole point of where this write sits. A build that
-// is staged and promoted before its record exists is live with routes that
-// enqueue a revalidation and never receive one — and the window is not
-// theoretical, it is however long the deploy takes to notice.
 func TestFinalizeDeploy_PublishesTheOriginRecordBeforeCuttingOver(t *testing.T) {
 	up := &fakeUploader{}
 	cfg := Config{AssetBucket: "assets-xyz", Uploader: up}
@@ -126,8 +107,6 @@ func TestFinalizeDeploy_PublishesTheOriginRecordBeforeCuttingOver(t *testing.T) 
 		t.Fatalf("staged %d over %d promotions, want 1 and 1", len(fake.staged), len(fake.promotions))
 	}
 
-	// A write that fails takes the cutover with it: nothing is staged and
-	// nothing is promoted.
 	blocked := &recordingRootStack{}
 	failing := Config{AssetBucket: "assets-xyz", Uploader: &fakeUploader{putErr: errors.New("access denied")}}
 	if _, err := finalizeDeploy(context.Background(), failing, blocked, specs, nil, "promo2", "", "", 100, results); err == nil {

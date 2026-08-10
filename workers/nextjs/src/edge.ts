@@ -1,26 +1,14 @@
-// Next's edge outputs — middleware and every `runtime: 'edge'` route — run as a
-// Cloudflare dynamic worker rather than an uploaded script: the Deployment's
-// edge bundle is one R2 object, and the loader compiles it on a cold isolate,
-// keyed by the bundle's content hash. Nothing is uploaded at deploy time, which
-// is what keeps a rollback a pointer flip (ADR 0002).
-
 import type { EdgeCacheRpc } from "@ocel/next-cache";
 
 import type { ObjectStoreReader } from "./tag-clock";
 
-// The Deployment record's edge slot, written by the host at deploy time.
 export interface EdgeWorkers {
   bundleKey: string;
-  // Hashes the bundle bytes together with the compat settings below: the
-  // loader's contract is "same id, same code", and compat is part of the code
-  // it compiles. One input to the loader key, not the key — see createEdgeInvoker.
   id: string;
   compatDate: string;
   compatFlags?: string[];
 }
 
-// The bundle the adapter emits. Chunk, wasm and asset ids are opaque module
-// names it assigns; the shim imports them by those names.
 interface EdgeBundle {
   version: number;
   mainModule: string;
@@ -31,28 +19,15 @@ interface EdgeBundle {
   env?: Record<string, string>;
 }
 
-// The bundle layout this worker knows how to compile. The worker script is
-// frozen at deploy time and outlives the deployments it serves (ADR 0002), so it
-// can legitimately be handed a bundle a later adapter wrote; a shape it cannot
-// read is a 500, not a best-effort load.
 const BUNDLE_VERSION = 2;
 
-// Invokes one entry of the Deployment's edge bundle. Throws on any failure —
-// callers turn that into a 500 rather than routing on as though the entry had
-// never run.
 export type EdgeInvoker = (
   entryKey: string,
   request: Request,
 ) => Promise<Response>;
 
-// A loopback stub for EdgeCacheRpc: the main worker's own CacheEntrypoint,
-// reached across a worker boundary, so what the bundle holds is the RPC view of
-// that interface rather than the object.
 export type EdgeCacheStub = Rpc.Provider<EdgeCacheRpc>;
 
-// What the bundled cache handler is given to reach storage: that stub, and the
-// deployment scope every call names. The edge holds no credentials, so this is
-// its entire cache.
 export interface EdgeCacheBinding {
   rpc: EdgeCacheStub;
   scope: string;
@@ -79,17 +54,10 @@ export function createEdgeInvoker(
     const modules: Record<string, WorkerLoaderModule> = {
       [bundle.mainModule]: { js: bundle.shim },
     };
-    // Chunks are CommonJS, not ESM: Turbopack reaches a Node builtin through a
-    // bare synchronous `require`, which exists only in a CJS module. Declaring
-    // them `js` leaves every chunk that touches Buffer or AsyncLocalStorage
-    // throwing "require is not defined" the moment it evaluates.
     for (const [id, cjs] of Object.entries(bundle.chunks)) modules[id] = { cjs };
     for (const [id, base64] of Object.entries(bundle.wasm ?? {})) {
       modules[id] = { wasm: base64Bytes(base64) };
     }
-    // A traced asset — a .txt, .png or font an entry binds with
-    // `new URL(…, import.meta.url)` — is a data module, whose default export is
-    // its bytes. The shim serves it to the `blob:` fetch the chunk emits.
     for (const [id, base64] of Object.entries(bundle.assets ?? {})) {
       modules[id] = { data: base64Bytes(base64) };
     }
@@ -99,13 +67,6 @@ export function createEdgeInvoker(
       compatibilityFlags: workers.compatFlags,
       mainModule: bundle.mainModule,
       modules,
-      // The bundle's own env, which the chunks read off process.env at module
-      // scope, plus the one binding an edge entry may reach: the cache loopback.
-      // It travels in the load-time env rather than per request because this
-      // env is evaluated once per isolate and outlives every request the isolate
-      // serves — a stub taken from a request's ctx would be disposed at the end
-      // of whichever request cold-started it, leaving requests 2..N holding a
-      // dead one.
       env: {
         ...(bundle.env ?? {}),
         ...(cache && { OCEL_CACHE_RPC: cache.rpc, OCEL_CACHE_SCOPE: cache.scope }),
@@ -113,20 +74,8 @@ export function createEdgeInvoker(
     };
   };
 
-  // The loader compiles `load`'s result on a cold isolate and serves every later
-  // request for the same id out of that one, so the id must name every input to
-  // the code: the bundle bytes and compat settings workers.id hashes, plus
-  // whatever is added here at load time. Two deployments can share a bundle — a
-  // rollback, or preview and production of one build — and differ only in cache
-  // scope; keyed on workers.id alone they collapse onto one isolate and the
-  // second silently reads the first's cache. The loopback needs no place in the
-  // key beyond its presence: it is this script's own entrypoint, the same one for
-  // every deployment the script serves. JSON-encoded so no pair of values can
-  // spell another pair's id.
   const id = `edge:${JSON.stringify([workers.id, cache?.scope ?? null])}`;
 
-  // The entry key travels as ctx.props, never a header: the request reaches the
-  // entry byte-exact, and no client can name an entry its URL never routed to.
   return (entryKey, request) =>
     loader
       .get(id, load)

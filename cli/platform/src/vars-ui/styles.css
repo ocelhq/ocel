@@ -1,8 +1,3 @@
-/* The variables matrix is an engineering drawing of a requirement: hairline
-   rules, a socket per cell, and exactly two saturated colours — one for a cell
-   that is owed, one for a cell that is held. State is carried by shape as well
-   as colour, so the drawing survives being read without colour at all. */
-
 :root {
   color-scheme: light dark;
 
@@ -64,8 +59,6 @@ button {
   font-family: var(--mono);
 }
 
-/* ---- frame ------------------------------------------------------------- */
-
 .frame {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(300px, 25rem);
@@ -82,8 +75,6 @@ button {
   min-width: 0;
   padding: calc(var(--step) * 4);
 }
-
-/* ---- masthead ---------------------------------------------------------- */
 
 .masthead {
   display: flex;
@@ -121,8 +112,6 @@ button {
   color: var(--owed);
 }
 
-/* ---- eyebrow ----------------------------------------------------------- */
-
 .eyebrow {
   margin: calc(var(--step) * 4) 0 calc(var(--step) * 1.5);
   font-family: var(--mono);
@@ -138,8 +127,6 @@ button {
   letter-spacing: 0.04em;
   text-transform: none;
 }
-
-/* ---- apps -------------------------------------------------------------- */
 
 .apps {
   display: flex;
@@ -179,8 +166,6 @@ button {
 .app .verdict[data-resolves="false"] {
   color: var(--owed);
 }
-
-/* ---- matrix ------------------------------------------------------------ */
 
 .scroller {
   overflow-x: auto;
@@ -229,9 +214,6 @@ button {
 .matrix td {
   text-align: center;
 }
-
-/* A cell is a socket. Held is solid, owed is a hollow ring, free is a faint
-   ring, forbidden is a hatched square with nothing to press. */
 
 .socket {
   display: inline-grid;
@@ -292,7 +274,6 @@ button {
   );
 }
 
-/* The thread: hovering an app lights the cells its two hops actually read. */
 .matrix[data-threading="true"] .socket:not(.threaded) {
   opacity: 0.24;
 }
@@ -312,8 +293,6 @@ button {
     animation: none;
   }
 }
-
-/* ---- legend ------------------------------------------------------------ */
 
 .legend {
   display: flex;
@@ -336,8 +315,6 @@ button {
   height: auto;
   cursor: default;
 }
-
-/* ---- inspector --------------------------------------------------------- */
 
 .inspector {
   display: flex;
@@ -378,10 +355,6 @@ button {
 .verdict-line[data-tone="owed"] {
   color: var(--owed);
 }
-
-/* The environment axis. Deliberately unlike the folder sockets: folders are a
-   grid of cells and environments are one row of alternatives for the cell
-   already chosen, so mistaking one axis for the other takes effort. */
 
 .environments {
   display: flex;
@@ -528,8 +501,6 @@ button {
   color: var(--ink-soft);
   font-size: 0.8125rem;
 }
-
-/* ---- footer ------------------------------------------------------------ */
 
 .done {
   margin-top: auto;

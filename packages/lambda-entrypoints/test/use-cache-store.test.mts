@@ -1,7 +1,5 @@
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 
-// The store binds its clients from env at construction, so every test needs the
-// table, namespace, bucket and prefix it keys into.
 beforeEach(() => {
   process.env.OCEL_STATE_TABLE = "state";
   process.env.OCEL_ISR_TAG_NAMESPACE = "TAG#prod#proj#app#BID#";
@@ -12,15 +10,11 @@ beforeEach(() => {
 afterEach(() => {
   vi.resetModules();
   vi.restoreAllMocks();
-  // Whether a store was adopted decides which bucket the store binds, so it has
-  // to be cleared between tests or one test's adoption leaks into the next.
   for (const v of Object.keys(process.env)) {
     if (v.startsWith("OCEL_ISR_STORE_")) delete process.env[v];
   }
 });
 
-// Drives the store against a scripted DynamoDB: each entry is one send()
-// response, in order. A response that is an Error is thrown instead.
 async function storeWithResponses(responses: any[]) {
   const sends: any[] = [];
   vi.doMock("@aws-sdk/client-dynamodb", async (orig) => {
@@ -42,9 +36,6 @@ async function storeWithResponses(responses: any[]) {
   return { store: awsUseCacheStore(), sends };
 }
 
-// The plural handlers run in Lambda, where the provider's own bucket is
-// in-region, so adopting an edge cache store deliberately does not move them:
-// only the singular ISR entry path is colocated with the edge.
 test("stays on the provider's bucket when a cache store is adopted", async () => {
   Object.assign(process.env, {
     OCEL_ISR_STORE_BUCKET: "isr",
@@ -109,9 +100,6 @@ test("writes a tag record under the monotonic guard", async () => {
   });
 });
 
-// A stale-only event carries no expiry, and writing one as 0 would both clobber
-// an expiry another instance set and — the guard being a strict `<` — wedge the
-// record, so every later stale-only write is rejected against its own zero.
 test("guards a stale-only write on stale, and does not write an absent expiry", async () => {
   const { store, sends } = await storeWithResponses([{}]);
 
@@ -125,8 +113,6 @@ test("guards a stale-only write on stale, and does not write an absent expiry", 
   expect(sends[0].UpdateExpression).not.toContain("expired");
 });
 
-// performance.now() is fractional, and a fractional sort key neither pads to the
-// fixed width nor orders lexicographically against one that does.
 test("rounds a fractional write time into the fixed-width sort key", async () => {
   const { store, sends } = await storeWithResponses([{}]);
 
@@ -137,8 +123,6 @@ test("rounds a fractional write time into the fixed-width sort key", async () =>
   });
 });
 
-// Next fans updateTags out to every registered handler, so the second write for
-// one event always loses the guard. That is the common path, not an error.
 test("reports a rejected conditional write rather than throwing", async () => {
   const rejected = Object.assign(new Error("guard"), {
     name: "ConditionalCheckFailedException",
@@ -158,8 +142,6 @@ test("surfaces failures that are not the guard", async () => {
   ).rejects.toThrow(/down/);
 });
 
-// Drives the store against a scripted S3 the same way, so the object key layout
-// and the envelope round-trip are asserted on the command actually emitted.
 async function storeWithObjects(responses: any[]) {
   const sends: any[] = [];
   vi.doMock("@aws-sdk/client-s3", async (orig) => {
@@ -194,8 +176,6 @@ const objectBody = (value: unknown) => ({
   Body: { transformToString: async () => JSON.stringify(value) },
 });
 
-// The cache key Next hands a handler is an encodeReply blob of arbitrary bytes
-// and arbitrary length, which is not a legal object key.
 test("hashes the cache key into a legal object name under the build prefix", async () => {
   const { store, sends } = await storeWithObjects([{}]);
   const cacheKey = "\u0000binary\uffff" + "x".repeat(4096);
@@ -225,8 +205,6 @@ test("gives distinct keys distinct object names", async () => {
   expect(sends[1].Key).not.toBe(sends[0].Key);
 });
 
-// One JSON document per entry: one round-trip to read, and an atomic write with
-// no torn entry to serve.
 test("round-trips the entry as a single JSON envelope", async () => {
   const { store, sends } = await storeWithObjects([{}]);
 
@@ -249,8 +227,6 @@ test("reports an absent object as a miss rather than a failure", async () => {
   await expect(store.readEntry("k")).resolves.toBeNull();
 });
 
-// Anything that is not a 404 is a real outage, and the handler is what turns it
-// into a miss — the store must not disguise it as an absent entry.
 test("surfaces a read failure that is not an absent object", async () => {
   const { store } = await storeWithObjects([new Error("s3 is down")]);
 
@@ -275,8 +251,6 @@ const notModified = () =>
     $metadata: { httpStatusCode: 304 },
   });
 
-// The publisher writes this build's clock to one object under the same prefix
-// the deploy scopes everything else to, so the read is one unconditional GET.
 test("reads the whole tag clock from one object under the build's prefix", async () => {
   const { store, sends } = await storeWithObjects([storedSnapshot(snapshot, '"v1"')]);
 
@@ -285,7 +259,6 @@ test("reads the whole tag clock from one object under the build's prefix", async
   expect(sends).toHaveLength(1);
   expect(sends[0].Bucket).toBe("assets");
   expect(sends[0].Key).toBe("prod/proj/app/BID/tag-clock.json");
-  // Nothing to condition on yet: a first read must never be answered with a 304.
   expect(sends[0].IfNoneMatch).toBeUndefined();
   expect(read).toEqual({
     status: "fresh",
@@ -312,8 +285,6 @@ test("reads an object the store named no version for", async () => {
   });
 });
 
-// Absent and unreadable are one answer on purpose: either way this reader holds
-// no tag state it may serve on, and the clock has to stay fail-closed.
 test("reports an absent snapshot as unusable rather than as an empty clock", async () => {
   const missing = Object.assign(new Error("nope"), { name: "NoSuchKey" });
   const { store } = await storeWithObjects([missing]);
@@ -329,19 +300,12 @@ test("reports a snapshot at an unknown version as unusable", async () => {
   expect(await store.readTagSnapshot(null)).toEqual({ status: "unusable" });
 });
 
-// A body of `null` parses fine and is an object by typeof, so it reaches the
-// version check as a document rather than being rejected as malformed — which is
-// the one shape a reader is most likely to dereference before judging it.
 test("reports a snapshot document of null as unusable", async () => {
   const { store } = await storeWithObjects([storedSnapshot(null, '"v1"')]);
 
   expect(await store.readTagSnapshot(null)).toEqual({ status: "unusable" });
 });
 
-// The opposite answer to every case above it, and the one that must not be
-// folded into them: a build that has invalidated nothing publishes a readable
-// snapshot with no records. Reading that as unusable would leave the remote tier
-// fail-closed for the life of a quiet build.
 test("reads a snapshot with no records as a fresh, empty clock", async () => {
   const { store } = await storeWithObjects([
     storedSnapshot({ ...snapshot, records: {} }, '"v1"'),
@@ -362,8 +326,6 @@ test("reports an unparseable snapshot as unusable", async () => {
   expect(await store.readTagSnapshot(null)).toEqual({ status: "unusable" });
 });
 
-// An outage is not an empty clock either, but it is the clock's to swallow: the
-// store reports it as what it is.
 test("surfaces a snapshot read failure that is neither a 404 nor a 304", async () => {
   const { store } = await storeWithObjects([new Error("s3 is down")]);
 

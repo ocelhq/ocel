@@ -61,8 +61,6 @@ it("reads the environment per invocation, so rotated credentials are the ones it
   expect(signatures[1]).toContain("Credential=AKIAROTATED/");
 });
 
-// The memo is per invocation. A container that outlived a redeploy must not
-// keep triggering the origin the previous build recorded.
 it("re-reads the deploy record on the next invocation rather than remembering it", async () => {
   vi.stubEnv("OCEL_ASSET_BUCKET", bucket);
 

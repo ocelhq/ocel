@@ -14,14 +14,6 @@ import type { TagRecord } from "@ocel/next-cache";
 
 export { IsrDeploy, IsrSnapshot };
 
-// A deploy's isrPrefix, exactly: <env>/<project>/<app>/<buildId>. Every request
-// path is this plus one op segment. The entry op reaches the object named by
-// that prefix before it has authenticated anyone, so the shape is checked first
-// and the object writes no storage until an initialize (see registry.ts).
-// A segment may not begin with a dot, which is the whole of what keeps `.` and
-// `..` out; `-` and `_` lead nothing anywhere, and a Next buildId is a nanoid
-// over an alphabet that includes both, so refusing them rejects one build in
-// thirty for no reason at all.
 const PREFIX_SEGMENTS = 4;
 const PREFIX_SEGMENT = /^[A-Za-z0-9_-][A-Za-z0-9._-]{0,127}$/;
 
@@ -38,10 +30,6 @@ function snapshotStub(env: Env, isrPrefix: string) {
   return env.ISR_SNAPSHOT_DO.get(env.ISR_SNAPSHOT_DO.idFromName(isrPrefix));
 }
 
-// Reads in flight, so a herd arriving on one deploy before its memo is filled
-// shares a single round trip instead of queueing one apiece at a
-// single-threaded object. A read that rejects is not left here: the next
-// request starts a new one.
 const registryReads = new Map<string, Promise<Memo>>();
 
 function fromRegistry(env: Env, isrPrefix: string, refreshed: boolean): Promise<Memo> {
@@ -67,9 +55,6 @@ async function authorized(env: Env, isrPrefix: string, token: string): Promise<b
   return matches(await fromRegistry(env, isrPrefix, true), token);
 }
 
-// A watermark is a moment, so anything that is not one raises nothing. Rejected
-// rather than coerced: the merge only ever moves watermarks upward, so a value
-// invented here can never be walked back.
 function isWatermark(value: unknown): value is number {
   return typeof value === "number" && Number.isFinite(value) && value >= 0;
 }
@@ -105,33 +90,6 @@ async function readJson<T>(request: Request): Promise<T | undefined> {
   }
 }
 
-// The account-level ISR writer. A deployed Lambda reads and writes its ISR
-// entries through here, so it holds no standing R2 credential of its own for
-// them at all (epic decision 6) — an R2 token scopes to a bucket and nothing
-// finer, so one left on the function even for reads would still be one that can
-// write every project's entries.
-//
-// Every request names the deploy's isrPrefix as its leading path segments and
-// the op as its last:
-//
-// - POST /<isrPrefix>/initialize and POST /<isrPrefix>/destroy seed and retire
-//   that deploy's write-secret hash, authorized by the account-level bootstrap
-//   credential, which authorizes nothing else. initialize also starts the
-//   build's heartbeat, so a build nothing ever invalidates still republishes
-//   its clock.
-// - PUT and GET /<isrPrefix>/entry?key=<cache key> write and read one entry,
-//   authenticated with that deploy's own write secret. The object key is
-//   derived from the authenticated prefix, so no caller can address another
-//   deploy's slice.
-// - POST /<isrPrefix>/tags raises tag invalidations into that build's
-//   tag-clock replica, on the same write secret. The body is
-//   {"records": {"<tag>": {"stale"?: ms, "expired"?: ms}}}: 204 once R2 holds
-//   them, 429 when the publisher exhausted its retries and nothing landed, 400
-//   on a body that is not a record set. The 204 is awaited all the way through
-//   the R2 write, because the raiser reads its own write straight afterwards.
-//
-// Auth is verified at this boundary and nowhere else: the DO behind it is
-// unauthenticated, matching workers/deployments-store/src/index.ts.
 export default class extends WorkerEntrypoint<Env> {
   async fetch(request: Request): Promise<Response> {
     const url = new URL(request.url);
@@ -152,8 +110,6 @@ export default class extends WorkerEntrypoint<Env> {
       }
       await deployStub(this.env, isrPrefix).initialize(body.secretHash);
       await snapshotStub(this.env, isrPrefix).begin(isrPrefix);
-      // Not `refreshed`: an isolate that served a redeploy's predecessor still
-      // owes the new generation its one registry re-read.
       memoize(isrPrefix, body.secretHash, false);
       return new Response(null, { status: 204 });
     }
@@ -194,8 +150,6 @@ export default class extends WorkerEntrypoint<Env> {
         objectKey,
         await request.text(),
       );
-      // A rate-limited write is reported, not retried: the caller already holds
-      // a fresh render and the winner wrote one just as fresh.
       if (outcome === "rate-limited") {
         return new Response("Too Many Requests", { status: 429 });
       }
@@ -211,9 +165,6 @@ export default class extends WorkerEntrypoint<Env> {
       const records = tagRecords(body?.records);
       if (records === null) return new Response("Bad Request", { status: 400 });
 
-      // Nothing durable happened, and the caller still holds the records: the
-      // merge is idempotent, so raising them again is the whole of the repair.
-      // Saying so is what the three-attempt silent give-up never did.
       if ((await snapshotStub(this.env, isrPrefix).raise(isrPrefix, records)) === "exhausted") {
         return new Response("Too Many Requests", { status: 429 });
       }

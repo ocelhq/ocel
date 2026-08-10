@@ -15,12 +15,6 @@ function withSuffix(name: string, token: string): string {
   return `${name.slice(0, dot)}-${token}${name.slice(dot)}`;
 }
 
-/**
- * Computes the object key for one file from the uploader's path config. The
- * structured form yields `prefix + sanitized(name)`, inserting a random token
- * before the extension when randomSuffix is set. The function form hands full
- * control to the user.
- */
 export function generateKey(
   path: PathConfig<unknown> | undefined,
   ctx: { file: FileInfo; metadata: unknown },

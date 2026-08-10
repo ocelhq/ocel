@@ -10,8 +10,6 @@ func prodEnv() *deploymentsv1.Environment {
 	return &deploymentsv1.Environment{Class: deploymentsv1.Environment_CLASS_PRODUCTION}
 }
 
-// buildOnly is a Deployment identity carrying no value fingerprint — what every
-// deploy mints today.
 func buildOnly(buildID string) DeploymentIdentity { return fingerprinted(buildID, "") }
 
 func fingerprinted(buildID, fingerprint string) DeploymentIdentity {
@@ -41,9 +39,6 @@ func TestAppDeployStackName_UniquePerApp(t *testing.T) {
 	}
 }
 
-// A naive "slug-app-buildID" join would let a hyphen inside one segment
-// shift where the next segment starts, colliding two distinct triples onto
-// the same name.
 func TestAppDeployStackName_NoCollisionAcrossHyphenatedSegments(t *testing.T) {
 	a := AppDeployStackName("proj", "web-x", buildOnly("1"))
 	b := AppDeployStackName("proj-web", "x", buildOnly("1"))
@@ -52,8 +47,6 @@ func TestAppDeployStackName_NoCollisionAcrossHyphenatedSegments(t *testing.T) {
 	}
 }
 
-// A fingerprint-free identity must name exactly the stack it named before
-// identities existed, so this prefactor moves no already-deployed stack.
 func TestAppDeployStackName_BuildOnlyIdentityNamesTheBuildIDsStack(t *testing.T) {
 	if got, want := AppDeployStackName("proj", "web", buildOnly("build1")), "proj--web--build1"; got != want {
 		t.Errorf("AppDeployStackName = %q, want %q", got, want)
@@ -63,8 +56,6 @@ func TestAppDeployStackName_BuildOnlyIdentityNamesTheBuildIDsStack(t *testing.T)
 	}
 }
 
-// A rotation reuses the build output, so its Deployment shares a build id with
-// the one it replaces and must still get a stack of its own.
 func TestAppDeployStackName_FingerprintSeparatesDeploymentsOfOneBuild(t *testing.T) {
 	plain := AppDeployStackName("proj", "web", buildOnly("build1"))
 	a := AppDeployStackName("proj", "web", fingerprinted("build1", "aaa"))
@@ -76,8 +67,6 @@ func TestAppDeployStackName_FingerprintSeparatesDeploymentsOfOneBuild(t *testing
 	}
 }
 
-// The fingerprint is its own name segment, so it can never blur into a build id
-// that happens to contain the joining hyphen.
 func TestAppDeployStackName_NoCollisionBetweenFingerprintAndHyphenatedBuildID(t *testing.T) {
 	a := AppDeployStackName("proj", "web", fingerprinted("b", "f"))
 	b := AppDeployStackName("proj", "web", buildOnly("b-f"))
@@ -140,9 +129,6 @@ func TestBuildPlan_HappyPath(t *testing.T) {
 	}
 }
 
-// The promotion's per-app entry is the Deployment record's key, so it carries
-// the whole identity — a rotation's promotion has to name the Deployment it
-// minted, not the build both Deployments share.
 func TestBuildPlan_PromotionCarriesTheRenderedIdentity(t *testing.T) {
 	manifest := &deploymentsv1.Manifest{
 		Slug: "proj",
@@ -167,7 +153,7 @@ func TestBuildPlan_MissingBuildIDErrors(t *testing.T) {
 		Slug: "proj",
 		Apps: []*deploymentsv1.ManifestApp{{Name: "web"}, {Name: "api"}},
 	}
-	identities := DeploymentIdentities{"web": buildOnly("buildW")} // api missing
+	identities := DeploymentIdentities{"web": buildOnly("buildW")}
 
 	if _, err := BuildPlan(manifest, prodEnv(), "promo1", identities); err == nil {
 		t.Fatal("BuildPlan with a missing app build id should error, got nil")
@@ -179,7 +165,7 @@ func TestBuildPlan_RejectsUnspecifiedClass(t *testing.T) {
 		Slug: "proj",
 		Apps: []*deploymentsv1.ManifestApp{{Name: "web"}},
 	}
-	env := &deploymentsv1.Environment{} // CLASS_UNSPECIFIED
+	env := &deploymentsv1.Environment{}
 
 	if _, err := BuildPlan(manifest, env, "promo1", DeploymentIdentities{"web": buildOnly("b")}); err == nil {
 		t.Fatal("BuildPlan for an unspecified class should error, got nil")
@@ -207,11 +193,9 @@ func TestBuildPlan_PersistentPreviewHasPerNameInfraStack(t *testing.T) {
 	if plan.InfraStack != PreviewInfraStackName("proj", "staging") {
 		t.Errorf("InfraStack = %q, want %q", plan.InfraStack, PreviewInfraStackName("proj", "staging"))
 	}
-	// A persistent preview's infra stack must not collide with production's.
 	if plan.InfraStack == InfraStackName("proj") {
 		t.Error("persistent preview infra stack collides with production infra stack")
 	}
-	// Preview app-deploy stacks must not collide with production's.
 	if plan.AppStacks["web"] == AppDeployStackName("proj", "web", buildOnly("b")) {
 		t.Error("preview app-deploy stack collides with the production one for the same build")
 	}
@@ -240,7 +224,7 @@ func TestBuildPlan_PreviewRequiresIdentity(t *testing.T) {
 		Slug: "proj",
 		Apps: []*deploymentsv1.ManifestApp{{Name: "web"}},
 	}
-	env := &deploymentsv1.Environment{Class: deploymentsv1.Environment_CLASS_PREVIEW} // no identity
+	env := &deploymentsv1.Environment{Class: deploymentsv1.Environment_CLASS_PREVIEW}
 
 	if _, err := BuildPlan(manifest, env, "promo1", DeploymentIdentities{"web": buildOnly("b")}); err == nil {
 		t.Fatal("BuildPlan for a preview with no identity should error, got nil")

@@ -17,8 +17,6 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/credentials"
 )
 
-// defaultAPIURL is the production Ocel API origin, used when neither
-// --api-url, OCEL_API_URL, nor OCEL_DEV selects another target.
 const defaultAPIURL = "https://ocel.app"
 
 var loginForce bool
@@ -37,10 +35,6 @@ func init() {
 	loginCmd.Flags().BoolVar(&loginForce, "force", false, "Re-authenticate even if already logged in")
 }
 
-// resolveAPIURL determines the default API origin when no --api-url flag and
-// no persisted credentials select one: OCEL_API_URL if set, else
-// http://localhost:3000 when OCEL_DEV is set (local development), else the
-// production defaultAPIURL.
 func resolveAPIURL() string {
 	if v := strings.TrimSpace(os.Getenv("OCEL_API_URL")); v != "" {
 		return v
@@ -53,9 +47,6 @@ func resolveAPIURL() string {
 
 func runLogin(cmd *cobra.Command, args []string) error {
 	out := cmd.OutOrStdout()
-	// No credentials exist yet at login time, so the credentials branch of
-	// effectiveAPIURL is naturally empty: an explicit --api-url wins,
-	// otherwise the resolved default is used.
 	apiURL := strings.TrimRight(effectiveAPIURL(cmd, ""), "/")
 
 	if !loginForce {
@@ -114,8 +105,6 @@ func runLogin(cmd *cobra.Command, args []string) error {
 		ExpiresAt:   expiresAt,
 	}
 
-	// Best-effort: fetch the signed-in user's email for a friendlier
-	// confirmation message. Not fatal if it fails.
 	if session, sessErr := client.GetSession(ctx, token.AccessToken); sessErr == nil && session != nil {
 		creds.Email = session.User.Email
 	}
@@ -138,9 +127,6 @@ func runLogin(cmd *cobra.Command, args []string) error {
 	return nil
 }
 
-// pollForToken polls the device/token endpoint until the user approves or
-// denies the request, the device code expires, or ctx is cancelled (e.g.
-// Ctrl+C).
 func pollForToken(ctx context.Context, client *authclient.Client, device *authclient.DeviceCode) (*authclient.TokenResult, error) {
 	interval := time.Duration(device.Interval) * time.Second
 	if interval <= 0 {
@@ -175,8 +161,6 @@ func pollForToken(ctx context.Context, client *authclient.Client, device *authcl
 	}
 }
 
-// describeConnError adds a hint about --api-url when the error looks like a
-// connectivity problem, without swallowing the underlying error.
 func describeConnError(err error, apiURL string) error {
 	return fmt.Errorf("%w (target: %s, override with --api-url)", err, apiURL)
 }

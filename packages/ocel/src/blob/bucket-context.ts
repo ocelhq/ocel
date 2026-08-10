@@ -2,11 +2,6 @@ import { createConnectTransport } from "@connectrpc/connect-node";
 import type { Bucket } from "./bucket.js";
 import { createBucketClient, type BucketServiceClient } from "./bucket-client.js";
 
-/**
- * The typed client plus the resolved store bucket name to address. The single
- * seam between the environment-blind SDK and the injected runtime address;
- * nothing here branches on prod/dev.
- */
 export interface BucketContext {
   client: BucketServiceClient;
   bucket: string;

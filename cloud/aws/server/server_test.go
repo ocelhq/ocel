@@ -117,8 +117,6 @@ func TestResourceSummary_PostgresIncludesTypedVersion(t *testing.T) {
 	}
 }
 
-// stubSSM answers GetParameter with a fixed value or a fixed error, standing in
-// for a substrate whose edge-values parameter is present, absent, or unreadable.
 type stubSSM struct {
 	value string
 	err   error
@@ -146,9 +144,6 @@ func TestReadEdgeValues_ReturnsStoredValues(t *testing.T) {
 	}
 }
 
-// A denied read must degrade, exactly as the edge credentials read above it
-// does: it is the edge's own state, not something a deploy cannot proceed
-// without.
 func TestReadEdgeValues_UnreadableParameterDegradesWithALog(t *testing.T) {
 	var logged []string
 	got := readEdgeValues(
@@ -177,18 +172,12 @@ func TestReadEdgeValues_AbsentParameterIsSilent(t *testing.T) {
 	}
 }
 
-// TestCacheStoreUploader_ZeroStoreIsAnUntypedNil pins the rollback path at its
-// one fragile point: the deploy reads a nil uploader as "no store adopted", and
-// a typed nil returned into the interface would read as adopted and seed every
-// entry into a bucket named "".
 func TestCacheStoreUploader_ZeroStoreIsAnUntypedNil(t *testing.T) {
 	if up := cacheStoreUploader(bootstrap.CacheStore{}); up != nil {
 		t.Errorf("cacheStoreUploader(zero) = %v, want nil", up)
 	}
 }
 
-// TestCacheStoreUploader_AdoptedStoreIsAddressable proves an adopted store yields
-// a client, which is what routes seeding away from the provider's own bucket.
 func TestCacheStoreUploader_AdoptedStoreIsAddressable(t *testing.T) {
 	store := bootstrap.CacheStore{
 		Bucket:          "isr",
@@ -202,11 +191,6 @@ func TestCacheStoreUploader_AdoptedStoreIsAddressable(t *testing.T) {
 	}
 }
 
-// TestRootStackStateChanged pins what the deploy path is allowed to write. The
-// stored state is a cache of an identity the store hands back on demand, and
-// Parameter Store enforces write throughput per parameter — so a run whose apps
-// all deploy into one project (the e2e matrix, a monorepo) must write once, not
-// once per deploy.
 func TestRootStackStateChanged(t *testing.T) {
 	reconciled := edge.RootStackState{
 		edge.RootStackKeySlug:       "proj-123",

@@ -20,8 +20,6 @@ func fixtureRevalidatorCode() artifactCode {
 	return artifactCode{bucket: "ocel-artifacts-test", key: revalidatorArtifactKey(fixtureRevalidatorPin())}
 }
 
-// parsedRevalidator is the subset of the rendered template the revalidation
-// queue and its consumer are asserted against.
 type parsedRevalidator struct {
 	Resources map[string]struct {
 		Type       string `yaml:"Type"`
@@ -72,8 +70,6 @@ type parsedRevalidator struct {
 	} `yaml:"Outputs"`
 }
 
-// policyStatement is one Allow in an inline policy, in the two shapes the
-// templates write actions and resources in (a scalar or a list).
 type policyStatement struct {
 	Effect    string         `yaml:"Effect"`
 	Action    any            `yaml:"Action"`
@@ -124,10 +120,6 @@ func revalidatorTemplates() []struct {
 	}
 }
 
-// TestRevalidateQueue_DedupesRendersAndRetiresPoison asserts the two amended
-// constants by value — they are the ones a plausible-looking edit moves — plus
-// the FIFO shape the deduplication rests on and the redrive that keeps a record
-// nothing can render from cycling forever.
 func TestRevalidateQueue_DedupesRendersAndRetiresPoison(t *testing.T) {
 	for _, tc := range revalidatorTemplates() {
 		t.Run(tc.name, func(t *testing.T) {
@@ -150,15 +142,9 @@ func TestRevalidateQueue_DedupesRendersAndRetiresPoison(t *testing.T) {
 			if q.Properties.ContentBasedDeduplication == nil || *q.Properties.ContentBasedDeduplication {
 				t.Error("ContentBasedDeduplication must be explicitly false: the sender supplies an id derived from the render it wants, not a hash of the body")
 			}
-			// Human decision G. A batch of ten at the handler's per-record budget
-			// is up to 120s of work; at 60 the consumer redelivers and eventually
-			// dead-letters records it already processed successfully.
 			if got := q.Properties.VisibilityTimeout; got != revalidateVisibilityTimeoutSeconds {
 				t.Errorf("VisibilityTimeout = %d, want %d", got, revalidateVisibilityTimeoutSeconds)
 			}
-			// Human decision C. At an hour, a wedged consumer accumulates a dozen
-			// distinctly-deduped stale echoes per route and renders every one of
-			// them on recovery.
 			if got := q.Properties.MessageRetentionPeriod; got != revalidateRetentionSeconds {
 				t.Errorf("MessageRetentionPeriod = %d, want %d", got, revalidateRetentionSeconds)
 			}
@@ -176,7 +162,6 @@ func TestRevalidateQueue_DedupesRendersAndRetiresPoison(t *testing.T) {
 			if dlq.Properties.QueueName != wantDLQ {
 				t.Errorf("dead-letter QueueName = %q, want %q", dlq.Properties.QueueName, wantDLQ)
 			}
-			// A FIFO source may only redrive to a FIFO queue.
 			if dlq.Properties.FifoQueue == nil || !*dlq.Properties.FifoQueue {
 				t.Error("the dead-letter queue is not FIFO, which a FIFO source cannot redrive to")
 			}
@@ -187,10 +172,6 @@ func TestRevalidateQueue_DedupesRendersAndRetiresPoison(t *testing.T) {
 	}
 }
 
-// TestRevalidateQueue_IsEncryptedUnderAManagedKey. Every message carries the
-// app's bypass token in x-prerender-revalidate, so the queue and its
-// dead-letter queue are both secret-bearing stores; SQS-managed encryption
-// would leave their use unauditable.
 func TestRevalidateQueue_IsEncryptedUnderAManagedKey(t *testing.T) {
 	for _, tc := range revalidatorTemplates() {
 		t.Run(tc.name, func(t *testing.T) {
@@ -204,9 +185,6 @@ func TestRevalidateQueue_IsEncryptedUnderAManagedKey(t *testing.T) {
 	}
 }
 
-// TestRevalidateQueue_RendersWithoutAConsumer. The queue is the edge's send
-// target and the thing the edge user is granted against, so it exists in every
-// substrate — a build that pins no consumer still renders it.
 func TestRevalidateQueue_RendersWithoutAConsumer(t *testing.T) {
 	unpinned := stackArtifacts{optimizer: fixtureOptimizerCode()}
 	for _, tc := range []struct {
@@ -226,11 +204,6 @@ func TestRevalidateQueue_RendersWithoutAConsumer(t *testing.T) {
 	}
 }
 
-// TestRevalidator_DrainsTheQueueAtABoundedConcurrency. MaximumConcurrency is
-// asserted through ScalingConfig on purpose: CloudFormation takes it as a
-// sub-property there and nowhere else, and a top-level one is accepted by the
-// YAML and dropped, which silently removes the only cap this system has on how
-// many renders a mass invalidation can put on the origin at once.
 func TestRevalidator_DrainsTheQueueAtABoundedConcurrency(t *testing.T) {
 	for _, tc := range revalidatorTemplates() {
 		t.Run(tc.name, func(t *testing.T) {
@@ -248,8 +221,6 @@ func TestRevalidator_DrainsTheQueueAtABoundedConcurrency(t *testing.T) {
 			if got := esm.Properties.BatchSize; got != revalidatorBatchSize {
 				t.Errorf("BatchSize = %d, want %d", got, revalidatorBatchSize)
 			}
-			// The handler reports per-record outcomes; without this the whole
-			// batch is redelivered whenever any one route cannot be rendered.
 			if want := []string{"ReportBatchItemFailures"}; !slices.Equal(esm.Properties.FunctionResponseTypes, want) {
 				t.Errorf("FunctionResponseTypes = %v, want %v", esm.Properties.FunctionResponseTypes, want)
 			}
@@ -263,16 +234,11 @@ func TestRevalidator_DrainsTheQueueAtABoundedConcurrency(t *testing.T) {
 	}
 }
 
-// TestRevalidator_TimeoutFitsInsideTheVisibilityTimeout. The two numbers are one
-// decision: a function that can outlast the visibility timeout has SQS
-// redelivering records it is still processing, and dead-lettering renders that
-// succeeded. packages/revalidator/src/limits.mts sizes the batch's worst case at
-// 120s and its test/limits.test.mts asserts that; this is the template's half.
 func TestRevalidator_TimeoutFitsInsideTheVisibilityTimeout(t *testing.T) {
 	if revalidatorTimeoutSeconds >= revalidateVisibilityTimeoutSeconds {
 		t.Fatalf("function timeout %ds does not fit inside the %ds visibility timeout", revalidatorTimeoutSeconds, revalidateVisibilityTimeoutSeconds)
 	}
-	const worstCaseBatchSeconds = 120 // limits.mts: 10 records x (10s trigger + 2s record read)
+	const worstCaseBatchSeconds = 120
 	if revalidatorTimeoutSeconds < worstCaseBatchSeconds {
 		t.Errorf("function timeout %ds clips the %ds worst-case batch the package is sized for", revalidatorTimeoutSeconds, worstCaseBatchSeconds)
 	}
@@ -286,14 +252,6 @@ func TestRevalidator_TimeoutFitsInsideTheVisibilityTimeout(t *testing.T) {
 	}
 }
 
-// TestRevalidator_ReadsOnlyOriginRecords is the IAM half of the exfiltration
-// defence. The message names the key this role reads, and the edge can write
-// fully-controlled JSON under the asset bucket's fetch-cache segment. IAM's '*'
-// spans '/', so anchoring this grant on the '/origin.json' suffix is half of
-// what keeps it disjoint from that write grant — the other half is asserted by
-// TestAssetBucket_NoKeySatisfiesBothTheEdgeWriteAndTheOriginRead, which is the
-// test that actually establishes the disjointness. Relaxing this Resource to
-// '/*' re-opens a demonstrated token exfiltration.
 func TestRevalidator_ReadsOnlyOriginRecords(t *testing.T) {
 	for _, tc := range revalidatorTemplates() {
 		t.Run(tc.name, func(t *testing.T) {
@@ -311,11 +269,6 @@ func TestRevalidator_ReadsOnlyOriginRecords(t *testing.T) {
 	}
 }
 
-// iamResourceMatches answers whether an IAM resource pattern admits a key,
-// under IAM's own wildcard semantics: '*' matches any run of characters,
-// including '/'. That last part is the whole reason this test exists — the
-// intuition that a '*' stops at a path separator is what makes two grants look
-// disjoint when they are not.
 func iamResourceMatches(pattern, arn string) bool {
 	parts := strings.Split(pattern, "*")
 	for i := range parts {
@@ -324,23 +277,6 @@ func iamResourceMatches(pattern, arn string) bool {
 	return regexp.MustCompile("^" + strings.Join(parts, ".*") + "$").MatchString(arn)
 }
 
-// TestAssetBucket_NoKeySatisfiesBothTheEdgeWriteAndTheOriginRead is the
-// disjointness the exfiltration defence is built on, asserted as a property of
-// the two rendered IAM patterns rather than as a claim about the worker's code.
-//
-// The threat is a STOLEN EDGE CREDENTIAL, which is not bound by what
-// workers/nextjs writes. So "every key the edge worker writes ends .cache.json"
-// proves nothing here; what has to hold is that no key at all satisfies both
-// grants. Both patterns are anchored on a trailing literal, and neither literal
-// is a suffix of the other, so no key can end in both — that is the mechanism,
-// and it survives any regression in the worker or in the consumer's parser.
-//
-// The named key below is the exact one that defeated the earlier, unanchored
-// write grant '${AssetBucket.Arn}/*/fetch-cache/*': it is writable by the edge
-// (first '*' = the build prefix, second '*' = 'origin.json') and readable by the
-// consumer (its '*' = the prefix plus the fetch-cache segment). Planting it
-// names an attacker-controlled origin for a victim app, and the consumer signs
-// and delivers that app's bypass token to it.
 func TestAssetBucket_NoKeySatisfiesBothTheEdgeWriteAndTheOriginRead(t *testing.T) {
 	for _, tc := range revalidatorTemplates() {
 		t.Run(tc.name, func(t *testing.T) {
@@ -357,9 +293,6 @@ func TestAssetBucket_NoKeySatisfiesBothTheEdgeWriteAndTheOriginRead(t *testing.T
 				}
 			}
 
-			// The general statement, not just the three keys above: a key
-			// admitted by both would have to end in both patterns' trailing
-			// literals at once.
 			writeTail := write[strings.LastIndex(write, "*")+1:]
 			readTail := read[strings.LastIndex(read, "*")+1:]
 			if writeTail == "" || readTail == "" {
@@ -372,7 +305,6 @@ func TestAssetBucket_NoKeySatisfiesBothTheEdgeWriteAndTheOriginRead(t *testing.T
 	}
 }
 
-// edgeGrant returns the single Resource the edge user's policy grants action on.
 func edgeGrant(t *testing.T, template, action string) string {
 	t.Helper()
 	user, ok := parseRevalidatorTemplate(t, template).Resources["EdgeUser"]
@@ -382,7 +314,6 @@ func edgeGrant(t *testing.T, template, action string) string {
 	return soleResource(t, user.Properties.Policies[0].PolicyDocument.Statement, action)
 }
 
-// revalidatorGrant returns the single Resource the consumer role grants action on.
 func revalidatorGrant(t *testing.T, template, action string) string {
 	t.Helper()
 	return soleResource(t, revalidatorPolicy(t, template), action)
@@ -402,23 +333,6 @@ func soleResource(t *testing.T, statements []policyStatement, action string) str
 	return found[0]
 }
 
-// TestRevalidateQueue_BothEndsCanUseTheEnvelope covers the grants that the
-// queue's SSE-KMS envelope makes mandatory rather than optional. AWS requires a
-// producer against an SSE-KMS queue to hold kms:GenerateDataKey* AND kms:Decrypt
-// in its own policy, and a consumer to hold kms:Decrypt; without them every
-// SendMessage fails with KMS.AccessDeniedException.
-//
-// That failure is silent in exactly the epic's signature shape: the edge fails
-// open to originBlocking, the queue never receives anything, and an empty queue
-// is the documented healthy state. Nothing else in the suite
-// notices — TestEdgeUser_SendsToTheQueueAndNothingElse filters to sqs: actions,
-// so the whole statement could be deleted and pass.
-//
-// Resource is '*' on both ends and that is the only workable form: the AWS-
-// managed alias/aws/sqs key's ARN is not knowable in the template. The
-// kms:ViaService condition is what bounds it instead — it confines the grant to
-// calls SQS itself makes on the principal's behalf — so the condition is
-// asserted as tightly as the actions are. Widening it is what widens the grant.
 func TestRevalidateQueue_BothEndsCanUseTheEnvelope(t *testing.T) {
 	for _, tc := range revalidatorTemplates() {
 		t.Run(tc.name, func(t *testing.T) {
@@ -465,9 +379,6 @@ func TestRevalidateQueue_BothEndsCanUseTheEnvelope(t *testing.T) {
 	}
 }
 
-// TestRevalidator_ReachesOnlyWhatItTriggersWith. The function holds every app's
-// bypass token in transit, so what it can reach has to be its queue, its record
-// and the functions it triggers — and nothing that writes.
 func TestRevalidator_ReachesOnlyWhatItTriggersWith(t *testing.T) {
 	for _, tc := range revalidatorTemplates() {
 		t.Run(tc.name, func(t *testing.T) {
@@ -492,16 +403,6 @@ func TestRevalidator_ReachesOnlyWhatItTriggersWith(t *testing.T) {
 	}
 }
 
-// TestRevalidator_InvokeGrantIsAccountWideOverOcelTaggedFunctions records a
-// resolution rather than merely asserting a string. The design doc describes
-// this condition as "scoped by the ocel:app resource tag", which reads narrower
-// than it is: Null-on-the-tag means "carries one at all", over every function in
-// the account. That looseness is ACCEPTED here, not overlooked — there is one
-// consumer per substrate and it triggers renders for every app in it, so there
-// is no app to scope to, and the functions are Pulumi-autonamed, so there is no
-// name to scope to either. It is narrowed on the one axis available: this
-// account and this region, where the deploy path creates the Function URLs it
-// triggers.
 func TestRevalidator_InvokeGrantIsAccountWideOverOcelTaggedFunctions(t *testing.T) {
 	for _, tc := range revalidatorTemplates() {
 		t.Run(tc.name, func(t *testing.T) {
@@ -509,7 +410,6 @@ func TestRevalidator_InvokeGrantIsAccountWideOverOcelTaggedFunctions(t *testing.
 				if !slices.Contains(st.actions(), "lambda:InvokeFunctionUrl") {
 					continue
 				}
-				// Both actions are required since AWS's October 2025 change.
 				if !slices.Contains(st.actions(), "lambda:InvokeFunction") {
 					t.Errorf("invoke grant = %v, want both lambda:InvokeFunctionUrl and lambda:InvokeFunction", st.actions())
 				}
@@ -531,10 +431,6 @@ func TestRevalidator_InvokeGrantIsAccountWideOverOcelTaggedFunctions(t *testing.
 	}
 }
 
-// TestRevalidator_RendersNoAlarms. Same reason as the publisher's: the
-// bootstrap stack is provisioned into every account and must cost nothing to
-// leave idle, and a CloudWatch alarm is billed per month per alarm whether or
-// not it ever fires.
 func TestRevalidator_RendersNoAlarms(t *testing.T) {
 	for _, tc := range revalidatorTemplates() {
 		t.Run(tc.name, func(t *testing.T) {
@@ -547,13 +443,6 @@ func TestRevalidator_RendersNoAlarms(t *testing.T) {
 	}
 }
 
-// TestRevalidator_UnpinnedRendersNoConsumerAndNoQueueURL is human decision F and
-// the unpinned-skip path in one. A build with no cut release renders no consumer
-// — an event source mapping with no function is a stack that cannot create —
-// and, critically, publishes no queue URL: the queue is still there, and an edge
-// told about a queue nothing drains enqueues successfully, reports the refresh
-// landed, re-arms its colo sentinel, and stops revalidating the route until it
-// hard-expires, with nothing anywhere reporting a failure.
 func TestRevalidator_UnpinnedRendersNoConsumerAndNoQueueURL(t *testing.T) {
 	for _, tc := range []struct {
 		name     string
@@ -577,8 +466,6 @@ func TestRevalidator_UnpinnedRendersNoConsumerAndNoQueueURL(t *testing.T) {
 	}
 }
 
-// TestRevalidator_PinnedPublishesTheQueueURL is decision F's other half: with a
-// consumer rendered, the edge is told where to send.
 func TestRevalidator_PinnedPublishesTheQueueURL(t *testing.T) {
 	for _, tc := range revalidatorTemplates() {
 		t.Run(tc.name, func(t *testing.T) {
@@ -593,13 +480,6 @@ func TestRevalidator_PinnedPublishesTheQueueURL(t *testing.T) {
 	}
 }
 
-// TestRun_ThisBuildBootstrapsAConsumer is the shipped pin under test rather than
-// a fixture one. The two tests above prove the template renders a consumer when
-// an artifact is available and skips it when none is; this proves which of those
-// paths revalidatorversion.go's constants actually put a customer's account on —
-// the consumer, its role, its event source mapping, and the queue URL the edge
-// is told to send to. It fails the moment either constant is
-// blanked, which is what makes the pin a tested state and not a comment.
 func TestRun_ThisBuildBootstrapsAConsumer(t *testing.T) {
 	if !pinnedRevalidator().pinned() {
 		t.Fatal("this build pins no revalidator; the queue it provisions has nothing to drain")
@@ -637,7 +517,6 @@ func TestRun_ThisBuildBootstrapsAConsumer(t *testing.T) {
 	}
 }
 
-// revalidatorPolicy is the consumer role's single inline policy document.
 func revalidatorPolicy(t *testing.T, template string) []policyStatement {
 	t.Helper()
 	role, ok := parseRevalidatorTemplate(t, template).Resources["RevalidatorRole"]
@@ -650,10 +529,6 @@ func revalidatorPolicy(t *testing.T, template string) []policyStatement {
 	return role.Properties.Policies[0].PolicyDocument.Statement
 }
 
-// TestEdgeUser_SendsToTheQueueAndNothingElse. The edge enqueues and never
-// drains: a receive or delete grant on this key would let a compromised edge
-// swallow the fleet's revalidations, which fails in the epic's signature shape
-// — silently, until every route hard-expires.
 func TestEdgeUser_SendsToTheQueueAndNothingElse(t *testing.T) {
 	for _, tc := range revalidatorTemplates() {
 		t.Run(tc.name, func(t *testing.T) {
@@ -686,12 +561,6 @@ func TestEdgeUser_SendsToTheQueueAndNothingElse(t *testing.T) {
 	}
 }
 
-// TestEnsureRevalidatorArtifact_RefusesADigestMismatch is what the pin in
-// revalidatorversion.go actually buys. The consumer holds an app's bypass token
-// and signs requests at its origin, so bytes that are not the reviewed artifact
-// must never reach a customer's account: bootstrap stops, uploads nothing, and
-// names both digests so an operator can tell a moved release from a tampered
-// download.
 func TestEnsureRevalidatorArtifact_RefusesADigestMismatch(t *testing.T) {
 	art, store, source := fixtureArtifactDeps([]byte("not the revalidator anyone reviewed"))
 
@@ -716,10 +585,6 @@ func TestEnsureRevalidatorArtifact_RefusesADigestMismatch(t *testing.T) {
 	}
 }
 
-// TestEnsureRevalidatorArtifact_UploadsAVerifiedArtifact is the same guarantee
-// from the other side: the bytes that do hash to the pin are uploaded verbatim,
-// under a key content-addressed on the digest, with the pin handed to S3 so the
-// stored checksum is something a later bootstrap can verify presence against.
 func TestEnsureRevalidatorArtifact_UploadsAVerifiedArtifact(t *testing.T) {
 	art, store, _ := fixtureArtifactDeps(fixtureArtifact)
 

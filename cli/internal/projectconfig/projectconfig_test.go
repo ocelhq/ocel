@@ -29,8 +29,6 @@ func TestFindProjectRoot_WalksUpToConfigFile(t *testing.T) {
 	}
 }
 
-// The first run in a config-less clone anchors at the working directory and
-// creates .ocel/ there, so later runs from a subdirectory must find it.
 func TestFindProjectRoot_WalksUpToScratchDir(t *testing.T) {
 	root := t.TempDir()
 	if err := os.MkdirAll(filepath.Join(root, scratchDirName), 0o755); err != nil {
@@ -58,7 +56,6 @@ func TestFindProjectRoot_FallsBackToStartDir(t *testing.T) {
 	}
 }
 
-// A .ocel/ that is a file, not a directory, is not an anchor.
 func TestFindProjectRoot_IgnoresScratchDirFile(t *testing.T) {
 	root := t.TempDir()
 	if err := os.WriteFile(filepath.Join(root, scratchDirName), []byte("x"), 0o644); err != nil {
@@ -205,8 +202,6 @@ export default {
 	}
 }
 
-// A .ocel/ anchors the project root, but it is not a config: the deploy path
-// still needs a real one.
 func TestResolve_ScratchDirIsNotAConfig(t *testing.T) {
 	root := t.TempDir()
 	if err := os.MkdirAll(filepath.Join(root, scratchDirName), 0o755); err != nil {
@@ -222,7 +217,6 @@ func TestResolve_ScratchDirIsNotAConfig(t *testing.T) {
 	}
 }
 
-// projectId is gone from the config; a leftover one is ignored silently.
 func TestResolve_IgnoresLeftoverProjectID(t *testing.T) {
 	root := t.TempDir()
 	writeConfig(t, root, `
@@ -259,8 +253,6 @@ func TestResolveOptional_NoConfigYieldsDefaultsRootedAtProjectRoot(t *testing.T)
 	}
 }
 
-// Dev in a config-less subdirectory of a linked clone must resolve to the same
-// root the link file lives at, not to the subdirectory.
 func TestResolveOptional_NoConfigAnchorsOnScratchDir(t *testing.T) {
 	root := t.TempDir()
 	if err := os.MkdirAll(filepath.Join(root, scratchDirName), 0o755); err != nil {
@@ -297,7 +289,6 @@ export default {
 	}
 }
 
-// An absent config is fine; a broken one is still an error.
 func TestResolveOptional_UnparseableConfigStillErrors(t *testing.T) {
 	root := t.TempDir()
 	writeConfig(t, root, `export default { this is not valid typescript +++`)
@@ -320,9 +311,6 @@ export default {
 	}
 }
 
-// ValidSlug is the single definition of the slug rule, shared with everything
-// that mints one, so its boundaries are pinned directly and not only through
-// Resolve.
 func TestValidSlug(t *testing.T) {
 	valid := []string{"a", "acme", "acme-web-1", "1", strings.Repeat("a", 63)}
 	for _, s := range valid {
@@ -572,11 +560,6 @@ export default {
 	}
 }
 
-// An app name becomes a directory in the build output and part of every one of
-// that app's function logical names, so a name that could escape the output
-// tree has to be rejected at the config boundary. The DNS-label rule subsumes
-// this, but the protection is what app-name validation exists for and must not
-// regress.
 func TestResolve_AppUnsafeNameErrors(t *testing.T) {
 	for _, name := range []string{"..", "../escape", "web/admin", `web\\admin`, "/abs"} {
 		t.Run(name, func(t *testing.T) {
@@ -599,10 +582,6 @@ export default {
 	}
 }
 
-// An app name is spent as a DNS label — the app half of a multi-app preview
-// host, "<pointer>--<app>.<base>" — so names that are merely harmless as a
-// directory segment are not enough. These four were once explicitly allowed;
-// each of them makes a hostname that cannot be parsed or does not exist.
 func TestResolve_AppNameRejectsNonDNSLabels(t *testing.T) {
 	for _, name := range []string{"web.app", "we b", "app.v2", "-web", "web-", "Web", "web_admin", strings.Repeat("a", 64)} {
 		t.Run(name, func(t *testing.T) {
@@ -628,7 +607,6 @@ export default {
 	}
 }
 
-// The shapes a DNS label allows must keep resolving.
 func TestResolve_AppNameAllowsDNSLabels(t *testing.T) {
 	for _, name := range []string{"web", "web-admin", "app2", "2app", "a", strings.Repeat("a", 63)} {
 		t.Run(name, func(t *testing.T) {
@@ -713,16 +691,11 @@ export default {
 	if len(cfg.Apps[1].Domains) != 0 {
 		t.Fatalf("Apps[1].Domains = %v, want empty", cfg.Apps[1].Domains)
 	}
-	// The project-level domain is independent of any app's.
 	if got := cfg.Domains["production"]; len(got) != 1 || got[0] != "acme.com" {
 		t.Fatalf("Domains[production] = %v, want [%q]", got, "acme.com")
 	}
 }
 
-// TestResolve_RejectsPerAppPreviewDomain pins the project-level rule: a preview
-// domain binds to the project, which serves every app from one entrypoint
-// worker, so an app declaring its own is a config error rather than a silently
-// ignored field.
 func TestResolve_RejectsPerAppPreviewDomain(t *testing.T) {
 	root := t.TempDir()
 	writeConfig(t, root, `
@@ -745,8 +718,6 @@ export default {
 	}
 }
 
-// TestResolve_PerAppProductionDomainStaysLegal guards the other half of the
-// rule: only preview is project-level.
 func TestResolve_PerAppProductionDomainStaysLegal(t *testing.T) {
 	root := t.TempDir()
 	writeConfig(t, root, `
@@ -812,12 +783,12 @@ func TestValidatePreviewDomain(t *testing.T) {
 	}
 
 	invalid := []string{
-		"preview.acme.com",   // no wildcard
-		"acme.com",           // apex, no wildcard
-		"*.*.acme.com",       // multiple wildcards
-		"foo*.preview.com",   // wildcard not a whole label
-		"preview.*.acme.com", // wildcard not leftmost
-		"*",                  // no base domain
+		"preview.acme.com",
+		"acme.com",
+		"*.*.acme.com",
+		"foo*.preview.com",
+		"preview.*.acme.com",
+		"*",
 	}
 	for _, d := range invalid {
 		if err := validatePreviewDomain(d); err == nil {
@@ -830,7 +801,7 @@ func TestPreviewBaseDomain(t *testing.T) {
 	cases := map[string]string{
 		"*.preview.acme.com": "preview.acme.com",
 		"*.acme.com":         "acme.com",
-		"acme.com":           "", // not a wildcard
+		"acme.com":           "",
 		"":                   "",
 	}
 	for in, want := range cases {
@@ -853,7 +824,6 @@ export default {
 	if err != nil {
 		t.Fatalf("Resolve: %v", err)
 	}
-	// Lowercased, and the duplicate "acme.com" deduped in declared order.
 	if got := cfg.Domains["production"]; len(got) != 2 || got[0] != "acme.com" || got[1] != "www.acme.com" {
 		t.Fatalf("Domains[production] = %v, want [acme.com www.acme.com]", got)
 	}

@@ -17,39 +17,25 @@ import (
 	"github.com/ocelhq/ocel/cloud/edge"
 )
 
-// fakeCFN is a CloudFormation account holding one stack per name, recording the
-// template body each upsert submitted so a test can assert what the account was
-// actually asked to provision. It reports a missing stack the way CloudFormation
-// does — a ValidationError whose message says it does not exist — answers an
-// update that would change nothing with the ValidationError CloudFormation
-// answers it with, and settles every real create/update immediately so the
-// waiters return on their first describe.
 type fakeCFN struct {
 	templates map[string]string
 	statuses  map[string]cfntypes.StackStatus
-	// outputs is what every existing stack in this account reports, so a test can
-	// stand in for the values CloudFormation only knows after a settle — the
-	// artifact bucket the optimizer's zip is uploaded into, for one.
-	outputs map[string]string
-	creates int
-	updates int
-	noops   int
+	outputs   map[string]string
+	creates   int
+	updates   int
+	noops     int
 }
 
 func newFakeCFN() *fakeCFN {
 	return &fakeCFN{
 		templates: map[string]string{},
 		statuses:  map[string]cfntypes.StackStatus{},
-		// Every settled stack has an artifact bucket, and the optimizer's zip is
-		// uploaded into it, so one is reported by default.
-		outputs: map[string]string{outputArtifactBucket: "ocel-artifacts-test"},
+		outputs:   map[string]string{outputArtifactBucket: "ocel-artifacts-test"},
 	}
 }
 
 var templateVersionRE = regexp.MustCompile(`(?s)` + outputVersion + `:.*?Value: '(\d+)'`)
 
-// validationError is CloudFormation's untyped ValidationError, which is how it
-// reports both a missing stack and a no-op update.
 type validationError struct{ msg string }
 
 func (e validationError) Error() string                 { return e.msg }
@@ -66,10 +52,6 @@ func (f *fakeCFN) DescribeStacks(_ context.Context, in *cloudformation.DescribeS
 	for k, v := range f.outputs {
 		outputs = append(outputs, cfntypes.Output{OutputKey: aws.String(k), OutputValue: aws.String(v)})
 	}
-	// The version is a literal in the body rather than something only a settle
-	// knows, and *which* version a given pass stamped is load-bearing — a first
-	// bootstrap deliberately seeds one that fails the gate. So it is read back out
-	// of the template the account actually holds, not from f.outputs.
 	if _, ok := f.outputs[outputVersion]; !ok {
 		if m := templateVersionRE.FindStringSubmatch(f.templates[name]); m != nil {
 			outputs = append(outputs, cfntypes.Output{OutputKey: aws.String(outputVersion), OutputValue: aws.String(m[1])})
@@ -101,9 +83,6 @@ func (f *fakeCFN) UpdateStack(_ context.Context, in *cloudformation.UpdateStackI
 	return &cloudformation.UpdateStackOutput{}, nil
 }
 
-// fakeEdge is an edge.Provider that reports whatever bootstrap output a test
-// chooses. It records every call so a test can prove the edge was bootstrapped
-// and that nothing called back into it.
 type fakeEdge struct {
 	out        edge.BootstrapOutput
 	err        error
@@ -123,8 +102,6 @@ func (f *fakeEdge) DeployApp(context.Context, edge.AppDeployment) (edge.AppResul
 	return edge.AppResult{}, errors.New("DeployApp must not run during bootstrap")
 }
 
-// hasEdgeUser reports whether the template the account was provisioned with
-// contains the edge reader IAM user at all.
 func hasEdgeUser(t *testing.T, template string) bool {
 	t.Helper()
 	var tmpl struct {
@@ -143,9 +120,6 @@ func hasEdgeUser(t *testing.T, template string) bool {
 	return false
 }
 
-// TestRun_ExternalTrustProvisionsEdgeReader proves an edge outside the trust
-// boundary gets what it needs to sign its own reads: the edge reader IAM user in
-// the account's template, and a static access key stored for the deploy path.
 func TestRun_ExternalTrustProvisionsEdgeReader(t *testing.T) {
 	cfn, ssmc, iamc := newFakeCFN(), newFakeSSM(), &fakeIAM{}
 	ed := &fakeEdge{out: edge.BootstrapOutput{Trust: edge.TrustExternal}}
@@ -167,9 +141,6 @@ func TestRun_ExternalTrustProvisionsEdgeReader(t *testing.T) {
 	}
 }
 
-// TestRun_BootstrapsTheEdgeForItsOwnSubstrateClass proves each substrate
-// bootstraps the edge for itself, so an edge provisioning per-class resources
-// never provisions preview's against production.
 func TestRun_BootstrapsTheEdgeForItsOwnSubstrateClass(t *testing.T) {
 	for _, tc := range []struct {
 		run  func(context.Context, CFNAPI, SSMAPI, IAMAPI, edge.Provider, Artifacts, func(string), func(string)) error
@@ -190,10 +161,6 @@ func TestRun_BootstrapsTheEdgeForItsOwnSubstrateClass(t *testing.T) {
 	}
 }
 
-// TestRun_InternalTrustLeavesNoCredential is the crux of the trust posture: an
-// edge inside the provider's boundary reads under the provider's own identity,
-// so bootstrap must leave neither an IAM user nor any long-lived key behind for
-// an attacker to find.
 func TestRun_InternalTrustLeavesNoCredential(t *testing.T) {
 	for _, tc := range []struct {
 		name      string
@@ -231,8 +198,6 @@ func TestRun_InternalTrustLeavesNoCredential(t *testing.T) {
 	}
 }
 
-// TestRun_PreviewTakesEdgeFirstPath proves the preview substrate reaches the same
-// account state through the same edge-first path, under its own identities.
 func TestRun_PreviewTakesEdgeFirstPath(t *testing.T) {
 	cfn, ssmc, iamc := newFakeCFN(), newFakeSSM(), &fakeIAM{}
 	ed := &fakeEdge{out: edge.BootstrapOutput{Trust: edge.TrustExternal}}
@@ -254,9 +219,6 @@ func TestRun_PreviewTakesEdgeFirstPath(t *testing.T) {
 	}
 }
 
-// TestRun_PersistsEdgeValues proves the edge's own outputs survive bootstrap and
-// come back byte-for-byte at deploy time — the edge reads back what it
-// provisioned without re-querying its API.
 func TestRun_PersistsEdgeValues(t *testing.T) {
 	cfn, ssmc, iamc := newFakeCFN(), newFakeSSM(), &fakeIAM{}
 	values := map[string]string{"bucketName": "edge-cache-7f3", "namespaceId": "ns-42"}
@@ -279,9 +241,6 @@ func TestRun_PersistsEdgeValues(t *testing.T) {
 	}
 }
 
-// TestRun_NoEdgeValuesStoresNothing proves an edge that provisioned nothing
-// leaves no parameter behind, so an account fronted by such an edge looks exactly
-// as it did before edge values existed.
 func TestRun_NoEdgeValuesStoresNothing(t *testing.T) {
 	cfn, ssmc, iamc := newFakeCFN(), newFakeSSM(), &fakeIAM{}
 	ed := &fakeEdge{out: edge.BootstrapOutput{Trust: edge.TrustExternal}}
@@ -301,11 +260,6 @@ func TestRun_NoEdgeValuesStoresNothing(t *testing.T) {
 	}
 }
 
-// TestRun_IgnoresUnrecognisedOffer proves a newer edge offering a resource this
-// provider has never heard of degrades rather than breaking: the offer is
-// ignored, the recognised one alongside it is still adopted, and bootstrap
-// completes. This is the rollback path for cache-store adoption — an unadopted
-// offer leaves ISR where it was.
 func TestRun_IgnoresUnrecognisedOffer(t *testing.T) {
 	cfn, ssmc, iamc := newFakeCFN(), newFakeSSM(), &fakeIAM{}
 	ed := &fakeEdge{out: edge.BootstrapOutput{
@@ -330,8 +284,6 @@ func TestRun_IgnoresUnrecognisedOffer(t *testing.T) {
 	}
 }
 
-// TestRun_NoOffersStoresNoCacheStore proves an edge offering nothing leaves ISR
-// exactly where it was: no cache-store parameter is written at all.
 func TestRun_NoOffersStoresNoCacheStore(t *testing.T) {
 	cfn, ssmc, iamc := newFakeCFN(), newFakeSSM(), &fakeIAM{}
 	ed := &fakeEdge{out: edge.BootstrapOutput{Trust: edge.TrustExternal}}
@@ -344,9 +296,6 @@ func TestRun_NoOffersStoresNoCacheStore(t *testing.T) {
 	}
 }
 
-// TestRun_AdoptsCacheStorePerClass proves each substrate adopts its own edge's
-// store into its own parameter, so a preview deploy can never be pointed at
-// production's cache.
 func TestRun_AdoptsCacheStorePerClass(t *testing.T) {
 	for _, tc := range []struct {
 		name  string
@@ -381,10 +330,6 @@ func TestRun_AdoptsCacheStorePerClass(t *testing.T) {
 	}
 }
 
-// TestRun_DanglingCacheStoreTokenFailsBootstrap proves the cross-run hazard stops
-// the bootstrap rather than leaking through it: a secretless offer with nothing
-// stored is an unrecoverable credential, and the run must not proceed as if the
-// store were usable.
 func TestRun_DanglingCacheStoreTokenFailsBootstrap(t *testing.T) {
 	cfn, ssmc, iamc := newFakeCFN(), newFakeSSM(), &fakeIAM{}
 	offer := offeredStore()
@@ -406,8 +351,6 @@ func TestRun_DanglingCacheStoreTokenFailsBootstrap(t *testing.T) {
 	}
 }
 
-// TestRun_Idempotent proves a second bootstrap against a live substrate mints no
-// second key — the AWS 2-key cap makes a duplicate mint a wedge, not a waste.
 func TestRun_Idempotent(t *testing.T) {
 	cfn, ssmc, iamc := newFakeCFN(), newFakeSSM(), &fakeIAM{}
 	ed := &fakeEdge{out: edge.BootstrapOutput{
@@ -438,11 +381,6 @@ func TestRun_Idempotent(t *testing.T) {
 	}
 }
 
-// TestRunPreview_Idempotent proves the preview substrate converges on a re-run
-// the way production does: the second bootstrap asks CloudFormation for a change
-// it has no change to make, mints no second key, regenerates no passphrase, and
-// leaves the preview stack still holding everything the first run put there —
-// the variable store included.
 func TestRunPreview_Idempotent(t *testing.T) {
 	cfn, ssmc, iamc := newFakeCFN(), newFakeSSM(), &fakeIAM{}
 	values := map[string]string{"namespaceId": "ns-42"}
@@ -501,8 +439,6 @@ func TestRunPreview_Idempotent(t *testing.T) {
 	}
 }
 
-// TestRun_EdgeBootstrapFailureStopsProvisioning proves the edge runs first: when
-// it fails, nothing of the provider's own has been created yet.
 func TestRun_EdgeBootstrapFailureStopsProvisioning(t *testing.T) {
 	cfn, ssmc, iamc := newFakeCFN(), newFakeSSM(), &fakeIAM{}
 	ed := &fakeEdge{err: errors.New("edge API unreachable")}
@@ -519,12 +455,6 @@ func TestRun_EdgeBootstrapFailureStopsProvisioning(t *testing.T) {
 	}
 }
 
-// TestRun_PublisherFollowsTheISRWriterAdoption is the other half of "an edge
-// that offers no writer degrades instead of breaking". The publisher derives
-// every build's write secret from the substrate's seed and raises through the
-// writer's endpoint; neither exists on a substrate that adopted no writer, so
-// rendering it there would refuse to start on every invocation, retry every
-// batch into the dead-letter queue from the moment of bootstrap.
 func TestRun_PublisherFollowsTheISRWriterAdoption(t *testing.T) {
 	for _, tc := range []struct {
 		name   string
@@ -555,12 +485,6 @@ func TestRun_PublisherFollowsTheISRWriterAdoption(t *testing.T) {
 	}
 }
 
-// TestRun_UnpinnedPublisherSaysWhatStopsReachingTheEdge holds an operator-facing
-// message to what is actually true. It used to promise that invalidations
-// "reach the edge the way they did before ... the Lambda tier's own publisher
-// and the DynamoDB fallback behind it" — but that publisher is gone, so with no
-// publisher pinned nothing carries an origin-raised invalidation to a build's
-// edge replica at all.
 func TestRun_UnpinnedPublisherSaysWhatStopsReachingTheEdge(t *testing.T) {
 	cfn, ssmc, iamc := newFakeCFN(), newFakeSSM(), &fakeIAM{}
 	ed := &fakeEdge{out: edge.BootstrapOutput{

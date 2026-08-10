@@ -2,14 +2,8 @@ import { bucket, uploader } from "ocel/blob/next";
 import { postgres } from "ocel/postgres";
 import { z } from "zod";
 
-// Declaring a resource *is* the provisioning step: `ocel dev` discovers these
-// calls, provisions a Postgres database and a bucket for them, and injects the
-// connections into the app's environment.
 export const pg = postgres("main");
 
-// A single-image avatar uploader. `input { userId }` authorizes the upload and
-// threads through as the stored document's owner; onUploadComplete records the
-// landed object in postgres("main") - the one server-authoritative write.
 export const uploads = bucket("uploads", {
   uploaders: {
     avatar: uploader(

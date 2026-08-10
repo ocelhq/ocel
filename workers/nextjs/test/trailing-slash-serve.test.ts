@@ -27,20 +27,9 @@ function assetStoreServing(
   };
 }
 
-// Next's own internal trailing-slash redirects, which it unshifts ahead of every
-// other route, as the build emits them into beforeMiddleware: destination-less
-// rules carrying a Location, a 308, and the `priority` flag build-complete.ts
-// maps `internal: true` onto. basePath is baked into the source, because the
-// build compiles these from the routes manifest, whose regex already carries it
-// (and internal rules skip modifyRouteRegex, so the source is used as-is).
-//
-// Included in every scenario below so the tests also prove serve drops them
-// rather than 308ing the canonical form it just normalized straight back at the
-// client.
 function internalRedirects(trailingSlash: boolean, basePath = ""): unknown[] {
   if (trailingSlash) {
     return [
-      // basePath: false on this one, so its source is the bare basePath.
       ...(basePath
         ? [
             {
@@ -86,15 +75,6 @@ function internalRedirects(trailingSlash: boolean, basePath = ""): unknown[] {
   ];
 }
 
-// The two rules withoutInternalRedirects must NOT drop, riding alongside the
-// internal ones in every scenario:
-//
-//   * Next's own Service-Worker-Allowed header rule, which the build marks
-//     `priority` exactly as it marks the redirects but which carries no status —
-//     the half of the predicate that keeps header rules alive.
-//   * an ordinary next.config `redirects()` entry, which can never be marked
-//     (checkCustomRoutes rejects `internal` from user config) and so must keep
-//     reaching isRoutingRedirect.
 const SERVICE_WORKER_PATH = "/_next/static/service-worker/sw.js";
 const USER_REDIRECT_FROM = "/old.txt";
 
@@ -119,8 +99,6 @@ function manifestRoutes(
   headerRoutes: unknown[] = [],
 ): Route[] {
   return [
-    // Where the build puts next.config `headers()`: ahead of the redirects, in
-    // the same list, so Next applies them to the redirect response too.
     ...headerRoutes,
     ...internalRedirects(trailingSlash, basePath),
     ...survivingRoutes(basePath),
@@ -131,20 +109,15 @@ interface Scenario {
   trailingSlash?: boolean;
   skipTrailingSlashRedirect?: boolean;
   basePath?: string;
-  // Served paths, by the routing-form pathname the build keyed them under.
   pages?: string[];
   files?: Record<string, string>;
   edge?: RouteDeps["edge"];
   middleware?: { entryKey: string; matchers?: { sourceRegex: string }[] };
-  // Overrides the all-static dispatch table `pages` implies, for the lambda and
-  // prerender arms.
   dispatch?: RouteDeps["manifest"]["dispatch"];
   functionUrls?: RouteDeps["functionUrls"];
   fetch?: RouteDeps["fetch"];
   cache?: RouteDeps["cache"];
-  // Every key serveStaticAsset asked the store for, in order.
   probes?: string[];
-  // next.config `headers()` rules, as the build emits them into beforeMiddleware.
   headerRoutes?: unknown[];
 }
 
@@ -209,8 +182,6 @@ describe("trailingSlash: true", () => {
   it("leaves the root alone", async () => {
     const res = await serve(
       get("/"),
-      // The build names the root document index.html, not /.html — the same
-      // name normalizePagePath gives every Pages Router root.
       deps({ ...scenario, pages: ["/"], files: { "/index.html": "home" } }),
     );
     expect(res.status).toBe(200);
@@ -257,11 +228,6 @@ describe("trailingSlash: true", () => {
     expect(res.headers.get("x-matched-path")).toBe("/_next/data/t/a.json");
   });
 
-  // canonicalPathname's isDataRequest is derived from the URL alone (a client
-  // header is not trusted for this either — see the describe above this one),
-  // so it has to recognize a data pathname even once a trailing slash has been
-  // appended to it, or this dotted-segment path gets stripped and 308'd like
-  // any other file with an extension.
   it("does not redirect a data request that already carries a trailing slash", async () => {
     const res = await serve(get("/_next/data/t/a.json/"), deps(scenario));
     expect(res.status).toBe(200);
@@ -274,9 +240,6 @@ describe("trailingSlash: true, basePath: /docs", () => {
     trailingSlash: true,
     basePath: "/docs",
     pages: ["/docs", "/docs/hello"],
-    // The build stores a basePath root at "<basePath>/index.html", never
-    // "<basePath>.html" — the same normalizePagePath-derived name a bare "/"
-    // root gets (see the "leaves the root alone" tests above).
     files: { "/docs/index.html": "docs root", "/docs/hello.html": "hello" },
   };
 
@@ -326,7 +289,6 @@ describe("trailingSlash: false", () => {
   it("leaves the root alone", async () => {
     const res = await serve(
       get("/"),
-      // index.html, not /.html — see the trailingSlash: true version above.
       deps({ ...scenario, pages: ["/"], files: { "/index.html": "home" } }),
     );
     expect(res.status).toBe(200);
@@ -348,8 +310,6 @@ describe("trailingSlash: false", () => {
   });
 });
 
-// Constraint: skipTrailingSlashRedirect suppresses the 308 and nothing else. The
-// routing-form strip stays unconditional, or the canonical `/a/` still 404s.
 describe("skipTrailingSlashRedirect", () => {
   for (const trailingSlash of [true, false]) {
     describe(`trailingSlash: ${trailingSlash}`, () => {
@@ -370,7 +330,6 @@ describe("skipTrailingSlashRedirect", () => {
   }
 });
 
-// Constraint: the 308 precedes middleware invocation and body buffering.
 describe("a request about to be redirected", () => {
   function counting() {
     let calls = 0;
@@ -415,9 +374,6 @@ describe("a request about to be redirected", () => {
   });
 });
 
-// Next compiles basePath into the source of every internal rule, so an
-// off-basePath path matches none of them and Next 404s it as it stands. A
-// redirect here would regress a correct 404 and tell a prober the app's basePath.
 describe("basePath: /docs, paths that are not under it", () => {
   for (const trailingSlash of [true, false]) {
     describe(`trailingSlash: ${trailingSlash}`, () => {
@@ -440,8 +396,6 @@ describe("basePath: /docs, paths that are not under it", () => {
   }
 });
 
-// The negative side of withoutInternalRedirects: it must drop Next's internal
-// trailing-slash redirects and nothing else.
 describe("routes withoutInternalRedirects keeps", () => {
   for (const trailingSlash of [true, false]) {
     describe(`trailingSlash: ${trailingSlash}`, () => {
@@ -451,7 +405,6 @@ describe("routes withoutInternalRedirects keeps", () => {
         files: { "/a.html": "<h1>a</h1>", [SERVICE_WORKER_PATH]: "self.skipWaiting()" },
       };
 
-      // Marked `priority` like the redirects, but it carries no status.
       it("Next's own priority-flagged header rule", async () => {
         const res = await serve(get(SERVICE_WORKER_PATH), deps(scenario));
         expect(res.status).toBe(200);
@@ -467,23 +420,6 @@ describe("routes withoutInternalRedirects keeps", () => {
   }
 });
 
-// ---------------------------------------------------------------------------
-// What the response is keyed by, once the seam has run.
-//
-// ocelhq-xlj's field face was a 404 on the canonical URL, and the merge note on
-// it argued the real defect was asset keying: a kind:static dispatch is read
-// from R2 by the REQUEST pathname (index.ts's static arm hands serveStaticAsset
-// `url`, not `result.resolvedPathname`), so `/a/` resolving to `/a` would still
-// read `<prefix>/a/.html` and miss. These pin that for a DIRECTLY requested
-// path: `serve` rebuilt the request on the routing form, so `url.pathname` IS
-// the resolved path by the time dispatch runs and every downstream key — the R2
-// object, the colo cache entry, the origin forward — is the slash-free one.
-//
-// The other face of that keying bug is untouched here and stays open
-// (ocelhq-t2qx / ocelhq-iud): a kind:static target reached through a rewrite is
-// still read by the SOURCE page's path, because there the request pathname and
-// the resolved pathname genuinely differ. Nothing below routes through a
-// rewrite, deliberately.
 describe("the resolved path is what keys the response", () => {
   const ENTRY_HEADER = "x-ocel-entry";
 
@@ -528,7 +464,6 @@ describe("the resolved path is what keys the response", () => {
       expect(probes).toContain("/a.html");
     });
 
-    // Both of these 404'd in the field: the basePath root and a page under it.
     it("serves the basePath root and a page under it from their own objects", async () => {
       const probes: string[] = [];
       const scenario: Scenario = {
@@ -616,7 +551,6 @@ describe("the resolved path is what keys the response", () => {
       expect(slashed.headers.get("location")).toBe("/ssr");
     });
 
-    // The other path observed 404ing in the field.
     it("forwards /docs/ssr/ as /docs/ssr under a basePath", async () => {
       const { scenario, forwarded } = lambdaScenario({
         route: "/docs/ssr",
@@ -675,8 +609,6 @@ describe("the resolved path is what keys the response", () => {
       expect(first.headers.get("x-ocel-cache")).toBe("MISS");
       await settle();
 
-      // The client's next hop for /p is the 308's target, which must land on the
-      // entry the first request wrote.
       const redirect = await serve(get("/p"), d);
       expect(redirect.status).toBe(308);
       expect(redirect.headers.get("location")).toBe("/p/");
@@ -688,9 +620,6 @@ describe("the resolved path is what keys the response", () => {
       expect(keys()).toEqual(["https://cache.ocel/t/p"]);
     });
 
-    // With the 308 suppressed both forms are served, so the two requests reach
-    // the cache key directly rather than through a redirect — the sharpest test
-    // that cacheKey does not fork on the slash.
     it("gives both served forms one key under skipTrailingSlashRedirect", async () => {
       const { scenario, settle, renders, keys } = coloScenario(true, true);
       const d = deps(scenario);
@@ -707,8 +636,6 @@ describe("the resolved path is what keys the response", () => {
     });
   });
 
-  // The fallthrough arm: no resolvedPathname at all, so the asset store is the
-  // only thing that can answer. It must still be probed on the routing form.
   it("probes an unmatched path slash-free before serving the build's 404", async () => {
     const probes: string[] = [];
     const res = await serve(
@@ -723,9 +650,6 @@ describe("the resolved path is what keys the response", () => {
   });
 });
 
-// Next resolves its header routes ahead of the internal trailing-slash
-// redirects, in the same list, and applies them to the redirect it answers with
-// — so the 308 carries them, on a default config as much as a slashed one.
 describe("next.config headers() on the trailing-slash 308", () => {
   const headerRoutes = [
     {

@@ -17,7 +17,6 @@ import (
 	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
 )
 
-// rollbackOptions holds the flags accepted by `ocel rollback`.
 type rollbackOptions struct {
 	to  string
 	tag string
@@ -25,9 +24,6 @@ type rollbackOptions struct {
 
 var rollbackOpts rollbackOptions
 
-// rollbackCmd re-points production at a previous promotion (ADR 0001):
-// project-wide, atomic, and production-only — it refuses on preview
-// infrastructure the same way `ocel deploy` does.
 var rollbackCmd = &cobra.Command{
 	Use:   "rollback",
 	Short: "Roll production back to a previous deployment",
@@ -48,12 +44,6 @@ func init() {
 	rollbackCmd.Flags().StringVar(&rollbackOpts.tag, "tag", "", "Roll back to the promotion carrying this tag (mutually exclusive with --to)")
 }
 
-// runRollback resolves the project, preflights production infrastructure, and
-// drives the provider's Rollback RPC: no flag rolls back to the promotion
-// immediately before the currently active one; --to <promotionId> targets a
-// specific one; --tag <tag> targets the promotion carrying that tag. --to and
-// --tag are mutually exclusive. A rolled-back promotion is itself still in
-// history, so running rollback again rolls forward.
 func runRollback(ctx context.Context, cwd string, opts rollbackOptions, stdout, stderr io.Writer) error {
 	if opts.to != "" && opts.tag != "" {
 		return fmt.Errorf("--to and --tag are mutually exclusive; pass just one")

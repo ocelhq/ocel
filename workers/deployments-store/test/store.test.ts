@@ -8,8 +8,6 @@ declare module "cloudflare:test" {
   interface ProvidedEnv extends Env {}
 }
 
-// Every test gets a fresh DO instance (isolatedStorage snapshots storage per
-// test), so a single fixed slug is fine to reuse across tests.
 function storeStub() {
   const id = env.DEPLOYMENTS_DO.idFromName("acme-web");
   return env.DEPLOYMENTS_DO.get(id);
@@ -88,9 +86,7 @@ describe("named pointers", () => {
       "flaky-web-2626",
     );
 
-    // The default pointer (production) still resolves the production build.
     expect(await store.pointerBuildId("web")).toBe("prod-build");
-    // The named pointer resolves its own build.
     expect(await store.pointerBuildId("web", "flaky-web-2626")).toBe(
       "preview-build",
     );
@@ -110,7 +106,6 @@ describe("named pointers", () => {
       buildId: "preview-build",
       record,
     });
-    // An unknown pointer resolves to no-pointer, exactly like a fresh project.
     expect(await store.pointerRecord("web", "no-such-preview")).toEqual({
       kind: "no-pointer",
     });
@@ -131,7 +126,6 @@ describe("named pointers", () => {
     );
 
     expect(await store.pointerBuildId("web", "preview")).toBe("preview-2");
-    // No production promotion ever ran, so the default pointer stays empty.
     expect(await store.pointerBuildId("web")).toBeUndefined();
   });
 });
@@ -207,8 +201,6 @@ describe("pointerRecord", () => {
 
   it("returns dangling when the active pointer names a build with no record", async () => {
     const store = storeStub();
-    // Promote a build that was never staged, so the pointer resolves but the
-    // record read misses.
     await store.promote(makePromotion({ builds: { web: "ghost-build" } }));
 
     expect(await store.pointerRecord("web")).toEqual({
@@ -253,7 +245,6 @@ describe("tags", () => {
     );
 
     expect(conflict).toMatch(/already used by promotion promo-1/);
-    // The clashing deploy never became active; the original still serves.
     expect((await store.history()).map((h) => h.promotionId)).toEqual(["promo-1"]);
     expect(await store.pointerBuildId("web")).toBe("build-1");
   });
@@ -269,7 +260,6 @@ describe("tags", () => {
       makePromotion({ promotionId: "promo-2", ts: 2_000, builds: { web: "build-2" } }),
     );
 
-    // Rollback re-promotes promo-1, carrying its tag, under a fresh ts.
     const { conflict } = await store.promote(
       makePromotion({ promotionId: "promo-1", ts: 3_000, tag: "v1", builds: { web: "build-1" } }),
     );
@@ -338,10 +328,6 @@ describe("prune", () => {
     expect(await store.record("web", "build-3")).toEqual(makeRecord({ buildId: "build-3" }));
   });
 
-  // A rotation's two Deployments share one build id, and the assets, ISR
-  // entries and edge bundle are keyed by that build id alone. The host reclaims
-  // a build's storage only when nothing left in the store still names it, which
-  // it can only tell from what survived.
   it("reports the record keys the store still holds", async () => {
     const store = storeStub();
     await store.putStaged(makeRecord({ buildId: "build-1" }));
@@ -357,9 +343,6 @@ describe("prune", () => {
     expect(result.survivingRecordKeys).toEqual(["record:web/build-1~fp2"]);
   });
 
-  // The ISR/prerender prefix carries the environment segment, so a Deployment
-  // on another pointer never serves out of it. The host needs the survivors of
-  // the pruned pointer alone to tell that prefix apart from the env-less ones.
   it("reports the pruned pointer's own surviving record keys separately", async () => {
     const store = storeStub();
     await store.putStaged(makeRecord({ buildId: "build-1~fpP" }));
@@ -387,8 +370,6 @@ describe("prune", () => {
   it("pins the active promotion even when it falls outside the keep window", async () => {
     const store = storeStub();
     await seedPromotions(store, 5);
-    // Roll back to an old promotion before pruning, so the active one is
-    // outside the naive "most recent N" window.
     await store.promote(makePromotion({ promotionId: "promo-1", ts: 6_000, builds: { web: "build-1" } }));
 
     const result = await store.prune(2);
@@ -409,7 +390,6 @@ describe("prune", () => {
 
   it("is scoped to a pointer: pruning one pointer leaves another untouched", async () => {
     const store = storeStub();
-    // Two independent pointer histories interleaved.
     for (let i = 1; i <= 3; i++) {
       await store.putStaged(makeRecord({ buildId: `prod-${i}` }));
       await store.promote(
@@ -424,8 +404,6 @@ describe("prune", () => {
 
     const result = await store.prune(1, "staging");
 
-    // Only the staging pointer's superseded promotions are collected; the
-    // active staging one (prev-3) is kept and production is entirely untouched.
     expect(result.removedPromotionIds).toEqual(["prev-2", "prev-1"]);
     expect((await store.history("staging")).map((h) => h.promotionId)).toEqual(["prev-3"]);
     expect((await store.history()).map((h) => h.promotionId)).toEqual([
@@ -433,7 +411,6 @@ describe("prune", () => {
       "prod-2",
       "prod-1",
     ]);
-    // Production's records survive a staging prune.
     expect(await store.record("web", "prod-1")).toBeDefined();
     expect(await store.record("web", "prev-1")).toBeUndefined();
   });
@@ -442,7 +419,6 @@ describe("prune", () => {
 describe("removePointer", () => {
   it("removes a whole pointer (active included) and reports what to reclaim", async () => {
     const store = storeStub();
-    // A production history and a staging preview history interleaved.
     for (let i = 1; i <= 2; i++) {
       await store.putStaged(makeRecord({ buildId: `prod-${i}` }));
       await store.promote(
@@ -457,14 +433,11 @@ describe("removePointer", () => {
 
     const result = await store.removePointer("staging");
 
-    // Every staging promotion goes (nothing pinned), newest-first, and the
-    // record keys come back so the host can reclaim the app-deploy stacks/R2.
     expect(result.keptPromotionIds).toEqual([]);
     expect(result.removedPromotionIds).toEqual(["prev-2", "prev-1"]);
     expect(result.removedRecordKeys.sort()).toEqual(
       ["record:web/prev-1", "record:web/prev-2"].sort(),
     );
-    // The pointer and its records are gone; production is untouched.
     expect(await store.history("staging")).toEqual([]);
     expect(await store.pointerBuildId("web", "staging")).toBeUndefined();
     expect(await store.record("web", "prev-1")).toBeUndefined();
@@ -472,8 +445,6 @@ describe("removePointer", () => {
     expect(await store.record("web", "prod-1")).toBeDefined();
   });
 
-  // Nothing of the pointer survives a removal, so its env-scoped storage is
-  // reclaimable outright even where production shares the build.
   it("leaves the removed pointer with no surviving record keys of its own", async () => {
     const store = storeStub();
     await store.putStaged(makeRecord({ buildId: "build-1~fpP" }));
@@ -561,8 +532,6 @@ describe("initialize / authorized", () => {
     expect(await store.authorized("wrong")).toBe(false);
   });
 
-  // What makes concurrent first deploys converge: the loser of the race is
-  // handed the identity the winner seeded rather than an error, and adopts it.
   it("returns the existing identity instead of re-seeding", async () => {
     const store = storeStub();
     await store.initialize("owner-1", "s3cret", false);
@@ -616,7 +585,6 @@ describe("destroy", () => {
     expect(await store.record("web", "build-1")).toBeUndefined();
     expect(await store.authorized("s3cret")).toBe(false);
 
-    // The emptied instance is immediately reusable by a fresh project.
     await store.initialize("owner-2", "fresh", false);
     expect(await store.authorized("fresh")).toBe(true);
   });

@@ -9,8 +9,6 @@ function isUniqueConstraintViolation(error: unknown): boolean {
   if (typeof error !== "object" || error === null) {
     return false;
   }
-  // node-postgres reports unique violations with code 23505; drizzle wraps
-  // the original pg error as `.cause`.
   if ((error as { code?: string }).code === "23505") {
     return true;
   }

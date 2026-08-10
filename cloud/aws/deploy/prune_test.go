@@ -42,10 +42,6 @@ func TestReclaimTargets_DerivesStackAndPrefixesPerRecord(t *testing.T) {
 	}
 }
 
-// A reclaimed build must give its edge bundle up too, under the same
-// build-scoped prefix uploadEdgeBundles published it at — nothing else sweeps
-// it, and the prefix belongs to exactly one build, so no live deployment can
-// lose the bundle it loads from.
 func TestReclaimTargets_ReclaimsTheBuildsEdgePrefix(t *testing.T) {
 	got, err := ReclaimTargets("proj1", "prod", []string{"record:web/build-1"}, nil, nil)
 	if err != nil {
@@ -63,10 +59,6 @@ func TestReclaimTargets_ReclaimsTheBuildsEdgePrefix(t *testing.T) {
 	}
 }
 
-// Two Deployments of one build (a rotation) are distinct records with distinct
-// stacks, but the bytes the build produced are keyed by the build id alone — so
-// a reclaim splits the record key back into its identity and reads the build id
-// off it.
 func TestReclaimTargets_FingerprintedIdentityKeysTheStackNotThePrefixes(t *testing.T) {
 	id := fingerprinted("build-1", "fp1")
 	got, err := ReclaimTargets("proj1", "prod", []string{"record:web/" + id.String()}, nil, nil)
@@ -94,9 +86,6 @@ func TestReclaimTargets_FingerprintedIdentityKeysTheStackNotThePrefixes(t *testi
 	}
 }
 
-// A rotation leaves two Deployments sharing one build id. Pruning the older
-// one must destroy its own stack but leave the build's assets, ISR entries and
-// edge bundle alone — the surviving Deployment serves from exactly those.
 func TestReclaimTargets_BuildASurvivingDeploymentSharesKeepsItsStorage(t *testing.T) {
 	rotated := fingerprinted("build-1", "fp2")
 	got, err := ReclaimTargets("proj1", "prod",
@@ -116,9 +105,6 @@ func TestReclaimTargets_BuildASurvivingDeploymentSharesKeepsItsStorage(t *testin
 	}
 }
 
-// The last Deployment of a build still gives its storage up: a surviving
-// Deployment of another build, or of the same build id under another app,
-// pins nothing here.
 func TestReclaimTargets_LastDeploymentOfABuildStillReclaimsItsStorage(t *testing.T) {
 	got, err := ReclaimTargets("proj1", "prod",
 		[]string{"record:web/build-1"},
@@ -141,10 +127,6 @@ func TestReclaimTargets_LastDeploymentOfABuildStillReclaimsItsStorage(t *testing
 	}
 }
 
-// A preview Deployment of the same build survives project-wide, so the env-less
-// asset and edge prefixes it shares stay put — but it can never serve out of
-// production's env-scoped ISR prefix, so pruning production's last Deployment of
-// that build still reclaims it.
 func TestReclaimTargets_ASurvivorOnAnotherPointerKeepsOnlyTheEnvlessPrefixes(t *testing.T) {
 	pruned := fingerprinted("B1", "fpP")
 	preview := fingerprinted("B1", "fpV")
@@ -166,10 +148,6 @@ func TestReclaimTargets_ASurvivorOnAnotherPointerKeepsOnlyTheEnvlessPrefixes(t *
 	}
 }
 
-// The mirror image on teardown: `preview rm` retires the whole pointer, so no
-// Deployment of it survives and its env-scoped ISR prefix goes, while a
-// production Deployment of the same build keeps the shared asset and edge
-// prefixes alive.
 func TestPreviewReclaimTargets_RemovingAPointerReclaimsItsCacheButNotTheSharedPrefixes(t *testing.T) {
 	pruned := fingerprinted("B1", "fpV")
 	got, err := PreviewReclaimTargets("proj1", "pr-7", "preview-pr-7",
@@ -208,11 +186,8 @@ func TestReclaimTargets_MalformedKeyErrors(t *testing.T) {
 	}
 }
 
-// fakePrefixDeleter is an in-memory, paginated PrefixDeleter: pages holds one
-// ListObjectsV2 response per call (in order), and delete records every key a
-// DeleteObjects call removes.
 type fakePrefixDeleter struct {
-	pages     [][]string // page i's object keys
+	pages     [][]string
 	call      int
 	deleted   []string
 	listErr   error
@@ -283,9 +258,6 @@ func TestDeletePrefix_EmptyBucketOrNilDeleterIsNoOp(t *testing.T) {
 	}
 }
 
-// An empty prefix matches every object in the bucket, so it must never reach
-// the delete loop: it is how a PruneTarget says a surviving Deployment still
-// serves this build's storage.
 func TestDeletePrefix_EmptyPrefixIsANoOp(t *testing.T) {
 	fake := &fakePrefixDeleter{pages: [][]string{{"prod/proj1/web/build-1/cache/a"}}}
 	if err := deletePrefix(context.Background(), fake, "bucket", ""); err != nil {
@@ -338,8 +310,6 @@ func TestAsPrefixDeleter_WiderUploaderIsRecovered(t *testing.T) {
 	}
 }
 
-// fakeUploaderWithDelete satisfies both ArtifactUploader and PrefixDeleter,
-// the shape the real aws-sdk-go-v2 S3 client always has.
 type fakeUploaderWithDelete struct{ fakePrefixDeleter }
 
 func (f *fakeUploaderWithDelete) HeadObject(context.Context, *s3.HeadObjectInput, ...func(*s3.Options)) (*s3.HeadObjectOutput, error) {

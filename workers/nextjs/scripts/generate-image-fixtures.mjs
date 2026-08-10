@@ -1,17 +1,3 @@
-// The differential fixture generator.
-//
-// It builds and runs the real Next server in examples/next-test over a request
-// matrix and records what came back, so the worker's /_next/image route is
-// tested against Next itself rather than against someone's reading of Next.
-// Fixtures are regenerated deliberately — never in CI — so a Next bump lands as
-// a reviewable diff instead of a silently moving target.
-//
-//   pnpm --filter @ocel/worker-nextjs fixtures:image
-//
-// dangerouslyAllowSVG is baked into the build, so the matrix is run once per
-// value of it; each run also records the image config Next actually served
-// with, compiled exactly as the adapter compiles it, which is what the worker
-// tests validate against.
 import { createHash } from "node:crypto";
 import { spawn } from "node:child_process";
 import { mkdir, readFile, readdir, rm, writeFile } from "node:fs/promises";
@@ -32,7 +18,6 @@ const origin = `http://127.0.0.1:${port}`;
 const BROWSER_ACCEPT =
   "image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8";
 
-// Written into the app before the build: the sources every case points at.
 const ASSETS = {
   "public/_fixtures/photo.png": png(),
   "public/_fixtures/animated.gif": animatedGif(),
@@ -44,11 +29,7 @@ const ASSETS = {
 
 const PHOTO = "/_fixtures/photo.png";
 
-// Every case is a query string against the image route plus the Accept header
-// to send. `only` restricts a case to one build variant; `note` records why the
-// case exists, so the fixture reads as the conformance argument it is.
 const CASES = [
-  // --- the validation table, row by row -----------------------------------
   { name: "url-missing", query: { w: "640", q: "75" } },
   { name: "url-empty", query: { url: "", w: "640", q: "75" } },
   { name: "url-array", query: { url: [PHOTO, "/_fixtures/icon.ico"], w: "640", q: "75" } },
@@ -141,7 +122,6 @@ const CASES = [
   { name: "q-not-in-qualities", query: { url: PHOTO, w: "640", q: "50" } },
   { name: "w-and-q-in-image-sizes", query: { url: PHOTO, w: "32", q: "75" }, accept: BROWSER_ACCEPT },
 
-  // --- Accept negotiation --------------------------------------------------
   {
     name: "accept-absent",
     query: { url: PHOTO, w: "640", q: "75" },
@@ -179,7 +159,6 @@ const CASES = [
     note: "registered divergence 6: @hapi/accept throws on a valueless parameter, so Next 500s before it looks at the image; the edge declines to negotiate and lets the request reach the origin",
   },
 
-  // --- passthrough rules ---------------------------------------------------
   {
     name: "animated-gif",
     query: { url: "/_fixtures/animated.gif", w: "640", q: "75" },
@@ -207,7 +186,6 @@ const CASES = [
   },
 ];
 
-// Resolved after the build, when the hashed filename exists.
 const STATIC_MEDIA_CASES = (mediaPath) => [
   {
     name: "static-import",
@@ -313,11 +291,6 @@ async function compiledConfig() {
   return { ...compiled, configHash: imageConfigHash(compiled) };
 }
 
-// The example app dogfoods the SDK: its home page reads `ocel/env/client`, so
-// it neither typechecks without the generated accessor nor prerenders without
-// a value behind every key the accessor names. Both are derived rather than
-// listed, so adding a client variable to the example does not silently break
-// fixture generation.
 async function clientEnv() {
   await run("go", ["run", "github.com/ocelhq/ocel/cli/ocel", "generate"], { cwd: appRoot });
   const accessor = await readFile(join(appRoot, ".ocel", "env-client.ts"), "utf8");
@@ -331,10 +304,6 @@ async function clientEnv() {
 async function generateVariant(variant, baseEnv) {
   const env = { ...baseEnv, OCEL_IMAGE_FIXTURES: variant };
   await run(join(appRoot, "node_modules", ".bin", "next"), ["build"], { cwd: appRoot, env: { ...process.env, ...env } });
-  // .next/cache survives a build, and Next's image cache key carries neither
-  // the config nor dangerouslyAllowSVG — so without this the svg variant's
-  // entries answer the default variant's requests on the next run, and the
-  // fixtures stop being a function of the code that produced them.
   await rm(join(appRoot, ".next", "cache", "images"), { recursive: true, force: true });
 
   const config = await compiledConfig();
@@ -360,8 +329,6 @@ async function main() {
     await writeFile(file, bytes);
   }
 
-  // The compiled config comes from the adapter's own compiler, so the fixtures
-  // carry the very patterns the worker will be handed at runtime.
   await run("pnpm", ["--filter", "@ocel/next-runtime", "build"], { cwd: repoRoot });
 
   const baseEnv = await clientEnv();
@@ -377,10 +344,6 @@ async function main() {
   );
   console.log(`wrote ${fixtureFile}`);
 
-  // The last build left is a fixture build — dangerouslyAllowSVG on, plus the
-  // fixture allowlist — and nothing about .next says so. Removing it means the
-  // next `next dev`/`next build` produces the app's own configuration instead
-  // of silently reusing this one.
   await rm(join(appRoot, ".next"), { recursive: true, force: true });
 }
 

@@ -12,8 +12,6 @@ import (
 	"time"
 )
 
-// controlPair gives a test a listener on a real unix socket plus a dial
-// function standing in for the node child connecting back to it.
 func controlPair(t *testing.T) (net.Listener, func() net.Conn) {
 	t.Helper()
 	sock := filepath.Join(t.TempDir(), "control.sock")
@@ -49,9 +47,6 @@ func TestAwaitReady_ReturnsPortOnServerReady(t *testing.T) {
 	}
 }
 
-// The common failure: the user's app throws on import, so node dies before it
-// ever connects. Waiting out the budget would burn the sandbox's init for
-// nothing — the exit is the answer, and it must arrive as soon as it happens.
 func TestAwaitReady_AbortsImmediatelyWhenNodeExitsBeforeConnecting(t *testing.T) {
 	ln, _ := controlPair(t)
 	exited := make(chan error, 1)
@@ -70,10 +65,6 @@ func TestAwaitReady_AbortsImmediatelyWhenNodeExitsBeforeConnecting(t *testing.T)
 	}
 }
 
-// The reaper is what turns a crashed child into an immediate error rather than
-// a stall, so exercise it against a real process exiting without ever
-// connecting — the shape of an app that throws on import — wired exactly as
-// startNode wires it.
 func TestAwaitReady_ReapsARealChildThatDiesWithoutConnecting(t *testing.T) {
 	ln, _ := controlPair(t)
 	cmd := exec.Command("sh", "-c", "exit 1")
@@ -101,7 +92,7 @@ func TestAwaitReady_FailsWhenNodeNeverSignalsReadyWithinBudget(t *testing.T) {
 	go func() {
 		c := dial()
 		fmt.Fprintln(c, `{"type":"log","payload":{"message":"still working"}}`)
-		select {} // connected, alive, never ready
+		select {}
 	}()
 
 	_, err := awaitReady(ln, make(chan error, 1), 100*time.Millisecond, nil, nil)
@@ -113,8 +104,6 @@ func TestAwaitReady_FailsWhenNodeNeverSignalsReadyWithinBudget(t *testing.T) {
 	}
 }
 
-// A stack trace node managed to report before dying is the whole diagnosis;
-// the handshake must not drop it on the floor in favour of a bare exit status.
 func TestAwaitReady_CarriesTheLastLogIntoTheError(t *testing.T) {
 	ln, dial := controlPair(t)
 	exited := make(chan error, 1)
@@ -140,7 +129,7 @@ func TestEntrypointPath(t *testing.T) {
 
 	cases := []struct {
 		name   string
-		config string // "" means no config.json written
+		config string
 		want   string
 	}{
 		{"next framework", `{"framework":"next"}`, nextEntry},

@@ -1,7 +1,3 @@
-// Package authclient is a minimal HTTP client for the subset of Better
-// Auth's REST API the Ocel CLI needs: the device authorization grant
-// (RFC 8628), session lookups/sign-out via Bearer token, and organization
-// listing/switching (list + set-active).
 package authclient
 
 import (
@@ -14,22 +10,13 @@ import (
 	"time"
 )
 
-// ClientID is the fixed OAuth client identifier the Ocel CLI presents to
-// the device authorization endpoint. The server validates it via
-// deviceAuthorization({ validateClient }) in packages/auth/src/config.ts.
 const ClientID = "ocel-cli"
 
-// Client talks to a Better Auth server's device authorization + session
-// endpoints.
 type Client struct {
-	// BaseURL is the origin of the Ocel server, e.g. http://localhost:3000.
-	BaseURL string
-	// HTTPClient is used for all requests. Defaults to a client with a
-	// sane timeout if left nil via New.
+	BaseURL    string
 	HTTPClient *http.Client
 }
 
-// New constructs a Client for the given base URL.
 func New(baseURL string) *Client {
 	return &Client{
 		BaseURL:    strings.TrimRight(baseURL, "/"),
@@ -37,17 +24,11 @@ func New(baseURL string) *Client {
 	}
 }
 
-// apiError mirrors Better Auth's { error, error_description } error body
-// shape, shared by the device/code and device/token endpoints.
 type apiError struct {
 	Error            string `json:"error"`
 	ErrorDescription string `json:"error_description"`
 }
 
-// postJSON POSTs body as JSON to path and decodes a JSON response into out.
-// On a non-2xx response it attempts to decode an apiError and returns it
-// wrapped as an *APIError; if that fails it returns a generic error with the
-// raw response body for debuggability.
 func (c *Client) postJSON(ctx context.Context, path string, body, out any) error {
 	payload, err := json.Marshal(body)
 	if err != nil {
@@ -93,8 +74,6 @@ func (c *Client) do(req *http.Request, out any) error {
 	return nil
 }
 
-// APIError represents a structured error returned by a Better Auth
-// endpoint, e.g. {"error":"authorization_pending","error_description":"..."}.
 type APIError struct {
 	Code        string
 	Description string

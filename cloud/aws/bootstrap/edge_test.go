@@ -15,9 +15,6 @@ import (
 	"github.com/ocelhq/ocel/cloud/edge"
 )
 
-// fakeSSM keeps parameters in a map, returning a typed ParameterNotFound for a
-// missing name so the errors.As path in ensureEdgeCredentials is exercised. It
-// honours Overwrite: false the way SSM does.
 type fakeSSM struct {
 	params map[string]string
 	puts   int
@@ -51,9 +48,6 @@ func (f *fakeSSM) DeleteParameter(_ context.Context, in *ssm.DeleteParameterInpu
 	return &ssm.DeleteParameterOutput{}, nil
 }
 
-// fakeIAM records the users it minted a key for and hands back a deterministic
-// key so the stored payload can be asserted. existingKeys is the number of keys
-// ListAccessKeys reports before any mint, so tests can drive the 2-key guard.
 type fakeIAM struct {
 	created      []string
 	existingKeys int
@@ -173,8 +167,6 @@ func TestEdgeCredentials_UnknownClass(t *testing.T) {
 	}
 }
 
-// offeredStore is a complete cache-store offer as a freshly minted one arrives:
-// every coordinate plus the secret. Tests drop the secret to model a reuse.
 func offeredStore() map[string]string {
 	return map[string]string{
 		edge.OfferKeyBucket:          "ocel-edge-cache",
@@ -207,9 +199,6 @@ func TestAdoptCacheStore_FreshMintPersistsEveryCoordinate(t *testing.T) {
 	}
 }
 
-// TestAdoptCacheStore_ReuseKeepsStoredSecret is the normal re-run: the edge
-// reoffers the token it already minted, carrying no secret, and the secret
-// already in SSM must survive.
 func TestAdoptCacheStore_ReuseKeepsStoredSecret(t *testing.T) {
 	ssmc := newFakeSSM()
 	if err := adoptCacheStore(context.Background(), ssmc, ClassProduction, "fake", offeredStore()); err != nil {
@@ -235,10 +224,6 @@ func TestAdoptCacheStore_ReuseKeepsStoredSecret(t *testing.T) {
 	}
 }
 
-// TestAdoptCacheStore_DanglingToken covers both shapes of the cross-run hazard: a
-// secretless offer whose access key is not the one in SSM means a prior run
-// minted a token and never persisted it. The secret is gone for good, so bootstrap
-// must say which token to delete rather than store a credential-less config.
 func TestAdoptCacheStore_DanglingToken(t *testing.T) {
 	for _, tc := range []struct {
 		name   string
@@ -459,11 +444,6 @@ func TestReadISRWriterFor_AbsentIsNotAnError(t *testing.T) {
 	}
 }
 
-// TestEnsureISRWriterSeed_IsCreateOnly is the whole reason the seed is a
-// parameter of its own rather than a field of the adopted-writer payload, which
-// every bootstrap overwrites. Each live build's write secret is derived from
-// this seed, and the writer worker holds only the hash: a seed that moved would
-// 401 every deployed function's cache write until that app was redeployed.
 func TestEnsureISRWriterSeed_IsCreateOnly(t *testing.T) {
 	ssmc := newFakeSSM()
 
@@ -491,9 +471,6 @@ func TestEnsureISRWriterSeed_IsCreateOnly(t *testing.T) {
 	}
 }
 
-// racingSSM is a second bootstrap running concurrently: the parameter appears
-// between this one's read and its create-only write, which is exactly what SSM
-// answers with ParameterAlreadyExists.
 type racingSSM struct {
 	*fakeSSM
 	winner string
@@ -508,10 +485,6 @@ func (r *racingSSM) PutParameter(ctx context.Context, in *ssm.PutParameterInput,
 	return r.fakeSSM.PutParameter(ctx, in, opts...)
 }
 
-// TestEnsureISRWriterSeed_ConvergesOnAConcurrentBootstrap. Two bootstraps racing
-// must agree on one seed rather than the loser failing the whole run: every live
-// build's write secret is derived from whichever seed is in force, so the answer
-// has to be the stored one.
 func TestEnsureISRWriterSeed_ConvergesOnAConcurrentBootstrap(t *testing.T) {
 	ssmc := &racingSSM{fakeSSM: newFakeSSM(), winner: "the-other-bootstraps-seed"}
 
@@ -524,10 +497,6 @@ func TestEnsureISRWriterSeed_ConvergesOnAConcurrentBootstrap(t *testing.T) {
 	}
 }
 
-// TestReadISRWriterSeedFor_AbsentIsNotAFailure keeps an account bootstrapped
-// before the seed distinguishable from a broken read: the deploy reports a
-// substrate with no writer and asks for a re-bootstrap, rather than deriving
-// secrets from an empty seed.
 func TestReadISRWriterSeedFor_AbsentIsNotAFailure(t *testing.T) {
 	seed, err := ReadISRWriterSeedFor(context.Background(), newFakeSSM(), ClassProduction)
 	if err != nil {

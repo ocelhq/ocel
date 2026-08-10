@@ -14,8 +14,6 @@ export async function getProjectById(
 
   const [found] = await db.select().from(project).where(eq(project.id, id));
 
-  // Same 404 whether the Project doesn't exist or the caller isn't a member
-  // of its org - don't leak existence to non-members.
   if (!found) {
     return Response.json({ error: "Not found" }, { status: 404 });
   }

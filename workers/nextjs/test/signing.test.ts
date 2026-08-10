@@ -41,15 +41,10 @@ describe("edgeOriginFetch", () => {
     }
 
     const auth = signed?.headers.get("authorization") ?? "";
-    // SigV4 stamps the credential scope with the region parsed from the host and
-    // the lambda service, and signs against the function URL's host.
     expect(auth).toContain("AWS4-HMAC-SHA256");
     expect(auth).toContain("/us-east-1/lambda/aws4_request");
     expect(signed?.headers.get("x-amz-date")).toBeTruthy();
 
-    // Only host + the amz headers are signed; the forwarded app headers ride
-    // along on the request but are never part of SignedHeaders, so Cloudflare
-    // rewriting one (e.g. accept-encoding) in transit cannot break the signature.
     const signedHeaders =
       /SignedHeaders=([^,]+)/.exec(auth)?.[1] ?? "";
     expect(signedHeaders).toContain("host");
@@ -78,13 +73,10 @@ describe("edgeOriginFetch", () => {
       globalThis.fetch = originalFetch;
     }
 
-    // The body must reach the origin verbatim: the signature covers its hash, so a
-    // re-streamed or mutated body would 403 at the Function URL.
     expect(signed?.method).toBe("POST");
     expect(await signed?.text()).toBe("POSTPONED");
     const auth = signed?.headers.get("authorization") ?? "";
     expect(auth).toContain("/us-east-1/lambda/aws4_request");
-    // The app's own headers ride along unsigned, exactly as on the GET path.
     const signedHeaders = /SignedHeaders=([^,]+)/.exec(auth)?.[1] ?? "";
     expect(signedHeaders).toContain("host");
     expect(signedHeaders).not.toContain("next-resume");
@@ -100,7 +92,6 @@ describe("edgeOriginFetch", () => {
 });
 
 describe("awsServiceFetch", () => {
-  // Captures the request aws4fetch actually put on the wire.
   async function capture(
     call: (send: ReturnType<typeof awsServiceFetch>) => Promise<unknown>,
   ): Promise<Request> {
@@ -131,7 +122,6 @@ describe("awsServiceFetch", () => {
     );
     const auth = sent.headers.get("authorization") ?? "";
     expect(auth).toContain("/eu-west-2/s3/aws4_request");
-    // S3 rejects a request whose payload hash is neither computed nor declared.
     expect(sent.headers.get("x-amz-content-sha256")).toBeTruthy();
   });
 
@@ -152,7 +142,6 @@ describe("awsServiceFetch", () => {
     const signedHeaders = /SignedHeaders=([^,]+)/.exec(auth)?.[1] ?? "";
     expect(signedHeaders).toContain("host");
     expect(signedHeaders).toContain("x-amz-target");
-    // The body reaches DynamoDB verbatim; the signature covers its hash.
     expect(await sent.text()).toBe(body);
   });
 });

@@ -11,8 +11,6 @@ import (
 	"github.com/ocelhq/ocel/cloud/aws/vars/baked"
 )
 
-// sealedTaskRoot writes a bundle sealed under key into a task root, exactly
-// where a deployed package carries it, and returns the root.
 func sealedTaskRoot(t *testing.T, key []byte, values map[string]string) string {
 	t.Helper()
 	root := t.TempDir()
@@ -34,11 +32,6 @@ func dataKey() []byte { return bytes.Repeat([]byte{9}, baked.KeyBytes) }
 
 func envelope(key []byte) string { return base64.StdEncoding.EncodeToString(key) }
 
-// TestBakedVarsEnv_InjectsUnderTheNamespacedNameOnly proves the membrane hands
-// the application its encrypted-baked values without ever putting them under
-// the name the user chose: the namespaced name is the whole reason a value
-// that was meant to be encrypted cannot be read out of a process environment
-// dump as though it were plaintext.
 func TestBakedVarsEnv_InjectsUnderTheNamespacedNameOnly(t *testing.T) {
 	root := sealedTaskRoot(t, dataKey(), map[string]string{"STRIPE_API_KEY": "sk-live", "WEBHOOK_SECRET": "whsec"})
 
@@ -58,11 +51,6 @@ func TestBakedVarsEnv_InjectsUnderTheNamespacedNameOnly(t *testing.T) {
 	}
 }
 
-// TestResolveBakedVarsEnv_OpensWithNoCredentialsAndNoEndpoint is the property
-// the whole envelope design exists for: init opens the bundle with what the
-// function configuration already carries, so it works in a sandbox with no
-// credentials, no region and no route to any API. Anything that reached out
-// for the key would fail here rather than return the values.
 func TestResolveBakedVarsEnv_OpensWithNoCredentialsAndNoEndpoint(t *testing.T) {
 	root := sealedTaskRoot(t, dataKey(), map[string]string{"STRIPE_API_KEY": "sk-live"})
 	for _, key := range []string{"AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY", "AWS_SESSION_TOKEN", "AWS_REGION", "AWS_DEFAULT_REGION", "AWS_PROFILE"} {
@@ -83,9 +71,6 @@ func TestResolveBakedVarsEnv_OpensWithNoCredentialsAndNoEndpoint(t *testing.T) {
 	}
 }
 
-// TestBakedVarsEnv_NoEnvelopeIsNoWorkAtAll proves a function that bakes
-// nothing does not even read a file, so the class costs nothing at init for
-// the apps that do not use it.
 func TestBakedVarsEnv_NoEnvelopeIsNoWorkAtAll(t *testing.T) {
 	env, err := bakedVarsEnv("", sealedTaskRoot(t, dataKey(), map[string]string{"A": "one"}))
 	if err != nil {
@@ -96,9 +81,6 @@ func TestBakedVarsEnv_NoEnvelopeIsNoWorkAtAll(t *testing.T) {
 	}
 }
 
-// TestBakedVarsEnv_EveryFailureIsDiagnosable proves init fails, and says why,
-// rather than starting an application whose variables are quietly unset — the
-// failure mode a value read as a plain property could never reveal.
 func TestBakedVarsEnv_EveryFailureIsDiagnosable(t *testing.T) {
 	sealed := sealedTaskRoot(t, dataKey(), map[string]string{"A": "one"})
 

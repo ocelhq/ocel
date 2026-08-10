@@ -10,9 +10,6 @@ import (
 	"github.com/ocelhq/ocel/pkg/channel"
 )
 
-// newAuthInterceptor rejects every call unless its Authorization header
-// carries the exact per-session token the CLI passed to this process via
-// channel.SessionTokenEnvVar at launch.
 func newAuthInterceptor(token string) connect.Interceptor {
 	return &authInterceptor{token: token}
 }

@@ -46,8 +46,6 @@ export default function Home() {
   );
 }
 
-/* ---------------------------------------------------------------- helpers */
-
 function Eyebrow({ children }: { children: ReactNode }) {
   return (
     <div className="mb-3.5 font-mono text-xs tracking-[0.08em] text-primary">
@@ -97,8 +95,6 @@ function DarkCodePane({
     </div>
   );
 }
-
-/* --------------------------------------------------------------- 01 · cli */
 
 type CliCommand = {
   name: string;
@@ -246,8 +242,6 @@ function Cli() {
     </section>
   );
 }
-
-/* --------------------------------------------------------------- 02 · sdk */
 
 type SdkResource = {
   handle: string;
@@ -397,8 +391,6 @@ async function Sdk() {
   );
 }
 
-/* ----------------------------------------------------------- 03 · dev mode */
-
 const devModeTiles: { label: string; visual: ReactNode; copy: string }[] = [
   {
     label: "YOUR WORKFLOW",
@@ -533,8 +525,6 @@ function DevMode() {
   );
 }
 
-/* ------------------------------------------------------------ 04 · console */
-
 function Console() {
   return (
     <section className="relative overflow-hidden border-t border-border bg-secondary">
@@ -565,8 +555,6 @@ function Console() {
     </section>
   );
 }
-
-/* ------------------------------------------------------------ 05 · interop */
 
 function Interop() {
   return (
@@ -604,8 +592,6 @@ function Interop() {
   );
 }
 
-/* ------------------------------------------------------------- 06 · pricing */
-
 function Pricing() {
   return (
     <section className="border-t border-border bg-secondary">
@@ -637,8 +623,6 @@ function Pricing() {
     </section>
   );
 }
-
-/* ---------------------------------------------------------------- 07 · faq */
 
 const faqs = [
   {
@@ -690,8 +674,6 @@ function Faq() {
     </section>
   );
 }
-
-/* ------------------------------------------------------------- cta + footer */
 
 function CtaBand() {
   return (

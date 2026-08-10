@@ -4,10 +4,6 @@ import type { CacheEntryFile, CacheStore } from "../src/next/cache-store.mjs";
 import type { TagSnapshotRead, UseCacheStore } from "../src/next/use-cache-store.mjs";
 import { publishedRecords, type TagRow } from "./tag-rows.mjs";
 
-// A stand-in for the state table's tag partition and for the published snapshot
-// of it: tag writes land under the same monotonic guard the real conditional
-// update applies, and every write moves the snapshot to a new version, which is
-// what the publisher does on the other side of the stream.
 function fakeStore() {
   const rows = new Map<string, TagRow>();
   const conditions: (string | null)[] = [];
@@ -33,7 +29,6 @@ function fakeStore() {
       rows.set(tag, { tag, ...row });
       version++;
     },
-    // No snapshot for this build — which is not the same as one with no records.
     unpublish() {
       published = false;
     },
@@ -46,7 +41,6 @@ function fakeStore() {
 
     async readTagSnapshot(etag): Promise<TagSnapshotRead> {
       conditions.push(etag);
-      // Yields, so concurrent callers really do overlap.
       await Promise.resolve();
       if (failure) throw failure;
       if (!published) return { status: "unusable" };
@@ -68,8 +62,6 @@ function fakeStore() {
   return store;
 }
 
-// The clock reads time through performance.now(), so shifting that is enough to
-// step past the sync throttle without waiting on it.
 let drift = 0;
 
 beforeEach(() => {
@@ -94,9 +86,6 @@ function advance(ms: number) {
   drift += ms;
 }
 
-// The clock's state is shared on globalThis and outlives a module reset, exactly
-// as it does across the two handler bundles in a warm Lambda — so every test
-// rebinds it onto its own store, which discards the previous one's state.
 async function load(store: UseCacheStore | null, env: Record<string, string> = {}) {
   vi.resetModules();
   for (const [k, v] of Object.entries(env)) process.env[k] = v;
@@ -106,10 +95,6 @@ async function load(store: UseCacheStore | null, env: Record<string, string> = {
   return { tagClock: clock.tagClock, handler };
 }
 
-// The singular handler's whole backing view. Tag writes land in the same rows
-// the snapshot is published from, exactly as the real store does — pass null to
-// model a publisher that has not caught up yet. The store has no tag *read* at
-// all: this tier learns of every invalidation through the shared clock.
 type FakeIsrStore = CacheStore & { entries: Map<string, CacheEntryFile> };
 
 function fakeIsrStore(published: ReturnType<typeof fakeStore> | null): FakeIsrStore {
@@ -133,7 +118,6 @@ function fakeIsrStore(published: ReturnType<typeof fakeStore> | null): FakeIsrSt
   };
 }
 
-// A prerendered page carrying one tag, under the key the adapter seeds it at.
 function seedPage(isr: FakeIsrStore, tag: string, lastModified = 1_000) {
   isr.entries.set("index", {
     lastModified,
@@ -146,8 +130,6 @@ function seedPage(isr: FakeIsrStore, tag: string, lastModified = 1_000) {
   });
 }
 
-// Loads both caching models against one shared clock, so a test can drive either
-// and observe what the other sees.
 async function loadBoth(store: ReturnType<typeof fakeStore>, published = true) {
   vi.resetModules();
   const clock = await import("../src/next/tag-clock.mjs");
@@ -159,9 +141,6 @@ async function loadBoth(store: ReturnType<typeof fakeStore>, published = true) {
   return { tagClock: clock.tagClock, handler, isr: new CacheHandler(), entries };
 }
 
-// Runs `fn` the way the membrane runs an invocation: work it defers is collected
-// rather than awaited, so a test can assert what the request itself paid for and
-// then settle the rest deliberately.
 async function invocation(fn: () => Promise<unknown>): Promise<Promise<unknown>[]> {
   const { runWithWaitUntil } = await import("../src/shared/background.mjs");
   const deferred: Promise<unknown>[] = [];
@@ -227,8 +206,6 @@ test("an invalidation raised elsewhere is observed after the next sync", async (
   expect(await handler.get("k", [])).toBeUndefined();
 });
 
-// Next fans updateTags out to every registered handler, so the second write for
-// one event always loses the guard. Losing it is the common path, not an error.
 test("swallows the rejection when a second writer loses the monotonic guard", async () => {
   const store = fakeStore();
   const { handler } = await load(store);
@@ -259,8 +236,6 @@ test("answers expiry lookups from memory without touching the network", async ()
   expect(store.gets).toBe(0);
 });
 
-// The whole point of the snapshot: a scale-out event puts N cold instances on
-// one object each, not N drains of the same partition.
 test("a cold instance learns the whole invalidation history from one object", async () => {
   const store = fakeStore();
   const { handler } = await load(store);
@@ -275,8 +250,6 @@ test("a cold instance learns the whole invalidation history from one object", as
   expect(await handler.get("k", [])).toBeUndefined();
 });
 
-// A publisher rewrites the object on every invalidation it observes, so an
-// unchanged version is proof nothing has been raised — and costs no document.
 test("conditions the next read on the version it holds and keeps its records on a 304", async () => {
   const store = fakeStore();
   const { tagClock, handler } = await load(store);
@@ -294,8 +267,6 @@ test("conditions the next read on the version it holds and keeps its records on 
   expect(await tagClock.getExpiration(["products"])).toBe(expiration);
 });
 
-// The snapshot is a lagged replica, so a record arriving from it must never walk
-// back an invalidation this instance raised itself.
 test("a lagged snapshot cannot walk back this instance's own invalidation", async () => {
   const store = fakeStore();
   const { tagClock, handler } = await load(store);
@@ -310,8 +281,6 @@ test("a lagged snapshot cannot walk back this instance's own invalidation", asyn
   expect(await tagClock.getExpiration(["products"])).toBe(mine);
 });
 
-// An empty clock is a real answer — a build that has invalidated nothing — and
-// is the one case that must not be confused with having no snapshot at all.
 test("a snapshot with no records still counts as a sync", async () => {
   const store = fakeStore();
   const { tagClock, handler } = await load(store);
@@ -340,8 +309,6 @@ test("suppresses a second sync inside the throttle window", async () => {
   expect(store.gets).toBe(1);
 });
 
-// Throttling on the attempt rather than the success is what keeps an already
-// struggling table from being hit once per request.
 test("a failing sync retries on a bounded interval rather than every request", async () => {
   const store = fakeStore();
   const { tagClock, handler } = await load(store);
@@ -372,10 +339,6 @@ test("a sync failure leaves the handler serving its last known tag state", async
   expect(await handler.get("k", [])).toBeDefined();
 });
 
-// A build whose snapshot is absent or unreadable has an unknown invalidation
-// history, not an empty one. Failing closed here is what stops the remote tier
-// serving entries the fleet has already thrown away, and it must not be traded
-// away for a cheaper cold start.
 test("an unusable snapshot degrades to the never-synced state without throwing", async () => {
   const store = fakeStore();
   const { tagClock, handler } = await load(store);
@@ -400,8 +363,6 @@ test("reports having synced only once a sync has succeeded", async () => {
   expect(tagClock.hasSynced).toBe(true);
 });
 
-// Both handler bundles load their own copy of this module, so the state has to
-// be shared — but only between copies that agree on what they are pointed at.
 test("shares one clock between module graphs built from the same configuration", async () => {
   const config = {
     OCEL_STATE_TABLE: "state",
@@ -437,11 +398,6 @@ test("refuses to adopt a shared clock built from different configuration", async
   expect(await other.getExpiration(["products"])).toBe(0);
 });
 
-// The durable write is the raise: the state table's stream carries it to the one
-// publisher, so nothing on this tier reads or writes the edge's replica. What the
-// singular handler still owes the shared clock is its own event, merged locally
-// so both caching models on this instance agree without waiting for a publish.
-
 test("an invalidation on the classic ISR model is the durable write and nothing more", async () => {
   const store = fakeStore();
   const { isr } = await loadBoth(store);
@@ -450,9 +406,6 @@ test("an invalidation on the classic ISR model is the durable write and nothing 
   await Promise.all(deferred);
 
   expect(store.rows.get("products")!.expired).toBeGreaterThan(0);
-  // No sync: the raise is durable already, and reading the snapshot here would
-  // buy this instance nothing its read path does not already fetch on its
-  // throttle.
   expect(store.gets).toBe(0);
 });
 
@@ -468,8 +421,6 @@ test("an invalidation raised on either model is visible to the other at once", a
   expect(await tagClock.getExpiration(["reviews"])).toBeGreaterThan(0);
 });
 
-// Shipping ahead of the snapshot means a clock with nothing behind it, which must
-// still answer from its own writes rather than fail.
 test("works with no durable store bound at all", async () => {
   const { handler } = await load(null);
 
@@ -480,11 +431,6 @@ test("works with no durable store bound at all", async () => {
   expect(await handler.get("k", [])).toBeUndefined();
 });
 
-// Next calls refreshTags only ahead of a `use cache` read, and an app on the
-// classic ISR model has none — so if the read path did not sync for itself,
-// nothing on the instance ever would, and an invalidation raised anywhere else
-// would never be observed. That failure is silent: every route keeps serving,
-// and only invalidation is dead.
 test("the classic ISR read path pulls the snapshot itself", async () => {
   const store = fakeStore();
   const { isr, entries } = await loadBoth(store);
@@ -505,12 +451,6 @@ test("an invalidation raised elsewhere expires an ISR entry once the read syncs"
   expect(await isr.get("/", { kind: "APP_PAGE" })).toBeNull();
 });
 
-// Epic decision 2, and the load-bearing half of this whole change. Next
-// re-renders on a miss and does not wrap get(), so failing closed on an
-// unreadable snapshot would not expire one route — it would expire every tagged
-// route on every instance at once, which is exactly the herd the DynamoDB read
-// was removed to prevent. The opposite choice on the remote `use cache` tier is
-// deliberate and bounded: nothing serves from that tier until it has synced.
 test("serves a tagged ISR entry when the build has no usable snapshot", async () => {
   const store = fakeStore();
   store.unpublish();
@@ -529,11 +469,6 @@ test("serves a tagged ISR entry through an object-store outage", async () => {
   expect(await isr.get("/", { kind: "APP_PAGE" })).not.toBeNull();
 });
 
-// A snapshot with no records is a build that has invalidated nothing — a real
-// answer, and a sync. Having no usable snapshot is the absence of an answer. The
-// ISR read serves on either, so the two are only ever told apart by what they
-// leave behind, and collapsing them would take the remote tier's fail-closed
-// gate with them.
 test("an empty snapshot counts as a sync where an unusable one does not", async () => {
   const store = fakeStore();
   const empty = await loadBoth(store);

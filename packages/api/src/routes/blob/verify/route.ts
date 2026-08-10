@@ -16,11 +16,6 @@ const verifyUploadSchema = z.object({
   }),
 });
 
-// POST /api/blob/verify. Backs buckets.v1.BucketService.VerifyUploadSignature:
-// re-derives the per-session HMAC over the completion callback and constant-time
-// compares, returning the stored metadata verbatim on success. The secret never
-// leaves here. An unknown session or bad signature returns { valid:false } as a
-// 200, not an error - the RPC is a boolean verdict, not a lookup.
 export async function verifyUploadSignature(
   request: Request,
 ): Promise<Response> {
@@ -49,9 +44,6 @@ export async function verifyUploadSignature(
     .from(uploadSession)
     .where(eq(uploadSession.id, sessionId));
 
-  // Unknown session, or a caller who isn't a member of its org, both fall
-  // through to a plain valid:false - the verdict never leaks whether the
-  // session exists, and only a member's callback can be verified.
   if (!row || !(await verifyOrganizationMembership(userId, row.organizationId))) {
     return Response.json({ valid: false }, { status: 200 });
   }
@@ -61,7 +53,5 @@ export async function verifyUploadSignature(
     return Response.json({ valid: false }, { status: 200 });
   }
 
-  // metadata is stored base64 verbatim; returned as-is so the shim decodes it
-  // straight into the proto's bytes field.
   return Response.json({ valid: true, metadata: row.metadata }, { status: 200 });
 }

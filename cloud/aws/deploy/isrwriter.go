@@ -12,42 +12,17 @@ import (
 	"net/http"
 )
 
-// The deploy host's half of the ISR writer contract (workers/isr-writer):
-// minting each build's write secret, seeding its hash into the writer's
-// per-deploy Durable Object, and retiring it when the build is pruned.
-
-// isrWriteSecret derives one app's write secret from the substrate's seed and
-// that app's isrPrefix. Deriving rather than minting keeps appCaches a pure
-// function of the deploy — it is called several times per run and every call
-// must agree — while still giving each app a secret that authorizes writes to
-// its slice alone.
-//
-// The seed comes from bootstrap (ensureISRWriterSeed) and outlives any one run,
-// so a build's secret is stable across redeploys and reproducible by the tag
-// publisher, which raises that build's invalidations against the same writer.
 func isrWriteSecret(seed, isrPrefix string) string {
 	mac := hmac.New(sha256.New, []byte(seed))
 	mac.Write([]byte(isrPrefix))
 	return hex.EncodeToString(mac.Sum(nil))
 }
 
-// isrWriteSecretHash is what the writer worker stores: the plaintext secret
-// never leaves the deploy host and the Lambda it is injected into.
 func isrWriteSecretHash(secret string) string {
 	sum := sha256.Sum256([]byte(secret))
 	return hex.EncodeToString(sum[:])
 }
 
-// checkISRWriterAgrees fails a deploy whose writer and cache store were adopted
-// independently of each other.
-//
-// The writer worker puts into the substrate's cache bucket and no other, while
-// the deployed function reads its entries from whichever store the membrane
-// found. The two are adopted from separate SSM parameters, so nothing but this
-// holds them equal: a deploy with a writer and no store would write every entry
-// into R2 and read every entry out of S3, missing on every request and
-// re-rendering forever, with nothing to say so. A deploy with a store and no
-// writer has no credential to write its entries with at all.
 func checkISRWriterAgrees(cfg Config) error {
 	adopted, writer := isrEntriesAdopted(cfg), isrWriterConfigured(cfg)
 	switch {
@@ -59,9 +34,6 @@ func checkISRWriterAgrees(cfg Config) error {
 	return nil
 }
 
-// seedISRWriters seeds every cached app's write-secret hash into the writer, so
-// each build's functions can write the moment they go live. A substrate that
-// adopted no writer seeds nothing.
 func seedISRWriters(ctx context.Context, cfg Config, caches map[string]*isrConfig) error {
 	if !isrWriterConfigured(cfg) {
 		return nil
@@ -75,33 +47,19 @@ func seedISRWriters(ctx context.Context, cfg Config, caches map[string]*isrConfi
 	return nil
 }
 
-// initializeISRWriter seeds one build's write-secret hash into the writer,
-// authenticated with the account-level bootstrap credential. It must land
-// before that build's functions serve a request, or their first entry write is
-// rejected.
 func initializeISRWriter(ctx context.Context, cfg Config, isrPrefix, secret string) error {
 	body := map[string]string{"secretHash": isrWriteSecretHash(secret)}
 	return isrWriterRequest(ctx, cfg, isrPrefix, "initialize", body)
 }
 
-// retireISRWriter drops one build's write secret when the build is pruned
-// (epic decision 6d), alongside the entries it wrote.
 func retireISRWriter(ctx context.Context, cfg Config, isrPrefix string) error {
 	return isrWriterRequest(ctx, cfg, isrPrefix, "destroy", nil)
 }
 
-// isrWriterReachable reports whether this Config can reach the writer at all. A
-// bootstrap predating it leaves the coordinates empty, and every writer call is
-// then a no-op. It is all a retirement needs: destroy is authorized by the
-// bootstrap credential, not by any deploy's secret, so a prune (which reads no
-// seed) still retires what it reclaims.
 func isrWriterReachable(cfg Config) bool {
 	return cfg.ISRWriterEndpoint != "" && cfg.ISRWriterBootstrapCred != ""
 }
 
-// isrWriterConfigured additionally requires the substrate's seed, which only a
-// deploy reads: without it there is no secret to derive, so nothing to point a
-// function at and nothing to seed.
 func isrWriterConfigured(cfg Config) bool {
 	return isrWriterReachable(cfg) && cfg.ISRWriterSeed != ""
 }

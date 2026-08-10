@@ -1,7 +1,5 @@
 import { pg } from "../ocel/index";
 
-// Thin data layer over postgres("main"). Route handlers call these instead of
-// touching the pool directly, so the SQL lives in one place.
 export type Todo = { id: number; title: string; done: boolean };
 
 export async function createTodo(title: string): Promise<Todo> {

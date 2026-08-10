@@ -14,8 +14,6 @@ import (
 	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
 )
 
-// A bytes.Buffer is not a *os.File, so New treats it as non-TTY and renders in
-// raw mode: every event is streamed to stdout and mirrored to the log.
 func newTestSession(t *testing.T, command string) (*Session, *bytes.Buffer, string) {
 	t.Helper()
 	dir := t.TempDir()
@@ -124,7 +122,7 @@ func TestBar(t *testing.T) {
 	}{
 		{0, 5, 0},
 		{5, 5, barWidth},
-		{10, 5, barWidth}, // clamp when current exceeds total
+		{10, 5, barWidth},
 	}
 	for _, tc := range cases {
 		got := bar(tc.current, tc.total)
@@ -135,7 +133,6 @@ func TestBar(t *testing.T) {
 }
 
 func TestStepIdentity(t *testing.T) {
-	// A typed phase groups its messages under the phase.
 	k1, title1 := stepIdentity(deploymentsv1.Phase_PHASE_PROVISIONING, "Preparing deployment stack")
 	k2, _ := stepIdentity(deploymentsv1.Phase_PHASE_PROVISIONING, "Provisioning resources")
 	if k1 != k2 {
@@ -144,16 +141,12 @@ func TestStepIdentity(t *testing.T) {
 	if title1 != "Provisioning" {
 		t.Errorf("title = %q, want Provisioning", title1)
 	}
-	// An unclassified event is its own step titled by its message.
 	k3, title3 := stepIdentity(deploymentsv1.Phase_PHASE_UNSPECIFIED, "Ensuring passphrase")
 	if k3 == k1 || title3 != "Ensuring passphrase" {
 		t.Errorf("unspecified step identity = (%q,%q), want its own message-keyed step", k3, title3)
 	}
 }
 
-// TestWaiting_PrintsWhereToGoAndHowToAbort pins the block a blocked run leaves
-// on screen. It is the whole of what a developer handed off to a browser has to
-// work with.
 func TestWaiting_PrintsWhereToGoAndHowToAbort(t *testing.T) {
 	s, out, logPath := newTestSession(t, "ocel deploy")
 	s.Waiting("1 variable is not ready — nothing has been built.\n\n  STRIPE_API_KEY (project root)\n", "http://127.0.0.1:5555/#t=abc")
@@ -169,9 +162,6 @@ func TestWaiting_PrintsWhereToGoAndHowToAbort(t *testing.T) {
 	}
 }
 
-// TestCancel_WhileWaiting_DoesNotWarnAboutResourcesThatCannotExist: the wait
-// stands before any provisioning, so the standard cancel warning would send the
-// developer looking for infrastructure that was never created.
 func TestCancel_WhileWaiting_DoesNotWarnAboutResourcesThatCannotExist(t *testing.T) {
 	s, out, _ := newTestSession(t, "ocel deploy")
 	s.Waiting("1 variable is not ready.", "http://127.0.0.1:5555/#t=abc")
@@ -186,9 +176,6 @@ func TestCancel_WhileWaiting_DoesNotWarnAboutResourcesThatCannotExist(t *testing
 	}
 }
 
-// TestWaiting_NeverPersistsTheSessionTokenToTheLog: the variables UI carries
-// its bearer token in the URL fragment so it reaches no log — and this log
-// outlives the wait, and is the file the run tells the developer to open.
 func TestWaiting_NeverPersistsTheSessionTokenToTheLog(t *testing.T) {
 	const token = "s3cr3t-session-token"
 	s, out, logPath := newTestSession(t, "ocel deploy")
@@ -208,13 +195,11 @@ func TestWaiting_NeverPersistsTheSessionTokenToTheLog(t *testing.T) {
 	if !strings.Contains(log, "[waiting] http://127.0.0.1:41234/") {
 		t.Errorf("log = %q, want the wait recorded with the address", log)
 	}
-	// The screen still gets the whole URL: it is what the developer clicks.
 	if !strings.Contains(out.String(), token) {
 		t.Errorf("stdout = %q, want the full URL on screen", out.String())
 	}
 }
 
-// lockedWriter serialises the render loop's writes against the test's reads.
 type lockedWriter struct {
 	mu sync.Mutex
 	b  bytes.Buffer
@@ -232,10 +217,6 @@ func (w *lockedWriter) String() string {
 	return w.b.String()
 }
 
-// newCleanTestSession builds a Session in the phased view — spinner, render
-// loop and all — against an in-memory writer. Everything Waiting and Resume do
-// beyond printing exists only in that view, so the seam is the only way to
-// reach it without a pty.
 func newCleanTestSession(t *testing.T) (*Session, *lockedWriter) {
 	t.Helper()
 	prev := isTTY
@@ -251,14 +232,10 @@ func newCleanTestSession(t *testing.T) (*Session, *lockedWriter) {
 	return s, out
 }
 
-// TestWaiting_StopsTheRenderLoopSoTheBlockSurvives: the block is the whole of
-// what a developer handed off to a browser has to work with, and the render
-// loop repaints one line in place — so a wait that does not stop it scrolls
-// the URL away a frame later.
 func TestWaiting_StopsTheRenderLoopSoTheBlockSurvives(t *testing.T) {
 	s, out := newCleanTestSession(t)
 	s.Building()
-	time.Sleep(3 * frameRate) // the spinner is painting
+	time.Sleep(3 * frameRate)
 
 	s.Waiting("1 variable is not ready.", "http://127.0.0.1:5555/#t=abc")
 	settled := out.String()
@@ -269,9 +246,6 @@ func TestWaiting_StopsTheRenderLoopSoTheBlockSurvives(t *testing.T) {
 	}
 }
 
-// TestResume_RestartsTheSpinnerTheWaitStopped: the wait stops the animation, so
-// a run that carries on must start it again or it looks hung for the rest of
-// the deploy.
 func TestResume_RestartsTheSpinnerTheWaitStopped(t *testing.T) {
 	s, out := newCleanTestSession(t)
 	s.Building()
@@ -286,8 +260,6 @@ func TestResume_RestartsTheSpinnerTheWaitStopped(t *testing.T) {
 	}
 }
 
-// TestCancel_AfterResume_WarnsAboutResourcesAgain: once the run is moving
-// again it can provision, so the wait must not leave its reassurance behind.
 func TestCancel_AfterResume_WarnsAboutResourcesAgain(t *testing.T) {
 	s, out, _ := newTestSession(t, "ocel deploy")
 	s.Waiting("1 variable is not ready.", "http://127.0.0.1:5555/#t=abc")

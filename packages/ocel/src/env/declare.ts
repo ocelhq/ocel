@@ -19,10 +19,6 @@ const WIRE_CLASS: Record<VariableClass, WireClass> = {
   secret: WireClass.SECRET,
 };
 
-// declareEnv sends every definition of one call, validates the cells the
-// store answers with, and reports what a deploy must not proceed on. The
-// verdict is formed here because the schemas are here: they are live objects
-// in this language and could not travel to the CLI.
 export async function declareEnv(
   definitions: Definitions,
   source: string,
@@ -68,9 +64,6 @@ function validate(
       }
     }
 
-    // A live cell arrives as presence without plaintext, so there is nothing
-    // to check here; its schema is re-checked at runtime init instead, which
-    // is required regardless because a live value can drift after a deploy.
     if (definition.class === "secret" || !definition.schema) continue;
 
     for (const cell of stored) {
@@ -91,10 +84,6 @@ function validate(
   return problems;
 }
 
-// requiredFolders is the required-cell matrix for one key. A scoped variable
-// owes a value to every folder it names and none to the root, so a root value
-// could never be read; an unscoped one owes exactly the root, and a value in a
-// folder is an override the root still has to back.
 function requiredFolders(definition: VariableDefinition): readonly string[] {
   return definition.folders?.length ? definition.folders : [""];
 }

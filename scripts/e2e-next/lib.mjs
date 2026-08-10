@@ -1,87 +1,29 @@
-// Pure helpers shared by the Next.js adapter-harness lifecycle scripts
-// (deploy.mjs, logs.mjs, cleanup.mjs, merge-baseline.mjs) and by the two
-// project-level scripts the workflow drives (project-teardown.mjs,
-// sweep-projects.mjs). The harness runs them as separate processes, so
-// everything they share travels through files in the temp app directory rather
-// than memory.
-
 import { join, relative } from "node:path";
 
-/** A valid single DNS label, per RFC 1035 (mirrors cli/internal/previewid). */
 export const DNS_LABEL = /^[a-z]([a-z0-9-]{0,61}[a-z0-9])?$/;
 
-/**
- * The file deploy.mjs persists this app's identity — the run's project slug and
- * this app's own preview ref — to, read by logs/cleanup.
- */
 export const STATE_FILE = ".ocel-e2e.json";
 
-/** The file every byte of the deploy's output is redirected to. */
 export const BUILD_LOG_FILE = ".adapter-build.log";
 
-/** The CLI's machine-readable deploy result, relative to the app directory. */
 export const DEPLOY_RESULT_FILE = join(".ocel", "deploy-result.json");
 
-/** Run-id token used when the scripts run outside GitHub Actions. */
 const LOCAL_RUN_ID = "local";
 
-/** The SSM path every project's preview root-stack state is stored under, one
- * parameter per project (cloud/aws/bootstrap/rootstack.go). Enumerating it is
- * how the sweeper finds projects an earlier run stranded. */
 export const PREVIEW_ROOT_STACK_PARAM_PREFIX = "/ocel/rootstack-preview/";
 
-/** The prefix every project this suite mints carries, and the only thing that
- * marks a project as this suite's to reclaim. */
 export const SLUG_PREFIX = "e2e-";
 
-/**
- * The name every temp app is declared under. Isolation lives in the preview
- * pointer (previewRef), so a per-app name would buy nothing and cost length:
- * the project's asset prefixes and Lambda tags carry it verbatim.
- */
 export const APP_NAME = "app";
 
-/**
- * The longest slug the project's one preview worker script can still be named
- * after: `ocel-<slug>-preview` (cloud/aws/deploy/production.go) has 63
- * characters to fit in, and the slug itself must be a DNS label
- * (cli/internal/projectconfig).
- */
 export const MAX_SLUG_LEN = 63 - "ocel-".length - "-preview".length;
 
-/**
- * projectSlug is the `slug` of the ONE Ocel project a whole CI run deploys
- * into. The project owns the preview wildcard domain — a project's declaration
- * of `domains.preview` claims that wildcard outright — so two projects can
- * never share one, and a run therefore mints exactly one project and hangs
- * every fixture off it as a preview pointer (previewRef).
- *
- * It must be a valid single DNS label within MAX_SLUG_LEN, unique per run, and
- * stable for that run: cleanup, the sweeper and the destroy job all re-derive
- * it, and a slug that cannot be re-derived is infrastructure nothing will ever
- * tear down — and, because it holds the domain claim, one that blocks every
- * future run until a human reclaims it.
- */
 export function projectSlug({ runId }) {
   const run = sanitizeToken(String(runId ?? "")) || LOCAL_RUN_ID;
-  // SLUG_PREFIX gives the label its required letter start and marks the project
-  // as this suite's; the run token is capped so it cannot push past the budget,
-  // and re-trimmed because the cut can land on a hyphen.
   const maxRun = MAX_SLUG_LEN - SLUG_PREFIX.length;
   return SLUG_PREFIX + run.slice(0, maxRun).replace(/-+$/, "");
 }
 
-/**
- * previewRef is the git ref one temp app's ephemeral preview is keyed by:
- * `ocel preview up --ref <ref>` resolves it through previewid.Resolve, which
- * sanitizes and hashes it into the pointer that becomes the app's subdomain
- * label. The temp directory is what makes it unique — it is the harness's own
- * per-suite isolation — and keeping the path readable in the pointer is what
- * lets a stranded preview be traced back to the suite that left it.
- *
- * Trailing separators are dropped so two spellings of one directory cannot
- * resolve to two pointers.
- */
 export function previewRef({ dir }) {
   const ref = String(dir ?? "").trim().replace(/\/+$/, "");
   if (!ref) {
@@ -90,13 +32,6 @@ export function previewRef({ dir }) {
   return ref;
 }
 
-/**
- * projectSlugForRun and previewRefForApp are how deploy.mjs and cleanup.mjs
- * derive the two identities. Both scripts must derive the SAME pair from the
- * same environment — a drift between them means cleanup tears down the wrong
- * preview, or nothing at all — so the environment reads live here, in one
- * place, rather than at each call site.
- */
 export function projectSlugForRun() {
   return projectSlug({ runId: process.env.GITHUB_RUN_ID });
 }
@@ -105,17 +40,6 @@ export function previewRefForApp(appDir) {
   return previewRef({ dir: process.env.NEXT_TEST_DIR || appDir });
 }
 
-/**
- * strandedProjectSlugs picks the projects an earlier run left behind out of a
- * listing of SSM parameter names under PREVIEW_ROOT_STACK_PARAM_PREFIX: every
- * slug this suite minted (SLUG_PREFIX) except the running run's own.
- *
- * This is the suite's only orphan reclamation. A cancelled or killed run never
- * reaches its destroy job, and the project it leaves behind still holds the
- * preview domain's wildcard route — which is an account-wide claim, so it
- * blocks every future run rather than merely costing money. Anything not
- * carrying the prefix is somebody else's project and is left alone.
- */
 export function strandedProjectSlugs(parameterNames, keepSlug) {
   const slugs = (parameterNames ?? [])
     .map((name) => String(name ?? ""))
@@ -132,15 +56,6 @@ function sanitizeToken(value) {
     .replace(/^-+|-+$/g, "");
 }
 
-/**
- * renderOcelConfig is the ocel.config.ts written into the temp app, and the one
- * project-teardown.mjs renders into a scratch directory to address the project
- * with. `slug` is the run's project (projectSlug) and the app under it is
- * declared explicitly rather than discovered, under APP_NAME. Pure: cleanup and
- * teardown re-render it from the same environment when a failed deploy left no
- * config behind. `ocel` and `@ocel/provider-aws` must resolve from the
- * directory it is written to — the config is bundled and executed from there.
- */
 export function renderOcelConfig({ slug, previewDomain }) {
   const lines = [
     `import { defineConfig } from "ocel/config";`,
@@ -162,11 +77,6 @@ export function renderOcelConfig({ slug, previewDomain }) {
   return lines.join("\n");
 }
 
-/**
- * withBuildScript returns the app's package.json with a `build` script, which
- * buildNext requires (it throws without one). An app that already declares one
- * keeps it: the fixture may build with flags of its own.
- */
 export function withBuildScript(pkg) {
   if (pkg.scripts?.build) {
     return pkg;
@@ -174,33 +84,8 @@ export function withBuildScript(pkg) {
   return { ...pkg, scripts: { ...pkg.scripts, build: "next build" } };
 }
 
-/**
- * The only TypeScript range a temp app may build against. typescript@7 is the
- * Go-native rewrite: its exports map is `{ ".": "./lib/version.cjs" }` and it
- * ships no `lib/typescript.js`, which is the file Next's
- * has-necessary-dependencies probes for. Without it Next decides TypeScript is
- * missing, auto-installs `typescript@latest` (getting 7 again), and then calls
- * `require(undefined)`.
- */
 export const TYPESCRIPT_PIN = "^5";
 
-/**
- * withPinnedTypeScript returns the app's package.json with every route to
- * TypeScript 7 closed, or the same object when they already are.
- *
- * Three routes exist and all three are closed, because closing only the first
- * leaves the others open:
- *
- * - a declared `typescript` that floats (`latest`, `*`, `^7`) — rewritten;
- * - a fixture that declares none at all but carries a tsconfig or a .ts file,
- *   which makes Next install one itself at build time — given an explicit
- *   devDependency, so the probe finds TypeScript 5 and the auto-install never
- *   runs;
- * - a transitive one — pinned by an override. Both the npm/yarn `overrides`
- *   spelling and pnpm's `pnpm.overrides` are written: the temp app has no
- *   lockfile, so which package manager Next's auto-install would detect is not
- *   something this script can decide for it.
- */
 export function withPinnedTypeScript(pkg) {
   const patched = { ...pkg };
   let changed = false;
@@ -231,100 +116,27 @@ export function withPinnedTypeScript(pkg) {
   return changed ? patched : pkg;
 }
 
-/**
- * The smoke app's revalidation probe, and the window it declares. Mirrors
- * `revalidate` and the marker in smoke-app/app/isr/page.tsx — assert-isr.mjs
- * reads them from here so the page and its assertion cannot drift apart.
- */
 export const ISR_ROUTE = "/isr";
 export const ISR_REVALIDATE_SECONDS = 5;
 
-/**
- * isrToken pulls the probe page's per-render token out of its html. Null when
- * the marker is absent, which means the response was not that page at all —
- * a redirect, an error page, or a build that dropped the route — and must be
- * reported as such rather than compared as a value.
- *
- * The token is a sibling text child of the marker, and React's hydratable
- * renderer delimits adjacent text with an empty comment, so what a probe
- * actually reads is `isr-token:<!-- -->1769…`. Every marker page here is written
- * that way; tolerating the separator keeps the shape of the JSX from deciding
- * whether the assertion can see its own probe.
- */
 export function isrToken(html) {
   return /isr-token:(?:<!--.*?-->)?(\d+)/.exec(String(html ?? ""))?.[1] ?? null;
 }
 
-/**
- * The tag-publisher probe's route, and the tag it raises. Mirrors
- * smoke-app/app/api/revalidate-tag/route.ts — assert-tag-publisher.mjs reads
- * them from here so the route and its assertion cannot drift apart.
- */
 export const TAG_PROBE_ROUTE = "/api/revalidate-tag";
 
-/**
- * tagProbeTag names one run's invalidation. It must be unique per run: the
- * assertion proves the publisher carried *this* raise, and a tag some earlier
- * run already published would be found in the snapshot before the probe fired.
- */
 export function tagProbeTag(stamp) {
   return `ocel-publisher-probe-${stamp}`;
 }
 
-/**
- * The golden comparison's probe route and the marker its body carries. Mirrors
- * smoke-app/app/golden/page.tsx — assert-suppression-golden.mjs reads them from
- * here so the page and its assertion cannot drift apart.
- */
 export const GOLDEN_ROUTE = "/golden";
 export const GOLDEN_MARKER = "golden-body:v1";
 
-/**
- * The probe page's own `revalidate`, kept short on purpose. `purpose: prefetch`
- * is read at exactly one place in Next's response cache
- * (`if (!entry.isStale || context.isPrefetch) return entry;`), where the FIRST
- * operand short-circuits on a fresh entry — so a comparison made against a
- * freshly warmed page proves only that the header does not change a fresh
- * serve, and never evaluates the branch it is guarding. The assertion waits out
- * this window before each pair so both legs are answered from a STALE entry,
- * which is the only state where `purpose` can change anything — and the state
- * suppression puts every governed route into.
- */
 export const GOLDEN_REVALIDATE_SECONDS = 3;
 
-/**
- * The header the edge stamps on a user-path forward to suppress Next's own
- * self-revalidation (bd ocelhq-wvag.26, workers/nextjs/src/index.ts).
- */
 export const PREFETCH_PURPOSE_HEADER = "purpose";
 export const PREFETCH_PURPOSE_VALUE = "prefetch";
 
-/**
- * Headers a golden comparison must ignore, because they differ between any two
- * responses whatever the request carried:
- *
- * - `date`/`age`: the responses are seconds apart.
- * - `x-nextjs-cache`: the freshness of the entry each render was answered from,
- *   which is what the suppression legitimately changes.
- * - `x-ocel-cache`, and `x-vercel-cache` where the build opted into the alias
- *   (OCEL_E2E_VERCEL_CACHE_HEADER): the tier that answered. Compared separately
- *   by the assertion, which requires both legs to report the same one — a
- *   difference there means the legs were never comparable, not that the render
- *   differed.
- * - the Cloudflare and connection-level set: stamped per response by the edge
- *   and the transport, never by the render.
- * - the `x-amzn-*` set: the Lambda Function URL stamps a fresh request id, trace
- *   id and receive date on every invocation and the edge forwards them, so they
- *   differ between any two responses by construction. They reached this
- *   comparison for the first time on the live run for ocelhq-wvag.27 — a local
- *   run has no Function URL in front of it — and failed both variants on nothing
- *   but per-invocation ids while the bodies were byte-identical.
- *
- * Everything else — status, body bytes, content-type, etag, x-matched-path,
- * x-nextjs-postponed, Next's own vary — is compared, which is the point: the
- * caveat this gate exists for is that a future Next could make `purpose`
- * change what is rendered.
- */
 export const GOLDEN_VOLATILE_HEADERS = new Set([
   "date",
   "age",
@@ -359,15 +171,6 @@ function headerMap(headers) {
   return map;
 }
 
-/**
- * goldenDifferences compares two fetches of the same route that differ only in
- * whether the origin leg carried `purpose: prefetch`, and returns one line per
- * difference — empty when the header had no observable side effect.
- *
- * A leg is `{ status, headers, body }`. Bodies are compared as exact strings:
- * the probe page renders no clock and no request data, so any difference at all
- * is the header's.
- */
 export function goldenDifferences(withHeader, without) {
   const differences = [];
   if (withHeader?.status !== without?.status) {
@@ -388,18 +191,12 @@ export function goldenDifferences(withHeader, without) {
   return differences;
 }
 
-/** Where two bodies first diverge, and by how much — enough to act on. */
 function byteDiff(a, b) {
   if (a.length !== b.length) return `lengths ${a.length} vs ${b.length}`;
   const at = [...a].findIndex((char, index) => char !== b[index]);
   return `differs at offset ${at}: ${JSON.stringify(a.slice(at, at + 40))} vs ${JSON.stringify(b.slice(at, at + 40))}`;
 }
 
-/**
- * deployURL is the URL the harness reads from the deploy script's stdout, taken
- * from the CLI's deploy result. A successful deploy that featured no app URL is
- * a failure for our purposes: the harness has nothing to test.
- */
 export function deployURL(result) {
   const url = result?.appUrls?.[0];
   if (!url) {
@@ -408,16 +205,6 @@ export function deployURL(result) {
   return url;
 }
 
-/**
- * markerLines formats the three lines the harness parses out of the logs
- * script's output. A missing value is reported as the literal "undefined",
- * which is what the contract asks for — never a blank value.
- *
- * `DEPLOYMENT_ID` is the harness's own marker name, not ours: it is an external
- * contract, so it keeps that spelling while carrying Ocel's promotion id.
- * IMMUTABLE_ASSET_TOKEN is always undefined — the Ocel adapter never sets
- * `config.deploymentId`, so its assets carry no `?dpl=` token.
- */
 export function markerLines({ buildId, promotionId }) {
   return [
     `BUILD_ID: ${buildId || "undefined"}`,
@@ -426,12 +213,6 @@ export function markerLines({ buildId, promotionId }) {
   ];
 }
 
-/**
- * lambdaFunctionNames maps a resourcegroupstaggingapi get-resources response
- * to the names of the Lambda functions it found. Function names are
- * Pulumi-autonamed, so the ocel tags (cloud/aws/deploy/function.go) are the
- * only way to find them.
- */
 export function lambdaFunctionNames(response) {
   return (response?.ResourceTagMappingList ?? [])
     .map((entry) => /^arn:aws:lambda:[^:]*:[^:]*:function:([^:]+)/.exec(entry?.ResourceARN ?? ""))
@@ -439,21 +220,10 @@ export function lambdaFunctionNames(response) {
     .map((match) => match[1]);
 }
 
-/**
- * lambdaLogGroups maps a resourcegroupstaggingapi get-resources response into
- * the CloudWatch log groups of the Lambdas it found; the caller filters on
- * `ocel:project`, this app's own slug being what is unique per deploy.
- */
 export function lambdaLogGroups(response) {
   return lambdaFunctionNames(response).map((name) => `/aws/lambda/${name}`);
 }
 
-/**
- * envSegment is the environment segment of an app's asset-key prefix. Mirrors
- * envSegment in cloud/aws/server/server.go: "prod" for a production deploy,
- * "preview-<identity>" for a preview one — the same token a deploy's Pulumi
- * stack name also carries.
- */
 export function envSegment(environment) {
   if (environment?.class === "preview") {
     return `preview-${environment?.identity ?? ""}`;
@@ -461,112 +231,38 @@ export function envSegment(environment) {
   return "prod";
 }
 
-/**
- * appAssetPrefix is the S3 key prefix one app's assets — and, when it caches,
- * its bytecode archive — live under. Mirrors appAssetPrefixFor in
- * cloud/aws/deploy/prerender.go: <env>/<slug>/<app>/<buildId>. `app` is
- * assumed to already be a valid worker name (sanitizeWorkerName's job on the
- * Go side) — every app this suite deploys is declared under the constant
- * APP_NAME, which needs no sanitizing.
- */
 export function appAssetPrefix({ environment, slug, app, buildId }) {
   return [envSegment(environment), slug, app, buildId].join("/");
 }
 
-/**
- * bytecodeCacheKeyPrefix is the S3 prefix every bytecode cache object for one
- * function lives under. Mirrors the directory portion of bytecodeCacheKey in
- * cloud/aws/cmd/lambdanode/bootstrap/bytecode.go — the filename that follows
- * it carries the live node patch version, which nothing outside a running
- * instance can know ahead of time, so a caller lists this prefix rather than
- * composing the full key.
- */
 export function bytecodeCacheKeyPrefix({ prefix, functionName }) {
   return `${prefix}/bytecode/${functionName}/`;
 }
 
 const BYTECODE_ARCHIVE_NAME = /^node(\d+\.\d+\.\d+)-([a-z0-9_]+)\.tar\.gz$/;
 
-/**
- * bytecodeCacheKeyName parses the filename segment of a bytecode cache key —
- * everything after bytecodeCacheKeyPrefix — into its node version and arch,
- * or null if it does not have the "node<version>-<arch>.tar.gz" shape
- * bytecodeCacheKey in bytecode.go composes. A caller lists objects under the
- * prefix and uses this to tell a real cache archive from anything else that
- * might land there, and to assert the version is the three-dot-separated-
- * numbers shape bytecode.go's canonicalNodeVersion requires.
- */
 export function bytecodeCacheKeyName(name) {
   const match = BYTECODE_ARCHIVE_NAME.exec(name ?? "");
   if (!match) return null;
   return { nodeVersion: match[1], arch: match[2] };
 }
 
-/**
- * The stderr line the S3 read leg logs on a hit, up to the key it names
- * (rehydrateCompileCache, cloud/aws/cmd/lambdanode/bootstrap/bytecode.go).
- * Exported so a caller that must prove this leg *never* ran — assert-embed.mjs,
- * where an S3 fetch means the embedded copy was not used — can look for it
- * without knowing which key an instance would have composed.
- */
 export const BYTECODE_S3_REHYDRATE_MARKER = "rehydrated compile cache from ";
 
-/**
- * The stderr line the embedded read leg logs on a hit, up to the path it names
- * (embeddedBytecodeCache, cloud/aws/cmd/lambdanode/bootstrap/bytecode.go).
- * Deliberately not a superstring or substring of BYTECODE_S3_REHYDRATE_MARKER:
- * the two legs are only distinguishable in CloudWatch because these two
- * wordings share no matchable text, and a change on the Go side that made one
- * contain the other would silently turn "read from the artifact" into "read
- * from S3" for every assertion here.
- */
 export const BYTECODE_EMBEDDED_MARKER = "loaded embedded compile cache from ";
 
-/** The env var gating the deploy-time embed pass (cloud/aws/deploy/embed.go). */
 export const BYTECODE_EMBED_ENV = "OCEL_BYTECODE_EMBED";
 
-/**
- * bytecodeEmbedEnabled mirrors the deploy's own gate: opt-in, and only the
- * literal "1". Anything else — unset, "true", "0" — is off, so an assertion
- * written for the embedded artifact skips rather than failing a deployment
- * that was never asked to embed.
- */
 export function bytecodeEmbedEnabled(env) {
   return (env ?? {})[BYTECODE_EMBED_ENV] === "1";
 }
 
-/**
- * embeddedBytecodePath is the path, inside the deployed `.func` zip, that the
- * embed pass bakes the cache at key to — `.ocel/bytecode/node<version>-<arch>.tar`
- * — or null for a key that names no cache tarball.
- *
- * Both sides derive it this way, from the key rather than from a version and an
- * arch read again: embeddedTarPath (cloud/aws/deploy/embed.go) on the way in and
- * embeddedBytecodePath (bytecode.go) on the way out. Asserting the same
- * derivation from the key an independent S3 listing found is what proves the
- * match rule holds, rather than just that *some* tar was embedded.
- *
- * The stored object is gzipped and the embedded one is not — the zip container
- * compresses it instead — so this is the key's basename minus the `.gz`.
- */
 export function embeddedBytecodePath(key) {
   const name = String(key ?? "").split("/").pop();
   if (!bytecodeCacheKeyName(name)) return null;
   return `.ocel/bytecode/${name.slice(0, -".gz".length)}`;
 }
 
-/**
- * bytecodeEmbeddedOutcome classifies one CloudWatch message against every line
- * the embedded read leg can emit for the tar at tarPath — the absolute
- * /var/task path the membrane logs, not the zip-relative one. Same contract as
- * bytecodeRehydrateOutcome: null for an unrelated line, and every failure mode
- * classified rather than dropped, so "the embedded leg was tried and failed" is
- * never reported as "the embedded leg never ran".
- *
- * An absent tar produces no line at all by design (an artifact built without the
- * embed pass is the ordinary case), so there is no "miss" kind here: absence is
- * the caller's to conclude from the whole window, not from any one message.
- */
 export function bytecodeEmbeddedOutcome(message, tarPath) {
   const text = String(message ?? "");
   if (text.includes(`could not open the embedded compile cache at ${tarPath}:`)) {
@@ -586,19 +282,6 @@ export function bytecodeEmbeddedOutcome(message, tarPath) {
 
 const EMBEDDED_ARTIFACT_KEY = /^(.*)-bc-([0-9a-f]+)\.zip$/;
 
-/**
- * embeddedArtifactPairs picks the repackaged artifacts out of a listing of
- * artifact keys and pairs each with the original it extends. The embed pass
- * writes `<original key minus .zip>-bc-<digest>.zip` beside the original rather
- * than replacing it (embeddedArtifactKey, cloud/aws/deploy/embed.go), so both
- * objects are present afterwards and the pair is discoverable from the bucket
- * alone — nothing outside the deploy is told either key.
- *
- * `original` is null when the counterpart is missing from the listing, which is
- * a fact worth surfacing rather than a pair to drop: it means the artifact the
- * function was warmed on is gone, and the "the code changed" assertion has
- * nothing left to compare against.
- */
 export function embeddedArtifactPairs(keys) {
   const all = new Set(keys ?? []);
   return (keys ?? []).flatMap((key) => {
@@ -609,30 +292,6 @@ export function embeddedArtifactPairs(keys) {
   });
 }
 
-/**
- * bytecodeRehydrateOutcome classifies one CloudWatch log message against
- * every read-leg line rehydrateCompileCache, rehydrateBytecodeCache and
- * resolveBytecodeResolution (cloud/aws/cmd/lambdanode/bootstrap/bytecode.go)
- * can emit, or null when the message is unrelated. That file is the source
- * of truth for the literal strings matched below — a wording change there
- * must be mirrored here, or a message that used to classify silently starts
- * returning null. assert-bytecode.mjs uses this to tell a proven hit from
- * every failure mode it can only report as a symptom: matched by exact
- * substring rather than parsed, since these are the literal lines the
- * membrane emits, not a format to decode.
- *
- * The `dir`-clear failure and the two resolveBytecodeResolution off-switch
- * lines name no key — the off-switch lines because a version probe or AWS
- * config load can fail before a key is ever composed, the clear failure
- * because its format string names `dir`, not `key`, even though the key is
- * already fully composed and in hand by then — so all three are matched on
- * a keyless substring instead, the same technique as "disabled" below: none
- * of the other lines this function matches could ever produce that
- * substring, so it stays unambiguous without `key` to narrow it. Classified
- * anyway, under "disabled" and "clear-error", because a caller polling by
- * key would otherwise never learn the feature turned itself off, or failed
- * before it could even try to read, on some instance.
- */
 export function bytecodeRehydrateOutcome(message, key) {
   const text = String(message ?? "");
   if (text.includes(`${BYTECODE_S3_REHYDRATE_MARKER}${key}:`)) {
@@ -662,39 +321,12 @@ export function bytecodeRehydrateOutcome(message, key) {
   return null;
 }
 
-/**
- * summarizeOutcomes turns the non-hit outcomes collected while polling into
- * "N kind, M kind" — a caller counting instances covers every failure mode the
- * *Outcome classifiers above can produce without a case list growing at the call
- * site every time one of them learns a new one.
- */
 export function summarizeOutcomes(outcomes) {
   const counts = new Map();
   for (const { kind } of outcomes) counts.set(kind, (counts.get(kind) ?? 0) + 1);
   return [...counts.entries()].map(([kind, n]) => `${n} ${kind}`).join(", ") || "0 related lines";
 }
 
-/**
- * logWindowVerdict decides whether a poll loop read enough of a CloudWatch
- * window for the *absence* of a line in it to mean anything.
- *
- * A presence claim needs no such thing — one successful read that finds the line
- * settles it, and every failed read only risks a false failure. An absence claim
- * is the opposite: it is a statement about the whole window, so it is only as
- * strong as the reading of it, and a poll loop that half failed can produce a
- * clean-looking result for entirely the wrong reason.
- *
- * `filter-log-events` re-reads the window from its start every time, so one
- * successful call sees everything ingested before it and nothing after. Failures
- * *inside* the loop are therefore recoverable — a later read covers what they
- * missed — but the loop has to end on a successful read, or the newest part of
- * the window was never looked at. Hence `confirmed`: the outcome of a final read
- * taken after the loop, not of the loop as a whole.
- *
- * `events` is how many that final read returned. At `pageLimit` the response is
- * a truncated view of the window rather than the whole of it, and a line the
- * caller is claiming never appeared may simply have been paged off the end.
- */
 export function logWindowVerdict({ attempts, failures, confirmed, events, pageLimit }) {
   const tried = `${attempts - failures}/${attempts} reads succeeded`;
   if (!confirmed) {
@@ -712,25 +344,8 @@ export function logWindowVerdict({ attempts, failures, confirmed, events, pageLi
   return { kind: "read", detail: `${tried}, the last of them returning all ${events} events in the window` };
 }
 
-/**
- * The stderr line a warm invocation lands its whole summary on
- * (answerWarmInvocation, cloud/aws/cmd/lambdanode/bootstrap/warm.go). The
- * deploy reads that same summary out of the invoke's response payload, but the
- * response is gone by the time anything asserts against the deployment —
- * CloudWatch is the only place it survives, which is what makes the deploy's
- * warm pass observable from outside at all.
- */
 export const WARM_SUMMARY_MARKER = "ocel: warm invocation:";
 
-/**
- * warmSummaryOutcome classifies one CloudWatch message as the warm summary the
- * membrane logged, or null when it is some other line.
- *
- * A line carrying the marker but no readable JSON is returned as "unreadable"
- * rather than dropped: that is a summary CloudWatch split or truncated, and
- * treating it as "no warm ever happened" would turn a reporting problem into a
- * claim about the deployment.
- */
 export function warmSummaryOutcome(message) {
   const text = String(message ?? "");
   const at = text.indexOf(WARM_SUMMARY_MARKER);
@@ -742,31 +357,6 @@ export function warmSummaryOutcome(message) {
   }
 }
 
-/**
- * warmCoverage says what one warm summary proves about the cache the build
- * ended up with. The states are warm.go's four, read for two separate claims:
- * that *this pass* is what published the object (attribution), and that what it
- * published covers the whole bundle (coverage).
- *
- * Attribution rests on the PUT being create-if-absent: exactly one writer can
- * ever create a given key, and warm.go reports that writer as
- * published/uploaded:true and every loser as already-cached. So published with
- * uploaded:true is the only reply that proves warming — not a request, not an
- * earlier run — created the object at `key`. published without uploaded:true is
- * not a weaker version of that claim but a contradiction, and is reported as a
- * failure rather than believed.
- *
- * Coverage is loaded against entries, qualified by where the walk stopped. A
- * ceiling or deadline stop is a real, reportable outcome of a bundle that is
- * too big or too slow to warm whole — "partial", for a caller to surface — not
- * a broken cache and not a proof of a complete one. A publish the membrane
- * could not account for (`uncounted`: node never reported back, or the artifact
- * has no warm capability) is "partial" for the same reason: the object landed,
- * and nothing measured what went into it.
- *
- * already-cached is "unproven", never a pass: the object exists, but this pass
- * neither wrote it nor measured what is in it.
- */
 export function warmCoverage(summary, key) {
   const state = summary?.state ?? "";
   const entries = summary?.entries ?? 0;
@@ -781,9 +371,6 @@ export function warmCoverage(summary, key) {
       `${summary?.skippedCount ?? 0} skipped${skipped.length ? ` (${skipped.join(", ")})` : ""}, ` +
       `stopped by ${stoppedBy || "(unreported)"}, ${summary?.bytes ?? 0} bytes`;
 
-  // A summary naming another key is another build's, and says nothing either
-  // way about this one — the key carries the build id, so the two can never be
-  // confused for each other.
   if (summary?.key && key && summary.key !== key) {
     return { kind: "other-build", detail: `names ${summary.key}, not ${key}` };
   }
@@ -819,13 +406,6 @@ export function warmCoverage(summary, key) {
   }
 }
 
-/**
- * How much a coverage verdict proves, weakest first. A window can hold more
- * than one summary for the same key — a redeployed build warms again, and that
- * second pass legitimately answers already-cached — so a caller takes the
- * strongest rather than the first or the last: the object is one object, and
- * the pass that actually wrote it is the one that says what is in it.
- */
 const WARM_COVERAGE_RANK = ["failed", "unproven", "partial", "complete"];
 
 export function strongestCoverage(verdicts) {
@@ -851,15 +431,6 @@ function tarHeaderChecksum(block) {
   return sum;
 }
 
-/**
- * tarEntryNames walks an uncompressed tar buffer and returns each entry's
- * name (its ustar `prefix` field joined on, when set). It exists so
- * assert-bytecode.mjs can prove the membrane's upload is a real archive
- * rather than truncated or empty bytes, without a dependency: every header's
- * checksum is verified, and a buffer that runs out mid-header or never
- * reaches the two-zero-block end-of-archive marker throws rather than
- * silently returning a partial entry list.
- */
 export function tarEntryNames(buffer) {
   const names = [];
   let offset = 0;
@@ -898,31 +469,11 @@ const ZIP64_EOCD_SIGNATURE = 0x06064b50;
 const ZIP_CENTRAL_SIGNATURE = 0x02014b50;
 const ZIP_CENTRAL_MIN_SIZE = 46;
 
-/**
- * zipEntryNames reads a zip's central directory and returns every entry's
- * name. It exists so assert-embed.mjs can look inside the package Lambda
- * actually deployed — fetched from the presigned Code.Location — without a
- * dependency and without shelling out to unzip(1).
- *
- * It reads the central directory rather than scanning for local headers
- * because only the central directory is authoritative: a local header can be
- * a leftover from a truncated write, and the embed pass copies existing
- * entries through zip.Writer.Copy (cloud/aws/deploy/embed.go), which rewrites
- * the central directory and nothing else.
- *
- * Every malformed input throws rather than returning a short list. The one
- * claim built on this is that a named entry is *absent*, and a parser that
- * quietly stopped early would make that claim out of its own bug.
- */
 export function zipEntryNames(buffer) {
   const eocd = findZipEOCD(buffer);
   let count = buffer.readUInt16LE(eocd + 10);
   let start = buffer.readUInt32LE(eocd + 16);
 
-  // A zip past 65535 entries or 4 GiB parks the real values in a zip64 record
-  // and leaves these fields saturated. A pnpm node_modules tree reaches the
-  // entry count long before the size, so this is a real case here, not
-  // defensive padding.
   if (count === 0xffff || start === 0xffffffff) {
     const locator = eocd - ZIP64_LOCATOR_SIZE;
     if (locator < 0 || buffer.readUInt32LE(locator) !== ZIP64_LOCATOR_SIGNATURE) {
@@ -958,11 +509,6 @@ export function zipEntryNames(buffer) {
   return names;
 }
 
-// The end-of-central-directory record is last but variable-length: its trailing
-// comment can be up to 65535 bytes, so it is found by scanning back rather than
-// read at a fixed offset. Scanning from the end takes the *last* candidate,
-// which is the real one even when an entry's contents happen to hold the same
-// four bytes.
 function findZipEOCD(buffer) {
   const floor = Math.max(0, buffer.length - ZIP_EOCD_MIN_SIZE - 0xffff);
   for (let at = buffer.length - ZIP_EOCD_MIN_SIZE; at >= floor; at--) {
@@ -984,17 +530,6 @@ export function tail(text, maxLines) {
 const HARNESS_OUTPUT = /--test output start-- (.*) --test output end--/;
 const HARNESS_STARTING = /\bStarting (\S+\.test\.\w+) retry \d+\/\d+/;
 
-/**
- * suitesFromHarnessOutput recovers every suite's Jest results from run-tests.js's
- * stdout, where each suite's JSON is framed on a single line.
- *
- * Reading stdout rather than the `.results.json` files the harness leaves on disk
- * is deliberate. Between retries of a failing suite the harness runs `git clean
- * -fdx` on that suite's directory, and for a top-level `test/e2e/<name>.test.ts`
- * that directory is the whole of `test/e2e` — so the clean also deletes every
- * other suite's untracked results file. A group holding one such failing suite
- * keeps only the results written after the last clean; stdout keeps them all.
- */
 export function suitesFromHarnessOutput(stdout, nextjsDir) {
   const suites = [];
   for (const line of stdout.split("\n")) {
@@ -1013,7 +548,6 @@ export function suitesFromHarnessOutput(stdout, nextjsDir) {
   return suites;
 }
 
-/** Every suite the harness announced it was starting, deduped across its retries. */
 export function suitesStartedInHarnessOutput(stdout) {
   const started = new Set();
   for (const line of stdout.split("\n")) {
@@ -1023,23 +557,6 @@ export function suitesStartedInHarnessOutput(stdout) {
   return [...started];
 }
 
-/**
- * suiteResultFromJest reduces one suite's Jest JSON output to the baseline
- * manifest's per-suite entry. A case name is its ancestor titles and its own
- * title joined by a single space — Jest's own test id (`getTestID`), and the
- * only spelling `run-tests.js`'s `--testNamePattern` exclusion can match. Any
- * other separator silently excludes nothing.
- *
- * A suite that produced no assertions at all did not merely fail — it never
- * ran (a crash while loading, a deploy the harness could not reach), which the
- * manifest records as runtimeError so the whole file is skipped rather than
- * every case in it being listed.
- *
- * Passing cases are counted but never recorded. `test/get-test-filter.js` reads
- * only `runtimeError`, `failed` and `flakey`; a passed list would be dead weight
- * in the committed baseline, and hand-maintaining it as fixes land is work that
- * buys nothing.
- */
 export function suiteResultFromJest(results) {
   let passed = 0;
   const failed = [];
@@ -1055,16 +572,6 @@ export function suiteResultFromJest(results) {
   return { failed, flakey: [], runtimeError: passed === 0 && failed.length === 0 };
 }
 
-/**
- * buildBaselineManifest turns one group's collected Jest results into a baseline
- * manifest fragment, keyed by test file — the legacy (unversioned)
- * NEXT_EXTERNAL_TESTS_FILTERS shape, where a listed suite's `failed` cases are
- * excluded and any newly added case is automatically included.
- *
- * A suite with nothing to exclude is left out entirely: an unlisted suite runs in
- * full, which is exactly what a green suite should do. So the manifest holds only
- * outstanding work, and empties as the adapter is fixed.
- */
 export function buildBaselineManifest(suites) {
   const manifest = {};
   for (const { suite, results } of suites) {
@@ -1076,13 +583,6 @@ export function buildBaselineManifest(suites) {
   return manifest;
 }
 
-/**
- * mergeBaselineManifest folds every group's fragment into the one manifest the
- * repo commits. Suites are disjoint across groups in a single run, but merging
- * is defined anyway — a re-run of one group must not drop the others' entries —
- * and a suite any group saw crash stays marked as a runtime error. Keys are
- * sorted so the committed baseline diffs cleanly.
- */
 export function mergeBaselineManifest(manifests) {
   const merged = {};
   for (const manifest of manifests) {

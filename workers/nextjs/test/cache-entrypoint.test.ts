@@ -17,18 +17,10 @@ const region = "eu-west-2";
 const bucket = "ocel-assets";
 const table = "ocel-state";
 
-// One R2 bucket serves every test, but the snapshot memo is keyed on the binding
-// *object* — so each test wraps the binding in its own delegate and keeps its
-// own isolate-local memo. Real R2 underneath, because this is the replica read
-// path exactly as the worker runs it.
 function snapshotBucket(): ObjectStoreReader {
   return { get: (key) => env.TAG_SNAPSHOT_STORE.get(key) };
 }
 
-// A recording stand-in for the ISR writer the edge raises through. `land` is
-// what the writer's own R2 put stands for: the contract is that the raise
-// resolves only once the replica holds the records, which is the whole of what
-// gives the raiser read-your-own-writes.
 function raiseRecorder(
   land: (records: Record<string, TagRecord>) => Promise<void> = async () => {},
 ) {
@@ -50,9 +42,6 @@ interface Call {
   body: string;
 }
 
-// A recording stand-in for the signed AWS transport. Signing itself is covered
-// by signing.test.ts; what matters here is which call is made, against what, and
-// what the entrypoint does with the answer.
 function awsRecorder(reply: (call: Call) => Response | Promise<Response> = () => new Response(null, { status: 404 })) {
   const calls: Call[] = [];
   return {
@@ -86,7 +75,6 @@ const entry = (over: Record<string, unknown> = {}) => ({
   value: { kind: "FETCH", data: { body: "hi" }, ...over },
 });
 
-// A fresh scope per test keeps one test's snapshot object out of another's way.
 let scopes = 0;
 let scope = "";
 beforeEach(() => {
@@ -164,11 +152,8 @@ it("evaluates the tags the entry itself recorded, not only the caller's", async 
 });
 
 it("misses when the tag snapshot cannot be trusted", async () => {
-  // No snapshot at all: staleness is unknown, and a data cache has nothing in
-  // hand that would make serving anyway the safer answer.
   const aws = awsRecorder(() => new Response(JSON.stringify(entry())));
   expect(await cacheWith(aws).fetchGet(scope, "abc123", ["posts"])).toBeNull();
-  // Untagged entries cannot be tag-invalidated, so they are unaffected.
   expect(await cacheWith(aws).fetchGet(scope, "abc123", [])).toEqual(entry());
 });
 
@@ -192,8 +177,6 @@ it("returns from a write before the object lands, and writes behind it", async (
   expect(put.url).toBe(
     `https://${bucket}.s3.${region}.amazonaws.com/${scope}/fetch-cache/abc123.cache.json`,
   );
-  // The caller's tags are stamped onto the stored value, which is where the node
-  // tier's reader looks for them.
   expect(JSON.parse(put.body)).toEqual({ ...entry(), value: { ...entry().value, tags: ["posts"] } });
 });
 
@@ -209,11 +192,6 @@ it("skips an oversized entry rather than failing the render", async () => {
   expect(pending).toHaveLength(0);
 });
 
-// Next's node entry templates are bundled into every edge chunk as dead code, so
-// a future Next could route a page-kind write through here with no change on our
-// side. The bundled client refuses one too, but a build's bundle keeps running
-// against a worker deployed long after it — so the invariant has to be enforced
-// on the side that cannot be replaced by an old bundle.
 it.each(["APP_PAGE", "APP_ROUTE", "PAGES", undefined])(
   "refuses to store a %s entry rather than corrupting the fetch cache",
   async (kind) => {
@@ -275,8 +253,6 @@ it("treats a rejected guard as the ordinary outcome it is", async () => {
   await expect(
     cacheWith(aws, { raise: writer.raise }).revalidateTags(scope, ["posts"]),
   ).resolves.toBeUndefined();
-  // The raise still happens: the winning writer's record is the one that has to
-  // reach the edge.
   expect(writer.raises).toHaveLength(1);
 });
 
@@ -303,8 +279,6 @@ it("raises every invalidated tag through the writer, under this deployment's pre
   ]);
 });
 
-// The record is authoritative and the raise is replication of it, so a raise
-// that outran the record would publish an invalidation nothing durable holds.
 it("records the invalidation durably before raising it", async () => {
   const order: string[] = [];
   const aws = awsRecorder(() => {
@@ -318,11 +292,6 @@ it("records the invalidation durably before raising it", async () => {
   expect(order).toEqual(["dynamodb", "raise"]);
 });
 
-// Next calls revalidateTag with no try/catch of its own, and a Server Action
-// awaits the drain before responding — so a throw out of the replication half
-// fails the very route that raised the invalidation. The durable record is
-// already written by then; the replica is the edge's copy of it, and a copy the
-// writer could not replace leaves the edge reading the last one.
 it("does not fail the route when the writer refuses the raise", async () => {
   const aws = awsRecorder(() => new Response("{}"));
 
@@ -334,13 +303,9 @@ it("does not fail the route when the writer refuses the raise", async () => {
     }).revalidateTags(scope, ["posts"]),
   ).resolves.toBeUndefined();
 
-  // The durable write still happened: the invalidation is recorded even though
-  // the replica was not republished.
   expect(aws.calls.filter((call) => call.service === "dynamodb")).toHaveLength(1);
 });
 
-// The writer answers only once R2 holds the merged replica, which is what lets
-// this read go straight back to the store rather than waiting out the memo.
 it("sees its own invalidation on the very next read", async () => {
   const stored = entry();
   const aws = awsRecorder((call) =>
@@ -349,7 +314,6 @@ it("sees its own invalidation on the very next read", async () => {
   const writer = raiseRecorder((records) => seedSnapshot(records));
   const cache = cacheWith(aws, { store: snapshotBucket(), raise: writer.raise });
 
-  // Warms this isolate's memo with the pre-invalidation snapshot.
   await seedSnapshot({ posts: { expired: 500 } });
   expect(await cache.fetchGet(scope, "abc123", ["posts"])).toEqual(stored);
 
@@ -357,8 +321,6 @@ it("sees its own invalidation on the very next read", async () => {
   expect(await cache.fetchGet(scope, "abc123", ["posts"])).toBeNull();
 });
 
-// A raise that never landed still leaves this isolate's memo describing a
-// replica the writer may well have replaced, so the memo goes either way.
 it("drops its snapshot memo even when the raise failed", async () => {
   const stored = entry();
   const aws = awsRecorder((call) =>
@@ -405,9 +367,6 @@ it.each([429, 401, 500])("reports a raise the writer answered with %i", async (s
   await expect(raise(scope, { posts: { expired: 5_000 } })).rejects.toThrow(String(status));
 });
 
-// The worker script outlives its deployments, so it can find itself serving a
-// build whose deploy predates the writer, or on a substrate that adopted none.
-// There is nowhere to raise to then, and saying so is all this can do.
 it("reports a raise it has no writer to make", async () => {
   await expect(tagRaiser(undefined, "write-secret")(scope, {})).rejects.toThrow(/no isr writer/);
   await expect(
@@ -415,11 +374,6 @@ it("reports a raise it has no writer to make", async () => {
   ).rejects.toThrow(/no isr writer/);
 });
 
-// The worker script is frozen and outlives its deployments (ADR 0002), so it can
-// find itself on a substrate whose bootstrap predates the stores its cache reads:
-// the region, table and bucket vars are then simply unbound. Every call must
-// answer like an empty cache, because a throw would take down the edge render
-// that made it rather than leaving that render uncached.
 it("answers like an empty cache on a substrate that binds no coordinates", async () => {
   const entrypoint = new CacheEntrypoint(createExecutionContext(), {} as Env);
 

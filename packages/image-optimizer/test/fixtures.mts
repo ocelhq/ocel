@@ -2,11 +2,6 @@ import { createHash } from "node:crypto";
 import type { CompiledImageConfig, ImageOriginRequest } from "../src/contract.mjs";
 import type { ObjectStore, StoredObject } from "../src/store.mjs";
 
-// Next 16's own defaults, which differ sharply from 14/15: minimumCacheTTL is
-// 14400 rather than 60, qualities defaults to [75] rather than being unset, and
-// localPatterns defaults to a pattern with search:"" so a local url carrying any
-// query string is rejected. Tests that assume the older values pass for the
-// wrong reasons.
 export function imageConfig(
   overrides: Partial<CompiledImageConfig> = {},
 ): CompiledImageConfig {
@@ -33,9 +28,6 @@ export function imageConfig(
   };
 }
 
-// The bytes the adapter writes to image-config.json, and the digest it puts in
-// the routing manifest. Reproduced here with the same key ordering so the hash
-// this function verifies is the hash that side produces.
 export function serialize(config: CompiledImageConfig): string {
   return JSON.stringify(config, (_key, value) =>
     value && typeof value === "object" && !Array.isArray(value)
@@ -85,8 +77,6 @@ export function fakeStore(): FakeStore {
       reads.push(key);
       const object = objects.get(key);
       if (!object) return undefined;
-      // The real store enforces the ceiling; the fake has to as well, or a test
-      // of the local-read cap would only be testing the fake.
       if (object.bytes.byteLength > limit) {
         throw new Error(`object ${key} exceeds ${limit} bytes`);
       }
@@ -95,8 +85,6 @@ export function fakeStore(): FakeStore {
   };
 }
 
-// A store already holding the config at the key the identity in payload() maps
-// to, which is the starting point for every end-to-end case.
 export function storeWithConfig(config: CompiledImageConfig): FakeStore {
   const store = fakeStore();
   store.put(`image-config/proj1/web/build-1.json`, {

@@ -23,10 +23,8 @@ const (
 	testCallback = testOrigin + "/api/upload"
 )
 
-// fakeTagger returns a fixed tag set for any object, letting a test bind an
-// object to a session id (or to none).
 type fakeTagger struct {
-	tags map[string]string // tag key -> value
+	tags map[string]string
 	err  error
 }
 
@@ -41,8 +39,6 @@ func (t *fakeTagger) GetObjectTagging(_ context.Context, _ *s3.GetObjectTaggingI
 	return &s3.GetObjectTaggingOutput{TagSet: set}, nil
 }
 
-// recordingDoer records every callback POST it receives so the test can assert
-// how many fired and inspect their bodies.
 type recordingDoer struct {
 	posts  []recordedPost
 	status int
@@ -66,8 +62,6 @@ func (d *recordingDoer) Do(req *http.Request) (*http.Response, error) {
 	return &http.Response{StatusCode: status, Body: io.NopCloser(strings.NewReader("{}"))}, nil
 }
 
-// seedPendingSession writes a one-file pending session to the fake store and
-// returns its id and secret.
 func seedPendingSession(t *testing.T, ddb *fakeDDB, callbackURL string) (id, secret string) {
 	t.Helper()
 	id = "sess_test1"
@@ -108,9 +102,6 @@ func newListener(ddb *fakeDDB, tagger objectTagger, doer httpDoer, origins []str
 	})
 }
 
-// TestListener_TransitionsOnceAndSignsAcceptedCallback proves the happy path:
-// one ObjectCreated event transitions the file, and the emitted op=callback
-// carries a genuine per-session signature that VerifyUploadSignature accepts.
 func TestListener_TransitionsOnceAndSignsAcceptedCallback(t *testing.T) {
 	ddb := newFakeDDB()
 	id, secret := seedPendingSession(t, ddb, testCallback)
@@ -130,8 +121,6 @@ func TestListener_TransitionsOnceAndSignsAcceptedCallback(t *testing.T) {
 		t.Fatalf("callback url op = %q, want callback (url %q)", got, post.url)
 	}
 
-	// The signature the listener emitted is verified by the same runtime path the
-	// env-blind route uses (VerifyUploadSignature), against the stored session.
 	svc := &Service{store: &sessionStore{client: ddb, table: "sessions"}}
 	resp, err := svc.VerifyUploadSignature(context.Background(), verifyReq(id, post.body))
 	if err != nil {
@@ -141,16 +130,12 @@ func TestListener_TransitionsOnceAndSignsAcceptedCallback(t *testing.T) {
 		t.Fatal("genuine listener signature was rejected by VerifyUploadSignature")
 	}
 
-	// Cross-check the raw HMAC too: the emitted signature is exactly
-	// HMAC(secret, canonical({sessionId, file})).
 	want := signUpload(secret, id, SignedFile{Key: testKey, Name: "u1.png", Size: 2048, MimeType: "image/png"})
 	if post.body.Signature != want {
 		t.Fatalf("signature = %q, want %q", post.body.Signature, want)
 	}
 }
 
-// TestListener_ForgedSignatureRejected proves the blast radius of a leaked or
-// tampered signature is one upload: a tampered signature does not verify.
 func TestListener_ForgedSignatureRejected(t *testing.T) {
 	ddb := newFakeDDB()
 	id, _ := seedPendingSession(t, ddb, testCallback)
@@ -163,7 +148,7 @@ func TestListener_ForgedSignatureRejected(t *testing.T) {
 	}
 
 	forged := doer.posts[0].body
-	forged.Signature = forged.Signature[:len(forged.Signature)-1] + "0" // flip last hex nibble
+	forged.Signature = forged.Signature[:len(forged.Signature)-1] + "0"
 
 	svc := &Service{store: &sessionStore{client: ddb, table: "sessions"}}
 	resp, err := svc.VerifyUploadSignature(context.Background(), verifyReq(id, forged))
@@ -175,9 +160,6 @@ func TestListener_ForgedSignatureRejected(t *testing.T) {
 	}
 }
 
-// TestListener_DuplicateEventNoOps proves idempotency: a second identical
-// ObjectCreated delivery does not re-transition and does not fire a second
-// callback.
 func TestListener_DuplicateEventNoOps(t *testing.T) {
 	ddb := newFakeDDB()
 	id, _ := seedPendingSession(t, ddb, testCallback)
@@ -198,10 +180,6 @@ func TestListener_DuplicateEventNoOps(t *testing.T) {
 	}
 }
 
-// TestListener_CallbackTargetNotAllowlistedRejected proves the prod
-// callback-trust check: a session whose callback_base_url origin is not in the
-// deploy-known allowedOrigins gets no callback, even though the file
-// transitions.
 func TestListener_CallbackTargetNotAllowlistedRejected(t *testing.T) {
 	ddb := newFakeDDB()
 	id, _ := seedPendingSession(t, ddb, "https://evil.example.com/api/upload")
@@ -218,12 +196,10 @@ func TestListener_CallbackTargetNotAllowlistedRejected(t *testing.T) {
 	}
 }
 
-// TestListener_UntaggedObjectNoOps proves an object without the sessionId tag
-// (not one of ours) is ignored.
 func TestListener_UntaggedObjectNoOps(t *testing.T) {
 	ddb := newFakeDDB()
 	seedPendingSession(t, ddb, testCallback)
-	tagger := &fakeTagger{tags: map[string]string{}} // no sessionId tag
+	tagger := &fakeTagger{tags: map[string]string{}}
 	doer := &recordingDoer{}
 
 	l := newListener(ddb, tagger, doer, []string{testOrigin})
@@ -235,7 +211,6 @@ func TestListener_UntaggedObjectNoOps(t *testing.T) {
 	}
 }
 
-// TestOriginAllowed covers the origin match directly, including a spoofed host.
 func TestOriginAllowed(t *testing.T) {
 	allowed := []string{"https://app.example.com", "https://www.example.com"}
 	cases := []struct {
@@ -245,8 +220,8 @@ func TestOriginAllowed(t *testing.T) {
 		{"https://app.example.com/api/upload", true},
 		{"https://www.example.com/x", true},
 		{"https://evil.example.com/api/upload", false},
-		{"http://app.example.com/api/upload", false}, // scheme mismatch
-		{"https://app.example.com:8443/x", false},    // port mismatch
+		{"http://app.example.com/api/upload", false},
+		{"https://app.example.com:8443/x", false},
 		{"not-a-url", false},
 	}
 	for _, c := range cases {
@@ -265,8 +240,6 @@ func queryOp(t *testing.T, rawURL string) string {
 	return u.Query().Get("op")
 }
 
-// verifyReq rebuilds the proto VerifyUploadSignature request from a recorded
-// callback body, so the test verifies exactly what the listener put on the wire.
 func verifyReq(sessionID string, c signedCompletion) *bucketsv1.VerifyUploadSignatureRequest {
 	return &bucketsv1.VerifyUploadSignatureRequest{
 		SessionId: sessionID,

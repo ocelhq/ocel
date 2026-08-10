@@ -140,7 +140,6 @@ describe("POST /api/blob/verify", () => {
     try {
       const { sessionId, secret, key } = await seedSession(owner, "verify-cross-tenant");
       const file = { key, name: "a.png", size: 3, mimeType: "image/png" };
-      // Even a correctly-signed callback is refused for a non-member caller.
       const signature = signUpload(secret, sessionId, file);
       const res = await verifyUploadSignature(
         verifyRequest({ sessionId, signature, file }, other.headers),

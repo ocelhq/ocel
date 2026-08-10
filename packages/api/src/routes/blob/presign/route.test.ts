@@ -77,12 +77,9 @@ describe("POST /api/blob/presign", () => {
       const target = bodyJson.files[0];
       expect(target.name).toBe("avatar.png");
 
-      // Honest, tenancy-prefixed key: {orgId}/{projectId}/{userId}/<user key>.
       const expectedKey = `${created.organizationId}/${created.id}/${session.user.id}/avatar.png`;
       expect(target.key).toBe(expectedKey);
 
-      // Well-formed presigned PUT URL: SigV4 query params, the prefixed key in
-      // the path, and the bound conditions in the signed-headers set.
       const url = new URL(target.url);
       expect(url.pathname).toContain(encodeURI(expectedKey));
       expect(url.searchParams.get("X-Amz-Algorithm")).toBe("AWS4-HMAC-SHA256");
@@ -90,19 +87,12 @@ describe("POST /api/blob/presign", () => {
       const signed = url.searchParams.get("X-Amz-SignedHeaders") ?? "";
       expect(signed).toContain("content-length");
       expect(signed).toContain("content-type");
-      // contentDisposition is signed (so the store binds it onto the object) and
-      // echoed on the target so the client sends it on the PUT.
       expect(signed).toContain("content-disposition");
       expect(target.contentDisposition).toBe("inline");
-      // The session tag rides in the SigV4-signed query string (bound, but not
-      // a sent header, so a browser-style PUT that won't send x-amz-tagging
-      // still succeeds).
       expect(url.searchParams.get("x-amz-tagging")).toBe(
         `sessionId=${sessionId}`,
       );
 
-      // A pending session persisted with the secret, callbackBaseUrl, verbatim
-      // metadata, and the prefixed per-file state.
       const [row] = await db
         .select()
         .from(uploadSession)
@@ -115,7 +105,6 @@ describe("POST /api/blob/presign", () => {
       expect(row.secret.length).toBeGreaterThan(0);
       expect(row.callbackBaseUrl).toBe("http://localhost:3000/api/upload");
       expect(row.contentDisposition).toBe("inline");
-      // Opaque metadata bytes round-trip verbatim.
       expect(row.metadata).toBe(encodedMetadata);
       const files = row.files as Array<{ key: string; state: string }>;
       expect(files).toHaveLength(1);

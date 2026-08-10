@@ -22,19 +22,6 @@ func main() {
 	ctx := context.Background()
 	start := time.Now()
 
-	// The bytecode cache's identity depends on node's own version, which this
-	// process cannot know without running node --version — so that probe, and
-	// the AWS config it will need if it succeeds, are kicked off before
-	// anything else in main() touches the clock. Both run on their own
-	// goroutine and are only joined once bringUpWithBytecode needs the result,
-	// which is what lets them overlap the live-values prefetch below and the
-	// baked-var decrypts rather than adding their own time to init.
-	//
-	// The goroutine's own context is bounded by bytecodeResolveBudget, so a
-	// wedged exec or a stalled config load actually terminates rather than
-	// lingering for the sandbox's whole lifetime. bringUpWithBytecode's join
-	// is bounded by the same constant independently, so even a probe that
-	// ignored its context entirely could not hold up the spawn.
 	bytecodeReady := make(chan *bytecodeResolution, 1)
 	go func() {
 		resolveCtx, cancel := context.WithTimeout(ctx, bytecodeResolveBudget)
@@ -42,22 +29,12 @@ func main() {
 		bytecodeReady <- resolveBytecodeResolution(resolveCtx, nodeVersionFromBinary)
 	}()
 
-	// Live values are the one class not delivered through the child's
-	// environment, so their fetch is the one that need not precede the spawn.
-	// It is started first and joined last: the read and its decrypts run beside
-	// the exec and node's own boot, and what they cost is only ever visible if
-	// node wins that race. Building the client is not deferred with them —
-	// failing to configure one is a fact about this deployment, not about the
-	// store, and it should be reported as itself.
 	live, err := resolveLiveValues(ctx)
 	if err != nil {
 		fatalInit(fmt.Sprintf("failed to read this deployment's live variables: %v", err))
 	}
 	prefetch := live.start(ctx)
 
-	// Encrypted-baked values are opened here for the same reason: they travel
-	// in the child's environment. Both the ciphertext and its key already rode
-	// in with the deployment, so this is local decryption rather than a fetch.
 	bakedEnv, err := resolveBakedVarsEnv()
 	if err != nil {
 		fatalInit(fmt.Sprintf("failed to open this deployment's encrypted variables: %v", err))
@@ -65,40 +42,20 @@ func main() {
 
 	membrane, err := bringUpWithBytecode(ctx, startNode, live, prefetch, childEnv(bakedEnv, live), start, bytecodeReady, bytecodeEmbedded, bytecodeRehydrate)
 	if err != nil {
-		// Must report init failure BEFORE we start polling the Runtime API.
 		fatalInit(err.Error())
 	}
 
 	rt := newRuntimeClient(os.Getenv("AWS_LAMBDA_RUNTIME_API"))
 	for {
 		if err := handleInvocation(ctx, rt, membrane); err != nil {
-			// A Runtime API failure is fatal to the loop; the sandbox is recycled.
 			fmt.Fprintf(os.Stderr, "ocel: runtime loop error: %v\n", err)
 			os.Exit(1)
 		}
 	}
 }
 
-// spawner is startNode as bringUp uses it, so the order the two are put in can
-// be tested without a node binary anywhere near it.
 type spawner func(extraEnv []string, budget time.Duration, onControl func(io.Writer), abandon <-chan struct{}) (*Membrane, error)
 
-// bringUp spawns the child and settles the prefetch that ran beside it,
-// returning the message init must report if either fails.
-//
-// The order is the property. The spawn is started before the prefetch is
-// waited on, so the fetch and the decrypts overlap the exec and node's own boot
-// rather than preceding them. The join is after, which is the last moment a
-// failure can still be reported as an init error: past here the Runtime API
-// only hears about invocations, and a function that could not resolve a value
-// it declared must not come up, or the value is read at the point of use as one
-// that was never required.
-//
-// Failing to spawn is usually node's own fault, but for a function with live
-// keys it is also what a failed prefetch looks like from here: node holds its
-// import until the push arrives, so a store it cannot read surfaces as a
-// startup timeout that names nothing. Where the prefetch is the reason, the
-// store's error is the diagnosis and it is what gets reported.
 func bringUp(spawn spawner, live *liveValues, prefetch <-chan error, env []string, budget time.Duration) (*Membrane, error) {
 	membrane, err := spawn(env, budget, live.attach, live.prefetchFailed())
 	if err != nil {
@@ -115,20 +72,10 @@ func bringUp(spawn spawner, live *liveValues, prefetch <-chan error, env []strin
 	return membrane, nil
 }
 
-// bytecodeRehydrate is bringUpWithBytecode's default rehydrate dependency,
-// closing over the one piece rehydrateBytecodeCache cannot know for itself:
-// where node is told to keep its compile cache. Nothing checks at runtime
-// that this is the same directory compileCacheEnv puts in NODE_COMPILE_CACHE
-// — it is only true because both read compileCacheDir rather than a literal
-// of their own; see TestBytecodeRehydrate_TargetsTheDirCompileCacheEnvDeclares.
 func bytecodeRehydrate(ctx context.Context, r *bytecodeResolution) bool {
 	return rehydrateBytecodeCache(ctx, r, compileCacheDir)
 }
 
-// bytecodeEmbedded is bringUpWithBytecode's default local-first dependency,
-// the same shape as bytecodeRehydrate and closing over the same directory. A
-// key that names no cache tarball composes no path and skips the attempt
-// rather than stat'ing something derived from a basename that means nothing.
 func bytecodeEmbedded(ctx context.Context, r *bytecodeResolution) bool {
 	tarPath := embeddedBytecodePath(r.key)
 	if tarPath == "" {
@@ -137,59 +84,6 @@ func bytecodeEmbedded(ctx context.Context, r *bytecodeResolution) bool {
 	return embeddedBytecodeCache(ctx, tarPath, compileCacheDir)
 }
 
-// bringUpWithBytecode wraps bringUp with the bytecode cache's two legs,
-// joining and rehydrating before bringUp is called and attaching the upload
-// leg after it returns.
-//
-// The join is bounded by bytecodeResolveBudget rather than a bare receive: a
-// resolution that never arrives — a wedged exec or a stalled config load
-// that somehow outran its own context — must still let init proceed, the
-// same as one that resolved to nil. The bytecodeReady channel is always
-// buffered by exactly one, so a goroutine that answers after this gives up
-// on it still completes its send without blocking; there is nothing left to
-// leak.
-//
-// The join's own wait is anchored to start, not restarted from here: the
-// resolution goroutine's context (main's) is already bounded by
-// bytecodeResolveBudget from start, so a fresh bytecodeResolveBudget timer
-// begun at this later point would let a resolution that ignores its context
-// hold the join for up to bytecodeResolveBudget twice — once in the
-// goroutine's own overrun, once again here. Sharing the one deadline is what
-// keeps this a max(work, bytecodeResolveBudget) wait, matching what the
-// resolve budget documents, rather than work-plus-bytecodeResolveBudget in
-// the pathological case.
-//
-// The join and the rehydrate attempt both happen before budget is computed,
-// which is what carves rehydration's cost out of startupBudget rather than
-// adding it on top: bringUp's budget argument is startupBudget minus
-// time.Since(start), and start was captured before any of this ran, so
-// whatever rehydration spent is already reflected in that subtraction by the
-// time bringUp sees it. That subtraction is floored at minSpawnBudget rather
-// than handed to bringUp as-is: a slow miss (the full pre-spawn budget
-// spent, cache dir wiped, nothing to show for it) would otherwise starve the
-// spawn on top of getting it no cache — see minSpawnBudget's own comment for
-// what that trades.
-//
-// A hit disables the upload leg entirely rather than merely skipping its
-// PUT: it proves the object already exists, so nothing membrane.bytecode
-// would do could ever matter, and leaving it nil is what keeps
-// uploadBytecodeCacheOnce from flushing, walking or archiving for an outcome
-// already decided. The hit is recorded alongside it because that absence is
-// otherwise indistinguishable from a deployment with no compile cache at all,
-// and a warm invocation has to answer the two differently.
-//
-// The local leg runs first and the S3 leg only answers for what it did not:
-// an artifact the deploy embedded the cache into serves it from /var/task
-// without a network round trip at all, and an artifact without one — or one
-// whose baked tar no longer matches the key, which is what makes a runtime
-// bump self-healing — behaves exactly as it did before this existed. A local
-// attempt that matched and then failed is a miss like any other: it wipes what
-// it wrote and falls through, because a corrupt embedded copy must never leave
-// a function permanently cold when S3 holds a good object.
-//
-// bytecodeReady, embedded and rehydrate are dependencies for the same reason spawn is:
-// the whole sequence, including its budget arithmetic, is exercisable with
-// fakes and no node binary, AWS client or environment in reach.
 func bringUpWithBytecode(
 	ctx context.Context,
 	spawn spawner,
@@ -214,13 +108,6 @@ func bringUpWithBytecode(
 
 	source := bytecodeSourceNone
 	if bytecode != nil {
-		// One budget across both legs, started here rather than inside either.
-		// The local attempt fails fast — the first bad header ends it — so the
-		// fallthrough is nearly free in practice, but the S3 leg has to be
-		// given whatever genuinely remains rather than a fresh
-		// bytecodeRehydrateBudget on top of what the local attempt already
-		// spent: rehydrate's own timeout nests inside this context, so the
-		// smaller deadline is the one that applies.
 		rehydrateCtx, cancel := context.WithTimeout(ctx, bytecodeRehydrateBudget)
 		switch {
 		case embedded(rehydrateCtx, bytecode):
@@ -250,10 +137,6 @@ func bringUpWithBytecode(
 	return membrane, nil
 }
 
-// childEnv is everything node is told at exec. The baked class travels in it as
-// values; the live class travels as key names only, because a live value reaches
-// node down the control socket and must never be in this process's environment
-// where anything reading the environment would find it.
 func childEnv(bakedEnv []string, live *liveValues) []string {
 	env := make([]string, 0, len(bakedEnv)+1)
 	env = append(env, bakedEnv...)

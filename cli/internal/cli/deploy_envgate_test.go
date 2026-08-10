@@ -14,18 +14,6 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
 )
 
-// envDeclarationScript is a stand-in for what ocel/env's defineEnv does during
-// discovery: declare every variable in one call, then report back the cells the
-// answer shows it cannot run with. Writing it by hand rather than importing the
-// SDK keeps this test about the CLI's half of the exchange — and lets it record
-// exactly what plaintext the declaring process was handed, which the real SDK
-// exposes no hook for.
-//
-// It states the report it makes rather than deriving one: the required-cell
-// matrix has exactly two owners — packages/ocel/src/env/declare.ts and
-// cli/internal/envgate/matrix.go — and cli/internal/envwire is where the real
-// SDK's copy is held to the gate's. A third copy here would be a rule this
-// file could drift from with every suite green.
 const envDeclarationScript = `
 declare global {
   var __ocelRegister: Promise<unknown>[];
@@ -65,10 +53,6 @@ globalThis.__ocelRegister.push(
 export {};
 `
 
-// envDeclareOnlyScript is a declaring process that reports nothing back: an
-// older SDK, or a defineEnv that throws after DeclareEnv. It exists because the
-// gate's verdict must not be the child process's alone — a run that says
-// nothing must not be read as a run that found nothing.
 const envDeclareOnlyScript = `
 declare global {
   var __ocelRegister: Promise<unknown>[];
@@ -88,9 +72,6 @@ globalThis.__ocelRegister.push(
 export {};
 `
 
-// setUpEnvGateFixture extends the deploy fixture with a definitions file
-// declaring definitions, and points the fake provider at a store file the
-// deploy and any `ocel env set` priming it share.
 func setUpEnvGateFixture(t *testing.T, definitions string) string {
 	t.Helper()
 	return setUpEnvGateFixtureWith(t, definitions, envDeclarationScript)
@@ -106,8 +87,6 @@ func setUpEnvGateFixtureWith(t *testing.T, definitions, script string) string {
 	return root
 }
 
-// stubAppBuildRecorder records whether the app build ran, which is what
-// "before anything is built" means from outside.
 func stubAppBuildRecorder(t *testing.T, built *bool) {
 	t.Helper()
 	prev := buildApp
@@ -148,10 +127,6 @@ func TestRunDeploy_MissingValue_RefusesBeforeAnythingIsBuilt(t *testing.T) {
 	}
 }
 
-// TestRunDeploy_MissingValue_RefusesThoughDiscoveryReportedNothing is the same
-// refusal driven by a declaring process that never reports: the value would
-// otherwise be missing inside the deployed function, which is exactly what
-// failing at deploy time exists to prevent.
 func TestRunDeploy_MissingValue_RefusesThoughDiscoveryReportedNothing(t *testing.T) {
 	root := setUpEnvGateFixtureWith(t,
 		`[{"key":"STRIPE_API_KEY","class":"VARIABLE_CLASS_SENSITIVE","required":true}]`,
@@ -188,9 +163,6 @@ func TestRunDeploy_ValueSet_PassesTheGateAndDeploys(t *testing.T) {
 	}
 }
 
-// A value set on production is not a value the preview substrate holds, so the
-// preview gate has to refuse as if nothing were set — and name the cell rather
-// than silently deploying with a production secret.
 func TestRunPreviewUp_AProductionValueDoesNotSatisfyThePreviewGate(t *testing.T) {
 	root := setUpEnvGateFixture(t, `[{"key":"STRIPE_API_KEY","class":"VARIABLE_CLASS_SENSITIVE","required":true}]`)
 	envSet(t, root, "STRIPE_API_KEY", "sk_live_secret", envOptions{})
@@ -216,9 +188,6 @@ func TestRunPreviewUp_AProductionValueDoesNotSatisfyThePreviewGate(t *testing.T)
 	}
 }
 
-// A store that answers a listing but not a reveal has to say which cell it
-// could not read. The read is batched over a whole declaration, so a failure
-// naming nothing tells an operator only that something, somewhere, is unset.
 func TestRunDeploy_AValueThatCannotBeReadNamesTheCell(t *testing.T) {
 	root := setUpEnvGateFixture(t, `[{"key":"STRIPE_API_KEY","class":"VARIABLE_CLASS_SENSITIVE","required":true}]`)
 	envSet(t, root, "STRIPE_API_KEY", "sk_live_value", envOptions{})
@@ -276,8 +245,6 @@ func TestRunDeploy_LiveValueIsNeverHandedToTheDeclaringProcess(t *testing.T) {
 	}
 }
 
-// writeAppsConfig rewrites the fixture's config with apps bound to folders,
-// which is the only place an app-to-folder binding is declared.
 func writeAppsConfig(t *testing.T, root, apps string) {
 	t.Helper()
 	writeFile(t, filepath.Join(root, "ocel.config.ts"), `
@@ -304,10 +271,6 @@ func TestRunDeploy_AFolderNoAppBindsIsAWarningNotARefusal(t *testing.T) {
 	}
 }
 
-// TestRunDeploy_EachAppIsBuiltWithItsOwnDivergedValue proves a key two apps
-// resolve differently reaches both builds. That is what folders exist for, and
-// a build given one app's value — or neither — inlines the wrong thing into
-// the artifact, which is the wrong layer to discover it in.
 func TestRunDeploy_EachAppIsBuiltWithItsOwnDivergedValue(t *testing.T) {
 	root := setUpEnvGateFixture(t, `[{"key":"POSTHOG_ID","class":"VARIABLE_CLASS_PLAIN","required":true,"folders":["/web","/admin"]}]`)
 	writeAppsConfig(t, root, `
@@ -333,10 +296,6 @@ func TestRunDeploy_EachAppIsBuiltWithItsOwnDivergedValue(t *testing.T) {
 	}
 }
 
-// TestRunPreviewUp_TheEnvironmentBeingDeployedResolvesItsOwnOverride is the
-// binding rule end to end, at the read time a baked value has: the environment
-// holding an override is built with it, and every other preview is built with
-// the class-wide value they all share.
 func TestRunPreviewUp_TheEnvironmentBeingDeployedResolvesItsOwnOverride(t *testing.T) {
 	for name, tc := range map[string]struct {
 		deploying string
@@ -378,10 +337,6 @@ func TestRunPreviewUp_TheEnvironmentBeingDeployedResolvesItsOwnOverride(t *testi
 	}
 }
 
-// A required key only one environment holds a value for is not a gap for that
-// environment — it is that environment's value. Refusing it would refuse the
-// deploy of a branch whose configuration is complete, and would disagree with
-// the live path, which serves the same override from the same row.
 func TestRunPreviewUp_AnOverrideIsTheOnlyValueItsOwnEnvironmentNeeds(t *testing.T) {
 	root := setUpEnvGateFixture(t, `[{"key":"POSTHOG_ID","class":"VARIABLE_CLASS_PLAIN","required":true}]`)
 	stubGit(t, "feature/login", "")
@@ -412,10 +367,6 @@ func TestRunPreviewUp_AnOverrideIsTheOnlyValueItsOwnEnvironmentNeeds(t *testing.
 	}
 }
 
-// Removing a preview removes compute, not values. A long-lived branch torn
-// down and put back up is the case the whole rule exists for: the override
-// someone deliberately set has to be what the rebuilt environment resolves,
-// without anyone setting it again.
 func TestRunPreviewUp_ARedeployedBranchFindsTheOverrideItAlreadyHad(t *testing.T) {
 	root := setUpEnvGateFixture(t, `[{"key":"POSTHOG_ID","class":"VARIABLE_CLASS_PLAIN","required":true}]`)
 	stubGit(t, "feature/login", "")
@@ -487,10 +438,6 @@ func TestRunDeploy_AHalfCompletedFolderRenameStopsTheDeployNamingBothFiles(t *te
 	}
 }
 
-// A required value another project owns satisfies this project's gate, and the
-// build is handed what that project holds right now. It is the whole of what a
-// reference is for, at the read time a baked value has: the credential is set
-// once, and the deploy that consumes it copies nothing.
 func TestRunDeploy_AReferenceSatisfiesTheGateWithItsSourcesValue(t *testing.T) {
 	root := setUpEnvGateFixture(t, `[{"key":"POSTHOG_ID","class":"VARIABLE_CLASS_PLAIN","required":true}]`)
 	ownedElsewhere(t, "POSTHOG_ID", "ph_owned_by_platform")

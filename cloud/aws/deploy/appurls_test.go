@@ -32,8 +32,6 @@ func TestAppURLs_PrefersEachAppsWorkerURL(t *testing.T) {
 	}
 }
 
-// An app with no worker is served straight from its functions — and only its
-// own, so one app's URLs never surface under another.
 func TestAppURLs_FallsBackToTheAppsOwnFunctionURLs(t *testing.T) {
 	manifest := &deploymentsv1.Manifest{
 		Apps: []*deploymentsv1.ManifestApp{

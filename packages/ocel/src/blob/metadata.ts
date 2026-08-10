@@ -1,8 +1,3 @@
-/**
- * Wraps the uploader name alongside the middleware's return in the session's
- * opaque metadata bytes, so the callback (which carries no metadata on the
- * wire) can resolve which uploader's onUploadComplete to run.
- */
 export interface MetadataEnvelope {
   uploader: string;
   metadata: unknown;

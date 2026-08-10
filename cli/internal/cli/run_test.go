@@ -166,11 +166,6 @@ export default { slug: "test-app" };
 	}
 }
 
-// TestRunRun_WithRunningLeader_DoesNotWaitOnFollowerUpdatesOrDisconnect
-// verifies that ocel run's follower path returns as soon as the one-off
-// command exits, even though the leader (and its Subscribe stream) is still
-// alive — i.e. it does not loop waiting for further pushes the way `ocel dev`
-// followers do.
 func TestRunRun_WithRunningLeader_DoesNotWaitOnFollowerUpdatesOrDisconnect(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("uses a POSIX shell fixture command")

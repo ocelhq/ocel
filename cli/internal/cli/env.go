@@ -23,10 +23,6 @@ import (
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/resources/v1"
 )
 
-// envOptions are the flags every `ocel env` subcommand shares. folder and
-// environment address the cell — the two override axes, one deploy-pinned and
-// one live; preview selects the substrate; reveal is the deliberate act that
-// prints a value.
 type envOptions struct {
 	preview     bool
 	folder      string
@@ -34,15 +30,6 @@ type envOptions struct {
 	reveal      bool
 }
 
-// checkEnvironment refuses an override addressed on a substrate that cannot
-// hold one. Production is a single environment, so a value there binds
-// class-wide and nothing else: accepting the flag would write a row no
-// production function will ever read.
-//
-// envSession runs it for every subcommand, before anything is resolved or
-// spawned, so a subcommand added later cannot quietly omit it — and so the
-// refusal costs nothing: there is no store to ask about a coordinate that
-// cannot exist.
 func (o envOptions) checkEnvironment() error {
 	if o.environment == "" || o.preview {
 		return nil
@@ -52,13 +39,6 @@ func (o envOptions) checkEnvironment() error {
 
 var envOpts envOptions
 
-// envRefOptions addresses the cell a reference reads: the project owning the
-// value, the folder within it, and the name it is set under there. Each is
-// omitted for the common case — the same project, its root, and the same name —
-// so pointing one project's key at another's is one flag.
-//
-// There is no environment component: a reference resolves against the target's
-// class-wide value, and there is no other address to offer.
 type envRefOptions struct {
 	project string
 	folder  string
@@ -67,8 +47,6 @@ type envRefOptions struct {
 
 var envRefOpts envRefOptions
 
-// target is the coordinate a reference points at, with each component defaulted
-// to the consuming cell's own.
 func (o envRefOptions) target(slug, key string) *envv1.Coordinate {
 	project, name := o.project, o.key
 	if project == "" {
@@ -182,23 +160,13 @@ func init() {
 	for _, c := range []*cobra.Command{envSetCmd, envGetCmd, envRmCmd, envHistoryCmd, envRefCmd} {
 		c.Flags().StringVar(&envOpts.environment, "environment", "", "Address the override this named preview environment holds instead of the class-wide value")
 	}
-	// The target is class-wide, always: a named environment belongs to the
-	// project holding the reference and means nothing in the target's namespace,
-	// so there is no flag to address one. Which cell is being asked about in
-	// `refs` is class-wide for the same reason — nothing can point at an
-	// override, so nothing points at one.
 	envRefCmd.Flags().StringVar(&envRefOpts.project, "target-project", "", "Read the value owned by this project instead of this one")
 	envRefCmd.Flags().StringVar(&envRefOpts.folder, "target-folder", "", "Read the value in this folder of the target project instead of its root")
 	envRefCmd.Flags().StringVar(&envRefOpts.key, "target-key", "", "Read the target's value under this name; without it, the same name")
-	// Reveal is `get`'s alone. History is metadata only: one keystroke that
-	// printed every retained version would keep a rotated-away secret readable
-	// for the whole window.
 	envGetCmd.Flags().BoolVar(&envOpts.reveal, "reveal", false, "Print the value itself; without it only metadata is shown")
 	rootCmd.AddCommand(envCmd)
 }
 
-// withEnvCommand resolves the working directory and a signal-aware context,
-// the preamble every `ocel env` subcommand shares.
 func withEnvCommand(cmd *cobra.Command, run func(context.Context, string) error) error {
 	cwd, err := os.Getwd()
 	if err != nil {
@@ -209,10 +177,6 @@ func withEnvCommand(cmd *cobra.Command, run func(context.Context, string) error)
 	return run(ctx, cwd)
 }
 
-// envSession resolves the project, spawns its provider, preflights the
-// substrate the flags selected, and hands the ready runner to drive. Every
-// `ocel env` subcommand goes through it: the store is only reachable through a
-// live provider session.
 func envSession(ctx context.Context, cwd string, opts envOptions, stdout, stderr io.Writer, drive func(*providerrunner.Runner, *projectconfig.Config, *projectconfig.ProviderDescriptor) error) error {
 	if err := opts.checkEnvironment(); err != nil {
 		return err
@@ -239,9 +203,6 @@ func envSession(ctx context.Context, cwd string, opts envOptions, stdout, stderr
 	})
 }
 
-// envClass maps the substrate flag onto the class the provider opens its store
-// for. Preview and production ciphertext are encrypted under different keys,
-// so this is which store is opened, not a filter over one.
 func envClass(opts envOptions) deploymentsv1.Environment_Class {
 	if opts.preview {
 		return deploymentsv1.Environment_CLASS_PREVIEW
@@ -249,16 +210,10 @@ func envClass(opts envOptions) deploymentsv1.Environment_Class {
 	return deploymentsv1.Environment_CLASS_PRODUCTION
 }
 
-// envCoordinate addresses the cell the flags named: the class-wide value, or
-// the override one named preview environment holds.
 func envCoordinate(slug, key string, opts envOptions) *envv1.Coordinate {
 	return &envv1.Coordinate{Slug: slug, Folder: opts.folder, Key: key, Environment: opts.environment}
 }
 
-// namedEnvironments is every preview environment the provider knows about. It
-// is the only authority on which names exist: an override is identified by
-// exactly the key the runtime derives from its ref, so a name nothing
-// enumerates is a name nothing will ever ask for.
 func namedEnvironments(ctx context.Context, runner *providerrunner.Runner, provider *projectconfig.ProviderDescriptor, slug string) ([]string, error) {
 	resp, err := runner.ListEnvironments(ctx, &deploymentsv1.ListEnvironmentsRequest{
 		Options:         []byte(provider.Options),
@@ -304,20 +259,6 @@ func runEnvSet(ctx context.Context, cwd, key, value string, opts envOptions, std
 	})
 }
 
-// declaredVariables answers what the project's code declares about key. A
-// write has to know a key's folder scope to reject a cell nothing could read,
-// and code is the only authority on scope — the store holds values and nothing
-// else, so it cannot answer this from its own side.
-//
-// Learning it means running the discovery pass, which costs a bundle and a node
-// process, so the answer is cached per project against a fingerprint of the
-// bundled program: a scripted run of writes pays for it once, and the first
-// write after the declaring code changes pays for it again. The cache answers
-// only for a key it holds a declaration for — a key it is silent about is a
-// key the last run's ambient state may have suppressed, and taking that silence
-// for "unscoped" is how a root cell for a scoped key gets written. Caching is
-// best-effort — a cache that cannot be opened or written just means running
-// discovery, which is what this did before it had one.
 func declaredVariables(ctx context.Context, cfg *projectconfig.Config, runner *providerrunner.Runner, provider *projectconfig.ProviderDescriptor, key string, opts envOptions, stderr io.Writer) ([]*resourcesv1.VariableDefinition, error) {
 	entry, err := deploycollector.Bundle(cfg)
 	if err != nil {
@@ -358,12 +299,6 @@ func runEnvLs(ctx context.Context, cwd string, opts envOptions, stdout, stderr i
 		if err != nil {
 			return err
 		}
-		// The enumeration is only asked for when something in the listing has to
-		// be judged against it, so a project with no overrides pays nothing. A
-		// production listing never asks: named environments are the preview
-		// substrate's, so any row addressed at one there is orphaned by
-		// definition, and judging it against the preview names would report a
-		// row nothing can read as live.
 		var environments []string
 		if opts.preview && overridden(resp.GetValues()) {
 			if environments, err = namedEnvironments(ctx, runner, provider, cfg.Slug); err != nil {
@@ -397,8 +332,6 @@ func runEnvGet(ctx context.Context, cwd, key string, opts envOptions, stdout, st
 			return fmt.Errorf("no value is set for %s; set one with `ocel env set %s <VALUE>`", describeCell(key, opts), key)
 		}
 
-		// A revealed read prints the value and nothing else, so it can be
-		// captured straight into a variable.
 		if opts.reveal {
 			fmt.Fprintln(stdout, resp.GetValue())
 			return nil
@@ -435,10 +368,6 @@ func runEnvRm(ctx context.Context, cwd, key string, opts envOptions, stdout, std
 	})
 }
 
-// runEnvRef points a cell at a value owned elsewhere. The cell is checked
-// against what the code declares exactly as a written value is: what a
-// reference changes is where the value comes from, not whether the project has
-// anywhere to put one.
 func runEnvRef(ctx context.Context, cwd, key string, opts envOptions, ref envRefOptions, stdout, stderr io.Writer) error {
 	for _, folder := range []string{opts.folder, ref.folder} {
 		if folder == "" {
@@ -472,9 +401,6 @@ func runEnvRef(ctx context.Context, cwd, key string, opts envOptions, ref envRef
 	})
 }
 
-// runEnvRefs answers what reads a value, which is the blast radius of editing
-// it. Nothing is inferred from an empty answer: a value nothing references is
-// the ordinary case, not a mistake.
 func runEnvRefs(ctx context.Context, cwd, key string, opts envOptions, stdout, stderr io.Writer) error {
 	return envSession(ctx, cwd, opts, stdout, stderr, func(runner *providerrunner.Runner, cfg *projectconfig.Config, provider *projectconfig.ProviderDescriptor) error {
 		resp, err := runner.ListReferences(ctx, &envv1.ListReferencesRequest{
@@ -507,8 +433,6 @@ func runEnvHistory(ctx context.Context, cwd, key string, opts envOptions, stdout
 	})
 }
 
-// describeCell names a cell the way an operator addressed it, so every message
-// identifies exactly which of a key's cells it is about.
 func describeCell(key string, opts envOptions) string {
 	out := key
 	if opts.folder != "" {
@@ -520,8 +444,6 @@ func describeCell(key string, opts envOptions) string {
 	return out
 }
 
-// describeCoordinate names a cell that may belong to another project, which is
-// what a reference's two ends have to be told apart by.
 func describeCoordinate(c *envv1.Coordinate) string {
 	out := c.GetSlug() + "/" + c.GetKey()
 	if c.GetFolder() != "" {
@@ -533,7 +455,6 @@ func describeCoordinate(c *envv1.Coordinate) string {
 	return out
 }
 
-// renderReferences lists what reads a value, which is what editing it changes.
 func renderReferences(stdout io.Writer, cell string, references []*envv1.Coordinate) {
 	if len(references) == 0 {
 		fmt.Fprintf(stdout, "Nothing references %s.\n", cell)
@@ -550,10 +471,6 @@ func renderReferences(stdout io.Writer, cell string, references []*envv1.Coordin
 	fmt.Fprintln(stdout, "\nEditing this value changes what every one of them reads.")
 }
 
-// renderValues lists the cells a project holds. environments is what the
-// provider enumerates, which is what makes an override addressed at a name no
-// longer among them an orphan: the value survives, nothing will ever ask for
-// it, and saying so is what stops the store quietly accumulating dead rows.
 func renderValues(stdout io.Writer, values []*envv1.ValueMetadata, environments []string) {
 	if len(values) == 0 {
 		fmt.Fprintln(stdout, "No values set. Set one with `ocel env set <KEY> <VALUE>`.")
@@ -569,8 +486,6 @@ func renderValues(stdout io.Writer, values []*envv1.ValueMetadata, environments 
 			environment += " (orphaned)"
 			orphans = true
 		}
-		// A reference has no size of its own, so the byte count is left blank
-		// rather than reported as zero, which would read as an empty value.
 		size := fmt.Sprint(v.GetSize())
 		source := "—"
 		if target := v.GetTarget(); target != nil {
@@ -587,8 +502,6 @@ func renderValues(stdout io.Writer, values []*envv1.ValueMetadata, environments 
 	}
 }
 
-// renderVersions shows when each version was written and how big it was.
-// There is no value column: history says a value changed, not what it was.
 func renderVersions(stdout io.Writer, cell string, versions []*envv1.VersionEntry) {
 	if len(versions) == 0 {
 		fmt.Fprintf(stdout, "No history for %s.\n", cell)

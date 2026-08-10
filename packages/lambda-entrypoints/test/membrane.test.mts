@@ -33,9 +33,6 @@ function waitFor(pred: () => boolean, timeoutMs = 3000): Promise<void> {
   });
 }
 
-// start serves the invoke and resolves with its port once a *fresh*
-// server-ready has arrived over the (async) control socket — waiting avoids
-// picking up a previous server's port.
 async function start(invoke: Invoke): Promise<number> {
   const before = messages.filter((m) => m.type === "server-ready").length;
   await serveInvoke(invoke);
@@ -43,8 +40,6 @@ async function start(invoke: Invoke): Promise<number> {
   return messages.filter((m) => m.type === "server-ready").at(-1)!.payload.httpPort;
 }
 
-// Import the membrane only after OCEL_CONTROL_SOCKET is set, so the lazy control
-// connection targets our capture socket. Populated in beforeAll.
 let serveInvoke: typeof import("../src/shared/membrane.mts").serveInvoke;
 let drainWaitUntil: typeof import("../src/shared/membrane.mts").drainWaitUntil;
 type Invoke = import("../src/shared/membrane.mts").Invoke;
@@ -91,7 +86,6 @@ describe("drainWaitUntil", () => {
     pending.push(
       Promise.resolve().then(() => {
         order.push("first");
-        // A late registration, added while the first batch is still settling.
         pending.push(Promise.resolve().then(() => order.push("late")));
       }),
     );
@@ -104,7 +98,6 @@ describe("drainWaitUntil", () => {
 });
 
 describe("the loopback header boundary", () => {
-  // Serves one request, captures the headers the app saw, and returns them.
   async function observe(headers: Record<string, string>): Promise<http.IncomingHttpHeaders> {
     let seen: http.IncomingHttpHeaders | undefined;
     const port = await start((req, res) => {
@@ -122,9 +115,6 @@ describe("the loopback header boundary", () => {
     return seen!;
   }
 
-  // undici drops a caller-supplied host, so the app's own self-fetch arrives
-  // claiming the loopback authority — the original ocelhq-7og signature, scoped
-  // to that path. x-forwarded-host survives and is what the client addressed.
   test("the app reads the public authority off Host, not the loopback one", async () => {
     const seen = await observe({ "x-forwarded-host": "app.ocel.site" });
 
@@ -143,9 +133,6 @@ describe("the loopback header boundary", () => {
     expect(seen.host).toMatch(/^127\.0\.0\.1:\d+$/);
   });
 
-  // x-ocel-entry names which route of the bundle to run. A self-fetch copies it
-  // from the request that caused it, where it names the *originating* route, so
-  // it must not survive; the request the bootstrap forwarded must keep it.
   test("a self-fetch loses the entry key it inherited", async () => {
     const seen = await observe({ "x-ocel-entry": "/server" });
 
@@ -161,9 +148,6 @@ describe("the loopback header boundary", () => {
 });
 
 describe("onListening", () => {
-  // Callers configure the process from the bound port here — the Next
-  // entrypoint's self-fetch origin among them — so it is handed the port the
-  // server really bound, not the one it asked for.
   test("is handed the port the server bound", async () => {
     const before = messages.filter((m) => m.type === "server-ready").length;
     let seen: number | undefined;
@@ -213,7 +197,6 @@ describe("invocation lifecycle", () => {
       (m) => m.type === "invocation-complete" && m.payload.requestId === "req-lifecycle",
     );
     expect(reIdx).toBeGreaterThanOrEqual(0);
-    // Completion is gated behind telemetry and the background task.
     expect(icIdx).toBeGreaterThan(reIdx);
     expect(events).toContain("waitUntil-settled");
   });
@@ -222,12 +205,10 @@ describe("invocation lifecycle", () => {
     let settled = false;
     const invoke: Invoke = (_req, res, ocel) => {
       ocel.waitUntil(new Promise<void>((r) => setTimeout(() => ((settled = true), r()), 60)));
-      // Hold the response open so the client's abort lands before finish.
       setTimeout(() => {
         try {
           res.end("late");
         } catch {
-          /* connection already gone */
         }
       }, 1000);
     };
@@ -255,15 +236,10 @@ describe("invocation lifecycle", () => {
     expect(settled).toBe(true);
   });
 
-  // How a cache handler defers work: it is bundled as its own module graph and
-  // cannot see the ocel context, so it reaches the invocation through the
-  // background bridge the Next entrypoint installs around the same waitUntil.
   test("holds the invocation for work deferred through the background bridge", async () => {
     let settled = false;
     const invoke: Invoke = (_req, res, ocel) =>
       runWithWaitUntil(ocel.waitUntil, async () => {
-        // Deep beneath the entrypoint and across an await, exactly where a
-        // handler's revalidateTag runs.
         await Promise.resolve();
         background(
           () => new Promise<void>((r) => setTimeout(() => ((settled = true), r()), 80)),
@@ -274,7 +250,6 @@ describe("invocation lifecycle", () => {
     const port = await start(invoke);
 
     await request(port, "req-bridge");
-    // The response landed; the deferred work had not.
     expect(settled).toBe(false);
 
     await waitFor(() =>

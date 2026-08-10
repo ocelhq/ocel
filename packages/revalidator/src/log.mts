@@ -1,14 +1,6 @@
 import type { Rejection, RevalidationMessage } from "./message.mjs";
 import type { ResolveFailure } from "./origin.mjs";
 
-// Structured logging for a secret-bearing record.
-//
-// The record's headers hold the app's bypass token, so nothing here takes a
-// record, a header map, or an error object: `context` copies the four dedup
-// ingredients out of a message and drops the rest, and every outcome is a
-// closed shape whose free text is a reason code. A caller that wanted to log
-// the token would have to invent a new field to carry it, which is the point —
-// the rule is enforced by the types rather than by remembering it.
 export interface LogContext {
   messageId: string;
   isrPrefix?: string;
@@ -28,10 +20,6 @@ export type FailureReason =
 export type Outcome =
   | { event: "RevalidateOk" }
   | { event: "RevalidateExpectMiss"; expected: string; got: string | null }
-  // A record the handler declined to run, reported as a failure so the queue
-  // redelivers it. It is logged rather than dropped silently, so a record that
-  // reaches the DLQ has a history that says which of "tried and failed" and
-  // "never tried" happened to it.
   | { event: "RevalidateSkipped"; reason: "group-stopped" }
   | { event: "RevalidateFailed"; reason: FailureReason; status?: number };
 

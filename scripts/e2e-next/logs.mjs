@@ -1,16 +1,4 @@
 #!/usr/bin/env node
-// NEXT_TEST_DEPLOY_LOGS_SCRIPT_PATH for the Next.js deployment-adapter
-// compatibility harness. Runs with cwd set to the temp app, plus NEXT_TEST_DIR
-// and NEXT_TEST_DEPLOY_URL.
-//
-// The three marker lines come first and everything else after, deliberately:
-// the harness takes the FIRST match of each marker, and the replayed build log
-// contains the fixture's own post-build markers (with an undefined deployment
-// id) which must not win over ours.
-//
-// The harness treats a non-zero exit as a failed test run, and logs are a
-// debugging aid, not a result — so every source here degrades to a note on
-// stdout and this script always exits 0.
 
 import { execFileSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
@@ -19,10 +7,8 @@ import { join } from "node:path";
 import { AWS_CLI_RETRY_ENV } from "./aws.mjs";
 import { BUILD_LOG_FILE, DEPLOY_RESULT_FILE, STATE_FILE, envSegment, lambdaLogGroups, markerLines } from "./lib.mjs";
 
-// How far back CloudWatch is queried when the state file carries no start time.
 const DEFAULT_LOG_WINDOW_MS = 60 * 60 * 1000;
 
-// Per-log-group event cap, so one chatty Lambda cannot bury the rest.
 const MAX_EVENTS_PER_GROUP = 200;
 
 const AWS_TIMEOUT_MS = 60_000;
@@ -39,9 +25,6 @@ replay(BUILD_LOG_FILE, join(appDir, BUILD_LOG_FILE));
 replay("ocel.log", join(appDir, ".ocel", "logs", "ocel.log"));
 printLambdaLogs();
 
-// readBuildID prefers the build's own BUILD_ID file over the deploy result: it
-// is written by the very build the harness is testing, whatever the CLI made of
-// it afterwards.
 function readBuildID() {
   const path = join(appDir, ".next", "BUILD_ID");
   if (existsSync(path)) {
@@ -59,18 +42,6 @@ function replay(label, path) {
   console.log(readFileSync(path, "utf8"));
 }
 
-// printLambdaLogs pulls this app's recent CloudWatch events. The functions are
-// Pulumi-autonamed, so they are found by the ocel tags every Ocel function
-// carries (cloud/aws/deploy/function.go). `ocel:env` is the one that isolates
-// this app: a whole CI run shares one project, so `ocel:project` matches every
-// fixture running concurrently, and `ocel:app` matches nothing narrower still
-// (every temp app is declared under the constant APP_NAME). `ocel:env` is the
-// asset key's environment segment — "preview-<this app's pointer>".
-//
-// It comes off the deploy result rather than the state file: the pointer is
-// what the CLI resolved the ref to, not something these scripts derive. A
-// deploy that produced no result falls back to the project filter, which mixes
-// concurrent fixtures' logs together but is better than printing none.
 function printLambdaLogs() {
   console.log("=== lambda logs ===");
   if (!state.slug) {
@@ -130,11 +101,6 @@ function printLambdaLogs() {
   }
 }
 
-// Local rather than aws.mjs's wrapper because this one pins --output json and
-// runs on the harness's longer timeout, but it borrows that module's retry env:
-// a log read throttled at the CLI's default of three attempts degrades to
-// "(could not read ...)" and quietly costs the run the evidence it was spawned
-// to print.
 function aws(args) {
   return execFileSync("aws", [...args, "--output", "json"], {
     encoding: "utf8",

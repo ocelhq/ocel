@@ -11,17 +11,6 @@ import (
 	"github.com/cloudflare/cloudflare-go/v4/option"
 )
 
-// liveDeploymentsStoreSettings is the verbatim body the Cloudflare API returned
-// for ocel-deployments-store-preview, a script that demonstrably carries the
-// DeploymentsStore class — it is bound, with a namespace_id — and yet reports no
-// migrations object at all. Every other endpoint that could carry a tag (the
-// script list, the version list, a version's detail) omits it too.
-//
-// This is the response that broke bootstrap: read for a migration tag it yields
-// "", which is the same answer as "never migrated", so the upload redeclared
-// new_sqlite_classes for an existing class and Cloudflare rejected it with
-// 400/10074. It is pinned here as a fixture because no unit test could have
-// reached the API's real shape, and the shape is the whole defect.
 const liveDeploymentsStoreSettings = `{
   "result": {
     "compatibility_date": "2026-07-13",
@@ -50,8 +39,6 @@ func liveSettingsProvider(t *testing.T) *provider {
 	)}
 }
 
-// The class is what the response actually reports, so it is what the decision
-// reads. Secret bindings are not classes and must not be counted.
 func TestDeployedClasses_ReadsTheClassOffTheLiveResponse(t *testing.T) {
 	t.Setenv(envAccountID, "acct")
 	classes, err := liveSettingsProvider(t).deployedClasses(context.Background(), "ocel-deployments-store-preview")
@@ -63,9 +50,6 @@ func TestDeployedClasses_ReadsTheClassOffTheLiveResponse(t *testing.T) {
 	}
 }
 
-// The bootstrap failure itself, stated as the payload it turned on: an upload of
-// the already-migrated store worker must declare no migration at all. Declaring
-// one is 400/10074, which is what the operator saw.
 func TestDeploymentsStoreUpload_DoesNotRedeclareAnExistingClass(t *testing.T) {
 	t.Setenv(envAccountID, "acct")
 	classes, err := liveSettingsProvider(t).deployedClasses(context.Background(), "ocel-deployments-store-preview")
@@ -79,8 +63,6 @@ func TestDeploymentsStoreUpload_DoesNotRedeclareAnExistingClass(t *testing.T) {
 	}
 }
 
-// A script Cloudflare has never heard of 404s, and that is the fresh-bootstrap
-// answer rather than a failure — it must still get the whole log.
 func TestDeployedClasses_AbsentScriptIsNoClasses(t *testing.T) {
 	t.Setenv(envAccountID, "acct")
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -100,9 +82,6 @@ func TestDeployedClasses_AbsentScriptIsNoClasses(t *testing.T) {
 	}
 }
 
-// A binding carrying script_name points at a class another script owns. Counting
-// it as deployed here would skip the step that creates this script's own class,
-// and Cloudflare would then reject the binding to a class it never created.
 func TestDeployedClasses_IgnoresAClassOwnedByAnotherScript(t *testing.T) {
 	t.Setenv(envAccountID, "acct")
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

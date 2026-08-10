@@ -4,18 +4,15 @@ import { bucket } from "./bucket.js";
 import { createUploadClient } from "./client.js";
 import { uploader } from "./uploader.js";
 
-// A bucket with two uploaders: `avatar` takes input, `doc` takes none.
 const avatar = uploader(
   {
     input: z.object({ userId: z.string() }),
     middleware: ({ input }) => {
-      // input is the parsed schema type
       expectTypeOf(input).toEqualTypeOf<{ userId: string }>();
       return { userId: input.userId, plan: "free" as const };
     },
   },
   {
-    // metadata from middleware threads into path + limits + onUploadComplete
     limits: {
       maxFileSize: ({ metadata }) => {
         expectTypeOf(metadata).toEqualTypeOf<{ userId: string; plan: "free" }>();
@@ -36,9 +33,7 @@ const storage = bucket("storage", { uploaders: { avatar, doc } });
 
 const client = createUploadClient<typeof storage>({ url: "/api/upload" });
 
-// Never executed — these assertions are compile-time only.
 export async function _typeChecks() {
-  // uploader name is compile-checked against the bucket
   await client.upload("avatar", { files: [], input: { userId: "u1" } });
   await client.upload("doc", { files: [] });
 

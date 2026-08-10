@@ -12,18 +12,12 @@ import type {
 } from "./store";
 import type { Env } from "./env";
 
-// One instance per project, addressed by a stable name (see index.ts). Every
-// method is RPC-callable on the stub; the class itself carries no auth logic
-// — index.ts decides who may call which method before it ever reaches here.
 export class DeploymentsStore extends DurableObject<Env> {
   constructor(ctx: DurableObjectState, env: Env) {
     super(ctx, env);
     store.ensureSchema(ctx.storage);
   }
 
-  // Seeds this instance's identity and returns the one it now carries — the
-  // presented pair on a fresh instance (or a forced adoption), the existing one
-  // otherwise, so concurrent first deploys converge on a single identity.
   async initialize(
     ownerToken: string,
     secret: string,
@@ -32,19 +26,12 @@ export class DeploymentsStore extends DurableObject<Env> {
     return store.initialize(this.ctx.storage, ownerToken, secret, force);
   }
 
-  // Constant-time-compares a bearer token against this instance's own stored
-  // project secret. False before the instance is initialized (no secret yet),
-  // so every op but initialize is rejected until the project is seeded.
   async authorized(token: string): Promise<boolean> {
     const secret = store.storedSecret(this.ctx.storage);
     if (secret === undefined) return false;
     return matchesSecret(token, secret);
   }
 
-  // Clears the instance's storage — history, records, ownership and secret —
-  // then re-creates the empty schema so the slug is immediately reusable by a
-  // fresh project. The shared worker itself is never deleted here (ocel
-  // destroy tears down only the project's own instance and app workers).
   async destroy(): Promise<void> {
     await this.ctx.storage.deleteAll();
     store.ensureSchema(this.ctx.storage);
@@ -54,9 +41,6 @@ export class DeploymentsStore extends DurableObject<Env> {
     store.putStaged(this.ctx.storage, record);
   }
 
-  // Returns { conflict } instead of throwing so the tag-collision signal
-  // survives the RPC boundary (custom error prototypes do not): index.ts turns
-  // a conflict into a 409 the deploy host surfaces verbatim.
   async promote(
     promotion: Promotion,
     pointer?: string,

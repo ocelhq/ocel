@@ -32,13 +32,6 @@ function waitFor(pred: () => boolean, timeoutMs = 3000): Promise<void> {
   });
 }
 
-// Stubs the default export of node:module before importing membrane.mts fresh
-// (the source reads Module.flushCompileCache/getCompileCacheDir off it), then
-// boots a real control socket, sends flush-compile-cache down it, and returns
-// the real compile-cache-flushed reply. `build` gets the real default export
-// and returns what stands in for it — deleting a key (rather than setting it
-// to undefined) is what makes a case a genuinely absent API, not just an
-// undefined-valued one.
 async function flushOver(
   build: (actualDefault: Record<string, unknown>) => Record<string, unknown>,
 ): Promise<FlushReply> {

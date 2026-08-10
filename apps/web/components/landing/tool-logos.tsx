@@ -119,8 +119,6 @@ export function GithubLogo({ className }: LogoProps) {
   );
 }
 
-/* -------------------------------------------------- framework marks (svgl) */
-
 export function NextjsLogo({ className }: LogoProps) {
   return (
     <svg viewBox="0 0 180 180" className={className} aria-hidden="true">

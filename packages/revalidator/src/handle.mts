@@ -3,16 +3,12 @@ import { parseMessage } from "./message.mjs";
 import { resolve, type OriginDeps } from "./origin.mjs";
 import { trigger, type TriggerDeps } from "./trigger.mjs";
 
-// A batch of SQS FIFO records, in the shape the event source mapping sends and
-// no wider — the wire format is interpreted in exactly one place.
 export interface SqsRecord {
   messageId: string;
   body: string;
   attributes?: { MessageGroupId?: string };
 }
 
-// ReportBatchItemFailures (declared on the event source mapping in
-// cloud/aws/bootstrap): only the reported records are redelivered.
 export interface BatchResponse {
   batchItemFailures: { itemIdentifier: string }[];
 }
@@ -38,18 +34,6 @@ async function once(deps: HandlerDeps, record: SqsRecord): Promise<Outcome> {
   return outcome;
 }
 
-// The FIFO contract: same-group messages are ordered, and a group that fails is
-// redelivered from the failure onward. So the first failure in a group ends
-// that group for this batch — its later records are reported unprocessed rather
-// than run out of order — while other groups carry on.
-//
-// A record with no group attribute — absent or empty; SQS FIFO sends neither,
-// and an empty one would collapse every such record into one shared group — is
-// its own group, keyed by its message id: one such record failing must not
-// suppress the next, which shares nothing with it.
-//
-// Nothing is allowed to throw out of here: a thrown handler fails the whole
-// batch, including groups that succeeded.
 export async function handle(deps: HandlerDeps, event: { Records?: SqsRecord[] }): Promise<BatchResponse> {
   const batchItemFailures: { itemIdentifier: string }[] = [];
   const stopped = new Set<string>();

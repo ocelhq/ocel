@@ -4,17 +4,8 @@ import { detect, resolveCommand } from "package-manager-detector";
 import { appOutDir } from "./layout.js";
 import type { AppInput, BuildOptions, FunctionSummary } from "./types.js";
 
-/**
- * Test seam over the actual build spawn. Mirrors the Go builderExec pattern:
- * tests replace it to assert the resolved command without running `next build`.
- */
 export const nextRunner = { run: spawnBuild };
 
-/**
- * Build a Next app by running its own build script. Emits no `.func` yet:
- * assembling the Next standalone output into a deployable Lambda artifact is a
- * separate follow-up, so this proves the path and returns nothing.
- */
 export async function buildNext(input: AppInput, options: BuildOptions): Promise<FunctionSummary[]> {
   const pkg = JSON.parse(readFileSync(path.join(input.cwd, "package.json"), "utf8"));
   if (!pkg.scripts?.build) {
@@ -25,11 +16,6 @@ export async function buildNext(input: AppInput, options: BuildOptions): Promise
   const cmd = resolveCommand(detected?.agent ?? "npm", "run", ["build"]);
   if (!cmd) throw new Error(`ocel: could not resolve a build command for app "${input.name}"`);
 
-  // This app's own values go first: the three entries below are the build's,
-  // and no resolved value may take one of their names. The folder is always
-  // written, so a binding inherited from the CLI never answers for this app.
-  // The Next adapter runs with the app dir as its cwd and can infer neither of
-  // the other two.
   await nextRunner.run(cmd.command, cmd.args, input.cwd, {
     ...input.env,
     OCEL_APP_NAME: input.name,

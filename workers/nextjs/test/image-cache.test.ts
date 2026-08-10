@@ -1,7 +1,3 @@
-// The colo tier as it carries an optimized image: the cache key's identity, the
-// TTL the browser is told, and the HIT/STALE/MISS transitions. caches.default
-// is a no-op on *.workers.dev, so none of this is observable on a deployment
-// there — every test here drives the machinery directly.
 import { describe, expect, it } from "vitest";
 
 import type { CacheDeps } from "../src/cache";
@@ -18,11 +14,6 @@ import { coloDeps } from "./cache-deps";
 const BASE_CONFIG = (fixtures.variants as unknown as Array<{ config: ImageConfig }>)[0]
   .config;
 
-// A CacheDeps over the real workerd cache with a manual clock and a waitUntil
-// the test flushes by hand, so a background refresh is observed rather than
-// raced. Every test names its own slug: the cache is process-wide and the key
-// is a hash over the slug, so that is what keeps one test's entries out of
-// another's.
 function testDeps(clock: { ms: number }): CacheDeps & { flush: () => Promise<void> } {
   const pending: Promise<unknown>[] = [];
   return {
@@ -39,8 +30,6 @@ function testDeps(clock: { ms: number }): CacheDeps & { flush: () => Promise<voi
   };
 }
 
-// Delegates to the real cache while recording the keys written, so a test can
-// reach an entry the worker addressed without reimplementing the key.
 function recordingCache(): Cache & { keys: string[] } {
   const real = caches.default;
   const recording = {
@@ -55,7 +44,6 @@ function recordingCache(): Cache & { keys: string[] } {
   return recording as unknown as Cache & { keys: string[] };
 }
 
-// An origin counting its calls, standing in for the optimizer PR 5 lands.
 function optimizer(body: string, init: ResponseInit = {}) {
   const fn = Object.assign(
     async () => {
@@ -115,8 +103,6 @@ describe("the image colo tier", () => {
     expect(origin.calls).toBe(1);
   });
 
-  // The whole point of a background refresh: the stale bytes go out on this
-  // request, and the optimization runs behind it.
   it("serves a stale entry immediately and refreshes behind the request", async () => {
     const clock = { ms: 0 };
     const cache = testDeps(clock);
@@ -150,10 +136,6 @@ describe("the image colo tier", () => {
     expect(await refreshed.text()).toBe("second");
   });
 
-  // A failing refresh must leave the entry alone rather than replace it with the
-  // failure. The discriminating read is the second one, after the refresh has
-  // run: had the 502 been stored, it would answer 502 there, and only an entry
-  // the store refused leaves the optimizer's own bytes to serve.
   it("leaves the entry intact when the refresh behind it 502s", async () => {
     const clock = { ms: 0 };
     const cache = testDeps(clock);
@@ -176,8 +158,6 @@ describe("the image colo tier", () => {
     expect(await stale.text()).toBe("optimized");
     await cache.flush();
 
-    // The refresh has now run and failed. The entry is what it was: still
-    // present, still stale, still the bytes the optimizer last produced.
     const again = await get(d);
     expect(again.status).toBe(200);
     expect(again.headers.get("x-ocel-cache")).toBe("STALE");
@@ -222,9 +202,6 @@ describe("the image colo tier", () => {
     expect(origin.calls).toBe(2);
   });
 
-  // HEAD is safe and cacheable, and an optimization carries none of the
-  // per-visitor semantics that make a prerender bypass on it. Bypassing would
-  // put a full optimizer invocation on the bill for every one of them.
   it("answers a HEAD from the entry a GET would read, without a body", async () => {
     const clock = { ms: 0 };
     const cache = testDeps(clock);
@@ -246,8 +223,6 @@ describe("the image colo tier", () => {
     expect(origin.calls).toBe(1);
   });
 
-  // ...and one that misses populates the entry the same way, rather than
-  // leaving a bodiless response behind for the next GET to read.
   it("populates the entry from a HEAD, so the following GET hits with a body", async () => {
     const clock = { ms: 0 };
     const cache = testDeps(clock);
@@ -280,15 +255,11 @@ describe("the image colo tier", () => {
     expect(response.headers.get("x-ocel-cache")).toBe("BYPASS");
     expect(origin.calls).toBe(1);
 
-    // Nothing was written, so a GET behind it still misses.
     await cache.flush();
     clock.ms = 1_000;
     expect((await get(d)).headers.get("x-ocel-cache")).toBe("MISS");
   });
 
-  // The version is what lets PR 6's durable tier change the entry format
-  // without a key change and without a flush: an entry this worker cannot read
-  // is re-optimized, not misread.
   it("treats an entry written in a format it does not know as a miss", async () => {
     const clock = { ms: 0 };
     const recording = recordingCache();
@@ -336,8 +307,6 @@ describe("the image cache key", () => {
     await cache.flush();
 
     clock.ms = 1_000;
-    // A tightened remotePatterns republishes the config under a new hash. An
-    // entry admitted under the old one must be unreachable, not merely stale.
     const tightened = await get(
       deps({
         slug: "confighash",
@@ -401,8 +370,6 @@ describe("the image cache key", () => {
     expect(origin.calls).toBe(2);
   });
 
-  // Without a hash there is nothing content-addressable to key on, so the entry
-  // is scoped to the build that produced it: correct, but flushed by a redeploy.
   it("falls back to a build-scoped identity for a path the build never hashed", async () => {
     const clock = { ms: 0 };
     const cache = testDeps(clock);
@@ -443,7 +410,6 @@ describe("the image cache key", () => {
     );
     await cache.flush();
 
-    // The same file, addressed by the same hash, under a later build.
     clock.ms = 1_000;
     const next = await get(
       deps({
@@ -474,7 +440,6 @@ describe("the image cache key", () => {
     await cache.flush();
 
     clock.ms = 1_000;
-    // The same url written the long way round, and a different build.
     const normalized = await get(
       deps({ slug: "remote", cache, origin, buildId: "b2" }),
       src("/img/../img/a.png"),
@@ -485,8 +450,6 @@ describe("the image cache key", () => {
     expect(other.headers.get("x-ocel-cache")).toBe("MISS");
   });
 
-  // The negotiated type, never the raw header: two browsers whose Accept
-  // strings differ in every other way still describe the same output bytes.
   it("keys on the negotiated type rather than the Accept header", async () => {
     const clock = { ms: 0 };
     const cache = testDeps(clock);
@@ -505,8 +468,6 @@ describe("the image cache key", () => {
     expect(other.headers.get("x-ocel-cache")).toBe("HIT");
     expect(origin.calls).toBe(1);
 
-    // A header that negotiates nothing describes different bytes — the source
-    // format, not webp — and is a different entry.
     const wildcard = await get(d, IMAGE, { headers: { accept: "*/*" } });
     expect(wildcard.headers.get("x-ocel-cache")).toBe("MISS");
   });
@@ -581,8 +542,6 @@ describe("the ttl the browser is told", () => {
     ).toBe("public, max-age=14400, must-revalidate");
   });
 
-  // The bytes the transform failed on. Next holds those for the configured
-  // minimum whatever the upstream would have allowed.
   it("ignores the upstream entirely on the optimization-failure passthrough", async () => {
     expect(
       await cacheControlFor(
@@ -592,8 +551,6 @@ describe("the ttl the browser is told", () => {
     ).toBe("public, max-age=14400, must-revalidate");
   });
 
-  // The optimizer's own signal, read for the ttl and dropped there. Advertising
-  // to every client that a transform failed is the deployment's business.
   it("never lets the passthrough marker reach the entry or the browser", async () => {
     const clock = { ms: 0 };
     const cache = testDeps(clock);
@@ -664,10 +621,6 @@ describe("the ttl the browser is told", () => {
   });
 });
 
-// The 400s and 500s stay bare: no Vary, no Content-Type, no Cache-Control.
-// Next's own do, and the conformance fixtures record it. x-ocel-cache is the one
-// exception — it is Ocel's diagnostic, no fixture pins it, and an operator
-// reading a 400 would otherwise get no tier signal where a 502 gives one.
 describe("a rejected request", () => {
   it("carries none of the served-image headers", async () => {
     const clock = { ms: 0 };
@@ -690,24 +643,16 @@ describe("a rejected request", () => {
     expect(bad.status).toBe(400);
     expect(bad.headers.get("x-ocel-cache")).toBe("BYPASS");
 
-    // The 500 path — a url no runtime can parse — answers the same way.
     const unparseable = await get(d, "url=%2F%25&w=640&q=75");
     expect(unparseable.status).toBe(500);
     expect(unparseable.headers.get("x-ocel-cache")).toBe("BYPASS");
   });
 });
 
-// Every other key test varies one input and asserts a MISS, which cannot catch
-// two genuinely different requests landing on one entry. These assert the
-// converse: what must not collide, and what must.
 describe("what the image cache key does and does not collapse", () => {
   const origin = () =>
     optimizer("optimized", { headers: { "cache-control": "public, max-age=60" } });
 
-  // The finding this whole class of test exists for. public/logo.png and the
-  // static-import copy of the same file are identical bytes, hash identically,
-  // and share one entry — no fragmentation, no second optimizer invocation —
-  // but only the content-hashed url may be called immutable.
   it("shares one entry between a public/ image and its static-import twin, with different ttls", async () => {
     const clock = { ms: 0 };
     const cache = testDeps(clock);
@@ -733,8 +678,6 @@ describe("what the image cache key does and does not collapse", () => {
     const fromPublic = await get(d, src("/logo.png"));
     expect(fromPublic.headers.get("x-ocel-cache")).toBe("HIT");
     expect(await fromPublic.text()).toBe("optimized");
-    // The entry was written by the immutable request and must not have pinned
-    // this one for ten years: a public/ path has no purge story.
     expect(fromPublic.headers.get("cache-control")).toBe(
       "public, max-age=14400, must-revalidate",
     );
@@ -767,9 +710,6 @@ describe("what the image cache key does and does not collapse", () => {
     expect(o.calls).toBe(1);
   });
 
-  // Distinct files under one build, distinct remote hosts, and one path served
-  // through two different projects: none of these are the same optimized image,
-  // and no pair of them may answer for another.
   it("gives genuinely different sources genuinely different entries", async () => {
     const clock = { ms: 0 };
     const cache = testDeps(clock);
@@ -795,8 +735,6 @@ describe("what the image cache key does and does not collapse", () => {
     expect(o.calls).toBe(cases.length);
   });
 
-  // The hash-map branch normalizes through new URL; the fallback must agree, or
-  // the same file requested three equivalent ways is three optimizer calls.
   it("normalizes the fallback identity the way the hash-map branch does", async () => {
     const clock = { ms: 0 };
     const cache = testDeps(clock);
@@ -824,8 +762,6 @@ describe("what the image cache key does and does not collapse", () => {
     expect(o.calls).toBe(1);
   });
 
-  // A query survives normalization: a local route is free to serve different
-  // bytes per query, and unlike a path it names no file to hash.
   it("keeps two queries on one path apart in the fallback", async () => {
     const clock = { ms: 0 };
     const cache = testDeps(clock);
@@ -846,9 +782,6 @@ describe("what the image cache key does and does not collapse", () => {
     expect(o.calls).toBe(2);
   });
 
-  // Under a basePath, /a.png names no file this deployment serves. It validates
-  // (Next strips no basePath from the url parameter), so it must miss on its own
-  // identity rather than answer from /docs/a.png's entry.
   it("does not let a bare path answer from the basePath-prefixed entry", async () => {
     const clock = { ms: 0 };
     const cache = testDeps(clock);

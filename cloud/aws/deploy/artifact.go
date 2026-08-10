@@ -25,32 +25,13 @@ import (
 	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
 )
 
-// uploadConcurrency bounds every artifact and asset upload fan-out.
-//
-// This work is latency-bound rather than bandwidth- or memory-bound, which is
-// what sets the number. A round trip to the bucket costs ~250ms, so the
-// wall time of a fan-out tracks how many requests are in flight almost
-// linearly: 103 HeadObjects (the shape a re-deploy of unchanged functions
-// takes) run in 3.3s eight at a time and 0.9s sixty-four at a time, flattening
-// out beyond that. Payload size does not constrain the choice — a function's
-// zip tops out under a megabyte, so even this many in flight peaks well under
-// 100MB. PutObject is the exception: it saturates the uplink long before this
-// limit and does not respond to concurrency at all, so raising this speeds up
-// the presence checks and the many-small-files paths, not a cold upload of
-// changed function code.
 const uploadConcurrency = 64
 
-// ArtifactUploader is the subset of the S3 client the artifact upload path
-// needs: a presence check and a put. The aws-sdk-go-v2 S3 client satisfies it;
-// tests substitute a fake.
 type ArtifactUploader interface {
 	HeadObject(ctx context.Context, in *s3.HeadObjectInput, optFns ...func(*s3.Options)) (*s3.HeadObjectOutput, error)
 	PutObject(ctx context.Context, in *s3.PutObjectInput, optFns ...func(*s3.Options)) (*s3.PutObjectOutput, error)
 }
 
-// walkRegularFiles returns every regular file under dir as a sorted slice of
-// slash-separated paths relative to dir. Both hashing and zipping consume it,
-// so they see the identical, deterministically-ordered file set.
 func walkRegularFiles(dir string) ([]string, error) {
 	var rels []string
 	if err := filepath.WalkDir(dir, func(path string, d fs.DirEntry, err error) error {
@@ -60,8 +41,6 @@ func walkRegularFiles(dir string) ([]string, error) {
 		if d.IsDir() {
 			return nil
 		}
-		// Regular files and symlinks only; symlinks carry pnpm's node_modules
-		// structure and must survive into the package.
 		if !d.Type().IsRegular() && d.Type()&fs.ModeSymlink == 0 {
 			return nil
 		}
@@ -78,8 +57,6 @@ func walkRegularFiles(dir string) ([]string, error) {
 	return rels, nil
 }
 
-// overlayPaths are an overlay's paths in sorted order, so hashing and zipping
-// see the same set in the same order.
 func overlayPaths(overlay map[string][]byte) []string {
 	rels := make([]string, 0, len(overlay))
 	for rel := range overlay {
@@ -89,15 +66,6 @@ func overlayPaths(overlay map[string][]byte) []string {
 	return rels
 }
 
-// hashArtifact computes a deterministic content hash over a `.func` source
-// tree plus the overlay deployed with it: the sorted set of regular files,
-// each folded in as its relative path, executable bit, and contents. It is
-// independent of zip encoding (mod times, entry order), so the same source
-// always hashes identically — which is what makes the content-addressed S3 key
-// dedup across deploys. The hash changes iff a file's path, contents, or
-// executable bit changes, and the overlay is folded in for exactly that
-// reason: skip-if-exists uploads would otherwise leave a rotated value
-// pointing at the object holding the ciphertext it replaced.
 func hashArtifact(dir string, overlay map[string][]byte) (string, error) {
 	rels, err := walkRegularFiles(dir)
 	if err != nil {
@@ -110,9 +78,6 @@ func hashArtifact(dir string, overlay map[string][]byte) (string, error) {
 		if err != nil {
 			return "", err
 		}
-		// Length-prefix the path so no two distinct (path, contents) layouts can
-		// collide by concatenation. The tag byte after it is 0/1 for a regular
-		// file's executable bit, 2 for a symlink whose target follows.
 		writeLenPrefixed(h, []byte(rel))
 
 		if info.Mode()&os.ModeSymlink != 0 {
@@ -159,19 +124,10 @@ func writeLenPrefixed(h io.Writer, b []byte) {
 	h.Write(b)
 }
 
-// artifactKey is the content-addressed S3 key a function's artifact lives at:
-// structured by project then function for human-navigability, keyed by the
-// source hash so a code change lands at a new key (and Pulumi redeploys) while
-// identical code dedups onto the same object.
 func artifactKey(slug, logicalName, hash string) string {
 	return fmt.Sprintf("%s/%s/%s.zip", slug, logicalName, hash)
 }
 
-// zipDir archives a `.func` source tree, plus the overlay the deploy renders
-// for it, into an in-memory Lambda deployment package: every regular file at
-// its relative path, preserving the executable bit. It mirrors what
-// pulumi.NewFileArchive produced, so the packaged Lambda is byte-for-byte
-// equivalent in layout.
 func zipDir(dir string, overlay map[string][]byte) ([]byte, error) {
 	rels, err := walkRegularFiles(dir)
 	if err != nil {
@@ -195,8 +151,6 @@ func zipDir(dir string, overlay map[string][]byte) ([]byte, error) {
 		if err != nil {
 			return nil, err
 		}
-		// FileInfoHeader carries the symlink mode; a symlink entry's body is its
-		// target path, which unzip on Lambda recreates as a link.
 		if info.Mode()&os.ModeSymlink != 0 {
 			target, err := os.Readlink(full)
 			if err != nil {
@@ -226,8 +180,6 @@ func zipDir(dir string, overlay map[string][]byte) ([]byte, error) {
 	return buf.Bytes(), nil
 }
 
-// copyFileInto streams a file's contents into w, closing the file promptly
-// (rather than a deferred close accumulating across a loop).
 func copyFileInto(w io.Writer, path string) error {
 	f, err := os.Open(path)
 	if err != nil {
@@ -238,17 +190,6 @@ func copyFileInto(w io.Writer, path string) error {
 	return err
 }
 
-// uploadArtifact ensures the object at bucket/key exists, skip-if-exists: a
-// present object (identical content already uploaded) is left as-is, a missing
-// one (never uploaded, or reaped by the lifecycle rule) is put. body is only
-// invoked on a miss, so the caller's zip is not paid when the object is already
-// present. A HeadObject error other than "not found" aborts rather than masking
-// an outage as "missing".
-//
-// contentType, when non-empty, is written onto the object so the store is
-// self-describing; callers whose objects are internal blobs (function zips) or
-// carry their own embedded metadata (prerender cache entries) pass "" and the
-// object keeps R2's default type.
 func uploadArtifact(ctx context.Context, up ArtifactUploader, bucket, key, contentType string, body func() ([]byte, error)) error {
 	_, err := up.HeadObject(ctx, &s3.HeadObjectInput{
 		Bucket: aws.String(bucket),
@@ -267,9 +208,6 @@ func uploadArtifact(ctx context.Context, up ArtifactUploader, bucket, key, conte
 	return putArtifact(ctx, up, bucket, key, contentType, data)
 }
 
-// putArtifact writes bucket/key unconditionally, replacing whatever is there.
-// It is what a key that is not content-addressed has to use: skip-if-exists is
-// only safe when the key changes whenever the bytes do.
 func putArtifact(ctx context.Context, up ArtifactUploader, bucket, key, contentType string, data []byte) error {
 	in := &s3.PutObjectInput{
 		Bucket: aws.String(bucket),
@@ -285,31 +223,17 @@ func putArtifact(ctx context.Context, up ArtifactUploader, bucket, key, contentT
 	return nil
 }
 
-// isNotFound reports whether an S3 error is a missing-object result (the two
-// shapes HeadObject returns for an absent key).
 func isNotFound(err error) bool {
 	var nf *s3types.NotFound
 	var nsk *s3types.NoSuchKey
 	return errors.As(err, &nf) || errors.As(err, &nsk)
 }
 
-// artifactRef is where a function's uploaded artifact lives, threaded from the
-// pre-up upload pass into the Pulumi program.
 type artifactRef struct {
 	Bucket string
 	Key    string
 }
 
-// uploadFunctionArtifacts hashes, zips, and uploads every function's `.func`
-// tree to the artifact bucket before provisioning, returning each function's
-// artifact reference keyed by logical name. It runs before the Pulumi program
-// so the content-addressed objects the Lambdas point at already exist. Uploads
-// are skip-if-exists, and the (potentially large) zip is deferred behind that
-// presence check, so an unchanged function re-deploying is a cheap HeadObject.
-//
-// baked is each app's sealed encrypted-baked values, keyed by app name; every
-// function of an app packages its app's bundle, which is what puts the
-// ciphertext inside the artifact rather than in the function's configuration.
 func uploadFunctionArtifacts(ctx context.Context, cfg Config, manifest *deploymentsv1.Manifest, baked map[string]appBundle, progress Progress) (map[string]artifactRef, error) {
 	functions := manifest.GetFunctions()
 	refs := make(map[string]artifactRef, len(functions))
@@ -345,9 +269,6 @@ func uploadFunctionArtifacts(ctx context.Context, cfg Config, manifest *deployme
 			}); err != nil {
 				return err
 			}
-			// Hold mu across the progress emit too: report reaches the provider's
-			// stream.Send, which is not safe for concurrent use, and these
-			// goroutines run in parallel.
 			mu.Lock()
 			refs[fn.GetLogicalName()] = artifactRef{Bucket: cfg.ArtifactBucket, Key: key}
 			progress.report(deploymentsv1.Phase_PHASE_UPLOADING, "Uploading function artifacts", done.Add(1), total)

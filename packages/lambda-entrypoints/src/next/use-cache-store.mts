@@ -12,10 +12,6 @@ import {
   type TagSnapshot,
 } from "@ocel/next-cache";
 
-// A `use cache` entry exactly as it sits in object storage: the metadata and the
-// body in one JSON document, so a read is a single GET and a write is atomic
-// with no torn entry. The body is base64 for the same reason the ISR entry's is
-// — it has to survive inside JSON.
 export interface UseCacheEntry {
   tags: string[];
   stale: number;
@@ -25,21 +21,11 @@ export interface UseCacheEntry {
   body: string;
 }
 
-// The outcome of one conditional read of this build's tag clock. `etag` is the
-// store's own version of the object, opaque to the clock and handed straight
-// back on the next read.
-//
-// `unusable` is both an absent snapshot and one this reader cannot understand.
-// Neither is an empty clock: a reader that took either for "nothing has been
-// invalidated" would serve entries the fleet has already thrown away, so the two
-// are one answer and the clock stays fail-closed on it.
 export type TagSnapshotRead =
   | { status: "fresh"; records: Record<string, TagRecord>; etag: string | null }
   | { status: "unchanged" }
   | { status: "unusable" };
 
-// UseCacheStore is the plural cache handlers' whole view of their backing
-// services, so the cache semantics can be exercised without reaching AWS.
 export interface UseCacheStore {
   readEntry(key: string): Promise<UseCacheEntry | null>;
   writeEntry(key: string, entry: UseCacheEntry): Promise<void>;
@@ -47,8 +33,6 @@ export interface UseCacheStore {
   writeTag(tag: string, record: TagRecordUpdate): Promise<boolean>;
 }
 
-// The key Next hands a handler is an encodeReply blob of arbitrary bytes and
-// arbitrary length. It is not a legal object key, so it is hashed into one.
 function objectName(key: string): string {
   return createHash("sha256").update(key).digest("hex");
 }
@@ -72,16 +56,10 @@ function isNotFound(err: any): boolean {
   return err?.name === "NoSuchKey" || err?.$metadata?.httpStatusCode === 404;
 }
 
-// S3 answers a satisfied If-None-Match with a bodiless 304, which the SDK
-// surfaces as a thrown error like any other non-2xx.
 function isNotModified(err: any): boolean {
   return err?.name === "NotModified" || err?.$metadata?.httpStatusCode === 304;
 }
 
-// awsUseCacheStore binds the store to the account-global state table for tag
-// writes and to the build's own object prefix for everything it reads. Tag keys
-// are namespaced by the deploy, which is also what the function's IAM policy is
-// scoped to.
 export function awsUseCacheStore(): UseCacheStore {
   const table = env("OCEL_STATE_TABLE");
   const tagNamespace = env("OCEL_ISR_TAG_NAMESPACE");
@@ -91,10 +69,6 @@ export function awsUseCacheStore(): UseCacheStore {
   const ddb = new DynamoDBClient({});
   const s3 = new S3Client({});
 
-  // Entries sit under the build's own prefix, which the function's existing
-  // object grant already covers. Next seeds every `use cache` key with the build
-  // id, so an app-scoped prefix would buy no extra sharing while widening the
-  // grant — and build scoping means entries are cleaned up with the build.
   const objectKey = (key: string) => `${prefix}/use-cache/${objectName(key)}.json`;
 
   return {
@@ -121,10 +95,6 @@ export function awsUseCacheStore(): UseCacheStore {
       );
     },
 
-    // The whole clock in one GET, conditioned on the version this instance
-    // already merged: the publisher rewrites the object on every invalidation it
-    // observes, so an unchanged object is proof nothing has been raised since.
-    // What this replaces is a paged scan of the tag partition per cold instance.
     async readTagSnapshot(etag) {
       let out;
       try {
@@ -152,8 +122,6 @@ export function awsUseCacheStore(): UseCacheStore {
       return { status: "fresh", records: snapshot.records, etag: out.ETag ?? null };
     },
 
-    // Writes into the same record the incremental cache's tag store already
-    // uses, under the same shared update, so both clocks observe every event.
     async writeTag(tag, record) {
       try {
         await ddb.send(

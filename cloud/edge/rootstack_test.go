@@ -6,10 +6,6 @@ import (
 	"testing"
 )
 
-// A worker-name stem names a family: the stem itself and every name segmented
-// below it. It is deliberately not a raw string prefix — a sibling whose name
-// merely starts with the same characters is a different family, and pruning and
-// teardown both act on what this answers.
 func TestNameUnderStem(t *testing.T) {
 	for _, tc := range []struct {
 		name         string
@@ -34,10 +30,6 @@ func TestNameUnderStem(t *testing.T) {
 	}
 }
 
-// The audit fields are additions to a record shape already on the wire, so a
-// Deployment that bakes nothing must still marshal byte-for-byte as it did
-// before them: a record the store already holds and one written now differ
-// only where there is something to say.
 func TestDeploymentRecord_AuditFieldsAreOmittedWhenAbsent(t *testing.T) {
 	raw, err := json.Marshal(DeploymentRecord{App: "web", Identity: "b1"})
 	if err != nil {

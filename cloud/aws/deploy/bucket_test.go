@@ -49,7 +49,6 @@ func TestTranslateBucket_NotificationAndLambdaArgs(t *testing.T) {
 func TestTranslateBucket_IAMArgs(t *testing.T) {
 	got := translateBucket(&resourcesv1.BucketConfig{})
 
-	// The runtime process presigns PUTs and reads/writes the session table.
 	if !slices.Contains(got.RuntimeS3Actions, "s3:PutObject") {
 		t.Errorf("RuntimeS3Actions = %v, want it to include s3:PutObject (presign)", got.RuntimeS3Actions)
 	}
@@ -59,8 +58,6 @@ func TestTranslateBucket_IAMArgs(t *testing.T) {
 		}
 	}
 
-	// The listener reads the landed object's tags and performs the guarded
-	// transition; it must NOT be able to presign or write objects.
 	if !slices.Contains(got.ListenerS3Actions, "s3:GetObjectTagging") {
 		t.Errorf("ListenerS3Actions = %v, want it to include s3:GetObjectTagging", got.ListenerS3Actions)
 	}

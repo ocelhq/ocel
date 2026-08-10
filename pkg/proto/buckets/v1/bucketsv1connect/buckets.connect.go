@@ -46,18 +46,8 @@ const (
 
 // BucketServiceClient is a client for the buckets.v1.BucketService service.
 type BucketServiceClient interface {
-	// PresignUpload writes the pending session and mints the presigned PUT
-	// targets. The response's targets are index-aligned with the request's
-	// files.
 	PresignUpload(context.Context, *v1.PresignUploadRequest) (*v1.PresignUploadResponse, error)
-	// VerifyUploadSignature re-derives the per-session HMAC over the signed
-	// payload and constant-time compares it. It is read-only: on a valid
-	// signature it returns the stored metadata so the route need never hold the
-	// session secret. The secret never leaves the store.
 	VerifyUploadSignature(context.Context, *v1.VerifyUploadSignatureRequest) (*v1.VerifyUploadSignatureResponse, error)
-	// GetUploadStatus reads the shared store and reports a session's state. It
-	// is read-only and drives op=poll; reading the shared store keeps it
-	// correct across app instances.
 	GetUploadStatus(context.Context, *v1.GetUploadStatusRequest) (*v1.GetUploadStatusResponse, error)
 }
 
@@ -129,18 +119,8 @@ func (c *bucketServiceClient) GetUploadStatus(ctx context.Context, req *v1.GetUp
 
 // BucketServiceHandler is an implementation of the buckets.v1.BucketService service.
 type BucketServiceHandler interface {
-	// PresignUpload writes the pending session and mints the presigned PUT
-	// targets. The response's targets are index-aligned with the request's
-	// files.
 	PresignUpload(context.Context, *v1.PresignUploadRequest) (*v1.PresignUploadResponse, error)
-	// VerifyUploadSignature re-derives the per-session HMAC over the signed
-	// payload and constant-time compares it. It is read-only: on a valid
-	// signature it returns the stored metadata so the route need never hold the
-	// session secret. The secret never leaves the store.
 	VerifyUploadSignature(context.Context, *v1.VerifyUploadSignatureRequest) (*v1.VerifyUploadSignatureResponse, error)
-	// GetUploadStatus reads the shared store and reports a session's state. It
-	// is read-only and drives op=poll; reading the shared store keeps it
-	// correct across app instances.
 	GetUploadStatus(context.Context, *v1.GetUploadStatusRequest) (*v1.GetUploadStatusResponse, error)
 }
 

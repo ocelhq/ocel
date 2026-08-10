@@ -14,22 +14,16 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
 )
 
-// sdkPackage is the package the scaffolded config imports from, so init
-// installs it alongside whichever provider it scaffolds with.
 const sdkPackage = "ocel"
 
-// defaultProviderPackage is the provider `ocel init` scaffolds with. It is the
-// only one, so init installs it without asking.
 const defaultProviderPackage = "@ocel/provider-aws"
 
-// initOptions holds the flags accepted by `ocel init`.
 type initOptions struct {
 	provider string
 }
 
 var initOpts initOptions
 
-// initCmd makes the current directory deployable.
 var initCmd = &cobra.Command{
 	Use:   "init [slug]",
 	Short: "Make this directory deployable",
@@ -59,9 +53,6 @@ func init() {
 	initCmd.Flags().StringVar(&initOpts.provider, "provider", defaultProviderPackage, "Provider package to scaffold with")
 }
 
-// runInit scaffolds ocel.config.ts in projectDir and adds ocel and the provider
-// package to its dependencies. slug is the requested project slug, empty to
-// derive one from the directory name.
 func runInit(ctx context.Context, projectDir, slug string, opts initOptions, stdout, stderr io.Writer) error {
 	slug, err := resolveSlug(projectDir, slug)
 	if err != nil {
@@ -93,9 +84,6 @@ func runInit(ctx context.Context, projectDir, slug string, opts initOptions, std
 	return nil
 }
 
-// resolveSlug settles the project's slug: the requested one, or the directory
-// name slugified. Both are checked against the rule the config resolver
-// enforces, so init never writes a config that later fails to load.
 func resolveSlug(projectDir, requested string) (string, error) {
 	requested = strings.TrimSpace(requested)
 	if requested == "" {
@@ -113,7 +101,6 @@ func resolveSlug(projectDir, requested string) (string, error) {
 	return requested, nil
 }
 
-// configTemplate renders the scaffolded ocel.config.ts.
 func configTemplate(slug, providerPkg string) string {
 	provider := providerIdentifier(providerPkg)
 	return fmt.Sprintf(`import { defineConfig } from "ocel/config";
@@ -126,8 +113,6 @@ export default defineConfig({
 `, provider, providerPkg, slug, provider)
 }
 
-// providerIdentifier names a provider package's default export in the
-// scaffolded config: "@ocel/provider-aws" becomes "awsProvider".
 func providerIdentifier(pkg string) string {
 	base := pkg[strings.LastIndex(pkg, "/")+1:]
 	name := slugify(strings.TrimPrefix(strings.ToLower(base), "provider-"))
@@ -143,8 +128,6 @@ func providerIdentifier(pkg string) string {
 	return ident + "Provider"
 }
 
-// packageManager is a JS package manager, the lockfile that identifies it, and
-// the subcommand it adds a dependency with.
 type packageManager struct {
 	name       string
 	lockfile   string
@@ -153,8 +136,6 @@ type packageManager struct {
 
 var npmPackageManager = packageManager{name: "npm", lockfile: "package-lock.json", addCommand: "install"}
 
-// packageManagers is searched in order, so the first lockfile found wins when a
-// directory somehow carries more than one.
 var packageManagers = []packageManager{
 	{name: "pnpm", lockfile: "pnpm-lock.yaml", addCommand: "add"},
 	{name: "yarn", lockfile: "yarn.lock", addCommand: "add"},
@@ -162,8 +143,6 @@ var packageManagers = []packageManager{
 	npmPackageManager,
 }
 
-// detectPackageManager identifies dir's package manager by its lockfile,
-// defaulting to npm when there is none to go on.
 func detectPackageManager(dir string) packageManager {
 	for _, pm := range packageManagers {
 		if _, err := os.Stat(filepath.Join(dir, pm.lockfile)); err == nil {
@@ -173,8 +152,6 @@ func detectPackageManager(dir string) packageManager {
 	return npmPackageManager
 }
 
-// runPackageManager executes argv in dir. A variable so tests can observe the
-// command without running an installer.
 var runPackageManager = func(ctx context.Context, dir string, argv []string, output io.Writer) error {
 	cmd := exec.CommandContext(ctx, argv[0], argv[1:]...)
 	cmd.Dir = dir
@@ -183,10 +160,6 @@ var runPackageManager = func(ctx context.Context, dir string, argv []string, out
 	return cmd.Run()
 }
 
-// addDependencies adds pkgs to dir's dependencies with the package manager its
-// lockfile names. This is the one step that leaves the machine, so a failure is
-// reported rather than returned: the config is already written, and a rerun of
-// init would refuse to overwrite it.
 func addDependencies(ctx context.Context, dir string, pkgs []string, stdout, stderr io.Writer) {
 	pm := detectPackageManager(dir)
 	argv := append([]string{pm.name, pm.addCommand}, pkgs...)

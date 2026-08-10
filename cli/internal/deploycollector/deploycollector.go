@@ -1,10 +1,3 @@
-// Package deploycollector serves a dedicated, minimal Connect
-// ResourceService for `ocel deploy`'s discovery phase (OCEL_PHASE=discovery):
-// it records the FULL Declare payload — name, type, and typed config — for
-// every declared resource, using the shared declare.Parse unit so it can
-// never diverge from the dev server in how a Declare is understood. Unlike
-// the dev server, it never triggers /sync-driven provisioning and never
-// touches cli/internal/devserver, which stays frozen.
 package deploycollector
 
 import (
@@ -18,10 +11,6 @@ import (
 	"github.com/ocelhq/ocel/pkg/proto/resources/v1/resourcesv1connect"
 )
 
-// Collector implements resourcesv1connect.ResourceServiceHandler,
-// accumulating every resource declared during a discovery run into a
-// builder-ready structure (declare.Resource, config oneof included) for the
-// deploy manifest builder to consume.
 type Collector struct {
 	*envgate.Gate
 
@@ -29,15 +18,10 @@ type Collector struct {
 	resources []declare.Resource
 }
 
-// New returns an empty Collector serving gate's variable declarations
-// alongside its own resource declarations: one discovery run declares both.
 func New(gate *envgate.Gate) *Collector {
 	return &Collector{Gate: gate}
 }
 
-// Declare implements resourcesv1connect.ResourceServiceHandler, parsing req
-// via the shared declare.Parse unit and recording its full result —
-// including the typed config the dev server itself discards.
 func (c *Collector) Declare(_ context.Context, req *resourcesv1.DeclareRequest) (*resourcesv1.DeclareResponse, error) {
 	res, err := declare.Parse(req)
 	if err != nil {
@@ -51,7 +35,6 @@ func (c *Collector) Declare(_ context.Context, req *resourcesv1.DeclareRequest) 
 	return &resourcesv1.DeclareResponse{}, nil
 }
 
-// Snapshot returns every resource declared so far.
 func (c *Collector) Snapshot() []declare.Resource {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -60,12 +43,6 @@ func (c *Collector) Snapshot() []declare.Resource {
 	return out
 }
 
-// Mux returns the HTTP handler serving the Connect ResourceService plus a
-// no-op /sync acknowledgment. discovery.Bundle's generated entrypoint is
-// shared with the dev path and always POSTs /sync once every declaration's
-// registration promise resolves; the collector acks it with 200 and does
-// nothing else, so discovery completes without any provisioning and without
-// the dev server's /sync route ever being involved.
 func (c *Collector) Mux() *http.ServeMux {
 	mux := http.NewServeMux()
 	path, handler := resourcesv1connect.NewResourceServiceHandler(c)

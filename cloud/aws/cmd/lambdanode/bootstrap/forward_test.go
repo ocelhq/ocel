@@ -13,8 +13,6 @@ import (
 	"testing"
 )
 
-// capturedResponse records what the fake Runtime API received on the streaming
-// POST /response, so a test can assert the exact bytes the bootstrap emitted.
 type capturedResponse struct {
 	body        []byte
 	trailer     http.Header
@@ -22,8 +20,6 @@ type capturedResponse struct {
 	mode        string
 }
 
-// fakeRuntime stands up an httptest Runtime API that serves one invocation
-// (event) on /next and captures the streamed response.
 func fakeRuntime(t *testing.T, event []byte) (*runtimeClient, *capturedResponse) {
 	t.Helper()
 	cap := &capturedResponse{}
@@ -57,8 +53,6 @@ func portOf(t *testing.T, s *httptest.Server) int {
 	return p
 }
 
-// splitPrelude separates the http-integration-response prelude JSON from the
-// streamed body at the 8 null-byte separator.
 func splitPrelude(t *testing.T, raw []byte) (prelude, []byte) {
 	t.Helper()
 	sep := bytes.Index(raw, make([]byte, preludeSeparatorLen))
@@ -114,9 +108,6 @@ func TestHandleInvocation_StreamsPreludeAndBody(t *testing.T) {
 	}
 }
 
-// What the app process behind the loopback actually reads off the wire: the
-// public authority, so nextUrl.origin and headers().get('host') are right and
-// an absolute Location can never name the ephemeral loopback port.
 func TestHandleInvocation_NodeObservesThePublicHost(t *testing.T) {
 	var observed string
 	node := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -138,10 +129,6 @@ func TestHandleInvocation_NodeObservesThePublicHost(t *testing.T) {
 	}
 }
 
-// Every status Go's http.Client would otherwise follow on its own. The app owns
-// its redirects — NextResponse.redirect (307), permanentRedirect (308), a
-// next.config redirect (301/308), an auth guard (302/303) — so each must arrive
-// at the Runtime API as the app wrote it.
 func TestHandleInvocation_AppRedirectIsNotFollowed(t *testing.T) {
 	for _, status := range []int{
 		http.StatusMovedPermanently,
@@ -187,9 +174,6 @@ func TestHandleInvocation_AppRedirectIsNotFollowed(t *testing.T) {
 	}
 }
 
-// A Function URL withholds the terminating chunk of a streamed response that
-// carries no body byte, hanging the client, so an empty body must leave as one
-// sentinel byte under the header that tells the edge to drop it again.
 func TestHandleInvocation_EmptyBodyTravelsAsSentinelByte(t *testing.T) {
 	for _, status := range []int{
 		http.StatusOK,
@@ -225,9 +209,6 @@ func TestHandleInvocation_EmptyBodyTravelsAsSentinelByte(t *testing.T) {
 	}
 }
 
-// A Function URL frames 204 and 304 with Content-Length: 0 rather than chunked
-// encoding, so they terminate with no body byte and need no sentinel — and both
-// forbid content, so sending one would violate the status.
 func TestHandleInvocation_SelfTerminatingStatusesCarryNoSentinel(t *testing.T) {
 	for _, status := range []int{http.StatusNoContent, http.StatusNotModified} {
 		t.Run(strconv.Itoa(status), func(t *testing.T) {
@@ -257,8 +238,6 @@ func TestHandleInvocation_SelfTerminatingStatusesCarryNoSentinel(t *testing.T) {
 	}
 }
 
-// The sentinel is only for a body that has no bytes at all: a response with a
-// body must arrive byte-for-byte, unmarked, however small it is.
 func TestHandleInvocation_BodiedResponseIsUnmarkedAndIntact(t *testing.T) {
 	node := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		io.WriteString(w, "x")
@@ -282,7 +261,6 @@ func TestHandleInvocation_BodiedResponseIsUnmarkedAndIntact(t *testing.T) {
 }
 
 func TestHandleInvocation_PreFirstByteFailureIs502(t *testing.T) {
-	// Reserve then release a port so nothing is listening → connection refused.
 	l, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
 		t.Fatal(err)
@@ -310,9 +288,6 @@ func TestHandleInvocation_PreFirstByteFailureIs502(t *testing.T) {
 }
 
 func TestHandleInvocation_MidStreamFailureSetsErrorTrailer(t *testing.T) {
-	// Declare more bytes than we write, then return: the server closes the
-	// connection early and the client's body read fails after the prelude and
-	// first bytes have already streamed.
 	node := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Length", "1000")
 		w.WriteHeader(http.StatusOK)

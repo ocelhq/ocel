@@ -22,18 +22,10 @@ import (
 	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
 )
 
-// prerenderManifest is the subset of a Next app's routing-manifest.json the
-// asset upload reads: the build id, which keys the objects and is immutable per
-// build.
 type prerenderManifest struct {
 	BuildID string `json:"buildId"`
 }
 
-// appAssetPrefix is the key prefix every asset one app publishes to the
-// account-global bucket sits under: <env>/<project-id>/<app-id>/<build-id>. It
-// is also what that app's IAM policy is scoped to and what its cache handler
-// joins its keys onto, so all three agree by construction — and no two apps ever
-// address the same slice.
 func appAssetPrefix(cfg Config, slug, app string) (string, error) {
 	var pm prerenderManifest
 	raw, err := os.ReadFile(filepath.Join(appArtifactRoot(cfg.ArtifactRoot, app), "routing-manifest.json"))
@@ -49,19 +41,10 @@ func appAssetPrefix(cfg Config, slug, app string) (string, error) {
 	return appAssetPrefixFor(cfg.Env, slug, app, pm.BuildID), nil
 }
 
-// appAssetPrefixFor is appAssetPrefix's pure half, once the build id is
-// already known rather than read off a build's routing manifest — what
-// prune needs, since the build it is reclaiming was never produced by the
-// deploy running it. The app-id key segment reuses the worker-name sanitizer
-// so it agrees with how the app is otherwise addressed, and stays a safe,
-// stable path token.
 func appAssetPrefixFor(env, slug, app, buildID string) string {
 	return path.Join(env, slug, sanitizeWorkerName(app), buildID)
 }
 
-// appCaches describes the ISR cache of every app in the manifest that keeps
-// one, keyed by app name. An app whose framework has no server-side cache is
-// absent, and so gets neither cache env nor a cache grant.
 func appCaches(cfg Config, manifest *deploymentsv1.Manifest) (map[string]*isrConfig, error) {
 	if err := checkISRWriterAgrees(cfg); err != nil {
 		return nil, err
@@ -92,23 +75,12 @@ func appCaches(cfg Config, manifest *deploymentsv1.Manifest) (map[string]*isrCon
 	return caches, nil
 }
 
-// uploadPrerenderAssets uploads each app's seeded cache entries under that app's
-// own prefix, keeping the segment they were emitted under in the key so the
-// deployed cache handler reads them back at exactly that path. It is a no-op for
-// a manifest with no cached app.
-//
-// The two kinds of entry go to different buckets. Route entries follow
-// entryTarget to whichever store the substrate adopted, because the edge reads
-// them directly. Fetch entries hold upstream response bodies — origin-private
-// data — so they always land in the provider's own bucket, whatever the edge
-// offered.
 func uploadPrerenderAssets(ctx context.Context, cfg Config, manifest *deploymentsv1.Manifest) error {
 	caches, err := appCaches(cfg, manifest)
 	if err != nil {
 		return err
 	}
 
-	// Each segment of a build's cache output and where it publishes to.
 	segments := []struct {
 		dir string
 		to  uploadTarget
@@ -123,8 +95,6 @@ func uploadPrerenderAssets(ctx context.Context, cfg Config, manifest *deployment
 	}
 	var uploads []upload
 	for app, cache := range caches {
-		// Cache entries live beside functions/ rather than inside it, and keep
-		// their own segment in the key: that is exactly where the handler looks.
 		for _, seg := range segments {
 			dir := filepath.Join(appArtifactRoot(cfg.ArtifactRoot, app), seg.dir)
 			entries, err := collectFiles(dir)
@@ -140,14 +110,9 @@ func uploadPrerenderAssets(ctx context.Context, cfg Config, manifest *deployment
 			}
 		}
 	}
-	// Seeded before the entries and independently of them: an app with nothing
-	// prerendered still has an edge reading its clock on every request.
 	if err := seedTagSnapshots(ctx, cfg, caches, time.Now()); err != nil {
 		return err
 	}
-	// Likewise independent of what this build prerendered: the first entry an
-	// app writes at runtime is rejected unless its write secret is already
-	// seeded, and that write can happen the moment its functions go live.
 	if err := seedISRWriters(ctx, cfg, caches); err != nil {
 		return err
 	}
@@ -173,7 +138,6 @@ func uploadPrerenderAssets(ctx context.Context, cfg Config, manifest *deployment
 	return g.Wait()
 }
 
-// uploadTarget is one bucket and the uploader that addresses it.
 type uploadTarget struct {
 	up     ArtifactUploader
 	bucket string
@@ -189,10 +153,6 @@ func (t uploadTarget) validate() error {
 	return nil
 }
 
-// tagSnapshot mirrors the TypeScript TagSnapshot in @ocel/next-cache. The deploy
-// writes this document once and the Lambda publisher rewrites it thereafter, so
-// the two agree on the field names and the version by way of the shared fixture
-// both sides' tests read — never by way of a shared type.
 type tagSnapshot struct {
 	Version     int                  `json:"version"`
 	DeployedAt  int64                `json:"deployedAt"`
@@ -200,8 +160,6 @@ type tagSnapshot struct {
 	Records     map[string]tagRecord `json:"records"`
 }
 
-// tagRecord is when a tag was last invalidated. The deploy never writes one; it
-// is here because the document it seeds is the same document the publisher fills.
 type tagRecord struct {
 	Stale   int64 `json:"stale,omitempty"`
 	Expired int64 `json:"expired,omitempty"`
@@ -209,17 +167,9 @@ type tagRecord struct {
 
 const (
 	tagSnapshotVersion = 1
-	// What tagSnapshotKey() in @ocel/next-cache appends to the same prefix. The
-	// deploy writes the object and the edge reads it without either calling the
-	// other's code, so the edge contract fixture is what holds the two spellings
-	// equal; a test here asserts this constant against it.
-	tagSnapshotSuffix = "/tag-clock.json"
+	tagSnapshotSuffix  = "/tag-clock.json"
 )
 
-// genesisSnapshot is a build's tag clock at the moment it deploys: empty, and
-// anchored. Empty is the correct content rather than a placeholder — every entry
-// in the build has a lastModified at or after this instant, so no invalidation
-// recorded before it can apply to any of them.
 func genesisSnapshot(at time.Time) tagSnapshot {
 	ms := at.UnixMilli()
 	return tagSnapshot{
@@ -230,24 +180,6 @@ func genesisSnapshot(at time.Time) tagSnapshot {
 	}
 }
 
-// seedTagSnapshots writes each app's genesis snapshot beside that app's entries,
-// so a fresh build intercepts from its first request instead of falling open
-// until some Lambda warms and publishes.
-//
-// It is also the only place the build's deploy time is ever recorded. The
-// publisher prunes records that can no longer expire anything in this build, and
-// that proof rests entirely on deployedAt; no environment variable carries a
-// build timestamp, and anything the publisher could synthesize would be an upper
-// bound, which would prune records that can still legitimately expire an entry.
-//
-// The clock exists twice, and both copies need the anchor. The edge reads the
-// replica in whichever store the substrate adopted; the stream publisher writes
-// its own copy into the provider's asset bucket, which nothing reads until
-// ocelhq-wvag.5. They are the same object on a substrate that adopted no store.
-//
-// Create-only. A redeploy of the same build must keep the snapshot the running
-// build accumulated, so an object already present is the expected outcome and
-// not a failure.
 func seedTagSnapshots(ctx context.Context, cfg Config, caches map[string]*isrConfig, at time.Time) error {
 	body, err := json.Marshal(genesisSnapshot(at))
 	if err != nil {
@@ -272,11 +204,6 @@ func seedTagSnapshots(ctx context.Context, cfg Config, caches map[string]*isrCon
 	return nil
 }
 
-// snapshotTargets is every store a build's genesis clock has to reach, deduped
-// by bucket: the provider's own, and the adopted one when there is a distinct
-// one. A target that is not configured is skipped rather than failed — a
-// substrate with no asset bucket has nowhere for a build's objects at all, and
-// the upload path already says so.
 func snapshotTargets(cfg Config) []uploadTarget {
 	var targets []uploadTarget
 	for _, t := range []uploadTarget{{up: cfg.Uploader, bucket: cfg.AssetBucket}, entryTarget(cfg)} {
@@ -291,9 +218,6 @@ func snapshotTargets(cfg Config) []uploadTarget {
 	return targets
 }
 
-// isPreconditionFailed reports whether a conditional write lost to the object it
-// conditioned on. Nothing else may be read as one: a denied grant must still
-// surface as a failed deploy rather than as a snapshot silently never seeded.
 func isPreconditionFailed(err error) bool {
 	var apiErr smithy.APIError
 	if errors.As(err, &apiErr) && apiErr.ErrorCode() == "PreconditionFailed" {
@@ -303,10 +227,6 @@ func isPreconditionFailed(err error) bool {
 	return errors.As(err, &respErr) && respErr.HTTPStatusCode() == http.StatusPreconditionFailed
 }
 
-// entryTarget is where seeded ISR cache entries land: the substrate's adopted
-// cache store when its edge offered one, and the provider's own asset bucket
-// when it did not. The cache handler makes the same choice from the coordinates
-// the membrane injects, so the two agree on one bucket by construction.
 func entryTarget(cfg Config) uploadTarget {
 	if isrEntriesAdopted(cfg) {
 		return uploadTarget{up: cfg.CacheStoreUploader, bucket: cfg.CacheStoreBucket}
@@ -314,18 +234,10 @@ func entryTarget(cfg Config) uploadTarget {
 	return uploadTarget{up: cfg.Uploader, bucket: cfg.AssetBucket}
 }
 
-// isrEntriesAdopted reports whether this deploy's ISR entries live in the
-// substrate's adopted cache store rather than the provider's own bucket. It is
-// the one question that decides where entries are seeded, where the deployed
-// function reads them back, and — because the writer worker holds that same
-// bucket and no other — whether entry writes go through the writer.
 func isrEntriesAdopted(cfg Config) bool {
 	return cfg.CacheStoreBucket != "" && cfg.CacheStoreUploader != nil
 }
 
-// collectFiles returns every file under dir as slash-separated paths relative to
-// it. A missing dir yields no files — an app with nothing prerendered emits no
-// cache entries.
 func collectFiles(dir string) ([]string, error) {
 	var rels []string
 	err := filepath.WalkDir(dir, func(p string, d fs.DirEntry, err error) error {

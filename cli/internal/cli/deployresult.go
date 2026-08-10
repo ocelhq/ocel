@@ -9,10 +9,6 @@ import (
 	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
 )
 
-// recordDeployResult writes .ocel/deploy-result.json for a deploy that just
-// succeeded (see package deployresult). The build ids come from the build
-// output this same run produced, the promotion id and featured URLs from the
-// provider's terminal result.
 func recordDeployResult(cfg *projectconfig.Config, manifest *deploymentsv1.Manifest, env *deploymentsv1.Environment, tag, promotionID string, appURLs []string) error {
 	apps := make([]deployresult.App, 0, len(manifest.GetApps()))
 	for _, a := range manifest.GetApps() {
@@ -35,8 +31,6 @@ func recordDeployResult(cfg *projectconfig.Config, manifest *deploymentsv1.Manif
 	return nil
 }
 
-// environmentClassKey renders an environment class as the lowercase token the
-// deploy result and the config's domain block both key by.
 func environmentClassKey(class deploymentsv1.Environment_Class) string {
 	switch class {
 	case deploymentsv1.Environment_CLASS_PRODUCTION:

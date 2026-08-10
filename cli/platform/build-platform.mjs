@@ -1,5 +1,3 @@
-// Bundles the Node platform artifacts the Go CLI embeds. Driven by generate.sh,
-// which owns the input-hash gate and the worker bundles.
 import { build } from "esbuild";
 import { copyFile, mkdir, rm } from "node:fs/promises";
 import { dirname, join } from "node:path";
@@ -12,9 +10,6 @@ const dist = join(platformDir, "dist");
 await rm(dist, { recursive: true, force: true });
 await mkdir(join(dist, "workers"), { recursive: true });
 
-// cjs is required: the bundled `typescript` is cjs and an esm output breaks on
-// its `__filename` references. The externals and loaders are the mock-only and
-// asset paths inside @mapbox/node-pre-gyp, reached through @vercel/nft.
 await build({
   entryPoints: [join(platformDir, "src/builder/cli.ts")],
   outfile: join(dist, "builder/cli.cjs"),
@@ -34,9 +29,6 @@ await build({
   format: "esm",
 });
 
-// The variables UI. It is served from the binary over loopback and never
-// materialized, so it is bundled to fixed names index.html asks for, with no
-// runtime, no network and no external font — offline is the whole point.
 await build({
   entryPoints: [join(platformDir, "src/vars-ui/main.ts")],
   outfile: join(dist, "vars-ui/app.js"),
@@ -51,11 +43,6 @@ await copyFile(
   join(dist, "vars-ui/index.html"),
 );
 
-// Stay unbundled: the adapter copies these into the user's app verbatim —
-// edge-cache-handler.cjs so its bare `require("next/dist/...")` binds to that
-// app's own Next, next-dispatch.cjs because it is the bundle launcher's runtime
-// peer. The adapter resolves both relative to its own URL, so they must sit
-// beside the bundled adapter here exactly as they do in the package's dist.
 await Promise.all(
   ["edge-cache-handler.cjs", "next-dispatch.cjs"].map((name) =>
     copyFile(

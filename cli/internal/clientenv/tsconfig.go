@@ -9,24 +9,8 @@ import (
 	"strings"
 )
 
-// A tsconfig is a file a developer maintains — comments, trailing commas and
-// all — so the entry is spliced into the text rather than parsed and written
-// back. Re-serialising would silently drop everything JSON cannot hold.
-
-// maxExtends bounds the chain of base configs followed, so a cycle is an error
-// rather than a hang.
 const maxExtends = 16
 
-// withMapping returns source carrying a compilerOptions.paths entry that
-// resolves specifier at the app's generated accessor, or source unchanged when
-// the mapping is already there. path is where source was read from, because
-// two things the entry depends on can live in another file: the baseUrl a
-// paths value is resolved against, and the paths a base config already states.
-//
-// Where the entry cannot be written truthfully the config is left alone and
-// the refusal says what to write by hand. The alternative — a mapping that
-// resolves somewhere else, or one that replaces a base config's aliases — is a
-// broken project reported as a success.
 func withMapping(path, source string) (string, error) {
 	if hasKey(source, specifier) {
 		return source, nil
@@ -74,8 +58,6 @@ func withMapping(path, source string) (string, error) {
 	}
 }
 
-// refuse reports why a config was left alone, and states the entry the
-// developer has to add for `ocel/env/client` to resolve.
 func refuse(path, baseURL, reason string) error {
 	target, err := accessorTarget(baseURL)
 	if err != nil {
@@ -85,10 +67,6 @@ func refuse(path, baseURL, reason string) error {
 		filepath.Base(path), reason, specifier, specifier, target)
 }
 
-// accessorTarget is what a paths value has to say to reach the generated
-// accessor. TypeScript resolves a paths value against baseUrl where a config
-// states one and against the config's own directory otherwise, so the target
-// is derived from accessorPath rather than spelled a second time.
 func accessorTarget(baseURL string) (string, error) {
 	target := accessorPath
 	if baseURL != "" {
@@ -105,7 +83,6 @@ func accessorTarget(baseURL string) (string, error) {
 	return "./" + slashed, nil
 }
 
-// local is what one config file's own text states.
 type local struct {
 	root       span
 	options    span
@@ -118,10 +95,6 @@ type local struct {
 	hasExtends bool
 }
 
-// parse reads the members the mapping depends on out of one config's text. It
-// fails on anything it cannot account for — a file that is not an object, a
-// paths member that is not one — rather than reporting an absence it did not
-// establish.
 func parse(source string) (local, bool) {
 	root, ok := objectBody(source, skipTrivia(source, 0))
 	if !ok {
@@ -151,19 +124,12 @@ func parse(source string) (local, bool) {
 	return file, true
 }
 
-// inherited is what a config's extends chain contributes: the baseUrl its
-// paths values resolve against, whether any config in it states paths a child's
-// own would replace, and whether one already maps the specifier.
 type inherited struct {
 	baseURL  string
 	hasPaths bool
 	mapped   bool
 }
 
-// extended follows the chain of base configs from, stated as extends, and
-// reports what they contribute. Only a relative specifier is followed: a bare
-// one is resolved by the package manager's rules, which the CLI does not
-// implement and will not guess at.
 func extended(from, extends string) (inherited, error) {
 	var out inherited
 	found := false
@@ -192,8 +158,6 @@ func extended(from, extends string) (inherited, error) {
 			out.mapped = out.mapped || hasKey(source, specifier)
 		}
 		if base.hasBaseURL && !found {
-			// A base config's relative paths are resolved against the directory
-			// that config sits in, not the child's.
 			rel, err := filepath.Rel(filepath.Dir(from), filepath.Join(filepath.Dir(path), filepath.FromSlash(base.baseURL)))
 			if err != nil {
 				return inherited{}, fmt.Errorf("it extends %q, whose baseUrl ocel cannot resolve", extends)
@@ -208,12 +172,8 @@ func extended(from, extends string) (inherited, error) {
 	return inherited{}, errors.New("its chain of extended configs is too long to follow")
 }
 
-// span is a JSON object's body: the range between its braces.
 type span struct{ start, end int }
 
-// insertMember splices member in as an object's first entry, indented one
-// level deeper than the line the object opens on. The separating comma goes
-// after it, so an object that was empty does not gain a trailing one.
 func insertMember(source string, body span, depth int, member string) string {
 	tail := ",\n"
 	if skipTrivia(source, body.start) >= body.end {
@@ -222,8 +182,6 @@ func insertMember(source string, body span, depth int, member string) string {
 	return source[:body.start] + "\n" + strings.Repeat("  ", depth) + member + tail + source[body.start:]
 }
 
-// memberObject returns the body of the object the named member of the object
-// at body holds, if that member exists and is an object.
 func memberObject(source string, body span, key string) (span, bool) {
 	value, ok := memberValue(source, body, key)
 	if !ok {
@@ -232,9 +190,6 @@ func memberObject(source string, body span, key string) (span, bool) {
 	return objectBody(source, value)
 }
 
-// memberValue returns the index of the value the named member of the object at
-// body holds. Only that object's own members are considered — a key of the
-// same name nested inside one of its values is a different key.
 func memberValue(source string, body span, key string) (int, bool) {
 	for i := body.start; i < body.end; {
 		if source[i] == '"' {
@@ -262,7 +217,6 @@ func memberValue(source string, body span, key string) (int, bool) {
 	return 0, false
 }
 
-// objectBody returns the range between the braces of the object starting at i.
 func objectBody(source string, i int) (span, bool) {
 	if i >= len(source) || source[i] != '{' {
 		return span{}, false
@@ -274,7 +228,6 @@ func objectBody(source string, i int) (span, bool) {
 	return span{start: i + 1, end: end - 1}, true
 }
 
-// valueEnd returns the index just past the bracketed value starting at i.
 func valueEnd(source string, i int) (int, bool) {
 	depth := 0
 	for i < len(source) {
@@ -301,9 +254,6 @@ func valueEnd(source string, i int) (int, bool) {
 	return 0, false
 }
 
-// hasKey reports whether the source names key as a member anywhere in it, at
-// any depth. Presence is the whole question: a mapping that exists is left
-// alone wherever the developer put it.
 func hasKey(source, key string) bool {
 	for i := 0; i < len(source); {
 		if source[i] != '"' {
@@ -323,8 +273,6 @@ func hasKey(source, key string) bool {
 	return false
 }
 
-// stringAt is the value of the string literal at i, if a string is what is
-// there.
 func stringAt(source string, i int) (string, bool) {
 	if i >= len(source) || source[i] != '"' {
 		return "", false
@@ -333,9 +281,6 @@ func stringAt(source string, i int) (string, bool) {
 	return value, ok
 }
 
-// readString reads the string literal starting at source[i], returning its
-// value and the index just past its closing quote. The literal is decoded as
-// JSON, so an escape means what the file says it means.
 func readString(source string, i int) (string, int, bool) {
 	for j := i + 1; j < len(source); j++ {
 		switch source[j] {
@@ -352,7 +297,6 @@ func readString(source string, i int) (string, int, bool) {
 	return "", 0, false
 }
 
-// advance steps over one byte, or over a whole comment where one starts.
 func advance(source string, i int) int {
 	if next, ok := commentEnd(source, i); ok {
 		return next
@@ -360,12 +304,8 @@ func advance(source string, i int) int {
 	return i + 1
 }
 
-// byteOrderMark is trivia too: a config that opens with one is a config whose
-// first brace is three bytes in.
 const byteOrderMark = "\ufeff"
 
-// skipTrivia returns the index of the next byte that is neither whitespace nor
-// part of a comment.
 func skipTrivia(source string, i int) int {
 	for i < len(source) {
 		if next, ok := commentEnd(source, i); ok {
@@ -386,10 +326,6 @@ func skipTrivia(source string, i int) int {
 	return i
 }
 
-// commentEnd returns the index just past the comment starting at i, if one
-// starts there. An unterminated block comment ends the file, which leaves
-// whatever it was inside unclosed and is reported as a config that cannot be
-// read.
 func commentEnd(source string, i int) (int, bool) {
 	if i+1 >= len(source) || source[i] != '/' {
 		return 0, false

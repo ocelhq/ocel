@@ -29,8 +29,6 @@ func TestPreviewHost(t *testing.T) {
 	}
 }
 
-// The worker splits the label on the separator to recover (pointer, app), so a
-// hyphen inside either half must not be mistaken for the join.
 func TestPreviewHost_SeparatorSurvivesHyphenatedHalves(t *testing.T) {
 	host := previewHost("feat-a-b", "my-app", "preview.acme.com", false)
 	label, _, _ := strings.Cut(host, ".")
@@ -40,8 +38,6 @@ func TestPreviewHost_SeparatorSurvivesHyphenatedHalves(t *testing.T) {
 	}
 }
 
-// A pointer previewid can mint fills the whole DNS label in the single-app case,
-// which is the budget previewid.maxKeyLen encodes.
 func TestPreviewHost_MaxPointerFillsTheLabel(t *testing.T) {
 	pointer := strings.Repeat("p", previewLabelMaxLen)
 	label, _, _ := strings.Cut(previewHost(pointer, "web", "preview.acme.com", true), ".")

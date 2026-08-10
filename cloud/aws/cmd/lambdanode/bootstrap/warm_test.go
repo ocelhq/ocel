@@ -21,29 +21,18 @@ import (
 
 const warmEvent = `{"ocel":{"warm":1}}`
 
-// warmedReply is what a Next artifact that knows the warm request answers
-// with once it has walked its bundle.
 const warmedReply = `{"type":"compile-cache-warmed","payload":` +
 	`{"ok":true,"state":"warmed","entries":42,"loaded":41,` +
 	`"failures":[{"entry":"app/broken/page.js","message":"boom"}],` +
 	`"stoppedBy":"complete","bytes":1234,"dir":"/tmp/.ocel/compile-cache"}}`
 
-// unsupportedReply is what an artifact built before the warm capability
-// existed — or any non-Next one — answers with.
 const unsupportedReply = `{"type":"compile-cache-warmed","payload":{"ok":false,"state":"unsupported","dir":null}}`
 
-// stoppedReply is a walk the ceiling cut short, naming a bounded sample of what
-// it never reached.
 const stoppedReply = `{"type":"compile-cache-warmed","payload":` +
 	`{"ok":true,"state":"warmed","entries":42,"loaded":33,"failures":[],` +
 	`"stoppedBy":"ceiling","skipped":["app/a/page","app/b/page"],"skippedCount":9,` +
 	`"bytes":1234,"dir":"/tmp/.ocel/compile-cache"}}`
 
-// The shape is the whole authorization story: these Function URLs are AWS_IAM
-// and the edge composes the event envelope itself, so public traffic can only
-// ever influence headers and body. Every case below that carries the warm
-// object inside a real event is exactly that attempt, and must not be taken
-// for a warm invocation.
 func TestIsWarmInvocation(t *testing.T) {
 	cases := []struct {
 		name    string
@@ -68,10 +57,6 @@ func TestIsWarmInvocation(t *testing.T) {
 	}
 }
 
-// warmRuntime serves one invocation carrying a real deadline and captures the
-// raw payload the membrane answered with. Both are load-bearing: the load
-// window is derived from that deadline, and a warm answer is the payload
-// itself rather than a prelude-framed response.
 func warmRuntime(t *testing.T, event []byte, deadline time.Time) (*runtimeClient, *capturedResponse) {
 	t.Helper()
 	captured := &capturedResponse{}
@@ -92,10 +77,6 @@ func warmRuntime(t *testing.T, event []byte, deadline time.Time) (*runtimeClient
 	return newRuntimeClient(strings.TrimPrefix(srv.URL, "http://")), captured
 }
 
-// warmFixture wires a membrane to a stand-in node that answers the warm
-// request with reply, and to a store under the test's control — the shape
-// bringUpWithBytecode leaves behind on a rehydrate miss. An empty reply stands
-// for a child that reads the request and never answers.
 func warmFixture(t *testing.T, store bytecodeStore, dir, reply string) *Membrane {
 	t.Helper()
 	m, nodeReader, nodeConn := controlConnPair(t)
@@ -110,8 +91,6 @@ func warmFixture(t *testing.T, store bytecodeStore, dir, reply string) *Membrane
 	return m
 }
 
-// slowBytecodeStore gives the publish leg a real duration, which is the window
-// a report node was too slow to make the load deadline has to arrive in.
 type slowBytecodeStore struct {
 	*fakeBytecodeStore
 	delay time.Duration
@@ -122,7 +101,6 @@ func (s slowBytecodeStore) putObject(ctx context.Context, bucket, key string, bo
 	return s.fakeBytecodeStore.putObject(ctx, bucket, key, body)
 }
 
-// warmCtx stands in for an invocation the platform gave the given time to run.
 func warmCtx(t *testing.T, remaining time.Duration) context.Context {
 	t.Helper()
 	ctx, cancel := context.WithDeadline(context.Background(), time.Now().Add(remaining))
@@ -130,9 +108,6 @@ func warmCtx(t *testing.T, remaining time.Duration) context.Context {
 	return ctx
 }
 
-// The whole point of the inline publish: the deploy has to be able to tell
-// "the cache landed" from "it did not", which a post-response upload only ever
-// says in CloudWatch.
 func TestWarmBytecodeCache_PublishesInlineAndReportsIt(t *testing.T) {
 	store := &fakeBytecodeStore{}
 	m := warmFixture(t, store, cacheDirWith(t, "compiled bytes"), warmedReply)
@@ -162,9 +137,6 @@ func TestWarmBytecodeCache_PublishesInlineAndReportsIt(t *testing.T) {
 	}
 }
 
-// The warm pass spends this instance's one upload attempt, so the ordinary
-// post-invocation path must find nothing left to do rather than re-HEAD and
-// re-archive the same object on the next request's billed time.
 func TestWarmBytecodeCache_SpendsTheInstancesOneUpload(t *testing.T) {
 	store := &fakeBytecodeStore{}
 	m := warmFixture(t, store, cacheDirWith(t, "compiled bytes"), warmedReply)
@@ -180,9 +152,6 @@ func TestWarmBytecodeCache_SpendsTheInstancesOneUpload(t *testing.T) {
 	}
 }
 
-// A rehydrate hit proves the object exists, so loading every entry could not
-// publish anything — it would only burn the invocation. Answering immediately
-// is what makes a deploy retry idempotent and near-free.
 func TestWarmBytecodeCache_AlreadyCachedAnswersWithoutTouchingTheChild(t *testing.T) {
 	store := &fakeBytecodeStore{}
 	m := warmFixture(t, store, cacheDirWith(t, "compiled bytes"), warmedReply)
@@ -202,8 +171,6 @@ func TestWarmBytecodeCache_AlreadyCachedAnswersWithoutTouchingTheChild(t *testin
 	if len(store.heads) != 0 || len(store.puts) != 0 {
 		t.Errorf("touched S3 (heads=%v puts=%v), want nothing", store.heads, store.puts)
 	}
-	// The key is the deploy's only way to reach the object it just had
-	// published — it never learns node's version, so it cannot compose one.
 	if got.Key != m.bytecodeKey {
 		t.Errorf("key = %q, want the resolution's %q", got.Key, m.bytecodeKey)
 	}
@@ -212,8 +179,6 @@ func TestWarmBytecodeCache_AlreadyCachedAnswersWithoutTouchingTheChild(t *testin
 	}
 }
 
-// An embedded hit and an S3 hit are the same already-cached answer, and the
-// deploy's whole verification of the embed pass is telling them apart.
 func TestWarmBytecodeCache_AlreadyCachedNamesWhichLegServedIt(t *testing.T) {
 	m := warmFixture(t, &fakeBytecodeStore{}, cacheDirWith(t, "compiled bytes"), warmedReply)
 	m.bytecode = nil
@@ -230,8 +195,6 @@ func TestWarmBytecodeCache_AlreadyCachedNamesWhichLegServedIt(t *testing.T) {
 	}
 }
 
-// A pass that had to publish for itself read no cache at all, and says so
-// rather than leaving the field empty for the deploy to interpret.
 func TestWarmBytecodeCache_APassThatPublishesReportsNoSource(t *testing.T) {
 	m := warmFixture(t, &fakeBytecodeStore{}, cacheDirWith(t, "compiled bytes"), warmedReply)
 
@@ -245,8 +208,6 @@ func TestWarmBytecodeCache_APassThatPublishesReportsNoSource(t *testing.T) {
 	}
 }
 
-// A deployment that resolved no bytecode identity at all has nothing to warm,
-// and must say so rather than read as a failure the deploy should retry.
 func TestWarmBytecodeCache_DisabledForAnUnconfiguredDeployment(t *testing.T) {
 	m := &Membrane{}
 
@@ -257,10 +218,6 @@ func TestWarmBytecodeCache_DisabledForAnUnconfiguredDeployment(t *testing.T) {
 	}
 }
 
-// An artifact with no warm capability — non-Next, or a launcher built before
-// warming existed — still loaded its primary entry at INIT, so there is a real
-// compile cache on disk. Publishing nothing when something is available is the
-// one outcome this feature exists to avoid.
 func TestWarmBytecodeCache_UnsupportedArtifactStillPublishesWhatInitLoaded(t *testing.T) {
 	store := &fakeBytecodeStore{}
 	m := warmFixture(t, store, cacheDirWith(t, "compiled bytes"), unsupportedReply)
@@ -281,11 +238,6 @@ func TestWarmBytecodeCache_UnsupportedArtifactStillPublishesWhatInitLoaded(t *te
 	}
 }
 
-// A single overrunning require pushes node's report past the deadline it only
-// checks between entries. The membrane does not need that report to publish —
-// the cache directory is shared disk and the flush is its own call — so a walk
-// that loaded the whole bundle must not report failure having published
-// nothing, which is strictly worse than never warming at all.
 func TestWarmBytecodeCache_PublishesWhenNodeNeverReportsBack(t *testing.T) {
 	store := &fakeBytecodeStore{}
 	m := warmFixture(t, store, cacheDirWith(t, "compiled bytes"), "")
@@ -303,17 +255,12 @@ func TestWarmBytecodeCache_PublishesWhenNodeNeverReportsBack(t *testing.T) {
 	}
 }
 
-// A report that lands while the publish leg runs is the late half of the same
-// story, and its counts are the only account of what stayed cold. Dropping it
-// with the waiter would throw them away for nothing.
 func TestWarmBytecodeCache_CollectsALateReport(t *testing.T) {
 	store := slowBytecodeStore{fakeBytecodeStore: &fakeBytecodeStore{}, delay: 400 * time.Millisecond}
 	m, nodeReader, nodeConn := controlConnPair(t)
 	u, _ := uploadFixture(store, compileCacheFlushedPayload{Dir: cacheDirWith(t, "compiled bytes"), OK: true}, true)
 	m.bytecode = u
 
-	// The reply arrives after the load deadline has passed but while the
-	// publish is still in flight.
 	go func() {
 		if _, err := nodeReader.ReadString('\n'); err != nil {
 			return
@@ -335,8 +282,6 @@ func TestWarmBytecodeCache_CollectsALateReport(t *testing.T) {
 	}
 }
 
-// The one thing an operator cannot work out from "38/51" is which routes stay
-// cold, so the names travel from node's report all the way into the summary.
 func TestWarmBytecodeCache_CarriesTheSkippedEntries(t *testing.T) {
 	store := &fakeBytecodeStore{}
 	m := warmFixture(t, store, cacheDirWith(t, "compiled bytes"), stoppedReply)
@@ -351,8 +296,6 @@ func TestWarmBytecodeCache_CarriesTheSkippedEntries(t *testing.T) {
 	}
 }
 
-// A PUT that S3 refused is not a published cache, and the deploy has to be
-// able to tell the two apart from the answer alone.
 func TestWarmBytecodeCache_ReportsAFailedUploadAsFailed(t *testing.T) {
 	store := &fakeBytecodeStore{putErr: errors.New("access denied")}
 	m := warmFixture(t, store, cacheDirWith(t, "compiled bytes"), warmedReply)
@@ -370,8 +313,6 @@ func TestWarmBytecodeCache_ReportsAFailedUploadAsFailed(t *testing.T) {
 	}
 }
 
-// A cache the warm pass grew past the ceiling is refused by the upload's own
-// guard, and reads as failed with the ceiling named — not as published.
 func TestWarmBytecodeCache_ReportsACacheOverTheCeiling(t *testing.T) {
 	dir := t.TempDir()
 	f, err := os.Create(filepath.Join(dir, "big.blob"))
@@ -399,8 +340,6 @@ func TestWarmBytecodeCache_ReportsACacheOverTheCeiling(t *testing.T) {
 	}
 }
 
-// Another instance winning the race is the cache landing, not this pass
-// failing: the PUT is create-if-absent and the object is there either way.
 func TestWarmBytecodeCache_AnObjectAlreadyThereReadsAsAlreadyCached(t *testing.T) {
 	store := &fakeBytecodeStore{exists: true}
 	m := warmFixture(t, store, cacheDirWith(t, "compiled bytes"), warmedReply)
@@ -415,12 +354,6 @@ func TestWarmBytecodeCache_AnObjectAlreadyThereReadsAsAlreadyCached(t *testing.T
 	}
 }
 
-// A child that reads the request and never answers must not hold the pass to
-// the function timeout: the wait ends at the load deadline and the state says
-// so.
-// A child that reads the request and never answers must not hold the pass to
-// the function timeout: the wait ends at the load deadline, and the publish leg
-// still gets the budget that was reserved for it.
 func TestWarmBytecodeCache_StopsWaitingAtTheLoadDeadline(t *testing.T) {
 	store := &fakeBytecodeStore{}
 	m := warmFixture(t, store, cacheDirWith(t, "compiled bytes"), "")
@@ -433,9 +366,6 @@ func TestWarmBytecodeCache_StopsWaitingAtTheLoadDeadline(t *testing.T) {
 	}
 }
 
-// The arithmetic is the whole reason the pass can publish anything: a load
-// that ran to the invocation deadline would be killed mid-flush and publish
-// nothing at all.
 func TestWarmLoadDeadline(t *testing.T) {
 	t.Run("reserves the publish leg and the margin", func(t *testing.T) {
 		deadline := time.Now().Add(30 * time.Second)
@@ -472,8 +402,6 @@ func TestWarmLoadDeadline(t *testing.T) {
 	})
 }
 
-// A pass with no window left must not ask node to load anything: whatever it
-// loaded could never be published, and the load is what would overrun.
 func TestWarmBytecodeCache_FailsWithoutAskingWhenNoWindowIsLeft(t *testing.T) {
 	store := &fakeBytecodeStore{}
 	m := warmFixture(t, store, cacheDirWith(t, "compiled bytes"), warmedReply)
@@ -488,9 +416,6 @@ func TestWarmBytecodeCache_FailsWithoutAskingWhenNoWindowIsLeft(t *testing.T) {
 	}
 }
 
-// The ceiling travels in the request rather than being duplicated on the node
-// side, and the deadline node is told is the membrane's own less the reply
-// margin — so node stops loading early enough for its answer to arrive.
 func TestWarmCompileCache_RequestCarriesTheDeadlineAndTheCeiling(t *testing.T) {
 	m, nodeReader, nodeConn := controlConnPair(t)
 	deadline := time.Now().Add(5 * time.Second)
@@ -538,8 +463,6 @@ func TestWarmCompileCache_NoOpsWithoutAControlConnection(t *testing.T) {
 	}
 }
 
-// A reply nobody is waiting for must not wedge the drain loop, which also
-// carries invocation-complete.
 func TestDrainControl_DropsAnUnawaitedWarmReply(t *testing.T) {
 	m, _, nodeConn := controlConnPair(t)
 	waiter := m.registerWaiter("req-1")
@@ -554,8 +477,6 @@ func TestDrainControl_DropsAnUnawaitedWarmReply(t *testing.T) {
 	}
 }
 
-// The answer is the payload itself: no Function URL is involved, so the
-// prelude framing forward() uses would be read as part of the deploy's JSON.
 func TestHandleInvocation_WarmPayloadIsAnsweredWithoutForwarding(t *testing.T) {
 	var hits int
 	node := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -592,8 +513,6 @@ func TestHandleInvocation_WarmPayloadIsAnsweredWithoutForwarding(t *testing.T) {
 	}
 }
 
-// The other half of the same property: a real event still reaches node and
-// still comes back prelude-framed.
 func TestHandleInvocation_RealEventIsStillForwarded(t *testing.T) {
 	var hits int
 	node := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -618,9 +537,6 @@ func TestHandleInvocation_RealEventIsStillForwarded(t *testing.T) {
 	}
 }
 
-// A warm invocation must not fail the invocation or leave the runtime loop,
-// however badly it goes — here the child is gone entirely and S3 refuses the
-// PUT, so there is genuinely nothing to publish.
 func TestHandleInvocation_AWarmFailureStillAnswersTheInvocation(t *testing.T) {
 	membraneSide, nodeSide := net.Pipe()
 	nodeSide.Close()
@@ -643,17 +559,12 @@ func TestHandleInvocation_AWarmFailureStillAnswersTheInvocation(t *testing.T) {
 	}
 }
 
-// Fields that do not apply are omitted rather than reported as zero: a deploy
-// reading "loaded":0 on a cache that was already there would be reading a
-// number this pass never measured.
 func TestWarmSummary_OmitsWhatDoesNotApply(t *testing.T) {
 	for _, s := range []warmSummary{{State: warmStateAlreadyCached, Source: bytecodeSourceNone}, {State: warmStateDisabled, Source: bytecodeSourceNone}} {
 		encoded, err := json.Marshal(s)
 		if err != nil {
 			t.Fatal(err)
 		}
-		// source is the one field that is never omitted: "none" is a real
-		// answer, and an absent field would read as an older membrane.
 		want := `{"state":"` + s.State + `","source":"none"}`
 		if string(encoded) != want {
 			t.Errorf("summary = %s, want %s", encoded, want)

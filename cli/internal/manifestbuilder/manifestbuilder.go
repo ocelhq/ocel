@@ -1,8 +1,3 @@
-// Package manifestbuilder lowers a project's collected resource
-// declarations into the versioned provider.v1 Manifest a provider consumes.
-// Build is a pure function: given the same declarations (in any order), it
-// always returns byte-identical output, so a manifest's logical names are a
-// stable identity providers and later deploys can rely on.
 package manifestbuilder
 
 import (
@@ -14,14 +9,8 @@ import (
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/resources/v1"
 )
 
-// SchemaVersion is the manifest schema version Build stamps onto every
-// manifest it produces.
 const SchemaVersion = "provider.v1"
 
-// Declaration is a single collected resource declaration: the pure input to
-// Build. Source is a caller-supplied, human-readable location (e.g. a file
-// path) identifying where the declaration came from, surfaced in duplicate
-// errors — Build treats it as an opaque string and never parses it.
 type Declaration struct {
 	Type     resourcesv1.ResourceType
 	ID       string
@@ -30,67 +19,32 @@ type Declaration struct {
 	Source   string
 }
 
-// App is a single application declared in the project's config: the pure
-// input to Build for Manifest.apps. Framework may be empty when the config
-// leaves detection to the builder — Build fills it from the app's functions.
 type App struct {
 	Name      string
 	Framework string
-	// Domains maps a lowercased environment class ("production") to the custom
-	// hostnames this app is served on, mirroring the project-level shape.
-	// Production may carry several; preview carries one wildcard.
-	Domains map[string][]string
-	// Folder is the variable folder this app binds. Empty is the project root.
-	Folder string
+	Domains   map[string][]string
+	Folder    string
 }
 
-// Variable is one variable the gate resolved for one app: the pure input to
-// Build for that app's variables. Value is the resolved plaintext, empty for a
-// live class whose value never reaches a build host.
 type Variable struct {
-	Key   string
-	Class resourcesv1.VariableClass
-	Value string
-	// Folder is the folder the key resolved from, which is not the app's
-	// binding: a scoped key resolves at the binding, an unscoped one at the
-	// project root, so the two differ for the same app. It completes the store
-	// coordinate a live-class value is fetched by at runtime. Empty is the
-	// project root, the one spelling used everywhere above the store.
-	Folder string
-	// ClientAccessible marks a value the browser may read. It travels with the
-	// resolution because the build is where it matters — the value is handed to
-	// the app build under the framework's public prefix and inlined there — and
-	// never reaches the manifest, which describes what a deployed function is
-	// delivered rather than what a bundle already carries.
+	Key              string
+	Class            resourcesv1.VariableClass
+	Value            string
+	Folder           string
 	ClientAccessible bool
-	// Version is the store version of the cell this value resolved from, zero
-	// for a cell that never had one. Nothing in delivery reads it: it travels
-	// so a Deployment record can name which value the deploy shipped.
-	Version int64
+	Version          int64
 }
 
-// Function is a single collected function unit: the pure input to Build for
-// Manifest.functions. Name is the app name, normalized into the function's
-// logical_name by the same rule as a resource's.
 type Function struct {
 	Name         string
 	Runtime      string
 	Handler      string
 	ArtifactPath string
 	Framework    string
-	// App is the name of the App this function belongs to, carried verbatim
-	// into ManifestFunction.app.
-	App string
-	// RouteID is the framework-native route identity a routing layer dispatches
-	// to (e.g. Next's "/api/documents"), carried verbatim into
-	// ManifestFunction.route_id — unlike Name, it is never normalized. Empty for
-	// functions whose framework has no routing layer.
-	RouteID string
+	App          string
+	RouteID      string
 }
 
-// DuplicateError is returned by Build when two declarations resolve to the
-// same type+id. It names both offending declarations and their source
-// locations, rather than a bare "duplicate key".
 type DuplicateError struct {
 	TypeToken    string
 	ID           string
@@ -112,9 +66,6 @@ func sourceOrUnknown(source string) string {
 	return source
 }
 
-// typeTokens maps a resources.v1.ResourceType to its canonical lowercase
-// token, the <type> half of a logical name (e.g. "postgres"). This is the
-// single place a new resource type's token is defined.
 var typeTokens = map[resourcesv1.ResourceType]string{
 	resourcesv1.ResourceType_RESOURCE_TYPE_POSTGRES: "postgres",
 	resourcesv1.ResourceType_RESOURCE_TYPE_BUCKET:   "bucket",
@@ -128,11 +79,6 @@ func typeToken(t resourcesv1.ResourceType) (string, error) {
 	return token, nil
 }
 
-// normalizeLogicalName applies the single deterministic rule that maps a
-// composed <type>_<id> string to the manifest's logical-name charset:
-// lowercase ASCII letters are lowercased, and any character outside
-// [a-z0-9_] (including the already-lowercase ones) is replaced with '_'.
-// Fixed by the golden test in manifestbuilder_test.go.
 func normalizeLogicalName(s string) string {
 	var b strings.Builder
 	b.Grow(len(s))
@@ -149,12 +95,6 @@ func normalizeLogicalName(s string) string {
 	return b.String()
 }
 
-// Build lowers declarations into a Manifest for the project identified by
-// slug. Output is deterministic: entries are emitted sorted by
-// logical_name (not input order), so reordering declarations or adding a new
-// one never changes an existing entry's logical name. Two declarations sharing
-// the same (type, id) are a hard error naming both declarations and their
-// source locations.
 func Build(slug string, domains map[string][]string, apps []App, declarations []Declaration, functions []Function, variables map[string][]Variable) (*deploymentsv1.Manifest, error) {
 	type identity struct {
 		typ resourcesv1.ResourceType
@@ -230,9 +170,6 @@ func Build(slug string, domains map[string][]string, apps []App, declarations []
 	}, nil
 }
 
-// domainLists lowers the class-keyed hostname lists into the manifest's
-// class-keyed DomainList map, dropping classes with no hostnames. Returns nil
-// for an empty input so a domainless manifest carries no domains map at all.
 func domainLists(domains map[string][]string) map[string]*deploymentsv1.DomainList {
 	if len(domains) == 0 {
 		return nil
@@ -250,14 +187,6 @@ func domainLists(domains map[string][]string) map[string]*deploymentsv1.DomainLi
 	return out
 }
 
-// buildApps lowers the configured apps into manifest apps, sorted by name. An
-// app named by a function but absent from the config is synthesized: with no
-// configured apps the builder detects one at the project root and only the
-// functions it emitted carry its name. A configured app's empty framework is
-// filled from its functions, which is where detection's result surfaces.
-//
-// variables is keyed by app name: what an app resolves is its own, because the
-// folder it binds is what decides where a value comes from.
 func buildApps(apps []App, functions []Function, variables map[string][]Variable) []*deploymentsv1.ManifestApp {
 	frameworkByApp := make(map[string]string, len(functions))
 	for _, f := range functions {
@@ -301,8 +230,6 @@ func buildApps(apps []App, functions []Function, variables map[string][]Variable
 	return manifestApps
 }
 
-// manifestVariables lowers one app's resolved variables, sorted by key so the
-// same resolution always produces the same manifest.
 func manifestVariables(variables []Variable) []*deploymentsv1.ManifestVariable {
 	if len(variables) == 0 {
 		return nil

@@ -14,11 +14,6 @@ func definition(key string, class resourcesv1.VariableClass) *resourcesv1.Variab
 	return &resourcesv1.VariableDefinition{Key: key, Class: class}
 }
 
-// TestAppVariables_PairsEachDeclarationWithWhatWasResolvedForIt proves the two
-// halves the deploy needs arrive joined: the class from the declaration decides
-// delivery, the resolution decides the value, and a key nothing resolved is
-// carried with no value rather than dropped — its class still says where it
-// comes from.
 func TestAppVariables_PairsEachDeclarationWithWhatWasResolvedForIt(t *testing.T) {
 	definitions := []*resourcesv1.VariableDefinition{
 		definition("POSTHOG_ID", resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN),
@@ -42,10 +37,6 @@ func TestAppVariables_PairsEachDeclarationWithWhatWasResolvedForIt(t *testing.T)
 	}
 }
 
-// TestAppVariables_OmitsAKeyThisAppCannotRead proves an out-of-scope key is
-// absent from what the app is deployed with, rather than delivered empty: the
-// SDK's own named error is the whole remedy, and an empty string would defeat
-// it.
 func TestAppVariables_OmitsAKeyThisAppCannotRead(t *testing.T) {
 	definitions := []*resourcesv1.VariableDefinition{
 		definition("CHECKOUT_ONLY", resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN),
@@ -56,10 +47,6 @@ func TestAppVariables_OmitsAKeyThisAppCannotRead(t *testing.T) {
 	}
 }
 
-// TestAppVariables_CarriesClientAccessibilityFromTheDeclaration proves the
-// flag that decides whether a value is inlined into a browser bundle survives
-// the join. Nothing else knows it: resolution answers what a value is, only
-// the declaration answers who may read it.
 func TestAppVariables_CarriesClientAccessibilityFromTheDeclaration(t *testing.T) {
 	definitions := []*resourcesv1.VariableDefinition{
 		{Key: "PUBLIC_SITE_URL", Class: resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN, ClientAccessible: true},
@@ -82,11 +69,6 @@ func TestAppVariables_CarriesClientAccessibilityFromTheDeclaration(t *testing.T)
 	}
 }
 
-// TestBuildEnv_ExportsEveryPlaintextValueUnderItsOwnNameAndNothingElse proves
-// the one thing a bundler's static replacement needs: the value present under
-// the name the accessor reads, which is the name it was declared with. No
-// prefix is added, so the name the developer chose to satisfy their bundler is
-// the name the build sees. Nothing but the plaintext class is a build's to read.
 func TestBuildEnv_ExportsEveryPlaintextValueUnderItsOwnNameAndNothingElse(t *testing.T) {
 	plans := []appPlan{{name: "storefront", variables: []manifestbuilder.Variable{
 		{Key: "NEXT_PUBLIC_SITE_URL", Class: resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN, Value: "https://example.com", ClientAccessible: true},
@@ -104,15 +86,11 @@ func TestBuildEnv_ExportsEveryPlaintextValueUnderItsOwnNameAndNothingElse(t *tes
 	if _, ok := env["STRIPE_API_KEY"]; ok {
 		t.Error("env carries STRIPE_API_KEY; an encrypted class is nothing a build may read")
 	}
-	// A value reaches the build under exactly one name: the declared one.
 	if _, ok := env["NEXT_PUBLIC_NEXT_PUBLIC_SITE_URL"]; ok {
 		t.Error("env carries a prefixed name; a key is delivered as it was declared")
 	}
 }
 
-// TestBuildEnv_ExportsOnlyPlaintextValues proves what each app's build runs
-// with: an encrypted-class value has no business in a build process's
-// environment, whatever app it belongs to.
 func TestBuildEnv_ExportsOnlyPlaintextValues(t *testing.T) {
 	plans := []appPlan{
 		{name: "admin", variables: []manifestbuilder.Variable{
@@ -139,10 +117,6 @@ func TestBuildEnv_ExportsOnlyPlaintextValues(t *testing.T) {
 	}
 }
 
-// TestBuildEnv_GivesEachAppItsOwnValueForADivergedKey proves the case folders
-// exist for reaches the build. Each app is built under its own environment, so
-// a key two apps resolve differently is inlinable by both — it is not the
-// build's job to pick one value or to leave the key unset.
 func TestBuildEnv_GivesEachAppItsOwnValueForADivergedKey(t *testing.T) {
 	plans := []appPlan{
 		{name: "storefront", variables: []manifestbuilder.Variable{{Key: "POSTHOG_ID", Class: resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN, Value: "ph-store"}}},
@@ -158,10 +132,6 @@ func TestBuildEnv_GivesEachAppItsOwnValueForADivergedKey(t *testing.T) {
 	}
 }
 
-// TestBuildEnv_TheRootStandInIsKeyedByNoAppAtAll proves the project that
-// configures no apps still hands its values to the build. Nothing yet knows
-// the name of the app the builder will detect, so its environment travels
-// under no name and the build exports it for whatever it finds.
 func TestBuildEnv_TheRootStandInIsKeyedByNoAppAtAll(t *testing.T) {
 	variables := map[string][]manifestbuilder.Variable{
 		rootApp: {{Key: "POSTHOG_ID", Class: resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN, Value: "ph-123"}},
@@ -176,11 +146,6 @@ func TestBuildEnv_TheRootStandInIsKeyedByNoAppAtAll(t *testing.T) {
 	}
 }
 
-// TestVariablesByApp_RootResolutionReachesTheAppNothingConfigured proves the
-// single-app project — which configures no apps at all, and is where a variable
-// is most likely to be the only thing the app needs — still gets its values:
-// the app the builder detected binds no folder, so what the root resolved is
-// exactly what it reads.
 func TestVariablesByApp_RootResolutionReachesTheAppNothingConfigured(t *testing.T) {
 	root := []manifestbuilder.Variable{
 		{Key: "POSTHOG_ID", Class: resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN, Value: "ph-123"},
@@ -196,9 +161,6 @@ func TestVariablesByApp_RootResolutionReachesTheAppNothingConfigured(t *testing.
 	}
 }
 
-// TestVariablesByApp_ConfiguredAppsKeepTheirOwnResolution proves the per-app
-// keying is left alone once apps are configured: that is the case folders exist
-// for, and rekeying it would collapse the divergence.
 func TestVariablesByApp_ConfiguredAppsKeepTheirOwnResolution(t *testing.T) {
 	resolved := map[string][]manifestbuilder.Variable{
 		"admin":      {{Key: "POSTHOG_ID", Value: "ph-admin"}},
@@ -215,10 +177,6 @@ func TestVariablesByApp_ConfiguredAppsKeepTheirOwnResolution(t *testing.T) {
 	}
 }
 
-// TestToApps_CarriesTheFolderBindingIntoTheManifest proves the binding
-// declared in ocel.config.ts reaches the manifest builder. It is what the
-// deployed app is told it is bound to, so a key scoped to another folder can
-// fail naming both sides rather than reporting the root for every app.
 func TestToApps_CarriesTheFolderBindingIntoTheManifest(t *testing.T) {
 	got := toApps([]projectconfig.App{
 		{Name: "admin", Framework: "express", Folder: "/admin"},
@@ -234,11 +192,6 @@ func TestToApps_CarriesTheFolderBindingIntoTheManifest(t *testing.T) {
 	}
 }
 
-// TestAppVariables_CarriesTheVersionEachValueResolvedAt proves the store
-// version of the cell each key came from survives the join, which is what lets
-// a Deployment record say which value it shipped. A live-class key carries its
-// cell's version here too — narrowing it to what a runtime fetch can honour is
-// the record's decision, not the join's.
 func TestAppVariables_CarriesTheVersionEachValueResolvedAt(t *testing.T) {
 	definitions := []*resourcesv1.VariableDefinition{
 		definition("PLAIN_KEY", resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN),
@@ -261,12 +214,6 @@ func TestAppVariables_CarriesTheVersionEachValueResolvedAt(t *testing.T) {
 	}
 }
 
-// TestAppVariables_CarriesTheFolderEachKeyResolvedFrom proves the folder
-// resolution computed survives the join. A live-class value carries no
-// plaintext, so its folder is the only thing that makes it addressable at
-// runtime: dropped here, the manifest names a key the store cannot be asked
-// for. The two keys resolve from different folders for the same app, which is
-// why the app's own binding cannot stand in for either.
 func TestAppVariables_CarriesTheFolderEachKeyResolvedFrom(t *testing.T) {
 	definitions := []*resourcesv1.VariableDefinition{
 		definition("ROOT_KEY", resourcesv1.VariableClass_VARIABLE_CLASS_SECRET),

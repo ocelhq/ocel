@@ -18,7 +18,6 @@ import (
 	smithy "github.com/aws/smithy-go"
 )
 
-// readZip decodes an in-memory zip into a relative-path -> contents map.
 func readZip(t *testing.T, data []byte) map[string]string {
 	t.Helper()
 	zr, err := zip.NewReader(bytes.NewReader(data), int64(len(data)))
@@ -44,8 +43,6 @@ func readZip(t *testing.T, data []byte) map[string]string {
 	return out
 }
 
-// writeTree materializes a set of relative-path -> contents files under a fresh
-// temp dir and returns it.
 func writeTree(t *testing.T, files map[string]string) string {
 	t.Helper()
 	dir := t.TempDir()
@@ -61,9 +58,6 @@ func writeTree(t *testing.T, files map[string]string) string {
 	return dir
 }
 
-// TestHashArtifact_Deterministic proves the hash is stable across two identical
-// source trees materialized independently, so content-addressing dedups: the
-// same code always maps to the same key.
 func TestHashArtifact_Deterministic(t *testing.T) {
 	files := map[string]string{
 		"src/server.js": "export const handler = () => 'hi'",
@@ -85,9 +79,6 @@ func TestHashArtifact_Deterministic(t *testing.T) {
 	}
 }
 
-// TestHashArtifact_SensitiveToContentAndPaths proves the hash changes when a
-// file's contents change and when a file is renamed, so a real code change
-// yields a new key (and Pulumi redeploys the function).
 func TestHashArtifact_SensitiveToContentAndPaths(t *testing.T) {
 	base, err := hashArtifact(writeTree(t, map[string]string{"a.js": "one"}), nil)
 	if err != nil {
@@ -109,8 +100,6 @@ func TestHashArtifact_SensitiveToContentAndPaths(t *testing.T) {
 	}
 }
 
-// TestArtifactKey pins the content-addressed key layout: artifacts are
-// structured by project then function, keyed by the source hash.
 func TestArtifactKey(t *testing.T) {
 	got := artifactKey("proj-123", "app_web", "abc123")
 	want := "proj-123/app_web/abc123.zip"
@@ -119,17 +108,11 @@ func TestArtifactKey(t *testing.T) {
 	}
 }
 
-// fakeUploader records PutObject calls and reports a configurable HeadObject
-// existence result.
 type fakeUploader struct {
 	exists  map[string]bool
 	headErr error
 	putErr  error
 
-	// Callers upload concurrently (uploadPrerenderAssets crawls under an
-	// errgroup), so what PutObject records is written from many goroutines at
-	// once and has to be guarded. Reading the fields back is safe unlocked:
-	// every caller waits for the uploads to finish first.
 	mu           sync.Mutex
 	puts         []string
 	buckets      []string
@@ -152,8 +135,6 @@ func (f *fakeUploader) PutObject(_ context.Context, in *s3.PutObjectInput, _ ...
 		return nil, f.putErr
 	}
 	key := aws.ToString(in.Key)
-	// A conditional create is refused by an object already there, which is how
-	// R2 answers a redeploy's seed of a build whose snapshot is already live.
 	if aws.ToString(in.IfNoneMatch) == "*" && f.exists[key] {
 		return nil, &smithy.GenericAPIError{Code: "PreconditionFailed"}
 	}
@@ -181,8 +162,6 @@ func (f *fakeUploader) PutObject(_ context.Context, in *s3.PutObjectInput, _ ...
 	return &s3.PutObjectOutput{}, nil
 }
 
-// bodyFn returns a body closure that records whether it was invoked, so a test
-// can assert the zip is deferred behind the presence check.
 func bodyFn(called *bool) func() ([]byte, error) {
 	return func() ([]byte, error) {
 		*called = true
@@ -190,9 +169,6 @@ func bodyFn(called *bool) func() ([]byte, error) {
 	}
 }
 
-// TestUploadArtifact_SkipsWhenPresent proves an already-present object is not
-// re-uploaded, and — crucially — the body (the expensive zip) is never invoked:
-// identical redeploys are a cheap HeadObject.
 func TestUploadArtifact_SkipsWhenPresent(t *testing.T) {
 	f := &fakeUploader{exists: map[string]bool{"k.zip": true}}
 	var zipped bool
@@ -207,9 +183,6 @@ func TestUploadArtifact_SkipsWhenPresent(t *testing.T) {
 	}
 }
 
-// TestUploadArtifact_UploadsWhenMissing proves a missing object (e.g. one the
-// lifecycle rule reaped) is re-uploaded, so a live function's artifact always
-// exists at deploy time.
 func TestUploadArtifact_UploadsWhenMissing(t *testing.T) {
 	f := &fakeUploader{exists: map[string]bool{}}
 	var zipped bool
@@ -227,9 +200,6 @@ func TestUploadArtifact_UploadsWhenMissing(t *testing.T) {
 	}
 }
 
-// TestUploadArtifact_SetsContentTypeWhenGiven proves a non-empty content-type
-// is written onto the object, so a caller that knows the type (static assets)
-// makes the stored object self-describing.
 func TestUploadArtifact_SetsContentTypeWhenGiven(t *testing.T) {
 	f := &fakeUploader{exists: map[string]bool{}}
 	var invoked bool
@@ -241,8 +211,6 @@ func TestUploadArtifact_SetsContentTypeWhenGiven(t *testing.T) {
 	}
 }
 
-// TestUploadArtifact_HeadErrorSurfaces proves a non-NotFound HeadObject error
-// aborts rather than being mistaken for "missing" (which could mask an outage).
 func TestUploadArtifact_HeadErrorSurfaces(t *testing.T) {
 	f := &fakeUploader{headErr: errors.New("access denied")}
 	var zipped bool
@@ -254,10 +222,6 @@ func TestUploadArtifact_HeadErrorSurfaces(t *testing.T) {
 	}
 }
 
-// TestUploadArtifact_FailuresNameTheBucket proves a failure says which store
-// refused it. The asset plane publishes one key to two buckets, so a message
-// carrying the key alone cannot tell an R2 failure from an S3 one — and the two
-// have entirely different remedies.
 func TestUploadArtifact_FailuresNameTheBucket(t *testing.T) {
 	denied := errors.New("AccessDenied")
 	for _, bucket := range []string{"r2-cache-store", "s3-asset-bucket"} {
@@ -272,9 +236,6 @@ func TestUploadArtifact_FailuresNameTheBucket(t *testing.T) {
 	}
 }
 
-// TestZipDir_RoundTrips proves the produced archive contains every source file
-// at its relative path with its contents, so the Lambda package matches the
-// .func tree.
 func TestZipDir_PreservesSymlinks(t *testing.T) {
 	dir := t.TempDir()
 	if err := os.WriteFile(filepath.Join(dir, "real.js"), []byte("module.exports={}"), 0o644); err != nil {
@@ -362,9 +323,6 @@ func TestZipDir_RoundTrips(t *testing.T) {
 	}
 }
 
-// TestZipDir_CarriesTheOverlay proves a file the deploy renders — the sealed
-// encrypted-baked values — ships inside the package at the path the membrane
-// reads, alongside the built tree rather than instead of any of it.
 func TestZipDir_CarriesTheOverlay(t *testing.T) {
 	dir := writeTree(t, map[string]string{"src/server.js": "handler"})
 
@@ -381,10 +339,6 @@ func TestZipDir_CarriesTheOverlay(t *testing.T) {
 	}
 }
 
-// TestHashArtifact_SensitiveToTheOverlay proves rotating a baked value lands at
-// a new content-addressed key. Uploads are skip-if-exists, so an overlay
-// outside the hash would leave a rotation pointing at the object holding the
-// ciphertext it was meant to replace.
 func TestHashArtifact_SensitiveToTheOverlay(t *testing.T) {
 	files := map[string]string{"src/server.js": "handler"}
 	hash := func(overlay map[string][]byte) string {

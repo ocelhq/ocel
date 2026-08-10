@@ -1,8 +1,3 @@
-// The race runner's argument surface. It lives here rather than beside the
-// runner so the vitest suite can reach it: scripts/ is outside the pool-workers
-// project, and an unvalidated flag turns a typo into a run whose numbers look
-// like an answer.
-
 import { Abort } from "./abort.ts";
 import { tokenizeFlags } from "./options.ts";
 import type { KeyScope } from "./race.ts";
@@ -13,24 +8,13 @@ export interface RaceOptions {
   trials: number;
   deltas: number[];
   sizes: number[];
-  // The admission-jitter windows the burst sweeps, in milliseconds. Swept
-  // rather than tested at one value: ocelhq-wvag.9 found cross-isolate
-  // visibility is not uniform inside a colo, so escapes may plateau above 1
-  // however wide the window, and only a sweep can tell a collapse from a floor.
   jitters: number[];
   sockets: number;
   scope: KeyScope;
   windowMs: number | null;
-  // The isolate ceiling the sizing table caps E at. It is a LOWER bound on the
-  // colo's real isolate population and it is inherited across runs — PR 1's
-  // sweep reached 99 where the burst reaches ~80 — so it is a flag rather than
-  // a literal buried in the runner.
   isolatesPerColo: number | null;
   colos: number;
   sentinelTtlSeconds: number;
-  // A run that discarded more than this fraction of its trials is not reporting
-  // on the cache. See the runner: discards rebuild the socket pool, so a run
-  // full of them also resamples its isolates mid-sweep.
   maxDiscardRate: number;
   out: string;
 }
@@ -97,19 +81,10 @@ export function parseRaceOptions(argv: string[], defaultOut: string): RaceOption
     phase,
     scope,
     trials: of("trials", phase === "gap" ? 200 : 100, (raw) => wholeAtLeast("trials", raw, 1)),
-    // A fractional Δ is meaningful — the window is milliseconds wide — so these
-    // are the one numeric list that is not required to be whole.
     deltas: listOf("deltas", DEFAULT_DELTAS, (raw) => atLeast("deltas", raw, 0)),
     sizes: listOf("sizes", DEFAULT_SIZES, (raw) => wholeAtLeast("sizes", raw, 1)),
-    // Zero is the un-jittered baseline and must stay expressible, so this is
-    // non-negative rather than positive.
     jitters: listOf("jitters", [0], (raw) => atLeast("jitters", raw, 0)),
-    // Two racers are the minimum a gap trial can pair, and a pool of one can
-    // never produce a cross-isolate pair at all. Coercing 1 upward would run a
-    // sweep the caller did not ask for and report it as the one they did.
     sockets: of("sockets", 16, (raw) => wholeAtLeast("sockets", raw, 2)),
-    // A window of zero is a real answer — the claim is colo-visible at once —
-    // so it must be expressible, which a positive-only flag would forbid.
     windowMs: of("window", null, (raw) => atLeast("window", raw, 0)),
     isolatesPerColo: of("isolates", null, (raw) => wholeAtLeast("isolates", raw, 1)),
     colos: of("colos", 300, (raw) => wholeAtLeast("colos", raw, 1)),

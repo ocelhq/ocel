@@ -3,12 +3,6 @@ import { describe, expect, it } from "vitest";
 
 import { drawDelayMs } from "../src/race";
 
-// These assert the HTTP contract the race driver parses, and nothing about
-// Cloudflare's cache. Miniflare's cache is a local in-process store with one
-// isolate and no colo, and it stores any hostname happily — so a hit on an
-// off-zone key HERE is evidence the wiring is right and is emphatically NOT
-// evidence about the zone-matching question Phase 0 exists to answer.
-
 const url = (path: string) => `https://probe.test${path}`;
 const post = (path: string) => SELF.fetch(url(path), { method: "POST" });
 
@@ -26,11 +20,7 @@ describe("drawDelayMs", () => {
   it("draws over [0, J) and collapses to no delay at all when J is zero", () => {
     expect(drawDelayMs(1_000, () => 0)).toBe(0);
     expect(drawDelayMs(1_000, () => 0.5)).toBe(500);
-    // Open at the top: a draw is strictly under J, so no racer's wait can reach
-    // the next window.
     expect(drawDelayMs(1_000, () => 0.999)).toBeLessThan(1_000);
-    // Not `random() * 0`: the un-jittered baseline must not consume a draw at
-    // all, or "no jitter was asked for and none was drawn" stops being checkable.
     expect(
       drawDelayMs(0, () => {
         throw new Error("drew for an un-jittered racer");
@@ -104,11 +94,6 @@ describe("/race", () => {
   });
 
   it("spends the delay it reports, rather than only reporting it", async () => {
-    // Over five sequential draws, not one. Against the mutation that echoes
-    // delayMs and skips the sleep, a single draw under a millisecond floors the
-    // elapsed comparison to zero and passes — the failure this is here to catch
-    // slipping through one trial in forty. Five draws from [0, 100) sum to
-    // ~250ms against a few ms of request overhead.
     let reported = 0;
     const started = Date.now();
     for (let i = 0; i < 5; i += 1) {

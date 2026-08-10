@@ -9,20 +9,14 @@ import (
 	"github.com/aws/aws-sdk-go-v2/aws"
 )
 
-// source is the cell a shared credential is set at: another project entirely,
-// which is the whole point of referencing one.
 func source() Coordinate {
 	return Coordinate{Slug: "platform", Key: "STRIPE_API_KEY"}
 }
 
-// consumer is a cell in a different project and a different folder, so one
-// resolution proves both axes a reference crosses.
 func consumer() Coordinate {
 	return Coordinate{Slug: "shop", Folder: "/checkout", Key: "STRIPE_API_KEY"}
 }
 
-// setReferenced sets a value at the source and points the consumer at it, the
-// arrangement every test here starts from.
 func setReferenced(t *testing.T, store *Store, plaintext string) {
 	t.Helper()
 	if _, err := store.Set(context.Background(), source(), plaintext, nil); err != nil {
@@ -48,8 +42,6 @@ func TestReferenceReadsAsTheValueItPointsAt(t *testing.T) {
 		t.Errorf("Target = %v, want %v", got.Target, source())
 	}
 
-	// The value exists once. What the consumer's own partition holds is an
-	// address, and nothing that would go stale if the source changed.
 	for sk, item := range ddb.items[PartitionKey(consumer().Slug, store.Class)] {
 		if len(binaryAttr(item, "ciphertext")) != 0 {
 			t.Errorf("%s carries ciphertext of its own; a reference holds an address, not a copy", sk)
@@ -74,9 +66,6 @@ func TestReferenceResolvesToTheSourcesCurrentValue(t *testing.T) {
 	}
 }
 
-// The batch read is the one a deploy and a running function make, so a
-// reference that resolves through Get and not through Reveal would work in a
-// terminal and be absent in production.
 func TestRevealResolvesAReferenceAcrossProjects(t *testing.T) {
 	store, _, _ := newTestStore(t)
 	setReferenced(t, store, "sk_live_shared")
@@ -110,9 +99,6 @@ func TestSetReferenceRejectsATargetThatIsItselfAReference(t *testing.T) {
 	}
 }
 
-// The other end of the same rule: a cell nothing points at may become a
-// reference, and one that others read may not, or the chain they read through
-// would silently be two hops long.
 func TestSetReferenceRejectsACellOthersAlreadyReference(t *testing.T) {
 	store, _, _ := newTestStore(t)
 	setReferenced(t, store, "sk_live_shared")
@@ -131,12 +117,6 @@ func TestSetReferenceRejectsACellOthersAlreadyReference(t *testing.T) {
 	}
 }
 
-// That half of the guard reads the reverse index, and no GSI is served
-// consistently, so a second reference written moments after the first can be
-// accepted against an index that does not yet show it. A loop still cannot
-// happen — the other half is a consistent read of the target — but a two-hop
-// chain can, so the read refuses one instead of decrypting a row that holds an
-// address rather than ciphertext.
 func TestAChainTheIndexWasTooLateToRefuseFailsTheRead(t *testing.T) {
 	store, ddb, _ := newTestStore(t)
 	setReferenced(t, store, "sk_live_shared")
@@ -174,9 +154,6 @@ func TestSetReferenceRejectsACellPointedAtItself(t *testing.T) {
 	}
 }
 
-// A named environment belongs to the project holding the reference. The target
-// project has its own environments, sharing nothing but their names, so an
-// override is not an address a reference can be pointed at.
 func TestSetReferenceRejectsAnEnvironmentSpecificTarget(t *testing.T) {
 	store, _, _ := newTestStore(t)
 	target := source()
@@ -194,10 +171,6 @@ func TestSetReferenceRejectsAnEnvironmentSpecificTarget(t *testing.T) {
 	}
 }
 
-// Pointing at a value and setting it are as often two people's work as one's,
-// in either order. The reference is written against an address, so the value
-// need not be there yet; until it is, a read of the reference says what is
-// missing rather than reading as unset.
 func TestAReferenceMayBeWrittenBeforeTheValueItReadsIsSet(t *testing.T) {
 	store, _, _ := newTestStore(t)
 
@@ -224,9 +197,6 @@ func TestAReferenceMayBeWrittenBeforeTheValueItReadsIsSet(t *testing.T) {
 	}
 }
 
-// Editing happens at the source, so there is exactly one place a value can be
-// changed. A write to a reference is refused rather than quietly filed as a
-// value of its own, which would leave two cells claiming to be the same one.
 func TestSetRefusesToEditThroughAReference(t *testing.T) {
 	store, _, _ := newTestStore(t)
 	setReferenced(t, store, "sk_live_shared")
@@ -256,8 +226,6 @@ func TestReferencesAnswersWhatPointsAtAValueFromTheIndex(t *testing.T) {
 	if _, err := store.SetReference(context.Background(), second, source(), nil); err != nil {
 		t.Fatalf("SetReference err = %v", err)
 	}
-	// A value of its own, in the same partition as one of the consumers, so the
-	// answer is what points at the source rather than what sits near it.
 	if _, err := store.Set(context.Background(), Coordinate{Slug: "admin", Key: "ADMIN_TOKEN"}, "unrelated", nil); err != nil {
 		t.Fatalf("Set err = %v", err)
 	}
@@ -287,9 +255,6 @@ func TestReferencesAnswersWhatPointsAtAValueFromTheIndex(t *testing.T) {
 	}
 }
 
-// The index is sparse and holds current pointers only: a version row that once
-// pointed somewhere, and a tombstone left where a reference was removed, are
-// not things that reference a value now.
 func TestReferencesCountsOnlyThePointersThatStillPoint(t *testing.T) {
 	store, _, _ := newTestStore(t)
 	setReferenced(t, store, "sk_live_shared")
@@ -311,9 +276,6 @@ func TestReferencesCountsOnlyThePointersThatStillPoint(t *testing.T) {
 	}
 }
 
-// Removing a reference is removing an item. There is no unlink step, because
-// there is nothing on the other side to unlink from: the source never recorded
-// who reads it, the index simply stops answering.
 func TestRemovingAReferenceNeedsNoUnlinkStep(t *testing.T) {
 	store, _, _ := newTestStore(t)
 	setReferenced(t, store, "sk_live_shared")
@@ -346,9 +308,6 @@ func TestRemovingAReferenceNeedsNoUnlinkStep(t *testing.T) {
 	}
 }
 
-// Deleting at the source is allowed — the reverse lookup makes the blast radius
-// visible rather than forbidding it — so what is left is a reference to nothing,
-// and a read of one says so instead of reading as unset.
 func TestReferenceToADeletedSourceFailsTheReadRatherThanReadingAsUnset(t *testing.T) {
 	store, _, _ := newTestStore(t)
 	setReferenced(t, store, "sk_live_shared")
@@ -388,9 +347,6 @@ func TestListShowsWhereAReferencePoints(t *testing.T) {
 	}
 }
 
-// A reference occupies a version of the cell like anything else, so a cell that
-// held a value and now holds a pointer keeps one version sequence rather than
-// restarting on top of history it already wrote.
 func TestAReferenceTakesTheNextVersionOfTheCellItReplaces(t *testing.T) {
 	store, _, _ := newTestStore(t)
 	if _, err := store.Set(context.Background(), source(), "the shared value", nil); err != nil {
@@ -417,11 +373,6 @@ func TestAReferenceTakesTheNextVersionOfTheCellItReplaces(t *testing.T) {
 	}
 }
 
-// What a deploy grants its functions is decided by this: which cell reads
-// whose rows. It is per cell because the grant is per function, so the answer
-// has to say which of a project's values a partition is needed for. A cell
-// reading this project's own value is not in it — that partition is granted
-// anyway.
 func TestReferenceOwnersNamesTheOwnerOfEachCellThatReadsElsewhere(t *testing.T) {
 	store, _, _ := newTestStore(t)
 	setReferenced(t, store, "sk_live_shared")

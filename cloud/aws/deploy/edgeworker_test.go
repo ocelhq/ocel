@@ -43,8 +43,6 @@ func TestSanitizeWorkerName_ClampsTo63Chars(t *testing.T) {
 	}
 }
 
-// recordingEdge captures every AppDeployment it is handed so orchestration can
-// be asserted without touching any real edge API.
 type recordingEdge struct {
 	deployed []edge.AppDeployment
 }
@@ -62,7 +60,6 @@ func (f *recordingEdge) DeployApp(_ context.Context, app edge.AppDeployment) (ed
 
 func (f *recordingEdge) called() bool { return len(f.deployed) > 0 }
 
-// only returns the single deployment a one-app test expects.
 func (f *recordingEdge) only(t *testing.T) edge.AppDeployment {
 	t.Helper()
 	if len(f.deployed) != 1 {
@@ -79,8 +76,6 @@ func (f *recordingEdge) names() []string {
 	return names
 }
 
-// legacyEdge additionally answers whether a deployment exists, standing in for
-// an edge that can report a worker left at the previous unqualified name.
 type legacyEdge struct {
 	recordingEdge
 	existing map[string]bool
@@ -92,8 +87,6 @@ func (l *legacyEdge) FindApp(_ context.Context, name string) (bool, error) {
 	return l.existing[name], nil
 }
 
-// otherEdge stands in for a future provider-native edge no framework has
-// registered a worker for.
 type otherEdge struct{ recordingEdge }
 
 func (o *otherEdge) Kind() edge.Kind { return "provider-native" }
@@ -164,10 +157,6 @@ func TestDeployEdgeWorker_AssemblesUploadAndReportsURL(t *testing.T) {
 	}
 }
 
-// The exact binding set a fully-configured Next app emits. Dropping any one of
-// the OCEL_ISR_* / OCEL_EDGE_* bindings silently degrades the worker to
-// forwarding every prerender route to the Lambda — still correct, just slower
-// and costlier — so only pinning the whole set catches it.
 func TestDeployEdgeWorker_FullyConfiguredBindingSet(t *testing.T) {
 	artifactRoot := t.TempDir()
 	writeRoutingManifest(t, artifactRoot, "web", `{"buildId":"b1","appName":"web"}`)
@@ -243,9 +232,6 @@ func TestDeployEdgeWorker_NoCacheBindingsWithoutEdgeCreds(t *testing.T) {
 	}
 }
 
-// A substrate whose bootstrap predates edge credentials reads as
-// not-configured, never an error, so the deploy still succeeds (the worker then
-// forwards unsigned).
 func TestDeployResolver_EdgeCredentialsNotConfigured(t *testing.T) {
 	artifactRoot := writeMinimalWorkerArtifacts(t)
 	r := &deployResolver{
@@ -257,8 +243,6 @@ func TestDeployResolver_EdgeCredentialsNotConfigured(t *testing.T) {
 	}
 }
 
-// With both keys present, the resolver hands the worker the credentials it
-// signs its Function-URL forwards with.
 func TestDeployResolver_EdgeCredentialsConfigured(t *testing.T) {
 	r := &deployResolver{
 		cfg: Config{EdgeAccessKeyID: "AKIAEDGE", EdgeSecretKey: "secret-edge"},
@@ -341,8 +325,6 @@ func TestDeployEdgeWorker_DomainsOnlyForProduction(t *testing.T) {
 	}
 }
 
-// writeRoutingManifest seeds one app's routing manifest in its own subtree of
-// the build output, mirroring the builder's per-app namespacing.
 func writeRoutingManifest(t *testing.T, artifactRoot, app, content string) string {
 	t.Helper()
 	dir := appArtifactRoot(artifactRoot, app)
@@ -355,8 +337,6 @@ func writeRoutingManifest(t *testing.T, artifactRoot, app, content string) strin
 	return dir
 }
 
-// setWorkerBundle writes a worker bundle and exports the manifest pointing the
-// Next-on-Cloudflare pairing at it, standing in for the npm launcher.
 func setWorkerBundle(t *testing.T) {
 	t.Helper()
 	bundle := filepath.Join(t.TempDir(), "index.js")
@@ -378,8 +358,6 @@ func writeMinimalWorkerArtifacts(t *testing.T) string {
 	return artifactRoot
 }
 
-// classDomains builds a manifest domains map attaching hostnames to one class.
-// nil hostnames yields a nil map (no domains).
 func classDomains(class string, hostnames ...string) map[string]*deploymentsv1.DomainList {
 	if len(hostnames) == 0 {
 		return nil
@@ -387,15 +365,11 @@ func classDomains(class string, hostnames ...string) map[string]*deploymentsv1.D
 	return map[string]*deploymentsv1.DomainList{class: {Hostnames: hostnames}}
 }
 
-// nextApp is a Next app plus its single index function, the shape most
-// multi-app assertions below only vary the names of.
 func nextApp(name string, domains map[string]*deploymentsv1.DomainList) (*deploymentsv1.ManifestApp, *deploymentsv1.ManifestFunction) {
 	return &deploymentsv1.ManifestApp{Name: name, Framework: "next", Domains: domains},
 		&deploymentsv1.ManifestFunction{LogicalName: name + "_index", Framework: "next", App: name, RouteId: "/"}
 }
 
-// twoNextApps builds a project of two Next apps, each with its own build output
-// and one function, and the realized Function URL outputs for both.
 func twoNextApps(t *testing.T) (string, *deploymentsv1.Manifest, []*deploymentsv1.ResourceOutput) {
 	t.Helper()
 	artifactRoot := t.TempDir()
@@ -431,9 +405,6 @@ func TestDeployEdgeWorker_OneWorkerPerApp(t *testing.T) {
 	if got := fake.names(); !slicesEqual(got, want) {
 		t.Fatalf("deployed script names = %v, want %v", got, want)
 	}
-	// One worker is deployed per app, each assembled from only its own app's
-	// routes (the Function URLs themselves now travel in the Deployment record,
-	// not as a worker binding).
 	if len(out) != 2 {
 		t.Fatalf("expected one output per worker, got %v", out)
 	}
@@ -445,8 +416,6 @@ func TestDeployEdgeWorker_OneWorkerPerApp(t *testing.T) {
 	}
 }
 
-// The app segment is what keeps two apps apart, so it must survive a project and
-// environment long enough to overrun the platform's 63-char script-name limit.
 func TestWorkerScriptName_AppSegmentSurvivesTruncation(t *testing.T) {
 	slug := strings.Repeat("verylongproject", 5)
 	web := workerScriptName(slug, "prod", "web")
@@ -519,8 +488,6 @@ func TestDeployEdgeWorker_ProjectDomainNeedsExactlyOneWorkerApp(t *testing.T) {
 	if got := fake.only(t).Domains; !slicesEqual(got, []string{"project.acme.com"}) {
 		t.Errorf("Domains = %v, want the project-level domain", got)
 	}
-	// The Express app has no registry entry, so it is served from its own
-	// Function URL.
 	if got := appURLs(manifest, append(outputs, out...)); !slicesEqual(got, []string{
 		"https://ocel-proj--prod-web.acme.workers.dev",
 		"https://api-fn.lambda-url.aws/",
@@ -550,8 +517,6 @@ func TestDeployEdgeWorker_ProjectDomainWithTwoWorkerAppsIsAmbiguous(t *testing.T
 	t.Logf("error = %v", err)
 }
 
-// A preview deploy consults no domain at all, and still deploys every app's
-// worker — the same path production takes.
 func TestDeployEdgeWorker_PreviewDeploysEveryWorkerWithoutDomains(t *testing.T) {
 	artifactRoot, manifest, outputs := twoNextApps(t)
 	manifest.Domains = classDomains("production", "project.acme.com")
@@ -594,8 +559,6 @@ func TestDeployEdgeWorker_WarnsAboutWorkerAtThePreviousName(t *testing.T) {
 		t.Fatalf("expected a warning naming the previous script, got %v", msgs)
 	}
 	t.Logf("warning = %s", warned)
-	// Warning only: the orphan is reported, never removed, and both apps still
-	// deploy.
 	if len(fake.deployed) != 2 {
 		t.Errorf("expected both workers to deploy, got %v", fake.names())
 	}
@@ -632,9 +595,6 @@ func slicesEqual(got, want []string) bool {
 	return true
 }
 
-// The edge's own bootstrap outputs are persisted by the provider and handed
-// back verbatim, so the edge can read what it provisioned without re-querying
-// its API. The provider never reads an individual key.
 func TestDeployEdgeWorker_HandsTheEdgeItsOwnBootstrapValues(t *testing.T) {
 	artifactRoot, manifest, outputs := twoNextApps(t)
 	fake := &recordingEdge{}
@@ -659,9 +619,6 @@ func TestDeployEdgeWorker_HandsTheEdgeItsOwnBootstrapValues(t *testing.T) {
 	}
 }
 
-// A configured Next app that emits no functions — a static export — produced no
-// build output for a worker to route to, so it must deploy without one rather
-// than failing on a routing manifest that was never written.
 func TestDeployEdgeWorker_ConfiguredAppWithNoFunctionsDeploysNoWorker(t *testing.T) {
 	setWorkerBundle(t)
 	fake := &recordingEdge{}
@@ -683,7 +640,6 @@ func TestDeployEdgeWorker_ConfiguredAppWithNoFunctionsDeploysNoWorker(t *testing
 	}
 }
 
-// The zero-function app must not suppress its siblings either.
 func TestDeployEdgeWorker_ZeroFunctionAppDoesNotBlockOthers(t *testing.T) {
 	artifactRoot := t.TempDir()
 	writeRoutingManifest(t, artifactRoot, "web", `{"buildId":"bweb"}`)

@@ -13,8 +13,6 @@ import (
 	"github.com/ocelhq/ocel/cloud/edge"
 )
 
-// metadataFromMultipart builds the worker upload body and parses its "metadata"
-// part back into a map for assertion.
 func metadataFromMultipart(t *testing.T, worker edge.Worker, assetsJWT string) map[string]any {
 	t.Helper()
 	body, contentType, err := buildScriptMultipart(worker, assetsJWT)
@@ -48,7 +46,6 @@ func metadataFromMultipart(t *testing.T, worker edge.Worker, assetsJWT string) m
 	return nil
 }
 
-// bindingsByType is every binding of one type in the uploaded script metadata.
 func bindingsByType(meta map[string]any, typ string) []map[string]any {
 	var found []map[string]any
 	bindings, _ := meta["bindings"].([]any)
@@ -87,9 +84,6 @@ func TestBuildScriptMultipartEnablesObservability(t *testing.T) {
 	}
 }
 
-// A worker uploaded with observability off carries the disable explicitly, so a
-// script that was deployed with it on goes quiet on the next upload rather than
-// keeping the settings it already has.
 func TestBuildScriptMultipartDisablesObservability(t *testing.T) {
 	t.Setenv(envObservability, "off")
 	worker := edge.Worker{
@@ -154,9 +148,6 @@ func TestBuildScriptMultipart_AssetsBindingGatedOnCompletionJWT(t *testing.T) {
 		Assets:       []edge.StaticAsset{{Path: "/a.svg", Content: []byte("a")}},
 	}
 
-	// Without a completion JWT (e.g. a redeploy where the session returned no
-	// buckets and the token was lost), neither the assets binding nor the assets
-	// metadata may appear — Cloudflare rejects a binding without assets.
 	noJWT := metadataFromMultipart(t, worker, "")
 	if _, ok := noJWT["assets"]; ok {
 		t.Error("assets metadata must be absent without a completion JWT")
@@ -192,7 +183,6 @@ func TestScriptBindings_MapsTheObjectStoreToAnR2Bucket(t *testing.T) {
 	}
 }
 
-// A worker with no object store uploads exactly as it did before there was one.
 func TestScriptBindings_NoObjectStoreEmitsNoBucketBinding(t *testing.T) {
 	cases := map[string]edge.ObjectStore{
 		"neither half":   {},
@@ -235,12 +225,6 @@ func TestScriptBindings_MapsServicesToServiceBindings(t *testing.T) {
 	}
 }
 
-// Guards ocelhq-f0e regression: the frozen generic worker is loaded from its
-// compiled bundle (production.go's loadWorkerBundle) with an empty ObjectStore —
-// unlike the preview path, nothing pre-declares its binding name. bindObjectStore
-// must supply both the binding name and the bucket, or scriptBindings (which
-// needs both) silently drops the R2 binding and the deployed worker has no
-// OCEL_CACHE_STORE.
 func TestBindObjectStore_FrozenBundleStillGetsTheBinding(t *testing.T) {
 	frozen := edge.Worker{
 		Main: edge.WorkerModule{Name: "index.js", ContentType: "application/javascript+module", Content: []byte("export default {}")},
@@ -261,8 +245,6 @@ func TestBindObjectStore_FrozenBundleStillGetsTheBinding(t *testing.T) {
 	}
 }
 
-// The bucket is whatever this edge reported provisioning at bootstrap and got
-// handed back at deploy, never a name recomputed here.
 func TestBindObjectStore_TakesTheBucketFromBootstrapValues(t *testing.T) {
 	worker := edge.Worker{ObjectStore: edge.ObjectStore{Binding: "OCEL_CACHE_STORE"}}
 
@@ -277,11 +259,6 @@ func TestBindObjectStore_TakesTheBucketFromBootstrapValues(t *testing.T) {
 	}
 }
 
-// Guards ocelhq-f0e: ReconcileRootStack composes withService then
-// bindObjectStore on the generic worker (mirroring DeployApp's
-// bindObjectStore(app.Worker, app.Values)) — this exercises that composition
-// end to end through the same scriptBindings/metadata path a real upload
-// takes, rather than each function in isolation.
 func TestBindObjectStoreThenWithService_BothBindingsSurvive(t *testing.T) {
 	worker := edge.Worker{
 		Main:        edge.WorkerModule{Name: "index.js", ContentType: "application/javascript+module", Content: []byte("export default {}")},
@@ -372,12 +349,12 @@ func TestCoveredByUniversalSSL(t *testing.T) {
 		host, zone string
 		want       bool
 	}{
-		{"acme.com", "acme.com", true},          // apex
-		{"www.acme.com", "acme.com", true},       // one label deep
-		{"*.acme.com", "acme.com", true},         // first-level wildcard
-		{"*.preview.acme.com", "acme.com", false}, // two labels deep
-		{"a.b.acme.com", "acme.com", false},       // two labels deep
-		{"other.com", "acme.com", false},          // not in zone
+		{"acme.com", "acme.com", true},
+		{"www.acme.com", "acme.com", true},
+		{"*.acme.com", "acme.com", true},
+		{"*.preview.acme.com", "acme.com", false},
+		{"a.b.acme.com", "acme.com", false},
+		{"other.com", "acme.com", false},
 	}
 	for _, tc := range cases {
 		if got := coveredByUniversalSSL(tc.host, tc.zone); got != tc.want {
@@ -476,8 +453,6 @@ func TestVerifyCredentials_MissingAPIToken_Errors(t *testing.T) {
 }
 
 func TestHashAsset_MatchesWranglerAlgorithm(t *testing.T) {
-	// Reference value computed independently:
-	//   sha256(base64("hello") + "txt").hex()[:32]
 	got := hashAsset(edge.StaticAsset{Path: "/greeting.txt", Content: []byte("hello")})
 	if want := "129d0bf9c674d4cc340cf5f8feeb9f36"; got != want {
 		t.Fatalf("hashAsset = %q, want %q", got, want)
@@ -487,8 +462,6 @@ func TestHashAsset_MatchesWranglerAlgorithm(t *testing.T) {
 	}
 }
 
-// The API's binding type is the singular "worker_loader" — the plural
-// "worker_loaders" is wrangler's config key, which this endpoint rejects.
 func TestScriptBindings_MapsTheCodeLoaderToAWorkerLoader(t *testing.T) {
 	worker := edge.Worker{
 		Main:          edge.WorkerModule{Name: "index.js", ContentType: "application/javascript+module", Content: []byte("export default {}")},
@@ -504,8 +477,6 @@ func TestScriptBindings_MapsTheCodeLoaderToAWorkerLoader(t *testing.T) {
 	}
 }
 
-// A worker that loads no code of its own — the deployments-store worker, say —
-// uploads exactly as it did before there was a loader.
 func TestScriptBindings_NoCodeLoaderEmitsNoLoaderBinding(t *testing.T) {
 	worker := edge.Worker{
 		Main: edge.WorkerModule{Name: "index.js", ContentType: "application/javascript+module", Content: []byte("export default {}")},
@@ -521,10 +492,6 @@ func TestScriptBindings_NoCodeLoaderEmitsNoLoaderBinding(t *testing.T) {
 	}
 }
 
-// The frozen generic worker arrives from its compiled bundle declaring no
-// bindings at all (production.go's loadWorkerBundle), so — exactly as with the
-// R2 store — bindCodeLoader has to supply the name, or the deployed worker has
-// no LOADER and every edge route fails closed.
 func TestBindCodeLoader_FrozenBundleStillGetsTheBinding(t *testing.T) {
 	frozen := edge.Worker{
 		Main: edge.WorkerModule{Name: "index.js", ContentType: "application/javascript+module", Content: []byte("export default {}")},
@@ -545,8 +512,6 @@ func TestBindCodeLoader_FrozenBundleStillGetsTheBinding(t *testing.T) {
 	}
 }
 
-// The record's compat settings are the ones the loading worker itself was
-// uploaded with, so loaded code never runs on a runtime its parent does not.
 func TestCodeRuntime_ReportsTheUploadedScriptsCompatSettings(t *testing.T) {
 	loader, ok := New().(edge.CodeLoader)
 	if !ok {

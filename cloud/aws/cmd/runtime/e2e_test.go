@@ -24,18 +24,6 @@ import (
 	"github.com/ocelhq/ocel/pkg/proto/buckets/v1/bucketsv1connect"
 )
 
-// TestRuntimeDirectDial builds the real runtime binary, spawns it against a
-// local DynamoDB, dials its BucketService over the private socket, and asserts
-// PresignUpload returns a real presigned PUT (bound content-length/content-type
-// + session tag) and writes a pending session to DynamoDB.
-//
-// It requires dynamodb-local. Run it with:
-//
-//	docker compose up -d dynamodb
-//	go test ./cloud/aws/cmd/runtime -run TestRuntimeDirectDial
-//
-// It self-skips when dynamodb-local is not reachable (mirrors the MinIO dev
-// e2e's gate), so default CI without the container is unaffected.
 func TestRuntimeDirectDial(t *testing.T) {
 	ddbEndpoint := os.Getenv(ddbEndpointEnvVar)
 	if ddbEndpoint == "" {
@@ -49,7 +37,6 @@ func TestRuntimeDirectDial(t *testing.T) {
 		o.BaseEndpoint = aws.String(ddbEndpoint)
 	})
 
-	// Gate: skip unless dynamodb-local answers.
 	probeCtx, cancel := context.WithTimeout(ctx, 2*time.Second)
 	defer cancel()
 	if _, err := ddb.ListTables(probeCtx, &dynamodb.ListTablesInput{}); err != nil {
@@ -114,15 +101,12 @@ func TestRuntimeDirectDial(t *testing.T) {
 	if !strings.Contains(url, bucket+"/avatars/u1.png") {
 		t.Fatalf("url does not target the prod bucket + as-is key: %s", url)
 	}
-	// The presigned PUT binds exact content-length and content-type and a
-	// SigV4-signed x-amz-tagging session id (all appear in X-Amz-SignedHeaders).
 	for _, want := range []string{"X-Amz-Signature=", "content-length", "content-type", "x-amz-tagging"} {
 		if !strings.Contains(url, want) {
 			t.Fatalf("presigned url missing %q: %s", want, url)
 		}
 	}
 
-	// The pending session landed in DynamoDB with the provisioned table schema.
 	item := getSession(t, ctx, ddb, table, resp.GetSessionId())
 	if item["secret"] == nil || avS(item["secret"]) == "" {
 		t.Fatal("session must persist a minted secret")
@@ -165,7 +149,6 @@ func createSessionsTable(t *testing.T, ctx context.Context, ddb *dynamodb.Client
 		_, _ = ddb.DeleteTable(context.Background(), &dynamodb.DeleteTableInput{TableName: aws.String(table)})
 	})
 
-	// dynamodb-local returns tables ACTIVE immediately, but be defensive.
 	for i := 0; i < 20; i++ {
 		out, err := ddb.DescribeTable(ctx, &dynamodb.DescribeTableInput{TableName: aws.String(table)})
 		if err == nil && out.Table.TableStatus == ddbtypes.TableStatusActive {
@@ -181,7 +164,6 @@ func createSessionsTable(t *testing.T, ctx context.Context, ddb *dynamodb.Client
 			Enabled:       aws.Bool(true),
 		},
 	}); err != nil {
-		// dynamodb-local supports TTL config; a failure here is a real problem.
 		t.Fatalf("enable TTL on expires_at: %v", err)
 	}
 }
@@ -278,8 +260,6 @@ func dialRuntime(t *testing.T, addr, token string) bucketsv1connect.BucketServic
 	)
 }
 
-// clientAuth presents the per-session token on every RPC, mirroring the
-// server's expectation.
 type clientAuth struct{ token string }
 
 func (c *clientAuth) WrapUnary(next connect.UnaryFunc) connect.UnaryFunc {

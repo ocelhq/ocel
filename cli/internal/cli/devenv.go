@@ -20,11 +20,6 @@ import (
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/resources/v1"
 )
 
-// storeValues builds the map dev's variable store answers declarations from:
-// the control plane's project-level values, overlaid by the dotfile. It is the
-// gate's half of the precedence resolvedEnv states for the child, and it holds
-// only variables — a resource's env and the app folder are the child's
-// environment, not values anything declares.
 func storeValues(projectEnv, dotfile map[string]string) map[string]string {
 	values := make(map[string]string, len(projectEnv)+len(dotfile))
 	for k, v := range projectEnv {
@@ -36,12 +31,6 @@ func storeValues(projectEnv, dotfile map[string]string) map[string]string {
 	return values
 }
 
-// resolveProjectConfig fetches the project's identity and shared values once,
-// before discovery, so the gate can rule from them.
-//
-// An unreachable control plane costs the run those shared values and nothing
-// else: the identity is kept so provisioning still has its coordinates, and a
-// project whose values are all in the dotfile keeps running offline.
 func resolveProjectConfig(ctx context.Context, apiURL, token, projectID string, stderr io.Writer) provision.ProjectConfig {
 	cfg, err := fetchProjectConfig(ctx, apiURL, token, projectID)
 	if err == nil {
@@ -51,15 +40,6 @@ func resolveProjectConfig(ctx context.Context, apiURL, token, projectID string, 
 	return provision.ProjectConfig{ProjectID: projectID, APIURL: apiURL, Token: token}
 }
 
-// devRefusal restates a gate refusal in the terms a dev run can act on. The
-// verdict is the deploy's verdict — same gate, same two-hop rule, same schema
-// report from the declaring process — but the remedy cannot be: `ocel env set`
-// needs a cloud provider and a bootstrapped store, and dev's dotfile exists
-// precisely so getting started needs neither. A refusal whose fix cannot be run
-// is worse than no fix at all, so dev names the file instead.
-//
-// It is given the file's key names and not its values, so the refusal has no
-// value to print however it is later edited.
 func devRefusal(err error, dotfileKeys map[string]struct{}) error {
 	var refusal *envgate.Refusal
 	if !errors.As(err, &refusal) {
@@ -80,12 +60,6 @@ func devRefusal(err error, dotfileKeys map[string]struct{}) error {
 	return errors.New(b.String())
 }
 
-// shellHint covers the one refusal a developer cannot otherwise explain: the
-// name is right there in their own environment. Dev resolves from the file
-// rather than the shell on purpose — a verdict that depended on unversioned
-// machine state would differ per developer, which is the failure variables
-// exist to prevent — so the refusal says which place it looked rather than
-// leaving the developer to guess. The value itself is never read out.
 func shellHint(key string, dotfileKeys map[string]struct{}) string {
 	if _, inFile := dotfileKeys[key]; inFile {
 		return ""
@@ -125,8 +99,6 @@ func devCellLabel(cell envgate.Cell) string {
 	return cell.Key + " (" + cell.Folder + ")"
 }
 
-// readBy names the apps a failing cell belongs to. A root cell is the fallback
-// for every app; a folder cell is read only by the app bound there.
 func devReadBy(apps []envgate.App, folder string) string {
 	var names []string
 	for _, app := range apps {
@@ -140,20 +112,6 @@ func devReadBy(apps []envgate.App, folder string) string {
 	return ", read by " + strings.Join(names, ", ")
 }
 
-// checkStatableBinding refuses a run that would cost an app a read it has. Dev
-// spawns one child for the whole project and nothing tells it which app that
-// child is, so it states the folder every app agrees on; where two apps bind
-// different ones it can only state the project root, and a read scoped
-// elsewhere then refuses at runtime with its value sitting in that very
-// environment. Letting the gate pass and the SDK throw would be precisely the
-// crash at the first read the gate exists to replace, so dev says here what it
-// cannot do.
-//
-// It refuses only for a key some app's own binding is in the scope of, and that
-// the stated binding is not — exactly the reads this run loses. A key scoped
-// where no app is bound is unreadable under every binding, including the ones a
-// deploy states, so dev is as silent about it as a deploy is rather than
-// refusing a project that deploys.
 func checkStatableBinding(apps []projectconfig.App, stated string, scoped map[string][]string) error {
 	var keys []string
 	losing := make([]bool, len(apps))
@@ -206,10 +164,6 @@ func folderLabel(folder string) string {
 	return folder
 }
 
-// reportUnreadableLines names the lines the parser could not read, by number.
-// It runs on every read of the file rather than once per run: a key that stops
-// arriving because an edit broke the line it was on is the moment this is worth
-// saying, and by then the startup notice has scrolled away.
 func reportUnreadableLines(stdout io.Writer, unreadable []int) {
 	if len(unreadable) == 0 {
 		return
@@ -225,25 +179,11 @@ func reportUnreadableLines(stdout io.Writer, unreadable []int) {
 	fmt.Fprintf(stdout, "%s lines %s are not KEY=VALUE and were ignored.\n", dotenv.FileName, strings.Join(numbers, ", "))
 }
 
-// Advice on when an edit takes effect, which the run's own command decides: a
-// run that re-reads the file on every save and one that holds it for its
-// lifetime owe their user opposite advice, and either sentence under the wrong
-// command is read as "editing does nothing".
 var (
 	dotfileWatchedAdvice  = fmt.Sprintf("editing %s re-resolves this run; saving it is enough.", dotenv.FileName)
 	dotfileReadOnceAdvice = fmt.Sprintf("%s is read once, at startup; editing it takes effect on the next `ocel run`.", dotenv.FileName)
 )
 
-// reportDotfile states what resolving from a file costs, at the moment it is
-// done, because none of it is visible from the code that reads the values.
-// Collaboration disappears — a shared store is one project's answer, a file is
-// one machine's — and so does confidentiality, because dev's only delivery
-// mechanism is the environment, so every class lands in the child in plaintext
-// under its own name where a deploy would keep a sensitive value out of the
-// function environment and a live one out of the artifact.
-//
-// It is told key names, never values: this is the one file whose contents
-// nothing else may see, so the notice about it cannot be what prints them.
 func reportDotfile(stdout io.Writer, dir string, values map[string]string, advice string) {
 	if len(values) == 0 {
 		return
@@ -264,12 +204,6 @@ func reportDotfile(stdout io.Writer, dir string, values map[string]string, advic
 	}
 }
 
-// gitIgnoresDotfile reads the project's own .gitignore rather than asking git,
-// so the check costs nothing and works in a tree that is not a repository yet —
-// which is exactly the new project this file is scaffolded for. It reads the
-// common spellings and treats a later re-inclusion as decisive, so the one way
-// it can be wrong is a nested or global ignore it never saw, which prints a
-// redundant line rather than staying quiet about an exposed file.
 func gitIgnoresDotfile(dir string) bool {
 	file, err := os.Open(filepath.Join(dir, ".gitignore"))
 	if err != nil {

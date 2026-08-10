@@ -4,9 +4,6 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 
-// The membrane pushes live values over the control socket the app process
-// already holds. These tests are the node half of that contract, driven from a
-// real unix socket so what is asserted is the bytes the membrane writes.
 const LIVE_VALUES = Symbol.for("ocel.env.liveValues");
 
 type LiveState = { generation: number; values: Record<string, string> } | undefined;
@@ -19,8 +16,6 @@ function published(): LiveState {
   return (globalThis as Record<symbol, unknown>)[LIVE_VALUES] as LiveState;
 }
 
-// push writes exactly the line the membrane writes: a newline-terminated JSON
-// object on the control socket, one way, with no reply expected.
 function push(message: unknown): void {
   for (const conn of connections) conn.write(JSON.stringify(message) + "\n");
 }
@@ -85,9 +80,6 @@ describe("receiving a push", () => {
     expect(published()).toEqual({ generation: 4, values: { API_TOKEN: "fourth" } });
   });
 
-  // A refresh that overtook a later one on the way here would otherwise
-  // resurrect a value the membrane has already replaced, which is the one thing
-  // a bounded staleness guarantee cannot survive.
   test.each([
     ["an older generation", 1],
     ["the generation already applied", 2],
@@ -106,9 +98,6 @@ describe("receiving a push", () => {
   });
 
   test.each([
-    // Well-formed in every respect but the type, so only the type can reject
-    // it: the socket carries the app's own telemetry in the other direction and
-    // will carry more message types than this one.
     ["a message of another type", { type: "log", generation: 1, values: { A: "x" } }],
     ["no generation", { type: "liveValues", values: { A: "x" } }],
     ["a generation below one", { type: "liveValues", generation: 0, values: { A: "x" } }],
@@ -162,10 +151,6 @@ describe("receiving a push", () => {
   });
 });
 
-// A function that declares nothing live must be untouched by the live path.
-// That is the whole of "a store outage affects only functions that declare live
-// values": there is nothing to wait for, so there is nothing an outage can
-// delay, and no store call was ever going to be made on its behalf.
 describe("a function that declares no live value", () => {
   test.each([
     ["the variable is absent", undefined],

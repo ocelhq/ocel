@@ -132,8 +132,6 @@ func TestVarsUIIsServableAndNeverMaterialized(t *testing.T) {
 		t.Errorf("index.html = %q, want it to load the bundled script", page)
 	}
 
-	// The UI is served from the binary over loopback. Writing it into a
-	// project would put bytes on disk that nothing ever opens.
 	dir := t.TempDir()
 	if err := Ensure(dir); err != nil {
 		t.Fatalf("Ensure: %v", err)

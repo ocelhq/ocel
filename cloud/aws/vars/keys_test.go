@@ -92,10 +92,6 @@ func TestValidateRejectsMalformedFolders(t *testing.T) {
 	}
 }
 
-// Root is the absence of a folder, spelled as the empty string. Accepting "/"
-// as a second spelling of it would let a direct RPC address root by a name the
-// CLI refuses, so the store rejects it on its own account rather than trusting
-// the caller to have been through the CLI's guard.
 func TestValidateRejectsTheRootFolderAsASecondSpellingOfRoot(t *testing.T) {
 	err := Coordinate{Slug: "shop", Key: "K", Folder: rootFolder}.validate()
 	if err == nil {

@@ -7,14 +7,6 @@
     "enabled": true,
   },
   "upload_source_maps": true,
-  // The Cache API is inert on workers.dev, so a deploy that answers only there
-  // measures nothing. Fill in the zone this probe should serve from before
-  // deploying — a zone route, which is how cloud/edge/cloudflare attaches a real
-  // Ocel app with domains. See README.md.
-  // ocel.dev carries a wildcard `*.ocel.dev/*` route belonging to another worker,
-  // and a fraction of requests reach machines that resolve the wildcard ahead of
-  // this more specific pattern — enough to poison a burst. ocel.site has no
-  // wildcard worker route, so measurements are taken there.
   "routes": [
     { "pattern": "probe.ocel.dev/*", "zone_name": "ocel.dev" },
     { "pattern": "probe.ocel.site/*", "zone_name": "ocel.site" },

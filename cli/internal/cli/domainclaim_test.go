@@ -30,8 +30,6 @@ func TestDeclaredHostnames(t *testing.T) {
 		t.Errorf("declaredHostnames(production) = %v, want %v (declared order, deduped)", got, want)
 	}
 
-	// The preview wildcard travels with its literal leading "*.": the provider
-	// forms the route pattern from it without inferring the class.
 	if got := declaredHostnames(cfg, "preview"); len(got) != 1 || got[0] != "*.preview.acme.com" {
 		t.Errorf("declaredHostnames(preview) = %v, want [*.preview.acme.com]", got)
 	}
@@ -56,14 +54,10 @@ func TestRefuseClaimedDomains(t *testing.T) {
 			claims: []*deploymentsv1.DomainClaim{{Hostname: "acme.com", Status: deploymentsv1.DomainClaim_STATUS_UNCLAIMED}},
 		},
 		{
-			// An edge that cannot answer must never fail a deploy: the guard
-			// degrades to the late collision it already survives.
 			name:   "unanswerable is skipped, never refused",
 			claims: []*deploymentsv1.DomainClaim{{Hostname: "acme.com", Status: deploymentsv1.DomainClaim_STATUS_UNSPECIFIED}},
 		},
 		{
-			// A hostname this project's own workers hold is reported
-			// unclaimed, so claimed is always another project's.
 			name:   "claimed refuses",
 			claims: []*deploymentsv1.DomainClaim{{Hostname: "acme.com", Status: deploymentsv1.DomainClaim_STATUS_CLAIMED, Owner: "ocel-other-preview"}},
 			refuse: true,
@@ -109,9 +103,6 @@ func TestRefuseClaimedDomains_NamesEveryClaimedHostname(t *testing.T) {
 	}
 }
 
-// TestRunPreviewUp_RefusesDomainClaimedByAnotherProject is the point of the
-// feature: a wildcard another project holds costs the user nothing — the
-// refusal lands before the build, so nothing is built and nothing is stranded.
 func TestRunPreviewUp_RefusesDomainClaimedByAnotherProject(t *testing.T) {
 	root, _ := setUpDeployFixture(t)
 	writeFile(t, filepath.Join(root, "ocel.config.ts"), `
@@ -177,9 +168,6 @@ export default {
 	}
 }
 
-// TestRunDeploy_DeclaresProjectAndAppHostnames proves the hostnames the claim
-// check is asked about come from the config before the build, project-level and
-// per-app alike.
 func TestRunDeploy_DeclaresProjectAndAppHostnames(t *testing.T) {
 	root, _ := setUpDeployFixture(t)
 	writeFile(t, filepath.Join(root, "ocel.config.ts"), `

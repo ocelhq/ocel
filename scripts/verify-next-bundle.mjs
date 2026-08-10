@@ -1,26 +1,4 @@
 #!/usr/bin/env node
-// Verifies that a *real* `next build` through the Ocel Next adapter emits a
-// correct bundled function tree. The adapter's unit tests drive it with
-// synthetic AdapterOutput fixtures; this drives it with a real app and asserts
-// against the bytes on disk.
-//
-// It is entirely local: it runs the app's own build script the way
-// cli/platform/src/builder/next.ts does (NEXT_ADAPTER_PATH + OCEL_APP_NAME +
-// OCEL_OUTPUT_DIR) and never deploys anything.
-//
-// Usage:
-//   node scripts/verify-next-bundle.mjs [options]
-//     --app <dir>        app to build (default examples/next-test; the tracked
-//                        example that builds with no ocel dev session. Pass
-//                        examples/next-cache-lab for a heavier ISR/PPR app)
-//     --app-name <name>  ocel app name (default the app dir's basename)
-//     --out <dir>        output root (default <app>/.ocel/verify-output)
-//     --skip-build       assert against an existing tree
-//     --skip-adapter     don't rebuild @ocel/next-runtime first
-//     --compare <dir>    a legacy one-function-per-route `functions/` tree to
-//                        report size/file-count against (reporting only)
-//
-// Exits non-zero listing every failed assertion, so it can be a CI gate.
 
 import { spawnSync } from "node:child_process";
 import { existsSync, lstatSync, readFileSync, readdirSync, rmSync } from "node:fs";
@@ -49,15 +27,11 @@ function main() {
   report();
 }
 
-// --- build -----------------------------------------------------------------
-
 function buildAdapter() {
   log("building @ocel/next-runtime");
   run("pnpm", ["--filter", "@ocel/next-runtime", "build"], repoRoot);
 }
 
-// Mirrors cli/platform/src/builder/next.ts: the app's own `build` script, with
-// the adapter named to Next and the per-app output subtree handed to it.
 function buildApp() {
   const adapter = join(repoRoot, "packages/next-runtime/dist/next-adapter.mjs");
   if (!existsSync(adapter)) {
@@ -71,8 +45,6 @@ function buildApp() {
     OCEL_OUTPUT_DIR: appOut,
   });
 }
-
-// --- assertions ------------------------------------------------------------
 
 function verify() {
   const functionsDir = join(appOut, "functions");
@@ -93,7 +65,6 @@ function verify() {
   const lambdaEntries = Object.entries(dispatch).filter(([, v]) => v.kind === "lambda");
   check(lambdaEntries.length > 1, `app routes to ${lambdaEntries.length} lambda pathname(s) — not a multi-route app, so "one bundle" proves nothing`);
 
-  // The headline claim: a normal multi-route app packs into exactly one Lambda.
   check(
     funcDirs.length === 1 && basename(funcDirs[0] ?? "") === "bundle-0.func",
     `expected exactly one functions/bundle-0.func, got [${funcDirs.map((d) => relative(functionsDir, d)).join(", ")}]`,
@@ -112,8 +83,6 @@ function verify() {
   reportSize(functionsDir, bundles);
 }
 
-// A bundle's on-disk shape: its config, its launcher's ENTRIES/PRIMARY, and the
-// probe results from requiring the launcher in a child process.
 function readBundle(dir, name) {
   const configPath = join(dir, "config.json");
   if (!existsSync(configPath)) {
@@ -147,8 +116,6 @@ function verifyBundle({ name, dir, config, launcher, launcherRel, entries, prima
 
   const keys = Object.keys(entries);
   check(keys.length > 0, `${name}: launcher ENTRIES is empty`);
-  // A specifier that does not resolve from the launcher is a 502 for that route:
-  // the compiled module was left out of the bundle's asset union.
   check(
     unresolved.length === 0,
     `${name}: launcher entries do not resolve from ${relative(dir, launcher)}: ${unresolved.map(([k, s]) => `${k} -> ${s}`).join(", ")}`,
@@ -158,29 +125,19 @@ function verifyBundle({ name, dir, config, launcher, launcherRel, entries, prima
     `${name}: launcher PRIMARY ${JSON.stringify(primary)} is not a key in ENTRIES`,
   );
 
-  // The dispatcher shipped inside the bundle, exercised with a stub load: real
-  // copied source, so a bad copy shows up here rather than at runtime.
   check(dispatchProbe.noHeader === 502, `${name}: dispatcher answered ${dispatchProbe.noHeader} for a request with no x-ocel-entry, expected 502`);
   check(dispatchProbe.unknownKey === 502, `${name}: dispatcher answered ${dispatchProbe.unknownKey} for an unknown entry key, expected 502`);
   check(dispatchProbe.routed === true, `${name}: dispatcher did not route a known entry key to its handler`);
 }
 
-// The cross-check that a deploy would otherwise be the first to catch: every
-// entryKey the routing manifest names must exist in the launcher table of the
-// bundle its id names, or that route is a guaranteed runtime 502.
 function verifyDispatch(dispatch, bundles) {
   for (const [pathname, entry] of Object.entries(dispatch)) {
     const where = `${entry.kind} ${pathname}`;
 
-    // A prerender is node-parented when it names a node entry to regenerate
-    // through, or when its id names one of the emitted bundles. Either fact
-    // alone is enough: whichever the emitter got wrong, this must still look.
     const nodeParented =
       typeof entry.entryKey === "string" || bundles.has(entry.id);
 
     if (entry.kind === "prerender" && !nodeParented) {
-      // Parented by an edge route: it regenerates through the edge bundle, which
-      // has no launcher table here to check it against.
       check(
         typeof entry.edgeEntryKey === "string",
         `${where}: prerender names neither an entryKey nor an edgeEntryKey, so nothing can regenerate it`,
@@ -192,8 +149,6 @@ function verifyDispatch(dispatch, bundles) {
     if (!check(typeof entry.id === "string", `${where}: no id`)) continue;
     if (!check(typeof entry.entryKey === "string", `${where}: no entryKey`)) continue;
     if (entry.kind === "prerender") {
-      // The worker reads `revalidates = !edgeEntryKey`, so a node prerender with
-      // anything in that field has silently lost revalidation.
       check(
         entry.edgeEntryKey === undefined,
         `${where}: node-parented prerender carries edgeEntryKey ${JSON.stringify(entry.edgeEntryKey)} — the worker reads that as "cannot revalidate"`,
@@ -209,11 +164,6 @@ function verifyDispatch(dispatch, bundles) {
   }
 }
 
-// --- launcher probe --------------------------------------------------------
-
-// Requires the emitted launcher for real, with the dispatcher stubbed out so no
-// Next route module is ever executed: the stub captures the table instead of
-// loading it, then each specifier is resolved (not required) from the launcher.
 const probeSource = `
 const Module = require("node:module");
 const launcher = process.env.OCEL_PROBE_LAUNCHER;
@@ -293,8 +243,6 @@ function probeLauncher(launcher) {
   }
 }
 
-// --- reporting -------------------------------------------------------------
-
 function reportSize(functionsDir, bundles) {
   const total = measure(functionsDir);
   notes.push(`bundled: ${bundles.size} function(s), ${total.files} files, ${mib(total.bytes)}`);
@@ -317,8 +265,6 @@ function reportSize(functionsDir, bundles) {
   );
 }
 
-// Sizes as the deployable artifact carries them: a symlink costs itself, never
-// its target, matching the adapter's symlink-preserving copy.
 function measure(dir) {
   let bytes = 0;
   let files = 0;
@@ -361,8 +307,6 @@ function report() {
   for (const failure of failures) process.stderr.write(`  ✗ ${failure}\n`);
   process.exit(1);
 }
-
-// --- plumbing --------------------------------------------------------------
 
 function parseArgs(argv) {
   const flags = { "skip-build": false, "skip-adapter": false };

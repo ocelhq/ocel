@@ -8,16 +8,8 @@ import (
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/resources/v1"
 )
 
-// keyDelimiter is what the store separates a value key's components with. It
-// is forbidden in every user-chosen name so a key stays unambiguous to build
-// and to parse back; the store client enforces the same rule from the other
-// side of the provider socket, where this package cannot reach.
 const keyDelimiter = "#"
 
-// ValidateFolder rejects a folder path the store cannot address or a reader
-// could mistake for another. Root is the absence of a folder, spelled as the
-// empty string everywhere above the store, so "/" is rejected rather than
-// silently accepted as a second spelling of it.
 func ValidateFolder(folder string) error {
 	switch {
 	case folder == "":
@@ -36,28 +28,12 @@ func ValidateFolder(folder string) error {
 	return nil
 }
 
-// Resolved is the cell one app reads a key from, once. Value is empty for a
-// live-class key: those are addresses only, fetched from the store at runtime,
-// which is what keeps their plaintext off a build host. Version is the store
-// version of the cell it came from, carried for every class alike — what a
-// ledger does with a version a runtime fetch cannot honour is the ledger's
-// decision, not resolution's.
 type Resolved struct {
 	Folder  string
 	Value   string
 	Version int64
 }
 
-// Resolve decides where every declared key's value comes from for one app.
-// This is the whole of folder resolution and it is exactly two hops — the
-// app's bound folder, then the project root — so a value's origin is
-// predictable without tracing a hierarchy. Nesting never participates: a
-// folder is matched whole, never as a path prefix.
-//
-// A key scoped to folders the app does not bind is absent from the result
-// rather than resolved from somewhere else, which is what makes an
-// out-of-scope read a named failure at the point of use instead of a value the
-// app was never meant to see.
 func (g *Gate) Resolve(ctx context.Context, app string) (map[string]Resolved, error) {
 	binding, known := g.binding(app)
 	if !known {
@@ -105,7 +81,6 @@ func (g *Gate) Resolve(ctx context.Context, app string) (map[string]Resolved, er
 	return resolved, nil
 }
 
-// hop is the two-hop rule itself.
 func hop(definition *resourcesv1.VariableDefinition, binding string, held heldCells) (Cell, bool) {
 	if scope := definition.GetFolders(); len(scope) > 0 {
 		if binding == "" || !contains(scope, binding) {
@@ -132,12 +107,6 @@ func (g *Gate) binding(app string) (string, bool) {
 	return "", false
 }
 
-// Lint reports what only reading the declarations and the app bindings
-// together can see. A scope no app covers is a warning: the requirement is
-// dead but nothing is wrong. A scope only some of whose folders are bound is
-// an error, because a scoped variable exists to diverge across every folder it
-// names — a folder left unread means one half of a rename landed and the other
-// did not, so the message names both places it has to agree in.
 func Lint(definitions []*resourcesv1.VariableDefinition, apps []App, configPath string) ([]string, error) {
 	bound := map[string]string{}
 	for _, app := range apps {
@@ -183,9 +152,6 @@ func Lint(definitions []*resourcesv1.VariableDefinition, apps []App, configPath 
 	return warnings, nil
 }
 
-// source names where a declaration was written. The SDK fills it best-effort,
-// so an empty one falls back to naming the key, which is what a reader greps
-// for anyway.
 func source(definition *resourcesv1.VariableDefinition) string {
 	if s := definition.GetSource(); s != "" {
 		return s
@@ -202,14 +168,6 @@ func contains(list []string, want string) bool {
 	return false
 }
 
-// CheckWritable refuses a write to a cell nothing could read back. A scoped
-// key diverges across the folders it names and has no root value at all, so a
-// root write, or one to a folder outside the scope, would put a value in the
-// store that no app resolves — the store's own client cannot see this, because
-// scoping is declared in code and never recorded beside the value.
-//
-// A key no declaration mentions is writable anywhere: values may be set before
-// the code that reads them exists.
 func CheckWritable(definitions []*resourcesv1.VariableDefinition, key, folder string) error {
 	for _, definition := range definitions {
 		if definition.GetKey() != key {

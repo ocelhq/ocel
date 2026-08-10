@@ -2,13 +2,8 @@ package cli
 
 import "fmt"
 
-// maxTagLen bounds a deployment tag so it stays readable in `ocel deployments
-// ls` and easy to retype for a rollback.
 const maxTagLen = 64
 
-// validateTag enforces the deployment-tag format: 1–64 characters drawn from
-// [A-Za-z0-9._-]. An empty tag is the "untagged" default and is always valid,
-// so callers can validate unconditionally.
 func validateTag(tag string) error {
 	if tag == "" {
 		return nil

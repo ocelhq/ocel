@@ -15,10 +15,6 @@ import (
 	"github.com/ocelhq/ocel/cli/platform"
 )
 
-// buildCmd builds the project's apps into .ocel/output without deploying
-// anything. It talks to no API and needs neither a login nor a configured
-// provider, so a CI job can build in a container holding no credentials and
-// deploy from the same checkout later with `--prebuilt`.
 var buildCmd = &cobra.Command{
 	Use:   "build",
 	Short: "Build your project's apps into .ocel/output without deploying",
@@ -36,9 +32,6 @@ var buildCmd = &cobra.Command{
 	},
 }
 
-// runBuild resolves the project config, builds its apps, and reports what
-// landed in the output. Builder progress goes to stderr so stdout carries only
-// the summary.
 func runBuild(ctx context.Context, cwd string, stdout, stderr io.Writer) error {
 	cfg, err := projectconfig.Resolve(cwd)
 	if err != nil {
@@ -49,10 +42,6 @@ func runBuild(ctx context.Context, cwd string, stdout, stderr io.Writer) error {
 		return err
 	}
 
-	// `ocel build` holds no provider session, so it resolves no values: the
-	// variables a build can inline arrive with the deploy that resolves them.
-	// The output says so, so a later `--prebuilt` deploy can tell a value that
-	// was never inlined from one that changed since.
 	if err := buildApp(ctx, cfg, nil, stderr); err != nil {
 		return err
 	}

@@ -3,9 +3,6 @@ import { describe, expect, it } from "vitest";
 import { dispatchResult, type RouteDeps } from "../src/index";
 import { coloDeps } from "./cache-deps";
 
-// Many routes share one Lambda ("a bundle"): dispatch[pathname].id is the
-// bundle's identity and the functionUrls key, while entryKey names which route
-// inside it runs — carried to the launcher on x-ocel-entry.
 const ENTRY_HEADER = "x-ocel-entry";
 
 function noAssets(): RouteDeps["assetStore"] {
@@ -41,7 +38,6 @@ function storeOf(entries: Record<string, unknown>) {
   };
 }
 
-// Every origin forward, in the order they were made.
 function recorder() {
   const requests: Request[] = [];
   const fetch = (async (request: Request) => {
@@ -138,16 +134,11 @@ describe("a lambda route's bundle entry", () => {
         functionUrls: { "bundle-0": "https://fn.example.com" },
         fetch: origin.fetch,
       }),
-      // A client value must still lose to the worker's own — the empty one.
       new Request("https://app.example/blog/hello", {
         headers: { [ENTRY_HEADER]: "attacker/admin/page" },
       }),
     );
 
-    // The dispatcher reads req.headers["x-ocel-entry"] and 502s when it is not a
-    // string, then looks the value up in its own entry table. An empty key is a
-    // key the table can carry, so the producer emits it faithfully; omitting the
-    // header here would turn it into the unrecoverable "carries no header" 502.
     expect(origin.requests[0].headers.has(ENTRY_HEADER)).toBe(true);
     expect(origin.entries()).toEqual([""]);
   });
@@ -228,8 +219,6 @@ describe("a prerender whose parent is a node bundle", () => {
     id: "bundle-0",
     entryKey: "app/blog/page",
     config: {
-      // Next's own allowHeader for a prerender: the entry header is not in it,
-      // and must survive the filter anyway.
       allowHeader: ["host", "x-matched-path", "x-prerender-revalidate"],
       bypassFor: [{ type: "cookie" as const, key: "preview" }],
       bypassToken: "TOKEN",
@@ -282,7 +271,6 @@ describe("a prerender whose parent is a node bundle", () => {
     );
 
     expect(res.headers.get("x-ocel-cache")).toBe("BYPASS");
-    // The raw header set: cookies reach the origin, and so does the entry.
     expect(origin.requests[0].headers.get("cookie")).toBe("preview=1");
     expect(origin.entries()).toEqual(["app/blog/page"]);
   });
@@ -301,7 +289,6 @@ describe("a prerender whose parent is a node bundle", () => {
     const res = await dispatchTo(
       "/blog",
       blogDeps(origin, storedEntry(1_000), {
-        // 61s past a 60s revalidate window: stale, not expired.
         now: 1_000 + 61_000,
         waitUntil: (p) => pending.push(p),
       }),
@@ -312,9 +299,6 @@ describe("a prerender whose parent is a node bundle", () => {
 
     await Promise.all(pending);
 
-    // The rename guard: a node-parented prerender still revalidates, and the
-    // regenerating forward names the bundle entry — without it the launcher has
-    // nothing to run and answers 502.
     expect(origin.requests).toHaveLength(1);
     expect(origin.requests[0].headers.get("x-prerender-revalidate")).toBe("TOKEN");
     expect(origin.entries()).toEqual(["app/blog/page"]);
@@ -376,7 +360,6 @@ describe("a PPR prerender whose parent is a node bundle", () => {
 
     expect(res.headers.get("x-ocel-cache")).toBe("PRERENDER");
     expect(await res.text()).toBe("<html>shell</html>from-lambda");
-    // The resume bypasses forward() entirely, building its own header set.
     expect(origin.entries()).toEqual(["app/ppr/page"]);
   });
 
@@ -385,7 +368,6 @@ describe("a PPR prerender whose parent is a node bundle", () => {
     const origin = recorder();
     const res = await dispatchTo(
       "/ppr",
-      // 61s past a 60s revalidate window: stale, not expired.
       pprDeps(origin, 1_000, {
         now: 1_000 + 61_000,
         waitUntil: (p) => pending.push(p),
@@ -395,7 +377,6 @@ describe("a PPR prerender whose parent is a node bundle", () => {
     expect(await res.text()).toBe("<html>shell</html>from-lambda");
     await Promise.all(pending);
 
-    // Both the resume and the regenerating forward name the bundle entry.
     expect(origin.requests.length).toBeGreaterThanOrEqual(2);
     expect(new Set(origin.entries())).toEqual(new Set(["app/ppr/page"]));
     expect(
@@ -501,8 +482,6 @@ describe("a prerender whose parent renders on the edge", () => {
     fallback: { initialRevalidate: 60 },
   };
 
-  // The same route with no id at all: an edge-parented prerender has no parent
-  // bundle, so there is no Function URL for an id to name.
   const unnamedTarget = (({ id: _unused, ...rest }) => rest)(edgeTarget);
 
   function edgeDeps(
@@ -531,7 +510,6 @@ describe("a prerender whose parent renders on the edge", () => {
           routes: {},
           dispatch: { "/edge-blog": over.target ?? edgeTarget },
         },
-        // No Function URL at all: the parent renders on the edge.
         functionUrls: over.functionUrls ?? {},
         edge: async (entryKey, request) => {
           invocations.push(entryKey);
@@ -638,9 +616,6 @@ describe("a prerender whose parent renders on the edge", () => {
     expect(invocations()).toEqual([]);
   });
 
-  // The edge path must be chosen by edgeEntryKey's presence, not by a
-  // functionUrls miss: bundle ids and route ids happen not to collide today, and
-  // a collision must not silently route an edge render to a Lambda.
   it("ignores a Function URL that its id happens to name", async () => {
     const pending: Promise<unknown>[] = [];
     const { deps, invocations, urls } = edgeDeps(null, 2_000, pending, {
@@ -651,8 +626,6 @@ describe("a prerender whose parent renders on the edge", () => {
 
     expect(await res.text()).toBe("<html>rendered-on-edge</html>");
     expect(invocations()).toEqual(["middleware_app/edge-blog"]);
-    // An edge entry renders the page a browser asked for, so it is invoked under
-    // the public origin — never under a Function URL it will never call.
     expect(urls()).toEqual(["https://app.example/edge-blog"]);
   });
 });

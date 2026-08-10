@@ -73,8 +73,6 @@ async function fileState(sessionId: string, idx: number) {
   return (row.files as SessionFile[])[idx];
 }
 
-// This suite drives the real MinIO from docker-compose (store.ts's OCEL_BLOB_*
-// defaults). Run `docker compose up -d minio minio-createbucket` first.
 describe("POST /api/blob/detect (MinIO)", () => {
   beforeAll(async () => {
     await setupTestDatabase();
@@ -86,12 +84,10 @@ describe("POST /api/blob/detect (MinIO)", () => {
       const { id: projectId } = await createProjectFor(session, "detect-once");
       const { sessionId, url, key } = await presign(session, projectId);
 
-      // Before the bytes land: sweep finds nothing, file stays pending.
       const before = await detectUploads(detectRequest(projectId, session.headers));
       expect((await before.json()).completions).toHaveLength(0);
       expect((await fileState(sessionId, 0)).state).toBe("pending");
 
-      // Real browser-style PUT to the presigned MinIO URL.
       const put = await fetch(url, {
         method: "PUT",
         body: Buffer.from("bytes"),
@@ -99,8 +95,6 @@ describe("POST /api/blob/detect (MinIO)", () => {
       });
       expect(put.status).toBeLessThan(300);
 
-      // First sweep after landing: exactly one completion, correctly signed,
-      // and the file is now succeeded.
       const first = await detectUploads(detectRequest(projectId, session.headers));
       const firstBody = await first.json();
       expect(firstBody.completions).toHaveLength(1);
@@ -118,9 +112,6 @@ describe("POST /api/blob/detect (MinIO)", () => {
       ).toBe(true);
       expect((await fileState(sessionId, 0)).state).toBe("succeeded");
 
-      // Second sweep: the object still exists, but the guarded transition
-      // no-ops (already succeeded) so no duplicate completion is emitted -
-      // onUploadComplete would run exactly once.
       const second = await detectUploads(detectRequest(projectId, session.headers));
       expect((await second.json()).completions).toHaveLength(0);
     } finally {
@@ -132,9 +123,6 @@ describe("POST /api/blob/detect (MinIO)", () => {
     const session = await createTestSessionWithOrganization();
     try {
       const { id: projectId } = await createProjectFor(session, "detect-collision");
-      // Same user + project + key (randomSuffix off): both sessions presign the
-      // identical object key, but only the one the client actually uploads
-      // through owns the landed object (via its sessionId tag).
       const a = await presign(session, projectId);
       const b = await presign(session, projectId);
       expect(a.key).toBe(b.key);
@@ -150,7 +138,6 @@ describe("POST /api/blob/detect (MinIO)", () => {
       expect(body.completions).toHaveLength(1);
       expect(body.completions[0].sessionId).toBe(b.sessionId);
       expect((await fileState(b.sessionId, 0)).state).toBe("succeeded");
-      // Session A must NOT be falsely completed by B's object.
       expect((await fileState(a.sessionId, 0)).state).toBe("pending");
     } finally {
       await session.cleanup();
@@ -168,8 +155,6 @@ describe("POST /api/blob/detect (MinIO)", () => {
         headers: { "content-type": "image/png" },
       });
 
-      // Fire several sweeps at once; the atomic conditional transition must let
-      // exactly one observe the pending->succeeded edge.
       const results = await Promise.all(
         Array.from({ length: 5 }, () =>
           detectUploads(detectRequest(projectId, session.headers)).then((r) =>
@@ -196,8 +181,6 @@ describe("POST /api/blob/detect (MinIO)", () => {
         body: Buffer.from("bytes"),
         headers: { "content-type": "image/png" },
       });
-      // `other` is not a member of the project's org -> 404, never sees the
-      // owner's landed object.
       const res = await detectUploads(detectRequest(projectId, other.headers));
       expect(res.status).toBe(404);
     } finally {

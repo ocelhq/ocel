@@ -18,7 +18,6 @@ import (
 	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
 )
 
-// bootstrapOptions holds the flags accepted by `ocel bootstrap`.
 type bootstrapOptions struct {
 	yes     bool
 	preview bool
@@ -26,11 +25,6 @@ type bootstrapOptions struct {
 
 var bootstrapOpts bootstrapOptions
 
-// bootstrapCmd creates the account-global resources the configured provider
-// needs before deploys can run. It does nothing itself: it delegates entirely
-// to the provider's Bootstrap RPC. For the AWS provider this is a
-// one-time-per-account action (re-run only when the provider's bootstrap
-// requirements change).
 var bootstrapCmd = &cobra.Command{
 	Use:   "bootstrap",
 	Short: "Provision the account-global resources your provider needs",
@@ -53,10 +47,6 @@ func init() {
 	bootstrapCmd.Flags().BoolVar(&bootstrapOpts.preview, "preview", false, "Stand up the preview infrastructure instead of the production infrastructure")
 }
 
-// runBootstrap resolves the project config, requires a configured provider,
-// confirms with the user, then spawns the provider and drives its Bootstrap RPC
-// to a terminal result. Bootstrap sends no manifest: the provider decides what
-// account-global resources to create.
 func runBootstrap(ctx context.Context, cwd string, opts bootstrapOptions, stdout, stderr io.Writer, stdin io.Reader) error {
 	cfg, err := projectconfig.Resolve(cwd)
 	if err != nil {
@@ -110,9 +100,6 @@ func runBootstrap(ctx context.Context, cwd string, opts bootstrapOptions, stdout
 	return nil
 }
 
-// confirmBootstrap prints the "Bootstrap <preview|production> infrastructure
-// with <provider>? [y/N]" prompt and returns the user's yes/no answer (see
-// confirmYN in deploy.go).
 func confirmBootstrap(class deploymentsv1.Environment_Class, providerPackage string, stdout io.Writer, stdin io.Reader) (bool, error) {
 	infra := "production"
 	if class == deploymentsv1.Environment_CLASS_PREVIEW {

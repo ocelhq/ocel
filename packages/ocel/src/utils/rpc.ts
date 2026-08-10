@@ -7,9 +7,6 @@ import {
 import { OCEL_DEV_SERVER } from "./constants.js";
 
 const _rpc = () => {
-  /**
-   * validation for this happens in the `defer` function since we can be sure it's only called during dev mode
-   */
   const transport = createConnectTransport({
     httpVersion: "1.1",
     baseUrl: OCEL_DEV_SERVER!,

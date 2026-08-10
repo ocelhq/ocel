@@ -10,10 +10,6 @@ import (
 	"testing"
 )
 
-// TestDetectorSweep_DeliversCallbacks proves one sweep asks the API to detect
-// this project's landings (forwarding the leader token) and POSTs each
-// resulting completion to its callbackBaseUrl as op=callback with the signed
-// body verbatim - the CLI half of the completion architecture.
 func TestDetectorSweep_DeliversCallbacks(t *testing.T) {
 	var gotOp string
 	var gotCallback signedCompletion
@@ -58,8 +54,6 @@ func TestDetectorSweep_DeliversCallbacks(t *testing.T) {
 	}
 }
 
-// TestDetectorSweep_NoCompletionsNoCallback proves an empty detect result
-// (nothing landed) fires no callback - the common idle tick.
 func TestDetectorSweep_NoCompletionsNoCallback(t *testing.T) {
 	var appHits int32
 	app := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
@@ -82,9 +76,6 @@ func TestDetectorSweep_NoCompletionsNoCallback(t *testing.T) {
 	}
 }
 
-// TestDetectorSweep_CallbackRejectionSurfaces proves a non-2xx from the app
-// route surfaces as a sweep error (so the loop reports rather than dropping it
-// silently).
 func TestDetectorSweep_CallbackRejectionSurfaces(t *testing.T) {
 	app := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		http.Error(w, "invalid signature", http.StatusUnauthorized)
@@ -105,8 +96,6 @@ func TestDetectorSweep_CallbackRejectionSurfaces(t *testing.T) {
 	}
 }
 
-// TestDetectorRun_StopsWithContext proves the loop's lifetime is bounded by
-// ctx: cancelling ends run promptly.
 func TestDetectorRun_StopsWithContext(t *testing.T) {
 	api := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		json.NewEncoder(w).Encode(detectResponseBody{})

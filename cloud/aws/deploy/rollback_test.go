@@ -131,16 +131,6 @@ func TestRollback_PromotesTheTargetUnderAFreshTimestamp(t *testing.T) {
 	}
 }
 
-// Rolling back to a Deployment that a rotation produced must re-point at its
-// full identity, not at the build id it shares with the Deployment it replaced:
-// the values ride the immutable artifact that identity names, so anything
-// coarser silently restores a different set of values than the one that
-// Deployment shipped with.
-//
-// And re-pointing is the whole of it: the identity that comes back is the
-// target promotion's own, so the values ride back with the artifact it names
-// and no version history is replayed to restore them. That is what keeps a
-// finite version history safe to prune.
 func TestRollback_AcrossARotationRePointsAtTheRotatedIdentity(t *testing.T) {
 	fake := &recordingRootStack{
 		history: []edge.HistoryEntry{

@@ -6,9 +6,6 @@ import (
 	"testing"
 )
 
-// A teardown the operator believes emptied the store must leave nothing of the
-// project behind: not a current value, not a tombstone, and above all not a
-// history row, whose ciphertext is exactly the secret the teardown was for.
 func TestPurgeRemovesEveryRowAProjectHolds(t *testing.T) {
 	store, ddb, _ := newTestStore(t)
 	cells := []Coordinate{
@@ -70,8 +67,6 @@ func TestPurgeLeavesOtherProjectsAndClassesAlone(t *testing.T) {
 	}
 }
 
-// A teardown is best-effort and re-runnable, so a purge that finds a partition
-// an earlier run already emptied is a success that removed nothing.
 func TestPurgeIsIdempotent(t *testing.T) {
 	store, _, _ := newTestStore(t)
 	if _, err := store.Set(context.Background(), testCoordinate(), "v", nil); err != nil {
@@ -90,8 +85,6 @@ func TestPurgeIsIdempotent(t *testing.T) {
 	}
 }
 
-// Every removal is one transaction of at most the platform's item limit, so a
-// project with more rows than that is emptied rather than rejected.
 func TestPurgeBatchesWithinTheTransactionLimit(t *testing.T) {
 	store, ddb, _ := newTestStore(t)
 	for i := range purgeBatch {

@@ -1,7 +1,3 @@
-// Package discovery locates resource-declaration source files under a
-// project's configured discovery.paths and bundles them into a single
-// side-effect-import entrypoint that self-registers each resource with the
-// local dev server.
 package discovery
 
 import (
@@ -12,7 +8,6 @@ import (
 	"strings"
 )
 
-// sourceExtensions are the file types imported for their side effects.
 var sourceExtensions = map[string]bool{
 	".ts":  true,
 	".tsx": true,
@@ -22,11 +17,6 @@ var sourceExtensions = map[string]bool{
 	".cjs": true,
 }
 
-// Discover resolves paths (each relative to configDir, optionally containing
-// glob metacharacters for monorepo layouts like "packages/*/ocel") and
-// returns the absolute path of every source file found under them, sorted
-// and de-duplicated. A path that matches nothing is silently skipped — an
-// unconfigured discovery directory is not an error.
 func Discover(configDir string, paths []string) ([]string, error) {
 	seen := make(map[string]bool)
 	var files []string
@@ -55,11 +45,6 @@ func Discover(configDir string, paths []string) ([]string, error) {
 	return files, nil
 }
 
-// Dirs resolves paths the same way Discover does, but returns every
-// directory under them (each resolved root plus every subdirectory beneath
-// it, applying the same node_modules/dotdir skip as Discover) instead of
-// source files. It's used to build the set of directories the leader's file
-// watcher subscribes to.
 func Dirs(configDir string, paths []string) ([]string, error) {
 	seen := make(map[string]bool)
 	var dirs []string
@@ -88,8 +73,6 @@ func Dirs(configDir string, paths []string) ([]string, error) {
 	return dirs, nil
 }
 
-// resolveRoots expands a single discovery.paths entry into the concrete
-// directories (or files) it refers to.
 func resolveRoots(configDir, pattern string) ([]string, error) {
 	joined := filepath.Join(configDir, pattern)
 
@@ -104,9 +87,6 @@ func resolveRoots(configDir, pattern string) ([]string, error) {
 	return matches, nil
 }
 
-// walkSourceFiles returns every source file under root (root itself if it's
-// a file), skipping node_modules and dotfiles/dotdirs. Missing roots yield
-// no files and no error.
 func walkSourceFiles(root string) ([]string, error) {
 	info, err := os.Stat(root)
 	if err != nil {
@@ -150,10 +130,6 @@ func walkSourceFiles(root string) ([]string, error) {
 	return files, nil
 }
 
-// walkDirs returns root (if it's a directory) and every subdirectory beneath
-// it, skipping node_modules and dotdirs the same way walkSourceFiles skips
-// them for files. A missing or non-directory root yields no directories and
-// no error.
 func walkDirs(root string) ([]string, error) {
 	info, err := os.Stat(root)
 	if err != nil || !info.IsDir() {
@@ -184,8 +160,6 @@ func walkDirs(root string) ([]string, error) {
 	return dirs, nil
 }
 
-// skipDir reports whether a directory named name should be excluded from
-// discovery/watching, the same rule for both source files and watch dirs.
 func skipDir(name string) bool {
 	return strings.HasPrefix(name, ".") || name == "node_modules"
 }

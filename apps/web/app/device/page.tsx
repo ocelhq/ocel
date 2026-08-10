@@ -18,8 +18,6 @@ function DeviceVerificationForm() {
   const [userCode, setUserCode] = useState(initialCode);
   const [error, setError] = useState<string | null>(null);
   const [isChecking, setIsChecking] = useState(false);
-  // Only auto-continue once, and only when the code arrived pre-filled via
-  // the URL (i.e. the CLI opened the browser directly to this link).
   const [hasAutoAttempted, setHasAutoAttempted] = useState(false);
 
   async function verifyAndContinue(code: string) {

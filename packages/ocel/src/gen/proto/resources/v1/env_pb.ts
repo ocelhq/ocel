@@ -13,11 +13,6 @@ export const file_resources_v1_env: GenFile = /*@__PURE__*/
   fileDesc("ChZyZXNvdXJjZXMvdjEvZW52LnByb3RvEgxyZXNvdXJjZXMudjEimwEKElZhcmlhYmxlRGVmaW5pdGlvbhILCgNrZXkYASABKAkSKgoFY2xhc3MYAiABKA4yGy5yZXNvdXJjZXMudjEuVmFyaWFibGVDbGFzcxIZChFjbGllbnRfYWNjZXNzaWJsZRgDIAEoCBIQCghyZXF1aXJlZBgEIAEoCBIPCgdmb2xkZXJzGAUgAygJEg4KBnNvdXJjZRgGIAEoCSJKChFEZWNsYXJlRW52UmVxdWVzdBI1CgtkZWZpbml0aW9ucxgBIAMoCzIgLnJlc291cmNlcy52MS5WYXJpYWJsZURlZmluaXRpb24iOgoMVmFyaWFibGVDZWxsEgsKA2tleRgBIAEoCRIOCgZmb2xkZXIYAiABKAkSDQoFdmFsdWUYAyABKAkiPwoSRGVjbGFyZUVudlJlc3BvbnNlEikKBWNlbGxzGAEgAygLMhoucmVzb3VyY2VzLnYxLlZhcmlhYmxlQ2VsbCKyAQoPVmFyaWFibGVQcm9ibGVtEgsKA2tleRgBIAEoCRIOCgZmb2xkZXIYAiABKAkSMAoEa2luZBgDIAEoDjIiLnJlc291cmNlcy52MS5WYXJpYWJsZVByb2JsZW0uS2luZBIOCgZkZXRhaWwYBCABKAkiQAoES2luZBIUChBLSU5EX1VOU1BFQ0lGSUVEEAASEAoMS0lORF9NSVNTSU5HEAESEAoMS0lORF9JTlZBTElEEAIiSwoYUmVwb3J0RW52UHJvYmxlbXNSZXF1ZXN0Ei8KCHByb2JsZW1zGAEgAygLMh0ucmVzb3VyY2VzLnYxLlZhcmlhYmxlUHJvYmxlbSIbChlSZXBvcnRFbnZQcm9ibGVtc1Jlc3BvbnNlKoIBCg1WYXJpYWJsZUNsYXNzEh4KGlZBUklBQkxFX0NMQVNTX1VOU1BFQ0lGSUVEEAASGAoUVkFSSUFCTEVfQ0xBU1NfUExBSU4QARIcChhWQVJJQUJMRV9DTEFTU19TRU5TSVRJVkUQAhIZChVWQVJJQUJMRV9DTEFTU19TRUNSRVQQA0I7WjlnaXRodWIuY29tL29jZWxocS9vY2VsL3BrZy9wcm90by9yZXNvdXJjZXMvdjE7cmVzb3VyY2VzdjFiBnByb3RvMw");
 
 /**
- * VariableDefinition is one variable exactly as application code declares it.
- * The schema itself is absent by construction: it is a live object in the
- * application's own language and cannot be serialised, which is why the SDK,
- * not the CLI, validates values.
- *
  * @generated from message resources.v1.VariableDefinition
  */
 export type VariableDefinition = Message<"resources.v1.VariableDefinition"> & {
@@ -32,37 +27,21 @@ export type VariableDefinition = Message<"resources.v1.VariableDefinition"> & {
   class: VariableClass;
 
   /**
-   * client_accessible marks a value the browser may read. It forces the
-   * plaintext class, so it can never be combined with an encrypted one.
-   *
    * @generated from field: bool client_accessible = 3;
    */
   clientAccessible: boolean;
 
   /**
-   * required is false when the schema supplies a default, the one place a
-   * default may come from.
-   *
    * @generated from field: bool required = 4;
    */
   required: boolean;
 
   /**
-   * folders scopes the variable to the apps bound to exactly these folders.
-   * Empty is the unscoped case: the value lives at the project root, and an
-   * app bound to a folder may override it there. A scoped variable is
-   * mandatory in every folder it names and has no root value at all, so the
-   * two modes never mix.
-   *
    * @generated from field: repeated string folders = 5;
    */
   folders: string[];
 
   /**
-   * source is the file the declaration was written in, so a cross-file
-   * complaint can name it alongside the config that binds the folders. It is
-   * best-effort: a bundler that drops the mapping leaves it empty.
-   *
    * @generated from field: string source = 6;
    */
   source: string;
@@ -80,10 +59,6 @@ export const VariableDefinitionSchema: GenMessage<VariableDefinition> = /*@__PUR
  */
 export type DeclareEnvRequest = Message<"resources.v1.DeclareEnvRequest"> & {
   /**
-   * definitions carries every variable from one defineEnv call: the call
-   * already holds them all, so the declaration is one round trip rather than
-   * one per key.
-   *
    * @generated from field: repeated resources.v1.VariableDefinition definitions = 1;
    */
   definitions: VariableDefinition[];
@@ -97,9 +72,6 @@ export const DeclareEnvRequestSchema: GenMessage<DeclareEnvRequest> = /*@__PURE_
   messageDesc(file_resources_v1_env, 1);
 
 /**
- * VariableCell is one stored value for a declared key. A cell absent from the
- * response is a cell the store does not hold.
- *
  * @generated from message resources.v1.VariableCell
  */
 export type VariableCell = Message<"resources.v1.VariableCell"> & {
@@ -109,18 +81,11 @@ export type VariableCell = Message<"resources.v1.VariableCell"> & {
   key: string;
 
   /**
-   * folder is the app-divergence axis; empty is the project root.
-   *
    * @generated from field: string folder = 2;
    */
   folder: string;
 
   /**
-   * value is the plaintext, and is empty for a live-class cell: those return
-   * presence only, so a CI build host never holds a live secret. Live values
-   * are validated at runtime init instead, which is required regardless
-   * because a live value can drift after a deploy.
-   *
    * @generated from field: string value = 3;
    */
   value: string;
@@ -151,8 +116,6 @@ export const DeclareEnvResponseSchema: GenMessage<DeclareEnvResponse> = /*@__PUR
   messageDesc(file_resources_v1_env, 3);
 
 /**
- * VariableProblem is one cell the declaring process refuses to deploy with.
- *
  * @generated from message resources.v1.VariableProblem
  */
 export type VariableProblem = Message<"resources.v1.VariableProblem"> & {
@@ -172,9 +135,6 @@ export type VariableProblem = Message<"resources.v1.VariableProblem"> & {
   kind: VariableProblem_Kind;
 
   /**
-   * detail is the schema's own message for an invalid value, empty for a
-   * missing one.
-   *
    * @generated from field: string detail = 4;
    */
   detail: string;
@@ -244,9 +204,6 @@ export const ReportEnvProblemsResponseSchema: GenMessage<ReportEnvProblemsRespon
   messageDesc(file_resources_v1_env, 6);
 
 /**
- * VariableClass decides confidentiality and delivery at once, and is the only
- * axis along which reading a variable is allowed to differ.
- *
  * @generated from enum resources.v1.VariableClass
  */
 export enum VariableClass {
@@ -256,23 +213,16 @@ export enum VariableClass {
   UNSPECIFIED = 0,
 
   /**
-   * PLAIN is a plaintext function environment entry under the bare key name.
-   *
    * @generated from enum value: VARIABLE_CLASS_PLAIN = 1;
    */
   PLAIN = 1,
 
   /**
-   * SENSITIVE is ciphertext carried inside the bundle.
-   *
    * @generated from enum value: VARIABLE_CLASS_SENSITIVE = 2;
    */
   SENSITIVE = 2,
 
   /**
-   * SECRET is never in an artifact at all: it is fetched from the store at
-   * runtime, which is why its plaintext never travels to a build host.
-   *
    * @generated from enum value: VARIABLE_CLASS_SECRET = 3;
    */
   SECRET = 3,

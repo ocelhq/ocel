@@ -1,10 +1,6 @@
 import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 
-// A minimal Next project dir as it exists inside a deployed pages-runtime
-// bundle: the patched required-server-files manifest, a prerender manifest,
-// and a manifest-named cache handler whose store the tests can observe.
-
 export const previewModeId = "test-preview-id";
 
 const cacheHandlerModule = `const store = new Map();

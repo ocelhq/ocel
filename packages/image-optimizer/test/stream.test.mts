@@ -22,9 +22,6 @@ test("one byte over is refused", async () => {
   await expect(readCapped(chunks(new Uint8Array(9)), 8)).rejects.toThrow(TooLargeError);
 });
 
-// The whole point of counting rather than measuring: an unbounded source has no
-// length to check, and arrayBuffer() on one is an OOM the sender times. This
-// generator would never end.
 test("an unbounded source is stopped rather than buffered", async () => {
   let produced = 0;
   async function* forever(): AsyncIterable<Uint8Array> {
@@ -34,7 +31,5 @@ test("an unbounded source is stopped rather than buffered", async () => {
     }
   }
   await expect(readCapped(forever(), 4096)).rejects.toThrow(TooLargeError);
-  // Five chunks: four inside the limit and the one that broke it. Nothing beyond
-  // it was ever asked for.
   expect(produced).toBe(5);
 });

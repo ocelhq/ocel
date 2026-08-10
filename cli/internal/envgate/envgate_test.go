@@ -10,8 +10,6 @@ import (
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/resources/v1"
 )
 
-// fakeValues is the store as the gate sees it, recording every reveal so a
-// test can assert on what plaintext the build host was allowed to hold.
 type fakeValues struct {
 	cells     map[envgate.Cell]string
 	versions  map[envgate.Cell]int64
@@ -34,8 +32,6 @@ func (v *fakeValues) setAt(key, folder, value string, version int64) {
 	v.versions[envgate.Cell{Key: key, Folder: folder}] = version
 }
 
-// override is the value one named environment holds for a cell, beside whatever
-// the class-wide row holds.
 func (v *fakeValues) override(key, folder, environment, value string) {
 	cell := envgate.Cell{Key: key, Folder: folder}
 	v.overrides = append(v.overrides, envgate.Stored{Address: envgate.Address{Cell: cell, Environment: environment}, Version: 1})
@@ -225,11 +221,6 @@ func TestGate_NothingReportedLetsTheDeployProceed(t *testing.T) {
 	}
 }
 
-// TestGate_RequiredCellWithNoValueRefusesThoughDiscoveryReportedNothing proves
-// the refusal does not depend on the declaring process saying so. An older SDK,
-// a defineEnv that throws after declaring, or any bug in the reporting half
-// leaves the gate with nothing but its own knowledge — and presence is not a
-// schema question, so the gate already has the answer.
 func TestGate_RequiredCellWithNoValueRefusesThoughDiscoveryReportedNothing(t *testing.T) {
 	g := prefetched(t, newFakeValues(), envgate.Scope{Apps: []envgate.App{{Name: "api"}}})
 	declare(t, g, def("STRIPE_API_KEY", resourcesv1.VariableClass_VARIABLE_CLASS_SENSITIVE))
@@ -245,10 +236,6 @@ func TestGate_RequiredCellWithNoValueRefusesThoughDiscoveryReportedNothing(t *te
 	}
 }
 
-// TestGate_UnreportedMissingFolderCellNamesTheFolderThatOwesIt proves the
-// gate's own verdict follows the same two-hop resolution the deploy does: only
-// the app bound to the empty folder is short, and the refusal addresses that
-// folder rather than the project root.
 func TestGate_UnreportedMissingFolderCellNamesTheFolderThatOwesIt(t *testing.T) {
 	values := newFakeValues()
 	values.set("POSTHOG_ID", "/web", "ph_web")
@@ -275,8 +262,6 @@ func TestGate_UnreportedMissingFolderCellNamesTheFolderThatOwesIt(t *testing.T) 
 	}
 }
 
-// TestGate_UnsetOptionalValueIsNotARefusal is the counterweight: the gate
-// forming its own verdict must not turn every empty cell into a stop.
 func TestGate_UnsetOptionalValueIsNotARefusal(t *testing.T) {
 	g := prefetched(t, newFakeValues(), envgate.Scope{Apps: []envgate.App{{Name: "api"}}})
 	declare(t, g, &resourcesv1.VariableDefinition{
@@ -289,9 +274,6 @@ func TestGate_UnsetOptionalValueIsNotARefusal(t *testing.T) {
 	}
 }
 
-// TestGate_ReportedProblemIsNotDoubledByTheGatesOwnVerdict proves the two
-// halves of the verdict meet as one list: a cell both sides call missing is
-// named once.
 func TestGate_ReportedProblemIsNotDoubledByTheGatesOwnVerdict(t *testing.T) {
 	g := prefetched(t, newFakeValues(), envgate.Scope{Apps: []envgate.App{{Name: "api"}}})
 	declare(t, g, def("STRIPE_API_KEY", resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN))
@@ -306,9 +288,6 @@ func TestGate_ReportedProblemIsNotDoubledByTheGatesOwnVerdict(t *testing.T) {
 	}
 }
 
-// TestGate_SchemaInvalidCellIsStillTheDeclaringProcessesToReport proves the
-// gate's own verdict does not displace the SDK's: a value that is present but
-// wrong is only knowable where the schema lives, and it must still refuse.
 func TestGate_SchemaInvalidCellIsStillTheDeclaringProcessesToReport(t *testing.T) {
 	values := newFakeValues()
 	values.set("WEBHOOK_URL", "", "not-a-url")
@@ -343,11 +322,6 @@ func TestGate_AnOverrideOnlyKeyDoesNotSatisfyTheDeployGate(t *testing.T) {
 	}
 }
 
-// The other side of the same rule, and the one that decides whether a preview
-// can deploy at all: the run that *is* the environment holding an override
-// resolves it, so the gate is not short of a cell that environment is the only
-// holder of. Refusing here would refuse a value the live path goes on serving —
-// the baked and live halves of one class disagreeing about one row.
 func TestGate_AnOverrideSatisfiesTheGateForTheRunThatIsThatEnvironment(t *testing.T) {
 	values := newFakeValues()
 	values.override("STRIPE_API_KEY", "", "staging", "sk_staging")
@@ -368,11 +342,6 @@ func TestGate_AnOverrideSatisfiesTheGateForTheRunThatIsThatEnvironment(t *testin
 	}
 }
 
-// An override answers for the environment holding it and for nothing else, so a
-// run bound to no environment must never see one. Each class leaks differently,
-// so each is asked the question it can answer: a live class answers presence
-// without reading, so a leaked override surfaces as a cell; a readable class
-// reads before answering, so it surfaces as a decrypt onto the build host.
 func TestGate_AnOverrideIsNeverAnsweredToARunThatIsNotThatEnvironment(t *testing.T) {
 	t.Run("a live class names no cell for it", func(t *testing.T) {
 		values := newFakeValues()
@@ -399,9 +368,6 @@ func TestGate_AnOverrideIsNeverAnsweredToARunThatIsNotThatEnvironment(t *testing
 	})
 }
 
-// The binding rule at the other read time. A live value resolves its override
-// in the sandbox; a baked one is read here, at the deploy, so the same rule has
-// to hold here or an override would only ever work for one class.
 func TestGate_TheRunsOwnEnvironmentResolvesItsOverrideAndEveryOtherResolvesClassWide(t *testing.T) {
 	for name, tc := range map[string]struct {
 		environment string
@@ -447,9 +413,6 @@ func TestGate_RefusalCarriesTheProblemsSoARecoveryPathCanPrefillThem(t *testing.
 	}
 }
 
-// TestRefusal_OwedNamesTheCellsWithoutTheAdviceToRerun: a caller that is about
-// to offer its own way out in this same run prints Owed, so Owed must carry
-// every cell and none of the advice.
 func TestRefusal_OwedNamesTheCellsWithoutTheAdviceToRerun(t *testing.T) {
 	refusal := &envgate.Refusal{
 		Problems: []*resourcesv1.VariableProblem{

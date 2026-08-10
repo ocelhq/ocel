@@ -18,11 +18,6 @@ export type {
   Uploader,
 } from "./types.js";
 
-/**
- * The Next binding of `uploader`. Identical to the framework-agnostic core
- * except that `middleware`'s `req` is typed as a Next `NextRequest`. The core
- * remains framework-agnostic; this only narrows the request type.
- */
 export function uploader<
   TInput extends z.ZodType | undefined = undefined,
   TMetadata = unknown,
@@ -38,12 +33,6 @@ export interface NextRouteHandlers {
   POST: (req: NextRequest) => Promise<Response>;
 }
 
-/**
- * The Next binding of `createRouteHandler`. Returns App Router `{ GET, POST }`
- * handlers typed against `NextRequest` — export them straight from an
- * `app/.../route.ts`. The mapping is the identity: a `NextRequest` already
- * satisfies the core, so this only narrows the handler types.
- */
 export function createRouteHandler(
   bucket: Bucket,
   options?: RouteOptions,

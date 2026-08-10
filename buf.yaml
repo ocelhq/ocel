@@ -1,4 +1,3 @@
-# For details on buf.yaml configuration, visit https://buf.build/docs/configuration/v2/buf-yaml
 version: v2
 modules:
   - path: proto
@@ -6,12 +5,7 @@ lint:
   use:
     - STANDARD
   except:
-    # Streaming RPCs here return a named stream of events (EnvUpdate,
-    # DeployEvent), not a single "response" — RPCNameResponse doesn't fit.
     - RPC_RESPONSE_STANDARD_NAME
-    # DeploymentService.Deploy and DeploymentService.Bootstrap deliberately share
-    # one DeployEvent stream (progress/log/result); reusing the event type
-    # across both RPCs is intentional, not accidental duplication.
     - RPC_REQUEST_RESPONSE_UNIQUE
 breaking:
   use:

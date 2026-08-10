@@ -22,26 +22,12 @@ const (
 	_ = protoimpl.EnforceVersion(protoimpl.MaxVersion - 20)
 )
 
-// Coordinate addresses exactly one cell. Its four components are the only
-// axes a value varies along, and every one of them is part of the store's key
-// structure rather than an attribute, so each operation is a point read or a
-// single prefix query.
 type Coordinate struct {
-	state protoimpl.MessageState `protogen:"open.v1"`
-	// slug is the owning project. Cross-project references name another
-	// project's slug here, which is why it travels per operation rather than
-	// per session.
-	Slug string `protobuf:"bytes,1,opt,name=slug,proto3" json:"slug,omitempty"`
-	// folder is the app-divergence axis, a leading-slash path ("/checkout").
-	// Empty means the project root. Nesting is organisation only: a folder is
-	// addressed exactly, never as a parent of the folders under it.
-	Folder string `protobuf:"bytes,2,opt,name=folder,proto3" json:"folder,omitempty"`
-	// key is the variable's name as application code declares it.
-	Key string `protobuf:"bytes,3,opt,name=key,proto3" json:"key,omitempty"`
-	// environment is the named-environment override axis: the identity of one
-	// preview environment. Empty means the value that binds class-wide, which is
-	// the only kind production has.
-	Environment   string `protobuf:"bytes,4,opt,name=environment,proto3" json:"environment,omitempty"`
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Slug          string                 `protobuf:"bytes,1,opt,name=slug,proto3" json:"slug,omitempty"`
+	Folder        string                 `protobuf:"bytes,2,opt,name=folder,proto3" json:"folder,omitempty"`
+	Key           string                 `protobuf:"bytes,3,opt,name=key,proto3" json:"key,omitempty"`
+	Environment   string                 `protobuf:"bytes,4,opt,name=environment,proto3" json:"environment,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -104,24 +90,13 @@ func (x *Coordinate) GetEnvironment() string {
 	return ""
 }
 
-// ValueMetadata is everything about a value except the value: what a listing
-// shows, and what a reveal adds the plaintext to.
 type ValueMetadata struct {
-	state      protoimpl.MessageState `protogen:"open.v1"`
-	Coordinate *Coordinate            `protobuf:"bytes,1,opt,name=coordinate,proto3" json:"coordinate,omitempty"`
-	// version is the value's current version number, counting from one. It is
-	// what a subsequent write passes as expected_version.
-	Version int64 `protobuf:"varint,2,opt,name=version,proto3" json:"version,omitempty"`
-	// updated_at is when this version was written, epoch seconds.
-	UpdatedAt int64 `protobuf:"varint,3,opt,name=updated_at,json=updatedAt,proto3" json:"updated_at,omitempty"`
-	// size is the plaintext's length in bytes, so a listing can show that a
-	// value is present and roughly how big without disclosing it.
-	Size int64 `protobuf:"varint,4,opt,name=size,proto3" json:"size,omitempty"`
-	// target is the cell this one references, and is absent for a cell holding
-	// a value of its own. The other fields stay this row's own either way: what
-	// a reference borrows is the plaintext, not the row, so its version is the
-	// one a write against the pointer must expect and its size is zero.
-	Target        *Coordinate `protobuf:"bytes,5,opt,name=target,proto3,oneof" json:"target,omitempty"`
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Coordinate    *Coordinate            `protobuf:"bytes,1,opt,name=coordinate,proto3" json:"coordinate,omitempty"`
+	Version       int64                  `protobuf:"varint,2,opt,name=version,proto3" json:"version,omitempty"`
+	UpdatedAt     int64                  `protobuf:"varint,3,opt,name=updated_at,json=updatedAt,proto3" json:"updated_at,omitempty"`
+	Size          int64                  `protobuf:"varint,4,opt,name=size,proto3" json:"size,omitempty"`
+	Target        *Coordinate            `protobuf:"bytes,5,opt,name=target,proto3,oneof" json:"target,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -191,8 +166,6 @@ func (x *ValueMetadata) GetTarget() *Coordinate {
 	return nil
 }
 
-// VersionEntry is one entry of a cell's change history. It carries no
-// plaintext: history records that a value changed, not what it was.
 type VersionEntry struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Version       int64                  `protobuf:"varint,1,opt,name=version,proto3" json:"version,omitempty"`
@@ -254,30 +227,13 @@ func (x *VersionEntry) GetSize() int64 {
 }
 
 type SetValueRequest struct {
-	state protoimpl.MessageState `protogen:"open.v1"`
-	// options is always UTF-8 JSON bytes: `{}` when the provider was given no
-	// options, never absent and never an empty string. The CLI never inspects
-	// this field; only the provider unmarshals it.
-	Options []byte `protobuf:"bytes,1,opt,name=options,proto3" json:"options,omitempty"`
-	// protocol_version pins the wire contract so a provider can reject a
-	// request it can't speak.
-	ProtocolVersion string `protobuf:"bytes,2,opt,name=protocol_version,json=protocolVersion,proto3" json:"protocol_version,omitempty"`
-	// class selects the substrate, and with it the table and the key the value
-	// encrypts under. Preview and production ciphertext are encrypted under
-	// different keys, so this is not a filter — it is which store is opened.
-	Class      v1.Environment_Class `protobuf:"varint,3,opt,name=class,proto3,enum=deployments.v1.Environment_Class" json:"class,omitempty"`
-	Coordinate *Coordinate          `protobuf:"bytes,4,opt,name=coordinate,proto3" json:"coordinate,omitempty"`
-	Value      string               `protobuf:"bytes,5,opt,name=value,proto3" json:"value,omitempty"`
-	// expected_version is the version the writer believes is current: absent
-	// for a blind write, zero to require that no value exists yet. A write whose
-	// expectation no longer holds is rejected rather than applied, so two people
-	// editing at once cannot silently lose one edit. A blind write still loses
-	// to a writer that commits between its read and its own commit. The
-	// rejection is FAILED_PRECONDITION and nothing else: that code is how a
-	// caller tells a lost race from a store it could not reach, so a provider
-	// spending it on anything but a broken expectation tells a user their value
-	// changed when it did not.
-	ExpectedVersion *int64 `protobuf:"varint,6,opt,name=expected_version,json=expectedVersion,proto3,oneof" json:"expected_version,omitempty"`
+	state           protoimpl.MessageState `protogen:"open.v1"`
+	Options         []byte                 `protobuf:"bytes,1,opt,name=options,proto3" json:"options,omitempty"`
+	ProtocolVersion string                 `protobuf:"bytes,2,opt,name=protocol_version,json=protocolVersion,proto3" json:"protocol_version,omitempty"`
+	Class           v1.Environment_Class   `protobuf:"varint,3,opt,name=class,proto3,enum=deployments.v1.Environment_Class" json:"class,omitempty"`
+	Coordinate      *Coordinate            `protobuf:"bytes,4,opt,name=coordinate,proto3" json:"coordinate,omitempty"`
+	Value           string                 `protobuf:"bytes,5,opt,name=value,proto3" json:"value,omitempty"`
+	ExpectedVersion *int64                 `protobuf:"varint,6,opt,name=expected_version,json=expectedVersion,proto3,oneof" json:"expected_version,omitempty"`
 	unknownFields   protoimpl.UnknownFields
 	sizeCache       protoimpl.SizeCache
 }
@@ -403,12 +359,9 @@ type ListValuesRequest struct {
 	Options         []byte                 `protobuf:"bytes,1,opt,name=options,proto3" json:"options,omitempty"`
 	ProtocolVersion string                 `protobuf:"bytes,2,opt,name=protocol_version,json=protocolVersion,proto3" json:"protocol_version,omitempty"`
 	Class           v1.Environment_Class   `protobuf:"varint,3,opt,name=class,proto3,enum=deployments.v1.Environment_Class" json:"class,omitempty"`
-	// slug is the project whose values to enumerate. Resolution — which of them
-	// an app actually reads — happens on the CLI side; the provider returns raw
-	// cells.
-	Slug          string `protobuf:"bytes,4,opt,name=slug,proto3" json:"slug,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	Slug            string                 `protobuf:"bytes,4,opt,name=slug,proto3" json:"slug,omitempty"`
+	unknownFields   protoimpl.UnknownFields
+	sizeCache       protoimpl.SizeCache
 }
 
 func (x *ListValuesRequest) Reset() {
@@ -519,10 +472,9 @@ type GetValueRequest struct {
 	ProtocolVersion string                 `protobuf:"bytes,2,opt,name=protocol_version,json=protocolVersion,proto3" json:"protocol_version,omitempty"`
 	Class           v1.Environment_Class   `protobuf:"varint,3,opt,name=class,proto3,enum=deployments.v1.Environment_Class" json:"class,omitempty"`
 	Coordinate      *Coordinate            `protobuf:"bytes,4,opt,name=coordinate,proto3" json:"coordinate,omitempty"`
-	// reveal asks for the plaintext. Without it the provider never decrypts.
-	Reveal        bool `protobuf:"varint,5,opt,name=reveal,proto3" json:"reveal,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	Reveal          bool                   `protobuf:"varint,5,opt,name=reveal,proto3" json:"reveal,omitempty"`
+	unknownFields   protoimpl.UnknownFields
+	sizeCache       protoimpl.SizeCache
 }
 
 func (x *GetValueRequest) Reset() {
@@ -591,13 +543,10 @@ func (x *GetValueRequest) GetReveal() bool {
 }
 
 type GetValueResponse struct {
-	state protoimpl.MessageState `protogen:"open.v1"`
-	// found distinguishes an unset cell from a set one, so a caller never has to
-	// read "no value" out of an empty string.
-	Found    bool           `protobuf:"varint,1,opt,name=found,proto3" json:"found,omitempty"`
-	Metadata *ValueMetadata `protobuf:"bytes,2,opt,name=metadata,proto3" json:"metadata,omitempty"`
-	// value is populated only when the request asked to reveal.
-	Value         string `protobuf:"bytes,3,opt,name=value,proto3" json:"value,omitempty"`
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Found         bool                   `protobuf:"varint,1,opt,name=found,proto3" json:"found,omitempty"`
+	Metadata      *ValueMetadata         `protobuf:"bytes,2,opt,name=metadata,proto3" json:"metadata,omitempty"`
+	Value         string                 `protobuf:"bytes,3,opt,name=value,proto3" json:"value,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -658,11 +607,10 @@ type RevealValuesRequest struct {
 	Options         []byte                 `protobuf:"bytes,1,opt,name=options,proto3" json:"options,omitempty"`
 	ProtocolVersion string                 `protobuf:"bytes,2,opt,name=protocol_version,json=protocolVersion,proto3" json:"protocol_version,omitempty"`
 	Class           v1.Environment_Class   `protobuf:"varint,3,opt,name=class,proto3,enum=deployments.v1.Environment_Class" json:"class,omitempty"`
-	// slug is the project the cells belong to. cells name them within it.
-	Slug          string  `protobuf:"bytes,4,opt,name=slug,proto3" json:"slug,omitempty"`
-	Cells         []*Cell `protobuf:"bytes,5,rep,name=cells,proto3" json:"cells,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	Slug            string                 `protobuf:"bytes,4,opt,name=slug,proto3" json:"slug,omitempty"`
+	Cells           []*Cell                `protobuf:"bytes,5,rep,name=cells,proto3" json:"cells,omitempty"`
+	unknownFields   protoimpl.UnknownFields
+	sizeCache       protoimpl.SizeCache
 }
 
 func (x *RevealValuesRequest) Reset() {
@@ -730,10 +678,6 @@ func (x *RevealValuesRequest) GetCells() []*Cell {
 	return nil
 }
 
-// Cell addresses one value inside a project already named. It is Coordinate
-// without the slug: a batched read carries the project once for the whole
-// request, so there is no second place for it to be stated and no way for two
-// cells of one request to disagree about which project they belong to.
 type Cell struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Folder        string                 `protobuf:"bytes,1,opt,name=folder,proto3" json:"folder,omitempty"`
@@ -795,10 +739,8 @@ func (x *Cell) GetEnvironment() string {
 }
 
 type RevealValuesResponse struct {
-	state protoimpl.MessageState `protogen:"open.v1"`
-	// values carries only the named cells that hold one. An unset cell is absent
-	// rather than empty, which is the distinction GetValue.found draws.
-	Values        []*RevealedValue `protobuf:"bytes,1,rep,name=values,proto3" json:"values,omitempty"`
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Values        []*RevealedValue       `protobuf:"bytes,1,rep,name=values,proto3" json:"values,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -898,14 +840,7 @@ type DeleteValueRequest struct {
 	ProtocolVersion string                 `protobuf:"bytes,2,opt,name=protocol_version,json=protocolVersion,proto3" json:"protocol_version,omitempty"`
 	Class           v1.Environment_Class   `protobuf:"varint,3,opt,name=class,proto3,enum=deployments.v1.Environment_Class" json:"class,omitempty"`
 	Coordinate      *Coordinate            `protobuf:"bytes,4,opt,name=coordinate,proto3" json:"coordinate,omitempty"`
-	// expected_version is the version the deleter believes is current: absent
-	// for a blind delete, zero to require that no value is set — which an unset
-	// cell already satisfies, so a repeat of a delete that already landed stays
-	// idempotent rather than becoming a conflict. A delete whose expectation no
-	// longer holds is rejected rather than applied, so a page showing a value
-	// somebody has since replaced cannot destroy the replacement. Like a write,
-	// the rejection is FAILED_PRECONDITION and nothing else.
-	ExpectedVersion *int64 `protobuf:"varint,5,opt,name=expected_version,json=expectedVersion,proto3,oneof" json:"expected_version,omitempty"`
+	ExpectedVersion *int64                 `protobuf:"varint,5,opt,name=expected_version,json=expectedVersion,proto3,oneof" json:"expected_version,omitempty"`
 	unknownFields   protoimpl.UnknownFields
 	sizeCache       protoimpl.SizeCache
 }
@@ -976,10 +911,8 @@ func (x *DeleteValueRequest) GetExpectedVersion() int64 {
 }
 
 type DeleteValueResponse struct {
-	state protoimpl.MessageState `protogen:"open.v1"`
-	// deleted is false when there was nothing to delete. Deleting is idempotent
-	// either way.
-	Deleted       bool `protobuf:"varint,1,opt,name=deleted,proto3" json:"deleted,omitempty"`
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Deleted       bool                   `protobuf:"varint,1,opt,name=deleted,proto3" json:"deleted,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1026,17 +959,9 @@ type SetReferenceRequest struct {
 	Options         []byte                 `protobuf:"bytes,1,opt,name=options,proto3" json:"options,omitempty"`
 	ProtocolVersion string                 `protobuf:"bytes,2,opt,name=protocol_version,json=protocolVersion,proto3" json:"protocol_version,omitempty"`
 	Class           v1.Environment_Class   `protobuf:"varint,3,opt,name=class,proto3,enum=deployments.v1.Environment_Class" json:"class,omitempty"`
-	// coordinate is the cell that will hold the reference; target is the cell it
-	// will read. target names its own slug, which is how a value owned by
-	// another project is consumed, and carries no environment component: a
-	// reference resolves against the target's class-wide value, and the store
-	// refuses any other address.
-	Coordinate *Coordinate `protobuf:"bytes,4,opt,name=coordinate,proto3" json:"coordinate,omitempty"`
-	Target     *Coordinate `protobuf:"bytes,5,opt,name=target,proto3" json:"target,omitempty"`
-	// expected_version is read exactly as SetValue reads it, against the cell
-	// that will hold the reference — the pointer's own version, never the
-	// target's.
-	ExpectedVersion *int64 `protobuf:"varint,6,opt,name=expected_version,json=expectedVersion,proto3,oneof" json:"expected_version,omitempty"`
+	Coordinate      *Coordinate            `protobuf:"bytes,4,opt,name=coordinate,proto3" json:"coordinate,omitempty"`
+	Target          *Coordinate            `protobuf:"bytes,5,opt,name=target,proto3" json:"target,omitempty"`
+	ExpectedVersion *int64                 `protobuf:"varint,6,opt,name=expected_version,json=expectedVersion,proto3,oneof" json:"expected_version,omitempty"`
 	unknownFields   protoimpl.UnknownFields
 	sizeCache       protoimpl.SizeCache
 }
@@ -1162,11 +1087,9 @@ type ListReferencesRequest struct {
 	Options         []byte                 `protobuf:"bytes,1,opt,name=options,proto3" json:"options,omitempty"`
 	ProtocolVersion string                 `protobuf:"bytes,2,opt,name=protocol_version,json=protocolVersion,proto3" json:"protocol_version,omitempty"`
 	Class           v1.Environment_Class   `protobuf:"varint,3,opt,name=class,proto3,enum=deployments.v1.Environment_Class" json:"class,omitempty"`
-	// coordinate is the value being asked about, not the reference: the answer
-	// is what points here.
-	Coordinate    *Coordinate `protobuf:"bytes,4,opt,name=coordinate,proto3" json:"coordinate,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	Coordinate      *Coordinate            `protobuf:"bytes,4,opt,name=coordinate,proto3" json:"coordinate,omitempty"`
+	unknownFields   protoimpl.UnknownFields
+	sizeCache       protoimpl.SizeCache
 }
 
 func (x *ListReferencesRequest) Reset() {
@@ -1228,10 +1151,8 @@ func (x *ListReferencesRequest) GetCoordinate() *Coordinate {
 }
 
 type ListReferencesResponse struct {
-	state protoimpl.MessageState `protogen:"open.v1"`
-	// references are the cells reading this value, sorted, as the store's reverse
-	// index has them.
-	References    []*Coordinate `protobuf:"bytes,1,rep,name=references,proto3" json:"references,omitempty"`
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	References    []*Coordinate          `protobuf:"bytes,1,rep,name=references,proto3" json:"references,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1342,9 +1263,8 @@ func (x *ListVersionsRequest) GetCoordinate() *Coordinate {
 }
 
 type ListVersionsResponse struct {
-	state protoimpl.MessageState `protogen:"open.v1"`
-	// versions are newest first.
-	Versions      []*VersionEntry `protobuf:"bytes,1,rep,name=versions,proto3" json:"versions,omitempty"`
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Versions      []*VersionEntry        `protobuf:"bytes,1,rep,name=versions,proto3" json:"versions,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }

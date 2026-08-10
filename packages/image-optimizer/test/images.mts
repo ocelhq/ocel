@@ -1,8 +1,5 @@
 import { sharp } from "../src/sharp.mjs";
 
-// Real encoded images for the transform tests, produced through the same
-// hardened sharp the pipeline uses. Creating and saving are not loading, so the
-// loader allowlist does not stand in the way of building a fixture with it.
 export async function solid(
   format: "jpeg" | "png" | "webp",
   width = 200,
@@ -24,10 +21,6 @@ export function bytes(...values: number[]): Uint8Array {
   return new Uint8Array(values);
 }
 
-// A GIF header followed by two Graphics Control Extension blocks. Nothing
-// decodes it — rule 3 answers on the container alone, which is the point: an
-// animation check that decoded would be the libvips parse the bypass exists to
-// avoid.
 export function animatedGif(): Uint8Array {
   const gce = [0x00, 0x21, 0xf9, 0x04, 0x04, 0x0a, 0x00, 0x00, 0x00];
   return new Uint8Array([

@@ -1,17 +1,10 @@
 import { describe, expect, test } from "vitest";
 import { isReachableAddress } from "../src/addresses.mjs";
 
-// The corpus is Next's own packages/next/src/server/is-private-ip.test.ts,
-// lifted verbatim from v16.2.10 and inverted: this function answers "may I
-// connect to this?" where Next's answers "is this private?". Keeping their
-// inputs means the ranges someone already thought to attack are the ranges
-// asserted here, rather than the ones we happened to think of.
 describe("the addresses Next's corpus calls private", () => {
   const PRIVATE = [
     "127.0.0.0",
     "127.0.0.1",
-    // Zero-padded octets. The URL parser normalizes these; ipaddr.js also
-    // parses them, so neither layer is the only thing catching them.
     "127.0.0.01",
     "127.0.0.001",
     "0.0.0.0",
@@ -23,18 +16,14 @@ describe("the addresses Next's corpus calls private", () => {
     "172.16.0.0",
     "172.16.0.1",
     "172.16.0.01",
-    // The instance metadata service. An SSRF that reaches this address gets
-    // this function's IAM role, and with it every tenant's assets.
     "169.254.169.254",
     "::",
     "::1",
     "::ffff:0.0.0.0",
-    // Loopback wearing an IPv6 costume, in both notations.
     "::ffff:127.0.0.1",
     "::ffff:7f00:1",
     "2001:2f:ffff:ffff:ffff:ffff:ffff:ffff",
     "[2001:2f:ffff:ffff:ffff:ffff:ffff:ffff]",
-    // 6to4 and multicast.
     "2002::",
     "ff00::",
   ];
@@ -45,8 +34,6 @@ describe("the addresses Next's corpus calls private", () => {
     });
   }
 
-  // Next reaches this one through the URL parser rather than as a literal,
-  // because 0x7f000001 is not an address until something normalizes it.
   test("0x7f000001 normalized through new URL is unreachable", () => {
     expect(isReachableAddress(new URL("http://0x7f000001").hostname)).toBe(false);
   });
@@ -69,10 +56,6 @@ describe("the addresses Next's corpus calls public", () => {
   }
 });
 
-// Next's third group asserts that hostnames are "not private", because its
-// helper is asked about names. This one is only ever asked about resolved
-// addresses, so a name is not a thing it can approve — and the default-deny
-// posture is what makes that safe rather than surprising.
 describe("anything that is not an address", () => {
   for (const value of ["vercel.com", "www.vercel.com", "nextjs.org", "", "not-an-ip"]) {
     test(`${JSON.stringify(value)} is unreachable`, () => {
@@ -81,8 +64,6 @@ describe("anything that is not an address", () => {
   }
 });
 
-// The blocks a hand-rolled CIDR list forgets, which is the argument for asking
-// ipaddr.js for "unicast" instead of enumerating anything.
 describe("blocks a hand-rolled list would miss", () => {
   const cases: Array<[string, string]> = [
     ["100.64.0.1", "CGNAT 100.64/10"],
@@ -109,11 +90,6 @@ describe("blocks a hand-rolled list would miss", () => {
   }
 });
 
-// The three notations the design names, each normalized by new URL() before any
-// check runs. Without that normalization every one of them is merely
-// "unparseable" rather than "loopback" — the same answer here, but for the wrong
-// reason, and a reason that stops holding the moment a caller passes a hostname
-// through some other parser.
 describe("obfuscated loopback, normalized first", () => {
   for (const host of ["0x7f000001", "2130706433", "0177.0.0.1"]) {
     test(host, () => {

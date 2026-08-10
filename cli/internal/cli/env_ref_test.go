@@ -10,9 +10,6 @@ import (
 	envv1 "github.com/ocelhq/ocel/pkg/proto/env/v1"
 )
 
-// ownedElsewhere is a value belonging to a project this one is not: the
-// arrangement a reference exists for, and one no command of this project's can
-// create, because every command addresses its own slug.
 func ownedElsewhere(t *testing.T, key, value string) {
 	t.Helper()
 	store, err := loadFakeStore()
@@ -43,10 +40,6 @@ func envGet(t *testing.T, root, key string, opts envOptions) string {
 	return stdout.String()
 }
 
-// The credential is set once, in the project that owns it, and read from
-// another. Nothing is copied, so an edit at the source is what the consumer
-// reads on its very next read — with no re-pointing, no re-run and nothing in
-// between that could be forgotten.
 func TestRunEnvRef_ReadsAValueAnotherProjectOwnsAndKeepsReadingIt(t *testing.T) {
 	root := setUpEnvFixture(t)
 	ownedElsewhere(t, "STRIPE_API_KEY", "sk_live_first")
@@ -66,8 +59,6 @@ func TestRunEnvRef_ReadsAValueAnotherProjectOwnsAndKeepsReadingIt(t *testing.T) 
 	}
 }
 
-// A reference is an address, and an address is what `get` shows without
-// --reveal: the cell it reads, and where the value behind it is edited.
 func TestRunEnvGet_SaysACellIsAReferenceAndWhereItsValueIsEdited(t *testing.T) {
 	root := setUpEnvFixture(t)
 	ownedElsewhere(t, "STRIPE_API_KEY", "sk_live_secret")
@@ -82,9 +73,6 @@ func TestRunEnvGet_SaysACellIsAReferenceAndWhereItsValueIsEdited(t *testing.T) {
 	}
 }
 
-// Editing happens at the source. A write to a reference is refused rather than
-// filed as a value of its own, which would leave two cells claiming to be the
-// same one and no way to tell which an application read.
 func TestRunEnvSet_RefusesToEditThroughAReference(t *testing.T) {
 	root := setUpEnvFixture(t)
 	ownedElsewhere(t, "STRIPE_API_KEY", "sk_live_secret")
@@ -103,9 +91,6 @@ func TestRunEnvSet_RefusesToEditThroughAReference(t *testing.T) {
 	}
 }
 
-// A chain of two would have to be followed twice and could be closed into a
-// loop, so it is refused at the moment it would be created rather than guarded
-// against on every read.
 func TestRunEnvRef_RefusesToPointAtAnotherReference(t *testing.T) {
 	root := setUpEnvFixture(t)
 	ownedElsewhere(t, "STRIPE_API_KEY", "sk_live_secret")
@@ -121,9 +106,6 @@ func TestRunEnvRef_RefusesToPointAtAnotherReference(t *testing.T) {
 	}
 }
 
-// The value and the reference to it are as often two people's work as one's,
-// so which lands first is not something the CLI has an opinion about. Until the
-// value is there, reading through the reference names what is missing.
 func TestRunEnvRef_PointsAtAValueNotSetYet(t *testing.T) {
 	root := setUpEnvFixture(t)
 
@@ -147,9 +129,6 @@ func TestRunEnvRef_PointsAtAValueNotSetYet(t *testing.T) {
 	}
 }
 
-// Before changing a shared value, an operator has to be able to see what it
-// would change. The answer crosses projects, because that is where a consumer
-// usually is.
 func TestRunEnvRefs_ListsWhatReadsAValue(t *testing.T) {
 	root := setUpEnvFixture(t)
 	envSet(t, root, "STRIPE_API_KEY", "sk_live_secret", envOptions{})
@@ -188,9 +167,6 @@ func TestRunEnvRefs_ListsWhatReadsAValue(t *testing.T) {
 	}
 }
 
-// Removing a reference is removing an item: there is no unlink step, because
-// the source never recorded who read it. What is left behind is the value,
-// untouched.
 func TestRunEnvRm_RemovesAReferenceWithoutTouchingItsSource(t *testing.T) {
 	root := setUpEnvFixture(t)
 	ownedElsewhere(t, "STRIPE_API_KEY", "sk_live_secret")

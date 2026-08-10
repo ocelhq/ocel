@@ -8,10 +8,6 @@ import (
 	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
 )
 
-// Prune streams a canned reclaim summary so `ocel deployments prune` has
-// something to render, mirroring the real server's summary-as-progress-events
-// contract, and keys off the requested keepN for TestRunDeploymentsPrune_* to
-// assert against.
 func (s *deployFakeProviderServer) Prune(ctx context.Context, req *deploymentsv1.PruneRequest, stream *connect.ServerStream[deploymentsv1.DeployEvent]) error {
 	if err := s.checkToken(ctx); err != nil {
 		return err

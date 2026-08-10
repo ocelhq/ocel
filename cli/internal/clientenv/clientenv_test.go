@@ -47,18 +47,12 @@ func read(t *testing.T, path string) string {
 	return string(data)
 }
 
-// appDir is an app directory holding the tsconfig a TypeScript project has.
 func appDir(t *testing.T) string {
 	dir := t.TempDir()
 	write(t, filepath.Join(dir, "tsconfig.json"), "{\n  \"compilerOptions\": {\n    \"strict\": true\n  },\n  \"include\": [\"**/*.ts\"]\n}\n")
 	return dir
 }
 
-// TestGenerate_WritesTheAccessorTheSDKPins holds the CLI to the text
-// packages/ocel/src/env/client.test.ts quotes verbatim. The accessor is only
-// worth anything if a bundler's static replacement recognises it, and that
-// recognition is a property of these exact bytes: a literal member expression
-// per key, under the key's own name, and nothing indirect.
 func TestGenerate_WritesTheAccessorTheSDKPins(t *testing.T) {
 	dir := appDir(t)
 
@@ -84,10 +78,6 @@ func TestGenerate_WritesTheAccessorTheSDKPins(t *testing.T) {
 	}
 }
 
-// TestGenerate_ReadsEachKeyUnderItsDeclaredName is the rule the whole package
-// turns on: no prefix is added and none is stripped, so which names a bundler
-// inlines stays the bundler's rule and the developer satisfies it by naming the
-// variable.
 func TestGenerate_ReadsEachKeyUnderItsDeclaredName(t *testing.T) {
 	dir := appDir(t)
 
@@ -110,9 +100,6 @@ func TestGenerate_ReadsEachKeyUnderItsDeclaredName(t *testing.T) {
 	}
 }
 
-// TestGenerate_NamesNoServerOnlyValue proves the browser half cannot reach a
-// value the browser was never meant to have — neither its name nor the
-// environment entry one could arrive under is in the file.
 func TestGenerate_NamesNoServerOnlyValue(t *testing.T) {
 	dir := appDir(t)
 
@@ -133,10 +120,6 @@ func TestGenerate_NamesNoServerOnlyValue(t *testing.T) {
 	}
 }
 
-// TestGenerate_PointsTheImportSpecifierAtTheGeneratedFile proves the one thing
-// that makes the accessor reachable from application code: `ocel/env/client`
-// resolves to this app's generated file rather than the SDK's throwing
-// fallback.
 func TestGenerate_PointsTheImportSpecifierAtTheGeneratedFile(t *testing.T) {
 	dir := appDir(t)
 
@@ -153,9 +136,6 @@ func TestGenerate_PointsTheImportSpecifierAtTheGeneratedFile(t *testing.T) {
 	}
 }
 
-// TestGenerate_KeepsWhatTheUserWroteAroundIt proves the edit is a splice and
-// not a re-serialisation: a tsconfig is a file a developer maintains, comments
-// and all, and rewriting it from a parsed value would silently discard them.
 func TestGenerate_KeepsWhatTheUserWroteAroundIt(t *testing.T) {
 	dir := t.TempDir()
 	source := "{\n  // the compiler options this project has always had\n  \"compilerOptions\": {\n    \"paths\": {\n      \"@/*\": [\"./src/*\"] // app aliases\n    }\n  }\n}\n"
@@ -178,10 +158,6 @@ func TestGenerate_KeepsWhatTheUserWroteAroundIt(t *testing.T) {
 	}
 }
 
-// TestGenerate_LeavesEveryStartingShapeParseable proves the splice produces a
-// config the framework can still read, whatever the app started from: the
-// three shapes differ in how much of the path to the entry already exists, and
-// an empty object is where a stray trailing comma would land.
 func TestGenerate_LeavesEveryStartingShapeParseable(t *testing.T) {
 	for name, source := range map[string]string{
 		"empty":              "{}\n",
@@ -216,8 +192,6 @@ func TestGenerate_LeavesEveryStartingShapeParseable(t *testing.T) {
 	}
 }
 
-// TestGenerate_TwiceLeavesTheSameFiles proves a second deploy is a no-op on
-// the project's own files rather than a second entry beside the first.
 func TestGenerate_TwiceLeavesTheSameFiles(t *testing.T) {
 	dir := appDir(t)
 	apps := []App{{Dir: dir, Variables: []manifestbuilder.Variable{clientVar("PUBLIC_SITE_URL", "https://example.com")}}}
@@ -239,9 +213,6 @@ func TestGenerate_TwiceLeavesTheSameFiles(t *testing.T) {
 	}
 }
 
-// TestGenerate_LeavesAProjectWithNoClientValuesAlone proves a project that
-// declared none pays nothing: no generated file it did not ask for, and no
-// edit to the tsconfig it maintains.
 func TestGenerate_LeavesAProjectWithNoClientValuesAlone(t *testing.T) {
 	dir := appDir(t)
 	before := read(t, filepath.Join(dir, "tsconfig.json"))
@@ -258,10 +229,6 @@ func TestGenerate_LeavesAProjectWithNoClientValuesAlone(t *testing.T) {
 	}
 }
 
-// TestGenerate_GivesEachAppItsOwnAccessor proves the generated module is the
-// app's and not the project's: two apps resolving one key differently each
-// name their own environment entry, and neither can be written over by the
-// other's build.
 func TestGenerate_GivesEachAppItsOwnAccessor(t *testing.T) {
 	store, admin := appDir(t), appDir(t)
 
@@ -281,11 +248,6 @@ func TestGenerate_GivesEachAppItsOwnAccessor(t *testing.T) {
 	}
 }
 
-// TestCheckFresh_RefusesABundleThatPredatesTheValueItCarries proves the rule
-// ADR 0005 states: a client value is a copy taken at build time, so reusing a
-// build output whose copy is stale would ship one key disagreeing with itself
-// across the wire. The refusal names the key, because that is what the
-// developer has to look at.
 func TestCheckFresh_RefusesABundleThatPredatesTheValueItCarries(t *testing.T) {
 	root := t.TempDir()
 	built := []App{{Name: "storefront", Variables: []manifestbuilder.Variable{clientVar("PUBLIC_SITE_URL", "https://example.com")}}}
@@ -306,9 +268,6 @@ func TestCheckFresh_RefusesABundleThatPredatesTheValueItCarries(t *testing.T) {
 	}
 }
 
-// TestCheckFresh_AllowsABundleBuiltWithTheSameValues proves the refusal is
-// about staleness and nothing else: a rotation of a server-only value is
-// exactly what --prebuilt exists for.
 func TestCheckFresh_AllowsABundleBuiltWithTheSameValues(t *testing.T) {
 	root := t.TempDir()
 	built := []App{{Name: "storefront", Variables: []manifestbuilder.Variable{
@@ -328,11 +287,6 @@ func TestCheckFresh_AllowsABundleBuiltWithTheSameValues(t *testing.T) {
 	}
 }
 
-// TestCheckFresh_RefusesAnOcelBuildOutputForWhatItIs proves the refusal states
-// the cause it actually has. `ocel build` holds no provider session and
-// resolves no values, so its output carries no client value at all — nothing
-// changed, it was never inlined, and telling the developer to rebuild because
-// a value moved sends them looking for a rotation that never happened.
 func TestCheckFresh_RefusesAnOcelBuildOutputForWhatItIs(t *testing.T) {
 	root := t.TempDir()
 	if err := RecordUnresolved(root); err != nil {
@@ -353,9 +307,6 @@ func TestCheckFresh_RefusesAnOcelBuildOutputForWhatItIs(t *testing.T) {
 	}
 }
 
-// TestCheckFresh_RefusesAKeyABuildNeverKnewAbout proves the other way a value
-// can be absent from an output: the build resolved values, but this key was
-// not client-accessible then. That is not a rotation either.
 func TestCheckFresh_RefusesAKeyABuildNeverKnewAbout(t *testing.T) {
 	root := t.TempDir()
 	if err := Record(root, []App{{Name: "storefront", Variables: []manifestbuilder.Variable{serverVar("STRIPE_API_KEY", "sk-live")}}}); err != nil {
@@ -373,8 +324,6 @@ func TestCheckFresh_RefusesAKeyABuildNeverKnewAbout(t *testing.T) {
 	}
 }
 
-// TestCheckFresh_SaysNothingAboutAProjectWithNoClientValues proves the whole
-// rule is invisible to the projects it does not concern.
 func TestCheckFresh_SaysNothingAboutAProjectWithNoClientValues(t *testing.T) {
 	root := t.TempDir()
 
@@ -384,8 +333,6 @@ func TestCheckFresh_SaysNothingAboutAProjectWithNoClientValues(t *testing.T) {
 	}
 }
 
-// TestRecord_HoldsNoPlaintext proves the record is a comparison and not a
-// second copy of the values: it lives in the build output, which travels.
 func TestRecord_HoldsNoPlaintext(t *testing.T) {
 	root := t.TempDir()
 

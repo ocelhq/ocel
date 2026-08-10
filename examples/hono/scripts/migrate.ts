@@ -1,7 +1,5 @@
 import { pg } from "../ocel/index";
 
-// Run via `ocel run -- pnpm migrate`, so the SDK-resolved connection for
-// postgres("main") is already injected into the environment.
 async function main() {
   await pg.query(`
     CREATE TABLE IF NOT EXISTS todos (

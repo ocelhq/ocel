@@ -66,8 +66,6 @@ describe("hono path", () => {
   });
 
   it("gives middleware the Hono Context as `c`", () => {
-    // Compile-time intent: `c` is a Hono Context, so context accessors like
-    // c.req.header / c.get are available. Runtime just asserts it builds.
     const up = honoUploader(
       { middleware: ({ c }) => ({ ua: c.req.header("user-agent") }) },
       {},
@@ -77,8 +75,6 @@ describe("hono path", () => {
 
   it("hands the Hono Context to middleware at runtime", async () => {
     const { ctx, presignUpload } = fakeContext();
-    // middleware reads a header off the Context - only possible if the route
-    // passes `c` (not the raw Request) as its middleware arg.
     const ctxBucket = bucket("ctx-storage", {
       uploaders: {
         avatar: honoUploader(
@@ -110,8 +106,6 @@ describe("express path", () => {
     const { ctx, presignUpload } = fakeContext();
     const handler = expressRouteHandler(storage, { runtime: ctx });
 
-    // What express hands a route after `express.json()`: parsed body, path-only
-    // url, a header bag, and a Response with status()/setHeader()/end().
     const req = {
       method: "POST",
       url: "/api/upload?op=presign",

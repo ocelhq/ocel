@@ -50,11 +50,6 @@ func TestConfirmDeploy(t *testing.T) {
 	}
 }
 
-// TestConfirmDeploy_UnrecognizedSlugWarns covers the slug-drift guard's whole
-// point: when the provider reports other projects in its backend, the prompt
-// must be visibly different from a routine update — naming the slug being
-// deployed, saying a NEW project is about to be created, and listing what is
-// already there — so a typo or a rename can't sail past on muscle memory.
 func TestConfirmDeploy_UnrecognizedSlugWarns(t *testing.T) {
 	var stdout bytes.Buffer
 	got, err := confirmDeploy("my-app", "@ocel/provider-aws", []string{"my-application", "billing"}, &stdout, strings.NewReader("y\n"))
@@ -81,9 +76,6 @@ func TestConfirmDeploy_UnrecognizedSlugWarns(t *testing.T) {
 	}
 }
 
-// TestConfirmDeploy_UnrecognizedSlugDefaultsToNo proves the drift prompt keeps
-// the y/N default: an empty or unrecognized answer aborts rather than forking
-// a project.
 func TestConfirmDeploy_UnrecognizedSlugDefaultsToNo(t *testing.T) {
 	for _, input := range []string{"\n", "", "sure\n"} {
 		var stdout bytes.Buffer
@@ -97,10 +89,6 @@ func TestConfirmDeploy_UnrecognizedSlugDefaultsToNo(t *testing.T) {
 	}
 }
 
-// TestConfirmDeploy_EmptyBackendIsNotNagged covers the case the guard must
-// stay quiet for: a genuinely-new project deploying into a backend that holds
-// nothing yet. The provider reports no known slugs, and the user sees the
-// routine prompt.
 func TestConfirmDeploy_EmptyBackendIsNotNagged(t *testing.T) {
 	for _, known := range [][]string{nil, {}} {
 		var stdout bytes.Buffer
@@ -194,12 +182,6 @@ export default {
 	}
 }
 
-// TestRunDeploy_HappyPath_DiscoversBuildsSpawnsAndDeploysToSuccess drives
-// runDeploy end to end through the real discover -> collect -> build ->
-// locate -> spawn -> deploy -> stream -> teardown wiring, against a fake
-// provider binary (this test binary re-exec'd, see
-// deploy_fakeprovider_test.go) resolved through the real
-// cli/internal/providerlocator convention.
 func TestRunDeploy_HappyPath_DiscoversBuildsSpawnsAndDeploysToSuccess(t *testing.T) {
 	root, sockPath := setUpDeployFixture(t)
 
@@ -225,10 +207,6 @@ func TestRunDeploy_HappyPath_DiscoversBuildsSpawnsAndDeploysToSuccess(t *testing
 	waitForNoStaleSocket(t, sockPath)
 }
 
-// TestRunDeploy_WithApp_BuildsFunctionsIntoManifest proves an app declared in
-// the config is built into a function and lowered onto the manifest alongside
-// its resources: the fake provider echoes every function it receives, so a
-// manifest missing the function fails this assertion.
 func TestRunDeploy_WithApp_BuildsFunctionsIntoManifest(t *testing.T) {
 	root, sockPath := setUpDeployFixture(t)
 	addAppToFixtureConfig(t, root)
@@ -263,10 +241,6 @@ func TestRunDeploy_WithApp_BuildsFunctionsIntoManifest(t *testing.T) {
 	waitForNoStaleSocket(t, sockPath)
 }
 
-// TestRunDeploy_NoApps_WarnsAndDeploysResourcesOnly proves that with no apps
-// configured, deploy prints a clear warning and still deploys the declared
-// resources (the fake validates the postgres resource, and no function is
-// echoed).
 func TestRunDeploy_NoApps_WarnsAndDeploysResourcesOnly(t *testing.T) {
 	root, sockPath := setUpDeployFixture(t)
 
@@ -292,8 +266,6 @@ func TestRunDeploy_NoApps_WarnsAndDeploysResourcesOnly(t *testing.T) {
 	waitForNoStaleSocket(t, sockPath)
 }
 
-// TestRunDeploy_AppBuildFailure_AbortsBeforeSpawn proves an app-build failure
-// aborts deploy before any provider is spawned (no Deploy driven).
 func TestRunDeploy_AppBuildFailure_AbortsBeforeSpawn(t *testing.T) {
 	root, _ := setUpDeployFixture(t)
 	addAppToFixtureConfig(t, root)
@@ -316,9 +288,6 @@ func TestRunDeploy_AppBuildFailure_AbortsBeforeSpawn(t *testing.T) {
 	}
 }
 
-// TestRunDeploy_RefusesOnClassMismatch_NoDeploy proves the production class
-// guard (User Story 27): pointed at a preview substrate, `ocel deploy` refuses
-// before provisioning and never drives Deploy.
 func TestRunDeploy_RefusesOnClassMismatch_NoDeploy(t *testing.T) {
 	root, _ := setUpDeployFixture(t)
 	t.Setenv(fakeInfraClassEnvVar, "preview")
@@ -337,8 +306,6 @@ func TestRunDeploy_RefusesOnClassMismatch_NoDeploy(t *testing.T) {
 	}
 }
 
-// TestRunDeploy_RefusesWhenInfraAbsent_NoDeploy proves `ocel deploy` refuses
-// with a concrete bootstrap hint when no infrastructure is present.
 func TestRunDeploy_RefusesWhenInfraAbsent_NoDeploy(t *testing.T) {
 	root, _ := setUpDeployFixture(t)
 	t.Setenv(fakeInfraPresentEnvVar, "0")
@@ -356,13 +323,6 @@ func TestRunDeploy_RefusesWhenInfraAbsent_NoDeploy(t *testing.T) {
 	}
 }
 
-// TestRunDeploy_ConfirmSkippedWhenStdinNotATTY_ProceedsWithoutPrompting
-// covers the non-interactive half of the confirm-prompt requirement: even
-// with --yes omitted, a non-TTY stdin (as in every test, and in CI) must
-// not block or prompt — it proceeds straight through to deploy. The
-// interactive "shown on a real TTY" half isn't exercised here, consistent
-// with how isTTY/isReaderTTY's real-terminal branch isn't unit-tested
-// elsewhere in this package.
 func TestRunDeploy_ConfirmSkippedWhenStdinNotATTY_ProceedsWithoutPrompting(t *testing.T) {
 	root, sockPath := setUpDeployFixture(t)
 
@@ -382,10 +342,6 @@ func TestRunDeploy_ConfirmSkippedWhenStdinNotATTY_ProceedsWithoutPrompting(t *te
 	waitForNoStaleSocket(t, sockPath)
 }
 
-// TestRunDeploy_PreflightCarriesTheSlug proves the slug-drift guard's request
-// half over the wire: the preflight `ocel deploy` runs names the project it is
-// about to stand up, which is what lets the provider answer whether it already
-// holds stacks for it.
 func TestRunDeploy_PreflightCarriesTheSlug(t *testing.T) {
 	root, sockPath := setUpDeployFixture(t)
 
@@ -400,9 +356,6 @@ func TestRunDeploy_PreflightCarriesTheSlug(t *testing.T) {
 	waitForNoStaleSocket(t, sockPath)
 }
 
-// TestRunDeploy_YesBypassesTheSlugDriftGuard proves --yes keeps CI unaffected:
-// even with the provider reporting an unrecognized slug beside other projects,
-// no prompt is shown and the deploy proceeds.
 func TestRunDeploy_YesBypassesTheSlugDriftGuard(t *testing.T) {
 	root, sockPath := setUpDeployFixture(t)
 	t.Setenv(fakeKnownSlugsEnvVar, "my-application,billing")
@@ -423,8 +376,6 @@ func TestRunDeploy_YesBypassesTheSlugDriftGuard(t *testing.T) {
 	waitForNoStaleSocket(t, sockPath)
 }
 
-// pretendStdoutIsTerminal makes the identity banner reachable in a test, which
-// otherwise writes to a buffer and so never sees a terminal.
 func pretendStdoutIsTerminal(t *testing.T) {
 	t.Helper()
 	prior := stdoutIsTerminal
@@ -432,10 +383,6 @@ func pretendStdoutIsTerminal(t *testing.T) {
 	t.Cleanup(func() { stdoutIsTerminal = prior })
 }
 
-// TestRunDeploy_PrintsIdentityBanner_BeforeBuildAndDeploy proves the preflight
-// identity banner is shown, and shown before the build and the Deploy — the
-// reordering that lets a user see which account they're about to hit, and lets
-// a bad credential abort before the build.
 func TestRunDeploy_PrintsIdentityBanner_BeforeBuildAndDeploy(t *testing.T) {
 	pretendStdoutIsTerminal(t)
 	root, sockPath := setUpDeployFixture(t)
@@ -468,9 +415,6 @@ func TestRunDeploy_PrintsIdentityBanner_BeforeBuildAndDeploy(t *testing.T) {
 	waitForNoStaleSocket(t, sockPath)
 }
 
-// TestRunDeploy_WithoutATerminal_OmitsIdentityBanner proves the account being
-// deployed into never reaches a log. A CI runner's captured stdout is not a
-// terminal, and on a public repository that log is world-readable.
 func TestRunDeploy_WithoutATerminal_OmitsIdentityBanner(t *testing.T) {
 	root, sockPath := setUpDeployFixture(t)
 	t.Setenv(fakeIDAwsAccountEnvVar, "123456789012")
@@ -483,8 +427,6 @@ func TestRunDeploy_WithoutATerminal_OmitsIdentityBanner(t *testing.T) {
 		t.Fatalf("runDeploy err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 	}
 
-	// The deploy still has to have run: an absence proved by nothing happening
-	// would hold just as well if the command had died before the preflight.
 	out := stdout.String()
 	if !strings.Contains(out, "Deployed") {
 		t.Fatalf("stdout = %q, want the deploy to have proceeded", out)
@@ -498,10 +440,6 @@ func TestRunDeploy_WithoutATerminal_OmitsIdentityBanner(t *testing.T) {
 	waitForNoStaleSocket(t, sockPath)
 }
 
-// TestRunDeploy_CredentialProblem_AbortsBeforeBuildAndDeploy proves a reported
-// credential failure aborts at preflight — before the build runs and before any
-// Deploy is driven — with the aggregated problem surfaced and the identity of
-// whatever resolved still shown to a terminal.
 func TestRunDeploy_CredentialProblem_AbortsBeforeBuildAndDeploy(t *testing.T) {
 	pretendStdoutIsTerminal(t)
 	root, _ := setUpDeployFixture(t)
@@ -530,14 +468,6 @@ func TestRunDeploy_CredentialProblem_AbortsBeforeBuildAndDeploy(t *testing.T) {
 	}
 }
 
-// setUpDeployFixture writes a project (ocel.config.ts declaring a provider,
-// and an ocel/main.ts discovery script declaring a single postgres resource
-// "main") and a fake provider binary resolvable via the real
-// providerlocator convention (a symlink to this re-exec'd test binary under
-// node_modules/@ocel/provider-aws-<platform>-<arch>/bin/ocelaws). It logs the
-// caller in, shortens the readiness timeout, and restores every package-level
-// seam it touches via t.Cleanup. It returns the project root and the Unix
-// socket path the fake provider will bind, for post-teardown assertions.
 func setUpDeployFixture(t *testing.T) (root, sockPath string) {
 	t.Helper()
 
@@ -596,23 +526,14 @@ export {};
 	t.Setenv(deployFakeProviderEnvVar, "1")
 	t.Setenv(deployFakeProviderSockEnvVar, sockPath)
 
-	// The deploy path now preflights before provisioning; default the fake to a
-	// present production substrate so the guard passes. Preview tests override
-	// these after calling setUpDeployFixture.
 	t.Setenv(fakeInfraClassEnvVar, "production")
 	t.Setenv(fakeInfraPresentEnvVar, "1")
 
-	// The builder always runs now; default it to no functions so tests that
-	// aren't about app building don't spawn the real node builder. Tests that
-	// need functions override this seam after calling setUpDeployFixture.
 	stubAppFunctions(t, nil)
 
 	return root, sockPath
 }
 
-// addAppToFixtureConfig rewrites the fixture's ocel.config.ts to declare one
-// express app, so cfg.Apps is non-empty and the no-apps warning is suppressed.
-// The app's real source is never built: stubAppFunctions injects the functions.
 func addAppToFixtureConfig(t *testing.T, root string) {
 	t.Helper()
 	writeFile(t, filepath.Join(root, "ocel.config.ts"), `
@@ -625,10 +546,6 @@ export default {
 `)
 }
 
-// stubAppFunctions turns the app build into a no-op and points discovery at
-// fixed functions for the duration of a test, so the CLI path is exercised
-// without spawning the node builder. It mirrors
-// locateProviderBinary/deployReadyTimeout.
 func stubAppFunctions(t *testing.T, functions []manifestbuilder.Function) {
 	t.Helper()
 	prevBuild, prevCollect := buildApp, collectAppFunctions
@@ -641,10 +558,6 @@ func stubAppFunctions(t *testing.T, functions []manifestbuilder.Function) {
 	t.Cleanup(func() { buildApp, collectAppFunctions = prevBuild, prevCollect })
 }
 
-// nodePlatformSuffix mirrors resolve-provider.cjs's platform/arch naming
-// (see cli/internal/providerlocator/locator_test.go's hostPlatformSuffix),
-// translated from Go's GOOS/GOARCH, so the fixture's node_modules layout is
-// exactly what Locate's Node resolver expects on this host.
 func nodePlatformSuffix(t *testing.T) string {
 	t.Helper()
 
@@ -659,9 +572,6 @@ func nodePlatformSuffix(t *testing.T) string {
 	return nodePlatform + "-" + nodeArch
 }
 
-// waitForNoStaleSocket fails the test if sockPath still exists shortly
-// after runDeploy returned — by then its deferred runner.Close() teardown
-// should have removed it.
 func waitForNoStaleSocket(t *testing.T, sockPath string) {
 	t.Helper()
 	deadline := time.Now().Add(2 * time.Second)
@@ -677,10 +587,6 @@ func waitForNoStaleSocket(t *testing.T, sockPath string) {
 	}
 }
 
-// TestRunDeploy_SingleApp_ProducesExactlyOneAttributedApp is the regression
-// guard for the single-app case: the manifest that reaches the provider must
-// carry exactly one app, carrying its configured domain, with the project's
-// function attributed to it.
 func TestRunDeploy_SingleApp_ProducesExactlyOneAttributedApp(t *testing.T) {
 	root, sockPath := setUpDeployFixture(t)
 	writeFile(t, filepath.Join(root, "ocel.config.ts"), `
@@ -713,9 +619,6 @@ export default {
 	waitForNoStaleSocket(t, sockPath)
 }
 
-// TestRunDeploy_TwoApps_AttributesFunctionsToTheirApps proves a two-app config
-// yields two manifest apps, each function attributed to its own, and a per-app
-// domain that does not leak across apps.
 func TestRunDeploy_TwoApps_AttributesFunctionsToTheirApps(t *testing.T) {
 	root, sockPath := setUpDeployFixture(t)
 	writeFile(t, filepath.Join(root, "ocel.config.ts"), `
@@ -758,9 +661,6 @@ export default {
 	waitForNoStaleSocket(t, sockPath)
 }
 
-// TestRunDeploy_DetectedApp_AppearsInManifest covers the 0-configured-apps
-// path: the builder detects an app and names it, and that name must still
-// reach the manifest as a proper app.
 func TestRunDeploy_DetectedApp_AppearsInManifest(t *testing.T) {
 	root, sockPath := setUpDeployFixture(t)
 	stubAppFunctions(t, []manifestbuilder.Function{

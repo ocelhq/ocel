@@ -1,6 +1,4 @@
 #!/bin/sh
-# Builds cli/platform/dist, the Node platform tree platform.go embeds. Gated on
-# a hash of its inputs so a repeat `go generate` is free.
 set -eu
 
 platform_dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)

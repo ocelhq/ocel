@@ -9,10 +9,6 @@ import (
 	"testing"
 )
 
-// hostPlatformSuffix mirrors packages/ocel/bin/run.js's (and
-// resolve-provider.cjs's) platform/arch naming, translated from Go's
-// GOOS/GOARCH so tests can build the same node_modules layout Node itself
-// would expect on this host.
 func hostPlatformSuffix(t *testing.T) string {
 	t.Helper()
 
@@ -43,8 +39,6 @@ func requireNode(t *testing.T) {
 	}
 }
 
-// writeFakeBinary creates projectDir/node_modules/<pkg>/bin/<binaryName>
-// (plus its .exe sibling on Windows), returning its path.
 func writeFakeBinary(t *testing.T, projectDir, pkg, binaryName string) string {
 	t.Helper()
 
@@ -86,9 +80,6 @@ func TestLocate_ResolvesThroughSymlinkedPackage(t *testing.T) {
 	requireNode(t)
 	suffix := hostPlatformSuffix(t)
 
-	// pnpm installs direct dependencies into node_modules as a symlink into
-	// its own content-addressed store, rather than a real directory. Locate
-	// must resolve through that exactly as it would a flat npm layout.
 	store := t.TempDir()
 	platformPkg := "@ocel/provider-aws-" + suffix
 	want := writeFakeBinary(t, store, platformPkg, "deploy")
@@ -139,11 +130,6 @@ func TestLocate_ErrorWhenNodeNotOnPath(t *testing.T) {
 	}
 }
 
-// TestLocate_FindsRealBuiltCloudAWSBinary is the standalone packaging smoke
-// test: it builds the actual cloud/aws provider binary and confirms Locate
-// finds it via the same @ocel/provider-aws-<platform>-<arch> convention the
-// real npm packages use — independent of the CLI's spawn wiring or the full
-// e2e run, so a packaging bug surfaces here.
 func TestLocate_FindsRealBuiltCloudAWSBinary(t *testing.T) {
 	requireNode(t)
 	if _, err := exec.LookPath("go"); err != nil {
@@ -182,9 +168,6 @@ func TestLocate_FindsRealBuiltCloudAWSBinary(t *testing.T) {
 	}
 }
 
-// repoRootDir returns the monorepo root (the directory containing go.work),
-// derived from this file's own location rather than the test's working
-// directory.
 func repoRootDir(t *testing.T) string {
 	t.Helper()
 	dir, err := filepath.Abs("../../..")

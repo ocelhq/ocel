@@ -1,8 +1,3 @@
-// Per-run Docker network + Postgres sidecar that sandboxed agents join, so
-// apps/web's Postgres-backed tests can run inside the sandbox instead of
-// being skipped there. One sidecar per orchestrator run; one database per
-// agent (see `databaseNameFor`) so parallel agents don't collide.
-
 import { execFileSync, spawnSync } from "node:child_process";
 
 function docker(args: string[]): string {
@@ -43,8 +38,6 @@ export function setupRunInfra(runId: string): RunInfra {
 		"postgres:16",
 	]);
 
-	// Wait for Postgres to accept connections before agents start racing to
-	// CREATE DATABASE against it.
 	const deadline = Date.now() + 60_000;
 	for (;;) {
 		const res = spawnSync("docker", ["exec", postgresContainerName, "pg_isready", "-U", "postgres"], { encoding: "utf8" });

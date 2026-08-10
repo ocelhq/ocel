@@ -1,6 +1,3 @@
-// The variables UI. It renders the required-cell matrix the CLI derived — it
-// never derives one of its own, because the rules that decide a cell belong to
-// the declaration, and a second copy of them here could only ever disagree.
 import "./styles.css";
 
 type CellState = "required" | "optional" | "forbidden";
@@ -10,9 +7,6 @@ interface Cell {
   folder: string;
 }
 
-// Address is a cell plus which environment's value of it is on screen. The
-// empty environment is the class-wide value — the one every environment reads
-// where none has been given its own.
 interface Address extends Cell {
   environment: string;
 }
@@ -62,9 +56,6 @@ interface Version {
   size: number;
 }
 
-// The token arrives in the fragment, which no browser sends to any server. It
-// is read once and erased from the address bar so a screen share or a pasted
-// URL cannot carry it.
 const token = new URLSearchParams(location.hash.slice(1)).get("t") ?? "";
 history.replaceState(null, "", location.pathname);
 
@@ -78,9 +69,6 @@ let error = "";
 let thread: AppResolution | null = null;
 let saving = false;
 
-// ApiError carries the status because one of them is not a failure: a refused
-// write means this page was showing a value that has since changed, and the
-// answer to that is to show what is there now.
 class ApiError extends Error {
   status: number;
 
@@ -105,7 +93,6 @@ async function api<T>(method: string, path: string, body?: unknown): Promise<T> 
     try {
       message = JSON.parse(text).error ?? text;
     } catch {
-      /* a guard rejection answers in plain text */
     }
     throw new ApiError(response.status, message.trim());
   }
@@ -126,10 +113,6 @@ function overrideOf(cell: MatrixCell, environment: string): Override | undefined
   return cell.overrides?.find((held) => held.environment === environment);
 }
 
-// What is on screen for the environment the inspector is addressing: whether a
-// value is set there and the version a write against it must expect. The
-// class-wide value and each override are separate cells, so neither reads the
-// other's state.
 function held(
   cell: MatrixCell,
   environment: string,
@@ -139,9 +122,6 @@ function held(
   return { set: override !== undefined, version: override?.version ?? 0 };
 }
 
-// Every environment the inspector can address for this cell: the class-wide
-// value, every environment that exists, and any environment holding an override
-// that no longer does — the last so an orphan has somewhere to be removed from.
 function addressable(current: State, cell: MatrixCell): string[] {
   const environments = [...current.environments];
   for (const override of cell.overrides ?? []) {
@@ -178,9 +158,6 @@ function folderName(folder: string): string {
   return folder === "" ? "root" : folder;
 }
 
-// A project can hold a preview environment per open pull request, and naming
-// fifty of them is a wall of text where a sentence was meant. Past this many
-// the rest are counted rather than listed.
 const namedLimit = 5;
 
 function environmentName(environment: string): string {
@@ -195,9 +172,6 @@ function names(items: string[]): string {
   return `${shown.slice(0, -1).join(", ")} and ${shown[shown.length - 1]}`;
 }
 
-// What this cell reaches. The class-wide value is the one every environment
-// reads, but only where none has been given its own — saying so unconditionally
-// would describe a cell that is not the one on screen.
 function coordinateLine(
   row: MatrixRow,
   cell: MatrixCell,
@@ -249,10 +223,6 @@ function select(row: MatrixRow, cell: MatrixCell): void {
   address({ key: row.key, folder: cell.folder, environment: "" });
 }
 
-// address moves the inspector to one value: a different cell, or the same cell
-// as one named environment reads it. The draft and the history go with it —
-// they described the value that was on screen, and carrying either across would
-// offer one environment's history for another's value.
 function address(at: Address): void {
   selected = at;
   draft = "";
@@ -260,7 +230,6 @@ function address(at: Address): void {
   history_ = [];
   render();
   void refreshHistory().catch(() => {
-    /* history is context, not the task; its absence must not block a fix */
   });
 }
 
@@ -275,10 +244,6 @@ async function mutate(run: () => Promise<State>): Promise<void> {
   } catch (thrown) {
     error = thrown instanceof Error ? thrown.message : String(thrown);
     if (thrown instanceof ApiError && thrown.status === 409) {
-      // A refusal promises the page is showing what is there now, and the
-      // other writer's version is the evidence that explains it. A re-read
-      // that fails leaves neither, so the promise is withdrawn rather than
-      // left standing over stale content.
       try {
         state = await api<State>("GET", "/api/state");
         await refreshHistory();
@@ -395,16 +360,12 @@ function renderSocket(row: MatrixRow, cell: MatrixCell): HTMLElement {
   socket.dataset.state = socketState(cell);
   socket.append(element("span", "pip"));
 
-  // The thread renders the two hops literally: an app reads its own folder,
-  // then the root, and nothing else.
   if (thread && (cell.folder === "" || cell.folder === thread.folder)) {
     socket.classList.add("threaded");
   }
   return socket;
 }
 
-// A forbidden cell is not a disabled control — it is not a control. There is
-// nothing to press because nothing could ever read a value from it.
 function forbiddenSocket(row: MatrixRow, where: string): HTMLElement {
   const socket = element("span", "socket forbidden");
   socket.title = `${row.key} holds no value in ${where} — nothing would read one`;
@@ -500,9 +461,6 @@ function renderInspector(current: State): HTMLElement {
   inspector.append(field);
 
   const actions = element("div", "actions");
-  // An orphan is offered no Save. Its environment is gone, so a value written
-  // there is one nothing will ever read — the store refuses it, and drawing a
-  // button that only ever fails is worse than drawing none.
   if (!orphaned) {
     const save = element("button", "save", saving ? "Saving…" : "Save");
     save.type = "button";
@@ -566,14 +524,6 @@ function renderInspector(current: State): HTMLElement {
   }
 }
 
-// The environment axis, drawn as the thing it is: one row of the values this
-// cell can hold, class-wide first because it is the one every environment reads
-// where none has been given its own. It is a picker rather than a text field so
-// an override cannot be written against a name nothing will ever ask for.
-//
-// A cell with nowhere to diverge — production, or a preview substrate with no
-// environments and no surviving override — gets no row at all: an axis with one
-// point on it is a decision nobody has to make.
 function renderEnvironments(
   current: State,
   row: MatrixRow,
@@ -667,7 +617,6 @@ function renderDone(current: State): HTMLElement {
   done.type = "button";
   done.addEventListener("click", () => {
     void api("POST", "/api/done").catch(() => {
-      /* the session closes as it answers, so a dropped response is success */
     });
     root.replaceChildren(
       element("p", "farewell", "Returned to the terminal. You can close this tab."),

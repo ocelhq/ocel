@@ -1,6 +1,3 @@
-// This file holds the teardown and enumeration counterparts to Run. Like Run,
-// their bodies drive the real Pulumi Automation API and are exercised only by
-// an opt-in run against a live account, never by unit tests.
 package deploy
 
 import (
@@ -16,22 +13,15 @@ import (
 	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
 )
 
-// TeardownConfig carries what a Destroy needs to reach and remove one stack:
-// the Pulumi backend, its decryption passphrase, and the exact stack to act on.
-// The account-global backend holds every project's stacks, so StackName is the
-// project-scoped "<slug>-preview-<identity>" the server derives (see the
-// server's stackName), never an identity alone.
 type TeardownConfig struct {
 	Region      string
 	BackendURL  string
 	Passphrase  string
-	ProjectName string // Pulumi project, e.g. "ocel"
-	StackName   string // exact "<slug>-preview-<identity>"
+	ProjectName string
+	StackName   string
 	Pulumi      auto.PulumiCommand
 }
 
-// nilSafe wraps a progress callback so callers can report unconditionally: a
-// nil callback makes reporting a no-op.
 func nilSafe(progress func(string)) func(string) {
 	return func(msg string) {
 		if progress != nil {
@@ -40,15 +30,6 @@ func nilSafe(progress func(string)) func(string) {
 	}
 }
 
-// Destroy tears down one stack — a `pulumi destroy` followed by removing the
-// stack from the backend — and streams progress. progress and log may be nil.
-// Destroy performs the real teardown and is not exercised by unit tests.
-//
-// A stack the backend has never heard of is nothing to remove, so Destroy
-// succeeds on it. Callers that derive a stack name rather than read it back from
-// the backend (RemovePreview names a persistent preview's infra stack) would
-// otherwise fail teardown over infrastructure that was never created — a deploy
-// that died before provisioning leaves exactly that state.
 func Destroy(ctx context.Context, cfg TeardownConfig, progress, log func(string)) error {
 	report := func(f func(string), msg string) {
 		if f != nil {
@@ -72,9 +53,6 @@ func Destroy(ctx context.Context, cfg TeardownConfig, progress, log func(string)
 
 	report(progress, "Destroying resources (this can take several minutes)")
 	logWriter := lineWriter(log)
-	// Refresh first so the destroy reconciles against real provider state — this
-	// clears the pending operations an interrupted earlier deploy can leave on a
-	// stack, which would otherwise make the destroy refuse.
 	destroyOpts := []optdestroy.Option{optdestroy.Refresh()}
 	if logWriter != nil {
 		destroyOpts = append(destroyOpts, optdestroy.ProgressStreams(logWriter))
@@ -92,12 +70,6 @@ func Destroy(ctx context.Context, cfg TeardownConfig, progress, log func(string)
 	return nil
 }
 
-// lockRecoveryHint appends the recovery path for the one Pulumi failure a killed
-// run leaves behind for good: a stack lock nothing releases on its own, which
-// fails every later teardown of that stack identically. Releasing it stays
-// manual and explicit — the same lock also protects a deploy that is genuinely
-// still running, and breaking that one corrupts the stack's state — so this
-// names the command and the precondition instead of clearing the lock. Pure.
 func lockRecoveryHint(err error, cfg TeardownConfig) string {
 	if err == nil || !strings.Contains(err.Error(), "the stack is currently locked") {
 		return ""
@@ -108,8 +80,6 @@ func lockRecoveryHint(err error, cfg TeardownConfig) string {
 		"\nand re-run the teardown", cfg.BackendURL, cfg.StackName)
 }
 
-// PreviewStack is one enumerated preview-class stack, in the pure shape
-// ListPreviewStacks returns and the server maps to a PreviewEnvironment.
 type PreviewStack struct {
 	Identity  string
 	Lifecycle deploymentsv1.Environment_Lifecycle
@@ -118,23 +88,15 @@ type PreviewStack struct {
 	ExpiresAt int64
 }
 
-// ListConfig carries what enumerating a project's preview stacks needs: the
-// Pulumi backend, the Pulumi project the workspace opens under, and the manifest
-// Slug the account-global backend's stacks are filtered by.
 type ListConfig struct {
 	Region      string
 	BackendURL  string
 	Passphrase  string
-	ProjectName string // Pulumi project, e.g. "ocel"
-	Slug        string // manifest slug, the stack-name scope prefix
+	ProjectName string
+	Slug        string
 	Pulumi      auto.PulumiCommand
 }
 
-// ListPreviewStacks enumerates one project's preview ENVIRONMENTS from the
-// preview Pulumi backend — one PreviewStack per distinct pointer, filtered to
-// cfg.Slug so it never lists another project's previews. It reads the real
-// Pulumi backend and is not exercised by unit tests; the pure pointer
-// enumeration and lifecycle inference it relies on is previewStacksFromNames.
 func ListPreviewStacks(ctx context.Context, cfg ListConfig) ([]PreviewStack, error) {
 	ws, err := backendWorkspace(ctx, cfg.ProjectName, cfg.BackendURL, cfg.Passphrase, cfg.Region, cfg.Pulumi)
 	if err != nil {
@@ -153,15 +115,6 @@ func ListPreviewStacks(ctx context.Context, cfg ListConfig) ([]PreviewStack, err
 	return previewStacksFromNames(cfg.Slug, names), nil
 }
 
-// previewStacksFromNames collapses a project's preview stack names into one
-// PreviewStack per distinct pointer (a preview instance holds many pointers,
-// each owning several stacks). Lifecycle is inferred from the stack list alone:
-// a pointer that owns a per-name "--infra" stack is persistent, one with only
-// app-deploy stacks is ephemeral. Entries come back sorted by pointer.
-//
-// Label, CreatedAt, and ExpiresAt are not recoverable from stack names — they
-// are stamped as stack tags at deploy time, whose reading is the opt-in-e2e
-// seam (bd ocelhq-d7u); until it lands, those fields stay zero. Pure.
 func previewStacksFromNames(slug string, stackNames []string) []PreviewStack {
 	plan := classifyPreviewStacks(slug, stackNames)
 	persistent := map[string]struct{}{}
@@ -182,9 +135,6 @@ func previewStacksFromNames(slug string, stackNames []string) []PreviewStack {
 	return stacks
 }
 
-// backendWorkspace opens a Pulumi Automation API workspace over the given
-// self-managed backend, for stack enumeration/selection (no inline program).
-// Shared by preview enumeration and whole-project teardown.
 func backendWorkspace(ctx context.Context, project, backendURL, passphrase, region string, pulumiCmd auto.PulumiCommand) (auto.Workspace, error) {
 	ws, err := auto.NewLocalWorkspace(ctx,
 		auto.Project(workspace.Project{

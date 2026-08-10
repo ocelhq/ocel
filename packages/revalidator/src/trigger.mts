@@ -5,16 +5,6 @@ import type { Outcome } from "./log.mjs";
 import type { RevalidationMessage } from "./message.mjs";
 import type { Target } from "./origin.mjs";
 
-// One message, one signed HEAD at the origin.
-//
-// HEAD runs the whole render and cache-write pipeline and skips only the body
-// write, so the trigger costs a render and no transfer. What comes back is read
-// framework-blind: the edge declared the receipt it expects when it enqueued
-// the message, and this evaluates that declaration and nothing else.
-//
-// The target is a `Target`, which nothing outside origin.mts can construct or
-// assert into being (see the class there). A caller cannot hand this function a
-// URL that did not come out of a resolution against the deploy's own record.
 export interface TriggerDeps {
   fetch: typeof fetch;
   credentials: { accessKeyId: string; secretAccessKey: string; sessionToken?: string };
@@ -27,10 +17,6 @@ export async function trigger(
   message: RevalidationMessage,
 ): Promise<Outcome> {
   const client = new AwsClient({ ...deps.credentials, service: "lambda", region: target.region });
-  // The message's own headers are signed along with `host`, so what AWS
-  // authorizes is exactly the request that gets sent. Nothing sits inside the
-  // TLS session to rewrite them, so signing them costs nothing and narrows what
-  // a captured signature could be replayed with.
   const signed = await client.sign(target.url, { method: "HEAD", headers: message.headers });
 
   const signal = AbortSignal.timeout(deps.timeoutMs ?? triggerTimeoutMs);
@@ -45,9 +31,6 @@ export async function trigger(
   if (message.expect === null) return { event: "RevalidateOk" };
 
   const got = response.headers.get(message.expect.header);
-  // A route that went dynamic since it was enqueued answers ok without the
-  // receipt. Redelivering the message cannot change that, so this is a success
-  // that says so rather than a failure that loops until the DLQ.
   if (got !== message.expect.value) {
     return { event: "RevalidateExpectMiss", expected: message.expect.value, got };
   }

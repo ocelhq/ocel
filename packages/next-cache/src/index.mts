@@ -1,13 +1,3 @@
-// Portable ISR cache primitives shared by the Lambda cache handler (which backs
-// Next's server cache) and the Cloudflare worker (which reads the same
-// authoritative cache directly at the edge, and writes tag records back into
-// it). Everything here is runtime-neutral: no Node Buffer, no AWS SDK, no
-// Workers globals beyond atob/btoa — so the key normalization, tag-expiry,
-// payload-decoding, tag-write and snapshot-merge rules are single-sourced and
-// the two sides can never disagree on them. The transport around these (the
-// S3/DynamoDB calls) stays per-side, since one speaks the AWS SDK and the
-// other signs raw HTTP.
-
 export {
   isGuardRejection,
   tagRecordUpdate,
@@ -28,43 +18,17 @@ export {
 export type { EdgeCacheRpc, FetchCacheEntry } from "./edge-cache-rpc.mjs";
 export { cacheKey, variantHeadersFile } from "./naming.mjs";
 
-// A cache entry exactly as it sits in S3: one object per route holding the html,
-// the RSC payload and any PPR segments together, so a read is a single GET and a
-// write is atomic. Binary bodies are base64 so the whole entry stays one JSON
-// document.
 export interface CacheEntryFile {
   lastModified: number;
   value: Record<string, any>;
-  // The freshness window of the render that wrote this entry, as Next declared
-  // it. Absent on entries the build seeded and on entries written before this
-  // was recorded, where the routing manifest's window stands in. `revalidate:
-  // false` is a static entry: no time-based staleness, only tag-based.
   cacheControl?: { revalidate?: number | false; expire?: number };
 }
 
-// When a tag was last invalidated. Mirrors Next's own tagsManifest entries:
-// `expired` marks the moment the tag's content stopped being usable, `stale`
-// the moment it should be refreshed in the background.
 export interface TagRecord {
   stale?: number;
   expired?: number;
 }
 
-// The tag clock as the edge reads it: a replica of the authoritative DynamoDB
-// clock, published per build by whichever Lambda last drained the index.
-//
-// `deployedAt` is the build's own deploy time and is set once, at genesis, then
-// carried forward unchanged. It is what makes pruning provable: every entry in a
-// build has lastModified >= deployedAt, so a record whose watermarks both sit at
-// or before it can no longer expire anything. Zero means the snapshot was never
-// anchored — created by a publisher rather than seeded by the deploy — and
-// nothing may be pruned from it.
-//
-// The document carries no expiry. A replica is current until a publisher says
-// otherwise, and a publisher republishes on every invalidation it observes — so
-// an unchanged object means nothing has changed, not that nobody has looked
-// lately. `generatedAt` records when it was last written, for operators reading
-// the object; no reader branches on it.
 export interface TagSnapshot {
   version: 1;
   deployedAt: number;
@@ -72,44 +36,16 @@ export interface TagSnapshot {
   records: Record<string, TagRecord>;
 }
 
-// Where the snapshot sits: beside the build's cache entries, under the same
-// prefix the deploy scopes every other object to. Both readers call this, but
-// the deploy that seeds the object is Go and spells the suffix out itself — so
-// nothing about calling one function holds them together. What does is the
-// checked-in edge contract fixture, whose suffix both languages assert their own
-// spelling against.
 export function tagSnapshotKey(prefix: string): string {
   return `${prefix}/tag-clock.json`;
 }
 
-// The partition-key prefix an app's tag records live under in the state table,
-// derived from the same ISR prefix that scopes its objects so one identity
-// governs both stores — which is also what lets the deploy grant DynamoDB with a
-// single LeadingKeys wildcard.
-//
-// Held together with Go by the same fixture tagSnapshotKey is, and for a stronger
-// reason: the Lambda tier is handed the finished namespace in its env and never
-// derives it, so the deploy and this function are the only two spellings and
-// nothing at runtime would notice them drifting.
 export function tagNamespace(prefix: string): string {
   return `TAG#${prefix.replaceAll("/", "#")}#`;
 }
 
-// The four segments of an isrPrefix, which is also how many the namespace holds.
 const PREFIX_SEGMENTS = 4;
 
-// tagNamespace's inverse: the isrPrefix a namespace was built from, or null for
-// anything that is not one. The stream consumer derives every build it publishes
-// for through here, so the grammar has exactly one spelling and one reader.
-//
-// It is given gsi1pk, which is the namespace verbatim, rather than pk. A tag
-// record's pk is the namespace with the tag appended, and a tag is arbitrary
-// user input that freely contains "#" — so splitting a pk would let a caller
-// choose which build a record is published to.
-//
-// Null is the answer for every item that is not a tag record, which is the
-// consumer's second line of defence behind its event filter: upload sessions
-// share this table, this sort key, and carry HMAC secrets.
 export function isrPrefixOf(namespace: string): string | null {
   if (!namespace.startsWith("TAG#") || !namespace.endsWith("#")) return null;
   const segments = namespace.slice("TAG#".length, -1).split("#");
@@ -117,15 +53,8 @@ export function isrPrefixOf(namespace: string): string | null {
   return segments.join("/");
 }
 
-// The header Next stamps a route's cache tags onto. For page and route kinds the
-// tags reach a reader only this way — the entry itself is the only record of
-// what it depends on.
 const TAGS_HEADER = "x-next-cache-tags";
 
-// base64ToBytes / bytesToBase64 are the runtime-neutral codec both readers use.
-// atob/btoa exist in Node 20+ and the Workers runtime; they operate on binary
-// strings (one char per byte), so the byte<->char loops are the bridge to and
-// from a Uint8Array.
 export function base64ToBytes(b64: string): Uint8Array {
   const binary = atob(b64);
   const bytes = new Uint8Array(binary.length);
@@ -139,15 +68,6 @@ export function bytesToBase64(bytes: Uint8Array): string {
   return btoa(binary);
 }
 
-// entryObjectKey is where a route entry lives in the ISR store. Two sides derive
-// it: the Lambda, which writes the entry, and the writer worker, which derives it
-// again from the prefix the caller authenticated against so no deploy can address
-// another's slice. Both call this, because a grammar the writer applies more
-// strictly than the writer's caller is a route that renders forever and never
-// caches. Only what could climb out of the prefix is refused — an absolute key, a
-// traversal segment, a backslash — and refused rather than normalized. An empty
-// segment cannot climb anywhere and is left alone: `trailingSlash: true` produces
-// one on every route.
 export function entryObjectKey(isrPrefix: string, key: string): string | null {
   if (key === "" || key.startsWith("/") || key.includes("\\")) return null;
   for (const segment of key.split("/")) {
@@ -156,21 +76,8 @@ export function entryObjectKey(isrPrefix: string, key: string): string | null {
   return `${isrPrefix}/cache/${key}.cache.json`;
 }
 
-// entryMissHeader marks the writer's "no entry under this key" 404, which the
-// reader serves as an ordinary cache miss. Every other 404 it can answer means
-// the request never reached an entry at all — a misconfigured writer URL, a path
-// shape the two sides no longer agree on — and reads identically without this.
 export const entryMissHeader = "ocel-isr-entry-miss";
 
-// tagsOf reports what a cached entry depends on — a set, deliberately: a FETCH
-// entry is stored under the very tags its reader passes back in, so the three
-// sources below always name the explicit ones twice, and what this answers is a
-// dependency set. Both readers weigh the list against a map, so a repeat costs
-// them only a second lookup — but a reader that cannot take one is a tagged
-// entry gone permanently unreadable, which is a failure this shape rules out
-// rather than relies on nobody introducing. FETCH entries are told their tags
-// per request; everything else carries them in the response headers Next stored
-// alongside the body.
 export function tagsOf(value: Record<string, any>, ctx: any): string[] {
   if (value?.kind === "FETCH") {
     return [
@@ -181,9 +88,6 @@ export function tagsOf(value: Record<string, any>, ctx: any): string[] {
   return typeof header === "string" && header.length > 0 ? header.split(",") : [];
 }
 
-// areTagsExpired mirrors Next's own tagsManifest check: a tag expires an entry
-// only when its expiry has already passed *and* it landed after the entry was
-// written. An expiry still in the future leaves the entry usable until then.
 export function areTagsExpired(
   tags: string[],
   records: Map<string, TagRecord>,
@@ -198,10 +102,6 @@ export function areTagsExpired(
   return false;
 }
 
-// deserialize rebuilds a cache value from its stored JSON, restoring the binary
-// payloads the entry base64'd on the way in as Uint8Array. Callers that need
-// Node Buffers (the Lambda handler, so Next sees exactly what it wrote) wrap the
-// bytes themselves; the worker serves them straight into a Response.
 export function deserialize(value: Record<string, any>): Record<string, any> {
   const out: Record<string, any> = { ...value };
   if (value.kind === "APP_ROUTE" && typeof value.body === "string") {

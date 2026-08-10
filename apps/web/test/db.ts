@@ -12,7 +12,6 @@ async function ensureDatabaseExists(connectionString: string) {
   try {
     await adminPool.query(`CREATE DATABASE "${dbName}"`);
   } catch (error) {
-    // 42P04 = duplicate_database - already exists, nothing to do.
     if ((error as { code?: string }).code !== "42P04") {
       throw error;
     }
@@ -23,10 +22,6 @@ async function ensureDatabaseExists(connectionString: string) {
 
 let setupPromise: Promise<void> | undefined;
 
-// Ensures the test database exists and its tables match the current
-// Drizzle schema (via drizzle-kit's migrationless push API), without
-// requiring committed migration files. Safe to call from multiple test
-// files - the underlying work only runs once per test process.
 export function setupTestDatabase() {
   if (!setupPromise) {
     setupPromise = (async () => {
@@ -41,8 +36,6 @@ export function setupTestDatabase() {
 
       const pool = new Pool({ connectionString });
       try {
-        // Not the app's @repo/db instance: pushSchema needs a schema-less
-        // PgDatabase generic, which the typed db doesn't satisfy.
         const pushDb = drizzle(pool);
         const { apply } = await pushSchema(schema, pushDb);
         await apply();

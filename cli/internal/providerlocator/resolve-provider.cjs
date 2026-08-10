@@ -1,17 +1,3 @@
-// Resolves a provider's platform-specific binary via Node's own
-// require.resolve, mirroring packages/ocel/bin/run.js's own platform-binary
-// resolution. Invoked by the CLI as:
-//
-//   node resolve-provider.cjs <package-name>
-//
-// e.g. <package-name> = "@ocel/provider-aws". Run from inside the user's
-// project (see providerlocator.Locate), so require.resolve walks that
-// project's own node_modules — whatever npm/pnpm/yarn actually installed —
-// rather than wherever this script happens to be written to.
-//
-// Prints the resolved absolute binary path to stdout on success. On
-// failure, prints a clear diagnostic to stderr and exits non-zero.
-
 const { join } = require("path");
 
 const packageName = process.argv[2];
@@ -27,10 +13,6 @@ if (!packageName.startsWith(providerPrefix)) {
   );
   process.exit(1);
 }
-// Every @ocel/provider-* package ships its deployment entrypoint as bin/deploy
-// (matching cloud/aws/cmd/deploy). Naming it "deploy" rather than after the
-// cloud keeps it from shadowing a same-named host CLI (e.g. the real `aws`) and
-// is uniform across providers.
 const binaryName = "deploy";
 
 const { platform, arch } = process;

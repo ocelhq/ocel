@@ -248,7 +248,6 @@ func (*DeclareRequest_Postgres) isDeclareRequest_Config() {}
 
 func (*DeclareRequest_Bucket) isDeclareRequest_Config() {}
 
-// config messages
 type PostgresConfig struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Version       string                 `protobuf:"bytes,1,opt,name=version,proto3" json:"version,omitempty"`

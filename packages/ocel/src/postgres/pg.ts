@@ -15,7 +15,6 @@ export class Postgres implements Component {
     public id: string,
     config?: PostgresConfig,
   ) {
-    // intentionally defined repeatedly like this for dead code elimination when in prod
     if (process.env.OCEL_PHASE === "discovery") {
       defer(
         rpc.resource.declare({

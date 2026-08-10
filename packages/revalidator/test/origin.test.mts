@@ -11,8 +11,6 @@ function message(overrides: Record<string, unknown> = {}): RevalidationMessage {
   return parsed.message;
 }
 
-// The substrate's S3, answering the deploy record with whatever this test wants
-// it to say — including nothing.
 function substrate(answer: Response | Error | (() => Response)): {
   deps: OriginDeps;
   requests: Request[];
@@ -36,17 +34,7 @@ function record(document: string = originDocument()): () => Response {
   return () => new Response(document, { status: 200 });
 }
 
-// The seam `Target` exists for, checked by the compiler rather than asserted in
 // a comment: `@ts-expect-error` is itself an error when the error it names does
-// not happen, so `pnpm typecheck` fails if either of these ever starts
-// compiling. The branded interface this replaced rejected the first and ADMITTED
-// the second — a real target could be spread, its url replaced, and the brand
-// came along with it.
-//
-// `as Target` still compiles, and always will: TypeScript permits an assertion
-// in either direction. That is why the comments in origin.mts claim a seam and
-// not a theorem, and why the property that actually keeps the token safe lives
-// in message.mts's validation and in reading the deploy's own record.
 it("cannot be spelled from a literal, or from a copy of a real one", async () => {
   const { deps } = substrate(record());
   const resolution = await resolve(deps, message());
@@ -78,9 +66,6 @@ it("composes the trigger from the recorded origin and the message's route path",
   expect(resolution.ok && resolution.target.url).toBe(`https://${host}/deep/route`);
 });
 
-// The whole point of resolving rather than validating: a route path that tries
-// to be a host cannot become one, because the composed origin is compared back
-// to the recorded one.
 it("refuses a route path that would leave the recorded origin", async () => {
   const { deps } = substrate(record());
 
@@ -99,11 +84,6 @@ it("refuses a route id the deploy never recorded", async () => {
   });
 });
 
-// The host shape is not what makes the token safe — the record is — but a
-// record that somehow said something else must not be signed for anyway, and
-// "a label somewhere equal to lambda-url" is not a Function URL check: it
-// admits `attacker.lambda-url.us-east-1.evil.example`, whose region it would
-// then read as `us-east-1` and sign against.
 it.each([
   ["a host of another shape entirely", "https://attacker.example.com/"],
   ["a suffix that only looks like one", "https://attacker.lambda-url.us-east-1.evil.example/"],
@@ -133,9 +113,6 @@ it("refuses a record that is not JSON", async () => {
   await expect(resolve(deps, message())).resolves.toEqual({ ok: false, reason: "origin-unusable" });
 });
 
-// A deploy older than the record answers 404 forever; an S3 that is merely
-// unwell answers 503. Only one of them is worth redelivering for, and the
-// reason code is what says which.
 it("calls a missing record unusable and a failing read unavailable", async () => {
   const missing = substrate(() => new Response(null, { status: 404 }));
   const failing = substrate(() => new Response(null, { status: 503 }));
@@ -150,9 +127,6 @@ it("reports an unreachable record as unavailable rather than throwing", async ()
   await expect(resolve(deps, message())).resolves.toEqual({ ok: false, reason: "origin-unavailable" });
 });
 
-// The default budget is the one production runs on — no caller passes
-// originTimeoutMs — so asserting it means catching the number the signal was
-// built from AND that the signal built from it is the one the read waits on.
 it("reads on the documented budget when no caller overrides it", async () => {
   const { deps } = substrate(record());
   const timeout = vi.spyOn(AbortSignal, "timeout");

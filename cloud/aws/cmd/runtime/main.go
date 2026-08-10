@@ -1,13 +1,3 @@
-// Command runtime is the Ocel AWS request-time plane binary: it serves the
-// per-resource services (buckets.v1.BucketService for now — presigned PUT
-// targets, upload-session persist/verify/read in DynamoDB). It ships alongside
-// the deploy binary and is later wrapped by the membrane, which supervises it
-// and injects its address into the app env. Nothing in this slice launches it
-// in a deployed environment; it is exercised by a direct-dial integration test.
-//
-// It reuses the provider's local-channel conventions: it binds a private Unix
-// socket (loopback TCP fallback), prints the OCEL_READY readiness
-// sentinel once bound, and verifies a per-session token on every RPC.
 package main
 
 import (
@@ -28,12 +18,8 @@ import (
 	"github.com/ocelhq/ocel/pkg/channel"
 )
 
-// version is set at build time via -ldflags "-X main.version=...".
 var version = "dev"
 
-// Environment contract. The launcher (the membrane, later) sets these; the
-// endpoint overrides exist for local integration testing against
-// dynamodb-local / MinIO.
 const (
 	sessionTokenEnvVar = channel.SessionTokenEnvVar
 	tableEnvVar        = "OCEL_RUNTIME_STATE_TABLE"
@@ -86,7 +72,6 @@ func run() error {
 	serveErr := make(chan error, 1)
 	go func() { serveErr <- httpSrv.Serve(ln) }()
 
-	// The listener is bound; announce readiness so a launcher can dial in.
 	fmt.Println(channel.FormatReadinessLine(addr))
 
 	select {
@@ -114,7 +99,6 @@ func buildService(ctx context.Context, table, bucketName string) (*bucket.Servic
 	s3Client := s3.NewFromConfig(cfg, func(o *s3.Options) {
 		if s3Endpoint != "" {
 			o.BaseEndpoint = &s3Endpoint
-			// A custom endpoint (MinIO / dynamodb-local rig) is path-style.
 			o.UsePathStyle = true
 		}
 	})

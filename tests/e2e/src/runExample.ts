@@ -13,10 +13,6 @@ import {
   waitForHealth,
 } from "./harness";
 
-// Polls fn until it returns a value or the deadline passes. The detector marks
-// the upload succeeded (which unblocks the client) and delivers the callback
-// that runs onUploadComplete's DB write in the same sweep, so the row can lag
-// the client's resolve by a tick.
 async function poll<T>(
   fn: () => Promise<T | undefined>,
   { timeoutMs = 15_000, intervalMs = 250 } = {},
@@ -30,18 +26,9 @@ async function poll<T>(
   }
 }
 
-// Drives one example end to end through the real CLI:
-//   link (fresh project) -> run (migrate) -> dev (serve) -> CRUD over HTTP.
-// Each example gets its own project, hence its own provisioned database, so
-// the three specs are safe to run in parallel. The examples' ocel.config.ts is
-// checked in and left alone: `ocel link` only writes the untracked
-// .ocel/link.json.
 export function describeExample(spec: ExampleSpec) {
   describe(`${spec.framework} example (e2e)`, () => {
     const token = inject("accessToken");
-    // A per-run id keeps the created project's slug unique across reruns
-    // (`ocel link --create` 409s on a repeat), while staying stable within a
-    // single run.
     const runId = `${Date.now().toString(36)}-${Math.random()
       .toString(36)
       .slice(2, 7)}`;
@@ -62,7 +49,6 @@ export function describeExample(spec: ExampleSpec) {
     it("creates, lists, gets, and deletes a todo", async () => {
       const todos = `${base(spec)}${spec.todosPath}`;
 
-      // create
       const created = await fetch(todos, {
         method: "POST",
         headers: { "content-type": "application/json" },
@@ -78,33 +64,26 @@ export function describeExample(spec: ExampleSpec) {
       expect(todo.done).toBe(false);
       expect(typeof todo.id).toBe("number");
 
-      // list
       const listed = await fetch(todos);
       expect(listed.status).toBe(200);
       const all = (await listed.json()) as Array<{ id: number }>;
       expect(all.some((t) => t.id === todo.id)).toBe(true);
 
-      // get one
       const got = await fetch(`${todos}/${todo.id}`);
       expect(got.status).toBe(200);
       const gotBody = (await got.json()) as { id: number; title: string };
       expect(gotBody.id).toBe(todo.id);
       expect(gotBody.title).toBe("write e2e tests");
 
-      // delete
       const deleted = await fetch(`${todos}/${todo.id}`, {
         method: "DELETE",
       });
       expect(deleted.status).toBe(204);
 
-      // verify gone
       const gone = await fetch(`${todos}/${todo.id}`);
       expect(gone.status).toBe(404);
     });
 
-    // The blob flow needs the dev object store (MinIO). It self-skips when
-    // that isn't up, mirroring the SDK-level dev e2e, so the suite still runs
-    // in environments without it.
     it("uploads a file and records it in documents via onUploadComplete", async (ctx) => {
       if (!(await minioReachable())) {
         ctx.skip();
@@ -133,15 +112,11 @@ export function describeExample(spec: ExampleSpec) {
         },
       );
 
-      // The real bytes reached storage: the flow only reaches "succeeded" once
-      // the detector HEADs a real object. The key carries the uploader's
-      // prefix/path-fn and the file name.
       expect(result.files).toHaveLength(1);
       const key = result.files[0]!.key;
       for (const part of blobSpec.expectedKeyIncludes) expect(key).toContain(part);
       expect(clientKeys).toEqual([key]);
 
-      // onUploadComplete wrote the row; the app's list route surfaces it.
       const row = await poll(async () => {
         const res = await fetch(`${base(spec)}${blobSpec.documentsPath}`);
         if (!res.ok) return undefined;

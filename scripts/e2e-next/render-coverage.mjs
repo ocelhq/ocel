@@ -1,12 +1,4 @@
 #!/usr/bin/env node
-// Renders the cumulative coverage dashboard from sweep-state.json.
-//
-// sweep-state.json is the source of truth; this file is a pure view of it, so it
-// is safe to regenerate at any time. Run it at the end of every sweep:
-//
-//   node scripts/e2e-next/render-coverage.mjs
-//
-// Output: scripts/e2e-next/coverage.html (self-contained, light + dark).
 
 import { readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
@@ -18,13 +10,6 @@ const state = JSON.parse(readFileSync(join(HERE, "sweep-state.json"), "utf8"));
 const esc = (s) =>
   String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
 
-// Issue ids link into the local beads kanban UI. Override the host with
-// BEADS_UI_URL when it is not on the default port; set it empty to render
-// plain, unlinked ids.
-//
-// The registry also holds environment pseudo-issues (env-cloudflare-rum and
-// friends) that beads has never heard of, so only bd-shaped ids get a link —
-// otherwise those render as confidently broken links into an empty board.
 const BEADS_UI_URL = process.env.BEADS_UI_URL ?? "http://localhost:7070";
 const isBeadsId = (id) => /^ocelhq-[a-z0-9]+$/.test(id);
 const issueRef = (id) =>
@@ -48,8 +33,6 @@ const agg = suites.reduce(
   { passed: 0, failed: 0, known: 0, skipped: 0 },
 );
 
-// An issue is an adapter defect or it is not. That split is what decides whether a
-// failure is work for this repo, so it is the only one worth colour-coding.
 const isAdapter = (i) => i.kind === "adapter";
 const issues = Object.entries(state.issues)
   .filter(([, i]) => i.tests > 0)
@@ -61,8 +44,6 @@ const otherTests = issues.filter(([, i]) => !isAdapter(i)).reduce((n, [, i]) => 
 const rate = (agg.passed / (agg.passed + agg.failed)) * 100;
 const adjRate = (agg.passed / (agg.passed + adapterTests)) * 100;
 
-// Which suites each issue has been seen in — the cross-suite reach that makes a
-// signature worth matching before spawning a debugger.
 const reach = {};
 for (const [path, s] of suites) {
   for (const id of Object.values(s.failedTests ?? {})) {
@@ -85,9 +66,6 @@ const bar = (id, i) => {
   </div>`;
 };
 
-// Run entries are canonically flat (suites/passed/failed/...). Earlier sweeps nested
-// them under `counts` or `totals` and spelled the suite count `suitesRun`, so read
-// through those too rather than silently rendering NaN.
 const runStats = (r) => {
   const c = r.counts ?? r.totals ?? r;
   const n = (v) => (typeof v === "number" ? v : null);

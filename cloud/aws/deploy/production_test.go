@@ -16,9 +16,6 @@ import (
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/resources/v1"
 )
 
-// setStoreWorkerBundle writes a deployments-store worker bundle and exports
-// the manifest pointing Cloudflare at it, standing in for the npm launcher
-// (mirrors edgeworker_test.go's setWorkerBundle for the generic worker).
 func setStoreWorkerBundle(t *testing.T) {
 	t.Helper()
 	bundle := filepath.Join(t.TempDir(), "index.js")
@@ -32,11 +29,6 @@ func setStoreWorkerBundle(t *testing.T) {
 	t.Setenv(edge.EnvStoreWorkerBundles, string(raw))
 }
 
-// TestRootStackSpecs_ThreadsEdgeValues guards ocelhq-f0e: the generic worker's
-// OCEL_CACHE_STORE R2 binding degrades to its no-store fallback in every
-// production deploy unless the bootstrap values carrying the cache bucket
-// name reach RootStackSpec, exactly like they already reach AppDeployment.Values
-// for a preview deploy (edgeworker.go's Values: cfg.EdgeValues).
 func TestRootStackSpecs_ThreadsEdgeValues(t *testing.T) {
 	setWorkerBundle(t)
 	setStoreWorkerBundle(t)
@@ -75,10 +67,6 @@ func TestRootStackSpecs_ThreadsEdgeValues(t *testing.T) {
 	})
 }
 
-// Production's worker routes are project-lifetime and reconciled declaratively,
-// so a hostname dropped from the config must lose its route. PruneRoutes is a
-// bool whose zero value is "prune nothing", so a spec that leaves it unset
-// silently stops pruning (ocelhq-5w3).
 func TestRootStackSpecs_ProductionPrunesStaleRoutes(t *testing.T) {
 	setWorkerBundle(t)
 	setStoreWorkerBundle(t)
@@ -94,9 +82,6 @@ func TestRootStackSpecs_ProductionPrunesStaleRoutes(t *testing.T) {
 	if !specs[0].PruneRoutes {
 		t.Error("PruneRoutes = false, want true for production")
 	}
-	// Production apps hold hostnames of their own on workers of their own, so a
-	// stem spanning them would let one app's reconcile sweep another's route —
-	// and one spanning the project would sweep its previews.
 	if specs[0].PruneWorkerStem != "" {
 		t.Errorf("PruneWorkerStem = %q, want empty: a production spec sweeps its own script alone", specs[0].PruneWorkerStem)
 	}
@@ -128,9 +113,6 @@ func TestPreviewWildcard(t *testing.T) {
 	}
 }
 
-// The project owns the wildcard, so every app resolves under one base domain and
-// each app gets its own label below it. The base is carried alongside because the
-// concrete hostnames have nothing to recover it from.
 func TestPreviewHostnames_ResolvesTheWildcardToThePointerHosts(t *testing.T) {
 	cfg := Config{Class: deploymentsv1.Environment_CLASS_PREVIEW, Slug: "proj", Identity: "pr-42"}
 
@@ -164,8 +146,6 @@ func TestPreviewHostnames_ResolvesTheWildcardToThePointerHosts(t *testing.T) {
 	})
 }
 
-// The wildcard is claimed by the project, so an app that declares nothing of its
-// own is still served under it — there is no per-app preview domain to inherit.
 func TestPreviewHostnames_ServesAnAppThatDeclaresNothingUnderTheProjectWildcard(t *testing.T) {
 	cfg := Config{Class: deploymentsv1.Environment_CLASS_PREVIEW, Slug: "proj", Identity: "pr-42"}
 	apps := []*deploymentsv1.ManifestApp{{Name: "web"}, {Name: "api"}}
@@ -197,9 +177,6 @@ func TestResolveWorkerHostnames_ProductionServesItsDeclaredHostnames(t *testing.
 	}
 }
 
-// A preview with no declared domain used to be served on the edge's own vendor
-// subdomain, which silently answers off the production default pointer. There is
-// no preview without a project-owned domain, so the deploy is refused instead.
 func TestRootStackSpecs_PreviewWithNoDeclaredDomainIsRefused(t *testing.T) {
 	setWorkerBundle(t)
 	setStoreWorkerBundle(t)
@@ -219,9 +196,6 @@ func TestRootStackSpecs_PreviewWithNoDeclaredDomainIsRefused(t *testing.T) {
 	}
 }
 
-// A preview declaration that is not a wildcard has no base to hang a pointer host
-// off, so the deploy would attach no route at all and every request 404 with
-// nothing having failed. It must fail instead, naming the app and the domain.
 func TestRootStackSpecs_PreviewWithoutAWildcardFailsTheDeploy(t *testing.T) {
 	setWorkerBundle(t)
 	setStoreWorkerBundle(t)
@@ -242,8 +216,6 @@ func TestRootStackSpecs_PreviewWithoutAWildcardFailsTheDeploy(t *testing.T) {
 	}
 }
 
-// One project, one preview wildcard: two apps claiming different bases would need
-// two entrypoint workers, which is the model this replaced.
 func TestPreviewHostnames_TwoPreviewDomainsInOneProjectAreRefused(t *testing.T) {
 	cfg := Config{Class: deploymentsv1.Environment_CLASS_PREVIEW, Slug: "proj", Identity: "pr-42"}
 	apps := []*deploymentsv1.ManifestApp{{Name: "web"}, {Name: "api"}}
@@ -258,10 +230,6 @@ func TestPreviewHostnames_TwoPreviewDomainsInOneProjectAreRefused(t *testing.T) 
 	}
 }
 
-// The pointer cap is mirrored in cli/internal/previewid and scripts/e2e-next
-// (separate modules, no shared constant), so drift is only ever caught here: an
-// over-long label yields a hostname that never resolves, with no deploy-time
-// diagnostic.
 func TestPreviewHostnames_OverLongPointerFailsTheDeploy(t *testing.T) {
 	pointer := strings.Repeat("p", previewLabelMaxLen+1)
 	cfg := Config{Class: deploymentsv1.Environment_CLASS_PREVIEW, Slug: "proj", Identity: pointer}
@@ -302,16 +270,11 @@ func TestPreviewWorkerName_ProjectScopedAndDistinctFromProduction(t *testing.T) 
 	if want := "ocel-shop--preview"; name != want {
 		t.Fatalf("previewWorkerName = %q, want %q", name, want)
 	}
-	// The worker resolves the app from the request host, so no app ever appears in
-	// its name — and it must never reach this project's production workers.
 	if prod := workerScriptName("shop", "prod", "web"); prod == name || strings.HasPrefix(prod, name) {
 		t.Errorf("production worker %q collides with the preview worker %q", prod, name)
 	}
 }
 
-// One entrypoint worker for the whole project, attached to the wildcard the
-// project declared, pruning everything else off itself and planting the record
-// behind it — the pointer is not in any of it.
 func TestRootStackSpecs_PreviewIsOneProjectScopedSpec(t *testing.T) {
 	setWorkerBundle(t)
 	setStoreWorkerBundle(t)
@@ -351,23 +314,15 @@ func TestRootStackSpecs_PreviewIsOneProjectScopedSpec(t *testing.T) {
 	if spec.RequiredRecord != "" {
 		t.Errorf("RequiredRecord = %q, want empty: the project owns the base domain, so Ocel plants the record", spec.RequiredRecord)
 	}
-	// A pointer-exact route left on a per-app preview worker outranks the
-	// wildcard, so the sweep has to reach that whole worker family — and no
-	// further than it.
 	if spec.PruneWorkerStem != previewWorkerName("proj") {
 		t.Errorf("PruneWorkerStem = %q, want %q", spec.PruneWorkerStem, previewWorkerName("proj"))
 	}
 	if spec.Generic.Vars[envPreview] != "1" {
 		t.Errorf("Vars[%s] = %q, want 1", envPreview, spec.Generic.Vars[envPreview])
 	}
-	// Emitted empty, the worker leaves preview mode and every preview request
-	// 404s with nothing failing at deploy time.
 	if spec.Generic.Vars[envPreviewBaseDomain] != "preview.acme.com" {
 		t.Errorf("Vars[%s] = %q, want preview.acme.com", envPreviewBaseDomain, spec.Generic.Vars[envPreviewBaseDomain])
 	}
-	// The worker serves every app of the project and reads the app off the request
-	// host, so baking one app into it would answer every host with that app. The
-	// app list is what it recovers the app half of the label against instead.
 	if app, ok := spec.Generic.Vars["OCEL_APP"]; ok {
 		t.Errorf("Vars[OCEL_APP] = %q, want it unset for preview", app)
 	}
@@ -376,9 +331,6 @@ func TestRootStackSpecs_PreviewIsOneProjectScopedSpec(t *testing.T) {
 	}
 }
 
-// A project with no worker-backed app still binds the list — empty, which the
-// worker reads as "no apps" and 404s on, exactly as an unbound var would, so the
-// two can never be told apart by accident.
 func TestRootStackSpecs_PreviewAlwaysBindsTheAppList(t *testing.T) {
 	setWorkerBundle(t)
 	setStoreWorkerBundle(t)
@@ -404,8 +356,6 @@ func TestPreviewAppNames_IsALowercasedCommaSeparatedList(t *testing.T) {
 	}
 }
 
-// The claim check turns on this: a hostname held by one of the project's own
-// workers is the project's to keep, and anything else is a conflict.
 func TestProjectOwnsWorker(t *testing.T) {
 	cases := []struct {
 		name   string
@@ -418,9 +368,6 @@ func TestProjectOwnsWorker(t *testing.T) {
 		{"another project's preview worker", "shop", previewWorkerName("other"), false},
 		{"a hand-made worker", "shop", "my-worker", false},
 		{"a sibling whose slug merely starts with ours", "shop", previewWorkerName("shopfoo"), false},
-		// The reason worker names carry a doubled hyphen at the project
-		// boundary: "shop-preview" is a valid slug, and reading its workers as
-		// "shop"'s would let one project repoint and prune the other's routes.
 		{"a sibling whose slug extends ours by a segment", "shop", previewWorkerName("shop-preview"), false},
 		{"that sibling's production worker", "shop", workerScriptName("shop-preview", "prod", "web"), false},
 		{"and ours is not theirs either", "shop-preview", previewWorkerName("shop"), false},
@@ -436,8 +383,6 @@ func TestProjectOwnsWorker(t *testing.T) {
 	}
 }
 
-// Production's routes are project-lifetime and reconciled declaratively: it keeps
-// pruning, plants its own records, and serves its declared hostnames verbatim.
 func TestRootStackSpecs_ProductionKeepsDeclarativeHostnames(t *testing.T) {
 	setWorkerBundle(t)
 	setStoreWorkerBundle(t)
@@ -465,9 +410,6 @@ func TestRootStackSpecs_ProductionKeepsDeclarativeHostnames(t *testing.T) {
 	}
 }
 
-// A preview pointer owns no route of its own — the project's wildcard serves them
-// all and is attached once for its lifetime — so a record has no hostname to
-// carry and a teardown has nothing to read back off it.
 func TestBuildDeploymentRecord_CarriesNoRouteHostnames(t *testing.T) {
 	manifest := &deploymentsv1.Manifest{
 		Slug:      "proj",
@@ -495,9 +437,6 @@ func TestBuildDeploymentRecord_CarriesNoRouteHostnames(t *testing.T) {
 	}
 }
 
-// One entrypoint worker fronts a project whose apps need not share a framework,
-// so the Deployment says what can serve it. The worker reads an absent field as
-// unsupported and 501s, so it must always be on the wire.
 func TestBuildDeploymentRecord_CarriesTheFramework(t *testing.T) {
 	manifest := &deploymentsv1.Manifest{
 		Slug:      "proj",
@@ -517,8 +456,6 @@ func TestBuildDeploymentRecord_CarriesTheFramework(t *testing.T) {
 		t.Errorf("Framework = %q, want next", record.Framework)
 	}
 
-	// An app declaring no framework still writes the field, empty: the worker
-	// answers 501 for it rather than reading a record with no framework at all.
 	bare, err := buildDeploymentRecord(cfg, manifest, manifest.GetApps()[1], buildOnly("DOCS1"), nil)
 	if err != nil {
 		t.Fatalf("buildDeploymentRecord: %v", err)
@@ -532,8 +469,6 @@ func TestBuildDeploymentRecord_CarriesTheFramework(t *testing.T) {
 	}
 }
 
-// varsManifest is one Next app carrying the variables a Deployment record has
-// to be able to account for.
 func varsManifest(variables ...*deploymentsv1.ManifestVariable) *deploymentsv1.Manifest {
 	return &deploymentsv1.Manifest{
 		Slug:      "proj",
@@ -542,8 +477,6 @@ func varsManifest(variables ...*deploymentsv1.ManifestVariable) *deploymentsv1.M
 	}
 }
 
-// varsConfig is the deploy configuration those variables are recorded under,
-// which is nothing but the environment class the audit rule turns on.
 func varsConfig(t *testing.T, class deploymentsv1.Environment_Class) Config {
 	t.Helper()
 	return Config{
@@ -553,8 +486,6 @@ func varsConfig(t *testing.T, class deploymentsv1.Environment_Class) Config {
 	}
 }
 
-// recordVariables is the audit half of a production record for one variable
-// set, which is what every fingerprint claim below is read from.
 func recordVariables(t *testing.T, variables ...*deploymentsv1.ManifestVariable) edge.DeploymentRecord {
 	t.Helper()
 	manifest := varsManifest(variables...)
@@ -565,9 +496,6 @@ func recordVariables(t *testing.T, variables ...*deploymentsv1.ManifestVariable)
 	return record
 }
 
-// An operator auditing a promotion needs the record to say which values it
-// shipped: the fingerprint that distinguishes it from another Deployment of
-// the same build, and the store coordinate and version of every key behind it.
 func TestBuildDeploymentRecord_ProductionCarriesTheFingerprintAndPerKeyVersions(t *testing.T) {
 	record := recordVariables(t,
 		&deploymentsv1.ManifestVariable{Key: "POSTHOG_ID", Class: resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN, Version: 2},
@@ -586,10 +514,6 @@ func TestBuildDeploymentRecord_ProductionCarriesTheFingerprintAndPerKeyVersions(
 	}
 }
 
-// The record's fingerprint is a digest of everything it recorded, not the
-// identity's — that one covers baked values alone, so an app whose every
-// variable is live would otherwise fingerprint as empty and two of its
-// promotions would be indistinguishable in the ledger.
 func TestBuildDeploymentRecord_AnAllLiveAppStillFingerprintsWhatItShipped(t *testing.T) {
 	record := recordVariables(t,
 		&deploymentsv1.ManifestVariable{Key: "SESSION_SECRET", Class: resourcesv1.VariableClass_VARIABLE_CLASS_SECRET, Version: 7},
@@ -600,8 +524,6 @@ func TestBuildDeploymentRecord_AnAllLiveAppStillFingerprintsWhatItShipped(t *tes
 	}
 }
 
-// Rotating one key is exactly what an audit has to be able to see, so two
-// records over the same keys at different versions must not read alike.
 func TestBuildDeploymentRecord_AVersionChangeChangesTheFingerprint(t *testing.T) {
 	before := recordVariables(t,
 		&deploymentsv1.ManifestVariable{Key: "API_KEY", Class: resourcesv1.VariableClass_VARIABLE_CLASS_SENSITIVE, Version: 5},
@@ -615,8 +537,6 @@ func TestBuildDeploymentRecord_AVersionChangeChangesTheFingerprint(t *testing.T)
 	}
 }
 
-// The same variable set has to fingerprint the same however the manifest
-// happened to order it, or an audit could not compare two deploys at all.
 func TestBuildDeploymentRecord_TheFingerprintIsIndependentOfManifestOrder(t *testing.T) {
 	plain := &deploymentsv1.ManifestVariable{Key: "POSTHOG_ID", Class: resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN, Version: 2}
 	live := &deploymentsv1.ManifestVariable{Key: "SESSION_SECRET", Class: resourcesv1.VariableClass_VARIABLE_CLASS_SECRET, Folder: "/api", Version: 7}
@@ -629,9 +549,6 @@ func TestBuildDeploymentRecord_TheFingerprintIsIndependentOfManifestOrder(t *tes
 	}
 }
 
-// A live value is whatever the store holds when the runtime fetches it, so
-// recording the version the deploy happened to see would be the ledger
-// claiming a reproducibility it cannot deliver.
 func TestBuildDeploymentRecord_LiveKeysAreRecordedAsLatestAtRuntime(t *testing.T) {
 	record := recordVariables(t,
 		&deploymentsv1.ManifestVariable{Key: "SESSION_SECRET", Class: resourcesv1.VariableClass_VARIABLE_CLASS_SECRET, Folder: "/api", Version: 7},
@@ -643,10 +560,6 @@ func TestBuildDeploymentRecord_LiveKeysAreRecordedAsLatestAtRuntime(t *testing.T
 	}
 }
 
-// A preview keeps no audit ledger, so it records nothing — and recording
-// nothing is the normal outcome, not a failure the deploy has to survive.
-// Nothing else about the record moves with it: the same inputs built under
-// either class differ in the two audit fields and nowhere else.
 func TestBuildDeploymentRecord_PreviewRecordsNoVariablesAndIsNotAnError(t *testing.T) {
 	manifest := varsManifest(
 		&deploymentsv1.ManifestVariable{Key: "POSTHOG_ID", Class: resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN, Version: 2},
@@ -669,8 +582,6 @@ func TestBuildDeploymentRecord_PreviewRecordsNoVariablesAndIsNotAnError(t *testi
 
 	production := build(deploymentsv1.Environment_CLASS_PRODUCTION)
 	production.Variables, production.ValueFingerprint = nil, ""
-	// CreatedAt is stamped per call, so it is compared as "both stamped it"
-	// rather than for equality.
 	if preview.CreatedAt == 0 || production.CreatedAt == 0 {
 		t.Errorf("CreatedAt = %d (preview) and %d (production), want both stamped", preview.CreatedAt, production.CreatedAt)
 	}
@@ -688,9 +599,6 @@ func TestBuildDeploymentRecord_AnAppWithNoVariablesRecordsNothing(t *testing.T) 
 	}
 }
 
-// The generic worker is AWS_IAM-gated behind its Lambdas, so it must be handed
-// the edge reader's key to sign forwards — the access key as a plain var, the
-// secret key as a secret binding (never plaintext).
 func TestRootStackSpecs_BindsEdgeSigningCredentials(t *testing.T) {
 	setWorkerBundle(t)
 	setStoreWorkerBundle(t)
@@ -734,10 +642,6 @@ func TestRootStackSpecs_BindsEdgeSigningCredentials(t *testing.T) {
 	})
 }
 
-// The worker's cache entrypoint addresses S3 and DynamoDB itself, so it must be
-// handed their coordinates. They are account-global, so they ride as vars on the
-// frozen bundle rather than in each Deployment record — and the region is bound
-// rather than parsed off a Function URL host, which an all-edge app has none of.
 func TestRootStackSpecs_BindsCacheCoordinates(t *testing.T) {
 	setWorkerBundle(t)
 	setStoreWorkerBundle(t)
@@ -780,11 +684,6 @@ func TestRootStackSpecs_BindsCacheCoordinates(t *testing.T) {
 	})
 }
 
-// The image optimizer is account-global like the stores above and rides as a var
-// for the same reason. A substrate that bootstrapped none must bind nothing at
-// all: the worker reads an absent var as "no optimizer" and answers every valid
-// /_next/image request 502, whereas a var bound to the empty string would be a
-// URL it tries to POST to.
 func TestRootStackSpecs_BindsImageOptimizerURL(t *testing.T) {
 	setWorkerBundle(t)
 	setStoreWorkerBundle(t)
@@ -818,15 +717,6 @@ func TestRootStackSpecs_BindsImageOptimizerURL(t *testing.T) {
 	})
 }
 
-// TestRootStackSpecs_BindsRevalidateQueueOnlyWithAConsumer is human decision F's
-// deploy half, and it is a silent-failure guard rather than a tidiness one.
-//
-// Bootstrap publishes the queue URL only alongside a rendered revalidator, so an
-// empty Config value means "this substrate has a queue that nothing drains".
-// Binding it anyway is the epic's signature failure in miniature: the worker
-// enqueues, SQS accepts, the refresh thunk reports landed, the colo sentinel
-// re-arms as though the entry were fresh, and the route stops revalidating until
-// it hard-expires — with nothing in the deploy or the logs saying so.
 func TestRootStackSpecs_BindsRevalidateQueueOnlyWithAConsumer(t *testing.T) {
 	setWorkerBundle(t)
 	setStoreWorkerBundle(t)
@@ -1031,11 +921,9 @@ func TestCheckTagAvailable_NoOpForUntaggedOrFirstDeploy(t *testing.T) {
 	}
 	ctx := context.Background()
 
-	// Untagged deploy: no check regardless of history.
 	if err := checkTagAvailable(ctx, fake, edge.RootStackState{edge.RootStackKeyEndpoint: "http://store"}, ""); err != nil {
 		t.Errorf("untagged deploy should never fail the tag check: %v", err)
 	}
-	// First-ever deploy: no store yet (no endpoint), so no history to read.
 	if err := checkTagAvailable(ctx, fake, nil, "v1.2.3"); err != nil {
 		t.Errorf("first deploy (no store) should never fail the tag check: %v", err)
 	}
@@ -1108,10 +996,6 @@ func TestFinalizeProductionDeploy_SecondDeployProducesNewPromotionRetainingPrior
 	}
 }
 
-// A rotation reuses the framework build, so both Deployments carry the same
-// build id and only the value fingerprint tells them apart. The rotation still
-// stages its own record and issues its own promotion, and the promotion the
-// prior Deployment was made live by is left exactly as it was.
 func TestFinalizeDeploy_RotationOfOneBuildIsANewDeploymentAndPromotion(t *testing.T) {
 	fake := &recordingRootStack{}
 	ctx := context.Background()
@@ -1154,9 +1038,6 @@ func TestFinalizeDeploy_RotationOfOneBuildIsANewDeploymentAndPromotion(t *testin
 	}
 }
 
-// Rotating twice is three Deployments of one build, not a pair that keeps
-// overwriting itself — and all three still address the same published bytes,
-// which is what makes a rotation free of a framework rebuild.
 func TestFinalizeDeploy_TwoRotationsOfOneBuildAreThreeDistinctDeployments(t *testing.T) {
 	cfg := Config{ArtifactRoot: edgeAppTree(t), Env: "prod", Edge: testLoaderEdge()}
 	manifest := nextManifest()
@@ -1210,9 +1091,6 @@ func TestFinalizeDeploy_TwoRotationsOfOneBuildAreThreeDistinctDeployments(t *tes
 	}
 }
 
-// orderTrackingRootStack wraps recordingRootStack to additionally record the
-// relative order of reconcile/stage/promote calls, which recordingRootStack's
-// own per-kind slices cannot express on their own.
 type orderTrackingRootStack struct {
 	*recordingRootStack
 	calls []string
@@ -1270,9 +1148,6 @@ func TestReconcileRootStack_NoSpecsReturnsPriorUnchanged(t *testing.T) {
 	}
 }
 
-// The identity is derived in exactly one place, and today it is the framework
-// build id with no fingerprint — so a Deployment's identity is byte-identical to
-// the build id it came from.
 func TestAssignIdentities_NextAppTakesItsBuildIDWithNoFingerprint(t *testing.T) {
 	cfg := Config{ArtifactRoot: writeTree(t, map[string]string{
 		"apps/web/routing-manifest.json": `{"buildId":"WEB1"}`,
@@ -1312,10 +1187,6 @@ func TestAssignIdentities_FrameworkWithNoBuildIDGetsAMintedOne(t *testing.T) {
 	}
 }
 
-// TestAssignIdentities_BakedValuesFingerprintTheIdentity is what lets a
-// rotation exist at all: the build id is unchanged by a vars-only deploy, so
-// the values the Deployment bakes are the only thing that can tell it from the
-// Deployment it replaces.
 func TestAssignIdentities_BakedValuesFingerprintTheIdentity(t *testing.T) {
 	cfg := Config{ArtifactRoot: writeTree(t, map[string]string{
 		"apps/web/routing-manifest.json": `{"buildId":"WEB1"}`,
@@ -1334,9 +1205,6 @@ func TestAssignIdentities_BakedValuesFingerprintTheIdentity(t *testing.T) {
 	}
 }
 
-// TestAssignIdentities_NothingBakedStaysTheBareBuildID holds the line that
-// makes fingerprints free for everyone who bakes nothing: their records, stack
-// names and promotions are byte-for-byte what they were before.
 func TestAssignIdentities_NothingBakedStaysTheBareBuildID(t *testing.T) {
 	cfg := Config{ArtifactRoot: writeTree(t, map[string]string{
 		"apps/web/routing-manifest.json": `{"buildId":"WEB1"}`,
@@ -1355,8 +1223,6 @@ func TestAssignIdentities_NothingBakedStaysTheBareBuildID(t *testing.T) {
 	}
 }
 
-// The record is keyed by the identity, but the bytes the build published are
-// keyed by the build id alone — two Deployments of one build share them.
 func TestBuildDeploymentRecord_IdentityKeysTheRecordAndTheBuildKeysTheBytes(t *testing.T) {
 	cfg := Config{ArtifactRoot: edgeAppTree(t), Env: "prod", Edge: testLoaderEdge()}
 	manifest := nextManifest()
@@ -1381,8 +1247,6 @@ func TestBuildDeploymentRecord_IdentityKeysTheRecordAndTheBuildKeysTheBytes(t *t
 	}
 }
 
-// The record's wire name for its key predates identities and stays as it is:
-// the store and the frozen worker read this JSON.
 func TestBuildDeploymentRecord_IdentityIsWiredAsBuildId(t *testing.T) {
 	cfg := Config{ArtifactRoot: edgeAppTree(t), Env: "prod", Edge: testLoaderEdge()}
 	app := &deploymentsv1.ManifestApp{Name: "web", Framework: frameworkNext}
@@ -1405,8 +1269,6 @@ func TestBuildDeploymentRecord_IdentityIsWiredAsBuildId(t *testing.T) {
 	}
 }
 
-// The promotion's per-app entry is what the store resolves a record by, so it
-// must be the identity, not the build both Deployments of a rotation share.
 func TestFinalizeDeploy_PromotionCarriesRenderedIdentities(t *testing.T) {
 	fake := &recordingRootStack{}
 	id := fingerprinted("b1", "fp1")

@@ -1,4 +1,3 @@
-// Command ocel is the Ocel CLI.
 package main
 
 import (

@@ -3,13 +3,10 @@ import { Hono } from "hono";
 import { createRouteHandler } from "ocel/blob/hono";
 import { pg, uploads } from "../ocel/index";
 
-// postgres("main") is resolved from the environment `ocel dev` injects, so the
-// server never sees a connection string of its own.
 const app = new Hono();
 
 const PORT = Number(process.env.PORT ?? 3103);
 
-// Readiness probe the e2e harness polls before hitting the CRUD routes.
 app.get("/health", (c) => c.json({ ok: true }));
 
 app.post("/todos", async (c) => {
@@ -54,8 +51,6 @@ app.delete("/todos/:id", async (c) => {
   return c.body(null, 204);
 });
 
-// The upload surface for the `uploads` bucket (?op=presign|callback|poll),
-// mounted for both methods at this exact path.
 app.on(["GET", "POST"], "/api/upload", createRouteHandler(uploads));
 
 app.get("/documents", async (c) => {

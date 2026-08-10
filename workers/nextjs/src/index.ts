@@ -55,8 +55,6 @@ import {
   type DeploymentsBinding,
   type DeploymentsDeps,
 } from "./deployments";
-// Re-exported from the main module so ctx.exports carries a loopback binding for
-// it, which is the only way the edge's dynamic worker can reach storage.
 export { CacheEntrypoint } from "./cache-entrypoint";
 import type { CacheEntrypointProps, IsrWriterBinding } from "./cache-entrypoint";
 import { normalizeBaseDomain, previewApps, previewTarget } from "./preview";
@@ -64,10 +62,6 @@ import { edgeOriginFetch } from "./signing";
 import { retryTransientOrigin } from "./retry";
 import type { ObjectStoreReader } from "./tag-clock";
 
-// The request headers a Next App Router response varies on. The colo cache key
-// is derived from these directly (see variantPath), and Next's own allowHeader
-// for a prerender omits them — so the origin still needs them forwarded to
-// render the right variant on a cache miss.
 const RSC_FORWARD_HEADERS = new Set([
   "rsc",
   "next-router-prefetch",
@@ -76,34 +70,12 @@ const RSC_FORWARD_HEADERS = new Set([
   "next-url",
 ]);
 
-// Many routes share one Lambda, so the Function URL alone does not say what to
-// run: this header names which entry of that bundle the launcher must invoke.
-// A manifest built before bundling carries no entryKey at all, and its
-// per-route launcher ignores the header — so a *missing* entryKey means no
-// header, which is not the same as an entryKey the build declared as the empty
-// string. The launcher's dispatcher 502s on an absent header and looks any
-// present value — "" included — up in its own entry table, so the distinction
-// it draws is presence, not truthiness.
 const ENTRY_HEADER = "x-ocel-entry";
 
-// The header Next reads to decide a request is speculative, and so to serve a
-// stale entry without starting a render. SUPPRESS_SELF_REVALIDATION (cache.ts)
-// is the revert point for both halves of that suppression.
 const PREFETCH_PURPOSE = "purpose";
 
-// x-ocel-* is the control plane's own namespace — x-ocel-entry selects which code
-// the origin runs — so no value in it may ever come from a client. The whole
-// namespace is dropped from every inbound request before anything is built from
-// it, which makes the forwarded values exactly the ones this worker stamped.
 const CONTROL_PREFIX = "x-ocel-";
 
-// Outside that namespace but just as much this worker's to stamp: next-resume is
-// what tells the origin a request is the dynamic half of a PPR serve, and the
-// origin answers one under minimal mode — Next's own caching, fallback and
-// revalidation handed to the platform. A client that could forge it could make a
-// non-PPR SSG route render and cache a path generateStaticParams never produced.
-// Next itself only ever emits it from the build's own resume chain, never from a
-// browser, and resumeRequest sets it on the one leg that is a resume.
 const CONTROL_HEADERS = ["next-resume"];
 
 function withoutControlHeaders(headers: Headers): Headers {
@@ -117,12 +89,6 @@ function withoutControlHeaders(headers: Headers): Headers {
   return kept;
 }
 
-// Next's own router-server strips these off every externally-originated
-// request before anything else runs — they are its internal protocol with
-// middleware and the render worker, not something a client is ever meant to
-// set. This worker's own transport re-adds the one it still needs
-// (x-nextjs-data, in forward() below) once it has established that itself
-// from the URL, never by trusting what arrived on the wire.
 const NEXT_INTERNAL_HEADERS = [
   "x-middleware-rewrite",
   "x-middleware-redirect",
@@ -144,70 +110,21 @@ function withoutNextInternalHeaders(headers: Headers): Headers {
 }
 
 export interface Env {
-  // The service binding to the shared deployments-store worker (ADR 0002),
-  // through which the active Deployment is resolved at request time.
   DEPLOYMENTS: DeploymentsBinding;
-  // The project slug — addresses this project's own instance in the shared
-  // deployments-store worker (idFromName), carried on every resolve RPC.
   OCEL_SLUG: string;
-  // This frozen worker's own app identity — one script per app — used to look
-  // up its Deployment in the project's deployments-store instance. Baked for
-  // production only; a preview worker fronts the whole project and reads the
-  // app off the request host instead.
   OCEL_APP?: string;
-  // Preview mode: when OCEL_PREVIEW is "1" and a base domain is set, this one
-  // worker serves the whole project behind the single wildcard route
-  // *.<base>/*, and each request's subdomain label names both the deployment
-  // pointer and the app to serve (see ./preview). Both must be present and
-  // well-formed; a partial config degrades to normal mode.
   OCEL_PREVIEW?: string;
   OCEL_PREVIEW_BASE_DOMAIN?: string;
-  // The project's app names, comma-separated (e.g. "web,admin"). It is what
-  // makes the label grammar unambiguous: the app half of <pointer>--<app> is
-  // recognized by matching this list, and a bare <pointer> label is legal only
-  // where this names exactly one app.
   OCEL_PREVIEW_APPS?: string;
-  // Bound only where the edge provisioned a cache store; together with the
-  // active Deployment's ISR prefix, its presence is what lets the worker
-  // read the ISR cache directly.
   OCEL_CACHE_STORE?: R2Bucket;
-  // The service binding to the shared ISR writer worker, which owns every
-  // build's tag-clock replica: an invalidation raised on the edge is posted
-  // there rather than written here, so one publisher per build merges them.
-  // Optional like the store — a substrate whose bootstrap predates the writer
-  // leaves an invalidation recorded in DynamoDB and unreplicated, which is what
-  // it was before the edge published at all.
   ISR_WRITER?: IsrWriterBinding;
-  // The edge reader's IAM credentials. The app's Lambdas are provisioned with
-  // AWS_IAM Function URL auth, so the worker signs every origin forward with
-  // these (SigV4). Absent only on a substrate whose edge runs inside the
-  // provider's trust boundary — where the Function URLs are not IAM-gated.
   OCEL_EDGE_ACCESS_KEY_ID?: string;
   OCEL_EDGE_SECRET_KEY?: string;
-  // The account-global stores the cache entrypoint addresses under those
-  // credentials, and the region they live in. Nothing here is per-deployment —
-  // bootstrap provisions one table and one bucket for the whole account — so
-  // they ride as worker vars rather than in each Deployment record; what scopes
-  // them to one app is the ISR prefix the record already carries. Optional like
-  // every other binding: a substrate that binds none of them leaves the edge
-  // uncached rather than failing to boot.
   OCEL_AWS_REGION?: string;
-  // The substrate's ISR revalidation queue. Bound only where a consumer exists
-  // to drain it (cloud/edge/resolver.go); unbound, every admitted refresh
-  // renders through the origin as it did before the queue existed.
   OCEL_REVALIDATE_QUEUE_URL?: string;
   OCEL_STATE_TABLE?: string;
   OCEL_ISR_BUCKET?: string;
-  // The Function URL of the substrate's image optimizer, which /_next/image is
-  // forwarded to under the same signed path as every other origin call. A worker
-  // var and not a routing-manifest field: the manifest describes one build, and
-  // one optimizer serves every app and deployment in the substrate. Absent on a
-  // substrate that bootstrapped none, which leaves the image origin unbound and
-  // every valid image request a 502.
   OCEL_IMAGE_OPTIMIZER_URL?: string;
-  // The dynamic-worker loader the Deployment's edge bundle is compiled through.
-  // Optional so a substrate without the binding degrades to a 500 on the edge
-  // routes alone rather than failing to boot.
   LOADER?: WorkerLoader;
 }
 
@@ -227,20 +144,14 @@ type DispatchTarget =
   | { kind: "static" }
   | {
       kind: "lambda";
-      // The bundle's identity, and the functionUrls key. Many pathnames share it.
       id: string;
-      // Which entry inside that bundle renders this route.
       entryKey?: string;
       parent?: string;
       revalidate?: unknown;
     }
   | {
       kind: "prerender";
-      // The parent bundle's identity, and the functionUrls key. Absent when the
-      // route that regenerates this prerender runs on the edge: there is no
-      // Function URL then, so there is nothing for an id to name.
       id?: string;
-      // The entry inside the parent bundle that regenerates this prerender.
       entryKey?: string;
       tags?: string[];
       allowQuery?: string[];
@@ -248,12 +159,7 @@ type DispatchTarget =
         initialExpiration?: number;
         initialRevalidate?: number | false;
       };
-      // The headers the build declares for this route's resume request, read
-      // from the manifest rather than assumed.
       pprChain?: { headers: Record<string, string> };
-      // Set when the route that regenerates this prerender runs on the edge:
-      // its presence alone is what routes every tier below the cache to this
-      // entry instead of to a Function URL — and no tier can revalidate.
       edgeEntryKey?: string;
       config: {
         allowQuery?: string[];
@@ -275,23 +181,12 @@ interface MiddlewareMatcher {
 interface Manifest {
   buildId: string;
   basePath: string;
-  // Absent on a manifest built before the adapter emitted them, which reads as
-  // `false` — today's behaviour.
   trailingSlash?: boolean;
   skipTrailingSlashRedirect?: boolean;
   skipMiddlewareUrlNormalize?: boolean;
   pathnames: string[];
   routes: unknown;
   dispatch: Record<string, DispatchTarget>;
-  // Absent when the app ships no middleware. A discriminated union on
-  // `runtime`: legacy middleware.ts always ran on the edge, so a manifest
-  // built before this field existed carries none at all — absent reads as
-  // "edge", never a separate migration path. Next 16 deprecated
-  // middleware.ts for proxy.ts, which the framework pins to the Node.js
-  // runtime with no way to opt back to edge — so it ships inside the app's
-  // own Lambda bundle as a reserved entry (entryKey "/_middleware") and is
-  // reached the same way any other route on that bundle is: `id` names it in
-  // `functionUrls`, exactly like a `kind: "lambda"` dispatch target.
   middleware?:
     | { runtime?: "edge"; entryKey: string; matchers?: MiddlewareMatcher[] }
     | {
@@ -300,36 +195,17 @@ interface Manifest {
         entryKey: string;
         matchers?: MiddlewareMatcher[];
       };
-  // Absent when the app opted out of the built-in optimizer (a custom loader,
-  // or unoptimized: true). next/image then emits the original src and never
-  // requests /_next/image, so the route is not registered at all and the path
-  // falls through to the asset store exactly as any other unmatched path.
   images?: ImageConfig;
-  // The pages-router i18n block, verbatim from next.config as the build adapter
-  // emitted it. Every page route the manifest carries is locale-prefixed under
-  // it, so routing must prefix the request's pathname to match. Absent for
-  // app-router builds, which do i18n in user middleware instead.
   i18n?: I18nConfig;
-  // Every static file the build emitted, by served path, with the sha256 of its
-  // bytes. The image cache keys a local source by its hash, so an optimized
-  // variant outlives the build it was produced under. Absent on a manifest
-  // built before the adapter emitted it.
   assetHashes?: Record<string, string>;
-  // Set by a build that opted into the `x-vercel-cache` alias
-  // (OCEL_E2E_VERCEL_CACHE_HEADER). Absent on every production build.
   vercelCacheAlias?: boolean;
 }
 
-// What resolveRoutes never hands back: the middleware's own Response and the
-// request headers it rewrote. The invoker captures both (see invokeMiddleware in
-// `serveRequest`).
 export interface MiddlewareOutcome {
   response: Response;
   headers: Headers;
 }
 
-// The relevant subset of resolveRoutes' result; typed loosely so the dispatch
-// logic can be exercised with synthetic results in tests.
 interface RouteResult {
   middlewareResponded?: boolean;
   status?: number;
@@ -338,16 +214,9 @@ interface RouteResult {
   resolvedPathname?: string | null;
   invocationTarget?: {
     pathname: string;
-    // The query resolveRoutes merged onto the invocation target — the client's
-    // own params plus whatever a rewrite (next.config or middleware) added.
-    // Absent only in a synthetic RouteResult a test built by hand; a real
-    // resolveRoutes result always carries one, even if empty.
     query?: Record<string, string | string[]>;
   } | null;
-  // Present only alongside a dynamic-route match; absent for an exact
-  // pathname, a redirect, or a miss.
   routeMatches?: Record<string, string | string[]>;
-  // next.config `headers()` rules and the middleware's own response headers.
   resolvedHeaders?: Headers;
   middleware?: MiddlewareOutcome;
 }
@@ -355,49 +224,21 @@ interface RouteResult {
 export interface RouteDeps {
   manifest: Manifest;
   functionUrls: Record<string, string>;
-  // This worker's own naming scope (env.OCEL_SLUG / env.OCEL_APP, ADR 0005).
-  // Carried here rather than read from the manifest because it identifies the
-  // deployment target, not the build: the image origin loads its config from
-  // image-config/<slug>/<app>/<buildId>.json.
   slug: string;
   app: string;
-  // Serves this Deployment's static output (see assets.ts).
   assetStore: AssetStoreDeps;
-  // Injectable so lambda/external forwarding can be observed in tests.
   fetch?: typeof fetch;
 
-  // Present when this Deployment carries an edge bundle and the loader binding
-  // exists. Absent leaves middleware and every edge route unservable — they
-  // fail closed with a 500 rather than routing on without them.
   edge?: EdgeInvoker;
 
-  // The SigV4-signing fetch used for Function-URL forwards only: the app's
-  // Lambdas require AWS_IAM auth, so every origin call goes through this. Falls
-  // back to `fetch` when no edge credentials are bound. Never used for external
-  // rewrites or static assets — signing those would leak credentials to hosts
-  // that are not the app's own Lambdas.
   originFetch?: typeof fetch;
 
-  // Absent outside a Worker request (and in routing tests): routes then forward
-  // to their origin uncached.
   cache?: CacheDeps;
 
-  // Where a validated /_next/image request goes. The route is registered by the
-  // manifest's `images` section, not by this — so on a substrate whose bootstrap
-  // provisioned no optimizer nothing binds it and every valid image request is a
-  // 502, in production as much as in tests.
   imageOrigin?: ImageOrigin;
 
-  // The cache store as the durable image tier reads and writes it. Present
-  // wherever the store is bound at all; unlike the ISR tier it needs no prefix
-  // from the Deployment, because an optimized image is keyed by its content and
-  // outlives every build.
   imageStore?: ImageStore;
 
-  // Present when the deploy bound a cache store and injected its prefix:
-  // prerender routes then read the authoritative ISR cache directly from the
-  // store before falling open to the Lambda origin. Absent leaves the Lambda
-  // path unchanged.
   interception?: Pick<
     InterceptDeps,
     "store" | "snapshotCache" | "now" | "waitUntil"
@@ -405,19 +246,9 @@ export interface RouteDeps {
     config: InterceptionConfig;
   };
 
-  // What resolveRouteDeps resolves manifest/functionUrls/interception's ISR
-  // prefix from (ADR 0002). Not itself consumed by dispatchResult — kept
-  // here only as the DI seam resolveRouteDeps takes, alongside cache /
-  // interception.
   deployments?: DeploymentsDeps;
 }
 
-// resolveRouteDeps resolves this app's active Deployment (ADR 0002) via
-// `deployments` and wires its manifest/functionUrls/ISR prefix/asset
-// prefix into a RouteDeps ready for dispatchResult — or, when there is
-// nothing to serve, the terminal Response to return instead: the baked-in
-// 404 when no Deployment has ever gone live for this app, or 503 when the
-// store is unreachable and no cached Deployment can stand in.
 export async function resolveRouteDeps(
   deployments: DeploymentsDeps,
   base: Omit<
@@ -433,11 +264,6 @@ export async function resolveRouteDeps(
   > & {
     interception?: Pick<InterceptDeps, "store" | "snapshotCache" | "now" | "waitUntil">;
     assetStore: Omit<AssetStoreDeps, "assetPrefix">;
-    // What the edge invoker is built from once the Deployment names a bundle:
-    // the loader binding, the store holding it, and the cache loopback its
-    // entries call back through. Both the loopback's scope and the write secret
-    // its raises carry are the Deployment's own, so the stub is minted here from
-    // the resolved record rather than handed over already made.
     edgeRuntime?: {
       loader: WorkerLoader;
       store: ObjectStoreReader;
@@ -506,16 +332,8 @@ function deploymentNotFoundResponse(): Response {
   });
 }
 
-// The one framework this bundle serves. A Deployment declaring anything else
-// resolved fine and is simply not this runtime's to render, so it is answered
-// as unimplemented rather than as a missing or broken deployment.
 const NEXT_FRAMEWORK = "next";
 
-// A record with no framework at all is not a foreign framework but an older
-// record: the field is required and every deploy writes it, so only a promotion
-// made before it existed can still be missing one — which a rollback can reach
-// and a redeploy cannot. The two cases read alike from here and would leave
-// whoever hit the second with nothing to act on, so each names its own remedy.
 function unsupportedFrameworkResponse(framework: string | undefined): Response {
   const body = framework
     ? `This deployment declares "${framework}"; this runtime serves "${NEXT_FRAMEWORK}" only.`
@@ -533,15 +351,6 @@ function unavailableResponse(): Response {
   });
 }
 
-// The image route, ahead of routing and therefore ahead of middleware — where
-// Next runs it too (handleNextImageRequest is called from
-// normalizeAndAttachMetadata, before handleCatchallMiddlewareRequest). Behind
-// middleware, an app whose matcher is broad enough to cover /_next/image would
-// have every image redirected to its login page here and served normally by
-// `next start`, and would pay an edge invocation per image on the way. It also
-// sits ahead of every asset fallthrough: /_next/image is in no build's static
-// output, so the request would otherwise be answered with the build's 404 page.
-// Registered only where the build emitted an image config.
 function imageResponse(
   request: Request,
   deps: RouteDeps,
@@ -566,25 +375,6 @@ function imageResponse(
 
 type RoutingTable = Parameters<typeof resolveRoutes>[0]["routes"];
 
-// Next marks the redirects it generates itself `internal`, which the build's
-// Route shape carries through as `priority`, and the only ones it generates are
-// the trailing-slash rules (its header rules are marked too, but carry no
-// status). serve now answers those rules itself, against the canonical pathname,
-// before routing runs — and the URL routing then sees is the *routing* form,
-// which the add-slash rule matches. Left in the table they would not sit inert:
-// they would 308 every canonical request straight back into a loop.
-//
-// @next/routing's beforeMiddleware loop only short-circuits a redirect inside
-// `if (destination)` — a next.config redirects() rule with no destination
-// (just a Location header) instead sets it on the shared resolvedHeaders and
-// keeps walking the table, so a later matching rule silently overwrites an
-// earlier one's Location. Next's own router-server stops at the first match.
-// A rule is only ever an unconditional match-and-win when it carries no `has`
-// / `missing` of its own — those still depend on runtime state this function
-// cannot evaluate, so the last-wins bug is left alone for them (worth its own
-// follow-up). Truncating the table right after the first such rule that
-// matches this request can never drop the rule that would have been the real
-// match: an unconditional redirect always wins in Next.
 type BeforeMiddlewareRule = RoutingTable["beforeMiddleware"][number] & {
   priority?: boolean;
 };
@@ -600,13 +390,6 @@ function isUnconditionalRedirect(route: BeforeMiddlewareRule): boolean {
   );
 }
 
-// resolveRoutes normalizes a /_next/data/<buildId>/….json URL to its page path
-// (its own normalizeNextDataUrl, gated on shouldNormalizeNextData) before it
-// ever walks beforeMiddleware — so the pathname tested here has to go through
-// the same normalization, or a data request never agrees with the library on
-// which rule matches. Mirrors the library's own algorithm exactly, including
-// its lack of a "/index" -> "/" fold (dataPagePathname's is for a different
-// purpose — the middleware-visible pathname — and does not apply here).
 function nextDataMatchPathname(pathname: string, basePath: string, buildId: string): string {
   const prefix = `${basePath}/_next/data/${buildId}/`;
   if (!pathname.startsWith(prefix)) return pathname;
@@ -636,15 +419,6 @@ function withoutInternalRedirects(
   return { ...table, beforeMiddleware: kept };
 }
 
-// Next's `headers()` rules live in the same list as the trailing-slash redirects
-// and run ahead of them, so they apply to the redirect response too. Rather than
-// rematch them here, the routing phase they live in is run for its headers
-// alone: the table is cut to beforeMiddleware, no pathname can match, and
-// middleware is never invoked. That is a second routing pass, paid only by a
-// request that is being redirected anyway.
-//
-// Everything else the pass resolves is discarded — the Location is the one
-// derived from the config, with the query the rules themselves drop.
 async function trailingSlashRedirect(
   location: string,
   url: URL,
@@ -678,9 +452,6 @@ async function trailingSlashRedirect(
   return new Response(null, { status: 308, headers });
 }
 
-// The one exit every served response leaves through, and so the only place the
-// x-vercel-cache alias is stamped: every tier's status header is set below here
-// (withStatus in cache.ts, composePpr in ppr.ts), and nothing above it.
 export async function serve(
   request: Request,
   deps: RouteDeps,
@@ -691,58 +462,27 @@ export async function serve(
   );
 }
 
-// The whole request path: normalize, buffer, route, dispatch. The body is read
-// here rather than at dispatch because middleware may consume it — routing gets
-// a fresh stream over the buffer, and the forward that follows reuses the same
-// bytes instead of a stream someone else already drained.
 async function serveRequest(
   request: Request,
   deps: RouteDeps,
 ): Promise<Response> {
-  // Ahead of normalization on purpose: /_next/image is answered before routing
-  // ever runs, so a request this route claims is never redirected to a canonical
-  // form. It only claims one where the build emitted an image config; without
-  // one, /_next/image is an unmatched path like any other and normalization
-  // applies to it (see imageResponse).
   const image = imageResponse(request, deps);
   if (image) return image;
 
   const url = new URL(request.url);
-  // isDataRequest is only ever consulted for a pathname that still ends in
-  // "/" (the one case applyPolicy needs it to suppress a strip-slash
-  // redirect for), which a genuine data path — ending in ".json" — never
-  // does on its own: tested against the slash-stripped form instead, so a
-  // client-supplied /_next/data/<buildId>/x.json/ is still recognized as one.
   const isDataRequest =
     url.pathname.endsWith("/") &&
     isNextDataPathname(url.pathname.slice(0, -1), deps.manifest, deps.manifest.buildId);
   const canonical = canonicalPathname(url.pathname, deps.manifest, isDataRequest);
-  // Before bufferBody and before routing, so a redirected request neither has
-  // its body read nor reaches middleware. Relative Location, as the manifest's
-  // own redirect rules emit — which are now inert, because everything past here
-  // is already canonical.
   if (canonical !== url.pathname) {
     return trailingSlashRedirect(canonical + url.search, url, request, deps);
   }
 
   const body = await bufferBody(request);
-  // Held for the middleware URL below: past this point url.pathname is the
-  // routing form, and where the 308 is suppressed the requested form cannot be
-  // derived back out of it.
   const requested = url.pathname;
   const routed = routingPathname(url.pathname);
   const rerouted = routed !== url.pathname;
   if (rerouted) url.pathname = routed;
-  // The single rebuild of the served request: routing, dispatch, the asset key,
-  // the colo cache key and the origin forward all read the routing form off it
-  // and none of them normalize again. Unconditional (not just on a body or a
-  // reroute) because it is also where a client-supplied copy of Next's
-  // internal protocol headers — its own contract with middleware and the
-  // render worker, forged from the outside — is stripped, exactly as Next's
-  // router-server does at ingress. Built from `url` and the already-buffered
-  // `body`, never from `request` itself, so this never touches request's own
-  // body stream — a request answered by the redirect above must reach here
-  // having never been read.
   request = new Request(url, {
     method: request.method,
     headers: withoutNextInternalHeaders(request.headers),
@@ -752,11 +492,6 @@ async function serveRequest(
     signal: request.signal,
   });
 
-  // Ahead of routing and behind normalization, as Next's router-server does it:
-  // a request that names no locale is given one to match on, and the root may
-  // redirect to the locale the visitor asked for. The prefix goes on the routing
-  // URL alone — the request keeps the name the client used, which is what the
-  // 308 above, the middleware URL below and every cache key are derived from.
   const routingUrl = new URL(request.url);
   if (deps.manifest.i18n) {
     const resolution = resolveLocale(
@@ -773,17 +508,12 @@ async function serveRequest(
   }
 
   let outcome: MiddlewareOutcome | undefined;
-  // Wrapped so the fail-closed check below is a presence test, not a
-  // truthiness test — a thrown falsy value must still trip it.
   let failure: { error: unknown } | undefined;
 
   const result = (await resolveRoutes({
     url: routingUrl,
     buildId: deps.manifest.buildId,
     basePath: deps.manifest.basePath,
-    // Normalized above instead: the library's own i18n handling diverges from
-    // Next on the root path, on when a locale redirect fires, and on app-router
-    // outputs (see ./i18n).
     i18n: undefined,
     headers: request.headers,
     requestBody: streamOf(body) as ReadableStream,
@@ -795,27 +525,13 @@ async function serveRequest(
       deps.manifest.buildId,
     ),
 
-    // resolveRoutes has no matcher field: whether middleware runs at all is
-    // entirely this callback's decision, and it returns neither the middleware's
-    // Response nor its redirect — so both are captured on the way through.
     invokeMiddleware: async (ctx) => {
       const middleware = deps.manifest.middleware;
       if (!middleware) return {};
       try {
-        // Next sets this on the request before middleware ever runs
-        // (setIsNextDataRequest, ahead of the middleware route in its own
-        // routing table) — it is what the edge adapter reads to turn a
-        // middleware redirect into x-nextjs-redirect instead of Location for
-        // a client-transition fetch. Derived from the URL alone, same as
-        // everywhere else this question is asked: a client-forged header was
-        // already stripped at ingress and must not be trusted back in here.
         if (isNextDataPathname(requested, deps.manifest, deps.manifest.buildId)) {
           ctx.headers.set("x-nextjs-data", "1");
         }
-        // Middleware runs ahead of the filesystem lookup, so the URL it is
-        // handed is not the routing one ctx carries: it is the canonical form
-        // the client is on, and for a data request the page that request is
-        // for. A copy — resolveRoutes goes on routing with ctx.url.
         const matchUrl = new URL(ctx.url);
         matchUrl.pathname = middlewareMatchPathname(
           requested,
@@ -825,8 +541,6 @@ async function serveRequest(
         if (!middlewareMatches(middleware.matchers, matchUrl, ctx.headers)) {
           return {};
         }
-        // Only skipMiddlewareUrlNormalize separates the two: it hands middleware
-        // the client's own URL while the matchers keep matching the routed one.
         const mwUrl = new URL(ctx.url);
         mwUrl.pathname = middlewarePathname(
           requested,
@@ -844,19 +558,11 @@ async function serveRequest(
               redirect: "manual",
             }),
         );
-        // ctx.headers is resolveRoutes' own mutable clone, which
-        // responseToMiddlewareResult rewrites in place and never returns; hold
-        // the reference or every request-header override is lost.
         const middlewareResult = responseToMiddlewareResult(
           response,
           ctx.headers,
           mwUrl,
         );
-        // A rewrite goes back into routing, so it needs the routing form: a
-        // middleware built on NextURL emits its destination canonically
-        // (/b -> /b/ under trailingSlash), which matches no build pathname.
-        // Next absorbs the same slash in its filesystem lookup. The redirect is
-        // client-visible and stays exactly as authored.
         const rewrite = middlewareResult.rewrite;
         if (rewrite && rewrite.origin === mwUrl.origin) {
           rewrite.pathname = routingPathname(rewrite.pathname);
@@ -870,8 +576,6 @@ async function serveRequest(
     },
   })) as RouteResult;
 
-  // Fail closed: middleware that could not run must not be routed past. An auth
-  // middleware failing open serves the pages it exists to protect.
   if (failure) {
     console.error("ocel: middleware invocation failed", failure.error);
     return new Response("Middleware failed", { status: 500 });
@@ -884,23 +588,9 @@ async function serveRequest(
   );
 }
 
-// @next/routing checks a dynamic route before the exact-pathname (filesystem)
-// check inside its afterFiles/fallback rewrite branches — the opposite of
-// Next's own router-server, which checks the filesystem first (checkTrue() in
-// resolve-routes.ts). A rewrite landing on a page that also happens to match a
-// dynamic template is resolved to the template instead of the page it named.
-// invocationTarget.pathname is always the rewrite's real destination, so when
-// that destination is itself one of the build's pathnames, it is the page
-// Next would have served — swap it back in. A destination the build never
-// registered (an unmatched dynamic-route param) is left alone: that is the
-// dynamic route genuinely winning, not this bug.
 function preferExactPathname(result: RouteResult, manifest: Manifest): RouteResult {
   const target = result.invocationTarget?.pathname;
   if (
-    // Only ever a swap, never how a redirect or middleware-responded result
-    // (neither of which sets resolvedPathname) picks one up — that would
-    // stamp x-matched-path on a response the invariant at dispatchResult says
-    // must carry none.
     result.resolvedPathname &&
     target !== undefined &&
     target !== result.resolvedPathname &&
@@ -925,22 +615,14 @@ export async function dispatchResult(
   if (!result.resolvedHeaders && !result.resolvedPathname) return response;
 
   const tagged = new Response(response.body, response);
-  // Applied here, after every cache tier: merging next.config `headers()` and
-  // the middleware's response headers before serveCached memoizes would bake
-  // one visitor's Set-Cookie into an entry every visitor is served.
   applyResolvedHeaders(tagged.headers, result.resolvedHeaders);
   stripMiddlewareHeaders(tagged.headers);
-  // x-matched-path mirrors Next.js: the matched route template with dynamic
-  // segments left un-substituted (e.g. /posts/[id]). Set only when routing
-  // resolved to a route — unmatched assets, 404s, and redirects carry none.
   if (result.resolvedPathname) {
     tagged.headers.set("x-matched-path", result.resolvedPathname);
   }
   return tagged;
 }
 
-// Set-Cookie is the one header a Headers clone flattens, so it is carried over
-// as the list it is.
 function applyResolvedHeaders(target: Headers, resolved: Headers | undefined): void {
   if (!resolved) return;
   resolved.forEach((value, name) => {
@@ -951,20 +633,8 @@ function applyResolvedHeaders(target: Headers, resolved: Headers | undefined): v
   }
 }
 
-// Next stamps this on a Server Action response that invalidated a tag, a cookie
-// or a path. It names no tags, which is all this needs: the question it answers
-// is whether the replica this worker has cached is still the current one.
 const NEXT_ACTION_REVALIDATED = "x-action-revalidated";
 
-// A Server Action reaches its origin through this worker, and the origin has
-// published the new replica before it answers — so at this moment the colo's
-// cached view of the tag clock is the only thing left between the visitor and
-// their own write. Dropping it here is what makes an invalidation observable on
-// the visitor's next request instead of up to a snapshot TTL later.
-//
-// Awaited rather than deferred: the guarantee being bought is that the purge has
-// landed by the time the client holds the action's response, and the client's
-// next request races anything left on waitUntil.
 async function noteRevalidation(
   response: Response,
   deps: RouteDeps,
@@ -983,20 +653,12 @@ async function dispatch(
 ): Promise<Response> {
   const { manifest, functionUrls } = deps;
   const doFetch = deps.fetch ?? fetch;
-  // Function-URL forwards are signed; external rewrites and static assets are
-  // not (they reach arbitrary hosts, so must never carry AWS credentials).
   const doOrigin = originFetch(deps);
   const url = new URL(request.url);
-  // Middleware may have rewritten the request's headers; everything downstream
-  // forwards those, not the ones the client sent.
   const headers = withoutControlHeaders(
     result.middleware?.headers ?? request.headers,
   );
 
-  // Under pages-router i18n the client asks for an unprefixed path while the
-  // build emitted one document per locale (static/en/about.html), so the object
-  // is named by what routing resolved rather than by what was asked for. Every
-  // other build serves the asset under the request's own name.
   const assetUrl =
     manifest.i18n && result.invocationTarget
       ? new URL(result.invocationTarget.pathname + url.search, url)
@@ -1019,11 +681,6 @@ async function dispatch(
     );
   }
   if (isRoutingRedirect(result)) {
-    // Built explicitly rather than with Response.redirect, which cannot carry
-    // the Set-Cookie an auth middleware pairs with its redirect. Checked before
-    // resolvedPathname: routing may have gone on to resolve a real page (a
-    // trailingSlash app self-redirecting /about still resolves /about), and the
-    // redirect must win over serving it.
     return new Response(null, { status: result.status });
   }
   if (result.externalRewrite) {
@@ -1033,33 +690,17 @@ async function dispatch(
     return staticAsset();
   }
 
-  // Next applies redirects() ahead of its dynamic-param decode check
-  // (checkTrue runs after the redirect table), so a path that both matches a
-  // next.config redirect and carries an undecodable dynamic segment is
-  // redirected, not 400'd. routeMatches is only ever populated alongside a
-  // resolved page — every branch above that can fire without one (middleware,
-  // a redirect, an external rewrite) has already returned — so this is the
-  // earliest point that agrees with Next's ordering.
   if (hasUndecodableRouteMatch(result.routeMatches)) {
     return new Response("Bad Request", { status: 400 });
   }
 
   const target = manifest.dispatch[result.resolvedPathname];
   if (!target) {
-    // Not in the manifest — fall back to the asset store before giving up, so
-    // any file present in static/ is still served even if unenumerated.
     return staticAsset();
   }
 
   switch (target.kind) {
     case "static":
-      // The manifest key names the file; the request path does not. One
-      // document answers every path a dynamic template spans
-      // (/docs/[slug].html for /docs/slug-1), so the asset is looked up under
-      // the key the target was found at — which under i18n is the localized
-      // key the request was prefixed to. For a directly requested path that key
-      // is the request's own pathname — serve normalized it to the routing form
-      // before routing ever saw it, so the two are the same string here.
       return staticAsset(new URL(result.resolvedPathname, url));
 
     case "lambda": {
@@ -1078,8 +719,6 @@ async function dispatch(
 
     case "edge": {
       if (!target.entryKey) return noEdgeEntry(result.resolvedPathname);
-      // An edge route is invoked under the public origin: it renders the page a
-      // browser asked for, not a forward to some other host.
       return edgeResponse(
         deps,
         target.entryKey,
@@ -1092,10 +731,6 @@ async function dispatch(
   }
 }
 
-// Next throws DecodeError and answers 400 when a matched dynamic route's
-// captured param fails decodeURIComponent (route-matcher.ts) — routeMatches is
-// only ever populated by a dynamic-route match, so an unmatched path (no
-// dynamic route at all) is unaffected and still falls through to a 404.
 function hasUndecodableRouteMatch(
   routeMatches: Record<string, string | string[]> | undefined,
 ): boolean {
@@ -1114,11 +749,6 @@ function hasUndecodableRouteMatch(
 
 type PrerenderTarget = Extract<DispatchTarget, { kind: "prerender" }>;
 
-// dispatchPrerender serves a prerendered route: from the colo cache when it can,
-// from the ISR cache the worker reads itself when edge coordinates are present,
-// and from the route's own renderer whenever neither can answer. That renderer
-// is the parent Lambda, or — for a route that renders on the edge — the entry in
-// the Deployment's edge bundle.
 async function dispatchPrerender(
   request: Request,
   url: URL,
@@ -1127,9 +757,6 @@ async function dispatchPrerender(
   headers: Headers,
   deps: RouteDeps,
 ): Promise<Response> {
-  // An edge-parented prerender is chosen by its edgeEntryKey, never by failing
-  // to find a Function URL: a bundle id and a route id that ever collided would
-  // otherwise route an edge render at a Lambda.
   const edgeEntryKey = target.edgeEntryKey;
   const fnUrl =
     edgeEntryKey || target.id === undefined
@@ -1137,13 +764,8 @@ async function dispatchPrerender(
       : deps.functionUrls[target.id];
   if (!fnUrl && !edgeEntryKey) return noRenderer(target.id);
 
-  // Every Function-URL call this function makes is signed when edge credentials
-  // are bound; an edge-rendered route has no Function URL at all and reaches its
-  // renderer through the loader instead.
   const doFetch = originFetch(deps);
   const forwardUrl = originUrl(fnUrl ?? url.origin, url, result, deps.manifest);
-  // Every tier's origin call goes through render, under its own header set — the
-  // bundle entry is stamped here so no tier can be built without it.
   const render = (rendered: Request) => {
     const entried = withEntry(rendered, target.entryKey);
     return edgeEntryKey
@@ -1156,13 +778,6 @@ async function dispatchPrerender(
   }
   const cache = deps.cache;
 
-  // A request that cannot be answered from any cache tier is forwarded as a
-  // plain invocation, under its own headers. That is the only path that carries
-  // cookies: allowHeader — Next's own filter for a *cached* prerender — omits
-  // them, so a draft-mode request routed through the cache tiers would reach
-  // the origin stripped of the very cookie that makes it draft mode, and render
-  // as an ordinary visitor. A middleware that set a cookie is the same case:
-  // the renderer must see it, and its response is per-visitor.
   if (
     shouldBypass(request, url, target.config) ||
     request.method !== "GET" ||
@@ -1175,8 +790,6 @@ async function dispatchPrerender(
 
   const safeHeaders = new Headers();
   const allowedHeaders = target.config.allowHeader?.map((h) => h.toLowerCase());
-  // Whatever middleware rewrote onto the request is part of what the route
-  // renders from, so it survives allowHeader's filter.
   const overridden = middlewareOverrides(result.middleware);
   for (const [name, value] of headers) {
     const lower = name.toLowerCase();
@@ -1189,53 +802,25 @@ async function dispatchPrerender(
     }
   }
 
-  // A pages-router data request (/_next/data/<build>/route.json) resolves to
-  // the same prerender target as its html route, but must be answered with
-  // JSON pageData, not html. Interception reconstructs only the html/RSC
-  // variants, so those requests fall open to the Lambda exactly as today.
   const isNextData =
     url.pathname.startsWith((deps.manifest.basePath ?? "") + "/_next/data/") &&
     url.pathname.endsWith(".json");
 
-  // The tier that can observe this entry's staleness and refresh it: the
-  // interception read judges the R2 entry, the tag clock makes a raised tag
-  // visible, and every admission site below is built inside it. Its absence is
-  // ordinary — the ISR store binding is optional by design, and a data request
-  // takes this path on a fully bound worker — which is exactly why suppression
-  // reads it rather than standing on where it sits in the function.
   const admissionTier =
     deps.interception && !isNextData ? deps.interception : undefined;
 
-  // The user-path forward, and the only leg suppression applies to. Asking the
-  // Lambda not to render is only safe where something else will: with no
-  // admission tier, a raised tag or a cold colo leaves the route serving the
-  // Lambda's stale entry with nothing anywhere able to replace it, until hard
-  // expiry. Inheriting the client's headers is safe here because the bypass
-  // gate above has already answered everything that is not an ISR-governed GET;
-  // whatever purpose the client sent is overwritten, and the inbound request is
-  // untouched.
   const originHeaders = new Headers(safeHeaders);
   if (SUPPRESS_SELF_REVALIDATION && admissionTier) {
     originHeaders.set(PREFETCH_PURPOSE, "prefetch");
   }
   const origin = () => render(forward(forwardUrl, request, originHeaders));
 
-  // Built from safeHeaders, never from originHeaders: x-prerender-revalidate's
-  // guard sits above the prefetch one in Next's response cache, so the header
-  // here would be dead weight that reads as though this leg were suppressed too.
-  // A client-sent value is dropped for the same reason it is overwritten above,
-  // and it is not merely cosmetic: with no bypassToken configured the
-  // revalidate header is empty, the request is not on-demand, and a client's
-  // `purpose: prefetch` would suppress the very render this leg forces.
   const blockingHeaders = new Headers(safeHeaders);
   blockingHeaders.delete(PREFETCH_PURPOSE);
   blockingHeaders.set("x-prerender-revalidate", target.config.bypassToken ?? "");
   const originBlocking = () =>
     render(forward(forwardUrl, request, blockingHeaders));
 
-  // Edge chunks compile with no incremental cache handler, so an edge render can
-  // never rewrite the ISR entry it was asked to refresh — scheduling one would
-  // only burn an invocation. Edge ISR is bd ocelhq-b7l.
   const revalidates = !edgeEntryKey;
 
   const routePath = result.invocationTarget?.pathname ?? url.pathname;
@@ -1247,17 +832,8 @@ async function dispatchPrerender(
     target.config.renderingMode,
     target.allowQuery,
   );
-  // A stable per-route id for deduping background revalidations, independent of
-  // whether this particular variant is colo-cacheable.
   const refreshKey = `${deps.manifest.buildId}:${routePath}`;
 
-  // What an admitted refresh would name to the queue instead of rendering it
-  // here: the force-render headers of the blocking leg above (the consumer
-  // sends them verbatim), the receipt this framework stamps on a real
-  // regeneration, and the deploy and route the consumer resolves the origin
-  // from. It names no host — that is the consumer's to resolve — so a route
-  // whose renderer is not one of this deploy's recorded functions, or that no
-  // tier below could resolve a prefix for, names nothing and renders here.
   const publicUrl = new URL(request.url);
   const revalidation: RevalidationRoute | undefined =
     admissionTier && revalidates && target.id !== undefined && routePath.startsWith("/")
@@ -1289,17 +865,8 @@ async function dispatchPrerender(
     expiration: target.fallback?.initialExpiration,
   };
 
-  // When edge cache coordinates are present, a prerender read is tried
-  // directly against the cache first; any miss/expiry/error falls open to
-  // the Lambda origin. A complete interception hit carries the entry's
-  // remaining window so serveCached memoizes it exactly as it would the
-  // Lambda's response.
   let cachingOrigin = origin;
   let tagClock: TagClock | undefined;
-  // The CacheDeps every admission site here uses. It is a spread of deps.cache,
-  // which is safe on purpose: the per-isolate in-flight set is a WeakMap on
-  // deps.cache — the Cache object — not on the deps object, so adding the
-  // tier-below read cannot fragment it.
   let cacheDeps = cache;
   if (admissionTier) {
     const { config, ...interceptDeps } = admissionTier;
@@ -1318,23 +885,6 @@ async function dispatchPrerender(
       }),
     );
 
-    // What an admitted refresh consults before it renders. It re-reads R2 past
-    // the entry memo — the memo is what declared the entry stale, and it
-    // outlives the admission wait — and a newer entry there means some other
-    // colo has already regenerated this route: take it into the colo and skip
-    // the render. Anything the colo cannot take (a miss, an entry no newer than
-    // the one being refreshed, a shell that cannot refill a complete variant,
-    // an unreadable store) returns false and the render proceeds, so this can
-    // only ever cost a redundant R2 GET, never a suppressed refresh.
-    //
-    // Newer, not fresh. A route whose revalidate window is shorter than the
-    // round trip is essentially always stale by the time it is read back, so a
-    // freshness test would refuse every entry below and leave the colo serving
-    // its original bytes until hard expiry — a year, on Next's default. A stale
-    // entry below is still strictly better than an older entry here, and taking
-    // it advances this tier's lastModified, which is what the next enqueue's
-    // dedup id is derived from. Promoted stale means the next request serves
-    // STALE and admits again, which is the intended steady state.
     const satisfiedFromBelow = async (refreshing: number) => {
       const below = await intercept(request, interceptTarget, config, {
         ...interceptDeps,
@@ -1347,14 +897,6 @@ async function dispatchPrerender(
         answered.body?.cancel();
         return false;
       }
-      // Newer below — but that only settles the render when this tier ends up
-      // reflecting it. A variant with no colo entry (the PPR admission site) has
-      // nothing to refill: the render's whole effect would have been
-      // regenerating what R2 already holds, so it is genuinely redundant.
-      // A shell answering a colo-cached complete variant is neither: it cannot
-      // refill that variant, so suppressing here would hold the route's
-      // colo-wide claim while leaving the colo serving the entry it wanted
-      // refreshed — and re-suppressing every TTL after.
       if (!keyResult.cacheable) {
         answered.body?.cancel();
         return true;
@@ -1363,22 +905,11 @@ async function dispatchPrerender(
         answered.body?.cancel();
         return false;
       }
-      // This put lands because a response reconstructed from the store carries
-      // no x-nextjs-cache: Next stamps that at serve time and never writes it
-      // into the entry, so the colo's refusal to store a Lambda's suppressed
-      // stale serve cannot fire here. An entry format that ever captured
-      // serve-time headers would break that silently: the put would be skipped,
-      // this would still return true, and the admission would class itself
-      // "landed" and hold the route's colo-wide sentinel over an empty colo.
       await storeInColo(cacheTarget, cache, below.response);
       return true;
     };
     cacheDeps = { ...cache, satisfiedFromBelow };
 
-    // A composed PPR response is rendered for one visitor and must not reach
-    // serveCached, so a route that might postpone is read before the colo cache
-    // is consulted. A STATIC route cannot postpone, so its read stays behind
-    // the cache, where a hit costs no store read at all.
     const mayPostpone =
       target.config.renderingMode !== "STATIC" &&
       request.method === "GET" &&
@@ -1419,14 +950,7 @@ async function dispatchPrerender(
 
     cachingOrigin = async () => {
       const hit = await read();
-      // A complete entry answered from the R2 store is a PRERENDER serve;
-      // serveCached preserves that tier and memoizes the response so the next
-      // request is a colo HIT. A miss falls open to the Lambda, an unstamped
-      // MISS.
       if (hit?.kind !== "complete") return origin();
-      // A stale entry serves immediately; the Lambda regenerates it behind the
-      // request, and this write mirrors that fresh response straight into colo
-      // so the next request is a colo HIT instead of another R2 round-trip.
       if (hit.stale && revalidates) {
         admitRefresh(
           cacheDeps,
@@ -1449,9 +973,6 @@ async function dispatchPrerender(
   }
 
   if (!keyResult.cacheable) {
-    // A per-visitor dynamic variant (PPR navigation, runtime prefetch): never
-    // colo-cached. It goes straight to the Lambda under the same filtered
-    // headers a prerender miss uses today.
     return withStatus(await origin(), "MISS");
   }
 
@@ -1470,11 +991,6 @@ function once<T>(run: () => Promise<T>): () => Promise<T> {
   return () => (pending ??= run());
 }
 
-// @next/routing strips the /_next/data/<buildId>/… wrapper before matching and
-// restores it only on its rewrite branches — a route resolved by the final
-// dynamic-route table comes back with the data-ness gone. Next derives
-// isNextDataRequest from the request URL alone, so invoking that pathname would
-// render the document where the client asked for pageData.
 function dataPathname(pathname: string, url: URL, manifest: Manifest): string {
   const base = manifest.basePath ?? "";
   const prefix = `${base}/_next/data/${manifest.buildId}`;
@@ -1482,18 +998,10 @@ function dataPathname(pathname: string, url: URL, manifest: Manifest): string {
     return pathname;
   }
   if (pathname.startsWith(`${prefix}/`)) return pathname;
-  // Only a real path segment boundary counts as the basePath: /docsy is a
-  // different route from /docs, not /docs plus "y". A pathname outside the
-  // basePath keeps every character it has.
   const route = (withoutBasePath(pathname, base) ?? pathname).replace(/\/$/, "");
-  // Next's normalizeDataPath maps /index back to /, so /index is the inverse of
-  // a root data request — not the /.json denormalizing the empty route gives.
   return `${prefix}${route || "/index"}.json`;
 }
 
-// A rewrite (next.config or middleware) can add query params that exist
-// nowhere on the client's URL — resolveRoutes merges them onto
-// invocationTarget.query, which is the only place they can be read back from.
 function searchFromQuery(query: Record<string, string | string[]>): string {
   const params = new URLSearchParams();
   for (const [key, value] of Object.entries(query)) {
@@ -1503,8 +1011,6 @@ function searchFromQuery(query: Record<string, string | string[]>): string {
   return search ? `?${search}` : "";
 }
 
-// originUrl points a request at its Function URL, preferring the routing
-// result's invocation target so a rewritten path reaches the right handler.
 function originUrl(
   fnUrl: string,
   url: URL,
@@ -1517,14 +1023,6 @@ function originUrl(
   return new URL(dataPathname(pathname, url, manifest) + search, fnUrl);
 }
 
-// bufferBody reads a request's body into memory so every forward of it carries a
-// concrete Content-Length instead of a re-streamed (chunked) body. An AWS Lambda
-// Function URL rejects a chunked request body with a 502 before the function ever
-// runs — which flaps, because whether Cloudflare buffers a small body or streams
-// it is nondeterministic. Buffering here is what the PPR resume already does for
-// its own POST; doing it for the served request makes forwarded actions reliable.
-// It is also what lets middleware read the body without starving the origin: the
-// bytes outlive the one stream a Request carries.
 async function bufferBody(request: Request): Promise<ArrayBuffer | null> {
   if (!request.body || request.method === "GET" || request.method === "HEAD") {
     return null;
@@ -1536,22 +1034,10 @@ function streamOf(body: ArrayBuffer | null): ReadableStream | null {
   return body === null ? null : new Blob([body]).stream();
 }
 
-// The membrane cannot answer a Function URL with a bodyless streamed response —
-// AWS would never terminate it, hanging this worker's own client — so an empty
-// body arrives as one sentinel byte under this header (see the membrane's
-// forward). Restoring the empty body is this hop's job, and it belongs to every
-// origin call rather than to one dispatch path: a prerender, a PPR resume and a
-// background revalidation all forward to the same Function URLs, and a sentinel
-// byte cached as page content would outlive the request that fetched it.
 const EMPTY_BODY_HEADER = "x-ocel-empty-body";
 
-// The Next runtime stamps this on every SSG response once minimal mode is on
-// (the platform's contract with it, not something a client should ever see),
-// so it is this hop's job to consume it same as it consumes EMPTY_BODY_HEADER.
 const NEXT_CACHE_TAGS_HEADER = "x-next-cache-tags";
 
-// originFetch is how every Function-URL forward is made: signed when edge
-// credentials are bound, and always stripped of the sentinel body.
 function originFetch(deps: RouteDeps): typeof fetch {
   const doFetch = deps.originFetch ?? deps.fetch ?? fetch;
   return (async (input, init) => {
@@ -1568,17 +1054,6 @@ function originFetch(deps: RouteDeps): typeof fetch {
   }) as typeof fetch;
 }
 
-// forward rebuilds a request against an origin URL under a chosen header set,
-// keeping the method and body of the request being served.
-//
-// The origin sits behind a Function URL, so its `host` is that URL's host, not
-// the public one the browser addressed. Next's Server Action CSRF check compares
-// the `origin` header against `x-forwarded-host` (falling back to `host`), so the
-// public host is stamped here — as the reverse proxy, this worker is authoritative
-// for it — or every forwarded action would abort on a host/origin mismatch.
-// Matches the origin URL forward() is about to call — after originUrl's own
-// dataPathname rewrite, so a middleware's own forward (whose URL is always the
-// page path, never the data one) never trips it.
 const ORIGIN_DATA_PATH = /\/_next\/data\/[^/]+\/.*\.json$/;
 
 export function forward(
@@ -1591,10 +1066,6 @@ export function forward(
   const forwarded = new Headers(headers);
   forwarded.set("x-forwarded-host", publicUrl.host);
   forwarded.set("x-forwarded-proto", publicUrl.protocol.replace(/:$/, ""));
-  // Next's router-server sets this itself once it recognizes a data URL, and
-  // the origin's own x-nextjs-matched-path response header depends on seeing
-  // it — a signal this worker must supply rather than trust from the client
-  // (see withoutNextInternalHeaders above).
   if (ORIGIN_DATA_PATH.test(url.pathname)) forwarded.set("x-nextjs-data", "1");
   return new Request(url, {
     method: request.method,
@@ -1604,14 +1075,6 @@ export function forward(
   });
 }
 
-// withEntry names the bundle entry an already-built forward must run. It wraps
-// the request rather than any one header set, because a prerender forwards under
-// several (raw, allowHeader-filtered, revalidating) and the origin needs the
-// entry on all of them. With no entry to name the header is removed, never left
-// as it was found: an entryless target's launcher ignores the header, but a
-// forward carrying one it did not choose is one this worker did not author.
-// Only an absent entryKey means no entry — a declared empty one is stamped as
-// an empty value, matching what the manifest emits and what the launcher reads.
 function withEntry(request: Request, entryKey: string | undefined): Request {
   const headers = new Headers(request.headers);
   if (entryKey !== undefined) headers.set(ENTRY_HEADER, entryKey);
@@ -1619,8 +1082,6 @@ function withEntry(request: Request, entryKey: string | undefined): Request {
   return new Request(request, { headers });
 }
 
-// makeRequest is a thunk, not a Request: its body is single-use, and a retry
-// needs a fresh one per attempt.
 function invokeMiddleware(
   middleware: NonNullable<Manifest["middleware"]>,
   deps: RouteDeps,
@@ -1655,8 +1116,6 @@ function noFunctionUrl(id: string): Response {
   return new Response(`No function URL for ${id}`, { status: 502 });
 }
 
-// A prerender resolves to neither a Function URL nor an edge entry: nothing can
-// render it, so it fails closed like every other unresolvable target.
 function noRenderer(id: string | undefined): Response {
   return id === undefined
     ? new Response("No renderer for prerender", { status: 502 })
@@ -1667,9 +1126,6 @@ function noEdgeEntry(pathname: string | null | undefined): Response {
   return new Response(`No edge entry for ${pathname}`, { status: 502 });
 }
 
-// edgeResponse runs one entry of the Deployment's edge bundle, fail-closed:
-// a missing bundle, a loader failure or a throwing entry is a 500, never a
-// silent fall-through to something else.
 async function edgeResponse(
   deps: RouteDeps,
   entryKey: string,
@@ -1685,12 +1141,6 @@ async function edgeResponse(
   }
 }
 
-// Every redirect resolveRoutes does not hand back as a `redirect`: next.config
-// `redirects()`, the adapter's trailing-slash normalization, and the
-// middleware's own redirect. All arrive as a bare status with the target
-// already on resolvedHeaders, and no resolvedPathname, so without this they
-// fall through to the asset store and 404. The status is what marks them —
-// next.config `headers()` can set a location on an ordinary page.
 function isRoutingRedirect(
   result: RouteResult,
 ): result is RouteResult & { status: number } {
@@ -1703,13 +1153,8 @@ function isRoutingRedirect(
   );
 }
 
-// A response with one of these statuses carries no body at all, and constructing
-// one over a body — even the empty body Next's own middleware returns — throws.
 const NULL_BODY_STATUSES = new Set([204, 205, 304]);
 
-// The middleware answered the request itself. resolveRoutes reports only that it
-// did — not the status, not the headers, not the body — so what goes back is the
-// Response the invoker captured, minus the control headers Next reads off it.
 function middlewareResponse(
   outcome: MiddlewareOutcome | undefined,
   status?: number,
@@ -1723,19 +1168,12 @@ function middlewareResponse(
   return response;
 }
 
-// Next's middleware protocol travels on response headers — the rewrite
-// destination, the request-header overrides, the set-cookie relay. They are read
-// by this worker and by resolveRoutes, and must never reach the client: a
-// rewrite header alone would publish the internal path every rewritten route
-// resolves to.
 function stripMiddlewareHeaders(headers: Headers): void {
   for (const name of [...headers.keys()]) {
     if (name.startsWith("x-middleware-")) headers.delete(name);
   }
 }
 
-// An absent or empty matcher list is Next's "run on everything" — what a bare
-// middleware.ts with no `config` export produces. It never means "never run".
 function middlewareMatches(
   matchers: MiddlewareMatcher[] | undefined,
   url: URL,
@@ -1750,9 +1188,6 @@ function middlewareMatches(
   );
 }
 
-// The request headers middleware replaced, named by the response header Next's
-// own server reads them from. The captured Response still carries it —
-// responseToMiddlewareResult consumes it off a copy.
 function middlewareOverrides(outcome: MiddlewareOutcome | undefined): Set<string> {
   const named = outcome?.response.headers.get("x-middleware-override-headers");
   return new Set(
@@ -1763,11 +1198,6 @@ function middlewareOverrides(outcome: MiddlewareOutcome | undefined): Set<string
   );
 }
 
-// shouldBypass decides whether a prerender request must skip the cache and go
-// straight to the origin: the route's own revalidate token, or any one of its
-// bypassFor conditions. Next builds bypassFor as independent bypass *reasons*
-// (server action, multipart upload, bot), so they OR — ANDing them could never
-// match.
 export function shouldBypass(
   request: Request,
   url: URL,
@@ -1784,9 +1214,6 @@ export function shouldBypass(
   );
 }
 
-// matchesHas mirrors Next's own hasMatch: a bare condition matches on presence
-// of a truthy value, and a condition with a value matches it as an ANCHORED
-// regex — not a string equality. A repeated key is matched on its last value.
 function matchesHas(has: RouteHas, headers: Headers, url: URL): boolean {
   const value = hasValue(has, headers, url);
   if (!value) return false;
@@ -1816,7 +1243,6 @@ function hasValue(
       return values.length === 1 ? values[0] : values;
     }
     case "host":
-      // The port is not part of the host a route condition names.
       return url.host.split(":", 1)[0].toLowerCase();
   }
 }
@@ -1833,22 +1259,12 @@ function cookieValue(header: string | null, key: string): string | undefined {
 
 export default {
   async fetch(request, env, ctx): Promise<Response> {
-    // Interception and static-asset serving are both enabled only where a
-    // cache store is bound; the ISR prefix and asset prefix they need come
-    // from the resolved Deployment below, so their config is filled in inside
-    // resolveRouteDeps.
     const store = env.OCEL_CACHE_STORE;
     const originFetch = edgeOriginFetch(
       env.OCEL_EDGE_ACCESS_KEY_ID,
       env.OCEL_EDGE_SECRET_KEY,
     );
 
-    // In preview mode both the deployment pointer and the app are named by the
-    // request's subdomain; a host that yields no valid preview label has nothing
-    // to serve. Preview mode is on only when OCEL_PREVIEW is "1" and a
-    // well-formed base domain is configured — a missing or malformed one
-    // degrades to normal serving under the baked app identity rather than
-    // 404-ing every request.
     let pointer: string | undefined;
     let app = env.OCEL_APP;
     const baseDomain =
@@ -1872,9 +1288,6 @@ export default {
       {
         fetch,
         originFetch,
-        // The optimizer is a Function URL like any app Lambda, so it is called
-        // through the same signing fetch. An unsigned worker (an edge inside the
-        // provider's trust boundary) forwards plainly, as it does everywhere else.
         imageOrigin: functionUrlImageOrigin(
           env.OCEL_IMAGE_OPTIMIZER_URL,
           originFetch ?? fetch,
@@ -1888,8 +1301,6 @@ export default {
         cache: {
           cache: caches.default,
           waitUntil: (promise) => ctx.waitUntil(promise),
-          // Built only where the substrate binds a queue and the credentials to
-          // send to it; absent, every admission site below renders as before.
           enqueueRevalidation: revalidationSender(
             env.OCEL_REVALIDATE_QUEUE_URL,
             env.OCEL_EDGE_ACCESS_KEY_ID,
@@ -1898,26 +1309,16 @@ export default {
         },
         interception: store
           ? {
-              // Passed as the binding itself: it is one stable object per
-              // isolate, which is what the snapshot memo keys on.
               store,
               snapshotCache: caches.default,
               waitUntil: (promise) => ctx.waitUntil(promise),
             }
           : undefined,
-        // The edge bundle lives in the same store as the ISR cache, under its
-        // own prefix — never under assets/, whose keys a request pathname can
-        // reach, because the bundle carries the app's edge secrets.
         edgeRuntime:
           env.LOADER && store
             ? {
                 loader: env.LOADER,
                 store,
-                // The stub factory for this script's own CacheEntrypoint. It is
-                // handed over uninvoked because only the resolved Deployment
-                // knows the props to mint the stub with; the factory itself
-                // never reaches a loaded worker's env, which refuses it with a
-                // DataCloneError — only an invoked stub serializes.
                 cacheEntrypoint: ctx.exports.CacheEntrypoint,
               }
             : undefined,

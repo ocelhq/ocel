@@ -89,14 +89,12 @@ describe("GET /api/blob/status", () => {
       );
       expect((await pending.json()).state).toBe("pending");
 
-      // One of two files done -> still pending.
       await setFileStates(sessionId, ["succeeded", "pending"]);
       expect(
         (await (await uploadStatus(statusRequest(sessionId, session.headers))).json())
           .state,
       ).toBe("pending");
 
-      // Both done -> succeeded.
       await setFileStates(sessionId, ["succeeded", "succeeded"]);
       expect(
         (await (await uploadStatus(statusRequest(sessionId, session.headers))).json())
@@ -139,9 +137,6 @@ describe("GET /api/blob/status", () => {
     const other = await createTestSessionWithOrganization();
     try {
       const sessionId = await seedSession(owner, "status-same-org-nonowner");
-      // Reassign the row to another user while keeping the caller's org: an org
-      // member who isn't the owner must still get 404 (this leaked when the
-      // guard checked org membership instead of ownership).
       await db
         .update(uploadSession)
         .set({ userId: other.user.id })

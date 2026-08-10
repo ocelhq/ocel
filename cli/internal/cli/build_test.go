@@ -43,9 +43,6 @@ export default {
 		t.Errorf("stdout = %q, want %q", got, want)
 	}
 
-	// The output states that this build resolved nothing, which is what lets a
-	// later --prebuilt deploy say a client value was never inlined rather than
-	// accuse it of having changed.
 	record, err := os.ReadFile(filepath.Join(root, ".ocel", "output", "client-values.json"))
 	if err != nil {
 		t.Fatalf("the build recorded nothing about its client values: %v", err)

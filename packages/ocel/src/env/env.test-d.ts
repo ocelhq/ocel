@@ -15,9 +15,6 @@ describe("the object defineEnv hands back", () => {
     env.TYPED_ABSENT;
   });
 
-  // The whole point of the object is that a value is there at the moment the
-  // property is read, whatever its class. A Promise anywhere in these types
-  // would mean a call site has to know how its value is delivered.
   it("hands back a value, never a promise of one, for every class", () => {
     const env = defineEnv({
       TYPED_SYNC_PLAIN: { class: "plain", schema: z.string() },
@@ -59,9 +56,6 @@ describe("the object defineEnv hands back", () => {
   });
 });
 
-// A value the browser may read cannot be one the browser must not read. That
-// is a contradiction in the declaration itself, so it is answered where the
-// declaration is written rather than when it runs.
 describe("client access on an encrypted class", () => {
   it("does not compile", () => {
     defineEnv({

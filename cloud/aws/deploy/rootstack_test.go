@@ -9,15 +9,6 @@ import (
 	"github.com/ocelhq/ocel/cloud/edge"
 )
 
-// recordingRootStack is recordingEdge's edge.RootStack counterpart (ADR
-// 0001/0002): it records every reconcile and store call so host
-// orchestration tests (ticket ocelhq-u8h.5) can assert the reconcile-then-
-// stage-then-promote sequence without any Cloudflare API. Reconcile
-// simulates the real provider's version-stamp gate purely from its own
-// in-memory state — a no-op unless spec.Version differs from what the last
-// reconcile "deployed" — and every store call rejects a write-secret that
-// doesn't match what reconcile last minted, catching a host that calls a
-// store operation before reconciling the root stack.
 type recordingRootStack struct {
 	recordingEdge
 
@@ -115,15 +106,10 @@ func (f *recordingRootStack) RemovePointer(_ context.Context, state edge.RootSta
 	return f.pruneResult, nil
 }
 
-// RouteOwner answers unclaimed for everything: nothing in this package reads a
-// hostname's owner, it is the preflight that does.
 func (f *recordingRootStack) RouteOwner(_ context.Context, _ string) (string, error) {
 	return "", nil
 }
 
-// ListDeployedWorkers reports whatever the test seeded as standing at the edge,
-// unfiltered — the filtering is the caller's (previewProjectWorkers), and a fake
-// that did it here would hide a caller that did not.
 func (f *recordingRootStack) ListDeployedWorkers(_ context.Context, stem string) ([]string, error) {
 	f.listedStems = append(f.listedStems, stem)
 	return f.deployedWorkers, f.listWorkersErr

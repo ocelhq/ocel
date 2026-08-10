@@ -13,10 +13,6 @@ export const file_buckets_v1_buckets: GenFile = /*@__PURE__*/
   fileDesc("ChhidWNrZXRzL3YxL2J1Y2tldHMucHJvdG8SCmJ1Y2tldHMudjEiSQoLUHJlc2lnbkZpbGUSCwoDa2V5GAEgASgJEgwKBG5hbWUYAiABKAkSDAoEc2l6ZRgDIAEoAxIRCgltaW1lX3R5cGUYBCABKAkiVgoPUHJlc2lnbmVkVGFyZ2V0EgsKA3VybBgBIAEoCRILCgNrZXkYAiABKAkSDAoEbmFtZRgDIAEoCRIbChNjb250ZW50X2Rpc3Bvc2l0aW9uGAQgASgJIksKDUNvbXBsZXRlZEZpbGUSCwoDa2V5GAEgASgJEgwKBG5hbWUYAiABKAkSDAoEc2l6ZRgDIAEoAxIRCgltaW1lX3R5cGUYBCABKAkimAEKFFByZXNpZ25VcGxvYWRSZXF1ZXN0Eg4KBmJ1Y2tldBgBIAEoCRImCgVmaWxlcxgCIAMoCzIXLmJ1Y2tldHMudjEuUHJlc2lnbkZpbGUSEAoIbWV0YWRhdGEYAyABKAwSGwoTY29udGVudF9kaXNwb3NpdGlvbhgEIAEoCRIZChFjYWxsYmFja19iYXNlX3VybBgFIAEoCSJXChVQcmVzaWduVXBsb2FkUmVzcG9uc2USEgoKc2Vzc2lvbl9pZBgBIAEoCRIqCgVmaWxlcxgCIAMoCzIbLmJ1Y2tldHMudjEuUHJlc2lnbmVkVGFyZ2V0Im4KHFZlcmlmeVVwbG9hZFNpZ25hdHVyZVJlcXVlc3QSEgoKc2Vzc2lvbl9pZBgBIAEoCRIRCglzaWduYXR1cmUYAiABKAkSJwoEZmlsZRgDIAEoCzIZLmJ1Y2tldHMudjEuQ29tcGxldGVkRmlsZSJACh1WZXJpZnlVcGxvYWRTaWduYXR1cmVSZXNwb25zZRINCgV2YWxpZBgBIAEoCBIQCghtZXRhZGF0YRgCIAEoDCIsChZHZXRVcGxvYWRTdGF0dXNSZXF1ZXN0EhIKCnNlc3Npb25faWQYASABKAkiUAoXR2V0VXBsb2FkU3RhdHVzUmVzcG9uc2USJgoFc3RhdGUYASABKA4yFy5idWNrZXRzLnYxLlVwbG9hZFN0YXRlEg0KBWVycm9yGAIgASgJKnsKC1VwbG9hZFN0YXRlEhwKGFVQTE9BRF9TVEFURV9VTlNQRUNJRklFRBAAEhgKFFVQTE9BRF9TVEFURV9QRU5ESU5HEAESGgoWVVBMT0FEX1NUQVRFX1NVQ0NFRURFRBACEhgKFFVQTE9BRF9TVEFURV9FWFBJUkVEEAMyrwIKDUJ1Y2tldFNlcnZpY2USVAoNUHJlc2lnblVwbG9hZBIgLmJ1Y2tldHMudjEuUHJlc2lnblVwbG9hZFJlcXVlc3QaIS5idWNrZXRzLnYxLlByZXNpZ25VcGxvYWRSZXNwb25zZRJsChVWZXJpZnlVcGxvYWRTaWduYXR1cmUSKC5idWNrZXRzLnYxLlZlcmlmeVVwbG9hZFNpZ25hdHVyZVJlcXVlc3QaKS5idWNrZXRzLnYxLlZlcmlmeVVwbG9hZFNpZ25hdHVyZVJlc3BvbnNlEloKD0dldFVwbG9hZFN0YXR1cxIiLmJ1Y2tldHMudjEuR2V0VXBsb2FkU3RhdHVzUmVxdWVzdBojLmJ1Y2tldHMudjEuR2V0VXBsb2FkU3RhdHVzUmVzcG9uc2VCN1o1Z2l0aHViLmNvbS9vY2VsaHEvb2NlbC9wa2cvcHJvdG8vYnVja2V0cy92MTtidWNrZXRzdjFiBnByb3RvMw");
 
 /**
- * PresignFile is one file the client intends to upload, as reported at presign
- * time. key is user-produced (the SDK computes it from the uploader's path
- * config); name/size/mime_type describe the file.
- *
  * @generated from message buckets.v1.PresignFile
  */
 export type PresignFile = Message<"buckets.v1.PresignFile"> & {
@@ -49,10 +45,6 @@ export const PresignFileSchema: GenMessage<PresignFile> = /*@__PURE__*/
   messageDesc(file_buckets_v1_buckets, 0);
 
 /**
- * PresignedTarget is the minted destination for one PresignFile, index-aligned
- * with the request. url is the presigned PUT the browser writes to; key and
- * name echo the file this target was minted for.
- *
  * @generated from message buckets.v1.PresignedTarget
  */
 export type PresignedTarget = Message<"buckets.v1.PresignedTarget"> & {
@@ -72,11 +64,6 @@ export type PresignedTarget = Message<"buckets.v1.PresignedTarget"> & {
   name: string;
 
   /**
-   * content_disposition, when non-empty, is a header the client MUST send on
-   * the PUT: the presigned URL signs it, so it is bound onto the stored object
-   * as its Content-Disposition and cannot be tampered with. Empty means no
-   * Content-Disposition is set on the object.
-   *
    * @generated from field: string content_disposition = 4;
    */
   contentDisposition: string;
@@ -90,10 +77,6 @@ export const PresignedTargetSchema: GenMessage<PresignedTarget> = /*@__PURE__*/
   messageDesc(file_buckets_v1_buckets, 1);
 
 /**
- * CompletedFile is the file identity carried by the completion callback and
- * signed by the detector. It is passed verbatim to VerifyUploadSignature as
- * the payload the signature covers.
- *
  * @generated from message buckets.v1.CompletedFile
  */
 export type CompletedFile = Message<"buckets.v1.CompletedFile"> & {
@@ -140,10 +123,6 @@ export type PresignUploadRequest = Message<"buckets.v1.PresignUploadRequest"> & 
   files: PresignFile[];
 
   /**
-   * metadata is opaque, SDK-encoded bytes (the uploader middleware's return)
-   * persisted on the session and handed back on VerifyUploadSignature. This
-   * service never inspects it.
-   *
    * @generated from field: bytes metadata = 3;
    */
   metadata: Uint8Array;
@@ -154,10 +133,6 @@ export type PresignUploadRequest = Message<"buckets.v1.PresignUploadRequest"> & 
   contentDisposition: string;
 
   /**
-   * callback_base_url is captured from the incoming presign request and
-   * persisted on the session; the detector later uses it to address the
-   * route's op=callback. Load-bearing downstream - never omit.
-   *
    * @generated from field: string callback_base_url = 5;
    */
   callbackBaseUrl: string;
@@ -180,9 +155,6 @@ export type PresignUploadResponse = Message<"buckets.v1.PresignUploadResponse"> 
   sessionId: string;
 
   /**
-   * files are the presigned targets, index-aligned with
-   * PresignUploadRequest.files.
-   *
    * @generated from field: repeated buckets.v1.PresignedTarget files = 2;
    */
   files: PresignedTarget[];
@@ -205,16 +177,11 @@ export type VerifyUploadSignatureRequest = Message<"buckets.v1.VerifyUploadSigna
   sessionId: string;
 
   /**
-   * signature is HMAC(session_secret, canonical({session_id, file})) computed
-   * by the detector. The secret itself never appears in this contract.
-   *
    * @generated from field: string signature = 2;
    */
   signature: string;
 
   /**
-   * file is the signed payload, passed verbatim.
-   *
    * @generated from field: buckets.v1.CompletedFile file = 3;
    */
   file?: CompletedFile | undefined;
@@ -237,9 +204,6 @@ export type VerifyUploadSignatureResponse = Message<"buckets.v1.VerifyUploadSign
   valid: boolean;
 
   /**
-   * metadata is the session's stored, opaque metadata bytes, present only when
-   * valid is true.
-   *
    * @generated from field: bytes metadata = 2;
    */
   metadata: Uint8Array;
@@ -279,9 +243,6 @@ export type GetUploadStatusResponse = Message<"buckets.v1.GetUploadStatusRespons
   state: UploadState;
 
   /**
-   * error is populated when the session carries a failure detail; empty
-   * otherwise.
-   *
    * @generated from field: string error = 2;
    */
   error: string;
@@ -295,9 +256,6 @@ export const GetUploadStatusResponseSchema: GenMessage<GetUploadStatusResponse> 
   messageDesc(file_buckets_v1_buckets, 8);
 
 /**
- * UploadState is the lifecycle of an upload session as recorded in the shared
- * store.
- *
  * @generated from enum buckets.v1.UploadState
  */
 export enum UploadState {
@@ -329,22 +287,10 @@ export const UploadStateSchema: GenEnum<UploadState> = /*@__PURE__*/
   enumDesc(file_buckets_v1_buckets, 0);
 
 /**
- * BucketService owns the cloud mechanics of ocel/blob uploads - minting
- * presigned targets, persisting a pending session, verifying the completion
- * signature, and reporting status - behind one language-neutral contract so
- * every SDK (JS, Python, Go) reuses one implementation. The SDK owns app
- * semantics (middleware, accept/limits, user key-generation); this service
- * owns nothing but store-side mechanics. All RPCs are addressed over Connect
- * to an injected address; the SDK never branches on prod/dev.
- *
  * @generated from service buckets.v1.BucketService
  */
 export const BucketService: GenService<{
   /**
-   * PresignUpload writes the pending session and mints the presigned PUT
-   * targets. The response's targets are index-aligned with the request's
-   * files.
-   *
    * @generated from rpc buckets.v1.BucketService.PresignUpload
    */
   presignUpload: {
@@ -353,11 +299,6 @@ export const BucketService: GenService<{
     output: typeof PresignUploadResponseSchema;
   },
   /**
-   * VerifyUploadSignature re-derives the per-session HMAC over the signed
-   * payload and constant-time compares it. It is read-only: on a valid
-   * signature it returns the stored metadata so the route need never hold the
-   * session secret. The secret never leaves the store.
-   *
    * @generated from rpc buckets.v1.BucketService.VerifyUploadSignature
    */
   verifyUploadSignature: {
@@ -366,10 +307,6 @@ export const BucketService: GenService<{
     output: typeof VerifyUploadSignatureResponseSchema;
   },
   /**
-   * GetUploadStatus reads the shared store and reports a session's state. It
-   * is read-only and drives op=poll; reading the shared store keeps it
-   * correct across app instances.
-   *
    * @generated from rpc buckets.v1.BucketService.GetUploadStatus
    */
   getUploadStatus: {

@@ -84,8 +84,6 @@ export const DeclareRequestSchema: GenMessage<DeclareRequest> = /*@__PURE__*/
   messageDesc(file_resources_v1_resources, 2);
 
 /**
- * config messages
- *
  * @generated from message resources.v1.PostgresConfig
  */
 export type PostgresConfig = Message<"resources.v1.PostgresConfig"> & {
@@ -158,11 +156,6 @@ export const ResourceService: GenService<{
     output: typeof DeclareResponseSchema;
   },
   /**
-   * DeclareEnv declares every variable one defineEnv call holds and, unlike
-   * Declare, answers with a payload: the cells the store already holds for
-   * those keys. Validation happens in the declaring process because the
-   * schemas live there, so the values have to travel back to it.
-   *
    * @generated from rpc resources.v1.ResourceService.DeclareEnv
    */
   declareEnv: {
@@ -171,10 +164,6 @@ export const ResourceService: GenService<{
     output: typeof DeclareEnvResponseSchema;
   },
   /**
-   * ReportEnvProblems carries the verdict back: every cell that is missing
-   * or fails its schema. It is what the discovery gate refuses on, so the
-   * decision stays with the schemas and the message stays with the CLI.
-   *
    * @generated from rpc resources.v1.ResourceService.ReportEnvProblems
    */
   reportEnvProblems: {

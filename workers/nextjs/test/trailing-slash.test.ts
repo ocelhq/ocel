@@ -10,10 +10,6 @@ import {
 
 const BUILD_ID = "t";
 
-// One row per pathname shape, per config. `canonical` is the form the client must
-// be on, `routing` the form the build's pathnames are keyed by, `redirects`
-// whether serve() would answer a 308 (i.e. canonical !== the requested path), and
-// `middleware` the URL middleware is handed for the *routing* form.
 interface Row {
   what: string;
   path: string;
@@ -37,11 +33,6 @@ function check(config: TrailingSlashConfig, rows: Row[]) {
   });
 }
 
-// Next compiles the basePath into the source of every internal rule, so a path
-// that is not under basePath matches none of them and Next 404s it as it stands.
-// The boundary is a segment: /docsy is not under /docs. Nothing here may be
-// touched, whatever trailingSlash says — a redirect would both regress a correct
-// 404 and tell a prober what the app's basePath is.
 const offBasePath: Row[] = ["/", "/favicon.ico", "/wp-admin", "/foo", "/docsy/page"].map(
   (path) => ({
     what: "off basePath, untouched",
@@ -54,7 +45,6 @@ const offBasePath: Row[] = ["/", "/favicon.ico", "/wp-admin", "/foo", "/docsy/pa
 );
 
 offBasePath.push({
-  // Not even the trailingSlash: false generic strip reaches off-basePath paths.
   what: "off basePath, a trailing slash is not stripped either",
   path: "/docsy/page/",
   canonical: "/docsy/page/",
@@ -422,9 +412,6 @@ describe("trailingSlash: false, basePath: /docs", () => {
   ]);
 });
 
-// skipTrailingSlashRedirect suppresses the 308 and nothing else: the routing-form
-// strip stays unconditional, or a canonical `/a/` resolves to no pathname the
-// build emitted and 404s.
 describe("skipTrailingSlashRedirect", () => {
   for (const trailingSlash of [true, false]) {
     describe(`trailingSlash: ${trailingSlash}`, () => {
@@ -455,20 +442,11 @@ describe("skipTrailingSlashRedirect", () => {
   }
 });
 
-// skipMiddlewareUrlNormalize is not one of the three normalizations standing
-// down — it is Next handing middleware `initURL`, the client's own URL, in place
-// of the routed one (next-server.ts's runMiddleware). So all three are off at
-// once: no page rewrite, no locale prefix, no slash. Under the flag the expected
-// value is always the input.
 describe("the URL middleware is handed, per skipMiddlewareUrlNormalize", () => {
   const cases: {
     what: string;
     path: string;
     normalized: Record<"true" | "false", string>;
-    // Only data-request rows need this: the matcher rewrites a data path to its
-    // page unconditionally, but re-adds the trailing slash only when the flag is
-    // unset, unlike `normalized`'s slash-free-URL rows, which go through
-    // canonicalPathname either way and so match `normalized` under the flag too.
     matchedWithFlag?: Record<"true" | "false", string>;
   }[] = [
     { what: "the root", path: "/", normalized: { true: "/", false: "/" } },
@@ -507,12 +485,6 @@ describe("the URL middleware is handed, per skipMiddlewareUrlNormalize", () => {
       normalized: { true: "/", false: "/" },
       matchedWithFlag: { true: "/", false: "/" },
     },
-    // The regression the live skip-trailing-slash-redirect suite caught: the
-    // fixture's middleware branches on `startsWith('/_next/data')` and echoes
-    // req.nextUrl.pathname back, so converting the path here loses both the
-    // branch and the assertion. NextURL still reports locale `ja-jp` off this
-    // pathname, since get-next-pathname-info reads the locale out of the data
-    // path even when parseData is off.
     {
       what: "a locale-prefixed data request",
       path: "/_next/data/t/ja-jp/locale-test.json",
@@ -536,12 +508,6 @@ describe("the URL middleware is handed, per skipMiddlewareUrlNormalize", () => {
           expect(middlewarePathname(path, config, BUILD_ID)).toBe(path);
         });
 
-        // The flag moves the URL middleware is handed, not the one the matchers
-        // are tested against — the router matches those on its own routed
-        // pathname either way. But that routed pathname's trailing slash is
-        // itself gated on !skipMiddlewareUrlNormalize (maybeAddTrailingSlash in
-        // resolve-routes.ts), so a data request's matcher form stays slash-free
-        // under the flag even when trailingSlash: true.
         it.each(cases)(
           "still matches $what on the routed form",
           ({ path, normalized, matchedWithFlag }) => {

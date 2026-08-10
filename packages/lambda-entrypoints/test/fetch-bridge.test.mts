@@ -2,8 +2,6 @@ import http from "node:http";
 import { afterAll, beforeAll, expect, test } from "vitest";
 import { fetchToNodeHandler } from "../src/node/fetch-bridge.mjs";
 
-// A fetch-handler app echoing the URL it was handed — the value every absolute
-// URL such an app builds (a Location, a canonical tag) is derived from.
 const invoke = fetchToNodeHandler(
   (request) =>
     new Response(JSON.stringify({ url: request.url }), {
@@ -24,8 +22,6 @@ afterAll(async () => {
   await new Promise<void>((resolve) => server.close(() => resolve()));
 });
 
-// node's fetch refuses to send a Host header, and the Host is half of what is
-// under test, so requests go out over node:http where both headers are ours.
 function get(path: string, headers: Record<string, string>): Promise<any> {
   return new Promise((resolve, reject) => {
     const req = http.request({ host: "127.0.0.1", port, path, headers }, (res) => {

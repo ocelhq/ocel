@@ -1,5 +1,3 @@
-// Package watcher watches a set of paths for filesystem changes and invokes a
-// callback once per debounced burst of activity.
 package watcher
 
 import (
@@ -12,11 +10,6 @@ import (
 	"github.com/fsnotify/fsnotify"
 )
 
-// Set is what a watch covers: every path under each of Dirs at any depth,
-// including subdirectories created after the watch started, plus each of Files
-// and nothing else beside it. A file's directory has to be watched to see the
-// file change, but only that one path in it counts and no subdirectory of it is
-// ever watched — a project root holds node_modules, .next and dist.
 type Set struct {
 	Dirs  []string
 	Files []string
@@ -31,9 +24,6 @@ func (s Set) covers(path string) bool {
 	return s.coversTree(path)
 }
 
-// coversTree reports whether path sits under one of Dirs, at any depth — a
-// subdirectory created after the watch started belongs to the same tree as the
-// files already there.
 func (s Set) coversTree(path string) bool {
 	for _, dir := range s.Dirs {
 		if strings.HasPrefix(path, dir+string(filepath.Separator)) {
@@ -43,12 +33,6 @@ func (s Set) coversTree(path string) bool {
 	return false
 }
 
-// Watch establishes a watch over set and, until ctx is done, invokes onChange
-// once after every quiet period of debounce following one or more changes to a
-// path set covers. Errors the underlying watcher reports while running (e.g.
-// the inotify limit is hit) are passed to onError, which may be nil to ignore
-// them. Watch returns as soon as the watch is established (or fails); the event
-// loop runs in the background.
 func Watch(ctx context.Context, set Set, debounce time.Duration, onChange func(), onError func(error)) error {
 	_, err := start(ctx, set, debounce, onChange, onError)
 	return err

@@ -91,9 +91,6 @@ async function makeOverdue(sessionId: string) {
     .where(eq(uploadSession.id, sessionId));
 }
 
-// Pure-DB (no MinIO): the expiry sweep is a jsonb state transition. detect skips
-// the store HEAD for any non-pending file, so an all-succeeded session never
-// touches MinIO either - the idempotency assertions run without a store.
 describe("blob expiry sweep (via POST /api/blob/detect)", () => {
   beforeAll(async () => {
     await setupTestDatabase();
@@ -107,7 +104,6 @@ describe("blob expiry sweep (via POST /api/blob/detect)", () => {
       await makeOverdue(sessionId);
 
       const res = await detectUploads(detectRequest(projectId, session.headers));
-      // Expiry is a non-completion: no callback is emitted for expired files.
       expect((await res.json()).completions).toHaveLength(0);
 
       const after = await files(sessionId);
@@ -122,7 +118,6 @@ describe("blob expiry sweep (via POST /api/blob/detect)", () => {
     try {
       const { id: projectId } = await createProjectFor(session, "expiry-succeeded");
       const sessionId = await presign(session, projectId);
-      // One file already landed and was completed before the session aged out.
       await setFileStates(sessionId, ["succeeded", "pending"]);
       await makeOverdue(sessionId);
 
@@ -161,9 +156,6 @@ describe("blob expiry sweep (via POST /api/blob/detect)", () => {
     try {
       const { id: projectId } = await createProjectFor(session, "expiry-live");
       const sessionId = await presign(session, projectId);
-      // Do NOT makeOverdue: presign set ~2h expiry. Exercise the sweep in
-      // isolation (not full detect, which would HEAD the store for live pending
-      // files) so the `expires_at <= now()` guard is what's under test.
       await expireOverdueSessions(projectId, session.user.id);
 
       const after = await files(sessionId);
@@ -178,8 +170,6 @@ describe("blob expiry sweep (via POST /api/blob/detect)", () => {
     try {
       const { id: projectId } = await createProjectFor(session, "expiry-once");
       const sessionId = await presign(session, projectId);
-      // Simulate a session whose files already succeeded (completion already
-      // fired). Further detect ticks must never re-emit a completion.
       await setFileStates(sessionId, ["succeeded", "succeeded"]);
 
       const a = await detectUploads(detectRequest(projectId, session.headers));

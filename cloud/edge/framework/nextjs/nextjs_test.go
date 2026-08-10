@@ -8,8 +8,6 @@ import (
 	"github.com/ocelhq/ocel/cloud/edge"
 )
 
-// stubResolver answers exactly what a test configures, so an assembly's pulls
-// are asserted through the worker it produces.
 type stubResolver struct {
 	urls     map[string]string
 	creds    edge.Credentials
@@ -65,8 +63,6 @@ func TestAssembleCloudflare_FullyConfigured(t *testing.T) {
 		t.Fatalf("assemble: %v", err)
 	}
 
-	// The worker resolves Function URLs and ISR coordinates from its Deployment
-	// record; the only binding it reads here is the signing access key.
 	wantVars := map[string]string{
 		"OCEL_EDGE_ACCESS_KEY_ID": "AKIAEDGE",
 	}
@@ -116,8 +112,6 @@ func TestAssembleCloudflare_NoCredentialsOmitsSigningBindings(t *testing.T) {
 	}
 }
 
-// The worker always asks for its object store by name; which store lands there,
-// and whether one exists at all, is the edge's to decide at upload.
 func TestAssembleCloudflare_AsksForItsObjectStoreByName(t *testing.T) {
 	src := writeNextArtifacts(t)
 	src.Routes = []string{"/"}

@@ -3,38 +3,20 @@ import { scopeProblem } from "./scope.js";
 
 export type VariableClass = "plain" | "sensitive" | "secret";
 
-// ConfidentialClass is a class whose values are kept from everything that is
-// not the running application: encrypted inside the artifact, or never in one.
 export type ConfidentialClass = Exclude<VariableClass, "plain">;
 
 interface VariableOptions<TSchema extends StandardSchemaV1 = StandardSchemaV1> {
-  // schema is any Standard Schema. It is also the only place a default may
-  // come from, so there is exactly one answer to where a value came from.
   schema?: TSchema;
 
-  // folders scopes the variable to the apps bound to exactly these folders,
-  // for the one case folders exist to serve: two apps that need the same key
-  // name and different values. It is then mandatory in every folder it names
-  // and has no root value at all — an unscoped variable lives at the root and
-  // a bound app may override it there, and the two modes never mix.
   folders?: readonly string[];
 }
 
-// VariableDefinition is split on class so that the one combination that cannot
-// be honoured — a value the browser may read that is also kept from it — is
-// answered by the compiler where the definition is written, rather than by a
-// throw when it runs. Reading never varies with class, so the split is visible
-// only here, at the declaration.
 export type VariableDefinition<
   TSchema extends StandardSchemaV1 = StandardSchemaV1,
 > =
   | (VariableOptions<TSchema> & {
-      // class decides confidentiality and delivery together. Reading never
-      // varies with it, so reclassifying a key never edits a call site.
       class: "plain";
 
-      // client marks a value the browser may read, which only a plaintext
-      // value can be.
       client?: boolean;
     })
   | (VariableOptions<TSchema> & {
@@ -44,48 +26,22 @@ export type VariableDefinition<
 
 export type Definitions = Record<string, VariableDefinition>;
 
-// EnvDefinitionError is a declaration that cannot be honoured — a duplicate
-// key, a reserved name, or a combination of options that contradict each
-// other. It is thrown where the definition is written, not where a value is
-// read.
 export class EnvDefinitionError extends Error {
   override name = "EnvDefinitionError";
 }
 
-// livingClasses are fetched from the store at runtime rather than carried by
-// an artifact, so a default would let a rotation-in-progress silently serve a
-// fallback instead of failing.
 const LIVE_CLASSES: ReadonlySet<VariableClass> = new Set(["secret"]);
 
-// isLive is the one question the read path asks about a class. Everything else
-// about a class is settled at the declaration or at deploy; this is settled
-// only while the process runs, because a live value is the only one that can be
-// replaced under it.
 export function isLive(definition: VariableDefinition): boolean {
   return LIVE_CLASSES.has(definition.class);
 }
 
-// bareKeyClasses reach the process environment under the key's own name, which
-// is the only situation where an Ocel-owned name could be overwritten.
 const BARE_KEY_CLASSES: ReadonlySet<VariableClass> = new Set(["plain"]);
 
-// RESERVED_PREFIXES is Ocel's own namespace and nothing else. A name a
-// provider's runtime injects, or one a bundler inlines into a browser bundle,
-// is that provider's or that bundler's to rule on: the provider refuses it at
-// deploy, where the target is known, and a bundler's convention is the reason a
-// developer chose the name in the first place. A key is delivered under the
-// name it was declared with, everywhere, so this file has no framework in it.
 const RESERVED_PREFIXES = ["OCEL_"];
 
 const KEY_PATTERN = /^[A-Z_][A-Z0-9_]*$/;
 
-// owner records the definitions file each key was claimed by. It is
-// process-global because definitions may be spread across files and a duplicate
-// key is only observable from above all of them. It records the file rather
-// than the bare fact of a claim because a file re-executing — every reload
-// under `ocel dev` — is restating its own claim, not making a second one. The
-// cost is that two claims written in one file read as one, which is the right
-// trade for an invariant that survives a reload: a key belongs to one file.
 const owner = new Map<string, string>();
 
 export function validateDefinitions(
@@ -114,8 +70,6 @@ function validateDefinition(
       `'${key}' is already declared in ${claimed}. A key may be defined by exactly one definitions file.`,
     );
   }
-  // A definition's own type refuses client access on a confidential class, so
-  // this answers only a caller the compiler never saw.
   const variableClass: VariableClass = definition.class;
   if (definition.client && variableClass !== "plain") {
     throw new EnvDefinitionError(
@@ -130,11 +84,6 @@ function validateDefinition(
       `'${key}' starts with a reserved prefix (${RESERVED_PREFIXES.join(", ")}). A '${variableClass}' variable is delivered under its own name, so Ocel would overwrite it.`,
     );
   }
-  // A client-accessible value is a copy taken at build time, and the only sign
-  // that a bundler never inlined it is that nothing arrives under its name. A
-  // schema that accepts a missing value would be indistinguishable from that,
-  // so the accessor could no longer tell a working variable from one the
-  // bundler passed over.
   if (definition.client && !isRequired(definition)) {
     throw new EnvDefinitionError(
       `'${key}' is client-accessible and its schema accepts a missing value. A client value is inlined into the browser bundle at build time, so a default or an optional could not be told apart from a value the bundler never inlined.`,
@@ -153,8 +102,6 @@ function validateDefinition(
   }
 }
 
-// isRequired asks the schema whether it accepts nothing, which is the only
-// portable way to learn that a Standard Schema carries a default.
 export function isRequired(definition: VariableDefinition): boolean {
   if (!definition.schema) return true;
   return parse(definition.schema, undefined).ok === false;
@@ -164,9 +111,6 @@ export type ParseResult =
   | { ok: true; value: unknown }
   | { ok: false; message: string };
 
-// parse runs a Standard Schema and refuses an asynchronous one: a variable is
-// read as a plain synchronous property, so a schema that cannot answer
-// synchronously could never be honoured at the point of use.
 export function parse(
   schema: StandardSchemaV1,
   value: unknown,
@@ -183,13 +127,6 @@ export function parse(
   return { ok: true, value: result.value };
 }
 
-// complaint is what a rejected value is allowed to be described as. A schema's
-// message is computed from the value it rejected — the built-in ones quote the
-// input and a custom one may say anything about it — so it survives only for
-// the class whose values are plaintext by declaration. Scrubbing the value out
-// of the message instead would be guesswork: a message may hold it transformed,
-// so nothing derived from the value is forwarded for the other classes. The
-// key and the folder travel beside this, which is what names the failing cell.
 export function complaint(
   definition: VariableDefinition,
   message: string,

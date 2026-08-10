@@ -7,9 +7,6 @@ import (
 	"testing"
 )
 
-// validKey matches a valid DNS label: leading lowercase letter, then letters,
-// digits and hyphens, not ending in a hyphen, 1–maxKeyLen chars. Key is used as
-// a preview subdomain label and store pointer, and the whole label is its own.
 var validKey = regexp.MustCompile(`^[a-z]([a-z0-9-]{0,` + strconv.Itoa(maxKeyLen-2) + `}[a-z0-9])?$`)
 
 func TestResolve_KeyIsStable(t *testing.T) {
@@ -46,7 +43,6 @@ func TestResolve_KeyIsSubstrateSafe(t *testing.T) {
 }
 
 func TestResolve_HashDisambiguatesCollidingBases(t *testing.T) {
-	// Both sanitize to the same base token but are different refs.
 	a, err := Resolve("feature/login", "")
 	if err != nil {
 		t.Fatalf("Resolve() error = %v", err)
@@ -128,8 +124,6 @@ func TestResolve_RefThatSanitizesToNothing(t *testing.T) {
 }
 
 func TestResolve_KeyHasNoUnderscore(t *testing.T) {
-	// The slug is now a DNS label, so an underscore (valid only in the old
-	// Postgres-identifier form) must never appear.
 	id, err := Resolve("feature/Fix_Bug", "")
 	if err != nil {
 		t.Fatalf("Resolve() error = %v", err)
@@ -169,8 +163,6 @@ func TestValidateLabel_TooLongNameIsRefusedActionably(t *testing.T) {
 	}
 }
 
-// A preview is served on "<key>.<base>" (or "<key>--<app>.<base>"), so the key
-// has the whole DNS label to itself.
 func TestKeyBudgetIsTheWholeLabel(t *testing.T) {
 	if maxKeyLen != maxLabelLen {
 		t.Errorf("maxKeyLen = %d, want the full DNS label %d", maxKeyLen, maxLabelLen)

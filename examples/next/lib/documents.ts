@@ -1,8 +1,5 @@
 import { pg } from "../ocel/index";
 
-// Read side of the documents table. The write side lives in the uploader's
-// onUploadComplete (see ocel/index.ts): the SDK has no get-file API yet, so
-// this list route is how the app surfaces what has landed.
 export type Document = {
   id: number;
   key: string;

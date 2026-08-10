@@ -45,8 +45,6 @@ describe("parseRaceOptions", () => {
   });
 
   it("names the bound it broke rather than a floating-point sentinel", () => {
-    // `--trials 0` once aborted with "must be a number >= 5e-324", which reads
-    // as an instrument fault rather than as a typo in the invocation.
     expect(() => parse("--trials", "0")).toThrow("--trials must be at least 1");
     expect(() => parse("--trials", "abc")).toThrow("--trials must be a number");
     expect(() => parse("--trials", "")).toThrow("--trials must be a number");
@@ -59,15 +57,11 @@ describe("parseRaceOptions", () => {
   });
 
   it("refuses a pool of one instead of quietly racing two", () => {
-    // A pool of one can never produce a cross-isolate pair, so a coerced 2
-    // would run a sweep the caller did not ask for and report it as theirs.
     expect(() => parse("--sockets", "1")).toThrow("--sockets must be at least 2");
     expect(parse("--sockets", "2").sockets).toBe(2);
   });
 
   it("requires whole counts, since a fractional burst cannot be sized", () => {
-    // `--sizes 2.5` used to open 2 sockets for a trial the summary filed under
-    // size 2.5, which the runner then reported as the instrument double-counting.
     expect(() => parse("--sizes", "2.5")).toThrow("--sizes must be a whole number");
     expect(() => parse("--sizes", "0")).toThrow("--sizes must be at least 1");
     expect(parse("--sizes", "2,8,32").sizes).toEqual([2, 8, 32]);

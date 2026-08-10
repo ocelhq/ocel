@@ -9,12 +9,6 @@ import (
 	"github.com/fatih/color"
 )
 
-// Spinner is a standalone one-line spinner for a discrete wait that isn't a
-// deploy phase — e.g. the preflight credential check, which runs before any
-// Session step is active. It animates only when out is a terminal; on a
-// non-terminal (CI, a captured buffer) it is inert so nothing corrupts the
-// logs. Stop clears the line, so the caller can print its result as though the
-// spinner never showed.
 type Spinner struct {
 	out  io.Writer
 	msg  string
@@ -23,9 +17,6 @@ type Spinner struct {
 	once sync.Once
 }
 
-// StartSpinner begins animating "<glyph> msg" on out, repainting in place until
-// Stop. On a non-terminal out it returns an inert spinner (no goroutine, no
-// output). msg is fixed for the spinner's life.
 func StartSpinner(out io.Writer, msg string) *Spinner {
 	s := &Spinner{out: out, msg: msg}
 	if !isTTY(out) {
@@ -54,8 +45,6 @@ func (s *Spinner) loop() {
 	}
 }
 
-// Stop halts the animation and clears the spinner's line. It is safe to call on
-// an inert spinner and safe to call more than once.
 func (s *Spinner) Stop() {
 	s.once.Do(func() {
 		if s.stop == nil {

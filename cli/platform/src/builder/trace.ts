@@ -7,7 +7,6 @@ import ts from "typescript";
 import { appRel } from "./layout.js";
 import type { AppInput, BuildOptions, FunctionSummary } from "./types.js";
 
-/** A framework built by tracing an entrypoint (express, fastify). */
 export interface TraceSpec {
   name: string;
   runtime: string;
@@ -16,9 +15,6 @@ export interface TraceSpec {
 
 const TS_EXT = new Set([".ts", ".tsx", ".mts", ".cts"]);
 
-// Target ESNext: nodejs24.x runs modern syntax natively, so downleveling only
-// obscures the user's code. Types are stripped; import/export specifiers are
-// left for per-file rewriting (no bundling).
 function transpileTs(source: string, ext: string): string {
   return ts.transpileModule(source, {
     fileName: `f${ext}`,
@@ -50,7 +46,6 @@ function resolveEntrypoint(input: AppInput, fw: TraceSpec): string {
   );
 }
 
-/** JS output path for a source file (TS -> JS, JS unchanged). */
 function toOutExt(rel: string): string {
   const ext = path.extname(rel);
   if (ext === ".ts" || ext === ".tsx") return rel.slice(0, -ext.length) + ".js";
@@ -60,20 +55,12 @@ function toOutExt(rel: string): string {
 }
 
 export interface Placement {
-  /** Destination path relative to the `.func` dir. */
   dest: string;
-  /** For dependency files, the owning package (root dir + name). */
   pkg?: { root: string; name: string };
 }
 
 type PkgCache = Map<string, { name: string } | null>;
 
-/**
- * The package that owns a file: the nearest ancestor directory with a
- * `package.json` that declares a `name`. Handles pnpm store paths, scoped
- * names, and workspace packages (whose real files have no `node_modules/`
- * segment) uniformly. Results are cached per directory.
- */
 function findPackage(absFile: string, cache: PkgCache): { root: string; name: string } | undefined {
   let dir = path.dirname(absFile);
   while (true) {
@@ -86,7 +73,6 @@ function findPackage(absFile: string, cache: PkgCache): { root: string; name: st
           const name: unknown = JSON.parse(readFileSync(pj, "utf8")).name;
           if (typeof name === "string" && name.length > 0) entry = { name };
         } catch {
-          /* malformed package.json — keep walking up */
         }
       }
       cache.set(dir, entry);
@@ -103,15 +89,6 @@ function isUserFile(absPath: string, cwd: string): boolean {
   return !rel.startsWith("..") && !rel.split(path.sep).includes("node_modules");
 }
 
-/**
- * Where a traced file lands in the artifact. App files stay at the root
- * (relative to `cwd`); dependency files are placed by package identity under
- * `node_modules/<name>/<path-within-package>`, preserving each package's
- * internal structure so intra-package relative imports still resolve.
- *
- * Known limitation: node_modules is flat and single-version — if two versions
- * of a package are traced they collapse into one. Acceptable for now.
- */
 export function placeFile(absPath: string, cwd: string, cache: PkgCache = new Map()): Placement {
   if (isUserFile(absPath, cwd)) {
     return { dest: path.relative(cwd, absPath) };
@@ -131,11 +108,6 @@ function emittedExt(sourceExt: string): string {
   return path.extname(toOutExt(`f${sourceExt}`)) || sourceExt;
 }
 
-/**
- * Rewrite an extensionless relative specifier to point at the file this build
- * actually emits. TS allows `./x` and `../dir`; raw Node ESM rejects both.
- * Returns the rewritten specifier, or undefined to leave it untouched.
- */
 function rewriteSpecifier(spec: string, sourceDir: string): string | undefined {
   if (!spec.startsWith("./") && !spec.startsWith("../")) return undefined;
   if (/\.(js|mjs|cjs)$/.test(spec)) return undefined;
@@ -154,11 +126,6 @@ function rewriteSpecifier(spec: string, sourceDir: string): string | undefined {
   return undefined;
 }
 
-/**
- * Add extensions to extensionless relative specifiers in transpiled user code,
- * so the un-bundled module tree resolves under raw Node ESM. Bare/package
- * specifiers are left untouched.
- */
 async function rewriteRelativeImports(code: string, sourceDir: string): Promise<string> {
   await lexerInit;
   let imports: ReturnType<typeof parseImports>[0];
@@ -180,11 +147,6 @@ async function rewriteRelativeImports(code: string, sourceDir: string): Promise<
   return out;
 }
 
-/**
- * nft only emits files under its `base`, so `base` must enclose the app's
- * resolvable `node_modules` — which, in a hoisted monorepo, lives at the repo
- * root. Use the topmost ancestor of `cwd` that contains a `node_modules` dir.
- */
 function traceBase(cwd: string): string {
   let base = cwd;
   let dir = cwd;
@@ -197,11 +159,6 @@ function traceBase(cwd: string): string {
   return base;
 }
 
-/**
- * readFile hook for nft: its parser throws on TS type syntax and then silently
- * under-traces that file's imports. Feed it type-stripped JS for TS files so it
- * follows imports; the EMIT step transpiles from source separately.
- */
 async function traceReadFile(p: string): Promise<Buffer | string | null> {
   let buf: Buffer;
   try {
@@ -223,7 +180,6 @@ async function traceReadFile(p: string): Promise<Buffer | string | null> {
 }
 
 async function emitFile(absPath: string, dest: string): Promise<void> {
-  // nft lists pnpm's directory symlinks; the real files are traced separately.
   if (statSync(absPath).isDirectory()) return;
   await mkdir(path.dirname(dest), { recursive: true });
   if (isUserSource(absPath)) {
@@ -233,9 +189,6 @@ async function emitFile(absPath: string, dest: string): Promise<void> {
     await writeFile(toOutExt(dest), rewritten);
     return;
   }
-  // Copied ESM deps may use extensionless relative imports that only resolve
-  // under a bundler; rewrite those too. CJS (extensionless `require`) is fine,
-  // so byte-for-byte copy anything unchanged.
   const ext = path.extname(absPath);
   if (ext === ".js" || ext === ".mjs") {
     const source = await readFile(absPath, "utf8");
@@ -255,8 +208,6 @@ export async function traceBuild(
 ): Promise<FunctionSummary> {
   const entrypoint = resolveEntrypoint(input, fw);
 
-  // A traced app serves every route through one function, so it takes the root
-  // route's name inside its own subtree.
   const funcRel = path.join(appRel(input.name), "functions", "index.func");
   const funcDir = path.join(options.outDir, funcRel);
   await rm(funcDir, { recursive: true, force: true });
@@ -274,8 +225,6 @@ export async function traceBuild(
     await emitFile(abs, path.join(funcDir, placement.dest));
   }
 
-  // A reconstructed package must carry its package.json so its `exports` map and
-  // `type` resolve. Copy any not already emitted by the trace.
   for (const [root, name] of depPackages) {
     const dest = path.join(funcDir, "node_modules", name, "package.json");
     const src = path.join(root, "package.json");

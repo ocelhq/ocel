@@ -81,9 +81,6 @@ func TestProjectSlugsBesides(t *testing.T) {
 	}
 }
 
-// A slug longer than safeName's cap is recovered in its truncated form, so
-// membership still answers exactly while the spelling shown back is the
-// normalized one.
 func TestProjectSlugsBesides_LongSlugMatchesItsTruncatedScope(t *testing.T) {
 	slug := "a-very-long-project-slug-that-runs-past-the-safe-name-cap"
 	scope := safeName(slug)

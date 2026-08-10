@@ -22,18 +22,11 @@ function makeRecord(over: Partial<DeploymentRecord> = {}): DeploymentRecord {
   };
 }
 
-// A binding stub whose pointerRecord calls are counted and can be switched to
-// throwing (simulating a store outage). It resolves each pointer's build id and
-// records from injected maps, and honours knownBuildId the same way the real
-// store does — omitting the record when the caller's build is still live. Build
-// ids are keyed by "<app>/<pointer>" so a preview pointer resolves independently
-// of the default one; an absent pointer arg keys as the empty string.
 function countingBinding(opts: {
   pointerBuildId: Record<string, string | undefined>;
   records: Record<string, DeploymentRecord>;
 }): DeploymentsBinding & {
   pointerRecordCalls: number;
-  // Whether the last answered call carried a record (vs. an "unchanged" echo).
   lastCarriedRecord: boolean;
   down: boolean;
 } {
@@ -110,7 +103,6 @@ describe("resolveDeployment", () => {
     await resolveDeployment(d);
     await resolveDeployment(d);
 
-    // The record is still within its TTL on the second call, so no RPC fires.
     expect(binding.pointerRecordCalls).toBe(1);
   });
 
@@ -130,8 +122,6 @@ describe("resolveDeployment", () => {
     clock.ms = 5_001; // TTL elapsed
     const resolution = await resolveDeployment(d);
     expect(binding.pointerRecordCalls).toBe(2);
-    // The build is unchanged, so the store echoed it back without the record;
-    // the cached record still stands.
     expect(binding.lastCarriedRecord).toBe(false);
     expect(resolution).toEqual({ kind: "found", record: makeRecord() });
   });
@@ -151,8 +141,6 @@ describe("resolveDeployment", () => {
     const first = await resolveDeployment(d);
     expect(first).toEqual({ kind: "found", record: makeRecord() });
 
-    // A rollback/promotion re-points the app at build-2; the TTL has to elapse
-    // before this worker notices.
     pointerBuildId["web/"] = "build-2";
     clock.ms = 5_001;
     const second = await resolveDeployment(d);
@@ -248,7 +236,6 @@ describe("resolveDeployment", () => {
 
     expect(production).toEqual({ kind: "found", record: makeRecord() });
     expect(preview).toEqual({ kind: "found", record: previewRecord });
-    // Two distinct pointers, so two distinct store round trips (no cross-serve).
     expect(binding.pointerRecordCalls).toBe(2);
   });
 });

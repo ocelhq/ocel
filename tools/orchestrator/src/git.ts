@@ -30,9 +30,6 @@ export function localBranchExists(branch: string, cwd: string): boolean {
 	return res.status === 0;
 }
 
-// True if `branch` is already fully merged into `base` (i.e. base contains
-// every commit on branch) — used to tell an already-landed blocker apart
-// from one whose branch still needs to be the stack parent.
 export function isMergedInto(branch: string, base: string, cwd: string): boolean {
 	const res = spawnSync("git", ["merge-base", "--is-ancestor", branch, base], { cwd, encoding: "utf8" });
 	return res.status === 0;

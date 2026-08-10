@@ -59,41 +59,13 @@ const (
 
 // EnvVarsServiceClient is a client for the env.v1.EnvVarsService service.
 type EnvVarsServiceClient interface {
-	// SetValue writes a value, recording a new version. Concurrency is
-	// optimistic: see SetValueRequest.expected_version.
 	SetValue(context.Context, *v1.SetValueRequest) (*v1.SetValueResponse, error)
-	// ListValues enumerates every current value a project holds, as metadata
-	// only. There is deliberately no reveal flag: a listing is the routine
-	// operation and must never print secrets to a shared terminal.
 	ListValues(context.Context, *v1.ListValuesRequest) (*v1.ListValuesResponse, error)
-	// GetValue reads one cell, revealing the plaintext only when asked.
 	GetValue(context.Context, *v1.GetValueRequest) (*v1.GetValueResponse, error)
-	// RevealValues reads a named set of cells and answers with their
-	// plaintext, in one round trip to the store. It is the batch form of
-	// GetValue and nothing more: the caller names every cell, so this is not a
-	// reveal-everything listing. It cannot be one — which cells a caller may
-	// hold the plaintext of follows from the class each variable was declared
-	// under, and that is knowable only where the declaration is.
 	RevealValues(context.Context, *v1.RevealValuesRequest) (*v1.RevealValuesResponse, error)
-	// DeleteValue removes a cell's current pointer. Its version history is
-	// left in place: history is an audit record of what the value once was,
-	// and deleting the value does not unmake that.
 	DeleteValue(context.Context, *v1.DeleteValueRequest) (*v1.DeleteValueResponse, error)
-	// SetReference points a cell at a value owned elsewhere, so a credential
-	// is set once and consumed in many places rather than copied into each.
-	// The cell then holds an address: resolution is a read-time follow, never
-	// background synchronisation, so a consumer cannot hold a stale copy.
 	SetReference(context.Context, *v1.SetReferenceRequest) (*v1.SetReferenceResponse, error)
-	// ListReferences answers what points at a cell, so the blast radius of an
-	// edit is visible before the edit. It is served by the store's one
-	// secondary index, populated on reference items alone.
 	ListReferences(context.Context, *v1.ListReferencesRequest) (*v1.ListReferencesResponse, error)
-	// ListVersions reads one cell's change history, newest first, bounded by
-	// the window each write prunes to. It is metadata only, for the same
-	// reason ListValues is: history answers when a value changed, and a
-	// command that printed every retained version's plaintext would keep a
-	// rotated-away secret readable for the whole window. Reading one value
-	// back is GetValue's job, one named cell at a time.
 	ListVersions(context.Context, *v1.ListVersionsRequest) (*v1.ListVersionsResponse, error)
 }
 
@@ -245,41 +217,13 @@ func (c *envVarsServiceClient) ListVersions(ctx context.Context, req *v1.ListVer
 
 // EnvVarsServiceHandler is an implementation of the env.v1.EnvVarsService service.
 type EnvVarsServiceHandler interface {
-	// SetValue writes a value, recording a new version. Concurrency is
-	// optimistic: see SetValueRequest.expected_version.
 	SetValue(context.Context, *v1.SetValueRequest) (*v1.SetValueResponse, error)
-	// ListValues enumerates every current value a project holds, as metadata
-	// only. There is deliberately no reveal flag: a listing is the routine
-	// operation and must never print secrets to a shared terminal.
 	ListValues(context.Context, *v1.ListValuesRequest) (*v1.ListValuesResponse, error)
-	// GetValue reads one cell, revealing the plaintext only when asked.
 	GetValue(context.Context, *v1.GetValueRequest) (*v1.GetValueResponse, error)
-	// RevealValues reads a named set of cells and answers with their
-	// plaintext, in one round trip to the store. It is the batch form of
-	// GetValue and nothing more: the caller names every cell, so this is not a
-	// reveal-everything listing. It cannot be one — which cells a caller may
-	// hold the plaintext of follows from the class each variable was declared
-	// under, and that is knowable only where the declaration is.
 	RevealValues(context.Context, *v1.RevealValuesRequest) (*v1.RevealValuesResponse, error)
-	// DeleteValue removes a cell's current pointer. Its version history is
-	// left in place: history is an audit record of what the value once was,
-	// and deleting the value does not unmake that.
 	DeleteValue(context.Context, *v1.DeleteValueRequest) (*v1.DeleteValueResponse, error)
-	// SetReference points a cell at a value owned elsewhere, so a credential
-	// is set once and consumed in many places rather than copied into each.
-	// The cell then holds an address: resolution is a read-time follow, never
-	// background synchronisation, so a consumer cannot hold a stale copy.
 	SetReference(context.Context, *v1.SetReferenceRequest) (*v1.SetReferenceResponse, error)
-	// ListReferences answers what points at a cell, so the blast radius of an
-	// edit is visible before the edit. It is served by the store's one
-	// secondary index, populated on reference items alone.
 	ListReferences(context.Context, *v1.ListReferencesRequest) (*v1.ListReferencesResponse, error)
-	// ListVersions reads one cell's change history, newest first, bounded by
-	// the window each write prunes to. It is metadata only, for the same
-	// reason ListValues is: history answers when a value changed, and a
-	// command that printed every retained version's plaintext would keep a
-	// rotated-away secret readable for the whole window. Reading one value
-	// back is GetValue's job, one named cell at a time.
 	ListVersions(context.Context, *v1.ListVersionsRequest) (*v1.ListVersionsResponse, error)
 }
 

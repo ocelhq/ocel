@@ -13,10 +13,6 @@ import (
 	"github.com/ocelhq/ocel/pkg/proto/buckets/v1/bucketsv1connect"
 )
 
-// TestRuntimePresignUpload_ForwardsToOcelAPI proves the dev BucketService
-// mounted on the Mux forwards PresignUpload to the Ocel API presign endpoint
-// (with the leader's token + projectID) and returns the API's response
-// verbatim to the SDK - the CLI owns no cloud mechanics itself.
 func TestRuntimePresignUpload_ForwardsToOcelAPI(t *testing.T) {
 	var gotAuth, gotPath string
 	var gotBody presignRequestBody
@@ -88,8 +84,6 @@ func TestRuntimePresignUpload_ForwardsToOcelAPI(t *testing.T) {
 	}
 }
 
-// TestRuntimePresignUpload_PropagatesAPIError surfaces a non-200 from the Ocel
-// API as a Connect error rather than a bogus empty success.
 func TestRuntimePresignUpload_PropagatesAPIError(t *testing.T) {
 	api := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		http.Error(w, "unauthorized", http.StatusUnauthorized)
@@ -110,9 +104,6 @@ func TestRuntimePresignUpload_PropagatesAPIError(t *testing.T) {
 	}
 }
 
-// TestRuntimeVerifyUploadSignature_ForwardsToOcelAPI proves the shim forwards
-// VerifyUploadSignature to POST /api/blob/verify (with the leader token) and
-// returns the API's verdict + verbatim metadata bytes to the route.
 func TestRuntimeVerifyUploadSignature_ForwardsToOcelAPI(t *testing.T) {
 	var gotAuth, gotPath string
 	var gotBody signedCompletion
@@ -121,8 +112,6 @@ func TestRuntimeVerifyUploadSignature_ForwardsToOcelAPI(t *testing.T) {
 	api := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		gotAuth, gotPath = r.Header.Get("Authorization"), r.URL.Path
 		_ = json.NewDecoder(r.Body).Decode(&gotBody)
-		// The API renders the stored metadata (base64) into the JSON []byte
-		// field; encoding/json base64-encodes rawMetadata for us here.
 		json.NewEncoder(w).Encode(verifyResponseBody{Valid: true, Metadata: rawMetadata})
 	}))
 	defer api.Close()
@@ -151,9 +140,6 @@ func TestRuntimeVerifyUploadSignature_ForwardsToOcelAPI(t *testing.T) {
 	}
 }
 
-// TestRuntimeGetUploadStatus_ForwardsToOcelAPI proves the shim forwards
-// GetUploadStatus to GET /api/blob/status?sessionId=... and maps the API's
-// string state onto the proto enum.
 func TestRuntimeGetUploadStatus_ForwardsToOcelAPI(t *testing.T) {
 	var gotPath, gotQuery string
 	api := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -179,8 +165,6 @@ func TestRuntimeGetUploadStatus_ForwardsToOcelAPI(t *testing.T) {
 	}
 }
 
-// TestRuntimeVerifyUploadSignature_PropagatesAPIError surfaces a non-200 as a
-// Connect error rather than a bogus verdict.
 func TestRuntimeVerifyUploadSignature_PropagatesAPIError(t *testing.T) {
 	api := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		http.Error(w, "boom", http.StatusInternalServerError)

@@ -11,9 +11,6 @@ import {
 const ID = { slug: "proj1", app: "web", buildId: "build-1" };
 
 describe("config key", () => {
-  // Must stay identical to imageConfigKey in cloud/aws/deploy/assets.go: this
-  // function reads what that one wrote, and the prefix is deliberately outside
-  // assets/, which is the app's public web root.
   test("is under image-config/, never under assets/", () => {
     expect(imageConfigKey(ID)).toBe("image-config/proj1/web/build-1.json");
     expect(imageConfigKey(ID).startsWith("assets/")).toBe(false);
@@ -33,13 +30,9 @@ describe("asset key", () => {
   });
 });
 
-// Every one of these would otherwise name an object outside this build's prefix,
-// which on a bucket holding every app in the account is another tenant's data.
 describe("traversal guard", () => {
   const escapes = [
     "/../../other/build/secret.png",
-    // The one a URL parser does not collapse, because it is not a path
-    // separator until decodeURIComponent has run.
     "/%2e%2e%2f%2e%2e%2fsecret.png",
     "/a/%2e%2e/b.png",
     "/./x.png",
@@ -76,9 +69,6 @@ describe("identity", () => {
     expect(() => identity({ ...ID, buildId: "..." })).toThrow(SubstrateError);
   });
 
-  // The uploader lowered the app name before writing the key and the worker's
-  // OCEL_APP carries the raw one, so this is where they are made to agree —
-  // deriving the key from the raw name would simply miss the object.
   test("sanitizes the app name the way the uploader did", () => {
     expect(sanitizeAppName("Web")).toBe("web");
     expect(sanitizeAppName("my app")).toBe("my-app");
@@ -89,8 +79,6 @@ describe("identity", () => {
     expect(identity({ ...ID, app: "My App" }).app).toBe("my-app");
   });
 
-  // A traversal attempt in the app name cannot survive sanitization, but the
-  // segment check runs on the sanitized value anyway rather than trusting that.
   test("a traversal attempt in the app name sanitizes to a plain segment", () => {
     expect(identity({ ...ID, app: "../../etc" }).app).toBe("etc");
   });

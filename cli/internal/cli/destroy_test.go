@@ -9,8 +9,6 @@ import (
 	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
 )
 
-// TestConfirmDestroyProject covers the typed-name gate directly: only the exact
-// project name proceeds, so a slip or a reflexive "y" never nukes production.
 func TestConfirmDestroyProject(t *testing.T) {
 	cases := []struct {
 		name  string
@@ -80,9 +78,6 @@ func TestPrintDestroyPlan_ListsEveryTarget(t *testing.T) {
 	}
 }
 
-// TestCheckDestroyFlags_YesIsPreviewOnly pins the asymmetry: --yes automates a
-// project's preview footprint, which is disposable by construction, and is
-// refused for production, whose only confirmation is typing the project name.
 func TestCheckDestroyFlags_YesIsPreviewOnly(t *testing.T) {
 	if err := checkDestroyFlags(true, true); err != nil {
 		t.Errorf("--preview --yes rejected: %v", err)
@@ -102,9 +97,6 @@ func TestCheckDestroyFlags_YesIsPreviewOnly(t *testing.T) {
 	}
 }
 
-// TestRunDestroyPreviewProject_YesSkipsTTYAndTypedName proves the
-// non-interactive teardown path the e2e sweeper and the workflow's destroy job
-// need: --yes skips both the terminal requirement and the typed-name prompt.
 func TestRunDestroyPreviewProject_YesSkipsTTYAndTypedName(t *testing.T) {
 	root, _ := setUpDeployFixture(t)
 	t.Setenv(fakeInfraClassEnvVar, "preview")
@@ -124,8 +116,6 @@ func TestRunDestroyPreviewProject_YesSkipsTTYAndTypedName(t *testing.T) {
 	}
 }
 
-// TestRunDestroyPreviewProject_WithoutYesRefusesWithoutTTY keeps the default
-// safe: without --yes there is still no non-interactive path.
 func TestRunDestroyPreviewProject_WithoutYesRefusesWithoutTTY(t *testing.T) {
 	var stdout, stderr bytes.Buffer
 	err := runDestroyPreviewProject(context.Background(), t.TempDir(), false, &stdout, &stderr, strings.NewReader(""))
@@ -137,10 +127,6 @@ func TestRunDestroyPreviewProject_WithoutYesRefusesWithoutTTY(t *testing.T) {
 	}
 }
 
-// TestRunDestroy_RefusesWithoutTTY proves destroy will not run when stdin is not
-// an interactive terminal — the only confirmation is typing the project name,
-// and it must never be bypassable. It refuses before resolving config or
-// spawning the provider.
 func TestRunDestroy_RefusesWithoutTTY(t *testing.T) {
 	var stdout, stderr bytes.Buffer
 	err := runDestroy(context.Background(), t.TempDir(), &stdout, &stderr, strings.NewReader(""))

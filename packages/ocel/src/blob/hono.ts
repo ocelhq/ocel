@@ -23,11 +23,6 @@ export type {
   Uploader,
 } from "./types.js";
 
-/**
- * The Hono binding of an uploader's auth. `middleware` receives the Hono
- * `Context` as `c` (not `req`), so it reads the request the Hono way -
- * `c.req.header(...)`, `c.get(...)`, `c.var` - with no `req.req` awkwardness.
- */
 export interface HonoUploaderAuth<
   TInput extends z.ZodType | undefined,
   TMetadata,
@@ -39,10 +34,6 @@ export interface HonoUploaderAuth<
   }) => MaybePromise<TMetadata>;
 }
 
-/**
- * The Hono binding of `uploader`. Identical to the core except `middleware`
- * takes the Hono `Context` as `c`.
- */
 export function uploader<
   TInput extends z.ZodType | undefined = undefined,
   TMetadata = unknown,
@@ -53,7 +44,6 @@ export function uploader<
   return coreUploader<TInput, TMetadata, Context>(
     {
       input: auth.input,
-      // The core passes the Context as `req`; hand it to the user as `c`.
       middleware: ({ req, input }) => auth.middleware({ c: req, input }),
     },
     upload,
@@ -62,13 +52,6 @@ export function uploader<
 
 export type HonoRouteHandler = (c: Context) => Promise<Response>;
 
-/**
- * The Hono binding of `createRouteHandler`. Returns a single handler covering
- * both methods — mount it with `app.on(["GET", "POST"], path, handler)`. The
- * core reads the URL and body from Hono's underlying Web `Request` (`c.req.raw`)
- * while `middleware` receives the full `Context`; the core `Response` is sent
- * verbatim.
- */
 export function createRouteHandler(
   bucket: Bucket,
   options?: RouteOptions,

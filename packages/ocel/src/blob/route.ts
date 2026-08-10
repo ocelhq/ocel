@@ -17,12 +17,6 @@ import type {
   UploadStatusState,
 } from "./types.js";
 
-/**
- * The requests the core route accepts: a Web Fetch `Request`/`NextRequest`
- * (via `BlobRequest`) or a Node `IncomingMessage`. Framework paths narrow this
- * to their own request type; the core normalizes either shape so a bare Node
- * http server works with no framework path at all.
- */
 export type RouteRequest = BlobRequest | IncomingMessage;
 
 function isWebRequest(req: RouteRequest): req is BlobRequest {
@@ -43,11 +37,6 @@ function headerOf(req: RouteRequest, name: string): string | null {
   return value ?? null;
 }
 
-/**
- * The request's absolute URL. A Web `Request` already carries one; a Node
- * `IncomingMessage` only carries the path, so it's rebuilt from the forwarded
- * protocol (or http) and the Host header.
- */
 function requestUrl(req: RouteRequest): string {
   const raw = req.url ?? "/";
   if (/^https?:\/\//i.test(raw)) return raw;
@@ -56,11 +45,6 @@ function requestUrl(req: RouteRequest): string {
   return `${proto}://${host}${raw}`;
 }
 
-/**
- * The parsed JSON body. Web requests expose `json()`. A Node request is read
- * from its stream, unless a body parser (e.g. `express.json()`) already drained
- * it and left the parsed value on `req.body`.
- */
 async function requestJson(req: RouteRequest): Promise<unknown> {
   if (isWebRequest(req)) return req.json();
   const node = req as IncomingMessage & { body?: unknown; readableEnded?: boolean };
@@ -73,11 +57,6 @@ async function requestJson(req: RouteRequest): Promise<unknown> {
 }
 
 export interface RouteOptions {
-  /**
-   * The runtime context (typed client + store bucket name). Defaults to a
-   * lazily-resolved context built from the injected OCEL_RESOURCE_BUCKET_<id>
-   * address. Injected directly in tests and by the dev bridge.
-   */
   runtime?: BucketContext;
 }
 
@@ -157,10 +136,6 @@ function validateFiles(
   return undefined;
 }
 
-/**
- * The route's own URL without its query string. The detector later appends
- * `?op=callback` to reach this same route.
- */
 function deriveCallbackBaseUrl(req: RouteRequest): string {
   const u = new URL(requestUrl(req));
   return `${u.origin}${u.pathname}`;
@@ -263,9 +238,6 @@ async function handleCallback(
 
   const envelope = decodeMetadata(verify.metadata);
   const up = bucket.uploaders[envelope.uploader];
-  // The uploader can vanish between presign and callback (e.g. renamed during
-  // an `ocel dev` hot-reload). Fail loudly instead of a silent no-op 200, so
-  // the detector surfaces it rather than marking the callback delivered.
   if (!up) return json({ error: `unknown uploader "${envelope.uploader}"` }, 404);
 
   const completed: CompletedFile = {
@@ -301,20 +273,8 @@ function errorMessage(err: unknown, fallback: string): string {
   return err instanceof Error && err.message ? err.message : fallback;
 }
 
-/**
- * Builds the public upload route for a bucket. Returns `{ GET, POST }` Web
- * Fetch handlers that multiplex `?op=presign|callback|poll`. Bytes never flow
- * through this route — only presign requests, signed completion callbacks, and
- * status polls.
- */
 export interface RouteHandlers {
   GET: (req: RouteRequest) => Promise<Response>;
-  /**
-   * `middlewareReq` is what uploader `middleware` receives as its `req`; it
-   * defaults to `req`. A framework path passes its richer request object here
-   * (e.g. Hono's `Context`) while the core still reads the URL and body from
-   * the transport `req`.
-   */
   POST: (req: RouteRequest, middlewareReq?: unknown) => Promise<Response>;
 }
 

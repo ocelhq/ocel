@@ -16,9 +16,6 @@ import (
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/resources/v1"
 )
 
-// withTestCache points openCache at a fresh temp-dir cache for the duration
-// of the test, restoring the previous seam afterwards, and returns the
-// cache's directory so tests can inspect the on-disk files directly.
 func withTestCache(t *testing.T) string {
 	t.Helper()
 	dir := t.TempDir()
@@ -28,9 +25,6 @@ func withTestCache(t *testing.T) string {
 	return dir
 }
 
-// countingResolveServer serves POST /api/resources/resolve with the same
-// wire contract the real endpoint serves, counting how many times it's hit
-// so tests can assert whether CachedResolve skipped the call.
 func countingResolveServer(t *testing.T) (*httptest.Server, *int) {
 	t.Helper()
 	calls := 0
@@ -122,8 +116,6 @@ func TestCachedResolve_DefinitionChangeForcesReResolve(t *testing.T) {
 		t.Fatalf("CachedResolve (first): %v", err)
 	}
 
-	// Same project/account, but a second declared resource - the manifest
-	// changed, so this must not reuse the cached single-resource entry.
 	if _, err := CachedResolve(context.Background(), httpClient, ts.URL, "tok", "proj_1",
 		[]manifest.Entry{
 			{Name: "main", Type: resourcesv1.ResourceType_RESOURCE_TYPE_POSTGRES},
@@ -146,7 +138,6 @@ func TestCachedResolve_ExpiredCacheForcesReResolve(t *testing.T) {
 		t.Fatalf("CachedResolve (first): %v", err)
 	}
 
-	// Back-date the cached entry's expiry so the next call must re-resolve.
 	cache, err := openCache()
 	if err != nil {
 		t.Fatalf("openCache: %v", err)
@@ -178,8 +169,6 @@ func TestCachedResolve_AccountSwitchForcesReResolve(t *testing.T) {
 		t.Fatalf("CachedResolve (account A): %v", err)
 	}
 
-	// Same project and defs, different token - simulates switching accounts
-	// (a re-login issues a new session token).
 	if _, err := CachedResolve(context.Background(), httpClient, ts.URL, "tok_b", "proj_1", resources); err != nil {
 		t.Fatalf("CachedResolve (account B): %v", err)
 	}

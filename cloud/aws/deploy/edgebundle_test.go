@@ -11,8 +11,6 @@ import (
 	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
 )
 
-// loaderEdge is an edge that can load code, reporting a fixed runtime — the
-// only Provider capability the record's edge-workers slot depends on.
 type loaderEdge struct {
 	compatDate  string
 	compatFlags []string
@@ -34,8 +32,6 @@ func testLoaderEdge() loaderEdge {
 	return loaderEdge{compatDate: "2026-07-13", compatFlags: []string{"nodejs_compat"}}
 }
 
-// edgeAppTree seeds two Next apps' build output, only one of which has edge
-// output — the common shape, since most apps carry no middleware at all.
 func edgeAppTree(t *testing.T) string {
 	t.Helper()
 	return writeTree(t, map[string]string{
@@ -45,10 +41,6 @@ func edgeAppTree(t *testing.T) string {
 	})
 }
 
-// TestAppEdgeBundleR2Key pins the build-scoped key layout: edge/<project>/
-// <app>/<build id>/bundle.json, its own top segment (never under assets/,
-// which the worker serves from) and never content-addressed, so pruning one
-// build's prefix can only ever remove that build's bundle.
 func TestAppEdgeBundleR2Key(t *testing.T) {
 	got := appEdgeBundleR2Key("proj", "web", "WEB1")
 	want := "edge/proj/web/WEB1/bundle.json"
@@ -63,9 +55,6 @@ func TestAppEdgeBundleR2Key(t *testing.T) {
 	}
 }
 
-// TestUploadEdgeBundles_UploadsEachBundleUnderItsOwnBuildPrefix proves the
-// bundle lands in the adopted cache store under the build's own prefix, typed
-// as JSON, and that an app with no edge output uploads nothing.
 func TestUploadEdgeBundles_UploadsEachBundleUnderItsOwnBuildPrefix(t *testing.T) {
 	store := &fakeUploader{exists: map[string]bool{}}
 	cfg := Config{
@@ -97,12 +86,6 @@ func TestUploadEdgeBundles_UploadsEachBundleUnderItsOwnBuildPrefix(t *testing.T)
 	}
 }
 
-// TestUploadEdgeBundles_ReplacesTheObjectAlreadyUnderTheKey proves the bundle
-// is written unconditionally rather than skipped-if-exists. The key is
-// build-scoped while the loader id is content-addressed, so an app whose
-// generateBuildId is constant would otherwise leave the previous build's bytes
-// in place and have the loader cache them under the new bundle's id — serving
-// the old edge code from a deployment that no longer contains it.
 func TestUploadEdgeBundles_ReplacesTheObjectAlreadyUnderTheKey(t *testing.T) {
 	key := "edge/proj/web/WEB1/bundle.json"
 	store := &fakeUploader{exists: map[string]bool{key: true}}
@@ -128,12 +111,6 @@ func TestUploadEdgeBundles_ReplacesTheObjectAlreadyUnderTheKey(t *testing.T) {
 	}
 }
 
-// TestUploadEdgeBundles_ARotationTargetsTheSameBuildKey proves a vars-only
-// deploy of an unchanged build adds no edge-bundle object: the key is scoped by
-// the build id, not the Deployment identity, so the rotation rewrites the one
-// object already there with the same bytes. Reuse here is one object, not a
-// skipped write — the write stays unconditional for the reason
-// TestUploadEdgeBundles_ReplacesTheObjectAlreadyUnderTheKey pins.
 func TestUploadEdgeBundles_ARotationTargetsTheSameBuildKey(t *testing.T) {
 	store := &fakeUploader{exists: map[string]bool{}}
 	cfg := Config{
@@ -164,9 +141,6 @@ func TestUploadEdgeBundles_ARotationTargetsTheSameBuildKey(t *testing.T) {
 	}
 }
 
-// TestUploadEdgeBundles_UnadoptedStoreUploadsNothing proves a substrate whose
-// edge offered no cache store uploads nothing: the frozen worker would have
-// nowhere to load a bundle back from.
 func TestUploadEdgeBundles_UnadoptedStoreUploadsNothing(t *testing.T) {
 	asset := &fakeUploader{exists: map[string]bool{}}
 	cfg := Config{ArtifactRoot: edgeAppTree(t), AssetBucket: "assets", Env: "prod", Uploader: asset}
@@ -179,10 +153,6 @@ func TestUploadEdgeBundles_UnadoptedStoreUploadsNothing(t *testing.T) {
 	}
 }
 
-// TestBuildDeploymentRecord_EdgeWorkersNamesTheBundleAndItsRuntime proves the
-// record carries exactly what the frozen worker needs to load this build's edge
-// code: the key uploadEdgeBundles published under, and the runtime the edge
-// reported it evaluates loaded code under.
 func TestBuildDeploymentRecord_EdgeWorkersNamesTheBundleAndItsRuntime(t *testing.T) {
 	cfg := Config{ArtifactRoot: edgeAppTree(t), Env: "prod", Edge: testLoaderEdge()}
 	manifest := nextManifest()
@@ -208,8 +178,6 @@ func TestBuildDeploymentRecord_EdgeWorkersNamesTheBundleAndItsRuntime(t *testing
 		t.Errorf("ID = %q, want a sha256 hex digest", record.EdgeWorkers.ID)
 	}
 
-	// The store and the frozen worker read this record as JSON, so the wire
-	// names are the contract — not the Go field names.
 	raw, err := json.Marshal(record.EdgeWorkers)
 	if err != nil {
 		t.Fatalf("marshal edge workers: %v", err)
@@ -228,10 +196,6 @@ func TestBuildDeploymentRecord_EdgeWorkersNamesTheBundleAndItsRuntime(t *testing
 	}
 }
 
-// TestBuildDeploymentRecord_NoEdgeOutputOmitsEdgeWorkers proves an app with no
-// middleware and no edge route carries no edge-workers slot at all — the worker
-// reads its absence as "this deployment has no edge code", so a null or an
-// empty object would be a different statement.
 func TestBuildDeploymentRecord_NoEdgeOutputOmitsEdgeWorkers(t *testing.T) {
 	cfg := Config{ArtifactRoot: edgeAppTree(t), Env: "prod", Edge: testLoaderEdge()}
 	manifest := twoAppManifest()
@@ -253,11 +217,6 @@ func TestBuildDeploymentRecord_NoEdgeOutputOmitsEdgeWorkers(t *testing.T) {
 	}
 }
 
-// TestLoaderID_CoversTheRuntimeNotJustTheBundle proves the id the loader keys
-// code by changes whenever anything the loader evaluates changes. The runtime
-// settings are part of that: were they left out, bumping the compat date would
-// reuse an id across genuinely different code and leave warm isolates on the
-// old runtime while cold ones took the new one.
 func TestLoaderID_CoversTheRuntimeNotJustTheBundle(t *testing.T) {
 	bundle := []byte(`{"version":1}`)
 	base := loaderID(bundle, "2026-07-13", []string{"nodejs_compat"})

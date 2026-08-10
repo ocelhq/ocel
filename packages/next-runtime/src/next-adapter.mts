@@ -29,53 +29,18 @@ import { stableStringify } from "./stable-json.mjs";
 const launcherName = "__next_launcher.cjs";
 const dispatchName = "__ocel_dispatch.cjs";
 
-// The dispatch key node middleware is loaded under, in the bundle it is packed
-// into. Reserved rather than derived from the output's own id (which Next also
-// happens to spell "/_middleware") so the adapter, the dispatcher and the
-// worker cannot drift on what names it. next-dispatch.cjs hardcodes the same
-// string, because it ships as plain CJS and cannot import it — a test in
-// next-adapter.test.mts reads that source back and asserts the two literals
-// match, so a change to one without the other fails there rather than at
-// runtime.
 export const middlewareEntryKey = "/_middleware";
 
-// The ocel builder passes this app's own subtree; a bare `next build` outside
-// ocel falls back to the flat cwd path.
 function resolveOutputRoot(): string {
   return process.env.OCEL_OUTPUT_DIR || join(process.cwd(), ".ocel/output");
 }
 
-// Where the membrane layer mounts the bundled cache handlers — the ones the
-// Lambda tier loads at runtime. These reach S3 with the function's own
-// credentials, which `next build`'s static generation workers do not have.
-//
-// The two tiers are named different handlers through different mechanisms.
-// modifyConfig names the edge tier's, the file Turbopack compiles into the edge
-// chunks. The node tier's are these paths, patched into the built manifest
-// afterwards (see patchCacheHandlers), because Next records a configured handler
-// relative to the *build* machine's distDir — a value that does not survive the
-// move to /var/task.
-//
-// The singular `cacheHandler` is the incremental cache (ISR, prerenders, Pages
-// Router); the plural `cacheHandlers` map, keyed by cache kind, is what backs
-// the `use cache` directive. They are separate contracts and separate modules.
 const cacheHandlerPath = "/opt/ocel/next/cache-handler.cjs";
 const useCacheHandlerPaths = {
   default: "/opt/ocel/next/use-cache-default.cjs",
   remote: "/opt/ocel/next/use-cache-remote.cjs",
 };
 
-// installCacheHandler puts the edge/build cache handler inside the app's own
-// tree and returns the path to name it by. It has to live there: Turbopack
-// rewrites config.cacheHandler to a project-relative path, and both it and
-// `next build`'s page-data workers resolve the handler's bare
-// `require('next/…')` from where the file physically sits — so a copy inside
-// this package would bind the app's build to this package's Next rather than the
-// app's. modifyConfig runs inside loadConfig, well before the config is
-// serialized for the build, so writing the file here is early enough.
-//
-// `next build` runs with the app directory as its cwd, which is what makes the
-// project root reachable from a hook that is handed only the config.
 async function installCacheHandler(): Promise<string> {
   const dest = join(process.cwd(), ".ocel", "cache-handler.cjs");
   await mkdir(dirname(dest), { recursive: true });
@@ -91,9 +56,6 @@ const adapter = {
       return {
         ...config,
         cacheMaxMemorySize: 0,
-        // Singular only. The plural map is compiled into every edge chunk as
-        // well, and the `use cache` handlers reach the AWS SDK transitively —
-        // naming them here would put it in every edge bundle.
         cacheHandler: await installCacheHandler(),
       };
     }
@@ -112,10 +74,6 @@ const adapter = {
       buildId,
     } = args;
 
-    // Read once, ahead of routePathname's every call: Next bakes basePath onto
-    // every output pathname before the adapter ever sees it (normalizePathnames,
-    // build-complete.ts:537-556), and routePathname has to undo that prefixing
-    // to find the `/index` normalization underneath it.
     const basePath = config.basePath || "";
 
     const allRoutes = [
@@ -125,17 +83,9 @@ const adapter = {
       ...outputs.appRoutes,
     ];
 
-    // The one location build-complete writes a Pages Router page's own HTML
-    // document to (build-complete.ts:864,922) — staticRouteKeyOf's signal for
-    // which STATIC_FILE outputs carry a normalizePagePath'd pathname, since
-    // that output kind carries no `type` field to gate on directly.
     const pagesDistDir = join(distDir, "server", "pages") + sep;
 
     const { middleware } = outputs;
-    // proxy.ts builds as node middleware unconditionally (Next has no edge
-    // option for it); legacy middleware.ts stays edge unless it opts into
-    // `runtime: 'nodejs'`, which throws inside Next's own build for a proxy
-    // file. Either way this is the only field that says which tier it runs on.
     const nodeMiddleware = middleware?.runtime === "nodejs" ? middleware : undefined;
 
     const images = compileImageConfig(config.images);
@@ -143,9 +93,6 @@ const adapter = {
     const functionRoutes = allRoutes.filter((r) => r.runtime === "nodejs");
     const edgeRoutes = allRoutes.filter((r) => r.runtime === "edge");
 
-    // Which entry a prerender's parent renders through, for the prerenders
-    // parented by an edge route: they have no Lambda to regenerate from, so the
-    // worker invokes this entry instead of looking for a Function URL.
     const edgeEntryByOutputId = new Map(
       edgeRoutes.map((r) => [r.id, edgeEntryOf(r).entryKey]),
     );
@@ -161,22 +108,10 @@ const adapter = {
     const outputRoot = resolveOutputRoot();
     const appRel = relative(repoRoot, projectDir);
 
-    // The ocel app name keys this app's assets in the account-global bucket
-    // (<env>/<project>/<appName>/<buildId>/…) and records each function's
-    // owning app in its config.json. The ocel builder passes it via
-    // OCEL_APP_NAME; falling back to the project dir name keeps a bare
-    // `next build` self-consistent.
     const appName = process.env.OCEL_APP_NAME || basename(projectDir);
 
-    // Patch the built manifest before anything is copied out of distDir, so
-    // every `.func` picks the cache handler up through the normal asset copy.
     await patchCacheHandlers(distDir);
 
-    // Routes sharing a filePath and config are the same compiled function —
-    // e.g. a page and its `.rsc` variant — so they resolve to one entry inside
-    // whichever bundle carries them. The group's entry key is its shortest
-    // pathname's id: the base route the variants extend, and the id prerenders
-    // reference via parentOutputId.
     const groups = new Map<string, typeof functionRoutes>();
     for (const route of functionRoutes) {
       const key = `${route.filePath}\0${JSON.stringify(route.config)}`;
@@ -197,29 +132,16 @@ const adapter = {
       const entry = members[0]!;
       entryRoutes.push(entry);
       for (const m of members) {
-        // Keyed by the request path, not Next's filename: a self-fetch loopback
-        // (next-dispatch.cjs's routes.exact) asks for the route it actually
-        // hits, and for a Pages Router root that is `/`, never `/index`.
         entryKeyByPathname.set(routeKeyOf(m, basePath), entry.id);
         entryKeyByRouteId.set(m.id, entry.id);
       }
     }
 
-    // A route's compiled module is an asset like any other here: it is what the
-    // launcher requires, and leaving it out of the union would hide every
-    // route's own bytes from the size accounting the packing rests on.
     const assetsOf = (route: { assets: Record<string, string>; filePath: string }) => ({
       ...route.assets,
       [relative(repoRoot, route.filePath)]: route.filePath,
     });
 
-    // Node middleware is never packed as an ordinary member — assertUniqueEntryKeys
-    // would reject the same entry landing in more than one bundle — but every
-    // bundle still has to be able to load it, and the manifest only ever calls
-    // bundles[0]. seedAssets absorbs it into that one bundle through the
-    // packer's own accounting (sizeBytes, missingAssets, the budget ceiling),
-    // opening bundles[0] itself when a fully static app with a proxy.ts traces
-    // zero node routes and therefore packs zero bundles.
     const { bundles, missingAssets } = packBundles(entryRoutes, {
       entryKeyOf: (route) => route.id,
       assetsOf,
@@ -234,9 +156,6 @@ const adapter = {
       ),
     );
 
-    // A manifest that names a bundle no build emitted is a 502 per request for
-    // that route, in production, and nothing on either side of the manifest can
-    // catch it — so an unmappable route fails the build instead.
     const bundleNameOf = (entryKey: string, pathname: string): string => {
       const name = bundleNameByEntryKey.get(entryKey);
       if (name === undefined) {
@@ -249,17 +168,12 @@ const adapter = {
 
     const prerenderGroups = groupPrerenders(outputs.prerenders);
 
-    // Shipped in the bundle rather than fetched at runtime: a Lambda for build N
-    // can then only ever read build N's projection, which is what makes the
-    // reseeded headers the ones its own build prerendered.
     const variantHeaders = JSON.stringify(
       variantHeaderProjection(prerenderGroups),
     );
 
     const routes = routeTable(entryKeyByPathname, routing.dynamicRoutes ?? []);
 
-    // See NextConfigProjection for why this is computed here rather than read
-    // back from required-server-files.json at runtime.
     const nextConfigProjection = {
       basePath: config.basePath || "",
       i18n: config.i18n ?? null,
@@ -288,12 +202,6 @@ const adapter = {
             "./" + relative(projectDir, member.filePath).split(sep).join("/"),
           ]),
         );
-        // Only the bundle carrying middleware's assets (bundles[0]) also carries
-        // its dispatch entry — never a route table entry: routeTable() above
-        // was built from entryKeyByPathname, which knows nothing of
-        // middleware, so `/_middleware` reaches the dispatcher only via an
-        // explicit x-ocel-entry header, never as a pathname a self-fetch could
-        // hit.
         if (nodeMiddleware && bundle.name === nodeMiddlewareBundleId) {
           entries[middlewareEntryKey] =
             "./" +
@@ -317,9 +225,6 @@ const adapter = {
             runtime: "nodejs24.x",
             handler: launcherRel,
             framework: "next",
-            // The bundle's identity, carried through to
-            // ManifestFunction.route_id so the routing layer can key
-            // FUNCTION_URLS by it (the Lambda itself keeps an infra-safe name).
             id: bundle.name,
             app: appName,
           }),
@@ -329,11 +234,6 @@ const adapter = {
       }),
     );
 
-    // A traced asset whose source is gone ships a bundle missing a module some
-    // route requires — and if the primed entry requires it, every route in that
-    // bundle. It predates bundling and is not known to be fatal, so it is loud
-    // rather than a failed build: one aggregate line, never one per file. The
-    // packer names them because it sized them; the copy skipped exactly these.
     if (missingAssets.length > 0) {
       const sample = missingAssets.slice(0, 5);
       console.warn(
@@ -341,20 +241,8 @@ const adapter = {
       );
     }
 
-    // public/ assets. Next's outputs.staticFiles covers _next/static and the
-    // prerendered error pages but never the project's public/ directory, so the
-    // adapter copies it verbatim into the static output and makes each file
-    // routable — otherwise a request for e.g. /favicon.svg has no dispatch entry
-    // and 404s despite the file existing.
-    //
-    // Both sets are hashed on the way through: the image cache key identifies a
-    // local source by its content hash, so identical bytes keep their optimized
-    // variants across a redeploy and changed bytes cannot serve a stale one.
     const publicFiles = await collectPublicFiles(projectDir);
     const staticAssets = [
-      // A public/ file is already a file: it is served under the name it was
-      // authored with. A built static output is named after the *route* it
-      // answers, which servedPathname turns back into a file name.
       ...publicFiles.map((f) => [f.pathname, f.filePath] as const),
       ...outputs.staticFiles.map((f) => [servedPathname(f), f.filePath] as const),
     ];
@@ -374,12 +262,9 @@ const adapter = {
       ]);
     }
 
-    // Seed each prerendered route's cache entry from the build output.
     await emitCacheEntries(outputRoot, prerenderGroups, allRoutes);
     await emitFetchEntries(outputRoot, distDir);
 
-    // One bundle serves many routes, so the id names the Lambda and the entry
-    // key names which of its routes to render.
     const functionDispatch = functionRoutes.map((o) => {
       const routeKey = routeKeyOf(o, basePath);
       const entryKey = entryKeyByPathname.get(routeKey);
@@ -399,9 +284,6 @@ const adapter = {
       };
     });
 
-    // Edge variants (`.rsc`, `_next/data`) share one compiled entry, so
-    // several pathnames simply name the same entryKey — a different
-    // namespace from the node bundles' entry keys.
     const edgeDispatch = edgeRoutes.map((o) => ({
       key: routeKeyOf(o, basePath),
       original: o.pathname,
@@ -414,14 +296,6 @@ const adapter = {
       value: { kind: "static" },
     }));
 
-    // Every route a request can dispatch to on its own name, before a
-    // prerender is allowed to take one of those names over below. A route
-    // resolving to the same key as a different route is ambiguous — whichever
-    // was listed last would silently win the dispatch table and the other
-    // 404s — so a collision here fails the build, matching bundleNameOf's
-    // posture above. publicFiles is deliberately not part of this check: a
-    // public/ file intentionally shadowing a route it shares a name with is
-    // an existing, unrelated pattern this fix does not touch.
     const routeDispatch = [...functionDispatch, ...edgeDispatch, ...staticDispatch];
     const dispatchKeyOrigin = new Map<string, string>();
     for (const { key, original } of routeDispatch) {
@@ -439,23 +313,6 @@ const adapter = {
       { kind: "static" },
     ]);
 
-    // A prerendered pathname resolves to a prerender: its cache entry lives in
-    // the asset bucket (keyed by build id) and its id is the bundle carrying
-    // the parent output — the base route deployed as a Lambda that
-    // regenerates the entry. Spread last so it replaces the plain lambda
-    // entry a prerendered function route also produced above.
-    //
-    // The renderer is named by parentOutputId, never by the prerender's own
-    // pathname: a segment prerender has no route of its own, a prerender's
-    // pathname can collide with a different group's function pathname, and
-    // parentOutputId can name a non-representative member of its group —
-    // which the by-route-id map resolves to that group's entry.
-    //
-    // The fallback is projected down to the two freshness windows rather than
-    // spread: the shell, the postponed state, and the entry's own
-    // status/headers all travel in the cache entry, so carrying build-time
-    // copies here would only put a stale second source of truth (and, for
-    // postponedState, ~96KB of it per route) in front of every request.
     const prerenderDispatch = outputs.prerenders.map((p) => {
       const routeKey = p.pathname;
       const allowQuery = p.config?.allowQuery;
@@ -472,9 +329,6 @@ const adapter = {
         routeKey,
         {
           kind: "prerender",
-          // An edge-parented prerender has no bundle at all: the worker
-          // regenerates it through edgeEntryKey and never reads the id, so it
-          // carries the parent output's own name for legibility.
           id:
             entryKey === undefined
               ? p.parentOutputId
@@ -487,12 +341,7 @@ const adapter = {
           ...(p.pprChain && { pprChain: p.pprChain }),
           ...(tags.length > 0 && { tags }),
           ...(allowQuery && { allowQuery }),
-          // Which entry of the parent's bundle regenerates this route.
           ...(entryKey !== undefined && { entryKey }),
-          // Set only when the parent renders on the edge: there is no
-          // Function URL to fall back to, so the worker regenerates this
-          // route through the edge bundle's entry instead — and reads the
-          // key's absence as "this tier may revalidate".
           ...(edgeEntryKey !== undefined && { edgeEntryKey }),
         },
       ];
@@ -516,11 +365,6 @@ const adapter = {
         images: { ...images, configHash: imageConfigHash(images) },
       }),
 
-      // The `x-vercel-cache` alias the edge stamps beside `x-ocel-cache`, so
-      // Next's own deploy suites — which assert Vercel's header name — are real
-      // coverage rather than a baseline entry. The opt-in is recorded here, at
-      // build time: a build whose deploying process did not set the flag carries
-      // no field, and a worker reading no field emits no alias.
       ...(process.env.OCEL_E2E_VERCEL_CACHE_HEADER === "1" && {
         vercelCacheAlias: true,
       }),
@@ -538,13 +382,6 @@ const adapter = {
       ],
       routes: routing,
 
-      // An absent or empty matcher list is Next's "run on everything" — the
-      // shape a bare middleware.ts (or proxy.ts) with no `config` export
-      // produces. `runtime` is always present so the worker never has to guess
-      // which dispatch namespace `entryKey` names: a node middleware's id
-      // names a Lambda bundle the same way dispatch[...].id does for
-      // kind: "lambda", while an edge middleware's entryKey names an entry in
-      // the edge bundle instead.
       ...(middleware && {
         middleware: nodeMiddleware
           ? {
@@ -569,9 +406,6 @@ const adapter = {
       JSON.stringify(routingManifest),
     );
 
-    // Its own artifact because the account-global optimizer holds no authority:
-    // it loads this file from the asset bucket rather than trusting anything the
-    // edge sends.
     if (images) {
       await writeFile(
         join(outputRoot, "image-config.json"),
@@ -581,33 +415,21 @@ const adapter = {
 
     await emitEdgeBundle(outputRoot, distDir, [
       ...edgeRoutes,
-      // Node middleware never reaches the edge bundle — it runs on Lambda like
-      // any other node output, injected into the function bundles above.
       ...(middleware?.runtime === "edge" ? [middleware] : []),
     ]);
   },
 } satisfies NextAdapter;
 
-// Every route that runs on Lambda.
 type NodeRoute =
   | AdapterOutput["PAGES"]
   | AdapterOutput["PAGES_API"]
   | AdapterOutput["APP_PAGE"]
   | AdapterOutput["APP_ROUTE"];
 
-// Routes that cannot share a Lambda. Becomes the route's (maxDuration,
-// preferredRegion) class once those reach the manifest (bd ocelhq-kay2): both
-// are function-level settings, so routes in one bundle cannot disagree on them.
 function configClass(_route: NodeRoute): string {
   return "";
 }
 
-// The entry required at INIT, which primes the chunk graph its bundle-mates
-// share: the one tracing the most bytes of it, since that graph's cost is bytes
-// and not file count. The bytes are the packer's own — the same sizing the
-// budget rests on, so the election and the accounting cannot disagree about what
-// a route weighs. Ties broken by entry key so an unchanged build produces
-// byte-identical output.
 function primaryEntryKey(
   members: readonly PackedMember<NodeRoute>[],
 ): string | null {
@@ -617,20 +439,6 @@ function primaryEntryKey(
   return weighed[0]?.member.id ?? null;
 }
 
-// warnNodeMiddlewareBlastRadius reports when node middleware's matcher covers
-// part of the build's own cached surface — prerenders, static outputs and
-// public/ files, all of which the edge can otherwise answer with no Lambda
-// involved at all. Node middleware runs ahead of both, so a matcher that
-// covers one of these turns every hit on it into a round trip to the function
-// region instead. One aggregate line, never one per path, matching the voice
-// of the other build-time warnings here.
-//
-// The predicate reads only sourceRegex, never the matcher's `has`/`missing`
-// conditions the worker also applies (workers/nextjs/src/index.ts) — those can
-// only narrow a match the regex already made, never widen one, so treating
-// every sourceRegex hit as a hit makes this an upper bound on the blast
-// radius rather than an exact one, which is the right side to err on for a
-// warning.
 function warnNodeMiddlewareBlastRadius(
   middleware: { config: { matchers?: { sourceRegex: string }[] } },
   cachedPathnames: readonly string[],
@@ -648,8 +456,6 @@ function warnNodeMiddlewareBlastRadius(
   );
 }
 
-// Every output that runs on the edge: the `runtime: 'edge'` routes and, when the
-// app has one, middleware.
 type EdgeOutput =
   | AdapterOutput["PAGES"]
   | AdapterOutput["PAGES_API"]
@@ -674,37 +480,6 @@ function edgeEntryOf(output: EdgeOutput): {
   return output.edgeRuntime;
 }
 
-// The bundle's main module. Turbopack's edge chunks are classic scripts that
-// register themselves on globalThis, so nothing here imports by specifier — the
-// shim declares every chunk as a module and imports only the hit entry's,
-// leaving the rest for workerd to never compile. process.env must be populated
-// before the first import: the chunks read it at module scope.
-//
-// AsyncLocalStorage is a global to Next's edge runtime, never an import — a
-// chunk that reaches for it and finds nothing throws the "accessed in runtime
-// where it is not available" invariant on evaluation. renderLauncher hands the
-// Lambda the same global for the same reason.
-//
-// The running entry key travels the same way, and for the same reason: a
-// variable is read as a plain property, so `ocel/env`'s edge build has nowhere
-// to be handed the entry whose read it is about to refuse. It is set before the
-// chunks evaluate because a module-scope read is still a read.
-//
-// The cache binding travels the same way rather than through process.env, whose
-// edge reads are build-time string literals a binding could not survive. It is
-// read from the load-time env — the main worker's own ctx.exports loopback,
-// which outlives every request — and never from the request's ctx: the isolate
-// is cached, so a stub captured from whichever request cold-started it is
-// disposed at that request's end and leaves requests 2..N holding a dead one.
-//
-// A traced asset reaches user code as the string `blob:<manifest asset name>`
-// (`new URL('./x.txt', import.meta.url)` compiles to it), which the platform's
-// fetch cannot load — so global fetch resolves those out of the bundle's asset
-// modules, the way Next's own sandbox resolves them with fetchInlineAsset. The
-// compiled chunks call `fetch` as a bare global and never shadow it, so this is
-// the whole path. Module scope, not per request: it must be installed before a
-// chunk can capture fetch, and the module body runs once per isolate, which
-// makes it idempotent by construction.
 function renderEdgeShim(
   entries: Record<string, EdgeEntry>,
   assetIdByName: Map<string, string>,
@@ -763,21 +538,8 @@ export default {
 `;
 }
 
-// EDGE_ENV_MARKER is the name `ocel/env`'s edge build gives the error it throws
-// on a read. It is the load-bearing string of that module rather than a marker
-// planted for this scan, so it survives the bundler for the same reason the
-// error does — and if the module is tree-shaken out entirely, the read it would
-// have refused does not exist either.
 const EDGE_ENV_MARKER = "EnvEdgeError";
 
-// warnEdgeEnvRoutes reports the edge entries that carry `ocel/env`. No variable
-// class is deliverable to the edge tier, so a read from one of these throws at
-// request time; this is what says so at build time instead, naming the route.
-//
-// It is a warning and not a build failure on purpose: a chunk shows that the
-// module was *imported*, never that a variable was read. An edge route
-// importing a barrel that re-exports `env` without touching it is legitimate,
-// and failing it would be wrong.
 function warnEdgeEnvRoutes(
   chunkKeysByPathname: Map<string, string[]>,
   chunkIdByKey: Map<string, string>,
@@ -796,10 +558,6 @@ function warnEdgeEnvRoutes(
   );
 }
 
-// moduleIds reads every source file and gives each distinct content one opaque
-// module id, so a chunk two entries share is carried once. Sources are visited
-// in sorted-key order and ids are numbered as they are minted, which is what
-// makes the bundle byte-stable across builds with unchanged input.
 async function moduleIds(
   pathByKey: Map<string, string>,
   idOf: (index: number) => string,
@@ -822,10 +580,6 @@ async function moduleIds(
   return { idByKey, modules };
 }
 
-// The shape of <distDir>/server/middleware-manifest.json this adapter reads.
-// Declared locally rather than imported from next/dist internals: the adapter
-// is esbuilt into the CLI's platform dist, and six fields are not worth the
-// coupling.
 interface EdgeManifest {
   middleware: Record<string, EdgeManifestFn>;
   functions: Record<string, EdgeManifestFn>;
@@ -836,9 +590,6 @@ interface EdgeManifestFn {
   assets?: { name: string; filePath: string }[];
 }
 
-// The build merges an edge entry's JS files and its traced assets into one flat
-// `assets` record, destroying the distinction the bundle needs. The manifest
-// that produced those outputs still holds it, so read it back.
 async function edgeAssetNames(distDir: string): Promise<Set<string> | null> {
   const path = join(distDir, "server", "middleware-manifest.json");
   let manifest: EdgeManifest;
@@ -861,13 +612,6 @@ async function edgeAssetNames(distDir: string): Promise<Set<string> | null> {
   return names;
 }
 
-// emitEdgeBundle writes the single JSON file the main worker turns into a
-// Cloudflare dynamic worker: every edge chunk under an opaque module id, the
-// wasm and traced assets those chunks need, the env they read, and the table
-// mapping each entry key to what must be evaluated before its handler can be
-// called. Ids are content-deduped and assigned in sorted-key order so an
-// unchanged build yields an identical file — the deployment's worker id is a
-// hash of these bytes.
 async function emitEdgeBundle(
   outputRoot: string,
   distDir: string,
@@ -877,19 +621,10 @@ async function emitEdgeBundle(
 
   const assetNames = await edgeAssetNames(distDir);
 
-  // Source maps are dead weight in the bundle — one alone runs to 1.5 MB.
-  // Traced assets are worse than dead weight: workerd compiles the whole module
-  // bundle at isolate startup, so one .png declared as a JS chunk fails every
-  // entry in the deployment. The middleware manifest is the authority on which
-  // key is which — an extension test would mis-file a `.js` file a route binds
-  // with `new URL("./worker.js", import.meta.url)` straight back into a chunk.
   const isMap = (key: string) => key.endsWith(".map");
   const isChunk = (key: string) =>
     !isMap(key) &&
     (assetNames ? !assetNames.has(key) : /\.[cm]?js$/.test(key));
-  // The key of an asset is the manifest's asset name — build-complete writes
-  // `output.assets[item.name]` — which is also the string a chunk hands user
-  // code after `blob:`. So the shim's table resolves by construction.
   const isAsset = (key: string) => !isMap(key) && !isChunk(key);
 
   const chunkPathByKey = new Map<string, string>();
@@ -917,17 +652,11 @@ async function emitEdgeBundle(
       assets.add(key);
       ownChunkKeys.push(key);
     }
-    // Two sources can share a pathname (a route and its middleware), and the
-    // scan is about the pathname, so their chunks accumulate rather than
-    // replace: whichever came first would otherwise stop being looked at.
     chunkKeysByPathname.set(source.pathname, [
       ...(chunkKeysByPathname.get(source.pathname) ?? []),
       ...ownChunkKeys,
     ]);
 
-    // Wasm modules are declared globally in the bundle, not per entry: workerd
-    // compiles a declared-but-unimported module lazily, so an entry that needs
-    // none pays nothing for the rest.
     for (const [name, abs] of Object.entries(source.wasmAssets ?? {})) {
       wasmPathByName.set(name, abs);
     }
@@ -953,9 +682,6 @@ async function emitEdgeBundle(
     (n) => `w/${n}.wasm`,
     (bytes) => bytes.toString("base64"),
   );
-  // Assets are declared globally like wasm, and base64 like wasm — never utf8,
-  // which replaces every invalid byte sequence with U+FFFD and would silently
-  // corrupt a png or a font.
   const { idByKey: assetIdByName, modules: assetModules } = await moduleIds(
     assetPathByName,
     (n) => `a/${n}.bin`,
@@ -964,12 +690,6 @@ async function emitEdgeBundle(
 
   warnEdgeEnvRoutes(chunkKeysByPathname, chunkIdByKey, chunks);
 
-  // Chunk order is load order, never sorted: a Turbopack chunk evaluates its
-  // modules as it registers, so one that runs before the chunk defining a module
-  // it requires fails with that module's factory unavailable. Next lists a
-  // page's files in the order they must be evaluated and `assets` preserves it,
-  // so the entry carries them in the order they arrived. Determinism comes from
-  // that order being the build's own, not from re-sorting it.
   const entries: Record<string, EdgeEntry> = {};
   for (const [entryKey, keys] of entryAssets) {
     entries[entryKey] = {
@@ -999,26 +719,14 @@ async function emitEdgeBundle(
   );
 }
 
-// Cloudflare's Cache-Tag ceilings: 16KB aggregate on the response header, 1000
-// tags in it, and 1024 chars per tag in a purge call. Cloudflare rejects an
-// over-limit header outright, which would cost the route every one of its tags
-// rather than the offending few — so trim to fit here instead.
 const maxTagBytes = 1024;
 const maxTags = 1000;
 const maxTagsBytes = 16 * 1024;
 
-// Next's encodeCacheTag percent-encodes only characters outside [\t\x20-\x7e],
-// so spaces and tabs survive it — and Cloudflare's Cache-Tag forbids both.
-// Extending Next's own scheme keeps one canonical encoding end to end, and the
-// purge side has to apply the same transform to match what was stamped.
 function sanitizeCacheTag(tag: string): string {
   return tag.replace(/[\t ]/g, (c) => encodeURIComponent(c));
 }
 
-// cacheTags reads the tag set Next recorded for a prerender and returns it in a
-// form Cloudflare will accept: sanitized, and trimmed to the header's ceilings.
-// A tag over the per-tag limit is dropped rather than truncated — a truncated
-// tag matches nothing, so it would occupy budget while never purging.
 function cacheTags(prerender: AdapterOutput["PRERENDER"]): string[] {
   const header = prerender.fallback?.initialHeaders?.["x-next-cache-tags"];
   const raw = Array.isArray(header) ? header.join(",") : header;
@@ -1045,12 +753,6 @@ function cacheTags(prerender: AdapterOutput["PRERENDER"]): string[] {
   return tags;
 }
 
-// patchCacheHandler names the layer's cache handler in the manifest `next build`
-// just wrote. The runtime reads this file back as nextConfig and resolves
-// cacheHandler through formatDynamicImportPath(distDir, value), which leaves the
-// value alone only when it is already absolute — so writing the runtime path
-// here, after the build, is what survives the move to /var/task. A build with no
-// manifest (`output: 'export'`) has no server to configure.
 async function patchCacheHandlers(distDir: string): Promise<void> {
   const manifestPath = join(distDir, "required-server-files.json");
   let manifest: { config?: Record<string, unknown> };
@@ -1068,28 +770,17 @@ async function patchCacheHandlers(distDir: string): Promise<void> {
   await writeFile(manifestPath, JSON.stringify(manifest));
 }
 
-// A route's cache entry as the handler reads it back: Next keys one entry per
-// route holding the html, the RSC payload and any PPR segments together, but the
-// adapter API surfaces those as separate PRERENDER outputs. Bodies are base64 so
-// the entry stays a single JSON object — one GET, one atomic write, and no torn
-// entry to serve.
 interface CacheEntryFile {
   lastModified: number;
   value: Record<string, unknown>;
 }
 
-// segmentPath recovers the key FileSystemCache stores a PPR segment under:
-// `<route>.segments/<segmentPath>.segment.rsc`.
 function segmentPath(pathname: string): string | null {
   const at = pathname.indexOf(".segments/");
   if (at === -1 || !pathname.endsWith(".segment.rsc")) return null;
   return pathname.slice(at + ".segments".length, -".segment.rsc".length);
 }
 
-// readMaybe returns a fallback body, or null when the build did not emit one.
-// A prerender can name a body it never wrote (a blocking fallback, say), and an
-// entry we cannot seed is not a build failure — the route renders on first
-// request and populates the cache itself.
 async function readMaybe(filePath: string | undefined): Promise<Buffer | null> {
   if (!filePath) return null;
   try {
@@ -1099,22 +790,13 @@ async function readMaybe(filePath: string | undefined): Promise<Buffer | null> {
   }
 }
 
-// A route's prerender variants, back together. Next surfaces the html, the
-// `.rsc` payload and each PPR segment as separate PRERENDER outputs sharing a
-// groupId; everything downstream wants the route.
 interface PrerenderGroup {
-  // Taken from the html variant's concrete pathname, never from parentOutputId,
-  // which names the shared function under its dynamic pattern.
   entryKey: string;
   html: any;
   rsc: any;
   segments: any[];
 }
 
-// groupPrerenders recombines each groupId's outputs into the route they
-// describe. A member is a segment or the `.rsc` payload by its own suffix; the
-// html variant is the one that is neither. A group whose html variant Next did
-// not prerender (a blocking fallback) describes no entry and is dropped.
 function groupPrerenders(prerenders: readonly any[]): PrerenderGroup[] {
   const byGroup = new Map<number, any[]>();
   for (const p of prerenders) {
@@ -1139,12 +821,6 @@ function groupPrerenders(prerenders: readonly any[]): PrerenderGroup[] {
   return groups;
 }
 
-// The headers the `.rsc` and segment variants were prerendered with. Each
-// variant arrives with its own initialHeaders, and replaying exactly those is
-// what lets a client see what Next would have served — including the segment
-// cache's x-nextjs-postponed: 2 marker, which lives only on the segment variants
-// and is the header PPR support is gated on. The segment variants' headers are
-// identical across a group, so the first one seen stands for all of them.
 function variantHeadersOf(group: PrerenderGroup): Record<string, unknown> {
   const rscHeaders = group.rsc?.fallback?.initialHeaders;
   const segmentHeaders = group.segments.find((m) => m.fallback?.initialHeaders)
@@ -1155,13 +831,6 @@ function variantHeadersOf(group: PrerenderGroup): Record<string, unknown> {
   };
 }
 
-// What a regenerating Lambda reseeds an entry's variant headers from, keyed the
-// way it keys the entry itself. They exist only here, in the build's prerender
-// output — Next's runtime set() payload carries a single page-level headers map
-// — so a revalidation rewrite that could not reach them would drop the segment
-// cache markers the edge serves PPR by and the content-type an RSC request is
-// negotiated with. Nothing else the routing manifest holds is projected: that is
-// read at the edge, and a function bundle carrying it would carry it dead.
 function variantHeaderProjection(
   groups: readonly PrerenderGroup[],
 ): Record<string, Record<string, unknown>> {
@@ -1173,9 +842,6 @@ function variantHeaderProjection(
   return projection;
 }
 
-// emitCacheEntries seeds one cache entry per prerendered route from the build's
-// own output, so a deployed route serves its prerender instead of re-rendering
-// on the first request to every instance.
 async function emitCacheEntries(
   outputRoot: string,
   groups: readonly PrerenderGroup[],
@@ -1199,7 +865,6 @@ async function emitCacheEntries(
       };
 
       if (kind === "APP_ROUTE") {
-        // A single, non-derivable body type: keep content-type verbatim.
         value.headers = html.fallback.initialHeaders;
         value.body = body.toString("base64");
       } else {
@@ -1207,9 +872,6 @@ async function emitCacheEntries(
         value.html = body.toString("utf8");
         const rscBody = await readMaybe(rsc?.fallback?.filePath);
         if (rscBody) value.rscData = rscBody.toString("base64");
-        // The same two maps the projection ships, from the same reading of the
-        // group: the entry a build seeds and the headers a rewrite reseeds it
-        // with cannot disagree.
         Object.assign(value, variantHeadersOf(group));
 
         const segmentData: Record<string, string> = {};
@@ -1233,20 +895,6 @@ async function emitCacheEntries(
   );
 }
 
-// emitFetchEntries seeds the `fetch`/`unstable_cache` entries the build produced
-// under <distDir>/cache/fetch-cache, so a deployed app answers from them instead
-// of re-hitting every upstream on the first request to each instance. It is a
-// rewrite rather than a copy: the file holds the bare cache *value*, since Next
-// synthesizes the envelope's lastModified from the mtime and never stores it.
-// They land in their own output folder because they upload to a different
-// bucket than route entries (see CacheStore.readFetch for why).
-//
-// lastModified is stamped at build time, not taken from the mtime, to keep the
-// tag clock's pruning proof intact: it rests on every entry in a build having
-// lastModified >= deployedAt, and .next/cache survives across builds, so a
-// restored entry's mtime can long predate this deploy. That restarts a restored
-// entry's revalidate window — so one whose window has already elapsed by its
-// mtime is dropped rather than resurrected with a clock it did not earn.
 async function emitFetchEntries(
   outputRoot: string,
   distDir: string,
@@ -1277,7 +925,6 @@ async function emitFetchEntries(
         return; // A half-written entry is a miss, not a failed build.
       }
 
-      // `revalidate: false` is force-cache: no window to elapse, always kept.
       const revalidate = value.revalidate;
       if (
         typeof revalidate === "number" &&
@@ -1299,17 +946,6 @@ export interface RouteTable {
   dynamic: [string, string][];
 }
 
-// Which entry serves which pathname, for the requests that reach a bundle
-// without one named. The worker names the entry on everything it forwards,
-// because only it holds the routing table — but Next also fetches the app
-// directly over the loopback, to run a Server Action that lives on another page
-// and to follow an action's redirect, and those requests arrive unnamed.
-//
-// Every bundle carries the whole build's table, not just its own routes. A
-// pathname another bundle owns then resolves to that bundle's key and fails by
-// name, rather than being absorbed by whatever local pattern happens to span it
-// — and the dynamic patterns keep the order Next emitted them in, which is the
-// specificity order the worker matches them in.
 function routeTable(
   entryKeyByPathname: ReadonlyMap<string, string>,
   dynamicRoutes: readonly { sourceRegex: string; destination?: string }[],
@@ -1318,11 +954,6 @@ function routeTable(
 
   const dynamic: [string, string][] = [];
   for (const route of dynamicRoutes) {
-    // Next emits one pattern per variant of a dynamic route. Only the plain
-    // one names its page outright; the .rsc and segment variants spell theirs
-    // with captures that are substituted per request ($rscSuffix, $d$id), as
-    // does every route under i18n ($nextLocale). A self-fetch asks for the
-    // plain pathname regardless — it carries the RSC header, not an .rsc URL.
     const page = route.destination?.split("?")[0];
     if (!page || page.includes("$")) continue;
     const entryKey = entryKeyByPathname.get(page);
@@ -1332,10 +963,6 @@ function routeTable(
   return { exact, dynamic };
 }
 
-// The `nextConfig` a node middleware invocation needs, projected once at build
-// time rather than reconstructed per bundle: basePath/i18n/trailingSlash shape
-// how Next's own adapter mirrors a request, and experimental carries whatever
-// flags that mirroring reads off it.
 interface NextConfigProjection {
   basePath: string;
   i18n: unknown;
@@ -1343,8 +970,6 @@ interface NextConfigProjection {
   experimental: unknown;
 }
 
-// The bundle's Lambda handler: the entry table, and the dispatcher wired to the
-// launcher's own `require` so the table's relative specifiers resolve from here.
 function renderLauncher(
   entries: Record<string, string>,
   primary: string | null,
@@ -1371,31 +996,6 @@ function renderLauncher(
   );
 }
 
-// routePathname undoes normalizePagePath, the *filename* rule Next's adapter
-// mistakenly uses as the *route* for every Pages Router output
-// (build-complete.ts:966,922): `/` -> `/index`, and any page whose own path
-// starts with `/index` gets a second `/index` prefixed on (`/index/foo` ->
-// `/index/index/foo`) — unless that page is a dynamic route, which
-// normalizePagePath leaves alone (normalize-page-path.ts:15) since a dynamic
-// segment already keeps it from colliding with the literal file `/index.js`.
-//
-// This is never safe to call on an App Router output: normalizeAppPath is a
-// different rule (`/index/page.js` -> `/index`), under which a route
-// genuinely named `/index` is already correct, and undoing normalizePagePath
-// on it would wrongly send it to `/`. Every call site gates on the output's
-// kind first — routeKeyOf and staticRouteKeyOf below — and this function
-// assumes that has already happened.
-//
-// This is the mirror image of servedPathname: that one names the bytes on
-// disk, this one names the route that serves them, and callers that need the
-// built file name (servedPathname, and cacheKey — Next's runtime incremental
-// cache re-derives its key with normalizePagePath, so the cache key must stay
-// spelled the way the build spelled it) must never call this.
-//
-// basePath is stripped before the fix and re-added after, on a segment
-// boundary (matching workers/nextjs's own withoutBasePath): Next bakes
-// basePath onto every output pathname ahead of the adapter, so `/docs/index`
-// must become `/docs`, not `/index/docs`.
 function routePathname(pathname: string, basePath: string): string {
   if (!basePath) return unindex(pathname);
   if (pathname === basePath) return basePath;
@@ -1404,15 +1004,6 @@ function routePathname(pathname: string, basePath: string): string {
   return fixed === "/" ? basePath : `${basePath}${fixed}`;
 }
 
-// Mirrors isDynamicRoute's strict test (is-dynamic.ts:9-11) rather than
-// importing it: the adapter is esbuilt into the CLI's platform dist, and one
-// regex is not worth the coupling. Interception routes (isInterceptionRouteAppPath)
-// are App Router only and never reach this function, so that half of Next's
-// check is not needed here. The `(?=\/|$)` lookahead would not match a
-// *suffixed* pathname such as `/index/[...slug].rsc`, but that is unreachable
-// today: the only `.rsc` prerenders are PPR-only/App Router
-// (build-complete.ts:1894), and `_next/data` paths start `/_next`, never
-// reaching unindex through a Pages Router gate at all.
 const dynamicSegment = /\/\[[^/]+\](?=\/|$)/;
 
 function unindex(pathname: string): string {
@@ -1422,20 +1013,10 @@ function unindex(pathname: string): string {
   return pathname;
 }
 
-// Only these two output kinds ever ran through normalizePagePath; App
-// Router's normalizeAppPath is a different rule and must never be undone.
 function isPagesRouterKind(type: string): boolean {
   return type === "PAGES" || type === "PAGES_API";
 }
 
-// routeKeyOf is the dispatch/pathname key for a function or edge output's own
-// pathname, gated on its kind and runtime. Only the nodejs Pages Router path
-// (build-complete.ts's normalizePagePath call) ever produces a normalized
-// pathname; the edge Pages Router path already hands back a denormalized one
-// — handleEdgeFunction applies the *inverse* rule itself
-// (`route === '/index' ? '/' : route.replace(/\/index$/, '')`,
-// build-complete.ts:749-753) — so re-applying routePathname to an edge output
-// would un-normalize it a second time.
 function routeKeyOf(
   output: { pathname: string; type: string; runtime: string },
   basePath: string,
@@ -1445,31 +1026,6 @@ function routeKeyOf(
     : output.pathname;
 }
 
-// staticRouteKeyOf gates a STATIC_FILE output's pathname. STATIC_FILE carries
-// no `type` to distinguish Pages from App (AdapterOutput['STATIC_FILE'] has
-// none) and no parentOutputId either, so neither of the two tricks above
-// applies — the file's own location on disk is the only signal build-complete
-// leaves behind. Only one STATIC_FILE writer names its pathname with
-// normalizePagePath's output: the Pages Router auto-static branch
-// (build-complete.ts:864,922), which is also the only one that puts the file
-// under server/pages/ *and* names it after the route. Every sibling under
-// server/pages/ (the locale variant, the static 404/500 fallback) already
-// carries its own raw, un-normalized pathname, so translating them is a
-// no-op — routePathname only changes a pathname that actually starts with
-// `/index`.
-//
-// A precise alternative was considered: the auto-static branch is also the
-// only STATIC_FILE writer where `id` is the raw page and `pathname` is
-// normalizePagePath(id) (build-complete.ts:921-922), so
-// `normalizePagePath(file.id) === pathname` looks like a layout-independent
-// test. It is not safe: the non-i18n `.rsc` fallback pushed alongside that
-// same branch (build-complete.ts:935) sets `id: \`${page}.rsc\`` and
-// `pathname: \`${route}.rsc\`` — different strings — and for a nested,
-// non-dynamic route under /index/ (e.g. page "/index/foo" coexisting with an
-// App Router, so the .rsc fallback exists) normalizePagePath(id) equals
-// pathname anyway, so the id-test would wrongly match and translate a `.rsc`
-// output, which must stay untouched. The filePath test has no such case, so
-// it stays.
 function staticRouteKeyOf(
   file: { pathname: string; filePath: string },
   pagesDistDir: string,
@@ -1480,28 +1036,12 @@ function staticRouteKeyOf(
     : file.pathname;
 }
 
-// The file name a built static output is written and keyed under. Next names a
-// prerendered HTML document after the route it answers — /404, /some, /en,
-// /v1.0 — and a route is not a file name: static/some then occupies the
-// directory name every sibling output under /some/ needs, and the bytes reach a
-// browser with no content-type either serving layer can infer. Naming the
-// document .html settles both, and the worker maps a request for /some back
-// onto it.
-//
-// Which outputs those are is read off the build rather than guessed from the
-// pathname: Next writes a document to .next/server/pages/<route>.html, so the
-// source file says what the bytes are where the route only says what they
-// answer. Everything Next already names as a file — the .rsc fallbacks, the
-// _next/static chunks, the app-router static metadata — passes through as
-// itself.
 function servedPathname(file: { pathname: string; filePath: string }): string {
   return file.filePath.endsWith(".html") && !file.pathname.endsWith(".html")
     ? `${file.pathname}.html`
     : file.pathname;
 }
 
-// Copies a file and returns the sha256 of its bytes, hashing as it streams so
-// neither memory nor a per-file size cap bounds what a build can ship.
 async function copyHashedFile(src: string, dest: string): Promise<string> {
   await mkdir(dirname(dest), { recursive: true });
   const hash = createHash("sha256");
@@ -1518,9 +1058,6 @@ async function copyHashedFile(src: string, dest: string): Promise<string> {
   return hash.digest("hex");
 }
 
-// collectPublicFiles walks a project's public/ directory and returns each file
-// as a servable static output: its URL pathname (public/ maps to the site root)
-// and absolute source path. A missing public/ directory yields no files.
 async function collectPublicFiles(
   projectDir: string,
 ): Promise<{ pathname: string; filePath: string }[]> {
@@ -1544,8 +1081,6 @@ async function collectPublicFiles(
   return files;
 }
 
-// Copies one traced asset, skipping a source that is not there — the packer
-// already sized those as missing and the caller warns about them once.
 async function copyAsset(srcAbs: string, dest: string): Promise<void> {
   let info;
   try {
@@ -1554,9 +1089,6 @@ async function copyAsset(srcAbs: string, dest: string): Promise<void> {
     return;
   }
   await mkdir(dirname(dest), { recursive: true });
-  // Preserve symlinks verbatim: the tracer emits pnpm's node_modules as a
-  // forest of links, and dereferencing them collapses package roots into
-  // unresolvable stubs. The link targets are copied as their own asset entries.
   if (info.isSymbolicLink()) {
     await rm(dest, { recursive: true, force: true });
     await symlink(await readlink(srcAbs), dest);

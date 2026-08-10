@@ -10,9 +10,6 @@ import (
 	"strings"
 )
 
-// funcURLRequest is the Lambda Function URL invoke event (payload format 2.0).
-// Function URLs only ever deliver this shape; the fields we don't consume are
-// left off deliberately.
 type funcURLRequest struct {
 	RawPath        string            `json:"rawPath"`
 	RawQueryString string            `json:"rawQueryString"`
@@ -39,7 +36,6 @@ func (ev *funcURLRequest) method() string {
 	return ev.RequestContext.HTTP.Method
 }
 
-// decodedBody returns the request body, base64-decoded when the event marks it so.
 func (ev *funcURLRequest) decodedBody() ([]byte, error) {
 	if !ev.IsBase64Encoded {
 		return []byte(ev.Body), nil
@@ -51,9 +47,6 @@ func (ev *funcURLRequest) decodedBody() ([]byte, error) {
 	return b, nil
 }
 
-// buildLoopbackRequest turns the Function URL event into a real HTTP request
-// against the user's app on loopback. Cookies are re-joined into a single
-// Cookie header (Function URLs split them into the cookies array).
 func buildLoopbackRequest(ctx context.Context, nodePort int, ev *funcURLRequest) (*http.Request, error) {
 	body, err := ev.decodedBody()
 	if err != nil {
@@ -75,18 +68,12 @@ func buildLoopbackRequest(ctx context.Context, nodePort int, ev *funcURLRequest)
 	if len(ev.Cookies) > 0 {
 		req.Header.Set("Cookie", strings.Join(ev.Cookies, "; "))
 	}
-	// Go sends req.Host as the wire Host header and ignores Header["Host"], so
-	// without this the app derives its own origin from the loopback authority and
-	// every absolute URL it builds points at 127.0.0.1:<ephemeral port>.
 	if host := publicHost(req.Header); host != "" {
 		req.Host = host
 	}
 	return req, nil
 }
 
-// publicHost is the authority the client addressed: the reverse proxy in front
-// of the Function URL is authoritative for it and stamps x-forwarded-host; the
-// Function URL's own host header is the next best thing.
 func publicHost(h http.Header) string {
 	for _, name := range []string{"X-Forwarded-Host", "Host"} {
 		if v := strings.TrimSpace(strings.Split(h.Get(name), ",")[0]); v != "" {

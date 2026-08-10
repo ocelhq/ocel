@@ -5,135 +5,48 @@ import (
 	"fmt"
 )
 
-// The account-global tag-snapshot publisher: the Lambda that consumes the state
-// table's stream and is the single writer of every build's tag-clock replica.
-//
-// A tag invalidation is durable the moment it lands in the state table, and that
-// write IS the raise (epic decision 1). Nothing publishes on the hot path any
-// more: this consumer picks the record off the stream, writes the S3 copy
-// directly, and posts the raise to that build's snapshot Durable Object, which
-// owns the R2 write. One publisher per build, and no writer left contending on
-// a key R2 rate-limits at one write a second.
-//
-// It is at-least-once and must stay idempotent: an event source mapping has up
-// to two sanctioned readers per shard, so there is no "exactly one publisher" to
-// be had. The merge is monotone, which is what makes that harmless.
-
 const (
-	// tagPublisherAssetName is the file name the release asset is published
-	// under. It matches what packages/tag-publisher/scripts/build-zip.mjs writes.
 	tagPublisherAssetName = "tag-publisher.zip"
 
-	// tagPublisherKeyPrefix is where the artifact lands in the account's artifact
-	// bucket, on the same two-segment key shape the optimizer uses and for the
-	// same reason: function artifacts are keyed `<slug>/<function>/<hash>.zip`,
-	// so no deploy can land on it.
 	tagPublisherKeyPrefix = "ocel-tag-publisher"
 
-	// tagPublisherLabel names the artifact in every message the placement path
-	// can fail with.
 	tagPublisherLabel = "tag publisher"
 
-	// What the artifact is built for and needs. It reads one S3 object per build
-	// in a batch, merges in memory and posts a small JSON body, so it is bounded
-	// by network round trips rather than by CPU or heap.
 	tagPublisherRuntime      = "nodejs22.x"
 	tagPublisherArchitecture = "arm64"
 	tagPublisherHandler      = "index.handler"
 	tagPublisherMemoryMB     = 512
 
-	// tagPublisherTimeoutSeconds bounds one batch. A batch fans out over the
-	// builds it touches, so the wall clock is a few round trips rather than one
-	// per record — but a timeout kills the whole batch, so overshooting is
-	// cheaper than clipping a batch that was about to finish.
 	tagPublisherTimeoutSeconds = 60
 
-	// tagPublisherBatchSize and tagPublisherRetries. Retries are bounded so a
-	// permanently failing record reaches the DLQ instead of blocking its shard
-	// forever: a stream shard is ordered, and an un-retirable record at its head
-	// stalls every later invalidation for that shard.
 	tagPublisherBatchSize = 100
 	tagPublisherRetries   = 5
 
-	// tagPublisherDLQRetentionSeconds keeps a failed batch's pointer around for
-	// the full 14 days SQS allows. What lands there is a diagnosis, not a work
-	// item — by the time anyone reads it the stream records themselves are gone
-	// — so keeping it costs nothing and throwing it away costs the diagnosis.
 	tagPublisherDLQRetentionSeconds = 1209600
 
-	// tagPublisherAssetBucketEnvVar names the bucket holding the S3 copy of every
-	// build's tag clock, which this function writes and (from ocelhq-wvag.5) the
-	// origin reads. tagPublisherWriterParamEnvVar and
-	// tagPublisherSeedParamEnvVar name the two SSM parameters it derives a
-	// build's write secret from: the writer's endpoint, and the substrate's
-	// write-secret seed. The artifact refuses to start without all three.
 	tagPublisherAssetBucketEnvVar = "OCEL_ASSET_BUCKET"
 	tagPublisherWriterParamEnvVar = "OCEL_ISR_WRITER_PARAM"
 	tagPublisherSeedParamEnvVar   = "OCEL_ISR_WRITER_SEED_PARAM"
 )
 
-// tagPublisherFilter is the event source mapping's filter, and it is a security
-// boundary rather than a cost saving.
-//
-// The stream carries the whole table. Upload sessions live there under the very
-// same sort key (cloud/aws/runtime/bucket/store.go) and carry HMAC secrets, so a
-// filter on `sk = "#META"` alone — which is what this work was originally
-// specified as — would stream credential material to a function that has no
-// business seeing it. The pk prefix is what confines it to the tag partitions.
-//
-// `prefix` is a documented Lambda filter operator and DynamoDB sources exclude
-// only the numeric operators (numbers are stringified in the event, which is
-// also why no filter can be written against a watermark). The consumer verifies
-// the namespace again in code regardless: a filter is configuration, and the one
-// thing this function must never do is act on an item that is not a tag record.
 const tagPublisherFilter = `{"dynamodb":{"Keys":{"pk":{"S":[{"prefix":"TAG#"}]},"sk":{"S":["#META"]}}}}`
 
 func pinnedTagPublisher() artifactPin {
 	return artifactPin{version: TagPublisherArtifactVersion, sha256: TagPublisherArtifactSHA256}
 }
 
-// tagPublisherReleaseURL is where the pinned asset is published. The tag is the
-// contract the release step must satisfy; nothing discovers it.
 func tagPublisherReleaseURL(version string) string {
 	return fmt.Sprintf("https://github.com/ocelhq/ocel/releases/download/tag-publisher-v%s/%s", version, tagPublisherAssetName)
 }
 
-// tagPublisherArtifactKey is content-addressed on the pinned digest, so a digest
-// that moves lands at a new key and CloudFormation sees a code change.
 func tagPublisherArtifactKey(p artifactPin) string {
 	return fmt.Sprintf("%s/%s-%s.zip", tagPublisherKeyPrefix, p.version, p.digest())
 }
 
-// ensureTagPublisherArtifact places the pinned publisher zip; see ensureArtifact
-// for the fail-closed discipline it runs under.
 func ensureTagPublisherArtifact(ctx context.Context, art Artifacts, bucket string, p artifactPin) (artifactCode, error) {
 	return ensureArtifact(ctx, art, bucket, tagPublisherArtifactKey(p), tagPublisherReleaseURL(p.version), tagPublisherLabel, p)
 }
 
-// tagPublisherResources renders the publisher's dead-letter queue, execution
-// role, function and event source mapping — or nothing when no artifact is
-// available, which leaves the substrate publishing exactly the way it did
-// before this function existed.
-//
-// The role is scoped to what the function actually does and nothing else: read
-// the one stream, write the tag-clock objects in this substrate's own asset
-// bucket, read the two SSM parameters it derives a build's write secret from,
-// and send to its own queue. The bucket grant is not narrower than the bucket
-// because the objects are keyed by a prefix the function learns at runtime, one
-// per build, and there is no prefix shape it could be pinned to that every
-// build's key does not already share.
-//
-// Like the optimizer, the function is deliberately unnamed — CloudFormation
-// autonames it and every grant is by !GetAtt — and nothing tags it ocel:app: it
-// belongs to no app, and a fabricated tag would both be a lie and misclassify it
-// for everything keyed off that tag.
-//
-// Nothing here alarms. The bootstrap stack is the substrate every account gets
-// whether or not it has traffic, and it must stay free to leave idle — a
-// standing CloudWatch alarm is billed per month per alarm regardless. The
-// failure modes this function has (dead poller, publishing failures, iterator
-// age, DLQ depth) are all readable from metrics Lambda and SQS emit anyway; what
-// was removed was the standing evaluation, not the signal.
 func tagPublisherResources(code artifactCode, class string) string {
 	if !code.present() {
 		return ""
@@ -235,10 +148,6 @@ func tagPublisherResources(code artifactCode, class string) string {
 		tagPublisherBatchSize, tagPublisherRetries, tagPublisherFilter)
 }
 
-// isrWriterParamNames is the pair of SSM parameters the publisher reads. Both
-// callers are the substrate templates, each passing its own class constant, so
-// there is no unknown class to report — and an empty pair would render a
-// parameter ARN CloudFormation rejects rather than a grant that quietly works.
 func isrWriterParamNames(class string) (writer, seed string) {
 	names := edgeNamesByClass[class]
 	return names.isrWriterParam, names.isrWriterSeedParam

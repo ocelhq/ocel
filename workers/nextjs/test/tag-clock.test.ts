@@ -36,7 +36,6 @@ function storeWith(body: string | null, opts: { fail?: boolean } = {}) {
 it("reports a tag expired after the entry was written as expired", async () => {
   const snap = snapshot({ records: { posts: { expired: 2_000 } } });
   const clock = createTagClock(cfg, { store: storeWith(JSON.stringify(snap)) });
-  // entry written at 1_000, tag expired at 2_000, now 3_000 => expired.
   expect(await clock.expired(["posts"], 1_000, 3_000)).toBe(true);
 });
 
@@ -104,16 +103,12 @@ it("re-reads inside the memo window once the memo is dropped", async () => {
   const clock = createTagClock(cfg, { store });
   expect(await clock.expired(["posts"], 1_000, 3_000)).toBe(false);
 
-  // A writer that republished the snapshot must see its own write, and the memo
-  // window would otherwise answer from before it.
   body = JSON.stringify(snapshot({ records: { posts: { expired: 2_000 } } }));
   dropSnapshotMemo(cfg, store);
   expect(await clock.expired(["posts"], 1_000, 3_000)).toBe(true);
   expect(gets).toHaveLength(2);
 });
 
-// The PoP copy is the layer an invalidation has to get past: it outlives the
-// isolate, is shared by every isolate in the colo, and carries the longer TTL.
 describe("the PoP copy fronting the replica", () => {
   function popCache() {
     const entries = new Map<string, string>();
@@ -138,7 +133,6 @@ describe("the PoP copy fronting the replica", () => {
     const clock = createTagClock(cfg, { store, snapshotCache });
 
     await clock.expired(["posts"], 1_000, 3_000);
-    // Past the isolate memo's window, so only the PoP copy can answer.
     await clock.expired(["posts"], 1_000, 9_000);
 
     expect(store.gets).toHaveLength(1);
@@ -158,7 +152,6 @@ describe("the PoP copy fronting the replica", () => {
 
     expect(await clock.expired(["posts"], 1_000, 3_000)).toBe(false);
 
-    // What a Server Action's origin has already done by the time it answers.
     body = JSON.stringify(snapshot({ records: { posts: { expired: 2_000 } } }));
     await invalidateSnapshot(cfg, { store, snapshotCache });
 
@@ -187,8 +180,6 @@ describe("the PoP copy fronting the replica", () => {
         return { etag: `"${key}"`, text: async () => body };
       },
     };
-    // A Cache API front with no delete, and one that throws, are the same case:
-    // the memo still goes, and the copy lapses on its own TTL.
     const inert = {
       async match() {
         return undefined;
@@ -201,16 +192,11 @@ describe("the PoP copy fronting the replica", () => {
     body = JSON.stringify(snapshot({ records: { posts: { expired: 2_000 } } }));
     await invalidateSnapshot(cfg, { store, snapshotCache: inert });
 
-    // Same millisecond as the read above: only the memo drop can explain this.
     expect(await clock.expired(["posts"], 1_000, 3_000)).toBe(true);
     expect(gets).toHaveLength(2);
   });
 });
 
-// The memo above dedupes across TIME. Nothing deduped across CONCURRENCY: the
-// memo is filled only once the read has returned, so every tagged request that
-// arrives on a cold memo used to issue its own store read. Same defect, and
-// same shape of fix, as registryReads in workers/isr-writer.
 describe("readers arriving together on a cold memo", () => {
   function gatedStore(body: string | null, opts: { fail?: boolean } = {}) {
     const gets: string[] = [];
@@ -239,7 +225,6 @@ describe("readers arriving together on a cold memo", () => {
       clock.expired(["posts"], 1_000, 3_000),
       clock.expired(["posts"], 1_000, 3_000),
     ]);
-    // Every caller is now parked inside the same read; releasing it answers all.
     store.release();
 
     expect(await verdicts).toEqual([true, true, true]);
@@ -255,20 +240,13 @@ describe("readers arriving together on a cold memo", () => {
       clock.expired(["posts"], 1_000, 3_000),
     ]);
     failing.release();
-    // Fail open, exactly as a lone reader does: unknown staleness never serves.
     expect(await verdicts).toEqual(["untrusted", "untrusted"]);
     expect(failing.gets).toHaveLength(1);
 
-    // And the rejection is not parked in the join map: the very next caller,
-    // still inside the memo window, starts a read of its own.
     expect(await clock.expired(["posts"], 1_000, 3_000)).toBe("untrusted");
     expect(failing.gets).toHaveLength(2);
   });
 
-  // invalidateSnapshot exists so a raiser is never answered from before its own
-  // write. A read already in flight when the raise lands IS such an answer, so
-  // the join must be abandoned by the same call that drops the memo — otherwise
-  // the join quietly re-opens the window the purge just closed.
   it("are not joined to a read that started before an invalidation", async () => {
     const bodies = [
       JSON.stringify(snapshot()),
@@ -300,11 +278,6 @@ describe("readers arriving together on a cold memo", () => {
     expect(gets).toHaveLength(2);
   });
 
-  // The abandoned read still settles, and its cleanup must not evict the read
-  // that replaced it. A rejecting one is the reachable case: it leaves no memo
-  // behind, so the next caller really does consult the join map, and a stale
-  // finalizer deleting a live entry would silently un-join every caller after
-  // it with the whole suite still green.
   it("join the read that replaced an abandoned one, not a third of their own", async () => {
     const gets: string[] = [];
     const releases: Array<() => void> = [];
@@ -325,14 +298,10 @@ describe("readers arriving together on a cold memo", () => {
     await invalidateSnapshot(cfg, { store });
     const successor = clock.expired(["posts"], 1_000, 3_000);
 
-    // The abandoned read fails first, so its cleanup runs — and leaves no memo —
-    // while the successor is still in flight.
     releases[0]!();
     expect(await abandoned).toBe("untrusted");
 
     const joiner = clock.expired(["posts"], 1_000, 3_000);
-    // Release everything outstanding, so a caller that failed to join settles
-    // as a third read rather than as a hang.
     for (let i = 0; i < 5; i++) {
       releases.forEach((done) => done());
       await Promise.resolve();
@@ -342,11 +311,6 @@ describe("readers arriving together on a cold memo", () => {
     expect(gets).toHaveLength(2);
   });
 
-  // Un-joining the abandoned read is only half of it. The read still SETTLES,
-  // and both of its effects — the memo it fills and the PoP copy it writes back
-  // — are effects on the layers invalidateSnapshot exists to clear. Resolving
-  // last, it would answer the isolate from before the write for a whole memo
-  // window, and re-put colo-wide the copy the purge just deleted.
   it("do not have an abandoned read fill the memo or re-put the purged copy behind them", async () => {
     const stale = JSON.stringify(snapshot());
     const fresh = JSON.stringify(snapshot({ records: { posts: { expired: 2_000 } } }));
@@ -361,7 +325,6 @@ describe("readers arriving together on a cold memo", () => {
         return { etag: `"${key}"`, text: async () => body };
       },
     };
-    // Always a miss, so every read that is willing to write the copy does.
     const puts: string[] = [];
     let purged = 0;
     const snapshotCache = {
@@ -383,32 +346,22 @@ describe("readers arriving together on a cold memo", () => {
     expect(purged).toBe(1);
     const successor = clock.expired(["posts"], 1_000, 3_000);
 
-    // Both reads are past the cache miss and parked in the store by now.
     for (let i = 0; releases.length < 2 && i < 20; i++) {
       await new Promise((done) => setTimeout(done, 0));
     }
     expect(releases).toHaveLength(2);
 
-    // The successor settles FIRST and the abandoned read last, which is the
-    // ordering in which the abandoned one gets to overwrite what it left.
     releases[1]!();
     expect(await successor).toBe(true);
     releases[0]!();
     expect(await abandoned).toBe(false);
 
-    // Same millisecond, so this is answered from the memo and nothing else —
-    // and the memo has to be the successor's.
     expect(await clock.expired(["posts"], 1_000, 3_000)).toBe(true);
     expect(gets).toHaveLength(2);
-    // And the body the purge deleted is not back in the colo's cache.
     expect(puts).toEqual([fresh]);
   });
 });
 
-// One R2 binding is one object for the life of an isolate; one BUILD is not. A
-// deploy rollover resolves a different isrPrefix per request over that same
-// binding, so state keyed on the binding alone lets build N+1's reader join or
-// memo-hit build N's replica and answer with the wrong clock entirely.
 describe("two builds sharing one binding", () => {
   const older = { isrPrefix: "prod/proj/app/build-n" };
   const newer = { isrPrefix: "prod/proj/app/build-n1" };
@@ -425,7 +378,6 @@ describe("two builds sharing one binding", () => {
       async get(key: string) {
         gets.push(key);
         await gate;
-        // Only the newer build's replica records the invalidation.
         const body =
           key === tagSnapshotKey(newer.isrPrefix)
             ? snapshot({ records: { posts: { expired: 2_000 } } })
@@ -452,8 +404,6 @@ describe("two builds sharing one binding", () => {
     store.release();
 
     expect(await createTagClock(older, { store }).expired(["posts"], 1_000, 3_000)).toBe(false);
-    // Same millisecond, so the older build's memo is live and would answer this
-    // one too if the memo were keyed on the binding alone.
     expect(await createTagClock(newer, { store }).expired(["posts"], 1_000, 3_000)).toBe(true);
     expect(store.gets).toHaveLength(2);
   });
@@ -474,16 +424,9 @@ describe("the PoP copy's drawn lifetime", () => {
     };
   }
 
-  // Both ends as literals, deliberately. Spelling them from the constants makes
-  // the assertion true of whatever the constants happen to say, so the WIDTH of
-  // the draw — the only property that de-synchronizes anything — goes untested
-  // and a jitter narrowed to 2, or widened past the ceiling, stays green.
   it("is drawn over 7..10 seconds: never above the ceiling, never to nothing", () => {
     const random = vi.spyOn(Math, "random").mockReturnValue(0);
     try {
-      // The ceiling is the worst case and the draw only ever shortens it, so
-      // this jitter costs no staleness at all: 10s remains the bound an
-      // invalidation waits out, and the mean falls to 8.5s.
       expect(snapshotTtlSeconds).toBe(10);
       expect(snapshotMaxAgeSeconds()).toBe(10);
       random.mockReturnValue(0.999);
@@ -494,8 +437,6 @@ describe("the PoP copy's drawn lifetime", () => {
   });
 
   it("is drawn by the production path itself, not only by an injected one", async () => {
-    // The silent failure this exists for: a flat constant, or a seam left
-    // unwired, puts the whole colo back in lockstep invisibly.
     const snapshotCache = recordingCache();
     for (let i = 0; i < 40; i++) {
       const clock = createTagClock(cfg, {
@@ -509,9 +450,6 @@ describe("the PoP copy's drawn lifetime", () => {
     for (const maxAge of snapshotCache.maxAges) {
       expect([7, 8, 9, 10]).toContain(maxAge);
     }
-    // 40 draws over 4 phases: seeing fewer than 3 of them is a 1-in-10^9 event,
-    // so this is the assertion that the header carries a DRAW and not a value
-    // that merely happens to be in range.
     expect(new Set(snapshotCache.maxAges).size).toBeGreaterThanOrEqual(3);
   });
 });

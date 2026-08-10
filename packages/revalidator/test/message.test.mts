@@ -19,9 +19,6 @@ it("accepts a well-formed message", () => {
   });
 });
 
-// The shape is the contract .25 builds against, and the security property is
-// that it has no field naming a host: an edge that sends one is sending
-// something the message does not carry.
 it("names no host, and keeps no field that could carry one", () => {
   const parsed = parseMessage(body({ url: "https://attacker.lambda-url.us-east-1.on.aws/x", host: "attacker" }));
 
@@ -69,21 +66,6 @@ it("rejects a route path that is not a path", () => {
   });
 });
 
-// `isrPrefix` is interpolated into the record's S3 URL, ahead of the
-// `/origin.json` the consumer means to read. A `#` or a `?` in it truncates
-// that suffix, so the message — not the deploy — would choose the key, and the
-// edge holds PutObject under the bucket's fetch-cache segment: it could plant a
-// document naming its own host and then point the consumer at it. aws4fetch
-// signs `url.pathname`, and a fragment never reaches the wire, so the signature
-// would have matched what S3 served. These are the exact inputs, rejected before
-// anything is read.
-//
-// The bare `fetch-cache` prefix is the second shape of the same attack and needs
-// no truncation at all: `prod/proj/web/BID/fetch-cache` + `/origin.json` is a
-// key inside the edge's write region. Every character in it passes the segment
-// pattern, so only the segment rejection stops it here. IAM stops it too — the
-// edge's write grant is anchored on `*.cache.json` — and both layers are meant
-// to hold on their own.
 it.each([
   ["a fragment truncating the record name", "prod/proj/web/BID/fetch-cache/x.cache.json#"],
   ["a query truncating the record name", "prod/proj/web/BID/fetch-cache/x.cache.json?"],
@@ -104,10 +86,6 @@ it("accepts the isrPrefix shape the deploy actually builds", () => {
   expect(parsed.ok && parsed.message.isrPrefix).toBe("preview.1/my-proj_2/web-app/BID-x_9.2");
 });
 
-// A header name that is not a token throws inside `new Headers` at signing
-// time, which would land as `handler-error` — a transient classification for a
-// permanently broken record, and five redeliveries before the DLQ. It is a
-// malformed message, and saying so here is what makes it one.
 it("rejects a header map holding a name that is not a token", () => {
   expect(parseMessage(body({ headers: { "bad header": "x" } }))).toEqual({ ok: false, reason: "malformed" });
 });

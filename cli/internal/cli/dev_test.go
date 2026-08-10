@@ -80,8 +80,6 @@ func TestRunDev_NotLoggedIn_ReturnsExitErrorWithLoginInstruction(t *testing.T) {
 	}
 }
 
-// Linking is interactive, so an unlinked directory with no terminal has no
-// flow to run — dev must say so and name the command that works non-interactively.
 func TestRunDev_Unlinked_NonTTY_ErrorsTowardOcelLink(t *testing.T) {
 	prev := loadCredentials
 	loadCredentials = func() (credentials.Credentials, error) {
@@ -100,8 +98,6 @@ func TestRunDev_Unlinked_NonTTY_ErrorsTowardOcelLink(t *testing.T) {
 	}
 }
 
-// A link written against another control plane doesn't apply here, so dev
-// treats the directory as unlinked rather than reusing the wrong project.
 func TestRunDev_LinkedToAnotherControlPlane_NonTTY_ErrorsTowardOcelLink(t *testing.T) {
 	prev := loadCredentials
 	loadCredentials = func() (credentials.Credentials, error) {
@@ -119,8 +115,6 @@ func TestRunDev_LinkedToAnotherControlPlane_NonTTY_ErrorsTowardOcelLink(t *testi
 	}
 }
 
-// Dev needs only the project root and discovery.paths, so it runs in a
-// directory that has a link but no ocel.config.ts at all.
 func TestRunDev_HappyPath_NoConfigFile_DiscoversDeclaresSyncsAndSpawnsWithExitCode(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("uses a POSIX shell fixture command")
@@ -160,8 +154,6 @@ export {};
 	envDumpPath := filepath.Join(root, "env.out")
 	appCmd := []string{"sh", "-c", "env > " + envDumpPath + "; exit 7"}
 
-	// The leader's watcher re-resolves on its own goroutine, writing to these
-	// while the test reads them, so a plain bytes.Buffer won't do.
 	var stdout, stderr syncBuffer
 	err := runDev(context.Background(), nil, root, appCmd, &stdout, &stderr, strings.NewReader(""))
 
@@ -188,9 +180,6 @@ export {};
 	}
 }
 
-// The working tree is the unit of election, and every run in it resolves the
-// same root — so a second run started deep inside the tree still joins the
-// leader rather than starting a rival one.
 func TestRunDev_SecondRunInSameRootFromSubdirectory_BecomesFollowerAndReceivesPushedEnv(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("uses a POSIX shell fixture command")
@@ -236,9 +225,6 @@ export {};
 	leaderDone := make(chan error, 1)
 	var leaderStdout, leaderStderr syncBuffer
 	go func() {
-		// A bare "sleep" (not "sh -c sleep 10") so ctx cancellation's
-		// Process.Kill() actually stops it directly, rather than killing a
-		// forking shell and leaving a "sleep" grandchild running.
 		leaderDone <- runDev(leaderCtx, nil, root, []string{"sleep", "10"}, &leaderStdout, &leaderStderr, strings.NewReader(""))
 	}()
 
@@ -275,10 +261,6 @@ export {};
 		t.Fatalf("OCEL_RESOURCE_POSTGRES_main = %q, want it to contain connectionString", raw)
 	}
 
-	// The binding rides the pushed map like everything else, so a follower's
-	// child is told it as fully as the leader's own is. Without this the SDK
-	// would refuse every scoped read in the one topology this project is most
-	// likely to be developed in — one `ocel dev` per app (ocelhq-xd5j.34 AC3).
 	if got, ok := env["OCEL_APP_FOLDER"]; !ok || got != "/web" {
 		t.Errorf("follower OCEL_APP_FOLDER = %q (present=%v), want the folder the app binds", got, ok)
 	}
@@ -291,10 +273,6 @@ export {};
 	}
 }
 
-// Two clones of one repo, linked to the same cloud project, are two working
-// trees: each elects its own leader and resolves its own declarations. Sharing
-// one would silently hand the second clone the first's environment even though
-// they may sit at different commits.
 func TestRunDev_SecondRootLinkedToSameProject_ElectsItsOwnLeader(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("uses a POSIX shell fixture command")
@@ -311,8 +289,6 @@ func TestRunDev_SecondRootLinkedToSameProject_ElectsItsOwnLeader(t *testing.T) {
 
 	projectID := "proj_" + t.Name()
 
-	// The clones declare different resources, standing in for two checkouts at
-	// different commits: the environment each ends up with names its leader.
 	firstClone := t.TempDir()
 	t.Cleanup(func() { _ = lockfile.Remove(firstClone) })
 	writeLink(t, firstClone, resolveServer.URL, projectID)
@@ -337,8 +313,6 @@ func TestRunDev_SecondRootLinkedToSameProject_ElectsItsOwnLeader(t *testing.T) {
 	envDumpPath := filepath.Join(secondClone, "env.out")
 	appCmd := []string{"sh", "-c", "env > " + envDumpPath + "; exit 9"}
 
-	// The second clone is a leader too, so its watcher goroutine writes here
-	// concurrently with the test's own reads.
 	var stdout, stderr syncBuffer
 	err := runDev(context.Background(), nil, secondClone, appCmd, &stdout, &stderr, strings.NewReader(""))
 
@@ -401,9 +375,6 @@ export default { slug: "test-app" };
 	leaderCtx, cancelLeader := context.WithCancel(context.Background())
 	defer cancelLeader()
 
-	// The leader's own long-running app child and its periodic re-discovery
-	// child both write to these concurrently, so a plain bytes.Buffer (not
-	// safe for concurrent writers) won't do.
 	var leaderStdout, leaderStderr syncBuffer
 
 	leaderDone := make(chan error, 1)
@@ -414,8 +385,6 @@ export default { slug: "test-app" };
 	waitForLockfile(t, root)
 
 	envDumpPath := filepath.Join(root, "follower-env.out")
-	// Loops so the test can observe the follower child's env both before
-	// and after a restart triggered by the leader's re-resolve push.
 	followerAppArgs := []string{"sh", "-c", "while true; do env > " + envDumpPath + "; sleep 0.02; done"}
 
 	followerCtx, cancelFollower := context.WithCancel(context.Background())
@@ -447,9 +416,6 @@ export default { slug: "test-app" };
 	}
 }
 
-// The premise of the dotfile is that the file you edit decides the value. A
-// run that held the file for its lifetime contradicted that silently: the
-// edit landed and nothing happened until the next `ocel dev`.
 func TestRunDev_Leader_EditingTheDotfileReResolvesAndPushesTheNewValue(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("uses a POSIX shell fixture command")
@@ -516,9 +482,6 @@ export default { slug: "test-app" };
 	}
 }
 
-// A watched file means a run can start refusing mid-session — the gate's
-// verdict is only as current as the values it ruled on. What matters is that
-// the refusal is not terminal: the edit that caused it, undone, is enough.
 func TestRunDev_Leader_ARefusalTheEditFixesStopsRefusing(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("uses a POSIX shell fixture command")
@@ -590,9 +553,6 @@ export default { slug: "test-app" };
 	}
 }
 
-// A line the parser cannot read costs the run that key. Reported only at
-// startup, an edit that introduces one re-resolves silently and the developer
-// is left with a value that stopped arriving for no stated reason.
 func TestRunDev_Leader_AnEditThatIntroducesAnUnreadableLineSaysSo(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("uses a POSIX shell fixture command")
@@ -627,8 +587,6 @@ export default { slug: "test-app" };
 
 	waitForLockfile(t, root)
 
-	// The watch is established after the startup resolve, so the edit is
-	// re-applied until it lands rather than raced against it.
 	waitForOutputAfter(t, &leaderStdout, "line 2", func() {
 		writeFile(t, filepath.Join(root, dotenv.FileName), "API_TOKEN=first\nnot a pair\n")
 	})
@@ -708,11 +666,6 @@ export default { slug: "test-app" };
 	}
 }
 
-// newFakeResolveServer serves POST /api/resources/resolve with the same
-// wire contract packages/api/src/routes/resources/resolve/route.ts serves:
-// {projectId, resources:[{name,type}]} -> {env, expiresAt}. Backs runDev's
-// provisioning path in tests that don't care about resolve's own behavior,
-// only that runDev calls it and applies the result.
 func newFakeResolveServer(t *testing.T) *httptest.Server {
 	t.Helper()
 	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -744,7 +697,6 @@ func newFakeResolveServer(t *testing.T) *httptest.Server {
 	}))
 }
 
-// waitForLockfile polls until root's leader lockfile exists.
 func waitForLockfile(t *testing.T, root string) {
 	t.Helper()
 	deadline := time.Now().Add(10 * time.Second)
@@ -757,10 +709,6 @@ func waitForLockfile(t *testing.T, root string) {
 	t.Fatalf("lockfile for %q never appeared", root)
 }
 
-// syncBuffer is a mutex-guarded bytes.Buffer, standing in for the
-// concurrency os.Stdout/os.Stderr provide for real CLI runs: multiple child
-// processes (the leader's own app child and its periodic re-discovery
-// child) can write to it at once.
 type syncBuffer struct {
 	mu  sync.Mutex
 	buf bytes.Buffer
@@ -778,8 +726,6 @@ func (b *syncBuffer) String() string {
 	return b.buf.String()
 }
 
-// declareResourceScript is a discovery-path fixture file that self-registers
-// a single postgres resource named name via ResourceService.Declare.
 func declareResourceScript(name string) string {
 	return fmt.Sprintf(`
 declare global {
@@ -800,7 +746,6 @@ export {};
 `, name)
 }
 
-// waitForEnvVar polls until path is a dumped `env` file containing key.
 func waitForEnvVar(t *testing.T, path, key string) {
 	t.Helper()
 	deadline := time.Now().Add(10 * time.Second)
@@ -816,8 +761,6 @@ func waitForEnvVar(t *testing.T, path, key string) {
 	t.Fatalf("%q never contained env key %q", path, key)
 }
 
-// waitForEnvValue polls until path is a dumped `env` file where key holds
-// want.
 func waitForEnvValue(t *testing.T, path, key, want string) {
 	t.Helper()
 	deadline := time.Now().Add(10 * time.Second)
@@ -835,10 +778,6 @@ func waitForEnvValue(t *testing.T, path, key, want string) {
 	t.Fatalf("%s in %q = %q, never became %q", key, path, last, want)
 }
 
-// waitForOutput polls until buf holds want.
-// waitForOutputAfter runs edit until want appears, for an effect a watch has
-// to be established to see: the watch comes up while the run is still
-// resolving, so a single edit can land before anything is watching for it.
 func waitForOutputAfter(t *testing.T, buf *syncBuffer, want string, edit func()) {
 	t.Helper()
 	deadline := time.Now().Add(10 * time.Second)
@@ -864,7 +803,6 @@ func waitForOutput(t *testing.T, buf *syncBuffer, want string) {
 	t.Fatalf("output = %q, never contained %q", buf.String(), want)
 }
 
-// waitForFile polls until path exists.
 func waitForFile(t *testing.T, path string) {
 	t.Helper()
 	deadline := time.Now().Add(10 * time.Second)
@@ -877,8 +815,6 @@ func waitForFile(t *testing.T, path string) {
 	t.Fatalf("%q never appeared", path)
 }
 
-// writeLink records dir as linked to projectID on the control plane at apiURL
-// — what `ocel link` writes, and what dev now takes its cloud identity from.
 func writeLink(t *testing.T, dir, apiURL, projectID string) {
 	t.Helper()
 	link := cloudlink.Link{APIURL: apiURL, OrganizationID: "org_1", ProjectID: projectID, ProjectName: "Test"}
@@ -897,11 +833,6 @@ func writeFile(t *testing.T, path, contents string) {
 	}
 }
 
-// TestResolvedEnv_DeliversLiveValuesAtStartup proves a live-class value
-// reaches the app the same way every other dev value does — in the environment
-// the child is spawned with, resolved before it starts. There is no second
-// channel in dev and no later opportunity: the value is either here or the
-// read fails.
 func TestResolvedEnv_DeliversLiveValuesAtStartup(t *testing.T) {
 	projectEnv := map[string]string{"PROJECT_ONLY": "p", "OVERRIDDEN": "from-project"}
 	live := map[string]string{"WEBHOOK_SECRET": "whsec_live", "OVERRIDDEN": "from-live"}
@@ -924,12 +855,6 @@ func TestResolvedEnv_DeliversLiveValuesAtStartup(t *testing.T) {
 	}
 }
 
-// TestMergeEnv_DevNeverTellsTheRuntimeToWaitForAPush pins the other half of how
-// dev delivers a live value. OCEL_LIVE_KEYS is the membrane's instruction to
-// the runtime to hold the application's import until values are pushed down the
-// control socket. Dev has no membrane and no control socket, so a dev child
-// that saw that name would wait for a push nobody can send and never boot at
-// all. Dev's whole delivery is the environment, and it must say nothing else.
 func TestMergeEnv_DevNeverTellsTheRuntimeToWaitForAPush(t *testing.T) {
 	live := map[string]string{"WEBHOOK_SECRET": "whsec_live"}
 
@@ -945,12 +870,6 @@ func TestMergeEnv_DevNeverTellsTheRuntimeToWaitForAPush(t *testing.T) {
 	}
 }
 
-// TestReportLiveValues_SaysDevResolvesThemOnce proves the one divergence dev
-// has from a deploy is stated where a developer meets it, rather than
-// discovered later as a rotated value that "won't update". A run with no live
-// value says nothing, and the notice is keyed on what the run declared: a
-// source that resolved none of them is the case with least to go on, and the
-// one a value-keyed notice would go silent for.
 func TestReportLiveValues_SaysDevResolvesThemOnce(t *testing.T) {
 	var quiet bytes.Buffer
 	reportLiveValues(&quiet, nil)

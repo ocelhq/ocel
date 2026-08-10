@@ -1,20 +1,4 @@
 #!/usr/bin/env node
-// Asserts that node middleware (proxy.ts) actually runs on a live deployment —
-// the rewrite, the redirect, the direct response, and the response cookie it
-// stamps on everything else. A 200 from the deployment's root route cannot see
-// any of this: it is served whether or not the Lambda ever calls proxy.ts at
-// all, which is exactly the failure mode next-dispatch.cjs's top-level-await
-// bug produced (every matched request 502ing, forever, from a 502 whose
-// message pointed at the wrong thing).
-//
-// Route names mirror scripts/e2e-next/smoke-app/proxy.ts's own literals; there
-// is no shared import between them because proxy.ts compiles inside the staged
-// Next app and this script runs outside it.
-//
-// Usage: assert-proxy.mjs [deployment-url]
-//   falls back to $NEXT_TEST_DEPLOY_URL, then $SMOKE_URL.
-//
-// Exits non-zero with the observations it collected.
 
 const base = process.argv[2] || process.env.NEXT_TEST_DEPLOY_URL || process.env.SMOKE_URL;
 if (!base) {
@@ -29,8 +13,6 @@ await assertBlocked();
 await assertCookieStamp();
 
 log("all proxy.ts assertions passed");
-
-// --- assertions --------------------------------------------------------
 
 async function assertRewrite() {
   const body = await fetchText("/mw/rewrite");
@@ -73,8 +55,6 @@ async function assertCookieStamp() {
   }
   log("fall-through: / carries the cookie proxy.ts stamps on every unmatched path");
 }
-
-// --- helpers -------------------------------------------------------------
 
 async function fetchText(path) {
   const response = await fetch(new URL(path, base), { redirect: "manual" });

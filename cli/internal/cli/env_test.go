@@ -15,9 +15,6 @@ import (
 	envv1 "github.com/ocelhq/ocel/pkg/proto/env/v1"
 )
 
-// setUpEnvFixture reuses the deploy fixture (project config, fake provider
-// binary, preflighted production substrate) and points the fake provider at a
-// store file that outlives the per-command provider process.
 func setUpEnvFixture(t *testing.T) string {
 	t.Helper()
 	root, _ := setUpDeployFixture(t)
@@ -83,9 +80,6 @@ func TestRunEnvLs_ShowsKeysAndMetadataButNeverValues(t *testing.T) {
 	}
 }
 
-// A root value's FOLDER cell must not print a spelling `ocel env set --folder`
-// rejects, so a value copied straight out of `ls` can be copied straight back
-// in.
 func TestRenderValues_RootFolderDoesNotPrintARejectedSlash(t *testing.T) {
 	var stdout bytes.Buffer
 	renderValues(&stdout, []*envv1.ValueMetadata{
@@ -106,10 +100,6 @@ func TestRenderValues_RootFolderDoesNotPrintARejectedSlash(t *testing.T) {
 	}
 }
 
-// An override whose environment is gone is a row nothing will ever read. `ls`
-// is where a store's dead rows become visible, so it says which they are and
-// what removes them; a listing where every override still has its environment
-// says nothing, because there is nothing to act on.
 func TestRenderValues_MarksAnOverrideWhoseEnvironmentIsGone(t *testing.T) {
 	const note = "orphaned"
 
@@ -187,10 +177,6 @@ func TestRunEnvRm_ReportsNothingToRemove(t *testing.T) {
 	}
 }
 
-// History answers when a value changed and who it was, never what it was.
-// Rotating a leaked key has to end the leak; a history that prints plaintext
-// would keep the rotated-away value one command from a shared terminal for the
-// next fifty writes.
 func TestRunEnvHistory_ShowsMetadataNewestFirstAndNeverAPlaintext(t *testing.T) {
 	root := setUpEnvFixture(t)
 	secrets := []string{"sk_first", "sk_second", "sk_third"}
@@ -198,8 +184,6 @@ func TestRunEnvHistory_ShowsMetadataNewestFirstAndNeverAPlaintext(t *testing.T) 
 		envSet(t, root, "STRIPE_API_KEY", v, envOptions{})
 	}
 
-	// reveal is `ocel env get`'s flag. History must ignore it rather than
-	// honour it, so the whole path is proven and not just the registration.
 	for _, opts := range []envOptions{{}, {reveal: true}} {
 		var stdout bytes.Buffer
 		if err := runEnvHistory(context.Background(), root, "STRIPE_API_KEY", opts, &stdout, &stdout); err != nil {
@@ -228,9 +212,6 @@ func TestRunEnvHistory_ShowsMetadataNewestFirstAndNeverAPlaintext(t *testing.T) 
 	}
 }
 
-// Reveal stays on `ocel env get`, which prints one value the operator asked
-// for by name. It never belonged on history, where one keystroke would print
-// every retained version at once.
 func TestEnvHistory_OffersNoRevealFlagWhereGetStillDoes(t *testing.T) {
 	if f := envHistoryCmd.Flags().Lookup("reveal"); f != nil {
 		t.Errorf("`ocel env history` registers --reveal (%q); history is metadata only", f.Usage)
@@ -240,9 +221,6 @@ func TestEnvHistory_OffersNoRevealFlagWhereGetStillDoes(t *testing.T) {
 	}
 }
 
-// A named environment is the second override axis, so every command that
-// addresses a cell has to be able to name one — including the reads, because an
-// override nothing can inspect or remove is one that accumulates silently.
 func TestEnvCommands_AddressANamedEnvironment(t *testing.T) {
 	for _, c := range []*cobra.Command{envSetCmd, envGetCmd, envRmCmd, envHistoryCmd} {
 		if c.Flags().Lookup("environment") == nil {
@@ -251,10 +229,6 @@ func TestEnvCommands_AddressANamedEnvironment(t *testing.T) {
 	}
 }
 
-// An override binds to one environment and nothing else: the environment that
-// holds it reads it, and the class-wide cell it sits beside is untouched. The
-// two are separate cells, not one another's fallback, which is what lets every
-// other preview go on sharing the class-wide value.
 func TestRunEnvSet_AnOverrideIsItsOwnCellBesideTheClassWideValue(t *testing.T) {
 	root := setUpEnvFixture(t)
 	t.Setenv(fakeInfraClassEnvVar, "preview")
@@ -285,10 +259,6 @@ func TestRunEnvSet_AnOverrideIsItsOwnCellBesideTheClassWideValue(t *testing.T) {
 	}
 }
 
-// An override can only be written against an environment identity the runtime
-// will ask for. The identity is derived from a ref rather than typed, so a name
-// that does not exist is a value nothing will ever read — and the refusal names
-// the ones that do, because guessing the spelling is the whole difficulty.
 func TestRunEnvSet_RefusesAnEnvironmentThatDoesNotExist(t *testing.T) {
 	root := setUpEnvFixture(t)
 	t.Setenv(fakeInfraClassEnvVar, "preview")
@@ -308,9 +278,6 @@ func TestRunEnvSet_RefusesAnEnvironmentThatDoesNotExist(t *testing.T) {
 	}
 }
 
-// Production has a single environment, so an override there is a row no
-// production function could read. The refusal happens before a session is
-// opened: there is nothing to ask the store about.
 func TestRunEnvSet_RefusesAnEnvironmentOnProduction(t *testing.T) {
 	root := setUpEnvFixture(t)
 
@@ -324,10 +291,6 @@ func TestRunEnvSet_RefusesAnEnvironmentOnProduction(t *testing.T) {
 	}
 }
 
-// An environment can be torn down while the override it held survives — which
-// is deliberate, so rebuilding a long-lived branch does not destroy its
-// configuration. What is left is a row nothing will ever read, so `ls` says so
-// and `rm` reaches it: removal must not require the environment back.
 func TestRunEnvRm_AnOrphanedOverrideIsListedAndRemovable(t *testing.T) {
 	root := setUpEnvFixture(t)
 	t.Setenv(fakeInfraClassEnvVar, "preview")
@@ -360,9 +323,6 @@ func TestRunEnvRm_AnOrphanedOverrideIsListedAndRemovable(t *testing.T) {
 	}
 }
 
-// seedFakeValue writes one row straight into the fake store, at a coordinate
-// the CLI's own write path refuses. It is how a listing is shown a row that
-// only a store predating a rule, or a caller that never had one, could leave.
 func seedFakeValue(t *testing.T, class deploymentsv1.Environment_Class, c *envv1.Coordinate, value string) {
 	t.Helper()
 	store, err := loadFakeStore()
@@ -379,10 +339,6 @@ func seedFakeValue(t *testing.T, class deploymentsv1.Environment_Class, c *envv1
 	}
 }
 
-// Named environments belong to the preview substrate, so a production row
-// addressed at one is unreadable whatever previews happen to exist. Judging it
-// against the preview enumeration would call a dead row live because a preview
-// of the same name is running — two different partitions, one name.
 func TestRunEnvLs_AProductionOverrideIsOrphanedThoughAPreviewSharesItsName(t *testing.T) {
 	root := setUpEnvFixture(t)
 	seedFakeValue(t, deploymentsv1.Environment_CLASS_PRODUCTION,
@@ -411,8 +367,6 @@ func TestRunEnvGet_ReportsAnUnsetKey(t *testing.T) {
 	}
 }
 
-// The two override axes are separate cells, not one another's fallback, so a
-// folder value must not answer a root read.
 func TestRunEnvGet_FolderAndRootAreSeparateCells(t *testing.T) {
 	root := setUpEnvFixture(t)
 	envSet(t, root, "POSTHOG_ID", "web-id", envOptions{folder: "/web"})
@@ -431,9 +385,6 @@ func TestRunEnvGet_FolderAndRootAreSeparateCells(t *testing.T) {
 	}
 }
 
-// Neither substrate's values may be reachable from the other — a production
-// secret answering a preview read is the leak the two substrates exist to
-// prevent.
 func TestRunEnv_ProductionAndPreviewAreSeparateStores(t *testing.T) {
 	root := setUpEnvFixture(t)
 	envSet(t, root, "STRIPE_API_KEY", "sk_live_secret", envOptions{})
@@ -520,15 +471,6 @@ func TestRunEnvSet_LeavesAnUnscopedKeyWritableAtRootAndInAFolder(t *testing.T) {
 	envSet(t, root, "LOG_LEVEL", "debug", envOptions{folder: "/web"})
 }
 
-// envDeclaringScript is a declaring process whose definitions are written into
-// the code, the way a real defineEnv call's are, rather than read from the
-// environment the way envDeclarationScript's are. A key's folder scope is a
-// property of the project's source, so changing it here means editing the file
-// — which is what makes "the declarations changed" observable from outside.
-//
-// It also appends a line to OCEL_TEST_DISCOVERY_LOG per run, so how many times
-// the pass actually ran is a fact about the project's own files rather than
-// anything about the CLI's internals.
 func envDeclaringScript(definitions string) string {
 	return fmt.Sprintf(`
 declare global {
@@ -570,9 +512,6 @@ func discoveryRuns(t *testing.T, log string) int {
 	return strings.Count(string(data), "ran\n")
 }
 
-// A write has to know a key's folder scope, which only the project's code
-// knows, but a scripted run of writes should pay for learning it once. The
-// declarations cannot have changed while the code they are written in has not.
 func TestRunEnvSet_SecondWriteReusesTheDeclarationsTheFirstOneLearned(t *testing.T) {
 	root, log := setUpDeclaringFixture(t, `[{"key":"POSTHOG_ID","class":"VARIABLE_CLASS_PLAIN","required":true,"folders":["/web"]}]`)
 
@@ -592,9 +531,6 @@ func TestRunEnvSet_SecondWriteReusesTheDeclarationsTheFirstOneLearned(t *testing
 	}
 }
 
-// The other half: a cache that outlives the code it was read from would put a
-// value in a cell nothing resolves, silently. Scoping a key that was unscoped
-// is exactly that change, and the next write must be judged by the new scope.
 func TestRunEnvSet_PicksUpAScopeTheCodeGainedSinceTheLastWrite(t *testing.T) {
 	root, log := setUpDeclaringFixture(t, `[{"key":"POSTHOG_ID","class":"VARIABLE_CLASS_PLAIN","required":true}]`)
 
@@ -616,18 +552,11 @@ func TestRunEnvSet_PicksUpAScopeTheCodeGainedSinceTheLastWrite(t *testing.T) {
 	}
 }
 
-// A declaration made conditional on ambient run-time state is missing from a
-// set the last run produced, and no fingerprint over the code can see that it
-// is missing. So a cached set may answer for a key it holds and never for one
-// it does not: the alternative is writing a root cell for a scoped key,
-// silently, which is the one thing the write guard exists to prevent.
 func TestRunEnvSet_DoesNotTrustACachedAbsenceForAConditionallyScopedKey(t *testing.T) {
 	root := setUpEnvGateFixtureWith(t, "[]", envDeclareOnlyScript)
 
 	envSet(t, root, "LOG_LEVEL", "info", envOptions{})
 
-	// Same bytes on disk, different ambient state: the declaring process now
-	// scopes a key the cached set never mentioned.
 	t.Setenv("OCEL_TEST_ENV_DEFINITIONS", `[{"key":"POSTHOG_ID","class":"VARIABLE_CLASS_PLAIN","required":true,"folders":["/web"]}]`)
 
 	var stdout, stderr bytes.Buffer

@@ -4,25 +4,8 @@ import { SubstrateError } from "./errors.mjs";
 import { imageConfigKey, type BuildIdentity } from "./keys.mjs";
 import type { ObjectStore } from "./store.mjs";
 
-// Loading the config this function validates against, and refusing to proceed
-// on anything it cannot prove is the config the build compiled.
-//
-// The edge sends a configHash and nothing else about the config. That is the
-// whole of the trust model: the worker is told what to ask for, and this side
-// decides what that means by fetching the artifact and hashing it. A worker
-// that lies about the hash gets a refusal, and a worker running an older
-// manifest cannot keep serving under a config the build has since tightened.
-
-// A config is a few kilobytes; a remotePatterns list large enough to approach
-// this would already be unservable. The ceiling exists so that a wrong or
-// hostile object at this key cannot be a memory exhaustion before it is a hash
-// mismatch.
 const CONFIG_LIMIT = 1024 * 1024;
 
-// Warm containers hold the few configs their traffic touches. Keyed by hash
-// alone, which is sound precisely because the hash is verified: whatever comes
-// back hashes to the key it is stored under, so there is no build identity a
-// cached entry could be wrong for.
 const MEMO_LIMIT = 64;
 const memo = new Map<string, CompiledImageConfig>();
 
@@ -50,15 +33,8 @@ export async function loadImageConfig(
   }
   if (!object) throw new SubstrateError(`no image config at ${key}`);
 
-  // Hashed over the exact bytes that were uploaded, which is why the adapter
-  // hashes the serialized artifact rather than an object it re-serializes:
-  // neither side has to reproduce the other's canonicalization, and there is no
-  // JSON round trip in between for a difference to hide in.
   const digest = createHash("sha256").update(object.bytes).digest("hex");
   if (digest !== configHash) {
-    // No downgrade path, no "close enough", no serving under whatever was
-    // found. The config names the hosts this function may fetch from; a config
-    // we cannot authenticate is one an attacker may have chosen.
     throw new SubstrateError(`image config at ${key} does not match configHash`, {
       expected: configHash,
       actual: digest,
@@ -78,20 +54,6 @@ export async function loadImageConfig(
   return config;
 }
 
-// The hash proves the bytes are the build's, not that this function's
-// expectations of them still hold — an artifact from a future adapter would
-// hash correctly and still be missing a field every check below reads. Absent
-// fields would otherwise read as undefined and quietly widen the validation
-// that is the whole point of loading this.
-//
-// Every field the pipeline reads is listed, including the two that are only ever
-// copied into a response header: `undefined` in a Record<string, string> is
-// serialized by the Lambda prelude as the literal string "undefined", so an
-// artifact missing contentSecurityPolicy answered 200 with
-// `content-security-policy: undefined` — a hash-valid config silently dropping
-// the header the SVG bypass depends on. `maximumRedirects` is absent from this
-// list because it is read through `?? MAX_REDIRECTS` and so is safe by
-// construction.
 function assertShape(config: CompiledImageConfig, key: string): void {
   const missing = (
     [

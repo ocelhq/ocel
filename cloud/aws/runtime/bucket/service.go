@@ -17,34 +17,22 @@ import (
 	"github.com/ocelhq/ocel/pkg/proto/buckets/v1/bucketsv1connect"
 )
 
-// presignTTL is how long a minted PUT URL is valid; sessionTTL is strictly
-// greater so the expiry window never reaps a still-live URL.
 const (
 	presignTTL = time.Hour
 	sessionTTL = 2 * time.Hour
 
-	// sessionTagKey is the object-tag key the presigned PUT binds. The prod
-	// completion listener reads this tag off the landed object to resolve its
-	// session — collision-safe, unlike keying by the object key.
 	sessionTagKey = "sessionId"
 )
 
-// presignAPI is the subset of the S3 presign client the service uses, narrowed
-// for testability.
 type presignAPI interface {
 	PresignPutObject(context.Context, *s3.PutObjectInput, ...func(*s3.PresignOptions)) (*v4.PresignedHTTPRequest, error)
 }
 
-// Service is the production BucketService: it mints presigned PUT targets,
-// persists pending sessions to DynamoDB, verifies completion signatures, and
-// reports status. It implements bucketsv1connect.BucketServiceHandler.
 type Service struct {
 	store     *sessionStore
 	presigner presignAPI
 	bucket    string
 
-	// now and generators are injectable so tests are deterministic; production
-	// wires the wall clock and crypto/rand.
 	now       func() time.Time
 	newID     func() string
 	newSecret func() string
@@ -52,7 +40,6 @@ type Service struct {
 
 var _ bucketsv1connect.BucketServiceHandler = (*Service)(nil)
 
-// Config wires a Service to its concrete AWS clients.
 type Config struct {
 	DDB       ddbAPI
 	Presigner presignAPI
@@ -60,8 +47,6 @@ type Config struct {
 	Bucket    string
 }
 
-// New builds a Service from concrete clients, defaulting the clock and
-// id/secret generators to production implementations.
 func New(cfg Config) *Service {
 	return &Service{
 		store:     &sessionStore{client: cfg.DDB, table: cfg.Table},
@@ -76,8 +61,6 @@ func New(cfg Config) *Service {
 func randomHex(n int) string {
 	b := make([]byte, n)
 	if _, err := rand.Read(b); err != nil {
-		// crypto/rand.Read never returns an error on supported platforms; a
-		// failure here is unrecoverable.
 		panic(fmt.Sprintf("runtime: read random: %v", err))
 	}
 	return hex.EncodeToString(b)
@@ -133,11 +116,6 @@ func (s *Service) PresignUpload(ctx context.Context, req *bucketsv1.PresignUploa
 	return &bucketsv1.PresignUploadResponse{SessionId: sessionID, Files: targets}, nil
 }
 
-// presignPut mints a presigned PUT that binds Content-Length (exact) and
-// Content-Type as signed conditions and a SigV4-signed x-amz-tagging carrying
-// the session id, so a client cannot exceed declared limits or alter the tag
-// without breaking the signature. The user's key is used as-is: prod has no
-// tenancy prefix (the env owns its bucket).
 func (s *Service) presignPut(ctx context.Context, key, contentType string, size int64, sessionID, contentDisposition string) (string, error) {
 	in := &s3.PutObjectInput{
 		Bucket:        aws.String(s.bucket),
@@ -146,8 +124,6 @@ func (s *Service) presignPut(ctx context.Context, key, contentType string, size 
 		ContentLength: aws.Int64(size),
 		Tagging:       aws.String(sessionTagKey + "=" + sessionID),
 	}
-	// When set, sign Content-Disposition so the client must send it and S3 binds
-	// it onto the stored object as tamper-resistant metadata.
 	if contentDisposition != "" {
 		in.ContentDisposition = aws.String(contentDisposition)
 	}
@@ -191,9 +167,6 @@ func (s *Service) GetUploadStatus(ctx context.Context, req *bucketsv1.GetUploadS
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}
 
-	// The DDB TTL reaps orphaned items lazily; treat a session past its TTL as
-	// expired at read time so poll reaches a terminal state without waiting on
-	// physical deletion.
 	state := aggregateState(sess.Files)
 	if s.now().Unix() >= sess.ExpiresAt {
 		state = stateExpired

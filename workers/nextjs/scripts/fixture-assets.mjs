@@ -1,7 +1,3 @@
-// The image payloads the conformance matrix is generated over, built byte by
-// byte so the checked-in fixtures move only when Next's behavior does — an
-// encoder upgrade on whoever regenerates them would otherwise show up as a
-// diff in every hash.
 import { deflateSync } from "node:zlib";
 
 const CRC_TABLE = (() => {
@@ -29,8 +25,6 @@ function pngChunk(type, data) {
   return Buffer.concat([length, body, crc]);
 }
 
-// A 16x16 truecolor PNG with a diagonal split, so a transform has something to
-// resample and a re-encode is not a no-op.
 export function png() {
   const size = 16;
   const raw = Buffer.alloc(size * (1 + size * 3));
@@ -58,8 +52,6 @@ export function png() {
   ]);
 }
 
-// A two-frame GIF89a. Two image descriptors is exactly what Next's is-animated
-// counts, and the animated branch returns the source unmodified.
 export function animatedGif() {
   const header = Buffer.from("GIF89a", "ascii");
   const screen = Buffer.from([1, 0, 1, 0, 0x80, 0, 0]);
@@ -73,7 +65,6 @@ export function animatedGif() {
     Buffer.concat([
       Buffer.from([0x21, 0xf9, 0x04, 0x00, 0x0a, 0x00, 0x00]),
       Buffer.from([0x2c, 0, 0, 0, 0, 1, 0, 1, 0, 0]),
-      // LZW, 2-bit codes: CLEAR, <index>, EOI.
       Buffer.from([0x02, 0x02, 0x04 | (index << 3) | 0x40, 0x01, 0x00]),
     ]);
   return Buffer.concat([
@@ -87,8 +78,6 @@ export function animatedGif() {
   ]);
 }
 
-// An ICO wrapping a PNG payload — the modern form, and the one whose magic
-// bytes put it on Next's BYPASS_TYPES path.
 export function ico() {
   const image = png();
   const header = Buffer.alloc(6);

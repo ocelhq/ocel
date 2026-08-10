@@ -4,11 +4,6 @@ description: >-
   Cloudflare accounts — the preamble every job of test-e2e-deploy that touches
   the disposable e2e accounts needs.
 
-# Referenced as `./adapter/.github/actions/e2e-session`, because the jobs that
-# use it have the repo at `adapter/` (checked out, or restored from the build
-# cache) rather than at the workspace root. The step that puts it there must
-# therefore run before the one that uses it.
-
 inputs:
   node-version:
     description: Node version to install.
@@ -26,12 +21,6 @@ inputs:
     description: Session name, per job, so CloudTrail attributes the calls.
     required: true
   role-duration-seconds:
-    # The session is minted once and never refreshed: the deploy path reads it
-    # off the default credential chain (cloud/aws/server/server.go loadAWS),
-    # which has nowhere to go back to for a new one. It must outlive the job
-    # that mints it, and the role's MaxSessionDuration must be at least this —
-    # an assume that is too long fails loudly at the top of the job, which is
-    # the failure mode to want.
     description: How long the session lives. Must outlive the calling job.
     required: false
     default: "7200"
@@ -61,9 +50,6 @@ runs:
         role-session-name: ${{ inputs.role-session-name }}
         role-duration-seconds: ${{ inputs.role-duration-seconds }}
 
-    # Runs before anything is built, let alone deployed: a misconfigured secret
-    # must never reach a real account. The expected ids are inputs rather than
-    # read from `secrets`, which a composite action cannot see.
     - name: Guard the target accounts
       shell: bash
       env:

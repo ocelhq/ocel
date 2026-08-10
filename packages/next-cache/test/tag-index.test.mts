@@ -2,11 +2,6 @@ import { describe, expect, it } from "vitest";
 
 import { isGuardRejection, tagRecordUpdate, tagSortKey } from "../src/index.mjs";
 
-// A reader of the index cannot tell which tier wrote a row, so these assertions
-// are the contract between them: the Lambda builds this update through the AWS
-// SDK and the worker signs it as a raw request, and a difference in either the
-// bytes or the guard corrupts the index rather than one writer.
-
 const update = (tag: string, record: { stale?: number; expired?: number; writtenAt: number }) =>
   tagRecordUpdate("state", "TAG#prod#proj#app#BID#", tag, record);
 
@@ -38,8 +33,6 @@ describe("tagRecordUpdate", () => {
     });
   });
 
-  // Writing an absent field as 0 would clobber a value another instance set and,
-  // the guard being a strict `<`, wedge the record against its own zero.
   it("guards a stale-only write on stale and leaves expiry unwritten", () => {
     const input = update("products", { stale: 700, writtenAt: 1700 });
     expect(input.ConditionExpression).toBe(

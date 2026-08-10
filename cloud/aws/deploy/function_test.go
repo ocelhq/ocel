@@ -26,8 +26,6 @@ func TestOcelTags(t *testing.T) {
 		}
 	})
 
-	// The invoke grant keys on ocel:app alone, so it is the one tag that must
-	// always be present; empty env/project are skipped rather than stamped blank.
 	t.Run("app is always present, empty env and project are skipped", func(t *testing.T) {
 		tags := ocelTags("web", "", "")
 		if len(tags) != 1 || tags[tagApp] != pulumi.String("web") {
@@ -36,10 +34,6 @@ func TestOcelTags(t *testing.T) {
 	})
 }
 
-// A nil cache is the ordinary case, not an edge one: appCaches only records a
-// cache for a Next app, so every function of a SvelteKit (or any other
-// non-Next) app reaches functionEnv with nil — on the pre-provisioning budget
-// check, before a single resource is created.
 func TestFunctionEnvWithoutCache(t *testing.T) {
 	base := map[string]string{"OCEL_RESOURCE_POSTGRES_main": "{}"}
 
@@ -55,9 +49,6 @@ func TestFunctionEnvWithoutCache(t *testing.T) {
 	}
 }
 
-// functionEnv must not write through to the shared base map: base is built once
-// per app and handed to every function, so a leaked write would put one
-// function's handler and cache coordinates on the next.
 func TestFunctionEnvLeavesBaseUntouched(t *testing.T) {
 	base := map[string]string{"OCEL_RESOURCE_BUCKET_uploads": "{}"}
 

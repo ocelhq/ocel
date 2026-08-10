@@ -20,7 +20,6 @@ app.get("/", (req, res) => {
       });
     }
 
-    // If it's a file, read it
     const content = fs.readFileSync(targetPath, "utf-8");
 
     res.type("text/plain");

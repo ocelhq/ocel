@@ -94,8 +94,6 @@ func (f *fakeGroups) List(_ context.Context, query user.TokenPermissionGroupList
 	}, nil
 }
 
-// newTestStore wires the cache store to fakes and drops the propagation wait, so
-// the retry path runs at test speed.
 func newTestStore(buckets *fakeBuckets, tokens *fakeTokens, groups *fakeGroups) cacheStore {
 	if buckets.existing == nil {
 		buckets.existing = map[string]bool{}
@@ -251,8 +249,6 @@ func TestCacheStoreBootstrap_MintedButUnusableNamesTheRecoveryPath(t *testing.T)
 	if err == nil {
 		t.Fatal("expected an error when the minted token never becomes usable")
 	}
-	// The token exists in Cloudflare but nothing downstream stored it: name it and
-	// the recovery, or the next run reuses a credential no one holds.
 	for _, want := range []string{name, "token-id", "delete"} {
 		if !strings.Contains(err.Error(), want) {
 			t.Errorf("diagnostic must mention %q, got: %v", want, err)

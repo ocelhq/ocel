@@ -23,8 +23,6 @@ const (
 	varsClass    = "production"
 )
 
-// liveConfig is a deploy whose substrate has a variable store, which is what a
-// live-class value needs to be deliverable at all.
 func liveConfig() Config {
 	return Config{
 		VarsKeyARN:   productionVarsKeyARN,
@@ -38,11 +36,6 @@ func scopedVariable(key, folder string, class resourcesv1.VariableClass) *deploy
 	return &deploymentsv1.ManifestVariable{Key: key, Class: class, Folder: folder}
 }
 
-// TestRenderAppBundle_LiveValuesArePinnedByCoordinateAndNeverBaked proves the
-// live class is delivered as an address and the encrypted-baked class as
-// ciphertext, from the same render. A live key contributes a coordinate to the
-// manifest and nothing to the sealed bundle, which is what makes possession of
-// the artifact disclose where the value lives rather than what it is.
 func TestRenderAppBundle_LiveValuesArePinnedByCoordinateAndNeverBaked(t *testing.T) {
 	app := &deploymentsv1.ManifestApp{
 		Name: "web",
@@ -86,11 +79,6 @@ func TestRenderAppBundle_LiveValuesArePinnedByCoordinateAndNeverBaked(t *testing
 	}
 }
 
-// TestRenderAppBundle_APreviewPinsItsOwnEnvironmentAndProductionPinsNone is
-// where the override axis is decided. A preview's functions resolve overrides
-// for the environment they are, so the deploy states which one that is;
-// production has a single environment and pins nothing, which is what keeps its
-// runtime reading one cell per key.
 func TestRenderAppBundle_APreviewPinsItsOwnEnvironmentAndProductionPinsNone(t *testing.T) {
 	app := &deploymentsv1.ManifestApp{
 		Name:      "web",
@@ -124,16 +112,11 @@ func TestRenderAppBundle_APreviewPinsItsOwnEnvironmentAndProductionPinsNone(t *t
 	}
 }
 
-// previewOf is the same substrate deployed as one named preview environment.
 func previewOf(cfg Config, identity string) Config {
 	cfg.Class, cfg.Identity = deploymentsv1.Environment_CLASS_PREVIEW, identity
 	return cfg
 }
 
-// TestRenderAppBundle_ALiveValueNeedsTheSubstratesStore proves a deploy that
-// cannot say where the store is refuses rather than shipping a manifest the
-// runtime will fail to use. The failure names the app and the key, because in
-// the sandbox it would name neither.
 func TestRenderAppBundle_ALiveValueNeedsTheSubstratesStore(t *testing.T) {
 	app := &deploymentsv1.ManifestApp{
 		Name:      "web",
@@ -145,10 +128,6 @@ func TestRenderAppBundle_ALiveValueNeedsTheSubstratesStore(t *testing.T) {
 	}
 }
 
-// TestRenderAppBundle_AnAppWithNoLiveValuesShipsNoManifest proves the file is
-// absent rather than empty for an app that declares none. That absence is what
-// a store outage is confined by: no manifest means no client, no credentials
-// and no call at all.
 func TestRenderAppBundle_AnAppWithNoLiveValuesShipsNoManifest(t *testing.T) {
 	app := &deploymentsv1.ManifestApp{
 		Name:      "web",
@@ -167,8 +146,6 @@ func TestRenderAppBundle_AnAppWithNoLiveValuesShipsNoManifest(t *testing.T) {
 	}
 }
 
-// TestAppBundle_OverlaysTheLiveManifestBesideTheCiphertext proves both
-// deliveries ride in the same package, each at the one path its reader knows.
 func TestAppBundle_OverlaysTheLiveManifestBesideTheCiphertext(t *testing.T) {
 	bundle := appBundle{Envelope: "e", Ciphertext: []byte("sealed"), Live: []byte(`{"slug":"shop"}`)}
 
@@ -184,11 +161,6 @@ func TestAppBundle_OverlaysTheLiveManifestBesideTheCiphertext(t *testing.T) {
 	}
 }
 
-// TestAppBundle_ALiveOnlyAppStillPackagesItsManifest proves a bundle whose only
-// content is a live manifest is not mistaken for the zero bundle. An app that
-// declares nothing but live values bakes no ciphertext, so a render that keyed
-// on the envelope alone would drop its manifest and leave it with no addresses
-// at runtime.
 func TestAppBundle_ALiveOnlyAppStillPackagesItsManifest(t *testing.T) {
 	manifest := &deploymentsv1.Manifest{
 		Slug: "shop",
@@ -217,12 +189,6 @@ func TestAppBundle_ALiveOnlyAppStillPackagesItsManifest(t *testing.T) {
 	}
 }
 
-// TestVarsReadPolicy_ScopesTheTableGrantToTheProjectsOwnPartition proves the
-// runtime's read grant reaches one project's values in one class and nothing
-// else. The table is account-global and shared by every project, so an
-// unconditioned grant would let any function read every project's ciphertext;
-// the condition is built from the same function that builds the key it
-// constrains, so the two cannot drift.
 func TestVarsReadPolicy_ScopesTheTableGrantToTheProjectsOwnPartition(t *testing.T) {
 	raw, err := varsReadPolicy(executionRole{VarsKeyARN: productionVarsKeyARN, VarsTableARN: varsTableARN, Slug: "shop", VarsClass: varsClass})
 	if err != nil {
@@ -262,10 +228,6 @@ func TestVarsReadPolicy_ScopesTheTableGrantToTheProjectsOwnPartition(t *testing.
 	}
 }
 
-// TestAppExecutionRole_TakesTheTableOnlyForAnAppWithLiveValues proves the
-// DynamoDB grant follows the declaration. An app that reads no live value never
-// gains the ability to reach the store at all, which is what keeps the store's
-// blast radius the set of functions that actually depend on it.
 func TestAppExecutionRole_TakesTheTableOnlyForAnAppWithLiveValues(t *testing.T) {
 	cfg := liveConfig()
 	cfg.Slug = "shop"
@@ -286,8 +248,6 @@ func TestAppExecutionRole_TakesTheTableOnlyForAnAppWithLiveValues(t *testing.T) 
 	}
 }
 
-// TestVarsReadPolicy_WithoutATableIsTheDecryptGrantAlone proves an app with no
-// live values renders exactly the policy it rendered before this class existed.
 func TestVarsReadPolicy_WithoutATableIsTheDecryptGrantAlone(t *testing.T) {
 	raw, err := varsReadPolicy(executionRole{VarsKeyARN: productionVarsKeyARN})
 	if err != nil {
@@ -298,10 +258,6 @@ func TestVarsReadPolicy_WithoutATableIsTheDecryptGrantAlone(t *testing.T) {
 	}
 }
 
-// TestLiveDelivery_TheArtifactCarriesTheAddressAndNeverTheValue is the property
-// the class exists for, asserted over what a deploy actually produces: the
-// package holds the coordinate of each live key, the function configuration
-// gains nothing for it, and no plaintext is anywhere in either.
 func TestLiveDelivery_TheArtifactCarriesTheAddressAndNeverTheValue(t *testing.T) {
 	dir := writeTree(t, map[string]string{"src/server.js": "handler"})
 	manifest := &deploymentsv1.Manifest{
@@ -362,8 +318,6 @@ func TestLiveDelivery_TheArtifactCarriesTheAddressAndNeverTheValue(t *testing.T)
 	}
 }
 
-// decodeEnvelope reads a bundle's data key back out of the one configuration
-// entry it travels in.
 func decodeEnvelope(t *testing.T, envelope string) []byte {
 	t.Helper()
 	key, err := base64.StdEncoding.DecodeString(envelope)
@@ -373,11 +327,6 @@ func decodeEnvelope(t *testing.T, envelope string) []byte {
 	return key
 }
 
-// A grant is per function role, so which partitions it reaches is decided by
-// the cells that app's own manifest names. A reference another app holds, and
-// one held by a cell no runtime reads at all, are partitions this function has
-// no business reaching — the project referencing something somewhere is not the
-// question.
 func TestRenderAppBundle_ReferencesOnlyTheOwnersOfItsOwnLiveValues(t *testing.T) {
 	cfg := previewOf(liveConfig(), "pr-42")
 	cfg.VarsReferenced = map[vars.Coordinate]string{
@@ -413,10 +362,6 @@ func TestRenderAppBundle_ReferencesOnlyTheOwnersOfItsOwnLiveValues(t *testing.T)
 	}
 }
 
-// A reference is followed where it is read, so a function resolving one reads
-// the owner project's rows. The grant has to cover exactly those partitions and
-// no others: without them the store accepts a write the runtime is then denied,
-// and with a wildcard the class's isolation is gone.
 func TestVarsReadPolicy_ReachesThePartitionsOfTheProjectsThisOneReferences(t *testing.T) {
 	raw, err := varsReadPolicy(executionRole{VarsKeyARN: productionVarsKeyARN, VarsTableARN: varsTableARN, Slug: "shop", VarsClass: varsClass, VarsReferenced: []string{"platform", "shop", "billing"}})
 	if err != nil {

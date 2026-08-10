@@ -57,8 +57,6 @@ func (*SubscribeRequest) Descriptor() ([]byte, []int) {
 	return file_dev_v1_dev_proto_rawDescGZIP(), []int{0}
 }
 
-// EnvUpdate carries the full resolved environment (project env vars merged
-// with every provisioned resource's env), not a diff.
 type EnvUpdate struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Env           map[string]string      `protobuf:"bytes,1,rep,name=env,proto3" json:"env,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`

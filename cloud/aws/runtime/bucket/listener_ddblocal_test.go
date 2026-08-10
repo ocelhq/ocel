@@ -13,15 +13,6 @@ import (
 	ddbtypes "github.com/aws/aws-sdk-go-v2/service/dynamodb/types"
 )
 
-// TestMarkSucceeded_RealDDBIsAtomicAndIdempotent exercises the store's guarded
-// pending->succeeded transition against a real DynamoDB (dynamodb-local), which
-// the in-memory fake cannot: only a live engine validates the actual
-// UpdateExpression / ConditionExpression the listener relies on for idempotency.
-//
-// It self-skips when dynamodb-local is unreachable. Run it with:
-//
-//	docker compose up -d dynamodb
-//	go test ./cloud/aws/runtime -run TestMarkSucceeded_RealDDBIsAtomicAndIdempotent
 func TestMarkSucceeded_RealDDBIsAtomicAndIdempotent(t *testing.T) {
 	endpoint := os.Getenv("OCEL_RUNTIME_DDB_ENDPOINT")
 	if endpoint == "" {
@@ -61,7 +52,6 @@ func TestMarkSucceeded_RealDDBIsAtomicAndIdempotent(t *testing.T) {
 		t.Fatalf("put session: %v", err)
 	}
 
-	// First transition of file 1 succeeds; a duplicate delivery no-ops.
 	first, err := store.markSucceeded(ctx, sess.SessionID, 1)
 	if err != nil {
 		t.Fatalf("first markSucceeded: %v", err)
@@ -77,7 +67,6 @@ func TestMarkSucceeded_RealDDBIsAtomicAndIdempotent(t *testing.T) {
 		t.Fatal("duplicate transition must report transitioned = false (idempotent)")
 	}
 
-	// Only file 1 flipped; file 0 stays pending — the guard is per-file-index.
 	got, err := store.get(ctx, sess.SessionID)
 	if err != nil {
 		t.Fatalf("get session: %v", err)

@@ -11,7 +11,6 @@ const check = (
   return shouldBypass(request, new URL(url), config);
 };
 
-// The three conditions Next actually emits for an app-router prerender.
 const nextBypassFor = [
   { type: "header", key: "next-action" },
   { type: "header", key: "content-type", value: "multipart/form-data;.*" },
@@ -38,7 +37,6 @@ describe("shouldBypass", () => {
   });
 
   it("ORs the conditions rather than ANDing them", () => {
-    // Only the bot UA matches; the other two conditions are absent.
     expect(
       check({ bypassFor: nextBypassFor }, "https://app.example/", {
         "user-agent": "Slackbot",

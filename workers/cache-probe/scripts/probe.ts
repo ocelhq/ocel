@@ -1,12 +1,3 @@
-// Drives the deployed probe and writes down what it saw. Run it from a machine
-// outside Cloudflare: every elapsed time is measured against this process's
-// clock, which is the only clock in the system that is allowed to be differenced.
-//
-//   node scripts/probe.ts --base https://probe.example.com
-//
-// See README.md for the full flag set and for why the base URL must not be a
-// workers.dev subdomain.
-
 import { mkdir, writeFile } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -24,7 +15,6 @@ import {
 } from "../src/analysis.ts";
 import { parseArgs, type Options } from "../src/options.ts";
 import { sleep } from "../src/race.ts";
-
 
 async function getJson<T>(url: string, init?: RequestInit & { dispatcher?: Dispatcher }) {
   const response = await fetch(url, init);
@@ -59,9 +49,6 @@ interface EntryRead extends Identity {
 async function census(options: Options): Promise<IdentitySample[]> {
   const samples: IdentitySample[] = [];
   for (let round = 0; round < options.rounds; round += 1) {
-    // A fresh dispatcher per round: undici pools keep-alive sockets per origin,
-    // so reusing the default one would replay round 1's connections and add
-    // little sampling surface beyond it.
     const dispatcher = new Agent();
     try {
       const identities = await burst(options.concurrency, () =>
@@ -86,13 +73,8 @@ async function sentinel(options: Options, run: string) {
   const writtenAt = Date.now();
 
   const observations: SentinelObservation[] = [];
-  // Read for a while: the answer being looked for is whether a *later* isolate
-  // sees the write, so the burst has to be wide enough to land somewhere else
-  // and repeated long enough for any propagation to finish.
   for (let round = 0; round < options.rounds * 2; round += 1) {
     const reads = await burst(options.concurrency, async () => {
-      // Stamped per read, not per burst: a burst-wide stamp would give every
-      // read the slowest read's latency and overstate the propagation delay.
       const read = await getJson<EntryRead>(`${options.base}/entry?run=${run}`);
       return { read, elapsedMs: Date.now() - writtenAt };
     });
@@ -148,17 +130,10 @@ async function ttl(
       })),
     });
 
-    // Only a read that could have seen the entry counts toward stopping. If the
-    // cache turns out to be isolate-local, a fan-out that missed the writer's
-    // isolate says nothing about the entry's lifetime, and stopping on it would
-    // report an eviction that never happened.
     const counted = crossIsolateVisible
       ? reads
       : reads.filter((read) => read.isolate === written.isolate);
     if (!counted.length) continue;
-    // Two consecutive misses end the poll: one miss could be a read that raced
-    // an eviction that a later read disproves, and the analysis treats it that
-    // way, so the run stops only once the entry looks durably gone.
     consecutiveMisses = counted.some((read) => read.hit) ? 0 : consecutiveMisses + 1;
     if (consecutiveMisses >= 2) break;
   }

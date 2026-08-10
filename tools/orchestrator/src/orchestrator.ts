@@ -1,14 +1,3 @@
-// Claims ready-for-agent bd issues under a given parent (epic/PRD) and
-// implements them one batch at a time, each in its own Docker sandbox (via
-// sandcastle) on its own branch. Agents never see a GitHub token — once a
-// wave's sandboxed runs close their bd issues, the host delegates the final
-// Graphite work (track each branch onto its parent and submit the stack) to a
-// host-side model call, which handles any restack/rebase the submit needs (see
-// submit.ts). An issue whose bd blockers are still-unmerged branches stacks on
-// the last unmerged blocker's branch; otherwise it's a sibling off the run's
-// feature branch. See
-// `.scratch/<parent-id>/orchestrator-runs/<timestamp>/` for per-run logs.
-
 import { spawnSync } from "node:child_process";
 import { appendFileSync, mkdirSync } from "node:fs";
 import path from "node:path";
@@ -23,10 +12,7 @@ import { submitWaveWithModel, type WaveOutcome } from "./submit.ts";
 
 const TRUNK_BRANCH = "main";
 
-// Max issues run concurrently (in separate sandboxes) within one wave.
 const MAX_PARALLEL_ISSUES = 3;
-// Safety cap on the number of claim waves (the outer sync/claim/run/submit
-// loop), in case something keeps re-claiming without making progress.
 const MAX_CLAIM_WAVES = 20;
 const IDLE_TIMEOUT_SECONDS = 30 * 60;
 const IMAGE_NAME = "sandcastle:ocelhq";
@@ -37,13 +23,6 @@ function usageError(message: string): never {
 	process.exit(1);
 }
 
-// Picks the branch a new issue branch should stack on: the last of its bd
-// blockers whose branch still exists and isn't merged into `baseBranch` yet,
-// or `baseBranch` itself if every blocker has already landed (or it has
-// none). `bd ready --claim` only surfaces issues whose blockers are all bd-
-// closed, and — because claiming is sequential while implement runs are the
-// only thing that happens concurrently — a blocker can only be bd-closed by
-// an earlier wave, so its branch is guaranteed to already be tracked.
 function resolveParentBranch(issue: { id: string }, baseBranch: string, repoRoot: string): string {
 	const blockers = issueBlockers(issue.id, repoRoot);
 	const candidates = blockers
@@ -52,12 +31,6 @@ function resolveParentBranch(issue: { id: string }, baseBranch: string, repoRoot
 
 	if (candidates.length <= 1) return candidates[0] ?? baseBranch;
 
-	// More than one still-unmerged blocker: if they form a single Graphite
-	// stack (each is already merged into one further-along candidate's
-	// branch), stack on the deepest one — it already contains every other
-	// candidate's commits. If they don't form a chain (independent
-	// branches), there's no single correct parent; keep the old last-wins
-	// behavior as a fallback.
 	const deepest = candidates.find((candidate) =>
 		candidates.every((other) => other === candidate || isMergedInto(other, candidate, repoRoot)),
 	);
@@ -79,9 +52,6 @@ function ensureImageBuilt(repoRoot: string, sandcastleBin: string, log: (msg: st
 }
 
 async function main() {
-	// Node skips `finally` blocks on SIGINT/SIGTERM (Ctrl+C or a container
-	// stop), which would otherwise leak the run's Docker network and Postgres
-	// sidecar. `infra` is set once setupRunInfra() below returns.
 	let infra: RunInfra | undefined;
 	for (const signal of ["SIGINT", "SIGTERM"] as const) {
 		process.on(signal, () => {
@@ -132,20 +102,9 @@ async function main() {
 	infra = setupRunInfra(runId);
 	log(`Run infra ready: network ${infra.networkName}, Postgres sidecar ${infra.postgresContainerName}`);
 
-	// bd resolves this via git's own common-dir logic, so it's correct whether
-	// the orchestrator runs from the main checkout or a linked worktree — a
-	// worktree's own `.beads/` is just a client stub with no issue data.
 	const beadsDir = bdWhere(repoRoot);
 	const beadsMount = { hostPath: beadsDir, sandboxPath: beadsDir };
 
-	// Hazard confirmed by testing: once a branch is gt-tracked, a later `gt
-	// sync` restack can silently drop commits made on it via plain `git
-	// commit` since gt's last look at it (e.g. hand-editing this repo on
-	// `baseBranch` between runs, or in the same checkout the orchestrator
-	// runs from) — the restack replays from gt's cached tip, not live HEAD.
-	// Don't hand-commit to `baseBranch` while a run against it is in
-	// progress; if you must, run `gt track <baseBranch> --force` again
-	// immediately after so gt's cache catches up before the next `gt sync`.
 	gtTrack(baseBranch, TRUNK_BRANCH, repoRoot);
 	log(`Tracked feature branch "${baseBranch}" with Graphite (parent: ${TRUNK_BRANCH})`);
 
@@ -175,9 +134,6 @@ async function main() {
 
 			log(`Claimed ${batch.length} issue(s) to run in parallel this wave: ${batch.map((c) => c.id).join(", ")}`);
 
-			// Sandboxed implement runs are the only thing that runs concurrently.
-			// gt track/submit happen afterward, one at a time — gt's local repo
-			// metadata isn't safe for concurrent writers the way bd's Dolt DB is.
 			const settled = await Promise.allSettled(
 				batch.map(async (issue) => {
 					const branch = branchNameFor(issue);
@@ -190,17 +146,11 @@ async function main() {
 						result = await sandcastleRun({
 							cwd: repoRoot,
 							name: issue.id,
-							// We never resume/fork a session, and a transient capture failure
-							// shouldn't revert an otherwise-successful run (bd close + commits
-							// already landed by the time capture happens).
 							agent: claudeCode("claude-sonnet-5", { captureSessions: false }),
 							sandbox: docker({
 								imageName: IMAGE_NAME,
 								network: infra.networkName,
 								mounts: [beadsMount],
-								// bd's discovery walks up from cwd, which inside the sandbox is
-								// the bind-mounted worktree (a different path than repoRoot) —
-								// it never reaches the mounted .beads dir. Point it there directly.
 								env: { BEADS_DIR: beadsMount.sandboxPath, TEST_DATABASE_URL: infra.testDatabaseUrlFor(issue.id) },
 							}),
 							branchStrategy: { type: "branch", branch, baseBranch: parentBranch },
@@ -242,13 +192,6 @@ async function main() {
 				}),
 			);
 
-			// Track/submit each successful branch onto its stack. gt's fixed
-			// track→submit sequence is fragile (a stacked branch may need a
-			// restack/rebase before `gt submit` takes), so instead of hand-coding
-			// each error path we delegate the whole wave to a host-side model call
-			// that runs the same steps and works around whatever it hits. It
-			// reopens branches it can't submit itself; the host only reverts the
-			// wave if the model call never ran (see submitWaveWithModel).
 			const waveOutcomes: WaveOutcome[] = [];
 			for (const outcome of settled) {
 				if (outcome.status === "fulfilled" && outcome.value !== null) waveOutcomes.push(outcome.value);

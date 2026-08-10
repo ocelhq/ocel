@@ -1,8 +1,3 @@
-// Aggregation over what the probe observed. Every elapsed time here is measured
-// by the runner against its own clock, never by differencing timestamps taken in
-// two isolates — Date.now() in a Worker only advances on I/O, so cross-isolate
-// arithmetic on it would be measuring the runtime, not the cache.
-
 export interface IdentitySample {
   colo: string;
   isolate: string;
@@ -44,25 +39,12 @@ export interface SentinelObservation {
 }
 
 export type SentinelVerdict =
-  // Nearly every cross-isolate read hit: L1 as designed is viable.
   | "cross-isolate-visible"
-  // Some cross-isolate reads hit and some missed. A colo is many machines, so
-  // this is the expected shape of a real sharing result. L1 suppresses only the
-  // observed fraction, and L2 must be sized by that suppression factor rather
-  // than by colo count.
   | "partially-visible"
-  // Other isolates read and missed while the writer's own isolate hit: L1 is a
-  // no-op and L2 must be sized for isolate-count fan-in.
   | "isolate-local"
-  // Nothing ever hit, including the writer's isolate: the cache is inert here
-  // (the workers.dev case), so the run measured nothing about isolates.
   | "never-cached"
-  // No read ever landed on an isolate other than the writer's, so the run
-  // cannot distinguish the outcomes.
   | "inconclusive";
 
-// A cross-isolate hit rate at or above this reads as full sharing rather than
-// partial. Below it the suppression factor, not the verdict, is the finding.
 const FULLY_VISIBLE_HIT_RATE = 0.9;
 
 export interface SentinelSummary {
@@ -132,12 +114,8 @@ export interface TtlObservation {
 }
 
 export type TtlVerdict =
-  // A hit was observed at or past the requested TTL.
   | "honored"
-  // The entry was already gone before the requested TTL elapsed.
   | "evicted-early"
-  // The observed lifetime brackets the requested TTL, or no poll was able to
-  // observe the entry's liveness at all, so the run proves neither.
   | "indeterminate"
   | "never-cached";
 
@@ -146,24 +124,10 @@ export interface TtlSummary {
   verdict: TtlVerdict;
   lastHitMs: number | null;
   firstMissAfterLastHitMs: number | null;
-  // True when polling stopped while the entry was still live, so its lifetime is
-  // only bounded from below. An entry that outlives its TTL by a wide margin is
-  // the signal that Cloudflare floored the TTL upward.
   stillLiveAtEndOfWindow: boolean;
-  // Misses observed before a later hit — a read that missed while the entry was
-  // demonstrably still live, which is itself worth seeing.
   transientMisses: number;
   polls: number;
-  // Polls whose reads could actually observe the entry: all of them when the
-  // sentinel phase proved the cache is shared, otherwise only those that landed
-  // on the writer's own isolate. A poll that could not observe the entry says
-  // nothing about its lifetime, and counting it would manufacture a confident
-  // evicted-early out of routing luck.
   authoritativePolls: number;
-  // Cloudflare's own account of the entry, independent of this probe's polling
-  // luck: the largest age it reported bounds the lifetime from below, and a
-  // cache-control differing from what was written answers whether cache.put
-  // rewrites TTLs.
   maxObservedAgeSeconds: number | null;
   observedCacheControl: string[];
 }

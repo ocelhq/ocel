@@ -27,8 +27,6 @@ func TestRootStackWorkerNames_CoversEveryAppFromHistoryNotTheSharedStore(t *test
 	}
 
 	prod := "proj_x-prod"
-	// Every generic worker (one per app across all of history, plus the no-app
-	// "root" fallback and the legacy unqualified name) must appear.
 	for _, want := range []string{
 		legacyWorkerName(prod),
 		workerScriptName("proj_x", "prod", "root"),
@@ -40,15 +38,12 @@ func TestRootStackWorkerNames_CoversEveryAppFromHistoryNotTheSharedStore(t *test
 		}
 	}
 
-	// The shared deployments-store worker outlives the project; it must never be
-	// in the delete set (its own instance is wiped by DestroyInstance instead).
 	for _, n := range names {
 		if n == "ocel-deployments-store" {
 			t.Errorf("worker names %v must not include the shared store worker", names)
 		}
 	}
 
-	// No duplicates — web appears in two promotions but is one worker.
 	seen := map[string]bool{}
 	for _, n := range names {
 		if seen[n] {
@@ -59,9 +54,6 @@ func TestRootStackWorkerNames_CoversEveryAppFromHistoryNotTheSharedStore(t *test
 }
 
 func TestRootStackWorkerNames_PropagatesHistoryError(t *testing.T) {
-	// An unreconciled state makes the fake's History reject; the resolver must
-	// surface that rather than silently returning an incomplete worker set (the
-	// caller then leaves the root stack marked not-torn-down).
 	_, err := rootStackWorkerNames(context.Background(), &recordingRootStack{}, edge.RootStackState{}, "proj_x", "prod")
 	if err == nil {
 		t.Fatal("rootStackWorkerNames with an unreadable store err = nil, want the history error")
@@ -93,8 +85,6 @@ func TestClassifyProjectStacks_SplitsInfraFromAppStacks(t *testing.T) {
 }
 
 func TestClassifyProjectStacks_IncludesOrphanAppStacks(t *testing.T) {
-	// An aborted deploy leaves an app stack no promotion ever named; a
-	// backend-prefix scan must still collect it, unlike a store-driven prune.
 	got := classifyProjectStacks("shop", []string{"shop--web--b1", "shop--web--aborted"})
 	want := []string{"shop--web--b1", "shop--web--aborted"}
 	if !reflect.DeepEqual(got.AppStacks, want) {
@@ -109,10 +99,10 @@ func TestClassifyProjectStacks_ExcludesOtherProjectsAndPreviews(t *testing.T) {
 	got := classifyProjectStacks("shop", []string{
 		"shop--infra",
 		"shop--web--b1",
-		"shopfoo--infra",   // sibling project whose id has ours as a prefix
-		"shopfoo--web--b1", // ditto
-		"other--infra",     // unrelated project
-		"shop-preview-pr1", // a preview stack (single-dash), not production
+		"shopfoo--infra",
+		"shopfoo--web--b1",
+		"other--infra",
+		"shop-preview-pr1",
 	})
 	want := ProjectTeardownPlan{
 		InfraStack: "shop--infra",
@@ -124,9 +114,6 @@ func TestClassifyProjectStacks_ExcludesOtherProjectsAndPreviews(t *testing.T) {
 }
 
 func TestClassifyProjectStacks_AppNamedInfraIsNotTheInfraStack(t *testing.T) {
-	// Only the exact "<project>--infra" name is the infra stack; an app that
-	// happens to be named "infra" produces "<project>--infra--<build>", which
-	// stays an app stack.
 	got := classifyProjectStacks("shop", []string{"shop--infra", "shop--infra--b1"})
 	want := ProjectTeardownPlan{
 		InfraStack: "shop--infra",

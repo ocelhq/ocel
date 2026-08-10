@@ -16,15 +16,8 @@ import (
 	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
 )
 
-// errNoProductionDeploy is returned by ListPromotions/Rollback when a project
-// has never had a successful production deploy: rollback and promotion
-// history exist only once a root stack has been reconciled (ADR 0001).
 var errNoProductionDeploy = errors.New("this project has no production deploys yet; run `ocel deploy` first")
 
-// rootStack resolves the reconciled edge.RootStack state a project's production
-// deploys have persisted, erroring clearly when none exists yet. Shared by
-// ListPromotions and Rollback, both of which only ever read/act on an
-// already-reconciled root stack — neither ever reconciles one itself.
 func (s *Server) rootStack(ctx context.Context, opts options, slug string) (edge.RootStack, edge.RootStackState, error) {
 	awscfg, err := loadAWS(ctx, opts.Region)
 	if err != nil {
@@ -47,8 +40,6 @@ func (s *Server) rootStack(ctx context.Context, opts options, slug string) (edge
 	return stack, state, nil
 }
 
-// ListPromotions enumerates a production project's promotion history via its
-// already-reconciled root stack. It backs `ocel deployments ls`.
 func (s *Server) ListPromotions(ctx context.Context, req *deploymentsv1.ListPromotionsRequest) (*deploymentsv1.ListPromotionsResponse, error) {
 	opts, err := parseOptions(req.GetOptions())
 	if err != nil {
@@ -69,10 +60,6 @@ func (s *Server) ListPromotions(ctx context.Context, req *deploymentsv1.ListProm
 	return &deploymentsv1.ListPromotionsResponse{Promotions: toPromotionHistory(history)}, nil
 }
 
-// Rollback re-points a production project's active-deployment pointer at a
-// prior Promotion: the one tagged req.Tag, else the one named by req.To, else
-// the immediately previous one. It backs `ocel rollback` / `ocel rollback --to
-// <promotionId>` / `ocel rollback --tag <tag>`.
 func (s *Server) Rollback(ctx context.Context, req *deploymentsv1.RollbackRequest) (*deploymentsv1.RollbackResponse, error) {
 	opts, err := parseOptions(req.GetOptions())
 	if err != nil {
@@ -90,8 +77,6 @@ func (s *Server) Rollback(ctx context.Context, req *deploymentsv1.RollbackReques
 	return &deploymentsv1.RollbackResponse{Promoted: toPromotionProto(promoted)}, nil
 }
 
-// toPromotionHistory maps the store's promotion history to the proto reply.
-// Pure.
 func toPromotionHistory(history []edge.HistoryEntry) []*deploymentsv1.PromotionHistoryEntry {
 	out := make([]*deploymentsv1.PromotionHistoryEntry, 0, len(history))
 	for _, h := range history {
@@ -103,7 +88,6 @@ func toPromotionHistory(history []edge.HistoryEntry) []*deploymentsv1.PromotionH
 	return out
 }
 
-// toPromotionProto maps edge.Promotion to the proto message. Pure.
 func toPromotionProto(p edge.Promotion) *deploymentsv1.Promotion {
 	return &deploymentsv1.Promotion{
 		PromotionId: p.PromotionID,

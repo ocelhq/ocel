@@ -6,8 +6,6 @@ import (
 )
 
 func TestRetention_KeepsWindowAndPinsActive(t *testing.T) {
-	// Newest-first, mirroring the store's history() order. p1 is active but
-	// old enough to fall outside a keepN=2 window.
 	history := []HistoryEntry{
 		{Promotion: Promotion{PromotionID: "p5"}},
 		{Promotion: Promotion{PromotionID: "p4"}},

@@ -12,7 +12,6 @@ type UploadArgs<B, K extends UploaderName<B>> = {
   ? { input?: undefined }
   : { input: InputOf<B, K> });
 
-/** The browser File surface the client needs: identity for presign + the body to PUT. */
 export interface BrowserFile {
   name: string;
   size: number;
@@ -38,7 +37,6 @@ export interface UploadClientOptions {
   url: string;
   pollIntervalMs?: number;
   maxPollMs?: number;
-  /** Fetch implementation; defaults to the global fetch. Injectable for tests. */
   fetch?: FetchLike;
 }
 
@@ -88,11 +86,6 @@ async function pollUntilTerminal(
   }
 }
 
-/**
- * Builds a typed upload client for a bucket. The bucket is imported as a
- * TYPE only, so no server code reaches the browser bundle. `upload`'s uploader
- * name and input are compile-checked against `typeof bucket`.
- */
 export function createUploadClient<B extends Bucket<Record<string, AnyUploader>>>(
   options: UploadClientOptions,
 ) {
@@ -126,9 +119,6 @@ export function createUploadClient<B extends Bucket<Record<string, AnyUploader>>
 
       await Promise.all(
         presign.files.map((target, i) => {
-          // Content-Type rides implicitly from the File body; Content-Disposition
-          // must be sent explicitly so the signed presigned PUT binds it onto the
-          // stored object.
           const headers = target.contentDisposition
             ? { "content-disposition": target.contentDisposition }
             : undefined;

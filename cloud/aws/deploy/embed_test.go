@@ -24,9 +24,6 @@ import (
 	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
 )
 
-// Embedding is opt-in, and it is opt-in the strict way: exactly "1". Anything
-// else, including the spellings a user might reasonably expect to work, leaves
-// the deploy on the S3 path it already has.
 func TestBytecodeEmbedEnabled_OffUnlessAskedForExactly(t *testing.T) {
 	t.Setenv(bytecodeCacheEnv, "1")
 	t.Setenv(bytecodeEmbedEnv, "")
@@ -45,8 +42,6 @@ func TestBytecodeEmbedEnabled_OffUnlessAskedForExactly(t *testing.T) {
 	}
 }
 
-// There is nothing to embed without a published cache, so the two gates are
-// ANDed rather than left for a caller to get wrong.
 func TestBytecodeEmbedEnabled_ImpliesCaching(t *testing.T) {
 	t.Setenv(bytecodeEmbedEnv, "1")
 	t.Setenv(bytecodeCacheEnv, "")
@@ -55,9 +50,6 @@ func TestBytecodeEmbedEnabled_ImpliesCaching(t *testing.T) {
 	}
 }
 
-// The gate is arithmetic over two numbers and is the only thing standing
-// between an embed and an undeployable package, so it is asserted directly
-// rather than through a pass.
 func TestEmbedGateAdmitsASmallCacheInASmallPackage(t *testing.T) {
 	if ok, why := embedGate(40<<20, 8<<20); !ok {
 		t.Errorf("embedGate(40 MiB, 8 MiB) refused: %s", why)
@@ -74,8 +66,6 @@ func TestEmbedGateRefusesACacheOverTheSoftCeiling(t *testing.T) {
 	}
 }
 
-// The hard bound is legality: past it Lambda rejects the package outright, so
-// it must bite even for a cache well under the soft ceiling.
 func TestEmbedGateRefusesAPackageOverTheUnzippedLimit(t *testing.T) {
 	ok, why := embedGate(embedUnzippedCeiling-(1<<20), 2<<20)
 	if ok {
@@ -96,8 +86,6 @@ func TestEmbeddedTarPathMirrorsTheCacheKeyBasename(t *testing.T) {
 	}
 }
 
-// A key the membrane did not compose is a key this side cannot mirror, and
-// guessing one would embed a tar no cold start ever looks for.
 func TestEmbeddedTarPathRejectsAKeyItCannotMirror(t *testing.T) {
 	for _, key := range []string{
 		"",
@@ -127,11 +115,6 @@ func TestEmbeddedArtifactKeyRejectsANonZipKey(t *testing.T) {
 	}
 }
 
-// The merge is the one step that rewrites deployed code, and the whole reason
-// it copies raw entries is that the function must stay byte-identical to what
-// the warm pass just proved. So the round trip asserts every original entry
-// survives unchanged — contents, name, and compression method — with exactly
-// one new entry beside them.
 func TestMergeEmbeddedTarPreservesEveryOriginalEntry(t *testing.T) {
 	dir := t.TempDir()
 	original := map[string]string{
@@ -188,9 +171,6 @@ func TestMergeEmbeddedTarPreservesEveryOriginalEntry(t *testing.T) {
 	}
 }
 
-// Streaming through a temp file is load-bearing (a bytes.Buffer would hold the
-// original and the merge in memory per concurrent function), so the merge has
-// to survive an original bigger than anything a buffer test would cover.
 func TestMergeEmbeddedTarHandlesALargeOriginal(t *testing.T) {
 	dir := t.TempDir()
 	original := map[string]string{}
@@ -213,8 +193,6 @@ func TestMergeEmbeddedTarHandlesALargeOriginal(t *testing.T) {
 	}
 }
 
-// fakeObjects answers every GET from a key-addressed map, so the whole pass
-// runs with no AWS client, config or credentials in reach.
 type fakeObjects struct {
 	objects map[string][]byte
 	err     error
@@ -231,7 +209,6 @@ func (f *fakeObjects) GetObject(_ context.Context, in *s3.GetObjectInput, _ ...f
 	return &s3.GetObjectOutput{Body: io.NopCloser(bytes.NewReader(body))}, nil
 }
 
-// fakePutter records what the pass uploaded, and can be told to refuse.
 type fakePutter struct {
 	mu   sync.Mutex
 	put  map[string][]byte
@@ -269,8 +246,6 @@ func (f *fakePutter) uploaded() map[string][]byte {
 	return f.put
 }
 
-// fakeCodeUpdater records the key each function was moved onto and answers the
-// settle poll with status.
 type fakeCodeUpdater struct {
 	status lambdatypes.LastUpdateStatus
 	err    error
@@ -305,8 +280,6 @@ func (f *fakeCodeUpdater) GetFunctionConfiguration(context.Context, *lambda.GetF
 
 const embedTestCacheKey = "prod/p/web/B1/bytecode/fn/node24.3.1-arm64.tar.gz"
 
-// embedTestPass wires one target against fakes holding a real gzipped tar and a
-// real zip, so every leg the pass runs is the production one.
 func embedTestPass(t *testing.T, putter *fakePutter, code *fakeCodeUpdater, invoker *fakeInvoker) (embedPass, func() string) {
 	t.Helper()
 	dir := t.TempDir()
@@ -349,7 +322,6 @@ func embedTestPass(t *testing.T, putter *fakePutter, code *fakeCodeUpdater, invo
 	}, out
 }
 
-// embeddedReply is what a function that answered from its own package says.
 func embeddedReply() *fakeInvoker {
 	return answering(`{"state":"already-cached","source":"embedded","entries":51,"loaded":51}`)
 }
@@ -388,7 +360,6 @@ func TestEmbedPass_RepackagesAndVerifies(t *testing.T) {
 			t.Errorf("uploaded package holds %v, want the original entry plus the tar", names)
 		}
 	}
-	// The function must end up on exactly the object that was uploaded.
 	for _, key := range code.updated {
 		if _, ok := uploaded["artifacts/"+key]; !ok {
 			t.Errorf("the function was moved onto %q, which was never uploaded", key)
@@ -396,9 +367,6 @@ func TestEmbedPass_RepackagesAndVerifies(t *testing.T) {
 	}
 }
 
-// Nothing in this pass may fail a deploy, and nothing may leave a function on a
-// package that was not verified. Each leg is broken in turn; the pass must
-// report it and move on.
 func TestEmbedPass_EveryFailureDegradesToAWarning(t *testing.T) {
 	for _, tc := range []struct {
 		name    string
@@ -415,8 +383,6 @@ func TestEmbedPass_EveryFailureDegradesToAWarning(t *testing.T) {
 			want:    "could not upload",
 		},
 		{
-			// The gate's arithmetic is an estimate; AWS's is the real one, and
-			// it arrives here.
 			name:    "the code update is refused for size",
 			putter:  &fakePutter{},
 			code:    &fakeCodeUpdater{err: errors.New("InvalidParameterValueException: Unzipped size must be smaller than 262144000 bytes")},
@@ -431,8 +397,6 @@ func TestEmbedPass_EveryFailureDegradesToAWarning(t *testing.T) {
 			want:    "left on its original package",
 		},
 		{
-			// The one failure the deploy could not otherwise see: the membrane
-			// reports already-cached whether it read /var/task or S3.
 			name:    "the function still answers from S3",
 			putter:  &fakePutter{},
 			code:    &fakeCodeUpdater{},
@@ -464,8 +428,6 @@ func TestEmbedPass_EveryFailureDegradesToAWarning(t *testing.T) {
 	}
 }
 
-// A cache that is not there is the ordinary state of a deploy whose warm pass
-// published nothing, and it must cost the deploy a line, not a failure.
 func TestEmbedPass_MissingCacheIsAWarning(t *testing.T) {
 	pass, out := embedTestPass(t, &fakePutter{}, &fakeCodeUpdater{}, embeddedReply())
 	pass.objects = &fakeObjects{}
@@ -476,8 +438,6 @@ func TestEmbedPass_MissingCacheIsAWarning(t *testing.T) {
 	}
 }
 
-// The gate refuses before anything is downloaded or uploaded, and says which
-// bound it failed.
 func TestEmbedPass_OversizedPackageIsNeverUploaded(t *testing.T) {
 	putter := &fakePutter{}
 	pass, out := embedTestPass(t, putter, &fakeCodeUpdater{}, embeddedReply())
@@ -492,11 +452,6 @@ func TestEmbedPass_OversizedPackageIsNeverUploaded(t *testing.T) {
 	}
 }
 
-// UpdateFunctionCode is the one call in this pass that cannot be taken back:
-// once it is accepted the function is moving, and the promote is next. So a
-// deadline that cannot cover the settle must stop the update from being issued
-// at all — which is the only state in which "left on its original package" is
-// a true thing to report.
 func TestEmbedPass_DeclinesAnUpdateItCannotWaitOut(t *testing.T) {
 	putter, code := &fakePutter{}, &fakeCodeUpdater{}
 	pass, out := embedTestPass(t, putter, code, embeddedReply())
@@ -515,11 +470,6 @@ func TestEmbedPass_DeclinesAnUpdateItCannotWaitOut(t *testing.T) {
 	}
 }
 
-// An update that was accepted and then never observed to land is the one
-// failure that does *not* leave the function where it was. Reporting it as
-// untouched would be a lie the promote then acts on, and verifying it would
-// mean invoking a function mid-update — which is what the settle poll exists to
-// avoid in the first place.
 func TestEmbedPass_UnsettledUpdateIsNeverReportedAsUntouched(t *testing.T) {
 	putter := &fakePutter{}
 	code := &fakeCodeUpdater{status: lambdatypes.LastUpdateStatusInProgress}
@@ -542,9 +492,6 @@ func TestEmbedPass_UnsettledUpdateIsNeverReportedAsUntouched(t *testing.T) {
 	}
 }
 
-// A deploy that asked for embedding and is not wired for it must be told, and
-// told which piece is missing. Silence here is indistinguishable from a deploy
-// that embedded everything.
 func TestEmbedBytecodeCaches_NamesTheClientsItIsMissing(t *testing.T) {
 	t.Setenv(bytecodeCacheEnv, "1")
 	t.Setenv(bytecodeEmbedEnv, "1")
@@ -559,10 +506,6 @@ func TestEmbedBytecodeCaches_NamesTheClientsItIsMissing(t *testing.T) {
 	}
 }
 
-// Nothing beyond the three things a target is built from is filtered here. A
-// bundle that answered from an embedded copy used to be dropped silently, which
-// is the one outcome no pass ever reports; the merge refuses a package that
-// already holds the entry, and that refusal is a line.
 func TestEmbedTargets_KeepsABundleThatAlreadyAnsweredFromItsPackage(t *testing.T) {
 	root := t.TempDir()
 	if err := os.MkdirAll(filepath.Join(root, "web.func"), 0o755); err != nil {

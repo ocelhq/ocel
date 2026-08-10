@@ -14,9 +14,6 @@ import (
 	"github.com/ocelhq/ocel/cloud/edge"
 )
 
-// varsTemplate is the subset of a rendered template needed to assert the
-// variable store: its own table, its own class key, and whether either is
-// retained past a stack delete.
 type varsTemplate struct {
 	Resources map[string]struct {
 		Type           string `yaml:"Type"`
@@ -71,9 +68,6 @@ func parseVarsTemplate(t *testing.T, template string) varsTemplate {
 	return tmpl
 }
 
-// varsSubstrates is the pair of rendered substrate templates every vars
-// assertion runs against: the store is provisioned per class, so a property
-// that holds for one class only is a property that does not hold.
 func varsSubstrates() []struct {
 	name     string
 	class    string
@@ -89,9 +83,6 @@ func varsSubstrates() []struct {
 	}
 }
 
-// TestVarsTable asserts both substrate templates provision the variable store's
-// own table, separate from the state table, under the same opaque pk/sk pair
-// and with the single secondary index the reverse reference lookup reads.
 func TestVarsTable(t *testing.T) {
 	for _, tc := range varsSubstrates() {
 		t.Run(tc.name, func(t *testing.T) {
@@ -123,9 +114,6 @@ func TestVarsTable(t *testing.T) {
 				t.Errorf("KeySchema = %+v, want pk HASH + sk RANGE", keys)
 			}
 
-			// One index, and only one: every consumer operation maps to a point
-			// read or a prefix query, so a second access path is a signal that
-			// something is about to scan.
 			idxs := table.Properties.GlobalSecondaryIndexes
 			if len(idxs) != 1 {
 				t.Fatalf("GlobalSecondaryIndexes = %+v, want exactly the reference index", idxs)
@@ -139,9 +127,6 @@ func TestVarsTable(t *testing.T) {
 				idx.KeySchema[1].AttributeName != "gsi1sk" || idx.KeySchema[1].KeyType != "RANGE" {
 				t.Errorf("index KeySchema = %+v, want gsi1pk HASH + gsi1sk RANGE", idx.KeySchema)
 			}
-			// The reverse lookup answers "what points at this value", which is a
-			// list of coordinates; projecting the values themselves would put a
-			// second copy of every referenced ciphertext in the index.
 			if idx.Projection.ProjectionType != "KEYS_ONLY" {
 				t.Errorf("index ProjectionType = %q, want KEYS_ONLY", idx.Projection.ProjectionType)
 			}
@@ -156,8 +141,6 @@ func TestVarsTable(t *testing.T) {
 	}
 }
 
-// TestVarsKey asserts each substrate provisions its own encryption key, aliased
-// by class — the isolation property varsResources argues for.
 func TestVarsKey(t *testing.T) {
 	aliases := map[string]string{}
 	for _, tc := range varsSubstrates() {
@@ -175,10 +158,6 @@ func TestVarsKey(t *testing.T) {
 				t.Error("EnableKeyRotation = false, want true: the key outlives every value encrypted under it")
 			}
 
-			// The key policy delegates to IAM rather than enumerating grantees:
-			// the principals that may decrypt are function execution roles the
-			// deploy creates long after bootstrap, so a key policy that named
-			// them would have to be rewritten on every deploy.
 			stmts := key.Properties.KeyPolicy.Statement
 			if len(stmts) != 1 {
 				t.Fatalf("KeyPolicy statements = %d, want exactly the one enabling IAM policies", len(stmts))
@@ -208,15 +187,11 @@ func TestVarsKey(t *testing.T) {
 			}
 		})
 	}
-	// Both substrates can be bootstrapped into one account, so a shared alias
-	// would be a stack collision — and, worse, a shared key.
 	if aliases[ClassProduction] == aliases[ClassPreview] {
 		t.Errorf("both classes alias the key %q; each class must own its own key", aliases[ClassProduction])
 	}
 }
 
-// TestVarsResourcesAreStackOwned proves destroying the account-global bootstrap
-// removes what it created: neither the table nor the key survives its stack.
 func TestVarsResourcesAreStackOwned(t *testing.T) {
 	for _, tc := range varsSubstrates() {
 		t.Run(tc.name, func(t *testing.T) {
@@ -235,10 +210,6 @@ func TestVarsResourcesAreStackOwned(t *testing.T) {
 	}
 }
 
-// TestRun_ProvisionsTheVariableStoreIdempotently proves a re-run leaves the
-// account holding one variable store, not a second one: the store rides the
-// same stack upsert everything else does, so re-running bootstrap converges
-// rather than duplicating.
 func TestRun_ProvisionsTheVariableStoreIdempotently(t *testing.T) {
 	cfn, ssmc, iamc := newFakeCFN(), newFakeSSM(), &fakeIAM{}
 	ed := &fakeEdge{out: edge.BootstrapOutput{Trust: edge.TrustExternal}}
@@ -260,10 +231,6 @@ func TestRun_ProvisionsTheVariableStoreIdempotently(t *testing.T) {
 	}
 }
 
-// preStoreTemplate derives the stack body as it stood before the variable store
-// by removing the store from the current template. Deriving it rather than
-// pinning a copy keeps the seed honest: if the store ever stops being a separable
-// block, this fails loudly instead of upgrading from a fiction.
 func preStoreTemplate(t *testing.T) string {
 	t.Helper()
 	tmpl := stackTemplate(edge.TrustExternal, fixtureArtifacts(), RequiredBootstrapVersion)
@@ -276,10 +243,6 @@ func preStoreTemplate(t *testing.T) string {
 	return tmpl
 }
 
-// TestRun_UpgradesAPreStoreAccountToTheVariableStore proves the version bump is
-// something an existing account can actually converge on: a stack raised before
-// the store re-runs bootstrap and gains the table, key and alias plus their
-// outputs — updated in place, never replaced.
 func TestRun_UpgradesAPreStoreAccountToTheVariableStore(t *testing.T) {
 	cfn, ssmc, iamc := newFakeCFN(), newFakeSSM(), &fakeIAM{}
 	seed := preStoreTemplate(t)
@@ -330,9 +293,6 @@ func TestRun_UpgradesAPreStoreAccountToTheVariableStore(t *testing.T) {
 	}
 }
 
-// TestCheckDeployed_ParsesVarsOutputs proves the discovery path surfaces the
-// store's coordinates, which is how everything downstream reaches it: the
-// provider never hardcodes a table name or a key id.
 func TestCheckDeployed_ParsesVarsOutputs(t *testing.T) {
 	api := stubDescriber{out: &cloudformation.DescribeStacksOutput{
 		Stacks: []cfntypes.Stack{{

@@ -8,32 +8,15 @@ import {
   type ImageConfig,
 } from "../src/image";
 
-// The differential oracle: every case in test/fixtures/image-conformance.json
-// is what the real Next server in examples/next-test answered, recorded by
-// scripts/generate-image-fixtures.mjs. Regenerate deliberately —
-// `pnpm fixtures:image` — so a Next bump lands as a reviewable diff.
-
-// The two 400s Next raises only after fetching the source. They belong to the
-// optimizer origin, not to this tier; the edge's job on those rows is to let
-// the request through.
 const ORIGIN_REJECTIONS = new Set([
   '"url" parameter is valid but image type is not allowed',
   "The requested resource isn't a valid image.",
 ]);
 
-// The registered divergences (docs/research/image-optimization-design.md,
-// "Deliberate divergences from Next"). Each names the row it applies to and
-// asserts what we do *instead* of what the fixture recorded, so a divergence is
-// pinned rather than absorbed by the generic branch below.
 const DIVERGENCES: Record<
   string,
   (fixture: FixtureCase, response: Response, config: ImageConfig) => void
 > = {
-  // Divergence 6. @hapi/accept throws on a parameter with no value, so Next
-  // answers this Accept header with a 500 before it ever looks at the image.
-  // The edge only needs the negotiated type as a cache-key component, so it
-  // declines to negotiate and lets the request reach the origin, which raises
-  // its own uncached 500 if it comes to that.
   "accept-malformed-parameter": (fixture, response, config) => {
     expect(fixture.status).toBe(500);
     expect(getSupportedMimeType(config.formats, fixture.request.accept ?? "")).toBe("");
@@ -83,8 +66,6 @@ for (const { variant, config, cases } of variants) {
           slug: "fixture",
           app: "fixture",
           buildId: "fixture",
-          // Reaching the origin at all is the assertion for every row Next did
-          // not reject at the edge; what the origin then does is PR 5's.
           origin: unprovisionedImageOrigin,
         });
 
@@ -100,10 +81,6 @@ for (const { variant, config, cases } of variants) {
       });
     }
 
-    // The undocumented guard, asserted against real output: a wildcard-only
-    // Accept negotiates nothing, so the response keeps the source format. Every
-    // 200 over a PNG source is covered, which is both wildcard rows, the absent
-    // header, an unconfigured format, a q=0 exclusion, and the browser header.
     describe("format negotiation against the served content-type", () => {
       const pngCases = cases.filter(
         (fixture) =>
@@ -126,8 +103,6 @@ for (const { variant, config, cases } of variants) {
 
       for (const fixture of pngCases) {
         it(`${fixture.name} serves ${fixture.contentType}`, () => {
-          // The output type is the negotiated one, or — a PNG source being a
-          // known extension that is neither webp nor avif — the source's own.
           const negotiated = getSupportedMimeType(
             config.formats,
             fixture.request.accept ?? "",

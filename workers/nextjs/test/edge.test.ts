@@ -19,10 +19,6 @@ declare module "cloudflare:test" {
   }
 }
 
-// These tests never call the cache through the stub — they assert that a live one
-// reaches the bundle and stays live — and a real remote stub is the only kind
-// that crosses into a loaded worker's env at all, so the 501 service binding
-// stands in for the worker's own CacheEntrypoint loopback.
 const remoteStub = () => env.DEPLOYMENTS as unknown as EdgeCacheStub;
 
 interface EdgeEntry {
@@ -30,16 +26,6 @@ interface EdgeEntry {
   handlerExport: string;
 }
 
-// The shim the adapter emits into every bundle: entry table inlined,
-// process.env populated before the first chunk import, entry key read off
-// ctx.props and published on __OCEL_EDGE_ENTRY before anything evaluates, and
-// global fetch serving `blob:<asset name>` out of the bundle's data modules.
-//
-// It is a hand-kept copy of renderEdgeShim (packages/next-runtime's
-// next-adapter.mts), not a golden — workers/nextjs is a workerd-pool package
-// and does not depend on next-runtime, whose own tests pin the original. Keep
-// the two in step by hand; what this file buys that those cannot is running the
-// shim in a real isolate.
 function shimFor(
   entries: Record<string, EdgeEntry>,
   assetIdByName: Record<string, string> = {},
@@ -95,18 +81,12 @@ export default {
 `;
 }
 
-// A chunk in the shape Turbopack emits one: a classic script that registers its
-// entry on globalThis._ENTRIES rather than exporting anything.
 function chunkFor(entryKey: string, handler: string): string {
   return `globalThis._ENTRIES ??= {}
 globalThis._ENTRIES[${JSON.stringify(entryKey)}] = { handler: ${handler} }
 `;
 }
 
-// A chunk that reaches a Node builtin the way Turbopack's edge chunks do:
-// `require` at module scope, synchronously, through its externalRequire helper.
-// Next compiles every edge entry that touches AsyncLocalStorage or Buffer this
-// way, so this is the shape a real bundle carries, not an exotic one.
 function nodeRequireChunkFor(entryKey: string): string {
   return `const { Buffer } = require("node:buffer")
 globalThis._ENTRIES ??= {}
@@ -120,21 +100,13 @@ function base64Of(bytes: Uint8Array): string {
   return btoa(String.fromCharCode(...bytes));
 }
 
-// The loader keys its compiled worker on the record id, so every bundle gets a
-// fresh one — otherwise the second test to use the same id would run the first
-// test's code.
 let bundles = 0;
 
-// invokerFor builds a real dynamic-worker invoker over a synthetic bundle: one
-// chunk per entry, served out of an in-memory store shaped like the R2 binding.
 function invokerFor(
   handlers: Record<string, string>,
   chunkSource: (entryKey: string, handler: string) => string = chunkFor,
   cache?: EdgeCacheBinding,
-  // The bundle's loader id. Defaulted per bundle; named explicitly by the tests
-  // that need two deployments over one bundle, which share it.
   id?: string,
-  // Traced blobs, keyed by the name a chunk fetches as `blob:<name>`.
   assetBytes: Record<string, Uint8Array> = {},
 ): EdgeInvoker {
   const chunks: Record<string, string> = {};
@@ -186,9 +158,6 @@ function invokerFor(
   );
 }
 
-// An invoker over a bundle written in a layout this worker does not know. The
-// worker script is frozen and outlives its deployments (ADR 0002), so it can be
-// handed one a later adapter wrote.
 function futureBundleInvoker(): EdgeInvoker {
   const seq = bundles++;
   const bundleKey = `edge/${seq}/bundle.json`;
@@ -206,7 +175,6 @@ function futureBundleInvoker(): EdgeInvoker {
   );
 }
 
-// An invoker whose bundle is not in the store: the loader callback throws.
 function missingBundleInvoker(): EdgeInvoker {
   const seq = bundles++;
   return createEdgeInvoker(
@@ -226,8 +194,6 @@ function middlewareInvoker(handler: string): EdgeInvoker {
   return invokerFor({ [MIDDLEWARE_KEY]: handler });
 }
 
-// Counts invocations without displacing the real loader underneath, so a test
-// can assert an entry was never reached rather than inferring it from output.
 function counted(edge: EdgeInvoker): { edge: EdgeInvoker; calls: () => number } {
   let calls = 0;
   return {
@@ -281,8 +247,6 @@ function deps(overrides: Partial<RouteDeps> = {}): RouteDeps {
   } as RouteDeps;
 }
 
-// A manifest serving one static file, so a middleware that lets the request
-// through has something concrete to fall through to.
 function staticDeps(
   middleware: unknown,
   overrides: Partial<RouteDeps> = {},
@@ -308,8 +272,6 @@ const passthrough = () =>
     ),
   );
 
-// gated serves /static.txt through a middleware with the given matcher config
-// and reports both whether the entry ran and what the client got.
 async function gated(
   matchers: unknown,
   init?: RequestInit,
@@ -325,8 +287,6 @@ async function gated(
 
 describe("middleware matchers", () => {
   it("does not invoke middleware for a path its matchers exclude", async () => {
-    // resolveRoutes calls invokeMiddleware unconditionally — it has no matcher
-    // field at all — so without this gate every static asset spins up middleware.
     const { res, calls } = await gated([{ sourceRegex: "^/dashboard$" }]);
 
     expect(calls).toBe(0);
@@ -335,8 +295,6 @@ describe("middleware matchers", () => {
   });
 
   it("invokes middleware on every path when the matcher list is absent", async () => {
-    // Next's semantics for a bare middleware.ts with no `config` export: no
-    // matchers means run on everything, not never run.
     const { res, calls } = await gated(undefined);
 
     expect(calls).toBe(1);
@@ -388,8 +346,6 @@ describe("middleware matchers", () => {
 
 describe("middleware responses", () => {
   it("returns the middleware's own body and status when it answers the request", async () => {
-    // resolveRoutes reports only `middlewareResponded`, with no status, headers
-    // or body — so a NextResponse.json() used to reach the client as a blank 200.
     const edge = middlewareInvoker(
       `async () => new Response(JSON.stringify({ error: "nope" }), {
          status: 401,
@@ -442,10 +398,6 @@ describe("middleware responses", () => {
   );
 
   it("keeps the x-middleware-* control headers off a rewritten response", async () => {
-    // responseToMiddlewareResult puts the rewrite destination back onto the
-    // response headers after its own exclusion list, and resolveRoutes copies
-    // those into resolvedHeaders — so applying them verbatim published the
-    // internal path every rewrite resolves to.
     const edge = middlewareInvoker(
       `async () => new Response(null, {
          headers: {
@@ -481,9 +433,6 @@ describe("middleware responses", () => {
   });
 
   it("redirects with the middleware's Set-Cookie intact", async () => {
-    // resolveRoutes returns a middleware redirect as bare resolvedHeaders with
-    // no resolvedPathname, so this used to fall through to a 404 — and
-    // Response.redirect could not have carried the cookie anyway.
     const edge = middlewareInvoker(
       `async () => new Response(null, {
          status: 307,
@@ -537,9 +486,6 @@ describe("middleware responses", () => {
   });
 
   it("leaves the origin a readable body after middleware consumed one", async () => {
-    // Middleware and the origin forward each need their own stream over the
-    // buffered bytes; routing used to be handed the live request body, so an
-    // app calling request.json() in middleware starved the origin.
     let captured: Request | undefined;
     const edge = middlewareInvoker(
       `async (request) => new Response(null, {
@@ -694,11 +640,6 @@ globalThis._ENTRIES[${JSON.stringify(entryKey)}] = {
     expect(await res.text()).toBe("scoped");
   });
 
-  // `ocel/env`'s edge build names the entry it refused a read from by reading
-  // this global, and it does so from module scope as readily as from a handler,
-  // so the shim has to publish it before the first chunk import rather than
-  // before the handler call. next-runtime pins that as a string; this pins it in
-  // a real isolate, which is the only place the ordering can actually be wrong.
   it("publishes the entry key on a global before an entry's chunks evaluate", async () => {
     const edge = invokerFor(
       { "middleware_app/edge": "" },
@@ -731,9 +672,6 @@ globalThis._ENTRIES[${JSON.stringify(entryKey)}] = {
     expect(await res.text()).toBe("middleware_app/edge");
   });
 
-  // A traced blob reaches user code as the string `blob:<manifest asset name>`,
-  // wrapped in the `new URL(…)` the source wrote. Cloudflare's fetch cannot load
-  // one, so the shim answers it out of the bundle's data modules.
   it("answers a blob: fetch from the bundle's assets, byte for byte", async () => {
     const bytes = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0xff, 0xfe]);
     const edge = invokerFor(
@@ -768,11 +706,6 @@ globalThis._ENTRIES[${JSON.stringify(entryKey)}] = {
     expect(new Uint8Array(await res.arrayBuffer())).toEqual(bytes);
   });
 
-  // The fall-through is the widest path in the change: every outbound fetch an
-  // edge route makes goes through it. A data: URL is answered by the platform
-  // itself, so a real body coming back proves the interceptor handed the call on
-  // and returned the platform's own Response — a catch-any-throw assertion would
-  // have passed just as well if the interceptor were broken.
   it("hands a fetch the asset table does not name to the platform", async () => {
     const edge = invokerFor(
       {
@@ -807,9 +740,6 @@ globalThis._ENTRIES[${JSON.stringify(entryKey)}] = {
     expect(await res.text()).toBe("200:from-the-platform");
   });
 
-  // A `blob:` name the table does not hold must reach the platform too, and fail
-  // as the platform's own rejection. Pinned by identity: a TypeError thrown from
-  // inside the interceptor would otherwise read as the same failure.
   it("hands an unknown blob: name to the platform, which rejects it", async () => {
     const edge = invokerFor(
       {
@@ -850,8 +780,6 @@ globalThis._ENTRIES[${JSON.stringify(entryKey)}] = {
     );
   });
 
-  // URL percent-encodes non-ASCII in an opaque path, so the name arrives encoded
-  // while the table is keyed by the name the build wrote.
   it("resolves an asset whose name the URL constructor percent-encodes", async () => {
     const bytes = new Uint8Array([0xde, 0xad, 0xbe, 0xef]);
     const edge = invokerFor(
@@ -886,9 +814,6 @@ globalThis._ENTRIES[${JSON.stringify(entryKey)}] = {
     expect(new Uint8Array(await res.arrayBuffer())).toEqual(bytes);
   });
 
-  // Bytes that are not valid UTF-8 are exactly what a .png or a font is. They
-  // must not cost the entries that never touch them: workerd compiles a declared
-  // module only when it is imported.
   it("serves an entry from a bundle carrying an asset that is not valid UTF-8", async () => {
     const edge = invokerFor(
       {
@@ -969,8 +894,6 @@ globalThis._ENTRIES[${JSON.stringify(entryKey)}] = {
   });
 
   it("returns 500 rather than routing on when middleware cannot be invoked", async () => {
-    // Fail closed: an auth middleware that could not run must not let the page
-    // it protects be served.
     const res = await serve(
       new Request("https://app.example/static.txt"),
       staticDeps({ entryKey: MIDDLEWARE_KEY }, { edge: missingBundleInvoker() }),
@@ -1023,7 +946,6 @@ describe("edge-parented prerenders", () => {
           },
         },
       },
-      // No Function URL at all: the parent renders on the edge.
       functionUrls: {},
       edge,
       cache: coloDeps({
@@ -1111,9 +1033,6 @@ describe("edge-parented prerenders", () => {
 });
 
 describe("the cache loopback", () => {
-  // The cache binding reaches the bundle through the load-time env, which the
-  // loader evaluates once per isolate — so it has to keep working for every
-  // request that isolate goes on to serve, not just the one that compiled it.
   it("stays live across every request a warm isolate serves", async () => {
     const edge = invokerFor(
       {
@@ -1142,8 +1061,6 @@ describe("the cache loopback", () => {
     expect(await (await edge("e", new Request("https://x/"))).text()).toBe("t");
   });
 
-  // A deployment served by a substrate that binds no cache store gets no
-  // loopback, and must still run its edge routes.
   it("is simply absent when nothing bound one", async () => {
     const edge = invokerFor({
       e: `async () => new Response(String(globalThis.__OCEL_EDGE_CACHE.rpc))`,
@@ -1153,8 +1070,6 @@ describe("the cache loopback", () => {
 });
 
 describe("the loaded isolate's identity", () => {
-  // Counts the requests its own isolate has served, so isolate reuse is observed
-  // rather than inferred.
   const servedCount = (entryKey: string) => `let served = 0
 globalThis._ENTRIES ??= {}
 globalThis._ENTRIES[${JSON.stringify(entryKey)}] = {
@@ -1170,9 +1085,6 @@ globalThis._ENTRIES[${JSON.stringify(entryKey)}] = {
     (await edge("e", new Request("https://x/"))).text();
 
   it("reuses one isolate across the requests of one deployment", async () => {
-    // The loader's contract is same id, same code, and it compiles only on a
-    // cold isolate: a key that varied per invoker or per request would recompile
-    // the bundle for every request it serves.
     const prod = deployment("shared-bundle-a", "prod/p/app/b1");
     const same = deployment("shared-bundle-a", "prod/p/app/b1");
 
@@ -1181,10 +1093,6 @@ globalThis._ENTRIES[${JSON.stringify(entryKey)}] = {
   });
 
   it("separates two deployments that share a bundle but not a scope", async () => {
-    // A rollback, or preview and production of one build: the same bundle bytes,
-    // hence the same workers.id, while the scope reaches the isolate only at
-    // load time. Keyed on the id alone the two collapse onto one isolate, and
-    // the second deployment silently reads the first's cache.
     const prod = deployment("shared-bundle-b", "prod/p/app/b1");
     const preview = deployment("shared-bundle-b", "preview/p/app/b1");
 
@@ -1193,16 +1101,9 @@ globalThis._ENTRIES[${JSON.stringify(entryKey)}] = {
   });
 });
 
-// Closes ocelhq-glyd: with trailingSlash: true the worker handed middleware the
-// slash-free routing pathname, so a middleware guarding on `url.pathname ===
-// '/send-url/'` never matched. Middleware runs ahead of the filesystem lookup,
-// so the URL it sees is the canonical one, and for a data request it is the page
-// that request is for — neither of which is the URL routing continues on.
 describe("the URL middleware is handed", () => {
   const PAGE = "/send-url";
 
-  // Echoes back what the bundle itself sees, which is the only thing under test
-  // here: the pathname on `new URL(request.url)` inside the isolate.
   const echo = () =>
     middlewareInvoker(
       `async (request) => new Response(null, {
@@ -1221,8 +1122,6 @@ describe("the URL middleware is handed", () => {
     edge?: EdgeInvoker;
   }
 
-  // One static page and its data route, both keyed by the routing pathname the
-  // build emits, so the dispatch entry a data request lands on is visible.
   function pageDeps(scenario: Scenario): RouteDeps {
     const dataPaths = [`/_next/data/t${PAGE}.json`, "/_next/data/t/index.json"];
     const pathnames = [PAGE, "/", ...dataPaths];
@@ -1286,7 +1185,6 @@ describe("the URL middleware is handed", () => {
         );
 
         expect(res.headers.get("req-url-path")).toBe(expected);
-        // Routing never left the data pathname: only the middleware URL moved.
         expect(res.headers.get("x-matched-path")).toBe(`/_next/data/t${PAGE}.json`);
         expect(await res.text()).toBe(`{"at":"/_next/data/t${PAGE}.json"}`);
       },
@@ -1319,9 +1217,6 @@ describe("the URL middleware is handed", () => {
     });
 
     it("loses no match for one path-to-regexp wrote with the optional slash", async () => {
-      // tryToParsePath compiles matchers with strict: false, so every source
-      // ends `(?:\/(?=$))?$` and matches both forms — the canonical form cannot
-      // cost a match.
       const { edge, calls } = counted(echo());
       await serve(
         get(`${PAGE}/`),
@@ -1348,11 +1243,6 @@ describe("the URL middleware is handed", () => {
   });
 
   it("routes a canonical rewrite destination on its routing form", async () => {
-    // NextResponse.rewrite(new URL('/b', url)) leaves the edge bundle as `/b/`,
-    // because NextURL re-adds the slash it parsed off the incoming URL. Left
-    // alone that matches no build pathname and 404s. A lambda target, so what
-    // the origin is asked for is visible — a static one would be read out of R2
-    // by the request path rather than the resolved one (ocelhq-t2qx).
     const edge = middlewareInvoker(
       `async () => new Response(null, { headers: { "x-middleware-rewrite": "/b/" } })`,
     );
@@ -1383,9 +1273,6 @@ describe("the URL middleware is handed", () => {
   });
 
   it("forwards a rewrite to another origin byte-verbatim", async () => {
-    // The strip is scoped to the app's own origin: an external destination is
-    // not keyed by any build pathname, so its slash is the remote host's
-    // business.
     const edge = middlewareInvoker(
       `async () => new Response(null, {
          headers: { "x-middleware-rewrite": "https://ext.example.com/b/?q=1" },
@@ -1421,7 +1308,6 @@ describe("the URL middleware is handed", () => {
   it.each([`/b/`, "/b"])(
     "leaves a middleware redirect to %s exactly as authored",
     async (location) => {
-      // Client-visible, so nothing here normalizes it: Next does not either.
       const edge = middlewareInvoker(
         `async () => new Response(null, {
            status: 307,
@@ -1460,9 +1346,6 @@ describe("the URL middleware is handed", () => {
     });
   });
 
-  // The 308 is suppressed, so both forms are served — and each middleware sees
-  // the form its own client asked for, which no longer survives in the routing
-  // URL. Nothing else changes: a data request is still shown its page.
   describe("skipTrailingSlashRedirect", () => {
     it.each([
       [true, `${PAGE}/`],
@@ -1493,9 +1376,6 @@ describe("the URL middleware is handed", () => {
     });
   });
 
-  // The opt-out means the URL the client sent, verbatim: Next hands middleware
-  // `initURL` instead of the routed URL, so the data-to-page rewrite goes with
-  // the slash and the locale prefix.
   describe("skipMiddlewareUrlNormalize", () => {
     it("shows middleware the canonical form the client sent", async () => {
       const res = await serve(
@@ -1508,8 +1388,6 @@ describe("the URL middleware is handed", () => {
     });
 
     it("shows middleware a slash-free form the 308 no longer takes away", async () => {
-      // The flag governs the middleware URL, not the redirect: only
-      // skipTrailingSlashRedirect lets /send-url reach middleware at all.
       const res = await serve(
         get(PAGE),
         pageDeps({
@@ -1523,10 +1401,6 @@ describe("the URL middleware is handed", () => {
       expect(res.headers.get("req-url-path")).toBe(PAGE);
     });
 
-    // Still the data URL under both trailingSlash values, which is what the
-    // upstream suite's "should provide original _next/data URL with
-    // skipProxyUrlNormalize" asserts: its middleware only rewrites when
-    // req.nextUrl.pathname still startsWith('/_next/data').
     it.each([true, false])(
       "shows a data request as the data URL under trailingSlash: %s",
       async (trailingSlash) => {

@@ -61,9 +61,6 @@ describe("getProjectById", () => {
     try {
       const created = await createProjectFor(session, "cross-active-org");
 
-      // Same user, a second organization they also belong to - and switch
-      // the session's active org to it. The project lives in the *first*
-      // org, which is no longer active.
       const secondOrganization = await auth.api.createOrganization({
         body: { name: "Second Org", slug: `second-org-${crypto.randomUUID()}` },
         headers: session.headers,

@@ -14,8 +14,6 @@ import (
 	"github.com/ocelhq/ocel/cloud/edge"
 )
 
-// parsedTemplate is the subset of the rendered bootstrap template the tests
-// assert against.
 type parsedTemplate struct {
 	Resources map[string]struct {
 		Type       string `yaml:"Type"`
@@ -84,11 +82,6 @@ func parseTemplateStr(t *testing.T, template string) parsedTemplate {
 	return tmpl
 }
 
-// TestStackTemplate_StateTable asserts both substrate templates provision the
-// account-global state table with the generic single-table schema every Ocel
-// state entity keys into: partition key pk (S), sort key sk (S), and a TTL on
-// expires_at. The keys are deliberately opaque — upload sessions and Next ISR
-// tag records share this table — so nothing here may name an entity.
 func TestStackTemplate_StateTable(t *testing.T) {
 	for _, tc := range []struct {
 		name     string
@@ -126,13 +119,6 @@ func TestStackTemplate_StateTable(t *testing.T) {
 				t.Errorf("KeySchema = %+v, want pk HASH + sk RANGE", keys)
 			}
 
-			// The index is what makes "which tags changed since I last looked"
-			// a bounded query instead of a scan of an account-global table. It
-			// is sparse by construction: only items that carry gsi1pk are
-			// indexed, so upload sessions and the ISR handler's own tag items
-			// stay out of it. The projection must carry every field the sync
-			// reads, or a query that "worked" still costs a follow-up read per
-			// tag.
 			idxs := table.Properties.GlobalSecondaryIndexes
 			if len(idxs) != 1 {
 				t.Fatalf("GlobalSecondaryIndexes = %+v, want exactly the tag-sync index", idxs)
@@ -158,11 +144,6 @@ func TestStackTemplate_StateTable(t *testing.T) {
 				t.Errorf("TimeToLiveSpecification = %+v, want expires_at enabled", ttl)
 			}
 
-			// The stream is what the tag-snapshot publisher consumes, and it
-			// must carry the whole item: the publisher reads gsi1pk to learn
-			// which build a record belongs to and the watermarks to publish,
-			// none of which are keys. KEYS_ONLY would leave it re-reading the
-			// table for every record it was just handed.
 			if view := table.Properties.StreamSpecification.StreamViewType; view != "NEW_IMAGE" {
 				t.Errorf("StreamViewType = %q, want NEW_IMAGE", view)
 			}
@@ -177,11 +158,6 @@ func TestStackTemplate_StateTable(t *testing.T) {
 	}
 }
 
-// TestArtifactBucket asserts both substrate templates provision the dedicated
-// function-artifact bucket with the public-access lockdown the state bucket
-// uses and a 30-day expiration lifecycle rule (plus incomplete-multipart abort)
-// so churned deploy artifacts don't accrue storage cost. It also asserts the
-// bucket name is exported for the deploy path to consume.
 func TestArtifactBucket(t *testing.T) {
 	for _, tc := range []struct {
 		name     string
@@ -228,12 +204,6 @@ func TestArtifactBucket(t *testing.T) {
 	}
 }
 
-// TestAssetBucket asserts both substrate templates provision the account-global
-// asset bucket that prerender configs + fallbacks are uploaded to. Unlike the
-// artifact bucket, assets are keyed by an immutable build id and a live build's
-// assets are never re-touched by later deploys, so the bucket carries NO
-// object-expiration rule (only an incomplete-multipart abort) and its name is
-// exported for the deploy path to consume.
 func TestAssetBucket(t *testing.T) {
 	for _, tc := range []struct {
 		name     string
@@ -280,8 +250,6 @@ func TestAssetBucket(t *testing.T) {
 	}
 }
 
-// TestStackTemplate_VersionOutput proves the deployed version output is
-// single-sourced from RequiredBootstrapVersion, so the two never drift.
 func TestStackTemplate_VersionOutput(t *testing.T) {
 	tmpl := parseTemplate(t)
 	if got := tmpl.Outputs[outputVersion].Value; got != strconv.Itoa(RequiredBootstrapVersion) {
@@ -289,7 +257,6 @@ func TestStackTemplate_VersionOutput(t *testing.T) {
 	}
 }
 
-// stubDescriber returns a fixed DescribeStacks response.
 type stubDescriber struct {
 	out *cloudformation.DescribeStacksOutput
 }
@@ -298,9 +265,6 @@ func (s stubDescriber) DescribeStacks(context.Context, *cloudformation.DescribeS
 	return s.out, nil
 }
 
-// TestCheckDeployed_ParsesOutputs proves the discovery path surfaces the
-// state table name, state bucket, version, and class marker that later
-// deploys and the class guard depend on.
 func TestCheckDeployed_ParsesOutputs(t *testing.T) {
 	api := stubDescriber{out: &cloudformation.DescribeStacksOutput{
 		Stacks: []cfntypes.Stack{{
@@ -325,9 +289,6 @@ func TestCheckDeployed_ParsesOutputs(t *testing.T) {
 	}
 }
 
-// TestCheckDeployed_ReadsPreviewClassMarker proves the class stamped on a
-// substrate is read back, so the class guard can verify a command acts on the
-// right one.
 func TestCheckDeployed_ReadsPreviewClassMarker(t *testing.T) {
 	api := stubDescriber{out: &cloudformation.DescribeStacksOutput{
 		Stacks: []cfntypes.Stack{{
@@ -346,8 +307,6 @@ func TestCheckDeployed_ReadsPreviewClassMarker(t *testing.T) {
 	}
 }
 
-// TestPreviewStackTemplate_StampsPreviewClass proves the preview template stamps
-// the preview class marker so CheckDeployedPreview surfaces it.
 func TestPreviewStackTemplate_StampsPreviewClass(t *testing.T) {
 	var tmpl parsedTemplate
 	if err := yaml.Unmarshal([]byte(previewStackTemplate(edge.TrustExternal, fixtureArtifacts(), RequiredBootstrapVersion)), &tmpl); err != nil {
@@ -358,8 +317,6 @@ func TestPreviewStackTemplate_StampsPreviewClass(t *testing.T) {
 	}
 }
 
-// edgeUserTemplate is the subset of a rendered template needed to assert the
-// edge reader IAM user and its inline cache policy.
 type edgeUserTemplate struct {
 	Resources map[string]struct {
 		Type       string `yaml:"Type"`
@@ -369,11 +326,8 @@ type edgeUserTemplate struct {
 				PolicyName     string `yaml:"PolicyName"`
 				PolicyDocument struct {
 					Statement []struct {
-						Effect string `yaml:"Effect"`
-						Action any    `yaml:"Action"`
-						// any, not string: this struct is unmarshalled against every
-						// resource in the template, and the image optimizer's role grants
-						// a list of prefixes rather than one Resource.
+						Effect    string         `yaml:"Effect"`
+						Action    any            `yaml:"Action"`
 						Resource  any            `yaml:"Resource"`
 						Condition map[string]any `yaml:"Condition"`
 					} `yaml:"Statement"`
@@ -383,14 +337,6 @@ type edgeUserTemplate struct {
 	} `yaml:"Resources"`
 }
 
-// TestEdgeUser asserts both substrate templates provision the deterministic edge
-// IAM user with an inline policy scoped to this stack's own stores: read on the
-// asset bucket, write confined to the fetch-cache prefix, BatchGetItem and
-// UpdateItem on the state table bounded to the TAG# partitions (so the edge key
-// can never reach the upload-session HMAC secrets sharing the table), Query on
-// the table's index under the same bound, and the lambda:Invoke* grant scoped by
-// the ocel:app tag (functions are autonamed, so the grant is attribute-based,
-// not name-based).
 func TestEdgeUser(t *testing.T) {
 	for _, tc := range []struct {
 		name     string
@@ -428,9 +374,6 @@ func TestEdgeUser(t *testing.T) {
 			for _, st := range stmts {
 				if st.Resource == "${AssetBucket.Arn}/*" {
 					s3Read = hasAction(st.Action, "s3:GetObject")
-					// The key is long-lived and lives in Cloudflare's environment,
-					// so a bucket-wide write would let it overwrite static assets,
-					// ISR entries and edge bundles.
 					if hasAction(st.Action, "s3:PutObject") {
 						t.Error("s3:PutObject must not be granted bucket-wide")
 					}
@@ -446,9 +389,6 @@ func TestEdgeUser(t *testing.T) {
 				}
 				if hasAction(st.Action, "lambda:InvokeFunctionUrl") {
 					invoke = true
-					// The grant is scoped by attribute, not name: any function
-					// carrying an ocel:app tag, gated by a Null presence check on
-					// that tag.
 					if null, ok := st.Condition["Null"].(map[string]any); ok {
 						if null["aws:ResourceTag/ocel:app"] == "false" {
 							invokeTagged = true
@@ -478,8 +418,6 @@ func TestEdgeUser(t *testing.T) {
 	}
 }
 
-// hasAction reports whether a statement grants action. YAML hands Action back as
-// a scalar string for a single action and a list for several.
 func hasAction(action any, want string) bool {
 	switch a := action.(type) {
 	case string:
@@ -494,9 +432,6 @@ func hasAction(action any, want string) bool {
 	return false
 }
 
-// boundToTagKeys reports whether a statement is bounded to the TAG# key
-// partitions, the condition that keeps the edge key away from the upload-session
-// items sharing the state table.
 func boundToTagKeys(condition map[string]any) bool {
 	cond, ok := condition["ForAllValues:StringLike"].(map[string]any)
 	if !ok {

@@ -21,8 +21,6 @@ const (
 	_ = protoimpl.EnforceVersion(protoimpl.MaxVersion - 20)
 )
 
-// UploadState is the lifecycle of an upload session as recorded in the shared
-// store.
 type UploadState int32
 
 const (
@@ -75,9 +73,6 @@ func (UploadState) EnumDescriptor() ([]byte, []int) {
 	return file_buckets_v1_buckets_proto_rawDescGZIP(), []int{0}
 }
 
-// PresignFile is one file the client intends to upload, as reported at presign
-// time. key is user-produced (the SDK computes it from the uploader's path
-// config); name/size/mime_type describe the file.
 type PresignFile struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Key           string                 `protobuf:"bytes,1,opt,name=key,proto3" json:"key,omitempty"`
@@ -146,19 +141,12 @@ func (x *PresignFile) GetMimeType() string {
 	return ""
 }
 
-// PresignedTarget is the minted destination for one PresignFile, index-aligned
-// with the request. url is the presigned PUT the browser writes to; key and
-// name echo the file this target was minted for.
 type PresignedTarget struct {
-	state protoimpl.MessageState `protogen:"open.v1"`
-	Url   string                 `protobuf:"bytes,1,opt,name=url,proto3" json:"url,omitempty"`
-	Key   string                 `protobuf:"bytes,2,opt,name=key,proto3" json:"key,omitempty"`
-	Name  string                 `protobuf:"bytes,3,opt,name=name,proto3" json:"name,omitempty"`
-	// content_disposition, when non-empty, is a header the client MUST send on
-	// the PUT: the presigned URL signs it, so it is bound onto the stored object
-	// as its Content-Disposition and cannot be tampered with. Empty means no
-	// Content-Disposition is set on the object.
-	ContentDisposition string `protobuf:"bytes,4,opt,name=content_disposition,json=contentDisposition,proto3" json:"content_disposition,omitempty"`
+	state              protoimpl.MessageState `protogen:"open.v1"`
+	Url                string                 `protobuf:"bytes,1,opt,name=url,proto3" json:"url,omitempty"`
+	Key                string                 `protobuf:"bytes,2,opt,name=key,proto3" json:"key,omitempty"`
+	Name               string                 `protobuf:"bytes,3,opt,name=name,proto3" json:"name,omitempty"`
+	ContentDisposition string                 `protobuf:"bytes,4,opt,name=content_disposition,json=contentDisposition,proto3" json:"content_disposition,omitempty"`
 	unknownFields      protoimpl.UnknownFields
 	sizeCache          protoimpl.SizeCache
 }
@@ -221,9 +209,6 @@ func (x *PresignedTarget) GetContentDisposition() string {
 	return ""
 }
 
-// CompletedFile is the file identity carried by the completion callback and
-// signed by the detector. It is passed verbatim to VerifyUploadSignature as
-// the payload the signature covers.
 type CompletedFile struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Key           string                 `protobuf:"bytes,1,opt,name=key,proto3" json:"key,omitempty"`
@@ -293,20 +278,14 @@ func (x *CompletedFile) GetMimeType() string {
 }
 
 type PresignUploadRequest struct {
-	state  protoimpl.MessageState `protogen:"open.v1"`
-	Bucket string                 `protobuf:"bytes,1,opt,name=bucket,proto3" json:"bucket,omitempty"`
-	Files  []*PresignFile         `protobuf:"bytes,2,rep,name=files,proto3" json:"files,omitempty"`
-	// metadata is opaque, SDK-encoded bytes (the uploader middleware's return)
-	// persisted on the session and handed back on VerifyUploadSignature. This
-	// service never inspects it.
-	Metadata           []byte `protobuf:"bytes,3,opt,name=metadata,proto3" json:"metadata,omitempty"`
-	ContentDisposition string `protobuf:"bytes,4,opt,name=content_disposition,json=contentDisposition,proto3" json:"content_disposition,omitempty"`
-	// callback_base_url is captured from the incoming presign request and
-	// persisted on the session; the detector later uses it to address the
-	// route's op=callback. Load-bearing downstream - never omit.
-	CallbackBaseUrl string `protobuf:"bytes,5,opt,name=callback_base_url,json=callbackBaseUrl,proto3" json:"callback_base_url,omitempty"`
-	unknownFields   protoimpl.UnknownFields
-	sizeCache       protoimpl.SizeCache
+	state              protoimpl.MessageState `protogen:"open.v1"`
+	Bucket             string                 `protobuf:"bytes,1,opt,name=bucket,proto3" json:"bucket,omitempty"`
+	Files              []*PresignFile         `protobuf:"bytes,2,rep,name=files,proto3" json:"files,omitempty"`
+	Metadata           []byte                 `protobuf:"bytes,3,opt,name=metadata,proto3" json:"metadata,omitempty"`
+	ContentDisposition string                 `protobuf:"bytes,4,opt,name=content_disposition,json=contentDisposition,proto3" json:"content_disposition,omitempty"`
+	CallbackBaseUrl    string                 `protobuf:"bytes,5,opt,name=callback_base_url,json=callbackBaseUrl,proto3" json:"callback_base_url,omitempty"`
+	unknownFields      protoimpl.UnknownFields
+	sizeCache          protoimpl.SizeCache
 }
 
 func (x *PresignUploadRequest) Reset() {
@@ -375,11 +354,9 @@ func (x *PresignUploadRequest) GetCallbackBaseUrl() string {
 }
 
 type PresignUploadResponse struct {
-	state     protoimpl.MessageState `protogen:"open.v1"`
-	SessionId string                 `protobuf:"bytes,1,opt,name=session_id,json=sessionId,proto3" json:"session_id,omitempty"`
-	// files are the presigned targets, index-aligned with
-	// PresignUploadRequest.files.
-	Files         []*PresignedTarget `protobuf:"bytes,2,rep,name=files,proto3" json:"files,omitempty"`
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	SessionId     string                 `protobuf:"bytes,1,opt,name=session_id,json=sessionId,proto3" json:"session_id,omitempty"`
+	Files         []*PresignedTarget     `protobuf:"bytes,2,rep,name=files,proto3" json:"files,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -429,13 +406,10 @@ func (x *PresignUploadResponse) GetFiles() []*PresignedTarget {
 }
 
 type VerifyUploadSignatureRequest struct {
-	state     protoimpl.MessageState `protogen:"open.v1"`
-	SessionId string                 `protobuf:"bytes,1,opt,name=session_id,json=sessionId,proto3" json:"session_id,omitempty"`
-	// signature is HMAC(session_secret, canonical({session_id, file})) computed
-	// by the detector. The secret itself never appears in this contract.
-	Signature string `protobuf:"bytes,2,opt,name=signature,proto3" json:"signature,omitempty"`
-	// file is the signed payload, passed verbatim.
-	File          *CompletedFile `protobuf:"bytes,3,opt,name=file,proto3" json:"file,omitempty"`
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	SessionId     string                 `protobuf:"bytes,1,opt,name=session_id,json=sessionId,proto3" json:"session_id,omitempty"`
+	Signature     string                 `protobuf:"bytes,2,opt,name=signature,proto3" json:"signature,omitempty"`
+	File          *CompletedFile         `protobuf:"bytes,3,opt,name=file,proto3" json:"file,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -492,11 +466,9 @@ func (x *VerifyUploadSignatureRequest) GetFile() *CompletedFile {
 }
 
 type VerifyUploadSignatureResponse struct {
-	state protoimpl.MessageState `protogen:"open.v1"`
-	Valid bool                   `protobuf:"varint,1,opt,name=valid,proto3" json:"valid,omitempty"`
-	// metadata is the session's stored, opaque metadata bytes, present only when
-	// valid is true.
-	Metadata      []byte `protobuf:"bytes,2,opt,name=metadata,proto3" json:"metadata,omitempty"`
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Valid         bool                   `protobuf:"varint,1,opt,name=valid,proto3" json:"valid,omitempty"`
+	Metadata      []byte                 `protobuf:"bytes,2,opt,name=metadata,proto3" json:"metadata,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -590,11 +562,9 @@ func (x *GetUploadStatusRequest) GetSessionId() string {
 }
 
 type GetUploadStatusResponse struct {
-	state protoimpl.MessageState `protogen:"open.v1"`
-	State UploadState            `protobuf:"varint,1,opt,name=state,proto3,enum=buckets.v1.UploadState" json:"state,omitempty"`
-	// error is populated when the session carries a failure detail; empty
-	// otherwise.
-	Error         string `protobuf:"bytes,2,opt,name=error,proto3" json:"error,omitempty"`
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	State         UploadState            `protobuf:"varint,1,opt,name=state,proto3,enum=buckets.v1.UploadState" json:"state,omitempty"`
+	Error         string                 `protobuf:"bytes,2,opt,name=error,proto3" json:"error,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }

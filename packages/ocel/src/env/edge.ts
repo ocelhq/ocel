@@ -19,20 +19,8 @@ export type Env<TDefinitions extends Definitions> = {
     : string;
 };
 
-// ENTRY_GLOBAL is where the edge shim records which entry a request is running
-// (packages/next-runtime's renderEdgeShim, set before the entry's chunks
-// evaluate). It is a global rather than an argument because a variable is read
-// as a plain property and has nowhere to be handed one.
 const ENTRY_GLOBAL = "__OCEL_EDGE_ENTRY";
 
-// The edge build of `ocel/env`, selected by the `edge-light`, `workerd` and
-// `worker` export conditions. It is a whole module rather than a branch because
-// the node build evaluates `@connectrpc/connect-node` at module scope, which
-// fails an edge compile on `node:http2` before any branch could run.
-//
-// Declaring stays harmless: a definitions module is normally shared by node and
-// edge entries, so throwing at `defineEnv` would break an app whose edge routes
-// merely import the module they never read from. Only the read is refused.
 export function defineEnv<const TDefinitions extends Definitions>(
   definitions: TDefinitions,
 ): Env<TDefinitions> {
@@ -40,8 +28,6 @@ export function defineEnv<const TDefinitions extends Definitions>(
 
   return new Proxy({} as Env<TDefinitions>, {
     get(_target, property) {
-      // Symbols are how the runtime inspects an object; they are never a
-      // variable, and answering them keeps the object loggable.
       if (typeof property === "symbol") return undefined;
       throw unreadable(property);
     },

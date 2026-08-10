@@ -1,6 +1,3 @@
-// These ship as source, not as compiled output: the adapter copies them verbatim
-// into the app being built, and tsc neither reads nor emits a .cjs. They have to
-// sit beside the built adapter, which resolves them relative to itself.
 import { copyFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";

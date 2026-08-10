@@ -35,8 +35,6 @@ func TestPreviewReclaimTargets_UsePointerScopedStackNames(t *testing.T) {
 	if got, want := byApp["web"].Stack, PreviewAppDeployStackName("shop", "pr-1", "web", buildOnly("b1")); got != want {
 		t.Errorf("web stack = %q, want the pointer-scoped preview stack %q", got, want)
 	}
-	// The production reclaim of the same record must resolve a different stack —
-	// proving preview and production never collide on stack names.
 	prod, _ := ReclaimTargets("shop", "prod", []string{"record:web/b1"}, nil, nil)
 	if prod[0].Stack == byApp["web"].Stack {
 		t.Error("preview and production reclaim resolved the same stack name")
@@ -66,9 +64,9 @@ func TestClassifyPreviewStacks_SplitsInfraAppAndPointers(t *testing.T) {
 		PreviewAppDeployStackName("shop", "staging", "web", buildOnly("b1")),
 		PreviewAppDeployStackName("shop", "pr-1", "web", buildOnly("b2")),
 		PreviewAppDeployStackName("shop", "pr-1", "api", buildOnly("b3")),
-		InfraStackName("shop"),                             // production infra — not a preview stack
-		AppDeployStackName("shop", "web", buildOnly("b9")), // production app — not a preview stack
-		"other--preview-x--web--b1",                        // another project's preview
+		InfraStackName("shop"),
+		AppDeployStackName("shop", "web", buildOnly("b9")),
+		"other--preview-x--web--b1",
 	})
 
 	sort.Strings(got.InfraStacks)
@@ -91,10 +89,6 @@ func TestClassifyPreviewStacks_SplitsInfraAppAndPointers(t *testing.T) {
 	}
 }
 
-// The entrypoint worker is the only preview worker a deploy names today, but an
-// earlier shape of it deployed one per app — so teardown reclaims the whole
-// worker family, not just the name it can compute. Reclaiming the deterministic
-// name is unconditional: it is the project's whether or not the list found it.
 func TestPreviewProjectWorkers_ReclaimsTheWholeWorkerFamily(t *testing.T) {
 	got := previewProjectWorkers("shop", []string{
 		previewWorkerName("shop") + "-web",
@@ -114,8 +108,6 @@ func TestPreviewProjectWorkers_AnEmptyListStillReclaimsTheEntrypoint(t *testing.
 	}
 }
 
-// Teardown deletes what it is handed, so a name outside the family must never
-// reach it — whatever the edge happened to report.
 func TestPreviewProjectWorkers_NeverAdoptsANameOutsideTheFamily(t *testing.T) {
 	got := previewProjectWorkers("shop", []string{
 		previewWorkerName("shopfoo"),
@@ -137,10 +129,6 @@ func TestPreviewProjectWorkers_NoSlugNamesNothing(t *testing.T) {
 	}
 }
 
-// Every pointer is served through the project's one wildcard route, so retiring
-// one is pure store work — and stays pure store work even when it was the last
-// pointer the store held: another deploy may be landing its own pointer right
-// now, and it is served by the same worker.
 func TestRemovePreview_TouchesNoProjectLevelEdgeState(t *testing.T) {
 	fake := &recordingRootStack{}
 	ctx := context.Background()
@@ -164,9 +152,6 @@ func TestRemovePreview_TouchesNoProjectLevelEdgeState(t *testing.T) {
 	}
 }
 
-// A project holding no root-stack state has no store to ask — and nothing
-// project-level to take either: the worker its half-finished deploy left behind
-// is the same worker its next deploy reconciles.
 func TestRemovePreview_NoRootStackStateTouchesNothing(t *testing.T) {
 	fake := &recordingRootStack{}
 
@@ -178,11 +163,8 @@ func TestRemovePreview_NoRootStackStateTouchesNothing(t *testing.T) {
 	}
 }
 
-// A store that refuses the removal is reported rather than stepped over: the
-// pointer is still live and still resolving.
 func TestRemovePreview_ReportsAFailedPointerRemoval(t *testing.T) {
 	fake := &recordingRootStack{}
-	// A state the fake cannot authenticate makes its RemovePointer reject.
 	stale := edge.RootStackState{edge.RootStackKeySlug: "shop", edge.RootStackKeySecret: "stale"}
 
 	err := RemovePreview(context.Background(), fake, stale, Config{}, "shop", "pr-1", false, nil, nil)
@@ -201,7 +183,7 @@ func TestClassifyPreviewStacks_ExcludesProductionAndSiblings(t *testing.T) {
 	got := classifyPreviewStacks("shop", []string{
 		InfraStackName("shop"),
 		AppDeployStackName("shop", "web", buildOnly("b1")),
-		"shopfoo--preview-x--web--b1", // sibling project whose id has ours as a prefix
+		"shopfoo--preview-x--web--b1",
 	})
 	if len(got.InfraStacks) != 0 || len(got.AppStacks) != 0 || len(got.Pointers) != 0 {
 		t.Errorf("classifyPreviewStacks matched non-preview / sibling stacks: %+v", got)

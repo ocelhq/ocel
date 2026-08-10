@@ -111,7 +111,6 @@ func TestRootStackState_ProductionAndPreviewAreSeparate(t *testing.T) {
 		t.Error("production and preview root-stack state prefixes must differ")
 	}
 
-	// Deleting one substrate's state leaves the other intact.
 	if err := DeleteRootStackStateFor(ctx, ssmc, ClassPreview, "proj-1"); err != nil {
 		t.Fatalf("DeleteRootStackStateFor(preview): %v", err)
 	}

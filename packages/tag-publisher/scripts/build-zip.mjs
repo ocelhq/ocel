@@ -1,14 +1,3 @@
-// Builds the deployable zip: one bundled ESM entrypoint, and nothing else.
-//
-// The publisher has no native dependency, so unlike the image optimizer there is
-// no cross-install and no node_modules tree to stage — the whole function is one
-// file:
-//   index.mjs          the bundle
-//
-// Fixed timestamps and a sorted entry list, so identical inputs produce an
-// identical zip: bootstrap pins this artifact by sha256 and verifies it
-// fail-closed, which only means anything if the digest is reproducible.
-
 import { execFileSync } from "node:child_process";
 import { mkdirSync, rmSync, statSync } from "node:fs";
 import { dirname, join } from "node:path";

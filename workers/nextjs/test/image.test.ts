@@ -14,8 +14,6 @@ import {
 import fixtures from "./fixtures/image-conformance.json";
 import { coloDeps } from "./cache-deps";
 
-// The compiled config the fixture app was served with, so a unit test that
-// narrows one field still matches the real thing everywhere else.
 const BASE_CONFIG = (fixtures.variants as unknown as Array<{ config: ImageConfig }>)[0]
   .config;
 
@@ -23,8 +21,6 @@ function configWith(overrides: Partial<ImageConfig>): ImageConfig {
   return { ...BASE_CONFIG, ...overrides };
 }
 
-// picomatch's compiled source for "**" with dot:true — the shape the adapter
-// emits for a pattern that names no pathname.
 const ANY_PATHNAME = BASE_CONFIG.localPatterns![0].pathname;
 
 function imageUrl(search: string, basePath = ""): URL {
@@ -42,9 +38,6 @@ function rejection(search: string, config?: ImageConfig): string {
   return result.message;
 }
 
-// The three query strings whose raw `url` no runtime can parse or decode. Each
-// is what reaches validation, not what a browser would send — the point is that
-// a client controls them.
 const MALFORMED = {
   "a bare percent": "url=/%&w=640&q=75",
   "an encoded bare percent": "url=%2F%25&w=640&q=75",
@@ -54,8 +47,6 @@ const MALFORMED = {
 
 describe("validateImageRequest ordering", () => {
   it("rejects a protocol-relative url before it can reach the allowlist", () => {
-    // //legacy.example is an allowlisted domain; the relative branch would read
-    // it as a path and the absolute branch would admit it. Neither may run.
     expect(rejection("url=//legacy.example/a.png&w=640&q=75")).toBe(
       '"url" parameter cannot be a protocol-relative URL (//)',
     );
@@ -79,7 +70,6 @@ describe("validateImageRequest ordering", () => {
   });
 
   it("tests the integer regex before parseInt", () => {
-    // parseInt("640.9") is 640, which is an allowed device size.
     expect(rejection("url=/a.png&w=640.9&q=75")).toBe(
       '"w" parameter (width) must be an integer greater than 0',
     );
@@ -89,10 +79,6 @@ describe("validateImageRequest ordering", () => {
   });
 });
 
-// Real Next answers every one of these 500 Internal Server Error: it decodes
-// and parses the url unguarded, and the throw reaches its error handler. Ours
-// must be the same status by way of a response rather than an exception — an
-// uncaught throw in a Worker is an unauthenticated Cloudflare 1101 page.
 describe("a url no runtime can parse", () => {
   for (const [name, search] of Object.entries(MALFORMED)) {
     it(`answers ${name} with a controlled 500`, async () => {
@@ -134,8 +120,6 @@ describe("a url no runtime can parse", () => {
   });
 
   it("is a 500 only where Next itself parses: an unparseable path with no localPatterns is allowed through", () => {
-    // hasLocalMatch returns before parsing when there are no patterns, so this
-    // is the one input of the four Next does not throw on either.
     const result = validate(
       MALFORMED["a path the URL parser rejects"],
       configWith({ localPatterns: undefined }),
@@ -146,8 +130,6 @@ describe("a url no runtime can parse", () => {
 
 describe("validateImageRequest pattern matching", () => {
   it("matches remote patterns against the hostname, not the host", () => {
-    // url.host would be "cdn.allowed.example:8443", which the compiled
-    // hostname regex — anchored, and knowing nothing of ports — cannot match.
     const withPort = validate(
       `url=${encodeURIComponent("https://cdn.allowed.example:8443/img/a.png")}&w=640&q=75`,
     );
@@ -249,8 +231,6 @@ describe("isImageRequest", () => {
   });
 
   it("also serves the unprefixed path, as Next does", () => {
-    // Next strips basePath and then tests the remainder, so /_next/image is an
-    // image request under a basePath too — `next start` serves it.
     expect(isImageRequest("/_next/image", "/docs")).toBe(true);
   });
 
@@ -276,11 +256,6 @@ describe("serveImage", () => {
     });
 
     expect(await response.text()).toBe("optimized");
-    // The whole payload, asserted exactly: PR 5's origin loads
-    // image-config/<slug>/<app>/<buildId>.json and re-validates against it, so
-    // a field missing here is a field it cannot reconstruct. mimeType is the
-    // negotiation this tier already performed and keyed the entry on — the
-    // origin is told the answer rather than asked to arrive at it again.
     expect(seen).toEqual([
       {
         slug: "p1",
@@ -466,9 +441,6 @@ describe("the /_next/image route", () => {
     });
   });
 
-  // The colo tier's own behavior is test/image-cache.test.ts's; this is the
-  // wiring — that the route reaches it at all, under the manifest's build id
-  // and asset hashes rather than something reconstructed at the seam.
   it("serves a repeat request from the colo cache, across a redeploy", async () => {
     const clock = { ms: 0 };
     const pending: Promise<unknown>[] = [];
@@ -519,10 +491,6 @@ describe("the /_next/image route", () => {
     expect(response.status).toBe(502);
   });
 
-  // Next runs handleNextImageRequest before handleCatchallMiddlewareRequest
-  // (base-server.ts), so an app whose matcher covers everything but /api still
-  // has its images served. Behind middleware, this request would come back as
-  // the redirect to /login and would cost an edge invocation per image.
   it("is served without running middleware whose matcher covers it", async () => {
     let middlewareRan = 0;
     const deps = imageDeps({

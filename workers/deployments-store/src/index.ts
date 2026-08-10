@@ -9,9 +9,6 @@ import type { Env } from "./env";
 
 export { DeploymentsStore };
 
-// One shared worker holds the DO namespace for the whole account; each project
-// addresses its own instance by its slug (idFromName). Every request names the
-// slug as the leading path segment (fetch) or the leading RPC argument.
 function stub(env: Env, slug: string) {
   return env.DEPLOYMENTS_DO.get(env.DEPLOYMENTS_DO.idFromName(slug));
 }
@@ -24,22 +21,6 @@ async function readJson<T>(request: Request): Promise<T | undefined> {
   }
 }
 
-// The deployments store's two access paths (ADR 0002), now against a shared
-// worker routed per project by slug:
-//
-// - fetch() is the authenticated write endpoint the deploy host calls over
-//   plain HTTP. Routes are prefixed with the project slug (/<slug>/...). The
-//   /<slug>/initialize route is authorized by the account-level bootstrap
-//   credential (the only op that credential may perform); every other route
-//   authenticates against the addressed instance's own stored project secret.
-// - pointerRecord is the single RPC method the frozen generic worker calls
-//   through its service binding, carrying the project slug: it resolves the
-//   app's deployment identity (the buildId field, whose name predates
-//   identities) and record for a pointer (the reserved default, or a named
-//   preview pointer) in one round trip, echoing the caller's knownBuildId back
-//   unchanged to skip re-sending an unchanged record. It stays secret-less — the
-//   trust boundary is the binding itself, only ever reachable from another
-//   Worker in the same account.
 export default class extends WorkerEntrypoint<Env> {
   async fetch(request: Request): Promise<Response> {
     const url = new URL(request.url);
@@ -49,11 +30,6 @@ export default class extends WorkerEntrypoint<Env> {
     const sub = "/" + segments.slice(1).join("/");
     const store = stub(this.env, slug);
 
-    // Seeding a project's instance is the sole op the account-level bootstrap
-    // credential authorizes — and it alone, because the response discloses the
-    // instance's identity: an already-initialized instance answers with the
-    // identity it already carries, so concurrent first deploys of one slug
-    // converge on it instead of clobbering each other.
     if (request.method === "POST" && sub === "/initialize") {
       if (!(await authorized(request, this.env.BOOTSTRAP_SECRET))) {
         return new Response("Unauthorized", { status: 401 });
@@ -71,7 +47,6 @@ export default class extends WorkerEntrypoint<Env> {
       );
     }
 
-    // Every other op authenticates against the instance's own project secret.
     const token = bearer(request);
     if (token === null || !(await store.authorized(token))) {
       return new Response("Unauthorized", { status: 401 });
@@ -89,8 +64,6 @@ export default class extends WorkerEntrypoint<Env> {
       if (!body?.promotionId || !body.builds) {
         return new Response("Bad Request", { status: 400 });
       }
-      // The pointer to move is an argument to the promote operation, not part of
-      // the persisted Promotion; the store defaults it when absent.
       const { pointer, ...promotion } = body;
       const { conflict } = await store.promote(promotion, pointer);
       if (conflict) return new Response(conflict, { status: 409 });
@@ -98,8 +71,6 @@ export default class extends WorkerEntrypoint<Env> {
     }
 
     if (request.method === "GET" && sub === "/history") {
-      // The pointer to scope history to is an optional query param; absent means
-      // the reserved default (production).
       const pointer = url.searchParams.get("pointer") ?? undefined;
       return Response.json(await store.history(pointer));
     }
@@ -124,9 +95,6 @@ export default class extends WorkerEntrypoint<Env> {
     }
 
     if (request.method === "POST" && sub === "/remove-pointer") {
-      // Full teardown of one pointer (a `preview rm`): unlike /prune it pins
-      // nothing. The pointer to remove is required — an absent one would wipe
-      // the reserved production default, which this op must never do implicitly.
       const body = await readJson<{ pointer?: string }>(request);
       if (!body?.pointer) return new Response("Bad Request", { status: 400 });
       return Response.json(await store.removePointer(body.pointer));

@@ -16,12 +16,6 @@ const buildEnv = {
   __NEXT_PREVIEW_MODE_ID: "preview",
 };
 
-// A synthetic build result standing in for a real edge build: two variants of
-// one page sharing an entry key, an app route with its own, edge middleware
-// carrying matchers and a wasm asset, and one nodejs route so the lambda path
-// stays exercised alongside. Chunk contents are chosen to force the interesting
-// cases — two distinct asset keys holding identical bytes, one asset shared by
-// every output, and a source map that must not reach the bundle.
 async function synthEdgeProject() {
   const projectDir = await mkdtemp(join(tmpdir(), "ocel-next-edge-"));
 
@@ -46,16 +40,12 @@ async function synthEdgeProject() {
   await mkdir(dirname(wasmPath), { recursive: true });
   await writeFile(wasmPath, Buffer.from([0, 97, 115, 109]));
 
-  // Traced blobs: Next merges these into the same flat `assets` record as the
-  // JS files, and only the middleware manifest still says which is which.
   const tracedAssets = {
     "server/edge/assets/text.abc.txt": Buffer.from("PLAIN TEXT ASSET"),
     "server/edge/assets/pic.abc.png": Buffer.from([
       0x89, 0x50, 0x4e, 0x47, 0xff, 0xfe,
     ]),
     "server/edge/assets/worker.abc.js": Buffer.from("NOT A CHUNK"),
-    // Names a user filename can legitimately produce: one the URL constructor
-    // percent-encodes, and one carrying JS template-literal syntax.
     "server/edge/assets/caf\u00e9.abc.txt": Buffer.from("ACCENTED"),
     "server/edge/assets/a`b${c}.abc.txt": Buffer.from("TEMPLATEY"),
   };
@@ -135,7 +125,6 @@ async function synthEdgeProject() {
           type: "APP_PAGE",
         },
         {
-          // The `.rsc` variant is its own output sharing the compiled entry.
           pathname: "/edge-page.rsc",
           id: "app/edge-page/page.rsc",
           sourcePage: "/edge-page/page",
@@ -228,8 +217,6 @@ function outputDir(projectDir: string): string {
   return join(projectDir, ".ocel/output");
 }
 
-// The name -> module id table the shim inlines, which is what resolves a
-// `blob:` fetch.
 function assetTable(shim: string): Record<string, string> {
   const match = /^const ASSETS = (.*)$/m.exec(shim);
   if (!match) throw new Error("shim carries no ASSETS table");
@@ -267,7 +254,6 @@ test("gives every edge entry key one bundle entry, variants folded together", as
   const bundle = await readBundle(projectDir);
   expect(bundle.version).toBe(2);
   expect(bundle.mainModule).toBe("main.js");
-  // /edge-page and /edge-page.rsc are two outputs but one compiled entry.
   expect(Object.keys(bundle.entries).sort()).toEqual([
     "middleware_app/api/edge/route",
     "middleware_app/edge-page/page",
@@ -284,7 +270,6 @@ test("dedupes chunks by content and assigns ids in sorted-key order", async () =
   await adapter.onBuildComplete!(args as never);
 
   const bundle = await readBundle(projectDir);
-  // dup-a and dup-b hold identical bytes under different keys: one id.
   expect(bundle.chunks).toEqual({
     "c/0.js": "DUPLICATE",
     "c/1.js": "MW",
@@ -311,9 +296,6 @@ test("dedupes chunks by content and assigns ids in sorted-key order", async () =
 test("carries an entry's chunks in the order Next listed them", async () => {
   const { projectDir, args } = await synthEdgeProject();
 
-  // Next lists a page's files in the order Turbopack must evaluate them, and a
-  // chunk requiring a module from one that has not run yet dies on evaluation.
-  // Ordered against the alphabet so re-sorting cannot pass by coincidence.
   const page = args.outputs.appPages[0]!;
   page.assets = {
     "chunks/shared.js": page.assets["chunks/shared.js"]!,
@@ -342,9 +324,6 @@ test("leaves source maps out of the bundle", async () => {
   expect(bundle.entries["middleware_app/edge-page/page"].chunks).toHaveLength(3);
 });
 
-// workerd compiles every declared module when the isolate starts, so a traced
-// blob emitted as a `c/N.js` chunk fails the whole bundle — every edge route in
-// the deployment, not just the route that traced it.
 test("keeps traced assets out of the chunk table", async () => {
   const { projectDir, args, tracedAssets } = await synthEdgeProject();
 
@@ -358,8 +337,6 @@ test("keeps traced assets out of the chunk table", async () => {
   expect(bundle.entries["middleware_app/edge-page/page"].chunks).toHaveLength(3);
 });
 
-// A route may legitimately bind a .js file as an asset via
-// `new URL("./worker.js", import.meta.url)`; only the manifest can tell.
 test("classifies by the middleware manifest, not by file extension", async () => {
   const { projectDir, args } = await synthEdgeProject();
 
@@ -389,8 +366,6 @@ test("falls back to extensions when the manifest is unreadable", async () => {
   ).toBe(true);
 });
 
-// base64 and never utf8: utf8 replaces every invalid byte sequence with U+FFFD,
-// which would silently corrupt a png or a font.
 test("carries traced assets as base64, byte-exact", async () => {
   const { projectDir, args, tracedAssets } = await synthEdgeProject();
 
@@ -403,9 +378,6 @@ test("carries traced assets as base64, byte-exact", async () => {
   }
 });
 
-// The key of an asset is the manifest's name, which is also the string the
-// compiled chunk hands user code after `blob:` — so the shim's table is what
-// turns that fetch into a module import.
 test("maps each asset's blob name to its module id in the shim", async () => {
   const { projectDir, args, tracedAssets } = await synthEdgeProject();
 
@@ -420,9 +392,6 @@ test("maps each asset's blob name to its module id in the shim", async () => {
   expect(bundle.shim).toContain('url.startsWith("blob:")');
 });
 
-// An asset name is a user filename, so it can carry JS template-literal syntax.
-// It lands inside a double-quoted JSON string in the emitted shim, where a
-// backtick and `${` are ordinary characters — this is what says so.
 test("emits a loadable shim for an asset name carrying template syntax", async () => {
   const { projectDir, args } = await synthEdgeProject();
 
@@ -434,9 +403,6 @@ test("emits a loadable shim for an asset name carrying template syntax", async (
   expect(typeof mod.default.fetch).toBe("function");
 });
 
-// The chunk fetches `new URL(<blob string>)`, and URL percent-encodes non-ASCII
-// in an opaque path, so the name can arrive encoded. The table is keyed by the
-// name the build wrote; the shim decodes to reach it.
 test("keys the asset table by the build's name and decodes to reach it", async () => {
   const { projectDir, args } = await synthEdgeProject();
 
@@ -456,8 +422,6 @@ test("carries wasm assets as base64, declared once for the whole bundle", async 
   expect(bundle.wasm).toEqual({
     "w/0.wasm": Buffer.from([0, 97, 115, 109]).toString("base64"),
   });
-  // The worker declares every wasm module globally and workerd compiles the
-  // unimported ones lazily, so no entry lists its own.
   for (const entry of Object.values(bundle.entries) as object[]) {
     expect(entry).not.toHaveProperty("wasm");
   }
@@ -509,9 +473,6 @@ test("fails the build when two edge outputs disagree on an env value", async () 
   );
 });
 
-// proxy.ts always builds as node middleware, so the edge bundle has to stay
-// buildable without it: the edge tier never runs it, only the Lambda tier
-// does (see next-adapter.test.mts for the node-middleware injection tests).
 test("excludes node middleware from the edge bundle", async () => {
   const { projectDir, args } = await synthEdgeProject();
   args.outputs.middleware.runtime = "nodejs";
@@ -533,7 +494,6 @@ test("dispatches each edge pathname to its entry key", async () => {
     kind: "edge",
     entryKey: "middleware_app/edge-page/page",
   });
-  // The variant maps onto the same entry — no grouping, no symlink.
   expect(manifest.dispatch["/edge-page.rsc"]).toEqual({
     kind: "edge",
     entryKey: "middleware_app/edge-page/page",
@@ -542,8 +502,6 @@ test("dispatches each edge pathname to its entry key", async () => {
     kind: "edge",
     entryKey: "middleware_app/api/edge/route",
   });
-  // The nodejs route is untouched by any of this: its own bundle, its own
-  // entry-key namespace.
   expect(manifest.dispatch["/api/docs"]).toEqual({
     kind: "lambda",
     id: "bundle-0",
@@ -615,7 +573,6 @@ test("inlines the entries table into the shim and imports only a hit entry's chu
   expect(bundle.shim).toContain("middleware_middleware");
   expect(bundle.shim).toContain('await import("./" + id)');
   expect(bundle.shim).toContain("ctx.props.entryKey");
-  // The shim reads env before the first chunk evaluates.
   expect(bundle.shim.indexOf("Object.assign(globalThis.process.env, env)")).
     toBeLessThan(bundle.shim.indexOf("await import"));
 });
@@ -632,8 +589,6 @@ test("emits a shim that is a loadable module exporting a fetch handler", async (
   expect(typeof mod.default.fetch).toBe("function");
 });
 
-// The bundled cache handler cannot read its binding from process.env: on the
-// edge those are build-time string literals, and a binding is not a string.
 test("hands the cache binding to the chunks on a global, before they evaluate", async () => {
   const { projectDir, args } = await synthEdgeProject();
 
@@ -648,11 +603,6 @@ test("hands the cache binding to the chunks on a global, before they evaluate", 
   );
 });
 
-// The dynamic worker's isolate is cached and long-lived, so a binding taken from
-// a request's ctx is captured by whichever request cold-started it and disposed
-// when that request ends — leaving requests 2..N holding a dead stub. Taking it
-// from the load-time env, which carries the main worker's ctx.exports loopback,
-// is what keeps a warm isolate working.
 test("rebinds every request from the load-time env, never from a request's ctx", async () => {
   const { projectDir, args } = await synthEdgeProject();
   await adapter.onBuildComplete!(args as never);
@@ -663,8 +613,6 @@ test("rebinds every request from the load-time env, never from a request's ctx",
   const env = { OCEL_CACHE_RPC: rpc, OCEL_CACHE_SCOPE: "prod/app/build" };
   const seen: unknown[] = [];
   try {
-    // An unknown entry key returns before any chunk is imported, which is what
-    // makes the prelude drivable without a real Turbopack chunk on disk.
     for (let i = 0; i < 2; i++) {
       const ctx = {
         props: { entryKey: "unknown" },
@@ -738,17 +686,11 @@ test("names the edge entry that regenerates a prerender its edge route parents",
   await adapter.onBuildComplete!(args as never);
 
   const manifest = await readManifest(projectDir);
-  // The prerender entry replaces the plain edge one this pathname also
-  // produced, so without the entry key the worker is left looking for a
-  // Function URL an edge-rendered route never has.
   expect(manifest.dispatch["/edge-page"]).toMatchObject({
     kind: "prerender",
     edgeEntryKey: "middleware_app/edge-page/page",
   });
   expect(manifest.dispatch["/edge-page"]).not.toHaveProperty("entryKey");
-  // A prerender its Lambda regenerates carries no edge key at all — that
-  // absence is what tells the worker it may revalidate — only the entry inside
-  // the bundle that renders it.
   expect(manifest.dispatch["/api/docs"]).not.toHaveProperty("edgeEntryKey");
   expect(manifest.dispatch["/api/docs"].entryKey).toBe("app/api/docs/route");
 });
@@ -766,10 +708,6 @@ test("prints the bundle size, chunk count and entry count", async () => {
   );
 });
 
-// A variable read from an edge entry throws at request time, because no
-// variable class is deliverable to the edge tier. The build cannot see the
-// read — only the import — so it warns rather than failing: an edge route that
-// imports a barrel re-exporting `env` without ever reading one is legitimate.
 test("warns naming every edge route whose chunks carry ocel/env's edge build", async () => {
   const { projectDir, args } = await synthEdgeProject();
   const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
@@ -800,9 +738,6 @@ test("stays silent when no edge chunk carries ocel/env", async () => {
   }
 });
 
-// The SDK's edge build names the entry a failing read happened in, and a
-// variable is read as a plain property with nowhere to be handed one — so the
-// shim records it, before the entry's chunks evaluate.
 test("hands the running entry key to the chunks on a global, before they evaluate", async () => {
   const { projectDir, args } = await synthEdgeProject();
 
@@ -815,12 +750,6 @@ test("hands the running entry key to the chunks on a global, before they evaluat
   );
 });
 
-// Ocel writes no variable value into the bundle's env: every class is
-// delivered to a Lambda. What the bundle carries is exactly the union of the
-// edge outputs' own config.env, which is Next's. (A user who copies a value
-// into next.config.env themselves still lands one there — the build
-// environment carries the resolved plaintexts deliberately — so the claim is
-// about what Ocel writes, not about what the object can ever hold.)
 test("writes no value of its own into the edge bundle's env", async () => {
   const { projectDir, args } = await synthEdgeProject();
   vi.stubEnv("OCEL_VAR_BAKED", "ciphertext-opened");

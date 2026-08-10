@@ -11,11 +11,6 @@ import {
   sleep,
 } from "./race";
 
-// Every judgement is left to the runner. This worker reports what it saw and
-// nothing more — it never compares two isolates' clocks, because Date.now() in a
-// Worker advances only on I/O and differencing it across isolates would measure
-// the runtime rather than the cache.
-
 interface Sentinel {
   run: string;
   writer: string;
@@ -58,9 +53,6 @@ export default {
             headers: { "cache-control": `max-age=${ttlSeconds}` },
           }),
         );
-        // Positive control: read the entry back from the isolate that just wrote
-        // it. Without this, a later run-wide miss cannot be told apart from a
-        // cache that never stored anything at all.
         const verified = await cache.match(key);
         return Response.json({
           ...base,
@@ -78,9 +70,6 @@ export default {
           hit: sentinel !== null,
           writer: sentinel?.writer ?? null,
           requestedTtlSeconds: sentinel?.ttlSeconds ?? null,
-          // Cloudflare's own view of how long it has held the entry, and of the
-          // freshness it decided to store it under. Independent of any clock
-          // this probe reads and of the runner's polling luck.
           age: hit?.headers.get("age") ?? null,
           cacheControl: hit?.headers.get("cache-control") ?? null,
         });
@@ -89,10 +78,6 @@ export default {
       return new Response("Method Not Allowed", { status: 405 });
     }
 
-    // Two racers must never be answered by one body. The zone's own edge cache
-    // sits in front of this worker, so every racing response is no-store and
-    // every racer's URL is unique by &seq — either alone would be enough, and
-    // a manufactured duplicate claim is not a mistake worth being clever about.
     const racing = (body: unknown) =>
       Response.json(body, { headers: { "cache-control": "no-store" } });
 
@@ -112,10 +97,6 @@ export default {
         return new Response("jitter must be a non-negative number", { status: 400 });
       }
 
-      // Drawn before the sleep and echoed, so the runner can check both that the
-      // draw covered the window it asked for and that the worker actually spent
-      // it — a delay that is reported but not slept would print a collapsed herd
-      // for a system that never jittered.
       const delayMs = drawDelayMs(jitterMs);
       await sleep(delayMs);
       const claimed = await claim(

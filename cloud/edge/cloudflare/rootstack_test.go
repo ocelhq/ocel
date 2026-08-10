@@ -16,8 +16,6 @@ import (
 	"github.com/ocelhq/ocel/cloud/edge"
 )
 
-// doMetadataFromMultipart mirrors cloudflare_test.go's metadataFromMultipart,
-// for buildDurableObjectScriptMultipart's body.
 func doMetadataFromMultipart(t *testing.T, worker edge.Worker, do durableObjectWorker, deployedClasses []string) map[string]any {
 	t.Helper()
 	body, contentType, err := buildDurableObjectScriptMultipart(worker, do, deployedClasses)
@@ -55,8 +53,6 @@ func testStoreWorker() edge.Worker {
 	return edge.Worker{Main: edge.WorkerModule{Name: "index.js", ContentType: "application/javascript+module", Content: []byte("export default {}")}}
 }
 
-// The account-level workers sit on every request and deploy path, so they honour
-// the observability switch the app workers do.
 func TestBuildDurableObjectScriptMultipartDisablesObservability(t *testing.T) {
 	t.Setenv(envObservability, "off")
 
@@ -105,8 +101,6 @@ func TestISRWriterScriptNameFor(t *testing.T) {
 	if prod == preview {
 		t.Error("production and preview isr-writer scripts must differ so their DO namespaces do not collide")
 	}
-	// The two account-level workers must not collide with each other either:
-	// one script name, one DO namespace.
 	if prod == sharedStoreScriptName || preview == previewStoreScriptName {
 		t.Error("the isr-writer and deployments-store scripts must be distinct")
 	}
@@ -115,8 +109,6 @@ func TestISRWriterScriptNameFor(t *testing.T) {
 	}
 }
 
-// doBindings returns every durable_object_namespace binding in the metadata,
-// keyed by binding name.
 func doBindings(t *testing.T, meta map[string]any) map[string]string {
 	t.Helper()
 	bindings, _ := meta["bindings"].([]any)
@@ -133,8 +125,6 @@ func doBindings(t *testing.T, meta map[string]any) map[string]string {
 	return found
 }
 
-// migrationSteps flattens migrations.steps to the sqlite classes each step
-// creates, in order.
 func migrationSteps(t *testing.T, migrations map[string]any) [][]string {
 	t.Helper()
 	steps, ok := migrations["steps"].([]any)
@@ -155,9 +145,6 @@ func migrationSteps(t *testing.T, migrations map[string]any) [][]string {
 	return out
 }
 
-// A worker owns as many Durable Object classes as its wrangler.jsonc declares,
-// and every one of them needs its binding: a class the script exports but the
-// script metadata does not bind is a class no request can reach.
 func TestBuildDurableObjectScriptMultipart_BindsEveryClass(t *testing.T) {
 	for _, do := range []durableObjectWorker{deploymentsStoreWorker, isrWriterWorker} {
 		found := doBindings(t, doMetadataFromMultipart(t, testStoreWorker(), do, nil))
@@ -172,9 +159,6 @@ func TestBuildDurableObjectScriptMultipart_BindsEveryClass(t *testing.T) {
 	}
 }
 
-// An account bootstrapping for the first time carries no migration tag, so
-// every step in the log has to be declared at once or the classes after the
-// first are never created.
 func TestBuildDurableObjectScriptMultipart_FreshBootstrapDeclaresTheWholeLog(t *testing.T) {
 	meta := doMetadataFromMultipart(t, testStoreWorker(), isrWriterWorker, nil)
 	migrations, ok := meta["migrations"].(map[string]any)
@@ -192,10 +176,6 @@ func TestBuildDurableObjectScriptMultipart_FreshBootstrapDeclaresTheWholeLog(t *
 	}
 }
 
-// ocelhq-wvag.4: the case a boolean "the script does not exist yet" could not
-// express. An account that already bootstrapped the writer carries v1, so a new
-// class reaches it only if the upload declares the steps v1 is missing —
-// otherwise Cloudflare rejects the binding to a class it never created.
 func TestBuildDurableObjectScriptMultipart_BootstrappedAccountDeclaresWhatItLacks(t *testing.T) {
 	meta := doMetadataFromMultipart(t, testStoreWorker(), isrWriterWorker, []string{"IsrDeploy"})
 	migrations, ok := meta["migrations"].(map[string]any)
@@ -213,8 +193,6 @@ func TestBuildDurableObjectScriptMultipart_BootstrappedAccountDeclaresWhatItLack
 	}
 }
 
-// Redeclaring an applied migration is at best redundant and at worst rejected,
-// and every bootstrap after the last one re-uploads the same script.
 func TestBuildDurableObjectScriptMultipart_UpToDateScriptDeclaresNoMigration(t *testing.T) {
 	for _, do := range []durableObjectWorker{deploymentsStoreWorker, isrWriterWorker} {
 		var deployed []string
@@ -228,17 +206,12 @@ func TestBuildDurableObjectScriptMultipart_UpToDateScriptDeclaresNoMigration(t *
 	}
 }
 
-// A deployed class this build has never heard of is a script ahead of the code
-// uploading it. Guessing a migration path from there is how a class gets
-// deleted; refusing costs a rollback and nothing else.
 func TestBuildDurableObjectScriptMultipart_UnknownDeployedClassIsRefused(t *testing.T) {
 	if _, _, err := buildDurableObjectScriptMultipart(testStoreWorker(), isrWriterWorker, []string{"IsrDeploy", "IsrFuture"}); err == nil {
 		t.Error("buildDurableObjectScriptMultipart(deployed IsrFuture) = nil error, want a refusal")
 	}
 }
 
-// The writer's whole justification is that a Lambda needs no R2 credentials of
-// its own: the bucket reaches the worker as a native binding instead.
 func TestBuildDurableObjectScriptMultipart_CarriesTheNativeBucketBinding(t *testing.T) {
 	worker := testStoreWorker()
 	worker.ObjectStore = edge.ObjectStore{Binding: cacheStoreBinding, Bucket: cacheStoreName(edge.ClassProduction)}
@@ -259,26 +232,11 @@ func TestBuildDurableObjectScriptMultipart_CarriesTheNativeBucketBinding(t *test
 	}
 }
 
-// storeBootstrapCred / storeOwnerToken are the account-level credential
-// fakeStoreServer authorizes /initialize with (the worker's BOOTSTRAP_SECRET)
-// and the owner token its instance starts out seeded under.
 const (
 	storeBootstrapCred = "bootstrap-cred"
 	storeOwnerToken    = "owner-token"
 )
 
-// fakeStoreServer stands in for workers/deployments-store/src/index.ts's
-// fetch() surface, close enough to exercise the Go-side HTTP client without
-// any Cloudflare API: it checks the Bearer secret and serves /initialize,
-// /staged, /promote, /history, /prune, /version-stamp and /destroy.
-//
-// Ownership is modelled as the real store does it (store.ts initialize): the
-// instance starts seeded with secret under storeOwnerToken, /initialize is
-// convergent — it seeds an unclaimed instance with the presented pair, answers
-// an already-seeded one with the pair it already carries, and overwrites only
-// under force — and always answers 200 with the identity the instance now
-// holds. /destroy clears the secret with the rest of the storage, so every
-// later op on the wiped instance is a 401, exactly as it is in production.
 func fakeStoreServer(t *testing.T, secret string) *httptest.Server {
 	t.Helper()
 	var (
@@ -286,8 +244,6 @@ func fakeStoreServer(t *testing.T, secret string) *httptest.Server {
 		history []edge.HistoryEntry
 		version *string
 	)
-	// An empty secret is an instance nobody has seeded yet, so it has no owner
-	// either and the first /initialize claims it.
 	owner, live := storeOwnerToken, secret
 	if secret == "" {
 		owner = ""
@@ -396,8 +352,6 @@ func testState(endpoint, secret string) edge.RootStackState {
 	}
 }
 
-// testSpec is the reconcile spec matching testState's project, addressing the
-// same instance with the account-level bootstrap credential.
 func testSpec(endpoint, version string) edge.RootStackSpec {
 	return edge.RootStackSpec{
 		Slug:          "acme-web",
@@ -407,9 +361,6 @@ func testSpec(endpoint, version string) edge.RootStackSpec {
 	}
 }
 
-// previewSpec is testSpec shaped like a project's preview reconcile: the one
-// wildcard the project declared, pruned to it, with Ocel planting the record
-// behind it.
 func previewSpec(endpoint, version string) edge.RootStackSpec {
 	spec := testSpec(endpoint, version)
 	spec.GenericName = "ocel-preview"
@@ -429,9 +380,6 @@ func previewZoneMock() *cfMock {
 	}
 }
 
-// The version stamp gates the script upload alone. Routes and records are
-// reconciled every time, so one deleted out of band heals on the next deploy
-// instead of surviving until the version happens to move.
 func TestReconcileRootStack_UpToDateStillReconcilesTheRoute(t *testing.T) {
 	t.Setenv(envAccountID, "acct")
 	store := fakeStoreServer(t, "s3cr3t")
@@ -459,9 +407,6 @@ func TestReconcileRootStack_UpToDateStillReconcilesTheRoute(t *testing.T) {
 	}
 }
 
-// The project owns its preview base domain outright, so the wildcard is its
-// complete desired route set: a pointer-exact route left over from the per-pointer
-// model is drift, and pruning is what sweeps it.
 func TestReconcileRootStack_PreviewPrunesEveryRouteButItsWildcard(t *testing.T) {
 	t.Setenv(envAccountID, "acct")
 	store := fakeStoreServer(t, "s3cr3t")
@@ -481,8 +426,6 @@ func TestReconcileRootStack_PreviewPrunesEveryRouteButItsWildcard(t *testing.T) 
 	}
 }
 
-// Nothing outside the project shares its preview base domain, so Ocel plants the
-// record the wildcard resolves through itself, exactly as production does.
 func TestReconcileRootStack_PreviewPlantsItsOwnWildcardRecord(t *testing.T) {
 	t.Setenv(envAccountID, "acct")
 	store := fakeStoreServer(t, "s3cr3t")
@@ -499,8 +442,6 @@ func TestReconcileRootStack_PreviewPlantsItsOwnWildcardRecord(t *testing.T) {
 	}
 }
 
-// A root stack behind spec.Version still does the whole job: upload the script,
-// attach the route, and stamp the version it now carries.
 func TestReconcileRootStack_BehindVersionUploadsAndStamps(t *testing.T) {
 	t.Setenv(envAccountID, "acct")
 	store := fakeStoreServer(t, "s3cr3t")
@@ -528,8 +469,6 @@ func TestReconcileRootStack_BehindVersionUploadsAndStamps(t *testing.T) {
 	}
 }
 
-// Teardown hands DestroyRootStack an exact set, so the list it computes it from
-// must be the stem's family and nothing adjacent to it.
 func TestListDeployedWorkers_ReturnsTheStemsFamilyOnly(t *testing.T) {
 	t.Setenv(envAccountID, "acct")
 	m := &cfMock{
@@ -571,8 +510,6 @@ func TestListDeployedWorkers_NothingUnderTheStemIsNotAnError(t *testing.T) {
 func TestDestroyRootStack_EmptyListIsNoOp(t *testing.T) {
 	t.Setenv(envAccountID, "acct-1")
 	p := &provider{}
-	// No workers to remove must not reach the Cloudflare client (p.client is nil
-	// here) — an empty teardown is a clean no-op.
 	if err := p.DestroyRootStack(context.Background(), nil); err != nil {
 		t.Fatalf("DestroyRootStack(nil) err = %v, want nil", err)
 	}
@@ -649,10 +586,6 @@ func TestDeletePromotionArtifacts_KeepsWindowAndPinsActive(t *testing.T) {
 	}
 }
 
-// TestStoreOps_TransmitPointer proves the Go host sends the pointer the store
-// scopes promote/history/prune by: as a sibling field of the /promote body, a
-// ?pointer= query on /history, and a field of the /prune body. An empty pointer
-// is omitted so the store applies its reserved production default.
 func TestStoreOps_TransmitPointer(t *testing.T) {
 	var (
 		promoteBodies []map[string]any
@@ -683,7 +616,6 @@ func TestStoreOps_TransmitPointer(t *testing.T) {
 	state := testState(srv.URL, "s3cr3t")
 	ctx := context.Background()
 
-	// Preview pointer: transmitted on all three.
 	if err := p.Promote(ctx, state, edge.Promotion{PromotionID: "p1", Ts: 1, Builds: map[string]string{"web": "b1"}}, "pr-42"); err != nil {
 		t.Fatalf("Promote(preview): %v", err)
 	}
@@ -693,8 +625,6 @@ func TestStoreOps_TransmitPointer(t *testing.T) {
 	if _, err := p.DeletePromotionArtifacts(ctx, state, 3, "pr-42"); err != nil {
 		t.Fatalf("Prune(preview): %v", err)
 	}
-	// Production default: pointer omitted from the promote/prune bodies and the
-	// history query.
 	if err := p.Promote(ctx, state, edge.Promotion{PromotionID: "p2", Ts: 2, Builds: map[string]string{"web": "b2"}}, ""); err != nil {
 		t.Fatalf("Promote(prod): %v", err)
 	}
@@ -748,9 +678,6 @@ func TestRemovePointer_SendsThePointerAndReturnsReclaimTargets(t *testing.T) {
 	}
 }
 
-// The deployments store is a Durable Object a project's first deploy of the day
-// wakes up cold, so a throttled or unavailable answer must not fail the deploy
-// outright.
 func TestStoreRequest_RetriesUntilTheStoreAnswers(t *testing.T) {
 	attempts := 0
 	mux := http.NewServeMux()
@@ -775,8 +702,6 @@ func TestStoreRequest_RetriesUntilTheStoreAnswers(t *testing.T) {
 	}
 }
 
-// A rejected credential is the store's answer, not a failure to reach it —
-// retrying it would only slow every recovery path that reads a 401 as a signal.
 func TestStoreRequest_DoesNotRetryARejectedCredential(t *testing.T) {
 	attempts := 0
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -794,8 +719,6 @@ func TestStoreRequest_DoesNotRetryARejectedCredential(t *testing.T) {
 	}
 }
 
-// A cancelled deploy stops waiting immediately rather than sleeping out its
-// remaining attempts.
 func TestStoreRequest_CancelledContextStopsRetrying(t *testing.T) {
 	attempts := 0
 	ctx, cancel := context.WithCancel(context.Background())
@@ -870,8 +793,6 @@ func TestMintSecret_UniqueAndNonEmpty(t *testing.T) {
 
 func TestDestroyInstance_NoSecretIsNoOp(t *testing.T) {
 	p := &provider{}
-	// No secret in state means the project never deployed to production; wiping
-	// its instance must not reach the store (srv-less) — a clean no-op.
 	if err := p.DestroyInstance(context.Background(), edge.RootStackState{}); err != nil {
 		t.Fatalf("DestroyInstance(empty) err = %v, want nil", err)
 	}
@@ -888,8 +809,6 @@ func TestDestroyInstance_WipesTheInstance(t *testing.T) {
 	if err := p.DestroyInstance(ctx, state); err != nil {
 		t.Fatalf("DestroyInstance: %v", err)
 	}
-	// The wipe takes the secret with it, so the instance no longer answers to
-	// the state that named it.
 	if _, err := p.History(ctx, state, ""); err == nil {
 		t.Error("history after destroy: err = nil, want the wiped instance to reject the secret")
 	}
@@ -903,10 +822,6 @@ func TestDestroyInstance_AlreadyWipedIsSuccess(t *testing.T) {
 	if err := p.DestroyInstance(ctx, state); err != nil {
 		t.Fatalf("DestroyInstance: %v", err)
 	}
-	// Wiping deletes the secret /destroy authenticates with, so a re-run always
-	// meets a 401. Reporting that as a failure would strand a teardown that
-	// failed after the wipe: its state is only forgotten once this reports the
-	// instance gone.
 	if err := p.DestroyInstance(ctx, state); err != nil {
 		t.Fatalf("DestroyInstance on an already-wiped instance: err = %v, want nil", err)
 	}
@@ -918,8 +833,6 @@ func TestEnsureInstance_ReseedsAnInstanceWipedByAFailedTeardown(t *testing.T) {
 	ctx := context.Background()
 	state := testState(srv.URL, "s3cr3t")
 
-	// A teardown wiped the instance and then failed, leaving the state naming it
-	// in place — the deploy that follows must recover, not fail forever.
 	if err := p.DestroyInstance(ctx, state); err != nil {
 		t.Fatalf("DestroyInstance: %v", err)
 	}
@@ -939,9 +852,6 @@ func TestEnsureInstance_ReseedsAnInstanceWipedByAFailedTeardown(t *testing.T) {
 	}
 }
 
-// Two first deploys of one slug race: the loser's initialize is answered with
-// the identity the winner seeded, and adopting it is what keeps both deploys
-// writing to the same instance instead of clobbering each other's SSM record.
 func TestEnsureInstance_AdoptsTheIdentityAnAlreadySeededInstanceReports(t *testing.T) {
 	srv := fakeStoreServer(t, "s3cr3t")
 	p := &provider{}
@@ -962,8 +872,6 @@ func TestEnsureInstance_AdoptsTheIdentityAnAlreadySeededInstanceReports(t *testi
 	}
 }
 
-// The adopted identity is what the caller persists, so it must reach
-// RootStackState verbatim — the whole point of adopting it.
 func TestReconcileRootStack_PersistsTheAdoptedIdentity(t *testing.T) {
 	t.Setenv(envAccountID, "acct")
 	store := fakeStoreServer(t, "s3cr3t")
@@ -1027,16 +935,12 @@ func TestEnsureInstance_DoesNotReseedOnAStoreFailure(t *testing.T) {
 		if r.Method == http.MethodPost {
 			initialized++
 		}
-		// A 5xx is retried, so the store asks for a wait this test can afford.
 		w.Header().Set("Retry-After-Ms", "1")
 		w.WriteHeader(http.StatusInternalServerError)
 	}))
 	t.Cleanup(srv.Close)
 	p := &provider{}
 
-	// Only a rejected credential means the instance lost our secret. Anything
-	// else is a store we could not read, and re-seeding on it would rotate the
-	// secret of a healthy instance.
 	if _, _, err := p.ensureInstance(context.Background(), testSpec(srv.URL, "v2"), testState(srv.URL, "s3cr3t")); err == nil {
 		t.Fatal("ensureInstance err = nil, want the store failure surfaced")
 	}
@@ -1069,9 +973,6 @@ func TestWithSecret_DoesNotMutateCallersWorker(t *testing.T) {
 	}
 }
 
-// The generic worker reaches two shared account workers, and neither is
-// something its own assembly can name: only the root stack knows which script
-// each substrate class provisioned.
 func TestGenericWorker_BindsTheAccountWorkersItReaches(t *testing.T) {
 	spec := edge.RootStackSpec{
 		Generic:             testStoreWorker(),
@@ -1092,10 +993,6 @@ func TestGenericWorker_BindsTheAccountWorkersItReaches(t *testing.T) {
 	}
 }
 
-// An upload naming a script that does not exist is refused outright, so a
-// substrate whose bootstrap predates the ISR writer binds nothing and serves
-// on: its builds record invalidations and replicate none, exactly as they did
-// before the edge published at all.
 func TestGenericWorker_LeavesTheISRWriterUnboundWhenTheSubstrateOffersNone(t *testing.T) {
 	spec := edge.RootStackSpec{Generic: testStoreWorker(), StoreScriptName: "ocel-deployments-store"}
 

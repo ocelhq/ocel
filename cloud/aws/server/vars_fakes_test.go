@@ -17,10 +17,6 @@ import (
 	"github.com/ocelhq/ocel/cloud/aws/bootstrap"
 )
 
-// countingCFN is the account's CloudFormation, answering with a bootstrap this
-// provider can speak to and counting what each describe cost. Opening a store
-// is the only thing that describes, so the count is how many times a session
-// paid to find the table.
 type countingCFN struct {
 	mu        sync.Mutex
 	describes int
@@ -48,10 +44,6 @@ func (c *countingCFN) count() int {
 	return c.describes
 }
 
-// fakeDynamo is one table held in memory, counting the round trips each store
-// operation costs. Conditions are not evaluated: what these tests assert is how
-// many times the table is reached, and the store's own package already proves
-// the conditions.
 type fakeDynamo struct {
 	mu      sync.Mutex
 	items   map[string]map[string]map[string]ddbtypes.AttributeValue
@@ -112,9 +104,6 @@ func (f *fakeDynamo) Query(_ context.Context, in *dynamodb.QueryInput, _ ...func
 	return out, nil
 }
 
-// queryIndex answers a read of the reverse-lookup index, sparse the way the
-// real one is: a row carrying neither index attribute is not in it at all.
-// Callers hold f.mu.
 func (f *fakeDynamo) queryIndex(in *dynamodb.QueryInput) *dynamodb.QueryOutput {
 	gsi1pk, _ := in.ExpressionAttributeValues[":pk"].(*ddbtypes.AttributeValueMemberS)
 	gsi1sk, _ := in.ExpressionAttributeValues[":sk"].(*ddbtypes.AttributeValueMemberS)
@@ -157,9 +146,6 @@ func (f *fakeDynamo) counts() (queries, gets int) {
 	return f.queries, f.gets
 }
 
-// fakeKMS stands in for the account's variable key, counting decrypts so a test
-// can see what a batched read costs. Its ciphertext is the plaintext behind a
-// marker.
 type fakeKMS struct {
 	mu       sync.Mutex
 	decrypts int
@@ -184,13 +170,10 @@ func (f *fakeKMS) count() int {
 	return f.decrypts
 }
 
-// testAccount wires a VarsServer to fakes standing in for one AWS account.
 func testAccount(cfn *countingCFN, ddb *fakeDynamo, crypto *fakeKMS) *VarsServer {
 	return &VarsServer{openAccount: func(context.Context, string) (account, error) {
 		return account{CFN: cfn, Dynamo: ddb, KMS: crypto}, nil
 	}}
 }
 
-// bootstrapVersionOutput is the version the fake account reports, kept in step
-// with what this provider requires so the fakes never trip the version gate.
 var bootstrapVersionOutput = strconv.Itoa(bootstrap.RequiredBootstrapVersion)

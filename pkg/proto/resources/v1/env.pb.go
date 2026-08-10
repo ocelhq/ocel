@@ -21,19 +21,13 @@ const (
 	_ = protoimpl.EnforceVersion(protoimpl.MaxVersion - 20)
 )
 
-// VariableClass decides confidentiality and delivery at once, and is the only
-// axis along which reading a variable is allowed to differ.
 type VariableClass int32
 
 const (
 	VariableClass_VARIABLE_CLASS_UNSPECIFIED VariableClass = 0
-	// PLAIN is a plaintext function environment entry under the bare key name.
-	VariableClass_VARIABLE_CLASS_PLAIN VariableClass = 1
-	// SENSITIVE is ciphertext carried inside the bundle.
-	VariableClass_VARIABLE_CLASS_SENSITIVE VariableClass = 2
-	// SECRET is never in an artifact at all: it is fetched from the store at
-	// runtime, which is why its plaintext never travels to a build host.
-	VariableClass_VARIABLE_CLASS_SECRET VariableClass = 3
+	VariableClass_VARIABLE_CLASS_PLAIN       VariableClass = 1
+	VariableClass_VARIABLE_CLASS_SENSITIVE   VariableClass = 2
+	VariableClass_VARIABLE_CLASS_SECRET      VariableClass = 3
 )
 
 // Enum value maps for VariableClass.
@@ -128,32 +122,16 @@ func (VariableProblem_Kind) EnumDescriptor() ([]byte, []int) {
 	return file_resources_v1_env_proto_rawDescGZIP(), []int{4, 0}
 }
 
-// VariableDefinition is one variable exactly as application code declares it.
-// The schema itself is absent by construction: it is a live object in the
-// application's own language and cannot be serialised, which is why the SDK,
-// not the CLI, validates values.
 type VariableDefinition struct {
-	state protoimpl.MessageState `protogen:"open.v1"`
-	Key   string                 `protobuf:"bytes,1,opt,name=key,proto3" json:"key,omitempty"`
-	Class VariableClass          `protobuf:"varint,2,opt,name=class,proto3,enum=resources.v1.VariableClass" json:"class,omitempty"`
-	// client_accessible marks a value the browser may read. It forces the
-	// plaintext class, so it can never be combined with an encrypted one.
-	ClientAccessible bool `protobuf:"varint,3,opt,name=client_accessible,json=clientAccessible,proto3" json:"client_accessible,omitempty"`
-	// required is false when the schema supplies a default, the one place a
-	// default may come from.
-	Required bool `protobuf:"varint,4,opt,name=required,proto3" json:"required,omitempty"`
-	// folders scopes the variable to the apps bound to exactly these folders.
-	// Empty is the unscoped case: the value lives at the project root, and an
-	// app bound to a folder may override it there. A scoped variable is
-	// mandatory in every folder it names and has no root value at all, so the
-	// two modes never mix.
-	Folders []string `protobuf:"bytes,5,rep,name=folders,proto3" json:"folders,omitempty"`
-	// source is the file the declaration was written in, so a cross-file
-	// complaint can name it alongside the config that binds the folders. It is
-	// best-effort: a bundler that drops the mapping leaves it empty.
-	Source        string `protobuf:"bytes,6,opt,name=source,proto3" json:"source,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state            protoimpl.MessageState `protogen:"open.v1"`
+	Key              string                 `protobuf:"bytes,1,opt,name=key,proto3" json:"key,omitempty"`
+	Class            VariableClass          `protobuf:"varint,2,opt,name=class,proto3,enum=resources.v1.VariableClass" json:"class,omitempty"`
+	ClientAccessible bool                   `protobuf:"varint,3,opt,name=client_accessible,json=clientAccessible,proto3" json:"client_accessible,omitempty"`
+	Required         bool                   `protobuf:"varint,4,opt,name=required,proto3" json:"required,omitempty"`
+	Folders          []string               `protobuf:"bytes,5,rep,name=folders,proto3" json:"folders,omitempty"`
+	Source           string                 `protobuf:"bytes,6,opt,name=source,proto3" json:"source,omitempty"`
+	unknownFields    protoimpl.UnknownFields
+	sizeCache        protoimpl.SizeCache
 }
 
 func (x *VariableDefinition) Reset() {
@@ -229,11 +207,8 @@ func (x *VariableDefinition) GetSource() string {
 }
 
 type DeclareEnvRequest struct {
-	state protoimpl.MessageState `protogen:"open.v1"`
-	// definitions carries every variable from one defineEnv call: the call
-	// already holds them all, so the declaration is one round trip rather than
-	// one per key.
-	Definitions   []*VariableDefinition `protobuf:"bytes,1,rep,name=definitions,proto3" json:"definitions,omitempty"`
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Definitions   []*VariableDefinition  `protobuf:"bytes,1,rep,name=definitions,proto3" json:"definitions,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -275,18 +250,11 @@ func (x *DeclareEnvRequest) GetDefinitions() []*VariableDefinition {
 	return nil
 }
 
-// VariableCell is one stored value for a declared key. A cell absent from the
-// response is a cell the store does not hold.
 type VariableCell struct {
-	state protoimpl.MessageState `protogen:"open.v1"`
-	Key   string                 `protobuf:"bytes,1,opt,name=key,proto3" json:"key,omitempty"`
-	// folder is the app-divergence axis; empty is the project root.
-	Folder string `protobuf:"bytes,2,opt,name=folder,proto3" json:"folder,omitempty"`
-	// value is the plaintext, and is empty for a live-class cell: those return
-	// presence only, so a CI build host never holds a live secret. Live values
-	// are validated at runtime init instead, which is required regardless
-	// because a live value can drift after a deploy.
-	Value         string `protobuf:"bytes,3,opt,name=value,proto3" json:"value,omitempty"`
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Key           string                 `protobuf:"bytes,1,opt,name=key,proto3" json:"key,omitempty"`
+	Folder        string                 `protobuf:"bytes,2,opt,name=folder,proto3" json:"folder,omitempty"`
+	Value         string                 `protobuf:"bytes,3,opt,name=value,proto3" json:"value,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -386,15 +354,12 @@ func (x *DeclareEnvResponse) GetCells() []*VariableCell {
 	return nil
 }
 
-// VariableProblem is one cell the declaring process refuses to deploy with.
 type VariableProblem struct {
-	state  protoimpl.MessageState `protogen:"open.v1"`
-	Key    string                 `protobuf:"bytes,1,opt,name=key,proto3" json:"key,omitempty"`
-	Folder string                 `protobuf:"bytes,2,opt,name=folder,proto3" json:"folder,omitempty"`
-	Kind   VariableProblem_Kind   `protobuf:"varint,3,opt,name=kind,proto3,enum=resources.v1.VariableProblem_Kind" json:"kind,omitempty"`
-	// detail is the schema's own message for an invalid value, empty for a
-	// missing one.
-	Detail        string `protobuf:"bytes,4,opt,name=detail,proto3" json:"detail,omitempty"`
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Key           string                 `protobuf:"bytes,1,opt,name=key,proto3" json:"key,omitempty"`
+	Folder        string                 `protobuf:"bytes,2,opt,name=folder,proto3" json:"folder,omitempty"`
+	Kind          VariableProblem_Kind   `protobuf:"varint,3,opt,name=kind,proto3,enum=resources.v1.VariableProblem_Kind" json:"kind,omitempty"`
+	Detail        string                 `protobuf:"bytes,4,opt,name=detail,proto3" json:"detail,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }

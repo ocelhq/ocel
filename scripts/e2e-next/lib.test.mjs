@@ -306,10 +306,6 @@ describe("goldenDifferences", () => {
     expect(goldenDifferences(withHeader, without)).toEqual([]);
   });
 
-  // The caveat this gate exists for: OpenNext's, now ours — a future Next could
-  // make `purpose` change what is rendered rather than only whether a
-  // revalidation is started. A shell where a full page was is what that looks
-  // like.
   it("reports a body the header changed, and where", () => {
     const [difference, ...rest] = goldenDifferences(leg({ body: "<p>shell</p>" }), leg());
 
@@ -349,15 +345,10 @@ describe("goldenDifferences", () => {
     const page = readFileSync(new URL("./smoke-app/app/golden/page.tsx", import.meta.url), "utf8");
     expect(page).toContain(GOLDEN_MARKER);
     expect(GOLDEN_ROUTE).toBe("/golden");
-    // Nothing per-render, or the comparison can never be byte-exact.
     expect(page).not.toContain("Date.now");
     expect(page).not.toContain("Math.random");
   });
 
-  // The assertion waits GOLDEN_REVALIDATE_SECONDS out to get both legs answered
-  // from a stale entry. A page whose own window is longer than that number puts
-  // the comparison back on a fresh entry, where the operand under test is
-  // short-circuited and the gate silently proves nothing.
   it("waits out the window the probe page actually declares", () => {
     const page = readFileSync(new URL("./smoke-app/app/golden/page.tsx", import.meta.url), "utf8");
 
@@ -519,8 +510,6 @@ describe("bytecodeRehydrateOutcome", () => {
   it("recognizes an extraction failure, and does not confuse it with a hit", () => {
     const message = `ocel: could not rehydrate the compile cache from ${key}: unexpected EOF`;
     expect(bytecodeRehydrateOutcome(message, key)).toEqual({ kind: "extract-error", message });
-    // "could not rehydrate the compile cache from" vs "rehydrated compile
-    // cache from" — one wrong word here would fold a real failure into a hit.
     expect(bytecodeRehydrateOutcome(message, key).kind).not.toBe("hit");
   });
 
@@ -597,8 +586,6 @@ describe("bytecodeEmbeddedOutcome", () => {
         tarPath,
       ).kind,
     ).toBe("clear-error");
-    // "could not load the embedded compile cache at" vs "loaded embedded
-    // compile cache from" — one wrong word here folds a fall-through into a hit.
     expect(
       bytecodeEmbeddedOutcome(`ocel: could not load the embedded compile cache at ${tarPath}: unexpected EOF`, tarPath).kind,
     ).toBe("load-error");
@@ -617,9 +604,6 @@ describe("bytecodeEmbeddedOutcome", () => {
     const embeddedHit = `ocel: loaded embedded compile cache from ${tarPath}: 4096 bytes in 7ms`;
     expect(bytecodeEmbeddedOutcome(s3Hit, tarPath)).toBeNull();
     expect(bytecodeRehydrateOutcome(embeddedHit, key)).toBeNull();
-    // The whole CloudWatch attribution rests on this: a caller looks for one
-    // marker to require and the other to forbid, so either containing the other
-    // would make "read from the artifact" indistinguishable from "read from S3".
     expect(BYTECODE_EMBEDDED_MARKER).not.toContain(BYTECODE_S3_REHYDRATE_MARKER);
     expect(BYTECODE_S3_REHYDRATE_MARKER).not.toContain(BYTECODE_EMBEDDED_MARKER);
     expect(embeddedHit).not.toContain(BYTECODE_S3_REHYDRATE_MARKER);
@@ -702,9 +686,6 @@ describe("warmCoverage", () => {
     expect(warmCoverage({ ...published, entries: 0, loaded: 0 }, key).kind).toBe("failed");
   });
 
-  // The membrane publishes what INIT loaded even when node never reported back,
-  // so an uncounted publish is a real object with unknown coverage — not the
-  // "no entries at all" contradiction it would otherwise be mistaken for.
   it("reports a publish nobody could account for as partial, with the reason", () => {
     const verdict = warmCoverage(
       { state: "published", uploaded: true, bytes: 4096, key, uncounted: "node did not report back" },
@@ -776,8 +757,6 @@ describe("logWindowVerdict", () => {
   });
 
   it("still reads it when polls failed but the last read succeeded", () => {
-    // The window is re-read from its start every time, so one successful read
-    // at the end covers everything the failed ones missed.
     expect(logWindowVerdict({ attempts: 5, failures: 4, confirmed: true, events: 12, pageLimit }).kind).toBe("read");
   });
 
@@ -830,9 +809,6 @@ describe("tarEntryNames", () => {
   });
 });
 
-// buildTar is a minimal, from-scratch ustar writer used only to build fixtures
-// for tarEntryNames: real archives always come from Go's archive/tar (via
-// gzip, in production) or from tar(1) in a human's shell, never from here.
 function buildTar(entries) {
   const blocks = entries.map((entry) => buildTarEntry(entry.name, entry.content));
   blocks.push(Buffer.alloc(1024));
@@ -904,7 +880,6 @@ describe("zipEntryNames", () => {
   it("throws rather than returning a short list for anything malformed", () => {
     expect(() => zipEntryNames(Buffer.from("not a zip at all"))).toThrow(/not a zip/);
     const zip = buildZip([{ name: "a.txt", content: "a" }]);
-    // Blow away the central-file-header signature the EOCD still points at.
     const corrupt = Buffer.from(zip);
     corrupt.writeUInt32LE(0, corrupt.readUInt32LE(corrupt.length - 6));
     expect(() => zipEntryNames(corrupt)).toThrow(/no central-file-header signature/);
@@ -913,15 +888,11 @@ describe("zipEntryNames", () => {
   it("throws when the central directory is truncated away", () => {
     const zip = buildZip([{ name: "a.txt", content: "a" }]);
     const eocd = Buffer.from(zip.subarray(zip.length - 22));
-    // An EOCD claiming a directory that starts past the end of the buffer.
     eocd.writeUInt32LE(0xfffffff0, 16);
     expect(() => zipEntryNames(eocd)).toThrow(/runs past the end of the buffer/);
   });
 });
 
-// buildZip is a minimal stored-mode zip writer used only to build fixtures for
-// zipEntryNames: real packages always come from Go's archive/zip. CRCs are left
-// zero because nothing under test reads them.
 function buildZip(entries, comment = "") {
   const locals = [];
   const centrals = [];
@@ -1063,11 +1034,6 @@ describe("suiteResultFromJest", () => {
     });
   });
 
-  // A recorded name is only worth anything if the harness's own exclusion
-  // matches it, and the two live in different repos. Both halves below are
-  // transcribed from Next: the pattern from run-tests.js, the id from
-  // jest-circus's getTestID. A separator that reads well but is not Jest's
-  // silently excludes nothing and turns the whole baseline into a no-op.
   it("records the name the harness's exclusion pattern actually matches", () => {
     const escapeRegexp = (s) => s.replace(/[|\\{}()[\]^$+*?.-]/g, "\\$&");
     const exclusionPattern = (cases) => new RegExp(`^(?!(?:${cases.map(escapeRegexp).join("|")})$).`, "i");

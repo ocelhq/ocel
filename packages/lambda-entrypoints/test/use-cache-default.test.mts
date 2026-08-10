@@ -1,11 +1,5 @@
 import { afterEach, expect, test, vi } from "vitest";
 
-// Everything the handler decides — budget, per-entry cap, the LRU — lives in
-// module scope, exactly as it does in a warm Lambda. Each test therefore
-// rebuilds the module graph so one test's cache never leaks into the next. The
-// tag clock is shared through globalThis and outlives a module reset, so it is
-// rebound explicitly onto no durable store: these tests are about the handler's
-// own memory tier, not about invalidation crossing instances.
 async function loadHandler(env: Record<string, string> = {}) {
   vi.resetModules();
   for (const [k, v] of Object.entries(env)) process.env[k] = v;
@@ -69,8 +63,6 @@ test("misses a key that was never stored", async () => {
   expect(await handler.get("absent", [])).toBeUndefined();
 });
 
-// The stored entry's stream is one-shot: a handler that handed the same stream
-// out twice would turn every read after the first into a miss.
 test("rebuilds the value stream on every read", async () => {
   const handler = await loadHandler();
 
@@ -106,7 +98,6 @@ test("evicts least-recently-used entries once the byte budget is exceeded", asyn
   await handler.set("b", Promise.resolve(entry(body)));
   await handler.set("c", Promise.resolve(entry(body)));
 
-  // Reading `a` makes `b` the least recently used.
   expect(await handler.get("a", [])).toBeDefined();
 
   await handler.set("d", Promise.resolve(entry(body)));
@@ -131,7 +122,6 @@ test("refuses an entry above the per-entry cap without evicting anything", async
 });
 
 test("derives the byte budget from the function's configured memory", async () => {
-  // 1MB of memory yields a ~104KB budget, so a 60KB entry evicts its predecessor.
   const handler = await loadHandler({ AWS_LAMBDA_FUNCTION_MEMORY_SIZE: "1" });
   const body = "x".repeat(60 * 1024);
 
@@ -202,8 +192,6 @@ test("leaves an entry whose tags were untouched alone", async () => {
   expect(await handler.get("k", [])).toBeDefined();
 });
 
-// A revalidation carrying durations but no expire marks the tag stale only.
-// Next reads revalidate === -1 as "serve this, then regenerate".
 test("serves a tag-stale entry with the revalidate signal", async () => {
   const handler = await loadHandler();
 
@@ -237,7 +225,6 @@ test("does not treat a duration-scoped revalidation as an expiry until it is ask
 
   await handler.updateTags(["products"], {});
 
-  // stale was recorded, expired was not — so nothing has an expiry yet.
   expect(await handler.getExpiration(["products"])).toBe(0);
 });
 

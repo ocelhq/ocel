@@ -19,9 +19,6 @@ import (
 	bucketsv1 "github.com/ocelhq/ocel/pkg/proto/buckets/v1"
 )
 
-// fakeDDB is an in-memory stand-in for the narrowed DynamoDB API. It keys items
-// by the shared state table's pk/sk pair, so a store that forgot to namespace
-// its keys would collide here exactly as it would against the real table.
 type fakeDDB struct {
 	items map[string]map[string]ddbtypes.AttributeValue
 }
@@ -34,7 +31,6 @@ func avString(v ddbtypes.AttributeValue) string {
 	return v.(*ddbtypes.AttributeValueMemberS).Value
 }
 
-// itemKey collapses an item's pk/sk pair into the fake's map key.
 func itemKey(m map[string]ddbtypes.AttributeValue) string {
 	return avString(m["pk"]) + "\x00" + avString(m["sk"])
 }
@@ -52,15 +48,8 @@ func (f *fakeDDB) GetItem(_ context.Context, in *dynamodb.GetItemInput, _ ...fun
 	return &dynamodb.GetItemOutput{Item: item}, nil
 }
 
-// updateFileIdxRe extracts the file index from the store's per-file transition
-// UpdateExpression ("SET files[<idx>].#st = :succeeded").
 var updateFileIdxRe = regexp.MustCompile(`files\[(\d+)\]`)
 
-// UpdateItem models exactly the store's guarded pending->succeeded transition:
-// it flips files[idx].state to succeeded only when it is currently pending,
-// returning a ConditionalCheckFailedException otherwise. That reproduces
-// DynamoDB's atomic conditional write, which is the listener's idempotency
-// guarantee under duplicate S3 deliveries.
 func (f *fakeDDB) UpdateItem(_ context.Context, in *dynamodb.UpdateItemInput, _ ...func(*dynamodb.Options)) (*dynamodb.UpdateItemOutput, error) {
 	item, ok := f.items[itemKey(in.Key)]
 	if !ok {
@@ -83,8 +72,6 @@ func (f *fakeDDB) UpdateItem(_ context.Context, in *dynamodb.UpdateItemInput, _ 
 	return &dynamodb.UpdateItemOutput{}, nil
 }
 
-// fakePresigner returns a deterministic URL that encodes the inputs the test
-// asserts on (bucket, key, content-type/length, session tag).
 type fakePresigner struct{ lastInput *s3.PutObjectInput }
 
 func (p *fakePresigner) PresignPutObject(_ context.Context, in *s3.PutObjectInput, _ ...func(*s3.PresignOptions)) (*v4.PresignedHTTPRequest, error) {
@@ -99,7 +86,6 @@ func (p *fakePresigner) PresignPutObject(_ context.Context, in *s3.PutObjectInpu
 
 func newTestService(ddb ddbAPI, ps presignAPI) *Service {
 	s := New(Config{DDB: ddb, Presigner: ps, Table: "sessions", Bucket: "prod-bucket"})
-	// Deterministic id/secret/clock for assertions.
 	s.newID = func() string { return "sess_fixed" }
 	s.newSecret = func() string { return "test-secret" }
 	s.now = func() time.Time { return time.Unix(1_000_000, 0) }
@@ -133,8 +119,6 @@ func TestPresignUploadWritesSessionAndBindsTag(t *testing.T) {
 		t.Fatalf("url does not use the prod bucket + as-is key: %s", target.GetUrl())
 	}
 
-	// The presign input binds exact content-length, content-type, and the
-	// session tag.
 	in := ps.lastInput
 	if aws.ToInt64(in.ContentLength) != 1024 {
 		t.Fatalf("content-length not bound: %v", in.ContentLength)
@@ -146,7 +130,6 @@ func TestPresignUploadWritesSessionAndBindsTag(t *testing.T) {
 		t.Fatalf("tag = %q, want sessionId=sess_fixed", got)
 	}
 
-	// The pending session landed in the store with the secret.
 	sess, err := svc.store.get(context.Background(), "sess_fixed")
 	if err != nil {
 		t.Fatalf("get session: %v", err)
@@ -235,7 +218,6 @@ func TestGetUploadStatusPendingAndExpired(t *testing.T) {
 		t.Fatalf("state = %v, want PENDING", st.GetState())
 	}
 
-	// Advance the clock past the session TTL: status becomes terminally expired.
 	svc.now = func() time.Time { return time.Unix(1_000_000, 0).Add(3 * time.Hour) }
 	st, err = svc.GetUploadStatus(context.Background(), &bucketsv1.GetUploadStatusRequest{SessionId: "sess_fixed"})
 	if err != nil {

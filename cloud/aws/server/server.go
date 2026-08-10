@@ -1,8 +1,3 @@
-// Package server implements the AWS provider's DeploymentService: it drives
-// real provisioning (Deploy) and account bootstrap (Bootstrap) behind the
-// provider protocol. It delegates resource translation to the deploy
-// package, account-global setup to the bootstrap package, and the Pulumi
-// runtime to pulumirt, so this package stays a thin protocol adapter.
 package server
 
 import (
@@ -36,29 +31,16 @@ import (
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/resources/v1"
 )
 
-// deployEnv is the environment segment of a production project's Pulumi stack
-// name (stacks are "<slug>-prod").
 const deployEnv = "prod"
 
-// pulumiProjectName is the fixed Pulumi project all Ocel stacks live under.
 const pulumiProjectName = "ocel"
 
-// Server implements deploymentsv1connect.DeploymentServiceHandler. It serves every
-// RPC in the contract, so it no longer embeds the generated Unimplemented
-// handler.
 type Server struct{}
 
-// stackName derives the Pulumi stack name for a deploy/destroy from the project
-// and the resolved environment. It is pure. A production, unspecified, or nil
-// environment keeps the historical "<slug>-prod"; a preview environment is
-// isolated into its own "<slug>-preview-<identity>" stack (identity is
-// already substrate-safe from the CLI).
 func stackName(slug string, env *deploymentsv1.Environment) string {
 	return slug + "-" + envSegment(env)
 }
 
-// envSegment is the environment token shared by the Pulumi stack name and the
-// asset-bucket key: "preview-<identity>" for a preview, else "prod".
 func envSegment(env *deploymentsv1.Environment) string {
 	if env.GetClass() == deploymentsv1.Environment_CLASS_PREVIEW {
 		return "preview-" + env.GetIdentity()
@@ -66,9 +48,6 @@ func envSegment(env *deploymentsv1.Environment) string {
 	return deployEnv
 }
 
-// options is the provider's opaque per-invocation options, decoded from the
-// request's options JSON. Region is optional: when empty, AWS's own
-// resolution (AWS_REGION / shared config) applies.
 type options struct {
 	Region string `json:"region"`
 }
@@ -84,10 +63,6 @@ func parseOptions(raw []byte) (options, error) {
 	return o, nil
 }
 
-// Deploy provisions the manifest's resources and streams progress, ending in
-// a terminal ResultEvent that carries the whole-stack connection outputs. A
-// malformed manifest is rejected up front as an InvalidArgument error;
-// provisioning failures arrive as a terminal ResultEvent with success=false.
 func (s *Server) Deploy(ctx context.Context, req *deploymentsv1.DeployRequest, stream *connect.ServerStream[deploymentsv1.DeployEvent]) error {
 	manifest := req.GetManifest()
 	if err := validateManifest(manifest); err != nil {
@@ -121,13 +96,6 @@ func (s *Server) runDeploy(ctx context.Context, req *deploymentsv1.DeployRequest
 	preview := env.GetClass() == deploymentsv1.Environment_CLASS_PREVIEW
 	bootstrapCmd := bootstrapCommand(preview)
 
-	// A preview deploy must read (and write) the preview substrate's Pulumi
-	// backend, not production's — otherwise `ocel preview rm`/`ls`, which
-	// resolve the preview backend, never see what up just created.
-	//
-	// The gate is unclassified so it becomes its own step titled by this
-	// message: it runs before anything is uploaded, and heading its failure
-	// "Uploading failed" names a phase that never started.
 	progress(deploymentsv1.Phase_PHASE_UNSPECIFIED, "Checking account bootstrap", 0, 0)
 	deployed, err := checkBootstrap(ctx, cfn, preview)
 	if err != nil {
@@ -158,14 +126,6 @@ func (s *Server) runDeploy(ctx context.Context, req *deploymentsv1.DeployRequest
 		return deploy.Result{}, err
 	}
 
-	// The edge reader credentials are injected into the Next.js worker so it can
-	// sign its Function-URL forwards (the Lambdas are AWS_IAM-gated) and read ISR
-	// directly from S3+DynamoDB. Read best-effort so an account bootstrapped
-	// before edge credentials existed still reaches the deploy — but a worker
-	// without them cannot sign, so every Lambda route 403s until bootstrap mints
-	// the key. The warning has to name that, not just interception.
-	// The substrate's class token, which the edge credentials and the variable
-	// store are both partitioned by.
 	substrateClass := bootstrap.ClassProduction
 	if preview {
 		substrateClass = bootstrap.ClassPreview
@@ -190,33 +150,17 @@ func (s *Server) runDeploy(ctx context.Context, req *deploymentsv1.DeployRequest
 		logf(resourceSummary(r))
 	}
 
-	// Bucket resources and Next cache handlers both scope their IAM grants to
-	// the state table, so resolve its ARN up front — unconditionally. Gating
-	// this on which resources happen to need it means every new consumer has to
-	// remember to widen the gate, and one that forgets renders an empty
-	// Resource into its policy and fails the deploy at Pulumi.
 	account, err := accountID(ctx, sts.NewFromConfig(awscfg))
 	if err != nil {
 		return deploy.Result{}, err
 	}
 	stateTableARN := fmt.Sprintf("arn:aws:dynamodb:%s:%s:table/%s", awscfg.Region, account, deployed.StateTable)
 
-	// Seeded ISR entries have to land in the same store the deployed cache
-	// handler is told to use, and the handler is told by the bucket name this
-	// read returns. A failed read is therefore fatal rather than best-effort:
-	// guessing wrong costs no error, only every prerendered route silently
-	// rendering cold.
 	cacheStore, err := bootstrap.ReadCacheStore(ctx, ssmClient, substrateClass)
 	if err != nil {
 		return deploy.Result{}, err
 	}
 
-	// Both classes realize the stacked model (ADR 0001): read this substrate's
-	// prior root-stack state and its own deployments-store worker coordinates.
-	// The two substrates keep separate state (their own store instance, secret
-	// and owner token), keyed by class. A bootstrap predating the store reads the
-	// zero value, and the deploy then fails fast asking for a re-bootstrap
-	// (realize, deploy/production.go).
 	priorRootStackState, err := bootstrap.ReadRootStackStateFor(ctx, ssmClient, substrateClass, manifest.GetSlug())
 	if err != nil {
 		return deploy.Result{}, err
@@ -226,13 +170,6 @@ func (s *Server) runDeploy(ctx context.Context, req *deploymentsv1.DeployRequest
 		return deploy.Result{}, err
 	}
 
-	// The ISR writer's coordinates, plus the substrate's seed each app's write
-	// secret is derived from. The seed is bootstrap's, not this run's: the tag
-	// publisher derives the same secrets from it to raise a build's
-	// invalidations, and a per-run seed would leave every live build holding a
-	// secret nothing else could reproduce. The derived secrets themselves are
-	// never persisted — they live only in this process and the function
-	// environments it writes.
 	isrWriter, err := bootstrap.ReadISRWriterFor(ctx, ssmClient, substrateClass)
 	if err != nil {
 		return deploy.Result{}, err
@@ -242,12 +179,6 @@ func (s *Server) runDeploy(ctx context.Context, req *deploymentsv1.DeployRequest
 		return deploy.Result{}, err
 	}
 
-	// Which of this project's cells read another project's value decides what
-	// each app's functions may read: a reference is followed where it is read, so
-	// a grant over this project's partition alone would deny at runtime what the
-	// store accepted at write. It is read here because this is where the store's
-	// coordinates are; which of these cells an app actually reads is the deploy's
-	// to decide, from the manifest it pins.
 	varsReferenced, err := referenceOwners(ctx, awscfg, deployed, substrateClass, manifest.GetSlug())
 	if err != nil {
 		return deploy.Result{}, err
@@ -273,16 +204,11 @@ func (s *Server) runDeploy(ctx context.Context, req *deploymentsv1.DeployRequest
 		CacheStoreBucket:   cacheStore.Bucket,
 		CacheStoreUploader: cacheStoreUploader(cacheStore),
 
-		ListenerCodePath: listenerCodePath,
-		ArtifactRoot:     artifactRoot(),
-		ArtifactBucket:   deployed.ArtifactBucket,
-		AssetBucket:      deployed.AssetBucket,
-		// Empty on a substrate that bootstrapped no optimizer, which leaves the
-		// worker's image origin unbound rather than bound to nothing.
-		ImageOptimizerURL: deployed.ImageOptimizerURL,
-		// Empty on a substrate whose bootstrap rendered no revalidator: the
-		// queue exists but nothing drains it, and an edge told about one
-		// enqueues successfully and never revalidates again.
+		ListenerCodePath:   listenerCodePath,
+		ArtifactRoot:       artifactRoot(),
+		ArtifactBucket:     deployed.ArtifactBucket,
+		AssetBucket:        deployed.AssetBucket,
+		ImageOptimizerURL:  deployed.ImageOptimizerURL,
 		RevalidateQueueURL: deployed.RevalidateQueueURL,
 		Env:                envSegment(env),
 		EdgeAccessKeyID:    edgeCreds.AccessKeyID,
@@ -312,12 +238,6 @@ func (s *Server) runDeploy(ctx context.Context, req *deploymentsv1.DeployRequest
 		Tag:            req.GetTag(),
 	}, manifest, progress, logf)
 
-	// Persist whatever root-stack state was reconciled — even when a later
-	// step of this same deploy failed — so the next deploy (and
-	// rollback/deployments-ls) reconciles against it instead of starting
-	// fresh and orphaning the root stack this run just reconciled. Written to
-	// this deploy's own substrate (production or preview), and nil when
-	// reconcile itself never ran (an error before it).
 	if rootStackStateChanged(priorRootStackState, res.RootStackState) {
 		if writeErr := bootstrap.WriteRootStackStateFor(ctx, ssmClient, substrateClass, manifest.GetSlug(), res.RootStackState); writeErr != nil {
 			if err != nil {
@@ -329,37 +249,12 @@ func (s *Server) runDeploy(ctx context.Context, req *deploymentsv1.DeployRequest
 	return res, err
 }
 
-// rootStackStateChanged reports whether a reconciled root-stack state is worth
-// a write. The stored state is a cache of what the project's store instance
-// already holds — since /initialize became convergent, an instance hands its
-// identity back to anyone bearing the account's bootstrap credential — so it
-// changes only on a first reconcile, a renamed project, or an instance a failed
-// teardown wiped. Rewriting an identical value costs a SecureString put and its
-// KMS encrypt per deploy, and Parameter Store enforces write throughput per
-// parameter: many apps deploying into one project (an e2e run is the extreme
-// case, a whole matrix sharing one slug) otherwise converge on a single name and
-// throttle each other. It is pure.
 func rootStackStateChanged(prior, reconciled edge.RootStackState) bool {
 	return reconciled != nil && !maps.Equal(reconciled, prior)
 }
 
-// previewTTL is how long an ephemeral preview lives before it is considered
-// expired — surfaced by `ocel preview ls` and, later, reaped. Ephemeral
-// previews are cheap and recoverable, so a week balances "still there when I
-// come back to the PR" against "cleaned up before it leaks".
 const previewTTL = 7 * 24 * time.Hour
 
-// previewExpiry returns the epoch-seconds expiry to stamp on a deploy: now +
-// previewTTL for an ephemeral preview, 0 (no expiry) for every other lifecycle.
-// It is pure.
-// readEdgeValues returns whatever the edge provisioned for itself at bootstrap,
-// for the deploy path to hand back verbatim. It is the edge's own state: the
-// provider persisted it without reading it and passes it on the same way.
-//
-// Best-effort, like the edge credentials read: a substrate that stored none, or
-// one whose policy denies the read, deploys with none rather than failing a
-// deploy that otherwise works. The edge then sees no prior state, which is the
-// same position it is in on its first deploy.
 func readEdgeValues(ctx context.Context, ssmClient bootstrap.SSMAPI, class, bootstrapCmd string, logf func(string)) map[string]string {
 	values, err := bootstrap.ReadEdgeValues(ctx, ssmClient, class)
 	if err != nil {
@@ -369,12 +264,6 @@ func readEdgeValues(ctx context.Context, ssmClient bootstrap.SSMAPI, class, boot
 	return values
 }
 
-// cacheStoreUploader addresses the substrate's adopted cache store with the same
-// S3 API the origin's cache handler speaks to it. The store is S3-compatible but
-// not S3: it carries its own endpoint and its own bucket-scoped credential, so
-// it is reached with a static provider rather than the deployer's chain. Nil for
-// the zero store — the interface value has to be nil, not a typed nil, for the
-// deploy to read it as "no store adopted".
 func cacheStoreUploader(store bootstrap.CacheStore) deploy.ArtifactUploader {
 	if store.Bucket == "" {
 		return nil
@@ -395,9 +284,6 @@ func previewExpiry(lifecycle deploymentsv1.Environment_Lifecycle, now time.Time)
 	return now.Add(previewTTL).Unix()
 }
 
-// Bootstrap creates the account-global resources the provider needs and
-// streams progress, ending in a terminal ResultEvent. Bootstrap carries no
-// outputs.
 func (s *Server) Bootstrap(ctx context.Context, req *deploymentsv1.BootstrapRequest, stream *connect.ServerStream[deploymentsv1.DeployEvent]) error {
 	progress := func(m string) { _ = stream.Send(progressEvent(m)) }
 	logf := func(m string) { _ = stream.Send(logEvent(m)) }
@@ -416,11 +302,6 @@ func (s *Server) Bootstrap(ctx context.Context, req *deploymentsv1.BootstrapRequ
 
 	preview := req.GetClass() == deploymentsv1.Environment_CLASS_PREVIEW
 
-	// The version gate runs on every invocation, bootstrap included. Here a
-	// missing or older bootstrap is expected — it's exactly what this call
-	// creates or upgrades — so only a bootstrap NEWER than this provider
-	// understands is fatal (upgrade the CLI rather than downgrade the account).
-	// Each substrate has its own stack, so the gate reads the one being acted on.
 	deployed, err := checkBootstrap(ctx, cfn, preview)
 	if err != nil {
 		return stream.Send(failureResult(err))
@@ -433,9 +314,6 @@ func (s *Server) Bootstrap(ctx context.Context, req *deploymentsv1.BootstrapRequ
 	if preview {
 		run = bootstrap.RunPreview
 	}
-	// The image optimizer's artifact is downloaded from its pinned release and
-	// uploaded into this account's own artifact bucket; nothing is granted
-	// cross-account and no Region map is consulted.
 	artifact := bootstrap.Artifacts{
 		Source: bootstrap.ReleaseSource{},
 		Store:  s3.NewFromConfig(awscfg),
@@ -446,10 +324,6 @@ func (s *Server) Bootstrap(ctx context.Context, req *deploymentsv1.BootstrapRequ
 	return stream.Send(okResult())
 }
 
-// bootstrapCommand is the command that raises or upgrades the substrate a
-// command acts on. Every error that tells a user to bootstrap routes through
-// here: a preview deploy pointed at the bare production command sends them to
-// fix the wrong account.
 func bootstrapCommand(preview bool) string {
 	if preview {
 		return "ocel bootstrap --preview"
@@ -457,8 +331,6 @@ func bootstrapCommand(preview bool) string {
 	return "ocel bootstrap"
 }
 
-// checkBootstrap reads the deployed state of the substrate a command acts on:
-// the preview infrastructure when preview is true, else the production one.
 func checkBootstrap(ctx context.Context, api bootstrap.CFNDescriber, preview bool) (bootstrap.Deployed, error) {
 	if preview {
 		return bootstrap.CheckDeployedPreview(ctx, api)
@@ -466,25 +338,12 @@ func checkBootstrap(ctx context.Context, api bootstrap.CFNDescriber, preview boo
 	return bootstrap.CheckDeployed(ctx, api)
 }
 
-// listenerCodePathEnvVar names the built listener-Lambda handler archive the
-// bucket deploy path uploads. It is set by the provider's distribution workflow
-// (which packages the handler binary alongside the provider) — deferred with
-// provider publish; empty until then, which is fine while prod is not made live.
 const listenerCodePathEnvVar = "OCEL_LISTENER_CODE_PATH"
 
-// listenerCodePath returns the configured listener archive path, or "" when
-// distribution has not wired one yet.
 var listenerCodePath = os.Getenv(listenerCodePathEnvVar)
 
-// artifactRootDirName is the project-relative directory a ManifestFunction's
-// artifact_path is rooted at: the app builder writes each `.func` under
-// <project>/.ocel/output, and artifact_path is relative to it.
 const artifactRootDirName = ".ocel/output"
 
-// artifactRoot is the absolute directory function artifacts resolve against.
-// The CLI spawns the provider from the project root, so the project's
-// .ocel/output lives under the working directory; a failure to read it yields
-// the relative path, still valid from that same working directory.
 func artifactRoot() string {
 	wd, err := os.Getwd()
 	if err != nil {
@@ -493,8 +352,6 @@ func artifactRoot() string {
 	return filepath.Join(wd, artifactRootDirName)
 }
 
-// STSAPI is the read subset of the STS client the deploy path uses to resolve
-// the account id for the state-table ARN.
 type STSAPI interface {
 	GetCallerIdentity(ctx context.Context, in *sts.GetCallerIdentityInput, optFns ...func(*sts.Options)) (*sts.GetCallerIdentityOutput, error)
 }
@@ -507,20 +364,10 @@ func accountID(ctx context.Context, api STSAPI) (string, error) {
 	return aws.ToString(out.Account), nil
 }
 
-// loadAWS is this package's single door to the deploy host's AWS
-// configuration: the standard default chain, the region overridden only when
-// one was supplied in the provider options, and — the reason the indirection
-// survives a one-line body — awsconf's control-plane retry policy on every
-// client built from it. Calling LoadDefaultConfig here instead would silently
-// put that client back on the SDK's three attempts with no pacing.
 func loadAWS(ctx context.Context, region string) (aws.Config, error) {
 	return awsconf.Control(ctx, region)
 }
 
-// resourceSummary renders the typed config the provider decoded for a
-// manifest resource, e.g. "postgres_main: postgres version=15". Emitted as a
-// log line so a caller driving the real binary can observe the exact typed
-// value that reached the provider.
 func resourceSummary(r *deploymentsv1.ManifestResource) string {
 	switch cfg := r.GetConfig().(type) {
 	case *deploymentsv1.ManifestResource_Postgres:
@@ -538,9 +385,6 @@ func progressEvent(message string) *deploymentsv1.DeployEvent {
 	}
 }
 
-// phaseProgressEvent builds a phase-tagged ProgressEvent. A non-zero total
-// marks a determinate step (current of total); total==0 leaves current/total
-// unset so the CLI renders a spinner.
 func phaseProgressEvent(phase deploymentsv1.Phase, message string, current, total uint32) *deploymentsv1.DeployEvent {
 	p := &deploymentsv1.ProgressEvent{Message: message, Phase: phase}
 	if total > 0 {
@@ -567,8 +411,6 @@ func failureResult(err error) *deploymentsv1.DeployEvent {
 	}
 }
 
-// okResult is the terminal result of an RPC that succeeded with nothing to
-// report — bootstrap, destroy, prune.
 func okResult() *deploymentsv1.DeployEvent {
 	return &deploymentsv1.DeployEvent{
 		Event: &deploymentsv1.DeployEvent_Result{Result: &deploymentsv1.ResultEvent{Success: true}},
@@ -586,10 +428,6 @@ func deployedResult(res deploy.Result) *deploymentsv1.DeployEvent {
 	}
 }
 
-// validateManifest reports whether manifest is well-formed enough for the
-// provider to act on: a schema version and slug are set, and every
-// resource entry carries a logical name, a typed resource identifier, and a
-// typed config.
 func validateManifest(m *deploymentsv1.Manifest) error {
 	if m == nil {
 		return fmt.Errorf("manifest is required")

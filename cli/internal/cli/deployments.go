@@ -24,8 +24,6 @@ import (
 	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
 )
 
-// deploymentsCmd groups production-deployment (promotion) management
-// subcommands.
 var deploymentsCmd = &cobra.Command{
 	Use:   "deployments",
 	Short: "Manage production deployments",
@@ -46,8 +44,6 @@ var deploymentsLsCmd = &cobra.Command{
 	},
 }
 
-// defaultPruneKeepN is `ocel deployments prune`'s default retention window
-// (in Promotions) when --keep is not given.
 const defaultPruneKeepN = 10
 
 var pruneKeepN int
@@ -73,9 +69,6 @@ func init() {
 	deploymentsCmd.AddCommand(deploymentsPruneCmd)
 }
 
-// runDeploymentsLs resolves the project, preflights production infrastructure,
-// and drives the provider's ListPromotions RPC, rendering each promotion
-// newest-first with its active marker.
 func runDeploymentsLs(ctx context.Context, cwd string, stdout, stderr io.Writer) error {
 	cfg, err := projectconfig.Resolve(cwd)
 	if err != nil {
@@ -108,11 +101,6 @@ func runDeploymentsLs(ctx context.Context, cwd string, stdout, stderr io.Writer)
 	})
 }
 
-// runDeploymentsPrune resolves the project, preflights production
-// infrastructure, and drives the provider's Prune RPC: keepN is how many of
-// the most recent promotions to keep, always additionally pinning the
-// active one. It never runs as part of `ocel deploy` — it is a standalone
-// command the user runs explicitly.
 func runDeploymentsPrune(ctx context.Context, cwd string, keepN int, stdout, stderr io.Writer) error {
 	cfg, err := projectconfig.Resolve(cwd)
 	if err != nil {
@@ -153,16 +141,6 @@ func runDeploymentsPrune(ctx context.Context, cwd string, keepN int, stdout, std
 	return nil
 }
 
-// renderPromotions prints the promotion history as an aligned ID/TAG/CREATED/
-// DEPLOYED/STATUS table, newest-first (the order the store returns), with the
-// active promotion's STATUS shown as a green "active". The colored cell is last
-// so its ANSI escapes — which tabwriter counts as width — never misalign a
-// later column, and color is emitted only to a terminal.
-//
-// DEPLOYED is what each app shipped: its Deployment identity, which is the
-// build id plus the fingerprint of the values baked into it. Two promotions of
-// one build differ only in that fingerprint, so the bare build id would show a
-// value rotation as a repeat of what it replaced.
 func renderPromotions(stdout io.Writer, promotions []*deploymentsv1.PromotionHistoryEntry) {
 	if len(promotions) == 0 {
 		fmt.Fprintln(stdout, "No promotions yet. Run `ocel deploy` first.")
@@ -191,8 +169,6 @@ func renderPromotions(stdout io.Writer, promotions []*deploymentsv1.PromotionHis
 	_ = tw.Flush()
 }
 
-// deployedIdentities renders a promotion's per-app Deployment identities as
-// "app=identity", sorted by app so one promotion's row reads against another's.
 func deployedIdentities(identityByApp map[string]string) string {
 	if len(identityByApp) == 0 {
 		return "—"
@@ -210,16 +186,11 @@ func deployedIdentities(identityByApp map[string]string) string {
 	return strings.Join(pairs, " ")
 }
 
-// isWriterTTY reports whether w is an interactive terminal, so table output
-// only emits ANSI color when a human will see it (never into a pipe or file).
 func isWriterTTY(w io.Writer) bool {
 	f, ok := w.(*os.File)
 	return ok && isatty.IsTerminal(f.Fd())
 }
 
-// epochTimestamp renders an epoch-seconds time as a full UTC timestamp, or "—"
-// when the provider reported 0 (unknown). Distinct from epochOrDash (date
-// only), which the preview commands still use.
 func epochTimestamp(sec int64) string {
 	if sec == 0 {
 		return "—"

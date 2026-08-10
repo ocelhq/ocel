@@ -18,8 +18,6 @@ afterAll(async () => {
   await rm(dir, { recursive: true, force: true });
 });
 
-// Runs a snippet in a real child node process, so process.exit behaves exactly
-// as it does in the Lambda sandbox. Returns what the child left behind.
 async function runChild(
   body: string,
   env: Record<string, string> = {},
@@ -34,9 +32,6 @@ async function runChild(
   }
 }
 
-// The bug this guards: routing a fatal boot error through the control socket
-// loses it, because process.exit abandons the pending async write. stderr is
-// the child's real fd, so the write lands before the process goes.
 test("a fatal boot error survives an immediate process.exit", async () => {
   const { code, stderr } = await runChild(
     `reportFatalBoot(new Error("SyntaxError: boom-from-boot"));\nprocess.exit(1);`,
@@ -46,9 +41,6 @@ test("a fatal boot error survives an immediate process.exit", async () => {
   expect(code).toBe(1);
 });
 
-// A boot that fails before the app is up may never have opened a control
-// socket, and on the earliest failures OCEL_CONTROL_SOCKET may not be usable at
-// all. Reporting must not itself depend on it.
 test("reporting a fatal boot error does not depend on the control socket", async () => {
   const { stderr } = await runChild(
     `reportFatalBoot(new Error("no-socket-needed"));\nprocess.exit(1);`,

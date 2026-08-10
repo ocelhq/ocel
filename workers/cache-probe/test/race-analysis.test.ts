@@ -43,7 +43,6 @@ const response = (over: Partial<RaceResponse> = {}): RaceResponse => ({
   ...over,
 });
 
-// A racer that neither asked for jitter nor could have slept any.
 const unjittered = { jitterMs: 0, elapsedMs: 70 };
 
 describe("outcomeOf", () => {
@@ -70,14 +69,10 @@ describe("outcomeOf", () => {
   });
 
   it("refuses a colo-less response rather than defaulting it to a shared unknown", () => {
-    // Two racers defaulted to the same "unknown" would compare equal and pass
-    // the mixed-colo gate that exists to catch exactly that.
     expect(() => outcomeOf(response({ colo: null }), "race-1", 0, unjittered)).toThrow("without a colo");
   });
 
   it("refuses a delay drawn outside the window the run asked for", () => {
-    // A worker that ignored --jitter, or drew from its own default, would make
-    // every escape count in the run belong to a different experiment.
     expect(() => outcomeOf(response({ delayMs: 12 }), "race-1", 0, unjittered)).toThrow(
       "outside [0, 0]",
     );
@@ -90,9 +85,6 @@ describe("outcomeOf", () => {
   });
 
   it("refuses a delay the request was too short to have contained", () => {
-    // Reported but not slept: the escape count would then be an un-jittered
-    // one, printed under a J. The driver's elapsed time starts before the
-    // request is queued, so it bounds the worker's own wall clock from above.
     expect(() =>
       outcomeOf(response({ delayMs: 800 }), "race-1", 0, { jitterMs: 1_000, elapsedMs: 70 }),
     ).toThrow("reported but not spent");
@@ -150,9 +142,6 @@ describe("summarizeGap", () => {
   });
 
   it("buckets a trial nobody claimed apart from one the leader lost", () => {
-    // Unreachable against the real claim primitive — whoever matches first on a
-    // fresh key must miss — but the two are different failures and the runner
-    // aborts on only one of them.
     const summary = summarizeGap(0, [gap({ a: { claimed: false } })]);
 
     expect(summary.excluded).toMatchObject({
@@ -174,8 +163,6 @@ describe("summarizeGap", () => {
   });
 
   it("keeps the trials it was asked for apart from the trials that answered", () => {
-    // A run whose transport failed silently shrinks its own denominator unless
-    // both numbers survive into the summary.
     expect(summarizeGap(0, [gap(), gap()], 5)).toMatchObject({ attempted: 5, trials: 2 });
     expect(summarizeGap(0, [gap(), gap()])).toMatchObject({ attempted: 2, trials: 2 });
   });
@@ -333,8 +320,6 @@ describe("summarizeBurst", () => {
   });
 
   it("discards a burst nobody claimed apart from one that never left an isolate", () => {
-    // The first is unreachable against the real claim primitive; the second is
-    // not, and folding them together would read L0's collapse as a broken run.
     const nobody = summarizeBurst(
       2,
       [burst([outcome({ seq: 0, isolate: "a" }), outcome({ seq: 1, isolate: "b" })])],
@@ -355,14 +340,8 @@ describe("summarizeBurst", () => {
     expect(spreadAt(1, 1, 1, 1, 1, 1, 1, 1, 1, 1).lowerBound).toBe(false);
     expect(spreadAt(40, 40, 40, 40, 40, 40, 40, 40, 40, 40).lowerBound).toBe(true);
 
-    // The case a median-only guard cannot see, and the one the J = 2000ms rows
-    // actually hit: concurrent in most trials, wider than the window in a tenth
-    // of them. Those escape counts are an under-count and the row has to say so.
     expect(spreadAt(1, 1, 1, 1, 1, 1, 1, 1, 40, 40).lowerBound).toBe(true);
 
-    // A single wide trial in twenty is not a systematic loss of concurrency,
-    // and a guard on the max would label every row over that. P90 is where the
-    // line is drawn, deliberately.
     expect(
       spreadAt(...Array.from({ length: 19 }, () => 1), 40).lowerBound,
     ).toBe(false);
@@ -385,8 +364,6 @@ describe("summarizeBurst", () => {
     );
 
   it("counts an escape as late when the first claim had longer than a window to reach it", () => {
-    // 0, then 5ms later (inside W=10 and so explained by the window), then
-    // 400ms later (not explained by anything the window can do).
     const summary = summarizeBurst(3, [drew(0, 5, 400)], 10, 1, 1_000);
 
     expect(summary.escapes).toMatchObject({ median: 3 });
@@ -394,9 +371,6 @@ describe("summarizeBurst", () => {
   });
 
   it("measures lateness from the first claim, not the nearest one before it", () => {
-    // Each step is 6ms, inside a 10ms window, but the second and third claims
-    // are 6ms and 12ms after the FIRST — and it is the first that has had the
-    // longest to propagate, so only the third is unexplained.
     expect(summarizeBurst(3, [drew(0, 6, 12)], 10, 1, 1_000).lateEscapes).toMatchObject({
       median: 1,
     });
@@ -407,8 +381,6 @@ describe("summarizeBurst", () => {
   });
 
   it("takes an isolate's earliest draw when it claimed twice", () => {
-    // The later draw would look late; the earlier one is the draw that actually
-    // took the admission, and production's L0 leaves only that one.
     const trial = burst(
       [
         outcome({ seq: 0, claimed: true, isolate: "a", delayMs: 0 }),
@@ -445,8 +417,6 @@ describe("jitterVerdict", () => {
   });
 
   it("calls a window nobody drew from degenerate", () => {
-    // The failure this exists for: the worker ignores --jitter, every racer
-    // draws zero, and the escape count is an un-jittered one wearing a J.
     expect(jitterVerdict(1_000, distribution([0, 0, 0]))).toBe("degenerate");
     expect(jitterVerdict(1_000, null)).toBe("degenerate");
   });
@@ -456,9 +426,6 @@ describe("jitterVerdict", () => {
     expect(jitterVerdict(1_000, distribution([10, 20]))).toBe("degenerate");
   });
 
-  // A delay drawn where none was asked for is outcomeOf's abort, not this
-  // verdict's: it voids the run per racer, before any distribution is built.
-  // This function's J = 0 arm therefore says only what J = 0 means.
   it("calls an un-jittered run none-requested and leaves the drawn-anyway case to outcomeOf", () => {
     expect(jitterVerdict(0, distribution([0, 12]))).toBe("none-requested");
   });

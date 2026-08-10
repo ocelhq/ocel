@@ -1,5 +1,3 @@
-// Package projectconfig locates, transpiles, and executes a user's
-// ocel.config.ts to resolve their project's configuration.
 package projectconfig
 
 import (
@@ -17,87 +15,42 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/envgate"
 )
 
-// ConfigFileName is the name of the file Resolve looks for.
 const ConfigFileName = "ocel.config.ts"
 
-// scratchDirName is the Ocel-internal folder at the project root: it holds
-// build artifacts and the cloud link record, and it anchors the root walk
-// alongside the config. It must stay gitignored.
 const scratchDirName = ".ocel"
 
-// initHint is appended to every resolution failure so the user knows how to
-// fix it.
 const initHint = "run `ocel init` to create one"
 
-// defaultDiscoveryPaths is used for discovery.paths when the config omits it.
 var defaultDiscoveryPaths = []string{"ocel"}
 
-// Discovery controls where the CLI looks for resource declarations.
 type Discovery struct {
 	Paths []string
 }
 
-// ProviderDescriptor identifies the deploy target a config's `provider`
-// field names — e.g. `provider: awsProvider({...})` in ocel.config.ts,
-// exported by packages like @ocel/provider-aws (see
-// packages/provider-aws/src/index.ts). Package is used to locate the
-// provider's binary; Options is forwarded to it opaquely (the CLI never
-// inspects it) and is always well-formed JSON, `{}` when the user passed
-// none.
 type ProviderDescriptor struct {
 	Package string
 	Options json.RawMessage
 }
 
-// App is a resolved, defaulted application declared in ocel.config.ts.
 type App struct {
-	Name string
-	// Path is the app's directory, relative to the config dir.
-	Path string
-	// Framework is the app's web framework, passed through to the builder.
-	// Empty means the builder auto-detects it. The builder validates the value.
-	Framework string
-	// Entrypoint is an optional override relative to Path.
+	Name       string
+	Path       string
+	Framework  string
 	Entrypoint string
-	// Domains maps a lowercased environment class ("production") to the custom
-	// hostnames this app is served on, mirroring Config.Domains. Empty entries
-	// are dropped.
-	Domains map[string][]string
-	// Compute is Ocel-internal: it defaults to "serverless" during
-	// normalization, is never user-settable, and is never serialized onto
-	// the manifest wire.
-	Compute string
-	// Folder is the variable folder this app's values come from — the reason
-	// two apps in one project can require one key name and get different
-	// values. Empty means the app reads the project root. Binding is a
-	// deployment concern, which is why it lives here and not in the code that
-	// declares the variables.
-	Folder string
+	Domains    map[string][]string
+	Compute    string
+	Folder     string
 }
 
-// Config is the resolved, defaulted project configuration read from
-// ocel.config.ts.
 type Config struct {
-	// Slug is the project's stable, human-authored deployment identity: it keys
-	// the project's own instance in the shared deployments-store worker.
 	Slug      string
 	Discovery Discovery
-	// Provider is nil when the config has no `provider` field configured.
-	Provider *ProviderDescriptor
-	// Apps holds the normalized applications declared in the config.
-	Apps []App
-	// Domains maps a lowercased environment class ("production") to the custom
-	// hostnames the web-facing worker is served on. Empty entries are dropped.
-	Domains map[string][]string
-	// Dir is the project root — the directory holding the resolved
-	// ocel.config.ts, or the root findProjectRoot settled on when there is no
-	// config. discovery.paths are relative to it.
-	Dir string
+	Provider  *ProviderDescriptor
+	Apps      []App
+	Domains   map[string][]string
+	Dir       string
 }
 
-// RequireProvider returns c.Provider, or a clear error naming what to add to
-// ocel.config.ts if it's absent. Callers (e.g. `ocel deploy`) should call
-// this before spawning anything provider-related.
 func (c *Config) RequireProvider() (*ProviderDescriptor, error) {
 	if c.Provider == nil {
 		return nil, fmt.Errorf("no provider configured in %s — add `provider: awsProvider({...})` (from @ocel/provider-aws) to your config", ConfigFileName)
@@ -105,8 +58,6 @@ func (c *Config) RequireProvider() (*ProviderDescriptor, error) {
 	return c.Provider, nil
 }
 
-// rawConfig mirrors the JSON shape emitted by executing the user's bundled
-// ocel.config.ts.
 type rawConfig struct {
 	Slug      string `json:"slug"`
 	Discovery struct {
@@ -127,20 +78,11 @@ type rawConfig struct {
 	Domains rawDomains `json:"domains"`
 }
 
-// rawDomains is the class-keyed domain block, shared by the project and each
-// app. "production" is one or more plain hostnames (or "*." wildcards for a
-// multitenant app), each attached as a worker route; "preview" is a single
-// wildcard the ephemeral and persistent previews are served under, one
-// subdomain label per pointer.
 type rawDomains struct {
 	Production stringOrList `json:"production"`
 	Preview    string       `json:"preview"`
 }
 
-// stringOrList unmarshals a JSON value that may be a single string or an array
-// of strings into a slice — the authoring ergonomics for production domains,
-// where `production: "app.com"` and `production: ["app.com", "www.app.com"]`
-// are both valid. A missing/null/empty value is the empty slice.
 type stringOrList []string
 
 func (s *stringOrList) UnmarshalJSON(b []byte) error {
@@ -169,11 +111,6 @@ func (s *stringOrList) UnmarshalJSON(b []byte) error {
 	return nil
 }
 
-// normalizeDomains lowers a raw domain block into the class-keyed lists the
-// manifest carries: dropping empty entries, validating the preview wildcard,
-// deduping the production hostnames, and rejecting a production hostname that
-// exactly equals the preview wildcard (production and preview cannot attach the
-// same worker-route pattern).
 func normalizeDomains(raw rawDomains) (map[string][]string, error) {
 	domains := map[string][]string{}
 
@@ -197,8 +134,6 @@ func normalizeDomains(raw rawDomains) (map[string][]string, error) {
 	return domains, nil
 }
 
-// normalizeProductionDomains lowercases, trims and dedupes the production
-// hostnames in declared order, and rejects any that equals the preview wildcard.
 func normalizeProductionDomains(raw stringOrList, preview string) ([]string, error) {
 	seen := map[string]bool{}
 	var out []string
@@ -219,11 +154,6 @@ func normalizeProductionDomains(raw stringOrList, preview string) ([]string, err
 	return out, nil
 }
 
-// validatePreviewDomain enforces that a preview domain is a single-wildcard
-// pattern whose sole wildcard is the leftmost label — e.g. "*.preview.app.com".
-// The subdomain label the wildcard stands in for is the store pointer; a
-// pattern with no wildcard, a wildcard that isn't a whole leftmost label, or
-// more than one wildcard cannot host per-pointer subdomains and is rejected.
 func validatePreviewDomain(domain string) error {
 	labels := strings.Split(domain, ".")
 	if len(labels) < 2 {
@@ -238,10 +168,6 @@ func validatePreviewDomain(domain string) error {
 	return nil
 }
 
-// PreviewBaseDomain derives the base domain the preview wildcard is anchored on
-// by stripping the leading "*." — "*.preview.app.com" becomes "preview.app.com".
-// It is the OCEL_PREVIEW_BASE_DOMAIN the frozen preview worker matches request
-// subdomains against. Returns "" for a non-wildcard or empty input.
 func PreviewBaseDomain(previewDomain string) string {
 	if !strings.HasPrefix(previewDomain, "*.") {
 		return ""
@@ -249,17 +175,8 @@ func PreviewBaseDomain(previewDomain string) string {
 	return previewDomain[len("*."):]
 }
 
-// defaultCompute is the Ocel-internal compute target applied to every app
-// during normalization. It is not user-settable.
 const defaultCompute = "serverless"
 
-// Resolve finds the project root, bundles and executes the ocel.config.ts it
-// holds, and returns the parsed, defaulted configuration. It is the entry
-// point for every command that needs a real config — deploy, preview,
-// bootstrap and friends — and fails when there is none.
-//
-// If no config is found, or it can't be bundled/executed, the returned error's
-// message instructs the user to run `ocel init`.
 func Resolve(startDir string) (*Config, error) {
 	root, err := findProjectRoot(startDir)
 	if err != nil {
@@ -273,12 +190,6 @@ func Resolve(startDir string) (*Config, error) {
 	return load(configPath)
 }
 
-// ResolveOptional is Resolve for commands that only need the project root and
-// discovery.paths — `ocel dev` and `ocel run`. Apps, domains, provider and slug
-// are all deploy-only, so an absent config is not an error here: it yields a
-// defaulted configuration rooted at the project root. A config that exists is
-// still parsed and validated in full, so a broken one is never silently
-// ignored.
 func ResolveOptional(startDir string) (*Config, error) {
 	root, err := findProjectRoot(startDir)
 	if err != nil {
@@ -295,7 +206,6 @@ func ResolveOptional(startDir string) (*Config, error) {
 	return load(configPath)
 }
 
-// load bundles, executes and normalizes the config at configPath.
 func load(configPath string) (*Config, error) {
 	output, err := buildAndRun(configPath)
 	if err != nil {
@@ -349,45 +259,16 @@ func load(configPath string) (*Config, error) {
 	}, nil
 }
 
-// dnsLabelPattern is the DNS label both a project slug and an app name must
-// be: lowercase letters, digits and hyphens, 1–63 characters, not starting or
-// ending with a hyphen.
 var dnsLabelPattern = regexp.MustCompile(`^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$`)
 
-// ValidSlug reports whether s is a usable project slug: a DNS label, meaning
-// lowercase letters, digits and hyphens only, 1–63 characters, not starting or
-// ending with a hyphen.
-//
-// The rule is a DNS label because the slug is spent as one in three places —
-// the shared deployments-store worker's instance name (idFromName), a URL path
-// segment, and an SSM parameter name. It is exported so everything that mints
-// or checks a slug — `ocel init` scaffolding a config, this resolver reading
-// one back — enforces the identical rule; slug is the sole project identity, so
-// two copies of this test drifting apart would orphan infrastructure.
 func ValidSlug(s string) bool {
 	return dnsLabelPattern.MatchString(s)
 }
 
-// validAppName reports whether a name is usable as an app's identity: the same
-// DNS label a slug must be.
-//
-// The app name is spent as a DNS label directly — a multi-app project serves a
-// preview at "<pointer>--<app>.<base>" — and as a segment of every deployed
-// name derived from it: worker scripts, asset prefixes, Pulumi stacks. Those
-// derivations already sanitized it, which left the constraint real but
-// implicit and per-caller. Per ADR 0005 there is one naming scope for every
-// deployed thing, so the constraint is made explicit and singular here, at the
-// config boundary, where an unusable name fails on read rather than partway
-// through a deploy. Being a DNS label also subsumes the path-segment rule this
-// replaces: no separator, no "..", no absolute path.
 func validAppName(name string) bool {
 	return dnsLabelPattern.MatchString(name)
 }
 
-// normalizeApps validates the raw apps and applies internal defaults. It is
-// framework-agnostic structural work only: it checks names and paths and sets
-// the Ocel-internal compute target. Framework validation and detection are the
-// node builder's job — the framework string is passed through untouched.
 func normalizeApps(raw rawConfig) ([]App, error) {
 	if len(raw.Apps) == 0 {
 		return nil, nil
@@ -444,10 +325,6 @@ func normalizeApps(raw rawConfig) ([]App, error) {
 	return apps, nil
 }
 
-// buildAndRun bundles configPath (and a small wrapper that JSON-serializes
-// its default export) with esbuild's Go API, writes the result under
-// .ocel/ next to the config, executes it with the user's node, and returns
-// what it wrote to stdout.
 func buildAndRun(configPath string) ([]byte, error) {
 	dir := filepath.Dir(configPath)
 	outDir := filepath.Join(dir, scratchDirName)
@@ -494,14 +371,6 @@ func buildAndRun(configPath string) ([]byte, error) {
 	return stdout, nil
 }
 
-// findProjectRoot walks up from startDir (tsconfig-style) for the nearest
-// ancestor holding ocel.config.ts or the .ocel/ scratch dir, falling back to
-// startDir itself when it reaches the filesystem root without finding either.
-//
-// The scratch dir counts because it is what a config-less project leaves
-// behind: the first run in a fresh clone anchors at the working directory and
-// creates .ocel/ there, so every later run from a subdirectory finds the same
-// root.
 func findProjectRoot(startDir string) (string, error) {
 	start, err := filepath.Abs(startDir)
 	if err != nil {

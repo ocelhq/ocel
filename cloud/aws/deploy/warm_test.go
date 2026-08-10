@@ -16,8 +16,6 @@ import (
 	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
 )
 
-// fakeInvoker answers every warm invoke from respond, recording the calls and
-// the peak number in flight so the cap can be asserted without an AWS client.
 type fakeInvoker struct {
 	respond func(ctx context.Context, name string) (*lambda.InvokeOutput, error)
 
@@ -50,15 +48,12 @@ func (f *fakeInvoker) called() []string {
 	return append([]string(nil), f.calls...)
 }
 
-// answering builds an invoker that replies to every function with the same raw
-// membrane response body.
 func answering(body string) *fakeInvoker {
 	return &fakeInvoker{respond: func(context.Context, string) (*lambda.InvokeOutput, error) {
 		return &lambda.InvokeOutput{StatusCode: 200, Payload: []byte(body)}, nil
 	}}
 }
 
-// collectLog is the log func realize threads through, captured for assertions.
 func collectLog() (func(string), func() string) {
 	var mu sync.Mutex
 	var b strings.Builder
@@ -93,10 +88,6 @@ func runWarm(t *testing.T, invoker FunctionInvoker, targets []warmTarget, budget
 	return dump()
 }
 
-// The warm pass exists to fill the bytecode cache, so its targets must be
-// exactly the functions the bytecode feature is on for: an app with no ISR
-// cache gets no OCEL_BYTECODE_PREFIX and so has nothing to publish, and a
-// function whose stack never reported a physical name cannot be addressed.
 func TestWarmTargets_OnlyBytecodeGatedFunctions(t *testing.T) {
 	t.Setenv(bytecodeCacheEnv, "1")
 	manifest := &deploymentsv1.Manifest{
@@ -123,9 +114,6 @@ func TestWarmTargets_OnlyBytecodeGatedFunctions(t *testing.T) {
 	}
 }
 
-// The gate is the deploying process's own OCEL_BYTECODE_CACHE=1: without it no
-// function is deployed with a prefix, so warming every one of them would spend
-// the deploy's time invoking functions that publish nothing.
 func TestWarmTargets_SkippedWhenGateIsOff(t *testing.T) {
 	t.Setenv(bytecodeCacheEnv, "")
 
@@ -150,8 +138,6 @@ func TestWarmPass_ReportsPublished(t *testing.T) {
 	}
 }
 
-// "warming 1 bundles" is the deploy talking to a person about their one Next
-// app.
 func TestWarmPass_CountsBundlesInWords(t *testing.T) {
 	out := runWarm(t, answering(`{"state":"published","uploaded":true}`), warmTestTargets(1), time.Minute)
 
@@ -160,8 +146,6 @@ func TestWarmPass_CountsBundlesInWords(t *testing.T) {
 	}
 }
 
-// The spec asks the pass to report what it skipped: "38/51" tells an operator
-// the cache is partial but not which routes will pay for it.
 func TestWarmPass_NamesTheEntriesThatStayedCold(t *testing.T) {
 	out := runWarm(t, answering(`{"state":"published","entries":51,"loaded":38,"uploaded":true,`+
 		`"stoppedBy":"ceiling","skippedCount":13,"skipped":["app/a/page","app/b/page"]}`),
@@ -174,9 +158,6 @@ func TestWarmPass_NamesTheEntriesThatStayedCold(t *testing.T) {
 	}
 }
 
-// A membrane that published a cache it could not account for still published
-// one: the deploy reports the counts as unknown rather than as zeros it would
-// otherwise read as a measurement.
 func TestWarmPass_ReportsUncountedCoverageAsUnknown(t *testing.T) {
 	out := runWarm(t, answering(`{"state":"published","uploaded":true,"bytes":1048576,`+
 		`"uncounted":"node did not report back on the compile-cache warm"}`),
@@ -193,8 +174,6 @@ func TestWarmPass_ReportsUncountedCoverageAsUnknown(t *testing.T) {
 	}
 }
 
-// published and uploaded:false cannot both be true, and believing the state
-// over the field would report a cache nothing wrote as this deploy's.
 func TestWarmPass_PublishedWithoutUploadingIsNotWarmed(t *testing.T) {
 	out := runWarm(t, answering(`{"state":"published","entries":51,"loaded":51,"uploaded":false}`),
 		warmTestTargets(1), time.Minute)
@@ -204,9 +183,6 @@ func TestWarmPass_PublishedWithoutUploadingIsNotWarmed(t *testing.T) {
 	}
 }
 
-// already-cached is a success: the deploy cannot pre-check the key (only the
-// sandbox knows node's full version), so this is the membrane's answer for a
-// cache that was already complete.
 func TestWarmPass_ReportsAlreadyCached(t *testing.T) {
 	out := runWarm(t, answering(`{"state":"already-cached","entries":51,"loaded":51}`), warmTestTargets(1), time.Minute)
 
@@ -238,8 +214,6 @@ func TestWarmPass_ReportsDisabledAndFailed(t *testing.T) {
 	}
 }
 
-// Every failure is a warning and nothing more: a deploy that fails because a
-// cache did not warm is worse than a slow cold start.
 func TestWarmPass_FailuresDegradeToWarnings(t *testing.T) {
 	for _, tc := range []struct {
 		name    string
@@ -293,9 +267,6 @@ func TestWarmPass_FailuresDegradeToWarnings(t *testing.T) {
 	}
 }
 
-// The rationed resource is Lambda's account concurrency, shared with everything
-// else running: an unbounded fan-out throttles most invocations and leaves most
-// bundles unwarmed.
 func TestWarmPass_CapsConcurrency(t *testing.T) {
 	invoker := &fakeInvoker{respond: func(context.Context, string) (*lambda.InvokeOutput, error) {
 		time.Sleep(5 * time.Millisecond)
@@ -312,9 +283,6 @@ func TestWarmPass_CapsConcurrency(t *testing.T) {
 	}
 }
 
-// A bundle the deadline cut off must be named, not silently dropped: an
-// unwarmed bundle is a cold start the first real request pays for, and the
-// deploy output is the only place that ever surfaces.
 func TestWarmPass_DeadlineNamesWhatItSkipped(t *testing.T) {
 	invoker := &fakeInvoker{respond: func(ctx context.Context, _ string) (*lambda.InvokeOutput, error) {
 		<-ctx.Done()
@@ -336,8 +304,6 @@ func TestWarmPass_DeadlineNamesWhatItSkipped(t *testing.T) {
 	}
 }
 
-// The payload is the membrane's contract: a deliberately non-HTTP shape the
-// edge's own event envelope can never produce.
 func TestWarmPass_SendsTheWarmPayload(t *testing.T) {
 	var got lambda.InvokeInput
 	invoker := &fakeInvoker{respond: func(context.Context, string) (*lambda.InvokeOutput, error) {
@@ -365,27 +331,18 @@ func (c *capturingInvoker) Invoke(ctx context.Context, in *lambda.InvokeInput, o
 	return c.inner.Invoke(ctx, in, optFns...)
 }
 
-// No targets means no output at all: a deploy with the feature off, or with no
-// Next app, must read exactly as it did before the warm pass existed.
 func TestWarmPass_SilentWithNoTargets(t *testing.T) {
 	if out := runWarm(t, answering(`{"state":"published"}`), nil, time.Minute); out != "" {
 		t.Errorf("warm log = %q, want nothing", out)
 	}
 }
 
-// A nil invoker is a caller that wired none (a deploy path predating the warm
-// pass): it must skip rather than panic mid-deploy.
 func TestWarmPass_SkipsWithoutAnInvoker(t *testing.T) {
 	if out := runWarm(t, nil, warmTestTargets(1), time.Minute); out != "" {
 		t.Errorf("warm log = %q, want nothing", out)
 	}
 }
 
-// The membrane writes its summary through the streaming response writer of a
-// RESPONSE_STREAM function, so whether a buffered Invoke hands these bytes back
-// bare or wrapped in the http-integration prelude and its null separator is not
-// something the deploy can settle. Both shapes have to read, or the feature
-// silently does nothing in production while every other test passes.
 func TestParseWarmReply_ReadsBareAndPreludeFramedPayloads(t *testing.T) {
 	summary := `{"state":"published","entries":51,"loaded":51,"uploaded":true}`
 	prelude := `{"statusCode":200,"headers":{"content-type":"application/json"},"cookies":[]}`
@@ -409,15 +366,12 @@ func TestParseWarmReply_ReadsBareAndPreludeFramedPayloads(t *testing.T) {
 	}
 }
 
-// A payload carrying no summary at all must be reported as unreadable rather
-// than parsed into a zero-valued reply that reads as an unrecognized state.
 func TestParseWarmReply_RejectsAPayloadWithNoSummary(t *testing.T) {
 	if _, err := parseWarmReply([]byte("Internal Server Error")); err == nil {
 		t.Error("parseWarmReply() err = nil, want an unreadable payload reported")
 	}
 }
 
-// The whole pass has to survive the framing question too, not just the parser.
 func TestWarmPass_ReadsAPreludeFramedAnswer(t *testing.T) {
 	framed := `{"statusCode":200,"headers":{},"cookies":[]}` + string(make([]byte, 8)) +
 		`{"state":"published","entries":9,"loaded":9,"uploaded":true}`
@@ -429,8 +383,6 @@ func TestWarmPass_ReadsAPreludeFramedAnswer(t *testing.T) {
 	}
 }
 
-// The physical Lambda name is Pulumi-autonamed, so the stack output is the only
-// thing that can tell the warm pass what to invoke.
 func TestCollectAppFunctionOutputs_ReadsPhysicalNames(t *testing.T) {
 	functions := []*deploymentsv1.ManifestFunction{
 		{LogicalName: "web_index"},
@@ -441,8 +393,6 @@ func TestCollectAppFunctionOutputs_ReadsPhysicalNames(t *testing.T) {
 			outputKeyFunctionURL:  "https://index.lambda-url.aws/",
 			outputKeyFunctionName: "ocel-web-index-a1b2",
 		}},
-		// A stack that reported no name at all: the URL still deploys, the
-		// bundle simply is not warmed.
 		"web_api": {Value: map[string]interface{}{outputKeyFunctionURL: "https://api.lambda-url.aws/"}},
 	}
 

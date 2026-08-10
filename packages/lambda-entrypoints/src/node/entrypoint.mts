@@ -35,8 +35,6 @@ async function loadUserApp(entrypoint: string): Promise<Loaded> {
   const result = await Promise.race([
     serverPromise,
     importPromise.then((r) => {
-      // Prefer the export if it's itself a server/app; otherwise keep waiting
-      // for a .listen() capture (Nest resolves via serverPromise).
       const v = r.value as any;
       if (v && (typeof v === "function" || typeof v.listen === "function")) {
         return r;
@@ -57,10 +55,6 @@ type Resolved =
   | { type: "web-handler"; fetch: FetchHandler };
 
 function resolveHandler(exported: any): Resolved {
-  // Callability MUST be checked before `.listen`: an Express `app` is both a
-  // function and has `.listen`, so a `.listen`-first check would route it to
-  // the "server" branch, and app.address() (nonexistent) would later throw.
-  // Treating it as a node-handler makes us wrap it in http.createServer.
   if (typeof exported === "function") {
     return { type: "node-handler", handler: exported };
   }
@@ -104,8 +98,6 @@ function interceptListen(): ListenHook {
   const waiters: Array<(server: http.Server) => void> = [];
 
   http.Server.prototype.listen = function (this: http.Server, ...args: any[]) {
-    // Restore immediately so our own later listen() binds for real; the user's
-    // .listen() is captured but never actually binds their port.
     http.Server.prototype.listen = realListen;
     captured = this;
     const cb = args.find((a) => typeof a === "function");
@@ -129,10 +121,6 @@ function interceptListen(): ListenHook {
 async function boot(): Promise<void> {
   installCompileCacheFlush();
 
-  // The user's module scope runs inside the import below, and a live value read
-  // there must already be in hand. The membrane's fetch overlaps this process
-  // starting, so the wait is usually already over; a function that declares no
-  // live value never waits at all.
   await awaitLiveValues();
   const loaded = await loadUserApp(process.env.OCEL_HANDLER!);
   if (loaded.kind === "server") {

@@ -46,14 +46,7 @@ const (
 // ResourceServiceClient is a client for the resources.v1.ResourceService service.
 type ResourceServiceClient interface {
 	Declare(context.Context, *v1.DeclareRequest) (*v1.DeclareResponse, error)
-	// DeclareEnv declares every variable one defineEnv call holds and, unlike
-	// Declare, answers with a payload: the cells the store already holds for
-	// those keys. Validation happens in the declaring process because the
-	// schemas live there, so the values have to travel back to it.
 	DeclareEnv(context.Context, *v1.DeclareEnvRequest) (*v1.DeclareEnvResponse, error)
-	// ReportEnvProblems carries the verdict back: every cell that is missing
-	// or fails its schema. It is what the discovery gate refuses on, so the
-	// decision stays with the schemas and the message stays with the CLI.
 	ReportEnvProblems(context.Context, *v1.ReportEnvProblemsRequest) (*v1.ReportEnvProblemsResponse, error)
 }
 
@@ -126,14 +119,7 @@ func (c *resourceServiceClient) ReportEnvProblems(ctx context.Context, req *v1.R
 // ResourceServiceHandler is an implementation of the resources.v1.ResourceService service.
 type ResourceServiceHandler interface {
 	Declare(context.Context, *v1.DeclareRequest) (*v1.DeclareResponse, error)
-	// DeclareEnv declares every variable one defineEnv call holds and, unlike
-	// Declare, answers with a payload: the cells the store already holds for
-	// those keys. Validation happens in the declaring process because the
-	// schemas live there, so the values have to travel back to it.
 	DeclareEnv(context.Context, *v1.DeclareEnvRequest) (*v1.DeclareEnvResponse, error)
-	// ReportEnvProblems carries the verdict back: every cell that is missing
-	// or fails its schema. It is what the discovery gate refuses on, so the
-	// decision stays with the schemas and the message stays with the CLI.
 	ReportEnvProblems(context.Context, *v1.ReportEnvProblemsRequest) (*v1.ReportEnvProblemsResponse, error)
 }
 

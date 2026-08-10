@@ -275,8 +275,6 @@ describe("op=callback", () => {
   });
 
   it("returns 404 (not a silent 200) when the uploader no longer exists", async () => {
-    // e.g. the uploader was renamed during an `ocel dev` hot-reload between
-    // presign and callback: fail loudly so the detector surfaces it.
     const { ctx } = fakeContext({
       verifyUploadSignature: vi.fn(async () => ({
         valid: true,

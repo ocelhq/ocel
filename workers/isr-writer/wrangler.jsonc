@@ -1,7 +1,3 @@
-/**
- * For more details on how to configure Wrangler, refer to:
- * https://developers.cloudflare.com/workers/wrangler/configuration/
- */
 {
   "$schema": "node_modules/wrangler/config-schema.json",
   "name": "isr-writer",
@@ -12,9 +8,6 @@
   },
   "upload_source_maps": true,
   "compatibility_flags": ["nodejs_compat"],
-  // Local-dev/test default only. The real deploy mints this account-level
-  // bootstrap credential when the shared writer worker is provisioned at
-  // bootstrap and binds it as secret_text, never through this file.
   "vars": {
     "BOOTSTRAP_SECRET": "dev-secret",
   },
@@ -36,9 +29,6 @@
       },
     ],
   },
-  // A cumulative log, not a declaration of the current state: every tag stays
-  // here forever, and an account already carrying v1 is brought forward by the
-  // steps it has not applied yet.
   "migrations": [
     {
       "tag": "v1",

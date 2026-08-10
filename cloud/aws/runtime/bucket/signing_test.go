@@ -10,8 +10,6 @@ var testFile = SignedFile{
 }
 
 func TestCanonicalUploadPayloadMatchesTSScheme(t *testing.T) {
-	// Byte-identical to the dev signer's canonicalUploadPayload assertion in
-	// packages/api/src/routes/blob/signing.test.ts.
 	const want = `{"sessionId":"sess_1","file":{"key":"org/proj/user/avatar.png","name":"avatar.png","size":1024,"mimeType":"image/png"}}`
 	got := string(CanonicalUploadPayload("sess_1", testFile))
 	if got != want {

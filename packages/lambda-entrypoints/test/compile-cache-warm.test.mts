@@ -5,8 +5,6 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, expect, test, vi } from "vitest";
 
-// The reply itself, not a copy of it: three spellings of the same literal is
-// how one of them silently drifts.
 import { UNSUPPORTED_WARM as UNSUPPORTED } from "../src/shared/membrane.mjs";
 
 type Msg = { type: string; payload: unknown };
@@ -48,10 +46,6 @@ const REPORT = {
   dir: "/tmp/v8-compile-cache",
 };
 
-// Boots a real control socket, installs the warm handler over the launcher's
-// `warm` (whatever the caller passes stands in for it, including nothing at
-// all), sends warm-compile-cache down the socket and returns the real
-// compile-cache-warmed reply.
 async function warmOver(
   warm: unknown,
   request: { payload?: unknown } = {

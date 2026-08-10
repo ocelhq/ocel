@@ -92,9 +92,6 @@ func TestBuildLoopbackRequest_PathQueryHeadersCookies(t *testing.T) {
 	}
 }
 
-// The app derives its own origin from the Host it observes, so the request that
-// reaches it must carry the authority the client addressed — not the loopback
-// one. Go takes that from req.Host and ignores Header["Host"].
 func TestBuildLoopbackRequest_HostIsThePublicAuthority(t *testing.T) {
 	for _, tc := range []struct {
 		name    string

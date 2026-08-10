@@ -1,4 +1,3 @@
-// Package cli implements the Ocel command-line interface.
 package cli
 
 import (
@@ -8,21 +7,12 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// version is set at build time via -ldflags "-X github.com/ocelhq/ocel/cli/internal/cli.version=...".
 var version = "dev"
 
-// apiURLFlag is bound to the root persistent --api-url flag, shared by every
-// subcommand. Empty unless explicitly set; the default target is resolved
-// per command (see effectiveAPIURL / resolveAPIURL).
 var apiURLFlag string
 
-// verboseFlag is bound to the root persistent --verbose/-v flag. When set (or
-// when OCEL_DEBUG is set in the environment), commands that show a phased
-// progress view instead stream every underlying log line to the terminal.
 var verboseFlag bool
 
-// verboseEnabled reports whether verbose output is requested, via the
-// --verbose flag or the OCEL_DEBUG environment variable.
 func verboseEnabled() bool {
 	if verboseFlag {
 		return true
@@ -31,7 +21,6 @@ func verboseEnabled() bool {
 	return ok
 }
 
-// rootCmd is the base command for the Ocel CLI.
 var rootCmd = &cobra.Command{
 	Use:           "ocel",
 	Short:         "Ocel CLI",
@@ -41,7 +30,6 @@ var rootCmd = &cobra.Command{
 	SilenceErrors: true,
 }
 
-// Execute runs the root command.
 func Execute() error {
 	return rootCmd.Execute()
 }
@@ -66,12 +54,6 @@ func init() {
 	rootCmd.AddCommand(unlinkCmd)
 }
 
-// effectiveAPIURL resolves the Ocel API origin a command should target, in
-// decreasing precedence: an explicit --api-url flag, the persisted
-// credentials' APIURL (credsURL), then the resolved default (see
-// resolveAPIURL). cmd may be nil (e.g. in tests), in which case the flag is
-// not consulted. The result is an origin with no trailing slash; callers
-// append "/api/..." themselves.
 func effectiveAPIURL(cmd *cobra.Command, credsURL string) string {
 	if cmd != nil && cmd.Flags().Changed("api-url") {
 		return strings.TrimRight(apiURLFlag, "/")

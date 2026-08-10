@@ -41,8 +41,6 @@ test("a write PUTs the entry under its cache key with the deploy's secret", asyn
   expect(JSON.parse(init.body as string)).toEqual(entry);
 });
 
-// Two regenerators that raced both wrote a fresh render, so the loser's write is
-// redundant rather than lost — and retrying it would turn a herd into a storm.
 test("a rate-limited write is accepted without a retry", async () => {
   const { impl, calls } = fakeFetch(new Response("Too Many Requests", { status: 429 }));
 
@@ -52,10 +50,6 @@ test("a rate-limited write is accepted without a retry", async () => {
   expect(calls).toHaveLength(1);
 });
 
-// A 4xx is the writer saying "not this key, not ever" — the route re-renders on
-// every request and caches on none. The caller runs under background(), which
-// swallows what it catches, so a permanent rejection that arrived as a plain
-// Error would be indistinguishable from the backpressure a 429 reports.
 test("a permanent rejection is distinguishable from rate limiting, and is logged", async () => {
   const { impl } = fakeFetch(new Response("Bad Request", { status: 400 }));
   const logged = vi.spyOn(console, "error").mockImplementation(() => {});
@@ -74,9 +68,6 @@ test("a server-side rejection surfaces as an ordinary retryable failure", async 
   await expect(write).rejects.not.toBeInstanceOf(IsrWriteRejected);
 });
 
-// A hung writer would otherwise hold the invocation open to the function's own
-// timeout, billing for the wait — the PutObjectCommand this replaced carried the
-// SDK's timeouts.
 test("a write carries a timeout", async () => {
   const { impl, calls } = fakeFetch(new Response(null, { status: 204 }));
 
@@ -85,9 +76,6 @@ test("a write carries a timeout", async () => {
   expect(calls[0][1].signal).toBeInstanceOf(AbortSignal);
 });
 
-// The writer is not optional: a deploy reading entries from an adopted cache
-// store has no other way to write them, so a half-injected pair is a broken
-// deploy and must say so rather than fall back to a standing credential.
 test("a half-configured writer is a failure, not a fallback", () => {
   expect(() => isrEntryStore()).toThrow(URL_ENV);
 
@@ -102,13 +90,10 @@ test("a half-configured writer is a failure, not a fallback", () => {
   expect(isrEntryStore()).not.toBeNull();
 });
 
-// What the writer answers for an entry it holds no object for, as against the
-// bare 404 anything else about the request produces.
 function entryMissResponse() {
   return new Response("Not Found", { status: 404, headers: { [entryMissHeader]: "1" } });
 }
 
-// A fetch impl that fails the way the network does, rather than answering.
 function throwingFetch(err: unknown) {
   return (async () => {
     throw err;
@@ -124,7 +109,6 @@ test("a read GETs the entry at its cache key with the deploy's secret", async ()
 
   expect(calls).toHaveLength(1);
   const [url, init] = calls[0];
-  // The same key encoding the write uses, so both ops name one object.
   expect(url).toBe(`${WRITER_URL}?key=blog%2Fpost`);
   expect(init.method ?? "GET").toBe("GET");
   expect((init.headers as Record<string, string>).authorization).toBe("Bearer write-secret");
@@ -138,11 +122,6 @@ test("a read is bounded by a timeout of its own", async () => {
   expect(calls[0][1].signal).toBeInstanceOf(AbortSignal);
 });
 
-// THE property this path is written around. A read now sits on the serving path,
-// where Next calls get() for every request to a cached route. An error raised
-// here does not become a slow request, it becomes a broken one — so every
-// failure degrades to a miss, which makes Next render. A writer outage has to
-// cost latency and nothing else.
 test.each([
   ["an absent entry", entryMissResponse()],
   ["a misdirected read", new Response("Not Found", { status: 404 })],
@@ -163,9 +142,6 @@ test.each([
   ).resolves.toBeNull();
 });
 
-// A miss is the ordinary case and says nothing; every other failure is a cache
-// that has stopped working, which is invisible in the response and shows up only
-// as origin load.
 test("a miss is silent and a failure is not", async () => {
   const warned = vi.spyOn(console, "warn").mockImplementation(() => {});
 
@@ -178,10 +154,6 @@ test("a miss is silent and a failure is not", async () => {
   expect(warned).toHaveBeenCalledWith(expect.stringContaining("blog/post"));
 });
 
-// A wrong writer URL, or any drift in the path shape between the two halves,
-// answers 404 to every read — which without the marker is indistinguishable from
-// a cache that is merely always cold, forever and with no signal at all. The
-// write path already treats the same failure class as permanent.
 test("a 404 from anywhere but the entry itself warns, and still misses", async () => {
   const warned = vi.spyOn(console, "warn").mockImplementation(() => {});
   const misdirected = fakeFetch(new Response("Not Found", { status: 404 })).impl;

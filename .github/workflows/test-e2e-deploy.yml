@@ -1,22 +1,5 @@
 name: test-e2e-deploy
 
-# Next.js's deployment-adapter compatibility harness, run against the Ocel Next
-# adapter with NEXT_TEST_MODE=deploy: every suite builds and deploys a real
-# isolated app into a disposable AWS + Cloudflare account through
-# `ocel preview up`, tests it over the network, and tears it down.
-#
-# A run deploys into ONE Ocel project, `e2e-<run id>`, and every fixture is an
-# ephemeral preview pointer inside it. The project owns the preview wildcard
-# domain, so two runs cannot share the account — hence the concurrency group
-# below — and a run that dies without reaching `destroy` strands that claim,
-# which is what the `sweep` job reclaims.
-#
-# Manual dispatch only, deliberately. A run deploys hundreds of apps and costs
-# real money — it is not something to trigger from a push.
-#
-# See scripts/e2e-next/README.md for the one-time account setup, the secrets and
-# variables this needs, and how to record or promote the known-failure baseline.
-
 on:
   workflow_dispatch:
     inputs:
@@ -29,36 +12,16 @@ on:
         default: false
         type: boolean
 
-# One run at a time, account-wide. A run's project claims the preview wildcard
-# domain by holding the worker route bound to it, so two runs would contend for
-# a claim only one can hold, and `sweep` would tear down a live run's project.
-#
-# cancel-in-progress is deliberately FALSE: cancelling a run mid-flight kills
-# its runners, so nothing tears down the deployed apps or the project, and the
-# stranded project keeps the domain claim until something reclaims it. Queueing
-# lets the running one reach its `destroy` job. `sweep` is only the backstop for
-# the runs that die anyway — a cancelled job, an expired session, a killed
-# runner — not the ordinary path.
 concurrency:
   group: test-e2e-deploy
   cancel-in-progress: false
 
 env:
-  # Where the baseline has to sit inside the Next.js checkout for
-  # NEXT_EXTERNAL_TESTS_FILTERS to resolve it (the harness resolves the path
-  # against its own cwd). Applied on a normal run so only regressions fail the
-  # job; skipped on a recording run, which must see every suite's real outcome.
   BASELINE_MANIFEST: test/ocel-deploy-tests-manifest.json
-  # Where this repo keeps it, alongside the scripts that produce it.
   ADAPTER_BASELINE: scripts/e2e-next/baseline-manifest.json
   NODE_VERSION: "22"
   PNPM_VERSION: "11.10.0"
 
-# AWS is reached through OIDC, never a stored key: every job that touches the
-# account mints a short-lived role session from the run's own identity token, so
-# there is no long-lived credential to leak or rotate. Each such job re-declares
-# `id-token: write` — a job-level permissions block replaces this one rather than
-# extending it.
 permissions:
   contents: read
 
@@ -74,11 +37,6 @@ jobs:
       AWS_REGION: ${{ vars.E2E_AWS_REGION }}
       CLOUDFLARE_ACCOUNT_ID: ${{ secrets.E2E_CLOUDFLARE_ACCOUNT_ID }}
       CLOUDFLARE_API_TOKEN: ${{ secrets.E2E_CLOUDFLARE_API_TOKEN }}
-      # Next.js builds itself with turbo, so its build is reusable across runs —
-      # which nothing else here makes it: the cache below is keyed by run id
-      # because it ships one run's artifacts between jobs, not across runs. Turbo
-      # reads these from the environment, so the checkout of vercel/next.js needs
-      # no change of ours. Unset, turbo builds locally exactly as before.
       TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
       TURBO_TEAM: ${{ vars.TURBO_TEAM }}
     steps:
@@ -103,11 +61,6 @@ jobs:
           expected-aws-account-id: ${{ secrets.E2E_EXPECTED_AWS_ACCOUNT_ID }}
           expected-cloudflare-account-id: ${{ secrets.E2E_EXPECTED_CLOUDFLARE_ACCOUNT_ID }}
 
-      # There is no module at the repo root, so setup-go's default hunt for a
-      # root go.sum finds nothing and silently restores no build cache at all —
-      # every Go step below then compiles cold. Naming every module's go.sum
-      # keys the cache on the whole workspace's dependency set, which is what
-      # `go build`/`go generate` here actually span.
       - uses: actions/setup-go@v5
         with:
           go-version-file: adapter/cli/go.mod
@@ -126,8 +79,6 @@ jobs:
         working-directory: nextjs
         run: pnpm playwright install --with-deps chromium
 
-      # ocel's built dist is what the sidecar packs. The CLI bundles the
-      # builder, the Next adapter and the worker bundles itself at `go generate`.
       - name: Install & build the adapter workspace
         working-directory: adapter
         run: |
@@ -137,20 +88,12 @@ jobs:
           pnpm --filter @ocel/worker-nextjs build
           pnpm --filter @ocel/worker-deployments-store build
 
-      # The launcher resolves the CLI binary out of packages/native-lib, and the
-      # sidecar packs the provider package from there, so HEAD's Go code has to
-      # land there first.
       - name: Build the Go binaries for this host
         working-directory: adapter
         run: |
           node scripts/build-native.mjs --host --target cli
           node scripts/build-native.mjs --host --target provider
 
-      # The sidecar is the only thing the harness's temp apps see of Ocel:
-      # ocel.config.ts is bundled and executed from the app dir (so `ocel` and
-      # @ocel/provider-aws must resolve from there), and providerlocator
-      # require.resolve's @ocel/provider-aws-linux-x64 from the app dir too.
-      # deploy.mjs symlinks <temp-app>/node_modules/{ocel,@ocel} at this directory.
       - name: Build the ocel sidecar
         working-directory: adapter
         run: |
@@ -211,9 +154,6 @@ jobs:
           expected-aws-account-id: ${{ secrets.E2E_EXPECTED_AWS_ACCOUNT_ID }}
           expected-cloudflare-account-id: ${{ secrets.E2E_EXPECTED_CLOUDFLARE_ACCOUNT_ID }}
 
-      # Unconditional, and it fails the run when it cannot finish: whatever it
-      # finds holds the preview domain's wildcard route, and deploying into a
-      # domain another project still claims fails later and less legibly.
       - name: Reclaim every e2e project that is not this run's
         run: node adapter/scripts/e2e-next/sweep-projects.mjs
 
@@ -245,9 +185,6 @@ jobs:
           key: build-${{ github.sha }}-${{ github.run_id }}
           fail-on-cache-miss: true
 
-      # The session's default duration is sized past this job's own cap so the
-      # teardown at the end of the job is still holding a live session: an
-      # expired one strands the deployment.
       - uses: ./adapter/.github/actions/e2e-session
         with:
           node-version: ${{ env.NODE_VERSION }}
@@ -258,9 +195,6 @@ jobs:
           expected-aws-account-id: ${{ secrets.E2E_EXPECTED_AWS_ACCOUNT_ID }}
           expected-cloudflare-account-id: ${{ secrets.E2E_EXPECTED_CLOUDFLARE_ACCOUNT_ID }}
 
-      # Installed off the `nextjs` checkout by the harness's own
-      # create-next-install, so the smoke app builds against the same Next the
-      # matrix tests whatever nextjsRef was dispatched.
       - name: Stage the smoke app
         run: |
           set -euo pipefail
@@ -269,17 +203,6 @@ jobs:
           echo "SMOKE_APP=$app" >> "$GITHUB_ENV"
           echo "staged in $app"
 
-      # Exercises exactly what the harness will: deploy prints only a URL, the
-      # URL serves the app, logs carries all three markers. The matrix costs
-      # hours and hundreds of deploys, so it only starts once one round trip is
-      # known to work — and this deploy is also what initializes the run's
-      # project (its first root-stack reconcile), so every matrix deploy after
-      # it finds the entrypoint worker and the wildcard route already there.
-      #
-      # Its pointer is deliberately KEPT for the whole run, as a canary: a URL
-      # that stops serving while the matrix is running says the project's
-      # entrypoint broke, not that one fixture did. The `destroy` job takes it
-      # with the rest of the project.
       - name: Deploy the smoke app
         working-directory: ${{ env.SMOKE_APP }}
         env:
@@ -304,9 +227,6 @@ jobs:
           echo "::error::$SMOKE_URL never returned 200"
           exit 1
 
-      # A 200 from every route cannot see revalidation dying: the worker's
-      # `revalidates` flag going wrong leaves every route serving correctly and
-      # only stops cache entries being rewritten. This asserts a rewrite.
       - name: Assert the ISR route's cache entry is rewritten
         env:
           NEXT_TEST_DEPLOY_URL: ${{ env.SMOKE_URL }}
@@ -328,9 +248,6 @@ jobs:
         run: |
           set -euo pipefail
           node "$ADAPTER_DIR/scripts/e2e-next/logs.mjs" > logs.txt
-          # `|| true` keeps a missing marker from aborting the step under
-          # `set -e` before its diagnostic can print. Only the first match
-          # counts: the replayed build log carries the fixture's own markers.
           for marker in BUILD_ID DEPLOYMENT_ID IMMUTABLE_ASSET_TOKEN; do
             line=$(grep -m1 "^$marker: " logs.txt || true)
             if [ -z "$line" ]; then
@@ -338,7 +255,6 @@ jobs:
               exit 1
             fi
             echo "$line"
-            # IMMUTABLE_ASSET_TOKEN is legitimately undefined for this adapter.
             if [ "$marker" != IMMUTABLE_ASSET_TOKEN ] && [ "$line" = "$marker: undefined" ]; then
               echo "::error::$marker resolved to undefined"
               exit 1
@@ -401,11 +317,6 @@ jobs:
           key: build-${{ github.sha }}-${{ github.run_id }}
           fail-on-cache-miss: true
 
-      # 6h, matching the job's own cap: the group deploys and tears down apps
-      # for its whole life off this one session, and nothing refreshes it. The
-      # role's MaxSessionDuration must be at least 21600 or the assume fails
-      # outright at the top of the job — which is the failure mode to want, a
-      # shorter session would instead die hours in with apps already deployed.
       - uses: ./adapter/.github/actions/e2e-session
         with:
           node-version: ${{ env.NODE_VERSION }}
@@ -433,19 +344,8 @@ jobs:
           IS_TURBOPACK_TEST: 1
           NEXT_TEST_JOB: 1
           NEXT_TELEMETRY_DISABLED: 1
-          # Takes the harness's retry loop out. A retry redeploys the whole app,
-          # and a suite that fails against this adapter fails again — the
-          # baseline is what tells a regression from a known failure, so the
-          # retries only ever cost deploys. merge-baseline.mjs and lib.mjs's
-          # retry-aware collection stay as they are: they read stdout precisely
-          # because a retry's `git clean` can delete another suite's results
-          # file, which is a claim about the harness, not about this variable.
           NEXT_TEST_CI: 1
-          # Empty on a recording run: the manifest excludes known-failing cases,
-          # and a recording run has to observe them.
           NEXT_EXTERNAL_TESTS_FILTERS: ${{ !inputs.recordBaseline && env.BASELINE_MANIFEST || '' }}
-          # Emits a results file for every suite, not just failing ones, so a
-          # recording run can build the baseline from them.
           NEXT_TEST_EMIT_ALL_OUTPUT: ${{ inputs.recordBaseline && '1' || '' }}
 
           ADAPTER_DIR: ${{ github.workspace }}/adapter
@@ -457,10 +357,6 @@ jobs:
           OCEL_API_URL: ${{ vars.E2E_OCEL_API_URL }}
           OCEL_E2E_PREVIEW_DOMAIN: ${{ vars.E2E_OCEL_PREVIEW_DOMAIN }}
           OCEL_E2E_SIDECAR_DIR: ${{ github.workspace }}/sidecar
-        # Tee'd to RUNNER_TEMP, deliberately outside the checkout: the harness
-        # runs `git clean -fdx` on a failing suite's directory between retries,
-        # and for a top-level test/e2e/<name>.test.ts that is all of test/e2e —
-        # anything kept in there is liable to be deleted mid-run.
         shell: bash
         run: |
           node run-tests.js --timings -g ${{ matrix.group }} -c 2 --type e2e \
@@ -522,11 +418,6 @@ jobs:
           expected-aws-account-id: ${{ secrets.E2E_EXPECTED_AWS_ACCOUNT_ID }}
           expected-cloudflare-account-id: ${{ secrets.E2E_EXPECTED_CLOUDFLARE_ACCOUNT_ID }}
 
-      # `if: always()`, because a failed or cancelled matrix leaves exactly the
-      # footprint this exists to remove — including the domain claim, which is
-      # account-wide. It takes the whole project: the smoke canary's pointer,
-      # every pointer a killed suite never cleaned up, the entrypoint worker,
-      # the wildcard route and the deployments-store instance.
       - name: Destroy the project this run deployed into
         run: node adapter/scripts/e2e-next/project-teardown.mjs
 
@@ -556,8 +447,6 @@ jobs:
           set -euo pipefail
           node adapter/scripts/e2e-next/merge-baseline.mjs merge baseline-manifest.json fragments/*.json
 
-      # Uploaded rather than committed: the baseline is a claim about what this
-      # adapter cannot do yet, and a human decides when to adopt it.
       - name: Upload the merged baseline for review
         uses: actions/upload-artifact@v4
         with:

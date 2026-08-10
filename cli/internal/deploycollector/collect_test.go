@@ -88,8 +88,6 @@ func writeFile(t *testing.T, path, contents string) {
 	}
 }
 
-// emptyValues is a store holding nothing, for the paths that declare no
-// variables and so never consult it.
 type emptyValues struct{}
 
 func (emptyValues) List(context.Context) ([]envgate.Stored, error) { return nil, nil }

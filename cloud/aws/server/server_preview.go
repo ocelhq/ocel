@@ -22,18 +22,8 @@ import (
 	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
 )
 
-// errPreviewInfraMissing is returned when a preview teardown or list is asked
-// for but no preview infrastructure exists in the account.
 var errPreviewInfraMissing = errors.New("preview infrastructure is not set up; run `ocel bootstrap --preview` first")
 
-// Preflight authenticates the ambient credentials this provider needs (its own
-// AWS credentials and the Cloudflare edge's), reports what they resolve to for
-// the CLI's "Running with:" banner, and — when the AWS credentials
-// authenticated — reports the class of the infrastructure present. The CLI
-// calls it before a preview or deploy so a missing or invalid credential is
-// refused before provisioning rather than part way through. Credential failures
-// are returned in-band (credential_problems) so every one is reported at once;
-// only a transport/read fault returns an error.
 func (s *Server) Preflight(ctx context.Context, req *deploymentsv1.PreflightRequest) (*deploymentsv1.PreflightResponse, error) {
 	opts, err := parseOptions(req.GetOptions())
 	if err != nil {
@@ -46,9 +36,6 @@ func (s *Server) Preflight(ctx context.Context, req *deploymentsv1.PreflightRequ
 
 	resp := &deploymentsv1.PreflightResponse{Identity: &deploymentsv1.Identity{}}
 
-	// AWS: authenticate via STS. On failure the account's infrastructure can't
-	// be read, so the infra check below is skipped and the CLI aborts on the
-	// reported problem.
 	awsOK := true
 	if id, err := sts.NewFromConfig(awscfg).GetCallerIdentity(ctx, &sts.GetCallerIdentityInput{}); err != nil {
 		awsOK = false
@@ -66,9 +53,6 @@ func (s *Server) Preflight(ctx context.Context, req *deploymentsv1.PreflightRequ
 
 	resp.DomainClaims = domainClaims(ctx, edgeRouteOwner(), req.GetSlug(), req.GetDomains())
 
-	// Cloudflare edge: verify through the edge seam. Every production deploy
-	// reconciles the root stack on the edge, so its credentials are always
-	// required.
 	if v, ok := cloudflare.New().(edge.CredentialVerifier); ok {
 		if id, err := v.VerifyCredentials(ctx); err != nil {
 			resp.CredentialProblems = append(resp.CredentialProblems, &deploymentsv1.CredentialProblem{
@@ -102,32 +86,12 @@ func (s *Server) Preflight(ctx context.Context, req *deploymentsv1.PreflightRequ
 	return resp, nil
 }
 
-// routeOwnerFunc is the edge lookup a claim check runs per hostname: the worker
-// script bound to a route pattern, "" when nothing holds it.
 type routeOwnerFunc func(ctx context.Context, pattern string) (string, error)
 
-// edgeRouteOwner is this provider's edge lookup.
 func edgeRouteOwner() routeOwnerFunc {
 	return cloudflare.New().(edge.RootStack).RouteOwner
 }
 
-// domainClaims reports who currently holds each requested hostname, one entry
-// per hostname in the order asked for, so a deploy whose domain another project
-// already owns is refused before anything is built. No hostnames is no lookup:
-// the check is opt-in per request.
-//
-// A hostname held by one of THIS project's own workers is reported unclaimed.
-// Nothing is claiming it against this deploy — the reconcile that follows
-// repoints its own route idempotently — and reporting it claimed would refuse
-// every redeploy of a project's own domain. That comparison lives here, on the
-// deploy host, because only the host derives a worker name from a slug
-// (deploy.ProjectOwnsWorker); the CLI is left with the simple rule that a
-// claimed hostname is someone else's. A request that carried no slug can
-// recognise nothing as its own.
-//
-// Nothing here can fail a preflight: a lookup that errors, and a hostname in no
-// zone this account owns, both leave the status unspecified, which the CLI reads
-// as "could not say" and skips.
 func domainClaims(ctx context.Context, owner routeOwnerFunc, slug string, domains []string) []*deploymentsv1.DomainClaim {
 	if len(domains) == 0 {
 		return nil
@@ -150,17 +114,6 @@ func domainClaims(ctx context.Context, owner routeOwnerFunc, slug string, domain
 	return claims
 }
 
-// knownSlugs names the other projects the required class's Pulumi backend
-// already holds stacks for, or nil when the deploying slug already owns stacks
-// there — the CLI's slug-drift signal. It answers nil without touching the
-// backend when the caller sent no slug (the commands that address existing
-// infrastructure by other means don't need the check and shouldn't pay for the
-// enumeration) or when the substrate isn't bootstrapped yet, in which case the
-// preflight is about to refuse anyway.
-//
-// Best-effort, matching the field's contract: the guard is advisory, so a
-// backend that could not be enumerated reports no known slugs rather than
-// failing a deploy that is otherwise fine.
 func knownSlugs(ctx context.Context, awscfg aws.Config, substrate bootstrap.Deployed, slug string) []string {
 	if slug == "" || !substrate.Present || substrate.StateBucket == "" {
 		return nil
@@ -187,12 +140,6 @@ func knownSlugs(ctx context.Context, awscfg aws.Config, substrate bootstrap.Depl
 	return slugs
 }
 
-// preflightResponse maps the discovered substrates to a PreflightResponse for
-// the class the caller requires. It is pure. The substrate matching required
-// wins when present, so an account with both substrates gates each command
-// against the right one; when the required substrate is absent but the other
-// exists, the other is reported so the caller's class guard fires an
-// informative mismatch; an empty account is reported absent.
 func preflightResponse(required deploymentsv1.Environment_Class, preview, production bootstrap.Deployed) *deploymentsv1.PreflightResponse {
 	wanted, other := requiredSubstrate(required, preview, production)
 	switch {
@@ -205,8 +152,6 @@ func preflightResponse(required deploymentsv1.Environment_Class, preview, produc
 	}
 }
 
-// requiredSubstrate splits the two discovered substrates into the one the
-// calling command requires and the one it doesn't. Pure.
 func requiredSubstrate(required deploymentsv1.Environment_Class, preview, production bootstrap.Deployed) (wanted, other bootstrap.Deployed) {
 	if required == deploymentsv1.Environment_CLASS_PREVIEW {
 		return preview, production
@@ -214,7 +159,6 @@ func requiredSubstrate(required deploymentsv1.Environment_Class, preview, produc
 	return production, preview
 }
 
-// classToEnum maps a bootstrap class marker to the provider contract enum.
 func classToEnum(class string) deploymentsv1.Environment_Class {
 	switch class {
 	case bootstrap.ClassProduction:
@@ -226,9 +170,6 @@ func classToEnum(class string) deploymentsv1.Environment_Class {
 	}
 }
 
-// DestroyPreview tears down the preview environment addressed by req.Environment
-// and streams progress, ending in a terminal ResultEvent. It reuses the
-// DeployEvent stream.
 func (s *Server) DestroyPreview(ctx context.Context, req *deploymentsv1.DestroyPreviewRequest, stream *connect.ServerStream[deploymentsv1.DeployEvent]) error {
 	progress := func(m string) { _ = stream.Send(progressEvent(m)) }
 	logf := func(m string) { _ = stream.Send(logEvent(m)) }
@@ -239,14 +180,6 @@ func (s *Server) DestroyPreview(ctx context.Context, req *deploymentsv1.DestroyP
 	return stream.Send(okResult())
 }
 
-// runDestroyPreview tears one preview pointer down in full (ADR 0001): every
-// app-deploy stack the pointer's builds live in, the pointer and its records in
-// the preview store, the pointer's R2/S3 assets, and — for a persistent preview
-// only — its per-name infra stack. It resolves the preview substrate's backend
-// and root-stack state, then drives deploy.RemovePreview. It leaves the
-// project's own root-stack state in place: the entrypoint worker and store
-// instance that state names front every pointer of the project, and only
-// `ocel destroy --preview` retires them.
 func (s *Server) runDestroyPreview(ctx context.Context, req *deploymentsv1.DestroyPreviewRequest, progress, logf func(string)) error {
 	opts, err := parseOptions(req.GetOptions())
 	if err != nil {
@@ -263,13 +196,6 @@ func (s *Server) runDestroyPreview(ctx context.Context, req *deploymentsv1.Destr
 	return deploy.RemovePreview(ctx, stack, state, cfg, req.GetSlug(), pointer, persistent, progress, logf)
 }
 
-// previewTeardownContext resolves everything a preview teardown (rm/prune/
-// destroy) needs against the preview substrate: the reclaim Config (preview
-// Pulumi backend, preview cache store, the env segment for the pointer), the
-// preview root stack, and the project's persisted preview root-stack state. A
-// missing preview substrate is refused up front. state is nil when the project
-// never deployed a preview — the caller treats that as "nothing store-side to
-// remove", not an error.
 func (s *Server) previewTeardownContext(ctx context.Context, opts options, slug string, env *deploymentsv1.Environment) (deploy.Config, edge.RootStack, edge.RootStackState, error) {
 	awscfg, err := loadAWS(ctx, opts.Region)
 	if err != nil {
@@ -295,15 +221,11 @@ func (s *Server) previewTeardownContext(ctx context.Context, opts options, slug 
 		return deploy.Config{}, nil, nil, err
 	}
 
-	// Best-effort, like the production prune's read: a preview whose edge never
-	// adopted a cache store reclaims nothing from CacheStoreBucket.
 	cacheStore, err := bootstrap.ReadCacheStore(ctx, ssmClient, bootstrap.ClassPreview)
 	if err != nil {
 		cacheStore = bootstrap.CacheStore{}
 	}
 
-	// Best-effort for the same reason: a substrate with no adopted writer has
-	// no per-build secret to retire, and a reclaim there is complete without one.
 	isrWriter, err := bootstrap.ReadISRWriterFor(ctx, ssmClient, bootstrap.ClassPreview)
 	if err != nil {
 		isrWriter = bootstrap.ISRWriter{}
@@ -340,9 +262,6 @@ func (s *Server) previewTeardownContext(ctx context.Context, opts options, slug 
 	return cfg, stack, state, nil
 }
 
-// ListEnvironments enumerates the preview environments from the preview
-// substrate's Pulumi backend. An account with no preview infrastructure lists
-// nothing rather than erroring.
 func (s *Server) ListEnvironments(ctx context.Context, req *deploymentsv1.ListEnvironmentsRequest) (*deploymentsv1.ListEnvironmentsResponse, error) {
 	opts, err := parseOptions(req.GetOptions())
 	if err != nil {
@@ -386,8 +305,6 @@ func (s *Server) ListEnvironments(ctx context.Context, req *deploymentsv1.ListEn
 	return &deploymentsv1.ListEnvironmentsResponse{Environments: toPreviewEnvironments(stacks)}, nil
 }
 
-// toPreviewEnvironments maps enumerated preview stacks to the proto reply. It is
-// pure.
 func toPreviewEnvironments(stacks []deploy.PreviewStack) []*deploymentsv1.PreviewEnvironment {
 	out := make([]*deploymentsv1.PreviewEnvironment, 0, len(stacks))
 	for _, s := range stacks {

@@ -1,16 +1,3 @@
-// Production deploy orchestration (ADR 0001): the stacked sequence — reconcile
-// the frozen root stack, run the stable infra stack, run one app-deploy stack
-// per app in parallel, stage each app's Deployment record, and issue a single
-// atomic promote only once every app succeeded. Any app failure aborts the
-// promote; the previous Deployment keeps serving and the failed stack/record
-// is left for prune to sweep later.
-//
-// The Pulumi-touching halves (runInfraStack, runAppStack, runProduction) are
-// exercised only by opt-in e2e, like Run itself. finalizeProductionDeploy and
-// the plan/record/spec builders around it take already-computed results as
-// plain data, so they have no Pulumi/AWS dependency and are what unit tests
-// exercise directly against the edge.RootStack fake to assert the reconcile ->
-// stage -> promote sequence and the abort-on-failure behavior.
 package deploy
 
 import (
@@ -34,30 +21,8 @@ import (
 	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
 )
 
-// rootStackVersion is the ocel root-stack revision this build expects.
-// ReconcileRootStack is a no-op once a project's root stack already carries it;
-// bump it only when the frozen generic/store worker bundles change shape in a
-// way that needs re-deploying.
-//
-// A NEW WORKER VAR IS SUCH A CHANGE, and forgetting it is silent. Version 12 is
-// OCEL_PREVIEW_APPS, which the preview entrypoint worker matches a request's
-// host label against: a project whose root stack still stamps 11 keeps a worker
-// that reads no app list, and every preview host under it 404s. Version 11 is
-// OCEL_REVALIDATE_QUEUE_URL: the var is bound from a bootstrap output, so a
-// substrate that gains a revalidator changes what every already-deployed
-// project's generic worker should carry — but a project whose root stack
-// already stamps this version skips the upload entirely and keeps a worker with
-// no queue binding. It then renders every admitted refresh through
-// originBlocking, which is the designed unpinned degradation rather than a
-// failure, so nothing anywhere reports it. Caught on the live e2e run for
-// ocelhq-wvag.27: the CloudFormation output carried the URL and the deployed
-// worker did not. Version 10 (the ISR writer binding) is the same class of
-// change and did bump; the queue's did not.
 const rootStackVersion = "12"
 
-// appDeployResult is one app's app-deploy-stack outcome, fed into
-// finalizeProductionDeploy after Run has driven that stack (Pulumi) to
-// completion or failure. Record is meaningless when Err is set.
 type appDeployResult struct {
 	App      string
 	Identity DeploymentIdentity
@@ -65,17 +30,6 @@ type appDeployResult struct {
 	Err      error
 }
 
-// realize runs one deploy under the stacked model, for both production and
-// preview: root reconcile, the infra stack (skipped for an ephemeral preview,
-// which has none), N app-deploy stacks in parallel, staged records, and a
-// single atomic promote of this deploy's pointer. It is Run's whole body and,
-// like Run, is exercised only by opt-in e2e — the sequencing and atomicity it
-// drives are unit-tested directly against finalizeDeploy below. Production and
-// preview differ only in data threaded here: the store coordinates and
-// root-stack state come from the preview substrate for a preview (Config, set
-// by the server), the plan is class-aware (BuildPlan/rootStackSpecs), and the
-// promote pointer is empty for production, the environment identity for a
-// preview.
 func realize(ctx context.Context, cfg Config, manifest *deploymentsv1.Manifest, progress Progress, log func(string)) (Result, error) {
 	stack, ok := cfg.Edge.(edge.RootStack)
 	if !ok {
@@ -85,10 +39,6 @@ func realize(ctx context.Context, cfg Config, manifest *deploymentsv1.Manifest, 
 		return Result{}, fmt.Errorf("no deployments-store worker found for this account; re-run `%s` to provision it before deploying", bootstrapCommand(cfg))
 	}
 
-	// Validate then check availability up front, before any artifact upload or
-	// provisioning, so a bad or duplicate tag never orphans infrastructure. The
-	// store's promote re-applies the uniqueness check atomically (the
-	// concurrent-deploy backstop); these exist to fail fast with a clear message.
 	if err := validateTag(cfg.Tag); err != nil {
 		return Result{}, err
 	}
@@ -96,9 +46,6 @@ func realize(ctx context.Context, cfg Config, manifest *deploymentsv1.Manifest, 
 		return Result{}, err
 	}
 
-	// Sealed before the artifacts are packaged: the ciphertext rides inside
-	// each function's deployment package, so it has to exist before anything
-	// is hashed or uploaded.
 	baked, err := renderAppBundles(cfg, manifest)
 	if err != nil {
 		return Result{}, err
@@ -131,25 +78,16 @@ func realize(ctx context.Context, cfg Config, manifest *deploymentsv1.Manifest, 
 		return Result{}, err
 	}
 
-	// Root reconcile runs before any AWS provisioning: a broken root stack
-	// aborts the deploy up front rather than after paying for infra and every
-	// app-deploy stack.
 	progress.report(deploymentsv1.Phase_PHASE_PROVISIONING, "Reconciling the root stack", 0, 0)
 	specs, err := rootStackSpecs(cfg, manifest, rootStackVersion, log)
 	if err != nil {
 		return Result{}, err
 	}
-	// The partial state is carried out with the error on purpose: reconcile
-	// deploys workers before it records anything, so dropping what it did get to
-	// leaves a live worker no teardown can ever name again.
 	state, err := reconcileRootStack(ctx, stack, specs, cfg.RootStackState)
 	if err != nil {
 		return Result{RootStackState: state}, err
 	}
 
-	// An ephemeral preview has no infra stack (BuildPlan leaves it empty): its
-	// functions get no resource-connection env — an acknowledged gap, not a
-	// logical slice. Every other class realizes its per-project infra stack.
 	var infraOutputs []*deploymentsv1.ResourceOutput
 	if plan.InfraStack != "" {
 		progress.report(deploymentsv1.Phase_PHASE_PROVISIONING, "Provisioning infra stack", 0, 0)
@@ -177,21 +115,8 @@ func realize(ctx context.Context, cfg Config, manifest *deploymentsv1.Manifest, 
 		results[i] = appDeployResult{App: app.GetName(), Identity: id, Record: record, Err: err}
 	})
 
-	// Warming runs here — after every app's stack, before the promote — and the
-	// ordering is load-bearing. A function is invokable as soon as its stack
-	// succeeds, but no traffic reaches it until Promote, so the first real
-	// request already finds a full cache. It is also the only ordering that is
-	// safe against the upload leg's create-if-absent semantics: an organic cold
-	// start that wins that race publishes whatever fraction of the app it
-	// happened to compile, permanently, for the life of the build.
 	warmed := warmDeployedFunctions(ctx, cfg, manifest, appFunctionNames, log)
 
-	// Embedding follows warming for the obvious reason — it has nothing to embed
-	// until the caches exist, and only the warm summaries carry the keys they
-	// were published under — and stays before the promote for the same reason
-	// warming does: it re-points functions at new code, and no traffic may see a
-	// function mid-update. It is opt-in and cannot fail a deploy; a bundle it
-	// skips keeps the package it was warmed on.
 	embedBytecodeCaches(ctx, cfg, manifest, artifacts, warmed, log)
 
 	progress.report(deploymentsv1.Phase_PHASE_FINALIZING, "Staging and promoting", 0, 0)
@@ -212,12 +137,8 @@ func realize(ctx context.Context, cfg Config, manifest *deploymentsv1.Manifest, 
 	}, nil
 }
 
-// maxTagLen bounds a deployment tag, mirroring the CLI's own limit.
 const maxTagLen = 64
 
-// validateTag re-checks the deployment-tag format host-side — the CLI validates
-// too, but the RPC is a trust boundary a non-CLI caller could cross, so a
-// malformed tag must never reach the store. Empty is the untagged default.
 func validateTag(tag string) error {
 	if tag == "" {
 		return nil
@@ -235,10 +156,6 @@ func validateTag(tag string) error {
 	return nil
 }
 
-// checkTagAvailable rejects a deploy whose tag is already held by a live
-// promotion. A no-op for an untagged deploy and for a project with no store yet
-// (no prior state to read a history from). Pure of AWS — only edge.RootStack is
-// called.
 func checkTagAvailable(ctx context.Context, stack edge.RootStack, state edge.RootStackState, tag string) error {
 	if tag == "" || state[edge.RootStackKeyEndpoint] == "" {
 		return nil
@@ -255,10 +172,6 @@ func checkTagAvailable(ctx context.Context, stack edge.RootStack, state edge.Roo
 	return nil
 }
 
-// reconcileRootStack reconciles the root stack once per spec, threading the
-// resulting state forward so a project with several worker-fronted apps
-// reconciles its (shared) store once and each app's generic-worker deployment
-// in turn. Pure of Pulumi/AWS: only edge.RootStack is called.
 func reconcileRootStack(ctx context.Context, stack edge.RootStack, specs []edge.RootStackSpec, prior edge.RootStackState) (edge.RootStackState, error) {
 	state := prior
 	for _, spec := range specs {
@@ -271,19 +184,7 @@ func reconcileRootStack(ctx context.Context, stack edge.RootStack, specs []edge.
 	return state, nil
 }
 
-// stageAndPromote stages every successful app's Deployment record into an
-// already-reconciled root stack, and — only if every app succeeded — issues
-// the single atomic promote that makes them all live together. Any app
-// failure aborts before Promote is ever called: the store still holds
-// whatever it staged (harmless — never promoted, swept by a later prune) but
-// the active pointer never moves and the previous Deployment keeps serving.
-// Pure of Pulumi/AWS/Cloudflare: the caller has already reconciled the root
-// stack and run every app-deploy stack.
 func stageAndPromote(ctx context.Context, cfg Config, stack edge.RootStack, state edge.RootStackState, promotionID, tag, pointer string, now int64, results []appDeployResult) error {
-	// Before anything is staged, and therefore before anything can serve: a
-	// build that goes live without its origin record has routes that enqueue a
-	// revalidation and never receive one, with the send succeeding and the colo
-	// sentinel re-arming. See originrecord.go.
 	if err := writeOriginRecords(ctx, cfg, results); err != nil {
 		return err
 	}
@@ -310,10 +211,6 @@ func stageAndPromote(ctx context.Context, cfg Config, stack edge.RootStack, stat
 	return nil
 }
 
-// planEnvironment is the environment identity BuildPlan plans against: it
-// carries the class, lifecycle, and identity from the deploy Config so a
-// preview's stacks are scoped by its store pointer (an ephemeral preview also
-// keys off its lifecycle). Production leaves lifecycle and identity empty.
 func planEnvironment(cfg Config) *deploymentsv1.Environment {
 	return &deploymentsv1.Environment{
 		Class:     cfg.Class,
@@ -322,9 +219,6 @@ func planEnvironment(cfg Config) *deploymentsv1.Environment {
 	}
 }
 
-// promotePointer is the store pointer this deploy's promote moves: empty for
-// production (the store's reserved default pointer), the environment identity
-// (the DNS-safe preview slug/name) for a preview.
 func promotePointer(cfg Config) string {
 	if cfg.Class == deploymentsv1.Environment_CLASS_PREVIEW {
 		return cfg.Identity
@@ -332,8 +226,6 @@ func promotePointer(cfg Config) string {
 	return ""
 }
 
-// bootstrapCommand is the bootstrap invocation a class's deploy tells the user
-// to re-run when the account is missing something a deploy needs.
 func bootstrapCommand(cfg Config) string {
 	if cfg.Class == deploymentsv1.Environment_CLASS_PREVIEW {
 		return "ocel bootstrap --preview"
@@ -341,12 +233,6 @@ func bootstrapCommand(cfg Config) string {
 	return "ocel bootstrap"
 }
 
-// finalizeDeploy composes reconcileRootStack and stageAndPromote — the same
-// order realize drives them in, just without any AWS provisioning between the
-// two, promoting the given pointer (empty for production, the preview identity
-// for a preview). Pure of Pulumi/AWS/Cloudflare, so this is what unit tests
-// exercise directly against the edge.RootStack fake to assert the reconcile ->
-// stage -> promote sequence and the abort-on-failure behavior.
 func finalizeDeploy(ctx context.Context, cfg Config, stack edge.RootStack, specs []edge.RootStackSpec, prior edge.RootStackState, promotionID, tag, pointer string, now int64, results []appDeployResult) (edge.RootStackState, error) {
 	state, err := reconcileRootStack(ctx, stack, specs, prior)
 	if err != nil {
@@ -358,24 +244,11 @@ func finalizeDeploy(ctx context.Context, cfg Config, stack edge.RootStack, specs
 	return state, nil
 }
 
-// rootStackSpecs builds the edge.RootStackSpecs one deploy reconciles: for
-// production, one per app needing a generic worker (workerApps) plus a no-app
-// fallback — the project's store instance still has to be seeded for every app's
-// Deployment record to be staged into it, even one served straight off its own
-// Function URL. A preview builds exactly one spec for the whole project: its
-// entrypoint worker is attached to the project's declared wildcard and resolves
-// the app from the request host, so it is neither per-app nor per-pointer. warn,
-// when non-nil, receives the edge's non-fatal hostname advisories (an uncovered
-// TLS name, a blocking DNS record).
 func rootStackSpecs(cfg Config, manifest *deploymentsv1.Manifest, version string, warn func(string)) ([]edge.RootStackSpec, error) {
 	generic, err := genericWorkerBundle(cfg)
 	if err != nil {
 		return nil, err
 	}
-	// The generic worker signs its Function-URL forwards (the Lambdas are
-	// AWS_IAM-gated) with the edge reader's key, and addresses the ISR stores
-	// directly under the same key. The bundle is the same bytes for every app, so
-	// both are bound once here.
 	generic = withRevalidateQueue(withImageOptimizer(withCacheCoordinates(withEdgeSigningCreds(generic, cfg), cfg), cfg), cfg)
 
 	base := edge.RootStackSpec{
@@ -397,20 +270,7 @@ func rootStackSpecs(cfg Config, manifest *deploymentsv1.Manifest, version string
 	if cfg.Class == deploymentsv1.Environment_CLASS_PREVIEW {
 		spec := base
 		spec.GenericName = previewWorkerName(cfg.Slug)
-		// The wildcard is the whole project's desired route set, so the sweep is
-		// the whole project's preview worker family — the entrypoint worker and
-		// the per-app workers an earlier shape of this deploy left standing,
-		// whose pointer-exact routes outrank the wildcard and would shadow it on
-		// those hostnames for good. It reaches nothing else: a production worker
-		// is "ocel-<slug>--<env>-<app>", outside this stem, and a sibling
-		// project's worker is outside the project boundary the stem opens with.
 		spec.PruneWorkerStem = previewWorkerName(cfg.Slug)
-		// A project with no worker-backed app has nothing to serve at the edge:
-		// the spec exists only to seed the project's store instance, and the
-		// worker is attached to no hostname. The missing-preview-domain refusal
-		// is deliberately not reached here — it exists so a preview that WOULD be
-		// served does not end up on the wrong hostname, and a project that gains
-		// its first worker-backed app meets it on that deploy.
 		if len(apps) == 0 {
 			spec.Generic = withPreviewVars(generic, "", apps)
 			return []edge.RootStackSpec{spec}, nil
@@ -419,11 +279,6 @@ func rootStackSpecs(cfg Config, manifest *deploymentsv1.Manifest, version string
 		if err != nil {
 			return nil, err
 		}
-		// The declared wildcard is the project's complete desired route set, held
-		// for the project's lifetime: every pointer of every app is served under
-		// it, so the worker is attached to it once and anything else on the script
-		// is drift. The project owns the base domain outright, so Ocel plants the
-		// record behind it like any other hostname it serves.
 		spec.Domains = []string{previewWildcard(resolved.previewBase)}
 		spec.Generic = withPreviewVars(generic, resolved.previewBase, apps)
 		return []edge.RootStackSpec{spec}, nil
@@ -451,19 +306,12 @@ func rootStackSpecs(cfg Config, manifest *deploymentsv1.Manifest, version string
 	return specs, nil
 }
 
-// Env var names the frozen preview worker reads to enter preview mode
-// (workers/nextjs/src/index.ts).
 const (
 	envPreview           = "OCEL_PREVIEW"
 	envPreviewBaseDomain = "OCEL_PREVIEW_BASE_DOMAIN"
 	envPreviewApps       = "OCEL_PREVIEW_APPS"
 )
 
-// withPreviewVars turns a generic worker bundle into the project's preview
-// entrypoint worker, setting the base domain when it is known. The worker
-// recovers a request's pointer and app from the label below that base domain,
-// so — unlike a production worker — it is bound to no single app; the app list
-// is what it recovers the app half against, and is always bound.
 func withPreviewVars(worker edge.Worker, baseDomain string, apps []*deploymentsv1.ManifestApp) edge.Worker {
 	worker = withVar(worker, envPreview, "1")
 	worker = withVar(worker, envPreviewApps, previewAppNames(apps))
@@ -473,15 +321,6 @@ func withPreviewVars(worker edge.Worker, baseDomain string, apps []*deploymentsv
 	return worker
 }
 
-// previewAppNames is the OCEL_PREVIEW_APPS value: the project's worker-backed
-// app names, lowercased and comma-separated, in manifest order. The preview
-// entrypoint worker recognises the "<app>" half of a "<pointer>--<app>" host
-// label by matching this list — longest match winning — rather than by splitting
-// on the separator, and accepts a bare "<pointer>" label only when the list
-// names exactly one app. A project with no worker-backed app 404s every preview
-// host, which is why the var is bound on every preview reconcile rather than
-// only when there is something to say: an unbound var and an empty one would
-// otherwise differ, and the worker reads both as "no apps". Pure.
 func previewAppNames(apps []*deploymentsv1.ManifestApp) string {
 	names := make([]string, 0, len(apps))
 	for _, app := range apps {
@@ -492,32 +331,10 @@ func previewAppNames(apps []*deploymentsv1.ManifestApp) string {
 	return strings.Join(names, ",")
 }
 
-// previewWorkerName is the project's one preview entrypoint worker,
-// "ocel-<project>--preview": project-scoped rather than per-app, because the
-// worker resolves the app from the request host, and never colliding with a
-// production root worker ("ocel-<project>--<env>-<app>") in the same account. It
-// is the single deterministic name preview teardown reclaims, so nothing has to
-// enumerate the edge to find it. It is also the stem that teardown and route
-// pruning sweep, and the project boundary projectWorkerStem plants is what keeps
-// that sweep inside this project: a sibling slugged "<slug>-preview" names its
-// workers "ocel-<slug>-preview--…", under no stem of this project's. Pure.
 func previewWorkerName(slug string) string {
 	return projectWorkerStem(slug) + "preview"
 }
 
-// ProjectOwnsWorker reports whether an edge worker script name is one of this
-// project's own: every worker Ocel deploys for a project carries the project
-// boundary "ocel-<slug>--" (previewWorkerName, workerScriptName), and no other
-// project's name can, so that prefix is what tells a project's own hold on a
-// hostname apart from another project's. It answers the domain-claim check's "is
-// this mine?", and it lives here rather than in the CLI because only the deploy
-// host derives a worker name from a slug.
-//
-// Two names it deliberately does not recognise, both erring toward "someone
-// else's claim" — which refuses a deploy rather than letting one repoint a route
-// it does not own: a slug long enough for workerScriptName to clamp the boundary
-// away, and the unqualified name a project deployed under before workers were
-// named per app (legacyWorkerName), which predates the boundary. Pure.
 func ProjectOwnsWorker(slug, script string) bool {
 	if slug == "" || script == "" {
 		return false
@@ -525,8 +342,6 @@ func ProjectOwnsWorker(slug, script string) bool {
 	return strings.HasPrefix(script, projectWorkerStem(slug))
 }
 
-// firstDomain is the first hostname in an app's declared domain list, or "" for
-// none. A preview declares exactly one wildcard, so this is that wildcard.
 func firstDomain(domains []string) string {
 	if len(domains) == 0 {
 		return ""
@@ -534,9 +349,6 @@ func firstDomain(domains []string) string {
 	return domains[0]
 }
 
-// previewBaseDomain strips the leading "*." from a preview wildcard domain —
-// "*.preview.app.com" becomes "preview.app.com". Returns "" for a non-wildcard.
-// Mirrors projectconfig.PreviewBaseDomain (a separate Go module).
 func previewBaseDomain(wildcard string) string {
 	if !strings.HasPrefix(wildcard, "*.") {
 		return ""
@@ -544,9 +356,6 @@ func previewBaseDomain(wildcard string) string {
 	return wildcard[len("*."):]
 }
 
-// previewWildcard is previewBaseDomain's inverse: the wildcard the project
-// declared, which is both its one worker route and the one DNS record every
-// pointer hostname under base resolves through. No base yields no wildcard.
 func previewWildcard(base string) string {
 	if base == "" {
 		return ""
@@ -554,18 +363,11 @@ func previewWildcard(base string) string {
 	return "*." + base
 }
 
-// workerHostnames is one deploy's resolved hostname intent for its worker-backed
-// apps: the hostnames each app is served on, plus — preview only — the project's
-// preview base domain, which the concrete pointer hostnames have nothing to
-// recover it from.
 type workerHostnames struct {
 	hosts       map[string][]string
 	previewBase string
 }
 
-// resolveWorkerHostnames is the single resolution from declared domains
-// (workerDomains) to what a deploy actually serves on, shared by the root-stack
-// spec and the reported app URLs so the two can never disagree.
 func resolveWorkerHostnames(cfg Config, manifest *deploymentsv1.Manifest, apps []*deploymentsv1.ManifestApp) (workerHostnames, error) {
 	declared, err := workerDomains(cfg, manifest, apps)
 	if err != nil {
@@ -577,13 +379,6 @@ func resolveWorkerHostnames(cfg Config, manifest *deploymentsv1.Manifest, apps [
 	return previewHostnames(cfg, apps, declared)
 }
 
-// previewHostnames resolves the project's declared preview wildcard to the
-// hostname each app is served on for this pointer. The base domain belongs to
-// the whole project — one wildcard, one entrypoint worker — so every worker-
-// backed app is served under it, and a deploy with a worker-backed app but no
-// wildcard to serve it under is refused rather than silently falling back to the
-// production default pointer. It is the only place a declared domain reaches
-// previewBaseDomain. Pure.
 func previewHostnames(cfg Config, apps []*deploymentsv1.ManifestApp, declared map[string][]string) (workerHostnames, error) {
 	base := ""
 	for _, app := range apps {
@@ -605,11 +400,6 @@ func previewHostnames(cfg Config, apps []*deploymentsv1.ManifestApp, declared ma
 		return workerHostnames{}, fmt.Errorf("this project declares no preview domain, so a preview deploy has nowhere to serve: add a project-level domains.preview wildcard (e.g. \"*.preview.acme.com\") to your ocel config and deploy again")
 	}
 
-	// The separator is the grammar's, not a pointer's: the entrypoint worker
-	// recovers the app half of "<pointer>--<app>" by matching the project's app
-	// names, so a pointer carrying it can resolve to a shorter pointer naming no
-	// deployment. The CLI refuses such a name (previewid.ValidateLabel); this is
-	// the same rule at the RPC boundary, which any caller can cross.
 	if strings.Contains(cfg.Identity, previewAppSeparator) {
 		return workerHostnames{}, fmt.Errorf("preview name %q contains %q, which separates the preview from the app in the hostname it is served on: use a single hyphen", cfg.Identity, previewAppSeparator)
 	}
@@ -629,9 +419,6 @@ func previewHostnames(cfg Config, apps []*deploymentsv1.ManifestApp, declared ma
 	return workerHostnames{hosts: hosts, previewBase: base}, nil
 }
 
-// withVar returns worker with one additional plain-text var, leaving the
-// caller's Worker untouched — the generic bundle is the same bytes for every
-// app; only its OCEL_APP var tells one deployed copy which app to resolve.
 func withVar(worker edge.Worker, name, value string) edge.Worker {
 	vars := make(map[string]string, len(worker.Vars)+1)
 	for k, v := range worker.Vars {
@@ -642,11 +429,6 @@ func withVar(worker edge.Worker, name, value string) edge.Worker {
 	return worker
 }
 
-// withEdgeSigningCreds binds the edge reader's IAM credentials onto the generic
-// worker: the access key as a plain var and the secret key as a secret, under
-// the names the worker reads to sign its Function-URL forwards. A substrate
-// predating edge credentials adds neither — the worker then forwards unsigned,
-// reaching only a Lambda that is still public.
 func withEdgeSigningCreds(worker edge.Worker, cfg Config) edge.Worker {
 	if cfg.EdgeAccessKeyID == "" || cfg.EdgeSecretKey == "" {
 		return worker
@@ -661,12 +443,6 @@ func withEdgeSigningCreds(worker edge.Worker, cfg Config) edge.Worker {
 	return worker
 }
 
-// withCacheCoordinates binds the account-global stores the worker's cache
-// entrypoint reads and writes the ISR cache in — see the var names in cloud/edge
-// for why they are worker vars rather than per-deployment record fields. A store
-// the substrate has not got (a bootstrap predating it) is left unbound rather
-// than bound empty, so the worker reads it as absent the way it already reads a
-// missing credential.
 func withCacheCoordinates(worker edge.Worker, cfg Config) edge.Worker {
 	for name, value := range map[string]string{
 		edge.AWSRegionVar:   cfg.Region,
@@ -680,12 +456,6 @@ func withCacheCoordinates(worker edge.Worker, cfg Config) edge.Worker {
 	return worker
 }
 
-// withImageOptimizer binds the substrate's image optimizer Function URL onto the
-// worker, which signs its POSTs to it with the edge credentials bound above. A
-// substrate with no optimizer (an older bootstrap, or a provider build pinning no
-// artifact) binds nothing rather than binding empty: the worker reads that as no
-// origin and answers every valid /_next/image request 502, which is what it did
-// before an optimizer existed.
 func withImageOptimizer(worker edge.Worker, cfg Config) edge.Worker {
 	if cfg.ImageOptimizerURL == "" {
 		return worker
@@ -693,17 +463,6 @@ func withImageOptimizer(worker edge.Worker, cfg Config) edge.Worker {
 	return withVar(worker, edge.ImageOptimizerURLVar, cfg.ImageOptimizerURL)
 }
 
-// withRevalidateQueue binds the substrate's ISR revalidation queue onto the
-// worker, which sends an admitted background refresh to it rather than rendering
-// through the origin.
-//
-// Empty binds nothing, and empty is what a substrate whose bootstrap rendered no
-// consumer reports: bootstrap publishes the queue URL only alongside the
-// revalidator, so this var tracks the drain rather than the queue. That is a
-// correctness requirement rather than tidiness — an edge that enqueues into a
-// queue nothing drains gets a successful send, reports the refresh landed,
-// re-arms its colo sentinel, and stops revalidating the route until it hard-
-// expires, with nothing anywhere reporting a failure.
 func withRevalidateQueue(worker edge.Worker, cfg Config) edge.Worker {
 	if cfg.RevalidateQueueURL == "" {
 		return worker
@@ -711,11 +470,6 @@ func withRevalidateQueue(worker edge.Worker, cfg Config) edge.Worker {
 	return withVar(worker, edge.RevalidateQueueURLVar, cfg.RevalidateQueueURL)
 }
 
-// genericWorkerBundle reads the frozen generic worker's compiled bundle: the
-// same Next.js/Cloudflare worker bundle framework registrations already load
-// for previews (ADR 0002 gave it request-time Deployment resolution), now
-// reused as every production app's frozen worker rather than rebuilt per
-// deploy.
 func genericWorkerBundle(cfg Config) (edge.Worker, error) {
 	bundles, err := edge.LoadBundleManifest()
 	if err != nil {
@@ -728,11 +482,6 @@ func genericWorkerBundle(cfg Config) (edge.Worker, error) {
 	return loadWorkerBundle(path)
 }
 
-// loadWorkerBundle reads a compiled worker entrypoint off disk into the
-// edge.Worker shape ReconcileRootStack uploads: the generic worker carries no
-// per-deploy modules/vars/assets at all — it resolves everything it serves from
-// the Deployment record at request time, which is what lets one frozen script
-// front a whole project's previews as well as each production app.
 func loadWorkerBundle(path string) (edge.Worker, error) {
 	main, err := os.ReadFile(path)
 	if err != nil {
@@ -745,8 +494,6 @@ func loadWorkerBundle(path string) (edge.Worker, error) {
 	}}, nil
 }
 
-// newRandomID mints a fresh random id: a production deploy's Promotion id, or a
-// build id for a framework whose build carries none of its own.
 func newRandomID() (string, error) {
 	buf := make([]byte, 16)
 	if _, err := rand.Read(buf); err != nil {
@@ -755,16 +502,6 @@ func newRandomID() (string, error) {
 	return hex.EncodeToString(buf), nil
 }
 
-// assignIdentities is the deploy host's per-app Deployment-identity assignment
-// BuildPlan consumes, and the one place an identity is derived: the app's build
-// id — a Next app's routing-manifest buildId (assigned at build time, immutable
-// per build), or a freshly minted id for a framework with none — plus the
-// fingerprint of the values baked into this Deployment.
-//
-// The fingerprint comes from the bundles already rendered for this deploy, so
-// the values that were sealed and the values the identity names cannot drift
-// apart. An app that bakes nothing has no fingerprint and keeps its bare build
-// id.
 func assignIdentities(cfg Config, manifest *deploymentsv1.Manifest, bundles map[string]appBundle) (DeploymentIdentities, error) {
 	identities := make(DeploymentIdentities, len(manifest.GetApps()))
 	for _, app := range manifestApps(manifest) {
@@ -782,9 +519,6 @@ func assignIdentities(cfg Config, manifest *deploymentsv1.Manifest, bundles map[
 	return identities, nil
 }
 
-// appBuildID is the build id one app's build carries: a Next app's
-// routing-manifest buildId, or a freshly minted id for a framework whose build
-// stamps none.
 func appBuildID(cfg Config, app *deploymentsv1.ManifestApp) (string, error) {
 	if app.GetFramework() == frameworkNext {
 		return nextBuildID(cfg, app.GetName())
@@ -792,8 +526,6 @@ func appBuildID(cfg Config, app *deploymentsv1.ManifestApp) (string, error) {
 	return newRandomID()
 }
 
-// nextBuildID reads the buildId a Next app's build stamped into its
-// routing-manifest.json.
 func nextBuildID(cfg Config, app string) (string, error) {
 	var pm prerenderManifest
 	raw, err := os.ReadFile(filepath.Join(appArtifactRoot(cfg.ArtifactRoot, app), "routing-manifest.json"))
@@ -809,23 +541,12 @@ func nextBuildID(cfg Config, app string) (string, error) {
 	return pm.BuildID, nil
 }
 
-// buildDeploymentRecord assembles one app's Deployment record from its
-// app-deploy stack's outputs: the routing manifest and tag namespace for a
-// Next app (nil/empty otherwise — the generic worker only dispatches
-// Next-shaped records today), and every function's URL keyed by route id.
-// AssetPrefix names exactly where uploadStaticAssets put this build's static
-// output in the R2 cache store (Next apps only — see below), so the frozen
-// worker can read it back with no project/app knowledge beyond what the
-// record itself carries.
 func buildDeploymentRecord(cfg Config, manifest *deploymentsv1.Manifest, app *deploymentsv1.ManifestApp, id DeploymentIdentity, outs []*deploymentsv1.ResourceOutput) (edge.DeploymentRecord, error) {
 	name := app.GetName()
 	urlByLogical := functionURLsByLogicalName(outs)
 	fingerprint, variables := recordedAudit(cfg, app)
 	record := edge.DeploymentRecord{
-		App: name,
-		// One entrypoint worker fronts a whole project, so what can serve a
-		// Deployment travels on the Deployment: the worker dispatches on this and
-		// answers 501 for a framework it has no handler for.
+		App:              name,
 		Framework:        app.GetFramework(),
 		Identity:         id.String(),
 		FunctionURLs:     appFunctionURLsByRoute(manifest.GetFunctions(), name, urlByLogical),
@@ -836,9 +557,6 @@ func buildDeploymentRecord(cfg Config, manifest *deploymentsv1.Manifest, app *de
 	if app.GetFramework() != frameworkNext {
 		return record, nil
 	}
-	// Only a Next app ever has static output for uploadStaticAssets to have
-	// published; leaving AssetPrefix set for any other app would point at a
-	// prefix nothing was ever uploaded to.
 	record.AssetPrefix = appAssetR2Prefix(manifest.GetSlug(), name, id.BuildID())
 
 	raw, err := os.ReadFile(filepath.Join(appArtifactRoot(cfg.ArtifactRoot, name), "routing-manifest.json"))
@@ -868,13 +586,6 @@ func buildDeploymentRecord(cfg Config, manifest *deploymentsv1.Manifest, app *de
 	return record, nil
 }
 
-// workerURLOutputs reports each worker-fronted app's user-facing URL under the
-// same workerOutputName appURLs already reads: its custom domain for production,
-// and for a preview the concrete per-pointer subdomain (the ref under the
-// wildcard's base domain) this deploy actually serves — never the wildcard
-// itself. An app with no domain is served off the edge's own vendor subdomain,
-// which the root stack does not report back today — that app falls back to its
-// own Function URLs, same as a non-worker app.
 func workerURLOutputs(cfg Config, manifest *deploymentsv1.Manifest) []*deploymentsv1.ResourceOutput {
 	apps := workerApps(manifest)
 	if len(apps) == 0 {
@@ -893,13 +604,6 @@ func workerURLOutputs(cfg Config, manifest *deploymentsv1.Manifest) []*deploymen
 	return outs
 }
 
-// workerAppURL turns an app's route hostnames into the URL to feature. A preview's
-// single hostname is already the concrete one this pointer is served on, so it is
-// reported as-is. Production features the first non-wildcard hostname, or the
-// first declared when every hostname is a wildcard (a pure multitenant deploy).
-// No hostnames (a vendor-subdomain app) yields no URL. Its production branch
-// mirrors cloudflare.canonicalDomainURL (a separate Go module): keep the two in
-// step.
 func workerAppURL(domains []string) string {
 	if len(domains) == 0 {
 		return ""
@@ -912,9 +616,6 @@ func workerAppURL(domains []string) string {
 	return "https://" + domains[0]
 }
 
-// runInfraStack provisions the project's SDK-declared resources (postgres,
-// bucket) into the stable, per-project infra stack. Untouched by
-// rollback. Opt-in-e2e only, like Run's single-stack program.
 func runInfraStack(ctx context.Context, cfg Config, manifest *deploymentsv1.Manifest, plan Plan, log func(string)) ([]*deploymentsv1.ResourceOutput, error) {
 	program := func(pctx *pulumi.Context) error {
 		vpc, err := ec2.LookupVpc(pctx, &ec2.LookupVpcArgs{Default: pulumi.BoolRef(true)})
@@ -951,11 +652,6 @@ func runInfraStack(ctx context.Context, cfg Config, manifest *deploymentsv1.Mani
 	return collectResourceOutputs(ctx, cfg.Secrets, manifest, res.Outputs)
 }
 
-// runAppStack provisions one app's Lambda functions into its per-deploy
-// app-deploy stack, wiring resourceEnv (the infra stack's already-resolved
-// resource outputs, reduced to plain strings) into each function's env as a
-// concrete value rather than a cross-stack Pulumi reference — the two stacks
-// never share a Pulumi program. Opt-in-e2e only.
 func runAppStack(ctx context.Context, cfg Config, manifest *deploymentsv1.Manifest, plan Plan, app *deploymentsv1.ManifestApp, resourceEnv map[string]string, artifacts map[string]artifactRef, baked appBundle, log func(string)) ([]*deploymentsv1.ResourceOutput, map[string]string, error) {
 	name := app.GetName()
 	functions := appFunctions(manifest, name)
@@ -974,8 +670,6 @@ func runAppStack(ctx context.Context, cfg Config, manifest *deploymentsv1.Manife
 	maps.Copy(env, variableEnv(app))
 	maps.Copy(env, baked.env())
 
-	// Accounted before the stack runs: an over-budget environment is a deploy
-	// that cannot succeed, and it must not cost any provisioning first.
 	for _, fn := range functions {
 		if err := checkFunctionEnvBudget(fn.GetLogicalName(), functionEnv(env, translateFunction(fn), caches[name])); err != nil {
 			return nil, nil, err
@@ -1003,7 +697,6 @@ func runAppStack(ctx context.Context, cfg Config, manifest *deploymentsv1.Manife
 	return collectAppFunctionOutputs(functions, res.Outputs)
 }
 
-// appFunctions are one app's functions, in manifest order.
 func appFunctions(manifest *deploymentsv1.Manifest, app string) []*deploymentsv1.ManifestFunction {
 	var fns []*deploymentsv1.ManifestFunction
 	for _, fn := range manifest.GetFunctions() {
@@ -1014,9 +707,6 @@ func appFunctions(manifest *deploymentsv1.Manifest, app string) []*deploymentsv1
 	return fns
 }
 
-// upStack is the Pulumi automation-API call every stack (infra, app-deploy)
-// drives a stack through: prepare, then up. Identical to Run's single-stack
-// preparation, just parameterized by stack name and program.
 func upStack(ctx context.Context, cfg Config, stackName string, program pulumi.RunFunc, log func(string)) (auto.UpResult, error) {
 	stack, err := auto.UpsertStackInlineSource(ctx, stackName, cfg.ProjectName, program,
 		auto.Pulumi(cfg.Pulumi),
@@ -1027,9 +717,6 @@ func upStack(ctx context.Context, cfg Config, stackName string, program pulumi.R
 		return auto.UpResult{}, fmt.Errorf("prepare stack %s: %w", stackName, err)
 	}
 
-	// An ephemeral preview's stacks carry its expiry so `ocel preview ls` can
-	// surface age/expiry and a future reaper can find orphans. A no-op (zero
-	// ExpiresAt) for production and persistent previews.
 	if err := stampExpiry(ctx, stack, cfg.ExpiresAt); err != nil {
 		return auto.UpResult{}, err
 	}
@@ -1044,10 +731,6 @@ func upStack(ctx context.Context, cfg Config, stackName string, program pulumi.R
 	return res, err
 }
 
-// resourceEnvValues reduces the infra stack's typed resource outputs to the
-// same OCEL_RESOURCE_<TYPE>_<id> payload strings the single-stack program
-// wires as pulumi.Output, so an app-deploy stack's functions see identical
-// env despite the resource living in a different Pulumi stack.
 func resourceEnvValues(manifest *deploymentsv1.Manifest, outputs []*deploymentsv1.ResourceOutput) map[string]string {
 	byLogical := make(map[string]*deploymentsv1.ResourceOutput, len(outputs))
 	for _, o := range outputs {
@@ -1073,8 +756,6 @@ func resourceEnvValues(manifest *deploymentsv1.Manifest, outputs []*deploymentsv
 	return env
 }
 
-// collectResourceOutputs is collectOutputs' resource-only half, for the infra
-// stack (which declares no functions).
 func collectResourceOutputs(ctx context.Context, secrets SecretsReader, manifest *deploymentsv1.Manifest, outputs auto.OutputMap) ([]*deploymentsv1.ResourceOutput, error) {
 	var result []*deploymentsv1.ResourceOutput
 	for _, r := range manifest.GetResources() {
@@ -1108,13 +789,6 @@ func collectResourceOutputs(ctx context.Context, secrets SecretsReader, manifest
 	return result, nil
 }
 
-// collectAppFunctionOutputs is collectOutputs' function-only half, scoped to
-// one app-deploy stack's own functions, plus each function's realized physical
-// Lambda name keyed by logical name.
-//
-// A missing URL fails the deploy and a missing name does not: the URL is how
-// the app is served, while the name only feeds the warm pass, which is an
-// optimization no deploy may fail for.
 func collectAppFunctionOutputs(functions []*deploymentsv1.ManifestFunction, outputs auto.OutputMap) ([]*deploymentsv1.ResourceOutput, map[string]string, error) {
 	var result []*deploymentsv1.ResourceOutput
 	names := make(map[string]string, len(functions))

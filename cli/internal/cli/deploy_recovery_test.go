@@ -22,12 +22,6 @@ import (
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/resources/v1"
 )
 
-// The recovery path is the one place the CLI blocks on a browser, so its tests
-// have to drive both ends at once: runDeploy on one goroutine, and the page's
-// own API on the other. Everything below is that harness.
-
-// terminalStdin makes the run interactive. Every test drives the CLI with an
-// in-memory reader, so the seam is the only way to reach the waiting path.
 func terminalStdin(t *testing.T) {
 	t.Helper()
 	prev := stdinIsTerminal
@@ -35,8 +29,6 @@ func terminalStdin(t *testing.T) {
 	t.Cleanup(func() { stdinIsTerminal = prev })
 }
 
-// recordBrowser stops the test opening the developer's real browser and
-// records what it was asked to open.
 func recordBrowser(t *testing.T, opened *[]string, mu *sync.Mutex) {
 	t.Helper()
 	prev := openBrowser
@@ -49,10 +41,6 @@ func recordBrowser(t *testing.T, opened *[]string, mu *sync.Mutex) {
 	t.Cleanup(func() { openBrowser = prev })
 }
 
-// varsUISessions holds every UI session a run opened. Ending one without a
-// completion is what an abandonment is, and nothing inside the process does it:
-// the page sends no signal when the browser closes, so holding the session is
-// the only way a test reaches that outcome.
 type varsUISessions struct {
 	mu  sync.Mutex
 	all []*varsui.Session
@@ -75,8 +63,6 @@ func captureVarsUI(t *testing.T) *varsUISessions {
 	return sessions
 }
 
-// abandon closes the nth session the way a closed browser leaves one: no
-// completion, no interrupt.
 func (s *varsUISessions) abandon(t *testing.T, n int) {
 	t.Helper()
 	deadline := time.Now().Add(30 * time.Second)
@@ -97,12 +83,8 @@ func (s *varsUISessions) abandon(t *testing.T, n int) {
 	t.Fatalf("session %d never opened", n)
 }
 
-// varsUIURL is the URL the waiting state prints, with the session token in the
-// fragment exactly as the page reads it.
 var varsUIURL = regexp.MustCompile(`http://127\.0\.0\.1:\d+/#t=[A-Za-z0-9_-]+`)
 
-// awaitVarsUI blocks until the run has printed the nth variables-UI URL, and
-// splits it into the address and token an API call needs.
 func awaitVarsUI(t *testing.T, out *syncBuffer, n int) (address, token string) {
 	t.Helper()
 	deadline := time.Now().Add(30 * time.Second)
@@ -117,8 +99,6 @@ func awaitVarsUI(t *testing.T, out *syncBuffer, n int) (address, token string) {
 	return "", ""
 }
 
-// setCell writes one value through the page's own API, which is how a
-// developer's write reaches the gate the deploy is holding.
 func setCell(t *testing.T, address, token, key, value string) {
 	t.Helper()
 	body := strings.NewReader(`{"key":"` + key + `","folder":"","value":"` + value + `"}`)
@@ -139,7 +119,6 @@ func setCell(t *testing.T, address, token, key, value string) {
 	}
 }
 
-// markDone is the page's "I'm finished" button.
 func markDone(t *testing.T, address, token string) {
 	t.Helper()
 	req, err := http.NewRequest(http.MethodPost, address+"/api/done", nil)
@@ -157,9 +136,6 @@ func markDone(t *testing.T, address, token string) {
 	}
 }
 
-// problemsFile points the fixture's declaring process at a file it re-reads on
-// every discovery pass, so a test can change what the second pass reports —
-// which is the only way to tell a re-validated resume from a re-checked one.
 func problemsFile(t *testing.T, problems string) string {
 	t.Helper()
 	path := filepath.Join(t.TempDir(), "problems.json")
@@ -170,9 +146,6 @@ func problemsFile(t *testing.T, problems string) string {
 
 const missingStripeKey = `[{"key":"STRIPE_API_KEY","folder":"","kind":"KIND_MISSING"}]`
 
-// TestRunDeploy_AGateRefusalInATerminalOpensTheUIAndResumesIntoTheBuild is the
-// whole point of the recovery: the developer never re-runs the command, and
-// never repeats the confirmation they already gave.
 func TestRunDeploy_AGateRefusalInATerminalOpensTheUIAndResumesIntoTheBuild(t *testing.T) {
 	root := setUpEnvGateFixture(t, `[{"key":"STRIPE_API_KEY","class":"VARIABLE_CLASS_SENSITIVE","required":true}]`)
 	problems := problemsFile(t, missingStripeKey)
@@ -193,7 +166,6 @@ func TestRunDeploy_AGateRefusalInATerminalOpensTheUIAndResumesIntoTheBuild(t *te
 
 	address, token := awaitVarsUI(t, &out, 1)
 	setCell(t, address, token, "STRIPE_API_KEY", "sk_live_filled_in")
-	// The second discovery pass has nothing left to report.
 	writeFile(t, problems, "[]")
 	markDone(t, address, token)
 
@@ -222,10 +194,6 @@ func TestRunDeploy_AGateRefusalInATerminalOpensTheUIAndResumesIntoTheBuild(t *te
 	}
 }
 
-// TestRunDeploy_TheResumedPassDeclaresEachVariableOnce: the retry runs
-// discovery a second time, and a gate accumulates declarations — so the second
-// pass has to get its own. Reusing the first one would deploy every app with
-// each of its variables twice.
 func TestRunDeploy_TheResumedPassDeclaresEachVariableOnce(t *testing.T) {
 	root := setUpEnvGateFixture(t, `[{"key":"STRIPE_API_KEY","class":"VARIABLE_CLASS_PLAIN","required":true}]`)
 	problems := problemsFile(t, missingStripeKey)
@@ -267,9 +235,6 @@ func TestRunDeploy_TheResumedPassDeclaresEachVariableOnce(t *testing.T) {
 	}
 }
 
-// TestRunDeploy_TheWaitingStateSaysHowToAbort pins the half of the waiting
-// state that is not the URL: a blocked command has to say it is blocked, and
-// what to press.
 func TestRunDeploy_TheWaitingStateSaysHowToAbort(t *testing.T) {
 	root := setUpEnvGateFixture(t, `[{"key":"STRIPE_API_KEY","class":"VARIABLE_CLASS_SENSITIVE","required":true}]`)
 	problemsFile(t, missingStripeKey)
@@ -296,9 +261,6 @@ func TestRunDeploy_TheWaitingStateSaysHowToAbort(t *testing.T) {
 			t.Errorf("stdout = %q, want the waiting state to contain %q", waiting, want)
 		}
 	}
-	// The command has not given up, so it must not tell the developer to run it
-	// again — that is the advice a hard refusal gives, and following it here
-	// would abandon the session that is waiting for them.
 	if strings.Contains(waiting, "run this command again") {
 		t.Errorf("stdout = %q, want a waiting command not to tell the developer to re-run it", waiting)
 	}
@@ -306,9 +268,6 @@ func TestRunDeploy_TheWaitingStateSaysHowToAbort(t *testing.T) {
 	<-done
 }
 
-// TestRunDeploy_InterruptingWhileWaitingAbortsWithNothingBuilt is AC3: a
-// command blocked on a browser must still answer Ctrl-C, and must not have
-// built or provisioned anything when it does.
 func TestRunDeploy_InterruptingWhileWaitingAbortsWithNothingBuilt(t *testing.T) {
 	root := setUpEnvGateFixture(t, `[{"key":"STRIPE_API_KEY","class":"VARIABLE_CLASS_SENSITIVE","required":true}]`)
 	problemsFile(t, missingStripeKey)
@@ -352,9 +311,6 @@ func TestRunDeploy_InterruptingWhileWaitingAbortsWithNothingBuilt(t *testing.T) 
 	}
 }
 
-// TestRunDeploy_ClosingTheUIStillNamesTheKeysThatAreOwed: a closed browser is
-// not an interrupt, and the developer who closed it has not been told what is
-// missing unless the run says so on its way out.
 func TestRunDeploy_ClosingTheUIStillNamesTheKeysThatAreOwed(t *testing.T) {
 	root := setUpEnvGateFixture(t, `[{"key":"STRIPE_API_KEY","class":"VARIABLE_CLASS_SENSITIVE","required":true}]`)
 	problemsFile(t, missingStripeKey)
@@ -374,9 +330,6 @@ func TestRunDeploy_ClosingTheUIStillNamesTheKeysThatAreOwed(t *testing.T) {
 	}()
 
 	awaitVarsUI(t, &out, 1)
-	// The refusal was printed once already, when the wait began. What matters
-	// is what the run says on its way out, a browser session later: the
-	// abandonment note alone would leave the developer with nothing to fix.
 	before := out.String()
 	sessions.abandon(t, 1)
 
@@ -401,11 +354,6 @@ func TestRunDeploy_ClosingTheUIStillNamesTheKeysThatAreOwed(t *testing.T) {
 	}
 }
 
-// TestRunDeploy_AReplacementThatStillFailsTheSchemaDoesNotSlipThrough is the
-// re-validation AC. A UI write retracts discovery's complaint about the value
-// it replaced, so a resume that only re-reads the store would deploy a second
-// invalid value. Only running discovery again catches it, because the schema
-// lives in the declaring process.
 func TestRunDeploy_AReplacementThatStillFailsTheSchemaDoesNotSlipThrough(t *testing.T) {
 	root := setUpEnvGateFixture(t, `[{"key":"STRIPE_API_KEY","class":"VARIABLE_CLASS_SENSITIVE","required":true}]`)
 	envSet(t, root, "STRIPE_API_KEY", "nope", envOptions{})
@@ -426,15 +374,9 @@ func TestRunDeploy_AReplacementThatStillFailsTheSchemaDoesNotSlipThrough(t *test
 	}()
 
 	address, token := awaitVarsUI(t, &out, 1)
-	// A second value that is just as wrong. The problems file is unchanged, so
-	// the next discovery pass reports it again — and a resume that never runs
-	// one would not know.
 	setCell(t, address, token, "STRIPE_API_KEY", "also_nope")
 	markDone(t, address, token)
 
-	// The gate refuses again, so the UI reopens rather than the command giving
-	// up: a matrix the developer called done that still does not satisfy the
-	// schema is a loop, not an exit.
 	awaitVarsUI(t, &out, 2)
 	sessions.abandon(t, 2)
 
@@ -457,9 +399,6 @@ func TestRunDeploy_AReplacementThatStillFailsTheSchemaDoesNotSlipThrough(t *test
 	}
 }
 
-// TestRunDeploy_ANonInteractiveRunNeverWaits is AC5. It is today's behaviour,
-// pinned so the recovery cannot quietly make a CI deploy hang on a browser
-// nobody will ever open.
 func TestRunDeploy_ANonInteractiveRunNeverWaits(t *testing.T) {
 	root := setUpEnvGateFixture(t, `[{"key":"STRIPE_API_KEY","class":"VARIABLE_CLASS_SENSITIVE","required":true}]`)
 	t.Setenv("OCEL_TEST_ENV_PROBLEMS", missingStripeKey)
@@ -469,8 +408,6 @@ func TestRunDeploy_ANonInteractiveRunNeverWaits(t *testing.T) {
 	built := false
 	stubAppBuildRecorder(t, &built)
 
-	// A deadline rather than a bare context: a run that wrongly waits has
-	// nothing to release it, and this test's whole subject is that it does not.
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 	defer cancel()
 	var stdout, stderr bytes.Buffer
@@ -488,8 +425,6 @@ func TestRunDeploy_ANonInteractiveRunNeverWaits(t *testing.T) {
 	}
 }
 
-// TestRunDeploy_TheOptOutsKeepATerminalFromWaiting: a developer at a terminal
-// over SSH is interactive by every signal the CLI has and still has no browser.
 func TestRunDeploy_TheOptOutsKeepATerminalFromWaiting(t *testing.T) {
 	for _, tc := range []struct {
 		name string
@@ -498,8 +433,6 @@ func TestRunDeploy_TheOptOutsKeepATerminalFromWaiting(t *testing.T) {
 	}{
 		{name: "--no-ui", opts: deployOptions{yes: true, noUI: true}},
 		{name: noBrowserEnvVar, opts: deployOptions{yes: true}, env: "1"},
-		// Any non-empty value opts out, as OCEL_DEV does elsewhere: the
-		// variable is a switch, not a boolean to be parsed.
 		{name: noBrowserEnvVar + "=anything", opts: deployOptions{yes: true}, env: "true"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -513,8 +446,6 @@ func TestRunDeploy_TheOptOutsKeepATerminalFromWaiting(t *testing.T) {
 			built := false
 			stubAppBuildRecorder(t, &built)
 
-			// A deadline rather than a bare context: an opt-out that stopped
-			// working has nothing to release the run, and that is the subject.
 			ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 			defer cancel()
 			var stdout, stderr bytes.Buffer
@@ -532,10 +463,6 @@ func TestRunDeploy_TheOptOutsKeepATerminalFromWaiting(t *testing.T) {
 	}
 }
 
-// TestRunPreviewUp_AGateRefusalInATerminalOpensTheUIAndResumes: `ocel preview
-// up` runs the same pre-provision path one line from `ocel deploy`'s, so it
-// recovers the same way. Two commands that far apart must not behave
-// differently.
 func TestRunPreviewUp_AGateRefusalInATerminalOpensTheUIAndResumes(t *testing.T) {
 	root := setUpEnvGateFixture(t, `[{"key":"STRIPE_API_KEY","class":"VARIABLE_CLASS_SENSITIVE","required":true}]`)
 	t.Setenv(fakeInfraClassEnvVar, "preview")
@@ -575,11 +502,6 @@ func TestRunPreviewUp_AGateRefusalInATerminalOpensTheUIAndResumes(t *testing.T) 
 	}
 }
 
-// TestRunPreviewUp_TheOptOutsAndANonTerminalKeepTheHardRefusal is AC5 for the
-// command most likely to run unattended. `ocel preview up` is what a PR-preview
-// job runs: a recovery that reached it regardless of the terminal would turn
-// every gate-refused preview build into a job blocked on a browser nobody will
-// open, until the CI timeout kills it.
 func TestRunPreviewUp_TheOptOutsAndANonTerminalKeepTheHardRefusal(t *testing.T) {
 	for _, tc := range []struct {
 		name     string
@@ -602,8 +524,6 @@ func TestRunPreviewUp_TheOptOutsAndANonTerminalKeepTheHardRefusal(t *testing.T) 
 			built := false
 			stubAppBuildRecorder(t, &built)
 
-			// A deadline rather than a bare context: a run that wrongly waits
-			// has nothing to release it, and that is the whole subject.
 			ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 			defer cancel()
 			var stdout, stderr bytes.Buffer
@@ -626,9 +546,6 @@ func TestRunPreviewUp_TheOptOutsAndANonTerminalKeepTheHardRefusal(t *testing.T) 
 	}
 }
 
-// TestRunDeploy_AReopenedUIShowsWhatIsStillOwed: the loop reopens on the gate's
-// current verdict, not the one that started it. A developer who filled half the
-// matrix and marked it done must not be shown the cells they already fixed.
 func TestRunDeploy_AReopenedUIShowsWhatIsStillOwed(t *testing.T) {
 	root := setUpEnvGateFixture(t, `[{"key":"STRIPE_API_KEY","class":"VARIABLE_CLASS_SENSITIVE","required":true},{"key":"DATABASE_URL","class":"VARIABLE_CLASS_SENSITIVE","required":true}]`)
 	problems := problemsFile(t, `[{"key":"STRIPE_API_KEY","folder":"","kind":"KIND_MISSING"},{"key":"DATABASE_URL","folder":"","kind":"KIND_MISSING"}]`)
@@ -651,8 +568,6 @@ func TestRunDeploy_AReopenedUIShowsWhatIsStillOwed(t *testing.T) {
 	if first := out.String(); !strings.Contains(first, "STRIPE_API_KEY") || !strings.Contains(first, "DATABASE_URL") {
 		t.Fatalf("stdout = %q, want the first refusal to name both cells", first)
 	}
-	// Half the matrix, then done. The second discovery pass reports only what
-	// is left.
 	setCell(t, address, token, "STRIPE_API_KEY", "sk_live_filled_in")
 	writeFile(t, problems, `[{"key":"DATABASE_URL","folder":"","kind":"KIND_MISSING"}]`)
 	before := out.String()
@@ -681,9 +596,6 @@ func TestRunDeploy_AReopenedUIShowsWhatIsStillOwed(t *testing.T) {
 	}
 }
 
-// TestAbandonedRefusal_MatchesBothTheRefusalAndTheAbandonment: the exit carries
-// two facts, and a caller that reaches for either — a hard-refusal branch, or
-// the abandonment — must find it.
 func TestAbandonedRefusal_MatchesBothTheRefusalAndTheAbandonment(t *testing.T) {
 	refusal := &envgate.Refusal{Problems: []*resourcesv1.VariableProblem{
 		{Key: "STRIPE_API_KEY", Kind: resourcesv1.VariableProblem_KIND_MISSING},
@@ -702,7 +614,6 @@ func TestAbandonedRefusal_MatchesBothTheRefusalAndTheAbandonment(t *testing.T) {
 	}
 }
 
-// varsUISubstrate reads which substrate the open page is addressing.
 func varsUISubstrate(t *testing.T, address, token string) string {
 	t.Helper()
 	req, err := http.NewRequest(http.MethodGet, address+"/api/state", nil)

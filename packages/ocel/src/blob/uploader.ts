@@ -7,13 +7,6 @@ import type {
   UploaderUpload,
 } from "./types.js";
 
-/**
- * Declares a named uploader. `auth` runs first at presign (validate `input`,
- * then `middleware` produces the trusted metadata); `upload` shapes storage
- * (accept/limits/path/contentDisposition) and runs onUploadComplete when the
- * upload lands. Metadata inferred from middleware threads into every `upload`
- * hook, so mismatches are compile errors.
- */
 export function uploader<
   TInput extends z.ZodType | undefined = undefined,
   TMetadata = unknown,

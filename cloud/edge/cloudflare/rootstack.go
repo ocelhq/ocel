@@ -1,10 +1,3 @@
-// Root-stack reconcile and deployments-store operations (ADR 0001/0002). The
-// deployments-store worker is a single shared worker provisioned once at
-// bootstrap (see bootstrapStore in cloudflare.go); reconcile here deploys only
-// a project's generic worker, service-bound to that shared store and carrying
-// the project slug, and seeds the project's own store instance. The store
-// operations are authenticated HTTP calls to the shared worker's fetch()
-// surface, routed per project by slug (workers/deployments-store/src/index.ts).
 package cloudflare
 
 import (
@@ -32,20 +25,10 @@ import (
 	"github.com/ocelhq/ocel/cloud/edge"
 )
 
-// bootstrapSecretBinding is the env name the shared deployments-store worker
-// reads its account-level bootstrap credential from
-// (workers/deployments-store/src/env.ts Env.BOOTSTRAP_SECRET).
 const bootstrapSecretBinding = "BOOTSTRAP_SECRET"
 
-// secretBytes is the byte length of a freshly minted credential (the bootstrap
-// credential, a project secret, or an owner token), hex-encoded on the wire.
 const secretBytes = 32
 
-// The account-level worker script names, one pair per worker and one name per
-// substrate class: production provisions the first, preview the second. They
-// are distinct scripts so their Durable Object namespaces (which are
-// script-scoped) never collide, letting the two substrates coexist in one
-// account. Each is provisioned once at bootstrap.
 const (
 	sharedStoreScriptName  = "ocel-deployments-store"
 	previewStoreScriptName = "ocel-deployments-store-preview"
@@ -54,14 +37,10 @@ const (
 	previewISRWriterScriptName = "ocel-isr-writer-preview"
 )
 
-// storeScriptNameFor returns the deployments-store worker script name for a
-// substrate class.
 func storeScriptNameFor(class edge.Class) (string, error) {
 	return accountScriptNameFor("deployments store", class, sharedStoreScriptName, previewStoreScriptName)
 }
 
-// isrWriterScriptNameFor returns the ISR writer worker script name for a
-// substrate class.
 func isrWriterScriptNameFor(class edge.Class) (string, error) {
 	return accountScriptNameFor("isr writer", class, isrWriterScriptName, previewISRWriterScriptName)
 }
@@ -77,32 +56,18 @@ func accountScriptNameFor(worker string, class edge.Class, production, preview s
 	}
 }
 
-// durableObjectClass is one Durable Object class an account-level worker owns, a
-// binding putScript's generic edge.Worker-driven binding set has no concept of:
-// it names a class the script itself exports rather than an external resource.
 type durableObjectClass struct {
 	binding   string
 	className string
 }
 
-// durableObjectBindingType is the binding type Cloudflare reports a Durable
-// Object namespace under, in both the upload metadata and the settings it reads
-// back.
 const durableObjectBindingType = "durable_object_namespace"
 
-// migrationStep is one entry in a worker's migration log, mirroring its
-// wrangler.jsonc. The log is cumulative: a step that has shipped stays here
-// forever and is never edited, so the classes it names are a complete record of
-// what a script at the end of the log carries, and the newest tag is the one an
-// upload declares itself as reaching.
 type migrationStep struct {
 	tag           string
 	sqliteClasses []string
 }
 
-// durableObjectWorker is one account-level worker's Durable Object surface: the
-// classes it exports and the migration log that creates them, each mirroring its
-// wrangler.jsonc.
 type durableObjectWorker struct {
 	classes    []durableObjectClass
 	migrations []migrationStep
@@ -129,21 +94,10 @@ var (
 	}
 )
 
-// genericStoreBinding is the env name the frozen generic worker reads its
-// service binding to the shared deployments-store worker from
-// (workers/nextjs/src/index.ts Env.DEPLOYMENTS), through which it resolves the
-// active Deployment at request time.
 const genericStoreBinding = "DEPLOYMENTS"
 
-// genericISRWriterBinding is the env name the frozen generic worker reads its
-// service binding to the shared ISR writer worker from
-// (workers/nextjs/src/index.ts Env.ISR_WRITER), through which an edge
-// revalidateTag raises the build's invalidations into their one publisher.
 const genericISRWriterBinding = "ISR_WRITER"
 
-// genericSlugBinding is the env name the frozen generic worker reads the
-// project slug from (workers/nextjs/src/index.ts Env.OCEL_SLUG), which it
-// passes on every resolve RPC to address the project's own store instance.
 const genericSlugBinding = "OCEL_SLUG"
 
 func (p *provider) ReconcileRootStack(ctx context.Context, spec edge.RootStackSpec, prior edge.RootStackState) (edge.RootStackState, error) {
@@ -160,10 +114,6 @@ func (p *provider) ReconcileRootStack(ctx context.Context, spec edge.RootStackSp
 		return nil, err
 	}
 
-	// The version stamp gates the script upload alone. Routes and their DNS
-	// records are reconciled every time, against a desired set that is constant
-	// for the project's lifetime, so one deleted out of band heals on the next
-	// deploy instead of surviving until the version happens to move.
 	genericUp := upload{accountID: accountID, scriptName: spec.GenericName}
 	if !upToDate {
 		genericUp.worker = genericWorker(spec, slug)
@@ -203,31 +153,11 @@ func (p *provider) ReconcileRootStack(ctx context.Context, spec edge.RootStackSp
 	}, nil
 }
 
-// storeIdentity is a project's credentials for its own deployments-store
-// instance: the owner token that proves the instance is this project's, and the
-// secret every op but /initialize authenticates with.
 type storeIdentity struct {
 	secret     string
 	ownerToken string
 }
 
-// ensureInstance brings the project's store instance to one this reconcile can
-// write to, and reports whether the root stack already carries spec.Version.
-//
-// A state whose secret the instance still accepts is the whole story: the
-// version stamp comes back and nothing is seeded. Every other path — a first
-// reconcile, a renamed project (whose prior names a different slug, forking a
-// new project with fresh history), an instance a failed teardown wiped —
-// presents a freshly minted pair to the convergent /initialize and ADOPTS the
-// identity it answers with. The store seeds an unclaimed instance with what it
-// was presented and answers an already-claimed one with the pair it already
-// carries, so two first deploys of one slug converge on one identity instead of
-// each persisting the pair it happened to mint and the loser's state naming an
-// instance that rejects it.
-//
-// Only a rejected credential leads here from an existing state; any other store
-// failure is surfaced, because re-seeding on it would present the bootstrap
-// credential to an instance that is merely unreachable.
 func (p *provider) ensureInstance(ctx context.Context, spec edge.RootStackSpec, prior edge.RootStackState) (storeIdentity, bool, error) {
 	if secret := prior[edge.RootStackKeySecret]; secret != "" && prior[edge.RootStackKeySlug] == spec.Slug {
 		current, res, err := p.getVersionStamp(ctx, spec.StoreEndpoint, spec.Slug, secret)
@@ -250,8 +180,6 @@ func (p *provider) ensureInstance(ctx context.Context, spec edge.RootStackSpec, 
 	return adopted, false, nil
 }
 
-// mintIdentity mints a project a fresh identity for a store instance it is
-// about to seed.
 func mintIdentity() (storeIdentity, error) {
 	secret, err := mintSecret()
 	if err != nil {
@@ -264,17 +192,10 @@ func mintIdentity() (storeIdentity, error) {
 	return storeIdentity{secret: secret, ownerToken: ownerToken}, nil
 }
 
-// unauthorized reports whether a deployments-store call was rejected for its
-// credential rather than failing outright — the instance holds no secret, or
-// not the one presented.
 func unauthorized(res *http.Response) bool {
 	return res != nil && res.StatusCode == http.StatusUnauthorized
 }
 
-// ListDeployedWorkers returns the account's worker script names falling under
-// stem. It pages the account's full script list and matches by name — the only
-// project scoping a bare list offers — so what a stem reaches is exactly what
-// edge.NameUnderStem says it does, and the caller's naming carries the rest.
 func (p *provider) ListDeployedWorkers(ctx context.Context, stem string) ([]string, error) {
 	accountID := os.Getenv(envAccountID)
 	if accountID == "" {
@@ -293,15 +214,6 @@ func (p *provider) ListDeployedWorkers(ctx context.Context, stem string) ([]stri
 	return names, nil
 }
 
-// DestroyRootStack deletes every worker in names — a project's generic
-// worker(s) — first undoing each one's hostname attachments: detaching its
-// custom-domain binding(s), and deleting the placeholder DNS records the route
-// path planted (script deletion drops the routes themselves, but not those
-// records). Records the user manages are left untouched. The shared
-// deployments-store worker is never among them (it outlives any single project;
-// a project's store data is reclaimed by DestroyInstance). It is best-effort: a
-// failure on one worker does not stop the others, and every failure is joined
-// into the returned error so the host can report exactly what remains.
 func (p *provider) DestroyRootStack(ctx context.Context, names []string) error {
 	accountID := os.Getenv(envAccountID)
 	if accountID == "" {
@@ -326,13 +238,6 @@ func (p *provider) DestroyRootStack(ctx context.Context, names []string) error {
 	return errors.Join(errs...)
 }
 
-// detachRouteRecords deletes the proxied placeholder DNS records the route path
-// planted for a worker script. Worker routes are zone-scoped and dropped when
-// the script is deleted, but the records that make their wildcard hostnames
-// resolve are not — so, before the script goes, this finds every route bound to
-// the script across the account's zones and deletes the Ocel-owned placeholder
-// (a proxied AAAA to the discard prefix) for each route's hostname. A record the
-// user manages at the same name is left in place.
 func (p *provider) detachRouteRecords(ctx context.Context, accountID, scriptName string) error {
 	owned := p.client.Zones.ListAutoPaging(ctx, zones.ZoneListParams{
 		Account: cf.F(zones.ZoneListParamsAccount{ID: cf.F(accountID)}),
@@ -361,10 +266,6 @@ func (p *provider) detachRouteRecords(ctx context.Context, accountID, scriptName
 	return errors.Join(errs...)
 }
 
-// deleteProxiedRecord removes the Ocel-owned placeholder record at hostname: the
-// proxied AAAA to the discard prefix that ensureProxiedRecord plants. It matches
-// on that content so a record the user manages at the same name is never
-// deleted.
 func (p *provider) deleteProxiedRecord(ctx context.Context, zoneID, hostname string) error {
 	records := p.client.DNS.Records.ListAutoPaging(ctx, dns.RecordListParams{
 		ZoneID: cf.F(zoneID),
@@ -386,19 +287,6 @@ func (p *provider) deleteProxiedRecord(ctx context.Context, zoneID, hostname str
 	return nil
 }
 
-// DestroyInstance wipes the project's own instance in the shared
-// deployments-store worker, authenticated with the project secret in state.
-// A project that never deployed to production (no secret in state) is a no-op,
-// which also makes `ocel destroy` safe to re-run: the per-project state is
-// deleted after this succeeds, so a re-run reads empty state and skips.
-//
-// An instance that rejects the secret is reported destroyed. Wiping an instance
-// deletes the very secret this call authenticates with, so a rejected credential
-// cannot be told apart from an instance a previous run already wiped — and
-// either way there is nothing left here for this project to destroy. Treating it
-// as a failure is what would strand a teardown that failed after the wipe: the
-// state naming the instance is only forgotten once the teardown reports the
-// instance gone, so every re-run would fail on the same already-done step.
 func (p *provider) DestroyInstance(ctx context.Context, state edge.RootStackState) error {
 	if state[edge.RootStackKeySecret] == "" {
 		return nil
@@ -410,10 +298,6 @@ func (p *provider) DestroyInstance(ctx context.Context, state edge.RootStackStat
 	return err
 }
 
-// detachCustomDomains removes every custom-domain binding attached to a worker
-// script, unbinding the worker from those hostnames without deleting the DNS
-// records the account owns for them (Workers.Domains.Delete detaches the
-// route only).
 func (p *provider) detachCustomDomains(ctx context.Context, accountID, scriptName string) error {
 	attached := p.client.Workers.Domains.ListAutoPaging(ctx, workers.DomainListParams{
 		AccountID: cf.F(accountID),
@@ -433,9 +317,6 @@ func (p *provider) detachCustomDomains(ctx context.Context, accountID, scriptNam
 	return nil
 }
 
-// deleteScript removes a worker script, forcing deletion through any bindings
-// it owns. A script that is already gone is treated as success, so
-// DestroyRootStack is safe to re-run.
 func (p *provider) deleteScript(ctx context.Context, accountID, scriptName string) error {
 	_, err := p.client.Workers.Scripts.Delete(ctx, scriptName, workers.ScriptDeleteParams{
 		AccountID: cf.F(accountID),
@@ -447,11 +328,6 @@ func (p *provider) deleteScript(ctx context.Context, accountID, scriptName strin
 	return err
 }
 
-// putDurableObjectScript uploads an account-level worker that owns a Durable
-// Object class of its own (bootstrapStore and bootstrapISRWriter in
-// cloudflare.go): like putScript, but it additionally binds every class the
-// script exports and declares the migration steps that create the classes the
-// deployed script does not have yet, which deployedClasses names.
 func (p *provider) putDurableObjectScript(ctx context.Context, up upload, do durableObjectWorker, deployedClasses []string) error {
 	body, contentType, err := buildDurableObjectScriptMultipart(up.worker, do, deployedClasses)
 	if err != nil {
@@ -463,10 +339,6 @@ func (p *provider) putDurableObjectScript(ctx context.Context, up upload, do dur
 	return err
 }
 
-// buildDurableObjectScriptMultipart is buildScriptMultipart's counterpart for
-// the account-level workers: the same module/binding shape, plus a binding per
-// Durable Object class the script exports and whatever migration steps create
-// the classes the deployed script does not have yet.
 func buildDurableObjectScriptMultipart(worker edge.Worker, do durableObjectWorker, deployedClasses []string) ([]byte, string, error) {
 	bindings := scriptBindings(worker, false)
 	for _, class := range do.classes {
@@ -511,29 +383,9 @@ func buildDurableObjectScriptMultipart(worker edge.Worker, do durableObjectWorke
 	return buf.Bytes(), w.FormDataContentType(), nil
 }
 
-// pendingMigrations is the migration declaration that creates the classes in a
-// worker's log that the deployed script does not have yet, or nil when it has
-// them all. No deployed classes is a script that has never been migrated — a
-// fresh bootstrap, or one that does not exist yet — and gets the whole log.
-//
-// The step list is what makes a class addable to a live script at all: a
-// declaration that named only the newest class would be applied against a
-// script Cloudflare has no record of migrating, and one that named a class the
-// script already has is rejected outright ("Cannot apply new-sqlite-class
-// migration to class C that is already depended on by existing Durable
-// Objects", code 10074).
-//
-// It keys on the deployed classes because the migration tag is unreadable; see
-// deployedClasses. The cost is that old_tag, Cloudflare's precondition against
-// the script moving underneath us, cannot be sent: it names a tag we have no way
-// to read back. A concurrent bootstrap that adds a class between this read and
-// the upload is therefore rejected by 10074 rather than by the precondition —
-// still rejected, and never misapplied.
 func pendingMigrations(log []migrationStep, deployedClasses []string) (map[string]any, error) {
 	for _, class := range deployedClasses {
 		if !slices.ContainsFunc(log, func(step migrationStep) bool { return slices.Contains(step.sqliteClasses, class) }) {
-			// The script is ahead of the code uploading it. Guessing a path
-			// forward from here is how a class gets deleted.
 			return nil, fmt.Errorf("deployed script carries Durable Object class %q, which this build's migration log does not create", class)
 		}
 	}
@@ -564,9 +416,6 @@ func (p *provider) PutStaged(ctx context.Context, state edge.RootStackState, rec
 	return err
 }
 
-// promoteBody matches the store's `Promotion & { pointer?: string }` /promote
-// body. An empty pointer is omitted so the store applies its reserved
-// production default.
 type promoteBody struct {
 	edge.Promotion
 	Pointer string `json:"pointer,omitempty"`
@@ -609,13 +458,6 @@ func (p *provider) DeletePromotionArtifacts(ctx context.Context, state edge.Root
 	return result, nil
 }
 
-// initializeInstance seeds the project's own instance in the shared
-// deployments-store worker with the presented identity, authenticated with the
-// account-level bootstrap credential, and returns the identity the instance
-// actually holds afterwards: what was presented when the instance was
-// unclaimed, and the pair it already carried when it was not. force is false —
-// the deploy host never overwrites an identity a live instance is authenticated
-// under; it adopts it.
 func (p *provider) initializeInstance(ctx context.Context, endpoint, slug, bootstrapCred string, present storeIdentity) (storeIdentity, error) {
 	body := map[string]any{"ownerToken": present.ownerToken, "secret": present.secret, "force": false}
 	var out struct {
@@ -631,9 +473,6 @@ func (p *provider) initializeInstance(ctx context.Context, endpoint, slug, boots
 	return storeIdentity{secret: out.Secret, ownerToken: out.OwnerToken}, nil
 }
 
-// getVersionStamp reads the version the instance's root stack last deployed. It
-// returns the response alongside the error so a caller can tell a rejected
-// credential (unauthorized) from a store it could not reach at all.
 func (p *provider) getVersionStamp(ctx context.Context, endpoint, slug, secret string) (string, *http.Response, error) {
 	var out struct {
 		Version *string `json:"version"`
@@ -653,23 +492,10 @@ func (p *provider) putVersionStamp(ctx context.Context, endpoint, slug, secret, 
 	return err
 }
 
-// storeRequest issues an authenticated call against the project's own instance
-// in the shared deployments-store worker, addressed by the endpoint, slug and
-// secret in state.
 func (p *provider) storeRequest(ctx context.Context, state edge.RootStackState, method, subpath string, body, out any) (*http.Response, error) {
 	return p.storeRequestTo(ctx, state[edge.RootStackKeyEndpoint], state[edge.RootStackKeySlug], state[edge.RootStackKeySecret], method, subpath, body, out)
 }
 
-// storeRequestTo issues one authenticated HTTP call to the shared
-// deployments-store worker's fetch() surface, routed to one project's instance
-// by slug (/<slug>/<subpath>), matching workers/deployments-store/src/index.ts:
-// a Bearer credential, a JSON body when body is non-nil, and a JSON response
-// decoded into out when out is non-nil. A non-2xx status is an error naming the
-// path and status.
-//
-// A throttled, unreachable or failing store is retried under storeRetryable's
-// policy rather than failing the deploy on the first attempt: the store is a
-// Durable Object that a project's first deploy of the day wakes up cold.
 func (p *provider) storeRequestTo(ctx context.Context, endpoint, slug, secret, method, subpath string, body, out any) (*http.Response, error) {
 	if endpoint == "" {
 		return nil, fmt.Errorf("deployments store: no endpoint; bootstrap the edge first")
@@ -700,8 +526,6 @@ func (p *provider) storeRequestTo(ctx context.Context, endpoint, slug, secret, m
 	}
 }
 
-// storeAttempt is one storeRequestTo call over the wire. The encoded body is
-// carried as bytes rather than a reader so every attempt sends the same request.
 func (p *provider) storeAttempt(ctx context.Context, endpoint, slug, secret, method, subpath string, encoded []byte, out any) (*http.Response, error) {
 	var reader io.Reader
 	if encoded != nil {
@@ -734,9 +558,6 @@ func (p *provider) storeAttempt(ctx context.Context, endpoint, slug, secret, met
 	return res, nil
 }
 
-// mintSecret generates a fresh random credential (the account-level bootstrap
-// credential, a per-project secret, or an owner token), hex-encoded so it is
-// safe to carry as a plain HTTP header value.
 func mintSecret() (string, error) {
 	buf := make([]byte, secretBytes)
 	if _, err := rand.Read(buf); err != nil {
@@ -745,8 +566,6 @@ func mintSecret() (string, error) {
 	return hex.EncodeToString(buf), nil
 }
 
-// withSecret returns worker with one additional secret_text binding, leaving
-// the caller's Worker untouched.
 func withSecret(worker edge.Worker, name, value string) edge.Worker {
 	secrets := make(map[string]string, len(worker.Secrets)+1)
 	for k, v := range worker.Secrets {
@@ -757,14 +576,6 @@ func withSecret(worker edge.Worker, name, value string) edge.Worker {
 	return worker
 }
 
-// genericWorker is the frozen per-app worker as it is uploaded: the assembly's
-// own bundle and bindings, plus the ones only the root stack can name — the
-// shared account workers this substrate class provisioned, and the project slug
-// addressing this project's own instance of the store.
-//
-// An unoffered ISR writer binds nothing rather than binding an empty name: an
-// upload naming a script that does not exist is refused outright, and a build
-// that raises nowhere still records every invalidation durably.
 func genericWorker(spec edge.RootStackSpec, slug string) edge.Worker {
 	worker := withVar(
 		withService(spec.Generic, genericStoreBinding, spec.StoreScriptName),
@@ -777,8 +588,6 @@ func genericWorker(spec edge.RootStackSpec, slug string) edge.Worker {
 	return bindCodeLoader(bindObjectStore(worker, spec.Values))
 }
 
-// withService returns worker with one additional service binding, leaving
-// the caller's Worker untouched.
 func withService(worker edge.Worker, name, service string) edge.Worker {
 	services := make(map[string]string, len(worker.Services)+1)
 	for k, v := range worker.Services {
@@ -789,8 +598,6 @@ func withService(worker edge.Worker, name, service string) edge.Worker {
 	return worker
 }
 
-// withVar returns worker with one additional plain-text var binding, leaving
-// the caller's Worker untouched.
 func withVar(worker edge.Worker, name, value string) edge.Worker {
 	vars := make(map[string]string, len(worker.Vars)+1)
 	for k, v := range worker.Vars {

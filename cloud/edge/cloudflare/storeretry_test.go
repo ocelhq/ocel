@@ -72,8 +72,6 @@ func TestParseStoreRetryAfter_UnusableValues(t *testing.T) {
 	}
 }
 
-// A store that asks for longer than the deploy can reasonably wait is ignored in
-// favour of the capped backoff, rather than stalling the deploy on its word.
 func TestStoreRetryDelay_IgnoresAnUnreasonableRetryAfter(t *testing.T) {
 	h := http.Header{}
 	h.Set("Retry-After", "600")
@@ -111,8 +109,6 @@ func TestStoreRetryDelay_BacksOffExponentiallyUnderACap(t *testing.T) {
 	}
 }
 
-// Jitter spreads concurrent deploys that all backed off from the same throttle,
-// which is the whole point of the delay being random rather than fixed.
 func TestStoreRetryDelay_JitterShortensWithinAQuarter(t *testing.T) {
 	base := storeRetryDelay(nil, 2, 0)
 	jittered := storeRetryDelay(nil, 2, 1)

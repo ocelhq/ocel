@@ -23,8 +23,6 @@ function bearerReq(path: string, token: string, init: RequestInit = {}) {
   });
 }
 
-// Seeds the project's instance with SECRET (authorized by the bootstrap
-// credential), the precondition for every per-project op.
 async function initialize(slug = SLUG, secret = SECRET) {
   return SELF.fetch(
     bearerReq(`/${slug}/initialize`, BOOTSTRAP, {
@@ -34,7 +32,6 @@ async function initialize(slug = SLUG, secret = SECRET) {
   );
 }
 
-// A per-project request authenticated with the seeded project secret.
 function authedReq(path: string, init: RequestInit = {}) {
   return bearerReq(`/${SLUG}${path}`, SECRET, init);
 }
@@ -75,8 +72,6 @@ describe("initialize", () => {
     expect(staged.status).toBe(204);
   });
 
-  // Convergent: a second first-deploy racing the same slug is handed the
-  // identity already seeded rather than clobbering it or failing.
   it("returns the existing identity for an already-initialized instance", async () => {
     await initialize();
     const res = await SELF.fetch(
@@ -88,7 +83,6 @@ describe("initialize", () => {
     expect(res.status).toBe(200);
     expect(await res.json()).toEqual({ ownerToken: "owner-1", secret: SECRET });
 
-    // The seeded secret still authenticates; the loser's never does.
     expect(
       (await SELF.fetch(authedReq("/staged", { method: "PUT", body: JSON.stringify(makeRecord()) })))
         .status,
@@ -105,9 +99,6 @@ describe("initialize", () => {
     ).toBe(401);
   });
 
-  // The identity is retrievable, so the credential that retrieves it is the
-  // account-level one and nothing else: the project's own secret authenticates
-  // every other op but must never read the instance's ownership back out.
   it("refuses to disclose the identity to the project secret", async () => {
     await initialize();
     const res = await SELF.fetch(
@@ -265,7 +256,6 @@ describe("authenticated write endpoint", () => {
     expect(result.removedPromotionIds).toEqual(["promo-pr-1"]);
     expect(result.removedRecordKeys).toEqual(["record:web/pr-1"]);
 
-    // The pointer is gone.
     const history = await (await SELF.fetch(authedReq("/history?pointer=pr-42"))).json();
     expect(history).toEqual([]);
   });
@@ -301,7 +291,6 @@ describe("authenticated write endpoint", () => {
     const destroyRes = await SELF.fetch(authedReq("/destroy", { method: "POST" }));
     expect(destroyRes.status).toBe(204);
 
-    // The secret is gone with the storage, so the old secret no longer authenticates.
     const after = await SELF.fetch(
       authedReq("/staged", { method: "PUT", body: JSON.stringify(makeRecord()) }),
     );
@@ -334,10 +323,6 @@ describe("service-binding read path", () => {
     await store.putStaged(makeRecord());
     await store.promote({ promotionId: "promo-1", ts: 1_000, builds: { web: "build-1" } });
 
-    // Exercises the same entrypoint a service binding would call — no
-    // Authorization header at all — carrying the project slug as the leading
-    // RPC argument. createExecutionContext gives the WorkerEntrypoint a real
-    // ExecutionContext, the same one the runtime would construct it with.
     const entry = new (await import("../src/index")).default(
       createExecutionContext(),
       env,
@@ -347,8 +332,6 @@ describe("service-binding read path", () => {
       buildId: "build-1",
       record: makeRecord(),
     });
-    // A caller that already holds the active build gets it echoed back with the
-    // record omitted.
     expect(
       await entry.pointerRecord({ slug: SLUG, app: "web", knownBuildId: "build-1" }),
     ).toEqual({
@@ -382,7 +365,6 @@ describe("service-binding read path", () => {
       createExecutionContext(),
       env,
     );
-    // The named pointer resolves the preview build; the default pointer never moved.
     expect(
       await entry.pointerRecord({ slug: SLUG, app: "web", pointer: "flaky-web-2626" }),
     ).toEqual({

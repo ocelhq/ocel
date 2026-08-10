@@ -13,10 +13,6 @@ import (
 	"github.com/ocelhq/ocel/cloud/edge"
 )
 
-// sweepRecorder records the (bucket, prefix) pair of every list a purge issues
-// and reports the prefix empty. What these tests pin down is which prefixes a
-// teardown reaches — deletePrefix's own paging and error propagation are
-// covered by TestDeletePrefix_*.
 type sweepRecorder struct{ swept []string }
 
 func (r *sweepRecorder) ListObjectsV2(_ context.Context, in *s3.ListObjectsV2Input, _ ...func(*s3.Options)) (*s3.ListObjectsV2Output, error) {
@@ -39,9 +35,6 @@ func (r *sweepRecorder) PutObject(context.Context, *s3.PutObjectInput, ...func(*
 var _ ArtifactUploader = (*sweepRecorder)(nil)
 var _ PrefixDeleter = (*sweepRecorder)(nil)
 
-// purgeConfig is the teardown Config shape both purges read, with one recorder
-// per substrate so a test can tell an artifact/asset sweep from a cache-store
-// one by which recorder saw it.
 func purgeConfig(env string, account, cache *sweepRecorder) Config {
 	return Config{
 		Env:                env,
@@ -120,10 +113,6 @@ func TestPurgeProjectArtifacts_MissingBucketIsANoOp(t *testing.T) {
 	}
 }
 
-// The artifact key carries no pointer, so identical code under two pointers is
-// one object — and a pointer that looks like the project's last one is not:
-// another deploy's pointer appears only once it promotes. The project prefix is
-// `ocel destroy --preview`'s to reclaim, never one pointer's.
 func TestRemovePreview_NeverPurgesTheProjectsArtifacts(t *testing.T) {
 	rec := &sweepRecorder{}
 	fake := &recordingRootStack{}
@@ -158,8 +147,6 @@ func TestRemovePreview_LeavesArtifactsWhenThePointerRemovalFailed(t *testing.T) 
 	}
 }
 
-// valueRecorder stands in for the substrate's variable store, recording which
-// projects a teardown emptied and failing on demand.
 type valueRecorder struct {
 	purged []string
 	err    error
@@ -192,8 +179,6 @@ func TestPurgeProjectValues_EmptiesTheProjectsPartitionAndReportsTheStep(t *test
 	}
 }
 
-// A bootstrap predating the variable store leaves nothing to remove, which is
-// not a failure and not a step worth reporting.
 func TestPurgeProjectValues_NoStoreIsNothingToRemove(t *testing.T) {
 	var steps []string
 
@@ -217,10 +202,6 @@ func TestPurgeProjectValues_ReportsAFailedRemoval(t *testing.T) {
 	}
 }
 
-// Value removal joins the best-effort teardown sequence like every other step,
-// which means its failure is reported and then stepped over. A teardown that
-// gave up there would strand the project's assets behind a table it could not
-// reach — and leave a re-run resuming from further back than it needs to.
 func TestDestroyProject_AFailedValueRemovalDoesNotStopTheStepsAfterIt(t *testing.T) {
 	values := &valueRecorder{err: errors.New("table is on fire")}
 	awsSide, cacheSide := &sweepRecorder{}, &sweepRecorder{}
@@ -244,9 +225,6 @@ func TestDestroyProject_AFailedValueRemovalDoesNotStopTheStepsAfterIt(t *testing
 	}
 }
 
-// Removing one preview removes compute, not values: the override someone set
-// for that environment is what a redeploy of the same branch resolves, and
-// overrides are tiny.
 func TestRemovePreview_KeepsTheEnvironmentsOverrides(t *testing.T) {
 	values := &valueRecorder{}
 	fake := &recordingRootStack{}

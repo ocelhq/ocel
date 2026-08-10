@@ -9,8 +9,6 @@ function record(messageId: string, group: string, overrides: Record<string, unkn
   return { messageId, body: body(overrides), attributes: { MessageGroupId: group } };
 }
 
-// The substrate: S3 answering the deploy record, and the origin answering by
-// the path each trigger asks for — a Response, or an Error to throw.
 function substrate(answers: Record<string, Response | Error> = {}): {
   deps: HandlerDeps;
   requested: string[];
@@ -44,9 +42,6 @@ function events(lines: string[]): string[] {
   return lines.map((line) => JSON.parse(line).event as string);
 }
 
-// Every test runs with the log captured: these lines are the audit trail the
-// no-log-the-token rule is about, and a test that let them reach the terminal
-// would be printing a bypass token into CI output.
 let lines: string[] = [];
 
 beforeEach(() => {
@@ -81,14 +76,9 @@ it("stops a group at its first failure and reports the rest of that group, unpro
   });
 
   expect(failures(response)).toEqual(["a-1", "a-2"]);
-  // The stopped group's later record is never triggered; the other group runs on.
   expect(requested).toEqual(["/a/1", "/b/1", "/b/2"]);
 });
 
-// A record with no group attribute belongs to no group but its own. Keying it
-// by its message id and keying it by a shared constant are both green against
-// every other test here, and they mean opposite things: the second lets one
-// failure suppress every later ungrouped record in the batch.
 it("keeps a record carrying no group from stopping the records after it", async () => {
   const { deps, requested } = substrate({ "/a": new Response(null, { status: 500 }), "/b": revalidated });
 
@@ -103,13 +93,6 @@ it("keeps a record carrying no group from stopping the records after it", async 
   expect(requested).toEqual(["/a", "/b"]);
 });
 
-// A record reported without ever being tried is still a record on its way to
-// the DLQ. CloudWatch cannot tell "tried and failed" from "never tried" unless
-// the skip says so itself.
-// `?? messageId` covers a missing attribute and not an empty one, and an empty
-// group id is indistinguishable in a Set from every other empty one — so two
-// such records would share a group and the first failure would suppress the
-// second. SQS FIFO does not send one; the guard costs a character.
 it("treats an empty group id the same as a missing one", async () => {
   const { deps, requested } = substrate({ "/a": new Response(null, { status: 500 }), "/b": revalidated });
 
@@ -148,9 +131,6 @@ it("rejects an unknown message version as an item failure", async () => {
   expect(requested).toEqual([]);
 });
 
-// Nothing the message says can name a host, so the failure the old allowlist
-// caught now cannot arise: a route the deploy did not record simply has no
-// origin to trigger.
 it("fails a record whose route the deploy never recorded, without triggering", async () => {
   const { deps, requested } = substrate();
 
@@ -161,12 +141,6 @@ it("fails a record whose route the deploy never recorded, without triggering", a
   expect(JSON.parse(lines[0]!).reason).toBe("origin-unusable");
 });
 
-// The exfiltration the resolution seam exists to prevent, driven end to end:
-// the edge writes a document naming its own host under `*/fetch-cache/*` — the
-// one prefix it holds PutObject on — and points `isrPrefix` at that key, with a
-// `#` truncating the `/origin.json` the consumer appends. If the record read
-// ever happens, S3 answers the planted document and the bypass token plus a
-// valid SigV4 signature go to the attacker. Nothing may be read at all.
 it("reads nothing at all for an isrPrefix that names a key the edge could have planted", async () => {
   const fetched: string[] = [];
   const { deps } = substrate();
@@ -206,9 +180,6 @@ it("keeps a record whose expectation missed out of the failures, and logs it", a
 
 it("fails the item, never the batch, when signing itself throws", async () => {
   const { deps } = substrate();
-  // A role whose credentials arrived half-formed: the signer throws where
-  // nothing expects it to, and a thrown handler would fail every group in the
-  // batch rather than these records.
   const broken: HandlerDeps = {
     ...deps,
     origins: new Map(),

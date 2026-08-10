@@ -25,26 +25,15 @@ import {
 import type { TagVerdict } from "../src/tag-clock";
 import { coloDeps } from "./cache-deps";
 
-// A CacheDeps backed by the real workerd Cache, with a manual clock and a
-// waitUntil that records background work so tests can flush it deterministically.
-// `cache` defaults to caches.default but can be swapped for a wrapper (e.g.
-// countingCache) that still delegates to the real cache underneath.
 function testDeps(
   clock: { ms: number },
   cache: Cache = caches.default,
-  // The tier-below double, bound here for the same reason admissionDelay is: one
-  // place a seam of CacheDeps is wired, so a test cannot quietly grow its own.
   satisfiedFromBelow?: CacheDeps["satisfiedFromBelow"],
 ): CacheDeps & {
   flush: () => Promise<void>;
 } {
   const pending: Promise<unknown>[] = [];
   return {
-    // coloDeps zeroes the admission wait, so every test below reads as it did
-    // before that wait existed. The wait's own behaviour — that it happens at
-    // all, that it precedes the claim, that its draw is bounded both by the
-    // jitter and by the entry's remaining stale window — is asserted where the
-    // default is left in place or the seam is driven deliberately.
     ...coloDeps({
       cache,
       satisfiedFromBelow,
@@ -59,8 +48,6 @@ function testDeps(
   };
 }
 
-// Delegates every call to the real workerd cache, only counting `put`s, so a
-// test can assert write cardinality without reimplementing the Cache API.
 function countingCache(): Cache & { puts: number } {
   const real = caches.default;
   const counting = {
@@ -75,8 +62,6 @@ function countingCache(): Cache & { puts: number } {
   return counting as unknown as Cache & { puts: number };
 }
 
-// Delegates to the real workerd cache while recording every url it was asked
-// about, so a test can assert which synthetic keys a path did and did not touch.
 function recordingCache(): Cache & { urls: string[] } {
   const real = caches.default;
   const recording = {
@@ -97,9 +82,6 @@ function recordingCache(): Cache & { urls: string[] } {
   return recording as unknown as Cache & { urls: string[] };
 }
 
-// A Cache double modelling only what the sentinel needs: retention against the
-// test's own clock. The real workerd cache expires on real time, which no
-// injected clock can advance.
 function ttlCache(clock: { ms: number }): Cache {
   const stored = new Map<string, number>();
   return {
@@ -116,10 +98,6 @@ function ttlCache(clock: { ms: number }): Cache {
   } as unknown as Cache;
 }
 
-// A Cache double that also models the colo's WRITE-VISIBILITY LAG: a record is
-// stored at once but does not read back for `lagMs`, which is the property the
-// admission wait exists to outrun. ttlCache above is instantly consistent and so
-// cannot show the herd at all.
 function lagCache(clock: { ms: number }, lagMs: number): Cache {
   const stored = new Map<string, { visibleAt: number; until: number }>();
   return {
@@ -141,7 +119,6 @@ function lagCache(clock: { ms: number }, lagMs: number): Cache {
   } as unknown as Cache;
 }
 
-// An origin returning a fixed response and counting how often it was invoked.
 type CountingOrigin = (() => Promise<Response>) & { calls: number };
 
 function countingOrigin(
@@ -160,10 +137,6 @@ function countingOrigin(
   return fn;
 }
 
-// A release-gated origin: each call increments `calls` synchronously but
-// blocks on `gate`, so a burst can be held with its leader mid-fill and its
-// followers parked on the join. That's what makes the burst deterministic
-// instead of depending on incidental Promise.all scheduling.
 function gatedOrigin(respond: (call: number) => Promise<Response>) {
   let release!: () => void;
   const gate = new Promise<void>((resolve) => (release = resolve));
@@ -177,16 +150,12 @@ function gatedOrigin(respond: (call: number) => Promise<Response>) {
   return origin;
 }
 
-// Lets the burst settle into its steady state — leader inside origin(),
-// followers parked — before the gate is opened.
 async function untilLeaderIsFilling(origin: { calls: number }) {
   while (origin.calls < 1) {
     await new Promise((resolve) => setTimeout(resolve, 0));
   }
 }
 
-// A refresh thunk that records its invocations and reports how it ended: any
-// RefreshOutcome, or "threw".
 function countingRun(outcome: RefreshOutcome | "threw" = "landed") {
   const run = (async () => {
     run.calls++;
@@ -330,7 +299,6 @@ describe("cacheKey", () => {
 
   it("strips _rsc from the key even when the route allows all query", () => {
     const url = new URL("https://app.example/blog?_rsc=abc123");
-    // allowQuery undefined => default to all params, but _rsc is always dropped.
     expect(cacheKey("b", "/blog", url, H(), "STATIC", undefined)).toEqual({
       cacheable: true,
       key: "https://cache.ocel/b/blog",
@@ -353,8 +321,6 @@ describe("cacheKey", () => {
 });
 
 describe("serveCached", () => {
-  // Distinct keys per test keep entries from bleeding across cases even if the
-  // isolate's Cache is reused.
   const target = (
     name: string,
     over: Partial<CacheTarget> = {},
@@ -364,11 +330,6 @@ describe("serveCached", () => {
   });
 
   it("never puts the admission wait on the miss path, which the request is waiting on", async () => {
-    // The wait belongs to a background refresh behind an already-served stale
-    // response. The miss-path fill is on the serving path with joiners awaiting
-    // it, so a wait there is up to a second of user-visible latency on every
-    // cold miss — and a joiner cannot even be answered until it elapses, which
-    // is what a wait that never elapses makes visible.
     const clock = { ms: 0 };
     const deps = { ...testDeps(clock), admissionDelay: () => new Promise<void>(() => {}) };
     const t = target("miss-undelayed", {
@@ -424,9 +385,6 @@ describe("serveCached", () => {
   it("preserves a PRERENDER status the origin already set, storing it for the next colo HIT", async () => {
     const clock = { ms: 0 };
     const deps = testDeps(clock);
-    // The R2 store tier answers by returning a response already stamped
-    // PRERENDER (as dispatch's cachingOrigin does); serveCached must report that
-    // tier rather than overwriting it with MISS.
     const origin = (async () =>
       new Response("prerendered", {
         headers: { "cache-control": "s-maxage=60", "x-ocel-cache": "PRERENDER" },
@@ -437,8 +395,6 @@ describe("serveCached", () => {
     expect(first.headers.get("x-ocel-cache")).toBe("PRERENDER");
     await deps.flush();
 
-    // The prerendered response was memoized into the colo cache, so the next GET
-    // is a plain colo HIT.
     clock.ms = 1_000;
     const second = await serveCached(req(), target("edge"), deps, origin, origin);
     expect(second.headers.get("x-ocel-cache")).toBe("HIT");
@@ -447,11 +403,6 @@ describe("serveCached", () => {
   it("strips the internal entry-modified header from the response returned to the browser, while still storing it", async () => {
     const clock = { ms: 0 };
     const deps = testDeps(clock);
-    // Mimics a PRERENDER intercept hit from dispatch's cachingOrigin, which
-    // stamps x-ocel-entry-modified (interception.ts) on the response it
-    // returns to serveCached. That header must never reach the browser, but
-    // forStorage still needs it off the cloned response to stamp the stored
-    // object's real lastModified.
     const origin = (async () =>
       new Response("prerendered", {
         headers: {
@@ -475,8 +426,6 @@ describe("serveCached", () => {
   it("misses without mutating an immutable origin response", async () => {
     const clock = { ms: 0 };
     const deps = testDeps(clock);
-    // A real fetch() response has immutable headers; Response.redirect is the
-    // one constructor that reproduces that guard in the test runtime.
     const origin = async () => Response.redirect("https://app.example/next", 302);
 
     const first = await serveCached(req(), target("immutable"), deps, origin, origin);
@@ -523,7 +472,6 @@ describe("serveCached", () => {
     expect(drafted.headers.get("x-ocel-cache")).toBe("BYPASS");
     await deps.flush();
 
-    // Nothing was written, so a subsequent public GET is still a MISS.
     const after = await serveCached(
       req(),
       target("draft"),
@@ -586,11 +534,6 @@ describe("serveCached", () => {
   });
 
   it("hands the refresh the entry's remaining stale window, so the wait cannot outlive it", async () => {
-    // A route whose stale window is shorter than the jitter would otherwise
-    // spend the tail of the wait EXPIRED — and past expiration this tier
-    // declines to serve at all, so L1 is bypassed and every isolate in the colo
-    // renders for itself. The bound is what the draw is capped by; that it is
-    // the remaining window and not the whole one is the whole of the fix.
     const clock = { ms: 0 };
     const bounds: number[] = [];
     const deps = {
@@ -661,11 +604,6 @@ describe("serveCached", () => {
     expect(bounds).toEqual([Infinity]);
   });
 
-  // An on-demand ISR path — one generateStaticParams never named — has no
-  // manifest window: Next emits initialRevalidate only for the paths it
-  // prerendered at build. The window it does carry is the one Next stamps on
-  // the response itself, so the entry must go stale on that rather than sit
-  // fresh for the whole retention window.
   it("takes its window from the origin response when the manifest declares none", async () => {
     const clock = { ms: 0 };
     const deps = testDeps(clock);
@@ -683,9 +621,6 @@ describe("serveCached", () => {
     expect(refresh.calls).toBe(1);
   });
 
-  // The response describes what was actually rendered; the manifest only
-  // describes what the build projected. A route whose window changed since the
-  // build must not stay pinned to the build's number.
   it("prefers the origin response's window over the manifest's", async () => {
     const clock = { ms: 0 };
     const deps = testDeps(clock);
@@ -702,9 +637,6 @@ describe("serveCached", () => {
     expect(refresh.calls).toBe(1);
   });
 
-  // A bare s-maxage declares a revalidate window and nothing about expiry —
-  // it is what the R2 tier synthesizes for an entry it serves. How long that
-  // entry may still be served stale stays the manifest's to say.
   it("keeps the manifest expiration when the response declares no swr", async () => {
     const clock = { ms: 0 };
     const deps = testDeps(clock);
@@ -724,9 +656,6 @@ describe("serveCached", () => {
   it("restates x-nextjs-cache by the freshness of the colo entry it serves", async () => {
     const clock = { ms: 0 };
     const deps = testDeps(clock);
-    // The value stored with the entry: whatever the tier below reported when it
-    // was written. A colo serve must not replay it — Next reports the freshness
-    // of the entry it is answering with, so a stale replay of a HIT is a STALE.
     const origin = countingOrigin("s-maxage=1");
     const stamped = (async () => {
       const response = await origin();
@@ -749,13 +678,7 @@ describe("serveCached", () => {
     await deps.flush();
   });
 
-  // The other half of self-revalidation suppression (bd ocelhq-wvag.26): with
-  // `purpose: prefetch` on the user-path forward, a Lambda answering on a stale
-  // entry serves it and starts no render. Those bytes are stale by construction
-  // and must not become a colo entry that looks fresh for a whole window.
   describe("a STALE serve", () => {
-    // Stamped like the Lambda's: Next's own header, and no x-ocel-* at all —
-    // the control namespace is stripped inbound and only this worker writes it.
     const lambdaStale = (cacheControl = "s-maxage=60"): CountingOrigin => {
       const fn = (async () => {
         fn.calls++;
@@ -780,16 +703,10 @@ describe("serveCached", () => {
       expect(await res.text()).toBe("stale bytes");
       expect(cache.puts).toBe(0);
 
-      // And so the next request reaches the origin again rather than being
-      // answered from a colo entry that would have read as fresh.
       await serveCached(req(), t, deps, origin, origin);
       expect(origin.calls).toBe(2);
     });
 
-    // The narrowing that keeps the colo tier alive during a tag invalidation:
-    // servedFromStore stamps STALE on Ocel's own R2 serves too, and gating on
-    // the header alone would send every stale route back to R2 on every colo
-    // miss for the whole duration of the invalidation.
     it("Ocel made from the R2 store is stored, because its provenance is not the Lambda", async () => {
       const clock = { ms: 0 };
       const cache = countingCache();
@@ -923,8 +840,6 @@ describe("serveCached", () => {
     const responses = await burst;
     await deps.flush();
 
-    // Only the leader reached the origin; the followers were answered from the
-    // entry it wrote, so they report HIT rather than MISS.
     expect(origin.calls).toBe(1);
     expect(cache.puts).toBe(1);
     expect(responses.map((res) => res.headers.get("x-ocel-cache"))).toEqual([
@@ -939,7 +854,6 @@ describe("serveCached", () => {
 
     const stored = await caches.default.match(new Request(t.key));
     expect(stored).not.toBeUndefined();
-    // A second-generation read is a HIT: the single write is intact.
     clock.ms = 1_000;
     const hit = await serveCached(req(), t, deps, origin, origin);
     expect(hit.headers.get("x-ocel-cache")).toBe("HIT");
@@ -970,8 +884,6 @@ describe("serveCached", () => {
     const responses = await burst;
     await deps.flush();
 
-    // Nothing was stored, so there is no entry to answer the followers with:
-    // each has to render for itself rather than go unanswered.
     expect(origin.calls).toBe(3);
     expect(cache.puts).toBe(0);
     for (const res of responses) {
@@ -1006,8 +918,6 @@ describe("serveCached", () => {
     const [leader, ...followers] = await burst;
     await deps.flush();
 
-    // The leader's failure is its own; the followers neither hang on it nor
-    // inherit it.
     expect(leader.status).toBe("rejected");
     expect(origin.calls).toBe(3);
     for (const settled of followers) {
@@ -1083,12 +993,10 @@ describe("serveCached", () => {
     const staleRsc = await serveCached(req(), rsc, deps, rscOrigin, refresh);
     await deps.flush();
 
-    // Each variant is still answered from its own entry...
     expect(staleHtml.headers.get("x-ocel-cache")).toBe("STALE");
     expect(staleRsc.headers.get("x-ocel-cache")).toBe("STALE");
     expect(await staleHtml.text()).toBe("html");
     expect(await staleRsc.text()).toBe("rsc");
-    // ...but one origin render rewrites the route, so only one was admitted.
     expect(refresh.calls).toBe(1);
   });
 
@@ -1110,9 +1018,6 @@ describe("serveCached", () => {
     await deps.flush();
     expect(refresh.calls).toBe(1);
 
-    // The refresh rewrote the entry at 5_000 with a 1s window, so this request
-    // is stale again — and nothing about it overlaps the first in flight. Only
-    // the sentinel this colo already holds can suppress it.
     clock.ms = 6_500;
     const again = await serveCached(req(), t, deps, origin, refresh);
     await deps.flush();
@@ -1128,9 +1033,6 @@ describe("serveCached", () => {
       refreshKey: "build:/errored",
     });
     const origin = countingOrigin("s-maxage=1");
-    // A 500 stores nothing and throws nothing. It is also the signal that the
-    // origin is shedding load, so re-admitting at once would aim the colo's
-    // whole arrival rate at an origin that just said it could not cope.
     const refresh = countingOrigin("s-maxage=1", "boom", 500);
 
     await serveCached(req(), t, deps, origin, refresh);
@@ -1141,8 +1043,6 @@ describe("serveCached", () => {
     await deps.flush();
     expect(refresh.calls).toBe(1);
 
-    // Still stale, and still served stale — but the origin is not asked again
-    // inside the backoff.
     clock.ms = 6_500;
     const again = await serveCached(req(), t, deps, origin, refresh);
     await deps.flush();
@@ -1171,10 +1071,7 @@ describe("serveCachedImage", () => {
     await serveCachedImage(req(), two, deps, origin, refresh);
     await deps.flush();
 
-    // Per-entry dedupe, exactly as before: one refresh each, not one between.
     expect(refresh.calls).toBe(2);
-    // And no sentinel was ever consulted — not even under the entry keys, which
-    // is what an image would fall back to admitting under.
     expect(cache.urls).not.toContain(sentinelUrl(one.key));
     expect(cache.urls).not.toContain(sentinelUrl(two.key));
   });
@@ -1182,8 +1079,6 @@ describe("serveCachedImage", () => {
 
 describe("admitRefresh", () => {
   it("suppresses the next admission of the same route within the sentinel's TTL", async () => {
-    // The real workerd cache expires on real time, so the TTL boundary is
-    // proven against a double that retains against the test's own clock.
     const clock = { ms: 0 };
     const deps = testDeps(clock, ttlCache(clock));
     const run = countingRun();
@@ -1232,9 +1127,6 @@ describe("admitRefresh", () => {
   });
 
   it("holds the claim for the backoff when the origin refused the refresh", async () => {
-    // The throttle-amplification loop: a 429 or a 5xx used to release the claim
-    // at once, so the colo re-admitted on the very next request and the failure
-    // fed the herd it exists to damp.
     const clock = { ms: 0 };
     const deps = testDeps(clock, ttlCache(clock));
     const refused = countingRun("refused");
@@ -1282,7 +1174,6 @@ describe("admitRefresh", () => {
   it("measures the suppression from the refresh landing, not from the claim", async () => {
     const clock = { ms: 0 };
     const deps = testDeps(clock, ttlCache(clock));
-    // A 3s render: the claim is taken at 0 and the refresh lands at 3_000.
     const slow = (async () => {
       clock.ms += 3_000;
       return "landed" as const;
@@ -1293,8 +1184,6 @@ describe("admitRefresh", () => {
     await deps.flush();
     expect(clock.ms).toBe(3_000);
 
-    // Past a TTL measured from the claim, still inside one measured from the
-    // landing — the whole window the refresh's own duration would otherwise eat.
     clock.ms = 3_000 + refreshSentinelTtlSeconds * 1_000 - 1;
     admitRefresh(deps, "build:/slow", 0, next);
     await deps.flush();
@@ -1307,9 +1196,6 @@ describe("admitRefresh", () => {
   });
 
   it("skips the render when the tier below already holds a fresher entry", async () => {
-    // The whole point of the tier-below read: the origin call an admission
-    // makes goes straight to the Function URL, so nothing else can tell this
-    // colo that another one already regenerated the route.
     const clock = { ms: 0 };
     const deps = testDeps(clock, ttlCache(clock), async () => true);
     const run = countingRun();
@@ -1321,11 +1207,7 @@ describe("admitRefresh", () => {
   });
 
   it("holds the claim for a full TTL when the tier below answered for it", async () => {
-    // A refresh satisfied from below is a refresh that landed: the route is
-    // fresh again, so the next admission inside the TTL has nothing to do.
     const clock = { ms: 0 };
-    // False by the second admission, so the only thing that can suppress its
-    // render is the claim the first one left behind.
     let below = true;
     const deps = testDeps(clock, ttlCache(clock), async () => below);
     const run = countingRun();
@@ -1353,9 +1235,6 @@ describe("admitRefresh", () => {
   });
 
   it("hands the tier below the lastModified of the entry being refreshed", async () => {
-    // The tier below cannot judge "newer" without it, and a tier that only
-    // answers "is it fresh?" strands a route whose window is shorter than the
-    // round trip: its entry below is always stale by the time it is read.
     const clock = { ms: 0 };
     const seen: number[] = [];
     const deps = testDeps(clock, ttlCache(clock), async (modified) => {
@@ -1370,8 +1249,6 @@ describe("admitRefresh", () => {
   });
 
   it("renders when the tier-below read throws, never suppressing the refresh", async () => {
-    // Fail open, as everywhere on this path: an unreadable tier below costs a
-    // duplicate render, while treating it as fresh would cost the refresh.
     const clock = { ms: 0 };
     const deps = testDeps(clock, ttlCache(clock), async () => {
       throw new Error("R2 exploded");
@@ -1404,8 +1281,6 @@ describe("admitRefresh", () => {
   });
 
   it("admits every refresh when the colo cache is inert", async () => {
-    // A domainless deploy answers on workers.dev, where caches.default accepts
-    // every put and never hits: L1 must degrade to the per-isolate dedupe.
     const clock = { ms: 0 };
     const deps = testDeps(clock, {
       match: async () => undefined,
@@ -1442,7 +1317,6 @@ describe("admitRefresh", () => {
     await deps.flush();
     expect(run.calls).toBe(1);
 
-    // And a throwing delete after a failed run neither escapes nor suppresses.
     const failing = countingRun("threw");
     admitRefresh(deps, "build:/throwing-failure", 0, failing);
     await deps.flush();
@@ -1452,9 +1326,6 @@ describe("admitRefresh", () => {
   it("waits before it claims, not after — an isolate evicted mid-wait leaves no sentinel", async () => {
     const clock = { ms: 0 };
     const cache = recordingCache();
-    // A wait that never resolves stands in for the isolate going away while
-    // holding the admission. Nothing may have been written by then, or the
-    // route is suppressed for a whole TTL by a refresh that never ran.
     const deps = { ...testDeps(clock, cache), admissionDelay: () => new Promise<void>(() => {}) };
     const run = countingRun();
 
@@ -1467,10 +1338,6 @@ describe("admitRefresh", () => {
   });
 
   it("collapses two admissions to one claim once they are more than a window apart", async () => {
-    // The whole point of the wait. Against a cache that only becomes readable
-    // W after the write — which is what the colo actually does — two claims
-    // inside W do not see each other and both admit; drawn far enough apart,
-    // the second sees the first. The spike measured W = 8ms.
     const admitAt = async (cache: Cache, clock: { ms: number }, draws: number[]) => {
       const run = countingRun();
       for (const draw of draws) {
@@ -1494,10 +1361,6 @@ describe("admitRefresh", () => {
   });
 
   it("keeps the per-isolate collapse across the wait, since it is keyed on the cache", async () => {
-    // Load-bearing and non-obvious: inFlight is a WeakMap on deps.cache, not on
-    // the deps object, so spreading CacheDeps to add a delay does not fragment
-    // L0 — and L0 holding its entry across the wait is exactly what bounds the
-    // claimant pool to the isolate count rather than to the arrival rate.
     const clock = { ms: 0 };
     const cache = ttlCache(clock);
     const run = countingRun();
@@ -1520,11 +1383,7 @@ describe("admitRefresh", () => {
     try {
       expect(admissionDrawMs(Infinity)).toBe(0.9 * admissionJitterMs);
       expect(admissionDrawMs(10 * admissionJitterMs)).toBe(0.9 * admissionJitterMs);
-      // The pathological route: 500ms of stale window left, so the draw is
-      // 450ms rather than 900ms, and the refresh lands before the entry expires.
       expect(admissionDrawMs(500)).toBe(450);
-      // A window already gone negative (a clock that moved under the read) must
-      // draw zero, never a negative delay a timer would silently floor.
       expect(admissionDrawMs(-100)).toBe(0);
     } finally {
       random.mockRestore();
@@ -1532,8 +1391,6 @@ describe("admitRefresh", () => {
   });
 
   it("draws its own delay when none is injected, neither zero nor unbounded", async () => {
-    // Silent failure #4: a test double left wired in production would take the
-    // whole colo's claims back inside one 8ms window, invisibly.
     const clock = { ms: 0 };
     const deps = testDeps(clock, ttlCache(clock));
     delete (deps as CacheDeps).admissionDelay;
@@ -1552,8 +1409,6 @@ describe("admitRefresh", () => {
       expect(elapsed).toBeGreaterThanOrEqual(admissionJitterMs / 2 - 20);
       expect(elapsed).toBeLessThan(admissionJitterMs);
     } finally {
-      // In a finally, or a failure above pins Math.random at 0.5 for every test
-      // after it in this file.
       random.mockRestore();
     }
   });
@@ -1609,8 +1464,6 @@ describe("withVercelCacheAlias", () => {
     expect(await aliased.text()).toBe("body");
   });
 
-  // The alias is stamped on the way out, never on what a tier stores: an entry
-  // carrying it would outlive the build that asked for it.
   it("leaves the response the caller may still store unaliased", () => {
     const stored = withStatus(new Response("body"), "PRERENDER");
 

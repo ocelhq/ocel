@@ -32,10 +32,6 @@ func runLogout(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("could not read stored credentials: %w", err)
 	}
 
-	// Best-effort server-side revocation. Local credentials are cleared
-	// regardless of whether this succeeds, so a stale/unreachable server
-	// never prevents the user from logging out locally. An explicit
-	// --api-url overrides the persisted credentials' API URL.
 	if apiURL := effectiveAPIURL(cmd, creds.APIURL); apiURL != "" {
 		ctx, cancel := context.WithTimeout(cmd.Context(), 10*time.Second)
 		defer cancel()

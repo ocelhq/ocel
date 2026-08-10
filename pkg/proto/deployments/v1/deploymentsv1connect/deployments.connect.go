@@ -67,76 +67,14 @@ const (
 // DeploymentServiceClient is a client for the deployments.v1.DeploymentService service.
 type DeploymentServiceClient interface {
 	Deploy(context.Context, *v1.DeployRequest) (*connect.ServerStreamForClient[v1.DeployEvent], error)
-	// Bootstrap provisions the account-global, non-project-specific
-	// resources a provider needs before any deploy can run (for the AWS
-	// provider: the S3 bucket that holds Pulumi state, and a Pulumi
-	// passphrase). It is a one-time-per-account action, re-run only when the
-	// bootstrapped resources change. It reuses the DeployEvent stream:
-	// progress/log events, then a terminal ResultEvent. Bootstrap carries no
-	// outputs on its result.
 	Bootstrap(context.Context, *v1.BootstrapRequest) (*connect.ServerStreamForClient[v1.DeployEvent], error)
-	// DestroyPreview tears down the single preview environment addressed by
-	// DestroyPreviewRequest.environment. It is the inverse of a preview Deploy
-	// and reuses the same DeployEvent stream: progress/log events, then a
-	// terminal ResultEvent (which carries no outputs). The provider selects
-	// exactly the environment named by the Environment block; the CLI never
-	// asks it to reverse-engineer how the teardown was invoked. It backs
-	// `ocel preview rm`.
 	DestroyPreview(context.Context, *v1.DestroyPreviewRequest) (*connect.ServerStreamForClient[v1.DeployEvent], error)
-	// DestroyProject tears down an entire production project (ADR 0001): the
-	// imperative root stack, every app-deploy stack, and the stateful infra
-	// stack, plus the project's R2 assets and root-stack state. Unlike
-	// DestroyPreview it names no environment — a project is the unit — and it
-	// fans out across both systems (Pulumi/AWS + the imperative edge) rather
-	// than selecting one stack. It is best-effort: it continues past a failed
-	// step and reports what remains, so a re-run resumes idempotently. It
-	// reuses the DeployEvent stream (progress/log, then a terminal
-	// ResultEvent), and backs `ocel destroy`. Production-only.
 	DestroyProject(context.Context, *v1.DestroyProjectRequest) (*connect.ServerStreamForClient[v1.DeployEvent], error)
-	// PlanDestroyProject enumerates, without removing anything, exactly what a
-	// DestroyProject would tear down: the project's app-deploy stacks, its
-	// infra stack, and whether it has a root stack. The CLI calls it to show
-	// the blast radius before asking the operator to type the project name, and
-	// to exit cleanly when there is nothing to destroy. Read-only and unary.
 	PlanDestroyProject(context.Context, *v1.PlanDestroyProjectRequest) (*v1.PlanDestroyProjectResponse, error)
-	// ListEnvironments enumerates the preview environments the provider knows
-	// about from its own authoritative state, one entry per environment. It
-	// backs `ocel preview ls`.
 	ListEnvironments(context.Context, *v1.ListEnvironmentsRequest) (*v1.ListEnvironmentsResponse, error)
-	// Preflight reports what the provider's ambient account/profile points at:
-	// the class the pointed-at infrastructure is stamped with, and whether that
-	// infrastructure exists yet. The CLI calls it before a preview or deploy to
-	// refuse fast and locally when the infrastructure is missing or is the
-	// wrong class, before anything is provisioned. It is authoritative: the
-	// provider enforces the same class match itself. It also answers who
-	// already holds the hostnames the caller declared, so a domain another
-	// project owns is refused before the build rather than after it.
 	Preflight(context.Context, *v1.PreflightRequest) (*v1.PreflightResponse, error)
-	// ListPromotions enumerates a production project's promotion history,
-	// newest first, each entry marked with whether it is the currently active
-	// one. It backs `ocel deployments ls`. Production-only: a project with no
-	// root stack (never deployed to production) returns an empty list rather
-	// than an error.
 	ListPromotions(context.Context, *v1.ListPromotionsRequest) (*v1.ListPromotionsResponse, error)
-	// Rollback atomically re-points a production project's active-deployment
-	// pointer at a prior Promotion: the immediately previous one when
-	// RollbackRequest.to is empty, or a specific one when set. It backs
-	// `ocel rollback` / `ocel rollback --to <promotionId>`. Production-only;
-	// an unknown promotion id is rejected with a clear error.
 	Rollback(context.Context, *v1.RollbackRequest) (*v1.RollbackResponse, error)
-	// Prune reclaims old Deployments: every Promotion outside a keep_n-deep
-	// window of a production project's promotion history, always pinning the
-	// currently active one. For each collected Promotion it destroys the
-	// app-deploy stacks its records named, deletes their R2/S3 static-asset
-	// and ISR/prerender prefixes, and deletes the store records themselves.
-	// It backs `ocel deployments prune`, a standalone command never run
-	// inline on deploy. Production-only.
-	//
-	// Prune streams progress/log events as it destroys each stack (a reclaim
-	// can run for minutes), then a terminal ResultEvent - the same DeployEvent
-	// contract Deploy/Bootstrap/Destroy speak. The kept-vs-reclaimed summary
-	// is delivered as the final progress lines before the result, so it carries
-	// no dedicated response message.
 	Prune(context.Context, *v1.PruneRequest) (*connect.ServerStreamForClient[v1.DeployEvent], error)
 }
 
@@ -301,76 +239,14 @@ func (c *deploymentServiceClient) Prune(ctx context.Context, req *v1.PruneReques
 // DeploymentServiceHandler is an implementation of the deployments.v1.DeploymentService service.
 type DeploymentServiceHandler interface {
 	Deploy(context.Context, *v1.DeployRequest, *connect.ServerStream[v1.DeployEvent]) error
-	// Bootstrap provisions the account-global, non-project-specific
-	// resources a provider needs before any deploy can run (for the AWS
-	// provider: the S3 bucket that holds Pulumi state, and a Pulumi
-	// passphrase). It is a one-time-per-account action, re-run only when the
-	// bootstrapped resources change. It reuses the DeployEvent stream:
-	// progress/log events, then a terminal ResultEvent. Bootstrap carries no
-	// outputs on its result.
 	Bootstrap(context.Context, *v1.BootstrapRequest, *connect.ServerStream[v1.DeployEvent]) error
-	// DestroyPreview tears down the single preview environment addressed by
-	// DestroyPreviewRequest.environment. It is the inverse of a preview Deploy
-	// and reuses the same DeployEvent stream: progress/log events, then a
-	// terminal ResultEvent (which carries no outputs). The provider selects
-	// exactly the environment named by the Environment block; the CLI never
-	// asks it to reverse-engineer how the teardown was invoked. It backs
-	// `ocel preview rm`.
 	DestroyPreview(context.Context, *v1.DestroyPreviewRequest, *connect.ServerStream[v1.DeployEvent]) error
-	// DestroyProject tears down an entire production project (ADR 0001): the
-	// imperative root stack, every app-deploy stack, and the stateful infra
-	// stack, plus the project's R2 assets and root-stack state. Unlike
-	// DestroyPreview it names no environment — a project is the unit — and it
-	// fans out across both systems (Pulumi/AWS + the imperative edge) rather
-	// than selecting one stack. It is best-effort: it continues past a failed
-	// step and reports what remains, so a re-run resumes idempotently. It
-	// reuses the DeployEvent stream (progress/log, then a terminal
-	// ResultEvent), and backs `ocel destroy`. Production-only.
 	DestroyProject(context.Context, *v1.DestroyProjectRequest, *connect.ServerStream[v1.DeployEvent]) error
-	// PlanDestroyProject enumerates, without removing anything, exactly what a
-	// DestroyProject would tear down: the project's app-deploy stacks, its
-	// infra stack, and whether it has a root stack. The CLI calls it to show
-	// the blast radius before asking the operator to type the project name, and
-	// to exit cleanly when there is nothing to destroy. Read-only and unary.
 	PlanDestroyProject(context.Context, *v1.PlanDestroyProjectRequest) (*v1.PlanDestroyProjectResponse, error)
-	// ListEnvironments enumerates the preview environments the provider knows
-	// about from its own authoritative state, one entry per environment. It
-	// backs `ocel preview ls`.
 	ListEnvironments(context.Context, *v1.ListEnvironmentsRequest) (*v1.ListEnvironmentsResponse, error)
-	// Preflight reports what the provider's ambient account/profile points at:
-	// the class the pointed-at infrastructure is stamped with, and whether that
-	// infrastructure exists yet. The CLI calls it before a preview or deploy to
-	// refuse fast and locally when the infrastructure is missing or is the
-	// wrong class, before anything is provisioned. It is authoritative: the
-	// provider enforces the same class match itself. It also answers who
-	// already holds the hostnames the caller declared, so a domain another
-	// project owns is refused before the build rather than after it.
 	Preflight(context.Context, *v1.PreflightRequest) (*v1.PreflightResponse, error)
-	// ListPromotions enumerates a production project's promotion history,
-	// newest first, each entry marked with whether it is the currently active
-	// one. It backs `ocel deployments ls`. Production-only: a project with no
-	// root stack (never deployed to production) returns an empty list rather
-	// than an error.
 	ListPromotions(context.Context, *v1.ListPromotionsRequest) (*v1.ListPromotionsResponse, error)
-	// Rollback atomically re-points a production project's active-deployment
-	// pointer at a prior Promotion: the immediately previous one when
-	// RollbackRequest.to is empty, or a specific one when set. It backs
-	// `ocel rollback` / `ocel rollback --to <promotionId>`. Production-only;
-	// an unknown promotion id is rejected with a clear error.
 	Rollback(context.Context, *v1.RollbackRequest) (*v1.RollbackResponse, error)
-	// Prune reclaims old Deployments: every Promotion outside a keep_n-deep
-	// window of a production project's promotion history, always pinning the
-	// currently active one. For each collected Promotion it destroys the
-	// app-deploy stacks its records named, deletes their R2/S3 static-asset
-	// and ISR/prerender prefixes, and deletes the store records themselves.
-	// It backs `ocel deployments prune`, a standalone command never run
-	// inline on deploy. Production-only.
-	//
-	// Prune streams progress/log events as it destroys each stack (a reclaim
-	// can run for minutes), then a terminal ResultEvent - the same DeployEvent
-	// contract Deploy/Bootstrap/Destroy speak. The kept-vs-reclaimed summary
-	// is delivered as the final progress lines before the result, so it carries
-	// no dedicated response message.
 	Prune(context.Context, *v1.PruneRequest, *connect.ServerStream[v1.DeployEvent]) error
 }
 

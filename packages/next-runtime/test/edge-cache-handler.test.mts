@@ -8,9 +8,6 @@ const handlerPath = fileURLToPath(
 );
 const require = createRequire(import.meta.url);
 
-// The handler branches at module scope, so each tier has to be loaded under its
-// own NEXT_RUNTIME — which in a bundled edge chunk is a build-time constant and
-// here is a fresh require.
 function loadHandler(runtime?: string) {
   if (runtime) vi.stubEnv("NEXT_RUNTIME", runtime);
   else vi.stubEnv("NEXT_RUNTIME", "nodejs");
@@ -51,8 +48,6 @@ test("delegates to FileSystemCache off the edge, so the build keeps its cache", 
   expect(Handler.name).toBe("FileSystemCache");
 });
 
-// What keeps the Node builtins FileSystemCache reaches for out of every edge
-// chunk is that the require sits in the branch Turbopack eliminates.
 test("holds no require in the edge branch", () => {
   const source = readFileSync(handlerPath, "utf8");
   const [edgeBranch] = source.split("\n} else {");
@@ -80,8 +75,6 @@ test("reads a fetch entry through the binding, keyed by scope", async () => {
   });
 });
 
-// Next does not wrap get() in a try/catch, so a throw would surface as a render
-// error rather than a miss.
 test("reports a miss when the binding throws", async () => {
   const Handler = loadHandler("edge");
   bind({
@@ -133,9 +126,6 @@ test("writes a fetch entry stamped with its own tags and lastModified", async ()
   });
 });
 
-// The write is Next's to await — it hands a background revalidation's set() to
-// evt.waitUntil, which settles it after the response. Detaching it here would
-// instead have the request's cancellation kill it.
 test("hands the write's promise back rather than detaching it", async () => {
   const Handler = loadHandler("edge");
   let settle: () => void;
@@ -153,9 +143,6 @@ test("hands the write's promise back rather than detaching it", async () => {
   expect(done).toBe(true);
 });
 
-// Next's node entry templates ride along in every edge chunk as dead code, so a
-// page-kind write is reachable in principle. IncrementalCache.set catches and
-// warns, which makes a throw the loud-but-survivable option.
 test("refuses a non-fetch write instead of storing it", async () => {
   const Handler = loadHandler("edge");
   const rpc = fakeRpc();
@@ -185,9 +172,6 @@ test("forwards a tag invalidation with its durations", async () => {
   ]);
 });
 
-// A missing binding means the shim never ran or the worker passed no cache
-// entrypoint; silently dropping writes would leave an app that looks cached and
-// never is.
 test("fails loudly on a write with no binding", async () => {
   const Handler = loadHandler("edge");
 

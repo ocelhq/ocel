@@ -15,9 +15,6 @@ function snapshotOf(
   return { version: 1, deployedAt, generatedAt: deployedAt, records };
 }
 
-// Whichever writer merges last must produce the same document, so the merge is
-// asserted here rather than through either publisher.
-
 describe("latest", () => {
   it("only ever moves upward, whichever side carries the value", () => {
     expect(latest(900, 100)).toBe(900);
@@ -55,10 +52,6 @@ describe("mergeSnapshot", () => {
     expect(merged.records.ours!.expired).toBe(700);
   });
 
-  // Every entry under a build's prefix was written at or after the build
-  // deployed, so a record whose watermarks both sit at or before that instant can
-  // no longer expire anything in it. Dropping those is what keeps the blob
-  // bounded on a substrate that has been invalidating tags for months.
   it("prunes records that cannot apply to any entry in this build", () => {
     const merged = mergeSnapshot(
       snapshotOf(5_000, {
@@ -73,8 +66,6 @@ describe("mergeSnapshot", () => {
     expect(Object.keys(merged.records).sort()).toEqual(["after", "staleOnly"]);
   });
 
-  // Without the deploy's own timestamp there is no proof a record is inert, and
-  // over-pruning would silently resurrect stale content at the edge.
   it("prunes nothing from a snapshot that was never anchored to a deploy", () => {
     const merged = mergeSnapshot(snapshotOf(0, { ancient: { expired: 1 } }), new Map(), 1);
     expect(merged.records.ancient!.expired).toBe(1);
@@ -90,9 +81,6 @@ describe("mergeSnapshot", () => {
   });
 });
 
-// A replica is judged by one rule wherever it is read, because both publishers
-// merge onto whatever that rule accepts: a reader that admitted a document the
-// other declines would merge into it and write the difference away.
 describe("readableSnapshot", () => {
   it("accepts a document at the version this format is", () => {
     const snapshot = snapshotOf(5_000, { products: { expired: 6_000 } });
@@ -105,8 +93,6 @@ describe("readableSnapshot", () => {
     expect(readableSnapshot(null)).toBeNull();
   });
 
-  // It is handed whatever parsed off the network, and JSON's top level is not
-  // required to be an object at all.
   it("declines anything that is not a document", () => {
     for (const parsed of [undefined, 7, "a snapshot", true, [], [snapshotOf(1, {})]]) {
       expect(readableSnapshot(parsed)).toBeNull();

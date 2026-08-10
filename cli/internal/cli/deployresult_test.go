@@ -13,10 +13,6 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/manifestbuilder"
 )
 
-// TestRunDeploy_Success_WritesDeployResult proves a successful `ocel deploy`
-// leaves the machine-readable result on disk: the featured URL and promotion
-// id the provider reported, the tag it was stamped with, and each deployed
-// app's build id read back from the build output.
 func TestRunDeploy_Success_WritesDeployResult(t *testing.T) {
 	root, _ := setUpDeployFixture(t)
 	addAppToFixtureConfig(t, root)
@@ -58,9 +54,6 @@ func TestRunDeploy_Success_WritesDeployResult(t *testing.T) {
 	}
 }
 
-// TestRunDeploy_Failure_LeavesNoStaleDeployResult proves a failed deploy never
-// leaves a result file behind — including the previous, successful run's, which
-// a consumer would otherwise read as this run's outcome.
 func TestRunDeploy_Failure_LeavesNoStaleDeployResult(t *testing.T) {
 	root, _ := setUpDeployFixture(t)
 	if err := deployresult.Write(root, deployresult.Result{PromotionID: "prm_previous_run"}); err != nil {
@@ -79,9 +72,6 @@ func TestRunDeploy_Failure_LeavesNoStaleDeployResult(t *testing.T) {
 	}
 }
 
-// TestRunPreviewUp_Success_WritesDeployResult proves `ocel preview up` records
-// the same result, carrying the preview it stood up as the environment — the
-// path the adapter e2e lifecycle scripts read.
 func TestRunPreviewUp_Success_WritesDeployResult(t *testing.T) {
 	root, _ := setUpDeployFixture(t)
 	t.Setenv(fakeInfraClassEnvVar, "preview")
@@ -116,8 +106,6 @@ func readDeployResult(t *testing.T, root string) deployresult.Result {
 	return got
 }
 
-// writeRoutingManifest stamps a build id into an app's build output the way a
-// Next build does, so the CLI has one to record.
 func writeRoutingManifest(t *testing.T, root, app, buildID string) {
 	t.Helper()
 	writeFile(t, filepath.Join(root, ".ocel", "output", "apps", app, "routing-manifest.json"),

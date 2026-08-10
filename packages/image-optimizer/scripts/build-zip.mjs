@@ -1,22 +1,3 @@
-// Builds the deployable zip: one bundled ESM entrypoint plus sharp's Linux
-// arm64 native binaries, ready for PR 5b's CLI to upload into a customer's
-// bucket.
-//
-// The native half is cross-installed rather than compiled. pnpm's
-// supportedArchitectures setting tells it which optional platform packages to
-// resolve, so a glibc arm64 sharp is fetched from the registry on any host — no
-// Docker, no qemu, and the same bytes in CI as on a laptop.
-//
-// The install runs in a scratch directory with its own pnpm-workspace.yaml,
-// because pnpm 11 reads that setting from the workspace manifest rather than from
-// a package.json `pnpm` field, and a pnpm-workspace.yaml anywhere under
-// packages/ would make that directory a second workspace root for the whole
-// monorepo. The scratch tree is also what keeps this repo's own node_modules from
-// ever being asked to hold a foreign architecture.
-//
-// The zip's layout is what Lambda expects of a plain Node function:
-//   index.mjs          the bundle
-//   node_modules/      sharp and its @img/* platform packages
 const TARGET = { os: ["linux"], cpu: ["arm64"], libc: ["glibc"] };
 
 import { execFileSync } from "node:child_process";
@@ -36,16 +17,12 @@ rmSync(stage, { recursive: true, force: true });
 mkdirSync(stage, { recursive: true });
 mkdirSync(out, { recursive: true });
 
-// The flags live in bundle.mjs, which test/bundle.test.mts builds from as well,
-// so what is checked and what is shipped cannot drift apart.
 execFileSync(
   "pnpm",
   ["exec", "esbuild", ...esbuildArgs(join(root, "src", "index.mts"), join(out, "index.mjs"))],
   { cwd: root, stdio: "inherit" },
 );
 
-// sharp's version comes from this package's own dependencies, so the artifact and
-// the tests can never be built against different libvips.
 writeFileSync(
   join(stage, "package.json"),
   `${JSON.stringify(
@@ -59,8 +36,6 @@ writeFileSync(
   )}\n`,
 );
 
-// packages: [] makes the scratch directory its own workspace root, which both
-// carries the architecture setting and stops pnpm walking up into this monorepo.
 writeFileSync(
   join(stage, "pnpm-workspace.yaml"),
   [
@@ -73,8 +48,6 @@ writeFileSync(
   ].join("\n"),
 );
 
-// Hoisted linking because what Lambda unzips is a plain directory: nothing there
-// resolves a symlink farm.
 execFileSync(
   "pnpm",
   ["install", "--node-linker=hoisted", "--prod", "--no-frozen-lockfile"],
@@ -96,8 +69,6 @@ if (
   throw new Error("cross-install produced no @img/sharp-libvips-linux-arm64");
 }
 
-// pnpm's own bookkeeping records absolute paths and an install timestamp, so it
-// would make the digest differ per machine and per run. Lambda reads none of it.
 for (const file of [
   ".modules.yaml",
   ".package-map.json",
@@ -107,10 +78,6 @@ for (const file of [
   rmSync(join(out, "node_modules", file), { recursive: true, force: true });
 }
 
-// Fixed timestamps, no extra attributes, and a sorted entry list, so identical
-// inputs produce an identical zip: PR 5b's CLI pins this artifact by sha256 and
-// verifies it fail-closed, which only means anything if the digest is
-// reproducible.
 execFileSync("find", [out, "-exec", "touch", "-t", "198001010000", "{}", "+"], {
   stdio: "inherit",
 });

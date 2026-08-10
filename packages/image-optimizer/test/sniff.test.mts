@@ -29,27 +29,16 @@ describe("magic bytes", () => {
     expect(detectContentType(new Uint8Array([0xff, 0x0a, 0, 0]))).toBe(JXL);
   });
 
-  // A signature's literal 0x00 bytes are literals. Spelling the "any byte here"
-  // wildcard as "the byte 0x00" collapsed ICO's `00 00 01 00` to a single
-  // `bytes[2] === 0x01` test, and ICO is a BYPASS_TYPE — so each of these
-  // sniffed as image/x-icon and was returned byte-for-byte under that type,
-  // which is passthrough rule 1 (the CVE-2025-55173 guard) defeated.
   test("a third byte of 0x01 does not make a non-image an ICO", () => {
-    // A Windows PE header, a gzip stream, and a ZIP local file header.
     expect(detectContentType(new Uint8Array([0x4d, 0x5a, 0x01, 0x00]))).toBe(null);
     expect(detectContentType(new Uint8Array([0x1f, 0x8b, 0x01, 0x00]))).toBe(null);
     expect(detectContentType(new Uint8Array([0x50, 0x4b, 0x01, 0x02]))).toBe(null);
   });
 
-  // The same defect ran the other way: a real image whose size byte happens to
-  // be 0x01 was answered as an ICO, so it took the bypass instead of being
-  // optimized.
   test("a BMP whose third byte is 0x01 is still a BMP", () => {
     expect(detectContentType(new Uint8Array([0x42, 0x4d, 0x01, 0x00, 0x00, 0x00]))).toBe(BMP);
   });
 
-  // TIFF's trailing 0x00 and the JXL container's leading zeros are part of those
-  // magic numbers, not padding a wildcard may stand in for.
   test("the remaining literal zero bytes are matched as literals", () => {
     expect(detectContentType(new Uint8Array([0x49, 0x49, 0x2a, 0x00]))).toBe(TIFF);
     expect(detectContentType(new Uint8Array([0x49, 0x49, 0x2a, 0x01]))).toBe(null);
@@ -59,9 +48,6 @@ describe("magic bytes", () => {
     expect(detectContentType(jxl)).toBe(JXL);
   });
 
-  // The two places a wildcard genuinely belongs: a length prefix ahead of an
-  // ISO-BMFF brand, and RIFF's file size ahead of the "WEBP" form tag. Both must
-  // keep matching whatever the length happens to be.
   test("the length prefixes stay wildcards", () => {
     for (const size of [0x00, 0x18, 0xff]) {
       const avif = new Uint8Array(16);
@@ -87,20 +73,13 @@ describe("magic bytes", () => {
     expect(detectContentType(new TextEncoder().encode('<?xml version="1.0"?><svg/>'))).toBe(SVG);
   });
 
-  // Never the upstream Content-Type, and never a guess: bytes we cannot identify
-  // are not an image. This is the ordering half of CVE-2025-55173 — an HTML
-  // document served as image/png has to be answered on its bytes.
   test("is null for anything unrecognised", () => {
     expect(detectContentType(new Uint8Array(0))).toBe(null);
     expect(detectContentType(new TextEncoder().encode("<!DOCTYPE html><html>"))).toBe(null);
     expect(detectContentType(new TextEncoder().encode("#!/bin/sh\n"))).toBe(null);
-    // A PDF: a real format libvips can load, and one Next's own table names —
-    // but not an image/* type, so it is refused rather than bypassed.
     expect(detectContentType(new TextEncoder().encode("%PDF-1.7\n"))).toBe(null);
   });
 
-  // The window is fixed at 1024 bytes: a signature further in is not a
-  // signature, or every payload becomes a scan of itself.
   test("looks at the first 1024 bytes only", () => {
     const buried = new Uint8Array(SNIFF_WINDOW + 8);
     buried.set([0xff, 0xd8, 0xff], SNIFF_WINDOW);

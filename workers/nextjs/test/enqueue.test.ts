@@ -14,13 +14,6 @@ import type { RevalidationMessage, RevalidationRoute } from "../src/revalidation
 import { parseMessage } from "../../../packages/revalidator/src/message.mts";
 import { coloDeps } from "./cache-deps";
 
-// The edge's half of queue-deduplicated revalidation (bd ocelhq-wvag.25): an
-// admitted background refresh hands the render to the queue and only renders
-// when the queue will not take it. Everything here is about WHICH of the two
-// happened — a message sent where a render was needed is a route that stops
-// revalidating, and a render made where a message was sent is the herd this
-// path exists to remove.
-
 const isrPrefix = "prod/p/app/build";
 
 const revalidation: RevalidationRoute = {
@@ -35,8 +28,6 @@ const revalidation: RevalidationRoute = {
   routePath: "/blog",
 };
 
-// Records every message the site handed the queue, and answers each send with
-// the verdict the test is about.
 function queue(accept: boolean | "throws" = true) {
   const sent: RevalidationMessage[] = [];
   const enqueueRevalidation = async (message: RevalidationMessage) => {
@@ -47,10 +38,6 @@ function queue(accept: boolean | "throws" = true) {
   return { sent, enqueueRevalidation };
 }
 
-// Delegates to the real workerd cache while recording what was written to (and
-// deleted from) the admission sentinel, which is how an outcome is observed:
-// "landed" re-arms it for one TTL, "refused" for the backoff, "failed" deletes
-// it.
 function sentinelWatch(key: string) {
   const real = caches.default;
   const url = sentinelUrl(key);
@@ -107,8 +94,6 @@ function countingOrigin(status = 200) {
   return fn;
 }
 
-// A colo entry served stale: filled at t=0 with a one-second window, read again
-// past it. The refresh that read triggers is the cache.ts admission site.
 async function serveStale(
   name: string,
   over: { deps?: Partial<CacheDeps>; target?: Partial<CacheTarget>; status?: number } = {},
@@ -151,9 +136,6 @@ describe("the colo tier's admitted refresh", () => {
   });
 
   it("re-arms the colo's claim on an accepted enqueue rather than releasing it", async () => {
-    // The convergence this path rests on: the enqueue is a landing, so the
-    // sentinel holds for one TTL and the colo re-admits ~5s later — by then the
-    // consumer has normally rendered and the tier below answers it.
     const sender = queue(true);
     const { cache } = await serveStale("re-armed", {
       deps: { enqueueRevalidation: sender.enqueueRevalidation },
@@ -184,8 +166,6 @@ describe("the colo tier's admitted refresh", () => {
   });
 
   it("follows the origin's own verdict on the fallback render", async () => {
-    // The fallback is today's path in full: a refusing origin still holds the
-    // claim for the backoff, not for a landing's TTL.
     const sender = queue(false);
     const { cache } = await serveStale("fallback-refused", {
       status: 500,
@@ -196,8 +176,6 @@ describe("the colo tier's admitted refresh", () => {
   });
 
   it("sends nothing when the tier below already answered the refresh", async () => {
-    // askBelow runs inside admitRefresh, ahead of the thunk. A colo that can be
-    // answered from R2 must never put a message on the queue.
     const sender = queue(true);
     const { blocking } = await serveStale("from-below", {
       deps: {
@@ -234,13 +212,10 @@ describe("the colo tier's admitted refresh", () => {
       deps: { enqueueRevalidation: sender.enqueueRevalidation },
     });
 
-    // The colo entry was written at t=0 by the fill above.
     expect(sender.sent[0].lastModified).toBe(0);
   });
 });
 
-// The two admission sites inside dispatchPrerender, driven through a real
-// dispatch so the message is built from what the route actually knows.
 function noAssets(): RouteDeps["assetStore"] {
   return {
     assetPrefix: "",
@@ -350,7 +325,6 @@ const dispatchBlog = (deps: RouteDeps, request?: Request) =>
     deps,
   );
 
-// A stale entry: written at 1_000 with a 60s window, read 61s later.
 async function dispatchStale(over: {
   entry?: unknown;
   enqueueRevalidation?: CacheDeps["enqueueRevalidation"];
@@ -412,8 +386,6 @@ describe("the R2 tier's admitted refresh", () => {
       },
       expect: { header: "x-nextjs-cache", value: "REVALIDATED" },
       isrPrefix,
-      // The functionUrls key the worker already dispatches this route by — a
-      // routeId naming anything else is a message the consumer cannot resolve.
       routeId: "bundle-0",
       routePath: "/blog",
       lastModified: 1_000,
@@ -422,8 +394,6 @@ describe("the R2 tier's admitted refresh", () => {
   });
 
   it("builds a message the consumer's own parser accepts", async () => {
-    // The two halves live in different packages; nothing else would catch a
-    // drift between what this edge sends and what the revalidator will take.
     const sender = queue(true);
     await dispatchStale({ enqueueRevalidation: sender.enqueueRevalidation });
 
@@ -459,8 +429,6 @@ describe("a PPR route's admitted refresh", () => {
       enqueueRevalidation: sender.enqueueRevalidation,
     });
 
-    // The resume still goes out — it is what answers this visitor — but the
-    // blocking revalidation does not.
     expect(origin.revalidating()).toEqual([]);
     expect(origin.requests).toHaveLength(1);
     expect(sender.sent).toHaveLength(1);

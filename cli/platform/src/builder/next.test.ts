@@ -46,9 +46,6 @@ describe("buildNext", () => {
     expect(env?.OCEL_APP_NAME).toBe("marketing");
   });
 
-  // The adapter runs inside `next build` with the app dir as its cwd, so it
-  // cannot infer where this build's output belongs. Being told keeps two Next
-  // apps from writing over each other.
   it("passes the app's own output subtree to the build as OCEL_OUTPUT_DIR", async () => {
     const dir = nextApp({ scripts: { build: "next build" }, dependencies: { next: "16" } });
     let env: Record<string, string> | undefined;
@@ -59,9 +56,6 @@ describe("buildNext", () => {
     expect(env?.OCEL_OUTPUT_DIR).toBe(path.join("/out", "apps", "marketing"));
   });
 
-  // Two apps resolving one key to different values is what folders exist for.
-  // Each build runs under its own environment, so both can inline their own
-  // value and neither is told the other's binding.
   it("builds each app with its own values and its own folder binding", async () => {
     const envs: Record<string, Record<string, string> | undefined> = {};
     nextRunner.run = async (_command, _args, _cwd, e) => void (envs[e?.OCEL_APP_NAME ?? ""] = e);
@@ -80,8 +74,6 @@ describe("buildNext", () => {
     expect(envs.admin?.OCEL_APP_FOLDER).toBe("/admin");
   });
 
-  // The app the builder detected binds no folder, and a binding inherited from
-  // the CLI's own environment must not answer for the build.
   it("binds an app that declares no folder to the project root", async () => {
     const dir = nextApp({ scripts: { build: "next build" }, dependencies: { next: "16" } });
     let env: Record<string, string> | undefined;

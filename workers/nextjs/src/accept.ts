@@ -1,11 +1,3 @@
-// A transcription of @hapi/accept's media selection (the module Next negotiates
-// with), because the answer has to be identical, not merely reasonable, and the
-// worker bundle carries no room for the package.
-//
-// It lives in its own module so it stays diffable against upstream: on every
-// hapi or Next bump this file is what gets re-read against
-// @hapi/accept/lib/media.js. Nothing here is ours to improve.
-
 const VALID_MEDIA =
   /^(?:\*\/\*)|(?:[\w!#$%&'*+\-.^`|~]+\/\*)|(?:[\w!#$%&'*+\-.^`|~]+\/[\w!#$%&'*+\-.^`|~]+)$/;
 
@@ -74,11 +66,6 @@ function mediaSelections(header: string, preferences: string[]): string[] {
     let seenQ = false;
     for (const piece of pieces) {
       const pair = piece.split("=");
-      // @hapi throws on a malformed parameter, which is why Next answers a
-      // malformed Accept with a 500. Registered divergence 6 in
-      // docs/research/image-optimization-design.md: nothing observable turns on
-      // the edge agreeing, so this declines to negotiate rather than
-      // manufacturing an error the tier that owns the response will raise anyway.
       if (pair.length !== 2 || !pair[1]) return [];
       const [key, raw] = pair;
       if (key === "q" || key === "Q") {

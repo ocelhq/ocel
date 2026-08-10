@@ -1,56 +1,23 @@
-// The deployments store's storage-class logic: SQL operations over one
-// project's Durable Object SQLite storage. Kept separate from the DO class
-// (deployments-do.ts) and the HTTP/RPC surface (index.ts) so it can be
-// exercised directly against a real DO instance's storage in tests, the same
-// way workers/nextjs's cache.ts is exercised against the real workerd Cache.
-
-// The subset of DurableObjectStorage this module calls: the synchronous SQL
-// API plus transactionSync for the multi-statement writes (promote, prune)
-// that must land atomically. A real ctx.storage satisfies it structurally;
-// nothing here names an edge.
 export interface SqlStore {
   sql: SqlStorage;
   transactionSync<T>(closure: () => T): T;
 }
 
-// A Deployment record: everything the frozen generic worker needs to serve
-// one app's build that used to be baked into its per-deploy worker script.
-// The store holds records opaquely — it never reads a field but app/buildId —
-// so this shape is here to describe what it carries, not to validate it.
 export interface DeploymentRecord {
   app: string;
-  // The framework the app declared in its manifest ("next"). One entrypoint
-  // worker fronts a whole project, whose apps need not share a framework, so
-  // it is the Deployment that says what can serve it.
   framework: string;
   buildId: string;
   routingManifest: unknown;
   functionUrls: Record<string, string>;
   assetPrefix: string;
   isrPrefix: string;
-  // The build's own write secret for the ISR writer worker, which the serving
-  // worker raises this build's tag invalidations with. Absent on a build
-  // deployed against a substrate that adopted no writer.
   isrWriteSecret?: string;
   createdAt: number;
-  // The build's own edge code (Next edge routes / middleware): where its bundle
-  // lives and what runtime the serving worker's loader evaluates it under.
-  // Absent when the build produced no edge output at all.
   edgeWorkers?: EdgeWorkers;
-  // The digest of every entry in `variables`, so two Deployments that shipped
-  // different values never read alike. Wider than the fingerprint inside the
-  // identity, which covers baked values alone. Absent when nothing is
-  // recorded.
   valueFingerprint?: string;
-  // What this Deployment shipped with, one entry per key the app resolved.
-  // Audit only: the values themselves ride the immutable artifact, so nothing
-  // serving or rolling back reads these.
   variables?: VariableRecord[];
 }
 
-// Mirrors VariableRecord in cloud/edge/rootstack.go. `live` marks a value
-// fetched from the store at runtime, recorded as latest-at-runtime and never
-// as a version.
 export interface VariableRecord {
   key: string;
   folder?: string;
@@ -58,8 +25,6 @@ export interface VariableRecord {
   live?: boolean;
 }
 
-// Mirrors EdgeWorkers in cloud/edge/rootstack.go (the host writes it) and in
-// workers/nextjs/src/edge.ts (the serving worker reads it).
 export interface EdgeWorkers {
   bundleKey: string;
   id: string;
@@ -67,15 +32,10 @@ export interface EdgeWorkers {
   compatFlags?: string[];
 }
 
-// One project-wide Promotion: a promotion id grouping the per-app build ids
-// it made active. The caller (host) supplies promotionId and ts — the store
-// never generates ids, it only records what it's told.
 export interface Promotion {
   promotionId: string;
   ts: number;
   builds: Record<string, string>;
-  // Optional immutable label stamped at deploy time, unique across a project's
-  // live promotions. Absent when the promotion was deployed without one.
   tag?: string;
 }
 
@@ -83,46 +43,18 @@ export interface HistoryEntry extends Promotion {
   active: boolean;
 }
 
-// Thrown by promote() when a deploy's tag is already held by a different live
-// promotion. The host also fails such a deploy up front (before creating any
-// infrastructure); this is the atomic backstop that closes the window between
-// that check and promote, e.g. two concurrent deploys claiming the same tag.
 export class TagConflictError extends Error {}
 
 export interface PruneResult {
   keptPromotionIds: string[];
   removedPromotionIds: string[];
-  // "record:<app>/<buildId>" keys whose records were deleted, so the caller
-  // knows exactly which underlying artifacts (stacks, R2 assets, ISR entries)
-  // it still needs to reclaim. Kept in this prefixed form because the Go host
-  // (cloud/aws/deploy/prune.go ReclaimTargets) parses it verbatim.
   removedRecordKeys: string[];
-  // The "record:<app>/<buildId>" keys the store still holds afterwards, across
-  // every pointer. Two Deployments of one build (a rotation) are two distinct
-  // records whose buildIds share a build, and the assets and edge bundle are
-  // keyed by that build alone with no environment segment, so the host reclaims
-  // them only when none of these still belongs to it. The store keeps a buildId
-  // opaque; splitting one back into build and value fingerprint is the host's
-  // business.
   survivingRecordKeys: string[];
-  // The record keys the pruned pointer itself still promotes. The ISR entries
-  // are keyed by the build under an environment segment that belongs to one
-  // pointer, so a Deployment on another pointer never serves out of them and
-  // cannot keep them alive.
   survivingPointerRecordKeys: string[];
 }
 
-// The reserved default pointer. The primary domain resolves it, and a promote
-// that names no pointer moves it. Its leading "@" can never appear in a DNS
-// label, so it can never collide with a preview pointer named after a subdomain
-// slug. It is an implementation detail of this module: callers omit the pointer
-// to address it, and never name it themselves.
 const DEFAULT_POINTER = "@production";
 const VERSION_KEY = "versionStamp";
-// The instance's ownership keys: the self-minted owner token that distinguishes
-// legitimate recovery from a slug collision, and the per-project secret every
-// authenticated op is checked against (index.ts). Both live in the meta table,
-// so a destroy() that clears storage takes them with it and frees the slug.
 const OWNER_KEY = "ownerToken";
 const SECRET_KEY = "secret";
 
@@ -130,8 +62,6 @@ function recordKey(app: string, buildId: string): string {
   return `record:${app}/${buildId}`;
 }
 
-// Called once from the DO constructor, before any method runs. CREATE TABLE
-// IF NOT EXISTS is idempotent, so re-running on every cold start is safe.
 export function ensureSchema(store: SqlStore): void {
   store.sql.exec(
     `CREATE TABLE IF NOT EXISTS records (
@@ -158,9 +88,6 @@ export function ensureSchema(store: SqlStore): void {
      );`,
   );
 
-  // Migrate a promotions table created before tags existed: add the column,
-  // then enforce tag uniqueness across live promotions (partial so the many
-  // untagged rows never collide on NULL).
   const hasTag = store.sql
     .exec<{ name: string }>(`PRAGMA table_info(promotions)`)
     .toArray()
@@ -173,10 +100,6 @@ export function ensureSchema(store: SqlStore): void {
        ON promotions(tag) WHERE tag IS NOT NULL`,
   );
 
-  // Migrate a promotions table created before pointer-scoped retention: add
-  // the column, backfilling every existing row to the reserved default pointer
-  // so production history()/prune() (which pass @production) keep seeing exactly
-  // the rows they saw before this column existed.
   const hasPointer = store.sql
     .exec<{ name: string }>(`PRAGMA table_info(promotions)`)
     .toArray()
@@ -204,9 +127,6 @@ function setMeta(store: SqlStore, key: string, value: string): void {
   );
 }
 
-// A pointer names the promotion a domain serves. There are arbitrarily many,
-// keyed by name; the reserved DEFAULT_POINTER is the one the primary domain
-// resolves, and preview pointers are named after their subdomain slug.
 function getPointer(store: SqlStore, name: string): string | undefined {
   const row = store.sql
     .exec<{ promotion_id: string }>(
@@ -227,8 +147,6 @@ function setPointer(store: SqlStore, name: string, promotionId: string): void {
 }
 
 export function putStaged(store: SqlStore, record: DeploymentRecord): void {
-  // Only ever writes the (app, build id) record. Pointers live in their own
-  // table, so staging can never change what any domain is currently serving.
   store.sql.exec(
     `INSERT INTO records (app, build_id, data) VALUES (?, ?, ?)
      ON CONFLICT(app, build_id) DO UPDATE SET data = excluded.data`,
@@ -258,16 +176,7 @@ export function promote(
   promotion: Promotion,
   pointer: string = DEFAULT_POINTER,
 ): void {
-  // Bumping seq to a fresh maximum on every promote — including a rollback's
-  // re-promote of an existing id — is what makes the promoted entry the newest
-  // in history(), so the previously-active promotion becomes the "immediately
-  // previous" one that a further rollback rolls back to. The whole thing runs
-  // in one transaction, so a crash mid-promote can never leave a pointer naming
-  // a promotion that isn't in the table, or vice versa.
   store.transactionSync(() => {
-    // A tag addresses exactly one promotion, so reject one already held by a
-    // different promotion. A rollback re-promotes an existing id carrying its
-    // own tag unchanged, so it never clashes with itself (promotion_id != ?).
     if (promotion.tag) {
       const clash = store.sql
         .exec<{ promotion_id: string }>(
@@ -317,18 +226,6 @@ export function pointerBuildId(
   return (JSON.parse(row.builds) as Record<string, string>)[app];
 }
 
-// The Deployment resolution the frozen generic worker consumes for a given
-// pointer, folding pointer read and record read into one call (ADR 0002).
-// knownBuildId lets a caller that already holds a record skip re-transferring
-// it: when the pointer's build still matches, the (potentially large) record is
-// omitted and only the build id comes back.
-//
-// - no-pointer  the pointer names no promotion for the app (fresh project, or
-//               an unknown preview).
-// - unchanged   pointer build id equals knownBuildId; record deliberately omitted.
-// - record      pointer build id differs (or knownBuildId absent); record included.
-// - dangling    the pointer names a build the store holds no record for — an
-//               invariant violation the caller surfaces rather than papering over.
 export type PointerRecordResult =
   | { kind: "no-pointer" }
   | { kind: "unchanged"; buildId: string }
@@ -354,10 +251,6 @@ export function history(
   pointer: string = DEFAULT_POINTER,
 ): HistoryEntry[] {
   const activeId = getPointer(store, pointer);
-  // Ordered newest-first by seq (promote assigns an increasing seq) per the
-  // acceptance criteria, with the active promotion marked. Scoped to one
-  // pointer: production passes @production and sees exactly its own history,
-  // each preview pointer sees only its own.
   return store.sql
     .exec<{ promotion_id: string; ts: number; builds: string; tag: string | null }>(
       `SELECT promotion_id, ts, builds, tag FROM promotions WHERE pointer = ? ORDER BY seq DESC`,
@@ -390,10 +283,6 @@ export function prune(
       )
       .toArray();
 
-    // The keep window is the N most recent promotions for this pointer; the
-    // active one is pinned even if it falls outside that window, so pruning can
-    // never take the live site (or a live preview) down. Scoping by pointer
-    // means a preview prune never reclaims production's builds and vice versa.
     const kept: { promotionId: string; builds: Record<string, string> }[] = [];
     const removed: { promotionId: string; builds: Record<string, string> }[] =
       [];
@@ -439,9 +328,6 @@ export function prune(
   });
 }
 
-// The distinct record keys a set of promotions names, sorted so a caller sees a
-// stable order. Read off the promotions rather than the records table, which
-// carries no pointer of its own.
 function promotedRecordKeys(
   promotions: { builds: Record<string, string> }[],
 ): string[] {
@@ -454,11 +340,6 @@ function promotedRecordKeys(
   return [...keys].sort();
 }
 
-// Removes a pointer outright: every promotion scoped to it, the records those
-// promotions name, and the pointer row itself. Unlike prune(), it pins nothing
-// — a `preview rm` tears the whole preview down, so its active promotion goes
-// too. Returns the removed record keys so the host reclaims the stacks and
-// R2/S3 objects they named. Removing an unknown pointer is a clean no-op.
 export function removePointer(
   store: SqlStore,
   pointer: string = DEFAULT_POINTER,
@@ -496,15 +377,11 @@ export function removePointer(
       removedPromotionIds: removed.map((p) => p.promotionId),
       removedRecordKeys,
       survivingRecordKeys: remainingRecordKeys(store),
-      // The pointer is gone outright, so nothing of it survives to keep its
-      // environment-scoped storage alive.
       survivingPointerRecordKeys: [],
     };
   });
 }
 
-// Every record key left in the store, read after the deletions so a caller
-// sees exactly what survived.
 function remainingRecordKeys(store: SqlStore): string[] {
   return store.sql
     .exec<{ app: string; build_id: string }>(
@@ -514,20 +391,11 @@ function remainingRecordKeys(store: SqlStore): string[] {
     .map((r) => recordKey(r.app, r.build_id));
 }
 
-// The identity an instance carries: the self-minted owner token and the
-// per-project secret every authenticated op is checked against.
 export interface Identity {
   ownerToken: string;
   secret: string;
 }
 
-// Seeds this instance's identity, convergently: an already-initialized instance
-// keeps the identity it has and hands it back, so concurrent first deploys of
-// one slug all adopt the same one instead of clobbering each other. Only force
-// overwrites — adopting an instance after total state loss, when only the human
-// deploying can vouch for it. The account-level bootstrap credential authorizes
-// the caller before this runs (index.ts), and it alone: the identity is
-// returned here, so nothing weaker may reach it.
 export function initialize(
   store: SqlStore,
   ownerToken: string,
@@ -551,9 +419,6 @@ function storedIdentity(store: SqlStore): Identity | undefined {
     : undefined;
 }
 
-// The instance's stored project secret, or undefined before it is initialized.
-// index.ts constant-time-compares an incoming bearer token against this to
-// authenticate every non-initialize op.
 export function storedSecret(store: SqlStore): string | undefined {
   return getMeta(store, SECRET_KEY);
 }

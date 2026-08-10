@@ -21,11 +21,6 @@ import (
 	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
 )
 
-// destroyCmd permanently tears down a project's entire production deployment:
-// the root stack, the infra stack (databases and buckets included), and every
-// app-deploy stack. It is deliberately hard to trigger by accident — it always
-// requires typing the project name at an interactive prompt and refuses to run
-// without a terminal.
 var destroyCmd = &cobra.Command{
 	Use:   "destroy",
 	Short: "Permanently destroy this project's entire production deployment",
@@ -54,9 +49,6 @@ var destroyCmd = &cobra.Command{
 	},
 }
 
-// destroyPreview selects the whole-project preview footprint instead of
-// production for `ocel destroy`; destroyYes runs that teardown without a
-// terminal.
 var (
 	destroyPreview bool
 	destroyYes     bool
@@ -68,11 +60,6 @@ func init() {
 	rootCmd.AddCommand(destroyCmd)
 }
 
-// checkDestroyFlags refuses `--yes` for a production teardown. Preview
-// infrastructure is disposable by construction and CI has to be able to reclaim
-// it unattended; production is the copy of record, so typing its name at a real
-// terminal stays the only way through — and a flag that were silently ignored
-// there would be worse than one that is refused.
 func checkDestroyFlags(preview, yes bool) error {
 	if yes && !preview {
 		return errors.New("`ocel destroy --yes` is only accepted with --preview; destroying production always requires typing the project name at an interactive terminal")
@@ -80,14 +67,7 @@ func checkDestroyFlags(preview, yes bool) error {
 	return nil
 }
 
-// runDestroy drives a production project teardown: it refuses without a
-// terminal (the confirmation cannot be skipped), enumerates and shows the blast
-// radius, requires the operator to type the project name, then drives the
-// provider's DestroyProject RPC.
 func runDestroy(ctx context.Context, cwd string, stdout, stderr io.Writer, stdin io.Reader) error {
-	// A slip must never nuke production, so destroy has no --yes and no
-	// non-interactive path: without a terminal to type the project name into,
-	// refuse before touching anything.
 	if !isReaderTTY(stdin) {
 		return errors.New("`ocel destroy` needs an interactive terminal to confirm the project name; it cannot be run non-interactively")
 	}
@@ -156,12 +136,6 @@ func runDestroy(ctx context.Context, cwd string, stdout, stderr io.Writer, stdin
 	return nil
 }
 
-// runDestroyPreviewProject tears down a project's entire preview footprint: every
-// preview pointer's app-deploy and per-name infra stacks, the preview store
-// instance, the preview root worker(s), the R2 assets and the preview root-stack
-// state — leaving the account-level preview bootstrap intact. Like production
-// destroy it refuses without a terminal and requires typing the project name;
-// yes waives both, which is how CI reclaims a run's preview project.
 func runDestroyPreviewProject(ctx context.Context, cwd string, yes bool, stdout, stderr io.Writer, stdin io.Reader) error {
 	if !yes && !isReaderTTY(stdin) {
 		return errors.New("`ocel destroy --preview` needs an interactive terminal to confirm the project name; re-run with --yes to tear the preview footprint down non-interactively")
@@ -225,15 +199,10 @@ func runDestroyPreviewProject(ctx context.Context, cwd string, yes bool, stdout,
 	return nil
 }
 
-// destroyPlanEmpty reports whether a project has nothing left to destroy — no
-// root stack, no infra stack, and no app stacks — so destroy can exit cleanly
-// without prompting.
 func destroyPlanEmpty(plan *deploymentsv1.PlanDestroyProjectResponse) bool {
 	return !plan.GetRootStack() && plan.GetInfraStack() == "" && len(plan.GetAppStacks()) == 0
 }
 
-// printDestroyPlan renders the blast radius the operator is about to confirm, so
-// they type the project name against a real inventory rather than blind.
 func printDestroyPlan(out io.Writer, slug string, plan *deploymentsv1.PlanDestroyProjectResponse) {
 	fmt.Fprintf(out, "This will permanently destroy everything below in production project %q:\n", slug)
 	if plan.GetRootStack() {
@@ -250,9 +219,6 @@ func printDestroyPlan(out io.Writer, slug string, plan *deploymentsv1.PlanDestro
 	fmt.Fprintln(out, "This cannot be undone.")
 }
 
-// confirmDestroyProject requires the operator to type the exact project name.
-// The match is case-sensitive and exact so a keyboard slip — or a reflexive
-// "y" — never proceeds. An empty or closed stdin reads as "no".
 func confirmDestroyProject(slug string, stdout io.Writer, stdin io.Reader) (bool, error) {
 	fmt.Fprintf(stdout, "Type the project name (%s) to confirm: ", slug)
 

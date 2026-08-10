@@ -2,8 +2,6 @@ import { applyE2EEnvDefaults } from "./env";
 
 applyE2EEnvDefaults();
 
-// Import AFTER env defaults are applied: @repo/db resolves its connection at
-// import time from OCEL_RESOURCE_POSTGRES_main.
 const { auth } = await import("@repo/auth/next");
 
 export type Seed = {
@@ -12,10 +10,6 @@ export type Seed = {
   organizationId: string;
 };
 
-// Mints one real Better-Auth session (via signUpEmail) plus one organization
-// and membership - the identity every example's `ocel init` runs against.
-// Adapted from packages/api/test/auth-harness.ts, minus cleanup: e2e rows are
-// intentionally left behind (the databases they seed are per-run anyway).
 export async function seed(): Promise<Seed> {
   const suffix = crypto.randomUUID();
   const email = `e2e-${suffix}@example.test`;

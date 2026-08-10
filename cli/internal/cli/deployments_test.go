@@ -33,10 +33,6 @@ func TestRunDeploymentsLs_RendersPromotionsNewestFirstWithActiveMarker(t *testin
 	waitForNoStaleSocket(t, sockPath)
 }
 
-// An operator auditing a promotion starts from what each app actually shipped,
-// and a Deployment's identity is that: the build id plus the fingerprint of the
-// values baked into it. Two promotions of one build differ only there, so
-// rendering the bare build id would show them as identical.
 func TestRunDeploymentsLs_ShowsEachAppsShippedIdentity(t *testing.T) {
 	root, sockPath := setUpDeployFixture(t)
 	t.Setenv(fakeInfraClassEnvVar, "production")
@@ -54,7 +50,6 @@ func TestRunDeploymentsLs_ShowsEachAppsShippedIdentity(t *testing.T) {
 		}
 	}
 
-	// The colored active cell is last, so every column before it stays aligned.
 	lines := strings.Split(strings.TrimRight(out, "\n"), "\n")
 	if len(lines) != 3 {
 		t.Fatalf("stdout = %q, want a header and two rows", out)
@@ -66,8 +61,6 @@ func TestRunDeploymentsLs_ShowsEachAppsShippedIdentity(t *testing.T) {
 	waitForNoStaleSocket(t, sockPath)
 }
 
-// runeIndex is where substr starts in printed columns rather than in bytes:
-// the table's own em-dash placeholder is one column and three bytes.
 func runeIndex(line, substr string) int {
 	at := strings.Index(line, substr)
 	if at < 0 {
@@ -122,9 +115,6 @@ func TestRunDeploymentsPrune_RefusesOnPreviewInfrastructure(t *testing.T) {
 	if err == nil {
 		t.Fatal("runDeploymentsPrune err = nil, want a class-mismatch failure")
 	}
-	// The refusal is rendered through the deploy UI (like deploy/bootstrap) and
-	// the command returns the sentinel exit error, so the concrete message lands
-	// in the rendered output rather than the returned error.
 	out := stdout.String()
 	if !strings.Contains(out, "ocel deploy can only run against production infrastructure") {
 		t.Errorf("stdout = %q, want the concrete class-mismatch message", out)

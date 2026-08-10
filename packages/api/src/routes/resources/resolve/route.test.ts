@@ -47,9 +47,6 @@ describe("POST /api/resources/resolve", () => {
   it("reuses an existing assignment: returns the stored connection string and no SQL is run against the cloud", async () => {
     const session = await createTestSessionWithOrganization();
     const previousAdminUrl = process.env.OCEL_CLOUD_ADMIN_URL;
-    // Deliberately unreachable host/port - if resolve tried to actually
-    // connect (i.e. ran SQL) instead of just formatting a connection
-    // string, this test would time out or error.
     process.env.OCEL_CLOUD_ADMIN_URL =
       "postgres://cloud-admin:cloud-admin@cloud-host.invalid:5432/postgres";
 
@@ -124,9 +121,6 @@ describe("POST /api/resources/resolve", () => {
         firstBody.env.OCEL_RESOURCE_POSTGRES_main,
       );
 
-      // Proves a real role + database were created in the cloud cluster,
-      // not just a row in resource_assignment: connect with the returned
-      // credentials and run a query against them.
       const client = new Client({ connectionString: firstConnectionString });
       await client.connect();
       try {
@@ -169,7 +163,6 @@ describe("POST /api/resources/resolve", () => {
         firstBody.env.OCEL_RESOURCE_POSTGRES_main,
       );
 
-      // No new role/db and no second row was created on reuse.
       const rowsAfterSecond = await db
         .select()
         .from(resourceAssignment)

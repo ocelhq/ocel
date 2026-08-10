@@ -13,7 +13,6 @@ import (
 	"time"
 )
 
-// okNode is a loopback app that returns a small 200 body.
 func okNode(t *testing.T) *httptest.Server {
 	t.Helper()
 	s := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -23,15 +22,10 @@ func okNode(t *testing.T) *httptest.Server {
 	return s
 }
 
-// TestHandleInvocation_HoldsUntilComplete proves the runtime loop does not
-// return (and therefore does not call the next /next) until the JS side sends
-// invocation-complete over the control socket.
 func TestHandleInvocation_HoldsUntilComplete(t *testing.T) {
 	node := okNode(t)
 	rt, _ := fakeRuntime(t, []byte(getEvent))
 
-	// net.Pipe stands in for the JS↔Go control socket; jsSide writes the
-	// control messages the entrypoint would emit.
 	goSide, jsSide := net.Pipe()
 	m := &Membrane{
 		nodePort: portOf(t, node),
@@ -44,14 +38,12 @@ func TestHandleInvocation_HoldsUntilComplete(t *testing.T) {
 	done := make(chan error, 1)
 	go func() { done <- handleInvocation(context.Background(), rt, m) }()
 
-	// Must still be blocked: the body is delivered but completion hasn't fired.
 	select {
 	case err := <-done:
 		t.Fatalf("handleInvocation returned before invocation-complete (err=%v)", err)
 	case <-time.After(75 * time.Millisecond):
 	}
 
-	// The JS entrypoint reports completion for the request forward() tagged.
 	if _, err := jsSide.Write([]byte(`{"type":"invocation-complete","payload":{"requestId":"req-1"}}` + "\n")); err != nil {
 		t.Fatalf("write control message: %v", err)
 	}
@@ -66,13 +58,8 @@ func TestHandleInvocation_HoldsUntilComplete(t *testing.T) {
 	}
 }
 
-// TestHandleInvocation_DeadlineForcesProgress proves that when no completion
-// signal ever arrives, the deadline (minus the margin) still releases the loop
-// instead of hanging forever.
 func TestHandleInvocation_DeadlineForcesProgress(t *testing.T) {
 	node := okNode(t)
-	// A deadline in the near past-relative-to-margin: time.Until(deadline) is
-	// under completionMargin, so the wait clamps to zero and returns promptly.
 	deadline := time.Now().Add(100 * time.Millisecond)
 	rt := fakeRuntimeWithDeadline(t, []byte(getEvent), deadline)
 	m := &Membrane{
@@ -93,7 +80,6 @@ func TestHandleInvocation_DeadlineForcesProgress(t *testing.T) {
 		t.Fatal("handleInvocation hung past the deadline with no completion signal")
 	}
 
-	// The waiter registration must be cleaned up on the timeout path.
 	m.mu.Lock()
 	n := len(m.pending)
 	m.mu.Unlock()
@@ -102,11 +88,7 @@ func TestHandleInvocation_DeadlineForcesProgress(t *testing.T) {
 	}
 }
 
-// TestHandleInvocation_UnreachableNodeReleasesImmediately proves that when the
-// request never reaches Node (so no invocation-complete can ever arrive), the
-// loop releases at once instead of stalling toward the deadline.
 func TestHandleInvocation_UnreachableNodeReleasesImmediately(t *testing.T) {
-	// Reserve then free a port so nothing is listening → connection refused.
 	l, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
 		t.Fatal(err)
@@ -114,8 +96,6 @@ func TestHandleInvocation_UnreachableNodeReleasesImmediately(t *testing.T) {
 	deadPort := l.Addr().(*net.TCPAddr).Port
 	l.Close()
 
-	// A generous deadline: if the wait were bounded only by the deadline, this
-	// test would take ~30s. Releasing promptly proves the unreachable path fires.
 	rt := fakeRuntimeWithDeadline(t, []byte(getEvent), time.Now().Add(30*time.Second))
 	m := &Membrane{
 		nodePort: deadPort,
@@ -143,9 +123,6 @@ func TestHandleInvocation_UnreachableNodeReleasesImmediately(t *testing.T) {
 	}
 }
 
-// fakeRuntimeWithDeadline stands up a Runtime API that serves one invocation
-// carrying a Lambda-Runtime-Deadline-Ms header, and swallows the streamed
-// response.
 func fakeRuntimeWithDeadline(t *testing.T, event []byte, deadline time.Time) *runtimeClient {
 	t.Helper()
 	mux := http.NewServeMux()

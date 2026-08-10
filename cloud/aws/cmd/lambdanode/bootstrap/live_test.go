@@ -19,12 +19,6 @@ import (
 	"github.com/ocelhq/ocel/cloud/aws/vars/live"
 )
 
-// scriptedFetcher stands in for the store. Each call takes the next scripted
-// outcome and holds the last one for every call after it, so a test says what
-// the store does rather than how many times it is asked. release, when set,
-// gates every call: a fetch does not return until the test lets it, which is
-// what makes a race between the prefetch and node's boot a thing a test can
-// stage deterministically.
 type scriptedFetcher struct {
 	release chan struct{}
 
@@ -78,8 +72,6 @@ func fails(err error) *scriptedFetcher {
 	return &scriptedFetcher{results: []fetchResult{{err: err}}}
 }
 
-// sink records what the membrane pushed down the control socket, decoded as the
-// messages node would read off it.
 type sink struct {
 	mu    sync.Mutex
 	lines []string
@@ -92,8 +84,6 @@ func (s *sink) Write(p []byte) (int, error) {
 	return len(p), nil
 }
 
-// raw is what actually went down the socket, for the assertions that are about
-// the encoding rather than the values it carries.
 func (s *sink) raw() []string {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -115,10 +105,6 @@ func (s *sink) messages(t *testing.T) []liveValuesMsg {
 	return out
 }
 
-// consistently asserts cond holds for long enough that a background goroutine
-// which was going to break it would have run. A negative assertion about work
-// that happens off the caller's goroutine is otherwise satisfied by the work
-// simply not having started yet.
 func consistently(t *testing.T, why string, cond func() bool) {
 	t.Helper()
 	deadline := time.Now().Add(200 * time.Millisecond)
@@ -130,10 +116,6 @@ func consistently(t *testing.T, why string, cond func() bool) {
 	}
 }
 
-// eventually polls until cond holds or the test gives up, so an assertion about
-// a background refresh does not depend on a sleep long enough to be flaky. The
-// cap is only ever paid by a test that is already failing, so it is generous:
-// a goroutine starved by a loaded machine must not read as a broken refresh.
 func eventually(t *testing.T, why string, cond func() bool) {
 	t.Helper()
 	deadline := time.Now().Add(10 * time.Second)
@@ -146,13 +128,6 @@ func eventually(t *testing.T, why string, cond func() bool) {
 	t.Fatalf("timed out waiting for %s", why)
 }
 
-// TestLiveValues_StartKicksTheFetchOffWithoutWaitingOnIt is half the overlap
-// property: whatever the fetch costs, it is not spent where it is kicked off.
-// The other half — that init then goes on to spawn the child before it waits
-// on the fetch — is TestBringUp_TheSpawnRunsBesideThePrefetchRatherThanBehindIt.
-//
-// The gate is the whole assertion; no clock is consulted. A fetch that had been
-// waited on could not have let start return while it was still held.
 func TestLiveValues_StartKicksTheFetchOffWithoutWaitingOnIt(t *testing.T) {
 	fetcher := &scriptedFetcher{release: make(chan struct{}), results: []fetchResult{{values: map[string]string{"DB_PASSWORD": "hunter2"}}}}
 	out := &sink{}
@@ -171,11 +146,6 @@ func TestLiveValues_StartKicksTheFetchOffWithoutWaitingOnIt(t *testing.T) {
 	}
 }
 
-// TestBringUp_TheSpawnRunsBesideThePrefetchRatherThanBehindIt is the other half
-// of the overlap property, at the seam that actually decides it. The fetch is
-// released only once the spawn has been entered, so init can reach the end of
-// this only by having spawned before it waited: moving the join above the spawn
-// leaves nothing to release the fetch, and it dies at its own budget.
 func TestBringUp_TheSpawnRunsBesideThePrefetchRatherThanBehindIt(t *testing.T) {
 	fetcher := &scriptedFetcher{release: make(chan struct{}), results: []fetchResult{{values: map[string]string{"DB_PASSWORD": "hunter2"}}}}
 	out := &sink{}
@@ -200,17 +170,9 @@ func TestBringUp_TheSpawnRunsBesideThePrefetchRatherThanBehindIt(t *testing.T) {
 	}
 }
 
-// TestBringUp_AFailedPrefetchIsReportedAsTheStoreErrorNotAsNodeNeverStarting is
-// what a store outage looks like from init. Node holds its import until a push
-// arrives, so a prefetch that failed is also a node that will never announce
-// itself — and the timeout that follows names nothing an operator can act on.
-// The store's error is the diagnosis, and the budget it would otherwise burn is
-// the room left to report it in.
 func TestBringUp_AFailedPrefetchIsReportedAsTheStoreErrorNotAsNodeNeverStarting(t *testing.T) {
 	const budget = 5 * time.Second
 
-	// Stands in for the real child: it announces nothing without a push, so the
-	// only ends to this wait are the budget and being told to stop waiting.
 	spawn := func(_ []string, budget time.Duration, _ func(io.Writer), abandon <-chan struct{}) (*Membrane, error) {
 		select {
 		case <-abandon:
@@ -239,11 +201,6 @@ func TestBringUp_AFailedPrefetchIsReportedAsTheStoreErrorNotAsNodeNeverStarting(
 	}
 }
 
-// TestLiveValues_AGenerationHoldingNothingIsPushedAsAnEmptyMap pins the
-// encoding of the empty case. A nil map marshals to `"values":null`, which node
-// reads as a malformed push and goes on waiting for one it can apply — so a
-// store holding none of this function's keys would wedge every cold start on a
-// difference of two characters.
 func TestLiveValues_AGenerationHoldingNothingIsPushedAsAnEmptyMap(t *testing.T) {
 	out := &sink{}
 	l := newLiveValues(resolves(nil), []string{"DB_PASSWORD"}, nil)
@@ -262,10 +219,6 @@ func TestLiveValues_AGenerationHoldingNothingIsPushedAsAnEmptyMap(t *testing.T) 
 	}
 }
 
-// TestLiveValues_TheFirstGenerationIsPushedInTheShapeNodeDecodes pins the
-// contract between the two languages. Node has no other way to learn a live
-// value, so the type name, the generation and the flat key-to-plaintext map are
-// the whole interface.
 func TestLiveValues_TheFirstGenerationIsPushedInTheShapeNodeDecodes(t *testing.T) {
 	out := &sink{}
 	l := newLiveValues(resolves(map[string]string{"DB_PASSWORD": "hunter2", "API_KEY": "sk-live"}), []string{"DB_PASSWORD", "API_KEY"}, nil)
@@ -290,11 +243,6 @@ func TestLiveValues_TheFirstGenerationIsPushedInTheShapeNodeDecodes(t *testing.T
 	}
 }
 
-// TestLiveValues_AGenerationResolvedBeforeNodeConnectsIsDeliveredOnConnect is
-// the lost race, from the membrane's side: the prefetch won, and the value was
-// resolved while there was still nobody to hand it to. The application's first
-// read is what is waiting on it, so it must go out the moment node's control
-// connection exists rather than at the next refresh.
 func TestLiveValues_AGenerationResolvedBeforeNodeConnectsIsDeliveredOnConnect(t *testing.T) {
 	l := newLiveValues(resolves(map[string]string{"DB_PASSWORD": "hunter2"}), []string{"DB_PASSWORD"}, nil)
 
@@ -317,10 +265,6 @@ func TestLiveValues_AGenerationResolvedBeforeNodeConnectsIsDeliveredOnConnect(t 
 	}
 }
 
-// TestLiveValues_AnInvocationWithinTheBoundCostsNoFetch is the cache hit. The
-// cache is one per execution environment and shared by every invocation it
-// serves, so a warm sandbox reads the store once however many requests it takes
-// while the bound holds.
 func TestLiveValues_AnInvocationWithinTheBoundCostsNoFetch(t *testing.T) {
 	clock := time.Unix(1_700_000_000, 0)
 	fetcher := resolves(map[string]string{"DB_PASSWORD": "hunter2"})
@@ -343,10 +287,6 @@ func TestLiveValues_AnInvocationWithinTheBoundCostsNoFetch(t *testing.T) {
 	}
 }
 
-// TestLiveValues_ARotationIsPickedUpInTheBackgroundAndPushedAsTheNextGeneration
-// is the refresh. Past the bound an invocation starts a fetch and is served the
-// generation already resolved — nothing blocks — and the rotated value arrives
-// as a later generation for the reads that follow.
 func TestLiveValues_ARotationIsPickedUpInTheBackgroundAndPushedAsTheNextGeneration(t *testing.T) {
 	clock := time.Unix(1_700_000_000, 0)
 	fetcher := resolves(
@@ -364,9 +304,6 @@ func TestLiveValues_ARotationIsPickedUpInTheBackgroundAndPushedAsTheNextGenerati
 	fetcher.release = make(chan struct{})
 	clock = clock.Add(liveStalenessBound)
 
-	// The bound is the fetch's own budget rather than a number picked to feel
-	// short: a refresh that was waited on could only return here by exhausting
-	// it, and anything under that is the scheduler, not the design.
 	start := time.Now()
 	l.refreshIfStale(context.Background())
 	if blocked := time.Since(start); blocked >= liveFetchBudget {
@@ -388,10 +325,6 @@ func TestLiveValues_ARotationIsPickedUpInTheBackgroundAndPushedAsTheNextGenerati
 	}
 }
 
-// TestLiveValues_AnInvocationDoesNotStackRefreshesOnOneAlreadyInFlight proves a
-// sandbox that thaws well past the bound starts one fetch, not one per
-// invocation. A frozen sandbox can leave a refresh in flight across a long gap,
-// and piling on would turn one slow store into many.
 func TestLiveValues_AnInvocationDoesNotStackRefreshesOnOneAlreadyInFlight(t *testing.T) {
 	clock := time.Unix(1_700_000_000, 0)
 	fetcher := resolves(map[string]string{"DB_PASSWORD": "hunter2"})
@@ -409,17 +342,10 @@ func TestLiveValues_AnInvocationDoesNotStackRefreshesOnOneAlreadyInFlight(t *tes
 	}
 	eventually(t, "the refresh to reach the store", func() bool { return fetcher.count() >= 2 })
 
-	// The count has to be held, not sampled: five stacked refreshes would drive
-	// it 2,3,4,5,6 in microseconds, and a re-read the instant it first showed 2
-	// would as likely as not have caught it on the way past.
 	consistently(t, "an invocation stacked a second refresh on the one already in flight", func() bool { return fetcher.count() == 2 })
 	close(fetcher.release)
 }
 
-// TestLiveValues_APrefetchThatCannotReachTheStoreFailsInit is the
-// store-unreachable case at startup. A function that declared a value it cannot
-// resolve must not come up: the value would be read at the point of use as one
-// that was never required, which is the failure nobody diagnoses.
 func TestLiveValues_APrefetchThatCannotReachTheStoreFailsInit(t *testing.T) {
 	l := newLiveValues(fails(errors.New("dial tcp: connection refused")), []string{"DB_PASSWORD"}, nil)
 	out := &sink{}
@@ -437,10 +363,6 @@ func TestLiveValues_APrefetchThatCannotReachTheStoreFailsInit(t *testing.T) {
 	}
 }
 
-// TestLiveValues_AFailedRefreshPushesNothingAndKeepsTheLastGeneration is the
-// store-unreachable case once the function is warm. The store going away must
-// not take a working function's values with it: the last generation goes on
-// being served, and node is told nothing rather than told nothing is there.
 func TestLiveValues_AFailedRefreshPushesNothingAndKeepsTheLastGeneration(t *testing.T) {
 	clock := time.Unix(1_700_000_000, 0)
 	fetcher := &scriptedFetcher{results: []fetchResult{
@@ -467,17 +389,11 @@ func TestLiveValues_AFailedRefreshPushesNothingAndKeepsTheLastGeneration(t *test
 		t.Errorf("message = %+v, want the last good generation untouched", msgs[0])
 	}
 
-	// And the next invocation retries rather than giving up on the store.
 	clock = clock.Add(liveStalenessBound)
 	l.refreshIfStale(context.Background())
 	eventually(t, "the refresh to be retried", func() bool { return fetcher.count() == 3 })
 }
 
-// TestResolveLiveValues_AFunctionWithNoManifestBuildsNothing is the property
-// that confines a store outage. An app that declares no live value packages no
-// manifest, so the membrane constructs no client, resolves no credentials and
-// makes no call — asserted the way the baked path asserts it, by running with
-// no credentials, no region and no endpoint configured at all.
 func TestResolveLiveValues_AFunctionWithNoManifestBuildsNothing(t *testing.T) {
 	t.Setenv("LAMBDA_TASK_ROOT", t.TempDir())
 	for _, name := range []string{"AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY", "AWS_REGION", "AWS_DEFAULT_REGION", "AWS_PROFILE", "AWS_ENDPOINT_URL"} {
@@ -492,7 +408,6 @@ func TestResolveLiveValues_AFunctionWithNoManifestBuildsNothing(t *testing.T) {
 		t.Fatal("a function with no live manifest built a store client anyway")
 	}
 
-	// Every method must be a no-op on it, because main calls them unconditionally.
 	if err := l.join(l.start(context.Background())); err != nil {
 		t.Errorf("start/join on a function with no live values = %v, want nil", err)
 	}
@@ -500,11 +415,6 @@ func TestResolveLiveValues_AFunctionWithNoManifestBuildsNothing(t *testing.T) {
 	l.refreshIfStale(context.Background())
 }
 
-// TestResolveLiveValues_ReadsThePinnedCoordinatesAndNeverTheSentinels proves
-// the membrane addresses cells by what the deploy pinned, and leaves the
-// components the store spells itself alone. The class-wide environment is the
-// trap: the store renders it as "*" and refuses a coordinate that names it, so
-// a manifest read that copied the sentinel through would fail every read.
 func TestResolveLiveValues_ReadsThePinnedCoordinatesAndNeverTheSentinels(t *testing.T) {
 	manifest := live.Manifest{
 		Slug:   "shop",
@@ -534,11 +444,6 @@ func TestResolveLiveValues_ReadsThePinnedCoordinatesAndNeverTheSentinels(t *test
 	}
 }
 
-// TestResolveLiveValues_APreviewReadsItsOwnOverrideBesideTheClassWideValue
-// proves the environment the deploy pinned is what turns an override into
-// something a function can resolve. Both cells are named in the one query the
-// reveal already costs, so the override is looked for without a second round
-// trip.
 func TestResolveLiveValues_APreviewReadsItsOwnOverrideBesideTheClassWideValue(t *testing.T) {
 	cells := manifestCells(live.Manifest{
 		Slug:        "shop",
@@ -557,10 +462,6 @@ func TestResolveLiveValues_APreviewReadsItsOwnOverrideBesideTheClassWideValue(t 
 	}
 }
 
-// TestResolveLiveValues_ProductionAsksForOneCellPerKey is the reason the
-// environment is pinned rather than derived. Production has a single
-// environment, so an override cannot exist there; naming one anyway would put a
-// second address on every key's read for a row that is never written.
 func TestResolveLiveValues_ProductionAsksForOneCellPerKey(t *testing.T) {
 	cells := manifestCells(live.Manifest{
 		Slug: "shop",
@@ -577,12 +478,6 @@ func TestResolveLiveValues_ProductionAsksForOneCellPerKey(t *testing.T) {
 	}
 }
 
-// TestResolved_AnOverrideWinsForItsOwnEnvironmentAndNothingElseChanges is the
-// binding rule itself: the environment that holds a value gets it, and every
-// key it holds none for resolves class-wide. The pair is asserted together
-// because the failure that matters is one leaking into the other — an override
-// that also replaces its neighbours, or one the class-wide value overwrites
-// depending on which cell the store answered with first.
 func TestResolved_AnOverrideWinsForItsOwnEnvironmentAndNothingElseChanges(t *testing.T) {
 	classWide := func(key, value string) vars.Value {
 		return vars.Value{Metadata: vars.Metadata{Coordinate: vars.Coordinate{Slug: "shop", Key: key}}, Plaintext: value}
@@ -605,11 +500,6 @@ func TestResolved_AnOverrideWinsForItsOwnEnvironmentAndNothingElseChanges(t *tes
 	}
 }
 
-// TestResolveLiveValues_AnUnreadableManifestIsAnInitFailure proves the file is
-// not treated as optional once it is there. Absent means "this app declares no
-// live value"; anything else — unparseable, or unreadable for any reason but
-// absence — is a function whose variables have no addresses, and coming up
-// without them is the silent failure the whole class is meant to avoid.
 func TestResolveLiveValues_AnUnreadableManifestIsAnInitFailure(t *testing.T) {
 	cases := map[string]func(t *testing.T, path string){
 		"will not parse": func(t *testing.T, path string) {
@@ -617,8 +507,6 @@ func TestResolveLiveValues_AnUnreadableManifestIsAnInitFailure(t *testing.T) {
 				t.Fatal(err)
 			}
 		},
-		// Not absent, and not a file either: the read fails for a reason that is
-		// not "this app declares none", and must not be read as one.
 		"cannot be read at all": func(t *testing.T, path string) {
 			if err := os.Mkdir(path, 0o755); err != nil {
 				t.Fatal(err)
@@ -643,11 +531,6 @@ func TestResolveLiveValues_AnUnreadableManifestIsAnInitFailure(t *testing.T) {
 	}
 }
 
-// TestResolveLiveValues_AManifestNamingNoKeysBuildsNothing proves the absence
-// of work is decided by what the manifest says, not only by whether the file is
-// there. A manifest with no keys has nothing to fetch, and building a client for
-// it would put a credential chain and a store dependency on the cold path of a
-// function that reads no live value.
 func TestResolveLiveValues_AManifestNamingNoKeysBuildsNothing(t *testing.T) {
 	root := t.TempDir()
 	path := filepath.Join(root, live.FilePath)
@@ -671,12 +554,6 @@ func TestResolveLiveValues_AManifestNamingNoKeysBuildsNothing(t *testing.T) {
 	}
 }
 
-// TestLiveValues_TellsNodeWhichKeysToExpectAPushFor pins the one thing node
-// cannot work out for itself. The declarations live in the application, which
-// node has not imported yet, so only the membrane knows whether a push is
-// coming — and node must know before the import, because a module-scope read
-// runs the instant the file loads. The variable's presence is the whole of
-// "wait"; its absence is the whole of "do not".
 func TestLiveValues_TellsNodeWhichKeysToExpectAPushFor(t *testing.T) {
 	l := newLiveValues(resolves(map[string]string{}), []string{"DB_PASSWORD", "SESSION_SECRET"}, nil)
 
@@ -687,10 +564,6 @@ func TestLiveValues_TellsNodeWhichKeysToExpectAPushFor(t *testing.T) {
 	}
 }
 
-// TestLiveValues_SaysNothingForAFunctionThatDeclaresNone is the other half, and
-// the dangerous one. A function with no live keys that is told to expect a push
-// waits for one nobody will send, until the startup budget kills it. Absent is
-// the only correct answer — not the name set to the empty string.
 func TestLiveValues_SaysNothingForAFunctionThatDeclaresNone(t *testing.T) {
 	for name, l := range map[string]*liveValues{
 		"no live manifest at all": nil,
@@ -704,10 +577,6 @@ func TestLiveValues_SaysNothingForAFunctionThatDeclaresNone(t *testing.T) {
 	}
 }
 
-// TestResolveLiveValues_DeclaresExactlyThePinnedKeys proves the names node is
-// told to expect are the ones the deploy pinned, and that nothing else about
-// the coordinate goes with them: a folder reaching node would make the runtime
-// folder-aware, which every other class is not.
 func TestResolveLiveValues_DeclaresExactlyThePinnedKeys(t *testing.T) {
 	root := t.TempDir()
 	path := filepath.Join(root, live.FilePath)
@@ -747,10 +616,6 @@ func TestResolveLiveValues_DeclaresExactlyThePinnedKeys(t *testing.T) {
 	}
 }
 
-// TestChildEnv_CarriesTheLiveDeclarationBesideTheDeliveredClass pins the
-// composition init actually hands to the child. The declaration has to be in
-// it, and the plaintexts of the class that does travel in the environment have
-// to still be in it beside the declaration.
 func TestChildEnv_CarriesTheLiveDeclarationBesideTheDeliveredClass(t *testing.T) {
 	bakedEnv := []string{"OCEL_VAR_STRIPE_KEY=sk_baked"}
 	l := newLiveValues(resolves(map[string]string{}), []string{"DB_PASSWORD"}, nil)
@@ -763,27 +628,12 @@ func TestChildEnv_CarriesTheLiveDeclarationBesideTheDeliveredClass(t *testing.T)
 		}
 	}
 
-	// A function with no live values is told nothing extra at all, so it never
-	// waits for a push nothing will send.
 	bare := childEnv(bakedEnv, nil)
 	if len(bare) != 1 {
 		t.Errorf("childEnv for a function with no live values = %q, want only the class delivered in the environment", bare)
 	}
 }
 
-// TestChildEnv_NeverCarriesALivePlaintext is the disclosure property the live
-// class exists to keep. A live value reaches node down the control socket
-// precisely so it is never in an environment: not the child's, where anything
-// that dumps its own environment — a crash reporter, a log line, a subprocess
-// it spawns — would carry it out, and not this process's either. The
-// declaration is the only thing about the class that may travel here, and it is
-// names.
-//
-// The cache is resolved before childEnv is called because that is the shape
-// init runs in: the prefetch is started before the spawn, so by the time the
-// environment is composed the plaintexts are usually already sitting in the
-// membrane. There being nothing in the composition to take them from is what
-// the test is about.
 func TestChildEnv_NeverCarriesALivePlaintext(t *testing.T) {
 	const dbPassword = "pg-plaintext-must-not-be-exported"
 	const sessionSecret = "session-plaintext-must-not-be-exported"
@@ -810,16 +660,12 @@ func TestChildEnv_NeverCarriesALivePlaintext(t *testing.T) {
 		}
 	}
 
-	// Nothing beyond the class that does travel as values and the one
-	// declaration: an extra entry is a live value under some other spelling.
 	want := []string{"OCEL_LIVE_KEYS=DB_PASSWORD,SESSION_SECRET", "OCEL_VAR_STRIPE_KEY=sk_baked"}
 	composed := slices.Sorted(slices.Values(got))
 	if !slices.Equal(composed, want) {
 		t.Errorf("childEnv = %q, want exactly %q", composed, want)
 	}
 
-	// And it exports nothing into this process either, which is the other place
-	// a live value would be readable from.
 	for _, entry := range os.Environ() {
 		for _, secret := range secrets {
 			if strings.Contains(entry, secret) {
@@ -832,9 +678,6 @@ func TestChildEnv_NeverCarriesALivePlaintext(t *testing.T) {
 	}
 }
 
-// TestLiveStalenessBound_IsSixtySeconds pins the documented bound. It is one
-// project-level number rather than a per-variable one, and it is stated in
-// exactly one place; a change to it is a change to what the docs promise.
 func TestLiveStalenessBound_IsSixtySeconds(t *testing.T) {
 	if liveStalenessBound != 60*time.Second {
 		t.Errorf("liveStalenessBound = %s, want 60s", liveStalenessBound)

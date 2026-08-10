@@ -32,9 +32,6 @@ func newTestVarsClient(t *testing.T, token string) envv1connect.EnvVarsServiceCl
 	return envv1connect.NewEnvVarsServiceClient(srv.Client(), srv.URL, opts...)
 }
 
-// The vars service must be served on the provider's own channel, behind the
-// same session-token handshake: it reaches values in the user's cloud account,
-// so an unauthenticated caller must not get past the interceptor to the store.
 func TestListValues_RejectsMissingToken(t *testing.T) {
 	_, err := newTestVarsClient(t, "").ListValues(context.Background(), &envv1.ListValuesRequest{Slug: "shop"})
 
@@ -53,8 +50,6 @@ func TestListValues_RejectsWrongToken(t *testing.T) {
 	}
 }
 
-// A lost race has to be distinguishable from a broken request by code, so the
-// CLI can tell the operator to re-read and retry without matching on text.
 func TestVarsError_ClassifiesStoreFailures(t *testing.T) {
 	for _, tc := range []struct {
 		err  error
@@ -78,10 +73,6 @@ func TestVarsError_ClassifiesStoreFailures(t *testing.T) {
 	}
 }
 
-// A deploy reads many values through one provider session, and every read used
-// to re-derive the table from the account's bootstrap stack. The coordinates do
-// not change while the provider is running, so the whole session must cost one
-// describe however many values it reads.
 func TestVarsServer_FindsTheStoreOncePerSession(t *testing.T) {
 	cfn, ddb, crypto := &countingCFN{}, newFakeDynamo(), &fakeKMS{}
 	s := testAccount(cfn, ddb, crypto)
@@ -104,9 +95,6 @@ func TestVarsServer_FindsTheStoreOncePerSession(t *testing.T) {
 	}
 }
 
-// The two substrates keep separate tables and separate keys, so reusing one
-// store for both would answer a preview read out of production's values. Each
-// has to be found on its own.
 func TestVarsServer_FindsEachSubstratesOwnStore(t *testing.T) {
 	cfn := &countingCFN{}
 	s := testAccount(cfn, newFakeDynamo(), &fakeKMS{})
@@ -132,10 +120,6 @@ func TestVarsServer_FindsEachSubstratesOwnStore(t *testing.T) {
 	}
 }
 
-// A deploy reads a project's plaintext a whole set at a time, and reading it
-// one cell per RPC is what made a gate cost a round trip per variable. The
-// batch has to cost one query however many cells it names — and a cell that
-// holds nothing has to come back absent, not empty.
 func TestRevealValues_ReadsEveryNamedCellInOneQuery(t *testing.T) {
 	cfn, ddb, crypto := &countingCFN{}, newFakeDynamo(), &fakeKMS{}
 	s := testAccount(cfn, ddb, crypto)
@@ -186,9 +170,6 @@ func TestRevealValues_ReadsEveryNamedCellInOneQuery(t *testing.T) {
 
 func atVersion(n int64) *int64 { return &n }
 
-// guardedCell is one cell reached through the provider, optionally already
-// holding a value at version 1, so a write's expectation has something to be
-// checked against.
 func guardedCell(t *testing.T, seeded bool) (*VarsServer, *envv1.Coordinate) {
 	t.Helper()
 	s := testAccount(&countingCFN{}, newFakeDynamo(), &fakeKMS{})
@@ -212,11 +193,6 @@ func wantsFailedPrecondition(t *testing.T, err error) {
 	}
 }
 
-// The version the caller believes is current has to reach the store unchanged,
-// because each of its three states means something different: absent writes
-// blind, zero demands that no live value is set, and N demands that exact live
-// version. Dropping the field here would turn every guarded write the UI makes
-// into a blind one that silently overwrites a concurrent edit.
 func TestSetValue_ForwardsTheCallersExpectedVersion(t *testing.T) {
 	for _, tc := range []struct {
 		name        string
@@ -255,9 +231,6 @@ func TestSetValue_ForwardsTheCallersExpectedVersion(t *testing.T) {
 	}
 }
 
-// A delete is a write of a tombstone, so it carries the same expectation and
-// must forward it the same way — and zero keeps a landed delete idempotent
-// rather than turning a repeat into a lost race.
 func TestDeleteValue_ForwardsTheCallersExpectedVersion(t *testing.T) {
 	for _, tc := range []struct {
 		name        string
@@ -295,11 +268,6 @@ func TestDeleteValue_ForwardsTheCallersExpectedVersion(t *testing.T) {
 	}
 }
 
-// An override is identified by exactly the key a preview's functions derive
-// from their own identity, so the store must not accept one at any other name.
-// The CLI and the bundled UI both state the rule where they can offer a picker
-// instead of a refusal, but the store is what has to hold it: a value written
-// at a name nothing enumerates is invisible from the moment it lands.
 func TestSetValue_RefusesAnOverrideNoRuntimeWouldEverAskFor(t *testing.T) {
 	for _, tc := range []struct {
 		name        string
@@ -370,10 +338,6 @@ func TestSetValue_RefusesAnOverrideNoRuntimeWouldEverAskFor(t *testing.T) {
 	}
 }
 
-// The whole point of a reference is that the value it reads belongs to another
-// project, so the coordinate the wire carries has to name a slug of its own —
-// a target read out of the request's own project would make the feature a
-// same-project alias and nothing more.
 func TestSetReference_ReadsAValueOwnedByAnotherProject(t *testing.T) {
 	s := testAccount(&countingCFN{}, newFakeDynamo(), &fakeKMS{})
 	ctx := context.Background()
@@ -415,9 +379,6 @@ func TestSetReference_ReadsAValueOwnedByAnotherProject(t *testing.T) {
 	}
 }
 
-// A reference is a write to the cell that holds it, so it passes the same guard
-// every other write to that cell does: what varies is what the cell holds, not
-// where the cell is.
 func TestSetReference_RefusesAnAddressNoRuntimeWouldEverAskFor(t *testing.T) {
 	s := testAccount(&countingCFN{}, newFakeDynamo(), &fakeKMS{})
 
@@ -443,10 +404,6 @@ func TestCoordinateRoundTripsThroughTheWire(t *testing.T) {
 	}
 }
 
-// A bootstrap predating the variable store must leave the teardown with no
-// store at all, not a store that fails every call: the Config field is an
-// interface, so handing back a typed nil would read as configured and turn "no
-// values to remove" into a teardown failure.
 func TestTeardownValues_IsAbsentUntilTheBootstrapHasAStore(t *testing.T) {
 	if store := teardownValues(aws.Config{}, bootstrap.Deployed{Present: true}, bootstrap.ClassProduction); store != nil {
 		t.Errorf("teardownValues = %v, want none for a bootstrap with no vars table", store)

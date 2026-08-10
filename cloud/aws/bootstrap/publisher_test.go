@@ -15,8 +15,6 @@ func fixturePublisherPin() artifactPin {
 	return artifactPin{version: "4.5.6", sha256: fixtureDigest()}
 }
 
-// fixtureArtifacts is a stack with every account-global Lambda already placed,
-// which is what the template tests render against.
 func fixtureArtifacts() stackArtifacts {
 	return stackArtifacts{
 		optimizer:   fixtureOptimizerCode(),
@@ -29,8 +27,6 @@ func fixturePublisherCode() artifactCode {
 	return artifactCode{bucket: "ocel-artifacts-test", key: tagPublisherArtifactKey(fixturePublisherPin())}
 }
 
-// parsedPublisher is the subset of the rendered template the publisher's own
-// resources are asserted against.
 type parsedPublisher struct {
 	Resources map[string]struct {
 		Type       string `yaml:"Type"`
@@ -87,11 +83,6 @@ func parsePublisherTemplate(t *testing.T, template string) parsedPublisher {
 	return tmpl
 }
 
-// TestTagPublisher_ConsumesTheStreamIntoADeadLetterQueue asserts the shape the
-// publisher's liveness rests on: a zero batching window so an invalidation is
-// not held back, per-record failure reporting and a bounded retry so a poisonous
-// record cannot stall its shard or take healthy records down with it, and a
-// queue for what those retries could not place.
 func TestTagPublisher_ConsumesTheStreamIntoADeadLetterQueue(t *testing.T) {
 	for _, tc := range []struct {
 		name     string
@@ -125,18 +116,12 @@ func TestTagPublisher_ConsumesTheStreamIntoADeadLetterQueue(t *testing.T) {
 			if w := esm.Properties.MaximumBatchingWindowInSeconds; w == nil || *w != 0 {
 				t.Errorf("MaximumBatchingWindowInSeconds = %v, want 0 — an invalidation must not wait on a batch filling", w)
 			}
-			// A batch fans out over the builds it touches, and one of them can be
-			// permanently unpublishable — a build whose deploy never initialized
-			// the writer 401s forever. Reported per record, only that build's
-			// records are retried; without it every healthy build sharing the
-			// batch is retried and dead-lettered alongside it.
 			if want := []string{"ReportBatchItemFailures"}; !slices.Equal(esm.Properties.FunctionResponseTypes, want) {
 				t.Errorf("FunctionResponseTypes = %v, want %v — one poison build must not fail its batch-mates", esm.Properties.FunctionResponseTypes, want)
 			}
 			if r := esm.Properties.MaximumRetryAttempts; r == nil || *r != tagPublisherRetries {
 				t.Errorf("MaximumRetryAttempts = %v, want %d — unbounded retries stall the shard", r, tagPublisherRetries)
 			}
-			// yaml.v3 hands back a !GetAtt short form as its value alone.
 			if got := esm.Properties.DestinationConfig.OnFailure.Destination; got != "TagPublisherDeadLetterQueue.Arn" {
 				t.Errorf("OnFailure destination = %q, want the publisher's own dead-letter queue", got)
 			}
@@ -155,10 +140,6 @@ func TestTagPublisher_ConsumesTheStreamIntoADeadLetterQueue(t *testing.T) {
 	}
 }
 
-// TestTagPublisher_FilterConfinesItToTagRecords is the security assertion of
-// this whole unit. Upload sessions share the state table and this exact sort
-// key, and they carry HMAC secrets — a filter on sk alone would stream them to
-// this function. Both key conditions must be present.
 func TestTagPublisher_FilterConfinesItToTagRecords(t *testing.T) {
 	tmpl := parsePublisherTemplate(t, stackTemplate(edge.TrustExternal, fixtureArtifacts(), RequiredBootstrapVersion))
 	filters := tmpl.Resources["TagPublisherStream"].Properties.FilterCriteria.Filters
@@ -189,11 +170,6 @@ func TestTagPublisher_FilterConfinesItToTagRecords(t *testing.T) {
 	}
 }
 
-// TestTagPublisher_RendersNoAlarms. The bootstrap stack is provisioned into
-// every account whether or not it has traffic, and it must cost nothing to
-// leave idle; a CloudWatch alarm is billed per month per alarm whether or not
-// it ever fires. Neither is the mapping opted into the event-source-mapping
-// metric group, which is billed the same way and existed only to feed an alarm.
 func TestTagPublisher_RendersNoAlarms(t *testing.T) {
 	for _, tc := range []struct {
 		name     string
@@ -215,9 +191,6 @@ func TestTagPublisher_RendersNoAlarms(t *testing.T) {
 	}
 }
 
-// TestTagPublisher_RoleReachesOnlyWhatItPublishesWith. The function holds the
-// authority to derive every build's write secret, so what it can reach beyond
-// that has to be exactly its inputs and outputs.
 func TestTagPublisher_RoleReachesOnlyWhatItPublishesWith(t *testing.T) {
 	for _, tc := range []struct {
 		name       string
@@ -257,9 +230,6 @@ func TestTagPublisher_RoleReachesOnlyWhatItPublishesWith(t *testing.T) {
 				}
 			}
 
-			// The seed is what every build's write secret is derived from, so a
-			// preview publisher reaching production's would hold production's
-			// entire fleet.
 			if !strings.Contains(tc.template, "parameter"+tc.seedParam+"'") {
 				t.Errorf("role does not grant %s", tc.seedParam)
 			}
@@ -275,11 +245,6 @@ func TestTagPublisher_RoleReachesOnlyWhatItPublishesWith(t *testing.T) {
 	}
 }
 
-// TestTagPublisher_UnpinnedRendersNothing keeps the same softness the optimizer
-// has: a provider build with no cut release renders no publisher at all, rather
-// than a function pointing at bytes that are not there. Every other resource
-// goes with it — an event source mapping with no function is a stack that
-// cannot create.
 func TestTagPublisher_UnpinnedRendersNothing(t *testing.T) {
 	tmpl := stackTemplate(edge.TrustExternal, stackArtifacts{optimizer: fixtureOptimizerCode()}, RequiredBootstrapVersion)
 	for _, name := range []string{

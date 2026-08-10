@@ -13,8 +13,6 @@ import (
 	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
 )
 
-// stubGit points the preview git/PR seams at fixed values for the duration of
-// a test, restoring them afterward.
 func stubGit(t *testing.T, branch, pr string) {
 	t.Helper()
 	prevBranch, prevPR := currentGitBranch, discoverPRNumber
@@ -54,8 +52,6 @@ func TestRunPreviewUp_Ephemeral_SendsPreviewEphemeralEnvironment(t *testing.T) {
 	waitForNoStaleSocket(t, sockPath)
 }
 
-// TestRunPreviewUp_WithApp_BuildsFunctionsIntoManifest proves `ocel preview`
-// builds apps into the manifest through the same shared path as `ocel deploy`.
 func TestRunPreviewUp_WithApp_BuildsFunctionsIntoManifest(t *testing.T) {
 	root, sockPath := setUpDeployFixture(t)
 	addAppToFixtureConfig(t, root)
@@ -85,13 +81,8 @@ func TestRunPreviewUp_WithApp_BuildsFunctionsIntoManifest(t *testing.T) {
 	waitForNoStaleSocket(t, sockPath)
 }
 
-// TestRunPreviewUp_Ref_StandsUpTheExplicitRefsEphemeral mirrors
-// TestRunPreviewRm_Ref_DestroysExplicitRef: --ref keys the ephemeral preview
-// off an explicit ref, so a checkout that is not a git repository at all can
-// still address one.
 func TestRunPreviewUp_Ref_StandsUpTheExplicitRefsEphemeral(t *testing.T) {
 	root, _ := setUpDeployFixture(t)
-	// The current branch differs from --ref to prove --ref wins.
 	stubGit(t, "some-other-branch", "")
 	t.Setenv(fakeInfraClassEnvVar, "preview")
 	t.Setenv(fakeInfraPresentEnvVar, "1")
@@ -112,8 +103,6 @@ func TestRunPreviewUp_Ref_StandsUpTheExplicitRefsEphemeral(t *testing.T) {
 	}
 }
 
-// TestRunPreviewUp_RefNeedsNoGit proves the point of the flag: --ref never
-// consults git, so a directory that is not a repository still resolves.
 func TestRunPreviewUp_RefNeedsNoGit(t *testing.T) {
 	prev := currentGitBranch
 	currentGitBranch = func(string) (string, error) { return "", errNotARepo }
@@ -169,11 +158,6 @@ func TestRunPreviewUp_PersistentNamed_SendsPersistentDeclaredEnvironment(t *test
 	waitForNoStaleSocket(t, sockPath)
 }
 
-// TestRunPreviewUp_DeclaresSlugAndPreviewWildcard proves the preflight carries
-// what the domain-claim check needs: the wildcard the project is about to
-// attach, and the slug the provider recognises this project's own workers by —
-// without it, a project's own wildcard would read as another project's claim on
-// every redeploy.
 func TestRunPreviewUp_DeclaresSlugAndPreviewWildcard(t *testing.T) {
 	root, _ := setUpDeployFixture(t)
 	stubGit(t, "feature/login", "")
@@ -189,9 +173,6 @@ func TestRunPreviewUp_DeclaresSlugAndPreviewWildcard(t *testing.T) {
 	}
 }
 
-// TestRunPreviewUp_RefusesWithoutAPreviewDomain is the preflight's point: a
-// preview that has nowhere to serve is refused before the build, so nothing is
-// built and nothing is stranded.
 func TestRunPreviewUp_RefusesWithoutAPreviewDomain(t *testing.T) {
 	root, _ := setUpDeployFixture(t)
 	writeFile(t, filepath.Join(root, "ocel.config.ts"), `
@@ -224,8 +205,6 @@ export default {
 	}
 }
 
-// A production-only project still deploys: the preview wildcard is required of
-// `ocel preview up` alone, never of loading the config.
 func TestRunDeploy_NeedsNoPreviewDomain(t *testing.T) {
 	root, _ := setUpDeployFixture(t)
 	writeFile(t, filepath.Join(root, "ocel.config.ts"), `
@@ -309,7 +288,6 @@ func TestRunPreviewRm_Ephemeral_DestroysCurrentBranchWithoutPrompting(t *testing
 
 func TestRunPreviewRm_Ref_DestroysExplicitRef(t *testing.T) {
 	root, _ := setUpDeployFixture(t)
-	// The current branch differs from --ref to prove --ref wins.
 	stubGit(t, "some-other-branch", "")
 	t.Setenv(fakeInfraClassEnvVar, "preview")
 	t.Setenv(fakeInfraPresentEnvVar, "1")
@@ -339,9 +317,6 @@ func TestResolveRmEnvironment_NameAndRefAreMutuallyExclusive(t *testing.T) {
 	}
 }
 
-// TestPersistentPreviewNameIsCappedForTheSubdomainLabel pins the cap at the
-// whole DNS label: a preview is served on the bare label of the project's
-// preview wildcard, so nothing is reserved out of it.
 func TestPersistentPreviewNameIsCappedForTheSubdomainLabel(t *testing.T) {
 	atCap := "a" + strings.Repeat("b", 62)
 	overCap := atCap + "c"
@@ -389,9 +364,6 @@ func TestRunPreviewRm_PersistentWithYes_DestroysWithoutPrompting(t *testing.T) {
 	}
 }
 
-// TestConfirmDestroyPreview covers the persistent-teardown prompt decision
-// directly, mirroring TestConfirmDeploy: the interactive TTY-gated branch in
-// runPreviewRm isn't exercised end to end (consistent with deploy/bootstrap).
 func TestConfirmDestroyPreview(t *testing.T) {
 	cases := []struct {
 		name  string
@@ -433,7 +405,6 @@ func TestRunPreviewLs_RendersEnvironments(t *testing.T) {
 	for _, sub := range []string{
 		"feature_login_ab12cd34", "ephemeral", "pr-7",
 		"staging", "persistent", "—",
-		// The fake echoes the slug the CLI scoped the listing to.
 		"project:test-app",
 	} {
 		if !strings.Contains(out, sub) {

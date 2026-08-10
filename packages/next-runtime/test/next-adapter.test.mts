@@ -19,11 +19,6 @@ import { variantHeadersFile } from "@ocel/next-cache/naming";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import { defaultImages } from "./fixtures.mts";
 
-// Absent OCEL_OUTPUT_DIR, onBuildComplete writes everything under
-// process.cwd(), mirroring how the real builder invokes it inside `next build`
-// in the app directory. Most tests exercise that fallback: each runs inside a
-// throwaway project, chdirs there and imports the adapter fresh, then restores
-// the cwd afterward.
 let originalCwd: string;
 
 beforeEach(() => {
@@ -42,9 +37,6 @@ async function loadAdapterIn(projectDir: string) {
   return mod.default;
 }
 
-// A minimal, hermetic build result exercising one nodejs function route plus a
-// public/ directory — enough to assert routing/static wiring without depending
-// on a real Next build.
 async function synthProject() {
   const projectDir = await mkdtemp(join(tmpdir(), "ocel-next-"));
 
@@ -105,8 +97,6 @@ async function exists(p: string): Promise<boolean> {
   }
 }
 
-// allFileNames returns the basenames of every file under dir, recursively.
-// A missing dir yields no names.
 async function allFileNames(dir: string): Promise<string[]> {
   try {
     const entries = await readdir(dir, { recursive: true, withFileTypes: true });
@@ -116,10 +106,6 @@ async function allFileNames(dir: string): Promise<string[]> {
   }
 }
 
-// A build result where routes come in base + `.rsc` pairs that share the same
-// filePath (and config, assets): the root page (/ and /index.rsc), plus an app
-// route (/api/documents and /api/documents.rsc). The root page is also
-// prerendered, so its dispatch entry is emitted by the prerenders loop.
 async function synthDedupProject() {
   const projectDir = await mkdtemp(join(tmpdir(), "ocel-next-dedup-"));
 
@@ -214,10 +200,6 @@ async function synthDedupProject() {
   return { projectDir, args };
 }
 
-// A build result centred on prerenders: the root page (/ and /index.rsc) plus
-// its PPR segment — all sharing one groupId — each with an on-disk fallback body
-// and a rich config, so the tests can assert the group recombines into one
-// seeded cache entry carrying html + rscData + segmentData.
 async function synthPrerenderProject() {
   const projectDir = await mkdtemp(join(tmpdir(), "ocel-next-isr-"));
 
@@ -225,9 +207,6 @@ async function synthPrerenderProject() {
   await mkdir(dirname(pageHandler), { recursive: true });
   await writeFile(pageHandler, "module.exports = () => {}");
 
-  // `next build` writes this manifest; the runtime reads its `config` back as
-  // nextConfig, which is the only channel through which the cache handler can
-  // be named.
   await writeFile(
     join(projectDir, ".next/required-server-files.json"),
     JSON.stringify({
@@ -239,7 +218,6 @@ async function synthPrerenderProject() {
     }),
   );
 
-  // Fallback bodies Next would have generated under .next/server/app.
   const appDir = join(projectDir, ".next/server/app");
   await mkdir(join(appDir, "index.segments"), { recursive: true });
   await writeFile(join(appDir, "index.html"), "<html>root</html>");
@@ -351,9 +329,6 @@ function functionsDir(projectDir: string): string {
   return join(projectDir, ".ocel/output/functions");
 }
 
-// Partitions every `.func` under functions/ into the real directories (one per
-// deployed Lambda) and the symlinks (reused variants), each relative to
-// functions/ so paths read like "index.func" / "api/documents.func".
 async function partitionFuncDirs(projectDir: string) {
   const root = functionsDir(projectDir);
   const real: string[] = [];
@@ -383,7 +358,6 @@ async function readManifest(projectDir: string) {
   );
 }
 
-// Reads a bundle's generated launcher and recovers the two tables it declares.
 async function readLauncher(projectDir: string, bundle = "bundle-0") {
   const source = await readFile(
     join(functionsDir(projectDir), `${bundle}.func/__next_launcher.cjs`),
@@ -399,11 +373,6 @@ async function readLauncher(projectDir: string, bundle = "bundle-0") {
   };
 }
 
-// Joins the two halves of the build's output: the manifest names an (id,
-// entryKey) pair per route and the launcher of the bundle that id names has to
-// carry that key, or the route is a guaranteed runtime 502. Nothing about either
-// half alone can catch a producer/consumer drift, so every dispatch test that
-// emits bundles runs this.
 async function expectManifestJoinsLaunchers(projectDir: string) {
   const entriesByBundle = new Map<string, Record<string, string>>();
   for (const name of await readdir(functionsDir(projectDir))) {
@@ -411,7 +380,6 @@ async function expectManifestJoinsLaunchers(projectDir: string) {
     const bundle = name.slice(0, -".func".length);
     const { entries, primary } = await readLauncher(projectDir, bundle);
     entriesByBundle.set(bundle, entries);
-    // The primed entry is required at INIT, so a bad key fails the whole bundle.
     expect(Object.keys(entries)).toContain(primary);
   }
   expect(entriesByBundle.size).toBeGreaterThan(0);
@@ -423,8 +391,6 @@ async function expectManifestJoinsLaunchers(projectDir: string) {
   let joined = 0;
   for (const [pathname, target] of Object.entries(dispatch)) {
     if (target.kind !== "lambda" && target.kind !== "prerender") continue;
-    // An edge-parented prerender regenerates through the edge bundle; it names
-    // no node entry and the worker ignores its id.
     if (target.kind === "prerender" && target.edgeEntryKey !== undefined) {
       expect(target.entryKey).toBeUndefined();
       continue;
@@ -448,11 +414,8 @@ test("packs every node route into one bundle .func", async () => {
 
   const { real, links } = await partitionFuncDirs(projectDir);
   expect(real).toEqual(["bundle-0.func"]);
-  // Variants are dispatch entries now, not symlinked functions.
   expect(links).toEqual([]);
 
-  // The bundle carries both members' compiled modules, the shared chunk, the
-  // launcher and the dispatcher it requires.
   const bundle = join(functionsDir(projectDir), "bundle-0.func");
   for (const rel of [
     ".next/server/app/page.js",
@@ -484,8 +447,6 @@ test("copies the dispatcher into the bundle verbatim", async () => {
   );
 });
 
-// The launcher is the whole bundle's handler: it names every entry by its key
-// and hands the table to the dispatcher, which selects one per request.
 test("declares every entry in the launcher with a POSIX relative specifier", async () => {
   const { projectDir, args } = await synthDedupProject();
   const adapter = await loadAdapterIn(projectDir);
@@ -498,17 +459,10 @@ test("declares every entry in the launcher with a POSIX relative specifier", asy
     "/api/documents": "./.next/server/app/api/documents/route.js",
   });
   expect(source).toContain(`require("./__ocel_dispatch.cjs")`);
-  // AsyncLocalStorage must be a global for Next's runtime, as on the edge.
   expect(source).toContain("globalThis.AsyncLocalStorage = AsyncLocalStorage");
   expect(source).toContain("process.env.NODE_ENV ||= 'production'");
 });
 
-// Only the worker holds the routing table, and it names the entry on every
-// request it forwards. But Next also fetches this Lambda directly over the
-// loopback — to run a Server Action that lives on another page, and to follow
-// an action's redirect — and those requests carry no name, because the one they
-// inherited named the *originating* route. Without this table the bundle would
-// serve them from that route: the wrong page's payload, under the right URL.
 test("the launcher carries the pathname every route is served at", async () => {
   const { projectDir, args } = await synthDedupProject();
   const adapter = await loadAdapterIn(projectDir);
@@ -523,11 +477,6 @@ test("the launcher carries the pathname every route is served at", async () => {
   });
 });
 
-// Next prefixes basePath onto every output pathname before the adapter is
-// called (normalizePathnames, build-complete.ts:537-556), so a basePath build
-// hands over pathnames that already carry it — as this fixture does — and it
-// stamps the same prefix onto the URLs the app self-fetches. The table is
-// therefore spelled with basePath on both sides and needs no adjusting.
 test("a basePath build's table is keyed by the prefixed pathnames Next hands over", async () => {
   const { projectDir, args } = await synthDedupProject();
   args.config = { ...args.config, basePath: "/docs" };
@@ -543,9 +492,6 @@ test("a basePath build's table is keyed by the prefixed pathnames Next hands ove
 
   await adapter.onBuildComplete(args as never);
 
-  // Keys carry basePath and values do not: normalizePathnames rewrites an
-  // output's pathname and leaves its id alone, and the id is the entry key the
-  // launcher's own table is written under.
   const { routes, entries } = await readLauncher(projectDir);
   expect(routes.exact).toEqual({
     "/docs": "/",
@@ -556,10 +502,6 @@ test("a basePath build's table is keyed by the prefixed pathnames Next hands ove
   for (const key of Object.values(routes.exact)) expect(entries).toHaveProperty(key);
 });
 
-// A redirect after an action names a concrete pathname (`/api/todos/7`), never
-// the bracketed page. Next emits the pattern that spans them; the plain variant
-// is the one that names its page outright, so it is the one that can be joined
-// to an entry at build time.
 test("a dynamic route reaches the launcher as the pattern that spans it", async () => {
   const { projectDir, args } = await synthDedupProject();
   const handler = join(projectDir, ".next/server/app/api/todos/[id]/route.js");
@@ -580,8 +522,6 @@ test("a dynamic route reaches the launcher as the pattern that spans it", async 
       ...dynamic,
     } as never,
   );
-  // Verbatim from a real build (examples/next-test/args.json): the .rsc variant
-  // first, then the plain one.
   args.routing.dynamicRoutes.push(
     {
       source: "/api/todos/[id].rsc",
@@ -600,31 +540,21 @@ test("a dynamic route reaches the launcher as the pattern that spans it", async 
   await adapter.onBuildComplete(args as never);
 
   const { routes } = await readLauncher(projectDir);
-  // The .rsc variant spells its page with a capture ($rscSuffix) that only a
-  // request can substitute, so it names no entry at build time and is dropped.
   expect(routes.dynamic).toEqual([
     ["^[/]?/api/todos/(?<nxtPid>[^/]+?)(?:/)?$", "/api/todos/[id]"],
   ]);
   expect(new RegExp(routes.dynamic[0][0], "i").test("/api/todos/7")).toBe(true);
 });
 
-// Requiring one entry at INIT primes the chunk graph the bundle shares; the
-// entry with the most traced bytes primes the most of it, and the tie-break
-// keeps builds byte-identical.
 test("primes the largest entry at INIT", async () => {
   const { projectDir, args } = await synthDedupProject();
   const adapter = await loadAdapterIn(projectDir);
 
   await adapter.onBuildComplete(args as never);
 
-  // "/" traces the shared chunk on top of its own module; the api route only
-  // its own.
   expect((await readLauncher(projectDir)).primary).toBe("/");
 });
 
-// Priming is about warming the shared chunk graph, which is measured in bytes:
-// an entry tracing many small files primes less of it than one tracing a single
-// large chunk.
 test("elects the primary by traced bytes, not asset count", async () => {
   const { projectDir, args } = await synthDedupProject();
   const chunks = join(projectDir, ".next/server/chunks");
@@ -637,7 +567,6 @@ test("elects the primary by traced bytes, not asset count", async () => {
   const big = join(chunks, "big.js");
   await writeFile(big, "x".repeat(64 * 1024));
 
-  // The page traces three small assets, the api route one large one.
   args.outputs.appPages[1]!.assets = Object.fromEntries(small);
   args.outputs.appPages[0]!.assets = args.outputs.appPages[1]!.assets;
   args.outputs.appRoutes[0]!.assets = { "chunks/big.js": big };
@@ -651,8 +580,6 @@ test("elects the primary by traced bytes, not asset count", async () => {
   expect(primary).toBe("/api/documents");
 });
 
-// The join a deploy would otherwise be the first to catch: the manifest names
-// (id, entryKey) pairs and the launcher tables are what answer them.
 test("joins every dispatch entry to its bundle's launcher table", async () => {
   const { projectDir, args } = await synthDedupProject();
   const adapter = await loadAdapterIn(projectDir);
@@ -662,8 +589,6 @@ test("joins every dispatch entry to its bundle's launcher table", async () => {
   await expectManifestJoinsLaunchers(projectDir);
 });
 
-// A route whose entry landed in no bundle can only be found here: at runtime it
-// is one 502 per request, per route, in production. Never a guess.
 test("fails the build when a route's entry lands in no bundle", async () => {
   const { projectDir, args } = await synthDedupProject();
 
@@ -674,7 +599,6 @@ test("fails the build when a route's entry lands in no bundle", async () => {
       await vi.importActual<typeof import("../src/pack.mts")>("../src/pack.mts");
     return {
       ...actual,
-      // A packer that loses a member — the drift the manifest must not paper over.
       packBundles: (members: never, opts: never) => {
         const result = actual.packBundles(members, opts as never);
         return {
@@ -700,8 +624,6 @@ test("fails the build when a route's entry lands in no bundle", async () => {
   }
 });
 
-// A prerender pointing at a parent that renders neither on Lambda nor on the
-// edge has nothing to regenerate it, and no id worth writing down.
 test("fails the build when a prerender's parent renders nowhere", async () => {
   const { projectDir, args } = await synthPrerenderProject();
   (args.outputs.prerenders[0] as Record<string, unknown>).parentOutputId =
@@ -713,8 +635,6 @@ test("fails the build when a prerender's parent renders nowhere", async () => {
   );
 });
 
-// An empty entry key is a real key in the launcher table, and `??`/truthiness
-// would drop it — writing a route with no entry key at all into the manifest.
 test("carries an empty-string entry key instead of dropping it", async () => {
   const { projectDir, args } = await synthPrerenderProject();
   args.outputs.appPages[1]!.id = "";
@@ -729,10 +649,6 @@ test("carries an empty-string entry key instead of dropping it", async () => {
   expect(Object.keys((await readLauncher(projectDir)).entries)).toEqual([""]);
 });
 
-// A traced asset with no source on disk ships a bundle missing a module some
-// route requires — and if the primed entry requires it, every route in the
-// bundle. It predates bundling and is not fatal, so it is loud but not a
-// failure: one aggregate line, never one per file.
 test("warns once, aggregated, about traced assets with no source", async () => {
   const { projectDir, args } = await synthDedupProject();
   const ghosts = Object.fromEntries(
@@ -754,9 +670,6 @@ test("warns once, aggregated, about traced assets with no source", async () => {
     warn.mockRestore();
   }
 
-  // One line for the build, from one side of the pack/copy seam: the packer
-  // sizes these and the copy site reports them, so neither half warns twice
-  // about the same dest keys.
   const lines = warned.filter((l) => l.includes("no source on disk"));
   expect(lines).toHaveLength(1);
   expect(lines[0]).toContain("not copied into the bundle");
@@ -765,8 +678,6 @@ test("warns once, aggregated, about traced assets with no source", async () => {
   expect(lines[0]).toContain("chunks/ghost-two.js");
 });
 
-// The same dest keys land in more than one bundle when the routes that trace
-// them cannot share one, and the report is still one line for the build.
 test("warns once about missing sources spanning several bundles", async () => {
   const { projectDir, args } = await synthDedupProject();
   const ghost = join(projectDir, ".next/server/chunks", "ghost.js");
@@ -792,9 +703,6 @@ test("warns once about missing sources spanning several bundles", async () => {
   expect(lines[0]).toContain("1 traced asset(s)");
 });
 
-// Both halves size a path the same way because there is only one sizer: a
-// directory asset's recursive contents count toward the primary election exactly
-// as they count toward the budget.
 test("elects the primary on a directory asset's recursive bytes", async () => {
   const { projectDir, args } = await synthDedupProject();
   const tree = join(projectDir, ".next/server/chunks/tree");
@@ -805,8 +713,6 @@ test("elects the primary on a directory asset's recursive bytes", async () => {
   const lone = join(projectDir, ".next/server/chunks/lone.js");
   await writeFile(lone, "x".repeat(12 * 1024));
 
-  // The api route traces one 12KB file; the page traces a directory whose bytes
-  // only add up to more than that when its nested file is counted too.
   args.outputs.appRoutes[0]!.assets = { "chunks/lone.js": lone };
   args.outputs.appRoutes[1]!.assets = args.outputs.appRoutes[0]!.assets;
   args.outputs.appPages[0]!.assets = { "chunks/tree": tree };
@@ -825,9 +731,6 @@ test("gives variants one shared bundle id and one shared entry key", async () =>
   await adapter.onBuildComplete(args as never);
 
   const manifest = await readManifest(projectDir);
-  // Every route stays a distinct dispatch key, resolving to the same Lambda and
-  // the same entry inside it — whether the pair is prerendered (the root page)
-  // or rendered on every request (the api route).
   expect(manifest.dispatch["/"]).toMatchObject({
     kind: "prerender",
     id: "bundle-0",
@@ -842,13 +745,10 @@ test("gives variants one shared bundle id and one shared entry key", async () =>
   expect(manifest.dispatch["/api/documents.rsc"]).toEqual(
     manifest.dispatch["/api/documents"],
   );
-  // Both variants remain routable.
   expect(manifest.pathnames).toContain("/index.rsc");
   expect(manifest.pathnames).toContain("/api/documents.rsc");
 });
 
-// A bundle that overflows the artifact ceiling splits, and each route's dispatch
-// entry has to follow its own half.
 test("splits over the budget and points each route at its own bundle", async () => {
   const { projectDir, args } = await synthDedupProject();
   const filler = join(projectDir, ".next/server/chunks/filler.js");
@@ -888,16 +788,11 @@ test("splits over the budget and points each route at its own bundle", async () 
   expect(manifest.dispatch["/api/documents"].id).toBe("bundle-1");
   expect(manifest.dispatch["/api/documents.rsc"].id).toBe("bundle-1");
 
-  // Each bundle's launcher declares only its own member.
   expect(Object.keys((await readLauncher(projectDir, "bundle-0")).entries)).toEqual(["/"]);
   expect(
     Object.keys((await readLauncher(projectDir, "bundle-1")).entries),
   ).toEqual(["/api/documents"]);
 
-  // But both carry the whole build's route table. A bundle that knew only its
-  // own pathnames would answer a self-fetch for a route it does not have from
-  // whichever local pattern happened to span it; knowing the other bundle owns
-  // that pathname is what turns the miss into a named 502.
   const whole = {
     "/": "/",
     "/index.rsc": "/",
@@ -953,9 +848,6 @@ async function addStaticOutput(
   args.outputs.staticFiles.push({ pathname, id: pathname, filePath });
 }
 
-// Adds one built static file to a synthetic project, standing in for the
-// _next/static output a real build emits: Next names both the route and the
-// file itself, and they agree.
 async function withStaticFile(
   projectDir: string,
   args: StaticOutputs,
@@ -965,10 +857,6 @@ async function withStaticFile(
   await addStaticOutput(args, pathname, join(projectDir, ".next", pathname), contents);
 }
 
-// Adds one prerendered page document, which Next names after the route it
-// answers while writing the file itself at .next/server/pages/<route>.html —
-// the layout that lets a page and its own children coexist on disk, and the
-// only thing that says these bytes are a document.
 async function withStaticPage(
   projectDir: string,
   args: StaticOutputs,
@@ -1015,9 +903,6 @@ test("writes an image config artifact the manifest's configHash covers", async (
   expect(JSON.parse(bytes.toString()).configHash).toBeUndefined();
 });
 
-// public/ is where <Image src="/logo.png" /> resolves, so it is the source that
-// most needs a content hash — a path missing from the map falls back to a
-// deploy-scoped cache key.
 test("hashes both public/ and built static files into the manifest", async () => {
   const { projectDir, args } = await synthProject();
   await withStaticFile(projectDir, args, "/_next/static/media/logo.png", "PNG");
@@ -1043,8 +928,6 @@ test("hashes both public/ and built static files into the manifest", async () =>
   ).toBe("PNG");
 });
 
-// A served path must hit the map, and the error pages are served as the .html
-// files they are written out as.
 test("keys the error pages by the path they are served at", async () => {
   const { projectDir, args } = await synthProject();
   await withStaticPage(projectDir, args, "/404", "gone");
@@ -1059,9 +942,6 @@ test("keys the error pages by the path they are served at", async () => {
   expect(assetHashes["/404"]).toBeUndefined();
 });
 
-// A statically-optimized Pages Router page arrives named after its route, with
-// no extension. Written out under that name it is served as a download, so it
-// is written out as the document it is.
 test("writes a statically-optimized page under its .html name", async () => {
   const { projectDir, args } = await synthProject();
   await withStaticPage(projectDir, args, "/some", "<html>some</html>");
@@ -1079,14 +959,11 @@ test("writes a statically-optimized page under its .html name", async () => {
   expect(manifest.assetHashes["/some.html"]).toBe(
     createHash("sha256").update("<html>some</html>").digest("hex"),
   );
-  // The dispatch map stays keyed on the route; only the stored file moved.
   expect(manifest.dispatch["/some"]).toEqual({ kind: "static" });
   expect(manifest.dispatch["/some.html"]).toBeUndefined();
   expect(manifest.pathnames).toContain("/some");
 });
 
-// pages/x.js beside pages/x/[slug].js is ordinary Next routing, and it used to
-// make the build write a file and a directory at the same path.
 test("emits a page and its own children without colliding", async () => {
   const { projectDir, args } = await synthProject();
   await withStaticPage(projectDir, args, "/overlap", "<html>parent</html>");
@@ -1110,10 +987,6 @@ test("emits a page and its own children without colliding", async () => {
   );
 });
 
-// A statically-optimized dynamic page is one document spanning every path its
-// template matches, so the dispatch key is route-shaped and the asset key is
-// document-shaped. The worker serves a static target by its manifest key, and
-// this is the build side of that contract.
 test("writes a statically-optimized dynamic page under its template's name", async () => {
   const { projectDir, args } = await synthProject();
   args.config = { ...args.config, basePath: "/docs" };
@@ -1135,8 +1008,6 @@ test("writes a statically-optimized dynamic page under its template's name", asy
   expect(manifest.pathnames).toContain("/docs/[slug]");
 });
 
-// Everything Next already wrote as a file is what its own name says it is —
-// including a static output whose route only looks like a document's.
 test("leaves static outputs that are already files alone", async () => {
   const { projectDir, args } = await synthProject();
   await withStaticFile(projectDir, args, "/_next/static/chunks/a.js", "JS");
@@ -1159,10 +1030,6 @@ test("leaves static outputs that are already files alone", async () => {
   expect(await exists(join(staticDir, "sitemap.xml.html"))).toBe(false);
 });
 
-// A route may carry what only looks like an extension. pages/v1.0.js is still a
-// document, and still occupies the directory name pages/v1.0/[slug].js needs —
-// so the build dies exactly as it does for an extensionless page unless the
-// document is recognised by what the build wrote, not by how the route reads.
 test("emits a dotted page and its own children without colliding", async () => {
   const { projectDir, args } = await synthProject();
   await withStaticPage(projectDir, args, "/v1.0", "<html>parent</html>");
@@ -1183,8 +1050,6 @@ test("emits a dotted page and its own children without colliding", async () => {
   });
 });
 
-// A public/ file is already a file: whatever it is named is what it is served
-// as, extension or not.
 test("copies an extensionless public/ file under its own name", async () => {
   const { projectDir, args } = await synthProject();
   await writeFile(join(projectDir, "public", "LICENSE"), "MIT");
@@ -1218,8 +1083,6 @@ test("omits the image config when the app opted out of optimization", async () =
   warn.mockRestore();
 });
 
-// The x-vercel-cache alias is a build-time opt-in the edge worker reads back off
-// the manifest, so a build the flag was absent from must carry no field at all.
 test("records the x-vercel-cache opt-in when the deploying process set the flag", async () => {
   const { projectDir, args } = await synthProject();
   vi.stubEnv("OCEL_E2E_VERCEL_CACHE_HEADER", "1");
@@ -1287,9 +1150,6 @@ test("marks prerendered pathnames as prerender in dispatch", async () => {
   await adapter.onBuildComplete(args as never);
 
   const manifest = await readManifest(projectDir);
-  // The prerender marker replaces the plain lambda entry; the id stays the
-  // parent's bundle and the entry key its route inside it, so the runtime can
-  // invoke it to regenerate.
   expect(manifest.dispatch["/"]).toMatchObject({
     kind: "prerender",
     id: "bundle-0",
@@ -1300,8 +1160,6 @@ test("marks prerendered pathnames as prerender in dispatch", async () => {
     id: "bundle-0",
     entryKey: "/",
   });
-  // A PPR segment is a prerender output alone — it appears in no route list —
-  // so the only thing that can name its renderer is its parentOutputId.
   expect(manifest.dispatch["/index.segments/_tree.segment.rsc"]).toMatchObject({
     kind: "prerender",
     id: "bundle-0",
@@ -1309,9 +1167,6 @@ test("marks prerendered pathnames as prerender in dispatch", async () => {
   });
 });
 
-// The worker reads `!edgeEntryKey` as "this tier may revalidate", so a node
-// prerender must never carry that key — and an edge-parented one must never
-// carry a plain entryKey, which would name a Lambda entry that does not exist.
 test("separates a node prerender's entryKey from an edge prerender's edgeEntryKey", async () => {
   const { projectDir, args } = await synthPrerenderProject();
   const edgePage = join(projectDir, ".next/server/app/edgy/page.js");
@@ -1355,12 +1210,7 @@ test("lists every prerender pathname (including .segment.rsc) so resolveRoutes c
   await adapter.onBuildComplete(args as never);
 
   const manifest = await readManifest(projectDir);
-  // A segment prefetch resolves only if its pathname is in `pathnames`; it lives
-  // in `prerenders` alone (never in appPages), so it is the case the old
-  // pathnames list dropped — leaving it dispatchable but unresolvable (404).
   expect(manifest.pathnames).toContain("/index.segments/_tree.segment.rsc");
-  // Every concrete prerender output must be resolvable, so pathnames is a
-  // superset of the prerender dispatch keys.
   for (const p of args.outputs.prerenders) {
     expect(manifest.pathnames).toContain(p.pathname);
   }
@@ -1379,8 +1229,6 @@ test("projects a prerender's fallback down to its freshness windows and pprChain
   await adapter.onBuildComplete(args as never);
 
   const entry = (await readManifest(projectDir)).dispatch["/"];
-  // Only the two windows survive: the shell, the postponed state and the
-  // entry's status/headers all reach the worker through the cache entry.
   expect(entry.fallback).toEqual({
     initialRevalidate: 3600,
     initialExpiration: 86400,
@@ -1413,8 +1261,6 @@ test("records the ocel app name (from OCEL_APP_NAME) in the routing manifest", a
   expect(manifest.appName).toBe("marketing");
 });
 
-// The id is the functionUrls key the worker looks up, and one bundle serves many
-// routes — so it names the bundle, never a route.
 test("writes the bundle name into its config.json", async () => {
   const { projectDir, args } = await synthProject();
   const adapter = await loadAdapterIn(projectDir);
@@ -1463,11 +1309,6 @@ async function readCacheEntry(projectDir: string, key: string) {
   );
 }
 
-// Turbopack rewrites config.cacheHandler to a project-relative path, and both it
-// and the page-data workers resolve the handler's own `require('next/…')` from
-// wherever the file physically sits — from inside a workspace package that is a
-// different copy of Next than the app builds with. Copying it into the app's own
-// tree is what makes the bare require resolve to the app's Next.
 test("copies the cache handler into the app tree and names it there", async () => {
   const projectDir = await mkdtemp(join(tmpdir(), "ocel-next-cfg-"));
   const adapter = await loadAdapterIn(projectDir);
@@ -1487,9 +1328,6 @@ test("copies the cache handler into the app tree and names it there", async () =
   );
 });
 
-// The plural map is bundled per entry into the edge chunks too, and our `use
-// cache` handlers reach the AWS SDK transitively — naming them here would drag
-// it into every edge bundle. They stay a post-build patch of the node manifest.
 test("names the singular handler only, never the 'use cache' map", async () => {
   const projectDir = await mkdtemp(join(tmpdir(), "ocel-next-cfg-"));
   const adapter = await loadAdapterIn(projectDir);
@@ -1519,11 +1357,6 @@ test("leaves a non-build phase untouched and writes nothing", async () => {
   ).rejects.toThrow();
 });
 
-// The runtime resolves nextConfig.cacheHandler through
-// formatDynamicImportPath(distDir, path), which only leaves the value alone
-// when it is already absolute — and `next build` rewrites any absolute value in
-// this manifest to a path relative to the *build* machine's distDir. Patching
-// the built manifest after the fact is what keeps the runtime path intact.
 test("names the layer's cache handler by absolute path in required-server-files", async () => {
   const { projectDir, args } = await synthPrerenderProject();
   const adapter = await loadAdapterIn(projectDir);
@@ -1534,15 +1367,10 @@ test("names the layer's cache handler by absolute path in required-server-files"
     await readFile(join(projectDir, ".next/required-server-files.json"), "utf8"),
   );
   expect(manifest.config.cacheHandler).toBe("/opt/ocel/next/cache-handler.cjs");
-  // Untouched neighbours prove we patched the manifest rather than rewrote it.
   expect(manifest.config.cacheMaxMemorySize).toBe(0);
   expect(manifest.version).toBe(1);
 });
 
-// `use cache` is served by the plural cacheHandlers map, which the runtime
-// resolves the same way and therefore needs the same absolute-path treatment.
-// Without an entry here the framework's built-in handler is constructed at
-// cacheMaxMemorySize 0 — a literal no-op that re-runs every cached function.
 test("registers the 'use cache' handlers by absolute path alongside the ISR one", async () => {
   const { projectDir, args } = await synthPrerenderProject();
   const adapter = await loadAdapterIn(projectDir);
@@ -1559,9 +1387,6 @@ test("registers the 'use cache' handlers by absolute path alongside the ISR one"
   expect(manifest.config.cacheHandler).toBe("/opt/ocel/next/cache-handler.cjs");
 });
 
-// Next stores one cache entry per route holding html + rscData + segments
-// together, but the adapter API surfaces those as three separate PRERENDER
-// outputs (/, /index.rsc, /index.segments/*). Seeding means regrouping them.
 test("regroups a route's prerender outputs into one cache entry", async () => {
   const { projectDir, args } = await synthPrerenderProject();
   const adapter = await loadAdapterIn(projectDir);
@@ -1579,9 +1404,6 @@ test("regroups a route's prerender outputs into one cache entry", async () => {
   expect(typeof entry.lastModified).toBe("number");
 });
 
-// The html variant carries the route's real response headers verbatim; the tags
-// the cache handler checks on every read ride in on x-next-cache-tags. Each
-// variant now owns its own headers map, so the html variant keeps its content-type.
 test("carries the html variant's headers and status onto an APP_PAGE entry", async () => {
   const { projectDir, args } = await synthPrerenderProject();
   args.outputs.prerenders[0].fallback.initialHeaders = {
@@ -1599,10 +1421,6 @@ test("carries the html variant's headers and status onto an APP_PAGE entry", asy
   expect(entry.value.status).toBe(200);
 });
 
-// The client gates PPR support on per-variant response headers — above all the
-// segment cache's x-nextjs-postponed: 2 marker — so the adapter captures the rsc
-// and segment variants' own initialHeaders verbatim, storing the segment headers
-// once (they are identical across a group).
 test("captures the rsc and segment variants' headers onto an APP_PAGE entry", async () => {
   const { projectDir, args } = await synthPrerenderProject();
   const adapter = await loadAdapterIn(projectDir);
@@ -1627,11 +1445,6 @@ async function readVariantHeaders(projectDir: string, bundle = "bundle-0") {
   );
 }
 
-// A revalidation rewrite carries only Next's single page-level headers map, so
-// the per-variant headers would be lost on the first regeneration. Shipping them
-// beside the function is what lets the rewrite reseed them without reading the
-// entry it is about to overwrite — and bundling rather than fetching makes the
-// projection and the code that reads it the same build by construction.
 test("ships the build's per-variant headers into every function bundle", async () => {
   const { projectDir, args } = await synthPrerenderProject();
   const adapter = await loadAdapterIn(projectDir);
@@ -1650,10 +1463,6 @@ test("ships the build's per-variant headers into every function bundle", async (
   });
 });
 
-// The projection is the write path's whole reason to exist, so it carries the
-// two header maps and nothing else: the tags, allowQuery, pprChain and entryKeys
-// the routing manifest holds are edge-only, and a route with neither variant has
-// nothing to reseed.
 test("projects only the variant headers, and only for routes that have them", async () => {
   const { projectDir, args } = await synthPrerenderProject();
   const appDir = join(projectDir, ".next/server/app");
@@ -1683,8 +1492,6 @@ test("projects only the variant headers, and only for routes that have them", as
   ]);
 });
 
-// An APP_ROUTE stores a single body whose type Next cannot re-derive, so its
-// content-type must survive verbatim onto the entry.
 test("keeps content-type on an APP_ROUTE cache entry", async () => {
   const projectDir = await mkdtemp(join(tmpdir(), "ocel-next-route-"));
   const handler = join(projectDir, ".next/server/app/api/data/route.js");
@@ -1750,8 +1557,6 @@ test("keeps content-type on an APP_ROUTE cache entry", async () => {
   expect(Buffer.from(entry.value.body, "base64").toString()).toBe("PAYLOAD");
 });
 
-// groupId is 1:1 with a route's cache entry, so two prerendered routes with
-// distinct groupIds must land in two separate cache.json files.
 test("splits distinct groupIds into separate cache files", async () => {
   const { projectDir, args } = await synthPrerenderProject();
   const appDir = join(projectDir, ".next/server/app");
@@ -1779,10 +1584,6 @@ test("splits distinct groupIds into separate cache files", async () => {
   expect(about.value.html).toBe("<html>about</html>");
 });
 
-// Build output is namespaced per app, and the adapter cannot infer which
-// subtree is its own — it builds inside the app dir, not the project root. The
-// ocel builder tells it via OCEL_OUTPUT_DIR; everything the build emits must
-// land there and nowhere else.
 test("writes every output under OCEL_OUTPUT_DIR when the builder sets it", async () => {
   const { projectDir, args } = await synthPrerenderProject();
   const outputRoot = join(await mkdtemp(join(tmpdir(), "ocel-out-")), "apps/web");
@@ -1794,12 +1595,9 @@ test("writes every output under OCEL_OUTPUT_DIR when the builder sets it", async
   expect(await exists(join(outputRoot, "routing-manifest.json"))).toBe(true);
   expect(await exists(join(outputRoot, "functions/bundle-0.func/config.json"))).toBe(true);
   expect(await exists(join(outputRoot, "cache/index.cache.json"))).toBe(true);
-  // Nothing may fall back to the cwd-derived flat tree.
   expect(await exists(join(projectDir, ".ocel/output"))).toBe(false);
 });
 
-// The collision this layout exists to prevent: before it, the second app's
-// build overwrote the first's functions, static assets and routing manifest.
 test("two apps exposing the same route path do not overwrite each other", async () => {
   const outRoot = await mkdtemp(join(tmpdir(), "ocel-two-apps-"));
 
@@ -1817,8 +1615,6 @@ test("two apps exposing the same route path do not overwrite each other", async 
       await readFile(join(outputRoot, "functions/bundle-0.func/config.json"), "utf8"),
     );
     expect(config.app).toBe(app);
-    // Same bundle name in both apps: the worker dispatches on it per app, so it
-    // must NOT be app-qualified.
     expect(config.id).toBe("bundle-0");
 
     const manifest = JSON.parse(await readFile(join(outputRoot, "routing-manifest.json"), "utf8"));
@@ -1832,9 +1628,6 @@ test("two apps exposing the same route path do not overwrite each other", async 
   }
 });
 
-// Next writes fetch/unstable_cache entries as the bare cache value under a hash
-// filename, deriving lastModified from the file's mtime. The deployed handler
-// reads the stored envelope instead, so the build has to supply one.
 async function seedFetchCache(
   projectDir: string,
   name: string,
@@ -1873,7 +1666,6 @@ test("seeds fetch-cache entries under their hash, wrapped in an envelope", async
     ),
   );
 
-  // The hash is the handler's lookup key, so the filename must survive verbatim.
   expect(entry.value).toEqual({
     kind: "FETCH",
     data: { body: "upstream", status: 200 },
@@ -1883,9 +1675,6 @@ test("seeds fetch-cache entries under their hash, wrapped in an envelope", async
   expect(entry.lastModified).toBeGreaterThanOrEqual(before);
 });
 
-// The pruning proof behind the tag clock rests on every entry in a build having
-// lastModified >= that build's deployedAt. .next/cache survives across builds,
-// so an mtime carried over from an older one would break it.
 test("stamps fetch entries with build time, not the file's mtime", async () => {
   const { projectDir, args } = await synthProject();
   const weekMs = 7 * 24 * 60 * 60 * 1000;
@@ -1909,9 +1698,6 @@ test("stamps fetch entries with build time, not the file's mtime", async () => {
   expect(entry.lastModified).toBeGreaterThanOrEqual(before);
 });
 
-// Stamping build time restarts an entry's revalidate window, so one whose window
-// already elapsed must be dropped rather than shipped with a clock it did not
-// earn. force-cache (revalidate: false) has no window and is always kept.
 test("drops fetch entries whose revalidate window already elapsed", async () => {
   const { projectDir, args } = await synthProject();
   await seedFetchCache(
@@ -1944,15 +1730,6 @@ test("emits no fetch-cache folder for an app that cached no fetch", async () => 
   expect(await exists(join(projectDir, ".ocel/output/fetch-cache"))).toBe(false);
 });
 
-// Next's adapter runs normalizePagePath — a *filename* rule — over every Pages
-// Router output's pathname, so a build hands the adapter "/index" for the root
-// rather than "/". Left alone, the deployed app has a route for /index and none
-// for /, and every request to / 404s. These tests cover routePathname undoing
-// that, at each of the shapes a real build was found to produce it in
-// (bd ocelhq-t0ue).
-
-// The static case: id stays "/" (the route Next itself would resolve a static
-// root to) while only pathname carries the bug.
 test("un-normalizes a static Pages Router root output's pathname", async () => {
   const { projectDir, args } = await synthProject();
   const filePath = join(projectDir, ".next/server/pages/index.html");
@@ -1968,8 +1745,6 @@ test("un-normalizes a static Pages Router root output's pathname", async () => {
   expect(manifest.dispatch["/index"]).toBeUndefined();
   expect(manifest.pathnames).toContain("/");
   expect(manifest.pathnames).not.toContain("/index");
-  // servedPathname must see the untranslated pathname: the stored object stays
-  // named index.html (what Next actually wrote to disk), not "/.html".
   expect(manifest.assetHashes["/index.html"]).toBe(
     createHash("sha256").update("<html>root</html>").digest("hex"),
   );
@@ -1978,10 +1753,6 @@ test("un-normalizes a static Pages Router root output's pathname", async () => {
   ).toBe("<html>root</html>");
 });
 
-// The getServerSideProps case: unlike the static case, Next gets the *id*
-// wrong too ("/index" rather than "/"), so the lambda dispatch entry's
-// entryKey carries the bug through — un-normalizing the dispatch key alone
-// must still join it to the launcher's own "/index"-keyed entry.
 test("un-normalizes a getServerSideProps root's dispatch key, keeping its own id as entryKey", async () => {
   const { projectDir, args } = await synthProject();
   const handler = join(projectDir, ".next/server/pages/index.js");
@@ -2006,15 +1777,6 @@ test("un-normalizes a getServerSideProps root's dispatch key, keeping its own id
   await expectManifestJoinsLaunchers(projectDir);
 });
 
-// The getStaticProps/ISR case: a prerender, parented by a PAGES output. A real
-// build never runs the prerender's own pathname through normalizePagePath —
-// only the parent's on-disk html/data path (build-complete.ts:1508,537-556) —
-// so its pathname already reads "/docs", the real route, with no leading
-// "/index" to undo. Only the parent PAGES output ("/docs/index") carries that.
-// The dispatch key must still translate for the *parent*'s sake (so a request
-// for /docs resolves to the entry the launcher actually carries under
-// "/docs/index"), while the prerender's own pathname — and therefore the
-// cache key Next's runtime re-derives at read time — stays exactly as built.
 test("un-normalizes a prerendered root's dispatch key from its PAGES parent, leaving the prerender's own raw pathname alone", async () => {
   const { projectDir, args } = await synthProject();
   args.config = { ...args.config, basePath: "/docs" };
@@ -2023,9 +1785,6 @@ test("un-normalizes a prerendered root's dispatch key from its PAGES parent, lea
   await mkdir(appDir, { recursive: true });
   await writeFile(handler, "module.exports = () => {}");
   await writeFile(join(appDir, "index.html"), "<html>root</html>");
-  // A real build never basePath-prefixes `id` — normalizePathnames
-  // (build-complete.ts:537-556) rewrites only `pathname` — so the raw ids
-  // here are "/index" and "/", not "/docs/index" and "/docs".
   args.outputs.pages.push({
     pathname: "/docs/index",
     id: "/index",
@@ -2060,9 +1819,6 @@ test("un-normalizes a prerendered root's dispatch key from its PAGES parent, lea
   expect(manifest.dispatch["/docs/index"]).toBeUndefined();
   expect(manifest.pathnames).toContain("/docs");
   expect(manifest.pathnames).not.toContain("/docs/index");
-  // The prerender's own pathname was never touched, so the entry Next's
-  // runtime incremental cache re-derives by cacheKey("/docs") — "docs" — is
-  // the one seeded, and no "docs/index" entry exists to shadow it.
   expect(await exists(join(projectDir, ".ocel/output/cache/docs.cache.json"))).toBe(
     true,
   );
@@ -2071,11 +1827,6 @@ test("un-normalizes a prerendered root's dispatch key from its PAGES parent, lea
   ).toBe(false);
 });
 
-// A page one directory below "index" — pages/index/foo.js — makes Next apply
-// the same rule to a non-root path: normalizePagePath prefixes another
-// "/index" segment on ("/index/foo" -> "/index/index/foo"), so routePathname
-// must undo it by dropping one leading "/index" segment, not by re-deriving
-// the root special case.
 test("un-normalizes a nested pages/index/foo output by dropping one leading /index segment", async () => {
   const { projectDir, args } = await synthProject();
   const handler = join(projectDir, ".next/server/pages/index/index/foo.js");
@@ -2100,15 +1851,6 @@ test("un-normalizes a nested pages/index/foo output by dropping one leading /ind
   expect(manifest.pathnames).toContain("/index/foo");
 });
 
-// A prerender's own pathname is never itself run through normalizePagePath —
-// only its parent's on-disk html/data path is (build-complete.ts:1508 pushes
-// `pathname: route` verbatim, never normalizePagePath(route) again) — so a
-// prerender under pages/index/foo.js already reads "/index/foo", not
-// "/index/index/foo". Gating the prerender's own key on its *parent's* kind
-// (the reverted round-2 approach) wrongly re-ran routePathname on it anyway,
-// dropping one more "/index" than the pathname ever had and sending the
-// prerender to a phantom "/foo" while the real "/index/foo" fell through to
-// the plain lambda entry above.
 test("keeps a prerendered pages/index/foo route on its own pathname, not a phantom /foo", async () => {
   const { projectDir, args } = await synthProject();
   const handler = join(projectDir, ".next/server/pages/index/index/foo.js");
@@ -2148,13 +1890,6 @@ test("keeps a prerendered pages/index/foo route on its own pathname, not a phant
   expect(manifest.pathnames).not.toContain("/foo");
 });
 
-// handleEdgeFunction denormalizes a Pages Router edge output's pathname
-// itself, with the *inverse* rule (`route === '/index' ? '/' : route.replace(
-// /\/index$/, '')`, build-complete.ts:749-753) before the adapter ever sees
-// it — so an edge PAGES/PAGES_API pathname is never normalizePagePath'd in
-// the first place. Gating routeKeyOf on `type` alone re-applies routePathname
-// to an already-correct pathname, un-normalizing it a second time and
-// dropping the route entirely.
 test("keeps an edge Pages Router output's already-denormalized pathname addressable by its own name", async () => {
   const { projectDir, args } = await synthProject();
   args.outputs.pages.push(
@@ -2190,15 +1925,6 @@ test("keeps an edge Pages Router output's already-denormalized pathname addressa
   expect(manifest.pathnames).toContain("/index/foo");
 });
 
-// staticRouteKeyOf's gate is the file's location on disk, not its pathname's
-// shape: a STATIC_FILE whose pathname happens to look like normalizePagePath's
-// output but was never written under server/pages/ (e.g. an `output: 'export'`
-// file — build-complete.ts:625-645 names pathnames the same way but writes
-// under configOutDir) must be left untouched, while files genuinely under
-// server/pages/ that are not /index-shaped (an i18n locale document, the
-// static 404 fallback) translate to a no-op. withStaticFile's fixed
-// `.next/<pathname>` location never exercises this gate at all, so this test
-// calls addStaticOutput directly with each file's real location.
 test("only translates a STATIC_FILE named under server/pages/, not any /index-shaped pathname", async () => {
   const { projectDir, args } = await synthProject();
   await addStaticOutput(
@@ -2224,23 +1950,13 @@ test("only translates a STATIC_FILE named under server/pages/, not any /index-sh
   await adapter.onBuildComplete(args as never);
 
   const manifest = await readManifest(projectDir);
-  // Not under server/pages/: routePathname must never run on it, even though
-  // its pathname is shaped like normalizePagePath's output.
   expect(manifest.dispatch["/index/foo"]).toEqual({ kind: "static" });
   expect(manifest.dispatch["/foo"]).toBeUndefined();
   expect(manifest.pathnames).toContain("/index/foo");
-  // Under server/pages/, but neither is /index-shaped, so translating them is
-  // a no-op.
   expect(manifest.dispatch["/en"]).toEqual({ kind: "static" });
   expect(manifest.dispatch["/404"]).toEqual({ kind: "static" });
 });
 
-// Negative cases: everything routePathname must leave alone. `.rsc` and
-// `.segment.rsc` variants, `_next/data/<buildId>/index.json`, `_next/static`
-// chunks and public/ files never match unindex's `/index` or `/index/…`
-// shape at all — unlike an App Router route genuinely named `/index`
-// (covered above), which does match it and is excluded by kind instead — so
-// the fix is a no-op on every one of these regardless of gating.
 test("leaves .rsc, _next/data, _next/static and public/ pathnames untouched", async () => {
   const { projectDir, args } = await synthProject();
   await withStaticFile(projectDir, args, "/index.rsc", "RSC-ROOT");
@@ -2269,11 +1985,6 @@ test("leaves .rsc, _next/data, _next/static and public/ pathnames untouched", as
   }
 });
 
-// App Router names its routes with normalizeAppPath, a different rule under
-// which a route literally at app/index/page.js is already correctly named
-// "/index" — routePathname must never be run on it. Fixture verified against
-// test/e2e/app-dir/app-edge/app/index/page.js in the Next.js repo, whose test
-// asserts next.render('/index') resolves.
 test("leaves an App Router route literally named /index untouched", async () => {
   const { projectDir, args } = await synthProject();
   const handler = join(projectDir, ".next/server/app/index/page.js");
@@ -2300,12 +2011,6 @@ test("leaves an App Router route literally named /index untouched", async () => 
   await expectManifestJoinsLaunchers(projectDir);
 });
 
-// normalizePagePath only double-prefixes a page under /index when the page is
-// *not* a dynamic route (normalize-page-path.ts:15) — so pages/index/[...slug]
-// keeps its own pathname, "/index/[...slug]", unlike the static
-// pages/index/foo case above. Fixture verified against
-// test/e2e/dynamic-routing/pages/index/[...slug].js in the Next.js repo, whose
-// routes-manifest records the page as "/index/[...slug]" verbatim.
 test("keeps a dynamic pages/index/[...slug] route addressable by its own name", async () => {
   const { projectDir, args } = await synthProject();
   const handler = join(projectDir, ".next/server/pages/index/[...slug].js");
@@ -2341,12 +2046,6 @@ test("keeps a dynamic pages/index/[...slug] route addressable by its own name", 
   await expectManifestJoinsLaunchers(projectDir);
 });
 
-// Insurance against exactly the failure mode above ever recurring under a
-// different guise: two routes that, after translation, name the same
-// dispatch key must fail the build rather than have one silently overwrite
-// the other in Object.fromEntries. Contrived (a real `next build` can never
-// itself emit a PAGES output at the literal pathname "/"), but it is the
-// most direct way to exercise the guard.
 test("fails the build when two routes resolve to the same dispatch key", async () => {
   const { projectDir, args } = await synthProject();
   const indexHandler = join(projectDir, ".next/server/pages/index.js");
@@ -2381,11 +2080,6 @@ test("fails the build when two routes resolve to the same dispatch key", async (
   );
 });
 
-// proxy.ts builds as node middleware unconditionally, with no `edgeRuntime`
-// field — this is the shape build-complete.js actually emits for it (see the
-// hasNodeMiddleware branch), reused verbatim rather than re-derived per test.
-// Matchers default to one that matches nothing, so a test that isn't about the
-// blast-radius warning stays silent by construction.
 async function withNodeMiddleware(
   projectDir: string,
   args: { outputs: Record<string, unknown> },
@@ -2409,11 +2103,6 @@ async function withNodeMiddleware(
   return filePath;
 }
 
-// next-dispatch.cjs ships as plain CJS straight into the bundle and cannot
-// import middlewareEntryKey, so it hardcodes the same literal instead — this
-// is what makes that comment's claim true rather than aspirational: a change
-// to one without the other fails here, not at runtime as a 502 on every
-// matched request.
 test("pins the dispatcher's hardcoded middleware key to the adapter's exported constant", async () => {
   const { middlewareEntryKey } = await import("../src/next-adapter.mts");
   const dispatchSource = await readFile(
@@ -2444,8 +2133,6 @@ test("names the bundle and the reserved entry key in a nodejs middleware manifes
   });
 });
 
-// Edge middleware keeps its own shape, discriminated the same way, so a worker
-// reading `runtime` never has to guess which entryKey namespace it names.
 test("names an edge middleware manifest entry by its edge entry key", async () => {
   const { projectDir, args } = await synthProject();
   const edgeFile = join(projectDir, ".next/server/edge/middleware.js");
@@ -2479,9 +2166,6 @@ test("names an edge middleware manifest entry by its edge entry key", async () =
   });
 });
 
-// Only bundles[0] is ever named by the manifest as the worker's call target,
-// so that is the only bundle middleware's entry and assets need to land in —
-// a split build's other bundles carry neither.
 test("injects node middleware's entry and assets into bundle-0 only, including a split build", async () => {
   const { projectDir, args } = await synthDedupProject();
   const filler = join(projectDir, ".next/server/chunks/filler.js");
@@ -2536,9 +2220,6 @@ test("injects node middleware's entry and assets into bundle-0 only, including a
   expect(manifest.middleware.id).toBe("bundle-0");
 });
 
-// A fully static app can still ship a proxy.ts — it traces zero node routes
-// and therefore packs zero bundles, so middleware has to open its own rather
-// than being lost.
 test("opens its own bundle for node middleware when the build traces zero node routes", async () => {
   const { projectDir, args } = await synthProject();
   args.outputs.appRoutes = [];
@@ -2552,18 +2233,12 @@ test("opens its own bundle for node middleware when the build traces zero node r
 
   const { entries, primary } = await readLauncher(projectDir);
   expect(Object.keys(entries)).toEqual(["/_middleware"]);
-  // No route entry exists to elect, so nothing is primed at INIT through the
-  // ordinary primary path — the dispatcher primes middleware itself.
   expect(primary).toBeNull();
 
   const manifest = await readManifest(projectDir);
   expect(manifest.middleware).toMatchObject({ runtime: "nodejs", id: "bundle-0" });
 });
 
-// Middleware's assets are routed through the packer's own accounting
-// (absorb/seedAssets), not a hand-rolled loop — so a missing source is
-// reported in the same aggregate warning a missing route asset gets, rather
-// than silently excluded from it.
 test("reports a missing middleware asset in the aggregate no-source warning", async () => {
   const { projectDir, args } = await synthProject();
   await withNodeMiddleware(projectDir, args);
@@ -2590,10 +2265,6 @@ test("reports a missing middleware asset in the aggregate no-source warning", as
   );
 });
 
-// Same accounting path as an ordinary route: a bundle middleware's assets push
-// over the artifact ceiling warns, the way a member overflowing a fresh bundle
-// already does in pack.mts — rather than shipping an artifact AWS silently
-// rejects at deploy.
 test("warns when node middleware's assets push a bundle over the budget", async () => {
   const { projectDir, args } = await synthProject();
   args.outputs.appRoutes = [];
@@ -2627,10 +2298,6 @@ test("warns when node middleware's assets push a bundle over the budget", async 
   expect(lines.some((l) => l.includes("over the") && l.includes("function limit"))).toBe(true);
 });
 
-// The dispatcher reaches `/_middleware` only through an explicit x-ocel-entry
-// header the worker sends — never through a loopback self-fetch to that
-// pathname — so it must never occupy a slot in the route table a self-fetch
-// could land on.
 test("never lets /_middleware enter the launcher's route table", async () => {
   const { projectDir, args } = await synthProject();
   await withNodeMiddleware(projectDir, args);
@@ -2684,9 +2351,6 @@ test("stays silent when node middleware's matcher covers no cached route", async
   expect(lines.some((l) => l.includes("matcher covers"))).toBe(false);
 });
 
-// An absent/empty matcher list is "run on everything", the same reading the
-// manifest gives it — so it has to warn about the build's whole cached
-// surface, not stay silent because it named no pattern.
 test("treats an empty matcher list as covering everything for the blast-radius warning", async () => {
   const { projectDir, args } = await synthProject();
   await withStaticFile(projectDir, args, "/_next/static/chunks/a.js", "JS");

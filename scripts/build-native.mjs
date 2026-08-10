@@ -1,23 +1,4 @@
 #!/usr/bin/env node
-// Shared cross-compile script for the Ocel Go binaries.
-//
-// This is the single implementation of the Node platform/arch <-> Go
-// GOOS/GOARCH mapping and the `go build` invocation itself, reused by both
-// local dev (`.air.toml` via `--host`) and CI (`release.yml`'s
-// build-binaries matrix via explicit `--goos`/`--goarch`).
-//
-// Two targets share the mapping:
-//   --target cli       (default) the `ocel` CLI -> native-lib/cli-<node>/bin/ocel
-//   --target provider  the AWS provider distribution -> native-lib/
-//                       provider-aws-<node>/bin/{deploy, runtime}
-// The provider target builds BOTH binaries the provider package ships: the
-// deploy entrypoint (cmd/deploy) and the runtime (cmd/runtime). The "ocel"
-// prefix keeps the shipped provider binary from shadowing the host's real
-// `aws` CLI.
-//
-// Usage:
-//   node scripts/build-native.mjs --host [--target <cli|provider>] [--version <version>]
-//   node scripts/build-native.mjs --goos <goos> --goarch <goarch> [--target <cli|provider>] [--out <path>] [--version <version>]
 
 import { spawnSync } from "node:child_process";
 import { chmodSync, existsSync, mkdirSync } from "node:fs";
@@ -27,31 +8,21 @@ import { fileURLToPath } from "node:url";
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = resolve(__dirname, "..");
 
-// exeName appends the Windows extension when building for windows.
 function exeName(name, goos) {
   return goos === "windows" ? `${name}.exe` : name;
 }
 
-// TARGETS declares, per buildable distribution, its Go module directory, the
-// npm native-package family its binaries land in, the -X ldflags package for
-// its version string, whether it needs `go generate` first, and the binaries it
-// ships (each an entrypoint dir under cmd/ plus the output name and optional
-// subdir inside the package's bin/).
 const TARGETS = {
   cli: {
     goModuleDir: join(REPO_ROOT, "cli"),
     pkgPrefix: "cli",
     versionLdflagPkg: "github.com/ocelhq/ocel/cli/internal/cli",
-    // The CLI embeds cli/platform/dist, which is generated, uncommitted, and
-    // required for the module to compile at all. The provider embeds nothing.
     generate: true,
     binaries: [{ cmd: "./ocel", name: "ocel" }],
   },
   provider: {
     goModuleDir: join(REPO_ROOT, "cloud", "aws"),
     pkgPrefix: "provider-aws",
-    // Both cmd/deploy and cmd/runtime are `package main`, so their version
-    // string is `-X main.version`.
     versionLdflagPkg: "main",
     binaries: [
       { cmd: "./cmd/deploy", name: "deploy" },
@@ -60,10 +31,6 @@ const TARGETS = {
   },
 };
 
-// Single source of truth for the platform matrix already encoded in
-// `packages/ocel/package.json`'s `optionalDependencies`. Node's
-// `process.platform`/`process.arch` values on one side, Go's
-// `GOOS`/`GOARCH` values on the other.
 const PLATFORM_MATRIX = [
   {
     nodePlatform: "darwin",
@@ -150,8 +117,6 @@ function resolveTarget(args) {
   return entry;
 }
 
-// binaryOutPath is where one of a build target's binaries lands inside its
-// native package's bin/ for a given host platform.
 function binaryOutPath(buildTarget, binary, platform) {
   const pkgDir = `${buildTarget.pkgPrefix}-${platform.nodePlatform}-${platform.nodeArch}`;
   const name = exeName(binary.name, platform.goos);
@@ -161,8 +126,6 @@ function binaryOutPath(buildTarget, binary, platform) {
   return join(...parts);
 }
 
-// Stays off the cross-compile env: the generators are host-side Node/pnpm
-// builds whose output is platform independent.
 function generate(buildTarget) {
   const result = spawnSync("go", ["generate", "./..."], {
     cwd: buildTarget.goModuleDir,
@@ -190,9 +153,6 @@ function buildOne(buildTarget, binary, platform, outPath, version) {
     stdio: "inherit",
     env: {
       ...process.env,
-      // Cross-compilation from a single Linux CI runner requires this:
-      // go-keyring's per-OS backends all shell out to native tools rather
-      // than linking natively via cgo, so CGO is never actually needed.
       CGO_ENABLED: "0",
       GOOS: platform.goos,
       GOARCH: platform.goarch,
@@ -215,8 +175,6 @@ function main() {
   const platform = resolveTarget(args);
   const buildTarget = TARGETS[args.target];
 
-  // --out overrides the destination, but only for a single-binary target (the
-  // CLI); a multi-binary target owns its layout.
   if (args.out && buildTarget.binaries.length > 1) {
     throw new Error(
       `--out is not supported for --target ${args.target} (it ships multiple binaries)`,

@@ -1,11 +1,6 @@
 import { SELF } from "cloudflare:test";
 import { describe, expect, it } from "vitest";
 
-// These assert the probe's HTTP contract — the shape the runner parses — and
-// nothing about caching behaviour. Miniflare's cache is a local in-process
-// store with one isolate and no colo, so a hit here is evidence the probe wires
-// up, never evidence about Cloudflare's edge.
-
 const url = (path: string) => `https://probe.test${path}`;
 
 describe("/identity", () => {

@@ -19,40 +19,8 @@ import (
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/resources/v1"
 )
 
-// functionEnvBudgetBytes is AWS Lambda's ceiling on a function's environment:
-// 4KB across every key and value together. Variables share it with the
-// resource payloads already there, so it is accounted once, over the whole
-// set, at deploy — a deploy that would exceed it fails here rather than at
-// AWS, where the message names no key.
 const functionEnvBudgetBytes = 4096
 
-// varsReadPolicy grants a function execution role what it needs to read its
-// own live-class values and nothing more. It takes the role rather than its
-// fields because they are one thing: what this app was decided to be allowed to
-// read, assembled once in appExecutionRole.
-//
-// Decrypt is on exactly one key: the one its own env class's variable store
-// encrypts under, named by ARN rather than a wildcard so the class boundary
-// holds. Encrypt is never granted — values are encrypted provider-side, never
-// by a runtime.
-//
-// The table grant is added only for an app that actually declares a live value,
-// and only over the partitions that app's own values resolve out of. The table
-// is account-global and shared by every project in the class, so an unconditioned
-// Query would let one function enumerate every project's ciphertext; the
-// condition is built from vars.PartitionKey, the same function that builds the
-// key it constrains, so the grant and the addressing cannot drift apart. Query
-// is the only action: the runtime's read is a query, including the one that
-// follows a reference, and a point read it never emits is one more thing a
-// compromised function could do.
-//
-// VarsReferenced is the other projects this app's own live values resolve out
-// of. A reference is resolved where it is read, so a function reading one reads
-// the owner's partition, and a grant covering only its own would deny at runtime
-// what the store accepted at write. The consequence is that pointing one of
-// these values at a project it has never read before needs a deploy — least
-// privilege is what a value's blast radius is bounded by, and the alternative is
-// granting every project in the class up front.
 func varsReadPolicy(r executionRole) (string, error) {
 	statements := []any{
 		map[string]any{
@@ -86,22 +54,8 @@ func varsReadPolicy(r executionRole) (string, error) {
 	return string(out), nil
 }
 
-// appFolderEnv carries the folder the app binds, which is what its variables
-// resolved from. The runtime reads it only to explain a key scoped to another
-// folder; the values themselves arrive already resolved. It is left unset for
-// an unbound app, because the project root is the absence of a binding and a
-// second spelling of it would be one the reader has to know about.
 const appFolderEnv = "OCEL_APP_FOLDER"
 
-// variableEnv is the environment entries an app's resolved variables
-// contribute: the plaintext class only, under the bare key the user chose,
-// because interop with code that reads the process environment itself is the
-// property that distinguishes that class. Every other class is delivered off
-// the function's configuration entirely, so a value meant to be encrypted is
-// never legible in a configuration listing. Any class this deploy cannot
-// deliver has already failed the deploy in renderAppBundle, so the filter
-// here can never be the thing that drops a value. The app's folder binding
-// rides along because it is what decided every one of those resolutions.
 func variableEnv(app *deploymentsv1.ManifestApp) map[string]string {
 	env := make(map[string]string)
 	for _, v := range app.GetVariables() {
@@ -116,28 +70,6 @@ func variableEnv(app *deploymentsv1.ManifestApp) map[string]string {
 	return env
 }
 
-// appBundle is what one app's variables add to its function packages and
-// configuration, across the places each class is delivered to.
-//
-// The encrypted-baked half is two of them: the ciphertext rides inside every
-// one of the app's function packages, and the data key it was sealed under is
-// the single entry they contribute to function configuration.
-//
-// Live is the third, and the one that carries no value at all: the addresses of
-// the app's live-class keys, which the membrane fetches through at runtime. It
-// rides in the package rather than the configuration so a handful of
-// coordinates does not compete for the environment budget.
-//
-// Referenced is what those live addresses turn out to resolve through: the
-// other projects owning the values behind them, which is what this app's role
-// has to be granted the partitions of.
-//
-// Fingerprint is the second half of the app's Deployment identity: a digest of
-// the values sealed here, taken over the plaintext rather than the ciphertext
-// the fresh data key makes different on every render. Empty when nothing is
-// baked.
-//
-// The zero bundle is an app that declared neither.
 type appBundle struct {
 	Envelope    string
 	Ciphertext  []byte
@@ -146,9 +78,6 @@ type appBundle struct {
 	Fingerprint string
 }
 
-// env is the bundle's contribution to function configuration. It is accounted
-// against the environment budget like anything else, and it is one entry
-// however many values the app bakes.
 func (b appBundle) env() map[string]string {
 	if b.Envelope == "" {
 		return nil
@@ -156,9 +85,6 @@ func (b appBundle) env() map[string]string {
 	return map[string]string{baked.EnvelopeVar: b.Envelope}
 }
 
-// overlay is the file the bundle adds to each of the app's function packages.
-// It is folded into the package's content hash, so rotating a value lands as a
-// new artifact rather than silently reusing the one holding the old ciphertext.
 func (b appBundle) overlay() map[string][]byte {
 	files := map[string][]byte{}
 	if len(b.Ciphertext) > 0 {
@@ -173,13 +99,8 @@ func (b appBundle) overlay() map[string][]byte {
 	return files
 }
 
-// hasLive reports whether the app reads the variable store at runtime, which is
-// what decides whether its role is granted the table at all.
 func (b appBundle) hasLive() bool { return len(b.Live) > 0 }
 
-// renderAppBundles seals every app's encrypted-baked values, keyed by app
-// name, and is where a variable whose class this deploy path cannot deliver
-// stops the deploy — before anything is packaged or provisioned.
 func renderAppBundles(cfg Config, manifest *deploymentsv1.Manifest) (map[string]appBundle, error) {
 	bundles := make(map[string]appBundle, len(manifest.GetApps()))
 	for _, app := range manifest.GetApps() {
@@ -194,16 +115,6 @@ func renderAppBundles(cfg Config, manifest *deploymentsv1.Manifest) (map[string]
 	return bundles, nil
 }
 
-// renderAppBundle seals an app's encrypted-baked values under a data key
-// drawn fresh for this render, which is what keeps one deployment's artifact
-// unopenable by another's configuration and makes every rotation a distinct
-// artifact. The key travels in the function's configuration rather than under
-// a substrate key, so the membrane opens the bundle with what it already has:
-// see the changeset for what that does and does not protect against.
-//
-// A class this path has no delivery for fails here rather than being skipped,
-// because a skipped variable is a deploy that reports success and an
-// application whose value is simply absent.
 func renderAppBundle(cfg Config, slug string, app *deploymentsv1.ManifestApp) (appBundle, error) {
 	values := make(map[string]string)
 	var keys []live.Key
@@ -253,16 +164,6 @@ func renderAppBundle(cfg Config, slug string, app *deploymentsv1.ManifestApp) (a
 	}, nil
 }
 
-// referencedOwners is the other projects one app's live values resolve out of,
-// sorted. It is derived from that app's own manifest rather than from the
-// project's references as a whole, because the grant it feeds is per function
-// role: another app's reference, and a cell no runtime ever reads, are
-// partitions this function has no use for.
-//
-// Both addresses a live key resolves at are looked up — the override this
-// deploy's environment holds, where it has one, and the class-wide value —
-// because either of them may be the cell holding an address rather than a
-// value.
 func referencedOwners(cfg Config, slug string, keys []live.Key) []string {
 	environments := []string{""}
 	if environment := overrideEnvironment(cfg); environment != "" {
@@ -287,15 +188,6 @@ func referencedOwners(cfg Config, slug string, keys []live.Key) []string {
 	return out
 }
 
-// overrideEnvironment is the named environment this deploy's functions resolve
-// overrides for: the preview's own identity, which is exactly the key the
-// runtime would otherwise have to derive from a ref it cannot see. Production
-// gets none — it has a single environment, so an override there is a row
-// nothing could ever write and a second address on every read.
-//
-// It is pinned rather than resolved at runtime because it is the identity of
-// the deployment, not one of its values: which folder and which environment a
-// key reads from is code-declared topology, and only the value itself is live.
 func overrideEnvironment(cfg Config) string {
 	if cfg.Class != deploymentsv1.Environment_CLASS_PREVIEW {
 		return ""
@@ -303,21 +195,6 @@ func overrideEnvironment(cfg Config) string {
 	return cfg.Identity
 }
 
-// recordedAudit is what one app's Deployment record says it shipped with: a
-// fingerprint of the whole variable set, and every variable it resolved at the
-// store coordinate and version it resolved at, sorted so one deploy's record
-// is comparable to another's.
-//
-// A live-class value is recorded as latest-at-runtime rather than at the
-// version this deploy saw: it is fetched from the store when it is read, so a
-// version here would be the ledger claiming a reproducibility the runtime
-// cannot honour.
-//
-// Production only. The record is the audit ledger of what is serving the
-// project's users, and a preview's Deployments are neither long-lived nor
-// audited; keeping them out means one class of record to reason about rather
-// than two. Nothing is lost by it: baked values ride the immutable artifact,
-// so no rollback or delivery path reads this.
 func recordedAudit(cfg Config, app *deploymentsv1.ManifestApp) (string, []edge.VariableRecord) {
 	if cfg.Class != deploymentsv1.Environment_CLASS_PRODUCTION {
 		return "", nil
@@ -341,16 +218,6 @@ func recordedAudit(cfg Config, app *deploymentsv1.ManifestApp) (string, []edge.V
 	return fingerprintRecords(records), records
 }
 
-// fingerprintRecords digests a recorded variable set, so any two promotions
-// that shipped different values read differently in the ledger.
-//
-// It is deliberately not the identity's fingerprint. That one covers baked
-// values alone — which is what keeps rotating a live value out of a redeploy —
-// so an app whose every variable is live would fingerprint as nothing at all.
-// This digest covers the live keys too, by their latest-at-runtime marker
-// rather than by a version the ledger must never claim for them.
-//
-// Empty when there is nothing to record, which is also what a preview records.
 func fingerprintRecords(records []edge.VariableRecord) string {
 	if len(records) == 0 {
 		return ""
@@ -368,26 +235,10 @@ func fingerprintRecords(records []edge.VariableRecord) string {
 	return hex.EncodeToString(h.Sum(nil))[:fingerprintValuesHexLen]
 }
 
-// liveVersionMarker stands where a version would be for a live key. It is not
-// a number, so it can never collide with one.
 const liveVersionMarker = "live"
 
-// fingerprintValuesHexLen is how much of the digest an identity carries. 48
-// bits, which only ever has to tell apart the handful of Deployments sharing
-// one build id, and short enough that safeName's 40-character hard truncation
-// cannot clip it out of a stack name.
 const fingerprintValuesHexLen = 12
 
-// fingerprintValues digests the resolved values a Deployment bakes, which is
-// the half of its identity that a rotation changes. It is taken over the
-// plaintext rather than the ciphertext: the data key is drawn fresh per render,
-// so a ciphertext digest would differ on every deploy and no two deploys could
-// ever be recognised as shipping the same values.
-//
-// Keys are sorted and each key and value written length-prefixed, so map order
-// cannot move the digest and no re-splitting of one pair's characters into
-// another can collide. Nothing baked fingerprints as empty, which renders the
-// identity as the bare build id.
 func fingerprintValues(values map[string]string) string {
 	if len(values) == 0 {
 		return ""
@@ -406,20 +257,8 @@ func fingerprintValues(values map[string]string) string {
 	return hex.EncodeToString(h.Sum(nil))[:fingerprintValuesHexLen]
 }
 
-// runtimeOwnedPrefixes are the names the Lambda runtime injects into every
-// function environment. A variable declared under one is overwritten before the
-// handler ever reads it, and the Lambda API refuses several outright.
-//
-// The list lives here, and not with the SDK's own reserved names, because it is
-// this provider's fact: a declaration is written before a deploy target exists,
-// and these names carry no meaning on another one. A second provider states its
-// own beside its own realization rather than editing a shared constant.
 var runtimeOwnedPrefixes = []string{"AWS_", "LAMBDA_"}
 
-// checkRuntimeOwnedNames refuses a variable this runtime would overwrite. It
-// rules only on the plaintext class, which is the only one delivered into the
-// function environment under its own name — an encrypted class travels in the
-// package and collides with nothing.
 func checkRuntimeOwnedNames(app *deploymentsv1.ManifestApp) error {
 	var taken []string
 	for _, v := range app.GetVariables() {
@@ -446,12 +285,6 @@ func checkRuntimeOwnedNames(app *deploymentsv1.ManifestApp) error {
 	)
 }
 
-// checkFunctionEnvBudget refuses a function environment that does not fit the
-// platform's limit, naming what each key costs and the remedy: moving a value
-// to an encrypted class takes it out of the function environment altogether.
-// The alternative — spilling over to another delivery path — would silently
-// change a value's confidentiality, which is the one thing a class must never
-// do behind the user's back.
 func checkFunctionEnvBudget(function string, env map[string]string) error {
 	total := 0
 	keys := make([]string, 0, len(env))

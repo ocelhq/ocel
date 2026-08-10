@@ -14,12 +14,6 @@ import (
 const goldenPath = "testdata/golden_manifest.json"
 const functionsGoldenPath = "testdata/golden_manifest_functions.json"
 
-// protojson deliberately injects random whitespace into its output (see
-// google.golang.org/protobuf/internal/encoding/json's detrand use) to stop
-// callers from depending on byte-stable JSON, so it can't back a
-// byte-identical golden test. goldenManifest is a plain mirror of the
-// Manifest shape, serialized with the standard library's deterministic
-// encoding/json instead, purely for this test's comparisons.
 type goldenManifest struct {
 	SchemaVersion string           `json:"schema_version"`
 	Slug          string           `json:"slug"`
@@ -419,8 +413,6 @@ func TestBuild_FunctionRecordsOwningApp(t *testing.T) {
 	}
 }
 
-// A project that configures no apps still deploys: the builder detects one at
-// the project root and names it, and that name must reach the manifest.
 func TestBuild_SynthesizesAppFromFunctionsWhenNoneConfigured(t *testing.T) {
 	manifest, err := Build("proj-1", nil, nil, nil, []Function{
 		{Name: "api/documents", Runtime: "nodejs24.x", Handler: "h.js", ArtifactPath: "a", Framework: "next", App: "storefront"},
@@ -441,8 +433,6 @@ func TestBuild_SynthesizesAppFromFunctionsWhenNoneConfigured(t *testing.T) {
 	}
 }
 
-// Config may omit framework and let the builder detect it; the manifest app
-// should still report the framework its functions were built with.
 func TestBuild_ConfiguredAppFrameworkFilledFromItsFunctions(t *testing.T) {
 	manifest, err := Build("proj-1", nil, []App{{Name: "web"}}, nil, []Function{
 		{Name: "web", Runtime: "nodejs24.x", Handler: "h.js", ArtifactPath: "a", Framework: "express", App: "web"},
@@ -455,7 +445,6 @@ func TestBuild_ConfiguredAppFrameworkFilledFromItsFunctions(t *testing.T) {
 	}
 }
 
-// A configured app that emits no functions is still part of the project.
 func TestBuild_ConfiguredAppWithNoFunctionsStillAppears(t *testing.T) {
 	manifest, err := Build("proj-1", nil, []App{{Name: "web", Framework: "express"}}, nil, nil, nil)
 	if err != nil {
@@ -476,11 +465,6 @@ func TestBuild_NoAppsAndNoFunctionsYieldsNoApps(t *testing.T) {
 	}
 }
 
-// A resolved variable has to reach the app whose functions read it, including
-// the app nothing configured — a single-app project configures none, and that
-// is the case where a variable is most likely to be the only thing the app
-// needs. Two apps resolving the same key differently is the whole reason
-// variables sit on the app rather than on the manifest.
 func TestBuild_CarriesEachAppsOwnResolvedVariables(t *testing.T) {
 	variables := map[string][]Variable{
 		"admin": {
@@ -523,11 +507,6 @@ func TestBuild_CarriesEachAppsOwnResolvedVariables(t *testing.T) {
 	}
 }
 
-// TestBuild_CarriesTheAppsFolderBinding proves the binding that decided where
-// an app's values came from travels with the app: the runtime needs it to say
-// what an app is bound to when it reads a key scoped somewhere else. An
-// unbound app carries the project root, and the root has exactly one spelling
-// — the empty string — so a reader never has to treat "/" as a second one.
 func TestBuild_CarriesTheAppsFolderBinding(t *testing.T) {
 	manifest, err := Build("proj-1", nil, []App{
 		{Name: "admin", Framework: "express", Folder: "/admin"},
@@ -549,12 +528,6 @@ func TestBuild_CarriesTheAppsFolderBinding(t *testing.T) {
 	}
 }
 
-// TestBuild_CarriesEachVariablesResolvedFolder proves the folder a key
-// actually resolved from survives onto the variable, which is what completes
-// the store coordinate a live-class value is fetched by at runtime. It is not
-// the app's binding: an unscoped key resolves at the project root even for a
-// bound app, so the same app carries variables from two different folders and
-// substituting ManifestApp.folder would be wrong for one of them.
 func TestBuild_CarriesEachVariablesResolvedFolder(t *testing.T) {
 	variables := map[string][]Variable{
 		"admin": {
@@ -581,11 +554,6 @@ func TestBuild_CarriesEachVariablesResolvedFolder(t *testing.T) {
 	}
 }
 
-// TestManifestVariables_LowersTheResolvedVersion proves the store version a
-// value resolved at reaches the manifest, which is the only route by which a
-// Deployment record can name what it shipped. Nothing in delivery reads it: a
-// cell that never had a version lowers as zero rather than as an absence a
-// consumer would have to distinguish.
 func TestManifestVariables_LowersTheResolvedVersion(t *testing.T) {
 	got := manifestVariables([]Variable{
 		{Key: "VERSIONED", Class: resourcesv1.VariableClass_VARIABLE_CLASS_SENSITIVE, Value: "v", Version: 4},

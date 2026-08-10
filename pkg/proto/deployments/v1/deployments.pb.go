@@ -22,13 +22,6 @@ const (
 	_ = protoimpl.EnforceVersion(protoimpl.MaxVersion - 20)
 )
 
-// Phase names the coarse stage a deploy is in, so the CLI can render a fixed
-// roadmap (build, upload, provision, finalize) instead of matching progress
-// wording. It is shared vocabulary across providers; a provider that does not
-// classify a step leaves PHASE_UNSPECIFIED and the CLI renders it as a plain
-// titled step. BUILDING is CLI-side (it runs before any provider is spawned)
-// and never travels the wire; it is defined here so the CLI and every provider
-// speak one vocabulary.
 type Phase int32
 
 const (
@@ -84,8 +77,6 @@ func (Phase) EnumDescriptor() ([]byte, []int) {
 	return file_deployments_v1_deployments_proto_rawDescGZIP(), []int{0}
 }
 
-// Class is the environment class a command acts under. It selects which
-// substrate the provider realizes against and gates the class guard.
 type Environment_Class int32
 
 const (
@@ -138,8 +129,6 @@ func (Environment_Class) EnumDescriptor() ([]byte, []int) {
 	return file_deployments_v1_deployments_proto_rawDescGZIP(), []int{0, 0}
 }
 
-// Lifecycle distinguishes the two preview lifecycles. It is meaningful only
-// for class=PREVIEW and is LIFECYCLE_UNSPECIFIED for every other class.
 type Environment_Lifecycle int32
 
 const (
@@ -189,9 +178,6 @@ func (Environment_Lifecycle) EnumDescriptor() ([]byte, []int) {
 	return file_deployments_v1_deployments_proto_rawDescGZIP(), []int{0, 1}
 }
 
-// IdentitySource records how identity was derived: from the git branch/ref
-// (ephemeral previews) or explicitly declared by the user (persistent
-// previews named with --name).
 type Environment_IdentitySource int32
 
 const (
@@ -241,10 +227,6 @@ func (Environment_IdentitySource) EnumDescriptor() ([]byte, []int) {
 	return file_deployments_v1_deployments_proto_rawDescGZIP(), []int{0, 2}
 }
 
-// Status separates the three answers an edge can give, so an edge that
-// cannot look the hostname up is never read as one reporting it unclaimed.
-// STATUS_UNSPECIFIED is "could not say", which is what a provider whose edge
-// does not implement the lookup reports by filling nothing in.
 type DomainClaim_Status int32
 
 const (
@@ -294,28 +276,15 @@ func (DomainClaim_Status) EnumDescriptor() ([]byte, []int) {
 	return file_deployments_v1_deployments_proto_rawDescGZIP(), []int{18, 0}
 }
 
-// Environment is the fully resolved target a provisioning verb acts on. The
-// CLI normalizes every invocation into one of these before spawning the
-// provider, so the provider branches only on this data and never inspects how
-// the command was called. `ocel deploy` and `ocel preview` drive the same
-// Deploy RPC and diverge only by the Environment they send: deploy sends
-// class=PRODUCTION with lifecycle unspecified; an ephemeral preview sends
-// class=PREVIEW, lifecycle=EPHEMERAL; a persistent (named) preview sends
-// class=PREVIEW, lifecycle=PERSISTENT.
 type Environment struct {
-	state     protoimpl.MessageState `protogen:"open.v1"`
-	Class     Environment_Class      `protobuf:"varint,1,opt,name=class,proto3,enum=deployments.v1.Environment_Class" json:"class,omitempty"`
-	Lifecycle Environment_Lifecycle  `protobuf:"varint,2,opt,name=lifecycle,proto3,enum=deployments.v1.Environment_Lifecycle" json:"lifecycle,omitempty"`
-	// identity is the canonical, substrate-safe key for this environment: a
-	// valid Postgres identifier and stack-name token. It is stable across
-	// re-runs, so re-running a preview updates the same environment in place.
+	state          protoimpl.MessageState     `protogen:"open.v1"`
+	Class          Environment_Class          `protobuf:"varint,1,opt,name=class,proto3,enum=deployments.v1.Environment_Class" json:"class,omitempty"`
+	Lifecycle      Environment_Lifecycle      `protobuf:"varint,2,opt,name=lifecycle,proto3,enum=deployments.v1.Environment_Lifecycle" json:"lifecycle,omitempty"`
 	Identity       string                     `protobuf:"bytes,3,opt,name=identity,proto3" json:"identity,omitempty"`
 	IdentitySource Environment_IdentitySource `protobuf:"varint,4,opt,name=identity_source,json=identitySource,proto3,enum=deployments.v1.Environment_IdentitySource" json:"identity_source,omitempty"`
-	// label is an optional display label (e.g. the PR number) surfaced by
-	// `ocel preview ls`. It is never part of identity and may be empty.
-	Label         string `protobuf:"bytes,5,opt,name=label,proto3" json:"label,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	Label          string                     `protobuf:"bytes,5,opt,name=label,proto3" json:"label,omitempty"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
 }
 
 func (x *Environment) Reset() {
@@ -383,31 +352,14 @@ func (x *Environment) GetLabel() string {
 	return ""
 }
 
-// Manifest is the versioned, deterministic artifact the CLI builds from a
-// project's discovered resources and hands to a provider.
 type Manifest struct {
-	state protoimpl.MessageState `protogen:"open.v1"`
-	// schema_version lets a provider reject a manifest shape it doesn't
-	// understand, e.g. "provider.v1".
-	SchemaVersion string              `protobuf:"bytes,1,opt,name=schema_version,json=schemaVersion,proto3" json:"schema_version,omitempty"`
-	Resources     []*ManifestResource `protobuf:"bytes,3,rep,name=resources,proto3" json:"resources,omitempty"`
-	Functions     []*ManifestFunction `protobuf:"bytes,4,rep,name=functions,proto3" json:"functions,omitempty"`
-	// slug is the project's identity: a stable, human-authored DNS-label string.
-	// Everything project-scoped derives from it — Pulumi stack names, root-stack
-	// state keys, and the project's instance in the shared deployments-store
-	// worker.
-	Slug string `protobuf:"bytes,7,opt,name=slug,proto3" json:"slug,omitempty"`
-	// domains maps a lowercased environment class ("production") to the custom
-	// hostnames the web-facing worker is served on for that class, each attached
-	// as a Cloudflare worker route. A provider reads only the entry matching
-	// DeployRequest.environment; absent entries mean the default vendor
-	// subdomain. Production may carry several hostnames; preview carries a single
-	// wildcard (validated one-entry at config time).
-	Domains map[string]*DomainList `protobuf:"bytes,5,rep,name=domains,proto3" json:"domains,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
-	// apps are the project's applications. Every ManifestFunction belongs to
-	// exactly one of them. A project that configures no apps still yields one,
-	// the app the builder detected at the project root.
-	Apps          []*ManifestApp `protobuf:"bytes,6,rep,name=apps,proto3" json:"apps,omitempty"`
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	SchemaVersion string                 `protobuf:"bytes,1,opt,name=schema_version,json=schemaVersion,proto3" json:"schema_version,omitempty"`
+	Resources     []*ManifestResource    `protobuf:"bytes,3,rep,name=resources,proto3" json:"resources,omitempty"`
+	Functions     []*ManifestFunction    `protobuf:"bytes,4,rep,name=functions,proto3" json:"functions,omitempty"`
+	Slug          string                 `protobuf:"bytes,7,opt,name=slug,proto3" json:"slug,omitempty"`
+	Domains       map[string]*DomainList `protobuf:"bytes,5,rep,name=domains,proto3" json:"domains,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
+	Apps          []*ManifestApp         `protobuf:"bytes,6,rep,name=apps,proto3" json:"apps,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -484,10 +436,6 @@ func (x *Manifest) GetApps() []*ManifestApp {
 	return nil
 }
 
-// DomainList is the set of custom hostnames a web-facing worker is served on
-// for one environment class. Production may name several; preview names exactly
-// one (a wildcard). Modelling both as a list keeps a single internal shape —
-// the single-vs-many distinction is a config-authoring rule, not a wire one.
 type DomainList struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Hostnames     []string               `protobuf:"bytes,1,rep,name=hostnames,proto3" json:"hostnames,omitempty"`
@@ -532,31 +480,13 @@ func (x *DomainList) GetHostnames() []string {
 	return nil
 }
 
-// ManifestApp is one application in the project: a unit the CLI builds and a
-// provider deploys as a whole.
 type ManifestApp struct {
-	state protoimpl.MessageState `protogen:"open.v1"`
-	// name is the app's name as configured (or, for a detected app, as the
-	// builder named it). It is the key ManifestFunction.app references, and is
-	// unique within a manifest. Unlike a logical_name it is carried verbatim.
-	Name string `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
-	// framework is the app's web framework (e.g. "express", "next"). It matches
-	// the framework of the app's functions.
-	Framework string `protobuf:"bytes,2,opt,name=framework,proto3" json:"framework,omitempty"`
-	// domains maps a lowercased environment class ("production") to the custom
-	// hostnames this app is served on for that class, mirroring Manifest.domains
-	// so a persistent preview can gain a domain without a schema change. Absent
-	// entries mean the default vendor subdomain.
-	Domains map[string]*DomainList `protobuf:"bytes,3,rep,name=domains,proto3" json:"domains,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
-	// variables are this app's resolved variables. They sit on the app rather
-	// than on the manifest because resolution is per app: two apps in one
-	// project may resolve the same key to different values.
-	Variables []*ManifestVariable `protobuf:"bytes,4,rep,name=variables,proto3" json:"variables,omitempty"`
-	// folder is the variable folder this app binds, which is what decided where
-	// its variables resolved from. It travels so the runtime can say what an app
-	// is bound to when it reads a key scoped elsewhere. Empty is the project
-	// root — the absence of a binding is the only spelling of it.
-	Folder        string `protobuf:"bytes,5,opt,name=folder,proto3" json:"folder,omitempty"`
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Name          string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
+	Framework     string                 `protobuf:"bytes,2,opt,name=framework,proto3" json:"framework,omitempty"`
+	Domains       map[string]*DomainList `protobuf:"bytes,3,rep,name=domains,proto3" json:"domains,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
+	Variables     []*ManifestVariable    `protobuf:"bytes,4,rep,name=variables,proto3" json:"variables,omitempty"`
+	Folder        string                 `protobuf:"bytes,5,opt,name=folder,proto3" json:"folder,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -626,29 +556,13 @@ func (x *ManifestApp) GetFolder() string {
 	return ""
 }
 
-// ManifestVariable is one variable resolved for one app. The class travels
-// with the value because the class is what decides delivery, and a provider
-// must not have to infer it from where the value happens to sit.
 type ManifestVariable struct {
-	state protoimpl.MessageState `protogen:"open.v1"`
-	Key   string                 `protobuf:"bytes,1,opt,name=key,proto3" json:"key,omitempty"`
-	Class v1.VariableClass       `protobuf:"varint,2,opt,name=class,proto3,enum=resources.v1.VariableClass" json:"class,omitempty"`
-	// value is the resolved plaintext. A live-class variable never carries one:
-	// it is fetched at runtime, so its plaintext never reaches a build host.
-	Value string `protobuf:"bytes,3,opt,name=value,proto3" json:"value,omitempty"`
-	// folder is the folder this key resolved from, which is not the app's
-	// binding: a scoped key resolves at the binding, an unscoped one at the
-	// project root, so the two differ for the same app. It completes the store
-	// coordinate a live-class value is fetched by at runtime, and pinning it at
-	// deploy is what keeps the runtime from ever having to resolve a folder
-	// itself. Empty is the project root — the same single spelling used
-	// everywhere above the store.
-	Folder string `protobuf:"bytes,4,opt,name=folder,proto3" json:"folder,omitempty"`
-	// version is the store version the class-wide cell was at when this deploy
-	// resolved it — zero for a live-class key, which is fetched at runtime and
-	// pinned to no version, or for a cell that never had one. It exists for the
-	// ledger's audit record and nothing else: delivery never reads it.
-	Version       int64 `protobuf:"varint,5,opt,name=version,proto3" json:"version,omitempty"`
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Key           string                 `protobuf:"bytes,1,opt,name=key,proto3" json:"key,omitempty"`
+	Class         v1.VariableClass       `protobuf:"varint,2,opt,name=class,proto3,enum=resources.v1.VariableClass" json:"class,omitempty"`
+	Value         string                 `protobuf:"bytes,3,opt,name=value,proto3" json:"value,omitempty"`
+	Folder        string                 `protobuf:"bytes,4,opt,name=folder,proto3" json:"folder,omitempty"`
+	Version       int64                  `protobuf:"varint,5,opt,name=version,proto3" json:"version,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -718,28 +632,15 @@ func (x *ManifestVariable) GetVersion() int64 {
 	return 0
 }
 
-// ManifestFunction is a deployable function unit. Being listed in
-// Manifest.functions implies serverless compute, and an express framework
-// implies web-facing — so there is deliberately no compute or trigger field.
 type ManifestFunction struct {
-	state protoimpl.MessageState `protogen:"open.v1"`
-	// logical_name is the app name normalized by the same rule as
-	// ManifestResource.logical_name. Deterministic across declaration order.
-	LogicalName  string `protobuf:"bytes,1,opt,name=logical_name,json=logicalName,proto3" json:"logical_name,omitempty"`
-	Runtime      string `protobuf:"bytes,2,opt,name=runtime,proto3" json:"runtime,omitempty"`
-	Handler      string `protobuf:"bytes,3,opt,name=handler,proto3" json:"handler,omitempty"`
-	ArtifactPath string `protobuf:"bytes,4,opt,name=artifact_path,json=artifactPath,proto3" json:"artifact_path,omitempty"`
-	Framework    string `protobuf:"bytes,5,opt,name=framework,proto3" json:"framework,omitempty"`
-	// route_id is the framework-native identity a routing layer dispatches to,
-	// distinct from logical_name: logical_name is normalized to an
-	// infrastructure-safe charset (an AWS Lambda name can't hold '/' or '.'),
-	// while route_id preserves the original route (e.g. Next's "/api/documents").
-	// The Cloudflare worker keys FUNCTION_URLS by route_id. Empty for functions
-	// whose framework has no routing layer.
-	RouteId string `protobuf:"bytes,6,opt,name=route_id,json=routeId,proto3" json:"route_id,omitempty"`
-	// app is the name of the ManifestApp this function belongs to. Always set:
-	// every function the builder emits records the app it was built from.
-	App           string `protobuf:"bytes,7,opt,name=app,proto3" json:"app,omitempty"`
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	LogicalName   string                 `protobuf:"bytes,1,opt,name=logical_name,json=logicalName,proto3" json:"logical_name,omitempty"`
+	Runtime       string                 `protobuf:"bytes,2,opt,name=runtime,proto3" json:"runtime,omitempty"`
+	Handler       string                 `protobuf:"bytes,3,opt,name=handler,proto3" json:"handler,omitempty"`
+	ArtifactPath  string                 `protobuf:"bytes,4,opt,name=artifact_path,json=artifactPath,proto3" json:"artifact_path,omitempty"`
+	Framework     string                 `protobuf:"bytes,5,opt,name=framework,proto3" json:"framework,omitempty"`
+	RouteId       string                 `protobuf:"bytes,6,opt,name=route_id,json=routeId,proto3" json:"route_id,omitempty"`
+	App           string                 `protobuf:"bytes,7,opt,name=app,proto3" json:"app,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -823,16 +724,8 @@ func (x *ManifestFunction) GetApp() string {
 	return ""
 }
 
-// ManifestResource pairs a resource's identity with its typed configuration.
-// The config oneof reuses resources.v1's typed config messages so a
-// resource's config schema is single-sourced across declare and manifest.
 type ManifestResource struct {
-	state protoimpl.MessageState `protogen:"open.v1"`
-	// logical_name = <type>_<id>, where type is the resource type's canonical
-	// lowercase token (e.g. "postgres") and id is the user's chosen resource
-	// key. Normalized to lowercase alphanumeric plus underscore. Deterministic:
-	// identical declarations always produce the same logical_name, independent
-	// of declaration order.
+	state       protoimpl.MessageState `protogen:"open.v1"`
 	LogicalName string                 `protobuf:"bytes,1,opt,name=logical_name,json=logicalName,proto3" json:"logical_name,omitempty"`
 	Resource    *v1.ResourceIdentifier `protobuf:"bytes,2,opt,name=resource,proto3" json:"resource,omitempty"`
 	// Types that are valid to be assigned to Config:
@@ -929,28 +822,15 @@ func (*ManifestResource_Postgres) isManifestResource_Config() {}
 
 func (*ManifestResource_Bucket) isManifestResource_Config() {}
 
-// DeployRequest is the sole request this slice: the manifest to provision
-// against, plus the provider's own opaque options.
 type DeployRequest struct {
-	state    protoimpl.MessageState `protogen:"open.v1"`
-	Manifest *Manifest              `protobuf:"bytes,1,opt,name=manifest,proto3" json:"manifest,omitempty"`
-	// options is always UTF-8 JSON bytes: `{}` when the provider was given no
-	// options, never absent and never an empty string. The CLI never inspects
-	// this field; only the provider unmarshals it.
-	Options []byte `protobuf:"bytes,2,opt,name=options,proto3" json:"options,omitempty"`
-	// protocol_version pins the DeployRequest/DeployEvent wire contract so a
-	// provider can reject a request it can't speak.
-	ProtocolVersion string `protobuf:"bytes,3,opt,name=protocol_version,json=protocolVersion,proto3" json:"protocol_version,omitempty"`
-	// environment is the fully resolved target this deploy acts on. `ocel
-	// deploy` and `ocel preview` both drive this RPC and diverge only here.
-	Environment *Environment `protobuf:"bytes,4,opt,name=environment,proto3" json:"environment,omitempty"`
-	// tag is an optional immutable label stamped on the promotion this deploy
-	// produces (production only), later usable as `ocel rollback --tag <tag>`.
-	// Empty means untagged. A tag already in use by another live promotion is
-	// rejected before any infrastructure is created.
-	Tag           string `protobuf:"bytes,5,opt,name=tag,proto3" json:"tag,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state           protoimpl.MessageState `protogen:"open.v1"`
+	Manifest        *Manifest              `protobuf:"bytes,1,opt,name=manifest,proto3" json:"manifest,omitempty"`
+	Options         []byte                 `protobuf:"bytes,2,opt,name=options,proto3" json:"options,omitempty"`
+	ProtocolVersion string                 `protobuf:"bytes,3,opt,name=protocol_version,json=protocolVersion,proto3" json:"protocol_version,omitempty"`
+	Environment     *Environment           `protobuf:"bytes,4,opt,name=environment,proto3" json:"environment,omitempty"`
+	Tag             string                 `protobuf:"bytes,5,opt,name=tag,proto3" json:"tag,omitempty"`
+	unknownFields   protoimpl.UnknownFields
+	sizeCache       protoimpl.SizeCache
 }
 
 func (x *DeployRequest) Reset() {
@@ -1018,24 +898,13 @@ func (x *DeployRequest) GetTag() string {
 	return ""
 }
 
-// BootstrapRequest is the request for DeploymentService.Bootstrap. Bootstrap
-// is account-global, so it carries no manifest and no slug: only the
-// provider's opaque options and the pinned protocol version.
 type BootstrapRequest struct {
-	state protoimpl.MessageState `protogen:"open.v1"`
-	// options is always UTF-8 JSON bytes: `{}` when the provider was given no
-	// options, never absent and never an empty string. The CLI never inspects
-	// this field; only the provider unmarshals it.
-	Options []byte `protobuf:"bytes,1,opt,name=options,proto3" json:"options,omitempty"`
-	// protocol_version pins the wire contract so a provider can reject a
-	// request it can't speak.
-	ProtocolVersion string `protobuf:"bytes,2,opt,name=protocol_version,json=protocolVersion,proto3" json:"protocol_version,omitempty"`
-	// class is the infrastructure the provider stands up and stamps: PRODUCTION
-	// for `ocel bootstrap`, PREVIEW for `ocel bootstrap --preview`. The two
-	// classes have independent lifecycles.
-	Class         Environment_Class `protobuf:"varint,3,opt,name=class,proto3,enum=deployments.v1.Environment_Class" json:"class,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state           protoimpl.MessageState `protogen:"open.v1"`
+	Options         []byte                 `protobuf:"bytes,1,opt,name=options,proto3" json:"options,omitempty"`
+	ProtocolVersion string                 `protobuf:"bytes,2,opt,name=protocol_version,json=protocolVersion,proto3" json:"protocol_version,omitempty"`
+	Class           Environment_Class      `protobuf:"varint,3,opt,name=class,proto3,enum=deployments.v1.Environment_Class" json:"class,omitempty"`
+	unknownFields   protoimpl.UnknownFields
+	sizeCache       protoimpl.SizeCache
 }
 
 func (x *BootstrapRequest) Reset() {
@@ -1089,25 +958,14 @@ func (x *BootstrapRequest) GetClass() Environment_Class {
 	return Environment_CLASS_UNSPECIFIED
 }
 
-// DestroyRequest is the request for DeploymentService.Destroy. It carries the
-// full Environment block as its addressing so the provider tears down exactly
-// the right environment.
 type DestroyPreviewRequest struct {
-	state       protoimpl.MessageState `protogen:"open.v1"`
-	Environment *Environment           `protobuf:"bytes,1,opt,name=environment,proto3" json:"environment,omitempty"`
-	// options is always UTF-8 JSON bytes: `{}` when the provider was given no
-	// options, never absent and never an empty string. The CLI never inspects
-	// this field; only the provider unmarshals it.
-	Options []byte `protobuf:"bytes,2,opt,name=options,proto3" json:"options,omitempty"`
-	// protocol_version pins the wire contract so a provider can reject a
-	// request it can't speak.
-	ProtocolVersion string `protobuf:"bytes,3,opt,name=protocol_version,json=protocolVersion,proto3" json:"protocol_version,omitempty"`
-	// slug scopes the teardown to one project. The Pulumi state backend is
-	// account-global, so identity alone is ambiguous across projects; the
-	// provider addresses the exact per-project stack with it.
-	Slug          string `protobuf:"bytes,4,opt,name=slug,proto3" json:"slug,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state           protoimpl.MessageState `protogen:"open.v1"`
+	Environment     *Environment           `protobuf:"bytes,1,opt,name=environment,proto3" json:"environment,omitempty"`
+	Options         []byte                 `protobuf:"bytes,2,opt,name=options,proto3" json:"options,omitempty"`
+	ProtocolVersion string                 `protobuf:"bytes,3,opt,name=protocol_version,json=protocolVersion,proto3" json:"protocol_version,omitempty"`
+	Slug            string                 `protobuf:"bytes,4,opt,name=slug,proto3" json:"slug,omitempty"`
+	unknownFields   protoimpl.UnknownFields
+	sizeCache       protoimpl.SizeCache
 }
 
 func (x *DestroyPreviewRequest) Reset() {
@@ -1168,33 +1026,14 @@ func (x *DestroyPreviewRequest) GetSlug() string {
 	return ""
 }
 
-// DestroyProjectRequest is the request for DeploymentService.DestroyProject. It
-// names no environment: a whole production project is the unit, so the provider
-// enumerates and tears down every stack the project owns. Like PruneRequest it
-// is project-scoped, carrying only the provider's opaque options, the pinned
-// protocol version, and the slug.
 type DestroyProjectRequest struct {
-	state protoimpl.MessageState `protogen:"open.v1"`
-	// options is always UTF-8 JSON bytes: `{}` when the provider was given no
-	// options, never absent and never an empty string. The CLI never inspects
-	// this field; only the provider unmarshals it.
-	Options []byte `protobuf:"bytes,1,opt,name=options,proto3" json:"options,omitempty"`
-	// protocol_version pins the wire contract so a provider can reject a
-	// request it can't speak.
-	ProtocolVersion string `protobuf:"bytes,2,opt,name=protocol_version,json=protocolVersion,proto3" json:"protocol_version,omitempty"`
-	// slug scopes the teardown to one project. The Pulumi state backend is
-	// account-global, so the provider addresses this project's per-project stacks
-	// (root state, infra stack, and every app-deploy stack) with it.
-	Slug string `protobuf:"bytes,3,opt,name=slug,proto3" json:"slug,omitempty"`
-	// environment selects the substrate to tear down. Absent (or production class)
-	// destroys the whole production project. A preview environment destroys the
-	// whole preview footprint — every pointer, every app-deploy and per-name infra
-	// stack, the preview store instance, the preview root worker(s), the R2 assets
-	// and the preview root-stack state — leaving the account-level preview
-	// bootstrap intact. `ocel destroy --preview` sends this.
-	Environment   *Environment `protobuf:"bytes,4,opt,name=environment,proto3" json:"environment,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state           protoimpl.MessageState `protogen:"open.v1"`
+	Options         []byte                 `protobuf:"bytes,1,opt,name=options,proto3" json:"options,omitempty"`
+	ProtocolVersion string                 `protobuf:"bytes,2,opt,name=protocol_version,json=protocolVersion,proto3" json:"protocol_version,omitempty"`
+	Slug            string                 `protobuf:"bytes,3,opt,name=slug,proto3" json:"slug,omitempty"`
+	Environment     *Environment           `protobuf:"bytes,4,opt,name=environment,proto3" json:"environment,omitempty"`
+	unknownFields   protoimpl.UnknownFields
+	sizeCache       protoimpl.SizeCache
 }
 
 func (x *DestroyProjectRequest) Reset() {
@@ -1255,22 +1094,13 @@ func (x *DestroyProjectRequest) GetEnvironment() *Environment {
 	return nil
 }
 
-// PlanDestroyProjectRequest is the request for
-// DeploymentService.PlanDestroyProject. Like DestroyProjectRequest it is
-// project-scoped and names no environment.
 type PlanDestroyProjectRequest struct {
-	state protoimpl.MessageState `protogen:"open.v1"`
-	// options is always UTF-8 JSON bytes: `{}` when the provider was given no
-	// options, never absent and never an empty string. The CLI never inspects
-	// this field; only the provider unmarshals it.
-	Options []byte `protobuf:"bytes,1,opt,name=options,proto3" json:"options,omitempty"`
-	// protocol_version pins the wire contract so a provider can reject a
-	// request it can't speak.
-	ProtocolVersion string `protobuf:"bytes,2,opt,name=protocol_version,json=protocolVersion,proto3" json:"protocol_version,omitempty"`
-	// slug scopes the plan to one project.
-	Slug          string `protobuf:"bytes,3,opt,name=slug,proto3" json:"slug,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state           protoimpl.MessageState `protogen:"open.v1"`
+	Options         []byte                 `protobuf:"bytes,1,opt,name=options,proto3" json:"options,omitempty"`
+	ProtocolVersion string                 `protobuf:"bytes,2,opt,name=protocol_version,json=protocolVersion,proto3" json:"protocol_version,omitempty"`
+	Slug            string                 `protobuf:"bytes,3,opt,name=slug,proto3" json:"slug,omitempty"`
+	unknownFields   protoimpl.UnknownFields
+	sizeCache       protoimpl.SizeCache
 }
 
 func (x *PlanDestroyProjectRequest) Reset() {
@@ -1324,21 +1154,11 @@ func (x *PlanDestroyProjectRequest) GetSlug() string {
 	return ""
 }
 
-// PlanDestroyProjectResponse is the reply from
-// DeploymentService.PlanDestroyProject: the inventory a DestroyProject would
-// remove. A project with no app stacks, no infra stack, and no root stack has
-// nothing to destroy.
 type PlanDestroyProjectResponse struct {
-	state protoimpl.MessageState `protogen:"open.v1"`
-	// app_stacks are the per-app-deploy Pulumi stacks the project owns, by name,
-	// including any orphaned by an aborted deploy.
-	AppStacks []string `protobuf:"bytes,1,rep,name=app_stacks,json=appStacks,proto3" json:"app_stacks,omitempty"`
-	// infra_stack is the project's stable infra Pulumi stack, or empty when it
-	// has none yet.
-	InfraStack string `protobuf:"bytes,2,opt,name=infra_stack,json=infraStack,proto3" json:"infra_stack,omitempty"`
-	// root_stack reports whether the project has a reconciled root stack (edge
-	// workers, custom-domain binding, deployments store) to tear down.
-	RootStack     bool `protobuf:"varint,3,opt,name=root_stack,json=rootStack,proto3" json:"root_stack,omitempty"`
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	AppStacks     []string               `protobuf:"bytes,1,rep,name=app_stacks,json=appStacks,proto3" json:"app_stacks,omitempty"`
+	InfraStack    string                 `protobuf:"bytes,2,opt,name=infra_stack,json=infraStack,proto3" json:"infra_stack,omitempty"`
+	RootStack     bool                   `protobuf:"varint,3,opt,name=root_stack,json=rootStack,proto3" json:"root_stack,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1394,24 +1214,13 @@ func (x *PlanDestroyProjectResponse) GetRootStack() bool {
 	return false
 }
 
-// ListEnvironmentsRequest is the request for DeploymentService.ListEnvironments.
-// It is account/substrate-scoped, so it carries no manifest and no identity:
-// only the provider's opaque options and the pinned protocol version.
 type ListEnvironmentsRequest struct {
-	state protoimpl.MessageState `protogen:"open.v1"`
-	// options is always UTF-8 JSON bytes: `{}` when the provider was given no
-	// options, never absent and never an empty string. The CLI never inspects
-	// this field; only the provider unmarshals it.
-	Options []byte `protobuf:"bytes,1,opt,name=options,proto3" json:"options,omitempty"`
-	// protocol_version pins the wire contract so a provider can reject a
-	// request it can't speak.
-	ProtocolVersion string `protobuf:"bytes,2,opt,name=protocol_version,json=protocolVersion,proto3" json:"protocol_version,omitempty"`
-	// slug scopes the listing to one project. The Pulumi state backend is
-	// account-global, so the provider filters to this project's preview stacks
-	// rather than every project's in the account.
-	Slug          string `protobuf:"bytes,3,opt,name=slug,proto3" json:"slug,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state           protoimpl.MessageState `protogen:"open.v1"`
+	Options         []byte                 `protobuf:"bytes,1,opt,name=options,proto3" json:"options,omitempty"`
+	ProtocolVersion string                 `protobuf:"bytes,2,opt,name=protocol_version,json=protocolVersion,proto3" json:"protocol_version,omitempty"`
+	Slug            string                 `protobuf:"bytes,3,opt,name=slug,proto3" json:"slug,omitempty"`
+	unknownFields   protoimpl.UnknownFields
+	sizeCache       protoimpl.SizeCache
 }
 
 func (x *ListEnvironmentsRequest) Reset() {
@@ -1465,8 +1274,6 @@ func (x *ListEnvironmentsRequest) GetSlug() string {
 	return ""
 }
 
-// ListEnvironmentsResponse is the reply from DeploymentService.ListEnvironments:
-// one PreviewEnvironment per preview environment the provider knows about.
 type ListEnvironmentsResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Environments  []*PreviewEnvironment  `protobuf:"bytes,1,rep,name=environments,proto3" json:"environments,omitempty"`
@@ -1511,18 +1318,13 @@ func (x *ListEnvironmentsResponse) GetEnvironments() []*PreviewEnvironment {
 	return nil
 }
 
-// PreviewEnvironment is a single enumerated preview environment, carrying just
-// what `ocel preview ls` renders: identity, lifecycle, the optional PR label,
-// and age/expiry metadata.
 type PreviewEnvironment struct {
-	state     protoimpl.MessageState `protogen:"open.v1"`
-	Identity  string                 `protobuf:"bytes,1,opt,name=identity,proto3" json:"identity,omitempty"`
-	Lifecycle Environment_Lifecycle  `protobuf:"varint,2,opt,name=lifecycle,proto3,enum=deployments.v1.Environment_Lifecycle" json:"lifecycle,omitempty"`
-	// label is the optional display label (e.g. the PR number). May be empty.
-	Label string `protobuf:"bytes,3,opt,name=label,proto3" json:"label,omitempty"`
-	// created_at and expires_at are epoch seconds, 0 when unknown.
-	CreatedAt     int64 `protobuf:"varint,4,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
-	ExpiresAt     int64 `protobuf:"varint,5,opt,name=expires_at,json=expiresAt,proto3" json:"expires_at,omitempty"`
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Identity      string                 `protobuf:"bytes,1,opt,name=identity,proto3" json:"identity,omitempty"`
+	Lifecycle     Environment_Lifecycle  `protobuf:"varint,2,opt,name=lifecycle,proto3,enum=deployments.v1.Environment_Lifecycle" json:"lifecycle,omitempty"`
+	Label         string                 `protobuf:"bytes,3,opt,name=label,proto3" json:"label,omitempty"`
+	CreatedAt     int64                  `protobuf:"varint,4,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
+	ExpiresAt     int64                  `protobuf:"varint,5,opt,name=expires_at,json=expiresAt,proto3" json:"expires_at,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1592,46 +1394,15 @@ func (x *PreviewEnvironment) GetExpiresAt() int64 {
 	return 0
 }
 
-// PreflightRequest is the request for DeploymentService.Preflight. Like
-// Bootstrap it is account/profile-scoped, carrying only the provider's opaque
-// options and the pinned protocol version.
 type PreflightRequest struct {
-	state protoimpl.MessageState `protogen:"open.v1"`
-	// options is always UTF-8 JSON bytes: `{}` when the provider was given no
-	// options, never absent and never an empty string. The CLI never inspects
-	// this field; only the provider unmarshals it.
-	Options []byte `protobuf:"bytes,1,opt,name=options,proto3" json:"options,omitempty"`
-	// protocol_version pins the wire contract so a provider can reject a
-	// request it can't speak.
-	ProtocolVersion string `protobuf:"bytes,2,opt,name=protocol_version,json=protocolVersion,proto3" json:"protocol_version,omitempty"`
-	// required_class is the environment class the calling command needs
-	// (production for `ocel deploy`, preview for `ocel preview`). The provider
-	// reports the state of that class's substrate, so an account with both
-	// substrates gates each command against the right one; when the required
-	// substrate is absent but the other exists, the provider reports the other
-	// so the caller's class guard still fires an informative mismatch.
-	RequiredClass Environment_Class `protobuf:"varint,3,opt,name=required_class,json=requiredClass,proto3,enum=deployments.v1.Environment_Class" json:"required_class,omitempty"`
-	// slug is the project the caller is about to deploy, set only when the
-	// caller wants the project-identity check that fills known_slugs. Slug is
-	// the sole thread back to a project's existing infrastructure, so a typo or
-	// a rename would silently fork a parallel one; the provider answers whether
-	// this slug is one it already holds stacks for. Empty from the commands
-	// that act on infrastructure already addressed by other means (rollback,
-	// destroy, deployments), and the provider then skips the enumeration
-	// rather than paying for it.
-	Slug string `protobuf:"bytes,4,opt,name=slug,proto3" json:"slug,omitempty"`
-	// domains are the hostnames the caller is about to attach to its own edge
-	// workers, taken from the project's config before anything is built, set
-	// only when the caller wants the domain-claim check that fills
-	// domain_claims. A hostname travels exactly as configured, so a preview
-	// wildcard carries its literal leading "*." label ("*.preview.app.com")
-	// while production hostnames are exact ("app.com"), and the provider forms
-	// the route pattern from it without inferring the class. Empty from the
-	// commands that touch no domains, and the provider then skips the lookup
-	// rather than paying for it.
-	Domains       []string `protobuf:"bytes,5,rep,name=domains,proto3" json:"domains,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state           protoimpl.MessageState `protogen:"open.v1"`
+	Options         []byte                 `protobuf:"bytes,1,opt,name=options,proto3" json:"options,omitempty"`
+	ProtocolVersion string                 `protobuf:"bytes,2,opt,name=protocol_version,json=protocolVersion,proto3" json:"protocol_version,omitempty"`
+	RequiredClass   Environment_Class      `protobuf:"varint,3,opt,name=required_class,json=requiredClass,proto3,enum=deployments.v1.Environment_Class" json:"required_class,omitempty"`
+	Slug            string                 `protobuf:"bytes,4,opt,name=slug,proto3" json:"slug,omitempty"`
+	Domains         []string               `protobuf:"bytes,5,rep,name=domains,proto3" json:"domains,omitempty"`
+	unknownFields   protoimpl.UnknownFields
+	sizeCache       protoimpl.SizeCache
 }
 
 func (x *PreflightRequest) Reset() {
@@ -1699,52 +1470,16 @@ func (x *PreflightRequest) GetDomains() []string {
 	return nil
 }
 
-// PreflightResponse tells the CLI what the provider's ambient account/profile
-// points at, so the CLI can refuse before provisioning.
 type PreflightResponse struct {
-	state protoimpl.MessageState `protogen:"open.v1"`
-	// infra_class is the class the pointed-at infrastructure is stamped with, or
-	// CLASS_UNSPECIFIED when no Ocel infrastructure is present.
-	InfraClass Environment_Class `protobuf:"varint,1,opt,name=infra_class,json=infraClass,proto3,enum=deployments.v1.Environment_Class" json:"infra_class,omitempty"`
-	// infrastructure_present is false when the infrastructure the command needs
-	// has not been bootstrapped yet.
-	InfrastructurePresent bool `protobuf:"varint,2,opt,name=infrastructure_present,json=infrastructurePresent,proto3" json:"infrastructure_present,omitempty"`
-	// identity is what the provider's ambient credentials resolve to, for the
-	// CLI's "Running with:" banner. Every field is best-effort: the provider
-	// fills what it could resolve and leaves the rest empty (e.g. the aws_*
-	// fields are empty when the AWS credentials failed to authenticate, which is
-	// reported as a credential_problems entry instead).
-	Identity *Identity `protobuf:"bytes,3,opt,name=identity,proto3" json:"identity,omitempty"`
-	// credential_problems lists every credential the provider needs but could
-	// not authenticate, reported in-band so the CLI can show all of them in one
-	// block rather than failing on the first. Empty when all credentials
-	// authenticated. When non-empty the infra fields are unreliable (the
-	// provider may not have been able to read its own state) and the CLI aborts
-	// before provisioning.
-	CredentialProblems []*CredentialProblem `protobuf:"bytes,4,rep,name=credential_problems,json=credentialProblems,proto3" json:"credential_problems,omitempty"`
-	// known_slugs names the *other* projects this backend already holds stacks
-	// for, and is populated only when request.slug is set and holds no stacks of
-	// its own — i.e. exactly when the deploy would fork a new project alongside
-	// existing ones, which is what a mistyped or renamed slug looks like. It is
-	// empty when the slug is already deployed, when the backend holds nothing at
-	// all (a genuine first deploy), and when request.slug was not sent, so a
-	// non-empty list is by itself the signal to warn. The provider decides
-	// membership rather than the CLI because only the provider knows how it
-	// derives a stack name from a slug. Best-effort: a backend the provider
-	// could not enumerate reports no known slugs rather than failing the
-	// preflight, since this guard is advisory.
-	KnownSlugs []string `protobuf:"bytes,5,rep,name=known_slugs,json=knownSlugs,proto3" json:"known_slugs,omitempty"`
-	// domain_claims reports who currently holds each hostname in
-	// request.domains, one entry per hostname, in the order they were asked
-	// for. Empty when request.domains was empty. An edge that cannot answer the
-	// question still gets an entry, left STATUS_UNSPECIFIED, so "nobody holds
-	// it" and "nobody could say" never collapse into the same answer: the CLI
-	// refuses only on a STATUS_CLAIMED hostname held by someone else and skips
-	// the guard otherwise, since a claim it cannot verify must degrade to the
-	// late collision it already survives rather than fail the deploy.
-	DomainClaims  []*DomainClaim `protobuf:"bytes,6,rep,name=domain_claims,json=domainClaims,proto3" json:"domain_claims,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state                 protoimpl.MessageState `protogen:"open.v1"`
+	InfraClass            Environment_Class      `protobuf:"varint,1,opt,name=infra_class,json=infraClass,proto3,enum=deployments.v1.Environment_Class" json:"infra_class,omitempty"`
+	InfrastructurePresent bool                   `protobuf:"varint,2,opt,name=infrastructure_present,json=infrastructurePresent,proto3" json:"infrastructure_present,omitempty"`
+	Identity              *Identity              `protobuf:"bytes,3,opt,name=identity,proto3" json:"identity,omitempty"`
+	CredentialProblems    []*CredentialProblem   `protobuf:"bytes,4,rep,name=credential_problems,json=credentialProblems,proto3" json:"credential_problems,omitempty"`
+	KnownSlugs            []string               `protobuf:"bytes,5,rep,name=known_slugs,json=knownSlugs,proto3" json:"known_slugs,omitempty"`
+	DomainClaims          []*DomainClaim         `protobuf:"bytes,6,rep,name=domain_claims,json=domainClaims,proto3" json:"domain_claims,omitempty"`
+	unknownFields         protoimpl.UnknownFields
+	sizeCache             protoimpl.SizeCache
 }
 
 func (x *PreflightResponse) Reset() {
@@ -1819,21 +1554,11 @@ func (x *PreflightResponse) GetDomainClaims() []*DomainClaim {
 	return nil
 }
 
-// DomainClaim is who currently holds one hostname on the provider's edge,
-// answered by Preflight so the CLI can refuse a hostname another project
-// already owns before it builds anything. The lookup is exact-pattern only:
-// overlapping wildcards ("*.app.com" vs "*.preview.app.com") are not detected
-// and remain a late collision.
 type DomainClaim struct {
-	state protoimpl.MessageState `protogen:"open.v1"`
-	// hostname echoes the requested hostname verbatim, so the caller matches
-	// entries by value rather than by position alone.
-	Hostname string             `protobuf:"bytes,1,opt,name=hostname,proto3" json:"hostname,omitempty"`
-	Status   DomainClaim_Status `protobuf:"varint,2,opt,name=status,proto3,enum=deployments.v1.DomainClaim_Status" json:"status,omitempty"`
-	// owner names what holds the hostname — the edge worker script bound to it,
-	// which for an Ocel-deployed project spells out the project it belongs to.
-	// Set only for STATUS_CLAIMED; empty otherwise.
-	Owner         string `protobuf:"bytes,3,opt,name=owner,proto3" json:"owner,omitempty"`
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Hostname      string                 `protobuf:"bytes,1,opt,name=hostname,proto3" json:"hostname,omitempty"`
+	Status        DomainClaim_Status     `protobuf:"varint,2,opt,name=status,proto3,enum=deployments.v1.DomainClaim_Status" json:"status,omitempty"`
+	Owner         string                 `protobuf:"bytes,3,opt,name=owner,proto3" json:"owner,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1889,23 +1614,13 @@ func (x *DomainClaim) GetOwner() string {
 	return ""
 }
 
-// Identity is what a provider's ambient credentials resolve to, surfaced by
-// Preflight for the CLI's "Running with:" banner. Fields are best-effort: a
-// provider fronting more than one cloud (the AWS provider also drives the
-// Cloudflare edge) fills each cloud's fields only when that cloud's
-// credentials authenticated.
 type Identity struct {
-	state protoimpl.MessageState `protogen:"open.v1"`
-	// aws_account is the 12-digit AWS account id the ambient credentials belong
-	// to; aws_profile is the AWS_PROFILE name when one is set (empty for
-	// env-key/SSO/role credentials); aws_region is the resolved deploy region;
-	// aws_arn is the caller's ARN.
-	AwsAccount string `protobuf:"bytes,1,opt,name=aws_account,json=awsAccount,proto3" json:"aws_account,omitempty"`
-	AwsProfile string `protobuf:"bytes,2,opt,name=aws_profile,json=awsProfile,proto3" json:"aws_profile,omitempty"`
-	AwsRegion  string `protobuf:"bytes,3,opt,name=aws_region,json=awsRegion,proto3" json:"aws_region,omitempty"`
-	AwsArn     string `protobuf:"bytes,4,opt,name=aws_arn,json=awsArn,proto3" json:"aws_arn,omitempty"`
-	// cloudflare_account is the Cloudflare account id the edge deploys into.
-	CloudflareAccount string `protobuf:"bytes,5,opt,name=cloudflare_account,json=cloudflareAccount,proto3" json:"cloudflare_account,omitempty"`
+	state             protoimpl.MessageState `protogen:"open.v1"`
+	AwsAccount        string                 `protobuf:"bytes,1,opt,name=aws_account,json=awsAccount,proto3" json:"aws_account,omitempty"`
+	AwsProfile        string                 `protobuf:"bytes,2,opt,name=aws_profile,json=awsProfile,proto3" json:"aws_profile,omitempty"`
+	AwsRegion         string                 `protobuf:"bytes,3,opt,name=aws_region,json=awsRegion,proto3" json:"aws_region,omitempty"`
+	AwsArn            string                 `protobuf:"bytes,4,opt,name=aws_arn,json=awsArn,proto3" json:"aws_arn,omitempty"`
+	CloudflareAccount string                 `protobuf:"bytes,5,opt,name=cloudflare_account,json=cloudflareAccount,proto3" json:"cloudflare_account,omitempty"`
 	unknownFields     protoimpl.UnknownFields
 	sizeCache         protoimpl.SizeCache
 }
@@ -1975,17 +1690,11 @@ func (x *Identity) GetCloudflareAccount() string {
 	return ""
 }
 
-// CredentialProblem is one credential a provider needs but could not
-// authenticate. The CLI aggregates every problem into one block.
 type CredentialProblem struct {
-	state protoimpl.MessageState `protogen:"open.v1"`
-	// provider is the human label for the failing credential's cloud, e.g.
-	// "AWS" or "Cloudflare".
-	Provider string `protobuf:"bytes,1,opt,name=provider,proto3" json:"provider,omitempty"`
-	// message states what is wrong (missing, invalid, expired, wrong account).
-	Message string `protobuf:"bytes,2,opt,name=message,proto3" json:"message,omitempty"`
-	// hint tells the user how to fix it.
-	Hint          string `protobuf:"bytes,3,opt,name=hint,proto3" json:"hint,omitempty"`
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Provider      string                 `protobuf:"bytes,1,opt,name=provider,proto3" json:"provider,omitempty"`
+	Message       string                 `protobuf:"bytes,2,opt,name=message,proto3" json:"message,omitempty"`
+	Hint          string                 `protobuf:"bytes,3,opt,name=hint,proto3" json:"hint,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -2041,21 +1750,12 @@ func (x *CredentialProblem) GetHint() string {
 	return ""
 }
 
-// Promotion is the project-wide unit one production deploy produces: a
-// promotion id grouping the per-app build ids it made active. Mirrors
-// edge.Promotion in cloud/edge/rootstack.go, which is itself mirrored from
-// workers/deployments-store/src/store.ts.
 type Promotion struct {
-	state       protoimpl.MessageState `protogen:"open.v1"`
-	PromotionId string                 `protobuf:"bytes,1,opt,name=promotion_id,json=promotionId,proto3" json:"promotion_id,omitempty"`
-	// ts is the epoch-seconds time this promotion was created.
-	Ts int64 `protobuf:"varint,2,opt,name=ts,proto3" json:"ts,omitempty"`
-	// builds maps app name to the build id this promotion made active.
-	Builds map[string]string `protobuf:"bytes,3,rep,name=builds,proto3" json:"builds,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
-	// tag is the optional immutable label stamped at deploy time. Empty when the
-	// promotion was deployed without one. Unique across a project's live
-	// promotions, so it addresses exactly one of them for rollback.
-	Tag           string `protobuf:"bytes,4,opt,name=tag,proto3" json:"tag,omitempty"`
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	PromotionId   string                 `protobuf:"bytes,1,opt,name=promotion_id,json=promotionId,proto3" json:"promotion_id,omitempty"`
+	Ts            int64                  `protobuf:"varint,2,opt,name=ts,proto3" json:"ts,omitempty"`
+	Builds        map[string]string      `protobuf:"bytes,3,rep,name=builds,proto3" json:"builds,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
+	Tag           string                 `protobuf:"bytes,4,opt,name=tag,proto3" json:"tag,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -2118,8 +1818,6 @@ func (x *Promotion) GetTag() string {
 	return ""
 }
 
-// PromotionHistoryEntry is one Promotion in the project's ordered promotion
-// history, annotated with whether it is the currently active one.
 type PromotionHistoryEntry struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Promotion     *Promotion             `protobuf:"bytes,1,opt,name=promotion,proto3" json:"promotion,omitempty"`
@@ -2172,19 +1870,11 @@ func (x *PromotionHistoryEntry) GetActive() bool {
 	return false
 }
 
-// ListPromotionsRequest is the request for DeploymentService.ListPromotions.
-// It is project-scoped and carries no environment: promotion history exists
-// only for the production class.
 type ListPromotionsRequest struct {
-	state protoimpl.MessageState `protogen:"open.v1"`
-	// options is always UTF-8 JSON bytes: `{}` when the provider was given no
-	// options, never absent and never an empty string. The CLI never inspects
-	// this field; only the provider unmarshals it.
-	Options []byte `protobuf:"bytes,1,opt,name=options,proto3" json:"options,omitempty"`
-	// protocol_version pins the wire contract so a provider can reject a
-	// request it can't speak.
-	ProtocolVersion string `protobuf:"bytes,2,opt,name=protocol_version,json=protocolVersion,proto3" json:"protocol_version,omitempty"`
-	Slug            string `protobuf:"bytes,3,opt,name=slug,proto3" json:"slug,omitempty"`
+	state           protoimpl.MessageState `protogen:"open.v1"`
+	Options         []byte                 `protobuf:"bytes,1,opt,name=options,proto3" json:"options,omitempty"`
+	ProtocolVersion string                 `protobuf:"bytes,2,opt,name=protocol_version,json=protocolVersion,proto3" json:"protocol_version,omitempty"`
+	Slug            string                 `protobuf:"bytes,3,opt,name=slug,proto3" json:"slug,omitempty"`
 	unknownFields   protoimpl.UnknownFields
 	sizeCache       protoimpl.SizeCache
 }
@@ -2240,8 +1930,6 @@ func (x *ListPromotionsRequest) GetSlug() string {
 	return ""
 }
 
-// ListPromotionsResponse is the reply from DeploymentService.ListPromotions:
-// the project's promotion history, newest first.
 type ListPromotionsResponse struct {
 	state         protoimpl.MessageState   `protogen:"open.v1"`
 	Promotions    []*PromotionHistoryEntry `protobuf:"bytes,1,rep,name=promotions,proto3" json:"promotions,omitempty"`
@@ -2286,25 +1974,15 @@ func (x *ListPromotionsResponse) GetPromotions() []*PromotionHistoryEntry {
 	return nil
 }
 
-// RollbackRequest is the request for DeploymentService.Rollback.
 type RollbackRequest struct {
-	state protoimpl.MessageState `protogen:"open.v1"`
-	// options is always UTF-8 JSON bytes: `{}` when the provider was given no
-	// options, never absent and never an empty string. The CLI never inspects
-	// this field; only the provider unmarshals it.
-	Options []byte `protobuf:"bytes,1,opt,name=options,proto3" json:"options,omitempty"`
-	// protocol_version pins the wire contract so a provider can reject a
-	// request it can't speak.
-	ProtocolVersion string `protobuf:"bytes,2,opt,name=protocol_version,json=protocolVersion,proto3" json:"protocol_version,omitempty"`
-	Slug            string `protobuf:"bytes,3,opt,name=slug,proto3" json:"slug,omitempty"`
-	// to is the promotion id to roll back to. Empty means "the promotion
-	// immediately before the currently active one".
-	To string `protobuf:"bytes,4,opt,name=to,proto3" json:"to,omitempty"`
-	// tag rolls back to the promotion carrying this tag. Mutually exclusive with
-	// to; the CLI rejects both being set. Empty means "not selecting by tag".
-	Tag           string `protobuf:"bytes,5,opt,name=tag,proto3" json:"tag,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state           protoimpl.MessageState `protogen:"open.v1"`
+	Options         []byte                 `protobuf:"bytes,1,opt,name=options,proto3" json:"options,omitempty"`
+	ProtocolVersion string                 `protobuf:"bytes,2,opt,name=protocol_version,json=protocolVersion,proto3" json:"protocol_version,omitempty"`
+	Slug            string                 `protobuf:"bytes,3,opt,name=slug,proto3" json:"slug,omitempty"`
+	To              string                 `protobuf:"bytes,4,opt,name=to,proto3" json:"to,omitempty"`
+	Tag             string                 `protobuf:"bytes,5,opt,name=tag,proto3" json:"tag,omitempty"`
+	unknownFields   protoimpl.UnknownFields
+	sizeCache       protoimpl.SizeCache
 }
 
 func (x *RollbackRequest) Reset() {
@@ -2372,8 +2050,6 @@ func (x *RollbackRequest) GetTag() string {
 	return ""
 }
 
-// RollbackResponse is the reply from DeploymentService.Rollback: the
-// Promotion that is now active.
 type RollbackResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Promoted      *Promotion             `protobuf:"bytes,1,opt,name=promoted,proto3" json:"promoted,omitempty"`
@@ -2418,28 +2094,15 @@ func (x *RollbackResponse) GetPromoted() *Promotion {
 	return nil
 }
 
-// PruneRequest is the request for DeploymentService.Prune.
 type PruneRequest struct {
-	state protoimpl.MessageState `protogen:"open.v1"`
-	// options is always UTF-8 JSON bytes: `{}` when the provider was given no
-	// options, never absent and never an empty string. The CLI never inspects
-	// this field; only the provider unmarshals it.
-	Options []byte `protobuf:"bytes,1,opt,name=options,proto3" json:"options,omitempty"`
-	// protocol_version pins the wire contract so a provider can reject a
-	// request it can't speak.
-	ProtocolVersion string `protobuf:"bytes,2,opt,name=protocol_version,json=protocolVersion,proto3" json:"protocol_version,omitempty"`
-	Slug            string `protobuf:"bytes,3,opt,name=slug,proto3" json:"slug,omitempty"`
-	// keep_n is how many of the newest Promotions to keep, always additionally
-	// pinning the currently active one even if it falls outside this window.
-	KeepN int32 `protobuf:"varint,4,opt,name=keep_n,json=keepN,proto3" json:"keep_n,omitempty"`
-	// environment scopes the prune to a substrate. Absent (or production class)
-	// prunes production's history. A preview environment (persistent only) prunes
-	// that named preview pointer's history in the preview store, reclaiming its
-	// superseded builds' pointer-scoped stacks and R2 assets. `ocel preview prune
-	// --name` sends this.
-	Environment   *Environment `protobuf:"bytes,5,opt,name=environment,proto3" json:"environment,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state           protoimpl.MessageState `protogen:"open.v1"`
+	Options         []byte                 `protobuf:"bytes,1,opt,name=options,proto3" json:"options,omitempty"`
+	ProtocolVersion string                 `protobuf:"bytes,2,opt,name=protocol_version,json=protocolVersion,proto3" json:"protocol_version,omitempty"`
+	Slug            string                 `protobuf:"bytes,3,opt,name=slug,proto3" json:"slug,omitempty"`
+	KeepN           int32                  `protobuf:"varint,4,opt,name=keep_n,json=keepN,proto3" json:"keep_n,omitempty"`
+	Environment     *Environment           `protobuf:"bytes,5,opt,name=environment,proto3" json:"environment,omitempty"`
+	unknownFields   protoimpl.UnknownFields
+	sizeCache       protoimpl.SizeCache
 }
 
 func (x *PruneRequest) Reset() {
@@ -2507,8 +2170,6 @@ func (x *PruneRequest) GetEnvironment() *Environment {
 	return nil
 }
 
-// DeployEvent is a single item on the Deploy response stream: either
-// progress/log output, or - always the final event - the terminal outcome.
 type DeployEvent struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// Types that are valid to be assigned to Event:
@@ -2607,18 +2268,12 @@ func (*DeployEvent_Log) isDeployEvent_Event() {}
 
 func (*DeployEvent_Result) isDeployEvent_Event() {}
 
-// ProgressEvent reports a discrete, human-readable step of deploy progress.
 type ProgressEvent struct {
-	state   protoimpl.MessageState `protogen:"open.v1"`
-	Message string                 `protobuf:"bytes,1,opt,name=message,proto3" json:"message,omitempty"`
-	// phase classifies this step so the CLI can group steps under a fixed
-	// roadmap. PHASE_UNSPECIFIED means the provider did not classify it.
-	Phase Phase `protobuf:"varint,2,opt,name=phase,proto3,enum=deployments.v1.Phase" json:"phase,omitempty"`
-	// current/total describe a determinate step (e.g. uploading 3 of 5
-	// artifacts) so the CLI can render a progress bar. Both unset means the
-	// step is indeterminate and the CLI shows a spinner.
-	Current       *uint32 `protobuf:"varint,3,opt,name=current,proto3,oneof" json:"current,omitempty"`
-	Total         *uint32 `protobuf:"varint,4,opt,name=total,proto3,oneof" json:"total,omitempty"`
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Message       string                 `protobuf:"bytes,1,opt,name=message,proto3" json:"message,omitempty"`
+	Phase         Phase                  `protobuf:"varint,2,opt,name=phase,proto3,enum=deployments.v1.Phase" json:"phase,omitempty"`
+	Current       *uint32                `protobuf:"varint,3,opt,name=current,proto3,oneof" json:"current,omitempty"`
+	Total         *uint32                `protobuf:"varint,4,opt,name=total,proto3,oneof" json:"total,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -2681,7 +2336,6 @@ func (x *ProgressEvent) GetTotal() uint32 {
 	return 0
 }
 
-// LogEvent carries diagnostic output that isn't a discrete progress step.
 type LogEvent struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Message       string                 `protobuf:"bytes,1,opt,name=message,proto3" json:"message,omitempty"`
@@ -2726,27 +2380,13 @@ func (x *LogEvent) GetMessage() string {
 	return ""
 }
 
-// ResultEvent is always the last event on the stream: success, or failure
-// with an explanatory error.
 type ResultEvent struct {
-	state   protoimpl.MessageState `protogen:"open.v1"`
-	Success bool                   `protobuf:"varint,1,opt,name=success,proto3" json:"success,omitempty"`
-	Error   string                 `protobuf:"bytes,2,opt,name=error,proto3" json:"error,omitempty"` // populated when success is false
-	// outputs are the connection details the provider produced for the whole
-	// stack, one entry per provisioned resource, keyed by logical_name. Empty
-	// on failure, and always empty for Bootstrap. The CLI collects these; the
-	// SDK is their eventual consumer.
-	Outputs []*ResourceOutput `protobuf:"bytes,3,rep,name=outputs,proto3" json:"outputs,omitempty"`
-	// app_urls are the user-facing URLs the CLI features on the success screen,
-	// in priority order (e.g. a Next.js worker URL, else the function URLs). The
-	// provider declares them so the CLI never has to match magic logical names.
-	AppUrls []string `protobuf:"bytes,4,rep,name=app_urls,json=appUrls,proto3" json:"app_urls,omitempty"`
-	// promotion_id identifies the promotion this deploy produced: the
-	// project-wide unit grouping every app's build id. The CLI records it in
-	// .ocel/deploy-result.json so a later process can address this exact deploy
-	// (roll back to it, correlate its logs) without scraping CLI output. Empty
-	// on failure, and for RPCs that promote nothing (Bootstrap).
-	PromotionId   string `protobuf:"bytes,5,opt,name=promotion_id,json=promotionId,proto3" json:"promotion_id,omitempty"`
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Success       bool                   `protobuf:"varint,1,opt,name=success,proto3" json:"success,omitempty"`
+	Error         string                 `protobuf:"bytes,2,opt,name=error,proto3" json:"error,omitempty"`
+	Outputs       []*ResourceOutput      `protobuf:"bytes,3,rep,name=outputs,proto3" json:"outputs,omitempty"`
+	AppUrls       []string               `protobuf:"bytes,4,rep,name=app_urls,json=appUrls,proto3" json:"app_urls,omitempty"`
+	PromotionId   string                 `protobuf:"bytes,5,opt,name=promotion_id,json=promotionId,proto3" json:"promotion_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -2816,14 +2456,9 @@ func (x *ResultEvent) GetPromotionId() string {
 	return ""
 }
 
-// ResourceOutput pairs a resource's logical name with its typed connection
-// output. The oneof mirrors ManifestResource.config so a resource type's
-// output schema is single-sourced alongside its config.
 type ResourceOutput struct {
-	state protoimpl.MessageState `protogen:"open.v1"`
-	// logical_name matches the ManifestResource.logical_name this output was
-	// produced for.
-	LogicalName string `protobuf:"bytes,1,opt,name=logical_name,json=logicalName,proto3" json:"logical_name,omitempty"`
+	state       protoimpl.MessageState `protogen:"open.v1"`
+	LogicalName string                 `protobuf:"bytes,1,opt,name=logical_name,json=logicalName,proto3" json:"logical_name,omitempty"`
 	// Types that are valid to be assigned to Output:
 	//
 	//	*ResourceOutput_Postgres
@@ -2927,18 +2562,13 @@ func (*ResourceOutput_Bucket) isResourceOutput_Output() {}
 
 func (*ResourceOutput_Function) isResourceOutput_Output() {}
 
-// PostgresOutput is the discrete connection detail for a provisioned
-// postgres resource. Callers compose a connection URL from these parts.
 type PostgresOutput struct {
-	state    protoimpl.MessageState `protogen:"open.v1"`
-	Host     string                 `protobuf:"bytes,1,opt,name=host,proto3" json:"host,omitempty"`
-	Port     int32                  `protobuf:"varint,2,opt,name=port,proto3" json:"port,omitempty"`
-	Database string                 `protobuf:"bytes,3,opt,name=database,proto3" json:"database,omitempty"`
-	Username string                 `protobuf:"bytes,4,opt,name=username,proto3" json:"username,omitempty"`
-	// password is sensitive: debug_redact keeps it out of protobuf debug
-	// rendering. It is still carried on the wire over the private,
-	// token-authenticated CLI<->provider channel.
-	Password      string `protobuf:"bytes,5,opt,name=password,proto3" json:"password,omitempty"`
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Host          string                 `protobuf:"bytes,1,opt,name=host,proto3" json:"host,omitempty"`
+	Port          int32                  `protobuf:"varint,2,opt,name=port,proto3" json:"port,omitempty"`
+	Database      string                 `protobuf:"bytes,3,opt,name=database,proto3" json:"database,omitempty"`
+	Username      string                 `protobuf:"bytes,4,opt,name=username,proto3" json:"username,omitempty"`
+	Password      string                 `protobuf:"bytes,5,opt,name=password,proto3" json:"password,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -3008,11 +2638,6 @@ func (x *PostgresOutput) GetPassword() string {
 	return ""
 }
 
-// BucketOutput is the discrete connection detail for a provisioned bucket
-// resource. It carries what the app needs to construct a runtime client and
-// address the bucket: the BucketService endpoint (address) and the bucket
-// binding. Together these match the OCEL_RESOURCE_BUCKET_<id> env payload
-// ({ address, bucket }) the SDK reads.
 type BucketOutput struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Address       string                 `protobuf:"bytes,1,opt,name=address,proto3" json:"address,omitempty"`
@@ -3065,10 +2690,6 @@ func (x *BucketOutput) GetBucket() string {
 	return ""
 }
 
-// FunctionOutput is the connection detail for a realized function: its
-// web-facing URL. Keyed by the function's logical_name, the CLI prints it
-// alongside the resource outputs so a deploy surfaces where each function is
-// reachable.
 type FunctionOutput struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Url           string                 `protobuf:"bytes,1,opt,name=url,proto3" json:"url,omitempty"`

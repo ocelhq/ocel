@@ -1,10 +1,3 @@
-// Package deploy provisions a project's declared resources into a user's AWS
-// account using the Pulumi Automation API (inline program). This slice
-// supports the postgres resource, translated to an AWS RDS Aurora Serverless
-// v2 cluster. The resource translation (translatePostgres) is a pure
-// function so it can be unit-tested without touching Pulumi or AWS; the
-// orchestration here drives the real deploy and is exercised only by an
-// opt-in run against a live account.
 package deploy
 
 import (
@@ -21,21 +14,6 @@ import (
 	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
 )
 
-// pulumiEnv is the environment every Pulumi workspace this package opens runs
-// under, whether it updates a stack, tears one down, or only enumerates.
-//
-// PULUMI_SKIP_CHECKPOINTS is the load-bearing entry. Against a self-managed
-// backend Pulumi otherwise rewrites the entire state file — and a second copy of
-// it under the backup prefix — after every single resource step, serialized
-// behind one lock. That caps a stack at one resource per state write however
-// parallel the engine is: a 103-function app tore down at one delete every ~3s
-// (~10 minutes) while the same functions were created 48-wide in 22s, purely
-// because the update path set this and the teardown path did not.
-//
-// The cost is that an interrupted run leaves state naming resources that are
-// already gone. That is the recoverable direction — both up and destroy
-// reconcile against the provider on the next run, and a delete of an
-// already-absent resource succeeds — unlike the reverse, which would leak.
 func pulumiEnv(region, backendURL, passphrase string) map[string]string {
 	return map[string]string{
 		"PULUMI_BACKEND_URL":       backendURL,
@@ -46,266 +24,98 @@ func pulumiEnv(region, backendURL, passphrase string) map[string]string {
 	}
 }
 
-// SecretsReader is the subset of the AWS Secrets Manager client the deploy
-// path needs, to resolve an RDS-managed master-password secret to its
-// plaintext for the connection outputs. The aws-sdk-go-v2 client satisfies
-// it; tests can substitute a fake.
 type SecretsReader interface {
 	GetSecretValue(ctx context.Context, in *secretsmanager.GetSecretValueInput, optFns ...func(*secretsmanager.Options)) (*secretsmanager.GetSecretValueOutput, error)
 }
 
-// Config carries everything a deploy needs beyond the manifest: where Pulumi
-// keeps state, how it decrypts it, which stack to act on, and the AWS clients
-// the provider resolves outputs with.
 type Config struct {
 	Region      string
-	BackendURL  string // Pulumi self-managed backend, e.g. "s3://<bucket>"
-	Passphrase  string // Pulumi passphrase secrets-provider value
-	ProjectName string // Pulumi project name, e.g. "ocel"
-	StackName   string // "<slug>-<env>"
+	BackendURL  string
+	Passphrase  string
+	ProjectName string
+	StackName   string
 	Pulumi      auto.PulumiCommand
 	Secrets     SecretsReader
 
-	// StateTable is the account-global state table bootstrap provisions, shared
-	// by every entity that keys into it: a bucket's upload sessions and a Next
-	// app's ISR tag records both live here under their own key prefixes.
-	StateTable string
-	// StateTableARN is that table's ARN, used to scope each consumer's IAM
-	// grants to its own key prefix.
-	StateTableARN string
-	// VarsKeyARN is the KMS key the substrate's variable store encrypts under,
-	// resolved from this substrate's bootstrap rather than derived, so a deploy
-	// can only ever grant its own class's key.
-	VarsKeyARN string
-	// VarsTable and VarsTableARN name the account-global table variable values
-	// live in, and its ARN. They reach a function two ways, for two readers: the
-	// name is pinned into the live-value manifest a function packages, because
-	// resolving it in the sandbox would mean linking a CloudFormation client
-	// into every cold start; the ARN scopes that function's read grant. Both
-	// come from this substrate's bootstrap, never derived.
-	VarsTable    string
-	VarsTableARN string
-	// VarsClass is the environment class the store partitions by. It is the
-	// store's own class token, not the deploy's environment segment: a preview
-	// deploy of any environment reads the preview class's partition.
-	VarsClass string
-	// VarsReferenced maps each of this project's cells that reads another
-	// project's value to the project owning it, resolved from the store before
-	// the deploy runs. A function's read grant is widened by the entries its own
-	// live values resolve through and no others: a reference is followed where
-	// it is read, so a grant over this project alone would deny at runtime what
-	// the store accepted, and a project-wide one would hand every app the
-	// partitions another app's values come out of.
+	StateTable     string
+	StateTableARN  string
+	VarsKeyARN     string
+	VarsTable      string
+	VarsTableARN   string
+	VarsClass      string
 	VarsReferenced map[vars.Coordinate]string
-	// Values is the substrate's variable store, opened for the one thing a
-	// teardown does to it: emptying a destroyed project's partition. A deploy
-	// never reads through it — values reach a function through the manifest the
-	// gate resolved — so it is set only on a teardown Config. Nil when the
-	// bootstrap predates the store, which leaves nothing to remove.
-	Values ValueStore
+	Values         ValueStore
 
-	// ListenerCodePath is the built listener-Lambda handler archive registerBucket
-	// deploys. Packaging it (building + zipping the handler binary) rides the
-	// provider's distribution workflow, which is deferred with provider publish;
-	// it is threaded here so the deploy path is complete once that lands.
 	ListenerCodePath string
 
-	// ArtifactRoot is the absolute path a ManifestFunction's artifact_path is
-	// resolved against — the project's .ocel/output directory. Each function's
-	// `.func` artifact lives under it; the provider hashes, zips, and uploads
-	// that directory to the artifact bucket before provisioning.
-	ArtifactRoot string
-	// ArtifactBucket is the account-global S3 bucket (from bootstrap) function
-	// deployment packages are uploaded to; each Lambda's code points at an object
-	// in it rather than an inline archive.
+	ArtifactRoot   string
 	ArtifactBucket string
-	// Uploader puts function artifacts into ArtifactBucket. The aws-sdk-go-v2 S3
-	// client satisfies it.
-	Uploader ArtifactUploader
+	Uploader       ArtifactUploader
 
-	// Invoker invokes this deploy's own functions once each, so the membrane
-	// publishes a compile cache covering the whole app before any traffic
-	// arrives (see warm.go). Nil leaves the warm pass off entirely, which costs
-	// nothing but the cold start the first organic request would have paid
-	// anyway — so a caller that wires none deploys exactly as before.
 	Invoker FunctionInvoker
 
-	// Getter and CodeUpdater are what the embed pass (see embed.go) needs on top
-	// of Uploader and Invoker: one reads the published cache and the deployed
-	// package back, the other moves a function onto the repackaged one. Nil
-	// leaves embedding off entirely, which is also what OCEL_BYTECODE_EMBED does
-	// by default — every bundle then fetches its cache from S3 as before.
 	Getter      ObjectGetter
 	CodeUpdater FunctionCodeUpdater
 
-	// AssetBucket is the account-global S3 bucket (from bootstrap) prerender
-	// configs + fallbacks are uploaded to, keyed by build id. Empty when the
-	// bootstrap predates it.
 	AssetBucket string
 
-	// ImageOptimizerURL is the Function URL of the substrate's image optimizer
-	// (from bootstrap), bound onto every worker so /_next/image has an origin.
-	// Empty on a substrate that bootstrapped none, which leaves the binding off
-	// entirely and every valid image request a 502.
 	ImageOptimizerURL string
 
-	// RevalidateQueueURL is the substrate's ISR revalidation queue (from
-	// bootstrap), bound onto every worker so an admitted background refresh is
-	// deduplicated fleet-wide instead of rendered per colo. Empty on a substrate
-	// whose bootstrap rendered no consumer for it, which leaves the binding off
-	// entirely and every refresh rendering through the origin as before.
 	RevalidateQueueURL string
 
-	// CacheStoreBucket and CacheStoreUploader address the substrate's adopted
-	// cache store — the edge-provisioned bucket the singular ISR entry path now
-	// lives in, seeded here and read back by both the origin's cache handler and
-	// the edge worker. Empty and nil when the edge offered no store, which leaves
-	// seeding on AssetBucket: the rollback for the whole colocation. The keys are
-	// identical either way, so only the bucket moves.
 	CacheStoreBucket   string
 	CacheStoreUploader ArtifactUploader
-	// Env is the environment segment of the S3 asset key ("prod", or
-	// "preview-<identity>"): the same token stackName suffixes.
-	Env string
+	Env                string
 
-	// EdgeAccessKeyID / EdgeSecretKey are the substrate's edge reader credentials
-	// (from bootstrap's SSM parameter), injected into the Next.js worker so it can
-	// read the ISR cache directly from S3+DynamoDB. Both empty when the bootstrap
-	// predates edge credentials or the read failed: the worker then simply
-	// forwards prerender routes to the Lambda, as before (interception is
-	// strictly additive).
 	EdgeAccessKeyID string
 	EdgeSecretKey   string
 
-	// EdgeValues is what the edge reported provisioning at bootstrap, persisted by
-	// the provider and handed back here verbatim so the edge can read back its own
-	// state without re-querying its API. Opaque: nothing on the provider side may
-	// read a key from it. Empty when the edge provisioned nothing of its own.
 	EdgeValues map[string]string
 
-	// Slug is the project's stable deployment identity (Manifest.slug): it keys
-	// the project's own instance in the shared deployments-store worker.
-	Slug string
-	// StoreScriptName / StoreEndpoint / StoreBootstrapCred are the shared
-	// deployments-store worker's coordinates, adopted from account-level
-	// bootstrap state: the script name a project's generic worker service-binds
-	// to, the endpoint the host reaches every store op at, and the bootstrap
-	// credential that authorizes seeding a project's instance. Empty when the
-	// bootstrap predates the shared store, in which case a production deploy
-	// fails fast asking the user to re-run bootstrap.
+	Slug               string
 	StoreScriptName    string
 	StoreEndpoint      string
 	StoreBootstrapCred string
 
-	// ISRWriterEndpoint / ISRWriterBootstrapCred are the shared ISR writer
-	// worker's coordinates, adopted from account-level bootstrap state: the
-	// endpoint a deployed function writes its ISR entries to, and the bootstrap
-	// credential that authorizes seeding and retiring one build's write secret.
-	// Empty only when the substrate adopted no edge cache store either, which
-	// checkISRWriterAgrees is what enforces.
 	ISRWriterEndpoint      string
 	ISRWriterBootstrapCred string
-	// ISRWriterScriptName is the same worker named as the edge names it, which
-	// is what the app worker's service binding to it takes: an edge
-	// revalidateTag raises inside the account rather than over the endpoint.
-	ISRWriterScriptName string
-	// ISRWriterSeed is the substrate's write-secret seed, minted once at
-	// bootstrap. Each app's write secret is derived from it and that app's own
-	// isrPrefix (isrWriteSecret), so appCaches stays a pure function of the
-	// deploy while no app can sign a write against another app's slice.
-	ISRWriterSeed string
+	ISRWriterScriptName    string
+	ISRWriterSeed          string
 
-	// Edge deploys the Next.js routing worker once its Lambdas exist and their
-	// Function URLs are known. Nil unless the project has a Next.js app; the
-	// concrete edge implementation is the end-to-end seam.
 	Edge edge.Provider
 
-	// Class is the environment class this deploy realizes under. It selects the
-	// web-facing worker's custom domain: only CLASS_PRODUCTION consults
-	// Manifest.domains["production"].
-	Class deploymentsv1.Environment_Class
-	// Lifecycle is the environment lifecycle this deploy realizes under; it
-	// selects each resource's realization (see realizationFor). Unspecified for
-	// production and persistent previews, LIFECYCLE_EPHEMERAL for ephemeral
-	// previews.
-	Lifecycle deploymentsv1.Environment_Lifecycle
-	// Identity is the environment identity, used to name an ephemeral preview's
-	// logical database slices. Empty for production.
-	Identity string
-	// SharedClusterEndpoint and SharedClusterSecretARN address the shared
-	// preview cluster an ephemeral postgres slice is carved from (from the
-	// preview bootstrap outputs). Empty outside ephemeral previews.
+	Class                  deploymentsv1.Environment_Class
+	Lifecycle              deploymentsv1.Environment_Lifecycle
+	Identity               string
 	SharedClusterEndpoint  string
 	SharedClusterSecretARN string
 
-	// ExpiresAt is the epoch-seconds expiry stamped on an ephemeral preview
-	// stack, so `ocel preview ls` can surface age/expiry and a future reaper can
-	// find orphans. 0 means no expiry (production and persistent previews).
 	ExpiresAt int64
 
-	// Tag is the optional immutable label to stamp on the promotion this
-	// production deploy produces (production only; ignored for previews). Empty
-	// for an untagged deploy. A tag already held by a live promotion fails the
-	// deploy before any infrastructure is created.
 	Tag string
 
-	// RootStackState is the project's prior root-stack reconcile state (ADR
-	// 0001), persisted by the caller across deploys exactly like EdgeValues —
-	// opaque, handed back unread. Nil on a project's first production deploy,
-	// and also nil until a caller wires up per-project persistence for it; every
-	// production deploy reconciles as if fresh until then.
 	RootStackState edge.RootStackState
 }
 
-// Progress reports a phase-tagged deploy step so the CLI can render a fixed
-// roadmap. current/total are 0 for an indeterminate step (spinner) and set for
-// a determinate one (progress bar). Implementations may be nil-safe via
-// report.
 type Progress func(phase deploymentsv1.Phase, message string, current, total uint32)
 
-// report invokes p only when it is non-nil, so callers need not guard every
-// progress call.
 func (p Progress) report(phase deploymentsv1.Phase, message string, current, total uint32) {
 	if p != nil {
 		p(phase, message, current, total)
 	}
 }
 
-// Result is what one deploy produced. RootStackState is set even when the
-// deploy fails partway: the caller must persist whatever was reconciled.
 type Result struct {
-	Outputs []*deploymentsv1.ResourceOutput
-	AppURLs []string
-	// PromotionID identifies the promotion this deploy created (CONTEXT.md):
-	// the project-wide unit grouping every app's Deployment identity. Empty
-	// when the deploy failed before promoting.
+	Outputs        []*deploymentsv1.ResourceOutput
+	AppURLs        []string
 	PromotionID    string
 	RootStackState edge.RootStackState
 }
 
-// Run provisions every resource in manifest against AWS and returns the
-// whole-stack connection outputs, the user-facing app URLs, the promotion it
-// created, and the root-stack state the caller must persist so the next deploy
-// (and rollback) reconciles against it instead of starting fresh — scoped to
-// this deploy's substrate (production or preview). progress reports phase-tagged
-// steps and log forwards Pulumi engine output; both may be nil. Run performs the
-// real Pulumi up and is not exercised by unit tests.
-//
-// Both production and preview realize the same stacked model (ADR 0001): root
-// reconcile, then a stable infra stack (skipped for an ephemeral preview), then
-// one parallel app-deploy stack per app, staged and promoted atomically under
-// this deploy's pointer. The two differ only in the data the server threads in
-// via Config — see realize.
 func Run(ctx context.Context, cfg Config, manifest *deploymentsv1.Manifest, progress Progress, log func(string)) (Result, error) {
 	return realize(ctx, cfg, manifest, progress, log)
 }
 
-// appURLs returns the user-facing URLs to feature on the success screen: for
-// every app, in manifest order, its edge worker URL when it has one (the worker
-// fronts the whole app), otherwise each of its own functions' URLs. Non-function
-// outputs (postgres, bucket) are never app URLs. Apps are joined to outputs by
-// workerOutputName, defined alongside the worker deploy, so the wire contract
-// carries no magic logical name.
 func appURLs(manifest *deploymentsv1.Manifest, outputs []*deploymentsv1.ResourceOutput) []string {
 	urlByLogical := make(map[string]string, len(outputs))
 	for _, o := range outputs {
@@ -332,29 +142,16 @@ func appURLs(manifest *deploymentsv1.Manifest, outputs []*deploymentsv1.Resource
 	return urls
 }
 
-// previewExpiryTagKey is the Pulumi stack tag holding an ephemeral preview's
-// epoch-seconds expiry; ListPreviewStacks reads it back for `ocel preview ls`.
 const previewExpiryTagKey = "ocel:expires_at"
 
-// stampExpiry records expiresAt as a Pulumi stack tag on an ephemeral preview
-// stack, so ls can surface expiry and a future reaper can find orphans. A zero
-// expiresAt (production and persistent previews) is a no-op. The stack-tag write
-// itself needs a live backend, so — like Run's provisioning body — it is the
-// opt-in-e2e seam: the value is computed and threaded here now, and the
-// stack.Workspace() tag write against the live backend lands at the marked line.
 func stampExpiry(ctx context.Context, stack auto.Stack, expiresAt int64) error {
 	if expiresAt == 0 {
 		return nil
 	}
-	// Opt-in-e2e seam: write previewExpiryTagKey=strconv.FormatInt(expiresAt, 10)
-	// via stack.Workspace() against the live Pulumi backend.
 	_ = stack
 	return nil
 }
 
-// collectOutputs turns the stack's raw Pulumi outputs into typed
-// per-resource ResourceOutputs, resolving each postgres resource's
-// RDS-managed secret to a plaintext password.
 func collectOutputs(ctx context.Context, secrets SecretsReader, manifest *deploymentsv1.Manifest, outputs auto.OutputMap) ([]*deploymentsv1.ResourceOutput, error) {
 	var result []*deploymentsv1.ResourceOutput
 	for _, r := range manifest.GetResources() {
@@ -446,10 +243,6 @@ func collectPostgresOutput(ctx context.Context, secrets SecretsReader, name stri
 	}, nil
 }
 
-// requireStringField reads key from a resource's raw output map, erroring if
-// it is absent, not a string, or empty — so a mistyped or missing connection
-// field surfaces as a deploy failure rather than a misleading success with an
-// unusable connection.
 func requireStringField(fields map[string]interface{}, name, key string) (string, error) {
 	v, ok := fields[key].(string)
 	if !ok || v == "" {
@@ -458,8 +251,6 @@ func requireStringField(fields map[string]interface{}, name, key string) (string
 	return v, nil
 }
 
-// resolveManagedPassword reads the RDS-managed master-user secret and returns
-// its password. RDS stores the secret as JSON with username/password fields.
 func resolveManagedPassword(ctx context.Context, secrets SecretsReader, secretARN string) (string, error) {
 	if secretARN == "" {
 		return "", fmt.Errorf("empty master-user secret ARN")

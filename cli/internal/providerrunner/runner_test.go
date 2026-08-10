@@ -14,10 +14,6 @@ import (
 	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
 )
 
-// spawnFake spawns this test binary re-exec'd as a fake provider in mode,
-// with a fresh Unix socket path under t.TempDir(). It registers t.Cleanup to
-// Close the runner, so tests don't need to remember teardown on every
-// return path (including t.Fatal).
 func spawnFake(t *testing.T, ctx context.Context, mode string, cfg Config) (*Runner, string) {
 	t.Helper()
 
@@ -92,7 +88,6 @@ func TestReady_ExitBeforeSentinel(t *testing.T) {
 		t.Errorf("Ready() took %s, want it to fail immediately rather than wait out the 5s timeout", elapsed)
 	}
 
-	// Distinct from the timeout and missing-binary cases.
 	var timeoutErr *ReadyTimeoutError
 	if errors.As(err, &timeoutErr) {
 		t.Errorf("Ready() returned a *ReadyTimeoutError for an early exit")
@@ -147,9 +142,6 @@ func TestDeploy_KilledMidCall(t *testing.T) {
 		}, func(ev *deploymentsv1.DeployEvent) { gotFirstEvent.Store(true) })
 	}()
 
-	// Wait for the provider to be mid-call, then kill it out from under
-	// Deploy, simulating e.g. an OOM kill or `kill -9` during a real
-	// provisioning run.
 	deadline := time.Now().Add(2 * time.Second)
 	for !gotFirstEvent.Load() && time.Now().Before(deadline) {
 		time.Sleep(5 * time.Millisecond)
@@ -198,9 +190,6 @@ func TestDeploy_TerminalFailure(t *testing.T) {
 	}
 }
 
-// TestDeployFailedError_EmptyMessage covers a provider that reports failure
-// without saying why: the error still has to read as something, since the CLI
-// prints it verbatim under the failed step.
 func TestDeployFailedError_EmptyMessage(t *testing.T) {
 	err := (&DeployFailedError{}).Error()
 	if strings.TrimSpace(err) == "" {
@@ -299,7 +288,6 @@ func TestClose_Idempotent(t *testing.T) {
 	}
 }
 
-// assertProcessGone fails the test if r's process is still alive.
 func assertProcessGone(t *testing.T, r *Runner) {
 	t.Helper()
 	select {
@@ -309,7 +297,6 @@ func assertProcessGone(t *testing.T, r *Runner) {
 	}
 }
 
-// assertNoStaleSocket fails the test if sockPath still exists on disk.
 func assertNoStaleSocket(t *testing.T, sockPath string) {
 	t.Helper()
 	if _, err := os.Stat(sockPath); !os.IsNotExist(err) {
@@ -318,8 +305,6 @@ func assertNoStaleSocket(t *testing.T, sockPath string) {
 }
 
 func init() {
-	// Fail fast with a clear message if this test binary can't re-exec
-	// itself, rather than every test in the file timing out mysteriously.
 	if _, err := os.Stat(os.Args[0]); err != nil {
 		panic(fmt.Sprintf("providerrunner tests require os.Args[0] to be a runnable test binary: %v", err))
 	}

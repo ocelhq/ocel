@@ -5,34 +5,21 @@ import { fileURLToPath } from "node:url";
 import { setTimeout as delay } from "node:timers/promises";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
-// tests/e2e/src -> repo root.
 export const repoRoot = path.resolve(here, "..", "..", "..");
 export const examplesDir = path.join(repoRoot, "examples");
 
-// The built Go CLI. `cd cli && go build -o bin/ocel ./ocel` produces this
-// (output goes to cli/bin/ - a gitignored path - because the CLI's own main
-// package already lives at cli/ocel/, so `-o ocel` would collide with that
-// directory). Override with OCEL_BIN to point at any binary.
 export const ocelBin =
   process.env.OCEL_BIN ?? path.join(repoRoot, "cli", "bin", "ocel");
 
 export const apiUrl = process.env.OCEL_API_URL ?? "http://localhost:3000";
 
-/** The blob upload scenario each example wires up, driven by the e2e. */
 export type BlobSpec = {
-  /** Route the SDK upload client hits (?op=presign|callback|poll). */
   uploadPath: string;
-  /** GET list route exposing the documents table. */
   documentsPath: string;
-  /** The uploader declared on the example's bucket. */
   uploaderName: string;
-  /** The `input` the uploader's middleware validates. */
   input: Record<string, unknown>;
-  /** A real file the client PUTs to storage. */
   file: { name: string; type: string };
-  /** Substrings the landed object key must contain (prefix/path-fn + name). */
   expectedKeyIncludes: string[];
-  /** The owner_id onUploadComplete should persist (threaded from input). */
   expectedOwnerId: string;
 };
 
@@ -40,20 +27,13 @@ export type ExampleSpec = {
   framework: "next" | "express" | "hono";
   dir: string;
   port: number;
-  /** URL path of the readiness probe. */
   healthPath: string;
-  /** Base path of the todos CRUD routes (Next mounts them under /api). */
   todosPath: string;
-  /** Command (argv) `ocel run --` executes to migrate. */
   migrateCmd: string[];
-  /** Command (argv) `ocel dev --` executes to start the server. */
   startCmd: string[];
-  /** The blob upload scenario, distinct per example. */
   blob: BlobSpec;
 };
 
-// The dev object store the whole upload flow lands bytes in. Present in the
-// root docker-compose; the blob e2e self-skips when it isn't reachable.
 export const blobEndpoint =
   process.env.OCEL_BLOB_ENDPOINT ?? "http://localhost:9000";
 
@@ -66,7 +46,6 @@ export async function minioReachable(): Promise<boolean> {
   }
 }
 
-// Distinct ports so the three specs can run their dev servers in parallel.
 export const examples: Record<ExampleSpec["framework"], ExampleSpec> = {
   next: {
     framework: "next",
@@ -124,9 +103,6 @@ export const examples: Record<ExampleSpec["framework"], ExampleSpec> = {
   },
 };
 
-// The environment the CLI (and, through it, the example app) inherits.
-// OCEL_ACCESS_TOKEN authenticates via the credentials env fallback; PORT tells
-// the example which port to bind.
 function ocelEnv(token: string, port: number): NodeJS.ProcessEnv {
   return {
     ...process.env,
@@ -138,7 +114,6 @@ function ocelEnv(token: string, port: number): NodeJS.ProcessEnv {
 
 type RunResult = { code: number | null; stdout: string; stderr: string };
 
-// Runs the CLI to completion (used for `link` and `run`), capturing output.
 function runOcel(
   args: string[],
   spec: ExampleSpec,
@@ -162,10 +137,6 @@ function runOcel(
   });
 }
 
-// Creates a fresh Ocel Cloud project and records it as the example
-// directory's link, which `ocel run` and `ocel dev` both require. `--create`
-// takes the new project's name positionally and never prompts, so it works
-// without a terminal.
 export async function runLink(
   spec: ExampleSpec,
   token: string,
@@ -181,8 +152,6 @@ export async function runLink(
   return result;
 }
 
-// Drops the link the run created, so the example directory is left as it was
-// found rather than pointing a later `ocel dev` at a throwaway e2e project.
 export async function clearLink(spec: ExampleSpec) {
   await rm(path.join(spec.dir, ".ocel", "link.json"), { force: true });
 }
@@ -206,14 +175,10 @@ export async function runMigrate(
 
 export type DevHandle = {
   child: ChildProcess;
-  // Everything the CLI/app has written to stdout+stderr so far, so a crash
-  // can be reported with its own diagnostics.
   output: () => string;
   stop: () => Promise<void>;
 };
 
-// Starts `ocel dev -- <startCmd>` in its own process group (detached) so the
-// whole tree - ocel, the app, anything it forks - can be torn down together.
 export function startDev(spec: ExampleSpec, token: string): DevHandle {
   const child = spawn(ocelBin, ["dev", "--", ...spec.startCmd], {
     cwd: spec.dir,
@@ -221,8 +186,6 @@ export function startDev(spec: ExampleSpec, token: string): DevHandle {
     detached: true,
     stdio: ["ignore", "pipe", "pipe"],
   });
-  // Surface app/CLI output under the test for debugging, and retain it so an
-  // early crash can be reported with the process's own output.
   let captured = "";
   const onData = (d: Buffer) => {
     captured += d.toString();
@@ -234,16 +197,13 @@ export function startDev(spec: ExampleSpec, token: string): DevHandle {
   const stop = async () => {
     if (child.pid && child.exitCode === null) {
       try {
-        // Negative pid targets the whole process group.
         process.kill(-child.pid, "SIGTERM");
       } catch {
-        // Already gone.
       }
       await delay(500);
       try {
         process.kill(-child.pid, "SIGKILL");
       } catch {
-        // Already gone.
       }
     }
   };
@@ -251,10 +211,6 @@ export function startDev(spec: ExampleSpec, token: string): DevHandle {
   return { child, output: () => captured, stop };
 }
 
-// Polls the readiness probe until it returns 200 or the timeout elapses. If
-// the dev process exits before then (auth failure, port conflict, bad
-// config), it fails fast with the process's exit code and output rather than
-// waiting out the full timeout.
 export async function waitForHealth(
   spec: ExampleSpec,
   dev: DevHandle,
@@ -278,7 +234,6 @@ export async function waitForHealth(
         return;
       }
     } catch {
-      // Server not up yet.
     }
     await delay(500);
   }

@@ -1,17 +1,3 @@
-// Package envwire holds one test and nothing else: the real ocel/env SDK,
-// running in a real node process started by the real discovery path, talking
-// to the real generated Connect handler in front of a real envgate.Gate.
-//
-// Every other test of this feature stands one half of that exchange in for the
-// other — the SDK's suite mocks its transport, and the CLI's suite drives a
-// hand-written TypeScript stand-in that speaks Connect JSON the SDK never
-// emits. So a field that stopped arriving, a class that mapped to the wrong
-// enum, or a source path that degraded to a bundle path would leave every
-// suite green. This package exists to make exactly those failures loud, and it
-// asserts nothing that would still pass with the transport faked.
-//
-// It lives in its own package so CI can name it in a `go test` argument
-// without pulling in the rest of the CLI's suites.
 package envwire
 
 import (
@@ -31,13 +17,6 @@ import (
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/resources/v1"
 )
 
-// envFixture is the declaration under test, written in the language a user
-// writes it in and importing the published `ocel/env` subpath so the package's
-// own export map is part of what is exercised.
-//
-// The schemas are real zod schemas rather than hand-rolled stand-ins because
-// the detail text a rejected value travels with is produced by the SDK from
-// whatever the schema said, and a stand-in would let that text be anything.
 const envFixture = `
 import { defineEnv } from "ocel/env";
 import { z } from "zod";
@@ -96,9 +75,6 @@ func TestDefineEnv_DeclaresThroughTheRealWireIntoTheGate(t *testing.T) {
 		}
 	})
 
-	// A schema carrying a default is the only way `required` is ever false, and
-	// it is derived in the SDK from the schema object itself — a live thing that
-	// could not have travelled.
 	t.Run("required is derived from the schema", func(t *testing.T) {
 		for key, want := range map[string]bool{
 			"PUBLIC_SITE_URL": true,
@@ -113,11 +89,6 @@ func TestDefineEnv_DeclaresThroughTheRealWireIntoTheGate(t *testing.T) {
 		}
 	})
 
-	// clientAccessible has no consumer in the CLI yet — the ticket that grows
-	// one turns a wrong value here into a confidential value inside a browser
-	// bundle, and this is the assertion that would have caught it. proto3 omits
-	// a false, so the negative case asserts the field reads false rather than
-	// that a false was transmitted.
 	t.Run("clientAccessible round-trips", func(t *testing.T) {
 		if !definitions["PUBLIC_SITE_URL"].GetClientAccessible() {
 			t.Error("PUBLIC_SITE_URL clientAccessible = false, want true")
@@ -138,10 +109,6 @@ func TestDefineEnv_DeclaresThroughTheRealWireIntoTheGate(t *testing.T) {
 		}
 	})
 
-	// source is walked out of a stack trace inside the SDK, mapped back through
-	// the inline sourcemap esbuild wrote, by a node started with
-	// --enable-source-maps. Drop any link in that chain and every diagnostic
-	// that names a declaration silently starts naming a file under .ocel/.
 	t.Run("source names the file the user wrote", func(t *testing.T) {
 		for key, definition := range definitions {
 			if got := definition.GetSource(); got != source {
@@ -150,10 +117,6 @@ func TestDefineEnv_DeclaresThroughTheRealWireIntoTheGate(t *testing.T) {
 		}
 	})
 
-	// The gate's verdict is the SDK's problems merged with its own. Asserting
-	// the exact set is what lets the required-cell matrix have one owner: a
-	// divergence between the SDK's rule and the gate's shows up here as a
-	// duplicated or misplaced cell.
 	t.Run("the verdict is exactly the cells the two halves owe", func(t *testing.T) {
 		refusal := refuse(t, gate)
 		got := describeProblems(refusal.Problems)
@@ -167,9 +130,6 @@ func TestDefineEnv_DeclaresThroughTheRealWireIntoTheGate(t *testing.T) {
 		}
 	})
 
-	// KIND_INVALID can only have come from the declaring process: the gate
-	// cannot run a schema. Non-empty detail is the SDK's complaint() surviving
-	// the trip back.
 	t.Run("an invalid value reports the schema's own complaint", func(t *testing.T) {
 		refusal := refuse(t, gate)
 		for _, problem := range refusal.Problems {
@@ -185,9 +145,6 @@ func TestDefineEnv_DeclaresThroughTheRealWireIntoTheGate(t *testing.T) {
 		}
 	})
 
-	// A secret-class cell is answered with presence and nothing else, so a
-	// build host never holds one. Reveal is where a plaintext would have been
-	// fetched, and it must never be reached for that cell.
 	t.Run("a secret value is never revealed to the declaring process", func(t *testing.T) {
 		if values.revealed(envgate.Cell{Key: "DB_PASSWORD"}) {
 			t.Fatal("Reveal was called for the secret-class cell")
@@ -198,9 +155,6 @@ func TestDefineEnv_DeclaresThroughTheRealWireIntoTheGate(t *testing.T) {
 	})
 }
 
-// runDiscovery drives the production discovery path — Discover, Bundle, and
-// the node spawn with its flags — rather than re-implementing it, so the
-// bundler options and the node flags are themselves under test.
 func runDiscovery(t *testing.T, root string, gate *envgate.Gate) {
 	t.Helper()
 
@@ -246,11 +200,6 @@ func byKey(t *testing.T, definitions []*resourcesv1.VariableDefinition) map[stri
 	return out
 }
 
-// setUpFixture writes a project whose only declaration file is fixture, and
-// links in just the two packages it imports. Linking the packages rather than
-// installing them is what keeps this test as fast as a unit test; resolving
-// `ocel` to the workspace package is what puts the published export map in the
-// path.
 func setUpFixture(t *testing.T, fixture string) string {
 	t.Helper()
 	requireNode(t)
@@ -270,10 +219,6 @@ func setUpFixture(t *testing.T, fixture string) string {
 	return root
 }
 
-// requireNode fails rather than skips. This is the repo's only test that runs
-// the real SDK in a real node process; a missing node silently turns it into a
-// no-op that still prints ok, which is exactly the failure this package exists
-// to make loud instead.
 func requireNode(t *testing.T) {
 	t.Helper()
 	if _, err := exec.LookPath("node"); err != nil {
@@ -281,9 +226,6 @@ func requireNode(t *testing.T) {
 	}
 }
 
-// requireSDKBuild fails rather than skips. packages/ocel/dist is gitignored, so
-// an unbuilt tree is the normal state of a fresh clone — and a test that
-// quietly skips itself in the normal state is a test nobody notices died.
 func requireSDKBuild(t *testing.T, repo string) {
 	t.Helper()
 	entry := filepath.Join(repo, "packages", "ocel", "dist", "env", "index.js")
@@ -321,9 +263,6 @@ func writeFile(t *testing.T, path, contents string) {
 	}
 }
 
-// fakeValues is the store, reduced to the two questions the gate asks it. The
-// store itself is out of scope here: this test is about what crosses the
-// language boundary, and a real store would only add ways for it to fail.
 type fakeValues struct {
 	plaintext map[envgate.Cell]string
 

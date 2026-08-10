@@ -59,9 +59,6 @@ describe("previewTarget", () => {
     expect(previewTarget("pr-42--nope.myapp.com", "myapp.com", MANY)).toBeNull();
   });
 
-  // A single-app project's whole label is its pointer, so a label naming no app
-  // it has is not an error there — it is a pointer that happens to contain the
-  // separator, and the same string is unresolvable in a multi-app project.
   it("reads an unknown app suffix as part of the pointer for a sole app", () => {
     expect(previewTarget("pr-42--nope.myapp.com", "myapp.com", SOLE)).toEqual({
       pointer: "pr-42--nope",
@@ -113,8 +110,6 @@ describe("previewTarget", () => {
   });
 });
 
-// previewApps is what turns the worker var into the list previewTarget matches
-// against, so the grammar's single-app case is decided by exactly what it parses.
 describe("previewApps", () => {
   it("splits a comma-separated list, lowercased and trimmed", () => {
     expect(previewApps(" Web , Admin-UI ")).toEqual(["web", "admin-ui"]);
@@ -131,9 +126,6 @@ describe("previewApps", () => {
   });
 });
 
-// normalizeBaseDomain is the single source of truth the fetch handler gates
-// preview mode on: an empty result means "no usable base domain", which degrades
-// to normal serving instead of 404-ing every request.
 describe("normalizeBaseDomain", () => {
   it("lowercases and strips surrounding dots", () => {
     expect(normalizeBaseDomain(".MyApp.com.")).toBe("myapp.com");

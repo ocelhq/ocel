@@ -26,9 +26,6 @@ jobs:
         uses: actions/setup-go@v5
         with:
           go-version-file: cli/go.mod
-          # No module at the repo root, so setup-go's default hunt for a root
-          # go.sum finds nothing and restores no build cache; name every
-          # module's instead.
           cache-dependency-path: |
             cli/go.sum
             cloud/aws/go.sum
@@ -40,14 +37,10 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: pnpm --filter @ocel/cli-platform typecheck
-        # go generate esbuilds the node builder, which strips types without
-        # checking them. This is the only gate on cli/platform/src/**.
         run: pnpm --filter @ocel/cli-platform typecheck
 
       - name: go generate (cli platform dist)
         working-directory: cli
-        # The platform dist is embedded but not committed, so nothing compiles
-        # without it.
         run: go generate ./...
 
       - name: go build (workspace)
@@ -63,10 +56,6 @@ jobs:
 
       - name: Go env-wire e2e (defineEnv -> DeclareEnv)
         working-directory: cli
-        # The only test that runs the real ocel/env SDK against the real gate,
-        # so it needs the SDK build above. Named explicitly rather than `go
-        # test ./...` to keep this step narrow: it must not drag in unrelated
-        # red from the rest of the cli module.
         run: go test ./internal/envwire/...
 
       - name: JS unit tests

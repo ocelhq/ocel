@@ -22,18 +22,12 @@ import (
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/resources/v1"
 )
 
-// fakeStore is both halves of what a session needs: the cells the gate reads
-// and the writes the UI makes, sharing one map so a write is visible to the
-// next read exactly as it is through a provider.
 type fakeStore struct {
 	cells     map[envgate.Cell]string
 	versions  map[envgate.Cell]int64
 	held      map[envgate.Address]string
 	overrides []envgate.Stored
 
-	// environments is what the provider enumerates for this session: what an
-	// override may be written against, and what a surviving one is judged
-	// orphaned by.
 	environments []string
 	expected     []*int64
 	deletes      int
@@ -66,9 +60,6 @@ func (s *fakeStore) Reveal(_ context.Context, rows []envgate.Address) (map[envga
 	return found, nil
 }
 
-// version is what the row at one address is currently held at, zero when it
-// holds nothing. An override is versioned like any other row: it is a value,
-// and two people can edit it as easily as they can edit the class-wide one.
 func (s *fakeStore) version(at envgate.Address) int64 {
 	if at.Environment == "" {
 		return s.versions[at.Cell]
@@ -81,10 +72,6 @@ func (s *fakeStore) version(at envgate.Address) int64 {
 	return 0
 }
 
-// stale is the store's whole concurrency rule: an expectation that no longer
-// describes the row refuses the operation. Both mutations run it, so a session
-// that dropped a version on its way through is a test failure rather than a
-// fixture that was going to refuse regardless.
 func (s *fakeStore) stale(at envgate.Address, expected *int64) bool {
 	return expected != nil && *expected != s.version(at)
 }
@@ -138,8 +125,6 @@ func def(key string, folders ...string) *resourcesv1.VariableDefinition {
 	}
 }
 
-// discovered is a gate that has run discovery over the given declarations, as
-// a deploy or an `ocel env` command leaves it.
 func discovered(t *testing.T, store *fakeStore, definitions ...*resourcesv1.VariableDefinition) *envgate.Gate {
 	t.Helper()
 	gate := envgate.New(store, envgate.Scope{Apps: []envgate.App{{Name: "web", Folder: "/web"}, {Name: "api"}}})
@@ -152,8 +137,6 @@ func discovered(t *testing.T, store *fakeStore, definitions ...*resourcesv1.Vari
 	return gate
 }
 
-// session starts a real loopback server over the given declarations, the way
-// every caller does.
 func session(t *testing.T, store *fakeStore, definitions ...*resourcesv1.VariableDefinition) *varsui.Session {
 	t.Helper()
 	return serve(t, store, discovered(t, store, definitions...))
@@ -164,8 +147,6 @@ func serve(t *testing.T, store *fakeStore, gate *envgate.Gate) *varsui.Session {
 	return serveUnder(t, context.Background(), store, gate)
 }
 
-// serveUnder starts a session under a context the test can end, which is how a
-// deploy hands the UI its own cancellation.
 func serveUnder(t *testing.T, ctx context.Context, store *fakeStore, gate *envgate.Gate) *varsui.Session {
 	t.Helper()
 	s, err := varsui.Serve(ctx, varsui.Options{
@@ -182,13 +163,10 @@ func serveUnder(t *testing.T, ctx context.Context, store *fakeStore, gate *envga
 	return s
 }
 
-// origin is the scheme and authority the session's own page is served from —
-// what every legitimate API request carries and nothing else can forge.
 func origin(s *varsui.Session) string {
 	return strings.SplitN(s.URL, "#", 2)[0]
 }
 
-// request is an API call exactly as the session's own page makes it.
 func request(t *testing.T, s *varsui.Session, method, path string, body any) *http.Response {
 	t.Helper()
 	return do(t, newRequest(t, s, method, path, body))
@@ -313,9 +291,6 @@ func TestSession_ARequestWithTheWrongTokenIsRefused(t *testing.T) {
 	}
 }
 
-// A page on another origin cannot read our fragment, but it can still aim a
-// request at the port. Rejecting a mismatched Origin closes that door even if
-// a token ever leaked.
 func TestSession_ARequestFromAnotherOriginIsRefused(t *testing.T) {
 	store := newFakeStore()
 	s := session(t, store, def("API_URL"))
@@ -336,8 +311,6 @@ func TestSession_ARequestFromAnotherOriginIsRefused(t *testing.T) {
 	}
 }
 
-// A rebinding attack reaches the port under a name that resolves to loopback
-// only after the page has loaded, so the Host header is the tell.
 func TestSession_ARequestUnderAnotherHostnameIsRefused(t *testing.T) {
 	s := session(t, newFakeStore(), def("API_URL"))
 
@@ -383,10 +356,6 @@ func TestSession_AWriteToAForbiddenCellIsRefusedWithTheReasonAndNeverReachesTheS
 	}
 }
 
-// Root is the empty folder everywhere above the store, and a folder is matched
-// whole. A cell addressed any other way is one no app could ever resolve, so
-// the UI refuses it exactly as `ocel env set` does rather than writing a value
-// that is invisible from the moment it lands.
 func TestSession_AWriteToAnUnaddressableFolderIsRefusedAndNeverReachesTheStore(t *testing.T) {
 	for _, folder := range []string{"web", "/", "/web/", "/web//api"} {
 		t.Run(folder, func(t *testing.T) {
@@ -494,8 +463,6 @@ func TestSession_TheMatrixNamesTheEnvironmentsThatStillOverrideACell(t *testing.
 	}
 }
 
-// The page offers a picker rather than a text field, so the environments it may
-// offer have to reach it. Nothing else in the state says which names exist.
 func TestSession_TheStateNamesTheEnvironmentsAnOverrideCanBeWrittenAgainst(t *testing.T) {
 	store := newFakeStore()
 	store.environments = []string{"pr-42", "staging"}
@@ -506,9 +473,6 @@ func TestSession_TheStateNamesTheEnvironmentsAnOverrideCanBeWrittenAgainst(t *te
 	}
 }
 
-// A write against a named environment lands on that environment's own cell.
-// The class-wide value it sits beside is untouched, which is the whole of "one
-// branch differs and every other goes on sharing".
 func TestSession_AnOverrideIsWrittenBesideTheClassWideValueRatherThanOverIt(t *testing.T) {
 	store := newFakeStore()
 	store.environments = []string{"staging"}
@@ -531,10 +495,6 @@ func TestSession_AnOverrideIsWrittenBesideTheClassWideValueRatherThanOverIt(t *t
 	}
 }
 
-// An override can only be written against an environment identity the runtime
-// will ask for. The page offers a picker, so reaching here means something
-// bypassed it — and the rule holds anyway, because a value nothing reads is
-// worse than a refusal.
 func TestSession_RefusesAnOverrideAgainstAnEnvironmentThatDoesNotExist(t *testing.T) {
 	store := newFakeStore()
 	store.environments = []string{"staging"}
@@ -551,10 +511,6 @@ func TestSession_RefusesAnOverrideAgainstAnEnvironmentThatDoesNotExist(t *testin
 	}
 }
 
-// An override is a value like any other, so two people editing one race exactly
-// as they do over the class-wide value. The write carries the version the page
-// rendered for that environment's own row — not the class-wide one beside it —
-// and is refused when it no longer holds.
 func TestSession_AnOverrideWriteExpectsTheVersionRenderedForItsOwnEnvironment(t *testing.T) {
 	at := envgate.Address{Cell: envgate.Cell{Key: "API_URL"}, Environment: "staging"}
 
@@ -592,9 +548,6 @@ func TestSession_AnOverrideWriteExpectsTheVersionRenderedForItsOwnEnvironment(t 
 	}
 }
 
-// The orphan's remedy. Its environment is gone by definition, so requiring one
-// would make the row permanently unreachable — which is exactly the silent
-// accumulation the marking exists to end.
 func TestSession_AnOrphanedOverrideIsMarkedAndStillRemovable(t *testing.T) {
 	store := newFakeStore()
 	store.override(envgate.Cell{Key: "API_URL"}, "pr-42")
@@ -632,10 +585,6 @@ func TestSession_AWriteExpectsTheVersionThePageRendered(t *testing.T) {
 	}
 }
 
-// Zero is not "no expectation": the store reads it as "no live value", so a
-// cell the page drew empty is written under exactly that condition and loses
-// to anyone who filled it in between. Absence is the blind write, and only a
-// caller that never rendered a version sends that.
 func TestSession_AWriteToACellThePageDrewEmptyExpectsNoLiveValue(t *testing.T) {
 	store := newFakeStore()
 	s := session(t, store, def("API_URL"))
@@ -666,9 +615,6 @@ func TestSession_AWriteThatQuotesNoVersionIsBlind(t *testing.T) {
 	}
 }
 
-// Two people editing one cell is the case optimistic concurrency exists for.
-// The second write must be refused and the page told its view was stale, not
-// told the store is unreachable and not silently allowed to win.
 func TestSession_AWriteAgainstAVersionThatIsNoLongerCurrentIsRefusedAsAConflict(t *testing.T) {
 	store := newFakeStore()
 	store.cells[envgate.Cell{Key: "API_URL"}] = "https://someone-elses.example"
@@ -687,9 +633,6 @@ func TestSession_AWriteAgainstAVersionThatIsNoLongerCurrentIsRefusedAsAConflict(
 	}
 }
 
-// Remove is the other half of the same race. A page whose cell was replaced
-// while it sat open must not be able to delete the replacement, so the delete
-// carries the version it rendered and is refused when that no longer holds.
 func TestSession_ADeleteAgainstAVersionThatIsNoLongerCurrentIsRefusedAsAConflict(t *testing.T) {
 	store := newFakeStore()
 	store.cells[envgate.Cell{Key: "API_URL"}] = "https://someone-elses.example"
@@ -773,10 +716,6 @@ func TestSession_HistoryIsReadableNewestFirst(t *testing.T) {
 func TestSession_WaitReturnsWhenTheDeveloperSaysTheMatrixIsDone(t *testing.T) {
 	s := session(t, newFakeStore(), def("API_URL"))
 
-	// The page posts while the caller is blocked in Wait, which is the only
-	// order this ever happens in, and it has to get its answer: finishing tears
-	// the server down, and a page that reads that as a failed request would
-	// tell the developer their completed matrix did not take.
 	type posted struct {
 		resp *http.Response
 		err  error
@@ -807,12 +746,6 @@ func TestSession_WaitReturnsWhenTheDeveloperSaysTheMatrixIsDone(t *testing.T) {
 	}
 }
 
-// The interruption has to be legible however the race falls. Cancelling closes
-// the session from a watcher goroutine, so by the time a caller reaches Wait
-// the session may already be closed — and a session closed by an interruption
-// looks exactly like one closed by a developer who finished, unless Wait can
-// tell them apart. Each round leaves the gap the scheduler would otherwise
-// close for us, and there are enough rounds that passing is not luck.
 func TestSession_WaitReturnsTheInterruptionEvenAfterTheWatcherHasAlreadyClosedTheSession(t *testing.T) {
 	for round := range 30 {
 		ctx, cancel := context.WithCancel(context.Background())
@@ -828,9 +761,6 @@ func TestSession_WaitReturnsTheInterruptionEvenAfterTheWatcherHasAlreadyClosedTh
 	}
 }
 
-// The deploy this UI interrupts resumes only on a completed matrix, and it may
-// look again on a context of its own. A session that ended without the
-// developer finishing must keep saying so, or a killed deploy resumes.
 func TestSession_WaitKeepsReportingAnAbandonedSessionOnAFreshContext(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -849,10 +779,6 @@ func TestSession_WaitKeepsReportingAnAbandonedSessionOnAFreshContext(t *testing.
 	}
 }
 
-// A command may open the UI more than once — a gate that fails again after a
-// fix reopens it — under a context that lives as long as the command. Each
-// closed session has to let go of that context, or the command accumulates a
-// goroutine per session for the rest of its run.
 func TestSession_ClosingASessionStopsItWatchingTheCallersContext(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -876,8 +802,6 @@ func TestSession_ClosingASessionStopsItWatchingTheCallersContext(t *testing.T) {
 	}
 }
 
-// awaitStopped blocks until the session's listener stops accepting, which is
-// how a test observes that the watcher's Close has already run.
 func awaitStopped(t *testing.T, s *varsui.Session) {
 	t.Helper()
 	address := strings.TrimPrefix(origin(s), "http://")

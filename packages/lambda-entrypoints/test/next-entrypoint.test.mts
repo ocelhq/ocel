@@ -6,12 +6,6 @@ import { join } from "node:path";
 import { afterAll, beforeAll, expect, test } from "vitest";
 import { writeNextProjectFixture } from "./next-project-fixture.mjs";
 
-// Boots the real Next entrypoint against a pages-runtime-shaped fixture bundle.
-// The launcher's handler performs unstable_cache's pages-path flow against
-// globalThis.__incrementalCache — the exact resolution that used to find
-// nothing, throw its invariant, and 500 every pages route using unstable_cache.
-// It also echoes the requestMeta it was called with, which is how the membrane
-// states the platform contract a request runs under.
 const launcherModule = `module.exports = {
   async handler(req, res, ctx) {
     if (req.url === "/__request-meta") {
@@ -128,9 +122,6 @@ test("unstable_cache's flow works through the published incremental cache", asyn
   expect(cached.random).toBe(rendered.random);
 });
 
-// Next's forwarded-action and redirect-follow self-fetches read
-// __NEXT_PRIVATE_ORIGIN before falling back to the request's Host. Unset, that
-// fallback is the public host and the fetch leaves the sandbox for the edge.
 test("the server-action self-fetch origin is the loopback the app bound", async () => {
   expect(process.env.__NEXT_PRIVATE_ORIGIN).toBe(`http://127.0.0.1:${port}`);
 
@@ -144,15 +135,10 @@ function requestMeta(init?: RequestInit): Promise<any> {
 
 const resume = { method: "POST", headers: { "next-resume": "1" }, body: "[1,{}]" };
 
-// The edge flushed the shell already and is asking only for the dynamic half.
-// Without minimal mode Next renders a shell of its own for this leg too, and the
-// client receives the prerendered shell twice.
 test("a PPR resume runs under minimal mode", async () => {
   expect(await requestMeta(resume)).toMatchObject({ minimalMode: true });
 });
 
-// Minimal mode on any other leg would cost Next its own caching, fallback and
-// revalidation, none of which the edge takes over.
 test.each([
   ["a document GET", undefined],
   ["a POST that is not a resume", { method: "POST", body: "x" }],

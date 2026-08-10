@@ -1,9 +1,3 @@
-// Command deploy is the Ocel AWS provider's deployment binary. It speaks the
-// provider protocol (pkg/proto/deployments/v1): it binds a private local
-// channel, prints the readiness sentinel once bound, verifies the per-session
-// token on every call, and serves DeploymentService (Deploy + Bootstrap). The
-// provisioning logic lives in the sibling deploy/bootstrap/server packages;
-// this entrypoint only wires transport.
 package main
 
 import (
@@ -18,7 +12,6 @@ import (
 	"github.com/ocelhq/ocel/pkg/channel"
 )
 
-// version is set at build time via -ldflags "-X main.version=...".
 var version = "dev"
 
 func main() {
@@ -50,9 +43,6 @@ func run() error {
 	serveErr := make(chan error, 1)
 	go func() { serveErr <- httpSrv.Serve(ln) }()
 
-	// The listener above is already bound; print the readiness sentinel now
-	// so the CLI can dial in. Any other stdout/stderr, before or after this
-	// line, is diagnostic log output, not protocol.
 	fmt.Println(channel.FormatReadinessLine(addr))
 
 	select {

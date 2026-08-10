@@ -5,9 +5,6 @@ import (
 	"testing"
 )
 
-// An identity assembled field-by-field skips the constructor's checks, so it can
-// render a token that parses back as some other Deployment. Callers outside this
-// package must have no way to assemble one.
 func TestDeploymentIdentity_CannotBeForgedFromOutsideThePackage(t *testing.T) {
 	typ := reflect.TypeOf(DeploymentIdentity{})
 	for i := range typ.NumField() {
@@ -40,8 +37,6 @@ func TestNewDeploymentIdentity_FingerprintIsCarriedAlongsideTheBuildID(t *testin
 	}
 }
 
-// The whole point of the identity: a rotation reuses the build output, so two
-// Deployments share a build id and are told apart only by their fingerprint.
 func TestDeploymentIdentity_SameBuildDifferentFingerprintsNeverCollide(t *testing.T) {
 	a, _ := NewDeploymentIdentity("WEB1", "aaa")
 	b, _ := NewDeploymentIdentity("WEB1", "bbb")
@@ -68,9 +63,6 @@ func TestParseDeploymentIdentity_RoundTripsBothShapes(t *testing.T) {
 	}
 }
 
-// A build id carrying the reserved separator would make the rendered identity
-// ambiguous to parse, so it is refused where build ids enter the system rather
-// than mis-split later.
 func TestNewDeploymentIdentity_RejectsUnusableParts(t *testing.T) {
 	for _, c := range []struct{ buildID, fingerprint string }{
 		{"", ""},

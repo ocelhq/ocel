@@ -15,8 +15,6 @@ import (
 	envv1 "github.com/ocelhq/ocel/pkg/proto/env/v1"
 )
 
-// withRunnerValues drives the store the way the variables UI does: over a live
-// provider session, through the same runnerValues the gate and the UI share.
 func withRunnerValues(t *testing.T, root string, opts envOptions, drive func(ctx context.Context, slug string, runner *providerrunner.Runner, values runnerValues) error) {
 	t.Helper()
 	ctx := context.Background()
@@ -45,8 +43,6 @@ func storeValue(t *testing.T, ctx context.Context, runner *providerrunner.Runner
 	}
 }
 
-// revealOne reads back one cell through the batched reveal, for the assertions
-// that only care about a single value.
 func revealOne(ctx context.Context, values runnerValues, cell envgate.Cell) (string, bool, error) {
 	found, err := values.Reveal(ctx, []envgate.Address{{Cell: cell}})
 	if err != nil {
@@ -67,14 +63,8 @@ func stored(t *testing.T, rows []envgate.Stored, key string) envgate.Stored {
 	return envgate.Stored{}
 }
 
-// A named environment's value is a value, and the gate has to be told it is
-// there — but as an override, never as the class-wide value a deploy resolves.
-// Discarding it is what let a deleted class-wide cell leave a survivor nothing
-// could see.
 func TestRunnerValues_ListCarriesANamedEnvironmentsValueAsAnOverride(t *testing.T) {
 	root := setUpEnvFixture(t)
-	// Overrides live on the preview substrate: production has a single
-	// environment, and the store refuses a row addressed at any other.
 	t.Setenv(fakeInfraClassEnvVar, "preview")
 	preview := envOptions{preview: true}
 
@@ -102,9 +92,6 @@ func TestRunnerValues_ListCarriesANamedEnvironmentsValueAsAnOverride(t *testing.
 	})
 }
 
-// The version the page rendered is the write's expectation, and a write whose
-// expectation no longer holds is refused rather than applied — otherwise two
-// people editing one cell both succeed and the second silently wins.
 func TestRunnerValues_SetAgainstAStaleVersionIsRefusedAsAStaleValue(t *testing.T) {
 	root := setUpEnvFixture(t)
 
@@ -131,9 +118,6 @@ func TestRunnerValues_SetAgainstAStaleVersionIsRefusedAsAStaleValue(t *testing.T
 	})
 }
 
-// Remove carries the same expectation Save does. Two developers hold the page
-// open, one replaces the value, and the other's Remove must lose to that write
-// rather than destroy it with nothing on either page admitting it happened.
 func TestRunnerValues_DeleteAgainstAStaleVersionIsRefusedAsAStaleValue(t *testing.T) {
 	root := setUpEnvFixture(t)
 

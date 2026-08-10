@@ -71,8 +71,6 @@ func TestRemove_NoLockfile_DoesNotError(t *testing.T) {
 	}
 }
 
-// Two clones of one repo are two working trees, and each gets its own leader
-// even though nothing but the path distinguishes them.
 func TestPath_DiffersByProjectRoot(t *testing.T) {
 	parent := t.TempDir()
 
@@ -89,8 +87,6 @@ func TestPath_DiffersByProjectRoot(t *testing.T) {
 	}
 }
 
-// The key is the root's absolute path, so spellings that name the same
-// directory must land on one lockfile.
 func TestPath_EquivalentSpellingsOfOneRoot_Agree(t *testing.T) {
 	root := t.TempDir()
 
@@ -107,8 +103,6 @@ func TestPath_EquivalentSpellingsOfOneRoot_Agree(t *testing.T) {
 	}
 }
 
-// The key is a filename, and a project root is a path: it must never leak a
-// separator into the lock directory.
 func TestPath_KeyIsAFlatNameInTheLockDirectory(t *testing.T) {
 	root := t.TempDir()
 

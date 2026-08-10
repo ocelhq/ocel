@@ -1,9 +1,3 @@
-// Package deployui renders the CLI's deploy/preview/bootstrap flow. In a
-// terminal it shows a compact, phased view — one spinner per phase, a progress
-// bar where the provider reports counts — and streams the full detail to
-// .ocel/logs/ocel.log. When stdout is not a terminal, or verbose is set, it
-// bypasses the phased view and streams every event to stdout as well, so CI
-// logs and `--verbose` runs keep the raw, debuggable output.
 package deployui
 
 import (
@@ -29,32 +23,22 @@ const (
 	frameRate = 100 * time.Millisecond
 )
 
-// spinnerFrames is the braille animation shown against the active phase.
 var spinnerFrames = []string{"⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"}
 
-// Session renders a single deploy/preview/bootstrap run. Construct it with New,
-// feed it provider events with Event, mark CLI-side building with Building, and
-// end it with exactly one of Deployed, Finish, Fail, or Cancel. Close releases
-// the log file.
-//
-// In the phased (clean) view a single background goroutine owns every animation
-// write to stdout; the caller's goroutine only mutates step state under mu, so
-// there is no torn write to the terminal. A Session is not meant to be shared
-// across unrelated callers.
 type Session struct {
 	out     io.Writer
-	command string // e.g. "ocel deploy", used in the cancel hint
+	command string
 	start   time.Time
 
 	log     *os.File
 	logPath string
 
-	clean bool // phased UI (true) vs raw stream (false)
+	clean bool
 
 	mu        sync.Mutex
-	active    bool // a step spinner is painting
-	paused    bool // a step Waiting stopped, for Resume to restart
-	waiting   bool // the run is blocked on something outside itself
+	active    bool
+	paused    bool
+	waiting   bool
 	frame     int
 	stepKey   string
 	stepTitle string
@@ -63,16 +47,10 @@ type Session struct {
 	stepTotal *uint32
 	stepStart time.Time
 
-	stopRender chan struct{} // closed to stop the render loop
-	renderDone chan struct{} // closed when the render loop has exited
+	stopRender chan struct{}
+	renderDone chan struct{}
 }
 
-// New creates a Session writing its human-facing view to stdout and its full
-// detail to <projectDir>/.ocel/logs/ocel.log (truncated per run). The phased
-// view is used only when stdout is a real terminal and verbose is false;
-// otherwise every event is streamed to stdout as well. command is the command
-// to suggest on cancel (e.g. "ocel deploy"). A log that cannot be opened is not
-// fatal: the run proceeds with no log file.
 func New(stdout io.Writer, projectDir, command string, verbose bool) *Session {
 	s := &Session{
 		out:     stdout,
@@ -96,9 +74,6 @@ func New(stdout io.Writer, projectDir, command string, verbose bool) *Session {
 	return s
 }
 
-// renderLoop repaints the active step's spinner line every frame. It is the
-// only writer of animation frames to stdout, so no lock is needed against the
-// caller beyond mu, which it takes to read step state.
 func (s *Session) renderLoop() {
 	defer close(s.renderDone)
 	t := time.NewTicker(frameRate)
@@ -118,9 +93,6 @@ func (s *Session) renderLoop() {
 	}
 }
 
-// BuildWriter is where CLI-side build/collect subprocess output should be
-// written. In the phased view it goes only to the log (so it never corrupts the
-// spinner); in raw mode it is teed to stdout as well.
 func (s *Session) BuildWriter() io.Writer {
 	if s.clean {
 		if s.log != nil {
@@ -134,8 +106,6 @@ func (s *Session) BuildWriter() io.Writer {
 	return s.out
 }
 
-// Building starts the CLI-side build phase. It runs before any provider is
-// spawned, so it never arrives as a wire event.
 func (s *Session) Building() {
 	s.logf("[building] Building project")
 	if !s.clean {
@@ -148,22 +118,10 @@ func (s *Session) Building() {
 	s.startLocked(key, title)
 }
 
-// BuildOK finalizes the CLI-side build phase after it succeeds, so a failure in
-// the gap before the first provider event (spawn, preflight) is not
-// misattributed to building. It is a no-op in raw mode.
 func (s *Session) BuildOK() {
 	s.finishStep(color.New(color.FgGreen), okMark, "")
 }
 
-// Waiting hands the terminal to something outside this run — a page the
-// developer has to fill in — and prints a block that stays on screen: what the
-// run is blocked on, where to go, and how to abort. The render loop repaints
-// one line in place, so anything printed under it is overwritten on a terminal;
-// the animation stops before the block goes out and stays stopped until Resume.
-//
-// reason is printed verbatim. It is a refusal, which names keys and folders and
-// never a value. url goes to the screen whole and to the log without its
-// fragment, which is where the session's bearer token rides.
 func (s *Session) Waiting(reason, url string) {
 	s.logf("[waiting] %s", withoutFragment(url))
 	s.mu.Lock()
@@ -179,8 +137,6 @@ func (s *Session) Waiting(reason, url string) {
 		reason, url)
 }
 
-// Resume restarts the phase Waiting paused, once whatever the run was blocked
-// on has answered.
 func (s *Session) Resume() {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -192,8 +148,6 @@ func (s *Session) Resume() {
 	}
 }
 
-// Event renders a single provider DeployEvent. The terminal ResultEvent is the
-// caller's to handle (via Deployed/Fail); Event ignores it.
 func (s *Session) Event(ev *deploymentsv1.DeployEvent) {
 	if p := ev.GetProgress(); p != nil {
 		s.progress(p.GetPhase(), p.GetMessage(), p.GetCurrent(), p.Total)
@@ -227,9 +181,6 @@ func (s *Session) logMessage(message string) {
 	}
 }
 
-// Deployed renders the success screen for deploy/preview: a green headline with
-// the total duration, the featured app URLs, and a pointer to the log. Other
-// connection outputs are written to the log only.
 func (s *Session) Deployed(headline string, appURLs []string, outputs []*deploymentsv1.ResourceOutput) {
 	s.logOutputs(outputs)
 	s.finishStep(color.New(color.FgGreen), okMark, "")
@@ -246,8 +197,6 @@ func (s *Session) Deployed(headline string, appURLs []string, outputs []*deploym
 	s.printLogPointer("Details")
 }
 
-// Finish renders a generic success line (used by bootstrap, which has no URL):
-// a green headline with the total duration and a log pointer.
 func (s *Session) Finish(headline string) {
 	s.finishStep(color.New(color.FgGreen), okMark, "")
 	fmt.Fprintln(s.out)
@@ -255,9 +204,6 @@ func (s *Session) Finish(headline string) {
 	s.printLogPointer("Details")
 }
 
-// Fail marks the active phase failed ("✗ Provisioning failed"), prints the
-// error, and points at the log. In raw mode, where no phase is active, it prints
-// a generic failure headline instead.
 func (s *Session) Fail(err error) {
 	s.logf("[error] %v", err)
 	red := color.New(color.FgRed, color.Bold)
@@ -270,10 +216,6 @@ func (s *Session) Fail(err error) {
 	s.printLogPointer("Full log")
 }
 
-// Cancel marks the active phase cancelled ("⚠ Provisioning cancelled") and warns
-// that infrastructure may be partially provisioned — unless the run was blocked
-// in Waiting, which stands before any provisioning, where that warning would
-// send the developer looking for resources that were never created.
 func (s *Session) Cancel() {
 	s.logf("[cancelled] interrupted")
 	s.mu.Lock()
@@ -293,7 +235,6 @@ func (s *Session) Cancel() {
 	s.printLogPointer("Log")
 }
 
-// Close stops the render loop and closes the log file.
 func (s *Session) Close() error {
 	if s.stopRender != nil {
 		close(s.stopRender)
@@ -306,18 +247,12 @@ func (s *Session) Close() error {
 	return nil
 }
 
-// finishStep finalizes the active step (if any) with the given mark and status
-// word, taking the lock. It reports whether a step was actually active, so
-// callers can supply a fallback headline in raw mode. A status of "" renders a
-// completed step ("✓ Building  2.1s"); a status like "failed" renders a
-// terminal step ("✗ Provisioning failed").
 func (s *Session) finishStep(c *color.Color, mark, status string) bool {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	return s.finalizeLocked(c, mark, status)
 }
 
-// startLocked begins a new active step. The render loop paints it from here.
 func (s *Session) startLocked(key, title string) {
 	s.stepKey = key
 	s.stepTitle = title
@@ -339,18 +274,11 @@ func (s *Session) renderLocked(message string, current uint32, total *uint32) {
 	}
 }
 
-// paintLocked repaints the active step's line in place (carriage return + clear
-// to end of line). Must be called with the lock held.
 func (s *Session) paintLocked() {
 	glyph := color.New(color.FgCyan).Sprint(spinnerFrames[s.frame%len(spinnerFrames)])
 	fmt.Fprintf(s.out, "\r\033[K%s %s", glyph, s.stepBody())
 }
 
-// finalizeLocked clears the active step's line and prints its final, static
-// line, then clears step state so a later finalize is a no-op. A status of ""
-// prints the completed form (title + dim elapsed); any other status is rendered
-// in the mark's colour after the title ("✗ Provisioning failed"). Reports
-// whether a step was active.
 func (s *Session) finalizeLocked(c *color.Color, mark, status string) bool {
 	if !s.active {
 		return false
@@ -368,9 +296,6 @@ func (s *Session) finalizeLocked(c *color.Color, mark, status string) bool {
 	return true
 }
 
-// stepBody builds the text after the spinner glyph: the phase title, elapsed
-// time, and either a progress bar (determinate step) or the latest message
-// (indeterminate step). Must be called with the lock held.
 func (s *Session) stepBody() string {
 	var b strings.Builder
 	fmt.Fprintf(&b, "%s  %s", s.stepTitle, color.New(color.Faint).Sprint(formatDuration(time.Since(s.stepStart))))
@@ -404,8 +329,6 @@ func (s *Session) printLogPointer(label string) {
 	color.New(color.Faint).Fprintf(s.out, "  %s: %s\n", label, s.relLog())
 }
 
-// relLog renders the log path relative to the working directory when it is a
-// clean descendant, else the absolute path.
 func (s *Session) relLog() string {
 	if wd, err := os.Getwd(); err == nil {
 		if rel, err := filepath.Rel(wd, s.logPath); err == nil && !strings.HasPrefix(rel, "..") {
@@ -415,10 +338,6 @@ func (s *Session) relLog() string {
 	return s.logPath
 }
 
-// withoutFragment strips a URL's fragment. The variables UI carries its bearer
-// token there precisely so it reaches no request line, Referer or log — and
-// this package's log outlives the session and is the file a run invites the
-// developer to open and share.
 func withoutFragment(url string) string {
 	if i := strings.Index(url, "#"); i >= 0 {
 		return url[:i]
@@ -426,8 +345,6 @@ func withoutFragment(url string) string {
 	return url
 }
 
-// isTTY reports whether w is a real terminal. A var so a test can render the
-// phased view against an in-memory writer; nothing but a test reassigns it.
 var isTTY = func(w io.Writer) bool {
 	f, ok := w.(*os.File)
 	if !ok {
@@ -436,9 +353,6 @@ var isTTY = func(w io.Writer) bool {
 	return isatty.IsTerminal(f.Fd())
 }
 
-// stepIdentity maps an event to the step it belongs to. A typed phase groups
-// all its messages under one step titled by the phase; an unclassified event
-// (bootstrap/destroy) is its own step titled by its message.
 func stepIdentity(phase deploymentsv1.Phase, message string) (key, title string) {
 	if phase == deploymentsv1.Phase_PHASE_UNSPECIFIED {
 		return "msg:" + message, message
@@ -495,8 +409,6 @@ func formatDuration(d time.Duration) string {
 	return fmt.Sprintf("%dm%02ds", m, sec)
 }
 
-// formatOutput renders a resource's connection details for the log, mirroring
-// the CLI's historical connection-outputs listing.
 func formatOutput(o *deploymentsv1.ResourceOutput) string {
 	if pg := o.GetPostgres(); pg != nil {
 		return fmt.Sprintf("%s: postgres://%s@%s:%d/%s", o.GetLogicalName(), pg.GetUsername(), pg.GetHost(), pg.GetPort(), pg.GetDatabase())

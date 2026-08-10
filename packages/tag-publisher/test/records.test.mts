@@ -41,8 +41,6 @@ describe("raisesOf", () => {
     expect(raises.get(PREFIX)!.records.get("home")).toEqual({ stale: 200, expired: undefined });
   });
 
-  // A build that cannot be published is reported back to the event source as
-  // the records that carried it, so its batch-mates are acknowledged.
   it("remembers which records each build's raise was carried by", () => {
     const other = tagNamespace("prod/acme/admin/BUILD2");
     const raises = raisesOf([
@@ -67,14 +65,11 @@ describe("raisesOf", () => {
   });
 
   it("derives the build from gsi1pk, not from a pk a tag can forge", () => {
-    // The tag is user input and freely contains "#": splitting pk would read
-    // this record as belonging to some other build entirely.
     const raises = raisesOf([tagRecord("evil#prod#other#app#B9", { expired: { N: "1" } })]);
     expect([...raises.keys()]).toEqual([PREFIX]);
   });
 
   it("acts on nothing that is not a tag record", () => {
-    // An upload session: same table, same sort key, and an HMAC secret in it.
     const session: StreamRecord = {
       dynamodb: {
         NewImage: {

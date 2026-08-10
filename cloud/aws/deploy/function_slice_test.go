@@ -46,9 +46,6 @@ func TestTranslateFunction_DefaultsSizeTheFunctionForSSR(t *testing.T) {
 	}
 }
 
-// Leaving either unset hands the function AWS's implicit 3s/128MB, which a Next
-// SSR cold start (measured 4.25s at 128MB, peaking at 109MB) cannot fit inside:
-// every invocation times out with no body and no error, presenting as a hang.
 func TestFunctionDefaults_ClearAWSImplicitCeilings(t *testing.T) {
 	const (
 		awsDefaultTimeoutSeconds = 3
@@ -64,8 +61,6 @@ func TestFunctionDefaults_ClearAWSImplicitCeilings(t *testing.T) {
 	}
 }
 
-// Sized for an accumulating bundle rather than a single module — see
-// nextBundleFunctionMemoryMB for why.
 func TestTranslateFunction_NextGetsTheBundleMemoryDefault(t *testing.T) {
 	got := translateFunction(&deploymentsv1.ManifestFunction{Framework: frameworkNext})
 	if got.MemorySizeMB != nextBundleFunctionMemoryMB {
@@ -73,8 +68,6 @@ func TestTranslateFunction_NextGetsTheBundleMemoryDefault(t *testing.T) {
 	}
 }
 
-// Express/fastify apps are already a single function, so nothing accumulates and
-// the flat default still fits.
 func TestTranslateFunction_NonNextKeepsTheFlatDefault(t *testing.T) {
 	got := translateFunction(&deploymentsv1.ManifestFunction{Framework: "express"})
 	if got.MemorySizeMB != defaultFunctionMemoryMB {
@@ -93,8 +86,6 @@ func TestMembraneLayerARN_DefaultAndEnvOverride(t *testing.T) {
 	}
 }
 
-// Bytecode caching is opt-in, so the default case (no override) must not see
-// the prefix.
 func TestBytecodeCacheEnabled_DefaultAndEnvOverride(t *testing.T) {
 	t.Setenv(bytecodeCacheEnv, "")
 	if bytecodeCacheEnabled() {
@@ -104,8 +95,6 @@ func TestBytecodeCacheEnabled_DefaultAndEnvOverride(t *testing.T) {
 	if !bytecodeCacheEnabled() {
 		t.Error("bytecodeCacheEnabled() = false with OCEL_BYTECODE_CACHE=1, want true")
 	}
-	// Only the literal "1" enables, matching the one-spelling precedent the
-	// other deploy-time overrides in this package follow.
 	for _, v := range []string{"true", "on", "yes", "TRUE"} {
 		t.Setenv(bytecodeCacheEnv, v)
 		if bytecodeCacheEnabled() {
@@ -142,11 +131,6 @@ func TestISREnv_OmitsBytecodePrefixWhenGateIsOff(t *testing.T) {
 	}
 }
 
-// The membrane composes its uploaded key as
-// {prefix}/bytecode/{function}/node{major}-{arch}.tar.gz. isrPolicy grants
-// {bucket}/{prefix}/* — this proves that composed key actually falls under the
-// wildcard the function's role is issued, not just that the two format strings
-// share a literal prefix.
 func TestISRPolicy_CoversTheComposedBytecodeKey(t *testing.T) {
 	t.Setenv(bytecodeCacheEnv, "1")
 	cfg := isrConfig{
@@ -248,11 +232,6 @@ func TestCollectFunctionOutput_ReportsURLKeyedByLogicalName(t *testing.T) {
 	}
 }
 
-// TestISRPolicy_ScopesToTheAppsOwnNamespace proves a Next function's cache
-// grant cannot reach another app's data. The asset bucket and the state table
-// are account-global and shared across every env/project/app, and the state
-// table also holds upload sessions (whose items carry HMAC secrets) — so an
-// unscoped grant here would expose every tenant to every function.
 func TestISRPolicy_ScopesToTheAppsOwnNamespace(t *testing.T) {
 	cfg := isrConfig{
 		Bucket:   "assets-xyz",
@@ -290,26 +269,15 @@ func TestISRPolicy_ScopesToTheAppsOwnNamespace(t *testing.T) {
 	if ddbStmt.Resource != cfg.TableARN {
 		t.Errorf("DynamoDB Resource = %q, want the table ARN", ddbStmt.Resource)
 	}
-	// The granted actions must match the calls the handler's tag store actually
-	// makes, which is UpdateItem to merge and nothing else. The two live in
-	// different languages with nothing linking them, so a missing action is only
-	// discovered as a runtime 403 out of the user's revalidateTag call — which is
-	// exactly what happened when writeTags moved from PutItem to UpdateItem.
 	wantActions := []string{"dynamodb:UpdateItem"}
 	if !slices.Equal(ddbStmt.Action, wantActions) {
 		t.Errorf("DynamoDB Action = %v, want exactly %v", ddbStmt.Action, wantActions)
 	}
-	// Exact LeadingKeys matching cannot express a prefix, so the scoping rests
-	// on StringLike; a plain StringEquals here would silently grant the table.
 	keys := ddbStmt.Condition["ForAllValues:StringLike"]["dynamodb:LeadingKeys"]
 	if len(keys) != 1 || keys[0] != "TAG#prod#proj123#marketing#build456#*" {
 		t.Errorf("LeadingKeys = %v, want the app's own tag partitions", keys)
 	}
 
-	// Both tiers read their whole tag state from the snapshot object under the S3
-	// grant above, so nothing on this function reads the table any more and no
-	// statement may grant it: a read the runtime never issues is a standing read
-	// of every tag partition this app's namespace admits.
 	for _, stmt := range doc.Statement {
 		if strings.Contains(stmt.Resource, "/index/") {
 			t.Errorf("policy still grants %v on the index %q", stmt.Action, stmt.Resource)
@@ -322,11 +290,6 @@ func TestISRPolicy_ScopesToTheAppsOwnNamespace(t *testing.T) {
 	}
 }
 
-// TestISRPolicy_CannotReachAnotherAppsPrefix proves two apps deployed side by
-// side are sealed off from each other: neither app's role grants any resource
-// under the other's prefix, in S3 or in the state table. Both apps share the
-// account-global bucket and table, so this scoping is the only thing standing
-// between one app's Lambdas and another's cached pages.
 func TestISRPolicy_CannotReachAnotherAppsPrefix(t *testing.T) {
 	const tableARN = "arn:aws:dynamodb:us-east-1:1234:table/state-abc"
 	web := isrConfig{Bucket: "assets-xyz", Prefix: "prod/proj/web/WEB1", Table: "state-abc", TableARN: tableARN}
@@ -344,8 +307,6 @@ func TestISRPolicy_CannotReachAnotherAppsPrefix(t *testing.T) {
 		t.Errorf("web's S3 grant %q reaches the admin app", webDoc.Statement[0].Resource)
 	}
 
-	// The table is addressed by a bare ARN both apps share, so the separation
-	// rests entirely on the leading-key condition.
 	for _, stmt := range webDoc.Statement[1:] {
 		keys := stmt.Condition["ForAllValues:StringLike"]["dynamodb:LeadingKeys"]
 		if len(keys) != 1 || keys[0] != "TAG#prod#proj#web#WEB1#*" {
@@ -382,9 +343,6 @@ func parsePolicy(t *testing.T, cfg isrConfig) policyDoc {
 	return doc
 }
 
-// The handler joins its S3 keys onto OCEL_ISR_PREFIX and its tag partitions onto
-// OCEL_ISR_TAG_NAMESPACE. Both must agree with what isrPolicy grants, or every
-// read fails closed at runtime.
 func TestISREnv_AgreesWithThePolicyScope(t *testing.T) {
 	cfg := isrConfig{
 		Bucket:   "assets-xyz",
@@ -407,19 +365,11 @@ func TestISREnv_AgreesWithThePolicyScope(t *testing.T) {
 	if want := "TAG#prod#proj123#marketing#build456#"; env["OCEL_ISR_TAG_NAMESPACE"] != want {
 		t.Errorf("OCEL_ISR_TAG_NAMESPACE = %q, want %q", env["OCEL_ISR_TAG_NAMESPACE"], want)
 	}
-	// The index name went with the query that used it: the tag clock reads the
-	// snapshot object under OCEL_ISR_PREFIX, and nothing in the bundle reads
-	// this variable any more.
 	if _, ok := env["OCEL_STATE_TABLE_INDEX"]; ok {
 		t.Errorf("OCEL_STATE_TABLE_INDEX = %q, want it unset", env["OCEL_STATE_TABLE_INDEX"])
 	}
 }
 
-// TestTagNamespace_MatchesTheEdgeContract pins the namespace this deploy grants
-// to the one the edge derives for itself. The Lambda tier is handed the finished
-// string in its env, so the only other spelling is TypeScript's tagNamespace() —
-// and since neither side calls the other, the fixture is what fails when one of
-// them moves. The edge reader's own test asserts against the same file.
 func TestTagNamespace_MatchesTheEdgeContract(t *testing.T) {
 	path := filepath.Join("..", "..", "..", "packages", "next-cache", "fixtures", "edge-contract.json")
 	body, err := os.ReadFile(path)
@@ -442,15 +392,6 @@ func TestTagNamespace_MatchesTheEdgeContract(t *testing.T) {
 	}
 }
 
-// The bucket name is the whole of what a deployed function is told about the
-// adopted store: it is what makes the cache handler read and write its entries
-// through the ISR writer worker rather than the provider's own bucket. It rides
-// in as a plain env var — there is nothing secret left in it, and an SSM
-// SecureString would only put a GetParameter on every cold start.
-//
-// The name is declared independently here and in the handler that reads it, and
-// no build step compares them, so the checked-in edge contract is what fails
-// when one of them moves. The reader's own test asserts against the same file.
 func TestISRCacheStore_NamesTheAdoptedBucketFromTheEdgeContract(t *testing.T) {
 	path := filepath.Join("..", "..", "..", "packages", "next-cache", "fixtures", "edge-contract.json")
 	body, err := os.ReadFile(path)
@@ -479,10 +420,6 @@ func TestISRCacheStore_NamesTheAdoptedBucketFromTheEdgeContract(t *testing.T) {
 	}
 }
 
-// The credential the function used to be handed is gone with the publisher that
-// read it: no parameter to fetch, no grant to read it, and no decrypt. An R2
-// token scopes to a bucket and nothing finer, so one left on a deployed function
-// would write every project's cache on the substrate.
 func TestISRCacheStore_LeavesNoStandingCredentialOnTheFunction(t *testing.T) {
 	cfg := isrConfig{
 		Bucket:           "assets-xyz",

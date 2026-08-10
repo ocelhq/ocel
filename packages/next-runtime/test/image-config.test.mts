@@ -26,10 +26,6 @@ function remotePattern(pattern: Record<string, unknown> | URL) {
 const matches = (source: string, value: string) =>
   new RegExp(source).test(value);
 
-// The whole compiled shape for the config an app that configures nothing gets,
-// literal regex sources included: the worker matches with `new RegExp` over
-// exactly these, so a Next bump that changes what picomatch emits has to show
-// up as a diff here rather than as a silent change in what is allowed.
 test("compiles the default image config Next hands the adapter", () => {
   expect(compile()).toEqual({
     path: "/_next/image",
@@ -56,9 +52,6 @@ test("compiles the default image config Next hands the adapter", () => {
   });
 });
 
-// Unset localPatterns means "allow every local path" and unset qualities means
-// "any quality in 1..100"; both have to reach the worker as absent keys, since a
-// present-but-empty list would mean the opposite.
 test("keeps unset localPatterns and qualities absent", () => {
   const compiled = compile({ localPatterns: undefined, qualities: undefined });
 
@@ -78,8 +71,6 @@ test("compiles remote pattern fields Next matches verbatim", () => {
   ).toMatchObject({ protocol: "https", port: "8080", search: "?v=1" });
 });
 
-// A subdomain wildcard that can be satisfied to the right of the host it names
-// is an allowlist bypass: any attacker-controlled host would pass.
 test.each([
   ["example.com", false],
   ["a.example.com", true],
@@ -114,9 +105,6 @@ test("a literal hostname matches nothing else", () => {
   expect(matches(hostname, "example.com.evil.com")).toBe(false);
 });
 
-// Pathnames are compiled with dot:true and hostnames without it — Next's own
-// asymmetry, kept by construction: a dotfile path is servable, a leading-dot
-// host label is not.
 test("pathnames match dotfiles and hostnames do not match empty labels", () => {
   const { pathname, hostname } = remotePattern({
     hostname: "**",
@@ -147,8 +135,6 @@ test("an omitted pathname allows every path", () => {
   expect(matches(pathname, "/deeply/nested/logo.png")).toBe(true);
 });
 
-// A URL entry is legal in remotePatterns and would serialize to `{}`, taking
-// the whole allowlist entry with it.
 test("normalizes a URL remote pattern into matchable fields", () => {
   const compiled = remotePattern(
     new URL("https://images.example.com/media/**"),
@@ -206,9 +192,6 @@ test("the artifact bytes are what configHash is taken over", () => {
   ).toBe(imageConfigHash(compiled));
 });
 
-// Both are valid, common setups — an external CDN, a static-export-shaped app —
-// and next/image never asks for /_next/image under either, so there is nothing
-// to serve and nothing to fail the build over.
 test.each([
   ["a non-default loader", { loader: "cloudinary" }, /images\.loader/],
   ["unoptimized images", { unoptimized: true }, /images\.unoptimized is true/],

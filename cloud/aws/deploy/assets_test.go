@@ -11,8 +11,6 @@ import (
 	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
 )
 
-// staticAppTree seeds two Next apps' build output, each with its own build id
-// and its own static/ directory.
 func staticAppTree(t *testing.T) string {
 	t.Helper()
 	return writeTree(t, map[string]string{
@@ -24,8 +22,6 @@ func staticAppTree(t *testing.T) string {
 	})
 }
 
-// TestAppAssetR2Prefix pins the ADR 0002 key layout: assets/<project>/<app>/
-// <build id>, disjoint from the isr cache-entry prefix.
 func TestAppAssetR2Prefix(t *testing.T) {
 	got := appAssetR2Prefix("proj", "web", "WEB1")
 	want := "assets/proj/web/WEB1"
@@ -34,10 +30,6 @@ func TestAppAssetR2Prefix(t *testing.T) {
 	}
 }
 
-// TestUploadStaticAssets_UploadsEachAppUnderItsOwnPrefix proves each app's
-// static/ output lands under its own assets/<project>/<app>/<build id>
-// prefix in the adopted cache store, so a rollback (which swaps the pointer,
-// not the objects) can address an older build's assets by that same key.
 func TestUploadStaticAssets_UploadsEachAppUnderItsOwnPrefix(t *testing.T) {
 	store := &fakeUploader{exists: map[string]bool{}}
 	cfg := Config{
@@ -72,13 +64,6 @@ func TestUploadStaticAssets_UploadsEachAppUnderItsOwnPrefix(t *testing.T) {
 	}
 }
 
-// TestUploadStaticAssets_StampsNoContentType proves no static object is written
-// with a content-type. The frozen worker derives one from the name the build
-// emitted the file under, mirroring what Next.js serves; a stamp here would
-// come from the deploy host's own mime database — which answers
-// image/vnd.microsoft.icon where Next serves image/x-icon, and answers
-// differently on two hosts — and would be a second, contradicting source of
-// truth.
 func TestUploadStaticAssets_StampsNoContentType(t *testing.T) {
 	store, asset := &fakeUploader{exists: map[string]bool{}}, &fakeUploader{exists: map[string]bool{}}
 	root := writeTree(t, map[string]string{
@@ -95,8 +80,6 @@ func TestUploadStaticAssets_StampsNoContentType(t *testing.T) {
 		t.Fatalf("uploadStaticAssets: %v", err)
 	}
 
-	// Both halves of the asset plane, not just the one the worker reads: the
-	// two carry identical keys and must carry identical (absent) metadata.
 	for name, up := range map[string]*fakeUploader{"cache store": store, "asset bucket": asset} {
 		if len(up.contentTypes) != 0 {
 			t.Errorf("%s content-types = %v, want none — the worker names the type", name, up.contentTypes)
@@ -107,10 +90,6 @@ func TestUploadStaticAssets_StampsNoContentType(t *testing.T) {
 	}
 }
 
-// TestUploadStaticAssets_UnadoptedStoreUploadsNothing proves a substrate whose
-// edge offered no cache store uploads no assets at all: there is nowhere for
-// the frozen worker to read them back from, so uploading into the provider's
-// own asset bucket would only be dead weight.
 func TestUploadStaticAssets_UnadoptedStoreUploadsNothing(t *testing.T) {
 	asset := &fakeUploader{exists: map[string]bool{}}
 	cfg := Config{ArtifactRoot: staticAppTree(t), AssetBucket: "assets", Env: "prod", Uploader: asset}
@@ -123,8 +102,6 @@ func TestUploadStaticAssets_UnadoptedStoreUploadsNothing(t *testing.T) {
 	}
 }
 
-// TestUploadStaticAssets_NoStaticOutputUploadsNothing proves an app with no
-// static/ directory (a pure API app, say) is a no-op rather than an error.
 func TestUploadStaticAssets_NoStaticOutputUploadsNothing(t *testing.T) {
 	store := &fakeUploader{exists: map[string]bool{}}
 	root := writeTree(t, map[string]string{
@@ -144,10 +121,6 @@ func TestUploadStaticAssets_NoStaticOutputUploadsNothing(t *testing.T) {
 	}
 }
 
-// TestUploadStaticAssets_ARotationReusesTheBuildsObjects proves a vars-only
-// deploy re-publishing an unchanged build re-uploads nothing: the keys are
-// build-scoped and already present, so a rotation costs presence checks alone
-// rather than the whole static tree again.
 func TestUploadStaticAssets_ARotationReusesTheBuildsObjects(t *testing.T) {
 	store := &fakeUploader{exists: map[string]bool{}}
 	cfg := Config{
@@ -176,16 +149,12 @@ func TestUploadStaticAssets_ARotationReusesTheBuildsObjects(t *testing.T) {
 	}
 }
 
-// sortedPuts is one uploader's recorded keys in a comparable order — the
-// uploads fan out concurrently, so only the set is meaningful.
 func sortedPuts(f *fakeUploader) []string {
 	keys := append([]string(nil), f.puts...)
 	sort.Strings(keys)
 	return keys
 }
 
-// imageConfigTree seeds one Next app whose build emitted a compiled image
-// config beside its routing manifest, as an app with optimizable images does.
 func imageConfigTree(t *testing.T) string {
 	t.Helper()
 	return writeTree(t, map[string]string{
@@ -195,8 +164,6 @@ func imageConfigTree(t *testing.T) string {
 	})
 }
 
-// mirrorConfig is the two-target asset-plane Config: the adopted R2 store the
-// worker reads and the account's own S3 bucket the image optimizer reads.
 func mirrorConfig(root string, store, asset *fakeUploader) Config {
 	return Config{
 		ArtifactRoot: root, Env: "prod",
@@ -205,11 +172,6 @@ func mirrorConfig(root string, store, asset *fakeUploader) Config {
 	}
 }
 
-// TestUploadStaticAssets_MirrorsIdenticalKeysAndBytesToBothTargets proves the
-// static assets are published twice under one key layout: R2 is the hot tier the
-// worker reads, and the account's own bucket is the source of truth the
-// account-global image optimizer reads — which is what lets that optimizer hold
-// no R2 credentials at all.
 func TestUploadStaticAssets_MirrorsIdenticalKeysAndBytesToBothTargets(t *testing.T) {
 	store, asset := &fakeUploader{exists: map[string]bool{}}, &fakeUploader{exists: map[string]bool{}}
 	cfg := mirrorConfig(imageConfigTree(t), store, asset)
@@ -236,13 +198,6 @@ func TestUploadStaticAssets_MirrorsIdenticalKeysAndBytesToBothTargets(t *testing
 	}
 }
 
-// TestUploadStaticAssets_PublishesTheImageConfigOutsideThePublicWebRoot pins the
-// key the optimizer loads the compiled image config from, and the bytes it
-// hashes against the manifest's configHash. The key sits outside
-// assets/<project>/<app>/<build id>, which is the app's public web root: a
-// config under it would be served to anyone who asked for /image-config.json.
-// It goes to the account's own bucket alone — the worker reads the compiled
-// patterns off the routing manifest, so an R2 copy would have no reader.
 func TestUploadStaticAssets_PublishesTheImageConfigOutsideThePublicWebRoot(t *testing.T) {
 	store, asset := &fakeUploader{exists: map[string]bool{}}, &fakeUploader{exists: map[string]bool{}}
 	cfg := mirrorConfig(imageConfigTree(t), store, asset)
@@ -268,10 +223,6 @@ func TestUploadStaticAssets_PublishesTheImageConfigOutsideThePublicWebRoot(t *te
 	}
 }
 
-// TestUploadStaticAssets_AProjectsOwnImageConfigAssetDoesNotCollide proves a
-// project shipping public/image-config.json keeps it: its static asset and the
-// compiled config are two distinct keys, so neither upload can overwrite the
-// other.
 func TestUploadStaticAssets_AProjectsOwnImageConfigAssetDoesNotCollide(t *testing.T) {
 	root := writeTree(t, map[string]string{
 		"apps/web/routing-manifest.json":    `{"buildId":"WEB1"}`,
@@ -292,9 +243,6 @@ func TestUploadStaticAssets_AProjectsOwnImageConfigAssetDoesNotCollide(t *testin
 	}
 }
 
-// TestUploadStaticAssets_AppWithoutAnImageConfigPublishesNone proves an app that
-// generates no /_next/image URLs (a custom loader, or unoptimized images) emits
-// no config artifact and the upload treats its absence as normal.
 func TestUploadStaticAssets_AppWithoutAnImageConfigPublishesNone(t *testing.T) {
 	store, asset := &fakeUploader{exists: map[string]bool{}}, &fakeUploader{exists: map[string]bool{}}
 	cfg := mirrorConfig(staticAppTree(t), store, asset)
@@ -309,12 +257,6 @@ func TestUploadStaticAssets_AppWithoutAnImageConfigPublishesNone(t *testing.T) {
 	}
 }
 
-// TestUploadStaticAssets_RepublishesTheImageConfigOverAPresentObject proves the
-// config is put unconditionally rather than skip-if-exists. Its bytes are what
-// the manifest's configHash covers, so a stale object left at this key by an
-// earlier publish of the same build id would fail the origin's hash check on
-// every image request — whereas re-uploading a static asset that is already
-// there would only be waste.
 func TestUploadStaticAssets_RepublishesTheImageConfigOverAPresentObject(t *testing.T) {
 	present := map[string]bool{
 		"image-config/proj/web/WEB1.json": true,
@@ -337,10 +279,6 @@ func TestUploadStaticAssets_RepublishesTheImageConfigOverAPresentObject(t *testi
 	}
 }
 
-// TestUploadStaticAssets_EitherTargetFailingFailsTheDeploy proves neither half
-// of the asset plane may degrade silently: a build whose assets reached R2 but
-// not S3 would serve pages while every image 502s, and one that reached S3 but
-// not R2 would 404 its own static files.
 func TestUploadStaticAssets_EitherTargetFailingFailsTheDeploy(t *testing.T) {
 	boom := errors.New("bucket is on fire")
 	for _, tc := range []struct {
@@ -365,9 +303,6 @@ func TestUploadStaticAssets_EitherTargetFailingFailsTheDeploy(t *testing.T) {
 	}
 }
 
-// TestUploadStaticAssets_MissingAssetBucketFailsTheDeploy proves a bootstrap
-// predating the asset bucket fails loudly rather than publishing the R2 half
-// alone: the image optimizer reads only the S3 copy.
 func TestUploadStaticAssets_MissingAssetBucketFailsTheDeploy(t *testing.T) {
 	store := &fakeUploader{exists: map[string]bool{}}
 	cfg := Config{
@@ -380,11 +315,6 @@ func TestUploadStaticAssets_MissingAssetBucketFailsTheDeploy(t *testing.T) {
 	}
 }
 
-// TestUploadPrerenderAssets_RouteEntriesAreNotMirroredToTheAssetBucket proves
-// the ISR cache stays single-homed while the asset plane is mirrored: the image
-// optimizer never reads a cache entry, so a second copy would double the upload
-// time and the storage for no reader. (Fetch entries land in the asset bucket
-// for their own, unrelated reason — they are origin-private.)
 func TestUploadPrerenderAssets_RouteEntriesAreNotMirroredToTheAssetBucket(t *testing.T) {
 	root := writeTree(t, map[string]string{
 		"apps/web/routing-manifest.json":     `{"buildId":"WEB1"}`,
@@ -409,9 +339,6 @@ func TestUploadPrerenderAssets_RouteEntriesAreNotMirroredToTheAssetBucket(t *tes
 	}
 }
 
-// TestBuildDeploymentRecord_AssetPrefixIsTheFullR2KeyRoot proves the record
-// carries the same prefix uploadStaticAssets published under, so the frozen
-// worker needs no project/app identity of its own to read an asset back.
 func TestBuildDeploymentRecord_AssetPrefixIsTheFullR2KeyRoot(t *testing.T) {
 	root := writeTree(t, map[string]string{
 		"apps/web/routing-manifest.json": `{"buildId":"WEB1"}`,
@@ -429,10 +356,6 @@ func TestBuildDeploymentRecord_AssetPrefixIsTheFullR2KeyRoot(t *testing.T) {
 	}
 }
 
-// TestBuildDeploymentRecord_IsrPrefixIsTheIsrKeyRoot proves the record carries
-// the ISR cache's own key root (isrConfig.Prefix) — the <env>/<project>/<app>/
-// <build> root the frozen worker joins its cache-entry and tag-snapshot reads
-// onto — and not the DynamoDB tag namespace, which addresses nothing in R2.
 func TestBuildDeploymentRecord_IsrPrefixIsTheIsrKeyRoot(t *testing.T) {
 	root := writeTree(t, map[string]string{
 		"apps/web/routing-manifest.json": `{"buildId":"WEB1"}`,
@@ -450,10 +373,6 @@ func TestBuildDeploymentRecord_IsrPrefixIsTheIsrKeyRoot(t *testing.T) {
 	}
 }
 
-// TestBuildDeploymentRecord_NonNextAppHasNoAssetPrefix proves a non-Next
-// app's record carries no AssetPrefix: uploadStaticAssets never publishes
-// static output for anything but a Next app, so a prefix here would point at
-// a location nothing was ever uploaded to.
 func TestBuildDeploymentRecord_NonNextAppHasNoAssetPrefix(t *testing.T) {
 	cfg := Config{ArtifactRoot: t.TempDir()}
 	manifest := &deploymentsv1.Manifest{Slug: "proj"}
@@ -468,10 +387,6 @@ func TestBuildDeploymentRecord_NonNextAppHasNoAssetPrefix(t *testing.T) {
 	}
 }
 
-// TestBuildDeploymentRecord_CarriesTheBuildsWriteSecret proves the record hands
-// the frozen edge worker the secret its tag raises authenticate with. The
-// secret is per-build and the worker script outlives every build it serves, so
-// the Deployment record is the only place it can ride.
 func TestBuildDeploymentRecord_CarriesTheBuildsWriteSecret(t *testing.T) {
 	root := writeTree(t, map[string]string{
 		"apps/web/routing-manifest.json": `{"buildId":"WEB1"}`,
@@ -497,8 +412,6 @@ func TestBuildDeploymentRecord_CarriesTheBuildsWriteSecret(t *testing.T) {
 	}
 }
 
-// A substrate that adopted no writer has no secret to derive, so the record
-// carries none and the edge raises nowhere rather than with a made-up token.
 func TestBuildDeploymentRecord_NoWriterLeavesNoWriteSecret(t *testing.T) {
 	root := writeTree(t, map[string]string{
 		"apps/web/routing-manifest.json": `{"buildId":"WEB1"}`,

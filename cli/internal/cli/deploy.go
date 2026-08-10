@@ -33,42 +33,19 @@ import (
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/resources/v1"
 )
 
-// deployReadyTimeout overrides how long `ocel deploy` waits for the spawned
-// provider to signal readiness (see providerrunner.Config.ReadyTimeout);
-// zero defers to providerrunner's own default/env resolution. A var so
-// tests can shorten it, mirroring watchDebounce in dev.go.
 var deployReadyTimeout time.Duration
 
-// locateProviderBinary is a seam over providerlocator.Locate so tests can
-// point `ocel deploy` at a fake provider binary without a real npm install.
 var locateProviderBinary = providerlocator.Locate
 
-// buildApp and collectAppFunctions are seams over appbuilder so tests can drive
-// the build and its output separately — asserting that `--prebuilt` skips the
-// former — without spawning the embedded node-builder, mirroring
-// locateProviderBinary.
 var (
 	buildApp            = appbuilder.Build
 	collectAppFunctions = appbuilder.CollectFunctions
 )
 
-// stdinIsTerminal is a seam over isReaderTTY for the one decision no test can
-// otherwise reach: whether a refused deploy may stop and hand the developer the
-// variables UI. Every test drives these commands with an in-memory reader, so
-// without the seam the waiting path is unreachable and the rule that a
-// non-interactive run hard-fails is unfalsifiable.
 var stdinIsTerminal = func(r io.Reader) bool { return isReaderTTY(r) }
 
-// noBrowserEnvVar opts a run out of the browser handoff without a flag: a
-// developer at a terminal over SSH is interactive by every signal the CLI has
-// and still has no browser to be handed.
 const noBrowserEnvVar = "OCEL_NO_BROWSER"
 
-// canOpenVarsUI reports whether a gate refusal may become a wait on the
-// variables UI rather than the end of the run. There is no CI detection here
-// on purpose: a terminal on stdin is the signal, and anything it gets wrong is
-// answered by --no-ui or OCEL_NO_BROWSER rather than by guessing at an
-// environment.
 func canOpenVarsUI(stdin io.Reader, noUI bool) bool {
 	if noUI || os.Getenv(noBrowserEnvVar) != "" {
 		return false
@@ -76,10 +53,8 @@ func canOpenVarsUI(stdin io.Reader, noUI bool) bool {
 	return stdinIsTerminal(stdin)
 }
 
-// noUIFlagUsage documents --no-ui everywhere it is registered.
 const noUIFlagUsage = "Never pause to open the variables UI; fail on a missing or invalid variable instead"
 
-// deployOptions holds the flags accepted by `ocel deploy`.
 type deployOptions struct {
 	yes      bool
 	tag      string
@@ -89,7 +64,6 @@ type deployOptions struct {
 
 var deployOpts deployOptions
 
-// deployCmd deploys the current Ocel project to its configured provider.
 var deployCmd = &cobra.Command{
 	Use:   "deploy",
 	Short: "Deploy your project to its configured cloud provider",
@@ -114,24 +88,8 @@ func init() {
 	deployCmd.Flags().BoolVar(&deployOpts.noUI, "no-ui", false, noUIFlagUsage)
 }
 
-// prebuiltFlagUsage documents --prebuilt everywhere it is registered. The flag
-// is an assertion by the caller that `ocel build` has already run against this
-// checkout; nothing verifies the output is current.
 const prebuiltFlagUsage = "Deploy the existing .ocel/output instead of building the apps first (produce it with ocel build)"
 
-// runDeploy resolves the project config, requires a configured provider,
-// spawns the provider binary, and preflights it — authenticating the
-// credentials the deploy needs and printing the "Running with:" banner — before
-// the user confirms and before the app build runs, so a missing or invalid
-// credential aborts up front rather than after paying for a build. It then
-// builds the deploy manifest, drives the provider's Deploy RPC to a terminal
-// result, and tears the provider down. Every pre-spawn error — no provider
-// configured, malformed or missing config — is returned before anything is
-// spawned.
-//
-// Deploy makes no call to the Ocel API: the slug comes from the resolved
-// config, and the manifest is built entirely locally. It authenticates only to
-// the user's own cloud account, through the provider binary.
 func runDeploy(ctx context.Context, cwd string, opts deployOptions, stdout, stderr io.Writer, stdin io.Reader) error {
 	if err := validateTag(opts.tag); err != nil {
 		return err
@@ -242,25 +200,12 @@ func runDeploy(ctx context.Context, cwd string, opts deployOptions, stdout, stde
 	return nil
 }
 
-// collectAndBuildManifest runs the pre-provision path `ocel deploy` and `ocel
-// preview` share: it collects the declared infrastructure, builds the
-// project's apps into functions (discovered from the build output), and lowers
-// both into the provider Manifest. When the build yields no functions it warns
-// and proceeds infrastructure-only; when there is nothing at all — no functions
-// and no resources — it returns a nil manifest so the caller can exit cleanly.
-// Any app-build failure aborts here, before any provider is spawned.
-//
-// prebuilt skips the framework build and deploys whatever is already in
-// .ocel/output; the infrastructure discovery pass, and the variable gate that
-// follows it, run either way.
 func collectAndBuildManifest(ctx context.Context, cfg *projectconfig.Config, gate *envgate.Gate, prebuilt bool, buildOut io.Writer) (*deploymentsv1.Manifest, error) {
 	resources, err := deploycollector.Collect(ctx, cfg, gate, buildOut, buildOut)
 	if err != nil {
 		return nil, err
 	}
 
-	// Both checks stand between discovery and the build on purpose: a deploy
-	// that cannot succeed must not cost one.
 	warnings, err := envgate.Lint(gate.Definitions(), envApps(cfg), filepath.Join(cfg.Dir, projectconfig.ConfigFileName))
 	if err != nil {
 		return nil, err
@@ -291,8 +236,6 @@ func collectAndBuildManifest(ctx context.Context, cfg *projectconfig.Config, gat
 		if err := buildApp(ctx, cfg, buildEnv(plans), buildOut); err != nil {
 			return nil, err
 		}
-		// Recorded after the build, because what it records is what the output
-		// carries: a build that failed inlined nothing.
 		if err := clientenv.Record(cfg.Dir, clients); err != nil {
 			return nil, err
 		}
@@ -313,17 +256,8 @@ func collectAndBuildManifest(ctx context.Context, cfg *projectconfig.Config, gat
 	return manifestbuilder.Build(cfg.Slug, cfg.Domains, toApps(cfg.Apps), toDeclarations(resources), functions, variablesByApp(variables, functions))
 }
 
-// rootApp stands in for the app a project that configures none still deploys:
-// the one the builder detects at the project root, whose name nothing knows
-// until the build has run. It binds no folder, so it resolves exactly what the
-// project root holds, and variablesByApp re-keys that resolution onto the
-// detected app once the build has named it.
 const rootApp = "this project's app"
 
-// resolveVariables is what each app is deployed with: the gate's resolution
-// paired with the class each key was declared under. The class decides
-// delivery and the resolution decides the value, so neither half alone is
-// deployable.
 func resolveVariables(ctx context.Context, gate *envgate.Gate, cfg *projectconfig.Config) (map[string][]manifestbuilder.Variable, error) {
 	definitions := gate.Definitions()
 	variables := make(map[string][]manifestbuilder.Variable, len(cfg.Apps))
@@ -337,14 +271,6 @@ func resolveVariables(ctx context.Context, gate *envgate.Gate, cfg *projectconfi
 	return variables, nil
 }
 
-// appVariables joins one app's resolution to the declarations. A key the app
-// resolves no cell for is absent rather than empty: the SDK's named error is
-// the whole remedy for reading one, and a blank value would defeat it.
-//
-// The folder travels alongside the value because resolution is the only place
-// that knows it. A live-class cell carries no plaintext at all, so its folder
-// is what makes it addressable later; dropping it would leave the manifest
-// naming a key nothing can be asked for.
 func appVariables(definitions []*resourcesv1.VariableDefinition, resolved map[string]envgate.Resolved) []manifestbuilder.Variable {
 	variables := make([]manifestbuilder.Variable, 0, len(definitions))
 	for _, definition := range definitions {
@@ -364,9 +290,6 @@ func appVariables(definitions []*resourcesv1.VariableDefinition, resolved map[st
 	return variables
 }
 
-// variablesByApp keys a resolution by the app name the manifest will carry.
-// Only the root stand-in needs re-keying, and it applies to every app the
-// build produced, because a project that configures none deploys exactly one.
 func variablesByApp(variables map[string][]manifestbuilder.Variable, functions []manifestbuilder.Function) map[string][]manifestbuilder.Variable {
 	root, ok := variables[rootApp]
 	if !ok {
@@ -379,21 +302,12 @@ func variablesByApp(variables map[string][]manifestbuilder.Variable, functions [
 	return byApp
 }
 
-// appPlan is one app as everything downstream of resolution needs it: the name
-// the build will run it under, the directory its own files live in, and what
-// it resolved. The app a project configuring none deploys has no name yet —
-// nothing knows what the builder will detect — and its directory is the
-// project itself.
 type appPlan struct {
 	name      string
 	dir       string
 	variables []manifestbuilder.Variable
 }
 
-// appPlans is the project's apps, paired with their resolution. It is the one
-// place the root stand-in is translated into the app a build sees, so the
-// build environment, the generated accessors and the freshness record cannot
-// disagree about what an app is or where it lives.
 func appPlans(cfg *projectconfig.Config, variables map[string][]manifestbuilder.Variable) []appPlan {
 	if len(cfg.Apps) == 0 {
 		return []appPlan{{dir: cfg.Dir, variables: variables[rootApp]}}
@@ -409,13 +323,6 @@ func appPlans(cfg *projectconfig.Config, variables map[string][]manifestbuilder.
 	return plans
 }
 
-// buildEnv is what each app's build runs with: its own plaintext values, keyed
-// by the app the builder will run them for. Only the plaintext class belongs
-// in a build process's environment at all — nothing else is a build's to read.
-//
-// A client-accessible value is delivered here under its own name, which is the
-// name its accessor reads and the name the developer chose to satisfy their
-// bundler's inlining rule.
 func buildEnv(plans []appPlan) map[string]map[string]string {
 	byApp := make(map[string]map[string]string, len(plans))
 	for _, plan := range plans {
@@ -431,9 +338,6 @@ func buildEnv(plans []appPlan) map[string]map[string]string {
 	return byApp
 }
 
-// clientApps is each app's browser half: its resolution, and the directory its
-// generated accessor and config live in — the app's own, so two apps never
-// share one accessor.
 func clientApps(plans []appPlan) []clientenv.App {
 	apps := make([]clientenv.App, 0, len(plans))
 	for _, plan := range plans {
@@ -442,10 +346,6 @@ func clientApps(plans []appPlan) []clientenv.App {
 	return apps
 }
 
-// envScope is the run a gate rules for: the apps that read a cell, with the
-// folders they bind, the substrate a fixing command must address, and the named
-// environment this run deploys — which is what decides whose overrides answer.
-// A command that is not deploying one environment names none.
 func envScope(cfg *projectconfig.Config, preview bool, environment string) envgate.Scope {
 	return envgate.Scope{Apps: envApps(cfg), Preview: preview, Environment: environment}
 }
@@ -461,8 +361,6 @@ func envApps(cfg *projectconfig.Config) []envgate.App {
 	return apps
 }
 
-// runnerValues reaches the variable store the only way the CLI can: through
-// the provider binary it already has a session with.
 type runnerValues struct {
 	runner  *providerrunner.Runner
 	options []byte
@@ -508,10 +406,6 @@ func (v runnerValues) Reveal(ctx context.Context, rows []envgate.Address) (map[e
 		Cells:           named,
 	})
 	if err != nil {
-		// Flattened to its message: this error travels back out through the
-		// gate's own handler, which adopts a connect error it can see whole and
-		// would answer with the transport's word in place of the cells the gate
-		// named.
 		return nil, errors.New(err.Error())
 	}
 
@@ -523,9 +417,6 @@ func (v runnerValues) Reveal(ctx context.Context, rows []envgate.Address) (map[e
 	return found, nil
 }
 
-// toApps lowers the resolved config's apps into the manifest builder's input.
-// A project that configures none still yields an app: the builder detects one
-// and the manifest builder recovers it from the functions it emitted.
 func toApps(apps []projectconfig.App) []manifestbuilder.App {
 	out := make([]manifestbuilder.App, 0, len(apps))
 	for _, a := range apps {
@@ -539,10 +430,6 @@ func toApps(apps []projectconfig.App) []manifestbuilder.App {
 	return out
 }
 
-// failSession ends a deploy/preview/bootstrap run on error: it renders a
-// cancellation when the context was interrupted, otherwise a failure, and
-// returns the sentinel exit error. It centralises the terminal error handling
-// the provider-driving commands share.
 func failSession(ctx context.Context, ui *deployui.Session, err error) error {
 	if ctx.Err() != nil {
 		ui.Cancel()
@@ -552,11 +439,6 @@ func failSession(ctx context.Context, ui *deployui.Session, err error) error {
 	return &ExitError{Code: 1}
 }
 
-// runProviderSession locates and spawns the project's configured provider,
-// waits for it to signal readiness, hands the ready runner to drive, and
-// tears the provider down afterward. It centralises the spawn/ready/teardown
-// plumbing that `ocel deploy` and `ocel bootstrap` share; only the RPC each
-// drives differs.
 func runProviderSession(ctx context.Context, cfg *projectconfig.Config, provider *projectconfig.ProviderDescriptor, stdout, stderr io.Writer, drive func(*providerrunner.Runner) error) error {
 	binPath, err := locateProviderBinary(cfg.Dir, provider.Package)
 	if err != nil {
@@ -586,10 +468,6 @@ func runProviderSession(ctx context.Context, cfg *projectconfig.Config, provider
 	return drive(runner)
 }
 
-// workerBundleEnv is the provider's environment: the inherited one plus the
-// manifests naming the edge worker bundles in the project's materialized
-// platform dist. The provider binary is a separate process in a separate Go
-// module, so env is how it learns those paths (see cloud/edge/bundles.go).
 func workerBundleEnv(projectDir string) ([]string, error) {
 	bundles, err := json.Marshal(platform.WorkerBundles(projectDir))
 	if err != nil {
@@ -610,17 +488,6 @@ func workerBundleEnv(projectDir string) ([]string, error) {
 	), nil
 }
 
-// confirmDeploy prints the "Deploy <project> with <provider>? [y/N]" prompt
-// and returns the user's yes/no answer (see confirmYN).
-//
-// knownSlugs is the slug-drift guard: the slug is a project's only thread back
-// to its infrastructure, so deploying a mistyped or renamed one orphans
-// production and stands a parallel copy of everything up beside it, and the
-// routine prompt looks identical either way. When the provider reports other
-// projects in its backend — which it does only when this slug has nothing there
-// — the prompt says so instead. An empty backend reports nothing, so a genuine
-// first deploy is never nagged. It stays a y/N, not a refusal: forking a new
-// project is legitimate, it just has to be deliberate.
 func confirmDeploy(slug, providerPackage string, knownSlugs []string, stdout io.Writer, stdin io.Reader) (bool, error) {
 	if len(knownSlugs) == 0 {
 		return confirmYN(fmt.Sprintf("Deploy %s with %s?", slug, providerPackage), stdout, stdin)
@@ -630,10 +497,6 @@ func confirmDeploy(slug, providerPackage string, knownSlugs []string, stdout io.
 	return confirmYN("Continue?", stdout, stdin)
 }
 
-// confirmYN prints "<prompt> [y/N] " and reads a single line from stdin,
-// defaulting to No on anything but an explicit y/yes answer — including no
-// answer at all (e.g. a closed stdin), so an interrupted or empty read never
-// accidentally proceeds.
 func confirmYN(prompt string, stdout io.Writer, stdin io.Reader) (bool, error) {
 	fmt.Fprintf(stdout, "%s [y/N] ", prompt)
 
@@ -649,11 +512,6 @@ func confirmYN(prompt string, stdout io.Writer, stdin io.Reader) (bool, error) {
 	return strings.EqualFold(answer, "y") || strings.EqualFold(answer, "yes"), nil
 }
 
-// toDeclarations adapts the deploy collector's full Declare records
-// (cli/internal/declare.Resource) into the manifest builder's pure input
-// shape (manifestbuilder.Declaration). Source is left empty: the collector
-// doesn't yet capture a declaration's source location, so duplicate errors
-// fall back to manifestbuilder's "<unknown source>".
 func toDeclarations(resources []declare.Resource) []manifestbuilder.Declaration {
 	decls := make([]manifestbuilder.Declaration, len(resources))
 	for i, r := range resources {

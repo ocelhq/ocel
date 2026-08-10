@@ -16,8 +16,6 @@ import (
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/resources/v1"
 )
 
-// declaring installs a collector that declares definitions into the gate and
-// discovers no resources, which is a discovery run as far as generation cares.
 func declaring(t *testing.T, definitions ...*resourcesv1.VariableDefinition) {
 	t.Helper()
 	prev := collectDeclarations
@@ -39,9 +37,6 @@ func plainClient(key string) *resourcesv1.VariableDefinition {
 	}
 }
 
-// A client accessor is determined by the declarations alone, so generating one
-// needs no login, no provider session and no store — which is the whole point
-// of the command: it runs in the workflows that have none of those.
 func TestRunGenerate_WritesAccessorWithoutLoginOrProvider(t *testing.T) {
 	root := t.TempDir()
 	writeFile(t, filepath.Join(root, "ocel.config.ts"), `
@@ -72,8 +67,6 @@ export default {
 		}
 	}
 
-	// Without the mapping the accessor is a file nothing resolves to, and
-	// `ocel/env/client` still lands on the SDK's fallback.
 	tsconfig, err := os.ReadFile(filepath.Join(root, "tsconfig.json"))
 	if err != nil {
 		t.Fatal(err)
@@ -87,9 +80,6 @@ export default {
 	}
 }
 
-// A missing value is a reason not to deploy, not a reason to withhold a file
-// the declarations already determined: refusing here would leave a developer
-// unable to typecheck the code they are editing to fix it.
 func TestRunGenerate_GeneratesForDeclarationsNoValueBacks(t *testing.T) {
 	root := t.TempDir()
 	writeFile(t, filepath.Join(root, "ocel.config.ts"), `
@@ -108,10 +98,6 @@ export default { slug: "test-app" };
 	}
 }
 
-// Only the plaintext class can carry client access, and only a client-
-// accessible key belongs in a browser bundle. An accessor naming anything else
-// hands the browser a value it must never hold, or one that would read as
-// undefined.
 func TestRunGenerate_NamesOnlyClientAccessiblePlaintext(t *testing.T) {
 	root := t.TempDir()
 	writeFile(t, filepath.Join(root, "ocel.config.ts"), `
@@ -142,8 +128,6 @@ export default { slug: "test-app" };
 	}
 }
 
-// A project declaring no client value is left entirely alone: no generated
-// file, and no edit to a config the developer maintains.
 func TestRunGenerate_NoClientVariables(t *testing.T) {
 	root := t.TempDir()
 	writeFile(t, filepath.Join(root, "ocel.config.ts"), `
@@ -173,8 +157,6 @@ export default { slug: "test-app" };
 	}
 }
 
-// The declaring run's failure is the command's failure: an accessor written
-// from a partial run would name fewer keys than the app has.
 func TestRunGenerate_DiscoveryFailure(t *testing.T) {
 	root := t.TempDir()
 	writeFile(t, filepath.Join(root, "ocel.config.ts"), `

@@ -17,8 +17,6 @@ func TestCheckCompat_Matrix(t *testing.T) {
 		{"older deployed needs upgrade", 2, true, NeedsBootstrapUpgrade},
 		{"equal is compatible", 3, true, Compatible},
 		{"newer deployed needs cli upgrade", 4, true, NeedsCLIUpgrade},
-		// A stack predating the version output reads as zero: it exists, so it
-		// is upgraded rather than created.
 		{"present zero needs upgrade", 0, true, NeedsBootstrapUpgrade},
 	}
 	for _, tc := range cases {
@@ -30,18 +28,12 @@ func TestCheckCompat_Matrix(t *testing.T) {
 	}
 }
 
-// TestRequiredBootstrapVersion pins the current required version. Bumping it is
-// a deliberate act (it forces every older account to re-run `ocel bootstrap`),
-// so a change must be matched here.
 func TestRequiredBootstrapVersion(t *testing.T) {
 	if RequiredBootstrapVersion != 9 {
 		t.Fatalf("RequiredBootstrapVersion = %d, want 9", RequiredBootstrapVersion)
 	}
 }
 
-// TestCheckCompat_StaleBootstrapTrips proves the gate trips for an account
-// bootstrapped before the sessions table (deployed v1) against the current
-// required version: it must ask for an upgrade, not a first bootstrap.
 func TestCheckCompat_StaleBootstrapTrips(t *testing.T) {
 	if got := CheckCompat(1, true, RequiredBootstrapVersion); got != NeedsBootstrapUpgrade {
 		t.Fatalf("CheckCompat(1, true, %d) = %v, want NeedsBootstrapUpgrade", RequiredBootstrapVersion, got)
@@ -54,9 +46,6 @@ func TestCompatibility_Explain_Compatible(t *testing.T) {
 	}
 }
 
-// TestCompatibility_Explain_NamesTheCommandItWasGiven guards the preview path:
-// a preview deploy must be told to run `ocel bootstrap --preview`, never the
-// bare production command.
 func TestCompatibility_Explain_NamesTheCommandItWasGiven(t *testing.T) {
 	const previewCmd = "ocel bootstrap --preview"
 	for _, c := range []Compatibility{NeedsBootstrapInit, NeedsBootstrapUpgrade} {
@@ -92,9 +81,6 @@ func TestCompatibility_Explain_ReportsBothVersions(t *testing.T) {
 	}
 }
 
-// TestCompatibility_Explain_UnversionedBootstrap covers a stack deployed before
-// the BootstrapVersion output existed: it reads as version zero, which is not a
-// version worth printing at the user.
 func TestCompatibility_Explain_UnversionedBootstrap(t *testing.T) {
 	msg := NeedsBootstrapUpgrade.Explain(0, 6, "ocel bootstrap").Error()
 	if strings.Contains(msg, "version 0") {
@@ -105,9 +91,6 @@ func TestCompatibility_Explain_UnversionedBootstrap(t *testing.T) {
 	}
 }
 
-// TestCompatibility_Explain_SeparatesDiagnosisFromAction keeps the remedy on
-// its own line: deployui indents each line, so an action folded into the
-// diagnosis wraps into an unindented continuation on a narrow terminal.
 func TestCompatibility_Explain_SeparatesDiagnosisFromAction(t *testing.T) {
 	for _, c := range []Compatibility{NeedsBootstrapInit, NeedsBootstrapUpgrade, NeedsCLIUpgrade} {
 		msg := c.Explain(4, 6, "ocel bootstrap").Error()

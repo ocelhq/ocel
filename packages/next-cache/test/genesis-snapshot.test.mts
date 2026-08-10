@@ -5,11 +5,6 @@ import { describe, expect, it } from "vitest";
 
 import { mergeSnapshot, tagSnapshotKey, type TagSnapshot } from "../src/index.mjs";
 
-// The genesis snapshot is written by the Go deploy and rewritten thereafter by
-// this publisher, so no type is shared across the boundary and nothing but this
-// fixture stops the two from drifting apart in silence. The deploy's own test
-// asserts it marshals exactly these bytes; the assertions here are what that
-// pins it to. Changing the document's shape must break both sides.
 const fixture: TagSnapshot = JSON.parse(
   readFileSync(
     fileURLToPath(new URL("../fixtures/genesis-tag-snapshot.json", import.meta.url)),

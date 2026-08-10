@@ -2,14 +2,10 @@ import { describe, expect, it } from "vitest";
 
 import { isrPrefixOf, tagNamespace } from "../src/index.mjs";
 
-// The four segments of an isrPrefix, as workers/isr-writer spells them:
-// <env>/<project>/<app>/<buildId>, each drawn from an alphabet that excludes
-// the "#" the namespace joins them with.
 const SEGMENT = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789._-";
 
 function segment(seed: number): string {
   let out = "";
-  // A leading alphanumeric, matching the writer's own segment grammar.
   let n = seed;
   for (let i = 0; i < 1 + (seed % 12); i++) {
     out += SEGMENT[n % SEGMENT.length];
@@ -34,7 +30,6 @@ describe("isrPrefixOf", () => {
   });
 
   it("refuses a partition that is not a tag namespace", () => {
-    // An upload session's item: same table, same sk, and its own key grammar.
     expect(isrPrefixOf("UPLOAD#abc")).toBeNull();
     expect(isrPrefixOf("")).toBeNull();
     expect(isrPrefixOf("TAG#")).toBeNull();
@@ -47,8 +42,6 @@ describe("isrPrefixOf", () => {
   });
 
   it("refuses a whole tag partition key, which carries the tag as well", () => {
-    // The tag is arbitrary user input and freely contains "#", so a reader that
-    // split a pk would derive a prefix from the caller's own bytes.
     expect(isrPrefixOf(tagNamespace("prod/acme/web/BUILD1") + "cart#42")).toBeNull();
   });
 });

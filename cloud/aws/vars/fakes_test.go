@@ -16,34 +16,18 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/kms"
 )
 
-// fakeKMS stands in for the account's variable key. Its "ciphertext" is the
-// plaintext behind a marker, so a test can tell at a glance whether what
-// reached the table was encrypted, and can assert that a read which was not
-// asked to reveal never decrypted at all.
-//
-// It binds a blob to the encryption context it was sealed under, the way KMS
-// does: a decrypt presenting a different context fails. That is what makes a
-// test about ciphertext relocation a real failure rather than an assertion
-// about a field nobody enforces.
 type fakeKMS struct {
-	// Reveal decrypts a batch concurrently, so what the fake records is written
-	// from several goroutines at once. Reading the fields back is safe unlocked:
-	// every caller waits for the batch to finish first.
 	mu       sync.Mutex
 	encrypts int
 	decrypts int
 	keyIDs   []string
 	contexts []map[string]string
 
-	// decryptContexts records what each decrypt presented, so a test can assert
-	// the context a read bound rather than only that the fake accepted it.
 	decryptContexts []map[string]string
 }
 
 const fakeCipherMarker = "enc:"
 
-// sealedContext renders an encryption context into the one string the fake
-// carries alongside a blob. Order cannot matter, so it is sorted.
 func sealedContext(ctx map[string]string) string {
 	pairs := make([]string, 0, len(ctx))
 	for k, v := range ctx {
@@ -82,13 +66,6 @@ func (f *fakeKMS) Decrypt(_ context.Context, in *kms.DecryptInput, _ ...func(*km
 	return &kms.DecryptOutput{Plaintext: []byte(plaintext)}, nil
 }
 
-// fakeDynamo is an in-memory stand-in for the variables table, keyed the same
-// way the real one is. It honours exactly the two access patterns the store
-// emits — a point read and a prefix query — and exactly the one conditional
-// write it emits, so an optimistic-concurrency failure in a test is a genuine
-// condition failure rather than a canned error. TestSetEmitsTheOptimisticCondition
-// and TestDeleteEmitsTheOptimisticCondition pin the condition's text so this
-// fake and the store cannot drift apart.
 type fakeDynamo struct {
 	items map[string]map[string]map[string]ddbtypes.AttributeValue
 
@@ -96,17 +73,9 @@ type fakeDynamo struct {
 	puts         []*dynamodb.PutItemInput
 	queries      []*dynamodb.QueryInput
 
-	// beforeTransact and beforePut run between a store's read and its commit,
-	// so a test can stage the interleaving only the table's own condition can
-	// catch. A write lands as a transaction, a delete as a point put, so each
-	// needs its own hook.
 	beforeTransact func()
 	beforePut      func()
 
-	// indexBehind holds the reverse index back the way DynamoDB may hold a real
-	// one back: the row is in the table and the index does not show it yet. No
-	// GSI is ever read consistently, so a guard built on one is what a test
-	// stages rather than what it can assume.
 	indexBehind bool
 }
 
@@ -146,8 +115,6 @@ func (f *fakeDynamo) PutItem(_ context.Context, in *dynamodb.PutItemInput, _ ...
 	return &dynamodb.PutItemOutput{}, nil
 }
 
-// conditionHolds evaluates the one condition the store writes under:
-// attribute_not_exists(pk) OR #version = :seen.
 func (f *fakeDynamo) conditionHolds(item, values map[string]ddbtypes.AttributeValue) bool {
 	current, exists := f.get(stringAttr(item, "pk"), stringAttr(item, "sk"))
 	seen := numberAttr(values, ":seen")
@@ -193,12 +160,6 @@ func (f *fakeDynamo) Query(_ context.Context, in *dynamodb.QueryInput, _ ...func
 	return out, nil
 }
 
-// queryIndex answers a read of the reverse-lookup index. It is sparse the way
-// the real one is — a row that carries neither index attribute is not in it at
-// all — so a test that finds a history row or a tombstone among the consumers
-// of a value is finding a genuine indexing mistake. KEYS_ONLY is honoured too:
-// what comes back is the four key attributes and nothing else, so nothing can
-// read an attribute the real index would not project.
 func (f *fakeDynamo) queryIndex(in *dynamodb.QueryInput) (*dynamodb.QueryOutput, error) {
 	if aws.ToString(in.IndexName) != IndexName {
 		return nil, fmt.Errorf("fakeDynamo: no index named %q", aws.ToString(in.IndexName))
@@ -282,8 +243,6 @@ func binaryAttr(m map[string]ddbtypes.AttributeValue, name string) []byte {
 	return nil
 }
 
-// newTestStore wires a store over the two fakes, with a clock that advances a
-// second per write so version timestamps are distinguishable.
 func newTestStore(t *testing.T) (*Store, *fakeDynamo, *fakeKMS) {
 	t.Helper()
 	ddb, crypto := newFakeDynamo(), &fakeKMS{}

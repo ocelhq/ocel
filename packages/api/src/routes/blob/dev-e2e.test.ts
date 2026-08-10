@@ -17,28 +17,7 @@ import { presignUpload } from "./presign/route";
 import { uploadStatus } from "./status/route";
 import { verifyUploadSignature } from "./verify/route";
 
-// The one new top-level dev seam. It drives the full ocel/blob dev completion
-// path end to end with ZERO prod cloud, using the SAME SDK code prod will use:
-//
-//   real SDK createUploadClient.upload
-//     -> SDK route ?op=presign -> [Connect] real Go dev server (blobrig)
-//        -> Ocel API /api/blob/presign -> real MinIO presigned URL
-//     -> real browser-style PUT of bytes to MinIO
-//     -> the Go dev server's detection loop -> Ocel API /api/blob/detect
-//        (HEADs MinIO, atomic pending->succeeded, signs) -> signed ?op=callback
-//     -> SDK route ?op=callback -> [Connect] dev server -> API /api/blob/verify
-//        -> onUploadComplete fires exactly once
-//     -> SDK client ?op=poll -> ... -> API /api/blob/status -> succeeded
-//        -> onClientUploadComplete
-//
-// It needs the Go toolchain (to build the dev-server rig) and MinIO from
-// docker-compose; it self-skips when either is absent, so it stays runnable
-// locally (`docker compose up -d minio minio-createbucket` then `pnpm test`)
-// without breaking environments that lack them - mirroring how the awslive
-// deploy e2e gates on a real account.
-
 const here = path.dirname(fileURLToPath(import.meta.url));
-// src/routes/blob -> repo root -> cli
 const cliDir = path.resolve(here, "..", "..", "..", "..", "..", "cli");
 
 function goAvailable(): boolean {
@@ -158,9 +137,6 @@ describe("ocel/blob dev e2e (MinIO)", () => {
     async () => {
       const token = session.token;
 
-      // The completion signals the assertions hinge on: the SERVER-decided
-      // onUploadComplete (fired by the detector's callback) and the client's
-      // poll-driven onClientUploadComplete.
       const completedPaths: string[] = [];
       const storageBucket = bucket("storage", {
         uploaders: {
@@ -181,9 +157,6 @@ describe("ocel/blob dev e2e (MinIO)", () => {
         },
       });
 
-      // Start the REAL Go dev server (Connect BucketService shim + detector).
-      // Its Ocel API base URL is this test's in-process HTTP server, reached
-      // once we know its port; bind the server first to learn the port.
       const listened = await new Promise<{ srv: Server; port: number }>(
         (resolve) => {
           const srv = createServer();
@@ -202,9 +175,6 @@ describe("ocel/blob dev e2e (MinIO)", () => {
       );
       const rigAddr = await waitForRigAddr(rig);
 
-      // Inject the resolved bucket env exactly as `ocel dev` does, so the SDK
-      // route resolves its runtime context (Connect dial to the dev server)
-      // through the same code path prod uses.
       process.env.OCEL_RESOURCE_BUCKET_storage = JSON.stringify({
         address: rigAddr,
         bucket: "storage",
@@ -212,9 +182,6 @@ describe("ocel/blob dev e2e (MinIO)", () => {
 
       const route = createRouteHandler(storageBucket);
 
-      // Mount the Ocel API endpoints (reached by the dev server) and the SDK
-      // app route (reached by the client and by the detector's callback) on the
-      // one in-process server.
       server.on("request", (req, res) => {
         (async () => {
           const url = new URL(appBase + req.url);
@@ -250,9 +217,6 @@ describe("ocel/blob dev e2e (MinIO)", () => {
         maxPollMs: 20_000,
       });
 
-      // A real File (Blob) so the SDK client PUTs actual bytes to MinIO, with
-      // content-type/length matching the signed presigned URL - exactly a
-      // browser upload.
       const file = new File([Buffer.from("bytes")], "me.png", {
         type: "image/png",
       });
@@ -271,21 +235,14 @@ describe("ocel/blob dev e2e (MinIO)", () => {
         },
       );
 
-      // The real bytes must have gone to the presigned MinIO URL: the whole
-      // flow can only reach "succeeded" if the detector HEADed a real object.
       expect(result.files).toHaveLength(1);
       const landedKey = result.files[0].key;
       expect(landedKey).toContain(`${projectId}/`); // honest tenancy prefix
       expect(landedKey).toContain("avatars/me.png");
 
-      // Server-authoritative completion fired exactly once, with the real path.
       expect(completedPaths).toEqual([landedKey]);
-      // Client learned the server-decided outcome by polling.
       expect(clientCompleted).toEqual([landedKey]);
 
-      // The uploader's contentDisposition is bound onto the stored object: the
-      // presign signs it, the client sends it on the PUT, so MinIO persists it
-      // as object metadata (US-12).
       const s3 = new S3Client({
         region: process.env.OCEL_BLOB_REGION ?? "us-east-1",
         endpoint: process.env.OCEL_BLOB_ENDPOINT ?? "http://localhost:9000",

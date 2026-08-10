@@ -21,8 +21,6 @@ afterEach(() => {
 });
 
 describe("declaring on the edge", () => {
-  // A definitions module is normally shared by node and edge entries, so the
-  // edge build must be able to evaluate one. Only the read is refused.
   it("is harmless: declaring never throws", () => {
     expect(() =>
       defineEnv({ EDGE_HARMLESS: { class: "plain", schema: z.string() } }),
@@ -38,9 +36,6 @@ describe("declaring on the edge", () => {
     ).toThrow(EnvDefinitionError);
   });
 
-  // Symbols are how the runtime inspects an object; they are never a variable,
-  // and answering them is what keeps the object loggable — same rule the node
-  // build follows.
   it("answers symbol reads with undefined rather than throwing", () => {
     const env = defineEnv({ EDGE_SYMBOL: { class: "plain" } }) as Record<
       symbol,
@@ -65,8 +60,6 @@ describe("reading on the edge", () => {
     expect(message).toContain("EDGE_READ");
     expect(message).toContain("edge");
     expect(message).toContain("nodejs");
-    // No class is deliverable to the edge, so reclassifying is not a remedy
-    // and must not be offered.
     expect(message).not.toContain("reclassif");
     expect(message).not.toContain("ocel env set");
   });
@@ -113,12 +106,6 @@ describe("the edge build's surface", () => {
     expect(node.EnvEdgeError).toBe(EnvEdgeError);
   });
 
-  // The `types` condition is not split: every tier is typed from
-  // index.d.ts, on the argument that the two surfaces are identical. Nothing
-  // was checking that they stayed identical, and the failure mode is quiet in
-  // the worst direction — an export added to the node build alone is typed for
-  // an edge consumer and is `undefined` at runtime there, with the compiler
-  // saying nothing. This is what makes that a test failure instead.
   it("exports exactly the names the node build does, which is what lets one types entry serve both", async () => {
     const node = await import("./index.js");
     const edge = await import("./edge.js");
@@ -140,12 +127,6 @@ describe("the edge build's surface", () => {
   });
 });
 
-// The whole fix is that `@connectrpc/connect-node` leaves the edge module
-// graph: `env/index.ts` -> `declare.ts` -> `utils/rpc.ts` evaluates a Node
-// transport at module scope, which is what makes an edge compile die on
-// `node:http2` today. Anyone re-adding such an import to `edge.ts` — or to
-// anything it reaches — silently restores that break with every other test
-// still green, so the graph itself is what is pinned here.
 describe("the edge module graph", () => {
   it("reaches no node builtin and no package, only relative modules", async () => {
     const visited = new Set<string>();

@@ -5,14 +5,6 @@ import { serve, type RouteDeps } from "../src/index";
 import type { AssetBucket } from "../src/assets";
 import { localeOf, resolveLocale } from "../src/i18n";
 
-// Pages-router i18n: the build adapter emits one locale-prefixed pathname per
-// page (/en/about, /fr/about) and a dynamic route whose sourceRegex carries a
-// nextLocale group, exactly as Next's own adapter does. Nothing in the manifest
-// answers the unprefixed path a browser asks for — routing has to prefix the
-// request with the detected (or default) locale before matching, which is what
-// upstream's resolve-routes does and what this worker forwards the i18n block
-// for.
-
 function assetStore(files: Record<string, string>): RouteDeps["assetStore"] {
   const store: AssetBucket = {
     async get(key) {
@@ -36,8 +28,6 @@ function i18nDeps(
     i18n?: RouteDeps["manifest"]["i18n"];
     basePath?: string;
     files?: Record<string, string>;
-    // Outputs the build named without a locale, as an app-router page or a
-    // public/ file is.
     unlocalized?: string[];
   } = {},
 ): RouteDeps & { forwarded: string[] } {
@@ -52,7 +42,6 @@ function i18nDeps(
       basePath,
       ...(i18n && { i18n }),
       pathnames: [
-        // The root, as the adapter emits it: /en, never /en/.
         page("/en"),
         page("/fr"),
         page("/en/about"),
@@ -131,8 +120,6 @@ describe("pages-router i18n", () => {
     expect(res.headers.get("x-matched-path")).toBe("/fr/about");
   });
 
-  // Next never localizes an API route: its adapter output carries no nextLocale
-  // group, so a prefixed path would match nothing at all.
   it("does not prefix an API route", async () => {
     const deps = i18nDeps();
 
@@ -164,9 +151,6 @@ describe("pages-router i18n", () => {
     expect(res.headers.get("x-matched-path")).toBe("/docs/en/about");
   });
 
-  // The root is the one output the adapter names /en rather than /en/about —
-  // and the one path whose prefixing has to drop the request's own slash, or
-  // string equality misses everything the build emitted.
   it("serves the default locale's root for /", async () => {
     const deps = i18nDeps({ files: { "/en.html": "<h1>home</h1>" } });
 
@@ -189,9 +173,6 @@ describe("pages-router i18n", () => {
     expect(res.headers.get("x-matched-path")).toBe("/docs/en");
   });
 
-  // Next's adapter localizes no app-router page, so a project carrying both an
-  // app/ and an i18n config gets a manifest holding /en/about beside a bare
-  // /dashboard. Prefixing that one would route it at a page no build emitted.
   it("leaves an app-router page in a hybrid build unprefixed", async () => {
     const deps = i18nDeps({
       unlocalized: ["/dashboard"],
@@ -217,8 +198,6 @@ describe("pages-router i18n", () => {
     expect(await res.text()).toBe("<svg/>");
   });
 
-  // Next redirects on locale detection at the site root and nowhere else: the
-  // default locale never appears in a URL a visitor is sent to.
   it("serves an unprefixed path under the default locale whatever Accept-Language says", async () => {
     const deps = i18nDeps({ files: { "/en/about.html": "<h1>about</h1>" } });
 
@@ -308,8 +287,6 @@ describe("pages-router i18n", () => {
     expect(res.headers.get("x-matched-path")).toBe("/en/about");
   });
 
-  // A domain's own default locale wins over the config's, and a request already
-  // on that domain is served rather than redirected across it.
   it("prefixes the locale the request's domain makes default", async () => {
     const deps = i18nDeps({
       i18n: { ...I18N, domains: [{ domain: "app.fr", defaultLocale: "fr" }] },
@@ -322,7 +299,6 @@ describe("pages-router i18n", () => {
     expect(res.headers.get("x-matched-path")).toBe("/fr/about");
   });
 
-  // The app-router path: no i18n block in the manifest, no normalization.
   it("leaves a manifest without i18n untouched", async () => {
     const deps = i18nDeps({ i18n: undefined });
 
@@ -332,8 +308,6 @@ describe("pages-router i18n", () => {
     expect(res.headers.has("x-matched-path")).toBe(false);
   });
 
-  // A pages-router data URL already names its locale (Next emits it even for the
-  // default), so normalization must leave it alone rather than prefix it again.
   it("leaves a _next/data URL's own locale in place", async () => {
     const deps = i18nDeps();
     deps.manifest.pathnames.push("/_next/data/b1/en/about.json");
@@ -378,8 +352,6 @@ describe("resolveLocale", () => {
   const at = (pathname: string, basePath = "", headers = new Headers()) =>
     resolveLocale(I18N, basePath, [], new URL(`https://app.example${pathname}`), headers);
 
-  // A basePath owns its own segment and nothing that merely starts with its
-  // letters: /documents is not a page under /docs.
   it("only strips a basePath on a segment boundary", () => {
     expect(at("/documents", "/docs").pathname).toBe("/en/documents");
     expect(at("/docs/about", "/docs").pathname).toBe("/docs/en/about");
@@ -395,12 +367,6 @@ describe("resolveLocale", () => {
   });
 });
 
-// The worker prefixes the locale itself and hands resolveRoutes `i18n:
-// undefined` so the library never does it too (src/i18n). Only a comment says
-// so, so this pins both halves: given an i18n block the library prefixes on its
-// own, and given none — the way the worker calls it — it must leave the
-// already-normalized path alone. An upgrade that resumed prefixing regardless
-// would double it to /en/en/about, and this is what fails first.
 describe("@next/routing boundary", () => {
   const call = (i18n: I18nConfig | undefined, pathname: string) =>
     resolveRoutes({

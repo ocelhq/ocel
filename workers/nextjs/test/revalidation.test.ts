@@ -25,8 +25,6 @@ const route: RevalidationRoute = {
 const queueUrl =
   "https://sqs.eu-west-2.amazonaws.com/363236815301/ocel-revalidate.fifo";
 
-// Replaces the global fetch for one send and hands back what the signed client
-// actually put on the wire.
 async function capture(
   send: () => Promise<boolean>,
   respond: (request: Request) => Promise<Response> | Response = () =>
@@ -52,11 +50,7 @@ const sender = (over: { timeoutMs?: number } = {}) =>
 const body = async (request: Request) =>
   new URLSearchParams(await request.text());
 
-// Every failure answers the same false, so the log is the only thing that tells
-// a queue refusing every send apart from a queue nobody is filling.
 const warnings = () => vi.spyOn(console, "warn").mockImplementation(() => {});
-// Serialized rather than stringified: a record logged as an argument is
-// `[object Object]` to String, which is exactly the leak this asserts against.
 const logged = (warn: ReturnType<typeof warnings>) =>
   JSON.stringify(warn.mock.calls);
 
@@ -170,8 +164,6 @@ describe("the queue send", () => {
   });
 
   it("names the status and nothing else when the queue refuses", async () => {
-    // The status is what makes the refusal diagnosable; the record carries the
-    // app's bypass token and the body is the protocol's, not ours.
     const warn = warnings();
     await capture(
       () => sender()(revalidationMessage(route, 1_000, 42)),

@@ -18,7 +18,6 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/projectclient"
 )
 
-// linkOptions holds the flags accepted by `ocel link`.
 type linkOptions struct {
 	org    string
 	create bool
@@ -61,9 +60,6 @@ func init() {
 	linkCmd.Flags().BoolVar(&linkOpts.create, "create", false, "Create a new project instead of selecting an existing one")
 }
 
-// runLink resolves the organization, selects or creates a cloud project, and
-// records it as projectDir's link. project names an existing project by slug
-// when selecting, or the new project's name when creating; empty means "ask".
 func runLink(ctx context.Context, projectDir, project string, opts linkOptions, stdout, stderr io.Writer, stdin io.Reader) error {
 	creds, err := loadCredentials()
 	if err != nil {
@@ -124,12 +120,6 @@ func runLink(ctx context.Context, projectDir, project string, opts linkOptions, 
 	return nil
 }
 
-// ensureLinked returns projectDir's Ocel Cloud link for the control plane at
-// apiURL, running the interactive link flow inline when there is none — the
-// first `ocel dev` in a fresh clone links and then carries straight on.
-//
-// Without a terminal there is no flow to run, so it points at `ocel link`,
-// which takes the project non-interactively.
 func ensureLinked(ctx context.Context, projectDir, apiURL string, stdout, stderr io.Writer, stdin io.Reader) (*cloudlink.Link, error) {
 	link, err := cloudlink.Read(projectDir, apiURL)
 	if err != nil {
@@ -158,9 +148,6 @@ func ensureLinked(ctx context.Context, projectDir, apiURL string, stdout, stderr
 	return link, nil
 }
 
-// selectProject resolves which project to link to: the one named by project,
-// a newly created one, or an interactive pick among the organization's
-// projects.
 func selectProject(
 	ctx context.Context,
 	client *projectclient.Client,
@@ -235,7 +222,6 @@ func selectProject(
 	return nil, fmt.Errorf("invalid selection %q; rerun `ocel link`.", selection)
 }
 
-// createProject creates a cloud project named name in the active organization.
 func createProject(ctx context.Context, client *projectclient.Client, accessToken, name string, org *authclient.Organization, stdout io.Writer) (*projectclient.Project, error) {
 	name = strings.TrimSpace(name)
 	if name == "" {
@@ -265,8 +251,6 @@ func createProject(ctx context.Context, client *projectclient.Client, accessToke
 	return created, nil
 }
 
-// defaultProjectName falls back to the directory's own name when the user
-// didn't name the project to create.
 func defaultProjectName(projectDir, name string) string {
 	if name != "" {
 		return name
@@ -274,8 +258,6 @@ func defaultProjectName(projectDir, name string) string {
 	return filepath.Base(projectDir)
 }
 
-// promptProjectName asks for the new project's name, defaulting to the
-// directory name when the user just presses enter.
 func promptProjectName(projectDir string, stdout io.Writer, scanner *bufio.Scanner) string {
 	fallback := filepath.Base(projectDir)
 	fmt.Fprintf(stdout, "Project name (%s): ", fallback)
@@ -287,12 +269,6 @@ func promptProjectName(projectDir string, stdout io.Writer, scanner *bufio.Scann
 	return fallback
 }
 
-// pickOrganization determines which organization to link within: the sole
-// organization the user belongs to, the one matching opts.org, or an
-// interactive pick among several. scanner reads from the same stdin as the
-// rest of runLink's prompts — it must be reused rather than wrapped again,
-// since a second bufio.Scanner over the same underlying reader could silently
-// drop bytes already buffered by the first one.
 func pickOrganization(ctx context.Context, client *authclient.Client, accessToken string, opts linkOptions, stdout io.Writer, stdin io.Reader, scanner *bufio.Scanner) (*authclient.Organization, error) {
 	var orgs []authclient.Organization
 	err := withSpinner(stdout, "Resolving organization...", func() error {

@@ -1,10 +1,6 @@
 import { parseMessage, type RevalidationMessage } from "../src/message.mjs";
 import { resolve, type Target } from "../src/origin.mjs";
 
-// One deploy, spelled once: the substrate's asset bucket, the record the deploy
-// wrote under this build's isrPrefix, and the Function URL that record names.
-// Tests that only care about one of these should still take all three from
-// here, so a change to the record's shape breaks in one place.
 export const bucket = "ocel-assets-1a2b3c";
 export const region = "us-east-1";
 export const isrPrefix = "prod/proj/web/BID";
@@ -33,7 +29,6 @@ export function body(overrides: Record<string, unknown> = {}): string {
 
 export const credentials = { accessKeyId: "AKIAEXAMPLE", secretAccessKey: "shhh", sessionToken: "session" };
 
-// A substrate that serves the deploy record and nothing else.
 export function recordFetch(document: string = originDocument()): typeof fetch {
   return (async (input: string | Request) => {
     const url = typeof input === "string" ? input : input.url;
@@ -42,9 +37,6 @@ export function recordFetch(document: string = originDocument()): typeof fetch {
   }) as typeof fetch;
 }
 
-// A Target, obtained the only way anything can obtain one: by resolving a
-// parsed message against a deploy record. A test that wants to trigger has to
-// go through the resolver, which is the property the seam exists for.
 export async function resolved(
   overrides: Record<string, unknown> = {},
 ): Promise<{ target: Target; message: RevalidationMessage }> {

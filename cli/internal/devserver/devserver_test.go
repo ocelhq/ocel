@@ -20,9 +20,6 @@ import (
 	"github.com/ocelhq/ocel/pkg/proto/resources/v1/resourcesv1connect"
 )
 
-// newFakeResolveServer serves POST /api/resources/resolve with the same
-// wire contract the real resolve endpoint serves, so tests exercising the
-// default (non-stubbed) provision.Provision don't hit the network.
 func newFakeResolveServer(t *testing.T) *httptest.Server {
 	t.Helper()
 	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -103,8 +100,6 @@ func TestDeclareThenSync_ProvisionsDeclaredResource(t *testing.T) {
 }
 
 func TestSync_BucketEnvSynthesizedLocallyAndKeptOutOfResolve(t *testing.T) {
-	// The fake resolve server fails the test if a BUCKET ever reaches it -
-	// buckets are runtime-served, not resolve-provisioned.
 	resolveServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		var req struct {
 			Resources []struct {
@@ -273,10 +268,6 @@ func TestSync_PropagatesProvisionError(t *testing.T) {
 
 func TestSubscribe_ReceivesEnvPushedAfterConnecting(t *testing.T) {
 	s := New("https://api.example.com", "tok", "proj_1", "http://127.0.0.1:0")
-	// Seed an initial env so the subscribe call below has something to
-	// receive immediately (a follower connecting before the leader has
-	// resolved anything simply waits — see
-	// TestSubscribe_NewSubscriberImmediatelyGetsLatestEnv for that case).
 	s.PushEnv(map[string]string{"INITIAL": "1"})
 
 	ts := httptest.NewServer(s.Mux())
@@ -330,11 +321,6 @@ func TestSubscribe_NewSubscriberImmediatelyGetsLatestEnv(t *testing.T) {
 	}
 }
 
-// TestDeclareEnvThenSync_ResolvesOnlyLiveKeysEagerly proves dev's live-value
-// path: the classes a deploy delivers from the artifact need nothing here,
-// while a live-class key — which has no artifact to be delivered from — is
-// fetched once, at startup, before the app is spawned. Only live keys are
-// asked for, so a dev run never fetches a value it already has.
 func TestDeclareEnvThenSync_ResolvesOnlyLiveKeysEagerly(t *testing.T) {
 	s := New("https://api.example.com", "tok", "proj_1", "http://127.0.0.1:0")
 
@@ -382,12 +368,6 @@ func TestDeclareEnvThenSync_ResolvesOnlyLiveKeysEagerly(t *testing.T) {
 	}
 }
 
-// TestSync_ReportsTheDeclaredLiveKeysEvenWhenTheSourceResolvesNone is what
-// keeps dev's one divergence from a deploy sayable. The run declared a live
-// key, so it has dev's resolve-once semantics whatever came back; a result that
-// carried only resolved values would leave the caller nothing to say it with
-// exactly when the source is the thing behaving unexpectedly — and today's
-// source, which is stubbed, returns nothing at all.
 func TestSync_ReportsTheDeclaredLiveKeysEvenWhenTheSourceResolvesNone(t *testing.T) {
 	s := New("https://api.example.com", "tok", "proj_1", "http://127.0.0.1:0")
 	s.fetchLiveValues = func(_ context.Context, _, _, _ string, keys []string) (map[string]string, error) {
@@ -424,10 +404,6 @@ func TestSync_ReportsTheDeclaredLiveKeysEvenWhenTheSourceResolvesNone(t *testing
 	}
 }
 
-// TestSync_DeclaringNoLiveKeysAsksTheControlPlaneForNothing mirrors the
-// deployed guarantee that a store outage reaches only the functions that
-// declare live values: a project with none makes no live call at all, so it
-// cannot fail on one.
 func TestSync_DeclaringNoLiveKeysAsksTheControlPlaneForNothing(t *testing.T) {
 	s := New("https://api.example.com", "tok", "proj_1", "http://127.0.0.1:0")
 
@@ -463,9 +439,6 @@ func TestSync_DeclaringNoLiveKeysAsksTheControlPlaneForNothing(t *testing.T) {
 	}
 }
 
-// TestSync_AnUnreachableLiveSourceFailsTheDevRun proves a live value dev
-// cannot resolve stops the run rather than spawning the app with the key
-// silently unset — the app would fail on the read anyway, far from the cause.
 func TestSync_AnUnreachableLiveSourceFailsTheDevRun(t *testing.T) {
 	s := New("https://api.example.com", "tok", "proj_1", "http://127.0.0.1:0")
 	s.fetchLiveValues = func(context.Context, string, string, string, []string) (map[string]string, error) {
@@ -502,9 +475,6 @@ func TestSync_AnUnreachableLiveSourceFailsTheDevRun(t *testing.T) {
 	}
 }
 
-// TestResetManifestThenSync_ForgetsLiveKeysADeclarationNoLongerNames proves a
-// re-discovery replaces the declared set rather than accumulating onto it: a
-// key deleted from the code is not still fetched for the rest of the session.
 func TestResetManifestThenSync_ForgetsLiveKeysADeclarationNoLongerNames(t *testing.T) {
 	s := New("https://api.example.com", "tok", "proj_1", "http://127.0.0.1:0")
 

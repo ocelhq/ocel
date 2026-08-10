@@ -16,8 +16,6 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/credentials"
 )
 
-// cloudServer stands in for the control plane: one organization, the projects
-// given, and project creation. It records what the CLI asked of it.
 type cloudServer struct {
 	*httptest.Server
 	orgs           []map[string]string
@@ -268,9 +266,6 @@ func TestRunLink_RelinkingReportsThePreviousLinkAndReplacesIt(t *testing.T) {
 	}
 }
 
-// A record naming another control plane reads as unlinked, so `ocel link`
-// against a different --api-url must not announce a previous link, and must
-// overwrite the record rather than reconcile with it.
 func TestRunLink_IgnoresARecordFromAnotherControlPlane(t *testing.T) {
 	setLoggedIn(t)
 	srv := newCloudServer(t, project("p1", "My App", "my-app"))

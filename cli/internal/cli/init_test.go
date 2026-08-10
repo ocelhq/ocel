@@ -12,9 +12,6 @@ import (
 	"testing"
 )
 
-// stubPackageManager replaces the package-manager seam for the duration of t
-// and returns a pointer to the argv of the last command init would have run,
-// nil if it ran none.
 func stubPackageManager(t *testing.T, result error) *[]string {
 	t.Helper()
 	var argv []string
@@ -27,8 +24,6 @@ func stubPackageManager(t *testing.T, result error) *[]string {
 	return &argv
 }
 
-// initTestDir makes a directory named name under a fresh temp dir, so tests can
-// control what init derives its default slug from.
 func initTestDir(t *testing.T, name string) string {
 	t.Helper()
 	dir := filepath.Join(t.TempDir(), name)
@@ -164,8 +159,6 @@ func TestRunInit_ProviderFlag_OverridesTheDefaultPackage(t *testing.T) {
 	}
 }
 
-// The scaffolded config imports from `ocel`, so init has to install it too:
-// leaving it out scaffolds a config whose very first line cannot resolve.
 func TestRunInit_InstallsTheSDKAlongsideTheProvider(t *testing.T) {
 	argv := stubPackageManager(t, nil)
 	dir := initTestDir(t, "proj")

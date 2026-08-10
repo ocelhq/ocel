@@ -3,8 +3,6 @@ import { describe, expect, it } from "vitest";
 
 import * as registry from "../src/registry";
 
-// Exercised against a real Durable Object's SQLite rather than a fake, so the
-// SQL is the SQL that ships.
 async function withStorage<T>(name: string, fn: (store: registry.SqlStore) => T): Promise<T> {
   const id = env.ISR_WRITER_DO.idFromName(name);
   return runInDurableObject(env.ISR_WRITER_DO.get(id), (_instance, ctx) => fn(ctx.storage));

@@ -11,8 +11,6 @@ import (
 	ddbtypes "github.com/aws/aws-sdk-go-v2/service/dynamodb/types"
 )
 
-// fileState is one file's lifecycle within a session. It mirrors the proto
-// UploadState set and the dev store's FileState.
 type fileState string
 
 const (
@@ -21,9 +19,6 @@ const (
 	stateExpired   fileState = "expired"
 )
 
-// sessionFile is one file's persisted record inside a session. key is the
-// user's object key as-is (prod has no tenancy prefix — the env owns its
-// bucket).
 type sessionFile struct {
 	Key      string    `dynamodbav:"key"`
 	Name     string    `dynamodbav:"name"`
@@ -33,12 +28,6 @@ type sessionFile struct {
 	Error    string    `dynamodbav:"error,omitempty"`
 }
 
-// session is the DynamoDB item persisted at presign. It lives in the shared
-// account-global state table under the generic pk/sk pair (see sessionKey), so
-// nothing here may assume the table holds only sessions. expires_at is the
-// table's TTL attribute (epoch seconds) so DynamoDB reaps orphaned sessions.
-// The secret never leaves this item — VerifyUploadSignature re-derives the HMAC
-// store-side and returns only the metadata.
 type session struct {
 	PK                 string        `dynamodbav:"pk"`
 	SK                 string        `dynamodbav:"sk"`
@@ -53,27 +42,19 @@ type session struct {
 	ExpiresAt          int64         `dynamodbav:"expires_at"`
 }
 
-// errSessionNotFound is returned when no session item exists for an id.
 var errSessionNotFound = errors.New("session not found")
 
-// ddbAPI is the subset of the DynamoDB client the store uses, narrowed so tests
-// can substitute a fake without a live table.
 type ddbAPI interface {
 	PutItem(context.Context, *dynamodb.PutItemInput, ...func(*dynamodb.Options)) (*dynamodb.PutItemOutput, error)
 	GetItem(context.Context, *dynamodb.GetItemInput, ...func(*dynamodb.Options)) (*dynamodb.GetItemOutput, error)
 	UpdateItem(context.Context, *dynamodb.UpdateItemInput, ...func(*dynamodb.Options)) (*dynamodb.UpdateItemOutput, error)
 }
 
-// sessionStore persists and reads upload sessions in the shared state table.
 type sessionStore struct {
 	client ddbAPI
 	table  string
 }
 
-// A session's key grammar in the shared state table. Sessions namespace
-// themselves under a SESSION# partition so they never collide with the other
-// entities keyed into the same table, and pin a constant sort key because a
-// session is a single item rather than a collection.
 const (
 	sessionPKPrefix = "SESSION#"
 	sessionSK       = "#META"
@@ -121,14 +102,6 @@ func (s *sessionStore) get(ctx context.Context, sessionID string) (session, erro
 	return sess, nil
 }
 
-// markSucceeded atomically transitions the file at index idx of sessionID from
-// pending to succeeded, guarded on it still being pending. This conditional
-// UpdateItem is the single point of idempotency for prod completion: duplicate
-// S3 deliveries race on the item, and only the delivery that observes state =
-// pending at write time transitions and reports transitioned = true. A guard
-// failure (already non-pending) is not an error — it returns transitioned =
-// false so the caller no-ops without firing the route callback. Mirrors the dev
-// detector's guarded UPDATE (packages/api/src/routes/blob/detect/route.ts).
 func (s *sessionStore) markSucceeded(ctx context.Context, sessionID string, idx int) (bool, error) {
 	expr := fmt.Sprintf("files[%d].#st", idx)
 	_, err := s.client.UpdateItem(ctx, &dynamodb.UpdateItemInput{
@@ -152,10 +125,6 @@ func (s *sessionStore) markSucceeded(ctx context.Context, sessionID string, idx 
 	return true, nil
 }
 
-// aggregateState collapses per-file states into the session-level state op=poll
-// reports: any expired file makes the session terminally expired; otherwise it
-// is succeeded only once every file has succeeded; else pending. Mirrors the
-// dev store's aggregateState.
 func aggregateState(files []sessionFile) fileState {
 	if len(files) == 0 {
 		return statePending

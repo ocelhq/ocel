@@ -25,8 +25,6 @@ func swapExec(t *testing.T, fn func(ctx context.Context, scriptPath string, env 
 	t.Cleanup(func() { builderExec = prev })
 }
 
-// lookup answers what the spawned process would see for name: exec is
-// last-wins, so the last entry is the one that counts.
 func lookup(env []string, name string) (string, bool) {
 	value, found := "", false
 	for _, entry := range env {
@@ -37,8 +35,6 @@ func lookup(env []string, name string) (string, bool) {
 	return value, found
 }
 
-// writeBuilder puts a stub builder where platform.Ensure would have
-// materialized the real one, so Build's existence check passes.
 func writeBuilder(t *testing.T, projectDir string) string {
 	t.Helper()
 	path := platform.BuilderPath(projectDir)
@@ -51,8 +47,6 @@ func writeBuilder(t *testing.T, projectDir string) string {
 	return path
 }
 
-// writeFuncConfig simulates one thing the builder does: writing a `.func`
-// directory with its config.json into the app's own subtree of the output.
 func writeFuncConfig(t *testing.T, outDir, app, funcRel string, cfg functionConfig) {
 	t.Helper()
 	dir := filepath.Join(outDir, appsDirName, app, functionsDirName, funcRel)
@@ -88,7 +82,6 @@ func TestBuild_RunsBuilderAndDiscoversFunctions(t *testing.T) {
 		if err := json.Unmarshal(request, &gotReq); err != nil {
 			return err
 		}
-		// Simulate the builder writing its output tree.
 		writeFuncConfig(t, gotReq.OutDir, "api", "index.func", functionConfig{Runtime: "nodejs24.x", Handler: "index.handler", Framework: "express", App: "api"})
 		writeFuncConfig(t, gotReq.OutDir, "worker", "index.func", functionConfig{Runtime: "nodejs24.x", Handler: "index.handler", Framework: "express", App: "worker"})
 		return nil
@@ -138,7 +131,6 @@ func TestBuild_RunsBuilderAndDiscoversFunctions(t *testing.T) {
 		t.Errorf("app[1].entrypoint = %q, want empty", gotReq.Apps[1].Entrypoint)
 	}
 
-	// Both artifacts are resolved from the project's materialized platform dist.
 	if gotScript != builderPath {
 		t.Errorf("script path = %q, want %q", gotScript, builderPath)
 	}
@@ -166,13 +158,11 @@ func TestBuild_MissingBuilder(t *testing.T) {
 func TestBuild_NoApps_RunsBuilderForDetectionAndResetsOutput(t *testing.T) {
 	root := t.TempDir()
 	writeBuilder(t, root)
-	// A stale artifact from a previous build must not survive to be deployed.
 	writeFuncConfig(t, filepath.Join(root, ".ocel", "output"), "stale", "index.func",
 		functionConfig{Runtime: "nodejs24.x", Handler: "h", Framework: "express", App: "stale"})
 
 	var gotReq builderRequest
 	swapExec(t, func(_ context.Context, _ string, _ []string, request []byte, _ io.Writer) error {
-		// Simulate the builder running detection and finding nothing to build.
 		return json.Unmarshal(request, &gotReq)
 	})
 
@@ -219,9 +209,6 @@ func TestBuild_BuildFailure_ReturnsClearError(t *testing.T) {
 	}
 }
 
-// TestFailureSummary is the fix for a build error that headlined a deprecation
-// notice while the cause sat on the line below it. The summary must name what
-// killed the build, whatever the tool printed on the way there.
 func TestFailureSummary(t *testing.T) {
 	tests := []struct {
 		name   string
@@ -266,8 +253,6 @@ Next.js build worker exited with code: 1 and signal: null
 	}
 }
 
-// runNodeScript runs the real runNode over a throwaway script, which is the
-// only way to prove what the child's two streams do.
 func runNodeScript(t *testing.T, source string) error {
 	t.Helper()
 	if _, err := exec.LookPath("node"); err != nil {
@@ -280,8 +265,6 @@ func runNodeScript(t *testing.T, source string) error {
 	return runNode(context.Background(), path, os.Environ(), []byte("{}"), io.Discard)
 }
 
-// A builder that reports its failure on stdout used to produce an error with no
-// detail at all, because only stderr was captured.
 func TestRunNode_StdoutOnlyFailure_IsNotDropped(t *testing.T) {
 	err := runNodeScript(t, "console.log('adapter could not resolve the entrypoint');process.exit(1);")
 	if err == nil {
@@ -325,8 +308,6 @@ func TestCollect_NoOutputTree_Errors(t *testing.T) {
 	}
 }
 
-// A built tree that produced no functions — a fully static export, say — is a
-// fact about the project, not a failure.
 func TestCollect_EmptyOutputTree_NoError(t *testing.T) {
 	root := t.TempDir()
 	if err := os.MkdirAll(filepath.Join(root, scratchDirName, outputDirName), 0o755); err != nil {
@@ -375,8 +356,6 @@ func TestCollectFunctions_Nested(t *testing.T) {
 		functionConfig{Runtime: "nodejs24.x", Handler: "index.handler", Framework: "next", App: "web"})
 	writeFuncConfig(t, outDir, "web", "index.func",
 		functionConfig{Runtime: "nodejs24.x", Handler: "index.handler", Framework: "next", App: "web"})
-	// A nested node_modules with its own package.json must not be mistaken for
-	// a function (no config.json, and it lives inside a .func leaf).
 	if err := os.MkdirAll(filepath.Join(outDir, appsDirName, "web", "functions", "index.func", "node_modules", "dep"), 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -400,9 +379,6 @@ func TestCollectFunctions_Nested(t *testing.T) {
 	}
 }
 
-// Two apps exposing the same route path is what a flat output tree could not
-// represent: one `.func` overwrote the other on disk, and even discovered
-// separately they produced the same logical name and so the same Lambda.
 func TestCollectFunctions_SameRouteInTwoApps_DoesNotCollide(t *testing.T) {
 	outDir := t.TempDir()
 	for _, app := range []string{"admin", "storefront"} {
@@ -473,7 +449,6 @@ func TestCollectFunctions_MissingConfig_Errors(t *testing.T) {
 
 func TestCollectFunctions_MissingField_Errors(t *testing.T) {
 	outDir := t.TempDir()
-	// framework omitted: all four fields are required.
 	writeFuncConfig(t, outDir, "web", "api.func", functionConfig{Runtime: "nodejs24.x", Handler: "index.handler", App: "web"})
 
 	_, err := collectFunctions(outDir)
@@ -504,11 +479,6 @@ func TestCollectFunctions_InvalidJSON_Errors(t *testing.T) {
 	}
 }
 
-// TestBuild_Integration materializes the embedded platform dist into the
-// express-app fixture and spawns the real node builder over it with the user's
-// node, then discovers the built function from its config.json. It is heavy
-// (needs node + the fixture's installed node_modules) so it is skipped under
-// -short.
 func TestBuild_Integration(t *testing.T) {
 	if testing.Short() {
 		t.Skip("integration test: spawns real node over the builder")
@@ -523,8 +493,6 @@ func TestBuild_Integration(t *testing.T) {
 		t.Fatalf("platform.Ensure: %v", err)
 	}
 
-	// The config Dir is the express-app itself so app Path "." points at the
-	// fixture; node resolves express via the package's node_modules above it.
 	cfg := &projectconfig.Config{
 		Dir:  fixtureRoot,
 		Apps: []projectconfig.App{{Name: "api", Path: ".", Framework: "express", Compute: "serverless"}},
@@ -555,9 +523,6 @@ func TestBuild_Integration(t *testing.T) {
 	}
 }
 
-// TestBuild_Integration_DetectsSingleApp proves the 0-apps path: with no apps
-// configured, the real builder detects the express app at the project root and
-// discovers its function. The function name is the sanitized root dir basename.
 func TestBuild_Integration_DetectsSingleApp(t *testing.T) {
 	if testing.Short() {
 		t.Skip("integration test: spawns real node over the builder")
@@ -587,7 +552,6 @@ func TestBuild_Integration_DetectsSingleApp(t *testing.T) {
 	if fns[0].Name != "express-app/index" || fns[0].Framework != "express" {
 		t.Errorf("detected function = %+v, want name express-app/index framework express", fns[0])
 	}
-	// The detected app must still be named, so the manifest can carry it.
 	if fns[0].App != "express-app" {
 		t.Errorf("detected function app = %q, want %q", fns[0].App, "express-app")
 	}
@@ -599,7 +563,6 @@ func repoRelPath(t *testing.T, parts ...string) string {
 	if !ok {
 		t.Fatal("runtime.Caller failed")
 	}
-	// this file: <repo>/cli/internal/appbuilder/appbuilder_test.go
 	repoRoot := filepath.Join(filepath.Dir(file), "..", "..", "..")
 	return filepath.Join(append([]string{repoRoot}, parts...)...)
 }
@@ -632,10 +595,6 @@ func TestCollectFunctions_MissingApp_Errors(t *testing.T) {
 	}
 }
 
-// TestBuild_ExportsResolvedValuesIntoTheBuildEnvironment proves a resolved
-// value is present before the framework build runs, which is the only moment a
-// framework can inline one into what it emits. A project that configures no
-// apps has no name to send values under, so its build inherits them.
 func TestBuild_ExportsResolvedValuesIntoTheBuildEnvironment(t *testing.T) {
 	root := t.TempDir()
 	writeBuilder(t, root)
@@ -655,10 +614,6 @@ func TestBuild_ExportsResolvedValuesIntoTheBuildEnvironment(t *testing.T) {
 	}
 }
 
-// TestBuild_SendsEachAppItsOwnValuesAndFolder proves the whole point of a
-// per-app build environment: a key two apps resolve differently reaches both
-// builds with the right value, and each build is told the folder its app binds
-// rather than the one every app happens to agree on.
 func TestBuild_SendsEachAppItsOwnValuesAndFolder(t *testing.T) {
 	root := t.TempDir()
 	writeBuilder(t, root)
@@ -693,9 +648,6 @@ func TestBuild_SendsEachAppItsOwnValuesAndFolder(t *testing.T) {
 	}
 }
 
-// TestBuilderEnv_AddsResolvedValuesWithoutLosingTheBuildersOwn proves the
-// export is additive: the builder's own entries and the inherited environment
-// still reach it.
 func TestBuilderEnv_AddsResolvedValuesWithoutLosingTheBuildersOwn(t *testing.T) {
 	env := builderEnv("/adapters/next.js", map[string]string{"POSTHOG_ID": "ph-123"})
 
@@ -710,11 +662,6 @@ func TestBuilderEnv_AddsResolvedValuesWithoutLosingTheBuildersOwn(t *testing.T) 
 	}
 }
 
-// TestBuild_TwoFoldersEachBuildStatesItsOwnBinding proves a scoped read
-// succeeds at build time in a project whose apps bind different folders. Each
-// app's build is told its own binding, so the SDK's scope check yields the
-// value sitting in that build's environment instead of refusing it as the
-// project root's.
 func TestBuild_TwoFoldersEachBuildStatesItsOwnBinding(t *testing.T) {
 	root := t.TempDir()
 	writeBuilder(t, root)
@@ -744,10 +691,6 @@ func TestBuild_TwoFoldersEachBuildStatesItsOwnBinding(t *testing.T) {
 	}
 }
 
-// TestBuild_TheBuilderItselfIsBoundToTheProjectRoot proves the process serving
-// every app claims no app's folder: a binding left over from whatever spawned
-// the CLI must not answer for a build, and only each app's own request entry
-// may narrow it.
 func TestBuild_TheBuilderItselfIsBoundToTheProjectRoot(t *testing.T) {
 	root := t.TempDir()
 	writeBuilder(t, root)
@@ -776,11 +719,6 @@ func TestBuild_TheBuilderItselfIsBoundToTheProjectRoot(t *testing.T) {
 	}
 }
 
-// TestBuild_RefusesAResolvedValueTheBuildEnvironmentOwns proves a declared
-// variable cannot take a name the build process itself runs on. Applying it
-// would break the build in a way that names nothing; ignoring it would drop a
-// value the project declared. Refusing names the key while nothing has been
-// built.
 func TestBuild_RefusesAResolvedValueTheBuildEnvironmentOwns(t *testing.T) {
 	for _, name := range []string{"PATH", "NEXT_ADAPTER_PATH", "OCEL_APP_FOLDER"} {
 		t.Run(name, func(t *testing.T) {
@@ -812,10 +750,6 @@ func TestBuild_RefusesAResolvedValueTheBuildEnvironmentOwns(t *testing.T) {
 	}
 }
 
-// TestBuilderEnv_WhatTheBuildOwnsIsAppliedLast proves the ordering the refusal
-// above does not depend on: exec is last-wins, so the entries the build runs on
-// are written after the resolved values, and no path into this function can
-// repoint the builder.
 func TestBuilderEnv_WhatTheBuildOwnsIsAppliedLast(t *testing.T) {
 	env := builderEnv("/adapters/next.js", map[string]string{
 		"NEXT_ADAPTER_PATH": "/evil/adapter.js",

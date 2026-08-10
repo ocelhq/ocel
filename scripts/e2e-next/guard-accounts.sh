@@ -1,12 +1,4 @@
 #!/usr/bin/env bash
-# Refuses to let the adapter e2e workflow deploy into anything but the
-# disposable account it is scoped to.
-#
-# The suite creates and destroys hundreds of Lambdas, worker scripts and DNS
-# labels under a shared project. A mistyped or rotated secret pointing at a real
-# account would spray that into production infrastructure, so the resolved
-# identities are compared against the expected ones before any deploy — in the
-# build job and again in every job that deploys.
 set -euo pipefail
 
 fail() {
@@ -35,9 +27,6 @@ if [ "$CLOUDFLARE_ACCOUNT_ID" != "$EXPECTED_CLOUDFLARE_ACCOUNT_ID" ]; then
   fail "CLOUDFLARE_ACCOUNT_ID is $CLOUDFLARE_ACCOUNT_ID, expected $EXPECTED_CLOUDFLARE_ACCOUNT_ID — refusing to deploy"
 fi
 
-# Confirm the token actually holds that account, rather than trusting the id
-# variable: a token for a different account would otherwise pass the check above
-# and then create workers somewhere else entirely.
 resolved_cf=$(
   curl -sS -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" \
     "https://api.cloudflare.com/client/v4/accounts/${CLOUDFLARE_ACCOUNT_ID}" |

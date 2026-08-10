@@ -9,13 +9,8 @@ import (
 	"github.com/evanw/esbuild/pkg/api"
 )
 
-// buildDirName is the Ocel-internal build-artifact folder, gitignored.
 const buildDirName = ".ocel"
 
-// syncScript awaits every registration promise collected by the SDK's
-// defer() during import, then POSTs /sync to signal discovery is complete.
-// It throws (failing the node process, and so the CLI's discovery step) if
-// the dev server rejects the sync.
 const syncScript = `
 await Promise.all(globalThis.__ocelRegister ?? []);
 
@@ -25,10 +20,6 @@ if (!__ocelSyncRes.ok) {
 }
 `
 
-// Bundle generates a single entrypoint that side-effect-imports every file
-// in files, awaits collected resource registrations, and posts /sync to
-// OCEL_DEV_SERVER. It bundles the result with esbuild and writes it under
-// configDir/.ocel, returning the path to run with node.
 func Bundle(configDir string, files []string) (string, error) {
 	outDir := filepath.Join(configDir, buildDirName)
 	if err := os.MkdirAll(outDir, 0o755); err != nil {
@@ -49,19 +40,12 @@ func Bundle(configDir string, files []string) (string, error) {
 			Sourcefile: "ocel-discovery-entry.ts",
 			Loader:     api.LoaderTS,
 		},
-		Bundle:   true,
-		Platform: api.PlatformNode,
-		// Inline, so a declaration that names its own file names the file the
-		// user wrote rather than this bundle. Node needs --enable-source-maps
-		// to read it; the discovery run passes that.
+		Bundle:    true,
+		Platform:  api.PlatformNode,
 		Sourcemap: api.SourceMapInline,
 		Format:    api.FormatESModule,
 		Outfile:   outfile,
 		Write:     true,
-		// Bundled CJS dependencies (e.g. node-postgres) load node builtins
-		// through require calls esbuild leaves in place; in ESM output those
-		// throw "Dynamic require of ... is not supported" unless a real
-		// createRequire-backed require is in scope.
 		Banner: map[string]string{
 			"js": `import { createRequire as __ocelCreateRequire } from "node:module"; const require = __ocelCreateRequire(import.meta.url);`,
 		},

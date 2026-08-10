@@ -1,9 +1,3 @@
-// Package providerrunner owns the CLI-side lifecycle of a spawned provider
-// binary: spawn it in its own process group, wait for its readiness
-// sentinel (racing it against an early exit and a timeout), dial it, drive
-// its Deploy RPC, and tear it down. It consumes the contracts defined in
-// pkg/proto/deployments/v1 (session token, readiness sentinel, Deploy
-// request/stream) — see that package for the protocol itself.
 package providerrunner
 
 import (
@@ -32,46 +26,23 @@ import (
 	"github.com/ocelhq/ocel/pkg/proto/env/v1/envv1connect"
 )
 
-// DefaultReadyTimeout is how long Ready waits for the readiness sentinel
-// when Config.ReadyTimeout is zero and ReadyTimeoutEnvVar is unset.
 const DefaultReadyTimeout = 10 * time.Second
 
-// ReadyTimeoutEnvVar overrides DefaultReadyTimeout when Config.ReadyTimeout
-// is zero. Its value must parse as a time.Duration (e.g. "15s").
 const ReadyTimeoutEnvVar = "OCEL_READY_TIMEOUT"
 
-// gracePeriod is how long Close waits after SIGTERM before escalating to
-// SIGKILL. A var so tests can shorten it.
 var gracePeriod = 5 * time.Second
 
-// Config configures Spawn.
 type Config struct {
-	// BinaryPath is the provider binary to spawn.
-	BinaryPath string
-	// Args are extra arguments passed to BinaryPath.
-	Args []string
-	// Env, if non-nil, is the base environment the session token env var is
-	// layered onto, instead of the inherited os.Environ(). Primarily for
-	// tests.
-	Env []string
-	// Stdout receives every line of the provider's stdout except the
-	// readiness sentinel line itself. Nil discards it.
-	Stdout io.Writer
-	// Stderr receives every line of the provider's stderr, in addition to
-	// it being captured for EarlyExitError. Nil discards it.
-	Stderr io.Writer
-	// ReadyTimeout bounds how long Ready waits for the readiness sentinel.
-	// Zero uses ReadyTimeoutEnvVar, falling back to DefaultReadyTimeout.
+	BinaryPath   string
+	Args         []string
+	Env          []string
+	Stdout       io.Writer
+	Stderr       io.Writer
 	ReadyTimeout time.Duration
 }
 
-// EarlyExitError reports that the provider process exited before printing
-// the readiness sentinel.
 type EarlyExitError struct {
-	// Err is the error exec.Cmd.Wait returned (typically an *exec.ExitError
-	// carrying the exit code).
-	Err error
-	// Stderr is the provider's captured stderr output, if any.
+	Err    error
 	Stderr string
 }
 
@@ -88,8 +59,6 @@ func (e *EarlyExitError) Error() string {
 
 func (e *EarlyExitError) Unwrap() error { return e.Err }
 
-// ReadyTimeoutError reports that the provider never printed the readiness
-// sentinel within the configured timeout.
 type ReadyTimeoutError struct {
 	Timeout time.Duration
 }
@@ -98,10 +67,6 @@ func (e *ReadyTimeoutError) Error() string {
 	return fmt.Sprintf("provider did not signal readiness within %s", e.Timeout)
 }
 
-// DeployFailedError reports that the provider's Deploy stream ended in a
-// terminal ResultEvent with Success == false. Its message is the provider's own
-// words, unprefixed: the CLI already heads it with the failed step, and a
-// second announcement in plumbing language only buries the provider's.
 type DeployFailedError struct {
 	Message string
 }
@@ -113,12 +78,6 @@ func (e *DeployFailedError) Error() string {
 	return e.Message
 }
 
-// Runner owns a single spawned provider process for its entire lifetime:
-// Spawn to launch it, Ready to wait for and dial it, Deploy to drive it, and
-// Close to tear it down. All exported methods are safe to call from a
-// single goroutine driving the lifecycle; Close is additionally safe to
-// call concurrently (e.g. from both a deferred cleanup and a signal
-// handler) and from repeat calls.
 type Runner struct {
 	cmd          *exec.Cmd
 	token        string
@@ -140,12 +99,6 @@ type Runner struct {
 	closeOnce sync.Once
 }
 
-// Spawn launches cfg.BinaryPath in its own process group with a fresh
-// per-session token, and starts draining its stdout/stderr in the
-// background. It returns as soon as the process has started; call Ready to
-// wait for it to signal readiness. If ctx is cancelled (e.g. by a signal
-// handler further up the call stack) before Close is called, the runner
-// tears itself down the same way Close would.
 func Spawn(ctx context.Context, cfg Config) (*Runner, error) {
 	if cfg.BinaryPath == "" {
 		return nil, errors.New("providerrunner: BinaryPath is required")
@@ -214,8 +167,6 @@ func Spawn(ctx context.Context, cfg Config) (*Runner, error) {
 	return r, nil
 }
 
-// resolveReadyTimeout applies override, then ReadyTimeoutEnvVar, then
-// DefaultReadyTimeout, in that order of precedence.
 func resolveReadyTimeout(override time.Duration) time.Duration {
 	if override > 0 {
 		return override
@@ -228,11 +179,6 @@ func resolveReadyTimeout(override time.Duration) time.Duration {
 	return DefaultReadyTimeout
 }
 
-// Ready waits on a select of three outcomes, whichever happens first: the
-// readiness sentinel appears (dialed immediately, returning nil); the
-// process exits first (returns *EarlyExitError with its captured stderr,
-// without waiting out the timeout); or the timeout elapses (returns
-// *ReadyTimeoutError). It also returns ctx.Err() if ctx is cancelled first.
 func (r *Runner) Ready(ctx context.Context) error {
 	timer := time.NewTimer(r.readyTimeout)
 	defer timer.Stop()
@@ -257,9 +203,6 @@ func (r *Runner) Ready(ctx context.Context) error {
 	}
 }
 
-// dial parses addr (as produced by the provider's readiness sentinel) and
-// builds a Connect client to it, presenting the session token on every
-// call.
 func (r *Runner) dial(addr string) error {
 	network, address, err := channel.ParseAddr(addr)
 	if err != nil {
@@ -283,13 +226,8 @@ func (r *Runner) dial(addr string) error {
 	return nil
 }
 
-// ErrVarsUnavailable reports that a caller reached for the store before the
-// provider was ready to serve it.
 var ErrVarsUnavailable = errors.New("providerrunner: the variable store was reached before a successful Ready")
 
-// SetValue, ListValues, GetValue, RevealValues, DeleteValue and ListVersions
-// drive the provider's variable store. The CLI has no cloud SDK dependency, so
-// every read and write of a value is one of these calls.
 func (r *Runner) SetValue(ctx context.Context, req *envv1.SetValueRequest) (*envv1.SetValueResponse, error) {
 	if r.vars == nil {
 		return nil, ErrVarsUnavailable
@@ -346,12 +284,6 @@ func (r *Runner) ListVersions(ctx context.Context, req *envv1.ListVersionsReques
 	return r.vars.ListVersions(ctx, req)
 }
 
-// Deploy calls the provider's Deploy RPC and streams DeployEvents to
-// onEvent (which may be nil) as they arrive, including the terminal event.
-// It returns nil once the stream ends in ResultEvent{Success: true}, a
-// *DeployFailedError for ResultEvent{Success: false}, or an error
-// describing why the stream ended without a result (e.g. the provider was
-// killed mid-call). Ready must have succeeded first.
 func (r *Runner) Deploy(ctx context.Context, req *deploymentsv1.DeployRequest, onEvent func(*deploymentsv1.DeployEvent)) error {
 	if r.client == nil {
 		return errors.New("providerrunner: Deploy called before a successful Ready")
@@ -360,12 +292,6 @@ func (r *Runner) Deploy(ctx context.Context, req *deploymentsv1.DeployRequest, o
 	return r.driveStream("Deploy", stream, err, onEvent)
 }
 
-// Bootstrap calls the provider's Bootstrap RPC and streams DeployEvents to
-// onEvent (which may be nil) as they arrive, including the terminal event.
-// Its result semantics match Deploy: nil on ResultEvent{Success: true}, a
-// *DeployFailedError on failure, or a connection error. Bootstrap and Deploy
-// share one event stream by contract, so they share the same driver. Ready
-// must have succeeded first.
 func (r *Runner) Bootstrap(ctx context.Context, req *deploymentsv1.BootstrapRequest, onEvent func(*deploymentsv1.DeployEvent)) error {
 	if r.client == nil {
 		return errors.New("providerrunner: Bootstrap called before a successful Ready")
@@ -374,12 +300,6 @@ func (r *Runner) Bootstrap(ctx context.Context, req *deploymentsv1.BootstrapRequ
 	return r.driveStream("Bootstrap", stream, err, onEvent)
 }
 
-// DestroyPreview calls the provider's DestroyPreview RPC and streams
-// DeployEvents to onEvent (which may be nil) as they arrive, including the
-// terminal event. Its result semantics match Deploy: nil on
-// ResultEvent{Success: true}, a *DeployFailedError on failure, or a connection
-// error. DestroyPreview reuses the DeployEvent stream by contract, so it shares
-// the same driver. Ready must have succeeded first.
 func (r *Runner) DestroyPreview(ctx context.Context, req *deploymentsv1.DestroyPreviewRequest, onEvent func(*deploymentsv1.DeployEvent)) error {
 	if r.client == nil {
 		return errors.New("providerrunner: DestroyPreview called before a successful Ready")
@@ -388,11 +308,6 @@ func (r *Runner) DestroyPreview(ctx context.Context, req *deploymentsv1.DestroyP
 	return r.driveStream("DestroyPreview", stream, err, onEvent)
 }
 
-// DestroyProject calls the provider's DestroyProject RPC and streams
-// DeployEvents to onEvent (which may be nil) as they arrive, including the
-// terminal event. Like DestroyPreview it reuses the DeployEvent stream and
-// shares the same driver; unlike it, it tears down a whole production project
-// rather than one environment. Ready must have succeeded first.
 func (r *Runner) DestroyProject(ctx context.Context, req *deploymentsv1.DestroyProjectRequest, onEvent func(*deploymentsv1.DeployEvent)) error {
 	if r.client == nil {
 		return errors.New("providerrunner: DestroyProject called before a successful Ready")
@@ -401,9 +316,6 @@ func (r *Runner) DestroyProject(ctx context.Context, req *deploymentsv1.DestroyP
 	return r.driveStream("DestroyProject", stream, err, onEvent)
 }
 
-// PlanDestroyProject calls the provider's unary PlanDestroyProject RPC and
-// returns the inventory a DestroyProject would tear down, so the CLI can show
-// the blast radius before prompting. Ready must have succeeded first.
 func (r *Runner) PlanDestroyProject(ctx context.Context, req *deploymentsv1.PlanDestroyProjectRequest) (*deploymentsv1.PlanDestroyProjectResponse, error) {
 	if r.client == nil {
 		return nil, errors.New("providerrunner: PlanDestroyProject called before a successful Ready")
@@ -415,8 +327,6 @@ func (r *Runner) PlanDestroyProject(ctx context.Context, req *deploymentsv1.Plan
 	return resp, nil
 }
 
-// ListEnvironments calls the provider's unary ListEnvironments RPC and returns
-// the enumerated preview environments. Ready must have succeeded first.
 func (r *Runner) ListEnvironments(ctx context.Context, req *deploymentsv1.ListEnvironmentsRequest) (*deploymentsv1.ListEnvironmentsResponse, error) {
 	if r.client == nil {
 		return nil, errors.New("providerrunner: ListEnvironments called before a successful Ready")
@@ -428,9 +338,6 @@ func (r *Runner) ListEnvironments(ctx context.Context, req *deploymentsv1.ListEn
 	return resp, nil
 }
 
-// Preflight calls the provider's unary Preflight RPC, reporting what the
-// provider's ambient account/profile points at. Ready must have succeeded
-// first.
 func (r *Runner) Preflight(ctx context.Context, req *deploymentsv1.PreflightRequest) (*deploymentsv1.PreflightResponse, error) {
 	if r.client == nil {
 		return nil, errors.New("providerrunner: Preflight called before a successful Ready")
@@ -442,8 +349,6 @@ func (r *Runner) Preflight(ctx context.Context, req *deploymentsv1.PreflightRequ
 	return resp, nil
 }
 
-// ListPromotions calls the provider's unary ListPromotions RPC and returns the
-// project's promotion history. Ready must have succeeded first.
 func (r *Runner) ListPromotions(ctx context.Context, req *deploymentsv1.ListPromotionsRequest) (*deploymentsv1.ListPromotionsResponse, error) {
 	if r.client == nil {
 		return nil, errors.New("providerrunner: ListPromotions called before a successful Ready")
@@ -455,8 +360,6 @@ func (r *Runner) ListPromotions(ctx context.Context, req *deploymentsv1.ListProm
 	return resp, nil
 }
 
-// Rollback calls the provider's unary Rollback RPC and returns the Promotion
-// that is now active. Ready must have succeeded first.
 func (r *Runner) Rollback(ctx context.Context, req *deploymentsv1.RollbackRequest) (*deploymentsv1.RollbackResponse, error) {
 	if r.client == nil {
 		return nil, errors.New("providerrunner: Rollback called before a successful Ready")
@@ -468,11 +371,6 @@ func (r *Runner) Rollback(ctx context.Context, req *deploymentsv1.RollbackReques
 	return resp, nil
 }
 
-// Prune calls the provider's Prune RPC and streams DeployEvents to onEvent
-// (which may be nil) as they arrive, including the terminal event. A reclaim's
-// per-stack destroys run for minutes, so Prune streams progress/log the same
-// way Deploy/Bootstrap/Destroy do and shares their driver; its result
-// semantics match theirs. Ready must have succeeded first.
 func (r *Runner) Prune(ctx context.Context, req *deploymentsv1.PruneRequest, onEvent func(*deploymentsv1.DeployEvent)) error {
 	if r.client == nil {
 		return errors.New("providerrunner: Prune called before a successful Ready")
@@ -481,10 +379,6 @@ func (r *Runner) Prune(ctx context.Context, req *deploymentsv1.PruneRequest, onE
 	return r.driveStream("Prune", stream, err, onEvent)
 }
 
-// driveStream consumes a provider event stream to its terminal ResultEvent,
-// forwarding every event to onEvent. rpc names the call for error messages.
-// It is shared by Deploy, Bootstrap, and Destroy, which speak the same
-// DeployEvent stream by contract.
 func (r *Runner) driveStream(rpc string, stream *connect.ServerStreamForClient[deploymentsv1.DeployEvent], callErr error, onEvent func(*deploymentsv1.DeployEvent)) error {
 	if callErr != nil {
 		return fmt.Errorf("providerrunner: call %s: %w", rpc, callErr)
@@ -510,10 +404,6 @@ func (r *Runner) driveStream(rpc string, stream *connect.ServerStreamForClient[d
 	return fmt.Errorf("providerrunner: provider closed the %s stream without a result", rpc)
 }
 
-// Close tears down the provider process — SIGTERM, ~5s grace, then SIGKILL
-// — and removes its Unix socket file, if any. It is idempotent and safe to
-// call concurrently, so it can be wired as both a deferred cleanup and a
-// signal handler.
 func (r *Runner) Close() error {
 	r.closeOnce.Do(func() {
 		r.teardown()
@@ -524,8 +414,6 @@ func (r *Runner) Close() error {
 	return nil
 }
 
-// teardown sends SIGTERM to the process group, waits up to gracePeriod for
-// it to exit, then escalates to SIGKILL.
 func (r *Runner) teardown() {
 	if r.cmd.Process == nil {
 		return
@@ -549,10 +437,6 @@ func (r *Runner) teardown() {
 	<-r.done
 }
 
-// drainStdout reads the provider's stdout line by line: the first line
-// matching the readiness sentinel is parsed and delivered on r.readyCh;
-// every other line, before or after it, is diagnostic output forwarded to
-// r.stdout.
 func (r *Runner) drainStdout(stdout io.Reader) {
 	ready := false
 	scanner := bufio.NewScanner(stdout)
@@ -572,8 +456,6 @@ func (r *Runner) drainStdout(stdout io.Reader) {
 	}
 }
 
-// drainStderr reads the provider's stderr line by line, capturing it (for
-// EarlyExitError) and forwarding it to r.stderr.
 func (r *Runner) drainStderr(stderr io.Reader) {
 	scanner := bufio.NewScanner(stderr)
 	scanner.Buffer(make([]byte, 64*1024), 1024*1024)
@@ -591,8 +473,6 @@ func (r *Runner) drainStderr(stderr io.Reader) {
 	}
 }
 
-// newSessionToken generates a fresh per-session token the CLI presents to
-// the provider on every RPC call (see channel.SessionTokenEnvVar).
 func newSessionToken() (string, error) {
 	buf := make([]byte, 32)
 	if _, err := rand.Read(buf); err != nil {
@@ -601,8 +481,6 @@ func newSessionToken() (string, error) {
 	return hex.EncodeToString(buf), nil
 }
 
-// authInterceptor presents the session token on every unary and streaming
-// call, as required by the provider protocol's session token handshake.
 type authInterceptor struct {
 	token string
 }
@@ -623,6 +501,5 @@ func (a authInterceptor) WrapStreamingClient(next connect.StreamingClientFunc) c
 }
 
 func (a authInterceptor) WrapStreamingHandler(next connect.StreamingHandlerFunc) connect.StreamingHandlerFunc {
-	// The runner is only ever a client; it never serves DeploymentService.
 	return next
 }

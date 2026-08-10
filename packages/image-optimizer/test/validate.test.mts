@@ -2,11 +2,6 @@ import { describe, expect, test } from "vitest";
 import { validate } from "../src/validate.mjs";
 import { imageConfig, payload } from "./fixtures.mjs";
 
-// The PR 3 validation table, re-run here against the config this function
-// loaded. The edge already asserts it against real Next output; what these
-// assert is that the authority-holding side reaches the same answers, so a
-// worker running a stale manifest cannot serve something the loaded config
-// forbids.
 function check(overrides: Parameters<typeof payload>[1], config = imageConfig()) {
   return validate(payload(config, overrides), config);
 }
@@ -25,10 +20,6 @@ describe("url", () => {
   });
 
   test("cannot be an array", () => {
-    // Arrays reach this side as JSON arrays rather than as repeated query keys,
-    // but they answer the row Next answers. The presence check above it is
-    // falsy-only — a non-empty array is truthy and falls through to here — which
-    // is what makes this row reachable at all, exactly as w and q do it.
     rejects(
       { url: ["/a.png", "/b.png"] as unknown as string },
       '"url" parameter cannot be an array',
@@ -39,9 +30,6 @@ describe("url", () => {
     rejects({ url: `/${"a".repeat(3072)}.png` }, '"url" parameter is too long');
   });
 
-  // Before the relative/absolute branch, always. The other order is a full
-  // allowlist bypass: //evil.example is a host the absolute branch checks and
-  // the relative branch does not.
   test("protocol-relative", () => {
     rejects(
       { url: "//evil.example/x.png" },
@@ -63,8 +51,6 @@ describe("url", () => {
     expect(check({ url: "/assets/a.png" }, config).ok).toBe(true);
   });
 
-  // Next 16's localPatterns default carries search:"", so any query string on a
-  // local url is a rejection rather than an allowance.
   test("relative with a query string, under the Next 16 default", () => {
     rejects({ url: "/a.png?v=1" }, '"url" parameter is not allowed');
   });
@@ -85,7 +71,6 @@ describe("url", () => {
   test("absolute and not http(s)", () => {
     rejects({ url: "ftp://cdn.example.com/a.png" }, '"url" parameter is invalid');
     rejects({ url: "data:image/png;base64,AAAA" }, '"url" parameter is invalid');
-    // The scheme that would read this function's own filesystem.
     rejects({ url: "file:///etc/passwd" }, '"url" parameter is invalid');
   });
 
@@ -103,8 +88,6 @@ describe("url", () => {
     expect(check({ url: "https://cdn.example.com/a.png" }, config).ok).toBe(true);
   });
 
-  // hostname, never host: userinfo is how an allowlisted name gets hung off a
-  // host the attacker controls.
   test("userinfo cannot smuggle an allowlisted hostname", () => {
     rejects({ url: "https://cdn.example.com@evil.example/a.png" }, '"url" parameter is not allowed');
   });
@@ -153,9 +136,6 @@ describe("width and quality", () => {
     rejects({ q: 80 }, '"q" parameter (quality) of 80 is not allowed');
   });
 
-  // Next interleaves the two parameters' checks, and the fixtures pin the
-  // interleaving: both of q's presence checks run before w's value checks, so a
-  // bad width with no quality is a quality error.
   test("w=0 with no q is a quality error, not a width error", () => {
     rejects(
       { w: 0, q: undefined as unknown as number },
@@ -175,12 +155,7 @@ describe("width and quality", () => {
   });
 });
 
-// Next throws on these and answers a bare 500. Reproduced as a status rather
-// than as a throw: an uncaught exception here would be an unauthenticated crash.
 describe("urls no parser can handle", () => {
-  // The edge's own fixtures list these as query values (`url=%2F%25`), which
-  // its query parser has already decoded to `/%` by the time the payload is
-  // built — so `/%` is what actually arrives here for both.
   for (const url of ["/%", "/a%zz", "/%E0%A4%A"]) {
     test(`${url} is a controlled 500`, () => {
       const result = check({ url });

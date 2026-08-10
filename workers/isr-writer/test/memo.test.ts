@@ -22,8 +22,6 @@ describe("memo", () => {
     expect(memoized("b")).toBeUndefined();
   });
 
-  // Nothing authenticates a caller before its prefix is looked up, so the set of
-  // prefixes an isolate is asked about is attacker-chosen and unbounded.
   it("evicts oldest-first rather than growing without bound", () => {
     for (let i = 0; i < CAPACITY * 2; i++) memoize(`flood-${i}`, `hash-${i}`, false);
 

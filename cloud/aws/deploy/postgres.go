@@ -8,14 +8,11 @@ import (
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/resources/v1"
 )
 
-// Aurora Serverless v2 defaults for a postgres resource. These are
-// provider-chosen this slice: PostgresConfig only carries a version, so
-// capacity, credentials, and teardown behaviour are fixed here.
 const (
 	postgresEngine               = "aurora-postgresql"
-	postgresEngineMode           = "provisioned" // serverless v2 runs in provisioned mode + a scaling config
+	postgresEngineMode           = "provisioned"
 	defaultPostgresEngineVersion = "16.4"
-	postgresMinCapacity          = 0.0 // scale to zero when idle
+	postgresMinCapacity          = 0.0
 	postgresMaxCapacity          = 2.0
 	postgresInstanceClass        = "db.serverless"
 	postgresPort                 = 5432
@@ -23,10 +20,6 @@ const (
 	postgresDatabaseName         = "ocel"
 )
 
-// postgresArgs is the fully-resolved set of Aurora Serverless v2 arguments a
-// PostgresConfig lowers to, independent of any Pulumi or AWS call. It is the
-// pure output of translatePostgres so the translation can be unit-tested
-// without provisioning anything.
 type postgresArgs struct {
 	Engine               string
 	EngineMode           string
@@ -43,10 +36,6 @@ type postgresArgs struct {
 	SkipFinalSnapshot    bool
 }
 
-// translatePostgres lowers a PostgresConfig into the concrete Aurora
-// Serverless v2 arguments the provider provisions. It is pure: same config
-// in, same args out, no I/O. An empty version falls back to a pinned recent
-// engine version.
 func translatePostgres(cfg *resourcesv1.PostgresConfig) postgresArgs {
 	version := defaultPostgresEngineVersion
 	if v := cfg.GetVersion(); v != "" {
@@ -69,21 +58,10 @@ func translatePostgres(cfg *resourcesv1.PostgresConfig) postgresArgs {
 	}
 }
 
-// registerPostgres declares the Aurora Serverless v2 cluster (plus its subnet
-// group, security group, and serverless instance) for one postgres resource
-// inside a Pulumi program, and exports the resource's connection outputs
-// under logicalName. vpcID/vpcCIDR/subnetIDs identify the default VPC the
-// cluster lands in. The exported map carries the discrete connection parts
-// plus the RDS-managed master-password secret ARN, which the caller resolves
-// to a plaintext password after the stack settles (see collectPostgresOutput).
 func registerPostgres(ctx *pulumi.Context, logicalName string, args postgresArgs, vpcID, vpcCIDR string, subnetIDs []string) (pulumi.StringOutput, error) {
 	sg, err := ec2.NewSecurityGroup(ctx, logicalName+"-sg", &ec2.SecurityGroupArgs{
 		Description: pulumi.String("Ocel-managed security group for " + logicalName),
 		VpcId:       pulumi.String(vpcID),
-		// The cluster is private (publiclyAccessible=false). Allow the Postgres
-		// port only from within the VPC — that's where the deployed app runs —
-		// and never from the public internet. Egress is open so the DB can
-		// reach AWS services it needs.
 		Ingress: ec2.SecurityGroupIngressArray{
 			&ec2.SecurityGroupIngressArgs{
 				Protocol:    pulumi.String("tcp"),
@@ -106,9 +84,6 @@ func registerPostgres(ctx *pulumi.Context, logicalName string, args postgresArgs
 		return pulumi.StringOutput{}, err
 	}
 
-	// RDS identifiers (subnet group, cluster, instance) forbid the underscores
-	// the logical name carries, so name each from a safe prefix rather than
-	// Pulumi's autoname.
 	subnetGroup, err := rds.NewSubnetGroup(ctx, logicalName+"-subnets", &rds.SubnetGroupArgs{
 		NamePrefix: pulumi.String(physicalNamePrefix(logicalName, "subnets")),
 		SubnetIds:  pulumi.ToStringArray(subnetIDs),
@@ -162,8 +137,6 @@ func registerPostgres(ctx *pulumi.Context, logicalName string, args postgresArgs
 	return postgresEnvValue(ctx, cluster.MasterUsername, cluster.Endpoint, cluster.Port, args.DatabaseName, secretARN.Elem()), nil
 }
 
-// Keys of the per-resource output map exported by registerPostgres and read
-// back by collectPostgresOutput.
 const (
 	outputKeyHost      = "host"
 	outputKeyPort      = "port"

@@ -12,12 +12,6 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
 )
 
-// The deploy path and the dev path each spawn node for the same discovery run,
-// and until they shared one spawner they carried their own flag lists and their
-// own copies of the two variable names the SDK reads. This test is the dev half
-// of the exchange the file above pins for deploy: the same fixture, the same
-// real SDK in a real node process, but started by devserver's own code path and
-// answered by dev's own store.
 func TestDefineEnv_DeclaresThroughDevserversOwnNodeSpawn(t *testing.T) {
 	root := setUpFixture(t, envFixture)
 
@@ -44,9 +38,6 @@ func TestDefineEnv_DeclaresThroughDevserversOwnNodeSpawn(t *testing.T) {
 	}
 	<-srv.Sync()
 
-	// A declaration that never arrived leaves both of these empty, which is what
-	// a rename of OCEL_PHASE or OCEL_DEV_SERVER at devserver's spawn site costs:
-	// the SDK either never declares or cannot reach the server.
 	t.Run("a declared scope arrives with its folders", func(t *testing.T) {
 		scoped := srv.ScopedFolders()
 		if got := strings.Join(scoped["POSTHOG_ID"], ","); got != "/admin,/web" {
@@ -57,9 +48,6 @@ func TestDefineEnv_DeclaresThroughDevserversOwnNodeSpawn(t *testing.T) {
 		}
 	})
 
-	// Dev generates its client accessor from these, and exports each one under
-	// the framework's public prefix. A client flag that failed to travel would
-	// leave a browser read landing on the SDK's throwing fallback.
 	t.Run("a client-accessible declaration arrives as one", func(t *testing.T) {
 		if got := strings.Join(srv.ClientKeys(), ","); got != "PUBLIC_SITE_URL" {
 			t.Errorf("client keys = %q, want PUBLIC_SITE_URL", got)
@@ -83,8 +71,6 @@ func TestDefineEnv_DeclaresThroughDevserversOwnNodeSpawn(t *testing.T) {
 	})
 }
 
-// serveDevServer stands up the production dev server on a loopback port, so the
-// address discovery is told to talk to is the one the server itself holds.
 func serveDevServer(t *testing.T) *devserver.Server {
 	t.Helper()
 

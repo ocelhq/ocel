@@ -10,8 +10,6 @@ import (
 	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
 )
 
-// namedApps builds n distinct apps, so a test can tell which app a callback
-// was handed.
 func namedApps(n int) []*deploymentsv1.ManifestApp {
 	apps := make([]*deploymentsv1.ManifestApp, n)
 	for i := range apps {
@@ -20,10 +18,6 @@ func namedApps(n int) []*deploymentsv1.ManifestApp {
 	return apps
 }
 
-// pinWindow is how long the test holds appConcurrency workers pinned while
-// watching for an over-admission. Proving nothing more was admitted needs a
-// window; an unbounded fan-out submits every remaining worker in the time it
-// takes to run a for loop, so this is generous by orders of magnitude.
 const pinWindow = 250 * time.Millisecond
 
 func TestRunAppStacksAdmitsAtMostAppConcurrency(t *testing.T) {
@@ -67,8 +61,6 @@ func TestRunAppStacksAdmitsAtMostAppConcurrency(t *testing.T) {
 		})
 	}()
 
-	// Under-admission: if the limit were below appConcurrency, that many
-	// workers could never be live at once and this never fires.
 	select {
 	case <-saturated:
 	case <-time.After(5 * time.Second):
@@ -79,8 +71,6 @@ func TestRunAppStacksAdmitsAtMostAppConcurrency(t *testing.T) {
 		t.Fatalf("never reached %d concurrent workers (peak %d): the limit is below appConcurrency", appConcurrency, got)
 	}
 
-	// Over-admission: appConcurrency workers are now pinned and cannot retire
-	// until release closes, so any further worker entry is a limit violation.
 	select {
 	case <-excess:
 		close(release)
@@ -108,9 +98,6 @@ func TestRunAppStacksAdmitsAtMostAppConcurrency(t *testing.T) {
 	}
 }
 
-// A fan-out no larger than the limit must not be serialized by it: every
-// worker runs concurrently, which is the behaviour single- and two-app
-// deploys have today.
 func TestRunAppStacksBelowLimitRunsFullyConcurrently(t *testing.T) {
 	n := appConcurrency
 
@@ -121,7 +108,7 @@ func TestRunAppStacksBelowLimitRunsFullyConcurrently(t *testing.T) {
 		defer close(done)
 		runAppStacks(namedApps(n), func(int, *deploymentsv1.ManifestApp) {
 			all.Done()
-			all.Wait() // deadlocks unless all n are live at once
+			all.Wait()
 		})
 	}()
 
@@ -132,9 +119,6 @@ func TestRunAppStacksBelowLimitRunsFullyConcurrently(t *testing.T) {
 	}
 }
 
-// Every app runs exactly once, and each callback is handed the app that its
-// index names: the caller writes results into slot i, so a mismatch would
-// attribute one app's deploy result to another.
 func TestRunAppStacksRunsEveryAppExactlyOnceAtItsOwnIndex(t *testing.T) {
 	n := 5*appConcurrency + 1
 	apps := namedApps(n)

@@ -19,7 +19,6 @@ func writerConfig(endpoint string) Config {
 	}
 }
 
-// One recorded call to the fake writer worker.
 type writerCall struct {
 	method string
 	path   string
@@ -42,10 +41,6 @@ func fakeWriter(t *testing.T, status int) (*httptest.Server, *[]writerCall) {
 	return srv, &calls
 }
 
-// adoptISRWriter points a Config at a fake writer that accepts every seed. A
-// deploy onto an adopted cache store must have one — appCaches refuses to build
-// a cache config where only one of the pair was adopted — so every test that
-// adopts a store adopts a writer alongside it.
 func adoptISRWriter(t *testing.T, cfg Config) Config {
 	t.Helper()
 	srv, _ := fakeWriter(t, http.StatusNoContent)
@@ -55,10 +50,6 @@ func adoptISRWriter(t *testing.T, cfg Config) Config {
 	return cfg
 }
 
-// The writer worker puts into the adopted cache store and no other, while the
-// deployed function reads its entries from whichever store the membrane found.
-// Nothing but this check holds the two adoptions equal, and a deploy that got
-// them from different substrates caches nothing and says nothing.
 func TestAppCaches_RefusesAWriterAndAStoreThatDisagree(t *testing.T) {
 	base := Config{ArtifactRoot: twoAppTree(t), AssetBucket: "assets", StateTable: "state", Env: "prod"}
 
@@ -93,8 +84,6 @@ func TestISRWriteSecret_DiffersPerPrefixAndIsStable(t *testing.T) {
 }
 
 func TestISRWriteSecretHash_IsTheHexSHA256TheWorkerStores(t *testing.T) {
-	// The worker accepts exactly 64 lowercase hex characters (isSecretHash in
-	// workers/isr-writer/src/auth.ts), and never sees the plaintext.
 	hash := isrWriteSecretHash("write-secret")
 	if len(hash) != 64 {
 		t.Fatalf("hash = %q, want 64 hex characters", hash)
@@ -174,9 +163,6 @@ func TestISRWriterCalls_AreNoOpsWhenNoWriterWasAdopted(t *testing.T) {
 	}
 }
 
-// A prune mints no seed — it derives no secret and points no function at the
-// writer — but destroy is authorized by the bootstrap credential alone, so a
-// retirement must still reach the worker (epic decision 6d).
 func TestRetireISRWriter_ReachesTheWorkerWithoutADeploySeed(t *testing.T) {
 	srv, calls := fakeWriter(t, http.StatusNoContent)
 	cfg := Config{ISRWriterEndpoint: srv.URL, ISRWriterBootstrapCred: "cred-1"}
@@ -189,9 +175,6 @@ func TestRetireISRWriter_ReachesTheWorkerWithoutADeploySeed(t *testing.T) {
 	}
 }
 
-// The whole point of the writer is that a function reaches it with what the
-// membrane already injected, and never with an SSM read on the cold path
-// (epic decision 6a).
 func TestISRWriterEnv_IsAPlainEnvVarPairOrNothing(t *testing.T) {
 	with := isrConfig{
 		Prefix:       testPrefix,
@@ -205,8 +188,6 @@ func TestISRWriterEnv_IsAPlainEnvVarPairOrNothing(t *testing.T) {
 		t.Errorf("OCEL_ISR_WRITER_SECRET = %q", with["OCEL_ISR_WRITER_SECRET"])
 	}
 
-	// A half-configured writer would leave the handler with an address it
-	// cannot authenticate against, so neither half is emitted alone.
 	for _, cfg := range []isrConfig{
 		{Prefix: testPrefix},
 		{Prefix: testPrefix, WriterURL: "https://writer.example/x/entry"},
@@ -222,9 +203,6 @@ func TestISRWriterEnv_IsAPlainEnvVarPairOrNothing(t *testing.T) {
 	}
 }
 
-// appCaches is called several times in one deploy and every call must agree, or
-// the hash seeded into the writer and the secret injected into the function
-// disagree and every entry write 401s.
 func TestAppCaches_GivesEachAppItsOwnWriterCoordinates(t *testing.T) {
 	cfg := Config{
 		ArtifactRoot:           twoAppTree(t),

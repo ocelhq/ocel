@@ -10,11 +10,6 @@ services:
     volumes:
       - postgres_data:/var/lib/postgresql/data
 
-  # Stands in for the Aurora Serverless v2 cluster resolve provisions
-  # against in prod. Distinct from the `postgres`
-  # service above, which is apps/web's own control-plane database - resolve
-  # carves per-user role+database pairs out of this one via an admin
-  # connection at OCEL_CLOUD_ADMIN_URL (see apps/web/.env.example).
   ocel-cloud:
     image: postgres:16
     restart: unless-stopped
@@ -26,11 +21,6 @@ services:
     volumes:
       - ocel_cloud_data:/var/lib/postgresql/data
 
-  # The dev object store: stands in for the private S3 bucket a `bucket()`
-  # provisions in prod. The Ocel API presigns PUTs against it
-  # and the dev detection sweep HEADs it; the CLI never touches it directly.
-  # Defaults match store.ts's OCEL_BLOB_* fallbacks so `pnpm test` and the dev
-  # e2e work with zero config.
   minio:
     image: minio/minio
     restart: unless-stopped
@@ -49,9 +39,6 @@ services:
       timeout: 5s
       retries: 12
 
-  # One-shot: creates the shared dev bucket store.ts expects, then exits. The
-  # bucket is shared across developers; tenancy isolation is by key prefix, not
-  # by bucket (see the presign endpoint).
   minio-createbucket:
     image: minio/mc
     depends_on:
@@ -63,10 +50,6 @@ services:
       mc mb --ignore-existing local/ocel-dev
       "
 
-  # Stands in for the account-global DynamoDB sessions table the prod runtime
-  # (cloud/aws runtime) persists upload sessions to, and that ocel bootstrap
-  # provisions in prod. Only the runtime direct-dial
-  # integration test uses it; it self-skips when this is not running.
   dynamodb:
     image: amazon/dynamodb-local
     restart: unless-stopped

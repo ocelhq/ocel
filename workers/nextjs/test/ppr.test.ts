@@ -121,14 +121,10 @@ describe("composePpr", () => {
         Promise.resolve(new Response("ERROR PAGE", { status: 500 })),
       );
 
-      // The shell survives; the failed dynamic half is discarded, not concatenated.
       expect(await res.text()).toBe("[shell]");
       expect(logged).toEqual(["ppr resume dropped: origin answered 500"]);
     });
 
-    // Names the error's class and nothing else: workerd puts the url it failed
-    // to fetch into a fetch error's message, and that url is the forward this
-    // visitor's query string rode in on.
     it("truncates when the resume promise rejects outright, and says so", async () => {
       const res = composePpr(
         hit(),

@@ -11,17 +11,11 @@ import (
 	"github.com/ocelhq/ocel/pkg/channel"
 )
 
-// listen binds the runtime's private local channel: a Unix domain socket at a
-// fresh, uniquely-named path. This is the intended isolation boundary (paired
-// with the per-session token); see listener_windows.go for the loopback-TCP
-// fallback.
 func listen() (net.Listener, string, error) {
 	dir, err := os.MkdirTemp("", "ocel-runtime-*")
 	if err != nil {
 		return nil, "", fmt.Errorf("reserve socket dir: %w", err)
 	}
-	// dir is 0700 by MkdirTemp — only the owner can traverse it, so nothing can
-	// reach the socket regardless of the socket's own mode.
 	path := filepath.Join(dir, "runtime.sock")
 	ln, err := net.Listen("unix", path)
 	if err != nil {

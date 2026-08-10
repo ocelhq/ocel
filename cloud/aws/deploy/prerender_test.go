@@ -13,8 +13,6 @@ import (
 	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
 )
 
-// nextManifest is a manifest carrying a single Next.js function, enough to trip
-// the prerender-upload path.
 func nextManifest() *deploymentsv1.Manifest {
 	return &deploymentsv1.Manifest{
 		Slug: "proj",
@@ -24,8 +22,6 @@ func nextManifest() *deploymentsv1.Manifest {
 	}
 }
 
-// twoAppManifest is a manifest carrying two Next.js apps, each with its own
-// function.
 func twoAppManifest() *deploymentsv1.Manifest {
 	return &deploymentsv1.Manifest{
 		Slug: "proj",
@@ -36,8 +32,6 @@ func twoAppManifest() *deploymentsv1.Manifest {
 	}
 }
 
-// twoAppTree seeds two Next apps' build output, each with its own build id and
-// its own prerendered cache entry.
 func twoAppTree(t *testing.T) string {
 	t.Helper()
 	return writeTree(t, map[string]string{
@@ -49,9 +43,6 @@ func twoAppTree(t *testing.T) string {
 	})
 }
 
-// TestAppCaches_GivesEachAppItsOwnPrefix proves two apps in one deploy address
-// two disjoint slices of the account-global asset bucket. A shared prefix would
-// let either app's functions read and overwrite the other's cached pages.
 func TestAppCaches_GivesEachAppItsOwnPrefix(t *testing.T) {
 	cfg := Config{ArtifactRoot: twoAppTree(t), AssetBucket: "assets", StateTable: "state", Env: "prod"}
 
@@ -70,9 +61,6 @@ func TestAppCaches_GivesEachAppItsOwnPrefix(t *testing.T) {
 	}
 }
 
-// TestAppCaches_OmitsAnAppWithNoPrerenderedContent proves an app whose framework
-// keeps no server-side cache is absent, so its role carries no cache grant at
-// all.
 func TestAppCaches_OmitsAnAppWithNoPrerenderedContent(t *testing.T) {
 	root := writeTree(t, map[string]string{
 		"apps/web/routing-manifest.json": `{"buildId":"WEB1"}`,
@@ -98,10 +86,6 @@ func TestAppCaches_OmitsAnAppWithNoPrerenderedContent(t *testing.T) {
 	}
 }
 
-// entryPuts is what a fake uploader received minus the genesis tag clocks. The
-// clock is seeded into every store a build touches and independently of what the
-// build prerendered, so a test about where entries land says so by leaving it
-// out rather than by counting it.
 func entryPuts(puts []string) []string {
 	var out []string
 	for _, key := range puts {
@@ -112,9 +96,6 @@ func entryPuts(puts []string) []string {
 	return out
 }
 
-// TestUploadPrerenderAssets_UploadsEachAppUnderItsOwnPrefix proves every app's
-// seeded cache entries land under that app's prefix, not one shared with its
-// neighbours.
 func TestUploadPrerenderAssets_UploadsEachAppUnderItsOwnPrefix(t *testing.T) {
 	f := &fakeUploader{exists: map[string]bool{}}
 	cfg := Config{ArtifactRoot: twoAppTree(t), AssetBucket: "assets", Env: "prod", Uploader: f}
@@ -140,12 +121,6 @@ func TestUploadPrerenderAssets_UploadsEachAppUnderItsOwnPrefix(t *testing.T) {
 	}
 }
 
-// TestUploadPrerenderAssets_SeedsTheAdoptedCacheStore proves a deploy onto a
-// substrate whose edge offered a cache store seeds into that store and not into
-// the provider's asset bucket. The handler that reads these entries back reads
-// the same store, so seeding the other bucket would leave every prerendered
-// route cold with nothing to show for it — and the keys must not move, because
-// the edge worker reads exactly them.
 func TestUploadPrerenderAssets_SeedsTheAdoptedCacheStore(t *testing.T) {
 	asset := &fakeUploader{exists: map[string]bool{}}
 	store := &fakeUploader{exists: map[string]bool{}}
@@ -186,8 +161,6 @@ func TestUploadPrerenderAssets_SeedsTheAdoptedCacheStore(t *testing.T) {
 	}
 }
 
-// TestUploadPrerenderAssets_UnadoptedStoreStaysOnTheAssetBucket proves the
-// rollback: a substrate whose edge offered no store seeds where it always did.
 func TestUploadPrerenderAssets_UnadoptedStoreStaysOnTheAssetBucket(t *testing.T) {
 	f := &fakeUploader{exists: map[string]bool{}}
 	cfg := Config{ArtifactRoot: twoAppTree(t), AssetBucket: "assets", Env: "prod", Uploader: f}
@@ -206,11 +179,6 @@ func TestUploadPrerenderAssets_UnadoptedStoreStaysOnTheAssetBucket(t *testing.T)
 	}
 }
 
-// TestUploadPrerenderAssets_SeedsTheGenesisTagSnapshot proves each app's build
-// gets its tag-clock replica written at deploy time, anchored to the deploy's
-// own clock. That anchor is the whole point: the publisher prunes against
-// deployedAt, and nothing in the Lambda knows when the build shipped, so a
-// snapshot the deploy never seeded can never be pruned and grows without bound.
 func TestUploadPrerenderAssets_SeedsTheGenesisTagSnapshot(t *testing.T) {
 	store := &fakeUploader{exists: map[string]bool{}}
 	cfg := Config{
@@ -249,11 +217,6 @@ func TestUploadPrerenderAssets_SeedsTheGenesisTagSnapshot(t *testing.T) {
 	}
 }
 
-// TestUploadPrerenderAssets_SeedsTheGenesisIntoBothStores proves the anchor
-// reaches the provider's own bucket as well as the edge's. The stream publisher
-// writes an S3 copy of every build's clock there, and deployedAt has exactly one
-// writer — this one — so a copy that was never seeded is a copy that can never
-// be pruned and grows for the life of the build.
 func TestUploadPrerenderAssets_SeedsTheGenesisIntoBothStores(t *testing.T) {
 	own := &fakeUploader{exists: map[string]bool{}}
 	store := &fakeUploader{exists: map[string]bool{}}
@@ -278,10 +241,6 @@ func TestUploadPrerenderAssets_SeedsTheGenesisIntoBothStores(t *testing.T) {
 	}
 }
 
-// TestUploadPrerenderAssets_KeepsAnExistingSnapshot proves a redeploy of the
-// same build leaves the live snapshot alone. Overwriting it would throw away
-// every invalidation the running build has accumulated and serve them stale
-// again at the edge, so the seed creates and never replaces.
 func TestUploadPrerenderAssets_KeepsAnExistingSnapshot(t *testing.T) {
 	store := &fakeUploader{exists: map[string]bool{"prod/proj/web/WEB1/tag-clock.json": true}}
 	cfg := Config{
@@ -302,10 +261,6 @@ func TestUploadPrerenderAssets_KeepsAnExistingSnapshot(t *testing.T) {
 	}
 }
 
-// TestUploadPrerenderAssets_UnadoptedStoreSeedsOneCopy proves a substrate whose
-// edge offered no store still gets its anchor. There is no edge replica to
-// write, but the publisher's S3 copy is written for every build regardless of
-// where its entries live, and it is the same object here.
 func TestUploadPrerenderAssets_UnadoptedStoreSeedsOneCopy(t *testing.T) {
 	f := &fakeUploader{exists: map[string]bool{}}
 	cfg := Config{ArtifactRoot: twoAppTree(t), AssetBucket: "assets", Env: "prod", Uploader: f}
@@ -324,11 +279,6 @@ func TestUploadPrerenderAssets_UnadoptedStoreSeedsOneCopy(t *testing.T) {
 	}
 }
 
-// TestGenesisSnapshot_MatchesThePublishersFormat pins the deploy's snapshot
-// bytes to the fixture the TypeScript publisher's own test reads back. The two
-// sides never share a type — Go writes this document and the Lambda rewrites it
-// — so the fixture is the only thing standing between them and a silent drift in
-// field names, version, or the validity window.
 func TestGenesisSnapshot_MatchesThePublishersFormat(t *testing.T) {
 	at := time.UnixMilli(1750000000000)
 	got, err := json.Marshal(genesisSnapshot(at))
@@ -346,10 +296,6 @@ func TestGenesisSnapshot_MatchesThePublishersFormat(t *testing.T) {
 	}
 }
 
-// TestTagSnapshotSuffix_MatchesTheEdgeContract pins where this deploy writes the
-// snapshot to where the readers look for it. tagSnapshotKey() in
-// @ocel/next-cache builds the same key from the same prefix, and neither side
-// calls the other, so the fixture is the only thing that fails when one moves.
 func TestTagSnapshotSuffix_MatchesTheEdgeContract(t *testing.T) {
 	path := filepath.Join("..", "..", "..", "packages", "next-cache", "fixtures", "edge-contract.json")
 	body, err := os.ReadFile(path)
@@ -367,8 +313,6 @@ func TestTagSnapshotSuffix_MatchesTheEdgeContract(t *testing.T) {
 	}
 }
 
-// TestUploadPrerenderAssets_NoNextApp proves the path is a no-op for a manifest
-// with no Next.js function: nothing is read or uploaded.
 func TestUploadPrerenderAssets_NoNextApp(t *testing.T) {
 	f := &fakeUploader{exists: map[string]bool{}}
 	cfg := Config{ArtifactRoot: t.TempDir(), AssetBucket: "assets", Env: "prod", Uploader: f}
@@ -382,8 +326,6 @@ func TestUploadPrerenderAssets_NoNextApp(t *testing.T) {
 	}
 }
 
-// TestUploadPrerenderAssets_NoPrerenders proves a Next app that produced no
-// prerender assets uploads nothing and does not error.
 func TestUploadPrerenderAssets_NoPrerenders(t *testing.T) {
 	root := writeTree(t, map[string]string{
 		"apps/web/routing-manifest.json":            `{"buildId":"BID","appName":"web"}`,
@@ -400,8 +342,6 @@ func TestUploadPrerenderAssets_NoPrerenders(t *testing.T) {
 	}
 }
 
-// TestUploadPrerenderAssets_MissingBucket proves the path fails loudly when a
-// Next app has cache entries to seed but no asset bucket is configured.
 func TestUploadPrerenderAssets_MissingBucket(t *testing.T) {
 	root := writeTree(t, map[string]string{
 		"apps/web/routing-manifest.json":  `{"buildId":"BID","appName":"web"}`,
@@ -415,12 +355,6 @@ func TestUploadPrerenderAssets_MissingBucket(t *testing.T) {
 	}
 }
 
-// TestUploadPrerenderAssets_UploadsCacheEntries proves the seeded ISR cache
-// entries reach the bucket at exactly the key the cache handler reads:
-// <prefix>/cache/<key>.cache.json. The handler joins its own key onto
-// OCEL_ISR_PREFIX + "/cache/", so a drift here leaves every route re-rendering
-// with no error to show for it. Entries live beside functions/ rather than
-// under it, so they need their own crawl.
 func TestUploadPrerenderAssets_UploadsCacheEntries(t *testing.T) {
 	root := writeTree(t, map[string]string{
 		"apps/web/routing-manifest.json":      `{"buildId":"BID","appName":"web"}`,
@@ -451,12 +385,6 @@ func TestUploadPrerenderAssets_UploadsCacheEntries(t *testing.T) {
 	}
 }
 
-// TestUploadPrerenderAssets_FetchEntriesStayOnTheAssetBucket proves the split
-// that motivates a second upload target: route entries follow the substrate to
-// its adopted store, because the edge reads them there. Fetch entries hold
-// upstream response bodies — origin-private data — and must stay in the
-// provider's own bucket whatever the edge offered. Uploading them alongside the
-// route entries would hand a third party every API response the build cached.
 func TestUploadPrerenderAssets_FetchEntriesStayOnTheAssetBucket(t *testing.T) {
 	hash := "a1b2c3"
 	root := writeTree(t, map[string]string{
@@ -477,8 +405,6 @@ func TestUploadPrerenderAssets_FetchEntriesStayOnTheAssetBucket(t *testing.T) {
 		t.Fatalf("uploadPrerenderAssets: %v", err)
 	}
 
-	// The hash is the handler's lookup key, so it must survive into the object
-	// name untouched.
 	want := "prod/proj/web/WEB1/fetch-cache/" + hash + ".cache.json"
 	if got := entryPuts(asset.puts); len(got) != 1 || got[0] != want {
 		t.Fatalf("asset bucket got %v, want exactly [%s]", got, want)

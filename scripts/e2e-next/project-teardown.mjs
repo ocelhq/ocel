@@ -1,21 +1,4 @@
 #!/usr/bin/env node
-// Tears down one whole e2e PROJECT: every preview pointer left in it, its
-// per-name infra stacks, its deployments-store instance, its preview entrypoint
-// worker and the wildcard route that worker holds.
-//
-//   node project-teardown.mjs [slug]      # defaults to this run's project
-//
-// Driven twice by the workflow: by the `destroy` job for the run's own project,
-// and by sweep-projects.mjs for each project an earlier run stranded. That
-// second caller is why this addresses a project by slug rather than by
-// directory — the project being reclaimed belongs to no checkout on this
-// runner, and nothing of it survives but its slug.
-//
-// `ocel destroy --preview` resolves the project through the ocel.config.ts in
-// its working directory, so this renders a minimal one (slug + provider, and
-// the preview wildcard the project declared) into a scratch directory and runs
-// there. Rendering rather than reusing a deployed app's config is the point: a
-// stranded project has no app directory left to run from.
 
 import { spawnSync } from "node:child_process";
 import { mkdtempSync, writeFileSync } from "node:fs";
@@ -33,12 +16,6 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
   process.exit(destroyProject(slug) ? 0 : 1);
 }
 
-/**
- * destroyProject drives `ocel destroy --preview --yes` for one project and
- * reports whether it succeeded, rather than exiting: the sweeper drives several
- * in a row and one stranded project it cannot reclaim must not stop it trying
- * the rest.
- */
 export function destroyProject(slug) {
   const adapterDir = process.env.ADAPTER_DIR;
   const sidecarDir = process.env.OCEL_E2E_SIDECAR_DIR;

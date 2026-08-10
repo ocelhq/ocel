@@ -12,7 +12,6 @@ export async function GET() {
         posthog: env.POSTHOG_PROJECT_ID,
         superSecret: env.SUPER_SECRET_VALUE,
       },
-      // envObject: env,
       processEnv: process.env,
     },
   ]);

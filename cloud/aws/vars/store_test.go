@@ -87,9 +87,6 @@ func TestSetRejectsAConcurrentWriteThatLostTheRace(t *testing.T) {
 		t.Fatalf("Set err = %v", err)
 	}
 
-	// Both writers read version 1. The second commits first, so the item is at
-	// version 2 by the time the first writer's transaction runs — exactly the
-	// interleaving the condition exists to catch.
 	seen := int64(1)
 	if _, err := store.Set(context.Background(), c, "committed by the other writer", &seen); err != nil {
 		t.Fatalf("Set err = %v", err)
@@ -108,9 +105,6 @@ func TestSetRejectsAConcurrentWriteThatLostTheRace(t *testing.T) {
 	}
 }
 
-// A blind write reads no version, so nothing in the process can tell it lost;
-// only the condition the transaction carries can. Staging a competing write
-// between this writer's read and its commit is the interleaving that proves it.
 func TestSetRejectsAWriterOvertakenBetweenItsReadAndItsCommit(t *testing.T) {
 	store, ddb, _ := newTestStore(t)
 	c := testCoordinate()
@@ -199,8 +193,6 @@ func TestSetPrunesTheVersionOutsideTheWindow(t *testing.T) {
 		t.Fatalf("pruned %v, want exactly %q", deleted, want)
 	}
 
-	// The prune is computed, not queried: the store never reads history to
-	// decide what to drop.
 	for _, q := range ddb.queries {
 		t.Fatalf("Set queried the table (%v); the pruned version must be computed", q.KeyConditionExpression)
 	}
@@ -218,10 +210,6 @@ func TestVersionsReadsNewestFirst(t *testing.T) {
 	store, _, _ := newTestStore(t)
 	c := testCoordinate()
 
-	// Each write is a different length, so every version's metadata identifies
-	// the write it came from. Equal-length writes would let a row carry its
-	// neighbour's metadata under its own version number unnoticed — which is
-	// the one question history exists to answer.
 	for _, v := range []string{"o", "tw", "three"} {
 		if _, err := store.Set(context.Background(), c, v, nil); err != nil {
 			t.Fatalf("Set %q err = %v", v, err)
@@ -250,10 +238,6 @@ func TestVersionsReadsNewestFirst(t *testing.T) {
 	}
 }
 
-// Reading history is not a way to read values. There is no reveal to ask for,
-// so a cell's whole retained window can never be decrypted in one call — which
-// is what keeps a rotation an actual remedy rather than a value moved one
-// version along.
 func TestVersionsNeverDecrypts(t *testing.T) {
 	store, _, crypto := newTestStore(t)
 	c := testCoordinate()
@@ -339,9 +323,6 @@ func TestDeleteUnsetsTheValueAndKeepsHistory(t *testing.T) {
 	}
 }
 
-// Two developers hold one cell open. A replaces the value; B, whose page still
-// shows the old one, clicks Remove. B's delete has to lose to A's write rather
-// than destroy it — the same race a stale write loses, from the other side.
 func TestDeleteRejectsADeleteAgainstAStaleVersion(t *testing.T) {
 	store, _, _ := newTestStore(t)
 	c := testCoordinate()
@@ -378,10 +359,6 @@ func TestDeleteRejectsADeleteAgainstAStaleVersion(t *testing.T) {
 	}
 }
 
-// A blind delete reads no version, so nothing in the process can tell it lost;
-// only the condition the tombstone carries can. Staging a competing write
-// between this deleter's read and its commit is the interleaving that proves
-// the tombstone is a conditioned write rather than an unconditional one.
 func TestDeleteRejectsADeleterOvertakenBetweenItsReadAndItsCommit(t *testing.T) {
 	store, ddb, _ := newTestStore(t)
 	c := testCoordinate()
@@ -407,9 +384,6 @@ func TestDeleteRejectsADeleterOvertakenBetweenItsReadAndItsCommit(t *testing.T) 
 	}
 }
 
-// Zero means "no value is set", which an already-unset cell satisfies. A repeat
-// of a delete that landed is the same idempotent no-op it always was, but a
-// cell somebody has since refilled is a conflict.
 func TestDeleteExpectingNoValueHoldsOnlyWhileTheCellIsUnset(t *testing.T) {
 	store, _, _ := newTestStore(t)
 	c := testCoordinate()
@@ -457,10 +431,6 @@ func TestDeleteEmitsTheOptimisticCondition(t *testing.T) {
 	}
 }
 
-// A delete must not rewind the version sequence. If the next write restarted
-// at 1 it would land on top of the history row version 1 already occupies,
-// rewriting what that version was and leaving the newest entry buried under
-// older ones.
 func TestSetAfterDeleteContinuesTheVersionSequence(t *testing.T) {
 	store, _, _ := newTestStore(t)
 	c := testCoordinate()
@@ -494,9 +464,6 @@ func TestSetAfterDeleteContinuesTheVersionSequence(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Versions err = %v", err)
 	}
-	// The three writes have three different lengths, so a version landing on
-	// top of an earlier one — or carrying a neighbour's metadata — still shows
-	// up even without reading the plaintext back.
 	wantNumbers := []int64{3, 2, 1}
 	wantSizes := []int64{5, 2, 1}
 	if len(versions) != len(wantNumbers) {
@@ -509,9 +476,6 @@ func TestSetAfterDeleteContinuesTheVersionSequence(t *testing.T) {
 	}
 }
 
-// Pruning deletes the version computed as next - historyWindow, so the window
-// only bounds history while the version sequence stays contiguous. A delete in
-// the middle of it must not break that arithmetic.
 func TestHistoryStaysCappedAcrossADelete(t *testing.T) {
 	store, _, _ := newTestStore(t)
 	c := testCoordinate()
@@ -543,8 +507,6 @@ func TestHistoryStaysCappedAcrossADelete(t *testing.T) {
 	}
 }
 
-// Deleting is what a create expects to find undone: the cell holds no value,
-// whatever its version sequence has reached.
 func TestSetWithExpectedVersionZeroSucceedsAfterADelete(t *testing.T) {
 	store, _, _ := newTestStore(t)
 	c := testCoordinate()
@@ -667,11 +629,6 @@ func TestListReturnsCurrentValuesWithoutHistoryOrPlaintext(t *testing.T) {
 	}
 }
 
-// One key serves a whole environment class, so the key alone binds a value to
-// nothing narrower than the class: every project in it, and every cell of
-// every project, is decryptable with the same grant. The encryption context is
-// what binds a blob to the one cell it was written for, and pinning its exact
-// contents is what keeps this test and the fake from drifting apart.
 func TestSetBindsTheCiphertextToItsCoordinate(t *testing.T) {
 	store, _, crypto := newTestStore(t)
 	c := Coordinate{Slug: "shop", Folder: "/web", Key: "STRIPE_API_KEY", Environment: "staging"}
@@ -691,10 +648,6 @@ func TestSetBindsTheCiphertextToItsCoordinate(t *testing.T) {
 	}
 }
 
-// A root, class-wide cell has no folder and no environment above the store, so
-// its context has to name the sentinels the key structure uses rather than
-// leave the components out: an absent component would bind the ciphertext to
-// less than the coordinate it was written at.
 func TestTheEncryptionContextNamesEveryComponentOfARootCell(t *testing.T) {
 	store, _, crypto := newTestStore(t)
 
@@ -713,9 +666,6 @@ func TestTheEncryptionContextNamesEveryComponentOfARootCell(t *testing.T) {
 	}
 }
 
-// The bytes are the only thing a class key needs to decrypt, so a blob moved
-// to another cell — or into another project sharing the class key — must fail
-// to open rather than read back as that cell's value.
 func TestARelocatedCiphertextDoesNotDecrypt(t *testing.T) {
 	origin := Coordinate{Slug: "shop", Key: "STRIPE_API_KEY"}
 	for name, elsewhere := range map[string]Coordinate{

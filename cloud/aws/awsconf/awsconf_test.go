@@ -7,7 +7,6 @@ import (
 	"github.com/aws/aws-sdk-go-v2/aws/retry"
 )
 
-// Pins the deploy host's profile: adaptive, and above the SDK's default of 3.
 func TestControlRetryerIsAdaptiveAndWiderThanTheDefault(t *testing.T) {
 	r := ControlRetryer()
 	if _, ok := r.(*retry.AdaptiveMode); !ok {
@@ -18,8 +17,6 @@ func TestControlRetryerIsAdaptiveAndWiderThanTheDefault(t *testing.T) {
 	}
 }
 
-// Pins the in-function profile: standard rather than adaptive, and above the
-// SDK's default of 3.
 func TestRuntimeRetryerIsStandardAndWiderThanTheDefault(t *testing.T) {
 	r := runtimeRetryer()
 	if _, ok := r.(*retry.Standard); !ok {
@@ -30,9 +27,6 @@ func TestRuntimeRetryerIsStandardAndWiderThanTheDefault(t *testing.T) {
 	}
 }
 
-// A loaded config has to carry the policy through to the clients built from it;
-// setting the retryer on LoadOptions and having it dropped during resolution
-// would leave every call site silently on the default.
 func TestLoadedConfigsCarryTheirRetryer(t *testing.T) {
 	t.Setenv("AWS_REGION", "us-east-1")
 
@@ -62,8 +56,6 @@ func TestLoadedConfigsCarryTheirRetryer(t *testing.T) {
 	}
 }
 
-// An empty region leaves the ambient chain to decide, rather than pinning the
-// config to "".
 func TestControlWithNoRegionFallsBackToTheAmbientChain(t *testing.T) {
 	t.Setenv("AWS_REGION", "ap-southeast-2")
 

@@ -77,8 +77,6 @@ func TestGate_ABoundAppFallsBackToRootForAnUnscopedKey(t *testing.T) {
 	}
 }
 
-// Nesting is visual organisation only: a value in a parent folder is not a hop
-// an app in a nested folder resolves through.
 func TestGate_ANestedFolderResolvesThroughRootNotItsParent(t *testing.T) {
 	values := newFakeValues()
 	values.set("LOG_LEVEL", "", "info")
@@ -92,9 +90,6 @@ func TestGate_ANestedFolderResolvesThroughRootNotItsParent(t *testing.T) {
 	}
 }
 
-// Values may sit in folders a key's scope does not name — a leftover, or a
-// folder another key diverges across. An app outside the scope must still be
-// handed nothing, rather than whatever its own folder happens to hold.
 func TestGate_AScopedKeyIsAbsentForAnAppOutsideItsScope(t *testing.T) {
 	values := newFakeValues()
 	values.set("POSTHOG_ID", "/web", "ph_web")
@@ -139,10 +134,6 @@ func TestGate_ALiveValueIsResolvedAsAnAddressWithoutItsPlaintext(t *testing.T) {
 	}
 }
 
-// A resolution is a cell, and a cell has a version; carrying it is what lets
-// the ledger say which value a deploy shipped. It is the resolved cell's
-// version, not the key's, so two apps reading one key from different folders
-// record different versions.
 func TestResolve_CarriesTheVersionOfTheCellEachKeyResolvedFrom(t *testing.T) {
 	values := newFakeValues()
 	values.setAt("KEY", "", "root", 3)
@@ -162,9 +153,6 @@ func TestResolve_CarriesTheVersionOfTheCellEachKeyResolvedFrom(t *testing.T) {
 	}
 }
 
-// A live-class key carries no plaintext, but it does resolve from a cell, and
-// that cell has a version. Whether a version a runtime fetch cannot honour is
-// worth recording is the ledger's decision, not resolution's.
 func TestResolve_ALiveKeyCarriesItsCellsVersionEvenWithNoValue(t *testing.T) {
 	values := newFakeValues()
 	values.setAt("SESSION_SECRET", "", "sk_live_do_not_leak", 5)
@@ -180,8 +168,6 @@ func TestResolve_ALiveKeyCarriesItsCellsVersionEvenWithNoValue(t *testing.T) {
 
 func TestGate_ARefusalNamesOnlyTheAppsThatReadTheFailingCell(t *testing.T) {
 	values := newFakeValues()
-	// Only /web is short: every other folder the key names is filled, so the
-	// refusal has exactly one cell to attribute.
 	values.set("POSTHOG_ID", "/admin", "ph_admin")
 	g := prefetched(t, values, envgate.Scope{Apps: []envgate.App{
 		{Name: "web", Folder: "/web"},

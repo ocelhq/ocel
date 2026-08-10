@@ -1,40 +1,4 @@
 #!/usr/bin/env node
-// Asserts that the deploy-time embed pass actually moved the function onto a
-// repackaged artifact carrying its own compile cache, and that cold starts read
-// that copy instead of fetching the object from S3.
-//
-// Why this exists as its own assertion, separate from assert-bytecode.mjs: the
-// embedded path is a pure optimization layered over a working one. Every way it
-// can fail — the gate skipping the bundle, UpdateFunctionCode never landing, the
-// tar being baked under a name the membrane does not look for, the extraction
-// failing and falling through — degrades to exactly the S3 behaviour the other
-// script already proves. So the deployment stays green, every request answers
-// 200, the cache is still there, and nothing anywhere is slower than it was
-// before the feature existed. The only way to tell the fast path ran is to look
-// at the artifact Lambda deployed and at what the membrane logged, which is what
-// this does:
-//
-//   1. the function's CodeSha256 is not the sha of the artifact the deploy
-//      originally uploaded — so it is running repackaged code at all;
-//   2. the package Lambda holds contains `.ocel/bytecode/node<ver>-<arch>.tar`
-//      at exactly the name derived from the cache key an independent S3 listing
-//      found — so the version+arch match rule the membrane applies holds;
-//   3. a burst of cold starts logs the embedded line, and never once logs the
-//      S3 rehydrate line — so instances are reading it, and none of them fell
-//      through.
-//
-// Skips, loudly, unless $OCEL_BYTECODE_EMBED=1: without the flag the deploy runs
-// no embed pass, and every claim here would be false about a correct deployment.
-//
-// Usage: assert-embed.mjs [deployment-url]
-//   falls back to $NEXT_TEST_DEPLOY_URL, then $SMOKE_URL.
-//   Run from the deployed app's directory: slug, environment, app name, build
-//   id and deploy time are read from .ocel/deploy-result.json there.
-//   $OCEL_ASSET_BUCKET and $OCEL_ARTIFACT_BUCKET name the two buckets involved;
-//   without them the script resolves the substrate's from the preview bootstrap
-//   stack.
-//
-// Exits non-zero with the observations it collected.
 
 import { createHash } from "node:crypto";
 import { existsSync, readFileSync } from "node:fs";
@@ -73,36 +37,14 @@ import {
   zipEntryNames,
 } from "./lib.mjs";
 
-// Same reasoning as assert-bytecode.mjs's burst: Lambda reuses one warm
-// instance for requests it can serve sequentially, so only concurrency forces
-// fresh sandboxes, and only a fresh sandbox runs the read leg at all.
 const BURST_SIZE = 20;
 
-// How long to keep retrying the one read of the burst window that has to
-// succeed (see the confirming read below). Deliberately its own budget rather
-// than more of LOG_DEADLINE_MS: this is not time spent waiting for lines to
-// arrive, it is time spent getting CloudWatch to answer at all, and the two run
-// out for entirely different reasons.
 const LOG_CONFIRM_DEADLINE_MS = 30_000;
 
-// Where Lambda unpacks the deployment package. The membrane logs the absolute
-// path it read, so the zip-relative entry name has to be rebased onto this to
-// match a log line.
 const TASK_ROOT = "/var/task";
 
-// Admits both read legs' lines and every failure mode of the embedded one, and
-// nothing else. A filter matters more here than in the other script's burst
-// poll: the strongest claim below is that a line is *absent*, and an unfiltered
-// window of twenty instances' output could push it off the end of a
-// LOG_PAGE_LIMIT-event page and make an absence out of a truncation. The
-// embedded term is the text common to that leg's hit and all three of its
-// failure lines, so a fall-through is diagnosable rather than just reported as
-// the S3 hit it produced.
 const BURST_LOG_FILTER = `?"embedded compile cache" ?"${BYTECODE_S3_REHYDRATE_MARKER.trim()}"`;
 
-// A deployment package is a few megabytes at most (one Next `.func` tree plus
-// the cache), but the ceiling is the embed pass's own legality gate — anything
-// larger than this could not have been produced by it.
 const MAX_PACKAGE_BYTES = 250 * 1024 * 1024;
 
 if (!bytecodeEmbedEnabled(process.env)) {
@@ -136,14 +78,6 @@ const artifactBucket =
   process.env.OCEL_ARTIFACT_BUCKET || resolveBootstrapBucket("ArtifactBucket", "$OCEL_ARTIFACT_BUCKET", fail);
 const functionName = resolveFunctionName(result.slug, app.name, result.environment, fail);
 
-// --- what the membrane would look for -------------------------------------
-
-// Derived from the key the membrane composed and published under, discovered by
-// listing rather than assembled here: the node patch version in it is the live
-// runtime's, which nothing outside a running instance knows. Both sides of the
-// feature derive the embedded path from that same key, so re-deriving it from
-// an independent listing is what makes step 2 an assertion about the match rule
-// rather than a restatement of whatever the pass happened to write.
 const keyPrefix = bytecodeCacheKeyPrefix({
   prefix: appAssetPrefix({
     environment: result.environment,
@@ -170,12 +104,6 @@ if (!entryName) {
 const taskPath = `${TASK_ROOT}/${entryName}`;
 log(`the cache is published at s3://${assetBucket}/${cacheKey}, so the artifact must carry ${entryName}`);
 
-// --- 1: the function is running repackaged code ----------------------------
-
-// The embed pass writes the merged bundle to a new content-addressed key beside
-// the original rather than over it (embeddedArtifactKey, cloud/aws/deploy/
-// embed.go), so the pair is discoverable from the bucket alone — the deploy
-// tells nothing outside it either key.
 const artifactPrefix = `${result.slug}/`;
 const artifactKeys = await listRetrying(artifactBucket, artifactPrefix);
 const pairs = embeddedArtifactPairs(artifactKeys);
@@ -212,12 +140,6 @@ if (codeSha === originalSha) {
 }
 log(`${functionName} CodeSha256 ${codeSha} differs from the originally-uploaded ${originalKey} (${originalSha})`);
 
-// --- 2: the deployed package carries the tar -------------------------------
-
-// Read from Code.Location rather than from the -bc- object in S3. The claim is
-// about what Lambda will actually unpack into /var/task, and the presigned copy
-// is the only thing that answers it; the sha check below is what rules out
-// having fetched some other version of it.
 const location = fn.Code?.Location;
 if (!location) {
   fail(`lambda get-function reported no Code.Location for ${functionName}, so its package cannot be inspected`);
@@ -254,12 +176,8 @@ if (!entries.includes(entryName)) {
 }
 log(`the deployed package carries ${entryName} among its ${entries.length} entries`);
 
-// --- 3: cold starts read it, and never read S3 -----------------------------
-
 const burstStart = Date.now();
 log(`bursting ${BURST_SIZE} concurrent requests to force fresh sandboxes`);
-// TAG_PROBE_ROUTE is force-dynamic, so these reach the Lambda rather than being
-// answered from an edge- or CDN-cached response.
 const burstResults = await Promise.all(
   Array.from({ length: BURST_SIZE }, (_, i) => {
     const burstTag = tagProbeTag(`embed-burst-${Date.now()}-${process.pid}-${i}`);
@@ -279,11 +197,6 @@ if (burstSucceeded === 0) {
   );
 }
 
-// Polled to the full deadline rather than stopped at the first embedded hit.
-// One hit only proves *an* instance read the artifact; the claim that none fell
-// through to S3 is about every instance the burst started, and stopping early
-// would turn "no S3 line yet" into "no S3 line", which is a different and much
-// weaker thing.
 log(`polling CloudWatch for ${LOG_DEADLINE_MS / 1000}s for every read-leg line the burst produced`);
 const logDeadline = Date.now() + LOG_DEADLINE_MS;
 const embeddedHits = [];
@@ -305,13 +218,6 @@ while (Date.now() < logDeadline) {
   await sleep(LOG_POLL_INTERVAL_MS);
 }
 
-// The loop above collects; this read is what the absence claim rests on. Each
-// filter-log-events call re-reads the window from burstStart, so a successful
-// one covers everything ingested before it and nothing after — which means a
-// window is only read as far as the *last* read that succeeded, and a loop whose
-// final polls failed leaves a tail of it unobserved. Failures inside the loop
-// are therefore recoverable; a run that never ends on a successful read is not,
-// and this is what tells the two apart.
 const confirmDeadline = Date.now() + LOG_CONFIRM_DEADLINE_MS;
 let confirmed = false;
 let finalEvents = 0;
@@ -353,9 +259,6 @@ if (coverage.kind === "truncated") {
   );
 }
 if (failures) {
-  // Not a failure: the confirming read above covers the whole window on its own,
-  // so these cost nothing but are worth naming — a run that spent most of its
-  // deadline unable to reach CloudWatch is a fact about the run.
   log(`read the burst window despite ${failures} failed attempt${failures === 1 ? "" : "s"}: ${coverage.detail}`);
 }
 
@@ -387,9 +290,6 @@ log(
 );
 log("compile cache embedded in the deployment package and read from it end to end");
 
-// ingest classifies one page of events into the three buckets above. Every poll
-// re-reads the whole window, so the eventId set is what keeps a line seen by
-// several of them from being counted several times.
 function ingest(events) {
   for (const event of events) {
     if (event.eventId) {
@@ -405,12 +305,6 @@ function ingest(events) {
   }
 }
 
-// --- AWS -------------------------------------------------------------------
-
-// listRetrying keeps retrying a list that could not be *made*, and returns the
-// first successful one — including an empty one. A list that succeeds and finds
-// nothing is a real miss for the caller to fail on, not something to poll away:
-// everything this script looks for was written before the deploy returned.
 async function listRetrying(bucket, prefix) {
   const deadline = Date.now() + LIST_RETRY_DEADLINE_MS;
   for (;;) {
@@ -445,8 +339,6 @@ function readObject(bucket, key) {
   }
 }
 
-// Code.Location is a short-lived presigned URL, so this is an unauthenticated
-// fetch rather than an `aws` call.
 async function downloadPackage(location) {
   let response;
   try {
@@ -464,9 +356,6 @@ async function downloadPackage(location) {
   return body;
 }
 
-// Lambda reports CodeSha256 as the base64 SHA-256 of the deployment package, so
-// a comparison against an S3 object is a comparison of bytes, not of metadata
-// either side could have stamped independently.
 function shaBase64(bytes) {
   return createHash("sha256").update(bytes).digest("base64");
 }

@@ -1,7 +1,3 @@
-/**
- * For more details on how to configure Wrangler, refer to:
- * https://developers.cloudflare.com/workers/wrangler/configuration/
- */
 {
   "$schema": "node_modules/wrangler/config-schema.json",
   "name": "deployments-store",
@@ -12,9 +8,6 @@
   },
   "upload_source_maps": true,
   "compatibility_flags": ["nodejs_compat"],
-  // Local-dev/test default only. The real deploy mints this account-level
-  // bootstrap credential when the shared store worker is provisioned at
-  // bootstrap and binds it as secret_text, never through this file.
   "vars": {
     "BOOTSTRAP_SECRET": "dev-secret",
   },

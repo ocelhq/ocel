@@ -9,11 +9,6 @@ import (
 	"github.com/ocelhq/ocel/pkg/proto/env/v1/envv1connect"
 )
 
-// NewMux wires the provider's services behind an interceptor that enforces
-// token as the per-session token every call must present (see
-// newAuthInterceptor). EnvVarsService rides the same channel and the same
-// handshake as DeploymentService: the CLI has no cloud SDK dependency, so
-// every read and write of a variable goes through this process.
 func NewMux(token string) *http.ServeMux {
 	mux := http.NewServeMux()
 	interceptors := connect.WithInterceptors(newAuthInterceptor(token))

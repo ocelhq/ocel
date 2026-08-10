@@ -3,10 +3,6 @@ import { db } from "@repo/db";
 import { organization, user } from "@repo/db/schema";
 import { eq } from "drizzle-orm";
 
-// Mints a real Better-Auth-issued session (via auth.api.signUpEmail) and a
-// real organization (via auth.api.createOrganization) - no mocks. Callers
-// own the returned rows and must call `cleanup()` when done; there are no
-// shared fixtures.
 export async function createTestSessionWithOrganization() {
   const suffix = crypto.randomUUID();
   const email = `test-${suffix}@example.test`;

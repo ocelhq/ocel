@@ -8,8 +8,6 @@ import {
   type AssetStoreDeps,
 } from "../src/assets";
 
-// A fake R2 bucket, keyed exactly as serveStaticAsset composes its key:
-// "<prefix><pathname>".
 function bucketServing(
   files: Record<string, { body: string; etag?: string; contentType?: string }>,
 ): AssetBucket {
@@ -26,10 +24,6 @@ function bucketServing(
   };
 }
 
-// Counts put()s against the real workerd cache so a test can assert write
-// cardinality without reimplementing the Cache API. Each test uses a unique
-// request URL, mirroring cache.test.ts's own isolation strategy under
-// isolatedStorage: false.
 function countingDeps(
   store: AssetBucket | undefined,
   prefix: string,
@@ -69,8 +63,6 @@ describe("contentTypeFor", () => {
     expect(contentTypeFor("/data.unknownext")).toBe("application/octet-stream");
   });
 
-  // The types Next.js itself serves for file-based metadata routes, which the
-  // host mime database the deploy used to stamp from disagrees with.
   it("serves the file-based metadata routes as Next.js does", () => {
     expect(contentTypeFor("/favicon.ico")).toBe("image/x-icon");
     expect(contentTypeFor("/sitemap.xml")).toBe("application/xml");
@@ -80,8 +72,6 @@ describe("contentTypeFor", () => {
     expect(contentTypeFor("/icons/static/apple-icon.png")).toBe("image/png");
   });
 
-  // Next types these by file name, and its answer differs from what the same
-  // extension means for a file served out of public/.
   it("types the metadata routes Next keys off a file name by that name", () => {
     expect(contentTypeFor("/manifest.json")).toBe("application/manifest+json");
     expect(contentTypeFor("/data.json")).toBe("application/json; charset=utf-8");
@@ -89,14 +79,12 @@ describe("contentTypeFor", () => {
     expect(contentTypeFor("/notes.txt")).toBe("text/plain; charset=utf-8");
   });
 
-  // A name taken off the request must never reach Object.prototype.
   it("answers a file named after an object prototype member as unknown", () => {
     expect(contentTypeFor("/constructor")).toBe("application/octet-stream");
     expect(contentTypeFor("/__proto__")).toBe("application/octet-stream");
     expect(contentTypeFor("/x.toString")).toBe("application/octet-stream");
   });
 
-  // A dot in a directory name is not an extension.
   it("reads the extension off the file name alone", () => {
     expect(contentTypeFor("/v1.0/README")).toBe("application/octet-stream");
   });
@@ -112,14 +100,10 @@ describe("cacheControlFor", () => {
     expect(cacheControlFor("/_next/static/media/font.woff2")).toBe(immutable);
   });
 
-  // Next publishes the service worker at a build-invariant URL, so an
-  // immutable response would pin a visitor to one deploy's worker for a year
-  // with no later deploy able to replace it.
   it("exempts the service-worker chunk", () => {
     expect(cacheControlFor("/_next/static/service-worker/sw.js")).toBe(revalidate);
   });
 
-  // basePath prefixes every asset URL, the service worker's included.
   it("classifies a basePath app's assets the same way", () => {
     expect(cacheControlFor("/docs/_next/static/chunks/main.js")).toBe(immutable);
     expect(cacheControlFor("/docs/_next/static/service-worker/sw.js")).toBe(revalidate);
@@ -164,8 +148,6 @@ describe("serveStaticAsset", () => {
     expect(res.headers.get("cache-control")).toBe("public, max-age=31536000, immutable");
   });
 
-  // Objects uploaded by a deploy that still stamped one carry a type the host
-  // mime database chose, which is not the type Next.js serves.
   it("ignores any content-type the stored object carries", async () => {
     const url = new URL("https://serve-ct-1.example/favicon.ico");
     const deps = countingDeps(
@@ -213,8 +195,6 @@ describe("serveStaticAsset", () => {
     expect(res.headers.get("content-type")).toBe("text/html; charset=utf-8");
   });
 
-  // A pages-router i18n build emits the 404 document once per locale and never
-  // a bare one, so the miss is answered under the locale routing resolved.
   it("serves the locale's own 404 page when the request resolved to one", async () => {
     const url = new URL("https://serve-2i.example/blog/timm");
     const deps = countingDeps(
@@ -274,8 +254,6 @@ describe("serveStaticAsset", () => {
     expect(res.headers.get("content-type")).toBe("text/html; charset=utf-8");
   });
 
-  // The dispatch map keys the error pages on /404 and /500; the documents are
-  // stored as the files they are. Same resolution, no second rule.
   it("resolves a directly requested error page to its document", async () => {
     const url = new URL("https://serve-html-2.example/404");
     const deps = countingDeps(
@@ -323,8 +301,6 @@ describe("serveStaticAsset", () => {
     expect(keys).toEqual(["assets/p/app/b1/some.rsc"]);
   });
 
-  // A route whose last segment carries what only looks like an extension is
-  // still a page, and is still stored as the document it is.
   it("resolves a dotted route to its document once its own name misses", async () => {
     const url = new URL("https://serve-html-5.example/v1.0");
     const keys: string[] = [];
@@ -349,10 +325,6 @@ describe("serveStaticAsset", () => {
     ]);
   });
 
-  // Next names the root document index.html (routePathname in next-adapter.mts
-  // un-normalizes the *route* back to /, but the file on disk keeps the name
-  // Next wrote it under), so a request for / must probe /index.html rather
-  // than the "/.html" the plain "${pathname}.html" rule would otherwise try.
   it("resolves the root request to the index.html document", async () => {
     const url = new URL("https://serve-root-1.example/");
     const keys: string[] = [];
@@ -374,11 +346,6 @@ describe("serveStaticAsset", () => {
     expect(keys).toEqual(["assets/p/app/b1/index.html"]);
   });
 
-  // Symmetric with every other branch (an extensionless page also falls back
-  // to the bare request name, for a build made before documents were named):
-  // the root candidate list must append its fallback, not replace the
-  // index.html candidate outright, so a store missing index.html still tries
-  // the bare "/" object before giving up.
   it("falls back to the bare root name when index.html is missing", async () => {
     const url = new URL("https://serve-root-1b.example/");
     const keys: string[] = [];
@@ -399,8 +366,6 @@ describe("serveStaticAsset", () => {
     expect(keys).toEqual(["assets/p/app/b1/index.html", "assets/p/app/b1/"]);
   });
 
-  // The basePath's own root arrives as the bare basePath (e.g. "/docs", no
-  // trailing segment) — the same document, at "<basePath>/index.html".
   it("resolves a basePath root request to <basePath>/index.html", async () => {
     const url = new URL("https://serve-root-2.example/docs");
     const deps = countingDeps(
@@ -419,9 +384,6 @@ describe("serveStaticAsset", () => {
     expect(await res.text()).toBe("<html>docs root</html>");
   });
 
-  // Absent a configured basePath, an ordinary page named "/docs" must not be
-  // mistaken for a basePath root: deps.basePath defaults to "", which never
-  // equals a real request pathname.
   it("does not treat an ordinary page as a basePath root when no basePath is configured", async () => {
     const url = new URL("https://serve-root-3.example/docs");
     const keys: string[] = [];
@@ -439,12 +401,9 @@ describe("serveStaticAsset", () => {
 
     expect(res.status).toBe(200);
     expect(await res.text()).toBe("<html>docs page</html>");
-    // The ordinary document candidate hits first, so the fallback bare-name
-    // candidate is never even probed.
     expect(keys).toEqual(["assets/p/app/b1/docs.html"]);
   });
 
-  // The page a browser navigates to is the hit worth spending one read on.
   it("reads only the document for an extensionless page", async () => {
     const url = new URL("https://serve-html-6.example/some");
     const keys: string[] = [];
@@ -464,8 +423,6 @@ describe("serveStaticAsset", () => {
     expect(keys).toEqual(["assets/p/app/b1/some.html"]);
   });
 
-  // must-revalidate without this means the whole body travels again on every
-  // navigation — the bandwidth cost the policy is supposed to avoid.
   it("answers 304 when the client already holds the object's etag", async () => {
     const url = new URL("https://serve-304-1.example/_next/static/service-worker/sw.js");
     const deps = countingDeps(
@@ -519,7 +476,6 @@ describe("serveStaticAsset", () => {
     expect(await res.text()).toBe("ok");
   });
 
-  // A response the colo can never answer from is a write for nothing.
   it("writes only the immutable assets to the colo cache", async () => {
     const url = new URL("https://serve-put-1.example/favicon.ico");
     const deps = countingDeps(
@@ -533,8 +489,6 @@ describe("serveStaticAsset", () => {
     expect(deps.puts).toBe(0);
   });
 
-  // Only an immutable asset earns a colo hit; a must-revalidate one is stale
-  // the moment it is written, so the cache declines to answer for it.
   it("serves a colo cache hit without reading the store again", async () => {
     const url = new URL("https://serve-4.example/_next/static/chunks/main.js");
     let reads = 0;

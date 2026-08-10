@@ -13,13 +13,6 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
 )
 
-// Collect runs node discovery (OCEL_PHASE=discovery) over cfg's resolved
-// discovery.paths against a fresh Collector, using the same
-// discovery.Discover/discovery.Bundle mechanism the dev path uses, and
-// returns every resource declared with its full typed config. The same run
-// declares the project's variables into gate, which is what a caller then
-// checks before it builds anything. It never starts or talks to the dev
-// server (cli/internal/devserver) and never provisions anything.
 func Collect(ctx context.Context, cfg *projectconfig.Config, gate *envgate.Gate, stdout, stderr io.Writer) ([]declare.Resource, error) {
 	entry, err := Bundle(cfg)
 	if err != nil {
@@ -28,10 +21,6 @@ func Collect(ctx context.Context, cfg *projectconfig.Config, gate *envgate.Gate,
 	return CollectBundled(ctx, cfg, gate, entry, stdout, stderr)
 }
 
-// Bundle builds the entrypoint a discovery run executes, without running it.
-// Everything a declaration can come from is inlined into it, so a caller that
-// only needs to know whether the declarations could have changed can read this
-// instead of running the pass.
 func Bundle(cfg *projectconfig.Config) (string, error) {
 	files, err := discovery.Discover(cfg.Dir, cfg.Discovery.Paths)
 	if err != nil {
@@ -45,12 +34,9 @@ func Bundle(cfg *projectconfig.Config) (string, error) {
 	return entry, nil
 }
 
-// CollectBundled is Collect over an entrypoint the caller already built.
 func CollectBundled(ctx context.Context, cfg *projectconfig.Config, gate *envgate.Gate, entry string, stdout, stderr io.Writer) ([]declare.Resource, error) {
 	c := New(gate)
 
-	// Before discovery, not during it: a store that cannot be read is a
-	// failure of the deploy, not of one declaration.
 	if err := gate.Prefetch(ctx); err != nil {
 		return nil, err
 	}

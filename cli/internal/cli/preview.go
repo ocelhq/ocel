@@ -25,8 +25,6 @@ import (
 	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
 )
 
-// currentGitBranch resolves the current git branch of dir. A package var so
-// tests can stub it without a real repo.
 var currentGitBranch = func(dir string) (string, error) {
 	out, err := exec.Command("git", "-C", dir, "rev-parse", "--abbrev-ref", "HEAD").Output()
 	if err != nil {
@@ -39,14 +37,10 @@ var currentGitBranch = func(dir string) (string, error) {
 	return branch, nil
 }
 
-// discoverPRNumber reads the pull request number from a well-known CI
-// environment variable, returning "" when unset. A package var so tests can
-// stub it.
 var discoverPRNumber = func() string {
 	return os.Getenv("OCEL_PR_NUMBER")
 }
 
-// previewUpOptions holds the flags accepted by `ocel preview` / `ocel preview up`.
 type previewUpOptions struct {
 	ref      string
 	name     string
@@ -54,14 +48,12 @@ type previewUpOptions struct {
 	noUI     bool
 }
 
-// previewRmOptions holds the flags accepted by `ocel preview rm`.
 type previewRmOptions struct {
 	ref  string
 	name string
 	yes  bool
 }
 
-// previewPruneOptions holds the flags accepted by `ocel preview prune`.
 type previewPruneOptions struct {
 	name string
 	keep int
@@ -73,12 +65,8 @@ var (
 	previewPruneOpts previewPruneOptions
 )
 
-// defaultPreviewPruneKeepN is `ocel preview prune`'s default retention window
-// (in promotions of the named preview) when --keep is not given.
 const defaultPreviewPruneKeepN = 3
 
-// previewCmd stands up, tears down, and lists preview environments. Bare
-// `ocel preview` is an alias for `ocel preview up`.
 var previewCmd = &cobra.Command{
 	Use:   "preview",
 	Short: "Stand up a preview environment for the current branch",
@@ -171,14 +159,6 @@ func init() {
 	previewCmd.AddCommand(previewPruneCmd)
 }
 
-// runPreviewUp resolves the target Environment, preflights the preview
-// infrastructure (refusing before provisioning when it is missing or the wrong
-// class), then drives the provider's Deploy RPC and prints the connection
-// outputs on success. `ocel preview` and `ocel deploy` share the Deploy RPC and
-// diverge only by the Environment sent.
-// stdin is read for nothing but whether this is a terminal: a preview refused
-// by the variable gate recovers exactly as a deploy does, and that decision is
-// the one thing the command needs stdin to answer.
 func runPreviewUp(ctx context.Context, cwd string, opts previewUpOptions, stdout, stderr io.Writer, stdin io.Reader) error {
 	cfg, err := projectconfig.Resolve(cwd)
 	if err != nil {
@@ -215,9 +195,6 @@ func runPreviewUp(ctx context.Context, cwd string, opts previewUpOptions, stdout
 			return err
 		}
 
-		// Building inside the session, as `ocel deploy` does: the variable
-		// gate runs between discovery and the build, and the store it reads
-		// is only reachable through the provider.
 		ui.Building()
 		recovery := gateRecovery{
 			cfg:      cfg,
@@ -280,12 +257,6 @@ func runPreviewUp(ctx context.Context, cwd string, opts previewUpOptions, stdout
 	return nil
 }
 
-// requirePreviewDomain refuses a preview the project has nowhere to serve,
-// before anything is built. The check is scoped to this command rather than to
-// the config loader, which is class-agnostic: a production-only project
-// declares no preview wildcard and must still load for `ocel dev`, `run`,
-// `build` and `deploy`. The provider refuses the same deploy authoritatively,
-// but only after the build.
 func requirePreviewDomain(cfg *projectconfig.Config) error {
 	if len(cfg.Domains["preview"]) > 0 {
 		return nil
@@ -296,9 +267,6 @@ func requirePreviewDomain(cfg *projectconfig.Config) error {
 		projectconfig.ConfigFileName)
 }
 
-// runPreviewRm resolves the addressing Environment, guards it against the
-// preview infrastructure, prompts before destroying a persistent preview, and
-// drives the provider's Destroy RPC.
 func runPreviewRm(ctx context.Context, cwd string, opts previewRmOptions, stdout, stderr io.Writer, stdin io.Reader) error {
 	cfg, err := projectconfig.Resolve(cwd)
 	if err != nil {
@@ -357,8 +325,6 @@ func runPreviewRm(ctx context.Context, cwd string, opts previewRmOptions, stdout
 	return nil
 }
 
-// runPreviewLs drives the provider's ListEnvironments RPC and renders each
-// preview environment.
 func runPreviewLs(ctx context.Context, cwd string, stdout, stderr io.Writer) error {
 	cfg, err := projectconfig.Resolve(cwd)
 	if err != nil {
@@ -387,11 +353,6 @@ func runPreviewLs(ctx context.Context, cwd string, stdout, stderr io.Writer) err
 	})
 }
 
-// runPreviewPrune reclaims a named persistent preview's superseded deployments:
-// it validates the name, preflights the preview infrastructure, and drives the
-// provider's Prune RPC scoped to that preview pointer (Environment carries the
-// preview class + persistent lifecycle + the name). Ephemeral previews have no
-// prune — they are torn down whole with `ocel preview rm`, never trimmed.
 func runPreviewPrune(ctx context.Context, cwd string, opts previewPruneOptions, stdout, stderr io.Writer) error {
 	if opts.name == "" {
 		return fmt.Errorf("`ocel preview prune` requires --name: only persistent previews are pruned")
@@ -440,9 +401,6 @@ func runPreviewPrune(ctx context.Context, cwd string, opts previewPruneOptions, 
 	return nil
 }
 
-// persistentPreviewEnvironment addresses the persistent preview a --name names,
-// refusing a name that cannot serve as the preview's subdomain label and store
-// pointer.
 func persistentPreviewEnvironment(name string) (*deploymentsv1.Environment, error) {
 	if err := previewid.ValidateLabel(name); err != nil {
 		return nil, err
@@ -455,10 +413,6 @@ func persistentPreviewEnvironment(name string) (*deploymentsv1.Environment, erro
 	}, nil
 }
 
-// resolveUpEnvironment builds the Environment `ocel preview up` provisions:
-// --name is a persistent, declared preview; --ref is an explicit ref's
-// ephemeral one, which needs no git repository to resolve; bare is the current
-// branch's ephemeral one, with the PR number carried as a display label.
 func resolveUpEnvironment(cwd string, opts previewUpOptions) (*deploymentsv1.Environment, error) {
 	if opts.name != "" && opts.ref != "" {
 		return nil, fmt.Errorf("--name and --ref are mutually exclusive; use one to stand up a persistent or ephemeral preview")
@@ -488,9 +442,6 @@ func resolveUpEnvironment(cwd string, opts previewUpOptions) (*deploymentsv1.Env
 	}, nil
 }
 
-// resolveRmEnvironment builds the addressing Environment for `ocel preview rm`:
-// --name targets a persistent preview; --ref targets an explicit ref's
-// ephemeral preview; bare targets the current branch's ephemeral preview.
 func resolveRmEnvironment(cwd string, opts previewRmOptions) (*deploymentsv1.Environment, error) {
 	if opts.name != "" && opts.ref != "" {
 		return nil, fmt.Errorf("--name and --ref are mutually exclusive; use one to address a persistent or ephemeral preview")
@@ -519,25 +470,14 @@ func resolveRmEnvironment(cwd string, opts previewRmOptions) (*deploymentsv1.Env
 	}, nil
 }
 
-// confirmDestroyPreview prints the "Destroy persistent preview <name>? [y/N]"
-// prompt and returns the user's yes/no answer (see confirmYN in deploy.go).
-// Only persistent previews prompt; ephemeral teardown never does.
 func confirmDestroyPreview(name string, stdout io.Writer, stdin io.Reader) (bool, error) {
 	return confirmYN(fmt.Sprintf("Destroy persistent preview %q?", name), stdout, stdin)
 }
 
-// preflightPreview refuses a preview command locally — before anything is
-// provisioned — when the preview infrastructure is missing or is the wrong
-// class. It declares no hostnames: only `ocel preview up` attaches any.
 func preflightPreview(ctx context.Context, runner *providerrunner.Runner, provider *projectconfig.ProviderDescriptor, out io.Writer) error {
 	return preflightClass(ctx, runner, provider, deploymentsv1.Environment_CLASS_PREVIEW, "ocel bootstrap --preview", out)
 }
 
-// preflightPreviewUp is preflightPreview for the one preview command that
-// attaches a hostname: it additionally names the project and declares the
-// preview wildcard, and refuses when another project already holds it. The slug
-// travels because the claim check is answered against it — a hostname this
-// project's own workers hold is not a collision.
 func preflightPreviewUp(ctx context.Context, runner *providerrunner.Runner, provider *projectconfig.ProviderDescriptor, cfg *projectconfig.Config, out io.Writer) error {
 	resp, err := preflight(ctx, runner, provider, deploymentsv1.Environment_CLASS_PREVIEW, cfg.Slug, declaredHostnames(cfg, "preview"), "ocel bootstrap --preview", out)
 	if err != nil {
@@ -546,12 +486,6 @@ func preflightPreviewUp(ctx context.Context, runner *providerrunner.Runner, prov
 	return refuseClaimedDomains(resp.GetDomainClaims())
 }
 
-// preflightDeploy is preflightClass scoped to the project `ocel deploy` is
-// about to stand up: it additionally names the slug and the production
-// hostnames it is about to attach, refuses a hostname another project holds,
-// and returns the other projects the provider's backend already holds —
-// non-empty only when this slug holds nothing there, which is what a mistyped
-// or renamed slug looks like (see confirmDeploy).
 func preflightDeploy(ctx context.Context, runner *providerrunner.Runner, provider *projectconfig.ProviderDescriptor, cfg *projectconfig.Config, out io.Writer) ([]string, error) {
 	resp, err := preflight(ctx, runner, provider, deploymentsv1.Environment_CLASS_PRODUCTION, cfg.Slug, declaredHostnames(cfg, "production"), "ocel bootstrap", out)
 	if err != nil {
@@ -563,11 +497,6 @@ func preflightDeploy(ctx context.Context, runner *providerrunner.Runner, provide
 	return resp.GetKnownSlugs(), nil
 }
 
-// declaredHostnames is every hostname the project attaches to its own edge
-// workers for a class — the project's own and each app's — in declared order,
-// deduped. It reads the config, not the manifest, because the claim check has
-// to happen before the build. A hostname travels exactly as configured, so a
-// preview wildcard keeps its literal leading "*.".
 func declaredHostnames(cfg *projectconfig.Config, class string) []string {
 	var hosts []string
 	seen := map[string]bool{}
@@ -587,12 +516,6 @@ func declaredHostnames(cfg *projectconfig.Config, class string) []string {
 	return hosts
 }
 
-// refuseClaimedDomains refuses a deploy that would take a hostname over from
-// another project, naming each hostname and its current owner. A hostname this
-// project's own workers hold is reported unclaimed, so STATUS_CLAIMED is always
-// someone else's. A claim the edge could not answer (STATUS_UNSPECIFIED) is
-// skipped rather than refused: an unverifiable claim must degrade to the late
-// collision a deploy already survives, never fail it.
 func refuseClaimedDomains(claims []*deploymentsv1.DomainClaim) error {
 	var b strings.Builder
 	for _, claim := range claims {
@@ -612,23 +535,11 @@ func refuseClaimedDomains(claims []*deploymentsv1.DomainClaim) error {
 	return errors.New(b.String())
 }
 
-// preflightClass asks the provider to authenticate the credentials it needs and
-// report what its ambient account points at, prints the "Running with:" banner
-// to out, and refuses locally — before anything is provisioned — when a
-// credential failed, when no infrastructure is present (directing the user to
-// bootstrapHint), or when it is the wrong class for the running command. The
-// provider enforces credentials and class authoritatively; this is the fast
-// local refuse the deploy/preview/rollback/deployments commands share.
 func preflightClass(ctx context.Context, runner *providerrunner.Runner, provider *projectconfig.ProviderDescriptor, required deploymentsv1.Environment_Class, bootstrapHint string, out io.Writer) error {
 	_, err := preflight(ctx, runner, provider, required, "", nil, bootstrapHint, out)
 	return err
 }
 
-// preflight drives the Preflight RPC and applies the shared refusals, handing
-// the response back for the caller-specific parts. slug is sent only by a
-// command that wants the project-identity answer, and domains only by one that
-// is about to attach hostnames; the rest send neither so the provider skips
-// the lookups.
 func preflight(ctx context.Context, runner *providerrunner.Runner, provider *projectconfig.ProviderDescriptor, required deploymentsv1.Environment_Class, slug string, domains []string, bootstrapHint string, out io.Writer) (*deploymentsv1.PreflightResponse, error) {
 	spinner := deployui.StartSpinner(out, "Checking credentials")
 	resp, err := runner.Preflight(ctx, &deploymentsv1.PreflightRequest{
@@ -642,10 +553,6 @@ func preflight(ctx context.Context, runner *providerrunner.Runner, provider *pro
 	if err != nil {
 		return nil, err
 	}
-	// Only ever to a terminal. The banner names the account being deployed
-	// into, which orients a developer and leaks in a log — and a CI run's log
-	// on a public repository is world-readable. Anything that is not a terminal
-	// is a log: a pipe, a file, a CI runner's captured stdout.
 	if stdoutIsTerminal(out) {
 		fmt.Fprint(out, formatIdentityBanner(resp.GetIdentity()))
 	}
@@ -661,19 +568,8 @@ func preflight(ctx context.Context, runner *providerrunner.Runner, provider *pro
 	return resp, nil
 }
 
-// stdoutIsTerminal is a seam over isTTY for the identity banner's one decision.
-// Every test drives these commands with an in-memory buffer, which is never a
-// terminal, so without the seam the banner is unreachable in a test and the
-// rule that it stays out of a log is unfalsifiable. There is no CI detection
-// behind it on purpose: a terminal on stdout is the signal, matching the rest
-// of the CLI rather than guessing at an environment.
 var stdoutIsTerminal = func(w io.Writer) bool { return isTTY(w) }
 
-// formatIdentityBanner renders the "Running with:" block from the identity the
-// provider resolved, or "" when nothing resolved (every credential failed, so
-// the credential-problems block carries the detail instead). AWS shows its
-// profile when one is set, else the caller's principal from the ARN. Printed
-// only to a terminal — see the call site in preflight.
 func formatIdentityBanner(id *deploymentsv1.Identity) string {
 	if id == nil {
 		return ""
@@ -695,8 +591,6 @@ func formatIdentityBanner(id *deploymentsv1.Identity) string {
 	return b.String()
 }
 
-// awsIdentityLine renders the AWS half of the banner, or "" when AWS did not
-// resolve (no account id).
 func awsIdentityLine(id *deploymentsv1.Identity) string {
 	if id.GetAwsAccount() == "" {
 		return ""
@@ -714,8 +608,6 @@ func awsIdentityLine(id *deploymentsv1.Identity) string {
 	return strings.Join(parts, "  ")
 }
 
-// arnPrincipal is the trailing principal of an ARN — the user, role, or session
-// name — used as the banner's identity when no AWS_PROFILE names the source.
 func arnPrincipal(arn string) string {
 	if i := strings.LastIndex(arn, "/"); i >= 0 {
 		return arn[i+1:]
@@ -726,9 +618,6 @@ func arnPrincipal(arn string) string {
 	return arn
 }
 
-// credentialProblems aggregates every reported credential failure into one
-// error, or nil when there are none. The identity of whatever did resolve is
-// already shown by the banner; this carries the ✗ side with a fix hint each.
 func credentialProblems(problems []*deploymentsv1.CredentialProblem) error {
 	if len(problems) == 0 {
 		return nil
@@ -744,8 +633,6 @@ func credentialProblems(problems []*deploymentsv1.CredentialProblem) error {
 	return errors.New(b.String())
 }
 
-// renderEnvironments prints one line per preview environment: identity,
-// lifecycle tag, PR label, and age/expiry.
 func renderEnvironments(stdout io.Writer, envs []*deploymentsv1.PreviewEnvironment) {
 	if len(envs) == 0 {
 		fmt.Fprintln(stdout, "No preview environments.")
@@ -780,8 +667,6 @@ func labelOrDash(label string) string {
 	return label
 }
 
-// epochOrDash renders an epoch-seconds timestamp as a date, or "—" when the
-// provider reported 0 (unknown).
 func epochOrDash(sec int64) string {
 	if sec == 0 {
 		return "—"

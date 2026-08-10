@@ -32,9 +32,6 @@ func reportProblems(t *testing.T, url string, problems ...*resourcesv1.VariableP
 	}
 }
 
-// A dev server with no values installed is the pre-variables dev server: it
-// answers with no cells and gates nothing, which is what `ocel run` and the
-// blob rig still rely on.
 func TestCheckEnv_NoValuesInstalled_GatesNothing(t *testing.T) {
 	s := New("https://api.example.com", "tok", "proj_1", "http://127.0.0.1:0")
 	ts := httptest.NewServer(s.Mux())
@@ -51,9 +48,6 @@ func TestCheckEnv_NoValuesInstalled_GatesNothing(t *testing.T) {
 	}
 }
 
-// The value a dev run holds reaches the declaring process, which is the only
-// place a schema can be checked — so a dev run validates the same way a deploy
-// does rather than accepting whatever is in the file.
 func TestDeclareEnv_AnswersARootKeyWithItsPlaintext(t *testing.T) {
 	s := New("https://api.example.com", "tok", "proj_1", "http://127.0.0.1:0")
 	s.UseValues(map[string]string{"DATABASE_URL": "postgres://localhost/app"}, envgate.Scope{})
@@ -79,9 +73,6 @@ func TestDeclareEnv_AnswersARootKeyWithItsPlaintext(t *testing.T) {
 	}
 }
 
-// A live-class value has no cell to be revealed from, in dev as in a deploy:
-// it is answered as presence only, and delivered to the child through the
-// environment instead.
 func TestDeclareEnv_NeverRevealsALiveValue(t *testing.T) {
 	s := New("https://api.example.com", "tok", "proj_1", "http://127.0.0.1:0")
 	s.UseValues(map[string]string{"WEBHOOK_SECRET": "whsec_must_not_appear"}, envgate.Scope{})
@@ -101,10 +92,6 @@ func TestDeclareEnv_NeverRevealsALiveValue(t *testing.T) {
 	}
 }
 
-// A flat file has no folders in it, so a root line is the value for every
-// folder the key is scoped to. Without this, one scoped variable would make a
-// project permanently unable to run `ocel dev`: a scoped key has no root cell
-// at all, so nothing the file could say would ever satisfy it.
 func TestDeclareEnv_ARootLineBroadcastsToEveryFolderAScopedKeyNames(t *testing.T) {
 	s := New("https://api.example.com", "tok", "proj_1", "http://127.0.0.1:0")
 	s.UseValues(map[string]string{"API_BASE": "http://localhost:3000"}, envgate.Scope{
@@ -134,9 +121,6 @@ func TestDeclareEnv_ARootLineBroadcastsToEveryFolderAScopedKeyNames(t *testing.T
 	}
 }
 
-// The gate's own half of the verdict: a required key the file does not hold
-// refuses the run, naming the cell rather than letting the app start and fail
-// at the first read.
 func TestCheckEnv_RefusesARequiredKeyTheValuesDoNotHold(t *testing.T) {
 	s := New("https://api.example.com", "tok", "proj_1", "http://127.0.0.1:0")
 	s.UseValues(map[string]string{}, envgate.Scope{Apps: []envgate.App{{Name: "web"}}})
@@ -160,9 +144,6 @@ func TestCheckEnv_RefusesARequiredKeyTheValuesDoNotHold(t *testing.T) {
 	}
 }
 
-// Schema validity is only knowable in the declaring process, so dev has to
-// keep what that process reports rather than dropping it — a value that is set
-// but unusable must stop the run the same way an absent one does.
 func TestCheckEnv_KeepsTheProblemsTheDeclaringProcessReports(t *testing.T) {
 	s := New("https://api.example.com", "tok", "proj_1", "http://127.0.0.1:0")
 	s.UseValues(map[string]string{"PORT": "not-a-number"}, envgate.Scope{})
@@ -182,9 +163,6 @@ func TestCheckEnv_KeepsTheProblemsTheDeclaringProcessReports(t *testing.T) {
 	}
 }
 
-// A re-discovery replaces the prior run's verdict rather than accumulating
-// onto it: a key deleted from the code, or a problem the edit just fixed, must
-// not keep refusing every later run of the session.
 func TestResetManifest_ForgetsThePriorRunsVerdict(t *testing.T) {
 	s := New("https://api.example.com", "tok", "proj_1", "http://127.0.0.1:0")
 	s.UseValues(map[string]string{}, envgate.Scope{})
@@ -205,10 +183,6 @@ func TestResetManifest_ForgetsThePriorRunsVerdict(t *testing.T) {
 	}
 }
 
-// The store is rebuilt with the gate, so the folders a prior discovery learned
-// do not outlive it. A key that stops being scoped has a root cell again; a
-// store that kept the old scope would report only folder cells and refuse a key
-// whose value is in the file.
 func TestResetManifest_ForgetsThePriorRunsScopes(t *testing.T) {
 	s := New("https://api.example.com", "tok", "proj_1", "http://127.0.0.1:0")
 	s.UseValues(map[string]string{"API_BASE": "http://localhost:3000"}, envgate.Scope{
@@ -235,11 +209,6 @@ func TestResetManifest_ForgetsThePriorRunsScopes(t *testing.T) {
 	}
 }
 
-// A key's folders arrive with the declaration that names them, so the cells the
-// store holds are only complete once every declaration has landed. The state
-// below is exactly what a declaration landing beside another leaves behind: a
-// gate that read the store before this scope was recorded. The verdict must not
-// depend on that ordering.
 func TestCheckEnv_RulesFromTheStoreAsOfTheEndOfDiscovery(t *testing.T) {
 	ctx := context.Background()
 	s := New("https://api.example.com", "tok", "proj_1", "http://127.0.0.1:0")
@@ -265,9 +234,6 @@ func TestCheckEnv_RulesFromTheStoreAsOfTheEndOfDiscovery(t *testing.T) {
 	}
 }
 
-// Two declarations of one key each require their own folders, so the store owes
-// cells for both. Keeping only the last would check fewer cells than the project
-// needs, which is a green gate over a value an app cannot resolve.
 func TestDeclareEnv_KeepsEveryDeclarationsFoldersForOneKey(t *testing.T) {
 	s := New("https://api.example.com", "tok", "proj_1", "http://127.0.0.1:0")
 	s.UseValues(map[string]string{"API_BASE": "http://localhost:3000"}, envgate.Scope{
@@ -298,10 +264,6 @@ func TestDeclareEnv_KeepsEveryDeclarationsFoldersForOneKey(t *testing.T) {
 	}
 }
 
-// ScopedFolders is what dev rules its own binding against, so it reports a key
-// once however many declarations name it — carrying the union of their folders,
-// because a key readable in either folder is scoped to both — and reports
-// nothing for an unscoped one.
 func TestScopedFolders_CarriesEveryFolderEveryDeclarationNames(t *testing.T) {
 	s := New("https://api.example.com", "tok", "proj_1", "http://127.0.0.1:0")
 	s.UseValues(map[string]string{}, envgate.Scope{})
@@ -324,12 +286,6 @@ func TestScopedFolders_CarriesEveryFolderEveryDeclarationNames(t *testing.T) {
 	}
 }
 
-// A live-class value's source is only reachable once the declared keys are
-// known, which is after the gate has ruled — so dev cannot hold one at gate
-// time and refusing for its absence would refuse every project that has one.
-// The store states presence for it instead, and states it without inventing a
-// plaintext: the value is resolved at sync and delivered through the
-// environment.
 func TestCheckEnv_StatesPresenceForALiveKeyItHoldsNoValueFor(t *testing.T) {
 	ctx := context.Background()
 	s := New("https://api.example.com", "tok", "proj_1", "http://127.0.0.1:0")
@@ -358,8 +314,6 @@ func TestCheckEnv_StatesPresenceForALiveKeyItHoldsNoValueFor(t *testing.T) {
 	}
 }
 
-// The exemption is the live class's alone. A plain-class key the file does not
-// hold still refuses, or the gate would stop ruling on the one thing it can.
 func TestCheckEnv_StillRefusesAPlainKeyBesideAnExemptLiveOne(t *testing.T) {
 	s := New("https://api.example.com", "tok", "proj_1", "http://127.0.0.1:0")
 	s.UseValues(map[string]string{}, envgate.Scope{Apps: []envgate.App{{Name: "web"}}})
@@ -381,9 +335,6 @@ func TestCheckEnv_StillRefusesAPlainKeyBesideAnExemptLiveOne(t *testing.T) {
 	}
 }
 
-// A live key scoped to folders needs a cell per folder, the way a value-backed
-// key does: the gate rules per app over each app's own binding, so a single
-// root cell would leave every scoped app's read unchecked.
 func TestCheckEnv_StatesPresenceForEveryFolderALiveKeyIsScopedTo(t *testing.T) {
 	s := New("https://api.example.com", "tok", "proj_1", "http://127.0.0.1:0")
 	s.UseValues(map[string]string{}, envgate.Scope{

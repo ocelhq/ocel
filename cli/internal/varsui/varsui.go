@@ -1,14 +1,3 @@
-// Package varsui serves the bundled variables UI: the required-cell matrix as
-// a page, plus the small API that page writes values through.
-//
-// It runs beside whatever command launched it and shares that command's
-// provider session, because the provider is the only component that can reach
-// the store. Nothing here is reachable off this host: the listener is
-// loopback, every API request must carry the session's token, and a request
-// whose Origin or Host is not this session's own is refused. A local server
-// that can write secrets to a cloud store is a target for DNS rebinding and
-// drive-by requests, so those checks are the package's contract, not a
-// hardening pass over it.
 package varsui
 
 import (
@@ -29,48 +18,22 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/envgate"
 )
 
-// ErrAbandoned is what Wait reports for a session that ended without the
-// developer marking the matrix complete. A caller that resumes work on a
-// completed matrix must treat this as a refusal, not a finish.
 var ErrAbandoned = errors.New("the variables UI closed before the matrix was complete")
 
-// ErrStaleValue is what a Store reports for a write whose expectation about the
-// current version no longer holds. The page that sent it was showing a value
-// somebody else has since changed, so the answer is to show it again — not to
-// apply the write, and not to report the store broken.
 var ErrStaleValue = errors.New("this value changed since the page read it; the page is showing it again — make your change against the value that is there now")
 
-// Store is the value store as the UI writes to it. Reads come through the
-// gate, which already holds the project's cells; these are the operations that
-// change them.
-//
-// Every operation is addressed by a row rather than a cell: the page edits the
-// class-wide value and each named environment's override through one surface,
-// and which of them a write lands on is the address it carries.
 type Store interface {
-	// Set writes a value and Delete unsets one. expected is the version the page
-	// rendered: zero for a cell it drew empty, which the store honours as "no
-	// live value", and nil only for a caller that rendered no version at all. A
-	// delete is expectation-bound for the same reason a write is — a page that
-	// renders a value somebody has since replaced must not be able to destroy
-	// the replacement.
 	Set(ctx context.Context, at envgate.Address, value string, expected *int64) error
 	Delete(ctx context.Context, at envgate.Address, expected *int64) error
 	History(ctx context.Context, at envgate.Address) ([]Version, error)
 }
 
-// Version is one entry of a cell's change history. It carries no plaintext:
-// history answers when a value changed, not what it was. Reading a value back
-// is `ocel env get --reveal`, one named cell at a time.
 type Version struct {
 	Version   int64 `json:"version"`
 	CreatedAt int64 `json:"createdAt"`
 	Size      int64 `json:"size"`
 }
 
-// State is everything the page renders: which project and substrate it is
-// looking at, the named environments an override may be written against, and
-// the matrix itself.
 type State struct {
 	Slug         string         `json:"slug"`
 	Substrate    string         `json:"substrate"`
@@ -79,27 +42,17 @@ type State struct {
 }
 
 type Options struct {
-	// Assets is the built single-page app, with index.html at its root.
 	Assets fs.FS
 
-	// Gate is the discovery run this session presents. It is the authority on
-	// what is required and what the store holds, so the UI and the deploy can
-	// never disagree.
 	Gate *envgate.Gate
 
 	Store   Store
 	Slug    string
 	Preview bool
 
-	// Environments is every named environment the provider enumerates. It is
-	// what the page offers to write an override against and what an existing one
-	// is judged orphaned by, so the picker can only ever name an environment the
-	// runtime will ask for. Empty on production, which has one environment.
 	Environments []string
 }
 
-// Session is a running UI. A caller opens URL, then blocks in Wait until the
-// developer says the matrix is done or the caller gives up.
 type Session struct {
 	URL   string
 	Token string
@@ -108,17 +61,11 @@ type Session struct {
 	listener net.Listener
 	server   *http.Server
 
-	// done is closed exactly once, by whatever ended the session, and outcome
-	// records which that was: nil for a developer who finished, ErrAbandoned
-	// for anything else. Wait cannot read a closed channel as a completion.
 	done     chan struct{}
 	outcome  error
 	closeOne sync.Once
 }
 
-// Serve binds a loopback listener and starts serving. It returns as soon as
-// the address is known, so the caller can print and open the URL while the
-// session runs.
 func Serve(ctx context.Context, opts Options) (*Session, error) {
 	listener, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
@@ -137,8 +84,6 @@ func Serve(ctx context.Context, opts Options) (*Session, error) {
 		listener: listener,
 		done:     make(chan struct{}),
 	}
-	// The token rides the fragment, which no browser puts in a request line,
-	// a log or a Referer. The page reads it there and sends it as a header.
 	s.URL = fmt.Sprintf("http://%s/#t=%s", listener.Addr().String(), s.Token)
 	s.server = &http.Server{Handler: s.handler()}
 
@@ -153,15 +98,7 @@ func Serve(ctx context.Context, opts Options) (*Session, error) {
 	return s, nil
 }
 
-// Wait blocks until the developer marks the matrix complete, or the caller's
-// context ends — an interrupted deploy is never trapped waiting on a browser.
-// It answers the same way however late it is asked: nil only for a matrix the
-// developer finished, and never for a session that ended any other way.
 func (s *Session) Wait(ctx context.Context) error {
-	// An already-ended context is the interruption, whether or not its watcher
-	// has closed the session yet. Reading it first is what makes the answer to
-	// a cancelled deploy ctx.Err() every time rather than whichever of two
-	// ready channels a select happened to pick.
 	if err := ctx.Err(); err != nil {
 		return err
 	}
@@ -173,8 +110,6 @@ func (s *Session) Wait(ctx context.Context) error {
 	}
 }
 
-// Close stops serving and releases anyone in Wait with ErrAbandoned: a session
-// closed by anything but the developer left the matrix unfinished.
 func (s *Session) Close() error {
 	return s.finish(ErrAbandoned)
 }
@@ -200,16 +135,11 @@ func (s *Session) handler() http.Handler {
 	page := http.FileServerFS(s.opts.Assets)
 
 	mux := http.NewServeMux()
-	// The page itself is unguarded: it is the same bytes for every project and
-	// holds no value, and it has to load before it can read the token it will
-	// then send on every call below.
 	mux.Handle("/", page)
 	mux.Handle("/api/", s.guard(api))
 	return mux
 }
 
-// guard is the whole security posture, applied to every API request: the
-// session's own address, the session's own page, and the session's own token.
 func (s *Session) guard(next http.Handler) http.Handler {
 	address := s.listener.Addr().String()
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -261,9 +191,6 @@ func (s *Session) handleSet(w http.ResponseWriter, r *http.Request) {
 	}
 	at := envgate.Address{Cell: envgate.Cell{Key: req.Key, Folder: req.Folder}, Environment: req.Environment}
 
-	// The same checks the CLI's own write path makes. The matrix draws only
-	// cells that exist and draws a forbidden one unfillable, so reaching here
-	// means something bypassed the page — and the rules hold anyway.
 	if err := addressable(at.Cell.Folder); err != nil {
 		fail(w, http.StatusBadRequest, err)
 		return
@@ -312,16 +239,6 @@ func (s *Session) handleDelete(w http.ResponseWriter, r *http.Request) {
 	s.writeState(r.Context(), w)
 }
 
-// writable refuses an override written against an environment this session was
-// not given: an override is identified by exactly the key the runtime derives
-// from its ref, so a name nothing enumerates is a value nothing will ever read.
-// Removing one is not a write and is never refused — an environment that has
-// gone is precisely when its override has to be reachable.
-//
-// The store holds the same rule and is what actually protects it. This one is
-// here because the page offers a picker over exactly this list, so the answer is
-// already on hand: a bad address comes back as the bad request it is, without a
-// round trip that can only agree.
 func (s *Session) writable(environment string) error {
 	if environment == "" || slices.Contains(s.opts.Environments, environment) {
 		return nil
@@ -329,10 +246,6 @@ func (s *Session) writable(environment string) error {
 	return fmt.Errorf("no environment named %q exists, so nothing would ever read that value", environment)
 }
 
-// forget drops discovery's complaint about a cell whose value has just been
-// replaced. Only a class-wide write does: the complaint described the value
-// this run resolved, and this run resolves no override — the session manages
-// every environment's values at once rather than standing in any one of them.
 func (s *Session) forget(at envgate.Address) {
 	if at.Environment == "" {
 		s.opts.Gate.Forget(at.Cell)
@@ -351,9 +264,6 @@ func (s *Session) handleHistory(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, map[string]any{"versions": versions})
 }
 
-// handleDone is the one path that ends a session as a completion. Closing tears
-// down live connections, so the answer goes out before it starts rather than
-// leaving the page to read a completed session as a failed request.
 func (s *Session) handleDone(w http.ResponseWriter, _ *http.Request) {
 	w.WriteHeader(http.StatusOK)
 	if flusher, ok := w.(http.Flusher); ok {
@@ -362,9 +272,6 @@ func (s *Session) handleDone(w http.ResponseWriter, _ *http.Request) {
 	go func() { _ = s.finish(nil) }()
 }
 
-// addressable refuses a folder no app could read a value back from. Root is
-// the absence of a folder, spelled as the empty string above the store, so
-// that is the one folder ValidateFolder is not asked about.
 func addressable(folder string) error {
 	if folder == "" {
 		return nil
@@ -379,10 +286,6 @@ func queryAddress(r *http.Request) envgate.Address {
 	}
 }
 
-// queryVersion reads the expectation a delete carries. An absent one is the
-// blind delete; an unreadable one is refused rather than dropped, because
-// silently blinding a write the page meant to condition is the lost update the
-// expectation exists to stop.
 func queryVersion(r *http.Request) (*int64, error) {
 	raw := r.URL.Query().Get("version")
 	if raw == "" {
@@ -395,8 +298,6 @@ func queryVersion(r *http.Request) (*int64, error) {
 	return &version, nil
 }
 
-// writeState re-reads the store before answering, so every mutation returns
-// the matrix as it now stands and the page never renders from its own guess.
 func (s *Session) writeState(ctx context.Context, w http.ResponseWriter) {
 	if err := s.opts.Gate.Prefetch(ctx); err != nil {
 		fail(w, http.StatusBadGateway, err)
@@ -417,10 +318,6 @@ func (s *Session) substrate() string {
 	return "production"
 }
 
-// writeJSON ignores a failed write because by then the only party that could
-// be told is the one that stopped listening: the status line is already out
-// and this server has no log of its own — it borrows the command's terminal,
-// where a note about a browser that navigated away is noise.
 func writeJSON(w http.ResponseWriter, payload any) {
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(payload)

@@ -53,9 +53,6 @@ func TestWatch_NewSubdirectoryIsWatchedForFutureChanges(t *testing.T) {
 	waitForCalls(t, &calls, 2)
 }
 
-// A watched file sits in a directory full of files that have nothing to do
-// with what the watch is for: a project root holds package.json, an editor's
-// scratch files, and node_modules. Only the named file counts.
 func TestWatch_IgnoresEveryPathBesideTheWatchedFile(t *testing.T) {
 	dir := t.TempDir()
 	dotfile := filepath.Join(dir, ".env")
@@ -78,10 +75,6 @@ func TestWatch_IgnoresEveryPathBesideTheWatchedFile(t *testing.T) {
 	waitForCalls(t, &calls, 1)
 }
 
-// A file's directory is watched only to see that file change. Recursing into
-// what else appears there would put node_modules, .next and dist under watch
-// as a build creates them, and exhaust the kernel's descriptors — a cost no
-// predicate can refund, because it runs after the descriptor is taken.
 func TestWatch_AFilesDirectoryDoesNotRecurseIntoNewSubdirectories(t *testing.T) {
 	root := t.TempDir()
 	dotfile := filepath.Join(root, ".env")

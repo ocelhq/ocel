@@ -59,42 +59,42 @@
 }
 
 :root {
-  --radius: 0rem; /* squared corners, always */
+  --radius: 0rem;
 
-  --background: oklch(1 0 0); /* Paper  #FFFFFF */
-  --foreground: oklch(0.1448 0 0); /* Ink    #0A0A0A */
+  --background: oklch(1 0 0);
+  --foreground: oklch(0.1448 0 0);
 
-  --card: oklch(1 0 0); /* Paper */
-  --card-foreground: oklch(0.1448 0 0); /* Ink */
+  --card: oklch(1 0 0);
+  --card-foreground: oklch(0.1448 0 0);
   --popover: oklch(1 0 0);
   --popover-foreground: oklch(0.1448 0 0);
 
-  --primary: oklch(0.4924 0.2858 266.52); /* Electric #1F35FF */
-  --primary-foreground: oklch(1 0 0); /* Paper */
+  --primary: oklch(0.4924 0.2858 266.52);
+  --primary-foreground: oklch(1 0 0);
 
-  --secondary: oklch(0.9581 0 0); /* Fog #F1F1F1 */
-  --secondary-foreground: oklch(0.1448 0 0); /* Ink */
+  --secondary: oklch(0.9581 0 0);
+  --secondary-foreground: oklch(0.1448 0 0);
 
-  --muted: oklch(0.9581 0 0); /* Fog */
-  --muted-foreground: oklch(0.4495 0 0); /* Body #555 */
+  --muted: oklch(0.9581 0 0);
+  --muted-foreground: oklch(0.4495 0 0);
 
-  --accent: oklch(0.9581 0 0); /* Fog — hover surfaces stay neutral */
-  --accent-foreground: oklch(0.1448 0 0); /* Ink (Electric is action-only) */
+  --accent: oklch(0.9581 0 0);
+  --accent-foreground: oklch(0.1448 0 0);
 
-  --destructive: oklch(0.577 0.245 27.33); /* added: no red in brand; restrained */
+  --destructive: oklch(0.577 0.245 27.33);
   --destructive-foreground: oklch(1 0 0);
 
-  --border: oklch(0.9128 0 0); /* Hairline #E2E2E2 */
+  --border: oklch(0.9128 0 0);
   --input: oklch(0.9128 0 0);
-  --ring: oklch(0.4924 0.2858 266.52); /* Electric focus ring */
+  --ring: oklch(0.4924 0.2858 266.52);
 
-  --chart-1: oklch(0.4924 0.2858 266.52); /* Electric */
-  --chart-2: oklch(0.616 0.151 153.07); /* Go */
-  --chart-3: oklch(0.1448 0 0); /* Ink */
-  --chart-4: oklch(0.6334 0 0); /* Steel */
-  --chart-5: oklch(0.4495 0 0); /* Body */
+  --chart-1: oklch(0.4924 0.2858 266.52);
+  --chart-2: oklch(0.616 0.151 153.07);
+  --chart-3: oklch(0.1448 0 0);
+  --chart-4: oklch(0.6334 0 0);
+  --chart-5: oklch(0.4495 0 0);
 
-  --sidebar: oklch(0.9581 0 0); /* Fog */
+  --sidebar: oklch(0.9581 0 0);
   --sidebar-foreground: oklch(0.1448 0 0);
   --sidebar-primary: oklch(0.4924 0.2858 266.52);
   --sidebar-primary-foreground: oklch(1 0 0);
@@ -103,50 +103,48 @@
   --sidebar-border: oklch(0.9128 0 0);
   --sidebar-ring: oklch(0.4924 0.2858 266.52);
 
-  /* landing decorative tokens */
-  --dim: #8a8a8a; /* mid-gray mono labels */
-  --faint: #c9c9c9; /* faint markers / dots */
-  --chip: #f1f1f1; /* inline code chips */
-  --grid: #ececec; /* blueprint grid lines */
-  --hard-shadow: #e8e8e8; /* offset block shadow */
+  --dim: #8a8a8a;
+  --faint: #c9c9c9;
+  --chip: #f1f1f1;
+  --grid: #ececec;
+  --hard-shadow: #e8e8e8;
 }
 
-/* ----------------------------------------------------------------- DARK --- */
 .dark {
-  --background: oklch(0.1809 0.0052 248.12); /* Night #101214 */
-  --foreground: oklch(0.9575 0.0067 97.35); /* Bone  #F2F1EC */
+  --background: oklch(0.1809 0.0052 248.12);
+  --foreground: oklch(0.9575 0.0067 97.35);
 
-  --card: oklch(0.2077 0.005 248.07); /* Coal #16181A */
+  --card: oklch(0.2077 0.005 248.07);
   --card-foreground: oklch(0.9575 0.0067 97.35);
   --popover: oklch(0.2077 0.005 248.07);
   --popover-foreground: oklch(0.9575 0.0067 97.35);
 
-  --primary: oklch(0.587 0.225 270.16); /* Electric lifted #4D68FF */
+  --primary: oklch(0.587 0.225 270.16);
   --primary-foreground: oklch(1 0 0);
 
-  --secondary: oklch(0.2077 0.005 248.07); /* Coal */
+  --secondary: oklch(0.2077 0.005 248.07);
   --secondary-foreground: oklch(0.9575 0.0067 97.35);
 
-  --muted: oklch(0.2077 0.005 248.07); /* Coal */
-  --muted-foreground: oklch(0.7034 0.0135 255.53); /* body #9AA0A8 */
+  --muted: oklch(0.2077 0.005 248.07);
+  --muted-foreground: oklch(0.7034 0.0135 255.53);
 
-  --accent: oklch(0.2077 0.005 248.07); /* Coal */
+  --accent: oklch(0.2077 0.005 248.07);
   --accent-foreground: oklch(0.9575 0.0067 97.35);
 
   --destructive: oklch(0.627 0.22 25);
   --destructive-foreground: oklch(1 0 0);
 
-  --border: oklch(0.2958 0.0084 255.57); /* Hairline #2A2D31 */
+  --border: oklch(0.2958 0.0084 255.57);
   --input: oklch(0.2958 0.0084 255.57);
   --ring: oklch(0.587 0.225 270.16);
 
   --chart-1: oklch(0.587 0.225 270.16);
-  --chart-2: oklch(0.7584 0.1722 153.08); /* Go dark #3ECF7A */
+  --chart-2: oklch(0.7584 0.1722 153.08);
   --chart-3: oklch(0.9575 0.0067 97.35);
-  --chart-4: oklch(0.5013 0.0127 256.74); /* Steel dark */
+  --chart-4: oklch(0.5013 0.0127 256.74);
   --chart-5: oklch(0.7034 0.0135 255.53);
 
-  --sidebar: oklch(0.2077 0.005 248.07); /* Coal */
+  --sidebar: oklch(0.2077 0.005 248.07);
   --sidebar-foreground: oklch(0.9575 0.0067 97.35);
   --sidebar-primary: oklch(0.587 0.225 270.16);
   --sidebar-primary-foreground: oklch(1 0 0);
@@ -155,7 +153,6 @@
   --sidebar-border: oklch(0.2958 0.0084 255.57);
   --sidebar-ring: oklch(0.587 0.225 270.16);
 
-  /* landing decorative tokens */
   --dim: #5f646b;
   --faint: #3a3e44;
   --chip: #22252a;

@@ -2,10 +2,6 @@ import { describe, expect, it } from "vitest";
 
 import { isServiceThrottle, retryTransientOrigin } from "../src/retry";
 
-// Every test injects sleep/random rather than letting the default backoff run
-// real wall-clock delays — the point under test is the retry policy, not
-// timer behaviour, and a real sleep would make the suite slow and jittery for
-// no assertion gained.
 const noDelay = { sleep: async () => {}, random: () => 0 };
 
 function throttled() {

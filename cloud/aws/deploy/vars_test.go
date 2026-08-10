@@ -20,10 +20,6 @@ const (
 	previewVarsKeyARN    = "arn:aws:kms:us-east-1:1234:key/preview-key"
 )
 
-// TestVarsDecryptPolicy_GrantsOneKeyAndOneAction proves a function execution
-// role can decrypt under its own substrate's class key and nothing else: a
-// wildcard resource, or the other class's key, would hand preview compute
-// production ciphertext.
 func TestVarsDecryptPolicy_GrantsOneKeyAndOneAction(t *testing.T) {
 	raw, err := varsReadPolicy(executionRole{VarsKeyARN: productionVarsKeyARN})
 	if err != nil {
@@ -58,10 +54,6 @@ func TestVarsDecryptPolicy_GrantsOneKeyAndOneAction(t *testing.T) {
 	}
 }
 
-// TestAppExecutionRole_CarriesTheSubstratesVarsKey proves the key a role
-// decrypts under is the one the substrate this deploy resolved, not a name the
-// deploy path derives: a production deploy can only ever render the production
-// key into a role, because that is the only key it was handed.
 func TestAppExecutionRole_CarriesTheSubstratesVarsKey(t *testing.T) {
 	caches := map[string]*isrConfig{"web": {Prefix: "prod/proj/web/WEB1"}}
 
@@ -86,11 +78,6 @@ func variable(key, value string, class resourcesv1.VariableClass) *deploymentsv1
 	return &deploymentsv1.ManifestVariable{Key: key, Class: class, Value: value}
 }
 
-// TestVariableEnv_OnlyPlainAndUnderItsBareKey proves the one property that
-// distinguishes the plaintext class: the value lands under the name the user
-// chose, so a library reading the process environment itself finds it. Every
-// other class is delivered off the function's configuration entirely, so a
-// value that is meant to be encrypted can never be read back from it.
 func TestVariableEnv_OnlyPlainAndUnderItsBareKey(t *testing.T) {
 	app := &deploymentsv1.ManifestApp{
 		Name: "web",
@@ -115,11 +102,6 @@ func TestVariableEnv_OnlyPlainAndUnderItsBareKey(t *testing.T) {
 	}
 }
 
-// TestFunctionEnv_AccountsResourcesVariablesAndTheMembraneTogether proves the
-// budget is charged against exactly what is deployed: a variable shares the
-// function environment with the resource payloads and the membrane's own
-// entries, so sizing any of them alone would let a deploy pass and then fail
-// at AWS.
 func TestFunctionEnv_AccountsResourcesVariablesAndTheMembraneTogether(t *testing.T) {
 	base := map[string]string{
 		"OCEL_RESOURCE_POSTGRES_main": `{"connectionString":"postgres://x"}`,
@@ -138,11 +120,6 @@ func TestFunctionEnv_AccountsResourcesVariablesAndTheMembraneTogether(t *testing
 	}
 }
 
-// TestCheckRuntimeOwnedNames_RefusesWhatLambdaWouldInject proves the provider
-// rules on its own runtime's names. The SDK cannot: a declaration is written
-// before a deploy target is known, and these names mean nothing on another
-// provider. Here the target is settled, so the collision is a named refusal
-// instead of an opaque InvalidParameterValue from the Lambda API.
 func TestCheckRuntimeOwnedNames_RefusesWhatLambdaWouldInject(t *testing.T) {
 	app := &deploymentsv1.ManifestApp{
 		Name: "web",
@@ -162,10 +139,6 @@ func TestCheckRuntimeOwnedNames_RefusesWhatLambdaWouldInject(t *testing.T) {
 	}
 }
 
-// TestCheckRuntimeOwnedNames_LeavesEveryOtherNameAlone proves the check is
-// about this runtime's namespace and nothing else. A bundler's public prefix in
-// particular is a name the developer chose on purpose, and no concern of the
-// provider's.
 func TestCheckRuntimeOwnedNames_LeavesEveryOtherNameAlone(t *testing.T) {
 	app := &deploymentsv1.ManifestApp{
 		Name: "web",
@@ -173,7 +146,6 @@ func TestCheckRuntimeOwnedNames_LeavesEveryOtherNameAlone(t *testing.T) {
 			variable("NEXT_PUBLIC_APP_ID", "app_1", resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN),
 			variable("VITE_APP_ID", "app_2", resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN),
 			variable("POSTHOG_ID", "ph-123", resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN),
-			// Never in the function environment, so nothing there to overwrite.
 			variable("AWS_ROTATION_TOKEN", "sk-live", resourcesv1.VariableClass_VARIABLE_CLASS_SENSITIVE),
 		},
 	}
@@ -183,9 +155,6 @@ func TestCheckRuntimeOwnedNames_LeavesEveryOtherNameAlone(t *testing.T) {
 	}
 }
 
-// TestCheckFunctionEnvBudget_UnderAtAndOverTheLimit proves the boundary is the
-// platform's own: a set that fits is deployed, and one byte past it fails
-// rather than being silently truncated by AWS.
 func TestCheckFunctionEnvBudget_UnderAtAndOverTheLimit(t *testing.T) {
 	sized := func(bytes int) map[string]string {
 		key := "K"
@@ -203,9 +172,6 @@ func TestCheckFunctionEnvBudget_UnderAtAndOverTheLimit(t *testing.T) {
 	}
 }
 
-// TestCheckFunctionEnvBudget_NamesEveryKeysBytesAndTheRemedy proves the
-// failure is actionable: the operator sees which key is spending the budget
-// and what to do about it, rather than a bare size number.
 func TestCheckFunctionEnvBudget_NamesEveryKeysBytesAndTheRemedy(t *testing.T) {
 	env := map[string]string{
 		"BIG_ONE":   strings.Repeat("a", 3000),
@@ -230,10 +196,6 @@ func TestCheckFunctionEnvBudget_NamesEveryKeysBytesAndTheRemedy(t *testing.T) {
 	}
 }
 
-// TestVariableEnv_CarriesTheAppsFolderBinding proves a bound app is told what
-// it is bound to. Without it every app reports the project root, so the one
-// case folders exist for — two apps, one key name, different values — is also
-// the case whose out-of-scope error would name the wrong folder.
 func TestVariableEnv_CarriesTheAppsFolderBinding(t *testing.T) {
 	bound := variableEnv(&deploymentsv1.ManifestApp{Name: "admin", Folder: "/admin"})
 	if got, want := bound["OCEL_APP_FOLDER"], "/admin"; got != want {
@@ -246,11 +208,6 @@ func TestVariableEnv_CarriesTheAppsFolderBinding(t *testing.T) {
 	}
 }
 
-// TestRenderBakedBundle_EnvelopeIsTheDataKeyAndTheValuesAreOnlyCiphertext
-// proves what the class actually delivers: the function configuration carries
-// the raw per-deploy data key and nothing else, and the values exist only as
-// ciphertext inside the bundle. The key being usable as-is is the point — the
-// membrane opens the bundle with it alone, so init makes no external call.
 func TestRenderBakedBundle_EnvelopeIsTheDataKeyAndTheValuesAreOnlyCiphertext(t *testing.T) {
 	app := &deploymentsv1.ManifestApp{
 		Name: "web",
@@ -296,10 +253,6 @@ func TestRenderBakedBundle_EnvelopeIsTheDataKeyAndTheValuesAreOnlyCiphertext(t *
 	}
 }
 
-// TestRenderBakedBundle_EveryRenderGetsAFreshDataKey proves the key is drawn
-// per deploy rather than derived from anything the app carries: two renders of
-// the identical app share neither key nor ciphertext, which is what keeps one
-// deployment's artifact from opening another's.
 func TestRenderBakedBundle_EveryRenderGetsAFreshDataKey(t *testing.T) {
 	app := &deploymentsv1.ManifestApp{
 		Name:      "web",
@@ -330,10 +283,6 @@ func TestRenderBakedBundle_EveryRenderGetsAFreshDataKey(t *testing.T) {
 	}
 }
 
-// TestRenderBakedBundle_AnAppWithNoBakedValuesCostsNothing proves an app that
-// declares none gains no configuration entry: the class is opt-in per app, and
-// a data key with nothing behind it would still spend the function environment
-// budget.
 func TestRenderBakedBundle_AnAppWithNoBakedValuesCostsNothing(t *testing.T) {
 	app := &deploymentsv1.ManifestApp{
 		Name:      "web",
@@ -349,11 +298,6 @@ func TestRenderBakedBundle_AnAppWithNoBakedValuesCostsNothing(t *testing.T) {
 	}
 }
 
-// TestRenderBakedBundle_FingerprintTracksThePlaintextNotTheCiphertext is the
-// executable form of the constraint the whole rotation path rests on. The data
-// key is drawn fresh every render, so the ciphertext differs even when nothing
-// changed; a fingerprint taken over it would mint a new Deployment identity on
-// every deploy unconditionally. It has to be taken over the values.
 func TestRenderBakedBundle_FingerprintTracksThePlaintextNotTheCiphertext(t *testing.T) {
 	app := &deploymentsv1.ManifestApp{
 		Name:      "web",
@@ -388,9 +332,6 @@ func TestRenderBakedBundle_FingerprintTracksThePlaintextNotTheCiphertext(t *test
 	}
 }
 
-// TestRenderBakedBundle_NoBakedValuesHaveNoFingerprint keeps an app that bakes
-// nothing on a bare-build-id identity, so its records and stack names are
-// byte-for-byte what they were before fingerprints existed.
 func TestRenderBakedBundle_NoBakedValuesHaveNoFingerprint(t *testing.T) {
 	app := &deploymentsv1.ManifestApp{
 		Name: "web",
@@ -409,12 +350,6 @@ func TestRenderBakedBundle_NoBakedValuesHaveNoFingerprint(t *testing.T) {
 	}
 }
 
-// TestFingerprintValues_SameValuesSameDigestDifferentValuesDifferent proves
-// what the identity rests on: the fingerprint is a function of the values
-// themselves, so an unchanged set re-renders to the same Deployment identity
-// and a rotated one to a different Deployment. The key/value boundary is part
-// of what is digested, so no re-splitting of one key's characters into another
-// can collide.
 func TestFingerprintValues_SameValuesSameDigestDifferentValuesDifferent(t *testing.T) {
 	values := map[string]string{"STRIPE_API_KEY": "sk-live", "SENTRY_DSN": "https://sentry"}
 
@@ -443,11 +378,6 @@ func TestFingerprintValues_SameValuesSameDigestDifferentValuesDifferent(t *testi
 	}
 }
 
-// TestRenderBakedBundle_AClassWithNoDeliveryFailsTheDeploy proves the gap fails
-// closed. A class this deploy path cannot deliver — `secret`, or an
-// unrecognised one from a newer client — must stop the deploy naming the
-// variable, because the alternative is a value that is simply absent at
-// runtime and a deploy that reported success.
 func TestRenderBakedBundle_AClassWithNoDeliveryFailsTheDeploy(t *testing.T) {
 	cases := []struct {
 		name  string
@@ -480,10 +410,6 @@ func TestRenderBakedBundle_AClassWithNoDeliveryFailsTheDeploy(t *testing.T) {
 	}
 }
 
-// TestRenderBakedBundles_SealsEachAppUnderItsOwnKey proves the render is
-// per-app across a whole manifest: each app's bundle opens under its own
-// envelope and under no other app's, and an app that bakes nothing contributes
-// no entry at all.
 func TestRenderBakedBundles_SealsEachAppUnderItsOwnKey(t *testing.T) {
 	manifest := &deploymentsv1.Manifest{Apps: []*deploymentsv1.ManifestApp{
 		{
@@ -533,9 +459,6 @@ func TestRenderBakedBundles_SealsEachAppUnderItsOwnKey(t *testing.T) {
 	}
 }
 
-// TestBakedBundle_OverlaysTheCiphertextAtTheAgreedPath proves the deploy
-// writes the file where the membrane reads it. The two sides are held together
-// by one constant, so a bundle can never ship values the runtime cannot find.
 func TestBakedBundle_OverlaysTheCiphertextAtTheAgreedPath(t *testing.T) {
 	bundle := appBundle{Envelope: "e", Ciphertext: []byte("sealed")}
 
@@ -548,11 +471,6 @@ func TestBakedBundle_OverlaysTheCiphertextAtTheAgreedPath(t *testing.T) {
 	}
 }
 
-// TestBakedDelivery_CiphertextRidesInTheBundleAndNeverTheConfiguration is the
-// property the class exists for, asserted over what a deploy actually produces:
-// the plaintext appears nowhere in the uploaded artifact or in the function
-// environment, the sealed file is inside the package at the path the membrane
-// reads, and the only thing configuration gains is a wrapped data key.
 func TestBakedDelivery_CiphertextRidesInTheBundleAndNeverTheConfiguration(t *testing.T) {
 	dir := writeTree(t, map[string]string{"src/server.js": "handler"})
 	manifest := &deploymentsv1.Manifest{

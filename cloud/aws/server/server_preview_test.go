@@ -77,18 +77,12 @@ func TestPreflightResponse(t *testing.T) {
 		wantClass     deploymentsv1.Environment_Class
 		wantPresent   bool
 	}{
-		// Both substrates present: each command gates against its own class,
-		// never a spurious mismatch (the bug this scoping fixes).
 		{"deploy with both reports production", deploymentsv1.Environment_CLASS_PRODUCTION, preview, production, deploymentsv1.Environment_CLASS_PRODUCTION, true},
 		{"preview with both reports preview", deploymentsv1.Environment_CLASS_PREVIEW, preview, production, deploymentsv1.Environment_CLASS_PREVIEW, true},
-		// Required substrate present alone.
 		{"preview required, preview present", deploymentsv1.Environment_CLASS_PREVIEW, preview, absent, deploymentsv1.Environment_CLASS_PREVIEW, true},
 		{"production required, production present", deploymentsv1.Environment_CLASS_PRODUCTION, absent, production, deploymentsv1.Environment_CLASS_PRODUCTION, true},
-		// Wrong account: required absent, the other present -> report the other
-		// so the caller's guard fires an informative mismatch.
 		{"deploy in a preview-only account reports preview", deploymentsv1.Environment_CLASS_PRODUCTION, preview, absent, deploymentsv1.Environment_CLASS_PREVIEW, true},
 		{"preview in a production-only account reports production", deploymentsv1.Environment_CLASS_PREVIEW, absent, production, deploymentsv1.Environment_CLASS_PRODUCTION, true},
-		// Empty account.
 		{"empty account reports absent", deploymentsv1.Environment_CLASS_PREVIEW, absent, absent, deploymentsv1.Environment_CLASS_UNSPECIFIED, false},
 	}
 	for _, tc := range cases {
@@ -102,8 +96,6 @@ func TestPreflightResponse(t *testing.T) {
 	}
 }
 
-// routeOwners is a stand-in edge lookup: who holds each pattern, and a failure
-// for the patterns it is told to fail on.
 func routeOwners(byPattern map[string]string, fail map[string]bool) routeOwnerFunc {
 	return func(_ context.Context, pattern string) (string, error) {
 		if fail[pattern] {
@@ -130,16 +122,11 @@ func TestDomainClaims_AnswersInRequestOrderWithTheOwningScript(t *testing.T) {
 	if got[1].GetHostname() != "free.com" || got[1].GetStatus() != deploymentsv1.DomainClaim_STATUS_UNCLAIMED || got[1].GetOwner() != "" {
 		t.Errorf("claim[1] = %+v, want an unheld hostname reported unclaimed", got[1])
 	}
-	// This project's own worker is not a conflict: redeploying reclaims the
-	// hostname idempotently, and refusing there would refuse every redeploy.
 	if got[2].GetStatus() != deploymentsv1.DomainClaim_STATUS_UNCLAIMED || got[2].GetOwner() != "" {
 		t.Errorf("claim[2] = %+v, want this project's own hold to read as free to take", got[2])
 	}
 }
 
-// "Nobody holds it" and "nobody could say" must never collapse: a lookup the
-// edge could not answer leaves the status unspecified, so the CLI skips the
-// guard instead of failing a deploy it cannot verify.
 func TestDomainClaims_AnEdgeThatCannotAnswerIsUnspecified(t *testing.T) {
 	failing := domainClaims(context.Background(), routeOwners(nil, map[string]bool{"app.com/*": true}), "shop", []string{"app.com"})
 	if len(failing) != 1 || failing[0].GetHostname() != "app.com" || failing[0].GetStatus() != deploymentsv1.DomainClaim_STATUS_UNSPECIFIED {
@@ -147,7 +134,6 @@ func TestDomainClaims_AnEdgeThatCannotAnswerIsUnspecified(t *testing.T) {
 	}
 }
 
-// The check is opt-in per the request: no hostnames means no lookup is paid for.
 func TestDomainClaims_NoDomainsAsksTheEdgeNothing(t *testing.T) {
 	asked := 0
 	owner := func(context.Context, string) (string, error) {
@@ -162,10 +148,6 @@ func TestDomainClaims_NoDomainsAsksTheEdgeNothing(t *testing.T) {
 	}
 }
 
-// knownSlugs must answer without opening a Pulumi backend whenever the drift
-// check can't or needn't run — a caller that sent no slug, or a substrate that
-// isn't bootstrapped. A zero aws.Config makes any AWS call the guard fails to
-// skip fail loudly rather than pass by luck.
 func TestKnownSlugs_SkipsTheBackendWhenTheCheckCannotRun(t *testing.T) {
 	present := bootstrap.Deployed{Present: true, StateBucket: "ocel-state"}
 

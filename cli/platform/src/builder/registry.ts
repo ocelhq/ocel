@@ -3,11 +3,6 @@ import { buildNext } from "./next.js";
 import { traceBuild } from "./trace.js";
 import type { AppInput, BuildOptions, FunctionSummary } from "./types.js";
 
-/**
- * A framework strategy: how to recognize it in a directory and how to build it.
- * Tracing (express, fastify) and delegating to a build command (next) are just
- * two `build` implementations; the builder core knows neither.
- */
 export interface Framework {
   name: string;
   detect(dir: string): boolean;
@@ -40,7 +35,6 @@ export const next: Framework = {
   build: buildNext,
 };
 
-// Order is detection precedence: more specific frameworks first.
 export const REGISTRY: Framework[] = [next, express, fastify];
 
 const byName = new Map(REGISTRY.map((fw) => [fw.name, fw]));

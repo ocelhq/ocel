@@ -15,14 +15,9 @@ test("loads the config from the key the deploy wrote it to", async () => {
   expect(store.reads).toEqual([KEY]);
 });
 
-// The digest is taken over the exact bytes that were uploaded, which is why the
-// adapter hashes the serialized artifact rather than an object it re-serializes:
-// neither side has to reproduce the other's canonicalization.
 test("the digest is over the stored bytes, not over a re-serialization", async () => {
   const config = imageConfig();
   const store = fakeStore();
-  // Same object, different key order — a hash of a re-serialization would still
-  // match; a hash of the bytes must not.
   store.put(KEY, {
     bytes: new TextEncoder().encode(JSON.stringify(config)),
   });
@@ -31,8 +26,6 @@ test("the digest is over the stored bytes, not over a re-serialization", async (
   await expect(loadImageConfig(store, ID, configHash(config))).rejects.toThrow(SubstrateError);
 });
 
-// No downgrade. The config names the hosts this function may open a socket to,
-// so one it cannot authenticate is one an attacker may have chosen.
 test("refuses a config that does not hash to configHash", async () => {
   const config = imageConfig();
   const store = storeWithConfig(imageConfig({ domains: ["evil.example"] }));
@@ -44,7 +37,6 @@ test("refuses a config that does not hash to configHash", async () => {
 test("refuses a configHash that is not a sha256 digest", async () => {
   const store = storeWithConfig(imageConfig());
   await expect(loadImageConfig(store, ID, "../../etc/passwd")).rejects.toThrow(SubstrateError);
-  // Refused before the store is touched at all.
   expect(store.reads).toEqual([]);
 });
 
@@ -64,9 +56,6 @@ test("refuses bytes that hash correctly but are not JSON", async () => {
   await expect(loadImageConfig(store, ID, hash)).rejects.toThrow(/is not JSON/);
 });
 
-// The hash proves the bytes are the build's, not that this function's
-// expectations of them still hold. A missing field would otherwise read as
-// undefined and quietly widen the validation this config exists to narrow.
 test("refuses an authentic config that is missing fields this side reads", async () => {
   const store = fakeStore();
   const partial = { path: "/_next/image", deviceSizes: [640] };
@@ -77,12 +66,6 @@ test("refuses an authentic config that is missing fields this side reads", async
   await expect(loadImageConfig(store, ID, hash)).rejects.toThrow(/is missing/);
 });
 
-// Every field the pipeline reads, including the two that are only ever copied
-// into a response header: `undefined` in a Record<string, string> is serialized
-// by the Lambda prelude as the literal string "undefined", so an authentic
-// config missing contentSecurityPolicy answered 200 with
-// `content-security-policy: undefined` — quietly dropping the header the SVG
-// bypass depends on.
 test("refuses an authentic config missing any single field this side reads", async () => {
   const { createHash } = await import("node:crypto");
   for (const field of [
@@ -121,8 +104,6 @@ describe("memoization", () => {
     expect(store.reads).toEqual([KEY]);
   });
 
-  // Keyed by hash alone, which is only sound because the hash is verified:
-  // whatever is cached hashes to the key it is cached under.
   test("a different configHash is a different entry", async () => {
     const first = imageConfig();
     const second = imageConfig({ minimumCacheTTL: 60 });
@@ -143,10 +124,6 @@ describe("memoization", () => {
   });
 });
 
-// A hostile or wrong object at this key must be a cheap refusal, not a memory
-// exhaustion. This is the local-read ceiling Next left off its own internal path
-// (CVE-2026-44577) applied to the one object this function reads before it has
-// any config to take a ceiling from.
 test("caps the config read", async () => {
   const store = fakeStore();
   store.put(KEY, { bytes: new Uint8Array(2 * 1024 * 1024) });

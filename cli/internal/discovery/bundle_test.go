@@ -79,11 +79,6 @@ func TestBundle_FailedSyncFailsTheProcess(t *testing.T) {
 	}
 }
 
-// Declaration files routinely pull in CJS dependencies (e.g. node-postgres
-// via the SDK's postgres()) whose require("events")-style builtin loads
-// esbuild leaves as runtime require calls. In ESM output those crash with
-// "Dynamic require of ... is not supported" unless the bundle provides a
-// createRequire-backed shim.
 func TestBundle_RunsCJSDepsThatRequireNodeBuiltins(t *testing.T) {
 	root := t.TempDir()
 	write(t, filepath.Join(root, "node_modules", "cjsdep", "package.json"),

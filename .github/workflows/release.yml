@@ -6,16 +6,11 @@ on:
       - main
   workflow_dispatch:
 
-# Avoid two release runs racing each other (e.g. a rapid double-push to
-# main) from opening duplicate Version PRs or double-publishing.
 concurrency:
   group: release
   cancel-in-progress: false
 
 jobs:
-  # Gate: does this push still have unreleased changesets? If yes, the next
-  # step is to open/update the Version PR. If no, the Version PR was just
-  # merged and this push's package.json versions are the ones to publish.
   check-release:
     runs-on: ubuntu-latest
     outputs:
@@ -27,10 +22,6 @@ jobs:
       - name: Check for pending changesets
         id: check
         run: |
-          # Pending changesets = *.md files under .changeset/ other than the
-          # scaffolded README. This repo never enters changesets' "pre"
-          # (pre-release) mode, so .changeset/pre.json never exists and
-          # doesn't need to be consulted here.
           count=$(find .changeset -maxdepth 1 -name '*.md' ! -name 'README.md' | wc -l)
           echo "Pending changesets: $count"
           if [ "$count" -gt 0 ]; then
@@ -39,9 +30,6 @@ jobs:
             echo "has-changesets=false" >> "$GITHUB_OUTPUT"
           fi
 
-  # Runs only while changesets are pending: opens or updates the Version PR.
-  # Merging that PR is what removes the pending changesets and flips
-  # check-release to false on the next push.
   version-pr:
     needs: check-release
     if: needs.check-release.outputs.has-changesets == 'true'
@@ -76,9 +64,6 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-  # Runs only once no changesets are pending, i.e. right after the Version
-  # PR was merged. Cross-compiles all 4 targets from this single Linux
-  # runner (see scripts/build-native.mjs / AGENTS.md for why that's safe).
   build-binaries:
     needs: check-release
     if: needs.check-release.outputs.has-changesets == 'false'
@@ -106,9 +91,6 @@ jobs:
         uses: actions/setup-go@v5
         with:
           go-version-file: cli/go.mod
-          # No module at the repo root, so setup-go's default hunt for a root
-          # go.sum finds nothing and restores no build cache; name every
-          # module's instead.
           cache-dependency-path: |
             cli/go.sum
             cloud/aws/go.sum
@@ -127,13 +109,9 @@ jobs:
           node-version: 22
           cache: pnpm
 
-      # build-native.mjs runs `go generate` for the cli target, which bundles
-      # cli/platform/dist with esbuild and wrangler from the workspace.
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      # build-native.mjs embeds the esbuilt node builder in the shipped binary,
-      # and esbuild strips types without checking them.
       - name: pnpm --filter @ocel/cli-platform typecheck
         run: pnpm --filter @ocel/cli-platform typecheck
 
@@ -157,8 +135,6 @@ jobs:
           name: ${{ matrix.pkg }}
           path: packages/native-lib/${{ matrix.pkg }}/bin
 
-  # Assembles the 4 cross-compiled binaries into their native packages and
-  # publishes all 6 publishable packages to npm with provenance.
   publish:
     needs: build-binaries
     runs-on: ubuntu-latest
@@ -197,8 +173,6 @@ jobs:
             mkdir -p "$dest"
             cp -r "artifacts/$pkg/." "$dest/"
           done
-          # Executable bit doesn't reliably round-trip through artifact
-          # zip/unzip, so re-set it explicitly on every non-Windows binary.
           chmod +x packages/native-lib/cli-darwin-arm64/bin/ocel
           chmod +x packages/native-lib/cli-darwin-x64/bin/ocel
           chmod +x packages/native-lib/cli-linux-x64/bin/ocel

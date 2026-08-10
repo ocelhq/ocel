@@ -15,20 +15,10 @@ import (
 	envv1 "github.com/ocelhq/ocel/pkg/proto/env/v1"
 )
 
-// envFakeStoreEnvVar points the fake provider at the JSON file its variable
-// store lives in. A provider process is spawned per command, so the store has
-// to outlive one: without a file on disk, a value set by one command could not
-// be read back by the next, and the round trip the store exists for would be
-// untestable at the command level.
 const envFakeStoreEnvVar = "OCEL_TEST_FAKE_VARS_STORE"
 
-// fakeRevealFailureEnvVar, when set, makes every RevealValues fail with the
-// reason it names, so a test can drive what the CLI says when the store is
-// there but its plaintext cannot be read.
 const fakeRevealFailureEnvVar = "OCEL_TEST_FAKE_REVEAL_FAILURE"
 
-// fakeCell is one coordinate's stored state in the fake store: the substrate and
-// coordinate it belongs to, plus its version history, newest last.
 type fakeCell struct {
 	Class      deploymentsv1.Environment_Class `json:"class"`
 	Coordinate fakeCoordinate                  `json:"coordinate"`
@@ -47,19 +37,12 @@ func (c fakeCoordinate) proto() *envv1.Coordinate {
 	return &envv1.Coordinate{Slug: c.Slug, Folder: c.Folder, Key: c.Key, Environment: c.Environment}
 }
 
-// fakeCellData is one version of a cell: what it held, and when. Target stands
-// where Value would be for a reference, which holds an address rather than a
-// value of its own.
 type fakeCellData struct {
 	Value  string          `json:"value"`
 	Target *fakeCoordinate `json:"target,omitempty"`
 	Ts     int64           `json:"ts"`
 }
 
-// fakeStore mirrors the real store's observable contract — versions, a
-// retention window, reveal-gated plaintext, and current-pointer deletion —
-// without any of its cloud machinery, so a command test asserts on what an
-// operator sees rather than on how the provider stored it.
 type fakeStore map[string]*fakeCell
 
 const fakeHistoryWindow = 50
@@ -109,8 +92,6 @@ func (cell *fakeCell) metadata() *envv1.ValueMetadata {
 	return m
 }
 
-// target is the cell this one references, and nil for a cell holding a value of
-// its own.
 func (cell *fakeCell) target() *fakeCoordinate {
 	if cell == nil || cell.Deleted || len(cell.Versions) == 0 {
 		return nil
@@ -118,9 +99,6 @@ func (cell *fakeCell) target() *fakeCoordinate {
 	return cell.Versions[len(cell.Versions)-1].Target
 }
 
-// resolve is read-time resolution: the plaintext behind a cell, following a
-// reference exactly once. A reference whose target no longer holds a value is a
-// failed read rather than an absent one, the way the real store's is.
 func (s fakeStore) resolve(class deploymentsv1.Environment_Class, cell *fakeCell) (string, error) {
 	if target := cell.target(); target != nil {
 		held := s[fakeCoordinateID(class, target.proto())]
@@ -133,10 +111,6 @@ func (s fakeStore) resolve(class deploymentsv1.Environment_Class, cell *fakeCell
 	return cell.Versions[len(cell.Versions)-1].Value, nil
 }
 
-// referencesTo is what points at a cell — the reverse lookup, which the real
-// store serves from its one secondary index and the fake serves by looking,
-// because what matters to a command test is the answer and not the access
-// pattern behind it.
 func (s fakeStore) referencesTo(class deploymentsv1.Environment_Class, at *envv1.Coordinate) []*envv1.Coordinate {
 	want := coordinateOf(at)
 	var found []*envv1.Coordinate
@@ -158,9 +132,6 @@ func sortedIDs(s fakeStore) []string {
 	return ids
 }
 
-// liveVersion is the version a reader can observe, zero when the cell holds no
-// value — the same rule the real store applies, and what an expectation is
-// compared against.
 func (c *fakeCell) liveVersion() int64 {
 	if c == nil || c.Deleted {
 		return 0
@@ -168,9 +139,6 @@ func (c *fakeCell) liveVersion() int64 {
 	return int64(len(c.Versions))
 }
 
-// checkExpectation is the provider half of optimistic concurrency: an
-// expectation that no longer describes the cell is FAILED_PRECONDITION, which
-// is the one code the wire contract reserves for it.
 func checkExpectation(cell *fakeCell, expected *int64) error {
 	if expected == nil || *expected == cell.liveVersion() {
 		return nil
@@ -179,10 +147,6 @@ func checkExpectation(cell *fakeCell, expected *int64) error {
 		errors.New("the value changed since it was read; re-read it and try again"))
 }
 
-// addressable mirrors the real provider's write guard: an override may only be
-// written against an environment identity the runtime will ask for. It is the
-// store's own rule rather than the CLI's, so the fake has to hold it for a
-// command test to be exercising the refusal a real provider makes.
 func (s *deployFakeProviderServer) addressable(ctx context.Context, at *envv1.Coordinate, class deploymentsv1.Environment_Class) error {
 	environment := at.GetEnvironment()
 	if environment == "" {
@@ -240,9 +204,6 @@ func (s *deployFakeProviderServer) SetValue(ctx context.Context, req *envv1.SetV
 	return &envv1.SetValueResponse{Metadata: store.metadata(req.GetClass(), req.GetCoordinate())}, nil
 }
 
-// write records one new version of a cell, whatever the cell now holds, and
-// saves the store. It is the fake's whole write path so a value and a reference
-// share one version sequence, as they do in the real store.
 func (s fakeStore) write(class deploymentsv1.Environment_Class, at *envv1.Coordinate, data fakeCellData) error {
 	id := fakeCoordinateID(class, at)
 	cell := s[id]
@@ -263,9 +224,6 @@ func coordinateOf(c *envv1.Coordinate) fakeCoordinate {
 	return fakeCoordinate{Slug: c.GetSlug(), Folder: c.GetFolder(), Key: c.GetKey(), Environment: c.GetEnvironment()}
 }
 
-// SetReference mirrors the real store's write-path enforcement: a reference
-// points at a value, never at another reference and never at a cell others
-// already read, so a chain can neither loop nor deepen.
 func (s *deployFakeProviderServer) SetReference(ctx context.Context, req *envv1.SetReferenceRequest) (*envv1.SetReferenceResponse, error) {
 	if err := s.checkToken(ctx); err != nil {
 		return nil, err

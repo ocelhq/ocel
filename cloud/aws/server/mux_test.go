@@ -15,11 +15,6 @@ import (
 
 const testToken = "test-session-token"
 
-// authHeaderInterceptor is a client-side interceptor standing in for what
-// the CLI does: attach the session token to every call's Authorization
-// header. The generated DeploymentServiceClient.Deploy signature takes the
-// bare request message (no per-call header option), so tests need this to
-// exercise the auth path at all.
 type authHeaderInterceptor struct{ token string }
 
 func (a authHeaderInterceptor) WrapUnary(next connect.UnaryFunc) connect.UnaryFunc {
@@ -41,9 +36,6 @@ func (a authHeaderInterceptor) WrapStreamingHandler(next connect.StreamingHandle
 	return next
 }
 
-// newTestClient starts an httptest server over NewMux(testToken) and returns
-// a client. When token is non-empty, every call presents it as the
-// Authorization header; an empty token presents no header at all.
 func newTestClient(t *testing.T, token string) deploymentsv1connect.DeploymentServiceClient {
 	t.Helper()
 	srv := httptest.NewServer(NewMux(testToken))
@@ -93,13 +85,6 @@ func TestDeploy_RejectsWrongToken(t *testing.T) {
 		t.Fatalf("Deploy() with wrong token err = %v, want CodeUnauthenticated", err)
 	}
 }
-
-// The happy-path "streams progress then success" assertion moved to the
-// opt-in, build-tagged real e2e (deploy_e2e_test in the CLI, //go:build
-// awslive): a successful Deploy now provisions real Aurora/S3/CFN, which
-// must never run in CI. The pre-provision behaviour a unit test can pin —
-// token auth and manifest validation, both of which reject before any AWS
-// call — is covered by the tests around this one.
 
 func TestDeploy_MalformedManifestFailsBeforeStreaming(t *testing.T) {
 	client := newTestClient(t, testToken)

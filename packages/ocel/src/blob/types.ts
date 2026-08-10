@@ -2,14 +2,8 @@ import type { z } from "zod";
 
 export type MaybePromise<T> = T | Promise<T>;
 
-/** Terminal-or-pending upload state as surfaced to the client by op=poll. */
 export type UploadStatusState = "pending" | "succeeded" | "expired";
 
-/**
- * The minimal request surface the blob route and uploader middleware rely on.
- * A Web Fetch `Request` (and a Next `NextRequest`) satisfy it structurally, so
- * the core stays framework-agnostic; framework bindings only narrow the type.
- */
 export interface BlobRequest {
   readonly url: string;
   readonly headers: { get(name: string): string | null };
@@ -27,7 +21,6 @@ export interface CompletedFile {
   name: string;
   size: number;
   mimeType: string;
-  /** The real object location; equal to key. */
   path: string;
 }
 
@@ -80,7 +73,6 @@ export interface UploaderUpload<TMetadata> {
   }) => MaybePromise<void>;
 }
 
-/** A built uploader: runtime config plus phantom types the client recovers from `typeof bucket`. */
 export interface Uploader<
   TInputParsed = unknown,
   TMetadata = unknown,
@@ -88,7 +80,6 @@ export interface Uploader<
 > {
   readonly auth: UploaderAuth<TReq, z.ZodType | undefined, TMetadata>;
   readonly upload: UploaderUpload<TMetadata>;
-  /** phantom, type-only: the parsed input this uploader accepts */
   readonly __input?: TInputParsed;
 }
 

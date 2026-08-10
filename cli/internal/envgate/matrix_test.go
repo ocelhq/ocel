@@ -105,10 +105,6 @@ func TestMatrix_AScopedKeyIsRequiredInEveryFolderItNamesAndForbiddenEverywhereEl
 	}
 }
 
-// The matrix draws the cells a user may type into, and CheckWritable decides
-// what the write path accepts. If those two ever disagree the UI either offers
-// a cell that cannot be saved or hides one that could, so they are asserted
-// against each other rather than separately.
 func TestMatrix_AForbiddenCellIsExactlyOneTheWritePathRefuses(t *testing.T) {
 	g := prefetched(t, newFakeValues(), envgate.Scope{Apps: []envgate.App{
 		{Name: "web", Folder: "/web"},
@@ -173,9 +169,6 @@ func TestMatrix_AMalformedValueKeepsItsCellFilledAndCarriesTheSchemasComplaint(t
 	}
 }
 
-// TestMatrix_AnOverrideIsNamedBesideACellItDoesNotFill is the whole of the
-// read-only surfacing: the cell reads exactly as empty as it is, and the
-// environments still holding a value are visible rather than silent.
 func TestMatrix_AnOverrideIsNamedBesideACellItDoesNotFill(t *testing.T) {
 	values := newFakeValues()
 	values.override("STRIPE_API_KEY", "", "pr-7", "override")
@@ -197,10 +190,6 @@ func TestMatrix_AnOverrideIsNamedBesideACellItDoesNotFill(t *testing.T) {
 	}
 }
 
-// An override outlives the environment that held it, so the matrix says which
-// ones no longer have somewhere to be read. Judging it against the enumeration
-// rather than against the store is the point: the store cannot know an
-// environment is gone, and an override nobody marks is one that accumulates.
 func TestMatrix_MarksAnOverrideWhoseEnvironmentIsGone(t *testing.T) {
 	values := newFakeValues()
 	values.override("STRIPE_API_KEY", "", "pr-7", "override")
@@ -219,9 +208,6 @@ func TestMatrix_MarksAnOverrideWhoseEnvironmentIsGone(t *testing.T) {
 	}
 }
 
-// The matrix is a snapshot, not a window onto the gate. A caller that sorts,
-// truncates or renames the environments a cell reports must not be editing the
-// gate's own record of them.
 func TestMatrix_TheEnvironmentsACellNamesAreTheCallersToKeep(t *testing.T) {
 	values := newFakeValues()
 	values.override("STRIPE_API_KEY", "", "pr-7", "override")
@@ -242,10 +228,6 @@ func TestMatrix_TheEnvironmentsACellNamesAreTheCallersToKeep(t *testing.T) {
 	}
 }
 
-// A folder nothing else names gets no column, and a cell that gets no column
-// has nowhere to report the environments still holding a value there. The
-// column an override earns has to stay inert: the cell it draws is one nobody
-// can be owed, nobody can be credited with, and no deploy is refused over.
 func TestMatrix_AnOverrideEarnsItsFolderAColumnThatSatisfiesNothing(t *testing.T) {
 	values := newFakeValues()
 	values.override("STRIPE_API_KEY", "/worker", "pr-42", "override")

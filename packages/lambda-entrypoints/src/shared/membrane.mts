@@ -5,8 +5,6 @@ import Module from "node:module";
 let controlSocket: net.Socket | null = null;
 const controlHandlers = new Set<(message: unknown) => void>();
 
-// The control socket is opened lazily on first use so importing this module has
-// no side effect (tests can load it without a live socket).
 function control(): net.Socket {
   if (!controlSocket) {
     controlSocket = net.createConnection(process.env.OCEL_CONTROL_SOCKET!);
@@ -19,19 +17,11 @@ export function sendControl(type: string, payload: unknown): void {
   control().write(JSON.stringify({ type, payload }) + "\n");
 }
 
-// onControlMessage subscribes to what the membrane writes back down the same
-// socket. Registering opens the connection: the membrane can only push once
-// this side has connected, so a subscriber that waited for a send to happen
-// first would miss everything sent before it.
 export function onControlMessage(handler: (message: unknown) => void): void {
   controlHandlers.add(handler);
   control();
 }
 
-// The framing is the one the membrane already reads in the other direction:
-// one JSON object per line. A line that is not JSON is dropped rather than
-// thrown on — the socket carries the app's own telemetry, and losing it to a
-// malformed frame would cost more than the frame did.
 function receive(socket: net.Socket): void {
   let buffer = "";
   socket.on("data", (chunk) => {
@@ -53,21 +43,11 @@ function receive(socket: net.Socket): void {
   });
 }
 
-// Reports an error that killed the boot, before there is an app to serve or,
-// often, a control socket to talk over. It must not go through sendControl:
-// that write is async, and the process.exit that follows a fatal error
-// abandons it, losing the one message explaining why the app never came up.
-// stderr is the real fd inherited from the Go bootstrap, which forwards it to
-// CloudWatch, so the write lands before the process goes.
 export function reportFatalBoot(err: unknown): void {
   const detail = err instanceof Error ? (err.stack ?? err.message) : String(err);
   console.error(`ocel: fatal boot error: ${detail}`);
 }
 
-// The compile cache itself is enabled by the Go side via NODE_COMPILE_CACHE;
-// this only answers the membrane's request to flush it before the sandbox is
-// frozen. `flushCompileCache`/`getCompileCacheDir` are absent on older Node,
-// which degrades to an ok:false reply rather than a version check.
 function flushCompileCacheNow(): { dir: string | null; ok: boolean } {
   let dir: string | null = null;
   try {
@@ -107,10 +87,6 @@ export interface WarmReport {
   dir: string | null;
 }
 
-// A function whose launcher predates warming — or is not a Next bundle at all —
-// has nothing to warm, and neither does one on a Node without the compile cache
-// APIs. Both are the same answer to the membrane: nothing was warmed, and the
-// deploy should publish whatever the run itself produced.
 export const UNSUPPORTED_WARM: WarmReport = {
   ok: false,
   state: "unsupported",
@@ -139,9 +115,6 @@ function warmNow(warm: unknown, payload: unknown): WarmReport {
   }
 }
 
-// The membrane blocks the deploy on this reply, so the handler answers whatever
-// the warm walk did — including having done nothing at all. A throw here would
-// leave the deploy waiting on a message that never comes.
 export function installCompileCacheWarm(warm: unknown): void {
   onControlMessage((message) => {
     if (!message || typeof message !== "object") return;
@@ -163,10 +136,6 @@ export type Invoke = (
   ocel: OcelContext,
 ) => void | Promise<void>;
 
-// drainWaitUntil settles every registered background promise — including any
-// registered while an earlier one was still settling — then resolves. Rejections
-// are logged and swallowed so one failed task can't sink the rest or fail the
-// invocation. The pending array is drained in place.
 export async function drainWaitUntil(pending: Promise<unknown>[]): Promise<void> {
   while (pending.length > 0) {
     const batch = pending.splice(0, pending.length);
@@ -182,17 +151,6 @@ export async function drainWaitUntil(pending: Promise<unknown>[]): Promise<void>
   }
 }
 
-// The Go bootstrap stamps x-ocel-request-id on every request it forwards, so a
-// request without one reached this listener some other way: the app fetched
-// itself over the loopback. Next does that to run a Server Action that lives on
-// another page, and to follow an action's redirect.
-//
-// Such a request is built from the headers of the request that caused it, and
-// two of those do not survive the copy intact. x-ocel-entry names which route of
-// the bundle to run and would name the *originating* one. And undici drops a
-// caller-supplied host, so the authority is the loopback again — the very thing
-// the bootstrap sets Host to avoid. x-forwarded-host survives both hops and is
-// the authority the client addressed, on the inner request as on the outer.
 function normalizeLoopbackHeaders(headers: http.IncomingHttpHeaders): void {
   const forwarded = String(headers["x-forwarded-host"] ?? "").split(",")[0]?.trim();
   if (forwarded) headers.host = forwarded;
@@ -212,10 +170,6 @@ function wrapWithOcelContext(invoke: Invoke): http.RequestListener {
       pending.push(Promise.resolve(p));
     };
 
-    // Fire once, on whichever of finish/close comes first (an aborted request
-    // emits close without finish). Report per-request telemetry, then hold the
-    // invocation open — via the control socket — until every waitUntil promise
-    // settles, so the runtime doesn't freeze the sandbox out from under them.
     let finalized = false;
     const finalize = (): void => {
       if (finalized) return;
@@ -246,8 +200,6 @@ export function serveInvoke(invoke: Invoke, onListening?: OnListening): Promise<
   return startServer(http.createServer(wrapWithOcelContext(invoke)), onListening);
 }
 
-// Runs with the ephemeral port the app bound to, before the port is announced —
-// so anything it configures is in place before the first request can arrive.
 export type OnListening = (port: number) => void;
 
 export function startServer(server: http.Server, onListening?: OnListening): Promise<void> {

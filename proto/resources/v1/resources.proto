@@ -8,15 +8,8 @@ import "resources/v1/env.proto";
 service ResourceService {
     rpc Declare(DeclareRequest) returns (DeclareResponse);
 
-    // DeclareEnv declares every variable one defineEnv call holds and, unlike
-    // Declare, answers with a payload: the cells the store already holds for
-    // those keys. Validation happens in the declaring process because the
-    // schemas live there, so the values have to travel back to it.
     rpc DeclareEnv(DeclareEnvRequest) returns (DeclareEnvResponse);
 
-    // ReportEnvProblems carries the verdict back: every cell that is missing
-    // or fails its schema. It is what the discovery gate refuses on, so the
-    // decision stays with the schemas and the message stays with the CLI.
     rpc ReportEnvProblems(ReportEnvProblemsRequest) returns (ReportEnvProblemsResponse);
 }
 
@@ -43,7 +36,6 @@ message DeclareRequest {
   }
 }
 
-// config messages
 message PostgresConfig {
   string version = 1;
 }

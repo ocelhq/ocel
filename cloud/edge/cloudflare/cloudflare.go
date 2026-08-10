@@ -1,6 +1,3 @@
-// Package cloudflare is the Cloudflare Workers edge: it uploads an assembled
-// worker as a Workers script with its static assets, and routes it on a custom
-// domain or the account's workers.dev subdomain.
 package cloudflare
 
 import (
@@ -30,47 +27,22 @@ import (
 	"github.com/ocelhq/ocel/cloud/edge"
 )
 
-// envAccountID names the Cloudflare account workers are deployed into.
-// envAPIToken is the token the SDK client authenticates with; it is read by the
-// client itself and named here only for diagnostics.
 const (
 	envAccountID = "CLOUDFLARE_ACCOUNT_ID"
 	envAPIToken  = "CLOUDFLARE_API_TOKEN"
 )
 
-// compatDate pins the Workers runtime compatibility date uploaded scripts are
-// built against (mirrors workers/nextjs/wrangler.jsonc). compatFlags enables the
-// Node.js compatibility the bundled routing code relies on.
 const compatDate = "2026-07-13"
 
 var compatFlags = []string{"nodejs_compat"}
 
-// A worker route is only a match rule: unlike a custom domain it creates no DNS
-// record, and a hostname with no proxied record never reaches Cloudflare's edge
-// for the route to fire (it returns ERR_NAME_NOT_RESOLVED). So the route path
-// also plants a proxied placeholder for the pattern's hostname — an AAAA to the
-// IPv6 discard prefix, Cloudflare's canonical "the Worker is the origin" record.
-// The content doubles as Ocel's ownership marker, so teardown removes only the
-// records it planted and never one the user manages at the same name.
 const (
 	routeRecordContent = "100::"
 	routeRecordComment = "managed by ocel — worker route placeholder"
 )
 
-// envObservability turns Workers observability off for every script this edge
-// uploads when it is set to "off". Cloudflare bills logs and traces per event,
-// so an account that exists only to run test suites would spend a real quota on
-// output nobody reads.
 const envObservability = "OCEL_EDGE_OBSERVABILITY"
 
-// observability is the Workers observability settings every deployed worker
-// ships with: logs (with per-invocation summaries) and OTel traces, both at 100%
-// head sampling. It is uploaded as a field of the script metadata, the same way
-// wrangler applies it, so no separate settings call is needed.
-//
-// Turning it off uploads an explicit disable rather than omitting the field: a
-// script already deployed with observability on keeps its settings until
-// something replaces them, so silence has to be stated to converge.
 func observability() map[string]any {
 	if strings.EqualFold(os.Getenv(envObservability), "off") {
 		return map[string]any{"enabled": false}
@@ -83,43 +55,22 @@ func observability() map[string]any {
 	}
 }
 
-// provider is the cloudflare-go-backed edge.Provider. It performs the real
-// multi-step worker upload (assets session -> asset batches -> script PUT ->
-// custom-domain or workers.dev routing) and is exercised only end-to-end; the
-// provider-side deploy orchestration is unit-tested against a fake through the
-// edge.Provider seam.
 type provider struct {
 	client *cf.Client
 }
 
-// The host reaches every optional capability through a type assertion, so an
-// interface this edge silently stopped satisfying would only surface at runtime.
 var _ edge.RootStack = (*provider)(nil)
 
-// New builds the Cloudflare edge. Its API token is read from
-// CLOUDFLARE_API_TOKEN by the cloudflare-go client, which retries a throttled
-// or failing API call rather than failing the deploy on the first attempt.
 func New() edge.Provider {
 	return &provider{client: cf.NewClient(option.WithMaxRetries(clientMaxRetries))}
 }
 
-// clientMaxRetries is how many times the cloudflare-go client retries one API
-// call. A deploy issues many calls against an account-wide rate limit, and a
-// single 429 anywhere in the sequence would otherwise strand it half-applied.
 const clientMaxRetries = 5
 
 func (p *provider) Kind() edge.Kind { return edge.KindCloudflare }
 
-// CodeRuntime reports the runtime a dynamically loaded worker is evaluated
-// under: the same settings every uploaded script is built against, so a
-// deployment's edge code never runs on a runtime the worker loading it does
-// not. It implements edge.CodeLoader.
 func (p *provider) CodeRuntime() (string, []string) { return compatDate, compatFlags }
 
-// Bootstrap provisions the substrate class's R2 cache store and reports
-// Cloudflare's trust posture. Cloudflare runs in its own account, outside any
-// cloud provider's trust boundary, so the provider must mint static credentials
-// for it — and, now that the cache lives here, Cloudflare mints one back.
 func (p *provider) Bootstrap(ctx context.Context, class edge.Class) (edge.BootstrapOutput, error) {
 	accountID := os.Getenv(envAccountID)
 	if accountID == "" {
@@ -129,10 +80,6 @@ func (p *provider) Bootstrap(ctx context.Context, class edge.Class) (edge.Bootst
 	if err != nil {
 		return out, err
 	}
-	// Each substrate provisions its own deployments-store worker so preview and
-	// production never share promotion history or Durable Object state. The two
-	// workers are distinct scripts (production vs preview script names), which is
-	// what keeps their DO namespaces separate — the namespace is script-scoped.
 	scriptName, err := storeScriptNameFor(class)
 	if err != nil {
 		return out, err
@@ -151,14 +98,6 @@ func (p *provider) Bootstrap(ctx context.Context, class edge.Class) (edge.Bootst
 	return out, nil
 }
 
-// bootstrapISRWriter provisions the single shared ISR writer worker for the
-// substrate class and offers the address and credential a deploy needs to seed
-// and reach one build's instance. It is the same shape as bootstrapStore — one
-// account-level script owning a Durable Object namespace, re-uploaded and
-// re-credentialed on every bootstrap — with one addition: the class's cache
-// bucket is bound natively, which is the whole point. With it a deployed Lambda
-// writes its ISR entries through this worker and needs no standing R2
-// credentials of its own.
 func (p *provider) bootstrapISRWriter(ctx context.Context, accountID string, class edge.Class) (edge.Offer, error) {
 	scriptName, err := isrWriterScriptNameFor(class)
 	if err != nil {
@@ -206,14 +145,6 @@ func (p *provider) bootstrapISRWriter(ctx context.Context, accountID string, cla
 	}, nil
 }
 
-// bootstrapStore provisions the single shared deployments-store worker for the
-// account and offers the address, credential and script name a project's root
-// stack needs to seed and reach its own instance. It re-uploads the bundle on
-// every bootstrap (so store-worker updates ship) and re-mints the bootstrap
-// credential, which is harmless: the credential authorizes only
-// /<slug>/initialize and is read fresh from the adopted param at deploy time,
-// never held long-term. Only the migration steps the deployed script has not
-// applied are declared; redeclaring an applied one is rejected.
 func (p *provider) bootstrapStore(ctx context.Context, accountID, scriptName string) (edge.Offer, error) {
 	bundles, err := edge.LoadStoreBundleManifest()
 	if err != nil {
@@ -256,9 +187,6 @@ func (p *provider) bootstrapStore(ctx context.Context, accountID, scriptName str
 	}, nil
 }
 
-// readWorkerBundle reads a compiled worker entrypoint off disk into the
-// edge.Worker shape the upload machinery consumes: a single main module, no
-// per-deploy modules/vars/assets of its own.
 func readWorkerBundle(path string) (edge.Worker, error) {
 	main, err := os.ReadFile(path)
 	if err != nil {
@@ -271,23 +199,6 @@ func readWorkerBundle(path string) (edge.Worker, error) {
 	}}, nil
 }
 
-// deployedClasses reports the Durable Object classes the deployed script already
-// has, which is what decides how much of a worker's migration log an upload has
-// to declare. No classes means the script has applied nothing — it does not
-// exist yet, or no class was ever created on it.
-//
-// Whether the script merely exists cannot answer this: an account that
-// bootstrapped an earlier version of a worker exists and is still missing every
-// class added since, and Cloudflare rejects a binding to a class it never
-// created (ocelhq-wvag.4).
-//
-// The classes are read rather than the migration tag because the API does not
-// report a tag. Every endpoint that could carry one — this settings call, the
-// script list, the version list and a version's detail — omits it entirely for a
-// script that demonstrably carries its class, so `settings.Migrations` comes back
-// zeroed. Reading a tag from it and finding "" is indistinguishable from a script
-// that was never migrated, which redeclares the class and is rejected with 10074.
-// A class binding is reported, so it is what this decides on.
 func (p *provider) deployedClasses(ctx context.Context, name string) ([]string, error) {
 	accountID := os.Getenv(envAccountID)
 	if accountID == "" {
@@ -305,9 +216,6 @@ func (p *provider) deployedClasses(ctx context.Context, name string) ([]string, 
 	}
 	var classes []string
 	for _, binding := range settings.Bindings {
-		// A binding carrying script_name points at a class another script owns,
-		// so it is no evidence this one has it. Counting it would skip the step
-		// that creates the local class, and the skip would be silent.
 		if binding.Type == durableObjectBindingType && binding.ClassName != "" && binding.ScriptName == "" {
 			classes = append(classes, binding.ClassName)
 		}
@@ -315,8 +223,6 @@ func (p *provider) deployedClasses(ctx context.Context, name string) ([]string, 
 	return classes, nil
 }
 
-// FindApp reports whether a Workers script exists under name. A 404 is the
-// answer "no", not a failure.
 func (p *provider) FindApp(ctx context.Context, name string) (bool, error) {
 	accountID := os.Getenv(envAccountID)
 	if accountID == "" {
@@ -332,11 +238,6 @@ func (p *provider) FindApp(ctx context.Context, name string) (bool, error) {
 	return err == nil, err
 }
 
-// VerifyCredentials proves the configured API token authenticates and can
-// reach CLOUDFLARE_ACCOUNT_ID, and reports that account for the preflight
-// banner. It fetches the account: an unset/invalid/expired token or a token
-// without access to the account all surface here, before any deploy touches
-// the edge. It implements edge.CredentialVerifier.
 func (p *provider) VerifyCredentials(ctx context.Context) (edge.CredentialIdentity, error) {
 	accountID := os.Getenv(envAccountID)
 	if accountID == "" {
@@ -380,17 +281,12 @@ func (p *provider) DeployApp(ctx context.Context, app edge.AppDeployment) (edge.
 	return edge.AppResult{URL: url}, nil
 }
 
-// upload is one app deployment resolved against the Cloudflare account it lands
-// in.
 type upload struct {
 	accountID  string
 	scriptName string
 	worker     edge.Worker
 }
 
-// uploadAssets registers the static-asset manifest, uploads the file batches the
-// session asks for, and returns the completion JWT the script upload binds. When
-// the worker has no static assets it returns an empty token and uploads nothing.
 func (p *provider) uploadAssets(ctx context.Context, up upload) (string, error) {
 	if len(up.worker.Assets) == 0 {
 		return "", nil
@@ -415,10 +311,6 @@ func (p *provider) uploadAssets(ctx context.Context, up upload) (string, error) 
 		return "", fmt.Errorf("create assets upload session: %w", err)
 	}
 
-	// When every file in the manifest is already present (e.g. a redeploy), the
-	// session returns no buckets and its own JWT is the completion token. When
-	// there are buckets, only a completed batch upload yields the completion
-	// token — the session JWT merely authenticates the uploads.
 	filesToUpload := 0
 	for _, bucket := range session.Buckets {
 		filesToUpload += len(bucket)
@@ -456,23 +348,12 @@ func (p *provider) uploadAssets(ctx context.Context, up upload) (string, error) 
 	return completionJWT, nil
 }
 
-// hashAsset computes the content hash the assets upload session keys a file by:
-// the SHA-256 of the base64-encoded contents concatenated with the file
-// extension (no leading dot), hex-encoded and truncated to 32 characters. This
-// mirrors wrangler's algorithm; a mismatch would make the session reject the
-// upload.
 func hashAsset(a edge.StaticAsset) string {
 	ext := strings.TrimPrefix(path.Ext(a.Path), ".")
 	sum := sha256.Sum256([]byte(base64.StdEncoding.EncodeToString(a.Content) + ext))
 	return hex.EncodeToString(sum[:])[:32]
 }
 
-// buildAssetBatch encodes one bucket of files as the multipart/form-data body
-// the assets upload endpoint expects: one part per file, named and filenamed by
-// its content hash, carrying the base64-encoded contents (the ?base64=true query
-// tells Cloudflare the parts are base64). An unknown extension maps to
-// "application/null" — Cloudflare's sentinel for "serve without a Content-Type",
-// mirroring wrangler.
 func buildAssetBatch(bucket []string, assetByHash map[string]edge.StaticAsset) ([]byte, string, error) {
 	buf := &bytes.Buffer{}
 	w := multipart.NewWriter(buf)
@@ -493,11 +374,6 @@ func buildAssetBatch(bucket []string, assetByHash map[string]edge.StaticAsset) (
 	return buf.Bytes(), w.FormDataContentType(), nil
 }
 
-// putScript uploads the worker as a multipart module-syntax script: a metadata
-// part describing the bindings, assets, and compatibility, plus one part per
-// module (the entrypoint and any siblings). The generated Update method only
-// serializes metadata JSON, so the multipart body is built by hand and swapped
-// in via WithRequestBody.
 func (p *provider) putScript(ctx context.Context, up upload, assetsJWT string) error {
 	body, contentType, err := buildScriptMultipart(up.worker, assetsJWT)
 	if err != nil {
@@ -510,12 +386,7 @@ func (p *provider) putScript(ctx context.Context, up upload, assetsJWT string) e
 	return err
 }
 
-// buildScriptMultipart assembles the worker upload's multipart/form-data body
-// and its content type.
 func buildScriptMultipart(worker edge.Worker, assetsJWT string) ([]byte, string, error) {
-	// Cloudflare rejects an assets binding without a completed assets upload, so
-	// the binding and the assets metadata are gated on the same token: present
-	// together or absent together.
 	includeAssets := assetsJWT != ""
 	metadata := map[string]any{
 		"main_module":         worker.Main.Name,
@@ -526,10 +397,7 @@ func buildScriptMultipart(worker edge.Worker, assetsJWT string) ([]byte, string,
 	}
 	if includeAssets {
 		metadata["assets"] = map[string]any{
-			"jwt": assetsJWT,
-			// The worker is the authoritative router: it always runs and delegates
-			// to the Assets binding itself, rather than Cloudflare serving assets
-			// ahead of the worker.
+			"jwt":    assetsJWT,
 			"config": map[string]any{"run_worker_first": true},
 		}
 	}
@@ -555,45 +423,21 @@ func buildScriptMultipart(worker edge.Worker, assetsJWT string) ([]byte, string,
 	return buf.Bytes(), w.FormDataContentType(), nil
 }
 
-// cacheStoreBinding is the name the Next.js worker reads its ISR cache store
-// under. Both worker paths bind it here: the preview worker assembled by the
-// framework and the frozen generic worker loaded from its compiled bundle, which
-// carries no ObjectStore of its own.
 const cacheStoreBinding = "OCEL_CACHE_STORE"
 
-// bindObjectStore points the worker's object-store binding at the bucket this
-// edge provisioned for the substrate class, as bootstrap reported it and the
-// provider handed it back. It supplies the binding name too: the frozen generic
-// worker arrives with an empty ObjectStore, and scriptBindings emits the R2
-// binding only when both name and bucket are set. A substrate bootstrapped
-// before there was a cache bucket carries no such value, so the worker still
-// uploads without the binding.
 func bindObjectStore(worker edge.Worker, values map[string]string) edge.Worker {
 	worker.ObjectStore.Binding = cacheStoreBinding
 	worker.ObjectStore.Bucket = values[valueKeyCacheBucket]
 	return worker
 }
 
-// codeLoaderBinding is the name the Next.js worker reads its Worker Loader
-// under, the binding it evaluates a Deployment's own edge routes and middleware
-// through.
 const codeLoaderBinding = "LOADER"
 
-// bindCodeLoader gives an app worker Cloudflare's Worker Loader under the name
-// its code reads it from. Like the object store it is bound here rather than
-// declared by the worker: the frozen generic worker arrives from its compiled
-// bundle declaring nothing, and only an app worker loads deployment-owned code
-// — the deployments-store worker never does.
 func bindCodeLoader(worker edge.Worker) edge.Worker {
 	worker.LoaderBinding = codeLoaderBinding
 	return worker
 }
 
-// scriptBindings is the worker's binding set: the Assets Fetcher (only when
-// assets were uploaded), the object store as an R2 bucket, the code loader, one
-// service binding per entry in Services, one plain-text binding per var, and
-// one secret_text binding per secret — values that must never surface in
-// plaintext metadata.
 func scriptBindings(worker edge.Worker, includeAssets bool) []map[string]any {
 	bindings := []map[string]any{}
 	if includeAssets && worker.AssetBinding != "" {
@@ -610,8 +454,6 @@ func scriptBindings(worker edge.Worker, includeAssets bool) []map[string]any {
 		})
 	}
 	if worker.LoaderBinding != "" {
-		// The API's binding type is the singular "worker_loader"; the plural
-		// "worker_loaders" is wrangler's config key and is rejected here.
 		bindings = append(bindings, map[string]any{
 			"type": "worker_loader",
 			"name": worker.LoaderBinding,
@@ -641,8 +483,6 @@ func scriptBindings(worker edge.Worker, includeAssets bool) []map[string]any {
 	return bindings
 }
 
-// writePart writes one multipart form part. A non-empty filename marks the part
-// as a module file rather than a plain field.
 func writePart(w *multipart.Writer, name, filename, contentType string, content []byte) error {
 	header := textproto.MIMEHeader{}
 	if filename != "" {
@@ -659,8 +499,6 @@ func writePart(w *multipart.Writer, name, filename, contentType string, content 
 	return err
 }
 
-// setSubdomain returns the worker's public workers.dev URL when enabling, or ""
-// when disabling.
 func (p *provider) setSubdomain(ctx context.Context, up upload, enabled bool) (string, error) {
 	if _, err := p.client.Workers.Scripts.Subdomain.New(ctx, up.scriptName, workers.ScriptSubdomainNewParams{
 		AccountID:       cf.F(up.accountID),
@@ -682,8 +520,6 @@ func (p *provider) setSubdomain(ctx context.Context, up upload, enabled bool) (s
 	return fmt.Sprintf("https://%s.%s.workers.dev", up.scriptName, account.Subdomain), nil
 }
 
-// routePlan is how one deploy wants its worker's hostnames attached. Mirrors the
-// intent fields of edge.RootStackSpec, which document why each choice exists.
 type routePlan struct {
 	desired        []string
 	prune          bool
@@ -691,23 +527,6 @@ type routePlan struct {
 	requiredRecord string
 }
 
-// reconcileWorkerRoutes attaches the worker to every hostname in plan.desired,
-// each as a Cloudflare worker route "<hostname>/*", or to none when desired is
-// empty. Every hostname — a plain production apex, a "www" host, an exact
-// preview pointer host, or a "*." wildcard (multitenant production or a preview
-// base) — routes the same way, so production and preview can share a base domain
-// and Cloudflare's most-specific route wins per request. It is the single
-// hostname path for both classes, replacing the earlier
-// custom-domain-for-production split.
-//
-// It converges idempotently. A hostname reaches Cloudflare's edge only through a
-// proxied DNS record, so it either plants its own placeholder record per hostname
-// or verifies plan.requiredRecord instead. A pruning plan then drops the routes
-// this deploy did not ask for, along with only Ocel's own placeholder records. It
-// always detaches any custom domain still bound to this script from before the
-// switch to routes — a custom domain would otherwise reject an overlapping
-// route. warn, when non-nil, receives non-fatal advisories (a hostname the
-// zone's Universal SSL does not cover, a user-managed record blocking a route).
 func (p *provider) reconcileWorkerRoutes(ctx context.Context, up upload, plan routePlan, warn func(string)) error {
 	warn = nilSafeWarn(warn)
 
@@ -748,17 +567,6 @@ func (p *provider) reconcileWorkerRoutes(ctx context.Context, up upload, plan ro
 	return p.pruneStaleRoutes(ctx, up, plan.pruneStem, wanted)
 }
 
-// pruneStaleRoutes deletes every route this deploy sweeps whose hostname is not
-// in wanted, across all of the account's zones — so dropping a hostname from the
-// config (even the last one in a whole zone) tears its route and Ocel's
-// placeholder record down. A record the user manages is left untouched.
-//
-// The sweep covers this script and, when the caller gave a stem, every worker
-// under it (edge.NameUnderStem) — a hostname left on a worker the caller no
-// longer deploys is drift the same way, and its more specific pattern would
-// otherwise outrank this script's on that hostname. wanted is consulted first,
-// so a hostname this reconcile just attached is never taken whichever worker
-// holds it.
 func (p *provider) pruneStaleRoutes(ctx context.Context, up upload, stem string, wanted map[string]bool) error {
 	owned := p.client.Zones.ListAutoPaging(ctx, zones.ZoneListParams{
 		Account: cf.F(zones.ZoneListParamsAccount{ID: cf.F(up.accountID)}),
@@ -794,17 +602,10 @@ func (p *provider) pruneStaleRoutes(ctx context.Context, up upload, stem string,
 	return errors.Join(errs...)
 }
 
-// routeBaseDomain is the zone-owning suffix of a route hostname: a "*." wildcard
-// strips its wildcard label, and any other host is resolved by itself. The
-// result is what resolveZone matches an account zone against.
 func routeBaseDomain(host string) string {
 	return strings.TrimPrefix(host, "*.")
 }
 
-// coveredByUniversalSSL reports whether host falls under the zone's Universal
-// SSL certificate, which covers only the apex and hostnames exactly one label
-// below it — including the first-level wildcard "*.<zone>". A name two or more
-// labels deep ("*.preview.<zone>", "a.b.<zone>") needs an Advanced Certificate.
 func coveredByUniversalSSL(host, zone string) bool {
 	if host == zone {
 		return true
@@ -816,11 +617,6 @@ func coveredByUniversalSSL(host, zone string) bool {
 	return !strings.Contains(sub, ".")
 }
 
-// canonicalDomainURL is the single URL a multi-hostname deploy is reported
-// under: the first non-wildcard hostname in declared order, or — when every
-// hostname is a wildcard (a pure multitenant deploy) — the first declared,
-// verbatim. Empty for no hostnames. Mirrors workerAppURL's production branch in
-// cloud/aws deploy (a separate Go module): keep the two in step.
 func canonicalDomainURL(domains []string) string {
 	if len(domains) == 0 {
 		return ""
@@ -840,23 +636,10 @@ func nilSafeWarn(warn func(string)) func(string) {
 	return warn
 }
 
-// RoutePattern is how a hostname is spelled as a Cloudflare worker route: the
-// hostname and every path under it. It is exported so a caller asking
-// RouteOwner who holds a hostname spells the pattern exactly as the reconcile
-// that attached it did — the lookup is exact-pattern, so a second spelling
-// would silently answer "unclaimed" for a hostname this edge itself holds.
 func RoutePattern(hostname string) string {
 	return hostname + "/*"
 }
 
-// RouteOwner reports the worker script bound to pattern, or "" when the zone
-// that owns its hostname holds no such route. Read-only: it lists and nothing
-// more. Matching is exact-pattern (see edge.RootStack.RouteOwner) — an
-// overlapping wildcard is a different pattern and is not reported.
-//
-// A hostname no zone in this account owns is an error rather than an empty
-// owner: this edge cannot say who holds it, and reporting it unclaimed would
-// read as a hostname free to take.
 func (p *provider) RouteOwner(ctx context.Context, pattern string) (string, error) {
 	accountID := os.Getenv(envAccountID)
 	if accountID == "" {
@@ -878,9 +661,6 @@ func (p *provider) RouteOwner(ctx context.Context, pattern string) (string, erro
 	return "", nil
 }
 
-// ensureRoute makes the zone route pattern to scriptName: it reuses an existing
-// route for that pattern (repointing it at this script if a different one holds
-// it) and otherwise creates it, leaving routes for other patterns alone.
 func (p *provider) ensureRoute(ctx context.Context, zoneID, pattern, scriptName string) error {
 	existing := p.client.Workers.Routes.ListAutoPaging(ctx, workers.RouteListParams{ZoneID: cf.F(zoneID)})
 	for existing.Next() {
@@ -914,13 +694,6 @@ func (p *provider) ensureRoute(ctx context.Context, zoneID, pattern, scriptName 
 	return nil
 }
 
-// verifyProxiedRecord fails unless a proxied address record already exists at
-// name, in the account zone that owns it. It is ensureProxiedRecord's
-// counterpart for a record whose lifecycle is not one deploy's to own — a
-// wildcard shared by every hostname under a preview base domain — so it only
-// reports, never plants. A record that exists unproxied is as fatal as a missing
-// one: an unproxied hostname never reaches Cloudflare's edge, so its worker route
-// can never fire.
 func (p *provider) verifyProxiedRecord(ctx context.Context, accountID, name string) error {
 	zoneID, _, err := p.resolveZone(ctx, accountID, routeBaseDomain(name))
 	if err != nil {
@@ -939,10 +712,6 @@ func (p *provider) verifyProxiedRecord(ctx context.Context, accountID, name stri
 	return nil
 }
 
-// addressRecordsAt reports whether the zone holds any address record (A, AAAA,
-// CNAME) at hostname and whether one of them is proxied — the two facts that
-// decide whether a worker route there can fire. TXT/MX and the like share the
-// name but are inherently unproxiable, so they are ignored.
 func (p *provider) addressRecordsAt(ctx context.Context, zoneID, hostname string) (haveAddress, haveProxied bool, err error) {
 	existing := p.client.DNS.Records.ListAutoPaging(ctx, dns.RecordListParams{
 		ZoneID: cf.F(zoneID),
@@ -964,13 +733,6 @@ func (p *provider) addressRecordsAt(ctx context.Context, zoneID, hostname string
 	return haveAddress, haveProxied, nil
 }
 
-// ensureProxiedRecord plants the proxied placeholder record for hostname so it
-// resolves to Cloudflare's edge, where the route fires — a route without a
-// proxied address record at its hostname never fires. It never overwrites an
-// address record the user (or a prior deploy) already put there: if a proxied one
-// exists the route already resolves and it is left alone; if address records
-// exist but none is proxied the route cannot fire, so it warns rather than
-// silently serve nothing — but still leaves them untouched.
 func (p *provider) ensureProxiedRecord(ctx context.Context, zoneID, hostname string, warn func(string)) error {
 	haveAddress, haveProxied, err := p.addressRecordsAt(ctx, zoneID, hostname)
 	if err != nil {
@@ -999,9 +761,6 @@ func (p *provider) ensureProxiedRecord(ctx context.Context, zoneID, hostname str
 	return nil
 }
 
-// isAddressRecord reports whether a DNS record type is one that resolves a
-// hostname to an address Cloudflare can proxy — A, AAAA, or CNAME. Only these
-// determine whether a worker route's hostname reaches the edge.
 func isAddressRecord(t dns.RecordResponseType) bool {
 	switch t {
 	case dns.RecordResponseTypeA, dns.RecordResponseTypeAAAA, dns.RecordResponseTypeCNAME:
@@ -1011,10 +770,6 @@ func isAddressRecord(t dns.RecordResponseType) bool {
 	}
 }
 
-// resolveZone finds the account zone whose name is the longest suffix of
-// hostname (e.g. "acme.com" for "app.acme.com"), returning its id and name. A
-// hostname with no owning zone in the account is a hard error: the deploy
-// cannot serve it.
 func (p *provider) resolveZone(ctx context.Context, accountID, hostname string) (id, name string, err error) {
 	owned := p.client.Zones.ListAutoPaging(ctx, zones.ZoneListParams{
 		Account: cf.F(zones.ZoneListParamsAccount{ID: cf.F(accountID)}),

@@ -22,7 +22,6 @@ import (
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/resources/v1"
 )
 
-// withCredentials points loadCredentials at apiURL for the duration of a test.
 func withCredentials(t *testing.T, apiURL string) {
 	t.Helper()
 	prev := loadCredentials
@@ -32,9 +31,6 @@ func withCredentials(t *testing.T, apiURL string) {
 	t.Cleanup(func() { loadCredentials = prev })
 }
 
-// declareEnvScript is a discovery-path fixture that declares the given
-// variable definitions (Connect JSON) via ResourceService.DeclareEnv, the way
-// the SDK's defineEnv does.
 func declareEnvScript(definitions ...string) string {
 	return fmt.Sprintf(`
 declare global {
@@ -52,11 +48,6 @@ export {};
 `, strings.Join(definitions, ","))
 }
 
-// The dotfile is the file the developer edits, so it is the file that decides.
-// A control-plane value that quietly outranked it would mean editing the file
-// stopped working the day a teammate set one — the failure this feature exists
-// to avoid. Resources stay above everything: those names are Ocel's own and
-// can never collide with a declared variable.
 func TestResolvedEnv_TheDotfileOutranksEveryOtherSourceButAResource(t *testing.T) {
 	base := []string{"PATH=/bin", "CONTESTED=shell", "SHELL_ONLY=s"}
 	projectEnv := map[string]string{"CONTESTED": "project"}
@@ -82,11 +73,6 @@ func TestResolvedEnv_TheDotfileOutranksEveryOtherSourceButAResource(t *testing.T
 	}
 }
 
-// ocelhq-xd5j.34: every layer that runs user code has to be told which folder
-// the app binds, or the SDK reports it binds the project root and refuses
-// scoped reads whose values are in that very environment. The name is written
-// unconditionally, so a binding left over in the developer's shell can never
-// answer for this run.
 func TestResolvedEnv_AlwaysStatesTheAppFolder(t *testing.T) {
 	bound := resolvedEnv(nil, nil, nil, nil, "/web")
 	if bound["OCEL_APP_FOLDER"] != "/web" {
@@ -107,8 +93,6 @@ func TestResolvedEnv_AlwaysStatesTheAppFolder(t *testing.T) {
 		t.Errorf("OCEL_APP_FOLDER = %q, want the shell's stale binding overwritten", stale["OCEL_APP_FOLDER"])
 	}
 
-	// Last means last: no source dev merges may answer for the binding, or the
-	// name the SDK reads stops being the one dev decided.
 	contested := resolvedEnv(
 		map[string]string{"OCEL_APP_FOLDER": "/from-project-env"},
 		map[string]string{"OCEL_APP_FOLDER": "/from-live"},
@@ -121,9 +105,6 @@ func TestResolvedEnv_AlwaysStatesTheAppFolder(t *testing.T) {
 	}
 }
 
-// The remedy has to be one the developer can actually run. `ocel env set`
-// needs a cloud provider and a bootstrapped store, and this whole path exists
-// for the project that has neither — so dev's refusal names the file instead.
 func TestDevRefusal_NamesTheDotfileRatherThanAStoreCommand(t *testing.T) {
 	refusal := &envgate.Refusal{
 		Problems: []*resourcesv1.VariableProblem{
@@ -156,11 +137,6 @@ func TestDevRefusal_NamesTheDotfileRatherThanAStoreCommand(t *testing.T) {
 	}
 }
 
-// A value exported in the shell is not a value dev resolves: the gate reads the
-// file, so what it refuses on is versioned and the same for every developer.
-// Saying only "no value is set" to someone looking at that very name in their
-// own shell is the confusing half of that choice, so the refusal says which
-// place it looked.
 func TestDevRefusal_SaysSoWhenTheKeyIsOnlyInTheShell(t *testing.T) {
 	t.Setenv("DATABASE_URL", "postgres://from-the-shell")
 
@@ -179,18 +155,12 @@ func TestDevRefusal_SaysSoWhenTheKeyIsOnlyInTheShell(t *testing.T) {
 		t.Errorf("refusal = %q, want it to disclose no value", got)
 	}
 
-	// A key that is in the file and fails its schema is not a key dev looked in
-	// the wrong place for, so the hint stays out of its way.
 	inFile := devRefusal(refusal, dotfileKeySet(map[string]string{"DATABASE_URL": "postgres://from-the-file"})).Error()
 	if strings.Contains(inFile, "set in this shell") {
 		t.Errorf("refusal = %q, want no shell hint for a key the file does hold", inFile)
 	}
 }
 
-// The refusal is rendered from the one file whose contents nothing else may
-// see, and the obvious next edit to the schema branch is to show the offending
-// value. There is none to show: what crosses the boundary is a key set, so the
-// values are not in scope at the point the message is built.
 func TestDevRefusal_IsNeverGivenAValueItCouldPrint(t *testing.T) {
 	want := reflect.TypeOf(func(error, map[string]struct{}) error { return nil })
 	if got := reflect.TypeOf(devRefusal); got != want {
@@ -217,9 +187,6 @@ func TestDevRefusal_IsNeverGivenAValueItCouldPrint(t *testing.T) {
 	}
 }
 
-// The notice is what makes the divergence stated rather than discovered. It
-// names keys only: this is the one file whose contents nothing else may see,
-// so the notice about it cannot be the thing that prints them.
 func TestReportDotfile_StatesWhatTheFileCostsAndPrintsNoValue(t *testing.T) {
 	var quiet bytes.Buffer
 	reportDotfile(&quiet, t.TempDir(), nil, dotfileWatchedAdvice)
@@ -246,7 +213,6 @@ func TestReportDotfile_StatesWhatTheFileCostsAndPrintsNoValue(t *testing.T) {
 			t.Fatalf("notice = %q, want it to disclose no value", got)
 		}
 	}
-	// The two divergences a dotfile introduces, both currently stated nowhere.
 	if !strings.Contains(got, "teammate") && !strings.Contains(got, "yours alone") {
 		t.Errorf("notice = %q, want it to say the collaboration a shared store provides is gone", got)
 	}
@@ -258,9 +224,6 @@ func TestReportDotfile_StatesWhatTheFileCostsAndPrintsNoValue(t *testing.T) {
 	}
 }
 
-// `ocel init` scaffolds no .gitignore, and this feature's whole purpose is to
-// encourage putting values — including secrets — in that file. An unignored one
-// is how a secret reaches a public repository.
 func TestReportDotfile_WarnsWhenTheFileIsNotIgnored(t *testing.T) {
 	var out bytes.Buffer
 	reportDotfile(&out, t.TempDir(), map[string]string{"API_TOKEN": "x"}, dotfileWatchedAdvice)
@@ -269,9 +232,6 @@ func TestReportDotfile_WarnsWhenTheFileIsNotIgnored(t *testing.T) {
 		t.Errorf("notice = %q, want it to say the file is not ignored by git", got)
 	}
 
-	// A re-inclusion is the last word git gives it, so it is the last word here:
-	// staying quiet about a file git will happily commit is the one direction
-	// this check must not be wrong in.
 	dir := t.TempDir()
 	if err := os.WriteFile(filepath.Join(dir, ".gitignore"), []byte(".env*\n!.env\n"), 0o644); err != nil {
 		t.Fatalf("write .gitignore: %v", err)
@@ -283,9 +243,6 @@ func TestReportDotfile_WarnsWhenTheFileIsNotIgnored(t *testing.T) {
 	}
 }
 
-// End to end: the file the developer edits reaches the process the developer
-// runs, under the key's own name, and the app is told the folder it binds so a
-// scoped read resolves instead of throwing.
 func TestRunDev_DeliversTheDotfileAndTheAppFolderIntoTheChild(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("uses a POSIX shell fixture command")
@@ -302,8 +259,6 @@ func TestRunDev_DeliversTheDotfileAndTheAppFolderIntoTheChild(t *testing.T) {
 	writeFile(t, filepath.Join(root, "ocel.config.ts"), `
 export default { slug: "test-app", apps: [{ name: "web", path: "apps/web", folder: "/web" }] };
 `)
-	// The lines around it are the ones a pre-existing Next project's .env
-	// already holds. None of them is Ocel's, and none of them may stop the run.
 	writeFile(t, filepath.Join(root, ".env"), "NEXT_PUBLIC_SITE_URL=https://example.com\nAWS_PROFILE=dev\napi_base=lower\nAPI_BASE=http://localhost:3000\nnot an assignment\n")
 	writeFile(t, filepath.Join(root, "ocel", "main.ts"), declareEnvScript(`{"key":"API_BASE","class":"VARIABLE_CLASS_PLAIN","required":true,"folders":["/web"]}`))
 
@@ -339,19 +294,14 @@ export default { slug: "test-app", apps: [{ name: "web", path: "apps/web", folde
 	if strings.Contains(stdout.String(), "api_base") {
 		t.Errorf("stdout = %q, want a line Ocel could never be asked for passed over in silence", stdout.String())
 	}
-	// A bundler's name is one defineEnv may declare, so it is Ocel's to resolve
-	// from this file and Ocel's to account for when it does.
 	if !strings.Contains(stdout.String(), "NEXT_PUBLIC_SITE_URL") {
 		t.Errorf("stdout = %q, want a declarable key accounted for", stdout.String())
 	}
-	// Telling a watched run to restart would be read as "editing does nothing".
 	if !strings.Contains(stdout.String(), dotfileWatchedAdvice) {
 		t.Errorf("stdout = %q, want the advice for a run that re-resolves on save", stdout.String())
 	}
 }
 
-// The gate refuses before anything is spawned, so a missing value is a named
-// failure at startup rather than a crash inside the app.
 func TestRunDev_RefusesWhenTheDotfileDoesNotHoldARequiredValue(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("uses a POSIX shell fixture command")
@@ -384,11 +334,6 @@ func TestRunDev_RefusesWhenTheDotfileDoesNotHoldARequiredValue(t *testing.T) {
 	}
 }
 
-// The gate rules per app, over each app's own binding; dev states one binding
-// for the whole project. Where those cannot be the same answer, a green gate
-// would be followed by an EnvScopeError at the first read — the crash the gate
-// exists to replace. It refuses instead, and never with a remedy that needs dev
-// to know which app it is running.
 func TestCheckStatableBinding_RefusesWhenTheAppsDoNotAgreeOnOne(t *testing.T) {
 	apps := []projectconfig.App{
 		{Name: "web", Path: "apps/web", Folder: "/web"},
@@ -419,10 +364,6 @@ func TestCheckStatableBinding_RefusesWhenTheAppsDoNotAgreeOnOne(t *testing.T) {
 	}
 }
 
-// A key scoped to a folder no app binds is unreadable under every app's own
-// binding too, so a deploy of the same project is just as silent about it. Dev
-// costs that project nothing by starting, and refusing it would refuse a
-// project that deploys.
 func TestCheckStatableBinding_StartsWhenNoAppBindsTheKeysScope(t *testing.T) {
 	apps := []projectconfig.App{
 		{Name: "web", Path: "apps/web", Folder: "/web"},
@@ -443,9 +384,6 @@ func TestCheckStatableBinding_StartsWhenNoAppBindsTheKeysScope(t *testing.T) {
 	}
 }
 
-// The refusal is a list of what this run cannot do, so it names only the apps
-// that lose a read: an app bound outside the key's scope was never going to
-// read it, and listing it makes the remedy read as if it were about them.
 func TestCheckStatableBinding_NamesOnlyTheAppsBindingTheKeysScope(t *testing.T) {
 	apps := []projectconfig.App{
 		{Name: "web", Path: "apps/web", Folder: "/web"},
@@ -465,12 +403,6 @@ func TestCheckStatableBinding_NamesOnlyTheAppsBindingTheKeysScope(t *testing.T) 
 	}
 }
 
-// A project can lose more than one read at once, and the refusal is the whole
-// list: every losing key, in a fixed order, and every app that loses one. Go
-// randomises map iteration, so without the sort the same broken project would
-// print a different refusal on every run — the message is asserted whole, and
-// repeatedly, because a text that varies per run is not a text a developer can
-// compare against a teammate's.
 func TestCheckStatableBinding_ListsEveryLosingKeyAndAppInAFixedOrder(t *testing.T) {
 	apps := []projectconfig.App{
 		{Name: "web", Path: "apps/web", Folder: "/web"},
@@ -500,8 +432,6 @@ func TestCheckStatableBinding_ListsEveryLosingKeyAndAppInAFixedOrder(t *testing.
 	}
 }
 
-// The gate reporting ready for a read the child provably cannot make is the one
-// failure the gate was put in dev to prevent, so the refusal is end to end.
 func TestRunDev_RefusesAScopedVariableNoChildOfTheRunCouldRead(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("uses a POSIX shell fixture command")
@@ -538,13 +468,6 @@ export default { slug: "test-app", apps: [{ name: "web", path: "apps/web", folde
 	}
 }
 
-// A deploy of this project succeeds and says nothing about NOBODY: every app's
-// own binding is outside its scope, so no app resolves it there either. Dev
-// must not be stricter than the deploy it stands in for, so the run starts.
-//
-// The value is in the file on purpose — a required scoped key with none is
-// refused by the gate itself, one step earlier, and this test would then pass
-// without ever reaching the binding check.
 func TestRunDev_StartsWhenAScopedVariableIsBoundByNoApp(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("uses a POSIX shell fixture command")
@@ -579,9 +502,6 @@ export default { slug: "test-app", apps: [{ name: "web", path: "apps/web", folde
 	}
 }
 
-// `ocel run` gates the same project the same way `ocel dev` does, so the
-// narrowing has to reach it too — they share one discovery path and this is
-// what says so.
 func TestRunRun_StartsWhenAScopedVariableIsBoundByNoApp(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("uses a POSIX shell fixture command")
@@ -616,10 +536,6 @@ export default { slug: "test-app", apps: [{ name: "web", path: "apps/web", folde
 	}
 }
 
-// `ocel run` runs the project's own code, so it resolves and gates the file the
-// same way `ocel dev` does. Answering differently meant a project set up to run
-// under dev failed under run, with the `ocel env set` remedy dev's refusal
-// exists to avoid.
 func TestRunRun_ResolvesTheDotfileAndGatesLikeDev(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("uses a POSIX shell fixture command")
@@ -662,14 +578,11 @@ export default { slug: "test-app", apps: [{ name: "web", path: "apps/web", folde
 	if env["OCEL_APP_FOLDER"] != "/web" {
 		t.Errorf("OCEL_APP_FOLDER = %q, want the folder the only app binds", env["OCEL_APP_FOLDER"])
 	}
-	// `ocel run` has no watcher, so the file really is read once.
 	if !strings.Contains(stdout.String(), dotfileReadOnceAdvice) {
 		t.Errorf("stdout = %q, want the advice for a run that reads the file once", stdout.String())
 	}
 }
 
-// The gate has to answer the same way under `ocel run` as under `ocel dev`, or
-// the same project is refused by one and started by the other.
 func TestRunRun_RefusesWhenTheDotfileDoesNotHoldARequiredValue(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("uses a POSIX shell fixture command")
@@ -705,9 +618,6 @@ func TestRunRun_RefusesWhenTheDotfileDoesNotHoldARequiredValue(t *testing.T) {
 	}
 }
 
-// A line the parser could not read is neither Ocel's nor the framework's, so it
-// is reported by number — and only by number, since a line that assigns nothing
-// is the shape a pasted token has.
 func TestReportUnreadableLines_NamesThemByNumberOnly(t *testing.T) {
 	var out bytes.Buffer
 	reportUnreadableLines(&out, []int{2, 5})
@@ -726,8 +636,6 @@ func TestReportUnreadableLines_NamesThemByNumberOnly(t *testing.T) {
 	}
 }
 
-// withProjectEnv points the control-plane fetch at envVars for the duration of
-// a test and reports how many times the run asked for it.
 func withProjectEnv(t *testing.T, envVars map[string]string) *atomic.Int32 {
 	t.Helper()
 	var calls atomic.Int32
@@ -740,9 +648,6 @@ func withProjectEnv(t *testing.T, envVars map[string]string) *atomic.Int32 {
 	return &calls
 }
 
-// The control plane is one of the three sources a run delivers, so it is one of
-// the three the gate rules from. A team keeping its values in the shared store
-// must not be told to duplicate them into a file that is one machine's.
 func TestRunDev_AControlPlaneValueSatisfiesTheGateWithoutADotfile(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("uses a POSIX shell fixture command")
@@ -784,8 +689,6 @@ func TestRunDev_AControlPlaneValueSatisfiesTheGateWithoutADotfile(t *testing.T) 
 	}
 }
 
-// The gate now sees both sources, so the precedence between them has to hold at
-// the gate too: the file the developer edits still decides.
 func TestRunDev_TheDotfileStillOutranksTheControlPlaneAtTheGate(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("uses a POSIX shell fixture command")
@@ -824,9 +727,6 @@ func TestRunDev_TheDotfileStillOutranksTheControlPlaneAtTheGate(t *testing.T) {
 	}
 }
 
-// Getting started needs no cloud account, so an unreachable control plane costs
-// the run its shared values and nothing else: it says what it lost and gates
-// from the file alone.
 func TestRunDev_FallsBackToTheDotfileWhenTheControlPlaneIsUnreachable(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("uses a POSIX shell fixture command")
@@ -875,7 +775,6 @@ func TestRunDev_FallsBackToTheDotfileWhenTheControlPlaneIsUnreachable(t *testing
 	}
 }
 
-// `ocel run` shares the gate, so it shares the sources the gate rules from.
 func TestRunRun_AControlPlaneValueSatisfiesTheGateWithoutADotfile(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("uses a POSIX shell fixture command")
@@ -913,10 +812,6 @@ func TestRunRun_AControlPlaneValueSatisfiesTheGateWithoutADotfile(t *testing.T) 
 	}
 }
 
-// A live-class key's source is keyed on the keys the run declared, so it can
-// only be read after discovery — after the gate has ruled. Refusing for its
-// absence would refuse every project that has one, so dev exempts it and says
-// what it did instead: the value is resolved once, at sync.
 func TestRunDev_ALiveClassKeyIsNotRefusedForHavingNoLocalValue(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("uses a POSIX shell fixture command")
@@ -950,12 +845,6 @@ func TestRunDev_ALiveClassKeyIsNotRefusedForHavingNoLocalValue(t *testing.T) {
 	}
 }
 
-// A client-accessible value is read through the generated accessor, and until
-// dev generated one the import landed on the SDK's throwing fallback: the same
-// code that works in a deploy threw under `ocel dev`, which is where a
-// developer writes it. Dev now generates the same accessor a deploy does, and
-// exports the value under the name it was declared with — the name the
-// accessor's literal member expression reads.
 func TestRunDev_GeneratesTheClientAccessorAndExportsTheValueUnderItsDeclaredName(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("uses a POSIX shell fixture command")

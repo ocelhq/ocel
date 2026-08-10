@@ -9,10 +9,6 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/kms"
 )
 
-// TestRevealReadsEveryNamedCellInOneQuery proves the runtime's batched read
-// costs one round trip to the table however many keys it names: the whole
-// point of a batch is that a function's cold start pays a single query, not
-// one per variable.
 func TestRevealReadsEveryNamedCellInOneQuery(t *testing.T) {
 	store, ddb, crypto := newTestStore(t)
 	ctx := context.Background()
@@ -57,11 +53,6 @@ func TestRevealReadsEveryNamedCellInOneQuery(t *testing.T) {
 	}
 }
 
-// TestRevealPresentsEachCellsOwnEncryptionContext proves the batch decrypts
-// through the same context every single read binds, per cell rather than once
-// for the batch. The fake key enforces the context the way KMS does, so a
-// batch that reused one cell's context for another's blob fails here rather
-// than in production against a key nobody can debug.
 func TestRevealPresentsEachCellsOwnEncryptionContext(t *testing.T) {
 	store, _, crypto := newTestStore(t)
 	ctx := context.Background()
@@ -107,10 +98,6 @@ func TestRevealPresentsEachCellsOwnEncryptionContext(t *testing.T) {
 	}
 }
 
-// TestRevealOmitsCellsThatHoldNoValue proves a live key nobody has set yet is
-// absent rather than an error. A missing value is the app's schema's business:
-// the store reports what is there, and a required key that is not there fails
-// where the schema is, not here.
 func TestRevealOmitsCellsThatHoldNoValue(t *testing.T) {
 	store, _, crypto := newTestStore(t)
 	ctx := context.Background()
@@ -141,10 +128,6 @@ func TestRevealOmitsCellsThatHoldNoValue(t *testing.T) {
 	}
 }
 
-// TestRevealReadsOnlyTheCellsItWasNamed proves the batch is addressed, not a
-// dump of the partition: a project's other values are read past, never handed
-// back and never decrypted, so a function receives exactly the keys it
-// declared.
 func TestRevealReadsOnlyTheCellsItWasNamed(t *testing.T) {
 	store, _, crypto := newTestStore(t)
 	ctx := context.Background()
@@ -171,10 +154,6 @@ func TestRevealReadsOnlyTheCellsItWasNamed(t *testing.T) {
 	}
 }
 
-// TestRevealRejectsTheClassWideSentinel proves the batch validates every
-// coordinate the way a point read does. A manifest that spelled the class-wide
-// environment literally is the plausible bug, and it must be refused here
-// rather than addressing a cell named "*".
 func TestRevealRejectsTheClassWideSentinel(t *testing.T) {
 	store, ddb, _ := newTestStore(t)
 
@@ -190,9 +169,6 @@ func TestRevealRejectsTheClassWideSentinel(t *testing.T) {
 	}
 }
 
-// TestRevealNamesNoCellsMakesNoCall proves a function that declares no live
-// values makes no call at all: it is what keeps a store outage confined to the
-// functions that actually depend on the store.
 func TestRevealNamesNoCellsMakesNoCall(t *testing.T) {
 	store, ddb, crypto := newTestStore(t)
 
@@ -208,18 +184,12 @@ func TestRevealNamesNoCellsMakesNoCall(t *testing.T) {
 	}
 }
 
-// failingDecrypt is a key that opens nothing, standing in for a decrypt the
-// function's role is not granted.
 type failingDecrypt struct{ CryptoAPI }
 
 func (failingDecrypt) Decrypt(context.Context, *kms.DecryptInput, ...func(*kms.Options)) (*kms.DecryptOutput, error) {
 	return nil, errors.New("AccessDeniedException")
 }
 
-// TestRevealFailsWhenAnyCellFailsToDecrypt proves the batch is all-or-nothing.
-// Handing back the values that happened to open would leave the application
-// with a variable silently unset, which at the point of use is indistinguishable
-// from one that was never required.
 func TestRevealFailsWhenAnyCellFailsToDecrypt(t *testing.T) {
 	store, _, _ := newTestStore(t)
 	ctx := context.Background()
@@ -234,7 +204,6 @@ func TestRevealFailsWhenAnyCellFailsToDecrypt(t *testing.T) {
 	}
 }
 
-// erroringQuery is a table that cannot be reached.
 type erroringQuery struct{ DynamoAPI }
 
 func (erroringQuery) Query(context.Context, *dynamodb.QueryInput, ...func(*dynamodb.Options)) (*dynamodb.QueryOutput, error) {

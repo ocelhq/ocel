@@ -19,8 +19,6 @@ const mb = (n: number) => n * 1024 * 1024;
 const keys = (bundle: { members: { member: Route }[] }) =>
   bundle.members.map((m) => m.member.key);
 
-// Every test injects sizes, so nothing here reads the filesystem: a path's size
-// is whatever the fake table says, and an unlisted path is a 1-byte file.
 function pack(routes: readonly Route[], sizes: Record<string, number> = {}, opts: {
   budgetBytes?: number;
   partitionBy?: (r: Route) => string;
@@ -230,9 +228,6 @@ test("two members sharing one entry key throws", () => {
   ).toThrow(/entry key "a"/);
 });
 
-// The packer sizes the assets, so it is the one that knows which sources are
-// missing — but the copy site is the one that reports them, so exactly one line
-// per build names them however many bundles they land in.
 test("an asset source that does not exist comes back on the result, unwarned", () => {
   const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
 
@@ -342,9 +337,6 @@ test("the default budget is Lambda's unzipped ceiling", () => {
   expect(defaultBudgetBytes).toBe(200 * 1024 * 1024);
 });
 
-// Per-member bytes are what elects a bundle's primed entry, so they have to be
-// the member's own traced weight — not its delta, which depends on who was
-// packed before it, and not the bundle's union.
 test("each member carries its own traced bytes", () => {
   const sizes = { "/abs/forest": mb(150), "/abs/a": mb(1), "/abs/b": mb(3) };
   const forest = { "node_modules/forest": "/abs/forest" };
@@ -379,10 +371,6 @@ test("a member's missing asset costs it nothing", () => {
   expect(bundles[0]!.members[0]!.sizeBytes).toBe(9);
 });
 
-// The one sizing implementation both the budget and the primary election rest
-// on, and it has to mirror how the asset copy lands each kind of path: a
-// symlink is preserved as a link and costs itself, a directory is copied whole
-// and costs its recursive contents, and a path that is not there costs nothing.
 test("the default sizer costs a path as the copy lands it", async () => {
   const root = await mkdtemp(join(tmpdir(), "ocel-pack-"));
   await mkdir(join(root, "dir", "nested"), { recursive: true });
@@ -406,7 +394,6 @@ test("the default sizer costs a path as the copy lands it", async () => {
   );
   expect(bytesByKey.get("a")).toBe(100);
   expect(bytesByKey.get("b")).toBe(105);
-  // Itself, never its target: the target is copied under its own asset entry.
   expect(bytesByKey.get("c")).toBe((await lstat(join(root, "link.js"))).size);
   expect(bytesByKey.get("c")).not.toBe(100);
   expect(bytesByKey.get("d")).toBe(0);
@@ -427,9 +414,6 @@ test("the default budget applies when none is given", () => {
   expect(bundles).toHaveLength(2);
 });
 
-// seedAssets is node middleware's path into a bundle: absorbed into bundles[0]
-// after ordinary packing, through the same accounting (sizeBytes,
-// missingAssets, the budget) as any other member's assets.
 test("seedAssets absorbs into bundles[0] through the packer's own accounting", () => {
   const sizes = { "/abs/a": 100, "/abs/mw": 50 };
   const { bundles, missingAssets } = pack(

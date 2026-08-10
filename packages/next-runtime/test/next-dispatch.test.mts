@@ -41,10 +41,6 @@ function silenceErrors() {
   return vi.spyOn(console, "error").mockImplementation(() => {});
 }
 
-// The compile-cache APIs live on the node:module default export, which the
-// dispatcher reads at call time; patching it there is what the CJS require of
-// the source under test sees. Deleting a key (rather than assigning undefined)
-// is what makes a case a genuinely absent API, as on older Node.
 const moduleApis = Module as unknown as Record<string, unknown>;
 const savedModuleApis = new Map<string, unknown>();
 
@@ -60,9 +56,6 @@ let cacheDir: string | null = null;
 let flushes = 0;
 let pending: { name: string; size: number }[] = [];
 
-// V8 buffers compile-cache writes in memory until a flush, so the stub only
-// materializes a load's bytes when flushCompileCache runs — a measurement taken
-// without flushing first reads the stale directory, exactly as in production.
 function stubCompileCache(patch: Record<string, unknown> = {}): string {
   cacheDir = mkdtempSync(join(tmpdir(), "ocel-warm-"));
   patchModule({
@@ -195,10 +188,6 @@ test("fails closed on a request with no entry header and no route for its path",
   expect(res.body).toMatch(/no entry serves \/nowhere/);
 });
 
-// The app's own loopback self-fetches — Next running a Server Action that lives
-// on another page, and following an action's redirect — reach the dispatcher
-// with no entry header, because the membrane strips the stale one they
-// inherited. Without pathname resolution they would run the originating route.
 const ROUTES = {
   exact: { "/server": "/server", "/header": "/header" },
   dynamic: [["^/blog/([^/]+?)(?:\\.rsc)?$", "/blog/[slug]"]] as [string, string][],
@@ -211,9 +200,6 @@ const ROUTED = {
   "/blog/[slug]": "./.next/server/app/blog/[slug]/page.js",
 };
 
-// The shape of the regression: an action on /server redirects to /header, Next
-// follows it by fetching this process, and the membrane has stripped the entry
-// key that request inherited — which named /server. It must land on /header.
 test("a self-fetch is served by the route it asks for, not the one it came from", async () => {
   const { loads, load } = fakeLoader();
   const dispatch = createDispatch({
@@ -278,11 +264,6 @@ test("a named request is served by the name, never by its pathname", async () =>
   expect(result).toMatchObject({ path: ROUTED["/server"] });
 });
 
-// Next prefixes basePath onto every output pathname before the adapter sees one
-// (normalizePathnames, build-complete.ts:537-556), and onto both the dynamic
-// patterns and the URLs the app self-fetches. So a basePath build's table is
-// simply spelled with it, on both sides, and the dispatcher adds and strips
-// nothing. This table is that shape.
 test("a basePath route is served under the path the build gave it", async () => {
   const { load } = fakeLoader();
   const dispatch = createDispatch({
@@ -300,9 +281,6 @@ test("a basePath route is served under the path the build gave it", async () => 
   expect(result).toMatchObject({ path: "./.next/server/app/header/page.js" });
 });
 
-// The table names every route the build has, not just the ones this bundle
-// carries, so a pathname another bundle owns is refused by name instead of
-// being absorbed by a local pattern broad enough to span it.
 test("a pathname another bundle owns fails by name, not by a local catch-all", async () => {
   const { loads, load } = fakeLoader();
   const dispatch = createDispatch({
@@ -621,8 +599,6 @@ test("reports unsupported when the compile cache is off, leaving no dir", () => 
   });
 });
 
-// A stopped walk that reports only "38/51" leaves an operator with no way to
-// tell which routes stay cold, which is the one thing the report exists for.
 test("names the entries a stopped walk never reached", () => {
   stubCompileCache();
   const { load } = cachingLoader({
@@ -649,9 +625,6 @@ test("a walk that reached every entry skips nothing", () => {
   expect(dispatch.warm(NO_LIMITS)).toMatchObject({ skipped: [], skippedCount: 0 });
 });
 
-// The list travels through a control message, a CloudWatch line and the
-// deploy's output, so a bundle with hundreds of cold routes must not be able to
-// bloat any of them — while the count still tells the whole truth.
 test("bounds the skipped list but not the skipped count", () => {
   stubCompileCache();
   const entries: Record<string, string> = { "app/page": "./.next/server/app/page.js" };
@@ -659,7 +632,6 @@ test("bounds the skipped list but not the skipped count", () => {
   const { load } = cachingLoader({});
   const dispatch = createDispatch({ entries, primary: "app/page", load });
 
-  // A deadline already in the past stops the walk before its first entry.
   const report = dispatch.warm({ deadlineMs: Date.now() - 1, ceilingBytes: 64 << 20 });
 
   expect(report.skippedCount).toBe(60);
@@ -667,9 +639,6 @@ test("bounds the skipped list but not the skipped count", () => {
   expect(report.skipped[0]).toBe("app/r0/page");
 });
 
-// Measuring is a flush plus a full recursive walk of the cache directory, so
-// one per entry is O(entries x files) inside the very deadline the walk exists
-// to respect — and it buys nothing while the total is nowhere near the ceiling.
 test("measures in strides while the ceiling is far away", () => {
   stubCompileCache();
   const entries: Record<string, string> = { "app/page": "./.next/server/app/page.js" };
@@ -684,8 +653,6 @@ test("measures in strides while the ceiling is far away", () => {
   expect(flushes).toBeLessThan(15);
 });
 
-// The ceiling guarantee survives the stride: the stride is sized against the
-// largest growth yet seen, and shrinks to a single entry as the headroom does.
 test("still stops before the ceiling when entries are large", () => {
   stubCompileCache();
   const entries: Record<string, string> = {};
@@ -704,9 +671,6 @@ test("still stops before the ceiling when entries are large", () => {
   expect(loads.length).toBeLessThan(20);
 });
 
-// An unreadable cache directory must not measure as a partial total: the walk
-// would sail past the ceiling into an archive the Go uploader refuses outright,
-// publishing nothing where stopping short would have published something.
 test("stops rather than undercounting when the cache cannot be measured", () => {
   const dir = stubCompileCache();
   const { loads, load } = cachingLoader({});
@@ -724,8 +688,6 @@ test("stops rather than undercounting when the cache cannot be measured", () => 
   expect(report.skippedCount).toBe(3);
 });
 
-// A directory node has not written yet is the one honest zero — the feature's
-// normal state on the first entry of a cold instance.
 test("measures a cache directory that does not exist yet as empty", () => {
   const dir = stubCompileCache();
   rmSync(dir, { recursive: true, force: true });
@@ -738,8 +700,6 @@ test("measures a cache directory that does not exist yet as empty", () => {
   expect(report.loaded).toBe(3);
 });
 
-// Next's own memoization, verbatim: route-module.ts builds the response cache
-// from the first request to reach it and reuses it forever after.
 const NEXT_REQUEST_META = Symbol.for("NextInternalRequestMeta");
 
 function routeModuleLoader(getResponseCache?: () => never) {
@@ -775,9 +735,6 @@ test("builds an entry's response cache non-minimal as it loads the entry", () =>
   expect(routeModule.responseCache).toEqual({ minimal: false });
 });
 
-// The regression this pin exists for: a PPR resume runs in minimal mode, and is
-// a likely first request, so an unpinned route module would memoize a minimal
-// response cache — no durable ISR read or write — for the whole instance.
 test("keeps that cache non-minimal when a minimal-mode request arrives first", () => {
   const { caches, routeModule, load } = routeModuleLoader();
   const dispatch = createDispatch({ entries: ENTRIES, primary: null, load });
@@ -802,9 +759,6 @@ test("still serves an entry whose response cache refuses to be built", () => {
   expect(res.statusCode).toBe(200);
 });
 
-// The pin's silent-failure mode: a Next that renames the getter takes the pin
-// with it, and every instance a resume reaches first serves the rest of its life
-// with ISR off. One line, once, is the only warning there would be.
 test("reports a route module that exposes no response-cache getter, once", () => {
   const errors = silenceErrors();
   const load = () => ({ handler: () => {}, routeModule: {} });
@@ -817,14 +771,8 @@ test("reports a route module that exposes no response-cache getter, once", () =>
   expect(String(errors.mock.calls[0]?.[0])).toMatch(/getResponseCache/);
 });
 
-// Node middleware (proxy.ts). The launcher injects it under this reserved key
-// — see middlewareEntryKey in next-adapter.mts, mirrored as MIDDLEWARE_ENTRY_KEY
-// in the source under test — never as an ordinary route.
 const MIDDLEWARE_KEY = "/_middleware";
 
-// A Writable stand-in for the real http.ServerResponse the membrane hands the
-// dispatcher: middleware's response can carry a real body, so a plain object
-// with just `.end()` can't be piped through node:stream/promises' pipeline.
 function fakeMiddlewareRes() {
   const chunks: Buffer[] = [];
   const res = new Writable({
@@ -847,9 +795,6 @@ function fakeMiddlewareRes() {
   return res;
 }
 
-// The worker always names middleware explicitly via x-ocel-entry — it is
-// absent from the route table by design, so a self-fetch can never land on it
-// by pathname (see next-adapter.mts's routeTable()).
 function middlewareReq(overrides: Partial<http.IncomingMessage> = {}) {
   return {
     url: "/dashboard",
@@ -921,7 +866,6 @@ test("dispatches the reserved key through the adapter-function contract, not .ha
     trailingSlash: false,
     experimental: {},
   });
-  // GET carries no body: constructing a Request with one throws.
   expect(call.request.body).toBeUndefined();
 });
 
@@ -974,10 +918,6 @@ test("carries a POST body as a readable web stream of the request's real bytes",
     load,
   });
 
-  // Readable.toWeb throws on a non-Uint8Array chunk, so this has to be real
-  // Buffer chunks — a Readable.from(["string"]) source would throw the moment
-  // anything actually consumed it, which a test that never reads the stream
-  // would never notice.
   const { Readable } = await import("node:stream");
   const postReq = Readable.from([Buffer.from("pay"), Buffer.from("load")]) as unknown as http.IncomingMessage;
   Object.assign(postReq, {
@@ -1010,11 +950,6 @@ test("forwards every Set-Cookie value onto the real response", async () => {
   expect(res.headers["set-cookie"]).toEqual(["a=1; Path=/", "b=2; Path=/"]);
 });
 
-// A `proxy.ts` with a top-level await compiles to a module whose exports are
-// a Promise, not the object itself — Next's own next-server.js documents and
-// handles this. Without awaiting it, `.default` reads off the Promise object
-// and is undefined, so every matched request 502s for the life of the
-// deployment.
 test("awaits a top-level-await middleware module before reading its default export", async () => {
   const load = () =>
     Promise.resolve({ default: () => ({ response: new Response("hi", { status: 200 }) }) });
@@ -1031,8 +966,6 @@ test("awaits a top-level-await middleware module before reading its default expo
   expect(res.text()).toBe("hi");
 });
 
-// The failure is deterministic, so both requests see it — matching the
-// memoized-failure semantics a synchronous require throw already gets.
 test("fails closed on both requests when a top-level-await module rejects", async () => {
   const errors = silenceErrors();
   const load = () => Promise.reject(new Error("boom"));
@@ -1049,9 +982,6 @@ test("fails closed on both requests when a top-level-await module rejects", asyn
 
   expect(first.statusCode).toBe(502);
   expect(second.statusCode).toBe(502);
-  // The worker relays this body to the public requester untouched (see
-  // middlewareResponse in workers/nextjs/src/index.ts), so the app's stack
-  // trace must never reach it — only the generic entry name does.
   expect(first.text()).not.toMatch(/boom/);
   expect(second.text()).not.toMatch(/boom/);
   expect(first.text()).toMatch(new RegExp(MIDDLEWARE_KEY.replace(/\//g, "\\/")));
@@ -1060,10 +990,6 @@ test("fails closed on both requests when a top-level-await module rejects", asyn
   );
 });
 
-// The module is primed at INIT (loadEntry runs synchronously, kicking off the
-// require's underlying work) even though nothing awaits its settlement until
-// a request arrives — this is what proves priming does not regress under a
-// Promise-valued module.
 test("primes a top-level-await middleware module at INIT, not deferred to first request", () => {
   const loads: string[] = [];
   const load = (path: string) => {
@@ -1103,11 +1029,6 @@ test("registers the adapter's waitUntil on the invocation's own ctx", async () =
   expect(settled).toBe(true);
 });
 
-// Next's own next-server.js passes waitUntil inside the request object, not
-// only as the return channel — a middleware that calls request.waitUntil()
-// directly (rather than returning it) would otherwise register nothing, and
-// the adapter's own NextFetchEvent fallback drops anything registered after
-// the adapter returns instead of deferring it.
 test("passes a request.waitUntil that forwards to the invocation's own ctx", async () => {
   let captured: ((p: Promise<unknown>) => void) | undefined;
   const registered: Promise<unknown>[] = [];
@@ -1131,10 +1052,6 @@ test("passes a request.waitUntil that forwards to the invocation's own ctx", asy
   expect(registered).toEqual([work]);
 });
 
-// A public request can trigger this (a rejected top-level await, or the
-// adapter function itself throwing): the response the worker relays to that
-// requester must carry no stack trace or other application detail, only the
-// detailed error server-side, where an operator can read it in CloudWatch.
 test("fails closed when the middleware module throws, without leaking its stack to the response", async () => {
   const errors = silenceErrors();
   const load = () => ({
@@ -1187,9 +1104,6 @@ test("fails closed when the adapter function returns no Response", async () => {
   expect(res.statusCode).toBe(502);
 });
 
-// warm() iterates every entry the bundle carries with no special case for
-// middleware, so priming it at scale-out time falls out of the existing walk
-// rather than needing its own path.
 test("warm() picks up the middleware entry for free", () => {
   stubCompileCache();
   const { loads, load } = cachingLoader({});

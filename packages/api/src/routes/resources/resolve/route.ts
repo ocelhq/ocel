@@ -6,8 +6,6 @@ import { uuidv7 } from "uuidv7";
 import { resourceTypeRegistry } from "./registry";
 import { resolveResourcesSchema } from "./validation";
 
-// Drives the CLI's resolve cache (ocelhq-amu.5): responses are safe to reuse
-// until this TTL elapses.
 const RESOLVE_TTL_MS = 60 * 60 * 1000;
 
 function buildResourceEnvKey(type: string, name: string): string {
@@ -18,8 +16,6 @@ function isUniqueConstraintViolation(error: unknown): boolean {
   if (typeof error !== "object" || error === null) {
     return false;
   }
-  // node-postgres reports unique violations with code 23505; drizzle wraps
-  // the original pg error as `.cause`.
   if ((error as { code?: string }).code === "23505") {
     return true;
   }
@@ -52,9 +48,6 @@ export async function resolveResources(request: Request): Promise<Response> {
     .from(project)
     .where(eq(project.id, projectId));
 
-  // Same 404 whether the Project doesn't exist or the caller isn't a member
-  // of its org - matches getProjectById's convention of not leaking
-  // existence to non-members.
   if (!foundProject) {
     return Response.json({ error: "Not found" }, { status: 404 });
   }
@@ -116,10 +109,6 @@ export async function resolveResources(request: Request): Promise<Response> {
         if (!isUniqueConstraintViolation(error)) {
           throw error;
         }
-        // Lost a race with a concurrent resolve for the same reuse key -
-        // the role/db we just provisioned are deterministically named from
-        // identity, so they're identical to the winner's; the persisted
-        // row is the source of truth, so defer to it instead of erroring.
         [assignment] = await db
           .select()
           .from(resourceAssignment)

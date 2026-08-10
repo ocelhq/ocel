@@ -18,8 +18,6 @@ import (
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/resources/v1"
 )
 
-// writePrebuiltFunction stages one `.func` in a project's build output exactly
-// as the builder would, so a --prebuilt run has something real to discover.
 func writePrebuiltFunction(t *testing.T, root, app, route string) {
 	t.Helper()
 	dir := filepath.Join(root, ".ocel", "output", "apps", app, "functions", route+".func")
@@ -40,7 +38,6 @@ func writePrebuiltFunction(t *testing.T, root, app, route string) {
 	}
 }
 
-// recordBuildApp replaces the app-build seam with one that records whether it ran.
 func recordBuildApp(t *testing.T) *bool {
 	t.Helper()
 	ran := false
@@ -97,8 +94,6 @@ func TestCollectAndBuildManifest_NotPrebuilt_RunsTheBuild(t *testing.T) {
 	}
 }
 
-// A --prebuilt run against a project that was never built must say so rather
-// than fall through to an infrastructure-only deploy.
 func TestCollectAndBuildManifest_Prebuilt_NoOutput_Errors(t *testing.T) {
 	recordBuildApp(t)
 
@@ -112,10 +107,6 @@ func TestCollectAndBuildManifest_Prebuilt_NoOutput_Errors(t *testing.T) {
 	}
 }
 
-// TestCollectAndBuildManifest_GeneratesTheClientAccessorBeforeTheBuild proves
-// the accessor exists by the time the framework build could read it, and that
-// the build it belongs to is recorded — which is what lets the next --prebuilt
-// deploy tell whether reusing this output is honest.
 func TestCollectAndBuildManifest_GeneratesTheClientAccessorBeforeTheBuild(t *testing.T) {
 	root := t.TempDir()
 	writePrebuiltFunction(t, root, "api", "index")
@@ -144,12 +135,6 @@ func TestCollectAndBuildManifest_GeneratesTheClientAccessorBeforeTheBuild(t *tes
 	}
 }
 
-// TestCollectAndBuildManifest_Prebuilt_RefusesAStaleClientValue proves the
-// rule ADR 0005 records: a --prebuilt deploy reuses build output, and a
-// client-accessible value was inlined into that output's browser bundles when
-// it was built. Proceeding would ship a Deployment whose server holds the new
-// value and whose browser holds the old one, so the deploy is refused by name
-// before any provider is driven.
 func TestCollectAndBuildManifest_Prebuilt_RefusesAStaleClientValue(t *testing.T) {
 	root := t.TempDir()
 	writePrebuiltFunction(t, root, "api", "index")
@@ -178,12 +163,6 @@ func TestCollectAndBuildManifest_Prebuilt_RefusesAStaleClientValue(t *testing.T)
 	}
 }
 
-// TestCollectAndBuildManifest_Prebuilt_NamesAnOcelBuildOutputForWhatItIs
-// proves the flow `ocel build` documents — build in a container holding no
-// credentials, deploy from the same checkout later — is refused for its real
-// reason. That build inlined nothing because it had nothing to inline, and a
-// refusal saying the value changed sends the developer after a rotation that
-// never happened.
 func TestCollectAndBuildManifest_Prebuilt_NamesAnOcelBuildOutputForWhatItIs(t *testing.T) {
 	root := t.TempDir()
 	writePrebuiltFunction(t, root, "api", "index")
@@ -207,9 +186,6 @@ func TestCollectAndBuildManifest_Prebuilt_NamesAnOcelBuildOutputForWhatItIs(t *t
 	}
 }
 
-// TestCollectAndBuildManifest_Prebuilt_ProceedsWhenTheClientValueIsUnchanged
-// proves the refusal is about staleness alone: reusing output built with the
-// value the store still holds is exactly what --prebuilt is for.
 func TestCollectAndBuildManifest_Prebuilt_ProceedsWhenTheClientValueIsUnchanged(t *testing.T) {
 	root := t.TempDir()
 	writePrebuiltFunction(t, root, "api", "index")
@@ -231,8 +207,6 @@ func TestCollectAndBuildManifest_Prebuilt_ProceedsWhenTheClientValueIsUnchanged(
 	}
 }
 
-// clientValueGate is a gate that has already been told this project declares
-// one client-accessible variable, holding the given value.
 func clientValueGate(t *testing.T, cfg *projectconfig.Config, value string) *envgate.Gate {
 	t.Helper()
 	cell := envgate.Cell{Key: "PUBLIC_SITE_URL"}
@@ -253,7 +227,6 @@ func clientValueGate(t *testing.T, cfg *projectconfig.Config, value string) *env
 	return gate
 }
 
-// oneValue is a store holding a single cell.
 type oneValue struct {
 	cell  envgate.Cell
 	value string
@@ -292,8 +265,6 @@ func TestPrebuiltFlag_RegisteredOnDeployAndPreview(t *testing.T) {
 	}
 }
 
-// prebuiltConfig is a resolved config with no discoverable resources, so the
-// test turns entirely on the build half.
 func prebuiltConfig(root string) *projectconfig.Config {
 	return &projectconfig.Config{
 		Dir:  root,
@@ -302,8 +273,6 @@ func prebuiltConfig(root string) *projectconfig.Config {
 	}
 }
 
-// TestRunDeploy_Prebuilt_NoOutput_AbortsBeforeSpawn proves a --prebuilt deploy
-// against an unbuilt checkout aborts before any provider is spawned.
 func TestRunDeploy_Prebuilt_NoOutput_AbortsBeforeSpawn(t *testing.T) {
 	root, _ := setUpDeployFixture(t)
 	addAppToFixtureConfig(t, root)
@@ -325,11 +294,6 @@ func TestRunDeploy_Prebuilt_NoOutput_AbortsBeforeSpawn(t *testing.T) {
 	}
 }
 
-// noGate is a gate over a store holding nothing, for the paths that declare
-// no variables and so never consult it.
-// noGate is a gate over a store that holds nothing. Its scope is the project's
-// own, because that is what the deploy path builds it from: an app the scope
-// does not name has no folder to resolve from.
 func noGate(cfg *projectconfig.Config) *envgate.Gate {
 	return envgate.New(emptyValues{}, envScope(cfg, false, ""))
 }

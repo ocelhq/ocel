@@ -9,17 +9,8 @@ import {
 
 import { isRateLimited } from "./r2";
 
-// What a publish did, as the caller has to be able to act on it. "unchanged"
-// and "published" both mean R2 holds every record the caller raised; only
-// "exhausted" means it does not, and it is the caller's to raise again.
-// "absent" means there is no snapshot here to publish into, which no retry can
-// change: only a deploy creates one.
 export type PublishOutcome = "published" | "unchanged" | "exhausted" | "absent";
 
-// R2 rate-limits a single key at one write per second, so a burst is answered
-// with 429 exactly when the clock is hottest. Four attempts spaced 200/400/800ms
-// spans a little over a second of throttling — enough for the limit to lapse,
-// short enough to answer inside a request.
 const publishAttempts = 4;
 const retryDelayMs = 200;
 
@@ -35,28 +26,8 @@ function parseJson<T>(body: string): T | null {
   }
 }
 
-// TagClock is one build's tag-clock replica, and the only writer of it. A
-// Durable Object addressed by isrPrefix is single-threaded, so the merge happens
-// in memory against the document this instance already holds and the write needs
-// no compare-and-swap — which is what replaces three publishers each running
-// their own three-attempt loop against the same key.
-//
-// Raises that arrive while a publish is in flight are coalesced into the next
-// one, so a herd of invalidations on a build costs writes proportional to the
-// round trip rather than to the herd.
-//
-// It never creates the document, on any path. deployedAt has exactly one writer
-// — the deploy's genesis seed — and a document conjured here would carry a zero
-// anchor, against which no record is ever inert, so that build's replica would
-// grow without bound for the life of the build. A build with no snapshot is
-// answered "absent" instead, which the edge reads as untrusted and falls open
-// to the origin for.
 export class TagClock {
   private readonly key: string;
-  // The document this instance last read or wrote, or null when it must read
-  // R2 again. Absence is never held: nothing orders the deploy's genesis seed
-  // against a build's first invalidation, so an instance that found no snapshot
-  // must look again rather than decline for its whole lifetime.
   private held: TagSnapshot | null = null;
   private pending = new Map<string, TagRecord>();
   private pendingAt = 0;
@@ -70,9 +41,6 @@ export class TagClock {
     this.key = tagSnapshotKey(isrPrefix);
   }
 
-  // Merges `records` into the build's snapshot, answering only once R2 holds the
-  // result — the raiser reads its own write straight afterwards, and a snapshot
-  // that has not landed yet reads as an invalidation that never happened.
   raise(records: Map<string, TagRecord>, at: number): Promise<PublishOutcome> {
     for (const [tag, record] of records) {
       this.pending.set(tag, mergeRecord(this.pending.get(tag), record));
@@ -87,15 +55,10 @@ export class TagClock {
     }));
   }
 
-  // Republishes the snapshot unchanged so generatedAt advances. The document
-  // carries no expiry, so without this an untouched object means both "nothing
-  // has changed" and "nobody has published in a week", and no reader can tell
-  // the two apart.
   heartbeat(at: number): Promise<PublishOutcome> {
     return this.chain(() => this.republish(at));
   }
 
-  // One publish at a time, so no two ever race this instance's held document.
   private chain(step: () => Promise<PublishOutcome>): Promise<PublishOutcome> {
     const done = this.draining.catch(() => undefined).then(step);
     this.draining = done;
@@ -108,10 +71,6 @@ export class TagClock {
       const prior = await this.prior();
       if (prior === null) return "absent";
       const merged = mergeSnapshot(prior, records, at);
-      // Pruning is a removal, so the record set is not monotone: a tag absent
-      // from the prior document may be one that was invalidated and then proved
-      // inert. Only the merged document can say whether R2 already reflects what
-      // was raised, so that is what the write turns on.
       if (sameRecords(prior.records, merged.records)) return "unchanged";
       if (await this.put(merged)) return "published";
     }
@@ -142,8 +101,6 @@ export class TagClock {
     return snapshot;
   }
 
-  // Only ever overwrites a document this instance has read. Every publish path
-  // above declines a build with no snapshot for that reason.
   private async put(snapshot: TagSnapshot): Promise<boolean> {
     try {
       const written = await this.bucket.put(this.key, JSON.stringify(snapshot), {
@@ -156,8 +113,6 @@ export class TagClock {
     } catch (err) {
       if (!isRateLimited(err)) throw err;
     }
-    // Either R2 refused the write or someone else got there first. Both are
-    // answered by reading what is actually there and merging onto that.
     this.held = null;
     return false;
   }

@@ -1,17 +1,8 @@
-// Delegates a wave's final Graphite work — tracking each closed issue's branch
-// onto its parent and submitting the stack — to a single host-side `claude` CLI
-// call. Graphite's fixed track→submit sequence is fragile (a stacked branch may
-// need a restack/rebase before `gt submit` will take), so instead of hand-coding
-// each error path we hand the model the same steps and let it work around
-// whatever it hits. Runs on the host, which already has `gt`/`gh`/`bd`
-// authenticated — sandboxes never see a GitHub token.
-
 import { spawnSync } from "node:child_process";
 import { appendFileSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { type BdIssue, revertClaim } from "./bd.ts";
 
-// Match the model used for implement runs (orchestrator.ts).
 const SUBMIT_MODEL = "claude-sonnet-5";
 const SUBMIT_TIMEOUT_MS = 20 * 60 * 1000;
 
@@ -27,11 +18,6 @@ function renderBranchList(outcomes: WaveOutcome[]): string {
 		.join("\n");
 }
 
-// Tracks and submits every branch produced by this wave via a host-side model
-// call. The model reopens any branch it can't submit (bd update --add-label
-// orchestrator-failed) itself; the host only steps in if the `claude` process
-// never ran to completion, reverting the whole wave so no closed issue is left
-// with no PR.
 export async function submitWaveWithModel(
 	outcomes: WaveOutcome[],
 	repoRoot: string,

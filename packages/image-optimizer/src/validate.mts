@@ -1,24 +1,6 @@
 import type { CompiledImageConfig, ImageOriginRequest } from "./contract.mjs";
 import { isAllowedRemote, matchLocalPattern } from "./patterns.mjs";
 
-// The whole of Next's ImageOptimizerCache.validateParams, run again, here,
-// against the config this function loaded from S3 itself.
-//
-// The edge already ran it. That is not a reason to skip it — it is the reason
-// to repeat it. The edge validates against the config compiled into a routing
-// manifest it was deployed with; this function validates against the artifact
-// it fetched and hashed. If the two ever disagree — a stale worker, a replayed
-// payload, a bug in either — the one holding the authority is this one, and
-// tightening remotePatterns has to take effect even for a worker that has not
-// noticed yet.
-//
-// The one shape difference from the edge's copy: the parameters arrive as JSON
-// values rather than as query strings, so "is an array" and "is not an integer"
-// are type checks here where they are regex checks there. The conditions and
-// their order are otherwise the table verbatim, including the interleaving —
-// both of q's presence checks run before w's value checks, so a request with a
-// bad width and no quality is a quality error.
-
 export type Validation =
   | { ok: true; params: ValidParams }
   | { ok: false; status: number; message: string };
@@ -32,19 +14,12 @@ export interface ValidParams {
 
 const DUMMY_ORIGIN = "http://n";
 
-// A url that resolves to /_next/image is a request for this route to call
-// itself. Matched against the decoded pathname and anywhere in it, never as a
-// prefix: an assetPrefix in front of it, or a percent-encoded letter inside it,
-// defeats a prefix check (CVE-2024-47831).
 const RECURSIVE = /\/_next\/image($|\/)/;
 
 function invalid(message: string): Validation {
   return { ok: false, status: 400, message };
 }
 
-// A url neither decodeURIComponent nor new URL can handle. Next throws here and
-// its server answers a bare 500; the edge already reproduces that status rather
-// than crashing, and so does this.
 function malformed(): Validation {
   return { ok: false, status: 500, message: "Internal Server Error" };
 }
@@ -71,20 +46,10 @@ export function validate(
 ): Validation {
   const { url, w, q } = payload;
 
-  // Falsy-only, as Next's own `!url` is. A non-empty array is truthy, so it
-  // falls through to the row below — which is the whole reason the array row is
-  // reachable at all. Testing `typeof url !== "string"` here instead swallows it
-  // and answers "required" for an input Next names.
   if (!url) return invalid('"url" parameter is required');
   if (Array.isArray(url)) return invalid('"url" parameter cannot be an array');
-  // Not a row in Next's table: a query string cannot produce a value that is
-  // neither string nor array, but a JSON payload can. Answered as an absent url
-  // rather than handed to a parser that assumes a string.
   if (typeof url !== "string") return invalid('"url" parameter is required');
   if (url.length > 3072) return invalid('"url" parameter is too long');
-  // Before the relative/absolute branch, always: //evil.example is a host the
-  // absolute branch would have checked and the relative branch would not, and
-  // getting this order wrong is a whole-allowlist bypass (Next PR #65752).
   if (url.startsWith("//")) {
     return invalid('"url" parameter cannot be a protocol-relative URL (//)');
   }

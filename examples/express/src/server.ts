@@ -2,14 +2,11 @@ import express from "express";
 import { createRouteHandler } from "ocel/blob/express";
 import { pg, uploads } from "../ocel/index";
 
-// postgres("main") is resolved from the environment `ocel dev` injects, so the
-// server never sees a connection string of its own.
 const app = express();
 app.use(express.json());
 
 const PORT = Number(process.env.PORT ?? 3102);
 
-// Readiness probe the e2e harness polls before hitting the CRUD routes.
 app.get("/health", (_req, res) => {
   res.json({ ok: true });
 });
@@ -57,8 +54,6 @@ app.delete("/todos/:id", async (req, res) => {
   res.status(204).end();
 });
 
-// The upload surface for the `uploads` bucket (?op=presign|callback|poll),
-// mounted for every method at this exact path.
 app.all("/api/upload", createRouteHandler(uploads));
 
 app.get("/documents", async (_req, res) => {

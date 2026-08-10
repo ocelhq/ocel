@@ -17,102 +17,40 @@ import (
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/resources/v1"
 )
 
-// Provider-chosen defaults for a realized function. A ManifestFunction always
-// carries a runtime and a handler (the app builder emits both), but an empty
-// value falls back to the pinned Node runtime and the conventional entrypoint.
 const (
 	defaultFunctionRuntime = "nodejs24.x"
 
-	// The manifest handler is the user entrypoint's path within the .func (e.g.
-	// `src/server.js`); the lambdanode entrypoint imports it via OCEL_HANDLER. This is
-	// the fallback when the manifest omits it.
 	defaultFunctionEntry = "src/server.js"
 
-	// AWS's implicit 3s/128MB cannot fit an SSR cold start, and a Lambda
-	// timeout surfaces as neither a body nor an error — only a REPORT line —
-	// so an undersized function reads as a hang rather than a failure. Memory
-	// is the CPU dial too: Lambda scales cores with it, so 128MB is what makes
-	// a cold start slow enough to hit the ceiling in the first place.
 	defaultFunctionMemoryMB       = 1024
 	defaultFunctionTimeoutSeconds = 30
 
-	// A Next function is a bundle: one container serves many routes, and each
-	// distinct route entry it has served stays resident (CommonJS modules cannot
-	// be unloaded), so peak RSS grows with the routes that reach it instead of
-	// holding at the 109MB a single resident module measures. 1769MB is the exact
-	// point Lambda allocates a full vCPU, which is what this buys twice over:
-	// headroom for the accumulated modules, and the CPU for evaluating them —
-	// bundling `require`s every entry but the primed one lazily on first request,
-	// moving that work out of the free full-vCPU INIT phase into the billed
-	// INVOKE phase, where a fractional core lands in request latency.
 	nextBundleFunctionMemoryMB = 1769
 
-	// lambdaConfigHandler is the Lambda's own Handler config value. Under the
-	// lambdanode exec-wrapper the Go bootstrap owns the Runtime API loop, so
-	// this is vestigial — but the managed nodejs runtime still requires a
-	// syntactically valid value.
 	lambdaConfigHandler = "index.handler"
 
-	// execWrapper points the managed runtime at the lambdanode Go bootstrap shipped
-	// in the membrane layer; it takes over the Runtime API loop.
 	execWrapper = "/opt/ocel/bootstrap"
 
-	// defaultMembraneLayerARN pins the Ocel-owned, publicly-shared membrane
-	// layer version. It is a released-artifact version, bumped only when the
-	// layer is republished (`make publish-layer`); override via
-	// OCEL_MEMBRANE_LAYER_ARN for dev/testing.
 	defaultMembraneLayerARN = "arn:aws:lambda:us-east-1:363236815301:layer:ocel-membrane:29"
 	membraneLayerARNEnv     = "OCEL_MEMBRANE_LAYER_ARN"
 
-	// bytecodeCacheEnv opts a deploy into having the membrane cache V8 bytecode.
-	// It is off until asked for — only the literal "1", mirroring no other
-	// spelling.
 	bytecodeCacheEnv = "OCEL_BYTECODE_CACHE"
 
-	// bytecodeEmbedEnv opts a deploy into embedding each bundle's compile cache
-	// in its own deployment package (see embed.go), so a cold start reads it
-	// from /var/task instead of S3. Like bytecodeCacheEnv it is off until asked
-	// for — only the literal "1".
 	bytecodeEmbedEnv = "OCEL_BYTECODE_EMBED"
 
-	// A Next-fronted function's Function URL is IAM-gated: the edge worker signs
-	// its forwards (SigV4) with the edge reader's key, whose identity-based grant
-	// authorizes invoke on any function tagged ocel:app. This removes the public
-	// resource-based grants a NONE URL needs.
 	functionURLAuthIAM = "AWS_IAM"
 
-	// The ocel resource tags. tagApp names the app a function belongs to and is
-	// the one the edge reader's invoke grant is conditioned on (bootstrap's
-	// edgeUserResource), so a function without it cannot be invoked through a
-	// signed Function URL — the two literals are an implicit contract. tagEnv and
-	// tagProject are constant across a deploy; all three are stamped on every
-	// function by ocelTags.
 	tagApp     = "ocel:app"
 	tagEnv     = "ocel:env"
 	tagProject = "ocel:project"
 
-	// functionURLInvokeModeStream deploys every Function URL in response-stream
-	// mode: the service invokes via InvokeWithResponseStream and the lambdanode
-	// bootstrap replies with the http-integration-response streaming contract.
-	// All functions stream (streaming is a superset — small responses stream
-	// fine), so this is unconditional.
 	functionURLInvokeModeStream = "RESPONSE_STREAM"
 
-	// outputKeyFunctionURL is the key registerFunction exports the Function URL
-	// under, read back by collectFunctionOutput.
 	outputKeyFunctionURL = "url"
 
-	// outputKeyFunctionName is the key the realized Lambda's physical name is
-	// exported under. The name is Pulumi-autonamed (a random suffix), so the
-	// stack output is the only thing that can tell the deploy which function to
-	// address for an Invoke — the warm pass reads it back here. It stays inside
-	// this package: the CLI-facing FunctionOutput carries a URL and nothing
-	// else, and a physical resource name is not a user-facing fact.
 	outputKeyFunctionName = "functionName"
 )
 
-// membraneLayerARN is the membrane layer version deployed functions attach,
-// taken from OCEL_MEMBRANE_LAYER_ARN when set, else the pinned default.
 func membraneLayerARN() string {
 	if arn := os.Getenv(membraneLayerARNEnv); arn != "" {
 		return arn
@@ -120,36 +58,18 @@ func membraneLayerARN() string {
 	return defaultMembraneLayerARN
 }
 
-// bytecodeCacheEnabled reports whether a deployed function should have its
-// V8 bytecode cached, read from OCEL_BYTECODE_CACHE on the deploying process.
-// Off by default; only the literal "1" turns it on.
 func bytecodeCacheEnabled() bool {
 	return os.Getenv(bytecodeCacheEnv) == "1"
 }
 
-// bytecodeEmbedRequested reports whether the deploy asked for embedding at all,
-// which is a different question from whether it can have it: a deploy that
-// asked and cannot is owed a line saying why, and only this can tell that from
-// a deploy that never asked. OCEL_BYTECODE_EMBED is read nowhere else.
 func bytecodeEmbedRequested() bool {
 	return os.Getenv(bytecodeEmbedEnv) == "1"
 }
 
-// bytecodeEmbedEnabled reports whether this deploy should embed each bundle's
-// published compile cache in its deployment package. Off by default; only the
-// literal "1" turns it on.
-//
-// Embedding implies caching: there is nothing to embed without a published
-// cache, so the two gates are ANDed here rather than left for a caller to
-// forget. embedBytecodeCaches names the contradiction when a deploy asks for
-// one and forbids the other.
 func bytecodeEmbedEnabled() bool {
 	return bytecodeEmbedRequested() && bytecodeCacheEnabled()
 }
 
-// functionArgs is the fully-resolved set of arguments a ManifestFunction lowers
-// to, independent of any Pulumi or AWS call. It is the pure output of
-// translateFunction so the translation can be unit-tested without provisioning.
 type functionArgs struct {
 	Runtime        string
 	Handler        string
@@ -157,52 +77,22 @@ type functionArgs struct {
 	TimeoutSeconds int
 }
 
-// isrConfig points a Next function's cache handler at the account-global stores
-// backing ISR. Prefix and TagNamespace both derive from the deploy's
-// <env>/<project>/<app>/<build> identity, so an app can only ever address its
-// own entries and its own tags — which is what isrPolicy then enforces.
 type isrConfig struct {
 	Bucket   string
 	Prefix   string
 	Table    string
 	TableARN string
 
-	// CacheStoreBucket is the substrate's adopted cache store, and the whole of
-	// what the function is told about it: the name alone is what makes the cache
-	// handler read and write its entries through the ISR writer worker instead of
-	// the provider's own bucket. Empty when the substrate adopted no store, which
-	// is the rollback for the whole colocation.
 	CacheStoreBucket string
 
-	// WriterURL and WriterSecret point the cache handler's entry reads and
-	// writes at the account-level ISR writer worker (epic decisions 6/6a): the
-	// worker holds the bucket natively, so the function needs no object-store
-	// credentials of its own for entries at all — reads go through it too,
-	// because an R2 token scopes to a bucket and nothing finer, so one left here
-	// to read with could still write every project's entries. One URL serves
-	// both ops; the method distinguishes them.
-	// Both are plain env vars, deliberately — an SSM
-	// SecureString would put a GetParameter on the cold path to buy protection
-	// a per-deploy secret that rotates every build does not need. Empty when the
-	// substrate adopted no writer.
 	WriterURL    string
 	WriterSecret string
 }
 
-// tagNamespace is the partition-key prefix this app's ISR tag records live
-// under in the shared state table. It mirrors the S3 prefix so one identity
-// governs both stores. Building it from the same Prefix is what lets isrPolicy
-// scope DynamoDB with a single LeadingKeys wildcard.
-//
-// The edge derives the same namespace from the same prefix in TypeScript
-// (tagNamespace in @ocel/next-cache) and reaches DynamoDB under this grant. The
-// two spellings are held together by the checked-in edge contract fixture, which
-// each side asserts its own against.
 func (c isrConfig) tagNamespace() string {
 	return "TAG#" + strings.ReplaceAll(c.Prefix, "/", "#") + "#"
 }
 
-// env is what the bundled cache handler reads to find its backing stores.
 func (c isrConfig) env() map[string]string {
 	env := map[string]string{
 		"OCEL_ISR_BUCKET":        c.Bucket,
@@ -210,40 +100,19 @@ func (c isrConfig) env() map[string]string {
 		"OCEL_STATE_TABLE":       c.Table,
 		"OCEL_ISR_TAG_NAMESPACE": c.tagNamespace(),
 	}
-	// Left unset rather than set empty when no store was adopted: the handler
-	// reads an unset bucket as "entries live in the provider's own store", which
-	// is what keeps an older substrate on S3. A plain variable for the same
-	// reason WriterURL and WriterSecret are — there is nothing secret in a bucket
-	// name, and it is read on every cold start.
 	if c.CacheStoreBucket != "" {
 		env["OCEL_ISR_STORE_BUCKET"] = c.CacheStoreBucket
 	}
-	// Both or neither. Set exactly when this deploy's entries live in the adopted
-	// cache store, which is the only bucket the writer holds — appCaches refuses
-	// a deploy where the two disagree, and the handler refuses to run without
-	// them once a store is adopted, since it has no other way to reach an entry.
 	if c.WriterURL != "" && c.WriterSecret != "" {
 		env["OCEL_ISR_WRITER_URL"] = c.WriterURL
 		env["OCEL_ISR_WRITER_SECRET"] = c.WriterSecret
 	}
-	// The membrane composes its own key under this prefix (bytecode/<function
-	// name>/node<major>-<arch>.tar.gz), which is why the value is the bare
-	// prefix rather than anything bytecode-specific: the same string isrPolicy
-	// already grants {bucket}/{prefix}/* against, so no extra grant is needed.
-	// Left unset when the gate is off, which is what makes the membrane no-op.
 	if bytecodeCacheEnabled() {
 		env["OCEL_BYTECODE_PREFIX"] = c.Prefix
 	}
 	return env
 }
 
-// isrPolicy grants a Next function exactly the cache access it needs and no
-// more. Both the asset bucket and the state table are account-global and shared
-// by every env, project and app, so an unscoped grant would let any function
-// read or corrupt another project's cache — and the state table also holds
-// upload sessions, whose items carry HMAC secrets. The DynamoDB grant leans on
-// StringLike (plain LeadingKeys matching is exact-only) to bound the function to
-// its own tag partitions.
 func isrPolicy(c isrConfig) (string, error) {
 	statements := []any{
 		map[string]any{
@@ -252,15 +121,7 @@ func isrPolicy(c isrConfig) (string, error) {
 			"Resource": fmt.Sprintf("arn:aws:s3:::%s/%s/*", c.Bucket, c.Prefix),
 		},
 		map[string]any{
-			"Effect": "Allow",
-			// Exactly the calls the handler's tag store makes against the
-			// table, and they are all writes: writeTags and the plural
-			// handler's writeTag send UpdateItem (they merge, so PutItem
-			// would clobber an earlier expiry). Nothing reads the table at
-			// all — both tiers read their whole tag state from the snapshot
-			// object under the S3 grant above. Adding a call means adding
-			// its action here — a mismatch 403s at runtime, and revalidateTag
-			// does not catch, so it throws out of the user's server action.
+			"Effect":   "Allow",
 			"Action":   []string{"dynamodb:UpdateItem"},
 			"Resource": c.TableARN,
 			"Condition": map[string]any{
@@ -279,11 +140,6 @@ func isrPolicy(c isrConfig) (string, error) {
 	return string(out), nil
 }
 
-// translateFunction lowers a ManifestFunction into the concrete Lambda
-// arguments the provider provisions. Empty runtime/handler fall back to the
-// pinned Node defaults, and a Next function is sized for a route bundle rather
-// than a single module. Handler is the user entrypoint path OCEL_HANDLER
-// resolves as /var/task/<handler>.
 func translateFunction(fn *deploymentsv1.ManifestFunction) functionArgs {
 	runtime := defaultFunctionRuntime
 	if r := fn.GetRuntime(); r != "" {
@@ -305,9 +161,6 @@ func translateFunction(fn *deploymentsv1.ManifestFunction) functionArgs {
 	}
 }
 
-// ocelTags is the tag set every function carries: the app it belongs to (which
-// the edge reader's invoke grant is conditioned on) plus the deploy's constant
-// env and project. Empty env/project are skipped rather than stamped blank.
 func ocelTags(app, env, project string) pulumi.StringMap {
 	tags := pulumi.StringMap{tagApp: pulumi.String(app)}
 	if env != "" {
@@ -319,16 +172,10 @@ func ocelTags(app, env, project string) pulumi.StringMap {
 	return tags
 }
 
-// functionEnvKey is the environment variable a resource is injected onto every
-// function under: OCEL_RESOURCE_<TYPE>_<id>, where <TYPE> is the resource
-// type's canonical uppercase token and <id> is the resource's user id. It
-// matches exactly what the SDK reads (get-config.ts).
 func functionEnvKey(rt resourcesv1.ResourceType, id string) string {
 	return fmt.Sprintf("OCEL_RESOURCE_%s_%s", resourceTypeToken(rt), id)
 }
 
-// resourceTypeToken is a resource type's canonical uppercase token, the middle
-// segment of its OCEL_RESOURCE_<TYPE>_<id> env key.
 func resourceTypeToken(rt resourcesv1.ResourceType) string {
 	switch rt {
 	case resourcesv1.ResourceType_RESOURCE_TYPE_POSTGRES:
@@ -340,32 +187,21 @@ func resourceTypeToken(rt resourcesv1.ResourceType) string {
 	}
 }
 
-// postgresEnvPayload is the OCEL_RESOURCE_POSTGRES_<id> value the SDK reads
-// (pg.ts): a JSON object carrying the connection string.
 func postgresEnvPayload(username, password, host string, port int, database string) string {
 	conn := fmt.Sprintf("postgres://%s:%s@%s:%d/%s", username, password, host, port, database)
 	b, _ := json.Marshal(map[string]string{"connectionString": conn})
 	return string(b)
 }
 
-// bucketEnvPayload is the OCEL_RESOURCE_BUCKET_<id> value the SDK reads
-// (bucket.ts): a JSON object pointing at the BucketService endpoint (address)
-// and the provisioned bucket binding.
 func bucketEnvPayload(address, bucket string) string {
 	b, _ := json.Marshal(map[string]string{"address": address, "bucket": bucket})
 	return string(b)
 }
 
-// artifactArchivePath resolves a ManifestFunction.artifact_path (relative to
-// the project's .ocel/output) against the deploy's artifact root, giving the
-// absolute path to the `.func` directory the provider hashes, zips, and uploads
-// to the artifact bucket before provisioning.
 func artifactArchivePath(root, artifactPath string) string {
 	return filepath.Join(root, artifactPath)
 }
 
-// collectFunctionOutput builds the ResourceOutput reporting a realized
-// function's web-facing URL, keyed by the function's logical_name.
 func collectFunctionOutput(logicalName, url string) *deploymentsv1.ResourceOutput {
 	return &deploymentsv1.ResourceOutput{
 		LogicalName: logicalName,
@@ -375,31 +211,17 @@ func collectFunctionOutput(logicalName, url string) *deploymentsv1.ResourceOutpu
 	}
 }
 
-// executionRole is one app's Lambda execution role: the app it belongs to, the
-// ISR cache it grants (nil when the app keeps none), the class key its
-// functions decrypt variable values under, and — only for an app that declares
-// a live-class value — the variable table it may read, with the partition it is
-// confined to.
 type executionRole struct {
 	App        string
 	Cache      *isrConfig
 	VarsKeyARN string
 
-	// VarsTableARN is empty for an app that reads no live value, which is how
-	// the store's blast radius stays the set of functions that depend on it.
-	// Slug and VarsClass name the project's own partition the grant is
-	// conditioned on, and VarsReferenced the partitions of the projects this
-	// app's own live values resolve out of.
 	VarsTableARN   string
 	Slug           string
 	VarsClass      string
 	VarsReferenced []string
 }
 
-// appExecutionRole is the role one app needs: its own cache and no other's,
-// plus the substrate's variable key off the deploy's config rather than derived
-// per app. The table is added only when the app's own bundle pins live
-// addresses, so a declaration is what earns the grant.
 func appExecutionRole(cfg Config, app string, caches map[string]*isrConfig, bundle appBundle) executionRole {
 	role := executionRole{App: app, Cache: caches[app], VarsKeyARN: cfg.VarsKeyARN}
 	if bundle.hasLive() {
@@ -411,10 +233,6 @@ func appExecutionRole(cfg Config, app string, caches map[string]*isrConfig, bund
 	return role
 }
 
-// newFunctionRole creates the IAM role every Lambda belonging to one app
-// assumes: the CloudWatch Logs grant every function needs, decrypt on the
-// substrate's class key, the app's own ISR cache grant when it has one, and the
-// variable table when the app declares a live-class value.
 func newFunctionRole(ctx *pulumi.Context, r executionRole) (*iam.Role, error) {
 	name := "ocel-fn-" + safeName(r.App)
 	role, err := newServiceRole(ctx, name, "lambda.amazonaws.com", nil)
@@ -452,15 +270,6 @@ func newFunctionRole(ctx *pulumi.Context, r executionRole) (*iam.Role, error) {
 	return role, nil
 }
 
-// functionEnv is the complete environment one function is deployed with: the
-// entries every function in the deploy shares (resource payloads and the app's
-// plaintext variables), the two the membrane needs, and the app's cache
-// coordinates when it keeps one. Pure and total, so what the deploy accounts
-// against the platform's budget is exactly what it deploys.
-//
-// The lambdanode bootstrap (in the membrane layer) takes over as the runtime
-// and imports the user entrypoint at /var/task/<handler>; the Lambda's own
-// Handler config is vestigial under this exec wrapper.
 func functionEnv(base map[string]string, args functionArgs, isr *isrConfig) map[string]string {
 	env := make(map[string]string, len(base))
 	maps.Copy(env, base)
@@ -472,19 +281,6 @@ func functionEnv(base map[string]string, args functionArgs, isr *isrConfig) map[
 	return env
 }
 
-// registerFunction realizes one ManifestFunction as an AWS Lambda from its
-// `.func` artifact plus a public Function URL. base is the environment every
-// function in the deploy shares, completed per function by functionEnv. The
-// function assumes its own app's execution role
-// (roleArn, from newFunctionRole). artifact points at the S3 object the provider
-// already uploaded the `.func` deployment package to; its content-addressed key
-// changes when the code changes, so Pulumi redeploys exactly the changed
-// functions. isr is the app's cache, nil when it keeps none; it injects the
-// cache handler's env, and the grant backing it lives on that same app's role.
-// The Function URL and the realized Lambda's physical name are exported under
-// logicalName for collectAppFunctionOutputs,
-// which is the identity everything downstream uses; the Pulumi resource name is
-// the clamped lambdaResourceName, so a long route still fits AWS's name limit.
 func registerFunction(ctx *pulumi.Context, logicalName string, tags pulumi.StringMap, args functionArgs, artifact artifactRef, base map[string]string, isr *isrConfig, roleArn pulumi.StringInput) error {
 	env := pulumi.StringMap{}
 	for key, value := range functionEnv(base, args, isr) {
@@ -505,8 +301,6 @@ func registerFunction(ctx *pulumi.Context, logicalName string, tags pulumi.Strin
 			Variables: env,
 		},
 
-		// ocel:app is what the edge reader's invoke grant is conditioned on;
-		// ocel:env / ocel:project ride alongside it (see ocelTags).
 		Tags: tags,
 
 		Layers: pulumi.StringArray{
@@ -517,10 +311,6 @@ func registerFunction(ctx *pulumi.Context, logicalName string, tags pulumi.Strin
 		return err
 	}
 
-	// AWS_IAM auth: the function is invoked only by a caller signing with
-	// credentials IAM authorizes, so it needs no resource-based grant at all —
-	// the edge reader's identity-based grant (conditioned on the ocel:app tag) is
-	// the whole authorization. The public NONE grants are gone with it.
 	url, err := lambda.NewFunctionUrl(ctx, resourceName+"-url", &lambda.FunctionUrlArgs{
 		FunctionName:      fn.Name,
 		AuthorizationType: pulumi.String(functionURLAuthIAM),
@@ -537,11 +327,6 @@ func registerFunction(ctx *pulumi.Context, logicalName string, tags pulumi.Strin
 	return nil
 }
 
-// postgresEnvValue composes the OCEL_RESOURCE_POSTGRES_<id> value from a
-// provisioned postgres resource's live outputs: the RDS-managed master
-// password is read from its Secrets Manager secret (a Pulumi data source, so
-// the Lambda depends on the secret and transitively the cluster), then folded
-// into the SDK connection-string payload.
 func postgresEnvValue(ctx *pulumi.Context, username, host pulumi.StringInput, port pulumi.IntInput, database string, secretARN pulumi.StringInput) pulumi.StringOutput {
 	secret := secretsmanager.LookupSecretVersionOutput(ctx, secretsmanager.LookupSecretVersionOutputArgs{
 		SecretId: secretARN,
@@ -558,18 +343,12 @@ func postgresEnvValue(ctx *pulumi.Context, username, host pulumi.StringInput, po
 	}).(pulumi.StringOutput)
 }
 
-// bucketEnvValue composes the OCEL_RESOURCE_BUCKET_<id> value from a
-// provisioned bucket's name and the BucketService endpoint. The address is
-// the deferred placeholder the bucket output already uses (see
-// deferredRuntimeAddress) until the membrane lands.
 func bucketEnvValue(bucket pulumi.StringInput) pulumi.StringOutput {
 	return bucket.ToStringOutput().ApplyT(func(b string) string {
 		return bucketEnvPayload(deferredRuntimeAddress, b)
 	}).(pulumi.StringOutput)
 }
 
-// parseManagedPassword extracts the password from an RDS-managed master-user
-// secret's JSON string ({username, password}).
 func parseManagedPassword(secretJSON string) (string, error) {
 	var parsed struct {
 		Password string `json:"password"`

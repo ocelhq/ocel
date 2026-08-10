@@ -1,23 +1,7 @@
-// The per-deploy Durable Object's storage-class logic: SQL over one deploy's
-// SQLite. Kept separate from the DO class (isr-deploy.ts) and the HTTP surface
-// (index.ts) so it can be exercised directly against a real DO instance's
-// storage, the same way workers/deployments-store's store.ts is.
-
-// The subset of DurableObjectStorage this module calls. A real ctx.storage
-// satisfies it structurally.
 export interface SqlStore {
   sql: SqlStorage;
 }
 
-// One row, holding the SHA-256 hash of this deploy's write secret. The
-// plaintext secret is minted by the deploy host, handed to the Lambda as an env
-// var and never sent to Cloudflare, so this table is the whole of what a
-// compromised writer worker could leak.
-//
-// The table is created by initialize and by nothing else, so a deploy that was
-// never initialized leaves no durable storage at all. The worker consults the
-// registry before it has authenticated anyone, and the name it consults comes
-// from the request path.
 function ensureSchema(store: SqlStore): void {
   store.sql.exec(
     `CREATE TABLE IF NOT EXISTS registry (
@@ -44,9 +28,6 @@ export function initialize(store: SqlStore, secretHash: string): void {
   );
 }
 
-// A hash is only ever accepted from the deploy host in the shape this table
-// stores, so a malformed one is rejected at the door rather than written and
-// then never matched by anything.
 export function isSecretHash(value: unknown): value is string {
   return typeof value === "string" && /^[0-9a-f]{64}$/.test(value);
 }

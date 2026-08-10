@@ -38,7 +38,6 @@ func TestElect_LiveLock_BecomesFollower(t *testing.T) {
 		t.Fatalf("LeaderAddr = %q, want %q", result.LeaderAddr, addr)
 	}
 
-	// The live lockfile must be left in place for other followers.
 	if _, err := lockfile.Read(root); err != nil {
 		t.Fatalf("lockfile.Read after Elect: %v", err)
 	}
@@ -52,7 +51,7 @@ func TestElect_DeadLock_ReclaimsAndBecomesLeader(t *testing.T) {
 		t.Fatalf("listen: %v", err)
 	}
 	addr := ln.Addr().String()
-	ln.Close() // nothing is listening anymore: the lock is dead.
+	ln.Close()
 
 	if err := lockfile.Create(root, addr); err != nil {
 		t.Fatalf("lockfile.Create: %v", err)
@@ -72,9 +71,6 @@ func TestElect_DeadLock_ReclaimsAndBecomesLeader(t *testing.T) {
 	}
 }
 
-// Two clones of one repo — same project, same everything but the path — are
-// two working trees, so a live leader in one must not make the other a
-// follower: they may sit at different commits with different resources.
 func TestElect_LiveLeaderInAnotherRoot_StillBecomesLeader(t *testing.T) {
 	elsewhere, here := t.TempDir(), t.TempDir()
 
@@ -92,7 +88,6 @@ func TestElect_LiveLeaderInAnotherRoot_StillBecomesLeader(t *testing.T) {
 	}
 }
 
-// liveAddr returns an address that stays reachable for the test's duration.
 func liveAddr(t *testing.T) string {
 	t.Helper()
 	ln, err := net.Listen("tcp", "127.0.0.1:0")

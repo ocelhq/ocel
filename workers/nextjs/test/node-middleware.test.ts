@@ -3,14 +3,6 @@ import { describe, expect, it, vi } from "vitest";
 import { serve, type RouteDeps } from "../src/index";
 import type { AssetBucket } from "../src/assets";
 
-// proxy.ts (Next 16+) always runs on the Node.js runtime — there is no way to
-// opt it back to edge — so it ships inside the app's own Lambda bundle as a
-// reserved entry and the worker reaches it as a signed Function-URL forward
-// rather than a dynamic-worker invocation. These tests exercise that forward
-// end to end through `serve`, the same way test/edge.test.ts exercises the
-// legacy edge transport, but with a fake HTTP origin standing in for the
-// Lambda instead of a real loaded bundle.
-
 const ENTRY_HEADER = "x-ocel-entry";
 const MW_ID = "middleware-bundle";
 const MW_URL = "https://mw.example.com";
@@ -57,9 +49,6 @@ function deps(overrides: Partial<RouteDeps> = {}): RouteDeps {
   } as RouteDeps;
 }
 
-// A manifest serving one static file, so a middleware that lets the request
-// through has something concrete to fall through to — same shape as
-// edge.test.ts's staticDeps, but wired for the nodejs transport.
 function staticDeps(middleware: unknown, overrides: Partial<RouteDeps> = {}): RouteDeps {
   return deps({
     manifest: {
@@ -85,11 +74,6 @@ function nodeMiddleware(matchers?: unknown) {
   };
 }
 
-// Records every request the fake origin received and answers it with
-// `handler`. Both the middleware forward and a lambda dispatch reach the
-// worker's fetch the same way (originFetch falls back to deps.fetch when no
-// signing credentials are bound), so tests that care which target a request
-// was for distinguish by host.
 function fakeOrigin(handler: (request: Request) => Response | Promise<Response>) {
   const requests: Request[] = [];
   const fetch = (async (input: Request) => {
@@ -237,10 +221,6 @@ describe("node middleware forwarding", () => {
   });
 
   it("routes a rewrite destination on its routing form (trailing-slash canonicalisation)", async () => {
-    // NextResponse.rewrite emits its destination canonically (/b -> /b/ under
-    // trailingSlash), which matches no build pathname — the same case
-    // edge.test.ts pins for the edge transport, exercised here for the Lambda
-    // origin hop instead.
     const PAGE = "/page";
     const origin = fakeOrigin((req) => {
       const url = new URL(req.url);
@@ -277,10 +257,6 @@ describe("node middleware forwarding", () => {
 });
 
 describe("Next's internal protocol headers are not honoured from the client", () => {
-  // Next's router-server strips these off every externally-originated
-  // request before anything runs — a client-forged x-nextjs-data reaching the
-  // middleware bundle makes Next's own edge adapter treat a redirect as a
-  // data-request "matched path" response instead of an ordinary redirect.
   it("does not forward a client-supplied x-nextjs-data header to node middleware", async () => {
     const origin = fakeOrigin(
       () => new Response(null, { headers: { "x-middleware-next": "1" } }),
@@ -310,13 +286,6 @@ describe("Next's internal protocol headers are not honoured from the client", ()
   });
 });
 
-// Next sets x-nextjs-data on the request before middleware ever runs when the
-// URL genuinely is a data path (setIsNextDataRequest, ahead of the middleware
-// route in resolve-routes.ts) — its own edge adapter reads it to convert a
-// middleware Location into x-nextjs-redirect for a client-transition fetch.
-// This worker used to derive it from the client's own header (stripped above)
-// and never re-add the URL-derived truth, so middleware could never see it on
-// a genuine data request.
 describe("x-nextjs-data on the middleware invocation", () => {
   it("sets x-nextjs-data on a genuine data request's middleware invocation", async () => {
     const origin = fakeOrigin(
@@ -342,14 +311,6 @@ describe("x-nextjs-data on the middleware invocation", () => {
     expect(origin.requests[0].headers.has("x-nextjs-data")).toBe(false);
   });
 
-  // The full round trip, with a fake bundle standing in for Next's own edge
-  // adapter (adapter.ts:171,513-521): a middleware redirect comes back as
-  // x-nextjs-redirect with no Location only when the request it received
-  // carried x-nextjs-data — exactly the behaviour the client's fetchNextData
-  // depends on for a client-transition redirect (packages/next/src/shared/
-  // lib/router/router.ts). Without this worker setting the header, the bundle
-  // falls back to an ordinary Location redirect, which fetchNextData cannot
-  // use as a client-side transition.
   it("carries a data-request redirect through as x-nextjs-redirect with no Location", async () => {
     const origin = fakeOrigin((req) =>
       req.headers.get("x-nextjs-data") === "1"
@@ -381,10 +342,6 @@ describe("node middleware fails closed", () => {
   });
 
   it("still fails closed when the invoker throws a falsy value", async () => {
-    // The gate is `if (failure)` over the caught value, which a bare
-    // truthiness check would pass straight through for a falsy throw —
-    // failing open on an auth proxy. Pin the gate against that directly
-    // rather than trusting that nothing ever throws falsy.
     vi.useFakeTimers();
     try {
       const origin = fakeOrigin(() => {
