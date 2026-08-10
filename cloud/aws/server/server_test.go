@@ -3,6 +3,7 @@ package server
 import (
 	"context"
 	"errors"
+	"maps"
 	"strings"
 	"testing"
 
@@ -11,6 +12,7 @@ import (
 	ssmtypes "github.com/aws/aws-sdk-go-v2/service/ssm/types"
 
 	"github.com/ocelhq/ocel/cloud/aws/bootstrap"
+	"github.com/ocelhq/ocel/cloud/edge"
 	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/resources/v1"
 )
@@ -197,5 +199,75 @@ func TestCacheStoreUploader_AdoptedStoreIsAddressable(t *testing.T) {
 	}
 	if up := cacheStoreUploader(store); up == nil {
 		t.Error("cacheStoreUploader on an adopted store = nil, want a client")
+	}
+}
+
+// TestPersistRootStackState pins what the deploy path is allowed to write. The
+// stored state is a cache of an identity the store hands back on demand, and
+// Parameter Store enforces write throughput per parameter — so a run whose apps
+// all deploy into one project (the e2e matrix, a monorepo) must write once, not
+// once per deploy.
+func TestPersistRootStackState(t *testing.T) {
+	reconciled := edge.RootStackState{
+		edge.RootStackKeySlug:       "proj-123",
+		edge.RootStackKeyEndpoint:   "https://store.workers.dev",
+		edge.RootStackKeySecret:     "s3cret",
+		edge.RootStackKeyOwnerToken: "owner",
+	}
+
+	tests := []struct {
+		name       string
+		prior      edge.RootStackState
+		reconciled edge.RootStackState
+		want       bool
+	}{
+		{
+			name:       "a first reconcile has nothing stored yet",
+			prior:      nil,
+			reconciled: reconciled,
+			want:       true,
+		},
+		{
+			name:       "a redeploy that changed nothing writes nothing",
+			prior:      maps.Clone(reconciled),
+			reconciled: reconciled,
+			want:       false,
+		},
+		{
+			name:  "an adopted instance answering with a different secret is persisted",
+			prior: maps.Clone(reconciled),
+			reconciled: edge.RootStackState{
+				edge.RootStackKeySlug:       "proj-123",
+				edge.RootStackKeyEndpoint:   "https://store.workers.dev",
+				edge.RootStackKeySecret:     "rotated",
+				edge.RootStackKeyOwnerToken: "owner",
+			},
+			want: true,
+		},
+		{
+			name:  "a renamed project names a different instance",
+			prior: maps.Clone(reconciled),
+			reconciled: edge.RootStackState{
+				edge.RootStackKeySlug:       "proj-456",
+				edge.RootStackKeyEndpoint:   "https://store.workers.dev",
+				edge.RootStackKeySecret:     "s3cret",
+				edge.RootStackKeyOwnerToken: "owner",
+			},
+			want: true,
+		},
+		{
+			name:       "a deploy that failed before reconcile leaves the stored state alone",
+			prior:      maps.Clone(reconciled),
+			reconciled: nil,
+			want:       false,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := persistRootStackState(tc.prior, tc.reconciled); got != tc.want {
+				t.Errorf("persistRootStackState() = %v, want %v", got, tc.want)
+			}
+		})
 	}
 }
