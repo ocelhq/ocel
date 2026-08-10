@@ -16,6 +16,7 @@ import { execFileSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 
+import { AWS_CLI_RETRY_ENV } from "./aws.mjs";
 import { BUILD_LOG_FILE, DEPLOY_RESULT_FILE, STATE_FILE, envSegment, lambdaLogGroups, markerLines } from "./lib.mjs";
 
 // How far back CloudWatch is queried when the state file carries no start time.
@@ -129,12 +130,18 @@ function printLambdaLogs() {
   }
 }
 
+// Local rather than aws.mjs's wrapper because this one pins --output json and
+// runs on the harness's longer timeout, but it borrows that module's retry env:
+// a log read throttled at the CLI's default of three attempts degrades to
+// "(could not read ...)" and quietly costs the run the evidence it was spawned
+// to print.
 function aws(args) {
   return execFileSync("aws", [...args, "--output", "json"], {
     encoding: "utf8",
     timeout: AWS_TIMEOUT_MS,
     stdio: ["ignore", "pipe", "pipe"],
     maxBuffer: 32 * 1024 * 1024,
+    env: { ...process.env, ...AWS_CLI_RETRY_ENV },
   });
 }
 

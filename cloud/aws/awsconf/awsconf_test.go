@@ -1,4 +1,4 @@
-package awscfg
+package awsconf
 
 import (
 	"context"
@@ -7,28 +7,26 @@ import (
 	"github.com/aws/aws-sdk-go-v2/aws/retry"
 )
 
-// The SDK default is 3 attempts and no pacing; every client an Ocel binary
-// builds has to come off that default, so the profiles are asserted by what
-// they actually resolve to rather than by the option that set them.
+// Pins the deploy host's profile: adaptive, and above the SDK's default of 3.
 func TestControlRetryerIsAdaptiveAndWiderThanTheDefault(t *testing.T) {
 	r := ControlRetryer()
 	if _, ok := r.(*retry.AdaptiveMode); !ok {
 		t.Fatalf("ControlRetryer() = %T, want *retry.AdaptiveMode", r)
 	}
-	if got := r.MaxAttempts(); got != ControlMaxAttempts {
-		t.Fatalf("MaxAttempts() = %d, want %d", got, ControlMaxAttempts)
+	if got := r.MaxAttempts(); got != controlMaxAttempts {
+		t.Fatalf("MaxAttempts() = %d, want %d", got, controlMaxAttempts)
 	}
 }
 
-// Adaptive mode's rate limiter would charge an unrelated throttle to a cold
-// start, so the runtime profile must not be adaptive.
+// Pins the in-function profile: standard rather than adaptive, and above the
+// SDK's default of 3.
 func TestRuntimeRetryerIsStandardAndWiderThanTheDefault(t *testing.T) {
-	r := RuntimeRetryer()
+	r := runtimeRetryer()
 	if _, ok := r.(*retry.Standard); !ok {
-		t.Fatalf("RuntimeRetryer() = %T, want *retry.Standard", r)
+		t.Fatalf("runtimeRetryer() = %T, want *retry.Standard", r)
 	}
-	if got := r.MaxAttempts(); got != RuntimeMaxAttempts {
-		t.Fatalf("MaxAttempts() = %d, want %d", got, RuntimeMaxAttempts)
+	if got := r.MaxAttempts(); got != runtimeMaxAttempts {
+		t.Fatalf("MaxAttempts() = %d, want %d", got, runtimeMaxAttempts)
 	}
 }
 
@@ -48,8 +46,8 @@ func TestLoadedConfigsCarryTheirRetryer(t *testing.T) {
 	if control.Retryer == nil {
 		t.Fatal("Control config carries no retryer")
 	}
-	if got := control.Retryer().MaxAttempts(); got != ControlMaxAttempts {
-		t.Fatalf("control MaxAttempts() = %d, want %d", got, ControlMaxAttempts)
+	if got := control.Retryer().MaxAttempts(); got != controlMaxAttempts {
+		t.Fatalf("control MaxAttempts() = %d, want %d", got, controlMaxAttempts)
 	}
 
 	runtime, err := Runtime(context.Background())
@@ -59,8 +57,8 @@ func TestLoadedConfigsCarryTheirRetryer(t *testing.T) {
 	if runtime.Retryer == nil {
 		t.Fatal("Runtime config carries no retryer")
 	}
-	if got := runtime.Retryer().MaxAttempts(); got != RuntimeMaxAttempts {
-		t.Fatalf("runtime MaxAttempts() = %d, want %d", got, RuntimeMaxAttempts)
+	if got := runtime.Retryer().MaxAttempts(); got != runtimeMaxAttempts {
+		t.Fatalf("runtime MaxAttempts() = %d, want %d", got, runtimeMaxAttempts)
 	}
 }
 

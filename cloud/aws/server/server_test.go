@@ -202,12 +202,12 @@ func TestCacheStoreUploader_AdoptedStoreIsAddressable(t *testing.T) {
 	}
 }
 
-// TestPersistRootStackState pins what the deploy path is allowed to write. The
+// TestRootStackStateChanged pins what the deploy path is allowed to write. The
 // stored state is a cache of an identity the store hands back on demand, and
 // Parameter Store enforces write throughput per parameter — so a run whose apps
 // all deploy into one project (the e2e matrix, a monorepo) must write once, not
 // once per deploy.
-func TestPersistRootStackState(t *testing.T) {
+func TestRootStackStateChanged(t *testing.T) {
 	reconciled := edge.RootStackState{
 		edge.RootStackKeySlug:       "proj-123",
 		edge.RootStackKeyEndpoint:   "https://store.workers.dev",
@@ -265,8 +265,8 @@ func TestPersistRootStackState(t *testing.T) {
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			if got := persistRootStackState(tc.prior, tc.reconciled); got != tc.want {
-				t.Errorf("persistRootStackState() = %v, want %v", got, tc.want)
+			if got := rootStackStateChanged(tc.prior, tc.reconciled); got != tc.want {
+				t.Errorf("rootStackStateChanged() = %v, want %v", got, tc.want)
 			}
 		})
 	}

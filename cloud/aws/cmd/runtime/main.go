@@ -22,7 +22,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 
-	"github.com/ocelhq/ocel/cloud/aws/awscfg"
+	"github.com/ocelhq/ocel/cloud/aws/awsconf"
 	"github.com/ocelhq/ocel/cloud/aws/runtime"
 	"github.com/ocelhq/ocel/cloud/aws/runtime/bucket"
 	"github.com/ocelhq/ocel/pkg/channel"
@@ -105,7 +105,7 @@ func buildService(ctx context.Context, table, bucketName string) (*bucket.Servic
 	if region := os.Getenv(regionEnvVar); region != "" {
 		optFns = append(optFns, awsconfig.WithRegion(region))
 	}
-	cfg, err := awscfg.Runtime(ctx, optFns...)
+	cfg, err := awsconf.Runtime(ctx, optFns...)
 	if err != nil {
 		return nil, fmt.Errorf("load aws config: %w", err)
 	}
