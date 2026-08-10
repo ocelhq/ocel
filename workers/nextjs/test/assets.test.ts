@@ -349,6 +349,101 @@ describe("serveStaticAsset", () => {
     ]);
   });
 
+  // Next names the root document index.html (routePathname in next-adapter.mts
+  // un-normalizes the *route* back to /, but the file on disk keeps the name
+  // Next wrote it under), so a request for / must probe /index.html rather
+  // than the "/.html" the plain "${pathname}.html" rule would otherwise try.
+  it("resolves the root request to the index.html document", async () => {
+    const url = new URL("https://serve-root-1.example/");
+    const keys: string[] = [];
+    const store: AssetBucket = {
+      async get(key) {
+        keys.push(key);
+        return key === "assets/p/app/b1/index.html"
+          ? { body: new Blob(["<html>root</html>"]).stream() }
+          : null;
+      },
+    };
+    const deps = countingDeps(store, "assets/p/app/b1");
+
+    const res = await serveStaticAsset(new Request(url), url, deps);
+
+    expect(res.status).toBe(200);
+    expect(await res.text()).toBe("<html>root</html>");
+    expect(res.headers.get("content-type")).toBe("text/html; charset=utf-8");
+    expect(keys).toEqual(["assets/p/app/b1/index.html"]);
+  });
+
+  // Symmetric with every other branch (an extensionless page also falls back
+  // to the bare request name, for a build made before documents were named):
+  // the root candidate list must append its fallback, not replace the
+  // index.html candidate outright, so a store missing index.html still tries
+  // the bare "/" object before giving up.
+  it("falls back to the bare root name when index.html is missing", async () => {
+    const url = new URL("https://serve-root-1b.example/");
+    const keys: string[] = [];
+    const store: AssetBucket = {
+      async get(key) {
+        keys.push(key);
+        return key === "assets/p/app/b1/"
+          ? { body: new Blob(["<html>legacy root</html>"]).stream() }
+          : null;
+      },
+    };
+    const deps = countingDeps(store, "assets/p/app/b1");
+
+    const res = await serveStaticAsset(new Request(url), url, deps);
+
+    expect(res.status).toBe(200);
+    expect(await res.text()).toBe("<html>legacy root</html>");
+    expect(keys).toEqual(["assets/p/app/b1/index.html", "assets/p/app/b1/"]);
+  });
+
+  // The basePath's own root arrives as the bare basePath (e.g. "/docs", no
+  // trailing segment) — the same document, at "<basePath>/index.html".
+  it("resolves a basePath root request to <basePath>/index.html", async () => {
+    const url = new URL("https://serve-root-2.example/docs");
+    const deps = countingDeps(
+      bucketServing({
+        "assets/p/app/b1/docs/index.html": { body: "<html>docs root</html>" },
+      }),
+      "assets/p/app/b1",
+    );
+
+    const res = await serveStaticAsset(new Request(url), url, {
+      ...deps,
+      basePath: "/docs",
+    });
+
+    expect(res.status).toBe(200);
+    expect(await res.text()).toBe("<html>docs root</html>");
+  });
+
+  // Absent a configured basePath, an ordinary page named "/docs" must not be
+  // mistaken for a basePath root: deps.basePath defaults to "", which never
+  // equals a real request pathname.
+  it("does not treat an ordinary page as a basePath root when no basePath is configured", async () => {
+    const url = new URL("https://serve-root-3.example/docs");
+    const keys: string[] = [];
+    const store: AssetBucket = {
+      async get(key) {
+        keys.push(key);
+        return key === "assets/p/app/b1/docs.html"
+          ? { body: new Blob(["<html>docs page</html>"]).stream() }
+          : null;
+      },
+    };
+    const deps = countingDeps(store, "assets/p/app/b1");
+
+    const res = await serveStaticAsset(new Request(url), url, deps);
+
+    expect(res.status).toBe(200);
+    expect(await res.text()).toBe("<html>docs page</html>");
+    // The ordinary document candidate hits first, so the fallback bare-name
+    // candidate is never even probed.
+    expect(keys).toEqual(["assets/p/app/b1/docs.html"]);
+  });
+
   // The page a browser navigates to is the hit worth spending one read on.
   it("reads only the document for an extensionless page", async () => {
     const url = new URL("https://serve-html-6.example/some");

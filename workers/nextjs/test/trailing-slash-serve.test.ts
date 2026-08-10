@@ -8,6 +8,7 @@ import { coloDeps } from "./cache-deps";
 function assetStoreServing(
   files: Record<string, string>,
   probes?: string[],
+  basePath = "",
 ): RouteDeps["assetStore"] {
   const store: AssetBucket = {
     async get(key) {
@@ -20,6 +21,7 @@ function assetStoreServing(
   return {
     store,
     assetPrefix: "",
+    basePath,
     cache: { match: async () => undefined, put: async () => {} },
     waitUntil: () => {},
   };
@@ -179,6 +181,7 @@ function deps(scenario: Scenario): RouteDeps {
     assetStore: assetStoreServing(
       { "/404.html": "not found", ...(scenario.files ?? {}) },
       scenario.probes,
+      basePath,
     ),
     edge: scenario.edge,
     fetch: scenario.fetch,
@@ -206,8 +209,9 @@ describe("trailingSlash: true", () => {
   it("leaves the root alone", async () => {
     const res = await serve(
       get("/"),
-      // The build names the root document /.html, after the route it answers.
-      deps({ ...scenario, pages: ["/"], files: { "/.html": "home" } }),
+      // The build names the root document index.html, not /.html — the same
+      // name normalizePagePath gives every Pages Router root.
+      deps({ ...scenario, pages: ["/"], files: { "/index.html": "home" } }),
     );
     expect(res.status).toBe(200);
     expect(await res.text()).toBe("home");
@@ -259,7 +263,10 @@ describe("trailingSlash: true, basePath: /docs", () => {
     trailingSlash: true,
     basePath: "/docs",
     pages: ["/docs", "/docs/hello"],
-    files: { "/docs.html": "docs root", "/docs/hello.html": "hello" },
+    // The build stores a basePath root at "<basePath>/index.html", never
+    // "<basePath>.html" — the same normalizePagePath-derived name a bare "/"
+    // root gets (see the "leaves the root alone" tests above).
+    files: { "/docs/index.html": "docs root", "/docs/hello.html": "hello" },
   };
 
   it("308s the bare basePath to the slashed one", async () => {
@@ -308,7 +315,8 @@ describe("trailingSlash: false", () => {
   it("leaves the root alone", async () => {
     const res = await serve(
       get("/"),
-      deps({ ...scenario, pages: ["/"], files: { "/.html": "home" } }),
+      // index.html, not /.html — see the trailingSlash: true version above.
+      deps({ ...scenario, pages: ["/"], files: { "/index.html": "home" } }),
     );
     expect(res.status).toBe(200);
     expect(await res.text()).toBe("home");
@@ -516,14 +524,14 @@ describe("the resolved path is what keys the response", () => {
         trailingSlash: true,
         basePath: "/docs",
         pages: ["/docs", "/docs/hello"],
-        files: { "/docs.html": "docs root", "/docs/hello.html": "hello" },
+        files: { "/docs/index.html": "docs root", "/docs/hello.html": "hello" },
         probes,
       };
 
       const root = await serve(get("/docs/"), deps(scenario));
       expect(root.status).toBe(200);
       expect(await root.text()).toBe("docs root");
-      expect(probes).toContain("/docs.html");
+      expect(probes).toContain("/docs/index.html");
 
       const page = await serve(get("/docs/hello/"), deps(scenario));
       expect(page.status).toBe(200);
