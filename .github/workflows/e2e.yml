@@ -6,11 +6,11 @@ on:
       - "cli/**"
       - "pkg/proto/**"
       - "packages/ocel/**"
-      - "packages/resources/**"
-      - "packages/api/**"
-      - "packages/auth/**"
-      - "packages/db/**"
-      - "apps/web/**"
+      - "console/resources/**"
+      - "console/api/**"
+      - "console/auth/**"
+      - "console/db/**"
+      - "console/web/**"
       - "examples/**"
       - "tests/e2e/**"
       - ".github/workflows/e2e.yml"
@@ -88,20 +88,20 @@ jobs:
           done
 
       - name: Push control-plane schema
-        run: pnpm --filter @repo/db db:push
+        run: pnpm --filter @console/db db:push
 
-      - name: Start apps/web (Next dev)
+      - name: Start console/web (Next dev)
         run: |
-          pnpm --filter web dev > /tmp/web.log 2>&1 &
-          echo "Waiting for apps/web on :3000 ..."
+          pnpm --filter @console/web dev > /tmp/web.log 2>&1 &
+          echo "Waiting for console/web on :3000 ..."
           for i in $(seq 1 90); do
             if curl -s -o /dev/null http://localhost:3000; then
-              echo "apps/web is up"
+              echo "console/web is up"
               break
             fi
             sleep 1
             if [ "$i" -eq 90 ]; then
-              echo "apps/web did not start; last log:" >&2
+              echo "console/web did not start; last log:" >&2
               cat /tmp/web.log >&2
               exit 1
             fi
@@ -119,6 +119,6 @@ jobs:
       - name: Run e2e specs
         run: pnpm --filter @ocel-tests/e2e test
 
-      - name: Dump apps/web log on failure
+      - name: Dump console/web log on failure
         if: failure()
         run: cat /tmp/web.log || true

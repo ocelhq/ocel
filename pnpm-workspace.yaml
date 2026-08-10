@@ -1,5 +1,5 @@
 packages:
-  - apps/*
+  - console/*
   - cli/platform
   - packages/*
   - packages/native-lib/*

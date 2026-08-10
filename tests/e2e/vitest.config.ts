@@ -22,7 +22,7 @@ export default defineConfig({
     },
     server: {
       deps: {
-        inline: ["@repo/auth", "@repo/db"],
+        inline: ["@console/auth", "@console/db"],
       },
     },
   },

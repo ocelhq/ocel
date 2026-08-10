@@ -8,8 +8,8 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@repo/auth": "workspace:*",
-    "@repo/db": "workspace:*",
+    "@console/auth": "workspace:*",
+    "@console/db": "workspace:*",
     "ocel": "workspace:^"
   },
   "devDependencies": {

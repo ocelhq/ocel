@@ -2,7 +2,7 @@ import { applyE2EEnvDefaults } from "./env";
 
 applyE2EEnvDefaults();
 
-const { auth } = await import("@repo/auth/next");
+const { auth } = await import("@console/auth/next");
 
 export type Seed = {
   token: string;

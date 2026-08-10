@@ -47,7 +47,7 @@ test commands. Read those first, then the code. A few invariants that rarely cha
 - `proto/` is the **source of truth**; bindings are generated (`pnpm gen`) — never hand-edit
   generated output.
 - The control-plane core is split into framework-agnostic packages so a future framework swap
-  stays cheap; `apps/web` is a thin shell over them.
+  stays cheap; `console/web` is a thin shell over them.
 
 **Gotchas you'd only find by tripping over them:**
 
