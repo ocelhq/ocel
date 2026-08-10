@@ -40,6 +40,12 @@ export interface PackOptions<T> {
   // undefined for a path that does not exist, which is charged nothing and
   // named in the result rather than costing a silent zero.
   sizeOf?: (absPath: string) => number | undefined;
+  // Assets absorbed into bundles[0] after packing, rather than into a member's
+  // own entry — node middleware's shape: one dispatch entry every bundle can
+  // load, but only the first bundle is ever the manifest's call target, so
+  // only it needs the bytes. Opens an empty bundle when packing produced none,
+  // through the same naming this file already owns.
+  seedAssets?: Record<string, string>;
 }
 
 // packBundles packs members into the fewest Lambda artifacts their assets fit
@@ -138,6 +144,16 @@ export function packBundles<T>(
     }
 
     if (bundle.members.length === 0) bundles.pop();
+  }
+
+  if (opts.seedAssets) {
+    const bundle = bundles[0] ?? open();
+    absorb(bundle, opts.seedAssets);
+    if (bundle.sizeBytes > budgetBytes) {
+      console.warn(
+        `ocel: node middleware pushes "${bundle.name}" to ${bundle.sizeBytes} bytes, over the ${budgetBytes}-byte function limit — it must run in the bundle the manifest already calls it through and cannot be split any further`,
+      );
+    }
   }
 
   return { bundles, missingAssets: [...missing].sort() };

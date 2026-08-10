@@ -12,7 +12,7 @@
 //
 // Usage: stage-smoke-app.mjs <nextjs-dir> <smoke-app-src-dir> <out-file>
 
-import { cpSync, readFileSync, writeFileSync } from "node:fs";
+import { cpSync, existsSync, readFileSync, writeFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import { join, resolve } from "node:path";
 
@@ -35,6 +35,12 @@ const { installDir } = await createNextInstall({
 });
 
 cpSync(join(src, "app"), join(installDir, "app"), { recursive: true });
+// proxy.ts (node middleware) lives at the project root beside app/, same as a
+// real app — copied only when the fixture carries one, so a smoke app with
+// none stays exactly as it was before this existed.
+if (existsSync(join(src, "proxy.ts"))) {
+  cpSync(join(src, "proxy.ts"), join(installDir, "proxy.ts"));
+}
 writeFileSync(outFile, installDir);
 
 // createNextInstall traces its own work; the harness passes a no-op span when it

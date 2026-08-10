@@ -6,12 +6,132 @@
 // on the request path — see edge-cache-handler.cjs for the same arrangement.
 const fs = require("node:fs");
 const path = require("node:path");
+const { Readable } = require("node:stream");
+const { pipeline } = require("node:stream/promises");
 
 // Charged per file on top of its payload because the Go side charges the same
 // 512 per tar entry against the same 64 MiB ceiling (tarEntryOverhead in
 // bytecode.go). A node-side estimate that undercounts would warm right up to an
 // archive the uploader then silently refuses, publishing nothing at all.
 const TAR_ENTRY_OVERHEAD = 512;
+
+// Mirrors the constant next-adapter.mts exports as `middlewareEntryKey`. It is
+// hardcoded here rather than imported because this file ships as plain CJS
+// straight into the bundle — the two are pinned equal by next-adapter.test.mts,
+// not by a shared import.
+const MIDDLEWARE_ENTRY_KEY = "/_middleware";
+
+// x-forwarded-host/-proto are the client-addressed origin, and are preferred
+// over headers.host/req's own scheme for the same reason the membrane reads
+// them at all: a request that reached this instance through the edge or a
+// loopback self-fetch carries `host` for whichever hop is nearest, not for
+// what the client actually addressed. Each can arrive comma-joined — a proxy
+// hop appends rather than replaces — so only the first, client-nearest value
+// is used.
+function middlewareRequestUrl(req) {
+  const host = req.headers["x-forwarded-host"] || req.headers.host || "localhost";
+  const proto = req.headers["x-forwarded-proto"] || "https";
+  return `${String(proto).split(",")[0].trim()}://${String(host).split(",")[0].trim()}${req.url || "/"}`;
+}
+
+// Writes an adapter Response onto the node http.ServerResponse the membrane
+// gave the dispatcher. Set-Cookie is the one header fetch's Headers folds
+// specially (getSetCookie() is the only way to recover every value), so it is
+// forwarded through res.setHeader's array form rather than the plain iterator.
+async function writeMiddlewareResponse(response, res) {
+  res.statusCode = response.status;
+  for (const [name, value] of response.headers) {
+    if (name.toLowerCase() === "set-cookie") continue;
+    res.setHeader(name, value);
+  }
+  const cookies = response.headers.getSetCookie?.() ?? [];
+  if (cookies.length > 0) res.setHeader("set-cookie", cookies);
+
+  if (!response.body) {
+    res.end();
+    return;
+  }
+  await pipeline(Readable.fromWeb(response.body), res);
+}
+
+function fail(res, message) {
+  res.statusCode = 502;
+  res.end(`ocel: ${message}`);
+}
+
+// The contract this mirrors, from Next's own next-server.js: the compiled
+// module's default export takes { handler, request, page } and returns
+// { response, waitUntil }.
+//
+// A `proxy.ts` with a top-level await compiles to a module whose exports are
+// a Promise rather than the object itself (next-server.js: "if used with top
+// level await, this will be a promise") — loadEntry's `require` returns that
+// Promise as-is, so it has to be awaited here before `.default` means
+// anything. The unwrap happens once per request rather than once per load:
+// the same (settled) promise can be awaited any number of times, and a
+// module that fails this way fails deterministically, so every request sees
+// the same outcome — matching the memoized-failure semantics a synchronous
+// require throw already gets.
+async function runMiddleware(moduleOrPromise, req, res, ctx, nextConfig) {
+  let module;
+  try {
+    module =
+      moduleOrPromise && typeof moduleOrPromise.then === "function"
+        ? await moduleOrPromise
+        : moduleOrPromise;
+  } catch (error) {
+    return fail(res, `entry ${MIDDLEWARE_ENTRY_KEY} failed to load: ${error?.stack ?? error}`);
+  }
+
+  const adapterFn = module && (module.default || module);
+  if (typeof adapterFn !== "function") {
+    return fail(res, `entry ${MIDDLEWARE_ENTRY_KEY} exports no adapter function`);
+  }
+
+  const method = req.method || "GET";
+  const hasBody = method !== "GET" && method !== "HEAD";
+  const controller = new AbortController();
+  // 'aborted' is deprecated on IncomingMessage and does not fire behind a
+  // Lambda Function URL, so the signal is driven off the response instead:
+  // 'close' fires whenever the underlying connection ends, and checking
+  // writableEnded is what tells a normal completion (res already wrote
+  // everything) apart from the client actually hanging up mid-response.
+  res.once("close", () => {
+    if (!res.writableEnded) controller.abort();
+  });
+
+  let result;
+  try {
+    result = await adapterFn({
+      handler: module.proxy || module.middleware || module, // mirrors next-server.js's own resolution order
+      request: {
+        headers: req.headers,
+        method,
+        nextConfig,
+        url: middlewareRequestUrl(req),
+        page: {},
+        body: hasBody ? Readable.toWeb(req) : undefined,
+        signal: controller.signal,
+        waitUntil:
+          ctx && typeof ctx.waitUntil === "function"
+            ? (p) => ctx.waitUntil(p)
+            : undefined,
+      },
+      page: "middleware",
+    });
+  } catch (error) {
+    return fail(res, `middleware failed: ${error?.stack ?? error}`);
+  }
+
+  if (ctx && typeof ctx.waitUntil === "function" && result?.waitUntil !== undefined) {
+    ctx.waitUntil(Promise.resolve(result.waitUntil));
+  }
+
+  if (!(result?.response instanceof Response)) {
+    return fail(res, `entry ${MIDDLEWARE_ENTRY_KEY} returned no response`);
+  }
+  await writeMiddlewareResponse(result.response, res);
+}
 
 // `getCompileCacheDir`/`flushCompileCache` are absent on older Node, which
 // degrades warming to an unsupported reply rather than a version check.
@@ -94,6 +214,7 @@ module.exports = function createDispatch({
   entries,
   primary,
   routes = { exact: {}, dynamic: [] },
+  nextConfig,
   load,
 }) {
   const loaded = new Map();
@@ -159,7 +280,17 @@ module.exports = function createDispatch({
     const already = loaded.get(key);
     if (already) return already;
     try {
-      const entry = { module: load(entries[key]) };
+      const moduleOrPromise = load(entries[key]);
+      // A top-level-await module (proxy.ts) requires to a Promise rather than
+      // its exports object — runMiddleware awaits it per request, but nothing
+      // awaits it here at load time, and an unobserved rejection crashes the
+      // process before any request gets the chance. This is that observer: it
+      // does not consume the rejection, so runMiddleware's own await still
+      // sees and reports it.
+      if (moduleOrPromise && typeof moduleOrPromise.then === "function") {
+        moduleOrPromise.catch(() => {});
+      }
+      const entry = { module: moduleOrPromise };
       pinResponseCache(entry.module);
       loaded.set(key, entry);
       return entry;
@@ -176,11 +307,14 @@ module.exports = function createDispatch({
   // best-effort: one broken entry must not take down every route in the bundle,
   // so the failure is reported here and re-surfaced as that key's own 502.
   if (primary) loadEntry(primary);
-
-  const fail = (res, message) => {
-    res.statusCode = 502;
-    res.end(`ocel: ${message}`);
-  };
+  // Middleware runs ahead of every route in the bundle, so a request that hits
+  // it is the coldest possible request this instance can serve — priming it
+  // here for the same reason the primary is primed here. primaryEntryKey never
+  // elects it (it is packed into `entries` directly, never into a bundle's
+  // route members), so this can't double-load what the line above already did.
+  if (Object.prototype.hasOwnProperty.call(entries, MIDDLEWARE_ENTRY_KEY)) {
+    loadEntry(MIDDLEWARE_ENTRY_KEY);
+  }
 
   return {
     handler(req, res, ctx) {
@@ -210,6 +344,13 @@ module.exports = function createDispatch({
           res,
           `entry ${key} failed to load: ${entry.error?.message ?? entry.error}`,
         );
+      }
+      // Middleware's compiled module exports no `.handler` — it is the
+      // adapter-function contract Next's own runtime invokes it with, not a
+      // route handler — so it is dispatched through its own path rather than
+      // the `handler(req, res, ctx)` call below.
+      if (key === MIDDLEWARE_ENTRY_KEY) {
+        return runMiddleware(entry.module, req, res, ctx, nextConfig);
       }
       const handler = entry.module?.handler;
       if (typeof handler !== "function") {
