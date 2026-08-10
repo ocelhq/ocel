@@ -89,7 +89,9 @@ service DeploymentService {
     // infrastructure exists yet. The CLI calls it before a preview or deploy to
     // refuse fast and locally when the infrastructure is missing or is the
     // wrong class, before anything is provisioned. It is authoritative: the
-    // provider enforces the same class match itself.
+    // provider enforces the same class match itself. It also answers who
+    // already holds the hostnames the caller declared, so a domain another
+    // project owns is refused before the build rather than after it.
     rpc Preflight(PreflightRequest) returns (PreflightResponse);
 
     // ListPromotions enumerates a production project's promotion history,
@@ -505,6 +507,17 @@ message PreflightRequest {
   // destroy, deployments), and the provider then skips the enumeration
   // rather than paying for it.
   string slug = 4;
+
+  // domains are the hostnames the caller is about to attach to its own edge
+  // workers, taken from the project's config before anything is built, set
+  // only when the caller wants the domain-claim check that fills
+  // domain_claims. A hostname travels exactly as configured, so a preview
+  // wildcard carries its literal leading "*." label ("*.preview.app.com")
+  // while production hostnames are exact ("app.com"), and the provider forms
+  // the route pattern from it without inferring the class. Empty from the
+  // commands that touch no domains, and the provider then skips the lookup
+  // rather than paying for it.
+  repeated string domains = 5;
 }
 
 // PreflightResponse tells the CLI what the provider's ambient account/profile
@@ -545,6 +558,44 @@ message PreflightResponse {
   // could not enumerate reports no known slugs rather than failing the
   // preflight, since this guard is advisory.
   repeated string known_slugs = 5;
+
+  // domain_claims reports who currently holds each hostname in
+  // request.domains, one entry per hostname, in the order they were asked
+  // for. Empty when request.domains was empty. An edge that cannot answer the
+  // question still gets an entry, left STATUS_UNSPECIFIED, so "nobody holds
+  // it" and "nobody could say" never collapse into the same answer: the CLI
+  // refuses only on a STATUS_CLAIMED hostname held by someone else and skips
+  // the guard otherwise, since a claim it cannot verify must degrade to the
+  // late collision it already survives rather than fail the deploy.
+  repeated DomainClaim domain_claims = 6;
+}
+
+// DomainClaim is who currently holds one hostname on the provider's edge,
+// answered by Preflight so the CLI can refuse a hostname another project
+// already owns before it builds anything. The lookup is exact-pattern only:
+// overlapping wildcards ("*.app.com" vs "*.preview.app.com") are not detected
+// and remain a late collision.
+message DomainClaim {
+  // Status separates the three answers an edge can give, so an edge that
+  // cannot look the hostname up is never read as one reporting it unclaimed.
+  // STATUS_UNSPECIFIED is "could not say", which is what a provider whose edge
+  // does not implement the lookup reports by filling nothing in.
+  enum Status {
+    STATUS_UNSPECIFIED = 0;
+    STATUS_UNCLAIMED = 1;
+    STATUS_CLAIMED = 2;
+  }
+
+  // hostname echoes the requested hostname verbatim, so the caller matches
+  // entries by value rather than by position alone.
+  string hostname = 1;
+
+  Status status = 2;
+
+  // owner names what holds the hostname — the edge worker script bound to it,
+  // which for an Ocel-deployed project spells out the project it belongs to.
+  // Set only for STATUS_CLAIMED; empty otherwise.
+  string owner = 3;
 }
 
 // Identity is what a provider's ambient credentials resolve to, surfaced by

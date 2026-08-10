@@ -108,7 +108,9 @@ type DeploymentServiceClient interface {
 	// infrastructure exists yet. The CLI calls it before a preview or deploy to
 	// refuse fast and locally when the infrastructure is missing or is the
 	// wrong class, before anything is provisioned. It is authoritative: the
-	// provider enforces the same class match itself.
+	// provider enforces the same class match itself. It also answers who
+	// already holds the hostnames the caller declared, so a domain another
+	// project owns is refused before the build rather than after it.
 	Preflight(context.Context, *v1.PreflightRequest) (*v1.PreflightResponse, error)
 	// ListPromotions enumerates a production project's promotion history,
 	// newest first, each entry marked with whether it is the currently active
@@ -340,7 +342,9 @@ type DeploymentServiceHandler interface {
 	// infrastructure exists yet. The CLI calls it before a preview or deploy to
 	// refuse fast and locally when the infrastructure is missing or is the
 	// wrong class, before anything is provisioned. It is authoritative: the
-	// provider enforces the same class match itself.
+	// provider enforces the same class match itself. It also answers who
+	// already holds the hostnames the caller declared, so a domain another
+	// project owns is refused before the build rather than after it.
 	Preflight(context.Context, *v1.PreflightRequest) (*v1.PreflightResponse, error)
 	// ListPromotions enumerates a production project's promotion history,
 	// newest first, each entry marked with whether it is the currently active
