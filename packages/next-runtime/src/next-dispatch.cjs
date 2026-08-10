@@ -54,7 +54,15 @@ async function writeMiddlewareResponse(response, res) {
   await pipeline(Readable.fromWeb(response.body), res);
 }
 
-function fail(res, message) {
+// Writes a generic body: the worker relays this verbatim to the public
+// requester (middlewareResponse in workers/nextjs/src/index.ts forwards a
+// node-middleware entry's response body untouched, at any status, because it
+// cannot tell an adapter-internal failure apart from a response the app
+// produced on purpose). `detail`, when given, is the operator-facing half —
+// logged here so it still reaches CloudWatch (and scripts/e2e-next/logs.mjs)
+// without ever entering the response the client sees.
+function fail(res, message, detail) {
+  if (detail !== undefined) console.error(`ocel: ${message}: ${detail}`);
   res.statusCode = 502;
   res.end(`ocel: ${message}`);
 }
@@ -80,7 +88,11 @@ async function runMiddleware(moduleOrPromise, req, res, ctx, nextConfig) {
         ? await moduleOrPromise
         : moduleOrPromise;
   } catch (error) {
-    return fail(res, `entry ${MIDDLEWARE_ENTRY_KEY} failed to load: ${error?.stack ?? error}`);
+    return fail(
+      res,
+      `entry ${MIDDLEWARE_ENTRY_KEY} failed to load`,
+      error?.stack ?? error,
+    );
   }
 
   const adapterFn = module && (module.default || module);
@@ -120,7 +132,7 @@ async function runMiddleware(moduleOrPromise, req, res, ctx, nextConfig) {
       page: "middleware",
     });
   } catch (error) {
-    return fail(res, `middleware failed: ${error?.stack ?? error}`);
+    return fail(res, "middleware failed", error?.stack ?? error);
   }
 
   if (ctx && typeof ctx.waitUntil === "function" && result?.waitUntil !== undefined) {

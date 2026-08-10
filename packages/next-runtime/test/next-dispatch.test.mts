@@ -1034,7 +1034,7 @@ test("awaits a top-level-await middleware module before reading its default expo
 // The failure is deterministic, so both requests see it — matching the
 // memoized-failure semantics a synchronous require throw already gets.
 test("fails closed on both requests when a top-level-await module rejects", async () => {
-  silenceErrors();
+  const errors = silenceErrors();
   const load = () => Promise.reject(new Error("boom"));
   const dispatch = createDispatch({
     entries: { [MIDDLEWARE_KEY]: "./middleware.js" },
@@ -1048,9 +1048,16 @@ test("fails closed on both requests when a top-level-await module rejects", asyn
   await dispatch.handler(middlewareReq(), second, {});
 
   expect(first.statusCode).toBe(502);
-  expect(first.text()).toMatch(/boom/);
   expect(second.statusCode).toBe(502);
-  expect(second.text()).toMatch(/boom/);
+  // The worker relays this body to the public requester untouched (see
+  // middlewareResponse in workers/nextjs/src/index.ts), so the app's stack
+  // trace must never reach it — only the generic entry name does.
+  expect(first.text()).not.toMatch(/boom/);
+  expect(second.text()).not.toMatch(/boom/);
+  expect(first.text()).toMatch(new RegExp(MIDDLEWARE_KEY.replace(/\//g, "\\/")));
+  expect(errors.mock.calls.some((call) => String(call[0]).includes("boom"))).toBe(
+    true,
+  );
 });
 
 // The module is primed at INIT (loadEntry runs synchronously, kicking off the
@@ -1124,8 +1131,12 @@ test("passes a request.waitUntil that forwards to the invocation's own ctx", asy
   expect(registered).toEqual([work]);
 });
 
-test("fails closed when the middleware module throws", async () => {
-  silenceErrors();
+// A public request can trigger this (a rejected top-level await, or the
+// adapter function itself throwing): the response the worker relays to that
+// requester must carry no stack trace or other application detail, only the
+// detailed error server-side, where an operator can read it in CloudWatch.
+test("fails closed when the middleware module throws, without leaking its stack to the response", async () => {
+  const errors = silenceErrors();
   const load = () => ({
     default: () => {
       throw new Error("boom");
@@ -1141,7 +1152,10 @@ test("fails closed when the middleware module throws", async () => {
   await dispatch.handler(middlewareReq(), res, {});
 
   expect(res.statusCode).toBe(502);
-  expect(res.text()).toMatch(/boom/);
+  expect(res.text()).not.toMatch(/boom/);
+  expect(errors.mock.calls.some((call) => String(call[0]).includes("boom"))).toBe(
+    true,
+  );
 });
 
 test("fails closed when the middleware module exports no adapter function", async () => {
