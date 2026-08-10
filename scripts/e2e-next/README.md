@@ -319,6 +319,7 @@ Repository **secrets**:
 | `E2E_CLOUDFLARE_API_TOKEN`          | Cloudflare API token                                                  |
 | `E2E_CLOUDFLARE_ACCOUNT_ID`         | Cloudflare account id passed to the provider                          |
 | `E2E_EXPECTED_CLOUDFLARE_ACCOUNT_ID`| the account id the guard requires the token to hold                   |
+| `TURBO_TOKEN`                       | Vercel access token for turbo's remote cache (optional; see below)     |
 
 Repository **variables**:
 
@@ -327,6 +328,16 @@ Repository **variables**:
 | `E2E_OCEL_API_URL`         | Ocel API base URL                                           |
 | `E2E_OCEL_PREVIEW_DOMAIN`  | the wildcard preview domain, e.g. `*.e2e.example.com` — the proxied record from step 1 |
 | `E2E_AWS_REGION`           | region to deploy into                                       |
+| `TURBO_TEAM`               | Vercel team slug (or username on a personal account) for the remote cache (optional) |
+
+`TURBO_TOKEN`/`TURBO_TEAM` are the only optional pair: Next.js builds itself with
+turbo (`turbo run build`), and its build is the one part of the build job that is
+the same from run to run — the job's own `actions/cache` is keyed by run id, so it
+ships artifacts between a single run's jobs and never across runs. With both set,
+that build is restored from Vercel's remote cache on every run pinned to the same
+`nextjsRef`; with either missing, turbo builds locally exactly as it did before.
+Nothing inside the `vercel/next.js` checkout is modified for this — turbo reads
+both from the environment.
 
 The expected account ids are deliberately duplicated: the guard compares the
 identity the credentials actually resolve to against them and hard-fails on a

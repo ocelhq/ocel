@@ -106,6 +106,15 @@ jobs:
         uses: actions/setup-go@v5
         with:
           go-version-file: cli/go.mod
+          # No module at the repo root, so setup-go's default hunt for a root
+          # go.sum finds nothing and restores no build cache; name every
+          # module's instead.
+          cache-dependency-path: |
+            cli/go.sum
+            cloud/aws/go.sum
+            cloud/edge/cloudflare/go.sum
+            pkg/proto/go.sum
+            sdk/go.sum
 
       - name: Setup pnpm
         uses: pnpm/action-setup@v4

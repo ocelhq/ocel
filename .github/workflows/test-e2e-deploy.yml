@@ -74,6 +74,13 @@ jobs:
       AWS_REGION: ${{ vars.E2E_AWS_REGION }}
       CLOUDFLARE_ACCOUNT_ID: ${{ secrets.E2E_CLOUDFLARE_ACCOUNT_ID }}
       CLOUDFLARE_API_TOKEN: ${{ secrets.E2E_CLOUDFLARE_API_TOKEN }}
+      # Next.js builds itself with turbo, so its build is reusable across runs —
+      # which nothing else here makes it: the cache below is keyed by run id
+      # because it ships one run's artifacts between jobs, not across runs. Turbo
+      # reads these from the environment, so the checkout of vercel/next.js needs
+      # no change of ours. Unset, turbo builds locally exactly as before.
+      TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
+      TURBO_TEAM: ${{ vars.TURBO_TEAM }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -96,9 +103,20 @@ jobs:
           expected-aws-account-id: ${{ secrets.E2E_EXPECTED_AWS_ACCOUNT_ID }}
           expected-cloudflare-account-id: ${{ secrets.E2E_EXPECTED_CLOUDFLARE_ACCOUNT_ID }}
 
+      # There is no module at the repo root, so setup-go's default hunt for a
+      # root go.sum finds nothing and silently restores no build cache at all —
+      # every Go step below then compiles cold. Naming every module's go.sum
+      # keys the cache on the whole workspace's dependency set, which is what
+      # `go build`/`go generate` here actually span.
       - uses: actions/setup-go@v5
         with:
           go-version-file: adapter/cli/go.mod
+          cache-dependency-path: |
+            adapter/cli/go.sum
+            adapter/cloud/aws/go.sum
+            adapter/cloud/edge/cloudflare/go.sum
+            adapter/pkg/proto/go.sum
+            adapter/sdk/go.sum
 
       - name: Install & build Next.js
         working-directory: nextjs
