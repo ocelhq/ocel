@@ -9,12 +9,16 @@ import (
 	"maps"
 	"os"
 	"path/filepath"
+	"runtime/debug"
+	"strconv"
 	"strings"
 	"time"
 
 	ec2 "github.com/pulumi/pulumi-aws/sdk/v7/go/aws/ec2"
 	"github.com/pulumi/pulumi/sdk/v3/go/auto"
 	"github.com/pulumi/pulumi/sdk/v3/go/auto/optup"
+	"github.com/pulumi/pulumi/sdk/v3/go/common/resource/config"
+	"github.com/pulumi/pulumi/sdk/v3/go/common/workspace"
 	"github.com/pulumi/pulumi/sdk/v3/go/pulumi"
 
 	"github.com/ocelhq/ocel/pkg/naming"
@@ -52,15 +56,15 @@ func realize(ctx context.Context, cfg Config, manifest *deploymentsv1.Manifest, 
 		return Result{}, err
 	}
 
-	artifacts, err := uploadFunctionArtifacts(ctx, cfg, manifest, baked, progress)
+	if err := checkISRWriterAgrees(cfg); err != nil {
+		return Result{}, err
+	}
+	builds, err := resolveAppBuilds(cfg, manifest, baked)
 	if err != nil {
 		return Result{}, err
 	}
 
-	if err := checkISRWriterAgrees(cfg); err != nil {
-		return Result{}, err
-	}
-	builds, err := resolveAppBuilds(cfg, manifest)
+	artifacts, err := uploadFunctionArtifacts(ctx, cfg, manifest, baked, builds, progress)
 	if err != nil {
 		return Result{}, err
 	}
@@ -75,10 +79,7 @@ func realize(ctx context.Context, cfg Config, manifest *deploymentsv1.Manifest, 
 		return Result{}, err
 	}
 
-	identities, err := assignIdentities(cfg, manifest, baked, builds)
-	if err != nil {
-		return Result{}, err
-	}
+	identities := builds.identities
 	promotionID, err := newRandomID()
 	if err != nil {
 		return Result{}, err
@@ -123,7 +124,7 @@ func realize(ctx context.Context, cfg Config, manifest *deploymentsv1.Manifest, 
 	appFunctionNames := make([]map[string]string, len(apps))
 	runAppStacks(apps, func(i int, app *deploymentsv1.ManifestApp) {
 		id := identities[app.GetName()]
-		outs, names, err := runAppStack(ctx, cfg, manifest, plan, app, resourceEnv, artifacts, baked[app.GetName()], builds, log)
+		outs, names, err := runAppStack(ctx, cfg, manifest, plan, app, id, resourceEnv, artifacts, baked[app.GetName()], builds, log)
 		appOutputs[i] = outs
 		appFunctionNames[i] = names
 		record, recErr := buildDeploymentRecord(cfg, manifest, app, id, outs, builds)
@@ -288,7 +289,7 @@ func rootStackSpecs(cfg Config, manifest *deploymentsv1.Manifest, version string
 	if cfg.Class == deploymentsv1.Environment_CLASS_PREVIEW {
 		spec := base
 		spec.GenericName = previewWorkerName(cfg.Slug)
-		spec.PruneWorkerStem = previewWorkerName(cfg.Slug)
+		spec.PruneWorkerStem = previewWorkerStem(cfg.Slug)
 		if len(apps) == 0 {
 			spec.Generic = withPreviewVars(generic, "", apps)
 			return []edge.RootStackSpec{spec}, nil
@@ -304,7 +305,7 @@ func rootStackSpecs(cfg Config, manifest *deploymentsv1.Manifest, version string
 
 	if len(apps) == 0 {
 		spec := base
-		spec.GenericName = workerScriptName(cfg.Slug, cfg.Env, "root")
+		spec.GenericName = rootWorkerName(cfg.Slug, cfg.Env)
 		return []edge.RootStackSpec{spec}, nil
 	}
 
@@ -347,17 +348,6 @@ func previewAppNames(apps []*deploymentsv1.ManifestApp) string {
 		}
 	}
 	return strings.Join(names, ",")
-}
-
-func previewWorkerName(slug string) string {
-	return projectWorkerStem(slug) + "preview"
-}
-
-func ProjectOwnsWorker(slug, script string) bool {
-	if slug == "" || script == "" {
-		return false
-	}
-	return strings.HasPrefix(script, projectWorkerStem(slug))
 }
 
 func firstDomain(domains []string) string {
@@ -520,30 +510,6 @@ func newRandomID() (string, error) {
 	return hex.EncodeToString(buf), nil
 }
 
-func assignIdentities(cfg Config, manifest *deploymentsv1.Manifest, bundles map[string]appBundle, builds appBuilds) (Identities, error) {
-	identities := make(Identities, len(manifest.GetApps()))
-	for _, app := range manifestApps(manifest) {
-		name := app.GetName()
-		buildID, err := appBuildID(cfg, app, builds)
-		if err != nil {
-			return nil, err
-		}
-		id, err := NewIdentity(buildID, bundles[name].Fingerprint)
-		if err != nil {
-			return nil, fmt.Errorf("deployment identity for %s: %w", name, err)
-		}
-		identities[name] = id
-	}
-	return identities, nil
-}
-
-func appBuildID(cfg Config, app *deploymentsv1.ManifestApp, builds appBuilds) (string, error) {
-	if app.GetFramework() == frameworkNext {
-		return builds.resolve(cfg, app.GetName())
-	}
-	return newRandomID()
-}
-
 func nextBuildID(cfg Config, app string) (string, error) {
 	var pm prerenderManifest
 	raw, err := os.ReadFile(filepath.Join(appArtifactRoot(cfg.ArtifactRoot, app), "routing-manifest.json"))
@@ -575,7 +541,7 @@ func buildDeploymentRecord(cfg Config, manifest *deploymentsv1.Manifest, app *de
 	if app.GetFramework() != frameworkNext {
 		return record, nil
 	}
-	record.AssetPrefix = appAssetR2Prefix(manifest.GetSlug(), name, id.BuildID())
+	record.AssetPrefix = appAssetPrefix(builds.coords[name])
 
 	raw, err := os.ReadFile(filepath.Join(appArtifactRoot(cfg.ArtifactRoot, name), "routing-manifest.json"))
 	if err != nil {
@@ -592,7 +558,7 @@ func buildDeploymentRecord(cfg Config, manifest *deploymentsv1.Manifest, app *de
 		record.IsrWriteSecret = isr.WriterSecret
 	}
 
-	edgeWorkers, err := appEdgeWorkers(cfg, manifest.GetSlug(), name, id.BuildID())
+	edgeWorkers, err := appEdgeWorkers(cfg, builds.coords[name], name)
 	if err != nil {
 		return edge.DeploymentRecord{}, err
 	}
@@ -642,13 +608,14 @@ func runInfraStack(ctx context.Context, cfg Config, manifest *deploymentsv1.Mani
 		if err != nil {
 			return fmt.Errorf("look up default VPC subnets: %w", err)
 		}
+		project, env := naming.Sanitize(manifest.GetSlug()), plan.InfraStack.Env
 		for _, r := range manifest.GetResources() {
 			var err error
 			switch {
 			case r.GetPostgres() != nil:
-				_, err = registerPostgres(pctx, r.GetLogicalName(), translatePostgres(r.GetPostgres()), vpc.Id, vpc.CidrBlock, subnets.Ids)
+				_, err = registerPostgres(pctx, project, env, r.GetLogicalName(), translatePostgres(r.GetPostgres()), vpc.Id, vpc.CidrBlock, subnets.Ids)
 			case r.GetBucket() != nil:
-				_, err = registerBucket(pctx, r.GetLogicalName(), translateBucket(r.GetBucket()), cfg.StateTable, cfg.StateTableARN, cfg.ListenerCodePath)
+				_, err = registerBucket(pctx, project, env, r.GetLogicalName(), translateBucket(r.GetBucket()), cfg.StateTable, cfg.StateTableARN, cfg.ListenerCodePath)
 			default:
 				continue
 			}
@@ -659,14 +626,14 @@ func runInfraStack(ctx context.Context, cfg Config, manifest *deploymentsv1.Mani
 		return nil
 	}
 
-	res, err := upStack(ctx, cfg, plan.InfraStack, program, log)
+	res, err := upStack(ctx, cfg, plan.InfraStack, stackTags(cfg, plan.InfraStack, plan.Promotion.PromotionID, ""), program, log)
 	if err != nil {
 		return nil, fmt.Errorf("provision infra stack %s: %w", plan.InfraStack, err)
 	}
 	return collectResourceOutputs(ctx, cfg.Secrets, manifest, res.Outputs)
 }
 
-func runAppStack(ctx context.Context, cfg Config, manifest *deploymentsv1.Manifest, plan Plan, app *deploymentsv1.ManifestApp, resourceEnv map[string]string, artifacts map[string]artifactRef, baked appBundle, builds appBuilds, log func(string)) ([]*deploymentsv1.ResourceOutput, map[string]string, error) {
+func runAppStack(ctx context.Context, cfg Config, manifest *deploymentsv1.Manifest, plan Plan, app *deploymentsv1.ManifestApp, id Identity, resourceEnv map[string]string, artifacts map[string]artifactRef, baked appBundle, builds appBuilds, log func(string)) ([]*deploymentsv1.ResourceOutput, map[string]string, error) {
 	name := app.GetName()
 	functions := appFunctions(manifest, name)
 	caches := builds.caches
@@ -686,21 +653,24 @@ func runAppStack(ctx context.Context, cfg Config, manifest *deploymentsv1.Manife
 		}
 	}
 
+	stack := plan.AppStacks[name]
+	project := naming.Sanitize(manifest.GetSlug())
+
 	program := func(pctx *pulumi.Context) error {
-		role, err := newFunctionRole(pctx, appExecutionRole(cfg, name, caches, baked))
+		role, err := newFunctionRole(pctx, roleCoordinate(project, stack), appExecutionRole(cfg, name, caches, baked))
 		if err != nil {
 			return err
 		}
 		for _, fn := range functions {
-			if err := registerFunction(pctx, fn.GetLogicalName(), ocelTags(name, cfg.Env, manifest.GetSlug()), translateFunction(fn), artifacts[fn.GetLogicalName()], env, caches[name], role.Arn); err != nil {
-				return fmt.Errorf("declare %s: %w", fn.GetLogicalName(), err)
+			logical := fn.GetLogicalName()
+			if err := registerFunction(pctx, logical, functionCoordinate(project, stack, logical), fn.GetRouteId(), translateFunction(fn), artifacts[logical], env, caches[name], role.Arn); err != nil {
+				return fmt.Errorf("declare %s: %w", logical, err)
 			}
 		}
 		return nil
 	}
 
-	stack := plan.AppStacks[name]
-	res, err := upStack(ctx, cfg, stack, program, log)
+	res, err := upStack(ctx, cfg, stack, stackTags(cfg, stack, plan.Promotion.PromotionID, id.BuildID()), program, log)
 	if err != nil {
 		return nil, nil, fmt.Errorf("provision app-deploy stack %s: %w", stack, err)
 	}
@@ -717,7 +687,68 @@ func appFunctions(manifest *deploymentsv1.Manifest, app string) []*deploymentsv1
 	return fns
 }
 
-func upStack(ctx context.Context, cfg Config, name naming.StackName, program pulumi.RunFunc, log func(string)) (auto.UpResult, error) {
+func stackTags(cfg Config, name naming.StackName, promotionID, buildID string) map[string]string {
+	coord := naming.Coordinate{
+		Project: naming.Sanitize(cfg.Slug),
+		Env:     name.Env,
+		App:     name.App,
+		Release: name.Release,
+	}
+	return coord.Tags(naming.Facts{
+		ManagedBy: managedBy(),
+		EnvClass:  envClass(cfg.Class),
+		BuildID:   buildID,
+		Promotion: promotionID,
+		ExpiresAt: expiresAt(cfg.ExpiresAt),
+	})
+}
+
+func managedBy() string {
+	version := "dev"
+	if info, ok := debug.ReadBuildInfo(); ok && info.Main.Version != "" && info.Main.Version != "(devel)" {
+		version = info.Main.Version
+	}
+	return "ocel-cli/" + version
+}
+
+func envClass(class deploymentsv1.Environment_Class) string {
+	if class == deploymentsv1.Environment_CLASS_PREVIEW {
+		return "preview"
+	}
+	return "production"
+}
+
+func expiresAt(unix int64) string {
+	if unix == 0 {
+		return ""
+	}
+	return strconv.FormatInt(unix, 10)
+}
+
+func applyDefaultTags(ctx context.Context, stack auto.Stack, tags map[string]string) error {
+	if len(tags) == 0 {
+		return nil
+	}
+	encoded, err := json.Marshal(map[string]map[string]string{"tags": tags})
+	if err != nil {
+		return fmt.Errorf("render default tags: %w", err)
+	}
+	ws := stack.Workspace()
+	settings, err := ws.StackSettings(ctx, stack.Name())
+	if err != nil {
+		settings = &workspace.ProjectStack{}
+	}
+	if settings.Config == nil {
+		settings.Config = config.Map{}
+	}
+	settings.Config[config.MustMakeKey("aws", "defaultTags")] = config.NewObjectValue(string(encoded))
+	if err := ws.SaveStackSettings(ctx, stack.Name(), settings); err != nil {
+		return fmt.Errorf("stamp default tags on %s: %w", stack.Name(), err)
+	}
+	return nil
+}
+
+func upStack(ctx context.Context, cfg Config, name naming.StackName, tags map[string]string, program pulumi.RunFunc, log func(string)) (auto.UpResult, error) {
 	stack, err := auto.UpsertStackInlineSource(ctx, name.String(), cfg.PulumiProject, program,
 		auto.Pulumi(cfg.Pulumi),
 		auto.SecretsProvider("passphrase"),
@@ -725,6 +756,10 @@ func upStack(ctx context.Context, cfg Config, name naming.StackName, program pul
 	)
 	if err != nil {
 		return auto.UpResult{}, fmt.Errorf("prepare stack %s: %w", name, err)
+	}
+
+	if err := applyDefaultTags(ctx, stack, tags); err != nil {
+		return auto.UpResult{}, err
 	}
 
 	index, err := stackIndex(cfg.Stacks)
