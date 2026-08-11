@@ -136,6 +136,9 @@ func previewStacksFromNames(slug string, stackNames []string) []PreviewStack {
 }
 
 func backendWorkspace(ctx context.Context, project, backendURL, passphrase, region string, pulumiCmd auto.PulumiCommand) (auto.Workspace, error) {
+	if project == "" {
+		return nil, fmt.Errorf("open workspace: no project name")
+	}
 	ws, err := auto.NewLocalWorkspace(ctx,
 		auto.Project(workspace.Project{
 			Name:    tokens.PackageName(project),
