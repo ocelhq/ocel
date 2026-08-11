@@ -96,6 +96,10 @@ func pruneConfig(ctx context.Context, opts options, slug string) (deploy.Config,
 	if deployed.AssetBucket == "" {
 		return deploy.Config{}, fmt.Errorf("account bootstrap is present but its asset bucket is missing (a partial rollback?); re-run `ocel bootstrap`")
 	}
+	stacks, err := stackIndexFor(awscfg, deployed, bootstrapCommand(false))
+	if err != nil {
+		return deploy.Config{}, err
+	}
 
 	passphrase, err := bootstrap.ReadPassphrase(ctx, ssmClient)
 	if err != nil {
@@ -127,7 +131,7 @@ func pruneConfig(ctx context.Context, opts options, slug string) (deploy.Config,
 		Uploader:           s3.NewFromConfig(awscfg),
 		CacheStoreBucket:   cacheStore.Bucket,
 		CacheStoreUploader: cacheStoreUploader(cacheStore),
-		Stacks:             stackIndexFor(awscfg, deployed),
+		Stacks:             stacks,
 		Env:                deployEnv,
 		Values:             teardownValues(awscfg, deployed, bootstrap.ClassProduction),
 

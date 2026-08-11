@@ -19,8 +19,9 @@ type TeardownConfig struct {
 	ProjectName string
 	StackName   string
 	Pulumi      auto.PulumiCommand
-	SkipRefresh bool
 	Stacks      StackIndex
+
+	realized *realizedStacks
 }
 
 func nilSafe(progress func(string)) func(string) {
@@ -72,6 +73,11 @@ func Destroy(ctx context.Context, cfg TeardownConfig, progress, log func(string)
 		}
 	}
 
+	index, err := stackIndex(cfg.Stacks)
+	if err != nil {
+		return err
+	}
+
 	report(progress, "Selecting stack")
 	stack, err := auto.SelectStackInlineSource(ctx, cfg.StackName, cfg.ProjectName, nil,
 		auto.Pulumi(cfg.Pulumi),
@@ -80,7 +86,7 @@ func Destroy(ctx context.Context, cfg TeardownConfig, progress, log func(string)
 	)
 	if auto.IsSelectStack404Error(err) {
 		report(progress, "No stack "+cfg.StackName+" to destroy")
-		return forgetStack(ctx, cfg)
+		return index.RemoveStack(ctx, cfg.StackName)
 	}
 	if err != nil {
 		return fmt.Errorf("select stack %s: %w", cfg.StackName, err)
@@ -98,20 +104,12 @@ func Destroy(ctx context.Context, cfg TeardownConfig, progress, log func(string)
 	if err := stack.Workspace().RemoveStack(ctx, cfg.StackName); err != nil {
 		return fmt.Errorf("remove stack %s: %w", cfg.StackName, err)
 	}
-	return forgetStack(ctx, cfg)
-}
-
-func forgetStack(ctx context.Context, cfg TeardownConfig) error {
-	index, err := stackIndex(cfg.Stacks)
-	if err != nil {
-		return err
-	}
 	return index.RemoveStack(ctx, cfg.StackName)
 }
 
 func destroyOptions(cfg TeardownConfig, logWriter *lineForwarder) []optdestroy.Option {
 	var opts []optdestroy.Option
-	if !cfg.SkipRefresh {
+	if !cfg.realized.realizedHere(cfg.StackName) {
 		opts = append(opts, optdestroy.Refresh())
 	}
 	if logWriter != nil {

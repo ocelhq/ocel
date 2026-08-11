@@ -161,7 +161,7 @@ func TestClassifyProjectStacks(t *testing.T) {
 func TestDestroyPhased(t *testing.T) {
 	t.Parallel()
 
-	t.Run("no infra stack starts before every app stack has finished", func(t *testing.T) {
+	t.Run("infra waits for every app stack", func(t *testing.T) {
 		t.Parallel()
 
 		var mu sync.Mutex
@@ -199,7 +199,7 @@ func TestDestroyPhased(t *testing.T) {
 		}
 	})
 
-	t.Run("stacks within a phase overlap up to the limit", func(t *testing.T) {
+	t.Run("a phase overlaps up to the limit", func(t *testing.T) {
 		t.Parallel()
 
 		var inFlight, peak atomic.Int64
@@ -238,7 +238,7 @@ func TestDestroyPhased(t *testing.T) {
 		}
 	})
 
-	t.Run("failures aggregate in stack order however they interleave", func(t *testing.T) {
+	t.Run("failures aggregate in stack order", func(t *testing.T) {
 		t.Parallel()
 
 		apps := []string{"a1", "a2", "a3", "a4", "a5", "a6", "a7", "a8"}

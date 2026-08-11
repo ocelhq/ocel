@@ -134,7 +134,7 @@ func TestLambdaResourceName(t *testing.T) {
 func TestStateBackendURL(t *testing.T) {
 	t.Parallel()
 
-	t.Run("state lands under a subpath naming the project", func(t *testing.T) {
+	t.Run("state lands under the project's subpath", func(t *testing.T) {
 		t.Parallel()
 
 		if got, want := StateBackendURL("ocel-state", "shop"), "s3://ocel-state/shop"; got != want {

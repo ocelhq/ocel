@@ -61,6 +61,26 @@ func TestStacksPagesToTheEnd(t *testing.T) {
 	}
 }
 
+func TestReadsAreConsistent(t *testing.T) {
+	t.Parallel()
+
+	stacks := &pagingDynamo{pages: [][]string{{"shop--infra"}}}
+	if _, err := (&Index{Dynamo: stacks, Table: "state"}).Stacks(context.Background(), "shop"); err != nil {
+		t.Fatalf("Stacks: %v", err)
+	}
+	projects := &pagingDynamo{pages: [][]string{{"shop"}}}
+	if _, err := (&Index{Dynamo: projects, Table: "state"}).Projects(context.Background()); err != nil {
+		t.Fatalf("Projects: %v", err)
+	}
+	for _, ddb := range []*pagingDynamo{stacks, projects} {
+		for i, q := range ddb.queries {
+			if !aws.ToBool(q.ConsistentRead) {
+				t.Errorf("query %d read eventually: a teardown reads back what it just wrote", i)
+			}
+		}
+	}
+}
+
 func TestProjectsAndStacksLiveInDifferentPartitions(t *testing.T) {
 	t.Parallel()
 

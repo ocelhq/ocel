@@ -119,7 +119,11 @@ func knownSlugs(ctx context.Context, awscfg aws.Config, substrate bootstrap.Depl
 	if slug == "" || !substrate.Present {
 		return nil
 	}
-	slugs, err := deploy.ProjectSlugsBesides(ctx, stackIndexFor(awscfg, substrate), slug)
+	index, err := stackIndexFor(awscfg, substrate, bootstrapCommand(false))
+	if err != nil {
+		return nil
+	}
+	slugs, err := deploy.ProjectSlugsBesides(ctx, index, slug)
 	if err != nil {
 		return nil
 	}
@@ -197,6 +201,10 @@ func (s *Server) previewTeardownContext(ctx context.Context, opts options, slug 
 	if !deployed.Present || deployed.StateBucket == "" {
 		return deploy.Config{}, nil, nil, errPreviewInfraMissing
 	}
+	stacks, err := stackIndexFor(awscfg, deployed, bootstrapCommand(true))
+	if err != nil {
+		return deploy.Config{}, nil, nil, err
+	}
 
 	passphrase, err := bootstrap.ReadPassphrase(ctx, ssmClient)
 	if err != nil {
@@ -237,7 +245,7 @@ func (s *Server) previewTeardownContext(ctx context.Context, opts options, slug 
 		Uploader:           s3.NewFromConfig(awscfg),
 		CacheStoreBucket:   cacheStore.Bucket,
 		CacheStoreUploader: cacheStoreUploader(cacheStore),
-		Stacks:             stackIndexFor(awscfg, deployed),
+		Stacks:             stacks,
 		Env:                envSegment(env),
 		Slug:               env.GetIdentity(),
 
@@ -267,8 +275,12 @@ func (s *Server) ListEnvironments(ctx context.Context, req *deploymentsv1.ListEn
 	if !deployed.Present || deployed.StateTable == "" {
 		return &deploymentsv1.ListEnvironmentsResponse{}, nil
 	}
+	index, err := stackIndexFor(awscfg, deployed, bootstrapCommand(true))
+	if err != nil {
+		return nil, err
+	}
 
-	stacks, err := deploy.ListPreviewStacks(ctx, stackIndexFor(awscfg, deployed), req.GetSlug())
+	stacks, err := deploy.ListPreviewStacks(ctx, index, req.GetSlug())
 	if err != nil {
 		return nil, err
 	}

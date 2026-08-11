@@ -1,6 +1,7 @@
 package deploy
 
 import (
+	"context"
 	"errors"
 	"reflect"
 	"strings"
@@ -47,18 +48,25 @@ func TestDestroyOptions(t *testing.T) {
 		return opts
 	}
 
-	t.Run("refreshes unless the caller vouches for the state", func(t *testing.T) {
+	t.Run("refreshes a stack this session did not realize", func(t *testing.T) {
 		t.Parallel()
 
 		if !applied(TeardownConfig{}, nil).Refresh {
-			t.Error("a zero TeardownConfig skipped the refresh: an unvouched-for stack must reconcile before it deletes")
+			t.Error("a zero TeardownConfig skipped the refresh")
 		}
-		if applied(TeardownConfig{SkipRefresh: true}, nil).Refresh {
-			t.Error("SkipRefresh still refreshed")
+		realized := &realizedStacks{}
+		if err := realized.realize(context.Background(), &fakeStackIndex{}, "shop--web--b1"); err != nil {
+			t.Fatalf("realize: %v", err)
+		}
+		if !applied(TeardownConfig{StackName: "shop--infra", realized: realized}, nil).Refresh {
+			t.Error("a stack realized elsewhere skipped the refresh")
+		}
+		if applied(TeardownConfig{StackName: "shop--web--b1", realized: realized}, nil).Refresh {
+			t.Error("a stack this session realized still refreshed")
 		}
 	})
 
-	t.Run("streams progress only when there is somewhere to send it", func(t *testing.T) {
+	t.Run("streams progress only with a log sink", func(t *testing.T) {
 		t.Parallel()
 
 		if got := applied(TeardownConfig{}, nil).ProgressStreams; len(got) != 0 {
@@ -68,6 +76,27 @@ func TestDestroyOptions(t *testing.T) {
 			t.Errorf("progress streams = %v, want the log sink attached", got)
 		}
 	})
+}
+
+func TestDestroyRefusesWithoutIndex(t *testing.T) {
+	t.Parallel()
+
+	err := Destroy(context.Background(), TeardownConfig{StackName: "shop--infra"}, nil, nil)
+	if !errors.Is(err, errNoStackIndex) {
+		t.Fatalf("Destroy err = %v, want %v raised before the stack is touched", err, errNoStackIndex)
+	}
+}
+
+func TestTeardownConfigCarriesTheSession(t *testing.T) {
+	t.Parallel()
+
+	realized := &realizedStacks{}
+	if err := realized.realize(context.Background(), &fakeStackIndex{}, "shop--infra"); err != nil {
+		t.Fatalf("realize: %v", err)
+	}
+	if !teardownConfig(Config{realized: realized}, "shop--infra").realized.realizedHere("shop--infra") {
+		t.Error("teardownConfig dropped the session, so a fresh stack would refresh needlessly")
+	}
 }
 
 func TestPreviewStacksFromNames(t *testing.T) {

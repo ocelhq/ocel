@@ -39,6 +39,8 @@ type Config struct {
 
 	Stacks StackIndex
 
+	realized *realizedStacks
+
 	StateTable     string
 	StateTableARN  string
 	VarsKeyARN     string
@@ -115,6 +117,7 @@ type Result struct {
 }
 
 func Run(ctx context.Context, cfg Config, manifest *deploymentsv1.Manifest, progress Progress, log func(string)) (Result, error) {
+	cfg.realized = &realizedStacks{}
 	return realize(ctx, cfg, manifest, progress, log)
 }
 

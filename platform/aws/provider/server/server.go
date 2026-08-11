@@ -181,6 +181,11 @@ func (s *Server) runDeploy(ctx context.Context, req *deploymentsv1.DeployRequest
 		logf(resourceSummary(r))
 	}
 
+	stacks, err := stackIndexFor(awscfg, deployed, bootstrapCmd)
+	if err != nil {
+		return deploy.Result{}, err
+	}
+
 	priorRootStackState := params.RootStackState
 	stateTableARN := fmt.Sprintf("arn:aws:dynamodb:%s:%s:table/%s", awscfg.Region, account, deployed.StateTable)
 
@@ -192,7 +197,7 @@ func (s *Server) runDeploy(ctx context.Context, req *deploymentsv1.DeployRequest
 		StackName:     stackName(manifest.GetSlug(), env),
 		Pulumi:        pulumiCmd,
 		Secrets:       secretsmanager.NewFromConfig(awscfg),
-		Stacks:        stackIndexFor(awscfg, deployed),
+		Stacks:        stacks,
 		StateTable:    deployed.StateTable,
 		StateTableARN: stateTableARN,
 
@@ -255,15 +260,6 @@ func rootStackStateChanged(prior, reconciled edge.RootStackState) bool {
 }
 
 const previewTTL = 7 * 24 * time.Hour
-
-func readEdgeValues(ctx context.Context, ssmClient bootstrap.SSMAPI, class, bootstrapCmd string, logf func(string)) map[string]string {
-	values, err := bootstrap.ReadEdgeValues(ctx, ssmClient, class)
-	if err != nil {
-		logf("edge bootstrap values unavailable: " + err.Error() + " (re-run `" + bootstrapCmd + "` if the edge needs them)")
-		return nil
-	}
-	return values
-}
 
 func cacheStoreUploader(store bootstrap.CacheStore) deploy.ArtifactUploader {
 	if store.Bucket == "" {
@@ -369,14 +365,14 @@ func loadAWS(ctx context.Context, region string) (aws.Config, error) {
 	return sdkconfig.Control(ctx, region)
 }
 
-func stackIndexFor(awscfg aws.Config, deployed bootstrap.Deployed) deploy.StackIndex {
+func stackIndexFor(awscfg aws.Config, deployed bootstrap.Deployed, bootstrapCmd string) (deploy.StackIndex, error) {
 	if deployed.StateTable == "" {
-		return nil
+		return nil, fmt.Errorf("account bootstrap is present but its state table is missing (a partial rollback?); re-run `%s`", bootstrapCmd)
 	}
 	return &stackindex.Index{
 		Dynamo: dynamodb.NewFromConfig(awscfg),
 		Table:  deployed.StateTable,
-	}
+	}, nil
 }
 
 func resourceSummary(r *deploymentsv1.ManifestResource) string {

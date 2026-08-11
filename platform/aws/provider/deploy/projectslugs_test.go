@@ -104,7 +104,7 @@ func TestProjectSlugsBesides(t *testing.T) {
 		}
 	})
 
-	t.Run("without an index the caller is told, not given an empty answer", func(t *testing.T) {
+	t.Run("without an index the caller is told", func(t *testing.T) {
 		t.Parallel()
 
 		if _, err := ProjectSlugsBesides(context.Background(), nil, "shop"); !errors.Is(err, errNoStackIndex) {

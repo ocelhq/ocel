@@ -1,15 +1,11 @@
 package server
 
 import (
-	"context"
-	"errors"
 	"maps"
 	"strings"
 	"testing"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
-	"github.com/aws/aws-sdk-go-v2/service/ssm"
-	ssmtypes "github.com/aws/aws-sdk-go-v2/service/ssm/types"
 
 	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/resources/v1"
@@ -96,64 +92,30 @@ func TestResourceSummary(t *testing.T) {
 	}
 }
 
-type stubSSM struct {
-	value string
-	err   error
-}
-
-func (s stubSSM) GetParameter(context.Context, *ssm.GetParameterInput, ...func(*ssm.Options)) (*ssm.GetParameterOutput, error) {
-	if s.err != nil {
-		return nil, s.err
-	}
-	return &ssm.GetParameterOutput{Parameter: &ssmtypes.Parameter{Value: aws.String(s.value)}}, nil
-}
-
-func (stubSSM) PutParameter(context.Context, *ssm.PutParameterInput, ...func(*ssm.Options)) (*ssm.PutParameterOutput, error) {
-	return &ssm.PutParameterOutput{}, nil
-}
-
-func (stubSSM) DeleteParameter(context.Context, *ssm.DeleteParameterInput, ...func(*ssm.Options)) (*ssm.DeleteParameterOutput, error) {
-	return &ssm.DeleteParameterOutput{}, nil
-}
-
-func TestReadEdgeValues(t *testing.T) {
+func TestStackIndexFor(t *testing.T) {
 	t.Parallel()
 
-	t.Run("returns the values the edge stored", func(t *testing.T) {
+	t.Run("an unindexed substrate is refused up front", func(t *testing.T) {
 		t.Parallel()
-		got := readEdgeValues(context.Background(), stubSSM{value: `{"bucketName":"edge-cache-7f3"}`}, bootstrap.ClassProduction, "ocel bootstrap", func(string) {})
-		if len(got) != 1 || got["bucketName"] != "edge-cache-7f3" {
-			t.Errorf("readEdgeValues = %v, want the stored values", got)
+
+		_, err := stackIndexFor(aws.Config{Region: "us-east-1"}, bootstrap.Deployed{Present: true}, "ocel bootstrap")
+		if err == nil {
+			t.Fatal("stackIndexFor err = nil, want a teardown refused before it destroys anything")
+		}
+		if !strings.Contains(err.Error(), "ocel bootstrap") {
+			t.Errorf("err = %v, want it to name the command that fixes it", err)
 		}
 	})
 
-	t.Run("degrades with a log when the parameter cannot be read", func(t *testing.T) {
+	t.Run("an indexed substrate yields its table", func(t *testing.T) {
 		t.Parallel()
-		var logged []string
-		got := readEdgeValues(
-			context.Background(),
-			stubSSM{err: errors.New("AccessDeniedException: not authorized to perform ssm:GetParameter")},
-			bootstrap.ClassProduction,
-			"ocel bootstrap",
-			func(m string) { logged = append(logged, m) },
-		)
-		if got != nil {
-			t.Errorf("readEdgeValues = %v, want none", got)
-		}
-		if len(logged) != 1 || !strings.Contains(logged[0], "AccessDenied") {
-			t.Errorf("logged = %v, want one line naming the failure", logged)
-		}
-	})
 
-	t.Run("stays silent when the parameter is simply absent", func(t *testing.T) {
-		t.Parallel()
-		var logged []string
-		got := readEdgeValues(context.Background(), stubSSM{err: &ssmtypes.ParameterNotFound{}}, bootstrap.ClassProduction, "ocel bootstrap", func(m string) { logged = append(logged, m) })
-		if got != nil {
-			t.Errorf("readEdgeValues = %v, want none", got)
+		index, err := stackIndexFor(aws.Config{Region: "us-east-1"}, bootstrap.Deployed{Present: true, StateTable: "ocel-state"}, "ocel bootstrap")
+		if err != nil {
+			t.Fatalf("stackIndexFor: %v", err)
 		}
-		if len(logged) != 0 {
-			t.Errorf("an edge that stored no values is not a failure to report, got %v", logged)
+		if index == nil {
+			t.Fatal("stackIndexFor = nil with no error")
 		}
 	})
 }
