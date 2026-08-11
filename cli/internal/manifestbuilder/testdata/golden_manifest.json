@@ -3,7 +3,7 @@
   "slug": "proj-1",
   "resources": [
     {
-      "logical_name": "postgres_analytics",
+      "logical_name": "db--analytics",
       "type": "RESOURCE_TYPE_POSTGRES",
       "id": "analytics",
       "postgres": {
@@ -11,7 +11,7 @@
       }
     },
     {
-      "logical_name": "postgres_main",
+      "logical_name": "db--main",
       "type": "RESOURCE_TYPE_POSTGRES",
       "id": "main",
       "postgres": {

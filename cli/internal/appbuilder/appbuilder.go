@@ -194,18 +194,23 @@ func collectFunctions(outputDir string) ([]manifestbuilder.Function, error) {
 		if !entry.IsDir() {
 			continue
 		}
-		appFunctions, err := collectAppFunctions(outputDir, filepath.Join(appsDir, entry.Name()), entry.Name())
+		appFunctions, err := collectAppFunctions(outputDir, filepath.Join(appsDir, entry.Name()))
 		if err != nil {
 			return nil, err
 		}
 		functions = append(functions, appFunctions...)
 	}
 
-	slices.SortFunc(functions, func(a, b manifestbuilder.Function) int { return strings.Compare(a.Name, b.Name) })
+	slices.SortFunc(functions, func(a, b manifestbuilder.Function) int {
+		if byApp := strings.Compare(a.App, b.App); byApp != 0 {
+			return byApp
+		}
+		return strings.Compare(a.Name, b.Name)
+	})
 	return functions, nil
 }
 
-func collectAppFunctions(outputDir, appDir, app string) ([]manifestbuilder.Function, error) {
+func collectAppFunctions(outputDir, appDir string) ([]manifestbuilder.Function, error) {
 	functionsDir := filepath.Join(appDir, functionsDirName)
 	if _, err := os.Stat(functionsDir); err != nil {
 		if errors.Is(err, fs.ErrNotExist) {
@@ -223,7 +228,7 @@ func collectAppFunctions(outputDir, appDir, app string) ([]manifestbuilder.Funct
 			return nil
 		}
 
-		fn, err := readFunction(outputDir, functionsDir, dir, app)
+		fn, err := readFunction(outputDir, functionsDir, dir)
 		if err != nil {
 			return err
 		}
@@ -236,7 +241,7 @@ func collectAppFunctions(outputDir, appDir, app string) ([]manifestbuilder.Funct
 	return functions, nil
 }
 
-func readFunction(outputDir, functionsDir, funcDir, app string) (manifestbuilder.Function, error) {
+func readFunction(outputDir, functionsDir, funcDir string) (manifestbuilder.Function, error) {
 	routeRel, err := filepath.Rel(functionsDir, funcDir)
 	if err != nil {
 		return manifestbuilder.Function{}, err
@@ -245,7 +250,7 @@ func readFunction(outputDir, functionsDir, funcDir, app string) (manifestbuilder
 	if err != nil {
 		return manifestbuilder.Function{}, err
 	}
-	name := app + "/" + strings.TrimSuffix(filepath.ToSlash(routeRel), funcDirSuffix)
+	route := strings.TrimSuffix(filepath.ToSlash(routeRel), funcDirSuffix)
 
 	configPath := filepath.Join(funcDir, configFileName)
 	data, err := os.ReadFile(configPath)
@@ -265,7 +270,7 @@ func readFunction(outputDir, functionsDir, funcDir, app string) (manifestbuilder
 	}
 
 	return manifestbuilder.Function{
-		Name:         name,
+		Name:         route,
 		Runtime:      fc.Runtime,
 		Handler:      fc.Handler,
 		ArtifactPath: filepath.ToSlash(artifactRel),
