@@ -53,9 +53,14 @@ type parsedTemplate struct {
 			} `yaml:"PublicAccessBlockConfiguration"`
 			LifecycleConfiguration struct {
 				Rules []struct {
-					Id                             string `yaml:"Id"`
-					Status                         string `yaml:"Status"`
-					ExpirationInDays               int    `yaml:"ExpirationInDays"`
+					Id                          string `yaml:"Id"`
+					Status                      string `yaml:"Status"`
+					ExpirationInDays            int    `yaml:"ExpirationInDays"`
+					ExpiredObjectDeleteMarker   bool   `yaml:"ExpiredObjectDeleteMarker"`
+					NoncurrentVersionExpiration struct {
+						NoncurrentDays          int `yaml:"NoncurrentDays"`
+						NewerNoncurrentVersions int `yaml:"NewerNoncurrentVersions"`
+					} `yaml:"NoncurrentVersionExpiration"`
 					AbortIncompleteMultipartUpload struct {
 						DaysAfterInitiation int `yaml:"DaysAfterInitiation"`
 					} `yaml:"AbortIncompleteMultipartUpload"`
@@ -165,6 +170,52 @@ func TestStackTemplate(t *testing.T) {
 			t.Errorf("%s output = %q, want %d", outputVersion, got, RequiredBootstrapVersion)
 		}
 	})
+}
+
+func TestStateBucketReclaimsNoncurrentVersions(t *testing.T) {
+	for _, tc := range []struct {
+		name     string
+		template string
+	}{
+		{"production", stackTemplate(edge.TrustExternal, fixtureArtifacts(), RequiredBootstrapVersion)},
+		{"preview", previewStackTemplate(edge.TrustExternal, fixtureArtifacts(), RequiredBootstrapVersion)},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			tmpl := parseTemplateStr(t, tc.template)
+
+			bucket, ok := tmpl.Resources["StateBucket"]
+			if !ok {
+				t.Fatal("template is missing the StateBucket resource")
+			}
+
+			rules := bucket.Properties.LifecycleConfiguration.Rules
+			if len(rules) != 1 {
+				t.Fatalf("StateBucket lifecycle rules = %d, want exactly 1", len(rules))
+			}
+			rule := rules[0]
+			if rule.Status != "Enabled" {
+				t.Errorf("lifecycle rule Status = %q, want Enabled", rule.Status)
+			}
+			if rule.NoncurrentVersionExpiration.NoncurrentDays != stateNoncurrentDays {
+				t.Errorf("NoncurrentDays = %d, want %d", rule.NoncurrentVersionExpiration.NoncurrentDays, stateNoncurrentDays)
+			}
+			if rule.NoncurrentVersionExpiration.NewerNoncurrentVersions != stateNoncurrentKeepNewer {
+				t.Errorf("NewerNoncurrentVersions = %d, want %d", rule.NoncurrentVersionExpiration.NewerNoncurrentVersions, stateNoncurrentKeepNewer)
+			}
+			if !rule.ExpiredObjectDeleteMarker {
+				t.Error("ExpiredObjectDeleteMarker = false, want true: delete markers left behind keep the versions they hide")
+			}
+			if rule.AbortIncompleteMultipartUpload.DaysAfterInitiation != stateAbortMultipartDays {
+				t.Errorf("AbortIncompleteMultipartUpload = %d, want %d", rule.AbortIncompleteMultipartUpload.DaysAfterInitiation, stateAbortMultipartDays)
+			}
+
+			// A rule may not carry both a current-version expiry and the
+			// delete-marker sweep; CloudFormation rejects the combination.
+			if rule.ExpirationInDays != 0 {
+				t.Errorf("ExpirationInDays = %d, want 0: state checkpoints are current versions and must not expire", rule.ExpirationInDays)
+			}
+		})
+	}
 }
 
 func TestArtifactBucket(t *testing.T) {
