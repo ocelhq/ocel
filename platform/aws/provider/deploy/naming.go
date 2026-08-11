@@ -40,7 +40,9 @@ func safeName(logicalName string) string {
 		name = "a" + name
 	}
 	if len(name) > maxSafeNamePrefixLen {
-		name = strings.TrimRight(name[:maxSafeNamePrefixLen], "-")
+		sum := sha256.Sum256([]byte(logicalName))
+		suffix := "-" + hex.EncodeToString(sum[:])[:8]
+		name = strings.TrimRight(name[:maxSafeNamePrefixLen-len(suffix)], "-") + suffix
 	}
 	return name
 }
