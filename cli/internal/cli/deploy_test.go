@@ -387,7 +387,7 @@ export default {
 		waitForNoStaleSocket(t, sockPath)
 	})
 
-	t.Run("the preflight carries the slug when production domains are declared", func(t *testing.T) {
+	t.Run("declared domains carry the slug", func(t *testing.T) {
 		d := defaultDeps()
 		setLoggedIn(&d)
 		stubAppFunctions(&d, nil)
@@ -411,7 +411,7 @@ export default {
 		waitForNoStaleSocket(t, sockPath)
 	})
 
-	t.Run("--yes leaves the slug out of the preflight", func(t *testing.T) {
+	t.Run("--yes leaves the slug out", func(t *testing.T) {
 		d := defaultDeps()
 		setLoggedIn(&d)
 		stubAppFunctions(&d, nil)
@@ -430,7 +430,7 @@ export default {
 		waitForNoStaleSocket(t, sockPath)
 	})
 
-	t.Run("a non-TTY stdin leaves the slug out of the preflight", func(t *testing.T) {
+	t.Run("a non-TTY stdin leaves the slug out", func(t *testing.T) {
 		d := defaultDeps()
 		setLoggedIn(&d)
 		stubAppFunctions(&d, nil)
@@ -448,7 +448,7 @@ export default {
 		waitForNoStaleSocket(t, sockPath)
 	})
 
-	t.Run("an interactive deploy warns about the other projects on the backend", func(t *testing.T) {
+	t.Run("an interactive deploy warns about other projects", func(t *testing.T) {
 		d := defaultDeps()
 		setLoggedIn(&d)
 		stubAppFunctions(&d, nil)
