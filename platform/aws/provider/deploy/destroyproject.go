@@ -221,7 +221,7 @@ func projectISRPrefix(env, slug string) string {
 const skipTeardownRefreshEnv = "OCEL_SKIP_TEARDOWN_REFRESH"
 
 func skipTeardownRefresh() bool {
-	switch os.Getenv(skipTeardownRefreshEnv) {
+	switch strings.ToLower(os.Getenv(skipTeardownRefreshEnv)) {
 	case "1", "true":
 		return true
 	}
