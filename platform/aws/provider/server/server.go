@@ -48,52 +48,60 @@ type Server struct {
 
 type memo struct {
 	mu       sync.Mutex
-	deployed map[string]*deployedEntry
-	identity map[string]*identityEntry
+	deployed map[string]*entry[bootstrap.Deployed]
+	identity map[string]*entry[callerIdentity]
 
 	edgeOnce sync.Once
 	edge     edge.Provider
 }
 
-type deployedEntry struct {
-	once  sync.Once
-	value bootstrap.Deployed
-	err   error
+type entry[T any] struct {
+	mu     sync.Mutex
+	filled bool
+	value  T
 }
 
-type identityEntry struct {
-	once  sync.Once
-	value callerIdentity
-	err   error
+func (e *entry[T]) resolve(fn func() (T, error)) (T, error) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	if e.filled {
+		return e.value, nil
+	}
+	v, err := fn()
+	if err != nil {
+		var zero T
+		return zero, err
+	}
+	e.value, e.filled = v, true
+	return v, nil
 }
 
-func (m *memo) deployedFor(region string, preview bool) *deployedEntry {
-	key := fmt.Sprintf("%s|%t", region, preview)
+func entryFor[T any](m *memo, table *map[string]*entry[T], key string) *entry[T] {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	if m.deployed == nil {
-		m.deployed = make(map[string]*deployedEntry)
+	if *table == nil {
+		*table = make(map[string]*entry[T])
 	}
-	e, ok := m.deployed[key]
+	e, ok := (*table)[key]
 	if !ok {
-		e = &deployedEntry{}
-		m.deployed[key] = e
+		e = &entry[T]{}
+		(*table)[key] = e
 	}
 	return e
 }
 
-func (m *memo) identityFor(region string) *identityEntry {
+func (m *memo) deployedFor(region string, preview bool) *entry[bootstrap.Deployed] {
+	return entryFor(m, &m.deployed, fmt.Sprintf("%s|%t", region, preview))
+}
+
+func (m *memo) identityFor(region string) *entry[callerIdentity] {
+	return entryFor(m, &m.identity, region)
+}
+
+func (m *memo) forgetDeployed() {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	if m.identity == nil {
-		m.identity = make(map[string]*identityEntry)
-	}
-	e, ok := m.identity[region]
-	if !ok {
-		e = &identityEntry{}
-		m.identity[region] = e
-	}
-	return e
+	m.deployed = nil
 }
 
 func (s *Server) edge() edge.Provider {
@@ -102,15 +110,15 @@ func (s *Server) edge() edge.Provider {
 }
 
 func (s *Server) deployed(ctx context.Context, api bootstrap.CFNDescriber, region string, preview bool) (bootstrap.Deployed, error) {
-	e := s.memo.deployedFor(region, preview)
-	e.once.Do(func() { e.value, e.err = checkBootstrap(ctx, api, preview) })
-	return e.value, e.err
+	return s.memo.deployedFor(region, preview).resolve(func() (bootstrap.Deployed, error) {
+		return checkBootstrap(ctx, api, preview)
+	})
 }
 
 func (s *Server) callerIdentity(ctx context.Context, api STSAPI, region string) (callerIdentity, error) {
-	e := s.memo.identityFor(region)
-	e.once.Do(func() { e.value, e.err = getCallerIdentity(ctx, api) })
-	return e.value, e.err
+	return s.memo.identityFor(region).resolve(func() (callerIdentity, error) {
+		return getCallerIdentity(ctx, api)
+	})
 }
 
 func stackName(slug string, env *deploymentsv1.Environment) string {
@@ -377,18 +385,31 @@ func (s *Server) Bootstrap(ctx context.Context, req *deploymentsv1.BootstrapRequ
 		return stream.Send(failureResult(compat.Explain(deployed.Version, bootstrap.RequiredBootstrapVersion, bootstrapCommand(preview))))
 	}
 
-	run := bootstrap.Run
-	if preview {
-		run = bootstrap.RunPreview
-	}
 	artifact := bootstrap.Artifacts{
 		Source: bootstrap.ReleaseSource{},
 		Store:  s3.NewFromConfig(awscfg),
 	}
-	if err := run(ctx, cfn, ssmClient, iamClient, cloudflare.New(), artifact, progress, logf); err != nil {
+	if err := s.runBootstrap(ctx, bootstrapRunner(preview), cfn, ssmClient, iamClient, artifact, progress, logf); err != nil {
 		return stream.Send(failureResult(err))
 	}
 	return stream.Send(okResult())
+}
+
+type bootstrapRun func(ctx context.Context, cfn bootstrap.CFNAPI, ssmClient bootstrap.SSMAPI, iamClient bootstrap.IAMAPI, edgeProvider edge.Provider, artifact bootstrap.Artifacts, progress, log func(string)) error
+
+func bootstrapRunner(preview bool) bootstrapRun {
+	if preview {
+		return bootstrap.RunPreview
+	}
+	return bootstrap.Run
+}
+
+func (s *Server) runBootstrap(ctx context.Context, run bootstrapRun, cfn bootstrap.CFNAPI, ssmClient bootstrap.SSMAPI, iamClient bootstrap.IAMAPI, artifact bootstrap.Artifacts, progress, logf func(string)) error {
+	if err := run(ctx, cfn, ssmClient, iamClient, cloudflare.New(), artifact, progress, logf); err != nil {
+		return err
+	}
+	s.memo.forgetDeployed()
+	return nil
 }
 
 func bootstrapCommand(preview bool) string {
