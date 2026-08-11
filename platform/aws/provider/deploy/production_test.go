@@ -11,6 +11,9 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/pulumi/pulumi/sdk/v3/go/common/resource/config"
+	"github.com/pulumi/pulumi/sdk/v3/go/common/workspace"
+
 	"github.com/ocelhq/ocel/pkg/naming"
 	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/resources/v1"
@@ -142,8 +145,8 @@ func TestRootStackSpecs(t *testing.T) {
 			t.Fatalf("specs = %d, want 1 for the whole project", len(specs))
 		}
 		spec := specs[0]
-		if spec.GenericName != "ocel-proj--preview" {
-			t.Errorf("GenericName = %q, want ocel-proj--preview", spec.GenericName)
+		if spec.GenericName != previewWorkerName("proj") {
+			t.Errorf("GenericName = %q, want %q", spec.GenericName, previewWorkerName("proj"))
 		}
 		if !slicesEqual(spec.Domains, []string{"*.preview.acme.com"}) {
 			t.Errorf("Domains = %v, want the declared wildcard", spec.Domains)
@@ -154,8 +157,8 @@ func TestRootStackSpecs(t *testing.T) {
 		if spec.RequiredRecord != "" {
 			t.Errorf("RequiredRecord = %q, want empty: the project owns the base domain, so Ocel plants the record", spec.RequiredRecord)
 		}
-		if spec.PruneWorkerStem != previewWorkerName("proj") {
-			t.Errorf("PruneWorkerStem = %q, want %q", spec.PruneWorkerStem, previewWorkerName("proj"))
+		if spec.PruneWorkerStem != previewWorkerStem("proj") {
+			t.Errorf("PruneWorkerStem = %q, want %q", spec.PruneWorkerStem, previewWorkerStem("proj"))
 		}
 		if spec.Generic.Vars[envPreview] != "1" {
 			t.Errorf("Vars[%s] = %q, want 1", envPreview, spec.Generic.Vars[envPreview])
@@ -488,21 +491,6 @@ func TestWorkerAppURL(t *testing.T) {
 	}
 }
 
-func TestPreviewWorkerName(t *testing.T) {
-	t.Parallel()
-
-	t.Run("project scoped and distinct from production", func(t *testing.T) {
-		t.Parallel()
-		name := previewWorkerName("shop")
-		if want := "ocel-shop--preview"; name != want {
-			t.Fatalf("previewWorkerName = %q, want %q", name, want)
-		}
-		if prod := workerScriptName("shop", "prod", "web"); prod == name || strings.HasPrefix(prod, name) {
-			t.Errorf("production worker %q collides with the preview worker %q", prod, name)
-		}
-	})
-}
-
 func TestPreviewAppNames(t *testing.T) {
 	t.Parallel()
 
@@ -520,35 +508,6 @@ func TestPreviewAppNames(t *testing.T) {
 			t.Errorf("previewAppNames(nil) = %q, want empty", got)
 		}
 	})
-}
-
-func TestProjectOwnsWorker(t *testing.T) {
-	t.Parallel()
-	cases := []struct {
-		name   string
-		slug   string
-		script string
-		want   bool
-	}{
-		{"its own preview worker", "shop", previewWorkerName("shop"), true},
-		{"its own production worker", "shop", workerScriptName("shop", "prod", "web"), true},
-		{"another project's preview worker", "shop", previewWorkerName("other"), false},
-		{"a hand-made worker", "shop", "my-worker", false},
-		{"a sibling whose slug merely starts with ours", "shop", previewWorkerName("shopfoo"), false},
-		{"a sibling whose slug extends ours by a segment", "shop", previewWorkerName("shop-preview"), false},
-		{"that sibling's production worker", "shop", workerScriptName("shop-preview", "prod", "web"), false},
-		{"and ours is not theirs either", "shop-preview", previewWorkerName("shop"), false},
-		{"no slug recognises nothing", "", previewWorkerName("shop"), false},
-		{"no script", "shop", "", false},
-	}
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			t.Parallel()
-			if got := ProjectOwnsWorker(tc.slug, tc.script); got != tc.want {
-				t.Errorf("ProjectOwnsWorker(%q, %q) = %v, want %v", tc.slug, tc.script, got, tc.want)
-			}
-		})
-	}
 }
 
 func varsManifest(variables ...*deploymentsv1.ManifestVariable) *deploymentsv1.Manifest {
@@ -791,25 +750,27 @@ func TestBuildDeploymentRecord(t *testing.T) {
 		}
 	})
 
-	t.Run("the build keys the bytes", func(t *testing.T) {
+	t.Run("the release keys the bytes", func(t *testing.T) {
 		t.Parallel()
 		cfg := Config{ArtifactRoot: edgeAppTree(t), Env: "prod", Edge: testLoaderEdge()}
 		manifest := nextManifest()
 		app := &deploymentsv1.ManifestApp{Name: "web", Framework: frameworkNext}
-		id := fingerprinted("WEB1", "fp1")
+		builds := releaseBuilds(t, cfg, manifest, "fp1")
+		id := builds.identities["web"]
 
-		record, err := buildDeploymentRecord(cfg, manifest, app, id, nil, appBuildsFor(t, cfg, manifest))
+		record, err := buildDeploymentRecord(cfg, manifest, app, id, nil, builds)
 		if err != nil {
 			t.Fatalf("buildDeploymentRecord: %v", err)
 		}
-		if want := "assets/proj/web/WEB1"; record.AssetPrefix != want {
-			t.Errorf("AssetPrefix = %q, want %q — static assets stay keyed by the build id", record.AssetPrefix, want)
+		root := "prod/proj/web/" + releaseOf(id).String() + "/"
+		if want := root + "assets"; record.AssetPrefix != want {
+			t.Errorf("AssetPrefix = %q, want %q", record.AssetPrefix, want)
 		}
-		if want := "prod/proj/web/WEB1"; record.IsrPrefix != want {
+		if want := root + "isr"; record.IsrPrefix != want {
 			t.Errorf("IsrPrefix = %q, want %q", record.IsrPrefix, want)
 		}
-		if want := "edge/proj/web/WEB1/bundle.json"; record.EdgeWorkers.BundleKey != want {
-			t.Errorf("BundleKey = %q, want %q — two Deployments of one build share an edge bundle", record.EdgeWorkers.BundleKey, want)
+		if want := root + "edge/bundle.json"; record.EdgeWorkers.BundleKey != want {
+			t.Errorf("BundleKey = %q, want %q — one release, one prefix", record.EdgeWorkers.BundleKey, want)
 		}
 	})
 
@@ -1039,14 +1000,19 @@ func TestFinalizeDeploy(t *testing.T) {
 		cfg := Config{ArtifactRoot: edgeAppTree(t), Env: "prod", Edge: testLoaderEdge()}
 		manifest := nextManifest()
 		app := &deploymentsv1.ManifestApp{Name: "web", Framework: frameworkNext}
-		ids := []Identity{buildOnly("WEB1"), fingerprinted("WEB1", "fp2"), fingerprinted("WEB1", "fp3")}
+		fingerprints := []string{"", "fp2", "fp3"}
+		ids := make([]Identity, len(fingerprints))
+		prefixes := map[string]bool{}
 
 		fake := &recordingRootStack{}
 		ctx := context.Background()
 		specs := []edge.RootStackSpec{{Version: "v1"}}
 		var state edge.RootStackState
-		for i, id := range ids {
-			record, err := buildDeploymentRecord(cfg, manifest, app, id, nil, appBuildsFor(t, cfg, manifest))
+		for i, fingerprint := range fingerprints {
+			builds := releaseBuilds(t, cfg, manifest, fingerprint)
+			id := builds.identities["web"]
+			ids[i] = id
+			record, err := buildDeploymentRecord(cfg, manifest, app, id, nil, builds)
 			if err != nil {
 				t.Fatalf("buildDeploymentRecord: %v", err)
 			}
@@ -1055,6 +1021,7 @@ func TestFinalizeDeploy(t *testing.T) {
 				t.Fatalf("finalizeDeploy %d: %v", i+1, err)
 			}
 			state = next
+			prefixes[record.AssetPrefix] = true
 		}
 
 		if len(fake.staged) != 3 || len(fake.promotions) != 3 {
@@ -1075,15 +1042,19 @@ func TestFinalizeDeploy(t *testing.T) {
 			t.Errorf("app-deploy stack names = %v, want three distinct ones", names)
 		}
 
+		if len(prefixes) != 3 {
+			t.Errorf("asset prefixes = %v, want one per release", prefixes)
+		}
 		for i, record := range fake.staged {
-			if want := "assets/proj/web/WEB1"; record.AssetPrefix != want {
-				t.Errorf("staged[%d].AssetPrefix = %q, want %q on every rotation", i, record.AssetPrefix, want)
-			}
-			if want := "prod/proj/web/WEB1"; record.IsrPrefix != want {
-				t.Errorf("staged[%d].IsrPrefix = %q, want %q on every rotation", i, record.IsrPrefix, want)
-			}
-			if want := "edge/proj/web/WEB1/bundle.json"; record.EdgeWorkers.BundleKey != want {
-				t.Errorf("staged[%d].EdgeWorkers.BundleKey = %q, want %q on every rotation", i, record.EdgeWorkers.BundleKey, want)
+			root := "prod/proj/web/" + releaseOf(ids[i]).String() + "/"
+			for name, key := range map[string]string{
+				"AssetPrefix":           record.AssetPrefix,
+				"IsrPrefix":             record.IsrPrefix,
+				"EdgeWorkers.BundleKey": record.EdgeWorkers.BundleKey,
+			} {
+				if !strings.HasPrefix(key, root) {
+					t.Errorf("staged[%d].%s = %q, want it under this release's prefix %q", i, name, key, root)
+				}
 			}
 		}
 	})
@@ -1305,7 +1276,7 @@ func TestReconcileRootStack(t *testing.T) {
 	})
 }
 
-func TestAssignIdentities(t *testing.T) {
+func TestResolvedIdentities(t *testing.T) {
 	t.Parallel()
 
 	cases := []struct {
@@ -1329,10 +1300,11 @@ func TestAssignIdentities(t *testing.T) {
 				Apps: []*deploymentsv1.ManifestApp{{Name: "web", Framework: frameworkNext}},
 			}
 
-			ids, err := assignIdentities(cfg, manifest, tc.bundles, appBuildsFor(t, cfg, manifest))
+			builds, err := resolveAppBuilds(cfg, manifest, tc.bundles)
 			if err != nil {
-				t.Fatalf("assignIdentities: %v", err)
+				t.Fatalf("resolveAppBuilds: %v", err)
 			}
+			ids := builds.identities
 			if got := ids["web"]; got != tc.want {
 				t.Errorf("identities[web] = %+v, want %+v", got, tc.want)
 			}
@@ -1350,10 +1322,11 @@ func TestAssignIdentities(t *testing.T) {
 		}
 
 		cfg := Config{ArtifactRoot: t.TempDir()}
-		ids, err := assignIdentities(cfg, manifest, nil, appBuildsFor(t, cfg, manifest))
+		builds, err := resolveAppBuilds(cfg, manifest, nil)
 		if err != nil {
-			t.Fatalf("assignIdentities: %v", err)
+			t.Fatalf("resolveAppBuilds: %v", err)
 		}
+		ids := builds.identities
 		if ids["api"].BuildID() == "" {
 			t.Error("identities[api] carries no build id")
 		}
@@ -1370,4 +1343,138 @@ func specsArtifactRoot(t *testing.T, manifest *deploymentsv1.Manifest) string {
 		writeRoutingManifest(t, root, app.GetName(), `{"buildId":"b1"}`)
 	}
 	return root
+}
+
+func TestStackTags(t *testing.T) {
+	t.Parallel()
+
+	release := naming.NewRelease("B1", "abc123")
+
+	t.Run("an app stack carries every fact constant across it", func(t *testing.T) {
+		t.Parallel()
+
+		cfg := Config{Slug: "shop", Class: deploymentsv1.Environment_CLASS_PRODUCTION}
+		stack := naming.AppStack("prod", "web", release)
+
+		tags := stackTags(cfg, stack, "p7", "B1")
+
+		want := map[string]string{
+			"ocel:managed-by": managedBy(),
+			"ocel:project":    "shop",
+			"ocel:env":        "prod",
+			"ocel:env-class":  "production",
+			"ocel:app":        "web",
+			"ocel:release":    release.String(),
+			"ocel:build":      "B1",
+			"ocel:promotion":  "p7",
+			"ocel:stack":      stack.String(),
+		}
+		if !reflect.DeepEqual(tags, want) {
+			t.Errorf("stackTags = %v, want %v", tags, want)
+		}
+	})
+
+	t.Run("together with the resource's own tags the set is complete", func(t *testing.T) {
+		t.Parallel()
+
+		cfg := Config{Slug: "shop", Class: deploymentsv1.Environment_CLASS_PREVIEW, ExpiresAt: 1760000000}
+		stack := naming.AppStack("pr-7", "web", release)
+
+		keys := map[string]bool{}
+		for key := range stackTags(cfg, stack, "p7", "B1") {
+			keys[key] = true
+		}
+		for key := range resourceTags(naming.KindFunction, "/api/users") {
+			keys[key] = true
+		}
+
+		for _, key := range []string{
+			"ocel:managed-by", "ocel:project", "ocel:env", "ocel:env-class", "ocel:app",
+			"ocel:release", "ocel:build", "ocel:promotion", "ocel:component", "ocel:route",
+			"ocel:stack", "ocel:expires-at",
+		} {
+			if !keys[key] {
+				t.Errorf("no resource carries %s", key)
+			}
+		}
+	})
+
+	t.Run("a preview is classed as such and stamped with its expiry", func(t *testing.T) {
+		t.Parallel()
+
+		cfg := Config{Slug: "shop", Class: deploymentsv1.Environment_CLASS_PREVIEW, ExpiresAt: 1760000000}
+
+		tags := stackTags(cfg, naming.AppStack("pr-7", "web", release), "p7", "B1")
+
+		if got, want := tags["ocel:env-class"], "preview"; got != want {
+			t.Errorf("ocel:env-class = %q, want %q", got, want)
+		}
+		if got, want := tags["ocel:expires-at"], "1760000000"; got != want {
+			t.Errorf("ocel:expires-at = %q, want %q", got, want)
+		}
+	})
+
+	t.Run("the infra stack names itself and claims no release or build", func(t *testing.T) {
+		t.Parallel()
+
+		cfg := Config{Slug: "shop", Class: deploymentsv1.Environment_CLASS_PRODUCTION}
+
+		tags := stackTags(cfg, naming.InfraStack("prod"), "p7", "")
+
+		if got, want := tags["ocel:stack"], "prod--infra"; got != want {
+			t.Errorf("ocel:stack = %q, want %q", got, want)
+		}
+		for _, key := range []string{"ocel:release", "ocel:build", "ocel:route", "ocel:component"} {
+			if _, ok := tags[key]; ok {
+				t.Errorf("infra stack carries %s = %q, want it absent", key, tags[key])
+			}
+		}
+	})
+
+	t.Run("managed-by names the tool and a version AWS accepts in a tag", func(t *testing.T) {
+		t.Parallel()
+
+		got := managedBy()
+		if !strings.HasPrefix(got, "ocel-cli/") {
+			t.Fatalf("managedBy = %q, want an ocel-cli/<version>", got)
+		}
+		for _, r := range got {
+			switch {
+			case r >= 'a' && r <= 'z', r >= 'A' && r <= 'Z', r >= '0' && r <= '9':
+			case strings.ContainsRune("+-=._:/@ ", r):
+			default:
+				t.Errorf("managedBy = %q, has %q which AWS rejects in a tag value", got, r)
+			}
+		}
+	})
+}
+
+func TestDefaultTagsReachTheWholeProgram(t *testing.T) {
+	t.Parallel()
+
+	encoded, err := json.Marshal(map[string]map[string]string{"tags": {
+		"ocel:project":    "shop",
+		"ocel:expires-at": "1760000000",
+	}})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	settings := &workspace.ProjectStack{Config: config.Map{
+		config.MustMakeKey("aws", "defaultTags"): config.NewObjectValue(string(encoded)),
+	}}
+	path := filepath.Join(t.TempDir(), "Pulumi.prod--web--r3f8a1c9.yaml")
+	if err := settings.Save(path); err != nil {
+		t.Fatalf("save stack settings: %v", err)
+	}
+
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{"aws:defaultTags", "ocel:project: shop", `ocel:expires-at: "1760000000"`} {
+		if !strings.Contains(string(raw), want) {
+			t.Errorf("stack settings\n%s\nmissing %q", raw, want)
+		}
+	}
 }

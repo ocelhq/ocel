@@ -41,9 +41,16 @@ const (
 
 	functionURLAuthIAM = "AWS_IAM"
 
-	tagApp     = "ocel:app"
-	tagEnv     = "ocel:env"
-	tagProject = "ocel:project"
+	tagComponent = "ocel:component"
+	tagRoute     = "ocel:route"
+
+	roleLocalName = "app"
+
+	lambdaServicePrincipal = "lambda.amazonaws.com"
+
+	maxDescriptionLen = 256
+
+	maxRoleNameLen = 64
 
 	functionURLInvokeModeStream = "RESPONSE_STREAM"
 
@@ -162,15 +169,47 @@ func translateFunction(fn *deploymentsv1.ManifestFunction) functionArgs {
 	}
 }
 
-func ocelTags(app, env, project string) pulumi.StringMap {
-	tags := pulumi.StringMap{tagApp: pulumi.String(app)}
-	if env != "" {
-		tags[tagEnv] = pulumi.String(env)
+func functionCoordinate(project string, stack naming.StackName, logicalName string) naming.Coordinate {
+	return naming.Coordinate{
+		Project: project,
+		Env:     stack.Env,
+		App:     stack.App,
+		Kind:    naming.KindFunction,
+		Name:    logicalLocalName(logicalName),
+		Release: stack.Release,
 	}
-	if project != "" {
-		tags[tagProject] = pulumi.String(project)
+}
+
+func roleCoordinate(project string, stack naming.StackName) naming.Coordinate {
+	return naming.Coordinate{
+		Project: project,
+		Env:     stack.Env,
+		App:     stack.App,
+		Kind:    naming.KindRole,
+		Name:    naming.Join(naming.WordSeparator, roleLocalName, string(naming.KindRole)),
+		Release: stack.Release,
+	}
+}
+
+func logicalLocalName(logicalName string) string {
+	fields := strings.Split(logicalName, naming.FieldSeparator)
+	return fields[len(fields)-1]
+}
+
+func resourceTags(kind naming.Kind, route string) pulumi.StringMap {
+	tags := pulumi.StringMap{tagComponent: pulumi.String(kind.Component())}
+	if route != "" {
+		tags[tagRoute] = pulumi.String(route)
 	}
 	return tags
+}
+
+func describe(c naming.Coordinate, detail string) pulumi.String {
+	described := c.Description(detail + " — release " + c.Release.String())
+	if len(described) > maxDescriptionLen {
+		described = strings.ToValidUTF8(described[:maxDescriptionLen], "")
+	}
+	return pulumi.String(described)
 }
 
 func functionEnvKey(rt resourcesv1.ResourceType, id string) string {
@@ -234,13 +273,18 @@ func appExecutionRole(cfg Config, app string, caches map[string]*isrConfig, bund
 	return role
 }
 
-func newFunctionRole(ctx *pulumi.Context, r executionRole) (*iam.Role, error) {
-	name := "ocel-fn-" + naming.SanitizeAlpha(r.App)
-	role, err := newServiceRole(ctx, name, "lambda.amazonaws.com", nil)
+func newFunctionRole(ctx *pulumi.Context, coord naming.Coordinate, r executionRole) (*iam.Role, error) {
+	id := naming.ResourceID(naming.KindRole, roleLocalName)
+	role, err := iam.NewRole(ctx, id, &iam.RoleArgs{
+		Name:             pulumi.String(coord.PhysicalName(maxRoleNameLen)),
+		Description:      describe(coord, "execution role for this app's functions"),
+		AssumeRolePolicy: pulumi.String(assumeRolePolicy(lambdaServicePrincipal)),
+		Tags:             resourceTags(coord.Kind, ""),
+	})
 	if err != nil {
 		return nil, err
 	}
-	if _, err := iam.NewRolePolicyAttachment(ctx, name+"-logs", &iam.RolePolicyAttachmentArgs{
+	if _, err := iam.NewRolePolicyAttachment(ctx, naming.ResourceID(naming.KindRole, roleLocalName, "policy", "logs"), &iam.RolePolicyAttachmentArgs{
 		Role:      role.Name,
 		PolicyArn: pulumi.String("arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"),
 	}); err != nil {
@@ -251,7 +295,7 @@ func newFunctionRole(ctx *pulumi.Context, r executionRole) (*iam.Role, error) {
 		if err != nil {
 			return nil, err
 		}
-		if _, err := iam.NewRolePolicy(ctx, name+"-isr", &iam.RolePolicyArgs{
+		if _, err := iam.NewRolePolicy(ctx, naming.ResourceID(naming.KindRole, roleLocalName, "policy", "isr", "cache"), &iam.RolePolicyArgs{
 			Role:   role.Name,
 			Policy: pulumi.String(policy),
 		}); err != nil {
@@ -262,7 +306,7 @@ func newFunctionRole(ctx *pulumi.Context, r executionRole) (*iam.Role, error) {
 	if err != nil {
 		return nil, err
 	}
-	if _, err := iam.NewRolePolicy(ctx, name+"-vars", &iam.RolePolicyArgs{
+	if _, err := iam.NewRolePolicy(ctx, naming.ResourceID(naming.KindRole, roleLocalName, "policy", "vars", "read"), &iam.RolePolicyArgs{
 		Role:   role.Name,
 		Policy: pulumi.String(varsPolicy),
 	}); err != nil {
@@ -282,27 +326,32 @@ func functionEnv(base map[string]string, args functionArgs, isr *isrConfig) map[
 	return env
 }
 
-func registerFunction(ctx *pulumi.Context, logicalName string, tags pulumi.StringMap, args functionArgs, artifact artifactRef, base map[string]string, isr *isrConfig, roleArn pulumi.StringInput) error {
+func registerFunction(ctx *pulumi.Context, logicalName string, coord naming.Coordinate, route string, args functionArgs, artifact artifactRef, base map[string]string, isr *isrConfig, roleArn pulumi.StringInput) error {
 	env := pulumi.StringMap{}
 	for key, value := range functionEnv(base, args, isr) {
 		env[key] = pulumi.String(value)
 	}
 
-	resourceName := lambdaResourceName(logicalName)
+	resourceName := naming.ResourceID(naming.KindFunction, coord.Name)
+	if route == "" {
+		route = naming.PathSeparator + coord.Name
+	}
 
 	fn, err := lambda.NewFunction(ctx, resourceName, &lambda.FunctionArgs{
-		Runtime:    pulumi.String(args.Runtime),
-		Handler:    pulumi.String(lambdaConfigHandler),
-		Role:       roleArn,
-		S3Bucket:   pulumi.String(artifact.Bucket),
-		S3Key:      pulumi.String(artifact.Key),
-		MemorySize: pulumi.Int(args.MemorySizeMB),
-		Timeout:    pulumi.Int(args.TimeoutSeconds),
+		Name:        pulumi.String(coord.PhysicalName(maxLambdaNameLen)),
+		Description: describe(coord, "route "+route),
+		Runtime:     pulumi.String(args.Runtime),
+		Handler:     pulumi.String(lambdaConfigHandler),
+		Role:        roleArn,
+		S3Bucket:    pulumi.String(artifact.Bucket),
+		S3Key:       pulumi.String(artifact.Key),
+		MemorySize:  pulumi.Int(args.MemorySizeMB),
+		Timeout:     pulumi.Int(args.TimeoutSeconds),
 		Environment: &lambda.FunctionEnvironmentArgs{
 			Variables: env,
 		},
 
-		Tags: tags,
+		Tags: resourceTags(coord.Kind, route),
 
 		Layers: pulumi.StringArray{
 			pulumi.String(membraneLayerARN()),
@@ -312,7 +361,7 @@ func registerFunction(ctx *pulumi.Context, logicalName string, tags pulumi.Strin
 		return err
 	}
 
-	url, err := lambda.NewFunctionUrl(ctx, resourceName+"-url", &lambda.FunctionUrlArgs{
+	url, err := lambda.NewFunctionUrl(ctx, naming.ResourceID(naming.KindFunction, coord.Name, "url"), &lambda.FunctionUrlArgs{
 		FunctionName:      fn.Name,
 		AuthorizationType: pulumi.String(functionURLAuthIAM),
 		InvokeMode:        pulumi.String(functionURLInvokeModeStream),
