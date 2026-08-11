@@ -28,8 +28,8 @@ var linkOpts linkOptions
 
 var linkCmd = &cobra.Command{
 	Use:   "link [project]",
-	Short: "Link this directory to an Ocel Cloud project",
-	Long: "Records this working tree's Ocel Cloud project in .ocel/link.json,\n" +
+	Short: "Link this directory to an Ocel console project",
+	Long: "Records this working tree's console project in .ocel/link.json,\n" +
 		"which is untracked — a clone can be linked to a different account or\n" +
 		"project, or to none at all.\n\n" +
 		"With no arguments on a terminal, pick from your existing projects or\n" +
@@ -130,10 +130,10 @@ func ensureLinked(ctx context.Context, projectDir, apiURL string, stdout, stderr
 	}
 
 	if !isReaderTTY(stdin) {
-		return nil, fmt.Errorf("%s isn't linked to an Ocel Cloud project — run `ocel link <project>` (or `ocel link --create`) first", projectDir)
+		return nil, fmt.Errorf("%s isn't linked to a console project — run `ocel link <project>` (or `ocel link --create`) first", projectDir)
 	}
 
-	fmt.Fprintln(stdout, "This directory isn't linked to an Ocel Cloud project yet.")
+	fmt.Fprintln(stdout, "This directory isn't linked to a console project yet.")
 	if err := runLink(ctx, projectDir, "", linkOptions{apiURL: apiURL}, stdout, stderr, stdin); err != nil {
 		return nil, err
 	}

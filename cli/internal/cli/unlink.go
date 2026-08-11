@@ -12,9 +12,9 @@ import (
 
 var unlinkCmd = &cobra.Command{
 	Use:   "unlink",
-	Short: "Remove this directory's Ocel Cloud link",
+	Short: "Remove this directory's Ocel console link",
 	Long: "Removes .ocel/link.json, leaving this working tree associated with no\n" +
-		"Ocel Cloud project. Nothing on the control plane is deleted.",
+		"console project. Nothing on the control plane is deleted.",
 	Args: cobra.NoArgs,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		cwd, err := os.Getwd()
@@ -31,7 +31,7 @@ func runUnlink(projectDir string, stdout io.Writer) error {
 		return err
 	}
 	if !removed {
-		fmt.Fprintln(stdout, "This directory isn't linked to an Ocel Cloud project.")
+		fmt.Fprintln(stdout, "This directory isn't linked to a console project.")
 		return nil
 	}
 	fmt.Fprintln(stdout, "✓ Unlinked.")
