@@ -5,6 +5,7 @@
   name what a human types, never what the code contains.
 - The commits are the ADRs. Rationale belongs in the commit message and PR bodies. Nowhere else.
 - There is no perfect approach, only trade-offs. Surface them when making decisions.
+- Do not generate changesets unless explicitly instructed.
 
 ## About Ocel
 
