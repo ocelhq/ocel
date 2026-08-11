@@ -6,6 +6,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/pulumi/pulumi/sdk/v3/go/auto/optdestroy"
+
 	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
 )
 
@@ -30,6 +32,40 @@ func TestLockRecoveryHint(t *testing.T) {
 		}
 		if got := lockRecoveryHint(nil, cfg); got != "" {
 			t.Errorf("hint on no error = %q, want empty", got)
+		}
+	})
+}
+
+func TestDestroyOptions(t *testing.T) {
+	t.Parallel()
+
+	applied := func(cfg TeardownConfig, w *lineForwarder) optdestroy.Options {
+		var opts optdestroy.Options
+		for _, o := range destroyOptions(cfg, w) {
+			o.ApplyOption(&opts)
+		}
+		return opts
+	}
+
+	t.Run("refreshes unless the caller vouches for the state", func(t *testing.T) {
+		t.Parallel()
+
+		if !applied(TeardownConfig{}, nil).Refresh {
+			t.Error("a zero TeardownConfig skipped the refresh: an unvouched-for stack must reconcile before it deletes")
+		}
+		if applied(TeardownConfig{SkipRefresh: true}, nil).Refresh {
+			t.Error("SkipRefresh still refreshed")
+		}
+	})
+
+	t.Run("streams progress only when there is somewhere to send it", func(t *testing.T) {
+		t.Parallel()
+
+		if got := applied(TeardownConfig{}, nil).ProgressStreams; len(got) != 0 {
+			t.Errorf("progress streams = %v, want none with no log sink", got)
+		}
+		if got := applied(TeardownConfig{}, lineWriter(func(string) {})).ProgressStreams; len(got) != 1 {
+			t.Errorf("progress streams = %v, want the log sink attached", got)
 		}
 	})
 }

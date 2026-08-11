@@ -37,7 +37,13 @@ type DestroyProjectResult struct {
 	RootTornDown bool
 }
 
+func destroyPhased(appStacks, infraStacks []string, destroyApp, destroyInfra func(string) error) []error {
+	errs := runBounded(teardownConcurrency, appStacks, destroyApp)
+	return append(errs, runBounded(teardownConcurrency, infraStacks, destroyInfra)...)
+}
+
 func DestroyProject(ctx context.Context, stack edge.RootStack, state edge.RootStackState, cfg Config, slug string, progress, log func(string)) (DestroyProjectResult, error) {
+	progress, log = serializeReports(progress, log)
 	report := nilSafe(progress)
 
 	var errs []error
@@ -65,19 +71,25 @@ func DestroyProject(ctx context.Context, stack edge.RootStack, state edge.RootSt
 		errs = append(errs, err)
 	}
 
-	for _, name := range plan.AppStacks {
-		report("Destroying app stack " + name)
-		if err := Destroy(ctx, teardownConfig(cfg, name), progress, log); err != nil {
-			errs = append(errs, fmt.Errorf("destroy app stack %s: %w", name, err))
-		}
-	}
-
+	var infraStacks []string
 	if plan.InfraStack != "" {
-		report("Destroying infra stack " + plan.InfraStack + " (databases, buckets)")
-		if err := Destroy(ctx, teardownConfig(cfg, plan.InfraStack), progress, log); err != nil {
-			errs = append(errs, fmt.Errorf("destroy infra stack %s: %w", plan.InfraStack, err))
-		}
+		infraStacks = []string{plan.InfraStack}
 	}
+	errs = append(errs, destroyPhased(plan.AppStacks, infraStacks,
+		func(name string) error {
+			report("Destroying app stack " + name)
+			if err := Destroy(ctx, teardownConfig(cfg, name), progress, log); err != nil {
+				return fmt.Errorf("destroy app stack %s: %w", name, err)
+			}
+			return nil
+		},
+		func(name string) error {
+			report("Destroying infra stack " + name + " (databases, buckets)")
+			if err := Destroy(ctx, teardownConfig(cfg, name), progress, log); err != nil {
+				return fmt.Errorf("destroy infra stack %s: %w", name, err)
+			}
+			return nil
+		})...)
 
 	if err := purgeProjectValues(ctx, cfg, slug, report); err != nil {
 		errs = append(errs, err)
@@ -167,11 +179,7 @@ func purgeProjectAssets(ctx context.Context, cfg Config, slug string) error {
 	assets := projectAssetR2Prefix(slug)
 	isr := projectISRPrefix(cfg.Env, slug)
 	var errs []error
-	for _, t := range []struct {
-		deleter PrefixDeleter
-		bucket  string
-		prefix  string
-	}{
+	for _, t := range []prefixTarget{
 		{asPrefixDeleter(cfg.CacheStoreUploader), cfg.CacheStoreBucket, assets},
 		{asPrefixDeleter(cfg.CacheStoreUploader), cfg.CacheStoreBucket, projectEdgeR2Prefix(slug)},
 		{asPrefixDeleter(cfg.CacheStoreUploader), cfg.CacheStoreBucket, isr},

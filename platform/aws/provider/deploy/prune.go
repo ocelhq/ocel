@@ -134,32 +134,44 @@ func asPrefixDeleter(up ArtifactUploader) PrefixDeleter {
 }
 
 func Reclaim(ctx context.Context, cfg Config, targets []PruneTarget, progress, log func(string)) error {
-	var errs []error
-	for _, t := range targets {
+	progress, log = serializeReports(progress, log)
+	return errors.Join(runBounded(teardownConcurrency, targets, func(t PruneTarget) error {
 		if progress != nil {
 			progress(fmt.Sprintf("Reclaiming %s deployment %s", t.App, t.Identity))
 		}
-		errs = append(errs, reclaimTarget(ctx, cfg, t, progress, log))
-	}
-	return errors.Join(errs...)
+		return reclaimTarget(ctx, cfg, t, progress, log)
+	})...)
+}
+
+type prefixTarget struct {
+	deleter PrefixDeleter
+	bucket  string
+	prefix  string
 }
 
 func reclaimTarget(ctx context.Context, cfg Config, t PruneTarget, progress, log func(string)) error {
-	if err := Destroy(ctx, teardownConfig(cfg, t.Stack), progress, log); err != nil {
+	teardown := teardownConfig(cfg, t.Stack)
+	teardown.SkipRefresh = true
+	if err := Destroy(ctx, teardown, progress, log); err != nil {
 		return fmt.Errorf("destroy app-deploy stack %s: %w", t.Stack, err)
 	}
 
-	var errs []error
-	for _, p := range []string{t.AssetPrefix, t.CachePrefix, t.EdgePrefix} {
-		errs = append(errs, deletePrefix(ctx, asPrefixDeleter(cfg.CacheStoreUploader), cfg.CacheStoreBucket, p))
-	}
-	for _, p := range []string{t.AssetPrefix, t.ImageConfigKey, t.CachePrefix} {
-		errs = append(errs, deletePrefix(ctx, asPrefixDeleter(cfg.Uploader), cfg.AssetBucket, p))
+	cacheStore, account := asPrefixDeleter(cfg.CacheStoreUploader), asPrefixDeleter(cfg.Uploader)
+	reclaims := make([]func() error, 0, 7)
+	for _, d := range []prefixTarget{
+		{cacheStore, cfg.CacheStoreBucket, t.AssetPrefix},
+		{cacheStore, cfg.CacheStoreBucket, t.CachePrefix},
+		{cacheStore, cfg.CacheStoreBucket, t.EdgePrefix},
+		{account, cfg.AssetBucket, t.AssetPrefix},
+		{account, cfg.AssetBucket, t.ImageConfigKey},
+		{account, cfg.AssetBucket, t.CachePrefix},
+	} {
+		reclaims = append(reclaims, func() error { return deletePrefix(ctx, d.deleter, d.bucket, d.prefix) })
 	}
 	if t.CachePrefix != "" {
-		errs = append(errs, retireISRWriter(ctx, cfg, t.CachePrefix))
+		reclaims = append(reclaims, func() error { return retireISRWriter(ctx, cfg, t.CachePrefix) })
 	}
-	return errors.Join(errs...)
+	return errors.Join(runBounded(len(reclaims), reclaims, func(run func() error) error { return run() })...)
 }
 
 func Prune(ctx context.Context, stack edge.RootStack, state edge.RootStackState, cfg Config, slug string, keepN int, pointer string, progress, log func(string)) (edge.PruneResult, error) {

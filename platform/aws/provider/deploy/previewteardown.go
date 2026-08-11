@@ -92,6 +92,7 @@ func classifyPreviewStacks(slug string, stackNames []string) PreviewProjectTeard
 }
 
 func DestroyPreviewProject(ctx context.Context, stack edge.RootStack, state edge.RootStackState, cfg Config, slug string, progress, log func(string)) (DestroyProjectResult, error) {
+	progress, log = serializeReports(progress, log)
 	report := nilSafe(progress)
 
 	plan, err := planPreviewProjectTeardown(ctx, cfg, slug)
@@ -120,18 +121,21 @@ func DestroyPreviewProject(ctx context.Context, stack edge.RootStack, state edge
 		}
 	}
 
-	for _, name := range plan.AppStacks {
-		report("Destroying preview app stack " + name)
-		if err := Destroy(ctx, teardownConfig(cfg, name), progress, log); err != nil {
-			errs = append(errs, fmt.Errorf("destroy preview app stack %s: %w", name, err))
-		}
-	}
-	for _, name := range plan.InfraStacks {
-		report("Destroying preview infra stack " + name + " (database, bucket)")
-		if err := Destroy(ctx, teardownConfig(cfg, name), progress, log); err != nil {
-			errs = append(errs, fmt.Errorf("destroy preview infra stack %s: %w", name, err))
-		}
-	}
+	errs = append(errs, destroyPhased(plan.AppStacks, plan.InfraStacks,
+		func(name string) error {
+			report("Destroying preview app stack " + name)
+			if err := Destroy(ctx, teardownConfig(cfg, name), progress, log); err != nil {
+				return fmt.Errorf("destroy preview app stack %s: %w", name, err)
+			}
+			return nil
+		},
+		func(name string) error {
+			report("Destroying preview infra stack " + name + " (database, bucket)")
+			if err := Destroy(ctx, teardownConfig(cfg, name), progress, log); err != nil {
+				return fmt.Errorf("destroy preview infra stack %s: %w", name, err)
+			}
+			return nil
+		})...)
 
 	if err := purgeProjectValues(ctx, cfg, slug, report); err != nil {
 		errs = append(errs, err)

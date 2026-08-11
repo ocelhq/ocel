@@ -2,8 +2,13 @@ package deploy
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"reflect"
+	"sync"
+	"sync/atomic"
 	"testing"
+	"time"
 
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
@@ -149,6 +154,112 @@ func TestClassifyProjectStacks(t *testing.T) {
 		got := classifyProjectStacks("shop", nil)
 		if got.InfraStack != "" || len(got.AppStacks) != 0 {
 			t.Fatalf("classifyProjectStacks(nil) = %+v, want empty plan", got)
+		}
+	})
+}
+
+func TestDestroyPhased(t *testing.T) {
+	t.Parallel()
+
+	t.Run("no infra stack starts before every app stack has finished", func(t *testing.T) {
+		t.Parallel()
+
+		var mu sync.Mutex
+		var running, finished int
+		var phases []string
+		errs := destroyPhased(
+			[]string{"a1", "a2", "a3", "a4", "a5", "a6"}, []string{"i1", "i2"},
+			func(name string) error {
+				mu.Lock()
+				running++
+				phases = append(phases, "app")
+				mu.Unlock()
+				time.Sleep(time.Millisecond)
+				mu.Lock()
+				running--
+				finished++
+				mu.Unlock()
+				return nil
+			},
+			func(name string) error {
+				mu.Lock()
+				defer mu.Unlock()
+				phases = append(phases, "infra")
+				if running != 0 || finished != 6 {
+					return fmt.Errorf("infra stack %s started with %d app stacks in flight and %d done", name, running, finished)
+				}
+				return nil
+			})
+
+		if err := errors.Join(errs...); err != nil {
+			t.Fatalf("destroyPhased crossed the phase barrier: %v", err)
+		}
+		if want := []string{"app", "app", "app", "app", "app", "app", "infra", "infra"}; !reflect.DeepEqual(phases, want) {
+			t.Errorf("phase order = %v, want %v", phases, want)
+		}
+	})
+
+	t.Run("stacks within a phase overlap up to the limit", func(t *testing.T) {
+		t.Parallel()
+
+		var inFlight, peak atomic.Int64
+		full := make(chan struct{})
+		var once sync.Once
+		overlap := func(name string) error {
+			n := inFlight.Add(1)
+			defer inFlight.Add(-1)
+			for {
+				peaked := peak.Load()
+				if n <= peaked || peak.CompareAndSwap(peaked, n) {
+					break
+				}
+			}
+			if n == teardownConcurrency {
+				once.Do(func() { close(full) })
+			}
+			select {
+			case <-full:
+				return nil
+			case <-time.After(5 * time.Second):
+				once.Do(func() { close(full) })
+				return fmt.Errorf("%s ran without %d stacks in flight: the phase is serialized", name, teardownConcurrency)
+			}
+		}
+
+		stacks := make([]string, teardownConcurrency*3)
+		for i := range stacks {
+			stacks[i] = fmt.Sprintf("shop--web--b%d", i)
+		}
+		if err := errors.Join(destroyPhased(stacks, nil, overlap, nil)...); err != nil {
+			t.Fatal(err)
+		}
+		if got := peak.Load(); got > teardownConcurrency {
+			t.Errorf("peak stacks in flight = %d, want at most %d", got, teardownConcurrency)
+		}
+	})
+
+	t.Run("failures aggregate in stack order however they interleave", func(t *testing.T) {
+		t.Parallel()
+
+		apps := []string{"a1", "a2", "a3", "a4", "a5", "a6", "a7", "a8"}
+		infra := []string{"i1", "i2"}
+		want := make([]string, 0, len(apps)+len(infra))
+		for _, name := range append(append([]string{}, apps...), infra...) {
+			want = append(want, "destroy "+name)
+		}
+
+		fail := func(name string) error {
+			time.Sleep(time.Duration(len(name)%3) * time.Millisecond)
+			return fmt.Errorf("destroy %s", name)
+		}
+		for range 20 {
+			var got []string
+			for _, err := range destroyPhased(apps, infra, fail, fail) {
+				got = append(got, err.Error())
+			}
+			if !reflect.DeepEqual(got, want) {
+				t.Fatalf("aggregated failures = %v, want %v", got, want)
+			}
 		}
 	})
 }
