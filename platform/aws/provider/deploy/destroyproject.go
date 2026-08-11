@@ -123,8 +123,6 @@ func purgeProjectValues(ctx context.Context, cfg Config, slug string, report fun
 }
 
 func rootStackWorkerNames(ctx context.Context, stack edge.RootStack, state edge.RootStackState, slug, env string) ([]string, error) {
-	prodStack := slug + "-" + env
-
 	history, err := stack.History(ctx, state, "")
 	if err != nil {
 		return nil, err
@@ -149,13 +147,16 @@ func rootStackWorkerNames(ctx context.Context, stack edge.RootStack, state edge.
 		names = append(names, name)
 	}
 
-	add(legacyWorkerName(prodStack))
-	add(workerScriptName(slug, env, "root"))
 	sortedApps := make([]string, 0, len(apps))
 	for app := range apps {
 		sortedApps = append(sortedApps, app)
 	}
 	slices.Sort(sortedApps)
+
+	for _, name := range retiredWorkerNames(slug, env, sortedApps) {
+		add(name)
+	}
+	add(rootWorkerName(slug, env))
 	for _, app := range sortedApps {
 		add(workerScriptName(slug, env, app))
 	}

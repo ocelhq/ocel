@@ -136,8 +136,8 @@ func TestDomainClaims(t *testing.T) {
 	t.Run("answers in request order, naming the owning script", func(t *testing.T) {
 		t.Parallel()
 		owner := routeOwners(map[string]string{
-			"*.preview.app.com/*": "ocel-other--preview",
-			"shop.com/*":          "ocel-shop--prod-web",
+			"*.preview.app.com/*": "ocel--other--preview--root",
+			"shop.com/*":          "ocel--shop--prod--web",
 		}, nil)
 
 		got := domainClaims(context.Background(), owner, "shop", []string{"*.preview.app.com", "free.com", "shop.com"})
@@ -145,7 +145,7 @@ func TestDomainClaims(t *testing.T) {
 		if len(got) != 3 {
 			t.Fatalf("claims = %d, want one per requested hostname", len(got))
 		}
-		if got[0].GetHostname() != "*.preview.app.com" || got[0].GetStatus() != deploymentsv1.DomainClaim_STATUS_CLAIMED || got[0].GetOwner() != "ocel-other--preview" {
+		if got[0].GetHostname() != "*.preview.app.com" || got[0].GetStatus() != deploymentsv1.DomainClaim_STATUS_CLAIMED || got[0].GetOwner() != "ocel--other--preview--root" {
 			t.Errorf("claim[0] = %+v, want another project's worker reported as the owner", got[0])
 		}
 		if got[1].GetHostname() != "free.com" || got[1].GetStatus() != deploymentsv1.DomainClaim_STATUS_UNCLAIMED || got[1].GetOwner() != "" {
@@ -153,6 +153,16 @@ func TestDomainClaims(t *testing.T) {
 		}
 		if got[2].GetStatus() != deploymentsv1.DomainClaim_STATUS_UNCLAIMED || got[2].GetOwner() != "" {
 			t.Errorf("claim[2] = %+v, want this project's own hold to read as free to take", got[2])
+		}
+	})
+
+	t.Run("a hold under this project's retired name is still its own", func(t *testing.T) {
+		t.Parallel()
+		owner := routeOwners(map[string]string{"shop.com/*": "ocel-shop--prod-web"}, nil)
+
+		got := domainClaims(context.Background(), owner, "shop", []string{"shop.com"})
+		if len(got) != 1 || got[0].GetStatus() != deploymentsv1.DomainClaim_STATUS_UNCLAIMED {
+			t.Errorf("claims = %+v, want the pre-cutover hold to read as free to take", got)
 		}
 	})
 

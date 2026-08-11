@@ -110,21 +110,36 @@ func TestPreviewProjectWorkers(t *testing.T) {
 	t.Run("reclaims the whole worker family", func(t *testing.T) {
 		t.Parallel()
 		got := previewProjectWorkers("shop", []string{
-			previewWorkerName("shop") + "-web",
+			previewWorkerStem("shop") + "--web",
 			previewWorkerName("shop"),
-			previewWorkerName("shop") + "-api",
+			previewWorkerStem("shop") + "--api",
 		})
-		want := []string{"ocel-shop--preview", "ocel-shop--preview-api", "ocel-shop--preview-web"}
+		want := []string{
+			"ocel--shop--preview--api",
+			"ocel--shop--preview--root",
+			"ocel--shop--preview--web",
+			"ocel-shop--preview",
+		}
 		if !reflect.DeepEqual(got, want) {
 			t.Errorf("workers = %v, want %v", got, want)
 		}
 	})
 
-	t.Run("an empty list still reclaims the entrypoint", func(t *testing.T) {
+	t.Run("an empty list still reclaims both entrypoints", func(t *testing.T) {
 		t.Parallel()
 		got := previewProjectWorkers("shop", nil)
-		if !reflect.DeepEqual(got, []string{"ocel-shop--preview"}) {
-			t.Errorf("workers = %v, want just the entrypoint worker", got)
+		want := []string{"ocel--shop--preview--root", "ocel-shop--preview"}
+		if !reflect.DeepEqual(got, want) {
+			t.Errorf("workers = %v, want the current and retired entrypoints", got)
+		}
+	})
+
+	t.Run("reclaims the retired family so the cutover strands nothing", func(t *testing.T) {
+		t.Parallel()
+		got := previewProjectWorkers("shop", []string{"ocel-shop--preview-web"})
+		want := []string{"ocel--shop--preview--root", "ocel-shop--preview", "ocel-shop--preview-web"}
+		if !reflect.DeepEqual(got, want) {
+			t.Errorf("workers = %v, want %v", got, want)
 		}
 	})
 
@@ -132,13 +147,13 @@ func TestPreviewProjectWorkers(t *testing.T) {
 		t.Parallel()
 		got := previewProjectWorkers("shop", []string{
 			previewWorkerName("shopfoo"),
-			previewWorkerName("other") + "-web",
-			"ocel-shop--preview-web",
-			"ocel-shop--previewer",
-			"ocel-shop-preview--prod-web",
+			previewWorkerStem("other") + "--web",
+			"ocel--shop--previewer",
+			"ocel--shop-preview--prod--web",
 			workerScriptName("shop", "prod", "web"),
+			"my-worker",
 		})
-		want := []string{"ocel-shop--preview", "ocel-shop--preview-web"}
+		want := []string{"ocel--shop--preview--root", "ocel-shop--preview"}
 		if !reflect.DeepEqual(got, want) {
 			t.Errorf("workers = %v, want %v", got, want)
 		}
@@ -146,7 +161,7 @@ func TestPreviewProjectWorkers(t *testing.T) {
 
 	t.Run("no slug names nothing", func(t *testing.T) {
 		t.Parallel()
-		if got := previewProjectWorkers("", []string{"ocel-shop--preview"}); got != nil {
+		if got := previewProjectWorkers("", []string{"ocel--shop--preview--root"}); got != nil {
 			t.Errorf("workers = %v, want none for a project with no slug", got)
 		}
 	})

@@ -90,10 +90,15 @@ func DestroyPreviewProject(ctx context.Context, stack edge.RootStack, state edge
 	if stack != nil && len(state) > 0 {
 		report("Destroying the preview root workers")
 		stateSlug := state[edge.RootStackKeySlug]
-		deployed, err := stack.ListDeployedWorkers(ctx, previewWorkerName(stateSlug))
-		if err != nil {
-			errs = append(errs, fmt.Errorf("list preview root workers: %w", err))
-			result.RootTornDown = false
+		var deployed []string
+		for _, stem := range previewWorkerStems(stateSlug) {
+			under, err := stack.ListDeployedWorkers(ctx, stem)
+			if err != nil {
+				errs = append(errs, fmt.Errorf("list preview root workers under %q: %w", stem, err))
+				result.RootTornDown = false
+				continue
+			}
+			deployed = append(deployed, under...)
 		}
 		if err := stack.DestroyRootStack(ctx, previewProjectWorkers(stateSlug, deployed)); err != nil {
 			errs = append(errs, fmt.Errorf("destroy preview root workers: %w", err))
@@ -138,15 +143,24 @@ func DestroyPreviewProject(ctx context.Context, stack edge.RootStack, state edge
 	return result, errors.Join(errs...)
 }
 
-func previewProjectWorkers(slug string, deployed []string) []string {
-	stem := previewWorkerName(slug)
-	if slug == "" || stem == "" {
+func previewWorkerStems(slug string) []string {
+	if slug == "" {
 		return nil
 	}
-	names := []string{stem}
+	return []string{previewWorkerStem(slug), retiredPreviewWorkerStem(slug)}
+}
+
+func previewProjectWorkers(slug string, deployed []string) []string {
+	stems := previewWorkerStems(slug)
+	if len(stems) == 0 {
+		return nil
+	}
+	names := []string{previewWorkerName(slug), retiredPreviewWorkerStem(slug)}
 	for _, name := range deployed {
-		if edge.NameUnderStem(stem, name) && !slices.Contains(names, name) {
-			names = append(names, name)
+		for _, stem := range stems {
+			if edge.NameUnderStem(stem, name) && !slices.Contains(names, name) {
+				names = append(names, name)
+			}
 		}
 	}
 	slices.Sort(names)

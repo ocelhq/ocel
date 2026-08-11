@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"testing"
 
@@ -23,34 +24,15 @@ func fnOutput(logicalName, url string) *deploymentsv1.ResourceOutput {
 	}
 }
 
-func TestSanitizeWorkerName(t *testing.T) {
-	cases := []struct {
-		name string
-		in   string
-		want string
-	}{
-		{"underscores and uppercase collapse to lowercase hyphens", "ocel-proj_ABC-prod", "ocel-proj-abc-prod"},
-		{"dots become hyphens", "ocel-Proj.123", "ocel-proj-123"},
-		{"leading and trailing separators are trimmed", "--weird__name--", "weird-name"},
-		{"empty falls back to the default worker name", "", "ocel-worker"},
-		{"an all-separator name falls back to the default worker name", "////", "ocel-worker"},
-	}
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			t.Parallel()
-			if got := sanitizeWorkerName(tc.in); got != tc.want {
-				t.Errorf("sanitizeWorkerName(%q) = %q, want %q", tc.in, got, tc.want)
-			}
-		})
-	}
+func TestWorkerOutputName(t *testing.T) {
+	t.Parallel()
 
-	t.Run("clamps to 63 chars", func(t *testing.T) {
-		t.Parallel()
-		long := strings.Repeat("a", 100)
-		if got := sanitizeWorkerName(long); len(got) != 63 {
-			t.Errorf("expected clamp to 63 chars, got %d", len(got))
+	cases := map[string]string{"web": "web-worker", "Web_1": "web-1-worker"}
+	for in, want := range cases {
+		if got := workerOutputName(in); got != want {
+			t.Errorf("workerOutputName(%q) = %q, want %q", in, got, want)
 		}
-	})
+	}
 }
 
 type recordingEdge struct {
@@ -152,8 +134,8 @@ func TestDeployEdgeWorker(t *testing.T) {
 		}
 
 		up := fake.only(t)
-		if up.Name != "ocel-proj-1--prod-web" {
-			t.Errorf("Name = %q, want ocel-proj-1--prod-web", up.Name)
+		if up.Name != "ocel--proj-1--prod--web" {
+			t.Errorf("Name = %q, want ocel--proj-1--prod--web", up.Name)
 		}
 		if string(up.Worker.Main.Content) != "export default {}" {
 			t.Errorf("Main content = %q", up.Worker.Main.Content)
@@ -167,7 +149,7 @@ func TestDeployEdgeWorker(t *testing.T) {
 		if len(up.Worker.Assets) != 1 || up.Worker.Assets[0].Path != "/next.svg" {
 			t.Errorf("expected the static asset, got %v", up.Worker.Assets)
 		}
-		if len(out) != 1 || out[0].GetFunction().GetUrl() != "https://ocel-proj-1--prod-web.acme.workers.dev" {
+		if len(out) != 1 || out[0].GetFunction().GetUrl() != "https://ocel--proj-1--prod--web.acme.workers.dev" {
 			t.Errorf("expected the worker URL output, got %v", out)
 		}
 	})
@@ -326,7 +308,7 @@ func TestDeployEdgeWorker(t *testing.T) {
 			t.Fatalf("deployEdgeWorker: %v", err)
 		}
 
-		want := []string{"ocel-proj--prod-web", "ocel-proj--prod-docs"}
+		want := []string{"ocel--proj--prod--web", "ocel--proj--prod--docs"}
 		if got := fake.names(); !slicesEqual(got, want) {
 			t.Fatalf("deployed script names = %v, want %v", got, want)
 		}
@@ -334,8 +316,8 @@ func TestDeployEdgeWorker(t *testing.T) {
 			t.Fatalf("expected one output per worker, got %v", out)
 		}
 		if got := appURLs(manifest, append(outputs, out...)); !slicesEqual(got, []string{
-			"https://ocel-proj--prod-web.acme.workers.dev",
-			"https://ocel-proj--prod-docs.acme.workers.dev",
+			"https://ocel--proj--prod--web.acme.workers.dev",
+			"https://ocel--proj--prod--docs.acme.workers.dev",
 		}) {
 			t.Errorf("appURLs = %v, want both worker URLs", got)
 		}
@@ -353,7 +335,7 @@ func TestDeployEdgeWorker(t *testing.T) {
 			t.Fatalf("deployEdgeWorker: %v", err)
 		}
 
-		want := map[string][]string{"ocel-proj--prod-web": {"web.acme.com"}, "ocel-proj--prod-docs": {"docs.acme.com"}}
+		want := map[string][]string{"ocel--proj--prod--web": {"web.acme.com"}, "ocel--proj--prod--docs": {"docs.acme.com"}}
 		for _, d := range fake.deployed {
 			if !slicesEqual(d.Domains, want[d.Name]) {
 				t.Errorf("%s Domains = %v, want %v", d.Name, d.Domains, want[d.Name])
@@ -394,7 +376,7 @@ func TestDeployEdgeWorker(t *testing.T) {
 			t.Errorf("Domains = %v, want the project-level domain", got)
 		}
 		if got := appURLs(manifest, append(outputs, out...)); !slicesEqual(got, []string{
-			"https://ocel-proj--prod-web.acme.workers.dev",
+			"https://ocel--proj--prod--web.acme.workers.dev",
 			"https://api-fn.lambda-url.aws/",
 		}) {
 			t.Errorf("appURLs = %v", got)
@@ -428,12 +410,12 @@ func TestDeployEdgeWorker(t *testing.T) {
 		manifest.GetApps()[0].Domains = classDomains("production", "web.acme.com")
 
 		fake := &recordingEdge{}
-		cfg := Config{Edge: fake, ArtifactRoot: artifactRoot, Slug: "proj", Env: "preview-pr-7", Class: deploymentsv1.Environment_CLASS_PREVIEW}
+		cfg := Config{Edge: fake, ArtifactRoot: artifactRoot, Slug: "proj", Env: "pr-7", Class: deploymentsv1.Environment_CLASS_PREVIEW}
 		if _, err := deployEdgeWorker(context.Background(), cfg, manifest, outputs, nil); err != nil {
 			t.Fatalf("deployEdgeWorker: %v", err)
 		}
 
-		want := []string{"ocel-proj--preview-pr-7-web", "ocel-proj--preview-pr-7-docs"}
+		want := []string{"ocel--proj--pr-7--web", "ocel--proj--pr-7--docs"}
 		if got := fake.names(); !slicesEqual(got, want) {
 			t.Fatalf("deployed script names = %v, want %v", got, want)
 		}
@@ -456,7 +438,7 @@ func TestDeployEdgeWorker(t *testing.T) {
 
 		var warned string
 		for _, m := range msgs {
-			if strings.Contains(m, "ocel-proj-prod") && !strings.Contains(m, "ocel-proj--prod-") {
+			if strings.Contains(m, "ocel-proj-prod") && !strings.Contains(m, "ocel--proj--prod--") {
 				warned = m
 			}
 		}
@@ -550,7 +532,7 @@ func TestDeployEdgeWorker(t *testing.T) {
 		if _, err := deployEdgeWorker(context.Background(), Config{Edge: fake, ArtifactRoot: artifactRoot, Slug: "proj", Env: "prod"}, manifest, outputs, nil); err != nil {
 			t.Fatalf("deployEdgeWorker: %v", err)
 		}
-		if got := fake.names(); !slicesEqual(got, []string{"ocel-proj--prod-web"}) {
+		if got := fake.names(); !slicesEqual(got, []string{"ocel--proj--prod--web"}) {
 			t.Errorf("deployed = %v, want only the app that emitted functions", got)
 		}
 	})
@@ -582,26 +564,97 @@ func TestDeployResolver(t *testing.T) {
 	})
 }
 
-func TestWorkerScriptName(t *testing.T) {
-	t.Run("the app segment survives truncation", func(t *testing.T) {
-		slug := strings.Repeat("verylongproject", 5)
-		web := workerScriptName(slug, "prod", "web")
-		docs := workerScriptName(slug, "prod", "docs")
+var truncationMarker = regexp.MustCompile(`-x[0-9a-f]{8}$`)
 
-		for _, name := range []string{web, docs} {
+func TestWorkerScriptName(t *testing.T) {
+	t.Run("every boundary is one field separator", func(t *testing.T) {
+		t.Parallel()
+		if got, want := workerScriptName("shop", "prod", "web"), "ocel--shop--prod--web"; got != want {
+			t.Errorf("workerScriptName = %q, want %q", got, want)
+		}
+		if got, want := rootWorkerName("shop", "prod"), "ocel--shop--prod--root"; got != want {
+			t.Errorf("rootWorkerName = %q, want %q", got, want)
+		}
+		if got, want := previewWorkerName("shop"), "ocel--shop--preview--root"; got != want {
+			t.Errorf("previewWorkerName = %q, want %q", got, want)
+		}
+		if got := workerScriptName("shop", "prod", "web"); truncationMarker.MatchString(got) {
+			t.Errorf("%q is marked truncated but fits", got)
+		}
+	})
+
+	t.Run("environments that differ past the truncation point keep distinct names", func(t *testing.T) {
+		t.Parallel()
+		slug := strings.Repeat("verylongproject", 5)
+		short := workerScriptName(slug, "pr-7", "web")
+		long := workerScriptName(slug, "pr-71", "web")
+
+		for _, name := range []string{short, long} {
 			if len(name) > maxWorkerNameLen {
 				t.Errorf("%q is %d chars, over the %d-char limit", name, len(name), maxWorkerNameLen)
 			}
+			if !truncationMarker.MatchString(name) {
+				t.Errorf("%q was truncated without saying so", name)
+			}
 		}
-		if !strings.HasSuffix(web, "-web") || !strings.HasSuffix(docs, "-docs") {
-			t.Errorf("app segment was truncated away: %q, %q", web, docs)
+		if short == long {
+			t.Fatalf("pr-7 and pr-71 deploy over one another as %q", short)
 		}
-		if web == docs {
+	})
+
+	t.Run("apps in one environment keep distinct names", func(t *testing.T) {
+		t.Parallel()
+		slug := strings.Repeat("verylongproject", 5)
+		if web, docs := workerScriptName(slug, "prod", "web"), workerScriptName(slug, "prod", "docs"); web == docs {
 			t.Fatalf("two apps collided on one script name: %q", web)
 		}
-		t.Logf("web  = %s (%d)", web, len(web))
-		t.Logf("docs = %s (%d)", docs, len(docs))
 	})
+}
+
+func TestProjectWorkerStems(t *testing.T) {
+	t.Parallel()
+
+	t.Run("a project owns both its own and its retired names", func(t *testing.T) {
+		t.Parallel()
+		cases := []struct {
+			script string
+			want   bool
+		}{
+			{workerScriptName("shop", "prod", "web"), true},
+			{previewWorkerName("shop"), true},
+			{"ocel-shop--prod-web", true},
+			{"ocel-shop--preview", true},
+			{workerScriptName("shopfoo", "prod", "web"), false},
+			{workerScriptName("shop-preview", "prod", "web"), false},
+			{"my-worker", false},
+		}
+		for _, tc := range cases {
+			if got := ProjectOwnsWorker("shop", tc.script); got != tc.want {
+				t.Errorf("ProjectOwnsWorker(shop, %q) = %v, want %v", tc.script, got, tc.want)
+			}
+		}
+	})
+
+	t.Run("the preview family sits under its own stem", func(t *testing.T) {
+		t.Parallel()
+		stem := previewWorkerStem("shop")
+		if !edge.NameUnderStem(stem, previewWorkerName("shop")) {
+			t.Errorf("%q is not under the preview stem %q", previewWorkerName("shop"), stem)
+		}
+		if edge.NameUnderStem(stem, rootWorkerName("shop", "prod")) {
+			t.Errorf("the production root worker sits under the preview stem %q", stem)
+		}
+	})
+}
+
+func TestRetiredWorkerNames(t *testing.T) {
+	t.Parallel()
+
+	got := retiredWorkerNames("shop", "prod", []string{"web"})
+	want := []string{"ocel-shop-prod", "ocel-shop--prod-root", "ocel-shop--prod-web"}
+	if !slicesEqual(got, want) {
+		t.Errorf("retiredWorkerNames = %v, want %v", got, want)
+	}
 }
 
 func writeRoutingManifest(t *testing.T, artifactRoot, app, content string) string {
