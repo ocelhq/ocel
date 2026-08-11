@@ -46,13 +46,13 @@ func TestRootStackWorkerNames(t *testing.T) {
 			t.Fatalf("rootStackWorkerNames: %v", err)
 		}
 
-		prod := "proj_x-prod"
-		for _, want := range []string{
-			legacyWorkerName(prod),
-			workerScriptName("proj_x", "prod", "root"),
+		want := []string{
+			rootWorkerName("proj_x", "prod"),
 			workerScriptName("proj_x", "prod", "web"),
 			workerScriptName("proj_x", "prod", "api"),
-		} {
+		}
+		want = append(want, retiredWorkerNames("proj_x", "prod", []string{"api", "web"})...)
+		for _, want := range want {
 			if !contains(names, want) {
 				t.Errorf("worker names %v missing %q", names, want)
 			}

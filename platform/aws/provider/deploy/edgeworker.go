@@ -8,12 +8,13 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/ocelhq/ocel/pkg/naming"
 	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
 func workerOutputName(app string) string {
-	return sanitizeWorkerName(app) + "-worker"
+	return naming.Join(naming.WordSeparator, app, string(naming.KindWorker))
 }
 
 func deployEdgeWorker(ctx context.Context, cfg Config, manifest *deploymentsv1.Manifest, outputs []*deploymentsv1.ResourceOutput, progress func(string)) ([]*deploymentsv1.ResourceOutput, error) {
@@ -238,34 +239,64 @@ func quotedList(names []string) string {
 	return strings.Join(quoted[:len(quoted)-1], ", ") + " and " + quoted[len(quoted)-1]
 }
 
-const maxWorkerNameLen = 63
+const (
+	maxWorkerNameLen = 63
+	workerNamespace  = "ocel"
+	previewWorkerEnv = "preview"
+	rootWorkerApp    = "root"
+)
 
 func projectWorkerStem(slug string) string {
-	return sanitizeWorkerName("ocel-"+slug) + "--"
+	return naming.Join(naming.FieldSeparator, workerNamespace, slug) + naming.FieldSeparator
 }
 
 func workerScriptName(slug, env, app string) string {
-	appSegment := sanitizeWorkerName(app)
-	budget := maxWorkerNameLen - len(appSegment) - 1
-	if budget <= 0 {
-		return appSegment
-	}
-	stackSegment := clamp(projectWorkerStem(slug)+sanitizeWorkerName(env), budget)
-	if stackSegment == "" {
-		return appSegment
-	}
-	return stackSegment + "-" + appSegment
+	return naming.Fit(maxWorkerNameLen, naming.FieldSeparator,
+		naming.Fixed(workerNamespace),
+		naming.Fixed(slug),
+		naming.Fixed(env),
+		naming.Compressible(app),
+	)
 }
 
-func clamp(name string, max int) string {
-	if len(name) <= max {
-		return name
-	}
-	return trimHyphens(name[:max])
+func rootWorkerName(slug, env string) string {
+	return workerScriptName(slug, env, rootWorkerApp)
 }
 
-func legacyWorkerName(stackName string) string {
-	return sanitizeWorkerName("ocel-" + stackName)
+func previewWorkerName(slug string) string {
+	return rootWorkerName(slug, previewWorkerEnv)
+}
+
+func previewWorkerStem(slug string) string {
+	return naming.Join(naming.FieldSeparator, workerNamespace, slug, previewWorkerEnv)
+}
+
+func ProjectOwnsWorker(slug, script string) bool {
+	if slug == "" || script == "" {
+		return false
+	}
+	return strings.HasPrefix(script, projectWorkerStem(slug)) ||
+		strings.HasPrefix(script, retiredProjectWorkerStem(slug))
+}
+
+func retiredProjectWorkerStem(slug string) string {
+	return naming.Join(naming.WordSeparator, workerNamespace, slug) + naming.FieldSeparator
+}
+
+func retiredPreviewWorkerStem(slug string) string {
+	return retiredProjectWorkerStem(slug) + previewWorkerEnv
+}
+
+func retiredWorkerNames(slug, env string, apps []string) []string {
+	names := []string{legacyWorkerName(slug, env)}
+	for _, app := range append([]string{rootWorkerApp}, apps...) {
+		names = append(names, retiredProjectWorkerStem(slug)+naming.Join(naming.WordSeparator, env, app))
+	}
+	return names
+}
+
+func legacyWorkerName(slug, env string) string {
+	return naming.Join(naming.WordSeparator, workerNamespace, slug, env)
 }
 
 func warnOrphanedWorker(ctx context.Context, cfg Config, progress func(string)) {
@@ -276,40 +307,9 @@ func warnOrphanedWorker(ctx context.Context, cfg Config, progress func(string)) 
 	if !ok {
 		return
 	}
-	name := legacyWorkerName(cfg.Slug + "-" + cfg.Env)
+	name := legacyWorkerName(cfg.Slug, cfg.Env)
 	if found, err := finder.FindApp(ctx, name); err != nil || !found {
 		return
 	}
 	progress(fmt.Sprintf("Warning: an edge worker remains at %q, the name this project deployed under before workers were named per app. Deploys no longer update it; delete it once nothing points at it.", name))
-}
-
-func sanitizeWorkerName(s string) string {
-	buf := make([]byte, 0, len(s))
-	for _, r := range s {
-		switch {
-		case r >= 'a' && r <= 'z', r >= '0' && r <= '9':
-			buf = append(buf, byte(r))
-		case r >= 'A' && r <= 'Z':
-			buf = append(buf, byte(r-'A'+'a'))
-		default:
-			if len(buf) > 0 && buf[len(buf)-1] != '-' {
-				buf = append(buf, '-')
-			}
-		}
-	}
-	name := clamp(trimHyphens(string(buf)), maxWorkerNameLen)
-	if name == "" {
-		return "ocel-worker"
-	}
-	return name
-}
-
-func trimHyphens(s string) string {
-	for len(s) > 0 && s[0] == '-' {
-		s = s[1:]
-	}
-	for len(s) > 0 && s[len(s)-1] == '-' {
-		s = s[:len(s)-1]
-	}
-	return s
 }
