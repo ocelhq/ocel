@@ -34,6 +34,9 @@ type stampedSpec struct {
 	PruneWorkerStem     string
 	RequiredRecord      string
 	Values              map[string]string
+	CompatDate          string
+	CompatFlags         []string
+	Observability       map[string]any
 }
 
 func specStamp(spec edge.RootStackSpec, generic edge.Worker) (string, error) {
@@ -50,8 +53,32 @@ func specStamp(spec edge.RootStackSpec, generic edge.Worker) (string, error) {
 		PruneWorkerStem:     spec.PruneWorkerStem,
 		RequiredRecord:      spec.RequiredRecord,
 		Values:              spec.Values,
+		CompatDate:          compatDate,
+		CompatFlags:         compatFlags,
+		Observability:       observability(),
 	}); err != nil {
 		return "", fmt.Errorf("hash root-stack spec: %w", err)
 	}
 	return spec.Version + "." + hex.EncodeToString(sum.Sum(nil)), nil
+}
+
+type stampSet map[string]string
+
+func decodeStampSet(raw string) stampSet {
+	set := stampSet{}
+	if raw == "" {
+		return set
+	}
+	if err := json.Unmarshal([]byte(raw), &set); err != nil {
+		return stampSet{}
+	}
+	return set
+}
+
+func (s stampSet) encode() (string, error) {
+	encoded, err := json.Marshal(s)
+	if err != nil {
+		return "", fmt.Errorf("encode root-stack version stamps: %w", err)
+	}
+	return string(encoded), nil
 }

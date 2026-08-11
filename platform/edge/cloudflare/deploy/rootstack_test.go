@@ -263,6 +263,26 @@ func specStampFor(t *testing.T, spec edge.RootStackSpec) string {
 	return stamp
 }
 
+func putStampSet(t *testing.T, p *provider, endpoint, secret string, set stampSet) {
+	t.Helper()
+	encoded, err := set.encode()
+	if err != nil {
+		t.Fatalf("encode stamp set: %v", err)
+	}
+	if err := p.putVersionStamp(t.Context(), endpoint, "acme-web", secret, encoded); err != nil {
+		t.Fatalf("putVersionStamp: %v", err)
+	}
+}
+
+func readStampSet(t *testing.T, p *provider, endpoint, secret string) stampSet {
+	t.Helper()
+	raw, _, err := p.getVersionStamp(t.Context(), endpoint, "acme-web", secret)
+	if err != nil {
+		t.Fatalf("getVersionStamp: %v", err)
+	}
+	return decodeStampSet(raw)
+}
+
 func previewZoneMock() *cfMock {
 	return &cfMock{
 		zoneID:   "zone1",
@@ -281,9 +301,7 @@ func TestReconcileRootStack(t *testing.T) {
 		m := previewZoneMock()
 		p := m.provider(t)
 		spec := previewSpec(store.URL, "v2")
-		if err := p.putVersionStamp(t.Context(), store.URL, "acme-web", "s3cr3t", specStampFor(t, spec)); err != nil {
-			t.Fatalf("putVersionStamp: %v", err)
-		}
+		putStampSet(t, p, store.URL, "s3cr3t", stampSet{spec.GenericName: specStampFor(t, spec)})
 
 		prior := testState(store.URL, "s3cr3t")
 		state, err := p.ReconcileRootStack(t.Context(), spec, prior)
@@ -350,12 +368,9 @@ func TestReconcileRootStack(t *testing.T) {
 		if len(m.createdRoutes) != 1 {
 			t.Errorf("created routes = %v, want the project's wildcard route", m.createdRoutes)
 		}
-		stamp, _, err := p.getVersionStamp(t.Context(), store.URL, "acme-web", state[edge.RootStackKeySecret])
-		if err != nil {
-			t.Fatalf("getVersionStamp: %v", err)
-		}
-		if want := specStampFor(t, spec); stamp != want {
-			t.Errorf("version stamp = %q, want %q", stamp, want)
+		stamps := readStampSet(t, p, store.URL, state[edge.RootStackKeySecret])
+		if want := specStampFor(t, spec); stamps[spec.GenericName] != want {
+			t.Errorf("version stamps = %v, want %q under %q", stamps, want, spec.GenericName)
 		}
 	})
 
@@ -425,6 +440,44 @@ func TestReconcileRootStack(t *testing.T) {
 
 		if len(m.putScripts) != 2 {
 			t.Errorf("uploaded scripts = %v, want the shared worker uploaded again for the wider app list", m.putScripts)
+		}
+	})
+
+	t.Run("two apps on one slug each read back their own stamp", func(t *testing.T) {
+		t.Setenv(envSkipEdgeReconcile, "1")
+
+		store := fakeStoreServer(t, "s3cr3t")
+		m := previewZoneMock()
+		p := m.provider(t)
+
+		appSpec := func(name string) edge.RootStackSpec {
+			spec := testSpec(store.URL, "v2")
+			spec.GenericName = "ocel-" + name
+			spec.Generic = withVar(testStoreWorker(), "OCEL_APP", name)
+			spec.Domains = []string{name + ".app.com"}
+			return spec
+		}
+		specs := []edge.RootStackSpec{appSpec("web"), appSpec("api")}
+
+		state := testState(store.URL, "s3cr3t")
+		for pass := range 2 {
+			for _, spec := range specs {
+				next, err := p.ReconcileRootStack(t.Context(), spec, state)
+				if err != nil {
+					t.Fatalf("pass %d, %s: %v", pass, spec.GenericName, err)
+				}
+				state = next
+			}
+		}
+
+		if len(m.putScripts) != 2 {
+			t.Errorf("uploaded scripts = %v, want each app's worker uploaded once: on the second pass every app must find its own stamp, not the app reconciled after it", m.putScripts)
+		}
+		stamps := readStampSet(t, p, store.URL, state[edge.RootStackKeySecret])
+		for _, spec := range specs {
+			if want := specStampFor(t, spec); stamps[spec.GenericName] != want {
+				t.Errorf("version stamps = %v, want %q under %q", stamps, want, spec.GenericName)
+			}
 		}
 	})
 
@@ -516,12 +569,12 @@ func TestEnsureInstance(t *testing.T) {
 			t.Fatalf("DestroyInstance: %v", err)
 		}
 
-		id, upToDate, err := p.ensureInstance(t.Context(), testSpec(srv.URL, "v2"), state, "stamp-v2")
+		id, stamps, err := p.ensureInstance(t.Context(), testSpec(srv.URL, "v2"), state)
 		if err != nil {
 			t.Fatalf("ensureInstance after a wipe: %v", err)
 		}
-		if upToDate {
-			t.Error("upToDate = true, want false: a wiped instance carries no version stamp")
+		if len(stamps) != 0 {
+			t.Errorf("stamps = %v, want none: a wiped instance carries no version stamp", stamps)
 		}
 		if id.secret == "" || id.ownerToken == "" {
 			t.Fatalf("identity = %+v, want the freshly seeded pair the wiped instance now carries", id)
@@ -537,12 +590,12 @@ func TestEnsureInstance(t *testing.T) {
 		srv := fakeStoreServer(t, "s3cr3t")
 		p := &provider{}
 
-		id, upToDate, err := p.ensureInstance(t.Context(), testSpec(srv.URL, "v2"), nil, "stamp-v2")
+		id, stamps, err := p.ensureInstance(t.Context(), testSpec(srv.URL, "v2"), nil)
 		if err != nil {
 			t.Fatalf("ensureInstance: %v", err)
 		}
-		if upToDate {
-			t.Error("upToDate = true, want false: this reconcile read no version stamp of its own")
+		if len(stamps) != 0 {
+			t.Errorf("stamps = %v, want none: this reconcile read no version stamp of its own", stamps)
 		}
 		if id.secret != "s3cr3t" || id.ownerToken != storeOwnerToken {
 			t.Fatalf("identity = %+v, want the pair the instance already carries", id)
@@ -557,15 +610,13 @@ func TestEnsureInstance(t *testing.T) {
 
 		srv := fakeStoreServer(t, "s3cr3t")
 		p := &provider{}
-		if err := p.putVersionStamp(t.Context(), srv.URL, "acme-web", "s3cr3t", "stamp-v2"); err != nil {
-			t.Fatalf("putVersionStamp: %v", err)
-		}
-		id, upToDate, err := p.ensureInstance(t.Context(), testSpec(srv.URL, "v2"), testState(srv.URL, "s3cr3t"), "stamp-v2")
+		putStampSet(t, p, srv.URL, "s3cr3t", stampSet{"": "stamp-v2"})
+		id, stamps, err := p.ensureInstance(t.Context(), testSpec(srv.URL, "v2"), testState(srv.URL, "s3cr3t"))
 		if err != nil {
 			t.Fatalf("ensureInstance: %v", err)
 		}
-		if !upToDate {
-			t.Error("upToDate = false, want true for a root stack already carrying this spec's stamp")
+		if stamps[""] != "stamp-v2" {
+			t.Errorf("stamps = %v, want the stamp the root stack already carries", stamps)
 		}
 		if id.secret != "s3cr3t" {
 			t.Errorf("secret = %q, want the one already in state", id.secret)
@@ -578,12 +629,12 @@ func TestEnsureInstance(t *testing.T) {
 		srv := fakeStoreServer(t, "")
 		p := &provider{}
 
-		id, upToDate, err := p.ensureInstance(t.Context(), testSpec(srv.URL, "v1"), nil, "stamp-v1")
+		id, stamps, err := p.ensureInstance(t.Context(), testSpec(srv.URL, "v1"), nil)
 		if err != nil {
 			t.Fatalf("ensureInstance with no prior state: %v", err)
 		}
-		if upToDate {
-			t.Error("upToDate = true, want false for a project with no root stack yet")
+		if len(stamps) != 0 {
+			t.Errorf("stamps = %v, want none for a project with no root stack yet", stamps)
 		}
 		if id.secret == "" || id.ownerToken == "" || id.secret == id.ownerToken {
 			t.Fatalf("minted identity = %+v, want two distinct non-empty credentials", id)
@@ -606,7 +657,7 @@ func TestEnsureInstance(t *testing.T) {
 		}))
 		t.Cleanup(srv.Close)
 
-		if _, _, err := (&provider{}).ensureInstance(t.Context(), testSpec(srv.URL, "v2"), testState(srv.URL, "s3cr3t"), "stamp-v2"); err == nil {
+		if _, _, err := (&provider{}).ensureInstance(t.Context(), testSpec(srv.URL, "v2"), testState(srv.URL, "s3cr3t")); err == nil {
 			t.Fatal("ensureInstance err = nil, want the store failure surfaced")
 		}
 		if initialized != 0 {

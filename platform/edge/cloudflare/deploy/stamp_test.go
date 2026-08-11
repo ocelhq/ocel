@@ -1,6 +1,7 @@
 package cloudflare
 
 import (
+	"maps"
 	"reflect"
 	"slices"
 	"testing"
@@ -33,6 +34,14 @@ func TestSpecStampShape(t *testing.T) {
 			},
 		},
 		{
+			typ: reflect.TypeFor[stampedSpec](),
+			want: []string{
+				"CompatDate", "CompatFlags", "Domains", "Generic", "GenericName", "ISRWriterScriptName",
+				"Observability", "PruneRoutes", "PruneWorkerStem", "RequiredRecord", "Slug",
+				"StoreEndpoint", "StoreScriptName", "Values",
+			},
+		},
+		{
 			typ:  reflect.TypeFor[edge.Worker](),
 			want: []string{"AssetBinding", "Assets", "LoaderBinding", "Main", "Modules", "ObjectStore", "Secrets", "Services", "Vars"},
 		},
@@ -60,4 +69,38 @@ func TestSpecStampShape(t *testing.T) {
 				tc.typ.Name(), got, tc.want)
 		})
 	}
+}
+
+func TestSpecStampCoversDeployedMetadata(t *testing.T) {
+	t.Run("the deployed metadata carries nothing the stamp cannot reach", func(t *testing.T) {
+		t.Parallel()
+
+		got := slices.Sorted(maps.Keys(metadataFromMultipart(t, edge.Worker{Main: mainModule()}, "")))
+		want := []string{"bindings", "compatibility_date", "compatibility_flags", "main_module", "observability"}
+		if !slices.Equal(got, want) {
+			t.Errorf("script metadata keys = %v, want %v: putScript sends this metadata, so a key specStamp never hashes leaves upToDate true over a worker that would deploy differently — fold the new key into stampedSpec, then bring this list back in line",
+				got, want)
+		}
+	})
+
+	t.Run("turning observability off restamps the spec", func(t *testing.T) {
+		spec := edge.RootStackSpec{Slug: "acme-web", GenericName: "ocel-web", Version: "v2"}
+		generic := genericWorker(spec, spec.Slug)
+
+		t.Setenv(envObservability, "on")
+		on, err := specStamp(spec, generic)
+		if err != nil {
+			t.Fatalf("specStamp with observability on: %v", err)
+		}
+
+		t.Setenv(envObservability, "off")
+		off, err := specStamp(spec, generic)
+		if err != nil {
+			t.Fatalf("specStamp with observability off: %v", err)
+		}
+
+		if on == off {
+			t.Errorf("stamp = %q either way, want %s to move it: the worker deploys with different observability settings", on, envObservability)
+		}
+	})
 }

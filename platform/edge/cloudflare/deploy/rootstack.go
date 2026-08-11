@@ -109,10 +109,11 @@ func (p *provider) ReconcileRootStack(ctx context.Context, spec edge.RootStackSp
 		return nil, err
 	}
 
-	id, upToDate, err := p.ensureInstance(ctx, spec, prior, stamp)
+	id, stamps, err := p.ensureInstance(ctx, spec, prior)
 	if err != nil {
 		return nil, err
 	}
+	upToDate := stamps[spec.GenericName] == stamp
 	if upToDate && skipEdgeReconcile() {
 		return prior, nil
 	}
@@ -144,7 +145,12 @@ func (p *provider) ReconcileRootStack(ctx context.Context, spec edge.RootStackSp
 	if _, err := p.setSubdomain(ctx, genericUp, len(spec.Domains) == 0); err != nil {
 		return nil, fmt.Errorf("set generic worker subdomain: %w", err)
 	}
-	if err := p.putVersionStamp(ctx, endpoint, slug, id.secret, stamp); err != nil {
+	stamps[spec.GenericName] = stamp
+	encoded, err := stamps.encode()
+	if err != nil {
+		return nil, err
+	}
+	if err := p.putVersionStamp(ctx, endpoint, slug, id.secret, encoded); err != nil {
 		return nil, fmt.Errorf("set root-stack version stamp: %w", err)
 	}
 
@@ -161,26 +167,26 @@ type storeIdentity struct {
 	ownerToken string
 }
 
-func (p *provider) ensureInstance(ctx context.Context, spec edge.RootStackSpec, prior edge.RootStackState, stamp string) (storeIdentity, bool, error) {
+func (p *provider) ensureInstance(ctx context.Context, spec edge.RootStackSpec, prior edge.RootStackState) (storeIdentity, stampSet, error) {
 	if secret := prior[edge.RootStackKeySecret]; secret != "" && prior[edge.RootStackKeySlug] == spec.Slug {
 		current, res, err := p.getVersionStamp(ctx, spec.StoreEndpoint, spec.Slug, secret)
 		switch {
 		case err == nil:
-			return storeIdentity{secret: secret, ownerToken: prior[edge.RootStackKeyOwnerToken]}, current == stamp, nil
+			return storeIdentity{secret: secret, ownerToken: prior[edge.RootStackKeyOwnerToken]}, decodeStampSet(current), nil
 		case !unauthorized(res):
-			return storeIdentity{}, false, fmt.Errorf("read root-stack version stamp: %w", err)
+			return storeIdentity{}, nil, fmt.Errorf("read root-stack version stamp: %w", err)
 		}
 	}
 
 	minted, err := mintIdentity()
 	if err != nil {
-		return storeIdentity{}, false, err
+		return storeIdentity{}, nil, err
 	}
 	adopted, err := p.initializeInstance(ctx, spec.StoreEndpoint, spec.Slug, spec.BootstrapCred, minted)
 	if err != nil {
-		return storeIdentity{}, false, fmt.Errorf("initialize project store instance: %w", err)
+		return storeIdentity{}, nil, fmt.Errorf("initialize project store instance: %w", err)
 	}
-	return adopted, false, nil
+	return adopted, stampSet{}, nil
 }
 
 func mintIdentity() (storeIdentity, error) {
