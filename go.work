@@ -2,10 +2,11 @@ go 1.25.11
 
 use (
 	./cli
-	./platform/aws/provider
-	./platform/edge/contract
-	./platform/edge/cloudflare/deploy
 	./pkg/channel
+	./pkg/naming
 	./pkg/proto
+	./platform/aws/provider
+	./platform/edge/cloudflare/deploy
+	./platform/edge/contract
 	./sdk
 )
