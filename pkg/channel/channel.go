@@ -1,6 +1,7 @@
 package channel
 
 import (
+	"crypto/subtle"
 	"fmt"
 	"strconv"
 	"strings"
@@ -22,6 +23,14 @@ func ParseAuthHeader(value string) (token string, ok bool) {
 		return "", false
 	}
 	return token, true
+}
+
+func VerifyAuthHeader(value, token string) bool {
+	got, ok := ParseAuthHeader(value)
+	if !ok {
+		return false
+	}
+	return subtle.ConstantTimeCompare([]byte(got), []byte(token)) == 1
 }
 
 const readinessSentinelPrefix = "OCEL_READY"

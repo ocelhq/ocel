@@ -4,7 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"sort"
+	"slices"
 	"strings"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
@@ -12,9 +12,9 @@ import (
 	ddbtypes "github.com/aws/aws-sdk-go-v2/service/dynamodb/types"
 )
 
-var ErrIsReference = errors.New("that cell is a reference, and a reference has no value of its own")
+var ErrIsReference = errors.New("vars: cell is a reference")
 
-var ErrWouldDeepen = errors.New("a reference may only point at a value, never at another reference")
+var ErrWouldDeepen = errors.New("vars: reference to a reference")
 
 func (s *Store) SetReference(ctx context.Context, c, target Coordinate, expected *int64) (Metadata, error) {
 	if err := c.validate(); err != nil {
@@ -102,7 +102,7 @@ func (s *Store) References(ctx context.Context, target Coordinate) ([]Coordinate
 		start = page.LastEvaluatedKey
 	}
 
-	sort.Slice(out, func(i, j int) bool { return out[i].String() < out[j].String() })
+	slices.SortFunc(out, func(a, b Coordinate) int { return strings.Compare(a.String(), b.String()) })
 	return out, nil
 }
 
@@ -125,6 +125,6 @@ func describeCoordinates(cells []Coordinate) string {
 	for _, c := range cells {
 		names = append(names, c.String())
 	}
-	sort.Strings(names)
+	slices.Sort(names)
 	return strings.Join(names, ", ")
 }

@@ -186,11 +186,11 @@ func newServiceRole(ctx *pulumi.Context, name, servicePrincipal string, statemen
 	}
 	for stmtName, stmt := range statements {
 		actions := stmt.Actions
-		resourceInputs := make([]interface{}, len(stmt.Resources))
+		resourceInputs := make([]any, len(stmt.Resources))
 		for i, r := range stmt.Resources {
 			resourceInputs[i] = r
 		}
-		policyJSON := pulumi.All(resourceInputs...).ApplyT(func(vs []interface{}) (string, error) {
+		policyJSON := pulumi.All(resourceInputs...).ApplyT(func(vs []any) (string, error) {
 			resources := make([]string, len(vs))
 			for i, v := range vs {
 				resources[i], _ = v.(string)
@@ -209,12 +209,12 @@ func newServiceRole(ctx *pulumi.Context, name, servicePrincipal string, statemen
 }
 
 func assumeRolePolicy(servicePrincipal string) string {
-	doc := map[string]interface{}{
+	doc := map[string]any{
 		"Version": "2012-10-17",
-		"Statement": []map[string]interface{}{{
+		"Statement": []map[string]any{{
 			"Effect":    "Allow",
 			"Action":    "sts:AssumeRole",
-			"Principal": map[string]interface{}{"Service": servicePrincipal},
+			"Principal": map[string]any{"Service": servicePrincipal},
 		}},
 	}
 	b, _ := json.Marshal(doc)
@@ -222,9 +222,9 @@ func assumeRolePolicy(servicePrincipal string) string {
 }
 
 func inlinePolicy(actions, resources []string) (string, error) {
-	doc := map[string]interface{}{
+	doc := map[string]any{
 		"Version": "2012-10-17",
-		"Statement": []map[string]interface{}{{
+		"Statement": []map[string]any{{
 			"Effect":   "Allow",
 			"Action":   actions,
 			"Resource": resources,
@@ -241,7 +241,7 @@ func joinArn(arn pulumi.StringOutput, suffix string) pulumi.StringInput {
 	return arn.ApplyT(func(a string) string { return a + suffix }).(pulumi.StringOutput)
 }
 
-func collectBucketOutput(name string, fields map[string]interface{}) (*deploymentsv1.ResourceOutput, error) {
+func collectBucketOutput(name string, fields map[string]any) (*deploymentsv1.ResourceOutput, error) {
 	bucket, err := requireStringField(fields, name, outputKeyBucket)
 	if err != nil {
 		return nil, err

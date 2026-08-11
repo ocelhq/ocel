@@ -16,13 +16,12 @@ import (
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/resources/v1"
 )
 
-func withTestCache(t *testing.T) string {
+func cachingResolver(t *testing.T) (*Resolver, string) {
 	t.Helper()
 	dir := t.TempDir()
-	prev := openCache
-	openCache = func() (*resolvecache.Cache, error) { return resolvecache.OpenAt(dir) }
-	t.Cleanup(func() { openCache = prev })
-	return dir
+	r := NewResolver()
+	r.OpenCache = func() (*resolvecache.Cache, error) { return resolvecache.OpenAt(dir) }
+	return r, dir
 }
 
 func countingResolveServer(t *testing.T) (*httptest.Server, *int) {
@@ -32,7 +31,9 @@ func countingResolveServer(t *testing.T) (*httptest.Server, *int) {
 		calls++
 		var req resolveRequestBody
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-			t.Fatalf("decode request: %v", err)
+			t.Errorf("decode request: %v", err)
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
 		}
 		env := make(map[string]string, len(req.Resources))
 		for _, res := range req.Resources {
@@ -47,133 +48,128 @@ func countingResolveServer(t *testing.T) (*httptest.Server, *int) {
 	return ts, &calls
 }
 
-func TestCachedResolve_MissCallsAPIAndPersistsA0600CacheFile(t *testing.T) {
-	dir := withTestCache(t)
-	ts, calls := countingResolveServer(t)
+func TestCachedResolve(t *testing.T) {
+	t.Parallel()
 
-	resources := []manifest.Entry{{Name: "main", Type: resourcesv1.ResourceType_RESOURCE_TYPE_POSTGRES}}
-	got, err := CachedResolve(context.Background(), httpClient, ts.URL, "tok", "proj_1", resources)
-	if err != nil {
-		t.Fatalf("CachedResolve: %v", err)
-	}
-	if *calls != 1 {
-		t.Fatalf("calls = %d, want 1", *calls)
-	}
-	if len(got) != 1 {
-		t.Fatalf("got = %+v", got)
-	}
+	onePostgres := []manifest.Entry{{Name: "main", Type: resourcesv1.ResourceType_RESOURCE_TYPE_POSTGRES}}
 
-	cache, err := openCache()
-	if err != nil {
-		t.Fatalf("openCache: %v", err)
-	}
-	entry, ok := cache.Load("proj_1")
-	if !ok {
-		t.Fatal("expected a cache entry after a miss, got none")
-	}
-	if entry.ExpiresAt.IsZero() || len(entry.Env) == 0 {
-		t.Fatalf("entry = %+v, want populated Env and ExpiresAt", entry)
-	}
+	t.Run("a miss calls the API and persists a 0600 cache file", func(t *testing.T) {
+		t.Parallel()
+		resolver, dir := cachingResolver(t)
+		ts, calls := countingResolveServer(t)
 
-	info, err := os.Stat(filepath.Join(dir, "proj_1.json"))
-	if err != nil {
-		t.Fatalf("stat cache file: %v", err)
-	}
-	if perm := info.Mode().Perm(); perm != 0o600 {
-		t.Fatalf("cache file mode = %o, want 0600", perm)
-	}
-}
+		got, err := resolver.Resolve(context.Background(), ts.URL, "tok", "proj_1", onePostgres)
+		if err != nil {
+			t.Fatalf("Resolve: %v", err)
+		}
+		if *calls != 1 {
+			t.Fatalf("calls = %d, want 1", *calls)
+		}
+		if len(got) != 1 {
+			t.Fatalf("got = %+v", got)
+		}
 
-func TestCachedResolve_HitSkipsTheAPICallAndReusesEnv(t *testing.T) {
-	withTestCache(t)
-	ts, calls := countingResolveServer(t)
+		cache, err := resolver.OpenCache()
+		if err != nil {
+			t.Fatalf("OpenCache: %v", err)
+		}
+		entry, ok := cache.Load("proj_1")
+		if !ok {
+			t.Fatal("expected a cache entry after a miss, got none")
+		}
+		if entry.ExpiresAt.IsZero() || len(entry.Env) == 0 {
+			t.Fatalf("entry = %+v, want populated Env and ExpiresAt", entry)
+		}
 
-	resources := []manifest.Entry{{Name: "main", Type: resourcesv1.ResourceType_RESOURCE_TYPE_POSTGRES}}
-	first, err := CachedResolve(context.Background(), httpClient, ts.URL, "tok", "proj_1", resources)
-	if err != nil {
-		t.Fatalf("CachedResolve (first): %v", err)
-	}
+		info, err := os.Stat(filepath.Join(dir, "proj_1.json"))
+		if err != nil {
+			t.Fatalf("stat cache file: %v", err)
+		}
+		if perm := info.Mode().Perm(); perm != 0o600 {
+			t.Fatalf("cache file mode = %o, want 0600", perm)
+		}
+	})
 
-	second, err := CachedResolve(context.Background(), httpClient, ts.URL, "tok", "proj_1", resources)
-	if err != nil {
-		t.Fatalf("CachedResolve (second): %v", err)
-	}
+	t.Run("a hit skips the API call and reuses env", func(t *testing.T) {
+		t.Parallel()
+		resolver, _ := cachingResolver(t)
+		ts, calls := countingResolveServer(t)
 
-	if *calls != 1 {
-		t.Fatalf("calls = %d, want 1 (second resolve should have hit the cache)", *calls)
-	}
-	if second[0].Env["OCEL_RESOURCE_POSTGRES_main"] != first[0].Env["OCEL_RESOURCE_POSTGRES_main"] {
-		t.Fatalf("second Env = %+v, want it to match the cached first Env %+v", second[0].Env, first[0].Env)
-	}
-}
+		first, err := resolver.Resolve(context.Background(), ts.URL, "tok", "proj_1", onePostgres)
+		if err != nil {
+			t.Fatalf("Resolve (first): %v", err)
+		}
 
-func TestCachedResolve_DefinitionChangeForcesReResolve(t *testing.T) {
-	withTestCache(t)
-	ts, calls := countingResolveServer(t)
+		second, err := resolver.Resolve(context.Background(), ts.URL, "tok", "proj_1", onePostgres)
+		if err != nil {
+			t.Fatalf("Resolve (second): %v", err)
+		}
 
-	if _, err := CachedResolve(context.Background(), httpClient, ts.URL, "tok", "proj_1",
-		[]manifest.Entry{{Name: "main", Type: resourcesv1.ResourceType_RESOURCE_TYPE_POSTGRES}}); err != nil {
-		t.Fatalf("CachedResolve (first): %v", err)
-	}
+		if *calls != 1 {
+			t.Fatalf("calls = %d, want 1 (second resolve should have hit the cache)", *calls)
+		}
+		if second[0].Env["OCEL_RESOURCE_POSTGRES_main"] != first[0].Env["OCEL_RESOURCE_POSTGRES_main"] {
+			t.Fatalf("second Env = %+v, want it to match the cached first Env %+v", second[0].Env, first[0].Env)
+		}
+	})
 
-	if _, err := CachedResolve(context.Background(), httpClient, ts.URL, "tok", "proj_1",
-		[]manifest.Entry{
-			{Name: "main", Type: resourcesv1.ResourceType_RESOURCE_TYPE_POSTGRES},
-			{Name: "second", Type: resourcesv1.ResourceType_RESOURCE_TYPE_POSTGRES},
-		}); err != nil {
-		t.Fatalf("CachedResolve (second): %v", err)
-	}
+	t.Run("a definition change forces a re-resolve", func(t *testing.T) {
+		t.Parallel()
+		resolver, _ := cachingResolver(t)
+		ts, calls := countingResolveServer(t)
 
-	if *calls != 2 {
-		t.Fatalf("calls = %d, want 2 (definition change should force a re-resolve)", *calls)
-	}
-}
+		if _, err := resolver.Resolve(context.Background(), ts.URL, "tok", "proj_1", onePostgres); err != nil {
+			t.Fatalf("Resolve (first): %v", err)
+		}
 
-func TestCachedResolve_ExpiredCacheForcesReResolve(t *testing.T) {
-	withTestCache(t)
-	ts, calls := countingResolveServer(t)
+		if _, err := resolver.Resolve(context.Background(), ts.URL, "tok", "proj_1",
+			[]manifest.Entry{
+				{Name: "main", Type: resourcesv1.ResourceType_RESOURCE_TYPE_POSTGRES},
+				{Name: "second", Type: resourcesv1.ResourceType_RESOURCE_TYPE_POSTGRES},
+			}); err != nil {
+			t.Fatalf("Resolve (second): %v", err)
+		}
 
-	resources := []manifest.Entry{{Name: "main", Type: resourcesv1.ResourceType_RESOURCE_TYPE_POSTGRES}}
-	if _, err := CachedResolve(context.Background(), httpClient, ts.URL, "tok", "proj_1", resources); err != nil {
-		t.Fatalf("CachedResolve (first): %v", err)
-	}
+		if *calls != 2 {
+			t.Fatalf("calls = %d, want 2 (definition change should force a re-resolve)", *calls)
+		}
+	})
 
-	cache, err := openCache()
-	if err != nil {
-		t.Fatalf("openCache: %v", err)
-	}
-	entry, ok := cache.Load("proj_1")
-	if !ok {
-		t.Fatal("expected a cache entry after the first resolve")
-	}
-	entry.ExpiresAt = time.Now().Add(-time.Minute)
-	if err := cache.Save("proj_1", entry); err != nil {
-		t.Fatalf("Save: %v", err)
-	}
+	t.Run("an expired entry forces a re-resolve", func(t *testing.T) {
+		t.Parallel()
+		resolver, _ := cachingResolver(t)
+		ts, calls := countingResolveServer(t)
 
-	if _, err := CachedResolve(context.Background(), httpClient, ts.URL, "tok", "proj_1", resources); err != nil {
-		t.Fatalf("CachedResolve (second): %v", err)
-	}
+		if _, err := resolver.Resolve(context.Background(), ts.URL, "tok", "proj_1", onePostgres); err != nil {
+			t.Fatalf("Resolve (first): %v", err)
+		}
 
-	if *calls != 2 {
-		t.Fatalf("calls = %d, want 2 (an expired entry should force a re-resolve)", *calls)
-	}
-}
+		resolver.Now = func() time.Time { return time.Now().Add(2 * time.Hour) }
 
-func TestCachedResolve_AccountSwitchForcesReResolve(t *testing.T) {
-	withTestCache(t)
-	ts, calls := countingResolveServer(t)
+		if _, err := resolver.Resolve(context.Background(), ts.URL, "tok", "proj_1", onePostgres); err != nil {
+			t.Fatalf("Resolve (second): %v", err)
+		}
 
-	resources := []manifest.Entry{{Name: "main", Type: resourcesv1.ResourceType_RESOURCE_TYPE_POSTGRES}}
-	if _, err := CachedResolve(context.Background(), httpClient, ts.URL, "tok_a", "proj_1", resources); err != nil {
-		t.Fatalf("CachedResolve (account A): %v", err)
-	}
+		if *calls != 2 {
+			t.Fatalf("calls = %d, want 2 (an expired entry should force a re-resolve)", *calls)
+		}
+	})
 
-	if _, err := CachedResolve(context.Background(), httpClient, ts.URL, "tok_b", "proj_1", resources); err != nil {
-		t.Fatalf("CachedResolve (account B): %v", err)
-	}
+	t.Run("an account switch forces a re-resolve", func(t *testing.T) {
+		t.Parallel()
+		resolver, _ := cachingResolver(t)
+		ts, calls := countingResolveServer(t)
 
-	if *calls != 2 {
-		t.Fatalf("calls = %d, want 2 (switching accounts should force a re-resolve)", *calls)
-	}
+		if _, err := resolver.Resolve(context.Background(), ts.URL, "tok_a", "proj_1", onePostgres); err != nil {
+			t.Fatalf("Resolve (account A): %v", err)
+		}
+
+		if _, err := resolver.Resolve(context.Background(), ts.URL, "tok_b", "proj_1", onePostgres); err != nil {
+			t.Fatalf("Resolve (account B): %v", err)
+		}
+
+		if *calls != 2 {
+			t.Fatalf("calls = %d, want 2 (switching accounts should force a re-resolve)", *calls)
+		}
+	})
 }

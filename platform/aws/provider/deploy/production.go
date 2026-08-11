@@ -25,7 +25,7 @@ const rootStackVersion = "12"
 
 type appDeployResult struct {
 	App      string
-	Identity DeploymentIdentity
+	Identity Identity
 	Record   edge.DeploymentRecord
 	Err      error
 }
@@ -502,15 +502,15 @@ func newRandomID() (string, error) {
 	return hex.EncodeToString(buf), nil
 }
 
-func assignIdentities(cfg Config, manifest *deploymentsv1.Manifest, bundles map[string]appBundle) (DeploymentIdentities, error) {
-	identities := make(DeploymentIdentities, len(manifest.GetApps()))
+func assignIdentities(cfg Config, manifest *deploymentsv1.Manifest, bundles map[string]appBundle) (Identities, error) {
+	identities := make(Identities, len(manifest.GetApps()))
 	for _, app := range manifestApps(manifest) {
 		name := app.GetName()
 		buildID, err := appBuildID(cfg, app)
 		if err != nil {
 			return nil, err
 		}
-		id, err := NewDeploymentIdentity(buildID, bundles[name].Fingerprint)
+		id, err := NewIdentity(buildID, bundles[name].Fingerprint)
 		if err != nil {
 			return nil, fmt.Errorf("deployment identity for %s: %w", name, err)
 		}
@@ -541,7 +541,7 @@ func nextBuildID(cfg Config, app string) (string, error) {
 	return pm.BuildID, nil
 }
 
-func buildDeploymentRecord(cfg Config, manifest *deploymentsv1.Manifest, app *deploymentsv1.ManifestApp, id DeploymentIdentity, outs []*deploymentsv1.ResourceOutput) (edge.DeploymentRecord, error) {
+func buildDeploymentRecord(cfg Config, manifest *deploymentsv1.Manifest, app *deploymentsv1.ManifestApp, id Identity, outs []*deploymentsv1.ResourceOutput) (edge.DeploymentRecord, error) {
 	name := app.GetName()
 	urlByLogical := functionURLsByLogicalName(outs)
 	fingerprint, variables := recordedAudit(cfg, app)
@@ -767,7 +767,7 @@ func collectResourceOutputs(ctx context.Context, secrets SecretsReader, manifest
 		if !ok {
 			return nil, fmt.Errorf("stack produced no output for %s", name)
 		}
-		fields, ok := raw.Value.(map[string]interface{})
+		fields, ok := raw.Value.(map[string]any)
 		if !ok {
 			return nil, fmt.Errorf("output for %s is not a map", name)
 		}
@@ -798,7 +798,7 @@ func collectAppFunctionOutputs(functions []*deploymentsv1.ManifestFunction, outp
 		if !ok {
 			return nil, nil, fmt.Errorf("stack produced no output for %s", name)
 		}
-		fields, ok := raw.Value.(map[string]interface{})
+		fields, ok := raw.Value.(map[string]any)
 		if !ok {
 			return nil, nil, fmt.Errorf("output for %s is not a map", name)
 		}

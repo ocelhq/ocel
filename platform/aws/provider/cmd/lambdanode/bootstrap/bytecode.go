@@ -23,7 +23,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 	s3types "github.com/aws/aws-sdk-go-v2/service/s3/types"
 
-	"github.com/ocelhq/ocel/platform/aws/provider/awsconf"
+	"github.com/ocelhq/ocel/platform/aws/provider/sdkconfig"
 )
 
 const bytecodeCacheCeiling = 64 << 20
@@ -235,7 +235,7 @@ func (u bytecodeUpload) run(ctx context.Context) bytecodeUploadOutcome {
 		return abandonUpload("could not measure the compile cache: %v", err)
 	}
 	if size == 0 {
-		if _, err := os.Stat(ack.Dir); os.IsNotExist(err) {
+		if _, err := os.Stat(ack.Dir); errors.Is(err, fs.ErrNotExist) {
 			return abandonUpload("node reported a compile cache at %s but nothing is there; skipping upload", ack.Dir)
 		}
 		return abandonUpload("the compile cache at %s is empty; nothing to upload", ack.Dir)
@@ -454,7 +454,7 @@ func loadEmbeddedBytecodeCache(ctx context.Context, tarPath, dir string) (int64,
 
 	f, err := os.Open(tarPath)
 	if err != nil {
-		if !os.IsNotExist(err) {
+		if !errors.Is(err, fs.ErrNotExist) {
 			fmt.Fprintf(os.Stderr, "ocel: could not open the embedded compile cache at %s: %v\n", tarPath, err)
 		}
 		return 0, false
@@ -533,7 +533,7 @@ func resolveBytecodeResolution(ctx context.Context, nodeVersion func(context.Con
 		return nil
 	}
 
-	cfg, err := awsconf.Runtime(ctx)
+	cfg, err := sdkconfig.Runtime(ctx)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "ocel: no aws config for the compile cache: %v\n", err)
 		return nil

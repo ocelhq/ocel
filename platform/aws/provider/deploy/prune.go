@@ -15,7 +15,7 @@ import (
 
 type PruneTarget struct {
 	App            string
-	Identity       DeploymentIdentity
+	Identity       Identity
 	Stack          string
 	AssetPrefix    string
 	ImageConfigKey string
@@ -25,31 +25,31 @@ type PruneTarget struct {
 
 const removedRecordKeyPrefix = "record:"
 
-func splitRecordKey(key string) (app string, id DeploymentIdentity, ok bool) {
+func splitRecordKey(key string) (app string, id Identity, ok bool) {
 	app, rendered, split := strings.Cut(strings.TrimPrefix(key, removedRecordKeyPrefix), "/")
 	if !split || app == "" {
-		return "", DeploymentIdentity{}, false
+		return "", Identity{}, false
 	}
-	id, err := ParseDeploymentIdentity(rendered)
+	id, err := ParseIdentity(rendered)
 	if err != nil {
-		return "", DeploymentIdentity{}, false
+		return "", Identity{}, false
 	}
 	return app, id, true
 }
 
 func ReclaimTargets(slug, env string, removedRecordKeys, survivingRecordKeys, survivingPointerRecordKeys []string) ([]PruneTarget, error) {
-	return reclaimTargets(slug, env, removedRecordKeys, survivingRecordKeys, survivingPointerRecordKeys, func(app string, id DeploymentIdentity) string {
+	return reclaimTargets(slug, env, removedRecordKeys, survivingRecordKeys, survivingPointerRecordKeys, func(app string, id Identity) string {
 		return AppDeployStackName(slug, app, id)
 	})
 }
 
 func PreviewReclaimTargets(slug, pointer, env string, removedRecordKeys, survivingRecordKeys, survivingPointerRecordKeys []string) ([]PruneTarget, error) {
-	return reclaimTargets(slug, env, removedRecordKeys, survivingRecordKeys, survivingPointerRecordKeys, func(app string, id DeploymentIdentity) string {
+	return reclaimTargets(slug, env, removedRecordKeys, survivingRecordKeys, survivingPointerRecordKeys, func(app string, id Identity) string {
 		return PreviewAppDeployStackName(slug, pointer, app, id)
 	})
 }
 
-func reclaimTargets(slug, env string, removedRecordKeys, survivingRecordKeys, survivingPointerRecordKeys []string, stackFor func(app string, id DeploymentIdentity) string) ([]PruneTarget, error) {
+func reclaimTargets(slug, env string, removedRecordKeys, survivingRecordKeys, survivingPointerRecordKeys []string, stackFor func(app string, id Identity) string) ([]PruneTarget, error) {
 	if len(removedRecordKeys) == 0 {
 		return nil, nil
 	}

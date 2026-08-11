@@ -102,132 +102,142 @@ func newListener(ddb *fakeDDB, tagger objectTagger, doer httpDoer, origins []str
 	})
 }
 
-func TestListener_TransitionsOnceAndSignsAcceptedCallback(t *testing.T) {
-	ddb := newFakeDDB()
-	id, secret := seedPendingSession(t, ddb, testCallback)
-	tagger := &fakeTagger{tags: map[string]string{sessionTagKey: id}}
-	doer := &recordingDoer{}
+func TestListener(t *testing.T) {
+	t.Parallel()
 
-	l := newListener(ddb, tagger, doer, []string{testOrigin})
-	if err := l.Handle(context.Background(), objectCreatedEvent(testBucket, testKey)); err != nil {
-		t.Fatalf("Handle: %v", err)
-	}
+	t.Run("transitions once and signs the accepted callback", func(t *testing.T) {
+		t.Parallel()
+		ddb := newFakeDDB()
+		id, secret := seedPendingSession(t, ddb, testCallback)
+		doer := &recordingDoer{}
 
-	if len(doer.posts) != 1 {
-		t.Fatalf("callbacks fired = %d, want 1", len(doer.posts))
-	}
-	post := doer.posts[0]
-	if got := queryOp(t, post.url); got != "callback" {
-		t.Fatalf("callback url op = %q, want callback (url %q)", got, post.url)
-	}
+		l := newListener(ddb, &fakeTagger{tags: map[string]string{sessionTagKey: id}}, doer, []string{testOrigin})
+		if err := l.Handle(context.Background(), objectCreatedEvent(testBucket, testKey)); err != nil {
+			t.Fatalf("Handle: %v", err)
+		}
 
-	svc := &Service{store: &sessionStore{client: ddb, table: "sessions"}}
-	resp, err := svc.VerifyUploadSignature(context.Background(), verifyReq(id, post.body))
-	if err != nil {
-		t.Fatalf("VerifyUploadSignature: %v", err)
-	}
-	if !resp.GetValid() {
-		t.Fatal("genuine listener signature was rejected by VerifyUploadSignature")
-	}
+		if len(doer.posts) != 1 {
+			t.Fatalf("callbacks fired = %d, want 1", len(doer.posts))
+		}
+		post := doer.posts[0]
+		if got := queryOp(t, post.url); got != "callback" {
+			t.Fatalf("callback url op = %q, want callback (url %q)", got, post.url)
+		}
 
-	want := signUpload(secret, id, SignedFile{Key: testKey, Name: "u1.png", Size: 2048, MimeType: "image/png"})
-	if post.body.Signature != want {
-		t.Fatalf("signature = %q, want %q", post.body.Signature, want)
-	}
-}
+		svc := &Service{store: &sessionStore{client: ddb, table: "sessions"}}
+		resp, err := svc.VerifyUploadSignature(context.Background(), verifyReq(id, post.body))
+		if err != nil {
+			t.Fatalf("VerifyUploadSignature: %v", err)
+		}
+		if !resp.GetValid() {
+			t.Fatal("genuine listener signature was rejected by VerifyUploadSignature")
+		}
 
-func TestListener_ForgedSignatureRejected(t *testing.T) {
-	ddb := newFakeDDB()
-	id, _ := seedPendingSession(t, ddb, testCallback)
-	tagger := &fakeTagger{tags: map[string]string{sessionTagKey: id}}
-	doer := &recordingDoer{}
+		want := mustSign(t, secret, id, SignedFile{Key: testKey, Name: "u1.png", Size: 2048, MimeType: "image/png"})
+		if post.body.Signature != want {
+			t.Fatalf("signature = %q, want %q", post.body.Signature, want)
+		}
+	})
 
-	l := newListener(ddb, tagger, doer, []string{testOrigin})
-	if err := l.Handle(context.Background(), objectCreatedEvent(testBucket, testKey)); err != nil {
-		t.Fatalf("Handle: %v", err)
-	}
+	t.Run("a forged signature is rejected", func(t *testing.T) {
+		t.Parallel()
+		ddb := newFakeDDB()
+		id, _ := seedPendingSession(t, ddb, testCallback)
+		doer := &recordingDoer{}
 
-	forged := doer.posts[0].body
-	forged.Signature = forged.Signature[:len(forged.Signature)-1] + "0"
+		l := newListener(ddb, &fakeTagger{tags: map[string]string{sessionTagKey: id}}, doer, []string{testOrigin})
+		if err := l.Handle(context.Background(), objectCreatedEvent(testBucket, testKey)); err != nil {
+			t.Fatalf("Handle: %v", err)
+		}
 
-	svc := &Service{store: &sessionStore{client: ddb, table: "sessions"}}
-	resp, err := svc.VerifyUploadSignature(context.Background(), verifyReq(id, forged))
-	if err != nil {
-		t.Fatalf("VerifyUploadSignature: %v", err)
-	}
-	if resp.GetValid() {
-		t.Fatal("a tampered signature was accepted; blast radius must stay one upload")
-	}
-}
+		forged := doer.posts[0].body
+		forged.Signature = forged.Signature[:len(forged.Signature)-1] + "0"
 
-func TestListener_DuplicateEventNoOps(t *testing.T) {
-	ddb := newFakeDDB()
-	id, _ := seedPendingSession(t, ddb, testCallback)
-	tagger := &fakeTagger{tags: map[string]string{sessionTagKey: id}}
-	doer := &recordingDoer{}
+		svc := &Service{store: &sessionStore{client: ddb, table: "sessions"}}
+		resp, err := svc.VerifyUploadSignature(context.Background(), verifyReq(id, forged))
+		if err != nil {
+			t.Fatalf("VerifyUploadSignature: %v", err)
+		}
+		if resp.GetValid() {
+			t.Fatal("a tampered signature was accepted; blast radius must stay one upload")
+		}
+	})
 
-	l := newListener(ddb, tagger, doer, []string{testOrigin})
-	evt := objectCreatedEvent(testBucket, testKey)
-	if err := l.Handle(context.Background(), evt); err != nil {
-		t.Fatalf("first Handle: %v", err)
-	}
-	if err := l.Handle(context.Background(), evt); err != nil {
-		t.Fatalf("second Handle: %v", err)
-	}
+	t.Run("a duplicate event no-ops", func(t *testing.T) {
+		t.Parallel()
+		ddb := newFakeDDB()
+		id, _ := seedPendingSession(t, ddb, testCallback)
+		doer := &recordingDoer{}
 
-	if len(doer.posts) != 1 {
-		t.Fatalf("callbacks fired = %d, want exactly 1 (duplicate delivery must no-op)", len(doer.posts))
-	}
-}
+		l := newListener(ddb, &fakeTagger{tags: map[string]string{sessionTagKey: id}}, doer, []string{testOrigin})
+		evt := objectCreatedEvent(testBucket, testKey)
+		if err := l.Handle(context.Background(), evt); err != nil {
+			t.Fatalf("first Handle: %v", err)
+		}
+		if err := l.Handle(context.Background(), evt); err != nil {
+			t.Fatalf("second Handle: %v", err)
+		}
 
-func TestListener_CallbackTargetNotAllowlistedRejected(t *testing.T) {
-	ddb := newFakeDDB()
-	id, _ := seedPendingSession(t, ddb, "https://evil.example.com/api/upload")
-	tagger := &fakeTagger{tags: map[string]string{sessionTagKey: id}}
-	doer := &recordingDoer{}
+		if len(doer.posts) != 1 {
+			t.Fatalf("callbacks fired = %d, want exactly 1 (duplicate delivery must no-op)", len(doer.posts))
+		}
+	})
 
-	l := newListener(ddb, tagger, doer, []string{testOrigin})
-	if err := l.Handle(context.Background(), objectCreatedEvent(testBucket, testKey)); err != nil {
-		t.Fatalf("Handle: %v", err)
-	}
+	t.Run("a callback target that is not allowlisted is never posted to", func(t *testing.T) {
+		t.Parallel()
+		ddb := newFakeDDB()
+		id, _ := seedPendingSession(t, ddb, "https://evil.example.com/api/upload")
+		doer := &recordingDoer{}
 
-	if len(doer.posts) != 0 {
-		t.Fatalf("callbacks fired = %d, want 0 (target not allowlisted)", len(doer.posts))
-	}
-}
+		l := newListener(ddb, &fakeTagger{tags: map[string]string{sessionTagKey: id}}, doer, []string{testOrigin})
+		if err := l.Handle(context.Background(), objectCreatedEvent(testBucket, testKey)); err != nil {
+			t.Fatalf("Handle: %v", err)
+		}
 
-func TestListener_UntaggedObjectNoOps(t *testing.T) {
-	ddb := newFakeDDB()
-	seedPendingSession(t, ddb, testCallback)
-	tagger := &fakeTagger{tags: map[string]string{}}
-	doer := &recordingDoer{}
+		if len(doer.posts) != 0 {
+			t.Fatalf("callbacks fired = %d, want 0 (target not allowlisted)", len(doer.posts))
+		}
+	})
 
-	l := newListener(ddb, tagger, doer, []string{testOrigin})
-	if err := l.Handle(context.Background(), objectCreatedEvent(testBucket, testKey)); err != nil {
-		t.Fatalf("Handle: %v", err)
-	}
-	if len(doer.posts) != 0 {
-		t.Fatalf("callbacks fired = %d, want 0 (untagged object)", len(doer.posts))
-	}
+	t.Run("an untagged object no-ops", func(t *testing.T) {
+		t.Parallel()
+		ddb := newFakeDDB()
+		seedPendingSession(t, ddb, testCallback)
+		doer := &recordingDoer{}
+
+		l := newListener(ddb, &fakeTagger{tags: map[string]string{}}, doer, []string{testOrigin})
+		if err := l.Handle(context.Background(), objectCreatedEvent(testBucket, testKey)); err != nil {
+			t.Fatalf("Handle: %v", err)
+		}
+		if len(doer.posts) != 0 {
+			t.Fatalf("callbacks fired = %d, want 0 (untagged object)", len(doer.posts))
+		}
+	})
 }
 
 func TestOriginAllowed(t *testing.T) {
+	t.Parallel()
+
 	allowed := []string{"https://app.example.com", "https://www.example.com"}
 	cases := []struct {
+		name string
 		url  string
 		want bool
 	}{
-		{"https://app.example.com/api/upload", true},
-		{"https://www.example.com/x", true},
-		{"https://evil.example.com/api/upload", false},
-		{"http://app.example.com/api/upload", false},
-		{"https://app.example.com:8443/x", false},
-		{"not-a-url", false},
+		{"an allowlisted origin", "https://app.example.com/api/upload", true},
+		{"another allowlisted origin", "https://www.example.com/x", true},
+		{"a different host", "https://evil.example.com/api/upload", false},
+		{"the same host over plain http", "http://app.example.com/api/upload", false},
+		{"the same host on another port", "https://app.example.com:8443/x", false},
+		{"not a url at all", "not-a-url", false},
 	}
-	for _, c := range cases {
-		if got := originAllowed(c.url, allowed); got != c.want {
-			t.Errorf("originAllowed(%q) = %v, want %v", c.url, got, c.want)
-		}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			if got := originAllowed(tc.url, allowed); got != tc.want {
+				t.Errorf("originAllowed(%q) = %v, want %v", tc.url, got, tc.want)
+			}
+		})
 	}
 }
 

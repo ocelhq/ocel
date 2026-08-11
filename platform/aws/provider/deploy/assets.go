@@ -2,7 +2,9 @@ package deploy
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"path"
 	"path/filepath"
@@ -79,7 +81,7 @@ func uploadStaticAssets(ctx context.Context, cfg Config, manifest *deploymentsv1
 				replace:     true,
 				contentType: "application/json",
 			})
-		case !os.IsNotExist(err):
+		case !errors.Is(err, fs.ErrNotExist):
 			return fmt.Errorf("stat image config for %s: %w", name, err)
 		}
 	}

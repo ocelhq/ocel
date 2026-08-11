@@ -17,7 +17,7 @@ import (
 	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
 	"github.com/ocelhq/ocel/platform/aws/provider/bootstrap"
 	"github.com/ocelhq/ocel/platform/aws/provider/deploy"
-	"github.com/ocelhq/ocel/platform/aws/provider/pulumirt"
+	"github.com/ocelhq/ocel/platform/aws/provider/pulumiruntime"
 	cloudflare "github.com/ocelhq/ocel/platform/edge/cloudflare/deploy"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
@@ -122,7 +122,7 @@ func knownSlugs(ctx context.Context, awscfg aws.Config, substrate bootstrap.Depl
 	if err != nil {
 		return nil
 	}
-	pulumiCmd, err := pulumirt.Ensure(ctx, nil)
+	pulumiCmd, err := pulumiruntime.Ensure(ctx, nil)
 	if err != nil {
 		return nil
 	}
@@ -216,7 +216,7 @@ func (s *Server) previewTeardownContext(ctx context.Context, opts options, slug 
 	if err != nil {
 		return deploy.Config{}, nil, nil, err
 	}
-	pulumiCmd, err := pulumirt.Ensure(ctx, nil)
+	pulumiCmd, err := pulumiruntime.Ensure(ctx, nil)
 	if err != nil {
 		return deploy.Config{}, nil, nil, err
 	}
@@ -286,7 +286,7 @@ func (s *Server) ListEnvironments(ctx context.Context, req *deploymentsv1.ListEn
 	if err != nil {
 		return nil, err
 	}
-	pulumiCmd, err := pulumirt.Ensure(ctx, nil)
+	pulumiCmd, err := pulumiruntime.Ensure(ctx, nil)
 	if err != nil {
 		return nil, err
 	}

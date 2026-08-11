@@ -6,7 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
-	"sort"
+	"slices"
 	"strings"
 
 	connect "connectrpc.com/connect"
@@ -104,7 +104,7 @@ func (s fakeStore) resolve(class deploymentsv1.Environment_Class, cell *fakeCell
 		held := s[fakeCoordinateID(class, target.proto())]
 		if held.liveVersion() == 0 {
 			return "", connect.NewError(connect.CodeNotFound, fmt.Errorf(
-				"%s/%s holds no value: no value is set there", target.Slug, target.Key))
+				"%s/%s holds no value: vars: not found", target.Slug, target.Key))
 		}
 		cell = held
 	}
@@ -128,7 +128,7 @@ func sortedIDs(s fakeStore) []string {
 	for id := range s {
 		ids = append(ids, id)
 	}
-	sort.Strings(ids)
+	slices.Sort(ids)
 	return ids
 }
 
@@ -144,7 +144,7 @@ func checkExpectation(cell *fakeCell, expected *int64) error {
 		return nil
 	}
 	return connect.NewError(connect.CodeFailedPrecondition,
-		errors.New("the value changed since it was read; re-read it and try again"))
+		errors.New("vars: stale version"))
 }
 
 func (s *deployFakeProviderServer) addressable(ctx context.Context, at *envv1.Coordinate, class deploymentsv1.Environment_Class) error {
@@ -171,7 +171,7 @@ func (s *deployFakeProviderServer) addressable(ctx context.Context, at *envv1.Co
 		return connect.NewError(connect.CodeFailedPrecondition, fmt.Errorf(
 			"no preview environment named %q exists, and this project has none at all; deploy one with `ocel preview` before setting a value only it would read", environment))
 	}
-	sort.Strings(names)
+	slices.Sort(names)
 	return connect.NewError(connect.CodeFailedPrecondition, fmt.Errorf(
 		"no preview environment named %q exists, so nothing would ever read that value. This project's environments are: %s",
 		environment, strings.Join(names, ", ")))
@@ -195,7 +195,7 @@ func (s *deployFakeProviderServer) SetValue(ctx context.Context, req *envv1.SetV
 	}
 	if target := cell.target(); target != nil {
 		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf(
-			"%s/%s is a reference to %s/%s, which is where that value is edited: that cell is a reference, and a reference has no value of its own",
+			"%s/%s is a reference to %s/%s, which is where that value is edited: vars: cell is a reference",
 			cell.Coordinate.Slug, cell.Coordinate.Key, target.Slug, target.Key))
 	}
 	if err := store.write(req.GetClass(), req.GetCoordinate(), fakeCellData{Value: req.GetValue()}); err != nil {
@@ -239,7 +239,7 @@ func (s *deployFakeProviderServer) SetReference(ctx context.Context, req *envv1.
 	at, target := req.GetCoordinate(), req.GetTarget()
 	deepens := func(reason string) error {
 		return connect.NewError(connect.CodeInvalidArgument, fmt.Errorf(
-			"%s: a reference may only point at a value, never at another reference", reason))
+			"%s: vars: reference to a reference", reason))
 	}
 	if target.GetEnvironment() != "" {
 		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf(

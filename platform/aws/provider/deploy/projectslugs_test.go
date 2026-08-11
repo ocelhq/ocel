@@ -6,6 +6,8 @@ import (
 )
 
 func TestProjectSlugsBesides(t *testing.T) {
+	t.Parallel()
+
 	cases := []struct {
 		name       string
 		slug       string
@@ -70,6 +72,8 @@ func TestProjectSlugsBesides(t *testing.T) {
 
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
 			got := projectSlugsBesides(tc.slug, tc.stackNames)
 			if len(got) == 0 && len(tc.want) == 0 {
 				return
@@ -79,16 +83,18 @@ func TestProjectSlugsBesides(t *testing.T) {
 			}
 		})
 	}
-}
 
-func TestProjectSlugsBesides_LongSlugMatchesItsTruncatedScope(t *testing.T) {
-	slug := "a-very-long-project-slug-that-runs-past-the-safe-name-cap"
-	scope := safeName(slug)
-	if scope == slug {
-		t.Fatalf("safeName(%q) = %q, want it truncated — the fixture no longer exercises the cap", slug, scope)
-	}
+	t.Run("a long slug matches its truncated scope", func(t *testing.T) {
+		t.Parallel()
 
-	if got := projectSlugsBesides(slug, []string{scope + "--infra"}); got != nil {
-		t.Errorf("projectSlugsBesides() = %v, want nil — the truncated scope is the slug's own", got)
-	}
+		slug := "a-very-long-project-slug-that-runs-past-the-safe-name-cap"
+		scope := safeName(slug)
+		if scope == slug {
+			t.Fatalf("safeName(%q) = %q, want it truncated — the fixture no longer exercises the cap", slug, scope)
+		}
+
+		if got := projectSlugsBesides(slug, []string{scope + "--infra"}); got != nil {
+			t.Errorf("projectSlugsBesides() = %v, want nil — the truncated scope is the slug's own", got)
+		}
+	})
 }

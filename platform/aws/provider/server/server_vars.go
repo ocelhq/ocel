@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"slices"
-	"sort"
 	"strings"
 	"sync"
 
@@ -164,7 +163,7 @@ func (s *VarsServer) addressable(ctx context.Context, options []byte, class depl
 		return connect.NewError(connect.CodeFailedPrecondition, fmt.Errorf(
 			"no preview environment named %q exists, and this project has none at all; deploy one with `ocel preview` before setting a value only it would read", environment))
 	}
-	sort.Strings(names)
+	slices.Sort(names)
 	return connect.NewError(connect.CodeFailedPrecondition, fmt.Errorf(
 		"no preview environment named %q exists, so nothing would ever read that value. This project's environments are: %s",
 		environment, strings.Join(names, ", ")))

@@ -8,6 +8,8 @@ import (
 )
 
 func TestRealizationFor(t *testing.T) {
+	t.Parallel()
+
 	pg := resourcesv1.ResourceType_RESOURCE_TYPE_POSTGRES
 	bucket := resourcesv1.ResourceType_RESOURCE_TYPE_BUCKET
 
@@ -26,6 +28,8 @@ func TestRealizationFor(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
 			if got := realizationFor(tc.rt, tc.lifecycle); got != tc.want {
 				t.Errorf("realizationFor(%v, %v) = %v, want %v", tc.rt, tc.lifecycle, got, tc.want)
 			}

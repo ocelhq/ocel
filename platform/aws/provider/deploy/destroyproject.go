@@ -5,7 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"path"
-	"sort"
+	"slices"
 	"strings"
 
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
@@ -139,7 +139,7 @@ func rootStackWorkerNames(ctx context.Context, stack edge.RootStack, state edge.
 	for app := range apps {
 		sortedApps = append(sortedApps, app)
 	}
-	sort.Strings(sortedApps)
+	slices.Sort(sortedApps)
 	for _, app := range sortedApps {
 		add(workerScriptName(slug, env, app))
 	}

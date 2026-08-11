@@ -4,7 +4,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
-	"sort"
+	"slices"
 	"strings"
 )
 
@@ -41,7 +41,7 @@ func Discover(configDir string, paths []string) ([]string, error) {
 		}
 	}
 
-	sort.Strings(files)
+	slices.Sort(files)
 	return files, nil
 }
 
@@ -69,7 +69,7 @@ func Dirs(configDir string, paths []string) ([]string, error) {
 		}
 	}
 
-	sort.Strings(dirs)
+	slices.Sort(dirs)
 	return dirs, nil
 }
 

@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"io"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"strings"
@@ -16,16 +17,13 @@ import (
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/resources/v1"
 )
 
-func declaring(t *testing.T, definitions ...*resourcesv1.VariableDefinition) {
-	t.Helper()
-	prev := collectDeclarations
-	collectDeclarations = func(ctx context.Context, _ *projectconfig.Config, gate *envgate.Gate, _, _ io.Writer) ([]declare.Resource, error) {
+func declaring(d *deps, definitions ...*resourcesv1.VariableDefinition) {
+	d.collectDeclarations = func(ctx context.Context, _ *projectconfig.Config, gate *envgate.Gate, _, _ io.Writer) ([]declare.Resource, error) {
 		if _, err := gate.DeclareEnv(ctx, &resourcesv1.DeclareEnvRequest{Definitions: definitions}); err != nil {
 			return nil, err
 		}
 		return nil, nil
 	}
-	t.Cleanup(func() { collectDeclarations = prev })
 }
 
 func plainClient(key string) *resourcesv1.VariableDefinition {
@@ -37,141 +35,143 @@ func plainClient(key string) *resourcesv1.VariableDefinition {
 	}
 }
 
-func TestRunGenerate_WritesAccessorWithoutLoginOrProvider(t *testing.T) {
+func setUpGenerateFixture(t *testing.T, config, tsconfig string) string {
+	t.Helper()
 	root := t.TempDir()
-	writeFile(t, filepath.Join(root, "ocel.config.ts"), `
+	writeFile(t, filepath.Join(root, "ocel.config.ts"), config)
+	if tsconfig != "" {
+		writeFile(t, filepath.Join(root, "tsconfig.json"), tsconfig)
+	}
+	return root
+}
+
+const generateSoloConfig = `
+export default { slug: "test-app" };
+`
+
+func TestRunGenerate(t *testing.T) {
+	t.Run("writes the accessor without a login or a provider", func(t *testing.T) {
+		root := setUpGenerateFixture(t, `
 export default {
   slug: "test-app",
   apps: [{ name: "web", path: ".", framework: "next" }],
 };
-`)
-	writeFile(t, filepath.Join(root, "tsconfig.json"), "{\n  \"compilerOptions\": {}\n}\n")
+`, "{\n  \"compilerOptions\": {}\n}\n")
 
-	declaring(t, plainClient("NEXT_PUBLIC_SITE_URL"), plainClient("NEXT_PUBLIC_APP_ID"))
+		d := defaultDeps()
+		declaring(&d, plainClient("NEXT_PUBLIC_SITE_URL"), plainClient("NEXT_PUBLIC_APP_ID"))
 
-	var stdout, stderr bytes.Buffer
-	if err := runGenerate(context.Background(), root, &stdout, &stderr); err != nil {
-		t.Fatalf("runGenerate: %v", err)
-	}
-
-	accessor, err := os.ReadFile(filepath.Join(root, ".ocel", "env-client.ts"))
-	if err != nil {
-		t.Fatalf("runGenerate wrote no accessor: %v", err)
-	}
-	for _, want := range []string{
-		"NEXT_PUBLIC_APP_ID: inlined(\"NEXT_PUBLIC_APP_ID\", process.env.NEXT_PUBLIC_APP_ID)",
-		"NEXT_PUBLIC_SITE_URL: inlined(\"NEXT_PUBLIC_SITE_URL\", process.env.NEXT_PUBLIC_SITE_URL)",
-	} {
-		if !strings.Contains(string(accessor), want) {
-			t.Errorf("accessor = %s, want it to name %q", accessor, want)
+		var stdout, stderr bytes.Buffer
+		if err := runGenerate(context.Background(), d, root, &stdout, &stderr); err != nil {
+			t.Fatalf("runGenerate: %v", err)
 		}
-	}
 
-	tsconfig, err := os.ReadFile(filepath.Join(root, "tsconfig.json"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !strings.Contains(string(tsconfig), ".ocel/env-client.ts") {
-		t.Errorf("tsconfig.json = %s, want it to map 'ocel/env/client' at the accessor", tsconfig)
-	}
-
-	if got, want := stdout.String(), "Generated the client accessor for 2 client-accessible variables\n"; got != want {
-		t.Errorf("stdout = %q, want %q", got, want)
-	}
-}
-
-func TestRunGenerate_GeneratesForDeclarationsNoValueBacks(t *testing.T) {
-	root := t.TempDir()
-	writeFile(t, filepath.Join(root, "ocel.config.ts"), `
-export default { slug: "test-app" };
-`)
-	writeFile(t, filepath.Join(root, "tsconfig.json"), "{}\n")
-
-	declaring(t, plainClient("NEXT_PUBLIC_SITE_URL"))
-
-	var stdout, stderr bytes.Buffer
-	if err := runGenerate(context.Background(), root, &stdout, &stderr); err != nil {
-		t.Fatalf("runGenerate refused a declaration nothing has a value for: %v", err)
-	}
-	if _, err := os.ReadFile(filepath.Join(root, ".ocel", "env-client.ts")); err != nil {
-		t.Fatalf("runGenerate wrote no accessor: %v", err)
-	}
-}
-
-func TestRunGenerate_NamesOnlyClientAccessiblePlaintext(t *testing.T) {
-	root := t.TempDir()
-	writeFile(t, filepath.Join(root, "ocel.config.ts"), `
-export default { slug: "test-app" };
-`)
-	writeFile(t, filepath.Join(root, "tsconfig.json"), "{}\n")
-
-	declaring(t,
-		plainClient("NEXT_PUBLIC_SITE_URL"),
-		&resourcesv1.VariableDefinition{Key: "DATABASE_URL", Class: resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN},
-		&resourcesv1.VariableDefinition{Key: "API_TOKEN", Class: resourcesv1.VariableClass_VARIABLE_CLASS_SENSITIVE, ClientAccessible: true},
-		&resourcesv1.VariableDefinition{Key: "SIGNING_KEY", Class: resourcesv1.VariableClass_VARIABLE_CLASS_SECRET, ClientAccessible: true},
-	)
-
-	var stdout, stderr bytes.Buffer
-	if err := runGenerate(context.Background(), root, &stdout, &stderr); err != nil {
-		t.Fatalf("runGenerate: %v", err)
-	}
-
-	accessor, err := os.ReadFile(filepath.Join(root, ".ocel", "env-client.ts"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	for _, unwanted := range []string{"DATABASE_URL", "API_TOKEN", "SIGNING_KEY"} {
-		if strings.Contains(string(accessor), unwanted) {
-			t.Errorf("accessor = %s, want it not to name %q", accessor, unwanted)
+		accessor, err := os.ReadFile(filepath.Join(root, ".ocel", "env-client.ts"))
+		if err != nil {
+			t.Fatalf("runGenerate wrote no accessor: %v", err)
 		}
-	}
-}
+		for _, want := range []string{
+			"NEXT_PUBLIC_APP_ID: inlined(\"NEXT_PUBLIC_APP_ID\", process.env.NEXT_PUBLIC_APP_ID)",
+			"NEXT_PUBLIC_SITE_URL: inlined(\"NEXT_PUBLIC_SITE_URL\", process.env.NEXT_PUBLIC_SITE_URL)",
+		} {
+			if !strings.Contains(string(accessor), want) {
+				t.Errorf("accessor = %s, want it to name %q", accessor, want)
+			}
+		}
 
-func TestRunGenerate_NoClientVariables(t *testing.T) {
-	root := t.TempDir()
-	writeFile(t, filepath.Join(root, "ocel.config.ts"), `
-export default { slug: "test-app" };
-`)
-	writeFile(t, filepath.Join(root, "tsconfig.json"), "{}\n")
+		tsconfig, err := os.ReadFile(filepath.Join(root, "tsconfig.json"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !strings.Contains(string(tsconfig), ".ocel/env-client.ts") {
+			t.Errorf("tsconfig.json = %s, want it to map 'ocel/env/client' at the accessor", tsconfig)
+		}
 
-	declaring(t, &resourcesv1.VariableDefinition{Key: "DATABASE_URL", Class: resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN})
+		if got, want := stdout.String(), "Generated the client accessor for 2 client-accessible variables\n"; got != want {
+			t.Errorf("stdout = %q, want %q", got, want)
+		}
+	})
 
-	var stdout, stderr bytes.Buffer
-	if err := runGenerate(context.Background(), root, &stdout, &stderr); err != nil {
-		t.Fatalf("runGenerate: %v", err)
-	}
+	t.Run("generates for declarations no value backs", func(t *testing.T) {
+		root := setUpGenerateFixture(t, generateSoloConfig, "{}\n")
 
-	if _, err := os.Stat(filepath.Join(root, ".ocel", "env-client.ts")); !errors.Is(err, os.ErrNotExist) {
-		t.Errorf("stat accessor = %v, want it not to exist for a project with no client-accessible variable", err)
-	}
-	tsconfig, err := os.ReadFile(filepath.Join(root, "tsconfig.json"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if got := string(tsconfig); got != "{}\n" {
-		t.Errorf("tsconfig.json = %q, want it untouched", got)
-	}
-	if got, want := stdout.String(), "No client-accessible variables declared; nothing to generate\n"; got != want {
-		t.Errorf("stdout = %q, want %q", got, want)
-	}
-}
+		d := defaultDeps()
+		declaring(&d, plainClient("NEXT_PUBLIC_SITE_URL"))
 
-func TestRunGenerate_DiscoveryFailure(t *testing.T) {
-	root := t.TempDir()
-	writeFile(t, filepath.Join(root, "ocel.config.ts"), `
-export default { slug: "test-app" };
-`)
+		var stdout, stderr bytes.Buffer
+		if err := runGenerate(context.Background(), d, root, &stdout, &stderr); err != nil {
+			t.Fatalf("runGenerate refused a declaration nothing has a value for: %v", err)
+		}
+		if _, err := os.ReadFile(filepath.Join(root, ".ocel", "env-client.ts")); err != nil {
+			t.Fatalf("runGenerate wrote no accessor: %v", err)
+		}
+	})
 
-	prev := collectDeclarations
-	collectDeclarations = func(context.Context, *projectconfig.Config, *envgate.Gate, io.Writer, io.Writer) ([]declare.Resource, error) {
-		return nil, errors.New("discovery blew up")
-	}
-	t.Cleanup(func() { collectDeclarations = prev })
+	t.Run("names only client-accessible plaintext", func(t *testing.T) {
+		root := setUpGenerateFixture(t, generateSoloConfig, "{}\n")
 
-	var stdout, stderr bytes.Buffer
-	err := runGenerate(context.Background(), root, &stdout, &stderr)
-	if err == nil || !strings.Contains(err.Error(), "discovery blew up") {
-		t.Fatalf("runGenerate = %v, want the discovery failure", err)
-	}
+		d := defaultDeps()
+		declaring(&d,
+			plainClient("NEXT_PUBLIC_SITE_URL"),
+			&resourcesv1.VariableDefinition{Key: "DATABASE_URL", Class: resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN},
+			&resourcesv1.VariableDefinition{Key: "API_TOKEN", Class: resourcesv1.VariableClass_VARIABLE_CLASS_SENSITIVE, ClientAccessible: true},
+			&resourcesv1.VariableDefinition{Key: "SIGNING_KEY", Class: resourcesv1.VariableClass_VARIABLE_CLASS_SECRET, ClientAccessible: true},
+		)
+
+		var stdout, stderr bytes.Buffer
+		if err := runGenerate(context.Background(), d, root, &stdout, &stderr); err != nil {
+			t.Fatalf("runGenerate: %v", err)
+		}
+
+		accessor, err := os.ReadFile(filepath.Join(root, ".ocel", "env-client.ts"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, unwanted := range []string{"DATABASE_URL", "API_TOKEN", "SIGNING_KEY"} {
+			if strings.Contains(string(accessor), unwanted) {
+				t.Errorf("accessor = %s, want it not to name %q", accessor, unwanted)
+			}
+		}
+	})
+
+	t.Run("writes nothing for a project with no client-accessible variable", func(t *testing.T) {
+		root := setUpGenerateFixture(t, generateSoloConfig, "{}\n")
+
+		d := defaultDeps()
+		declaring(&d, &resourcesv1.VariableDefinition{Key: "DATABASE_URL", Class: resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN})
+
+		var stdout, stderr bytes.Buffer
+		if err := runGenerate(context.Background(), d, root, &stdout, &stderr); err != nil {
+			t.Fatalf("runGenerate: %v", err)
+		}
+
+		if _, err := os.Stat(filepath.Join(root, ".ocel", "env-client.ts")); !errors.Is(err, fs.ErrNotExist) {
+			t.Errorf("stat accessor = %v, want it not to exist for a project with no client-accessible variable", err)
+		}
+		tsconfig, err := os.ReadFile(filepath.Join(root, "tsconfig.json"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got := string(tsconfig); got != "{}\n" {
+			t.Errorf("tsconfig.json = %q, want it untouched", got)
+		}
+		if got, want := stdout.String(), "No client-accessible variables declared; nothing to generate\n"; got != want {
+			t.Errorf("stdout = %q, want %q", got, want)
+		}
+	})
+
+	t.Run("surfaces a discovery failure", func(t *testing.T) {
+		root := setUpGenerateFixture(t, generateSoloConfig, "")
+
+		d := defaultDeps()
+		d.collectDeclarations = func(context.Context, *projectconfig.Config, *envgate.Gate, io.Writer, io.Writer) ([]declare.Resource, error) {
+			return nil, errors.New("discovery blew up")
+		}
+
+		var stdout, stderr bytes.Buffer
+		err := runGenerate(context.Background(), d, root, &stdout, &stderr)
+		if err == nil || !strings.Contains(err.Error(), "discovery blew up") {
+			t.Fatalf("runGenerate = %v, want the discovery failure", err)
+		}
+	})
 }

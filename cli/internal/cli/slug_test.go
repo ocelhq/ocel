@@ -8,6 +8,8 @@ import (
 )
 
 func TestSlugify(t *testing.T) {
+	t.Parallel()
+
 	cases := []struct {
 		name string
 		want string
@@ -19,12 +21,16 @@ func TestSlugify(t *testing.T) {
 		{strings.Repeat("a", 100), strings.Repeat("a", 63)},
 	}
 	for _, tc := range cases {
-		got := slugify(tc.name)
-		if got != tc.want {
-			t.Errorf("slugify(%q) = %q, want %q", tc.name, got, tc.want)
-		}
-		if got != "" && !projectconfig.ValidSlug(got) {
-			t.Errorf("slugify(%q) = %q, which is not a valid slug", tc.name, got)
-		}
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			got := slugify(tc.name)
+			if got != tc.want {
+				t.Errorf("slugify(%q) = %q, want %q", tc.name, got, tc.want)
+			}
+			if got != "" && !projectconfig.ValidSlug(got) {
+				t.Errorf("slugify(%q) = %q, which is not a valid slug", tc.name, got)
+			}
+		})
 	}
 }

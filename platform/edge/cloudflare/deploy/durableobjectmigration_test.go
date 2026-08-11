@@ -1,7 +1,6 @@
 package cloudflare
 
 import (
-	"context"
 	"net/http"
 	"net/http/httptest"
 	"reflect"
@@ -26,11 +25,19 @@ const liveDeploymentsStoreSettings = `{
   "success": true, "errors": [], "messages": []
 }`
 
-func liveSettingsProvider(t *testing.T) *provider {
+const absentScriptSettings = `{"success":false,"errors":[{"code":10007,"message":"workers.api.error.script_not_found"}],"result":null}`
+
+const foreignClassSettings = `{"result":{"bindings":[
+	{"class_name":"IsrDeploy","name":"ISR_WRITER_DO","script_name":"some-other-worker",
+	 "type":"durable_object_namespace"}
+]},"success":true,"errors":[],"messages":[]}`
+
+func settingsProvider(t *testing.T, status int, body string) *provider {
 	t.Helper()
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write([]byte(liveDeploymentsStoreSettings))
+		w.WriteHeader(status)
+		_, _ = w.Write([]byte(body))
 	}))
 	t.Cleanup(srv.Close)
 	return &provider{client: cf.NewClient(
@@ -39,74 +46,82 @@ func liveSettingsProvider(t *testing.T) *provider {
 	)}
 }
 
-func TestDeployedClasses_ReadsTheClassOffTheLiveResponse(t *testing.T) {
+func TestDeployedClasses(t *testing.T) {
 	t.Setenv(envAccountID, "acct")
-	classes, err := liveSettingsProvider(t).deployedClasses(context.Background(), "ocel-deployments-store-preview")
-	if err != nil {
-		t.Fatalf("deployedClasses: %v", err)
-	}
-	if !reflect.DeepEqual(classes, []string{"DeploymentsStore"}) {
-		t.Errorf("deployedClasses = %v, want [DeploymentsStore]", classes)
+
+	for _, tc := range []struct {
+		name    string
+		status  int
+		body    string
+		script  string
+		want    []string
+		wantLen int
+	}{
+		{
+			name:   "reads the class off the live settings response",
+			status: http.StatusOK,
+			body:   liveDeploymentsStoreSettings,
+			script: "ocel-deployments-store-preview",
+			want:   []string{"DeploymentsStore"},
+		},
+		{
+			name:   "a script that does not exist has no classes",
+			status: http.StatusNotFound,
+			body:   absentScriptSettings,
+			script: "ocel-isr-writer-preview",
+			want:   nil,
+		},
+		{
+			name:   "a class owned by another script is not ours",
+			status: http.StatusOK,
+			body:   foreignClassSettings,
+			script: "ocel-isr-writer-preview",
+			want:   nil,
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			classes, err := settingsProvider(t, tc.status, tc.body).deployedClasses(t.Context(), tc.script)
+			if err != nil {
+				t.Fatalf("deployedClasses: %v", err)
+			}
+			if !reflect.DeepEqual(classes, tc.want) {
+				t.Errorf("deployedClasses = %v, want %v", classes, tc.want)
+			}
+		})
 	}
 }
 
-func TestDeploymentsStoreUpload_DoesNotRedeclareAnExistingClass(t *testing.T) {
+func TestDurableObjectMigrationAgainstLiveClasses(t *testing.T) {
 	t.Setenv(envAccountID, "acct")
-	classes, err := liveSettingsProvider(t).deployedClasses(context.Background(), "ocel-deployments-store-preview")
-	if err != nil {
-		t.Fatalf("deployedClasses: %v", err)
-	}
-	meta := doMetadataFromMultipart(t, testStoreWorker(), deploymentsStoreWorker, classes)
-	if migrations, present := meta["migrations"]; present {
-		t.Fatalf("upload declares migrations %v against a script that already has DeploymentsStore; "+
-			"Cloudflare rejects this with 10074", migrations)
-	}
-}
 
-func TestDeployedClasses_AbsentScriptIsNoClasses(t *testing.T) {
-	t.Setenv(envAccountID, "acct")
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusNotFound)
-		_, _ = w.Write([]byte(`{"success":false,"errors":[{"code":10007,"message":"workers.api.error.script_not_found"}],"result":null}`))
-	}))
-	t.Cleanup(srv.Close)
-	p := &provider{client: cf.NewClient(option.WithBaseURL(srv.URL+"/"), option.WithAPIToken("test"))}
+	t.Run("a class the script already carries is not redeclared", func(t *testing.T) {
+		classes, err := settingsProvider(t, http.StatusOK, liveDeploymentsStoreSettings).
+			deployedClasses(t.Context(), "ocel-deployments-store-preview")
+		if err != nil {
+			t.Fatalf("deployedClasses: %v", err)
+		}
 
-	classes, err := p.deployedClasses(context.Background(), "ocel-isr-writer-preview")
-	if err != nil {
-		t.Fatalf("deployedClasses on an absent script: %v", err)
-	}
-	if len(classes) != 0 {
-		t.Errorf("deployedClasses = %v, want none for a script that does not exist", classes)
-	}
-}
+		meta := doMetadataFromMultipart(t, testStoreWorker(), deploymentsStoreWorker, classes)
+		if migrations, present := meta["migrations"]; present {
+			t.Fatalf("upload declares migrations %v against a script that already has DeploymentsStore; "+
+				"Cloudflare rejects this with 10074", migrations)
+		}
+	})
 
-func TestDeployedClasses_IgnoresAClassOwnedByAnotherScript(t *testing.T) {
-	t.Setenv(envAccountID, "acct")
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write([]byte(`{"result":{"bindings":[
-			{"class_name":"IsrDeploy","name":"ISR_WRITER_DO","script_name":"some-other-worker",
-			 "type":"durable_object_namespace"}
-		]},"success":true,"errors":[],"messages":[]}`))
-	}))
-	t.Cleanup(srv.Close)
-	p := &provider{client: cf.NewClient(option.WithBaseURL(srv.URL+"/"), option.WithAPIToken("test"))}
+	t.Run("a class another script owns is still created locally", func(t *testing.T) {
+		classes, err := settingsProvider(t, http.StatusOK, foreignClassSettings).
+			deployedClasses(t.Context(), "ocel-isr-writer-preview")
+		if err != nil {
+			t.Fatalf("deployedClasses: %v", err)
+		}
 
-	classes, err := p.deployedClasses(context.Background(), "ocel-isr-writer-preview")
-	if err != nil {
-		t.Fatalf("deployedClasses: %v", err)
-	}
-	if len(classes) != 0 {
-		t.Fatalf("deployedClasses = %v, want none: IsrDeploy belongs to another script", classes)
-	}
-	meta := doMetadataFromMultipart(t, testStoreWorker(), isrWriterWorker, classes)
-	migrations, ok := meta["migrations"].(map[string]any)
-	if !ok {
-		t.Fatalf("expected a migrations object, got %v", meta["migrations"])
-	}
-	if steps := migrationSteps(t, migrations); !reflect.DeepEqual(steps, [][]string{{"IsrDeploy"}, {"IsrSnapshot"}}) {
-		t.Errorf("migrations.steps = %v, want both classes still created locally", steps)
-	}
+		meta := doMetadataFromMultipart(t, testStoreWorker(), isrWriterWorker, classes)
+		migrations, ok := meta["migrations"].(map[string]any)
+		if !ok {
+			t.Fatalf("expected a migrations object, got %v", meta["migrations"])
+		}
+		if steps := migrationSteps(t, migrations); !reflect.DeepEqual(steps, [][]string{{"IsrDeploy"}, {"IsrSnapshot"}}) {
+			t.Errorf("migrations.steps = %v, want both classes still created locally", steps)
+		}
+	})
 }

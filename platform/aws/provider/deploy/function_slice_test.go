@@ -11,309 +11,381 @@ import (
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/resources/v1"
 )
 
-func TestTranslateFunction_PassesRuntimeAndEntrypoint(t *testing.T) {
-	got := translateFunction(&deploymentsv1.ManifestFunction{
-		Runtime: "nodejs24.x",
-		Handler: "src/server.js",
+func TestTranslateFunction(t *testing.T) {
+	t.Run("passes runtime and entrypoint", func(t *testing.T) {
+		t.Parallel()
+		got := translateFunction(&deploymentsv1.ManifestFunction{
+			Runtime: "nodejs24.x",
+			Handler: "src/server.js",
+		})
+		if got.Runtime != "nodejs24.x" {
+			t.Errorf("Runtime = %q, want nodejs24.x", got.Runtime)
+		}
+		if got.Handler != "src/server.js" {
+			t.Errorf("Handler = %q, want src/server.js", got.Handler)
+		}
 	})
-	if got.Runtime != "nodejs24.x" {
-		t.Errorf("Runtime = %q, want nodejs24.x", got.Runtime)
-	}
-	if got.Handler != "src/server.js" {
-		t.Errorf("Handler = %q, want src/server.js", got.Handler)
-	}
+
+	t.Run("empty falls back to pinned defaults", func(t *testing.T) {
+		t.Parallel()
+		got := translateFunction(&deploymentsv1.ManifestFunction{})
+		if got.Runtime != defaultFunctionRuntime {
+			t.Errorf("Runtime = %q, want default %q", got.Runtime, defaultFunctionRuntime)
+		}
+		if got.Handler != defaultFunctionEntry {
+			t.Errorf("Handler = %q, want default %q", got.Handler, defaultFunctionEntry)
+		}
+	})
+
+	t.Run("defaults size the function for SSR", func(t *testing.T) {
+		t.Parallel()
+		got := translateFunction(&deploymentsv1.ManifestFunction{})
+		if got.MemorySizeMB != defaultFunctionMemoryMB {
+			t.Errorf("MemorySizeMB = %d, want default %d", got.MemorySizeMB, defaultFunctionMemoryMB)
+		}
+		if got.TimeoutSeconds != defaultFunctionTimeoutSeconds {
+			t.Errorf("TimeoutSeconds = %d, want default %d", got.TimeoutSeconds, defaultFunctionTimeoutSeconds)
+		}
+	})
+
+	t.Run("Next gets the bundle memory default", func(t *testing.T) {
+		t.Parallel()
+		got := translateFunction(&deploymentsv1.ManifestFunction{Framework: frameworkNext})
+		if got.MemorySizeMB != nextBundleFunctionMemoryMB {
+			t.Errorf("MemorySizeMB = %d, want the Next default %d", got.MemorySizeMB, nextBundleFunctionMemoryMB)
+		}
+	})
+
+	t.Run("non-Next keeps the flat default", func(t *testing.T) {
+		t.Parallel()
+		got := translateFunction(&deploymentsv1.ManifestFunction{Framework: "express"})
+		if got.MemorySizeMB != defaultFunctionMemoryMB {
+			t.Errorf("MemorySizeMB = %d, want default %d", got.MemorySizeMB, defaultFunctionMemoryMB)
+		}
+	})
 }
 
-func TestTranslateFunction_EmptyFallsBackToPinnedDefaults(t *testing.T) {
-	got := translateFunction(&deploymentsv1.ManifestFunction{})
-	if got.Runtime != defaultFunctionRuntime {
-		t.Errorf("Runtime = %q, want default %q", got.Runtime, defaultFunctionRuntime)
-	}
-	if got.Handler != defaultFunctionEntry {
-		t.Errorf("Handler = %q, want default %q", got.Handler, defaultFunctionEntry)
-	}
+func TestFunctionDefaults(t *testing.T) {
+	t.Run("clear AWS's implicit ceilings", func(t *testing.T) {
+		const (
+			awsDefaultTimeoutSeconds = 3
+			awsDefaultMemoryMB       = 128
+		)
+		if defaultFunctionTimeoutSeconds <= awsDefaultTimeoutSeconds {
+			t.Errorf("defaultFunctionTimeoutSeconds = %d, must exceed AWS's implicit %ds",
+				defaultFunctionTimeoutSeconds, awsDefaultTimeoutSeconds)
+		}
+		if defaultFunctionMemoryMB <= awsDefaultMemoryMB {
+			t.Errorf("defaultFunctionMemoryMB = %d, must exceed AWS's implicit %dMB",
+				defaultFunctionMemoryMB, awsDefaultMemoryMB)
+		}
+	})
 }
 
-func TestTranslateFunction_DefaultsSizeTheFunctionForSSR(t *testing.T) {
-	got := translateFunction(&deploymentsv1.ManifestFunction{})
-	if got.MemorySizeMB != defaultFunctionMemoryMB {
-		t.Errorf("MemorySizeMB = %d, want default %d", got.MemorySizeMB, defaultFunctionMemoryMB)
-	}
-	if got.TimeoutSeconds != defaultFunctionTimeoutSeconds {
-		t.Errorf("TimeoutSeconds = %d, want default %d", got.TimeoutSeconds, defaultFunctionTimeoutSeconds)
-	}
+func TestMembraneLayerARN(t *testing.T) {
+	t.Run("defaults to the pinned layer", func(t *testing.T) {
+		t.Setenv(membraneLayerARNEnv, "")
+		if got := membraneLayerARN(); got != defaultMembraneLayerARN {
+			t.Errorf("membraneLayerARN() = %q, want default %q", got, defaultMembraneLayerARN)
+		}
+	})
+
+	t.Run("the env override wins", func(t *testing.T) {
+		t.Setenv(membraneLayerARNEnv, "arn:aws:lambda:us-east-1:123:layer:ocel-membrane:9")
+		if got := membraneLayerARN(); got != "arn:aws:lambda:us-east-1:123:layer:ocel-membrane:9" {
+			t.Errorf("membraneLayerARN() = %q, want the env override", got)
+		}
+	})
 }
 
-func TestFunctionDefaults_ClearAWSImplicitCeilings(t *testing.T) {
-	const (
-		awsDefaultTimeoutSeconds = 3
-		awsDefaultMemoryMB       = 128
-	)
-	if defaultFunctionTimeoutSeconds <= awsDefaultTimeoutSeconds {
-		t.Errorf("defaultFunctionTimeoutSeconds = %d, must exceed AWS's implicit %ds",
-			defaultFunctionTimeoutSeconds, awsDefaultTimeoutSeconds)
-	}
-	if defaultFunctionMemoryMB <= awsDefaultMemoryMB {
-		t.Errorf("defaultFunctionMemoryMB = %d, must exceed AWS's implicit %dMB",
-			defaultFunctionMemoryMB, awsDefaultMemoryMB)
-	}
-}
-
-func TestTranslateFunction_NextGetsTheBundleMemoryDefault(t *testing.T) {
-	got := translateFunction(&deploymentsv1.ManifestFunction{Framework: frameworkNext})
-	if got.MemorySizeMB != nextBundleFunctionMemoryMB {
-		t.Errorf("MemorySizeMB = %d, want the Next default %d", got.MemorySizeMB, nextBundleFunctionMemoryMB)
-	}
-}
-
-func TestTranslateFunction_NonNextKeepsTheFlatDefault(t *testing.T) {
-	got := translateFunction(&deploymentsv1.ManifestFunction{Framework: "express"})
-	if got.MemorySizeMB != defaultFunctionMemoryMB {
-		t.Errorf("MemorySizeMB = %d, want default %d", got.MemorySizeMB, defaultFunctionMemoryMB)
-	}
-}
-
-func TestMembraneLayerARN_DefaultAndEnvOverride(t *testing.T) {
-	t.Setenv(membraneLayerARNEnv, "")
-	if got := membraneLayerARN(); got != defaultMembraneLayerARN {
-		t.Errorf("membraneLayerARN() = %q, want default %q", got, defaultMembraneLayerARN)
-	}
-	t.Setenv(membraneLayerARNEnv, "arn:aws:lambda:us-east-1:123:layer:ocel-membrane:9")
-	if got := membraneLayerARN(); got != "arn:aws:lambda:us-east-1:123:layer:ocel-membrane:9" {
-		t.Errorf("membraneLayerARN() = %q, want the env override", got)
-	}
-}
-
-func TestBytecodeCacheEnabled_DefaultAndEnvOverride(t *testing.T) {
-	t.Setenv(bytecodeCacheEnv, "")
-	if bytecodeCacheEnabled() {
-		t.Error("bytecodeCacheEnabled() = true with no override, want false")
-	}
-	t.Setenv(bytecodeCacheEnv, "1")
-	if !bytecodeCacheEnabled() {
-		t.Error("bytecodeCacheEnabled() = false with OCEL_BYTECODE_CACHE=1, want true")
-	}
-	for _, v := range []string{"true", "on", "yes", "TRUE"} {
-		t.Setenv(bytecodeCacheEnv, v)
+func TestBytecodeCacheEnabled(t *testing.T) {
+	t.Run("off with no override", func(t *testing.T) {
+		t.Setenv(bytecodeCacheEnv, "")
 		if bytecodeCacheEnabled() {
-			t.Errorf("bytecodeCacheEnabled() = true with OCEL_BYTECODE_CACHE=%q, want false (only \"1\" enables)", v)
+			t.Error("bytecodeCacheEnabled() = true with no override, want false")
 		}
-	}
-}
+	})
 
-func TestISREnv_SetsBytecodePrefixToTheAssetPrefix(t *testing.T) {
-	t.Setenv(bytecodeCacheEnv, "1")
-	cfg := isrConfig{
-		Bucket:   "assets-xyz",
-		Prefix:   "prod/proj123/marketing/build456",
-		Table:    "state-abc",
-		TableARN: "arn:aws:dynamodb:us-east-1:1234:table/state-abc",
-	}
-	env := cfg.env()
-	if env["OCEL_BYTECODE_PREFIX"] != cfg.Prefix {
-		t.Errorf("OCEL_BYTECODE_PREFIX = %q, want %q", env["OCEL_BYTECODE_PREFIX"], cfg.Prefix)
-	}
-}
-
-func TestISREnv_OmitsBytecodePrefixWhenGateIsOff(t *testing.T) {
-	t.Setenv(bytecodeCacheEnv, "")
-	cfg := isrConfig{
-		Bucket:   "assets-xyz",
-		Prefix:   "prod/proj123/marketing/build456",
-		Table:    "state-abc",
-		TableARN: "arn:aws:dynamodb:us-east-1:1234:table/state-abc",
-	}
-	env := cfg.env()
-	if _, ok := env["OCEL_BYTECODE_PREFIX"]; ok {
-		t.Errorf("OCEL_BYTECODE_PREFIX = %q, want it unset without OCEL_BYTECODE_CACHE=1", env["OCEL_BYTECODE_PREFIX"])
-	}
-}
-
-func TestISRPolicy_CoversTheComposedBytecodeKey(t *testing.T) {
-	t.Setenv(bytecodeCacheEnv, "1")
-	cfg := isrConfig{
-		Bucket:   "assets-xyz",
-		Prefix:   "prod/proj123/marketing/build456",
-		Table:    "state-abc",
-		TableARN: "arn:aws:dynamodb:us-east-1:1234:table/state-abc",
-	}
-
-	prefix := cfg.env()["OCEL_BYTECODE_PREFIX"]
-	bytecodeKey := fmt.Sprintf("%s/bytecode/my-function/node22-x64.tar.gz", prefix)
-
-	raw, err := isrPolicy(cfg)
-	if err != nil {
-		t.Fatalf("isrPolicy: %v", err)
-	}
-	var doc struct {
-		Statement []struct {
-			Resource string `json:"Resource"`
+	t.Run("on with OCEL_BYTECODE_CACHE=1", func(t *testing.T) {
+		t.Setenv(bytecodeCacheEnv, "1")
+		if !bytecodeCacheEnabled() {
+			t.Error("bytecodeCacheEnabled() = false with OCEL_BYTECODE_CACHE=1, want true")
 		}
-	}
-	if err := json.Unmarshal([]byte(raw), &doc); err != nil {
-		t.Fatalf("policy is not valid JSON: %v", err)
-	}
+	})
 
-	s3Resource := doc.Statement[0].Resource
-	if !strings.HasPrefix(s3Resource, "arn:aws:s3:::") {
-		t.Fatalf("Statement[0].Resource = %q, want the S3 grant", s3Resource)
-	}
-	pattern := strings.TrimPrefix(s3Resource, "arn:aws:s3:::")
-	if !strings.HasSuffix(pattern, "/*") {
-		t.Fatalf("S3 resource pattern %q does not end in /*", pattern)
-	}
-	dir := strings.TrimSuffix(pattern, "*")
-	if !strings.HasPrefix(fmt.Sprintf("%s/%s", cfg.Bucket, bytecodeKey), dir) {
-		t.Errorf("bytecode key %s/%s is not covered by the policy's resource pattern %q", cfg.Bucket, bytecodeKey, pattern)
+	for _, v := range []string{"true", "on", "yes", "TRUE"} {
+		t.Run("only \"1\" enables, not "+v, func(t *testing.T) {
+			t.Setenv(bytecodeCacheEnv, v)
+			if bytecodeCacheEnabled() {
+				t.Errorf("bytecodeCacheEnabled() = true with OCEL_BYTECODE_CACHE=%q, want false (only \"1\" enables)", v)
+			}
+		})
 	}
 }
 
-func TestFunctionEnvKey_UsesCanonicalTypeTokenAndUserID(t *testing.T) {
-	if got := functionEnvKey(resourcesv1.ResourceType_RESOURCE_TYPE_POSTGRES, "main"); got != "OCEL_RESOURCE_POSTGRES_main" {
-		t.Errorf("functionEnvKey(postgres, main) = %q, want OCEL_RESOURCE_POSTGRES_main", got)
-	}
-	if got := functionEnvKey(resourcesv1.ResourceType_RESOURCE_TYPE_BUCKET, "uploads"); got != "OCEL_RESOURCE_BUCKET_uploads" {
-		t.Errorf("functionEnvKey(bucket, uploads) = %q, want OCEL_RESOURCE_BUCKET_uploads", got)
-	}
-}
-
-func TestPostgresEnvPayload_MatchesSDKConnectionStringShape(t *testing.T) {
-	payload := postgresEnvPayload("ocel", "s3cr3t", "db.host", 5432, "ocel")
-	var parsed struct {
-		ConnectionString string `json:"connectionString"`
-	}
-	if err := json.Unmarshal([]byte(payload), &parsed); err != nil {
-		t.Fatalf("payload is not valid JSON: %v", err)
-	}
-	want := "postgres://ocel:s3cr3t@db.host:5432/ocel"
-	if parsed.ConnectionString != want {
-		t.Errorf("connectionString = %q, want %q", parsed.ConnectionString, want)
-	}
-}
-
-func TestBucketEnvPayload_MatchesSDKAddressBucketShape(t *testing.T) {
-	payload := bucketEnvPayload("unix:///run/ocel/runtime.sock", "my-bucket-abc123")
-	var parsed struct {
-		Address string `json:"address"`
-		Bucket  string `json:"bucket"`
-	}
-	if err := json.Unmarshal([]byte(payload), &parsed); err != nil {
-		t.Fatalf("payload is not valid JSON: %v", err)
-	}
-	if parsed.Address != "unix:///run/ocel/runtime.sock" {
-		t.Errorf("address = %q, want the BucketService endpoint", parsed.Address)
-	}
-	if parsed.Bucket != "my-bucket-abc123" {
-		t.Errorf("bucket = %q, want the provisioned bucket binding", parsed.Bucket)
-	}
-}
-
-func TestArtifactArchivePath_ResolvesRelativeToOutputRoot(t *testing.T) {
-	got := artifactArchivePath("/proj/.ocel/output", "apps/web/functions/api.func")
-	want := "/proj/.ocel/output/apps/web/functions/api.func"
-	if got != want {
-		t.Errorf("artifactArchivePath() = %q, want %q", got, want)
-	}
-}
-
-func TestCollectFunctionOutput_ReportsURLKeyedByLogicalName(t *testing.T) {
-	out := collectFunctionOutput("api", "https://abc.lambda-url.us-east-1.on.aws/")
-	if out.GetLogicalName() != "api" {
-		t.Errorf("LogicalName = %q, want api", out.GetLogicalName())
-	}
-	fn := out.GetFunction()
-	if fn == nil {
-		t.Fatal("output has no FunctionOutput; the Function URL must be reported")
-	}
-	if fn.GetUrl() != "https://abc.lambda-url.us-east-1.on.aws/" {
-		t.Errorf("url = %q, want the Function URL", fn.GetUrl())
-	}
-}
-
-func TestISRPolicy_ScopesToTheAppsOwnNamespace(t *testing.T) {
-	cfg := isrConfig{
-		Bucket:   "assets-xyz",
-		Prefix:   "prod/proj123/marketing/build456",
-		Table:    "state-abc",
-		TableARN: "arn:aws:dynamodb:us-east-1:1234:table/state-abc",
-	}
-
-	raw, err := isrPolicy(cfg)
-	if err != nil {
-		t.Fatalf("isrPolicy: %v", err)
-	}
-
-	var doc struct {
-		Statement []struct {
-			Effect    string   `json:"Effect"`
-			Action    []string `json:"Action"`
-			Resource  string   `json:"Resource"`
-			Condition map[string]map[string][]string
+func TestISREnv(t *testing.T) {
+	t.Run("sets the bytecode prefix to the asset prefix", func(t *testing.T) {
+		t.Setenv(bytecodeCacheEnv, "1")
+		cfg := isrConfig{
+			Bucket:   "assets-xyz",
+			Prefix:   "prod/proj123/marketing/build456",
+			Table:    "state-abc",
+			TableARN: "arn:aws:dynamodb:us-east-1:1234:table/state-abc",
 		}
-	}
-	if err := json.Unmarshal([]byte(raw), &doc); err != nil {
-		t.Fatalf("policy is not valid JSON: %v", err)
-	}
-	if len(doc.Statement) != 2 {
-		t.Fatalf("got %d statements, want 2", len(doc.Statement))
-	}
-
-	s3Stmt := doc.Statement[0]
-	if want := "arn:aws:s3:::assets-xyz/prod/proj123/marketing/build456/*"; s3Stmt.Resource != want {
-		t.Errorf("S3 Resource = %q, want %q", s3Stmt.Resource, want)
-	}
-
-	ddbStmt := doc.Statement[1]
-	if ddbStmt.Resource != cfg.TableARN {
-		t.Errorf("DynamoDB Resource = %q, want the table ARN", ddbStmt.Resource)
-	}
-	wantActions := []string{"dynamodb:UpdateItem"}
-	if !slices.Equal(ddbStmt.Action, wantActions) {
-		t.Errorf("DynamoDB Action = %v, want exactly %v", ddbStmt.Action, wantActions)
-	}
-	keys := ddbStmt.Condition["ForAllValues:StringLike"]["dynamodb:LeadingKeys"]
-	if len(keys) != 1 || keys[0] != "TAG#prod#proj123#marketing#build456#*" {
-		t.Errorf("LeadingKeys = %v, want the app's own tag partitions", keys)
-	}
-
-	for _, stmt := range doc.Statement {
-		if strings.Contains(stmt.Resource, "/index/") {
-			t.Errorf("policy still grants %v on the index %q", stmt.Action, stmt.Resource)
+		env := cfg.env()
+		if env["OCEL_BYTECODE_PREFIX"] != cfg.Prefix {
+			t.Errorf("OCEL_BYTECODE_PREFIX = %q, want %q", env["OCEL_BYTECODE_PREFIX"], cfg.Prefix)
 		}
-		for _, read := range []string{"dynamodb:Query", "dynamodb:BatchGetItem", "dynamodb:GetItem"} {
-			if slices.Contains(stmt.Action, read) {
-				t.Errorf("policy still grants %s on %q", read, stmt.Resource)
+	})
+
+	t.Run("omits the bytecode prefix when the gate is off", func(t *testing.T) {
+		t.Setenv(bytecodeCacheEnv, "")
+		cfg := isrConfig{
+			Bucket:   "assets-xyz",
+			Prefix:   "prod/proj123/marketing/build456",
+			Table:    "state-abc",
+			TableARN: "arn:aws:dynamodb:us-east-1:1234:table/state-abc",
+		}
+		env := cfg.env()
+		if _, ok := env["OCEL_BYTECODE_PREFIX"]; ok {
+			t.Errorf("OCEL_BYTECODE_PREFIX = %q, want it unset without OCEL_BYTECODE_CACHE=1", env["OCEL_BYTECODE_PREFIX"])
+		}
+	})
+
+	t.Run("agrees with the policy scope", func(t *testing.T) {
+		cfg := isrConfig{
+			Bucket:   "assets-xyz",
+			Prefix:   "prod/proj123/marketing/build456",
+			Table:    "state-abc",
+			TableARN: "arn:aws:dynamodb:us-east-1:1234:table/state-abc",
+		}
+
+		env := cfg.env()
+
+		if env["OCEL_ISR_BUCKET"] != "assets-xyz" {
+			t.Errorf("OCEL_ISR_BUCKET = %q", env["OCEL_ISR_BUCKET"])
+		}
+		if env["OCEL_ISR_PREFIX"] != cfg.Prefix {
+			t.Errorf("OCEL_ISR_PREFIX = %q, want %q", env["OCEL_ISR_PREFIX"], cfg.Prefix)
+		}
+		if env["OCEL_STATE_TABLE"] != "state-abc" {
+			t.Errorf("OCEL_STATE_TABLE = %q", env["OCEL_STATE_TABLE"])
+		}
+		if want := "TAG#prod#proj123#marketing#build456#"; env["OCEL_ISR_TAG_NAMESPACE"] != want {
+			t.Errorf("OCEL_ISR_TAG_NAMESPACE = %q, want %q", env["OCEL_ISR_TAG_NAMESPACE"], want)
+		}
+		if _, ok := env["OCEL_STATE_TABLE_INDEX"]; ok {
+			t.Errorf("OCEL_STATE_TABLE_INDEX = %q, want it unset", env["OCEL_STATE_TABLE_INDEX"])
+		}
+	})
+}
+
+func TestISRPolicy(t *testing.T) {
+	t.Run("covers the composed bytecode key", func(t *testing.T) {
+		t.Setenv(bytecodeCacheEnv, "1")
+		cfg := isrConfig{
+			Bucket:   "assets-xyz",
+			Prefix:   "prod/proj123/marketing/build456",
+			Table:    "state-abc",
+			TableARN: "arn:aws:dynamodb:us-east-1:1234:table/state-abc",
+		}
+
+		prefix := cfg.env()["OCEL_BYTECODE_PREFIX"]
+		bytecodeKey := fmt.Sprintf("%s/bytecode/my-function/node22-x64.tar.gz", prefix)
+
+		raw, err := isrPolicy(cfg)
+		if err != nil {
+			t.Fatalf("isrPolicy: %v", err)
+		}
+		var doc struct {
+			Statement []struct {
+				Resource string `json:"Resource"`
 			}
 		}
+		if err := json.Unmarshal([]byte(raw), &doc); err != nil {
+			t.Fatalf("policy is not valid JSON: %v", err)
+		}
+
+		s3Resource := doc.Statement[0].Resource
+		if !strings.HasPrefix(s3Resource, "arn:aws:s3:::") {
+			t.Fatalf("Statement[0].Resource = %q, want the S3 grant", s3Resource)
+		}
+		pattern := strings.TrimPrefix(s3Resource, "arn:aws:s3:::")
+		if !strings.HasSuffix(pattern, "/*") {
+			t.Fatalf("S3 resource pattern %q does not end in /*", pattern)
+		}
+		dir := strings.TrimSuffix(pattern, "*")
+		if !strings.HasPrefix(fmt.Sprintf("%s/%s", cfg.Bucket, bytecodeKey), dir) {
+			t.Errorf("bytecode key %s/%s is not covered by the policy's resource pattern %q", cfg.Bucket, bytecodeKey, pattern)
+		}
+	})
+
+	t.Run("scopes to the app's own namespace", func(t *testing.T) {
+		cfg := isrConfig{
+			Bucket:   "assets-xyz",
+			Prefix:   "prod/proj123/marketing/build456",
+			Table:    "state-abc",
+			TableARN: "arn:aws:dynamodb:us-east-1:1234:table/state-abc",
+		}
+
+		raw, err := isrPolicy(cfg)
+		if err != nil {
+			t.Fatalf("isrPolicy: %v", err)
+		}
+
+		var doc struct {
+			Statement []struct {
+				Effect    string   `json:"Effect"`
+				Action    []string `json:"Action"`
+				Resource  string   `json:"Resource"`
+				Condition map[string]map[string][]string
+			}
+		}
+		if err := json.Unmarshal([]byte(raw), &doc); err != nil {
+			t.Fatalf("policy is not valid JSON: %v", err)
+		}
+		if len(doc.Statement) != 2 {
+			t.Fatalf("got %d statements, want 2", len(doc.Statement))
+		}
+
+		s3Stmt := doc.Statement[0]
+		if want := "arn:aws:s3:::assets-xyz/prod/proj123/marketing/build456/*"; s3Stmt.Resource != want {
+			t.Errorf("S3 Resource = %q, want %q", s3Stmt.Resource, want)
+		}
+
+		ddbStmt := doc.Statement[1]
+		if ddbStmt.Resource != cfg.TableARN {
+			t.Errorf("DynamoDB Resource = %q, want the table ARN", ddbStmt.Resource)
+		}
+		wantActions := []string{"dynamodb:UpdateItem"}
+		if !slices.Equal(ddbStmt.Action, wantActions) {
+			t.Errorf("DynamoDB Action = %v, want exactly %v", ddbStmt.Action, wantActions)
+		}
+		keys := ddbStmt.Condition["ForAllValues:StringLike"]["dynamodb:LeadingKeys"]
+		if len(keys) != 1 || keys[0] != "TAG#prod#proj123#marketing#build456#*" {
+			t.Errorf("LeadingKeys = %v, want the app's own tag partitions", keys)
+		}
+
+		for _, stmt := range doc.Statement {
+			if strings.Contains(stmt.Resource, "/index/") {
+				t.Errorf("policy still grants %v on the index %q", stmt.Action, stmt.Resource)
+			}
+			for _, read := range []string{"dynamodb:Query", "dynamodb:BatchGetItem", "dynamodb:GetItem"} {
+				if slices.Contains(stmt.Action, read) {
+					t.Errorf("policy still grants %s on %q", read, stmt.Resource)
+				}
+			}
+		}
+	})
+
+	t.Run("cannot reach another app's prefix", func(t *testing.T) {
+		const tableARN = "arn:aws:dynamodb:us-east-1:1234:table/state-abc"
+		web := isrConfig{Bucket: "assets-xyz", Prefix: "prod/proj/web/WEB1", Table: "state-abc", TableARN: tableARN}
+		admin := isrConfig{Bucket: "assets-xyz", Prefix: "prod/proj/admin/ADM1", Table: "state-abc", TableARN: tableARN}
+
+		webDoc, adminDoc := parsePolicy(t, web), parsePolicy(t, admin)
+
+		if want := "arn:aws:s3:::assets-xyz/prod/proj/web/WEB1/*"; webDoc.Statement[0].Resource != want {
+			t.Errorf("web S3 Resource = %q, want %q", webDoc.Statement[0].Resource, want)
+		}
+		if want := "arn:aws:s3:::assets-xyz/prod/proj/admin/ADM1/*"; adminDoc.Statement[0].Resource != want {
+			t.Errorf("admin S3 Resource = %q, want %q", adminDoc.Statement[0].Resource, want)
+		}
+		if strings.Contains(webDoc.Statement[0].Resource, "admin") {
+			t.Errorf("web's S3 grant %q reaches the admin app", webDoc.Statement[0].Resource)
+		}
+
+		for _, stmt := range webDoc.Statement[1:] {
+			keys := stmt.Condition["ForAllValues:StringLike"]["dynamodb:LeadingKeys"]
+			if len(keys) != 1 || keys[0] != "TAG#prod#proj#web#WEB1#*" {
+				t.Fatalf("web LeadingKeys = %v, want only its own tag partitions", keys)
+			}
+			if strings.HasPrefix(admin.tagNamespace(), strings.TrimSuffix(keys[0], "*")) {
+				t.Errorf("web's LeadingKeys %q admits the admin app's namespace %q", keys[0], admin.tagNamespace())
+			}
+		}
+	})
+}
+
+func TestFunctionEnvKey(t *testing.T) {
+	cases := []struct {
+		name     string
+		typ      resourcesv1.ResourceType
+		userID   string
+		wantName string
+	}{
+		{"postgres uses the canonical type token and user ID", resourcesv1.ResourceType_RESOURCE_TYPE_POSTGRES, "main", "OCEL_RESOURCE_POSTGRES_main"},
+		{"bucket uses the canonical type token and user ID", resourcesv1.ResourceType_RESOURCE_TYPE_BUCKET, "uploads", "OCEL_RESOURCE_BUCKET_uploads"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			if got := functionEnvKey(tc.typ, tc.userID); got != tc.wantName {
+				t.Errorf("functionEnvKey(%v, %s) = %q, want %q", tc.typ, tc.userID, got, tc.wantName)
+			}
+		})
 	}
 }
 
-func TestISRPolicy_CannotReachAnotherAppsPrefix(t *testing.T) {
-	const tableARN = "arn:aws:dynamodb:us-east-1:1234:table/state-abc"
-	web := isrConfig{Bucket: "assets-xyz", Prefix: "prod/proj/web/WEB1", Table: "state-abc", TableARN: tableARN}
-	admin := isrConfig{Bucket: "assets-xyz", Prefix: "prod/proj/admin/ADM1", Table: "state-abc", TableARN: tableARN}
-
-	webDoc, adminDoc := parsePolicy(t, web), parsePolicy(t, admin)
-
-	if want := "arn:aws:s3:::assets-xyz/prod/proj/web/WEB1/*"; webDoc.Statement[0].Resource != want {
-		t.Errorf("web S3 Resource = %q, want %q", webDoc.Statement[0].Resource, want)
-	}
-	if want := "arn:aws:s3:::assets-xyz/prod/proj/admin/ADM1/*"; adminDoc.Statement[0].Resource != want {
-		t.Errorf("admin S3 Resource = %q, want %q", adminDoc.Statement[0].Resource, want)
-	}
-	if strings.Contains(webDoc.Statement[0].Resource, "admin") {
-		t.Errorf("web's S3 grant %q reaches the admin app", webDoc.Statement[0].Resource)
-	}
-
-	for _, stmt := range webDoc.Statement[1:] {
-		keys := stmt.Condition["ForAllValues:StringLike"]["dynamodb:LeadingKeys"]
-		if len(keys) != 1 || keys[0] != "TAG#prod#proj#web#WEB1#*" {
-			t.Fatalf("web LeadingKeys = %v, want only its own tag partitions", keys)
+func TestPostgresEnvPayload(t *testing.T) {
+	t.Run("matches the SDK connection string shape", func(t *testing.T) {
+		payload := postgresEnvPayload("ocel", "s3cr3t", "db.host", 5432, "ocel")
+		var parsed struct {
+			ConnectionString string `json:"connectionString"`
 		}
-		if strings.HasPrefix(admin.tagNamespace(), strings.TrimSuffix(keys[0], "*")) {
-			t.Errorf("web's LeadingKeys %q admits the admin app's namespace %q", keys[0], admin.tagNamespace())
+		if err := json.Unmarshal([]byte(payload), &parsed); err != nil {
+			t.Fatalf("payload is not valid JSON: %v", err)
 		}
-	}
+		want := "postgres://ocel:s3cr3t@db.host:5432/ocel"
+		if parsed.ConnectionString != want {
+			t.Errorf("connectionString = %q, want %q", parsed.ConnectionString, want)
+		}
+	})
+}
+
+func TestBucketEnvPayload(t *testing.T) {
+	t.Run("matches the SDK address and bucket shape", func(t *testing.T) {
+		payload := bucketEnvPayload("unix:///run/ocel/runtime.sock", "my-bucket-abc123")
+		var parsed struct {
+			Address string `json:"address"`
+			Bucket  string `json:"bucket"`
+		}
+		if err := json.Unmarshal([]byte(payload), &parsed); err != nil {
+			t.Fatalf("payload is not valid JSON: %v", err)
+		}
+		if parsed.Address != "unix:///run/ocel/runtime.sock" {
+			t.Errorf("address = %q, want the BucketService endpoint", parsed.Address)
+		}
+		if parsed.Bucket != "my-bucket-abc123" {
+			t.Errorf("bucket = %q, want the provisioned bucket binding", parsed.Bucket)
+		}
+	})
+}
+
+func TestArtifactArchivePath(t *testing.T) {
+	t.Run("resolves relative to the output root", func(t *testing.T) {
+		got := artifactArchivePath("/proj/.ocel/output", "apps/web/functions/api.func")
+		want := "/proj/.ocel/output/apps/web/functions/api.func"
+		if got != want {
+			t.Errorf("artifactArchivePath() = %q, want %q", got, want)
+		}
+	})
+}
+
+func TestCollectFunctionOutput(t *testing.T) {
+	t.Run("reports the URL keyed by logical name", func(t *testing.T) {
+		out := collectFunctionOutput("api", "https://abc.lambda-url.us-east-1.on.aws/")
+		if out.GetLogicalName() != "api" {
+			t.Errorf("LogicalName = %q, want api", out.GetLogicalName())
+		}
+		fn := out.GetFunction()
+		if fn == nil {
+			t.Fatal("output has no FunctionOutput; the Function URL must be reported")
+		}
+		if fn.GetUrl() != "https://abc.lambda-url.us-east-1.on.aws/" {
+			t.Errorf("url = %q, want the Function URL", fn.GetUrl())
+		}
+	})
 }
 
 type policyDoc struct {
@@ -341,104 +413,81 @@ func parsePolicy(t *testing.T, cfg isrConfig) policyDoc {
 	return doc
 }
 
-func TestISREnv_AgreesWithThePolicyScope(t *testing.T) {
-	cfg := isrConfig{
-		Bucket:   "assets-xyz",
-		Prefix:   "prod/proj123/marketing/build456",
-		Table:    "state-abc",
-		TableARN: "arn:aws:dynamodb:us-east-1:1234:table/state-abc",
-	}
-
-	env := cfg.env()
-
-	if env["OCEL_ISR_BUCKET"] != "assets-xyz" {
-		t.Errorf("OCEL_ISR_BUCKET = %q", env["OCEL_ISR_BUCKET"])
-	}
-	if env["OCEL_ISR_PREFIX"] != cfg.Prefix {
-		t.Errorf("OCEL_ISR_PREFIX = %q, want %q", env["OCEL_ISR_PREFIX"], cfg.Prefix)
-	}
-	if env["OCEL_STATE_TABLE"] != "state-abc" {
-		t.Errorf("OCEL_STATE_TABLE = %q", env["OCEL_STATE_TABLE"])
-	}
-	if want := "TAG#prod#proj123#marketing#build456#"; env["OCEL_ISR_TAG_NAMESPACE"] != want {
-		t.Errorf("OCEL_ISR_TAG_NAMESPACE = %q, want %q", env["OCEL_ISR_TAG_NAMESPACE"], want)
-	}
-	if _, ok := env["OCEL_STATE_TABLE_INDEX"]; ok {
-		t.Errorf("OCEL_STATE_TABLE_INDEX = %q, want it unset", env["OCEL_STATE_TABLE_INDEX"])
-	}
-}
-
-func TestTagNamespace_MatchesTheEdgeContract(t *testing.T) {
-	body := nextCacheFixture(t, "edge-contract.json")
-	var contract struct {
-		TagNamespace struct {
-			ISRPrefix          string `json:"isrPrefix"`
-			PartitionKeyPrefix string `json:"partitionKeyPrefix"`
-		} `json:"tagNamespace"`
-	}
-	if err := json.Unmarshal(body, &contract); err != nil {
-		t.Fatalf("parse fixture: %v", err)
-	}
-
-	cfg := isrConfig{Prefix: contract.TagNamespace.ISRPrefix}
-	if got := cfg.tagNamespace(); got != contract.TagNamespace.PartitionKeyPrefix {
-		t.Errorf("tagNamespace() = %q, want %q", got, contract.TagNamespace.PartitionKeyPrefix)
-	}
-}
-
-func TestISRCacheStore_NamesTheAdoptedBucketFromTheEdgeContract(t *testing.T) {
-	body := nextCacheFixture(t, "edge-contract.json")
-	var contract struct {
-		CacheStoreEnv struct {
-			Bucket string `json:"bucket"`
-		} `json:"cacheStoreEnv"`
-	}
-	if err := json.Unmarshal(body, &contract); err != nil {
-		t.Fatalf("parse fixture: %v", err)
-	}
-
-	cfg := isrConfig{
-		Bucket:           "assets-xyz",
-		Prefix:           "prod/proj123/marketing/build456",
-		Table:            "state-abc",
-		TableARN:         "arn:aws:dynamodb:us-east-1:1234:table/state-abc",
-		CacheStoreBucket: "ocel-edge-cache",
-	}
-
-	if got := cfg.env()[contract.CacheStoreEnv.Bucket]; got != "ocel-edge-cache" {
-		t.Errorf("%s = %q, want the adopted bucket", contract.CacheStoreEnv.Bucket, got)
-	}
-}
-
-func TestISRCacheStore_LeavesNoStandingCredentialOnTheFunction(t *testing.T) {
-	cfg := isrConfig{
-		Bucket:           "assets-xyz",
-		Prefix:           "prod/proj123/marketing/build456",
-		Table:            "state-abc",
-		TableARN:         "arn:aws:dynamodb:us-east-1:1234:table/state-abc",
-		CacheStoreBucket: "ocel-edge-cache",
-	}
-
-	env := functionEnv(map[string]string{}, functionArgs{Handler: "index.mjs"}, &cfg)
-	for name, value := range env {
-		if strings.Contains(name, "ACCESS_KEY") || strings.Contains(name, "SECRET_ACCESS") {
-			t.Errorf("env carries %s = %q", name, value)
+func TestTagNamespace(t *testing.T) {
+	t.Run("matches the edge contract", func(t *testing.T) {
+		body := nextCacheFixture(t, "edge-contract.json")
+		var contract struct {
+			TagNamespace struct {
+				ISRPrefix          string `json:"isrPrefix"`
+				PartitionKeyPrefix string `json:"partitionKeyPrefix"`
+			} `json:"tagNamespace"`
 		}
-	}
-	if _, ok := env["OCEL_CACHE_STORE_PARAM"]; ok {
-		t.Error("OCEL_CACHE_STORE_PARAM is set; the parameter it named carried the R2 keys")
-	}
-
-	raw, err := isrPolicy(cfg)
-	if err != nil {
-		t.Fatalf("isrPolicy: %v", err)
-	}
-	for _, action := range []string{"ssm:GetParameter", "kms:Decrypt"} {
-		if strings.Contains(raw, action) {
-			t.Errorf("policy still grants %s; nothing on this role reads a parameter now", action)
+		if err := json.Unmarshal(body, &contract); err != nil {
+			t.Fatalf("parse fixture: %v", err)
 		}
-	}
-	if doc := parsePolicy(t, cfg); len(doc.Statement) != 2 {
-		t.Errorf("got %d statements, want the two cache grants and nothing more", len(doc.Statement))
-	}
+
+		cfg := isrConfig{Prefix: contract.TagNamespace.ISRPrefix}
+		if got := cfg.tagNamespace(); got != contract.TagNamespace.PartitionKeyPrefix {
+			t.Errorf("tagNamespace() = %q, want %q", got, contract.TagNamespace.PartitionKeyPrefix)
+		}
+	})
+}
+
+func TestISRCacheStore(t *testing.T) {
+	t.Run("names the adopted bucket from the edge contract", func(t *testing.T) {
+		body := nextCacheFixture(t, "edge-contract.json")
+		var contract struct {
+			CacheStoreEnv struct {
+				Bucket string `json:"bucket"`
+			} `json:"cacheStoreEnv"`
+		}
+		if err := json.Unmarshal(body, &contract); err != nil {
+			t.Fatalf("parse fixture: %v", err)
+		}
+
+		cfg := isrConfig{
+			Bucket:           "assets-xyz",
+			Prefix:           "prod/proj123/marketing/build456",
+			Table:            "state-abc",
+			TableARN:         "arn:aws:dynamodb:us-east-1:1234:table/state-abc",
+			CacheStoreBucket: "ocel-edge-cache",
+		}
+
+		if got := cfg.env()[contract.CacheStoreEnv.Bucket]; got != "ocel-edge-cache" {
+			t.Errorf("%s = %q, want the adopted bucket", contract.CacheStoreEnv.Bucket, got)
+		}
+	})
+
+	t.Run("leaves no standing credential on the function", func(t *testing.T) {
+		cfg := isrConfig{
+			Bucket:           "assets-xyz",
+			Prefix:           "prod/proj123/marketing/build456",
+			Table:            "state-abc",
+			TableARN:         "arn:aws:dynamodb:us-east-1:1234:table/state-abc",
+			CacheStoreBucket: "ocel-edge-cache",
+		}
+
+		env := functionEnv(map[string]string{}, functionArgs{Handler: "index.mjs"}, &cfg)
+		for name, value := range env {
+			if strings.Contains(name, "ACCESS_KEY") || strings.Contains(name, "SECRET_ACCESS") {
+				t.Errorf("env carries %s = %q", name, value)
+			}
+		}
+		if _, ok := env["OCEL_CACHE_STORE_PARAM"]; ok {
+			t.Error("OCEL_CACHE_STORE_PARAM is set; the parameter it named carried the R2 keys")
+		}
+
+		raw, err := isrPolicy(cfg)
+		if err != nil {
+			t.Fatalf("isrPolicy: %v", err)
+		}
+		for _, action := range []string{"ssm:GetParameter", "kms:Decrypt"} {
+			if strings.Contains(raw, action) {
+				t.Errorf("policy still grants %s; nothing on this role reads a parameter now", action)
+			}
+		}
+		if doc := parsePolicy(t, cfg); len(doc.Statement) != 2 {
+			t.Errorf("got %d statements, want the two cache grants and nothing more", len(doc.Statement))
+		}
+	})
 }

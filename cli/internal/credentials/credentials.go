@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"time"
@@ -103,7 +104,7 @@ func Load() (Credentials, error) {
 	}
 	data, err := os.ReadFile(path)
 	if err != nil {
-		if os.IsNotExist(err) {
+		if errors.Is(err, fs.ErrNotExist) {
 			return Credentials{}, ErrNotLoggedIn
 		}
 		return Credentials{}, fmt.Errorf("read credentials file: %w", err)
@@ -123,7 +124,7 @@ func Delete() error {
 	if err != nil {
 		return err
 	}
-	if err := os.Remove(path); err != nil && !os.IsNotExist(err) {
+	if err := os.Remove(path); err != nil && !errors.Is(err, fs.ErrNotExist) {
 		return fmt.Errorf("remove credentials file: %w", err)
 	}
 	return nil

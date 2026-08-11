@@ -13,9 +13,9 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 
 	"github.com/ocelhq/ocel/pkg/channel"
-	"github.com/ocelhq/ocel/platform/aws/provider/awsconf"
 	"github.com/ocelhq/ocel/platform/aws/provider/membrane"
 	"github.com/ocelhq/ocel/platform/aws/provider/membrane/bucket"
+	"github.com/ocelhq/ocel/platform/aws/provider/sdkconfig"
 )
 
 var version = "dev"
@@ -90,7 +90,7 @@ func buildService(ctx context.Context, table, bucketName string) (*bucket.Servic
 	if region := os.Getenv(regionEnvVar); region != "" {
 		optFns = append(optFns, awsconfig.WithRegion(region))
 	}
-	cfg, err := awsconf.Runtime(ctx, optFns...)
+	cfg, err := sdkconfig.Runtime(ctx, optFns...)
 	if err != nil {
 		return nil, fmt.Errorf("load aws config: %w", err)
 	}

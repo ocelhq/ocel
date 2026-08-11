@@ -36,75 +36,54 @@ func wellFormedManifest() *deploymentsv1.Manifest {
 	}
 }
 
-func TestValidateManifest_WellFormed(t *testing.T) {
-	if err := validateManifest(wellFormedManifest()); err != nil {
-		t.Fatalf("validateManifest() error = %v, want nil", err)
+func TestValidateManifest(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		name    string
+		mutate  func(*deploymentsv1.Manifest)
+		wantErr bool
+	}{
+		{name: "a well-formed manifest"},
+		{name: "a missing schema_version", mutate: func(m *deploymentsv1.Manifest) { m.SchemaVersion = "" }, wantErr: true},
+		{name: "a missing slug", mutate: func(m *deploymentsv1.Manifest) { m.Slug = "" }, wantErr: true},
+		{name: "a resource with no logical_name", mutate: func(m *deploymentsv1.Manifest) { m.Resources[0].LogicalName = "" }, wantErr: true},
+		{
+			name: "a resource of an unspecified type",
+			mutate: func(m *deploymentsv1.Manifest) {
+				m.Resources[0].Resource.Type = resourcesv1.ResourceType_RESOURCE_TYPE_UNSPECIFIED
+			},
+			wantErr: true,
+		},
+		{name: "a resource with no identifier", mutate: func(m *deploymentsv1.Manifest) { m.Resources[0].Resource = nil }, wantErr: true},
+		{name: "a resource with no typed config", mutate: func(m *deploymentsv1.Manifest) { m.Resources[0].Config = nil }, wantErr: true},
+		{name: "a manifest declaring no resources", mutate: func(m *deploymentsv1.Manifest) { m.Resources = nil }},
 	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			m := wellFormedManifest()
+			if tc.mutate != nil {
+				tc.mutate(m)
+			}
+			err := validateManifest(m)
+			if tc.wantErr != (err != nil) {
+				t.Fatalf("validateManifest() error = %v, wantErr = %v", err, tc.wantErr)
+			}
+		})
+	}
+
+	t.Run("a nil manifest", func(t *testing.T) {
+		t.Parallel()
+		if err := validateManifest(nil); err == nil {
+			t.Fatal("validateManifest(nil) error = nil, want error")
+		}
+	})
 }
 
-func TestValidateManifest_Nil(t *testing.T) {
-	if err := validateManifest(nil); err == nil {
-		t.Fatal("validateManifest(nil) error = nil, want error")
-	}
-}
+func TestResourceSummary(t *testing.T) {
+	t.Parallel()
 
-func TestValidateManifest_MissingSchemaVersion(t *testing.T) {
-	m := wellFormedManifest()
-	m.SchemaVersion = ""
-	if err := validateManifest(m); err == nil {
-		t.Fatal("validateManifest() error = nil, want error for missing schema_version")
-	}
-}
-
-func TestValidateManifest_MissingSlug(t *testing.T) {
-	m := wellFormedManifest()
-	m.Slug = ""
-	if err := validateManifest(m); err == nil {
-		t.Fatal("validateManifest() error = nil, want error for missing slug")
-	}
-}
-
-func TestValidateManifest_MissingLogicalName(t *testing.T) {
-	m := wellFormedManifest()
-	m.Resources[0].LogicalName = ""
-	if err := validateManifest(m); err == nil {
-		t.Fatal("validateManifest() error = nil, want error for missing logical_name")
-	}
-}
-
-func TestValidateManifest_UnspecifiedResourceType(t *testing.T) {
-	m := wellFormedManifest()
-	m.Resources[0].Resource.Type = resourcesv1.ResourceType_RESOURCE_TYPE_UNSPECIFIED
-	if err := validateManifest(m); err == nil {
-		t.Fatal("validateManifest() error = nil, want error for unspecified resource type")
-	}
-}
-
-func TestValidateManifest_MissingResourceIdentifier(t *testing.T) {
-	m := wellFormedManifest()
-	m.Resources[0].Resource = nil
-	if err := validateManifest(m); err == nil {
-		t.Fatal("validateManifest() error = nil, want error for missing resource identifier")
-	}
-}
-
-func TestValidateManifest_MissingConfig(t *testing.T) {
-	m := wellFormedManifest()
-	m.Resources[0].Config = nil
-	if err := validateManifest(m); err == nil {
-		t.Fatal("validateManifest() error = nil, want error for missing typed config")
-	}
-}
-
-func TestValidateManifest_EmptyResourcesOK(t *testing.T) {
-	m := wellFormedManifest()
-	m.Resources = nil
-	if err := validateManifest(m); err != nil {
-		t.Fatalf("validateManifest() error = %v, want nil for a manifest with no resources", err)
-	}
-}
-
-func TestResourceSummary_PostgresIncludesTypedVersion(t *testing.T) {
 	m := wellFormedManifest()
 	m.Resources[0].Config = &deploymentsv1.ManifestResource_Postgres{
 		Postgres: &resourcesv1.PostgresConfig{Version: "15"},
@@ -137,61 +116,76 @@ func (stubSSM) DeleteParameter(context.Context, *ssm.DeleteParameterInput, ...fu
 	return &ssm.DeleteParameterOutput{}, nil
 }
 
-func TestReadEdgeValues_ReturnsStoredValues(t *testing.T) {
-	got := readEdgeValues(context.Background(), stubSSM{value: `{"bucketName":"edge-cache-7f3"}`}, bootstrap.ClassProduction, "ocel bootstrap", func(string) {})
-	if len(got) != 1 || got["bucketName"] != "edge-cache-7f3" {
-		t.Errorf("readEdgeValues = %v, want the stored values", got)
-	}
+func TestReadEdgeValues(t *testing.T) {
+	t.Parallel()
+
+	t.Run("returns the values the edge stored", func(t *testing.T) {
+		t.Parallel()
+		got := readEdgeValues(context.Background(), stubSSM{value: `{"bucketName":"edge-cache-7f3"}`}, bootstrap.ClassProduction, "ocel bootstrap", func(string) {})
+		if len(got) != 1 || got["bucketName"] != "edge-cache-7f3" {
+			t.Errorf("readEdgeValues = %v, want the stored values", got)
+		}
+	})
+
+	t.Run("degrades with a log when the parameter cannot be read", func(t *testing.T) {
+		t.Parallel()
+		var logged []string
+		got := readEdgeValues(
+			context.Background(),
+			stubSSM{err: errors.New("AccessDeniedException: not authorized to perform ssm:GetParameter")},
+			bootstrap.ClassProduction,
+			"ocel bootstrap",
+			func(m string) { logged = append(logged, m) },
+		)
+		if got != nil {
+			t.Errorf("readEdgeValues = %v, want none", got)
+		}
+		if len(logged) != 1 || !strings.Contains(logged[0], "AccessDenied") {
+			t.Errorf("logged = %v, want one line naming the failure", logged)
+		}
+	})
+
+	t.Run("stays silent when the parameter is simply absent", func(t *testing.T) {
+		t.Parallel()
+		var logged []string
+		got := readEdgeValues(context.Background(), stubSSM{err: &ssmtypes.ParameterNotFound{}}, bootstrap.ClassProduction, "ocel bootstrap", func(m string) { logged = append(logged, m) })
+		if got != nil {
+			t.Errorf("readEdgeValues = %v, want none", got)
+		}
+		if len(logged) != 0 {
+			t.Errorf("an edge that stored no values is not a failure to report, got %v", logged)
+		}
+	})
 }
 
-func TestReadEdgeValues_UnreadableParameterDegradesWithALog(t *testing.T) {
-	var logged []string
-	got := readEdgeValues(
-		context.Background(),
-		stubSSM{err: errors.New("AccessDeniedException: not authorized to perform ssm:GetParameter")},
-		bootstrap.ClassProduction,
-		"ocel bootstrap",
-		func(m string) { logged = append(logged, m) },
-	)
-	if got != nil {
-		t.Errorf("readEdgeValues = %v, want none", got)
-	}
-	if len(logged) != 1 || !strings.Contains(logged[0], "AccessDenied") {
-		t.Errorf("logged = %v, want one line naming the failure", logged)
-	}
-}
+func TestCacheStoreUploader(t *testing.T) {
+	t.Parallel()
 
-func TestReadEdgeValues_AbsentParameterIsSilent(t *testing.T) {
-	var logged []string
-	got := readEdgeValues(context.Background(), stubSSM{err: &ssmtypes.ParameterNotFound{}}, bootstrap.ClassProduction, "ocel bootstrap", func(m string) { logged = append(logged, m) })
-	if got != nil {
-		t.Errorf("readEdgeValues = %v, want none", got)
-	}
-	if len(logged) != 0 {
-		t.Errorf("an edge that stored no values is not a failure to report, got %v", logged)
-	}
-}
+	t.Run("a zero store is an untyped nil", func(t *testing.T) {
+		t.Parallel()
+		if up := cacheStoreUploader(bootstrap.CacheStore{}); up != nil {
+			t.Errorf("cacheStoreUploader(zero) = %v, want nil", up)
+		}
+	})
 
-func TestCacheStoreUploader_ZeroStoreIsAnUntypedNil(t *testing.T) {
-	if up := cacheStoreUploader(bootstrap.CacheStore{}); up != nil {
-		t.Errorf("cacheStoreUploader(zero) = %v, want nil", up)
-	}
-}
-
-func TestCacheStoreUploader_AdoptedStoreIsAddressable(t *testing.T) {
-	store := bootstrap.CacheStore{
-		Bucket:          "isr",
-		Endpoint:        "https://acct.r2.cloudflarestorage.com",
-		Region:          "auto",
-		AccessKeyID:     "AK",
-		SecretAccessKey: "s3cret",
-	}
-	if up := cacheStoreUploader(store); up == nil {
-		t.Error("cacheStoreUploader on an adopted store = nil, want a client")
-	}
+	t.Run("an adopted store is addressable", func(t *testing.T) {
+		t.Parallel()
+		store := bootstrap.CacheStore{
+			Bucket:          "isr",
+			Endpoint:        "https://acct.r2.cloudflarestorage.com",
+			Region:          "auto",
+			AccessKeyID:     "AK",
+			SecretAccessKey: "s3cret",
+		}
+		if up := cacheStoreUploader(store); up == nil {
+			t.Error("cacheStoreUploader on an adopted store = nil, want a client")
+		}
+	})
 }
 
 func TestRootStackStateChanged(t *testing.T) {
+	t.Parallel()
+
 	reconciled := edge.RootStackState{
 		edge.RootStackKeySlug:       "proj-123",
 		edge.RootStackKeyEndpoint:   "https://store.workers.dev",
@@ -249,6 +243,7 @@ func TestRootStackStateChanged(t *testing.T) {
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 			if got := rootStackStateChanged(tc.prior, tc.reconciled); got != tc.want {
 				t.Errorf("rootStackStateChanged() = %v, want %v", got, tc.want)
 			}

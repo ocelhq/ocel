@@ -22,23 +22,17 @@ import (
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/resources/v1"
 )
 
-func terminalStdin(t *testing.T) {
-	t.Helper()
-	prev := stdinIsTerminal
-	stdinIsTerminal = func(io.Reader) bool { return true }
-	t.Cleanup(func() { stdinIsTerminal = prev })
+func terminalStdin(d *deps) {
+	d.stdinIsTerminal = func(io.Reader) bool { return true }
 }
 
-func recordBrowser(t *testing.T, opened *[]string, mu *sync.Mutex) {
-	t.Helper()
-	prev := openBrowser
-	openBrowser = func(url string) error {
+func recordBrowser(d *deps, opened *[]string, mu *sync.Mutex) {
+	d.openBrowser = func(url string) error {
 		mu.Lock()
 		defer mu.Unlock()
 		*opened = append(*opened, url)
 		return nil
 	}
-	t.Cleanup(func() { openBrowser = prev })
 }
 
 type varsUISessions struct {
@@ -46,11 +40,10 @@ type varsUISessions struct {
 	all []*varsui.Session
 }
 
-func captureVarsUI(t *testing.T) *varsUISessions {
-	t.Helper()
+func captureVarsUI(d *deps) *varsUISessions {
 	sessions := &varsUISessions{}
-	prev := serveVarsUI
-	serveVarsUI = func(ctx context.Context, cfg *projectconfig.Config, provider *projectconfig.ProviderDescriptor, runner *providerrunner.Runner, preview bool, gate *envgate.Gate) (*varsui.Session, error) {
+	prev := d.serveVarsUI
+	d.serveVarsUI = func(ctx context.Context, cfg *projectconfig.Config, provider *projectconfig.ProviderDescriptor, runner *providerrunner.Runner, preview bool, gate *envgate.Gate) (*varsui.Session, error) {
 		session, err := prev(ctx, cfg, provider, runner, preview, gate)
 		if err == nil {
 			sessions.mu.Lock()
@@ -59,7 +52,6 @@ func captureVarsUI(t *testing.T) *varsUISessions {
 		}
 		return session, err
 	}
-	t.Cleanup(func() { serveVarsUI = prev })
 	return sessions
 }
 
@@ -144,476 +136,6 @@ func problemsFile(t *testing.T, problems string) string {
 	return path
 }
 
-const missingStripeKey = `[{"key":"STRIPE_API_KEY","folder":"","kind":"KIND_MISSING"}]`
-
-func TestRunDeploy_AGateRefusalInATerminalOpensTheUIAndResumesIntoTheBuild(t *testing.T) {
-	root := setUpEnvGateFixture(t, `[{"key":"STRIPE_API_KEY","class":"VARIABLE_CLASS_SENSITIVE","required":true}]`)
-	problems := problemsFile(t, missingStripeKey)
-	terminalStdin(t)
-	var mu sync.Mutex
-	var opened []string
-	recordBrowser(t, &opened, &mu)
-
-	built := false
-	stubAppBuildRecorder(t, &built)
-
-	var out syncBuffer
-	var stderr bytes.Buffer
-	done := make(chan error, 1)
-	go func() {
-		done <- runDeploy(context.Background(), root, deployOptions{yes: true}, &out, &stderr, strings.NewReader(""))
-	}()
-
-	address, token := awaitVarsUI(t, &out, 1)
-	setCell(t, address, token, "STRIPE_API_KEY", "sk_live_filled_in")
-	writeFile(t, problems, "[]")
-	markDone(t, address, token)
-
-	select {
-	case err := <-done:
-		if err != nil {
-			t.Fatalf("runDeploy err = %v, want the deploy to resume into the build; stdout=%s stderr=%s", err, out.String(), stderr.String())
-		}
-	case <-time.After(60 * time.Second):
-		t.Fatal("runDeploy never returned after the matrix was marked done")
-	}
-
-	if !strings.Contains(out.String(), "Deployed") {
-		t.Errorf("stdout = %q, want the resumed deploy to have completed", out.String())
-	}
-	if !built {
-		t.Error("the app was never built, so the deploy did not resume into the build")
-	}
-	if !strings.Contains(out.String(), "STRIPE_API_KEY") {
-		t.Errorf("stdout = %q, want the waiting state to name the cell that stopped the deploy", out.String())
-	}
-	mu.Lock()
-	defer mu.Unlock()
-	if len(opened) != 1 || opened[0] != address+"/#t="+token {
-		t.Errorf("opened = %v, want the session's own URL opened exactly once", opened)
-	}
-}
-
-func TestRunDeploy_TheResumedPassDeclaresEachVariableOnce(t *testing.T) {
-	root := setUpEnvGateFixture(t, `[{"key":"STRIPE_API_KEY","class":"VARIABLE_CLASS_PLAIN","required":true}]`)
-	problems := problemsFile(t, missingStripeKey)
-	terminalStdin(t)
-	var mu sync.Mutex
-	var opened []string
-	recordBrowser(t, &opened, &mu)
-	stubAppFunctions(t, []manifestbuilder.Function{
-		{Name: "api", Runtime: "nodejs24.x", Handler: "src/server.js", ArtifactPath: "output/api", Framework: "express", App: "api"},
-	})
-
-	var out syncBuffer
-	var stderr bytes.Buffer
-	done := make(chan error, 1)
-	go func() {
-		done <- runDeploy(context.Background(), root, deployOptions{yes: true}, &out, &stderr, strings.NewReader(""))
-	}()
-
-	address, token := awaitVarsUI(t, &out, 1)
-	setCell(t, address, token, "STRIPE_API_KEY", "pk_filled_in")
-	writeFile(t, problems, "[]")
-	markDone(t, address, token)
-
-	select {
-	case err := <-done:
-		if err != nil {
-			t.Fatalf("runDeploy err = %v; stdout=%s stderr=%s", err, out.String(), stderr.String())
-		}
-	case <-time.After(60 * time.Second):
-		t.Fatal("runDeploy never returned after the matrix was marked done")
-	}
-
-	got := out.String()
-	if !strings.Contains(got, "vars=STRIPE_API_KEY\n") {
-		t.Errorf("stdout = %q, want the resumed manifest to carry STRIPE_API_KEY exactly once", got)
-	}
-	if strings.Contains(got, "pk_filled_in") {
-		t.Errorf("stdout = %q, want no variable value ever printed", got)
-	}
-}
-
-func TestRunDeploy_TheWaitingStateSaysHowToAbort(t *testing.T) {
-	root := setUpEnvGateFixture(t, `[{"key":"STRIPE_API_KEY","class":"VARIABLE_CLASS_SENSITIVE","required":true}]`)
-	problemsFile(t, missingStripeKey)
-	terminalStdin(t)
-	var mu sync.Mutex
-	var opened []string
-	recordBrowser(t, &opened, &mu)
-	built := false
-	stubAppBuildRecorder(t, &built)
-
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-	var out syncBuffer
-	var stderr bytes.Buffer
-	done := make(chan error, 1)
-	go func() {
-		done <- runDeploy(ctx, root, deployOptions{yes: true}, &out, &stderr, strings.NewReader(""))
-	}()
-
-	awaitVarsUI(t, &out, 1)
-	waiting := out.String()
-	for _, want := range []string{"Waiting", "Ctrl-C"} {
-		if !strings.Contains(waiting, want) {
-			t.Errorf("stdout = %q, want the waiting state to contain %q", waiting, want)
-		}
-	}
-	if strings.Contains(waiting, "run this command again") {
-		t.Errorf("stdout = %q, want a waiting command not to tell the developer to re-run it", waiting)
-	}
-	cancel()
-	<-done
-}
-
-func TestRunDeploy_InterruptingWhileWaitingAbortsWithNothingBuilt(t *testing.T) {
-	root := setUpEnvGateFixture(t, `[{"key":"STRIPE_API_KEY","class":"VARIABLE_CLASS_SENSITIVE","required":true}]`)
-	problemsFile(t, missingStripeKey)
-	terminalStdin(t)
-	var mu sync.Mutex
-	var opened []string
-	recordBrowser(t, &opened, &mu)
-	built := false
-	stubAppBuildRecorder(t, &built)
-
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-	var out syncBuffer
-	var stderr bytes.Buffer
-	done := make(chan error, 1)
-	go func() {
-		done <- runDeploy(ctx, root, deployOptions{yes: true}, &out, &stderr, strings.NewReader(""))
-	}()
-
-	awaitVarsUI(t, &out, 1)
-	cancel()
-
-	select {
-	case err := <-done:
-		var exit *ExitError
-		if !errors.As(err, &exit) || exit.Code == 0 {
-			t.Fatalf("runDeploy err = %v, want a non-zero exit; stdout=%s", err, out.String())
-		}
-	case <-time.After(60 * time.Second):
-		t.Fatal("runDeploy never returned after the context was cancelled")
-	}
-
-	if built {
-		t.Error("the app was built, want an interrupted wait to build nothing")
-	}
-	if strings.Contains(out.String(), "DEPLOY ") {
-		t.Errorf("stdout = %q, want no Deploy to have been driven", out.String())
-	}
-	if strings.Contains(out.String(), "Resources may be partially created") {
-		t.Errorf("stdout = %q, want an interrupted wait to say nothing was provisioned", out.String())
-	}
-}
-
-func TestRunDeploy_ClosingTheUIStillNamesTheKeysThatAreOwed(t *testing.T) {
-	root := setUpEnvGateFixture(t, `[{"key":"STRIPE_API_KEY","class":"VARIABLE_CLASS_SENSITIVE","required":true}]`)
-	problemsFile(t, missingStripeKey)
-	terminalStdin(t)
-	var mu sync.Mutex
-	var opened []string
-	recordBrowser(t, &opened, &mu)
-	sessions := captureVarsUI(t)
-	built := false
-	stubAppBuildRecorder(t, &built)
-
-	var out syncBuffer
-	var stderr bytes.Buffer
-	done := make(chan error, 1)
-	go func() {
-		done <- runDeploy(context.Background(), root, deployOptions{yes: true}, &out, &stderr, strings.NewReader(""))
-	}()
-
-	awaitVarsUI(t, &out, 1)
-	before := out.String()
-	sessions.abandon(t, 1)
-
-	select {
-	case err := <-done:
-		var exit *ExitError
-		if !errors.As(err, &exit) || exit.Code == 0 {
-			t.Fatalf("runDeploy err = %v, want a non-zero exit", err)
-		}
-	case <-time.After(60 * time.Second):
-		t.Fatal("runDeploy never returned after the UI was abandoned")
-	}
-
-	tail := strings.TrimPrefix(out.String(), before) + stderr.String()
-	for _, want := range []string{"STRIPE_API_KEY", "ocel env set STRIPE_API_KEY <VALUE>", "closed before the matrix was complete"} {
-		if !strings.Contains(tail, want) {
-			t.Errorf("output after the UI closed = %q, want it to contain %q", tail, want)
-		}
-	}
-	if built {
-		t.Error("the app was built, want an abandoned wait to build nothing")
-	}
-}
-
-func TestRunDeploy_AReplacementThatStillFailsTheSchemaDoesNotSlipThrough(t *testing.T) {
-	root := setUpEnvGateFixture(t, `[{"key":"STRIPE_API_KEY","class":"VARIABLE_CLASS_SENSITIVE","required":true}]`)
-	envSet(t, root, "STRIPE_API_KEY", "nope", envOptions{})
-	problemsFile(t, `[{"key":"STRIPE_API_KEY","folder":"","kind":"KIND_INVALID","detail":"must start with sk_"}]`)
-	terminalStdin(t)
-	var mu sync.Mutex
-	var opened []string
-	recordBrowser(t, &opened, &mu)
-	sessions := captureVarsUI(t)
-	built := false
-	stubAppBuildRecorder(t, &built)
-
-	var out syncBuffer
-	var stderr bytes.Buffer
-	done := make(chan error, 1)
-	go func() {
-		done <- runDeploy(context.Background(), root, deployOptions{yes: true}, &out, &stderr, strings.NewReader(""))
-	}()
-
-	address, token := awaitVarsUI(t, &out, 1)
-	setCell(t, address, token, "STRIPE_API_KEY", "also_nope")
-	markDone(t, address, token)
-
-	awaitVarsUI(t, &out, 2)
-	sessions.abandon(t, 2)
-
-	select {
-	case err := <-done:
-		if err == nil {
-			t.Fatalf("runDeploy err = nil, want the second invalid value refused; stdout=%s", out.String())
-		}
-	case <-time.After(60 * time.Second):
-		t.Fatal("runDeploy never returned")
-	}
-	if built {
-		t.Error("the app was built with a value the schema rejects")
-	}
-	if strings.Contains(out.String(), "Deployed") {
-		t.Errorf("stdout = %q, want no deploy to have completed", out.String())
-	}
-	if strings.Contains(out.String(), "also_nope") || strings.Contains(out.String(), "nope") {
-		t.Errorf("stdout = %q, want no variable value ever printed", out.String())
-	}
-}
-
-func TestRunDeploy_ANonInteractiveRunNeverWaits(t *testing.T) {
-	root := setUpEnvGateFixture(t, `[{"key":"STRIPE_API_KEY","class":"VARIABLE_CLASS_SENSITIVE","required":true}]`)
-	t.Setenv("OCEL_TEST_ENV_PROBLEMS", missingStripeKey)
-	var mu sync.Mutex
-	var opened []string
-	recordBrowser(t, &opened, &mu)
-	built := false
-	stubAppBuildRecorder(t, &built)
-
-	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
-	defer cancel()
-	var stdout, stderr bytes.Buffer
-	err := runDeploy(ctx, root, deployOptions{yes: true}, &stdout, &stderr, strings.NewReader(""))
-	if err == nil {
-		t.Fatal("runDeploy err = nil, want a non-interactive run to hard-fail")
-	}
-	if varsUIURL.MatchString(stdout.String()) {
-		t.Errorf("stdout = %q, want no variables UI opened without a terminal", stdout.String())
-	}
-	mu.Lock()
-	defer mu.Unlock()
-	if len(opened) != 0 {
-		t.Errorf("opened = %v, want no browser launched without a terminal", opened)
-	}
-}
-
-func TestRunDeploy_TheOptOutsKeepATerminalFromWaiting(t *testing.T) {
-	for _, tc := range []struct {
-		name string
-		opts deployOptions
-		env  string
-	}{
-		{name: "--no-ui", opts: deployOptions{yes: true, noUI: true}},
-		{name: noBrowserEnvVar, opts: deployOptions{yes: true}, env: "1"},
-		{name: noBrowserEnvVar + "=anything", opts: deployOptions{yes: true}, env: "true"},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			root := setUpEnvGateFixture(t, `[{"key":"STRIPE_API_KEY","class":"VARIABLE_CLASS_SENSITIVE","required":true}]`)
-			t.Setenv("OCEL_TEST_ENV_PROBLEMS", missingStripeKey)
-			t.Setenv(noBrowserEnvVar, tc.env)
-			terminalStdin(t)
-			var mu sync.Mutex
-			var opened []string
-			recordBrowser(t, &opened, &mu)
-			built := false
-			stubAppBuildRecorder(t, &built)
-
-			ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
-			defer cancel()
-			var stdout, stderr bytes.Buffer
-			err := runDeploy(ctx, root, tc.opts, &stdout, &stderr, strings.NewReader(""))
-			if err == nil {
-				t.Fatal("runDeploy err = nil, want the opt-out to keep the hard refusal")
-			}
-			if varsUIURL.MatchString(stdout.String()) {
-				t.Errorf("stdout = %q, want no variables UI opened", stdout.String())
-			}
-			if built {
-				t.Error("the app was built, want the gate to refuse before any build runs")
-			}
-		})
-	}
-}
-
-func TestRunPreviewUp_AGateRefusalInATerminalOpensTheUIAndResumes(t *testing.T) {
-	root := setUpEnvGateFixture(t, `[{"key":"STRIPE_API_KEY","class":"VARIABLE_CLASS_SENSITIVE","required":true}]`)
-	t.Setenv(fakeInfraClassEnvVar, "preview")
-	problems := problemsFile(t, missingStripeKey)
-	terminalStdin(t)
-	var mu sync.Mutex
-	var opened []string
-	recordBrowser(t, &opened, &mu)
-	built := false
-	stubAppBuildRecorder(t, &built)
-
-	var out syncBuffer
-	var stderr bytes.Buffer
-	done := make(chan error, 1)
-	go func() {
-		done <- runPreviewUp(context.Background(), root, previewUpOptions{name: "staging"}, &out, &stderr, strings.NewReader(""))
-	}()
-
-	address, token := awaitVarsUI(t, &out, 1)
-	if got := varsUISubstrate(t, address, token); got != "preview" {
-		t.Errorf("substrate = %q, want the preview's own", got)
-	}
-	setCell(t, address, token, "STRIPE_API_KEY", "sk_live_filled_in")
-	writeFile(t, problems, "[]")
-	markDone(t, address, token)
-
-	select {
-	case err := <-done:
-		if err != nil {
-			t.Fatalf("runPreviewUp err = %v, want the preview to resume; stdout=%s stderr=%s", err, out.String(), stderr.String())
-		}
-	case <-time.After(60 * time.Second):
-		t.Fatal("runPreviewUp never returned after the matrix was marked done")
-	}
-	if !built {
-		t.Error("the app was never built, so the preview did not resume into the build")
-	}
-}
-
-func TestRunPreviewUp_TheOptOutsAndANonTerminalKeepTheHardRefusal(t *testing.T) {
-	for _, tc := range []struct {
-		name     string
-		terminal bool
-		opts     previewUpOptions
-	}{
-		{name: "no terminal", opts: previewUpOptions{name: "staging"}},
-		{name: "--no-ui", terminal: true, opts: previewUpOptions{name: "staging", noUI: true}},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			root := setUpEnvGateFixture(t, `[{"key":"STRIPE_API_KEY","class":"VARIABLE_CLASS_SENSITIVE","required":true}]`)
-			t.Setenv(fakeInfraClassEnvVar, "preview")
-			t.Setenv("OCEL_TEST_ENV_PROBLEMS", missingStripeKey)
-			if tc.terminal {
-				terminalStdin(t)
-			}
-			var mu sync.Mutex
-			var opened []string
-			recordBrowser(t, &opened, &mu)
-			built := false
-			stubAppBuildRecorder(t, &built)
-
-			ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
-			defer cancel()
-			var stdout, stderr bytes.Buffer
-			err := runPreviewUp(ctx, root, tc.opts, &stdout, &stderr, strings.NewReader(""))
-			if err == nil {
-				t.Fatal("runPreviewUp err = nil, want the hard refusal kept")
-			}
-			if varsUIURL.MatchString(stdout.String()) {
-				t.Errorf("stdout = %q, want no variables UI opened", stdout.String())
-			}
-			if built {
-				t.Error("the app was built, want the gate to refuse before any build runs")
-			}
-			mu.Lock()
-			defer mu.Unlock()
-			if len(opened) != 0 {
-				t.Errorf("opened = %v, want no browser launched", opened)
-			}
-		})
-	}
-}
-
-func TestRunDeploy_AReopenedUIShowsWhatIsStillOwed(t *testing.T) {
-	root := setUpEnvGateFixture(t, `[{"key":"STRIPE_API_KEY","class":"VARIABLE_CLASS_SENSITIVE","required":true},{"key":"DATABASE_URL","class":"VARIABLE_CLASS_SENSITIVE","required":true}]`)
-	problems := problemsFile(t, `[{"key":"STRIPE_API_KEY","folder":"","kind":"KIND_MISSING"},{"key":"DATABASE_URL","folder":"","kind":"KIND_MISSING"}]`)
-	terminalStdin(t)
-	var mu sync.Mutex
-	var opened []string
-	recordBrowser(t, &opened, &mu)
-	sessions := captureVarsUI(t)
-	built := false
-	stubAppBuildRecorder(t, &built)
-
-	var out syncBuffer
-	var stderr bytes.Buffer
-	done := make(chan error, 1)
-	go func() {
-		done <- runDeploy(context.Background(), root, deployOptions{yes: true}, &out, &stderr, strings.NewReader(""))
-	}()
-
-	address, token := awaitVarsUI(t, &out, 1)
-	if first := out.String(); !strings.Contains(first, "STRIPE_API_KEY") || !strings.Contains(first, "DATABASE_URL") {
-		t.Fatalf("stdout = %q, want the first refusal to name both cells", first)
-	}
-	setCell(t, address, token, "STRIPE_API_KEY", "sk_live_filled_in")
-	writeFile(t, problems, `[{"key":"DATABASE_URL","folder":"","kind":"KIND_MISSING"}]`)
-	before := out.String()
-	markDone(t, address, token)
-
-	awaitVarsUI(t, &out, 2)
-	reopened := strings.TrimPrefix(out.String(), before)
-	if !strings.Contains(reopened, "DATABASE_URL") {
-		t.Errorf("reopened block = %q, want it to name the cell that is still owed", reopened)
-	}
-	if strings.Contains(reopened, "STRIPE_API_KEY") {
-		t.Errorf("reopened block = %q, want a cell the developer already filled not shown as owed", reopened)
-	}
-
-	sessions.abandon(t, 2)
-	select {
-	case err := <-done:
-		if err == nil {
-			t.Fatal("runDeploy err = nil, want the still-incomplete matrix refused")
-		}
-	case <-time.After(60 * time.Second):
-		t.Fatal("runDeploy never returned")
-	}
-	if built {
-		t.Error("the app was built with a required variable still missing")
-	}
-}
-
-func TestAbandonedRefusal_MatchesBothTheRefusalAndTheAbandonment(t *testing.T) {
-	refusal := &envgate.Refusal{Problems: []*resourcesv1.VariableProblem{
-		{Key: "STRIPE_API_KEY", Kind: resourcesv1.VariableProblem_KIND_MISSING},
-	}}
-	var err error = &abandonedRefusal{refusal: refusal}
-
-	if !errors.Is(err, varsui.ErrAbandoned) {
-		t.Error("errors.Is(err, ErrAbandoned) = false, want an abandonment the caller can match")
-	}
-	var got *envgate.Refusal
-	if !errors.As(err, &got) || got != refusal {
-		t.Error("errors.As(err, *envgate.Refusal) did not recover the original refusal")
-	}
-	if !strings.Contains(err.Error(), "STRIPE_API_KEY") {
-		t.Errorf("err = %q, want the keys that are owed named", err)
-	}
-}
-
 func varsUISubstrate(t *testing.T, address, token string) string {
 	t.Helper()
 	req, err := http.NewRequest(http.MethodGet, address+"/api/state", nil)
@@ -633,4 +155,495 @@ func varsUISubstrate(t *testing.T, address, token string) string {
 		t.Fatalf("decode the page's state: %v", err)
 	}
 	return state.Substrate
+}
+
+const missingStripeKey = `[{"key":"STRIPE_API_KEY","folder":"","kind":"KIND_MISSING"}]`
+
+func TestGateRecoveryOnDeploy(t *testing.T) {
+	t.Run("a gate refusal in a terminal opens the UI and resumes into the build", func(t *testing.T) {
+		root := setUpEnvGateFixture(t, `[{"key":"STRIPE_API_KEY","class":"VARIABLE_CLASS_SENSITIVE","required":true}]`)
+		problems := problemsFile(t, missingStripeKey)
+		d := defaultDeps()
+		terminalStdin(&d)
+		var mu sync.Mutex
+		var opened []string
+		recordBrowser(&d, &opened, &mu)
+
+		built := false
+		stubAppBuildRecorder(&d, &built)
+
+		var out syncBuffer
+		var stderr bytes.Buffer
+		done := make(chan error, 1)
+		go func() {
+			done <- runDeploy(context.Background(), d, root, deployOptions{yes: true}, &out, &stderr, strings.NewReader(""))
+		}()
+
+		address, token := awaitVarsUI(t, &out, 1)
+		setCell(t, address, token, "STRIPE_API_KEY", "sk_live_filled_in")
+		writeFile(t, problems, "[]")
+		markDone(t, address, token)
+
+		select {
+		case err := <-done:
+			if err != nil {
+				t.Fatalf("runDeploy err = %v, want the deploy to resume into the build; stdout=%s stderr=%s", err, out.String(), stderr.String())
+			}
+		case <-time.After(60 * time.Second):
+			t.Fatal("runDeploy never returned after the matrix was marked done")
+		}
+
+		if !strings.Contains(out.String(), "Deployed") {
+			t.Errorf("stdout = %q, want the resumed deploy to have completed", out.String())
+		}
+		if !built {
+			t.Error("the app was never built, so the deploy did not resume into the build")
+		}
+		if !strings.Contains(out.String(), "STRIPE_API_KEY") {
+			t.Errorf("stdout = %q, want the waiting state to name the cell that stopped the deploy", out.String())
+		}
+		mu.Lock()
+		defer mu.Unlock()
+		if len(opened) != 1 || opened[0] != address+"/#t="+token {
+			t.Errorf("opened = %v, want the session's own URL opened exactly once", opened)
+		}
+	})
+
+	t.Run("the resumed pass declares each variable once", func(t *testing.T) {
+		root := setUpEnvGateFixture(t, `[{"key":"STRIPE_API_KEY","class":"VARIABLE_CLASS_PLAIN","required":true}]`)
+		problems := problemsFile(t, missingStripeKey)
+		d := defaultDeps()
+		terminalStdin(&d)
+		var mu sync.Mutex
+		var opened []string
+		recordBrowser(&d, &opened, &mu)
+		stubAppFunctions(&d, []manifestbuilder.Function{
+			{Name: "api", Runtime: "nodejs24.x", Handler: "src/server.js", ArtifactPath: "output/api", Framework: "express", App: "api"},
+		})
+
+		var out syncBuffer
+		var stderr bytes.Buffer
+		done := make(chan error, 1)
+		go func() {
+			done <- runDeploy(context.Background(), d, root, deployOptions{yes: true}, &out, &stderr, strings.NewReader(""))
+		}()
+
+		address, token := awaitVarsUI(t, &out, 1)
+		setCell(t, address, token, "STRIPE_API_KEY", "pk_filled_in")
+		writeFile(t, problems, "[]")
+		markDone(t, address, token)
+
+		select {
+		case err := <-done:
+			if err != nil {
+				t.Fatalf("runDeploy err = %v; stdout=%s stderr=%s", err, out.String(), stderr.String())
+			}
+		case <-time.After(60 * time.Second):
+			t.Fatal("runDeploy never returned after the matrix was marked done")
+		}
+
+		got := out.String()
+		if !strings.Contains(got, "vars=STRIPE_API_KEY\n") {
+			t.Errorf("stdout = %q, want the resumed manifest to carry STRIPE_API_KEY exactly once", got)
+		}
+		if strings.Contains(got, "pk_filled_in") {
+			t.Errorf("stdout = %q, want no variable value ever printed", got)
+		}
+	})
+
+	t.Run("the waiting state says how to abort", func(t *testing.T) {
+		root := setUpEnvGateFixture(t, `[{"key":"STRIPE_API_KEY","class":"VARIABLE_CLASS_SENSITIVE","required":true}]`)
+		problemsFile(t, missingStripeKey)
+		d := defaultDeps()
+		terminalStdin(&d)
+		var mu sync.Mutex
+		var opened []string
+		recordBrowser(&d, &opened, &mu)
+		built := false
+		stubAppBuildRecorder(&d, &built)
+
+		ctx, cancel := context.WithCancel(context.Background())
+		defer cancel()
+		var out syncBuffer
+		var stderr bytes.Buffer
+		done := make(chan error, 1)
+		go func() {
+			done <- runDeploy(ctx, d, root, deployOptions{yes: true}, &out, &stderr, strings.NewReader(""))
+		}()
+
+		awaitVarsUI(t, &out, 1)
+		waiting := out.String()
+		for _, want := range []string{"Waiting", "Ctrl-C"} {
+			if !strings.Contains(waiting, want) {
+				t.Errorf("stdout = %q, want the waiting state to contain %q", waiting, want)
+			}
+		}
+		if strings.Contains(waiting, "run this command again") {
+			t.Errorf("stdout = %q, want a waiting command not to tell the developer to re-run it", waiting)
+		}
+		cancel()
+		<-done
+	})
+
+	t.Run("interrupting while waiting aborts with nothing built", func(t *testing.T) {
+		root := setUpEnvGateFixture(t, `[{"key":"STRIPE_API_KEY","class":"VARIABLE_CLASS_SENSITIVE","required":true}]`)
+		problemsFile(t, missingStripeKey)
+		d := defaultDeps()
+		terminalStdin(&d)
+		var mu sync.Mutex
+		var opened []string
+		recordBrowser(&d, &opened, &mu)
+		built := false
+		stubAppBuildRecorder(&d, &built)
+
+		ctx, cancel := context.WithCancel(context.Background())
+		defer cancel()
+		var out syncBuffer
+		var stderr bytes.Buffer
+		done := make(chan error, 1)
+		go func() {
+			done <- runDeploy(ctx, d, root, deployOptions{yes: true}, &out, &stderr, strings.NewReader(""))
+		}()
+
+		awaitVarsUI(t, &out, 1)
+		cancel()
+
+		select {
+		case err := <-done:
+			var exit *ExitError
+			if !errors.As(err, &exit) || exit.Code == 0 {
+				t.Fatalf("runDeploy err = %v, want a non-zero exit; stdout=%s", err, out.String())
+			}
+		case <-time.After(60 * time.Second):
+			t.Fatal("runDeploy never returned after the context was cancelled")
+		}
+
+		if built {
+			t.Error("the app was built, want an interrupted wait to build nothing")
+		}
+		if strings.Contains(out.String(), "DEPLOY ") {
+			t.Errorf("stdout = %q, want no Deploy to have been driven", out.String())
+		}
+		if strings.Contains(out.String(), "Resources may be partially created") {
+			t.Errorf("stdout = %q, want an interrupted wait to say nothing was provisioned", out.String())
+		}
+	})
+
+	t.Run("closing the UI still names the keys that are owed", func(t *testing.T) {
+		root := setUpEnvGateFixture(t, `[{"key":"STRIPE_API_KEY","class":"VARIABLE_CLASS_SENSITIVE","required":true}]`)
+		problemsFile(t, missingStripeKey)
+		d := defaultDeps()
+		terminalStdin(&d)
+		var mu sync.Mutex
+		var opened []string
+		recordBrowser(&d, &opened, &mu)
+		sessions := captureVarsUI(&d)
+		built := false
+		stubAppBuildRecorder(&d, &built)
+
+		var out syncBuffer
+		var stderr bytes.Buffer
+		done := make(chan error, 1)
+		go func() {
+			done <- runDeploy(context.Background(), d, root, deployOptions{yes: true}, &out, &stderr, strings.NewReader(""))
+		}()
+
+		awaitVarsUI(t, &out, 1)
+		before := out.String()
+		sessions.abandon(t, 1)
+
+		select {
+		case err := <-done:
+			var exit *ExitError
+			if !errors.As(err, &exit) || exit.Code == 0 {
+				t.Fatalf("runDeploy err = %v, want a non-zero exit", err)
+			}
+		case <-time.After(60 * time.Second):
+			t.Fatal("runDeploy never returned after the UI was abandoned")
+		}
+
+		tail := strings.TrimPrefix(out.String(), before) + stderr.String()
+		for _, want := range []string{"STRIPE_API_KEY", "ocel env set STRIPE_API_KEY <VALUE>", "closed before the matrix was complete"} {
+			if !strings.Contains(tail, want) {
+				t.Errorf("output after the UI closed = %q, want it to contain %q", tail, want)
+			}
+		}
+		if built {
+			t.Error("the app was built, want an abandoned wait to build nothing")
+		}
+	})
+
+	t.Run("a replacement that still fails the schema does not slip through", func(t *testing.T) {
+		root := setUpEnvGateFixture(t, `[{"key":"STRIPE_API_KEY","class":"VARIABLE_CLASS_SENSITIVE","required":true}]`)
+		envSet(t, root, "STRIPE_API_KEY", "nope", envOptions{})
+		problemsFile(t, `[{"key":"STRIPE_API_KEY","folder":"","kind":"KIND_INVALID","detail":"must start with sk_"}]`)
+		d := defaultDeps()
+		terminalStdin(&d)
+		var mu sync.Mutex
+		var opened []string
+		recordBrowser(&d, &opened, &mu)
+		sessions := captureVarsUI(&d)
+		built := false
+		stubAppBuildRecorder(&d, &built)
+
+		var out syncBuffer
+		var stderr bytes.Buffer
+		done := make(chan error, 1)
+		go func() {
+			done <- runDeploy(context.Background(), d, root, deployOptions{yes: true}, &out, &stderr, strings.NewReader(""))
+		}()
+
+		address, token := awaitVarsUI(t, &out, 1)
+		setCell(t, address, token, "STRIPE_API_KEY", "also_nope")
+		markDone(t, address, token)
+
+		awaitVarsUI(t, &out, 2)
+		sessions.abandon(t, 2)
+
+		select {
+		case err := <-done:
+			if err == nil {
+				t.Fatalf("runDeploy err = nil, want the second invalid value refused; stdout=%s", out.String())
+			}
+		case <-time.After(60 * time.Second):
+			t.Fatal("runDeploy never returned")
+		}
+		if built {
+			t.Error("the app was built with a value the schema rejects")
+		}
+		if strings.Contains(out.String(), "Deployed") {
+			t.Errorf("stdout = %q, want no deploy to have completed", out.String())
+		}
+		if strings.Contains(out.String(), "also_nope") || strings.Contains(out.String(), "nope") {
+			t.Errorf("stdout = %q, want no variable value ever printed", out.String())
+		}
+	})
+
+	t.Run("a reopened UI shows what is still owed", func(t *testing.T) {
+		root := setUpEnvGateFixture(t, `[{"key":"STRIPE_API_KEY","class":"VARIABLE_CLASS_SENSITIVE","required":true},{"key":"DATABASE_URL","class":"VARIABLE_CLASS_SENSITIVE","required":true}]`)
+		problems := problemsFile(t, `[{"key":"STRIPE_API_KEY","folder":"","kind":"KIND_MISSING"},{"key":"DATABASE_URL","folder":"","kind":"KIND_MISSING"}]`)
+		d := defaultDeps()
+		terminalStdin(&d)
+		var mu sync.Mutex
+		var opened []string
+		recordBrowser(&d, &opened, &mu)
+		sessions := captureVarsUI(&d)
+		built := false
+		stubAppBuildRecorder(&d, &built)
+
+		var out syncBuffer
+		var stderr bytes.Buffer
+		done := make(chan error, 1)
+		go func() {
+			done <- runDeploy(context.Background(), d, root, deployOptions{yes: true}, &out, &stderr, strings.NewReader(""))
+		}()
+
+		address, token := awaitVarsUI(t, &out, 1)
+		if first := out.String(); !strings.Contains(first, "STRIPE_API_KEY") || !strings.Contains(first, "DATABASE_URL") {
+			t.Fatalf("stdout = %q, want the first refusal to name both cells", first)
+		}
+		setCell(t, address, token, "STRIPE_API_KEY", "sk_live_filled_in")
+		writeFile(t, problems, `[{"key":"DATABASE_URL","folder":"","kind":"KIND_MISSING"}]`)
+		before := out.String()
+		markDone(t, address, token)
+
+		awaitVarsUI(t, &out, 2)
+		reopened := strings.TrimPrefix(out.String(), before)
+		if !strings.Contains(reopened, "DATABASE_URL") {
+			t.Errorf("reopened block = %q, want it to name the cell that is still owed", reopened)
+		}
+		if strings.Contains(reopened, "STRIPE_API_KEY") {
+			t.Errorf("reopened block = %q, want a cell the developer already filled not shown as owed", reopened)
+		}
+
+		sessions.abandon(t, 2)
+		select {
+		case err := <-done:
+			if err == nil {
+				t.Fatal("runDeploy err = nil, want the still-incomplete matrix refused")
+			}
+		case <-time.After(60 * time.Second):
+			t.Fatal("runDeploy never returned")
+		}
+		if built {
+			t.Error("the app was built with a required variable still missing")
+		}
+	})
+
+	t.Run("a non-interactive run never waits", func(t *testing.T) {
+		root := setUpEnvGateFixture(t, `[{"key":"STRIPE_API_KEY","class":"VARIABLE_CLASS_SENSITIVE","required":true}]`)
+		t.Setenv("OCEL_TEST_ENV_PROBLEMS", missingStripeKey)
+		d := defaultDeps()
+		var mu sync.Mutex
+		var opened []string
+		recordBrowser(&d, &opened, &mu)
+		built := false
+		stubAppBuildRecorder(&d, &built)
+
+		ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+		defer cancel()
+		var stdout, stderr bytes.Buffer
+		err := runDeploy(ctx, d, root, deployOptions{yes: true}, &stdout, &stderr, strings.NewReader(""))
+		if err == nil {
+			t.Fatal("runDeploy err = nil, want a non-interactive run to hard-fail")
+		}
+		if varsUIURL.MatchString(stdout.String()) {
+			t.Errorf("stdout = %q, want no variables UI opened without a terminal", stdout.String())
+		}
+		mu.Lock()
+		defer mu.Unlock()
+		if len(opened) != 0 {
+			t.Errorf("opened = %v, want no browser launched without a terminal", opened)
+		}
+	})
+
+	t.Run("the opt-outs keep a terminal from waiting", func(t *testing.T) {
+		for _, tc := range []struct {
+			name string
+			opts deployOptions
+			env  string
+		}{
+			{name: "--no-ui", opts: deployOptions{yes: true, noUI: true}},
+			{name: noBrowserEnvVar, opts: deployOptions{yes: true}, env: "1"},
+			{name: noBrowserEnvVar + "=anything", opts: deployOptions{yes: true}, env: "true"},
+		} {
+			t.Run(tc.name, func(t *testing.T) {
+				root := setUpEnvGateFixture(t, `[{"key":"STRIPE_API_KEY","class":"VARIABLE_CLASS_SENSITIVE","required":true}]`)
+				t.Setenv("OCEL_TEST_ENV_PROBLEMS", missingStripeKey)
+				t.Setenv(noBrowserEnvVar, tc.env)
+				d := defaultDeps()
+				terminalStdin(&d)
+				var mu sync.Mutex
+				var opened []string
+				recordBrowser(&d, &opened, &mu)
+				built := false
+				stubAppBuildRecorder(&d, &built)
+
+				ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+				defer cancel()
+				var stdout, stderr bytes.Buffer
+				err := runDeploy(ctx, d, root, tc.opts, &stdout, &stderr, strings.NewReader(""))
+				if err == nil {
+					t.Fatal("runDeploy err = nil, want the opt-out to keep the hard refusal")
+				}
+				if varsUIURL.MatchString(stdout.String()) {
+					t.Errorf("stdout = %q, want no variables UI opened", stdout.String())
+				}
+				if built {
+					t.Error("the app was built, want the gate to refuse before any build runs")
+				}
+			})
+		}
+	})
+}
+
+func TestGateRecoveryOnPreviewUp(t *testing.T) {
+	t.Run("a gate refusal in a terminal opens the UI and resumes", func(t *testing.T) {
+		root := setUpEnvGateFixture(t, `[{"key":"STRIPE_API_KEY","class":"VARIABLE_CLASS_SENSITIVE","required":true}]`)
+		t.Setenv(fakeInfraClassEnvVar, "preview")
+		problems := problemsFile(t, missingStripeKey)
+		d := defaultDeps()
+		terminalStdin(&d)
+		var mu sync.Mutex
+		var opened []string
+		recordBrowser(&d, &opened, &mu)
+		built := false
+		stubAppBuildRecorder(&d, &built)
+
+		var out syncBuffer
+		var stderr bytes.Buffer
+		done := make(chan error, 1)
+		go func() {
+			done <- runPreviewUp(context.Background(), d, root, previewUpOptions{name: "staging"}, &out, &stderr, strings.NewReader(""))
+		}()
+
+		address, token := awaitVarsUI(t, &out, 1)
+		if got := varsUISubstrate(t, address, token); got != "preview" {
+			t.Errorf("substrate = %q, want the preview's own", got)
+		}
+		setCell(t, address, token, "STRIPE_API_KEY", "sk_live_filled_in")
+		writeFile(t, problems, "[]")
+		markDone(t, address, token)
+
+		select {
+		case err := <-done:
+			if err != nil {
+				t.Fatalf("runPreviewUp err = %v, want the preview to resume; stdout=%s stderr=%s", err, out.String(), stderr.String())
+			}
+		case <-time.After(60 * time.Second):
+			t.Fatal("runPreviewUp never returned after the matrix was marked done")
+		}
+		if !built {
+			t.Error("the app was never built, so the preview did not resume into the build")
+		}
+	})
+
+	t.Run("the opt-outs and a non-terminal keep the hard refusal", func(t *testing.T) {
+		for _, tc := range []struct {
+			name     string
+			terminal bool
+			opts     previewUpOptions
+		}{
+			{name: "no terminal", opts: previewUpOptions{name: "staging"}},
+			{name: "--no-ui", terminal: true, opts: previewUpOptions{name: "staging", noUI: true}},
+		} {
+			t.Run(tc.name, func(t *testing.T) {
+				root := setUpEnvGateFixture(t, `[{"key":"STRIPE_API_KEY","class":"VARIABLE_CLASS_SENSITIVE","required":true}]`)
+				t.Setenv(fakeInfraClassEnvVar, "preview")
+				t.Setenv("OCEL_TEST_ENV_PROBLEMS", missingStripeKey)
+				d := defaultDeps()
+				if tc.terminal {
+					terminalStdin(&d)
+				}
+				var mu sync.Mutex
+				var opened []string
+				recordBrowser(&d, &opened, &mu)
+				built := false
+				stubAppBuildRecorder(&d, &built)
+
+				ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+				defer cancel()
+				var stdout, stderr bytes.Buffer
+				err := runPreviewUp(ctx, d, root, tc.opts, &stdout, &stderr, strings.NewReader(""))
+				if err == nil {
+					t.Fatal("runPreviewUp err = nil, want the hard refusal kept")
+				}
+				if varsUIURL.MatchString(stdout.String()) {
+					t.Errorf("stdout = %q, want no variables UI opened", stdout.String())
+				}
+				if built {
+					t.Error("the app was built, want the gate to refuse before any build runs")
+				}
+				mu.Lock()
+				defer mu.Unlock()
+				if len(opened) != 0 {
+					t.Errorf("opened = %v, want no browser launched", opened)
+				}
+			})
+		}
+	})
+}
+
+func TestAbandonedRefusal(t *testing.T) {
+	t.Parallel()
+
+	t.Run("matches both the refusal and the abandonment", func(t *testing.T) {
+		t.Parallel()
+
+		refusal := &envgate.Refusal{Problems: []*resourcesv1.VariableProblem{
+			{Key: "STRIPE_API_KEY", Kind: resourcesv1.VariableProblem_KIND_MISSING},
+		}}
+		var err error = &abandonedRefusal{refusal: refusal}
+
+		if !errors.Is(err, varsui.ErrAbandoned) {
+			t.Error("errors.Is(err, ErrAbandoned) = false, want an abandonment the caller can match")
+		}
+		var got *envgate.Refusal
+		if !errors.As(err, &got) || got != refusal {
+			t.Error("errors.As(err, *envgate.Refusal) did not recover the original refusal")
+		}
+		if !strings.Contains(err.Error(), "STRIPE_API_KEY") {
+			t.Errorf("err = %q, want the keys that are owed named", err)
+		}
+	})
 }

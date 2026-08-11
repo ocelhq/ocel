@@ -56,63 +56,53 @@ func drainStream(stream *connect.ServerStreamForClient[deploymentsv1.DeployEvent
 	return events, stream.Err()
 }
 
-func TestDeploy_RejectsMissingToken(t *testing.T) {
-	client := newTestClient(t, "")
+func TestDeploy(t *testing.T) {
+	t.Parallel()
 
-	stream, err := client.Deploy(context.Background(), &deploymentsv1.DeployRequest{Manifest: wellFormedManifest()})
-	if err != nil {
-		t.Fatalf("Deploy() error = %v, want nil (error surfaces on Receive)", err)
+	cases := []struct {
+		name     string
+		token    string
+		manifest *deploymentsv1.Manifest
+		want     connect.Code
+	}{
+		{
+			name:     "a caller with no session token is unauthenticated",
+			manifest: wellFormedManifest(),
+			want:     connect.CodeUnauthenticated,
+		},
+		{
+			name:     "a caller holding another session's token is unauthenticated",
+			token:    "wrong-token",
+			manifest: wellFormedManifest(),
+			want:     connect.CodeUnauthenticated,
+		},
+		{
+			name:     "a malformed manifest fails before any streaming",
+			token:    testToken,
+			manifest: &deploymentsv1.Manifest{SchemaVersion: "", Slug: "proj-123"},
+			want:     connect.CodeInvalidArgument,
+		},
+		{
+			name:  "a request carrying no manifest at all is refused",
+			token: testToken,
+			want:  connect.CodeInvalidArgument,
+		},
 	}
-	_, err = drainStream(stream)
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			client := newTestClient(t, tc.token)
 
-	var connectErr *connect.Error
-	if !errors.As(err, &connectErr) || connectErr.Code() != connect.CodeUnauthenticated {
-		t.Fatalf("Deploy() with no token err = %v, want CodeUnauthenticated", err)
-	}
-}
+			stream, err := client.Deploy(context.Background(), &deploymentsv1.DeployRequest{Manifest: tc.manifest})
+			if err != nil {
+				t.Fatalf("Deploy() error = %v, want nil (error surfaces on Receive)", err)
+			}
+			_, err = drainStream(stream)
 
-func TestDeploy_RejectsWrongToken(t *testing.T) {
-	client := newTestClient(t, "wrong-token")
-
-	stream, err := client.Deploy(context.Background(), &deploymentsv1.DeployRequest{Manifest: wellFormedManifest()})
-	if err != nil {
-		t.Fatalf("Deploy() error = %v, want nil (error surfaces on Receive)", err)
-	}
-	_, err = drainStream(stream)
-
-	var connectErr *connect.Error
-	if !errors.As(err, &connectErr) || connectErr.Code() != connect.CodeUnauthenticated {
-		t.Fatalf("Deploy() with wrong token err = %v, want CodeUnauthenticated", err)
-	}
-}
-
-func TestDeploy_MalformedManifestFailsBeforeStreaming(t *testing.T) {
-	client := newTestClient(t, testToken)
-
-	badManifest := &deploymentsv1.Manifest{SchemaVersion: "", Slug: "proj-123"}
-	stream, err := client.Deploy(context.Background(), &deploymentsv1.DeployRequest{Manifest: badManifest})
-	if err != nil {
-		t.Fatalf("Deploy() error = %v, want nil (error surfaces on Receive)", err)
-	}
-	_, err = drainStream(stream)
-
-	var connectErr *connect.Error
-	if !errors.As(err, &connectErr) || connectErr.Code() != connect.CodeInvalidArgument {
-		t.Fatalf("Deploy() with malformed manifest err = %v, want CodeInvalidArgument", err)
-	}
-}
-
-func TestDeploy_MissingManifestRejected(t *testing.T) {
-	client := newTestClient(t, testToken)
-
-	stream, err := client.Deploy(context.Background(), &deploymentsv1.DeployRequest{})
-	if err != nil {
-		t.Fatalf("Deploy() error = %v, want nil (error surfaces on Receive)", err)
-	}
-	_, err = drainStream(stream)
-
-	var connectErr *connect.Error
-	if !errors.As(err, &connectErr) || connectErr.Code() != connect.CodeInvalidArgument {
-		t.Fatalf("Deploy() with no manifest err = %v, want CodeInvalidArgument", err)
+			var connectErr *connect.Error
+			if !errors.As(err, &connectErr) || connectErr.Code() != tc.want {
+				t.Fatalf("Deploy() err = %v, want %v", err, tc.want)
+			}
+		})
 	}
 }

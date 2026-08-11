@@ -22,105 +22,107 @@ func okNode(t *testing.T) *httptest.Server {
 	return s
 }
 
-func TestHandleInvocation_HoldsUntilComplete(t *testing.T) {
-	node := okNode(t)
-	rt, _ := fakeRuntime(t, []byte(getEvent))
+func TestHandleInvocationComplete(t *testing.T) {
+	t.Run("holds until complete", func(t *testing.T) {
+		node := okNode(t)
+		rt, _ := fakeRuntime(t, []byte(getEvent))
 
-	goSide, jsSide := net.Pipe()
-	m := &Membrane{
-		nodePort: portOf(t, node),
-		client:   &http.Client{},
-		control:  goSide,
-		pending:  map[string]chan struct{}{},
-	}
-	go m.drainControl(bufio.NewReader(goSide))
-
-	done := make(chan error, 1)
-	go func() { done <- handleInvocation(context.Background(), rt, m) }()
-
-	select {
-	case err := <-done:
-		t.Fatalf("handleInvocation returned before invocation-complete (err=%v)", err)
-	case <-time.After(75 * time.Millisecond):
-	}
-
-	if _, err := jsSide.Write([]byte(`{"type":"invocation-complete","payload":{"requestId":"req-1"}}` + "\n")); err != nil {
-		t.Fatalf("write control message: %v", err)
-	}
-
-	select {
-	case err := <-done:
-		if err != nil {
-			t.Fatalf("handleInvocation: %v", err)
+		goSide, jsSide := net.Pipe()
+		m := &Membrane{
+			nodePort: portOf(t, node),
+			client:   &http.Client{},
+			control:  goSide,
+			pending:  map[string]chan struct{}{},
 		}
-	case <-time.After(2 * time.Second):
-		t.Fatal("handleInvocation did not return after invocation-complete")
-	}
-}
+		go m.drainControl(bufio.NewReader(goSide))
 
-func TestHandleInvocation_DeadlineForcesProgress(t *testing.T) {
-	node := okNode(t)
-	deadline := time.Now().Add(100 * time.Millisecond)
-	rt := fakeRuntimeWithDeadline(t, []byte(getEvent), deadline)
-	m := &Membrane{
-		nodePort: portOf(t, node),
-		client:   &http.Client{},
-		pending:  map[string]chan struct{}{},
-	}
+		done := make(chan error, 1)
+		go func() { done <- handleInvocation(context.Background(), rt, m) }()
 
-	done := make(chan error, 1)
-	go func() { done <- handleInvocation(context.Background(), rt, m) }()
-
-	select {
-	case err := <-done:
-		if err != nil {
-			t.Fatalf("handleInvocation: %v", err)
+		select {
+		case err := <-done:
+			t.Fatalf("handleInvocation returned before invocation-complete (err=%v)", err)
+		case <-time.After(75 * time.Millisecond):
 		}
-	case <-time.After(2 * time.Second):
-		t.Fatal("handleInvocation hung past the deadline with no completion signal")
-	}
 
-	m.mu.Lock()
-	n := len(m.pending)
-	m.mu.Unlock()
-	if n != 0 {
-		t.Errorf("pending waiters after timeout = %d, want 0", n)
-	}
-}
-
-func TestHandleInvocation_UnreachableNodeReleasesImmediately(t *testing.T) {
-	l, err := net.Listen("tcp", "127.0.0.1:0")
-	if err != nil {
-		t.Fatal(err)
-	}
-	deadPort := l.Addr().(*net.TCPAddr).Port
-	l.Close()
-
-	rt := fakeRuntimeWithDeadline(t, []byte(getEvent), time.Now().Add(30*time.Second))
-	m := &Membrane{
-		nodePort: deadPort,
-		client:   &http.Client{},
-		pending:  map[string]chan struct{}{},
-	}
-
-	done := make(chan error, 1)
-	go func() { done <- handleInvocation(context.Background(), rt, m) }()
-
-	select {
-	case err := <-done:
-		if err != nil {
-			t.Fatalf("handleInvocation: %v", err)
+		if _, err := jsSide.Write([]byte(`{"type":"invocation-complete","payload":{"requestId":"req-1"}}` + "\n")); err != nil {
+			t.Fatalf("write control message: %v", err)
 		}
-	case <-time.After(2 * time.Second):
-		t.Fatal("handleInvocation stalled toward the deadline on an unreachable node")
-	}
 
-	m.mu.Lock()
-	n := len(m.pending)
-	m.mu.Unlock()
-	if n != 0 {
-		t.Errorf("pending waiters after release = %d, want 0", n)
-	}
+		select {
+		case err := <-done:
+			if err != nil {
+				t.Fatalf("handleInvocation: %v", err)
+			}
+		case <-time.After(2 * time.Second):
+			t.Fatal("handleInvocation did not return after invocation-complete")
+		}
+	})
+
+	t.Run("deadline forces progress", func(t *testing.T) {
+		node := okNode(t)
+		deadline := time.Now().Add(100 * time.Millisecond)
+		rt := fakeRuntimeWithDeadline(t, []byte(getEvent), deadline)
+		m := &Membrane{
+			nodePort: portOf(t, node),
+			client:   &http.Client{},
+			pending:  map[string]chan struct{}{},
+		}
+
+		done := make(chan error, 1)
+		go func() { done <- handleInvocation(context.Background(), rt, m) }()
+
+		select {
+		case err := <-done:
+			if err != nil {
+				t.Fatalf("handleInvocation: %v", err)
+			}
+		case <-time.After(2 * time.Second):
+			t.Fatal("handleInvocation hung past the deadline with no completion signal")
+		}
+
+		m.mu.Lock()
+		n := len(m.pending)
+		m.mu.Unlock()
+		if n != 0 {
+			t.Errorf("pending waiters after timeout = %d, want 0", n)
+		}
+	})
+
+	t.Run("unreachable node releases immediately", func(t *testing.T) {
+		l, err := net.Listen("tcp", "127.0.0.1:0")
+		if err != nil {
+			t.Fatal(err)
+		}
+		deadPort := l.Addr().(*net.TCPAddr).Port
+		l.Close()
+
+		rt := fakeRuntimeWithDeadline(t, []byte(getEvent), time.Now().Add(30*time.Second))
+		m := &Membrane{
+			nodePort: deadPort,
+			client:   &http.Client{},
+			pending:  map[string]chan struct{}{},
+		}
+
+		done := make(chan error, 1)
+		go func() { done <- handleInvocation(context.Background(), rt, m) }()
+
+		select {
+		case err := <-done:
+			if err != nil {
+				t.Fatalf("handleInvocation: %v", err)
+			}
+		case <-time.After(2 * time.Second):
+			t.Fatal("handleInvocation stalled toward the deadline on an unreachable node")
+		}
+
+		m.mu.Lock()
+		n := len(m.pending)
+		m.mu.Unlock()
+		if n != 0 {
+			t.Errorf("pending waiters after release = %d, want 0", n)
+		}
+	})
 }
 
 func fakeRuntimeWithDeadline(t *testing.T, event []byte, deadline time.Time) *runtimeClient {

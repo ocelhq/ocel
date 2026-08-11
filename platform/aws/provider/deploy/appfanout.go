@@ -1,7 +1,7 @@
 package deploy
 
 import (
-	"golang.org/x/sync/errgroup"
+	"sync"
 
 	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
 )
@@ -9,13 +9,16 @@ import (
 const appConcurrency = 4
 
 func runAppStacks(apps []*deploymentsv1.ManifestApp, run func(i int, app *deploymentsv1.ManifestApp)) {
-	var g errgroup.Group
-	g.SetLimit(appConcurrency)
+	var wg sync.WaitGroup
+	slots := make(chan struct{}, appConcurrency)
 	for i, app := range apps {
-		g.Go(func() error {
+		slots <- struct{}{}
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			defer func() { <-slots }()
 			run(i, app)
-			return nil
-		})
+		}()
 	}
-	_ = g.Wait()
+	wg.Wait()
 }

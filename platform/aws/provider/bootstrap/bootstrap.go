@@ -137,10 +137,6 @@ type stackArtifacts struct {
 	revalidator artifactCode
 }
 
-func (a stackArtifacts) present() bool {
-	return a.optimizer.present() || a.publisher.present() || a.revalidator.present()
-}
-
 type stackPins struct {
 	optimizer   artifactPin
 	publisher   artifactPin

@@ -6,7 +6,6 @@ import (
 	"io"
 
 	connect "connectrpc.com/connect"
-	"github.com/pkg/browser"
 	"github.com/spf13/cobra"
 
 	"github.com/ocelhq/ocel/cli/internal/deploycollector"
@@ -30,7 +29,7 @@ var envUICmd = &cobra.Command{
 	Args: cobra.NoArgs,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		return withEnvCommand(cmd, func(ctx context.Context, cwd string) error {
-			return runEnvUI(ctx, cwd, envOpts, cmd.OutOrStdout(), cmd.ErrOrStderr())
+			return runEnvUI(ctx, defaultDeps(), cwd, envOpts, cmd.OutOrStdout(), cmd.ErrOrStderr())
 		})
 	},
 }
@@ -40,14 +39,14 @@ func init() {
 	envCmd.AddCommand(envUICmd)
 }
 
-func runEnvUI(ctx context.Context, cwd string, opts envOptions, stdout, stderr io.Writer) error {
-	return envSession(ctx, cwd, opts, stdout, stderr, func(runner *providerrunner.Runner, cfg *projectconfig.Config, provider *projectconfig.ProviderDescriptor) error {
+func runEnvUI(ctx context.Context, d deps, cwd string, opts envOptions, stdout, stderr io.Writer) error {
+	return envSession(ctx, d, cwd, opts, stdout, stderr, func(runner *providerrunner.Runner, cfg *projectconfig.Config, provider *projectconfig.ProviderDescriptor) error {
 		gate, err := discoverVariables(ctx, cfg, runner, provider, opts, stderr)
 		if err != nil {
 			return err
 		}
 
-		session, err := OpenVarsUI(ctx, cfg, provider, runner, opts.preview, gate, stdout)
+		session, err := d.openVarsUI(ctx, cfg, provider, runner, opts.preview, gate, stdout)
 		if err != nil {
 			return err
 		}
@@ -56,9 +55,7 @@ func runEnvUI(ctx context.Context, cwd string, opts envOptions, stdout, stderr i
 	})
 }
 
-var openBrowser = browser.OpenURL
-
-func OpenVarsUI(
+func (d deps) openVarsUI(
 	ctx context.Context,
 	cfg *projectconfig.Config,
 	provider *projectconfig.ProviderDescriptor,
@@ -67,19 +64,17 @@ func OpenVarsUI(
 	gate *envgate.Gate,
 	stdout io.Writer,
 ) (*varsui.Session, error) {
-	session, err := serveVarsUI(ctx, cfg, provider, runner, preview, gate)
+	session, err := d.serveVarsUI(ctx, cfg, provider, runner, preview, gate)
 	if err != nil {
 		return nil, err
 	}
 
 	fmt.Fprintf(stdout, "\nVariables for %s are at:\n\n  %s\n\n", cfg.Slug, session.URL)
-	if err := openBrowser(session.URL); err != nil {
+	if err := d.openBrowser(session.URL); err != nil {
 		fmt.Fprintln(stdout, "Couldn't open your browser automatically — open the link above manually.")
 	}
 	return session, nil
 }
-
-var serveVarsUI = startVarsUI
 
 func startVarsUI(
 	ctx context.Context,
@@ -141,7 +136,11 @@ func (v runnerValues) coordinate(at envgate.Address) *envv1.Coordinate {
 }
 
 func (v runnerValues) Set(ctx context.Context, at envgate.Address, value string, expected *int64) error {
-	_, err := v.runner.SetValue(ctx, &envv1.SetValueRequest{
+	vars, err := v.runner.Vars()
+	if err != nil {
+		return err
+	}
+	_, err = vars.SetValue(ctx, &envv1.SetValueRequest{
 		Options:         v.options,
 		ProtocolVersion: manifestbuilder.SchemaVersion,
 		Class:           v.class,
@@ -153,7 +152,11 @@ func (v runnerValues) Set(ctx context.Context, at envgate.Address, value string,
 }
 
 func (v runnerValues) Delete(ctx context.Context, at envgate.Address, expected *int64) error {
-	_, err := v.runner.DeleteValue(ctx, &envv1.DeleteValueRequest{
+	vars, err := v.runner.Vars()
+	if err != nil {
+		return err
+	}
+	_, err = vars.DeleteValue(ctx, &envv1.DeleteValueRequest{
 		Options:         v.options,
 		ProtocolVersion: manifestbuilder.SchemaVersion,
 		Class:           v.class,
@@ -171,7 +174,11 @@ func staleOrBroken(err error) error {
 }
 
 func (v runnerValues) History(ctx context.Context, at envgate.Address) ([]varsui.Version, error) {
-	resp, err := v.runner.ListVersions(ctx, &envv1.ListVersionsRequest{
+	vars, err := v.runner.Vars()
+	if err != nil {
+		return nil, err
+	}
+	resp, err := vars.ListVersions(ctx, &envv1.ListVersionsRequest{
 		Options:         v.options,
 		ProtocolVersion: manifestbuilder.SchemaVersion,
 		Class:           v.class,

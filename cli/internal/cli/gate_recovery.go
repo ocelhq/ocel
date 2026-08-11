@@ -15,6 +15,7 @@ import (
 )
 
 type gateRecovery struct {
+	deps     deps
 	cfg      *projectconfig.Config
 	provider *projectconfig.ProviderDescriptor
 	runner   *providerrunner.Runner
@@ -31,7 +32,7 @@ type gateRecovery struct {
 func (r gateRecovery) buildManifest(ctx context.Context, prebuilt bool, buildOut io.Writer) (*deploymentsv1.Manifest, error) {
 	for {
 		gate := r.newGate()
-		manifest, err := collectAndBuildManifest(ctx, r.cfg, gate, prebuilt, buildOut)
+		manifest, err := collectAndBuildManifest(ctx, r.deps, r.cfg, gate, prebuilt, buildOut)
 
 		var refusal *envgate.Refusal
 		if !r.enabled || !errors.As(err, &refusal) {
@@ -44,14 +45,14 @@ func (r gateRecovery) buildManifest(ctx context.Context, prebuilt bool, buildOut
 }
 
 func (r gateRecovery) fill(ctx context.Context, gate *envgate.Gate, refusal *envgate.Refusal) error {
-	session, err := serveVarsUI(ctx, r.cfg, r.provider, r.runner, r.preview, gate)
+	session, err := r.deps.serveVarsUI(ctx, r.cfg, r.provider, r.runner, r.preview, gate)
 	if err != nil {
 		return err
 	}
 	defer session.Close()
 
 	r.ui.Waiting(refusal.Owed(), session.URL)
-	if err := openBrowser(session.URL); err != nil {
+	if err := r.deps.openBrowser(session.URL); err != nil {
 		fmt.Fprintln(r.stdout, "  Couldn't open your browser automatically — open the link above yourself.")
 	}
 
@@ -72,7 +73,7 @@ type abandonedRefusal struct {
 }
 
 func (e *abandonedRefusal) Error() string {
-	return e.refusal.Error() + "\n\n" + varsui.ErrAbandoned.Error() + "."
+	return e.refusal.Error() + "\n\n" + varsui.AbandonedMessage + "."
 }
 
 func (e *abandonedRefusal) Unwrap() []error {

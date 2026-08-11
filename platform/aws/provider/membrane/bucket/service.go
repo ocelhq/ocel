@@ -60,9 +60,7 @@ func New(cfg Config) *Service {
 
 func randomHex(n int) string {
 	b := make([]byte, n)
-	if _, err := rand.Read(b); err != nil {
-		panic(fmt.Sprintf("runtime: read random: %v", err))
-	}
+	rand.Read(b)
 	return hex.EncodeToString(b)
 }
 
@@ -152,7 +150,11 @@ func (s *Service) VerifyUploadSignature(ctx context.Context, req *bucketsv1.Veri
 		Size:     f.GetSize(),
 		MimeType: f.GetMimeType(),
 	}
-	if !verifyUpload(sess.Secret, req.GetSessionId(), file, req.GetSignature()) {
+	valid, err := verifyUpload(sess.Secret, req.GetSessionId(), file, req.GetSignature())
+	if err != nil {
+		return nil, connect.NewError(connect.CodeInternal, err)
+	}
+	if !valid {
 		return &bucketsv1.VerifyUploadSignatureResponse{Valid: false}, nil
 	}
 	return &bucketsv1.VerifyUploadSignatureResponse{Valid: true, Metadata: sess.Metadata}, nil

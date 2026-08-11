@@ -1,4 +1,4 @@
-package awsconf
+package sdkconfig
 
 import (
 	"context"

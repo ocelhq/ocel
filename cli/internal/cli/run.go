@@ -29,12 +29,12 @@ var runCmd = &cobra.Command{
 		if err != nil {
 			return fmt.Errorf("determine working directory: %w", err)
 		}
-		return runRun(cmd.Context(), cmd, cwd, args, cmd.OutOrStdout(), cmd.ErrOrStderr(), cmd.InOrStdin())
+		return runRun(cmd.Context(), defaultDeps(), cmd, cwd, args, cmd.OutOrStdout(), cmd.ErrOrStderr(), cmd.InOrStdin())
 	},
 }
 
-func runRun(ctx context.Context, cmd *cobra.Command, cwd string, appArgs []string, stdout, stderr io.Writer, stdin io.Reader) error {
-	creds, err := loadCredentials()
+func runRun(ctx context.Context, d deps, cmd *cobra.Command, cwd string, appArgs []string, stdout, stderr io.Writer, stdin io.Reader) error {
+	creds, err := d.loadCredentials()
 	if err != nil {
 		fmt.Fprintln(stderr, "You're not logged in. Run `ocel login` first.")
 		return &ExitError{Code: 1}
@@ -47,19 +47,27 @@ func runRun(ctx context.Context, cmd *cobra.Command, cwd string, appArgs []strin
 
 	apiURL := effectiveAPIURL(cmd, creds.APIURL)
 
-	role, err := election.Elect(cfg.Dir)
-	if err != nil {
-		return fmt.Errorf("determine leader/follower role: %w", err)
-	}
-	if role.Role == election.Follower {
-		return runOnceAsFollower(ctx, role.LeaderAddr, appArgs, stdout, stderr, stdin)
-	}
-
-	link, err := ensureLinked(ctx, cfg.Dir, apiURL, stdout, stderr, stdin)
+	leaderAddr, found, err := runningDevServer(cfg.Dir)
 	if err != nil {
 		return err
 	}
-	return runStandalone(ctx, creds, apiURL, link.ProjectID, cfg, appArgs, stdout, stderr, stdin)
+	if found {
+		return runOnceAsFollower(ctx, leaderAddr, appArgs, stdout, stderr, stdin)
+	}
+
+	link, err := ensureLinked(ctx, d, cfg.Dir, apiURL, stdout, stderr, stdin)
+	if err != nil {
+		return err
+	}
+	return runStandalone(ctx, d, creds, apiURL, link.ProjectID, cfg, appArgs, stdout, stderr, stdin)
+}
+
+func runningDevServer(root string) (string, bool, error) {
+	result, err := election.Elect(root)
+	if err != nil {
+		return "", false, fmt.Errorf("look for a running dev server: %w", err)
+	}
+	return result.LeaderAddr, result.Role == election.Follower, nil
 }
 
 func runOnceAsFollower(ctx context.Context, leaderAddr string, appArgs []string, stdout, stderr io.Writer, stdin io.Reader) error {
@@ -78,7 +86,7 @@ func runOnceAsFollower(ctx context.Context, leaderAddr string, appArgs []string,
 	return runChildOnce(ctx, appArgs, stream.Msg().Env, stdin, stdout, stderr)
 }
 
-func runStandalone(ctx context.Context, creds credentials.Credentials, apiURL, projectID string, cfg *projectconfig.Config, appArgs []string, stdout, stderr io.Writer, stdin io.Reader) error {
+func runStandalone(ctx context.Context, d deps, creds credentials.Credentials, apiURL, projectID string, cfg *projectconfig.Config, appArgs []string, stdout, stderr io.Writer, stdin io.Reader) error {
 	file, err := dotenv.Load(cfg.Dir)
 	if err != nil {
 		return err
@@ -86,7 +94,7 @@ func runStandalone(ctx context.Context, creds credentials.Credentials, apiURL, p
 	reportUnreadableLines(stdout, file.Unreadable)
 	reportDotfile(stdout, cfg.Dir, file.Values, dotfileReadOnceAdvice)
 
-	projectCfg := resolveProjectConfig(ctx, apiURL, creds.AccessToken, projectID, stderr)
+	projectCfg := resolveProjectConfig(ctx, d, apiURL, creds.AccessToken, projectID, stderr)
 
 	listener, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {

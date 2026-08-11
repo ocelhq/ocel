@@ -23,15 +23,25 @@ type ProjectConfig struct {
 	Token     string
 }
 
-type ProvisionedResource struct {
+type Resource struct {
 	Name string
 	Type resourcesv1.ResourceType
 	Env  map[string]string
 }
 
-var httpClient = &http.Client{Timeout: 30 * time.Second}
+type Resolver struct {
+	HTTP      *http.Client
+	OpenCache func() (*resolvecache.Cache, error)
+	Now       func() time.Time
+}
 
-var openCache = resolvecache.Open
+func NewResolver() *Resolver {
+	return &Resolver{
+		HTTP:      &http.Client{Timeout: 30 * time.Second},
+		OpenCache: resolvecache.Open,
+		Now:       time.Now,
+	}
+}
 
 func FetchProjectConfig(_ context.Context, apiURL, token, projectID string) (ProjectConfig, error) {
 	return ProjectConfig{
@@ -48,8 +58,8 @@ func FetchLiveValues(_ context.Context, apiURL, token, projectID string, keys []
 	return make(map[string]string, len(keys)), nil
 }
 
-func Provision(ctx context.Context, cfg ProjectConfig, resources []manifest.Entry) ([]ProvisionedResource, error) {
-	return CachedResolve(ctx, httpClient, cfg.APIURL, cfg.Token, cfg.ProjectID, resources)
+func Run(ctx context.Context, cfg ProjectConfig, resources []manifest.Entry) ([]Resource, error) {
+	return NewResolver().Resolve(ctx, cfg.APIURL, cfg.Token, cfg.ProjectID, resources)
 }
 
 type resolveResourceEntry struct {
@@ -67,45 +77,33 @@ type resolveResponseBody struct {
 	ExpiresAt string            `json:"expiresAt"`
 }
 
-func Resolve(ctx context.Context, client *http.Client, baseURL, token, projectID string, resources []manifest.Entry) ([]ProvisionedResource, error) {
+func (r *Resolver) Resolve(ctx context.Context, baseURL, token, projectID string, resources []manifest.Entry) ([]Resource, error) {
 	if len(resources) == 0 {
-		return []ProvisionedResource{}, nil
-	}
-
-	env, _, err := callResolve(ctx, client, baseURL, token, projectID, resources)
-	if err != nil {
-		return nil, err
-	}
-	return resourcesFromEnv(resources, env)
-}
-
-func CachedResolve(ctx context.Context, client *http.Client, baseURL, token, projectID string, resources []manifest.Entry) ([]ProvisionedResource, error) {
-	if len(resources) == 0 {
-		return []ProvisionedResource{}, nil
+		return []Resource{}, nil
 	}
 
 	defs := make([]resolvecache.Def, 0, len(resources))
-	for _, r := range resources {
-		typeName, err := ResourceTypeName(r.Type)
+	for _, entry := range resources {
+		typeName, err := ResourceTypeName(entry.Type)
 		if err != nil {
 			return nil, err
 		}
-		defs = append(defs, resolvecache.Def{Name: r.Name, Type: typeName})
+		defs = append(defs, resolvecache.Def{Name: entry.Name, Type: typeName})
 	}
 	defsHash := resolvecache.HashDefs(defs)
 	account := resolvecache.Fingerprint(baseURL, token)
 
-	cache, cacheErr := openCache()
+	cache, cacheErr := r.OpenCache()
 	if cacheErr == nil {
 		if entry, ok := cache.Load(projectID); ok &&
 			entry.DefsHash == defsHash &&
 			entry.Account == account &&
-			time.Now().Before(entry.ExpiresAt) {
+			r.Now().Before(entry.ExpiresAt) {
 			return resourcesFromEnv(resources, entry.Env)
 		}
 	}
 
-	env, expiresAt, err := callResolve(ctx, client, baseURL, token, projectID, resources)
+	env, expiresAt, err := r.callResolve(ctx, baseURL, token, projectID, resources)
 	if err != nil {
 		return nil, err
 	}
@@ -122,14 +120,14 @@ func CachedResolve(ctx context.Context, client *http.Client, baseURL, token, pro
 	return resourcesFromEnv(resources, env)
 }
 
-func callResolve(ctx context.Context, client *http.Client, baseURL, token, projectID string, resources []manifest.Entry) (map[string]string, time.Time, error) {
+func (r *Resolver) callResolve(ctx context.Context, baseURL, token, projectID string, resources []manifest.Entry) (map[string]string, time.Time, error) {
 	entries := make([]resolveResourceEntry, 0, len(resources))
-	for _, r := range resources {
-		typeName, err := ResourceTypeName(r.Type)
+	for _, resource := range resources {
+		typeName, err := ResourceTypeName(resource.Type)
 		if err != nil {
 			return nil, time.Time{}, err
 		}
-		entries = append(entries, resolveResourceEntry{Name: r.Name, Type: typeName})
+		entries = append(entries, resolveResourceEntry{Name: resource.Name, Type: typeName})
 	}
 
 	body, err := json.Marshal(resolveRequestBody{ProjectID: projectID, Resources: entries})
@@ -146,7 +144,7 @@ func callResolve(ctx context.Context, client *http.Client, baseURL, token, proje
 		req.Header.Set("Authorization", "Bearer "+token)
 	}
 
-	resp, err := client.Do(req)
+	resp, err := r.HTTP.Do(req)
 	if err != nil {
 		return nil, time.Time{}, fmt.Errorf("resolve resources: %w", err)
 	}
@@ -166,19 +164,19 @@ func callResolve(ctx context.Context, client *http.Client, baseURL, token, proje
 	return decoded.Env, expiresAt, nil
 }
 
-func resourcesFromEnv(resources []manifest.Entry, env map[string]string) ([]ProvisionedResource, error) {
-	out := make([]ProvisionedResource, 0, len(resources))
-	for _, r := range resources {
-		typeName, err := ResourceTypeName(r.Type)
+func resourcesFromEnv(resources []manifest.Entry, env map[string]string) ([]Resource, error) {
+	out := make([]Resource, 0, len(resources))
+	for _, resource := range resources {
+		typeName, err := ResourceTypeName(resource.Type)
 		if err != nil {
 			return nil, err
 		}
-		key := fmt.Sprintf("OCEL_RESOURCE_%s_%s", typeName, r.Name)
+		key := fmt.Sprintf("OCEL_RESOURCE_%s_%s", typeName, resource.Name)
 		value, ok := env[key]
 		if !ok {
-			return nil, fmt.Errorf("resolve response missing env for resource %q", r.Name)
+			return nil, fmt.Errorf("resolve response missing env for resource %q", resource.Name)
 		}
-		out = append(out, ProvisionedResource{Name: r.Name, Type: r.Type, Env: map[string]string{key: value}})
+		out = append(out, Resource{Name: resource.Name, Type: resource.Type, Env: map[string]string{key: value}})
 	}
 	return out, nil
 }

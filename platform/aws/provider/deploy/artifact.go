@@ -13,7 +13,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
-	"sort"
+	"slices"
 	"sync"
 	"sync/atomic"
 
@@ -53,7 +53,7 @@ func walkRegularFiles(dir string) ([]string, error) {
 	}); err != nil {
 		return nil, fmt.Errorf("walk artifact %s: %w", dir, err)
 	}
-	sort.Strings(rels)
+	slices.Sort(rels)
 	return rels, nil
 }
 
@@ -62,7 +62,7 @@ func overlayPaths(overlay map[string][]byte) []string {
 	for rel := range overlay {
 		rels = append(rels, rel)
 	}
-	sort.Strings(rels)
+	slices.Sort(rels)
 	return rels
 }
 

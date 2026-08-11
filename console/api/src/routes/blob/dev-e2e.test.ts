@@ -69,23 +69,23 @@ async function sendWebResponse(res: any, webRes: Response): Promise<void> {
   res.end(Buffer.from(await webRes.arrayBuffer()));
 }
 
-async function waitForRigAddr(child: ChildProcess): Promise<string> {
+async function waitForDevServerAddr(child: ChildProcess): Promise<string> {
   return new Promise((resolve, reject) => {
     let buf = "";
     const onData = (d: Buffer) => {
       buf += d.toString();
-      const m = buf.match(/RIG_ADDR=(\S+)/);
+      const m = buf.match(/DEV_SERVER_ADDR=(\S+)/);
       if (m) {
         child.stdout?.off("data", onData);
         resolve(m[1]);
       }
     };
     child.stdout?.on("data", onData);
-    child.stderr?.on("data", (d) => process.stderr.write(`[blobrig] ${d}`));
+    child.stderr?.on("data", (d) => process.stderr.write(`[devserver] ${d}`));
     child.on("exit", (code) =>
-      reject(new Error(`blobrig exited early (code ${code})`)),
+      reject(new Error(`devserver exited early (code ${code})`)),
     );
-    setTimeout(() => reject(new Error("blobrig never printed RIG_ADDR")), 15_000);
+    setTimeout(() => reject(new Error("devserver never printed DEV_SERVER_ADDR")), 15_000);
   });
 }
 
@@ -94,9 +94,9 @@ const runIt = (await minioReachable()) && goAvailable() ? it : it.skip;
 describe("ocel/blob dev e2e (MinIO)", () => {
   let session: Awaited<ReturnType<typeof createTestSessionWithOrganization>>;
   let projectId: string;
-  let rigBin: string;
-  let rigDir: string;
-  let rig: ChildProcess | undefined;
+  let devServerBin: string;
+  let devServerDir: string;
+  let devServer: ChildProcess | undefined;
   let server: Server | undefined;
   let appBase = "";
 
@@ -117,19 +117,19 @@ describe("ocel/blob dev e2e (MinIO)", () => {
     );
     projectId = (await created.json()).id;
 
-    rigDir = mkdtempSync(path.join(tmpdir(), "blobrig-"));
-    rigBin = path.join(rigDir, "blobrig");
-    execFileSync("go", ["build", "-o", rigBin, "./internal/blobrig"], {
+    devServerDir = mkdtempSync(path.join(tmpdir(), "ocel-devserver-"));
+    devServerBin = path.join(devServerDir, "devserver");
+    execFileSync("go", ["build", "-o", devServerBin, "./internal/cmd/devserver"], {
       cwd: cliDir,
       stdio: "inherit",
     });
   }, 120_000);
 
   afterAll(async () => {
-    rig?.kill("SIGTERM");
+    devServer?.kill("SIGTERM");
     await new Promise((r) => server?.close(r) ?? r(undefined));
     if (session) await session.cleanup();
-    if (rigDir) rmSync(rigDir, { recursive: true, force: true });
+    if (devServerDir) rmSync(devServerDir, { recursive: true, force: true });
   });
 
   runIt(
@@ -168,15 +168,15 @@ describe("ocel/blob dev e2e (MinIO)", () => {
       server = listened.srv;
       appBase = `http://127.0.0.1:${listened.port}`;
 
-      rig = spawn(
-        rigBin,
+      devServer = spawn(
+        devServerBin,
         ["-api", appBase, "-token", token, "-project", projectId],
         { stdio: ["pipe", "pipe", "pipe"] },
       );
-      const rigAddr = await waitForRigAddr(rig);
+      const devServerAddr = await waitForDevServerAddr(devServer);
 
       process.env.OCEL_RESOURCE_BUCKET_storage = JSON.stringify({
-        address: rigAddr,
+        address: devServerAddr,
         bucket: "storage",
       });
 

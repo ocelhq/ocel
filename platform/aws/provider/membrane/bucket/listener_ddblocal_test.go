@@ -13,7 +13,7 @@ import (
 	ddbtypes "github.com/aws/aws-sdk-go-v2/service/dynamodb/types"
 )
 
-func TestMarkSucceeded_RealDDBIsAtomicAndIdempotent(t *testing.T) {
+func TestMarkSucceeded(t *testing.T) {
 	endpoint := os.Getenv("OCEL_RUNTIME_DDB_ENDPOINT")
 	if endpoint == "" {
 		endpoint = "http://localhost:8000"
@@ -52,31 +52,38 @@ func TestMarkSucceeded_RealDDBIsAtomicAndIdempotent(t *testing.T) {
 		t.Fatalf("put session: %v", err)
 	}
 
-	first, err := store.markSucceeded(ctx, sess.SessionID, 1)
-	if err != nil {
-		t.Fatalf("first markSucceeded: %v", err)
-	}
-	if !first {
-		t.Fatal("first transition must report transitioned = true")
-	}
-	dup, err := store.markSucceeded(ctx, sess.SessionID, 1)
-	if err != nil {
-		t.Fatalf("duplicate markSucceeded: %v", err)
-	}
-	if dup {
-		t.Fatal("duplicate transition must report transitioned = false (idempotent)")
-	}
+	t.Run("real dynamodb transitions the file on first delivery", func(t *testing.T) {
+		first, err := store.markSucceeded(ctx, sess.SessionID, 1)
+		if err != nil {
+			t.Fatalf("first markSucceeded: %v", err)
+		}
+		if !first {
+			t.Fatal("first transition must report transitioned = true")
+		}
+	})
 
-	got, err := store.get(ctx, sess.SessionID)
-	if err != nil {
-		t.Fatalf("get session: %v", err)
-	}
-	if got.Files[1].State != stateSucceeded {
-		t.Fatalf("file[1] state = %q, want succeeded", got.Files[1].State)
-	}
-	if got.Files[0].State != statePending {
-		t.Fatalf("file[0] state = %q, want pending (untouched)", got.Files[0].State)
-	}
+	t.Run("real dynamodb makes a duplicate delivery a no-op", func(t *testing.T) {
+		dup, err := store.markSucceeded(ctx, sess.SessionID, 1)
+		if err != nil {
+			t.Fatalf("duplicate markSucceeded: %v", err)
+		}
+		if dup {
+			t.Fatal("duplicate transition must report transitioned = false (idempotent)")
+		}
+	})
+
+	t.Run("real dynamodb leaves the sibling file alone", func(t *testing.T) {
+		got, err := store.get(ctx, sess.SessionID)
+		if err != nil {
+			t.Fatalf("get session: %v", err)
+		}
+		if got.Files[1].State != stateSucceeded {
+			t.Fatalf("file[1] state = %q, want succeeded", got.Files[1].State)
+		}
+		if got.Files[0].State != statePending {
+			t.Fatalf("file[0] state = %q, want pending (untouched)", got.Files[0].State)
+		}
+	})
 }
 
 func createTable(t *testing.T, ctx context.Context, ddb *dynamodb.Client, table string) {
@@ -98,7 +105,7 @@ func createTable(t *testing.T, ctx context.Context, ddb *dynamodb.Client, table 
 	t.Cleanup(func() {
 		_, _ = ddb.DeleteTable(context.Background(), &dynamodb.DeleteTableInput{TableName: aws.String(table)})
 	})
-	for i := 0; i < 20; i++ {
+	for range 20 {
 		out, err := ddb.DescribeTable(ctx, &dynamodb.DescribeTableInput{TableName: aws.String(table)})
 		if err == nil && out.Table.TableStatus == ddbtypes.TableStatusActive {
 			return

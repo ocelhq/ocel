@@ -35,7 +35,7 @@ var rollbackCmd = &cobra.Command{
 		}
 		ctx, stop := signal.NotifyContext(cmd.Context(), os.Interrupt, syscall.SIGTERM)
 		defer stop()
-		return runRollback(ctx, cwd, rollbackOpts, cmd.OutOrStdout(), cmd.ErrOrStderr())
+		return runRollback(ctx, defaultDeps(), cwd, rollbackOpts, cmd.OutOrStdout(), cmd.ErrOrStderr())
 	},
 }
 
@@ -44,7 +44,7 @@ func init() {
 	rollbackCmd.Flags().StringVar(&rollbackOpts.tag, "tag", "", "Roll back to the promotion carrying this tag (mutually exclusive with --to)")
 }
 
-func runRollback(ctx context.Context, cwd string, opts rollbackOptions, stdout, stderr io.Writer) error {
+func runRollback(ctx context.Context, d deps, cwd string, opts rollbackOptions, stdout, stderr io.Writer) error {
 	if opts.to != "" && opts.tag != "" {
 		return fmt.Errorf("--to and --tag are mutually exclusive; pass just one")
 	}
@@ -65,12 +65,16 @@ func runRollback(ctx context.Context, cwd string, opts rollbackOptions, stdout, 
 		return err
 	}
 
-	return runProviderSession(ctx, cfg, provider, stdout, stderr, func(runner *providerrunner.Runner) error {
-		if err := preflightClass(ctx, runner, provider, deploymentsv1.Environment_CLASS_PRODUCTION, "ocel bootstrap", stdout); err != nil {
+	return runProviderSession(ctx, d, cfg, provider, stdout, stderr, func(runner *providerrunner.Runner) error {
+		if err := preflightClass(ctx, d, runner, provider, deploymentsv1.Environment_CLASS_PRODUCTION, "ocel bootstrap", stdout); err != nil {
 			return err
 		}
 
-		resp, err := runner.Rollback(ctx, &deploymentsv1.RollbackRequest{
+		client, err := runner.Deployments()
+		if err != nil {
+			return err
+		}
+		resp, err := client.Rollback(ctx, &deploymentsv1.RollbackRequest{
 			Options:         []byte(provider.Options),
 			ProtocolVersion: manifestbuilder.SchemaVersion,
 			Slug:            cfg.Slug,

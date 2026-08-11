@@ -38,7 +38,7 @@ var bootstrapCmd = &cobra.Command{
 		ctx, stop := signal.NotifyContext(cmd.Context(), os.Interrupt, syscall.SIGTERM)
 		defer stop()
 
-		return runBootstrap(ctx, cwd, bootstrapOpts, cmd.OutOrStdout(), cmd.ErrOrStderr(), cmd.InOrStdin())
+		return runBootstrap(ctx, defaultDeps(), cwd, bootstrapOpts, cmd.OutOrStdout(), cmd.ErrOrStderr(), cmd.InOrStdin())
 	},
 }
 
@@ -47,7 +47,7 @@ func init() {
 	bootstrapCmd.Flags().BoolVar(&bootstrapOpts.preview, "preview", false, "Stand up the preview infrastructure instead of the production infrastructure")
 }
 
-func runBootstrap(ctx context.Context, cwd string, opts bootstrapOptions, stdout, stderr io.Writer, stdin io.Reader) error {
+func runBootstrap(ctx context.Context, d deps, cwd string, opts bootstrapOptions, stdout, stderr io.Writer, stdin io.Reader) error {
 	cfg, err := projectconfig.Resolve(cwd)
 	if err != nil {
 		return err
@@ -82,7 +82,7 @@ func runBootstrap(ctx context.Context, cwd string, opts bootstrapOptions, stdout
 	defer ui.Close()
 
 	provW := ui.BuildWriter()
-	err = runProviderSession(ctx, cfg, provider, provW, provW, func(runner *providerrunner.Runner) error {
+	err = runProviderSession(ctx, d, cfg, provider, provW, provW, func(runner *providerrunner.Runner) error {
 		req := &deploymentsv1.BootstrapRequest{
 			Options:         []byte(provider.Options),
 			ProtocolVersion: manifestbuilder.SchemaVersion,

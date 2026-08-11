@@ -50,201 +50,236 @@ func adoptISRWriter(t *testing.T, cfg Config) Config {
 	return cfg
 }
 
-func TestAppCaches_RefusesAWriterAndAStoreThatDisagree(t *testing.T) {
-	base := Config{ArtifactRoot: twoAppTree(t), AssetBucket: "assets", StateTable: "state", Env: "prod"}
+func TestAppCachesISRWriter(t *testing.T) {
+	t.Run("refuses a writer and a store that disagree", func(t *testing.T) {
+		base := Config{ArtifactRoot: twoAppTree(t), AssetBucket: "assets", StateTable: "state", Env: "prod"}
 
-	storeOnly := base
-	storeOnly.CacheStoreBucket = "isr"
-	storeOnly.CacheStoreUploader = &fakeUploader{exists: map[string]bool{}}
-	if _, err := appCaches(storeOnly, twoAppManifest()); err == nil {
-		t.Error("a cache store with no writer to write into it must fail the deploy")
-	}
-
-	writerOnly := adoptISRWriter(t, base)
-	if _, err := appCaches(writerOnly, twoAppManifest()); err == nil {
-		t.Error("a writer with no adopted cache store must fail the deploy")
-	}
-}
-
-func TestISRWriteSecret_DiffersPerPrefixAndIsStable(t *testing.T) {
-	web := isrWriteSecret("seed-1", "prod/acme/web/B1")
-	admin := isrWriteSecret("seed-1", "prod/acme/admin/B1")
-	if web == admin {
-		t.Error("two apps in one deploy must not share a write secret")
-	}
-	if web != isrWriteSecret("seed-1", "prod/acme/web/B1") {
-		t.Error("the same seed and prefix must derive the same secret on every call")
-	}
-	if web == isrWriteSecret("seed-2", "prod/acme/web/B1") {
-		t.Error("a fresh deploy seed must rotate the secret")
-	}
-	if web == "" {
-		t.Error("derived secret is empty")
-	}
-}
-
-func TestISRWriteSecretHash_IsTheHexSHA256TheWorkerStores(t *testing.T) {
-	hash := isrWriteSecretHash("write-secret")
-	if len(hash) != 64 {
-		t.Fatalf("hash = %q, want 64 hex characters", hash)
-	}
-	for _, c := range hash {
-		if !((c >= '0' && c <= '9') || (c >= 'a' && c <= 'f')) {
-			t.Fatalf("hash = %q, want lowercase hex", hash)
+		storeOnly := base
+		storeOnly.CacheStoreBucket = "isr"
+		storeOnly.CacheStoreUploader = &fakeUploader{exists: map[string]bool{}}
+		if _, err := appCaches(storeOnly, twoAppManifest()); err == nil {
+			t.Error("a cache store with no writer to write into it must fail the deploy")
 		}
-	}
-	if hash == "write-secret" {
-		t.Error("the plaintext secret must never be what is sent")
-	}
-}
 
-func TestInitializeISRWriter_SeedsOnlyTheHashUnderTheBootstrapCredential(t *testing.T) {
-	srv, calls := fakeWriter(t, http.StatusNoContent)
-	cfg := writerConfig(srv.URL)
-	secret := isrWriteSecret(cfg.ISRWriterSeed, testPrefix)
-
-	if err := initializeISRWriter(context.Background(), cfg, testPrefix, secret); err != nil {
-		t.Fatalf("initializeISRWriter: %v", err)
-	}
-	if len(*calls) != 1 {
-		t.Fatalf("calls = %d, want 1", len(*calls))
-	}
-	got := (*calls)[0]
-	if got.method != http.MethodPost || got.path != "/"+testPrefix+"/initialize" {
-		t.Errorf("call = %s %s, want POST /%s/initialize", got.method, got.path, testPrefix)
-	}
-	if got.auth != "Bearer cred-1" {
-		t.Errorf("authorization = %q, want the bootstrap credential", got.auth)
-	}
-	if got.body["secretHash"] != isrWriteSecretHash(secret) {
-		t.Errorf("secretHash = %q, want the hash of the write secret", got.body["secretHash"])
-	}
-	if _, leaked := got.body["secret"]; leaked {
-		t.Error("the plaintext write secret must never reach the worker")
-	}
-}
-
-func TestRetireISRWriter_DestroysTheBuildsInstance(t *testing.T) {
-	srv, calls := fakeWriter(t, http.StatusNoContent)
-
-	if err := retireISRWriter(context.Background(), writerConfig(srv.URL), testPrefix); err != nil {
-		t.Fatalf("retireISRWriter: %v", err)
-	}
-	if len(*calls) != 1 || (*calls)[0].path != "/"+testPrefix+"/destroy" {
-		t.Fatalf("calls = %+v, want one POST to /%s/destroy", *calls, testPrefix)
-	}
-}
-
-func TestISRWriterRequest_RejectedCallIsAnError(t *testing.T) {
-	srv, _ := fakeWriter(t, http.StatusUnauthorized)
-
-	err := initializeISRWriter(context.Background(), writerConfig(srv.URL), testPrefix, "s")
-	if err == nil {
-		t.Fatal("a 401 from the writer must not be swallowed")
-	}
-}
-
-func TestISRWriterCalls_AreNoOpsWhenNoWriterWasAdopted(t *testing.T) {
-	srv, calls := fakeWriter(t, http.StatusNoContent)
-	for _, cfg := range []Config{
-		{},
-		{ISRWriterEndpoint: srv.URL},
-		{ISRWriterBootstrapCred: "cred-1"},
-	} {
-		if err := initializeISRWriter(context.Background(), cfg, testPrefix, "s"); err != nil {
-			t.Fatalf("initializeISRWriter with %+v: %v", cfg, err)
+		writerOnly := adoptISRWriter(t, base)
+		if _, err := appCaches(writerOnly, twoAppManifest()); err == nil {
+			t.Error("a writer with no adopted cache store must fail the deploy")
 		}
+	})
+
+	t.Run("gives each app its own writer coordinates", func(t *testing.T) {
+		t.Parallel()
+		cfg := Config{
+			ArtifactRoot:           twoAppTree(t),
+			AssetBucket:            "assets",
+			StateTable:             "state",
+			Env:                    "prod",
+			CacheStoreBucket:       "isr",
+			CacheStoreUploader:     &fakeUploader{exists: map[string]bool{}},
+			ISRWriterEndpoint:      "https://writer.example",
+			ISRWriterBootstrapCred: "cred-1",
+			ISRWriterSeed:          "seed-1",
+		}
+
+		caches, err := appCaches(cfg, twoAppManifest())
+		if err != nil {
+			t.Fatalf("appCaches: %v", err)
+		}
+		again, err := appCaches(cfg, twoAppManifest())
+		if err != nil {
+			t.Fatalf("appCaches (second call): %v", err)
+		}
+
+		web, admin := caches["web"], caches["admin"]
+		if want := "https://writer.example/prod/proj/web/WEB1/entry"; web.WriterURL != want {
+			t.Errorf("web WriterURL = %q, want %q", web.WriterURL, want)
+		}
+		if web.WriterSecret == admin.WriterSecret {
+			t.Error("two apps in one deploy must not share a write secret")
+		}
+		if web.WriterSecret != again["web"].WriterSecret {
+			t.Error("appCaches must derive the same write secret on every call")
+		}
+	})
+
+	t.Run("leaves writer coordinates unset without an adopted writer", func(t *testing.T) {
+		t.Parallel()
+		cfg := Config{ArtifactRoot: twoAppTree(t), AssetBucket: "assets", StateTable: "state", Env: "prod"}
+
+		caches, err := appCaches(cfg, twoAppManifest())
+		if err != nil {
+			t.Fatalf("appCaches: %v", err)
+		}
+		if caches["web"].WriterURL != "" || caches["web"].WriterSecret != "" {
+			t.Errorf("writer coordinates = %+v, want unset", caches["web"])
+		}
+	})
+}
+
+func TestISRWriteSecret(t *testing.T) {
+	t.Run("differs per prefix", func(t *testing.T) {
+		t.Parallel()
+		web := isrWriteSecret("seed-1", "prod/acme/web/B1")
+		admin := isrWriteSecret("seed-1", "prod/acme/admin/B1")
+		if web == admin {
+			t.Error("two apps in one deploy must not share a write secret")
+		}
+	})
+
+	t.Run("is stable", func(t *testing.T) {
+		t.Parallel()
+		web := isrWriteSecret("seed-1", "prod/acme/web/B1")
+		if web != isrWriteSecret("seed-1", "prod/acme/web/B1") {
+			t.Error("the same seed and prefix must derive the same secret on every call")
+		}
+	})
+
+	t.Run("rotates with a fresh deploy seed", func(t *testing.T) {
+		t.Parallel()
+		web := isrWriteSecret("seed-1", "prod/acme/web/B1")
+		if web == isrWriteSecret("seed-2", "prod/acme/web/B1") {
+			t.Error("a fresh deploy seed must rotate the secret")
+		}
+	})
+
+	t.Run("is not empty", func(t *testing.T) {
+		t.Parallel()
+		if isrWriteSecret("seed-1", "prod/acme/web/B1") == "" {
+			t.Error("derived secret is empty")
+		}
+	})
+}
+
+func TestISRWriteSecretHash(t *testing.T) {
+	t.Run("is the hex SHA256 the worker stores", func(t *testing.T) {
+		t.Parallel()
+		hash := isrWriteSecretHash("write-secret")
+		if len(hash) != 64 {
+			t.Fatalf("hash = %q, want 64 hex characters", hash)
+		}
+		for _, c := range hash {
+			if !((c >= '0' && c <= '9') || (c >= 'a' && c <= 'f')) {
+				t.Fatalf("hash = %q, want lowercase hex", hash)
+			}
+		}
+		if hash == "write-secret" {
+			t.Error("the plaintext secret must never be what is sent")
+		}
+	})
+}
+
+func TestInitializeISRWriter(t *testing.T) {
+	t.Run("seeds only the hash under the bootstrap credential", func(t *testing.T) {
+		srv, calls := fakeWriter(t, http.StatusNoContent)
+		cfg := writerConfig(srv.URL)
+		secret := isrWriteSecret(cfg.ISRWriterSeed, testPrefix)
+
+		if err := initializeISRWriter(context.Background(), cfg, testPrefix, secret); err != nil {
+			t.Fatalf("initializeISRWriter: %v", err)
+		}
+		if len(*calls) != 1 {
+			t.Fatalf("calls = %d, want 1", len(*calls))
+		}
+		got := (*calls)[0]
+		if got.method != http.MethodPost || got.path != "/"+testPrefix+"/initialize" {
+			t.Errorf("call = %s %s, want POST /%s/initialize", got.method, got.path, testPrefix)
+		}
+		if got.auth != "Bearer cred-1" {
+			t.Errorf("authorization = %q, want the bootstrap credential", got.auth)
+		}
+		if got.body["secretHash"] != isrWriteSecretHash(secret) {
+			t.Errorf("secretHash = %q, want the hash of the write secret", got.body["secretHash"])
+		}
+		if _, leaked := got.body["secret"]; leaked {
+			t.Error("the plaintext write secret must never reach the worker")
+		}
+	})
+}
+
+func TestRetireISRWriter(t *testing.T) {
+	t.Run("destroys the build's instance", func(t *testing.T) {
+		srv, calls := fakeWriter(t, http.StatusNoContent)
+
+		if err := retireISRWriter(context.Background(), writerConfig(srv.URL), testPrefix); err != nil {
+			t.Fatalf("retireISRWriter: %v", err)
+		}
+		if len(*calls) != 1 || (*calls)[0].path != "/"+testPrefix+"/destroy" {
+			t.Fatalf("calls = %+v, want one POST to /%s/destroy", *calls, testPrefix)
+		}
+	})
+
+	t.Run("reaches the worker without a deploy seed", func(t *testing.T) {
+		srv, calls := fakeWriter(t, http.StatusNoContent)
+		cfg := Config{ISRWriterEndpoint: srv.URL, ISRWriterBootstrapCred: "cred-1"}
+
 		if err := retireISRWriter(context.Background(), cfg, testPrefix); err != nil {
-			t.Fatalf("retireISRWriter with %+v: %v", cfg, err)
+			t.Fatalf("retireISRWriter: %v", err)
 		}
-	}
-	if len(*calls) != 0 {
-		t.Errorf("calls = %+v, want none without adopted writer coordinates", *calls)
-	}
-}
-
-func TestRetireISRWriter_ReachesTheWorkerWithoutADeploySeed(t *testing.T) {
-	srv, calls := fakeWriter(t, http.StatusNoContent)
-	cfg := Config{ISRWriterEndpoint: srv.URL, ISRWriterBootstrapCred: "cred-1"}
-
-	if err := retireISRWriter(context.Background(), cfg, testPrefix); err != nil {
-		t.Fatalf("retireISRWriter: %v", err)
-	}
-	if len(*calls) != 1 || (*calls)[0].path != "/"+testPrefix+"/destroy" {
-		t.Fatalf("calls = %+v, want one POST to /%s/destroy", *calls, testPrefix)
-	}
-}
-
-func TestISRWriterEnv_IsAPlainEnvVarPairOrNothing(t *testing.T) {
-	with := isrConfig{
-		Prefix:       testPrefix,
-		WriterURL:    "https://writer.example/" + testPrefix + "/entry",
-		WriterSecret: "write-secret",
-	}.env()
-	if with["OCEL_ISR_WRITER_URL"] != "https://writer.example/"+testPrefix+"/entry" {
-		t.Errorf("OCEL_ISR_WRITER_URL = %q", with["OCEL_ISR_WRITER_URL"])
-	}
-	if with["OCEL_ISR_WRITER_SECRET"] != "write-secret" {
-		t.Errorf("OCEL_ISR_WRITER_SECRET = %q", with["OCEL_ISR_WRITER_SECRET"])
-	}
-
-	for _, cfg := range []isrConfig{
-		{Prefix: testPrefix},
-		{Prefix: testPrefix, WriterURL: "https://writer.example/x/entry"},
-		{Prefix: testPrefix, WriterSecret: "write-secret"},
-	} {
-		env := cfg.env()
-		if _, ok := env["OCEL_ISR_WRITER_URL"]; ok {
-			t.Errorf("OCEL_ISR_WRITER_URL set for %+v", cfg)
+		if len(*calls) != 1 || (*calls)[0].path != "/"+testPrefix+"/destroy" {
+			t.Fatalf("calls = %+v, want one POST to /%s/destroy", *calls, testPrefix)
 		}
-		if _, ok := env["OCEL_ISR_WRITER_SECRET"]; ok {
-			t.Errorf("OCEL_ISR_WRITER_SECRET set for %+v", cfg)
+	})
+}
+
+func TestISRWriterRequest(t *testing.T) {
+	t.Run("rejected call is an error", func(t *testing.T) {
+		srv, _ := fakeWriter(t, http.StatusUnauthorized)
+
+		err := initializeISRWriter(context.Background(), writerConfig(srv.URL), testPrefix, "s")
+		if err == nil {
+			t.Fatal("a 401 from the writer must not be swallowed")
 		}
-	}
+	})
 }
 
-func TestAppCaches_GivesEachAppItsOwnWriterCoordinates(t *testing.T) {
-	cfg := Config{
-		ArtifactRoot:           twoAppTree(t),
-		AssetBucket:            "assets",
-		StateTable:             "state",
-		Env:                    "prod",
-		CacheStoreBucket:       "isr",
-		CacheStoreUploader:     &fakeUploader{exists: map[string]bool{}},
-		ISRWriterEndpoint:      "https://writer.example",
-		ISRWriterBootstrapCred: "cred-1",
-		ISRWriterSeed:          "seed-1",
-	}
-
-	caches, err := appCaches(cfg, twoAppManifest())
-	if err != nil {
-		t.Fatalf("appCaches: %v", err)
-	}
-	again, err := appCaches(cfg, twoAppManifest())
-	if err != nil {
-		t.Fatalf("appCaches (second call): %v", err)
-	}
-
-	web, admin := caches["web"], caches["admin"]
-	if want := "https://writer.example/prod/proj/web/WEB1/entry"; web.WriterURL != want {
-		t.Errorf("web WriterURL = %q, want %q", web.WriterURL, want)
-	}
-	if web.WriterSecret == admin.WriterSecret {
-		t.Error("two apps in one deploy must not share a write secret")
-	}
-	if web.WriterSecret != again["web"].WriterSecret {
-		t.Error("appCaches must derive the same write secret on every call")
-	}
+func TestISRWriterCalls(t *testing.T) {
+	t.Run("are no-ops when no writer was adopted", func(t *testing.T) {
+		srv, calls := fakeWriter(t, http.StatusNoContent)
+		for _, cfg := range []Config{
+			{},
+			{ISRWriterEndpoint: srv.URL},
+			{ISRWriterBootstrapCred: "cred-1"},
+		} {
+			if err := initializeISRWriter(context.Background(), cfg, testPrefix, "s"); err != nil {
+				t.Fatalf("initializeISRWriter with %+v: %v", cfg, err)
+			}
+			if err := retireISRWriter(context.Background(), cfg, testPrefix); err != nil {
+				t.Fatalf("retireISRWriter with %+v: %v", cfg, err)
+			}
+		}
+		if len(*calls) != 0 {
+			t.Errorf("calls = %+v, want none without adopted writer coordinates", *calls)
+		}
+	})
 }
 
-func TestAppCaches_LeavesWriterCoordinatesUnsetWithoutAnAdoptedWriter(t *testing.T) {
-	cfg := Config{ArtifactRoot: twoAppTree(t), AssetBucket: "assets", StateTable: "state", Env: "prod"}
+func TestISRWriterEnv(t *testing.T) {
+	t.Run("is a plain env var pair or nothing", func(t *testing.T) {
+		t.Parallel()
+		with := isrConfig{
+			Prefix:       testPrefix,
+			WriterURL:    "https://writer.example/" + testPrefix + "/entry",
+			WriterSecret: "write-secret",
+		}.env()
+		if with["OCEL_ISR_WRITER_URL"] != "https://writer.example/"+testPrefix+"/entry" {
+			t.Errorf("OCEL_ISR_WRITER_URL = %q", with["OCEL_ISR_WRITER_URL"])
+		}
+		if with["OCEL_ISR_WRITER_SECRET"] != "write-secret" {
+			t.Errorf("OCEL_ISR_WRITER_SECRET = %q", with["OCEL_ISR_WRITER_SECRET"])
+		}
 
-	caches, err := appCaches(cfg, twoAppManifest())
-	if err != nil {
-		t.Fatalf("appCaches: %v", err)
-	}
-	if caches["web"].WriterURL != "" || caches["web"].WriterSecret != "" {
-		t.Errorf("writer coordinates = %+v, want unset", caches["web"])
-	}
+		for _, cfg := range []isrConfig{
+			{Prefix: testPrefix},
+			{Prefix: testPrefix, WriterURL: "https://writer.example/x/entry"},
+			{Prefix: testPrefix, WriterSecret: "write-secret"},
+		} {
+			env := cfg.env()
+			if _, ok := env["OCEL_ISR_WRITER_URL"]; ok {
+				t.Errorf("OCEL_ISR_WRITER_URL set for %+v", cfg)
+			}
+			if _, ok := env["OCEL_ISR_WRITER_SECRET"]; ok {
+				t.Errorf("OCEL_ISR_WRITER_SECRET set for %+v", cfg)
+			}
+		}
+	})
 }

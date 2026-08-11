@@ -9,7 +9,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
-	"sort"
+	"slices"
 	"strings"
 
 	"github.com/ocelhq/ocel/cli/internal/manifestbuilder"
@@ -157,8 +157,8 @@ func CheckFresh(projectDir string, apps []App) error {
 	if len(missing) == 0 && len(changed) == 0 {
 		return nil
 	}
-	sort.Strings(missing)
-	sort.Strings(changed)
+	slices.Sort(missing)
+	slices.Sort(changed)
 
 	var causes []string
 	if len(missing) > 0 {
@@ -208,7 +208,7 @@ func clientKeys(app App) []string {
 			keys = append(keys, v.Key)
 		}
 	}
-	sort.Strings(keys)
+	slices.Sort(keys)
 	return keys
 }
 
@@ -223,7 +223,7 @@ func DeclaredKeys(definitions []*resourcesv1.VariableDefinition) []string {
 			keys = append(keys, definition.GetKey())
 		}
 	}
-	sort.Strings(keys)
+	slices.Sort(keys)
 	return keys
 }
 

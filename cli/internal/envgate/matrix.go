@@ -1,7 +1,7 @@
 package envgate
 
 import (
-	"sort"
+	"slices"
 
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/resources/v1"
 )
@@ -53,8 +53,8 @@ var className = map[resourcesv1.VariableClass]string{
 
 func (g *Gate) Matrix(environments []string) Matrix {
 	g.mu.Lock()
-	definitions := append([]*resourcesv1.VariableDefinition(nil), g.definitions...)
-	apps := append([]App(nil), g.scope.Apps...)
+	definitions := slices.Clone(g.definitions)
+	apps := slices.Clone(g.scope.Apps)
 	classWide := g.classWideCells()
 	resolved := g.resolvedCells()
 	overrides := make(map[Cell][]Override, len(g.overrides))
@@ -105,7 +105,7 @@ func (g *Gate) Matrix(environments []string) Matrix {
 
 func state(definition *resourcesv1.VariableDefinition, folder string) CellState {
 	if scope := definition.GetFolders(); len(scope) > 0 {
-		if !contains(scope, folder) {
+		if !slices.Contains(scope, folder) {
 			return CellForbidden
 		}
 	} else if folder != "" {
@@ -124,7 +124,7 @@ func missing(definitions []*resourcesv1.VariableDefinition, binding string, held
 			continue
 		}
 		scope := definition.GetFolders()
-		if len(scope) > 0 && !contains(scope, binding) {
+		if len(scope) > 0 && !slices.Contains(scope, binding) {
 			continue
 		}
 		if _, ok := hop(definition, binding, held); ok {
@@ -166,7 +166,7 @@ func columns(definitions []*resourcesv1.VariableDefinition, apps []App, held hel
 	for folder := range seen {
 		folders = append(folders, folder)
 	}
-	sort.Strings(folders)
+	slices.Sort(folders)
 	return append([]string{""}, folders...)
 }
 

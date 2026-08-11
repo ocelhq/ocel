@@ -2,10 +2,11 @@ package cli
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
+	"io/fs"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 
@@ -45,7 +46,7 @@ var initCmd = &cobra.Command{
 			slug = args[0]
 		}
 
-		return runInit(cmd.Context(), cwd, slug, initOpts, cmd.OutOrStdout(), cmd.ErrOrStderr())
+		return runInit(cmd.Context(), defaultDeps(), cwd, slug, initOpts, cmd.OutOrStdout(), cmd.ErrOrStderr())
 	},
 }
 
@@ -53,7 +54,7 @@ func init() {
 	initCmd.Flags().StringVar(&initOpts.provider, "provider", defaultProviderPackage, "Provider package to scaffold with")
 }
 
-func runInit(ctx context.Context, projectDir, slug string, opts initOptions, stdout, stderr io.Writer) error {
+func runInit(ctx context.Context, d deps, projectDir, slug string, opts initOptions, stdout, stderr io.Writer) error {
 	slug, err := resolveSlug(projectDir, slug)
 	if err != nil {
 		return err
@@ -66,8 +67,8 @@ func runInit(ctx context.Context, projectDir, slug string, opts initOptions, std
 
 	configPath := filepath.Join(projectDir, projectconfig.ConfigFileName)
 	if _, err := os.Stat(configPath); err == nil {
-		return fmt.Errorf("%s already exists in this directory.", projectconfig.ConfigFileName)
-	} else if !os.IsNotExist(err) {
+		return fmt.Errorf("%s already exists in this directory", projectconfig.ConfigFileName)
+	} else if !errors.Is(err, fs.ErrNotExist) {
 		return fmt.Errorf("check for existing %s: %w", projectconfig.ConfigFileName, err)
 	}
 
@@ -76,7 +77,7 @@ func runInit(ctx context.Context, projectDir, slug string, opts initOptions, std
 	}
 	fmt.Fprintf(stdout, "✓ Wrote %s (slug: %s)\n", projectconfig.ConfigFileName, slug)
 
-	addDependencies(ctx, projectDir, []string{sdkPackage, providerPkg}, stdout, stderr)
+	addDependencies(ctx, d, projectDir, []string{sdkPackage, providerPkg}, stdout, stderr)
 
 	fmt.Fprintln(stdout)
 	fmt.Fprintln(stdout, "Run `ocel deploy` to deploy to your own cloud, or `ocel dev` to develop against the Ocel console.")
@@ -152,15 +153,7 @@ func detectPackageManager(dir string) packageManager {
 	return npmPackageManager
 }
 
-var runPackageManager = func(ctx context.Context, dir string, argv []string, output io.Writer) error {
-	cmd := exec.CommandContext(ctx, argv[0], argv[1:]...)
-	cmd.Dir = dir
-	cmd.Stdout = output
-	cmd.Stderr = output
-	return cmd.Run()
-}
-
-func addDependencies(ctx context.Context, dir string, pkgs []string, stdout, stderr io.Writer) {
+func addDependencies(ctx context.Context, d deps, dir string, pkgs []string, stdout, stderr io.Writer) {
 	pm := detectPackageManager(dir)
 	argv := append([]string{pm.name, pm.addCommand}, pkgs...)
 	command := strings.Join(argv, " ")
@@ -172,7 +165,7 @@ func addDependencies(ctx context.Context, dir string, pkgs []string, stdout, std
 	}
 
 	err := withSpinner(stdout, fmt.Sprintf("Adding %s...", added), func() error {
-		return runPackageManager(ctx, dir, argv, stderr)
+		return d.runPackageManager(ctx, dir, argv, stderr)
 	})
 	if err != nil {
 		fmt.Fprintf(stdout, "! Could not add %s (%v) — run `%s` yourself.\n", added, err, command)

@@ -20,122 +20,124 @@ func namedApps(n int) []*deploymentsv1.ManifestApp {
 
 const pinWindow = 250 * time.Millisecond
 
-func TestRunAppStacksAdmitsAtMostAppConcurrency(t *testing.T) {
-	n := 3 * appConcurrency
+func TestRunAppStacks(t *testing.T) {
+	t.Run("admits at most appConcurrency", func(t *testing.T) {
+		n := 3 * appConcurrency
 
-	var mu sync.Mutex
-	live, peak := 0, 0
-	saturated := make(chan struct{})
-	excess := make(chan struct{})
-	var once, excessOnce sync.Once
-	release := make(chan struct{})
+		var mu sync.Mutex
+		live, peak := 0, 0
+		saturated := make(chan struct{})
+		excess := make(chan struct{})
+		var once, excessOnce sync.Once
+		release := make(chan struct{})
 
-	ran := make([]int32, n)
-	done := make(chan struct{})
-	go func() {
-		defer close(done)
-		runAppStacks(namedApps(n), func(i int, _ *deploymentsv1.ManifestApp) {
-			atomic.AddInt32(&ran[i], 1)
+		ran := make([]int32, n)
+		done := make(chan struct{})
+		go func() {
+			defer close(done)
+			runAppStacks(namedApps(n), func(i int, _ *deploymentsv1.ManifestApp) {
+				atomic.AddInt32(&ran[i], 1)
 
+				mu.Lock()
+				live++
+				if live > peak {
+					peak = live
+				}
+				atSaturation := live == appConcurrency
+				over := live > appConcurrency
+				mu.Unlock()
+
+				if atSaturation {
+					once.Do(func() { close(saturated) })
+				}
+				if over {
+					excessOnce.Do(func() { close(excess) })
+				}
+
+				<-release
+
+				mu.Lock()
+				live--
+				mu.Unlock()
+			})
+		}()
+
+		select {
+		case <-saturated:
+		case <-time.After(5 * time.Second):
+			close(release)
 			mu.Lock()
-			live++
-			if live > peak {
-				peak = live
-			}
-			atSaturation := live == appConcurrency
-			over := live > appConcurrency
+			got := peak
 			mu.Unlock()
-
-			if atSaturation {
-				once.Do(func() { close(saturated) })
-			}
-			if over {
-				excessOnce.Do(func() { close(excess) })
-			}
-
-			<-release
-
-			mu.Lock()
-			live--
-			mu.Unlock()
-		})
-	}()
-
-	select {
-	case <-saturated:
-	case <-time.After(5 * time.Second):
-		close(release)
-		mu.Lock()
-		got := peak
-		mu.Unlock()
-		t.Fatalf("never reached %d concurrent workers (peak %d): the limit is below appConcurrency", appConcurrency, got)
-	}
-
-	select {
-	case <-excess:
-		close(release)
-		mu.Lock()
-		got := peak
-		mu.Unlock()
-		t.Fatalf("admitted %d concurrent workers, want at most %d: the limit is not enforced", got, appConcurrency)
-	case <-time.After(pinWindow):
-	}
-
-	close(release)
-	select {
-	case <-done:
-	case <-time.After(10 * time.Second):
-		t.Fatal("runAppStacks did not return after release")
-	}
-
-	if peak != appConcurrency {
-		t.Errorf("peak concurrency = %d, want %d", peak, appConcurrency)
-	}
-	for i, c := range ran {
-		if c != 1 {
-			t.Errorf("app %d ran %d times, want exactly 1", i, c)
+			t.Fatalf("never reached %d concurrent workers (peak %d): the limit is below appConcurrency", appConcurrency, got)
 		}
-	}
-}
 
-func TestRunAppStacksBelowLimitRunsFullyConcurrently(t *testing.T) {
-	n := appConcurrency
+		select {
+		case <-excess:
+			close(release)
+			mu.Lock()
+			got := peak
+			mu.Unlock()
+			t.Fatalf("admitted %d concurrent workers, want at most %d: the limit is not enforced", got, appConcurrency)
+		case <-time.After(pinWindow):
+		}
 
-	var all sync.WaitGroup
-	all.Add(n)
-	done := make(chan struct{})
-	go func() {
-		defer close(done)
-		runAppStacks(namedApps(n), func(int, *deploymentsv1.ManifestApp) {
-			all.Done()
-			all.Wait()
-		})
-	}()
+		close(release)
+		select {
+		case <-done:
+		case <-time.After(10 * time.Second):
+			t.Fatal("runAppStacks did not return after release")
+		}
 
-	select {
-	case <-done:
-	case <-time.After(5 * time.Second):
-		t.Fatalf("%d workers did not all run concurrently", n)
-	}
-}
-
-func TestRunAppStacksRunsEveryAppExactlyOnceAtItsOwnIndex(t *testing.T) {
-	n := 5*appConcurrency + 1
-	apps := namedApps(n)
-	ran := make([]int32, n)
-	got := make([]*deploymentsv1.ManifestApp, n)
-
-	runAppStacks(apps, func(i int, app *deploymentsv1.ManifestApp) {
-		atomic.AddInt32(&ran[i], 1)
-		got[i] = app
+		if peak != appConcurrency {
+			t.Errorf("peak concurrency = %d, want %d", peak, appConcurrency)
+		}
+		for i, c := range ran {
+			if c != 1 {
+				t.Errorf("app %d ran %d times, want exactly 1", i, c)
+			}
+		}
 	})
 
-	for i, c := range ran {
-		if c != 1 {
-			t.Errorf("index %d ran %d times, want exactly 1", i, c)
+	t.Run("below the limit runs fully concurrently", func(t *testing.T) {
+		n := appConcurrency
+
+		var all sync.WaitGroup
+		all.Add(n)
+		done := make(chan struct{})
+		go func() {
+			defer close(done)
+			runAppStacks(namedApps(n), func(int, *deploymentsv1.ManifestApp) {
+				all.Done()
+				all.Wait()
+			})
+		}()
+
+		select {
+		case <-done:
+		case <-time.After(5 * time.Second):
+			t.Fatalf("%d workers did not all run concurrently", n)
 		}
-		if got[i] != apps[i] {
-			t.Errorf("index %d got app %q, want %q", i, got[i].GetName(), apps[i].GetName())
+	})
+
+	t.Run("runs every app exactly once at its own index", func(t *testing.T) {
+		n := 5*appConcurrency + 1
+		apps := namedApps(n)
+		ran := make([]int32, n)
+		got := make([]*deploymentsv1.ManifestApp, n)
+
+		runAppStacks(apps, func(i int, app *deploymentsv1.ManifestApp) {
+			atomic.AddInt32(&ran[i], 1)
+			got[i] = app
+		})
+
+		for i, c := range ran {
+			if c != 1 {
+				t.Errorf("index %d ran %d times, want exactly 1", i, c)
+			}
+			if got[i] != apps[i] {
+				t.Errorf("index %d got app %q, want %q", i, got[i].GetName(), apps[i].GetName())
+			}
 		}
-	}
+	})
 }

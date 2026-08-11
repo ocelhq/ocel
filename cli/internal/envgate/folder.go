@@ -3,6 +3,7 @@ package envgate
 import (
 	"context"
 	"fmt"
+	"slices"
 	"strings"
 
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/resources/v1"
@@ -42,7 +43,7 @@ func (g *Gate) Resolve(ctx context.Context, app string) (map[string]Resolved, er
 
 	g.mu.Lock()
 	held := g.resolvedCells()
-	definitions := append([]*resourcesv1.VariableDefinition(nil), g.definitions...)
+	definitions := slices.Clone(g.definitions)
 	g.mu.Unlock()
 
 	type hopped struct {
@@ -83,7 +84,7 @@ func (g *Gate) Resolve(ctx context.Context, app string) (map[string]Resolved, er
 
 func hop(definition *resourcesv1.VariableDefinition, binding string, held heldCells) (Cell, bool) {
 	if scope := definition.GetFolders(); len(scope) > 0 {
-		if binding == "" || !contains(scope, binding) {
+		if binding == "" || !slices.Contains(scope, binding) {
 			return Cell{}, false
 		}
 		cell := Cell{Key: definition.GetKey(), Folder: binding}
@@ -144,7 +145,7 @@ func Lint(definitions []*resourcesv1.VariableDefinition, apps []App, configPath 
 					"A scoped variable must diverge across every folder it names, so this is a folder rename that landed in one place only.\n"+
 					"  declared in %s\n"+
 					"  bound in    %s\n"+
-					"Rename the folder in both, or drop %s from the scope.",
+					"Rename the folder in both, or drop %s from the scope",
 				definition.GetKey(), strings.Join(scope, " and "), strings.Join(unbound, " or "),
 				source(definition), configPath, strings.Join(unbound, " or "))
 		}
@@ -159,22 +160,13 @@ func source(definition *resourcesv1.VariableDefinition) string {
 	return "the defineEnv call declaring " + definition.GetKey()
 }
 
-func contains(list []string, want string) bool {
-	for _, item := range list {
-		if item == want {
-			return true
-		}
-	}
-	return false
-}
-
 func CheckWritable(definitions []*resourcesv1.VariableDefinition, key, folder string) error {
 	for _, definition := range definitions {
 		if definition.GetKey() != key {
 			continue
 		}
 		scope := definition.GetFolders()
-		if len(scope) == 0 || contains(scope, folder) {
+		if len(scope) == 0 || slices.Contains(scope, folder) {
 			return nil
 		}
 		if folder == "" {

@@ -331,7 +331,7 @@ func postgresEnvValue(ctx *pulumi.Context, username, host pulumi.StringInput, po
 	secret := secretsmanager.LookupSecretVersionOutput(ctx, secretsmanager.LookupSecretVersionOutputArgs{
 		SecretId: secretARN,
 	}).SecretString()
-	return pulumi.All(username, host, port, secret).ApplyT(func(vs []interface{}) (string, error) {
+	return pulumi.All(username, host, port, secret).ApplyT(func(vs []any) (string, error) {
 		user, _ := vs[0].(string)
 		h, _ := vs[1].(string)
 		p, _ := vs[2].(int)

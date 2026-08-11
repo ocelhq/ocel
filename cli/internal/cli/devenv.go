@@ -9,7 +9,6 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
-	"sort"
 	"strconv"
 	"strings"
 
@@ -31,8 +30,8 @@ func storeValues(projectEnv, dotfile map[string]string) map[string]string {
 	return values
 }
 
-func resolveProjectConfig(ctx context.Context, apiURL, token, projectID string, stderr io.Writer) provision.ProjectConfig {
-	cfg, err := fetchProjectConfig(ctx, apiURL, token, projectID)
+func resolveProjectConfig(ctx context.Context, d deps, apiURL, token, projectID string, stderr io.Writer) provision.ProjectConfig {
+	cfg, err := d.fetchProjectConfig(ctx, apiURL, token, projectID)
 	if err == nil {
 		return cfg
 	}
@@ -133,7 +132,7 @@ func checkStatableBinding(apps []projectconfig.App, stated string, scoped map[st
 	if len(keys) == 0 {
 		return nil
 	}
-	sort.Strings(keys)
+	slices.Sort(keys)
 
 	var bindings []string
 	for i, app := range apps {
@@ -146,7 +145,7 @@ func checkStatableBinding(apps []projectconfig.App, stated string, scoped map[st
 
   %s
 
-`+"`ocel dev` and `ocel run` spawn one child for the whole project and nothing tells it which app that child is, so the binding they state is %s. A scoped read refuses under it, even with the value in %s.\n\nfix: bind every app to the same folder in ocel.config.ts, or drop `folders:` from those declarations.",
+`+"`ocel dev` and `ocel run` spawn one child for the whole project and nothing tells it which app that child is, so the binding they state is %s. A scoped read refuses under it, even with the value in %s.\n\nfix: bind every app to the same folder in ocel.config.ts, or drop `folders:` from those declarations",
 		scopedPlural(keys), strings.Join(bindings, "\n  "), folderLabel(stated), dotenv.FileName)
 }
 
@@ -193,7 +192,7 @@ func reportDotfile(stdout io.Writer, dir string, values map[string]string, advic
 	for key := range values {
 		keys = append(keys, key)
 	}
-	sort.Strings(keys)
+	slices.Sort(keys)
 
 	fmt.Fprintf(stdout, "resolved %s from %s. That file is yours alone — a teammate's checkout has its own, so nothing set here reaches anyone else and a deploy resolves none of it.\n",
 		strings.Join(keys, ", "), dotenv.FileName)

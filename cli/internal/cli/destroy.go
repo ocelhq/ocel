@@ -43,9 +43,9 @@ var destroyCmd = &cobra.Command{
 			return err
 		}
 		if destroyPreview {
-			return runDestroyPreviewProject(ctx, cwd, destroyYes, cmd.OutOrStdout(), cmd.ErrOrStderr(), cmd.InOrStdin())
+			return runDestroyPreviewProject(ctx, defaultDeps(), cwd, destroyYes, cmd.OutOrStdout(), cmd.ErrOrStderr(), cmd.InOrStdin())
 		}
-		return runDestroy(ctx, cwd, cmd.OutOrStdout(), cmd.ErrOrStderr(), cmd.InOrStdin())
+		return runDestroy(ctx, defaultDeps(), cwd, cmd.OutOrStdout(), cmd.ErrOrStderr(), cmd.InOrStdin())
 	},
 }
 
@@ -67,7 +67,7 @@ func checkDestroyFlags(preview, yes bool) error {
 	return nil
 }
 
-func runDestroy(ctx context.Context, cwd string, stdout, stderr io.Writer, stdin io.Reader) error {
+func runDestroy(ctx context.Context, d deps, cwd string, stdout, stderr io.Writer, stdin io.Reader) error {
 	if !isReaderTTY(stdin) {
 		return errors.New("`ocel destroy` needs an interactive terminal to confirm the project name; it cannot be run non-interactively")
 	}
@@ -89,13 +89,18 @@ func runDestroy(ctx context.Context, cwd string, stdout, stderr io.Writer, stdin
 	defer ui.Close()
 
 	provW := ui.BuildWriter()
-	err = runProviderSession(ctx, cfg, provider, provW, provW, func(runner *providerrunner.Runner) error {
-		if err := preflightClass(ctx, runner, provider, deploymentsv1.Environment_CLASS_PRODUCTION, "ocel bootstrap", stdout); err != nil {
+	err = runProviderSession(ctx, d, cfg, provider, provW, provW, func(runner *providerrunner.Runner) error {
+		if err := preflightClass(ctx, d, runner, provider, deploymentsv1.Environment_CLASS_PRODUCTION, "ocel bootstrap", stdout); err != nil {
+			return err
+		}
+
+		client, err := runner.Deployments()
+		if err != nil {
 			return err
 		}
 
 		spinner := deployui.StartSpinner(stdout, "Enumerating what would be destroyed")
-		plan, err := runner.PlanDestroyProject(ctx, &deploymentsv1.PlanDestroyProjectRequest{
+		plan, err := client.PlanDestroyProject(ctx, &deploymentsv1.PlanDestroyProjectRequest{
 			Options:         []byte(provider.Options),
 			ProtocolVersion: manifestbuilder.SchemaVersion,
 			Slug:            cfg.Slug,
@@ -136,7 +141,7 @@ func runDestroy(ctx context.Context, cwd string, stdout, stderr io.Writer, stdin
 	return nil
 }
 
-func runDestroyPreviewProject(ctx context.Context, cwd string, yes bool, stdout, stderr io.Writer, stdin io.Reader) error {
+func runDestroyPreviewProject(ctx context.Context, d deps, cwd string, yes bool, stdout, stderr io.Writer, stdin io.Reader) error {
 	if !yes && !isReaderTTY(stdin) {
 		return errors.New("`ocel destroy --preview` needs an interactive terminal to confirm the project name; re-run with --yes to tear the preview footprint down non-interactively")
 	}
@@ -158,8 +163,8 @@ func runDestroyPreviewProject(ctx context.Context, cwd string, yes bool, stdout,
 	defer ui.Close()
 
 	provW := ui.BuildWriter()
-	err = runProviderSession(ctx, cfg, provider, provW, provW, func(runner *providerrunner.Runner) error {
-		if err := preflightClass(ctx, runner, provider, deploymentsv1.Environment_CLASS_PREVIEW, "ocel bootstrap --preview", stdout); err != nil {
+	err = runProviderSession(ctx, d, cfg, provider, provW, provW, func(runner *providerrunner.Runner) error {
+		if err := preflightClass(ctx, d, runner, provider, deploymentsv1.Environment_CLASS_PREVIEW, "ocel bootstrap --preview", stdout); err != nil {
 			return err
 		}
 

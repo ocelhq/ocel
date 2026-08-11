@@ -13,59 +13,65 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
 )
 
-func TestRunBuild_BuildsWithoutLoginOrProvider(t *testing.T) {
-	root := t.TempDir()
-	writeFile(t, filepath.Join(root, "ocel.config.ts"), `
+func TestRunBuild(t *testing.T) {
+	t.Parallel()
+
+	t.Run("builds without login or provider", func(t *testing.T) {
+		t.Parallel()
+
+		root := t.TempDir()
+		writeFile(t, filepath.Join(root, "ocel.config.ts"), `
 export default {
   slug: "test-app",
   apps: [{ name: "api", path: ".", framework: "express" }],
 };
 `)
 
-	var built *projectconfig.Config
-	prev := buildApp
-	buildApp = func(_ context.Context, cfg *projectconfig.Config, _ map[string]map[string]string, _ io.Writer) error {
-		built = cfg
-		writePrebuiltFunction(t, cfg.Dir, "api", "index")
-		return nil
-	}
-	t.Cleanup(func() { buildApp = prev })
+		var built *projectconfig.Config
+		d := defaultDeps()
+		d.buildApp = func(_ context.Context, cfg *projectconfig.Config, _ map[string]map[string]string, _ io.Writer) error {
+			built = cfg
+			writePrebuiltFunction(t, cfg.Dir, "api", "index")
+			return nil
+		}
 
-	var stdout, stderr bytes.Buffer
-	if err := runBuild(context.Background(), root, &stdout, &stderr); err != nil {
-		t.Fatalf("runBuild: %v", err)
-	}
+		var stdout, stderr bytes.Buffer
+		if err := runBuild(context.Background(), d, root, &stdout, &stderr); err != nil {
+			t.Fatalf("runBuild: %v", err)
+		}
 
-	if built == nil {
-		t.Fatal("runBuild did not build the project")
-	}
-	if got, want := stdout.String(), "Built 1 function into .ocel/output\n"; got != want {
-		t.Errorf("stdout = %q, want %q", got, want)
-	}
+		if built == nil {
+			t.Fatal("runBuild did not build the project")
+		}
+		if got, want := stdout.String(), "Built 1 function into .ocel/output\n"; got != want {
+			t.Errorf("stdout = %q, want %q", got, want)
+		}
 
-	record, err := os.ReadFile(filepath.Join(root, ".ocel", "output", "client-values.json"))
-	if err != nil {
-		t.Fatalf("the build recorded nothing about its client values: %v", err)
-	}
-	if !strings.Contains(string(record), `"resolved":false`) {
-		t.Errorf("client-values.json = %s, want it to state that the build resolved no values", record)
-	}
-}
+		record, err := os.ReadFile(filepath.Join(root, ".ocel", "output", "client-values.json"))
+		if err != nil {
+			t.Fatalf("the build recorded nothing about its client values: %v", err)
+		}
+		if !strings.Contains(string(record), `"resolved":false`) {
+			t.Errorf("client-values.json = %s, want it to state that the build resolved no values", record)
+		}
+	})
 
-func TestRunBuild_BuildFailure(t *testing.T) {
-	root := t.TempDir()
-	writeFile(t, filepath.Join(root, "ocel.config.ts"), `
+	t.Run("surfaces a build failure", func(t *testing.T) {
+		t.Parallel()
+
+		root := t.TempDir()
+		writeFile(t, filepath.Join(root, "ocel.config.ts"), `
 export default { slug: "test-app" };
 `)
 
-	prev := buildApp
-	buildApp = func(context.Context, *projectconfig.Config, map[string]map[string]string, io.Writer) error {
-		return errors.New("boom: app build failed")
-	}
-	t.Cleanup(func() { buildApp = prev })
+		d := defaultDeps()
+		d.buildApp = func(context.Context, *projectconfig.Config, map[string]map[string]string, io.Writer) error {
+			return errors.New("boom: app build failed")
+		}
 
-	err := runBuild(context.Background(), root, io.Discard, io.Discard)
-	if err == nil || !strings.Contains(err.Error(), "boom: app build failed") {
-		t.Fatalf("runBuild err = %v, want the build failure surfaced", err)
-	}
+		err := runBuild(context.Background(), d, root, io.Discard, io.Discard)
+		if err == nil || !strings.Contains(err.Error(), "boom: app build failed") {
+			t.Fatalf("runBuild err = %v, want the build failure surfaced", err)
+		}
+	})
 }

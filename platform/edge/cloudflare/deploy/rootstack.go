@@ -8,19 +8,13 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 	"mime/multipart"
-	"net/http"
-	"net/url"
 	"os"
 	"slices"
-	"strings"
 
 	cf "github.com/cloudflare/cloudflare-go/v4"
-	"github.com/cloudflare/cloudflare-go/v4/dns"
 	"github.com/cloudflare/cloudflare-go/v4/option"
 	"github.com/cloudflare/cloudflare-go/v4/workers"
-	"github.com/cloudflare/cloudflare-go/v4/zones"
 
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
@@ -192,10 +186,6 @@ func mintIdentity() (storeIdentity, error) {
 	return storeIdentity{secret: secret, ownerToken: ownerToken}, nil
 }
 
-func unauthorized(res *http.Response) bool {
-	return res != nil && res.StatusCode == http.StatusUnauthorized
-}
-
 func (p *provider) ListDeployedWorkers(ctx context.Context, stem string) ([]string, error) {
 	accountID := os.Getenv(envAccountID)
 	if accountID == "" {
@@ -236,96 +226,6 @@ func (p *provider) DestroyRootStack(ctx context.Context, names []string) error {
 		}
 	}
 	return errors.Join(errs...)
-}
-
-func (p *provider) detachRouteRecords(ctx context.Context, accountID, scriptName string) error {
-	owned := p.client.Zones.ListAutoPaging(ctx, zones.ZoneListParams{
-		Account: cf.F(zones.ZoneListParamsAccount{ID: cf.F(accountID)}),
-	})
-	var errs []error
-	for owned.Next() {
-		zoneID := owned.Current().ID
-		routes := p.client.Workers.Routes.ListAutoPaging(ctx, workers.RouteListParams{ZoneID: cf.F(zoneID)})
-		for routes.Next() {
-			route := routes.Current()
-			if route.Script != scriptName {
-				continue
-			}
-			hostname := strings.TrimSuffix(route.Pattern, "/*")
-			if err := p.deleteProxiedRecord(ctx, zoneID, hostname); err != nil {
-				errs = append(errs, err)
-			}
-		}
-		if err := routes.Err(); err != nil {
-			errs = append(errs, fmt.Errorf("list worker routes in zone %s: %w", zoneID, err))
-		}
-	}
-	if err := owned.Err(); err != nil {
-		errs = append(errs, fmt.Errorf("list zones: %w", err))
-	}
-	return errors.Join(errs...)
-}
-
-func (p *provider) deleteProxiedRecord(ctx context.Context, zoneID, hostname string) error {
-	records := p.client.DNS.Records.ListAutoPaging(ctx, dns.RecordListParams{
-		ZoneID: cf.F(zoneID),
-		Name:   cf.F(dns.RecordListParamsName{Exact: cf.F(hostname)}),
-		Type:   cf.F(dns.RecordListParamsTypeAAAA),
-	})
-	for records.Next() {
-		rec := records.Current()
-		if rec.Content != routeRecordContent {
-			continue
-		}
-		if _, err := p.client.DNS.Records.Delete(ctx, rec.ID, dns.RecordDeleteParams{ZoneID: cf.F(zoneID)}); err != nil {
-			return fmt.Errorf("delete DNS record %q: %w", hostname, err)
-		}
-	}
-	if err := records.Err(); err != nil {
-		return fmt.Errorf("list DNS records for %q: %w", hostname, err)
-	}
-	return nil
-}
-
-func (p *provider) DestroyInstance(ctx context.Context, state edge.RootStackState) error {
-	if state[edge.RootStackKeySecret] == "" {
-		return nil
-	}
-	res, err := p.storeRequest(ctx, state, http.MethodPost, "/destroy", nil, nil)
-	if unauthorized(res) {
-		return nil
-	}
-	return err
-}
-
-func (p *provider) detachCustomDomains(ctx context.Context, accountID, scriptName string) error {
-	attached := p.client.Workers.Domains.ListAutoPaging(ctx, workers.DomainListParams{
-		AccountID: cf.F(accountID),
-		Service:   cf.F(scriptName),
-	})
-	for attached.Next() {
-		dom := attached.Current()
-		if err := p.client.Workers.Domains.Delete(ctx, dom.ID, workers.DomainDeleteParams{
-			AccountID: cf.F(accountID),
-		}); err != nil {
-			return fmt.Errorf("detach custom domain %q: %w", dom.Hostname, err)
-		}
-	}
-	if err := attached.Err(); err != nil {
-		return fmt.Errorf("list custom domains for %q: %w", scriptName, err)
-	}
-	return nil
-}
-
-func (p *provider) deleteScript(ctx context.Context, accountID, scriptName string) error {
-	_, err := p.client.Workers.Scripts.Delete(ctx, scriptName, workers.ScriptDeleteParams{
-		AccountID: cf.F(accountID),
-		Force:     cf.F(true),
-	})
-	if hasStatus(err, http.StatusNotFound) {
-		return nil
-	}
-	return err
 }
 
 func (p *provider) putDurableObjectScript(ctx context.Context, up upload, do durableObjectWorker, deployedClasses []string) error {
@@ -409,153 +309,6 @@ func pendingMigrations(log []migrationStep, deployedClasses []string) (map[strin
 		"new_tag": log[len(log)-1].tag,
 		"steps":   steps,
 	}, nil
-}
-
-func (p *provider) PutStaged(ctx context.Context, state edge.RootStackState, record edge.DeploymentRecord) error {
-	_, err := p.storeRequest(ctx, state, http.MethodPut, "/staged", record, nil)
-	return err
-}
-
-type promoteBody struct {
-	edge.Promotion
-	Pointer string `json:"pointer,omitempty"`
-}
-
-func (p *provider) Promote(ctx context.Context, state edge.RootStackState, promotion edge.Promotion, pointer string) error {
-	_, err := p.storeRequest(ctx, state, http.MethodPost, "/promote", promoteBody{Promotion: promotion, Pointer: pointer}, nil)
-	return err
-}
-
-func (p *provider) History(ctx context.Context, state edge.RootStackState, pointer string) ([]edge.HistoryEntry, error) {
-	subpath := "/history"
-	if pointer != "" {
-		subpath += "?pointer=" + url.QueryEscape(pointer)
-	}
-	var history []edge.HistoryEntry
-	if _, err := p.storeRequest(ctx, state, http.MethodGet, subpath, nil, &history); err != nil {
-		return nil, err
-	}
-	return history, nil
-}
-
-func (p *provider) RemovePointer(ctx context.Context, state edge.RootStackState, pointer string) (edge.PruneResult, error) {
-	var result edge.PruneResult
-	if _, err := p.storeRequest(ctx, state, http.MethodPost, "/remove-pointer", map[string]string{"pointer": pointer}, &result); err != nil {
-		return edge.PruneResult{}, err
-	}
-	return result, nil
-}
-
-func (p *provider) DeletePromotionArtifacts(ctx context.Context, state edge.RootStackState, keepN int, pointer string) (edge.PruneResult, error) {
-	body := map[string]any{"keepN": keepN}
-	if pointer != "" {
-		body["pointer"] = pointer
-	}
-	var result edge.PruneResult
-	if _, err := p.storeRequest(ctx, state, http.MethodPost, "/prune", body, &result); err != nil {
-		return edge.PruneResult{}, err
-	}
-	return result, nil
-}
-
-func (p *provider) initializeInstance(ctx context.Context, endpoint, slug, bootstrapCred string, present storeIdentity) (storeIdentity, error) {
-	body := map[string]any{"ownerToken": present.ownerToken, "secret": present.secret, "force": false}
-	var out struct {
-		OwnerToken string `json:"ownerToken"`
-		Secret     string `json:"secret"`
-	}
-	if _, err := p.storeRequestTo(ctx, endpoint, slug, bootstrapCred, http.MethodPost, "/initialize", body, &out); err != nil {
-		return storeIdentity{}, err
-	}
-	if out.Secret == "" || out.OwnerToken == "" {
-		return storeIdentity{}, fmt.Errorf("deployments store reported no identity for %q", slug)
-	}
-	return storeIdentity{secret: out.Secret, ownerToken: out.OwnerToken}, nil
-}
-
-func (p *provider) getVersionStamp(ctx context.Context, endpoint, slug, secret string) (string, *http.Response, error) {
-	var out struct {
-		Version *string `json:"version"`
-	}
-	res, err := p.storeRequestTo(ctx, endpoint, slug, secret, http.MethodGet, "/version-stamp", nil, &out)
-	if err != nil {
-		return "", res, err
-	}
-	if out.Version == nil {
-		return "", res, nil
-	}
-	return *out.Version, res, nil
-}
-
-func (p *provider) putVersionStamp(ctx context.Context, endpoint, slug, secret, version string) error {
-	_, err := p.storeRequestTo(ctx, endpoint, slug, secret, http.MethodPut, "/version-stamp", map[string]string{"version": version}, nil)
-	return err
-}
-
-func (p *provider) storeRequest(ctx context.Context, state edge.RootStackState, method, subpath string, body, out any) (*http.Response, error) {
-	return p.storeRequestTo(ctx, state[edge.RootStackKeyEndpoint], state[edge.RootStackKeySlug], state[edge.RootStackKeySecret], method, subpath, body, out)
-}
-
-func (p *provider) storeRequestTo(ctx context.Context, endpoint, slug, secret, method, subpath string, body, out any) (*http.Response, error) {
-	if endpoint == "" {
-		return nil, fmt.Errorf("deployments store: no endpoint; bootstrap the edge first")
-	}
-	if slug == "" {
-		return nil, fmt.Errorf("deployments store: no project slug")
-	}
-
-	var encoded []byte
-	if body != nil {
-		marshalled, err := json.Marshal(body)
-		if err != nil {
-			return nil, fmt.Errorf("marshal deployments-store request body: %w", err)
-		}
-		encoded = marshalled
-	}
-
-	var res *http.Response
-	var err error
-	for attempt := 0; ; attempt++ {
-		res, err = p.storeAttempt(ctx, endpoint, slug, secret, method, subpath, encoded, out)
-		if attempt == storeMaxAttempts-1 || !storeRetryable(res, err) {
-			return res, err
-		}
-		if waitErr := waitBeforeRetry(ctx, storeRetryDelay(res, attempt, retryJitter())); waitErr != nil {
-			return res, err
-		}
-	}
-}
-
-func (p *provider) storeAttempt(ctx context.Context, endpoint, slug, secret, method, subpath string, encoded []byte, out any) (*http.Response, error) {
-	var reader io.Reader
-	if encoded != nil {
-		reader = bytes.NewReader(encoded)
-	}
-	req, err := http.NewRequestWithContext(ctx, method, endpoint+"/"+slug+subpath, reader)
-	if err != nil {
-		return nil, fmt.Errorf("build deployments-store request: %w", err)
-	}
-	req.Header.Set("Authorization", "Bearer "+secret)
-	if encoded != nil {
-		req.Header.Set("Content-Type", "application/json")
-	}
-
-	res, err := http.DefaultClient.Do(req)
-	if err != nil {
-		return nil, fmt.Errorf("call deployments store %s %s: %w", method, subpath, err)
-	}
-	defer res.Body.Close()
-
-	if res.StatusCode < 200 || res.StatusCode >= 300 {
-		respBody, _ := io.ReadAll(res.Body)
-		return res, fmt.Errorf("deployments store %s %s: status %d: %s", method, subpath, res.StatusCode, string(respBody))
-	}
-	if out != nil {
-		if err := json.NewDecoder(res.Body).Decode(out); err != nil {
-			return res, fmt.Errorf("decode deployments store %s %s response: %w", method, subpath, err)
-		}
-	}
-	return res, nil
 }
 
 func mintSecret() (string, error) {

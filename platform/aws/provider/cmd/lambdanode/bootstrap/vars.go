@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"sort"
+	"slices"
 
 	"github.com/ocelhq/ocel/platform/aws/provider/vars/baked"
 )
@@ -31,7 +31,7 @@ func bakedVarsEnv(envelope, taskRoot string) ([]string, error) {
 	for key, value := range values {
 		env = append(env, baked.Prefix+key+"="+value)
 	}
-	sort.Strings(env)
+	slices.Sort(env)
 	return env, nil
 }
 

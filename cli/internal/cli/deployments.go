@@ -6,7 +6,7 @@ import (
 	"io"
 	"os"
 	"os/signal"
-	"sort"
+	"slices"
 	"strings"
 	"syscall"
 	"text/tabwriter"
@@ -40,7 +40,7 @@ var deploymentsLsCmd = &cobra.Command{
 		}
 		ctx, stop := signal.NotifyContext(cmd.Context(), os.Interrupt, syscall.SIGTERM)
 		defer stop()
-		return runDeploymentsLs(ctx, cwd, cmd.OutOrStdout(), cmd.ErrOrStderr())
+		return runDeploymentsLs(ctx, defaultDeps(), cwd, cmd.OutOrStdout(), cmd.ErrOrStderr())
 	},
 }
 
@@ -59,7 +59,7 @@ var deploymentsPruneCmd = &cobra.Command{
 		}
 		ctx, stop := signal.NotifyContext(cmd.Context(), os.Interrupt, syscall.SIGTERM)
 		defer stop()
-		return runDeploymentsPrune(ctx, cwd, pruneKeepN, cmd.OutOrStdout(), cmd.ErrOrStderr())
+		return runDeploymentsPrune(ctx, defaultDeps(), cwd, pruneKeepN, cmd.OutOrStdout(), cmd.ErrOrStderr())
 	},
 }
 
@@ -69,7 +69,7 @@ func init() {
 	deploymentsCmd.AddCommand(deploymentsPruneCmd)
 }
 
-func runDeploymentsLs(ctx context.Context, cwd string, stdout, stderr io.Writer) error {
+func runDeploymentsLs(ctx context.Context, d deps, cwd string, stdout, stderr io.Writer) error {
 	cfg, err := projectconfig.Resolve(cwd)
 	if err != nil {
 		return err
@@ -83,12 +83,16 @@ func runDeploymentsLs(ctx context.Context, cwd string, stdout, stderr io.Writer)
 		return err
 	}
 
-	return runProviderSession(ctx, cfg, provider, stdout, stderr, func(runner *providerrunner.Runner) error {
-		if err := preflightClass(ctx, runner, provider, deploymentsv1.Environment_CLASS_PRODUCTION, "ocel bootstrap", stdout); err != nil {
+	return runProviderSession(ctx, d, cfg, provider, stdout, stderr, func(runner *providerrunner.Runner) error {
+		if err := preflightClass(ctx, d, runner, provider, deploymentsv1.Environment_CLASS_PRODUCTION, "ocel bootstrap", stdout); err != nil {
 			return err
 		}
 
-		resp, err := runner.ListPromotions(ctx, &deploymentsv1.ListPromotionsRequest{
+		client, err := runner.Deployments()
+		if err != nil {
+			return err
+		}
+		resp, err := client.ListPromotions(ctx, &deploymentsv1.ListPromotionsRequest{
 			Options:         []byte(provider.Options),
 			ProtocolVersion: manifestbuilder.SchemaVersion,
 			Slug:            cfg.Slug,
@@ -101,7 +105,7 @@ func runDeploymentsLs(ctx context.Context, cwd string, stdout, stderr io.Writer)
 	})
 }
 
-func runDeploymentsPrune(ctx context.Context, cwd string, keepN int, stdout, stderr io.Writer) error {
+func runDeploymentsPrune(ctx context.Context, d deps, cwd string, keepN int, stdout, stderr io.Writer) error {
 	cfg, err := projectconfig.Resolve(cwd)
 	if err != nil {
 		return err
@@ -119,8 +123,8 @@ func runDeploymentsPrune(ctx context.Context, cwd string, keepN int, stdout, std
 	defer ui.Close()
 
 	provW := ui.BuildWriter()
-	err = runProviderSession(ctx, cfg, provider, provW, provW, func(runner *providerrunner.Runner) error {
-		if err := preflightClass(ctx, runner, provider, deploymentsv1.Environment_CLASS_PRODUCTION, "ocel bootstrap", stdout); err != nil {
+	err = runProviderSession(ctx, d, cfg, provider, provW, provW, func(runner *providerrunner.Runner) error {
+		if err := preflightClass(ctx, d, runner, provider, deploymentsv1.Environment_CLASS_PRODUCTION, "ocel bootstrap", stdout); err != nil {
 			return err
 		}
 
@@ -177,7 +181,7 @@ func deployedIdentities(identityByApp map[string]string) string {
 	for app := range identityByApp {
 		apps = append(apps, app)
 	}
-	sort.Strings(apps)
+	slices.Sort(apps)
 
 	pairs := make([]string, 0, len(apps))
 	for _, app := range apps {

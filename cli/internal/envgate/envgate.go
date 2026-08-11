@@ -1,11 +1,10 @@
 package envgate
 
 import (
+	"cmp"
 	"context"
 	"fmt"
 	"slices"
-	"sort"
-	"strings"
 	"sync"
 
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/resources/v1"
@@ -34,46 +33,6 @@ type Override struct {
 
 func Orphaned(environments []string, environment string) bool {
 	return environment != "" && !slices.Contains(environments, environment)
-}
-
-type heldCells map[Cell]int64
-
-func (h heldCells) has(cell Cell) bool {
-	_, ok := h[cell]
-	return ok
-}
-
-func (g *Gate) classWideCells() heldCells {
-	cells := make(heldCells, len(g.cells))
-	for _, row := range g.cells {
-		cells[row.Cell] = row.Version
-	}
-	return cells
-}
-
-func (g *Gate) resolvedCells() heldCells {
-	cells := g.classWideCells()
-	if g.scope.Environment == "" {
-		return cells
-	}
-	for cell := range g.overrides {
-		if version, ok := g.ownOverride(cell); ok {
-			cells[cell] = version
-		}
-	}
-	return cells
-}
-
-func (g *Gate) ownOverride(cell Cell) (int64, bool) {
-	if g.scope.Environment == "" {
-		return 0, false
-	}
-	for _, override := range g.overrides[cell] {
-		if override.Environment == g.scope.Environment {
-			return override.Version, true
-		}
-	}
-	return 0, false
 }
 
 type Values interface {
@@ -131,7 +90,7 @@ func (g *Gate) Prefetch(ctx context.Context) error {
 		overrides[row.Cell] = append(overrides[row.Cell], Override{Environment: row.Environment, Version: row.Version})
 	}
 	for _, forCell := range overrides {
-		sort.Slice(forCell, func(i, j int) bool { return forCell[i].Environment < forCell[j].Environment })
+		slices.SortFunc(forCell, func(a, b Override) int { return cmp.Compare(a.Environment, b.Environment) })
 	}
 
 	g.mu.Lock()
@@ -177,13 +136,6 @@ func (g *Gate) reveal(ctx context.Context, cells []Cell) (map[Cell]revealed, err
 	return out, nil
 }
 
-func (g *Gate) resolvedEnvironment(cell Cell) string {
-	if _, ok := g.ownOverride(cell); ok {
-		return g.scope.Environment
-	}
-	return ""
-}
-
 func (g *Gate) DeclareEnv(ctx context.Context, req *resourcesv1.DeclareEnvRequest) (*resourcesv1.DeclareEnvResponse, error) {
 	g.mu.Lock()
 	held := g.resolvedCells()
@@ -224,17 +176,6 @@ func (g *Gate) DeclareEnv(ctx context.Context, req *resourcesv1.DeclareEnvReques
 	return &resourcesv1.DeclareEnvResponse{Cells: cells}, nil
 }
 
-func cellsOf(held heldCells, key string) []Cell {
-	var out []Cell
-	for cell := range held {
-		if cell.Key == key {
-			out = append(out, cell)
-		}
-	}
-	sort.Slice(out, func(i, j int) bool { return out[i].Folder < out[j].Folder })
-	return out
-}
-
 func (g *Gate) ReportEnvProblems(_ context.Context, req *resourcesv1.ReportEnvProblemsRequest) (*resourcesv1.ReportEnvProblemsResponse, error) {
 	g.mu.Lock()
 	defer g.mu.Unlock()
@@ -245,13 +186,13 @@ func (g *Gate) ReportEnvProblems(_ context.Context, req *resourcesv1.ReportEnvPr
 func (g *Gate) Definitions() []*resourcesv1.VariableDefinition {
 	g.mu.Lock()
 	defer g.mu.Unlock()
-	return append([]*resourcesv1.VariableDefinition(nil), g.definitions...)
+	return slices.Clone(g.definitions)
 }
 
 func (g *Gate) Check() error {
 	g.mu.Lock()
-	problems := append([]*resourcesv1.VariableProblem(nil), g.problems...)
-	definitions := append([]*resourcesv1.VariableDefinition(nil), g.definitions...)
+	problems := slices.Clone(g.problems)
+	definitions := slices.Clone(g.definitions)
 	apps := readers(g.scope.Apps)
 	held := g.resolvedCells()
 	g.mu.Unlock()
@@ -260,11 +201,11 @@ func (g *Gate) Check() error {
 	if len(problems) == 0 {
 		return nil
 	}
-	sort.SliceStable(problems, func(i, j int) bool {
-		if problems[i].GetKey() != problems[j].GetKey() {
-			return problems[i].GetKey() < problems[j].GetKey()
+	slices.SortStableFunc(problems, func(a, b *resourcesv1.VariableProblem) int {
+		if c := cmp.Compare(a.GetKey(), b.GetKey()); c != 0 {
+			return c
 		}
-		return problems[i].GetFolder() < problems[j].GetFolder()
+		return cmp.Compare(a.GetFolder(), b.GetFolder())
 	})
 	return &Refusal{Problems: problems, Scope: g.scope}
 }
@@ -296,79 +237,5 @@ func readers(apps []App) []App {
 	if len(apps) == 0 {
 		return []App{{}}
 	}
-	return append([]App(nil), apps...)
-}
-
-type Refusal struct {
-	Problems []*resourcesv1.VariableProblem
-	Scope    Scope
-}
-
-func (r *Refusal) Error() string {
-	return r.Owed() + "\nSet the values above, then run this command again."
-}
-
-func (r *Refusal) Owed() string {
-	var b strings.Builder
-	fmt.Fprintf(&b, "%s not ready — nothing has been built.\n", plural(len(r.Problems)))
-	for _, problem := range r.Problems {
-		cell := Cell{Key: problem.GetKey(), Folder: problem.GetFolder()}
-		fmt.Fprintf(&b, "\n  %s\n    %s\n    fix: %s\n",
-			describe(cell)+readBy(r.Scope.Apps, cell.Folder), why(problem), fixCommand(cell, r.Scope))
-	}
-	return b.String()
-}
-
-func plural(n int) string {
-	if n == 1 {
-		return "1 variable is"
-	}
-	return fmt.Sprintf("%d variables are", n)
-}
-
-func why(problem *resourcesv1.VariableProblem) string {
-	if problem.GetKind() == resourcesv1.VariableProblem_KIND_INVALID {
-		return "set, but it does not satisfy its schema: " + problem.GetDetail()
-	}
-	return "no value is set"
-}
-
-func describeAll(rows []Address) string {
-	names := make([]string, 0, len(rows))
-	for _, row := range rows {
-		names = append(names, describe(row.Cell))
-	}
-	sort.Strings(names)
-	return strings.Join(names, ", ")
-}
-
-func describe(cell Cell) string {
-	if cell.Folder == "" {
-		return cell.Key + " (project root)"
-	}
-	return cell.Key + " (" + cell.Folder + ")"
-}
-
-func readBy(apps []App, folder string) string {
-	var names []string
-	for _, app := range apps {
-		if folder == "" || app.Folder == folder {
-			names = append(names, app.Name)
-		}
-	}
-	if len(names) == 0 {
-		return ""
-	}
-	return ", read by " + strings.Join(names, ", ")
-}
-
-func fixCommand(cell Cell, scope Scope) string {
-	cmd := fmt.Sprintf("ocel env set %s <VALUE>", cell.Key)
-	if cell.Folder != "" {
-		cmd += " --folder " + cell.Folder
-	}
-	if scope.Preview {
-		cmd += " --preview"
-	}
-	return cmd
+	return slices.Clone(apps)
 }

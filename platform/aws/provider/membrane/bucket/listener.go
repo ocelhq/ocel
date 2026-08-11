@@ -154,9 +154,13 @@ func (l *Listener) postCallback(ctx context.Context, sess session, f sessionFile
 	}
 
 	signed := SignedFile{Key: f.Key, Name: f.Name, Size: f.Size, MimeType: f.MimeType}
+	signature, err := signUpload(sess.Secret, sess.SessionID, signed)
+	if err != nil {
+		return err
+	}
 	body, err := json.Marshal(signedCompletion{
 		SessionID: sess.SessionID,
-		Signature: signUpload(sess.Secret, sess.SessionID, signed),
+		Signature: signature,
 		File:      completedFile{Key: f.Key, Name: f.Name, Size: f.Size, MimeType: f.MimeType},
 	})
 	if err != nil {
