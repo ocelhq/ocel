@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/ocelhq/ocel/pkg/naming"
 	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/resources/v1"
 )
@@ -85,8 +86,8 @@ func synthDeclarations() []Declaration {
 
 func synthFunctions() []Function {
 	return []Function{
-		{Name: "api/documents", Runtime: "nodejs24.x", Handler: "app/api.ts", ArtifactPath: "dist/api.zip", Framework: "next", RouteID: "/api/documents"},
-		{Name: "worker", Runtime: "nodejs24.x", Handler: "app/worker.ts", ArtifactPath: "dist/worker.zip", Framework: ""},
+		{Name: "api/documents", App: "web", Runtime: "nodejs24.x", Handler: "app/api.ts", ArtifactPath: "dist/api.zip", Framework: "next", RouteID: "/api/documents"},
+		{Name: "worker", App: "web", Runtime: "nodejs24.x", Handler: "app/worker.ts", ArtifactPath: "dist/worker.zip", Framework: ""},
 	}
 }
 
@@ -256,8 +257,8 @@ func TestBuild(t *testing.T) {
 		}
 
 		resource := manifest.GetResources()[0]
-		if resource.GetLogicalName() != "bucket_storage" {
-			t.Fatalf("logical_name = %q, want %q", resource.GetLogicalName(), "bucket_storage")
+		if resource.GetLogicalName() != "bucket--storage" {
+			t.Fatalf("logical_name = %q, want %q", resource.GetLogicalName(), "bucket--storage")
 		}
 		bucket := resource.GetBucket()
 		if bucket == nil {
@@ -283,18 +284,96 @@ func TestBuild(t *testing.T) {
 		if !ok {
 			t.Fatalf("Build error = %T, want *DuplicateError", err)
 		}
-		if dupErr.TypeToken != "postgres" || dupErr.ID != "main" {
-			t.Fatalf("DuplicateError = %+v, want type=postgres id=main", dupErr)
+		if dupErr.TypeToken != "db" || dupErr.ID != "main" {
+			t.Fatalf("DuplicateError = %+v, want type=db id=main", dupErr)
 		}
 		if dupErr.FirstSource != "app/db.ts:5" || dupErr.SecondSource != "app/other.ts:12" {
 			t.Fatalf("DuplicateError sources = %q, %q, want both offending source locations", dupErr.FirstSource, dupErr.SecondSource)
 		}
 
 		msg := dupErr.Error()
-		for _, want := range []string{"postgres", "main", "app/db.ts:5", "app/other.ts:12"} {
+		for _, want := range []string{"db", "main", "app/db.ts:5", "app/other.ts:12"} {
 			if !strings.Contains(msg, want) {
 				t.Fatalf("error message %q does not contain %q", msg, want)
 			}
+		}
+	})
+
+	t.Run("keeps the app on its own field so routes cannot borrow it", func(t *testing.T) {
+		t.Parallel()
+
+		manifest, err := Build("proj-1", nil, nil, nil, []Function{
+			{Name: "api/users", App: "web", Runtime: "nodejs24.x", Handler: "h.js", ArtifactPath: "a"},
+			{Name: "users", App: "web-api", Runtime: "nodejs24.x", Handler: "h.js", ArtifactPath: "b"},
+		}, nil)
+		if err != nil {
+			t.Fatalf("Build: %v", err)
+		}
+
+		names := []string{manifest.GetFunctions()[0].GetLogicalName(), manifest.GetFunctions()[1].GetLogicalName()}
+		if names[0] == names[1] {
+			t.Fatalf("both functions got the logical name %q; the app field must stay separable", names[0])
+		}
+		if names[0] != "fn--web--api-users" || names[1] != "fn--web-api--users" {
+			t.Fatalf("logical names = %v, want [fn--web--api-users fn--web-api--users]", names)
+		}
+	})
+
+	t.Run("names both routes when two of them collide", func(t *testing.T) {
+		t.Parallel()
+
+		_, err := Build("proj-1", nil, nil, nil, []Function{
+			{Name: "api/users", App: "web", Runtime: "nodejs24.x", Handler: "h.js", ArtifactPath: "a"},
+			{Name: "api_users", App: "web", Runtime: "nodejs24.x", Handler: "h.js", ArtifactPath: "b"},
+		}, nil)
+		if err == nil {
+			t.Fatal("Build: expected a collision error, got nil")
+		}
+
+		collision, ok := err.(*CollisionError)
+		if !ok {
+			t.Fatalf("Build error = %T, want *CollisionError", err)
+		}
+		if collision.LogicalName != "fn--web--api-users" {
+			t.Fatalf("CollisionError.LogicalName = %q, want %q", collision.LogicalName, "fn--web--api-users")
+		}
+		for _, want := range []string{"api/users", "api_users", "web", "fn--web--api-users"} {
+			if !strings.Contains(collision.Error(), want) {
+				t.Fatalf("error message %q does not name %q", collision.Error(), want)
+			}
+		}
+	})
+
+	t.Run("names both declarations when two ids collide", func(t *testing.T) {
+		t.Parallel()
+
+		_, err := Build("proj-1", nil, nil, []Declaration{
+			{Type: resourcesv1.ResourceType_RESOURCE_TYPE_BUCKET, ID: "my_uploads", Source: "app/a.ts:1"},
+			{Type: resourcesv1.ResourceType_RESOURCE_TYPE_BUCKET, ID: "my-uploads", Source: "app/b.ts:2"},
+		}, nil, nil)
+		if err == nil {
+			t.Fatal("Build: expected a collision error, got nil")
+		}
+
+		collision, ok := err.(*CollisionError)
+		if !ok {
+			t.Fatalf("Build error = %T, want *CollisionError", err)
+		}
+		for _, want := range []string{"bucket--my-uploads", "my_uploads", "my-uploads", "app/a.ts:1", "app/b.ts:2"} {
+			if !strings.Contains(collision.Error(), want) {
+				t.Fatalf("error message %q does not name %q", collision.Error(), want)
+			}
+		}
+	})
+
+	t.Run("refuses a function with no app", func(t *testing.T) {
+		t.Parallel()
+
+		_, err := Build("proj-1", nil, nil, nil, []Function{
+			{Name: "index", Runtime: "nodejs24.x", Handler: "h.js", ArtifactPath: "a"},
+		}, nil)
+		if err == nil {
+			t.Fatal("Build: expected an error for a function with no app, got nil")
 		}
 	})
 
@@ -337,7 +416,7 @@ func TestBuild(t *testing.T) {
 		t.Parallel()
 
 		manifest, err := Build("proj-1", nil, nil, nil, []Function{
-			{Name: "Web API", Runtime: "nodejs24.x", Handler: "app/api.ts", ArtifactPath: "dist/api.zip", Framework: "express"},
+			{Name: "Web API", App: "web", Runtime: "nodejs24.x", Handler: "app/api.ts", ArtifactPath: "dist/api.zip", Framework: "express"},
 		}, nil)
 		if err != nil {
 			t.Fatalf("Build: %v", err)
@@ -345,8 +424,8 @@ func TestBuild(t *testing.T) {
 		if len(manifest.GetFunctions()) != 1 {
 			t.Fatalf("got %d functions, want 1", len(manifest.GetFunctions()))
 		}
-		if got := manifest.GetFunctions()[0].GetLogicalName(); got != "web_api" {
-			t.Fatalf("logical_name = %q, want %q", got, "web_api")
+		if got := manifest.GetFunctions()[0].GetLogicalName(); got != "fn--web--web-api" {
+			t.Fatalf("logical_name = %q, want %q", got, "fn--web--web-api")
 		}
 	})
 
@@ -354,13 +433,13 @@ func TestBuild(t *testing.T) {
 		t.Parallel()
 
 		manifest, err := Build("proj-1", nil, nil, nil, []Function{
-			{Name: "api/documents", Runtime: "nodejs24.x", Handler: "route.js", ArtifactPath: "functions/api/documents.func", Framework: "next", RouteID: "/api/documents"},
+			{Name: "api/documents", App: "web", Runtime: "nodejs24.x", Handler: "route.js", ArtifactPath: "functions/api/documents.func", Framework: "next", RouteID: "/api/documents"},
 		}, nil)
 		if err != nil {
 			t.Fatalf("Build: %v", err)
 		}
 		fn := manifest.GetFunctions()[0]
-		if got, want := fn.GetLogicalName(), "api_documents"; got != want {
+		if got, want := fn.GetLogicalName(), "fn--web--api-documents"; got != want {
 			t.Fatalf("logical_name = %q, want %q", got, want)
 		}
 		if got, want := fn.GetRouteId(), "/api/documents"; got != want {
@@ -571,23 +650,52 @@ func TestBuild(t *testing.T) {
 	})
 }
 
-func TestNormalizeLogicalName(t *testing.T) {
+func TestLogicalNames(t *testing.T) {
 	t.Parallel()
 
-	cases := []struct {
-		in   string
-		want string
-	}{
-		{"postgres_main", "postgres_main"},
-		{"postgres_My DB!", "postgres_my_db_"},
-		{"postgres_api-v2.prod", "postgres_api_v2_prod"},
-		{"postgres_ALLCAPS", "postgres_allcaps"},
-	}
-	for _, c := range cases {
-		if got := normalizeLogicalName(c.in); got != c.want {
-			t.Errorf("normalizeLogicalName(%q) = %q, want %q", c.in, got, c.want)
+	t.Run("resources read as kind and name", func(t *testing.T) {
+		t.Parallel()
+
+		cases := []struct {
+			kind naming.Kind
+			id   string
+			want string
+		}{
+			{naming.KindDatabase, "main", "db--main"},
+			{naming.KindDatabase, "My DB!", "db--my-db"},
+			{naming.KindDatabase, "api-v2.prod", "db--api-v2-prod"},
+			{naming.KindBucket, "UPLOADS", "bucket--uploads"},
 		}
-	}
+		for _, c := range cases {
+			if got := resourceLogicalName(c.kind, c.id); got != c.want {
+				t.Errorf("resourceLogicalName(%q, %q) = %q, want %q", c.kind, c.id, got, c.want)
+			}
+		}
+	})
+
+	t.Run("functions keep the app on its own field", func(t *testing.T) {
+		t.Parallel()
+
+		cases := []struct {
+			app   string
+			route string
+			want  string
+		}{
+			{"web", "index", "fn--web--index"},
+			{"web", "api/users", "fn--web--api-users"},
+			{"web-api", "users", "fn--web-api--users"},
+			{"web", "api/todos/[id]", "fn--web--api-todos-id"},
+		}
+		for _, c := range cases {
+			got := functionLogicalName(c.app, c.route)
+			if got != c.want {
+				t.Errorf("functionLogicalName(%q, %q) = %q, want %q", c.app, c.route, got, c.want)
+			}
+			if fields := strings.Split(got, naming.FieldSeparator); len(fields) != 3 {
+				t.Errorf("%q splits into %d fields on %q, want kind, app and route", got, len(fields), naming.FieldSeparator)
+			}
+		}
+	})
 }
 
 func TestManifestVariables(t *testing.T) {

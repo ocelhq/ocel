@@ -5,6 +5,7 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/ocelhq/ocel/pkg/naming"
 	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/resources/v1"
 )
@@ -59,6 +60,19 @@ func (e *DuplicateError) Error() string {
 	)
 }
 
+type CollisionError struct {
+	LogicalName string
+	First       string
+	Second      string
+}
+
+func (e *CollisionError) Error() string {
+	return fmt.Sprintf(
+		"manifestbuilder: %s and %s both name %q: rename one so the two differ by more than punctuation",
+		e.First, e.Second, e.LogicalName,
+	)
+}
+
 func sourceOrUnknown(source string) string {
 	if source == "" {
 		return "<unknown source>"
@@ -66,33 +80,33 @@ func sourceOrUnknown(source string) string {
 	return source
 }
 
-var typeTokens = map[resourcesv1.ResourceType]string{
-	resourcesv1.ResourceType_RESOURCE_TYPE_POSTGRES: "postgres",
-	resourcesv1.ResourceType_RESOURCE_TYPE_BUCKET:   "bucket",
+var typeKinds = map[resourcesv1.ResourceType]naming.Kind{
+	resourcesv1.ResourceType_RESOURCE_TYPE_POSTGRES: naming.KindDatabase,
+	resourcesv1.ResourceType_RESOURCE_TYPE_BUCKET:   naming.KindBucket,
 }
 
-func typeToken(t resourcesv1.ResourceType) (string, error) {
-	token, ok := typeTokens[t]
+func typeKind(t resourcesv1.ResourceType) (naming.Kind, error) {
+	kind, ok := typeKinds[t]
 	if !ok {
 		return "", fmt.Errorf("manifestbuilder: unsupported resource type %v", t)
 	}
-	return token, nil
+	return kind, nil
 }
 
-func normalizeLogicalName(s string) string {
-	var b strings.Builder
-	b.Grow(len(s))
-	for _, r := range s {
-		switch {
-		case r >= 'a' && r <= 'z', r >= '0' && r <= '9', r == '_':
-			b.WriteRune(r)
-		case r >= 'A' && r <= 'Z':
-			b.WriteRune(r - 'A' + 'a')
-		default:
-			b.WriteRune('_')
-		}
-	}
-	return b.String()
+func resourceLogicalName(kind naming.Kind, id string) string {
+	return naming.Join(naming.FieldSeparator, string(kind), id)
+}
+
+func functionLogicalName(app, route string) string {
+	return naming.Join(naming.FieldSeparator, string(naming.KindFunction), app, route)
+}
+
+func describeDeclaration(kind naming.Kind, d Declaration) string {
+	return fmt.Sprintf("%s %q declared at %s", kind, d.ID, sourceOrUnknown(d.Source))
+}
+
+func describeFunction(f Function) string {
+	return fmt.Sprintf("route %q of app %q", f.Name, f.App)
 }
 
 func Build(slug string, domains map[string][]string, apps []App, declarations []Declaration, functions []Function, variables map[string][]Variable) (*deploymentsv1.Manifest, error) {
@@ -101,6 +115,7 @@ func Build(slug string, domains map[string][]string, apps []App, declarations []
 		id  string
 	}
 	seen := make(map[identity]Declaration, len(declarations))
+	named := make(map[string]string, len(declarations)+len(functions))
 
 	resources := make([]*deploymentsv1.ManifestResource, 0, len(declarations))
 	for _, d := range declarations {
@@ -108,7 +123,7 @@ func Build(slug string, domains map[string][]string, apps []App, declarations []
 			return nil, fmt.Errorf("manifestbuilder: declaration has empty resource id")
 		}
 
-		token, err := typeToken(d.Type)
+		kind, err := typeKind(d.Type)
 		if err != nil {
 			return nil, err
 		}
@@ -116,7 +131,7 @@ func Build(slug string, domains map[string][]string, apps []App, declarations []
 		id := identity{d.Type, d.ID}
 		if prior, ok := seen[id]; ok {
 			return nil, &DuplicateError{
-				TypeToken:    token,
+				TypeToken:    string(kind),
 				ID:           d.ID,
 				FirstSource:  prior.Source,
 				SecondSource: d.Source,
@@ -124,8 +139,15 @@ func Build(slug string, domains map[string][]string, apps []App, declarations []
 		}
 		seen[id] = d
 
+		logical := resourceLogicalName(kind, d.ID)
+		described := describeDeclaration(kind, d)
+		if prior, ok := named[logical]; ok {
+			return nil, &CollisionError{LogicalName: logical, First: prior, Second: described}
+		}
+		named[logical] = described
+
 		resource := &deploymentsv1.ManifestResource{
-			LogicalName: normalizeLogicalName(token + "_" + d.ID),
+			LogicalName: logical,
 			Resource: &resourcesv1.ResourceIdentifier{
 				Type: d.Type,
 				Name: d.ID,
@@ -146,8 +168,19 @@ func Build(slug string, domains map[string][]string, apps []App, declarations []
 
 	manifestFunctions := make([]*deploymentsv1.ManifestFunction, 0, len(functions))
 	for _, f := range functions {
+		if f.App == "" || f.Name == "" {
+			return nil, fmt.Errorf("manifestbuilder: function %q of app %q needs both an app and a route name", f.Name, f.App)
+		}
+
+		logical := functionLogicalName(f.App, f.Name)
+		described := describeFunction(f)
+		if prior, ok := named[logical]; ok {
+			return nil, &CollisionError{LogicalName: logical, First: prior, Second: described}
+		}
+		named[logical] = described
+
 		manifestFunctions = append(manifestFunctions, &deploymentsv1.ManifestFunction{
-			LogicalName:  normalizeLogicalName(f.Name),
+			LogicalName:  logical,
 			Runtime:      f.Runtime,
 			Handler:      f.Handler,
 			ArtifactPath: f.ArtifactPath,
