@@ -112,13 +112,13 @@ func TestTeardownConfigSkipRefresh(t *testing.T) {
 		if teardownConfig(Config{}, "shop--infra").SkipRefresh {
 			t.Error("teardownConfig skipped the refresh with no opt-out set")
 		}
-		for _, v := range []string{"1", "true"} {
+		for _, v := range []string{"1", "true", "TRUE", "True"} {
 			t.Setenv(skipTeardownRefreshEnv, v)
 			if !teardownConfig(Config{}, "shop--infra").SkipRefresh {
 				t.Errorf("%s=%q did not skip the refresh", skipTeardownRefreshEnv, v)
 			}
 		}
-		for _, v := range []string{"", "0", "false", "yes"} {
+		for _, v := range []string{"", "0", "false", "FALSE", "yes"} {
 			t.Setenv(skipTeardownRefreshEnv, v)
 			if teardownConfig(Config{}, "shop--infra").SkipRefresh {
 				t.Errorf("%s=%q skipped the refresh, want only \"1\" and \"true\" to", skipTeardownRefreshEnv, v)
