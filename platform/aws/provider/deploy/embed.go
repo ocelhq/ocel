@@ -57,7 +57,7 @@ type embedTarget struct {
 	TreeBytes   int64
 }
 
-func embedBytecodeCaches(ctx context.Context, cfg Config, manifest *deploymentsv1.Manifest, artifacts map[string]artifactRef, warmed []warmResult, log func(string)) {
+func embedBytecodeCaches(ctx context.Context, cfg Config, manifest *deploymentsv1.Manifest, artifacts map[string]artifactRef, warmed []warmResult, builds appBuilds, log func(string)) {
 	if log == nil {
 		log = func(string) {}
 	}
@@ -72,17 +72,12 @@ func embedBytecodeCaches(ctx context.Context, cfg Config, manifest *deploymentsv
 		log(fmt.Sprintf("ocel: %s=1 but this deploy has no %s; not embedding", bytecodeEmbedEnv, missing))
 		return
 	}
-	caches, err := appCaches(cfg, manifest)
-	if err != nil {
-		log(fmt.Sprintf("ocel: could not work out which bundles to embed: %v", err))
-		return
-	}
 	embedPass{
 		objects:  cfg.Getter,
 		uploader: cfg.Uploader,
 		code:     cfg.CodeUpdater,
 		invoker:  cfg.Invoker,
-		targets:  embedTargets(cfg, manifest, caches, artifacts, warmed, log),
+		targets:  embedTargets(cfg, manifest, builds.caches, artifacts, warmed, log),
 		budget:   embedPassDeadline,
 		settle:   embedUpdateSettle,
 		log:      log,

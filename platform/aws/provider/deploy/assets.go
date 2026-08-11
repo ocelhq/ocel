@@ -34,7 +34,7 @@ func assetPlaneTargets(cfg Config) []uploadTarget {
 	}
 }
 
-func uploadStaticAssets(ctx context.Context, cfg Config, manifest *deploymentsv1.Manifest) error {
+func uploadStaticAssets(ctx context.Context, cfg Config, manifest *deploymentsv1.Manifest, builds appBuilds) error {
 	if cfg.CacheStoreBucket == "" || cfg.CacheStoreUploader == nil {
 		return nil
 	}
@@ -53,10 +53,7 @@ func uploadStaticAssets(ctx context.Context, cfg Config, manifest *deploymentsv1
 			continue
 		}
 		name := app.GetName()
-		buildID, err := nextBuildID(cfg, name)
-		if err != nil {
-			return err
-		}
+		buildID := builds.ids[name]
 		root := appArtifactRoot(cfg.ArtifactRoot, name)
 		dir := filepath.Join(root, staticAssetsDir)
 		rels, err := collectFiles(dir)
