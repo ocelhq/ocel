@@ -172,7 +172,7 @@ func TestStackTemplate(t *testing.T) {
 	})
 }
 
-func TestStateBucketReclaimsNoncurrentVersions(t *testing.T) {
+func TestStateBucket(t *testing.T) {
 	for _, tc := range []struct {
 		name     string
 		template string
@@ -189,30 +189,41 @@ func TestStateBucketReclaimsNoncurrentVersions(t *testing.T) {
 			}
 
 			rules := bucket.Properties.LifecycleConfiguration.Rules
-			if len(rules) != 1 {
-				t.Fatalf("StateBucket lifecycle rules = %d, want exactly 1", len(rules))
-			}
-			rule := rules[0]
-			if rule.Status != "Enabled" {
-				t.Errorf("lifecycle rule Status = %q, want Enabled", rule.Status)
-			}
-			if rule.NoncurrentVersionExpiration.NoncurrentDays != stateNoncurrentDays {
-				t.Errorf("NoncurrentDays = %d, want %d", rule.NoncurrentVersionExpiration.NoncurrentDays, stateNoncurrentDays)
-			}
-			if rule.NoncurrentVersionExpiration.NewerNoncurrentVersions != stateNoncurrentKeepNewer {
-				t.Errorf("NewerNoncurrentVersions = %d, want %d", rule.NoncurrentVersionExpiration.NewerNoncurrentVersions, stateNoncurrentKeepNewer)
-			}
-			if !rule.ExpiredObjectDeleteMarker {
-				t.Error("ExpiredObjectDeleteMarker = false, want true: delete markers left behind keep the versions they hide")
-			}
-			if rule.AbortIncompleteMultipartUpload.DaysAfterInitiation != stateAbortMultipartDays {
-				t.Errorf("AbortIncompleteMultipartUpload = %d, want %d", rule.AbortIncompleteMultipartUpload.DaysAfterInitiation, stateAbortMultipartDays)
+			if len(rules) != 2 {
+				t.Fatalf("StateBucket lifecycle rules = %d, want exactly 2", len(rules))
 			}
 
-			// A rule may not carry both a current-version expiry and the
-			// delete-marker sweep; CloudFormation rejects the combination.
-			if rule.ExpirationInDays != 0 {
-				t.Errorf("ExpirationInDays = %d, want 0: state checkpoints are current versions and must not expire", rule.ExpirationInDays)
+			byID := map[string]int{}
+			for i, rule := range rules {
+				byID[rule.Id] = i
+				if rule.Status != "Enabled" {
+					t.Errorf("rule %q Status = %q, want Enabled", rule.Id, rule.Status)
+				}
+				if rule.ExpirationInDays != 0 {
+					t.Errorf("rule %q ExpirationInDays = %d, want 0: state checkpoints are current versions and must not expire", rule.Id, rule.ExpirationInDays)
+				}
+			}
+
+			expire, ok := byID["expire-noncurrent-state"]
+			if !ok {
+				t.Fatalf("lifecycle rules %v are missing expire-noncurrent-state", rules)
+			}
+			if got := rules[expire].NoncurrentVersionExpiration.NoncurrentDays; got != stateNoncurrentDays {
+				t.Errorf("NoncurrentDays = %d, want %d", got, stateNoncurrentDays)
+			}
+			if got := rules[expire].NoncurrentVersionExpiration.NewerNoncurrentVersions; got != 0 {
+				t.Errorf("NewerNoncurrentVersions = %d, want 0: retained versions survive a teardown forever", got)
+			}
+			if got := rules[expire].AbortIncompleteMultipartUpload.DaysAfterInitiation; got != stateAbortMultipartDays {
+				t.Errorf("AbortIncompleteMultipartUpload = %d, want %d", got, stateAbortMultipartDays)
+			}
+
+			sweep, ok := byID["expire-state-delete-markers"]
+			if !ok {
+				t.Fatalf("lifecycle rules %v are missing expire-state-delete-markers", rules)
+			}
+			if !rules[sweep].ExpiredObjectDeleteMarker {
+				t.Error("ExpiredObjectDeleteMarker = false, want true: a delete marker left behind is an object left behind")
 			}
 		})
 	}

@@ -53,7 +53,7 @@ func fullProductionParams() map[string]string {
 	}
 }
 
-func TestReadClassParamsBatchesOneCall(t *testing.T) {
+func TestReadClassParamsBatches(t *testing.T) {
 	ssmc := &fakeBatchSSM{params: fullProductionParams()}
 
 	got, err := ReadClassParams(context.Background(), ssmc, ClassProduction, "proj-1")
@@ -152,7 +152,7 @@ func TestReadClassParamsUnknownClass(t *testing.T) {
 	}
 }
 
-func TestReadClassParamsMissingPassphraseIsFatal(t *testing.T) {
+func TestReadClassParamsMissingPassphrase(t *testing.T) {
 	params := fullProductionParams()
 	delete(params, PassphraseParamName)
 
@@ -165,15 +165,15 @@ func TestReadClassParamsMissingPassphraseIsFatal(t *testing.T) {
 	}
 }
 
-func TestReadClassParamsCallFailureIsFatal(t *testing.T) {
+func TestReadClassParamsCallFailure(t *testing.T) {
 	ssmc := &fakeBatchSSM{params: fullProductionParams(), err: errors.New("throttled")}
 	if _, err := ReadClassParams(context.Background(), ssmc, ClassProduction, "proj-1"); err == nil {
 		t.Fatal("ReadClassParams with a failing GetParameters = nil error, want an error")
 	}
 }
 
-func TestReadClassParamsToleratedEdgeFailures(t *testing.T) {
-	t.Run("absent credentials are reported, not fatal", func(t *testing.T) {
+func TestReadClassParamsEdgeFailures(t *testing.T) {
+	t.Run("absent credentials are reported", func(t *testing.T) {
 		params := fullProductionParams()
 		delete(params, EdgeCredentialsParamName)
 
@@ -192,7 +192,7 @@ func TestReadClassParamsToleratedEdgeFailures(t *testing.T) {
 		}
 	})
 
-	t.Run("unparsable credentials are reported, not fatal", func(t *testing.T) {
+	t.Run("unparsable credentials are reported", func(t *testing.T) {
 		params := fullProductionParams()
 		params[EdgeCredentialsParamName] = "{not json"
 
@@ -224,7 +224,7 @@ func TestReadClassParamsToleratedEdgeFailures(t *testing.T) {
 		}
 	})
 
-	t.Run("unparsable values are reported, not fatal", func(t *testing.T) {
+	t.Run("unparsable values are reported", func(t *testing.T) {
 		params := fullProductionParams()
 		params[EdgeValuesParamName] = "{not json"
 
@@ -241,7 +241,7 @@ func TestReadClassParamsToleratedEdgeFailures(t *testing.T) {
 	})
 }
 
-func TestReadClassParamsAbsentOptionalParams(t *testing.T) {
+func TestReadClassParamsAbsentOptional(t *testing.T) {
 	ssmc := &fakeBatchSSM{params: map[string]string{PassphraseParamName: "pass-1"}}
 
 	got, err := ReadClassParams(context.Background(), ssmc, ClassProduction, "proj-1")
@@ -265,7 +265,7 @@ func TestReadClassParamsAbsentOptionalParams(t *testing.T) {
 	}
 }
 
-func TestReadClassParamsUnparsableStoresAreFatal(t *testing.T) {
+func TestReadClassParamsUnparsableStores(t *testing.T) {
 	for _, name := range []string{
 		CacheStoreParamName,
 		DeploymentsStoreParamName,

@@ -42,12 +42,8 @@ const (
 	artifactExpirationDays     = 30
 	artifactAbortMultipartDays = 7
 
-	// Pulumi rewrites a stack's whole checkpoint on every operation, so a
-	// versioned state bucket accrues one dead copy per operation forever. These
-	// bound that: keep a shallow undo window, then let the versions go.
-	stateNoncurrentDays      = 7
-	stateNoncurrentKeepNewer = 3
-	stateAbortMultipartDays  = 7
+	stateNoncurrentDays     = 7
+	stateAbortMultipartDays = 7
 )
 
 const (
@@ -420,10 +416,11 @@ Resources:
             Status: Enabled
             NoncurrentVersionExpiration:
               NoncurrentDays: %d
-              NewerNoncurrentVersions: %d
-            ExpiredObjectDeleteMarker: true
             AbortIncompleteMultipartUpload:
               DaysAfterInitiation: %d
+          - Id: expire-state-delete-markers
+            Status: Enabled
+            ExpiredObjectDeleteMarker: true
 %s%s%s%s%s%s%s%s%sOutputs:
   %s:
     Description: S3 bucket holding Pulumi state.
@@ -434,7 +431,7 @@ Resources:
   %s:
     Description: Class this substrate is stamped with, verified before an action runs.
     Value: '%s'
-`, stateNoncurrentDays, stateNoncurrentKeepNewer, stateAbortMultipartDays, stateTableResource(), artifactBucketResource(), assetBucketResource(), varsResources(ClassProduction), imageOptimizerResources(code.optimizer), tagPublisherResources(code.publisher, ClassProduction), revalidateQueueResources(ClassProduction), revalidatorResources(code.revalidator), edgeUserResource(EdgeUserName, trust, code.optimizer), outputStateBucket, stateTableOutput(), artifactBucketOutput(), assetBucketOutput(), varsOutputs(), imageOptimizerOutput(code.optimizer), revalidateQueueOutput(code.revalidator), outputVersion, version, outputInfraClass, ClassProduction)
+`, stateNoncurrentDays, stateAbortMultipartDays, stateTableResource(), artifactBucketResource(), assetBucketResource(), varsResources(ClassProduction), imageOptimizerResources(code.optimizer), tagPublisherResources(code.publisher, ClassProduction), revalidateQueueResources(ClassProduction), revalidatorResources(code.revalidator), edgeUserResource(EdgeUserName, trust, code.optimizer), outputStateBucket, stateTableOutput(), artifactBucketOutput(), assetBucketOutput(), varsOutputs(), imageOptimizerOutput(code.optimizer), revalidateQueueOutput(code.revalidator), outputVersion, version, outputInfraClass, ClassProduction)
 }
 
 func previewStackTemplate(trust edge.TrustBoundary, code stackArtifacts, version int) string {
@@ -461,10 +458,11 @@ Resources:
             Status: Enabled
             NoncurrentVersionExpiration:
               NoncurrentDays: %d
-              NewerNoncurrentVersions: %d
-            ExpiredObjectDeleteMarker: true
             AbortIncompleteMultipartUpload:
               DaysAfterInitiation: %d
+          - Id: expire-state-delete-markers
+            Status: Enabled
+            ExpiredObjectDeleteMarker: true
 %s%s%s%s%s%s%s%s%sOutputs:
   %s:
     Description: S3 bucket holding Pulumi state for preview stacks.
@@ -475,7 +473,7 @@ Resources:
   %s:
     Description: Class this substrate is stamped with, verified before an action runs.
     Value: '%s'
-`, stateNoncurrentDays, stateNoncurrentKeepNewer, stateAbortMultipartDays, stateTableResource(), artifactBucketResource(), assetBucketResource(), varsResources(ClassPreview), imageOptimizerResources(code.optimizer), tagPublisherResources(code.publisher, ClassPreview), revalidateQueueResources(ClassPreview), revalidatorResources(code.revalidator), edgeUserResource(EdgePreviewUserName, trust, code.optimizer), outputStateBucket, stateTableOutput(), artifactBucketOutput(), assetBucketOutput(), varsOutputs(), imageOptimizerOutput(code.optimizer), revalidateQueueOutput(code.revalidator), outputVersion, version, outputInfraClass, ClassPreview)
+`, stateNoncurrentDays, stateAbortMultipartDays, stateTableResource(), artifactBucketResource(), assetBucketResource(), varsResources(ClassPreview), imageOptimizerResources(code.optimizer), tagPublisherResources(code.publisher, ClassPreview), revalidateQueueResources(ClassPreview), revalidatorResources(code.revalidator), edgeUserResource(EdgePreviewUserName, trust, code.optimizer), outputStateBucket, stateTableOutput(), artifactBucketOutput(), assetBucketOutput(), varsOutputs(), imageOptimizerOutput(code.optimizer), revalidateQueueOutput(code.revalidator), outputVersion, version, outputInfraClass, ClassPreview)
 }
 
 func stateTableResource() string {
