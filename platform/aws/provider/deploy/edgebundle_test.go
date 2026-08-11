@@ -70,7 +70,7 @@ func TestUploadEdgeBundles(t *testing.T) {
 			CacheStoreBucket: "isr", CacheStoreUploader: store,
 		}
 
-		if err := uploadEdgeBundles(context.Background(), cfg, twoAppManifest()); err != nil {
+		if err := uploadEdgeBundles(context.Background(), cfg, twoAppManifest(), appBuildsFor(t, cfg, twoAppManifest())); err != nil {
 			t.Fatalf("uploadEdgeBundles: %v", err)
 		}
 
@@ -107,7 +107,7 @@ func TestUploadEdgeBundles(t *testing.T) {
 			CacheStoreBucket: "isr", CacheStoreUploader: store,
 		}
 
-		if err := uploadEdgeBundles(context.Background(), cfg, twoAppManifest()); err != nil {
+		if err := uploadEdgeBundles(context.Background(), cfg, nextManifest(), appBuildsFor(t, cfg, nextManifest())); err != nil {
 			t.Fatalf("uploadEdgeBundles: %v", err)
 		}
 
@@ -128,13 +128,13 @@ func TestUploadEdgeBundles(t *testing.T) {
 			CacheStoreBucket: "isr", CacheStoreUploader: store,
 		}
 
-		if err := uploadEdgeBundles(context.Background(), cfg, twoAppManifest()); err != nil {
+		if err := uploadEdgeBundles(context.Background(), cfg, twoAppManifest(), appBuildsFor(t, cfg, twoAppManifest())); err != nil {
 			t.Fatalf("first uploadEdgeBundles: %v", err)
 		}
 		for _, key := range store.puts {
 			store.exists[key] = true
 		}
-		if err := uploadEdgeBundles(context.Background(), cfg, twoAppManifest()); err != nil {
+		if err := uploadEdgeBundles(context.Background(), cfg, twoAppManifest(), appBuildsFor(t, cfg, twoAppManifest())); err != nil {
 			t.Fatalf("rotation uploadEdgeBundles: %v", err)
 		}
 
@@ -155,7 +155,7 @@ func TestUploadEdgeBundles(t *testing.T) {
 		asset := &fakeUploader{exists: map[string]bool{}}
 		cfg := Config{ArtifactRoot: edgeAppTree(t), AssetBucket: "assets", Env: "prod", Uploader: asset}
 
-		if err := uploadEdgeBundles(context.Background(), cfg, twoAppManifest()); err != nil {
+		if err := uploadEdgeBundles(context.Background(), cfg, twoAppManifest(), appBuildsFor(t, cfg, twoAppManifest())); err != nil {
 			t.Fatalf("uploadEdgeBundles: %v", err)
 		}
 		if len(asset.puts) != 0 {
@@ -171,7 +171,7 @@ func TestBuildDeploymentRecordEdgeWorkers(t *testing.T) {
 		manifest := nextManifest()
 		app := &deploymentsv1.ManifestApp{Name: "web", Framework: frameworkNext}
 
-		record, err := buildDeploymentRecord(cfg, manifest, app, buildOnly("WEB1"), nil)
+		record, err := buildDeploymentRecord(cfg, manifest, app, buildOnly("WEB1"), nil, appBuildsFor(t, cfg, manifest))
 		if err != nil {
 			t.Fatalf("buildDeploymentRecord: %v", err)
 		}
@@ -215,7 +215,7 @@ func TestBuildDeploymentRecordEdgeWorkers(t *testing.T) {
 		manifest := twoAppManifest()
 		app := &deploymentsv1.ManifestApp{Name: "admin", Framework: frameworkNext}
 
-		record, err := buildDeploymentRecord(cfg, manifest, app, buildOnly("ADM1"), nil)
+		record, err := buildDeploymentRecord(cfg, manifest, app, buildOnly("ADM1"), nil, appBuildsFor(t, cfg, manifest))
 		if err != nil {
 			t.Fatalf("buildDeploymentRecord: %v", err)
 		}

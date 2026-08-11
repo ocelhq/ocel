@@ -37,7 +37,7 @@ func readEdgeBundle(cfg Config, app string) ([]byte, bool, error) {
 	return raw, true, nil
 }
 
-func uploadEdgeBundles(ctx context.Context, cfg Config, manifest *deploymentsv1.Manifest) error {
+func uploadEdgeBundles(ctx context.Context, cfg Config, manifest *deploymentsv1.Manifest, builds appBuilds) error {
 	if cfg.CacheStoreBucket == "" || cfg.CacheStoreUploader == nil {
 		return nil
 	}
@@ -53,11 +53,7 @@ func uploadEdgeBundles(ctx context.Context, cfg Config, manifest *deploymentsv1.
 		if !ok {
 			continue
 		}
-		buildID, err := nextBuildID(cfg, name)
-		if err != nil {
-			return err
-		}
-		key := appEdgeBundleR2Key(manifest.GetSlug(), name, buildID)
+		key := appEdgeBundleR2Key(manifest.GetSlug(), name, builds.ids[name])
 		if err := putArtifact(ctx, cfg.CacheStoreUploader, cfg.CacheStoreBucket, key, "application/json", bundle); err != nil {
 			return err
 		}

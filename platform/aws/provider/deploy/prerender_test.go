@@ -41,6 +41,15 @@ func twoAppTree(t *testing.T) string {
 	})
 }
 
+func appBuildsFor(t *testing.T, cfg Config, manifest *deploymentsv1.Manifest) appBuilds {
+	t.Helper()
+	builds, err := resolveAppBuilds(cfg, manifest)
+	if err != nil {
+		t.Fatalf("resolveAppBuilds: %v", err)
+	}
+	return builds
+}
+
 func entryPuts(puts []string) []string {
 	var out []string
 	for _, key := range puts {
@@ -51,25 +60,25 @@ func entryPuts(puts []string) []string {
 	return out
 }
 
-func TestAppCaches(t *testing.T) {
+func TestResolveAppBuilds(t *testing.T) {
 	t.Parallel()
 
 	t.Run("gives each app its own prefix", func(t *testing.T) {
 		t.Parallel()
 		cfg := Config{ArtifactRoot: twoAppTree(t), AssetBucket: "assets", StateTable: "state", Env: "prod"}
 
-		caches, err := appCaches(cfg, twoAppManifest())
+		builds, err := resolveAppBuilds(cfg, twoAppManifest())
 		if err != nil {
-			t.Fatalf("appCaches: %v", err)
+			t.Fatalf("resolveAppBuilds: %v", err)
 		}
-		if len(caches) != 2 {
-			t.Fatalf("got %d caches, want one per app", len(caches))
+		if len(builds.caches) != 2 {
+			t.Fatalf("got %d caches, want one per app", len(builds.caches))
 		}
-		if want := "prod/proj/web/WEB1"; caches["web"].Prefix != want {
-			t.Errorf("web prefix = %q, want %q", caches["web"].Prefix, want)
+		if want := "prod/proj/web/WEB1"; builds.caches["web"].Prefix != want {
+			t.Errorf("web prefix = %q, want %q", builds.caches["web"].Prefix, want)
 		}
-		if want := "prod/proj/admin/ADM1"; caches["admin"].Prefix != want {
-			t.Errorf("admin prefix = %q, want %q", caches["admin"].Prefix, want)
+		if want := "prod/proj/admin/ADM1"; builds.caches["admin"].Prefix != want {
+			t.Errorf("admin prefix = %q, want %q", builds.caches["admin"].Prefix, want)
 		}
 	})
 
@@ -87,14 +96,14 @@ func TestAppCaches(t *testing.T) {
 			},
 		}
 
-		caches, err := appCaches(cfg, manifest)
+		builds, err := resolveAppBuilds(cfg, manifest)
 		if err != nil {
-			t.Fatalf("appCaches: %v", err)
+			t.Fatalf("resolveAppBuilds: %v", err)
 		}
-		if _, ok := caches["api"]; ok {
-			t.Errorf("an app with no prerendered content must have no cache, got %+v", caches["api"])
+		if _, ok := builds.caches["api"]; ok {
+			t.Errorf("an app with no prerendered content must have no cache, got %+v", builds.caches["api"])
 		}
-		if caches["web"] == nil {
+		if builds.caches["web"] == nil {
 			t.Error("the Next app must still have its own cache")
 		}
 	})
@@ -108,7 +117,7 @@ func TestUploadPrerenderAssets(t *testing.T) {
 		f := &fakeUploader{exists: map[string]bool{}}
 		cfg := Config{ArtifactRoot: twoAppTree(t), AssetBucket: "assets", Env: "prod", Uploader: f}
 
-		if err := uploadPrerenderAssets(context.Background(), cfg, twoAppManifest()); err != nil {
+		if err := uploadPrerenderAssets(context.Background(), cfg, appBuildsFor(t, cfg, twoAppManifest())); err != nil {
 			t.Fatalf("uploadPrerenderAssets: %v", err)
 		}
 
@@ -139,7 +148,7 @@ func TestUploadPrerenderAssets(t *testing.T) {
 		}
 		cfg = adoptISRWriter(t, cfg)
 
-		if err := uploadPrerenderAssets(context.Background(), cfg, twoAppManifest()); err != nil {
+		if err := uploadPrerenderAssets(context.Background(), cfg, appBuildsFor(t, cfg, twoAppManifest())); err != nil {
 			t.Fatalf("uploadPrerenderAssets: %v", err)
 		}
 
@@ -175,7 +184,7 @@ func TestUploadPrerenderAssets(t *testing.T) {
 		f := &fakeUploader{exists: map[string]bool{}}
 		cfg := Config{ArtifactRoot: twoAppTree(t), AssetBucket: "assets", Env: "prod", Uploader: f}
 
-		if err := uploadPrerenderAssets(context.Background(), cfg, twoAppManifest()); err != nil {
+		if err := uploadPrerenderAssets(context.Background(), cfg, appBuildsFor(t, cfg, twoAppManifest())); err != nil {
 			t.Fatalf("uploadPrerenderAssets: %v", err)
 		}
 
@@ -198,7 +207,7 @@ func TestUploadPrerenderAssets(t *testing.T) {
 		cfg = adoptISRWriter(t, cfg)
 
 		before := time.Now().UnixMilli()
-		if err := uploadPrerenderAssets(context.Background(), cfg, twoAppManifest()); err != nil {
+		if err := uploadPrerenderAssets(context.Background(), cfg, appBuildsFor(t, cfg, twoAppManifest())); err != nil {
 			t.Fatalf("uploadPrerenderAssets: %v", err)
 		}
 		after := time.Now().UnixMilli()
@@ -237,7 +246,7 @@ func TestUploadPrerenderAssets(t *testing.T) {
 		}
 		cfg = adoptISRWriter(t, cfg)
 
-		if err := uploadPrerenderAssets(context.Background(), cfg, twoAppManifest()); err != nil {
+		if err := uploadPrerenderAssets(context.Background(), cfg, appBuildsFor(t, cfg, twoAppManifest())); err != nil {
 			t.Fatalf("uploadPrerenderAssets: %v", err)
 		}
 
@@ -261,7 +270,7 @@ func TestUploadPrerenderAssets(t *testing.T) {
 		}
 		cfg = adoptISRWriter(t, cfg)
 
-		if err := uploadPrerenderAssets(context.Background(), cfg, twoAppManifest()); err != nil {
+		if err := uploadPrerenderAssets(context.Background(), cfg, appBuildsFor(t, cfg, twoAppManifest())); err != nil {
 			t.Fatalf("uploadPrerenderAssets: %v", err)
 		}
 
@@ -278,7 +287,7 @@ func TestUploadPrerenderAssets(t *testing.T) {
 		f := &fakeUploader{exists: map[string]bool{}}
 		cfg := Config{ArtifactRoot: twoAppTree(t), AssetBucket: "assets", Env: "prod", Uploader: f}
 
-		if err := uploadPrerenderAssets(context.Background(), cfg, twoAppManifest()); err != nil {
+		if err := uploadPrerenderAssets(context.Background(), cfg, appBuildsFor(t, cfg, twoAppManifest())); err != nil {
 			t.Fatalf("uploadPrerenderAssets: %v", err)
 		}
 		var seeded int
@@ -298,7 +307,7 @@ func TestUploadPrerenderAssets(t *testing.T) {
 		cfg := Config{ArtifactRoot: t.TempDir(), AssetBucket: "assets", Env: "prod", Uploader: f}
 		manifest := &deploymentsv1.Manifest{Slug: "proj"}
 
-		if err := uploadPrerenderAssets(context.Background(), cfg, manifest); err != nil {
+		if err := uploadPrerenderAssets(context.Background(), cfg, appBuildsFor(t, cfg, manifest)); err != nil {
 			t.Fatalf("uploadPrerenderAssets: %v", err)
 		}
 		if len(f.puts) != 0 {
@@ -315,7 +324,7 @@ func TestUploadPrerenderAssets(t *testing.T) {
 		f := &fakeUploader{exists: map[string]bool{}}
 		cfg := Config{ArtifactRoot: root, AssetBucket: "assets", Env: "prod", Uploader: f}
 
-		if err := uploadPrerenderAssets(context.Background(), cfg, nextManifest()); err != nil {
+		if err := uploadPrerenderAssets(context.Background(), cfg, appBuildsFor(t, cfg, nextManifest())); err != nil {
 			t.Fatalf("uploadPrerenderAssets: %v", err)
 		}
 		if got := entryPuts(f.puts); len(got) != 0 {
@@ -332,7 +341,7 @@ func TestUploadPrerenderAssets(t *testing.T) {
 		f := &fakeUploader{exists: map[string]bool{}}
 		cfg := Config{ArtifactRoot: root, Env: "prod", Uploader: f}
 
-		if err := uploadPrerenderAssets(context.Background(), cfg, nextManifest()); err == nil {
+		if err := uploadPrerenderAssets(context.Background(), cfg, appBuildsFor(t, cfg, nextManifest())); err == nil {
 			t.Fatal("uploadPrerenderAssets = nil, want an error for a missing asset bucket")
 		}
 	})
@@ -348,7 +357,7 @@ func TestUploadPrerenderAssets(t *testing.T) {
 		f := &fakeUploader{exists: map[string]bool{}}
 		cfg := Config{ArtifactRoot: root, AssetBucket: "assets", Env: "prod", Uploader: f}
 
-		if err := uploadPrerenderAssets(context.Background(), cfg, nextManifest()); err != nil {
+		if err := uploadPrerenderAssets(context.Background(), cfg, appBuildsFor(t, cfg, nextManifest())); err != nil {
 			t.Fatalf("uploadPrerenderAssets: %v", err)
 		}
 
@@ -385,7 +394,7 @@ func TestUploadPrerenderAssets(t *testing.T) {
 		}
 		cfg = adoptISRWriter(t, cfg)
 
-		if err := uploadPrerenderAssets(context.Background(), cfg, nextManifest()); err != nil {
+		if err := uploadPrerenderAssets(context.Background(), cfg, appBuildsFor(t, cfg, nextManifest())); err != nil {
 			t.Fatalf("uploadPrerenderAssets: %v", err)
 		}
 

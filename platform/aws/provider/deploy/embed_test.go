@@ -535,7 +535,7 @@ func TestEmbedBytecodeCaches(t *testing.T) {
 		t.Setenv(bytecodeEmbedEnv, "1")
 		log, out := collectLog()
 
-		embedBytecodeCaches(context.Background(), Config{}, nextManifest(), nil, nil, log)
+		embedBytecodeCaches(context.Background(), Config{}, nextManifest(), nil, nil, appBuilds{}, log)
 
 		for _, want := range []string{"object getter", "code updater", "artifact uploader", "function invoker", "not embedding"} {
 			if !strings.Contains(out(), want) {

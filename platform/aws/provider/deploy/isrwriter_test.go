@@ -50,19 +50,19 @@ func adoptISRWriter(t *testing.T, cfg Config) Config {
 	return cfg
 }
 
-func TestAppCachesISRWriter(t *testing.T) {
+func TestResolveAppBuildsISRWriter(t *testing.T) {
 	t.Run("refuses a writer and a store that disagree", func(t *testing.T) {
 		base := Config{ArtifactRoot: twoAppTree(t), AssetBucket: "assets", StateTable: "state", Env: "prod"}
 
 		storeOnly := base
 		storeOnly.CacheStoreBucket = "isr"
 		storeOnly.CacheStoreUploader = &fakeUploader{exists: map[string]bool{}}
-		if _, err := appCaches(storeOnly, twoAppManifest()); err == nil {
+		if err := checkISRWriterAgrees(storeOnly); err == nil {
 			t.Error("a cache store with no writer to write into it must fail the deploy")
 		}
 
 		writerOnly := adoptISRWriter(t, base)
-		if _, err := appCaches(writerOnly, twoAppManifest()); err == nil {
+		if err := checkISRWriterAgrees(writerOnly); err == nil {
 			t.Error("a writer with no adopted cache store must fail the deploy")
 		}
 	})
@@ -81,24 +81,24 @@ func TestAppCachesISRWriter(t *testing.T) {
 			ISRWriterSeed:          "seed-1",
 		}
 
-		caches, err := appCaches(cfg, twoAppManifest())
+		builds, err := resolveAppBuilds(cfg, twoAppManifest())
 		if err != nil {
-			t.Fatalf("appCaches: %v", err)
+			t.Fatalf("resolveAppBuilds: %v", err)
 		}
-		again, err := appCaches(cfg, twoAppManifest())
+		againBuilds, err := resolveAppBuilds(cfg, twoAppManifest())
 		if err != nil {
-			t.Fatalf("appCaches (second call): %v", err)
+			t.Fatalf("resolveAppBuilds (second call): %v", err)
 		}
 
-		web, admin := caches["web"], caches["admin"]
+		web, admin := builds.caches["web"], builds.caches["admin"]
 		if want := "https://writer.example/prod/proj/web/WEB1/entry"; web.WriterURL != want {
 			t.Errorf("web WriterURL = %q, want %q", web.WriterURL, want)
 		}
 		if web.WriterSecret == admin.WriterSecret {
 			t.Error("two apps in one deploy must not share a write secret")
 		}
-		if web.WriterSecret != again["web"].WriterSecret {
-			t.Error("appCaches must derive the same write secret on every call")
+		if web.WriterSecret != againBuilds.caches["web"].WriterSecret {
+			t.Error("resolveAppBuilds must derive the same write secret on every call")
 		}
 	})
 
@@ -106,12 +106,12 @@ func TestAppCachesISRWriter(t *testing.T) {
 		t.Parallel()
 		cfg := Config{ArtifactRoot: twoAppTree(t), AssetBucket: "assets", StateTable: "state", Env: "prod"}
 
-		caches, err := appCaches(cfg, twoAppManifest())
+		builds, err := resolveAppBuilds(cfg, twoAppManifest())
 		if err != nil {
-			t.Fatalf("appCaches: %v", err)
+			t.Fatalf("resolveAppBuilds: %v", err)
 		}
-		if caches["web"].WriterURL != "" || caches["web"].WriterSecret != "" {
-			t.Errorf("writer coordinates = %+v, want unset", caches["web"])
+		if builds.caches["web"].WriterURL != "" || builds.caches["web"].WriterSecret != "" {
+			t.Errorf("writer coordinates = %+v, want unset", builds.caches["web"])
 		}
 	})
 }

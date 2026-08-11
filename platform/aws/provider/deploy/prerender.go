@@ -26,39 +26,27 @@ type prerenderManifest struct {
 	BuildID string `json:"buildId"`
 }
 
-func appAssetPrefix(cfg Config, slug, app string) (string, error) {
-	var pm prerenderManifest
-	raw, err := os.ReadFile(filepath.Join(appArtifactRoot(cfg.ArtifactRoot, app), "routing-manifest.json"))
-	if err != nil {
-		return "", fmt.Errorf("read routing manifest for %s: %w", app, err)
-	}
-	if err := json.Unmarshal(raw, &pm); err != nil {
-		return "", fmt.Errorf("parse routing manifest for %s: %w", app, err)
-	}
-	if pm.BuildID == "" {
-		return "", fmt.Errorf("routing manifest for %s is missing buildId; rebuild the app", app)
-	}
-	return appAssetPrefixFor(cfg.Env, slug, app, pm.BuildID), nil
-}
-
 func appAssetPrefixFor(env, slug, app, buildID string) string {
 	return path.Join(env, slug, sanitizeWorkerName(app), buildID)
 }
 
-func appCaches(cfg Config, manifest *deploymentsv1.Manifest) (map[string]*isrConfig, error) {
-	if err := checkISRWriterAgrees(cfg); err != nil {
-		return nil, err
-	}
-	caches := map[string]*isrConfig{}
+type appBuilds struct {
+	ids    map[string]string
+	caches map[string]*isrConfig
+}
+
+func resolveAppBuilds(cfg Config, manifest *deploymentsv1.Manifest) (appBuilds, error) {
+	builds := appBuilds{ids: map[string]string{}, caches: map[string]*isrConfig{}}
 	for _, fn := range manifest.GetFunctions() {
 		app := fn.GetApp()
-		if fn.GetFramework() != frameworkNext || caches[app] != nil {
+		if fn.GetFramework() != frameworkNext || builds.caches[app] != nil {
 			continue
 		}
-		prefix, err := appAssetPrefix(cfg, manifest.GetSlug(), app)
+		buildID, err := builds.resolve(cfg, app)
 		if err != nil {
-			return nil, err
+			return appBuilds{}, err
 		}
+		prefix := appAssetPrefixFor(cfg.Env, manifest.GetSlug(), app, buildID)
 		cache := &isrConfig{
 			Bucket:   cfg.AssetBucket,
 			Prefix:   prefix,
@@ -70,16 +58,33 @@ func appCaches(cfg Config, manifest *deploymentsv1.Manifest) (map[string]*isrCon
 			cache.WriterURL = cfg.ISRWriterEndpoint + "/" + prefix + "/entry"
 			cache.WriterSecret = isrWriteSecret(cfg.ISRWriterSeed, prefix)
 		}
-		caches[app] = cache
+		builds.caches[app] = cache
 	}
-	return caches, nil
+	for _, app := range manifestApps(manifest) {
+		if app.GetFramework() != frameworkNext {
+			continue
+		}
+		if _, err := builds.resolve(cfg, app.GetName()); err != nil {
+			return appBuilds{}, err
+		}
+	}
+	return builds, nil
 }
 
-func uploadPrerenderAssets(ctx context.Context, cfg Config, manifest *deploymentsv1.Manifest) error {
-	caches, err := appCaches(cfg, manifest)
-	if err != nil {
-		return err
+func (b appBuilds) resolve(cfg Config, app string) (string, error) {
+	if id := b.ids[app]; id != "" {
+		return id, nil
 	}
+	id, err := nextBuildID(cfg, app)
+	if err != nil {
+		return "", err
+	}
+	b.ids[app] = id
+	return id, nil
+}
+
+func uploadPrerenderAssets(ctx context.Context, cfg Config, builds appBuilds) error {
+	caches := builds.caches
 
 	segments := []struct {
 		dir string

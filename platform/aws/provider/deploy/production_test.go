@@ -570,7 +570,8 @@ func varsConfig(t *testing.T, class deploymentsv1.Environment_Class) Config {
 func recordVariables(t *testing.T, variables ...*deploymentsv1.ManifestVariable) edge.DeploymentRecord {
 	t.Helper()
 	manifest := varsManifest(variables...)
-	record, err := buildDeploymentRecord(varsConfig(t, deploymentsv1.Environment_CLASS_PRODUCTION), manifest, manifest.GetApps()[0], buildOnly("WEB1"), nil)
+	cfg := varsConfig(t, deploymentsv1.Environment_CLASS_PRODUCTION)
+	record, err := buildDeploymentRecord(cfg, manifest, manifest.GetApps()[0], buildOnly("WEB1"), nil, appBuildsFor(t, cfg, manifest))
 	if err != nil {
 		t.Fatalf("buildDeploymentRecord: %v", err)
 	}
@@ -595,7 +596,7 @@ func TestBuildDeploymentRecord(t *testing.T) {
 			Identity:     "pr-42",
 		}
 
-		record, err := buildDeploymentRecord(cfg, manifest, manifest.GetApps()[0], buildOnly("WEB1"), nil)
+		record, err := buildDeploymentRecord(cfg, manifest, manifest.GetApps()[0], buildOnly("WEB1"), nil, appBuildsFor(t, cfg, manifest))
 		if err != nil {
 			t.Fatalf("buildDeploymentRecord: %v", err)
 		}
@@ -620,7 +621,7 @@ func TestBuildDeploymentRecord(t *testing.T) {
 			Slug:         "proj",
 		}
 
-		record, err := buildDeploymentRecord(cfg, manifest, manifest.GetApps()[0], buildOnly("WEB1"), nil)
+		record, err := buildDeploymentRecord(cfg, manifest, manifest.GetApps()[0], buildOnly("WEB1"), nil, appBuildsFor(t, cfg, manifest))
 		if err != nil {
 			t.Fatalf("buildDeploymentRecord: %v", err)
 		}
@@ -641,7 +642,7 @@ func TestBuildDeploymentRecord(t *testing.T) {
 			Slug:         "proj",
 		}
 
-		bare, err := buildDeploymentRecord(cfg, manifest, manifest.GetApps()[1], buildOnly("DOCS1"), nil)
+		bare, err := buildDeploymentRecord(cfg, manifest, manifest.GetApps()[1], buildOnly("DOCS1"), nil, appBuildsFor(t, cfg, manifest))
 		if err != nil {
 			t.Fatalf("buildDeploymentRecord: %v", err)
 		}
@@ -741,7 +742,7 @@ func TestBuildDeploymentRecord(t *testing.T) {
 		build := func(class deploymentsv1.Environment_Class) edge.DeploymentRecord {
 			t.Helper()
 			cfg := varsConfig(t, class)
-			record, err := buildDeploymentRecord(cfg, manifest, manifest.GetApps()[0], id, nil)
+			record, err := buildDeploymentRecord(cfg, manifest, manifest.GetApps()[0], id, nil, appBuildsFor(t, cfg, manifest))
 			if err != nil {
 				t.Fatalf("buildDeploymentRecord under %s: %v", class, err)
 			}
@@ -780,7 +781,7 @@ func TestBuildDeploymentRecord(t *testing.T) {
 		app := &deploymentsv1.ManifestApp{Name: "web", Framework: frameworkNext}
 		id := fingerprinted("WEB1", "fp1")
 
-		record, err := buildDeploymentRecord(cfg, manifest, app, id, nil)
+		record, err := buildDeploymentRecord(cfg, manifest, app, id, nil, appBuildsFor(t, cfg, manifest))
 		if err != nil {
 			t.Fatalf("buildDeploymentRecord: %v", err)
 		}
@@ -796,7 +797,7 @@ func TestBuildDeploymentRecord(t *testing.T) {
 		app := &deploymentsv1.ManifestApp{Name: "web", Framework: frameworkNext}
 		id := fingerprinted("WEB1", "fp1")
 
-		record, err := buildDeploymentRecord(cfg, manifest, app, id, nil)
+		record, err := buildDeploymentRecord(cfg, manifest, app, id, nil, appBuildsFor(t, cfg, manifest))
 		if err != nil {
 			t.Fatalf("buildDeploymentRecord: %v", err)
 		}
@@ -817,7 +818,7 @@ func TestBuildDeploymentRecord(t *testing.T) {
 		app := &deploymentsv1.ManifestApp{Name: "web", Framework: frameworkNext}
 		id := fingerprinted("WEB1", "fp1")
 
-		record, err := buildDeploymentRecord(cfg, nextManifest(), app, id, nil)
+		record, err := buildDeploymentRecord(cfg, nextManifest(), app, id, nil, appBuildsFor(t, cfg, nextManifest()))
 		if err != nil {
 			t.Fatalf("buildDeploymentRecord: %v", err)
 		}
@@ -1044,7 +1045,7 @@ func TestFinalizeDeploy(t *testing.T) {
 		specs := []edge.RootStackSpec{{Version: "v1"}}
 		var state edge.RootStackState
 		for i, id := range ids {
-			record, err := buildDeploymentRecord(cfg, manifest, app, id, nil)
+			record, err := buildDeploymentRecord(cfg, manifest, app, id, nil, appBuildsFor(t, cfg, manifest))
 			if err != nil {
 				t.Fatalf("buildDeploymentRecord: %v", err)
 			}
@@ -1327,7 +1328,7 @@ func TestAssignIdentities(t *testing.T) {
 				Apps: []*deploymentsv1.ManifestApp{{Name: "web", Framework: frameworkNext}},
 			}
 
-			ids, err := assignIdentities(cfg, manifest, tc.bundles)
+			ids, err := assignIdentities(cfg, manifest, tc.bundles, appBuildsFor(t, cfg, manifest))
 			if err != nil {
 				t.Fatalf("assignIdentities: %v", err)
 			}
@@ -1347,7 +1348,8 @@ func TestAssignIdentities(t *testing.T) {
 			Apps: []*deploymentsv1.ManifestApp{{Name: "api", Framework: "express"}},
 		}
 
-		ids, err := assignIdentities(Config{ArtifactRoot: t.TempDir()}, manifest, nil)
+		cfg := Config{ArtifactRoot: t.TempDir()}
+		ids, err := assignIdentities(cfg, manifest, nil, appBuildsFor(t, cfg, manifest))
 		if err != nil {
 			t.Fatalf("assignIdentities: %v", err)
 		}

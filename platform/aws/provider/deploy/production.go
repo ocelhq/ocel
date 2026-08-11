@@ -55,17 +55,26 @@ func realize(ctx context.Context, cfg Config, manifest *deploymentsv1.Manifest, 
 	if err != nil {
 		return Result{}, err
 	}
-	if err := uploadPrerenderAssets(ctx, cfg, manifest); err != nil {
+
+	if err := checkISRWriterAgrees(cfg); err != nil {
 		return Result{}, err
 	}
-	if err := uploadStaticAssets(ctx, cfg, manifest); err != nil {
-		return Result{}, err
-	}
-	if err := uploadEdgeBundles(ctx, cfg, manifest); err != nil {
+	builds, err := resolveAppBuilds(cfg, manifest)
+	if err != nil {
 		return Result{}, err
 	}
 
-	identities, err := assignIdentities(cfg, manifest, baked)
+	if err := uploadPrerenderAssets(ctx, cfg, builds); err != nil {
+		return Result{}, err
+	}
+	if err := uploadStaticAssets(ctx, cfg, manifest, builds); err != nil {
+		return Result{}, err
+	}
+	if err := uploadEdgeBundles(ctx, cfg, manifest, builds); err != nil {
+		return Result{}, err
+	}
+
+	identities, err := assignIdentities(cfg, manifest, baked, builds)
 	if err != nil {
 		return Result{}, err
 	}
@@ -113,19 +122,19 @@ func realize(ctx context.Context, cfg Config, manifest *deploymentsv1.Manifest, 
 	appFunctionNames := make([]map[string]string, len(apps))
 	runAppStacks(apps, func(i int, app *deploymentsv1.ManifestApp) {
 		id := identities[app.GetName()]
-		outs, names, err := runAppStack(ctx, cfg, manifest, plan, app, resourceEnv, artifacts, baked[app.GetName()], log)
+		outs, names, err := runAppStack(ctx, cfg, manifest, plan, app, resourceEnv, artifacts, baked[app.GetName()], builds, log)
 		appOutputs[i] = outs
 		appFunctionNames[i] = names
-		record, recErr := buildDeploymentRecord(cfg, manifest, app, id, outs)
+		record, recErr := buildDeploymentRecord(cfg, manifest, app, id, outs, builds)
 		if err == nil {
 			err = recErr
 		}
 		results[i] = appDeployResult{App: app.GetName(), Identity: id, Record: record, Err: err}
 	})
 
-	warmed := warmDeployedFunctions(ctx, cfg, manifest, appFunctionNames, log)
+	warmed := warmDeployedFunctions(ctx, cfg, manifest, appFunctionNames, builds, log)
 
-	embedBytecodeCaches(ctx, cfg, manifest, artifacts, warmed, log)
+	embedBytecodeCaches(ctx, cfg, manifest, artifacts, warmed, builds, log)
 
 	progress.report(deploymentsv1.Phase_PHASE_FINALIZING, "Staging and promoting", 0, 0)
 	if err := stageAndPromote(ctx, cfg, stack, state, promotionID, cfg.Tag, promotePointer(cfg), time.Now().Unix(), results); err != nil {
@@ -510,11 +519,11 @@ func newRandomID() (string, error) {
 	return hex.EncodeToString(buf), nil
 }
 
-func assignIdentities(cfg Config, manifest *deploymentsv1.Manifest, bundles map[string]appBundle) (Identities, error) {
+func assignIdentities(cfg Config, manifest *deploymentsv1.Manifest, bundles map[string]appBundle, builds appBuilds) (Identities, error) {
 	identities := make(Identities, len(manifest.GetApps()))
 	for _, app := range manifestApps(manifest) {
 		name := app.GetName()
-		buildID, err := appBuildID(cfg, app)
+		buildID, err := appBuildID(cfg, app, builds)
 		if err != nil {
 			return nil, err
 		}
@@ -527,9 +536,9 @@ func assignIdentities(cfg Config, manifest *deploymentsv1.Manifest, bundles map[
 	return identities, nil
 }
 
-func appBuildID(cfg Config, app *deploymentsv1.ManifestApp) (string, error) {
+func appBuildID(cfg Config, app *deploymentsv1.ManifestApp, builds appBuilds) (string, error) {
 	if app.GetFramework() == frameworkNext {
-		return nextBuildID(cfg, app.GetName())
+		return builds.resolve(cfg, app.GetName())
 	}
 	return newRandomID()
 }
@@ -549,7 +558,7 @@ func nextBuildID(cfg Config, app string) (string, error) {
 	return pm.BuildID, nil
 }
 
-func buildDeploymentRecord(cfg Config, manifest *deploymentsv1.Manifest, app *deploymentsv1.ManifestApp, id Identity, outs []*deploymentsv1.ResourceOutput) (edge.DeploymentRecord, error) {
+func buildDeploymentRecord(cfg Config, manifest *deploymentsv1.Manifest, app *deploymentsv1.ManifestApp, id Identity, outs []*deploymentsv1.ResourceOutput, builds appBuilds) (edge.DeploymentRecord, error) {
 	name := app.GetName()
 	urlByLogical := functionURLsByLogicalName(outs)
 	fingerprint, variables := recordedAudit(cfg, app)
@@ -577,11 +586,7 @@ func buildDeploymentRecord(cfg Config, manifest *deploymentsv1.Manifest, app *de
 	}
 	record.RoutingManifest = routing
 
-	caches, err := appCaches(cfg, manifest)
-	if err != nil {
-		return edge.DeploymentRecord{}, err
-	}
-	if isr := caches[name]; isr != nil {
+	if isr := builds.caches[name]; isr != nil {
 		record.IsrPrefix = isr.Prefix
 		record.IsrWriteSecret = isr.WriterSecret
 	}
@@ -660,14 +665,10 @@ func runInfraStack(ctx context.Context, cfg Config, manifest *deploymentsv1.Mani
 	return collectResourceOutputs(ctx, cfg.Secrets, manifest, res.Outputs)
 }
 
-func runAppStack(ctx context.Context, cfg Config, manifest *deploymentsv1.Manifest, plan Plan, app *deploymentsv1.ManifestApp, resourceEnv map[string]string, artifacts map[string]artifactRef, baked appBundle, log func(string)) ([]*deploymentsv1.ResourceOutput, map[string]string, error) {
+func runAppStack(ctx context.Context, cfg Config, manifest *deploymentsv1.Manifest, plan Plan, app *deploymentsv1.ManifestApp, resourceEnv map[string]string, artifacts map[string]artifactRef, baked appBundle, builds appBuilds, log func(string)) ([]*deploymentsv1.ResourceOutput, map[string]string, error) {
 	name := app.GetName()
 	functions := appFunctions(manifest, name)
-
-	caches, err := appCaches(cfg, manifest)
-	if err != nil {
-		return nil, nil, err
-	}
+	caches := builds.caches
 
 	if err := checkRuntimeOwnedNames(app); err != nil {
 		return nil, nil, err

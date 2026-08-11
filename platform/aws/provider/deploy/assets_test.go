@@ -66,7 +66,7 @@ func TestUploadStaticAssets(t *testing.T) {
 			CacheStoreBucket: "isr", CacheStoreUploader: store,
 		}
 
-		if err := uploadStaticAssets(context.Background(), cfg, twoAppManifest()); err != nil {
+		if err := uploadStaticAssets(context.Background(), cfg, twoAppManifest(), appBuildsFor(t, cfg, twoAppManifest())); err != nil {
 			t.Fatalf("uploadStaticAssets: %v", err)
 		}
 
@@ -105,7 +105,7 @@ func TestUploadStaticAssets(t *testing.T) {
 		})
 		cfg := mirrorConfig(root, store, asset)
 
-		if err := uploadStaticAssets(context.Background(), cfg, nextManifest()); err != nil {
+		if err := uploadStaticAssets(context.Background(), cfg, nextManifest(), appBuildsFor(t, cfg, nextManifest())); err != nil {
 			t.Fatalf("uploadStaticAssets: %v", err)
 		}
 
@@ -124,7 +124,7 @@ func TestUploadStaticAssets(t *testing.T) {
 		asset := &fakeUploader{exists: map[string]bool{}}
 		cfg := Config{ArtifactRoot: staticAppTree(t), AssetBucket: "assets", Env: "prod", Uploader: asset}
 
-		if err := uploadStaticAssets(context.Background(), cfg, twoAppManifest()); err != nil {
+		if err := uploadStaticAssets(context.Background(), cfg, twoAppManifest(), appBuildsFor(t, cfg, twoAppManifest())); err != nil {
 			t.Fatalf("uploadStaticAssets: %v", err)
 		}
 		if len(asset.puts) != 0 {
@@ -144,7 +144,7 @@ func TestUploadStaticAssets(t *testing.T) {
 			CacheStoreBucket: "isr", CacheStoreUploader: store,
 		}
 
-		if err := uploadStaticAssets(context.Background(), cfg, nextManifest()); err != nil {
+		if err := uploadStaticAssets(context.Background(), cfg, nextManifest(), appBuildsFor(t, cfg, nextManifest())); err != nil {
 			t.Fatalf("uploadStaticAssets: %v", err)
 		}
 		if len(store.puts) != 0 {
@@ -161,7 +161,7 @@ func TestUploadStaticAssets(t *testing.T) {
 			CacheStoreBucket: "isr", CacheStoreUploader: store,
 		}
 
-		if err := uploadStaticAssets(context.Background(), cfg, twoAppManifest()); err != nil {
+		if err := uploadStaticAssets(context.Background(), cfg, twoAppManifest(), appBuildsFor(t, cfg, twoAppManifest())); err != nil {
 			t.Fatalf("first uploadStaticAssets: %v", err)
 		}
 		first := append([]string(nil), store.puts...)
@@ -173,7 +173,7 @@ func TestUploadStaticAssets(t *testing.T) {
 		}
 		store.puts = nil
 
-		if err := uploadStaticAssets(context.Background(), cfg, twoAppManifest()); err != nil {
+		if err := uploadStaticAssets(context.Background(), cfg, twoAppManifest(), appBuildsFor(t, cfg, twoAppManifest())); err != nil {
 			t.Fatalf("rotation uploadStaticAssets: %v", err)
 		}
 		if len(store.puts) != 0 {
@@ -186,7 +186,7 @@ func TestUploadStaticAssets(t *testing.T) {
 		store, asset := &fakeUploader{exists: map[string]bool{}}, &fakeUploader{exists: map[string]bool{}}
 		cfg := mirrorConfig(imageConfigTree(t), store, asset)
 
-		if err := uploadStaticAssets(context.Background(), cfg, nextManifest()); err != nil {
+		if err := uploadStaticAssets(context.Background(), cfg, nextManifest(), appBuildsFor(t, cfg, nextManifest())); err != nil {
 			t.Fatalf("uploadStaticAssets: %v", err)
 		}
 
@@ -213,7 +213,7 @@ func TestUploadStaticAssets(t *testing.T) {
 		store, asset := &fakeUploader{exists: map[string]bool{}}, &fakeUploader{exists: map[string]bool{}}
 		cfg := mirrorConfig(imageConfigTree(t), store, asset)
 
-		if err := uploadStaticAssets(context.Background(), cfg, nextManifest()); err != nil {
+		if err := uploadStaticAssets(context.Background(), cfg, nextManifest(), appBuildsFor(t, cfg, nextManifest())); err != nil {
 			t.Fatalf("uploadStaticAssets: %v", err)
 		}
 
@@ -242,8 +242,9 @@ func TestUploadStaticAssets(t *testing.T) {
 			"apps/web/static/image-config.json": `{"mine":true}`,
 		})
 		store, asset := &fakeUploader{exists: map[string]bool{}}, &fakeUploader{exists: map[string]bool{}}
+		cfg := mirrorConfig(root, store, asset)
 
-		if err := uploadStaticAssets(context.Background(), mirrorConfig(root, store, asset), nextManifest()); err != nil {
+		if err := uploadStaticAssets(context.Background(), cfg, nextManifest(), appBuildsFor(t, cfg, nextManifest())); err != nil {
 			t.Fatalf("uploadStaticAssets: %v", err)
 		}
 
@@ -260,7 +261,7 @@ func TestUploadStaticAssets(t *testing.T) {
 		store, asset := &fakeUploader{exists: map[string]bool{}}, &fakeUploader{exists: map[string]bool{}}
 		cfg := mirrorConfig(staticAppTree(t), store, asset)
 
-		if err := uploadStaticAssets(context.Background(), cfg, twoAppManifest()); err != nil {
+		if err := uploadStaticAssets(context.Background(), cfg, twoAppManifest(), appBuildsFor(t, cfg, twoAppManifest())); err != nil {
 			t.Fatalf("uploadStaticAssets: %v", err)
 		}
 		for _, key := range append(sortedPuts(store), sortedPuts(asset)...) {
@@ -280,7 +281,7 @@ func TestUploadStaticAssets(t *testing.T) {
 		asset := &fakeUploader{exists: present}
 		cfg := mirrorConfig(imageConfigTree(t), store, asset)
 
-		if err := uploadStaticAssets(context.Background(), cfg, nextManifest()); err != nil {
+		if err := uploadStaticAssets(context.Background(), cfg, nextManifest(), appBuildsFor(t, cfg, nextManifest())); err != nil {
 			t.Fatalf("uploadStaticAssets: %v", err)
 		}
 
@@ -307,7 +308,7 @@ func TestUploadStaticAssets(t *testing.T) {
 			t.Run(tc.name, func(t *testing.T) {
 				cfg := mirrorConfig(imageConfigTree(t), tc.store, tc.asset)
 
-				err := uploadStaticAssets(context.Background(), cfg, nextManifest())
+				err := uploadStaticAssets(context.Background(), cfg, nextManifest(), appBuildsFor(t, cfg, nextManifest()))
 				if err == nil {
 					t.Fatal("uploadStaticAssets = nil, want the failed target to fail the deploy")
 				}
@@ -326,7 +327,7 @@ func TestUploadStaticAssets(t *testing.T) {
 			CacheStoreBucket: "isr", CacheStoreUploader: store,
 		}
 
-		if err := uploadStaticAssets(context.Background(), cfg, nextManifest()); err == nil {
+		if err := uploadStaticAssets(context.Background(), cfg, nextManifest(), appBuildsFor(t, cfg, nextManifest())); err == nil {
 			t.Fatal("uploadStaticAssets = nil, want an error for a missing asset bucket")
 		}
 	})
@@ -342,7 +343,7 @@ func TestUploadPrerenderAssetsMirroring(t *testing.T) {
 		store, asset := &fakeUploader{exists: map[string]bool{}}, &fakeUploader{exists: map[string]bool{}}
 		cfg := adoptISRWriter(t, mirrorConfig(root, store, asset))
 
-		if err := uploadPrerenderAssets(context.Background(), cfg, nextManifest()); err != nil {
+		if err := uploadPrerenderAssets(context.Background(), cfg, appBuildsFor(t, cfg, nextManifest())); err != nil {
 			t.Fatalf("uploadPrerenderAssets: %v", err)
 		}
 
@@ -367,7 +368,7 @@ func TestBuildDeploymentRecordAssets(t *testing.T) {
 		manifest := &deploymentsv1.Manifest{Slug: "proj"}
 		app := &deploymentsv1.ManifestApp{Name: "web", Framework: frameworkNext}
 
-		record, err := buildDeploymentRecord(cfg, manifest, app, buildOnly("WEB1"), nil)
+		record, err := buildDeploymentRecord(cfg, manifest, app, buildOnly("WEB1"), nil, appBuildsFor(t, cfg, manifest))
 		if err != nil {
 			t.Fatalf("buildDeploymentRecord: %v", err)
 		}
@@ -384,7 +385,7 @@ func TestBuildDeploymentRecordAssets(t *testing.T) {
 		manifest := nextManifest()
 		app := &deploymentsv1.ManifestApp{Name: "web", Framework: frameworkNext}
 
-		record, err := buildDeploymentRecord(cfg, manifest, app, buildOnly("WEB1"), nil)
+		record, err := buildDeploymentRecord(cfg, manifest, app, buildOnly("WEB1"), nil, appBuildsFor(t, cfg, manifest))
 		if err != nil {
 			t.Fatalf("buildDeploymentRecord: %v", err)
 		}
@@ -398,7 +399,7 @@ func TestBuildDeploymentRecordAssets(t *testing.T) {
 		manifest := &deploymentsv1.Manifest{Slug: "proj"}
 		app := &deploymentsv1.ManifestApp{Name: "api", Framework: "express"}
 
-		record, err := buildDeploymentRecord(cfg, manifest, app, buildOnly("API1"), nil)
+		record, err := buildDeploymentRecord(cfg, manifest, app, buildOnly("API1"), nil, appBuildsFor(t, cfg, manifest))
 		if err != nil {
 			t.Fatalf("buildDeploymentRecord: %v", err)
 		}
@@ -423,7 +424,7 @@ func TestBuildDeploymentRecordAssets(t *testing.T) {
 		manifest := nextManifest()
 		app := &deploymentsv1.ManifestApp{Name: "web", Framework: frameworkNext}
 
-		record, err := buildDeploymentRecord(cfg, manifest, app, buildOnly("WEB1"), nil)
+		record, err := buildDeploymentRecord(cfg, manifest, app, buildOnly("WEB1"), nil, appBuildsFor(t, cfg, manifest))
 		if err != nil {
 			t.Fatalf("buildDeploymentRecord: %v", err)
 		}
@@ -437,7 +438,7 @@ func TestBuildDeploymentRecordAssets(t *testing.T) {
 			"apps/web/routing-manifest.json": `{"buildId":"WEB1"}`,
 		})
 		cfg := Config{ArtifactRoot: root, Env: "prod"}
-		record, err := buildDeploymentRecord(cfg, nextManifest(), &deploymentsv1.ManifestApp{Name: "web", Framework: frameworkNext}, buildOnly("WEB1"), nil)
+		record, err := buildDeploymentRecord(cfg, nextManifest(), &deploymentsv1.ManifestApp{Name: "web", Framework: frameworkNext}, buildOnly("WEB1"), nil, appBuildsFor(t, cfg, nextManifest()))
 		if err != nil {
 			t.Fatalf("buildDeploymentRecord: %v", err)
 		}

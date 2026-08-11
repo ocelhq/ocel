@@ -28,17 +28,12 @@ type FunctionInvoker interface {
 	Invoke(ctx context.Context, in *lambda.InvokeInput, optFns ...func(*lambda.Options)) (*lambda.InvokeOutput, error)
 }
 
-func warmDeployedFunctions(ctx context.Context, cfg Config, manifest *deploymentsv1.Manifest, appFunctionNames []map[string]string, log func(string)) []warmResult {
+func warmDeployedFunctions(ctx context.Context, cfg Config, manifest *deploymentsv1.Manifest, appFunctionNames []map[string]string, builds appBuilds, log func(string)) []warmResult {
 	if cfg.Invoker == nil {
 		return nil
 	}
 	if log == nil {
 		log = func(string) {}
-	}
-	caches, err := appCaches(cfg, manifest)
-	if err != nil {
-		log(fmt.Sprintf("ocel: could not work out which bundles to warm: %v", err))
-		return nil
 	}
 	names := map[string]string{}
 	for _, app := range appFunctionNames {
@@ -48,7 +43,7 @@ func warmDeployedFunctions(ctx context.Context, cfg Config, manifest *deployment
 	}
 	return warmPass{
 		invoker: cfg.Invoker,
-		targets: warmTargets(manifest, caches, names),
+		targets: warmTargets(manifest, builds.caches, names),
 		budget:  warmPassDeadline,
 		log:     log,
 	}.run(ctx)
