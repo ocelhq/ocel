@@ -81,17 +81,17 @@ func TestResolveAppBuildsISRWriter(t *testing.T) {
 			ISRWriterSeed:          "seed-1",
 		}
 
-		builds, err := resolveAppBuilds(cfg, twoAppManifest())
+		builds, err := resolveAppBuilds(cfg, twoAppManifest(), nil)
 		if err != nil {
 			t.Fatalf("resolveAppBuilds: %v", err)
 		}
-		againBuilds, err := resolveAppBuilds(cfg, twoAppManifest())
+		againBuilds, err := resolveAppBuilds(cfg, twoAppManifest(), nil)
 		if err != nil {
 			t.Fatalf("resolveAppBuilds (second call): %v", err)
 		}
 
 		web, admin := builds.caches["web"], builds.caches["admin"]
-		if want := "https://writer.example/prod/proj/web/WEB1/entry"; web.WriterURL != want {
+		if want := "https://writer.example/" + isrPrefixFor("web", "WEB1") + "/entry"; web.WriterURL != want {
 			t.Errorf("web WriterURL = %q, want %q", web.WriterURL, want)
 		}
 		if web.WriterSecret == admin.WriterSecret {
@@ -106,7 +106,7 @@ func TestResolveAppBuildsISRWriter(t *testing.T) {
 		t.Parallel()
 		cfg := Config{ArtifactRoot: twoAppTree(t), AssetBucket: "assets", StateTable: "state", Env: "prod"}
 
-		builds, err := resolveAppBuilds(cfg, twoAppManifest())
+		builds, err := resolveAppBuilds(cfg, twoAppManifest(), nil)
 		if err != nil {
 			t.Fatalf("resolveAppBuilds: %v", err)
 		}

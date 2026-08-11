@@ -6,12 +6,12 @@ import (
 	"fmt"
 	"io/fs"
 	"os"
-	"path"
 	"path/filepath"
 	"sync"
 
 	"golang.org/x/sync/errgroup"
 
+	"github.com/ocelhq/ocel/pkg/naming"
 	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
 )
 
@@ -19,12 +19,8 @@ const staticAssetsDir = "static"
 
 const imageConfigFile = "image-config.json"
 
-func appAssetR2Prefix(slug, app, buildID string) string {
-	return path.Join("assets", slug, sanitizeWorkerName(app), buildID)
-}
-
-func imageConfigKey(slug, app, buildID string) string {
-	return path.Join("image-config", slug, sanitizeWorkerName(app), buildID+".json")
+func appAssetPrefix(c naming.Coordinate) string {
+	return c.AssetKey("")
 }
 
 func assetPlaneTargets(cfg Config) []uploadTarget {
@@ -53,17 +49,16 @@ func uploadStaticAssets(ctx context.Context, cfg Config, manifest *deploymentsv1
 			continue
 		}
 		name := app.GetName()
-		buildID := builds.ids[name]
+		coord := builds.coords[name]
 		root := appArtifactRoot(cfg.ArtifactRoot, name)
 		dir := filepath.Join(root, staticAssetsDir)
 		rels, err := collectFiles(dir)
 		if err != nil {
 			return err
 		}
-		prefix := appAssetR2Prefix(manifest.GetSlug(), name, buildID)
 		for _, rel := range rels {
 			uploads = append(uploads, upload{
-				key: path.Join(prefix, rel),
+				key: coord.AssetKey(rel),
 				src: filepath.Join(dir, filepath.FromSlash(rel)),
 				to:  plane,
 			})
@@ -72,7 +67,7 @@ func uploadStaticAssets(ctx context.Context, cfg Config, manifest *deploymentsv1
 		switch _, err := os.Stat(imageConfig); {
 		case err == nil:
 			uploads = append(uploads, upload{
-				key:         imageConfigKey(manifest.GetSlug(), name, buildID),
+				key:         coord.ImageConfigKey(),
 				src:         imageConfig,
 				to:          []uploadTarget{assetBucket},
 				replace:     true,

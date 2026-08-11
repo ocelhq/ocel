@@ -1,7 +1,5 @@
 export interface ImageOriginRequest {
-  slug: string;
-  app: string;
-  buildId: string;
+  assetPrefix: string;
   url: string;
   w: number;
   q: number;

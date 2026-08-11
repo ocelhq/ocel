@@ -90,8 +90,8 @@ describe("a url no runtime can parse", () => {
       const response = await serveImage(new Request(url), url, {
         config: BASE_CONFIG,
         basePath: "",
+        assetPrefix: ASSET_PREFIX,
         slug: "p1",
-        app: "web",
         buildId: "build-7",
         origin: async () => new Response("optimized"),
       });
@@ -107,8 +107,8 @@ describe("a url no runtime can parse", () => {
       await serveImage(new Request(url), url, {
         config: BASE_CONFIG,
         basePath: "",
+        assetPrefix: ASSET_PREFIX,
         slug: "p1",
-        app: "web",
         buildId: "build-7",
         origin: async () => {
           called = true;
@@ -246,8 +246,8 @@ describe("serveImage", () => {
     const response = await serveImage(new Request(url, { headers: { accept: "image/webp" } }), url, {
       config: BASE_CONFIG,
       basePath: "",
+      assetPrefix: ASSET_PREFIX,
       slug: "p1",
-      app: "web",
       buildId: "build-7",
       origin: async (payload) => {
         seen.push(payload);
@@ -258,9 +258,7 @@ describe("serveImage", () => {
     expect(await response.text()).toBe("optimized");
     expect(seen).toEqual([
       {
-        slug: "p1",
-        app: "web",
-        buildId: "build-7",
+        assetPrefix: ASSET_PREFIX,
         url: "/a.png",
         w: 640,
         q: 75,
@@ -279,8 +277,8 @@ describe("serveImage", () => {
     await serveImage(new Request(url), url, {
       config: BASE_CONFIG,
       basePath: "",
+      assetPrefix: ASSET_PREFIX,
       slug: "p1",
-      app: "web",
       buildId: "build-7",
       origin: async (payload) => {
         seen.push(payload);
@@ -297,8 +295,8 @@ describe("serveImage", () => {
     const response = await serveImage(new Request(url), url, {
       config: BASE_CONFIG,
       basePath: "",
+      assetPrefix: ASSET_PREFIX,
       slug: "p1",
-      app: "web",
       buildId: "build-7",
       origin: async () => {
         called = true;
@@ -330,17 +328,19 @@ describe("serveImage", () => {
   });
 });
 
+const ASSET_PREFIX = "prod/p1/web/r3f8a1c9d/assets";
+
 function assetStoreServing(files: Record<string, string>): RouteDeps["assetStore"] {
   const store: AssetBucket = {
     async get(key) {
-      const body = files[key];
+      const body = files[key.slice(ASSET_PREFIX.length)];
       if (body === undefined) return null;
       return { body: new Blob([body]).stream() };
     },
   };
   return {
     store,
-    assetPrefix: "",
+    assetPrefix: ASSET_PREFIX,
     cache: { match: async () => undefined, put: async () => {} },
     waitUntil: () => {},
   };
@@ -432,9 +432,7 @@ describe("the /_next/image route", () => {
 
     expect(response.status).toBe(200);
     expect(seen[0]).toMatchObject({
-      slug: "p1",
-      app: "web",
-      buildId: "b1",
+      assetPrefix: ASSET_PREFIX,
       url: "/a.png",
       w: 640,
       q: 75,

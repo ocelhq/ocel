@@ -22,6 +22,7 @@ type PruneTarget struct {
 	ImageConfigKey string
 	CachePrefix    string
 	EdgePrefix     string
+	FunctionPrefix string
 }
 
 const removedRecordKeyPrefix = "record:"
@@ -42,39 +43,45 @@ func ReclaimTargets(slug, env string, removedRecordKeys, survivingRecordKeys, su
 	if len(removedRecordKeys) == 0 {
 		return nil, nil
 	}
-	sharedElsewhere := servedBuilds(survivingRecordKeys)
-	servedHere := servedBuilds(survivingPointerRecordKeys)
+	sharedElsewhere := servedReleases(survivingRecordKeys)
+	servedHere := servedReleases(survivingPointerRecordKeys)
 	targets := make([]PruneTarget, 0, len(removedRecordKeys))
 	for _, key := range removedRecordKeys {
 		app, id, ok := splitRecordKey(key)
 		if !ok {
 			return nil, fmt.Errorf("malformed removed record key %q, want %q", key, removedRecordKeyPrefix+"app/identity")
 		}
-		target := PruneTarget{App: app, Identity: id, Stack: naming.AppStack(env, app, releaseOf(id))}
-		build := appBuild{app, id.BuildID()}
-		if !sharedElsewhere[build] {
-			target.AssetPrefix = appAssetR2Prefix(slug, app, id.BuildID())
-			target.ImageConfigKey = imageConfigKey(slug, app, id.BuildID())
-			target.EdgePrefix = appEdgeR2Prefix(slug, app, id.BuildID())
+		release := releaseOf(id)
+		coord := storageCoordinate(env, slug, app, release)
+		target := PruneTarget{App: app, Identity: id, Stack: naming.AppStack(env, app, release)}
+		released := appRelease{app, release}
+		if !sharedElsewhere[released] {
+			target.AssetPrefix = appAssetPrefix(coord)
+			target.ImageConfigKey = coord.ImageConfigKey()
+			target.EdgePrefix = appEdgePrefix(coord)
+			target.FunctionPrefix = functionArtifactPrefix(coord)
 		}
-		if !servedHere[build] {
-			target.CachePrefix = appAssetPrefixFor(env, slug, app, id.BuildID())
+		if !servedHere[released] {
+			target.CachePrefix = isrPrefixOf(coord)
 		}
 		targets = append(targets, target)
 	}
 	return targets, nil
 }
 
-type appBuild struct{ app, buildID string }
+type appRelease struct {
+	app     string
+	release naming.Release
+}
 
-func servedBuilds(survivingRecordKeys []string) map[appBuild]bool {
-	served := make(map[appBuild]bool, len(survivingRecordKeys))
+func servedReleases(survivingRecordKeys []string) map[appRelease]bool {
+	served := make(map[appRelease]bool, len(survivingRecordKeys))
 	for _, key := range survivingRecordKeys {
 		app, id, ok := splitRecordKey(key)
 		if !ok {
 			continue
 		}
-		served[appBuild{app, id.BuildID()}] = true
+		served[appRelease{app, releaseOf(id)}] = true
 	}
 	return served
 }
@@ -144,7 +151,7 @@ func reclaimTarget(ctx context.Context, cfg Config, t PruneTarget, progress, log
 	}
 
 	cacheStore, account := asPrefixDeleter(cfg.CacheStoreUploader), asPrefixDeleter(cfg.Uploader)
-	reclaims := make([]func() error, 0, 7)
+	reclaims := make([]func() error, 0, 8)
 	for _, d := range []prefixTarget{
 		{cacheStore, cfg.CacheStoreBucket, t.AssetPrefix},
 		{cacheStore, cfg.CacheStoreBucket, t.CachePrefix},
@@ -152,6 +159,7 @@ func reclaimTarget(ctx context.Context, cfg Config, t PruneTarget, progress, log
 		{account, cfg.AssetBucket, t.AssetPrefix},
 		{account, cfg.AssetBucket, t.ImageConfigKey},
 		{account, cfg.AssetBucket, t.CachePrefix},
+		{account, cfg.ArtifactBucket, t.FunctionPrefix},
 	} {
 		reclaims = append(reclaims, func() error { return deletePrefix(ctx, d.deleter, d.bucket, d.prefix) })
 	}

@@ -7,7 +7,7 @@ import {
 } from "./contract.mjs";
 import { loadImageConfig } from "./config.mjs";
 import { ImageError, SUBSTRATE_MESSAGE, upstreamFailure } from "./errors.mjs";
-import { assetKey, identity, type BuildIdentity } from "./keys.mjs";
+import { assetKey, releaseAssetPrefix } from "./keys.mjs";
 import { extensionFor } from "./sniff.mjs";
 import type { ObjectStore } from "./store.mjs";
 import { transform, type Transformed } from "./transform.mjs";
@@ -41,8 +41,8 @@ async function run(
   payload: ImageOriginRequest,
   deps: OptimizeDeps,
 ): Promise<OriginResponse> {
-  const id = identity(payload);
-  const config = await loadImageConfig(deps.store, id, payload.configHash);
+  const assetPrefix = releaseAssetPrefix(payload.assetPrefix);
+  const config = await loadImageConfig(deps.store, assetPrefix, payload.configHash);
 
   const result = validate(payload, config);
   if (!result.ok) throw new ImageError(result.status, result.message);
@@ -50,7 +50,7 @@ async function run(
 
   const source = isAbsolute
     ? await fetchUpstream(href, config, deps.upstream)
-    : await readLocal(deps.store, id, href, config);
+    : await readLocal(deps.store, assetPrefix, href, config);
 
   const transformed = await transform({
     bytes: source.bytes,
@@ -65,12 +65,12 @@ async function run(
 
 async function readLocal(
   store: ObjectStore,
-  id: BuildIdentity,
+  assetPrefix: string,
   href: string,
   config: CompiledImageConfig,
 ): Promise<UpstreamImage> {
   const url = new URL(href, "http://n");
-  const key = assetKey(id, url.pathname);
+  const key = assetKey(assetPrefix, url.pathname);
   let object;
   try {
     object = await store.get(key, config.maximumResponseBody);

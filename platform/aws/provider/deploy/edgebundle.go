@@ -12,18 +12,21 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/ocelhq/ocel/pkg/naming"
 	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
 const edgeBundleFile = "edge/bundle.json"
 
-func appEdgeR2Prefix(slug, app, buildID string) string {
-	return path.Join("edge", slug, sanitizeWorkerName(app), buildID)
+const edgeKind = "edge"
+
+func appEdgePrefix(c naming.Coordinate) string {
+	return c.StoragePrefix() + edgeKind
 }
 
-func appEdgeBundleR2Key(slug, app, buildID string) string {
-	return path.Join(appEdgeR2Prefix(slug, app, buildID), "bundle.json")
+func appEdgeBundleKey(c naming.Coordinate) string {
+	return path.Join(appEdgePrefix(c), "bundle.json")
 }
 
 func readEdgeBundle(cfg Config, app string) ([]byte, bool, error) {
@@ -53,7 +56,7 @@ func uploadEdgeBundles(ctx context.Context, cfg Config, manifest *deploymentsv1.
 		if !ok {
 			continue
 		}
-		key := appEdgeBundleR2Key(manifest.GetSlug(), name, builds.ids[name])
+		key := appEdgeBundleKey(builds.coords[name])
 		if err := putArtifact(ctx, cfg.CacheStoreUploader, cfg.CacheStoreBucket, key, "application/json", bundle); err != nil {
 			return err
 		}
@@ -61,7 +64,7 @@ func uploadEdgeBundles(ctx context.Context, cfg Config, manifest *deploymentsv1.
 	return nil
 }
 
-func appEdgeWorkers(cfg Config, slug, app, buildID string) (*edge.Code, error) {
+func appEdgeWorkers(cfg Config, c naming.Coordinate, app string) (*edge.Code, error) {
 	loader, ok := cfg.Edge.(edge.CodeLoader)
 	if !ok {
 		return nil, nil
@@ -72,7 +75,7 @@ func appEdgeWorkers(cfg Config, slug, app, buildID string) (*edge.Code, error) {
 	}
 	compatDate, compatFlags := loader.CodeRuntime()
 	return &edge.Code{
-		BundleKey:   appEdgeBundleR2Key(slug, app, buildID),
+		BundleKey:   appEdgeBundleKey(c),
 		ID:          loaderID(bundle, compatDate, compatFlags),
 		CompatDate:  compatDate,
 		CompatFlags: compatFlags,

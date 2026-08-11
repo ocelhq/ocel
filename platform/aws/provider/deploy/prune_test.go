@@ -4,12 +4,30 @@ import (
 	"context"
 	"errors"
 	"reflect"
+	"strings"
 	"testing"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 	s3types "github.com/aws/aws-sdk-go-v2/service/s3/types"
+
+	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
 )
+
+func reclaimedFor(t *testing.T, env, slug, app string, id Identity) PruneTarget {
+	t.Helper()
+	coord := storageCoordinate(env, slug, app, releaseOf(id))
+	return PruneTarget{
+		App:            app,
+		Identity:       id,
+		Stack:          appStack(t, env, app, id),
+		AssetPrefix:    appAssetPrefix(coord),
+		ImageConfigKey: coord.ImageConfigKey(),
+		CachePrefix:    isrPrefixOf(coord),
+		EdgePrefix:     appEdgePrefix(coord),
+		FunctionPrefix: functionArtifactPrefix(coord),
+	}
+}
 
 func TestReclaimTargets(t *testing.T) {
 	t.Parallel()
@@ -21,24 +39,27 @@ func TestReclaimTargets(t *testing.T) {
 			t.Fatalf("ReclaimTargets: %v", err)
 		}
 
+		release := releaseTokenFor("build-1")
 		want := []PruneTarget{
 			{
 				App:            "web",
 				Identity:       buildOnly("build-1"),
 				Stack:          appStack(t, "prod", "web", buildOnly("build-1")),
-				AssetPrefix:    appAssetR2Prefix("proj1", "web", "build-1"),
-				ImageConfigKey: imageConfigKey("proj1", "web", "build-1"),
-				CachePrefix:    appAssetPrefixFor("prod", "proj1", "web", "build-1"),
-				EdgePrefix:     appEdgeR2Prefix("proj1", "web", "build-1"),
+				AssetPrefix:    "prod/proj1/web/" + release + "/assets",
+				ImageConfigKey: "prod/proj1/web/" + release + "/image-config.json",
+				CachePrefix:    "prod/proj1/web/" + release + "/isr",
+				EdgePrefix:     "prod/proj1/web/" + release + "/edge",
+				FunctionPrefix: "prod/proj1/web/" + release + "/fn",
 			},
 			{
 				App:            "api",
 				Identity:       buildOnly("build-2"),
 				Stack:          appStack(t, "prod", "api", buildOnly("build-2")),
-				AssetPrefix:    appAssetR2Prefix("proj1", "api", "build-2"),
-				ImageConfigKey: imageConfigKey("proj1", "api", "build-2"),
-				CachePrefix:    appAssetPrefixFor("prod", "proj1", "api", "build-2"),
-				EdgePrefix:     appEdgeR2Prefix("proj1", "api", "build-2"),
+				AssetPrefix:    "prod/proj1/api/" + releaseTokenFor("build-2") + "/assets",
+				ImageConfigKey: "prod/proj1/api/" + releaseTokenFor("build-2") + "/image-config.json",
+				CachePrefix:    "prod/proj1/api/" + releaseTokenFor("build-2") + "/isr",
+				EdgePrefix:     "prod/proj1/api/" + releaseTokenFor("build-2") + "/edge",
+				FunctionPrefix: "prod/proj1/api/" + releaseTokenFor("build-2") + "/fn",
 			},
 		}
 		if !reflect.DeepEqual(got, want) {
@@ -46,73 +67,84 @@ func TestReclaimTargets(t *testing.T) {
 		}
 	})
 
-	t.Run("reclaims the build's edge prefix", func(t *testing.T) {
+	t.Run("every prefix of one record shares the release prefix", func(t *testing.T) {
 		t.Parallel()
 		got, err := ReclaimTargets("proj1", "prod", []string{"record:web/build-1"}, nil, nil)
 		if err != nil {
 			t.Fatalf("ReclaimTargets: %v", err)
 		}
-		if want := "edge/proj1/web/build-1"; got[0].EdgePrefix != want {
-			t.Errorf("EdgePrefix = %q, want %q", got[0].EdgePrefix, want)
+		root := "prod/proj1/web/" + releaseTokenFor("build-1") + "/"
+		for name, prefix := range map[string]string{
+			"AssetPrefix":    got[0].AssetPrefix,
+			"ImageConfigKey": got[0].ImageConfigKey,
+			"CachePrefix":    got[0].CachePrefix,
+			"EdgePrefix":     got[0].EdgePrefix,
+			"FunctionPrefix": got[0].FunctionPrefix,
+		} {
+			if !strings.HasPrefix(prefix, root) {
+				t.Errorf("%s = %q, want it under the one release prefix %q", name, prefix, root)
+			}
+		}
+	})
+
+	t.Run("another release of one app is a different prefix", func(t *testing.T) {
+		t.Parallel()
+		got, err := ReclaimTargets("proj1", "prod", []string{"record:web/build-1"}, nil, nil)
+		if err != nil {
+			t.Fatalf("ReclaimTargets: %v", err)
 		}
 		other, err := ReclaimTargets("proj1", "prod", []string{"record:web/build-2"}, nil, nil)
 		if err != nil {
 			t.Fatalf("ReclaimTargets: %v", err)
 		}
 		if other[0].EdgePrefix == got[0].EdgePrefix {
-			t.Error("two builds of one app resolved the same edge prefix; pruning one would take the other's bundle")
+			t.Error("two releases of one app resolved the same edge prefix; pruning one would take the other's bundle")
+		}
+		if other[0].FunctionPrefix == got[0].FunctionPrefix {
+			t.Error("two releases of one app resolved the same function prefix; pruning one would take the other's packages")
 		}
 	})
 
-	t.Run("fingerprinted identity keys the stack not the prefixes", func(t *testing.T) {
+	t.Run("a rotated value fingerprint is its own release and its own storage", func(t *testing.T) {
 		t.Parallel()
 		id := fingerprinted("build-1", "fp1")
 		got, err := ReclaimTargets("proj1", "prod", []string{"record:web/" + id.String()}, nil, nil)
 		if err != nil {
 			t.Fatalf("ReclaimTargets: %v", err)
 		}
-		want := PruneTarget{
-			App:            "web",
-			Identity:       id,
-			Stack:          appStack(t, "prod", "web", id),
-			AssetPrefix:    appAssetR2Prefix("proj1", "web", "build-1"),
-			ImageConfigKey: imageConfigKey("proj1", "web", "build-1"),
-			CachePrefix:    appAssetPrefixFor("prod", "proj1", "web", "build-1"),
-			EdgePrefix:     appEdgeR2Prefix("proj1", "web", "build-1"),
-		}
-		if !reflect.DeepEqual(got, []PruneTarget{want}) {
-			t.Errorf("ReclaimTargets = %+v, want %+v", got, want)
+		if !reflect.DeepEqual(got, []PruneTarget{reclaimedFor(t, "prod", "proj1", "web", id)}) {
+			t.Errorf("ReclaimTargets = %+v, want %+v", got, reclaimedFor(t, "prod", "proj1", "web", id))
 		}
 		plain, err := ReclaimTargets("proj1", "prod", []string{"record:web/build-1"}, nil, nil)
 		if err != nil {
 			t.Fatalf("ReclaimTargets: %v", err)
 		}
-		if plain[0].Stack == got[0].Stack {
-			t.Error("two Deployments of one build resolved the same app-deploy stack")
+		if plain[0].Stack == got[0].Stack || plain[0].AssetPrefix == got[0].AssetPrefix {
+			t.Error("two deployments of one build with different values resolved the same stack or storage")
 		}
 	})
 
-	t.Run("build a surviving deployment shares keeps its storage", func(t *testing.T) {
+	t.Run("a surviving deployment of the same release keeps its storage", func(t *testing.T) {
 		t.Parallel()
-		rotated := fingerprinted("build-1", "fp2")
+		id := fingerprinted("build-1", "fp1")
 		got, err := ReclaimTargets("proj1", "prod",
-			[]string{"record:web/build-1"},
-			[]string{"record:web/" + rotated.String()},
-			[]string{"record:web/" + rotated.String()})
+			[]string{"record:web/" + id.String()},
+			[]string{"record:web/" + id.String()},
+			[]string{"record:web/" + id.String()})
 		if err != nil {
 			t.Fatalf("ReclaimTargets: %v", err)
 		}
 		want := []PruneTarget{{
 			App:      "web",
-			Identity: buildOnly("build-1"),
-			Stack:    appStack(t, "prod", "web", buildOnly("build-1")),
+			Identity: id,
+			Stack:    appStack(t, "prod", "web", id),
 		}}
 		if !reflect.DeepEqual(got, want) {
 			t.Errorf("ReclaimTargets = %+v, want the stack alone %+v", got, want)
 		}
 	})
 
-	t.Run("last deployment of a build still reclaims its storage", func(t *testing.T) {
+	t.Run("another app or another release does not shield this one", func(t *testing.T) {
 		t.Parallel()
 		got, err := ReclaimTargets("proj1", "prod",
 			[]string{"record:web/build-1"},
@@ -121,60 +153,40 @@ func TestReclaimTargets(t *testing.T) {
 		if err != nil {
 			t.Fatalf("ReclaimTargets: %v", err)
 		}
-		want := []PruneTarget{{
-			App:            "web",
-			Identity:       buildOnly("build-1"),
-			Stack:          appStack(t, "prod", "web", buildOnly("build-1")),
-			AssetPrefix:    appAssetR2Prefix("proj1", "web", "build-1"),
-			ImageConfigKey: imageConfigKey("proj1", "web", "build-1"),
-			CachePrefix:    appAssetPrefixFor("prod", "proj1", "web", "build-1"),
-			EdgePrefix:     appEdgeR2Prefix("proj1", "web", "build-1"),
-		}}
-		if !reflect.DeepEqual(got, want) {
-			t.Errorf("ReclaimTargets = %+v, want %+v", got, want)
+		if !reflect.DeepEqual(got, []PruneTarget{reclaimedFor(t, "prod", "proj1", "web", buildOnly("build-1"))}) {
+			t.Errorf("ReclaimTargets = %+v, want every prefix reclaimed", got)
 		}
 	})
 
-	t.Run("a survivor on another pointer keeps only the envless prefixes", func(t *testing.T) {
+	t.Run("a survivor on another pointer keeps the shared prefixes but not the cache", func(t *testing.T) {
 		t.Parallel()
-		pruned := fingerprinted("B1", "fpP")
-		preview := fingerprinted("B1", "fpV")
+		shared := fingerprinted("B1", "fpP")
 		got, err := ReclaimTargets("proj1", "prod",
-			[]string{"record:web/" + pruned.String()},
-			[]string{"record:web/" + preview.String()},
+			[]string{"record:web/" + shared.String()},
+			[]string{"record:web/" + shared.String()},
 			nil)
 		if err != nil {
 			t.Fatalf("ReclaimTargets: %v", err)
 		}
 		want := []PruneTarget{{
 			App:         "web",
-			Identity:    pruned,
-			Stack:       appStack(t, "prod", "web", pruned),
-			CachePrefix: appAssetPrefixFor("prod", "proj1", "web", "B1"),
+			Identity:    shared,
+			Stack:       appStack(t, "prod", "web", shared),
+			CachePrefix: isrPrefixOf(storageCoordinate("prod", "proj1", "web", releaseOf(shared))),
 		}}
 		if !reflect.DeepEqual(got, want) {
 			t.Errorf("ReclaimTargets = %+v, want %+v", got, want)
 		}
 	})
 
-	t.Run("removing a pointer reclaims its cache but not the shared prefixes", func(t *testing.T) {
+	t.Run("the env leads every prefix", func(t *testing.T) {
 		t.Parallel()
-		pruned := fingerprinted("B1", "fpV")
-		got, err := ReclaimTargets("proj1", "pr-7",
-			[]string{"record:web/" + pruned.String()},
-			[]string{"record:web/" + fingerprinted("B1", "fpP").String()},
-			nil)
+		got, err := ReclaimTargets("proj1", "pr-7", []string{"record:web/B1"}, nil, nil)
 		if err != nil {
 			t.Fatalf("ReclaimTargets: %v", err)
 		}
-		want := []PruneTarget{{
-			App:         "web",
-			Identity:    pruned,
-			Stack:       appStack(t, "pr-7", "web", pruned),
-			CachePrefix: appAssetPrefixFor("pr-7", "proj1", "web", "B1"),
-		}}
-		if !reflect.DeepEqual(got, want) {
-			t.Errorf("ReclaimTargets = %+v, want %+v", got, want)
+		if want := "pr-7/proj1/web/" + releaseTokenFor("B1") + "/isr"; got[0].CachePrefix != want {
+			t.Errorf("CachePrefix = %q, want %q", got[0].CachePrefix, want)
 		}
 	})
 
@@ -339,4 +351,92 @@ func (f *fakeUploaderWithDelete) HeadObject(context.Context, *s3.HeadObjectInput
 
 func (f *fakeUploaderWithDelete) PutObject(context.Context, *s3.PutObjectInput, ...func(*s3.Options)) (*s3.PutObjectOutput, error) {
 	return nil, errors.New("not implemented")
+}
+
+func TestReclaimCoversEveryKeyTheDeployWrote(t *testing.T) {
+	root := writeTree(t, map[string]string{
+		"apps/web/routing-manifest.json":      `{"buildId":"WEB1"}`,
+		"apps/web/image-config.json":          `{"formats":["image/webp"]}`,
+		"apps/web/static/logo.png":            "PNG",
+		"apps/web/cache/index.cache.json":     `{"lastModified":1,"value":{"kind":"APP_PAGE"}}`,
+		"apps/web/fetch-cache/abc.cache.json": `{"lastModified":1,"value":{"kind":"FETCH"}}`,
+		"apps/web/edge/bundle.json":           `{"version":1,"mainModule":"main.js"}`,
+		"web.func/index.js":                   "export const handler = () => {}",
+	})
+	account := &fakeUploader{exists: map[string]bool{}}
+	store := &fakeUploader{exists: map[string]bool{}}
+	cfg := Config{
+		ArtifactRoot:       root,
+		Env:                "prod",
+		ArtifactBucket:     "artifacts",
+		AssetBucket:        "assets",
+		Uploader:           account,
+		CacheStoreBucket:   "isr",
+		CacheStoreUploader: store,
+		Edge:               testLoaderEdge(),
+	}
+	manifest := &deploymentsv1.Manifest{
+		Slug: "proj",
+		Apps: []*deploymentsv1.ManifestApp{{Name: "web", Framework: frameworkNext}},
+		Functions: []*deploymentsv1.ManifestFunction{
+			{LogicalName: "web_index", Framework: frameworkNext, App: "web", ArtifactPath: "web.func"},
+		},
+	}
+
+	builds := releaseBuilds(t, cfg, manifest, "fp1")
+	ctx := context.Background()
+	if _, err := uploadFunctionArtifacts(ctx, cfg, manifest, nil, builds, nil); err != nil {
+		t.Fatalf("uploadFunctionArtifacts: %v", err)
+	}
+	if err := uploadPrerenderAssets(ctx, cfg, builds); err != nil {
+		t.Fatalf("uploadPrerenderAssets: %v", err)
+	}
+	if err := uploadStaticAssets(ctx, cfg, manifest, builds); err != nil {
+		t.Fatalf("uploadStaticAssets: %v", err)
+	}
+	if err := uploadEdgeBundles(ctx, cfg, manifest, builds); err != nil {
+		t.Fatalf("uploadEdgeBundles: %v", err)
+	}
+	record, err := buildDeploymentRecord(cfg, manifest, manifest.GetApps()[0], builds.identities["web"], nil, builds)
+	if err != nil {
+		t.Fatalf("buildDeploymentRecord: %v", err)
+	}
+	if err := writeOriginRecords(ctx, cfg, []appDeployResult{{App: "web", Record: record}}); err != nil {
+		t.Fatalf("writeOriginRecords: %v", err)
+	}
+
+	id := builds.identities["web"]
+	targets, err := ReclaimTargets("proj", "prod", []string{"record:web/" + id.String()}, nil, nil)
+	if err != nil {
+		t.Fatalf("ReclaimTargets: %v", err)
+	}
+	target := targets[0]
+	reclaimed := map[string][]string{
+		"artifacts": {target.FunctionPrefix},
+		"assets":    {target.AssetPrefix, target.ImageConfigKey, target.CachePrefix},
+		"isr":       {target.AssetPrefix, target.CachePrefix, target.EdgePrefix},
+	}
+
+	written := map[string][]string{}
+	for _, up := range []*fakeUploader{account, store} {
+		for i, key := range up.puts {
+			written[up.buckets[i]] = append(written[up.buckets[i]], key)
+		}
+	}
+	if len(written) != 3 {
+		t.Fatalf("the deploy wrote into %v, want all three buckets", written)
+	}
+	for bucket, keys := range written {
+		for _, key := range keys {
+			covered := false
+			for _, prefix := range reclaimed[bucket] {
+				if prefix != "" && strings.HasPrefix(key, prefix) {
+					covered = true
+				}
+			}
+			if !covered {
+				t.Errorf("the deploy wrote %s/%s and the prune of that release deletes no prefix covering it", bucket, key)
+			}
+		}
+	}
 }

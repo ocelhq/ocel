@@ -1,51 +1,33 @@
 import { SubstrateError } from "./errors.mjs";
 
-const MAX_APP_LEN = 63;
-
-export function sanitizeAppName(name: string): string {
-  let out = "";
-  for (const char of name) {
-    if (/[a-z0-9]/.test(char)) out += char;
-    else if (/[A-Z]/.test(char)) out += char.toLowerCase();
-    else if (out.length > 0 && !out.endsWith("-")) out += "-";
-  }
-  const clamped = trimHyphens(trimHyphens(out).slice(0, MAX_APP_LEN));
-  return clamped === "" ? "ocel-worker" : clamped;
-}
-
-function trimHyphens(value: string): string {
-  return value.replace(/^-+/, "").replace(/-+$/, "");
-}
-
 const SEGMENT = /^[A-Za-z0-9._-]+$/;
 
-function segment(name: string, value: unknown): string {
-  if (typeof value !== "string" || !SEGMENT.test(value) || value.includes("..")) {
-    throw new SubstrateError(`invalid ${name} in request`, value);
+const ASSETS = "assets";
+
+const IMAGE_CONFIG = "image-config.json";
+
+export function releaseAssetPrefix(value: unknown): string {
+  if (typeof value !== "string" || value === "") {
+    throw new SubstrateError("request carries no asset prefix", value);
+  }
+  const segments = value.split("/");
+  if (segments.at(-1) !== ASSETS) {
+    throw new SubstrateError(`asset prefix does not end in ${ASSETS}`, value);
+  }
+  for (const part of segments) {
+    if (!SEGMENT.test(part) || part.includes("..")) {
+      throw new SubstrateError("asset prefix holds an unusable segment", value);
+    }
   }
   return value;
 }
 
-export interface BuildIdentity {
-  slug: string;
-  app: string;
-  buildId: string;
+export function imageConfigKey(assetPrefix: string): string {
+  return assetPrefix.slice(0, -ASSETS.length) + IMAGE_CONFIG;
 }
 
-export function identity(payload: BuildIdentity): BuildIdentity {
-  return {
-    slug: segment("slug", payload.slug),
-    app: segment("app", sanitizeAppName(String(payload.app ?? ""))),
-    buildId: segment("buildId", payload.buildId),
-  };
-}
-
-export function imageConfigKey(id: BuildIdentity): string {
-  return `image-config/${id.slug}/${id.app}/${id.buildId}.json`;
-}
-
-export function assetKey(id: BuildIdentity, pathname: string): string {
-  return `assets/${id.slug}/${id.app}/${id.buildId}${assetPath(pathname)}`;
+export function assetKey(assetPrefix: string, pathname: string): string {
+  return `${assetPrefix}${assetPath(pathname)}`;
 }
 
 export function assetPath(pathname: string): string {

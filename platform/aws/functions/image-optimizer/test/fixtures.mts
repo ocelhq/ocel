@@ -2,6 +2,10 @@ import { createHash } from "node:crypto";
 import type { CompiledImageConfig, ImageOriginRequest } from "../src/contract.mjs";
 import type { ObjectStore, StoredObject } from "../src/store.mjs";
 
+export const ASSET_PREFIX = "prod/proj1/web/r3f8a1c9d/assets";
+
+export const CONFIG_KEY = "prod/proj1/web/r3f8a1c9d/image-config.json";
+
 export function imageConfig(
   overrides: Partial<CompiledImageConfig> = {},
 ): CompiledImageConfig {
@@ -45,9 +49,7 @@ export function payload(
   overrides: Partial<ImageOriginRequest> = {},
 ): ImageOriginRequest {
   return {
-    slug: "proj1",
-    app: "web",
-    buildId: "build-1",
+    assetPrefix: ASSET_PREFIX,
     url: "/logo.png",
     w: 640,
     q: 75,
@@ -87,7 +89,7 @@ export function fakeStore(): FakeStore {
 
 export function storeWithConfig(config: CompiledImageConfig): FakeStore {
   const store = fakeStore();
-  store.put(`image-config/proj1/web/build-1.json`, {
+  store.put(CONFIG_KEY, {
     bytes: new TextEncoder().encode(serialize(config)),
   });
   return store;

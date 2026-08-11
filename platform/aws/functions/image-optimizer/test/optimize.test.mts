@@ -10,7 +10,7 @@ import type { UpstreamDeps } from "../src/upstream.mjs";
 import { configHash, imageConfig, payload, storeWithConfig } from "./fixtures.mjs";
 import { animatedGif, solid } from "./images.mjs";
 
-const ASSET = "assets/proj1/web/build-1/logo.png";
+const ASSET = "prod/proj1/web/r3f8a1c9d/assets/logo.png";
 
 beforeEach(() => resetConfigMemo());
 
@@ -47,30 +47,30 @@ describe("the config the edge validated against", () => {
     const response = await optimize(payload(declared), { store });
     expect(response.status).toBe(502);
     expect(response.headers).toEqual({});
-    expect(store.reads).toEqual(["image-config/proj1/web/build-1.json"]);
+    expect(store.reads).toEqual(["prod/proj1/web/r3f8a1c9d/image-config.json"]);
   });
 
   test("a missing config is a 502", async () => {
     const config = imageConfig();
     const store = storeWithConfig(config);
-    store.objects.delete("image-config/proj1/web/build-1.json");
+    store.objects.delete("prod/proj1/web/r3f8a1c9d/image-config.json");
     expect((await optimize(payload(config), { store })).status).toBe(502);
   });
 
   test("a config for another build cannot be substituted", async () => {
     const config = imageConfig();
     const store = storeWithConfig(config);
-    store.put("image-config/proj1/web/build-2.json", store.objects.get(
-      "image-config/proj1/web/build-1.json",
+    store.put("prod/proj1/web/rbbbbbbbb/image-config.json", store.objects.get(
+      "prod/proj1/web/r3f8a1c9d/image-config.json",
     )!);
-    store.objects.delete("image-config/proj1/web/build-1.json");
+    store.objects.delete("prod/proj1/web/r3f8a1c9d/image-config.json");
     expect((await optimize(payload(config), { store })).status).toBe(502);
   });
 
-  test("an identifier that is not a single path segment is a 502", async () => {
+  test("an asset prefix that is not plain path segments is a 502", async () => {
     const config = imageConfig();
     const store = storeWithConfig(config);
-    const response = await optimize(payload(config, { buildId: "../build-2" }), { store });
+    const response = await optimize(payload(config, { assetPrefix: "prod/proj1/web/../rbbbbbbbb/assets" }), { store });
     expect(response.status).toBe(502);
     expect(store.reads).toEqual([]);
   });
@@ -211,7 +211,7 @@ describe("a local image", () => {
       { store },
     );
     expect(response.status).toBe(502);
-    expect(store.reads).toEqual(["image-config/proj1/web/build-1.json"]);
+    expect(store.reads).toEqual(["prod/proj1/web/r3f8a1c9d/image-config.json"]);
   });
 
   test("no cache-control on the object means none on the response", async () => {
