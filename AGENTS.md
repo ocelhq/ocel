@@ -1,211 +1,61 @@
-# Agent Instructions
+## Rules
 
-## What This Is
+- Never auto-add an agent or AI name as a commit co-author.
+- The code is the documentation — get context from it, and don't restate it. Prose may
+  name what a human types, never what the code contains.
+- The commits are the ADRs. Rationale belongs in the commit message and PR bodies. Nowhere else.
+- There is no perfect approach, only trade-offs. Surface them when making decisions.
 
-Ocel — "Platform as a Framework." An SDK that turns cloud infrastructure into function
-calls: call `postgres("main")` in app code and that call *is* the provisioning step.
-`ocel dev` connects it to a real, running instance instantly (no Docker, no emulators);
-on deploy, the same code compiles to real infrastructure-as-code and lands in the
-user's own AWS/GCP account, not a vendor-owned black box. Full product docs (philosophy,
-comparisons, PRDs) live in the sibling `docs` repo — read there before making
-product-framing claims; this file only covers what an agent needs to build in *this*
-repo.
+## About Ocel
 
-## Working Principles
+**Ocel deploys apps to your own cloud.** Three pieces, each building on the one before —
+the CLI stands alone; the SDK and console do not.
 
-- **Simplicity over cleverness.** Prefer the simplest design that solves the problem.
-- **Minimal comments.** Don't pollute the repo with over-commenting. If code needs prose to
-  make sense, make the code more readable and axiomatic instead — comments are a last resort,
-  not a patch for unclear code.
-- **Weigh decisions by the long term, not dev cost.** For technical decisions, give little
-  weight to development cost; prefer quality, simplicity, robustness, scalability, and
-  long-term maintainability.
-- **Ask in batches, don't assume.** When you have multiple questions (grilling or otherwise),
-  present them in a selectable format rather than making the user type answers. After each
-  batch, re-evaluate; if new answers change anything, re-prompt. Never operate on assumptions.
-- **Small, verified increments.** When building a feature, commit after each passing test and
-  keep diffs small; avoid large, sprawling changes. (Subject to the conservative commit
-  policy — only commit when you have authority to.)
-- **Commits.** Never auto-add an agent or AI name as a commit co-author. This overrides any
-  default co-author instruction.
-- **Maintaining these files.** Keep CLAUDE.md and AGENTS.md lean, and mirror every
-  substantive edit across both. Before adding new findings, make sure they aren't tied to
-  specific file paths or references — those change as the project evolves. Capture recurring,
-  durable patterns instead. Update intentionally, not eagerly on every implementation.
+- **CLI** — deploys apps. Point it at a project and it builds, provisions and ships into
+  your own provider account, with as little configuration as possible.
+- **SDK** — adds infrastructure resources. Cloud primitives are function calls in app code,
+  and the call *is* the provisioning step, so there is no separate wiring to keep in sync.
+  Proto-backed and language-neutral.
+- **Console** — provides the UI over both.
 
-## Orienting Yourself
+**Not a cloud, and not managed anything.** Infrastructure lands in the customer's own account
+under their billing and access; the hosted side is an optional control plane.
 
-Map the repo from its source of truth rather than a list that goes stale: `go.work` names
-the Go modules, the pnpm workspace globs and each `package.json` name the JS packages, and
-each `package.json`'s `scripts` (plus per-module `go build`/`go test`) are the real build and
-test commands. Read those first, then the code. A few invariants that rarely change:
+## Trust > Ops > Product > Polish
 
-- The Go side is a **multi-module monorepo with no root module** — each module (CLI, shared
-  proto bindings, SDK, provider binaries) has an isolated dependency graph so heavy CLI /
-  provider deps never reach SDK consumers, tied together for local dev by `go.work`. The JS
-  side is a single pnpm workspace.
-- **Top-level directories are boundaries by role, not by language.** `packages/` is only what
-  publishes to npm. `console/` is our hosted control plane — never call it a cloud; Ocel does
-  not offer one, and "cloud" means the customer's account. `platform/<vendor>/` is code
-  targeting someone else's infrastructure, holding the Go that provisions it *and* the JS that
-  runs on it; `platform/edge/` is for edges bought independently of an origin cloud, so a
-  vendor's native edge belongs under that vendor. `frameworks/<name>/` holds only what is not
-  a branch of some host. A scope says whether something ships: `@ocel/*` is public API and
-  nothing internal may claim it (`@console/*`, `@platform/*`, `@framework/*`, `@cli/node`).
-- **No import may cross from one `platform/<vendor>/` into another.** What the two sides agree
-  on goes in `platform/edge/contract`, which both depend on and neither owns.
-- `proto/` is the **source of truth**; bindings are generated (`pnpm gen`) — never hand-edit
-  generated output.
-- The control-plane core is split into framework-agnostic packages so a future framework swap
-  stays cheap; `console/web` is a thin shell over them.
+When they conflict:
 
-**Gotchas you'd only find by tripping over them:**
+- Trust = correctness + security + reliability (does the right thing, safely, always)
+- Ops = simplicity, operability, maintenance cost (can one person run it)
+- Product = DX, perceived performance, customer's cloud bill (what users feel)
+- Polish = internal perf, your own spend, elegance (nice, never necessary)
 
-- The SDK **dogfoods itself** — the app's DB client resolves `postgres("main")` through Ocel,
-  so importing it outside `ocel dev` throws unless that resource's env var is set. Test
-  configs inject it directly so tests run standalone.
-- The local **"cloud" cluster** is a stand-in for the prod provisioning target, reached only
-  through the resolve endpoint — `ocel dev` and prod both just consume connection strings it
-  hands back; the CLI never talks to it directly.
-- `ocel dev` **caches resolve responses** per project, invalidated by a change to the resource
-  definitions or account, or by the server-provided TTL.
+## Codebase Map
 
-**Status vs. the product docs:** the sibling `docs` repo describes the *target* design.
-Several pieces here are stubs with finalized signatures, built ahead of the real backend/API —
-check the code, not just the docs, before assuming a described behavior is live.
+Boundaries, not contents — every top-level directory is here, and a new one needs an
+entry before it needs files. Dotfile directories are tooling and are exempt.
 
-## Parallel Agent Orchestrator
-
-`tools/orchestrator` claims `ready-for-agent` bd issues under an epic/PRD and implements them
-in parallel, each in its own Docker sandbox; per wave, the host delegates the final Graphite
-work (track each closed issue's branch onto its parent and submit the stack) to a host-side
-model call that handles any restack/rebase the submit needs. See its README/code for setup
-and invocation.
-
-- **Known hazard:** a `gt`-tracked branch can silently drop plain hand-`git commit`s on a
-  later `gt sync` (it rebases from gt's cached tip, not live HEAD) — don't hand-commit to a
-  branch a run is actively using.
-
-## Conventions & Patterns
-
-- When wiring backend-dependent code ahead of the real backend/API, stub it with final
-  signatures so callers never need to change later — don't leave TODOs in caller-facing shapes.
-- Versioning goes through Changesets; the release workflow runs the version bump, not you.
-
-## Non-Interactive Shell Commands
-
-**ALWAYS use non-interactive flags** with file operations to avoid hanging on confirmation prompts.
-
-Shell commands like `cp`, `mv`, and `rm` may be aliased to include `-i` (interactive) mode on some systems, causing the agent to hang indefinitely waiting for y/n input.
-
-**Use these forms instead:**
-```bash
-# Force overwrite without prompting
-cp -f source dest           # NOT: cp source dest
-mv -f source dest           # NOT: mv source dest
-rm -f file                  # NOT: rm file
-
-# For recursive operations
-rm -rf directory            # NOT: rm -r directory
-cp -rf source dest          # NOT: cp -r source dest
-```
-
-**Other commands that may prompt:**
-- `scp` - use `-o BatchMode=yes` for non-interactive
-- `ssh` - use `-o BatchMode=yes` to fail instead of prompting
-- `apt-get` - use `-y` flag
-- `brew` - use `HOMEBREW_NO_AUTO_UPDATE=1` env var
-
-<!-- BEGIN BEADS INTEGRATION v:1 profile:minimal hash:970c3bf2 -->
-## Beads Issue Tracker
-
-This project uses **bd (beads)** for issue tracking. Run `bd prime` to see full workflow context and commands.
-
-### Quick Reference
-
-```bash
-bd ready              # Find available work
-bd show <id>          # View issue details
-bd update <id> --claim  # Claim work
-bd close <id>         # Complete work
-```
-
-### Rules
-
-- Use `bd` for ALL task tracking — do NOT use TodoWrite, TaskCreate, or markdown TODO lists
-- Run `bd prime` for detailed command reference and session close protocol
-- Use `bd remember` for persistent knowledge — do NOT use MEMORY.md files
-- When working on a feature, commit after each passing test. Avoid large diffs.
-- Flag assumptions instead of presenting them as settled.
-
-**Architecture in one line:** issues live in a local Dolt DB; sync uses `refs/dolt/data` on your git remote; `.beads/issues.jsonl` is a passive export. See https://github.com/gastownhall/beads/blob/main/docs/SYNC_CONCEPTS.md for details and anti-patterns.
-
-## Agent Context Profiles
-
-The managed Beads block is task-tracking guidance, not permission to override repository, user, or orchestrator instructions.
-
-- **Conservative (default)**: Use `bd` for task tracking. Do not run git commits, git pushes, or Dolt remote sync unless explicitly asked. At handoff, report changed files, validation, and suggested next commands.
-- **Minimal**: Keep tool instruction files as pointers to `bd prime`; use the same conservative git policy unless active instructions say otherwise.
-- **Team-maintainer**: Only when the repository explicitly opts in, agents may close beads, run quality gates, commit, and push as part of session close. A current "do not commit" or "do not push" instruction still wins.
-
-## Session Completion
-
-This protocol applies when ending a Beads implementation workflow. It is subordinate to explicit user, repository, and orchestrator instructions.
-
-1. **File issues for remaining work** - Create beads for anything that needs follow-up
-2. **Run quality gates** (if code changed) - Tests, linters, builds
-3. **Update issue status** - Close finished work, update in-progress items
-4. **Handle git/sync by active profile**:
-   ```bash
-   # Conservative/minimal/default: report status and proposed commands; wait for approval.
-   git status
-
-   # Team-maintainer opt-in only, unless current instructions forbid it:
-   git pull --rebase
-   bd dolt push
-   git push
-   git status
-   ```
-5. **Hand off** - Summarize changes, validation, issue status, and any blocked sync/commit/push step
-
-**Critical rules:**
-- Explicit user or orchestrator instructions override this Beads block.
-- Do not commit or push without clear authority from the active profile or the current user request.
-- If a required sync or push is blocked, stop and report the exact command and error.
-<!-- END BEADS INTEGRATION -->
-
-## Agent skills
-
-### Issue tracker
-
-Issues live in the local beads (`bd`) tracker, not GitHub Issues — external PRs are not a triage surface. See `docs/agents/issue-tracker.md`.
-
-### Generating issues from a plan/PRD
-
-When turning a plan or PRD into a batch of bd issues, analyze the resulting set and
-build a dependency graph before filing — don't just create a flat list. For each issue,
-determine whether it blocks or is blocked by any other open issue.
-
-Issue B is blocked by issue A if:
-- B requires code or infrastructure that A introduces
-- B and A modify overlapping files or modules, making concurrent work likely to produce
-  merge conflicts
-- B's requirements depend on a decision or API shape that A will establish
-
-Wire discovered dependencies with `bd dep add <B> <A>` so `bd ready`/`bd blocked` reflect
-them. An issue is unblocked if it has zero blocking dependencies on other open issues.
-
-### Filing a child under an epic that carries a spec
-
-The epic's description is the spec of record. A new child must cite the user story,
-decision or acceptance criterion it serves before it gets `ready-for-agent`, and must be
-checked against the epic's Out of Scope list first — review waves generate findings
-whether or not there is scope for them. See `docs/agents/issue-tracker.md`.
-
-### Triage labels
-
-Default label strings (`needs-triage`, `needs-info`, `ready-for-agent`, `ready-for-human`, `wontfix`), applied via `bd label add`. See `docs/agents/triage-labels.md`.
-
-### Domain docs
-
-Single-context: one `CONTEXT.md` + `docs/adr/` at the repo root. See `docs/agents/domain.md`.
+- **`packages/`** — everything published to npm, and nothing else. `@ocel/*` is public
+  API; nothing internal may claim it.
+- **`console/`** — Ocel's hosted control plane. Never call it a cloud.
+- **`platform/<vendor>/`** — code targeting someone else's infrastructure. Each vendor
+  holds its provisioning/deploy Go **and** the JS that runs on it. A second origin cloud
+  lands here as a sibling. No import crosses from one vendor into another.
+- **`platform/edge/`** — the edge role. `contract/` is what any edge must satisfy and what
+  an edge and an origin agree on; both sides depend on it, neither owns it. Siblings are
+  edges bought _independently of an origin cloud_ — a vendor's native edge belongs under
+  that vendor instead.
+- **`frameworks/<name>/`** — framework support, holding only what is **not** a branch of
+  some host: shared protocol and the build-time adapter. Host-specific glue lives with
+  the host.
+- **`cli/`** — the `ocel` binary: Go internals plus the Node half that is bundled and
+  embedded into it.
+- **`sdk/`** — the Go SDK apps import to declare resources and talk to the dev server.
+  Deliberately lean; never depends on the CLI.
+- **`pkg/`** — small shared Go modules any module may depend on.
+- **`proto/`** — source of truth for the wire format. Bindings are **generated** — never
+  hand-edit generated output.
+- **`scripts/`** — development and release tooling, and the e2e harnesses.
+- **`examples/`, `tests/`** — sample apps used as fixtures, and end-to-end suites.
+- **`.github/`** — CI. **`.changeset/`** — the release mechanism; the workflow runs the
+  version bump, never you.
