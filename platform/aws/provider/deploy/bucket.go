@@ -109,14 +109,14 @@ func registerBucket(ctx *pulumi.Context, logicalName string, args bucketArgs, st
 
 	if _, err := newServiceRole(ctx, logicalName+"-runtime", "ec2.amazonaws.com", map[string]policyStatement{
 		"s3":       {Actions: args.RuntimeS3Actions, Resources: []pulumi.StringInput{joinArn(bucket.Arn, "/*")}},
-		"sessions": {Actions: args.RuntimeSessionActions, Resources: []pulumi.StringInput{pulumi.String(stateTableARN)}},
+		"sessions": sessionStatement(args.RuntimeSessionActions, stateTableARN),
 	}); err != nil {
 		return pulumi.StringOutput{}, err
 	}
 
 	listenerRole, err := newServiceRole(ctx, logicalName+"-listener", "lambda.amazonaws.com", map[string]policyStatement{
 		"s3":       {Actions: args.ListenerS3Actions, Resources: []pulumi.StringInput{joinArn(bucket.Arn, "/*")}},
-		"sessions": {Actions: args.ListenerSessionActions, Resources: []pulumi.StringInput{pulumi.String(stateTableARN)}},
+		"sessions": sessionStatement(args.ListenerSessionActions, stateTableARN),
 	})
 	if err != nil {
 		return pulumi.StringOutput{}, err
@@ -175,6 +175,21 @@ func registerBucket(ctx *pulumi.Context, logicalName string, args bucketArgs, st
 type policyStatement struct {
 	Actions   []string
 	Resources []pulumi.StringInput
+	Condition map[string]any
+}
+
+const sessionKeyPrefix = "SESSION#"
+
+func sessionStatement(actions []string, stateTableARN string) policyStatement {
+	return policyStatement{
+		Actions:   actions,
+		Resources: []pulumi.StringInput{pulumi.String(stateTableARN)},
+		Condition: map[string]any{
+			"ForAllValues:StringLike": map[string]any{
+				"dynamodb:LeadingKeys": []string{sessionKeyPrefix + "*"},
+			},
+		},
+	}
 }
 
 func newServiceRole(ctx *pulumi.Context, name, servicePrincipal string, statements map[string]policyStatement) (*iam.Role, error) {
@@ -185,7 +200,7 @@ func newServiceRole(ctx *pulumi.Context, name, servicePrincipal string, statemen
 		return nil, err
 	}
 	for stmtName, stmt := range statements {
-		actions := stmt.Actions
+		actions, condition := stmt.Actions, stmt.Condition
 		resourceInputs := make([]any, len(stmt.Resources))
 		for i, r := range stmt.Resources {
 			resourceInputs[i] = r
@@ -195,7 +210,7 @@ func newServiceRole(ctx *pulumi.Context, name, servicePrincipal string, statemen
 			for i, v := range vs {
 				resources[i], _ = v.(string)
 			}
-			return inlinePolicy(actions, resources)
+			return inlinePolicy(actions, resources, condition)
 		}).(pulumi.StringOutput)
 
 		if _, err := iam.NewRolePolicy(ctx, name+"-"+stmtName, &iam.RolePolicyArgs{
@@ -221,14 +236,18 @@ func assumeRolePolicy(servicePrincipal string) string {
 	return string(b)
 }
 
-func inlinePolicy(actions, resources []string) (string, error) {
+func inlinePolicy(actions, resources []string, condition map[string]any) (string, error) {
+	statement := map[string]any{
+		"Effect":   "Allow",
+		"Action":   actions,
+		"Resource": resources,
+	}
+	if len(condition) > 0 {
+		statement["Condition"] = condition
+	}
 	doc := map[string]any{
-		"Version": "2012-10-17",
-		"Statement": []map[string]any{{
-			"Effect":   "Allow",
-			"Action":   actions,
-			"Resource": resources,
-		}},
+		"Version":   "2012-10-17",
+		"Statement": []map[string]any{statement},
 	}
 	b, err := json.Marshal(doc)
 	if err != nil {

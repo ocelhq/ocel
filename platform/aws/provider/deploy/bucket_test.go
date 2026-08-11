@@ -1,8 +1,10 @@
 package deploy
 
 import (
+	"encoding/json"
 	"reflect"
 	"slices"
+	"strings"
 	"testing"
 
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/resources/v1"
@@ -84,6 +86,47 @@ func TestTranslateBucket(t *testing.T) {
 		got := translateBucket(&resourcesv1.BucketConfig{})
 		if len(got.CORS.AllowedOrigins) != 0 {
 			t.Errorf("CORS.AllowedOrigins = %v, want empty for a bucket with no declared origins", got.CORS.AllowedOrigins)
+		}
+	})
+}
+
+func TestSessionStatement(t *testing.T) {
+	t.Parallel()
+
+	const tableARN = "arn:aws:dynamodb:us-east-1:111122223333:table/ocel-state"
+
+	t.Run("reaches only the app's own session keys", func(t *testing.T) {
+		t.Parallel()
+
+		stmt := sessionStatement([]string{"dynamodb:Query"}, tableARN)
+		doc, err := inlinePolicy(stmt.Actions, []string{tableARN}, stmt.Condition)
+		if err != nil {
+			t.Fatalf("inlinePolicy: %v", err)
+		}
+
+		var parsed struct {
+			Statement []struct {
+				Condition map[string]map[string][]string
+			}
+		}
+		if err := json.Unmarshal([]byte(doc), &parsed); err != nil {
+			t.Fatalf("unmarshal policy: %v", err)
+		}
+		keys := parsed.Statement[0].Condition["ForAllValues:StringLike"]["dynamodb:LeadingKeys"]
+		if !reflect.DeepEqual(keys, []string{sessionKeyPrefix + "*"}) {
+			t.Fatalf("LeadingKeys = %v, want %q — an app must not read or write the stack index", keys, sessionKeyPrefix+"*")
+		}
+	})
+
+	t.Run("an unconditioned statement carries no condition", func(t *testing.T) {
+		t.Parallel()
+
+		doc, err := inlinePolicy([]string{"s3:PutObject"}, []string{"arn:aws:s3:::b/*"}, nil)
+		if err != nil {
+			t.Fatalf("inlinePolicy: %v", err)
+		}
+		if strings.Contains(doc, "Condition") {
+			t.Errorf("policy = %s, want no empty Condition block", doc)
 		}
 	})
 }
