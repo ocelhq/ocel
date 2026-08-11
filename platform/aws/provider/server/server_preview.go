@@ -116,25 +116,10 @@ func domainClaims(ctx context.Context, owner routeOwnerFunc, slug string, domain
 }
 
 func knownSlugs(ctx context.Context, awscfg aws.Config, substrate bootstrap.Deployed, slug string) []string {
-	if slug == "" || !substrate.Present || substrate.StateBucket == "" {
+	if slug == "" || !substrate.Present {
 		return nil
 	}
-	passphrase, err := bootstrap.ReadPassphrase(ctx, ssm.NewFromConfig(awscfg))
-	if err != nil {
-		return nil
-	}
-	pulumiCmd, err := pulumiruntime.Ensure(ctx, nil)
-	if err != nil {
-		return nil
-	}
-	slugs, err := deploy.ProjectSlugsBesides(ctx, deploy.ListConfig{
-		Region:      awscfg.Region,
-		BackendURL:  "s3://" + substrate.StateBucket,
-		Passphrase:  passphrase,
-		ProjectName: pulumiProjectName,
-		Slug:        slug,
-		Pulumi:      pulumiCmd,
-	})
+	slugs, err := deploy.ProjectSlugsBesides(ctx, stackIndexFor(awscfg, substrate), slug)
 	if err != nil {
 		return nil
 	}
@@ -243,7 +228,7 @@ func (s *Server) previewTeardownContext(ctx context.Context, opts options, slug 
 
 	cfg := deploy.Config{
 		Region:             awscfg.Region,
-		BackendURL:         "s3://" + deployed.StateBucket,
+		BackendURL:         deploy.StateBackendURL(deployed.StateBucket, slug),
 		Passphrase:         passphrase,
 		ProjectName:        pulumiProjectName,
 		Pulumi:             pulumiCmd,
@@ -252,6 +237,7 @@ func (s *Server) previewTeardownContext(ctx context.Context, opts options, slug 
 		Uploader:           s3.NewFromConfig(awscfg),
 		CacheStoreBucket:   cacheStore.Bucket,
 		CacheStoreUploader: cacheStoreUploader(cacheStore),
+		Stacks:             stackIndexFor(awscfg, deployed),
 		Env:                envSegment(env),
 		Slug:               env.GetIdentity(),
 
@@ -273,33 +259,16 @@ func (s *Server) ListEnvironments(ctx context.Context, req *deploymentsv1.ListEn
 		return nil, err
 	}
 	cfn := cloudformation.NewFromConfig(awscfg)
-	ssmClient := ssm.NewFromConfig(awscfg)
 
 	deployed, err := bootstrap.CheckDeployedPreview(ctx, cfn)
 	if err != nil {
 		return nil, err
 	}
-	if !deployed.Present || deployed.StateBucket == "" {
+	if !deployed.Present || deployed.StateTable == "" {
 		return &deploymentsv1.ListEnvironmentsResponse{}, nil
 	}
 
-	passphrase, err := bootstrap.ReadPassphrase(ctx, ssmClient)
-	if err != nil {
-		return nil, err
-	}
-	pulumiCmd, err := pulumiruntime.Ensure(ctx, nil)
-	if err != nil {
-		return nil, err
-	}
-
-	stacks, err := deploy.ListPreviewStacks(ctx, deploy.ListConfig{
-		Region:      awscfg.Region,
-		BackendURL:  "s3://" + deployed.StateBucket,
-		Passphrase:  passphrase,
-		ProjectName: pulumiProjectName,
-		Slug:        req.GetSlug(),
-		Pulumi:      pulumiCmd,
-	})
+	stacks, err := deploy.ListPreviewStacks(ctx, stackIndexFor(awscfg, deployed), req.GetSlug())
 	if err != nil {
 		return nil, err
 	}

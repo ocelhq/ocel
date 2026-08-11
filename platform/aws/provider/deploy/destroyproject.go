@@ -100,6 +100,10 @@ func DestroyProject(ctx context.Context, stack edge.RootStack, state edge.RootSt
 		errs = append(errs, err)
 	}
 
+	if err := forgetProjectIfEmpty(ctx, cfg.Stacks, slug); err != nil {
+		errs = append(errs, err)
+	}
+
 	return result, errors.Join(errs...)
 }
 
@@ -160,17 +164,9 @@ func rootStackWorkerNames(ctx context.Context, stack edge.RootStack, state edge.
 }
 
 func PlanProjectTeardown(ctx context.Context, cfg Config, slug string) (ProjectTeardownPlan, error) {
-	ws, err := backendWorkspace(ctx, cfg.ProjectName, cfg.BackendURL, cfg.Passphrase, cfg.Region, cfg.Pulumi)
+	names, err := indexedStacks(ctx, cfg.Stacks, slug)
 	if err != nil {
 		return ProjectTeardownPlan{}, err
-	}
-	summaries, err := ws.ListStacks(ctx)
-	if err != nil {
-		return ProjectTeardownPlan{}, fmt.Errorf("list stacks: %w", err)
-	}
-	names := make([]string, len(summaries))
-	for i, s := range summaries {
-		names[i] = s.Name
 	}
 	return classifyProjectStacks(slug, names), nil
 }
@@ -229,5 +225,6 @@ func teardownConfig(cfg Config, stackName string) TeardownConfig {
 		ProjectName: cfg.ProjectName,
 		StackName:   stackName,
 		Pulumi:      cfg.Pulumi,
+		Stacks:      cfg.Stacks,
 	}
 }

@@ -182,6 +182,8 @@ func TestDestroyProject(t *testing.T) {
 		awsSide, cacheSide := &sweepRecorder{}, &sweepRecorder{}
 		cfg := purgeConfig("prod", awsSide, cacheSide)
 		cfg.Values = values
+		index := &fakeStackIndex{projects: []string{"shop"}}
+		cfg.Stacks = index
 
 		_, err := DestroyProject(context.Background(), nil, nil, cfg, "shop", nil, nil)
 
@@ -197,6 +199,9 @@ func TestDestroyProject(t *testing.T) {
 		}
 		if cacheSide.swept == nil {
 			t.Error("the cache store was never swept, want the asset purge to have run anyway")
+		}
+		if !reflect.DeepEqual(index.projectsGone, []string{"shop"}) {
+			t.Errorf("index projects dropped = %v, want [shop] — a torn-down project leaves no entry", index.projectsGone)
 		}
 	})
 }

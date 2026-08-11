@@ -8,8 +8,6 @@ import (
 
 	"github.com/pulumi/pulumi/sdk/v3/go/auto"
 	"github.com/pulumi/pulumi/sdk/v3/go/auto/optdestroy"
-	"github.com/pulumi/pulumi/sdk/v3/go/common/tokens"
-	"github.com/pulumi/pulumi/sdk/v3/go/common/workspace"
 
 	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
 )
@@ -22,6 +20,7 @@ type TeardownConfig struct {
 	StackName   string
 	Pulumi      auto.PulumiCommand
 	SkipRefresh bool
+	Stacks      StackIndex
 }
 
 func nilSafe(progress func(string)) func(string) {
@@ -81,7 +80,7 @@ func Destroy(ctx context.Context, cfg TeardownConfig, progress, log func(string)
 	)
 	if auto.IsSelectStack404Error(err) {
 		report(progress, "No stack "+cfg.StackName+" to destroy")
-		return nil
+		return forgetStack(ctx, cfg)
 	}
 	if err != nil {
 		return fmt.Errorf("select stack %s: %w", cfg.StackName, err)
@@ -99,7 +98,15 @@ func Destroy(ctx context.Context, cfg TeardownConfig, progress, log func(string)
 	if err := stack.Workspace().RemoveStack(ctx, cfg.StackName); err != nil {
 		return fmt.Errorf("remove stack %s: %w", cfg.StackName, err)
 	}
-	return nil
+	return forgetStack(ctx, cfg)
+}
+
+func forgetStack(ctx context.Context, cfg TeardownConfig) error {
+	index, err := stackIndex(cfg.Stacks)
+	if err != nil {
+		return err
+	}
+	return index.RemoveStack(ctx, cfg.StackName)
 }
 
 func destroyOptions(cfg TeardownConfig, logWriter *lineForwarder) []optdestroy.Option {
@@ -131,31 +138,12 @@ type PreviewStack struct {
 	ExpiresAt int64
 }
 
-type ListConfig struct {
-	Region      string
-	BackendURL  string
-	Passphrase  string
-	ProjectName string
-	Slug        string
-	Pulumi      auto.PulumiCommand
-}
-
-func ListPreviewStacks(ctx context.Context, cfg ListConfig) ([]PreviewStack, error) {
-	ws, err := backendWorkspace(ctx, cfg.ProjectName, cfg.BackendURL, cfg.Passphrase, cfg.Region, cfg.Pulumi)
+func ListPreviewStacks(ctx context.Context, index StackIndex, slug string) ([]PreviewStack, error) {
+	names, err := indexedStacks(ctx, index, slug)
 	if err != nil {
 		return nil, err
 	}
-
-	summaries, err := ws.ListStacks(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("list stacks: %w", err)
-	}
-
-	names := make([]string, len(summaries))
-	for i, s := range summaries {
-		names[i] = s.Name
-	}
-	return previewStacksFromNames(cfg.Slug, names), nil
+	return previewStacksFromNames(slug, names), nil
 }
 
 func previewStacksFromNames(slug string, stackNames []string) []PreviewStack {
@@ -176,23 +164,4 @@ func previewStacksFromNames(slug string, stackNames []string) []PreviewStack {
 		stacks = append(stacks, PreviewStack{Identity: pointer, Lifecycle: lifecycle})
 	}
 	return stacks
-}
-
-func backendWorkspace(ctx context.Context, project, backendURL, passphrase, region string, pulumiCmd auto.PulumiCommand) (auto.Workspace, error) {
-	if project == "" {
-		return nil, fmt.Errorf("open workspace: no project name")
-	}
-	ws, err := auto.NewLocalWorkspace(ctx,
-		auto.Project(workspace.Project{
-			Name:    tokens.PackageName(project),
-			Runtime: workspace.NewProjectRuntimeInfo("go", nil),
-		}),
-		auto.Pulumi(pulumiCmd),
-		auto.SecretsProvider("passphrase"),
-		auto.EnvVars(pulumiEnv(region, backendURL, passphrase)),
-	)
-	if err != nil {
-		return nil, fmt.Errorf("open workspace: %w", err)
-	}
-	return ws, nil
 }

@@ -37,6 +37,8 @@ type Config struct {
 	Pulumi      auto.PulumiCommand
 	Secrets     SecretsReader
 
+	Stacks StackIndex
+
 	StateTable     string
 	StateTableARN  string
 	VarsKeyARN     string

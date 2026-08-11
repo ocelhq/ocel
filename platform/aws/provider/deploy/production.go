@@ -78,6 +78,14 @@ func realize(ctx context.Context, cfg Config, manifest *deploymentsv1.Manifest, 
 		return Result{}, err
 	}
 
+	index, err := stackIndex(cfg.Stacks)
+	if err != nil {
+		return Result{}, err
+	}
+	if err := index.AddProject(ctx, safeName(manifest.GetSlug())); err != nil {
+		return Result{}, err
+	}
+
 	progress.report(deploymentsv1.Phase_PHASE_PROVISIONING, "Reconciling the root stack", 0, 0)
 	specs, err := rootStackSpecs(cfg, manifest, rootStackVersion, log)
 	if err != nil {
@@ -715,6 +723,14 @@ func upStack(ctx context.Context, cfg Config, stackName string, program pulumi.R
 	)
 	if err != nil {
 		return auto.UpResult{}, fmt.Errorf("prepare stack %s: %w", stackName, err)
+	}
+
+	index, err := stackIndex(cfg.Stacks)
+	if err != nil {
+		return auto.UpResult{}, err
+	}
+	if err := index.AddStack(ctx, stackName); err != nil {
+		return auto.UpResult{}, err
 	}
 
 	if err := stampExpiry(ctx, stack, cfg.ExpiresAt); err != nil {
