@@ -103,14 +103,23 @@ func (p *provider) ReconcileRootStack(ctx context.Context, spec edge.RootStackSp
 	slug := spec.Slug
 	endpoint := spec.StoreEndpoint
 
-	id, upToDate, err := p.ensureInstance(ctx, spec, prior)
+	generic := genericWorker(spec, slug)
+	stamp, err := specStamp(spec, generic)
 	if err != nil {
 		return nil, err
 	}
 
+	id, upToDate, err := p.ensureInstance(ctx, spec, prior, stamp)
+	if err != nil {
+		return nil, err
+	}
+	if upToDate && skipEdgeReconcile() {
+		return prior, nil
+	}
+
 	genericUp := upload{accountID: accountID, scriptName: spec.GenericName}
 	if !upToDate {
-		genericUp.worker = genericWorker(spec, slug)
+		genericUp.worker = generic
 		assetsJWT, err := p.uploadAssets(ctx, genericUp)
 		if err != nil {
 			return nil, fmt.Errorf("upload generic worker assets: %w", err)
@@ -135,7 +144,7 @@ func (p *provider) ReconcileRootStack(ctx context.Context, spec edge.RootStackSp
 	if _, err := p.setSubdomain(ctx, genericUp, len(spec.Domains) == 0); err != nil {
 		return nil, fmt.Errorf("set generic worker subdomain: %w", err)
 	}
-	if err := p.putVersionStamp(ctx, endpoint, slug, id.secret, spec.Version); err != nil {
+	if err := p.putVersionStamp(ctx, endpoint, slug, id.secret, stamp); err != nil {
 		return nil, fmt.Errorf("set root-stack version stamp: %w", err)
 	}
 
@@ -152,12 +161,12 @@ type storeIdentity struct {
 	ownerToken string
 }
 
-func (p *provider) ensureInstance(ctx context.Context, spec edge.RootStackSpec, prior edge.RootStackState) (storeIdentity, bool, error) {
+func (p *provider) ensureInstance(ctx context.Context, spec edge.RootStackSpec, prior edge.RootStackState, stamp string) (storeIdentity, bool, error) {
 	if secret := prior[edge.RootStackKeySecret]; secret != "" && prior[edge.RootStackKeySlug] == spec.Slug {
 		current, res, err := p.getVersionStamp(ctx, spec.StoreEndpoint, spec.Slug, secret)
 		switch {
 		case err == nil:
-			return storeIdentity{secret: secret, ownerToken: prior[edge.RootStackKeyOwnerToken]}, current == spec.Version, nil
+			return storeIdentity{secret: secret, ownerToken: prior[edge.RootStackKeyOwnerToken]}, current == stamp, nil
 		case !unauthorized(res):
 			return storeIdentity{}, false, fmt.Errorf("read root-stack version stamp: %w", err)
 		}

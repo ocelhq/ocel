@@ -20,6 +20,7 @@ type cfMock struct {
 	existingCustomDomains []map[string]any
 	existingScripts       []string
 
+	requests   int
 	zoneLists  int
 	routeLists int
 
@@ -146,7 +147,10 @@ func (m *cfMock) server(t *testing.T) *httptest.Server {
 		}
 	})
 
-	srv := httptest.NewServer(mux)
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		m.requests++
+		mux.ServeHTTP(w, r)
+	}))
 	t.Cleanup(srv.Close)
 	return srv
 }
