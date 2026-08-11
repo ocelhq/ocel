@@ -155,6 +155,77 @@ func TestReveal(t *testing.T) {
 		}
 	})
 
+	t.Run("resolves a reference inside the project from the query it already made", func(t *testing.T) {
+		store, ddb, crypto := newTestStore(t)
+		ctx := context.Background()
+
+		origin := Coordinate{Slug: "shop", Key: "STRIPE_API_KEY"}
+		alias := Coordinate{Slug: "shop", Folder: "/checkout", Key: "STRIPE_API_KEY"}
+		if _, err := store.Set(ctx, origin, "sk-live", nil); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := store.SetReference(ctx, alias, origin, nil); err != nil {
+			t.Fatal(err)
+		}
+
+		queriesBefore, decryptsBefore := len(ddb.queries), crypto.decrypts
+
+		values, err := store.Reveal(ctx, "shop", []Coordinate{{Folder: alias.Folder, Key: alias.Key}})
+		if err != nil {
+			t.Fatalf("Reveal: %v", err)
+		}
+		if len(values) != 1 || values[0].Plaintext != "sk-live" {
+			t.Fatalf("Reveal = %+v, want the origin's value", values)
+		}
+		if queries := len(ddb.queries) - queriesBefore; queries != 1 {
+			t.Errorf("Reveal made %d queries, want 1: the target sits in the partition already read", queries)
+		}
+		if decrypts := crypto.decrypts - decryptsBefore; decrypts != 1 {
+			t.Errorf("Reveal made %d decrypts, want 1", decrypts)
+		}
+	})
+
+	t.Run("reads a shared target once however many cells point at it", func(t *testing.T) {
+		store, ddb, crypto := newTestStore(t)
+		ctx := context.Background()
+
+		origin := Coordinate{Slug: "platform", Key: "STRIPE_API_KEY"}
+		aliases := []Coordinate{
+			{Slug: "shop", Folder: "/checkout", Key: "STRIPE_API_KEY"},
+			{Slug: "shop", Folder: "/web", Key: "STRIPE_API_KEY"},
+			{Slug: "shop", Folder: "/admin", Key: "STRIPE_API_KEY"},
+		}
+		if _, err := store.Set(ctx, origin, "sk-live", nil); err != nil {
+			t.Fatal(err)
+		}
+		for _, alias := range aliases {
+			if _, err := store.SetReference(ctx, alias, origin, nil); err != nil {
+				t.Fatalf("SetReference %s: %v", alias, err)
+			}
+		}
+
+		queriesBefore, decryptsBefore := len(ddb.queries), crypto.decrypts
+
+		values, err := store.Reveal(ctx, "shop", aliases)
+		if err != nil {
+			t.Fatalf("Reveal: %v", err)
+		}
+		if len(values) != len(aliases) {
+			t.Fatalf("Reveal returned %d values, want %d", len(values), len(aliases))
+		}
+		for _, v := range values {
+			if v.Plaintext != "sk-live" {
+				t.Errorf("%s revealed %q, want the origin's value", v.Coordinate, v.Plaintext)
+			}
+		}
+		if queries := len(ddb.queries) - queriesBefore; queries != 2 {
+			t.Errorf("Reveal made %d queries, want 2: the partition plus one read of the shared target", queries)
+		}
+		if decrypts := crypto.decrypts - decryptsBefore; decrypts != 1 {
+			t.Errorf("Reveal made %d decrypts, want 1: one ciphertext under one encryption context", decrypts)
+		}
+	})
+
 	t.Run("rejects the class wide sentinel", func(t *testing.T) {
 		store, ddb, _ := newTestStore(t)
 

@@ -201,7 +201,7 @@ func (s *Store) Get(ctx context.Context, c Coordinate, reveal bool) (Value, erro
 	if !reveal {
 		return value, nil
 	}
-	holder, at, err := s.dereference(ctx, c, stored)
+	holder, at, err := s.dereference(ctx, c, stored, nil)
 	if err != nil {
 		return Value{}, err
 	}
@@ -211,7 +211,7 @@ func (s *Store) Get(ctx context.Context, c Coordinate, reveal bool) (Value, erro
 	return value, nil
 }
 
-func (s *Store) dereference(ctx context.Context, at Coordinate, stored item) (item, Coordinate, error) {
+func (s *Store) dereference(ctx context.Context, at Coordinate, stored item, held map[string]item) (item, Coordinate, error) {
 	target, err := stored.target()
 	if err != nil {
 		return item{}, Coordinate{}, err
@@ -219,9 +219,11 @@ func (s *Store) dereference(ctx context.Context, at Coordinate, stored item) (it
 	if target.Slug == "" {
 		return stored, at, nil
 	}
-	holder, err := s.follow(ctx, stored.TargetPK, stored.TargetSK)
-	if err != nil {
-		return item{}, Coordinate{}, err
+	holder, known := held[cellKey(stored.TargetPK, stored.TargetSK)]
+	if !known {
+		if holder, err = s.follow(ctx, stored.TargetPK, stored.TargetSK); err != nil {
+			return item{}, Coordinate{}, err
+		}
 	}
 	if holder.liveVersion() == 0 {
 		return item{}, Coordinate{}, fmt.Errorf("%s references %s, which holds no value: %w", at, target, ErrNotFound)
@@ -294,9 +296,11 @@ func (s *Store) Reveal(ctx context.Context, slug string, cells []Coordinate) ([]
 		return nil, err
 	}
 
+	held := make(map[string]item, len(items))
 	var found []item
 	var at []Coordinate
 	for _, stored := range items {
+		held[cellKey(stored.PK, stored.SK)] = stored
 		c, ok := wanted[stored.SK]
 		if !ok || stored.Deleted {
 			continue
@@ -304,35 +308,101 @@ func (s *Store) Reveal(ctx context.Context, slug string, cells []Coordinate) ([]
 		found = append(found, stored)
 		at = append(at, c)
 	}
+	if err := s.gather(ctx, found, held); err != nil {
+		return nil, err
+	}
 
-	values := make([]Value, len(found))
+	var sealed []sealedValue
+	slotOf := make([]int, len(found))
+	slots := make(map[string]int, len(found))
+	for i, stored := range found {
+		holder, from, err := s.dereference(ctx, at[i], stored, held)
+		if err != nil {
+			return nil, err
+		}
+		key := cellKey(holder.PK, holder.SK)
+		slot, seen := slots[key]
+		if !seen {
+			slot = len(sealed)
+			slots[key] = slot
+			sealed = append(sealed, sealedValue{at: from, ciphertext: holder.Ciphertext})
+		}
+		slotOf[i] = slot
+	}
+
+	plaintexts := make([]string, len(sealed))
 	group, ctx := errgroup.WithContext(ctx)
 	group.SetLimit(revealConcurrency)
-	for i, stored := range found {
+	for i, cell := range sealed {
 		group.Go(func() error {
-			holder, from, err := s.dereference(ctx, at[i], stored)
+			plaintext, err := s.decrypt(ctx, cell.at, cell.ciphertext)
 			if err != nil {
 				return err
 			}
-			plaintext, err := s.decrypt(ctx, from, holder.Ciphertext)
-			if err != nil {
-				return err
-			}
-			target, err := stored.target()
-			if err != nil {
-				return err
-			}
-			values[i] = Value{
-				Metadata:  Metadata{Coordinate: at[i], Version: stored.Version, UpdatedAt: stored.Ts, Size: stored.Size, Target: target},
-				Plaintext: plaintext,
-			}
+			plaintexts[i] = plaintext
 			return nil
 		})
 	}
 	if err := group.Wait(); err != nil {
 		return nil, err
 	}
+
+	values := make([]Value, len(found))
+	for i, stored := range found {
+		target, err := stored.target()
+		if err != nil {
+			return nil, err
+		}
+		values[i] = Value{
+			Metadata:  Metadata{Coordinate: at[i], Version: stored.Version, UpdatedAt: stored.Ts, Size: stored.Size, Target: target},
+			Plaintext: plaintexts[slotOf[i]],
+		}
+	}
 	return values, nil
+}
+
+type sealedValue struct {
+	at         Coordinate
+	ciphertext []byte
+}
+
+func (s *Store) gather(ctx context.Context, cells []item, held map[string]item) error {
+	var pending []item
+	for _, stored := range cells {
+		if !stored.references() {
+			continue
+		}
+		key := cellKey(stored.TargetPK, stored.TargetSK)
+		if _, known := held[key]; known {
+			continue
+		}
+		held[key] = item{}
+		pending = append(pending, stored)
+	}
+	if len(pending) == 0 {
+		return nil
+	}
+
+	holders := make([]item, len(pending))
+	group, ctx := errgroup.WithContext(ctx)
+	group.SetLimit(revealConcurrency)
+	for i, stored := range pending {
+		group.Go(func() error {
+			holder, err := s.follow(ctx, stored.TargetPK, stored.TargetSK)
+			if err != nil {
+				return err
+			}
+			holders[i] = holder
+			return nil
+		})
+	}
+	if err := group.Wait(); err != nil {
+		return err
+	}
+	for i, stored := range pending {
+		held[cellKey(stored.TargetPK, stored.TargetSK)] = holders[i]
+	}
+	return nil
 }
 
 func (s *Store) Delete(ctx context.Context, c Coordinate, expected *int64) (bool, error) {
@@ -473,6 +543,8 @@ func (s *Store) decrypt(ctx context.Context, c Coordinate, ciphertext []byte) (s
 	}
 	return string(out.Plaintext), nil
 }
+
+func cellKey(pk, sk string) string { return pk + "\x00" + sk }
 
 func pointKey(pk, sk string) map[string]ddbtypes.AttributeValue {
 	return map[string]ddbtypes.AttributeValue{
