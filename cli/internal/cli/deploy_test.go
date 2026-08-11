@@ -260,7 +260,7 @@ export default {
 		}
 
 		out := stdout.String()
-		if !strings.Contains(out, "FUNCTION logical_name=api runtime=nodejs24.x handler=src/server.js artifact_path=output/api framework=express app=api") {
+		if !strings.Contains(out, "FUNCTION logical_name=fn--api--api runtime=nodejs24.x handler=src/server.js artifact_path=output/api framework=express app=api") {
 			t.Errorf("stdout = %q, want the function to have reached the manifest", out)
 		}
 		if strings.Contains(stderr.String(), "deploying infrastructure only") {
@@ -664,10 +664,10 @@ export default {
 		if !strings.Contains(out, "APP name=web framework=express production_domain=acme.com") {
 			t.Errorf("stdout = %q, want the web app with its own production domain", out)
 		}
-		if !strings.Contains(out, "logical_name=web") || !strings.Contains(out, "artifact_path=output/web framework=express app=web") {
+		if !strings.Contains(out, "logical_name=fn--web--web") || !strings.Contains(out, "artifact_path=output/web framework=express app=web") {
 			t.Errorf("stdout = %q, want the web function attributed to the web app", out)
 		}
-		if !strings.Contains(out, "logical_name=admin") || !strings.Contains(out, "artifact_path=output/admin framework=express app=admin") {
+		if !strings.Contains(out, "logical_name=fn--admin--admin") || !strings.Contains(out, "artifact_path=output/admin framework=express app=admin") {
 			t.Errorf("stdout = %q, want the admin function attributed to the admin app", out)
 		}
 
