@@ -169,8 +169,8 @@ func TestRunPreviewUp(t *testing.T) {
 		if err := runPreviewUp(context.Background(), d, root, previewUpOptions{}, &stdout, &stderr, strings.NewReader("")); err != nil {
 			t.Fatalf("runPreviewUp err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 		}
-		if !strings.Contains(stdout.String(), "PREFLIGHT slug=test-app domains=*.preview.acme.com") {
-			t.Errorf("stdout = %q, want the slug and preview wildcard to have reached Preflight", stdout.String())
+		if !strings.Contains(stdout.String(), "PREFLIGHT slug=test-app domains=*.preview.acme.com class=CLASS_PREVIEW") {
+			t.Errorf("stdout = %q, want the slug and preview wildcard to have reached Preflight under the preview class", stdout.String())
 		}
 	})
 

@@ -474,8 +474,13 @@ func preflightPreviewUp(ctx context.Context, d deps, runner *providerrunner.Runn
 	return refuseClaimedDomains(resp.GetDomainClaims())
 }
 
-func preflightDeploy(ctx context.Context, d deps, runner *providerrunner.Runner, provider *projectconfig.ProviderDescriptor, cfg *projectconfig.Config, out io.Writer) ([]string, error) {
-	resp, err := preflight(ctx, d, runner, provider, deploymentsv1.Environment_CLASS_PRODUCTION, cfg.Slug, declaredHostnames(cfg, "production"), "ocel bootstrap", out)
+func preflightDeploy(ctx context.Context, d deps, runner *providerrunner.Runner, provider *projectconfig.ProviderDescriptor, cfg *projectconfig.Config, wantKnownSlugs bool, out io.Writer) ([]string, error) {
+	domains := declaredHostnames(cfg, "production")
+	var slug string
+	if wantKnownSlugs || len(domains) > 0 {
+		slug = cfg.Slug
+	}
+	resp, err := preflight(ctx, d, runner, provider, deploymentsv1.Environment_CLASS_PRODUCTION, slug, domains, "ocel bootstrap", out)
 	if err != nil {
 		return nil, err
 	}

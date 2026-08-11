@@ -90,18 +90,19 @@ type deployFakeProviderServer struct {
 	mu               sync.Mutex
 	preflightSlug    string
 	preflightDomains []string
+	preflightClass   deploymentsv1.Environment_Class
 }
 
-func (s *deployFakeProviderServer) recordPreflight(slug string, domains []string) {
+func (s *deployFakeProviderServer) recordPreflight(slug string, domains []string, class deploymentsv1.Environment_Class) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	s.preflightSlug, s.preflightDomains = slug, domains
+	s.preflightSlug, s.preflightDomains, s.preflightClass = slug, domains, class
 }
 
-func (s *deployFakeProviderServer) lastPreflight() (string, []string) {
+func (s *deployFakeProviderServer) lastPreflight() (string, []string, deploymentsv1.Environment_Class) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	return s.preflightSlug, s.preflightDomains
+	return s.preflightSlug, s.preflightDomains, s.preflightClass
 }
 
 func (s *deployFakeProviderServer) Deploy(ctx context.Context, req *deploymentsv1.DeployRequest, stream *connect.ServerStream[deploymentsv1.DeployEvent]) error {
@@ -115,9 +116,9 @@ func (s *deployFakeProviderServer) Deploy(ctx context.Context, req *deploymentsv
 		})
 	}
 
-	slug, domains := s.lastPreflight()
+	slug, domains, class := s.lastPreflight()
 	if err := stream.Send(&deploymentsv1.DeployEvent{
-		Event: &deploymentsv1.DeployEvent_Progress{Progress: &deploymentsv1.ProgressEvent{Message: "PREFLIGHT slug=" + slug + " domains=" + strings.Join(domains, ",")}},
+		Event: &deploymentsv1.DeployEvent_Progress{Progress: &deploymentsv1.ProgressEvent{Message: "PREFLIGHT slug=" + slug + " domains=" + strings.Join(domains, ",") + " class=" + class.String()}},
 	}); err != nil {
 		return err
 	}
@@ -172,7 +173,7 @@ func (s *deployFakeProviderServer) Preflight(ctx context.Context, req *deploymen
 	if err := s.checkToken(ctx); err != nil {
 		return nil, err
 	}
-	s.recordPreflight(req.GetSlug(), req.GetDomains())
+	s.recordPreflight(req.GetSlug(), req.GetDomains(), req.GetRequiredClass())
 	resp := &deploymentsv1.PreflightResponse{
 		InfraClass:            parseInfraClass(os.Getenv(fakeInfraClassEnvVar)),
 		InfrastructurePresent: os.Getenv(fakeInfraPresentEnvVar) != "0",
@@ -183,7 +184,7 @@ func (s *deployFakeProviderServer) Preflight(ctx context.Context, req *deploymen
 			CloudflareAccount: os.Getenv(fakeIDCfAccountEnvVar),
 		},
 	}
-	if req.GetSlug() != "" {
+	if req.GetSlug() != "" && req.GetRequiredClass() == deploymentsv1.Environment_CLASS_PRODUCTION {
 		for _, s := range strings.Split(os.Getenv(fakeKnownSlugsEnvVar), ",") {
 			if s = strings.TrimSpace(s); s != "" {
 				resp.KnownSlugs = append(resp.KnownSlugs, s)
