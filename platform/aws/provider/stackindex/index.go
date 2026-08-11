@@ -3,17 +3,17 @@ package stackindex
 import (
 	"context"
 	"fmt"
-	"strings"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb"
 	ddbtypes "github.com/aws/aws-sdk-go-v2/service/dynamodb/types"
+
+	"github.com/ocelhq/ocel/pkg/naming"
 )
 
 const (
-	projectsPartition = "OCELSTACKS"
-	scopePartition    = "OCELSTACKS#"
-	scopeSeparator    = "--"
+	projectsPartition = "PROJECTS"
+	sortAttribute     = "sk"
 )
 
 type DynamoAPI interface {
@@ -27,92 +27,108 @@ type Index struct {
 	Table  string
 }
 
-func ScopeOf(stackName string) (string, error) {
-	scope, _, ok := strings.Cut(stackName, scopeSeparator)
-	if !ok || scope == "" {
-		return "", fmt.Errorf("stack name %q carries no project scope", stackName)
+func (ix *Index) AddProject(ctx context.Context, project string) error {
+	if err := naming.Validate("project", project); err != nil {
+		return fmt.Errorf("index a project: %w", err)
 	}
-	return scope, nil
-}
-
-func (ix *Index) AddProject(ctx context.Context, scope string) error {
-	if scope == "" {
-		return fmt.Errorf("index a project: no scope")
-	}
-	if err := ix.put(ctx, projectsPartition, scope); err != nil {
-		return fmt.Errorf("index project %s: %w", scope, err)
+	if err := ix.put(ctx, item(projectsPartition, naming.ProjectKey(project))); err != nil {
+		return fmt.Errorf("index project %s: %w", project, err)
 	}
 	return nil
 }
 
-func (ix *Index) AddStack(ctx context.Context, stackName string) error {
-	scope, err := ScopeOf(stackName)
+func (ix *Index) RemoveProject(ctx context.Context, project string) error {
+	if err := naming.Validate("project", project); err != nil {
+		return fmt.Errorf("drop a project from the index: %w", err)
+	}
+	if err := ix.delete(ctx, item(projectsPartition, naming.ProjectKey(project))); err != nil {
+		return fmt.Errorf("drop project %s from the index: %w", project, err)
+	}
+	return nil
+}
+
+func (ix *Index) AddStack(ctx context.Context, project string, stack naming.StackName) error {
+	if err := readable(project, stack); err != nil {
+		return fmt.Errorf("index a stack: %w", err)
+	}
+	if err := ix.put(ctx, item(naming.ProjectKey(project), naming.StackKey(project, stack))); err != nil {
+		return fmt.Errorf("index stack %s/%s: %w", project, stack, err)
+	}
+	return nil
+}
+
+func (ix *Index) RemoveStack(ctx context.Context, project string, stack naming.StackName) error {
+	if err := readable(project, stack); err != nil {
+		return fmt.Errorf("drop a stack from the index: %w", err)
+	}
+	if err := ix.delete(ctx, item(naming.ProjectKey(project), naming.StackKey(project, stack))); err != nil {
+		return fmt.Errorf("drop stack %s/%s from the index: %w", project, stack, err)
+	}
+	return nil
+}
+
+func (ix *Index) Stacks(ctx context.Context, project string) ([]naming.StackName, error) {
+	if err := naming.Validate("project", project); err != nil {
+		return nil, fmt.Errorf("list a project's stacks: %w", err)
+	}
+	keys, err := ix.values(ctx, naming.ProjectKey(project), sortAttribute)
 	if err != nil {
-		return err
+		return nil, fmt.Errorf("list %s's stacks: %w", project, err)
 	}
-	if err := ix.put(ctx, scopePartition+scope, stackName); err != nil {
-		return fmt.Errorf("index stack %s: %w", stackName, err)
+	var stacks []naming.StackName
+	for _, key := range keys {
+		_, stack, err := naming.ParseStackKey(key)
+		if err != nil {
+			return nil, fmt.Errorf("list %s's stacks: %w", project, err)
+		}
+		stacks = append(stacks, stack)
 	}
-	return nil
-}
-
-func (ix *Index) RemoveStack(ctx context.Context, stackName string) error {
-	scope, err := ScopeOf(stackName)
-	if err != nil {
-		return err
-	}
-	if err := ix.delete(ctx, scopePartition+scope, stackName); err != nil {
-		return fmt.Errorf("drop stack %s from the index: %w", stackName, err)
-	}
-	return nil
-}
-
-func (ix *Index) RemoveProject(ctx context.Context, scope string) error {
-	if scope == "" {
-		return fmt.Errorf("drop a project from the index: no scope")
-	}
-	if err := ix.delete(ctx, projectsPartition, scope); err != nil {
-		return fmt.Errorf("drop project %s from the index: %w", scope, err)
-	}
-	return nil
-}
-
-func (ix *Index) Stacks(ctx context.Context, scope string) ([]string, error) {
-	if scope == "" {
-		return nil, fmt.Errorf("list a project's stacks: no scope")
-	}
-	names, err := ix.sortKeys(ctx, scopePartition+scope)
-	if err != nil {
-		return nil, fmt.Errorf("list %s's stacks: %w", scope, err)
-	}
-	return names, nil
+	return stacks, nil
 }
 
 func (ix *Index) Projects(ctx context.Context) ([]string, error) {
-	scopes, err := ix.sortKeys(ctx, projectsPartition)
+	keys, err := ix.values(ctx, projectsPartition, sortAttribute)
 	if err != nil {
 		return nil, fmt.Errorf("list indexed projects: %w", err)
 	}
-	return scopes, nil
+	var projects []string
+	for _, key := range keys {
+		project, err := naming.ProjectOf(key)
+		if err != nil {
+			return nil, fmt.Errorf("list indexed projects: %w", err)
+		}
+		projects = append(projects, project)
+	}
+	return projects, nil
 }
 
-func (ix *Index) put(ctx context.Context, pk, sk string) error {
+func readable(project string, stack naming.StackName) error {
+	if err := naming.Validate("project", project); err != nil {
+		return err
+	}
+	if _, err := naming.ParseStackName(stack.String()); err != nil {
+		return err
+	}
+	return nil
+}
+
+func (ix *Index) put(ctx context.Context, entry map[string]ddbtypes.AttributeValue) error {
 	_, err := ix.Dynamo.PutItem(ctx, &dynamodb.PutItemInput{
 		TableName: aws.String(ix.Table),
-		Item:      key(pk, sk),
+		Item:      entry,
 	})
 	return err
 }
 
-func (ix *Index) delete(ctx context.Context, pk, sk string) error {
+func (ix *Index) delete(ctx context.Context, entry map[string]ddbtypes.AttributeValue) error {
 	_, err := ix.Dynamo.DeleteItem(ctx, &dynamodb.DeleteItemInput{
 		TableName: aws.String(ix.Table),
-		Key:       key(pk, sk),
+		Key:       entry,
 	})
 	return err
 }
 
-func (ix *Index) sortKeys(ctx context.Context, pk string) ([]string, error) {
+func (ix *Index) values(ctx context.Context, pk, attribute string) ([]string, error) {
 	var (
 		out   []string
 		start map[string]ddbtypes.AttributeValue
@@ -122,10 +138,10 @@ func (ix *Index) sortKeys(ctx context.Context, pk string) ([]string, error) {
 			TableName:              aws.String(ix.Table),
 			ConsistentRead:         aws.Bool(true),
 			KeyConditionExpression: aws.String("#pk = :pk"),
-			ProjectionExpression:   aws.String("#sk"),
+			ProjectionExpression:   aws.String("#value"),
 			ExpressionAttributeNames: map[string]string{
-				"#pk": "pk",
-				"#sk": "sk",
+				"#pk":    "pk",
+				"#value": attribute,
 			},
 			ExpressionAttributeValues: map[string]ddbtypes.AttributeValue{
 				":pk": &ddbtypes.AttributeValueMemberS{Value: pk},
@@ -135,12 +151,12 @@ func (ix *Index) sortKeys(ctx context.Context, pk string) ([]string, error) {
 		if err != nil {
 			return nil, err
 		}
-		for _, item := range page.Items {
-			sk, ok := item["sk"].(*ddbtypes.AttributeValueMemberS)
-			if !ok || sk.Value == "" {
+		for _, entry := range page.Items {
+			value, ok := entry[attribute].(*ddbtypes.AttributeValueMemberS)
+			if !ok || value.Value == "" {
 				continue
 			}
-			out = append(out, sk.Value)
+			out = append(out, value.Value)
 		}
 		if len(page.LastEvaluatedKey) == 0 {
 			return out, nil
@@ -149,9 +165,9 @@ func (ix *Index) sortKeys(ctx context.Context, pk string) ([]string, error) {
 	}
 }
 
-func key(pk, sk string) map[string]ddbtypes.AttributeValue {
+func item(pk, sk string) map[string]ddbtypes.AttributeValue {
 	return map[string]ddbtypes.AttributeValue{
-		"pk": &ddbtypes.AttributeValueMemberS{Value: pk},
-		"sk": &ddbtypes.AttributeValueMemberS{Value: sk},
+		"pk":          &ddbtypes.AttributeValueMemberS{Value: pk},
+		sortAttribute: &ddbtypes.AttributeValueMemberS{Value: sk},
 	}
 }

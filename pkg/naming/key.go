@@ -29,6 +29,22 @@ func ISRTagKey(project, app, tag string) string {
 	return token(tokenProject, project) + KeySeparator + token(tokenApp, app) + KeySeparator + token(tokenTag, tag)
 }
 
+func ParseStackKey(key string) (string, StackName, error) {
+	project, err := ProjectOf(key)
+	if err != nil {
+		return "", StackName{}, err
+	}
+	rest, ok := strings.CutPrefix(key, token(tokenProject, project)+KeySeparator+token(tokenStack, ""))
+	if !ok {
+		return "", StackName{}, fmt.Errorf("key %q names no stack", key)
+	}
+	stack, err := ParseStackName(rest)
+	if err != nil {
+		return "", StackName{}, fmt.Errorf("key %q: %w", key, err)
+	}
+	return project, stack, nil
+}
+
 func ProjectOf(key string) (string, error) {
 	fields := strings.Split(key, KeySeparator)
 	if len(fields) < 2 || fields[0] != tokenProject || fields[1] == "" {

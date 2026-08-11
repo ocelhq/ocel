@@ -14,6 +14,8 @@ import (
 	"github.com/aws/aws-sdk-go-v2/credentials"
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb"
 	ddbtypes "github.com/aws/aws-sdk-go-v2/service/dynamodb/types"
+
+	"github.com/ocelhq/ocel/pkg/naming"
 )
 
 func TestIndexAgainstDynamoDBLocal(t *testing.T) {
@@ -50,7 +52,7 @@ func TestIndexAgainstDynamoDBLocal(t *testing.T) {
 					errs[i] = err
 					return
 				}
-				errs[i] = ix.AddStack(ctx, fmt.Sprintf("shop--web--b%d", i))
+				errs[i] = ix.AddStack(ctx, "shop", naming.AppStack("prod", "web", naming.NewRelease(fmt.Sprintf("b%d", i), "")))
 			}()
 		}
 		wg.Wait()
@@ -81,7 +83,7 @@ func TestIndexAgainstDynamoDBLocal(t *testing.T) {
 		if err := ix.AddProject(ctx, "billing"); err != nil {
 			t.Fatalf("AddProject: %v", err)
 		}
-		if err := ix.AddStack(ctx, "billing--infra"); err != nil {
+		if err := ix.AddStack(ctx, "billing", naming.InfraStack("prod")); err != nil {
 			t.Fatalf("AddStack: %v", err)
 		}
 
@@ -89,16 +91,16 @@ func TestIndexAgainstDynamoDBLocal(t *testing.T) {
 		if err != nil {
 			t.Fatalf("Stacks: %v", err)
 		}
-		if !reflect.DeepEqual(stacks, []string{"billing--infra"}) {
+		if !reflect.DeepEqual(stacks, []naming.StackName{naming.InfraStack("prod")}) {
 			t.Fatalf("Stacks = %v, want billing's own", stacks)
 		}
 	})
 
 	t.Run("teardown leaves neither stack nor project behind", func(t *testing.T) {
-		if err := ix.RemoveStack(ctx, "billing--infra"); err != nil {
+		if err := ix.RemoveStack(ctx, "billing", naming.InfraStack("prod")); err != nil {
 			t.Fatalf("RemoveStack: %v", err)
 		}
-		if err := ix.RemoveStack(ctx, "billing--infra"); err != nil {
+		if err := ix.RemoveStack(ctx, "billing", naming.InfraStack("prod")); err != nil {
 			t.Fatalf("repeated RemoveStack: %v", err)
 		}
 		if err := ix.RemoveProject(ctx, "billing"); err != nil {
