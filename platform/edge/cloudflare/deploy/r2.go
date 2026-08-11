@@ -58,7 +58,7 @@ type cacheStore struct {
 	buckets bucketAPI
 	tokens  tokenAPI
 	groups  permissionGroupAPI
-	sleep   func(time.Duration)
+	wait    func(context.Context, time.Duration) error
 }
 
 func newCacheStore(client *cf.Client) cacheStore {
@@ -66,7 +66,7 @@ func newCacheStore(client *cf.Client) cacheStore {
 		buckets: client.R2.Buckets,
 		tokens:  client.User.Tokens,
 		groups:  client.User.Tokens.PermissionGroups,
-		sleep:   time.Sleep,
+		wait:    waitBeforeRetry,
 	}
 }
 
@@ -188,14 +188,18 @@ func (s cacheStore) mintToken(ctx context.Context, accountID, name string) (mint
 
 func (s cacheStore) awaitToken(ctx context.Context, value string) error {
 	var err error
-	for attempt := 0; attempt < tokenPropagationAttempts; attempt++ {
+	for attempt := range tokenPropagationAttempts {
+		if attempt > 0 {
+			if waitErr := s.wait(ctx, tokenPropagationDelay); waitErr != nil {
+				return errors.Join(err, waitErr)
+			}
+		}
 		if _, err = s.tokens.Verify(ctx, option.WithAPIToken(value)); err == nil {
 			return nil
 		}
 		if !hasStatus(err, http.StatusUnauthorized) && !hasStatus(err, http.StatusForbidden) {
 			return err
 		}
-		s.sleep(tokenPropagationDelay)
 	}
 	return err
 }
@@ -210,7 +214,7 @@ func (s cacheStore) permissionGroupID(ctx context.Context, name string) (string,
 			return group.ID, nil
 		}
 	}
-	return "", fmt.Errorf("Cloudflare reports no %q permission group; the R2 token cannot be scoped to a bucket without it", name)
+	return "", fmt.Errorf("no %q permission group is offered by Cloudflare; the R2 token cannot be scoped to a bucket without it", name)
 }
 
 func bucketResource(accountID, bucket string) string {

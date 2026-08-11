@@ -28,11 +28,11 @@ var buildCmd = &cobra.Command{
 		ctx, stop := signal.NotifyContext(cmd.Context(), os.Interrupt, syscall.SIGTERM)
 		defer stop()
 
-		return runBuild(ctx, cwd, cmd.OutOrStdout(), cmd.ErrOrStderr())
+		return runBuild(ctx, defaultDeps(), cwd, cmd.OutOrStdout(), cmd.ErrOrStderr())
 	},
 }
 
-func runBuild(ctx context.Context, cwd string, stdout, stderr io.Writer) error {
+func runBuild(ctx context.Context, d deps, cwd string, stdout, stderr io.Writer) error {
 	cfg, err := projectconfig.Resolve(cwd)
 	if err != nil {
 		return err
@@ -42,14 +42,14 @@ func runBuild(ctx context.Context, cwd string, stdout, stderr io.Writer) error {
 		return err
 	}
 
-	if err := buildApp(ctx, cfg, nil, stderr); err != nil {
+	if err := d.buildApp(ctx, cfg, nil, stderr); err != nil {
 		return err
 	}
 	if err := clientenv.RecordUnresolved(cfg.Dir); err != nil {
 		return err
 	}
 
-	functions, err := collectAppFunctions(cfg.Dir)
+	functions, err := d.collectAppFunctions(cfg.Dir)
 	if err != nil {
 		return err
 	}

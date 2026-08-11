@@ -7,6 +7,8 @@ import (
 )
 
 func TestNameUnderStem(t *testing.T) {
+	t.Parallel()
+
 	for _, tc := range []struct {
 		name         string
 		stem, script string
@@ -23,6 +25,8 @@ func TestNameUnderStem(t *testing.T) {
 		{"an empty name is nothing's", "ocel-shop-preview", "", false},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
 			if got := NameUnderStem(tc.stem, tc.script); got != tc.want {
 				t.Errorf("NameUnderStem(%q, %q) = %v, want %v", tc.stem, tc.script, got, tc.want)
 			}
@@ -30,49 +34,57 @@ func TestNameUnderStem(t *testing.T) {
 	}
 }
 
-func TestDeploymentRecord_AuditFieldsAreOmittedWhenAbsent(t *testing.T) {
-	raw, err := json.Marshal(DeploymentRecord{App: "web", Identity: "b1"})
-	if err != nil {
-		t.Fatalf("Marshal: %v", err)
-	}
-	for _, absent := range []string{"valueFingerprint", "variables"} {
-		if strings.Contains(string(raw), absent) {
-			t.Errorf("record = %s, want no %q for a Deployment that baked nothing", raw, absent)
+func TestDeploymentRecord(t *testing.T) {
+	t.Parallel()
+
+	t.Run("audit fields are omitted when absent", func(t *testing.T) {
+		t.Parallel()
+
+		raw, err := json.Marshal(DeploymentRecord{App: "web", Identity: "b1"})
+		if err != nil {
+			t.Fatalf("Marshal: %v", err)
 		}
-	}
-}
-
-func TestDeploymentRecord_AuditFieldsMarshalUnderTheirWireNames(t *testing.T) {
-	raw, err := json.Marshal(DeploymentRecord{
-		App:              "web",
-		Identity:         "b1~fp",
-		ValueFingerprint: "fp",
-		Variables: []VariableRecord{
-			{Key: "PLAIN_KEY", Version: 2},
-			{Key: "LIVE_KEY", Folder: "/api", Live: true},
-		},
+		for _, absent := range []string{"valueFingerprint", "variables"} {
+			if strings.Contains(string(raw), absent) {
+				t.Errorf("record = %s, want no %q for a Deployment that baked nothing", raw, absent)
+			}
+		}
 	})
-	if err != nil {
-		t.Fatalf("Marshal: %v", err)
-	}
 
-	var got struct {
-		ValueFingerprint string           `json:"valueFingerprint"`
-		Variables        []VariableRecord `json:"variables"`
-	}
-	if err := json.Unmarshal(raw, &got); err != nil {
-		t.Fatalf("Unmarshal: %v", err)
-	}
-	if got.ValueFingerprint != "fp" {
-		t.Errorf("valueFingerprint = %q, want %q", got.ValueFingerprint, "fp")
-	}
-	if len(got.Variables) != 2 {
-		t.Fatalf("variables = %v, want both entries", got.Variables)
-	}
-	if got.Variables[0] != (VariableRecord{Key: "PLAIN_KEY", Version: 2}) {
-		t.Errorf("variables[0] = %+v, want the version it shipped at", got.Variables[0])
-	}
-	if got.Variables[1] != (VariableRecord{Key: "LIVE_KEY", Folder: "/api", Live: true}) {
-		t.Errorf("variables[1] = %+v, want a latest-at-runtime entry with no version", got.Variables[1])
-	}
+	t.Run("audit fields marshal under their wire names", func(t *testing.T) {
+		t.Parallel()
+
+		raw, err := json.Marshal(DeploymentRecord{
+			App:              "web",
+			Identity:         "b1~fp",
+			ValueFingerprint: "fp",
+			Variables: []VariableRecord{
+				{Key: "PLAIN_KEY", Version: 2},
+				{Key: "LIVE_KEY", Folder: "/api", Live: true},
+			},
+		})
+		if err != nil {
+			t.Fatalf("Marshal: %v", err)
+		}
+
+		var got struct {
+			ValueFingerprint string           `json:"valueFingerprint"`
+			Variables        []VariableRecord `json:"variables"`
+		}
+		if err := json.Unmarshal(raw, &got); err != nil {
+			t.Fatalf("Unmarshal: %v", err)
+		}
+		if got.ValueFingerprint != "fp" {
+			t.Errorf("valueFingerprint = %q, want %q", got.ValueFingerprint, "fp")
+		}
+		if len(got.Variables) != 2 {
+			t.Fatalf("variables = %v, want both entries", got.Variables)
+		}
+		if got.Variables[0] != (VariableRecord{Key: "PLAIN_KEY", Version: 2}) {
+			t.Errorf("variables[0] = %+v, want the version it shipped at", got.Variables[0])
+		}
+		if got.Variables[1] != (VariableRecord{Key: "LIVE_KEY", Folder: "/api", Live: true}) {
+			t.Errorf("variables[1] = %+v, want a latest-at-runtime entry with no version", got.Variables[1])
+		}
+	})
 }

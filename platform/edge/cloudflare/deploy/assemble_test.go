@@ -49,143 +49,162 @@ func writeAppArtifacts(t *testing.T) edge.WorkerSource {
 	return edge.WorkerSource{ArtifactRoot: root, BundlePath: bundle}
 }
 
-func TestAssembleApp_FullyConfigured(t *testing.T) {
-	src := writeAppArtifacts(t)
-	src.Routes = []string{"/api/documents"}
-	r := stubResolver{
-		urls:     map[string]string{"/api/documents": "https://fn.lambda-url.aws/"},
-		creds:    edge.Credentials{AccessKeyID: "AKIAEDGE", SecretKey: "secret-edge"},
-		hasCreds: true,
-	}
-
-	w, err := assembleFor(t)(src, r)
-	if err != nil {
-		t.Fatalf("assemble: %v", err)
-	}
-
-	wantVars := map[string]string{
-		"OCEL_EDGE_ACCESS_KEY_ID": "AKIAEDGE",
-	}
-	if len(w.Vars) != len(wantVars) {
-		t.Errorf("got %d vars, want %d: %v", len(w.Vars), len(wantVars), w.Vars)
-	}
-	for k, want := range wantVars {
-		if got := w.Vars[k]; got != want {
-			t.Errorf("Vars[%s] = %q, want %q", k, got, want)
-		}
-	}
-	if len(w.Secrets) != 1 || w.Secrets["OCEL_EDGE_SECRET_KEY"] != "secret-edge" {
-		t.Errorf("Secrets = %v, want only OCEL_EDGE_SECRET_KEY", w.Secrets)
-	}
-	if _, leaked := w.Vars["OCEL_EDGE_SECRET_KEY"]; leaked {
-		t.Error("the signing secret must never appear in plain-text Vars")
-	}
-
-	if string(w.Main.Content) != "export default {}" || w.Main.Name != "index.js" {
-		t.Errorf("Main = %q / %q", w.Main.Name, w.Main.Content)
-	}
-	if len(w.Modules) != 1 || w.Modules[0].Name != "routing-manifest.json" || w.Modules[0].ContentType != "text/plain" {
-		t.Errorf("Modules = %v, want the routing manifest as a text module", w.Modules)
-	}
-	if w.AssetBinding != "ASSETS" {
-		t.Errorf("AssetBinding = %q, want ASSETS", w.AssetBinding)
-	}
-	if len(w.Assets) != 1 || w.Assets[0].Path != "/next.svg" {
-		t.Errorf("Assets = %v, want /next.svg", w.Assets)
-	}
-}
-
-func TestAssembleApp_NoCredentialsOmitsSigningBindings(t *testing.T) {
-	src := writeAppArtifacts(t)
-	src.Routes = []string{"/"}
-	r := stubResolver{urls: map[string]string{"/": "https://fn.lambda-url.aws/"}}
-
-	w, err := assembleFor(t)(src, r)
-	if err != nil {
-		t.Fatalf("a substrate predating edge credentials must not fail the deploy: %v", err)
-	}
-	if w.Secrets != nil {
-		t.Errorf("Secrets = %v, want none", w.Secrets)
-	}
-	if len(w.Vars) != 0 {
-		t.Errorf("Vars = %v, want none without edge credentials", w.Vars)
-	}
-}
-
-func TestAssembleApp_AsksForItsObjectStoreByName(t *testing.T) {
-	src := writeAppArtifacts(t)
-	src.Routes = []string{"/"}
-	r := stubResolver{urls: map[string]string{"/": "https://fn.lambda-url.aws/"}}
-
-	w, err := assembleFor(t)(src, r)
-	if err != nil {
-		t.Fatalf("assemble: %v", err)
-	}
-	if w.ObjectStore.Binding != objectStoreBinding {
-		t.Errorf("ObjectStore.Binding = %q, want %q", w.ObjectStore.Binding, objectStoreBinding)
-	}
-	if w.ObjectStore.Bucket != "" {
-		t.Errorf("ObjectStore.Bucket = %q, want empty: the edge names the bucket it provisioned", w.ObjectStore.Bucket)
-	}
-}
-
-func TestAssembleApp_UnresolvableRouteIsAnError(t *testing.T) {
-	src := writeAppArtifacts(t)
-	src.Routes = []string{"/orphan"}
-
-	_, err := assembleFor(t)(src, stubResolver{urls: map[string]string{}})
-	if err == nil {
-		t.Fatal("expected an error for an unresolvable route")
-	}
-}
-
-func TestCollectStaticAssets_ReadsFilesWithPathAndContent(t *testing.T) {
-	dir := t.TempDir()
-	if err := os.MkdirAll(filepath.Join(dir, "icons"), 0o755); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(filepath.Join(dir, "next.svg"), []byte("hello"), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(filepath.Join(dir, "icons", "logo.png"), []byte("xx"), 0o644); err != nil {
-		t.Fatal(err)
-	}
-
-	assets, err := collectStaticAssets(dir)
-	if err != nil {
-		t.Fatalf("collectStaticAssets: %v", err)
-	}
-	if len(assets) != 2 {
-		t.Fatalf("got %d assets, want 2", len(assets))
-	}
-
-	byPath := map[string]edge.StaticAsset{}
-	for _, a := range assets {
-		byPath[a.Path] = a
-	}
-	svg, ok := byPath["/next.svg"]
-	if !ok {
-		t.Fatalf("missing /next.svg; got %v", byPath)
-	}
-	if string(svg.Content) != "hello" {
-		t.Errorf("/next.svg content = %q, want %q", svg.Content, "hello")
-	}
-	if _, ok := byPath["/icons/logo.png"]; !ok {
-		t.Errorf("missing nested /icons/logo.png; got %v", byPath)
-	}
-}
-
-func TestCollectStaticAssets_MissingDirYieldsNone(t *testing.T) {
-	assets, err := collectStaticAssets(filepath.Join(t.TempDir(), "does-not-exist"))
-	if err != nil {
-		t.Fatalf("expected no error for missing dir, got %v", err)
-	}
-	if len(assets) != 0 {
-		t.Errorf("expected no assets, got %d", len(assets))
-	}
-}
-
 func assembleFor(t *testing.T) func(edge.WorkerSource, edge.Resolver) (edge.Worker, error) {
 	t.Helper()
 	return New().AssembleApp
+}
+
+func TestAssembleApp(t *testing.T) {
+	t.Parallel()
+
+	t.Run("a fully configured source yields every module, binding and asset", func(t *testing.T) {
+		t.Parallel()
+
+		src := writeAppArtifacts(t)
+		src.Routes = []string{"/api/documents"}
+		r := stubResolver{
+			urls:     map[string]string{"/api/documents": "https://fn.lambda-url.aws/"},
+			creds:    edge.Credentials{AccessKeyID: "AKIAEDGE", SecretKey: "secret-edge"},
+			hasCreds: true,
+		}
+
+		w, err := assembleFor(t)(src, r)
+		if err != nil {
+			t.Fatalf("assemble: %v", err)
+		}
+
+		wantVars := map[string]string{
+			"OCEL_EDGE_ACCESS_KEY_ID": "AKIAEDGE",
+		}
+		if len(w.Vars) != len(wantVars) {
+			t.Errorf("got %d vars, want %d: %v", len(w.Vars), len(wantVars), w.Vars)
+		}
+		for k, want := range wantVars {
+			if got := w.Vars[k]; got != want {
+				t.Errorf("Vars[%s] = %q, want %q", k, got, want)
+			}
+		}
+		if len(w.Secrets) != 1 || w.Secrets["OCEL_EDGE_SECRET_KEY"] != "secret-edge" {
+			t.Errorf("Secrets = %v, want only OCEL_EDGE_SECRET_KEY", w.Secrets)
+		}
+		if _, leaked := w.Vars["OCEL_EDGE_SECRET_KEY"]; leaked {
+			t.Error("the signing secret must never appear in plain-text Vars")
+		}
+
+		if string(w.Main.Content) != "export default {}" || w.Main.Name != "index.js" {
+			t.Errorf("Main = %q / %q", w.Main.Name, w.Main.Content)
+		}
+		if len(w.Modules) != 1 || w.Modules[0].Name != "routing-manifest.json" || w.Modules[0].ContentType != "text/plain" {
+			t.Errorf("Modules = %v, want the routing manifest as a text module", w.Modules)
+		}
+		if w.AssetBinding != "ASSETS" {
+			t.Errorf("AssetBinding = %q, want ASSETS", w.AssetBinding)
+		}
+		if len(w.Assets) != 1 || w.Assets[0].Path != "/next.svg" {
+			t.Errorf("Assets = %v, want /next.svg", w.Assets)
+		}
+	})
+
+	t.Run("a substrate offering no credentials omits the signing bindings", func(t *testing.T) {
+		t.Parallel()
+
+		src := writeAppArtifacts(t)
+		src.Routes = []string{"/"}
+		r := stubResolver{urls: map[string]string{"/": "https://fn.lambda-url.aws/"}}
+
+		w, err := assembleFor(t)(src, r)
+		if err != nil {
+			t.Fatalf("a substrate predating edge credentials must not fail the deploy: %v", err)
+		}
+		if w.Secrets != nil {
+			t.Errorf("Secrets = %v, want none", w.Secrets)
+		}
+		if len(w.Vars) != 0 {
+			t.Errorf("Vars = %v, want none without edge credentials", w.Vars)
+		}
+	})
+
+	t.Run("the object store is asked for by name and left unbucketed", func(t *testing.T) {
+		t.Parallel()
+
+		src := writeAppArtifacts(t)
+		src.Routes = []string{"/"}
+		r := stubResolver{urls: map[string]string{"/": "https://fn.lambda-url.aws/"}}
+
+		w, err := assembleFor(t)(src, r)
+		if err != nil {
+			t.Fatalf("assemble: %v", err)
+		}
+		if w.ObjectStore.Binding != objectStoreBinding {
+			t.Errorf("ObjectStore.Binding = %q, want %q", w.ObjectStore.Binding, objectStoreBinding)
+		}
+		if w.ObjectStore.Bucket != "" {
+			t.Errorf("ObjectStore.Bucket = %q, want empty: the edge names the bucket it provisioned", w.ObjectStore.Bucket)
+		}
+	})
+
+	t.Run("an unresolvable route is an error", func(t *testing.T) {
+		t.Parallel()
+
+		src := writeAppArtifacts(t)
+		src.Routes = []string{"/orphan"}
+
+		if _, err := assembleFor(t)(src, stubResolver{urls: map[string]string{}}); err == nil {
+			t.Fatal("expected an error for an unresolvable route")
+		}
+	})
+}
+
+func TestCollectStaticAssets(t *testing.T) {
+	t.Parallel()
+
+	t.Run("every file is read with its rooted path and content", func(t *testing.T) {
+		t.Parallel()
+
+		dir := t.TempDir()
+		if err := os.MkdirAll(filepath.Join(dir, "icons"), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(dir, "next.svg"), []byte("hello"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(dir, "icons", "logo.png"), []byte("xx"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+
+		assets, err := collectStaticAssets(dir)
+		if err != nil {
+			t.Fatalf("collectStaticAssets: %v", err)
+		}
+		if len(assets) != 2 {
+			t.Fatalf("got %d assets, want 2", len(assets))
+		}
+
+		byPath := map[string]edge.StaticAsset{}
+		for _, a := range assets {
+			byPath[a.Path] = a
+		}
+		svg, ok := byPath["/next.svg"]
+		if !ok {
+			t.Fatalf("missing /next.svg; got %v", byPath)
+		}
+		if string(svg.Content) != "hello" {
+			t.Errorf("/next.svg content = %q, want %q", svg.Content, "hello")
+		}
+		if _, ok := byPath["/icons/logo.png"]; !ok {
+			t.Errorf("missing nested /icons/logo.png; got %v", byPath)
+		}
+	})
+
+	t.Run("a missing directory yields no assets and no error", func(t *testing.T) {
+		t.Parallel()
+
+		assets, err := collectStaticAssets(filepath.Join(t.TempDir(), "does-not-exist"))
+		if err != nil {
+			t.Fatalf("expected no error for missing dir, got %v", err)
+		}
+		if len(assets) != 0 {
+			t.Errorf("expected no assets, got %d", len(assets))
+		}
+	})
 }

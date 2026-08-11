@@ -18,7 +18,7 @@ import (
 func withRunnerValues(t *testing.T, root string, opts envOptions, drive func(ctx context.Context, slug string, runner *providerrunner.Runner, values runnerValues) error) {
 	t.Helper()
 	ctx := context.Background()
-	err := envSession(ctx, root, opts, io.Discard, io.Discard, func(runner *providerrunner.Runner, cfg *projectconfig.Config, provider *projectconfig.ProviderDescriptor) error {
+	err := envSession(ctx, defaultDeps(), root, opts, io.Discard, io.Discard, func(runner *providerrunner.Runner, cfg *projectconfig.Config, provider *projectconfig.ProviderDescriptor) error {
 		return drive(ctx, cfg.Slug, runner, runnerValues{
 			runner:  runner,
 			options: []byte(provider.Options),
@@ -33,7 +33,11 @@ func withRunnerValues(t *testing.T, root string, opts envOptions, drive func(ctx
 
 func storeValue(t *testing.T, ctx context.Context, runner *providerrunner.Runner, class deploymentsv1.Environment_Class, coordinate *envv1.Coordinate, value string) {
 	t.Helper()
-	if _, err := runner.SetValue(ctx, &envv1.SetValueRequest{
+	vars, err := runner.Vars()
+	if err != nil {
+		t.Fatalf("reach the provider's variable store: %v", err)
+	}
+	if _, err := vars.SetValue(ctx, &envv1.SetValueRequest{
 		ProtocolVersion: manifestbuilder.SchemaVersion,
 		Class:           class,
 		Coordinate:      coordinate,
@@ -63,85 +67,87 @@ func stored(t *testing.T, rows []envgate.Stored, key string) envgate.Stored {
 	return envgate.Stored{}
 }
 
-func TestRunnerValues_ListCarriesANamedEnvironmentsValueAsAnOverride(t *testing.T) {
-	root := setUpEnvFixture(t)
-	t.Setenv(fakeInfraClassEnvVar, "preview")
-	preview := envOptions{preview: true}
+func TestRunnerValues(t *testing.T) {
+	t.Run("List carries a named environment's value as an override", func(t *testing.T) {
+		root := setUpEnvFixture(t)
+		t.Setenv(fakeInfraClassEnvVar, "preview")
+		preview := envOptions{preview: true}
 
-	withRunnerValues(t, root, preview, func(ctx context.Context, slug string, runner *providerrunner.Runner, values runnerValues) error {
-		storeValue(t, ctx, runner, envClass(preview), &envv1.Coordinate{Slug: slug, Key: "API_URL"}, "https://root.example")
-		storeValue(t, ctx, runner, envClass(preview), &envv1.Coordinate{Slug: slug, Key: "STRIPE_API_KEY", Environment: "staging"}, "sk_pr")
+		withRunnerValues(t, root, preview, func(ctx context.Context, slug string, runner *providerrunner.Runner, values runnerValues) error {
+			storeValue(t, ctx, runner, envClass(preview), &envv1.Coordinate{Slug: slug, Key: "API_URL"}, "https://root.example")
+			storeValue(t, ctx, runner, envClass(preview), &envv1.Coordinate{Slug: slug, Key: "STRIPE_API_KEY", Environment: "staging"}, "sk_pr")
 
-		rows, err := values.List(ctx)
-		if err != nil {
-			t.Fatalf("List: %v", err)
-		}
-		if len(rows) != 2 {
-			t.Fatalf("List returned %+v, want both the class-wide value and the override", rows)
-		}
+			rows, err := values.List(ctx)
+			if err != nil {
+				t.Fatalf("List: %v", err)
+			}
+			if len(rows) != 2 {
+				t.Fatalf("List returned %+v, want both the class-wide value and the override", rows)
+			}
 
-		classWide := stored(t, rows, "API_URL")
-		if classWide.Environment != "" || classWide.Version != 1 {
-			t.Errorf("API_URL = %+v, want no environment and version 1", classWide)
-		}
-		override := stored(t, rows, "STRIPE_API_KEY")
-		if override.Environment != "staging" {
-			t.Errorf("STRIPE_API_KEY = %+v, want it to name the environment that holds it", override)
-		}
-		return nil
+			classWide := stored(t, rows, "API_URL")
+			if classWide.Environment != "" || classWide.Version != 1 {
+				t.Errorf("API_URL = %+v, want no environment and version 1", classWide)
+			}
+			override := stored(t, rows, "STRIPE_API_KEY")
+			if override.Environment != "staging" {
+				t.Errorf("STRIPE_API_KEY = %+v, want it to name the environment that holds it", override)
+			}
+			return nil
+		})
 	})
-}
 
-func TestRunnerValues_SetAgainstAStaleVersionIsRefusedAsAStaleValue(t *testing.T) {
-	root := setUpEnvFixture(t)
+	t.Run("Set against a stale version is refused as a stale value", func(t *testing.T) {
+		root := setUpEnvFixture(t)
 
-	withRunnerValues(t, root, envOptions{}, func(ctx context.Context, slug string, runner *providerrunner.Runner, values runnerValues) error {
-		storeValue(t, ctx, runner, envClass(envOptions{}), &envv1.Coordinate{Slug: slug, Key: "API_URL"}, "https://someone-elses.example")
-		at := envgate.Address{Cell: envgate.Cell{Key: "API_URL"}}
+		withRunnerValues(t, root, envOptions{}, func(ctx context.Context, slug string, runner *providerrunner.Runner, values runnerValues) error {
+			storeValue(t, ctx, runner, envClass(envOptions{}), &envv1.Coordinate{Slug: slug, Key: "API_URL"}, "https://someone-elses.example")
+			at := envgate.Address{Cell: envgate.Cell{Key: "API_URL"}}
 
-		unset := int64(0)
-		if err := values.Set(ctx, at, "https://mine.example", &unset); !errors.Is(err, varsui.ErrStaleValue) {
-			t.Fatalf("Set expecting an empty cell err = %v, want varsui.ErrStaleValue — the page drew a cell somebody has since filled", err)
-		}
-		if got, _, err := revealOne(ctx, values, at.Cell); err != nil || got != "https://someone-elses.example" {
-			t.Errorf("the cell holds %q (err %v), want the value already there — a refused write must not have landed", got, err)
-		}
+			unset := int64(0)
+			if err := values.Set(ctx, at, "https://mine.example", &unset); !errors.Is(err, varsui.ErrStaleValue) {
+				t.Fatalf("Set expecting an empty cell err = %v, want varsui.ErrStaleValue — the page drew a cell somebody has since filled", err)
+			}
+			if got, _, err := revealOne(ctx, values, at.Cell); err != nil || got != "https://someone-elses.example" {
+				t.Errorf("the cell holds %q (err %v), want the value already there — a refused write must not have landed", got, err)
+			}
 
-		current := int64(1)
-		if err := values.Set(ctx, at, "https://mine.example", &current); err != nil {
-			t.Fatalf("Set expecting the current version err = %v, want the write to land", err)
-		}
-		if got, _, err := revealOne(ctx, values, at.Cell); err != nil || got != "https://mine.example" {
-			t.Errorf("the cell holds %q (err %v), want the write that quoted the right version", got, err)
-		}
-		return nil
+			current := int64(1)
+			if err := values.Set(ctx, at, "https://mine.example", &current); err != nil {
+				t.Fatalf("Set expecting the current version err = %v, want the write to land", err)
+			}
+			if got, _, err := revealOne(ctx, values, at.Cell); err != nil || got != "https://mine.example" {
+				t.Errorf("the cell holds %q (err %v), want the write that quoted the right version", got, err)
+			}
+			return nil
+		})
 	})
-}
 
-func TestRunnerValues_DeleteAgainstAStaleVersionIsRefusedAsAStaleValue(t *testing.T) {
-	root := setUpEnvFixture(t)
+	t.Run("Delete against a stale version is refused as a stale value", func(t *testing.T) {
+		root := setUpEnvFixture(t)
 
-	withRunnerValues(t, root, envOptions{}, func(ctx context.Context, slug string, runner *providerrunner.Runner, values runnerValues) error {
-		coordinate := &envv1.Coordinate{Slug: slug, Key: "API_URL"}
-		storeValue(t, ctx, runner, envClass(envOptions{}), coordinate, "https://first.example")
-		storeValue(t, ctx, runner, envClass(envOptions{}), coordinate, "https://someone-elses.example")
-		at := envgate.Address{Cell: envgate.Cell{Key: "API_URL"}}
+		withRunnerValues(t, root, envOptions{}, func(ctx context.Context, slug string, runner *providerrunner.Runner, values runnerValues) error {
+			coordinate := &envv1.Coordinate{Slug: slug, Key: "API_URL"}
+			storeValue(t, ctx, runner, envClass(envOptions{}), coordinate, "https://first.example")
+			storeValue(t, ctx, runner, envClass(envOptions{}), coordinate, "https://someone-elses.example")
+			at := envgate.Address{Cell: envgate.Cell{Key: "API_URL"}}
 
-		rendered := int64(1)
-		if err := values.Delete(ctx, at, &rendered); !errors.Is(err, varsui.ErrStaleValue) {
-			t.Fatalf("Delete expecting version 1 err = %v, want varsui.ErrStaleValue — the page drew a value somebody has since replaced", err)
-		}
-		if got, found, err := revealOne(ctx, values, at.Cell); err != nil || !found || got != "https://someone-elses.example" {
-			t.Errorf("the cell holds %q (found %v, err %v), want the replacement — a refused delete must not have landed", got, found, err)
-		}
+			rendered := int64(1)
+			if err := values.Delete(ctx, at, &rendered); !errors.Is(err, varsui.ErrStaleValue) {
+				t.Fatalf("Delete expecting version 1 err = %v, want varsui.ErrStaleValue — the page drew a value somebody has since replaced", err)
+			}
+			if got, found, err := revealOne(ctx, values, at.Cell); err != nil || !found || got != "https://someone-elses.example" {
+				t.Errorf("the cell holds %q (found %v, err %v), want the replacement — a refused delete must not have landed", got, found, err)
+			}
 
-		current := int64(2)
-		if err := values.Delete(ctx, at, &current); err != nil {
-			t.Fatalf("Delete expecting the current version err = %v, want the delete to land", err)
-		}
-		if _, found, err := revealOne(ctx, values, at.Cell); err != nil || found {
-			t.Errorf("the cell is still set (found %v, err %v), want the honoured delete to have unset it", found, err)
-		}
-		return nil
+			current := int64(2)
+			if err := values.Delete(ctx, at, &current); err != nil {
+				t.Fatalf("Delete expecting the current version err = %v, want the delete to land", err)
+			}
+			if _, found, err := revealOne(ctx, values, at.Cell); err != nil || found {
+				t.Errorf("the cell is still set (found %v, err %v), want the honoured delete to have unset it", found, err)
+			}
+			return nil
+		})
 	})
 }

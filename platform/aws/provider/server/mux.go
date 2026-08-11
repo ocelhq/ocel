@@ -7,11 +7,12 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/proto/deployments/v1/deploymentsv1connect"
 	"github.com/ocelhq/ocel/pkg/proto/env/v1/envv1connect"
+	"github.com/ocelhq/ocel/platform/aws/provider/channelauth"
 )
 
 func NewMux(token string) *http.ServeMux {
 	mux := http.NewServeMux()
-	interceptors := connect.WithInterceptors(newAuthInterceptor(token))
+	interceptors := connect.WithInterceptors(channelauth.Interceptor(token))
 
 	path, handler := deploymentsv1connect.NewDeploymentServiceHandler(&Server{}, interceptors)
 	mux.Handle(path, handler)

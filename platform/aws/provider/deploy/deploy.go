@@ -142,8 +142,6 @@ func appURLs(manifest *deploymentsv1.Manifest, outputs []*deploymentsv1.Resource
 	return urls
 }
 
-const previewExpiryTagKey = "ocel:expires_at"
-
 func stampExpiry(ctx context.Context, stack auto.Stack, expiresAt int64) error {
 	if expiresAt == 0 {
 		return nil
@@ -152,56 +150,7 @@ func stampExpiry(ctx context.Context, stack auto.Stack, expiresAt int64) error {
 	return nil
 }
 
-func collectOutputs(ctx context.Context, secrets SecretsReader, manifest *deploymentsv1.Manifest, outputs auto.OutputMap) ([]*deploymentsv1.ResourceOutput, error) {
-	var result []*deploymentsv1.ResourceOutput
-	for _, r := range manifest.GetResources() {
-		if r.GetPostgres() == nil && r.GetBucket() == nil {
-			continue
-		}
-		name := r.GetLogicalName()
-		raw, ok := outputs[name]
-		if !ok {
-			return nil, fmt.Errorf("stack produced no output for %s", name)
-		}
-		fields, ok := raw.Value.(map[string]interface{})
-		if !ok {
-			return nil, fmt.Errorf("output for %s is not a map", name)
-		}
-		var (
-			out *deploymentsv1.ResourceOutput
-			err error
-		)
-		switch {
-		case r.GetPostgres() != nil:
-			out, err = collectPostgresOutput(ctx, secrets, name, fields)
-		case r.GetBucket() != nil:
-			out, err = collectBucketOutput(name, fields)
-		}
-		if err != nil {
-			return nil, err
-		}
-		result = append(result, out)
-	}
-	for _, fn := range manifest.GetFunctions() {
-		name := fn.GetLogicalName()
-		raw, ok := outputs[name]
-		if !ok {
-			return nil, fmt.Errorf("stack produced no output for %s", name)
-		}
-		fields, ok := raw.Value.(map[string]interface{})
-		if !ok {
-			return nil, fmt.Errorf("output for %s is not a map", name)
-		}
-		url, err := requireStringField(fields, name, outputKeyFunctionURL)
-		if err != nil {
-			return nil, err
-		}
-		result = append(result, collectFunctionOutput(name, url))
-	}
-	return result, nil
-}
-
-func collectPostgresOutput(ctx context.Context, secrets SecretsReader, name string, fields map[string]interface{}) (*deploymentsv1.ResourceOutput, error) {
+func collectPostgresOutput(ctx context.Context, secrets SecretsReader, name string, fields map[string]any) (*deploymentsv1.ResourceOutput, error) {
 	host, err := requireStringField(fields, name, outputKeyHost)
 	if err != nil {
 		return nil, err
@@ -243,7 +192,7 @@ func collectPostgresOutput(ctx context.Context, secrets SecretsReader, name stri
 	}, nil
 }
 
-func requireStringField(fields map[string]interface{}, name, key string) (string, error) {
+func requireStringField(fields map[string]any, name, key string) (string, error) {
 	v, ok := fields[key].(string)
 	if !ok || v == "" {
 		return "", fmt.Errorf("output %q for %s is missing or not a non-empty string", key, name)

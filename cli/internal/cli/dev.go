@@ -11,7 +11,6 @@ import (
 	"os/exec"
 	"path/filepath"
 	"slices"
-	"sort"
 	"strings"
 	"time"
 
@@ -23,17 +22,12 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/discovery"
 	"github.com/ocelhq/ocel/cli/internal/dotenv"
 	"github.com/ocelhq/ocel/cli/internal/election"
-	"github.com/ocelhq/ocel/cli/internal/lockfile"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
 	"github.com/ocelhq/ocel/cli/internal/provision"
 	"github.com/ocelhq/ocel/cli/internal/watcher"
 	devv1 "github.com/ocelhq/ocel/pkg/proto/dev/v1"
 	"github.com/ocelhq/ocel/pkg/proto/dev/v1/devv1connect"
 )
-
-var loadCredentials = credentials.Load
-
-var fetchProjectConfig = provision.FetchProjectConfig
 
 var watchDebounce = 300 * time.Millisecond
 
@@ -46,12 +40,12 @@ var devCmd = &cobra.Command{
 		if err != nil {
 			return fmt.Errorf("determine working directory: %w", err)
 		}
-		return runDev(cmd.Context(), cmd, cwd, args, cmd.OutOrStdout(), cmd.ErrOrStderr(), cmd.InOrStdin())
+		return runDev(cmd.Context(), defaultDeps(), cmd, cwd, args, cmd.OutOrStdout(), cmd.ErrOrStderr(), cmd.InOrStdin())
 	},
 }
 
-func runDev(ctx context.Context, cmd *cobra.Command, cwd string, appArgs []string, stdout, stderr io.Writer, stdin io.Reader) error {
-	creds, err := loadCredentials()
+func runDev(ctx context.Context, d deps, cmd *cobra.Command, cwd string, appArgs []string, stdout, stderr io.Writer, stdin io.Reader) error {
+	creds, err := d.loadCredentials()
 	if err != nil {
 		fmt.Fprintln(stderr, "You're not logged in. Run `ocel login` first.")
 		return &ExitError{Code: 1}
@@ -74,27 +68,25 @@ func runDev(ctx context.Context, cmd *cobra.Command, cwd string, appArgs []strin
 			return runFollower(ctx, role.LeaderAddr, appArgs, stdout, stderr, stdin)
 		}
 
-		link, err := ensureLinked(ctx, cfg.Dir, apiURL, stdout, stderr, stdin)
+		link, err := ensureLinked(ctx, d, cfg.Dir, apiURL, stdout, stderr, stdin)
 		if err != nil {
 			return err
 		}
-		if err := runLeader(ctx, creds, apiURL, link.ProjectID, cfg, appArgs, stdout, stderr, stdin); !errors.Is(err, errLostElection) {
+		if err := runLeader(ctx, d, role, creds, apiURL, link.ProjectID, cfg, appArgs, stdout, stderr, stdin); !errors.Is(err, election.ErrLost) {
 			return err
 		}
 	}
 	return errors.New("determine leader/follower role: repeatedly lost the leader election; try again")
 }
 
-var errLostElection = errors.New("another process became leader first")
-
-func runLeader(ctx context.Context, creds credentials.Credentials, apiURL, projectID string, cfg *projectconfig.Config, appArgs []string, stdout, stderr io.Writer, stdin io.Reader) error {
+func runLeader(ctx context.Context, d deps, role election.Result, creds credentials.Credentials, apiURL, projectID string, cfg *projectconfig.Config, appArgs []string, stdout, stderr io.Writer, stdin io.Reader) error {
 	file, err := dotenv.Load(cfg.Dir)
 	if err != nil {
 		return err
 	}
 	reportDotfile(stdout, cfg.Dir, file.Values, dotfileWatchedAdvice)
 
-	projectCfg := resolveProjectConfig(ctx, apiURL, creds.AccessToken, projectID, stderr)
+	projectCfg := resolveProjectConfig(ctx, d, apiURL, creds.AccessToken, projectID, stderr)
 
 	listener, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
@@ -114,13 +106,10 @@ func runLeader(ctx context.Context, creds credentials.Credentials, apiURL, proje
 		fmt.Fprintln(stderr, "upload detection:", err)
 	})
 
-	if err := lockfile.Create(cfg.Dir, addr); err != nil {
-		if errors.Is(err, os.ErrExist) {
-			return errLostElection
-		}
-		return fmt.Errorf("write leader lockfile: %w", err)
+	if err := role.Claim(addr); err != nil {
+		return err
 	}
-	defer lockfile.Remove(cfg.Dir)
+	defer role.Release()
 
 	resolved, err := resolveOnce(ctx, srv, cfg, projectCfg.EnvVars, stdout, stderr)
 	if err != nil {
@@ -183,7 +172,7 @@ func reportLiveValues(stdout io.Writer, liveKeys []string) {
 		return
 	}
 	keys := slices.Clone(liveKeys)
-	sort.Strings(keys)
+	slices.Sort(keys)
 	fmt.Fprintf(stdout, "resolved %s once, at startup. Deployed, a rotated value is picked up within a bounded window; here, restart `ocel dev` to pick one up.\n", strings.Join(keys, ", "))
 }
 
@@ -302,11 +291,11 @@ func waitExitError(err error) error {
 	return err
 }
 
-func mergeEnv(base []string, projectEnv, liveValues, dotfile map[string]string, resources []provision.ProvisionedResource, appFolder string) []string {
+func mergeEnv(base []string, projectEnv, liveValues, dotfile map[string]string, resources []provision.Resource, appFolder string) []string {
 	return applyEnv(base, resolvedEnv(projectEnv, liveValues, dotfile, resources, appFolder))
 }
 
-func resolvedEnv(projectEnv, liveValues, dotfile map[string]string, resources []provision.ProvisionedResource, appFolder string) map[string]string {
+func resolvedEnv(projectEnv, liveValues, dotfile map[string]string, resources []provision.Resource, appFolder string) map[string]string {
 	merged := make(map[string]string, len(projectEnv)+len(liveValues)+len(dotfile)+1)
 	for k, v := range projectEnv {
 		merged[k] = v

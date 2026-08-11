@@ -11,7 +11,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"sort"
+	"slices"
 	"strings"
 	"unicode"
 
@@ -55,8 +55,6 @@ type functionConfig struct {
 	ID        string `json:"id,omitempty"`
 }
 
-var builderExec = runNode
-
 const adapterPathEnv = "NEXT_ADAPTER_PATH"
 
 const appFolderEnv = "OCEL_APP_FOLDER"
@@ -79,7 +77,7 @@ func builderEnv(adapterPath string, vars map[string]string) []string {
 	for key := range vars {
 		keys = append(keys, key)
 	}
-	sort.Strings(keys)
+	slices.Sort(keys)
 
 	env := os.Environ()
 	for _, key := range keys {
@@ -101,7 +99,17 @@ func AppFolder(apps []projectconfig.App) string {
 	return folder
 }
 
+type Exec func(ctx context.Context, scriptPath string, env []string, request []byte, stderr io.Writer) error
+
+type Builder struct {
+	Exec Exec
+}
+
 func Build(ctx context.Context, cfg *projectconfig.Config, envByApp map[string]map[string]string, stderr io.Writer) error {
+	return Builder{}.Build(ctx, cfg, envByApp, stderr)
+}
+
+func (b Builder) Build(ctx context.Context, cfg *projectconfig.Config, envByApp map[string]map[string]string, stderr io.Writer) error {
 	for _, env := range envByApp {
 		if err := checkVariableNames(env); err != nil {
 			return err
@@ -139,7 +147,11 @@ func Build(ctx context.Context, cfg *projectconfig.Config, envByApp map[string]m
 	if err != nil {
 		return fmt.Errorf("marshal build request: %w", err)
 	}
-	return builderExec(ctx, builderPath, builderEnv(node.AdapterPath(cfg.Dir), envByApp[rootAppEnv]), payload, stderr)
+	run := b.Exec
+	if run == nil {
+		run = runNode
+	}
+	return run(ctx, builderPath, builderEnv(node.AdapterPath(cfg.Dir), envByApp[rootAppEnv]), payload, stderr)
 }
 
 func CollectFunctions(projectDir string) ([]manifestbuilder.Function, error) {
@@ -189,7 +201,7 @@ func collectFunctions(outputDir string) ([]manifestbuilder.Function, error) {
 		functions = append(functions, appFunctions...)
 	}
 
-	sort.Slice(functions, func(i, j int) bool { return functions[i].Name < functions[j].Name })
+	slices.SortFunc(functions, func(a, b manifestbuilder.Function) int { return strings.Compare(a.Name, b.Name) })
 	return functions, nil
 }
 

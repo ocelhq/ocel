@@ -3,14 +3,15 @@ package lockfile
 import (
 	"crypto/sha256"
 	"encoding/hex"
+	"errors"
 	"fmt"
+	"io/fs"
 	"os"
-	"os/user"
 	"path/filepath"
 	"strings"
 )
 
-const dirName = "ocel-dev-locks"
+const dirName = "dev-locks"
 
 func Path(root string) (string, error) {
 	name, err := key(root)
@@ -60,19 +61,19 @@ func Remove(root string) error {
 	if err != nil {
 		return err
 	}
-	if err := os.Remove(path); err != nil && !os.IsNotExist(err) {
+	if err := os.Remove(path); err != nil && !errors.Is(err, fs.ErrNotExist) {
 		return fmt.Errorf("remove lockfile: %w", err)
 	}
 	return nil
 }
 
 func lockDir() (string, error) {
-	uid := "shared"
-	if u, err := user.Current(); err == nil && u.Uid != "" {
-		uid = u.Uid
+	base, err := os.UserCacheDir()
+	if err != nil {
+		return "", fmt.Errorf("resolve user cache directory: %w", err)
 	}
 
-	dir := filepath.Join(os.TempDir(), fmt.Sprintf("%s-%s", dirName, uid))
+	dir := filepath.Join(base, "ocel", dirName)
 	if err := os.MkdirAll(dir, 0o700); err != nil {
 		return "", fmt.Errorf("create lockfile directory: %w", err)
 	}

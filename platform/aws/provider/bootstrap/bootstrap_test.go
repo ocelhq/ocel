@@ -82,80 +82,89 @@ func parseTemplateStr(t *testing.T, template string) parsedTemplate {
 	return tmpl
 }
 
-func TestStackTemplate_StateTable(t *testing.T) {
-	for _, tc := range []struct {
-		name     string
-		template string
-	}{
-		{"production", stackTemplate(edge.TrustExternal, fixtureArtifacts(), RequiredBootstrapVersion)},
-		{"preview", previewStackTemplate(edge.TrustExternal, fixtureArtifacts(), RequiredBootstrapVersion)},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			tmpl := parseTemplateStr(t, tc.template)
+func TestStackTemplate(t *testing.T) {
+	t.Run("state table", func(t *testing.T) {
+		for _, tc := range []struct {
+			name     string
+			template string
+		}{
+			{"production", stackTemplate(edge.TrustExternal, fixtureArtifacts(), RequiredBootstrapVersion)},
+			{"preview", previewStackTemplate(edge.TrustExternal, fixtureArtifacts(), RequiredBootstrapVersion)},
+		} {
+			t.Run(tc.name, func(t *testing.T) {
+				tmpl := parseTemplateStr(t, tc.template)
 
-			table, ok := tmpl.Resources["StateTable"]
-			if !ok {
-				t.Fatal("template is missing the StateTable resource")
-			}
-			if table.Type != "AWS::DynamoDB::Table" {
-				t.Errorf("StateTable Type = %q, want AWS::DynamoDB::Table", table.Type)
-			}
-			if table.Properties.BillingMode != "PAY_PER_REQUEST" {
-				t.Errorf("BillingMode = %q, want PAY_PER_REQUEST", table.Properties.BillingMode)
-			}
+				table, ok := tmpl.Resources["StateTable"]
+				if !ok {
+					t.Fatal("template is missing the StateTable resource")
+				}
+				if table.Type != "AWS::DynamoDB::Table" {
+					t.Errorf("StateTable Type = %q, want AWS::DynamoDB::Table", table.Type)
+				}
+				if table.Properties.BillingMode != "PAY_PER_REQUEST" {
+					t.Errorf("BillingMode = %q, want PAY_PER_REQUEST", table.Properties.BillingMode)
+				}
 
-			attrs := table.Properties.AttributeDefinitions
-			if len(attrs) != 4 ||
-				attrs[0].AttributeName != "pk" || attrs[0].AttributeType != "S" ||
-				attrs[1].AttributeName != "sk" || attrs[1].AttributeType != "S" ||
-				attrs[2].AttributeName != "gsi1pk" || attrs[2].AttributeType != "S" ||
-				attrs[3].AttributeName != "gsi1sk" || attrs[3].AttributeType != "S" {
-				t.Errorf("AttributeDefinitions = %+v, want pk/sk and gsi1pk/gsi1sk, all (S)", attrs)
-			}
-			keys := table.Properties.KeySchema
-			if len(keys) != 2 ||
-				keys[0].AttributeName != "pk" || keys[0].KeyType != "HASH" ||
-				keys[1].AttributeName != "sk" || keys[1].KeyType != "RANGE" {
-				t.Errorf("KeySchema = %+v, want pk HASH + sk RANGE", keys)
-			}
+				attrs := table.Properties.AttributeDefinitions
+				if len(attrs) != 4 ||
+					attrs[0].AttributeName != "pk" || attrs[0].AttributeType != "S" ||
+					attrs[1].AttributeName != "sk" || attrs[1].AttributeType != "S" ||
+					attrs[2].AttributeName != "gsi1pk" || attrs[2].AttributeType != "S" ||
+					attrs[3].AttributeName != "gsi1sk" || attrs[3].AttributeType != "S" {
+					t.Errorf("AttributeDefinitions = %+v, want pk/sk and gsi1pk/gsi1sk, all (S)", attrs)
+				}
+				keys := table.Properties.KeySchema
+				if len(keys) != 2 ||
+					keys[0].AttributeName != "pk" || keys[0].KeyType != "HASH" ||
+					keys[1].AttributeName != "sk" || keys[1].KeyType != "RANGE" {
+					t.Errorf("KeySchema = %+v, want pk HASH + sk RANGE", keys)
+				}
 
-			idxs := table.Properties.GlobalSecondaryIndexes
-			if len(idxs) != 1 {
-				t.Fatalf("GlobalSecondaryIndexes = %+v, want exactly the tag-sync index", idxs)
-			}
-			idx := idxs[0]
-			if idx.IndexName != StateTableIndexName {
-				t.Errorf("IndexName = %q, want %q", idx.IndexName, StateTableIndexName)
-			}
-			if len(idx.KeySchema) != 2 ||
-				idx.KeySchema[0].AttributeName != "gsi1pk" || idx.KeySchema[0].KeyType != "HASH" ||
-				idx.KeySchema[1].AttributeName != "gsi1sk" || idx.KeySchema[1].KeyType != "RANGE" {
-				t.Errorf("index KeySchema = %+v, want gsi1pk HASH + gsi1sk RANGE", idx.KeySchema)
-			}
-			if idx.Projection.ProjectionType != "INCLUDE" {
-				t.Errorf("index ProjectionType = %q, want INCLUDE", idx.Projection.ProjectionType)
-			}
-			if want := []string{"expired", "stale", "tag"}; !slices.Equal(idx.Projection.NonKeyAttributes, want) {
-				t.Errorf("index NonKeyAttributes = %v, want %v", idx.Projection.NonKeyAttributes, want)
-			}
+				idxs := table.Properties.GlobalSecondaryIndexes
+				if len(idxs) != 1 {
+					t.Fatalf("GlobalSecondaryIndexes = %+v, want exactly the tag-sync index", idxs)
+				}
+				idx := idxs[0]
+				if idx.IndexName != StateTableIndexName {
+					t.Errorf("IndexName = %q, want %q", idx.IndexName, StateTableIndexName)
+				}
+				if len(idx.KeySchema) != 2 ||
+					idx.KeySchema[0].AttributeName != "gsi1pk" || idx.KeySchema[0].KeyType != "HASH" ||
+					idx.KeySchema[1].AttributeName != "gsi1sk" || idx.KeySchema[1].KeyType != "RANGE" {
+					t.Errorf("index KeySchema = %+v, want gsi1pk HASH + gsi1sk RANGE", idx.KeySchema)
+				}
+				if idx.Projection.ProjectionType != "INCLUDE" {
+					t.Errorf("index ProjectionType = %q, want INCLUDE", idx.Projection.ProjectionType)
+				}
+				if want := []string{"expired", "stale", "tag"}; !slices.Equal(idx.Projection.NonKeyAttributes, want) {
+					t.Errorf("index NonKeyAttributes = %v, want %v", idx.Projection.NonKeyAttributes, want)
+				}
 
-			ttl := table.Properties.TimeToLiveSpecification
-			if ttl.AttributeName != "expires_at" || !ttl.Enabled {
-				t.Errorf("TimeToLiveSpecification = %+v, want expires_at enabled", ttl)
-			}
+				ttl := table.Properties.TimeToLiveSpecification
+				if ttl.AttributeName != "expires_at" || !ttl.Enabled {
+					t.Errorf("TimeToLiveSpecification = %+v, want expires_at enabled", ttl)
+				}
 
-			if view := table.Properties.StreamSpecification.StreamViewType; view != "NEW_IMAGE" {
-				t.Errorf("StreamViewType = %q, want NEW_IMAGE", view)
-			}
+				if view := table.Properties.StreamSpecification.StreamViewType; view != "NEW_IMAGE" {
+					t.Errorf("StreamViewType = %q, want NEW_IMAGE", view)
+				}
 
-			if _, ok := tmpl.Outputs[outputStateTable]; !ok {
-				t.Errorf("template is missing the %s output", outputStateTable)
-			}
-			if _, ok := tmpl.Resources["SessionsTable"]; ok {
-				t.Error("SessionsTable is superseded by StateTable and must not be provisioned")
-			}
-		})
-	}
+				if _, ok := tmpl.Outputs[outputStateTable]; !ok {
+					t.Errorf("template is missing the %s output", outputStateTable)
+				}
+				if _, ok := tmpl.Resources["SessionsTable"]; ok {
+					t.Error("SessionsTable is superseded by StateTable and must not be provisioned")
+				}
+			})
+		}
+	})
+
+	t.Run("version output", func(t *testing.T) {
+		tmpl := parseTemplate(t)
+		if got := tmpl.Outputs[outputVersion].Value; got != strconv.Itoa(RequiredBootstrapVersion) {
+			t.Errorf("%s output = %q, want %d", outputVersion, got, RequiredBootstrapVersion)
+		}
+	})
 }
 
 func TestArtifactBucket(t *testing.T) {
@@ -250,13 +259,6 @@ func TestAssetBucket(t *testing.T) {
 	}
 }
 
-func TestStackTemplate_VersionOutput(t *testing.T) {
-	tmpl := parseTemplate(t)
-	if got := tmpl.Outputs[outputVersion].Value; got != strconv.Itoa(RequiredBootstrapVersion) {
-		t.Errorf("%s output = %q, want %d", outputVersion, got, RequiredBootstrapVersion)
-	}
-}
-
 type stubDescriber struct {
 	out *cloudformation.DescribeStacksOutput
 }
@@ -265,56 +267,60 @@ func (s stubDescriber) DescribeStacks(context.Context, *cloudformation.DescribeS
 	return s.out, nil
 }
 
-func TestCheckDeployed_ParsesOutputs(t *testing.T) {
-	api := stubDescriber{out: &cloudformation.DescribeStacksOutput{
-		Stacks: []cfntypes.Stack{{
-			Outputs: []cfntypes.Output{
-				{OutputKey: aws.String(outputStateBucket), OutputValue: aws.String("bucket-123")},
-				{OutputKey: aws.String(outputStateTable), OutputValue: aws.String("state-abc")},
-				{OutputKey: aws.String(outputArtifactBucket), OutputValue: aws.String("artifacts-xyz")},
-				{OutputKey: aws.String(outputAssetBucket), OutputValue: aws.String("assets-xyz")},
-				{OutputKey: aws.String(outputVersion), OutputValue: aws.String("3")},
-				{OutputKey: aws.String(outputInfraClass), OutputValue: aws.String(ClassProduction)},
-			},
-		}},
-	}}
+func TestCheckDeployed(t *testing.T) {
+	t.Run("parses outputs", func(t *testing.T) {
+		api := stubDescriber{out: &cloudformation.DescribeStacksOutput{
+			Stacks: []cfntypes.Stack{{
+				Outputs: []cfntypes.Output{
+					{OutputKey: aws.String(outputStateBucket), OutputValue: aws.String("bucket-123")},
+					{OutputKey: aws.String(outputStateTable), OutputValue: aws.String("state-abc")},
+					{OutputKey: aws.String(outputArtifactBucket), OutputValue: aws.String("artifacts-xyz")},
+					{OutputKey: aws.String(outputAssetBucket), OutputValue: aws.String("assets-xyz")},
+					{OutputKey: aws.String(outputVersion), OutputValue: aws.String("3")},
+					{OutputKey: aws.String(outputInfraClass), OutputValue: aws.String(ClassProduction)},
+				},
+			}},
+		}}
 
-	got, err := CheckDeployed(context.Background(), api)
-	if err != nil {
-		t.Fatalf("CheckDeployed: %v", err)
-	}
-	want := Deployed{Present: true, Version: 3, StateBucket: "bucket-123", StateTable: "state-abc", ArtifactBucket: "artifacts-xyz", AssetBucket: "assets-xyz", Class: ClassProduction}
-	if got != want {
-		t.Errorf("CheckDeployed = %+v, want %+v", got, want)
-	}
+		got, err := CheckDeployed(context.Background(), api)
+		if err != nil {
+			t.Fatalf("CheckDeployed: %v", err)
+		}
+		want := Deployed{Present: true, Version: 3, StateBucket: "bucket-123", StateTable: "state-abc", ArtifactBucket: "artifacts-xyz", AssetBucket: "assets-xyz", Class: ClassProduction}
+		if got != want {
+			t.Errorf("CheckDeployed = %+v, want %+v", got, want)
+		}
+	})
+
+	t.Run("reads preview class marker", func(t *testing.T) {
+		api := stubDescriber{out: &cloudformation.DescribeStacksOutput{
+			Stacks: []cfntypes.Stack{{
+				Outputs: []cfntypes.Output{
+					{OutputKey: aws.String(outputInfraClass), OutputValue: aws.String(ClassPreview)},
+				},
+			}},
+		}}
+
+		got, err := CheckDeployed(context.Background(), api)
+		if err != nil {
+			t.Fatalf("CheckDeployed: %v", err)
+		}
+		if !got.Present || got.Class != ClassPreview {
+			t.Errorf("CheckDeployed = %+v, want Present with Class %q", got, ClassPreview)
+		}
+	})
 }
 
-func TestCheckDeployed_ReadsPreviewClassMarker(t *testing.T) {
-	api := stubDescriber{out: &cloudformation.DescribeStacksOutput{
-		Stacks: []cfntypes.Stack{{
-			Outputs: []cfntypes.Output{
-				{OutputKey: aws.String(outputInfraClass), OutputValue: aws.String(ClassPreview)},
-			},
-		}},
-	}}
-
-	got, err := CheckDeployed(context.Background(), api)
-	if err != nil {
-		t.Fatalf("CheckDeployed: %v", err)
-	}
-	if !got.Present || got.Class != ClassPreview {
-		t.Errorf("CheckDeployed = %+v, want Present with Class %q", got, ClassPreview)
-	}
-}
-
-func TestPreviewStackTemplate_StampsPreviewClass(t *testing.T) {
-	var tmpl parsedTemplate
-	if err := yaml.Unmarshal([]byte(previewStackTemplate(edge.TrustExternal, fixtureArtifacts(), RequiredBootstrapVersion)), &tmpl); err != nil {
-		t.Fatalf("preview template is not valid YAML: %v", err)
-	}
-	if got := tmpl.Outputs[outputInfraClass].Value; got != ClassPreview {
-		t.Errorf("%s output = %q, want %q", outputInfraClass, got, ClassPreview)
-	}
+func TestPreviewStackTemplate(t *testing.T) {
+	t.Run("stamps preview class", func(t *testing.T) {
+		var tmpl parsedTemplate
+		if err := yaml.Unmarshal([]byte(previewStackTemplate(edge.TrustExternal, fixtureArtifacts(), RequiredBootstrapVersion)), &tmpl); err != nil {
+			t.Fatalf("preview template is not valid YAML: %v", err)
+		}
+		if got := tmpl.Outputs[outputInfraClass].Value; got != ClassPreview {
+			t.Errorf("%s output = %q, want %q", outputInfraClass, got, ClassPreview)
+		}
+	})
 }
 
 type edgeUserTemplate struct {

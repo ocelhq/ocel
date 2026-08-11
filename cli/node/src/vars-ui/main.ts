@@ -244,6 +244,8 @@ async function mutate(run: () => Promise<State>): Promise<void> {
   } catch (thrown) {
     error = thrown instanceof Error ? thrown.message : String(thrown);
     if (thrown instanceof ApiError && thrown.status === 409) {
+      error =
+        "This value changed since the page read it; the page is showing it again — make your change against the value that is there now.";
       try {
         state = await api<State>("GET", "/api/state");
         await refreshHistory();

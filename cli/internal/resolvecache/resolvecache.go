@@ -7,7 +7,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"sort"
+	"slices"
 	"strings"
 	"time"
 )
@@ -76,11 +76,11 @@ func sanitize(projectID string) string {
 func HashDefs(defs []Def) string {
 	sorted := make([]Def, len(defs))
 	copy(sorted, defs)
-	sort.Slice(sorted, func(i, j int) bool {
-		if sorted[i].Name != sorted[j].Name {
-			return sorted[i].Name < sorted[j].Name
+	slices.SortFunc(sorted, func(a, b Def) int {
+		if c := strings.Compare(a.Name, b.Name); c != 0 {
+			return c
 		}
-		return sorted[i].Type < sorted[j].Type
+		return strings.Compare(a.Type, b.Type)
 	})
 	return hash(sorted)
 }

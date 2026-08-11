@@ -2,7 +2,7 @@ package manifestbuilder
 
 import (
 	"fmt"
-	"sort"
+	"slices"
 	"strings"
 
 	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
@@ -140,8 +140,8 @@ func Build(slug string, domains map[string][]string, apps []App, declarations []
 		resources = append(resources, resource)
 	}
 
-	sort.Slice(resources, func(i, j int) bool {
-		return resources[i].LogicalName < resources[j].LogicalName
+	slices.SortFunc(resources, func(a, b *deploymentsv1.ManifestResource) int {
+		return strings.Compare(a.LogicalName, b.LogicalName)
 	})
 
 	manifestFunctions := make([]*deploymentsv1.ManifestFunction, 0, len(functions))
@@ -156,8 +156,8 @@ func Build(slug string, domains map[string][]string, apps []App, declarations []
 			App:          f.App,
 		})
 	}
-	sort.Slice(manifestFunctions, func(i, j int) bool {
-		return manifestFunctions[i].LogicalName < manifestFunctions[j].LogicalName
+	slices.SortFunc(manifestFunctions, func(a, b *deploymentsv1.ManifestFunction) int {
+		return strings.Compare(a.LogicalName, b.LogicalName)
 	})
 
 	return &deploymentsv1.Manifest{
@@ -226,7 +226,7 @@ func buildApps(apps []App, functions []Function, variables map[string][]Variable
 		})
 	}
 
-	sort.Slice(manifestApps, func(i, j int) bool { return manifestApps[i].Name < manifestApps[j].Name })
+	slices.SortFunc(manifestApps, func(a, b *deploymentsv1.ManifestApp) int { return strings.Compare(a.Name, b.Name) })
 	return manifestApps
 }
 
@@ -238,6 +238,6 @@ func manifestVariables(variables []Variable) []*deploymentsv1.ManifestVariable {
 	for _, v := range variables {
 		out = append(out, &deploymentsv1.ManifestVariable{Key: v.Key, Class: v.Class, Value: v.Value, Folder: v.Folder, Version: v.Version})
 	}
-	sort.Slice(out, func(i, j int) bool { return out[i].Key < out[j].Key })
+	slices.SortFunc(out, func(a, b *deploymentsv1.ManifestVariable) int { return strings.Compare(a.Key, b.Key) })
 	return out
 }

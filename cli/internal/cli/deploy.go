@@ -16,7 +16,6 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/ocelhq/ocel/cli/internal/appbuilder"
 	"github.com/ocelhq/ocel/cli/internal/clientenv"
 	"github.com/ocelhq/ocel/cli/internal/declare"
 	"github.com/ocelhq/ocel/cli/internal/deploycollector"
@@ -25,7 +24,6 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/envgate"
 	"github.com/ocelhq/ocel/cli/internal/manifestbuilder"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
-	"github.com/ocelhq/ocel/cli/internal/providerlocator"
 	"github.com/ocelhq/ocel/cli/internal/providerrunner"
 	"github.com/ocelhq/ocel/cli/node"
 	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
@@ -35,22 +33,13 @@ import (
 
 var deployReadyTimeout time.Duration
 
-var locateProviderBinary = providerlocator.Locate
-
-var (
-	buildApp            = appbuilder.Build
-	collectAppFunctions = appbuilder.CollectFunctions
-)
-
-var stdinIsTerminal = func(r io.Reader) bool { return isReaderTTY(r) }
-
 const noBrowserEnvVar = "OCEL_NO_BROWSER"
 
-func canOpenVarsUI(stdin io.Reader, noUI bool) bool {
+func (d deps) canOpenVarsUI(stdin io.Reader, noUI bool) bool {
 	if noUI || os.Getenv(noBrowserEnvVar) != "" {
 		return false
 	}
-	return stdinIsTerminal(stdin)
+	return d.stdinIsTerminal(stdin)
 }
 
 const noUIFlagUsage = "Never pause to open the variables UI; fail on a missing or invalid variable instead"
@@ -77,7 +66,7 @@ var deployCmd = &cobra.Command{
 		ctx, stop := signal.NotifyContext(cmd.Context(), os.Interrupt, syscall.SIGTERM)
 		defer stop()
 
-		return runDeploy(ctx, cwd, deployOpts, cmd.OutOrStdout(), cmd.ErrOrStderr(), cmd.InOrStdin())
+		return runDeploy(ctx, defaultDeps(), cwd, deployOpts, cmd.OutOrStdout(), cmd.ErrOrStderr(), cmd.InOrStdin())
 	},
 }
 
@@ -90,7 +79,7 @@ func init() {
 
 const prebuiltFlagUsage = "Deploy the existing .ocel/output instead of building the apps first (produce it with ocel build)"
 
-func runDeploy(ctx context.Context, cwd string, opts deployOptions, stdout, stderr io.Writer, stdin io.Reader) error {
+func runDeploy(ctx context.Context, d deps, cwd string, opts deployOptions, stdout, stderr io.Writer, stdin io.Reader) error {
 	if err := validateTag(opts.tag); err != nil {
 		return err
 	}
@@ -117,8 +106,8 @@ func runDeploy(ctx context.Context, cwd string, opts deployOptions, stdout, stde
 	defer ui.Close()
 
 	provW := ui.BuildWriter()
-	err = runProviderSession(ctx, cfg, provider, provW, provW, func(runner *providerrunner.Runner) error {
-		knownSlugs, err := preflightDeploy(ctx, runner, provider, cfg, stdout)
+	err = runProviderSession(ctx, d, cfg, provider, provW, provW, func(runner *providerrunner.Runner) error {
+		knownSlugs, err := preflightDeploy(ctx, d, runner, provider, cfg, stdout)
 		if err != nil {
 			return err
 		}
@@ -136,6 +125,7 @@ func runDeploy(ctx context.Context, cwd string, opts deployOptions, stdout, stde
 
 		ui.Building()
 		recovery := gateRecovery{
+			deps:     d,
 			cfg:      cfg,
 			provider: provider,
 			runner:   runner,
@@ -149,7 +139,7 @@ func runDeploy(ctx context.Context, cwd string, opts deployOptions, stdout, stde
 			},
 			ui:      ui,
 			stdout:  stdout,
-			enabled: canOpenVarsUI(stdin, opts.noUI),
+			enabled: d.canOpenVarsUI(stdin, opts.noUI),
 		}
 		manifest, err := recovery.buildManifest(ctx, opts.prebuilt, ui.BuildWriter())
 		if err != nil {
@@ -200,7 +190,7 @@ func runDeploy(ctx context.Context, cwd string, opts deployOptions, stdout, stde
 	return nil
 }
 
-func collectAndBuildManifest(ctx context.Context, cfg *projectconfig.Config, gate *envgate.Gate, prebuilt bool, buildOut io.Writer) (*deploymentsv1.Manifest, error) {
+func collectAndBuildManifest(ctx context.Context, d deps, cfg *projectconfig.Config, gate *envgate.Gate, prebuilt bool, buildOut io.Writer) (*deploymentsv1.Manifest, error) {
 	resources, err := deploycollector.Collect(ctx, cfg, gate, buildOut, buildOut)
 	if err != nil {
 		return nil, err
@@ -233,7 +223,7 @@ func collectAndBuildManifest(ctx context.Context, cfg *projectconfig.Config, gat
 		if err := clientenv.Generate(clients); err != nil {
 			return nil, err
 		}
-		if err := buildApp(ctx, cfg, buildEnv(plans), buildOut); err != nil {
+		if err := d.buildApp(ctx, cfg, buildEnv(plans), buildOut); err != nil {
 			return nil, err
 		}
 		if err := clientenv.Record(cfg.Dir, clients); err != nil {
@@ -241,7 +231,7 @@ func collectAndBuildManifest(ctx context.Context, cfg *projectconfig.Config, gat
 		}
 	}
 
-	functions, err := collectAppFunctions(cfg.Dir)
+	functions, err := d.collectAppFunctions(cfg.Dir)
 	if err != nil {
 		return nil, err
 	}
@@ -369,7 +359,11 @@ type runnerValues struct {
 }
 
 func (v runnerValues) List(ctx context.Context) ([]envgate.Stored, error) {
-	resp, err := v.runner.ListValues(ctx, &envv1.ListValuesRequest{
+	vars, err := v.runner.Vars()
+	if err != nil {
+		return nil, err
+	}
+	resp, err := vars.ListValues(ctx, &envv1.ListValuesRequest{
 		Options:         v.options,
 		ProtocolVersion: manifestbuilder.SchemaVersion,
 		Class:           v.class,
@@ -398,7 +392,11 @@ func (v runnerValues) Reveal(ctx context.Context, rows []envgate.Address) (map[e
 	for _, row := range rows {
 		named = append(named, &envv1.Cell{Folder: row.Cell.Folder, Key: row.Cell.Key, Environment: row.Environment})
 	}
-	resp, err := v.runner.RevealValues(ctx, &envv1.RevealValuesRequest{
+	vars, err := v.runner.Vars()
+	if err != nil {
+		return nil, err
+	}
+	resp, err := vars.RevealValues(ctx, &envv1.RevealValuesRequest{
 		Options:         v.options,
 		ProtocolVersion: manifestbuilder.SchemaVersion,
 		Class:           v.class,
@@ -439,8 +437,8 @@ func failSession(ctx context.Context, ui *deployui.Session, err error) error {
 	return &ExitError{Code: 1}
 }
 
-func runProviderSession(ctx context.Context, cfg *projectconfig.Config, provider *projectconfig.ProviderDescriptor, stdout, stderr io.Writer, drive func(*providerrunner.Runner) error) error {
-	binPath, err := locateProviderBinary(cfg.Dir, provider.Package)
+func runProviderSession(ctx context.Context, d deps, cfg *projectconfig.Config, provider *projectconfig.ProviderDescriptor, stdout, stderr io.Writer, drive func(*providerrunner.Runner) error) error {
+	binPath, err := d.locateProviderBinary(cfg.Dir, provider.Package)
 	if err != nil {
 		return fmt.Errorf("locate provider binary: %w", err)
 	}

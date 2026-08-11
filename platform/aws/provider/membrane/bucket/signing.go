@@ -6,6 +6,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"fmt"
 )
 
 type SignedFile struct {
@@ -27,29 +28,30 @@ type canonicalPayload struct {
 	File      canonicalFile `json:"file"`
 }
 
-func CanonicalUploadPayload(sessionID string, file SignedFile) []byte {
+func CanonicalUploadPayload(sessionID string, file SignedFile) ([]byte, error) {
 	var buf bytes.Buffer
 	enc := json.NewEncoder(&buf)
 	enc.SetEscapeHTML(false)
-	_ = enc.Encode(canonicalPayload{
-		SessionID: sessionID,
-		File: canonicalFile{
-			Key:      file.Key,
-			Name:     file.Name,
-			Size:     file.Size,
-			MimeType: file.MimeType,
-		},
-	})
-	return bytes.TrimRight(buf.Bytes(), "\n")
+	if err := enc.Encode(canonicalPayload{SessionID: sessionID, File: canonicalFile(file)}); err != nil {
+		return nil, fmt.Errorf("encode canonical upload payload: %w", err)
+	}
+	return bytes.TrimRight(buf.Bytes(), "\n"), nil
 }
 
-func signUpload(secret, sessionID string, file SignedFile) string {
+func signUpload(secret, sessionID string, file SignedFile) (string, error) {
+	payload, err := CanonicalUploadPayload(sessionID, file)
+	if err != nil {
+		return "", err
+	}
 	mac := hmac.New(sha256.New, []byte(secret))
-	mac.Write(CanonicalUploadPayload(sessionID, file))
-	return hex.EncodeToString(mac.Sum(nil))
+	mac.Write(payload)
+	return hex.EncodeToString(mac.Sum(nil)), nil
 }
 
-func verifyUpload(secret, sessionID string, file SignedFile, signature string) bool {
-	expected := signUpload(secret, sessionID, file)
-	return hmac.Equal([]byte(expected), []byte(signature))
+func verifyUpload(secret, sessionID string, file SignedFile, signature string) (bool, error) {
+	expected, err := signUpload(secret, sessionID, file)
+	if err != nil {
+		return false, err
+	}
+	return hmac.Equal([]byte(expected), []byte(signature)), nil
 }

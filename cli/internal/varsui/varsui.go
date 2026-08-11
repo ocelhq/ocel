@@ -18,9 +18,11 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/envgate"
 )
 
-var ErrAbandoned = errors.New("the variables UI closed before the matrix was complete")
+var ErrAbandoned = errors.New("variables UI abandoned")
 
-var ErrStaleValue = errors.New("this value changed since the page read it; the page is showing it again — make your change against the value that is there now")
+var ErrStaleValue = errors.New("stale value")
+
+const AbandonedMessage = "the variables UI closed before the matrix was complete"
 
 type Store interface {
 	Set(ctx context.Context, at envgate.Address, value string, expected *int64) error

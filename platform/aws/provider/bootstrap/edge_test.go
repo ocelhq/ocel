@@ -69,83 +69,85 @@ func (f *fakeIAM) CreateAccessKey(_ context.Context, in *iam.CreateAccessKeyInpu
 	}}, nil
 }
 
-func TestEnsureEdgeCredentials_MintsWhenAbsent(t *testing.T) {
-	ssmc := newFakeSSM()
-	iamc := &fakeIAM{}
+func TestEnsureEdgeCredentials(t *testing.T) {
+	t.Run("mints when absent", func(t *testing.T) {
+		ssmc := newFakeSSM()
+		iamc := &fakeIAM{}
 
-	created, err := ensureEdgeCredentials(context.Background(), iamc, ssmc, ClassProduction)
-	if err != nil {
-		t.Fatalf("ensureEdgeCredentials: %v", err)
-	}
-	if !created {
-		t.Error("expected created=true on first mint")
-	}
-	if len(iamc.created) != 1 || iamc.created[0] != EdgeUserName {
-		t.Errorf("CreateAccessKey users = %v, want [%s]", iamc.created, EdgeUserName)
-	}
+		created, err := ensureEdgeCredentials(context.Background(), iamc, ssmc, ClassProduction)
+		if err != nil {
+			t.Fatalf("ensureEdgeCredentials: %v", err)
+		}
+		if !created {
+			t.Error("expected created=true on first mint")
+		}
+		if len(iamc.created) != 1 || iamc.created[0] != EdgeUserName {
+			t.Errorf("CreateAccessKey users = %v, want [%s]", iamc.created, EdgeUserName)
+		}
 
-	stored, ok := ssmc.params[EdgeCredentialsParamName]
-	if !ok {
-		t.Fatalf("credentials were not written to %s", EdgeCredentialsParamName)
-	}
-	var creds EdgeCredentials
-	if err := json.Unmarshal([]byte(stored), &creds); err != nil {
-		t.Fatalf("stored value is not EdgeCredentials JSON: %v", err)
-	}
-	if creds.AccessKeyID != "AKIAEDGE" || creds.SecretAccessKey != "secret-edge" {
-		t.Errorf("stored creds = %+v, want the minted key", creds)
-	}
-}
+		stored, ok := ssmc.params[EdgeCredentialsParamName]
+		if !ok {
+			t.Fatalf("credentials were not written to %s", EdgeCredentialsParamName)
+		}
+		var creds EdgeCredentials
+		if err := json.Unmarshal([]byte(stored), &creds); err != nil {
+			t.Fatalf("stored value is not EdgeCredentials JSON: %v", err)
+		}
+		if creds.AccessKeyID != "AKIAEDGE" || creds.SecretAccessKey != "secret-edge" {
+			t.Errorf("stored creds = %+v, want the minted key", creds)
+		}
+	})
 
-func TestEnsureEdgeCredentials_ReusesWhenPresent(t *testing.T) {
-	ssmc := newFakeSSM()
-	ssmc.params[EdgeCredentialsParamName] = `{"accessKeyId":"AKOLD","secretAccessKey":"old"}`
-	iamc := &fakeIAM{}
+	t.Run("reuses when present", func(t *testing.T) {
+		ssmc := newFakeSSM()
+		ssmc.params[EdgeCredentialsParamName] = `{"accessKeyId":"AKOLD","secretAccessKey":"old"}`
+		iamc := &fakeIAM{}
 
-	created, err := ensureEdgeCredentials(context.Background(), iamc, ssmc, ClassProduction)
-	if err != nil {
-		t.Fatalf("ensureEdgeCredentials: %v", err)
-	}
-	if created {
-		t.Error("expected created=false when the parameter already exists")
-	}
-	if len(iamc.created) != 0 {
-		t.Errorf("minted a key despite an existing parameter: %v", iamc.created)
-	}
-	if ssmc.puts != 0 {
-		t.Errorf("overwrote the existing parameter (%d puts)", ssmc.puts)
-	}
-}
+		created, err := ensureEdgeCredentials(context.Background(), iamc, ssmc, ClassProduction)
+		if err != nil {
+			t.Fatalf("ensureEdgeCredentials: %v", err)
+		}
+		if created {
+			t.Error("expected created=false when the parameter already exists")
+		}
+		if len(iamc.created) != 0 {
+			t.Errorf("minted a key despite an existing parameter: %v", iamc.created)
+		}
+		if ssmc.puts != 0 {
+			t.Errorf("overwrote the existing parameter (%d puts)", ssmc.puts)
+		}
+	})
 
-func TestEnsureEdgeCredentials_FailsWhenKeyCapReached(t *testing.T) {
-	ssmc := newFakeSSM()
-	iamc := &fakeIAM{existingKeys: 2}
+	t.Run("fails when key cap reached", func(t *testing.T) {
+		ssmc := newFakeSSM()
+		iamc := &fakeIAM{existingKeys: 2}
 
-	_, err := ensureEdgeCredentials(context.Background(), iamc, ssmc, ClassProduction)
-	if err == nil {
-		t.Fatal("expected an error when the user is already at the 2-key cap")
-	}
-	if len(iamc.created) != 0 {
-		t.Errorf("minted a key despite the cap: %v", iamc.created)
-	}
-	if ssmc.puts != 0 {
-		t.Errorf("wrote a parameter despite the cap (%d puts)", ssmc.puts)
-	}
-}
+		_, err := ensureEdgeCredentials(context.Background(), iamc, ssmc, ClassProduction)
+		if err == nil {
+			t.Fatal("expected an error when the user is already at the 2-key cap")
+		}
+		if len(iamc.created) != 0 {
+			t.Errorf("minted a key despite the cap: %v", iamc.created)
+		}
+		if ssmc.puts != 0 {
+			t.Errorf("wrote a parameter despite the cap (%d puts)", ssmc.puts)
+		}
+	})
 
-func TestEnsureEdgeCredentials_PreviewUsesPreviewIdentity(t *testing.T) {
-	ssmc := newFakeSSM()
-	iamc := &fakeIAM{}
+	t.Run("preview uses preview identity", func(t *testing.T) {
+		ssmc := newFakeSSM()
+		iamc := &fakeIAM{}
 
-	if _, err := ensureEdgeCredentials(context.Background(), iamc, ssmc, ClassPreview); err != nil {
-		t.Fatalf("ensureEdgeCredentials: %v", err)
-	}
-	if len(iamc.created) != 1 || iamc.created[0] != EdgePreviewUserName {
-		t.Errorf("CreateAccessKey users = %v, want [%s]", iamc.created, EdgePreviewUserName)
-	}
-	if _, ok := ssmc.params[EdgeCredentialsPreviewParamName]; !ok {
-		t.Errorf("preview credentials were not written to %s", EdgeCredentialsPreviewParamName)
-	}
+		if _, err := ensureEdgeCredentials(context.Background(), iamc, ssmc, ClassPreview); err != nil {
+			t.Fatalf("ensureEdgeCredentials: %v", err)
+		}
+		if len(iamc.created) != 1 || iamc.created[0] != EdgePreviewUserName {
+			t.Errorf("CreateAccessKey users = %v, want [%s]", iamc.created, EdgePreviewUserName)
+		}
+		if _, ok := ssmc.params[EdgeCredentialsPreviewParamName]; !ok {
+			t.Errorf("preview credentials were not written to %s", EdgeCredentialsPreviewParamName)
+		}
+	})
 }
 
 func TestReadEdgeCredentials(t *testing.T) {
@@ -161,10 +163,12 @@ func TestReadEdgeCredentials(t *testing.T) {
 	}
 }
 
-func TestEdgeCredentials_UnknownClass(t *testing.T) {
-	if _, err := ensureEdgeCredentials(context.Background(), &fakeIAM{}, newFakeSSM(), "nonsense"); err == nil {
-		t.Error("expected an error for an unknown substrate class")
-	}
+func TestEdgeCredentials(t *testing.T) {
+	t.Run("unknown class", func(t *testing.T) {
+		if _, err := ensureEdgeCredentials(context.Background(), &fakeIAM{}, newFakeSSM(), "nonsense"); err == nil {
+			t.Error("expected an error for an unknown substrate class")
+		}
+	})
 }
 
 func offeredStore() map[string]string {
@@ -177,120 +181,130 @@ func offeredStore() map[string]string {
 	}
 }
 
-func TestAdoptCacheStore_FreshMintPersistsEveryCoordinate(t *testing.T) {
-	ssmc := newFakeSSM()
+func TestAdoptCacheStore(t *testing.T) {
+	t.Run("fresh mint persists every coordinate", func(t *testing.T) {
+		ssmc := newFakeSSM()
 
-	if err := adoptCacheStore(context.Background(), ssmc, ClassProduction, "fake", offeredStore()); err != nil {
-		t.Fatalf("adoptCacheStore: %v", err)
-	}
-	got, err := ReadCacheStore(context.Background(), ssmc, ClassProduction)
-	if err != nil {
-		t.Fatalf("ReadCacheStore: %v", err)
-	}
-	want := CacheStore{
-		Bucket:          "ocel-edge-cache",
-		Endpoint:        "https://acct.r2.cloudflarestorage.com",
-		Region:          "auto",
-		AccessKeyID:     "tok-1",
-		SecretAccessKey: "sha-of-tok-1",
-	}
-	if got != want {
-		t.Errorf("stored store = %+v, want %+v", got, want)
-	}
+		if err := adoptCacheStore(context.Background(), ssmc, ClassProduction, "fake", offeredStore()); err != nil {
+			t.Fatalf("adoptCacheStore: %v", err)
+		}
+		got, err := ReadCacheStore(context.Background(), ssmc, ClassProduction)
+		if err != nil {
+			t.Fatalf("ReadCacheStore: %v", err)
+		}
+		want := CacheStore{
+			Bucket:          "ocel-edge-cache",
+			Endpoint:        "https://acct.r2.cloudflarestorage.com",
+			Region:          "auto",
+			AccessKeyID:     "tok-1",
+			SecretAccessKey: "sha-of-tok-1",
+		}
+		if got != want {
+			t.Errorf("stored store = %+v, want %+v", got, want)
+		}
+	})
+
+	t.Run("reuse keeps stored secret", func(t *testing.T) {
+		ssmc := newFakeSSM()
+		if err := adoptCacheStore(context.Background(), ssmc, ClassProduction, "fake", offeredStore()); err != nil {
+			t.Fatalf("first adopt: %v", err)
+		}
+
+		reoffer := offeredStore()
+		delete(reoffer, edge.OfferKeySecretAccessKey)
+		reoffer[edge.OfferKeyEndpoint] = "https://acct.r2.cloudflarestorage.com/v2"
+
+		if err := adoptCacheStore(context.Background(), ssmc, ClassProduction, "fake", reoffer); err != nil {
+			t.Fatalf("second adopt: %v", err)
+		}
+		got, err := ReadCacheStore(context.Background(), ssmc, ClassProduction)
+		if err != nil {
+			t.Fatalf("ReadCacheStore: %v", err)
+		}
+		if got.SecretAccessKey != "sha-of-tok-1" {
+			t.Errorf("secret = %q, want the stored secret preserved", got.SecretAccessKey)
+		}
+		if got.Endpoint != "https://acct.r2.cloudflarestorage.com/v2" {
+			t.Errorf("endpoint = %q, want the reoffered coordinate", got.Endpoint)
+		}
+	})
+
+	t.Run("dangling token", func(t *testing.T) {
+		for _, tc := range []struct {
+			name   string
+			stored string
+		}{
+			{"nothing stored", ""},
+			{"a different key stored", `{"bucket":"ocel-edge-cache","accessKeyId":"tok-0","secretAccessKey":"sha-of-tok-0"}`},
+		} {
+			t.Run(tc.name, func(t *testing.T) {
+				ssmc := newFakeSSM()
+				if tc.stored != "" {
+					ssmc.params[CacheStoreParamName] = tc.stored
+				}
+				offer := offeredStore()
+				delete(offer, edge.OfferKeySecretAccessKey)
+
+				err := adoptCacheStore(context.Background(), ssmc, ClassProduction, "fake", offer)
+				if err == nil {
+					t.Fatal("expected a dangling-token error for a secretless offer with no matching stored secret")
+				}
+				if !strings.Contains(err.Error(), "tok-1") {
+					t.Errorf("diagnostic does not name the token: %v", err)
+				}
+				if ssmc.params[CacheStoreParamName] != tc.stored {
+					t.Errorf("wrote %q over the stored store despite failing", ssmc.params[CacheStoreParamName])
+				}
+			})
+		}
+	})
+
+	t.Run("preview stores separately", func(t *testing.T) {
+		ssmc := newFakeSSM()
+		preview := offeredStore()
+		preview[edge.OfferKeyBucket] = "ocel-edge-cache-preview"
+		preview[edge.OfferKeyAccessKeyID] = "tok-preview"
+
+		if err := adoptCacheStore(context.Background(), ssmc, ClassProduction, "fake", offeredStore()); err != nil {
+			t.Fatalf("production adopt: %v", err)
+		}
+		if err := adoptCacheStore(context.Background(), ssmc, ClassPreview, "fake", preview); err != nil {
+			t.Fatalf("preview adopt: %v", err)
+		}
+
+		prod, err := ReadCacheStore(context.Background(), ssmc, ClassProduction)
+		if err != nil {
+			t.Fatalf("ReadCacheStore production: %v", err)
+		}
+		prev, err := ReadCacheStore(context.Background(), ssmc, ClassPreview)
+		if err != nil {
+			t.Fatalf("ReadCacheStore preview: %v", err)
+		}
+		if prod.Bucket != "ocel-edge-cache" || prod.AccessKeyID != "tok-1" {
+			t.Errorf("production store = %+v, want production's own coordinates", prod)
+		}
+		if prev.Bucket != "ocel-edge-cache-preview" || prev.AccessKeyID != "tok-preview" {
+			t.Errorf("preview store = %+v, want preview's own coordinates", prev)
+		}
+	})
+
+	t.Run("unknown class", func(t *testing.T) {
+		if err := adoptCacheStore(context.Background(), newFakeSSM(), "nonsense", "fake", offeredStore()); err == nil {
+			t.Error("expected an error for an unknown substrate class")
+		}
+	})
 }
 
-func TestAdoptCacheStore_ReuseKeepsStoredSecret(t *testing.T) {
-	ssmc := newFakeSSM()
-	if err := adoptCacheStore(context.Background(), ssmc, ClassProduction, "fake", offeredStore()); err != nil {
-		t.Fatalf("first adopt: %v", err)
-	}
-
-	reoffer := offeredStore()
-	delete(reoffer, edge.OfferKeySecretAccessKey)
-	reoffer[edge.OfferKeyEndpoint] = "https://acct.r2.cloudflarestorage.com/v2"
-
-	if err := adoptCacheStore(context.Background(), ssmc, ClassProduction, "fake", reoffer); err != nil {
-		t.Fatalf("second adopt: %v", err)
-	}
-	got, err := ReadCacheStore(context.Background(), ssmc, ClassProduction)
-	if err != nil {
-		t.Fatalf("ReadCacheStore: %v", err)
-	}
-	if got.SecretAccessKey != "sha-of-tok-1" {
-		t.Errorf("secret = %q, want the stored secret preserved", got.SecretAccessKey)
-	}
-	if got.Endpoint != "https://acct.r2.cloudflarestorage.com/v2" {
-		t.Errorf("endpoint = %q, want the reoffered coordinate", got.Endpoint)
-	}
-}
-
-func TestAdoptCacheStore_DanglingToken(t *testing.T) {
-	for _, tc := range []struct {
-		name   string
-		stored string
-	}{
-		{"nothing stored", ""},
-		{"a different key stored", `{"bucket":"ocel-edge-cache","accessKeyId":"tok-0","secretAccessKey":"sha-of-tok-0"}`},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			ssmc := newFakeSSM()
-			if tc.stored != "" {
-				ssmc.params[CacheStoreParamName] = tc.stored
-			}
-			offer := offeredStore()
-			delete(offer, edge.OfferKeySecretAccessKey)
-
-			err := adoptCacheStore(context.Background(), ssmc, ClassProduction, "fake", offer)
-			if err == nil {
-				t.Fatal("expected a dangling-token error for a secretless offer with no matching stored secret")
-			}
-			if !strings.Contains(err.Error(), "tok-1") {
-				t.Errorf("diagnostic does not name the token: %v", err)
-			}
-			if ssmc.params[CacheStoreParamName] != tc.stored {
-				t.Errorf("wrote %q over the stored store despite failing", ssmc.params[CacheStoreParamName])
-			}
-		})
-	}
-}
-
-func TestAdoptCacheStore_PreviewStoresSeparately(t *testing.T) {
-	ssmc := newFakeSSM()
-	preview := offeredStore()
-	preview[edge.OfferKeyBucket] = "ocel-edge-cache-preview"
-	preview[edge.OfferKeyAccessKeyID] = "tok-preview"
-
-	if err := adoptCacheStore(context.Background(), ssmc, ClassProduction, "fake", offeredStore()); err != nil {
-		t.Fatalf("production adopt: %v", err)
-	}
-	if err := adoptCacheStore(context.Background(), ssmc, ClassPreview, "fake", preview); err != nil {
-		t.Fatalf("preview adopt: %v", err)
-	}
-
-	prod, err := ReadCacheStore(context.Background(), ssmc, ClassProduction)
-	if err != nil {
-		t.Fatalf("ReadCacheStore production: %v", err)
-	}
-	prev, err := ReadCacheStore(context.Background(), ssmc, ClassPreview)
-	if err != nil {
-		t.Fatalf("ReadCacheStore preview: %v", err)
-	}
-	if prod.Bucket != "ocel-edge-cache" || prod.AccessKeyID != "tok-1" {
-		t.Errorf("production store = %+v, want production's own coordinates", prod)
-	}
-	if prev.Bucket != "ocel-edge-cache-preview" || prev.AccessKeyID != "tok-preview" {
-		t.Errorf("preview store = %+v, want preview's own coordinates", prev)
-	}
-}
-
-func TestReadCacheStore_AbsentIsNotAnError(t *testing.T) {
-	got, err := ReadCacheStore(context.Background(), newFakeSSM(), ClassProduction)
-	if err != nil {
-		t.Fatalf("ReadCacheStore on an absent parameter: %v", err)
-	}
-	if got != (CacheStore{}) {
-		t.Errorf("ReadCacheStore = %+v, want the zero store", got)
-	}
+func TestReadCacheStore(t *testing.T) {
+	t.Run("absent is not an error", func(t *testing.T) {
+		got, err := ReadCacheStore(context.Background(), newFakeSSM(), ClassProduction)
+		if err != nil {
+			t.Fatalf("ReadCacheStore on an absent parameter: %v", err)
+		}
+		if got != (CacheStore{}) {
+			t.Errorf("ReadCacheStore = %+v, want the zero store", got)
+		}
+	})
 }
 
 func offeredDeploymentsStore() map[string]string {
@@ -325,54 +339,52 @@ func TestDeploymentsStoreParamFor(t *testing.T) {
 	}
 }
 
-func TestAdoptDeploymentsStore_PreviewStoresSeparately(t *testing.T) {
-	ssmc := newFakeSSM()
-	preview := offeredDeploymentsStore()
-	preview[edge.OfferKeyStoreEndpoint] = "https://ocel-deployments-store-preview.acct.workers.dev"
-	preview[edge.OfferKeyStoreScriptName] = "ocel-deployments-store-preview"
-	preview[edge.OfferKeyStoreBootstrapCred] = "cred-preview"
+func TestAdoptDeploymentsStore(t *testing.T) {
+	t.Run("preview stores separately", func(t *testing.T) {
+		ssmc := newFakeSSM()
+		preview := offeredDeploymentsStore()
+		preview[edge.OfferKeyStoreEndpoint] = "https://ocel-deployments-store-preview.acct.workers.dev"
+		preview[edge.OfferKeyStoreScriptName] = "ocel-deployments-store-preview"
+		preview[edge.OfferKeyStoreBootstrapCred] = "cred-preview"
 
-	if err := adoptDeploymentsStore(context.Background(), ssmc, ClassProduction, offeredDeploymentsStore()); err != nil {
-		t.Fatalf("production adopt: %v", err)
-	}
-	if err := adoptDeploymentsStore(context.Background(), ssmc, ClassPreview, preview); err != nil {
-		t.Fatalf("preview adopt: %v", err)
-	}
+		if err := adoptDeploymentsStore(context.Background(), ssmc, ClassProduction, offeredDeploymentsStore()); err != nil {
+			t.Fatalf("production adopt: %v", err)
+		}
+		if err := adoptDeploymentsStore(context.Background(), ssmc, ClassPreview, preview); err != nil {
+			t.Fatalf("preview adopt: %v", err)
+		}
 
-	prod, err := ReadDeploymentsStoreFor(context.Background(), ssmc, ClassProduction)
-	if err != nil {
-		t.Fatalf("ReadDeploymentsStoreFor(production): %v", err)
-	}
-	prev, err := ReadDeploymentsStoreFor(context.Background(), ssmc, ClassPreview)
-	if err != nil {
-		t.Fatalf("ReadDeploymentsStoreFor(preview): %v", err)
-	}
-	wantProd := DeploymentsStore{Endpoint: "https://ocel-deployments-store.acct.workers.dev", ScriptName: "ocel-deployments-store", BootstrapCred: "cred-prod"}
-	wantPrev := DeploymentsStore{Endpoint: "https://ocel-deployments-store-preview.acct.workers.dev", ScriptName: "ocel-deployments-store-preview", BootstrapCred: "cred-preview"}
-	if prod != wantProd {
-		t.Errorf("production store = %+v, want %+v", prod, wantProd)
-	}
-	if prev != wantPrev {
-		t.Errorf("preview store = %+v, want %+v", prev, wantPrev)
-	}
-}
-
-func TestReadDeploymentsStore_AbsentIsNotAnError(t *testing.T) {
-	for _, class := range []string{ClassProduction, ClassPreview} {
-		got, err := ReadDeploymentsStoreFor(context.Background(), newFakeSSM(), class)
+		prod, err := ReadDeploymentsStoreFor(context.Background(), ssmc, ClassProduction)
 		if err != nil {
-			t.Fatalf("ReadDeploymentsStoreFor(%q) on an absent parameter: %v", class, err)
+			t.Fatalf("ReadDeploymentsStoreFor(production): %v", err)
 		}
-		if got != (DeploymentsStore{}) {
-			t.Errorf("ReadDeploymentsStoreFor(%q) = %+v, want the zero store", class, got)
+		prev, err := ReadDeploymentsStoreFor(context.Background(), ssmc, ClassPreview)
+		if err != nil {
+			t.Fatalf("ReadDeploymentsStoreFor(preview): %v", err)
 		}
-	}
+		wantProd := DeploymentsStore{Endpoint: "https://ocel-deployments-store.acct.workers.dev", ScriptName: "ocel-deployments-store", BootstrapCred: "cred-prod"}
+		wantPrev := DeploymentsStore{Endpoint: "https://ocel-deployments-store-preview.acct.workers.dev", ScriptName: "ocel-deployments-store-preview", BootstrapCred: "cred-preview"}
+		if prod != wantProd {
+			t.Errorf("production store = %+v, want %+v", prod, wantProd)
+		}
+		if prev != wantPrev {
+			t.Errorf("preview store = %+v, want %+v", prev, wantPrev)
+		}
+	})
 }
 
-func TestAdoptCacheStore_UnknownClass(t *testing.T) {
-	if err := adoptCacheStore(context.Background(), newFakeSSM(), "nonsense", "fake", offeredStore()); err == nil {
-		t.Error("expected an error for an unknown substrate class")
-	}
+func TestReadDeploymentsStore(t *testing.T) {
+	t.Run("absent is not an error", func(t *testing.T) {
+		for _, class := range []string{ClassProduction, ClassPreview} {
+			got, err := ReadDeploymentsStoreFor(context.Background(), newFakeSSM(), class)
+			if err != nil {
+				t.Fatalf("ReadDeploymentsStoreFor(%q) on an absent parameter: %v", class, err)
+			}
+			if got != (DeploymentsStore{}) {
+				t.Errorf("ReadDeploymentsStoreFor(%q) = %+v, want the zero store", class, got)
+			}
+		}
+	})
 }
 
 func offeredISRWriter(suffix, cred string) map[string]string {
@@ -407,68 +419,86 @@ func TestISRWriterParamFor(t *testing.T) {
 	}
 }
 
-func TestAdoptISRWriter_PreviewStoresSeparately(t *testing.T) {
-	ssmc := newFakeSSM()
-	if err := adoptISRWriter(context.Background(), ssmc, ClassProduction, offeredISRWriter("", "cred-prod")); err != nil {
-		t.Fatalf("production adopt: %v", err)
-	}
-	if err := adoptISRWriter(context.Background(), ssmc, ClassPreview, offeredISRWriter("-preview", "cred-preview")); err != nil {
-		t.Fatalf("preview adopt: %v", err)
-	}
+func TestAdoptISRWriter(t *testing.T) {
+	t.Run("preview stores separately", func(t *testing.T) {
+		ssmc := newFakeSSM()
+		if err := adoptISRWriter(context.Background(), ssmc, ClassProduction, offeredISRWriter("", "cred-prod")); err != nil {
+			t.Fatalf("production adopt: %v", err)
+		}
+		if err := adoptISRWriter(context.Background(), ssmc, ClassPreview, offeredISRWriter("-preview", "cred-preview")); err != nil {
+			t.Fatalf("preview adopt: %v", err)
+		}
 
-	prod, err := ReadISRWriterFor(context.Background(), ssmc, ClassProduction)
-	if err != nil {
-		t.Fatalf("ReadISRWriterFor(production): %v", err)
-	}
-	prev, err := ReadISRWriterFor(context.Background(), ssmc, ClassPreview)
-	if err != nil {
-		t.Fatalf("ReadISRWriterFor(preview): %v", err)
-	}
-	wantProd := ISRWriter{Endpoint: "https://ocel-isr-writer.acct.workers.dev", ScriptName: "ocel-isr-writer", BootstrapCred: "cred-prod"}
-	wantPrev := ISRWriter{Endpoint: "https://ocel-isr-writer-preview.acct.workers.dev", ScriptName: "ocel-isr-writer-preview", BootstrapCred: "cred-preview"}
-	if prod != wantProd {
-		t.Errorf("production writer = %+v, want %+v", prod, wantProd)
-	}
-	if prev != wantPrev {
-		t.Errorf("preview writer = %+v, want %+v", prev, wantPrev)
-	}
+		prod, err := ReadISRWriterFor(context.Background(), ssmc, ClassProduction)
+		if err != nil {
+			t.Fatalf("ReadISRWriterFor(production): %v", err)
+		}
+		prev, err := ReadISRWriterFor(context.Background(), ssmc, ClassPreview)
+		if err != nil {
+			t.Fatalf("ReadISRWriterFor(preview): %v", err)
+		}
+		wantProd := ISRWriter{Endpoint: "https://ocel-isr-writer.acct.workers.dev", ScriptName: "ocel-isr-writer", BootstrapCred: "cred-prod"}
+		wantPrev := ISRWriter{Endpoint: "https://ocel-isr-writer-preview.acct.workers.dev", ScriptName: "ocel-isr-writer-preview", BootstrapCred: "cred-preview"}
+		if prod != wantProd {
+			t.Errorf("production writer = %+v, want %+v", prod, wantProd)
+		}
+		if prev != wantPrev {
+			t.Errorf("preview writer = %+v, want %+v", prev, wantPrev)
+		}
+	})
 }
 
-func TestReadISRWriterFor_AbsentIsNotAnError(t *testing.T) {
-	got, err := ReadISRWriterFor(context.Background(), newFakeSSM(), ClassProduction)
-	if err != nil {
-		t.Fatalf("ReadISRWriterFor on an absent parameter: %v", err)
-	}
-	if got != (ISRWriter{}) {
-		t.Errorf("ReadISRWriterFor = %+v, want the zero writer", got)
-	}
+func TestReadISRWriterFor(t *testing.T) {
+	t.Run("absent is not an error", func(t *testing.T) {
+		got, err := ReadISRWriterFor(context.Background(), newFakeSSM(), ClassProduction)
+		if err != nil {
+			t.Fatalf("ReadISRWriterFor on an absent parameter: %v", err)
+		}
+		if got != (ISRWriter{}) {
+			t.Errorf("ReadISRWriterFor = %+v, want the zero writer", got)
+		}
+	})
 }
 
-func TestEnsureISRWriterSeed_IsCreateOnly(t *testing.T) {
-	ssmc := newFakeSSM()
+func TestEnsureISRWriterSeed(t *testing.T) {
+	t.Run("is create only", func(t *testing.T) {
+		ssmc := newFakeSSM()
 
-	first, err := ensureISRWriterSeed(context.Background(), ssmc, ClassProduction)
-	if err != nil {
-		t.Fatalf("ensureISRWriterSeed: %v", err)
-	}
-	if first == "" {
-		t.Fatal("ensureISRWriterSeed minted no seed")
-	}
-	again, err := ensureISRWriterSeed(context.Background(), ssmc, ClassProduction)
-	if err != nil {
-		t.Fatalf("ensureISRWriterSeed (second run): %v", err)
-	}
-	if again != first {
-		t.Errorf("second bootstrap returned seed %q, want the stored %q", again, first)
-	}
+		first, err := ensureISRWriterSeed(context.Background(), ssmc, ClassProduction)
+		if err != nil {
+			t.Fatalf("ensureISRWriterSeed: %v", err)
+		}
+		if first == "" {
+			t.Fatal("ensureISRWriterSeed minted no seed")
+		}
+		again, err := ensureISRWriterSeed(context.Background(), ssmc, ClassProduction)
+		if err != nil {
+			t.Fatalf("ensureISRWriterSeed (second run): %v", err)
+		}
+		if again != first {
+			t.Errorf("second bootstrap returned seed %q, want the stored %q", again, first)
+		}
 
-	preview, err := ensureISRWriterSeed(context.Background(), ssmc, ClassPreview)
-	if err != nil {
-		t.Fatalf("ensureISRWriterSeed (preview): %v", err)
-	}
-	if preview == first {
-		t.Error("preview and production share a seed; each substrate has its own writer")
-	}
+		preview, err := ensureISRWriterSeed(context.Background(), ssmc, ClassPreview)
+		if err != nil {
+			t.Fatalf("ensureISRWriterSeed (preview): %v", err)
+		}
+		if preview == first {
+			t.Error("preview and production share a seed; each substrate has its own writer")
+		}
+	})
+
+	t.Run("converges on a concurrent bootstrap", func(t *testing.T) {
+		ssmc := &racingSSM{fakeSSM: newFakeSSM(), winner: "the-other-bootstraps-seed"}
+
+		seed, err := ensureISRWriterSeed(context.Background(), ssmc, ClassProduction)
+		if err != nil {
+			t.Fatalf("ensureISRWriterSeed lost a race instead of converging: %v", err)
+		}
+		if seed != ssmc.winner {
+			t.Errorf("seed = %q, want the winner's %q", seed, ssmc.winner)
+		}
+	})
 }
 
 type racingSSM struct {
@@ -485,24 +515,14 @@ func (r *racingSSM) PutParameter(ctx context.Context, in *ssm.PutParameterInput,
 	return r.fakeSSM.PutParameter(ctx, in, opts...)
 }
 
-func TestEnsureISRWriterSeed_ConvergesOnAConcurrentBootstrap(t *testing.T) {
-	ssmc := &racingSSM{fakeSSM: newFakeSSM(), winner: "the-other-bootstraps-seed"}
-
-	seed, err := ensureISRWriterSeed(context.Background(), ssmc, ClassProduction)
-	if err != nil {
-		t.Fatalf("ensureISRWriterSeed lost a race instead of converging: %v", err)
-	}
-	if seed != ssmc.winner {
-		t.Errorf("seed = %q, want the winner's %q", seed, ssmc.winner)
-	}
-}
-
-func TestReadISRWriterSeedFor_AbsentIsNotAFailure(t *testing.T) {
-	seed, err := ReadISRWriterSeedFor(context.Background(), newFakeSSM(), ClassProduction)
-	if err != nil {
-		t.Fatalf("ReadISRWriterSeedFor: %v", err)
-	}
-	if seed != "" {
-		t.Errorf("seed = %q, want empty", seed)
-	}
+func TestReadISRWriterSeedFor(t *testing.T) {
+	t.Run("absent is not a failure", func(t *testing.T) {
+		seed, err := ReadISRWriterSeedFor(context.Background(), newFakeSSM(), ClassProduction)
+		if err != nil {
+			t.Fatalf("ReadISRWriterSeedFor: %v", err)
+		}
+		if seed != "" {
+			t.Errorf("seed = %q, want empty", seed)
+		}
+	})
 }

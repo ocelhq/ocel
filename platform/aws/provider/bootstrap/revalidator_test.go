@@ -120,153 +120,304 @@ func revalidatorTemplates() []struct {
 	}
 }
 
-func TestRevalidateQueue_DedupesRendersAndRetiresPoison(t *testing.T) {
-	for _, tc := range revalidatorTemplates() {
-		t.Run(tc.name, func(t *testing.T) {
-			tmpl := parseRevalidatorTemplate(t, tc.template)
-			wantQueue, wantDLQ := revalidateQueueNames(tc.class)
+func TestRevalidateQueue(t *testing.T) {
+	t.Run("dedupes renders and retires poison", func(t *testing.T) {
+		for _, tc := range revalidatorTemplates() {
+			t.Run(tc.name, func(t *testing.T) {
+				tmpl := parseRevalidatorTemplate(t, tc.template)
+				wantQueue, wantDLQ := revalidateQueueNames(tc.class)
 
-			q, ok := tmpl.Resources["RevalidateQueue"]
-			if !ok {
-				t.Fatal("template is missing the RevalidateQueue")
-			}
-			if q.Type != "AWS::SQS::Queue" {
-				t.Errorf("RevalidateQueue Type = %q, want AWS::SQS::Queue", q.Type)
-			}
-			if q.Properties.QueueName != wantQueue {
-				t.Errorf("QueueName = %q, want %q", q.Properties.QueueName, wantQueue)
-			}
-			if q.Properties.FifoQueue == nil || !*q.Properties.FifoQueue {
-				t.Error("RevalidateQueue is not FIFO; the deduplication that collapses the herd is a FIFO feature")
-			}
-			if q.Properties.ContentBasedDeduplication == nil || *q.Properties.ContentBasedDeduplication {
-				t.Error("ContentBasedDeduplication must be explicitly false: the sender supplies an id derived from the render it wants, not a hash of the body")
-			}
-			if got := q.Properties.VisibilityTimeout; got != revalidateVisibilityTimeoutSeconds {
-				t.Errorf("VisibilityTimeout = %d, want %d", got, revalidateVisibilityTimeoutSeconds)
-			}
-			if got := q.Properties.MessageRetentionPeriod; got != revalidateRetentionSeconds {
-				t.Errorf("MessageRetentionPeriod = %d, want %d", got, revalidateRetentionSeconds)
-			}
-			if got := q.Properties.RedrivePolicy.DeadLetterTargetArn; got != "RevalidateDeadLetterQueue.Arn" {
-				t.Errorf("redrive target = %q, want the revalidation dead-letter queue", got)
-			}
-			if got := q.Properties.RedrivePolicy.MaxReceiveCount; got != revalidateMaxReceiveCount {
-				t.Errorf("maxReceiveCount = %d, want %d", got, revalidateMaxReceiveCount)
-			}
-
-			dlq, ok := tmpl.Resources["RevalidateDeadLetterQueue"]
-			if !ok {
-				t.Fatal("template is missing the RevalidateDeadLetterQueue")
-			}
-			if dlq.Properties.QueueName != wantDLQ {
-				t.Errorf("dead-letter QueueName = %q, want %q", dlq.Properties.QueueName, wantDLQ)
-			}
-			if dlq.Properties.FifoQueue == nil || !*dlq.Properties.FifoQueue {
-				t.Error("the dead-letter queue is not FIFO, which a FIFO source cannot redrive to")
-			}
-			if got := dlq.Properties.MessageRetentionPeriod; got != revalidateDLQRetentionSeconds {
-				t.Errorf("dead-letter MessageRetentionPeriod = %d, want %d", got, revalidateDLQRetentionSeconds)
-			}
-		})
-	}
-}
-
-func TestRevalidateQueue_IsEncryptedUnderAManagedKey(t *testing.T) {
-	for _, tc := range revalidatorTemplates() {
-		t.Run(tc.name, func(t *testing.T) {
-			tmpl := parseRevalidatorTemplate(t, tc.template)
-			for _, name := range []string{"RevalidateQueue", "RevalidateDeadLetterQueue"} {
-				if got := tmpl.Resources[name].Properties.KmsMasterKeyId; got != "alias/aws/sqs" {
-					t.Errorf("%s KmsMasterKeyId = %q, want the SSE-KMS managed key; the messages carry bypass tokens", name, got)
+				q, ok := tmpl.Resources["RevalidateQueue"]
+				if !ok {
+					t.Fatal("template is missing the RevalidateQueue")
 				}
-			}
-		})
-	}
-}
-
-func TestRevalidateQueue_RendersWithoutAConsumer(t *testing.T) {
-	unpinned := stackArtifacts{optimizer: fixtureOptimizerCode()}
-	for _, tc := range []struct {
-		name     string
-		template string
-	}{
-		{"production", stackTemplate(edge.TrustExternal, unpinned, RequiredBootstrapVersion)},
-		{"preview", previewStackTemplate(edge.TrustExternal, unpinned, RequiredBootstrapVersion)},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			for _, name := range []string{"RevalidateQueue", "RevalidateDeadLetterQueue"} {
-				if !strings.Contains(tc.template, "  "+name+":") {
-					t.Errorf("an unpinned build rendered no %s", name)
+				if q.Type != "AWS::SQS::Queue" {
+					t.Errorf("RevalidateQueue Type = %q, want AWS::SQS::Queue", q.Type)
 				}
-			}
-		})
-	}
-}
-
-func TestRevalidator_DrainsTheQueueAtABoundedConcurrency(t *testing.T) {
-	for _, tc := range revalidatorTemplates() {
-		t.Run(tc.name, func(t *testing.T) {
-			tmpl := parseRevalidatorTemplate(t, tc.template)
-			esm, ok := tmpl.Resources["RevalidatorQueueConsumer"]
-			if !ok {
-				t.Fatal("template is missing the RevalidatorQueueConsumer event source mapping")
-			}
-			if esm.Type != "AWS::Lambda::EventSourceMapping" {
-				t.Errorf("RevalidatorQueueConsumer Type = %q, want AWS::Lambda::EventSourceMapping", esm.Type)
-			}
-			if got := esm.Properties.EventSourceArn; got != "RevalidateQueue.Arn" {
-				t.Errorf("EventSourceArn = %q, want the revalidation queue", got)
-			}
-			if got := esm.Properties.BatchSize; got != revalidatorBatchSize {
-				t.Errorf("BatchSize = %d, want %d", got, revalidatorBatchSize)
-			}
-			if want := []string{"ReportBatchItemFailures"}; !slices.Equal(esm.Properties.FunctionResponseTypes, want) {
-				t.Errorf("FunctionResponseTypes = %v, want %v", esm.Properties.FunctionResponseTypes, want)
-			}
-			if c := esm.Properties.ScalingConfig.MaximumConcurrency; c == nil || *c != revalidatorMaxConcurrency {
-				t.Errorf("ScalingConfig.MaximumConcurrency = %v, want %d — the render-drain bound", c, revalidatorMaxConcurrency)
-			}
-			if esm.Properties.MaximumConcurrency != nil {
-				t.Error("MaximumConcurrency is rendered at the top level, where CloudFormation does not take it; nest it under ScalingConfig")
-			}
-		})
-	}
-}
-
-func TestRevalidator_TimeoutFitsInsideTheVisibilityTimeout(t *testing.T) {
-	if revalidatorTimeoutSeconds >= revalidateVisibilityTimeoutSeconds {
-		t.Fatalf("function timeout %ds does not fit inside the %ds visibility timeout", revalidatorTimeoutSeconds, revalidateVisibilityTimeoutSeconds)
-	}
-	const worstCaseBatchSeconds = 120
-	if revalidatorTimeoutSeconds < worstCaseBatchSeconds {
-		t.Errorf("function timeout %ds clips the %ds worst-case batch the package is sized for", revalidatorTimeoutSeconds, worstCaseBatchSeconds)
-	}
-	for _, tc := range revalidatorTemplates() {
-		t.Run(tc.name, func(t *testing.T) {
-			fn := parseRevalidatorTemplate(t, tc.template).Resources["Revalidator"]
-			if fn.Properties.Timeout != revalidatorTimeoutSeconds {
-				t.Errorf("Timeout = %d, want %d", fn.Properties.Timeout, revalidatorTimeoutSeconds)
-			}
-		})
-	}
-}
-
-func TestRevalidator_ReadsOnlyOriginRecords(t *testing.T) {
-	for _, tc := range revalidatorTemplates() {
-		t.Run(tc.name, func(t *testing.T) {
-			for _, st := range revalidatorPolicy(t, tc.template) {
-				if !slices.Contains(st.actions(), "s3:GetObject") {
-					continue
+				if q.Properties.QueueName != wantQueue {
+					t.Errorf("QueueName = %q, want %q", q.Properties.QueueName, wantQueue)
 				}
-				if want := []string{"${AssetBucket.Arn}/*/origin.json"}; !slices.Equal(st.resources(), want) {
-					t.Fatalf("s3:GetObject is granted on %v, want %v", st.resources(), want)
+				if q.Properties.FifoQueue == nil || !*q.Properties.FifoQueue {
+					t.Error("RevalidateQueue is not FIFO; the deduplication that collapses the herd is a FIFO feature")
 				}
-				return
-			}
-			t.Fatal("the revalidator role cannot read the origin record it resolves every trigger from")
-		})
-	}
+				if q.Properties.ContentBasedDeduplication == nil || *q.Properties.ContentBasedDeduplication {
+					t.Error("ContentBasedDeduplication must be explicitly false: the sender supplies an id derived from the render it wants, not a hash of the body")
+				}
+				if got := q.Properties.VisibilityTimeout; got != revalidateVisibilityTimeoutSeconds {
+					t.Errorf("VisibilityTimeout = %d, want %d", got, revalidateVisibilityTimeoutSeconds)
+				}
+				if got := q.Properties.MessageRetentionPeriod; got != revalidateRetentionSeconds {
+					t.Errorf("MessageRetentionPeriod = %d, want %d", got, revalidateRetentionSeconds)
+				}
+				if got := q.Properties.RedrivePolicy.DeadLetterTargetArn; got != "RevalidateDeadLetterQueue.Arn" {
+					t.Errorf("redrive target = %q, want the revalidation dead-letter queue", got)
+				}
+				if got := q.Properties.RedrivePolicy.MaxReceiveCount; got != revalidateMaxReceiveCount {
+					t.Errorf("maxReceiveCount = %d, want %d", got, revalidateMaxReceiveCount)
+				}
+
+				dlq, ok := tmpl.Resources["RevalidateDeadLetterQueue"]
+				if !ok {
+					t.Fatal("template is missing the RevalidateDeadLetterQueue")
+				}
+				if dlq.Properties.QueueName != wantDLQ {
+					t.Errorf("dead-letter QueueName = %q, want %q", dlq.Properties.QueueName, wantDLQ)
+				}
+				if dlq.Properties.FifoQueue == nil || !*dlq.Properties.FifoQueue {
+					t.Error("the dead-letter queue is not FIFO, which a FIFO source cannot redrive to")
+				}
+				if got := dlq.Properties.MessageRetentionPeriod; got != revalidateDLQRetentionSeconds {
+					t.Errorf("dead-letter MessageRetentionPeriod = %d, want %d", got, revalidateDLQRetentionSeconds)
+				}
+			})
+		}
+	})
+
+	t.Run("is encrypted under a managed key", func(t *testing.T) {
+		for _, tc := range revalidatorTemplates() {
+			t.Run(tc.name, func(t *testing.T) {
+				tmpl := parseRevalidatorTemplate(t, tc.template)
+				for _, name := range []string{"RevalidateQueue", "RevalidateDeadLetterQueue"} {
+					if got := tmpl.Resources[name].Properties.KmsMasterKeyId; got != "alias/aws/sqs" {
+						t.Errorf("%s KmsMasterKeyId = %q, want the SSE-KMS managed key; the messages carry bypass tokens", name, got)
+					}
+				}
+			})
+		}
+	})
+
+	t.Run("renders without a consumer", func(t *testing.T) {
+		unpinned := stackArtifacts{optimizer: fixtureOptimizerCode()}
+		for _, tc := range []struct {
+			name     string
+			template string
+		}{
+			{"production", stackTemplate(edge.TrustExternal, unpinned, RequiredBootstrapVersion)},
+			{"preview", previewStackTemplate(edge.TrustExternal, unpinned, RequiredBootstrapVersion)},
+		} {
+			t.Run(tc.name, func(t *testing.T) {
+				for _, name := range []string{"RevalidateQueue", "RevalidateDeadLetterQueue"} {
+					if !strings.Contains(tc.template, "  "+name+":") {
+						t.Errorf("an unpinned build rendered no %s", name)
+					}
+				}
+			})
+		}
+	})
+
+	t.Run("both ends can use the envelope", func(t *testing.T) {
+		for _, tc := range revalidatorTemplates() {
+			t.Run(tc.name, func(t *testing.T) {
+				user, ok := parseRevalidatorTemplate(t, tc.template).Resources["EdgeUser"]
+				if !ok {
+					t.Fatal("template is missing the EdgeUser")
+				}
+				for _, end := range []struct {
+					who        string
+					statements []policyStatement
+					want       []string
+				}{
+					{"the edge producer", user.Properties.Policies[0].PolicyDocument.Statement, []string{"kms:GenerateDataKey", "kms:Decrypt"}},
+					{"the consumer", revalidatorPolicy(t, tc.template), []string{"kms:Decrypt"}},
+				} {
+					var kms []policyStatement
+					for _, st := range end.statements {
+						if slices.ContainsFunc(st.actions(), func(a string) bool { return strings.HasPrefix(a, "kms:") }) {
+							kms = append(kms, st)
+						}
+					}
+					if len(kms) != 1 {
+						t.Fatalf("%s holds %d KMS statements, want exactly one; without it every message against the SSE-KMS queue fails KMS.AccessDeniedException and the queue silently stays empty", end.who, len(kms))
+					}
+					st := kms[0]
+					if !slices.Equal(st.actions(), end.want) {
+						t.Errorf("%s KMS actions = %v, want exactly %v", end.who, st.actions(), end.want)
+					}
+					if got := st.resources(); !slices.Equal(got, []string{"*"}) {
+						t.Errorf("%s KMS resource = %v, want '*' — the managed alias/aws/sqs key's ARN is not knowable in the template, so the condition is what bounds this", end.who, got)
+					}
+					equals, ok := st.Condition["StringEquals"].(map[string]any)
+					if !ok {
+						t.Fatalf("%s KMS condition = %+v, want a StringEquals on kms:ViaService; unconditioned, this is an account-wide KMS grant", end.who, st.Condition)
+					}
+					if want := "sqs.${AWS::Region}.amazonaws.com"; equals["kms:ViaService"] != want {
+						t.Errorf("%s kms:ViaService = %v, want %q — anything wider lets this key decrypt outside SQS", end.who, equals["kms:ViaService"], want)
+					}
+					if len(equals) != 1 || len(st.Condition) != 1 {
+						t.Errorf("%s KMS condition = %+v, want kms:ViaService alone", end.who, st.Condition)
+					}
+				}
+			})
+		}
+	})
+}
+
+func TestRevalidator(t *testing.T) {
+	t.Run("drains the queue at a bounded concurrency", func(t *testing.T) {
+		for _, tc := range revalidatorTemplates() {
+			t.Run(tc.name, func(t *testing.T) {
+				tmpl := parseRevalidatorTemplate(t, tc.template)
+				esm, ok := tmpl.Resources["RevalidatorQueueConsumer"]
+				if !ok {
+					t.Fatal("template is missing the RevalidatorQueueConsumer event source mapping")
+				}
+				if esm.Type != "AWS::Lambda::EventSourceMapping" {
+					t.Errorf("RevalidatorQueueConsumer Type = %q, want AWS::Lambda::EventSourceMapping", esm.Type)
+				}
+				if got := esm.Properties.EventSourceArn; got != "RevalidateQueue.Arn" {
+					t.Errorf("EventSourceArn = %q, want the revalidation queue", got)
+				}
+				if got := esm.Properties.BatchSize; got != revalidatorBatchSize {
+					t.Errorf("BatchSize = %d, want %d", got, revalidatorBatchSize)
+				}
+				if want := []string{"ReportBatchItemFailures"}; !slices.Equal(esm.Properties.FunctionResponseTypes, want) {
+					t.Errorf("FunctionResponseTypes = %v, want %v", esm.Properties.FunctionResponseTypes, want)
+				}
+				if c := esm.Properties.ScalingConfig.MaximumConcurrency; c == nil || *c != revalidatorMaxConcurrency {
+					t.Errorf("ScalingConfig.MaximumConcurrency = %v, want %d — the render-drain bound", c, revalidatorMaxConcurrency)
+				}
+				if esm.Properties.MaximumConcurrency != nil {
+					t.Error("MaximumConcurrency is rendered at the top level, where CloudFormation does not take it; nest it under ScalingConfig")
+				}
+			})
+		}
+	})
+
+	t.Run("timeout fits inside the visibility timeout", func(t *testing.T) {
+		if revalidatorTimeoutSeconds >= revalidateVisibilityTimeoutSeconds {
+			t.Fatalf("function timeout %ds does not fit inside the %ds visibility timeout", revalidatorTimeoutSeconds, revalidateVisibilityTimeoutSeconds)
+		}
+		const worstCaseBatchSeconds = 120
+		if revalidatorTimeoutSeconds < worstCaseBatchSeconds {
+			t.Errorf("function timeout %ds clips the %ds worst-case batch the package is sized for", revalidatorTimeoutSeconds, worstCaseBatchSeconds)
+		}
+		for _, tc := range revalidatorTemplates() {
+			t.Run(tc.name, func(t *testing.T) {
+				fn := parseRevalidatorTemplate(t, tc.template).Resources["Revalidator"]
+				if fn.Properties.Timeout != revalidatorTimeoutSeconds {
+					t.Errorf("Timeout = %d, want %d", fn.Properties.Timeout, revalidatorTimeoutSeconds)
+				}
+			})
+		}
+	})
+
+	t.Run("reads only origin records", func(t *testing.T) {
+		for _, tc := range revalidatorTemplates() {
+			t.Run(tc.name, func(t *testing.T) {
+				for _, st := range revalidatorPolicy(t, tc.template) {
+					if !slices.Contains(st.actions(), "s3:GetObject") {
+						continue
+					}
+					if want := []string{"${AssetBucket.Arn}/*/origin.json"}; !slices.Equal(st.resources(), want) {
+						t.Fatalf("s3:GetObject is granted on %v, want %v", st.resources(), want)
+					}
+					return
+				}
+				t.Fatal("the revalidator role cannot read the origin record it resolves every trigger from")
+			})
+		}
+	})
+
+	t.Run("reaches only what it triggers with", func(t *testing.T) {
+		for _, tc := range revalidatorTemplates() {
+			t.Run(tc.name, func(t *testing.T) {
+				var actions []string
+				for _, st := range revalidatorPolicy(t, tc.template) {
+					actions = append(actions, st.actions()...)
+				}
+				want := []string{
+					"sqs:ReceiveMessage", "sqs:DeleteMessage", "sqs:GetQueueAttributes",
+					"kms:Decrypt", "s3:GetObject",
+					"lambda:InvokeFunctionUrl", "lambda:InvokeFunction",
+				}
+				if !slices.Equal(actions, want) {
+					t.Errorf("revalidator role grants %v, want exactly %v", actions, want)
+				}
+
+				env := parseRevalidatorTemplate(t, tc.template).Resources["Revalidator"].Properties.Environment.Variables
+				if got := env[revalidatorAssetBucketEnvVar]; got != "AssetBucket" {
+					t.Errorf("%s = %q, want a !Ref of this substrate's own asset bucket; unset, the consumer resolves nothing and triggers nothing", revalidatorAssetBucketEnvVar, got)
+				}
+			})
+		}
+	})
+
+	t.Run("invoke grant is account wide over ocel tagged functions", func(t *testing.T) {
+		for _, tc := range revalidatorTemplates() {
+			t.Run(tc.name, func(t *testing.T) {
+				for _, st := range revalidatorPolicy(t, tc.template) {
+					if !slices.Contains(st.actions(), "lambda:InvokeFunctionUrl") {
+						continue
+					}
+					if !slices.Contains(st.actions(), "lambda:InvokeFunction") {
+						t.Errorf("invoke grant = %v, want both lambda:InvokeFunctionUrl and lambda:InvokeFunction", st.actions())
+					}
+					want := []string{"arn:aws:lambda:${AWS::Region}:${AWS::AccountId}:function:*"}
+					if !slices.Equal(st.resources(), want) {
+						t.Errorf("invoke grant resource = %v, want %v — the edge user's own '*' region is wider than this consumer needs", st.resources(), want)
+					}
+					null, ok := st.Condition["Null"].(map[string]any)
+					if !ok {
+						t.Fatalf("invoke grant condition = %+v, want a Null condition on the ocel:app tag", st.Condition)
+					}
+					if got := null["aws:ResourceTag/ocel:app"]; got != "false" {
+						t.Errorf("invoke condition = %v, want 'aws:ResourceTag/ocel:app': 'false'", got)
+					}
+					return
+				}
+				t.Fatal("the revalidator role cannot invoke the Function URLs it triggers")
+			})
+		}
+	})
+
+	t.Run("renders no alarms", func(t *testing.T) {
+		for _, tc := range revalidatorTemplates() {
+			t.Run(tc.name, func(t *testing.T) {
+				for name, res := range parseRevalidatorTemplate(t, tc.template).Resources {
+					if res.Type == "AWS::CloudWatch::Alarm" {
+						t.Errorf("%s is a billed standing alarm in a stack that must be free to leave idle", name)
+					}
+				}
+			})
+		}
+	})
+
+	t.Run("unpinned renders no consumer and no queue URL", func(t *testing.T) {
+		for _, tc := range []struct {
+			name     string
+			template string
+		}{
+			{"production", stackTemplate(edge.TrustExternal, stackArtifacts{optimizer: fixtureOptimizerCode(), publisher: fixturePublisherCode()}, RequiredBootstrapVersion)},
+			{"preview", previewStackTemplate(edge.TrustExternal, stackArtifacts{optimizer: fixtureOptimizerCode(), publisher: fixturePublisherCode()}, RequiredBootstrapVersion)},
+		} {
+			t.Run(tc.name, func(t *testing.T) {
+				for _, name := range []string{
+					"Revalidator", "RevalidatorRole", "RevalidatorQueueConsumer",
+				} {
+					if strings.Contains(tc.template, "  "+name+":") {
+						t.Errorf("an unpinned build still rendered %s", name)
+					}
+				}
+				if _, ok := parseRevalidatorTemplate(t, tc.template).Outputs[outputRevalidateQueueURL]; ok {
+					t.Errorf("an unpinned build published %s; the edge would enqueue into a queue nothing drains and report the refresh landed", outputRevalidateQueueURL)
+				}
+			})
+		}
+	})
+
+	t.Run("pinned publishes the queue URL", func(t *testing.T) {
+		for _, tc := range revalidatorTemplates() {
+			t.Run(tc.name, func(t *testing.T) {
+				out, ok := parseRevalidatorTemplate(t, tc.template).Outputs[outputRevalidateQueueURL]
+				if !ok {
+					t.Fatalf("template publishes no %s", outputRevalidateQueueURL)
+				}
+				if out.Value != "RevalidateQueue" {
+					t.Errorf("%s = %q, want a !Ref of the queue, which is its URL", outputRevalidateQueueURL, out.Value)
+				}
+			})
+		}
+	})
 }
 
 func iamResourceMatches(pattern, arn string) bool {
@@ -277,32 +428,34 @@ func iamResourceMatches(pattern, arn string) bool {
 	return regexp.MustCompile("^" + strings.Join(parts, ".*") + "$").MatchString(arn)
 }
 
-func TestAssetBucket_NoKeySatisfiesBothTheEdgeWriteAndTheOriginRead(t *testing.T) {
-	for _, tc := range revalidatorTemplates() {
-		t.Run(tc.name, func(t *testing.T) {
-			write := edgeGrant(t, tc.template, "s3:PutObject")
-			read := revalidatorGrant(t, tc.template, "s3:GetObject")
+func TestAssetBucketRevalidator(t *testing.T) {
+	t.Run("no key satisfies both the edge write and the origin read", func(t *testing.T) {
+		for _, tc := range revalidatorTemplates() {
+			t.Run(tc.name, func(t *testing.T) {
+				write := edgeGrant(t, tc.template, "s3:PutObject")
+				read := revalidatorGrant(t, tc.template, "s3:GetObject")
 
-			for _, key := range []string{
-				"${AssetBucket.Arn}/prod/proj/web/B1/fetch-cache/origin.json",
-				"${AssetBucket.Arn}/prod/proj/web/B1/origin.json",
-				"${AssetBucket.Arn}/prod/proj/web/B1/fetch-cache/a/origin.json",
-			} {
-				if iamResourceMatches(write, key) && iamResourceMatches(read, key) {
-					t.Errorf("%s is both edge-writable under %q and consumer-readable under %q: a stolen edge key plants an origin record and the consumer delivers the app's bypass token to it", key, write, read)
+				for _, key := range []string{
+					"${AssetBucket.Arn}/prod/proj/web/B1/fetch-cache/origin.json",
+					"${AssetBucket.Arn}/prod/proj/web/B1/origin.json",
+					"${AssetBucket.Arn}/prod/proj/web/B1/fetch-cache/a/origin.json",
+				} {
+					if iamResourceMatches(write, key) && iamResourceMatches(read, key) {
+						t.Errorf("%s is both edge-writable under %q and consumer-readable under %q: a stolen edge key plants an origin record and the consumer delivers the app's bypass token to it", key, write, read)
+					}
 				}
-			}
 
-			writeTail := write[strings.LastIndex(write, "*")+1:]
-			readTail := read[strings.LastIndex(read, "*")+1:]
-			if writeTail == "" || readTail == "" {
-				t.Fatalf("one grant ends in an unanchored wildcard (write %q, read %q); nothing bounds what a key can end in, so the two grants cannot be disjoint", write, read)
-			}
-			if strings.HasSuffix(writeTail, readTail) || strings.HasSuffix(readTail, writeTail) {
-				t.Errorf("write grant ends %q and read grant ends %q; one is a suffix of the other, so a single key satisfies both", writeTail, readTail)
-			}
-		})
-	}
+				writeTail := write[strings.LastIndex(write, "*")+1:]
+				readTail := read[strings.LastIndex(read, "*")+1:]
+				if writeTail == "" || readTail == "" {
+					t.Fatalf("one grant ends in an unanchored wildcard (write %q, read %q); nothing bounds what a key can end in, so the two grants cannot be disjoint", write, read)
+				}
+				if strings.HasSuffix(writeTail, readTail) || strings.HasSuffix(readTail, writeTail) {
+					t.Errorf("write grant ends %q and read grant ends %q; one is a suffix of the other, so a single key satisfies both", writeTail, readTail)
+				}
+			})
+		}
+	})
 }
 
 func edgeGrant(t *testing.T, template, action string) string {
@@ -333,188 +486,43 @@ func soleResource(t *testing.T, statements []policyStatement, action string) str
 	return found[0]
 }
 
-func TestRevalidateQueue_BothEndsCanUseTheEnvelope(t *testing.T) {
-	for _, tc := range revalidatorTemplates() {
-		t.Run(tc.name, func(t *testing.T) {
-			user, ok := parseRevalidatorTemplate(t, tc.template).Resources["EdgeUser"]
-			if !ok {
-				t.Fatal("template is missing the EdgeUser")
-			}
-			for _, end := range []struct {
-				who        string
-				statements []policyStatement
-				want       []string
-			}{
-				{"the edge producer", user.Properties.Policies[0].PolicyDocument.Statement, []string{"kms:GenerateDataKey", "kms:Decrypt"}},
-				{"the consumer", revalidatorPolicy(t, tc.template), []string{"kms:Decrypt"}},
-			} {
-				var kms []policyStatement
-				for _, st := range end.statements {
-					if slices.ContainsFunc(st.actions(), func(a string) bool { return strings.HasPrefix(a, "kms:") }) {
-						kms = append(kms, st)
+func TestRunRevalidator(t *testing.T) {
+	t.Run("this build bootstraps a consumer", func(t *testing.T) {
+		if !pinnedRevalidator().pinned() {
+			t.Fatal("this build pins no revalidator; the queue it provisions has nothing to drain")
+		}
+		for _, tc := range []struct {
+			name      string
+			run       func(context.Context, CFNAPI, SSMAPI, IAMAPI, edge.Provider, Artifacts, func(string), func(string)) error
+			stackName string
+		}{
+			{"production", Run, StackName},
+			{"preview", RunPreview, PreviewStackName},
+		} {
+			t.Run(tc.name, func(t *testing.T) {
+				cfn, ssmc, iamc := newFakeCFN(), newFakeSSM(), &fakeIAM{}
+				ed := &fakeEdge{out: edge.BootstrapOutput{Trust: edge.TrustExternal}}
+
+				if err := tc.run(context.Background(), cfn, ssmc, iamc, ed, preloadedArtifact(), nil, nil); err != nil {
+					t.Fatalf("run: %v", err)
+				}
+				template := cfn.templates[tc.stackName]
+				for _, name := range []string{
+					"Revalidator", "RevalidatorRole", "RevalidatorQueueConsumer",
+				} {
+					if !strings.Contains(template, "  "+name+":") {
+						t.Errorf("this build's bootstrap rendered no %s", name)
 					}
 				}
-				if len(kms) != 1 {
-					t.Fatalf("%s holds %d KMS statements, want exactly one; without it every message against the SSE-KMS queue fails KMS.AccessDeniedException and the queue silently stays empty", end.who, len(kms))
+				if want := revalidatorArtifactKey(pinnedRevalidator()); !strings.Contains(template, want) {
+					t.Errorf("the consumer does not read its code from %s", want)
 				}
-				st := kms[0]
-				if !slices.Equal(st.actions(), end.want) {
-					t.Errorf("%s KMS actions = %v, want exactly %v", end.who, st.actions(), end.want)
+				if _, ok := parseRevalidatorTemplate(t, template).Outputs[outputRevalidateQueueURL]; !ok {
+					t.Errorf("this build's bootstrap published no %s, so the edge keeps rendering through the origin", outputRevalidateQueueURL)
 				}
-				if got := st.resources(); !slices.Equal(got, []string{"*"}) {
-					t.Errorf("%s KMS resource = %v, want '*' — the managed alias/aws/sqs key's ARN is not knowable in the template, so the condition is what bounds this", end.who, got)
-				}
-				equals, ok := st.Condition["StringEquals"].(map[string]any)
-				if !ok {
-					t.Fatalf("%s KMS condition = %+v, want a StringEquals on kms:ViaService; unconditioned, this is an account-wide KMS grant", end.who, st.Condition)
-				}
-				if want := "sqs.${AWS::Region}.amazonaws.com"; equals["kms:ViaService"] != want {
-					t.Errorf("%s kms:ViaService = %v, want %q — anything wider lets this key decrypt outside SQS", end.who, equals["kms:ViaService"], want)
-				}
-				if len(equals) != 1 || len(st.Condition) != 1 {
-					t.Errorf("%s KMS condition = %+v, want kms:ViaService alone", end.who, st.Condition)
-				}
-			}
-		})
-	}
-}
-
-func TestRevalidator_ReachesOnlyWhatItTriggersWith(t *testing.T) {
-	for _, tc := range revalidatorTemplates() {
-		t.Run(tc.name, func(t *testing.T) {
-			var actions []string
-			for _, st := range revalidatorPolicy(t, tc.template) {
-				actions = append(actions, st.actions()...)
-			}
-			want := []string{
-				"sqs:ReceiveMessage", "sqs:DeleteMessage", "sqs:GetQueueAttributes",
-				"kms:Decrypt", "s3:GetObject",
-				"lambda:InvokeFunctionUrl", "lambda:InvokeFunction",
-			}
-			if !slices.Equal(actions, want) {
-				t.Errorf("revalidator role grants %v, want exactly %v", actions, want)
-			}
-
-			env := parseRevalidatorTemplate(t, tc.template).Resources["Revalidator"].Properties.Environment.Variables
-			if got := env[revalidatorAssetBucketEnvVar]; got != "AssetBucket" {
-				t.Errorf("%s = %q, want a !Ref of this substrate's own asset bucket; unset, the consumer resolves nothing and triggers nothing", revalidatorAssetBucketEnvVar, got)
-			}
-		})
-	}
-}
-
-func TestRevalidator_InvokeGrantIsAccountWideOverOcelTaggedFunctions(t *testing.T) {
-	for _, tc := range revalidatorTemplates() {
-		t.Run(tc.name, func(t *testing.T) {
-			for _, st := range revalidatorPolicy(t, tc.template) {
-				if !slices.Contains(st.actions(), "lambda:InvokeFunctionUrl") {
-					continue
-				}
-				if !slices.Contains(st.actions(), "lambda:InvokeFunction") {
-					t.Errorf("invoke grant = %v, want both lambda:InvokeFunctionUrl and lambda:InvokeFunction", st.actions())
-				}
-				want := []string{"arn:aws:lambda:${AWS::Region}:${AWS::AccountId}:function:*"}
-				if !slices.Equal(st.resources(), want) {
-					t.Errorf("invoke grant resource = %v, want %v — the edge user's own '*' region is wider than this consumer needs", st.resources(), want)
-				}
-				null, ok := st.Condition["Null"].(map[string]any)
-				if !ok {
-					t.Fatalf("invoke grant condition = %+v, want a Null condition on the ocel:app tag", st.Condition)
-				}
-				if got := null["aws:ResourceTag/ocel:app"]; got != "false" {
-					t.Errorf("invoke condition = %v, want 'aws:ResourceTag/ocel:app': 'false'", got)
-				}
-				return
-			}
-			t.Fatal("the revalidator role cannot invoke the Function URLs it triggers")
-		})
-	}
-}
-
-func TestRevalidator_RendersNoAlarms(t *testing.T) {
-	for _, tc := range revalidatorTemplates() {
-		t.Run(tc.name, func(t *testing.T) {
-			for name, res := range parseRevalidatorTemplate(t, tc.template).Resources {
-				if res.Type == "AWS::CloudWatch::Alarm" {
-					t.Errorf("%s is a billed standing alarm in a stack that must be free to leave idle", name)
-				}
-			}
-		})
-	}
-}
-
-func TestRevalidator_UnpinnedRendersNoConsumerAndNoQueueURL(t *testing.T) {
-	for _, tc := range []struct {
-		name     string
-		template string
-	}{
-		{"production", stackTemplate(edge.TrustExternal, stackArtifacts{optimizer: fixtureOptimizerCode(), publisher: fixturePublisherCode()}, RequiredBootstrapVersion)},
-		{"preview", previewStackTemplate(edge.TrustExternal, stackArtifacts{optimizer: fixtureOptimizerCode(), publisher: fixturePublisherCode()}, RequiredBootstrapVersion)},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			for _, name := range []string{
-				"Revalidator", "RevalidatorRole", "RevalidatorQueueConsumer",
-			} {
-				if strings.Contains(tc.template, "  "+name+":") {
-					t.Errorf("an unpinned build still rendered %s", name)
-				}
-			}
-			if _, ok := parseRevalidatorTemplate(t, tc.template).Outputs[outputRevalidateQueueURL]; ok {
-				t.Errorf("an unpinned build published %s; the edge would enqueue into a queue nothing drains and report the refresh landed", outputRevalidateQueueURL)
-			}
-		})
-	}
-}
-
-func TestRevalidator_PinnedPublishesTheQueueURL(t *testing.T) {
-	for _, tc := range revalidatorTemplates() {
-		t.Run(tc.name, func(t *testing.T) {
-			out, ok := parseRevalidatorTemplate(t, tc.template).Outputs[outputRevalidateQueueURL]
-			if !ok {
-				t.Fatalf("template publishes no %s", outputRevalidateQueueURL)
-			}
-			if out.Value != "RevalidateQueue" {
-				t.Errorf("%s = %q, want a !Ref of the queue, which is its URL", outputRevalidateQueueURL, out.Value)
-			}
-		})
-	}
-}
-
-func TestRun_ThisBuildBootstrapsAConsumer(t *testing.T) {
-	if !pinnedRevalidator().pinned() {
-		t.Fatal("this build pins no revalidator; the queue it provisions has nothing to drain")
-	}
-	for _, tc := range []struct {
-		name      string
-		run       func(context.Context, CFNAPI, SSMAPI, IAMAPI, edge.Provider, Artifacts, func(string), func(string)) error
-		stackName string
-	}{
-		{"production", Run, StackName},
-		{"preview", RunPreview, PreviewStackName},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			cfn, ssmc, iamc := newFakeCFN(), newFakeSSM(), &fakeIAM{}
-			ed := &fakeEdge{out: edge.BootstrapOutput{Trust: edge.TrustExternal}}
-
-			if err := tc.run(context.Background(), cfn, ssmc, iamc, ed, preloadedArtifact(), nil, nil); err != nil {
-				t.Fatalf("run: %v", err)
-			}
-			template := cfn.templates[tc.stackName]
-			for _, name := range []string{
-				"Revalidator", "RevalidatorRole", "RevalidatorQueueConsumer",
-			} {
-				if !strings.Contains(template, "  "+name+":") {
-					t.Errorf("this build's bootstrap rendered no %s", name)
-				}
-			}
-			if want := revalidatorArtifactKey(pinnedRevalidator()); !strings.Contains(template, want) {
-				t.Errorf("the consumer does not read its code from %s", want)
-			}
-			if _, ok := parseRevalidatorTemplate(t, template).Outputs[outputRevalidateQueueURL]; !ok {
-				t.Errorf("this build's bootstrap published no %s, so the edge keeps rendering through the origin", outputRevalidateQueueURL)
-			}
-		})
-	}
+			})
+		}
+	})
 }
 
 func revalidatorPolicy(t *testing.T, template string) []policyStatement {
@@ -529,80 +537,84 @@ func revalidatorPolicy(t *testing.T, template string) []policyStatement {
 	return role.Properties.Policies[0].PolicyDocument.Statement
 }
 
-func TestEdgeUser_SendsToTheQueueAndNothingElse(t *testing.T) {
-	for _, tc := range revalidatorTemplates() {
-		t.Run(tc.name, func(t *testing.T) {
-			tmpl := parseRevalidatorTemplate(t, tc.template)
-			user, ok := tmpl.Resources["EdgeUser"]
-			if !ok {
-				t.Fatal("template is missing the EdgeUser")
-			}
-			if len(user.Properties.Policies) != 1 {
-				t.Fatalf("edge user policies = %+v, want exactly one inline policy", user.Properties.Policies)
-			}
+func TestEdgeUserRevalidator(t *testing.T) {
+	t.Run("sends to the queue and nothing else", func(t *testing.T) {
+		for _, tc := range revalidatorTemplates() {
+			t.Run(tc.name, func(t *testing.T) {
+				tmpl := parseRevalidatorTemplate(t, tc.template)
+				user, ok := tmpl.Resources["EdgeUser"]
+				if !ok {
+					t.Fatal("template is missing the EdgeUser")
+				}
+				if len(user.Properties.Policies) != 1 {
+					t.Fatalf("edge user policies = %+v, want exactly one inline policy", user.Properties.Policies)
+				}
 
-			var sqsActions []string
-			var sendResources []string
-			for _, st := range user.Properties.Policies[0].PolicyDocument.Statement {
-				for _, a := range st.actions() {
-					if strings.HasPrefix(a, "sqs:") {
-						sqsActions = append(sqsActions, a)
-						sendResources = append(sendResources, st.resources()...)
+				var sqsActions []string
+				var sendResources []string
+				for _, st := range user.Properties.Policies[0].PolicyDocument.Statement {
+					for _, a := range st.actions() {
+						if strings.HasPrefix(a, "sqs:") {
+							sqsActions = append(sqsActions, a)
+							sendResources = append(sendResources, st.resources()...)
+						}
 					}
 				}
-			}
-			if want := []string{"sqs:SendMessage"}; !slices.Equal(sqsActions, want) {
-				t.Errorf("edge user SQS actions = %v, want exactly %v", sqsActions, want)
-			}
-			if want := []string{"RevalidateQueue.Arn"}; !slices.Equal(sendResources, want) {
-				t.Errorf("edge user sends to %v, want only the revalidation queue's own ARN", sendResources)
-			}
-		})
-	}
+				if want := []string{"sqs:SendMessage"}; !slices.Equal(sqsActions, want) {
+					t.Errorf("edge user SQS actions = %v, want exactly %v", sqsActions, want)
+				}
+				if want := []string{"RevalidateQueue.Arn"}; !slices.Equal(sendResources, want) {
+					t.Errorf("edge user sends to %v, want only the revalidation queue's own ARN", sendResources)
+				}
+			})
+		}
+	})
 }
 
-func TestEnsureRevalidatorArtifact_RefusesADigestMismatch(t *testing.T) {
-	art, store, source := fixtureArtifactDeps([]byte("not the revalidator anyone reviewed"))
+func TestEnsureRevalidatorArtifact(t *testing.T) {
+	t.Run("refuses a digest mismatch", func(t *testing.T) {
+		art, store, source := fixtureArtifactDeps([]byte("not the revalidator anyone reviewed"))
 
-	code, err := ensureRevalidatorArtifact(context.Background(), art, "ocel-artifacts-test", fixtureRevalidatorPin())
-	if err == nil {
-		t.Fatal("a mismatched revalidator was accepted; it must refuse to deploy")
-	}
-	if code.present() {
-		t.Errorf("a refused revalidator still produced code %+v", code)
-	}
-	if store.puts != 0 {
-		t.Errorf("a refused revalidator was uploaded anyway (%d puts)", store.puts)
-	}
-	if want := revalidatorReleaseURL(fixtureRevalidatorPin().version); len(source.urls) != 1 || source.urls[0] != want {
-		t.Errorf("fetched %v, want exactly [%s]", source.urls, want)
-	}
-	if !strings.Contains(err.Error(), fixtureRevalidatorPin().sha256) {
-		t.Errorf("error does not name the required digest: %v", err)
-	}
-	if !strings.Contains(err.Error(), revalidatorLabel) {
-		t.Errorf("error does not name which artifact refused: %v", err)
-	}
-}
+		code, err := ensureRevalidatorArtifact(context.Background(), art, "ocel-artifacts-test", fixtureRevalidatorPin())
+		if err == nil {
+			t.Fatal("a mismatched revalidator was accepted; it must refuse to deploy")
+		}
+		if code.present() {
+			t.Errorf("a refused revalidator still produced code %+v", code)
+		}
+		if store.puts != 0 {
+			t.Errorf("a refused revalidator was uploaded anyway (%d puts)", store.puts)
+		}
+		if want := revalidatorReleaseURL(fixtureRevalidatorPin().version); len(source.urls) != 1 || source.urls[0] != want {
+			t.Errorf("fetched %v, want exactly [%s]", source.urls, want)
+		}
+		if !strings.Contains(err.Error(), fixtureRevalidatorPin().sha256) {
+			t.Errorf("error does not name the required digest: %v", err)
+		}
+		if !strings.Contains(err.Error(), revalidatorLabel) {
+			t.Errorf("error does not name which artifact refused: %v", err)
+		}
+	})
 
-func TestEnsureRevalidatorArtifact_UploadsAVerifiedArtifact(t *testing.T) {
-	art, store, _ := fixtureArtifactDeps(fixtureArtifact)
+	t.Run("uploads a verified artifact", func(t *testing.T) {
+		art, store, _ := fixtureArtifactDeps(fixtureArtifact)
 
-	code, err := ensureRevalidatorArtifact(context.Background(), art, "ocel-artifacts-test", fixtureRevalidatorPin())
-	if err != nil {
-		t.Fatalf("ensureRevalidatorArtifact: %v", err)
-	}
-	if !strings.Contains(code.key, fixtureDigest()) {
-		t.Errorf("key %q is not content-addressed on the pinned digest", code.key)
-	}
-	if got := string(store.objects[code.key]); got != string(fixtureArtifact) {
-		t.Errorf("uploaded %q, want the verified bytes verbatim", got)
-	}
-	want, err := fixtureRevalidatorPin().checksum(revalidatorLabel)
-	if err != nil {
-		t.Fatalf("checksum: %v", err)
-	}
-	if len(store.putChecksums) != 1 || store.putChecksums[0] != want {
-		t.Errorf("uploaded with checksums %v, want [%s]", store.putChecksums, want)
-	}
+		code, err := ensureRevalidatorArtifact(context.Background(), art, "ocel-artifacts-test", fixtureRevalidatorPin())
+		if err != nil {
+			t.Fatalf("ensureRevalidatorArtifact: %v", err)
+		}
+		if !strings.Contains(code.key, fixtureDigest()) {
+			t.Errorf("key %q is not content-addressed on the pinned digest", code.key)
+		}
+		if got := string(store.objects[code.key]); got != string(fixtureArtifact) {
+			t.Errorf("uploaded %q, want the verified bytes verbatim", got)
+		}
+		want, err := fixtureRevalidatorPin().checksum(revalidatorLabel)
+		if err != nil {
+			t.Fatalf("checksum: %v", err)
+		}
+		if len(store.putChecksums) != 1 || store.putChecksums[0] != want {
+			t.Errorf("uploaded with checksums %v, want [%s]", store.putChecksums, want)
+		}
+	})
 }

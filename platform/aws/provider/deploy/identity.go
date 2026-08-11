@@ -7,40 +7,40 @@ import (
 
 const identitySeparator = "~"
 
-type DeploymentIdentity struct {
+type Identity struct {
 	buildID     string
 	fingerprint string
 }
 
-func (id DeploymentIdentity) BuildID() string { return id.buildID }
+func (id Identity) BuildID() string { return id.buildID }
 
-func (id DeploymentIdentity) Fingerprint() string { return id.fingerprint }
+func (id Identity) Fingerprint() string { return id.fingerprint }
 
-type DeploymentIdentities map[string]DeploymentIdentity
+type Identities map[string]Identity
 
-func NewDeploymentIdentity(buildID, fingerprint string) (DeploymentIdentity, error) {
+func NewIdentity(buildID, fingerprint string) (Identity, error) {
 	if buildID == "" {
-		return DeploymentIdentity{}, fmt.Errorf("deployment identity requires a build id")
+		return Identity{}, fmt.Errorf("deployment identity requires a build id")
 	}
 	for label, part := range map[string]string{"build id": buildID, "value fingerprint": fingerprint} {
 		if strings.Contains(part, identitySeparator) {
-			return DeploymentIdentity{}, fmt.Errorf("%s %q contains the reserved character %q", label, part, identitySeparator)
+			return Identity{}, fmt.Errorf("%s %q contains the reserved character %q", label, part, identitySeparator)
 		}
 	}
-	return DeploymentIdentity{buildID: buildID, fingerprint: fingerprint}, nil
+	return Identity{buildID: buildID, fingerprint: fingerprint}, nil
 }
 
-func (id DeploymentIdentity) String() string {
+func (id Identity) String() string {
 	if id.fingerprint == "" {
 		return id.buildID
 	}
 	return id.buildID + identitySeparator + id.fingerprint
 }
 
-func ParseDeploymentIdentity(s string) (DeploymentIdentity, error) {
+func ParseIdentity(s string) (Identity, error) {
 	buildID, fingerprint, split := strings.Cut(s, identitySeparator)
 	if split && fingerprint == "" {
-		return DeploymentIdentity{}, fmt.Errorf("deployment identity %q has an empty value fingerprint", s)
+		return Identity{}, fmt.Errorf("deployment identity %q has an empty value fingerprint", s)
 	}
-	return NewDeploymentIdentity(buildID, fingerprint)
+	return NewIdentity(buildID, fingerprint)
 }

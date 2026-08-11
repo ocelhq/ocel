@@ -255,7 +255,7 @@ func collectFiles(dir string) ([]string, error) {
 		return nil
 	})
 	if err != nil {
-		if os.IsNotExist(err) {
+		if errors.Is(err, fs.ErrNotExist) {
 			return nil, nil
 		}
 		return nil, fmt.Errorf("crawl %s: %w", dir, err)

@@ -1,6 +1,7 @@
 package providerrunner
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -28,6 +29,10 @@ func runFakeProvider() int {
 		fmt.Fprintln(os.Stderr, "fake provider: simulated startup failure")
 		return 7
 	case "never-ready":
+		select {}
+	case "oversized-line":
+		os.Stdout.Write(bytes.Repeat([]byte("x"), 2*1024*1024))
+		fmt.Println()
 		select {}
 	}
 

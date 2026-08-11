@@ -14,6 +14,8 @@ import (
 )
 
 func TestPreviewExpiry(t *testing.T) {
+	t.Parallel()
+
 	now := time.Unix(1_700_000_000, 0)
 	cases := []struct {
 		name      string
@@ -26,6 +28,7 @@ func TestPreviewExpiry(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 			if got := previewExpiry(tc.lifecycle, now); got != tc.want {
 				t.Errorf("previewExpiry(%v) = %d, want %d", tc.lifecycle, got, tc.want)
 			}
@@ -34,6 +37,8 @@ func TestPreviewExpiry(t *testing.T) {
 }
 
 func TestStackName(t *testing.T) {
+	t.Parallel()
+
 	cases := []struct {
 		name string
 		env  *deploymentsv1.Environment
@@ -58,6 +63,7 @@ func TestStackName(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 			if got := stackName("proj-123", tc.env); got != tc.want {
 				t.Errorf("stackName() = %q, want %q", got, tc.want)
 			}
@@ -66,6 +72,8 @@ func TestStackName(t *testing.T) {
 }
 
 func TestPreflightResponse(t *testing.T) {
+	t.Parallel()
+
 	preview := bootstrap.Deployed{Present: true, Class: bootstrap.ClassPreview}
 	production := bootstrap.Deployed{Present: true, Class: bootstrap.ClassProduction}
 	absent := bootstrap.Deployed{Present: false}
@@ -87,6 +95,7 @@ func TestPreflightResponse(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 			got := preflightResponse(tc.required, tc.preview, tc.prod)
 			if got.GetInfraClass() != tc.wantClass || got.GetInfrastructurePresent() != tc.wantPresent {
 				t.Errorf("preflightResponse() = {class=%v present=%v}, want {class=%v present=%v}",
@@ -105,50 +114,59 @@ func routeOwners(byPattern map[string]string, fail map[string]bool) routeOwnerFu
 	}
 }
 
-func TestDomainClaims_AnswersInRequestOrderWithTheOwningScript(t *testing.T) {
-	owner := routeOwners(map[string]string{
-		"*.preview.app.com/*": "ocel-other--preview",
-		"shop.com/*":          "ocel-shop--prod-web",
-	}, nil)
+func TestDomainClaims(t *testing.T) {
+	t.Parallel()
 
-	got := domainClaims(context.Background(), owner, "shop", []string{"*.preview.app.com", "free.com", "shop.com"})
+	t.Run("answers in request order, naming the owning script", func(t *testing.T) {
+		t.Parallel()
+		owner := routeOwners(map[string]string{
+			"*.preview.app.com/*": "ocel-other--preview",
+			"shop.com/*":          "ocel-shop--prod-web",
+		}, nil)
 
-	if len(got) != 3 {
-		t.Fatalf("claims = %d, want one per requested hostname", len(got))
-	}
-	if got[0].GetHostname() != "*.preview.app.com" || got[0].GetStatus() != deploymentsv1.DomainClaim_STATUS_CLAIMED || got[0].GetOwner() != "ocel-other--preview" {
-		t.Errorf("claim[0] = %+v, want another project's worker reported as the owner", got[0])
-	}
-	if got[1].GetHostname() != "free.com" || got[1].GetStatus() != deploymentsv1.DomainClaim_STATUS_UNCLAIMED || got[1].GetOwner() != "" {
-		t.Errorf("claim[1] = %+v, want an unheld hostname reported unclaimed", got[1])
-	}
-	if got[2].GetStatus() != deploymentsv1.DomainClaim_STATUS_UNCLAIMED || got[2].GetOwner() != "" {
-		t.Errorf("claim[2] = %+v, want this project's own hold to read as free to take", got[2])
-	}
+		got := domainClaims(context.Background(), owner, "shop", []string{"*.preview.app.com", "free.com", "shop.com"})
+
+		if len(got) != 3 {
+			t.Fatalf("claims = %d, want one per requested hostname", len(got))
+		}
+		if got[0].GetHostname() != "*.preview.app.com" || got[0].GetStatus() != deploymentsv1.DomainClaim_STATUS_CLAIMED || got[0].GetOwner() != "ocel-other--preview" {
+			t.Errorf("claim[0] = %+v, want another project's worker reported as the owner", got[0])
+		}
+		if got[1].GetHostname() != "free.com" || got[1].GetStatus() != deploymentsv1.DomainClaim_STATUS_UNCLAIMED || got[1].GetOwner() != "" {
+			t.Errorf("claim[1] = %+v, want an unheld hostname reported unclaimed", got[1])
+		}
+		if got[2].GetStatus() != deploymentsv1.DomainClaim_STATUS_UNCLAIMED || got[2].GetOwner() != "" {
+			t.Errorf("claim[2] = %+v, want this project's own hold to read as free to take", got[2])
+		}
+	})
+
+	t.Run("an edge that cannot answer leaves the claim unspecified", func(t *testing.T) {
+		t.Parallel()
+		failing := domainClaims(context.Background(), routeOwners(nil, map[string]bool{"app.com/*": true}), "shop", []string{"app.com"})
+		if len(failing) != 1 || failing[0].GetHostname() != "app.com" || failing[0].GetStatus() != deploymentsv1.DomainClaim_STATUS_UNSPECIFIED {
+			t.Errorf("claims = %+v, want a failed lookup reported as unanswerable", failing)
+		}
+	})
+
+	t.Run("no domains asks the edge nothing", func(t *testing.T) {
+		t.Parallel()
+		asked := 0
+		owner := func(context.Context, string) (string, error) {
+			asked++
+			return "", nil
+		}
+		if got := domainClaims(context.Background(), owner, "shop", nil); got != nil {
+			t.Errorf("claims = %+v, want none", got)
+		}
+		if asked != 0 {
+			t.Errorf("edge lookups = %d, want 0", asked)
+		}
+	})
 }
 
-func TestDomainClaims_AnEdgeThatCannotAnswerIsUnspecified(t *testing.T) {
-	failing := domainClaims(context.Background(), routeOwners(nil, map[string]bool{"app.com/*": true}), "shop", []string{"app.com"})
-	if len(failing) != 1 || failing[0].GetHostname() != "app.com" || failing[0].GetStatus() != deploymentsv1.DomainClaim_STATUS_UNSPECIFIED {
-		t.Errorf("claims = %+v, want a failed lookup reported as unanswerable", failing)
-	}
-}
+func TestKnownSlugs(t *testing.T) {
+	t.Parallel()
 
-func TestDomainClaims_NoDomainsAsksTheEdgeNothing(t *testing.T) {
-	asked := 0
-	owner := func(context.Context, string) (string, error) {
-		asked++
-		return "", nil
-	}
-	if got := domainClaims(context.Background(), owner, "shop", nil); got != nil {
-		t.Errorf("claims = %+v, want none", got)
-	}
-	if asked != 0 {
-		t.Errorf("edge lookups = %d, want 0", asked)
-	}
-}
-
-func TestKnownSlugs_SkipsTheBackendWhenTheCheckCannotRun(t *testing.T) {
 	present := bootstrap.Deployed{Present: true, StateBucket: "ocel-state"}
 
 	cases := []struct {
@@ -156,12 +174,13 @@ func TestKnownSlugs_SkipsTheBackendWhenTheCheckCannotRun(t *testing.T) {
 		substrate bootstrap.Deployed
 		slug      string
 	}{
-		{"no slug sent", present, ""},
-		{"substrate not bootstrapped", bootstrap.Deployed{Present: false}, "my-app"},
-		{"substrate present but has no state bucket", bootstrap.Deployed{Present: true}, "my-app"},
+		{"no slug sent, so there is nothing to look up", present, ""},
+		{"a substrate that is not bootstrapped", bootstrap.Deployed{Present: false}, "my-app"},
+		{"a substrate present but holding no state bucket", bootstrap.Deployed{Present: true}, "my-app"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 			if got := knownSlugs(context.Background(), aws.Config{}, tc.substrate, tc.slug); got != nil {
 				t.Errorf("knownSlugs() = %v, want nil", got)
 			}
@@ -170,26 +189,32 @@ func TestKnownSlugs_SkipsTheBackendWhenTheCheckCannotRun(t *testing.T) {
 }
 
 func TestToPreviewEnvironments(t *testing.T) {
-	stacks := []deploy.PreviewStack{
-		{Identity: "feature_login_ab12", Lifecycle: deploymentsv1.Environment_LIFECYCLE_EPHEMERAL, Label: "pr-7", CreatedAt: 100, ExpiresAt: 200},
-		{Identity: "staging", Lifecycle: deploymentsv1.Environment_LIFECYCLE_PERSISTENT},
-	}
+	t.Parallel()
 
-	got := toPreviewEnvironments(stacks)
-	if len(got) != 2 {
-		t.Fatalf("len = %d, want 2", len(got))
-	}
-	if got[0].GetIdentity() != "feature_login_ab12" || got[0].GetLifecycle() != deploymentsv1.Environment_LIFECYCLE_EPHEMERAL ||
-		got[0].GetLabel() != "pr-7" || got[0].GetCreatedAt() != 100 || got[0].GetExpiresAt() != 200 {
-		t.Errorf("first env = %+v, want the ephemeral entry mapped through", got[0])
-	}
-	if got[1].GetIdentity() != "staging" || got[1].GetLifecycle() != deploymentsv1.Environment_LIFECYCLE_PERSISTENT {
-		t.Errorf("second env = %+v, want the persistent entry mapped through", got[1])
-	}
-}
+	t.Run("maps every stack through", func(t *testing.T) {
+		t.Parallel()
+		stacks := []deploy.PreviewStack{
+			{Identity: "feature_login_ab12", Lifecycle: deploymentsv1.Environment_LIFECYCLE_EPHEMERAL, Label: "pr-7", CreatedAt: 100, ExpiresAt: 200},
+			{Identity: "staging", Lifecycle: deploymentsv1.Environment_LIFECYCLE_PERSISTENT},
+		}
 
-func TestToPreviewEnvironments_Empty(t *testing.T) {
-	if got := toPreviewEnvironments(nil); len(got) != 0 {
-		t.Errorf("toPreviewEnvironments(nil) = %+v, want empty", got)
-	}
+		got := toPreviewEnvironments(stacks)
+		if len(got) != 2 {
+			t.Fatalf("len = %d, want 2", len(got))
+		}
+		if got[0].GetIdentity() != "feature_login_ab12" || got[0].GetLifecycle() != deploymentsv1.Environment_LIFECYCLE_EPHEMERAL ||
+			got[0].GetLabel() != "pr-7" || got[0].GetCreatedAt() != 100 || got[0].GetExpiresAt() != 200 {
+			t.Errorf("first env = %+v, want the ephemeral entry mapped through", got[0])
+		}
+		if got[1].GetIdentity() != "staging" || got[1].GetLifecycle() != deploymentsv1.Environment_LIFECYCLE_PERSISTENT {
+			t.Errorf("second env = %+v, want the persistent entry mapped through", got[1])
+		}
+	})
+
+	t.Run("no stacks map to no environments", func(t *testing.T) {
+		t.Parallel()
+		if got := toPreviewEnvironments(nil); len(got) != 0 {
+			t.Errorf("toPreviewEnvironments(nil) = %+v, want empty", got)
+		}
+	})
 }

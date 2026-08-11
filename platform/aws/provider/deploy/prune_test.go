@@ -11,14 +11,117 @@ import (
 	s3types "github.com/aws/aws-sdk-go-v2/service/s3/types"
 )
 
-func TestReclaimTargets_DerivesStackAndPrefixesPerRecord(t *testing.T) {
-	got, err := ReclaimTargets("proj1", "prod", []string{"record:web/build-1", "record:api/build-2"}, nil, nil)
-	if err != nil {
-		t.Fatalf("ReclaimTargets: %v", err)
-	}
+func TestReclaimTargets(t *testing.T) {
+	t.Parallel()
 
-	want := []PruneTarget{
-		{
+	t.Run("derives stack and prefixes per record", func(t *testing.T) {
+		t.Parallel()
+		got, err := ReclaimTargets("proj1", "prod", []string{"record:web/build-1", "record:api/build-2"}, nil, nil)
+		if err != nil {
+			t.Fatalf("ReclaimTargets: %v", err)
+		}
+
+		want := []PruneTarget{
+			{
+				App:            "web",
+				Identity:       buildOnly("build-1"),
+				Stack:          AppDeployStackName("proj1", "web", buildOnly("build-1")),
+				AssetPrefix:    appAssetR2Prefix("proj1", "web", "build-1"),
+				ImageConfigKey: imageConfigKey("proj1", "web", "build-1"),
+				CachePrefix:    appAssetPrefixFor("prod", "proj1", "web", "build-1"),
+				EdgePrefix:     appEdgeR2Prefix("proj1", "web", "build-1"),
+			},
+			{
+				App:            "api",
+				Identity:       buildOnly("build-2"),
+				Stack:          AppDeployStackName("proj1", "api", buildOnly("build-2")),
+				AssetPrefix:    appAssetR2Prefix("proj1", "api", "build-2"),
+				ImageConfigKey: imageConfigKey("proj1", "api", "build-2"),
+				CachePrefix:    appAssetPrefixFor("prod", "proj1", "api", "build-2"),
+				EdgePrefix:     appEdgeR2Prefix("proj1", "api", "build-2"),
+			},
+		}
+		if !reflect.DeepEqual(got, want) {
+			t.Errorf("ReclaimTargets = %+v, want %+v", got, want)
+		}
+	})
+
+	t.Run("reclaims the build's edge prefix", func(t *testing.T) {
+		t.Parallel()
+		got, err := ReclaimTargets("proj1", "prod", []string{"record:web/build-1"}, nil, nil)
+		if err != nil {
+			t.Fatalf("ReclaimTargets: %v", err)
+		}
+		if want := "edge/proj1/web/build-1"; got[0].EdgePrefix != want {
+			t.Errorf("EdgePrefix = %q, want %q", got[0].EdgePrefix, want)
+		}
+		other, err := ReclaimTargets("proj1", "prod", []string{"record:web/build-2"}, nil, nil)
+		if err != nil {
+			t.Fatalf("ReclaimTargets: %v", err)
+		}
+		if other[0].EdgePrefix == got[0].EdgePrefix {
+			t.Error("two builds of one app resolved the same edge prefix; pruning one would take the other's bundle")
+		}
+	})
+
+	t.Run("fingerprinted identity keys the stack not the prefixes", func(t *testing.T) {
+		t.Parallel()
+		id := fingerprinted("build-1", "fp1")
+		got, err := ReclaimTargets("proj1", "prod", []string{"record:web/" + id.String()}, nil, nil)
+		if err != nil {
+			t.Fatalf("ReclaimTargets: %v", err)
+		}
+		want := PruneTarget{
+			App:            "web",
+			Identity:       id,
+			Stack:          AppDeployStackName("proj1", "web", id),
+			AssetPrefix:    appAssetR2Prefix("proj1", "web", "build-1"),
+			ImageConfigKey: imageConfigKey("proj1", "web", "build-1"),
+			CachePrefix:    appAssetPrefixFor("prod", "proj1", "web", "build-1"),
+			EdgePrefix:     appEdgeR2Prefix("proj1", "web", "build-1"),
+		}
+		if !reflect.DeepEqual(got, []PruneTarget{want}) {
+			t.Errorf("ReclaimTargets = %+v, want %+v", got, want)
+		}
+		plain, err := ReclaimTargets("proj1", "prod", []string{"record:web/build-1"}, nil, nil)
+		if err != nil {
+			t.Fatalf("ReclaimTargets: %v", err)
+		}
+		if plain[0].Stack == got[0].Stack {
+			t.Error("two Deployments of one build resolved the same app-deploy stack")
+		}
+	})
+
+	t.Run("build a surviving deployment shares keeps its storage", func(t *testing.T) {
+		t.Parallel()
+		rotated := fingerprinted("build-1", "fp2")
+		got, err := ReclaimTargets("proj1", "prod",
+			[]string{"record:web/build-1"},
+			[]string{"record:web/" + rotated.String()},
+			[]string{"record:web/" + rotated.String()})
+		if err != nil {
+			t.Fatalf("ReclaimTargets: %v", err)
+		}
+		want := []PruneTarget{{
+			App:      "web",
+			Identity: buildOnly("build-1"),
+			Stack:    AppDeployStackName("proj1", "web", buildOnly("build-1")),
+		}}
+		if !reflect.DeepEqual(got, want) {
+			t.Errorf("ReclaimTargets = %+v, want the stack alone %+v", got, want)
+		}
+	})
+
+	t.Run("last deployment of a build still reclaims its storage", func(t *testing.T) {
+		t.Parallel()
+		got, err := ReclaimTargets("proj1", "prod",
+			[]string{"record:web/build-1"},
+			[]string{"record:web/build-2", "record:api/build-1"},
+			[]string{"record:web/build-2", "record:api/build-1"})
+		if err != nil {
+			t.Fatalf("ReclaimTargets: %v", err)
+		}
+		want := []PruneTarget{{
 			App:            "web",
 			Identity:       buildOnly("build-1"),
 			Stack:          AppDeployStackName("proj1", "web", buildOnly("build-1")),
@@ -26,164 +129,74 @@ func TestReclaimTargets_DerivesStackAndPrefixesPerRecord(t *testing.T) {
 			ImageConfigKey: imageConfigKey("proj1", "web", "build-1"),
 			CachePrefix:    appAssetPrefixFor("prod", "proj1", "web", "build-1"),
 			EdgePrefix:     appEdgeR2Prefix("proj1", "web", "build-1"),
-		},
-		{
-			App:            "api",
-			Identity:       buildOnly("build-2"),
-			Stack:          AppDeployStackName("proj1", "api", buildOnly("build-2")),
-			AssetPrefix:    appAssetR2Prefix("proj1", "api", "build-2"),
-			ImageConfigKey: imageConfigKey("proj1", "api", "build-2"),
-			CachePrefix:    appAssetPrefixFor("prod", "proj1", "api", "build-2"),
-			EdgePrefix:     appEdgeR2Prefix("proj1", "api", "build-2"),
-		},
-	}
-	if !reflect.DeepEqual(got, want) {
-		t.Errorf("ReclaimTargets = %+v, want %+v", got, want)
-	}
-}
-
-func TestReclaimTargets_ReclaimsTheBuildsEdgePrefix(t *testing.T) {
-	got, err := ReclaimTargets("proj1", "prod", []string{"record:web/build-1"}, nil, nil)
-	if err != nil {
-		t.Fatalf("ReclaimTargets: %v", err)
-	}
-	if want := "edge/proj1/web/build-1"; got[0].EdgePrefix != want {
-		t.Errorf("EdgePrefix = %q, want %q", got[0].EdgePrefix, want)
-	}
-	other, err := ReclaimTargets("proj1", "prod", []string{"record:web/build-2"}, nil, nil)
-	if err != nil {
-		t.Fatalf("ReclaimTargets: %v", err)
-	}
-	if other[0].EdgePrefix == got[0].EdgePrefix {
-		t.Error("two builds of one app resolved the same edge prefix; pruning one would take the other's bundle")
-	}
-}
-
-func TestReclaimTargets_FingerprintedIdentityKeysTheStackNotThePrefixes(t *testing.T) {
-	id := fingerprinted("build-1", "fp1")
-	got, err := ReclaimTargets("proj1", "prod", []string{"record:web/" + id.String()}, nil, nil)
-	if err != nil {
-		t.Fatalf("ReclaimTargets: %v", err)
-	}
-	want := PruneTarget{
-		App:            "web",
-		Identity:       id,
-		Stack:          AppDeployStackName("proj1", "web", id),
-		AssetPrefix:    appAssetR2Prefix("proj1", "web", "build-1"),
-		ImageConfigKey: imageConfigKey("proj1", "web", "build-1"),
-		CachePrefix:    appAssetPrefixFor("prod", "proj1", "web", "build-1"),
-		EdgePrefix:     appEdgeR2Prefix("proj1", "web", "build-1"),
-	}
-	if !reflect.DeepEqual(got, []PruneTarget{want}) {
-		t.Errorf("ReclaimTargets = %+v, want %+v", got, want)
-	}
-	plain, err := ReclaimTargets("proj1", "prod", []string{"record:web/build-1"}, nil, nil)
-	if err != nil {
-		t.Fatalf("ReclaimTargets: %v", err)
-	}
-	if plain[0].Stack == got[0].Stack {
-		t.Error("two Deployments of one build resolved the same app-deploy stack")
-	}
-}
-
-func TestReclaimTargets_BuildASurvivingDeploymentSharesKeepsItsStorage(t *testing.T) {
-	rotated := fingerprinted("build-1", "fp2")
-	got, err := ReclaimTargets("proj1", "prod",
-		[]string{"record:web/build-1"},
-		[]string{"record:web/" + rotated.String()},
-		[]string{"record:web/" + rotated.String()})
-	if err != nil {
-		t.Fatalf("ReclaimTargets: %v", err)
-	}
-	want := []PruneTarget{{
-		App:      "web",
-		Identity: buildOnly("build-1"),
-		Stack:    AppDeployStackName("proj1", "web", buildOnly("build-1")),
-	}}
-	if !reflect.DeepEqual(got, want) {
-		t.Errorf("ReclaimTargets = %+v, want the stack alone %+v", got, want)
-	}
-}
-
-func TestReclaimTargets_LastDeploymentOfABuildStillReclaimsItsStorage(t *testing.T) {
-	got, err := ReclaimTargets("proj1", "prod",
-		[]string{"record:web/build-1"},
-		[]string{"record:web/build-2", "record:api/build-1"},
-		[]string{"record:web/build-2", "record:api/build-1"})
-	if err != nil {
-		t.Fatalf("ReclaimTargets: %v", err)
-	}
-	want := []PruneTarget{{
-		App:            "web",
-		Identity:       buildOnly("build-1"),
-		Stack:          AppDeployStackName("proj1", "web", buildOnly("build-1")),
-		AssetPrefix:    appAssetR2Prefix("proj1", "web", "build-1"),
-		ImageConfigKey: imageConfigKey("proj1", "web", "build-1"),
-		CachePrefix:    appAssetPrefixFor("prod", "proj1", "web", "build-1"),
-		EdgePrefix:     appEdgeR2Prefix("proj1", "web", "build-1"),
-	}}
-	if !reflect.DeepEqual(got, want) {
-		t.Errorf("ReclaimTargets = %+v, want %+v", got, want)
-	}
-}
-
-func TestReclaimTargets_ASurvivorOnAnotherPointerKeepsOnlyTheEnvlessPrefixes(t *testing.T) {
-	pruned := fingerprinted("B1", "fpP")
-	preview := fingerprinted("B1", "fpV")
-	got, err := ReclaimTargets("proj1", "prod",
-		[]string{"record:web/" + pruned.String()},
-		[]string{"record:web/" + preview.String()},
-		nil)
-	if err != nil {
-		t.Fatalf("ReclaimTargets: %v", err)
-	}
-	want := []PruneTarget{{
-		App:         "web",
-		Identity:    pruned,
-		Stack:       AppDeployStackName("proj1", "web", pruned),
-		CachePrefix: appAssetPrefixFor("prod", "proj1", "web", "B1"),
-	}}
-	if !reflect.DeepEqual(got, want) {
-		t.Errorf("ReclaimTargets = %+v, want %+v", got, want)
-	}
-}
-
-func TestPreviewReclaimTargets_RemovingAPointerReclaimsItsCacheButNotTheSharedPrefixes(t *testing.T) {
-	pruned := fingerprinted("B1", "fpV")
-	got, err := PreviewReclaimTargets("proj1", "pr-7", "preview-pr-7",
-		[]string{"record:web/" + pruned.String()},
-		[]string{"record:web/" + fingerprinted("B1", "fpP").String()},
-		nil)
-	if err != nil {
-		t.Fatalf("PreviewReclaimTargets: %v", err)
-	}
-	want := []PruneTarget{{
-		App:         "web",
-		Identity:    pruned,
-		Stack:       PreviewAppDeployStackName("proj1", "pr-7", "web", pruned),
-		CachePrefix: appAssetPrefixFor("preview-pr-7", "proj1", "web", "B1"),
-	}}
-	if !reflect.DeepEqual(got, want) {
-		t.Errorf("PreviewReclaimTargets = %+v, want %+v", got, want)
-	}
-}
-
-func TestReclaimTargets_EmptyInputYieldsNil(t *testing.T) {
-	got, err := ReclaimTargets("proj1", "prod", nil, nil, nil)
-	if err != nil {
-		t.Fatalf("ReclaimTargets: %v", err)
-	}
-	if got != nil {
-		t.Errorf("ReclaimTargets = %v, want nil", got)
-	}
-}
-
-func TestReclaimTargets_MalformedKeyErrors(t *testing.T) {
-	for _, key := range []string{"no-slash", "record:/build-1", "record:web/"} {
-		if _, err := ReclaimTargets("proj1", "prod", []string{key}, nil, nil); err == nil {
-			t.Errorf("ReclaimTargets(%q) err = nil, want an error for a malformed key", key)
+		}}
+		if !reflect.DeepEqual(got, want) {
+			t.Errorf("ReclaimTargets = %+v, want %+v", got, want)
 		}
-	}
+	})
+
+	t.Run("a survivor on another pointer keeps only the envless prefixes", func(t *testing.T) {
+		t.Parallel()
+		pruned := fingerprinted("B1", "fpP")
+		preview := fingerprinted("B1", "fpV")
+		got, err := ReclaimTargets("proj1", "prod",
+			[]string{"record:web/" + pruned.String()},
+			[]string{"record:web/" + preview.String()},
+			nil)
+		if err != nil {
+			t.Fatalf("ReclaimTargets: %v", err)
+		}
+		want := []PruneTarget{{
+			App:         "web",
+			Identity:    pruned,
+			Stack:       AppDeployStackName("proj1", "web", pruned),
+			CachePrefix: appAssetPrefixFor("prod", "proj1", "web", "B1"),
+		}}
+		if !reflect.DeepEqual(got, want) {
+			t.Errorf("ReclaimTargets = %+v, want %+v", got, want)
+		}
+	})
+
+	t.Run("removing a pointer reclaims its cache but not the shared prefixes", func(t *testing.T) {
+		t.Parallel()
+		pruned := fingerprinted("B1", "fpV")
+		got, err := PreviewReclaimTargets("proj1", "pr-7", "preview-pr-7",
+			[]string{"record:web/" + pruned.String()},
+			[]string{"record:web/" + fingerprinted("B1", "fpP").String()},
+			nil)
+		if err != nil {
+			t.Fatalf("PreviewReclaimTargets: %v", err)
+		}
+		want := []PruneTarget{{
+			App:         "web",
+			Identity:    pruned,
+			Stack:       PreviewAppDeployStackName("proj1", "pr-7", "web", pruned),
+			CachePrefix: appAssetPrefixFor("preview-pr-7", "proj1", "web", "B1"),
+		}}
+		if !reflect.DeepEqual(got, want) {
+			t.Errorf("PreviewReclaimTargets = %+v, want %+v", got, want)
+		}
+	})
+
+	t.Run("empty input yields nil", func(t *testing.T) {
+		t.Parallel()
+		got, err := ReclaimTargets("proj1", "prod", nil, nil, nil)
+		if err != nil {
+			t.Fatalf("ReclaimTargets: %v", err)
+		}
+		if got != nil {
+			t.Errorf("ReclaimTargets = %v, want nil", got)
+		}
+	})
+
+	t.Run("malformed key errors", func(t *testing.T) {
+		t.Parallel()
+		for _, key := range []string{"no-slash", "record:/build-1", "record:web/"} {
+			if _, err := ReclaimTargets("proj1", "prod", []string{key}, nil, nil); err == nil {
+				t.Errorf("ReclaimTargets(%q) err = nil, want an error for a malformed key", key)
+			}
+		}
+	})
 }
 
 type fakePrefixDeleter struct {
@@ -224,90 +237,98 @@ func (f *fakePrefixDeleter) DeleteObjects(_ context.Context, in *s3.DeleteObject
 	return &s3.DeleteObjectsOutput{}, nil
 }
 
-func TestDeletePrefix_DeletesEveryObjectAcrossPages(t *testing.T) {
-	fake := &fakePrefixDeleter{
-		pages: [][]string{
-			{"prod/proj1/web/build-1/cache/a", "prod/proj1/web/build-1/cache/b"},
-			{"prod/proj1/web/build-1/fetch-cache/c"},
-		},
+func TestDeletePrefix(t *testing.T) {
+	t.Run("deletes every object across pages", func(t *testing.T) {
+		fake := &fakePrefixDeleter{
+			pages: [][]string{
+				{"prod/proj1/web/build-1/cache/a", "prod/proj1/web/build-1/cache/b"},
+				{"prod/proj1/web/build-1/fetch-cache/c"},
+			},
+		}
+
+		if err := deletePrefix(context.Background(), fake, "bucket", "prod/proj1/web/build-1/"); err != nil {
+			t.Fatalf("deletePrefix: %v", err)
+		}
+
+		want := []string{
+			"prod/proj1/web/build-1/cache/a", "prod/proj1/web/build-1/cache/b",
+			"prod/proj1/web/build-1/fetch-cache/c",
+		}
+		if !reflect.DeepEqual(fake.deleted, want) {
+			t.Errorf("deleted = %v, want %v", fake.deleted, want)
+		}
+	})
+
+	noops := []struct {
+		name       string
+		nilDeleter bool
+		pages      [][]string
+		bucket     string
+		prefix     string
+		wantList   int
+	}{
+		{name: "nil deleter is a no-op", nilDeleter: true, bucket: "bucket", prefix: "prefix"},
+		{name: "empty bucket is a no-op", prefix: "prefix"},
+		{name: "empty prefix is a no-op", pages: [][]string{{"prod/proj1/web/build-1/cache/a"}}, bucket: "bucket"},
+		{name: "no matches is a no-op", pages: [][]string{{}}, bucket: "bucket", prefix: "prefix", wantList: 1},
+	}
+	for _, tc := range noops {
+		t.Run(tc.name, func(t *testing.T) {
+			var deleter PrefixDeleter
+			var fake *fakePrefixDeleter
+			if !tc.nilDeleter {
+				fake = &fakePrefixDeleter{pages: tc.pages}
+				deleter = fake
+			}
+
+			if err := deletePrefix(context.Background(), deleter, tc.bucket, tc.prefix); err != nil {
+				t.Fatalf("deletePrefix: %v", err)
+			}
+			if fake == nil {
+				return
+			}
+			if fake.call != tc.wantList {
+				t.Errorf("ListObjectsV2 calls = %d, want %d", fake.call, tc.wantList)
+			}
+			if fake.deleted != nil {
+				t.Errorf("deleted = %v, want none", fake.deleted)
+			}
+		})
 	}
 
-	if err := deletePrefix(context.Background(), fake, "bucket", "prod/proj1/web/build-1/"); err != nil {
-		t.Fatalf("deletePrefix: %v", err)
-	}
+	t.Run("list error propagates", func(t *testing.T) {
+		fake := &fakePrefixDeleter{listErr: errors.New("list failed")}
+		if err := deletePrefix(context.Background(), fake, "bucket", "prefix"); err == nil {
+			t.Error("deletePrefix err = nil, want the list error propagated")
+		}
+	})
 
-	want := []string{
-		"prod/proj1/web/build-1/cache/a", "prod/proj1/web/build-1/cache/b",
-		"prod/proj1/web/build-1/fetch-cache/c",
-	}
-	if !reflect.DeepEqual(fake.deleted, want) {
-		t.Errorf("deleted = %v, want %v", fake.deleted, want)
-	}
+	t.Run("delete error propagates", func(t *testing.T) {
+		fake := &fakePrefixDeleter{
+			pages:     [][]string{{"k1"}},
+			deleteErr: errors.New("delete failed"),
+		}
+		if err := deletePrefix(context.Background(), fake, "bucket", "prefix"); err == nil {
+			t.Error("deletePrefix err = nil, want the delete error propagated")
+		}
+	})
 }
 
-func TestDeletePrefix_EmptyBucketOrNilDeleterIsNoOp(t *testing.T) {
-	if err := deletePrefix(context.Background(), nil, "bucket", "prefix"); err != nil {
-		t.Errorf("deletePrefix with nil deleter: %v", err)
-	}
-	fake := &fakePrefixDeleter{}
-	if err := deletePrefix(context.Background(), fake, "", "prefix"); err != nil {
-		t.Errorf("deletePrefix with empty bucket: %v", err)
-	}
-	if fake.call != 0 {
-		t.Errorf("expected no ListObjectsV2 call for an empty bucket, got %d", fake.call)
-	}
-}
+func TestAsPrefixDeleter(t *testing.T) {
+	t.Run("narrow uploader yields nil", func(t *testing.T) {
+		var up ArtifactUploader = &fakeUploader{}
+		if d := asPrefixDeleter(up); d != nil {
+			t.Errorf("asPrefixDeleter = %v, want nil for an uploader with no delete capability", d)
+		}
+	})
 
-func TestDeletePrefix_EmptyPrefixIsANoOp(t *testing.T) {
-	fake := &fakePrefixDeleter{pages: [][]string{{"prod/proj1/web/build-1/cache/a"}}}
-	if err := deletePrefix(context.Background(), fake, "bucket", ""); err != nil {
-		t.Fatalf("deletePrefix: %v", err)
-	}
-	if fake.call != 0 || fake.deleted != nil {
-		t.Errorf("deleted %v in %d list calls, want the whole bucket left alone", fake.deleted, fake.call)
-	}
-}
-
-func TestDeletePrefix_NoMatchesIsANoOp(t *testing.T) {
-	fake := &fakePrefixDeleter{pages: [][]string{{}}}
-	if err := deletePrefix(context.Background(), fake, "bucket", "prefix"); err != nil {
-		t.Errorf("deletePrefix: %v", err)
-	}
-	if fake.deleted != nil {
-		t.Errorf("deleted = %v, want none", fake.deleted)
-	}
-}
-
-func TestDeletePrefix_ListErrorPropagates(t *testing.T) {
-	fake := &fakePrefixDeleter{listErr: errors.New("list failed")}
-	if err := deletePrefix(context.Background(), fake, "bucket", "prefix"); err == nil {
-		t.Error("deletePrefix err = nil, want the list error propagated")
-	}
-}
-
-func TestDeletePrefix_DeleteErrorPropagates(t *testing.T) {
-	fake := &fakePrefixDeleter{
-		pages:     [][]string{{"k1"}},
-		deleteErr: errors.New("delete failed"),
-	}
-	if err := deletePrefix(context.Background(), fake, "bucket", "prefix"); err == nil {
-		t.Error("deletePrefix err = nil, want the delete error propagated")
-	}
-}
-
-func TestAsPrefixDeleter_NarrowUploaderYieldsNil(t *testing.T) {
-	var up ArtifactUploader = &fakeUploader{}
-	if d := asPrefixDeleter(up); d != nil {
-		t.Errorf("asPrefixDeleter = %v, want nil for an uploader with no delete capability", d)
-	}
-}
-
-func TestAsPrefixDeleter_WiderUploaderIsRecovered(t *testing.T) {
-	fake := &fakeUploaderWithDelete{}
-	var up ArtifactUploader = fake
-	if d := asPrefixDeleter(up); d == nil {
-		t.Error("asPrefixDeleter = nil, want the PrefixDeleter capability recovered")
-	}
+	t.Run("wider uploader is recovered", func(t *testing.T) {
+		fake := &fakeUploaderWithDelete{}
+		var up ArtifactUploader = fake
+		if d := asPrefixDeleter(up); d == nil {
+			t.Error("asPrefixDeleter = nil, want the PrefixDeleter capability recovered")
+		}
+	})
 }
 
 type fakeUploaderWithDelete struct{ fakePrefixDeleter }

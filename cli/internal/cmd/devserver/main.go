@@ -21,13 +21,13 @@ func main() {
 	flag.Parse()
 
 	if *apiURL == "" || *projectID == "" {
-		fmt.Fprintln(os.Stderr, "blobrig: -api and -project are required")
+		fmt.Fprintln(os.Stderr, "devserver: -api and -project are required")
 		os.Exit(2)
 	}
 
 	listener, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
-		fmt.Fprintln(os.Stderr, "blobrig: listen:", err)
+		fmt.Fprintln(os.Stderr, "devserver: listen:", err)
 		os.Exit(1)
 	}
 	devServerAddr := "http://" + listener.Addr().String()
@@ -40,10 +40,10 @@ func main() {
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGTERM, syscall.SIGINT)
 	defer stop()
 	go srv.RunDetector(ctx, func(err error) {
-		fmt.Fprintln(os.Stderr, "blobrig detect:", err)
+		fmt.Fprintln(os.Stderr, "devserver detect:", err)
 	})
 
-	fmt.Printf("RIG_ADDR=%s\n", devServerAddr)
+	fmt.Printf("DEV_SERVER_ADDR=%s\n", devServerAddr)
 
 	go func() {
 		io.Copy(io.Discard, os.Stdin)

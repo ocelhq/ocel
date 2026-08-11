@@ -7,115 +7,152 @@ import (
 	"time"
 )
 
-func TestStoreRetryable_TransportFailureRetries(t *testing.T) {
-	if !storeRetryable(nil, errors.New("connection refused")) {
-		t.Error("a request that never reached the store must retry")
-	}
-}
+func TestStoreRetryable(t *testing.T) {
+	t.Parallel()
 
-func TestStoreRetryable_ByStatus(t *testing.T) {
-	cases := map[int]bool{
-		http.StatusOK:                  false,
-		http.StatusUnauthorized:        false,
-		http.StatusConflict:            false,
-		http.StatusNotFound:            false,
-		http.StatusTooManyRequests:     true,
-		http.StatusInternalServerError: true,
-		http.StatusBadGateway:          true,
-		http.StatusServiceUnavailable:  true,
-		http.StatusGatewayTimeout:      true,
-	}
-	for status, want := range cases {
-		res := &http.Response{StatusCode: status, Header: http.Header{}}
-		if got := storeRetryable(res, nil); got != want {
-			t.Errorf("storeRetryable(%d) = %v, want %v", status, got, want)
+	t.Run("a request that never reached the store retries", func(t *testing.T) {
+		t.Parallel()
+
+		if !storeRetryable(nil, errors.New("connection refused")) {
+			t.Error("a request that never reached the store must retry")
 		}
+	})
+
+	for _, tc := range []struct {
+		name   string
+		status int
+		want   bool
+	}{
+		{"a success is final", http.StatusOK, false},
+		{"a rejected credential is final", http.StatusUnauthorized, false},
+		{"a conflict is final", http.StatusConflict, false},
+		{"a missing instance is final", http.StatusNotFound, false},
+		{"a rate limit retries", http.StatusTooManyRequests, true},
+		{"an internal error retries", http.StatusInternalServerError, true},
+		{"a bad gateway retries", http.StatusBadGateway, true},
+		{"an unavailable store retries", http.StatusServiceUnavailable, true},
+		{"a gateway timeout retries", http.StatusGatewayTimeout, true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			res := &http.Response{StatusCode: tc.status, Header: http.Header{}}
+			if got := storeRetryable(res, nil); got != tc.want {
+				t.Errorf("storeRetryable(%d) = %v, want %v", tc.status, got, tc.want)
+			}
+		})
 	}
 }
 
-func TestParseStoreRetryAfter_PrefersMilliseconds(t *testing.T) {
-	h := http.Header{}
-	h.Set("Retry-After-Ms", "250")
-	h.Set("Retry-After", "30")
+func TestParseStoreRetryAfter(t *testing.T) {
+	t.Parallel()
 
-	got, ok := parseStoreRetryAfter(h, time.Now())
-	if !ok || got != 250*time.Millisecond {
-		t.Errorf("parseStoreRetryAfter = %v, %v; want 250ms, true", got, ok)
-	}
-}
-
-func TestParseStoreRetryAfter_SecondsAndHTTPDate(t *testing.T) {
 	now := time.Date(2026, 8, 10, 12, 0, 0, 0, time.UTC)
 
-	h := http.Header{}
-	h.Set("Retry-After", "2")
-	if got, ok := parseStoreRetryAfter(h, now); !ok || got != 2*time.Second {
-		t.Errorf("seconds form = %v, %v; want 2s, true", got, ok)
-	}
+	for _, tc := range []struct {
+		name   string
+		header map[string]string
+		want   time.Duration
+		wantOK bool
+	}{
+		{
+			name:   "milliseconds win over whole seconds",
+			header: map[string]string{"Retry-After-Ms": "250", "Retry-After": "30"},
+			want:   250 * time.Millisecond,
+			wantOK: true,
+		},
+		{
+			name:   "the seconds form is honored",
+			header: map[string]string{"Retry-After": "2"},
+			want:   2 * time.Second,
+			wantOK: true,
+		},
+		{
+			name:   "the HTTP-date form is honored as a wait from now",
+			header: map[string]string{"Retry-After": now.Add(3 * time.Second).Format(time.RFC1123)},
+			want:   3 * time.Second,
+			wantOK: true,
+		},
+		{"no header asks for nothing", nil, 0, false},
+		{"an unparsable value is not honored", map[string]string{"Retry-After": "soon"}, 0, false},
+		{"a negative wait is not honored", map[string]string{"Retry-After": "-1"}, 0, false},
+		{
+			name:   "an HTTP-date already past is not honored",
+			header: map[string]string{"Retry-After": now.Add(-time.Second).Format(time.RFC1123)},
+			wantOK: false,
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 
-	h = http.Header{}
-	h.Set("Retry-After", now.Add(3*time.Second).Format(time.RFC1123))
-	if got, ok := parseStoreRetryAfter(h, now); !ok || got != 3*time.Second {
-		t.Errorf("HTTP-date form = %v, %v; want 3s, true", got, ok)
+			h := http.Header{}
+			for k, v := range tc.header {
+				h.Set(k, v)
+			}
+			got, ok := parseStoreRetryAfter(h, now)
+			if ok != tc.wantOK || (tc.wantOK && got != tc.want) {
+				t.Errorf("parseStoreRetryAfter = %v, %v; want %v, %v", got, ok, tc.want, tc.wantOK)
+			}
+		})
 	}
 }
 
-func TestParseStoreRetryAfter_UnusableValues(t *testing.T) {
-	for _, value := range []string{"", "soon", "-1"} {
+func TestStoreRetryDelay(t *testing.T) {
+	t.Parallel()
+
+	t.Run("an unreasonable Retry-After is ignored for the capped backoff", func(t *testing.T) {
+		t.Parallel()
+
 		h := http.Header{}
-		if value != "" {
-			h.Set("Retry-After", value)
+		h.Set("Retry-After", "600")
+		res := &http.Response{StatusCode: http.StatusTooManyRequests, Header: h}
+
+		if got := storeRetryDelay(res, 0, 0); got > storeMaxRetryDelay {
+			t.Errorf("delay = %v, want at most the capped backoff %v", got, storeMaxRetryDelay)
 		}
-		if _, ok := parseStoreRetryAfter(h, time.Now()); ok {
-			t.Errorf("Retry-After %q must not be honored", value)
+	})
+
+	t.Run("a reasonable Retry-After wins over attempt and jitter", func(t *testing.T) {
+		t.Parallel()
+
+		h := http.Header{}
+		h.Set("Retry-After-Ms", "1500")
+		res := &http.Response{StatusCode: http.StatusServiceUnavailable, Header: h}
+
+		if got := storeRetryDelay(res, 3, 0.9); got != 1500*time.Millisecond {
+			t.Errorf("delay = %v, want the requested 1.5s regardless of attempt or jitter", got)
 		}
-	}
-}
+	})
 
-func TestStoreRetryDelay_IgnoresAnUnreasonableRetryAfter(t *testing.T) {
-	h := http.Header{}
-	h.Set("Retry-After", "600")
-	res := &http.Response{StatusCode: http.StatusTooManyRequests, Header: h}
+	t.Run("backoff grows exponentially and never passes the cap", func(t *testing.T) {
+		t.Parallel()
 
-	if got := storeRetryDelay(res, 0, 0); got > storeMaxRetryDelay {
-		t.Errorf("delay = %v, want at most the capped backoff %v", got, storeMaxRetryDelay)
-	}
-}
-
-func TestStoreRetryDelay_HonorsAReasonableRetryAfter(t *testing.T) {
-	h := http.Header{}
-	h.Set("Retry-After-Ms", "1500")
-	res := &http.Response{StatusCode: http.StatusServiceUnavailable, Header: h}
-
-	if got := storeRetryDelay(res, 3, 0.9); got != 1500*time.Millisecond {
-		t.Errorf("delay = %v, want the requested 1.5s regardless of attempt or jitter", got)
-	}
-}
-
-func TestStoreRetryDelay_BacksOffExponentiallyUnderACap(t *testing.T) {
-	var prev time.Duration
-	for attempt := 0; attempt < 8; attempt++ {
-		got := storeRetryDelay(nil, attempt, 0)
-		if got > storeMaxRetryDelay {
-			t.Fatalf("attempt %d delay = %v, over the cap %v", attempt, got, storeMaxRetryDelay)
+		var prev time.Duration
+		for attempt := range 8 {
+			got := storeRetryDelay(nil, attempt, 0)
+			if got > storeMaxRetryDelay {
+				t.Fatalf("attempt %d delay = %v, over the cap %v", attempt, got, storeMaxRetryDelay)
+			}
+			if attempt > 0 && got < prev {
+				t.Fatalf("attempt %d delay = %v, shorter than the previous %v", attempt, got, prev)
+			}
+			prev = got
 		}
-		if attempt > 0 && got < prev {
-			t.Fatalf("attempt %d delay = %v, shorter than the previous %v", attempt, got, prev)
+		if first := storeRetryDelay(nil, 0, 0); first != 500*time.Millisecond {
+			t.Errorf("first delay = %v, want 500ms", first)
 		}
-		prev = got
-	}
-	if first := storeRetryDelay(nil, 0, 0); first != 500*time.Millisecond {
-		t.Errorf("first delay = %v, want 500ms", first)
-	}
-}
+	})
 
-func TestStoreRetryDelay_JitterShortensWithinAQuarter(t *testing.T) {
-	base := storeRetryDelay(nil, 2, 0)
-	jittered := storeRetryDelay(nil, 2, 1)
-	if jittered >= base {
-		t.Errorf("jittered delay %v is not shorter than the base %v", jittered, base)
-	}
-	if jittered < base-base/4 {
-		t.Errorf("jittered delay %v takes more than a quarter off the base %v", jittered, base)
-	}
+	t.Run("jitter shortens the delay by at most a quarter", func(t *testing.T) {
+		t.Parallel()
+
+		base := storeRetryDelay(nil, 2, 0)
+		jittered := storeRetryDelay(nil, 2, 1)
+		if jittered >= base {
+			t.Errorf("jittered delay %v is not shorter than the base %v", jittered, base)
+		}
+		if jittered < base-base/4 {
+			t.Errorf("jittered delay %v takes more than a quarter off the base %v", jittered, base)
+		}
+	})
 }

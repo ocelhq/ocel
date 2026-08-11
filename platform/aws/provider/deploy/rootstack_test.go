@@ -129,105 +129,117 @@ func (f *recordingRootStack) DestroyInstance(_ context.Context, state edge.RootS
 	return nil
 }
 
-func TestRecordingRootStack_ReconcileIsANoOpWhenVersionUnchanged(t *testing.T) {
-	f := &recordingRootStack{}
-	ctx := context.Background()
-	spec := edge.RootStackSpec{Version: "v1"}
+func TestRecordingRootStack(t *testing.T) {
+	t.Parallel()
 
-	state, err := f.ReconcileRootStack(ctx, spec, nil)
-	if err != nil {
-		t.Fatalf("ReconcileRootStack: %v", err)
-	}
-	if f.redeploys != 1 {
-		t.Fatalf("redeploys = %d, want 1 after the first reconcile", f.redeploys)
-	}
+	t.Run("reconcile is a no-op when the version is unchanged", func(t *testing.T) {
+		t.Parallel()
 
-	again, err := f.ReconcileRootStack(ctx, spec, state)
-	if err != nil {
-		t.Fatalf("ReconcileRootStack: %v", err)
-	}
-	if f.redeploys != 1 {
-		t.Errorf("redeploys = %d, want 1: an unchanged version must be a no-op", f.redeploys)
-	}
-	if again[edge.RootStackKeySecret] != state[edge.RootStackKeySecret] {
-		t.Errorf("a no-op reconcile must hand back the same state unchanged")
-	}
-	if len(f.reconciles) != 2 {
-		t.Errorf("expected both reconcile attempts recorded, got %d", len(f.reconciles))
-	}
-}
+		f := &recordingRootStack{}
+		ctx := context.Background()
+		spec := edge.RootStackSpec{Version: "v1"}
 
-func TestRecordingRootStack_ReconcileRedeploysOnVersionBump(t *testing.T) {
-	f := &recordingRootStack{}
-	ctx := context.Background()
+		state, err := f.ReconcileRootStack(ctx, spec, nil)
+		if err != nil {
+			t.Fatalf("ReconcileRootStack: %v", err)
+		}
+		if f.redeploys != 1 {
+			t.Fatalf("redeploys = %d, want 1 after the first reconcile", f.redeploys)
+		}
 
-	state, err := f.ReconcileRootStack(ctx, edge.RootStackSpec{Version: "v1"}, nil)
-	if err != nil {
-		t.Fatalf("ReconcileRootStack: %v", err)
-	}
-	if _, err := f.ReconcileRootStack(ctx, edge.RootStackSpec{Version: "v2"}, state); err != nil {
-		t.Fatalf("ReconcileRootStack: %v", err)
-	}
-	if f.redeploys != 2 {
-		t.Errorf("redeploys = %d, want 2: a version bump must not be a no-op", f.redeploys)
-	}
-}
+		again, err := f.ReconcileRootStack(ctx, spec, state)
+		if err != nil {
+			t.Fatalf("ReconcileRootStack: %v", err)
+		}
+		if f.redeploys != 1 {
+			t.Errorf("redeploys = %d, want 1: an unchanged version must be a no-op", f.redeploys)
+		}
+		if again[edge.RootStackKeySecret] != state[edge.RootStackKeySecret] {
+			t.Errorf("a no-op reconcile must hand back the same state unchanged")
+		}
+		if len(f.reconciles) != 2 {
+			t.Errorf("expected both reconcile attempts recorded, got %d", len(f.reconciles))
+		}
+	})
 
-func TestRecordingRootStack_StoreOpsRejectAnUnreconciledState(t *testing.T) {
-	f := &recordingRootStack{}
-	ctx := context.Background()
-	record := edge.DeploymentRecord{App: "web", Identity: "b1"}
+	t.Run("reconcile redeploys on a version bump", func(t *testing.T) {
+		t.Parallel()
 
-	if err := f.PutStaged(ctx, edge.RootStackState{}, record); err == nil {
-		t.Error("expected PutStaged to reject a state no reconcile ever produced")
-	}
-	if len(f.staged) != 0 {
-		t.Errorf("expected no record staged, got %v", f.staged)
-	}
-}
+		f := &recordingRootStack{}
+		ctx := context.Background()
 
-func TestRecordingRootStack_StoreOpsRecordCallsAfterReconcile(t *testing.T) {
-	f := &recordingRootStack{
-		history:     []edge.HistoryEntry{{Promotion: edge.Promotion{PromotionID: "p1"}, Active: true}},
-		pruneResult: edge.PruneResult{RemovedPromotionIDs: []string{"p0"}},
-	}
-	ctx := context.Background()
+		state, err := f.ReconcileRootStack(ctx, edge.RootStackSpec{Version: "v1"}, nil)
+		if err != nil {
+			t.Fatalf("ReconcileRootStack: %v", err)
+		}
+		if _, err := f.ReconcileRootStack(ctx, edge.RootStackSpec{Version: "v2"}, state); err != nil {
+			t.Fatalf("ReconcileRootStack: %v", err)
+		}
+		if f.redeploys != 2 {
+			t.Errorf("redeploys = %d, want 2: a version bump must not be a no-op", f.redeploys)
+		}
+	})
 
-	state, err := f.ReconcileRootStack(ctx, edge.RootStackSpec{Version: "v1"}, nil)
-	if err != nil {
-		t.Fatalf("ReconcileRootStack: %v", err)
-	}
+	t.Run("store ops reject an unreconciled state", func(t *testing.T) {
+		t.Parallel()
 
-	record := edge.DeploymentRecord{App: "web", Identity: "b1"}
-	if err := f.PutStaged(ctx, state, record); err != nil {
-		t.Fatalf("PutStaged: %v", err)
-	}
-	promotion := edge.Promotion{PromotionID: "promo-1", Ts: 1, Builds: map[string]string{"web": "b1"}}
-	if err := f.Promote(ctx, state, promotion, ""); err != nil {
-		t.Fatalf("Promote: %v", err)
-	}
-	history, err := f.History(ctx, state, "")
-	if err != nil {
-		t.Fatalf("History: %v", err)
-	}
-	result, err := f.DeletePromotionArtifacts(ctx, state, 3, "")
-	if err != nil {
-		t.Fatalf("DeletePromotionArtifacts: %v", err)
-	}
+		f := &recordingRootStack{}
+		ctx := context.Background()
+		record := edge.DeploymentRecord{App: "web", Identity: "b1"}
 
-	if len(f.staged) != 1 || !reflect.DeepEqual(f.staged[0], record) {
-		t.Errorf("staged = %v, want [%v]", f.staged, record)
-	}
-	if len(f.promotions) != 1 || !reflect.DeepEqual(f.promotions[0], promotion) {
-		t.Errorf("promotions = %v, want [%v]", f.promotions, promotion)
-	}
-	if len(history) != 1 || history[0].PromotionID != "p1" {
-		t.Errorf("History = %v", history)
-	}
-	if len(f.pruned) != 1 || f.pruned[0] != 3 {
-		t.Errorf("pruned = %v, want [3]", f.pruned)
-	}
-	if len(result.RemovedPromotionIDs) != 1 || result.RemovedPromotionIDs[0] != "p0" {
-		t.Errorf("DeletePromotionArtifacts result = %+v", result)
-	}
+		if err := f.PutStaged(ctx, edge.RootStackState{}, record); err == nil {
+			t.Error("expected PutStaged to reject a state no reconcile ever produced")
+		}
+		if len(f.staged) != 0 {
+			t.Errorf("expected no record staged, got %v", f.staged)
+		}
+	})
+
+	t.Run("store ops record calls after reconcile", func(t *testing.T) {
+		t.Parallel()
+
+		f := &recordingRootStack{
+			history:     []edge.HistoryEntry{{Promotion: edge.Promotion{PromotionID: "p1"}, Active: true}},
+			pruneResult: edge.PruneResult{RemovedPromotionIDs: []string{"p0"}},
+		}
+		ctx := context.Background()
+
+		state, err := f.ReconcileRootStack(ctx, edge.RootStackSpec{Version: "v1"}, nil)
+		if err != nil {
+			t.Fatalf("ReconcileRootStack: %v", err)
+		}
+
+		record := edge.DeploymentRecord{App: "web", Identity: "b1"}
+		if err := f.PutStaged(ctx, state, record); err != nil {
+			t.Fatalf("PutStaged: %v", err)
+		}
+		promotion := edge.Promotion{PromotionID: "promo-1", Ts: 1, Builds: map[string]string{"web": "b1"}}
+		if err := f.Promote(ctx, state, promotion, ""); err != nil {
+			t.Fatalf("Promote: %v", err)
+		}
+		history, err := f.History(ctx, state, "")
+		if err != nil {
+			t.Fatalf("History: %v", err)
+		}
+		result, err := f.DeletePromotionArtifacts(ctx, state, 3, "")
+		if err != nil {
+			t.Fatalf("DeletePromotionArtifacts: %v", err)
+		}
+
+		if len(f.staged) != 1 || !reflect.DeepEqual(f.staged[0], record) {
+			t.Errorf("staged = %v, want [%v]", f.staged, record)
+		}
+		if len(f.promotions) != 1 || !reflect.DeepEqual(f.promotions[0], promotion) {
+			t.Errorf("promotions = %v, want [%v]", f.promotions, promotion)
+		}
+		if len(history) != 1 || history[0].PromotionID != "p1" {
+			t.Errorf("History = %v", history)
+		}
+		if len(f.pruned) != 1 || f.pruned[0] != 3 {
+			t.Errorf("pruned = %v, want [3]", f.pruned)
+		}
+		if len(result.RemovedPromotionIDs) != 1 || result.RemovedPromotionIDs[0] != "p0" {
+			t.Errorf("DeletePromotionArtifacts result = %+v", result)
+		}
+	})
 }

@@ -7,9 +7,7 @@ import (
 	"io"
 	"net/http"
 	"slices"
-	"sort"
 	"strings"
-	"sync"
 
 	connect "connectrpc.com/connect"
 
@@ -29,7 +27,7 @@ import (
 
 type SyncResult struct {
 	ProjectConfig provision.ProjectConfig
-	Resources     []provision.ProvisionedResource
+	Resources     []provision.Resource
 	LiveValues    map[string]string
 	LiveKeys      []string
 	Err           error
@@ -46,26 +44,13 @@ type Server struct {
 	syncCh        chan SyncResult
 
 	fetchProjectConfig func(ctx context.Context, apiURL, token, projectID string) (provision.ProjectConfig, error)
-	provision          func(ctx context.Context, cfg provision.ProjectConfig, resources []manifest.Entry) ([]provision.ProvisionedResource, error)
+	provision          func(ctx context.Context, cfg provision.ProjectConfig, resources []manifest.Entry) ([]provision.Resource, error)
 	fetchLiveValues    func(ctx context.Context, apiURL, token, projectID string, keys []string) (map[string]string, error)
 
-	cfgMu      sync.Mutex
-	projectCfg *provision.ProjectConfig
-
-	liveMu   sync.Mutex
-	liveKeys map[string]struct{}
-
-	declareMu sync.Mutex
-
-	varsMu sync.Mutex
-	values map[string]string
-	scope  envgate.Scope
-	store  *flatValues
-	gate   *envgate.Gate
-
-	subMu       sync.Mutex
-	latestEnv   *devv1.EnvUpdate
-	subscribers map[chan *devv1.EnvUpdate]struct{}
+	config *configCache
+	live   *liveKeys
+	env    *envState
+	fanout *envFanout
 }
 
 func New(apiURL, token, projectID, devServerAddr string) *Server {
@@ -79,10 +64,12 @@ func New(apiURL, token, projectID, devServerAddr string) *Server {
 		detector:           newDetector(apiURL, token, projectID),
 		syncCh:             make(chan SyncResult, 1),
 		fetchProjectConfig: provision.FetchProjectConfig,
-		provision:          provision.Provision,
+		provision:          provision.Run,
 		fetchLiveValues:    provision.FetchLiveValues,
-		liveKeys:           make(map[string]struct{}),
-		subscribers:        make(map[chan *devv1.EnvUpdate]struct{}),
+		config:             newConfigCache(),
+		live:               newLiveKeys(),
+		env:                newEnvState(),
+		fanout:             newEnvFanout(),
 	}
 }
 
@@ -101,61 +88,27 @@ func (s *Server) Declare(_ context.Context, req *resourcesv1.DeclareRequest) (*r
 }
 
 func (s *Server) UseValues(values map[string]string, scope envgate.Scope) {
-	s.varsMu.Lock()
-	defer s.varsMu.Unlock()
-	s.values = values
-	s.scope = scope
-	s.store = newFlatValues(values)
-	s.gate = envgate.New(s.store, scope)
+	s.env.use(values, scope)
 }
 
 func (s *Server) UseProjectConfig(cfg provision.ProjectConfig) {
-	s.cfgMu.Lock()
-	defer s.cfgMu.Unlock()
-	s.projectCfg = &cfg
+	s.config.use(cfg)
 }
 
 func (s *Server) projectConfig(ctx context.Context) (provision.ProjectConfig, error) {
-	s.cfgMu.Lock()
-	cfg := s.projectCfg
-	s.cfgMu.Unlock()
-	if cfg != nil {
-		return *cfg, nil
+	if cfg, ok := s.config.held(); ok {
+		return cfg, nil
 	}
 	return s.fetchProjectConfig(ctx, s.apiURL, s.token, s.projectID)
 }
 
-func (s *Server) variables() (*flatValues, *envgate.Gate) {
-	s.varsMu.Lock()
-	defer s.varsMu.Unlock()
-	return s.store, s.gate
-}
-
 func (s *Server) DeclareEnv(ctx context.Context, req *resourcesv1.DeclareEnvRequest) (*resourcesv1.DeclareEnvResponse, error) {
-	s.liveMu.Lock()
-	for _, d := range req.GetDefinitions() {
-		if d.GetClass() == resourcesv1.VariableClass_VARIABLE_CLASS_SECRET {
-			s.liveKeys[d.GetKey()] = struct{}{}
-		}
-	}
-	s.liveMu.Unlock()
-
-	s.declareMu.Lock()
-	defer s.declareMu.Unlock()
-
-	store, gate := s.variables()
-	if gate == nil {
-		return &resourcesv1.DeclareEnvResponse{}, nil
-	}
-	store.Declare(req.GetDefinitions())
-	if err := gate.Prefetch(ctx); err != nil {
-		return nil, err
-	}
-	return gate.DeclareEnv(ctx, req)
+	s.live.declare(req.GetDefinitions())
+	return s.env.declare(ctx, req)
 }
 
 func (s *Server) CheckEnv(ctx context.Context) error {
-	_, gate := s.variables()
+	_, gate := s.env.current()
 	if gate == nil {
 		return nil
 	}
@@ -166,7 +119,7 @@ func (s *Server) CheckEnv(ctx context.Context) error {
 }
 
 func (s *Server) ScopedFolders() map[string][]string {
-	_, gate := s.variables()
+	_, gate := s.env.current()
 	if gate == nil {
 		return nil
 	}
@@ -184,24 +137,13 @@ func (s *Server) ScopedFolders() map[string][]string {
 		}
 	}
 	for key := range scoped {
-		sort.Strings(scoped[key])
+		slices.Sort(scoped[key])
 	}
 	return scoped
 }
 
-func (s *Server) declaredLiveKeys() []string {
-	s.liveMu.Lock()
-	defer s.liveMu.Unlock()
-	keys := make([]string, 0, len(s.liveKeys))
-	for key := range s.liveKeys {
-		keys = append(keys, key)
-	}
-	sort.Strings(keys)
-	return keys
-}
-
 func (s *Server) ReportEnvProblems(ctx context.Context, req *resourcesv1.ReportEnvProblemsRequest) (*resourcesv1.ReportEnvProblemsResponse, error) {
-	if _, gate := s.variables(); gate != nil {
+	if _, gate := s.env.current(); gate != nil {
 		return gate.ReportEnvProblems(ctx, req)
 	}
 	return &resourcesv1.ReportEnvProblemsResponse{}, nil
@@ -209,16 +151,8 @@ func (s *Server) ReportEnvProblems(ctx context.Context, req *resourcesv1.ReportE
 
 func (s *Server) ResetManifest() {
 	s.manifest.Reset()
-	s.liveMu.Lock()
-	s.liveKeys = make(map[string]struct{})
-	s.liveMu.Unlock()
-
-	s.varsMu.Lock()
-	defer s.varsMu.Unlock()
-	if s.gate != nil {
-		s.store = newFlatValues(s.values)
-		s.gate = envgate.New(s.store, s.scope)
-	}
+	s.live.reset()
+	s.env.forgetDeclarations()
 }
 
 func (s *Server) Mux() *http.ServeMux {
@@ -234,34 +168,12 @@ func (s *Server) Mux() *http.ServeMux {
 }
 
 func (s *Server) PushEnv(env map[string]string) {
-	update := &devv1.EnvUpdate{Env: env}
-
-	s.subMu.Lock()
-	defer s.subMu.Unlock()
-	s.latestEnv = update
-	for ch := range s.subscribers {
-		select {
-		case ch <- update:
-		default:
-		}
-	}
+	s.fanout.push(&devv1.EnvUpdate{Env: env})
 }
 
 func (s *Server) Subscribe(ctx context.Context, _ *devv1.SubscribeRequest, stream *connect.ServerStream[devv1.EnvUpdate]) error {
-	ch := make(chan *devv1.EnvUpdate, 1)
-
-	s.subMu.Lock()
-	if s.latestEnv != nil {
-		ch <- s.latestEnv
-	}
-	s.subscribers[ch] = struct{}{}
-	s.subMu.Unlock()
-
-	defer func() {
-		s.subMu.Lock()
-		delete(s.subscribers, ch)
-		s.subMu.Unlock()
-	}()
+	ch := s.fanout.subscribe()
+	defer s.fanout.unsubscribe(ch)
 
 	for {
 		select {
@@ -321,7 +233,7 @@ func (s *Server) handleSync(w http.ResponseWriter, r *http.Request) {
 	provisioned = append(provisioned, s.bucketResources(buckets)...)
 
 	var liveValues map[string]string
-	liveKeys := s.declaredLiveKeys()
+	liveKeys := s.live.sorted()
 	if len(liveKeys) > 0 {
 		liveValues, err = s.fetchLiveValues(ctx, s.apiURL, s.token, s.projectID, liveKeys)
 		if err != nil {
@@ -336,14 +248,14 @@ func (s *Server) handleSync(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusOK)
 }
 
-func (s *Server) bucketResources(buckets []manifest.Entry) []provision.ProvisionedResource {
-	out := make([]provision.ProvisionedResource, 0, len(buckets))
+func (s *Server) bucketResources(buckets []manifest.Entry) []provision.Resource {
+	out := make([]provision.Resource, 0, len(buckets))
 	for _, b := range buckets {
 		value, _ := json.Marshal(map[string]string{
 			"address": s.devServerAddr,
 			"bucket":  b.Name,
 		})
-		out = append(out, provision.ProvisionedResource{
+		out = append(out, provision.Resource{
 			Name: b.Name,
 			Type: b.Type,
 			Env:  map[string]string{"OCEL_RESOURCE_BUCKET_" + b.Name: string(value)},
@@ -367,7 +279,7 @@ func (s *Server) Discover(ctx context.Context, cfg *projectconfig.Config, stdout
 }
 
 func (s *Server) ClientKeys() []string {
-	_, gate := s.variables()
+	_, gate := s.env.current()
 	if gate == nil {
 		return nil
 	}

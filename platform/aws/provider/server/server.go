@@ -23,10 +23,10 @@ import (
 
 	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/resources/v1"
-	"github.com/ocelhq/ocel/platform/aws/provider/awsconf"
 	"github.com/ocelhq/ocel/platform/aws/provider/bootstrap"
 	"github.com/ocelhq/ocel/platform/aws/provider/deploy"
-	"github.com/ocelhq/ocel/platform/aws/provider/pulumirt"
+	"github.com/ocelhq/ocel/platform/aws/provider/pulumiruntime"
+	"github.com/ocelhq/ocel/platform/aws/provider/sdkconfig"
 	cloudflare "github.com/ocelhq/ocel/platform/edge/cloudflare/deploy"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
@@ -139,7 +139,7 @@ func (s *Server) runDeploy(ctx context.Context, req *deploymentsv1.DeployRequest
 
 	edgeValues := readEdgeValues(ctx, ssmClient, substrateClass, bootstrapCmd, logf)
 
-	pulumiCmd, err := pulumirt.Ensure(ctx, func(m string) {
+	pulumiCmd, err := pulumiruntime.Ensure(ctx, func(m string) {
 		progress(deploymentsv1.Phase_PHASE_UPLOADING, m, 0, 0)
 	})
 	if err != nil {
@@ -271,7 +271,7 @@ func cacheStoreUploader(store bootstrap.CacheStore) deploy.ArtifactUploader {
 	return s3.NewFromConfig(aws.Config{
 		Region:      store.Region,
 		Credentials: credentials.NewStaticCredentialsProvider(store.AccessKeyID, store.SecretAccessKey, ""),
-		Retryer:     awsconf.ControlRetryer,
+		Retryer:     sdkconfig.ControlRetryer,
 	}, func(o *s3.Options) {
 		o.BaseEndpoint = aws.String(store.Endpoint)
 	})
@@ -365,7 +365,7 @@ func accountID(ctx context.Context, api STSAPI) (string, error) {
 }
 
 func loadAWS(ctx context.Context, region string) (aws.Config, error) {
-	return awsconf.Control(ctx, region)
+	return sdkconfig.Control(ctx, region)
 }
 
 func resourceSummary(r *deploymentsv1.ManifestResource) string {

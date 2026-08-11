@@ -35,118 +35,6 @@ func (r *sweepRecorder) PutObject(context.Context, *s3.PutObjectInput, ...func(*
 var _ ArtifactUploader = (*sweepRecorder)(nil)
 var _ PrefixDeleter = (*sweepRecorder)(nil)
 
-func purgeConfig(env string, account, cache *sweepRecorder) Config {
-	return Config{
-		Env:                env,
-		AssetBucket:        "asset-bucket",
-		ArtifactBucket:     "artifact-bucket",
-		Uploader:           account,
-		CacheStoreBucket:   "cache-bucket",
-		CacheStoreUploader: cache,
-	}
-}
-
-func TestPurgeProjectAssets_SweepsTheArtifactPrefixAlongsideTheRest(t *testing.T) {
-	awsSide, cacheSide := &sweepRecorder{}, &sweepRecorder{}
-
-	if err := purgeProjectAssets(context.Background(), purgeConfig("prod", awsSide, cacheSide), "shop"); err != nil {
-		t.Fatalf("purgeProjectAssets: %v", err)
-	}
-
-	wantAWS := []string{
-		"asset-bucket|assets/shop/",
-		"asset-bucket|image-config/shop/",
-		"asset-bucket|prod/shop/",
-		"artifact-bucket|shop/",
-	}
-	if !reflect.DeepEqual(awsSide.swept, wantAWS) {
-		t.Errorf("account-side sweeps = %v, want %v", awsSide.swept, wantAWS)
-	}
-	wantCache := []string{
-		"cache-bucket|assets/shop/",
-		"cache-bucket|edge/shop/",
-		"cache-bucket|prod/shop/",
-	}
-	if !reflect.DeepEqual(cacheSide.swept, wantCache) {
-		t.Errorf("cache-store sweeps = %v, want %v", cacheSide.swept, wantCache)
-	}
-}
-
-func TestPurgePreviewAssets_SweepsTheArtifactPrefixAndEveryPointersISR(t *testing.T) {
-	awsSide, cacheSide := &sweepRecorder{}, &sweepRecorder{}
-
-	err := purgePreviewAssets(context.Background(), purgeConfig("preview-pr-1", awsSide, cacheSide), "shop", []string{"pr-1", "staging"})
-	if err != nil {
-		t.Fatalf("purgePreviewAssets: %v", err)
-	}
-
-	wantAWS := []string{
-		"artifact-bucket|shop/",
-		"asset-bucket|assets/shop/",
-		"asset-bucket|image-config/shop/",
-		"asset-bucket|preview-pr-1/shop/",
-		"asset-bucket|preview-staging/shop/",
-	}
-	if !reflect.DeepEqual(awsSide.swept, wantAWS) {
-		t.Errorf("account-side sweeps = %v, want %v", awsSide.swept, wantAWS)
-	}
-	wantCache := []string{
-		"cache-bucket|assets/shop/",
-		"cache-bucket|edge/shop/",
-		"cache-bucket|preview-pr-1/shop/",
-		"cache-bucket|preview-staging/shop/",
-	}
-	if !reflect.DeepEqual(cacheSide.swept, wantCache) {
-		t.Errorf("cache-store sweeps = %v, want %v", cacheSide.swept, wantCache)
-	}
-}
-
-func TestPurgeProjectArtifacts_MissingBucketIsANoOp(t *testing.T) {
-	rec := &sweepRecorder{}
-	cfg := Config{Uploader: rec}
-
-	if err := purgeProjectArtifacts(context.Background(), cfg, "shop"); err != nil {
-		t.Fatalf("purgeProjectArtifacts: %v", err)
-	}
-	if rec.swept != nil {
-		t.Errorf("swept %v with no artifact bucket configured, want nothing", rec.swept)
-	}
-}
-
-func TestRemovePreview_NeverPurgesTheProjectsArtifacts(t *testing.T) {
-	rec := &sweepRecorder{}
-	fake := &recordingRootStack{}
-	ctx := context.Background()
-	state, err := fake.ReconcileRootStack(ctx, edge.RootStackSpec{Version: "v1", Slug: "shop"}, nil)
-	if err != nil {
-		t.Fatalf("ReconcileRootStack: %v", err)
-	}
-	cfg := Config{ArtifactBucket: "artifact-bucket", Uploader: rec}
-
-	if err := RemovePreview(ctx, fake, state, cfg, "shop", "pr-1", false, nil, nil); err != nil {
-		t.Fatalf("RemovePreview: %v", err)
-	}
-
-	if rec.swept != nil {
-		t.Errorf("swept %v: the project prefix is shared by every pointer, live or landing", rec.swept)
-	}
-}
-
-func TestRemovePreview_LeavesArtifactsWhenThePointerRemovalFailed(t *testing.T) {
-	rec := &sweepRecorder{}
-	fake := &recordingRootStack{}
-	cfg := Config{ArtifactBucket: "artifact-bucket", Uploader: rec}
-	state := edge.RootStackState{edge.RootStackKeySlug: "shop", edge.RootStackKeySecret: "stale"}
-
-	err := RemovePreview(context.Background(), fake, state, cfg, "shop", "pr-1", false, nil, nil)
-	if err == nil {
-		t.Fatal("RemovePreview err = nil, want the failed pointer removal reported")
-	}
-	if rec.swept != nil {
-		t.Errorf("swept %v after a failed pointer removal, want nothing", rec.swept)
-	}
-}
-
 type valueRecorder struct {
 	purged []string
 	err    error
@@ -162,83 +50,207 @@ func (r *valueRecorder) Purge(_ context.Context, slug string) (int, error) {
 
 var _ ValueStore = (*valueRecorder)(nil)
 
-func TestPurgeProjectValues_EmptiesTheProjectsPartitionAndReportsTheStep(t *testing.T) {
-	values := &valueRecorder{}
-	var steps []string
-	cfg := Config{Values: values}
-
-	if err := purgeProjectValues(context.Background(), cfg, "shop", func(m string) { steps = append(steps, m) }); err != nil {
-		t.Fatalf("purgeProjectValues: %v", err)
-	}
-
-	if want := []string{"shop"}; !reflect.DeepEqual(values.purged, want) {
-		t.Errorf("purged = %v, want %v", values.purged, want)
-	}
-	if len(steps) != 1 {
-		t.Errorf("reported steps = %v, want the removal reported as one step", steps)
+func purgeConfig(env string, account, cache *sweepRecorder) Config {
+	return Config{
+		Env:                env,
+		AssetBucket:        "asset-bucket",
+		ArtifactBucket:     "artifact-bucket",
+		Uploader:           account,
+		CacheStoreBucket:   "cache-bucket",
+		CacheStoreUploader: cache,
 	}
 }
 
-func TestPurgeProjectValues_NoStoreIsNothingToRemove(t *testing.T) {
-	var steps []string
+func TestPurgeProjectAssets(t *testing.T) {
+	t.Run("sweeps the artifact prefix alongside the rest", func(t *testing.T) {
+		awsSide, cacheSide := &sweepRecorder{}, &sweepRecorder{}
 
-	if err := purgeProjectValues(context.Background(), Config{}, "shop", func(m string) { steps = append(steps, m) }); err != nil {
-		t.Fatalf("purgeProjectValues: %v", err)
-	}
-	if steps != nil {
-		t.Errorf("reported %v with no store configured, want nothing", steps)
-	}
+		if err := purgeProjectAssets(context.Background(), purgeConfig("prod", awsSide, cacheSide), "shop"); err != nil {
+			t.Fatalf("purgeProjectAssets: %v", err)
+		}
+
+		wantAWS := []string{
+			"asset-bucket|assets/shop/",
+			"asset-bucket|image-config/shop/",
+			"asset-bucket|prod/shop/",
+			"artifact-bucket|shop/",
+		}
+		if !reflect.DeepEqual(awsSide.swept, wantAWS) {
+			t.Errorf("account-side sweeps = %v, want %v", awsSide.swept, wantAWS)
+		}
+		wantCache := []string{
+			"cache-bucket|assets/shop/",
+			"cache-bucket|edge/shop/",
+			"cache-bucket|prod/shop/",
+		}
+		if !reflect.DeepEqual(cacheSide.swept, wantCache) {
+			t.Errorf("cache-store sweeps = %v, want %v", cacheSide.swept, wantCache)
+		}
+	})
 }
 
-func TestPurgeProjectValues_ReportsAFailedRemoval(t *testing.T) {
-	values := &valueRecorder{err: errors.New("table is on fire")}
+func TestPurgePreviewAssets(t *testing.T) {
+	t.Run("sweeps the artifact prefix and every pointer's ISR", func(t *testing.T) {
+		awsSide, cacheSide := &sweepRecorder{}, &sweepRecorder{}
 
-	err := purgeProjectValues(context.Background(), Config{Values: values}, "shop", nil)
-	if err == nil {
-		t.Fatal("purgeProjectValues err = nil, want the failure reported")
-	}
-	if !strings.Contains(err.Error(), "table is on fire") {
-		t.Errorf("err = %v, want it to carry what the store said", err)
-	}
+		err := purgePreviewAssets(context.Background(), purgeConfig("preview-pr-1", awsSide, cacheSide), "shop", []string{"pr-1", "staging"})
+		if err != nil {
+			t.Fatalf("purgePreviewAssets: %v", err)
+		}
+
+		wantAWS := []string{
+			"artifact-bucket|shop/",
+			"asset-bucket|assets/shop/",
+			"asset-bucket|image-config/shop/",
+			"asset-bucket|preview-pr-1/shop/",
+			"asset-bucket|preview-staging/shop/",
+		}
+		if !reflect.DeepEqual(awsSide.swept, wantAWS) {
+			t.Errorf("account-side sweeps = %v, want %v", awsSide.swept, wantAWS)
+		}
+		wantCache := []string{
+			"cache-bucket|assets/shop/",
+			"cache-bucket|edge/shop/",
+			"cache-bucket|preview-pr-1/shop/",
+			"cache-bucket|preview-staging/shop/",
+		}
+		if !reflect.DeepEqual(cacheSide.swept, wantCache) {
+			t.Errorf("cache-store sweeps = %v, want %v", cacheSide.swept, wantCache)
+		}
+	})
 }
 
-func TestDestroyProject_AFailedValueRemovalDoesNotStopTheStepsAfterIt(t *testing.T) {
-	values := &valueRecorder{err: errors.New("table is on fire")}
-	awsSide, cacheSide := &sweepRecorder{}, &sweepRecorder{}
-	cfg := purgeConfig("prod", awsSide, cacheSide)
-	cfg.Values = values
+func TestPurgeProjectArtifacts(t *testing.T) {
+	t.Run("missing bucket is a no-op", func(t *testing.T) {
+		rec := &sweepRecorder{}
+		cfg := Config{Uploader: rec}
 
-	_, err := DestroyProject(context.Background(), nil, nil, cfg, "shop", nil, nil)
-
-	if err == nil || !strings.Contains(err.Error(), "table is on fire") {
-		t.Fatalf("DestroyProject err = %v, want the failed value removal reported", err)
-	}
-	if values.purged == nil {
-		t.Fatal("the teardown never reached the value store, so nothing was stepped over")
-	}
-	want := []string{"asset-bucket|assets/shop/", "asset-bucket|image-config/shop/", "asset-bucket|prod/shop/", "artifact-bucket|shop/"}
-	if !reflect.DeepEqual(awsSide.swept, want) {
-		t.Errorf("account-side sweeps = %v, want %v — the steps after a failed value removal must still run", awsSide.swept, want)
-	}
-	if cacheSide.swept == nil {
-		t.Error("the cache store was never swept, want the asset purge to have run anyway")
-	}
+		if err := purgeProjectArtifacts(context.Background(), cfg, "shop"); err != nil {
+			t.Fatalf("purgeProjectArtifacts: %v", err)
+		}
+		if rec.swept != nil {
+			t.Errorf("swept %v with no artifact bucket configured, want nothing", rec.swept)
+		}
+	})
 }
 
-func TestRemovePreview_KeepsTheEnvironmentsOverrides(t *testing.T) {
-	values := &valueRecorder{}
-	fake := &recordingRootStack{}
-	ctx := context.Background()
-	state, err := fake.ReconcileRootStack(ctx, edge.RootStackSpec{Version: "v1", Slug: "shop"}, nil)
-	if err != nil {
-		t.Fatalf("ReconcileRootStack: %v", err)
-	}
+func TestPurgeProjectValues(t *testing.T) {
+	t.Run("empties the project's partition and reports the step", func(t *testing.T) {
+		values := &valueRecorder{}
+		var steps []string
+		cfg := Config{Values: values}
 
-	if err := RemovePreview(ctx, fake, state, Config{Values: values}, "shop", "pr-1", false, nil, nil); err != nil {
-		t.Fatalf("RemovePreview: %v", err)
-	}
+		if err := purgeProjectValues(context.Background(), cfg, "shop", func(m string) { steps = append(steps, m) }); err != nil {
+			t.Fatalf("purgeProjectValues: %v", err)
+		}
 
-	if values.purged != nil {
-		t.Errorf("removing preview %q emptied %v: a redeployed branch would lose the override set for it", "pr-1", values.purged)
-	}
+		if want := []string{"shop"}; !reflect.DeepEqual(values.purged, want) {
+			t.Errorf("purged = %v, want %v", values.purged, want)
+		}
+		if len(steps) != 1 {
+			t.Errorf("reported steps = %v, want the removal reported as one step", steps)
+		}
+	})
+
+	t.Run("no store is nothing to remove", func(t *testing.T) {
+		var steps []string
+
+		if err := purgeProjectValues(context.Background(), Config{}, "shop", func(m string) { steps = append(steps, m) }); err != nil {
+			t.Fatalf("purgeProjectValues: %v", err)
+		}
+		if steps != nil {
+			t.Errorf("reported %v with no store configured, want nothing", steps)
+		}
+	})
+
+	t.Run("reports a failed removal", func(t *testing.T) {
+		values := &valueRecorder{err: errors.New("table is on fire")}
+
+		err := purgeProjectValues(context.Background(), Config{Values: values}, "shop", nil)
+		if err == nil {
+			t.Fatal("purgeProjectValues err = nil, want the failure reported")
+		}
+		if !strings.Contains(err.Error(), "table is on fire") {
+			t.Errorf("err = %v, want it to carry what the store said", err)
+		}
+	})
+}
+
+func TestDestroyProject(t *testing.T) {
+	t.Run("a failed value removal does not stop the steps after it", func(t *testing.T) {
+		values := &valueRecorder{err: errors.New("table is on fire")}
+		awsSide, cacheSide := &sweepRecorder{}, &sweepRecorder{}
+		cfg := purgeConfig("prod", awsSide, cacheSide)
+		cfg.Values = values
+
+		_, err := DestroyProject(context.Background(), nil, nil, cfg, "shop", nil, nil)
+
+		if err == nil || !strings.Contains(err.Error(), "table is on fire") {
+			t.Fatalf("DestroyProject err = %v, want the failed value removal reported", err)
+		}
+		if values.purged == nil {
+			t.Fatal("the teardown never reached the value store, so nothing was stepped over")
+		}
+		want := []string{"asset-bucket|assets/shop/", "asset-bucket|image-config/shop/", "asset-bucket|prod/shop/", "artifact-bucket|shop/"}
+		if !reflect.DeepEqual(awsSide.swept, want) {
+			t.Errorf("account-side sweeps = %v, want %v — the steps after a failed value removal must still run", awsSide.swept, want)
+		}
+		if cacheSide.swept == nil {
+			t.Error("the cache store was never swept, want the asset purge to have run anyway")
+		}
+	})
+}
+
+func TestRemovePreviewPurge(t *testing.T) {
+	t.Run("never purges the project's artifacts", func(t *testing.T) {
+		rec := &sweepRecorder{}
+		fake := &recordingRootStack{}
+		ctx := context.Background()
+		state, err := fake.ReconcileRootStack(ctx, edge.RootStackSpec{Version: "v1", Slug: "shop"}, nil)
+		if err != nil {
+			t.Fatalf("ReconcileRootStack: %v", err)
+		}
+		cfg := Config{ArtifactBucket: "artifact-bucket", Uploader: rec}
+
+		if err := RemovePreview(ctx, fake, state, cfg, "shop", "pr-1", false, nil, nil); err != nil {
+			t.Fatalf("RemovePreview: %v", err)
+		}
+
+		if rec.swept != nil {
+			t.Errorf("swept %v: the project prefix is shared by every pointer, live or landing", rec.swept)
+		}
+	})
+
+	t.Run("leaves artifacts when the pointer removal failed", func(t *testing.T) {
+		rec := &sweepRecorder{}
+		fake := &recordingRootStack{}
+		cfg := Config{ArtifactBucket: "artifact-bucket", Uploader: rec}
+		state := edge.RootStackState{edge.RootStackKeySlug: "shop", edge.RootStackKeySecret: "stale"}
+
+		err := RemovePreview(context.Background(), fake, state, cfg, "shop", "pr-1", false, nil, nil)
+		if err == nil {
+			t.Fatal("RemovePreview err = nil, want the failed pointer removal reported")
+		}
+		if rec.swept != nil {
+			t.Errorf("swept %v after a failed pointer removal, want nothing", rec.swept)
+		}
+	})
+
+	t.Run("keeps the environment's overrides", func(t *testing.T) {
+		values := &valueRecorder{}
+		fake := &recordingRootStack{}
+		ctx := context.Background()
+		state, err := fake.ReconcileRootStack(ctx, edge.RootStackSpec{Version: "v1", Slug: "shop"}, nil)
+		if err != nil {
+			t.Fatalf("ReconcileRootStack: %v", err)
+		}
+
+		if err := RemovePreview(ctx, fake, state, Config{Values: values}, "shop", "pr-1", false, nil, nil); err != nil {
+			t.Fatalf("RemovePreview: %v", err)
+		}
+
+		if values.purged != nil {
+			t.Errorf("removing preview %q emptied %v: a redeployed branch would lose the override set for it", "pr-1", values.purged)
+		}
+	})
 }

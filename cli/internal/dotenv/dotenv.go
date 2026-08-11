@@ -3,7 +3,9 @@ package dotenv
 import (
 	"bufio"
 	"bytes"
+	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -25,7 +27,7 @@ type File struct {
 func Load(dir string) (File, error) {
 	file, err := os.Open(filepath.Join(dir, FileName))
 	if err != nil {
-		if os.IsNotExist(err) {
+		if errors.Is(err, fs.ErrNotExist) {
 			return File{Values: map[string]string{}}, nil
 		}
 		return File{}, fmt.Errorf("read %s: %w", FileName, err)

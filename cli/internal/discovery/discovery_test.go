@@ -16,151 +16,134 @@ func write(t *testing.T, path, contents string) {
 	}
 }
 
-func TestDiscover_FindsFilesUnderDefaultPath(t *testing.T) {
-	root := t.TempDir()
-	write(t, filepath.Join(root, "ocel", "main.ts"), "export {};")
-	write(t, filepath.Join(root, "ocel", "sub", "nested.ts"), "export {};")
-	write(t, filepath.Join(root, "other.ts"), "export {};")
-
-	got, err := Discover(root, []string{"ocel"})
-	if err != nil {
-		t.Fatalf("Discover: %v", err)
-	}
-
-	want := []string{
-		filepath.Join(root, "ocel", "main.ts"),
-		filepath.Join(root, "ocel", "sub", "nested.ts"),
-	}
-	assertFiles(t, got, want)
+type walkCase struct {
+	name  string
+	files map[string]string
+	paths []string
+	want  []string
 }
 
-func TestDiscover_IgnoresNodeModulesAndHiddenDirs(t *testing.T) {
-	root := t.TempDir()
-	write(t, filepath.Join(root, "ocel", "main.ts"), "export {};")
-	write(t, filepath.Join(root, "ocel", "node_modules", "dep.ts"), "export {};")
-	write(t, filepath.Join(root, "ocel", ".hidden", "skip.ts"), "export {};")
+func runWalkCases(t *testing.T, cases []walkCase, walk func(configDir string, paths []string) ([]string, error)) {
+	t.Helper()
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 
-	got, err := Discover(root, []string{"ocel"})
-	if err != nil {
-		t.Fatalf("Discover: %v", err)
-	}
+			root := t.TempDir()
+			for path, contents := range tc.files {
+				write(t, filepath.Join(root, filepath.FromSlash(path)), contents)
+			}
 
-	want := []string{filepath.Join(root, "ocel", "main.ts")}
-	assertFiles(t, got, want)
-}
+			got, err := walk(root, tc.paths)
+			if err != nil {
+				t.Fatalf("walk: %v", err)
+			}
 
-func TestDiscover_FiltersNonSourceExtensions(t *testing.T) {
-	root := t.TempDir()
-	write(t, filepath.Join(root, "ocel", "main.ts"), "export {};")
-	write(t, filepath.Join(root, "ocel", "README.md"), "# not source")
-
-	got, err := Discover(root, []string{"ocel"})
-	if err != nil {
-		t.Fatalf("Discover: %v", err)
-	}
-
-	want := []string{filepath.Join(root, "ocel", "main.ts")}
-	assertFiles(t, got, want)
-}
-
-func TestDiscover_SupportsGlobPatternsAcrossPackages(t *testing.T) {
-	root := t.TempDir()
-	write(t, filepath.Join(root, "packages", "a", "ocel", "one.ts"), "export {};")
-	write(t, filepath.Join(root, "packages", "b", "ocel", "two.ts"), "export {};")
-
-	got, err := Discover(root, []string{"packages/*/ocel"})
-	if err != nil {
-		t.Fatalf("Discover: %v", err)
-	}
-
-	want := []string{
-		filepath.Join(root, "packages", "a", "ocel", "one.ts"),
-		filepath.Join(root, "packages", "b", "ocel", "two.ts"),
-	}
-	assertFiles(t, got, want)
-}
-
-func TestDiscover_MissingPathYieldsNoFilesNoError(t *testing.T) {
-	root := t.TempDir()
-
-	got, err := Discover(root, []string{"ocel"})
-	if err != nil {
-		t.Fatalf("Discover: %v", err)
-	}
-	if len(got) != 0 {
-		t.Fatalf("Discover() = %v, want empty", got)
+			want := make([]string, 0, len(tc.want))
+			for _, w := range tc.want {
+				want = append(want, filepath.Join(root, filepath.FromSlash(w)))
+			}
+			assertFiles(t, got, want)
+		})
 	}
 }
 
-func TestDirs_ReturnsRootAndSubdirsNotFiles(t *testing.T) {
-	root := t.TempDir()
-	write(t, filepath.Join(root, "ocel", "main.ts"), "export {};")
-	write(t, filepath.Join(root, "ocel", "sub", "nested.ts"), "export {};")
+func TestDiscover(t *testing.T) {
+	t.Parallel()
 
-	got, err := Dirs(root, []string{"ocel"})
-	if err != nil {
-		t.Fatalf("Dirs: %v", err)
-	}
-
-	want := []string{
-		filepath.Join(root, "ocel"),
-		filepath.Join(root, "ocel", "sub"),
-	}
-	assertFiles(t, got, want)
+	runWalkCases(t, []walkCase{
+		{
+			name: "finds files under the default path",
+			files: map[string]string{
+				"ocel/main.ts":       "export {};",
+				"ocel/sub/nested.ts": "export {};",
+				"other.ts":           "export {};",
+			},
+			paths: []string{"ocel"},
+			want:  []string{"ocel/main.ts", "ocel/sub/nested.ts"},
+		},
+		{
+			name: "ignores node_modules and hidden dirs",
+			files: map[string]string{
+				"ocel/main.ts":             "export {};",
+				"ocel/node_modules/dep.ts": "export {};",
+				"ocel/.hidden/skip.ts":     "export {};",
+			},
+			paths: []string{"ocel"},
+			want:  []string{"ocel/main.ts"},
+		},
+		{
+			name: "filters non-source extensions",
+			files: map[string]string{
+				"ocel/main.ts":   "export {};",
+				"ocel/README.md": "# not source",
+			},
+			paths: []string{"ocel"},
+			want:  []string{"ocel/main.ts"},
+		},
+		{
+			name: "supports glob patterns across packages",
+			files: map[string]string{
+				"packages/a/ocel/one.ts": "export {};",
+				"packages/b/ocel/two.ts": "export {};",
+			},
+			paths: []string{"packages/*/ocel"},
+			want:  []string{"packages/a/ocel/one.ts", "packages/b/ocel/two.ts"},
+		},
+		{
+			name:  "a missing path yields no files and no error",
+			paths: []string{"ocel"},
+		},
+	}, Discover)
 }
 
-func TestDirs_IgnoresNodeModulesAndHiddenDirs(t *testing.T) {
-	root := t.TempDir()
-	write(t, filepath.Join(root, "ocel", "main.ts"), "export {};")
-	write(t, filepath.Join(root, "ocel", "node_modules", "dep.ts"), "export {};")
-	write(t, filepath.Join(root, "ocel", ".hidden", "skip.ts"), "export {};")
+func TestDirs(t *testing.T) {
+	t.Parallel()
 
-	got, err := Dirs(root, []string{"ocel"})
-	if err != nil {
-		t.Fatalf("Dirs: %v", err)
-	}
-
-	want := []string{filepath.Join(root, "ocel")}
-	assertFiles(t, got, want)
-}
-
-func TestDirs_SupportsGlobPatternsAcrossPackages(t *testing.T) {
-	root := t.TempDir()
-	write(t, filepath.Join(root, "packages", "a", "ocel", "one.ts"), "export {};")
-	write(t, filepath.Join(root, "packages", "b", "ocel", "two.ts"), "export {};")
-
-	got, err := Dirs(root, []string{"packages/*/ocel"})
-	if err != nil {
-		t.Fatalf("Dirs: %v", err)
-	}
-
-	want := []string{
-		filepath.Join(root, "packages", "a", "ocel"),
-		filepath.Join(root, "packages", "b", "ocel"),
-	}
-	assertFiles(t, got, want)
-}
-
-func TestDirs_MissingPathYieldsNoDirsNoError(t *testing.T) {
-	root := t.TempDir()
-
-	got, err := Dirs(root, []string{"ocel"})
-	if err != nil {
-		t.Fatalf("Dirs: %v", err)
-	}
-	if len(got) != 0 {
-		t.Fatalf("Dirs() = %v, want empty", got)
-	}
+	runWalkCases(t, []walkCase{
+		{
+			name: "returns the root and its subdirs, not files",
+			files: map[string]string{
+				"ocel/main.ts":       "export {};",
+				"ocel/sub/nested.ts": "export {};",
+			},
+			paths: []string{"ocel"},
+			want:  []string{"ocel", "ocel/sub"},
+		},
+		{
+			name: "ignores node_modules and hidden dirs",
+			files: map[string]string{
+				"ocel/main.ts":             "export {};",
+				"ocel/node_modules/dep.ts": "export {};",
+				"ocel/.hidden/skip.ts":     "export {};",
+			},
+			paths: []string{"ocel"},
+			want:  []string{"ocel"},
+		},
+		{
+			name: "supports glob patterns across packages",
+			files: map[string]string{
+				"packages/a/ocel/one.ts": "export {};",
+				"packages/b/ocel/two.ts": "export {};",
+			},
+			paths: []string{"packages/*/ocel"},
+			want:  []string{"packages/a/ocel", "packages/b/ocel"},
+		},
+		{
+			name:  "a missing path yields no dirs and no error",
+			paths: []string{"ocel"},
+		},
+	}, Dirs)
 }
 
 func assertFiles(t *testing.T, got, want []string) {
 	t.Helper()
 	if len(got) != len(want) {
-		t.Fatalf("Discover() = %v, want %v", got, want)
+		t.Fatalf("got %v, want %v", got, want)
 	}
 	for i := range want {
 		if got[i] != want[i] {
-			t.Fatalf("Discover() = %v, want %v", got, want)
+			t.Fatalf("got %v, want %v", got, want)
 		}
 	}
 }

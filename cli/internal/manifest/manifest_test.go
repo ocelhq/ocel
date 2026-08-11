@@ -7,62 +7,74 @@ import (
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/resources/v1"
 )
 
-func TestManifest_AddAndSnapshot(t *testing.T) {
-	m := New()
+func TestManifest(t *testing.T) {
+	t.Parallel()
 
-	m.Add(Entry{Name: "main", Type: resourcesv1.ResourceType_RESOURCE_TYPE_POSTGRES})
+	t.Run("add and snapshot", func(t *testing.T) {
+		t.Parallel()
 
-	got := m.Snapshot()
-	want := []Entry{{Name: "main", Type: resourcesv1.ResourceType_RESOURCE_TYPE_POSTGRES}}
-	if len(got) != len(want) || got[0] != want[0] {
-		t.Fatalf("Snapshot() = %+v, want %+v", got, want)
-	}
-}
+		m := New()
 
-func TestManifest_SnapshotIsIndependentCopy(t *testing.T) {
-	m := New()
-	m.Add(Entry{Name: "main", Type: resourcesv1.ResourceType_RESOURCE_TYPE_POSTGRES})
+		m.Add(Entry{Name: "main", Type: resourcesv1.ResourceType_RESOURCE_TYPE_POSTGRES})
 
-	snap := m.Snapshot()
-	snap[0].Name = "mutated"
+		got := m.Snapshot()
+		want := []Entry{{Name: "main", Type: resourcesv1.ResourceType_RESOURCE_TYPE_POSTGRES}}
+		if len(got) != len(want) || got[0] != want[0] {
+			t.Fatalf("Snapshot() = %+v, want %+v", got, want)
+		}
+	})
 
-	got := m.Snapshot()
-	if got[0].Name != "main" {
-		t.Fatalf("mutating a snapshot affected the manifest: got %q", got[0].Name)
-	}
-}
+	t.Run("snapshot is an independent copy", func(t *testing.T) {
+		t.Parallel()
 
-func TestManifest_Reset_ClearsEntries(t *testing.T) {
-	m := New()
-	m.Add(Entry{Name: "main", Type: resourcesv1.ResourceType_RESOURCE_TYPE_POSTGRES})
+		m := New()
+		m.Add(Entry{Name: "main", Type: resourcesv1.ResourceType_RESOURCE_TYPE_POSTGRES})
 
-	m.Reset()
+		snap := m.Snapshot()
+		snap[0].Name = "mutated"
 
-	if got := m.Snapshot(); len(got) != 0 {
-		t.Fatalf("Snapshot() after Reset = %+v, want empty", got)
-	}
+		got := m.Snapshot()
+		if got[0].Name != "main" {
+			t.Fatalf("mutating a snapshot affected the manifest: got %q", got[0].Name)
+		}
+	})
 
-	m.Add(Entry{Name: "second", Type: resourcesv1.ResourceType_RESOURCE_TYPE_POSTGRES})
-	got := m.Snapshot()
-	want := []Entry{{Name: "second", Type: resourcesv1.ResourceType_RESOURCE_TYPE_POSTGRES}}
-	if len(got) != len(want) || got[0] != want[0] {
-		t.Fatalf("Snapshot() after Reset+Add = %+v, want %+v", got, want)
-	}
-}
+	t.Run("reset clears entries", func(t *testing.T) {
+		t.Parallel()
 
-func TestManifest_ConcurrentAdd(t *testing.T) {
-	m := New()
-	var wg sync.WaitGroup
-	for i := 0; i < 50; i++ {
-		wg.Add(1)
-		go func(i int) {
-			defer wg.Done()
-			m.Add(Entry{Name: "r", Type: resourcesv1.ResourceType_RESOURCE_TYPE_POSTGRES})
-		}(i)
-	}
-	wg.Wait()
+		m := New()
+		m.Add(Entry{Name: "main", Type: resourcesv1.ResourceType_RESOURCE_TYPE_POSTGRES})
 
-	if got := len(m.Snapshot()); got != 50 {
-		t.Fatalf("Snapshot() len = %d, want 50", got)
-	}
+		m.Reset()
+
+		if got := m.Snapshot(); len(got) != 0 {
+			t.Fatalf("Snapshot() after Reset = %+v, want empty", got)
+		}
+
+		m.Add(Entry{Name: "second", Type: resourcesv1.ResourceType_RESOURCE_TYPE_POSTGRES})
+		got := m.Snapshot()
+		want := []Entry{{Name: "second", Type: resourcesv1.ResourceType_RESOURCE_TYPE_POSTGRES}}
+		if len(got) != len(want) || got[0] != want[0] {
+			t.Fatalf("Snapshot() after Reset+Add = %+v, want %+v", got, want)
+		}
+	})
+
+	t.Run("concurrent add", func(t *testing.T) {
+		t.Parallel()
+
+		m := New()
+		var wg sync.WaitGroup
+		for range 50 {
+			wg.Add(1)
+			go func() {
+				defer wg.Done()
+				m.Add(Entry{Name: "r", Type: resourcesv1.ResourceType_RESOURCE_TYPE_POSTGRES})
+			}()
+		}
+		wg.Wait()
+
+		if got := len(m.Snapshot()); got != 50 {
+			t.Fatalf("Snapshot() len = %d, want 50", got)
+		}
+	})
 }

@@ -18,49 +18,51 @@ import (
 	"time"
 )
 
-func TestRunDeploy_E2E_RealBuiltStubProvider(t *testing.T) {
-	root, binPath := setUpRealProviderFixture(t)
+func TestDeployE2E(t *testing.T) {
+	t.Run("a real built provider reports the typed resource output it decoded", func(t *testing.T) {
+		root, binPath := setUpRealProviderFixture(t)
 
-	var stdout, stderr bytes.Buffer
-	err := runDeploy(context.Background(), root, deployOptions{yes: true}, &stdout, &stderr, strings.NewReader(""))
-	if err != nil {
-		t.Fatalf("runDeploy err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
-	}
+		var stdout, stderr bytes.Buffer
+		err := runDeploy(context.Background(), defaultDeps(), root, deployOptions{yes: true}, &stdout, &stderr, strings.NewReader(""))
+		if err != nil {
+			t.Fatalf("runDeploy err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
+		}
 
-	if !strings.Contains(stdout.String(), "postgres_main: postgres version=15") {
-		t.Errorf("stdout = %q, want the real stub provider to report the exact typed postgres version it decoded", stdout.String())
-	}
-	if !strings.Contains(stdout.String(), "Deployed") {
-		t.Errorf("stdout = %q, want a terminal success message", stdout.String())
-	}
+		if !strings.Contains(stdout.String(), "postgres_main: postgres version=15") {
+			t.Errorf("stdout = %q, want the real stub provider to report the exact typed postgres version it decoded", stdout.String())
+		}
+		if !strings.Contains(stdout.String(), "Deployed") {
+			t.Errorf("stdout = %q, want a terminal success message", stdout.String())
+		}
 
-	sockPath := parseBoundSocketPath(t, stderr.String())
-	waitForNoStaleSocket(t, sockPath)
-	waitForNoOrphanProcess(t, binPath)
-}
+		sockPath := parseBoundSocketPath(t, stderr.String())
+		waitForNoStaleSocket(t, sockPath)
+		waitForNoOrphanProcess(t, binPath)
+	})
 
-func TestRunDeploy_E2E_ExpressFunctionURL(t *testing.T) {
-	root, binPath, fnName := setUpRealProviderExpressFixture(t)
+	t.Run("an express app answers on the function URL it was deployed to", func(t *testing.T) {
+		root, binPath, fnName := setUpRealProviderExpressFixture(t)
 
-	var stdout, stderr bytes.Buffer
-	err := runDeploy(context.Background(), root, deployOptions{yes: true}, &stdout, &stderr, strings.NewReader(""))
-	if err != nil {
-		t.Fatalf("runDeploy err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
-	}
-	if !strings.Contains(stdout.String(), "Deployed") {
-		t.Fatalf("stdout = %q, want a terminal success message", stdout.String())
-	}
+		var stdout, stderr bytes.Buffer
+		err := runDeploy(context.Background(), defaultDeps(), root, deployOptions{yes: true}, &stdout, &stderr, strings.NewReader(""))
+		if err != nil {
+			t.Fatalf("runDeploy err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
+		}
+		if !strings.Contains(stdout.String(), "Deployed") {
+			t.Fatalf("stdout = %q, want a terminal success message", stdout.String())
+		}
 
-	fnURL := parseFunctionURL(t, stdout.String(), fnName)
+		fnURL := parseFunctionURL(t, stdout.String(), fnName)
 
-	body := getHealthWithRetry(t, fnURL, 3*time.Minute)
-	if !strings.Contains(body, `"ok":true`) {
-		t.Errorf("GET %s/health body = %q, want the express health route's {\"ok\":true}", fnURL, body)
-	}
+		body := getHealthWithRetry(t, fnURL, 3*time.Minute)
+		if !strings.Contains(body, `"ok":true`) {
+			t.Errorf("GET %s/health body = %q, want the express health route's {\"ok\":true}", fnURL, body)
+		}
 
-	sockPath := parseBoundSocketPath(t, stderr.String())
-	waitForNoStaleSocket(t, sockPath)
-	waitForNoOrphanProcess(t, binPath)
+		sockPath := parseBoundSocketPath(t, stderr.String())
+		waitForNoStaleSocket(t, sockPath)
+		waitForNoOrphanProcess(t, binPath)
+	})
 }
 
 func setUpRealProviderFixture(t *testing.T) (root, binPath string) {

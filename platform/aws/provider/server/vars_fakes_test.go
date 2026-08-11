@@ -2,7 +2,7 @@ package server
 
 import (
 	"context"
-	"sort"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -95,7 +95,7 @@ func (f *fakeDynamo) Query(_ context.Context, in *dynamodb.QueryInput, _ ...func
 			sks = append(sks, sk)
 		}
 	}
-	sort.Strings(sks)
+	slices.Sort(sks)
 
 	out := &dynamodb.QueryOutput{}
 	for _, sk := range sks {

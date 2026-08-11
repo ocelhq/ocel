@@ -12,153 +12,187 @@ import (
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/resources/v1"
 )
 
-func TestFetchProjectConfig_ReturnsIdentityForProjectID(t *testing.T) {
-	cfg, err := FetchProjectConfig(context.Background(), "https://api.example.com", "tok_123", "proj_abc")
-	if err != nil {
-		t.Fatalf("FetchProjectConfig: %v", err)
-	}
-	if cfg.ProjectID != "proj_abc" {
-		t.Fatalf("ProjectID = %q, want %q", cfg.ProjectID, "proj_abc")
-	}
-	if cfg.OrgID == "" {
-		t.Fatal("OrgID is empty")
-	}
-	if cfg.UserID == "" {
-		t.Fatal("UserID is empty")
-	}
-	if cfg.APIURL != "https://api.example.com" {
-		t.Fatalf("APIURL = %q, want %q", cfg.APIURL, "https://api.example.com")
-	}
-	if cfg.Token != "tok_123" {
-		t.Fatalf("Token = %q, want %q", cfg.Token, "tok_123")
-	}
-}
+func TestFetchProjectConfig(t *testing.T) {
+	t.Parallel()
 
-func TestResourceTypeName_RendersCanonicalName(t *testing.T) {
-	got, err := ResourceTypeName(resourcesv1.ResourceType_RESOURCE_TYPE_POSTGRES)
-	if err != nil {
-		t.Fatalf("ResourceTypeName: %v", err)
-	}
-	if got != "POSTGRES" {
-		t.Fatalf("ResourceTypeName() = %q, want %q", got, "POSTGRES")
-	}
-}
-
-func TestResourceTypeName_RejectsUnspecifiedType(t *testing.T) {
-	_, err := ResourceTypeName(resourcesv1.ResourceType_RESOURCE_TYPE_UNSPECIFIED)
-	if err == nil {
-		t.Fatal("ResourceTypeName: expected error for unspecified type, got nil")
-	}
-}
-
-func TestProvision_EmptyManifestYieldsNoResourcesWithoutCallingResolve(t *testing.T) {
-	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		t.Fatal("Provision made an HTTP request for an empty resource list")
-	}))
-	defer ts.Close()
-
-	got, err := Provision(context.Background(), ProjectConfig{ProjectID: "proj_abc", APIURL: ts.URL}, nil)
-	if err != nil {
-		t.Fatalf("Provision: %v", err)
-	}
-	if len(got) != 0 {
-		t.Fatalf("Provision() = %+v, want empty", got)
-	}
-}
-
-func TestProvision_CallsResolveEndpointAndInjectsConnectionStringUnderCanonicalEnvKey(t *testing.T) {
-	var gotAuth string
-	mux := http.NewServeMux()
-	mux.HandleFunc("/api/resources/resolve", func(w http.ResponseWriter, r *http.Request) {
-		gotAuth = r.Header.Get("Authorization")
-
-		var req resolveRequestBody
-		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-			t.Fatalf("decode request: %v", err)
+	t.Run("returns an identity for the project ID", func(t *testing.T) {
+		t.Parallel()
+		cfg, err := FetchProjectConfig(context.Background(), "https://api.example.com", "tok_123", "proj_abc")
+		if err != nil {
+			t.Fatalf("FetchProjectConfig: %v", err)
 		}
-		if req.ProjectID != "proj_abc" {
-			t.Fatalf("ProjectID = %q, want %q", req.ProjectID, "proj_abc")
+		if cfg.ProjectID != "proj_abc" {
+			t.Fatalf("ProjectID = %q, want %q", cfg.ProjectID, "proj_abc")
 		}
-		if len(req.Resources) != 1 || req.Resources[0].Name != "main" || req.Resources[0].Type != "POSTGRES" {
-			t.Fatalf("Resources = %+v", req.Resources)
+		if cfg.OrgID == "" {
+			t.Fatal("OrgID is empty")
 		}
-
-		_ = json.NewEncoder(w).Encode(resolveResponseBody{
-			Env: map[string]string{
-				"OCEL_RESOURCE_POSTGRES_main": `{"connectionString":"postgres://resolved/main"}`,
-			},
-			ExpiresAt: time.Now().Add(time.Hour).Format(time.RFC3339),
-		})
+		if cfg.UserID == "" {
+			t.Fatal("UserID is empty")
+		}
+		if cfg.APIURL != "https://api.example.com" {
+			t.Fatalf("APIURL = %q, want %q", cfg.APIURL, "https://api.example.com")
+		}
+		if cfg.Token != "tok_123" {
+			t.Fatalf("Token = %q, want %q", cfg.Token, "tok_123")
+		}
 	})
-	ts := httptest.NewServer(mux)
-	defer ts.Close()
+}
 
-	resources := []manifest.Entry{
-		{Name: "main", Type: resourcesv1.ResourceType_RESOURCE_TYPE_POSTGRES},
-	}
+func TestResourceTypeName(t *testing.T) {
+	t.Parallel()
 
-	got, err := Provision(context.Background(), ProjectConfig{ProjectID: "proj_abc", APIURL: ts.URL, Token: "tok_123"}, resources)
-	if err != nil {
-		t.Fatalf("Provision: %v", err)
-	}
-	if len(got) != 1 {
-		t.Fatalf("Provision() len = %d, want 1", len(got))
-	}
-	if gotAuth != "Bearer tok_123" {
-		t.Fatalf("Authorization = %q, want %q", gotAuth, "Bearer tok_123")
-	}
-
-	resource := got[0]
-	if resource.Name != "main" {
-		t.Fatalf("Name = %q, want %q", resource.Name, "main")
-	}
-	if resource.Type != resourcesv1.ResourceType_RESOURCE_TYPE_POSTGRES {
-		t.Fatalf("Type = %v, want POSTGRES", resource.Type)
-	}
-
-	const key = "OCEL_RESOURCE_POSTGRES_main"
-	raw, ok := resource.Env[key]
-	if !ok {
-		t.Fatalf("Env missing key %q, got %+v", key, resource.Env)
-	}
-
-	var parsed struct {
-		ConnectionString string `json:"connectionString"`
-	}
-	if err := json.Unmarshal([]byte(raw), &parsed); err != nil {
-		t.Fatalf("Env[%q] = %q is not valid JSON: %v", key, raw, err)
-	}
-	if parsed.ConnectionString != "postgres://resolved/main" {
-		t.Fatalf("connectionString = %q, want %q", parsed.ConnectionString, "postgres://resolved/main")
+	for _, tt := range []struct {
+		name    string
+		typ     resourcesv1.ResourceType
+		want    string
+		wantErr bool
+	}{
+		{"renders the canonical name", resourcesv1.ResourceType_RESOURCE_TYPE_POSTGRES, "POSTGRES", false},
+		{"rejects an unspecified type", resourcesv1.ResourceType_RESOURCE_TYPE_UNSPECIFIED, "", true},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			got, err := ResourceTypeName(tt.typ)
+			if tt.wantErr {
+				if err == nil {
+					t.Fatalf("ResourceTypeName(%v) = %q, want an error", tt.typ, got)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("ResourceTypeName: %v", err)
+			}
+			if got != tt.want {
+				t.Fatalf("ResourceTypeName() = %q, want %q", got, tt.want)
+			}
+		})
 	}
 }
 
-func TestProvision_PropagatesNonOKStatus(t *testing.T) {
-	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		http.Error(w, "boom", http.StatusInternalServerError)
-	}))
-	defer ts.Close()
+func TestProvision(t *testing.T) {
+	onePostgres := []manifest.Entry{{Name: "main", Type: resourcesv1.ResourceType_RESOURCE_TYPE_POSTGRES}}
 
-	resources := []manifest.Entry{
-		{Name: "main", Type: resourcesv1.ResourceType_RESOURCE_TYPE_POSTGRES},
-	}
-	_, err := Provision(context.Background(), ProjectConfig{ProjectID: "proj_abc", APIURL: ts.URL}, resources)
-	if err == nil {
-		t.Fatal("Provision: expected error, got nil")
-	}
-}
+	t.Run("an empty manifest yields no resources without calling resolve", func(t *testing.T) {
+		ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			t.Error("Provision made an HTTP request for an empty resource list")
+			http.Error(w, "unexpected request", http.StatusInternalServerError)
+		}))
+		defer ts.Close()
 
-func TestProvision_MissingEnvKeyInResponseIsAnError(t *testing.T) {
-	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		_ = json.NewEncoder(w).Encode(resolveResponseBody{Env: map[string]string{}})
-	}))
-	defer ts.Close()
+		got, err := Run(context.Background(), ProjectConfig{ProjectID: "proj_abc", APIURL: ts.URL}, nil)
+		if err != nil {
+			t.Fatalf("Provision: %v", err)
+		}
+		if len(got) != 0 {
+			t.Fatalf("Run() = %+v, want empty", got)
+		}
+	})
 
-	resources := []manifest.Entry{
-		{Name: "main", Type: resourcesv1.ResourceType_RESOURCE_TYPE_POSTGRES},
-	}
-	_, err := Provision(context.Background(), ProjectConfig{ProjectID: "proj_abc", APIURL: ts.URL}, resources)
-	if err == nil {
-		t.Fatal("Provision: expected error for missing env key, got nil")
-	}
+	t.Run("calls the resolve endpoint", func(t *testing.T) {
+		var gotAuth string
+		mux := http.NewServeMux()
+		mux.HandleFunc("/api/resources/resolve", func(w http.ResponseWriter, r *http.Request) {
+			gotAuth = r.Header.Get("Authorization")
+
+			var req resolveRequestBody
+			if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+				t.Errorf("decode request: %v", err)
+				http.Error(w, err.Error(), http.StatusBadRequest)
+				return
+			}
+			if req.ProjectID != "proj_abc" {
+				t.Errorf("ProjectID = %q, want %q", req.ProjectID, "proj_abc")
+			}
+			if len(req.Resources) != 1 || req.Resources[0].Name != "main" || req.Resources[0].Type != "POSTGRES" {
+				t.Errorf("Resources = %+v", req.Resources)
+			}
+
+			_ = json.NewEncoder(w).Encode(resolveResponseBody{
+				Env: map[string]string{
+					"OCEL_RESOURCE_POSTGRES_main": `{"connectionString":"postgres://resolved/main"}`,
+				},
+				ExpiresAt: time.Now().Add(time.Hour).Format(time.RFC3339),
+			})
+		})
+		ts := httptest.NewServer(mux)
+		defer ts.Close()
+
+		got, err := Run(context.Background(), ProjectConfig{ProjectID: "proj_abc", APIURL: ts.URL, Token: "tok_123"}, onePostgres)
+		if err != nil {
+			t.Fatalf("Provision: %v", err)
+		}
+		if len(got) != 1 {
+			t.Fatalf("Run() len = %d, want 1", len(got))
+		}
+		if gotAuth != "Bearer tok_123" {
+			t.Fatalf("Authorization = %q, want %q", gotAuth, "Bearer tok_123")
+		}
+		if got[0].Name != "main" {
+			t.Fatalf("Name = %q, want %q", got[0].Name, "main")
+		}
+		if got[0].Type != resourcesv1.ResourceType_RESOURCE_TYPE_POSTGRES {
+			t.Fatalf("Type = %v, want POSTGRES", got[0].Type)
+		}
+	})
+
+	t.Run("injects the connection string under the canonical env key", func(t *testing.T) {
+		ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			_ = json.NewEncoder(w).Encode(resolveResponseBody{
+				Env: map[string]string{
+					"OCEL_RESOURCE_POSTGRES_main": `{"connectionString":"postgres://resolved/main"}`,
+				},
+				ExpiresAt: time.Now().Add(time.Hour).Format(time.RFC3339),
+			})
+		}))
+		defer ts.Close()
+
+		got, err := Run(context.Background(), ProjectConfig{ProjectID: "proj_abc", APIURL: ts.URL, Token: "tok_123"}, onePostgres)
+		if err != nil {
+			t.Fatalf("Provision: %v", err)
+		}
+		if len(got) != 1 {
+			t.Fatalf("Run() len = %d, want 1", len(got))
+		}
+
+		const key = "OCEL_RESOURCE_POSTGRES_main"
+		raw, ok := got[0].Env[key]
+		if !ok {
+			t.Fatalf("Env missing key %q, got %+v", key, got[0].Env)
+		}
+
+		var parsed struct {
+			ConnectionString string `json:"connectionString"`
+		}
+		if err := json.Unmarshal([]byte(raw), &parsed); err != nil {
+			t.Fatalf("Env[%q] = %q is not valid JSON: %v", key, raw, err)
+		}
+		if parsed.ConnectionString != "postgres://resolved/main" {
+			t.Fatalf("connectionString = %q, want %q", parsed.ConnectionString, "postgres://resolved/main")
+		}
+	})
+
+	t.Run("propagates a non-OK status", func(t *testing.T) {
+		ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			http.Error(w, "boom", http.StatusInternalServerError)
+		}))
+		defer ts.Close()
+
+		_, err := Run(context.Background(), ProjectConfig{ProjectID: "proj_abc", APIURL: ts.URL}, onePostgres)
+		if err == nil {
+			t.Fatal("Provision: expected error, got nil")
+		}
+	})
+
+	t.Run("a missing env key in the response is an error", func(t *testing.T) {
+		ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			_ = json.NewEncoder(w).Encode(resolveResponseBody{Env: map[string]string{}})
+		}))
+		defer ts.Close()
+
+		_, err := Run(context.Background(), ProjectConfig{ProjectID: "proj_abc", APIURL: ts.URL}, onePostgres)
+		if err == nil {
+			t.Fatal("Provision: expected error for missing env key, got nil")
+		}
+	})
 }

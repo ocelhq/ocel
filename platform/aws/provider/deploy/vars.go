@@ -1,13 +1,14 @@
 package deploy
 
 import (
+	"cmp"
 	"crypto/rand"
 	"crypto/sha256"
 	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
-	"sort"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -184,7 +185,7 @@ func referencedOwners(cfg Config, slug string, keys []live.Key) []string {
 	for owner := range owners {
 		out = append(out, owner)
 	}
-	sort.Strings(out)
+	slices.Sort(out)
 	return out
 }
 
@@ -209,11 +210,11 @@ func recordedAudit(cfg Config, app *deploymentsv1.ManifestApp) (string, []edge.V
 		}
 		records = append(records, record)
 	}
-	sort.Slice(records, func(i, j int) bool {
-		if records[i].Key != records[j].Key {
-			return records[i].Key < records[j].Key
+	slices.SortFunc(records, func(a, b edge.VariableRecord) int {
+		if c := cmp.Compare(a.Key, b.Key); c != 0 {
+			return c
 		}
-		return records[i].Folder < records[j].Folder
+		return cmp.Compare(a.Folder, b.Folder)
 	})
 	return fingerprintRecords(records), records
 }
@@ -247,7 +248,7 @@ func fingerprintValues(values map[string]string) string {
 	for key := range values {
 		keys = append(keys, key)
 	}
-	sort.Strings(keys)
+	slices.Sort(keys)
 
 	h := sha256.New()
 	for _, key := range keys {
@@ -275,7 +276,7 @@ func checkRuntimeOwnedNames(app *deploymentsv1.ManifestApp) error {
 	if len(taken) == 0 {
 		return nil
 	}
-	sort.Strings(taken)
+	slices.Sort(taken)
 
 	return fmt.Errorf(
 		"app %s declares %s, which the AWS Lambda runtime injects into every function environment (%s). "+
@@ -296,12 +297,11 @@ func checkFunctionEnvBudget(function string, env map[string]string) error {
 		return nil
 	}
 
-	sort.Slice(keys, func(i, j int) bool {
-		a, b := keys[i], keys[j]
-		if sizeOf := len(a) + len(env[a]); sizeOf != len(b)+len(env[b]) {
-			return sizeOf > len(b)+len(env[b])
+	slices.SortFunc(keys, func(a, b string) int {
+		if c := cmp.Compare(len(b)+len(env[b]), len(a)+len(env[a])); c != 0 {
+			return c
 		}
-		return a < b
+		return cmp.Compare(a, b)
 	})
 
 	var b strings.Builder

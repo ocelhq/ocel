@@ -22,7 +22,6 @@ import (
 	"github.com/ocelhq/ocel/pkg/channel"
 	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
 	"github.com/ocelhq/ocel/pkg/proto/deployments/v1/deploymentsv1connect"
-	envv1 "github.com/ocelhq/ocel/pkg/proto/env/v1"
 	"github.com/ocelhq/ocel/pkg/proto/env/v1/envv1connect"
 )
 
@@ -86,12 +85,14 @@ type Runner struct {
 	readyTimeout time.Duration
 
 	readyCh chan string
+	scanErr chan error
 	done    chan struct{}
 	waitErr error
 
 	stderrMu  sync.Mutex
 	stderrBuf bytes.Buffer
 
+	mu               sync.Mutex
 	network, address string
 	client           deploymentsv1connect.DeploymentServiceClient
 	vars             envv1connect.EnvVarsServiceClient
@@ -141,6 +142,7 @@ func Spawn(ctx context.Context, cfg Config) (*Runner, error) {
 		stderr:       cfg.Stderr,
 		readyTimeout: resolveReadyTimeout(cfg.ReadyTimeout),
 		readyCh:      make(chan string, 1),
+		scanErr:      make(chan error, 1),
 		done:         make(chan struct{}),
 	}
 
@@ -154,15 +156,13 @@ func Spawn(ctx context.Context, cfg Config) (*Runner, error) {
 		close(r.done)
 	}()
 
-	if ctx != nil {
-		go func() {
-			select {
-			case <-ctx.Done():
-				_ = r.Close()
-			case <-r.done:
-			}
-		}()
-	}
+	go func() {
+		select {
+		case <-ctx.Done():
+			r.Close()
+		case <-r.done:
+		}
+	}()
 
 	return r, nil
 }
@@ -186,6 +186,8 @@ func (r *Runner) Ready(ctx context.Context) error {
 	select {
 	case addr := <-r.readyCh:
 		return r.dial(addr)
+	case err := <-r.scanErr:
+		return err
 	case <-r.done:
 		select {
 		case addr := <-r.readyCh:
@@ -208,8 +210,6 @@ func (r *Runner) dial(addr string) error {
 	if err != nil {
 		return fmt.Errorf("providerrunner: parse readiness address: %w", err)
 	}
-	r.network = network
-	r.address = address
 
 	httpClient := &http.Client{
 		Transport: &http.Transport{
@@ -221,162 +221,74 @@ func (r *Runner) dial(addr string) error {
 	}
 
 	auth := connect.WithInterceptors(authInterceptor{token: r.token})
+
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.network, r.address = network, address
 	r.client = deploymentsv1connect.NewDeploymentServiceClient(httpClient, "http://provider", auth)
 	r.vars = envv1connect.NewEnvVarsServiceClient(httpClient, "http://provider", auth)
 	return nil
 }
 
+func (r *Runner) Vars() (envv1connect.EnvVarsServiceClient, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if r.vars == nil {
+		return nil, ErrVarsUnavailable
+	}
+	return r.vars, nil
+}
+
+func (r *Runner) Deployments() (deploymentsv1connect.DeploymentServiceClient, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if r.client == nil {
+		return nil, ErrDeploymentsUnavailable
+	}
+	return r.client, nil
+}
+
 var ErrVarsUnavailable = errors.New("providerrunner: the variable store was reached before a successful Ready")
 
-func (r *Runner) SetValue(ctx context.Context, req *envv1.SetValueRequest) (*envv1.SetValueResponse, error) {
-	if r.vars == nil {
-		return nil, ErrVarsUnavailable
-	}
-	return r.vars.SetValue(ctx, req)
-}
-
-func (r *Runner) ListValues(ctx context.Context, req *envv1.ListValuesRequest) (*envv1.ListValuesResponse, error) {
-	if r.vars == nil {
-		return nil, ErrVarsUnavailable
-	}
-	return r.vars.ListValues(ctx, req)
-}
-
-func (r *Runner) GetValue(ctx context.Context, req *envv1.GetValueRequest) (*envv1.GetValueResponse, error) {
-	if r.vars == nil {
-		return nil, ErrVarsUnavailable
-	}
-	return r.vars.GetValue(ctx, req)
-}
-
-func (r *Runner) RevealValues(ctx context.Context, req *envv1.RevealValuesRequest) (*envv1.RevealValuesResponse, error) {
-	if r.vars == nil {
-		return nil, ErrVarsUnavailable
-	}
-	return r.vars.RevealValues(ctx, req)
-}
-
-func (r *Runner) DeleteValue(ctx context.Context, req *envv1.DeleteValueRequest) (*envv1.DeleteValueResponse, error) {
-	if r.vars == nil {
-		return nil, ErrVarsUnavailable
-	}
-	return r.vars.DeleteValue(ctx, req)
-}
-
-func (r *Runner) SetReference(ctx context.Context, req *envv1.SetReferenceRequest) (*envv1.SetReferenceResponse, error) {
-	if r.vars == nil {
-		return nil, ErrVarsUnavailable
-	}
-	return r.vars.SetReference(ctx, req)
-}
-
-func (r *Runner) ListReferences(ctx context.Context, req *envv1.ListReferencesRequest) (*envv1.ListReferencesResponse, error) {
-	if r.vars == nil {
-		return nil, ErrVarsUnavailable
-	}
-	return r.vars.ListReferences(ctx, req)
-}
-
-func (r *Runner) ListVersions(ctx context.Context, req *envv1.ListVersionsRequest) (*envv1.ListVersionsResponse, error) {
-	if r.vars == nil {
-		return nil, ErrVarsUnavailable
-	}
-	return r.vars.ListVersions(ctx, req)
-}
+var ErrDeploymentsUnavailable = errors.New("providerrunner: the provider was reached before a successful Ready")
 
 func (r *Runner) Deploy(ctx context.Context, req *deploymentsv1.DeployRequest, onEvent func(*deploymentsv1.DeployEvent)) error {
-	if r.client == nil {
-		return errors.New("providerrunner: Deploy called before a successful Ready")
-	}
-	stream, err := r.client.Deploy(ctx, req)
-	return r.driveStream("Deploy", stream, err, onEvent)
+	return r.stream(ctx, "Deploy", onEvent, func(client deploymentsv1connect.DeploymentServiceClient) (*connect.ServerStreamForClient[deploymentsv1.DeployEvent], error) {
+		return client.Deploy(ctx, req)
+	})
 }
 
 func (r *Runner) Bootstrap(ctx context.Context, req *deploymentsv1.BootstrapRequest, onEvent func(*deploymentsv1.DeployEvent)) error {
-	if r.client == nil {
-		return errors.New("providerrunner: Bootstrap called before a successful Ready")
-	}
-	stream, err := r.client.Bootstrap(ctx, req)
-	return r.driveStream("Bootstrap", stream, err, onEvent)
+	return r.stream(ctx, "Bootstrap", onEvent, func(client deploymentsv1connect.DeploymentServiceClient) (*connect.ServerStreamForClient[deploymentsv1.DeployEvent], error) {
+		return client.Bootstrap(ctx, req)
+	})
 }
 
 func (r *Runner) DestroyPreview(ctx context.Context, req *deploymentsv1.DestroyPreviewRequest, onEvent func(*deploymentsv1.DeployEvent)) error {
-	if r.client == nil {
-		return errors.New("providerrunner: DestroyPreview called before a successful Ready")
-	}
-	stream, err := r.client.DestroyPreview(ctx, req)
-	return r.driveStream("DestroyPreview", stream, err, onEvent)
+	return r.stream(ctx, "DestroyPreview", onEvent, func(client deploymentsv1connect.DeploymentServiceClient) (*connect.ServerStreamForClient[deploymentsv1.DeployEvent], error) {
+		return client.DestroyPreview(ctx, req)
+	})
 }
 
 func (r *Runner) DestroyProject(ctx context.Context, req *deploymentsv1.DestroyProjectRequest, onEvent func(*deploymentsv1.DeployEvent)) error {
-	if r.client == nil {
-		return errors.New("providerrunner: DestroyProject called before a successful Ready")
-	}
-	stream, err := r.client.DestroyProject(ctx, req)
-	return r.driveStream("DestroyProject", stream, err, onEvent)
-}
-
-func (r *Runner) PlanDestroyProject(ctx context.Context, req *deploymentsv1.PlanDestroyProjectRequest) (*deploymentsv1.PlanDestroyProjectResponse, error) {
-	if r.client == nil {
-		return nil, errors.New("providerrunner: PlanDestroyProject called before a successful Ready")
-	}
-	resp, err := r.client.PlanDestroyProject(ctx, req)
-	if err != nil {
-		return nil, fmt.Errorf("providerrunner: call PlanDestroyProject: %w", err)
-	}
-	return resp, nil
-}
-
-func (r *Runner) ListEnvironments(ctx context.Context, req *deploymentsv1.ListEnvironmentsRequest) (*deploymentsv1.ListEnvironmentsResponse, error) {
-	if r.client == nil {
-		return nil, errors.New("providerrunner: ListEnvironments called before a successful Ready")
-	}
-	resp, err := r.client.ListEnvironments(ctx, req)
-	if err != nil {
-		return nil, fmt.Errorf("providerrunner: call ListEnvironments: %w", err)
-	}
-	return resp, nil
-}
-
-func (r *Runner) Preflight(ctx context.Context, req *deploymentsv1.PreflightRequest) (*deploymentsv1.PreflightResponse, error) {
-	if r.client == nil {
-		return nil, errors.New("providerrunner: Preflight called before a successful Ready")
-	}
-	resp, err := r.client.Preflight(ctx, req)
-	if err != nil {
-		return nil, fmt.Errorf("providerrunner: call Preflight: %w", err)
-	}
-	return resp, nil
-}
-
-func (r *Runner) ListPromotions(ctx context.Context, req *deploymentsv1.ListPromotionsRequest) (*deploymentsv1.ListPromotionsResponse, error) {
-	if r.client == nil {
-		return nil, errors.New("providerrunner: ListPromotions called before a successful Ready")
-	}
-	resp, err := r.client.ListPromotions(ctx, req)
-	if err != nil {
-		return nil, fmt.Errorf("providerrunner: call ListPromotions: %w", err)
-	}
-	return resp, nil
-}
-
-func (r *Runner) Rollback(ctx context.Context, req *deploymentsv1.RollbackRequest) (*deploymentsv1.RollbackResponse, error) {
-	if r.client == nil {
-		return nil, errors.New("providerrunner: Rollback called before a successful Ready")
-	}
-	resp, err := r.client.Rollback(ctx, req)
-	if err != nil {
-		return nil, fmt.Errorf("providerrunner: call Rollback: %w", err)
-	}
-	return resp, nil
+	return r.stream(ctx, "DestroyProject", onEvent, func(client deploymentsv1connect.DeploymentServiceClient) (*connect.ServerStreamForClient[deploymentsv1.DeployEvent], error) {
+		return client.DestroyProject(ctx, req)
+	})
 }
 
 func (r *Runner) Prune(ctx context.Context, req *deploymentsv1.PruneRequest, onEvent func(*deploymentsv1.DeployEvent)) error {
-	if r.client == nil {
-		return errors.New("providerrunner: Prune called before a successful Ready")
+	return r.stream(ctx, "Prune", onEvent, func(client deploymentsv1connect.DeploymentServiceClient) (*connect.ServerStreamForClient[deploymentsv1.DeployEvent], error) {
+		return client.Prune(ctx, req)
+	})
+}
+
+func (r *Runner) stream(ctx context.Context, rpc string, onEvent func(*deploymentsv1.DeployEvent), call func(deploymentsv1connect.DeploymentServiceClient) (*connect.ServerStreamForClient[deploymentsv1.DeployEvent], error)) error {
+	client, err := r.Deployments()
+	if err != nil {
+		return err
 	}
-	stream, err := r.client.Prune(ctx, req)
-	return r.driveStream("Prune", stream, err, onEvent)
+	stream, callErr := call(client)
+	return r.driveStream(rpc, stream, callErr, onEvent)
 }
 
 func (r *Runner) driveStream(rpc string, stream *connect.ServerStreamForClient[deploymentsv1.DeployEvent], callErr error, onEvent func(*deploymentsv1.DeployEvent)) error {
@@ -404,14 +316,18 @@ func (r *Runner) driveStream(rpc string, stream *connect.ServerStreamForClient[d
 	return fmt.Errorf("providerrunner: provider closed the %s stream without a result", rpc)
 }
 
-func (r *Runner) Close() error {
+func (r *Runner) Close() {
 	r.closeOnce.Do(func() {
 		r.teardown()
-		if r.network == "unix" && r.address != "" {
-			_ = os.Remove(r.address)
+
+		r.mu.Lock()
+		network, address := r.network, r.address
+		r.mu.Unlock()
+
+		if network == "unix" && address != "" {
+			_ = os.Remove(address)
 		}
 	})
-	return nil
 }
 
 func (r *Runner) teardown() {
@@ -454,6 +370,17 @@ func (r *Runner) drainStdout(stdout io.Reader) {
 			fmt.Fprintln(r.stdout, line)
 		}
 	}
+
+	if err := scanner.Err(); err != nil {
+		wrapped := fmt.Errorf("providerrunner: read provider stdout: %w", err)
+		r.record(wrapped.Error())
+		if !ready {
+			select {
+			case r.scanErr <- wrapped:
+			default:
+			}
+		}
+	}
 }
 
 func (r *Runner) drainStderr(stderr io.Reader) {
@@ -461,16 +388,22 @@ func (r *Runner) drainStderr(stderr io.Reader) {
 	scanner.Buffer(make([]byte, 64*1024), 1024*1024)
 	for scanner.Scan() {
 		line := scanner.Text()
-
-		r.stderrMu.Lock()
-		r.stderrBuf.WriteString(line)
-		r.stderrBuf.WriteByte('\n')
-		r.stderrMu.Unlock()
-
+		r.record(line)
 		if r.stderr != nil {
 			fmt.Fprintln(r.stderr, line)
 		}
 	}
+
+	if err := scanner.Err(); err != nil {
+		r.record(fmt.Errorf("providerrunner: read provider stderr: %w", err).Error())
+	}
+}
+
+func (r *Runner) record(line string) {
+	r.stderrMu.Lock()
+	defer r.stderrMu.Unlock()
+	r.stderrBuf.WriteString(line)
+	r.stderrBuf.WriteByte('\n')
 }
 
 func newSessionToken() (string, error) {

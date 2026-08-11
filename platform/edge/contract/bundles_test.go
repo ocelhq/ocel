@@ -5,64 +5,55 @@ import (
 	"testing"
 )
 
-func TestBundleManifest_LoadsAndResolvesByEdge(t *testing.T) {
-	t.Setenv(EnvWorkerBundles, `{"cloudflare":"/pkg/entry/index.js"}`)
+func TestBundleManifest(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		env  string
+		path string
+		load func() (KindBundleManifest, error)
+	}{
+		{"the app worker manifest", EnvWorkerBundles, "/pkg/entry/index.js", LoadBundleManifest},
+		{"the account-level deployments-store manifest", EnvStoreWorkerBundles, "/pkg/worker-deployments-store/index.js", LoadStoreBundleManifest},
+		{"the account-level isr-writer manifest", EnvISRWriterWorkerBundles, "/pkg/worker-isr-writer/index.js", LoadISRWriterBundleManifest},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Run("loads and resolves a bundle path by edge", func(t *testing.T) {
+				t.Setenv(tc.env, `{"cloudflare":"`+tc.path+`"}`)
 
-	m, err := LoadBundleManifest()
-	if err != nil {
-		t.Fatalf("LoadBundleManifest: %v", err)
-	}
-	got, err := m.Path(KindCloudflare)
-	if err != nil {
-		t.Fatalf("Path: %v", err)
-	}
-	if got != "/pkg/entry/index.js" {
-		t.Errorf("Path = %q", got)
-	}
+				m, err := tc.load()
+				if err != nil {
+					t.Fatalf("load: %v", err)
+				}
+				got, err := m.Path(KindCloudflare)
+				if err != nil {
+					t.Fatalf("Path: %v", err)
+				}
+				if got != tc.path {
+					t.Errorf("Path = %q, want %q", got, tc.path)
+				}
+			})
 
-	_, err = m.Path("provider-native")
-	if err == nil {
-		t.Fatal("expected an error for an edge with no bundle")
-	}
-	if !strings.Contains(err.Error(), "provider-native") {
-		t.Errorf("error must name the edge, got %q", err)
-	}
-}
+			t.Run("an edge with no bundle is an error that names the edge", func(t *testing.T) {
+				t.Setenv(tc.env, `{"cloudflare":"`+tc.path+`"}`)
 
-func TestLoadBundleManifest_UnsetEnvIsAnError(t *testing.T) {
-	t.Setenv(EnvWorkerBundles, "")
-	if _, err := LoadBundleManifest(); err == nil {
-		t.Fatal("expected an error when the launcher exported no manifest")
-	}
-}
+				m, err := tc.load()
+				if err != nil {
+					t.Fatalf("load: %v", err)
+				}
+				if _, err := m.Path("provider-native"); err == nil {
+					t.Fatal("expected an error for an edge with no bundle")
+				} else if !strings.Contains(err.Error(), "provider-native") {
+					t.Errorf("error must name the edge, got %q", err)
+				}
+			})
 
-func TestStoreBundleManifest_LoadsTheAccountLevelBundle(t *testing.T) {
-	t.Setenv(EnvStoreWorkerBundles, `{"cloudflare":"/pkg/worker-deployments-store/index.js"}`)
+			t.Run("an unset env is an error", func(t *testing.T) {
+				t.Setenv(tc.env, "")
 
-	m, err := LoadStoreBundleManifest()
-	if err != nil {
-		t.Fatalf("LoadStoreBundleManifest: %v", err)
-	}
-	got, err := m.Path(KindCloudflare)
-	if err != nil {
-		t.Fatalf("Path: %v", err)
-	}
-	if got != "/pkg/worker-deployments-store/index.js" {
-		t.Errorf("Path = %q", got)
-	}
-
-	_, err = m.Path("provider-native")
-	if err == nil {
-		t.Fatal("expected an error for an edge with no bundle")
-	}
-	if !strings.Contains(err.Error(), "provider-native") {
-		t.Errorf("error must name the edge, got %q", err)
-	}
-}
-
-func TestLoadStoreBundleManifest_UnsetEnvIsAnError(t *testing.T) {
-	t.Setenv(EnvStoreWorkerBundles, "")
-	if _, err := LoadStoreBundleManifest(); err == nil {
-		t.Fatal("expected an error when the launcher exported no manifest")
+				if _, err := tc.load(); err == nil {
+					t.Fatal("expected an error when the launcher exported no manifest")
+				}
+			})
+		})
 	}
 }

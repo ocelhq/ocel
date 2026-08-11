@@ -2,7 +2,9 @@ package deployresult
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"time"
@@ -80,7 +82,7 @@ func Write(projectDir string, r Result) error {
 }
 
 func Clear(projectDir string) error {
-	if err := os.Remove(Path(projectDir)); err != nil && !os.IsNotExist(err) {
+	if err := os.Remove(Path(projectDir)); err != nil && !errors.Is(err, fs.ErrNotExist) {
 		return fmt.Errorf("remove %s: %w", Path(projectDir), err)
 	}
 	return nil

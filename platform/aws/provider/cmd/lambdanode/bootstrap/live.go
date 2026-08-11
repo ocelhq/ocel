@@ -3,8 +3,10 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"strings"
@@ -13,7 +15,7 @@ import (
 
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb"
 	"github.com/aws/aws-sdk-go-v2/service/kms"
-	"github.com/ocelhq/ocel/platform/aws/provider/awsconf"
+	"github.com/ocelhq/ocel/platform/aws/provider/sdkconfig"
 	"github.com/ocelhq/ocel/platform/aws/provider/vars"
 	"github.com/ocelhq/ocel/platform/aws/provider/vars/live"
 )
@@ -215,7 +217,7 @@ func (l *liveValues) deliver() {
 
 func resolveLiveValues(ctx context.Context) (*liveValues, error) {
 	raw, err := os.ReadFile(filepath.Join(taskRoot(), live.FilePath))
-	if os.IsNotExist(err) {
+	if errors.Is(err, fs.ErrNotExist) {
 		return nil, nil
 	}
 	if err != nil {
@@ -229,7 +231,7 @@ func resolveLiveValues(ctx context.Context) (*liveValues, error) {
 		return nil, nil
 	}
 
-	cfg, err := awsconf.Runtime(ctx)
+	cfg, err := sdkconfig.Runtime(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("load aws config: %w", err)
 	}

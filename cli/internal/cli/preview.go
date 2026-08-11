@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"os/exec"
 	"os/signal"
 	"strings"
 	"syscall"
@@ -24,22 +23,6 @@ import (
 	"github.com/ocelhq/ocel/cli/node"
 	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
 )
-
-var currentGitBranch = func(dir string) (string, error) {
-	out, err := exec.Command("git", "-C", dir, "rev-parse", "--abbrev-ref", "HEAD").Output()
-	if err != nil {
-		return "", fmt.Errorf("determine current git branch: %w", err)
-	}
-	branch := strings.TrimSpace(string(out))
-	if branch == "" {
-		return "", fmt.Errorf("determine current git branch: empty ref")
-	}
-	return branch, nil
-}
-
-var discoverPRNumber = func() string {
-	return os.Getenv("OCEL_PR_NUMBER")
-}
 
 type previewUpOptions struct {
 	ref      string
@@ -92,7 +75,7 @@ var previewRmCmd = &cobra.Command{
 		}
 		ctx, stop := signal.NotifyContext(cmd.Context(), os.Interrupt, syscall.SIGTERM)
 		defer stop()
-		return runPreviewRm(ctx, cwd, previewRmOpts, cmd.OutOrStdout(), cmd.ErrOrStderr(), cmd.InOrStdin())
+		return runPreviewRm(ctx, defaultDeps(), cwd, previewRmOpts, cmd.OutOrStdout(), cmd.ErrOrStderr(), cmd.InOrStdin())
 	},
 }
 
@@ -107,7 +90,7 @@ var previewLsCmd = &cobra.Command{
 		}
 		ctx, stop := signal.NotifyContext(cmd.Context(), os.Interrupt, syscall.SIGTERM)
 		defer stop()
-		return runPreviewLs(ctx, cwd, cmd.OutOrStdout(), cmd.ErrOrStderr())
+		return runPreviewLs(ctx, defaultDeps(), cwd, cmd.OutOrStdout(), cmd.ErrOrStderr())
 	},
 }
 
@@ -118,7 +101,7 @@ func runPreviewUpCmd(cmd *cobra.Command, args []string) error {
 	}
 	ctx, stop := signal.NotifyContext(cmd.Context(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
-	return runPreviewUp(ctx, cwd, previewUpOpts, cmd.OutOrStdout(), cmd.ErrOrStderr(), cmd.InOrStdin())
+	return runPreviewUp(ctx, defaultDeps(), cwd, previewUpOpts, cmd.OutOrStdout(), cmd.ErrOrStderr(), cmd.InOrStdin())
 }
 
 var previewPruneCmd = &cobra.Command{
@@ -132,7 +115,7 @@ var previewPruneCmd = &cobra.Command{
 		}
 		ctx, stop := signal.NotifyContext(cmd.Context(), os.Interrupt, syscall.SIGTERM)
 		defer stop()
-		return runPreviewPrune(ctx, cwd, previewPruneOpts, cmd.OutOrStdout(), cmd.ErrOrStderr())
+		return runPreviewPrune(ctx, defaultDeps(), cwd, previewPruneOpts, cmd.OutOrStdout(), cmd.ErrOrStderr())
 	},
 }
 
@@ -159,7 +142,7 @@ func init() {
 	previewCmd.AddCommand(previewPruneCmd)
 }
 
-func runPreviewUp(ctx context.Context, cwd string, opts previewUpOptions, stdout, stderr io.Writer, stdin io.Reader) error {
+func runPreviewUp(ctx context.Context, d deps, cwd string, opts previewUpOptions, stdout, stderr io.Writer, stdin io.Reader) error {
 	cfg, err := projectconfig.Resolve(cwd)
 	if err != nil {
 		return err
@@ -177,7 +160,7 @@ func runPreviewUp(ctx context.Context, cwd string, opts previewUpOptions, stdout
 		return err
 	}
 
-	env, err := resolveUpEnvironment(cwd, opts)
+	env, err := resolveUpEnvironment(d, cwd, opts)
 	if err != nil {
 		return err
 	}
@@ -190,13 +173,14 @@ func runPreviewUp(ctx context.Context, cwd string, opts previewUpOptions, stdout
 	defer ui.Close()
 
 	provW := ui.BuildWriter()
-	err = runProviderSession(ctx, cfg, provider, provW, provW, func(runner *providerrunner.Runner) error {
-		if err := preflightPreviewUp(ctx, runner, provider, cfg, stdout); err != nil {
+	err = runProviderSession(ctx, d, cfg, provider, provW, provW, func(runner *providerrunner.Runner) error {
+		if err := preflightPreviewUp(ctx, d, runner, provider, cfg, stdout); err != nil {
 			return err
 		}
 
 		ui.Building()
 		recovery := gateRecovery{
+			deps:     d,
 			cfg:      cfg,
 			provider: provider,
 			runner:   runner,
@@ -211,7 +195,7 @@ func runPreviewUp(ctx context.Context, cwd string, opts previewUpOptions, stdout
 			},
 			ui:      ui,
 			stdout:  stdout,
-			enabled: canOpenVarsUI(stdin, opts.noUI),
+			enabled: d.canOpenVarsUI(stdin, opts.noUI),
 		}
 		manifest, err := recovery.buildManifest(ctx, opts.prebuilt, ui.BuildWriter())
 		if err != nil {
@@ -267,7 +251,7 @@ func requirePreviewDomain(cfg *projectconfig.Config) error {
 		projectconfig.ConfigFileName)
 }
 
-func runPreviewRm(ctx context.Context, cwd string, opts previewRmOptions, stdout, stderr io.Writer, stdin io.Reader) error {
+func runPreviewRm(ctx context.Context, d deps, cwd string, opts previewRmOptions, stdout, stderr io.Writer, stdin io.Reader) error {
 	cfg, err := projectconfig.Resolve(cwd)
 	if err != nil {
 		return err
@@ -281,7 +265,7 @@ func runPreviewRm(ctx context.Context, cwd string, opts previewRmOptions, stdout
 		return err
 	}
 
-	env, err := resolveRmEnvironment(cwd, opts)
+	env, err := resolveRmEnvironment(d, cwd, opts)
 	if err != nil {
 		return err
 	}
@@ -302,8 +286,8 @@ func runPreviewRm(ctx context.Context, cwd string, opts previewRmOptions, stdout
 	defer ui.Close()
 
 	provW := ui.BuildWriter()
-	err = runProviderSession(ctx, cfg, provider, provW, provW, func(runner *providerrunner.Runner) error {
-		if err := preflightPreview(ctx, runner, provider, stdout); err != nil {
+	err = runProviderSession(ctx, d, cfg, provider, provW, provW, func(runner *providerrunner.Runner) error {
+		if err := preflightPreview(ctx, d, runner, provider, stdout); err != nil {
 			return err
 		}
 
@@ -325,7 +309,7 @@ func runPreviewRm(ctx context.Context, cwd string, opts previewRmOptions, stdout
 	return nil
 }
 
-func runPreviewLs(ctx context.Context, cwd string, stdout, stderr io.Writer) error {
+func runPreviewLs(ctx context.Context, d deps, cwd string, stdout, stderr io.Writer) error {
 	cfg, err := projectconfig.Resolve(cwd)
 	if err != nil {
 		return err
@@ -339,8 +323,12 @@ func runPreviewLs(ctx context.Context, cwd string, stdout, stderr io.Writer) err
 		return err
 	}
 
-	return runProviderSession(ctx, cfg, provider, stdout, stderr, func(runner *providerrunner.Runner) error {
-		resp, err := runner.ListEnvironments(ctx, &deploymentsv1.ListEnvironmentsRequest{
+	return runProviderSession(ctx, d, cfg, provider, stdout, stderr, func(runner *providerrunner.Runner) error {
+		client, err := runner.Deployments()
+		if err != nil {
+			return err
+		}
+		resp, err := client.ListEnvironments(ctx, &deploymentsv1.ListEnvironmentsRequest{
 			Options:         []byte(provider.Options),
 			ProtocolVersion: manifestbuilder.SchemaVersion,
 			Slug:            cfg.Slug,
@@ -353,7 +341,7 @@ func runPreviewLs(ctx context.Context, cwd string, stdout, stderr io.Writer) err
 	})
 }
 
-func runPreviewPrune(ctx context.Context, cwd string, opts previewPruneOptions, stdout, stderr io.Writer) error {
+func runPreviewPrune(ctx context.Context, d deps, cwd string, opts previewPruneOptions, stdout, stderr io.Writer) error {
 	if opts.name == "" {
 		return fmt.Errorf("`ocel preview prune` requires --name: only persistent previews are pruned")
 	}
@@ -379,8 +367,8 @@ func runPreviewPrune(ctx context.Context, cwd string, opts previewPruneOptions, 
 	defer ui.Close()
 
 	provW := ui.BuildWriter()
-	err = runProviderSession(ctx, cfg, provider, provW, provW, func(runner *providerrunner.Runner) error {
-		if err := preflightPreview(ctx, runner, provider, stdout); err != nil {
+	err = runProviderSession(ctx, d, cfg, provider, provW, provW, func(runner *providerrunner.Runner) error {
+		if err := preflightPreview(ctx, d, runner, provider, stdout); err != nil {
 			return err
 		}
 		if err := runner.Prune(ctx, &deploymentsv1.PruneRequest{
@@ -413,7 +401,7 @@ func persistentPreviewEnvironment(name string) (*deploymentsv1.Environment, erro
 	}, nil
 }
 
-func resolveUpEnvironment(cwd string, opts previewUpOptions) (*deploymentsv1.Environment, error) {
+func resolveUpEnvironment(d deps, cwd string, opts previewUpOptions) (*deploymentsv1.Environment, error) {
 	if opts.name != "" && opts.ref != "" {
 		return nil, fmt.Errorf("--name and --ref are mutually exclusive; use one to stand up a persistent or ephemeral preview")
 	}
@@ -423,11 +411,11 @@ func resolveUpEnvironment(cwd string, opts previewUpOptions) (*deploymentsv1.Env
 
 	ref, prNumber := opts.ref, ""
 	if ref == "" {
-		branch, err := currentGitBranch(cwd)
+		branch, err := d.currentGitBranch(cwd)
 		if err != nil {
 			return nil, err
 		}
-		ref, prNumber = branch, discoverPRNumber()
+		ref, prNumber = branch, d.discoverPRNumber()
 	}
 	id, err := previewid.Resolve(ref, prNumber)
 	if err != nil {
@@ -442,7 +430,7 @@ func resolveUpEnvironment(cwd string, opts previewUpOptions) (*deploymentsv1.Env
 	}, nil
 }
 
-func resolveRmEnvironment(cwd string, opts previewRmOptions) (*deploymentsv1.Environment, error) {
+func resolveRmEnvironment(d deps, cwd string, opts previewRmOptions) (*deploymentsv1.Environment, error) {
 	if opts.name != "" && opts.ref != "" {
 		return nil, fmt.Errorf("--name and --ref are mutually exclusive; use one to address a persistent or ephemeral preview")
 	}
@@ -452,7 +440,7 @@ func resolveRmEnvironment(cwd string, opts previewRmOptions) (*deploymentsv1.Env
 
 	ref := opts.ref
 	if ref == "" {
-		branch, err := currentGitBranch(cwd)
+		branch, err := d.currentGitBranch(cwd)
 		if err != nil {
 			return nil, err
 		}
@@ -474,20 +462,20 @@ func confirmDestroyPreview(name string, stdout io.Writer, stdin io.Reader) (bool
 	return confirmYN(fmt.Sprintf("Destroy persistent preview %q?", name), stdout, stdin)
 }
 
-func preflightPreview(ctx context.Context, runner *providerrunner.Runner, provider *projectconfig.ProviderDescriptor, out io.Writer) error {
-	return preflightClass(ctx, runner, provider, deploymentsv1.Environment_CLASS_PREVIEW, "ocel bootstrap --preview", out)
+func preflightPreview(ctx context.Context, d deps, runner *providerrunner.Runner, provider *projectconfig.ProviderDescriptor, out io.Writer) error {
+	return preflightClass(ctx, d, runner, provider, deploymentsv1.Environment_CLASS_PREVIEW, "ocel bootstrap --preview", out)
 }
 
-func preflightPreviewUp(ctx context.Context, runner *providerrunner.Runner, provider *projectconfig.ProviderDescriptor, cfg *projectconfig.Config, out io.Writer) error {
-	resp, err := preflight(ctx, runner, provider, deploymentsv1.Environment_CLASS_PREVIEW, cfg.Slug, declaredHostnames(cfg, "preview"), "ocel bootstrap --preview", out)
+func preflightPreviewUp(ctx context.Context, d deps, runner *providerrunner.Runner, provider *projectconfig.ProviderDescriptor, cfg *projectconfig.Config, out io.Writer) error {
+	resp, err := preflight(ctx, d, runner, provider, deploymentsv1.Environment_CLASS_PREVIEW, cfg.Slug, declaredHostnames(cfg, "preview"), "ocel bootstrap --preview", out)
 	if err != nil {
 		return err
 	}
 	return refuseClaimedDomains(resp.GetDomainClaims())
 }
 
-func preflightDeploy(ctx context.Context, runner *providerrunner.Runner, provider *projectconfig.ProviderDescriptor, cfg *projectconfig.Config, out io.Writer) ([]string, error) {
-	resp, err := preflight(ctx, runner, provider, deploymentsv1.Environment_CLASS_PRODUCTION, cfg.Slug, declaredHostnames(cfg, "production"), "ocel bootstrap", out)
+func preflightDeploy(ctx context.Context, d deps, runner *providerrunner.Runner, provider *projectconfig.ProviderDescriptor, cfg *projectconfig.Config, out io.Writer) ([]string, error) {
+	resp, err := preflight(ctx, d, runner, provider, deploymentsv1.Environment_CLASS_PRODUCTION, cfg.Slug, declaredHostnames(cfg, "production"), "ocel bootstrap", out)
 	if err != nil {
 		return nil, err
 	}
@@ -535,14 +523,19 @@ func refuseClaimedDomains(claims []*deploymentsv1.DomainClaim) error {
 	return errors.New(b.String())
 }
 
-func preflightClass(ctx context.Context, runner *providerrunner.Runner, provider *projectconfig.ProviderDescriptor, required deploymentsv1.Environment_Class, bootstrapHint string, out io.Writer) error {
-	_, err := preflight(ctx, runner, provider, required, "", nil, bootstrapHint, out)
+func preflightClass(ctx context.Context, d deps, runner *providerrunner.Runner, provider *projectconfig.ProviderDescriptor, required deploymentsv1.Environment_Class, bootstrapHint string, out io.Writer) error {
+	_, err := preflight(ctx, d, runner, provider, required, "", nil, bootstrapHint, out)
 	return err
 }
 
-func preflight(ctx context.Context, runner *providerrunner.Runner, provider *projectconfig.ProviderDescriptor, required deploymentsv1.Environment_Class, slug string, domains []string, bootstrapHint string, out io.Writer) (*deploymentsv1.PreflightResponse, error) {
+func preflight(ctx context.Context, d deps, runner *providerrunner.Runner, provider *projectconfig.ProviderDescriptor, required deploymentsv1.Environment_Class, slug string, domains []string, bootstrapHint string, out io.Writer) (*deploymentsv1.PreflightResponse, error) {
+	client, err := runner.Deployments()
+	if err != nil {
+		return nil, err
+	}
+
 	spinner := deployui.StartSpinner(out, "Checking credentials")
-	resp, err := runner.Preflight(ctx, &deploymentsv1.PreflightRequest{
+	resp, err := client.Preflight(ctx, &deploymentsv1.PreflightRequest{
 		Options:         []byte(provider.Options),
 		ProtocolVersion: manifestbuilder.SchemaVersion,
 		RequiredClass:   required,
@@ -553,7 +546,7 @@ func preflight(ctx context.Context, runner *providerrunner.Runner, provider *pro
 	if err != nil {
 		return nil, err
 	}
-	if stdoutIsTerminal(out) {
+	if d.stdoutIsTerminal(out) {
 		fmt.Fprint(out, formatIdentityBanner(resp.GetIdentity()))
 	}
 	if err := credentialProblems(resp.GetCredentialProblems()); err != nil {
@@ -567,8 +560,6 @@ func preflight(ctx context.Context, runner *providerrunner.Runner, provider *pro
 	}
 	return resp, nil
 }
-
-var stdoutIsTerminal = func(w io.Writer) bool { return isTTY(w) }
 
 func formatIdentityBanner(id *deploymentsv1.Identity) string {
 	if id == nil {

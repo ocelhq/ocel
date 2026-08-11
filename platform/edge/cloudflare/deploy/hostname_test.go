@@ -1,7 +1,6 @@
 package cloudflare
 
 import (
-	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -171,553 +170,602 @@ func prunedPlan(desired ...string) routePlan {
 	return routePlan{desired: desired, prune: true}
 }
 
-func TestReconcileWorkerRoutes_PlantsProxiedRecord(t *testing.T) {
-	m := &cfMock{zoneID: "zone1", zoneName: "app.com"}
-	p := m.provider(t)
+func stemPlan(stem string, desired ...string) routePlan {
+	return routePlan{desired: desired, prune: true, pruneStem: stem}
+}
 
-	up := upload{accountID: "acct", scriptName: "ocel-preview"}
-	if err := p.reconcileWorkerRoutes(context.Background(), up, prunedPlan("*.preview.app.com"), nil); err != nil {
-		t.Fatalf("reconcileWorkerRoutes: %v", err)
-	}
+func requiredRecordPlan(record string, desired ...string) routePlan {
+	return routePlan{desired: desired, requiredRecord: record}
+}
 
-	if len(m.createdRoutes) != 1 {
-		t.Fatalf("expected one route created, got %d", len(m.createdRoutes))
+func assertSet(t *testing.T, what string, got, want []string) {
+	t.Helper()
+	if len(got) != len(want) {
+		t.Errorf("%s = %v, want %v", what, got, want)
+		return
 	}
-	if got := m.createdRoutes[0]["pattern"]; got != "*.preview.app.com/*" {
-		t.Errorf("route pattern = %v, want *.preview.app.com/*", got)
+	seen := map[string]int{}
+	for _, g := range got {
+		seen[g]++
 	}
-
-	if len(m.createdRecords) != 1 {
-		t.Fatalf("expected one DNS record created, got %d", len(m.createdRecords))
-	}
-	rec := m.createdRecords[0]
-	if rec["name"] != "*.preview.app.com" {
-		t.Errorf("record name = %v, want *.preview.app.com", rec["name"])
-	}
-	if rec["type"] != "AAAA" {
-		t.Errorf("record type = %v, want AAAA", rec["type"])
-	}
-	if rec["content"] != "100::" {
-		t.Errorf("record content = %v, want 100::", rec["content"])
-	}
-	if rec["proxied"] != true {
-		t.Errorf("record proxied = %v, want true", rec["proxied"])
+	for _, w := range want {
+		if seen[w] == 0 {
+			t.Errorf("%s = %v, want %v", what, got, want)
+			return
+		}
+		seen[w]--
 	}
 }
 
-func TestRoutePattern_IsTheOneSpellingOfAHostnameAsARoute(t *testing.T) {
-	if got := RoutePattern("*.preview.app.com"); got != "*.preview.app.com/*" {
-		t.Errorf("RoutePattern = %q, want *.preview.app.com/*", got)
+func routePatterns(routes []map[string]any) []string {
+	var patterns []string
+	for _, r := range routes {
+		patterns = append(patterns, r["pattern"].(string))
 	}
+	return patterns
 }
 
-func TestRouteOwner_ReportsTheScriptBoundToThePattern(t *testing.T) {
-	t.Setenv(envAccountID, "acct")
-	m := &cfMock{
-		zoneID:   "zone1",
-		zoneName: "app.com",
-		existingRoutes: []map[string]any{
-			{"id": "route1", "pattern": "*.preview.app.com/*", "script": "ocel-other-preview"},
-		},
-	}
-	p := m.provider(t)
+type routeCase struct {
+	name   string
+	mock   *cfMock
+	script string
+	plan   routePlan
 
-	owner, err := p.RouteOwner(context.Background(), RoutePattern("*.preview.app.com"))
-	if err != nil {
-		t.Fatalf("RouteOwner: %v", err)
-	}
-	if owner != "ocel-other-preview" {
-		t.Errorf("owner = %q, want ocel-other-preview", owner)
-	}
-	if len(m.createdRoutes)+len(m.createdRecords)+len(m.deletedRoutes) != 0 {
-		t.Error("RouteOwner changed the zone; it is read-only")
-	}
+	wantErr         []string
+	createdRoutes   []string
+	repointedRoutes []string
+	deletedRoutes   []string
+	createdRecords  int
+	deletedRecords  []string
+	detachedDomains []string
+	warnings        []string
 }
 
-func TestRouteOwner_UnheldPatternIsUnclaimed(t *testing.T) {
-	t.Setenv(envAccountID, "acct")
-	m := &cfMock{zoneID: "zone1", zoneName: "app.com"}
-
-	owner, err := m.provider(t).RouteOwner(context.Background(), RoutePattern("*.preview.app.com"))
-	if err != nil {
-		t.Fatalf("RouteOwner: %v", err)
-	}
-	if owner != "" {
-		t.Errorf("owner = %q, want empty for a pattern nothing holds", owner)
-	}
-}
-
-func TestRouteOwner_OverlappingWildcardIsNotAMatch(t *testing.T) {
-	t.Setenv(envAccountID, "acct")
-	m := &cfMock{
-		zoneID:   "zone1",
-		zoneName: "app.com",
-		existingRoutes: []map[string]any{
-			{"id": "route1", "pattern": "*.app.com/*", "script": "ocel-other-preview"},
-		},
-	}
-
-	owner, err := m.provider(t).RouteOwner(context.Background(), RoutePattern("*.preview.app.com"))
-	if err != nil {
-		t.Fatalf("RouteOwner: %v", err)
-	}
-	if owner != "" {
-		t.Errorf("owner = %q, want empty: *.app.com/* is not the pattern asked for", owner)
-	}
-}
-
-func TestRouteOwner_HostnameOutsideTheAccountIsAnError(t *testing.T) {
-	t.Setenv(envAccountID, "acct")
-	m := &cfMock{zoneID: "zone1", zoneName: "app.com"}
-
-	if _, err := m.provider(t).RouteOwner(context.Background(), RoutePattern("*.preview.elsewhere.com")); err == nil {
-		t.Fatal("RouteOwner err = nil, want the unresolvable zone reported")
-	}
-}
-
-func TestReconcileWorkerRoutes_AttachesEveryDomain(t *testing.T) {
-	m := &cfMock{zoneID: "zone1", zoneName: "app.com"}
-	p := m.provider(t)
-
-	up := upload{accountID: "acct", scriptName: "ocel-prod"}
-	if err := p.reconcileWorkerRoutes(context.Background(), up, prunedPlan("app.com", "www.app.com"), nil); err != nil {
-		t.Fatalf("reconcileWorkerRoutes: %v", err)
-	}
-
-	patterns := map[string]bool{}
-	for _, r := range m.createdRoutes {
-		patterns[r["pattern"].(string)] = true
-	}
-	if !patterns["app.com/*"] || !patterns["www.app.com/*"] {
-		t.Errorf("created route patterns = %v, want both app.com/* and www.app.com/*", patterns)
-	}
-	if len(m.createdRecords) != 2 {
-		t.Errorf("expected a placeholder record per hostname, got %d", len(m.createdRecords))
-	}
-}
-
-func TestReconcileWorkerRoutes_ExistingRecordIsLeftAlone(t *testing.T) {
-	m := &cfMock{
-		zoneID:   "zone1",
-		zoneName: "app.com",
-		existingRoutes: []map[string]any{
-			{"id": "route1", "pattern": "*.preview.app.com/*", "script": "ocel-preview"},
-		},
-		existingRecords: []map[string]any{
-			{"id": "record1", "name": "*.preview.app.com", "type": "AAAA", "content": "100::", "proxied": true},
-		},
-	}
-	p := m.provider(t)
-
-	up := upload{accountID: "acct", scriptName: "ocel-preview"}
-	if err := p.reconcileWorkerRoutes(context.Background(), up, prunedPlan("*.preview.app.com"), nil); err != nil {
-		t.Fatalf("reconcileWorkerRoutes: %v", err)
-	}
-
-	if len(m.createdRoutes) != 0 {
-		t.Errorf("expected no route created, got %d", len(m.createdRoutes))
-	}
-	if len(m.createdRecords) != 0 {
-		t.Errorf("expected no DNS record created, got %d", len(m.createdRecords))
-	}
-}
-
-func TestReconcileWorkerRoutes_PrunesDroppedDomain(t *testing.T) {
-	m := &cfMock{
-		zoneID:   "zone1",
-		zoneName: "app.com",
-		existingRoutes: []map[string]any{
-			{"id": "stale", "pattern": "www.app.com/*", "script": "ocel-prod"},
-			{"id": "kept", "pattern": "app.com/*", "script": "ocel-prod"},
-			{"id": "other", "pattern": "x.app.com/*", "script": "someone-else"},
-		},
-		existingRecords: []map[string]any{
-			{"id": "wwwrec", "name": "www.app.com", "type": "AAAA", "content": "100::", "proxied": true},
-		},
-	}
-	p := m.provider(t)
-
-	up := upload{accountID: "acct", scriptName: "ocel-prod"}
-	if err := p.reconcileWorkerRoutes(context.Background(), up, prunedPlan("app.com"), nil); err != nil {
-		t.Fatalf("reconcileWorkerRoutes: %v", err)
-	}
-
-	if len(m.deletedRoutes) != 1 || m.deletedRoutes[0] != "stale" {
-		t.Errorf("deleted routes = %v, want [stale]", m.deletedRoutes)
-	}
-	if len(m.deletedRecords) != 1 || m.deletedRecords[0] != "wwwrec" {
-		t.Errorf("deleted records = %v, want [wwwrec]", m.deletedRecords)
-	}
-}
-
-func TestReconcileWorkerRoutes_PrunesRoutesOnWorkersUnderTheStem(t *testing.T) {
-	m := &cfMock{
-		zoneID:   "zone1",
-		zoneName: "app.com",
-		existingRoutes: []map[string]any{
-			{"id": "perapp", "pattern": "pr-1.preview.app.com/*", "script": "ocel-shop-preview-web"},
-		},
-		existingRecords: []map[string]any{
-			{"id": "perapprec", "name": "pr-1.preview.app.com", "type": "AAAA", "content": "100::", "proxied": true},
-		},
-	}
-	p := m.provider(t)
-
-	up := upload{accountID: "acct", scriptName: "ocel-shop-preview"}
-	plan := routePlan{desired: []string{"*.preview.app.com"}, prune: true, pruneStem: "ocel-shop-preview"}
-	if err := p.reconcileWorkerRoutes(context.Background(), up, plan, nil); err != nil {
-		t.Fatalf("reconcileWorkerRoutes: %v", err)
-	}
-
-	if len(m.deletedRoutes) != 1 || m.deletedRoutes[0] != "perapp" {
-		t.Errorf("deleted routes = %v, want [perapp]", m.deletedRoutes)
-	}
-	if len(m.deletedRecords) != 1 || m.deletedRecords[0] != "perapprec" {
-		t.Errorf("deleted records = %v, want [perapprec]", m.deletedRecords)
-	}
-}
-
-func TestReconcileWorkerRoutes_StemNeverReachesAnotherWorkerFamily(t *testing.T) {
-	m := &cfMock{
-		zoneID:   "zone1",
-		zoneName: "app.com",
-		existingRoutes: []map[string]any{
-			{"id": "sibling", "pattern": "pr-1.preview.app.com/*", "script": "ocel-shopfoo-preview-web"},
-			{"id": "other", "pattern": "pr-2.preview.app.com/*", "script": "ocel-other-preview"},
-			{"id": "prod", "pattern": "app.com/*", "script": "ocel-shop-prod-web"},
-			{"id": "lookalike", "pattern": "pr-3.preview.app.com/*", "script": "ocel-shop-previewer"},
-		},
-	}
-	p := m.provider(t)
-
-	up := upload{accountID: "acct", scriptName: "ocel-shop-preview"}
-	plan := routePlan{desired: []string{"*.preview.app.com"}, prune: true, pruneStem: "ocel-shop-preview"}
-	if err := p.reconcileWorkerRoutes(context.Background(), up, plan, nil); err != nil {
-		t.Fatalf("reconcileWorkerRoutes: %v", err)
-	}
-
-	if len(m.deletedRoutes) != 0 {
-		t.Errorf("deleted routes = %v, want none: no route here is under the stem", m.deletedRoutes)
-	}
-	if len(m.deletedRecords) != 0 {
-		t.Errorf("deleted records = %v, want none", m.deletedRecords)
-	}
-}
-
-func TestReconcileWorkerRoutes_StemNeverTakesADesiredHostname(t *testing.T) {
-	m := &cfMock{
-		zoneID:   "zone1",
-		zoneName: "app.com",
-		existingRoutes: []map[string]any{
-			{"id": "wildcard", "pattern": "*.preview.app.com/*", "script": "ocel-shop-preview-web"},
-		},
-	}
-	p := m.provider(t)
-
-	up := upload{accountID: "acct", scriptName: "ocel-shop-preview"}
-	plan := routePlan{desired: []string{"*.preview.app.com"}, prune: true, pruneStem: "ocel-shop-preview"}
-	if err := p.reconcileWorkerRoutes(context.Background(), up, plan, nil); err != nil {
-		t.Fatalf("reconcileWorkerRoutes: %v", err)
-	}
-
-	if len(m.repointedRoutes) != 1 || m.repointedRoutes[0] != "wildcard" {
-		t.Errorf("repointed routes = %v, want [wildcard]", m.repointedRoutes)
-	}
-	if len(m.deletedRoutes) != 0 {
-		t.Errorf("deleted routes = %v, want none: the wildcard was repointed, not pruned", m.deletedRoutes)
-	}
-}
-
-func TestReconcileWorkerRoutes_NoStemSweepsThisScriptOnly(t *testing.T) {
-	m := &cfMock{
-		zoneID:   "zone1",
-		zoneName: "app.com",
-		existingRoutes: []map[string]any{
-			{"id": "perapp", "pattern": "pr-1.preview.app.com/*", "script": "ocel-shop-preview-web"},
-		},
-	}
-	p := m.provider(t)
-
-	up := upload{accountID: "acct", scriptName: "ocel-shop-preview"}
-	if err := p.reconcileWorkerRoutes(context.Background(), up, prunedPlan("*.preview.app.com"), nil); err != nil {
-		t.Fatalf("reconcileWorkerRoutes: %v", err)
-	}
-
-	if len(m.deletedRoutes) != 0 {
-		t.Errorf("deleted routes = %v, want none: no stem was given", m.deletedRoutes)
-	}
-}
-
-func TestReconcileWorkerRoutes_WithoutPruningLeavesUnnamedRoutes(t *testing.T) {
-	m := &cfMock{
-		zoneID:   "zone1",
-		zoneName: "app.com",
-		existingRoutes: []map[string]any{
-			{"id": "unnamed", "pattern": "pr-1-abc1234567.preview.app.com/*", "script": "ocel-preview"},
-		},
-		existingRecords: []map[string]any{
-			{"id": "wildcard", "name": "*.preview.app.com", "type": "AAAA", "content": "100::", "proxied": true},
-		},
-	}
-	p := m.provider(t)
-
-	up := upload{accountID: "acct", scriptName: "ocel-preview"}
-	plan := routePlan{desired: []string{"pr-2-abc1234567.preview.app.com"}, requiredRecord: "*.preview.app.com"}
-	if err := p.reconcileWorkerRoutes(context.Background(), up, plan, nil); err != nil {
-		t.Fatalf("reconcileWorkerRoutes: %v", err)
-	}
-
-	if len(m.createdRoutes) != 1 || m.createdRoutes[0]["pattern"] != "pr-2-abc1234567.preview.app.com/*" {
-		t.Errorf("created routes = %v, want just the desired route", m.createdRoutes)
-	}
-	if len(m.deletedRoutes) != 0 {
-		t.Errorf("deleted routes = %v, want none: a route this reconcile did not name is not its to prune", m.deletedRoutes)
-	}
-	if len(m.deletedRecords) != 0 {
-		t.Errorf("deleted records = %v, want none", m.deletedRecords)
-	}
-}
-
-func TestReconcileWorkerRoutes_RequiredRecordPresentPlantsNothing(t *testing.T) {
-	m := &cfMock{
-		zoneID:   "zone1",
-		zoneName: "app.com",
-		existingRecords: []map[string]any{
-			{"id": "wildcard", "name": "*.preview.app.com", "type": "AAAA", "content": "100::", "proxied": true},
-		},
-	}
-	p := m.provider(t)
-
-	up := upload{accountID: "acct", scriptName: "ocel-preview"}
-	plan := routePlan{desired: []string{"pr-1-abc1234567.preview.app.com"}, requiredRecord: "*.preview.app.com"}
-	if err := p.reconcileWorkerRoutes(context.Background(), up, plan, nil); err != nil {
-		t.Fatalf("reconcileWorkerRoutes: %v", err)
-	}
-
-	if len(m.createdRoutes) != 1 {
-		t.Errorf("created routes = %v, want the desired route", m.createdRoutes)
-	}
-	if len(m.createdRecords) != 0 {
-		t.Errorf("created records = %v, want none: the required record is not this deploy's to plant", m.createdRecords)
-	}
-}
-
-func TestReconcileWorkerRoutes_RequiredRecordMissingFails(t *testing.T) {
-	m := &cfMock{zoneID: "zone1", zoneName: "app.com"}
-	p := m.provider(t)
-
-	up := upload{accountID: "acct", scriptName: "ocel-preview"}
-	plan := routePlan{desired: []string{"pr-1-abc1234567.preview.app.com"}, requiredRecord: "*.preview.app.com"}
-	err := p.reconcileWorkerRoutes(context.Background(), up, plan, nil)
-	if err == nil {
-		t.Fatal("reconcileWorkerRoutes err = nil, want a failure for the missing required record")
-	}
-	if !strings.Contains(err.Error(), "*.preview.app.com") {
-		t.Errorf("error = %v, want it to name the record to add", err)
-	}
-	if len(m.createdRecords) != 0 {
-		t.Errorf("created records = %v, want none: reconcile must never create the required record", m.createdRecords)
-	}
-}
-
-func TestReconcileWorkerRoutes_RequiredRecordUnproxiedFails(t *testing.T) {
-	m := &cfMock{
-		zoneID:   "zone1",
-		zoneName: "app.com",
-		existingRecords: []map[string]any{
-			{"id": "wildcard", "name": "*.preview.app.com", "type": "AAAA", "content": "100::", "proxied": false},
-		},
-	}
-	p := m.provider(t)
-
-	up := upload{accountID: "acct", scriptName: "ocel-preview"}
-	plan := routePlan{desired: []string{"pr-1-abc1234567.preview.app.com"}, requiredRecord: "*.preview.app.com"}
-	err := p.reconcileWorkerRoutes(context.Background(), up, plan, nil)
-	if err == nil {
-		t.Fatal("reconcileWorkerRoutes err = nil, want a failure for the unproxied required record")
-	}
-	if !strings.Contains(err.Error(), "proxied") || !strings.Contains(err.Error(), "*.preview.app.com") {
-		t.Errorf("error = %v, want it to name the record and say it must be proxied", err)
-	}
-}
-
-func TestReconcileWorkerRoutes_DetachesLeftoverCustomDomains(t *testing.T) {
-	m := &cfMock{
-		zoneID:                "zone1",
-		zoneName:              "app.com",
-		existingCustomDomains: []map[string]any{{"id": "cd1", "hostname": "app.com", "service": "ocel-prod"}},
-	}
-	p := m.provider(t)
-
-	up := upload{accountID: "acct", scriptName: "ocel-prod"}
-	if err := p.reconcileWorkerRoutes(context.Background(), up, prunedPlan("app.com"), nil); err != nil {
-		t.Fatalf("reconcileWorkerRoutes: %v", err)
-	}
-
-	if len(m.deletedCustomDomains) != 1 || m.deletedCustomDomains[0] != "cd1" {
-		t.Errorf("detached custom domains = %v, want [cd1]", m.deletedCustomDomains)
-	}
-}
-
-func TestReconcileWorkerRoutes_WarnsOnUncoveredTLS(t *testing.T) {
-	m := &cfMock{zoneID: "zone1", zoneName: "app.com"}
-	p := m.provider(t)
+func (tc routeCase) run(t *testing.T) {
+	t.Helper()
 
 	var warnings []string
-	up := upload{accountID: "acct", scriptName: "ocel-preview"}
-	if err := p.reconcileWorkerRoutes(context.Background(), up, prunedPlan("*.preview.app.com"), func(s string) {
-		warnings = append(warnings, s)
-	}); err != nil {
+	err := tc.mock.provider(t).reconcileWorkerRoutes(
+		t.Context(),
+		upload{accountID: "acct", scriptName: tc.script},
+		tc.plan,
+		func(s string) { warnings = append(warnings, s) },
+	)
+
+	switch {
+	case len(tc.wantErr) > 0 && err == nil:
+		t.Fatalf("reconcileWorkerRoutes err = nil, want a failure mentioning %v", tc.wantErr)
+	case len(tc.wantErr) > 0:
+		for _, want := range tc.wantErr {
+			if !strings.Contains(err.Error(), want) {
+				t.Errorf("error = %v, want it to mention %q", err, want)
+			}
+		}
+	case err != nil:
 		t.Fatalf("reconcileWorkerRoutes: %v", err)
 	}
 
-	if len(warnings) != 1 || !strings.Contains(warnings[0], "Advanced Certificate") {
-		t.Errorf("warnings = %v, want one about an Advanced Certificate", warnings)
+	assertSet(t, "created routes", routePatterns(tc.mock.createdRoutes), tc.createdRoutes)
+	assertSet(t, "repointed routes", tc.mock.repointedRoutes, tc.repointedRoutes)
+	assertSet(t, "deleted routes", tc.mock.deletedRoutes, tc.deletedRoutes)
+	assertSet(t, "deleted records", tc.mock.deletedRecords, tc.deletedRecords)
+	assertSet(t, "detached custom domains", tc.mock.deletedCustomDomains, tc.detachedDomains)
+
+	if len(tc.mock.createdRecords) != tc.createdRecords {
+		t.Errorf("created records = %v, want %d", tc.mock.createdRecords, tc.createdRecords)
+	}
+	if len(warnings) != len(tc.warnings) {
+		t.Fatalf("warnings = %v, want %d", warnings, len(tc.warnings))
+	}
+	for i, want := range tc.warnings {
+		if !strings.Contains(warnings[i], want) {
+			t.Errorf("warning %d = %q, want it to mention %q", i, warnings[i], want)
+		}
 	}
 }
 
-func TestReconcileWorkerRoutes_WarnsOnUnproxiedRecord(t *testing.T) {
-	m := &cfMock{
-		zoneID:   "zone1",
-		zoneName: "app.com",
-		existingRecords: []map[string]any{
-			{"id": "user", "name": "app.com", "type": "A", "content": "203.0.113.1", "proxied": false},
+func TestReconcileWorkerRoutes(t *testing.T) {
+	t.Parallel()
+
+	t.Run("a wildcard hostname gets a proxied AAAA placeholder and a nil warn is tolerated", func(t *testing.T) {
+		t.Parallel()
+
+		m := &cfMock{zoneID: "zone1", zoneName: "app.com"}
+		up := upload{accountID: "acct", scriptName: "ocel-preview"}
+		if err := m.provider(t).reconcileWorkerRoutes(t.Context(), up, prunedPlan("*.preview.app.com"), nil); err != nil {
+			t.Fatalf("reconcileWorkerRoutes: %v", err)
+		}
+
+		if len(m.createdRoutes) != 1 {
+			t.Fatalf("expected one route created, got %d", len(m.createdRoutes))
+		}
+		if got := m.createdRoutes[0]["pattern"]; got != "*.preview.app.com/*" {
+			t.Errorf("route pattern = %v, want *.preview.app.com/*", got)
+		}
+
+		if len(m.createdRecords) != 1 {
+			t.Fatalf("expected one DNS record created, got %d", len(m.createdRecords))
+		}
+		rec := m.createdRecords[0]
+		if rec["name"] != "*.preview.app.com" {
+			t.Errorf("record name = %v, want *.preview.app.com", rec["name"])
+		}
+		if rec["type"] != "AAAA" {
+			t.Errorf("record type = %v, want AAAA", rec["type"])
+		}
+		if rec["content"] != routeRecordContent {
+			t.Errorf("record content = %v, want %q", rec["content"], routeRecordContent)
+		}
+		if rec["proxied"] != true {
+			t.Errorf("record proxied = %v, want true", rec["proxied"])
+		}
+	})
+
+	for _, tc := range []routeCase{
+		{
+			name:           "every desired domain is attached and given a placeholder",
+			mock:           &cfMock{zoneID: "zone1", zoneName: "app.com"},
+			script:         "ocel-prod",
+			plan:           prunedPlan("app.com", "www.app.com"),
+			createdRoutes:  []string{"app.com/*", "www.app.com/*"},
+			createdRecords: 2,
 		},
-	}
-	p := m.provider(t)
+		{
+			name: "a route and record already in place are left untouched",
+			mock: &cfMock{
+				zoneID:   "zone1",
+				zoneName: "app.com",
+				existingRoutes: []map[string]any{
+					{"id": "route1", "pattern": "*.preview.app.com/*", "script": "ocel-preview"},
+				},
+				existingRecords: []map[string]any{
+					{"id": "record1", "name": "*.preview.app.com", "type": "AAAA", "content": "100::", "proxied": true},
+				},
+			},
+			script:   "ocel-preview",
+			plan:     prunedPlan("*.preview.app.com"),
+			warnings: []string{"Advanced Certificate"},
+		},
+		{
+			name: "a domain dropped from the plan loses its route and placeholder",
+			mock: &cfMock{
+				zoneID:   "zone1",
+				zoneName: "app.com",
+				existingRoutes: []map[string]any{
+					{"id": "stale", "pattern": "www.app.com/*", "script": "ocel-prod"},
+					{"id": "kept", "pattern": "app.com/*", "script": "ocel-prod"},
+					{"id": "other", "pattern": "x.app.com/*", "script": "someone-else"},
+				},
+				existingRecords: []map[string]any{
+					{"id": "wwwrec", "name": "www.app.com", "type": "AAAA", "content": "100::", "proxied": true},
+				},
+			},
+			script:         "ocel-prod",
+			plan:           prunedPlan("app.com"),
+			deletedRoutes:  []string{"stale"},
+			deletedRecords: []string{"wwwrec"},
+			createdRecords: 1,
+		},
+		{
+			name: "a stem sweeps routes on the worker family below it",
+			mock: &cfMock{
+				zoneID:   "zone1",
+				zoneName: "app.com",
+				existingRoutes: []map[string]any{
+					{"id": "perapp", "pattern": "pr-1.preview.app.com/*", "script": "ocel-shop-preview-web"},
+				},
+				existingRecords: []map[string]any{
+					{"id": "perapprec", "name": "pr-1.preview.app.com", "type": "AAAA", "content": "100::", "proxied": true},
+				},
+			},
+			script:         "ocel-shop-preview",
+			plan:           stemPlan("ocel-shop-preview", "*.preview.app.com"),
+			createdRoutes:  []string{"*.preview.app.com/*"},
+			deletedRoutes:  []string{"perapp"},
+			deletedRecords: []string{"perapprec"},
+			createdRecords: 1,
+			warnings:       []string{"Advanced Certificate"},
+		},
+		{
+			name: "a stem never reaches another worker family",
+			mock: &cfMock{
+				zoneID:   "zone1",
+				zoneName: "app.com",
+				existingRoutes: []map[string]any{
+					{"id": "sibling", "pattern": "pr-1.preview.app.com/*", "script": "ocel-shopfoo-preview-web"},
+					{"id": "other", "pattern": "pr-2.preview.app.com/*", "script": "ocel-other-preview"},
+					{"id": "prod", "pattern": "app.com/*", "script": "ocel-shop-prod-web"},
+					{"id": "lookalike", "pattern": "pr-3.preview.app.com/*", "script": "ocel-shop-previewer"},
+				},
+			},
+			script:         "ocel-shop-preview",
+			plan:           stemPlan("ocel-shop-preview", "*.preview.app.com"),
+			createdRoutes:  []string{"*.preview.app.com/*"},
+			createdRecords: 1,
+			warnings:       []string{"Advanced Certificate"},
+		},
+		{
+			name: "a stem never prunes a hostname the plan still wants",
+			mock: &cfMock{
+				zoneID:   "zone1",
+				zoneName: "app.com",
+				existingRoutes: []map[string]any{
+					{"id": "wildcard", "pattern": "*.preview.app.com/*", "script": "ocel-shop-preview-web"},
+				},
+			},
+			script:          "ocel-shop-preview",
+			plan:            stemPlan("ocel-shop-preview", "*.preview.app.com"),
+			repointedRoutes: []string{"wildcard"},
+			createdRecords:  1,
+			warnings:        []string{"Advanced Certificate"},
+		},
+		{
+			name: "without a stem the sweep reaches this script only",
+			mock: &cfMock{
+				zoneID:   "zone1",
+				zoneName: "app.com",
+				existingRoutes: []map[string]any{
+					{"id": "perapp", "pattern": "pr-1.preview.app.com/*", "script": "ocel-shop-preview-web"},
+				},
+			},
+			script:         "ocel-shop-preview",
+			plan:           prunedPlan("*.preview.app.com"),
+			createdRoutes:  []string{"*.preview.app.com/*"},
+			createdRecords: 1,
+			warnings:       []string{"Advanced Certificate"},
+		},
+		{
+			name: "without pruning a route this reconcile did not name survives",
+			mock: &cfMock{
+				zoneID:   "zone1",
+				zoneName: "app.com",
+				existingRoutes: []map[string]any{
+					{"id": "unnamed", "pattern": "pr-1-abc1234567.preview.app.com/*", "script": "ocel-preview"},
+				},
+				existingRecords: []map[string]any{
+					{"id": "wildcard", "name": "*.preview.app.com", "type": "AAAA", "content": "100::", "proxied": true},
+				},
+			},
+			script:        "ocel-preview",
+			plan:          requiredRecordPlan("*.preview.app.com", "pr-2-abc1234567.preview.app.com"),
+			createdRoutes: []string{"pr-2-abc1234567.preview.app.com/*"},
+			warnings:      []string{"Advanced Certificate"},
+		},
+		{
+			name: "a required record present is not this deploy's to plant",
+			mock: &cfMock{
+				zoneID:   "zone1",
+				zoneName: "app.com",
+				existingRecords: []map[string]any{
+					{"id": "wildcard", "name": "*.preview.app.com", "type": "AAAA", "content": "100::", "proxied": true},
+				},
+			},
+			script:        "ocel-preview",
+			plan:          requiredRecordPlan("*.preview.app.com", "pr-1-abc1234567.preview.app.com"),
+			createdRoutes: []string{"pr-1-abc1234567.preview.app.com/*"},
+			warnings:      []string{"Advanced Certificate"},
+		},
+		{
+			name:    "a required record missing fails and names the record to add",
+			mock:    &cfMock{zoneID: "zone1", zoneName: "app.com"},
+			script:  "ocel-preview",
+			plan:    requiredRecordPlan("*.preview.app.com", "pr-1-abc1234567.preview.app.com"),
+			wantErr: []string{"*.preview.app.com"},
+		},
+		{
+			name: "a required record left unproxied fails and says so",
+			mock: &cfMock{
+				zoneID:   "zone1",
+				zoneName: "app.com",
+				existingRecords: []map[string]any{
+					{"id": "wildcard", "name": "*.preview.app.com", "type": "AAAA", "content": "100::", "proxied": false},
+				},
+			},
+			script:  "ocel-preview",
+			plan:    requiredRecordPlan("*.preview.app.com", "pr-1-abc1234567.preview.app.com"),
+			wantErr: []string{"proxied", "*.preview.app.com"},
+		},
+		{
+			name: "a leftover custom domain is detached before the route is attached",
+			mock: &cfMock{
+				zoneID:                "zone1",
+				zoneName:              "app.com",
+				existingCustomDomains: []map[string]any{{"id": "cd1", "hostname": "app.com", "service": "ocel-prod"}},
+			},
+			script:          "ocel-prod",
+			plan:            prunedPlan("app.com"),
+			createdRoutes:   []string{"app.com/*"},
+			createdRecords:  1,
+			detachedDomains: []string{"cd1"},
+		},
+		{
+			name:           "a hostname Universal SSL does not cover is warned about",
+			mock:           &cfMock{zoneID: "zone1", zoneName: "app.com"},
+			script:         "ocel-preview",
+			plan:           prunedPlan("*.preview.app.com"),
+			createdRoutes:  []string{"*.preview.app.com/*"},
+			createdRecords: 1,
+			warnings:       []string{"Advanced Certificate"},
+		},
+		{
+			name: "a user's unproxied record is warned about, never overwritten",
+			mock: &cfMock{
+				zoneID:   "zone1",
+				zoneName: "app.com",
+				existingRecords: []map[string]any{
+					{"id": "user", "name": "app.com", "type": "A", "content": "203.0.113.1", "proxied": false},
+				},
+			},
+			script:        "ocel-prod",
+			plan:          prunedPlan("app.com"),
+			createdRoutes: []string{"app.com/*"},
+			warnings:      []string{"proxied"},
+		},
+		{
+			name: "a TXT record at the hostname does not block the placeholder",
+			mock: &cfMock{
+				zoneID:   "zone1",
+				zoneName: "app.com",
+				existingRecords: []map[string]any{
+					{"id": "spf", "name": "app.com", "type": "TXT", "content": "v=spf1 -all", "proxied": false},
+				},
+			},
+			script:         "ocel-prod",
+			plan:           prunedPlan("app.com"),
+			createdRoutes:  []string{"app.com/*"},
+			createdRecords: 1,
+		},
+		{
+			name: "a user's proxied address record is left alone without a warning",
+			mock: &cfMock{
+				zoneID:   "zone1",
+				zoneName: "app.com",
+				existingRecords: []map[string]any{
+					{"id": "user", "name": "app.com", "type": "A", "content": "203.0.113.1", "proxied": true},
+				},
+			},
+			script:        "ocel-prod",
+			plan:          prunedPlan("app.com"),
+			createdRoutes: []string{"app.com/*"},
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 
-	var warnings []string
-	up := upload{accountID: "acct", scriptName: "ocel-prod"}
-	if err := p.reconcileWorkerRoutes(context.Background(), up, prunedPlan("app.com"), func(s string) {
-		warnings = append(warnings, s)
-	}); err != nil {
-		t.Fatalf("reconcileWorkerRoutes: %v", err)
-	}
-
-	if len(m.createdRecords) != 0 {
-		t.Errorf("must not overwrite the user's record, created %d", len(m.createdRecords))
-	}
-	if len(warnings) != 1 || !strings.Contains(warnings[0], "proxied") {
-		t.Errorf("warnings = %v, want one about proxying the record", warnings)
+			tc.run(t)
+		})
 	}
 }
 
-func TestReconcileWorkerRoutes_PlantsDespiteTXTRecord(t *testing.T) {
-	m := &cfMock{
-		zoneID:   "zone1",
-		zoneName: "app.com",
-		existingRecords: []map[string]any{
-			{"id": "spf", "name": "app.com", "type": "TXT", "content": "v=spf1 -all", "proxied": false},
+func TestRoutePattern(t *testing.T) {
+	t.Parallel()
+
+	t.Run("is the one spelling of a hostname as a route", func(t *testing.T) {
+		t.Parallel()
+
+		if got := RoutePattern("*.preview.app.com"); got != "*.preview.app.com/*" {
+			t.Errorf("RoutePattern = %q, want *.preview.app.com/*", got)
+		}
+	})
+}
+
+func TestRouteOwner(t *testing.T) {
+	t.Setenv(envAccountID, "acct")
+
+	for _, tc := range []struct {
+		name    string
+		mock    *cfMock
+		pattern string
+		want    string
+		wantErr bool
+	}{
+		{
+			name: "reports the script bound to the pattern",
+			mock: &cfMock{
+				zoneID:   "zone1",
+				zoneName: "app.com",
+				existingRoutes: []map[string]any{
+					{"id": "route1", "pattern": "*.preview.app.com/*", "script": "ocel-other-preview"},
+				},
+			},
+			pattern: RoutePattern("*.preview.app.com"),
+			want:    "ocel-other-preview",
 		},
-	}
-	p := m.provider(t)
-
-	var warnings []string
-	up := upload{accountID: "acct", scriptName: "ocel-prod"}
-	if err := p.reconcileWorkerRoutes(context.Background(), up, prunedPlan("app.com"), func(s string) {
-		warnings = append(warnings, s)
-	}); err != nil {
-		t.Fatalf("reconcileWorkerRoutes: %v", err)
-	}
-
-	if len(m.createdRecords) != 1 {
-		t.Errorf("expected the AAAA placeholder to be planted, created %d", len(m.createdRecords))
-	}
-	if len(warnings) != 0 {
-		t.Errorf("warnings = %v, want none", warnings)
+		{
+			name:    "a pattern nothing holds is unclaimed",
+			mock:    &cfMock{zoneID: "zone1", zoneName: "app.com"},
+			pattern: RoutePattern("*.preview.app.com"),
+		},
+		{
+			name: "an overlapping wildcard is not a match",
+			mock: &cfMock{
+				zoneID:   "zone1",
+				zoneName: "app.com",
+				existingRoutes: []map[string]any{
+					{"id": "route1", "pattern": "*.app.com/*", "script": "ocel-other-preview"},
+				},
+			},
+			pattern: RoutePattern("*.preview.app.com"),
+		},
+		{
+			name:    "a hostname outside the account is an error",
+			mock:    &cfMock{zoneID: "zone1", zoneName: "app.com"},
+			pattern: RoutePattern("*.preview.elsewhere.com"),
+			wantErr: true,
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			owner, err := tc.mock.provider(t).RouteOwner(t.Context(), tc.pattern)
+			if tc.wantErr {
+				if err == nil {
+					t.Fatal("RouteOwner err = nil, want the unresolvable zone reported")
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("RouteOwner: %v", err)
+			}
+			if owner != tc.want {
+				t.Errorf("owner = %q, want %q", owner, tc.want)
+			}
+			if n := len(tc.mock.createdRoutes) + len(tc.mock.createdRecords) + len(tc.mock.deletedRoutes); n != 0 {
+				t.Error("RouteOwner changed the zone; it is read-only")
+			}
+		})
 	}
 }
 
-func TestReconcileWorkerRoutes_ProxiedAddressRecordLeftAlone(t *testing.T) {
-	m := &cfMock{
-		zoneID:   "zone1",
-		zoneName: "app.com",
-		existingRecords: []map[string]any{
-			{"id": "user", "name": "app.com", "type": "A", "content": "203.0.113.1", "proxied": true},
+func TestDetachRouteRecords(t *testing.T) {
+	t.Parallel()
+
+	for _, tc := range []struct {
+		name string
+		mock *cfMock
+		want []string
+	}{
+		{
+			name: "removes only the placeholders ocel planted",
+			mock: &cfMock{
+				zoneID:   "zone1",
+				zoneName: "app.com",
+				existingRoutes: []map[string]any{
+					{"id": "route1", "pattern": "*.preview.app.com/*", "script": "ocel-preview"},
+					{"id": "route2", "pattern": "other.app.com/*", "script": "someone-else"},
+				},
+				existingRecords: []map[string]any{
+					{"id": "ours", "name": "*.preview.app.com", "type": "AAAA", "content": "100::", "proxied": true},
+				},
+			},
+			want: []string{"ours"},
 		},
-	}
-	p := m.provider(t)
+		{
+			name: "leaves a user's own AAAA record standing",
+			mock: &cfMock{
+				zoneID:   "zone1",
+				zoneName: "app.com",
+				existingRoutes: []map[string]any{
+					{"id": "route1", "pattern": "*.preview.app.com/*", "script": "ocel-preview"},
+				},
+				existingRecords: []map[string]any{
+					{"id": "user", "name": "*.preview.app.com", "type": "AAAA", "content": "2606:4700::1", "proxied": true},
+				},
+			},
+		},
+		{
+			name: "leaves a record no route of its own names",
+			mock: &cfMock{
+				zoneID:   "zone1",
+				zoneName: "app.com",
+				existingRoutes: []map[string]any{
+					{"id": "route1", "pattern": "pr-1-abc1234567.preview.app.com/*", "script": "ocel-preview"},
+					{"id": "route2", "pattern": "pr-2-abc1234567.preview.app.com/*", "script": "ocel-preview"},
+				},
+				existingRecords: []map[string]any{
+					{"id": "base", "name": "*.preview.app.com", "type": "AAAA", "content": "100::", "proxied": true},
+				},
+			},
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 
-	var warnings []string
-	up := upload{accountID: "acct", scriptName: "ocel-prod"}
-	if err := p.reconcileWorkerRoutes(context.Background(), up, prunedPlan("app.com"), func(s string) {
-		warnings = append(warnings, s)
-	}); err != nil {
-		t.Fatalf("reconcileWorkerRoutes: %v", err)
-	}
-
-	if len(m.createdRecords) != 0 {
-		t.Errorf("expected no record created, got %d", len(m.createdRecords))
-	}
-	if len(warnings) != 0 {
-		t.Errorf("warnings = %v, want none", warnings)
+			if err := tc.mock.provider(t).detachRouteRecords(t.Context(), "acct", "ocel-preview"); err != nil {
+				t.Fatalf("detachRouteRecords: %v", err)
+			}
+			assertSet(t, "deleted records", tc.mock.deletedRecords, tc.want)
+		})
 	}
 }
 
-func TestDetachRouteRecords_RemovesOnlyOcelPlaceholders(t *testing.T) {
-	m := &cfMock{
-		zoneID:   "zone1",
-		zoneName: "app.com",
-		existingRoutes: []map[string]any{
-			{"id": "route1", "pattern": "*.preview.app.com/*", "script": "ocel-preview"},
-			{"id": "route2", "pattern": "other.app.com/*", "script": "someone-else"},
-		},
-		existingRecords: []map[string]any{
-			{"id": "ours", "name": "*.preview.app.com", "type": "AAAA", "content": "100::", "proxied": true},
-		},
-	}
-	p := m.provider(t)
+func TestCoveredByUniversalSSL(t *testing.T) {
+	t.Parallel()
 
-	if err := p.detachRouteRecords(context.Background(), "acct", "ocel-preview"); err != nil {
-		t.Fatalf("detachRouteRecords: %v", err)
-	}
+	for _, tc := range []struct {
+		name       string
+		host, zone string
+		want       bool
+	}{
+		{"the apex is its own certificate's subject", "acme.com", "acme.com", true},
+		{"one label below the apex", "www.acme.com", "acme.com", true},
+		{"the wildcard one label below the apex", "*.acme.com", "acme.com", true},
+		{"a wildcard two labels below the apex", "*.preview.acme.com", "acme.com", false},
+		{"two labels below the apex", "a.b.acme.com", "acme.com", false},
+		{"a hostname in another zone", "other.com", "acme.com", false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 
-	if len(m.deletedRecords) != 1 || m.deletedRecords[0] != "ours" {
-		t.Errorf("deleted records = %v, want [ours]", m.deletedRecords)
-	}
-}
-
-func TestDetachRouteRecords_LeavesUserRecords(t *testing.T) {
-	m := &cfMock{
-		zoneID:   "zone1",
-		zoneName: "app.com",
-		existingRoutes: []map[string]any{
-			{"id": "route1", "pattern": "*.preview.app.com/*", "script": "ocel-preview"},
-		},
-		existingRecords: []map[string]any{
-			{"id": "user", "name": "*.preview.app.com", "type": "AAAA", "content": "2606:4700::1", "proxied": true},
-		},
-	}
-	p := m.provider(t)
-
-	if err := p.detachRouteRecords(context.Background(), "acct", "ocel-preview"); err != nil {
-		t.Fatalf("detachRouteRecords: %v", err)
-	}
-
-	if len(m.deletedRecords) != 0 {
-		t.Errorf("deleted records = %v, want none", m.deletedRecords)
+			if got := coveredByUniversalSSL(tc.host, tc.zone); got != tc.want {
+				t.Errorf("coveredByUniversalSSL(%q, %q) = %v, want %v", tc.host, tc.zone, got, tc.want)
+			}
+		})
 	}
 }
 
-func TestDetachRouteRecords_LeavesARecordNoRouteOfItsOwnNames(t *testing.T) {
-	m := &cfMock{
-		zoneID:   "zone1",
-		zoneName: "app.com",
-		existingRoutes: []map[string]any{
-			{"id": "route1", "pattern": "pr-1-abc1234567.preview.app.com/*", "script": "ocel-preview"},
-			{"id": "route2", "pattern": "pr-2-abc1234567.preview.app.com/*", "script": "ocel-preview"},
-		},
-		existingRecords: []map[string]any{
-			{"id": "base", "name": "*.preview.app.com", "type": "AAAA", "content": "100::", "proxied": true},
-		},
-	}
-	p := m.provider(t)
+func TestCanonicalDomainURL(t *testing.T) {
+	t.Parallel()
 
-	if err := p.detachRouteRecords(context.Background(), "acct", "ocel-preview"); err != nil {
-		t.Fatalf("detachRouteRecords: %v", err)
-	}
+	for _, tc := range []struct {
+		name    string
+		domains []string
+		want    string
+	}{
+		{"no domain has no canonical URL", nil, ""},
+		{"a single plain hostname is the canonical URL", []string{"app.com"}, "https://app.com"},
+		{"the first non-wildcard wins", []string{"*.app.com", "app.com"}, "https://app.com"},
+		{"all wildcards falls back to the first", []string{"*.app.com"}, "https://*.app.com"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 
-	if len(m.deletedRecords) != 0 {
-		t.Errorf("deleted records = %v, want none: no route on this script names *.preview.app.com", m.deletedRecords)
+			if got := canonicalDomainURL(tc.domains); got != tc.want {
+				t.Errorf("canonicalDomainURL(%v) = %q, want %q", tc.domains, got, tc.want)
+			}
+		})
+	}
+}
+
+func TestRouteBaseDomain(t *testing.T) {
+	t.Parallel()
+
+	for _, tc := range []struct {
+		name, host, want string
+	}{
+		{"a wildcard resolves through the hostname below it", "*.preview.acme.com", "preview.acme.com"},
+		{"a plain hostname resolves through itself", "www.acme.com", "www.acme.com"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			if got := routeBaseDomain(tc.host); got != tc.want {
+				t.Errorf("routeBaseDomain(%q) = %q, want %q", tc.host, got, tc.want)
+			}
+		})
+	}
+}
+
+func TestZoneOwns(t *testing.T) {
+	t.Parallel()
+
+	for _, tc := range []struct {
+		name           string
+		hostname, zone string
+		want           bool
+	}{
+		{"a subdomain of the zone", "app.acme.com", "acme.com", true},
+		{"the zone apex itself", "acme.com", "acme.com", true},
+		{"a zone delegated at the subdomain", "app.acme.com", "app.acme.com", true},
+		{"an unrelated zone", "app.acme.com", "other.com", false},
+		{"a zone that is only a suffix of the label", "app.acme.com", "me.com", false},
+		{"a hostname that merely ends in the zone name", "notacme.com", "acme.com", false},
+		{"a zone sharing the tail of a label", "app.acme.com", "cme.com", false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			if got := zoneOwns(tc.hostname, tc.zone); got != tc.want {
+				t.Errorf("zoneOwns(%q, %q) = %v, want %v", tc.hostname, tc.zone, got, tc.want)
+			}
+		})
 	}
 }

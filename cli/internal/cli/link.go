@@ -47,11 +47,12 @@ var linkCmd = &cobra.Command{
 			project = args[0]
 		}
 
+		d := defaultDeps()
 		opts := linkOpts
-		creds, _ := loadCredentials()
+		creds, _ := d.loadCredentials()
 		opts.apiURL = effectiveAPIURL(cmd, creds.APIURL)
 
-		return runLink(cmd.Context(), cwd, project, opts, cmd.OutOrStdout(), cmd.ErrOrStderr(), cmd.InOrStdin())
+		return runLink(cmd.Context(), d, cwd, project, opts, cmd.OutOrStdout(), cmd.ErrOrStderr(), cmd.InOrStdin())
 	},
 }
 
@@ -60,8 +61,8 @@ func init() {
 	linkCmd.Flags().BoolVar(&linkOpts.create, "create", false, "Create a new project instead of selecting an existing one")
 }
 
-func runLink(ctx context.Context, projectDir, project string, opts linkOptions, stdout, stderr io.Writer, stdin io.Reader) error {
-	creds, err := loadCredentials()
+func runLink(ctx context.Context, d deps, projectDir, project string, opts linkOptions, stdout, stderr io.Writer, stdin io.Reader) error {
+	creds, err := d.loadCredentials()
 	if err != nil {
 		fmt.Fprintln(stderr, "You're not logged in. Run `ocel login` first.")
 		return &ExitError{Code: 1}
@@ -120,7 +121,7 @@ func runLink(ctx context.Context, projectDir, project string, opts linkOptions, 
 	return nil
 }
 
-func ensureLinked(ctx context.Context, projectDir, apiURL string, stdout, stderr io.Writer, stdin io.Reader) (*cloudlink.Link, error) {
+func ensureLinked(ctx context.Context, d deps, projectDir, apiURL string, stdout, stderr io.Writer, stdin io.Reader) (*cloudlink.Link, error) {
 	link, err := cloudlink.Read(projectDir, apiURL)
 	if err != nil {
 		return nil, err
@@ -134,7 +135,7 @@ func ensureLinked(ctx context.Context, projectDir, apiURL string, stdout, stderr
 	}
 
 	fmt.Fprintln(stdout, "This directory isn't linked to a console project yet.")
-	if err := runLink(ctx, projectDir, "", linkOptions{apiURL: apiURL}, stdout, stderr, stdin); err != nil {
+	if err := runLink(ctx, d, projectDir, "", linkOptions{apiURL: apiURL}, stdout, stderr, stdin); err != nil {
 		return nil, err
 	}
 
@@ -170,14 +171,14 @@ func selectProject(
 			}
 		}
 		if len(projects) == 0 {
-			return nil, fmt.Errorf("%s has no projects yet — run `ocel link --create` to make one.", org.Name)
+			return nil, fmt.Errorf("%s has no projects yet — run `ocel link --create` to make one", org.Name)
 		}
 		return nil, fmt.Errorf("no project with slug %q in %s; available: %s (or pass --create)", project, org.Name, joinProjectSlugs(projects))
 	}
 
 	if !isReaderTTY(stdin) {
 		if len(projects) == 0 {
-			return nil, errors.New("no project selected — pass --create to make one.")
+			return nil, errors.New("no project selected — pass --create to make one")
 		}
 		return nil, fmt.Errorf("no project selected — pass a project slug or --create. available: %s", joinProjectSlugs(projects))
 	}
@@ -203,14 +204,14 @@ func selectProject(
 	}
 	switch {
 	case selection == "":
-		return nil, errors.New("no project selected; rerun `ocel link`.")
+		return nil, errors.New("no project selected; rerun `ocel link`")
 	case strings.EqualFold(selection, "n"):
 		return createProject(ctx, client, accessToken, promptProjectName(projectDir, stdout, scanner), org, stdout)
 	}
 
 	if idx, convErr := strconv.Atoi(selection); convErr == nil {
 		if idx < 1 || idx > len(projects) {
-			return nil, fmt.Errorf("invalid selection %q; rerun `ocel link`.", selection)
+			return nil, fmt.Errorf("invalid selection %q; rerun `ocel link`", selection)
 		}
 		return &projects[idx-1], nil
 	}
@@ -219,7 +220,7 @@ func selectProject(
 			return &projects[i], nil
 		}
 	}
-	return nil, fmt.Errorf("invalid selection %q; rerun `ocel link`.", selection)
+	return nil, fmt.Errorf("invalid selection %q; rerun `ocel link`", selection)
 }
 
 func createProject(ctx context.Context, client *projectclient.Client, accessToken, name string, org *authclient.Organization, stdout io.Writer) (*projectclient.Project, error) {
@@ -243,7 +244,7 @@ func createProject(ctx context.Context, client *projectclient.Client, accessToke
 	})
 	if err != nil {
 		if projectclient.IsConflict(err) {
-			return nil, fmt.Errorf("a project with slug %q already exists in %s — run `ocel link %s` to link to it.", slug, org.Name, slug)
+			return nil, fmt.Errorf("a project with slug %q already exists in %s — run `ocel link %s` to link to it", slug, org.Name, slug)
 		}
 		return nil, fmt.Errorf("failed to create project: %w", err)
 	}
@@ -284,7 +285,7 @@ func pickOrganization(ctx context.Context, client *authclient.Client, accessToke
 	}
 
 	if len(orgs) == 0 {
-		return nil, errors.New("you don't belong to any organization yet — create one on the Ocel dashboard first.")
+		return nil, errors.New("you don't belong to any organization yet — create one on the Ocel dashboard first")
 	}
 
 	if opts.org != "" {
@@ -318,12 +319,12 @@ func pickOrganization(ctx context.Context, client *authclient.Client, accessToke
 		return nil, fmt.Errorf("failed to read input: %w", err)
 	}
 	if selection == "" {
-		return nil, errors.New("no organization selected; rerun `ocel link`.")
+		return nil, errors.New("no organization selected; rerun `ocel link`")
 	}
 
 	if idx, convErr := strconv.Atoi(selection); convErr == nil {
 		if idx < 1 || idx > len(orgs) {
-			return nil, fmt.Errorf("invalid selection %q; rerun `ocel link`.", selection)
+			return nil, fmt.Errorf("invalid selection %q; rerun `ocel link`", selection)
 		}
 		return &orgs[idx-1], nil
 	}
@@ -332,7 +333,7 @@ func pickOrganization(ctx context.Context, client *authclient.Client, accessToke
 			return &orgs[i], nil
 		}
 	}
-	return nil, fmt.Errorf("invalid selection %q; rerun `ocel link`.", selection)
+	return nil, fmt.Errorf("invalid selection %q; rerun `ocel link`", selection)
 }
 
 func joinOrgSlugs(orgs []authclient.Organization) string {

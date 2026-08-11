@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"slices"
-	"sort"
 	"strings"
 
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
@@ -88,7 +87,7 @@ func classifyPreviewStacks(slug string, stackNames []string) PreviewProjectTeard
 			plan.AppStacks = append(plan.AppStacks, name)
 		}
 	}
-	sort.Strings(plan.Pointers)
+	slices.Sort(plan.Pointers)
 	return plan
 }
 

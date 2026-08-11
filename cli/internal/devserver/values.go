@@ -3,7 +3,6 @@ package devserver
 import (
 	"context"
 	"slices"
-	"sort"
 	"sync"
 
 	"github.com/ocelhq/ocel/cli/internal/envgate"
@@ -50,7 +49,7 @@ func (v *flatValues) List(context.Context) ([]envgate.Stored, error) {
 			keys = append(keys, key)
 		}
 	}
-	sort.Strings(keys)
+	slices.Sort(keys)
 
 	var stored []envgate.Stored
 	for _, key := range keys {

@@ -52,11 +52,15 @@ type Session struct {
 }
 
 func New(stdout io.Writer, projectDir, command string, verbose bool) *Session {
+	return newSession(stdout, projectDir, command, isTTY(stdout) && !verbose)
+}
+
+func newSession(stdout io.Writer, projectDir, command string, clean bool) *Session {
 	s := &Session{
 		out:     stdout,
 		command: command,
 		start:   time.Now(),
-		clean:   isTTY(stdout) && !verbose,
+		clean:   clean,
 	}
 	logDir := filepath.Join(projectDir, ".ocel", "logs")
 	if err := os.MkdirAll(logDir, 0o755); err == nil {
@@ -345,7 +349,7 @@ func withoutFragment(url string) string {
 	return url
 }
 
-var isTTY = func(w io.Writer) bool {
+func isTTY(w io.Writer) bool {
 	f, ok := w.(*os.File)
 	if !ok {
 		return false

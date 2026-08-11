@@ -18,8 +18,12 @@ type Spinner struct {
 }
 
 func StartSpinner(out io.Writer, msg string) *Spinner {
+	return startSpinner(out, msg, isTTY(out))
+}
+
+func startSpinner(out io.Writer, msg string, animate bool) *Spinner {
 	s := &Spinner{out: out, msg: msg}
-	if !isTTY(out) {
+	if !animate {
 		return s
 	}
 	s.stop = make(chan struct{})

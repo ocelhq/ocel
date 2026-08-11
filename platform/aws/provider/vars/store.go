@@ -16,9 +16,9 @@ import (
 
 const revealConcurrency = 16
 
-var ErrNotFound = errors.New("no value is set there")
+var ErrNotFound = errors.New("vars: not found")
 
-var ErrStaleVersion = errors.New("the value changed since it was read; re-read it and try again")
+var ErrStaleVersion = errors.New("vars: stale version")
 
 type DynamoAPI interface {
 	GetItem(context.Context, *dynamodb.GetItemInput, ...func(*dynamodb.Options)) (*dynamodb.GetItemOutput, error)

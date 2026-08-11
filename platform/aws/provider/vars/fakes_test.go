@@ -4,7 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"sort"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -33,7 +33,7 @@ func sealedContext(ctx map[string]string) string {
 	for k, v := range ctx {
 		pairs = append(pairs, k+"="+v)
 	}
-	sort.Strings(pairs)
+	slices.Sort(pairs)
 	return strings.Join(pairs, ",")
 }
 
@@ -148,9 +148,9 @@ func (f *fakeDynamo) Query(_ context.Context, in *dynamodb.QueryInput, _ ...func
 			sks = append(sks, sk)
 		}
 	}
-	sort.Strings(sks)
+	slices.Sort(sks)
 	if in.ScanIndexForward != nil && !*in.ScanIndexForward {
-		sort.Sort(sort.Reverse(sort.StringSlice(sks)))
+		slices.Reverse(sks)
 	}
 
 	out := &dynamodb.QueryOutput{}
@@ -183,7 +183,7 @@ func (f *fakeDynamo) queryIndex(in *dynamodb.QueryInput) (*dynamodb.QueryOutput,
 			}
 		}
 	}
-	sort.Strings(keys)
+	slices.Sort(keys)
 
 	out := &dynamodb.QueryOutput{}
 	for _, key := range keys {

@@ -1,6 +1,7 @@
 package cloudflare
 
 import (
+	"errors"
 	"fmt"
 	"io/fs"
 	"os"
@@ -74,7 +75,7 @@ func collectStaticAssets(dir string) ([]edge.StaticAsset, error) {
 	var assets []edge.StaticAsset
 	err := filepath.WalkDir(dir, func(p string, d fs.DirEntry, err error) error {
 		if err != nil {
-			if os.IsNotExist(err) && p == dir {
+			if errors.Is(err, fs.ErrNotExist) && p == dir {
 				return fs.SkipAll
 			}
 			return err

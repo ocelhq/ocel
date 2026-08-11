@@ -15,7 +15,7 @@ import (
 	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
 	"github.com/ocelhq/ocel/platform/aws/provider/bootstrap"
 	"github.com/ocelhq/ocel/platform/aws/provider/deploy"
-	"github.com/ocelhq/ocel/platform/aws/provider/pulumirt"
+	"github.com/ocelhq/ocel/platform/aws/provider/pulumiruntime"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
@@ -101,7 +101,7 @@ func pruneConfig(ctx context.Context, opts options) (deploy.Config, error) {
 	if err != nil {
 		return deploy.Config{}, err
 	}
-	pulumiCmd, err := pulumirt.Ensure(ctx, nil)
+	pulumiCmd, err := pulumiruntime.Ensure(ctx, nil)
 	if err != nil {
 		return deploy.Config{}, err
 	}

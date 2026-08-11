@@ -3,7 +3,7 @@ package deploy
 import (
 	"context"
 	"fmt"
-	"sort"
+	"slices"
 	"strings"
 )
 
@@ -41,6 +41,6 @@ func projectSlugsBesides(slug string, stackNames []string) []string {
 	for scope := range others {
 		out = append(out, scope)
 	}
-	sort.Strings(out)
+	slices.Sort(out)
 	return out
 }

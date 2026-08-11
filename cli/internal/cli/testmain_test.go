@@ -22,11 +22,8 @@ func TestMain(m *testing.M) {
 	os.Exit(code)
 }
 
-func setLoggedIn(t *testing.T) {
-	t.Helper()
-	prev := loadCredentials
-	loadCredentials = func() (credentials.Credentials, error) {
+func setLoggedIn(d *deps) {
+	d.loadCredentials = func() (credentials.Credentials, error) {
 		return credentials.Credentials{APIURL: "https://api.example.com", AccessToken: "tok"}, nil
 	}
-	t.Cleanup(func() { loadCredentials = prev })
 }

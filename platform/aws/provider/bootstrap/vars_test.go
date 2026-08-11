@@ -210,25 +210,77 @@ func TestVarsResourcesAreStackOwned(t *testing.T) {
 	}
 }
 
-func TestRun_ProvisionsTheVariableStoreIdempotently(t *testing.T) {
-	cfn, ssmc, iamc := newFakeCFN(), newFakeSSM(), &fakeIAM{}
-	ed := &fakeEdge{out: edge.BootstrapOutput{Trust: edge.TrustExternal}}
+func TestRunVars(t *testing.T) {
+	t.Run("provisions the variable store idempotently", func(t *testing.T) {
+		cfn, ssmc, iamc := newFakeCFN(), newFakeSSM(), &fakeIAM{}
+		ed := &fakeEdge{out: edge.BootstrapOutput{Trust: edge.TrustExternal}}
 
-	for i := range 2 {
+		for i := range 2 {
+			if err := Run(context.Background(), cfn, ssmc, iamc, ed, preloadedArtifact(), nil, nil); err != nil {
+				t.Fatalf("Run %d: %v", i+1, err)
+			}
+		}
+		if cfn.creates != 1 {
+			t.Errorf("stack was created %d times across two bootstraps, want 1", cfn.creates)
+		}
+
+		tmpl := parseVarsTemplate(t, cfn.templates[StackName])
+		for _, name := range []string{"VarsTable", "VarsKey", "VarsKeyAlias"} {
+			if _, ok := tmpl.Resources[name]; !ok {
+				t.Errorf("the account's stack no longer declares %s after a re-run", name)
+			}
+		}
+	})
+
+	t.Run("upgrades a pre store account to the variable store", func(t *testing.T) {
+		cfn, ssmc, iamc := newFakeCFN(), newFakeSSM(), &fakeIAM{}
+		seed := preStoreTemplate(t)
+		cfn.templates[StackName] = seed
+		cfn.statuses[StackName] = cfntypes.StackStatusCreateComplete
+
+		before := parseVarsTemplate(t, seed)
+		for _, name := range []string{"VarsTable", "VarsKey", "VarsKeyAlias"} {
+			if _, ok := before.Resources[name]; ok {
+				t.Fatalf("the seeded account already declares %s; it is not a pre-store account", name)
+			}
+		}
+		for _, name := range []string{outputVarsTable, outputVarsKeyARN} {
+			if _, ok := before.Outputs[name]; ok {
+				t.Fatalf("the seeded account already outputs %s; it is not a pre-store account", name)
+			}
+		}
+
+		ed := &fakeEdge{out: edge.BootstrapOutput{Trust: edge.TrustExternal}}
 		if err := Run(context.Background(), cfn, ssmc, iamc, ed, preloadedArtifact(), nil, nil); err != nil {
-			t.Fatalf("Run %d: %v", i+1, err)
+			t.Fatalf("Run: %v", err)
 		}
-	}
-	if cfn.creates != 1 {
-		t.Errorf("stack was created %d times across two bootstraps, want 1", cfn.creates)
-	}
 
-	tmpl := parseVarsTemplate(t, cfn.templates[StackName])
-	for _, name := range []string{"VarsTable", "VarsKey", "VarsKeyAlias"} {
-		if _, ok := tmpl.Resources[name]; !ok {
-			t.Errorf("the account's stack no longer declares %s after a re-run", name)
+		if cfn.creates != 0 {
+			t.Errorf("the upgrade created %d stacks; a live account must be updated, not replaced", cfn.creates)
 		}
-	}
+		if cfn.updates != 1 {
+			t.Errorf("the account's stack was updated %d times, want 1", cfn.updates)
+		}
+
+		after := parseVarsTemplate(t, cfn.templates[StackName])
+		for _, name := range []string{"VarsTable", "VarsKey", "VarsKeyAlias"} {
+			if _, ok := after.Resources[name]; !ok {
+				t.Errorf("the upgrade did not add %s", name)
+			}
+		}
+		for _, name := range []string{outputVarsTable, outputVarsKeyARN} {
+			if _, ok := after.Outputs[name]; !ok {
+				t.Errorf("the upgrade did not add the %s output", name)
+			}
+		}
+		if got, want := after.Outputs[outputVersion].Value, strconv.Itoa(RequiredBootstrapVersion); got != want {
+			t.Errorf("upgraded stack reports version %q, want %q", got, want)
+		}
+
+		if _, ok := after.Resources["StateBucket"]; !ok {
+			t.Error("the upgrade dropped the state bucket")
+		}
+	})
 }
 
 func preStoreTemplate(t *testing.T) string {
@@ -243,74 +295,26 @@ func preStoreTemplate(t *testing.T) string {
 	return tmpl
 }
 
-func TestRun_UpgradesAPreStoreAccountToTheVariableStore(t *testing.T) {
-	cfn, ssmc, iamc := newFakeCFN(), newFakeSSM(), &fakeIAM{}
-	seed := preStoreTemplate(t)
-	cfn.templates[StackName] = seed
-	cfn.statuses[StackName] = cfntypes.StackStatusCreateComplete
+func TestCheckDeployedVars(t *testing.T) {
+	t.Run("parses vars outputs", func(t *testing.T) {
+		api := stubDescriber{out: &cloudformation.DescribeStacksOutput{
+			Stacks: []cfntypes.Stack{{
+				Outputs: []cfntypes.Output{
+					{OutputKey: aws.String(outputVarsTable), OutputValue: aws.String("vars-abc")},
+					{OutputKey: aws.String(outputVarsKeyARN), OutputValue: aws.String("arn:aws:kms:eu-west-1:123456789012:key/abcd")},
+				},
+			}},
+		}}
 
-	before := parseVarsTemplate(t, seed)
-	for _, name := range []string{"VarsTable", "VarsKey", "VarsKeyAlias"} {
-		if _, ok := before.Resources[name]; ok {
-			t.Fatalf("the seeded account already declares %s; it is not a pre-store account", name)
+		got, err := CheckDeployed(context.Background(), api)
+		if err != nil {
+			t.Fatalf("CheckDeployed: %v", err)
 		}
-	}
-	for _, name := range []string{outputVarsTable, outputVarsKeyARN} {
-		if _, ok := before.Outputs[name]; ok {
-			t.Fatalf("the seeded account already outputs %s; it is not a pre-store account", name)
+		if got.VarsTable != "vars-abc" {
+			t.Errorf("VarsTable = %q, want vars-abc", got.VarsTable)
 		}
-	}
-
-	ed := &fakeEdge{out: edge.BootstrapOutput{Trust: edge.TrustExternal}}
-	if err := Run(context.Background(), cfn, ssmc, iamc, ed, preloadedArtifact(), nil, nil); err != nil {
-		t.Fatalf("Run: %v", err)
-	}
-
-	if cfn.creates != 0 {
-		t.Errorf("the upgrade created %d stacks; a live account must be updated, not replaced", cfn.creates)
-	}
-	if cfn.updates != 1 {
-		t.Errorf("the account's stack was updated %d times, want 1", cfn.updates)
-	}
-
-	after := parseVarsTemplate(t, cfn.templates[StackName])
-	for _, name := range []string{"VarsTable", "VarsKey", "VarsKeyAlias"} {
-		if _, ok := after.Resources[name]; !ok {
-			t.Errorf("the upgrade did not add %s", name)
+		if got.VarsKeyARN != "arn:aws:kms:eu-west-1:123456789012:key/abcd" {
+			t.Errorf("VarsKeyARN = %q, want the key ARN from the stack output", got.VarsKeyARN)
 		}
-	}
-	for _, name := range []string{outputVarsTable, outputVarsKeyARN} {
-		if _, ok := after.Outputs[name]; !ok {
-			t.Errorf("the upgrade did not add the %s output", name)
-		}
-	}
-	if got, want := after.Outputs[outputVersion].Value, strconv.Itoa(RequiredBootstrapVersion); got != want {
-		t.Errorf("upgraded stack reports version %q, want %q", got, want)
-	}
-
-	if _, ok := after.Resources["StateBucket"]; !ok {
-		t.Error("the upgrade dropped the state bucket")
-	}
-}
-
-func TestCheckDeployed_ParsesVarsOutputs(t *testing.T) {
-	api := stubDescriber{out: &cloudformation.DescribeStacksOutput{
-		Stacks: []cfntypes.Stack{{
-			Outputs: []cfntypes.Output{
-				{OutputKey: aws.String(outputVarsTable), OutputValue: aws.String("vars-abc")},
-				{OutputKey: aws.String(outputVarsKeyARN), OutputValue: aws.String("arn:aws:kms:eu-west-1:123456789012:key/abcd")},
-			},
-		}},
-	}}
-
-	got, err := CheckDeployed(context.Background(), api)
-	if err != nil {
-		t.Fatalf("CheckDeployed: %v", err)
-	}
-	if got.VarsTable != "vars-abc" {
-		t.Errorf("VarsTable = %q, want vars-abc", got.VarsTable)
-	}
-	if got.VarsKeyARN != "arn:aws:kms:eu-west-1:123456789012:key/abcd" {
-		t.Errorf("VarsKeyARN = %q, want the key ARN from the stack output", got.VarsKeyARN)
-	}
+	})
 }

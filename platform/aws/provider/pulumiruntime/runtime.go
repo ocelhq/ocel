@@ -1,4 +1,4 @@
-package pulumirt
+package pulumiruntime
 
 import (
 	"context"
