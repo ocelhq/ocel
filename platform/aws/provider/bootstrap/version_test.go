@@ -45,8 +45,8 @@ func TestCheckCompat(t *testing.T) {
 func TestRequiredBootstrapVersion(t *testing.T) {
 	t.Parallel()
 
-	if RequiredBootstrapVersion != 9 {
-		t.Fatalf("RequiredBootstrapVersion = %d, want 9", RequiredBootstrapVersion)
+	if RequiredBootstrapVersion != 10 {
+		t.Fatalf("RequiredBootstrapVersion = %d, want 10", RequiredBootstrapVersion)
 	}
 }
 

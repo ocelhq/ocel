@@ -2,7 +2,7 @@ package bootstrap
 
 import "fmt"
 
-const RequiredBootstrapVersion = 9
+const RequiredBootstrapVersion = 10
 
 const seedingBootstrapVersion = RequiredBootstrapVersion - 1
 
