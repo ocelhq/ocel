@@ -11,7 +11,7 @@ beforeEach(() => {
   process.env.OCEL_ISR_BUCKET = "assets";
   process.env.OCEL_ISR_PREFIX = "prod/proj/app/BID";
   process.env.OCEL_STATE_TABLE = "state";
-  process.env.OCEL_ISR_TAG_NAMESPACE = "TAG#prod#proj#app#BID#";
+  process.env.OCEL_ISR_TAG_NAMESPACE = "PROJECT#proj#STACK#prod--app--r3f8a1c9d#TAG#";
   for (const name of Object.keys(storeEnv)) delete process.env[name];
   delete process.env.OCEL_ISR_WRITER_URL;
   delete process.env.OCEL_ISR_WRITER_SECRET;
@@ -261,13 +261,13 @@ test("indexes the tag record a singular revalidateTag writes", async () => {
 
   expect(sends[0]).toMatchObject({
     TableName: TABLE,
-    Key: { pk: { S: "TAG#prod#proj#app#BID#products" }, sk: { S: "#META" } },
+    Key: { pk: { S: "PROJECT#proj#STACK#prod--app--r3f8a1c9d#TAG#products" }, sk: { S: "#META" } },
     ConditionExpression: "attribute_not_exists(expired) OR expired < :expired",
     UpdateExpression:
       "SET tag = :tag, gsi1pk = :ns, gsi1sk = :writtenAt, expired = :expired",
     ExpressionAttributeValues: {
       ":tag": { S: "products" },
-      ":ns": { S: "TAG#prod#proj#app#BID#" },
+      ":ns": { S: "PROJECT#proj#STACK#prod--app--r3f8a1c9d#TAG#" },
       ":writtenAt": { S: "000000000001700" },
       ":expired": { N: "1700" },
     },
@@ -341,9 +341,9 @@ test("makes a classic-model invalidation visible to the stream publisher", async
 
   await (await handlerOver(store)).revalidateTag("products");
 
-  const item = items.get("TAG#prod#proj#app#BID#products")!;
+  const item = items.get("PROJECT#proj#STACK#prod--app--r3f8a1c9d#TAG#products")!;
   expect(item.tag.S).toBe("products");
-  expect(item.gsi1pk.S).toBe("TAG#prod#proj#app#BID#");
+  expect(item.gsi1pk.S).toBe("PROJECT#proj#STACK#prod--app--r3f8a1c9d#TAG#");
   expect(Number(item.expired.N)).toBeGreaterThan(0);
   expect(Number(item.gsi1sk.S)).toBeGreaterThan(0);
 });
@@ -354,7 +354,7 @@ test("an older singular write cannot walk back a newer plural one", async () => 
   await useStore.writeTag("products", { expired: 2_000, writtenAt: 2_000 });
   await store.writeTags(["products"], { expired: 1_000 });
 
-  const item = items.get("TAG#prod#proj#app#BID#products")!;
+  const item = items.get("PROJECT#proj#STACK#prod--app--r3f8a1c9d#TAG#products")!;
   expect(item.expired.N).toBe("2000");
   expect(Number(item.gsi1sk.S)).toBe(2_000);
 });

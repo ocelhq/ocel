@@ -128,7 +128,7 @@ func TestKeysCarryTheProject(t *testing.T) {
 			"",
 			"shop",
 			naming.ProjectKey("shop"),
-			naming.ISRTagKey("shop", "web", "products"),
+			naming.ISRTagKey("shop", naming.AppStack("prod", "web", naming.NewRelease("b1", "")), "products"),
 			PartitionKey("shop", "production") + delimiter + "extra",
 		} {
 			if _, err := parsePartitionKey(pk); err == nil {

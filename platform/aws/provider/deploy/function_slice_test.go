@@ -3,10 +3,12 @@ package deploy
 import (
 	"encoding/json"
 	"fmt"
+	"path"
 	"slices"
 	"strings"
 	"testing"
 
+	"github.com/ocelhq/ocel/pkg/naming"
 	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/resources/v1"
 )
@@ -123,15 +125,22 @@ func TestBytecodeCacheEnabled(t *testing.T) {
 	}
 }
 
+func isrCacheFor(t *testing.T, env, project, app, buildID string) isrConfig {
+	t.Helper()
+	coord := storageCoordinate(env, project, app, releaseOf(buildOnly(buildID)))
+	return isrConfig{
+		Coord:    coord,
+		Bucket:   "assets-xyz",
+		Prefix:   isrPrefixOf(coord),
+		Table:    "state-abc",
+		TableARN: "arn:aws:dynamodb:us-east-1:1234:table/state-abc",
+	}
+}
+
 func TestISREnv(t *testing.T) {
 	t.Run("sets the bytecode prefix to the asset prefix", func(t *testing.T) {
 		t.Setenv(bytecodeCacheEnv, "1")
-		cfg := isrConfig{
-			Bucket:   "assets-xyz",
-			Prefix:   "prod/proj123/marketing/build456",
-			Table:    "state-abc",
-			TableARN: "arn:aws:dynamodb:us-east-1:1234:table/state-abc",
-		}
+		cfg := isrCacheFor(t, "prod", "proj123", "marketing", "build456")
 		env := cfg.env()
 		if env["OCEL_BYTECODE_PREFIX"] != cfg.Prefix {
 			t.Errorf("OCEL_BYTECODE_PREFIX = %q, want %q", env["OCEL_BYTECODE_PREFIX"], cfg.Prefix)
@@ -140,12 +149,7 @@ func TestISREnv(t *testing.T) {
 
 	t.Run("omits the bytecode prefix when the gate is off", func(t *testing.T) {
 		t.Setenv(bytecodeCacheEnv, "")
-		cfg := isrConfig{
-			Bucket:   "assets-xyz",
-			Prefix:   "prod/proj123/marketing/build456",
-			Table:    "state-abc",
-			TableARN: "arn:aws:dynamodb:us-east-1:1234:table/state-abc",
-		}
+		cfg := isrCacheFor(t, "prod", "proj123", "marketing", "build456")
 		env := cfg.env()
 		if _, ok := env["OCEL_BYTECODE_PREFIX"]; ok {
 			t.Errorf("OCEL_BYTECODE_PREFIX = %q, want it unset without OCEL_BYTECODE_CACHE=1", env["OCEL_BYTECODE_PREFIX"])
@@ -153,12 +157,7 @@ func TestISREnv(t *testing.T) {
 	})
 
 	t.Run("agrees with the policy scope", func(t *testing.T) {
-		cfg := isrConfig{
-			Bucket:   "assets-xyz",
-			Prefix:   "prod/proj123/marketing/build456",
-			Table:    "state-abc",
-			TableARN: "arn:aws:dynamodb:us-east-1:1234:table/state-abc",
-		}
+		cfg := isrCacheFor(t, "prod", "proj123", "marketing", "build456")
 
 		env := cfg.env()
 
@@ -171,7 +170,7 @@ func TestISREnv(t *testing.T) {
 		if env["OCEL_STATE_TABLE"] != "state-abc" {
 			t.Errorf("OCEL_STATE_TABLE = %q", env["OCEL_STATE_TABLE"])
 		}
-		if want := "TAG#prod#proj123#marketing#build456#"; env["OCEL_ISR_TAG_NAMESPACE"] != want {
+		if want := "PROJECT#proj123#STACK#prod--marketing--" + releaseTokenFor("build456") + "#TAG#"; env["OCEL_ISR_TAG_NAMESPACE"] != want {
 			t.Errorf("OCEL_ISR_TAG_NAMESPACE = %q, want %q", env["OCEL_ISR_TAG_NAMESPACE"], want)
 		}
 		if _, ok := env["OCEL_STATE_TABLE_INDEX"]; ok {
@@ -183,12 +182,7 @@ func TestISREnv(t *testing.T) {
 func TestISRPolicy(t *testing.T) {
 	t.Run("covers the composed bytecode key", func(t *testing.T) {
 		t.Setenv(bytecodeCacheEnv, "1")
-		cfg := isrConfig{
-			Bucket:   "assets-xyz",
-			Prefix:   "prod/proj123/marketing/build456",
-			Table:    "state-abc",
-			TableARN: "arn:aws:dynamodb:us-east-1:1234:table/state-abc",
-		}
+		cfg := isrCacheFor(t, "prod", "proj123", "marketing", "build456")
 
 		prefix := cfg.env()["OCEL_BYTECODE_PREFIX"]
 		bytecodeKey := fmt.Sprintf("%s/bytecode/my-function/node22-x64.tar.gz", prefix)
@@ -221,12 +215,7 @@ func TestISRPolicy(t *testing.T) {
 	})
 
 	t.Run("scopes to the app's own namespace", func(t *testing.T) {
-		cfg := isrConfig{
-			Bucket:   "assets-xyz",
-			Prefix:   "prod/proj123/marketing/build456",
-			Table:    "state-abc",
-			TableARN: "arn:aws:dynamodb:us-east-1:1234:table/state-abc",
-		}
+		cfg := isrCacheFor(t, "prod", "proj123", "marketing", "build456")
 
 		raw, err := isrPolicy(cfg)
 		if err != nil {
@@ -249,7 +238,7 @@ func TestISRPolicy(t *testing.T) {
 		}
 
 		s3Stmt := doc.Statement[0]
-		if want := "arn:aws:s3:::assets-xyz/prod/proj123/marketing/build456/*"; s3Stmt.Resource != want {
+		if want := "arn:aws:s3:::assets-xyz/prod/proj123/marketing/" + releaseTokenFor("build456") + "/isr/*"; s3Stmt.Resource != want {
 			t.Errorf("S3 Resource = %q, want %q", s3Stmt.Resource, want)
 		}
 
@@ -262,7 +251,7 @@ func TestISRPolicy(t *testing.T) {
 			t.Errorf("DynamoDB Action = %v, want exactly %v", ddbStmt.Action, wantActions)
 		}
 		keys := ddbStmt.Condition["ForAllValues:StringLike"]["dynamodb:LeadingKeys"]
-		if len(keys) != 1 || keys[0] != "TAG#prod#proj123#marketing#build456#*" {
+		if want := "PROJECT#proj123#STACK#prod--marketing--" + releaseTokenFor("build456") + "#TAG#*"; len(keys) != 1 || keys[0] != want {
 			t.Errorf("LeadingKeys = %v, want the app's own tag partitions", keys)
 		}
 
@@ -279,16 +268,17 @@ func TestISRPolicy(t *testing.T) {
 	})
 
 	t.Run("cannot reach another app's prefix", func(t *testing.T) {
-		const tableARN = "arn:aws:dynamodb:us-east-1:1234:table/state-abc"
-		web := isrConfig{Bucket: "assets-xyz", Prefix: "prod/proj/web/WEB1", Table: "state-abc", TableARN: tableARN}
-		admin := isrConfig{Bucket: "assets-xyz", Prefix: "prod/proj/admin/ADM1", Table: "state-abc", TableARN: tableARN}
+		web := isrCacheFor(t, "prod", "proj", "web", "WEB1")
+		admin := isrCacheFor(t, "prod", "proj", "admin", "ADM1")
+		preview := isrCacheFor(t, "pr-7", "proj", "web", "WEB1")
+		redeployed := isrCacheFor(t, "prod", "proj", "web", "WEB2")
 
 		webDoc, adminDoc := parsePolicy(t, web), parsePolicy(t, admin)
 
-		if want := "arn:aws:s3:::assets-xyz/prod/proj/web/WEB1/*"; webDoc.Statement[0].Resource != want {
+		if want := "arn:aws:s3:::assets-xyz/" + web.Prefix + "/*"; webDoc.Statement[0].Resource != want {
 			t.Errorf("web S3 Resource = %q, want %q", webDoc.Statement[0].Resource, want)
 		}
-		if want := "arn:aws:s3:::assets-xyz/prod/proj/admin/ADM1/*"; adminDoc.Statement[0].Resource != want {
+		if want := "arn:aws:s3:::assets-xyz/" + admin.Prefix + "/*"; adminDoc.Statement[0].Resource != want {
 			t.Errorf("admin S3 Resource = %q, want %q", adminDoc.Statement[0].Resource, want)
 		}
 		if strings.Contains(webDoc.Statement[0].Resource, "admin") {
@@ -297,14 +287,48 @@ func TestISRPolicy(t *testing.T) {
 
 		for _, stmt := range webDoc.Statement[1:] {
 			keys := stmt.Condition["ForAllValues:StringLike"]["dynamodb:LeadingKeys"]
-			if len(keys) != 1 || keys[0] != "TAG#prod#proj#web#WEB1#*" {
-				t.Fatalf("web LeadingKeys = %v, want only its own tag partitions", keys)
+			if want := web.tagNamespace() + "*"; len(keys) != 1 || keys[0] != want {
+				t.Fatalf("web LeadingKeys = %v, want only %q", keys, want)
 			}
-			if strings.HasPrefix(admin.tagNamespace(), strings.TrimSuffix(keys[0], "*")) {
-				t.Errorf("web's LeadingKeys %q admits the admin app's namespace %q", keys[0], admin.tagNamespace())
+			for _, tag := range []string{"products", "a#b", ""} {
+				if key := isrTagKey(web, tag); !admits(t, keys[0], key) {
+					t.Errorf("web's LeadingKeys %q denies its own tag key %q", keys[0], key)
+				}
+			}
+			for _, other := range []isrConfig{admin, preview, redeployed} {
+				for _, tag := range []string{"products", ""} {
+					if key := isrTagKey(other, tag); admits(t, keys[0], key) {
+						t.Errorf("web's LeadingKeys %q admits %q, which web must not write", keys[0], key)
+					}
+				}
+			}
+			for _, key := range []string{
+				naming.ProjectKey("proj"),
+				naming.VarsKey("proj", "production"),
+				naming.StackKey("proj", web.Coord.Stack()),
+			} {
+				if admits(t, keys[0], key) {
+					t.Errorf("web's LeadingKeys %q admits %q, which is not a tag partition", keys[0], key)
+				}
 			}
 		}
 	})
+}
+
+func isrTagKey(c isrConfig, tag string) string {
+	return c.tagNamespace() + tag
+}
+
+func admits(t *testing.T, pattern, key string) bool {
+	t.Helper()
+	if strings.ContainsAny(pattern+key, "?[]/\\") {
+		t.Fatalf("pattern %q or key %q carries a character path.Match reads differently from IAM StringLike", pattern, key)
+	}
+	ok, err := path.Match(pattern, key)
+	if err != nil {
+		t.Fatalf("path.Match(%q, %q): %v", pattern, key, err)
+	}
+	return ok
 }
 
 func TestFunctionEnvKey(t *testing.T) {
@@ -418,6 +442,12 @@ func TestTagNamespace(t *testing.T) {
 		body := nextCacheFixture(t, "edge-contract.json")
 		var contract struct {
 			TagNamespace struct {
+				Coordinate struct {
+					Project string `json:"project"`
+					Env     string `json:"env"`
+					App     string `json:"app"`
+					Release string `json:"release"`
+				} `json:"coordinate"`
 				ISRPrefix          string `json:"isrPrefix"`
 				PartitionKeyPrefix string `json:"partitionKeyPrefix"`
 			} `json:"tagNamespace"`
@@ -426,9 +456,28 @@ func TestTagNamespace(t *testing.T) {
 			t.Fatalf("parse fixture: %v", err)
 		}
 
-		cfg := isrConfig{Prefix: contract.TagNamespace.ISRPrefix}
+		facts := contract.TagNamespace.Coordinate
+		release, err := naming.ParseRelease(facts.Release)
+		if err != nil {
+			t.Fatalf("ParseRelease(%q): %v", facts.Release, err)
+		}
+		coord := storageCoordinate(facts.Env, facts.Project, facts.App, release)
+
+		if got := isrPrefixOf(coord); got != contract.TagNamespace.ISRPrefix {
+			t.Errorf("isrPrefixOf() = %q, want the contract's isrPrefix %q", got, contract.TagNamespace.ISRPrefix)
+		}
+		cfg := isrConfig{Coord: coord}
 		if got := cfg.tagNamespace(); got != contract.TagNamespace.PartitionKeyPrefix {
 			t.Errorf("tagNamespace() = %q, want %q", got, contract.TagNamespace.PartitionKeyPrefix)
+		}
+	})
+
+	t.Run("refuses a cache with no coordinate", func(t *testing.T) {
+		if got := (isrConfig{Prefix: "prod/proj/web/r3f8a1c9d/isr"}).tagNamespace(); got != "" {
+			t.Errorf("tagNamespace() = %q, want %q — a rendered path is not a coordinate", got, "")
+		}
+		if _, err := isrPolicy(isrConfig{Prefix: "prod/proj/web/r3f8a1c9d/isr"}); err == nil {
+			t.Error("isrPolicy accepted a cache with no coordinate; an unscoped tag grant must never render")
 		}
 	})
 }
@@ -445,13 +494,8 @@ func TestISRCacheStore(t *testing.T) {
 			t.Fatalf("parse fixture: %v", err)
 		}
 
-		cfg := isrConfig{
-			Bucket:           "assets-xyz",
-			Prefix:           "prod/proj123/marketing/build456",
-			Table:            "state-abc",
-			TableARN:         "arn:aws:dynamodb:us-east-1:1234:table/state-abc",
-			CacheStoreBucket: "ocel-edge-cache",
-		}
+		cfg := isrCacheFor(t, "prod", "proj123", "marketing", "build456")
+		cfg.CacheStoreBucket = "ocel-edge-cache"
 
 		if got := cfg.env()[contract.CacheStoreEnv.Bucket]; got != "ocel-edge-cache" {
 			t.Errorf("%s = %q, want the adopted bucket", contract.CacheStoreEnv.Bucket, got)
@@ -459,13 +503,8 @@ func TestISRCacheStore(t *testing.T) {
 	})
 
 	t.Run("leaves no standing credential on the function", func(t *testing.T) {
-		cfg := isrConfig{
-			Bucket:           "assets-xyz",
-			Prefix:           "prod/proj123/marketing/build456",
-			Table:            "state-abc",
-			TableARN:         "arn:aws:dynamodb:us-east-1:1234:table/state-abc",
-			CacheStoreBucket: "ocel-edge-cache",
-		}
+		cfg := isrCacheFor(t, "prod", "proj123", "marketing", "build456")
+		cfg.CacheStoreBucket = "ocel-edge-cache"
 
 		env := functionEnv(map[string]string{}, functionArgs{Handler: "index.mjs"}, &cfg)
 		for name, value := range env {

@@ -1,4 +1,9 @@
-import { tagSnapshotKey, type TagRecord, type TagSnapshot } from "@framework/next-cache";
+import {
+  tagNamespace,
+  tagSnapshotKey,
+  type TagRecord,
+  type TagSnapshot,
+} from "@framework/next-cache";
 import { createExecutionContext, env } from "cloudflare:test";
 import { beforeEach, expect, it } from "vitest";
 
@@ -78,7 +83,7 @@ const entry = (over: Record<string, unknown> = {}) => ({
 let scopes = 0;
 let scope = "";
 beforeEach(() => {
-  scope = `prod/proj/app/${scopes++}`;
+  scope = `prod/proj/app/r${String(scopes++).padStart(8, "0")}/isr`;
 });
 
 async function seedSnapshot(records: TagSnapshot["records"], deployedAt = 0): Promise<void> {
@@ -215,7 +220,7 @@ it("does not surface a failed write to the caller", async () => {
   await expect(Promise.all(pending)).resolves.toBeDefined();
 });
 
-it("records one tag update per tag, under the prefix's TAG# namespace", async () => {
+it("records one tag update per tag, under the prefix's tag namespace", async () => {
   const aws = awsRecorder(() => new Response("{}"));
   await cacheWith(aws).revalidateTags(scope, ["posts", "authors"]);
 
@@ -225,8 +230,16 @@ it("records one tag update per tag, under the prefix's TAG# namespace", async ()
   expect(updates[0].headers.get("x-amz-target")).toBe("DynamoDB_20120810.UpdateItem");
   const body = JSON.parse(updates[0].body);
   expect(body.TableName).toBe(table);
-  expect(body.Key.pk.S).toBe(`TAG#${scope.replaceAll("/", "#")}#posts`);
+  expect(body.Key.pk.S).toBe(`${tagNamespace(scope)}posts`);
   expect(body.ExpressionAttributeValues[":expired"].N).toBe("5000");
+});
+
+it("writes no tag item at all for a scope that is not one release's ISR prefix", async () => {
+  const aws = awsRecorder(() => new Response("{}"));
+  await expect(
+    cacheWith(aws).revalidateTags("prod/proj/app/r00000000", ["posts"]),
+  ).rejects.toThrow(/ISR prefix/);
+  expect(aws.calls).toHaveLength(0);
 });
 
 it("marks tags stale now and dead at the end of an expire window", async () => {

@@ -99,6 +99,9 @@ export function createEdgeCache(deps: EdgeCacheDeps): EdgeCacheRpc {
         : { expired: at };
 
       const namespace = tagNamespace(scope);
+      if (namespace === null) {
+        throw new Error(`ocel: ${scope} is not an ISR prefix tag items can be keyed by`);
+      }
       await Promise.all(
         tags.map((tag) => writeTagRecord(deps, namespace, tag, { ...record, writtenAt: at })),
       );

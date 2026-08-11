@@ -10,7 +10,7 @@ let nextSequence = 0;
 function tagRecord(
   tag: string,
   attrs: Record<string, { S?: string; N?: string }>,
-  namespace = tagNamespace(PREFIX),
+  namespace = tagNamespace(PREFIX)!,
 ): StreamRecord {
   return {
     dynamodb: {
@@ -29,7 +29,7 @@ function tagRecord(
 
 describe("raisesOf", () => {
   it("groups a batch by the build each record belongs to", () => {
-    const other = tagNamespace("prod/acme/admin/rbbbbbbbb/isr");
+    const other = tagNamespace("prod/acme/admin/rbbbbbbbb/isr")!;
     const raises = raisesOf([
       tagRecord("cart", { expired: { N: "100" } }),
       tagRecord("home", { stale: { N: "200" } }),
@@ -42,7 +42,7 @@ describe("raisesOf", () => {
   });
 
   it("remembers which records each build's raise was carried by", () => {
-    const other = tagNamespace("prod/acme/admin/rbbbbbbbb/isr");
+    const other = tagNamespace("prod/acme/admin/rbbbbbbbb/isr")!;
     const raises = raisesOf([
       tagRecord("cart", { expired: { N: "100" } }),
       tagRecord("cart", { expired: { N: "300" } }, other),
@@ -65,8 +65,20 @@ describe("raisesOf", () => {
   });
 
   it("derives the build from gsi1pk, not from a pk a tag can forge", () => {
-    const raises = raisesOf([tagRecord("evil#prod#other#app#B9", { expired: { N: "1" } })]);
+    const raises = raisesOf([
+      tagRecord("evil#PROJECT#other#STACK#prod--app--r00000000#TAG#", { expired: { N: "1" } }),
+    ]);
     expect([...raises.keys()]).toEqual([PREFIX]);
+  });
+
+  it("acts on no partition that only looks like a tag namespace", () => {
+    for (const namespace of [
+      "PROJECT#acme#CLASS#production#TAG#",
+      "PROJECT#acme#STACK#prod--web#TAG#",
+      "TAG#prod#acme#web#r3f8a1c9d#isr#",
+    ]) {
+      expect(raisesOf([tagRecord("cart", { expired: { N: "1" } }, namespace)]).size).toBe(0);
+    }
   });
 
   it("acts on nothing that is not a tag record", () => {

@@ -2,7 +2,7 @@ import { afterEach, beforeEach, expect, test, vi } from "vitest";
 
 beforeEach(() => {
   process.env.OCEL_STATE_TABLE = "state";
-  process.env.OCEL_ISR_TAG_NAMESPACE = "TAG#prod#proj#app#BID#";
+  process.env.OCEL_ISR_TAG_NAMESPACE = "PROJECT#proj#STACK#prod--app--r3f8a1c9d#TAG#";
   process.env.OCEL_ISR_BUCKET = "assets";
   process.env.OCEL_ISR_PREFIX = "prod/proj/app/BID";
 });
@@ -86,7 +86,7 @@ test("writes a tag record under the monotonic guard", async () => {
   expect(sends).toHaveLength(1);
   expect(sends[0]).toMatchObject({
     TableName: "state",
-    Key: { pk: { S: "TAG#prod#proj#app#BID#products" }, sk: { S: "#META" } },
+    Key: { pk: { S: "PROJECT#proj#STACK#prod--app--r3f8a1c9d#TAG#products" }, sk: { S: "#META" } },
     ConditionExpression: "attribute_not_exists(expired) OR expired < :expired",
     UpdateExpression:
       "SET tag = :tag, gsi1pk = :ns, gsi1sk = :writtenAt, expired = :expired, stale = :stale",
@@ -94,7 +94,7 @@ test("writes a tag record under the monotonic guard", async () => {
       ":expired": { N: "1800" },
       ":stale": { N: "1700" },
       ":tag": { S: "products" },
-      ":ns": { S: "TAG#prod#proj#app#BID#" },
+      ":ns": { S: "PROJECT#proj#STACK#prod--app--r3f8a1c9d#TAG#" },
       ":writtenAt": { S: "000000000001700" },
     },
   });

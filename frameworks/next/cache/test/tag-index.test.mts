@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import { isGuardRejection, tagRecordUpdate, tagSortKey } from "../src/index.mjs";
 
 const update = (tag: string, record: { stale?: number; expired?: number; writtenAt: number }) =>
-  tagRecordUpdate("state", "TAG#prod#proj#app#BID#", tag, record);
+  tagRecordUpdate("state", "PROJECT#proj#STACK#prod--app--r3f8a1c9d#TAG#", tag, record);
 
 describe("tagSortKey", () => {
   it("pads to a fixed width so string order matches numeric order", () => {
@@ -20,13 +20,13 @@ describe("tagRecordUpdate", () => {
   it("addresses the record and guards the advancing watermark", () => {
     expect(update("products", { expired: 700, writtenAt: 1700 })).toEqual({
       TableName: "state",
-      Key: { pk: { S: "TAG#prod#proj#app#BID#products" }, sk: { S: "#META" } },
+      Key: { pk: { S: "PROJECT#proj#STACK#prod--app--r3f8a1c9d#TAG#products" }, sk: { S: "#META" } },
       ConditionExpression: "attribute_not_exists(expired) OR expired < :expired",
       UpdateExpression:
         "SET tag = :tag, gsi1pk = :ns, gsi1sk = :writtenAt, expired = :expired",
       ExpressionAttributeValues: {
         ":tag": { S: "products" },
-        ":ns": { S: "TAG#prod#proj#app#BID#" },
+        ":ns": { S: "PROJECT#proj#STACK#prod--app--r3f8a1c9d#TAG#" },
         ":writtenAt": { S: "000000000001700" },
         ":expired": { N: "700" },
       },
