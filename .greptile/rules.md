@@ -41,9 +41,24 @@ Classify every provider call the diff adds by how its request count grows:
 Also fails when a loop polls without backoff or a cap, immutable data is re-read instead
 of cached, or per-item calls exist where the API offers a batch.
 
-Prior failure: Pulumi's S3 state backend enumerated all stacks per operation — LIST
-requests scaled with live objects in the bucket and cost 3.5× the state writes themselves.
-An `O(deploys ever)` term that passed review.
+Budgets, where one deploy is one stack created and destroyed:
+
+| Metric                                              | Target | Fail |
+| --------------------------------------------------- | ------ | ---- |
+| Ocel's provider request charges per 10,000 deploys  | $2     | $10  |
+| Billable provider requests per deploy               | 50     | 250  |
+| Share of the customer's bill for the same resources | 0.1%   | 1%   |
+
+Bytes a deploy leaves behind after teardown must be zero — its own teardown reclaims what
+it wrote. Retention is the only term that keeps growing after the deploy is over, so a
+destroy that leaves state behind fails this rule even when its request count passes.
+
+Prior failure: Pulumi's S3 state backend enumerated all stacks per operation, so LIST
+requests scaled with live objects in the bucket. A measured run of 548 stacks cost $0.236
+— $4.31 per 10,000 deploys — of which 78% was enumeration rather than state writes, and
+each run left husks that made the next enumeration dearer. The backend writes 9 PUTs per
+operation, putting the structural floor near $1 per 10,000 deploys. An `O(deploys ever)`
+term that passed review.
 
 ## Enumeration
 
