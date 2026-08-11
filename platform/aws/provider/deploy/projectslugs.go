@@ -3,6 +3,8 @@ package deploy
 import (
 	"context"
 	"slices"
+
+	"github.com/ocelhq/ocel/pkg/naming"
 )
 
 func ProjectSlugsBesides(ctx context.Context, index StackIndex, slug string) ([]string, error) {
@@ -18,7 +20,7 @@ func ProjectSlugsBesides(ctx context.Context, index StackIndex, slug string) ([]
 }
 
 func projectSlugsBesides(slug string, scopes []string) []string {
-	mine := safeName(slug)
+	mine := naming.Sanitize(slug)
 	others := map[string]struct{}{}
 	for _, scope := range scopes {
 		if scope == "" {

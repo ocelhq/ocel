@@ -9,18 +9,20 @@ import (
 	"github.com/pulumi/pulumi/sdk/v3/go/auto"
 	"github.com/pulumi/pulumi/sdk/v3/go/auto/optdestroy"
 
+	"github.com/ocelhq/ocel/pkg/naming"
 	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
 )
 
 type TeardownConfig struct {
-	Region      string
-	BackendURL  string
-	Passphrase  string
-	ProjectName string
-	StackName   string
-	Pulumi      auto.PulumiCommand
-	Stacks      StackIndex
-	SkipRefresh bool
+	Region        string
+	BackendURL    string
+	Passphrase    string
+	PulumiProject string
+	Project       string
+	Stack         naming.StackName
+	Pulumi        auto.PulumiCommand
+	Stacks        StackIndex
+	SkipRefresh   bool
 
 	realized *realizedStacks
 }
@@ -79,38 +81,40 @@ func Destroy(ctx context.Context, cfg TeardownConfig, progress, log func(string)
 		return err
 	}
 
+	name := cfg.Stack.String()
+
 	report(progress, "Selecting stack")
-	stack, err := auto.SelectStackInlineSource(ctx, cfg.StackName, cfg.ProjectName, nil,
+	stack, err := auto.SelectStackInlineSource(ctx, name, cfg.PulumiProject, nil,
 		auto.Pulumi(cfg.Pulumi),
 		auto.SecretsProvider("passphrase"),
 		auto.EnvVars(pulumiEnv(cfg.Region, cfg.BackendURL, cfg.Passphrase)),
 	)
 	if auto.IsSelectStack404Error(err) {
-		report(progress, "No stack "+cfg.StackName+" to destroy")
-		return index.RemoveStack(ctx, cfg.StackName)
+		report(progress, "No stack "+name+" to destroy")
+		return index.RemoveStack(ctx, cfg.Project, cfg.Stack)
 	}
 	if err != nil {
-		return fmt.Errorf("select stack %s: %w", cfg.StackName, err)
+		return fmt.Errorf("select stack %s: %w", name, err)
 	}
 
 	report(progress, "Destroying resources (this can take several minutes)")
 	logWriter := lineWriter(log)
 	if _, err := stack.Destroy(ctx, destroyOptions(cfg, logWriter)...); err != nil {
 		logWriter.Flush()
-		return fmt.Errorf("destroy stack %s: %w%s", cfg.StackName, err, lockRecoveryHint(err, cfg))
+		return fmt.Errorf("destroy stack %s: %w%s", name, err, lockRecoveryHint(err, cfg))
 	}
 	logWriter.Flush()
 
 	report(progress, "Removing stack")
-	if err := stack.Workspace().RemoveStack(ctx, cfg.StackName); err != nil {
-		return fmt.Errorf("remove stack %s: %w", cfg.StackName, err)
+	if err := stack.Workspace().RemoveStack(ctx, name); err != nil {
+		return fmt.Errorf("remove stack %s: %w", name, err)
 	}
-	return index.RemoveStack(ctx, cfg.StackName)
+	return index.RemoveStack(ctx, cfg.Project, cfg.Stack)
 }
 
 func destroyOptions(cfg TeardownConfig, logWriter *lineForwarder) []optdestroy.Option {
 	var opts []optdestroy.Option
-	if !cfg.SkipRefresh && !cfg.realized.realizedHere(cfg.StackName) {
+	if !cfg.SkipRefresh && !cfg.realized.realizedHere(cfg.Project, cfg.Stack) {
 		opts = append(opts, optdestroy.Refresh())
 	}
 	if logWriter != nil {
@@ -126,7 +130,7 @@ func lockRecoveryHint(err error, cfg TeardownConfig) string {
 	return fmt.Sprintf("\n\nthis lock outlives a run that was killed rather than one still working."+
 		"\nconfirm no deploy or teardown is running against this stack, then release it with:"+
 		"\n  PULUMI_BACKEND_URL=%s PULUMI_CONFIG_PASSPHRASE=<the account passphrase> pulumi cancel --stack %s"+
-		"\nand re-run the teardown", cfg.BackendURL, cfg.StackName)
+		"\nand re-run the teardown", cfg.BackendURL, cfg.Stack)
 }
 
 type PreviewStack struct {
@@ -138,29 +142,27 @@ type PreviewStack struct {
 }
 
 func ListPreviewStacks(ctx context.Context, index StackIndex, slug string) ([]PreviewStack, error) {
-	names, err := indexedStacks(ctx, index, slug)
+	stacks, err := indexedStacks(ctx, index, slug)
 	if err != nil {
 		return nil, err
 	}
-	return previewStacksFromNames(slug, names), nil
+	return previewStacksFromNames(stacks), nil
 }
 
-func previewStacksFromNames(slug string, stackNames []string) []PreviewStack {
-	plan := classifyPreviewStacks(slug, stackNames)
+func previewStacksFromNames(stacks []naming.StackName) []PreviewStack {
+	plan := classifyPreviewStacks(stacks)
 	persistent := map[string]struct{}{}
 	for _, infra := range plan.InfraStacks {
-		if pointer, _, ok := previewStackPointer(slug, infra); ok {
-			persistent[pointer] = struct{}{}
-		}
+		persistent[infra.Env] = struct{}{}
 	}
 
-	stacks := make([]PreviewStack, 0, len(plan.Pointers))
+	previews := make([]PreviewStack, 0, len(plan.Pointers))
 	for _, pointer := range plan.Pointers {
 		lifecycle := deploymentsv1.Environment_LIFECYCLE_EPHEMERAL
 		if _, ok := persistent[pointer]; ok {
 			lifecycle = deploymentsv1.Environment_LIFECYCLE_PERSISTENT
 		}
-		stacks = append(stacks, PreviewStack{Identity: pointer, Lifecycle: lifecycle})
+		previews = append(previews, PreviewStack{Identity: pointer, Lifecycle: lifecycle})
 	}
-	return stacks
+	return previews
 }

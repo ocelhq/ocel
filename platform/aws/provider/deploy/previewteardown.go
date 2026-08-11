@@ -5,16 +5,16 @@ import (
 	"errors"
 	"fmt"
 	"slices"
-	"strings"
 
+	"github.com/ocelhq/ocel/pkg/naming"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
-func PreviewInfraStackFor(slug, pointer string, persistent bool) string {
+func PreviewInfraStackFor(pointer string, persistent bool) naming.StackName {
 	if !persistent {
-		return ""
+		return naming.StackName{}
 	}
-	return PreviewInfraStackName(slug, pointer)
+	return naming.InfraStack(pointer)
 }
 
 func RemovePreview(ctx context.Context, stack edge.RootStack, state edge.RootStackState, cfg Config, slug, pointer string, persistent bool, progress, log func(string)) error {
@@ -32,15 +32,15 @@ func RemovePreview(ctx context.Context, stack edge.RootStack, state edge.RootSta
 		}
 	}
 
-	targets, err := PreviewReclaimTargets(slug, pointer, cfg.Env, removal.RemovedRecordKeys, removal.SurvivingRecordKeys, removal.SurvivingPointerRecordKeys)
+	targets, err := ReclaimTargets(slug, pointer, removal.RemovedRecordKeys, removal.SurvivingRecordKeys, removal.SurvivingPointerRecordKeys)
 	if err != nil {
 		errs = append(errs, err)
 	} else if err := Reclaim(ctx, cfg, targets, progress, log); err != nil {
 		errs = append(errs, err)
 	}
 
-	if infra := PreviewInfraStackFor(slug, pointer, persistent); infra != "" {
-		report("Destroying preview infra stack " + infra + " (database, bucket)")
+	if infra := PreviewInfraStackFor(pointer, persistent); !infra.IsZero() {
+		report("Destroying preview infra stack " + infra.String() + " (database, bucket)")
 		if err := Destroy(ctx, teardownConfig(cfg, infra), progress, log); err != nil {
 			errs = append(errs, fmt.Errorf("destroy preview infra stack %s: %w", infra, err))
 		}
@@ -50,41 +50,26 @@ func RemovePreview(ctx context.Context, stack edge.RootStack, state edge.RootSta
 }
 
 type PreviewProjectTeardownPlan struct {
-	InfraStacks []string
-	AppStacks   []string
+	InfraStacks []naming.StackName
+	AppStacks   []naming.StackName
 	Pointers    []string
 }
 
-const previewStackNameInfix = "--preview-"
-
-func previewStackPointer(slug, name string) (pointer string, infra, ok bool) {
-	prefix := safeName(slug) + previewStackNameInfix
-	if !strings.HasPrefix(name, prefix) {
-		return "", false, false
-	}
-	pointer, _, ok = strings.Cut(strings.TrimPrefix(name, prefix), "--")
-	if !ok || pointer == "" {
-		return "", false, false
-	}
-	return pointer, strings.HasSuffix(name, "--infra"), true
-}
-
-func classifyPreviewStacks(slug string, stackNames []string) PreviewProjectTeardownPlan {
+func classifyPreviewStacks(stacks []naming.StackName) PreviewProjectTeardownPlan {
 	var plan PreviewProjectTeardownPlan
 	seenPointer := map[string]struct{}{}
-	for _, name := range stackNames {
-		pointer, infra, ok := previewStackPointer(slug, name)
-		if !ok {
+	for _, stack := range stacks {
+		if stack.Env == ProductionEnv {
 			continue
 		}
-		if _, dup := seenPointer[pointer]; !dup {
-			seenPointer[pointer] = struct{}{}
-			plan.Pointers = append(plan.Pointers, pointer)
+		if _, dup := seenPointer[stack.Env]; !dup {
+			seenPointer[stack.Env] = struct{}{}
+			plan.Pointers = append(plan.Pointers, stack.Env)
 		}
-		if infra {
-			plan.InfraStacks = append(plan.InfraStacks, name)
+		if stack.IsInfra() {
+			plan.InfraStacks = append(plan.InfraStacks, stack)
 		} else {
-			plan.AppStacks = append(plan.AppStacks, name)
+			plan.AppStacks = append(plan.AppStacks, stack)
 		}
 	}
 	slices.Sort(plan.Pointers)
@@ -122,17 +107,17 @@ func DestroyPreviewProject(ctx context.Context, stack edge.RootStack, state edge
 	}
 
 	errs = append(errs, destroyPhased(plan.AppStacks, plan.InfraStacks,
-		func(name string) error {
-			report("Destroying preview app stack " + name)
-			if err := Destroy(ctx, teardownConfig(cfg, name), progress, log); err != nil {
-				return fmt.Errorf("destroy preview app stack %s: %w", name, err)
+		func(stack naming.StackName) error {
+			report("Destroying preview app stack " + stack.String())
+			if err := Destroy(ctx, teardownConfig(cfg, stack), progress, log); err != nil {
+				return fmt.Errorf("destroy preview app stack %s: %w", stack, err)
 			}
 			return nil
 		},
-		func(name string) error {
-			report("Destroying preview infra stack " + name + " (database, bucket)")
-			if err := Destroy(ctx, teardownConfig(cfg, name), progress, log); err != nil {
-				return fmt.Errorf("destroy preview infra stack %s: %w", name, err)
+		func(stack naming.StackName) error {
+			report("Destroying preview infra stack " + stack.String() + " (database, bucket)")
+			if err := Destroy(ctx, teardownConfig(cfg, stack), progress, log); err != nil {
+				return fmt.Errorf("destroy preview infra stack %s: %w", stack, err)
 			}
 			return nil
 		})...)
@@ -169,11 +154,11 @@ func previewProjectWorkers(slug string, deployed []string) []string {
 }
 
 func planPreviewProjectTeardown(ctx context.Context, cfg Config, slug string) (PreviewProjectTeardownPlan, error) {
-	names, err := indexedStacks(ctx, cfg.Stacks, slug)
+	stacks, err := indexedStacks(ctx, cfg.Stacks, slug)
 	if err != nil {
 		return PreviewProjectTeardownPlan{}, err
 	}
-	return classifyPreviewStacks(slug, names), nil
+	return classifyPreviewStacks(stacks), nil
 }
 
 func purgePreviewAssets(ctx context.Context, cfg Config, slug string, pointers []string) error {
@@ -189,7 +174,7 @@ func purgePreviewAssets(ctx context.Context, cfg Config, slug string, pointers [
 		}
 	}
 	for _, pointer := range pointers {
-		isr := projectISRPrefix("preview-"+pointer, slug)
+		isr := projectISRPrefix(pointer, slug)
 		if err := deletePrefix(ctx, asPrefixDeleter(cfg.CacheStoreUploader), cfg.CacheStoreBucket, isr); err != nil {
 			errs = append(errs, err)
 		}

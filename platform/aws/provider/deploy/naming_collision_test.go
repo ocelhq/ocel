@@ -1,30 +1,20 @@
 package deploy
 
-import "testing"
+import (
+	"testing"
 
-func TestSafeNameKeepsLongNamesDistinct(t *testing.T) {
-	const shared = "my-very-long-project-name-that-runs-past-the-limit"
+	"github.com/ocelhq/ocel/pkg/naming"
+)
 
-	a := safeName(shared + "-alpha")
-	b := safeName(shared + "-beta")
+func TestLongSlugsStayDistinct(t *testing.T) {
+	const shared = "my-very-long-project-name-that-runs-past-the-old-limit"
 
-	if a == b {
-		t.Fatalf("safeName collapsed two distinct slugs to %q — teardown filters on this value and would plan across projects", a)
+	a, b := shared+"-alpha", shared+"-beta"
+
+	if one, two := naming.Sanitize(a), naming.Sanitize(b); one == two {
+		t.Fatalf("two slugs collapsed to the index project %q — teardown scopes on this value and would plan across projects", one)
 	}
-	for _, got := range []string{a, b} {
-		if len(got) > maxSafeNamePrefixLen {
-			t.Errorf("safeName(%q) = %q, length %d exceeds %d", shared, got, len(got), maxSafeNamePrefixLen)
-		}
-	}
-	if again := safeName(shared + "-alpha"); again != a {
-		t.Errorf("safeName is not deterministic: %q then %q", a, again)
-	}
-}
-
-func TestStateBackendURLSeparatesCollidingSlugs(t *testing.T) {
-	const shared = "another-extremely-long-slug-that-will-be-truncated"
-
-	if one, two := StateBackendURL("b", shared+"-one"), StateBackendURL("b", shared+"-two"); one == two {
+	if one, two := naming.StateBackendURL("state", a), naming.StateBackendURL("state", b); one == two {
 		t.Fatalf("two slugs share the state subpath %q", one)
 	}
 }

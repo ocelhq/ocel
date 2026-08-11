@@ -26,6 +26,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/ssm"
 	"github.com/aws/aws-sdk-go-v2/service/sts"
 
+	"github.com/ocelhq/ocel/pkg/naming"
 	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/resources/v1"
 	"github.com/ocelhq/ocel/platform/aws/provider/bootstrap"
@@ -38,9 +39,7 @@ import (
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
-const deployEnv = "prod"
-
-const pulumiProjectName = "ocel"
+const deployEnv = deploy.ProductionEnv
 
 type Server struct {
 	memo memo
@@ -121,17 +120,6 @@ func (s *Server) callerIdentity(ctx context.Context, api STSAPI, region string) 
 	})
 }
 
-func stackName(slug string, env *deploymentsv1.Environment) string {
-	return slug + "-" + envSegment(env)
-}
-
-func envSegment(env *deploymentsv1.Environment) string {
-	if env.GetClass() == deploymentsv1.Environment_CLASS_PREVIEW {
-		return "preview-" + env.GetIdentity()
-	}
-	return deployEnv
-}
-
 type options struct {
 	Region string `json:"region"`
 }
@@ -177,6 +165,10 @@ func (s *Server) runDeploy(ctx context.Context, req *deploymentsv1.DeployRequest
 	ssmClient := ssm.NewFromConfig(awscfg)
 
 	env := req.GetEnvironment()
+	envName, err := deploy.EnvName(env)
+	if err != nil {
+		return deploy.Result{}, connect.NewError(connect.CodeInvalidArgument, err)
+	}
 	preview := env.GetClass() == deploymentsv1.Environment_CLASS_PREVIEW
 	bootstrapCmd := bootstrapCommand(preview)
 
@@ -269,10 +261,9 @@ func (s *Server) runDeploy(ctx context.Context, req *deploymentsv1.DeployRequest
 
 	res, err := deploy.Run(ctx, deploy.Config{
 		Region:        awscfg.Region,
-		BackendURL:    deploy.StateBackendURL(deployed.StateBucket, manifest.GetSlug()),
+		BackendURL:    naming.StateBackendURL(deployed.StateBucket, manifest.GetSlug()),
 		Passphrase:    params.Passphrase,
-		ProjectName:   pulumiProjectName,
-		StackName:     stackName(manifest.GetSlug(), env),
+		PulumiProject: naming.PulumiProject(manifest.GetSlug()),
 		Pulumi:        pulumiCmd,
 		Secrets:       secretsmanager.NewFromConfig(awscfg),
 		Stacks:        stacks,
@@ -294,7 +285,7 @@ func (s *Server) runDeploy(ctx context.Context, req *deploymentsv1.DeployRequest
 		AssetBucket:        deployed.AssetBucket,
 		ImageOptimizerURL:  deployed.ImageOptimizerURL,
 		RevalidateQueueURL: deployed.RevalidateQueueURL,
-		Env:                envSegment(env),
+		Env:                envName,
 		EdgeAccessKeyID:    edgeCreds.AccessKeyID,
 		EdgeSecretKey:      edgeCreds.SecretAccessKey,
 		EdgeValues:         edgeValues,

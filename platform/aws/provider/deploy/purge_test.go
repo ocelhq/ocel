@@ -93,7 +93,7 @@ func TestPurgePreviewAssets(t *testing.T) {
 	t.Run("sweeps the artifact prefix and every pointer's ISR", func(t *testing.T) {
 		awsSide, cacheSide := &sweepRecorder{}, &sweepRecorder{}
 
-		err := purgePreviewAssets(context.Background(), purgeConfig("preview-pr-1", awsSide, cacheSide), "shop", []string{"pr-1", "staging"})
+		err := purgePreviewAssets(context.Background(), purgeConfig("pr-1", awsSide, cacheSide), "shop", []string{"pr-1", "staging"})
 		if err != nil {
 			t.Fatalf("purgePreviewAssets: %v", err)
 		}
@@ -102,8 +102,8 @@ func TestPurgePreviewAssets(t *testing.T) {
 			"artifact-bucket|shop/",
 			"asset-bucket|assets/shop/",
 			"asset-bucket|image-config/shop/",
-			"asset-bucket|preview-pr-1/shop/",
-			"asset-bucket|preview-staging/shop/",
+			"asset-bucket|pr-1/shop/",
+			"asset-bucket|staging/shop/",
 		}
 		if !reflect.DeepEqual(awsSide.swept, wantAWS) {
 			t.Errorf("account-side sweeps = %v, want %v", awsSide.swept, wantAWS)
@@ -111,8 +111,8 @@ func TestPurgePreviewAssets(t *testing.T) {
 		wantCache := []string{
 			"cache-bucket|assets/shop/",
 			"cache-bucket|edge/shop/",
-			"cache-bucket|preview-pr-1/shop/",
-			"cache-bucket|preview-staging/shop/",
+			"cache-bucket|pr-1/shop/",
+			"cache-bucket|staging/shop/",
 		}
 		if !reflect.DeepEqual(cacheSide.swept, wantCache) {
 			t.Errorf("cache-store sweeps = %v, want %v", cacheSide.swept, wantCache)

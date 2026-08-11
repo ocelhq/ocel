@@ -11,6 +11,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/ocelhq/ocel/pkg/naming"
 	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/resources/v1"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
@@ -1029,7 +1030,7 @@ func TestFinalizeDeploy(t *testing.T) {
 		if got := fake.promotions[0].Builds["web"]; got != "B1" {
 			t.Errorf("prior promotion Builds[web] = %q, want %q — the prior Deployment stays intact", got, "B1")
 		}
-		if a, b := AppDeployStackName("proj", "web", before), AppDeployStackName("proj", "web", after); a == b {
+		if a, b := appStack(t, ProductionEnv, "web", before), appStack(t, ProductionEnv, "web", after); a == b {
 			t.Errorf("both Deployments name stack %q; a rotation must provision its own", a)
 		}
 	})
@@ -1060,7 +1061,7 @@ func TestFinalizeDeploy(t *testing.T) {
 			t.Fatalf("staged = %d records over %d promotions, want 3 and 3", len(fake.staged), len(fake.promotions))
 		}
 		wantIdentities := []string{"WEB1", "WEB1~fp2", "WEB1~fp3"}
-		names := map[string]bool{}
+		names := map[naming.StackName]bool{}
 		for i, want := range wantIdentities {
 			if got := fake.staged[i].Identity; got != want {
 				t.Errorf("staged[%d].Identity = %q, want %q", i, got, want)
@@ -1068,7 +1069,7 @@ func TestFinalizeDeploy(t *testing.T) {
 			if got := fake.promotions[i].Builds["web"]; got != want {
 				t.Errorf("promotions[%d].Builds[web] = %q, want %q", i, got, want)
 			}
-			names[AppDeployStackName("proj", "web", ids[i])] = true
+			names[appStack(t, ProductionEnv, "web", ids[i])] = true
 		}
 		if len(names) != 3 {
 			t.Errorf("app-deploy stack names = %v, want three distinct ones", names)

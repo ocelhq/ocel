@@ -5,6 +5,8 @@ import (
 	"errors"
 	"reflect"
 	"testing"
+
+	"github.com/ocelhq/ocel/pkg/naming"
 )
 
 func TestProjectSlugsBesides(t *testing.T) {
@@ -53,7 +55,7 @@ func TestProjectSlugsBesides(t *testing.T) {
 			want:   nil,
 		},
 		{
-			name:   "the slug's own scope is matched on its safeName form",
+			name:   "the slug's own scope is matched on its sanitized form",
 			slug:   "My--App",
 			scopes: []string{"my-app"},
 			want:   nil,
@@ -74,17 +76,17 @@ func TestProjectSlugsBesides(t *testing.T) {
 		})
 	}
 
-	t.Run("a long slug matches its truncated scope", func(t *testing.T) {
+	t.Run("a long slug keeps its whole scope", func(t *testing.T) {
 		t.Parallel()
 
-		slug := "a-very-long-project-slug-that-runs-past-the-safe-name-cap"
-		scope := safeName(slug)
-		if scope == slug {
-			t.Fatalf("safeName(%q) = %q, want it truncated — the fixture no longer exercises the cap", slug, scope)
+		slug := "a-very-long-project-slug-that-once-ran-past-the-safe-name-cap"
+		scope := naming.Sanitize(slug)
+		if scope != slug {
+			t.Fatalf("Sanitize(%q) = %q, want it whole — a project scope is never truncated", slug, scope)
 		}
 
 		if got := projectSlugsBesides(slug, []string{scope}); got != nil {
-			t.Errorf("projectSlugsBesides() = %v, want nil — the truncated scope is the slug's own", got)
+			t.Errorf("projectSlugsBesides() = %v, want nil — the scope is the slug's own", got)
 		}
 	})
 

@@ -14,6 +14,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/ssm"
 	"github.com/aws/aws-sdk-go-v2/service/sts"
 
+	"github.com/ocelhq/ocel/pkg/naming"
 	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
 	"github.com/ocelhq/ocel/platform/aws/provider/bootstrap"
 	"github.com/ocelhq/ocel/platform/aws/provider/deploy"
@@ -239,11 +240,16 @@ func (s *Server) previewTeardownContext(ctx context.Context, opts options, slug 
 		return deploy.Config{}, nil, nil, fmt.Errorf("this edge does not support the root stack")
 	}
 
+	envName, err := deploy.EnvName(env)
+	if err != nil {
+		return deploy.Config{}, nil, nil, connect.NewError(connect.CodeInvalidArgument, err)
+	}
+
 	cfg := deploy.Config{
 		Region:             awscfg.Region,
-		BackendURL:         deploy.StateBackendURL(deployed.StateBucket, slug),
+		BackendURL:         naming.StateBackendURL(deployed.StateBucket, slug),
 		Passphrase:         params.Passphrase,
-		ProjectName:        pulumiProjectName,
+		PulumiProject:      naming.PulumiProject(slug),
 		Pulumi:             pulumiCmd,
 		AssetBucket:        deployed.AssetBucket,
 		ArtifactBucket:     deployed.ArtifactBucket,
@@ -251,8 +257,8 @@ func (s *Server) previewTeardownContext(ctx context.Context, opts options, slug 
 		CacheStoreBucket:   params.CacheStore.Bucket,
 		CacheStoreUploader: cacheStoreUploader(params.CacheStore),
 		Stacks:             stacks,
-		Env:                envSegment(env),
-		Slug:               env.GetIdentity(),
+		Env:                envName,
+		Slug:               slug,
 
 		ISRWriterEndpoint:      params.ISRWriter.Endpoint,
 		ISRWriterBootstrapCred: params.ISRWriter.BootstrapCred,

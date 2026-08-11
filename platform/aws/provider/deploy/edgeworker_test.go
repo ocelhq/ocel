@@ -138,7 +138,7 @@ func TestDeployEdgeWorker(t *testing.T) {
 		setWorkerBundle(t)
 
 		fake := &recordingEdge{}
-		cfg := Config{Edge: fake, ArtifactRoot: artifactRoot, StackName: "proj_1-prod", Slug: "proj_1", Env: "prod"}
+		cfg := Config{Edge: fake, ArtifactRoot: artifactRoot, Slug: "proj_1", Env: "prod"}
 		manifest := &deploymentsv1.Manifest{
 			Functions: []*deploymentsv1.ManifestFunction{
 				{LogicalName: "api_documents", Framework: "next", App: "web", RouteId: "/api/documents"},
@@ -179,9 +179,9 @@ func TestDeployEdgeWorker(t *testing.T) {
 
 		fake := &recordingEdge{}
 		cfg := Config{
-			Edge:            fake,
-			ArtifactRoot:    artifactRoot,
-			StackName:       "proj_1-prod",
+			Edge:         fake,
+			ArtifactRoot: artifactRoot,
+
 			Slug:            "proj_1",
 			Region:          "us-west-2",
 			AssetBucket:     "ocel-assets",
@@ -228,7 +228,7 @@ func TestDeployEdgeWorker(t *testing.T) {
 	t.Run("no cache bindings without edge creds", func(t *testing.T) {
 		artifactRoot := writeMinimalWorkerArtifacts(t)
 		fake := &recordingEdge{}
-		cfg := Config{Edge: fake, ArtifactRoot: artifactRoot, StackName: "proj_1-prod", Slug: "proj_1", Env: "prod"}
+		cfg := Config{Edge: fake, ArtifactRoot: artifactRoot, Slug: "proj_1", Env: "prod"}
 		manifest := &deploymentsv1.Manifest{
 			Functions: []*deploymentsv1.ManifestFunction{{LogicalName: "index", Framework: "next", App: "web", RouteId: "/"}},
 		}
@@ -250,7 +250,7 @@ func TestDeployEdgeWorker(t *testing.T) {
 	t.Run("an unresolvable route fails naming it", func(t *testing.T) {
 		artifactRoot := writeMinimalWorkerArtifacts(t)
 		fake := &recordingEdge{}
-		cfg := Config{Edge: fake, ArtifactRoot: artifactRoot, StackName: "proj_1-prod", Slug: "proj_1", Env: "prod"}
+		cfg := Config{Edge: fake, ArtifactRoot: artifactRoot, Slug: "proj_1", Env: "prod"}
 		manifest := &deploymentsv1.Manifest{
 			Functions: []*deploymentsv1.ManifestFunction{{LogicalName: "orphan", Framework: "next", App: "web", RouteId: "/orphan"}},
 		}
@@ -269,7 +269,7 @@ func TestDeployEdgeWorker(t *testing.T) {
 
 	t.Run("an unsupported edge names the edge", func(t *testing.T) {
 		artifactRoot := writeMinimalWorkerArtifacts(t)
-		cfg := Config{Edge: &otherEdge{}, ArtifactRoot: artifactRoot, StackName: "proj_1-prod", Slug: "proj_1", Env: "prod"}
+		cfg := Config{Edge: &otherEdge{}, ArtifactRoot: artifactRoot, Slug: "proj_1", Env: "prod"}
 		manifest := &deploymentsv1.Manifest{
 			Functions: []*deploymentsv1.ManifestFunction{{LogicalName: "index", Framework: "next", App: "web", RouteId: "/"}},
 		}
@@ -299,7 +299,7 @@ func TestDeployEdgeWorker(t *testing.T) {
 			t.Run(tc.name, func(t *testing.T) {
 				artifactRoot := writeMinimalWorkerArtifacts(t)
 				fake := &recordingEdge{}
-				cfg := Config{Edge: fake, ArtifactRoot: artifactRoot, StackName: "proj_1-prod", Slug: "proj_1", Env: "prod", Class: tc.class}
+				cfg := Config{Edge: fake, ArtifactRoot: artifactRoot, Slug: "proj_1", Env: "prod", Class: tc.class}
 				manifest := &deploymentsv1.Manifest{
 					Functions: []*deploymentsv1.ManifestFunction{{LogicalName: "api_documents", Framework: "next", App: "web", RouteId: "/api/documents"}},
 					Domains:   tc.domains,
@@ -319,7 +319,7 @@ func TestDeployEdgeWorker(t *testing.T) {
 	t.Run("one worker per app", func(t *testing.T) {
 		artifactRoot, manifest, outputs := twoNextApps(t)
 		fake := &recordingEdge{}
-		cfg := Config{Edge: fake, ArtifactRoot: artifactRoot, StackName: "proj-prod", Slug: "proj", Env: "prod"}
+		cfg := Config{Edge: fake, ArtifactRoot: artifactRoot, Slug: "proj", Env: "prod"}
 
 		out, err := deployEdgeWorker(context.Background(), cfg, manifest, outputs, nil)
 		if err != nil {
@@ -348,7 +348,7 @@ func TestDeployEdgeWorker(t *testing.T) {
 		manifest.GetApps()[1].Domains = classDomains("production", "docs.acme.com")
 
 		fake := &recordingEdge{}
-		cfg := Config{Edge: fake, ArtifactRoot: artifactRoot, StackName: "proj-prod", Slug: "proj", Env: "prod", Class: deploymentsv1.Environment_CLASS_PRODUCTION}
+		cfg := Config{Edge: fake, ArtifactRoot: artifactRoot, Slug: "proj", Env: "prod", Class: deploymentsv1.Environment_CLASS_PRODUCTION}
 		if _, err := deployEdgeWorker(context.Background(), cfg, manifest, outputs, nil); err != nil {
 			t.Fatalf("deployEdgeWorker: %v", err)
 		}
@@ -385,7 +385,7 @@ func TestDeployEdgeWorker(t *testing.T) {
 		}
 
 		fake := &recordingEdge{}
-		cfg := Config{Edge: fake, ArtifactRoot: artifactRoot, StackName: "proj-prod", Slug: "proj", Env: "prod", Class: deploymentsv1.Environment_CLASS_PRODUCTION}
+		cfg := Config{Edge: fake, ArtifactRoot: artifactRoot, Slug: "proj", Env: "prod", Class: deploymentsv1.Environment_CLASS_PRODUCTION}
 		out, err := deployEdgeWorker(context.Background(), cfg, manifest, outputs, nil)
 		if err != nil {
 			t.Fatalf("deployEdgeWorker: %v", err)
@@ -406,7 +406,7 @@ func TestDeployEdgeWorker(t *testing.T) {
 		manifest.Domains = classDomains("production", "project.acme.com")
 
 		fake := &recordingEdge{}
-		cfg := Config{Edge: fake, ArtifactRoot: artifactRoot, StackName: "proj-prod", Slug: "proj", Env: "prod", Class: deploymentsv1.Environment_CLASS_PRODUCTION}
+		cfg := Config{Edge: fake, ArtifactRoot: artifactRoot, Slug: "proj", Env: "prod", Class: deploymentsv1.Environment_CLASS_PRODUCTION}
 		_, err := deployEdgeWorker(context.Background(), cfg, manifest, outputs, nil)
 		if err == nil {
 			t.Fatal("expected an ambiguous project-level domain to fail the deploy")
@@ -428,7 +428,7 @@ func TestDeployEdgeWorker(t *testing.T) {
 		manifest.GetApps()[0].Domains = classDomains("production", "web.acme.com")
 
 		fake := &recordingEdge{}
-		cfg := Config{Edge: fake, ArtifactRoot: artifactRoot, StackName: "proj-preview-pr-7", Slug: "proj", Env: "preview-pr-7", Class: deploymentsv1.Environment_CLASS_PREVIEW}
+		cfg := Config{Edge: fake, ArtifactRoot: artifactRoot, Slug: "proj", Env: "preview-pr-7", Class: deploymentsv1.Environment_CLASS_PREVIEW}
 		if _, err := deployEdgeWorker(context.Background(), cfg, manifest, outputs, nil); err != nil {
 			t.Fatalf("deployEdgeWorker: %v", err)
 		}
@@ -447,7 +447,7 @@ func TestDeployEdgeWorker(t *testing.T) {
 	t.Run("warns about a worker at the previous name", func(t *testing.T) {
 		artifactRoot, manifest, outputs := twoNextApps(t)
 		fake := &legacyEdge{existing: map[string]bool{"ocel-proj-prod": true}}
-		cfg := Config{Edge: fake, ArtifactRoot: artifactRoot, StackName: "proj-prod", Slug: "proj", Env: "prod"}
+		cfg := Config{Edge: fake, ArtifactRoot: artifactRoot, Slug: "proj", Env: "prod"}
 
 		var msgs []string
 		if _, err := deployEdgeWorker(context.Background(), cfg, manifest, outputs, func(m string) { msgs = append(msgs, m) }); err != nil {
@@ -472,7 +472,7 @@ func TestDeployEdgeWorker(t *testing.T) {
 	t.Run("no warning without a legacy worker", func(t *testing.T) {
 		artifactRoot, manifest, outputs := twoNextApps(t)
 		fake := &legacyEdge{}
-		cfg := Config{Edge: fake, ArtifactRoot: artifactRoot, StackName: "proj-prod", Slug: "proj", Env: "prod"}
+		cfg := Config{Edge: fake, ArtifactRoot: artifactRoot, Slug: "proj", Env: "prod"}
 
 		var msgs []string
 		if _, err := deployEdgeWorker(context.Background(), cfg, manifest, outputs, func(m string) { msgs = append(msgs, m) }); err != nil {
@@ -492,7 +492,7 @@ func TestDeployEdgeWorker(t *testing.T) {
 		artifactRoot, manifest, outputs := twoNextApps(t)
 		fake := &recordingEdge{}
 		values := map[string]string{"bucketName": "edge-cache-7f3", "zoneID": "z1"}
-		cfg := Config{Edge: fake, ArtifactRoot: artifactRoot, StackName: "proj-prod", Slug: "proj", Env: "prod", EdgeValues: values}
+		cfg := Config{Edge: fake, ArtifactRoot: artifactRoot, Slug: "proj", Env: "prod", EdgeValues: values}
 
 		if _, err := deployEdgeWorker(context.Background(), cfg, manifest, outputs, nil); err != nil {
 			t.Fatalf("deployEdgeWorker: %v", err)
@@ -519,7 +519,7 @@ func TestDeployEdgeWorker(t *testing.T) {
 			Slug: "proj",
 			Apps: []*deploymentsv1.ManifestApp{{Name: "marketing", Framework: "next"}},
 		}
-		cfg := Config{Edge: fake, ArtifactRoot: t.TempDir(), StackName: "proj-prod", Slug: "proj", Env: "prod"}
+		cfg := Config{Edge: fake, ArtifactRoot: t.TempDir(), Slug: "proj", Env: "prod"}
 
 		out, err := deployEdgeWorker(context.Background(), cfg, manifest, nil, nil)
 		if err != nil {
@@ -547,7 +547,7 @@ func TestDeployEdgeWorker(t *testing.T) {
 		outputs := []*deploymentsv1.ResourceOutput{fnOutput("web_index", "https://web-fn.lambda-url.aws/")}
 		fake := &recordingEdge{}
 
-		if _, err := deployEdgeWorker(context.Background(), Config{Edge: fake, ArtifactRoot: artifactRoot, StackName: "proj-prod", Slug: "proj", Env: "prod"}, manifest, outputs, nil); err != nil {
+		if _, err := deployEdgeWorker(context.Background(), Config{Edge: fake, ArtifactRoot: artifactRoot, Slug: "proj", Env: "prod"}, manifest, outputs, nil); err != nil {
 			t.Fatalf("deployEdgeWorker: %v", err)
 		}
 		if got := fake.names(); !slicesEqual(got, []string{"ocel-proj--prod-web"}) {

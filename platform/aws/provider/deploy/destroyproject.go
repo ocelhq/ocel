@@ -9,27 +9,26 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/ocelhq/ocel/pkg/naming"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
 type ProjectTeardownPlan struct {
-	InfraStack string
-	AppStacks  []string
+	InfraStack naming.StackName
+	AppStacks  []naming.StackName
 }
 
-func classifyProjectStacks(slug string, stackNames []string) ProjectTeardownPlan {
-	prefix := safeName(slug) + "--"
-	infra := InfraStackName(slug)
+func classifyProjectStacks(stacks []naming.StackName) ProjectTeardownPlan {
 	var plan ProjectTeardownPlan
-	for _, name := range stackNames {
-		if !strings.HasPrefix(name, prefix) {
+	for _, stack := range stacks {
+		if stack.Env != ProductionEnv {
 			continue
 		}
-		if name == infra {
-			plan.InfraStack = name
+		if stack.IsInfra() {
+			plan.InfraStack = stack
 			continue
 		}
-		plan.AppStacks = append(plan.AppStacks, name)
+		plan.AppStacks = append(plan.AppStacks, stack)
 	}
 	return plan
 }
@@ -38,7 +37,7 @@ type DestroyProjectResult struct {
 	RootTornDown bool
 }
 
-func destroyPhased(appStacks, infraStacks []string, destroyApp, destroyInfra func(string) error) []error {
+func destroyPhased(appStacks, infraStacks []naming.StackName, destroyApp, destroyInfra func(naming.StackName) error) []error {
 	errs := runBounded(teardownConcurrency, appStacks, destroyApp)
 	return append(errs, runBounded(teardownConcurrency, infraStacks, destroyInfra)...)
 }
@@ -72,22 +71,22 @@ func DestroyProject(ctx context.Context, stack edge.RootStack, state edge.RootSt
 		errs = append(errs, err)
 	}
 
-	var infraStacks []string
-	if plan.InfraStack != "" {
-		infraStacks = []string{plan.InfraStack}
+	var infraStacks []naming.StackName
+	if !plan.InfraStack.IsZero() {
+		infraStacks = []naming.StackName{plan.InfraStack}
 	}
 	errs = append(errs, destroyPhased(plan.AppStacks, infraStacks,
-		func(name string) error {
-			report("Destroying app stack " + name)
-			if err := Destroy(ctx, teardownConfig(cfg, name), progress, log); err != nil {
-				return fmt.Errorf("destroy app stack %s: %w", name, err)
+		func(stack naming.StackName) error {
+			report("Destroying app stack " + stack.String())
+			if err := Destroy(ctx, teardownConfig(cfg, stack), progress, log); err != nil {
+				return fmt.Errorf("destroy app stack %s: %w", stack, err)
 			}
 			return nil
 		},
-		func(name string) error {
-			report("Destroying infra stack " + name + " (databases, buckets)")
-			if err := Destroy(ctx, teardownConfig(cfg, name), progress, log); err != nil {
-				return fmt.Errorf("destroy infra stack %s: %w", name, err)
+		func(stack naming.StackName) error {
+			report("Destroying infra stack " + stack.String() + " (databases, buckets)")
+			if err := Destroy(ctx, teardownConfig(cfg, stack), progress, log); err != nil {
+				return fmt.Errorf("destroy infra stack %s: %w", stack, err)
 			}
 			return nil
 		})...)
@@ -165,11 +164,11 @@ func rootStackWorkerNames(ctx context.Context, stack edge.RootStack, state edge.
 }
 
 func PlanProjectTeardown(ctx context.Context, cfg Config, slug string) (ProjectTeardownPlan, error) {
-	names, err := indexedStacks(ctx, cfg.Stacks, slug)
+	stacks, err := indexedStacks(ctx, cfg.Stacks, slug)
 	if err != nil {
 		return ProjectTeardownPlan{}, err
 	}
-	return classifyProjectStacks(slug, names), nil
+	return classifyProjectStacks(stacks), nil
 }
 
 func purgeProjectAssets(ctx context.Context, cfg Config, slug string) error {
@@ -228,16 +227,17 @@ func skipTeardownRefresh() bool {
 	return false
 }
 
-func teardownConfig(cfg Config, stackName string) TeardownConfig {
+func teardownConfig(cfg Config, stack naming.StackName) TeardownConfig {
 	return TeardownConfig{
-		Region:      cfg.Region,
-		BackendURL:  cfg.BackendURL,
-		Passphrase:  cfg.Passphrase,
-		ProjectName: cfg.ProjectName,
-		StackName:   stackName,
-		Pulumi:      cfg.Pulumi,
-		Stacks:      cfg.Stacks,
-		SkipRefresh: skipTeardownRefresh(),
-		realized:    cfg.realized,
+		Region:        cfg.Region,
+		BackendURL:    cfg.BackendURL,
+		Passphrase:    cfg.Passphrase,
+		PulumiProject: cfg.PulumiProject,
+		Project:       naming.Sanitize(cfg.Slug),
+		Stack:         stack,
+		Pulumi:        cfg.Pulumi,
+		Stacks:        cfg.Stacks,
+		SkipRefresh:   skipTeardownRefresh(),
+		realized:      cfg.realized,
 	}
 }
