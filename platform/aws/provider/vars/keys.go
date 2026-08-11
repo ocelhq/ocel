@@ -4,17 +4,26 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+
+	"github.com/ocelhq/ocel/pkg/naming"
 )
 
 const (
-	delimiter = "#"
+	delimiter = naming.KeySeparator
 
 	classWideEnvironment = "*"
 
 	rootFolder = "/"
 
-	currentPrefix      = "V" + delimiter
-	historyPrefixToken = "H" + delimiter
+	tokenValue   = "VALUE"
+	tokenHistory = "HISTORY"
+	tokenFolder  = "FOLDER"
+	tokenName    = "NAME"
+	tokenEnv     = "ENV"
+	tokenVersion = "VERSION"
+
+	currentPrefix      = tokenValue + delimiter
+	historyPrefixToken = tokenHistory + delimiter
 
 	historyWindow = 50
 
@@ -91,27 +100,31 @@ func (c Coordinate) validate() error {
 }
 
 func PartitionKey(slug, class string) string {
-	return "P" + delimiter + slug + delimiter + "C" + delimiter + class
+	return naming.VarsKey(slug, class)
 }
 
 func parsePartitionKey(pk string) (string, error) {
-	parts := strings.Split(pk, delimiter)
-	if len(parts) != 4 || parts[0] != "P" || parts[2] != "C" {
+	slug, err := naming.ProjectOf(pk)
+	if err != nil {
 		return "", fmt.Errorf("unrecognized partition key %q", pk)
 	}
-	return parts[1], nil
+	class, scoped := strings.CutPrefix(pk, naming.VarsKey(slug, ""))
+	if !scoped || class == "" || strings.Contains(class, delimiter) {
+		return "", fmt.Errorf("unrecognized partition key %q", pk)
+	}
+	return slug, nil
 }
 
 func folderPrefix(folder string) string {
-	return "F" + delimiter + folder + delimiter
+	return tokenFolder + delimiter + folder + delimiter
 }
 
 func keyPrefix(c Coordinate) string {
-	return currentPrefix + folderPrefix(c.Folder) + "K" + delimiter + c.Key + delimiter
+	return currentPrefix + folderPrefix(c.Folder) + tokenName + delimiter + c.Key + delimiter
 }
 
 func cellSuffix(c Coordinate) string {
-	return folderPrefix(c.Folder) + "K" + delimiter + c.Key + delimiter + "E" + delimiter + c.Environment
+	return folderPrefix(c.Folder) + tokenName + delimiter + c.Key + delimiter + tokenEnv + delimiter + c.Environment
 }
 
 func currentSortKey(c Coordinate) string {
@@ -123,12 +136,12 @@ func historySortKey(c Coordinate, version int64) string {
 }
 
 func historyPrefix(c Coordinate) string {
-	return historyPrefixToken + cellSuffix(c) + delimiter + "N" + delimiter
+	return historyPrefixToken + cellSuffix(c) + delimiter + tokenVersion + delimiter
 }
 
 func parseCurrentSortKey(slug, sk string) (Coordinate, error) {
 	parts := strings.Split(sk, delimiter)
-	if len(parts) != 7 || parts[0] != "V" || parts[1] != "F" || parts[3] != "K" || parts[5] != "E" {
+	if len(parts) != 7 || parts[0] != tokenValue || parts[1] != tokenFolder || parts[3] != tokenName || parts[5] != tokenEnv {
 		return Coordinate{}, fmt.Errorf("unrecognized value key %q", sk)
 	}
 	c := Coordinate{Slug: slug, Folder: parts[2], Key: parts[4], Environment: parts[6]}
@@ -143,7 +156,7 @@ func parseCurrentSortKey(slug, sk string) (Coordinate, error) {
 
 func parseHistorySortKey(sk string) (int64, error) {
 	parts := strings.Split(sk, delimiter)
-	if len(parts) != 9 || parts[0] != "H" || parts[7] != "N" {
+	if len(parts) != 9 || parts[0] != tokenHistory || parts[7] != tokenVersion {
 		return 0, fmt.Errorf("unrecognized version key %q", sk)
 	}
 	return strconv.ParseInt(parts[8], 10, 64)
