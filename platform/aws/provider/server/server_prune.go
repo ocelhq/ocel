@@ -8,6 +8,7 @@ import (
 
 	connect "connectrpc.com/connect"
 
+	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/cloudformation"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/aws/aws-sdk-go-v2/service/ssm"
@@ -52,7 +53,11 @@ func (s *Server) runPrune(ctx context.Context, req *deploymentsv1.PruneRequest, 
 		return deploy.Prune(ctx, stack, state, cfg, req.GetSlug(), int(req.GetKeepN()), env.GetIdentity(), progress, logf)
 	}
 
-	stack, state, err := s.rootStack(ctx, opts, req.GetSlug())
+	awscfg, params, err := productionTeardownParams(ctx, opts, req.GetSlug())
+	if err != nil {
+		return edge.PruneResult{}, err
+	}
+	stack, state, err := s.rootStackFor(params.RootStackState)
 	if err != nil {
 		if errors.Is(err, errNoProductionDeploy) {
 			return edge.PruneResult{}, nil
@@ -60,7 +65,7 @@ func (s *Server) runPrune(ctx context.Context, req *deploymentsv1.PruneRequest, 
 		return edge.PruneResult{}, err
 	}
 
-	cfg, err := pruneConfig(ctx, opts, req.GetSlug())
+	cfg, err := s.pruneConfig(ctx, opts, awscfg, params, req.GetSlug())
 	if err != nil {
 		return edge.PruneResult{}, err
 	}
@@ -78,15 +83,22 @@ func pruneSummaryLines(result edge.PruneResult) []string {
 	}
 }
 
-func pruneConfig(ctx context.Context, opts options, slug string) (deploy.Config, error) {
+func productionTeardownParams(ctx context.Context, opts options, slug string) (aws.Config, bootstrap.TeardownParams, error) {
 	awscfg, err := loadAWS(ctx, opts.Region)
 	if err != nil {
-		return deploy.Config{}, err
+		return aws.Config{}, bootstrap.TeardownParams{}, err
 	}
-	cfn := cloudformation.NewFromConfig(awscfg)
-	ssmClient := ssm.NewFromConfig(awscfg)
+	params, err := bootstrap.ReadTeardownParams(ctx, ssm.NewFromConfig(awscfg), bootstrap.ClassProduction, slug)
+	if err != nil {
+		return aws.Config{}, bootstrap.TeardownParams{}, err
+	}
+	return awscfg, params, nil
+}
 
-	deployed, err := checkBootstrap(ctx, cfn, false)
+func (s *Server) pruneConfig(ctx context.Context, opts options, awscfg aws.Config, params bootstrap.TeardownParams, slug string) (deploy.Config, error) {
+	cfn := cloudformation.NewFromConfig(awscfg)
+
+	deployed, err := s.deployed(ctx, cfn, opts.Region, false)
 	if err != nil {
 		return deploy.Config{}, err
 	}
@@ -101,41 +113,30 @@ func pruneConfig(ctx context.Context, opts options, slug string) (deploy.Config,
 		return deploy.Config{}, err
 	}
 
-	passphrase, err := bootstrap.ReadPassphrase(ctx, ssmClient)
-	if err != nil {
-		return deploy.Config{}, err
+	if params.PassphraseErr != nil {
+		return deploy.Config{}, params.PassphraseErr
 	}
 	pulumiCmd, err := pulumiruntime.Ensure(ctx, nil)
 	if err != nil {
 		return deploy.Config{}, err
 	}
 
-	cacheStore, err := bootstrap.ReadCacheStore(ctx, ssmClient, bootstrap.ClassProduction)
-	if err != nil {
-		cacheStore = bootstrap.CacheStore{}
-	}
-
-	isrWriter, err := bootstrap.ReadISRWriterFor(ctx, ssmClient, bootstrap.ClassProduction)
-	if err != nil {
-		isrWriter = bootstrap.ISRWriter{}
-	}
-
 	return deploy.Config{
 		Region:             awscfg.Region,
 		BackendURL:         deploy.StateBackendURL(deployed.StateBucket, slug),
-		Passphrase:         passphrase,
+		Passphrase:         params.Passphrase,
 		ProjectName:        pulumiProjectName,
 		Pulumi:             pulumiCmd,
 		AssetBucket:        deployed.AssetBucket,
 		ArtifactBucket:     deployed.ArtifactBucket,
 		Uploader:           s3.NewFromConfig(awscfg),
-		CacheStoreBucket:   cacheStore.Bucket,
-		CacheStoreUploader: cacheStoreUploader(cacheStore),
+		CacheStoreBucket:   params.CacheStore.Bucket,
+		CacheStoreUploader: cacheStoreUploader(params.CacheStore),
 		Stacks:             stacks,
 		Env:                deployEnv,
 		Values:             teardownValues(awscfg, deployed, bootstrap.ClassProduction),
 
-		ISRWriterEndpoint:      isrWriter.Endpoint,
-		ISRWriterBootstrapCred: isrWriter.BootstrapCred,
+		ISRWriterEndpoint:      params.ISRWriter.Endpoint,
+		ISRWriterBootstrapCred: params.ISRWriter.BootstrapCred,
 	}, nil
 }

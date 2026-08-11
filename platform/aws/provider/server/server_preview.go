@@ -37,7 +37,7 @@ func (s *Server) Preflight(ctx context.Context, req *deploymentsv1.PreflightRequ
 	resp := &deploymentsv1.PreflightResponse{Identity: &deploymentsv1.Identity{}}
 
 	awsOK := true
-	if id, err := sts.NewFromConfig(awscfg).GetCallerIdentity(ctx, &sts.GetCallerIdentityInput{}); err != nil {
+	if id, err := s.callerIdentity(ctx, sts.NewFromConfig(awscfg), opts.Region); err != nil {
 		awsOK = false
 		resp.CredentialProblems = append(resp.CredentialProblems, &deploymentsv1.CredentialProblem{
 			Provider: "AWS",
@@ -45,15 +45,15 @@ func (s *Server) Preflight(ctx context.Context, req *deploymentsv1.PreflightRequ
 			Hint:     "configure AWS credentials (set AWS_PROFILE, run `aws sso login`, or export access keys)",
 		})
 	} else {
-		resp.Identity.AwsAccount = aws.ToString(id.Account)
-		resp.Identity.AwsArn = aws.ToString(id.Arn)
+		resp.Identity.AwsAccount = id.account
+		resp.Identity.AwsArn = id.arn
 		resp.Identity.AwsRegion = awscfg.Region
 		resp.Identity.AwsProfile = os.Getenv("AWS_PROFILE")
 	}
 
-	resp.DomainClaims = domainClaims(ctx, edgeRouteOwner(), req.GetSlug(), req.GetDomains())
+	resp.DomainClaims = domainClaims(ctx, s.edgeRouteOwner(), req.GetSlug(), req.GetDomains())
 
-	if v, ok := cloudflare.New().(edge.CredentialVerifier); ok {
+	if v, ok := s.edge().(edge.CredentialVerifier); ok {
 		if id, err := v.VerifyCredentials(ctx); err != nil {
 			resp.CredentialProblems = append(resp.CredentialProblems, &deploymentsv1.CredentialProblem{
 				Provider: "Cloudflare",
@@ -67,14 +67,11 @@ func (s *Server) Preflight(ctx context.Context, req *deploymentsv1.PreflightRequ
 
 	if awsOK {
 		cfn := cloudformation.NewFromConfig(awscfg)
-		preview, err := bootstrap.CheckDeployedPreview(ctx, cfn)
+		preview, production, err := s.preflightSubstrates(ctx, cfn, opts.Region, req.GetRequiredClass())
 		if err != nil {
 			return nil, err
 		}
-		production, err := bootstrap.CheckDeployed(ctx, cfn)
-		if err != nil {
-			return nil, err
-		}
+
 		pf := preflightResponse(req.GetRequiredClass(), preview, production)
 		resp.InfraClass = pf.GetInfraClass()
 		resp.InfrastructurePresent = pf.GetInfrastructurePresent()
@@ -89,8 +86,8 @@ func (s *Server) Preflight(ctx context.Context, req *deploymentsv1.PreflightRequ
 
 type routeOwnerFunc func(ctx context.Context, pattern string) (string, error)
 
-func edgeRouteOwner() routeOwnerFunc {
-	return cloudflare.New().(edge.RootStack).RouteOwner
+func (s *Server) edgeRouteOwner() routeOwnerFunc {
+	return s.edge().(edge.RootStack).RouteOwner
 }
 
 func domainClaims(ctx context.Context, owner routeOwnerFunc, slug string, domains []string) []*deploymentsv1.DomainClaim {
@@ -128,6 +125,25 @@ func knownSlugs(ctx context.Context, awscfg aws.Config, substrate bootstrap.Depl
 		return nil
 	}
 	return slugs
+}
+
+func (s *Server) preflightSubstrates(ctx context.Context, cfn bootstrap.CFNDescriber, region string, required deploymentsv1.Environment_Class) (preview, production bootstrap.Deployed, err error) {
+	previewRequired := required == deploymentsv1.Environment_CLASS_PREVIEW
+
+	wanted, err := s.deployed(ctx, cfn, region, previewRequired)
+	if err != nil {
+		return bootstrap.Deployed{}, bootstrap.Deployed{}, err
+	}
+	var other bootstrap.Deployed
+	if !wanted.Present {
+		if other, err = s.deployed(ctx, cfn, region, !previewRequired); err != nil {
+			return bootstrap.Deployed{}, bootstrap.Deployed{}, err
+		}
+	}
+	if previewRequired {
+		return wanted, other, nil
+	}
+	return other, wanted, nil
 }
 
 func preflightResponse(required deploymentsv1.Environment_Class, preview, production bootstrap.Deployed) *deploymentsv1.PreflightResponse {
@@ -194,7 +210,7 @@ func (s *Server) previewTeardownContext(ctx context.Context, opts options, slug 
 	cfn := cloudformation.NewFromConfig(awscfg)
 	ssmClient := ssm.NewFromConfig(awscfg)
 
-	deployed, err := bootstrap.CheckDeployedPreview(ctx, cfn)
+	deployed, err := s.deployed(ctx, cfn, opts.Region, true)
 	if err != nil {
 		return deploy.Config{}, nil, nil, err
 	}
@@ -206,30 +222,19 @@ func (s *Server) previewTeardownContext(ctx context.Context, opts options, slug 
 		return deploy.Config{}, nil, nil, err
 	}
 
-	passphrase, err := bootstrap.ReadPassphrase(ctx, ssmClient)
+	params, err := bootstrap.ReadTeardownParams(ctx, ssmClient, bootstrap.ClassPreview, slug)
 	if err != nil {
 		return deploy.Config{}, nil, nil, err
+	}
+	if params.PassphraseErr != nil {
+		return deploy.Config{}, nil, nil, params.PassphraseErr
 	}
 	pulumiCmd, err := pulumiruntime.Ensure(ctx, nil)
 	if err != nil {
 		return deploy.Config{}, nil, nil, err
 	}
 
-	cacheStore, err := bootstrap.ReadCacheStore(ctx, ssmClient, bootstrap.ClassPreview)
-	if err != nil {
-		cacheStore = bootstrap.CacheStore{}
-	}
-
-	isrWriter, err := bootstrap.ReadISRWriterFor(ctx, ssmClient, bootstrap.ClassPreview)
-	if err != nil {
-		isrWriter = bootstrap.ISRWriter{}
-	}
-
-	state, err := bootstrap.ReadRootStackStateFor(ctx, ssmClient, bootstrap.ClassPreview, slug)
-	if err != nil {
-		return deploy.Config{}, nil, nil, err
-	}
-	stack, ok := cloudflare.New().(edge.RootStack)
+	stack, ok := s.edge().(edge.RootStack)
 	if !ok {
 		return deploy.Config{}, nil, nil, fmt.Errorf("this edge does not support the root stack")
 	}
@@ -237,24 +242,24 @@ func (s *Server) previewTeardownContext(ctx context.Context, opts options, slug 
 	cfg := deploy.Config{
 		Region:             awscfg.Region,
 		BackendURL:         deploy.StateBackendURL(deployed.StateBucket, slug),
-		Passphrase:         passphrase,
+		Passphrase:         params.Passphrase,
 		ProjectName:        pulumiProjectName,
 		Pulumi:             pulumiCmd,
 		AssetBucket:        deployed.AssetBucket,
 		ArtifactBucket:     deployed.ArtifactBucket,
 		Uploader:           s3.NewFromConfig(awscfg),
-		CacheStoreBucket:   cacheStore.Bucket,
-		CacheStoreUploader: cacheStoreUploader(cacheStore),
+		CacheStoreBucket:   params.CacheStore.Bucket,
+		CacheStoreUploader: cacheStoreUploader(params.CacheStore),
 		Stacks:             stacks,
 		Env:                envSegment(env),
 		Slug:               env.GetIdentity(),
 
-		ISRWriterEndpoint:      isrWriter.Endpoint,
-		ISRWriterBootstrapCred: isrWriter.BootstrapCred,
+		ISRWriterEndpoint:      params.ISRWriter.Endpoint,
+		ISRWriterBootstrapCred: params.ISRWriter.BootstrapCred,
 
 		Values: teardownValues(awscfg, deployed, bootstrap.ClassPreview),
 	}
-	return cfg, stack, state, nil
+	return cfg, stack, params.RootStackState, nil
 }
 
 func (s *Server) ListEnvironments(ctx context.Context, req *deploymentsv1.ListEnvironmentsRequest) (*deploymentsv1.ListEnvironmentsResponse, error) {
@@ -268,7 +273,7 @@ func (s *Server) ListEnvironments(ctx context.Context, req *deploymentsv1.ListEn
 	}
 	cfn := cloudformation.NewFromConfig(awscfg)
 
-	deployed, err := bootstrap.CheckDeployedPreview(ctx, cfn)
+	deployed, err := s.deployed(ctx, cfn, opts.Region, true)
 	if err != nil {
 		return nil, err
 	}

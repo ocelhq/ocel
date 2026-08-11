@@ -304,3 +304,169 @@ func TestGetParametersChunks(t *testing.T) {
 		t.Errorf("getParameters = %v, want only the present names", got)
 	}
 }
+
+func teardownProductionParams() map[string]string {
+	return map[string]string{
+		PassphraseParamName:                  "pass-1",
+		CacheStoreParamName:                  `{"bucket":"cache-1","secretAccessKey":"sec-2"}`,
+		ISRWriterParamName:                   `{"endpoint":"https://isr","bootstrapCred":"isr-cred"}`,
+		RootStackStateParamPrefix + "proj-1": `{"zone":"z1"}`,
+	}
+}
+
+func TestReadTeardownParamsBatches(t *testing.T) {
+	ssmc := &fakeBatchSSM{params: teardownProductionParams()}
+
+	got, err := ReadTeardownParams(context.Background(), ssmc, ClassProduction, "proj-1")
+	if err != nil {
+		t.Fatalf("ReadTeardownParams: %v", err)
+	}
+	if ssmc.calls != 1 {
+		t.Errorf("GetParameters calls = %d, want 1", ssmc.calls)
+	}
+	want := []string{
+		PassphraseParamName,
+		CacheStoreParamName,
+		ISRWriterParamName,
+		RootStackStateParamPrefix + "proj-1",
+	}
+	slices.Sort(want)
+	requested := slices.Clone(ssmc.requested)
+	slices.Sort(requested)
+	if !slices.Equal(requested, want) {
+		t.Errorf("requested names = %v, want %v", requested, want)
+	}
+	for _, d := range ssmc.decrypted {
+		if !d {
+			t.Error("GetParameters called without WithDecryption")
+		}
+	}
+
+	if got.Passphrase != "pass-1" || got.PassphraseErr != nil {
+		t.Errorf("Passphrase = %q (err %v), want pass-1", got.Passphrase, got.PassphraseErr)
+	}
+	if got.CacheStore.Bucket != "cache-1" || got.CacheStore.SecretAccessKey != "sec-2" {
+		t.Errorf("CacheStore = %+v", got.CacheStore)
+	}
+	if got.ISRWriter.Endpoint != "https://isr" || got.ISRWriter.BootstrapCred != "isr-cred" {
+		t.Errorf("ISRWriter = %+v", got.ISRWriter)
+	}
+	if !reflect.DeepEqual(map[string]string(got.RootStackState), map[string]string{"zone": "z1"}) {
+		t.Errorf("RootStackState = %v", got.RootStackState)
+	}
+}
+
+func TestReadTeardownParamsPreviewNames(t *testing.T) {
+	ssmc := &fakeBatchSSM{params: map[string]string{
+		PassphraseParamName:                        "pass-1",
+		CacheStorePreviewParamName:                 `{"bucket":"cache-prev"}`,
+		PreviewRootStackStateParamPrefix + "proj1": `{"zone":"zp"}`,
+	}}
+
+	got, err := ReadTeardownParams(context.Background(), ssmc, ClassPreview, "proj1")
+	if err != nil {
+		t.Fatalf("ReadTeardownParams(preview): %v", err)
+	}
+	if got.CacheStore.Bucket != "cache-prev" {
+		t.Errorf("CacheStore = %+v, want the preview store", got.CacheStore)
+	}
+	if !reflect.DeepEqual(map[string]string(got.RootStackState), map[string]string{"zone": "zp"}) {
+		t.Errorf("RootStackState = %v, want the preview state", got.RootStackState)
+	}
+	for _, name := range ssmc.requested {
+		if name == CacheStoreParamName || name == RootStackStateParamPrefix+"proj1" {
+			t.Errorf("preview read requested production parameter %q", name)
+		}
+	}
+}
+
+func TestReadTeardownParamsUnknownClass(t *testing.T) {
+	ssmc := &fakeBatchSSM{params: teardownProductionParams()}
+	if _, err := ReadTeardownParams(context.Background(), ssmc, "nonsense", "proj-1"); err == nil {
+		t.Fatal("ReadTeardownParams(unknown class) = nil error, want an error")
+	}
+	if ssmc.calls != 0 {
+		t.Errorf("GetParameters calls = %d, want none for an unknown class", ssmc.calls)
+	}
+}
+
+func TestReadTeardownParamsCallFailure(t *testing.T) {
+	ssmc := &fakeBatchSSM{params: teardownProductionParams(), err: errors.New("throttled")}
+	if _, err := ReadTeardownParams(context.Background(), ssmc, ClassProduction, "proj-1"); err == nil {
+		t.Fatal("ReadTeardownParams with a failing GetParameters = nil error, want an error")
+	}
+}
+
+func TestReadTeardownParamsMissingPassphrase(t *testing.T) {
+	params := teardownProductionParams()
+	delete(params, PassphraseParamName)
+
+	got, err := ReadTeardownParams(context.Background(), &fakeBatchSSM{params: params}, ClassProduction, "proj-1")
+	if err != nil {
+		t.Fatalf("ReadTeardownParams: %v", err)
+	}
+	if got.PassphraseErr == nil {
+		t.Fatal("PassphraseErr = nil, want an absent passphrase reported as fatal to whoever needs it")
+	}
+	if !strings.Contains(got.PassphraseErr.Error(), PassphraseParamName) {
+		t.Errorf("PassphraseErr = %v, want it to name %s", got.PassphraseErr, PassphraseParamName)
+	}
+	if got.CacheStore.Bucket != "cache-1" {
+		t.Errorf("CacheStore = %+v, want the rest of the batch intact", got.CacheStore)
+	}
+}
+
+func TestReadTeardownParamsAbsentOptional(t *testing.T) {
+	ssmc := &fakeBatchSSM{params: map[string]string{PassphraseParamName: "pass-1"}}
+
+	got, err := ReadTeardownParams(context.Background(), ssmc, ClassProduction, "proj-1")
+	if err != nil {
+		t.Fatalf("ReadTeardownParams: %v", err)
+	}
+	if got.CacheStore != (CacheStore{}) {
+		t.Errorf("CacheStore = %+v, want the zero store", got.CacheStore)
+	}
+	if got.ISRWriter != (ISRWriter{}) {
+		t.Errorf("ISRWriter = %+v, want the zero writer", got.ISRWriter)
+	}
+	if got.RootStackState != nil {
+		t.Errorf("RootStackState = %v, want nil", got.RootStackState)
+	}
+}
+
+func TestReadTeardownParamsUnparsable(t *testing.T) {
+	t.Run("a cache store falls back to the zero store", func(t *testing.T) {
+		params := teardownProductionParams()
+		params[CacheStoreParamName] = "{not json"
+
+		got, err := ReadTeardownParams(context.Background(), &fakeBatchSSM{params: params}, ClassProduction, "proj-1")
+		if err != nil {
+			t.Fatalf("ReadTeardownParams: %v", err)
+		}
+		if got.CacheStore != (CacheStore{}) {
+			t.Errorf("CacheStore = %+v, want the zero store", got.CacheStore)
+		}
+	})
+
+	t.Run("an isr writer falls back to the zero writer", func(t *testing.T) {
+		params := teardownProductionParams()
+		params[ISRWriterParamName] = "{not json"
+
+		got, err := ReadTeardownParams(context.Background(), &fakeBatchSSM{params: params}, ClassProduction, "proj-1")
+		if err != nil {
+			t.Fatalf("ReadTeardownParams: %v", err)
+		}
+		if got.ISRWriter != (ISRWriter{}) {
+			t.Errorf("ISRWriter = %+v, want the zero writer", got.ISRWriter)
+		}
+	})
+
+	t.Run("a root-stack state is fatal", func(t *testing.T) {
+		params := teardownProductionParams()
+		params[RootStackStateParamPrefix+"proj-1"] = "{not json"
+
+		if _, err := ReadTeardownParams(context.Background(), &fakeBatchSSM{params: params}, ClassProduction, "proj-1"); err == nil {
+			t.Fatal("ReadTeardownParams with an unparsable root-stack state = nil error, want an error")
+		}
+	})
+}

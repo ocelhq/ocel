@@ -11,6 +11,7 @@ import (
 	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
 	"github.com/ocelhq/ocel/platform/aws/provider/bootstrap"
 	"github.com/ocelhq/ocel/platform/aws/provider/deploy"
+	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
 func (s *Server) PlanDestroyProject(ctx context.Context, req *deploymentsv1.PlanDestroyProjectRequest) (*deploymentsv1.PlanDestroyProjectResponse, error) {
@@ -19,7 +20,11 @@ func (s *Server) PlanDestroyProject(ctx context.Context, req *deploymentsv1.Plan
 		return nil, connect.NewError(connect.CodeInvalidArgument, err)
 	}
 
-	cfg, err := pruneConfig(ctx, opts, req.GetSlug())
+	awscfg, params, err := productionTeardownParams(ctx, opts, req.GetSlug())
+	if err != nil {
+		return nil, err
+	}
+	cfg, err := s.pruneConfig(ctx, opts, awscfg, params, req.GetSlug())
 	if err != nil {
 		return nil, err
 	}
@@ -28,7 +33,7 @@ func (s *Server) PlanDestroyProject(ctx context.Context, req *deploymentsv1.Plan
 		return nil, err
 	}
 
-	rootStack, err := s.hasRootStack(ctx, opts, req.GetSlug())
+	rootStack, err := s.hasRootStack(params.RootStackState)
 	if err != nil {
 		return nil, err
 	}
@@ -40,8 +45,8 @@ func (s *Server) PlanDestroyProject(ctx context.Context, req *deploymentsv1.Plan
 	}, nil
 }
 
-func (s *Server) hasRootStack(ctx context.Context, opts options, slug string) (bool, error) {
-	_, state, err := s.rootStack(ctx, opts, slug)
+func (s *Server) hasRootStack(state edge.RootStackState) (bool, error) {
+	_, state, err := s.rootStackFor(state)
 	if err != nil {
 		if errors.Is(err, errNoProductionDeploy) {
 			return false, nil
@@ -71,12 +76,16 @@ func (s *Server) runDestroyProject(ctx context.Context, req *deploymentsv1.Destr
 		return s.runDestroyPreviewProject(ctx, opts, req.GetSlug(), env, progress, logf)
 	}
 
-	stack, state, err := s.rootStack(ctx, opts, req.GetSlug())
+	awscfg, params, err := productionTeardownParams(ctx, opts, req.GetSlug())
+	if err != nil {
+		return err
+	}
+	stack, state, err := s.rootStackFor(params.RootStackState)
 	if err != nil && !errors.Is(err, errNoProductionDeploy) {
 		return err
 	}
 
-	cfg, err := pruneConfig(ctx, opts, req.GetSlug())
+	cfg, err := s.pruneConfig(ctx, opts, awscfg, params, req.GetSlug())
 	if err != nil {
 		return err
 	}

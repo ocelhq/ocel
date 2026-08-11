@@ -12,7 +12,6 @@ import (
 	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
 	"github.com/ocelhq/ocel/platform/aws/provider/bootstrap"
 	"github.com/ocelhq/ocel/platform/aws/provider/deploy"
-	cloudflare "github.com/ocelhq/ocel/platform/edge/cloudflare/deploy"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
@@ -23,17 +22,18 @@ func (s *Server) rootStack(ctx context.Context, opts options, slug string) (edge
 	if err != nil {
 		return nil, nil, err
 	}
-	ssmClient := ssm.NewFromConfig(awscfg)
-
-	state, err := bootstrap.ReadRootStackState(ctx, ssmClient, slug)
+	state, err := bootstrap.ReadRootStackState(ctx, ssm.NewFromConfig(awscfg), slug)
 	if err != nil {
 		return nil, nil, err
 	}
+	return s.rootStackFor(state)
+}
+
+func (s *Server) rootStackFor(state edge.RootStackState) (edge.RootStack, edge.RootStackState, error) {
 	if len(state) == 0 {
 		return nil, nil, errNoProductionDeploy
 	}
-
-	stack, ok := cloudflare.New().(edge.RootStack)
+	stack, ok := s.edge().(edge.RootStack)
 	if !ok {
 		return nil, nil, errors.New("this edge does not support the root stack (instant rollback)")
 	}
