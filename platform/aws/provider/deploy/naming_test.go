@@ -130,3 +130,39 @@ func TestLambdaResourceName(t *testing.T) {
 		}
 	})
 }
+
+func TestStateBackendURL(t *testing.T) {
+	t.Parallel()
+
+	t.Run("state lands under a subpath naming the project", func(t *testing.T) {
+		t.Parallel()
+
+		if got, want := StateBackendURL("ocel-state", "shop"), "s3://ocel-state/shop"; got != want {
+			t.Errorf("StateBackendURL = %q, want %q", got, want)
+		}
+	})
+
+	t.Run("a slug cannot escape its own subpath", func(t *testing.T) {
+		t.Parallel()
+
+		const prefix = "s3://ocel-state/"
+		for _, slug := range []string{"../other", "a/b", "", "..", "./."} {
+			got := StateBackendURL("ocel-state", slug)
+			segment, ok := strings.CutPrefix(got, prefix)
+			if !ok {
+				t.Fatalf("StateBackendURL(%q) = %q, want the %q prefix", slug, got, prefix)
+			}
+			if segment == "" || strings.ContainsAny(segment, "/.") {
+				t.Errorf("StateBackendURL(%q) = %q, which is not a single path segment", slug, got)
+			}
+		}
+	})
+
+	t.Run("two projects never share a subpath", func(t *testing.T) {
+		t.Parallel()
+
+		if StateBackendURL("ocel-state", "shop") == StateBackendURL("ocel-state", "shop-staging") {
+			t.Error("two slugs collided on one state subpath")
+		}
+	})
+}

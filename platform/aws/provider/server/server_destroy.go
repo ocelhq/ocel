@@ -19,7 +19,7 @@ func (s *Server) PlanDestroyProject(ctx context.Context, req *deploymentsv1.Plan
 		return nil, connect.NewError(connect.CodeInvalidArgument, err)
 	}
 
-	cfg, err := pruneConfig(ctx, opts)
+	cfg, err := pruneConfig(ctx, opts, req.GetSlug())
 	if err != nil {
 		return nil, err
 	}
@@ -76,7 +76,7 @@ func (s *Server) runDestroyProject(ctx context.Context, req *deploymentsv1.Destr
 		return err
 	}
 
-	cfg, err := pruneConfig(ctx, opts)
+	cfg, err := pruneConfig(ctx, opts, req.GetSlug())
 	if err != nil {
 		return err
 	}

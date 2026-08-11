@@ -17,6 +17,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/credentials"
 	"github.com/aws/aws-sdk-go-v2/service/cloudformation"
+	"github.com/aws/aws-sdk-go-v2/service/dynamodb"
 	"github.com/aws/aws-sdk-go-v2/service/iam"
 	"github.com/aws/aws-sdk-go-v2/service/lambda"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
@@ -30,6 +31,7 @@ import (
 	"github.com/ocelhq/ocel/platform/aws/provider/deploy"
 	"github.com/ocelhq/ocel/platform/aws/provider/pulumiruntime"
 	"github.com/ocelhq/ocel/platform/aws/provider/sdkconfig"
+	"github.com/ocelhq/ocel/platform/aws/provider/stackindex"
 	"github.com/ocelhq/ocel/platform/aws/provider/vars"
 	cloudflare "github.com/ocelhq/ocel/platform/edge/cloudflare/deploy"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
@@ -184,12 +186,13 @@ func (s *Server) runDeploy(ctx context.Context, req *deploymentsv1.DeployRequest
 
 	res, err := deploy.Run(ctx, deploy.Config{
 		Region:        awscfg.Region,
-		BackendURL:    "s3://" + deployed.StateBucket,
+		BackendURL:    deploy.StateBackendURL(deployed.StateBucket, manifest.GetSlug()),
 		Passphrase:    params.Passphrase,
 		ProjectName:   pulumiProjectName,
 		StackName:     stackName(manifest.GetSlug(), env),
 		Pulumi:        pulumiCmd,
 		Secrets:       secretsmanager.NewFromConfig(awscfg),
+		Stacks:        stackIndexFor(awscfg, deployed),
 		StateTable:    deployed.StateTable,
 		StateTableARN: stateTableARN,
 
@@ -364,6 +367,16 @@ func accountID(ctx context.Context, api STSAPI) (string, error) {
 
 func loadAWS(ctx context.Context, region string) (aws.Config, error) {
 	return sdkconfig.Control(ctx, region)
+}
+
+func stackIndexFor(awscfg aws.Config, deployed bootstrap.Deployed) deploy.StackIndex {
+	if deployed.StateTable == "" {
+		return nil
+	}
+	return &stackindex.Index{
+		Dynamo: dynamodb.NewFromConfig(awscfg),
+		Table:  deployed.StateTable,
+	}
 }
 
 func resourceSummary(r *deploymentsv1.ManifestResource) string {

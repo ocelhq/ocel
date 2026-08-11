@@ -8,6 +8,10 @@ import (
 
 const maxSafeNamePrefixLen = 40
 
+func StateBackendURL(bucket, slug string) string {
+	return "s3://" + bucket + "/" + safeName(slug)
+}
+
 func safeName(logicalName string) string {
 	var b strings.Builder
 	prevDash := false

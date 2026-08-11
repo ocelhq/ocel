@@ -2,33 +2,26 @@ package deploy
 
 import (
 	"context"
-	"fmt"
 	"slices"
-	"strings"
 )
 
-func ProjectSlugsBesides(ctx context.Context, cfg ListConfig) ([]string, error) {
-	ws, err := backendWorkspace(ctx, cfg.ProjectName, cfg.BackendURL, cfg.Passphrase, cfg.Region, cfg.Pulumi)
+func ProjectSlugsBesides(ctx context.Context, index StackIndex, slug string) ([]string, error) {
+	ix, err := stackIndex(index)
 	if err != nil {
 		return nil, err
 	}
-	summaries, err := ws.ListStacks(ctx)
+	scopes, err := ix.Projects(ctx)
 	if err != nil {
-		return nil, fmt.Errorf("list stacks: %w", err)
+		return nil, err
 	}
-	names := make([]string, len(summaries))
-	for i, s := range summaries {
-		names[i] = s.Name
-	}
-	return projectSlugsBesides(cfg.Slug, names), nil
+	return projectSlugsBesides(slug, scopes), nil
 }
 
-func projectSlugsBesides(slug string, stackNames []string) []string {
+func projectSlugsBesides(slug string, scopes []string) []string {
 	mine := safeName(slug)
 	others := map[string]struct{}{}
-	for _, name := range stackNames {
-		scope, _, ok := strings.Cut(name, "--")
-		if !ok || scope == "" {
+	for _, scope := range scopes {
+		if scope == "" {
 			continue
 		}
 		if scope == mine {

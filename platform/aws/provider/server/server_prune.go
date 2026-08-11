@@ -60,7 +60,7 @@ func (s *Server) runPrune(ctx context.Context, req *deploymentsv1.PruneRequest, 
 		return edge.PruneResult{}, err
 	}
 
-	cfg, err := pruneConfig(ctx, opts)
+	cfg, err := pruneConfig(ctx, opts, req.GetSlug())
 	if err != nil {
 		return edge.PruneResult{}, err
 	}
@@ -78,7 +78,7 @@ func pruneSummaryLines(result edge.PruneResult) []string {
 	}
 }
 
-func pruneConfig(ctx context.Context, opts options) (deploy.Config, error) {
+func pruneConfig(ctx context.Context, opts options, slug string) (deploy.Config, error) {
 	awscfg, err := loadAWS(ctx, opts.Region)
 	if err != nil {
 		return deploy.Config{}, err
@@ -118,7 +118,7 @@ func pruneConfig(ctx context.Context, opts options) (deploy.Config, error) {
 
 	return deploy.Config{
 		Region:             awscfg.Region,
-		BackendURL:         "s3://" + deployed.StateBucket,
+		BackendURL:         deploy.StateBackendURL(deployed.StateBucket, slug),
 		Passphrase:         passphrase,
 		ProjectName:        pulumiProjectName,
 		Pulumi:             pulumiCmd,
@@ -127,6 +127,7 @@ func pruneConfig(ctx context.Context, opts options) (deploy.Config, error) {
 		Uploader:           s3.NewFromConfig(awscfg),
 		CacheStoreBucket:   cacheStore.Bucket,
 		CacheStoreUploader: cacheStoreUploader(cacheStore),
+		Stacks:             stackIndexFor(awscfg, deployed),
 		Env:                deployEnv,
 		Values:             teardownValues(awscfg, deployed, bootstrap.ClassProduction),
 

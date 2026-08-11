@@ -146,6 +146,10 @@ func DestroyPreviewProject(ctx context.Context, stack edge.RootStack, state edge
 		errs = append(errs, err)
 	}
 
+	if err := forgetProjectIfEmpty(ctx, cfg.Stacks, slug); err != nil {
+		errs = append(errs, err)
+	}
+
 	return result, errors.Join(errs...)
 }
 
@@ -165,17 +169,9 @@ func previewProjectWorkers(slug string, deployed []string) []string {
 }
 
 func planPreviewProjectTeardown(ctx context.Context, cfg Config, slug string) (PreviewProjectTeardownPlan, error) {
-	ws, err := backendWorkspace(ctx, cfg.ProjectName, cfg.BackendURL, cfg.Passphrase, cfg.Region, cfg.Pulumi)
+	names, err := indexedStacks(ctx, cfg.Stacks, slug)
 	if err != nil {
 		return PreviewProjectTeardownPlan{}, err
-	}
-	summaries, err := ws.ListStacks(ctx)
-	if err != nil {
-		return PreviewProjectTeardownPlan{}, fmt.Errorf("list preview stacks: %w", err)
-	}
-	names := make([]string, len(summaries))
-	for i, s := range summaries {
-		names[i] = s.Name
 	}
 	return classifyPreviewStacks(slug, names), nil
 }
