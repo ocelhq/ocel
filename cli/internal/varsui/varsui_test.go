@@ -163,8 +163,11 @@ func serveUnder(t *testing.T, ctx context.Context, store *fakeStore, gate *envga
 	return s
 }
 
+// s.URL carries a trailing slash before its fragment, so joining a path onto it
+// raw yields "//api/value"; ServeMux 301s that to the cleaned path and the
+// client downgrades the method to GET on the way.
 func origin(s *varsui.Session) string {
-	return strings.SplitN(s.URL, "#", 2)[0]
+	return strings.TrimSuffix(strings.SplitN(s.URL, "#", 2)[0], "/")
 }
 
 func request(t *testing.T, s *varsui.Session, method, path string, body any) *http.Response {

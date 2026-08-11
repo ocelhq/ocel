@@ -58,6 +58,12 @@ jobs:
         working-directory: .
         run: pnpm install --frozen-lockfile
 
+      # internal/envwire drives the real SDK wire, so it needs packages/ocel built.
+      - name: pnpm --filter ocel build
+        if: matrix.module == 'cli'
+        working-directory: .
+        run: pnpm --filter ocel build
+
       - name: go generate (embedded node dist)
         if: matrix.module == 'cli'
         run: go generate ./...
