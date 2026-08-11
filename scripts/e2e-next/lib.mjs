@@ -18,6 +18,19 @@ export const APP_NAME = "app";
 
 export const MAX_SLUG_LEN = 63 - "ocel-".length - "-preview".length;
 
+export const SKIP_DRIFT_CHECK_ENV = Object.freeze({
+  OCEL_SKIP_EDGE_RECONCILE: "1",
+  OCEL_SKIP_TEARDOWN_REFRESH: "1",
+});
+
+export function withoutSkipDriftChecks(env) {
+  const out = { ...env };
+  for (const name of Object.keys(SKIP_DRIFT_CHECK_ENV)) {
+    delete out[name];
+  }
+  return out;
+}
+
 export function projectSlug({ runId }) {
   const run = sanitizeToken(String(runId ?? "")) || LOCAL_RUN_ID;
   const maxRun = MAX_SLUG_LEN - SLUG_PREFIX.length;

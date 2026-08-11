@@ -8,6 +8,7 @@ import {
   APP_NAME,
   BUILD_LOG_FILE,
   DEPLOY_RESULT_FILE,
+  SKIP_DRIFT_CHECK_ENV,
   STATE_FILE,
   deployURL,
   previewRefForApp,
@@ -32,6 +33,7 @@ const CHILD_ENV = {
   NEXT_PRIVATE_TEST_MODE: "e2e",
   OCEL_E2E_VERCEL_CACHE_HEADER: "1",
   OCEL_EDGE_OBSERVABILITY: "off",
+  ...SKIP_DRIFT_CHECK_ENV,
   ...(hasTypeScriptNextConfig() ? { __NEXT_NODE_NATIVE_TS_LOADER_ENABLED: "true" } : {}),
 };
 

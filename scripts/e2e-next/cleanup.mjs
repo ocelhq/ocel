@@ -4,7 +4,13 @@ import { spawnSync } from "node:child_process";
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
-import { STATE_FILE, previewRefForApp, projectSlugForRun, renderOcelConfig } from "./lib.mjs";
+import {
+  SKIP_DRIFT_CHECK_ENV,
+  STATE_FILE,
+  previewRefForApp,
+  projectSlugForRun,
+  renderOcelConfig,
+} from "./lib.mjs";
 
 const TEARDOWN_TIMEOUT_MS = 20 * 60 * 1000;
 
@@ -22,7 +28,12 @@ console.error(`[ocel-e2e] removing preview ${ref} from project ${slug}`);
 const res = spawnSync(
   process.execPath,
   [join(adapterDir, "packages", "ocel", "bin", "run.js"), "preview", "rm", "--ref", ref, "--yes"],
-  { cwd: appDir, stdio: ["ignore", "inherit", "inherit"], timeout: TEARDOWN_TIMEOUT_MS },
+  {
+    cwd: appDir,
+    stdio: ["ignore", "inherit", "inherit"],
+    timeout: TEARDOWN_TIMEOUT_MS,
+    env: { ...process.env, ...SKIP_DRIFT_CHECK_ENV },
+  },
 );
 
 if (res.error || res.signal || res.status !== 0) {
