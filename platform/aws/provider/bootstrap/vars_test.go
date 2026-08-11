@@ -18,7 +18,11 @@ type varsTemplate struct {
 	Resources map[string]struct {
 		Type           string `yaml:"Type"`
 		DeletionPolicy string `yaml:"DeletionPolicy"`
-		Properties     struct {
+		Metadata       struct {
+			Description string `yaml:"Description"`
+		} `yaml:"Metadata"`
+		Properties struct {
+			Description          string `yaml:"Description"`
 			BillingMode          string `yaml:"BillingMode"`
 			AttributeDefinitions []struct {
 				AttributeName string `yaml:"AttributeName"`
@@ -55,7 +59,8 @@ type varsTemplate struct {
 		} `yaml:"Properties"`
 	} `yaml:"Resources"`
 	Outputs map[string]struct {
-		Value string `yaml:"Value"`
+		Description string `yaml:"Description"`
+		Value       string `yaml:"Value"`
 	} `yaml:"Outputs"`
 }
 
@@ -205,6 +210,48 @@ func TestVarsResourcesAreStackOwned(t *testing.T) {
 				if res.DeletionPolicy != "" {
 					t.Errorf("%s DeletionPolicy = %q, want none so a stack delete removes it", name, res.DeletionPolicy)
 				}
+			}
+		})
+	}
+}
+
+func TestVarsDescriptions(t *testing.T) {
+	const maxDescriptionLen = 1024
+
+	for _, tc := range varsSubstrates() {
+		t.Run(tc.name, func(t *testing.T) {
+			tmpl := parseVarsTemplate(t, tc.template)
+
+			described := map[string]string{
+				"VarsKey":        tmpl.Resources["VarsKey"].Properties.Description,
+				"VarsKeyAlias":   tmpl.Resources["VarsKeyAlias"].Metadata.Description,
+				"VarsTable":      tmpl.Resources["VarsTable"].Metadata.Description,
+				outputVarsTable:  tmpl.Outputs[outputVarsTable].Description,
+				outputVarsKeyARN: tmpl.Outputs[outputVarsKeyARN].Description,
+			}
+			for name, description := range described {
+				if description == "" {
+					t.Errorf("%s carries no description; an operator meets it in the console with no context", name)
+					continue
+				}
+				if len(description) > maxDescriptionLen {
+					t.Errorf("%s description is %d characters, over the %d CloudFormation accepts", name, len(description), maxDescriptionLen)
+				}
+				if !strings.Contains(description, " ") || !strings.HasSuffix(strings.TrimSpace(description), ".") {
+					t.Errorf("%s description = %q, want a sentence", name, description)
+				}
+			}
+
+			for _, name := range []string{"VarsKey", "VarsKeyAlias", "VarsTable"} {
+				if !strings.Contains(described[name], tc.class) {
+					t.Errorf("%s description = %q, want it to name the %s class it belongs to", name, described[name], tc.class)
+				}
+			}
+			if !strings.Contains(described["VarsKey"], "again") {
+				t.Errorf("VarsKey description = %q, want it to say what deleting the key costs", described["VarsKey"])
+			}
+			if !strings.Contains(described["VarsTable"], "again") {
+				t.Errorf("VarsTable description = %q, want it to say what deleting the table costs", described["VarsTable"])
 			}
 		})
 	}
