@@ -81,7 +81,7 @@ func TestFunctionCoordinate(t *testing.T) {
 		coord := functionCoordinate("shop", testStack(t, "prod", "web"), "fn--web--api-users")
 
 		got := string(describe(coord, "route /api/users"))
-		if want := "shop / prod / web — route /api/users — release r3f8a1c90"; got != want {
+		if want := "shop / prod / web - route /api/users - release r3f8a1c90"; got != want {
 			t.Fatalf("description = %q, want %q", got, want)
 		}
 	})
@@ -122,7 +122,7 @@ func TestRoleCoordinate(t *testing.T) {
 		}
 	}
 	if got, want := string(describe(coord, "execution role for this app's functions")),
-		"shop / prod / web — execution role for this app's functions — release r3f8a1c90"; got != want {
+		"shop / prod / web - execution role for this app's functions - release r3f8a1c90"; got != want {
 		t.Errorf("description = %q, want %q", got, want)
 	}
 }

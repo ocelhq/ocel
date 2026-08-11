@@ -50,7 +50,8 @@ const (
 
 	maxDescriptionLen = 256
 
-	maxRoleNameLen = 64
+	maxRoleNameLen   = 64
+	maxLambdaNameLen = 64
 
 	functionURLInvokeModeStream = "RESPONSE_STREAM"
 
@@ -205,7 +206,7 @@ func resourceTags(kind naming.Kind, route string) pulumi.StringMap {
 }
 
 func describe(c naming.Coordinate, detail string) pulumi.String {
-	described := c.Description(detail + " — release " + c.Release.String())
+	described := c.Description(detail + " - release " + c.Release.String())
 	if len(described) > maxDescriptionLen {
 		described = strings.ToValidUTF8(described[:maxDescriptionLen], "")
 	}

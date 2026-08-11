@@ -118,11 +118,11 @@ func ResourceID(kind Kind, name string, parts ...string) string {
 }
 
 func (c Coordinate) Description(detail string) string {
-	head := strings.Join([]string{c.Project, c.Env, c.App}, " / ")
+	head := strings.Join(nonEmpty([]string{c.Project, c.Env, c.App}), " / ")
 	if detail == "" {
 		return head + "."
 	}
-	return head + " — " + detail
+	return head + " - " + detail
 }
 
 type Facts struct {
