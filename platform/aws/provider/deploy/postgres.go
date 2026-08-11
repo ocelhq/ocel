@@ -1,8 +1,6 @@
 package deploy
 
 import (
-	"strings"
-
 	ec2 "github.com/pulumi/pulumi-aws/sdk/v7/go/aws/ec2"
 	rds "github.com/pulumi/pulumi-aws/sdk/v7/go/aws/rds"
 	"github.com/pulumi/pulumi/sdk/v3/go/pulumi"
@@ -72,17 +70,11 @@ func rdsIdentifierPrefix(at naming.Coordinate, role string) string {
 	return ident.PhysicalPrefix(maxRDSIdentifierPrefixLen)
 }
 
-const ec2DescriptionDash = " - "
-
-func ec2Description(at naming.Coordinate, detail string) string {
-	return strings.ReplaceAll(at.Description(detail), " — ", ec2DescriptionDash)
-}
-
 func registerPostgres(ctx *pulumi.Context, project, env, logicalName string, args postgresArgs, vpcID, vpcCIDR string, subnetIDs []string) (pulumi.StringOutput, error) {
 	at := resourceCoordinate(project, env, logicalName, naming.KindDatabase)
 
 	sg, err := ec2.NewSecurityGroup(ctx, naming.ResourceID(at.Kind, at.Name, "security-group"), &ec2.SecurityGroupArgs{
-		Description: pulumi.String(ec2Description(at, "security group for the "+at.Name+" database")),
+		Description: pulumi.String(at.Description("security group for the " + at.Name + " database")),
 		VpcId:       pulumi.String(vpcID),
 		Ingress: ec2.SecurityGroupIngressArray{
 			&ec2.SecurityGroupIngressArgs{
@@ -90,7 +82,7 @@ func registerPostgres(ctx *pulumi.Context, project, env, logicalName string, arg
 				FromPort:    pulumi.Int(args.Port),
 				ToPort:      pulumi.Int(args.Port),
 				CidrBlocks:  pulumi.StringArray{pulumi.String(vpcCIDR)},
-				Description: pulumi.String(ec2Description(at, "Postgres access to the "+at.Name+" database from within the VPC")),
+				Description: pulumi.String(at.Description("Postgres access to the " + at.Name + " database from within the VPC")),
 			},
 		},
 		Egress: ec2.SecurityGroupEgressArray{
@@ -99,7 +91,7 @@ func registerPostgres(ctx *pulumi.Context, project, env, logicalName string, arg
 				FromPort:    pulumi.Int(0),
 				ToPort:      pulumi.Int(0),
 				CidrBlocks:  pulumi.StringArray{pulumi.String("0.0.0.0/0")},
-				Description: pulumi.String(ec2Description(at, "outbound access for the "+at.Name+" database")),
+				Description: pulumi.String(at.Description("outbound access for the " + at.Name + " database")),
 			},
 		},
 	})

@@ -87,18 +87,18 @@ func TestEC2Description(t *testing.T) {
 	t.Parallel()
 
 	at := resourceCoordinate("shop", "prod", "db--main", naming.KindDatabase)
-	got := ec2Description(at, "security group for the "+at.Name+" database")
+	got := at.Description("security group for the " + at.Name + " database")
 
 	if !strings.HasPrefix(got, "shop / prod / infra") {
-		t.Errorf("ec2Description() = %q, want it to open with the coordinate", got)
+		t.Errorf("Description() = %q, want it to open with the coordinate", got)
 	}
 	for _, r := range got {
 		if r > 127 {
-			t.Fatalf("ec2Description() = %q, contains %q; EC2 rejects a description outside its ASCII character set", got, r)
+			t.Fatalf("Description() = %q, contains %q; EC2 rejects a description outside its ASCII character set", got, r)
 		}
 	}
 	if len(got) > 255 {
-		t.Errorf("ec2Description() length = %d, want <= 255", len(got))
+		t.Errorf("Description() length = %d, want <= 255", len(got))
 	}
 }
 
