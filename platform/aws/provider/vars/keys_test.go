@@ -3,6 +3,8 @@ package vars
 import (
 	"strings"
 	"testing"
+
+	"github.com/ocelhq/ocel/pkg/naming"
 )
 
 func TestKeys(t *testing.T) {
@@ -73,6 +75,64 @@ func TestKeys(t *testing.T) {
 			}
 			if got != c {
 				t.Errorf("round trip of %+v = %+v", c, got)
+			}
+		}
+	})
+}
+
+func TestKeysCarryTheProject(t *testing.T) {
+	t.Parallel()
+
+	t.Run("every key a cell is written under names its project", func(t *testing.T) {
+		t.Parallel()
+
+		for _, class := range []string{"production", "preview"} {
+			for _, slug := range []string{"shop", "platform", "billing-eu"} {
+				c := Coordinate{Slug: slug, Key: "STRIPE_API_KEY", Folder: "/web", Environment: "staging"}.canonical()
+				for _, key := range []string{
+					PartitionKey(slug, class),
+					PartitionKey(slug, class) + delimiter + currentSortKey(c),
+					PartitionKey(slug, class) + delimiter + historySortKey(c, 3),
+				} {
+					got, err := naming.ProjectOf(key)
+					if err != nil {
+						t.Fatalf("naming.ProjectOf(%q) err = %v", key, err)
+					}
+					if got != slug {
+						t.Errorf("naming.ProjectOf(%q) = %q, want %q", key, got, slug)
+					}
+				}
+			}
+		}
+	})
+
+	t.Run("partition key round trips", func(t *testing.T) {
+		t.Parallel()
+
+		for _, slug := range []string{"shop", "billing-eu"} {
+			pk := PartitionKey(slug, "production")
+			got, err := parsePartitionKey(pk)
+			if err != nil {
+				t.Fatalf("parsePartitionKey(%q) err = %v", pk, err)
+			}
+			if got != slug {
+				t.Errorf("parsePartitionKey(%q) = %q, want %q", pk, got, slug)
+			}
+		}
+	})
+
+	t.Run("rejects keys of a neighbouring grammar", func(t *testing.T) {
+		t.Parallel()
+
+		for _, pk := range []string{
+			"",
+			"shop",
+			naming.ProjectKey("shop"),
+			naming.ISRTagKey("shop", "web", "products"),
+			PartitionKey("shop", "production") + delimiter + "extra",
+		} {
+			if _, err := parsePartitionKey(pk); err == nil {
+				t.Errorf("parsePartitionKey(%q) was accepted as a vars partition key", pk)
 			}
 		}
 	})
