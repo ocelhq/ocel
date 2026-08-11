@@ -254,6 +254,15 @@ func previewSpec(endpoint, version string) edge.RootStackSpec {
 	return spec
 }
 
+func specStampFor(t *testing.T, spec edge.RootStackSpec) string {
+	t.Helper()
+	stamp, err := specStamp(spec, genericWorker(spec, spec.Slug))
+	if err != nil {
+		t.Fatalf("specStamp: %v", err)
+	}
+	return stamp
+}
+
 func previewZoneMock() *cfMock {
 	return &cfMock{
 		zoneID:   "zone1",
@@ -267,16 +276,17 @@ func previewZoneMock() *cfMock {
 func TestReconcileRootStack(t *testing.T) {
 	t.Setenv(envAccountID, "acct")
 
-	t.Run("a root stack already at the spec version still reconciles its route", func(t *testing.T) {
+	t.Run("a root stack already at the spec stamp still reconciles its route", func(t *testing.T) {
 		store := fakeStoreServer(t, "s3cr3t")
 		m := previewZoneMock()
 		p := m.provider(t)
-		if err := p.putVersionStamp(t.Context(), store.URL, "acme-web", "s3cr3t", "v2"); err != nil {
+		spec := previewSpec(store.URL, "v2")
+		if err := p.putVersionStamp(t.Context(), store.URL, "acme-web", "s3cr3t", specStampFor(t, spec)); err != nil {
 			t.Fatalf("putVersionStamp: %v", err)
 		}
 
 		prior := testState(store.URL, "s3cr3t")
-		state, err := p.ReconcileRootStack(t.Context(), previewSpec(store.URL, "v2"), prior)
+		state, err := p.ReconcileRootStack(t.Context(), spec, prior)
 		if err != nil {
 			t.Fatalf("ReconcileRootStack: %v", err)
 		}
@@ -288,7 +298,7 @@ func TestReconcileRootStack(t *testing.T) {
 			t.Errorf("created routes = %v, want the project's wildcard route", m.createdRoutes)
 		}
 		if len(m.putScripts) != 0 {
-			t.Errorf("uploaded scripts = %v, want none: the root stack already carries spec.Version", m.putScripts)
+			t.Errorf("uploaded scripts = %v, want none: the root stack already carries this spec's stamp", m.putScripts)
 		}
 	})
 
@@ -323,12 +333,13 @@ func TestReconcileRootStack(t *testing.T) {
 		}
 	})
 
-	t.Run("a root stack behind the spec version uploads and stamps", func(t *testing.T) {
+	t.Run("a root stack behind the spec stamp uploads and stamps", func(t *testing.T) {
 		store := fakeStoreServer(t, "s3cr3t")
 		m := previewZoneMock()
 		p := m.provider(t)
+		spec := previewSpec(store.URL, "v2")
 
-		state, err := p.ReconcileRootStack(t.Context(), previewSpec(store.URL, "v2"), testState(store.URL, "s3cr3t"))
+		state, err := p.ReconcileRootStack(t.Context(), spec, testState(store.URL, "s3cr3t"))
 		if err != nil {
 			t.Fatalf("ReconcileRootStack: %v", err)
 		}
@@ -339,12 +350,81 @@ func TestReconcileRootStack(t *testing.T) {
 		if len(m.createdRoutes) != 1 {
 			t.Errorf("created routes = %v, want the project's wildcard route", m.createdRoutes)
 		}
-		version, _, err := p.getVersionStamp(t.Context(), store.URL, "acme-web", state[edge.RootStackKeySecret])
+		stamp, _, err := p.getVersionStamp(t.Context(), store.URL, "acme-web", state[edge.RootStackKeySecret])
 		if err != nil {
 			t.Fatalf("getVersionStamp: %v", err)
 		}
-		if version != "v2" {
-			t.Errorf("version stamp = %q, want v2", version)
+		if want := specStampFor(t, spec); stamp != want {
+			t.Errorf("version stamp = %q, want %q", stamp, want)
+		}
+	})
+
+	t.Run("an opted-in second reconcile of the same spec touches Cloudflare not at all", func(t *testing.T) {
+		t.Setenv(envSkipEdgeReconcile, "1")
+
+		store := fakeStoreServer(t, "s3cr3t")
+		m := previewZoneMock()
+		p := m.provider(t)
+		spec := previewSpec(store.URL, "v2")
+
+		state, err := p.ReconcileRootStack(t.Context(), spec, testState(store.URL, "s3cr3t"))
+		if err != nil {
+			t.Fatalf("ReconcileRootStack: %v", err)
+		}
+
+		spent := m.requests
+		if _, err := p.ReconcileRootStack(t.Context(), spec, state); err != nil {
+			t.Fatalf("second ReconcileRootStack: %v", err)
+		}
+		if m.requests != spent {
+			t.Errorf("Cloudflare requests = %d, want the %d the first reconcile already spent", m.requests, spent)
+		}
+	})
+
+	t.Run("a second reconcile of the same spec still reconciles routes by default", func(t *testing.T) {
+		store := fakeStoreServer(t, "s3cr3t")
+		m := previewZoneMock()
+		p := m.provider(t)
+		spec := previewSpec(store.URL, "v2")
+
+		state, err := p.ReconcileRootStack(t.Context(), spec, testState(store.URL, "s3cr3t"))
+		if err != nil {
+			t.Fatalf("ReconcileRootStack: %v", err)
+		}
+
+		if _, err := p.ReconcileRootStack(t.Context(), spec, state); err != nil {
+			t.Fatalf("second ReconcileRootStack: %v", err)
+		}
+		if m.routeLists != 2 {
+			t.Errorf("route lists = %d, want 2: every deploy repairs its routes unless %s says otherwise", m.routeLists, envSkipEdgeReconcile)
+		}
+		if len(m.putScripts) != 1 {
+			t.Errorf("uploaded scripts = %v, want the first reconcile's alone", m.putScripts)
+		}
+	})
+
+	t.Run("a preview whose app list grew re-uploads the shared worker", func(t *testing.T) {
+		t.Setenv(envSkipEdgeReconcile, "1")
+
+		store := fakeStoreServer(t, "s3cr3t")
+		m := previewZoneMock()
+		p := m.provider(t)
+
+		spec := previewSpec(store.URL, "v2")
+		spec.Generic = withVar(spec.Generic, "OCEL_PREVIEW_APPS", "web")
+		state, err := p.ReconcileRootStack(t.Context(), spec, testState(store.URL, "s3cr3t"))
+		if err != nil {
+			t.Fatalf("ReconcileRootStack: %v", err)
+		}
+
+		grown := previewSpec(store.URL, "v2")
+		grown.Generic = withVar(grown.Generic, "OCEL_PREVIEW_APPS", "web,api")
+		if _, err := p.ReconcileRootStack(t.Context(), grown, state); err != nil {
+			t.Fatalf("ReconcileRootStack after the app list grew: %v", err)
+		}
+
+		if len(m.putScripts) != 2 {
+			t.Errorf("uploaded scripts = %v, want the shared worker uploaded again for the wider app list", m.putScripts)
 		}
 	})
 
@@ -436,7 +516,7 @@ func TestEnsureInstance(t *testing.T) {
 			t.Fatalf("DestroyInstance: %v", err)
 		}
 
-		id, upToDate, err := p.ensureInstance(t.Context(), testSpec(srv.URL, "v2"), state)
+		id, upToDate, err := p.ensureInstance(t.Context(), testSpec(srv.URL, "v2"), state, "stamp-v2")
 		if err != nil {
 			t.Fatalf("ensureInstance after a wipe: %v", err)
 		}
@@ -457,7 +537,7 @@ func TestEnsureInstance(t *testing.T) {
 		srv := fakeStoreServer(t, "s3cr3t")
 		p := &provider{}
 
-		id, upToDate, err := p.ensureInstance(t.Context(), testSpec(srv.URL, "v2"), nil)
+		id, upToDate, err := p.ensureInstance(t.Context(), testSpec(srv.URL, "v2"), nil, "stamp-v2")
 		if err != nil {
 			t.Fatalf("ensureInstance: %v", err)
 		}
@@ -472,20 +552,20 @@ func TestEnsureInstance(t *testing.T) {
 		}
 	})
 
-	t.Run("a stamp already at the spec version skips the reconcile", func(t *testing.T) {
+	t.Run("a stamp already matching this spec skips the reconcile", func(t *testing.T) {
 		t.Parallel()
 
 		srv := fakeStoreServer(t, "s3cr3t")
 		p := &provider{}
-		if err := p.putVersionStamp(t.Context(), srv.URL, "acme-web", "s3cr3t", "v2"); err != nil {
+		if err := p.putVersionStamp(t.Context(), srv.URL, "acme-web", "s3cr3t", "stamp-v2"); err != nil {
 			t.Fatalf("putVersionStamp: %v", err)
 		}
-		id, upToDate, err := p.ensureInstance(t.Context(), testSpec(srv.URL, "v2"), testState(srv.URL, "s3cr3t"))
+		id, upToDate, err := p.ensureInstance(t.Context(), testSpec(srv.URL, "v2"), testState(srv.URL, "s3cr3t"), "stamp-v2")
 		if err != nil {
 			t.Fatalf("ensureInstance: %v", err)
 		}
 		if !upToDate {
-			t.Error("upToDate = false, want true for a root stack already at spec.Version")
+			t.Error("upToDate = false, want true for a root stack already carrying this spec's stamp")
 		}
 		if id.secret != "s3cr3t" {
 			t.Errorf("secret = %q, want the one already in state", id.secret)
@@ -498,7 +578,7 @@ func TestEnsureInstance(t *testing.T) {
 		srv := fakeStoreServer(t, "")
 		p := &provider{}
 
-		id, upToDate, err := p.ensureInstance(t.Context(), testSpec(srv.URL, "v1"), nil)
+		id, upToDate, err := p.ensureInstance(t.Context(), testSpec(srv.URL, "v1"), nil, "stamp-v1")
 		if err != nil {
 			t.Fatalf("ensureInstance with no prior state: %v", err)
 		}
@@ -526,7 +606,7 @@ func TestEnsureInstance(t *testing.T) {
 		}))
 		t.Cleanup(srv.Close)
 
-		if _, _, err := (&provider{}).ensureInstance(t.Context(), testSpec(srv.URL, "v2"), testState(srv.URL, "s3cr3t")); err == nil {
+		if _, _, err := (&provider{}).ensureInstance(t.Context(), testSpec(srv.URL, "v2"), testState(srv.URL, "s3cr3t"), "stamp-v2"); err == nil {
 			t.Fatal("ensureInstance err = nil, want the store failure surfaced")
 		}
 		if initialized != 0 {
