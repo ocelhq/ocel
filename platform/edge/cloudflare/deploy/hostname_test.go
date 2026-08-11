@@ -556,21 +556,21 @@ func TestReconcileWorkerRoutesRequestBudget(t *testing.T) {
 		reconcilePasses int
 	}{
 		{
-			name:       "every hostname in a pass shares one zone list and one route list",
+			name:       "many hostnames share one zone and route list",
 			mock:       &cfMock{zoneID: "zone1", zoneName: "app.com"},
 			plan:       prunedPlan("app.com", "www.app.com", "api.app.com"),
 			zoneLists:  1,
 			routeLists: 1,
 		},
 		{
-			name:       "the record a plan requires costs no extra zone list",
+			name:       "a required record costs no extra list",
 			mock:       &cfMock{zoneID: "zone1", zoneName: "app.com", existingRecords: []map[string]any{{"id": "wildcard", "name": "*.preview.app.com", "type": "AAAA", "content": "100::", "proxied": true}}},
 			plan:       requiredRecordPlan("*.preview.app.com", "pr-1.preview.app.com", "pr-2.preview.app.com"),
 			zoneLists:  1,
 			routeLists: 1,
 		},
 		{
-			name:            "zones are read once for the life of the provider, routes once per pass",
+			name:            "zones are read once, routes once per pass",
 			mock:            &cfMock{zoneID: "zone1", zoneName: "app.com"},
 			plan:            prunedPlan("app.com"),
 			reconcilePasses: 3,
