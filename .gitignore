@@ -189,7 +189,7 @@ cli/bin/
 cli/platform/dist/
 .local/
 
-# scripts/orchestrator.mjs run logs (local bookkeeping, not issue state — issues live in bd)
+# Agent scratch space (local bookkeeping, never project state)
 .scratch/
 
 # superpowers agent-skill working state (per-machine, not project state)
@@ -198,13 +198,8 @@ cli/platform/dist/
 # air (.air.toml) internal log/pid files
 /tmp/
 
-# Beads / Dolt files (added by bd init)
-.dolt/
-*.db
-.beads-credential-key
-.beads/proxieddb/
-issues.jsonl
-interactions.jsonl
+# Retired local issue database. Issues are tracked on GitHub; this is read-only history.
+.beads/
 
 examples/next-cache-lab/*
 !examples/next-cache-lab/package.json

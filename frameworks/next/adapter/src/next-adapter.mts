@@ -101,7 +101,7 @@ const adapter = {
       .map((p) => p.pathname);
     if (inertPrerenders.length > 0) {
       console.warn(
-        `ocel: revalidate is inert for edge-rendered route(s) ${inertPrerenders.join(", ")} — edge ISR is not supported yet (bd ocelhq-b7l)`,
+        `ocel: revalidate is inert for edge-rendered route(s) ${inertPrerenders.join(", ")} — edge ISR is not supported yet`,
       );
     }
 
