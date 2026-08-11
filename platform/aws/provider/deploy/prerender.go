@@ -11,6 +11,7 @@ import (
 	"os"
 	"path"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
@@ -19,6 +20,7 @@ import (
 	smithy "github.com/aws/smithy-go"
 	"golang.org/x/sync/errgroup"
 
+	"github.com/ocelhq/ocel/pkg/naming"
 	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
 )
 
@@ -26,27 +28,56 @@ type prerenderManifest struct {
 	BuildID string `json:"buildId"`
 }
 
-func appAssetPrefixFor(env, slug, app, buildID string) string {
-	return path.Join(env, slug, sanitizeWorkerName(app), buildID)
+func storageCoordinate(env, slug, app string, release naming.Release) naming.Coordinate {
+	return naming.Coordinate{
+		Project: naming.Sanitize(slug),
+		Env:     naming.Sanitize(env),
+		App:     naming.Sanitize(app),
+		Release: release,
+	}
+}
+
+func isrPrefixOf(c naming.Coordinate) string {
+	return strings.TrimSuffix(c.ISRPrefix(), naming.PathSeparator)
 }
 
 type appBuilds struct {
-	ids    map[string]string
-	caches map[string]*isrConfig
+	ids        map[string]string
+	identities Identities
+	coords     map[string]naming.Coordinate
+	caches     map[string]*isrConfig
 }
 
-func resolveAppBuilds(cfg Config, manifest *deploymentsv1.Manifest) (appBuilds, error) {
-	builds := appBuilds{ids: map[string]string{}, caches: map[string]*isrConfig{}}
+func resolveAppBuilds(cfg Config, manifest *deploymentsv1.Manifest, baked map[string]appBundle) (appBuilds, error) {
+	builds := appBuilds{
+		ids:        map[string]string{},
+		identities: Identities{},
+		coords:     map[string]naming.Coordinate{},
+		caches:     map[string]*isrConfig{},
+	}
+	for _, app := range manifestApps(manifest) {
+		name := app.GetName()
+		buildID, err := builds.resolve(cfg, app)
+		if err != nil {
+			return appBuilds{}, err
+		}
+		id, err := NewIdentity(buildID, baked[name].Fingerprint)
+		if err != nil {
+			return appBuilds{}, fmt.Errorf("deployment identity for %s: %w", name, err)
+		}
+		builds.identities[name] = id
+		builds.coords[name] = storageCoordinate(cfg.Env, manifest.GetSlug(), name, releaseOf(id))
+	}
 	for _, fn := range manifest.GetFunctions() {
 		app := fn.GetApp()
 		if fn.GetFramework() != frameworkNext || builds.caches[app] != nil {
 			continue
 		}
-		buildID, err := builds.resolve(cfg, app)
-		if err != nil {
-			return appBuilds{}, err
+		coord, ok := builds.coords[app]
+		if !ok {
+			return appBuilds{}, fmt.Errorf("function %s names the app %q, which this manifest does not declare", fn.GetLogicalName(), app)
 		}
-		prefix := appAssetPrefixFor(cfg.Env, manifest.GetSlug(), app, buildID)
+		prefix := isrPrefixOf(coord)
 		cache := &isrConfig{
 			Bucket:   cfg.AssetBucket,
 			Prefix:   prefix,
@@ -60,27 +91,27 @@ func resolveAppBuilds(cfg Config, manifest *deploymentsv1.Manifest) (appBuilds, 
 		}
 		builds.caches[app] = cache
 	}
-	for _, app := range manifestApps(manifest) {
-		if app.GetFramework() != frameworkNext {
-			continue
-		}
-		if _, err := builds.resolve(cfg, app.GetName()); err != nil {
-			return appBuilds{}, err
-		}
-	}
 	return builds, nil
 }
 
-func (b appBuilds) resolve(cfg Config, app string) (string, error) {
-	if id := b.ids[app]; id != "" {
+func (b appBuilds) resolve(cfg Config, app *deploymentsv1.ManifestApp) (string, error) {
+	name := app.GetName()
+	if id := b.ids[name]; id != "" {
 		return id, nil
 	}
-	id, err := nextBuildID(cfg, app)
+	id, err := appBuildID(cfg, app)
 	if err != nil {
 		return "", err
 	}
-	b.ids[app] = id
+	b.ids[name] = id
 	return id, nil
+}
+
+func appBuildID(cfg Config, app *deploymentsv1.ManifestApp) (string, error) {
+	if app.GetFramework() == frameworkNext {
+		return nextBuildID(cfg, app.GetName())
+	}
+	return newRandomID()
 }
 
 func uploadPrerenderAssets(ctx context.Context, cfg Config, builds appBuilds) error {

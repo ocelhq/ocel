@@ -385,8 +385,8 @@ function imageResponse(
   return serveImage(request, url, {
     config: manifest.images,
     basePath: manifest.basePath,
+    assetPrefix: deps.assetStore.assetPrefix,
     slug: deps.slug,
-    app: deps.app,
     buildId: manifest.buildId,
     origin: deps.imageOrigin ?? unprovisionedImageOrigin,
     assetHashes: manifest.assetHashes,

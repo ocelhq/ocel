@@ -43,11 +43,40 @@ func twoAppTree(t *testing.T) string {
 
 func appBuildsFor(t *testing.T, cfg Config, manifest *deploymentsv1.Manifest) appBuilds {
 	t.Helper()
-	builds, err := resolveAppBuilds(cfg, manifest)
+	builds, err := resolveAppBuilds(cfg, manifest, nil)
 	if err != nil {
 		t.Fatalf("resolveAppBuilds: %v", err)
 	}
 	return builds
+}
+
+func releaseBuilds(t *testing.T, cfg Config, manifest *deploymentsv1.Manifest, fingerprint string) appBuilds {
+	t.Helper()
+	bundles := map[string]appBundle{}
+	for _, app := range manifestApps(manifest) {
+		bundles[app.GetName()] = appBundle{Fingerprint: fingerprint}
+	}
+	builds, err := resolveAppBuilds(cfg, manifest, bundles)
+	if err != nil {
+		t.Fatalf("resolveAppBuilds: %v", err)
+	}
+	return builds
+}
+
+func releaseTokenFor(buildID string) string {
+	return releaseOf(buildOnly(buildID)).String()
+}
+
+func storagePrefixFor(env, slug, app, buildID string) string {
+	return env + "/" + slug + "/" + app + "/" + releaseTokenFor(buildID) + "/"
+}
+
+func isrPrefixFor(app, buildID string) string {
+	return storagePrefixFor("prod", "proj", app, buildID) + "isr"
+}
+
+func isrKeyFor(app, buildID, rest string) string {
+	return isrPrefixFor(app, buildID) + "/" + rest
 }
 
 func entryPuts(puts []string) []string {
@@ -67,17 +96,17 @@ func TestResolveAppBuilds(t *testing.T) {
 		t.Parallel()
 		cfg := Config{ArtifactRoot: twoAppTree(t), AssetBucket: "assets", StateTable: "state", Env: "prod"}
 
-		builds, err := resolveAppBuilds(cfg, twoAppManifest())
+		builds, err := resolveAppBuilds(cfg, twoAppManifest(), nil)
 		if err != nil {
 			t.Fatalf("resolveAppBuilds: %v", err)
 		}
 		if len(builds.caches) != 2 {
 			t.Fatalf("got %d caches, want one per app", len(builds.caches))
 		}
-		if want := "prod/proj/web/WEB1"; builds.caches["web"].Prefix != want {
+		if want := isrPrefixFor("web", "WEB1"); builds.caches["web"].Prefix != want {
 			t.Errorf("web prefix = %q, want %q", builds.caches["web"].Prefix, want)
 		}
-		if want := "prod/proj/admin/ADM1"; builds.caches["admin"].Prefix != want {
+		if want := isrPrefixFor("admin", "ADM1"); builds.caches["admin"].Prefix != want {
 			t.Errorf("admin prefix = %q, want %q", builds.caches["admin"].Prefix, want)
 		}
 	})
@@ -96,7 +125,7 @@ func TestResolveAppBuilds(t *testing.T) {
 			},
 		}
 
-		builds, err := resolveAppBuilds(cfg, manifest)
+		builds, err := resolveAppBuilds(cfg, manifest, nil)
 		if err != nil {
 			t.Fatalf("resolveAppBuilds: %v", err)
 		}
@@ -124,9 +153,9 @@ func TestUploadPrerenderAssets(t *testing.T) {
 		got := entryPuts(f.puts)
 		slices.Sort(got)
 		want := []string{
-			"prod/proj/admin/ADM1/cache/dash.cache.json",
-			"prod/proj/admin/ADM1/cache/users.cache.json",
-			"prod/proj/web/WEB1/cache/index.cache.json",
+			isrKeyFor("admin", "ADM1", "cache/dash.cache.json"),
+			isrKeyFor("admin", "ADM1", "cache/users.cache.json"),
+			isrKeyFor("web", "WEB1", "cache/index.cache.json"),
 		}
 		if len(got) != len(want) {
 			t.Fatalf("uploaded keys = %v, want %v", got, want)
@@ -158,11 +187,11 @@ func TestUploadPrerenderAssets(t *testing.T) {
 		got := append([]string(nil), store.puts...)
 		slices.Sort(got)
 		want := []string{
-			"prod/proj/admin/ADM1/cache/dash.cache.json",
-			"prod/proj/admin/ADM1/cache/users.cache.json",
-			"prod/proj/admin/ADM1/tag-clock.json",
-			"prod/proj/web/WEB1/cache/index.cache.json",
-			"prod/proj/web/WEB1/tag-clock.json",
+			isrKeyFor("admin", "ADM1", "cache/dash.cache.json"),
+			isrKeyFor("admin", "ADM1", "cache/users.cache.json"),
+			isrKeyFor("admin", "ADM1", "tag-clock.json"),
+			isrKeyFor("web", "WEB1", "cache/index.cache.json"),
+			isrKeyFor("web", "WEB1", "tag-clock.json"),
 		}
 		if len(got) != len(want) {
 			t.Fatalf("uploaded keys = %v, want %v", got, want)
@@ -212,7 +241,7 @@ func TestUploadPrerenderAssets(t *testing.T) {
 		}
 		after := time.Now().UnixMilli()
 
-		for _, key := range []string{"prod/proj/web/WEB1/tag-clock.json", "prod/proj/admin/ADM1/tag-clock.json"} {
+		for _, key := range []string{isrKeyFor("web", "WEB1", "tag-clock.json"), isrKeyFor("admin", "ADM1", "tag-clock.json")} {
 			body, ok := store.putBodies[key]
 			if !ok {
 				t.Fatalf("no snapshot seeded at %q; puts = %v", key, store.puts)
@@ -250,7 +279,7 @@ func TestUploadPrerenderAssets(t *testing.T) {
 			t.Fatalf("uploadPrerenderAssets: %v", err)
 		}
 
-		for _, key := range []string{"prod/proj/web/WEB1/tag-clock.json", "prod/proj/admin/ADM1/tag-clock.json"} {
+		for _, key := range []string{isrKeyFor("web", "WEB1", "tag-clock.json"), isrKeyFor("admin", "ADM1", "tag-clock.json")} {
 			mine, ok := own.putBodies[key]
 			if !ok {
 				t.Fatalf("no snapshot seeded into the provider's own bucket at %q; puts = %v", key, own.puts)
@@ -263,7 +292,7 @@ func TestUploadPrerenderAssets(t *testing.T) {
 
 	t.Run("keeps an existing snapshot", func(t *testing.T) {
 		t.Parallel()
-		store := &fakeUploader{exists: map[string]bool{"prod/proj/web/WEB1/tag-clock.json": true}}
+		store := &fakeUploader{exists: map[string]bool{isrKeyFor("web", "WEB1", "tag-clock.json"): true}}
 		cfg := Config{
 			ArtifactRoot: twoAppTree(t), AssetBucket: "assets", Env: "prod",
 			Uploader: &fakeUploader{exists: map[string]bool{}}, CacheStoreBucket: "isr", CacheStoreUploader: store,
@@ -274,10 +303,10 @@ func TestUploadPrerenderAssets(t *testing.T) {
 			t.Fatalf("uploadPrerenderAssets: %v", err)
 		}
 
-		if _, ok := store.putBodies["prod/proj/web/WEB1/tag-clock.json"]; ok {
+		if _, ok := store.putBodies[isrKeyFor("web", "WEB1", "tag-clock.json")]; ok {
 			t.Error("an existing snapshot was overwritten, want it left as the publisher last wrote it")
 		}
-		if _, ok := store.putBodies["prod/proj/admin/ADM1/tag-clock.json"]; !ok {
+		if _, ok := store.putBodies[isrKeyFor("admin", "ADM1", "tag-clock.json")]; !ok {
 			t.Error("the other app's snapshot was not seeded; one refusal must not stop the rest")
 		}
 	})
@@ -364,8 +393,8 @@ func TestUploadPrerenderAssets(t *testing.T) {
 		got := entryPuts(f.puts)
 		slices.Sort(got)
 		want := []string{
-			"prod/proj/web/BID/cache/blog/post.cache.json",
-			"prod/proj/web/BID/cache/index.cache.json",
+			isrKeyFor("web", "BID", "cache/blog/post.cache.json"),
+			isrKeyFor("web", "BID", "cache/index.cache.json"),
 		}
 		if len(got) != len(want) {
 			t.Fatalf("uploaded keys = %v, want %v", got, want)
@@ -398,7 +427,7 @@ func TestUploadPrerenderAssets(t *testing.T) {
 			t.Fatalf("uploadPrerenderAssets: %v", err)
 		}
 
-		want := "prod/proj/web/WEB1/fetch-cache/" + hash + ".cache.json"
+		want := isrKeyFor("web", "WEB1", "fetch-cache/") + hash + ".cache.json"
 		if got := entryPuts(asset.puts); len(got) != 1 || got[0] != want {
 			t.Fatalf("asset bucket got %v, want exactly [%s]", got, want)
 		}

@@ -47,9 +47,7 @@ export interface ImageConfig {
 }
 
 export interface ImageOriginRequest {
-  slug: string;
-  app: string;
-  buildId: string;
+  assetPrefix: string;
   url: string;
   w: number;
   q: number;
@@ -63,8 +61,8 @@ export type ImageOrigin = (payload: ImageOriginRequest) => Promise<Response>;
 export interface ImageDeps {
   config: ImageConfig;
   basePath: string;
+  assetPrefix: string;
   slug: string;
-  app: string;
   buildId: string;
   origin: ImageOrigin;
   assetHashes?: Record<string, string>;
@@ -296,9 +294,7 @@ export async function serveImage(request: Request, url: URL, deps: ImageDeps): P
   const origin = async () =>
     servedImage(
       await deps.origin({
-        slug: deps.slug,
-        app: deps.app,
-        buildId: deps.buildId,
+        assetPrefix: deps.assetPrefix,
         url: params.href,
         w: params.width,
         q: params.quality,

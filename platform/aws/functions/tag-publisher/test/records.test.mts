@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 
 import { raisesOf, type StreamRecord } from "../src/records.mjs";
 
-const PREFIX = "prod/acme/web/BUILD1";
+const PREFIX = "prod/acme/web/r3f8a1c9d/isr";
 
 let nextSequence = 0;
 
@@ -29,20 +29,20 @@ function tagRecord(
 
 describe("raisesOf", () => {
   it("groups a batch by the build each record belongs to", () => {
-    const other = tagNamespace("prod/acme/admin/BUILD2");
+    const other = tagNamespace("prod/acme/admin/rbbbbbbbb/isr");
     const raises = raisesOf([
       tagRecord("cart", { expired: { N: "100" } }),
       tagRecord("home", { stale: { N: "200" } }),
       tagRecord("cart", { expired: { N: "300" } }, other),
     ]);
 
-    expect([...raises.keys()].sort()).toEqual(["prod/acme/admin/BUILD2", PREFIX]);
+    expect([...raises.keys()].sort()).toEqual(["prod/acme/admin/rbbbbbbbb/isr", PREFIX]);
     expect(raises.get(PREFIX)!.records.get("cart")).toEqual({ stale: undefined, expired: 100 });
     expect(raises.get(PREFIX)!.records.get("home")).toEqual({ stale: 200, expired: undefined });
   });
 
   it("remembers which records each build's raise was carried by", () => {
-    const other = tagNamespace("prod/acme/admin/BUILD2");
+    const other = tagNamespace("prod/acme/admin/rbbbbbbbb/isr");
     const raises = raisesOf([
       tagRecord("cart", { expired: { N: "100" } }),
       tagRecord("cart", { expired: { N: "300" } }, other),
@@ -50,7 +50,7 @@ describe("raisesOf", () => {
     ]);
 
     const [cart, home] = raises.get(PREFIX)!.sequenceNumbers;
-    expect(raises.get("prod/acme/admin/BUILD2")!.sequenceNumbers).toEqual([
+    expect(raises.get("prod/acme/admin/rbbbbbbbb/isr")!.sequenceNumbers).toEqual([
       String(Number(cart) + 1),
     ]);
     expect(home).toBe(String(Number(cart) + 2));

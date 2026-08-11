@@ -46,17 +46,22 @@ func edgeAppTree(t *testing.T) string {
 	})
 }
 
-func TestAppEdgeBundleR2Key(t *testing.T) {
-	got := appEdgeBundleR2Key("proj", "web", "WEB1")
-	want := "edge/proj/web/WEB1/bundle.json"
+func edgeBundleKeyFor(app, buildID string) string {
+	return storagePrefixFor("prod", "proj", app, buildID) + "edge/bundle.json"
+}
+
+func TestAppEdgeBundleKey(t *testing.T) {
+	coord := storageCoordinate("prod", "proj", "web", releaseOf(buildOnly("WEB1")))
+	got := appEdgeBundleKey(coord)
+	want := edgeBundleKeyFor("web", "WEB1")
 	if got != want {
-		t.Errorf("appEdgeBundleR2Key = %q, want %q", got, want)
+		t.Errorf("appEdgeBundleKey = %q, want %q", got, want)
 	}
-	if !strings.HasPrefix(got, appEdgeR2Prefix("proj", "web", "WEB1")+"/") {
-		t.Errorf("key %q must live under the build's own prune-able prefix", got)
+	if !strings.HasPrefix(got, appEdgePrefix(coord)+"/") {
+		t.Errorf("key %q must live under the release's own prune-able prefix", got)
 	}
-	if other := appEdgeBundleR2Key("proj", "web", "WEB2"); other == got {
-		t.Error("two builds of one app must not share a bundle key")
+	if other := appEdgeBundleKey(storageCoordinate("prod", "proj", "web", releaseOf(buildOnly("WEB2")))); other == got {
+		t.Error("two releases of one app must not share a bundle key")
 	}
 }
 
@@ -76,7 +81,7 @@ func TestUploadEdgeBundles(t *testing.T) {
 
 		got := append([]string(nil), store.puts...)
 		slices.Sort(got)
-		want := []string{"edge/proj/web/WEB1/bundle.json"}
+		want := []string{edgeBundleKeyFor("web", "WEB1")}
 		if len(got) != len(want) || got[0] != want[0] {
 			t.Fatalf("uploaded keys = %v, want %v", got, want)
 		}
@@ -95,7 +100,7 @@ func TestUploadEdgeBundles(t *testing.T) {
 
 	t.Run("replaces the object already under the key", func(t *testing.T) {
 		t.Parallel()
-		key := "edge/proj/web/WEB1/bundle.json"
+		key := edgeBundleKeyFor("web", "WEB1")
 		store := &fakeUploader{exists: map[string]bool{key: true}}
 		cfg := Config{
 			ArtifactRoot: writeTree(t, map[string]string{
@@ -142,10 +147,10 @@ func TestUploadEdgeBundles(t *testing.T) {
 		for _, key := range store.puts {
 			distinct[key] = true
 		}
-		if len(store.puts) != 2 || len(distinct) != 1 || !distinct["edge/proj/web/WEB1/bundle.json"] {
-			t.Fatalf("uploaded keys = %v, want the same %q twice", store.puts, "edge/proj/web/WEB1/bundle.json")
+		if len(store.puts) != 2 || len(distinct) != 1 || !distinct[edgeBundleKeyFor("web", "WEB1")] {
+			t.Fatalf("uploaded keys = %v, want the same %q twice", store.puts, edgeBundleKeyFor("web", "WEB1"))
 		}
-		if body := store.putBodies["edge/proj/web/WEB1/bundle.json"]; body != `{"version":1,"mainModule":"main.js"}` {
+		if body := store.putBodies[edgeBundleKeyFor("web", "WEB1")]; body != `{"version":1,"mainModule":"main.js"}` {
 			t.Errorf("object after the rotation = %q, want the build's bundle unchanged", body)
 		}
 	})
@@ -178,7 +183,7 @@ func TestBuildDeploymentRecordEdgeWorkers(t *testing.T) {
 		if record.EdgeWorkers == nil {
 			t.Fatal("EdgeWorkers = nil, want the build's edge bundle")
 		}
-		if want := "edge/proj/web/WEB1/bundle.json"; record.EdgeWorkers.BundleKey != want {
+		if want := edgeBundleKeyFor("web", "WEB1"); record.EdgeWorkers.BundleKey != want {
 			t.Errorf("BundleKey = %q, want %q", record.EdgeWorkers.BundleKey, want)
 		}
 		if record.EdgeWorkers.CompatDate != "2026-07-13" {

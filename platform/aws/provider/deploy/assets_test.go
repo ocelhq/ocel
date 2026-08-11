@@ -45,12 +45,31 @@ func mirrorConfig(root string, store, asset *fakeUploader) Config {
 	}
 }
 
-func TestAppAssetR2Prefix(t *testing.T) {
+func publishedImageConfig(key string) bool {
+	return strings.HasSuffix(key, "/"+imageConfigFile) && !strings.Contains(key, "/assets/")
+}
+
+func assetPrefixFor(app, buildID string) string {
+	return storagePrefixFor("prod", "proj", app, buildID) + "assets"
+}
+
+func assetKeyFor(app, buildID, rest string) string {
+	return assetPrefixFor(app, buildID) + "/" + rest
+}
+
+func imageConfigKeyFor(app, buildID string) string {
+	return storagePrefixFor("prod", "proj", app, buildID) + "image-config.json"
+}
+
+func TestAppAssetPrefix(t *testing.T) {
 	t.Parallel()
-	got := appAssetR2Prefix("proj", "web", "WEB1")
-	want := "assets/proj/web/WEB1"
+	got := appAssetPrefix(storageCoordinate("prod", "proj", "web", releaseOf(buildOnly("WEB1"))))
+	want := assetPrefixFor("web", "WEB1")
 	if got != want {
-		t.Errorf("appAssetR2Prefix = %q, want %q", got, want)
+		t.Errorf("appAssetPrefix = %q, want %q", got, want)
+	}
+	if config := imageConfigKeyFor("web", "WEB1"); !strings.HasPrefix(config, strings.TrimSuffix(got, "assets")) {
+		t.Errorf("image config %q does not sit beside the assets under one release prefix %q", config, got)
 	}
 }
 
@@ -73,9 +92,9 @@ func TestUploadStaticAssets(t *testing.T) {
 		got := append([]string(nil), store.puts...)
 		slices.Sort(got)
 		want := []string{
-			"assets/proj/admin/ADM1/favicon.ico",
-			"assets/proj/web/WEB1/_next/static/chunk.js",
-			"assets/proj/web/WEB1/next.svg",
+			assetKeyFor("admin", "ADM1", "favicon.ico"),
+			assetKeyFor("web", "WEB1", "_next/static/chunk.js"),
+			assetKeyFor("web", "WEB1", "next.svg"),
 		}
 		if len(got) != len(want) {
 			t.Fatalf("uploaded keys = %v, want %v", got, want)
@@ -190,11 +209,11 @@ func TestUploadStaticAssets(t *testing.T) {
 			t.Fatalf("uploadStaticAssets: %v", err)
 		}
 
-		key := "assets/proj/web/WEB1/logo.png"
+		key := assetKeyFor("web", "WEB1", "logo.png")
 		if got := sortedPuts(store); !reflect.DeepEqual(got, []string{key}) {
 			t.Errorf("cache store keys = %v, want %v", got, []string{key})
 		}
-		want := []string{key, "image-config/proj/web/WEB1.json"}
+		want := []string{key, imageConfigKeyFor("web", "WEB1")}
 		if got := sortedPuts(asset); !reflect.DeepEqual(got, want) {
 			t.Errorf("asset bucket keys = %v, want %v", got, want)
 		}
@@ -217,7 +236,7 @@ func TestUploadStaticAssets(t *testing.T) {
 			t.Fatalf("uploadStaticAssets: %v", err)
 		}
 
-		key := "image-config/proj/web/WEB1.json"
+		key := imageConfigKeyFor("web", "WEB1")
 		if got, want := asset.putBodies[key], `{"formats":["image/webp"]}`; got != want {
 			t.Errorf("image config bytes = %q, want %q — the origin hashes exactly these", got, want)
 		}
@@ -228,7 +247,7 @@ func TestUploadStaticAssets(t *testing.T) {
 			t.Errorf("published %q to the cache store, want the asset bucket alone", key)
 		}
 		for _, k := range sortedPuts(store) {
-			if strings.HasPrefix(k, "image-config/") {
+			if publishedImageConfig(k) {
 				t.Errorf("cache store received %q, want no image config in R2 at all", k)
 			}
 		}
@@ -248,10 +267,10 @@ func TestUploadStaticAssets(t *testing.T) {
 			t.Fatalf("uploadStaticAssets: %v", err)
 		}
 
-		if got, want := asset.putBodies["assets/proj/web/WEB1/image-config.json"], `{"mine":true}`; got != want {
+		if got, want := asset.putBodies[assetKeyFor("web", "WEB1", "image-config.json")], `{"mine":true}`; got != want {
 			t.Errorf("the project's own public/image-config.json = %q, want %q", got, want)
 		}
-		if got, want := asset.putBodies["image-config/proj/web/WEB1.json"], `{"formats":["image/webp"]}`; got != want {
+		if got, want := asset.putBodies[imageConfigKeyFor("web", "WEB1")], `{"formats":["image/webp"]}`; got != want {
 			t.Errorf("compiled image config = %q, want %q", got, want)
 		}
 	})
@@ -265,7 +284,7 @@ func TestUploadStaticAssets(t *testing.T) {
 			t.Fatalf("uploadStaticAssets: %v", err)
 		}
 		for _, key := range append(sortedPuts(store), sortedPuts(asset)...) {
-			if strings.HasPrefix(key, "image-config/") {
+			if publishedImageConfig(key) {
 				t.Errorf("published %q for a build that emitted no image config", key)
 			}
 		}
@@ -274,8 +293,8 @@ func TestUploadStaticAssets(t *testing.T) {
 	t.Run("republishes the image config over a present object", func(t *testing.T) {
 		t.Parallel()
 		present := map[string]bool{
-			"image-config/proj/web/WEB1.json": true,
-			"assets/proj/web/WEB1/logo.png":   true,
+			imageConfigKeyFor("web", "WEB1"):       true,
+			assetKeyFor("web", "WEB1", "logo.png"): true,
 		}
 		store := &fakeUploader{exists: present}
 		asset := &fakeUploader{exists: present}
@@ -288,7 +307,7 @@ func TestUploadStaticAssets(t *testing.T) {
 		if got := sortedPuts(store); got != nil {
 			t.Errorf("cache store keys = %v, want nothing re-put", got)
 		}
-		want := []string{"image-config/proj/web/WEB1.json"}
+		want := []string{imageConfigKeyFor("web", "WEB1")}
 		if got := sortedPuts(asset); !reflect.DeepEqual(got, want) {
 			t.Errorf("asset bucket keys = %v, want %v", got, want)
 		}
@@ -347,8 +366,8 @@ func TestUploadPrerenderAssetsMirroring(t *testing.T) {
 			t.Fatalf("uploadPrerenderAssets: %v", err)
 		}
 
-		entry := "prod/proj/web/WEB1/cache/index.cache.json"
-		if got := sortedPuts(store); !reflect.DeepEqual(got, []string{entry, "prod/proj/web/WEB1/tag-clock.json"}) {
+		entry := isrKeyFor("web", "WEB1", "cache/index.cache.json")
+		if got := sortedPuts(store); !reflect.DeepEqual(got, []string{entry, isrKeyFor("web", "WEB1", "tag-clock.json")}) {
 			t.Errorf("cache store keys = %v, want the route entry and the tag clock", got)
 		}
 		for _, key := range sortedPuts(asset) {
@@ -364,15 +383,15 @@ func TestBuildDeploymentRecordAssets(t *testing.T) {
 		root := writeTree(t, map[string]string{
 			"apps/web/routing-manifest.json": `{"buildId":"WEB1"}`,
 		})
-		cfg := Config{ArtifactRoot: root}
-		manifest := &deploymentsv1.Manifest{Slug: "proj"}
+		cfg := Config{ArtifactRoot: root, Env: "prod"}
+		manifest := nextManifest()
 		app := &deploymentsv1.ManifestApp{Name: "web", Framework: frameworkNext}
 
 		record, err := buildDeploymentRecord(cfg, manifest, app, buildOnly("WEB1"), nil, appBuildsFor(t, cfg, manifest))
 		if err != nil {
 			t.Fatalf("buildDeploymentRecord: %v", err)
 		}
-		if want := "assets/proj/web/WEB1"; record.AssetPrefix != want {
+		if want := assetPrefixFor("web", "WEB1"); record.AssetPrefix != want {
 			t.Errorf("AssetPrefix = %q, want %q", record.AssetPrefix, want)
 		}
 	})
@@ -389,7 +408,7 @@ func TestBuildDeploymentRecordAssets(t *testing.T) {
 		if err != nil {
 			t.Fatalf("buildDeploymentRecord: %v", err)
 		}
-		if want := "prod/proj/web/WEB1"; record.IsrPrefix != want {
+		if want := isrPrefixFor("web", "WEB1"); record.IsrPrefix != want {
 			t.Errorf("IsrPrefix = %q, want %q", record.IsrPrefix, want)
 		}
 	})
@@ -428,7 +447,7 @@ func TestBuildDeploymentRecordAssets(t *testing.T) {
 		if err != nil {
 			t.Fatalf("buildDeploymentRecord: %v", err)
 		}
-		if want := isrWriteSecret("seed-1", "prod/proj/web/WEB1"); record.IsrWriteSecret != want {
+		if want := isrWriteSecret("seed-1", isrPrefixFor("web", "WEB1")); record.IsrWriteSecret != want {
 			t.Errorf("IsrWriteSecret = %q, want the secret derived for this build's prefix", record.IsrWriteSecret)
 		}
 	})

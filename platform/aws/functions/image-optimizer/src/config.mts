@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import type { CompiledImageConfig } from "./contract.mjs";
 import { SubstrateError } from "./errors.mjs";
-import { imageConfigKey, type BuildIdentity } from "./keys.mjs";
+import { imageConfigKey } from "./keys.mjs";
 import type { ObjectStore } from "./store.mjs";
 
 const CONFIG_LIMIT = 1024 * 1024;
@@ -15,7 +15,7 @@ export function resetConfigMemo(): void {
 
 export async function loadImageConfig(
   store: ObjectStore,
-  id: BuildIdentity,
+  assetPrefix: string,
   configHash: string,
 ): Promise<CompiledImageConfig> {
   if (!/^[0-9a-f]{64}$/.test(configHash)) {
@@ -24,7 +24,7 @@ export async function loadImageConfig(
   const cached = memo.get(configHash);
   if (cached) return cached;
 
-  const key = imageConfigKey(id);
+  const key = imageConfigKey(assetPrefix);
   let object;
   try {
     object = await store.get(key, CONFIG_LIMIT);

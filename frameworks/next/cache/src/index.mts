@@ -44,7 +44,7 @@ export function tagNamespace(prefix: string): string {
   return `TAG#${prefix.replaceAll("/", "#")}#`;
 }
 
-const PREFIX_SEGMENTS = 4;
+const PREFIX_SEGMENTS = 5;
 
 export function isrPrefixOf(namespace: string): string | null {
   if (!namespace.startsWith("TAG#") || !namespace.endsWith("#")) return null;

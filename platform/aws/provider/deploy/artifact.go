@@ -22,6 +22,7 @@ import (
 	s3types "github.com/aws/aws-sdk-go-v2/service/s3/types"
 	"golang.org/x/sync/errgroup"
 
+	"github.com/ocelhq/ocel/pkg/naming"
 	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
 )
 
@@ -124,8 +125,14 @@ func writeLenPrefixed(h io.Writer, b []byte) {
 	h.Write(b)
 }
 
-func artifactKey(slug, logicalName, hash string) string {
-	return fmt.Sprintf("%s/%s/%s.zip", slug, logicalName, hash)
+func functionArtifactPrefix(c naming.Coordinate) string {
+	return c.StoragePrefix() + string(naming.KindFunction)
+}
+
+func artifactKey(c naming.Coordinate, logicalName, hash string) string {
+	c.Kind = naming.KindFunction
+	c.Name = logicalName
+	return c.FunctionArtifactKey(hash)
 }
 
 func zipDir(dir string, overlay map[string][]byte) ([]byte, error) {
@@ -234,7 +241,7 @@ type artifactRef struct {
 	Key    string
 }
 
-func uploadFunctionArtifacts(ctx context.Context, cfg Config, manifest *deploymentsv1.Manifest, baked map[string]appBundle, progress Progress) (map[string]artifactRef, error) {
+func uploadFunctionArtifacts(ctx context.Context, cfg Config, manifest *deploymentsv1.Manifest, baked map[string]appBundle, builds appBuilds, progress Progress) (map[string]artifactRef, error) {
 	functions := manifest.GetFunctions()
 	refs := make(map[string]artifactRef, len(functions))
 	if len(functions) == 0 {
@@ -257,13 +264,17 @@ func uploadFunctionArtifacts(ctx context.Context, cfg Config, manifest *deployme
 	var mu sync.Mutex
 	for _, fn := range functions {
 		g.Go(func() error {
+			coord, ok := builds.coords[fn.GetApp()]
+			if !ok {
+				return fmt.Errorf("function %s names the app %q, which this manifest does not declare", fn.GetLogicalName(), fn.GetApp())
+			}
 			dir := artifactArchivePath(cfg.ArtifactRoot, fn.GetArtifactPath())
 			overlay := baked[fn.GetApp()].overlay()
 			hash, err := hashArtifact(dir, overlay)
 			if err != nil {
 				return err
 			}
-			key := artifactKey(manifest.GetSlug(), fn.GetLogicalName(), hash)
+			key := artifactKey(coord, fn.GetLogicalName(), hash)
 			if err := uploadArtifact(ctx, cfg.Uploader, cfg.ArtifactBucket, key, "", func() ([]byte, error) {
 				return zipDir(dir, overlay)
 			}); err != nil {

@@ -1,32 +1,24 @@
 import { describe, expect, test } from "vitest";
 import { SubstrateError } from "../src/errors.mjs";
-import {
-  assetKey,
-  assetPath,
-  identity,
-  imageConfigKey,
-  sanitizeAppName,
-} from "../src/keys.mjs";
+import { assetKey, assetPath, imageConfigKey, releaseAssetPrefix } from "../src/keys.mjs";
 
-const ID = { slug: "proj1", app: "web", buildId: "build-1" };
+const PREFIX = "prod/proj1/web/r3f8a1c9d/assets";
 
 describe("config key", () => {
-  test("is under image-config/, never under assets/", () => {
-    expect(imageConfigKey(ID)).toBe("image-config/proj1/web/build-1.json");
-    expect(imageConfigKey(ID).startsWith("assets/")).toBe(false);
+  test("is the release's own sibling of the assets, never under them", () => {
+    expect(imageConfigKey(PREFIX)).toBe("prod/proj1/web/r3f8a1c9d/image-config.json");
+    expect(imageConfigKey(PREFIX).startsWith(PREFIX)).toBe(false);
   });
 });
 
 describe("asset key", () => {
-  test("is the build prefix joined with the request pathname", () => {
-    expect(assetKey(ID, "/logo.png")).toBe("assets/proj1/web/build-1/logo.png");
-    expect(assetKey(ID, "/nested/dir/logo.png")).toBe(
-      "assets/proj1/web/build-1/nested/dir/logo.png",
-    );
+  test("is the prefix the deploy minted joined with the request pathname", () => {
+    expect(assetKey(PREFIX, "/logo.png")).toBe(`${PREFIX}/logo.png`);
+    expect(assetKey(PREFIX, "/nested/dir/logo.png")).toBe(`${PREFIX}/nested/dir/logo.png`);
   });
 
   test("decodes what the browser encoded", () => {
-    expect(assetKey(ID, "/my%20logo.png")).toBe("assets/proj1/web/build-1/my logo.png");
+    expect(assetKey(PREFIX, "/my%20logo.png")).toBe(`${PREFIX}/my logo.png`);
   });
 });
 
@@ -58,28 +50,25 @@ describe("traversal guard", () => {
   });
 });
 
-describe("identity", () => {
-  test("refuses a separator in any component", () => {
-    expect(() => identity({ ...ID, slug: "proj1/../other" })).toThrow(SubstrateError);
-    expect(() => identity({ ...ID, buildId: "../build-2" })).toThrow(SubstrateError);
-    expect(() => identity({ ...ID, slug: "" })).toThrow(SubstrateError);
+describe("asset prefix", () => {
+  test("takes the prefix the deploy minted", () => {
+    expect(releaseAssetPrefix(PREFIX)).toBe(PREFIX);
   });
 
-  test("refuses a dot run even without a separator", () => {
-    expect(() => identity({ ...ID, buildId: "..." })).toThrow(SubstrateError);
+  test("refuses a prefix that does not end in the assets segment", () => {
+    expect(() => releaseAssetPrefix("prod/proj1/web/r3f8a1c9d")).toThrow(SubstrateError);
+    expect(() => releaseAssetPrefix("prod/proj1/web/r3f8a1c9d/isr")).toThrow(SubstrateError);
   });
 
-  test("sanitizes the app name the way the uploader did", () => {
-    expect(sanitizeAppName("Web")).toBe("web");
-    expect(sanitizeAppName("my app")).toBe("my-app");
-    expect(sanitizeAppName("my___app")).toBe("my-app");
-    expect(sanitizeAppName("-lead-and-trail-")).toBe("lead-and-trail");
-    expect(sanitizeAppName("!!!")).toBe("ocel-worker");
-    expect(sanitizeAppName("a".repeat(80))).toBe("a".repeat(63));
-    expect(identity({ ...ID, app: "My App" }).app).toBe("my-app");
+  test("refuses a traversal in any segment", () => {
+    expect(() => releaseAssetPrefix("prod/proj1/web/../assets")).toThrow(SubstrateError);
+    expect(() => releaseAssetPrefix("prod/proj1/web/.../assets")).toThrow(SubstrateError);
+    expect(() => releaseAssetPrefix("prod//web/r3f8a1c9d/assets")).toThrow(SubstrateError);
   });
 
-  test("a traversal attempt in the app name sanitizes to a plain segment", () => {
-    expect(identity({ ...ID, app: "../../etc" }).app).toBe("etc");
+  test("refuses a missing or empty prefix", () => {
+    expect(() => releaseAssetPrefix(undefined)).toThrow(SubstrateError);
+    expect(() => releaseAssetPrefix("")).toThrow(SubstrateError);
+    expect(() => releaseAssetPrefix(42)).toThrow(SubstrateError);
   });
 });

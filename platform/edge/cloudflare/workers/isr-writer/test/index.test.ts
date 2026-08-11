@@ -32,7 +32,7 @@ afterEach(() => {
 
 let nextBuild = 0;
 function freshPrefix() {
-  return `prod/acme/web/BUILD${nextBuild++}`;
+  return `prod/acme/web/r0000000${nextBuild++}/isr`;
 }
 
 async function initialize(prefix: string, secret: string, token = BOOTSTRAP) {
@@ -251,18 +251,18 @@ describe("destroy", () => {
 
 describe("routing", () => {
   it("404s an unknown op and a path with no deploy prefix", async () => {
-    expect((await SELF.fetch(req("/prod/acme/web/B/nonsense"))).status).toBe(404);
+    expect((await SELF.fetch(req("/prod/acme/web/r3f8a1c9d/isr/nonsense"))).status).toBe(404);
     expect((await SELF.fetch(req("/initialize", { method: "POST" }))).status).toBe(404);
   });
 
-  it("404s a path that is not exactly a four-segment deploy prefix", async () => {
+  it("404s a path that is not exactly a release prefix", async () => {
     const secretHash = vi.spyOn(IsrDeploy.prototype, "secretHash");
     const paths = [
       "/aaa/entry",
       "/prod/acme/entry",
-      "/prod/acme/web/B1/extra/entry",
-      "/prod/acme/web/../entry",
-      "/prod/acme/web/./entry",
+      "/prod/acme/web/r3f8a1c9d/isr/extra/entry",
+      "/prod/acme/web/r3f8a1c9d/../entry",
+      "/prod/acme/web/r3f8a1c9d/./entry",
     ];
     for (const path of paths) {
       const res = await SELF.fetch(
@@ -275,9 +275,9 @@ describe("routing", () => {
   });
 
   it.each(["-H1t_CFb4Ec1S1wr0e2T4", "_H1t-CFb4Ec1S1wr0e2T4"])(
-    "accepts the build id %s, which a nanoid leads with once in thirty builds",
+    "accepts the segment %s, which a nanoid leads with once in thirty builds",
     async (buildId) => {
-      const prefix = `preview-p/p/app/${buildId}`;
+      const prefix = `preview-p/p/app/${buildId}/isr`;
       expect((await initialize(prefix, "write-secret")).status).toBe(204);
       expect((await writeEntryReq(prefix, "blog/post", "write-secret")).status).toBe(204);
     },

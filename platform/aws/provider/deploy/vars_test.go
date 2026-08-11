@@ -620,7 +620,7 @@ func TestBakedDelivery(t *testing.T) {
 		if err != nil {
 			t.Fatalf("renderAppBundles: %v", err)
 		}
-		if _, err := uploadFunctionArtifacts(context.Background(), cfg, manifest, bundles, nil); err != nil {
+		if _, err := uploadFunctionArtifacts(context.Background(), cfg, manifest, bundles, appBuildsFor(t, cfg, manifest), nil); err != nil {
 			t.Fatalf("uploadFunctionArtifacts: %v", err)
 		}
 
