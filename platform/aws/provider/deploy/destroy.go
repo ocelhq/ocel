@@ -20,6 +20,7 @@ type TeardownConfig struct {
 	StackName   string
 	Pulumi      auto.PulumiCommand
 	Stacks      StackIndex
+	SkipRefresh bool
 
 	realized *realizedStacks
 }
@@ -109,7 +110,7 @@ func Destroy(ctx context.Context, cfg TeardownConfig, progress, log func(string)
 
 func destroyOptions(cfg TeardownConfig, logWriter *lineForwarder) []optdestroy.Option {
 	var opts []optdestroy.Option
-	if !cfg.realized.realizedHere(cfg.StackName) {
+	if !cfg.SkipRefresh && !cfg.realized.realizedHere(cfg.StackName) {
 		opts = append(opts, optdestroy.Refresh())
 	}
 	if logWriter != nil {
