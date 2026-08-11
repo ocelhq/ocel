@@ -120,6 +120,7 @@ func (ix *Index) sortKeys(ctx context.Context, pk string) ([]string, error) {
 	for {
 		page, err := ix.Dynamo.Query(ctx, &dynamodb.QueryInput{
 			TableName:              aws.String(ix.Table),
+			ConsistentRead:         aws.Bool(true),
 			KeyConditionExpression: aws.String("#pk = :pk"),
 			ProjectionExpression:   aws.String("#sk"),
 			ExpressionAttributeNames: map[string]string{

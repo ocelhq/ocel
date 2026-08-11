@@ -3,6 +3,7 @@ package deploy
 import (
 	"context"
 	"fmt"
+	"sync"
 )
 
 type StackIndex interface {
@@ -15,6 +16,37 @@ type StackIndex interface {
 }
 
 var errNoStackIndex = fmt.Errorf("this deploy has no stack index; re-run `ocel bootstrap`")
+
+type realizedStacks struct {
+	mu    sync.Mutex
+	names map[string]struct{}
+}
+
+func (r *realizedStacks) realize(ctx context.Context, index StackIndex, stackName string) error {
+	if err := index.AddStack(ctx, stackName); err != nil {
+		return err
+	}
+	if r == nil {
+		return nil
+	}
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if r.names == nil {
+		r.names = map[string]struct{}{}
+	}
+	r.names[stackName] = struct{}{}
+	return nil
+}
+
+func (r *realizedStacks) realizedHere(stackName string) bool {
+	if r == nil {
+		return false
+	}
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	_, ok := r.names[stackName]
+	return ok
+}
 
 func stackIndex(index StackIndex) (StackIndex, error) {
 	if index == nil {

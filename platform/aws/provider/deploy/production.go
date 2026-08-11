@@ -729,7 +729,7 @@ func upStack(ctx context.Context, cfg Config, stackName string, program pulumi.R
 	if err != nil {
 		return auto.UpResult{}, err
 	}
-	if err := index.AddStack(ctx, stackName); err != nil {
+	if err := cfg.realized.realize(ctx, index, stackName); err != nil {
 		return auto.UpResult{}, err
 	}
 

@@ -74,7 +74,7 @@ func (f *fakeStackIndex) Projects(_ context.Context) ([]string, error) {
 func TestPlanProjectTeardown(t *testing.T) {
 	t.Parallel()
 
-	t.Run("covers what the index holds for this project alone", func(t *testing.T) {
+	t.Run("covers only this project's stacks", func(t *testing.T) {
 		t.Parallel()
 
 		index := &fakeStackIndex{stacks: map[string][]string{
@@ -98,7 +98,7 @@ func TestPlanProjectTeardown(t *testing.T) {
 		}
 	})
 
-	t.Run("without an index the teardown refuses to plan", func(t *testing.T) {
+	t.Run("without an index the plan is refused", func(t *testing.T) {
 		t.Parallel()
 
 		if _, err := PlanProjectTeardown(context.Background(), Config{}, "shop"); !errors.Is(err, errNoStackIndex) {
@@ -155,7 +155,7 @@ func TestListPreviewStacksFromIndex(t *testing.T) {
 func TestForgetProjectIfEmpty(t *testing.T) {
 	t.Parallel()
 
-	t.Run("a project whose last stack is gone leaves nothing behind", func(t *testing.T) {
+	t.Run("the last stack gone drops the project", func(t *testing.T) {
 		t.Parallel()
 
 		index := &fakeStackIndex{projects: []string{"shop"}}
@@ -167,7 +167,7 @@ func TestForgetProjectIfEmpty(t *testing.T) {
 		}
 	})
 
-	t.Run("a project with a stack the teardown could not destroy is kept", func(t *testing.T) {
+	t.Run("a surviving stack keeps the project", func(t *testing.T) {
 		t.Parallel()
 
 		index := &fakeStackIndex{

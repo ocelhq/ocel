@@ -39,7 +39,7 @@ func TestIndexAgainstDynamoDBLocal(t *testing.T) {
 	createTable(t, ctx, ddb, table)
 	ix := &Index{Dynamo: ddb, Table: table}
 
-	t.Run("concurrent deploys of one project converge on one project entry", func(t *testing.T) {
+	t.Run("concurrent deploys converge on one entry", func(t *testing.T) {
 		var wg sync.WaitGroup
 		errs := make([]error, 50)
 		for i := range errs {

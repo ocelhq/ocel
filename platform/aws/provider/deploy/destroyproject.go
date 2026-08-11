@@ -226,5 +226,6 @@ func teardownConfig(cfg Config, stackName string) TeardownConfig {
 		StackName:   stackName,
 		Pulumi:      cfg.Pulumi,
 		Stacks:      cfg.Stacks,
+		realized:    cfg.realized,
 	}
 }

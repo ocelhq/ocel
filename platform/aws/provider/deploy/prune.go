@@ -150,9 +150,7 @@ type prefixTarget struct {
 }
 
 func reclaimTarget(ctx context.Context, cfg Config, t PruneTarget, progress, log func(string)) error {
-	teardown := teardownConfig(cfg, t.Stack)
-	teardown.SkipRefresh = true
-	if err := Destroy(ctx, teardown, progress, log); err != nil {
+	if err := Destroy(ctx, teardownConfig(cfg, t.Stack), progress, log); err != nil {
 		return fmt.Errorf("destroy app-deploy stack %s: %w", t.Stack, err)
 	}
 
