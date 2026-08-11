@@ -1,4 +1,4 @@
-export const isrPrefix = "prod/proj/web/BID";
+export const isrPrefix = "prod/proj/web/r3f8a1c9d/isr";
 export const routeId = "/";
 
 export function body(overrides: Record<string, unknown> = {}): string {

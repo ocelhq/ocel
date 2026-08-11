@@ -29,7 +29,7 @@ const (
 	tagPublisherSeedParamEnvVar   = "OCEL_ISR_WRITER_SEED_PARAM"
 )
 
-const tagPublisherFilter = `{"dynamodb":{"Keys":{"pk":{"S":[{"prefix":"TAG#"}]},"sk":{"S":["#META"]}}}}`
+const tagPublisherFilter = `{"dynamodb":{"Keys":{"pk":{"S":[{"prefix":"PROJECT#"}]},"sk":{"S":["#META"]}}}}`
 
 func pinnedTagPublisher() artifactPin {
 	return artifactPin{version: TagPublisherArtifactVersion, sha256: TagPublisherArtifactSHA256}

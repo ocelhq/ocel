@@ -2,8 +2,10 @@ package bootstrap
 
 import (
 	"context"
+	"path"
 	"slices"
 	"strconv"
+	"strings"
 	"testing"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
@@ -11,6 +13,7 @@ import (
 	cfntypes "github.com/aws/aws-sdk-go-v2/service/cloudformation/types"
 	"gopkg.in/yaml.v3"
 
+	"github.com/ocelhq/ocel/pkg/naming"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
@@ -500,11 +503,58 @@ func hasAction(action any, want string) bool {
 	return false
 }
 
+const edgeTagKeyPattern = "PROJECT#*#TAG#*"
+
 func boundToTagKeys(condition map[string]any) bool {
 	cond, ok := condition["ForAllValues:StringLike"].(map[string]any)
 	if !ok {
 		return false
 	}
 	keys, ok := cond["dynamodb:LeadingKeys"].([]any)
-	return ok && len(keys) == 1 && keys[0] == "TAG#*"
+	return ok && len(keys) == 1 && keys[0] == edgeTagKeyPattern
+}
+
+func TestEdgeTagKeys(t *testing.T) {
+	release, err := naming.ParseRelease("r3f8a1c9d")
+	if err != nil {
+		t.Fatalf("ParseRelease: %v", err)
+	}
+	stack := naming.AppStack("prod", "web", release)
+
+	t.Run("admits every tag partition the edge writes", func(t *testing.T) {
+		for _, key := range []string{
+			naming.StackKey("shop", stack) + "#TAG#products",
+			naming.StackKey("shop", naming.AppStack("pr-7", "admin", release)) + "#TAG#a#b",
+		} {
+			if !stringLike(t, edgeTagKeyPattern, key) {
+				t.Errorf("%q denies the tag key %q", edgeTagKeyPattern, key)
+			}
+		}
+	})
+
+	t.Run("admits no other partition in the table", func(t *testing.T) {
+		for _, key := range []string{
+			"PROJECTS",
+			naming.ProjectKey("shop"),
+			naming.VarsKey("shop", "production"),
+			naming.StackKey("shop", stack),
+			"SESSION#01hxyz",
+		} {
+			if stringLike(t, edgeTagKeyPattern, key) {
+				t.Errorf("%q admits %q, which is not a tag partition", edgeTagKeyPattern, key)
+			}
+		}
+	})
+}
+
+func stringLike(t *testing.T, pattern, value string) bool {
+	t.Helper()
+	if strings.ContainsAny(pattern+value, "?[]/\\") {
+		t.Fatalf("pattern %q or value %q carries a character path.Match reads differently from IAM StringLike", pattern, value)
+	}
+	ok, err := path.Match(pattern, value)
+	if err != nil {
+		t.Fatalf("path.Match(%q, %q): %v", pattern, value, err)
+	}
+	return ok
 }

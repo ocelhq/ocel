@@ -139,7 +139,7 @@ func TestDynamoKeysLeadWithTheProject(t *testing.T) {
 		ProjectKey("shop"),
 		StackKey("shop", stack),
 		VarsKey("shop", "production"),
-		ISRTagKey("shop", "web", "products"),
+		ISRTagKey("shop", stack, "products"),
 	} {
 		project, err := ProjectOf(key)
 		if err != nil {

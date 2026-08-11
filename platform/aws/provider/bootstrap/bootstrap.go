@@ -603,14 +603,14 @@ func edgeUserResource(userName, class string, trust edge.TrustBoundary, optimize
                 Condition:
                   ForAllValues:StringLike:
                     dynamodb:LeadingKeys:
-                      - 'TAG#*'
+                      - 'PROJECT#*#TAG#*'
               - Effect: Allow
                 Action: dynamodb:Query
                 Resource: !Sub '${StateTable.Arn}/index/%s'
                 Condition:
                   ForAllValues:StringLike:
                     dynamodb:LeadingKeys:
-                      - 'TAG#*'
+                      - 'PROJECT#*#TAG#*'
               - Effect: Allow
                 Action:
                   - lambda:InvokeFunctionUrl

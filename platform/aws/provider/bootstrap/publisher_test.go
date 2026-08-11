@@ -8,6 +8,7 @@ import (
 
 	"gopkg.in/yaml.v3"
 
+	"github.com/ocelhq/ocel/pkg/naming"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
@@ -163,8 +164,11 @@ func TestTagPublisher(t *testing.T) {
 		if err := json.Unmarshal([]byte(filters[0].Pattern), &pattern); err != nil {
 			t.Fatalf("filter pattern is not valid JSON, which Lambda rejects at create time: %v", err)
 		}
-		if len(pattern.DynamoDB.Keys.PK.S) != 1 || pattern.DynamoDB.Keys.PK.S[0]["prefix"] != "TAG#" {
-			t.Errorf("pk rule = %+v, want a TAG# prefix; without it upload sessions reach this function", pattern.DynamoDB.Keys.PK.S)
+		if len(pattern.DynamoDB.Keys.PK.S) != 1 || pattern.DynamoDB.Keys.PK.S[0]["prefix"] != "PROJECT#" {
+			t.Errorf("pk rule = %+v, want a PROJECT# prefix; without it upload sessions reach this function", pattern.DynamoDB.Keys.PK.S)
+		}
+		if prefix := pattern.DynamoDB.Keys.PK.S[0]["prefix"]; !strings.HasPrefix(naming.StackKey("shop", naming.AppStack("prod", "web", naming.NewRelease("b1", ""))), prefix) {
+			t.Errorf("pk rule %q does not match a tag partition, so no snapshot would ever be republished", prefix)
 		}
 		if len(pattern.DynamoDB.Keys.SK.S) != 1 || pattern.DynamoDB.Keys.SK.S[0] != "#META" {
 			t.Errorf("sk rule = %+v, want #META", pattern.DynamoDB.Keys.SK.S)

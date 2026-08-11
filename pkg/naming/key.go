@@ -9,7 +9,6 @@ const (
 	tokenProject = "PROJECT"
 	tokenStack   = "STACK"
 	tokenClass   = "CLASS"
-	tokenApp     = "APP"
 	tokenTag     = "TAG"
 )
 
@@ -25,8 +24,12 @@ func VarsKey(project, class string) string {
 	return token(tokenProject, project) + KeySeparator + token(tokenClass, class)
 }
 
-func ISRTagKey(project, app, tag string) string {
-	return token(tokenProject, project) + KeySeparator + token(tokenApp, app) + KeySeparator + token(tokenTag, tag)
+func ISRTagPrefix(project string, stack StackName) string {
+	return StackKey(project, stack) + KeySeparator + tokenTag + KeySeparator
+}
+
+func ISRTagKey(project string, stack StackName, tag string) string {
+	return ISRTagPrefix(project, stack) + tag
 }
 
 func ParseStackKey(key string) (string, StackName, error) {

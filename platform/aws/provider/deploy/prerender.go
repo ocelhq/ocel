@@ -79,6 +79,7 @@ func resolveAppBuilds(cfg Config, manifest *deploymentsv1.Manifest, baked map[st
 		}
 		prefix := isrPrefixOf(coord)
 		cache := &isrConfig{
+			Coord:    coord,
 			Bucket:   cfg.AssetBucket,
 			Prefix:   prefix,
 			Table:    cfg.StateTable,

@@ -1,4 +1,4 @@
-import { tagNamespace, tagSnapshotKey } from "@framework/next-cache";
+import { isrPrefixOf, tagNamespace, tagSnapshotKey } from "@framework/next-cache";
 import contract from "@framework/next-cache/fixtures/edge-contract.json" with {
   type: "json",
 };
@@ -9,14 +9,27 @@ afterEach(() => {
 });
 
 test("the snapshot is keyed at the suffix the deploy seeds it under", () => {
-  expect(tagSnapshotKey("prod/proj/web/BID")).toBe(
-    "prod/proj/web/BID" + contract.tagSnapshotSuffix,
-  );
+  const prefix = contract.tagNamespace.isrPrefix;
+  expect(tagSnapshotKey(prefix)).toBe(prefix + contract.tagSnapshotSuffix);
 });
 
 test("tag records are namespaced exactly as the deploy grants them", () => {
   expect(tagNamespace(contract.tagNamespace.isrPrefix)).toBe(
     contract.tagNamespace.partitionKeyPrefix,
+  );
+});
+
+test("the publisher reads back the very prefix the deploy wrote the tag items for", () => {
+  expect(isrPrefixOf(contract.tagNamespace.partitionKeyPrefix)).toBe(
+    contract.tagNamespace.isrPrefix,
+  );
+});
+
+test("the contract's prefix and key are one coordinate, spelled twice", () => {
+  const { project, env, app, release } = contract.tagNamespace.coordinate;
+  expect(contract.tagNamespace.isrPrefix).toBe(`${env}/${project}/${app}/${release}/isr`);
+  expect(contract.tagNamespace.partitionKeyPrefix).toBe(
+    `PROJECT#${project}#STACK#${env}--${app}--${release}#TAG#`,
   );
 });
 

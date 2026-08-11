@@ -87,6 +87,8 @@ type functionArgs struct {
 }
 
 type isrConfig struct {
+	Coord naming.Coordinate
+
 	Bucket   string
 	Prefix   string
 	Table    string
@@ -99,7 +101,10 @@ type isrConfig struct {
 }
 
 func (c isrConfig) tagNamespace() string {
-	return "TAG#" + strings.ReplaceAll(c.Prefix, "/", "#") + "#"
+	if c.Coord.Project == "" || c.Coord.Env == "" || c.Coord.App == "" || c.Coord.Release.IsZero() {
+		return ""
+	}
+	return naming.ISRTagPrefix(c.Coord.Project, c.Coord.Stack())
 }
 
 func (c isrConfig) env() map[string]string {
@@ -123,6 +128,10 @@ func (c isrConfig) env() map[string]string {
 }
 
 func isrPolicy(c isrConfig) (string, error) {
+	namespace := c.tagNamespace()
+	if namespace == "" {
+		return "", fmt.Errorf("isr cache under %q carries no coordinate, so its tag items cannot be scoped to this app", c.Prefix)
+	}
 	statements := []any{
 		map[string]any{
 			"Effect":   "Allow",
@@ -135,7 +144,7 @@ func isrPolicy(c isrConfig) (string, error) {
 			"Resource": c.TableARN,
 			"Condition": map[string]any{
 				"ForAllValues:StringLike": map[string]any{
-					"dynamodb:LeadingKeys": []string{c.tagNamespace() + "*"},
+					"dynamodb:LeadingKeys": []string{namespace + "*"},
 				},
 			},
 		},
