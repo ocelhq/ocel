@@ -29,10 +29,10 @@ require (
 	github.com/aws/aws-sdk-go-v2/service/sts v1.44.0
 	github.com/aws/smithy-go v1.27.3
 	github.com/blang/semver v3.5.1+incompatible
-	github.com/ocelhq/ocel/platform/edge/contract v0.0.0-00010101000000-000000000000
-	github.com/ocelhq/ocel/platform/edge/cloudflare/deploy v0.0.0-00010101000000-000000000000
 	github.com/ocelhq/ocel/pkg/channel v0.0.0-00010101000000-000000000000
 	github.com/ocelhq/ocel/pkg/proto v0.0.0-00010101000000-000000000000
+	github.com/ocelhq/ocel/platform/edge/cloudflare/deploy v0.0.0-00010101000000-000000000000
+	github.com/ocelhq/ocel/platform/edge/contract v0.0.0-00010101000000-000000000000
 	github.com/pulumi/pulumi-aws/sdk/v7 v7.36.0
 	github.com/pulumi/pulumi/sdk/v3 v3.251.0
 	gopkg.in/yaml.v3 v3.0.1
@@ -120,6 +120,7 @@ require (
 	github.com/muesli/cancelreader v0.2.2 // indirect
 	github.com/muesli/termenv v0.16.0 // indirect
 	github.com/nxadm/tail v1.4.11 // indirect
+	github.com/ocelhq/ocel/pkg/naming v0.0.0-00010101000000-000000000000
 	github.com/opentracing/basictracer-go v1.1.0 // indirect
 	github.com/opentracing/opentracing-go v1.2.0 // indirect
 	github.com/pgavlin/fx v0.1.6 // indirect
@@ -179,3 +180,5 @@ replace github.com/ocelhq/ocel/pkg/proto => ../../../pkg/proto
 replace github.com/ocelhq/ocel/platform/edge/contract => ../../edge/contract
 
 replace github.com/ocelhq/ocel/platform/edge/cloudflare/deploy => ../../edge/cloudflare/deploy
+
+replace github.com/ocelhq/ocel/pkg/naming => ../../../pkg/naming
