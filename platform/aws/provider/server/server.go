@@ -11,6 +11,9 @@ import (
 
 	connect "connectrpc.com/connect"
 
+	"github.com/pulumi/pulumi/sdk/v3/go/auto"
+	"golang.org/x/sync/errgroup"
+
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/credentials"
 	"github.com/aws/aws-sdk-go-v2/service/cloudformation"
@@ -27,6 +30,7 @@ import (
 	"github.com/ocelhq/ocel/platform/aws/provider/deploy"
 	"github.com/ocelhq/ocel/platform/aws/provider/pulumiruntime"
 	"github.com/ocelhq/ocel/platform/aws/provider/sdkconfig"
+	"github.com/ocelhq/ocel/platform/aws/provider/vars"
 	cloudflare "github.com/ocelhq/ocel/platform/edge/cloudflare/deploy"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
@@ -121,73 +125,67 @@ func (s *Server) runDeploy(ctx context.Context, req *deploymentsv1.DeployRequest
 		return deploy.Result{}, fmt.Errorf("account bootstrap is present but its variable store is missing (a partial rollback?); re-run `%s`", bootstrapCmd)
 	}
 
-	passphrase, err := bootstrap.ReadPassphrase(ctx, ssmClient)
-	if err != nil {
-		return deploy.Result{}, err
-	}
-
 	substrateClass := bootstrap.ClassProduction
 	if preview {
 		substrateClass = bootstrap.ClassPreview
 	}
-	edgeCreds, err := bootstrap.ReadEdgeCredentials(ctx, ssmClient, substrateClass)
-	if err != nil {
-		logf("edge reader credentials unavailable: " + err.Error() +
+
+	var (
+		params         bootstrap.ClassParams
+		account        string
+		pulumiCmd      auto.PulumiCommand
+		varsReferenced map[vars.Coordinate]string
+	)
+	group, gctx := errgroup.WithContext(ctx)
+	group.Go(func() error {
+		var err error
+		params, err = bootstrap.ReadClassParams(gctx, ssmClient, substrateClass, manifest.GetSlug())
+		return err
+	})
+	group.Go(func() error {
+		var err error
+		account, err = accountID(gctx, sts.NewFromConfig(awscfg))
+		return err
+	})
+	group.Go(func() error {
+		var err error
+		varsReferenced, err = referenceOwners(gctx, awscfg, deployed, substrateClass, manifest.GetSlug())
+		return err
+	})
+	group.Go(func() error {
+		var err error
+		pulumiCmd, err = pulumiruntime.Ensure(gctx, func(m string) {
+			progress(deploymentsv1.Phase_PHASE_UPLOADING, m, 0, 0)
+		})
+		return err
+	})
+	if err := group.Wait(); err != nil {
+		return deploy.Result{}, err
+	}
+
+	edgeCreds := params.EdgeCredentials
+	if params.EdgeCredentialsErr != nil {
+		logf("edge reader credentials unavailable: " + params.EdgeCredentialsErr.Error() +
 			" — the worker cannot sign its Function-URL forwards, so every route will 403; re-run `" + bootstrapCmd + "` to mint the edge key")
 		edgeCreds = bootstrap.EdgeCredentials{}
 	}
-
-	edgeValues := readEdgeValues(ctx, ssmClient, substrateClass, bootstrapCmd, logf)
-
-	pulumiCmd, err := pulumiruntime.Ensure(ctx, func(m string) {
-		progress(deploymentsv1.Phase_PHASE_UPLOADING, m, 0, 0)
-	})
-	if err != nil {
-		return deploy.Result{}, err
+	edgeValues := params.EdgeValues
+	if params.EdgeValuesErr != nil {
+		logf("edge bootstrap values unavailable: " + params.EdgeValuesErr.Error() + " (re-run `" + bootstrapCmd + "` if the edge needs them)")
+		edgeValues = nil
 	}
 
 	for _, r := range manifest.GetResources() {
 		logf(resourceSummary(r))
 	}
 
-	account, err := accountID(ctx, sts.NewFromConfig(awscfg))
-	if err != nil {
-		return deploy.Result{}, err
-	}
+	priorRootStackState := params.RootStackState
 	stateTableARN := fmt.Sprintf("arn:aws:dynamodb:%s:%s:table/%s", awscfg.Region, account, deployed.StateTable)
-
-	cacheStore, err := bootstrap.ReadCacheStore(ctx, ssmClient, substrateClass)
-	if err != nil {
-		return deploy.Result{}, err
-	}
-
-	priorRootStackState, err := bootstrap.ReadRootStackStateFor(ctx, ssmClient, substrateClass, manifest.GetSlug())
-	if err != nil {
-		return deploy.Result{}, err
-	}
-	deploymentsStore, err := bootstrap.ReadDeploymentsStoreFor(ctx, ssmClient, substrateClass)
-	if err != nil {
-		return deploy.Result{}, err
-	}
-
-	isrWriter, err := bootstrap.ReadISRWriterFor(ctx, ssmClient, substrateClass)
-	if err != nil {
-		return deploy.Result{}, err
-	}
-	isrWriterSeed, err := bootstrap.ReadISRWriterSeedFor(ctx, ssmClient, substrateClass)
-	if err != nil {
-		return deploy.Result{}, err
-	}
-
-	varsReferenced, err := referenceOwners(ctx, awscfg, deployed, substrateClass, manifest.GetSlug())
-	if err != nil {
-		return deploy.Result{}, err
-	}
 
 	res, err := deploy.Run(ctx, deploy.Config{
 		Region:        awscfg.Region,
 		BackendURL:    "s3://" + deployed.StateBucket,
-		Passphrase:    passphrase,
+		Passphrase:    params.Passphrase,
 		ProjectName:   pulumiProjectName,
 		StackName:     stackName(manifest.GetSlug(), env),
 		Pulumi:        pulumiCmd,
@@ -201,8 +199,8 @@ func (s *Server) runDeploy(ctx context.Context, req *deploymentsv1.DeployRequest
 		VarsClass:      substrateClass,
 		VarsReferenced: varsReferenced,
 
-		CacheStoreBucket:   cacheStore.Bucket,
-		CacheStoreUploader: cacheStoreUploader(cacheStore),
+		CacheStoreBucket:   params.CacheStore.Bucket,
+		CacheStoreUploader: cacheStoreUploader(params.CacheStore),
 
 		ListenerCodePath:   listenerCodePath,
 		ArtifactRoot:       artifactRoot(),
@@ -216,14 +214,14 @@ func (s *Server) runDeploy(ctx context.Context, req *deploymentsv1.DeployRequest
 		EdgeValues:         edgeValues,
 
 		Slug:               manifest.GetSlug(),
-		StoreScriptName:    deploymentsStore.ScriptName,
-		StoreEndpoint:      deploymentsStore.Endpoint,
-		StoreBootstrapCred: deploymentsStore.BootstrapCred,
+		StoreScriptName:    params.DeploymentsStore.ScriptName,
+		StoreEndpoint:      params.DeploymentsStore.Endpoint,
+		StoreBootstrapCred: params.DeploymentsStore.BootstrapCred,
 
-		ISRWriterEndpoint:      isrWriter.Endpoint,
-		ISRWriterBootstrapCred: isrWriter.BootstrapCred,
-		ISRWriterScriptName:    isrWriter.ScriptName,
-		ISRWriterSeed:          isrWriterSeed,
+		ISRWriterEndpoint:      params.ISRWriter.Endpoint,
+		ISRWriterBootstrapCred: params.ISRWriter.BootstrapCred,
+		ISRWriterScriptName:    params.ISRWriter.ScriptName,
+		ISRWriterSeed:          params.ISRWriterSeed,
 
 		Uploader:       s3.NewFromConfig(awscfg),
 		Invoker:        lambda.NewFromConfig(awscfg),
