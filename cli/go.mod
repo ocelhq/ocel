@@ -30,6 +30,7 @@ require (
 	github.com/joho/godotenv v1.5.1 // indirect
 	github.com/mattn/go-colorable v0.1.14 // indirect
 	github.com/ocelhq/ocel/pkg/channel v0.0.0-00010101000000-000000000000
+	github.com/ocelhq/ocel/pkg/naming v0.0.0-00010101000000-000000000000
 	github.com/ocelhq/ocel/pkg/proto v0.0.0-00010101000000-000000000000
 	github.com/pelletier/go-toml v1.9.5 // indirect
 	github.com/pelletier/go-toml/v2 v2.2.4 // indirect
@@ -51,3 +52,5 @@ tool (
 replace github.com/ocelhq/ocel/pkg/channel => ../pkg/channel
 
 replace github.com/ocelhq/ocel/pkg/proto => ../pkg/proto
+
+replace github.com/ocelhq/ocel/pkg/naming => ../pkg/naming
