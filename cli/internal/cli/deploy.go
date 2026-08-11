@@ -107,12 +107,13 @@ func runDeploy(ctx context.Context, d deps, cwd string, opts deployOptions, stdo
 
 	provW := ui.BuildWriter()
 	err = runProviderSession(ctx, d, cfg, provider, provW, provW, func(runner *providerrunner.Runner) error {
-		knownSlugs, err := preflightDeploy(ctx, d, runner, provider, cfg, stdout)
+		willConfirm := !opts.yes && d.stdinIsTerminal(stdin)
+		knownSlugs, err := preflightDeploy(ctx, d, runner, provider, cfg, willConfirm, stdout)
 		if err != nil {
 			return err
 		}
 
-		if !opts.yes && isReaderTTY(stdin) {
+		if willConfirm {
 			proceed, err := confirmDeploy(cfg.Slug, provider.Package, knownSlugs, stdout, stdin)
 			if err != nil {
 				return err

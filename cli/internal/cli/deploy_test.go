@@ -387,11 +387,18 @@ export default {
 		waitForNoStaleSocket(t, sockPath)
 	})
 
-	t.Run("the preflight carries the slug", func(t *testing.T) {
+	t.Run("the preflight carries the slug when production domains are declared", func(t *testing.T) {
 		d := defaultDeps()
 		setLoggedIn(&d)
 		stubAppFunctions(&d, nil)
 		root, sockPath := setUpDeployFixture(t)
+		writeFile(t, filepath.Join(root, "ocel.config.ts"), `
+export default {
+  slug: "test-app",
+  provider: { package: "@ocel/provider-aws", options: {} },
+  domains: { production: "app.acme.com" },
+};
+`)
 
 		var stdout, stderr bytes.Buffer
 		if err := runDeploy(context.Background(), d, root, deployOptions{yes: true}, &stdout, &stderr, strings.NewReader("")); err != nil {
@@ -399,6 +406,74 @@ export default {
 		}
 		if !strings.Contains(stdout.String(), "PREFLIGHT slug=test-app") {
 			t.Errorf("stdout = %q, want the preflight to have carried the project's slug", stdout.String())
+		}
+
+		waitForNoStaleSocket(t, sockPath)
+	})
+
+	t.Run("--yes leaves the slug out of the preflight", func(t *testing.T) {
+		d := defaultDeps()
+		setLoggedIn(&d)
+		stubAppFunctions(&d, nil)
+		d.stdinIsTerminal = func(io.Reader) bool { return true }
+		root, sockPath := setUpDeployFixture(t)
+		t.Setenv(fakeKnownSlugsEnvVar, "my-application,billing")
+
+		var stdout, stderr bytes.Buffer
+		if err := runDeploy(context.Background(), d, root, deployOptions{yes: true}, &stdout, &stderr, strings.NewReader("")); err != nil {
+			t.Fatalf("runDeploy err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
+		}
+		if !strings.Contains(stdout.String(), "PREFLIGHT slug= ") {
+			t.Errorf("stdout = %q, want --yes to ask for no slug-scoped answers", stdout.String())
+		}
+
+		waitForNoStaleSocket(t, sockPath)
+	})
+
+	t.Run("a non-TTY stdin leaves the slug out of the preflight", func(t *testing.T) {
+		d := defaultDeps()
+		setLoggedIn(&d)
+		stubAppFunctions(&d, nil)
+		root, sockPath := setUpDeployFixture(t)
+		t.Setenv(fakeKnownSlugsEnvVar, "my-application,billing")
+
+		var stdout, stderr bytes.Buffer
+		if err := runDeploy(context.Background(), d, root, deployOptions{yes: false}, &stdout, &stderr, strings.NewReader("")); err != nil {
+			t.Fatalf("runDeploy err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
+		}
+		if !strings.Contains(stdout.String(), "PREFLIGHT slug= ") {
+			t.Errorf("stdout = %q, want a non-TTY deploy to ask for no slug-scoped answers", stdout.String())
+		}
+
+		waitForNoStaleSocket(t, sockPath)
+	})
+
+	t.Run("an interactive deploy warns about the other projects on the backend", func(t *testing.T) {
+		d := defaultDeps()
+		setLoggedIn(&d)
+		stubAppFunctions(&d, nil)
+		d.stdinIsTerminal = func(io.Reader) bool { return true }
+		root, sockPath := setUpDeployFixture(t)
+		t.Setenv(fakeKnownSlugsEnvVar, "my-application,billing")
+
+		var stdout, stderr bytes.Buffer
+		if err := runDeploy(context.Background(), d, root, deployOptions{}, &stdout, &stderr, strings.NewReader("y\n")); err != nil {
+			t.Fatalf("runDeploy err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
+		}
+
+		out := stdout.String()
+		if !strings.Contains(out, "PREFLIGHT slug=test-app") {
+			t.Errorf("stdout = %q, want the prompting deploy to have asked with the slug", out)
+		}
+		for _, want := range []string{
+			"No existing deployment for slug \"test-app\".",
+			"This will create a NEW project.",
+			"This backend already has: my-application, billing",
+			"Continue? [y/N]",
+		} {
+			if !strings.Contains(out, want) {
+				t.Errorf("stdout missing %q:\n%s", want, out)
+			}
 		}
 
 		waitForNoStaleSocket(t, sockPath)
