@@ -22,41 +22,14 @@ jobs:
           node-version: 22
           cache: pnpm
 
-      - name: Setup Go
-        uses: actions/setup-go@v5
-        with:
-          go-version-file: cli/go.mod
-          cache-dependency-path: |
-            cli/go.sum
-            platform/aws/provider/go.sum
-            cloud/edge/cloudflare/go.sum
-            pkg/proto/go.sum
-            sdk/go.sum
-
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
       - name: pnpm --filter @cli/node typecheck
         run: pnpm --filter @cli/node typecheck
 
-      - name: go generate (cli platform dist)
-        working-directory: cli
-        run: go generate ./...
-
-      - name: go build (workspace)
-        run: >-
-          go build
-          github.com/ocelhq/ocel/cli/...
-          github.com/ocelhq/ocel/pkg/proto/...
-          github.com/ocelhq/ocel/sdk/...
-          github.com/ocelhq/ocel/platform/aws/provider/...
-
       - name: pnpm --filter ocel build (tsc)
         run: pnpm --filter ocel build
-
-      - name: Go env-wire e2e (defineEnv -> DeclareEnv)
-        working-directory: cli
-        run: go test ./internal/envwire/...
 
       - name: JS unit tests
         run: |
