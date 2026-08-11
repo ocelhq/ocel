@@ -7,6 +7,7 @@ import (
 	"maps"
 	"os"
 	"path/filepath"
+	"sync"
 	"time"
 
 	connect "connectrpc.com/connect"
@@ -41,7 +42,76 @@ const deployEnv = "prod"
 
 const pulumiProjectName = "ocel"
 
-type Server struct{}
+type Server struct {
+	memo memo
+}
+
+type memo struct {
+	mu       sync.Mutex
+	deployed map[string]*deployedEntry
+	identity map[string]*identityEntry
+
+	edgeOnce sync.Once
+	edge     edge.Provider
+}
+
+type deployedEntry struct {
+	once  sync.Once
+	value bootstrap.Deployed
+	err   error
+}
+
+type identityEntry struct {
+	once  sync.Once
+	value callerIdentity
+	err   error
+}
+
+func (m *memo) deployedFor(region string, preview bool) *deployedEntry {
+	key := fmt.Sprintf("%s|%t", region, preview)
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if m.deployed == nil {
+		m.deployed = make(map[string]*deployedEntry)
+	}
+	e, ok := m.deployed[key]
+	if !ok {
+		e = &deployedEntry{}
+		m.deployed[key] = e
+	}
+	return e
+}
+
+func (m *memo) identityFor(region string) *identityEntry {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if m.identity == nil {
+		m.identity = make(map[string]*identityEntry)
+	}
+	e, ok := m.identity[region]
+	if !ok {
+		e = &identityEntry{}
+		m.identity[region] = e
+	}
+	return e
+}
+
+func (s *Server) edge() edge.Provider {
+	s.memo.edgeOnce.Do(func() { s.memo.edge = cloudflare.New() })
+	return s.memo.edge
+}
+
+func (s *Server) deployed(ctx context.Context, api bootstrap.CFNDescriber, region string, preview bool) (bootstrap.Deployed, error) {
+	e := s.memo.deployedFor(region, preview)
+	e.once.Do(func() { e.value, e.err = checkBootstrap(ctx, api, preview) })
+	return e.value, e.err
+}
+
+func (s *Server) callerIdentity(ctx context.Context, api STSAPI, region string) (callerIdentity, error) {
+	e := s.memo.identityFor(region)
+	e.once.Do(func() { e.value, e.err = getCallerIdentity(ctx, api) })
+	return e.value, e.err
+}
 
 func stackName(slug string, env *deploymentsv1.Environment) string {
 	return slug + "-" + envSegment(env)
@@ -103,7 +173,7 @@ func (s *Server) runDeploy(ctx context.Context, req *deploymentsv1.DeployRequest
 	bootstrapCmd := bootstrapCommand(preview)
 
 	progress(deploymentsv1.Phase_PHASE_UNSPECIFIED, "Checking account bootstrap", 0, 0)
-	deployed, err := checkBootstrap(ctx, cfn, preview)
+	deployed, err := s.deployed(ctx, cfn, opts.Region, preview)
 	if err != nil {
 		return deploy.Result{}, err
 	}
@@ -146,7 +216,7 @@ func (s *Server) runDeploy(ctx context.Context, req *deploymentsv1.DeployRequest
 	})
 	group.Go(func() error {
 		var err error
-		account, err = accountID(gctx, sts.NewFromConfig(awscfg))
+		account, err = s.accountID(gctx, sts.NewFromConfig(awscfg), opts.Region)
 		return err
 	})
 	group.Go(func() error {
@@ -235,7 +305,7 @@ func (s *Server) runDeploy(ctx context.Context, req *deploymentsv1.DeployRequest
 		Invoker:        lambda.NewFromConfig(awscfg),
 		Getter:         s3.NewFromConfig(awscfg),
 		CodeUpdater:    lambda.NewFromConfig(awscfg),
-		Edge:           cloudflare.New(),
+		Edge:           s.edge(),
 		Class:          env.GetClass(),
 		Lifecycle:      env.GetLifecycle(),
 		Identity:       env.GetIdentity(),
@@ -353,12 +423,25 @@ type STSAPI interface {
 	GetCallerIdentity(ctx context.Context, in *sts.GetCallerIdentityInput, optFns ...func(*sts.Options)) (*sts.GetCallerIdentityOutput, error)
 }
 
-func accountID(ctx context.Context, api STSAPI) (string, error) {
+type callerIdentity struct {
+	account string
+	arn     string
+}
+
+func getCallerIdentity(ctx context.Context, api STSAPI) (callerIdentity, error) {
 	out, err := api.GetCallerIdentity(ctx, &sts.GetCallerIdentityInput{})
+	if err != nil {
+		return callerIdentity{}, err
+	}
+	return callerIdentity{account: aws.ToString(out.Account), arn: aws.ToString(out.Arn)}, nil
+}
+
+func (s *Server) accountID(ctx context.Context, api STSAPI, region string) (string, error) {
+	id, err := s.callerIdentity(ctx, api, region)
 	if err != nil {
 		return "", fmt.Errorf("resolve AWS account id: %w", err)
 	}
-	return aws.ToString(out.Account), nil
+	return id.account, nil
 }
 
 func loadAWS(ctx context.Context, region string) (aws.Config, error) {

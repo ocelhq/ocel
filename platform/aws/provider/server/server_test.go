@@ -1,11 +1,18 @@
 package server
 
 import (
+	"context"
+	"errors"
 	"maps"
+	"slices"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
+	"github.com/aws/aws-sdk-go-v2/service/cloudformation"
+	cfntypes "github.com/aws/aws-sdk-go-v2/service/cloudformation/types"
+	"github.com/aws/aws-sdk-go-v2/service/sts"
 
 	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/resources/v1"
@@ -210,5 +217,168 @@ func TestRootStackStateChanged(t *testing.T) {
 				t.Errorf("rootStackStateChanged() = %v, want %v", got, tc.want)
 			}
 		})
+	}
+}
+
+type presenceCFN struct {
+	mu      sync.Mutex
+	present map[string]bool
+	asked   []string
+}
+
+func (p *presenceCFN) DescribeStacks(_ context.Context, in *cloudformation.DescribeStacksInput, _ ...func(*cloudformation.Options)) (*cloudformation.DescribeStacksOutput, error) {
+	name := aws.ToString(in.StackName)
+	p.mu.Lock()
+	p.asked = append(p.asked, name)
+	p.mu.Unlock()
+
+	if !p.present[name] {
+		return &cloudformation.DescribeStacksOutput{}, nil
+	}
+	class := bootstrap.ClassProduction
+	if name == bootstrap.PreviewStackName {
+		class = bootstrap.ClassPreview
+	}
+	return &cloudformation.DescribeStacksOutput{Stacks: []cfntypes.Stack{{
+		Outputs: []cfntypes.Output{{OutputKey: aws.String("InfrastructureClass"), OutputValue: aws.String(class)}},
+	}}}, nil
+}
+
+func (p *presenceCFN) questions() []string {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	return slices.Clone(p.asked)
+}
+
+type countingSTS struct {
+	mu    sync.Mutex
+	calls int
+	err   error
+}
+
+func (c *countingSTS) GetCallerIdentity(_ context.Context, _ *sts.GetCallerIdentityInput, _ ...func(*sts.Options)) (*sts.GetCallerIdentityOutput, error) {
+	c.mu.Lock()
+	c.calls++
+	c.mu.Unlock()
+	if c.err != nil {
+		return nil, c.err
+	}
+	return &sts.GetCallerIdentityOutput{
+		Account: aws.String("123456789012"),
+		Arn:     aws.String("arn:aws:iam::123456789012:user/deployer"),
+	}, nil
+}
+
+func TestServerDeployedMemo(t *testing.T) {
+	t.Parallel()
+
+	t.Run("one describe serves every caller in the process", func(t *testing.T) {
+		t.Parallel()
+		s := &Server{}
+		cfn := &presenceCFN{present: map[string]bool{bootstrap.StackName: true}}
+
+		for range 3 {
+			got, err := s.deployed(context.Background(), cfn, "eu-west-1", false)
+			if err != nil {
+				t.Fatalf("deployed: %v", err)
+			}
+			if !got.Present {
+				t.Fatal("deployed reported absent, want the described stack")
+			}
+		}
+		if asked := cfn.questions(); len(asked) != 1 {
+			t.Errorf("describes = %v, want one", asked)
+		}
+	})
+
+	t.Run("class and region each get their own answer", func(t *testing.T) {
+		t.Parallel()
+		s := &Server{}
+		cfn := &presenceCFN{present: map[string]bool{bootstrap.StackName: true}}
+
+		for _, c := range []struct {
+			region  string
+			preview bool
+		}{{"eu-west-1", false}, {"eu-west-1", true}, {"us-east-1", false}} {
+			if _, err := s.deployed(context.Background(), cfn, c.region, c.preview); err != nil {
+				t.Fatalf("deployed(%s, preview=%t): %v", c.region, c.preview, err)
+			}
+		}
+		want := []string{bootstrap.StackName, bootstrap.PreviewStackName, bootstrap.StackName}
+		if asked := cfn.questions(); !slices.Equal(asked, want) {
+			t.Errorf("describes = %v, want %v", asked, want)
+		}
+	})
+}
+
+func TestServerCallerIdentity(t *testing.T) {
+	t.Parallel()
+
+	t.Run("one call serves every caller in the process", func(t *testing.T) {
+		t.Parallel()
+		s := &Server{}
+		api := &countingSTS{}
+
+		id, err := s.callerIdentity(context.Background(), api, "eu-west-1")
+		if err != nil {
+			t.Fatalf("callerIdentity: %v", err)
+		}
+		if id.account != "123456789012" || id.arn != "arn:aws:iam::123456789012:user/deployer" {
+			t.Errorf("identity = %+v, want the caller reported whole", id)
+		}
+		account, err := s.accountID(context.Background(), api, "eu-west-1")
+		if err != nil {
+			t.Fatalf("accountID: %v", err)
+		}
+		if account != "123456789012" {
+			t.Errorf("accountID = %q, want 123456789012", account)
+		}
+		if api.calls != 1 {
+			t.Errorf("GetCallerIdentity calls = %d, want 1", api.calls)
+		}
+	})
+
+	t.Run("each region asks once", func(t *testing.T) {
+		t.Parallel()
+		s := &Server{}
+		api := &countingSTS{}
+
+		for _, region := range []string{"eu-west-1", "us-east-1", "eu-west-1"} {
+			if _, err := s.callerIdentity(context.Background(), api, region); err != nil {
+				t.Fatalf("callerIdentity(%s): %v", region, err)
+			}
+		}
+		if api.calls != 2 {
+			t.Errorf("GetCallerIdentity calls = %d, want 2", api.calls)
+		}
+	})
+
+	t.Run("a failure reaches accountID named", func(t *testing.T) {
+		t.Parallel()
+		s := &Server{}
+		api := &countingSTS{err: errors.New("expired token")}
+
+		_, err := s.accountID(context.Background(), api, "eu-west-1")
+		if err == nil {
+			t.Fatal("accountID = nil error, want the failure")
+		}
+		if !strings.Contains(err.Error(), "resolve AWS account id") || !strings.Contains(err.Error(), "expired token") {
+			t.Errorf("error = %v, want it to name the resolution and the cause", err)
+		}
+		if _, err := s.callerIdentity(context.Background(), api, "eu-west-1"); err == nil || strings.Contains(err.Error(), "resolve AWS account id") {
+			t.Errorf("callerIdentity error = %v, want the bare cause", err)
+		}
+		if api.calls != 1 {
+			t.Errorf("GetCallerIdentity calls = %d, want the failure remembered too", api.calls)
+		}
+	})
+}
+
+func TestServerEdgeIsOneInstance(t *testing.T) {
+	t.Parallel()
+
+	s := &Server{}
+	if s.edge() != s.edge() {
+		t.Error("edge() handed out two providers, want one so its zone lookups are remembered")
 	}
 }

@@ -106,6 +106,62 @@ func ReadClassParams(ctx context.Context, api SSMBatchAPI, class, slug string) (
 	return p, nil
 }
 
+type TeardownParams struct {
+	Passphrase    string
+	PassphraseErr error
+
+	CacheStore     CacheStore
+	ISRWriter      ISRWriter
+	RootStackState edge.RootStackState
+}
+
+func ReadTeardownParams(ctx context.Context, api SSMBatchAPI, class, slug string) (TeardownParams, error) {
+	names, err := edgeNamesFor(class)
+	if err != nil {
+		return TeardownParams{}, err
+	}
+	prefix, err := rootStackStateParamPrefixFor(class)
+	if err != nil {
+		return TeardownParams{}, err
+	}
+	rootStackParam := rootStackStateParamName(prefix, slug)
+
+	found, err := getParameters(ctx, api, []string{
+		PassphraseParamName,
+		names.cacheStoreParam,
+		names.isrWriterParam,
+		rootStackParam,
+	})
+	if err != nil {
+		return TeardownParams{}, err
+	}
+
+	var p TeardownParams
+
+	passphrase, ok := found[PassphraseParamName]
+	if !ok {
+		p.PassphraseErr = fmt.Errorf("read passphrase parameter: %s not found", PassphraseParamName)
+	}
+	p.Passphrase = passphrase
+
+	if raw, ok := found[names.cacheStoreParam]; ok {
+		if err := json.Unmarshal([]byte(raw), &p.CacheStore); err != nil {
+			p.CacheStore = CacheStore{}
+		}
+	}
+	if raw, ok := found[names.isrWriterParam]; ok {
+		if err := json.Unmarshal([]byte(raw), &p.ISRWriter); err != nil {
+			p.ISRWriter = ISRWriter{}
+		}
+	}
+	if raw, ok := found[rootStackParam]; ok {
+		if err := json.Unmarshal([]byte(raw), &p.RootStackState); err != nil {
+			return TeardownParams{}, fmt.Errorf("parse root-stack state: %w", err)
+		}
+	}
+	return p, nil
+}
+
 func getParameters(ctx context.Context, api SSMBatchAPI, names []string) (map[string]string, error) {
 	found := make(map[string]string, len(names))
 	for start := 0; start < len(names); start += getParametersLimit {

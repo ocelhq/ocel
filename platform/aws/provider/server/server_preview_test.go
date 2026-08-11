@@ -3,6 +3,7 @@ package server
 import (
 	"context"
 	"errors"
+	"slices"
 	"testing"
 	"time"
 
@@ -217,4 +218,87 @@ func TestToPreviewEnvironments(t *testing.T) {
 			t.Errorf("toPreviewEnvironments(nil) = %+v, want empty", got)
 		}
 	})
+}
+
+func TestPreflightSubstrates(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		name        string
+		required    deploymentsv1.Environment_Class
+		present     map[string]bool
+		wantAsked   []string
+		wantPreview bool
+		wantProd    bool
+	}{
+		{
+			"a preview that is there asks about nothing else",
+			deploymentsv1.Environment_CLASS_PREVIEW,
+			map[string]bool{bootstrap.PreviewStackName: true, bootstrap.StackName: true},
+			[]string{bootstrap.PreviewStackName},
+			true, false,
+		},
+		{
+			"a production that is there asks about nothing else",
+			deploymentsv1.Environment_CLASS_PRODUCTION,
+			map[string]bool{bootstrap.PreviewStackName: true, bootstrap.StackName: true},
+			[]string{bootstrap.StackName},
+			false, true,
+		},
+		{
+			"a missing preview falls back to asking about production",
+			deploymentsv1.Environment_CLASS_PREVIEW,
+			map[string]bool{bootstrap.StackName: true},
+			[]string{bootstrap.PreviewStackName, bootstrap.StackName},
+			false, true,
+		},
+		{
+			"a missing production falls back to asking about preview",
+			deploymentsv1.Environment_CLASS_PRODUCTION,
+			map[string]bool{bootstrap.PreviewStackName: true},
+			[]string{bootstrap.StackName, bootstrap.PreviewStackName},
+			true, false,
+		},
+		{
+			"an empty account is asked about both",
+			deploymentsv1.Environment_CLASS_PREVIEW,
+			nil,
+			[]string{bootstrap.PreviewStackName, bootstrap.StackName},
+			false, false,
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			cfn := &presenceCFN{present: tc.present}
+
+			preview, production, err := (&Server{}).preflightSubstrates(context.Background(), cfn, "eu-west-1", tc.required)
+			if err != nil {
+				t.Fatalf("preflightSubstrates: %v", err)
+			}
+			if asked := cfn.questions(); !slices.Equal(asked, tc.wantAsked) {
+				t.Errorf("describes = %v, want %v", asked, tc.wantAsked)
+			}
+			if preview.Present != tc.wantPreview || production.Present != tc.wantProd {
+				t.Errorf("presence = {preview=%t production=%t}, want {preview=%t production=%t}",
+					preview.Present, production.Present, tc.wantPreview, tc.wantProd)
+			}
+		})
+	}
+}
+
+func TestPreflightSubstratesFallbackMessage(t *testing.T) {
+	t.Parallel()
+
+	cfn := &presenceCFN{present: map[string]bool{bootstrap.StackName: true}}
+	preview, production, err := (&Server{}).preflightSubstrates(context.Background(), cfn, "eu-west-1", deploymentsv1.Environment_CLASS_PREVIEW)
+	if err != nil {
+		t.Fatalf("preflightSubstrates: %v", err)
+	}
+
+	got := preflightResponse(deploymentsv1.Environment_CLASS_PREVIEW, preview, production)
+	if !got.GetInfrastructurePresent() || got.GetInfraClass() != deploymentsv1.Environment_CLASS_PRODUCTION {
+		t.Errorf("preflightResponse() = {class=%v present=%v}, want the production infra still reported",
+			got.GetInfraClass(), got.GetInfrastructurePresent())
+	}
 }
