@@ -151,6 +151,23 @@ func TestDynamoKeysLeadWithTheProject(t *testing.T) {
 	}
 }
 
+func TestStackKeysRoundTrip(t *testing.T) {
+	want := AppStack("pr-7", "web", NewRelease("build-1", "fp"))
+	project, got, err := ParseStackKey(StackKey("shop", want))
+	if err != nil {
+		t.Fatalf("ParseStackKey: %v", err)
+	}
+	if project != "shop" || got != want {
+		t.Errorf("ParseStackKey = (%q, %+v), want (%q, %+v)", project, got, "shop", want)
+	}
+	if _, _, err := ParseStackKey(ProjectKey("shop")); err == nil {
+		t.Error("a project key names no stack and must be rejected")
+	}
+	if _, _, err := ParseStackKey(VarsKey("shop", "production")); err == nil {
+		t.Error("a vars key names no stack and must be rejected")
+	}
+}
+
 func TestResourceIDsReadAsEnglish(t *testing.T) {
 	for _, tc := range []struct {
 		got, want string

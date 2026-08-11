@@ -4,26 +4,28 @@ import (
 	"context"
 	"fmt"
 	"sync"
+
+	"github.com/ocelhq/ocel/pkg/naming"
 )
 
 type StackIndex interface {
-	AddProject(ctx context.Context, scope string) error
-	AddStack(ctx context.Context, stackName string) error
-	RemoveStack(ctx context.Context, stackName string) error
-	RemoveProject(ctx context.Context, scope string) error
-	Stacks(ctx context.Context, scope string) ([]string, error)
+	AddProject(ctx context.Context, project string) error
+	AddStack(ctx context.Context, project string, stack naming.StackName) error
+	RemoveStack(ctx context.Context, project string, stack naming.StackName) error
+	RemoveProject(ctx context.Context, project string) error
+	Stacks(ctx context.Context, project string) ([]naming.StackName, error)
 	Projects(ctx context.Context) ([]string, error)
 }
 
 var errNoStackIndex = fmt.Errorf("this deploy has no stack index; re-run `ocel bootstrap`")
 
 type realizedStacks struct {
-	mu    sync.Mutex
-	names map[string]struct{}
+	mu   sync.Mutex
+	keys map[string]struct{}
 }
 
-func (r *realizedStacks) realize(ctx context.Context, index StackIndex, stackName string) error {
-	if err := index.AddStack(ctx, stackName); err != nil {
+func (r *realizedStacks) realize(ctx context.Context, index StackIndex, project string, stack naming.StackName) error {
+	if err := index.AddStack(ctx, project, stack); err != nil {
 		return err
 	}
 	if r == nil {
@@ -31,20 +33,20 @@ func (r *realizedStacks) realize(ctx context.Context, index StackIndex, stackNam
 	}
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	if r.names == nil {
-		r.names = map[string]struct{}{}
+	if r.keys == nil {
+		r.keys = map[string]struct{}{}
 	}
-	r.names[stackName] = struct{}{}
+	r.keys[naming.StackKey(project, stack)] = struct{}{}
 	return nil
 }
 
-func (r *realizedStacks) realizedHere(stackName string) bool {
+func (r *realizedStacks) realizedHere(project string, stack naming.StackName) bool {
 	if r == nil {
 		return false
 	}
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	_, ok := r.names[stackName]
+	_, ok := r.keys[naming.StackKey(project, stack)]
 	return ok
 }
 
@@ -55,12 +57,12 @@ func stackIndex(index StackIndex) (StackIndex, error) {
 	return index, nil
 }
 
-func indexedStacks(ctx context.Context, index StackIndex, slug string) ([]string, error) {
+func indexedStacks(ctx context.Context, index StackIndex, slug string) ([]naming.StackName, error) {
 	ix, err := stackIndex(index)
 	if err != nil {
 		return nil, err
 	}
-	return ix.Stacks(ctx, safeName(slug))
+	return ix.Stacks(ctx, naming.Sanitize(slug))
 }
 
 func forgetProjectIfEmpty(ctx context.Context, index StackIndex, slug string) error {
@@ -68,13 +70,13 @@ func forgetProjectIfEmpty(ctx context.Context, index StackIndex, slug string) er
 	if err != nil {
 		return err
 	}
-	scope := safeName(slug)
-	remaining, err := ix.Stacks(ctx, scope)
+	project := naming.Sanitize(slug)
+	remaining, err := ix.Stacks(ctx, project)
 	if err != nil {
 		return err
 	}
 	if len(remaining) > 0 {
 		return nil
 	}
-	return ix.RemoveProject(ctx, scope)
+	return ix.RemoveProject(ctx, project)
 }

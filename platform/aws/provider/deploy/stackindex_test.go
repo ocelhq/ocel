@@ -6,62 +6,64 @@ import (
 	"reflect"
 	"slices"
 	"testing"
+
+	"github.com/ocelhq/ocel/pkg/naming"
 )
 
 type fakeStackIndex struct {
 	projects      []string
-	stacks        map[string][]string
+	stacks        map[string][]naming.StackName
 	stacksQueried []string
-	added         []string
-	removed       []string
+	added         []naming.StackName
+	removed       []naming.StackName
 	projectsGone  []string
 	err           error
 }
 
-func (f *fakeStackIndex) AddProject(_ context.Context, scope string) error {
+func (f *fakeStackIndex) AddProject(_ context.Context, project string) error {
 	if f.err != nil {
 		return f.err
 	}
-	if !slices.Contains(f.projects, scope) {
-		f.projects = append(f.projects, scope)
+	if !slices.Contains(f.projects, project) {
+		f.projects = append(f.projects, project)
 	}
 	return nil
 }
 
-func (f *fakeStackIndex) AddStack(_ context.Context, stackName string) error {
+func (f *fakeStackIndex) AddStack(_ context.Context, _ string, stack naming.StackName) error {
 	if f.err != nil {
 		return f.err
 	}
-	f.added = append(f.added, stackName)
+	f.added = append(f.added, stack)
 	return nil
 }
 
-func (f *fakeStackIndex) RemoveStack(_ context.Context, stackName string) error {
+func (f *fakeStackIndex) RemoveStack(_ context.Context, _ string, stack naming.StackName) error {
 	if f.err != nil {
 		return f.err
 	}
-	f.removed = append(f.removed, stackName)
-	for scope, names := range f.stacks {
-		f.stacks[scope] = slices.DeleteFunc(names, func(n string) bool { return n == stackName })
+	f.removed = append(f.removed, stack)
+	for project, names := range f.stacks {
+		f.stacks[project] = slices.DeleteFunc(names, func(n naming.StackName) bool { return n == stack })
 	}
 	return nil
 }
 
-func (f *fakeStackIndex) RemoveProject(_ context.Context, scope string) error {
+func (f *fakeStackIndex) RemoveProject(_ context.Context, project string) error {
 	if f.err != nil {
 		return f.err
 	}
-	f.projectsGone = append(f.projectsGone, scope)
-	f.projects = slices.DeleteFunc(f.projects, func(s string) bool { return s == scope })
+	f.projectsGone = append(f.projectsGone, project)
+	f.projects = slices.DeleteFunc(f.projects, func(s string) bool { return s == project })
 	return nil
 }
 
-func (f *fakeStackIndex) Stacks(_ context.Context, scope string) ([]string, error) {
+func (f *fakeStackIndex) Stacks(_ context.Context, project string) ([]naming.StackName, error) {
 	if f.err != nil {
 		return nil, f.err
 	}
-	f.stacksQueried = append(f.stacksQueried, scope)
-	return f.stacks[scope], nil
+	f.stacksQueried = append(f.stacksQueried, project)
+	return f.stacks[project], nil
 }
 
 func (f *fakeStackIndex) Projects(_ context.Context) ([]string, error) {
@@ -71,15 +73,21 @@ func (f *fakeStackIndex) Projects(_ context.Context) ([]string, error) {
 	return f.projects, nil
 }
 
+func testRelease(t *testing.T, buildID string) naming.Release {
+	t.Helper()
+	return naming.NewRelease(buildID, "")
+}
+
 func TestPlanProjectTeardown(t *testing.T) {
 	t.Parallel()
 
 	t.Run("covers only this project's stacks", func(t *testing.T) {
 		t.Parallel()
 
-		index := &fakeStackIndex{stacks: map[string][]string{
-			"shop": {InfraStackName("shop"), AppDeployStackName("shop", "web", buildOnly("b1"))},
-			"othr": {InfraStackName("othr")},
+		web := naming.AppStack("prod", "web", testRelease(t, "b1"))
+		index := &fakeStackIndex{stacks: map[string][]naming.StackName{
+			"shop": {naming.InfraStack("prod"), web},
+			"othr": {naming.InfraStack("prod")},
 		}}
 
 		plan, err := PlanProjectTeardown(context.Background(), Config{Stacks: index}, "shop")
@@ -87,8 +95,8 @@ func TestPlanProjectTeardown(t *testing.T) {
 			t.Fatalf("PlanProjectTeardown: %v", err)
 		}
 		want := ProjectTeardownPlan{
-			InfraStack: InfraStackName("shop"),
-			AppStacks:  []string{AppDeployStackName("shop", "web", buildOnly("b1"))},
+			InfraStack: naming.InfraStack("prod"),
+			AppStacks:  []naming.StackName{web},
 		}
 		if !reflect.DeepEqual(plan, want) {
 			t.Fatalf("PlanProjectTeardown = %+v, want %+v", plan, want)
@@ -110,11 +118,12 @@ func TestPlanProjectTeardown(t *testing.T) {
 func TestPlanPreviewProjectTeardown(t *testing.T) {
 	t.Parallel()
 
-	index := &fakeStackIndex{stacks: map[string][]string{
+	web := naming.AppStack("staging", "web", testRelease(t, "b1"))
+	index := &fakeStackIndex{stacks: map[string][]naming.StackName{
 		"shop": {
-			PreviewInfraStackName("shop", "staging"),
-			PreviewAppDeployStackName("shop", "staging", "web", buildOnly("b1")),
-			InfraStackName("shop"),
+			naming.InfraStack("staging"),
+			web,
+			naming.InfraStack("prod"),
 		},
 	}}
 
@@ -123,8 +132,8 @@ func TestPlanPreviewProjectTeardown(t *testing.T) {
 		t.Fatalf("planPreviewProjectTeardown: %v", err)
 	}
 	want := PreviewProjectTeardownPlan{
-		InfraStacks: []string{PreviewInfraStackName("shop", "staging")},
-		AppStacks:   []string{PreviewAppDeployStackName("shop", "staging", "web", buildOnly("b1"))},
+		InfraStacks: []naming.StackName{naming.InfraStack("staging")},
+		AppStacks:   []naming.StackName{web},
 		Pointers:    []string{"staging"},
 	}
 	if !reflect.DeepEqual(plan, want) {
@@ -135,11 +144,11 @@ func TestPlanPreviewProjectTeardown(t *testing.T) {
 func TestListPreviewStacksFromIndex(t *testing.T) {
 	t.Parallel()
 
-	index := &fakeStackIndex{stacks: map[string][]string{
+	index := &fakeStackIndex{stacks: map[string][]naming.StackName{
 		"shop": {
-			PreviewInfraStackName("shop", "staging"),
-			PreviewAppDeployStackName("shop", "staging", "web", buildOnly("b1")),
-			PreviewAppDeployStackName("shop", "pr-1", "web", buildOnly("b2")),
+			naming.InfraStack("staging"),
+			naming.AppStack("staging", "web", testRelease(t, "b1")),
+			naming.AppStack("pr-1", "web", testRelease(t, "b2")),
 		},
 	}}
 
@@ -172,7 +181,7 @@ func TestForgetProjectIfEmpty(t *testing.T) {
 
 		index := &fakeStackIndex{
 			projects: []string{"shop"},
-			stacks:   map[string][]string{"shop": {InfraStackName("shop")}},
+			stacks:   map[string][]naming.StackName{"shop": {naming.InfraStack("prod")}},
 		}
 		if err := forgetProjectIfEmpty(context.Background(), index, "shop"); err != nil {
 			t.Fatalf("forgetProjectIfEmpty: %v", err)
