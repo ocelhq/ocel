@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"sync"
 
 	"github.com/pulumi/pulumi/sdk/v3/go/auto"
 	"github.com/pulumi/pulumi/sdk/v3/go/auto/optdestroy"
@@ -20,6 +21,7 @@ type TeardownConfig struct {
 	ProjectName string
 	StackName   string
 	Pulumi      auto.PulumiCommand
+	SkipRefresh bool
 }
 
 func nilSafe(progress func(string)) func(string) {
@@ -28,6 +30,40 @@ func nilSafe(progress func(string)) func(string) {
 			progress(msg)
 		}
 	}
+}
+
+const teardownConcurrency = 4
+
+func runBounded[T any](limit int, items []T, run func(T) error) []error {
+	errs := make([]error, len(items))
+	var wg sync.WaitGroup
+	slots := make(chan struct{}, limit)
+	for i, item := range items {
+		slots <- struct{}{}
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			defer func() { <-slots }()
+			errs[i] = run(item)
+		}()
+	}
+	wg.Wait()
+	return errs
+}
+
+func serializeReports(progress, log func(string)) (func(string), func(string)) {
+	var mu sync.Mutex
+	guard := func(f func(string)) func(string) {
+		if f == nil {
+			return nil
+		}
+		return func(msg string) {
+			mu.Lock()
+			defer mu.Unlock()
+			f(msg)
+		}
+	}
+	return guard(progress), guard(log)
 }
 
 func Destroy(ctx context.Context, cfg TeardownConfig, progress, log func(string)) error {
@@ -53,11 +89,7 @@ func Destroy(ctx context.Context, cfg TeardownConfig, progress, log func(string)
 
 	report(progress, "Destroying resources (this can take several minutes)")
 	logWriter := lineWriter(log)
-	destroyOpts := []optdestroy.Option{optdestroy.Refresh()}
-	if logWriter != nil {
-		destroyOpts = append(destroyOpts, optdestroy.ProgressStreams(logWriter))
-	}
-	if _, err := stack.Destroy(ctx, destroyOpts...); err != nil {
+	if _, err := stack.Destroy(ctx, destroyOptions(cfg, logWriter)...); err != nil {
 		logWriter.Flush()
 		return fmt.Errorf("destroy stack %s: %w%s", cfg.StackName, err, lockRecoveryHint(err, cfg))
 	}
@@ -68,6 +100,17 @@ func Destroy(ctx context.Context, cfg TeardownConfig, progress, log func(string)
 		return fmt.Errorf("remove stack %s: %w", cfg.StackName, err)
 	}
 	return nil
+}
+
+func destroyOptions(cfg TeardownConfig, logWriter *lineForwarder) []optdestroy.Option {
+	var opts []optdestroy.Option
+	if !cfg.SkipRefresh {
+		opts = append(opts, optdestroy.Refresh())
+	}
+	if logWriter != nil {
+		opts = append(opts, optdestroy.ProgressStreams(logWriter))
+	}
+	return opts
 }
 
 func lockRecoveryHint(err error, cfg TeardownConfig) string {
