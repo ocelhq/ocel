@@ -94,6 +94,7 @@ func registerPostgres(ctx *pulumi.Context, project, env, logicalName string, arg
 				Description: pulumi.String(at.Description("outbound access for the " + at.Name + " database")),
 			},
 		},
+		Tags: resourceTags(at.Kind, ""),
 	})
 	if err != nil {
 		return pulumi.StringOutput{}, err
@@ -103,6 +104,7 @@ func registerPostgres(ctx *pulumi.Context, project, env, logicalName string, arg
 		NamePrefix:  pulumi.String(rdsIdentifierPrefix(at, "subnets")),
 		Description: pulumi.String(at.Description("subnet group placing the " + at.Name + " database in the VPC's subnets")),
 		SubnetIds:   pulumi.ToStringArray(subnetIDs),
+		Tags:        resourceTags(at.Kind, ""),
 	})
 	if err != nil {
 		return pulumi.StringOutput{}, err
@@ -124,6 +126,7 @@ func registerPostgres(ctx *pulumi.Context, project, env, logicalName string, arg
 			MinCapacity: pulumi.Float64(args.MinCapacity),
 			MaxCapacity: pulumi.Float64(args.MaxCapacity),
 		},
+		Tags: resourceTags(at.Kind, ""),
 	})
 	if err != nil {
 		return pulumi.StringOutput{}, err
@@ -136,6 +139,7 @@ func registerPostgres(ctx *pulumi.Context, project, env, logicalName string, arg
 		EngineVersion:      cluster.EngineVersion,
 		InstanceClass:      pulumi.String(args.InstanceClass),
 		PubliclyAccessible: pulumi.Bool(args.PubliclyAccessible),
+		Tags:               resourceTags(at.Kind, ""),
 	})
 	if err != nil {
 		return pulumi.StringOutput{}, err

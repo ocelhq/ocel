@@ -4,9 +4,47 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/pulumi/pulumi/sdk/v3/go/common/resource"
+	"github.com/pulumi/pulumi/sdk/v3/go/pulumi"
+
 	"github.com/ocelhq/ocel/pkg/naming"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/resources/v1"
 )
+
+func masterUserSecret(args pulumi.MockResourceArgs) resource.PropertyMap {
+	if args.TypeToken != "aws:rds/cluster:Cluster" {
+		return nil
+	}
+	return resource.PropertyMap{
+		"masterUserSecrets": resource.NewArrayProperty([]resource.PropertyValue{
+			resource.NewObjectProperty(resource.PropertyMap{
+				"secretArn": resource.NewStringProperty("arn:aws:secretsmanager:eu-west-1:111122223333:secret:db-main"),
+			}),
+		}),
+	}
+}
+
+func TestPostgresComponentTags(t *testing.T) {
+	rec := recordTags(t, func(ctx *pulumi.Context) error {
+		_, err := registerPostgres(ctx, "shop", "prod", "db--main", translatePostgres(&resourcesv1.PostgresConfig{}), "vpc-1", "10.0.0.0/16", []string{"subnet-1", "subnet-2"})
+		return err
+	}, masterUserSecret)
+
+	cases := []struct {
+		typeToken string
+		name      string
+	}{
+		{"aws:ec2/securityGroup:SecurityGroup", "db-main-security-group"},
+		{"aws:rds/subnetGroup:SubnetGroup", "db-main-subnet-group"},
+		{"aws:rds/cluster:Cluster", "db-main"},
+		{"aws:rds/clusterInstance:ClusterInstance", "db-main-instance"},
+	}
+	for _, tc := range cases {
+		if got, want := rec.component(t, tc.typeToken, tc.name), naming.KindDatabase.Component(); got != want {
+			t.Errorf("%s on %s = %q, want %q", tagComponent, tc.name, got, want)
+		}
+	}
+}
 
 func TestPostgresResourceIDs(t *testing.T) {
 	t.Parallel()

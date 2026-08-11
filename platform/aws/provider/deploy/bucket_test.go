@@ -1,15 +1,117 @@
 package deploy
 
 import (
+	"archive/zip"
 	"encoding/json"
+	"os"
+	"path/filepath"
 	"reflect"
 	"slices"
 	"strings"
+	"sync"
 	"testing"
+
+	"github.com/pulumi/pulumi/sdk/v3/go/common/resource"
+	"github.com/pulumi/pulumi/sdk/v3/go/pulumi"
 
 	"github.com/ocelhq/ocel/pkg/naming"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/resources/v1"
 )
+
+type tagRecorder struct {
+	mu      sync.Mutex
+	tags    map[string]map[string]string
+	outputs func(pulumi.MockResourceArgs) resource.PropertyMap
+}
+
+func (r *tagRecorder) NewResource(args pulumi.MockResourceArgs) (string, resource.PropertyMap, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if r.tags == nil {
+		r.tags = map[string]map[string]string{}
+	}
+	recorded := map[string]string{}
+	if raw, ok := args.Inputs["tags"]; ok && raw.IsObject() {
+		for key, value := range raw.ObjectValue() {
+			if value.IsString() {
+				recorded[string(key)] = value.StringValue()
+			}
+		}
+	}
+	r.tags[args.TypeToken+"::"+args.Name] = recorded
+	state := args.Inputs
+	if r.outputs != nil {
+		for key, value := range r.outputs(args) {
+			state[key] = value
+		}
+	}
+	return args.Name + "-id", state, nil
+}
+
+func (r *tagRecorder) Call(pulumi.MockCallArgs) (resource.PropertyMap, error) {
+	return resource.PropertyMap{}, nil
+}
+
+func (r *tagRecorder) component(t *testing.T, typeToken, name string) string {
+	t.Helper()
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	tags, ok := r.tags[typeToken+"::"+name]
+	if !ok {
+		t.Fatalf("no %s named %q was registered", typeToken, name)
+	}
+	return tags[tagComponent]
+}
+
+func recordTags(t *testing.T, program pulumi.RunFunc, outputs ...func(pulumi.MockResourceArgs) resource.PropertyMap) *tagRecorder {
+	t.Helper()
+	rec := &tagRecorder{}
+	if len(outputs) == 1 {
+		rec.outputs = outputs[0]
+	}
+	if err := pulumi.RunErr(program, pulumi.WithMocks("shop", "prod--infra", rec)); err != nil {
+		t.Fatalf("run program: %v", err)
+	}
+	return rec
+}
+
+func emptyArchive(t *testing.T) string {
+	t.Helper()
+	path := filepath.Join(t.TempDir(), "listener.zip")
+	f, err := os.Create(path)
+	if err != nil {
+		t.Fatalf("create archive: %v", err)
+	}
+	defer f.Close()
+	if err := zip.NewWriter(f).Close(); err != nil {
+		t.Fatalf("write archive: %v", err)
+	}
+	return path
+}
+
+func TestBucketComponentTags(t *testing.T) {
+	code := emptyArchive(t)
+	rec := recordTags(t, func(ctx *pulumi.Context) error {
+		_, err := registerBucket(ctx, "shop", "prod", "bucket--uploads", translateBucket(&resourcesv1.BucketConfig{}), "ocel-state", "arn:aws:dynamodb:eu-west-1:111122223333:table/ocel-state", code)
+		return err
+	})
+
+	cases := []struct {
+		typeToken string
+		name      string
+		want      string
+	}{
+		{"aws:s3/bucketV2:BucketV2", "bucket-uploads", naming.KindBucket.Component()},
+		{"aws:iam/role:Role", "bucket-uploads-runtime-role", naming.KindRole.Component()},
+		{"aws:iam/role:Role", "bucket-uploads-event-listener-role", naming.KindRole.Component()},
+		{"aws:lambda/function:Function", "bucket-uploads-event-listener", naming.KindListener.Component()},
+	}
+	for _, tc := range cases {
+		if got := rec.component(t, tc.typeToken, tc.name); got != tc.want {
+			t.Errorf("%s on %s = %q, want %q", tagComponent, tc.name, got, tc.want)
+		}
+	}
+}
 
 func TestBucketResourceIDs(t *testing.T) {
 	t.Parallel()

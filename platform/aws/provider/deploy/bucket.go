@@ -92,6 +92,7 @@ func registerBucket(ctx *pulumi.Context, project, env, logicalName string, args 
 
 	bucket, err := s3.NewBucketV2(ctx, naming.ResourceID(at.Kind, at.Name), &s3.BucketV2Args{
 		BucketPrefix: pulumi.String(at.PhysicalPrefix(maxS3BucketPrefixLen)),
+		Tags:         resourceTags(at.Kind, ""),
 	})
 	if err != nil {
 		return pulumi.StringOutput{}, err
@@ -157,6 +158,7 @@ func registerBucket(ctx *pulumi.Context, project, env, logicalName string, args 
 		Role:        listenerRole.Arn,
 		Timeout:     pulumi.Int(args.ListenerTimeoutSeconds),
 		Description: pulumi.String(at.Description("upload event listener for the " + at.Name + " bucket")),
+		Tags:        resourceTags(naming.KindListener, ""),
 		Code:        pulumi.NewFileArchive(listenerCodePath),
 		Environment: &lambda.FunctionEnvironmentArgs{
 			Variables: pulumi.StringMap{
@@ -220,6 +222,7 @@ func newServiceRole(ctx *pulumi.Context, name, description, servicePrincipal str
 	role, err := iam.NewRole(ctx, name, &iam.RoleArgs{
 		AssumeRolePolicy: pulumi.String(assumeRolePolicy(servicePrincipal)),
 		Description:      pulumi.String(description),
+		Tags:             resourceTags(naming.KindRole, ""),
 	})
 	if err != nil {
 		return nil, err
