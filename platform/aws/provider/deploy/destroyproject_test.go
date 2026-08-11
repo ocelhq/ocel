@@ -262,20 +262,37 @@ func TestDestroyPhased(t *testing.T) {
 func TestProjectPrefixes(t *testing.T) {
 	t.Parallel()
 
-	t.Run("a trailing slash scopes to the project", func(t *testing.T) {
+	t.Run("a trailing slash scopes to the project in one environment", func(t *testing.T) {
 		t.Parallel()
 
-		if p := projectAssetR2Prefix("shop"); p != "assets/shop/" {
-			t.Errorf("projectAssetR2Prefix = %q, want assets/shop/", p)
+		if p := projectEnvPrefix("prod", "shop"); p != "prod/shop/" {
+			t.Errorf("projectEnvPrefix = %q, want prod/shop/", p)
 		}
-		if p := projectISRPrefix("prod", "shop"); p != "prod/shop/" {
-			t.Errorf("projectISRPrefix = %q, want prod/shop/", p)
+		if p := projectEnvPrefix("pr-7", "shop"); p != "pr-7/shop/" {
+			t.Errorf("projectEnvPrefix = %q, want pr-7/shop/", p)
 		}
-		if p := projectEdgeR2Prefix("shop"); p != "edge/shop/" {
-			t.Errorf("projectEdgeR2Prefix = %q, want edge/shop/", p)
+	})
+
+	t.Run("every environment the index knows is purged, not just the configured one", func(t *testing.T) {
+		t.Parallel()
+
+		release := naming.NewRelease("b1", "")
+		envs := purgeEnvs([]naming.StackName{
+			naming.InfraStack("prod"),
+			naming.AppStack("pr-7", "web", release),
+			naming.AppStack("pr-7", "admin", release),
+		}, "prod")
+
+		if want := []string{"pr-7", "prod"}; !reflect.DeepEqual(envs, want) {
+			t.Errorf("purgeEnvs = %v, want %v", envs, want)
 		}
-		if p := projectImageConfigPrefix("shop"); p != "image-config/shop/" {
-			t.Errorf("projectImageConfigPrefix = %q, want image-config/shop/", p)
+	})
+
+	t.Run("the configured environment is purged even when the index is empty", func(t *testing.T) {
+		t.Parallel()
+
+		if envs := purgeEnvs(nil, "prod"); !reflect.DeepEqual(envs, []string{"prod"}) {
+			t.Errorf("purgeEnvs = %v, want [prod]", envs)
 		}
 	})
 }

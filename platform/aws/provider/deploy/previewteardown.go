@@ -176,25 +176,5 @@ func planPreviewProjectTeardown(ctx context.Context, cfg Config, slug string) (P
 }
 
 func purgePreviewAssets(ctx context.Context, cfg Config, slug string, pointers []string) error {
-	errs := []error{purgeProjectArtifacts(ctx, cfg, slug)}
-	for _, prefix := range []string{projectAssetR2Prefix(slug), projectEdgeR2Prefix(slug)} {
-		if err := deletePrefix(ctx, asPrefixDeleter(cfg.CacheStoreUploader), cfg.CacheStoreBucket, prefix); err != nil {
-			errs = append(errs, err)
-		}
-	}
-	for _, prefix := range []string{projectAssetR2Prefix(slug), projectImageConfigPrefix(slug)} {
-		if err := deletePrefix(ctx, asPrefixDeleter(cfg.Uploader), cfg.AssetBucket, prefix); err != nil {
-			errs = append(errs, err)
-		}
-	}
-	for _, pointer := range pointers {
-		isr := projectISRPrefix(pointer, slug)
-		if err := deletePrefix(ctx, asPrefixDeleter(cfg.CacheStoreUploader), cfg.CacheStoreBucket, isr); err != nil {
-			errs = append(errs, err)
-		}
-		if err := deletePrefix(ctx, asPrefixDeleter(cfg.Uploader), cfg.AssetBucket, isr); err != nil {
-			errs = append(errs, err)
-		}
-	}
-	return errors.Join(errs...)
+	return purgeProjectAssets(ctx, cfg, slug, pointers)
 }

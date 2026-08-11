@@ -67,8 +67,8 @@ func imageOptimizerResources(code artifactCode) string {
               - Effect: Allow
                 Action: s3:GetObject
                 Resource:
-                  - !Sub '${AssetBucket.Arn}/assets/*'
-                  - !Sub '${AssetBucket.Arn}/image-config/*'
+                  - !Sub '${AssetBucket.Arn}/*/assets/*'
+                  - !Sub '${AssetBucket.Arn}/*/image-config.json'
   ImageOptimizer:
     Type: AWS::Lambda::Function
     Properties:
