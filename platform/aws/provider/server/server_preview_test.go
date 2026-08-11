@@ -37,36 +37,51 @@ func TestPreviewExpiry(t *testing.T) {
 	}
 }
 
-func TestStackName(t *testing.T) {
+func TestEnvironmentNameAtIngest(t *testing.T) {
 	t.Parallel()
 
 	cases := []struct {
-		name string
-		env  *deploymentsv1.Environment
-		want string
+		name    string
+		env     *deploymentsv1.Environment
+		want    string
+		wantErr bool
 	}{
-		{"nil env keeps production", nil, "proj-123-prod"},
+		{"production is named prod", &deploymentsv1.Environment{Class: deploymentsv1.Environment_CLASS_PRODUCTION}, deployEnv, false},
 		{
-			"production class keeps production",
-			&deploymentsv1.Environment{Class: deploymentsv1.Environment_CLASS_PRODUCTION},
-			"proj-123-prod",
+			"a preview is named by its pointer",
+			&deploymentsv1.Environment{Class: deploymentsv1.Environment_CLASS_PREVIEW, Lifecycle: deploymentsv1.Environment_LIFECYCLE_EPHEMERAL, Identity: "pr-7"},
+			"pr-7",
+			false,
 		},
 		{
-			"preview ephemeral isolates by identity",
-			&deploymentsv1.Environment{Class: deploymentsv1.Environment_CLASS_PREVIEW, Lifecycle: deploymentsv1.Environment_LIFECYCLE_EPHEMERAL, Identity: "feature_login_ab12"},
-			"proj-123-preview-feature_login_ab12",
+			"a preview named prod is refused",
+			&deploymentsv1.Environment{Class: deploymentsv1.Environment_CLASS_PREVIEW, Lifecycle: deploymentsv1.Environment_LIFECYCLE_PERSISTENT, Identity: deployEnv},
+			"",
+			true,
 		},
 		{
-			"preview persistent isolates by identity",
-			&deploymentsv1.Environment{Class: deploymentsv1.Environment_CLASS_PREVIEW, Lifecycle: deploymentsv1.Environment_LIFECYCLE_PERSISTENT, Identity: "staging"},
-			"proj-123-preview-staging",
+			"a preview name the stack grammar cannot carry is refused",
+			&deploymentsv1.Environment{Class: deploymentsv1.Environment_CLASS_PREVIEW, Identity: "feature_login_ab12"},
+			"",
+			true,
 		},
+		{"no environment is refused", nil, "", true},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			if got := stackName("proj-123", tc.env); got != tc.want {
-				t.Errorf("stackName() = %q, want %q", got, tc.want)
+			got, err := deploy.EnvName(tc.env)
+			if tc.wantErr {
+				if err == nil {
+					t.Fatalf("EnvName = %q, want the environment refused before anything is provisioned", got)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("EnvName: %v", err)
+			}
+			if got != tc.want {
+				t.Errorf("EnvName = %q, want %q", got, tc.want)
 			}
 		})
 	}

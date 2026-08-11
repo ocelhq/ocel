@@ -276,7 +276,7 @@ func warnOrphanedWorker(ctx context.Context, cfg Config, progress func(string)) 
 	if !ok {
 		return
 	}
-	name := legacyWorkerName(cfg.StackName)
+	name := legacyWorkerName(cfg.Slug + "-" + cfg.Env)
 	if found, err := finder.FindApp(ctx, name); err != nil || !found {
 		return
 	}

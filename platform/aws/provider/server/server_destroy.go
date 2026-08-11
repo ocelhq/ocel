@@ -38,9 +38,18 @@ func (s *Server) PlanDestroyProject(ctx context.Context, req *deploymentsv1.Plan
 		return nil, err
 	}
 
+	appStacks := make([]string, 0, len(plan.AppStacks))
+	for _, stack := range plan.AppStacks {
+		appStacks = append(appStacks, stack.String())
+	}
+	var infraStack string
+	if !plan.InfraStack.IsZero() {
+		infraStack = plan.InfraStack.String()
+	}
+
 	return &deploymentsv1.PlanDestroyProjectResponse{
-		AppStacks:  plan.AppStacks,
-		InfraStack: plan.InfraStack,
+		AppStacks:  appStacks,
+		InfraStack: infraStack,
 		RootStack:  rootStack,
 	}, nil
 }

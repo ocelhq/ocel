@@ -10,13 +10,14 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 	s3types "github.com/aws/aws-sdk-go-v2/service/s3/types"
 
+	"github.com/ocelhq/ocel/pkg/naming"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
 type PruneTarget struct {
 	App            string
 	Identity       Identity
-	Stack          string
+	Stack          naming.StackName
 	AssetPrefix    string
 	ImageConfigKey string
 	CachePrefix    string
@@ -38,18 +39,6 @@ func splitRecordKey(key string) (app string, id Identity, ok bool) {
 }
 
 func ReclaimTargets(slug, env string, removedRecordKeys, survivingRecordKeys, survivingPointerRecordKeys []string) ([]PruneTarget, error) {
-	return reclaimTargets(slug, env, removedRecordKeys, survivingRecordKeys, survivingPointerRecordKeys, func(app string, id Identity) string {
-		return AppDeployStackName(slug, app, id)
-	})
-}
-
-func PreviewReclaimTargets(slug, pointer, env string, removedRecordKeys, survivingRecordKeys, survivingPointerRecordKeys []string) ([]PruneTarget, error) {
-	return reclaimTargets(slug, env, removedRecordKeys, survivingRecordKeys, survivingPointerRecordKeys, func(app string, id Identity) string {
-		return PreviewAppDeployStackName(slug, pointer, app, id)
-	})
-}
-
-func reclaimTargets(slug, env string, removedRecordKeys, survivingRecordKeys, survivingPointerRecordKeys []string, stackFor func(app string, id Identity) string) ([]PruneTarget, error) {
 	if len(removedRecordKeys) == 0 {
 		return nil, nil
 	}
@@ -61,7 +50,7 @@ func reclaimTargets(slug, env string, removedRecordKeys, survivingRecordKeys, su
 		if !ok {
 			return nil, fmt.Errorf("malformed removed record key %q, want %q", key, removedRecordKeyPrefix+"app/identity")
 		}
-		target := PruneTarget{App: app, Identity: id, Stack: stackFor(app, id)}
+		target := PruneTarget{App: app, Identity: id, Stack: naming.AppStack(env, app, releaseOf(id))}
 		build := appBuild{app, id.BuildID()}
 		if !sharedElsewhere[build] {
 			target.AssetPrefix = appAssetR2Prefix(slug, app, id.BuildID())
@@ -178,7 +167,7 @@ func Prune(ctx context.Context, stack edge.RootStack, state edge.RootStackState,
 		return edge.PruneResult{}, fmt.Errorf("delete promotion artifacts: %w", err)
 	}
 
-	targets, err := reclaimTargetsFor(slug, pointer, cfg.Env, result.RemovedRecordKeys, result.SurvivingRecordKeys, result.SurvivingPointerRecordKeys)
+	targets, err := ReclaimTargets(slug, cfg.Env, result.RemovedRecordKeys, result.SurvivingRecordKeys, result.SurvivingPointerRecordKeys)
 	if err != nil {
 		return result, err
 	}
@@ -186,11 +175,4 @@ func Prune(ctx context.Context, stack edge.RootStack, state edge.RootStackState,
 		return result, err
 	}
 	return result, nil
-}
-
-func reclaimTargetsFor(slug, pointer, env string, removedRecordKeys, survivingRecordKeys, survivingPointerRecordKeys []string) ([]PruneTarget, error) {
-	if pointer == "" {
-		return ReclaimTargets(slug, env, removedRecordKeys, survivingRecordKeys, survivingPointerRecordKeys)
-	}
-	return PreviewReclaimTargets(slug, pointer, env, removedRecordKeys, survivingRecordKeys, survivingPointerRecordKeys)
 }

@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/ocelhq/ocel/pkg/naming"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
@@ -85,17 +86,16 @@ func TestRootStackWorkerNames(t *testing.T) {
 func TestClassifyProjectStacks(t *testing.T) {
 	t.Parallel()
 
+	web := naming.AppStack(ProductionEnv, "web", naming.NewRelease("b1", ""))
+	api := naming.AppStack(ProductionEnv, "api", naming.NewRelease("b2", ""))
+
 	t.Run("splits infra from app stacks", func(t *testing.T) {
 		t.Parallel()
 
-		got := classifyProjectStacks("shop", []string{
-			"shop--infra",
-			"shop--web--b1",
-			"shop--api--b2",
-		})
+		got := classifyProjectStacks([]naming.StackName{naming.InfraStack(ProductionEnv), web, api})
 		want := ProjectTeardownPlan{
-			InfraStack: "shop--infra",
-			AppStacks:  []string{"shop--web--b1", "shop--api--b2"},
+			InfraStack: naming.InfraStack(ProductionEnv),
+			AppStacks:  []naming.StackName{web, api},
 		}
 		if !reflect.DeepEqual(got, want) {
 			t.Fatalf("classifyProjectStacks = %+v, want %+v", got, want)
@@ -105,43 +105,29 @@ func TestClassifyProjectStacks(t *testing.T) {
 	t.Run("includes orphan app stacks", func(t *testing.T) {
 		t.Parallel()
 
-		got := classifyProjectStacks("shop", []string{"shop--web--b1", "shop--web--aborted"})
-		want := []string{"shop--web--b1", "shop--web--aborted"}
+		aborted := naming.AppStack(ProductionEnv, "web", naming.NewRelease("aborted", ""))
+		got := classifyProjectStacks([]naming.StackName{web, aborted})
+		want := []naming.StackName{web, aborted}
 		if !reflect.DeepEqual(got.AppStacks, want) {
 			t.Fatalf("AppStacks = %v, want %v", got.AppStacks, want)
 		}
-		if got.InfraStack != "" {
-			t.Errorf("InfraStack = %q, want empty", got.InfraStack)
+		if !got.InfraStack.IsZero() {
+			t.Errorf("InfraStack = %q, want none", got.InfraStack)
 		}
 	})
 
-	t.Run("excludes other projects and previews", func(t *testing.T) {
+	t.Run("excludes previews", func(t *testing.T) {
 		t.Parallel()
 
-		got := classifyProjectStacks("shop", []string{
-			"shop--infra",
-			"shop--web--b1",
-			"shopfoo--infra",
-			"shopfoo--web--b1",
-			"other--infra",
-			"shop-preview-pr1",
+		got := classifyProjectStacks([]naming.StackName{
+			naming.InfraStack(ProductionEnv),
+			web,
+			naming.InfraStack("pr-1"),
+			naming.AppStack("pr-1", "web", naming.NewRelease("b1", "")),
 		})
 		want := ProjectTeardownPlan{
-			InfraStack: "shop--infra",
-			AppStacks:  []string{"shop--web--b1"},
-		}
-		if !reflect.DeepEqual(got, want) {
-			t.Fatalf("classifyProjectStacks = %+v, want %+v", got, want)
-		}
-	})
-
-	t.Run("an app named infra is not the infra stack", func(t *testing.T) {
-		t.Parallel()
-
-		got := classifyProjectStacks("shop", []string{"shop--infra", "shop--infra--b1"})
-		want := ProjectTeardownPlan{
-			InfraStack: "shop--infra",
-			AppStacks:  []string{"shop--infra--b1"},
+			InfraStack: naming.InfraStack(ProductionEnv),
+			AppStacks:  []naming.StackName{web},
 		}
 		if !reflect.DeepEqual(got, want) {
 			t.Fatalf("classifyProjectStacks = %+v, want %+v", got, want)
@@ -151,11 +137,19 @@ func TestClassifyProjectStacks(t *testing.T) {
 	t.Run("no stacks is an empty plan", func(t *testing.T) {
 		t.Parallel()
 
-		got := classifyProjectStacks("shop", nil)
-		if got.InfraStack != "" || len(got.AppStacks) != 0 {
+		got := classifyProjectStacks(nil)
+		if !got.InfraStack.IsZero() || len(got.AppStacks) != 0 {
 			t.Fatalf("classifyProjectStacks(nil) = %+v, want empty plan", got)
 		}
 	})
+}
+
+func appStacks(names ...string) []naming.StackName {
+	stacks := make([]naming.StackName, 0, len(names))
+	for _, name := range names {
+		stacks = append(stacks, naming.AppStack(ProductionEnv, name, naming.NewRelease(name, "")))
+	}
+	return stacks
 }
 
 func TestDestroyPhased(t *testing.T) {
@@ -168,8 +162,9 @@ func TestDestroyPhased(t *testing.T) {
 		var running, finished int
 		var phases []string
 		errs := destroyPhased(
-			[]string{"a1", "a2", "a3", "a4", "a5", "a6"}, []string{"i1", "i2"},
-			func(name string) error {
+			appStacks("a1", "a2", "a3", "a4", "a5", "a6"),
+			[]naming.StackName{naming.InfraStack(ProductionEnv), naming.InfraStack("pr-1")},
+			func(naming.StackName) error {
 				mu.Lock()
 				running++
 				phases = append(phases, "app")
@@ -181,12 +176,12 @@ func TestDestroyPhased(t *testing.T) {
 				mu.Unlock()
 				return nil
 			},
-			func(name string) error {
+			func(stack naming.StackName) error {
 				mu.Lock()
 				defer mu.Unlock()
 				phases = append(phases, "infra")
 				if running != 0 || finished != 6 {
-					return fmt.Errorf("infra stack %s started with %d app stacks in flight and %d done", name, running, finished)
+					return fmt.Errorf("infra stack %s started with %d app stacks in flight and %d done", stack, running, finished)
 				}
 				return nil
 			})
@@ -205,7 +200,7 @@ func TestDestroyPhased(t *testing.T) {
 		var inFlight, peak atomic.Int64
 		full := make(chan struct{})
 		var once sync.Once
-		overlap := func(name string) error {
+		overlap := func(stack naming.StackName) error {
 			n := inFlight.Add(1)
 			defer inFlight.Add(-1)
 			for {
@@ -222,13 +217,13 @@ func TestDestroyPhased(t *testing.T) {
 				return nil
 			case <-time.After(5 * time.Second):
 				once.Do(func() { close(full) })
-				return fmt.Errorf("%s ran without %d stacks in flight: the phase is serialized", name, teardownConcurrency)
+				return fmt.Errorf("%s ran without %d stacks in flight: the phase is serialized", stack, teardownConcurrency)
 			}
 		}
 
-		stacks := make([]string, teardownConcurrency*3)
+		stacks := make([]naming.StackName, teardownConcurrency*3)
 		for i := range stacks {
-			stacks[i] = fmt.Sprintf("shop--web--b%d", i)
+			stacks[i] = naming.AppStack(ProductionEnv, "web", naming.NewRelease(fmt.Sprintf("b%d", i), ""))
 		}
 		if err := errors.Join(destroyPhased(stacks, nil, overlap, nil)...); err != nil {
 			t.Fatal(err)
@@ -241,16 +236,16 @@ func TestDestroyPhased(t *testing.T) {
 	t.Run("failures aggregate in stack order", func(t *testing.T) {
 		t.Parallel()
 
-		apps := []string{"a1", "a2", "a3", "a4", "a5", "a6", "a7", "a8"}
-		infra := []string{"i1", "i2"}
+		apps := appStacks("a1", "a2", "a3", "a4", "a5", "a6", "a7", "a8")
+		infra := []naming.StackName{naming.InfraStack(ProductionEnv), naming.InfraStack("pr-1")}
 		want := make([]string, 0, len(apps)+len(infra))
-		for _, name := range append(append([]string{}, apps...), infra...) {
-			want = append(want, "destroy "+name)
+		for _, stack := range append(append([]naming.StackName{}, apps...), infra...) {
+			want = append(want, "destroy "+stack.String())
 		}
 
-		fail := func(name string) error {
-			time.Sleep(time.Duration(len(name)%3) * time.Millisecond)
-			return fmt.Errorf("destroy %s", name)
+		fail := func(stack naming.StackName) error {
+			time.Sleep(time.Duration(len(stack.App)%3) * time.Millisecond)
+			return fmt.Errorf("destroy %s", stack)
 		}
 		for range 20 {
 			var got []string

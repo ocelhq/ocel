@@ -25,7 +25,7 @@ func TestReclaimTargets(t *testing.T) {
 			{
 				App:            "web",
 				Identity:       buildOnly("build-1"),
-				Stack:          AppDeployStackName("proj1", "web", buildOnly("build-1")),
+				Stack:          appStack(t, "prod", "web", buildOnly("build-1")),
 				AssetPrefix:    appAssetR2Prefix("proj1", "web", "build-1"),
 				ImageConfigKey: imageConfigKey("proj1", "web", "build-1"),
 				CachePrefix:    appAssetPrefixFor("prod", "proj1", "web", "build-1"),
@@ -34,7 +34,7 @@ func TestReclaimTargets(t *testing.T) {
 			{
 				App:            "api",
 				Identity:       buildOnly("build-2"),
-				Stack:          AppDeployStackName("proj1", "api", buildOnly("build-2")),
+				Stack:          appStack(t, "prod", "api", buildOnly("build-2")),
 				AssetPrefix:    appAssetR2Prefix("proj1", "api", "build-2"),
 				ImageConfigKey: imageConfigKey("proj1", "api", "build-2"),
 				CachePrefix:    appAssetPrefixFor("prod", "proj1", "api", "build-2"),
@@ -74,7 +74,7 @@ func TestReclaimTargets(t *testing.T) {
 		want := PruneTarget{
 			App:            "web",
 			Identity:       id,
-			Stack:          AppDeployStackName("proj1", "web", id),
+			Stack:          appStack(t, "prod", "web", id),
 			AssetPrefix:    appAssetR2Prefix("proj1", "web", "build-1"),
 			ImageConfigKey: imageConfigKey("proj1", "web", "build-1"),
 			CachePrefix:    appAssetPrefixFor("prod", "proj1", "web", "build-1"),
@@ -105,7 +105,7 @@ func TestReclaimTargets(t *testing.T) {
 		want := []PruneTarget{{
 			App:      "web",
 			Identity: buildOnly("build-1"),
-			Stack:    AppDeployStackName("proj1", "web", buildOnly("build-1")),
+			Stack:    appStack(t, "prod", "web", buildOnly("build-1")),
 		}}
 		if !reflect.DeepEqual(got, want) {
 			t.Errorf("ReclaimTargets = %+v, want the stack alone %+v", got, want)
@@ -124,7 +124,7 @@ func TestReclaimTargets(t *testing.T) {
 		want := []PruneTarget{{
 			App:            "web",
 			Identity:       buildOnly("build-1"),
-			Stack:          AppDeployStackName("proj1", "web", buildOnly("build-1")),
+			Stack:          appStack(t, "prod", "web", buildOnly("build-1")),
 			AssetPrefix:    appAssetR2Prefix("proj1", "web", "build-1"),
 			ImageConfigKey: imageConfigKey("proj1", "web", "build-1"),
 			CachePrefix:    appAssetPrefixFor("prod", "proj1", "web", "build-1"),
@@ -149,7 +149,7 @@ func TestReclaimTargets(t *testing.T) {
 		want := []PruneTarget{{
 			App:         "web",
 			Identity:    pruned,
-			Stack:       AppDeployStackName("proj1", "web", pruned),
+			Stack:       appStack(t, "prod", "web", pruned),
 			CachePrefix: appAssetPrefixFor("prod", "proj1", "web", "B1"),
 		}}
 		if !reflect.DeepEqual(got, want) {
@@ -160,21 +160,21 @@ func TestReclaimTargets(t *testing.T) {
 	t.Run("removing a pointer reclaims its cache but not the shared prefixes", func(t *testing.T) {
 		t.Parallel()
 		pruned := fingerprinted("B1", "fpV")
-		got, err := PreviewReclaimTargets("proj1", "pr-7", "preview-pr-7",
+		got, err := ReclaimTargets("proj1", "pr-7",
 			[]string{"record:web/" + pruned.String()},
 			[]string{"record:web/" + fingerprinted("B1", "fpP").String()},
 			nil)
 		if err != nil {
-			t.Fatalf("PreviewReclaimTargets: %v", err)
+			t.Fatalf("ReclaimTargets: %v", err)
 		}
 		want := []PruneTarget{{
 			App:         "web",
 			Identity:    pruned,
-			Stack:       PreviewAppDeployStackName("proj1", "pr-7", "web", pruned),
-			CachePrefix: appAssetPrefixFor("preview-pr-7", "proj1", "web", "B1"),
+			Stack:       appStack(t, "pr-7", "web", pruned),
+			CachePrefix: appAssetPrefixFor("pr-7", "proj1", "web", "B1"),
 		}}
 		if !reflect.DeepEqual(got, want) {
-			t.Errorf("PreviewReclaimTargets = %+v, want %+v", got, want)
+			t.Errorf("ReclaimTargets = %+v, want %+v", got, want)
 		}
 	})
 

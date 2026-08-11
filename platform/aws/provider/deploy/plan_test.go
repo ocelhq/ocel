@@ -1,8 +1,10 @@
 package deploy
 
 import (
+	"strings"
 	"testing"
 
+	"github.com/ocelhq/ocel/pkg/naming"
 	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
 )
 
@@ -28,89 +30,111 @@ func previewEnv(lifecycle deploymentsv1.Environment_Lifecycle) *deploymentsv1.En
 	}
 }
 
-func TestAppDeployStackName(t *testing.T) {
+func appStack(t *testing.T, env, app string, id Identity) naming.StackName {
+	t.Helper()
+	return naming.AppStack(env, app, releaseOf(id))
+}
+
+func TestEnvName(t *testing.T) {
 	t.Parallel()
 
-	distinct := []struct {
-		name string
-		a    string
-		b    string
-	}{
-		{
-			name: "unique per deploy",
-			a:    AppDeployStackName("proj", "web", buildOnly("build1")),
-			b:    AppDeployStackName("proj", "web", buildOnly("build2")),
-		},
-		{
-			name: "unique per app",
-			a:    AppDeployStackName("proj", "web", buildOnly("build1")),
-			b:    AppDeployStackName("proj", "api", buildOnly("build1")),
-		},
-		{
-			name: "no collision across hyphenated segments",
-			a:    AppDeployStackName("proj", "web-x", buildOnly("1")),
-			b:    AppDeployStackName("proj-web", "x", buildOnly("1")),
-		},
-		{
-			name: "no collision between fingerprint and hyphenated buildID",
-			a:    AppDeployStackName("proj", "web", fingerprinted("b", "f")),
-			b:    AppDeployStackName("proj", "web", buildOnly("b-f")),
-		},
-	}
-	for _, tc := range distinct {
-		t.Run(tc.name, func(t *testing.T) {
-			t.Parallel()
-			if tc.a == tc.b {
-				t.Fatalf("distinct stack names collided: %q", tc.a)
-			}
-		})
-	}
-
-	t.Run("is deterministic", func(t *testing.T) {
+	t.Run("production is named, not classed", func(t *testing.T) {
 		t.Parallel()
-		a := AppDeployStackName("proj", "web", buildOnly("build1"))
-		if got := AppDeployStackName("proj", "web", buildOnly("build1")); got != a {
-			t.Errorf("AppDeployStackName is not deterministic: got %q, want %q", got, a)
+		got, err := EnvName(prodEnv())
+		if err != nil {
+			t.Fatalf("EnvName: %v", err)
+		}
+		if got != ProductionEnv {
+			t.Errorf("EnvName = %q, want %q", got, ProductionEnv)
 		}
 	})
 
-	t.Run("build-only identity names the buildID's stack", func(t *testing.T) {
+	t.Run("a preview environment is named by its pointer", func(t *testing.T) {
 		t.Parallel()
-		if got, want := AppDeployStackName("proj", "web", buildOnly("build1")), "proj--web--build1"; got != want {
-			t.Errorf("AppDeployStackName = %q, want %q", got, want)
+		got, err := EnvName(previewEnv(deploymentsv1.Environment_LIFECYCLE_PERSISTENT))
+		if err != nil {
+			t.Fatalf("EnvName: %v", err)
 		}
-		if got, want := PreviewAppDeployStackName("proj", "pr-1", "web", buildOnly("build1")), "proj--preview-pr-1--web--build1"; got != want {
-			t.Errorf("PreviewAppDeployStackName = %q, want %q", got, want)
+		if got != "staging" {
+			t.Errorf("EnvName = %q, want the pointer with no class infix", got)
 		}
 	})
 
-	t.Run("fingerprint separates deployments of one build", func(t *testing.T) {
+	t.Run("a preview named prod is refused", func(t *testing.T) {
 		t.Parallel()
-		plain := AppDeployStackName("proj", "web", buildOnly("build1"))
-		a := AppDeployStackName("proj", "web", fingerprinted("build1", "aaa"))
-		b := AppDeployStackName("proj", "web", fingerprinted("build1", "bbb"))
-		for _, pair := range [][2]string{{plain, a}, {plain, b}, {a, b}} {
-			if pair[0] == pair[1] {
-				t.Errorf("stack names for distinct identities of one build collided: %q", pair[0])
+		env := &deploymentsv1.Environment{
+			Class:    deploymentsv1.Environment_CLASS_PREVIEW,
+			Identity: ProductionEnv,
+		}
+		_, err := EnvName(env)
+		if err == nil {
+			t.Fatal("EnvName err = nil, want a preview named after production refused")
+		}
+		if !strings.Contains(err.Error(), "rename the preview") {
+			t.Errorf("error %q does not tell the user how to recover", err)
+		}
+	})
+
+	t.Run("an unusable preview name is refused at ingest", func(t *testing.T) {
+		t.Parallel()
+		for _, pointer := range []string{"", "PR-7", "pr--7", "-pr7", "pr_7", "pr 7"} {
+			env := &deploymentsv1.Environment{
+				Class:    deploymentsv1.Environment_CLASS_PREVIEW,
+				Identity: pointer,
 			}
+			if _, err := EnvName(env); err == nil {
+				t.Errorf("EnvName(%q) err = nil, want the name refused before it reaches a stack", pointer)
+			}
+		}
+	})
+
+	t.Run("an unspecified class is refused", func(t *testing.T) {
+		t.Parallel()
+		if _, err := EnvName(&deploymentsv1.Environment{}); err == nil {
+			t.Fatal("EnvName err = nil, want an unspecified class refused")
 		}
 	})
 }
 
-func TestInfraStackName(t *testing.T) {
+func TestReleaseOf(t *testing.T) {
 	t.Parallel()
 
-	t.Run("stable across deploys", func(t *testing.T) {
+	t.Run("fixed arity whatever the identity carries", func(t *testing.T) {
 		t.Parallel()
-		if got, want := InfraStackName("proj"), InfraStackName("proj"); got != want {
-			t.Errorf("InfraStackName is not deterministic: got %q, want %q", got, want)
+		plain := appStack(t, "prod", "web", buildOnly("build1"))
+		full := appStack(t, "prod", "web", fingerprinted("build1", "fp1"))
+		for _, stack := range []naming.StackName{plain, full} {
+			if got := len(strings.Split(stack.String(), naming.FieldSeparator)); got != 3 {
+				t.Errorf("stack %q has %d fields, want a fixed 3", stack, got)
+			}
 		}
 	})
 
-	t.Run("never collides with an app-deploy stack name", func(t *testing.T) {
+	t.Run("either input forces a new stack", func(t *testing.T) {
 		t.Parallel()
-		if InfraStackName("proj") == AppDeployStackName("proj", "web", buildOnly("build1")) {
-			t.Error("infra stack name collides with an app-deploy stack name")
+		base := appStack(t, "prod", "web", fingerprinted("build1", "fp1"))
+		newBuild := appStack(t, "prod", "web", fingerprinted("build2", "fp1"))
+		newValues := appStack(t, "prod", "web", fingerprinted("build1", "fp2"))
+		noValues := appStack(t, "prod", "web", buildOnly("build1"))
+
+		for _, other := range []naming.StackName{newBuild, newValues, noValues} {
+			if base == other {
+				t.Errorf("a changed identity reused the stack %q", base)
+			}
+		}
+	})
+
+	t.Run("no collision between a fingerprint and a hyphenated build id", func(t *testing.T) {
+		t.Parallel()
+		if a, b := appStack(t, "prod", "web", fingerprinted("b", "f")), appStack(t, "prod", "web", buildOnly("b-f")); a == b {
+			t.Errorf("distinct identities collided on %q", a)
+		}
+	})
+
+	t.Run("is deterministic", func(t *testing.T) {
+		t.Parallel()
+		if a, b := releaseOf(buildOnly("build1")), releaseOf(buildOnly("build1")); a != b {
+			t.Errorf("releaseOf is not deterministic: %q then %q", a, b)
 		}
 	})
 }
@@ -134,12 +158,12 @@ func TestBuildPlan(t *testing.T) {
 			t.Fatalf("BuildPlan: %v", err)
 		}
 
-		if plan.InfraStack != InfraStackName("proj") {
-			t.Errorf("InfraStack = %q, want %q", plan.InfraStack, InfraStackName("proj"))
+		if want := naming.InfraStack(ProductionEnv); plan.InfraStack != want {
+			t.Errorf("InfraStack = %q, want %q", plan.InfraStack, want)
 		}
 
-		wantWeb := AppDeployStackName("proj", "web", buildOnly("buildW"))
-		wantAPI := AppDeployStackName("proj", "api", buildOnly("buildA"))
+		wantWeb := appStack(t, ProductionEnv, "web", buildOnly("buildW"))
+		wantAPI := appStack(t, ProductionEnv, "api", buildOnly("buildA"))
 		if plan.AppStacks["web"] != wantWeb {
 			t.Errorf("AppStacks[web] = %q, want %q", plan.AppStacks["web"], wantWeb)
 		}
@@ -164,7 +188,24 @@ func TestBuildPlan(t *testing.T) {
 		}
 	})
 
-	t.Run("promotion carries the rendered identity", func(t *testing.T) {
+	t.Run("the stack names read as env, app and release", func(t *testing.T) {
+		t.Parallel()
+		manifest := &deploymentsv1.Manifest{Slug: "shop", Apps: []*deploymentsv1.ManifestApp{{Name: "web"}}}
+
+		plan, err := BuildPlan(manifest, prodEnv(), "promo1", Identities{"web": buildOnly("b")})
+		if err != nil {
+			t.Fatalf("BuildPlan: %v", err)
+		}
+		if got, want := plan.InfraStack.String(), "prod--infra"; got != want {
+			t.Errorf("InfraStack = %q, want %q — the project belongs to the Pulumi project", got, want)
+		}
+		release := releaseOf(buildOnly("b")).String()
+		if got, want := plan.AppStacks["web"].String(), "prod--web--"+release; got != want {
+			t.Errorf("AppStacks[web] = %q, want %q", got, want)
+		}
+	})
+
+	t.Run("the promotion record keeps the build id recoverable", func(t *testing.T) {
 		t.Parallel()
 		manifest := &deploymentsv1.Manifest{
 			Slug: "proj",
@@ -177,10 +218,14 @@ func TestBuildPlan(t *testing.T) {
 			t.Fatalf("BuildPlan: %v", err)
 		}
 		if got := plan.Promotion.Builds["web"]; got != id.String() {
-			t.Errorf("Promotion.Builds[web] = %q, want %q", got, id.String())
+			t.Errorf("Promotion.Builds[web] = %q, want %q — the release token is one-way", got, id.String())
 		}
-		if plan.AppStacks["web"] != AppDeployStackName("proj", "web", id) {
-			t.Errorf("AppStacks[web] = %q, want %q", plan.AppStacks["web"], AppDeployStackName("proj", "web", id))
+		recovered, err := ParseIdentity(plan.Promotion.Builds["web"])
+		if err != nil {
+			t.Fatalf("ParseIdentity: %v", err)
+		}
+		if plan.AppStacks["web"] != appStack(t, ProductionEnv, "web", recovered) {
+			t.Error("the recovered identity does not name the stack it was deployed under")
 		}
 	})
 
@@ -197,15 +242,26 @@ func TestBuildPlan(t *testing.T) {
 		}
 	})
 
+	t.Run("an app named infra is refused", func(t *testing.T) {
+		t.Parallel()
+		manifest := &deploymentsv1.Manifest{
+			Slug: "proj",
+			Apps: []*deploymentsv1.ManifestApp{{Name: naming.InfraApp}},
+		}
+
+		if _, err := BuildPlan(manifest, prodEnv(), "promo1", Identities{naming.InfraApp: buildOnly("b")}); err == nil {
+			t.Fatal("BuildPlan with an app named infra should error, got nil")
+		}
+	})
+
 	t.Run("rejects unspecified class", func(t *testing.T) {
 		t.Parallel()
 		manifest := &deploymentsv1.Manifest{
 			Slug: "proj",
 			Apps: []*deploymentsv1.ManifestApp{{Name: "web"}},
 		}
-		env := &deploymentsv1.Environment{}
 
-		if _, err := BuildPlan(manifest, env, "promo1", Identities{"web": buildOnly("b")}); err == nil {
+		if _, err := BuildPlan(manifest, &deploymentsv1.Environment{}, "promo1", Identities{"web": buildOnly("b")}); err == nil {
 			t.Fatal("BuildPlan for an unspecified class should error, got nil")
 		}
 	})
@@ -221,13 +277,13 @@ func TestBuildPlan(t *testing.T) {
 		if err != nil {
 			t.Fatalf("BuildPlan: %v", err)
 		}
-		if plan.InfraStack != PreviewInfraStackName("proj", "staging") {
-			t.Errorf("InfraStack = %q, want %q", plan.InfraStack, PreviewInfraStackName("proj", "staging"))
+		if want := naming.InfraStack("staging"); plan.InfraStack != want {
+			t.Errorf("InfraStack = %q, want %q", plan.InfraStack, want)
 		}
-		if plan.InfraStack == InfraStackName("proj") {
+		if plan.InfraStack == naming.InfraStack(ProductionEnv) {
 			t.Error("persistent preview infra stack collides with production infra stack")
 		}
-		if plan.AppStacks["web"] == AppDeployStackName("proj", "web", buildOnly("b")) {
+		if plan.AppStacks["web"] == appStack(t, ProductionEnv, "web", buildOnly("b")) {
 			t.Error("preview app-deploy stack collides with the production one for the same build")
 		}
 	})
@@ -243,10 +299,10 @@ func TestBuildPlan(t *testing.T) {
 		if err != nil {
 			t.Fatalf("BuildPlan: %v", err)
 		}
-		if plan.InfraStack != "" {
-			t.Errorf("ephemeral preview InfraStack = %q, want empty (infra stack skipped)", plan.InfraStack)
+		if !plan.InfraStack.IsZero() {
+			t.Errorf("ephemeral preview InfraStack = %q, want none (infra stack skipped)", plan.InfraStack)
 		}
-		if plan.AppStacks["web"] == "" {
+		if plan.AppStacks["web"].IsZero() {
 			t.Error("ephemeral preview must still plan an app-deploy stack so the URL serves")
 		}
 	})
@@ -290,6 +346,30 @@ func TestBuildPlan(t *testing.T) {
 		}
 		if len(plan.AppStacks) != 0 || len(plan.Promotion.Builds) != 0 {
 			t.Errorf("expected empty plan for a manifest with no apps, got %+v", plan)
+		}
+	})
+
+	t.Run("every planned stack re-parses", func(t *testing.T) {
+		t.Parallel()
+		manifest := &deploymentsv1.Manifest{Slug: "proj", Apps: []*deploymentsv1.ManifestApp{{Name: "web"}, {Name: "api"}}}
+
+		plan, err := BuildPlan(manifest, previewEnv(deploymentsv1.Environment_LIFECYCLE_PERSISTENT), "p", Identities{
+			"web": buildOnly("b1"),
+			"api": fingerprinted("b2", "fp"),
+		})
+		if err != nil {
+			t.Fatalf("BuildPlan: %v", err)
+		}
+		stacks := []naming.StackName{plan.InfraStack, plan.AppStacks["web"], plan.AppStacks["api"]}
+		for _, stack := range stacks {
+			parsed, err := naming.ParseStackName(stack.String())
+			if err != nil {
+				t.Errorf("ParseStackName(%q): %v — the index could not store it", stack, err)
+				continue
+			}
+			if parsed != stack {
+				t.Errorf("ParseStackName(%q) = %+v, want %+v", stack, parsed, stack)
+			}
 		}
 	})
 }

@@ -13,6 +13,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/aws/aws-sdk-go-v2/service/ssm"
 
+	"github.com/ocelhq/ocel/pkg/naming"
 	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
 	"github.com/ocelhq/ocel/platform/aws/provider/bootstrap"
 	"github.com/ocelhq/ocel/platform/aws/provider/deploy"
@@ -123,9 +124,9 @@ func (s *Server) pruneConfig(ctx context.Context, opts options, awscfg aws.Confi
 
 	return deploy.Config{
 		Region:             awscfg.Region,
-		BackendURL:         deploy.StateBackendURL(deployed.StateBucket, slug),
+		BackendURL:         naming.StateBackendURL(deployed.StateBucket, slug),
 		Passphrase:         params.Passphrase,
-		ProjectName:        pulumiProjectName,
+		PulumiProject:      naming.PulumiProject(slug),
 		Pulumi:             pulumiCmd,
 		AssetBucket:        deployed.AssetBucket,
 		ArtifactBucket:     deployed.ArtifactBucket,
@@ -134,6 +135,7 @@ func (s *Server) pruneConfig(ctx context.Context, opts options, awscfg aws.Confi
 		CacheStoreUploader: cacheStoreUploader(params.CacheStore),
 		Stacks:             stacks,
 		Env:                deployEnv,
+		Slug:               slug,
 		Values:             teardownValues(awscfg, deployed, bootstrap.ClassProduction),
 
 		ISRWriterEndpoint:      params.ISRWriter.Endpoint,

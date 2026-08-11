@@ -13,6 +13,7 @@ import (
 	secretsmanager "github.com/pulumi/pulumi-aws/sdk/v7/go/aws/secretsmanager"
 	"github.com/pulumi/pulumi/sdk/v3/go/pulumi"
 
+	"github.com/ocelhq/ocel/pkg/naming"
 	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/resources/v1"
 )
@@ -234,7 +235,7 @@ func appExecutionRole(cfg Config, app string, caches map[string]*isrConfig, bund
 }
 
 func newFunctionRole(ctx *pulumi.Context, r executionRole) (*iam.Role, error) {
-	name := "ocel-fn-" + safeName(r.App)
+	name := "ocel-fn-" + naming.SanitizeAlpha(r.App)
 	role, err := newServiceRole(ctx, name, "lambda.amazonaws.com", nil)
 	if err != nil {
 		return nil, err

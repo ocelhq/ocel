@@ -17,6 +17,7 @@ import (
 	"github.com/pulumi/pulumi/sdk/v3/go/auto/optup"
 	"github.com/pulumi/pulumi/sdk/v3/go/pulumi"
 
+	"github.com/ocelhq/ocel/pkg/naming"
 	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
@@ -91,7 +92,7 @@ func realize(ctx context.Context, cfg Config, manifest *deploymentsv1.Manifest, 
 	if err != nil {
 		return Result{}, err
 	}
-	if err := index.AddProject(ctx, safeName(manifest.GetSlug())); err != nil {
+	if err := index.AddProject(ctx, naming.Sanitize(manifest.GetSlug())); err != nil {
 		return Result{}, err
 	}
 
@@ -106,7 +107,7 @@ func realize(ctx context.Context, cfg Config, manifest *deploymentsv1.Manifest, 
 	}
 
 	var infraOutputs []*deploymentsv1.ResourceOutput
-	if plan.InfraStack != "" {
+	if !plan.InfraStack.IsZero() {
 		progress.report(deploymentsv1.Phase_PHASE_PROVISIONING, "Provisioning infra stack", 0, 0)
 		infraOutputs, err = runInfraStack(ctx, cfg, manifest, plan, log)
 		if err != nil {
@@ -698,10 +699,10 @@ func runAppStack(ctx context.Context, cfg Config, manifest *deploymentsv1.Manife
 		return nil
 	}
 
-	stackName := plan.AppStacks[name]
-	res, err := upStack(ctx, cfg, stackName, program, log)
+	stack := plan.AppStacks[name]
+	res, err := upStack(ctx, cfg, stack, program, log)
 	if err != nil {
-		return nil, nil, fmt.Errorf("provision app-deploy stack %s: %w", stackName, err)
+		return nil, nil, fmt.Errorf("provision app-deploy stack %s: %w", stack, err)
 	}
 	return collectAppFunctionOutputs(functions, res.Outputs)
 }
@@ -716,21 +717,21 @@ func appFunctions(manifest *deploymentsv1.Manifest, app string) []*deploymentsv1
 	return fns
 }
 
-func upStack(ctx context.Context, cfg Config, stackName string, program pulumi.RunFunc, log func(string)) (auto.UpResult, error) {
-	stack, err := auto.UpsertStackInlineSource(ctx, stackName, cfg.ProjectName, program,
+func upStack(ctx context.Context, cfg Config, name naming.StackName, program pulumi.RunFunc, log func(string)) (auto.UpResult, error) {
+	stack, err := auto.UpsertStackInlineSource(ctx, name.String(), cfg.PulumiProject, program,
 		auto.Pulumi(cfg.Pulumi),
 		auto.SecretsProvider("passphrase"),
 		auto.EnvVars(pulumiEnv(cfg.Region, cfg.BackendURL, cfg.Passphrase)),
 	)
 	if err != nil {
-		return auto.UpResult{}, fmt.Errorf("prepare stack %s: %w", stackName, err)
+		return auto.UpResult{}, fmt.Errorf("prepare stack %s: %w", name, err)
 	}
 
 	index, err := stackIndex(cfg.Stacks)
 	if err != nil {
 		return auto.UpResult{}, err
 	}
-	if err := cfg.realized.realize(ctx, index, stackName); err != nil {
+	if err := cfg.realized.realize(ctx, index, naming.Sanitize(cfg.Slug), name); err != nil {
 		return auto.UpResult{}, err
 	}
 

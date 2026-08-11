@@ -3,8 +3,11 @@ package deploy
 import (
 	"fmt"
 
+	"github.com/ocelhq/ocel/pkg/naming"
 	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
 )
+
+const ProductionEnv = "prod"
 
 type Promotion struct {
 	PromotionID string
@@ -12,82 +15,72 @@ type Promotion struct {
 }
 
 type Plan struct {
-	InfraStack string
-	AppStacks  map[string]string
+	InfraStack naming.StackName
+	AppStacks  map[string]naming.StackName
 	Promotion  Promotion
 }
 
-func InfraStackName(slug string) string {
-	return safeName(slug) + "--infra"
-}
-
-func PreviewInfraStackName(slug, pointer string) string {
-	return safeName(slug) + "--preview-" + safeName(pointer) + "--infra"
-}
-
-func PreviewAppDeployStackName(slug, pointer, app string, id Identity) string {
-	return safeName(slug) + "--preview-" + safeName(pointer) + "--" + safeName(app) + identityNameSegments(id)
-}
-
-func AppDeployStackName(slug, app string, id Identity) string {
-	return safeName(slug) + "--" + safeName(app) + identityNameSegments(id)
-}
-
-func identityNameSegments(id Identity) string {
-	name := "--" + safeName(id.BuildID())
-	if id.Fingerprint() != "" {
-		name += "--" + safeName(id.Fingerprint())
+func EnvName(env *deploymentsv1.Environment) (string, error) {
+	switch env.GetClass() {
+	case deploymentsv1.Environment_CLASS_PRODUCTION:
+		return ProductionEnv, nil
+	case deploymentsv1.Environment_CLASS_PREVIEW:
+		return previewEnvName(env.GetIdentity())
+	default:
+		return "", fmt.Errorf("deploys support production and preview, got class %s", env.GetClass())
 	}
-	return name
+}
+
+func previewEnvName(pointer string) (string, error) {
+	if pointer == "" {
+		return "", fmt.Errorf("a preview deploy requires an environment identity (the store pointer)")
+	}
+	if err := naming.Validate("preview name", pointer); err != nil {
+		return "", err
+	}
+	if pointer == ProductionEnv {
+		return "", fmt.Errorf("preview name %q is the production environment's name, so this preview would deploy over production; rename the preview", pointer)
+	}
+	return pointer, nil
+}
+
+func releaseOf(id Identity) naming.Release {
+	return naming.NewRelease(id.BuildID(), id.Fingerprint())
 }
 
 func BuildPlan(manifest *deploymentsv1.Manifest, env *deploymentsv1.Environment, promotionID string, identities Identities) (Plan, error) {
-	slug := manifest.GetSlug()
-	apps := manifest.GetApps()
-
-	var (
-		infraStack string
-		appStack   func(app string, id Identity) string
-		ephemeral  bool
-	)
-	switch env.GetClass() {
-	case deploymentsv1.Environment_CLASS_PRODUCTION:
-		infraStack = InfraStackName(slug)
-		appStack = func(app string, id Identity) string {
-			return AppDeployStackName(slug, app, id)
-		}
-	case deploymentsv1.Environment_CLASS_PREVIEW:
-		pointer := env.GetIdentity()
-		if pointer == "" {
-			return Plan{}, fmt.Errorf("preview deploy plan requires an environment identity (the store pointer)")
-		}
-		ephemeral = env.GetLifecycle() == deploymentsv1.Environment_LIFECYCLE_EPHEMERAL
-		if !ephemeral {
-			infraStack = PreviewInfraStackName(slug, pointer)
-		}
-		appStack = func(app string, id Identity) string {
-			return PreviewAppDeployStackName(slug, pointer, app, id)
-		}
-	default:
-		return Plan{}, fmt.Errorf("deploy plan supports production and preview, got class %s", env.GetClass())
+	envName, err := EnvName(env)
+	if err != nil {
+		return Plan{}, err
 	}
 
+	apps := manifest.GetApps()
 	plan := Plan{
-		InfraStack: infraStack,
-		AppStacks:  make(map[string]string, len(apps)),
+		AppStacks: make(map[string]naming.StackName, len(apps)),
 		Promotion: Promotion{
 			PromotionID: promotionID,
 			Builds:      make(map[string]string, len(apps)),
 		},
 	}
+	if !ephemeralPreview(env) {
+		plan.InfraStack = naming.InfraStack(envName)
+	}
 	for _, app := range apps {
 		name := app.GetName()
+		if name == naming.InfraApp {
+			return Plan{}, fmt.Errorf("app %q uses the name reserved for the environment's infra stack; rename the app", name)
+		}
 		id, ok := identities[name]
 		if !ok {
 			return Plan{}, fmt.Errorf("missing deployment identity for app %q", name)
 		}
-		plan.AppStacks[name] = appStack(name, id)
+		plan.AppStacks[name] = naming.AppStack(envName, name, releaseOf(id))
 		plan.Promotion.Builds[name] = id.String()
 	}
 	return plan, nil
+}
+
+func ephemeralPreview(env *deploymentsv1.Environment) bool {
+	return env.GetClass() == deploymentsv1.Environment_CLASS_PREVIEW &&
+		env.GetLifecycle() == deploymentsv1.Environment_LIFECYCLE_EPHEMERAL
 }

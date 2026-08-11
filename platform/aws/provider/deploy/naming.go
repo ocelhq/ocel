@@ -3,49 +3,9 @@ package deploy
 import (
 	"crypto/sha256"
 	"encoding/hex"
-	"strings"
+
+	"github.com/ocelhq/ocel/pkg/naming"
 )
-
-const maxSafeNamePrefixLen = 40
-
-func StateBackendURL(bucket, slug string) string {
-	return "s3://" + bucket + "/" + safeName(slug)
-}
-
-func safeName(logicalName string) string {
-	var b strings.Builder
-	prevDash := false
-	for _, r := range strings.ToLower(logicalName) {
-		safe := (r >= 'a' && r <= 'z') || (r >= '0' && r <= '9')
-		if !safe {
-			r = '-'
-		}
-		if r == '-' {
-			if prevDash || b.Len() == 0 {
-				continue
-			}
-			prevDash = true
-			b.WriteRune('-')
-			continue
-		}
-		prevDash = false
-		b.WriteRune(r)
-	}
-	name := strings.TrimRight(b.String(), "-")
-
-	if name == "" {
-		name = "a"
-	}
-	if first := name[0]; first < 'a' || first > 'z' {
-		name = "a" + name
-	}
-	if len(name) > maxSafeNamePrefixLen {
-		sum := sha256.Sum256([]byte(logicalName))
-		suffix := "-" + hex.EncodeToString(sum[:])[:8]
-		name = strings.TrimRight(name[:maxSafeNamePrefixLen-len(suffix)], "-") + suffix
-	}
-	return name
-}
 
 const (
 	maxLambdaNameLen        = 64
@@ -62,10 +22,12 @@ func lambdaResourceName(logicalName string) string {
 	return logicalName[:max-len(suffix)] + suffix
 }
 
+const maxPhysicalNamePrefixLen = 40
+
 func physicalNamePrefix(logicalName, infix string) string {
-	prefix := safeName(logicalName) + "-"
+	prefix := naming.Fit(maxPhysicalNamePrefixLen, naming.WordSeparator, naming.Compressible(naming.SanitizeAlpha(logicalName))) + naming.WordSeparator
 	if infix != "" {
-		prefix += infix + "-"
+		prefix += infix + naming.WordSeparator
 	}
 	return prefix
 }

@@ -29,13 +29,12 @@ type SecretsReader interface {
 }
 
 type Config struct {
-	Region      string
-	BackendURL  string
-	Passphrase  string
-	ProjectName string
-	StackName   string
-	Pulumi      auto.PulumiCommand
-	Secrets     SecretsReader
+	Region        string
+	BackendURL    string
+	Passphrase    string
+	PulumiProject string
+	Pulumi        auto.PulumiCommand
+	Secrets       SecretsReader
 
 	Stacks StackIndex
 
