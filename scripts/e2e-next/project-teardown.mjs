@@ -6,7 +6,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 
-import { projectSlugForRun, renderOcelConfig } from "./lib.mjs";
+import { projectSlugForRun, renderOcelConfig, withoutSkipDriftChecks } from "./lib.mjs";
 import { linkSidecar } from "./sidecar.mjs";
 
 const TEARDOWN_TIMEOUT_MS = 30 * 60 * 1000;
@@ -34,7 +34,12 @@ export function destroyProject(slug) {
   const res = spawnSync(
     process.execPath,
     [join(adapterDir, "packages", "ocel", "bin", "run.js"), "destroy", "--preview", "--yes"],
-    { cwd: dir, stdio: ["ignore", "inherit", "inherit"], timeout: TEARDOWN_TIMEOUT_MS },
+    {
+      cwd: dir,
+      stdio: ["ignore", "inherit", "inherit"],
+      timeout: TEARDOWN_TIMEOUT_MS,
+      env: withoutSkipDriftChecks(process.env),
+    },
   );
 
   if (res.error || res.signal || res.status !== 0) {
