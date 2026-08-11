@@ -1,10 +1,106 @@
 package deploy
 
 import (
+	"strings"
 	"testing"
 
+	"github.com/ocelhq/ocel/pkg/naming"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/resources/v1"
 )
+
+func TestPostgresResourceIDs(t *testing.T) {
+	t.Parallel()
+
+	at := resourceCoordinate("shop", "prod", "db--main", naming.KindDatabase)
+
+	cases := map[string]string{
+		"db-main":                naming.ResourceID(at.Kind, at.Name),
+		"db-main-security-group": naming.ResourceID(at.Kind, at.Name, "security-group"),
+		"db-main-subnet-group":   naming.ResourceID(at.Kind, at.Name, "subnet-group"),
+		"db-main-instance":       naming.ResourceID(at.Kind, at.Name, "instance"),
+	}
+	for want, got := range cases {
+		if got != want {
+			t.Errorf("resource id = %q, want %q", got, want)
+		}
+		if strings.Contains(got, "_") {
+			t.Errorf("resource id %q mixes alphabets; the deploy log is kebab throughout", got)
+		}
+	}
+}
+
+func TestRDSIdentifierPrefix(t *testing.T) {
+	t.Parallel()
+
+	at := resourceCoordinate("shop", "prod", "db--main", naming.KindDatabase)
+
+	t.Run("carries project, env, resource and role", func(t *testing.T) {
+		t.Parallel()
+
+		cases := map[string]string{
+			"":         "shop-prod-main-",
+			"instance": "shop-prod-main-instance-",
+			"subnets":  "shop-prod-main-subnets-",
+		}
+		for role, want := range cases {
+			if got := rdsIdentifierPrefix(at, role); got != want {
+				t.Errorf("rdsIdentifierPrefix(%q) = %q, want %q", role, got, want)
+			}
+		}
+	})
+
+	t.Run("fits the identifier AWS appends to", func(t *testing.T) {
+		t.Parallel()
+
+		long := resourceCoordinate(strings.Repeat("p", 30), strings.Repeat("e", 30), "db--"+strings.Repeat("m", 30), naming.KindDatabase)
+		got := rdsIdentifierPrefix(long, "instance")
+		if len(got) > maxRDSIdentifierPrefixLen {
+			t.Errorf("rdsIdentifierPrefix() = %q, length %d, want <= %d", got, len(got), maxRDSIdentifierPrefixLen)
+		}
+		if len(got)+rdsAutonameSuffixLen > maxRDSIdentifierLen {
+			t.Errorf("rdsIdentifierPrefix() length %d leaves no room for the %d-character suffix within %d", len(got), rdsAutonameSuffixLen, maxRDSIdentifierLen)
+		}
+	})
+
+	t.Run("starts with a letter even when the project does not", func(t *testing.T) {
+		t.Parallel()
+
+		got := rdsIdentifierPrefix(resourceCoordinate("7shop", "prod", "db--main", naming.KindDatabase), "")
+		if first := got[0]; !(first >= 'a' && first <= 'z') {
+			t.Errorf("rdsIdentifierPrefix() = %q, want a letter first — RDS rejects a leading digit", got)
+		}
+	})
+
+	t.Run("two long names sharing a prefix stay distinct", func(t *testing.T) {
+		t.Parallel()
+
+		shared := strings.Repeat("reporting-", 5)
+		a := rdsIdentifierPrefix(resourceCoordinate("shop", "prod", "db--"+shared+"alpha", naming.KindDatabase), "")
+		b := rdsIdentifierPrefix(resourceCoordinate("shop", "prod", "db--"+shared+"beta", naming.KindDatabase), "")
+		if a == b {
+			t.Errorf("rdsIdentifierPrefix() collided: both %q", a)
+		}
+	})
+}
+
+func TestEC2Description(t *testing.T) {
+	t.Parallel()
+
+	at := resourceCoordinate("shop", "prod", "db--main", naming.KindDatabase)
+	got := ec2Description(at, "security group for the "+at.Name+" database")
+
+	if !strings.HasPrefix(got, "shop / prod / infra") {
+		t.Errorf("ec2Description() = %q, want it to open with the coordinate", got)
+	}
+	for _, r := range got {
+		if r > 127 {
+			t.Fatalf("ec2Description() = %q, contains %q; EC2 rejects a description outside its ASCII character set", got, r)
+		}
+	}
+	if len(got) > 255 {
+		t.Errorf("ec2Description() length = %d, want <= 255", len(got))
+	}
+}
 
 func TestTranslatePostgres(t *testing.T) {
 	t.Parallel()

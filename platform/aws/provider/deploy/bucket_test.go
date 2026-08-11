@@ -7,8 +7,117 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/ocelhq/ocel/pkg/naming"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/resources/v1"
 )
+
+func TestBucketResourceIDs(t *testing.T) {
+	t.Parallel()
+
+	at := resourceCoordinate("shop", "prod", "bucket--uploads", naming.KindBucket)
+
+	cases := map[string]string{
+		"bucket-uploads":                            naming.ResourceID(at.Kind, at.Name),
+		"bucket-uploads-public-access-block":        naming.ResourceID(at.Kind, at.Name, "public-access-block"),
+		"bucket-uploads-cors":                       naming.ResourceID(at.Kind, at.Name, "cors"),
+		"bucket-uploads-runtime-role":               naming.ResourceID(at.Kind, at.Name, "runtime-role"),
+		"bucket-uploads-event-listener":             naming.ResourceID(at.Kind, at.Name, "event-listener"),
+		"bucket-uploads-event-listener-permission":  naming.ResourceID(at.Kind, at.Name, "event-listener-permission"),
+		"bucket-uploads-notification":               naming.ResourceID(at.Kind, at.Name, "notification"),
+		"bucket-uploads-event-listener-logs-policy": naming.ResourceID(at.Kind, at.Name, "event-listener-logs-policy"),
+	}
+	for want, got := range cases {
+		if got != want {
+			t.Errorf("resource id = %q, want %q", got, want)
+		}
+		if strings.Contains(got, "_") {
+			t.Errorf("resource id %q mixes alphabets; the deploy log is kebab throughout", got)
+		}
+	}
+}
+
+func TestBucketPhysicalPrefix(t *testing.T) {
+	t.Parallel()
+
+	t.Run("carries project, env and resource", func(t *testing.T) {
+		t.Parallel()
+
+		at := resourceCoordinate("shop", "prod", "bucket--uploads", naming.KindBucket)
+		if got, want := at.PhysicalPrefix(maxS3BucketPrefixLen), "shop-prod-uploads-"; got != want {
+			t.Errorf("PhysicalPrefix() = %q, want %q", got, want)
+		}
+	})
+
+	t.Run("fits the name AWS appends to", func(t *testing.T) {
+		t.Parallel()
+
+		at := resourceCoordinate(strings.Repeat("p", 30), strings.Repeat("e", 30), "bucket--"+strings.Repeat("u", 30), naming.KindBucket)
+		got := at.PhysicalPrefix(maxS3BucketPrefixLen)
+		if len(got) > maxS3BucketPrefixLen {
+			t.Errorf("PhysicalPrefix() = %q, length %d, want <= %d", got, len(got), maxS3BucketPrefixLen)
+		}
+		if len(got)+s3AutonameSuffixLen > maxS3BucketNameLen {
+			t.Errorf("PhysicalPrefix() length %d leaves no room for the %d-character suffix within %d", len(got), s3AutonameSuffixLen, maxS3BucketNameLen)
+		}
+		for _, r := range got {
+			if !(r >= 'a' && r <= 'z') && !(r >= '0' && r <= '9') && r != '-' {
+				t.Fatalf("PhysicalPrefix() = %q, contains %q, which S3 rejects", got, r)
+			}
+		}
+		if first := got[0]; !(first >= 'a' && first <= 'z') && !(first >= '0' && first <= '9') {
+			t.Errorf("PhysicalPrefix() = %q, want a letter or digit first", got)
+		}
+	})
+
+	t.Run("two long names sharing a prefix stay distinct", func(t *testing.T) {
+		t.Parallel()
+
+		shared := strings.Repeat("uploads-", 6)
+		a := resourceCoordinate("shop", "prod", "bucket--"+shared+"alpha", naming.KindBucket).PhysicalPrefix(maxS3BucketPrefixLen)
+		b := resourceCoordinate("shop", "prod", "bucket--"+shared+"beta", naming.KindBucket).PhysicalPrefix(maxS3BucketPrefixLen)
+		if a == b {
+			t.Errorf("PhysicalPrefix() collided: both %q", a)
+		}
+	})
+}
+
+func TestResourceCoordinate(t *testing.T) {
+	t.Parallel()
+
+	t.Run("takes the local name from the logical name's fields", func(t *testing.T) {
+		t.Parallel()
+
+		at := resourceCoordinate("shop", "prod", "bucket--uploads", naming.KindBucket)
+		if at.Name != "uploads" {
+			t.Errorf("Name = %q, want %q", at.Name, "uploads")
+		}
+		if at.App != naming.InfraApp {
+			t.Errorf("App = %q, want %q — resources live on the environment's infra stack", at.App, naming.InfraApp)
+		}
+	})
+
+	t.Run("an unqualified logical name is its own local name", func(t *testing.T) {
+		t.Parallel()
+
+		at := resourceCoordinate("shop", "prod", "uploads", naming.KindBucket)
+		if at.Name != "uploads" {
+			t.Errorf("Name = %q, want %q", at.Name, "uploads")
+		}
+	})
+}
+
+func TestBucketDescriptions(t *testing.T) {
+	t.Parallel()
+
+	at := resourceCoordinate("shop", "prod", "bucket--uploads", naming.KindBucket)
+	got := at.Description("upload event listener for the " + at.Name + " bucket")
+	if !strings.HasPrefix(got, "shop / prod / infra") {
+		t.Errorf("Description() = %q, want it to open with the coordinate", got)
+	}
+	if !strings.Contains(got, "uploads") {
+		t.Errorf("Description() = %q, want it to name the bucket", got)
+	}
+}
 
 func TestTranslateBucket(t *testing.T) {
 	t.Parallel()

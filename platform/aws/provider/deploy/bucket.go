@@ -9,12 +9,17 @@ import (
 	s3 "github.com/pulumi/pulumi-aws/sdk/v7/go/aws/s3"
 	"github.com/pulumi/pulumi/sdk/v3/go/pulumi"
 
+	"github.com/ocelhq/ocel/pkg/naming"
 	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/resources/v1"
 )
 
 const (
 	bucketCORSMaxAgeSeconds = 3600
+
+	maxS3BucketNameLen   = 63
+	s3AutonameSuffixLen  = 26
+	maxS3BucketPrefixLen = maxS3BucketNameLen - s3AutonameSuffixLen
 
 	bucketNotificationEvent = "s3:ObjectCreated:*"
 
@@ -74,15 +79,25 @@ func translateBucket(cfg *resourcesv1.BucketConfig) bucketArgs {
 	}
 }
 
-func registerBucket(ctx *pulumi.Context, logicalName string, args bucketArgs, stateTableName, stateTableARN, listenerCodePath string) (pulumi.StringOutput, error) {
-	bucket, err := s3.NewBucketV2(ctx, logicalName, &s3.BucketV2Args{
-		BucketPrefix: pulumi.String(physicalNamePrefix(logicalName, "")),
+func resourceCoordinate(project, env, logicalName string, kind naming.Kind) naming.Coordinate {
+	name := logicalName
+	if _, local, ok := strings.Cut(logicalName, naming.FieldSeparator); ok {
+		name = local
+	}
+	return naming.Coordinate{Project: project, Env: env, App: naming.InfraApp, Kind: kind, Name: name}
+}
+
+func registerBucket(ctx *pulumi.Context, project, env, logicalName string, args bucketArgs, stateTableName, stateTableARN, listenerCodePath string) (pulumi.StringOutput, error) {
+	at := resourceCoordinate(project, env, logicalName, naming.KindBucket)
+
+	bucket, err := s3.NewBucketV2(ctx, naming.ResourceID(at.Kind, at.Name), &s3.BucketV2Args{
+		BucketPrefix: pulumi.String(at.PhysicalPrefix(maxS3BucketPrefixLen)),
 	})
 	if err != nil {
 		return pulumi.StringOutput{}, err
 	}
 
-	if _, err := s3.NewBucketPublicAccessBlock(ctx, logicalName+"-pab", &s3.BucketPublicAccessBlockArgs{
+	if _, err := s3.NewBucketPublicAccessBlock(ctx, naming.ResourceID(at.Kind, at.Name, "public-access-block"), &s3.BucketPublicAccessBlockArgs{
 		Bucket:                bucket.ID(),
 		BlockPublicAcls:       pulumi.Bool(true),
 		BlockPublicPolicy:     pulumi.Bool(true),
@@ -92,7 +107,7 @@ func registerBucket(ctx *pulumi.Context, logicalName string, args bucketArgs, st
 		return pulumi.StringOutput{}, err
 	}
 
-	if _, err := s3.NewBucketCorsConfigurationV2(ctx, logicalName+"-cors", &s3.BucketCorsConfigurationV2Args{
+	if _, err := s3.NewBucketCorsConfigurationV2(ctx, naming.ResourceID(at.Kind, at.Name, "cors"), &s3.BucketCorsConfigurationV2Args{
 		Bucket: bucket.ID(),
 		CorsRules: s3.BucketCorsConfigurationV2CorsRuleArray{
 			&s3.BucketCorsConfigurationV2CorsRuleArgs{
@@ -107,33 +122,42 @@ func registerBucket(ctx *pulumi.Context, logicalName string, args bucketArgs, st
 		return pulumi.StringOutput{}, err
 	}
 
-	if _, err := newServiceRole(ctx, logicalName+"-runtime", "ec2.amazonaws.com", map[string]policyStatement{
-		"s3":       {Actions: args.RuntimeS3Actions, Resources: []pulumi.StringInput{joinArn(bucket.Arn, "/*")}},
-		"sessions": sessionStatement(args.RuntimeSessionActions, stateTableARN),
-	}); err != nil {
+	if _, err := newServiceRole(ctx,
+		naming.ResourceID(at.Kind, at.Name, "runtime-role"),
+		at.Description("runtime role for the "+at.Name+" bucket, granting presigned uploads and session bookkeeping"),
+		"ec2.amazonaws.com",
+		map[string]policyStatement{
+			"s3":       {Actions: args.RuntimeS3Actions, Resources: []pulumi.StringInput{joinArn(bucket.Arn, "/*")}},
+			"sessions": sessionStatement(args.RuntimeSessionActions, stateTableARN),
+		}); err != nil {
 		return pulumi.StringOutput{}, err
 	}
 
-	listenerRole, err := newServiceRole(ctx, logicalName+"-listener", "lambda.amazonaws.com", map[string]policyStatement{
-		"s3":       {Actions: args.ListenerS3Actions, Resources: []pulumi.StringInput{joinArn(bucket.Arn, "/*")}},
-		"sessions": sessionStatement(args.ListenerSessionActions, stateTableARN),
-	})
+	listenerRole, err := newServiceRole(ctx,
+		naming.ResourceID(at.Kind, at.Name, "event-listener-role"),
+		at.Description("execution role for the "+at.Name+" bucket's upload event listener"),
+		"lambda.amazonaws.com",
+		map[string]policyStatement{
+			"s3":       {Actions: args.ListenerS3Actions, Resources: []pulumi.StringInput{joinArn(bucket.Arn, "/*")}},
+			"sessions": sessionStatement(args.ListenerSessionActions, stateTableARN),
+		})
 	if err != nil {
 		return pulumi.StringOutput{}, err
 	}
-	if _, err := iam.NewRolePolicyAttachment(ctx, logicalName+"-listener-logs", &iam.RolePolicyAttachmentArgs{
+	if _, err := iam.NewRolePolicyAttachment(ctx, naming.ResourceID(at.Kind, at.Name, "event-listener-logs-policy"), &iam.RolePolicyAttachmentArgs{
 		Role:      listenerRole.Name,
 		PolicyArn: pulumi.String("arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"),
 	}); err != nil {
 		return pulumi.StringOutput{}, err
 	}
 
-	listener, err := lambda.NewFunction(ctx, logicalName+"-listener", &lambda.FunctionArgs{
-		Runtime: pulumi.String(args.ListenerRuntime),
-		Handler: pulumi.String(args.ListenerHandler),
-		Role:    listenerRole.Arn,
-		Timeout: pulumi.Int(args.ListenerTimeoutSeconds),
-		Code:    pulumi.NewFileArchive(listenerCodePath),
+	listener, err := lambda.NewFunction(ctx, naming.ResourceID(at.Kind, at.Name, "event-listener"), &lambda.FunctionArgs{
+		Runtime:     pulumi.String(args.ListenerRuntime),
+		Handler:     pulumi.String(args.ListenerHandler),
+		Role:        listenerRole.Arn,
+		Timeout:     pulumi.Int(args.ListenerTimeoutSeconds),
+		Description: pulumi.String(at.Description("upload event listener for the " + at.Name + " bucket")),
+		Code:        pulumi.NewFileArchive(listenerCodePath),
 		Environment: &lambda.FunctionEnvironmentArgs{
 			Variables: pulumi.StringMap{
 				envStateTable:     pulumi.String(stateTableName),
@@ -145,7 +169,7 @@ func registerBucket(ctx *pulumi.Context, logicalName string, args bucketArgs, st
 		return pulumi.StringOutput{}, err
 	}
 
-	perm, err := lambda.NewPermission(ctx, logicalName+"-invoke", &lambda.PermissionArgs{
+	perm, err := lambda.NewPermission(ctx, naming.ResourceID(at.Kind, at.Name, "event-listener-permission"), &lambda.PermissionArgs{
 		Action:    pulumi.String("lambda:InvokeFunction"),
 		Function:  listener.Name,
 		Principal: pulumi.String("s3.amazonaws.com"),
@@ -155,7 +179,7 @@ func registerBucket(ctx *pulumi.Context, logicalName string, args bucketArgs, st
 		return pulumi.StringOutput{}, err
 	}
 
-	if _, err := s3.NewBucketNotification(ctx, logicalName+"-notify", &s3.BucketNotificationArgs{
+	if _, err := s3.NewBucketNotification(ctx, naming.ResourceID(at.Kind, at.Name, "notification"), &s3.BucketNotificationArgs{
 		Bucket: bucket.ID(),
 		LambdaFunctions: s3.BucketNotificationLambdaFunctionArray{
 			&s3.BucketNotificationLambdaFunctionArgs{
@@ -192,9 +216,10 @@ func sessionStatement(actions []string, stateTableARN string) policyStatement {
 	}
 }
 
-func newServiceRole(ctx *pulumi.Context, name, servicePrincipal string, statements map[string]policyStatement) (*iam.Role, error) {
+func newServiceRole(ctx *pulumi.Context, name, description, servicePrincipal string, statements map[string]policyStatement) (*iam.Role, error) {
 	role, err := iam.NewRole(ctx, name, &iam.RoleArgs{
 		AssumeRolePolicy: pulumi.String(assumeRolePolicy(servicePrincipal)),
+		Description:      pulumi.String(description),
 	})
 	if err != nil {
 		return nil, err
@@ -213,7 +238,7 @@ func newServiceRole(ctx *pulumi.Context, name, servicePrincipal string, statemen
 			return inlinePolicy(actions, resources, condition)
 		}).(pulumi.StringOutput)
 
-		if _, err := iam.NewRolePolicy(ctx, name+"-"+stmtName, &iam.RolePolicyArgs{
+		if _, err := iam.NewRolePolicy(ctx, name+"-policy-"+stmtName, &iam.RolePolicyArgs{
 			Role:   role.ID(),
 			Policy: policyJSON,
 		}); err != nil {
