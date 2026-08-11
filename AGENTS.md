@@ -72,3 +72,7 @@ Issues live as GitHub issues on `ocelhq/ocel`, driven by the `gh` CLI. See `docs
 ### Triage labels
 
 The five canonical roles, each label string equal to its name. See `docs/agents/triage-labels.md`.
+
+### Review rules
+
+The rules every change is reviewed against. See `.greptile/rules.md`.
