@@ -92,10 +92,11 @@ func writeEdgeValues(ctx context.Context, ssmClient SSMAPI, class string, values
 		return fmt.Errorf("marshal edge values: %w", err)
 	}
 	if _, err := ssmClient.PutParameter(ctx, &ssm.PutParameterInput{
-		Name:      aws.String(names.valuesParam),
-		Value:     aws.String(string(payload)),
-		Type:      ssmtypes.ParameterTypeSecureString,
-		Overwrite: aws.Bool(true),
+		Name:        aws.String(names.valuesParam),
+		Description: aws.String(fmt.Sprintf("Ocel: everything the %s edge handed back when it was bootstrapped, read on every deploy into this substrate to reach it. Rewritten in full by each bootstrap of this class, so deleting it costs a re-run of ocel bootstrap and nothing more.", class)),
+		Value:       aws.String(string(payload)),
+		Type:        ssmtypes.ParameterTypeSecureString,
+		Overwrite:   aws.Bool(true),
 	}); err != nil {
 		return fmt.Errorf("write edge values parameter: %w", err)
 	}
@@ -173,10 +174,11 @@ func ensureEdgeCredentials(ctx context.Context, iamClient IAMAPI, ssmClient SSMA
 		return false, fmt.Errorf("marshal edge credentials: %w", err)
 	}
 	if _, err := ssmClient.PutParameter(ctx, &ssm.PutParameterInput{
-		Name:      aws.String(paramName),
-		Value:     aws.String(string(payload)),
-		Type:      ssmtypes.ParameterTypeSecureString,
-		Overwrite: aws.Bool(false),
+		Name:        aws.String(paramName),
+		Description: aws.String(fmt.Sprintf("Ocel: the access key for IAM user %s, the identity the %s edge signs its calls into this account with. This is the only copy of the secret - AWS will not show it again - and bootstrap treats the parameter's absence as permission to mint a fresh key, so deleting it leaves an orphaned key on the user that must be removed by hand.", userName, class)),
+		Value:       aws.String(string(payload)),
+		Type:        ssmtypes.ParameterTypeSecureString,
+		Overwrite:   aws.Bool(false),
 	}); err != nil {
 		return false, fmt.Errorf("write edge credentials parameter: %w", err)
 	}
@@ -235,10 +237,11 @@ func adoptDeploymentsStore(ctx context.Context, ssmClient SSMAPI, class string, 
 		return fmt.Errorf("marshal deployments store: %w", err)
 	}
 	if _, err := ssmClient.PutParameter(ctx, &ssm.PutParameterInput{
-		Name:      aws.String(paramName),
-		Value:     aws.String(string(payload)),
-		Type:      ssmtypes.ParameterTypeSecureString,
-		Overwrite: aws.Bool(true),
+		Name:        aws.String(paramName),
+		Description: aws.String(fmt.Sprintf("Ocel: endpoint and bootstrap credential for the %s edge's deployments store, the worker that tells the edge which build a request belongs to. Every deploy into this substrate publishes its routing through it. Re-adopted whole by ocel bootstrap, so deleting it costs a re-run.", class)),
+		Value:       aws.String(string(payload)),
+		Type:        ssmtypes.ParameterTypeSecureString,
+		Overwrite:   aws.Bool(true),
 	}); err != nil {
 		return fmt.Errorf("write deployments store parameter: %w", err)
 	}
@@ -288,10 +291,11 @@ func adoptISRWriter(ctx context.Context, ssmClient SSMAPI, class string, values 
 		return fmt.Errorf("marshal isr writer: %w", err)
 	}
 	if _, err := ssmClient.PutParameter(ctx, &ssm.PutParameterInput{
-		Name:      aws.String(paramName),
-		Value:     aws.String(string(payload)),
-		Type:      ssmtypes.ParameterTypeSecureString,
-		Overwrite: aws.Bool(true),
+		Name:        aws.String(paramName),
+		Description: aws.String(fmt.Sprintf("Ocel: endpoint and bootstrap credential for the %s edge's ISR writer, the worker the tag publisher pushes tag snapshots into so the edge learns a cached page has gone stale. Read at runtime by the tag publisher. Re-adopted whole by ocel bootstrap, so deleting it costs a re-run.", class)),
+		Value:       aws.String(string(payload)),
+		Type:        ssmtypes.ParameterTypeSecureString,
+		Overwrite:   aws.Bool(true),
 	}); err != nil {
 		return fmt.Errorf("write isr writer parameter: %w", err)
 	}
@@ -352,10 +356,11 @@ func ensureISRWriterSeed(ctx context.Context, ssmClient SSMAPI, class string) (s
 	}
 	seed := hex.EncodeToString(buf)
 	if _, err := ssmClient.PutParameter(ctx, &ssm.PutParameterInput{
-		Name:      aws.String(paramName),
-		Value:     aws.String(seed),
-		Type:      ssmtypes.ParameterTypeSecureString,
-		Overwrite: aws.Bool(false),
+		Name:        aws.String(paramName),
+		Description: aws.String(fmt.Sprintf("Ocel: the shared secret the tag publisher authenticates its writes to the %s edge's ISR writer with. Generated once and never rotated; the publisher reads it at runtime by name. Delete it and the next bootstrap generates a different secret, which the edge side will not recognise until it is bootstrapped again.", class)),
+		Value:       aws.String(seed),
+		Type:        ssmtypes.ParameterTypeSecureString,
+		Overwrite:   aws.Bool(false),
 	}); err != nil {
 		var exists *ssmtypes.ParameterAlreadyExists
 		if !errors.As(err, &exists) {
@@ -426,10 +431,11 @@ func adoptCacheStore(ctx context.Context, ssmClient SSMAPI, class string, kind e
 		return fmt.Errorf("marshal cache store: %w", err)
 	}
 	if _, err := ssmClient.PutParameter(ctx, &ssm.PutParameterInput{
-		Name:      aws.String(names.cacheStoreParam),
-		Value:     aws.String(string(payload)),
-		Type:      ssmtypes.ParameterTypeSecureString,
-		Overwrite: aws.Bool(true),
+		Name:        aws.String(names.cacheStoreParam),
+		Description: aws.String(fmt.Sprintf("Ocel: bucket, endpoint and credentials for the %s edge's cache store, where the edge keeps the fetch cache it serves from. This is the only copy of that credential's secret - the %s edge cannot show it again - so deleting this parameter forces the stale credential to be deleted at the edge and a fresh one minted.", class, kind)),
+		Value:       aws.String(string(payload)),
+		Type:        ssmtypes.ParameterTypeSecureString,
+		Overwrite:   aws.Bool(true),
 	}); err != nil {
 		return fmt.Errorf("write cache store parameter: %w", err)
 	}

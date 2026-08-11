@@ -363,10 +363,11 @@ func ensurePassphrase(ctx context.Context, ssmClient SSMAPI) (created bool, err 
 		return false, err
 	}
 	if _, err := ssmClient.PutParameter(ctx, &ssm.PutParameterInput{
-		Name:      aws.String(PassphraseParamName),
-		Value:     aws.String(passphrase),
-		Type:      ssmtypes.ParameterTypeSecureString,
-		Overwrite: aws.Bool(false),
+		Name:        aws.String(PassphraseParamName),
+		Description: aws.String("Ocel: the passphrase every Pulumi stack in this account is encrypted under, production and preview alike. Generated once by ocel bootstrap and never rotated. It is the only copy - delete it and the state in the Pulumi state buckets can never be decrypted again, stranding every app Ocel has deployed here."),
+		Value:       aws.String(passphrase),
+		Type:        ssmtypes.ParameterTypeSecureString,
+		Overwrite:   aws.Bool(false),
 	}); err != nil {
 		return false, fmt.Errorf("write passphrase parameter: %w", err)
 	}
@@ -394,52 +395,47 @@ func generatePassphrase() (string, error) {
 
 func stackTemplate(trust edge.TrustBoundary, code stackArtifacts, version int) string {
 	return fmt.Sprintf(`AWSTemplateFormatVersion: '2010-09-09'
-Description: Ocel bootstrap - account-global resources for the Ocel AWS provider.
+Description: "Ocel bootstrap (production) - the account-global substrate every production app Ocel deploys into this AWS account is built on: the Pulumi state bucket and state table, the artifact and asset buckets, the variable store, and the image optimizer, tag publisher and ISR revalidator all apps share. Created and updated by ocel bootstrap; it holds no app of its own. Deleting this stack orphans every app deployed from it: the Pulumi state describing them goes with its bucket, and no deploy or teardown can run until it is recreated."
 Resources:
-  StateBucket:
-    Type: AWS::S3::Bucket
-    Properties:
-      BucketEncryption:
-        ServerSideEncryptionConfiguration:
-          - ServerSideEncryptionByDefault:
-              SSEAlgorithm: AES256
-      VersioningConfiguration:
-        Status: Enabled
-      PublicAccessBlockConfiguration:
-        BlockPublicAcls: true
-        BlockPublicPolicy: true
-        IgnorePublicAcls: true
-        RestrictPublicBuckets: true
-      LifecycleConfiguration:
-        Rules:
-          - Id: expire-noncurrent-state
-            Status: Enabled
-            NoncurrentVersionExpiration:
-              NoncurrentDays: %d
-            AbortIncompleteMultipartUpload:
-              DaysAfterInitiation: %d
-          - Id: expire-state-delete-markers
-            Status: Enabled
-            ExpiredObjectDeleteMarker: true
-%s%s%s%s%s%s%s%s%sOutputs:
+%s%s%s%s%s%s%s%s%s%sOutputs:
   %s:
-    Description: S3 bucket holding Pulumi state.
+    Description: "S3 bucket holding the Pulumi state Ocel plans every production deploy and teardown from. One versioned object per app stack."
     Value: !Ref StateBucket
 %s%s%s%s%s%s  %s:
-    Description: Ocel bootstrap schema version.
+    Description: "Schema version of this bootstrap stack. The CLI refuses to act while its required version and this one disagree, and points at the side that has to move."
     Value: '%d'
   %s:
-    Description: Class this substrate is stamped with, verified before an action runs.
+    Description: "Class this substrate is stamped with, verified before an action runs so that a preview deploy cannot reach production state, variables or caches."
     Value: '%s'
-`, stateNoncurrentDays, stateAbortMultipartDays, stateTableResource(), artifactBucketResource(), assetBucketResource(), varsResources(ClassProduction), imageOptimizerResources(code.optimizer), tagPublisherResources(code.publisher, ClassProduction), revalidateQueueResources(ClassProduction), revalidatorResources(code.revalidator), edgeUserResource(EdgeUserName, trust, code.optimizer), outputStateBucket, stateTableOutput(), artifactBucketOutput(), assetBucketOutput(), varsOutputs(), imageOptimizerOutput(code.optimizer), revalidateQueueOutput(code.revalidator), outputVersion, version, outputInfraClass, ClassProduction)
+`, stateBucketResource(ClassProduction), stateTableResource(), artifactBucketResource(), assetBucketResource(), varsResources(ClassProduction), imageOptimizerResources(code.optimizer), tagPublisherResources(code.publisher, ClassProduction), revalidateQueueResources(ClassProduction), revalidatorResources(code.revalidator), edgeUserResource(EdgeUserName, ClassProduction, trust, code.optimizer), outputStateBucket, stateTableOutput(), artifactBucketOutput(), assetBucketOutput(), varsOutputs(), imageOptimizerOutput(code.optimizer), revalidateQueueOutput(code.revalidator), outputVersion, version, outputInfraClass, ClassProduction)
 }
 
 func previewStackTemplate(trust edge.TrustBoundary, code stackArtifacts, version int) string {
 	return fmt.Sprintf(`AWSTemplateFormatVersion: '2010-09-09'
-Description: Ocel preview infrastructure - shared substrate per-PR previews are carved from.
+Description: "Ocel bootstrap (preview) - the account-global substrate every preview environment Ocel deploys into this AWS account is carved from, deliberately separate from the production bootstrap so a per-PR preview can never reach production state, variables or caches. Created and updated by ocel bootstrap --preview. Deleting this stack orphans every live preview: the Pulumi state describing them goes with its bucket, and no preview deploy or teardown can run until it is recreated."
 Resources:
-  StateBucket:
+%s%s%s%s%s%s%s%s%s%sOutputs:
+  %s:
+    Description: "S3 bucket holding the Pulumi state Ocel plans every preview deploy and teardown from. One versioned object per preview stack."
+    Value: !Ref StateBucket
+%s%s%s%s%s%s  %s:
+    Description: "Schema version of this bootstrap stack. The CLI refuses to act while its required version and this one disagree, and points at the side that has to move."
+    Value: '%d'
+  %s:
+    Description: "Class this substrate is stamped with, verified before an action runs so that a preview deploy cannot reach production state, variables or caches."
+    Value: '%s'
+`, stateBucketResource(ClassPreview), stateTableResource(), artifactBucketResource(), assetBucketResource(), varsResources(ClassPreview), imageOptimizerResources(code.optimizer), tagPublisherResources(code.publisher, ClassPreview), revalidateQueueResources(ClassPreview), revalidatorResources(code.revalidator), edgeUserResource(EdgePreviewUserName, ClassPreview, trust, code.optimizer), outputStateBucket, stateTableOutput(), artifactBucketOutput(), assetBucketOutput(), varsOutputs(), imageOptimizerOutput(code.optimizer), revalidateQueueOutput(code.revalidator), outputVersion, version, outputInfraClass, ClassPreview)
+}
+
+func stateBucketResource(class string) string {
+	scope := "production app"
+	if class == ClassPreview {
+		scope = "preview environment"
+	}
+	return fmt.Sprintf(`  StateBucket:
     Type: AWS::S3::Bucket
+    Metadata:
+      Description: "Pulumi state for every %s Ocel has deployed into this account, one versioned object per stack. Ocel reads it to plan a deploy and to tear one down, so emptying or deleting this bucket strands what is already deployed: the infrastructure keeps running and Ocel can no longer describe, update or remove it."
     Properties:
       BucketEncryption:
         ServerSideEncryptionConfiguration:
@@ -463,22 +459,14 @@ Resources:
           - Id: expire-state-delete-markers
             Status: Enabled
             ExpiredObjectDeleteMarker: true
-%s%s%s%s%s%s%s%s%sOutputs:
-  %s:
-    Description: S3 bucket holding Pulumi state for preview stacks.
-    Value: !Ref StateBucket
-%s%s%s%s%s%s  %s:
-    Description: Ocel bootstrap schema version.
-    Value: '%d'
-  %s:
-    Description: Class this substrate is stamped with, verified before an action runs.
-    Value: '%s'
-`, stateNoncurrentDays, stateAbortMultipartDays, stateTableResource(), artifactBucketResource(), assetBucketResource(), varsResources(ClassPreview), imageOptimizerResources(code.optimizer), tagPublisherResources(code.publisher, ClassPreview), revalidateQueueResources(ClassPreview), revalidatorResources(code.revalidator), edgeUserResource(EdgePreviewUserName, trust, code.optimizer), outputStateBucket, stateTableOutput(), artifactBucketOutput(), assetBucketOutput(), varsOutputs(), imageOptimizerOutput(code.optimizer), revalidateQueueOutput(code.revalidator), outputVersion, version, outputInfraClass, ClassPreview)
+`, scope, stateNoncurrentDays, stateAbortMultipartDays)
 }
 
 func stateTableResource() string {
 	return fmt.Sprintf(`  StateTable:
     Type: AWS::DynamoDB::Table
+    Metadata:
+      Description: "Account-global Ocel state, keyed by pk/sk: the index of every stack this substrate has deployed, which prune and teardown walk, and the tag clock the edge reads and updates to decide whether a cached page is still fresh. Deleting it loses both - Ocel forgets what it deployed here, and every tag's invalidation history starts over."
     Properties:
       BillingMode: PAY_PER_REQUEST
       AttributeDefinitions:
@@ -518,7 +506,7 @@ func stateTableResource() string {
 
 func stateTableOutput() string {
 	return fmt.Sprintf(`  %s:
-    Description: DynamoDB table holding account-global Ocel state, keyed by pk/sk.
+    Description: "DynamoDB table holding account-global Ocel state keyed by pk/sk: the stack index prune and teardown walk, and the ISR tag clock every app in this substrate shares with the edge."
     Value: !Ref StateTable
 `, outputStateTable)
 }
@@ -526,6 +514,8 @@ func stateTableOutput() string {
 func artifactBucketResource() string {
 	return fmt.Sprintf(`  ArtifactBucket:
     Type: AWS::S3::Bucket
+    Metadata:
+      Description: "Staging area for the Lambda code Ocel uploads before a stack references it. A deployed function holds its own copy and these objects age out on a lifecycle rule, so deleting this bucket costs the next bootstrap and the next deploy a re-upload, not a running app."
     Properties:
       BucketEncryption:
         ServerSideEncryptionConfiguration:
@@ -548,7 +538,7 @@ func artifactBucketResource() string {
 
 func artifactBucketOutput() string {
 	return fmt.Sprintf(`  %s:
-    Description: S3 bucket holding function deployment artifacts.
+    Description: "S3 bucket Ocel stages function code in before a stack references it. Objects age out on a lifecycle rule; a deployed function keeps its own copy."
     Value: !Ref ArtifactBucket
 `, outputArtifactBucket)
 }
@@ -556,6 +546,8 @@ func artifactBucketOutput() string {
 func assetBucketResource() string {
 	return fmt.Sprintf(`  AssetBucket:
     Type: AWS::S3::Bucket
+    Metadata:
+      Description: "Per-build static assets, prerender fallbacks, image-optimizer config and the edge's fetch cache, keyed by build id. The edge, the image optimizer, the tag publisher and the revalidator all read it directly, so deleting it breaks static assets and image optimization for every app in this substrate until each is redeployed."
     Properties:
       BucketEncryption:
         ServerSideEncryptionConfiguration:
@@ -577,17 +569,19 @@ func assetBucketResource() string {
 
 func assetBucketOutput() string {
 	return fmt.Sprintf(`  %s:
-    Description: S3 bucket holding prerender configs and fallbacks, keyed by build id.
+    Description: "S3 bucket holding per-build static assets, prerender fallbacks, image-optimizer config and the edge fetch cache, keyed by build id. Read directly by the edge."
     Value: !Ref AssetBucket
 `, outputAssetBucket)
 }
 
-func edgeUserResource(userName string, trust edge.TrustBoundary, optimizer artifactCode) string {
+func edgeUserResource(userName, class string, trust edge.TrustBoundary, optimizer artifactCode) string {
 	if trust != edge.TrustExternal {
 		return ""
 	}
 	return fmt.Sprintf(`  EdgeUser:
     Type: AWS::IAM::User
+    Metadata:
+      Description: "The identity the %s edge signs its calls into this account with, from outside the trust boundary: it reads the asset bucket, writes the fetch cache back, reads and updates tag items, invokes Ocel-tagged functions and enqueues ISR revalidations. Nothing else in this account assumes it. Its access key is the only credential the edge holds; delete the user or its key and the edge is severed from this account, and bootstrap only mints a replacement once the SSM parameter holding the old one is gone too."
     Properties:
       UserName: %s
       Policies:
@@ -636,7 +630,7 @@ func edgeUserResource(userName string, trust edge.TrustBoundary, optimizer artif
                 Condition:
                   StringEquals:
                     kms:ViaService: !Sub 'sqs.${AWS::Region}.amazonaws.com'
-%s`, userName, StateTableIndexName, imageOptimizerInvokeStatement(optimizer))
+%s`, class, userName, StateTableIndexName, imageOptimizerInvokeStatement(optimizer))
 }
 
 func isStackNotFound(err error) bool {

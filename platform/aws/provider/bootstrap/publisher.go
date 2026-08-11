@@ -54,12 +54,15 @@ func tagPublisherResources(code artifactCode, class string) string {
 	writerParam, seedParam := isrWriterParamNames(class)
 	return fmt.Sprintf(`  TagPublisherDeadLetterQueue:
     Type: AWS::SQS::Queue
+    Metadata:
+      Description: "Where a batch of tag snapshots lands after the publisher has exhausted its retries. Anything in here is a cache invalidation that never reached the edge, so a non-empty queue means some builds are serving pages the origin already considers stale. Draining it by hand is a diagnosis, not a repair."
     Properties:
       MessageRetentionPeriod: %d
       SqsManagedSseEnabled: true
   TagPublisherRole:
     Type: AWS::IAM::Role
     Properties:
+      Description: "Execution role for this substrate's tag-snapshot publisher. Grants it the state table's stream, the asset bucket and the two ISR writer parameters, and nothing else. Managed by ocel bootstrap; deleting it stops every origin-raised invalidation before it reaches the edge."
       AssumeRolePolicyDocument:
         Version: '2012-10-17'
         Statement:
@@ -107,7 +110,7 @@ func tagPublisherResources(code artifactCode, class string) string {
   TagPublisher:
     Type: AWS::Lambda::Function
     Properties:
-      Description: Ocel tag-snapshot publisher - the single writer of every build's tag clock in this substrate.
+      Description: "Ocel tag-snapshot publisher - the single writer of every build's tag clock in this substrate, fed by the state table stream. Managed by ocel bootstrap; delete it and origin-raised invalidations never reach the edge."
       Runtime: %s
       Architectures:
         - %s
@@ -125,6 +128,8 @@ func tagPublisherResources(code artifactCode, class string) string {
           %s: '%s'
   TagPublisherStream:
     Type: AWS::Lambda::EventSourceMapping
+    Metadata:
+      Description: "Binds the publisher to the state table's stream, filtered to tag metadata items so unrelated writes cost nothing. This is the only trigger the publisher has: delete it and invalidation goes quiet rather than failing - the table keeps accepting writes and nothing publishes them onward."
     Properties:
       EventSourceArn: !GetAtt StateTable.StreamArn
       FunctionName: !GetAtt TagPublisher.Arn
