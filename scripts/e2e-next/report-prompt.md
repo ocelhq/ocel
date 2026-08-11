@@ -1,13 +1,13 @@
 # Next.js deploy-adapter e2e coverage report
 
-Sibling of `sweep-prompt.md` (finds bugs locally) and `fix-prompt.md` (fixes
-them). This one **reads a completed `test-e2e-deploy` run on GitHub** and turns it
-into a coverage report: overall pass rate, suites ranked by failures, failures
-clustered by root cause, and a fix order that avoids debugging the same defect
-twice.
+**Reads a completed `test-e2e-deploy` run on GitHub** and turns it into a
+coverage report: overall pass rate, suites ranked by failures, failures clustered
+by root cause, and a fix order that avoids debugging the same defect twice.
+
+Reproducing any single failure afterwards is `run-suite-prompt.md`.
 
 You are given a **run id** and nothing else. Everything below is derived from
-GitHub. Do not use local sweep artifacts, `.coverage/`, or a previously committed
+GitHub. Do not use a local run's leftovers or a previously committed
 `baseline-manifest.json` as your source of truth — they describe a different run.
 
 ## The one rule that matters
@@ -87,7 +87,7 @@ Diff your log-derived suite set against the merged `baseline-manifest` artifact
 and each group fragment. For any suite present in one and not the other, or
 disagreeing on pass/fail, find out why. Known traps:
 
-- **`runtimeError` does not mean "crashed."** `lib.mjs` sets it when a suite
+- **`runtimeError` does not mean "crashed."** The collector sets it when a suite
   yields zero passes *and* zero failures. A suite whose cases are all `pending`
   under deploy mode (guarded fixtures — PPR, yarn-pnp, dev-only suites) lands
   there too. Classify each one from its JSON (`numPendingTests` vs
