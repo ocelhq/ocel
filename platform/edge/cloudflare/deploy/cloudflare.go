@@ -16,6 +16,7 @@ import (
 	"os"
 	"path"
 	"strings"
+	"sync"
 
 	cf "github.com/cloudflare/cloudflare-go/v4"
 	"github.com/cloudflare/cloudflare-go/v4/accounts"
@@ -50,6 +51,9 @@ func observability() map[string]any {
 
 type provider struct {
 	client *cf.Client
+
+	zoneMu    sync.Mutex
+	zonesSeen map[string][]zoneRef
 }
 
 var _ edge.RootStack = (*provider)(nil)

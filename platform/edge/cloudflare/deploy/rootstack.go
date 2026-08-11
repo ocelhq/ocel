@@ -210,6 +210,7 @@ func (p *provider) DestroyRootStack(ctx context.Context, names []string) error {
 		return fmt.Errorf("%s is not set; it is required to destroy the Cloudflare root stack", envAccountID)
 	}
 
+	routes := p.routeSnapshot()
 	var errs []error
 	for _, name := range names {
 		if name == "" {
@@ -218,7 +219,7 @@ func (p *provider) DestroyRootStack(ctx context.Context, names []string) error {
 		if err := p.detachCustomDomains(ctx, accountID, name); err != nil {
 			errs = append(errs, err)
 		}
-		if err := p.detachRouteRecords(ctx, accountID, name); err != nil {
+		if err := p.detachRouteRecords(ctx, routes, accountID, name); err != nil {
 			errs = append(errs, err)
 		}
 		if err := p.deleteScript(ctx, accountID, name); err != nil {

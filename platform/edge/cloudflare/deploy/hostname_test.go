@@ -20,6 +20,9 @@ type cfMock struct {
 	existingCustomDomains []map[string]any
 	existingScripts       []string
 
+	zoneLists  int
+	routeLists int
+
 	createdRoutes        []map[string]any
 	repointedRoutes      []string
 	createdRecords       []map[string]any
@@ -53,12 +56,16 @@ func (m *cfMock) server(t *testing.T) *httptest.Server {
 			writeResult(w, []any{})
 			return
 		}
+		m.zoneLists++
 		writeResult(w, []map[string]any{{"id": m.zoneID, "name": m.zoneName}})
 	})
 
 	mux.HandleFunc("/zones/"+m.zoneID+"/workers/routes", func(w http.ResponseWriter, r *http.Request) {
 		switch r.Method {
 		case http.MethodGet:
+			if firstPage(r) {
+				m.routeLists++
+			}
 			writeResult(w, m.existingRoutes)
 		case http.MethodPost:
 			var body map[string]any
@@ -537,6 +544,74 @@ func TestReconcileWorkerRoutes(t *testing.T) {
 	}
 }
 
+func TestReconcileWorkerRoutesRequestBudget(t *testing.T) {
+	t.Parallel()
+
+	for _, tc := range []struct {
+		name            string
+		mock            *cfMock
+		plan            routePlan
+		zoneLists       int
+		routeLists      int
+		reconcilePasses int
+	}{
+		{
+			name:       "every hostname in a pass shares one zone list and one route list",
+			mock:       &cfMock{zoneID: "zone1", zoneName: "app.com"},
+			plan:       prunedPlan("app.com", "www.app.com", "api.app.com"),
+			zoneLists:  1,
+			routeLists: 1,
+		},
+		{
+			name:       "the record a plan requires costs no extra zone list",
+			mock:       &cfMock{zoneID: "zone1", zoneName: "app.com", existingRecords: []map[string]any{{"id": "wildcard", "name": "*.preview.app.com", "type": "AAAA", "content": "100::", "proxied": true}}},
+			plan:       requiredRecordPlan("*.preview.app.com", "pr-1.preview.app.com", "pr-2.preview.app.com"),
+			zoneLists:  1,
+			routeLists: 1,
+		},
+		{
+			name:            "zones are read once for the life of the provider, routes once per pass",
+			mock:            &cfMock{zoneID: "zone1", zoneName: "app.com"},
+			plan:            prunedPlan("app.com"),
+			reconcilePasses: 3,
+			zoneLists:       1,
+			routeLists:      3,
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			p := tc.mock.provider(t)
+			for range max(tc.reconcilePasses, 1) {
+				if err := p.reconcileWorkerRoutes(t.Context(), upload{accountID: "acct", scriptName: "ocel-prod"}, tc.plan, nil); err != nil {
+					t.Fatalf("reconcileWorkerRoutes: %v", err)
+				}
+			}
+			if tc.mock.zoneLists != tc.zoneLists {
+				t.Errorf("zone lists = %d, want %d", tc.mock.zoneLists, tc.zoneLists)
+			}
+			if tc.mock.routeLists != tc.routeLists {
+				t.Errorf("route lists = %d, want %d", tc.mock.routeLists, tc.routeLists)
+			}
+		})
+	}
+}
+
+func TestRouteOwnerRequestBudget(t *testing.T) {
+	t.Setenv(envAccountID, "acct")
+
+	m := &cfMock{zoneID: "zone1", zoneName: "app.com"}
+	p := m.provider(t)
+	for _, host := range []string{"app.com", "www.app.com"} {
+		if _, err := p.RouteOwner(t.Context(), RoutePattern(host)); err != nil {
+			t.Fatalf("RouteOwner: %v", err)
+		}
+	}
+	if m.zoneLists != 1 {
+		t.Errorf("zone lists = %d, want 1: preflight reads the account's zones once", m.zoneLists)
+	}
+}
+
 func TestRoutePattern(t *testing.T) {
 	t.Parallel()
 
@@ -669,7 +744,8 @@ func TestDetachRouteRecords(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 
-			if err := tc.mock.provider(t).detachRouteRecords(t.Context(), "acct", "ocel-preview"); err != nil {
+			p := tc.mock.provider(t)
+			if err := p.detachRouteRecords(t.Context(), p.routeSnapshot(), "acct", "ocel-preview"); err != nil {
 				t.Fatalf("detachRouteRecords: %v", err)
 			}
 			assertSet(t, "deleted records", tc.mock.deletedRecords, tc.want)

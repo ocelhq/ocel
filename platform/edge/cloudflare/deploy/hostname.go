@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"slices"
 	"strings"
 
 	cf "github.com/cloudflare/cloudflare-go/v4"
@@ -29,6 +30,7 @@ type routePlan struct {
 
 func (p *provider) reconcileWorkerRoutes(ctx context.Context, up upload, plan routePlan, warn func(string)) error {
 	warn = nilSafeWarn(warn)
+	routes := p.routeSnapshot()
 
 	if err := p.detachCustomDomains(ctx, up.accountID, up.scriptName); err != nil {
 		return err
@@ -50,7 +52,7 @@ func (p *provider) reconcileWorkerRoutes(ctx context.Context, up upload, plan ro
 		if !coveredByUniversalSSL(host, zoneName) {
 			warn(fmt.Sprintf("%s is more than one label below %s, which the zone's Universal SSL certificate does not cover — TLS will fail there until you add a Cloudflare Advanced Certificate for it", host, zoneName))
 		}
-		if err := p.ensureRoute(ctx, zoneID, RoutePattern(host), up.scriptName); err != nil {
+		if err := p.ensureRoute(ctx, routes, zoneID, RoutePattern(host), up.scriptName); err != nil {
 			return err
 		}
 		if plan.requiredRecord != "" {
@@ -64,19 +66,22 @@ func (p *provider) reconcileWorkerRoutes(ctx context.Context, up upload, plan ro
 	if !plan.prune {
 		return nil
 	}
-	return p.pruneStaleRoutes(ctx, up, plan.pruneStem, wanted)
+	return p.pruneStaleRoutes(ctx, routes, up, plan.pruneStem, wanted)
 }
 
-func (p *provider) pruneStaleRoutes(ctx context.Context, up upload, stem string, wanted map[string]bool) error {
-	owned := p.client.Zones.ListAutoPaging(ctx, zones.ZoneListParams{
-		Account: cf.F(zones.ZoneListParamsAccount{ID: cf.F(up.accountID)}),
-	})
+func (p *provider) pruneStaleRoutes(ctx context.Context, snap *routeSnapshot, up upload, stem string, wanted map[string]bool) error {
+	owned, err := p.accountZones(ctx, up.accountID)
+	if err != nil {
+		return err
+	}
 	var errs []error
-	for owned.Next() {
-		zoneID := owned.Current().ID
-		routes := p.client.Workers.Routes.ListAutoPaging(ctx, workers.RouteListParams{ZoneID: cf.F(zoneID)})
-		for routes.Next() {
-			route := routes.Current()
+	for _, zone := range owned {
+		inZone, err := snap.inZone(ctx, zone.id)
+		if err != nil {
+			errs = append(errs, err)
+			continue
+		}
+		for _, route := range slices.Clone(inZone) {
 			if route.Script != up.scriptName && !edge.NameUnderStem(stem, route.Script) {
 				continue
 			}
@@ -84,20 +89,15 @@ func (p *provider) pruneStaleRoutes(ctx context.Context, up upload, stem string,
 			if wanted[host] {
 				continue
 			}
-			if _, err := p.client.Workers.Routes.Delete(ctx, route.ID, workers.RouteDeleteParams{ZoneID: cf.F(zoneID)}); err != nil {
+			if _, err := p.client.Workers.Routes.Delete(ctx, route.ID, workers.RouteDeleteParams{ZoneID: cf.F(zone.id)}); err != nil {
 				errs = append(errs, fmt.Errorf("delete stale worker route %q: %w", route.Pattern, err))
 				continue
 			}
-			if err := p.deleteProxiedRecord(ctx, zoneID, host); err != nil {
+			snap.detached(zone.id, route.ID)
+			if err := p.deleteProxiedRecord(ctx, zone.id, host); err != nil {
 				errs = append(errs, err)
 			}
 		}
-		if err := routes.Err(); err != nil {
-			errs = append(errs, fmt.Errorf("list worker routes in zone %s: %w", zoneID, err))
-		}
-	}
-	if err := owned.Err(); err != nil {
-		errs = append(errs, fmt.Errorf("list zones: %w", err))
 	}
 	return errors.Join(errs...)
 }
@@ -149,22 +149,24 @@ func (p *provider) RouteOwner(ctx context.Context, pattern string) (string, erro
 	if err != nil {
 		return "", err
 	}
-	routes := p.client.Workers.Routes.ListAutoPaging(ctx, workers.RouteListParams{ZoneID: cf.F(zoneID)})
-	for routes.Next() {
-		if route := routes.Current(); route.Pattern == pattern {
+	inZone, err := p.routeSnapshot().inZone(ctx, zoneID)
+	if err != nil {
+		return "", err
+	}
+	for _, route := range inZone {
+		if route.Pattern == pattern {
 			return route.Script, nil
 		}
-	}
-	if err := routes.Err(); err != nil {
-		return "", fmt.Errorf("list worker routes in zone %s: %w", zoneID, err)
 	}
 	return "", nil
 }
 
-func (p *provider) ensureRoute(ctx context.Context, zoneID, pattern, scriptName string) error {
-	existing := p.client.Workers.Routes.ListAutoPaging(ctx, workers.RouteListParams{ZoneID: cf.F(zoneID)})
-	for existing.Next() {
-		route := existing.Current()
+func (p *provider) ensureRoute(ctx context.Context, snap *routeSnapshot, zoneID, pattern, scriptName string) error {
+	inZone, err := snap.inZone(ctx, zoneID)
+	if err != nil {
+		return err
+	}
+	for _, route := range inZone {
 		if route.Pattern != pattern {
 			continue
 		}
@@ -178,19 +180,19 @@ func (p *provider) ensureRoute(ctx context.Context, zoneID, pattern, scriptName 
 		}); err != nil {
 			return fmt.Errorf("repoint worker route %q: %w", pattern, err)
 		}
+		snap.repointed(zoneID, route.ID, scriptName)
 		return nil
 	}
-	if err := existing.Err(); err != nil {
-		return fmt.Errorf("list worker routes: %w", err)
-	}
 
-	if _, err := p.client.Workers.Routes.New(ctx, workers.RouteNewParams{
+	attached, err := p.client.Workers.Routes.New(ctx, workers.RouteNewParams{
 		ZoneID:  cf.F(zoneID),
 		Pattern: cf.F(pattern),
 		Script:  cf.F(scriptName),
-	}); err != nil {
+	})
+	if err != nil {
 		return fmt.Errorf("attach worker route %q: %w", pattern, err)
 	}
+	snap.attached(zoneID, workers.RouteListResponse{ID: attached.ID, Pattern: pattern, Script: scriptName})
 	return nil
 }
 
@@ -270,30 +272,27 @@ func isAddressRecord(t dns.RecordResponseType) bool {
 	}
 }
 
-func (p *provider) detachRouteRecords(ctx context.Context, accountID, scriptName string) error {
-	owned := p.client.Zones.ListAutoPaging(ctx, zones.ZoneListParams{
-		Account: cf.F(zones.ZoneListParamsAccount{ID: cf.F(accountID)}),
-	})
+func (p *provider) detachRouteRecords(ctx context.Context, snap *routeSnapshot, accountID, scriptName string) error {
+	owned, err := p.accountZones(ctx, accountID)
+	if err != nil {
+		return err
+	}
 	var errs []error
-	for owned.Next() {
-		zoneID := owned.Current().ID
-		routes := p.client.Workers.Routes.ListAutoPaging(ctx, workers.RouteListParams{ZoneID: cf.F(zoneID)})
-		for routes.Next() {
-			route := routes.Current()
+	for _, zone := range owned {
+		inZone, err := snap.inZone(ctx, zone.id)
+		if err != nil {
+			errs = append(errs, err)
+			continue
+		}
+		for _, route := range inZone {
 			if route.Script != scriptName {
 				continue
 			}
 			hostname := strings.TrimSuffix(route.Pattern, "/*")
-			if err := p.deleteProxiedRecord(ctx, zoneID, hostname); err != nil {
+			if err := p.deleteProxiedRecord(ctx, zone.id, hostname); err != nil {
 				errs = append(errs, err)
 			}
 		}
-		if err := routes.Err(); err != nil {
-			errs = append(errs, fmt.Errorf("list worker routes in zone %s: %w", zoneID, err))
-		}
-	}
-	if err := owned.Err(); err != nil {
-		errs = append(errs, fmt.Errorf("list zones: %w", err))
 	}
 	return errors.Join(errs...)
 }
@@ -338,18 +337,88 @@ func (p *provider) detachCustomDomains(ctx context.Context, accountID, scriptNam
 	return nil
 }
 
-func (p *provider) resolveZone(ctx context.Context, accountID, hostname string) (id, name string, err error) {
+type zoneRef struct {
+	id   string
+	name string
+}
+
+func (p *provider) accountZones(ctx context.Context, accountID string) ([]zoneRef, error) {
+	p.zoneMu.Lock()
+	defer p.zoneMu.Unlock()
+	if cached, ok := p.zonesSeen[accountID]; ok {
+		return cached, nil
+	}
+
 	owned := p.client.Zones.ListAutoPaging(ctx, zones.ZoneListParams{
 		Account: cf.F(zones.ZoneListParamsAccount{ID: cf.F(accountID)}),
 	})
+	var refs []zoneRef
 	for owned.Next() {
 		z := owned.Current()
-		if zoneOwns(hostname, z.Name) && len(z.Name) > len(name) {
-			id, name = z.ID, z.Name
-		}
+		refs = append(refs, zoneRef{id: z.ID, name: z.Name})
 	}
 	if err := owned.Err(); err != nil {
-		return "", "", fmt.Errorf("list zones: %w", err)
+		return nil, fmt.Errorf("list zones: %w", err)
+	}
+	if p.zonesSeen == nil {
+		p.zonesSeen = map[string][]zoneRef{}
+	}
+	p.zonesSeen[accountID] = refs
+	return refs, nil
+}
+
+type routeSnapshot struct {
+	p      *provider
+	byZone map[string][]workers.RouteListResponse
+}
+
+func (p *provider) routeSnapshot() *routeSnapshot {
+	return &routeSnapshot{p: p, byZone: map[string][]workers.RouteListResponse{}}
+}
+
+func (s *routeSnapshot) inZone(ctx context.Context, zoneID string) ([]workers.RouteListResponse, error) {
+	if cached, ok := s.byZone[zoneID]; ok {
+		return cached, nil
+	}
+	iter := s.p.client.Workers.Routes.ListAutoPaging(ctx, workers.RouteListParams{ZoneID: cf.F(zoneID)})
+	routes := []workers.RouteListResponse{}
+	for iter.Next() {
+		routes = append(routes, iter.Current())
+	}
+	if err := iter.Err(); err != nil {
+		return nil, fmt.Errorf("list worker routes in zone %s: %w", zoneID, err)
+	}
+	s.byZone[zoneID] = routes
+	return routes, nil
+}
+
+func (s *routeSnapshot) attached(zoneID string, route workers.RouteListResponse) {
+	s.byZone[zoneID] = append(s.byZone[zoneID], route)
+}
+
+func (s *routeSnapshot) repointed(zoneID, routeID, scriptName string) {
+	for i, route := range s.byZone[zoneID] {
+		if route.ID == routeID {
+			s.byZone[zoneID][i].Script = scriptName
+		}
+	}
+}
+
+func (s *routeSnapshot) detached(zoneID, routeID string) {
+	s.byZone[zoneID] = slices.DeleteFunc(s.byZone[zoneID], func(route workers.RouteListResponse) bool {
+		return route.ID == routeID
+	})
+}
+
+func (p *provider) resolveZone(ctx context.Context, accountID, hostname string) (id, name string, err error) {
+	owned, err := p.accountZones(ctx, accountID)
+	if err != nil {
+		return "", "", err
+	}
+	for _, z := range owned {
+		if zoneOwns(hostname, z.name) && len(z.name) > len(name) {
+			id, name = z.id, z.name
+		}
 	}
 	if id == "" {
 		return "", "", fmt.Errorf("no Cloudflare zone in this account owns %q — add its zone to the account whose CLOUDFLARE_API_TOKEN you provided", hostname)
