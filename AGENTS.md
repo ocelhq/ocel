@@ -3,8 +3,9 @@
 - Never auto-add an agent or AI name as a commit co-author.
 - The code is the documentation — get context from it, and don't restate it. Prose may
   name what a human types, never what the code contains.
+- Zero comments by default. Comment only to mark a gap — `TODO`/`FIXME` with a why.
+  Doc-comments only on the exported surface of `packages/` and `sdk/`, for the consumer.
 - The commits are the ADRs. Rationale belongs in the commit message and PR bodies. Nowhere else.
-- There is no perfect approach, only trade-offs. Surface them when making decisions.
 - Do not generate changesets unless explicitly instructed.
 
 ## About Ocel
