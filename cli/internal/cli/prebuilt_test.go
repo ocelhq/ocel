@@ -129,7 +129,7 @@ func TestCollectAndBuildManifest(t *testing.T) {
 		if len(functions) != 1 {
 			t.Fatalf("manifest carries %d functions, want the prebuilt one: %+v", len(functions), functions)
 		}
-		if got, want := functions[0].GetLogicalName(), "api_index"; got != want {
+		if got, want := functions[0].GetLogicalName(), "fn--api--index"; got != want {
 			t.Errorf("function logical name = %q, want %q", got, want)
 		}
 		if got, want := functions[0].GetArtifactPath(), "apps/api/functions/index.func"; got != want {

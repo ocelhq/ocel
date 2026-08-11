@@ -328,8 +328,8 @@ func validateFixtureManifest(m *deploymentsv1.Manifest) error {
 		return fmt.Errorf("manifest has %d resources, want 1", len(m.GetResources()))
 	}
 	r := m.GetResources()[0]
-	if r.GetLogicalName() != "postgres_main" {
-		return fmt.Errorf("resource logical_name = %q, want %q", r.GetLogicalName(), "postgres_main")
+	if r.GetLogicalName() != "db--main" {
+		return fmt.Errorf("resource logical_name = %q, want %q", r.GetLogicalName(), "db--main")
 	}
 	if r.GetPostgres().GetVersion() != "17" {
 		return fmt.Errorf("resource postgres version = %q, want %q", r.GetPostgres().GetVersion(), "17")

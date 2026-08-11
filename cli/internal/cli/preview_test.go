@@ -79,7 +79,7 @@ func TestRunPreviewUp(t *testing.T) {
 			t.Fatalf("runPreviewUp err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 		}
 
-		if !strings.Contains(stdout.String(), "FUNCTION logical_name=api runtime=nodejs24.x handler=index.handler artifact_path=output/api framework=express app=api") {
+		if !strings.Contains(stdout.String(), "FUNCTION logical_name=fn--api--api runtime=nodejs24.x handler=index.handler artifact_path=output/api framework=express app=api") {
 			t.Errorf("stdout = %q, want the function to have reached the preview manifest", stdout.String())
 		}
 

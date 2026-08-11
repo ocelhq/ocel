@@ -28,7 +28,7 @@ func TestDeployE2E(t *testing.T) {
 			t.Fatalf("runDeploy err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 		}
 
-		if !strings.Contains(stdout.String(), "postgres_main: postgres version=15") {
+		if !strings.Contains(stdout.String(), "db--main: postgres version=15") {
 			t.Errorf("stdout = %q, want the real stub provider to report the exact typed postgres version it decoded", stdout.String())
 		}
 		if !strings.Contains(stdout.String(), "Deployed") {
