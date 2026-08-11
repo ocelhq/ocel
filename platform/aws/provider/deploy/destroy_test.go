@@ -66,6 +66,14 @@ func TestDestroyOptions(t *testing.T) {
 		}
 	})
 
+	t.Run("skips the refresh the caller opted out of", func(t *testing.T) {
+		t.Parallel()
+
+		if applied(TeardownConfig{StackName: "shop--infra", SkipRefresh: true}, nil).Refresh {
+			t.Error("an opted-out teardown still refreshed")
+		}
+	})
+
 	t.Run("streams progress only with a log sink", func(t *testing.T) {
 		t.Parallel()
 
@@ -97,6 +105,26 @@ func TestTeardownConfigCarriesTheSession(t *testing.T) {
 	if !teardownConfig(Config{realized: realized}, "shop--infra").realized.realizedHere("shop--infra") {
 		t.Error("teardownConfig dropped the session, so a fresh stack would refresh needlessly")
 	}
+}
+
+func TestTeardownConfigSkipRefresh(t *testing.T) {
+	t.Run("refreshes unless the environment opts out", func(t *testing.T) {
+		if teardownConfig(Config{}, "shop--infra").SkipRefresh {
+			t.Error("teardownConfig skipped the refresh with no opt-out set")
+		}
+		for _, v := range []string{"1", "true"} {
+			t.Setenv(skipTeardownRefreshEnv, v)
+			if !teardownConfig(Config{}, "shop--infra").SkipRefresh {
+				t.Errorf("%s=%q did not skip the refresh", skipTeardownRefreshEnv, v)
+			}
+		}
+		for _, v := range []string{"", "0", "false", "yes"} {
+			t.Setenv(skipTeardownRefreshEnv, v)
+			if teardownConfig(Config{}, "shop--infra").SkipRefresh {
+				t.Errorf("%s=%q skipped the refresh, want only \"1\" and \"true\" to", skipTeardownRefreshEnv, v)
+			}
+		}
+	})
 }
 
 func TestPreviewStacksFromNames(t *testing.T) {

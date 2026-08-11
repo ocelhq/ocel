@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"os"
 	"path"
 	"slices"
 	"strings"
@@ -217,6 +218,16 @@ func projectISRPrefix(env, slug string) string {
 	return path.Join(env, slug) + "/"
 }
 
+const skipTeardownRefreshEnv = "OCEL_SKIP_TEARDOWN_REFRESH"
+
+func skipTeardownRefresh() bool {
+	switch os.Getenv(skipTeardownRefreshEnv) {
+	case "1", "true":
+		return true
+	}
+	return false
+}
+
 func teardownConfig(cfg Config, stackName string) TeardownConfig {
 	return TeardownConfig{
 		Region:      cfg.Region,
@@ -226,6 +237,7 @@ func teardownConfig(cfg Config, stackName string) TeardownConfig {
 		StackName:   stackName,
 		Pulumi:      cfg.Pulumi,
 		Stacks:      cfg.Stacks,
+		SkipRefresh: skipTeardownRefresh(),
 		realized:    cfg.realized,
 	}
 }
