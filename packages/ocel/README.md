@@ -38,7 +38,7 @@ npx ocel deploy        # deploy to the provider configured in ocel.config.ts
 | `ocel destroy` | Permanently destroy this project's entire production deployment |
 | `ocel bootstrap` | Provision the account-global resources your provider needs |
 | `ocel login` / `ocel logout` | Authenticate the CLI with your account |
-| `ocel link [project]` / `ocel unlink` | Link this directory to an Ocel Cloud project |
+| `ocel link [project]` / `ocel unlink` | Link this directory to an Ocel console project |
 
 Run `ocel <command> --help` for flags.
 
