@@ -55,7 +55,7 @@ fail(
     `R2 may be current while the colo tier serves its original bytes — the queue leg reports "landed" ` +
     `without rewriting the colo, so the only thing that replaces it is a promotion from below, and a ` +
     `colo entry that never advances also freezes the lastModified the next enqueue's dedup id is ` +
-    `derived from. Read the R2 entry's lastModified against the served token first (bd ocelhq-46eb)`,
+    `derived from. Read the R2 entry's lastModified against the served token first.`,
 );
 
 async function probe() {

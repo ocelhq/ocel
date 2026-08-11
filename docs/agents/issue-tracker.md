@@ -1,59 +1,45 @@
-# Issue tracker: Beads (bd)
+# Issue tracker: GitHub
 
-Issues and PRDs for this repo live in the local beads (`bd`) issue tracker, not GitHub Issues (even though `origin` is a GitHub remote). Run `bd prime` for the full workflow reference; this file covers what the engineering skills need.
+Issues and specs for this repo live as GitHub issues. Use the `gh` CLI for all operations.
 
 ## Conventions
 
-- **Create an issue**: `bd create --title="..." --description="..." --type=task|bug|feature|chore|epic|decision|spike|story --priority=0-4`
-- **Read an issue**: `bd show <id>`
-- **List issues**: `bd list --status=open` / `bd list --status=in_progress`, or `bd search <query>` / `bd query` for text search
-- **Comment on an issue**: `bd comment <id> "..."`
-- **Apply / remove labels**: `bd label add <id> <name>` / `bd label remove <id> <name>`
-- **Close**: `bd close <id> --reason="..."`
+- **Create an issue**: `gh issue create --title "..." --body "..."`. Use a heredoc for multi-line bodies.
+- **Read an issue**: `gh issue view <number> --comments`, filtering comments by `jq` and also fetching labels.
+- **List issues**: `gh issue list --state open --json number,title,body,labels,comments --jq '[.[] | {number, title, body, labels: [.labels[].name], comments: [.comments[].body]}]'` with appropriate `--label` and `--state` filters.
+- **Comment on an issue**: `gh issue comment <number> --body "..."`
+- **Apply / remove labels**: `gh issue edit <number> --add-label "..."` / `--remove-label "..."`
+- **Close**: `gh issue close <number> --comment "..."`
+
+Infer the repo from `git remote -v` — `gh` does this automatically when run inside a clone.
 
 ## Pull requests as a triage surface
 
-N/A — beads has no PR concept. `/triage` should only ever process `bd` issues for this repo.
+**PRs as a request surface: no.** _(Set to `yes` if this repo treats external PRs as feature requests; `/triage` reads this flag.)_
+
+When set to `yes`, PRs run through the same labels and states as issues, using the `gh pr` equivalents:
+
+- **Read a PR**: `gh pr view <number> --comments` and `gh pr diff <number>` for the diff.
+- **List external PRs for triage**: `gh pr list --state open --json number,title,body,labels,author,authorAssociation,comments` then keep only `authorAssociation` of `CONTRIBUTOR`, `FIRST_TIME_CONTRIBUTOR`, or `NONE` (drop `OWNER`/`MEMBER`/`COLLABORATOR`).
+- **Comment / label / close**: `gh pr comment`, `gh pr edit --add-label`/`--remove-label`, `gh pr close`.
+
+GitHub shares one number space across issues and PRs, so a bare `#42` may be either — resolve with `gh pr view 42` and fall back to `gh issue view 42`.
 
 ## When a skill says "publish to the issue tracker"
 
-Run `bd create ...`.
+Create a GitHub issue.
 
 ## When a skill says "fetch the relevant ticket"
 
-Run `bd show <id>`.
-
-## Filing a child under an epic that carries a spec
-
-An epic whose description states user stories, Implementation Decisions or an Out of
-Scope list is the spec of record for everything filed beneath it. Review waves generate
-findings whether or not there is scope for them, so a new child must earn its place
-before it earns `ready-for-agent`:
-
-- **Cite the authority.** Name the user story, the Implementation Decision, or the
-  acceptance criterion the bead serves. A bead that cannot name one is proposing new
-  scope, not completing existing scope — say so in the description and let a human rule.
-- **Read the Out of Scope list first.** A bead that restates something already listed
-  there is closed, not built.
-- **A recorded decision is not a task.** "This is deliberate, X was preferred to Y"
-  belongs in an ADR or the epic's notes, not in an open bead.
-- **Style findings and invented refactors do not become beads.** Fix them in the change
-  that introduced them, or leave them.
-- **A test seam the epic's Testing Decisions did not charter is new scope.** So is a new
-  test environment or runner.
-- **Keep strays out.** A defect found while working an epic, but not about that epic's
-  subject, is filed with no parent or under its own.
-
-The same test applies when re-reviewing an epic: grade every open child against the spec
-and close what the spec never asked for, with the violated clause quoted in the reason.
+Run `gh issue view <number> --comments`.
 
 ## Wayfinding operations
 
-Used by `/wayfinder`. The **map** is a single bd issue (`--type=epic`) with **child** issues linked via `--parent`.
+Used by `/wayfinder`. The **map** is a single issue with **child** issues as tickets.
 
-- **Map**: `bd create --title="<effort>" --type=epic --description="Notes / Decisions-so-far / Fog"`.
-- **Child ticket**: `bd create --title="..." --type=task --parent=<map-id>` (inherits parent labels). Label with `wayfinder:<type>` (`research`/`prototype`/`grilling`/`task`) via `bd label add`.
-- **Blocking**: `bd dep add <child-id> <blocker-id>` — beads' native dependency graph (equivalent shorthand: `bd dep <blocker-id> --blocks <child-id>`). A ticket unblocks automatically when every blocker closes.
-- **Frontier query**: `bd children <map-id>` filtered to open, unblocked tickets (or `bd ready`, scoped to the map's children) — first in creation order wins.
-- **Claim**: `bd update <id> --claim` — the session's first write.
-- **Resolve**: `bd comment <id> "<answer>"`, then `bd close <id>`, then append a context pointer to the map's Decisions-so-far via `bd comment <map-id> "..."`.
+- **Map**: a single issue labelled `wayfinder:map`, holding the Notes / Decisions-so-far / Fog body. `gh issue create --label wayfinder:map`.
+- **Child ticket**: an issue linked to the map as a GitHub sub-issue (`gh api` on the sub-issues endpoint). Where sub-issues aren't enabled, add the child to a task list in the map body and put `Part of #<map>` at the top of the child body. Labels: `wayfinder:<type>` (`research`/`prototype`/`grilling`/`task`). Once claimed, the ticket is assigned to the driving dev.
+- **Blocking**: GitHub's **native issue dependencies** — the canonical, UI-visible representation. Add an edge with `gh api --method POST repos/<owner>/<repo>/issues/<child>/dependencies/blocked_by -F issue_id=<blocker-db-id>`, where `<blocker-db-id>` is the blocker's numeric **database id** (`gh api repos/<owner>/<repo>/issues/<n> --jq .id`, _not_ the `#number` or `node_id`). GitHub reports `issue_dependencies_summary.blocked_by` (open blockers only — the live gate). Where dependencies aren't available, fall back to a `Blocked by: #<n>, #<n>` line at the top of the child body. A ticket is unblocked when every blocker is closed.
+- **Frontier query**: list the map's open children (`gh issue list --state open`, scoped to the map's sub-issues / task list), drop any with an open blocker (`issue_dependencies_summary.blocked_by > 0`, or an open issue in the `Blocked by` line) or an assignee; first in map order wins.
+- **Claim**: `gh issue edit <n> --add-assignee @me` — the session's first write.
+- **Resolve**: `gh issue comment <n> --body "<answer>"`, then `gh issue close <n>`, then append a context pointer (gist + link) to the map's Decisions-so-far.

@@ -57,5 +57,17 @@ entry before it needs files. Dotfile directories are tooling and are exempt.
   hand-edit generated output.
 - **`scripts/`** — development and release tooling, and the e2e harnesses.
 - **`examples/`, `tests/`** — sample apps used as fixtures, and end-to-end suites.
+- **`docs/agents/`** — configuration the agent skills read. Not product documentation;
+  nothing that explains the code belongs here.
 - **`.github/`** — CI. **`.changeset/`** — the release mechanism; the workflow runs the
   version bump, never you.
+
+## Agent skills
+
+### Issue tracker
+
+Issues live as GitHub issues on `ocelhq/ocel`, driven by the `gh` CLI. See `docs/agents/issue-tracker.md`.
+
+### Triage labels
+
+The five canonical roles, each label string equal to its name. See `docs/agents/triage-labels.md`.
