@@ -496,7 +496,7 @@ func TestStackTemplateOptimizer(t *testing.T) {
 		if !ok || len(resources) != 2 {
 			t.Fatalf("Resource = %v, want exactly the two prefixes it reads", statements[0].Resource)
 		}
-		for _, want := range []string{"${AssetBucket.Arn}/assets/*", "${AssetBucket.Arn}/image-config/*"} {
+		for _, want := range []string{"${AssetBucket.Arn}/*/assets/*", "${AssetBucket.Arn}/*/image-config.json"} {
 			found := false
 			for _, r := range resources {
 				if s, ok := r.(string); ok && strings.Contains(s, want) {
@@ -505,6 +505,15 @@ func TestStackTemplateOptimizer(t *testing.T) {
 			}
 			if !found {
 				t.Errorf("Resource %v does not grant %s", resources, want)
+			}
+		}
+		for _, r := range resources {
+			s, ok := r.(string)
+			if !ok {
+				continue
+			}
+			if strings.Contains(s, "/isr/") || strings.Contains(s, "/fn/") || strings.HasSuffix(s, ".Arn}/*") {
+				t.Errorf("Resource %q reaches past the two leaves the optimizer reads", s)
 			}
 		}
 	})

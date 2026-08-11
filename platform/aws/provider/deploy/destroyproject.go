@@ -66,10 +66,12 @@ func DestroyProject(ctx context.Context, stack edge.RootStack, state edge.RootSt
 		}
 	}
 
-	plan, err := PlanProjectTeardown(ctx, cfg, slug)
+	indexed, err := indexedStacks(ctx, cfg.Stacks, slug)
 	if err != nil {
 		errs = append(errs, err)
 	}
+	plan := classifyProjectStacks(indexed)
+	envs := purgeEnvs(indexed, cfg.Env)
 
 	var infraStacks []naming.StackName
 	if !plan.InfraStack.IsZero() {
@@ -96,7 +98,7 @@ func DestroyProject(ctx context.Context, stack edge.RootStack, state edge.RootSt
 	}
 
 	report("Purging project assets")
-	if err := purgeProjectAssets(ctx, cfg, slug); err != nil {
+	if err := purgeProjectAssets(ctx, cfg, slug, envs); err != nil {
 		errs = append(errs, err)
 	}
 
@@ -172,50 +174,36 @@ func PlanProjectTeardown(ctx context.Context, cfg Config, slug string) (ProjectT
 	return classifyProjectStacks(stacks), nil
 }
 
-func purgeProjectAssets(ctx context.Context, cfg Config, slug string) error {
-	assets := projectAssetR2Prefix(slug)
-	isr := projectISRPrefix(cfg.Env, slug)
-	var errs []error
-	for _, t := range []prefixTarget{
-		{asPrefixDeleter(cfg.CacheStoreUploader), cfg.CacheStoreBucket, assets},
-		{asPrefixDeleter(cfg.CacheStoreUploader), cfg.CacheStoreBucket, projectEdgeR2Prefix(slug)},
-		{asPrefixDeleter(cfg.CacheStoreUploader), cfg.CacheStoreBucket, isr},
-		{asPrefixDeleter(cfg.Uploader), cfg.AssetBucket, assets},
-		{asPrefixDeleter(cfg.Uploader), cfg.AssetBucket, projectImageConfigPrefix(slug)},
-		{asPrefixDeleter(cfg.Uploader), cfg.AssetBucket, isr},
-	} {
-		if err := deletePrefix(ctx, t.deleter, t.bucket, t.prefix); err != nil {
-			errs = append(errs, err)
+func purgeEnvs(stacks []naming.StackName, env string) []string {
+	envs := []string{env}
+	for _, stack := range stacks {
+		if !slices.Contains(envs, stack.Env) {
+			envs = append(envs, stack.Env)
 		}
 	}
-	if err := purgeProjectArtifacts(ctx, cfg, slug); err != nil {
-		errs = append(errs, err)
+	slices.Sort(envs)
+	return envs
+}
+
+func purgeProjectAssets(ctx context.Context, cfg Config, slug string, envs []string) error {
+	var errs []error
+	for _, env := range envs {
+		prefix := projectEnvPrefix(env, slug)
+		for _, t := range []prefixTarget{
+			{asPrefixDeleter(cfg.CacheStoreUploader), cfg.CacheStoreBucket, prefix},
+			{asPrefixDeleter(cfg.Uploader), cfg.AssetBucket, prefix},
+			{asPrefixDeleter(cfg.Uploader), cfg.ArtifactBucket, prefix},
+		} {
+			if err := deletePrefix(ctx, t.deleter, t.bucket, t.prefix); err != nil {
+				errs = append(errs, err)
+			}
+		}
 	}
 	return errors.Join(errs...)
 }
 
-func purgeProjectArtifacts(ctx context.Context, cfg Config, slug string) error {
-	return deletePrefix(ctx, asPrefixDeleter(cfg.Uploader), cfg.ArtifactBucket, projectArtifactPrefix(slug))
-}
-
-func projectAssetR2Prefix(slug string) string {
-	return path.Join("assets", slug) + "/"
-}
-
-func projectImageConfigPrefix(slug string) string {
-	return path.Join("image-config", slug) + "/"
-}
-
-func projectEdgeR2Prefix(slug string) string {
-	return path.Join("edge", slug) + "/"
-}
-
-func projectArtifactPrefix(slug string) string {
-	return slug + "/"
-}
-
-func projectISRPrefix(env, slug string) string {
-	return path.Join(env, slug) + "/"
+func projectEnvPrefix(env, slug string) string {
+	return path.Join(env, naming.Sanitize(slug)) + "/"
 }
 
 const skipTeardownRefreshEnv = "OCEL_SKIP_TEARDOWN_REFRESH"

@@ -62,35 +62,43 @@ func purgeConfig(env string, account, cache *sweepRecorder) Config {
 }
 
 func TestPurgeProjectAssets(t *testing.T) {
-	t.Run("sweeps the artifact prefix alongside the rest", func(t *testing.T) {
+	t.Run("one prefix per environment reaches every bucket the deploy wrote to", func(t *testing.T) {
 		awsSide, cacheSide := &sweepRecorder{}, &sweepRecorder{}
 
-		if err := purgeProjectAssets(context.Background(), purgeConfig("prod", awsSide, cacheSide), "shop"); err != nil {
+		if err := purgeProjectAssets(context.Background(), purgeConfig("prod", awsSide, cacheSide), "shop", []string{"prod"}); err != nil {
 			t.Fatalf("purgeProjectAssets: %v", err)
 		}
 
 		wantAWS := []string{
-			"asset-bucket|assets/shop/",
-			"asset-bucket|image-config/shop/",
 			"asset-bucket|prod/shop/",
-			"artifact-bucket|shop/",
+			"artifact-bucket|prod/shop/",
 		}
 		if !reflect.DeepEqual(awsSide.swept, wantAWS) {
 			t.Errorf("account-side sweeps = %v, want %v", awsSide.swept, wantAWS)
 		}
-		wantCache := []string{
-			"cache-bucket|assets/shop/",
-			"cache-bucket|edge/shop/",
-			"cache-bucket|prod/shop/",
-		}
+		wantCache := []string{"cache-bucket|prod/shop/"}
 		if !reflect.DeepEqual(cacheSide.swept, wantCache) {
 			t.Errorf("cache-store sweeps = %v, want %v", cacheSide.swept, wantCache)
+		}
+	})
+
+	t.Run("a preview teardown leaves production's bytes alone", func(t *testing.T) {
+		awsSide, cacheSide := &sweepRecorder{}, &sweepRecorder{}
+
+		if err := purgePreviewAssets(context.Background(), purgeConfig("prod", awsSide, cacheSide), "shop", []string{"pr-7"}); err != nil {
+			t.Fatalf("purgePreviewAssets: %v", err)
+		}
+
+		for _, swept := range append(awsSide.swept, cacheSide.swept...) {
+			if !strings.Contains(swept, "|pr-7/") {
+				t.Errorf("preview teardown swept %q, which is not the preview's own prefix", swept)
+			}
 		}
 	})
 }
 
 func TestPurgePreviewAssets(t *testing.T) {
-	t.Run("sweeps the artifact prefix and every pointer's ISR", func(t *testing.T) {
+	t.Run("sweeps every pointer it is given and nothing else", func(t *testing.T) {
 		awsSide, cacheSide := &sweepRecorder{}, &sweepRecorder{}
 
 		err := purgePreviewAssets(context.Background(), purgeConfig("pr-1", awsSide, cacheSide), "shop", []string{"pr-1", "staging"})
@@ -99,18 +107,15 @@ func TestPurgePreviewAssets(t *testing.T) {
 		}
 
 		wantAWS := []string{
-			"artifact-bucket|shop/",
-			"asset-bucket|assets/shop/",
-			"asset-bucket|image-config/shop/",
 			"asset-bucket|pr-1/shop/",
+			"artifact-bucket|pr-1/shop/",
 			"asset-bucket|staging/shop/",
+			"artifact-bucket|staging/shop/",
 		}
 		if !reflect.DeepEqual(awsSide.swept, wantAWS) {
 			t.Errorf("account-side sweeps = %v, want %v", awsSide.swept, wantAWS)
 		}
 		wantCache := []string{
-			"cache-bucket|assets/shop/",
-			"cache-bucket|edge/shop/",
 			"cache-bucket|pr-1/shop/",
 			"cache-bucket|staging/shop/",
 		}
@@ -118,18 +123,15 @@ func TestPurgePreviewAssets(t *testing.T) {
 			t.Errorf("cache-store sweeps = %v, want %v", cacheSide.swept, wantCache)
 		}
 	})
-}
 
-func TestPurgeProjectArtifacts(t *testing.T) {
 	t.Run("missing bucket is a no-op", func(t *testing.T) {
 		rec := &sweepRecorder{}
-		cfg := Config{Uploader: rec}
 
-		if err := purgeProjectArtifacts(context.Background(), cfg, "shop"); err != nil {
-			t.Fatalf("purgeProjectArtifacts: %v", err)
+		if err := purgeProjectAssets(context.Background(), Config{Uploader: rec}, "shop", []string{"prod"}); err != nil {
+			t.Fatalf("purgeProjectAssets: %v", err)
 		}
 		if rec.swept != nil {
-			t.Errorf("swept %v with no artifact bucket configured, want nothing", rec.swept)
+			t.Errorf("swept %v with no buckets configured, want nothing", rec.swept)
 		}
 	})
 }
@@ -193,7 +195,7 @@ func TestDestroyProject(t *testing.T) {
 		if values.purged == nil {
 			t.Fatal("the teardown never reached the value store, so nothing was stepped over")
 		}
-		want := []string{"asset-bucket|assets/shop/", "asset-bucket|image-config/shop/", "asset-bucket|prod/shop/", "artifact-bucket|shop/"}
+		want := []string{"asset-bucket|prod/shop/", "artifact-bucket|prod/shop/"}
 		if !reflect.DeepEqual(awsSide.swept, want) {
 			t.Errorf("account-side sweeps = %v, want %v — the steps after a failed value removal must still run", awsSide.swept, want)
 		}
