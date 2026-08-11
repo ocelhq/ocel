@@ -1,0 +1,84 @@
+name: Go
+
+on:
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: go-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  go:
+    name: ${{ matrix.module }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        module:
+          - cli
+          - sdk
+          - pkg/channel
+          - pkg/proto
+          - platform/edge/contract
+          - platform/aws/provider
+          - platform/edge/cloudflare/deploy
+    defaults:
+      run:
+        working-directory: ${{ matrix.module }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: ${{ matrix.module }}/go.mod
+          cache-dependency-path: ${{ matrix.module }}/go.sum
+
+      # cli embeds cli/node/dist, which is gitignored and built by `go generate`.
+      - name: Setup pnpm
+        if: matrix.module == 'cli'
+        uses: pnpm/action-setup@v4
+        with:
+          version: 11.10.0
+
+      - name: Setup Node
+        if: matrix.module == 'cli'
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install dependencies
+        if: matrix.module == 'cli'
+        working-directory: .
+        run: pnpm install --frozen-lockfile
+
+      - name: go generate (embedded node dist)
+        if: matrix.module == 'cli'
+        run: go generate ./...
+
+      - name: gofmt
+        run: |
+          unformatted=$(gofmt -l .)
+          if [ -n "$unformatted" ]; then
+            echo "::error::not gofmt'd:"
+            echo "$unformatted"
+            exit 1
+          fi
+
+      - name: go vet
+        run: go vet ./...
+
+      - name: go build
+        run: go build ./...
+
+      - name: go test -race
+        run: go test -race -count=1 ./...
+
+      - name: staticcheck
+        run: go run honnef.co/go/tools/cmd/staticcheck@2025.1 ./...
