@@ -49,6 +49,7 @@ func imageOptimizerResources(code artifactCode) string {
 	return fmt.Sprintf(`  ImageOptimizerRole:
     Type: AWS::IAM::Role
     Properties:
+      Description: "Execution role for this substrate's shared image optimizer. Grants read on the asset bucket's assets and image-config prefixes and nothing else, so a compromised optimizer cannot reach state, variables or another app's data. Managed by ocel bootstrap; deleting it breaks /_next/image for every app in this substrate."
       AssumeRolePolicyDocument:
         Version: '2012-10-17'
         Statement:
@@ -71,7 +72,7 @@ func imageOptimizerResources(code artifactCode) string {
   ImageOptimizer:
     Type: AWS::Lambda::Function
     Properties:
-      Description: Ocel image optimizer - transforms /_next/image requests for every app in this substrate.
+      Description: "Ocel image optimizer - one shared function transforming /_next/image for every app in this substrate, invoked by the edge. Managed by ocel bootstrap; delete it and /_next/image answers 502 everywhere here."
       Runtime: %s
       Architectures:
         - %s
@@ -88,6 +89,8 @@ func imageOptimizerResources(code artifactCode) string {
           UV_THREADPOOL_SIZE: '%d'
   ImageOptimizerUrl:
     Type: AWS::Lambda::Url
+    Metadata:
+      Description: "The edge's entry point to the image optimizer, IAM-authenticated so only the edge user can call it and response-streaming so a large image does not buffer. Its URL is a stack output the edge is given at bootstrap; recreate this and the edge keeps calling the old URL until bootstrap runs again."
     Properties:
       TargetFunctionArn: !GetAtt ImageOptimizer.Arn
       AuthType: AWS_IAM
@@ -101,7 +104,7 @@ func imageOptimizerOutput(code artifactCode) string {
 		return ""
 	}
 	return fmt.Sprintf(`  %s:
-    Description: Function URL of the substrate's image optimizer, signed by the edge user.
+    Description: "Function URL of this substrate's shared image optimizer. The edge calls it with requests signed by the edge user."
     Value: !GetAtt ImageOptimizerUrl.FunctionUrl
 `, outputImageOptimizerURL)
 }

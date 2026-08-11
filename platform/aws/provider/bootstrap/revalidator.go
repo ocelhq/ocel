@@ -63,6 +63,8 @@ func revalidateQueueResources(class string) string {
 	queue, dlq := revalidateQueueNames(class)
 	return fmt.Sprintf(`  RevalidateDeadLetterQueue:
     Type: AWS::SQS::Queue
+    Metadata:
+      Description: "Where an ISR refresh lands once the revalidator has failed it enough times. Anything in here is a page that was asked to re-render and never did, so a filling queue points at a broken origin rather than a broken queue."
     Properties:
       QueueName: %s
       FifoQueue: true
@@ -70,6 +72,8 @@ func revalidateQueueResources(class string) string {
       KmsMasterKeyId: alias/aws/sqs
   RevalidateQueue:
     Type: AWS::SQS::Queue
+    Metadata:
+      Description: "The queue the edge sends admitted ISR refreshes to and the revalidator drains, FIFO and explicitly deduplicated so a stampede on one page renders once. Shared by every app in this substrate; delete it and background revalidation stops for all of them."
     Properties:
       QueueName: %s
       FifoQueue: true
@@ -91,6 +95,7 @@ func revalidatorResources(code artifactCode) string {
 	return fmt.Sprintf(`  RevalidatorRole:
     Type: AWS::IAM::Role
     Properties:
+      Description: "Execution role for this substrate's ISR revalidator. Grants it the revalidation queue, the origin descriptors in the asset bucket and invoke on Ocel-tagged functions only, so it can re-render an app but cannot touch state or variables. Managed by ocel bootstrap; deleting it leaves the queue undrained."
       AssumeRolePolicyDocument:
         Version: '2012-10-17'
         Statement:
@@ -131,7 +136,7 @@ func revalidatorResources(code artifactCode) string {
   Revalidator:
     Type: AWS::Lambda::Function
     Properties:
-      Description: Ocel ISR revalidator - turns one deduplicated queue message into one signed render at the app's own origin.
+      Description: "Ocel ISR revalidator - drains this substrate's revalidation queue, turning one deduplicated message into one signed render at the app's own origin. Managed by ocel bootstrap; delete it and stale pages stay stale."
       Runtime: %s
       Architectures:
         - %s
@@ -147,6 +152,8 @@ func revalidatorResources(code artifactCode) string {
           %s: !Ref AssetBucket
   RevalidatorQueueConsumer:
     Type: AWS::Lambda::EventSourceMapping
+    Metadata:
+      Description: "Binds the revalidator to the revalidation queue under a concurrency cap, so a burst of expiring pages cannot crowd out live traffic at the apps' own origins. Delete it and messages accumulate until they age out - the queue stays healthy while nothing re-renders."
     Properties:
       EventSourceArn: !GetAtt RevalidateQueue.Arn
       FunctionName: !GetAtt Revalidator.Arn
@@ -166,7 +173,7 @@ func revalidateQueueOutput(code artifactCode) string {
 		return ""
 	}
 	return fmt.Sprintf(`  %s:
-    Description: URL of the ISR revalidation queue, sent to by the edge and drained by the revalidator.
+    Description: "URL of this substrate's ISR revalidation queue. The edge sends admitted refreshes to it and the revalidator drains it."
     Value: !Ref RevalidateQueue
 `, outputRevalidateQueueURL)
 }

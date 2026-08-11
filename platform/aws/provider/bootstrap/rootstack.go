@@ -33,6 +33,13 @@ func rootStackStateParamName(prefix, slug string) string {
 	return prefix + slug
 }
 
+func rootStackStateParamDescription(class, slug string) string {
+	return fmt.Sprintf(
+		"Ocel: what the %s edge was left holding for project %q - the handles Ocel needs to recognise, update and eventually remove the root worker fronting this project. Written by every deploy of %q and read by the next deploy and by teardown. Delete it and Ocel loses track of edge resources it has already created for %q: they keep serving traffic, and teardown will not reclaim them.",
+		class, slug, slug, slug,
+	)
+}
+
 func WriteRootStackStateFor(ctx context.Context, ssmClient SSMAPI, class, slug string, state edge.RootStackState) error {
 	prefix, err := rootStackStateParamPrefixFor(class)
 	if err != nil {
@@ -43,10 +50,11 @@ func WriteRootStackStateFor(ctx context.Context, ssmClient SSMAPI, class, slug s
 		return fmt.Errorf("marshal root-stack state: %w", err)
 	}
 	if _, err := ssmClient.PutParameter(ctx, &ssm.PutParameterInput{
-		Name:      aws.String(rootStackStateParamName(prefix, slug)),
-		Value:     aws.String(string(payload)),
-		Type:      ssmtypes.ParameterTypeSecureString,
-		Overwrite: aws.Bool(true),
+		Name:        aws.String(rootStackStateParamName(prefix, slug)),
+		Description: aws.String(rootStackStateParamDescription(class, slug)),
+		Value:       aws.String(string(payload)),
+		Type:        ssmtypes.ParameterTypeSecureString,
+		Overwrite:   aws.Bool(true),
 	}); err != nil {
 		return fmt.Errorf("write root-stack state parameter: %w", err)
 	}
