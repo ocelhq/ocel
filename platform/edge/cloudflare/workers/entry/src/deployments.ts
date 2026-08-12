@@ -1,4 +1,5 @@
 import type { EdgeWorkers } from "./edge";
+import { lruSet } from "./lru";
 
 export interface DeploymentRecord {
   app: string;
@@ -44,6 +45,7 @@ export type DeploymentResolution =
   | { kind: "unavailable" };
 
 const RECORD_TTL_MS = 5_000;
+export const RECORD_CACHE_MAX = 64;
 
 interface CacheEntry {
   buildId: string;
@@ -70,6 +72,7 @@ export async function resolveDeployment(
   const cache = cacheMap(deps.binding);
   const key = cacheKey(deps);
   const cached = cache.get(key);
+  if (cached) lruSet(cache, key, cached, RECORD_CACHE_MAX);
 
   if (cached && now - cached.at < RECORD_TTL_MS) {
     return { kind: "found", record: cached.record };
@@ -93,14 +96,15 @@ export async function resolveDeployment(
     case "ambiguous-app":
       return { kind: "not-found" };
     case "unchanged":
-      cache.set(key, { ...cached!, at: now });
+      lruSet(cache, key, { ...cached!, at: now }, RECORD_CACHE_MAX);
       return { kind: "found", record: cached!.record };
     case "record":
-      cache.set(key, {
-        buildId: result.buildId,
-        record: result.record,
-        at: now,
-      });
+      lruSet(
+        cache,
+        key,
+        { buildId: result.buildId, record: result.record, at: now },
+        RECORD_CACHE_MAX,
+      );
       return { kind: "found", record: result.record };
     case "dangling":
       return { kind: "unavailable" };
