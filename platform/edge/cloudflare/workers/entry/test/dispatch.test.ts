@@ -90,7 +90,7 @@ describe("dispatchResult", () => {
     );
 
     expect(res.headers.get("vary")).toBe(
-      "rsc, next-router-state-tree, next-router-prefetch, next-router-segment-prefetch",
+      "rsc, next-router-state-tree, next-router-prefetch, next-router-segment-prefetch, next-url",
     );
   });
 
@@ -3116,6 +3116,245 @@ describe("the origin URL under a config rewrite", () => {
 
     expect(invoked().pathname).toBe("/rewrite-source/foo");
     expect(invoked().searchParams.has("path")).toBe(false);
+  });
+});
+
+describe("the colo cache key under a config rewrite", () => {
+  it("keys two source URLs that rewrite to the same destination separately", async () => {
+    const seen: string[] = [];
+    const pending: Promise<unknown>[] = [];
+    const deps = baseDeps({
+      manifest: {
+        buildId: "t",
+        basePath: "",
+        pathnames: ["/bar"],
+        routes: {
+          beforeMiddleware: [],
+          beforeFiles: [],
+          afterFiles: [
+            { sourceRegex: "^/foo1$", destination: "/bar" },
+            { sourceRegex: "^/foo2$", destination: "/bar" },
+          ],
+          dynamicRoutes: [],
+          onMatch: [],
+          fallback: [],
+        } as unknown as RouteDeps["manifest"]["routes"],
+        dispatch: {
+          "/bar": {
+            kind: "prerender",
+            id: "bar",
+            config: {},
+            fallback: { initialRevalidate: 60 },
+          },
+        },
+      },
+      functionUrls: { bar: "https://fn.example.com" },
+      fetch: (async () =>
+        new Response("rendered", {
+          status: 200,
+          headers: { "cache-control": "s-maxage=60" },
+        })) as unknown as typeof fetch,
+      cache: coloDeps({
+        cache: {
+          match: async (req: Request) => {
+            seen.push(req.url);
+            return undefined;
+          },
+          put: async (req: Request) => {
+            seen.push(req.url);
+          },
+        } as unknown as Cache,
+        waitUntil: (p: Promise<unknown>) => pending.push(p),
+      }),
+    });
+
+    await serve(new Request("https://app.example/foo1"), deps);
+    await serve(new Request("https://app.example/foo2"), deps);
+    await Promise.all(pending);
+
+    expect(seen.some((k) => k.endsWith("/foo1"))).toBe(true);
+    expect(seen.some((k) => k.endsWith("/foo2"))).toBe(true);
+    expect(seen.some((k) => k.endsWith("/bar"))).toBe(false);
+  });
+
+  it("keys two concrete paths of the same dynamic route separately, not by the route pattern", async () => {
+    const seen: string[] = [];
+    const pending: Promise<unknown>[] = [];
+    const deps = baseDeps({
+      manifest: {
+        buildId: "t",
+        basePath: "",
+        pathnames: ["/blog/[slug]"],
+        routes: {
+          beforeMiddleware: [],
+          beforeFiles: [],
+          afterFiles: [],
+          dynamicRoutes: [
+            {
+              sourceRegex: "^/blog/(?<nxtPslug>[^/]+?)(?:/)?$",
+              destination: "/blog/[slug]?nxtPslug=$nxtPslug",
+            },
+          ],
+          onMatch: [],
+          fallback: [],
+        } as unknown as RouteDeps["manifest"]["routes"],
+        dispatch: {
+          "/blog/[slug]": {
+            kind: "prerender",
+            id: "blog",
+            config: {},
+            fallback: { initialRevalidate: 60 },
+          },
+        },
+      },
+      functionUrls: { blog: "https://fn.example.com" },
+      fetch: (async () =>
+        new Response("rendered", {
+          status: 200,
+          headers: { "cache-control": "s-maxage=60" },
+        })) as unknown as typeof fetch,
+      cache: coloDeps({
+        cache: {
+          match: async (req: Request) => {
+            seen.push(req.url);
+            return undefined;
+          },
+          put: async (req: Request) => {
+            seen.push(req.url);
+          },
+        } as unknown as Cache,
+        waitUntil: (p: Promise<unknown>) => pending.push(p),
+      }),
+    });
+
+    await serve(new Request("https://app.example/blog/post-1"), deps);
+    await serve(new Request("https://app.example/blog/post-2"), deps);
+    await Promise.all(pending);
+
+    expect(seen.some((k) => k.endsWith("/blog/post-1"))).toBe(true);
+    expect(seen.some((k) => k.endsWith("/blog/post-2"))).toBe(true);
+    expect(seen.some((k) => k.includes("[slug]"))).toBe(false);
+  });
+});
+
+describe("a generated interception rewrite's prerender key", () => {
+  const isrPrefix = "prod/p/app/build";
+  const entryKey = "(.)test-nested";
+
+  function interceptionDeps(overrides: { lambdaBody?: string } = {}) {
+    let lambda = 0;
+    return {
+      deps: baseDeps({
+        manifest: {
+          buildId: "t",
+          basePath: "",
+          pathnames: ["/test-nested", "/(.)test-nested"],
+          routes: {
+            beforeMiddleware: [],
+            beforeFiles: [
+              {
+                sourceRegex: "^/test-nested$",
+                destination: "/(.)test-nested",
+                has: [{ type: "header", key: "next-url" }],
+              },
+            ],
+            afterFiles: [],
+            dynamicRoutes: [],
+            onMatch: [],
+            fallback: [],
+          } as unknown as RouteDeps["manifest"]["routes"],
+          dispatch: {
+            "/(.)test-nested": {
+              kind: "prerender",
+              id: "test-nested",
+              config: {},
+              fallback: { initialRevalidate: 60 },
+            },
+          },
+        },
+        functionUrls: { "test-nested": "https://fn.example.com" },
+        fetch: (async () => {
+          lambda++;
+          return new Response(overrides.lambdaBody ?? "from-lambda", {
+            status: 200,
+            headers: { "cache-control": "s-maxage=60" },
+          });
+        }) as unknown as typeof fetch,
+        cache: coloDeps({
+          cache: {
+            match: async () => undefined,
+            put: async () => {},
+          } as unknown as Cache,
+          waitUntil: () => {},
+        }),
+        interception: {
+          config: { isrPrefix },
+          now: () => 2_000,
+          store: {
+            async get(key: string) {
+              if (key !== `${isrPrefix}/cache/${entryKey}.cache.json`) return null;
+              return {
+                text: async () =>
+                  JSON.stringify({
+                    lastModified: 1_000,
+                    value: {
+                      kind: "APP_PAGE",
+                      html: "<html>intercepted</html>",
+                      status: 200,
+                      headers: {},
+                      segmentData: { "/children": btoa("INTERCEPTED-SEGMENT") },
+                      segmentHeaders: { "content-type": "text/x-component" },
+                    },
+                  }),
+              };
+            },
+          },
+        },
+      }),
+      lambdaCalls: () => lambda,
+    };
+  }
+
+  it("resolves a segment-prefetch request's ISR key to the rewritten path, not the requested one", async () => {
+    const { deps, lambdaCalls } = interceptionDeps();
+
+    const res = await serve(
+      new Request("https://app.example/test-nested", {
+        headers: {
+          RSC: "1",
+          "next-url": "/",
+          "next-router-segment-prefetch": "/children",
+        },
+      }),
+      deps,
+    );
+
+    expect(res.headers.get("x-ocel-cache")).toBe("PRERENDER");
+    expect(await res.text()).toBe("INTERCEPTED-SEGMENT");
+    expect(lambdaCalls()).toBe(0);
+  });
+
+  it("still forwards the requested (source) path to the origin, unaffected by the ISR key fix", async () => {
+    let capturedPath: string | undefined;
+    const { deps } = interceptionDeps();
+    deps.fetch = (async (req: Request) => {
+      capturedPath = new URL(req.url).pathname;
+      return new Response("miss", { status: 404 });
+    }) as unknown as typeof fetch;
+    deps.interception!.store = { async get() { return null; } };
+
+    await serve(
+      new Request("https://app.example/test-nested", {
+        headers: {
+          RSC: "1",
+          "next-url": "/",
+          "next-router-segment-prefetch": "/children",
+        },
+      }),
+      deps,
+    );
+
+    expect(capturedPath).toBe("/test-nested");
   });
 });
 

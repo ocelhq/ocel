@@ -268,6 +268,41 @@ describe("variantPath", () => {
     const h = H({ RSC: "1", "next-router-prefetch": "2" });
     expect(variantPath("/blog", h, "STATIC")).toBeNull();
   });
+
+  it("folds next-url into a segment prefetch's path so an intercepted and a plain navigation to the same URL cannot collide", () => {
+    const plain = variantPath(
+      "/photo",
+      H({ RSC: "1", "next-router-segment-prefetch": "/children" }),
+      "PARTIALLY_STATIC",
+    );
+    const intercepted = variantPath(
+      "/photo",
+      H({
+        RSC: "1",
+        "next-router-segment-prefetch": "/children",
+        "next-url": "/feed",
+      }),
+      "PARTIALLY_STATIC",
+    );
+
+    expect(plain).not.toBeNull();
+    expect(intercepted).not.toBeNull();
+    expect(plain).not.toBe(intercepted);
+  });
+
+  it("folds next-url into a full-route prefetch and a bare-RSC static path too", () => {
+    const withUrl = H({ RSC: "1", "next-router-prefetch": "1", "next-url": "/feed" });
+    const withoutUrl = H({ RSC: "1", "next-router-prefetch": "1" });
+    expect(variantPath("/photo", withUrl, "PARTIALLY_STATIC")).not.toBe(
+      variantPath("/photo", withoutUrl, "PARTIALLY_STATIC"),
+    );
+
+    const staticWithUrl = H({ RSC: "1", "next-url": "/feed" });
+    const staticWithoutUrl = H({ RSC: "1" });
+    expect(variantPath("/photo", staticWithUrl, "STATIC")).not.toBe(
+      variantPath("/photo", staticWithoutUrl, "STATIC"),
+    );
+  });
 });
 
 describe("cacheKey", () => {
@@ -317,6 +352,22 @@ describe("cacheKey", () => {
     expect(
       cacheKey("b", "/blog", url, H({ RSC: "1" }), "PARTIALLY_STATIC", []),
     ).toEqual({ cacheable: false });
+  });
+
+  it("gives an intercepted segment prefetch a different colo key than the same URL without next-url", () => {
+    const url = new URL("https://app.example/photo");
+    const headers = { RSC: "1", "next-router-segment-prefetch": "/children" };
+    const plain = cacheKey("b", "/photo", url, H(headers), "PARTIALLY_STATIC", []);
+    const intercepted = cacheKey(
+      "b",
+      "/photo",
+      url,
+      H({ ...headers, "next-url": "/feed" }),
+      "PARTIALLY_STATIC",
+      [],
+    );
+
+    expect(plain).not.toEqual(intercepted);
   });
 });
 
