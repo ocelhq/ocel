@@ -151,26 +151,7 @@
     "runtimeError": false
   },
   "test/e2e/app-dir/app/index.test.ts": {
-    "failed": [
-      "app dir - basic should successfully detect app route during prefetch",
-      "app dir - basic should match redirects in pages correctly $path",
-      "app dir - basic should match redirects in pages correctly $path",
-      "app dir - basic should match redirects in pages correctly $path",
-      "app dir - basic should match redirects in pages correctly $path",
-      "app dir - basic should match redirects in pages correctly $path",
-      "app dir - basic should match redirects in pages correctly $path",
-      "app dir - basic should not apply client router filter on shallow",
-      "app dir - basic should return the `vary` header from pages for flight requests",
-      "app dir - basic should serve from pages",
-      "app dir - basic should not serve when layout is provided but no folder index",
-      "app dir - basic server components should not serve .server.js as a path",
-      "app dir - basic server components should not serve .client.js as a path",
-      "app dir - basic server components catch-all routes should handle required segments root as not found",
-      "app dir - basic searchParams prop client component should have the correct search params on rewrite",
-      "app dir - basic searchParams prop client component should have the correct search params on middleware rewrite",
-      "app dir - basic searchParams prop server component should have the correct search params on rewrite",
-      "app dir - basic searchParams prop server component should have the correct search params on middleware rewrite"
-    ],
+    "failed": [],
     "flakey": [],
     "runtimeError": false
   },
