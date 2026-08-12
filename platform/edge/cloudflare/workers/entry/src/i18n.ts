@@ -6,7 +6,7 @@ import {
   type I18nConfig,
 } from "@next/routing";
 
-import { withoutBasePath } from "./trailing-slash";
+import { dataPagePathname, withoutBasePath } from "./trailing-slash";
 
 export interface LocaleResolution {
   pathname: string;
@@ -16,10 +16,19 @@ export interface LocaleResolution {
 export function resolveLocale(
   i18n: I18nConfig,
   basePath: string,
+  buildId: string,
   pathnames: string[],
   url: URL,
   headers: Headers,
 ): LocaleResolution {
+  const dataPage = dataPagePathname(url.pathname, { basePath }, buildId);
+  if (dataPage !== undefined) {
+    const pageUrl = new URL(url);
+    pageUrl.pathname = dataPage;
+    const resolved = resolveLocale(i18n, basePath, buildId, pathnames, pageUrl, headers);
+    return { pathname: wrapDataPagePathname(resolved.pathname, basePath, buildId) };
+  }
+
   const rest = withoutBasePath(url.pathname, basePath);
   const hadBasePath = rest !== undefined;
   const pathname = rest ?? url.pathname;
@@ -64,6 +73,16 @@ function isApiPath(pathname: string): boolean {
 
 function isRoot(pathname: string): boolean {
   return pathname === "" || pathname === "/" || pathname === "/index";
+}
+
+function wrapDataPagePathname(
+  pagePathname: string,
+  basePath: string,
+  buildId: string,
+): string {
+  const rest = withoutBasePath(pagePathname, basePath) ?? pagePathname;
+  const page = isRoot(rest) ? "index" : rest.slice(1);
+  return `${basePath}/_next/data/${buildId}/${page}.json`;
 }
 
 function rootRedirect(

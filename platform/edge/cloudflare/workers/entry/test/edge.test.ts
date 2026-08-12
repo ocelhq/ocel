@@ -345,6 +345,79 @@ describe("middleware matchers", () => {
   });
 });
 
+describe("middleware matchers under i18n", () => {
+  const I18N = { locales: ["en", "fr"], defaultLocale: "en" };
+
+  function localeDeps(matchers: unknown, edge?: EdgeInvoker): RouteDeps {
+    const pathnames = [
+      "/en/foo",
+      "/fr/foo",
+      "/en/bar",
+      "/fr/bar",
+      "/_next/data/t/en/foo.json",
+      "/_next/data/t/fr/foo.json",
+    ];
+    return deps({
+      manifest: {
+        buildId: "t",
+        basePath: "",
+        i18n: I18N,
+        pathnames,
+        routes: emptyRoutes,
+        dispatch: Object.fromEntries(pathnames.map((path) => [path, { kind: "static" }])),
+        middleware: { entryKey: MIDDLEWARE_KEY, matchers },
+      },
+      assetStore: assetStoreServing({
+        "/en/foo.html": "the en page",
+        "/fr/foo.html": "the fr page",
+        "/en/bar.html": "the en bar page",
+        "/fr/bar.html": "the fr bar page",
+        "/_next/data/t/en/foo.json": '{"at":"en/foo"}',
+        "/_next/data/t/fr/foo.json": '{"at":"fr/foo"}',
+        "/en/404.html": "not found",
+      }),
+      edge: edge ?? passthrough().edge,
+    } as Partial<RouteDeps>);
+  }
+
+  it("matches an unprefixed default-locale path against a mandatory locale group", async () => {
+    const { edge, calls } = passthrough();
+    const res = await serve(
+      new Request("https://app.example/foo"),
+      localeDeps([{ sourceRegex: "^/(?:en|fr)/foo$" }], edge),
+    );
+
+    expect(res.headers.get("x-mw-ran")).toBe("1");
+    expect(calls()).toBe(1);
+    expect(await res.text()).toBe("the en page");
+  });
+
+  it("still leaves a genuinely unmatched path alone", async () => {
+    const { edge, calls } = passthrough();
+    const res = await serve(
+      new Request("https://app.example/bar"),
+      localeDeps([{ sourceRegex: "^/(?:en|fr)/foo$" }], edge),
+    );
+
+    expect(res.headers.get("x-mw-ran")).toBe(null);
+    expect(calls()).toBe(0);
+    expect(await res.text()).toBe("the en bar page");
+  });
+
+  it("resolves a _next/data page URL with no locale of its own", async () => {
+    const res = await serve(
+      new Request("https://app.example/_next/data/t/foo.json", {
+        headers: { "x-nextjs-data": "1" },
+      }),
+      localeDeps(undefined),
+    );
+
+    expect(res.status).toBe(200);
+    expect(res.headers.get("x-matched-path")).toBe("/_next/data/t/en/foo.json");
+    expect(await res.text()).toBe('{"at":"en/foo"}');
+  });
+});
+
 describe("middleware responses", () => {
   it("returns the middleware's own body and status when it answers the request", async () => {
     const edge = middlewareInvoker(
