@@ -2957,3 +2957,144 @@ describe("the x-vercel-cache alias", () => {
     expect(res.headers.get("x-vercel-cache")).toBe("PRERENDER");
   });
 });
+
+describe("custom error page substitution", () => {
+  function errorPageDeps(
+    pageResponse: () => Response,
+    overrides: Partial<RouteDeps> = {},
+  ): RouteDeps {
+    return baseDeps({
+      manifest: {
+        buildId: "t",
+        basePath: "",
+        pathnames: ["/not-found", "/404", "/500"],
+        routes: {},
+        dispatch: {
+          "/not-found": { kind: "lambda", id: "page", entryKey: "/not-found", page: true },
+          "/404": { kind: "lambda", id: "page", entryKey: "/404", page: true },
+          "/500": { kind: "lambda", id: "page", entryKey: "/500", page: true },
+        },
+        errorRoutes: { notFound: "/404", serverError: "/500" },
+      },
+      functionUrls: { page: "https://fn.example.com" },
+      fetch: (async (req: Request) => {
+        const entryKey = req.headers.get("x-ocel-entry");
+        if (entryKey === "/not-found") return pageResponse();
+        if (entryKey === "/404") {
+          return new Response("<html>custom 404</html>", {
+            status: 200,
+            headers: { "content-type": "text/html" },
+          });
+        }
+        if (entryKey === "/500") {
+          return new Response("<html>custom 500</html>", {
+            status: 200,
+            headers: { "content-type": "text/html" },
+          });
+        }
+        throw new Error(`unexpected entry ${entryKey}`);
+      }) as unknown as typeof fetch,
+      ...overrides,
+    });
+  }
+
+  it("substitutes the /404 entry's body for a 404 document response, keeping the 404 status", async () => {
+    const deps = errorPageDeps(
+      () => new Response("This page could not be found", { status: 404 }),
+    );
+
+    const res = await dispatchResult(
+      { resolvedPathname: "/not-found", invocationTarget: { pathname: "/not-found" } },
+      new Request("https://app.example/not-found"),
+      deps,
+    );
+
+    expect(res.status).toBe(404);
+    expect(await res.text()).toBe("<html>custom 404</html>");
+  });
+
+  it("substitutes the /500 entry's body for a 5xx document response, keeping the original status", async () => {
+    const deps = errorPageDeps(
+      () => new Response("Internal Server Error", { status: 500 }),
+    );
+
+    const res = await dispatchResult(
+      { resolvedPathname: "/not-found", invocationTarget: { pathname: "/not-found" } },
+      new Request("https://app.example/enoent"),
+      deps,
+    );
+
+    expect(res.status).toBe(500);
+    expect(await res.text()).toBe("<html>custom 500</html>");
+  });
+
+  it("leaves a 404 _next/data response untouched", async () => {
+    const deps = errorPageDeps(
+      () =>
+        new Response(JSON.stringify({ notFound: true }), {
+          status: 404,
+          headers: { "content-type": "application/json" },
+        }),
+    );
+
+    const res = await dispatchResult(
+      { resolvedPathname: "/not-found", invocationTarget: { pathname: "/not-found" } },
+      new Request("https://app.example/_next/data/t/not-found.json"),
+      deps,
+    );
+
+    expect(res.status).toBe(404);
+    expect(await res.text()).toBe(JSON.stringify({ notFound: true }));
+  });
+
+  it("still 404s a genuinely missing static asset without substitution", async () => {
+    const deps = baseDeps({
+      manifest: {
+        buildId: "t",
+        basePath: "",
+        pathnames: [],
+        routes: {},
+        dispatch: {},
+        errorRoutes: { notFound: "/404", serverError: "/500" },
+      },
+      assetStore: assetStoreServing({}),
+    });
+
+    const res = await dispatchResult(
+      { resolvedPathname: "/missing-asset.txt" },
+      new Request("https://app.example/missing-asset.txt"),
+      deps,
+    );
+
+    expect(res.status).toBe(404);
+    expect(await res.text()).not.toBe("<html>custom 404</html>");
+  });
+
+  it("does not substitute a 404 from an API route", async () => {
+    const deps = baseDeps({
+      manifest: {
+        buildId: "t",
+        basePath: "",
+        pathnames: ["/api/missing", "/404"],
+        routes: {},
+        dispatch: {
+          "/api/missing": { kind: "lambda", id: "api", entryKey: "/api/missing" },
+          "/404": { kind: "lambda", id: "page", entryKey: "/404", page: true },
+        },
+        errorRoutes: { notFound: "/404" },
+      },
+      functionUrls: { api: "https://fn.example.com", page: "https://fn.example.com" },
+      fetch: (async () =>
+        new Response("Not Found", { status: 404 })) as unknown as typeof fetch,
+    });
+
+    const res = await dispatchResult(
+      { resolvedPathname: "/api/missing", invocationTarget: { pathname: "/api/missing" } },
+      new Request("https://app.example/api/missing"),
+      deps,
+    );
+
+    expect(res.status).toBe(404);
+    expect(await res.text()).toBe("Not Found");
+  });
+});
