@@ -1011,27 +1011,7 @@
     "runtimeError": false
   },
   "test/e2e/middleware-redirects/test/node-runtime.test.ts": {
-    "failed": [
-      "Middleware Redirect should redirect correctly with redirect in next.config.js",
-      "Middleware Redirect does not include the locale in redirects by default",
-      "Middleware Redirect should have relative path for same host redirect",
-      "Middleware Redirect should redirect to data urls with data requests and internal redirects",
-      "Middleware Redirect should redirect to external urls with data requests and external redirects",
-      "Middleware Redirect should redirect",
-      "Middleware Redirect should implement internal redirects",
-      "Middleware Redirect should redirect cleanly with the original url param",
-      "Middleware Redirect should redirect multiple times",
-      "Middleware Redirect should redirect (infinite-loop)",
-      "Middleware Redirect should redirect to api route with locale",
-      "Middleware Redirect should redirect with a fragment",
-      "Middleware Redirect /fr should redirect",
-      "Middleware Redirect /fr should implement internal redirects",
-      "Middleware Redirect /fr should redirect cleanly with the original url param",
-      "Middleware Redirect /fr should redirect multiple times",
-      "Middleware Redirect /fr should redirect (infinite-loop)",
-      "Middleware Redirect /fr should redirect to api route with locale",
-      "Middleware Redirect /fr should redirect with a fragment"
-    ],
+    "failed": [],
     "flakey": [],
     "runtimeError": false
   },
