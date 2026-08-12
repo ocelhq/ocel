@@ -941,27 +941,50 @@ async function dispatch(
 
   const target = manifest.dispatch[result.resolvedPathname];
   if (!target) {
-    return staticAsset();
+    return notFoundResponse(request, url, result, headers, deps, staticAsset);
   }
+
+  const response = await renderDispatchTarget(
+    target,
+    request,
+    url,
+    result,
+    headers,
+    deps,
+    staticAsset,
+  );
+  return target.kind === "lambda" && target.page
+    ? substituteErrorPage(response, request, url, headers, manifest, deps)
+    : response;
+}
+
+async function renderDispatchTarget(
+  target: DispatchTarget,
+  request: Request,
+  url: URL,
+  result: RouteResult,
+  headers: Headers,
+  deps: RouteDeps,
+  staticAsset: (at?: URL) => Promise<Response>,
+): Promise<Response> {
+  const { manifest, functionUrls } = deps;
+  const doOrigin = originFetch(deps);
 
   switch (target.kind) {
     case "static": {
-      const response = await staticAsset(new URL(result.resolvedPathname, url));
+      const response = await staticAsset(new URL(result.resolvedPathname!, url));
       return isFlightRequest(request.headers) ? withFlightVary(response) : response;
     }
 
     case "lambda": {
       const fnUrl = functionUrls[target.id];
       if (!fnUrl) return noFunctionUrl(target.id);
-      const response = await doOrigin(
+      return doOrigin(
         withEntry(
           forward(originUrl(fnUrl, url, result, manifest), request, headers),
           target.entryKey,
         ),
       );
-      return target.page
-        ? substituteErrorPage(response, request, url, headers, manifest, deps)
-        : response;
     }
 
     case "prerender":
@@ -979,6 +1002,41 @@ async function dispatch(
     default:
       return staticAsset();
   }
+}
+
+async function notFoundResponse(
+  request: Request,
+  url: URL,
+  result: RouteResult,
+  headers: Headers,
+  deps: RouteDeps,
+  staticAsset: (at?: URL) => Promise<Response>,
+): Promise<Response> {
+  const notFoundPathname = deps.manifest.errorRoutes?.notFound;
+  const notFoundTarget = notFoundPathname
+    ? deps.manifest.dispatch[notFoundPathname]
+    : undefined;
+  if (!notFoundPathname || !notFoundTarget) return staticAsset();
+
+  const notFoundResult: RouteResult = {
+    ...result,
+    resolvedPathname: notFoundPathname,
+    invocationTarget: { pathname: notFoundPathname },
+  };
+  const rendered = await renderDispatchTarget(
+    notFoundTarget,
+    request,
+    url,
+    notFoundResult,
+    headers,
+    deps,
+    staticAsset,
+  );
+  return new Response(rendered.body, {
+    status: 404,
+    statusText: rendered.statusText,
+    headers: rendered.headers,
+  });
 }
 
 function errorRouteKind(status: number): "notFound" | "serverError" | undefined {
@@ -1003,21 +1061,31 @@ async function substituteErrorPage(
   const errorPathname = manifest.errorRoutes?.[kind];
   if (!errorPathname) return response;
   const errorTarget = manifest.dispatch[errorPathname];
-  if (!errorTarget || errorTarget.kind !== "lambda") return response;
-  const fnUrl = deps.functionUrls[errorTarget.id];
-  if (!fnUrl) return response;
+  if (!errorTarget) return response;
+  if (errorTarget.kind === "lambda" && !deps.functionUrls[errorTarget.id]) {
+    return response;
+  }
 
   await response.body?.cancel();
-  const doOrigin = originFetch(deps);
   const errorResult: RouteResult = {
     resolvedPathname: errorPathname,
     invocationTarget: { pathname: errorPathname },
   };
-  const rendered = await doOrigin(
-    withEntry(
-      forward(originUrl(fnUrl, url, errorResult, manifest), request, headers),
-      errorTarget.entryKey,
-    ),
+  const errorStaticAsset = (at: URL = new URL(errorPathname, url)) =>
+    serveStaticAsset(
+      request,
+      at,
+      deps.assetStore,
+      manifest.i18n && localeOf(manifest.i18n, manifest.basePath, url),
+    );
+  const rendered = await renderDispatchTarget(
+    errorTarget,
+    request,
+    url,
+    errorResult,
+    headers,
+    deps,
+    errorStaticAsset,
   );
   return new Response(rendered.body, {
     status: response.status,

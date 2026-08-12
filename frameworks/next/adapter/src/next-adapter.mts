@@ -385,13 +385,21 @@ const adapter = {
 
     const isDispatchedErrorPage = (key: string): boolean => {
       const target = dispatch[key];
-      return target?.kind === "lambda" && target.page === true;
+      if (!target) return false;
+      if (target.kind === "lambda") return target.page === true;
+      return target.kind === "prerender" || target.kind === "static";
     };
-    const notFoundKey = `${basePath}/404`;
-    const serverErrorKey = `${basePath}/500`;
+    const firstDispatchedErrorPage = (
+      candidates: string[],
+    ): string | undefined => candidates.find(isDispatchedErrorPage);
+    const notFoundKey = firstDispatchedErrorPage([
+      `${basePath}/404`,
+      `${basePath}/_not-found`,
+    ]);
+    const serverErrorKey = firstDispatchedErrorPage([`${basePath}/500`]);
     const errorRoutes = {
-      ...(isDispatchedErrorPage(notFoundKey) && { notFound: notFoundKey }),
-      ...(isDispatchedErrorPage(serverErrorKey) && { serverError: serverErrorKey }),
+      ...(notFoundKey !== undefined && { notFound: notFoundKey }),
+      ...(serverErrorKey !== undefined && { serverError: serverErrorKey }),
     };
 
     const routingManifest = {

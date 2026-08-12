@@ -2044,6 +2044,44 @@ test("only translates a STATIC_FILE named under server/pages/, not any /index-sh
   expect(manifest.dispatch["/404"]).toEqual({ kind: "static" });
 });
 
+test("resolves the App Router not-found page (/_not-found) as errorRoutes.notFound", async () => {
+  const { projectDir, args } = await synthProject();
+  const notFoundHandler = join(projectDir, ".next/server/app/_not-found.js");
+  await mkdir(dirname(notFoundHandler), { recursive: true });
+  await writeFile(notFoundHandler, "module.exports = () => {}");
+  args.outputs.appPages.push({
+    pathname: "/_not-found",
+    id: "/_not-found",
+    assets: {},
+    runtime: "nodejs",
+    filePath: notFoundHandler,
+    config: {},
+    type: "APP_PAGE",
+  } as never);
+  const adapter = await loadAdapterIn(projectDir);
+
+  await adapter.onBuildComplete(args as never);
+
+  const manifest = await readManifest(projectDir);
+  expect(manifest.dispatch["/_not-found"]).toMatchObject({
+    kind: "lambda",
+    page: true,
+  });
+  expect(manifest.errorRoutes).toMatchObject({ notFound: "/_not-found" });
+});
+
+test("resolves a static-kind /500 page as errorRoutes.serverError", async () => {
+  const { projectDir, args } = await synthProject();
+  await withStaticPage(projectDir, args, "/500", "server error");
+  const adapter = await loadAdapterIn(projectDir);
+
+  await adapter.onBuildComplete(args as never);
+
+  const manifest = await readManifest(projectDir);
+  expect(manifest.dispatch["/500"]).toEqual({ kind: "static" });
+  expect(manifest.errorRoutes).toMatchObject({ serverError: "/500" });
+});
+
 test("leaves .rsc, _next/data, _next/static and public/ pathnames untouched", async () => {
   const { projectDir, args } = await synthProject();
   await withStaticFile(projectDir, args, "/index.rsc", "RSC-ROOT");
