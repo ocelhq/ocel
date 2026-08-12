@@ -3606,6 +3606,89 @@ describe("custom error page substitution", () => {
     expect(res.status).toBe(404);
     expect(await res.text()).toBe("Not Found");
   });
+
+  it("substitutes a static-kind error route's body for a document error response", async () => {
+    const deps = baseDeps({
+      manifest: {
+        buildId: "t",
+        basePath: "",
+        pathnames: ["/not-found", "/500"],
+        routes: {},
+        dispatch: {
+          "/not-found": { kind: "lambda", id: "page", entryKey: "/not-found", page: true },
+          "/500": { kind: "static" },
+        },
+        errorRoutes: { serverError: "/500" },
+      },
+      functionUrls: { page: "https://fn.example.com" },
+      fetch: (async () =>
+        new Response("Internal Server Error", { status: 500 })) as unknown as typeof fetch,
+      assetStore: assetStoreServing({ "/500.html": "<html>static 500</html>" }),
+    });
+
+    const res = await dispatchResult(
+      { resolvedPathname: "/not-found", invocationTarget: { pathname: "/not-found" } },
+      new Request("https://app.example/not-found"),
+      deps,
+    );
+
+    expect(res.status).toBe(500);
+    expect(await res.text()).toBe("<html>static 500</html>");
+  });
+});
+
+describe("not-found fallback for unmatched pathnames", () => {
+  it("renders the notFound error route's body with status 404 when the pathname has no dispatch entry", async () => {
+    const deps = baseDeps({
+      manifest: {
+        buildId: "t",
+        basePath: "",
+        pathnames: ["/404"],
+        routes: {},
+        dispatch: {
+          "/404": { kind: "lambda", id: "page", entryKey: "/404", page: true },
+        },
+        errorRoutes: { notFound: "/404" },
+      },
+      functionUrls: { page: "https://fn.example.com" },
+      fetch: (async () =>
+        new Response("<html>custom 404</html>", {
+          status: 200,
+          headers: { "content-type": "text/html" },
+        })) as unknown as typeof fetch,
+    });
+
+    const res = await dispatchResult(
+      { resolvedPathname: "/never-registered" },
+      new Request("https://app.example/never-registered"),
+      deps,
+    );
+
+    expect(res.status).toBe(404);
+    expect(await res.text()).toBe("<html>custom 404</html>");
+  });
+
+  it("falls back to the plaintext 404 when the manifest has no errorRoutes.notFound", async () => {
+    const deps = baseDeps({
+      manifest: {
+        buildId: "t",
+        basePath: "",
+        pathnames: [],
+        routes: {},
+        dispatch: {},
+      },
+      assetStore: assetStoreServing({}),
+    });
+
+    const res = await dispatchResult(
+      { resolvedPathname: "/never-registered" },
+      new Request("https://app.example/never-registered"),
+      deps,
+    );
+
+    expect(res.status).toBe(404);
+    expect(await res.text()).toBe("Not Found");
+  });
 });
 
 describe("ruleDestinationPathname substitution with prefix-colliding groups", () => {
