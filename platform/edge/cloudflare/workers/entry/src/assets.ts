@@ -64,6 +64,10 @@ export function contentTypeFor(pathname: string): string {
 const NEXT_STATIC_PREFIX = "/_next/static/";
 const SERVICE_WORKER_PREFIX = "service-worker/";
 
+export function isNextStaticPathname(pathname: string): boolean {
+  return pathname.includes(NEXT_STATIC_PREFIX);
+}
+
 export function cacheControlFor(pathname: string): string {
   const at = pathname.indexOf(NEXT_STATIC_PREFIX);
   if (at === -1) return REVALIDATE_CACHE_CONTROL;

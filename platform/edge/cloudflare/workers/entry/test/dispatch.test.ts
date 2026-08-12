@@ -3723,6 +3723,68 @@ describe("not-found fallback for unmatched pathnames", () => {
     expect(await res.text()).toBe("console.log(1)");
   });
 
+  it("returns the plaintext 404 for a missing /_next/static asset instead of the not-found page", async () => {
+    const deps = baseDeps({
+      manifest: {
+        buildId: "t",
+        basePath: "",
+        pathnames: ["/404"],
+        routes: {},
+        dispatch: {
+          "/404": { kind: "lambda", id: "page", entryKey: "/404", page: true },
+        },
+        errorRoutes: { notFound: "/404" },
+      },
+      functionUrls: { page: "https://fn.example.com" },
+      fetch: (async () =>
+        new Response("<html>custom 404</html>", {
+          status: 200,
+          headers: { "content-type": "text/html" },
+        })) as unknown as typeof fetch,
+      assetStore: assetStoreServing({}),
+    });
+
+    const res = await dispatchResult(
+      {},
+      new Request("https://app.example/_next/static/invalid-path"),
+      deps,
+    );
+
+    expect(res.status).toBe(404);
+    expect(await res.text()).toBe("Not Found");
+  });
+
+  it("returns the plaintext 404 for a missing /_next/static asset under a basePath", async () => {
+    const deps = baseDeps({
+      manifest: {
+        buildId: "t",
+        basePath: "/base",
+        pathnames: ["/base/404"],
+        routes: {},
+        dispatch: {
+          "/base/404": { kind: "lambda", id: "page", entryKey: "/base/404", page: true },
+        },
+        errorRoutes: { notFound: "/base/404" },
+      },
+      functionUrls: { page: "https://fn.example.com" },
+      fetch: (async () =>
+        new Response("<html>custom 404</html>", {
+          status: 200,
+          headers: { "content-type": "text/html" },
+        })) as unknown as typeof fetch,
+      assetStore: assetStoreServing({}),
+    });
+
+    const res = await dispatchResult(
+      {},
+      new Request("https://app.example/base/_next/static/invalid-path"),
+      deps,
+    );
+
+    expect(res.status).toBe(404);
+    expect(await res.text()).toBe("Not Found");
+  });
+
   it("renders the not-found page for a genuinely unmatched pathname through the real router", async () => {
     const deps = baseDeps({
       manifest: {
