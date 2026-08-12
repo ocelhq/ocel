@@ -52,22 +52,35 @@ Hard-stop on any of these; a bad preflight makes the result meaningless.
    sourcing; defines `CLOUDFLARE_ACCOUNT_ID` and `CLOUDFLARE_API_TOKEN`) plus
    `~/.aws/credentials`. Confirm which AWS profile to use. Subagents inherit
    *your* env, not the user's shell.
-2. **Disposable accounts.** `guard-accounts.sh` is a hard gate and exists
-   because this provisions real infrastructure. Do not proceed on assumption.
+2. **Disposable accounts, confirmed by hand.** `guard-accounts.sh` gates CI, not
+   you: it requires `EXPECTED_AWS_ACCOUNT_ID` and
+   `EXPECTED_CLOUDFLARE_ACCOUNT_ID`, which are workflow secrets, and aborts on
+   the unset variable before comparing anything. Locally, resolve both yourself —
+   `aws sts get-caller-identity` and the `CLOUDFLARE_ACCOUNT_ID` in `.env` — and
+   match them against the `E2E_EXPECTED_*` secrets. This provisions real
+   infrastructure into whichever account the credentials resolve to.
 3. **Proxied wildcard DNS.** The substrate's preview wildcard must exist as a
    Cloudflare record on that zone and be **orange-clouded**. Deploys only verify
    it; a missing or grey record fails every deploy. Check with
-   `ocel domain ls --preview`.
+   `ocel domain ls --preview`; `unimplemented: 404` there is a stale sidecar
+   (item 5), not a missing domain. `ocel domain use` writes the wildcard to the
+   SSM parameter `/ocel/edge/preview-domain`, which reads it without the CLI.
 4. **`ocel bootstrap --preview` and `ocel domain use '<wildcard>' --preview`
    have been run** once on the account. Without the domain, a preview deploy has
    nowhere to serve: no project declares one of its own.
-5. **The sidecar carries `ocel`:**
+5. **The sidecar carries `ocel`, and carries it fresh:**
    ```bash
    test -d /home/vndaba/Dev/ocelhq-work/sidecar/node_modules/ocel \
      || echo "STOP: sidecar needs the one-time repack (see README)"
+   ls -l /home/vndaba/Dev/ocelhq-work/sidecar/node_modules/@ocel/provider-aws-linux-x64/bin/deploy
+   git log -1 --format=%ad -- platform/aws/provider cli pkg
    ```
-   `linkSidecar` hard-fails without it, failing the deploy at link time. Repack
-   only when no other run is using the sidecar.
+   `linkSidecar` hard-fails on a missing one, failing the deploy at link time. A
+   *stale* one passes that check and then runs superseded Go silently, or rejects
+   a new RPC as `unimplemented: 404`; the binary older than the last Go-touching
+   commit is the tell. Repack only when no other run is using the sidecar, and
+   note that packing does not imply building — the Go binaries come from
+   `node scripts/build-native.mjs --host --target cli`.
 
 ## Screen the suite before running it
 
