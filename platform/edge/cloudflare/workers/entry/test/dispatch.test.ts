@@ -2849,6 +2849,104 @@ describe("an afterFiles rewrite shadowed by a dynamic route", () => {
   });
 });
 
+describe("the origin URL under a config rewrite", () => {
+  function capturingDeps(overrides: Partial<RouteDeps["manifest"]> = {}): {
+    deps: RouteDeps;
+    invoked: () => URL;
+  } {
+    let captured: URL | undefined;
+    const deps = baseDeps({
+      manifest: {
+        buildId: "t",
+        basePath: "",
+        pathnames: ["/blog/[post]", "/rewrite-target"],
+        routes: {
+          beforeMiddleware: [],
+          beforeFiles: [],
+          afterFiles: [],
+          dynamicRoutes: [
+            {
+              sourceRegex: "^/blog/(?<nxtPpost>[^/]+?)(?:/)?$",
+              destination: "/blog/[post]?nxtPpost=$nxtPpost",
+            },
+          ],
+          onMatch: [],
+          fallback: [],
+        },
+        dispatch: {
+          "/blog/[post]": { kind: "lambda", id: "blog" },
+          "/rewrite-target": { kind: "lambda", id: "target" },
+        },
+        ...overrides,
+      },
+      functionUrls: {
+        blog: "https://blog.example.com",
+        target: "https://target.example.com",
+      },
+      fetch: (async (req: Request) => {
+        captured = new URL(req.url);
+        return new Response("ok", { status: 200 });
+      }) as unknown as typeof fetch,
+    });
+    return { deps, invoked: () => captured! };
+  }
+
+  it("forwards the rewrite's source pathname and query, not the destination", async () => {
+    const { deps, invoked } = capturingDeps({
+      routes: {
+        beforeMiddleware: [],
+        beforeFiles: [],
+        afterFiles: [{ sourceRegex: "^/blog-post-1$", destination: "/blog/post-1" }],
+        dynamicRoutes: [
+          {
+            sourceRegex: "^/blog/(?<nxtPpost>[^/]+?)(?:/)?$",
+            destination: "/blog/[post]?nxtPpost=$nxtPpost",
+          },
+        ],
+        onMatch: [],
+        fallback: [],
+      } as unknown as RouteDeps["manifest"]["routes"],
+    });
+
+    await serve(new Request("https://app.example/blog-post-1?ref=home"), deps);
+
+    expect(invoked().pathname).toBe("/blog-post-1");
+    expect(invoked().searchParams.get("ref")).toBe("home");
+    expect(invoked().searchParams.has("nxtPpost")).toBe(false);
+  });
+
+  it("still forwards the interpolated pathname for a direct dynamic-route hit", async () => {
+    const { deps, invoked } = capturingDeps();
+
+    await serve(new Request("https://app.example/blog/post-1"), deps);
+
+    expect(invoked().pathname).toBe("/blog/post-1");
+  });
+
+  it("does not leak a rewrite's synthesized destination query onto the origin request", async () => {
+    const { deps, invoked } = capturingDeps({
+      routes: {
+        beforeMiddleware: [],
+        beforeFiles: [],
+        afterFiles: [
+          {
+            sourceRegex: "^/rewrite-source/(.+)$",
+            destination: "/rewrite-target?path=$1",
+          },
+        ],
+        dynamicRoutes: [],
+        onMatch: [],
+        fallback: [],
+      } as unknown as RouteDeps["manifest"]["routes"],
+    });
+
+    await serve(new Request("https://app.example/rewrite-source/foo"), deps);
+
+    expect(invoked().pathname).toBe("/rewrite-source/foo");
+    expect(invoked().searchParams.has("path")).toBe(false);
+  });
+});
+
 describe("the x-vercel-cache alias", () => {
   const emptyRoutes = {
     beforeMiddleware: [],
