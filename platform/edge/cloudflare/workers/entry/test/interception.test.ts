@@ -633,6 +633,60 @@ describe("intercept, PPR entries", () => {
     expect(await res.text()).toBe("RSC-PAYLOAD");
   });
 
+  it("stamps x-nextjs-postponed on a full-route prefetch of a postponed entry", async () => {
+    const rscHeaders = {
+      "content-type": "text/x-component",
+      vary: "rsc, next-router-state-tree, next-router-prefetch, next-router-segment-prefetch",
+      "x-nextjs-stale-time": "300",
+    };
+    const outcome = await intercept(
+      req({ headers: { RSC: "1", "next-router-prefetch": "1" } }),
+      pprTarget(),
+      cfg,
+      storeDeps(
+        stored({ [entryKey("/blog")]: pprEntry({ rscHeaders }) }),
+        { now: () => 2_000 },
+      ),
+    );
+
+    expect(outcome?.kind).toBe("complete");
+    const res = (outcome as { response: Response }).response;
+    expect(res.headers.get("x-nextjs-postponed")).toBe("1");
+  });
+
+  it("does not add x-nextjs-postponed to a full-route prefetch of a complete entry", async () => {
+    const rscHeaders = {
+      "content-type": "text/x-component",
+      vary: "rsc, next-router-state-tree, next-router-prefetch, next-router-segment-prefetch",
+      "x-nextjs-stale-time": "300",
+    };
+    const outcome = await intercept(
+      req({ headers: { RSC: "1", "next-router-prefetch": "1" } }),
+      target(),
+      cfg,
+      storeDeps(
+        stored({ [entryKey("/blog")]: appPage({ rscHeaders }) }),
+        { now: () => 2_000 },
+      ),
+    );
+
+    expect(outcome?.kind).toBe("complete");
+    const res = (outcome as { response: Response }).response;
+    expect(res.headers.has("x-nextjs-postponed")).toBe(false);
+  });
+
+  it("does not add x-nextjs-postponed to the composed ppr response", async () => {
+    const outcome = await read(
+      pprTarget(),
+      { [entryKey("/blog")]: pprEntry() },
+      2_000,
+    );
+
+    expect(outcome?.kind).toBe("ppr");
+    const shell = (outcome as { shell: Response }).shell;
+    expect(shell.headers.has("x-nextjs-postponed")).toBe(false);
+  });
+
   it("serves a segment prefetch even when the entry's tags were invalidated", async () => {
     const store = stored({
       [entryKey("/blog")]: pprEntry({
