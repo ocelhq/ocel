@@ -123,6 +123,9 @@ export async function intercept(
     ) {
       const response = reconstruct(request, value);
       if (!response) return null;
+      if (!response.headers.has("x-nextjs-postponed")) {
+        response.headers.set("x-nextjs-postponed", "1");
+      }
       response.headers.set("cache-control", `s-maxage=${window}`);
       response.headers.set("x-ocel-entry-modified", String(entry.lastModified));
       return {
