@@ -2849,6 +2849,178 @@ describe("an afterFiles rewrite shadowed by a dynamic route", () => {
   });
 });
 
+describe("a concrete route shadowed by a dynamic sibling", () => {
+  function apiDeps(): { deps: RouteDeps; invoked: () => URL } {
+    let captured: URL | undefined;
+    const deps = baseDeps({
+      manifest: {
+        buildId: "t",
+        basePath: "",
+        pathnames: ["/api/hello", "/api/[id]"],
+        routes: {
+          beforeMiddleware: [],
+          beforeFiles: [],
+          afterFiles: [],
+          dynamicRoutes: [
+            {
+              sourceRegex: "^[/]?/api/(?<nxtPid>[^/]+?)$",
+              destination: "/api/[id]?nxtPid=$nxtPid",
+            },
+          ],
+          onMatch: [],
+          fallback: [],
+        } as unknown as RouteDeps["manifest"]["routes"],
+        dispatch: {
+          "/api/hello": { kind: "lambda", id: "/api/hello" },
+          "/api/[id]": { kind: "lambda", id: "/api/[id]" },
+        },
+      },
+      functionUrls: {
+        "/api/hello": "https://hello.example.com",
+        "/api/[id]": "https://id.example.com",
+      },
+      fetch: (async (req: Request) => {
+        captured = new URL(req.url);
+        return new Response("ok", { status: 200 });
+      }) as unknown as typeof fetch,
+    });
+    return { deps, invoked: () => captured! };
+  }
+
+  it("drops the shadowing route's params from a concrete route's forwarded query", async () => {
+    const { deps, invoked } = apiDeps();
+
+    await serve(new Request("https://app.example/api/hello?a=b"), deps);
+
+    expect(invoked().searchParams.has("nxtPid")).toBe(false);
+    expect(invoked().searchParams.get("a")).toBe("b");
+  });
+
+  it("drops the shadowing route's params from a concrete _next/data request", async () => {
+    let captured: URL | undefined;
+    const deps = baseDeps({
+      manifest: {
+        buildId: "t",
+        basePath: "",
+        pathnames: ["/", "/_next/data/t/index.json", "/[id]"],
+        routes: {
+          beforeMiddleware: [],
+          beforeFiles: [],
+          afterFiles: [],
+          dynamicRoutes: [
+            {
+              sourceRegex: "^[/]?/(?<nxtPid>[^/]+?)$",
+              destination: "/[id]?nxtPid=$nxtPid",
+            },
+            {
+              sourceRegex: "^/_next/data/t/(?<nxtPid>[^/]+?)\\.json$",
+              destination: "/[id]?nxtPid=$nxtPid",
+            },
+          ],
+          onMatch: [],
+          fallback: [],
+        } as unknown as RouteDeps["manifest"]["routes"],
+        dispatch: {
+          "/": { kind: "lambda", id: "/" },
+          "/_next/data/t/index.json": { kind: "lambda", id: "/" },
+          "/[id]": { kind: "lambda", id: "/[id]" },
+        },
+      },
+      functionUrls: {
+        "/": "https://root.example.com",
+        "/[id]": "https://id.example.com",
+      },
+      fetch: (async (req: Request) => {
+        captured = new URL(req.url);
+        return new Response("ok", { status: 200 });
+      }) as unknown as typeof fetch,
+    });
+
+    await serve(new Request("https://app.example/_next/data/t/index.json"), deps);
+
+    expect(captured?.searchParams.has("nxtPid")).toBe(false);
+  });
+
+  it("still carries params for a genuinely dynamic request", async () => {
+    const { deps, invoked } = apiDeps();
+
+    await serve(new Request("https://app.example/api/something-else"), deps);
+
+    expect(invoked().searchParams.get("nxtPid")).toBe("something-else");
+  });
+
+  it("keeps params for a prerendered concrete path of a dynamic page", async () => {
+    let captured: URL | undefined;
+    const deps = baseDeps({
+      manifest: {
+        buildId: "t",
+        basePath: "",
+        pathnames: ["/blog/post-1", "/blog/[slug]"],
+        routes: {
+          beforeMiddleware: [],
+          beforeFiles: [],
+          afterFiles: [],
+          dynamicRoutes: [
+            {
+              sourceRegex: "^[/]?/blog/(?<nxtPslug>[^/]+?)$",
+              destination: "/blog/[slug]?nxtPslug=$nxtPslug",
+            },
+          ],
+          onMatch: [],
+          fallback: [],
+        } as unknown as RouteDeps["manifest"]["routes"],
+        dispatch: {
+          "/blog/post-1": { kind: "prerender", id: "/blog/post-1", config: {} },
+        },
+      },
+      functionUrls: { "/blog/post-1": "https://blog.example.com" },
+      fetch: (async (req: Request) => {
+        captured = new URL(req.url);
+        return new Response("rendered", { status: 200 });
+      }) as unknown as typeof fetch,
+    });
+
+    await serve(new Request("https://app.example/blog/post-1"), deps);
+
+    expect(captured?.searchParams.get("nxtPslug")).toBe("post-1");
+  });
+
+  it("leaves the root path unaffected", async () => {
+    let captured: URL | undefined;
+    const deps = baseDeps({
+      manifest: {
+        buildId: "t",
+        basePath: "",
+        pathnames: ["/", "/[id]"],
+        routes: {
+          beforeMiddleware: [],
+          beforeFiles: [],
+          afterFiles: [],
+          dynamicRoutes: [
+            {
+              sourceRegex: "^[/]?/(?<nxtPid>[^/]+?)$",
+              destination: "/[id]?nxtPid=$nxtPid",
+            },
+          ],
+          onMatch: [],
+          fallback: [],
+        } as unknown as RouteDeps["manifest"]["routes"],
+        dispatch: { "/": { kind: "lambda", id: "/" } },
+      },
+      functionUrls: { "/": "https://root.example.com" },
+      fetch: (async (req: Request) => {
+        captured = new URL(req.url);
+        return new Response("ok", { status: 200 });
+      }) as unknown as typeof fetch,
+    });
+
+    const res = await serve(new Request("https://app.example/"), deps);
+
+    expect(res.status).toBe(200);
+    expect(captured?.searchParams.has("nxtPid")).toBe(false);
+  });
+});
+
 describe("the origin URL under a config rewrite", () => {
   function capturingDeps(overrides: Partial<RouteDeps["manifest"]> = {}): {
     deps: RouteDeps;
