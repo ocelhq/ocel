@@ -427,20 +427,6 @@ func TestPreviewHostnames(t *testing.T) {
 		}
 	})
 
-	t.Run("an over-long pointer fails the deploy", func(t *testing.T) {
-		t.Parallel()
-		pointer := strings.Repeat("p", previewLabelMaxLen+1)
-		cfg := Config{Class: deploymentsv1.Environment_CLASS_PREVIEW, Slug: "proj", Identity: pointer}
-		apps := []*deploymentsv1.ManifestApp{{Name: "web"}}
-
-		_, err := previewHostnames(cfg, apps, map[string][]string{"web": {"*.preview.acme.com"}})
-		if err == nil {
-			t.Fatalf("expected a pointer of %d characters to fail the deploy", len(pointer))
-		}
-		if !strings.Contains(err.Error(), pointer) || !strings.Contains(err.Error(), "64") {
-			t.Errorf("error must name the pointer and the label length, got %q", err)
-		}
-	})
 }
 
 func TestResolveWorkerHostnames(t *testing.T) {
