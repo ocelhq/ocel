@@ -5,6 +5,7 @@ import { awaitLiveValues } from "../shared/live-values.mjs";
 import { fetchToNodeHandler, type FetchHandler } from "./fetch-bridge.mjs";
 import {
   installCompileCacheFlush,
+  installCompileCacheWarm,
   reportFatalBoot,
   serveInvoke,
   startServer,
@@ -120,6 +121,7 @@ function interceptListen(): ListenHook {
 
 async function boot(): Promise<void> {
   installCompileCacheFlush();
+  installCompileCacheWarm(undefined);
 
   await awaitLiveValues();
   const loaded = await loadUserApp(process.env.OCEL_HANDLER!);
