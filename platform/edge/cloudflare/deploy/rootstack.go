@@ -118,8 +118,12 @@ func (p *provider) ReconcileRootStack(ctx context.Context, spec edge.RootStackSp
 		return prior, nil
 	}
 
+	if spec.PruneOnly && spec.GenericName == edge.SharedPreviewEntryScript {
+		return nil, fmt.Errorf("prune-only root stack may not target the shared preview entry worker %q", spec.GenericName)
+	}
+
 	genericUp := upload{accountID: accountID, scriptName: spec.GenericName}
-	if !upToDate {
+	if !upToDate && !spec.PruneOnly {
 		genericUp.worker = generic
 		if err := p.putWorkerScript(ctx, genericUp, "generic worker"); err != nil {
 			return nil, err
@@ -138,7 +142,11 @@ func (p *provider) ReconcileRootStack(ctx context.Context, spec edge.RootStackSp
 		return prior, nil
 	}
 
-	if _, err := p.setSubdomain(ctx, genericUp, len(spec.Domains) == 0); err != nil {
+	if spec.PruneOnly {
+		if err := p.deleteScript(ctx, accountID, spec.GenericName); err != nil {
+			return nil, fmt.Errorf("delete retired generic worker %q: %w", spec.GenericName, err)
+		}
+	} else if _, err := p.setSubdomain(ctx, genericUp, len(spec.Domains) == 0); err != nil {
 		return nil, fmt.Errorf("set generic worker subdomain: %w", err)
 	}
 	stamps[spec.GenericName] = stamp

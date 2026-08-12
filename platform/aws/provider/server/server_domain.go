@@ -76,17 +76,27 @@ func (s *Server) runUseDomain(ctx context.Context, req *deploymentsv1.UseDomainR
 	if err != nil {
 		return err
 	}
+	isrWriter, err := bootstrap.ReadISRWriterFor(ctx, ssmClient, bootstrap.ClassPreview)
+	if err != nil {
+		return err
+	}
+	edgeValues, err := bootstrap.ReadEdgeValues(ctx, ssmClient, bootstrap.ClassPreview)
+	if err != nil {
+		return err
+	}
 
 	spec, err := deploy.SharedPreviewEntrySpec(deploy.Config{
-		Region:             awscfg.Region,
-		StateTable:         deployed.StateTable,
-		AssetBucket:        deployed.AssetBucket,
-		ImageOptimizerURL:  deployed.ImageOptimizerURL,
-		RevalidateQueueURL: deployed.RevalidateQueueURL,
-		EdgeAccessKeyID:    creds.AccessKeyID,
-		EdgeSecretKey:      creds.SecretAccessKey,
-		StoreScriptName:    store.ScriptName,
-		Edge:               s.edge(),
+		Region:              awscfg.Region,
+		StateTable:          deployed.StateTable,
+		AssetBucket:         deployed.AssetBucket,
+		ImageOptimizerURL:   deployed.ImageOptimizerURL,
+		RevalidateQueueURL:  deployed.RevalidateQueueURL,
+		EdgeAccessKeyID:     creds.AccessKeyID,
+		EdgeSecretKey:       creds.SecretAccessKey,
+		StoreScriptName:     store.ScriptName,
+		ISRWriterScriptName: isrWriter.ScriptName,
+		EdgeValues:          edgeValues,
+		Edge:                s.edge(),
 	}, baseDomain, logf)
 	if err != nil {
 		return err
@@ -165,10 +175,28 @@ func (s *Server) ListDomain(ctx context.Context, req *deploymentsv1.ListDomainRe
 	if err != nil {
 		return nil, err
 	}
+	served, err := globalPreviewProjects(ctx, ssmClient, slugs, recorded.BaseDomain)
+	if err != nil {
+		return nil, err
+	}
 	return &deploymentsv1.ListDomainResponse{
 		Domain:   globalPreviewDomain(ctx, s.edgeRouteOwner(), recorded),
-		Projects: slugs,
+		Projects: served,
 	}, nil
+}
+
+func globalPreviewProjects(ctx context.Context, ssmClient bootstrap.SSMAPI, slugs []string, baseDomain string) ([]string, error) {
+	var served []string
+	for _, slug := range slugs {
+		state, err := bootstrap.ReadRootStackStateFor(ctx, ssmClient, bootstrap.ClassPreview, slug)
+		if err != nil {
+			return nil, err
+		}
+		if edge.ServedOnGlobalPreview(state, baseDomain) {
+			served = append(served, slug)
+		}
+	}
+	return served, nil
 }
 
 func (s *Server) sharedEntry() (edge.SharedEntry, error) {

@@ -28,7 +28,7 @@ func (p *provider) ReconcileSharedEntry(ctx context.Context, spec edge.SharedEnt
 	up := upload{
 		accountID:  accountID,
 		scriptName: sharedEntryScriptName(spec),
-		worker:     bindCodeLoader(spec.Generic),
+		worker:     sharedEntryWorker(spec),
 	}
 	if err := p.putWorkerScript(ctx, up, "shared preview entry worker"); err != nil {
 		return err
@@ -77,8 +77,13 @@ func (p *provider) stripSharedEntryRoute(ctx context.Context, accountID, baseDom
 	}
 
 	pattern := RoutePattern(wildcard)
+	foreign := false
 	for _, route := range slices.Clone(inZone) {
-		if route.Pattern != pattern || route.Script != edge.SharedPreviewEntryScript {
+		if route.Pattern != pattern {
+			continue
+		}
+		if route.Script != edge.SharedPreviewEntryScript {
+			foreign = true
 			continue
 		}
 		if _, err := p.client.Workers.Routes.Delete(ctx, route.ID, workers.RouteDeleteParams{ZoneID: cf.F(zoneID)}); err != nil {
@@ -86,7 +91,18 @@ func (p *provider) stripSharedEntryRoute(ctx context.Context, accountID, baseDom
 		}
 		snap.detached(zoneID, route.ID)
 	}
+	if foreign {
+		return nil
+	}
 	return p.deleteProxiedRecord(ctx, zoneID, wildcard)
+}
+
+func sharedEntryWorker(spec edge.SharedEntrySpec) edge.Worker {
+	worker := spec.Generic
+	if spec.ISRWriterScriptName != "" {
+		worker = withService(worker, genericISRWriterBinding, spec.ISRWriterScriptName)
+	}
+	return bindCodeLoader(bindObjectStore(worker, spec.Values))
 }
 
 func sharedEntryScriptName(spec edge.SharedEntrySpec) string {

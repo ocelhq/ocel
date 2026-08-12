@@ -29,7 +29,7 @@ func TestSpecStampShape(t *testing.T) {
 			typ: reflect.TypeFor[edge.RootStackSpec](),
 			want: []string{
 				"BootstrapCred", "Domains", "Generic", "GenericName", "ISRWriterScriptName",
-				"PruneRoutes", "PruneWorkerStem", "RequiredRecord", "Slug", "StoreEndpoint",
+				"PruneOnly", "PruneRoutes", "PruneWorkerStem", "RequiredRecord", "Slug", "StoreEndpoint",
 				"StoreScriptName", "Values", "Version", "Warn",
 			},
 		},
@@ -37,7 +37,7 @@ func TestSpecStampShape(t *testing.T) {
 			typ: reflect.TypeFor[stampedSpec](),
 			want: []string{
 				"CompatDate", "CompatFlags", "Domains", "Generic", "GenericName", "ISRWriterScriptName",
-				"Observability", "PruneRoutes", "PruneWorkerStem", "RequiredRecord", "Slug",
+				"Observability", "PruneOnly", "PruneRoutes", "PruneWorkerStem", "RequiredRecord", "Slug",
 				"StoreEndpoint", "StoreScriptName", "Values",
 			},
 		},

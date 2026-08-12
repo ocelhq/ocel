@@ -106,6 +106,7 @@ func realize(ctx context.Context, cfg Config, manifest *deploymentsv1.Manifest, 
 	if err != nil {
 		return Result{RootStackState: state}, err
 	}
+	state = MarkGlobalPreview(state, cfg, manifest)
 
 	var infraOutputs []*deploymentsv1.ResourceOutput
 	if !plan.InfraStack.IsZero() {
@@ -294,14 +295,20 @@ func rootStackSpecs(cfg Config, manifest *deploymentsv1.Manifest, version string
 	apps := workerApps(cfg.ArtifactRoot, manifest)
 
 	if cfg.Class == deploymentsv1.Environment_CLASS_PREVIEW {
-		if cfg.GlobalPreviewDomain != "" && !declaresPreviewDomain(manifest) {
-			return nil, nil
-		}
 		spec := base
 		spec.GenericName = previewWorkerName(cfg.Slug)
 		spec.PruneWorkerStem = previewWorkerStem(cfg.Slug)
+		if servesOnGlobalPreviewDomain(cfg, manifest) {
+			if _, err := resolveWorkerHostnames(cfg, manifest, apps); err != nil {
+				return nil, err
+			}
+			spec.Generic = withPreviewVars(generic, "", apps)
+			spec.PruneOnly = true
+			return []edge.RootStackSpec{spec}, nil
+		}
 		if len(apps) == 0 {
 			spec.Generic = withPreviewVars(generic, "", apps)
+			spec.PruneOnly = true
 			return []edge.RootStackSpec{spec}, nil
 		}
 		resolved, err := resolveWorkerHostnames(cfg, manifest, apps)
@@ -394,7 +401,65 @@ func resolveWorkerHostnames(cfg Config, manifest *deploymentsv1.Manifest, apps [
 	if cfg.Class != deploymentsv1.Environment_CLASS_PREVIEW {
 		return workerHostnames{hosts: declared}, nil
 	}
-	return previewHostnames(cfg, apps, declared)
+	if servesOnGlobalPreviewDomain(cfg, manifest) {
+		resolved, err := globalPreviewHostnames(cfg, apps)
+		if err != nil {
+			return workerHostnames{}, err
+		}
+		if err := checkPreviewLabels(cfg.Slug, apps, resolved); err != nil {
+			return workerHostnames{}, err
+		}
+		return resolved, nil
+	}
+	resolved, err := previewHostnames(cfg, apps, declared)
+	if err != nil {
+		return workerHostnames{}, err
+	}
+	if err := checkPreviewLabels("", apps, resolved); err != nil {
+		return workerHostnames{}, err
+	}
+	return resolved, nil
+}
+
+func checkPreviewLabels(slug string, apps []*deploymentsv1.ManifestApp, resolved workerHostnames) error {
+	for _, app := range apps {
+		if err := PreviewLabelProblem(slug, resolved.hosts[app.GetName()]); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func servesOnGlobalPreviewDomain(cfg Config, manifest *deploymentsv1.Manifest) bool {
+	return cfg.Class == deploymentsv1.Environment_CLASS_PREVIEW &&
+		cfg.GlobalPreviewDomain != "" && !declaresPreviewDomain(manifest)
+}
+
+func globalPreviewHostnames(cfg Config, apps []*deploymentsv1.ManifestApp) (workerHostnames, error) {
+	if err := checkPreviewPointer(cfg.Identity); err != nil {
+		return workerHostnames{}, err
+	}
+	hosts := make(map[string][]string, len(apps))
+	for _, app := range apps {
+		name := app.GetName()
+		qualifier := name
+		if len(apps) == 1 {
+			qualifier = ""
+		}
+		label := edge.PreviewLabel(cfg.Slug, cfg.Identity, qualifier)
+		if label == "" {
+			continue
+		}
+		hosts[name] = []string{label + "." + cfg.GlobalPreviewDomain}
+	}
+	return workerHostnames{hosts: hosts, previewBase: cfg.GlobalPreviewDomain}, nil
+}
+
+func checkPreviewPointer(pointer string) error {
+	if strings.Contains(pointer, previewAppSeparator) {
+		return fmt.Errorf("preview name %q contains %q, which separates the preview from the app in the hostname it is served on: use a single hyphen", pointer, previewAppSeparator)
+	}
+	return nil
 }
 
 func previewHostnames(cfg Config, apps []*deploymentsv1.ManifestApp, declared map[string][]string) (workerHostnames, error) {
@@ -418,8 +483,8 @@ func previewHostnames(cfg Config, apps []*deploymentsv1.ManifestApp, declared ma
 		return workerHostnames{}, fmt.Errorf("this project declares no preview domain, so a preview deploy has nowhere to serve: add a project-level domains.preview wildcard (e.g. \"*.preview.acme.com\") to your ocel config and deploy again")
 	}
 
-	if strings.Contains(cfg.Identity, previewAppSeparator) {
-		return workerHostnames{}, fmt.Errorf("preview name %q contains %q, which separates the preview from the app in the hostname it is served on: use a single hyphen", cfg.Identity, previewAppSeparator)
+	if err := checkPreviewPointer(cfg.Identity); err != nil {
+		return workerHostnames{}, err
 	}
 
 	hosts := make(map[string][]string, len(apps))

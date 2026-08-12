@@ -44,6 +44,7 @@ type RootStackSpec struct {
 	StoreEndpoint       string
 	BootstrapCred       string
 	Domains             []string
+	PruneOnly           bool
 	PruneRoutes         bool
 	PruneWorkerStem     string
 	RequiredRecord      string

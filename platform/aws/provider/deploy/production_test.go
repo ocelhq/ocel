@@ -454,6 +454,252 @@ func TestResolveWorkerHostnames(t *testing.T) {
 	})
 }
 
+func TestAmbientPreview(t *testing.T) {
+	setWorkerBundle(t)
+	setStoreWorkerBundle(t)
+
+	manifest := func(apps ...string) *deploymentsv1.Manifest {
+		m := &deploymentsv1.Manifest{Slug: "proj"}
+		for _, app := range apps {
+			m.Apps = append(m.Apps, &deploymentsv1.ManifestApp{Name: app, Framework: "next"})
+			m.Functions = append(m.Functions, &deploymentsv1.ManifestFunction{
+				LogicalName: app + "_index", Framework: "next", App: app, RouteId: "/",
+			})
+		}
+		return m
+	}
+	ambient := func(t *testing.T, m *deploymentsv1.Manifest) Config {
+		return Config{
+			Edge:                &recordingEdge{},
+			Slug:                "proj",
+			Class:               deploymentsv1.Environment_CLASS_PREVIEW,
+			Identity:            "pr-42",
+			GlobalPreviewDomain: "preview.acme.com",
+			ArtifactRoot:        specsArtifactRoot(t, m),
+		}
+	}
+
+	t.Run("a first ambient deploy still writes the project's root-stack state", func(t *testing.T) {
+		m := manifest("web")
+		specs, err := rootStackSpecs(ambient(t, m), m, "v1", nil)
+		if err != nil {
+			t.Fatalf("rootStackSpecs: %v", err)
+		}
+
+		fake := &recordingRootStack{}
+		state, err := reconcileRootStack(context.Background(), fake, specs, nil)
+		if err != nil {
+			t.Fatalf("reconcileRootStack: %v", err)
+		}
+		if state[edge.RootStackKeyEndpoint] == "" {
+			t.Fatalf("state = %v, want a store endpoint: staging a deployment reads it", state)
+		}
+		if state[edge.RootStackKeySlug] != "proj" {
+			t.Errorf("state[%s] = %q, want proj: `ocel domain ls` and preview pruning find the project by it", edge.RootStackKeySlug, state[edge.RootStackKeySlug])
+		}
+	})
+
+	t.Run("an ambient deploy claims no hostname of its own", func(t *testing.T) {
+		m := manifest("web")
+		specs, err := rootStackSpecs(ambient(t, m), m, "v1", nil)
+		if err != nil {
+			t.Fatalf("rootStackSpecs: %v", err)
+		}
+		if len(specs) != 1 {
+			t.Fatalf("specs = %d, want 1", len(specs))
+		}
+		spec := specs[0]
+		if len(spec.Domains) != 0 {
+			t.Errorf("Domains = %v, want none: the shared entry worker serves the global wildcard", spec.Domains)
+		}
+		if got, ok := spec.Generic.Vars[envPreviewBaseDomain]; ok {
+			t.Errorf("Vars[%s] = %q, want unset: no per-project worker answers on the global domain", envPreviewBaseDomain, got)
+		}
+	})
+
+	t.Run("dropping a declared preview domain prunes the worker it left behind", func(t *testing.T) {
+		m := manifest("web")
+		specs, err := rootStackSpecs(ambient(t, m), m, "v1", nil)
+		if err != nil {
+			t.Fatalf("rootStackSpecs: %v", err)
+		}
+		spec := specs[0]
+		if spec.GenericName != previewWorkerName("proj") {
+			t.Errorf("GenericName = %q, want %q", spec.GenericName, previewWorkerName("proj"))
+		}
+		if !spec.PruneRoutes {
+			t.Error("PruneRoutes = false: the old wildcard route must stop serving the last promoted build")
+		}
+		if spec.PruneWorkerStem != previewWorkerStem("proj") {
+			t.Errorf("PruneWorkerStem = %q, want %q", spec.PruneWorkerStem, previewWorkerStem("proj"))
+		}
+		if !spec.PruneOnly {
+			t.Error("PruneOnly = false: an ambient project must not upload or expose a per-project preview worker")
+		}
+	})
+
+	t.Run("a preview on its own domain still ships a worker", func(t *testing.T) {
+		m := manifest("web")
+		m.Domains = map[string]*deploymentsv1.DomainList{"preview": {Hostnames: []string{"*.preview.proj.com"}}}
+		specs, err := rootStackSpecs(ambient(t, m), m, "v1", nil)
+		if err != nil {
+			t.Fatalf("rootStackSpecs: %v", err)
+		}
+		if specs[0].PruneOnly {
+			t.Error("PruneOnly = true: a project serving its own preview wildcard needs its worker")
+		}
+	})
+
+	t.Run("a preview with no apps exposes nothing, on any domain", func(t *testing.T) {
+		for _, base := range []string{"preview.acme.com", ""} {
+			m := manifest()
+			m.Domains = map[string]*deploymentsv1.DomainList{"preview": {Hostnames: []string{"*.preview.proj.com"}}}
+			cfg := ambient(t, m)
+			cfg.GlobalPreviewDomain = base
+			specs, err := rootStackSpecs(cfg, m, "v1", nil)
+			if err != nil {
+				t.Fatalf("rootStackSpecs: %v", err)
+			}
+			if len(specs) != 1 {
+				t.Fatalf("specs = %d, want 1", len(specs))
+			}
+			if !specs[0].PruneOnly {
+				t.Errorf("GlobalPreviewDomain %q: PruneOnly = false: a worker with no app answers nothing, so it must not be uploaded or exposed", base)
+			}
+		}
+	})
+
+	t.Run("app URLs land on the global preview domain", func(t *testing.T) {
+		cases := []struct {
+			name string
+			apps []string
+			want []string
+		}{
+			{"a single app elides the app label", []string{"web"}, []string{"https://proj--pr-42.preview.acme.com"}},
+			{"two apps qualify the label", []string{"web", "api"}, []string{
+				"https://proj--pr-42--web.preview.acme.com",
+				"https://proj--pr-42--api.preview.acme.com",
+			}},
+		}
+		for _, tc := range cases {
+			t.Run(tc.name, func(t *testing.T) {
+				m := manifest(tc.apps...)
+				outs := workerURLOutputs(ambient(t, m), m)
+				if got := appURLs(m, outs); !slicesEqual(got, tc.want) {
+					t.Errorf("AppURLs = %v, want %v", got, tc.want)
+				}
+			})
+		}
+	})
+
+	t.Run("the deploy marks the project as served on the global domain", func(t *testing.T) {
+		m := manifest("web")
+		cfg := ambient(t, m)
+		specs, err := rootStackSpecs(cfg, m, "v1", nil)
+		if err != nil {
+			t.Fatalf("rootStackSpecs: %v", err)
+		}
+
+		fake := &recordingRootStack{}
+		state, err := reconcileRootStack(context.Background(), fake, specs, edge.RootStackState{
+			edge.RootStackKeyGlobalPreview: cfg.GlobalPreviewDomain,
+		})
+		if err != nil {
+			t.Fatalf("reconcileRootStack: %v", err)
+		}
+		if edge.ServedOnGlobalPreview(state, cfg.GlobalPreviewDomain) {
+			t.Fatal("the reconciled state kept the prior mark; stamping it before the reconcile would then be enough, and this test proves nothing")
+		}
+
+		state = MarkGlobalPreview(state, cfg, m)
+		if !edge.ServedOnGlobalPreview(state, cfg.GlobalPreviewDomain) {
+			t.Errorf("state = %v, want the global preview domain stamped: `ocel domain ls` lists the projects by it", state)
+		}
+	})
+
+	t.Run("declaring its own preview domain clears the mark", func(t *testing.T) {
+		m := manifest("web")
+		cfg := ambient(t, m)
+		m.Domains = map[string]*deploymentsv1.DomainList{"preview": {Hostnames: []string{"*.preview.proj.com"}}}
+		specs, err := rootStackSpecs(cfg, m, "v1", nil)
+		if err != nil {
+			t.Fatalf("rootStackSpecs: %v", err)
+		}
+
+		fake := &recordingRootStack{version: "v1", secret: "fake-secret"}
+		prior := edge.RootStackState{
+			edge.RootStackKeySlug:          "proj",
+			edge.RootStackKeyEndpoint:      fakeStoreEndpoint,
+			edge.RootStackKeySecret:        "fake-secret",
+			edge.RootStackKeyGlobalPreview: cfg.GlobalPreviewDomain,
+		}
+		state, err := reconcileRootStack(context.Background(), fake, specs, prior)
+		if err != nil {
+			t.Fatalf("reconcileRootStack: %v", err)
+		}
+
+		state = MarkGlobalPreview(state, cfg, m)
+		if edge.ServedOnGlobalPreview(state, cfg.GlobalPreviewDomain) {
+			t.Errorf("state = %v, want the mark cleared: this project serves its own wildcard now", state)
+		}
+	})
+
+	t.Run("an over-long label is refused at deploy time", func(t *testing.T) {
+		pointer := strings.Repeat("p", previewLabelMaxLen)
+
+		t.Run("on the global domain, where the slug is part of the label", func(t *testing.T) {
+			m := manifest("web")
+			cfg := ambient(t, m)
+			cfg.Slug = "acme"
+			cfg.Identity = pointer
+
+			_, err := rootStackSpecs(cfg, m, "v1", nil)
+			if err == nil {
+				t.Fatalf("expected a %d-character label to be refused", len("acme--")+len(pointer))
+			}
+			for _, want := range []string{"acme", pointer, "69", "63", "6"} {
+				if !strings.Contains(err.Error(), want) {
+					t.Errorf("error must name %q, got %q", want, err)
+				}
+			}
+		})
+
+		t.Run("on the project's own wildcard", func(t *testing.T) {
+			m := manifest("web")
+			m.Domains = map[string]*deploymentsv1.DomainList{"preview": {Hostnames: []string{"*.preview.proj.com"}}}
+			cfg := ambient(t, m)
+			cfg.Identity = pointer + "pppppp"
+
+			_, err := rootStackSpecs(cfg, m, "v1", nil)
+			if err == nil {
+				t.Fatalf("expected a %d-character label to be refused", len(cfg.Identity))
+			}
+			for _, want := range []string{cfg.Identity, "69", "63", "6"} {
+				if !strings.Contains(err.Error(), want) {
+					t.Errorf("error must name %q, got %q", want, err)
+				}
+			}
+		})
+	})
+
+	t.Run("a project that declares its own preview domain ignores the global one", func(t *testing.T) {
+		m := manifest("web")
+		m.Domains = map[string]*deploymentsv1.DomainList{"preview": {Hostnames: []string{"*.preview.proj.com"}}}
+		cfg := ambient(t, m)
+
+		specs, err := rootStackSpecs(cfg, m, "v1", nil)
+		if err != nil {
+			t.Fatalf("rootStackSpecs: %v", err)
+		}
+		if !slicesEqual(specs[0].Domains, []string{"*.preview.proj.com"}) {
+			t.Errorf("Domains = %v, want the project's own wildcard", specs[0].Domains)
+		}
+		if got := appURLs(m, workerURLOutputs(cfg, m)); !slicesEqual(got, []string{"https://pr-42.preview.proj.com"}) {
+			t.Errorf("AppURLs = %v, want the project's own wildcard resolved", got)
+		}
+	})
+}
+
 func TestWorkerAppURL(t *testing.T) {
 	t.Parallel()
 	cases := []struct {

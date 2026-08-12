@@ -103,17 +103,38 @@ func TestReconcileSharedEntry(t *testing.T) {
 		}
 
 		meta := uploadedMetadata(t, m, edge.SharedPreviewEntryScript)
-		for _, typ := range []string{"secret_text", "service", "plain_text", "r2_bucket"} {
+		for _, typ := range []string{"secret_text", "plain_text"} {
 			if got := bindingsByType(meta, typ); len(got) != 0 {
 				t.Errorf("%s bindings = %v, want none: the shared entry serves no single project", typ, got)
 			}
 		}
-		if got := bindingsByType(meta, "worker_loader"); len(got) != 1 {
-			t.Errorf("worker_loader bindings = %v, want the loader the entry runs preview code through", got)
-		}
 
 		if stamp, _, err := (&provider{}).getVersionStamp(t.Context(), store.URL, "acme-web", "s3cr3t"); err != nil || stamp != "" {
 			t.Errorf("store version stamp = %q (err %v), want it untouched by a shared-entry reconcile", stamp, err)
+		}
+	})
+
+	t.Run("the cache bucket and the isr writer are bound", func(t *testing.T) {
+		m := &cfMock{zoneID: "zone1", zoneName: "app.com"}
+		spec := sharedEntrySpec()
+		spec.Values = map[string]string{valueKeyCacheBucket: "ocel-edge-cache-preview"}
+		spec.ISRWriterScriptName = "ocel-isr-writer-preview"
+
+		if err := m.provider(t).ReconcileSharedEntry(t.Context(), spec); err != nil {
+			t.Fatalf("ReconcileSharedEntry: %v", err)
+		}
+
+		meta := uploadedMetadata(t, m, edge.SharedPreviewEntryScript)
+		buckets := bindingsByType(meta, "r2_bucket")
+		if len(buckets) != 1 || buckets[0]["name"] != cacheStoreBinding || buckets[0]["bucket_name"] != "ocel-edge-cache-preview" {
+			t.Errorf("r2_bucket bindings = %v, want %s bound to the preview cache bucket: without it every static asset 404s", buckets, cacheStoreBinding)
+		}
+		services := bindingsByType(meta, "service")
+		if len(services) != 1 || services[0]["name"] != genericISRWriterBinding || services[0]["service"] != "ocel-isr-writer-preview" {
+			t.Errorf("service bindings = %v, want the ISR writer bound", services)
+		}
+		if got := bindingsByType(meta, "worker_loader"); len(got) != 1 {
+			t.Errorf("worker_loader bindings = %v, want the loader the entry runs preview code through", got)
 		}
 	})
 
@@ -184,6 +205,9 @@ func TestDestroySharedEntry(t *testing.T) {
 			existingRoutes: []map[string]any{
 				{"id": "someone-elses", "pattern": "*.preview.app.com/*", "script": "ocel-shop-preview"},
 			},
+			existingRecords: []map[string]any{
+				{"id": "wildcard", "name": "*.preview.app.com", "type": "AAAA", "content": "100::", "proxied": true},
+			},
 		}
 
 		if err := m.provider(t).DestroySharedEntry(t.Context(), "preview.app.com"); err != nil {
@@ -192,7 +216,25 @@ func TestDestroySharedEntry(t *testing.T) {
 		if len(m.deletedRoutes) != 0 {
 			t.Errorf("deleted routes = %v, want none: the wildcard belongs to another worker", m.deletedRoutes)
 		}
+		if len(m.deletedRecords) != 0 {
+			t.Errorf("deleted records = %v, want none: the surviving route needs its placeholder", m.deletedRecords)
+		}
 		assertSet(t, "deleted scripts", m.deletedScripts, []string{edge.SharedPreviewEntryScript})
+	})
+
+	t.Run("a route already gone still takes its record", func(t *testing.T) {
+		m := &cfMock{
+			zoneID:   "zone1",
+			zoneName: "app.com",
+			existingRecords: []map[string]any{
+				{"id": "wildcard", "name": "*.preview.app.com", "type": "AAAA", "content": "100::", "proxied": true},
+			},
+		}
+
+		if err := m.provider(t).DestroySharedEntry(t.Context(), "preview.app.com"); err != nil {
+			t.Fatalf("DestroySharedEntry: %v", err)
+		}
+		assertSet(t, "deleted records", m.deletedRecords, []string{"wildcard"})
 	})
 
 	t.Run("an unset account id is an error", func(t *testing.T) {

@@ -254,6 +254,14 @@ func previewSpec(endpoint, version string) edge.RootStackSpec {
 	return spec
 }
 
+func pruneOnlySpec(endpoint, version string) edge.RootStackSpec {
+	spec := previewSpec(endpoint, version)
+	spec.Domains = nil
+	spec.PruneOnly = true
+	spec.PruneWorkerStem = "ocel-preview"
+	return spec
+}
+
 func specStampFor(t *testing.T, spec edge.RootStackSpec) string {
 	t.Helper()
 	stamp, err := specStamp(spec, genericWorker(spec, spec.Slug))
@@ -494,6 +502,55 @@ func TestReconcileRootStack(t *testing.T) {
 		}
 		if state[edge.RootStackKeyOwnerToken] != storeOwnerToken {
 			t.Errorf("persisted owner token = %q, want the instance's own", state[edge.RootStackKeyOwnerToken])
+		}
+	})
+
+	t.Run("a prune-only spec exposes no worker yet still records the instance and prunes", func(t *testing.T) {
+		store := fakeStoreServer(t, "s3cr3t")
+		m := previewZoneMock()
+		m.existingRoutes = []map[string]any{
+			{"id": "stale", "pattern": "pr-1-abc1234567.preview.app.com/*", "script": "ocel-preview"},
+			{"id": "sibling", "pattern": "pr-2-abc1234567.preview.app.com/*", "script": "ocel-preview--web"},
+			{"id": "entry", "pattern": "*.preview.ocel.app/*", "script": edge.SharedPreviewEntryScript},
+			{"id": "other", "pattern": "pr-3-abc1234567.preview.app.com/*", "script": "someone-else"},
+		}
+		p := m.provider(t)
+		spec := pruneOnlySpec(store.URL, "v2")
+
+		state, err := p.ReconcileRootStack(t.Context(), spec, testState(store.URL, "s3cr3t"))
+		if err != nil {
+			t.Fatalf("ReconcileRootStack: %v", err)
+		}
+
+		if len(m.putScripts) != 0 {
+			t.Errorf("uploaded scripts = %v, want none: the shared entry worker serves these hostnames", m.putScripts)
+		}
+		if len(m.subdomainCalls) != 0 {
+			t.Errorf("subdomain calls = %v, want none: a prune-only worker is never exposed on workers.dev", m.subdomainCalls)
+		}
+		if !slices.Equal(m.deletedScripts, []string{spec.GenericName}) {
+			t.Errorf("deleted scripts = %v, want the retired per-project preview worker alone", m.deletedScripts)
+		}
+		if len(m.createdRoutes) != 0 {
+			t.Errorf("created routes = %v, want none", m.createdRoutes)
+		}
+		assertSet(t, "deleted routes", m.deletedRoutes, []string{"stale", "sibling"})
+		if state[edge.RootStackKeySecret] != "s3cr3t" || state[edge.RootStackKeyEndpoint] != store.URL {
+			t.Errorf("state = %v, want the store instance's identity", state)
+		}
+		stamps := readStampSet(t, p, store.URL, state[edge.RootStackKeySecret])
+		if want := specStampFor(t, spec); stamps[spec.GenericName] != want {
+			t.Errorf("version stamps = %v, want %q under %q", stamps, want, spec.GenericName)
+		}
+	})
+
+	t.Run("a prune-only spec refuses to target the shared entry worker", func(t *testing.T) {
+		store := fakeStoreServer(t, "s3cr3t")
+		spec := pruneOnlySpec(store.URL, "v2")
+		spec.GenericName = edge.SharedPreviewEntryScript
+
+		if _, err := previewZoneMock().provider(t).ReconcileRootStack(t.Context(), spec, testState(store.URL, "s3cr3t")); err == nil {
+			t.Fatal("ReconcileRootStack err = nil, want a refusal to prune the shared entry worker")
 		}
 	})
 }

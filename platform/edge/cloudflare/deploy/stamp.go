@@ -30,6 +30,7 @@ type stampedSpec struct {
 	ISRWriterScriptName string
 	StoreEndpoint       string
 	Domains             []string
+	PruneOnly           bool
 	PruneRoutes         bool
 	PruneWorkerStem     string
 	RequiredRecord      string
@@ -49,6 +50,7 @@ func specStamp(spec edge.RootStackSpec, generic edge.Worker) (string, error) {
 		ISRWriterScriptName: spec.ISRWriterScriptName,
 		StoreEndpoint:       spec.StoreEndpoint,
 		Domains:             spec.Domains,
+		PruneOnly:           spec.PruneOnly,
 		PruneRoutes:         spec.PruneRoutes,
 		PruneWorkerStem:     spec.PruneWorkerStem,
 		RequiredRecord:      spec.RequiredRecord,
