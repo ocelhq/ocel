@@ -240,7 +240,7 @@ func runPreviewUp(ctx context.Context, d deps, cwd string, opts previewUpOptions
 
 func requirePreviewDomain(cfg *projectconfig.Config, global *deploymentsv1.GlobalPreviewDomain, id *deploymentsv1.Identity, pointer string, out io.Writer) error {
 	declared := ""
-	if hosts := cfg.Domains["preview"]; len(hosts) > 0 {
+	if hosts := declaredHostnames(cfg, "preview"); len(hosts) > 0 {
 		declared = hosts[0]
 	}
 	base := global.GetBaseDomain()
@@ -275,13 +275,12 @@ func intendedPreviewHostnames(cfg *projectconfig.Config, slug, pointer, base str
 	if pointer == "" || base == "" {
 		return nil
 	}
+	if len(cfg.Apps) < 2 {
+		return []string{edge.PreviewLabel(slug, pointer, "") + "." + base}
+	}
 	hosts := make([]string, 0, len(cfg.Apps))
 	for _, app := range cfg.Apps {
-		name := app.Name
-		if len(cfg.Apps) == 1 {
-			name = ""
-		}
-		hosts = append(hosts, edge.PreviewLabel(slug, pointer, name)+"."+base)
+		hosts = append(hosts, edge.PreviewLabel(slug, pointer, app.Name)+"."+base)
 	}
 	return hosts
 }

@@ -40,6 +40,8 @@ const (
 
 const fakeKnownSlugsEnvVar = "OCEL_TEST_FAKE_KNOWN_SLUGS"
 
+const fakePreflightJournalEnvVar = "OCEL_TEST_FAKE_PREFLIGHT_JOURNAL"
+
 const fakeDomainOwnerEnvVar = "OCEL_TEST_FAKE_DOMAIN_OWNER"
 
 const (
@@ -183,6 +185,7 @@ func (s *deployFakeProviderServer) Preflight(ctx context.Context, req *deploymen
 		return nil, err
 	}
 	s.recordPreflight(req.GetSlug(), req.GetDomains(), req.GetRequiredClass())
+	journalPreflight(req)
 	resp := &deploymentsv1.PreflightResponse{
 		InfraClass:            parseInfraClass(os.Getenv(fakeInfraClassEnvVar)),
 		InfrastructurePresent: os.Getenv(fakeInfraPresentEnvVar) != "0",
@@ -217,6 +220,20 @@ func (s *deployFakeProviderServer) Preflight(ctx context.Context, req *deploymen
 		})
 	}
 	return resp, nil
+}
+
+func journalPreflight(req *deploymentsv1.PreflightRequest) {
+	path := os.Getenv(fakePreflightJournalEnvVar)
+	if path == "" {
+		return
+	}
+	f, err := os.OpenFile(path, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o600)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "fake provider: preflight journal:", err)
+		return
+	}
+	defer f.Close()
+	fmt.Fprintf(f, "slug=%s domains=%s class=%s\n", req.GetSlug(), strings.Join(req.GetDomains(), ","), req.GetRequiredClass())
 }
 
 func fakeGlobalDomain() *deploymentsv1.GlobalPreviewDomain {

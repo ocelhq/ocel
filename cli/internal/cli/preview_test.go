@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -504,6 +505,132 @@ func TestPreviewEnvironmentFlags(t *testing.T) {
 	})
 }
 
+func TestPreviewPreflightShapeKeepsTeardownOffTheSharedWildcardRefusal(t *testing.T) {
+	const why = "the provider refuses a global-preview account mismatch only for a preflight that carries a slug and no domains, " +
+		"because that is exactly a preview deploy landing on the shared wildcard; a teardown that starts sending a slug would be refused and strand its resources"
+
+	setUpPreview := func(t *testing.T) (root, journal string, d deps) {
+		t.Helper()
+		root, _ = setUpDeployFixture(t)
+		journal = filepath.Join(t.TempDir(), "preflight.journal")
+		t.Setenv(fakePreflightJournalEnvVar, journal)
+		d = defaultDeps()
+		setLoggedIn(&d)
+		stubAppFunctions(&d, nil)
+		stubGit(&d, "feature/login", "")
+		t.Setenv(fakeInfraClassEnvVar, "preview")
+		t.Setenv(fakeInfraPresentEnvVar, "1")
+		return root, journal, d
+	}
+
+	t.Run("up sends the slug and the project's declared preview hostnames, so the shared-wildcard refusal can reach it", func(t *testing.T) {
+		root, journal, d := setUpPreview(t)
+
+		var stdout, stderr bytes.Buffer
+		if err := runPreviewUp(context.Background(), d, root, previewUpOptions{}, &stdout, &stderr, strings.NewReader("")); err != nil {
+			t.Fatalf("runPreviewUp err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
+		}
+
+		got := readPreflightJournal(t, journal)
+		if len(got) != 1 {
+			t.Fatalf("`ocel preview up` issued %d preflights, want exactly 1: %+v", len(got), got)
+		}
+		if got[0].slug == "" {
+			t.Errorf("`ocel preview up` sent an empty slug, want the project slug: %s", why)
+		}
+		if want := "*.preview.acme.com"; strings.Join(got[0].domains, ",") != want {
+			t.Errorf("`ocel preview up` sent domains %v, want the project's declared preview hostnames [%s]: %s", got[0].domains, want, why)
+		}
+	})
+
+	teardowns := []struct {
+		name string
+		run  func(t *testing.T, d deps, root string, stdout, stderr *bytes.Buffer) error
+	}{
+		{"rm", func(t *testing.T, d deps, root string, stdout, stderr *bytes.Buffer) error {
+			return runPreviewRm(context.Background(), d, root, previewRmOptions{}, stdout, stderr, strings.NewReader(""))
+		}},
+		{"prune", func(t *testing.T, d deps, root string, stdout, stderr *bytes.Buffer) error {
+			return runPreviewPrune(context.Background(), d, root, previewPruneOptions{name: "staging", keep: defaultPreviewPruneKeepN}, stdout, stderr)
+		}},
+	}
+	for _, tc := range teardowns {
+		t.Run(tc.name+" sends neither a slug nor domains, so the shared-wildcard refusal never reaches a teardown", func(t *testing.T) {
+			root, journal, d := setUpPreview(t)
+
+			var stdout, stderr bytes.Buffer
+			if err := tc.run(t, d, root, &stdout, &stderr); err != nil {
+				t.Fatalf("`ocel preview %s` err = %v; stdout=%s stderr=%s", tc.name, err, stdout.String(), stderr.String())
+			}
+
+			got := readPreflightJournal(t, journal)
+			if len(got) != 1 {
+				t.Fatalf("`ocel preview %s` issued %d preflights, want exactly 1: %+v", tc.name, len(got), got)
+			}
+			if got[0].slug != "" {
+				t.Errorf("`ocel preview %s` sent slug %q, want none: %s", tc.name, got[0].slug, why)
+			}
+			if len(got[0].domains) != 0 {
+				t.Errorf("`ocel preview %s` sent domains %v, want none: %s", tc.name, got[0].domains, why)
+			}
+		})
+	}
+
+	t.Run("ls preflights not at all, so nothing about it can be refused", func(t *testing.T) {
+		root, journal, d := setUpPreview(t)
+
+		var stdout, stderr bytes.Buffer
+		if err := runPreviewLs(context.Background(), d, root, &stdout, &stderr); err != nil {
+			t.Fatalf("runPreviewLs err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
+		}
+
+		if got := readPreflightJournal(t, journal); len(got) != 0 {
+			t.Errorf("`ocel preview ls` issued %d preflights, want none: %+v; %s", len(got), got, why)
+		}
+	})
+}
+
+type preflightRecord struct {
+	slug    string
+	domains []string
+	class   string
+}
+
+func readPreflightJournal(t *testing.T, path string) []preflightRecord {
+	t.Helper()
+
+	data, err := os.ReadFile(path)
+	if errors.Is(err, os.ErrNotExist) {
+		return nil
+	}
+	if err != nil {
+		t.Fatalf("read preflight journal %s: %v", path, err)
+	}
+
+	var records []preflightRecord
+	for _, line := range strings.Split(strings.TrimSpace(string(data)), "\n") {
+		if line == "" {
+			continue
+		}
+		var rec preflightRecord
+		for _, field := range strings.Fields(line) {
+			key, value, _ := strings.Cut(field, "=")
+			switch key {
+			case "slug":
+				rec.slug = value
+			case "domains":
+				if value != "" {
+					rec.domains = strings.Split(value, ",")
+				}
+			case "class":
+				rec.class = value
+			}
+		}
+		records = append(records, rec)
+	}
+	return records
+}
+
 func TestConfirmDestroyPreview(t *testing.T) {
 	t.Parallel()
 
@@ -589,6 +716,40 @@ func TestRequirePreviewDomain(t *testing.T) {
 			if !strings.Contains(err.Error(), want) {
 				t.Errorf("err = %v, want it to contain %q", err, want)
 			}
+		}
+	})
+
+	t.Run("a single-app project with no apps array still has its global label capped", func(t *testing.T) {
+		t.Parallel()
+
+		cfg := &projectconfig.Config{Slug: "acme"}
+		pointer := strings.Repeat("b", 63)
+		var out bytes.Buffer
+		err := requirePreviewDomain(cfg, global, nil, pointer, &out)
+		if err == nil {
+			t.Fatal("requirePreviewDomain err = nil, want a refusal")
+		}
+		for _, want := range []string{"acme--" + pointer + " is 69 characters", "DNS labels cap at 63", `project "acme" (4)`, "6 over"} {
+			if !strings.Contains(err.Error(), want) {
+				t.Errorf("err = %v, want it to contain %q", err, want)
+			}
+		}
+	})
+
+	t.Run("an app-level preview domain counts as declared", func(t *testing.T) {
+		t.Parallel()
+
+		cfg := &projectconfig.Config{
+			Slug: "acme",
+			Apps: []projectconfig.App{{Name: "web", Domains: map[string][]string{"preview": {"*.preview.acme.com"}}}},
+		}
+		broken := &deploymentsv1.GlobalPreviewDomain{BaseDomain: "previews.ocel.dev", GrammarMin: 1, GrammarMax: 1}
+		var out bytes.Buffer
+		if err := requirePreviewDomain(cfg, broken, nil, "pr-1", &out); err != nil {
+			t.Fatalf("requirePreviewDomain err = %v, want nil", err)
+		}
+		if !strings.Contains(out.String(), "*.preview.acme.com") {
+			t.Errorf("out = %q, want it to name the project's own preview domain", out.String())
 		}
 	})
 
