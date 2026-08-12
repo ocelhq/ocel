@@ -50,8 +50,13 @@ const (
 
 	maxDescriptionLen = 256
 
-	maxRoleNameLen   = 64
-	maxLambdaNameLen = 64
+	maxRoleNameLen       = 64
+	iamAutonameSuffixLen = 26
+	maxRolePrefixLen     = maxRoleNameLen - iamAutonameSuffixLen
+
+	maxLambdaNameLen        = 64
+	lambdaAutonameSuffixLen = 8
+	maxLambdaBaseNameLen    = maxLambdaNameLen - lambdaAutonameSuffixLen
 
 	functionURLInvokeModeStream = "RESPONSE_STREAM"
 
@@ -283,10 +288,14 @@ func appExecutionRole(cfg Config, app string, caches map[string]*isrConfig, bund
 	return role
 }
 
+func rolePrefix(coord naming.Coordinate) string {
+	return coord.PhysicalName(maxRolePrefixLen-len(naming.WordSeparator)) + naming.WordSeparator
+}
+
 func newFunctionRole(ctx *pulumi.Context, coord naming.Coordinate, r executionRole) (*iam.Role, error) {
 	id := naming.ResourceID(naming.KindRole, roleLocalName)
 	role, err := iam.NewRole(ctx, id, &iam.RoleArgs{
-		Name:             pulumi.String(coord.PhysicalName(maxRoleNameLen)),
+		NamePrefix:       pulumi.String(rolePrefix(coord)),
 		Description:      describe(coord, "execution role for this app's functions"),
 		AssumeRolePolicy: pulumi.String(assumeRolePolicy(lambdaServicePrincipal)),
 		Tags:             resourceTags(coord.Kind, ""),
@@ -342,13 +351,12 @@ func registerFunction(ctx *pulumi.Context, logicalName string, coord naming.Coor
 		env[key] = pulumi.String(value)
 	}
 
-	resourceName := naming.ResourceID(naming.KindFunction, coord.Name)
+	resourceName := coord.PhysicalName(maxLambdaBaseNameLen)
 	if route == "" {
 		route = naming.PathSeparator + coord.Name
 	}
 
 	fn, err := lambda.NewFunction(ctx, resourceName, &lambda.FunctionArgs{
-		Name:        pulumi.String(coord.PhysicalName(maxLambdaNameLen)),
 		Description: describe(coord, "route "+route),
 		Runtime:     pulumi.String(args.Runtime),
 		Handler:     pulumi.String(lambdaConfigHandler),
