@@ -96,6 +96,57 @@ func TestEnvName(t *testing.T) {
 	})
 }
 
+func TestEnvScope(t *testing.T) {
+	t.Parallel()
+
+	t.Run("a preview class with no pointer scopes every preview", func(t *testing.T) {
+		t.Parallel()
+		got, err := EnvScope(&deploymentsv1.Environment{Class: deploymentsv1.Environment_CLASS_PREVIEW})
+		if err != nil {
+			t.Fatalf("EnvScope: %v", err)
+		}
+		if got != EveryPreview {
+			t.Errorf("EnvScope = %q, want the project-wide preview scope", got)
+		}
+	})
+
+	t.Run("a pointed preview keeps its name", func(t *testing.T) {
+		t.Parallel()
+		got, err := EnvScope(previewEnv(deploymentsv1.Environment_LIFECYCLE_PERSISTENT))
+		if err != nil {
+			t.Fatalf("EnvScope: %v", err)
+		}
+		if got != "staging" {
+			t.Errorf("EnvScope = %q, want %q", got, "staging")
+		}
+	})
+
+	t.Run("an unusable preview name is still refused", func(t *testing.T) {
+		t.Parallel()
+		env := &deploymentsv1.Environment{
+			Class:    deploymentsv1.Environment_CLASS_PREVIEW,
+			Identity: ProductionEnv,
+		}
+		if _, err := EnvScope(env); err == nil {
+			t.Fatal("EnvScope err = nil, want a preview named after production refused")
+		}
+	})
+
+	t.Run("production and unspecified classes are unchanged", func(t *testing.T) {
+		t.Parallel()
+		got, err := EnvScope(prodEnv())
+		if err != nil {
+			t.Fatalf("EnvScope: %v", err)
+		}
+		if got != ProductionEnv {
+			t.Errorf("EnvScope = %q, want %q", got, ProductionEnv)
+		}
+		if _, err := EnvScope(&deploymentsv1.Environment{}); err == nil {
+			t.Fatal("EnvScope err = nil, want an unspecified class refused")
+		}
+	})
+}
+
 func TestReleaseOf(t *testing.T) {
 	t.Parallel()
 
