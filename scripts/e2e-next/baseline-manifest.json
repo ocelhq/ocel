@@ -704,25 +704,9 @@
     "runtimeError": true
   },
   "test/e2e/cancel-request/stream-cancel.test.ts": {
-    "failed": [
-      "streaming responses cancel inner stream after disconnect middleware cancels stream making progress",
-      "streaming responses cancel inner stream after disconnect middleware cancels stalled stream",
-      "streaming responses cancel inner stream after disconnect middleware cancels stream that never sent data",
-      "streaming responses cancel inner stream after disconnect edge app route handler cancels stream making progress",
-      "streaming responses cancel inner stream after disconnect edge app route handler cancels stalled stream",
-      "streaming responses cancel inner stream after disconnect edge app route handler cancels stream that never sent data",
-      "streaming responses cancel inner stream after disconnect node app route handler cancels stream making progress",
-      "streaming responses cancel inner stream after disconnect node app route handler cancels stalled stream",
-      "streaming responses cancel inner stream after disconnect node app route handler cancels stream that never sent data",
-      "streaming responses cancel inner stream after disconnect edge pages api cancels stream making progress",
-      "streaming responses cancel inner stream after disconnect edge pages api cancels stalled stream",
-      "streaming responses cancel inner stream after disconnect edge pages api cancels stream that never sent data",
-      "streaming responses cancel inner stream after disconnect node pages api cancels stream making progress",
-      "streaming responses cancel inner stream after disconnect node pages api cancels stalled stream",
-      "streaming responses cancel inner stream after disconnect node pages api cancels stream that never sent data"
-    ],
+    "failed": [],
     "flakey": [],
-    "runtimeError": false
+    "runtimeError": true
   },
   "test/e2e/chrome-devtools-workspace/chrome-devtools-workspace.test.ts": {
     "failed": [
