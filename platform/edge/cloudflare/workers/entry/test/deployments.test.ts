@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  RECORD_CACHE_MAX,
   resolveDeployment,
   type PointerRecordResult,
   type DeploymentRecord,
@@ -297,6 +298,65 @@ describe("resolveDeployment", () => {
     await resolveDeployment(d);
 
     expect(calls).toBe(1);
+  });
+
+  it("evicts the oldest host once the cache is full", async () => {
+    const calls: Record<string, number> = {};
+    const binding: DeploymentsBinding = {
+      async pointerRecord(args) {
+        calls[args.slug] = (calls[args.slug] ?? 0) + 1;
+        return { kind: "record", buildId: args.slug, record: makeRecord() };
+      },
+    };
+    const clock = { ms: 0 };
+    const resolve = (n: number) =>
+      resolveDeployment({
+        binding,
+        slug: `p${n}`,
+        host: `p${n}.preview.ocel.sh`,
+        pointer: "pr-1",
+        now: () => clock.ms,
+      });
+
+    for (let n = 0; n <= RECORD_CACHE_MAX; n++) await resolve(n);
+
+    await resolve(1);
+    await resolve(0);
+
+    expect(calls.p1).toBe(1);
+    expect(calls.p0).toBe(2);
+  });
+
+  it("evicts least-recently-used, so a re-read host outlives an older one", async () => {
+    const calls: Record<string, number> = {};
+    const binding: DeploymentsBinding = {
+      async pointerRecord(args) {
+        calls[args.slug] = (calls[args.slug] ?? 0) + 1;
+        return { kind: "record", buildId: args.slug, record: makeRecord() };
+      },
+    };
+    const clock = { ms: 0 };
+    const resolve = (n: number) =>
+      resolveDeployment({
+        binding,
+        slug: `q${n}`,
+        host: `q${n}.preview.ocel.sh`,
+        pointer: "pr-1",
+        now: () => clock.ms,
+      });
+
+    for (let n = 0; n < RECORD_CACHE_MAX; n++) await resolve(n);
+
+    await resolve(0);
+    expect(calls.q0).toBe(1);
+
+    await resolve(RECORD_CACHE_MAX);
+
+    await resolve(0);
+    await resolve(1);
+
+    expect(calls.q0).toBe(1);
+    expect(calls.q1).toBe(2);
   });
 
   it("passes an absent app through and maps ambiguous-app to not-found", async () => {
