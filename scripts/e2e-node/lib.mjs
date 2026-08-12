@@ -256,6 +256,96 @@ export function envSegment(environment) {
   return "prod";
 }
 
+export const BYTECODE_CACHE_ENV = "OCEL_BYTECODE_CACHE";
+
+export const BYTECODE_BUCKET_ENV = "OCEL_BYTECODE_BUCKET";
+
+export const BYTECODE_PREFIX_ENV = "OCEL_BYTECODE_PREFIX";
+
+export const BYTECODE_PREFIX_SEGMENT = "bytecode";
+
+const BYTECODE_ARCHIVE_NAME = /^node(\d+\.\d+\.\d+)-([a-z0-9_]+)\.tar\.gz$/;
+
+export function bytecodeArchiveName(key) {
+  const name = String(key ?? "").split("/").pop();
+  const match = BYTECODE_ARCHIVE_NAME.exec(name ?? "");
+  if (!match) return null;
+  return { name, nodeVersion: match[1], arch: match[2] };
+}
+
+export function bytecodeSettings(env) {
+  const bucket = (env ?? {})[BYTECODE_BUCKET_ENV] ?? "";
+  const prefix = String((env ?? {})[BYTECODE_PREFIX_ENV] ?? "").replace(/\/+$/, "");
+  const missing = [
+    ...(bucket ? [] : [BYTECODE_BUCKET_ENV]),
+    ...(prefix ? [] : [BYTECODE_PREFIX_ENV]),
+  ];
+  if (missing.length === 2) return { kind: "absent", missing, bucket, prefix };
+  if (missing.length === 1) return { kind: "partial", missing, bucket, prefix };
+  return { kind: "present", missing, bucket, prefix };
+}
+
+export function bytecodePrefixProblem({ prefix, environment, slug, app }) {
+  const segments = String(prefix ?? "").split("/").filter(Boolean);
+  const want = `${envSegment(environment)}/${slug}/${app}/<release>/${BYTECODE_PREFIX_SEGMENT}`;
+  if (segments.length !== 5) {
+    return `${prefix} has ${segments.length} segments, not the five of ${want}`;
+  }
+  const [env, project, name] = segments;
+  if (env !== envSegment(environment) || project !== slug || name !== app) {
+    return `${prefix} does not name this app; expected ${want}`;
+  }
+  if (segments[4] !== BYTECODE_PREFIX_SEGMENT) {
+    return `${prefix} ends in ${segments[4]}, not ${BYTECODE_PREFIX_SEGMENT}; expected ${want}`;
+  }
+  return null;
+}
+
+export const BYTECODE_REHYDRATE_MARKER = "rehydrated compile cache from ";
+
+export const BYTECODE_EMBEDDED_MARKER = "loaded embedded compile cache from ";
+
+export function bytecodeRehydrateOutcome(message, key) {
+  const text = String(message ?? "");
+  if (text.includes(`${BYTECODE_REHYDRATE_MARKER}${key}:`)) {
+    return { kind: "hit", message: text };
+  }
+  if (text.includes(BYTECODE_EMBEDDED_MARKER)) {
+    return { kind: "embedded", message: text };
+  }
+  if (text.includes(`no compile cache at ${key} yet`)) {
+    return { kind: "miss", message: text };
+  }
+  if (text.includes(`could not fetch the compile cache at ${key}:`)) {
+    return { kind: "fetch-error", message: text };
+  }
+  if (text.includes(`compile cache at ${key} is`) && text.includes("skipping rehydration")) {
+    return { kind: "over-ceiling", message: text };
+  }
+  if (text.includes(`could not rehydrate the compile cache from ${key}:`)) {
+    return { kind: "extract-error", message: text };
+  }
+  if (text.includes(`rehydrating the compile cache from ${key} ran out of time:`)) {
+    return { kind: "timeout", message: text };
+  }
+  if (text.includes("before rehydrating the compile cache:")) {
+    return { kind: "clear-error", message: text };
+  }
+  if (text.includes("compile cache disabled") || text.includes("no aws config for the compile cache:")) {
+    return { kind: "disabled", message: text };
+  }
+  if (text.includes("compile cache")) {
+    return { kind: "other-key", message: text };
+  }
+  return null;
+}
+
+export function summarizeOutcomes(outcomes) {
+  const counts = new Map();
+  for (const { kind } of outcomes ?? []) counts.set(kind, (counts.get(kind) ?? 0) + 1);
+  return [...counts.entries()].map(([kind, n]) => `${n} ${kind}`).join(", ") || "no compile-cache lines at all";
+}
+
 export function lambdaFunctionNames(response) {
   return (response?.ResourceTagMappingList ?? [])
     .map((entry) => /^arn:aws:lambda:[^:]*:[^:]*:function:([^:]+)/.exec(entry?.ResourceARN ?? ""))

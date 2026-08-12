@@ -10,6 +10,10 @@ import {
   PREVIEW_ROOT_STACK_PARAM_PREFIX,
   SLUG_PREFIX,
   SMOKE_APPS,
+  bytecodeArchiveName,
+  bytecodePrefixProblem,
+  bytecodeRehydrateOutcome,
+  bytecodeSettings,
   echoMismatches,
   echoRequest,
   edgeVerdict,
@@ -24,6 +28,7 @@ import {
   resolveAppURLs,
   serveMarker,
   strandedProjectSlugs,
+  summarizeOutcomes,
   tail,
   urlHost,
 } from "./lib.mjs";
@@ -343,6 +348,124 @@ describe("urlHost", () => {
 
   it("is empty for something that is not a URL", () => {
     expect(urlHost("nope")).toBe("");
+  });
+});
+
+describe("bytecodeSettings", () => {
+  it("reads the coordinate the deploy put on the function", () => {
+    expect(
+      bytecodeSettings({
+        OCEL_BYTECODE_BUCKET: "assets-xyz",
+        OCEL_BYTECODE_PREFIX: "preview-ptr/e2en-7/exp/rdeadbeef/bytecode/",
+      }),
+    ).toMatchObject({ kind: "present", bucket: "assets-xyz", prefix: "preview-ptr/e2en-7/exp/rdeadbeef/bytecode" });
+  });
+
+  it("calls a function carrying neither var absent — the shape a deploy with the flag off leaves", () => {
+    const settings = bytecodeSettings({ OCEL_ISR_BUCKET: "assets-xyz" });
+    expect(settings.kind).toBe("absent");
+    expect(settings.missing).toEqual(["OCEL_BYTECODE_BUCKET", "OCEL_BYTECODE_PREFIX"]);
+  });
+
+  it("names the half that is missing, since half a coordinate resolves to no cache at all", () => {
+    expect(bytecodeSettings({ OCEL_BYTECODE_PREFIX: "p/q/app/r1/bytecode" })).toMatchObject({
+      kind: "partial",
+      missing: ["OCEL_BYTECODE_BUCKET"],
+    });
+  });
+});
+
+describe("bytecodePrefixProblem", () => {
+  const environment = { class: "preview", identity: "ptr" };
+
+  it("passes the app's own bytecode coordinate", () => {
+    expect(
+      bytecodePrefixProblem({
+        prefix: "preview-ptr/e2en-7/exp/rdeadbeef/bytecode",
+        environment,
+        slug: "e2en-7",
+        app: "exp",
+      }),
+    ).toBeNull();
+  });
+
+  it("catches a prefix belonging to another app", () => {
+    expect(
+      bytecodePrefixProblem({
+        prefix: "preview-ptr/e2en-7/hono/rdeadbeef/bytecode",
+        environment,
+        slug: "e2en-7",
+        app: "exp",
+      }),
+    ).toContain("does not name this app");
+  });
+
+  it("catches the ISR prefix, which is what bytecode used to borrow", () => {
+    expect(
+      bytecodePrefixProblem({
+        prefix: "preview-ptr/e2en-7/exp/rdeadbeef/isr",
+        environment,
+        slug: "e2en-7",
+        app: "exp",
+      }),
+    ).toContain("ends in isr");
+  });
+});
+
+describe("bytecodeArchiveName", () => {
+  it("reads the node version and architecture out of a cache key", () => {
+    expect(bytecodeArchiveName("preview-ptr/e2en-7/exp/r1/bytecode/fn/node24.3.1-arm64.tar.gz")).toMatchObject({
+      nodeVersion: "24.3.1",
+      arch: "arm64",
+    });
+  });
+
+  it("is null for anything that is not a cache archive", () => {
+    expect(bytecodeArchiveName("preview-ptr/e2en-7/exp/r1/bytecode/")).toBeNull();
+    expect(bytecodeArchiveName("some/other/object.zip")).toBeNull();
+  });
+});
+
+describe("bytecodeRehydrateOutcome", () => {
+  const key = "preview-ptr/e2en-7/exp/r1/bytecode/fn/node24.3.1-arm64.tar.gz";
+
+  it("reads the hit the bootstrap logs on a cold start", () => {
+    expect(
+      bytecodeRehydrateOutcome(`ocel: rehydrated compile cache from ${key}: 63963136 bytes in 412ms`, key),
+    ).toMatchObject({ kind: "hit" });
+  });
+
+  it("tells a miss, a disabled cache and an embedded load apart", () => {
+    expect(bytecodeRehydrateOutcome(`ocel: no compile cache at ${key} yet; nothing to rehydrate`, key).kind).toBe(
+      "miss",
+    );
+    expect(bytecodeRehydrateOutcome("ocel: could not read node's version, compile cache disabled: x", key).kind).toBe(
+      "disabled",
+    );
+    expect(
+      bytecodeRehydrateOutcome("ocel: loaded embedded compile cache from .ocel/bytecode/node24.3.1-arm64.tar: 1 bytes in 2ms", key)
+        .kind,
+    ).toBe("embedded");
+  });
+
+  it("keeps a compile-cache line naming some other key, so the summary cannot claim silence", () => {
+    expect(bytecodeRehydrateOutcome("ocel: no compile cache at other/key yet; nothing to rehydrate", key).kind).toBe(
+      "other-key",
+    );
+  });
+
+  it("ignores lines that are not about the compile cache", () => {
+    expect(bytecodeRehydrateOutcome("START RequestId: abc", key)).toBeNull();
+  });
+});
+
+describe("summarizeOutcomes", () => {
+  it("counts by kind", () => {
+    expect(summarizeOutcomes([{ kind: "miss" }, { kind: "miss" }, { kind: "disabled" }])).toBe("2 miss, 1 disabled");
+  });
+
+  it("says so when nothing at all was seen", () => {
+    expect(summarizeOutcomes([])).toContain("no compile-cache lines");
   });
 });
 

@@ -52,6 +52,16 @@ node "$ADAPTER_DIR"/scripts/e2e-node/assert-serves.mjs
 node "$ADAPTER_DIR"/scripts/e2e-node/cleanup.mjs
 ```
 
+To cover the compile cache as well, deploy with the gate on and add the second
+assertion:
+
+```bash
+OCEL_BYTECODE_CACHE=1 node "$ADAPTER_DIR"/scripts/e2e-node/deploy.mjs
+node "$ADAPTER_DIR"/scripts/e2e-node/assert-serves.mjs
+node "$ADAPTER_DIR"/scripts/e2e-node/assert-bytecode.mjs
+node "$ADAPTER_DIR"/scripts/e2e-node/cleanup.mjs
+```
+
 `deploy.mjs` prints one line per app — its name, its framework and the URL the
 deploy announced. `assert-serves.mjs` is the judgement; run it from the same
 directory, since it reads `.ocel/deploy-result.json` and `.ocel-e2e-node.json`
@@ -92,6 +102,39 @@ The pure halves — slug and pointer derivation, hostname attribution, the edge
 verdict, the echo comparison — are covered by
 `pnpm --filter @ocel-scripts/e2e-node test`, which proves the comparisons and
 not the Lambda.
+
+## What `assert-bytecode.mjs` proves
+
+Only meaningful after a deploy run with `OCEL_BYTECODE_CACHE=1`; without it the
+first step below fails, saying so. Per app, stopping at the first failure:
+
+1. The deployed function carries both `OCEL_BYTECODE_BUCKET` and
+   `OCEL_BYTECODE_PREFIX`. A function carrying neither is the shape of the
+   silence in #196 — the flag was accepted and the coordinate reached only next
+   apps, so the node child never got `NODE_COMPILE_CACHE` and no cache exists to
+   write or read. Half a coordinate is called out separately: the bootstrap
+   resolves nothing from it and logs nothing about it.
+2. The prefix is **this app's** bytecode coordinate. A mismatch does not stop
+   the run — the legs below still run against whatever the function names — but
+   it is reported unverified, since a prefix that is not this app's is how the
+   cache silently ends up shared or borrowed from ISR.
+3. Exactly one `node<version>-<arch>.tar.gz` exists under that prefix **before
+   this script issues any request**, so the deploy's warm pass wrote it and not
+   a request of ours.
+4. A burst of concurrent requests forces fresh sandboxes, and one of them logs
+   `ocel: rehydrated compile cache from <key>` — a cold start read the object
+   back. Anything else in the window is reported by kind (miss, fetch error,
+   over-ceiling, timeout, disabled), so a write that is never read back says
+   which.
+
+An embedded cache (the compile cache shipped inside the artifact) makes step 4
+**unproven, not passed**: those cold starts load from the artifact and no
+instance ever reads the S3 object.
+
+The whole script is AWS-side and exits 2 without the `aws` CLI and credentials.
+The pure halves — the coordinate read off the function, the prefix check, the
+archive name and the log classification — are covered by
+`pnpm --filter @ocel-scripts/e2e-node test`.
 
 ## Reclaiming a stranded project
 

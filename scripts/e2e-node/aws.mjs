@@ -31,6 +31,54 @@ export function awsUnreachable() {
   }
 }
 
+export const LIST_RETRY_DEADLINE_MS = 30_000;
+
+export const LOG_POLL_INTERVAL_MS = 5_000;
+
+export const LOG_DEADLINE_MS = 120_000;
+
+export const LOG_PAGE_LIMIT = 1000;
+
+export function listObjectKeys(bucket, prefix) {
+  const response = JSON.parse(
+    aws(["s3api", "list-objects-v2", "--bucket", bucket, "--prefix", prefix, "--output", "json"]),
+  );
+  return (response.Contents ?? []).map((entry) => entry.Key);
+}
+
+export function functionEnvironment(functionName) {
+  const raw = aws([
+    "lambda",
+    "get-function-configuration",
+    "--function-name",
+    functionName,
+    "--query",
+    "Environment.Variables",
+    "--output",
+    "json",
+  ]);
+  return JSON.parse(raw) ?? {};
+}
+
+export function fetchFunctionLogs(functionName, startTime, filterPattern) {
+  const response = JSON.parse(
+    aws([
+      "logs",
+      "filter-log-events",
+      "--log-group-name",
+      `/aws/lambda/${functionName}`,
+      "--start-time",
+      String(startTime),
+      ...(filterPattern ? ["--filter-pattern", filterPattern] : []),
+      "--limit",
+      String(LOG_PAGE_LIMIT),
+      "--output",
+      "json",
+    ]),
+  );
+  return response.events ?? [];
+}
+
 export function listParameterNames(pathPrefix) {
   const response = JSON.parse(
     aws([
