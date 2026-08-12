@@ -6,6 +6,7 @@ import {
   mkdirSync,
   mkdtempSync,
   readFileSync,
+  readdirSync,
   rmSync,
   symlinkSync,
   writeFileSync,
@@ -13,10 +14,12 @@ import {
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { buildApp, buildApps, detectApp, placeFile } from "./build.js";
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
+import { buildApp, buildApps, detectApp, placeFile, writeBuildPlan } from "./build.js";
+import { BUNDLE_HANDLER } from "./bundle.js";
 import { sanitizeName } from "./detect.js";
-import { appOutDir } from "./layout.js";
+import { BUILD_PLAN_FILE, SERVE_DESCRIPTOR_FILE, appOutDir } from "./layout.js";
+import { artifactHash } from "./trace.js";
 
 function importEntryInNode(entryMjs: string): { defaultType: string } {
   const script =
@@ -52,6 +55,9 @@ afterAll(() => {
   for (const d of dirs) rmSync(d, { recursive: true, force: true });
 });
 
+beforeEach(() => vi.stubEnv("OCEL_BUILD_PREFER_TRACING", "1"));
+afterEach(() => vi.unstubAllEnvs());
+
 function appFuncDir(outDir: string, app: string): string {
   return path.join(appOutDir(outDir, app), "functions", "index.func");
 }
@@ -82,6 +88,8 @@ describe("buildApp", () => {
     expect(summary.handler).toBe("src/server.js");
     expect(summary.framework).toBe("express");
     expect(summary.artifactPath).toBe(path.join("apps", "api", "functions", "index.func"));
+    expect(summary.strategy).toBe("trace");
+    expect(summary.entrypoint).toBeUndefined();
   });
 
   it("preserves the module tree instead of emitting a single bundle", async () => {
@@ -253,6 +261,194 @@ describe("self-contained .func artifact", () => {
     cpSync(funcDir, isolated, { recursive: true });
     const { defaultType } = importEntryInNode(path.join(isolated, "src", "server.js"));
     expect(defaultType).toBe("function");
+  });
+});
+
+function nodeApp(dep: string): string {
+  const dir = mkdtempSync(path.join(tmpdir(), `nb-${dep}-`));
+  dirs.push(dir);
+  writeFileSync(path.join(dir, "package.json"), JSON.stringify({ dependencies: { [dep]: "*" } }));
+  mkdirSync(path.join(dir, "src"), { recursive: true });
+  writeFileSync(path.join(dir, "src", "server.ts"), "export default { fetch: () => new Response() }\n");
+  return dir;
+}
+
+describe("artifactHash", () => {
+  function tree(files: Record<string, string>): string {
+    const dir = mkdtempSync(path.join(tmpdir(), "nb-hash-"));
+    dirs.push(dir);
+    for (const [rel, content] of Object.entries(files)) {
+      const abs = path.join(dir, rel);
+      mkdirSync(path.dirname(abs), { recursive: true });
+      writeFileSync(abs, content);
+    }
+    return dir;
+  }
+
+  it("is 16 lowercase hex chars", async () => {
+    expect(await artifactHash(tree({ "a.js": "x" }))).toMatch(/^[0-9a-f]{16}$/);
+  });
+
+  it("is identical for identical trees written independently", async () => {
+    const files = { "a.js": "one", "nested/b.js": "two", "config.json": "{}" };
+    expect(await artifactHash(tree(files))).toBe(await artifactHash(tree(files)));
+  });
+
+  it("changes when a file's bytes change", async () => {
+    const before = await artifactHash(tree({ "a.js": "one" }));
+    expect(await artifactHash(tree({ "a.js": "two" }))).not.toBe(before);
+  });
+
+  it("changes when a file is renamed but its bytes are not", async () => {
+    const before = await artifactHash(tree({ "a.js": "one" }));
+    expect(await artifactHash(tree({ "b.js": "one" }))).not.toBe(before);
+  });
+
+  it("changes when a file is added", async () => {
+    const before = await artifactHash(tree({ "a.js": "one" }));
+    expect(await artifactHash(tree({ "a.js": "one", "b.js": "two" }))).not.toBe(before);
+  });
+});
+
+describe("serve descriptor", () => {
+  function readServe(outDir: string, app: string) {
+    return JSON.parse(
+      readFileSync(path.join(appOutDir(outDir, app), SERVE_DESCRIPTOR_FILE), "utf8"),
+    );
+  }
+
+  it("names the framework and an artifact hash at the app artifact root", async () => {
+    const outDir = freshOut();
+    dirs.push(outDir);
+    await buildApp({ name: "api", cwd: fixtureDir }, { outDir });
+
+    expect(readServe(outDir, "api")).toEqual({
+      framework: "express",
+      buildId: expect.stringMatching(/^[0-9a-f]{16}$/),
+    });
+    expect(existsSync(path.join(appFuncDir(outDir, "api"), SERVE_DESCRIPTOR_FILE))).toBe(false);
+  });
+
+  it("carries the hash of the function directory", async () => {
+    const outDir = freshOut();
+    dirs.push(outDir);
+    await buildApp({ name: "api", cwd: fixtureDir }, { outDir });
+
+    expect(readServe(outDir, "api").buildId).toBe(await artifactHash(appFuncDir(outDir, "api")));
+  });
+
+  it("repeats the same buildId for an unchanged app", async () => {
+    const first = freshOut();
+    const second = freshOut();
+    dirs.push(first, second);
+    await buildApp({ name: "api", cwd: fixtureDir }, { outDir: first });
+    await buildApp({ name: "api", cwd: fixtureDir }, { outDir: second });
+
+    expect(readServe(second, "api").buildId).toBe(readServe(first, "api").buildId);
+  });
+});
+
+describe("a node framework is one server behind one origin", () => {
+  for (const framework of ["express", "fastify", "hono"]) {
+    it(`${framework} emits exactly one function when tracing, so the edge has one origin to pick`, async () => {
+      const outDir = freshOut();
+      dirs.push(outDir);
+
+      const summaries = await buildApp({ name: "api", cwd: nodeApp(framework) }, { outDir });
+
+      expect(summaries).toHaveLength(1);
+      expect(summaries[0]?.framework).toBe(framework);
+      expect(summaries[0]?.strategy).toBe("trace");
+      expect(readdirSync(path.join(appOutDir(outDir, "api"), "functions"))).toEqual(["index.func"]);
+    });
+
+    it(`${framework} emits exactly one function when bundling, so the edge has one origin to pick`, async () => {
+      vi.stubEnv("OCEL_BUILD_PREFER_TRACING", undefined);
+      const outDir = freshOut();
+      dirs.push(outDir);
+
+      const summaries = await buildApp({ name: "api", cwd: nodeApp(framework) }, { outDir });
+
+      expect(summaries).toHaveLength(1);
+      expect(summaries[0]?.framework).toBe(framework);
+      expect(summaries[0]?.strategy).toBe("bundle");
+      expect(summaries[0]?.artifactPath).toBe(path.join("apps", "api", "functions", "index.func"));
+    });
+  }
+});
+
+describe("writeBuildPlan", () => {
+  it("reports every summary, strategy and entrypoint at the output root", async () => {
+    vi.stubEnv("OCEL_BUILD_PREFER_TRACING", undefined);
+    const outDir = freshOut();
+    dirs.push(outDir);
+    const cwd = nodeApp("express");
+
+    await writeBuildPlan(outDir, await buildApps([{ name: "api", cwd }], { outDir }));
+
+    expect(JSON.parse(readFileSync(path.join(outDir, BUILD_PLAN_FILE), "utf8"))).toEqual({
+      functions: [
+        {
+          name: "api",
+          runtime: "nodejs24.x",
+          handler: BUNDLE_HANDLER,
+          artifactPath: path.join("apps", "api", "functions", "index.func"),
+          framework: "express",
+          strategy: "bundle",
+          entrypoint: path.join(cwd, "src", "server.ts"),
+        },
+      ],
+    });
+  });
+});
+
+describe("build strategy", () => {
+  it("bundles by default, emitting nothing and reporting the entrypoint", async () => {
+    vi.stubEnv("OCEL_BUILD_PREFER_TRACING", undefined);
+    const outDir = freshOut();
+    dirs.push(outDir);
+    const cwd = nodeApp("hono");
+
+    const [summary] = await buildApp({ name: "api", cwd }, { outDir });
+
+    expect(summary).toEqual({
+      name: "api",
+      runtime: "nodejs24.x",
+      handler: BUNDLE_HANDLER,
+      artifactPath: path.join("apps", "api", "functions", "index.func"),
+      framework: "hono",
+      strategy: "bundle",
+      entrypoint: path.join(cwd, "src", "server.ts"),
+    });
+    expect(existsSync(appOutDir(outDir, "api"))).toBe(false);
+  });
+
+  it("traces when OCEL_BUILD_PREFER_TRACING is 1", async () => {
+    const outDir = freshOut();
+    dirs.push(outDir);
+    const [summary] = await buildApp({ name: "api", cwd: fixtureDir }, { outDir });
+
+    expect(summary.strategy).toBe("trace");
+    expect(existsSync(path.join(appFuncDir(outDir, "api"), "config.json"))).toBe(true);
+  });
+
+  it("bundles for any value other than 1", async () => {
+    vi.stubEnv("OCEL_BUILD_PREFER_TRACING", "true");
+    const outDir = freshOut();
+    dirs.push(outDir);
+    const [summary] = await buildApp({ name: "api", cwd: nodeApp("express") }, { outDir });
+    expect(summary.strategy).toBe("bundle");
+  });
+
+  it("still fails on an unresolvable entrypoint when bundling", async () => {
+    vi.stubEnv("OCEL_BUILD_PREFER_TRACING", undefined);
+    const outDir = freshOut();
+    dirs.push(outDir);
+    const dir = mkdtempSync(path.join(tmpdir(), "nb-nobundle-"));
+    dirs.push(dir);
+    writeFileSync(path.join(dir, "package.json"), JSON.stringify({ dependencies: { hono: "4" } }));
+
+    await expect(buildApp({ name: "api", cwd: dir }, { outDir })).rejects.toThrow(/no entrypoint found/);
   });
 });
 

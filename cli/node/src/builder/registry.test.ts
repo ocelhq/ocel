@@ -16,6 +16,7 @@ function dirWith(deps: Record<string, string>): string {
 
 describe("resolveFramework", () => {
   it("resolves a known key", () => expect(resolveFramework("express").name).toBe("express"));
+  it("resolves hono", () => expect(resolveFramework("hono").name).toBe("hono"));
   it("throws naming known frameworks for an unknown key", () => {
     expect(() => resolveFramework("svelte")).toThrow(/unknown framework "svelte".*next/s);
   });
@@ -26,9 +27,13 @@ describe("detectFramework", () => {
     expect(detectFramework(dirWith({ express: "5" }))?.name).toBe("express");
     expect(detectFramework(dirWith({ fastify: "5" }))?.name).toBe("fastify");
     expect(detectFramework(dirWith({ next: "16" }))?.name).toBe("next");
+    expect(detectFramework(dirWith({ hono: "4" }))?.name).toBe("hono");
   });
   it("prefers next over express when both are present", () => {
     expect(detectFramework(dirWith({ next: "16", express: "5" }))?.name).toBe("next");
+  });
+  it("prefers next over hono when both are present", () => {
+    expect(detectFramework(dirWith({ next: "16", hono: "4" }))?.name).toBe("next");
   });
   it("returns undefined when nothing matches", () => {
     expect(detectFramework(dirWith({ lodash: "4" }))).toBeUndefined();

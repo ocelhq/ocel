@@ -1,5 +1,7 @@
+import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { sanitizeName } from "./detect.js";
+import { BUILD_PLAN_FILE } from "./layout.js";
 import { withSpan } from "./protocol.js";
 import { detectFramework, resolveFramework } from "./registry.js";
 import type { AppInput, BuildOptions, FunctionSummary } from "./types.js";
@@ -21,6 +23,17 @@ export async function buildApps(inputs: AppInput[], options: BuildOptions): Prom
     summaries.push(...(await withSpan("build", input.name, () => buildApp(input, options))));
   }
   return summaries;
+}
+
+export async function writeBuildPlan(
+  outDir: string,
+  functions: FunctionSummary[],
+): Promise<void> {
+  await mkdir(outDir, { recursive: true });
+  await writeFile(
+    path.join(outDir, BUILD_PLAN_FILE),
+    `${JSON.stringify({ functions }, null, 2)}\n`,
+  );
 }
 
 export function detectApp(projectRoot: string): AppInput | undefined {

@@ -1,10 +1,11 @@
+import { createHash } from "node:crypto";
 import { existsSync, readFileSync, statSync } from "node:fs";
-import { copyFile, mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import { copyFile, mkdir, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { nodeFileTrace } from "@vercel/nft";
 import { init as lexerInit, parse as parseImports } from "es-module-lexer";
 import ts from "typescript";
-import { appRel } from "./layout.js";
+import { SERVE_DESCRIPTOR_FILE, appOutDir, functionRel } from "./layout.js";
 import type { AppInput, BuildOptions, FunctionSummary } from "./types.js";
 
 export interface TraceSpec {
@@ -29,7 +30,7 @@ function transpileTs(source: string, ext: string): string {
 
 const RESOLVE_EXT = [".ts", ".tsx", ".mts", ".cts", ".js", ".jsx", ".mjs", ".cjs"];
 
-function resolveEntrypoint(input: AppInput, fw: TraceSpec): string {
+export function resolveEntrypoint(input: AppInput, fw: TraceSpec): string {
   if (input.entrypoint) {
     const abs = path.resolve(input.cwd, input.entrypoint);
     if (!existsSync(abs)) {
@@ -201,6 +202,43 @@ async function emitFile(absPath: string, dest: string): Promise<void> {
   await copyFile(absPath, dest);
 }
 
+async function regularFiles(dir: string, prefix = ""): Promise<string[]> {
+  const entries = await readdir(dir, { withFileTypes: true });
+  const found: string[] = [];
+  for (const entry of entries) {
+    const rel = prefix ? `${prefix}/${entry.name}` : entry.name;
+    if (entry.isDirectory()) {
+      found.push(...(await regularFiles(path.join(dir, entry.name), rel)));
+    } else if (entry.isFile()) {
+      found.push(rel);
+    }
+  }
+  return found;
+}
+
+export async function artifactHash(dir: string): Promise<string> {
+  const rels = (await regularFiles(dir)).sort();
+  const outer = createHash("sha256");
+  for (const rel of rels) {
+    const digest = createHash("sha256").update(await readFile(path.join(dir, rel))).digest("hex");
+    outer.update(`${rel}\0${digest}\n`);
+  }
+  return outer.digest("hex").slice(0, 16);
+}
+
+export async function writeServeDescriptor(
+  outDir: string,
+  app: string,
+  descriptor: { framework: string; buildId: string },
+): Promise<void> {
+  const appDir = appOutDir(outDir, app);
+  await mkdir(appDir, { recursive: true });
+  await writeFile(
+    path.join(appDir, SERVE_DESCRIPTOR_FILE),
+    `${JSON.stringify(descriptor, null, 2)}\n`,
+  );
+}
+
 export async function traceBuild(
   input: AppInput,
   options: BuildOptions,
@@ -208,7 +246,7 @@ export async function traceBuild(
 ): Promise<FunctionSummary> {
   const entrypoint = resolveEntrypoint(input, fw);
 
-  const funcRel = path.join(appRel(input.name), "functions", "index.func");
+  const funcRel = functionRel(input.name);
   const funcDir = path.join(options.outDir, funcRel);
   await rm(funcDir, { recursive: true, force: true });
   await mkdir(funcDir, { recursive: true });
@@ -240,5 +278,17 @@ export async function traceBuild(
     `${JSON.stringify({ runtime: fw.runtime, handler, framework: fw.name, app: input.name }, null, 2)}\n`,
   );
 
-  return { name: input.name, runtime: fw.runtime, handler, artifactPath: funcRel, framework: fw.name };
+  await writeServeDescriptor(options.outDir, input.name, {
+    framework: fw.name,
+    buildId: await artifactHash(funcDir),
+  });
+
+  return {
+    name: input.name,
+    runtime: fw.runtime,
+    handler,
+    artifactPath: funcRel,
+    framework: fw.name,
+    strategy: "trace",
+  };
 }

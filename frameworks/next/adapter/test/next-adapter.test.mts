@@ -1680,9 +1680,23 @@ test("writes every output under OCEL_OUTPUT_DIR when the builder sets it", async
   await adapter.onBuildComplete(args as never);
 
   expect(await exists(join(outputRoot, "routing-manifest.json"))).toBe(true);
+  expect(await exists(join(outputRoot, "serve.json"))).toBe(true);
   expect(await exists(join(outputRoot, "functions/bundle-0.func/config.json"))).toBe(true);
   expect(await exists(join(outputRoot, "cache/index.cache.json"))).toBe(true);
   expect(await exists(join(projectDir, ".ocel/output"))).toBe(false);
+});
+
+test("states the framework and next's own build id in serve.json", async () => {
+  const { projectDir, args } = await synthProject();
+  const adapter = await loadAdapterIn(projectDir);
+
+  await adapter.onBuildComplete(args as never);
+
+  const serve = JSON.parse(
+    await readFile(join(projectDir, ".ocel/output/serve.json"), "utf8"),
+  );
+  expect(serve).toEqual({ framework: "next", buildId: args.buildId });
+  expect(serve.buildId).toBe((await readManifest(projectDir)).buildId);
 });
 
 test("two apps exposing the same route path do not overwrite each other", async () => {
