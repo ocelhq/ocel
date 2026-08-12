@@ -1,8 +1,12 @@
 package deploy
 
-const previewLabelMaxLen = 63
+import edge "github.com/ocelhq/ocel/platform/edge/contract"
 
-const previewAppSeparator = "--"
+const (
+	previewAppSeparator = edge.PreviewAppSeparator
+
+	previewLabelMaxLen = edge.PreviewLabelMaxLen
+)
 
 func previewHost(pointer, app, base string, singleApp bool) string {
 	if pointer == "" || base == "" {

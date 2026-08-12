@@ -263,12 +263,19 @@ func finalizeDeploy(ctx context.Context, cfg Config, stack edge.RootStack, specs
 	return state, nil
 }
 
-func rootStackSpecs(cfg Config, manifest *deploymentsv1.Manifest, version string, warn func(string)) ([]edge.RootStackSpec, error) {
+func sharedWorker(cfg Config) (edge.Worker, error) {
 	generic, err := genericWorkerBundle(cfg)
+	if err != nil {
+		return edge.Worker{}, err
+	}
+	return withRevalidateQueue(withImageOptimizer(withCacheCoordinates(withEdgeSigningCreds(generic, cfg), cfg), cfg), cfg), nil
+}
+
+func rootStackSpecs(cfg Config, manifest *deploymentsv1.Manifest, version string, warn func(string)) ([]edge.RootStackSpec, error) {
+	generic, err := sharedWorker(cfg)
 	if err != nil {
 		return nil, err
 	}
-	generic = withRevalidateQueue(withImageOptimizer(withCacheCoordinates(withEdgeSigningCreds(generic, cfg), cfg), cfg), cfg)
 
 	base := edge.RootStackSpec{
 		Version:         version,
@@ -287,6 +294,9 @@ func rootStackSpecs(cfg Config, manifest *deploymentsv1.Manifest, version string
 	apps := workerApps(cfg.ArtifactRoot, manifest)
 
 	if cfg.Class == deploymentsv1.Environment_CLASS_PREVIEW {
+		if cfg.GlobalPreviewDomain != "" && !declaresPreviewDomain(manifest) {
+			return nil, nil
+		}
 		spec := base
 		spec.GenericName = previewWorkerName(cfg.Slug)
 		spec.PruneWorkerStem = previewWorkerStem(cfg.Slug)
@@ -418,9 +428,6 @@ func previewHostnames(cfg Config, apps []*deploymentsv1.ManifestApp, declared ma
 		host := previewHost(cfg.Identity, name, base, len(apps) == 1)
 		if host == "" {
 			continue
-		}
-		if label, _, _ := strings.Cut(host, "."); len(label) > previewLabelMaxLen {
-			return workerHostnames{}, fmt.Errorf("preview pointer %q makes the hostname label %q %d characters, over the %d-character DNS limit: use a shorter preview name", cfg.Identity, label, len(label), previewLabelMaxLen)
 		}
 		hosts[name] = []string{host}
 	}

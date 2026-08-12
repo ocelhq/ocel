@@ -75,6 +75,8 @@ type Config struct {
 
 	EdgeValues map[string]string
 
+	GlobalPreviewDomain string
+
 	Slug               string
 	StoreScriptName    string
 	StoreEndpoint      string
