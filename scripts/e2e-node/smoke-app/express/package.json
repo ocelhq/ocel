@@ -1,0 +1,9 @@
+{
+  "name": "ocel-e2e-node-smoke-express",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "express": "~5.0.0"
+  }
+}

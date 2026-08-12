@@ -1,0 +1,13 @@
+{
+  "name": "@ocel-scripts/e2e-node",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Lifecycle scripts deploying the express and hono smoke apps and asserting they serve through the edge worker",
+  "scripts": {
+    "test": "vitest run"
+  },
+  "devDependencies": {
+    "vitest": "^4.1.9"
+  }
+}
