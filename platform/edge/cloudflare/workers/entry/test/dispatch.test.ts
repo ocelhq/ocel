@@ -3659,7 +3659,7 @@ describe("not-found fallback for unmatched pathnames", () => {
     });
 
     const res = await dispatchResult(
-      { resolvedPathname: "/never-registered" },
+      {},
       new Request("https://app.example/never-registered"),
       deps,
     );
@@ -3681,13 +3681,84 @@ describe("not-found fallback for unmatched pathnames", () => {
     });
 
     const res = await dispatchResult(
-      { resolvedPathname: "/never-registered" },
+      {},
       new Request("https://app.example/never-registered"),
       deps,
     );
 
     expect(res.status).toBe(404);
     expect(await res.text()).toBe("Not Found");
+  });
+
+  it("serves a /_next/static asset from the store instead of the not-found page", async () => {
+    const deps = baseDeps({
+      manifest: {
+        buildId: "t",
+        basePath: "",
+        pathnames: ["/404"],
+        routes: {},
+        dispatch: {
+          "/404": { kind: "lambda", id: "page", entryKey: "/404", page: true },
+        },
+        errorRoutes: { notFound: "/404" },
+      },
+      functionUrls: { page: "https://fn.example.com" },
+      fetch: (async () =>
+        new Response("<html>custom 404</html>", {
+          status: 200,
+          headers: { "content-type": "text/html" },
+        })) as unknown as typeof fetch,
+      assetStore: assetStoreServing({
+        "/_next/static/chunks/app.js": "console.log(1)",
+      }),
+    });
+
+    const res = await dispatchResult(
+      {},
+      new Request("https://app.example/_next/static/chunks/app.js"),
+      deps,
+    );
+
+    expect(res.status).toBe(200);
+    expect(await res.text()).toBe("console.log(1)");
+  });
+
+  it("renders the not-found page for a genuinely unmatched pathname through the real router", async () => {
+    const deps = baseDeps({
+      manifest: {
+        buildId: "t",
+        basePath: "",
+        pathnames: ["/404", "/dashboard"],
+        routes: {
+          beforeMiddleware: [],
+          beforeFiles: [],
+          afterFiles: [],
+          dynamicRoutes: [],
+          onMatch: [],
+          fallback: [],
+        },
+        dispatch: {
+          "/404": { kind: "lambda", id: "page", entryKey: "/404", page: true },
+          "/dashboard": { kind: "static" },
+        },
+        errorRoutes: { notFound: "/404" },
+      },
+      functionUrls: { page: "https://fn.example.com" },
+      fetch: (async () =>
+        new Response("<html>custom 404</html>", {
+          status: 200,
+          headers: { "content-type": "text/html" },
+        })) as unknown as typeof fetch,
+      assetStore: assetStoreServing({ "/dashboard.html": "<html>dashboard</html>" }),
+    });
+
+    const res = await serve(
+      new Request("https://app.example/catch-all"),
+      deps,
+    );
+
+    expect(res.status).toBe(404);
+    expect(await res.text()).toBe("<html>custom 404</html>");
   });
 });
 

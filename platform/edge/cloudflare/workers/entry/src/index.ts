@@ -932,7 +932,13 @@ async function dispatch(
     return doFetch(new Request(result.externalRewrite, request));
   }
   if (!result.resolvedPathname) {
-    return middlewarePrefetchProbe(request, url.pathname, manifest) ?? staticAsset();
+    const probe = middlewarePrefetchProbe(request, url.pathname, manifest);
+    if (probe) return probe;
+    const asset = await staticAsset();
+    if (asset.status !== 404) return asset;
+    if (isFlightRequest(request.headers)) return asset;
+    if (isNextDataPathname(url.pathname, manifest, manifest.buildId)) return asset;
+    return notFoundResponse(request, url, result, headers, deps, () => asset, staticAsset);
   }
 
   if (hasUndecodableRouteMatch(result.routeMatches)) {
@@ -941,7 +947,7 @@ async function dispatch(
 
   const target = manifest.dispatch[result.resolvedPathname];
   if (!target) {
-    return notFoundResponse(request, url, result, headers, deps, staticAsset);
+    return notFoundResponse(request, url, result, headers, deps, staticAsset, staticAsset);
   }
 
   const response = await renderDispatchTarget(
@@ -1010,13 +1016,17 @@ async function notFoundResponse(
   result: RouteResult,
   headers: Headers,
   deps: RouteDeps,
+  fallback: () => Response | Promise<Response>,
   staticAsset: (at?: URL) => Promise<Response>,
 ): Promise<Response> {
   const notFoundPathname = deps.manifest.errorRoutes?.notFound;
   const notFoundTarget = notFoundPathname
     ? deps.manifest.dispatch[notFoundPathname]
     : undefined;
-  if (!notFoundPathname || !notFoundTarget) return staticAsset();
+  if (!notFoundPathname || !notFoundTarget) return fallback();
+  if (notFoundTarget.kind === "lambda" && !deps.functionUrls[notFoundTarget.id]) {
+    return fallback();
+  }
 
   const notFoundResult: RouteResult = {
     ...result,
