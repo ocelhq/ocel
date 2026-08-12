@@ -152,7 +152,16 @@ export interface Env {
   OCEL_STATE_TABLE?: string;
   OCEL_ISR_BUCKET?: string;
   OCEL_IMAGE_OPTIMIZER_URL?: string;
+  OCEL_ORIGIN_BODY_LIMIT?: string;
+  OCEL_ORIGIN_BODY_ENCODING?: string;
   LOADER?: WorkerLoader;
+}
+
+export type OriginBodyEncoding = "identity" | "base64";
+
+export interface OriginBodyBudget {
+  maxBytes: number;
+  encoding: OriginBodyEncoding;
 }
 
 type RouteHas =
@@ -263,6 +272,8 @@ export interface RouteDeps {
   edge?: EdgeInvoker;
 
   originFetch?: typeof fetch;
+
+  originBodyBudget?: OriginBodyBudget;
 
   cache?: CacheDeps;
 
@@ -1332,10 +1343,58 @@ const EMPTY_BODY_HEADER = "x-ocel-empty-body";
 
 const NEXT_CACHE_TAGS_HEADER = "x-next-cache-tags";
 
+const TEXT_CONTENT_TYPE =
+  /^(text\/|application\/(json|javascript|xml|x-www-form-urlencoded)\b|[^;]+\+(json|xml)\b)/i;
+
+export function originBodyBytes(
+  byteLength: number,
+  contentType: string | null,
+  encoding: OriginBodyEncoding,
+): number {
+  if (encoding !== "base64") return byteLength;
+  if (contentType !== null && TEXT_CONTENT_TYPE.test(contentType)) return byteLength;
+  return Math.ceil(byteLength / 3) * 4;
+}
+
+export function originBodyBudget(
+  maxBytes: string | undefined,
+  encoding: string | undefined,
+): OriginBodyBudget | undefined {
+  const max = Number(maxBytes);
+  if (!Number.isFinite(max) || max <= 0) return undefined;
+  return { maxBytes: max, encoding: encoding === "base64" ? "base64" : "identity" };
+}
+
+function payloadTooLarge(): Response {
+  return new Response(null, { status: 413 });
+}
+
 function originFetch(deps: RouteDeps): typeof fetch {
   const doFetch = deps.originFetch ?? deps.fetch ?? fetch;
+  const budget = deps.originBodyBudget;
   return (async (input, init) => {
-    const response = await doFetch(input as RequestInfo, init);
+    let request: Request | undefined;
+    if (budget) {
+      request = new Request(input as RequestInfo, init);
+      if (request.body) {
+        const contentType = request.headers.get("content-type");
+        const declared = Number(request.headers.get("content-length"));
+        if (Number.isFinite(declared) && declared > 0) {
+          if (originBodyBytes(declared, contentType, budget.encoding) > budget.maxBytes) {
+            return payloadTooLarge();
+          }
+        } else {
+          const buffered = await request.arrayBuffer();
+          if (originBodyBytes(buffered.byteLength, contentType, budget.encoding) > budget.maxBytes) {
+            return payloadTooLarge();
+          }
+          request = new Request(request, { body: buffered });
+        }
+      }
+    }
+    const response = await (request
+      ? doFetch(request)
+      : doFetch(input as RequestInfo, init));
     const hasEmptyBody = response.headers.has(EMPTY_BODY_HEADER);
     const hasCacheTags = response.headers.has(NEXT_CACHE_TAGS_HEADER);
     if (!hasEmptyBody && !hasCacheTags) return response;
@@ -1618,6 +1677,10 @@ export default {
       {
         fetch,
         originFetch,
+        originBodyBudget: originBodyBudget(
+          env.OCEL_ORIGIN_BODY_LIMIT,
+          env.OCEL_ORIGIN_BODY_ENCODING,
+        ),
         imageOrigin: functionUrlImageOrigin(
           env.OCEL_IMAGE_OPTIMIZER_URL,
           originFetch ?? fetch,

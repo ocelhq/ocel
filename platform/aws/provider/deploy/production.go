@@ -269,7 +269,7 @@ func sharedWorker(cfg Config) (edge.Worker, error) {
 	if err != nil {
 		return edge.Worker{}, err
 	}
-	return withRevalidateQueue(withImageOptimizer(withCacheCoordinates(withEdgeSigningCreds(generic, cfg), cfg), cfg), cfg), nil
+	return withOriginBodyBudget(withRevalidateQueue(withImageOptimizer(withCacheCoordinates(withEdgeSigningCreds(generic, cfg), cfg), cfg), cfg)), nil
 }
 
 func rootStackSpecs(cfg Config, manifest *deploymentsv1.Manifest, version string, warn func(string)) ([]edge.RootStackSpec, error) {
@@ -541,6 +541,11 @@ func withImageOptimizer(worker edge.Worker, cfg Config) edge.Worker {
 		return worker
 	}
 	return withVar(worker, edge.ImageOptimizerURLVar, cfg.ImageOptimizerURL)
+}
+
+func withOriginBodyBudget(worker edge.Worker) edge.Worker {
+	worker = withVar(worker, edge.OriginBodyLimitVar, strconv.Itoa(lambdaOriginBodyLimitBytes))
+	return withVar(worker, edge.OriginBodyEncodingVar, edge.OriginBodyEncodingBase64)
 }
 
 func withRevalidateQueue(worker edge.Worker, cfg Config) edge.Worker {

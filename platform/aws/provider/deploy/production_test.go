@@ -187,6 +187,24 @@ func TestRootStackSpecs(t *testing.T) {
 		}
 	})
 
+	t.Run("every worker declares Lambda's invoke-payload budget to the edge", func(t *testing.T) {
+		manifest := webManifest()
+		cfg := Config{Edge: &recordingEdge{}, Slug: "proj", Class: deploymentsv1.Environment_CLASS_PRODUCTION, ArtifactRoot: specsArtifactRoot(t, manifest)}
+
+		specs, err := rootStackSpecs(cfg, manifest, "v1", nil)
+		if err != nil {
+			t.Fatalf("rootStackSpecs: %v", err)
+		}
+		for _, spec := range specs {
+			if got := spec.Generic.Vars[edge.OriginBodyLimitVar]; got != "6289408" {
+				t.Errorf("Vars[%s] = %q, want 6289408", edge.OriginBodyLimitVar, got)
+			}
+			if got := spec.Generic.Vars[edge.OriginBodyEncodingVar]; got != edge.OriginBodyEncodingBase64 {
+				t.Errorf("Vars[%s] = %q, want %q", edge.OriginBodyEncodingVar, got, edge.OriginBodyEncodingBase64)
+			}
+		}
+	})
+
 	t.Run("production keeps declarative hostnames", func(t *testing.T) {
 		manifest := webManifest()
 		manifest.Domains = map[string]*deploymentsv1.DomainList{"production": {Hostnames: []string{"acme.com", "www.acme.com"}}}
