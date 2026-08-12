@@ -2,13 +2,11 @@ import { execFileSync } from "node:child_process";
 import {
   cpSync,
   existsSync,
-  lstatSync,
   mkdirSync,
   mkdtempSync,
   readFileSync,
   readdirSync,
   rmSync,
-  symlinkSync,
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
@@ -33,15 +31,6 @@ function importEntryInNode(entryMjs: string): { defaultType: string } {
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const fixtureDir = path.resolve(here, "../../test/fixtures/express-app");
-
-(() => {
-  const link = path.join(fixtureDir, "node_modules", "workspace-pkg");
-  try {
-    lstatSync(link);
-  } catch {
-    symlinkSync(path.join("..", "..", "workspace-pkg"), link, "dir");
-  }
-})();
 
 const outRoot = path.resolve(here, "../../.ocel");
 
