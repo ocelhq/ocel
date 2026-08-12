@@ -3,7 +3,7 @@ import {
   responseToMiddlewareResult,
   type I18nConfig,
 } from "@next/routing";
-import { serveStaticAsset, type AssetStoreDeps } from "./assets";
+import { isNextStaticPathname, serveStaticAsset, type AssetStoreDeps } from "./assets";
 import {
   canonicalPathname,
   isNextDataPathname,
@@ -938,6 +938,7 @@ async function dispatch(
     if (asset.status !== 404) return asset;
     if (isFlightRequest(request.headers)) return asset;
     if (isNextDataPathname(url.pathname, manifest, manifest.buildId)) return asset;
+    if (isNextStaticPathname(url.pathname)) return asset;
     return notFoundResponse(request, url, result, headers, deps, () => asset, staticAsset);
   }
 
