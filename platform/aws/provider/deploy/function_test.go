@@ -33,7 +33,7 @@ func TestFunctionCoordinate(t *testing.T) {
 
 		coord := functionCoordinate("shop", testStack(t, "prod", "web"), "fn--web--api-users")
 
-		got := coord.PhysicalName(maxLambdaNameLen)
+		got := coord.PhysicalName(maxLambdaBaseNameLen)
 		if want := "shop-prod-web-api-users-r3f8a1c90"; got != want {
 			t.Fatalf("PhysicalName = %q, want %q", got, want)
 		}
@@ -50,9 +50,9 @@ func TestFunctionCoordinate(t *testing.T) {
 		route := strings.Repeat("very-long-route-segment-", 6)
 		coord := functionCoordinate("shop", testStack(t, "prod", "web"), "fn--web--"+route)
 
-		got := coord.PhysicalName(maxLambdaNameLen)
-		if len(got) > maxLambdaNameLen {
-			t.Fatalf("PhysicalName = %q (%d chars), over the %d-character budget", got, len(got), maxLambdaNameLen)
+		got := coord.PhysicalName(maxLambdaBaseNameLen)
+		if len(got)+lambdaAutonameSuffixLen > maxLambdaNameLen {
+			t.Fatalf("PhysicalName = %q (%d chars) leaves no room for the %d-character suffix within %d", got, len(got), lambdaAutonameSuffixLen, maxLambdaNameLen)
 		}
 		if !strings.HasPrefix(got, "shop-prod-web-") {
 			t.Errorf("PhysicalName = %q, want the project, env and app kept intact", got)
@@ -67,8 +67,8 @@ func TestFunctionCoordinate(t *testing.T) {
 
 		coord := functionCoordinate("shop", testStack(t, "prod", "web"), "fn--web--index")
 
-		if got, want := naming.ResourceID(naming.KindFunction, coord.Name), "fn-index"; got != want {
-			t.Errorf("resource id = %q, want %q", got, want)
+		if got, want := coord.PhysicalName(maxLambdaBaseNameLen), "shop-prod-web-index-r3f8a1c90"; got != want {
+			t.Errorf("function resource id = %q, want %q", got, want)
 		}
 		if got, want := naming.ResourceID(naming.KindFunction, coord.Name, "url"), "fn-index-url"; got != want {
 			t.Errorf("url resource id = %q, want %q", got, want)
@@ -103,8 +103,8 @@ func TestRoleCoordinate(t *testing.T) {
 
 	coord := roleCoordinate("shop", testStack(t, "prod", "web"))
 
-	if got, want := coord.PhysicalName(maxRoleNameLen), "shop-prod-web-app-role-r3f8a1c90"; got != want {
-		t.Errorf("PhysicalName = %q, want %q", got, want)
+	if got, want := rolePrefix(coord), "shop-prod-web-app-role-r3f8a1c90-"; got != want {
+		t.Errorf("rolePrefix = %q, want %q", got, want)
 	}
 	if got, want := naming.ResourceID(naming.KindRole, roleLocalName), "role-app"; got != want {
 		t.Errorf("resource id = %q, want %q", got, want)
@@ -124,6 +124,20 @@ func TestRoleCoordinate(t *testing.T) {
 	if got, want := string(describe(coord, "execution role for this app's functions")),
 		"shop / prod / web - execution role for this app's functions - release r3f8a1c90"; got != want {
 		t.Errorf("description = %q, want %q", got, want)
+	}
+}
+
+func TestRolePrefixLeavesRoomForTheSuffix(t *testing.T) {
+	t.Parallel()
+
+	long := roleCoordinate(strings.Repeat("p", 30), naming.AppStack(strings.Repeat("e", 30), strings.Repeat("a", 30), fixedRelease(t)))
+
+	got := rolePrefix(long)
+	if len(got)+iamAutonameSuffixLen > maxRoleNameLen {
+		t.Errorf("rolePrefix = %q (%d chars) leaves no room for the %d-character suffix within %d", got, len(got), iamAutonameSuffixLen, maxRoleNameLen)
+	}
+	if !strings.HasSuffix(got, naming.WordSeparator) {
+		t.Errorf("rolePrefix = %q, want it to end on the word separator", got)
 	}
 }
 
