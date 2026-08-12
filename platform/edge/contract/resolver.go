@@ -24,3 +24,13 @@ const (
 const ImageOptimizerURLVar = "OCEL_IMAGE_OPTIMIZER_URL"
 
 const RevalidateQueueURLVar = "OCEL_REVALIDATE_QUEUE_URL"
+
+const (
+	OriginBodyLimitVar    = "OCEL_ORIGIN_BODY_LIMIT"
+	OriginBodyEncodingVar = "OCEL_ORIGIN_BODY_ENCODING"
+)
+
+const (
+	OriginBodyEncodingIdentity = "identity"
+	OriginBodyEncodingBase64   = "base64"
+)

@@ -95,6 +95,8 @@ func TestSharedPreviewEntrySpec(t *testing.T) {
 		edge.ImageOptimizerURLVar:  "https://optimizer.example",
 		edge.RevalidateQueueURLVar: "https://queue.example",
 		edge.EdgeAccessKeyIDVar:    "AKIA",
+		edge.OriginBodyLimitVar:    "6289408",
+		edge.OriginBodyEncodingVar: edge.OriginBodyEncodingBase64,
 	} {
 		if spec.Generic.Vars[name] != want {
 			t.Errorf("Vars[%s] = %q, want %q", name, spec.Generic.Vars[name], want)
