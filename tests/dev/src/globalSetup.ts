@@ -1,8 +1,8 @@
 import type { TestProject } from "vitest/node";
-import { applyE2EEnvDefaults } from "./env";
+import { applyDevEnvDefaults } from "./env";
 
 export default async function setup(project: TestProject) {
-  applyE2EEnvDefaults();
+  applyDevEnvDefaults();
 
   let token = process.env.OCEL_ACCESS_TOKEN;
   if (!token) {

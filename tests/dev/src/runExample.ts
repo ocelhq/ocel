@@ -27,7 +27,7 @@ async function poll<T>(
 }
 
 export function describeExample(spec: ExampleSpec) {
-  describe(`${spec.framework} example (e2e)`, () => {
+  describe(`${spec.framework} example (dev)`, () => {
     const token = inject("accessToken");
     const runId = `${Date.now().toString(36)}-${Math.random()
       .toString(36)
