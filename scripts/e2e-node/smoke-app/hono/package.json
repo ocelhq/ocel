@@ -1,0 +1,10 @@
+{
+  "name": "ocel-e2e-node-smoke-hono",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "@hono/node-server": "^1.13.7",
+    "hono": "~4.11.1"
+  }
+}
