@@ -243,6 +243,33 @@ describe("pages-router i18n", () => {
     expect(new URL(res.headers.get("location") ?? "").pathname).toBe("/fr");
   });
 
+  it("redirects the root the build also names bare to the preferred locale", async () => {
+    const deps = i18nDeps({ unlocalized: ["/", "/about"] });
+
+    const res = await serve(
+      new Request("https://app.example/", {
+        headers: { "accept-language": "fr-FR,fr;q=0.9" },
+        redirect: "manual",
+      }),
+      deps,
+    );
+
+    expect(res.status).toBe(307);
+    expect(new URL(res.headers.get("location") ?? "").pathname).toBe("/fr");
+  });
+
+  it("prefixes a path the build names both bare and under a locale", async () => {
+    const deps = i18nDeps({
+      unlocalized: ["/", "/about"],
+      files: { "/en/about.html": "<h1>about</h1>" },
+    });
+
+    const res = await serve(new Request("https://app.example/about"), deps);
+
+    expect(res.status).toBe(200);
+    expect(res.headers.get("x-matched-path")).toBe("/en/about");
+  });
+
   it("does not redirect the root towards the default locale", async () => {
     const deps = i18nDeps({ files: { "/en.html": "<h1>home</h1>" } });
 
