@@ -33,7 +33,11 @@ export function resolveLocale(
   const { detectedLocale, pathname: bare } = normalizeLocalePath(pathname, i18n.locales);
   if (detectedLocale) return { pathname: url.pathname };
 
-  if (pathnames.includes(url.pathname)) {
+  const prefixed =
+    (hadBasePath ? basePath : "") +
+    (isRoot(bare) ? `/${defaultLocale}` : `/${defaultLocale}${bare}`);
+
+  if (!pathnames.includes(prefixed) && pathnames.includes(url.pathname)) {
     return { pathname: url.pathname };
   }
 
@@ -42,8 +46,7 @@ export function resolveLocale(
     if (redirect) return { pathname: url.pathname, redirect };
   }
 
-  const prefixed = isRoot(bare) ? `/${defaultLocale}` : `/${defaultLocale}${bare}`;
-  return { pathname: (hadBasePath ? basePath : "") + prefixed };
+  return { pathname: prefixed };
 }
 
 export function localeOf(i18n: I18nConfig, basePath: string, url: URL): string {
