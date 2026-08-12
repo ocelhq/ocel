@@ -153,6 +153,67 @@ func TestAssembleApp(t *testing.T) {
 			t.Fatal("expected an error for an unresolvable route")
 		}
 	})
+
+	t.Run("a node framework assembles with no routing module", func(t *testing.T) {
+		t.Parallel()
+
+		src := writeNodeAppArtifacts(t, "express")
+		src.Routes = []string{"/"}
+		r := stubResolver{urls: map[string]string{"/": "https://fn.lambda-url.aws/"}}
+
+		w, err := assembleFor(t)(src, r)
+		if err != nil {
+			t.Fatalf("a node framework emits no routing manifest and must still assemble: %v", err)
+		}
+		if len(w.Modules) != 0 {
+			t.Errorf("Modules = %v, want none for a node framework", w.Modules)
+		}
+		if string(w.Main.Content) != "export default {}" {
+			t.Errorf("Main = %q", w.Main.Content)
+		}
+	})
+
+	t.Run("next missing its routing manifest is still an error", func(t *testing.T) {
+		t.Parallel()
+
+		src := writeNodeAppArtifacts(t, "next")
+		src.Routes = []string{"/"}
+		r := stubResolver{urls: map[string]string{"/": "https://fn.lambda-url.aws/"}}
+
+		if _, err := assembleFor(t)(src, r); err == nil {
+			t.Fatal("a next build without a routing manifest is corrupt and must not deploy")
+		}
+	})
+
+	t.Run("a missing serve descriptor is an error", func(t *testing.T) {
+		t.Parallel()
+
+		root := t.TempDir()
+		bundle := filepath.Join(t.TempDir(), "index.js")
+		if err := os.WriteFile(bundle, []byte("export default {}"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		src := edge.WorkerSource{ArtifactRoot: root, BundlePath: bundle, Routes: []string{"/"}}
+		r := stubResolver{urls: map[string]string{"/": "https://fn.lambda-url.aws/"}}
+
+		if _, err := assembleFor(t)(src, r); err == nil {
+			t.Fatal("an artifact with neither a routing manifest nor a descriptor must not deploy")
+		}
+	})
+}
+
+func writeNodeAppArtifacts(t *testing.T, framework string) edge.WorkerSource {
+	t.Helper()
+	root := t.TempDir()
+	descriptor := `{"framework":"` + framework + `","buildId":"b1"}`
+	if err := os.WriteFile(filepath.Join(root, edge.ServeDescriptorFile), []byte(descriptor), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	bundle := filepath.Join(t.TempDir(), "index.js")
+	if err := os.WriteFile(bundle, []byte("export default {}"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	return edge.WorkerSource{ArtifactRoot: root, BundlePath: bundle}
 }
 
 func TestCollectStaticAssets(t *testing.T) {
