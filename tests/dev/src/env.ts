@@ -1,4 +1,4 @@
-export function applyE2EEnvDefaults() {
+export function applyDevEnvDefaults() {
   const databaseUrl =
     process.env.DATABASE_URL ??
     "postgres://postgres:postgres@localhost:5432/postgres";

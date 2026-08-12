@@ -142,7 +142,7 @@ export async function runLink(
   token: string,
   runId: string,
 ): Promise<RunResult> {
-  const name = `e2e-${spec.framework}-${runId}`;
+  const name = `dev-${spec.framework}-${runId}`;
   const result = await runOcel(["link", "--create", name], spec, token);
   if (result.code !== 0) {
     throw new Error(

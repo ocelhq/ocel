@@ -12,7 +12,7 @@ on:
       - "console/db/**"
       - "console/web/**"
       - "examples/**"
-      - "tests/e2e/**"
+      - "tests/dev/**"
       - ".github/workflows/e2e.yml"
   workflow_dispatch:
 
@@ -109,7 +109,7 @@ jobs:
 
       - name: Seed identity and export token
         run: |
-          TOKEN=$(pnpm --silent --filter @ocel-tests/e2e seed | tail -n1)
+          TOKEN=$(pnpm --silent --filter @ocel-tests/dev seed | tail -n1)
           if [ -z "$TOKEN" ]; then
             echo "seed did not print a token" >&2
             exit 1
@@ -117,7 +117,7 @@ jobs:
           echo "OCEL_ACCESS_TOKEN=$TOKEN" >> "$GITHUB_ENV"
 
       - name: Run e2e specs
-        run: pnpm --filter @ocel-tests/e2e test
+        run: pnpm --filter @ocel-tests/dev test
 
       - name: Dump console/web log on failure
         if: failure()

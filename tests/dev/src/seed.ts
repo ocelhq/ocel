@@ -1,6 +1,6 @@
-import { applyE2EEnvDefaults } from "./env";
+import { applyDevEnvDefaults } from "./env";
 
-applyE2EEnvDefaults();
+applyDevEnvDefaults();
 
 const { auth } = await import("@console/auth/next");
 
