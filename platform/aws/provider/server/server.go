@@ -290,6 +290,8 @@ func (s *Server) runDeploy(ctx context.Context, req *deploymentsv1.DeployRequest
 		EdgeSecretKey:      edgeCreds.SecretAccessKey,
 		EdgeValues:         edgeValues,
 
+		GlobalPreviewDomain: params.PreviewDomain.BaseDomain,
+
 		Slug:               manifest.GetSlug(),
 		StoreScriptName:    params.DeploymentsStore.ScriptName,
 		StoreEndpoint:      params.DeploymentsStore.Endpoint,
