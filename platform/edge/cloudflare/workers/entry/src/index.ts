@@ -68,6 +68,7 @@ import {
   previewApps,
   previewTarget,
 } from "./preview";
+import { nodeOrigin } from "./node";
 import { edgeOriginFetch } from "./signing";
 import { retryTransientOrigin } from "./retry";
 import type { ObjectStoreReader } from "./tag-clock";
@@ -321,31 +322,80 @@ export type ResolveBase = Omit<
   };
 };
 
+export type ServeFetch = (request: Request) => Promise<Response>;
+
+interface FrameworkRuntime {
+  serve: (
+    record: DeploymentRecord,
+    deployments: DeploymentsDeps,
+    base: ResolveBase,
+  ) => ServeFetch;
+  routeDeps?: (
+    record: DeploymentRecord,
+    deployments: DeploymentsDeps,
+    base: ResolveBase,
+  ) => RouteDeps;
+}
+
+const nextRuntime: FrameworkRuntime = {
+  serve: (record, deployments, base) => {
+    const deps = nextRouteDeps(record, deployments, base);
+    return (request) => serve(request, deps);
+  },
+  routeDeps: nextRouteDeps,
+};
+
+const nodeRuntime: FrameworkRuntime = {
+  serve: (record, deployments, base) =>
+    nodeOrigin({
+      app: deployments.app ?? record.app,
+      functionUrls: record.functionUrls,
+      originFetch: base.originFetch,
+    }),
+};
+
+const frameworkRuntimes: Record<string, FrameworkRuntime> = {
+  next: nextRuntime,
+  express: nodeRuntime,
+  fastify: nodeRuntime,
+  hono: nodeRuntime,
+};
+
+async function resolveRecord(
+  deployments: DeploymentsDeps,
+): Promise<DeploymentRecord | Response> {
+  const resolution = await resolveDeployment(deployments);
+  if (resolution.kind === "not-found") return deploymentNotFoundResponse();
+  if (resolution.kind === "unavailable") return unavailableResponse();
+  return resolution.record;
+}
+
+export async function resolveServe(
+  deployments: DeploymentsDeps,
+  base: ResolveBase,
+): Promise<ServeFetch | Response> {
+  const record = await resolveRecord(deployments);
+  if (record instanceof Response) return record;
+
+  const runtime = frameworkRuntimes[record.framework];
+  if (!runtime) return unsupportedFrameworkResponse(record.framework);
+
+  return runtime.serve(record, deployments, base);
+}
+
 export async function resolveRouteDeps(
   deployments: DeploymentsDeps,
   base: ResolveBase,
 ): Promise<RouteDeps | Response> {
-  const resolution = await resolveDeployment(deployments);
+  const record = await resolveRecord(deployments);
+  if (record instanceof Response) return record;
 
-  if (resolution.kind === "not-found") return deploymentNotFoundResponse();
-  if (resolution.kind === "unavailable") return unavailableResponse();
+  const runtime = frameworkRuntimes[record.framework];
+  if (!runtime) return unsupportedFrameworkResponse(record.framework);
+  if (!runtime.routeDeps) return unroutedFrameworkResponse(record.framework);
 
-  const { record } = resolution;
-  const handler = frameworkHandlers[record.framework];
-  if (!handler) return unsupportedFrameworkResponse(record.framework);
-
-  return handler(record, deployments, base);
+  return runtime.routeDeps(record, deployments, base);
 }
-
-type FrameworkHandler = (
-  record: DeploymentRecord,
-  deployments: DeploymentsDeps,
-  base: ResolveBase,
-) => RouteDeps;
-
-const frameworkHandlers: Record<string, FrameworkHandler> = {
-  next: nextRouteDeps,
-};
 
 function nextRouteDeps(
   record: DeploymentRecord,
@@ -405,13 +455,20 @@ function deploymentNotFoundResponse(): Response {
 }
 
 function unsupportedFrameworkResponse(framework: string | undefined): Response {
-  const served = Object.keys(frameworkHandlers)
+  const served = Object.keys(frameworkRuntimes)
     .map((name) => `"${name}"`)
     .join(", ");
   const body = framework
     ? `This deployment declares "${framework}"; this runtime serves ${served}.`
     : "This deployment predates framework-tagged deployments and cannot be served. Deploy the app again.";
   return new Response(body, {
+    status: 501,
+    headers: { "content-type": "text/plain; charset=utf-8" },
+  });
+}
+
+function unroutedFrameworkResponse(framework: string): Response {
+  return new Response(`"${framework}" is served without edge routing.`, {
     status: 501,
     headers: { "content-type": "text/plain; charset=utf-8" },
   });
@@ -1794,7 +1851,7 @@ export default {
     }
     if (!app && !global) return deploymentNotFoundResponse();
 
-    const deps = await resolveRouteDeps(
+    const serveRequest = await resolveServe(
       { binding: env.DEPLOYMENTS, slug, host, app, pointer },
       {
         fetch,
@@ -1839,8 +1896,8 @@ export default {
             : undefined,
       },
     );
-    if (deps instanceof Response) return deps;
+    if (serveRequest instanceof Response) return serveRequest;
 
-    return serve(request, deps);
+    return serveRequest(request);
   },
 } satisfies ExportedHandler<Env>;
