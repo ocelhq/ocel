@@ -449,7 +449,7 @@ func newLoopbackClient() *http.Client {
 		Transport: &http.Transport{
 			MaxIdleConns:        16,
 			MaxIdleConnsPerHost: 16,
-			IdleConnTimeout:     90 * time.Second,
+			IdleConnTimeout:     4 * time.Second,
 		},
 	}
 }

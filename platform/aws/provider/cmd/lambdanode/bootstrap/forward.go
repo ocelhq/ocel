@@ -2,10 +2,13 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
+	"net/http/httptrace"
 	"os"
+	"syscall"
 	"time"
 
 	"github.com/aws/aws-lambda-go/lambdacontext"
@@ -59,17 +62,7 @@ func (m *Membrane) forward(ctx context.Context, inv *invocation, rw *responseWri
 		return false, m.fail(rw, fmt.Sprintf("bad event payload: %v", err))
 	}
 
-	req, err := buildLoopbackRequest(ctx, m.nodePort, ev)
-	if err != nil {
-		return false, m.fail(rw, fmt.Sprintf("build loopback request: %v", err))
-	}
-
-	if lc, ok := lambdacontext.FromContext(ctx); ok {
-		req.Header.Set("x-ocel-request-id", lc.AwsRequestID)
-		req.Header.Set("x-ocel-function-arn", lc.InvokedFunctionArn)
-	}
-
-	resp, err := m.client.Do(req)
+	resp, err := m.forwardToNode(ctx, ev)
 	if err != nil {
 		return false, m.fail(rw, fmt.Sprintf("upstream request failed: %v", err))
 	}
@@ -110,6 +103,59 @@ func (m *Membrane) forward(ctx context.Context, inv *invocation, rw *responseWri
 		return true, rw.closeWithError(errTypeUpstream, err.Error())
 	}
 	return true, rw.Close()
+}
+
+func (m *Membrane) forwardToNode(ctx context.Context, ev *funcURLRequest) (*http.Response, error) {
+	req, err := buildForwardRequest(ctx, m.nodePort, ev)
+	if err != nil {
+		return nil, err
+	}
+	resp, retryable, err := m.roundTrip(req)
+	if err == nil || !retryable {
+		return resp, err
+	}
+
+	req, buildErr := buildForwardRequest(ctx, m.nodePort, ev)
+	if buildErr != nil {
+		return nil, err
+	}
+	resp, _, err = m.roundTrip(req)
+	return resp, err
+}
+
+func buildForwardRequest(ctx context.Context, nodePort int, ev *funcURLRequest) (*http.Request, error) {
+	req, err := buildLoopbackRequest(ctx, nodePort, ev)
+	if err != nil {
+		return nil, err
+	}
+	if lc, ok := lambdacontext.FromContext(ctx); ok {
+		req.Header.Set("x-ocel-request-id", lc.AwsRequestID)
+		req.Header.Set("x-ocel-function-arn", lc.InvokedFunctionArn)
+	}
+	return req, nil
+}
+
+func (m *Membrane) roundTrip(req *http.Request) (resp *http.Response, retryable bool, err error) {
+	var reused, wrote bool
+	trace := &httptrace.ClientTrace{
+		GotConn: func(info httptrace.GotConnInfo) {
+			reused = info.Reused
+		},
+		WroteRequest: func(info httptrace.WroteRequestInfo) {
+			wrote = info.Err == nil
+		},
+	}
+	req = req.WithContext(httptrace.WithClientTrace(req.Context(), trace))
+
+	resp, err = m.client.Do(req)
+	if err == nil {
+		return resp, false, nil
+	}
+	return nil, reused && !wrote && isStaleConnError(err), err
+}
+
+func isStaleConnError(err error) bool {
+	return errors.Is(err, io.EOF) || errors.Is(err, syscall.ECONNRESET)
 }
 
 func selfTerminating(status int) bool {

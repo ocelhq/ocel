@@ -203,6 +203,8 @@ export function serveInvoke(invoke: Invoke, onListening?: OnListening): Promise<
 export type OnListening = (port: number) => void;
 
 export function startServer(server: http.Server, onListening?: OnListening): Promise<void> {
+  server.keepAliveTimeout = 0;
+  server.headersTimeout = 0;
   return new Promise((resolve, reject) => {
     server.on("error", reject);
     server.listen({ host: "127.0.0.1", port: 0 }, () => {
