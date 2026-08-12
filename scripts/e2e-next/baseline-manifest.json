@@ -565,21 +565,7 @@
     "runtimeError": false
   },
   "test/e2e/app-dir/segment-cache/vary-params-base-dynamic/vary-params-base-dynamic.test.ts": {
-    "failed": [
-      "segment cache - vary params base dynamic keeps dynamic segment params valid after tag-layout-expireNow with in-view Link back/forward navigations",
-      "segment cache - vary params base dynamic keeps dynamic segment params valid after tag-layout-max with in-view Link back/forward navigations",
-      "segment cache - vary params base dynamic keeps dynamic segment params valid after tag-layout-legacy with in-view Link back/forward navigations",
-      "segment cache - vary params base dynamic keeps dynamic segment params valid after path-root-layout with in-view Link back/forward navigations",
-      "segment cache - vary params base dynamic keeps dynamic segment params valid after path-team-layout with in-view Link back/forward navigations",
-      "segment cache - vary params base dynamic keeps dynamic segment params valid after path-team-page with in-view Link back/forward navigations",
-      "segment cache - vary params base dynamic keeps dynamic segment params valid when browser-triggered revalidation uses tag-layout-expireNow",
-      "segment cache - vary params base dynamic keeps dynamic segment params valid when browser-triggered revalidation uses tag-layout-max",
-      "segment cache - vary params base dynamic keeps dynamic segment params valid when browser-triggered revalidation uses tag-layout-legacy",
-      "segment cache - vary params base dynamic keeps dynamic segment params valid when browser-triggered revalidation uses server-action-tag-layout-expireNow",
-      "segment cache - vary params base dynamic keeps dynamic segment params valid when browser-triggered revalidation uses server-action-tag-layout-max",
-      "segment cache - vary params base dynamic keeps dynamic segment params valid when browser-triggered revalidation uses server-action-tag-layout-legacy",
-      "segment cache - vary params base dynamic keeps params valid for production route shape /[team]/[project]/settings/domains after tag-layout-expireNow"
-    ],
+    "failed": [],
     "flakey": [],
     "runtimeError": false
   },
