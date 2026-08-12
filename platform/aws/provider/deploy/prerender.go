@@ -24,10 +24,6 @@ import (
 	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
 )
 
-type prerenderManifest struct {
-	BuildID string `json:"buildId"`
-}
-
 func storageCoordinate(env, slug, app string, release naming.Release) naming.Coordinate {
 	return naming.Coordinate{
 		Project: naming.Sanitize(slug),
@@ -109,10 +105,17 @@ func (b appBuilds) resolve(cfg Config, app *deploymentsv1.ManifestApp) (string, 
 }
 
 func appBuildID(cfg Config, app *deploymentsv1.ManifestApp) (string, error) {
-	if app.GetFramework() == frameworkNext {
-		return nextBuildID(cfg, app.GetName())
+	name := app.GetName()
+	desc, ok, err := readServeDescriptor(cfg.ArtifactRoot, name)
+	switch {
+	case err != nil:
+		return "", err
+	case !ok:
+		return newRandomID()
+	case desc.BuildID == "":
+		return "", fmt.Errorf("serve descriptor for %s is missing buildId; rebuild the app", name)
 	}
-	return newRandomID()
+	return desc.BuildID, nil
 }
 
 func uploadPrerenderAssets(ctx context.Context, cfg Config, builds appBuilds) error {

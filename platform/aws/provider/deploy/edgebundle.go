@@ -54,9 +54,6 @@ func uploadEdgeBundles(ctx context.Context, cfg Config, manifest *deploymentsv1.
 
 func putEdgeBundles(ctx context.Context, cfg Config, manifest *deploymentsv1.Manifest, builds appBuilds, stats *uploadBatchStats) error {
 	for _, app := range manifestApps(manifest) {
-		if app.GetFramework() != frameworkNext {
-			continue
-		}
 		name := app.GetName()
 		bundle, ok, err := readEdgeBundle(cfg, name)
 		if err != nil {

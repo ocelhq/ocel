@@ -3,7 +3,9 @@ package deploy
 import (
 	"context"
 	"encoding/json"
+	"maps"
 	"os"
+	"path"
 	"path/filepath"
 	"regexp"
 	"strings"
@@ -81,6 +83,17 @@ type legacyEdge struct {
 func (l *legacyEdge) FindApp(_ context.Context, name string) (bool, error) {
 	l.asked = append(l.asked, name)
 	return l.existing[name], nil
+}
+
+type descriptorEdge struct{ recordingEdge }
+
+func (d *descriptorEdge) AssembleApp(src edge.WorkerSource, r edge.Resolver) (edge.Worker, error) {
+	for _, route := range src.Routes {
+		if _, err := r.FunctionURL(route); err != nil {
+			return edge.Worker{}, err
+		}
+	}
+	return edge.Worker{Main: edge.WorkerModule{Name: "index.js"}}, nil
 }
 
 type otherEdge struct{ recordingEdge }
@@ -515,6 +528,73 @@ func TestDeployEdgeWorker(t *testing.T) {
 		}
 	})
 
+	t.Run("a node framework app gets a worker and its domain", func(t *testing.T) {
+		artifactRoot := t.TempDir()
+		writeServeDescriptor(t, artifactRoot, "api", "express", "a1b2c3d4e5f60718")
+		setWorkerBundle(t)
+
+		fake := &descriptorEdge{}
+		cfg := Config{Edge: fake, ArtifactRoot: artifactRoot, Slug: "proj", Env: "prod", Class: deploymentsv1.Environment_CLASS_PRODUCTION}
+		manifest := &deploymentsv1.Manifest{
+			Slug: "proj",
+			Apps: []*deploymentsv1.ManifestApp{
+				{Name: "api", Framework: "express", Domains: classDomains("production", "api.acme.com")},
+			},
+			Functions: []*deploymentsv1.ManifestFunction{
+				{LogicalName: "api_handler", Framework: "express", App: "api", RouteId: "/"},
+			},
+		}
+		outputs := []*deploymentsv1.ResourceOutput{fnOutput("api_handler", "https://api-fn.lambda-url.aws/")}
+
+		out, err := deployEdgeWorker(context.Background(), cfg, manifest, outputs, nil)
+		if err != nil {
+			t.Fatalf("deployEdgeWorker: %v", err)
+		}
+
+		up := fake.only(t)
+		if up.Name != "ocel--proj--prod--api" {
+			t.Errorf("Name = %q, want ocel--proj--prod--api", up.Name)
+		}
+		if !slicesEqual(up.Domains, []string{"api.acme.com"}) {
+			t.Errorf("Domains = %v, want the app's own", up.Domains)
+		}
+		if got := appURLs(manifest, append(outputs, out...)); !slicesEqual(got, []string{"https://ocel--proj--prod--api.acme.workers.dev"}) {
+			t.Errorf("appURLs = %v, want the worker URL, not the IAM-authed Function URL", got)
+		}
+	})
+
+	t.Run("a build that emitted no serve descriptor stays off the edge", func(t *testing.T) {
+		artifactRoot := t.TempDir()
+		dir := appArtifactRoot(artifactRoot, "api")
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(dir, edge.RoutingManifestFile), []byte(`{"buildId":"API1"}`), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		setWorkerBundle(t)
+
+		fake := &descriptorEdge{}
+		cfg := Config{Edge: fake, ArtifactRoot: artifactRoot, Slug: "proj", Env: "prod"}
+		manifest := &deploymentsv1.Manifest{
+			Slug:      "proj",
+			Apps:      []*deploymentsv1.ManifestApp{{Name: "api", Framework: "express"}},
+			Functions: []*deploymentsv1.ManifestFunction{{LogicalName: "api_handler", Framework: "express", App: "api", RouteId: "/"}},
+		}
+		outputs := []*deploymentsv1.ResourceOutput{fnOutput("api_handler", "https://api-fn.lambda-url.aws/")}
+
+		out, err := deployEdgeWorker(context.Background(), cfg, manifest, outputs, nil)
+		if err != nil {
+			t.Fatalf("deployEdgeWorker: %v", err)
+		}
+		if fake.called() {
+			t.Errorf("an app with no serve descriptor must not reach the edge, got %v", fake.names())
+		}
+		if out != nil {
+			t.Errorf("expected no outputs, got %v", out)
+		}
+	})
+
 	t.Run("a zero-function app does not block others", func(t *testing.T) {
 		artifactRoot := t.TempDir()
 		writeRoutingManifest(t, artifactRoot, "web", `{"buildId":"bweb"}`)
@@ -663,10 +743,68 @@ func writeRoutingManifest(t *testing.T, artifactRoot, app, content string) strin
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(dir, "routing-manifest.json"), []byte(content), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(dir, edge.RoutingManifestFile), []byte(content), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	writeServeDescriptor(t, artifactRoot, app, frameworkNext, buildIDOf(t, content))
+	return dir
+}
+
+func writeServeDescriptor(t *testing.T, artifactRoot, app, framework, buildID string) string {
+	t.Helper()
+	dir := appArtifactRoot(artifactRoot, app)
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, edge.ServeDescriptorFile), []byte(serveDescriptor(t, framework, buildID)), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	return dir
+}
+
+func serveDescriptor(t *testing.T, framework, buildID string) string {
+	t.Helper()
+	raw, err := json.Marshal(edge.ServeDescriptor{Framework: framework, BuildID: buildID})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return string(raw)
+}
+
+func buildIDOf(t *testing.T, routingManifest string) string {
+	t.Helper()
+	var routing struct {
+		BuildID string `json:"buildId"`
+	}
+	if err := json.Unmarshal([]byte(routingManifest), &routing); err != nil {
+		t.Fatalf("parse routing manifest %s: %v", routingManifest, err)
+	}
+	return routing.BuildID
+}
+
+func withServeDescriptors(t *testing.T, files map[string]string) map[string]string {
+	t.Helper()
+	out := maps.Clone(files)
+	for rel, contents := range files {
+		app, ok := appOfRoutingManifest(rel)
+		if !ok {
+			continue
+		}
+		descriptor := path.Join(appsDirName, app, edge.ServeDescriptorFile)
+		if _, written := out[descriptor]; written {
+			continue
+		}
+		out[descriptor] = serveDescriptor(t, frameworkNext, buildIDOf(t, contents))
+	}
+	return out
+}
+
+func appOfRoutingManifest(rel string) (string, bool) {
+	parts := strings.Split(rel, "/")
+	if len(parts) != 3 || parts[0] != appsDirName || parts[2] != edge.RoutingManifestFile {
+		return "", false
+	}
+	return parts[1], true
 }
 
 func setWorkerBundle(t *testing.T) {

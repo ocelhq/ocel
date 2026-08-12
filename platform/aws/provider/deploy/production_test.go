@@ -1027,6 +1027,49 @@ func TestBuildDeploymentRecord(t *testing.T) {
 		}
 	})
 
+	t.Run("a node framework app records its origin", func(t *testing.T) {
+		t.Parallel()
+		cfg := Config{ArtifactRoot: nodeAppTree(t), Env: "prod", Slug: "proj", Edge: testLoaderEdge()}
+		manifest := nodeManifest()
+		builds := appBuildsFor(t, cfg, manifest)
+		id := builds.identities["api"]
+		outs := []*deploymentsv1.ResourceOutput{fnOutput("api_handler", "https://api-fn.lambda-url.aws/")}
+
+		record, err := buildDeploymentRecord(cfg, manifest, manifest.GetApps()[0], id, outs, builds)
+		if err != nil {
+			t.Fatalf("buildDeploymentRecord: %v", err)
+		}
+		if record.App != "api" || record.Framework != "express" {
+			t.Errorf("record = %+v, want the app and its framework", record)
+		}
+		if record.Identity != id.String() {
+			t.Errorf("Identity = %q, want %q", record.Identity, id.String())
+		}
+		if got := record.FunctionURLs["/"]; got != "https://api-fn.lambda-url.aws/" {
+			t.Errorf("FunctionURLs = %v, want the origin the worker signs for", record.FunctionURLs)
+		}
+		if record.RoutingManifest != nil {
+			t.Errorf("RoutingManifest = %v, want none from a build that emitted none", record.RoutingManifest)
+		}
+		if record.AssetPrefix != "" || record.IsrPrefix != "" || record.EdgeWorkers != nil {
+			t.Errorf("record = %+v, want no next-only fields", record)
+		}
+
+		raw, err := json.Marshal(record)
+		if err != nil {
+			t.Fatalf("marshal record: %v", err)
+		}
+		var wire map[string]any
+		if err := json.Unmarshal(raw, &wire); err != nil {
+			t.Fatalf("unmarshal record: %v", err)
+		}
+		for _, key := range []string{"framework", "buildId", "functionUrls"} {
+			if _, ok := wire[key]; !ok {
+				t.Errorf("record JSON %s is missing %q", raw, key)
+			}
+		}
+	})
+
 	t.Run("the identity is wired as buildId", func(t *testing.T) {
 		t.Parallel()
 		cfg := Config{ArtifactRoot: edgeAppTree(t), Env: "prod", Edge: testLoaderEdge()}
