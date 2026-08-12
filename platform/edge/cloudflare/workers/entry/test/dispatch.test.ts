@@ -71,6 +71,69 @@ describe("dispatchResult", () => {
     expect(await res.text()).toBe("<svg/>");
   });
 
+  it("varies a statically-dispatched page on the flight headers when the request carries one", async () => {
+    const deps = baseDeps({
+      manifest: {
+        buildId: "t",
+        basePath: "",
+        pathnames: [],
+        routes: {},
+        dispatch: { "/dashboard": { kind: "static" } },
+      },
+      assetStore: assetStoreServing({ "/dashboard": "<html/>" }),
+    });
+
+    const res = await dispatchResult(
+      { resolvedPathname: "/dashboard" },
+      new Request("https://app.example/dashboard", { headers: { rsc: "1" } }),
+      deps,
+    );
+
+    expect(res.headers.get("vary")).toBe(
+      "rsc, next-router-state-tree, next-router-prefetch, next-router-segment-prefetch",
+    );
+  });
+
+  it("does not vary a statically-dispatched page when the request carries no flight header", async () => {
+    const deps = baseDeps({
+      manifest: {
+        buildId: "t",
+        basePath: "",
+        pathnames: [],
+        routes: {},
+        dispatch: { "/dashboard": { kind: "static" } },
+      },
+      assetStore: assetStoreServing({ "/dashboard": "<html/>" }),
+    });
+
+    const res = await dispatchResult(
+      { resolvedPathname: "/dashboard" },
+      new Request("https://app.example/dashboard"),
+      deps,
+    );
+
+    expect(res.headers.has("vary")).toBe(false);
+  });
+
+  it("does not vary a /_next/static/* asset even when the request carries a flight header", async () => {
+    const deps = baseDeps({
+      assetStore: assetStoreServing({
+        "/_next/static/chunks/app.js": "console.log(1)",
+      }),
+    });
+
+    const res = await dispatchResult(
+      { resolvedPathname: null },
+      new Request("https://app.example/_next/static/chunks/app.js", {
+        headers: { rsc: "1" },
+      }),
+      deps,
+    );
+
+    expect(res.status).toBe(200);
+    expect(res.headers.has("vary")).toBe(false);
+  });
+
   it("serves a statically-optimized dynamic page under its manifest key", async () => {
     const deps = baseDeps({
       manifest: {

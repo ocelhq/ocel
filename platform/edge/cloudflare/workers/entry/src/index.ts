@@ -78,6 +78,23 @@ const RSC_FORWARD_HEADERS = new Set([
   "next-url",
 ]);
 
+const FLIGHT_VARY_HEADERS = [
+  "rsc",
+  "next-router-state-tree",
+  "next-router-prefetch",
+  "next-router-segment-prefetch",
+];
+
+function isFlightRequest(headers: Headers): boolean {
+  return FLIGHT_VARY_HEADERS.some((name) => headers.has(name));
+}
+
+function withFlightVary(response: Response): Response {
+  const tagged = new Response(response.body, response);
+  tagged.headers.set("vary", FLIGHT_VARY_HEADERS.join(", "));
+  return tagged;
+}
+
 const ENTRY_HEADER = "x-ocel-entry";
 
 const PREFETCH_PURPOSE = "purpose";
@@ -740,8 +757,10 @@ async function dispatch(
   }
 
   switch (target.kind) {
-    case "static":
-      return staticAsset(new URL(result.resolvedPathname, url));
+    case "static": {
+      const response = await staticAsset(new URL(result.resolvedPathname, url));
+      return isFlightRequest(request.headers) ? withFlightVary(response) : response;
+    }
 
     case "lambda": {
       const fnUrl = functionUrls[target.id];
