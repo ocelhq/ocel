@@ -90,8 +90,25 @@ function serviceThrottle() {
   });
 }
 
+function mwResponse(
+  headers: Record<string, string> = {},
+  init: { status?: number; body?: BodyInit | null } = {},
+): Response {
+  return new Response(init.body ?? null, {
+    status: init.status ?? 200,
+    headers: { ...headers, "x-ocel-middleware-headers": Object.keys(headers).join(",") },
+  });
+}
+
+function transportResponse(
+  headers: Record<string, string> = {},
+  init: { status?: number; body?: BodyInit | null } = {},
+): Response {
+  return new Response(init.body ?? null, { status: init.status ?? 200, headers });
+}
+
 const passthroughBody =
-  'async () => new Response(null, { headers: { "x-middleware-next": "1", "x-mw-ran": "1" } })';
+  'async () => new Response(null, { headers: { "x-middleware-next": "1", "x-mw-ran": "1", "x-ocel-middleware-headers": "x-middleware-next,x-mw-ran" } })';
 
 describe("node middleware matchers", () => {
   it("does not invoke middleware for a path its matchers exclude", async () => {
@@ -107,7 +124,7 @@ describe("node middleware matchers", () => {
 
   it("invokes middleware for a path its matchers name", async () => {
     const origin = fakeOrigin(
-      () => new Response(null, { headers: { "x-middleware-next": "1", "x-mw-ran": "1" } }),
+      () => mwResponse({ "x-middleware-next": "1", "x-mw-ran": "1" }),
     );
     const res = await serve(
       new Request("https://app.example/static.txt"),
@@ -122,7 +139,7 @@ describe("node middleware matchers", () => {
 describe("node middleware forwarding", () => {
   it("carries x-ocel-entry: /_middleware and reaches the bundle named by middleware.id", async () => {
     const origin = fakeOrigin(
-      () => new Response(null, { headers: { "x-middleware-next": "1" } }),
+      () => mwResponse({ "x-middleware-next": "1" }),
     );
     await serve(
       new Request("https://app.example/static.txt"),
@@ -137,7 +154,7 @@ describe("node middleware forwarding", () => {
 
   it("pins the forwarded URL and the x-forwarded-* pair the dispatcher rebuilds the public URL from", async () => {
     const origin = fakeOrigin(
-      () => new Response(null, { headers: { "x-middleware-next": "1" } }),
+      () => mwResponse({ "x-middleware-next": "1" }),
     );
     await serve(
       new Request("https://app.example/static.txt?a=1"),
@@ -155,9 +172,34 @@ describe("node middleware forwarding", () => {
   it("responds directly with the middleware's own body and status", async () => {
     const origin = fakeOrigin(
       () =>
+        mwResponse(
+          { "content-type": "application/json" },
+          { status: 401, body: JSON.stringify({ error: "nope" }) },
+        ),
+    );
+    const res = await serve(
+      new Request("https://app.example/static.txt"),
+      staticDeps(nodeMiddleware(), { fetch: origin.fetch }),
+    );
+
+    expect(res.status).toBe(401);
+    expect(res.headers.get("content-type")).toBe("application/json");
+    expect(await res.json()).toEqual({ error: "nope" });
+  });
+
+  it("preserves a middleware-authored content-type on the respond-directly path even though transport headers around it are dropped", async () => {
+    const origin = fakeOrigin(
+      () =>
         new Response(JSON.stringify({ error: "nope" }), {
           status: 401,
-          headers: { "content-type": "application/json" },
+          headers: {
+            "content-type": "application/json",
+            "x-ocel-middleware-headers": "content-type",
+            etag: '"abc123"',
+            date: "Tue, 12 Aug 2026 00:00:00 GMT",
+            connection: "keep-alive",
+            "x-amzn-requestid": "req-1",
+          },
         }),
     );
     const res = await serve(
@@ -166,16 +208,21 @@ describe("node middleware forwarding", () => {
     );
 
     expect(res.status).toBe(401);
+    expect(res.headers.get("content-type")).toBe("application/json");
+    expect(res.headers.has("etag")).toBe(false);
+    expect(res.headers.has("date")).toBe(false);
+    expect(res.headers.has("connection")).toBe(false);
+    expect(res.headers.has("x-amzn-requestid")).toBe(false);
     expect(await res.json()).toEqual({ error: "nope" });
   });
 
   it("redirects with the middleware's Set-Cookie intact", async () => {
     const origin = fakeOrigin(
       () =>
-        new Response(null, {
-          status: 307,
-          headers: { location: "/login", "set-cookie": "sid=abc; Path=/" },
-        }),
+        mwResponse(
+          { location: "/login", "set-cookie": "sid=abc; Path=/" },
+          { status: 307 },
+        ),
     );
     const res = await serve(
       new Request("https://app.example/static.txt"),
@@ -190,12 +237,10 @@ describe("node middleware forwarding", () => {
   it("forwards a request-header override to the origin", async () => {
     const origin = fakeOrigin((req) => {
       if (new URL(req.url).host === new URL(MW_URL).host) {
-        return new Response(null, {
-          headers: {
-            "x-middleware-next": "1",
-            "x-middleware-override-headers": "x-user",
-            "x-middleware-request-x-user": "alice",
-          },
+        return mwResponse({
+          "x-middleware-next": "1",
+          "x-middleware-override-headers": "x-user",
+          "x-middleware-request-x-user": "alice",
         });
       }
       return new Response(req.headers.get("x-user") ?? "none");
@@ -225,9 +270,7 @@ describe("node middleware forwarding", () => {
     const origin = fakeOrigin((req) => {
       const url = new URL(req.url);
       if (url.host === new URL(MW_URL).host) {
-        return new Response(null, {
-          headers: { "x-middleware-rewrite": "/b/" },
-        });
+        return mwResponse({ "x-middleware-rewrite": "/b/" });
       }
       return new Response(url.pathname);
     });
@@ -259,7 +302,7 @@ describe("node middleware forwarding", () => {
 describe("Next's internal protocol headers are not honoured from the client", () => {
   it("does not forward a client-supplied x-nextjs-data header to node middleware", async () => {
     const origin = fakeOrigin(
-      () => new Response(null, { headers: { "x-middleware-next": "1" } }),
+      () => mwResponse({ "x-middleware-next": "1" }),
     );
     await serve(
       new Request("https://app.example/static.txt", {
@@ -273,7 +316,7 @@ describe("Next's internal protocol headers are not honoured from the client", ()
 
   it("does not forward a client-supplied x-matched-path header to node middleware", async () => {
     const origin = fakeOrigin(
-      () => new Response(null, { headers: { "x-middleware-next": "1" } }),
+      () => mwResponse({ "x-middleware-next": "1" }),
     );
     await serve(
       new Request("https://app.example/static.txt", {
@@ -289,7 +332,7 @@ describe("Next's internal protocol headers are not honoured from the client", ()
 describe("x-nextjs-data on the middleware invocation", () => {
   it("sets x-nextjs-data on a genuine data request's middleware invocation", async () => {
     const origin = fakeOrigin(
-      () => new Response(null, { headers: { "x-middleware-next": "1" } }),
+      () => mwResponse({ "x-middleware-next": "1" }),
     );
     await serve(
       new Request("https://app.example/_next/data/t/static.txt.json"),
@@ -301,7 +344,7 @@ describe("x-nextjs-data on the middleware invocation", () => {
 
   it("does not set x-nextjs-data on an ordinary document request", async () => {
     const origin = fakeOrigin(
-      () => new Response(null, { headers: { "x-middleware-next": "1" } }),
+      () => mwResponse({ "x-middleware-next": "1" }),
     );
     await serve(
       new Request("https://app.example/static.txt"),
@@ -314,8 +357,8 @@ describe("x-nextjs-data on the middleware invocation", () => {
   it("carries a data-request redirect through as x-nextjs-redirect with no Location", async () => {
     const origin = fakeOrigin((req) =>
       req.headers.get("x-nextjs-data") === "1"
-        ? new Response(null, { status: 307, headers: { "x-nextjs-redirect": "/somewhere" } })
-        : new Response(null, { status: 307, headers: { location: "/somewhere" } }),
+        ? mwResponse({ "x-nextjs-redirect": "/somewhere" }, { status: 307 })
+        : mwResponse({ location: "/somewhere" }, { status: 307 }),
     );
     const res = await serve(
       new Request("https://app.example/_next/data/t/static.txt.json", {
@@ -369,7 +412,7 @@ describe("node middleware retries a throttled origin", () => {
     const origin = fakeOrigin(() => {
       calls++;
       if (calls === 1) return serviceThrottle();
-      return new Response(null, { headers: { "x-middleware-next": "1", "x-mw-ran": "1" } });
+      return mwResponse({ "x-middleware-next": "1", "x-mw-ran": "1" });
     });
 
     const res = await serve(
@@ -405,7 +448,7 @@ describe("node middleware retries a throttled origin", () => {
 
   it("does not retry a real 500 the app produced on purpose", async () => {
     const origin = fakeOrigin(
-      () => new Response("app error", { status: 500 }),
+      () => mwResponse({}, { status: 500, body: "app error" }),
     );
 
     const res = await serve(
@@ -421,10 +464,7 @@ describe("node middleware retries a throttled origin", () => {
   it("does not retry an app-authored 429 — it reaches the client verbatim, uncounted against the retry budget", async () => {
     const origin = fakeOrigin(
       () =>
-        new Response("rate limited", {
-          status: 429,
-          headers: { "retry-after": "60" },
-        }),
+        mwResponse({ "retry-after": "60" }, { status: 429, body: "rate limited" }),
     );
 
     const res = await serve(
@@ -436,6 +476,99 @@ describe("node middleware retries a throttled origin", () => {
     expect(res.headers.get("retry-after")).toBe("60");
     expect(await res.text()).toBe("rate limited");
     expect(origin.requests.length).toBe(1);
+  });
+});
+
+describe("the Function URL hop's transport headers stay off both the client response and the forwarded request", () => {
+  it("does not leak content-type, content-length, etag, date, connection, cf-cache-status or x-amzn-* onto the client response", async () => {
+    const origin = fakeOrigin(() =>
+      transportResponse({
+        "x-middleware-next": "1",
+        link: "</style.css>; rel=preload",
+        "x-ocel-middleware-headers": "x-middleware-next,link",
+        "content-type": "application/json",
+        "content-length": "0",
+        etag: '"abc"',
+        date: "Tue, 12 Aug 2026 00:00:00 GMT",
+        connection: "keep-alive",
+        "cf-cache-status": "DYNAMIC",
+        "x-amzn-requestid": "req-1",
+        "x-amzn-remapped-content-length": "0",
+      }),
+    );
+
+    const res = await serve(
+      new Request("https://app.example/static.txt"),
+      staticDeps(nodeMiddleware(), { fetch: origin.fetch }),
+    );
+
+    expect(res.headers.get("link")).toBe("</style.css>; rel=preload");
+    expect(res.headers.get("content-type")).not.toBe("application/json");
+    for (const name of [
+      "etag",
+      "date",
+      "connection",
+      "cf-cache-status",
+      "x-amzn-requestid",
+      "x-amzn-remapped-content-length",
+      "x-ocel-middleware-headers",
+    ]) {
+      expect(res.headers.has(name)).toBe(false);
+    }
+    expect(await res.text()).toBe("the-file");
+  });
+
+  it("does not overwrite the forwarded request's real content-type with the hop's synthetic one", async () => {
+    const origin = fakeOrigin((req) => {
+      if (new URL(req.url).host === new URL(MW_URL).host) {
+        return transportResponse({
+          "x-middleware-next": "1",
+          "x-ocel-middleware-headers": "x-middleware-next",
+          "content-type": "application/json",
+        });
+      }
+      return new Response(req.headers.get("content-type") ?? "none");
+    });
+
+    const res = await serve(
+      new Request("https://app.example/api/upload", {
+        method: "POST",
+        headers: { "content-type": "multipart/form-data; boundary=x" },
+        body: "irrelevant",
+      }),
+      deps({
+        manifest: {
+          buildId: "t",
+          basePath: "",
+          pathnames: ["/api/upload"],
+          routes: emptyRoutes,
+          dispatch: { "/api/upload": { kind: "lambda", id: "/api/upload" } },
+          middleware: nodeMiddleware(),
+        },
+        functionUrls: { [MW_ID]: MW_URL, "/api/upload": "https://fn.example.com" },
+        fetch: origin.fetch,
+      } as Partial<RouteDeps>),
+    );
+
+    expect(await res.text()).toBe("multipart/form-data; boundary=x");
+  });
+
+  it("still honours x-middleware-next from an old bundle with no declaration, while dropping the hop's synthetic content-type", async () => {
+    const origin = fakeOrigin(() =>
+      transportResponse({
+        "x-middleware-next": "1",
+        "content-type": "application/json",
+      }),
+    );
+
+    const res = await serve(
+      new Request("https://app.example/static.txt"),
+      staticDeps(nodeMiddleware(), { fetch: origin.fetch }),
+    );
+
+    expect(res.status).toBe(200);
+    expect(res.headers.get("content-type")).not.toBe("application/json");
+    expect(await res.text()).toBe("the-file");
   });
 });
 
