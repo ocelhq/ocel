@@ -42,6 +42,7 @@ async function start(invoke: Invoke): Promise<number> {
 
 let serveInvoke: typeof import("../src/shared/membrane.mts").serveInvoke;
 let drainWaitUntil: typeof import("../src/shared/membrane.mts").drainWaitUntil;
+let startServer: typeof import("../src/shared/membrane.mts").startServer;
 type Invoke = import("../src/shared/membrane.mts").Invoke;
 
 beforeAll(async () => {
@@ -71,6 +72,7 @@ beforeAll(async () => {
   const mod = await import("../src/shared/membrane.mts");
   serveInvoke = mod.serveInvoke;
   drainWaitUntil = mod.drainWaitUntil;
+  startServer = mod.startServer;
 });
 
 afterAll(async () => {
@@ -144,6 +146,23 @@ describe("the loopback header boundary", () => {
 
     expect(seen["x-ocel-entry"]).toBe("/server");
     expect(seen["x-ocel-request-id"]).toBeUndefined();
+  });
+});
+
+describe("the loopback server's socket lifetime", () => {
+  test("never reaps an idle keep-alive connection on its own", async () => {
+    const before = messages.filter((m) => m.type === "server-ready").length;
+    const server = http.createServer((_req, res) => res.end("ok"));
+    await new Promise<void>((resolve, reject) => {
+      server.on("error", reject);
+      startServer(server).then(resolve, reject);
+    });
+    await waitFor(() => messages.filter((m) => m.type === "server-ready").length > before);
+
+    expect(server.keepAliveTimeout).toBe(0);
+    expect(server.headersTimeout).toBe(0);
+
+    server.close();
   });
 });
 
