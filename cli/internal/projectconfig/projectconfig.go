@@ -13,6 +13,7 @@ import (
 	"github.com/evanw/esbuild/pkg/api"
 
 	"github.com/ocelhq/ocel/cli/internal/envgate"
+	"github.com/ocelhq/ocel/pkg/naming"
 )
 
 const ConfigFileName = "ocel.config.ts"
@@ -117,7 +118,7 @@ func normalizeDomains(raw rawDomains) (map[string][]string, error) {
 	var preview string
 	if raw.Preview != "" {
 		preview = strings.ToLower(raw.Preview)
-		if err := validatePreviewDomain(preview); err != nil {
+		if err := ValidatePreviewDomain(preview); err != nil {
 			return nil, err
 		}
 		domains["preview"] = []string{preview}
@@ -154,7 +155,7 @@ func normalizeProductionDomains(raw stringOrList, preview string) ([]string, err
 	return out, nil
 }
 
-func validatePreviewDomain(domain string) error {
+func ValidatePreviewDomain(domain string) error {
 	labels := strings.Split(domain, ".")
 	if len(labels) < 2 {
 		return fmt.Errorf("preview domain %q must be a wildcard hostname like \"*.preview.example.com\"", domain)
@@ -219,8 +220,8 @@ func load(configPath string) (*Config, error) {
 	if raw.Slug == "" {
 		return nil, fmt.Errorf("%s is missing required \"slug\" — %s", configPath, initHint)
 	}
-	if !ValidSlug(raw.Slug) {
-		return nil, fmt.Errorf("%s has an invalid \"slug\" %q — it must be a DNS label: lowercase letters, digits and hyphens, 1–63 characters, not starting or ending with a hyphen", configPath, raw.Slug)
+	if err := ValidateSlug(raw.Slug); err != nil {
+		return nil, fmt.Errorf("%s has an invalid \"slug\": %w", configPath, err)
 	}
 
 	paths := raw.Discovery.Paths
@@ -262,7 +263,17 @@ func load(configPath string) (*Config, error) {
 var dnsLabelPattern = regexp.MustCompile(`^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$`)
 
 func ValidSlug(s string) bool {
-	return dnsLabelPattern.MatchString(s)
+	return ValidateSlug(s) == nil
+}
+
+func ValidateSlug(s string) error {
+	if !dnsLabelPattern.MatchString(s) {
+		return fmt.Errorf("%q must be a DNS label: lowercase letters, digits and hyphens, 1–63 characters, not starting or ending with a hyphen", s)
+	}
+	if strings.Contains(s, naming.FieldSeparator) {
+		return fmt.Errorf("%q may not contain %q: it separates the fields of every name this project deploys, and separates the project from the preview in the hostname a preview is served on (\"<slug>%s<preview>[%s<app>].<domain>\") — use a single hyphen", s, naming.FieldSeparator, naming.FieldSeparator, naming.FieldSeparator)
+	}
+	return nil
 }
 
 func validAppName(name string) bool {
