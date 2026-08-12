@@ -154,6 +154,11 @@ func TestResolveAppBuilds(t *testing.T) {
 		if builds.caches["web"] == nil {
 			t.Error("the Next app must still have its own cache")
 		}
+		for _, app := range []string{"web", "api"} {
+			if builds.bytecode[app] == nil {
+				t.Errorf("bytecode cache = nil for %s; every app gets one", app)
+			}
+		}
 	})
 
 	t.Run("a node framework app takes its build id from the serve descriptor", func(t *testing.T) {
@@ -170,6 +175,16 @@ func TestResolveAppBuilds(t *testing.T) {
 		}
 		if builds.caches["api"] != nil {
 			t.Errorf("cache = %+v, want none for a framework with no prerendering", builds.caches["api"])
+		}
+		cache := builds.bytecode["api"]
+		if cache == nil {
+			t.Fatal("bytecode cache = nil for an express app; the compile cache is not a Next feature")
+		}
+		if want := bytecodePrefixOf(builds.coords["api"]); cache.Prefix != want {
+			t.Errorf("bytecode prefix = %q, want %q", cache.Prefix, want)
+		}
+		if cache.Bucket != "assets" {
+			t.Errorf("bytecode bucket = %q, want the asset bucket", cache.Bucket)
 		}
 	})
 

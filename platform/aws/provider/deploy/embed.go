@@ -77,7 +77,7 @@ func embedBytecodeCaches(ctx context.Context, cfg Config, manifest *deploymentsv
 		uploader: cfg.Uploader,
 		code:     cfg.CodeUpdater,
 		invoker:  cfg.Invoker,
-		targets:  embedTargets(cfg, manifest, builds.caches, artifacts, warmed, log),
+		targets:  embedTargets(cfg, manifest, builds.bytecode, artifacts, warmed, log),
 		budget:   embedPassDeadline,
 		settle:   embedUpdateSettle,
 		log:      log,
@@ -102,7 +102,7 @@ func missingEmbedClients(cfg Config) string {
 	return strings.Join(missing, ", ")
 }
 
-func embedTargets(cfg Config, manifest *deploymentsv1.Manifest, caches map[string]*isrConfig, artifacts map[string]artifactRef, warmed []warmResult, log func(string)) []embedTarget {
+func embedTargets(cfg Config, manifest *deploymentsv1.Manifest, bytecode map[string]*bytecodeConfig, artifacts map[string]artifactRef, warmed []warmResult, log func(string)) []embedTarget {
 	dirs := map[string]string{}
 	for _, fn := range manifest.GetFunctions() {
 		dirs[fn.GetLogicalName()] = artifactArchivePath(cfg.ArtifactRoot, fn.GetArtifactPath())
@@ -110,7 +110,7 @@ func embedTargets(cfg Config, manifest *deploymentsv1.Manifest, caches map[strin
 	var targets []embedTarget
 	for _, result := range warmed {
 		logical := result.Target.LogicalName
-		cache := caches[result.Target.App]
+		cache := bytecode[result.Target.App]
 		artifact := artifacts[logical]
 		if cache == nil || artifact.Key == "" || result.Reply.Key == "" {
 			continue
