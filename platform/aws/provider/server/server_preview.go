@@ -93,7 +93,7 @@ func (s *Server) Preflight(ctx context.Context, req *deploymentsv1.PreflightRequ
 			if err != nil {
 				return nil, err
 			}
-			if err := globalPreviewAccountMismatch(recorded); err != nil {
+			if err := globalPreviewProblem(recorded, req); err != nil {
 				return nil, connect.NewError(connect.CodeFailedPrecondition, err)
 			}
 			resp.GlobalPreviewDomain = globalPreviewDomain(ctx, s.edgeRouteOwner(), recorded)
@@ -104,6 +104,14 @@ func (s *Server) Preflight(ctx context.Context, req *deploymentsv1.PreflightRequ
 	}
 
 	return resp, nil
+}
+
+func globalPreviewProblem(recorded bootstrap.PreviewDomain, req *deploymentsv1.PreflightRequest) error {
+	servesOnSharedWildcard := req.GetSlug() != "" && len(req.GetDomains()) == 0
+	if !servesOnSharedWildcard {
+		return nil
+	}
+	return globalPreviewAccountMismatch(recorded)
 }
 
 type routeOwnerFunc func(ctx context.Context, pattern string) (string, error)

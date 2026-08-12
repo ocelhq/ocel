@@ -14,6 +14,42 @@ import (
 	"github.com/ocelhq/ocel/platform/aws/provider/deploy"
 )
 
+func TestGlobalPreviewProblem(t *testing.T) {
+	recorded := bootstrap.PreviewDomain{BaseDomain: "previews.ocel.dev", CloudflareAccount: "cf-owner"}
+	t.Setenv(cloudflareAccountEnvVar, "cf-other")
+
+	cases := []struct {
+		name    string
+		req     *deploymentsv1.PreflightRequest
+		wantErr bool
+	}{
+		{
+			name:    "a preview deploy that would serve on the shared wildcard refuses",
+			req:     &deploymentsv1.PreflightRequest{Slug: "acme"},
+			wantErr: true,
+		},
+		{
+			name: "a preview deploy of a project with its own preview domain proceeds",
+			req:  &deploymentsv1.PreflightRequest{Slug: "acme", Domains: []string{"*.preview.acme.com"}},
+		},
+		{
+			name: "`ocel preview rm`, which names no project and serves nothing, proceeds",
+			req:  &deploymentsv1.PreflightRequest{},
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			err := globalPreviewProblem(recorded, tc.req)
+			if tc.wantErr && err == nil {
+				t.Fatal("globalPreviewProblem = nil, want the account mismatch")
+			}
+			if !tc.wantErr && err != nil {
+				t.Fatalf("globalPreviewProblem = %v, want nil", err)
+			}
+		})
+	}
+}
+
 func TestPreviewExpiry(t *testing.T) {
 	t.Parallel()
 
