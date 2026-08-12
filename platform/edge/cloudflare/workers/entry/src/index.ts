@@ -667,7 +667,7 @@ async function serveRequest(
   return dispatchResult(
     {
       ...withSourceInvocationTarget(
-        preferExactPathname(result, deps.manifest),
+        dropShadowedDynamicParams(preferExactPathname(result, deps.manifest), deps.manifest),
         routingUrl,
         deps.manifest,
       ),
@@ -702,6 +702,23 @@ function preferExactPathname(result: RouteResult, manifest: Manifest): RouteResu
     return { ...result, resolvedPathname: target };
   }
   return result;
+}
+
+function dropShadowedDynamicParams(result: RouteResult, manifest: Manifest): RouteResult {
+  const target = result.invocationTarget;
+  if (
+    !target ||
+    !result.routeMatches ||
+    !result.resolvedPathname ||
+    target.pathname !== result.resolvedPathname ||
+    manifest.dispatch[result.resolvedPathname]?.kind === "prerender"
+  ) {
+    return result;
+  }
+  const query = { ...target.query };
+  for (const key of Object.keys(result.routeMatches)) delete query[key];
+  const { routeMatches: _routeMatches, ...rest } = result;
+  return { ...rest, invocationTarget: { ...target, query } };
 }
 
 function queryFromUrl(url: URL): Record<string, string | string[]> {
