@@ -83,6 +83,7 @@ const FLIGHT_VARY_HEADERS = [
   "next-router-state-tree",
   "next-router-prefetch",
   "next-router-segment-prefetch",
+  "next-url",
 ];
 
 function isFlightRequest(headers: Headers): boolean {
@@ -240,6 +241,7 @@ interface RouteResult {
   redirect?: { url: URL | string; status: number };
   externalRewrite?: string | URL;
   resolvedPathname?: string | null;
+  routePath?: string | null;
   invocationTarget?: {
     pathname: string;
     query?: Record<string, string | string[]>;
@@ -789,9 +791,10 @@ function withSourceInvocationTarget(
   routingUrl: URL,
   manifest: Manifest,
 ): RouteResult {
+  const routePath = result.resolvedPathname;
   const target = result.invocationTarget;
-  if (!target || !result.resolvedPathname) return result;
-  if (target.pathname === routingUrl.pathname) return result;
+  if (!target || !result.resolvedPathname) return { ...result, routePath };
+  if (target.pathname === routingUrl.pathname) return { ...result, routePath };
   if (
     !matchesConfigRewrite(
       routingUrl.pathname,
@@ -799,10 +802,11 @@ function withSourceInvocationTarget(
       manifest.routes as RoutingTable,
     )
   ) {
-    return result;
+    return { ...result, routePath };
   }
   return {
     ...result,
+    routePath,
     invocationTarget: {
       pathname: routingUrl.pathname,
       query: queryFromUrl(routingUrl),
@@ -1103,7 +1107,7 @@ async function dispatchPrerender(
 
   const revalidates = !edgeEntryKey;
 
-  const routePath = result.invocationTarget?.pathname ?? url.pathname;
+  const routePath = result.routePath ?? result.resolvedPathname ?? url.pathname;
   const keyResult = cacheKey(
     deps.manifest.buildId,
     url.pathname,

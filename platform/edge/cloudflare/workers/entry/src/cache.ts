@@ -118,16 +118,19 @@ export function variantPath(
 ): string | null {
   if (headers.get("RSC") === null) return pathname; // HTML document / shell.
 
+  const nextUrl = headers.get("next-url");
+  const base = nextUrl !== null ? `${pathname}.iu/${encodeURIComponent(nextUrl)}` : pathname;
+
   const segment = headers.get("next-router-segment-prefetch");
   if (segment !== null) {
-    return `${pathname}.segments/${encodeURIComponent(segment)}.segment.rsc`;
+    return `${base}.segments/${encodeURIComponent(segment)}.segment.rsc`;
   }
 
   const prefetch = headers.get("next-router-prefetch");
-  if (prefetch === "1") return `${pathname}.prefetch.rsc`;
+  if (prefetch === "1") return `${base}.prefetch.rsc`;
   if (prefetch !== null) return null;
 
-  return renderingMode === "STATIC" ? `${pathname}.rsc` : null;
+  return renderingMode === "STATIC" ? `${base}.rsc` : null;
 }
 
 export function cacheKey(
