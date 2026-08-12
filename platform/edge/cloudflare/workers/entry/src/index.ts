@@ -244,6 +244,7 @@ interface RouteResult {
     pathname: string;
     query?: Record<string, string | string[]>;
   } | null;
+  resolvedQuery?: Record<string, string | string[]>;
   routeMatches?: Record<string, string | string[]>;
   resolvedHeaders?: Headers;
   middleware?: MiddlewareOutcome;
@@ -656,6 +657,8 @@ async function serveRequest(
     },
   })) as RouteResult;
 
+  repairPrefixCollidedQuery(result);
+
   if (failure) {
     console.error("ocel: middleware invocation failed", failure.error);
     return new Response("Middleware failed", { status: 500 });
@@ -673,6 +676,19 @@ async function serveRequest(
     request,
     deps,
   );
+}
+
+function repairPrefixCollidedQuery(result: RouteResult): void {
+  const routeMatches = result.routeMatches;
+  if (!routeMatches) return;
+  const query = result.invocationTarget?.query;
+  const resolvedQuery = result.resolvedQuery;
+  for (const [key, value] of Object.entries(routeMatches)) {
+    if (value === undefined) continue;
+    if (/^\d+$/.test(key)) continue;
+    if (query && key in query) query[key] = value;
+    if (resolvedQuery && key in resolvedQuery) resolvedQuery[key] = value;
+  }
 }
 
 function preferExactPathname(result: RouteResult, manifest: Manifest): RouteResult {
@@ -698,7 +714,7 @@ function queryFromUrl(url: URL): Record<string, string | string[]> {
   return query;
 }
 
-function ruleDestinationPathname(
+export function ruleDestinationPathname(
   sourceRegex: string,
   destination: string,
   pathname: string,
@@ -711,11 +727,12 @@ function ruleDestinationPathname(
   }
   if (!match) return undefined;
   let out = destination.split("?")[0];
-  for (let i = 1; i < match.length; i++) {
+  for (let i = match.length - 1; i >= 1; i--) {
     if (match[i] !== undefined) out = out.replace(new RegExp(`\\$${i}`, "g"), match[i]);
   }
   if (match.groups) {
-    for (const [key, value] of Object.entries(match.groups)) {
+    const groups = Object.entries(match.groups).sort(([a], [b]) => b.length - a.length);
+    for (const [key, value] of groups) {
       if (value !== undefined) out = out.replace(new RegExp(`\\$${key}`, "g"), value);
     }
   }
