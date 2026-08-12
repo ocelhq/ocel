@@ -463,6 +463,10 @@ const adapter = {
       join(outputRoot, "routing-manifest.json"),
       JSON.stringify(routingManifest),
     );
+    writeFileSync(
+      join(outputRoot, "serve.json"),
+      JSON.stringify({ framework: "next", buildId }),
+    );
 
     if (images) {
       await writeFile(

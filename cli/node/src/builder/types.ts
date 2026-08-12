@@ -17,4 +17,6 @@ export interface FunctionSummary {
   handler: string;
   artifactPath: string;
   framework: string;
+  strategy: "trace" | "bundle";
+  entrypoint?: string;
 }

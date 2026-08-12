@@ -14,7 +14,7 @@ export interface ProjectDomainConfig extends AppDomainConfig {
 export interface AppConfig {
   name: string;
   path: string;
-  framework: "next" | "express" | "fastify";
+  framework: "next" | "express" | "fastify" | "hono";
   entrypoint?: string;
   domains?: AppDomainConfig;
   folder?: string;

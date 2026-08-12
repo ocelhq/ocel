@@ -1,4 +1,4 @@
-import { buildApps, detectApp } from "./build.js";
+import { buildApps, detectApp, writeBuildPlan } from "./build.js";
 import { isReported, reportError } from "./protocol.js";
 import type { AppInput, BuildOptions } from "./types.js";
 
@@ -19,7 +19,7 @@ async function main(): Promise<void> {
   const req = await readRequest();
   const detected = req.apps.length === 0 ? detectApp(req.projectRoot) : undefined;
   const apps = detected ? [detected] : req.apps;
-  await buildApps(apps, { outDir: req.outDir });
+  await writeBuildPlan(req.outDir, await buildApps(apps, { outDir: req.outDir }));
 }
 
 main().catch((err) => {
