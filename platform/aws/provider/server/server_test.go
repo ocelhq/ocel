@@ -152,6 +152,12 @@ func TestCacheStoreUploader(t *testing.T) {
 	})
 }
 
+func markedGlobalPreview(state edge.RootStackState, baseDomain string) edge.RootStackState {
+	marked := maps.Clone(state)
+	marked[edge.RootStackKeyGlobalPreview] = baseDomain
+	return marked
+}
+
 func TestRootStackStateChanged(t *testing.T) {
 	t.Parallel()
 
@@ -207,6 +213,18 @@ func TestRootStackStateChanged(t *testing.T) {
 			prior:      maps.Clone(reconciled),
 			reconciled: nil,
 			want:       false,
+		},
+		{
+			name:       "a project moving onto the global preview domain persists the mark",
+			prior:      maps.Clone(reconciled),
+			reconciled: markedGlobalPreview(reconciled, "preview.acme.com"),
+			want:       true,
+		},
+		{
+			name:       "a project declaring its own preview domain persists the cleared mark",
+			prior:      markedGlobalPreview(reconciled, "preview.acme.com"),
+			reconciled: maps.Clone(reconciled),
+			want:       true,
 		},
 	}
 

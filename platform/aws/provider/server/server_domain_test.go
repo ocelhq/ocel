@@ -6,6 +6,10 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/aws/aws-sdk-go-v2/aws"
+	"github.com/aws/aws-sdk-go-v2/service/ssm"
+	ssmtypes "github.com/aws/aws-sdk-go-v2/service/ssm/types"
+
 	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
 	"github.com/ocelhq/ocel/platform/aws/provider/bootstrap"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
@@ -110,6 +114,52 @@ func TestGlobalPreviewDomain(t *testing.T) {
 			}
 		}
 	})
+}
+
+type stateSSM struct {
+	params map[string]string
+}
+
+func (s *stateSSM) GetParameter(_ context.Context, in *ssm.GetParameterInput, _ ...func(*ssm.Options)) (*ssm.GetParameterOutput, error) {
+	raw, ok := s.params[aws.ToString(in.Name)]
+	if !ok {
+		return nil, &ssmtypes.ParameterNotFound{}
+	}
+	return &ssm.GetParameterOutput{Parameter: &ssmtypes.Parameter{Value: aws.String(raw)}}, nil
+}
+
+func (s *stateSSM) PutParameter(_ context.Context, in *ssm.PutParameterInput, _ ...func(*ssm.Options)) (*ssm.PutParameterOutput, error) {
+	s.params[aws.ToString(in.Name)] = aws.ToString(in.Value)
+	return &ssm.PutParameterOutput{}, nil
+}
+
+func (s *stateSSM) DeleteParameter(_ context.Context, in *ssm.DeleteParameterInput, _ ...func(*ssm.Options)) (*ssm.DeleteParameterOutput, error) {
+	delete(s.params, aws.ToString(in.Name))
+	return &ssm.DeleteParameterOutput{}, nil
+}
+
+func TestGlobalPreviewProjects(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	ssmc := &stateSSM{params: map[string]string{}}
+	for slug, state := range map[string]edge.RootStackState{
+		"ambient":     {edge.RootStackKeySlug: "ambient", edge.RootStackKeyGlobalPreview: "preview.acme.com"},
+		"own-domain":  {edge.RootStackKeySlug: "own-domain"},
+		"other-usage": {edge.RootStackKeySlug: "other-usage", edge.RootStackKeyGlobalPreview: "preview.old.com"},
+	} {
+		if err := bootstrap.WriteRootStackStateFor(ctx, ssmc, bootstrap.ClassPreview, slug, state); err != nil {
+			t.Fatalf("WriteRootStackStateFor(%s): %v", slug, err)
+		}
+	}
+
+	served, err := globalPreviewProjects(ctx, ssmc, []string{"ambient", "own-domain", "other-usage", "never-deployed"}, "preview.acme.com")
+	if err != nil {
+		t.Fatalf("globalPreviewProjects: %v", err)
+	}
+	if len(served) != 1 || served[0] != "ambient" {
+		t.Errorf("served = %v, want [ambient]: a project on its own preview domain is not served by the substrate's", served)
+	}
 }
 
 func TestGlobalPreviewAccountMismatch(t *testing.T) {

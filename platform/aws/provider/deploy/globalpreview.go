@@ -2,6 +2,7 @@ package deploy
 
 import (
 	"fmt"
+	"maps"
 
 	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
@@ -43,14 +44,29 @@ func SharedPreviewEntrySpec(cfg Config, baseDomain string, warn func(string)) (e
 	generic = withVar(generic, envPreviewBaseDomain, baseDomain)
 
 	return edge.SharedEntrySpec{
-		Version:    rootStackVersion,
-		ScriptName: edge.SharedPreviewEntryScript,
-		Generic:    generic,
-		BaseDomain: baseDomain,
-		GrammarMin: edge.PreviewGrammarMin,
-		GrammarMax: edge.PreviewGrammarMax,
-		Warn:       warn,
+		Version:             rootStackVersion,
+		ScriptName:          edge.SharedPreviewEntryScript,
+		Generic:             generic,
+		BaseDomain:          baseDomain,
+		GrammarMin:          edge.PreviewGrammarMin,
+		GrammarMax:          edge.PreviewGrammarMax,
+		ISRWriterScriptName: cfg.ISRWriterScriptName,
+		Values:              cfg.EdgeValues,
+		Warn:                warn,
 	}, nil
+}
+
+func MarkGlobalPreview(state edge.RootStackState, cfg Config, manifest *deploymentsv1.Manifest) edge.RootStackState {
+	if len(state) == 0 || cfg.Class != deploymentsv1.Environment_CLASS_PREVIEW {
+		return state
+	}
+	marked := maps.Clone(state)
+	if servesOnGlobalPreviewDomain(cfg, manifest) {
+		marked[edge.RootStackKeyGlobalPreview] = cfg.GlobalPreviewDomain
+	} else {
+		delete(marked, edge.RootStackKeyGlobalPreview)
+	}
+	return marked
 }
 
 func withService(worker edge.Worker, name, service string) edge.Worker {

@@ -34,6 +34,12 @@ type cfMock struct {
 	putScripts           []string
 	putBodies            map[string]putBody
 	deletedScripts       []string
+	subdomainCalls       []subdomainCall
+}
+
+type subdomainCall struct {
+	script  string
+	enabled bool
 }
 
 type putBody struct {
@@ -127,7 +133,11 @@ func (m *cfMock) server(t *testing.T) *httptest.Server {
 	})
 
 	mux.HandleFunc("POST /accounts/acct/workers/scripts/{name}/subdomain", func(w http.ResponseWriter, r *http.Request) {
-		writeResult(w, map[string]any{"enabled": false, "previews_enabled": false})
+		var body map[string]any
+		_ = json.NewDecoder(r.Body).Decode(&body)
+		enabled, _ := body["enabled"].(bool)
+		m.subdomainCalls = append(m.subdomainCalls, subdomainCall{script: r.PathValue("name"), enabled: enabled})
+		writeResult(w, map[string]any{"enabled": enabled, "previews_enabled": false})
 	})
 
 	mux.HandleFunc("/accounts/acct/workers/domains", func(w http.ResponseWriter, r *http.Request) {
