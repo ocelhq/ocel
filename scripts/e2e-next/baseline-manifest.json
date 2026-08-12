@@ -879,24 +879,7 @@
     "runtimeError": false
   },
   "test/e2e/i18n-ignore-redirect-source-locale/redirects-with-basepath.test.ts": {
-    "failed": [
-      "i18n-ignore-redirect-source-locale with basepath get redirected to the new page, from:  to: sv",
-      "i18n-ignore-redirect-source-locale with basepath get redirected to the new page, from: /en to: sv",
-      "i18n-ignore-redirect-source-locale with basepath get redirected to the new page, from: /sv to: sv",
-      "i18n-ignore-redirect-source-locale with basepath get redirected to the new page, from: /nl to: sv",
-      "i18n-ignore-redirect-source-locale with basepath get redirected to the new page, from:  to: en",
-      "i18n-ignore-redirect-source-locale with basepath get redirected to the new page, from: /en to: en",
-      "i18n-ignore-redirect-source-locale with basepath get redirected to the new page, from: /sv to: en",
-      "i18n-ignore-redirect-source-locale with basepath get redirected to the new page, from: /nl to: en",
-      "i18n-ignore-redirect-source-locale with basepath get redirected to the new page, from:  to: /",
-      "i18n-ignore-redirect-source-locale with basepath get redirected to the new page, from: /en to: /",
-      "i18n-ignore-redirect-source-locale with basepath get redirected to the new page, from: /sv to: /",
-      "i18n-ignore-redirect-source-locale with basepath get redirected to the new page, from: /nl to: /",
-      "i18n-ignore-redirect-source-locale with basepath get redirected to the new page, from and to: ",
-      "i18n-ignore-redirect-source-locale with basepath get redirected to the new page, from and to: /en",
-      "i18n-ignore-redirect-source-locale with basepath get redirected to the new page, from and to: /sv",
-      "i18n-ignore-redirect-source-locale with basepath get redirected to the new page, from and to: /nl"
-    ],
+    "failed": [],
     "flakey": [],
     "runtimeError": false
   },
