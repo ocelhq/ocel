@@ -287,22 +287,26 @@ jobs:
       matrix:
         group:
           [
-            1/16,
-            2/16,
-            3/16,
-            4/16,
-            5/16,
-            6/16,
-            7/16,
-            8/16,
-            9/16,
-            10/16,
-            11/16,
-            12/16,
-            13/16,
-            14/16,
-            15/16,
-            16/16,
+            1/20,
+            2/20,
+            3/20,
+            4/20,
+            5/20,
+            6/20,
+            7/20,
+            8/20,
+            9/20,
+            10/20,
+            11/20,
+            12/20,
+            13/20,
+            14/20,
+            15/20,
+            16/20,
+            17/20,
+            18/20,
+            19/20,
+            20/20,
           ]
     steps:
       - uses: actions/cache/restore@v4
@@ -356,7 +360,7 @@ jobs:
           OCEL_E2E_SIDECAR_DIR: ${{ github.workspace }}/sidecar
         shell: bash
         run: |
-          node run-tests.js --timings -g ${{ matrix.group }} -c 2 --type e2e \
+          node run-tests.js --timings -g ${{ matrix.group }} -c 3 --type e2e \
             2>&1 | tee "$RUNNER_TEMP/deploy-tests.log"
 
       - name: Collect this group's results into a baseline fragment
