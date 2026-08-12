@@ -1,7 +1,7 @@
 package bootstrap
 
 const (
-	ImageOptimizerArtifactVersion = "0.0.2"
+	ImageOptimizerArtifactVersion = "0.0.3"
 
-	ImageOptimizerArtifactSHA256 = "cf9fbda3b06deee93898bf00e5f629b2889f456b562839bc16e7312c3277f383"
+	ImageOptimizerArtifactSHA256 = "d64fd5105299bdc1bafaa224c2a4464cc986eb1cdbf3f1b2ef55e932b6b6eef4"
 )
