@@ -7,6 +7,8 @@ const TAR_ENTRY_OVERHEAD = 512;
 
 const MIDDLEWARE_ENTRY_KEY = "/_middleware";
 
+const MIDDLEWARE_HEADERS_HEADER = "x-ocel-middleware-headers";
+
 function middlewareRequestUrl(req) {
   const host = req.headers["x-forwarded-host"] || req.headers.host || "localhost";
   const proto = req.headers["x-forwarded-proto"] || "https";
@@ -15,12 +17,18 @@ function middlewareRequestUrl(req) {
 
 async function writeMiddlewareResponse(response, res) {
   res.statusCode = response.status;
+  const names = [];
   for (const [name, value] of response.headers) {
     if (name.toLowerCase() === "set-cookie") continue;
+    names.push(name);
     res.setHeader(name, value);
   }
   const cookies = response.headers.getSetCookie?.() ?? [];
-  if (cookies.length > 0) res.setHeader("set-cookie", cookies);
+  if (cookies.length > 0) {
+    names.push("set-cookie");
+    res.setHeader("set-cookie", cookies);
+  }
+  res.setHeader(MIDDLEWARE_HEADERS_HEADER, names.join(","));
 
   if (!response.body) {
     res.end();

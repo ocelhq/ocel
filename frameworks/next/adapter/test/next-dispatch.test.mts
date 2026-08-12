@@ -950,6 +950,29 @@ test("forwards every Set-Cookie value onto the real response", async () => {
   expect(res.headers["set-cookie"]).toEqual(["a=1; Path=/", "b=2; Path=/"]);
 });
 
+test("declares the middleware's own header names so the hop can be told apart from transport headers", async () => {
+  const response = new Response(null, {
+    status: 200,
+    headers: { "x-middleware-next": "1", link: "</style.css>; rel=preload" },
+  });
+  response.headers.append("set-cookie", "a=1; Path=/");
+  const load = () => ({ default: () => ({ response }) });
+  const dispatch = createDispatch({
+    entries: { [MIDDLEWARE_KEY]: "./middleware.js" },
+    primary: null,
+    load,
+  });
+  const res = fakeMiddlewareRes();
+
+  await dispatch.handler(middlewareReq(), res, {});
+
+  const declared = String(res.headers["x-ocel-middleware-headers"]).split(",");
+  expect(declared).toEqual(
+    expect.arrayContaining(["x-middleware-next", "link", "set-cookie"]),
+  );
+  expect(declared).toHaveLength(3);
+});
+
 test("awaits a top-level-await middleware module before reading its default export", async () => {
   const load = () =>
     Promise.resolve({ default: () => ({ response: new Response("hi", { status: 200 }) }) });

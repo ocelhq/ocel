@@ -1113,6 +1113,32 @@ function withEntry(request: Request, entryKey: string | undefined): Request {
   return new Request(request, { headers });
 }
 
+const MIDDLEWARE_HEADERS_HEADER = "x-ocel-middleware-headers";
+
+function originAuthoredResponse(response: Response): Response {
+  const declared = response.headers.get(MIDDLEWARE_HEADERS_HEADER);
+  const allow = new Set(
+    (declared ?? "")
+      .split(",")
+      .map((name) => name.trim().toLowerCase())
+      .filter(Boolean),
+  );
+  const headers = new Headers();
+  response.headers.forEach((value, name) => {
+    const lower = name.toLowerCase();
+    if (lower === "set-cookie" || lower === MIDDLEWARE_HEADERS_HEADER) return;
+    if (lower.startsWith("x-middleware-") || allow.has(lower)) headers.set(name, value);
+  });
+  if (allow.has("set-cookie")) {
+    for (const cookie of response.headers.getSetCookie()) headers.append("set-cookie", cookie);
+  }
+  return new Response(response.body, {
+    status: response.status,
+    statusText: response.statusText,
+    headers,
+  });
+}
+
 function invokeMiddleware(
   middleware: NonNullable<Manifest["middleware"]>,
   deps: RouteDeps,
@@ -1134,7 +1160,7 @@ function invokeMiddleware(
           middleware.entryKey,
         ),
       );
-    });
+    }).then(originAuthoredResponse);
   }
 
   if (!deps.edge) {
