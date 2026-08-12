@@ -4,6 +4,8 @@ import {
   canonicalPathname,
   middlewareMatchPathname,
   middlewarePathname,
+  needsSlashNormalization,
+  normalizeRepeatedSlashes,
   routingPathname,
   type TrailingSlashConfig,
 } from "../src/trailing-slash";
@@ -527,4 +529,33 @@ describe("the URL middleware is handed, per skipMiddlewareUrlNormalize", () => {
       });
     });
   }
+});
+
+describe("needsSlashNormalization / normalizeRepeatedSlashes", () => {
+  it.each(["/a//b", "/a///b", "/basepath//en/x", "/a\\b", "/a/\\b"])(
+    "flags %s as needing normalization",
+    (path) => {
+      expect(needsSlashNormalization(path)).toBe(true);
+    },
+  );
+
+  it.each(["/a", "/a/b", "/basepath/en/x", "/"])(
+    "leaves %s alone",
+    (path) => {
+      expect(needsSlashNormalization(path)).toBe(false);
+    },
+  );
+
+  it.each([
+    ["/a//b", "/a/b"],
+    ["/a///b", "/a/b"],
+    ["/basepath//en/x", "/basepath/en/x"],
+    ["/a\\b", "/a/b"],
+    ["/a//b?x=1//2", "/a/b?x=1//2"],
+    ["/a//b?x=1//2?y=3", "/a/b?x=1//2?y=3"],
+    ["/a//b/", "/a/b/"],
+    ["//", "/"],
+  ])("normalizes %s to %s", (input, expected) => {
+    expect(normalizeRepeatedSlashes(input)).toBe(expected);
+  });
 });
