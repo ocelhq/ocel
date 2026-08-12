@@ -1,6 +1,7 @@
 package cloudflare
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io/fs"
@@ -20,9 +21,9 @@ func (p *provider) AssembleApp(src edge.WorkerSource, r edge.Resolver) (edge.Wor
 	if err != nil {
 		return edge.Worker{}, fmt.Errorf("read edge worker bundle: %w", err)
 	}
-	routing, err := os.ReadFile(filepath.Join(src.ArtifactRoot, edge.RoutingManifestFile))
+	modules, err := routingModules(src.ArtifactRoot)
 	if err != nil {
-		return edge.Worker{}, fmt.Errorf("read routing manifest: %w", err)
+		return edge.Worker{}, err
 	}
 	assets, err := collectStaticAssets(filepath.Join(src.ArtifactRoot, edge.StaticAssetDir))
 	if err != nil {
@@ -40,17 +41,49 @@ func (p *provider) AssembleApp(src edge.WorkerSource, r edge.Resolver) (edge.Wor
 			ContentType: "application/javascript+module",
 			Content:     main,
 		},
-		Modules: []edge.WorkerModule{{
-			Name:        edge.RoutingManifestFile,
-			ContentType: "text/plain",
-			Content:     routing,
-		}},
+		Modules:      modules,
 		Vars:         vars,
 		Secrets:      secrets,
 		AssetBinding: assetBinding,
 		Assets:       assets,
 		ObjectStore:  edge.ObjectStore{Binding: objectStoreBinding},
 	}, nil
+}
+
+const frameworkNext = "next"
+
+func routingModules(artifactRoot string) ([]edge.WorkerModule, error) {
+	routing, err := os.ReadFile(filepath.Join(artifactRoot, edge.RoutingManifestFile))
+	if err == nil {
+		return []edge.WorkerModule{{
+			Name:        edge.RoutingManifestFile,
+			ContentType: "text/plain",
+			Content:     routing,
+		}}, nil
+	}
+	if !errors.Is(err, fs.ErrNotExist) {
+		return nil, fmt.Errorf("read routing manifest: %w", err)
+	}
+	routed, err := routesAtEdge(artifactRoot)
+	if err != nil {
+		return nil, err
+	}
+	if routed {
+		return nil, fmt.Errorf("read routing manifest: %w", fs.ErrNotExist)
+	}
+	return nil, nil
+}
+
+func routesAtEdge(artifactRoot string) (bool, error) {
+	raw, err := os.ReadFile(filepath.Join(artifactRoot, edge.ServeDescriptorFile))
+	if err != nil {
+		return false, fmt.Errorf("read serve descriptor: %w", err)
+	}
+	var descriptor edge.ServeDescriptor
+	if err := json.Unmarshal(raw, &descriptor); err != nil {
+		return false, fmt.Errorf("parse serve descriptor: %w", err)
+	}
+	return descriptor.Framework == frameworkNext, nil
 }
 
 func validateRoutes(routes []string, r edge.Resolver) error {
