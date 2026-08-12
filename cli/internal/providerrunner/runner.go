@@ -276,6 +276,18 @@ func (r *Runner) DestroyProject(ctx context.Context, req *deploymentsv1.DestroyP
 	})
 }
 
+func (r *Runner) UseDomain(ctx context.Context, req *deploymentsv1.UseDomainRequest, onEvent func(*deploymentsv1.DeployEvent)) error {
+	return r.stream(ctx, "UseDomain", onEvent, func(client deploymentsv1connect.DeploymentServiceClient) (*connect.ServerStreamForClient[deploymentsv1.DeployEvent], error) {
+		return client.UseDomain(ctx, req)
+	})
+}
+
+func (r *Runner) ReleaseDomain(ctx context.Context, req *deploymentsv1.ReleaseDomainRequest, onEvent func(*deploymentsv1.DeployEvent)) error {
+	return r.stream(ctx, "ReleaseDomain", onEvent, func(client deploymentsv1connect.DeploymentServiceClient) (*connect.ServerStreamForClient[deploymentsv1.DeployEvent], error) {
+		return client.ReleaseDomain(ctx, req)
+	})
+}
+
 func (r *Runner) Prune(ctx context.Context, req *deploymentsv1.PruneRequest, onEvent func(*deploymentsv1.DeployEvent)) error {
 	return r.stream(ctx, "Prune", onEvent, func(client deploymentsv1connect.DeploymentServiceClient) (*connect.ServerStreamForClient[deploymentsv1.DeployEvent], error) {
 		return client.Prune(ctx, req)

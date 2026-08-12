@@ -7,6 +7,7 @@ import (
 	"net"
 	"net/http"
 	"os"
+	"strconv"
 	"strings"
 	"sync"
 
@@ -40,6 +41,14 @@ const (
 const fakeKnownSlugsEnvVar = "OCEL_TEST_FAKE_KNOWN_SLUGS"
 
 const fakeDomainOwnerEnvVar = "OCEL_TEST_FAKE_DOMAIN_OWNER"
+
+const (
+	fakeGlobalDomainEnvVar         = "OCEL_TEST_FAKE_GLOBAL_DOMAIN"
+	fakeGlobalDomainAccountEnvVar  = "OCEL_TEST_FAKE_GLOBAL_DOMAIN_CF_ACCOUNT"
+	fakeGlobalDomainRouteEnvVar    = "OCEL_TEST_FAKE_GLOBAL_DOMAIN_ROUTE"
+	fakeGlobalDomainGrammarEnvVar  = "OCEL_TEST_FAKE_GLOBAL_DOMAIN_GRAMMAR"
+	fakeGlobalDomainProjectsEnvVar = "OCEL_TEST_FAKE_GLOBAL_DOMAIN_PROJECTS"
+)
 
 const (
 	fakeAppURL      = "https://fake-app.example.com"
@@ -199,12 +208,81 @@ func (s *deployFakeProviderServer) Preflight(ctx context.Context, req *deploymen
 		}
 		resp.DomainClaims = append(resp.DomainClaims, claim)
 	}
+	resp.GlobalPreviewDomain = fakeGlobalDomain()
 	if p := os.Getenv(fakeCredProblemEnvVar); p != "" {
 		resp.CredentialProblems = append(resp.CredentialProblems, &deploymentsv1.CredentialProblem{
 			Provider: p,
 			Message:  "could not authenticate",
 			Hint:     "configure the credential and re-run",
 		})
+	}
+	return resp, nil
+}
+
+func fakeGlobalDomain() *deploymentsv1.GlobalPreviewDomain {
+	base := os.Getenv(fakeGlobalDomainEnvVar)
+	if base == "" {
+		return nil
+	}
+	grammarMin, grammarMax := uint32(1), uint32(1)
+	if g := os.Getenv(fakeGlobalDomainGrammarEnvVar); g != "" {
+		lo, hi, _ := strings.Cut(g, "-")
+		grammarMin, grammarMax = parseGrammar(lo), parseGrammar(hi)
+	}
+	return &deploymentsv1.GlobalPreviewDomain{
+		BaseDomain:        base,
+		CloudflareAccount: os.Getenv(fakeGlobalDomainAccountEnvVar),
+		GrammarMin:        grammarMin,
+		GrammarMax:        grammarMax,
+		RouteInstalled:    os.Getenv(fakeGlobalDomainRouteEnvVar) != "0",
+	}
+}
+
+func parseGrammar(s string) uint32 {
+	n, err := strconv.ParseUint(strings.TrimSpace(s), 10, 32)
+	if err != nil {
+		return 0
+	}
+	return uint32(n)
+}
+
+func (s *deployFakeProviderServer) UseDomain(ctx context.Context, req *deploymentsv1.UseDomainRequest, stream *connect.ServerStream[deploymentsv1.DeployEvent]) error {
+	if err := s.checkToken(ctx); err != nil {
+		return err
+	}
+	if err := stream.Send(&deploymentsv1.DeployEvent{
+		Event: &deploymentsv1.DeployEvent_Progress{Progress: &deploymentsv1.ProgressEvent{Message: "USE DOMAIN class=" + req.GetClass().String() + " base=" + req.GetBaseDomain()}},
+	}); err != nil {
+		return err
+	}
+	return stream.Send(&deploymentsv1.DeployEvent{
+		Event: &deploymentsv1.DeployEvent_Result{Result: &deploymentsv1.ResultEvent{Success: true}},
+	})
+}
+
+func (s *deployFakeProviderServer) ReleaseDomain(ctx context.Context, req *deploymentsv1.ReleaseDomainRequest, stream *connect.ServerStream[deploymentsv1.DeployEvent]) error {
+	if err := s.checkToken(ctx); err != nil {
+		return err
+	}
+	if err := stream.Send(&deploymentsv1.DeployEvent{
+		Event: &deploymentsv1.DeployEvent_Progress{Progress: &deploymentsv1.ProgressEvent{Message: "RELEASE DOMAIN class=" + req.GetClass().String()}},
+	}); err != nil {
+		return err
+	}
+	return stream.Send(&deploymentsv1.DeployEvent{
+		Event: &deploymentsv1.DeployEvent_Result{Result: &deploymentsv1.ResultEvent{Success: true}},
+	})
+}
+
+func (s *deployFakeProviderServer) ListDomain(ctx context.Context, req *deploymentsv1.ListDomainRequest) (*deploymentsv1.ListDomainResponse, error) {
+	if err := s.checkToken(ctx); err != nil {
+		return nil, err
+	}
+	resp := &deploymentsv1.ListDomainResponse{Domain: fakeGlobalDomain()}
+	for _, p := range strings.Split(os.Getenv(fakeGlobalDomainProjectsEnvVar), ",") {
+		if p = strings.TrimSpace(p); p != "" {
+			resp.Projects = append(resp.Projects, p)
+		}
 	}
 	return resp, nil
 }
