@@ -79,7 +79,7 @@ export function routingPathname(pathname: string): string {
   return pathname.slice(0, -1);
 }
 
-function dataPagePathname(
+export function dataPagePathname(
   pathname: string,
   config: TrailingSlashConfig,
   buildId: string,

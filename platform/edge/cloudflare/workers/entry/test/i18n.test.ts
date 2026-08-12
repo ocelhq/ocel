@@ -419,7 +419,14 @@ describe("pages-router i18n", () => {
 
 describe("resolveLocale", () => {
   const at = (pathname: string, basePath = "", headers = new Headers()) =>
-    resolveLocale(I18N, basePath, [], new URL(`https://app.example${pathname}`), headers);
+    resolveLocale(
+      I18N,
+      basePath,
+      "b1",
+      [],
+      new URL(`https://app.example${pathname}`),
+      headers,
+    );
 
   it("only strips a basePath on a segment boundary", () => {
     expect(at("/documents", "/docs").pathname).toBe("/en/documents");
@@ -433,6 +440,30 @@ describe("resolveLocale", () => {
 
   it("prefixes the root without a trailing slash", () => {
     expect(at("/").pathname).toBe("/en");
+  });
+
+  it("prefixes a _next/data page URL that carries no locale", () => {
+    expect(at("/_next/data/b1/about.json").pathname).toBe(
+      "/_next/data/b1/en/about.json",
+    );
+  });
+
+  it("prefixes a _next/data index URL that carries no locale", () => {
+    expect(at("/_next/data/b1/index.json").pathname).toBe(
+      "/_next/data/b1/en.json",
+    );
+  });
+
+  it("leaves a _next/data page URL's own locale in place", () => {
+    expect(at("/_next/data/b1/fr/about.json").pathname).toBe(
+      "/_next/data/b1/fr/about.json",
+    );
+  });
+
+  it("still bails out a _next/static URL", () => {
+    expect(at("/_next/static/chunks/x.js").pathname).toBe(
+      "/_next/static/chunks/x.js",
+    );
   });
 });
 

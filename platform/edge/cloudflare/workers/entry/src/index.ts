@@ -556,6 +556,7 @@ async function serveRequest(
     const resolution = resolveLocale(
       deps.manifest.i18n,
       deps.manifest.basePath,
+      deps.manifest.buildId,
       deps.manifest.pathnames,
       routingUrl,
       request.headers,
@@ -597,6 +598,16 @@ async function serveRequest(
           deps.manifest,
           deps.manifest.buildId,
         );
+        if (deps.manifest.i18n) {
+          matchUrl.pathname = resolveLocale(
+            deps.manifest.i18n,
+            deps.manifest.basePath,
+            deps.manifest.buildId,
+            deps.manifest.pathnames,
+            matchUrl,
+            ctx.headers,
+          ).pathname;
+        }
         if (!middlewareMatches(middleware.matchers, matchUrl, ctx.headers)) {
           return {};
         }
@@ -606,6 +617,16 @@ async function serveRequest(
           deps.manifest,
           deps.manifest.buildId,
         );
+        if (deps.manifest.i18n) {
+          mwUrl.pathname = resolveLocale(
+            deps.manifest.i18n,
+            deps.manifest.basePath,
+            deps.manifest.buildId,
+            deps.manifest.pathnames,
+            mwUrl,
+            ctx.headers,
+          ).pathname;
+        }
         const response = await invokeMiddleware(
           middleware,
           deps,
