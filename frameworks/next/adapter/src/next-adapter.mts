@@ -88,6 +88,18 @@ const adapter = {
     const { middleware } = outputs;
     const nodeMiddleware = middleware?.runtime === "nodejs" ? middleware : undefined;
 
+    const nextDataStaticFiles = middleware
+      ? outputs.staticFiles
+          .filter((f) => f.filePath.startsWith(pagesDistDir))
+          .map((f) => {
+            const pageKey = staticRouteKeyOf(f, pagesDistDir, basePath);
+            return {
+              pageKey,
+              dataKey: nextDataPathnameOf(pageKey, buildId, basePath),
+            };
+          })
+      : [];
+
     const images = compileImageConfig(config.images);
 
     const functionRoutes = allRoutes.filter((r) => r.runtime === "nodejs");
@@ -253,6 +265,12 @@ const adapter = {
         join(outputRoot, "static", pathname),
       );
     }
+    for (const { dataKey } of nextDataStaticFiles) {
+      assetHashes[dataKey] = await writeHashedFile(
+        join(outputRoot, "static", dataKey),
+        "{}",
+      );
+    }
 
     if (nodeMiddleware) {
       warnNodeMiddlewareBlastRadius(nodeMiddleware, [
@@ -296,7 +314,18 @@ const adapter = {
       value: { kind: "static" },
     }));
 
-    const routeDispatch = [...functionDispatch, ...edgeDispatch, ...staticDispatch];
+    const nextDataDispatch = nextDataStaticFiles.map(({ pageKey, dataKey }) => ({
+      key: dataKey,
+      original: pageKey,
+      value: { kind: "static" },
+    }));
+
+    const routeDispatch = [
+      ...functionDispatch,
+      ...edgeDispatch,
+      ...staticDispatch,
+      ...nextDataDispatch,
+    ];
     const dispatchKeyOrigin = new Map<string, string>();
     for (const { key, original } of routeDispatch) {
       const prior = dispatchKeyOrigin.get(key);
@@ -378,6 +407,7 @@ const adapter = {
             staticRouteKeyOf(o, pagesDistDir, basePath),
           ),
           ...publicFiles.map((p) => p.pathname),
+          ...nextDataStaticFiles.map((d) => d.dataKey),
         ]),
       ],
       routes: routing,
@@ -1044,6 +1074,20 @@ function staticRouteKeyOf(
     : file.pathname;
 }
 
+function nextDataPathnameOf(
+  pageKey: string,
+  buildId: string,
+  basePath: string,
+): string {
+  const unprefixed =
+    basePath && pageKey.startsWith(basePath)
+      ? pageKey.slice(basePath.length) || "/"
+      : pageKey;
+  const normalized = unprefixed === "/" ? "/index" : unprefixed;
+  const dataPathname = `/_next/data/${buildId}${normalized}.json`;
+  return basePath ? `${basePath}${dataPathname}` : dataPathname;
+}
+
 function servedPathname(file: { pathname: string; filePath: string }): string {
   return file.filePath.endsWith(".html") && !file.pathname.endsWith(".html")
     ? `${file.pathname}.html`
@@ -1064,6 +1108,12 @@ async function copyHashedFile(src: string, dest: string): Promise<string> {
     createWriteStream(dest, { mode: (await stat(src)).mode }),
   );
   return hash.digest("hex");
+}
+
+async function writeHashedFile(dest: string, content: string): Promise<string> {
+  await mkdir(dirname(dest), { recursive: true });
+  await writeFile(dest, content);
+  return createHash("sha256").update(content).digest("hex");
 }
 
 async function collectPublicFiles(
