@@ -270,6 +270,48 @@ describe("pages-router i18n", () => {
     expect(res.headers.get("x-matched-path")).toBe("/en/about");
   });
 
+  it("drops an optional catch-all placeholder no segment filled", async () => {
+    const deps = i18nDeps();
+    const searches: string[] = [];
+    (deps.manifest.routes as { dynamicRoutes: unknown[] }).dynamicRoutes.push({
+      sourceRegex: "^[/]?(?<nextLocale>[^/]{1,})(?:/(?<nxtPslug>.+?))?(?:/)?$",
+      destination: "/$nextLocale/[[...slug]]?nxtPslug=$nxtPslug",
+    });
+    deps.manifest.pathnames = deps.manifest.pathnames.filter((p) => p !== "/fr");
+    delete deps.manifest.dispatch["/fr"];
+    deps.manifest.pathnames.push("/fr/[[...slug]]");
+    deps.manifest.dispatch["/fr/[[...slug]]"] = { kind: "lambda", id: "posts" };
+    deps.fetch = (async (input: Request) => {
+      searches.push(new URL(input.url).search);
+      return new Response("origin", { status: 200 });
+    }) as unknown as typeof fetch;
+
+    const res = await serve(new Request("https://app.example/fr"), deps);
+
+    expect(res.status).toBe(200);
+    expect(searches[0]).toBe("");
+  });
+
+  it("keeps an optional catch-all value a segment did fill", async () => {
+    const deps = i18nDeps();
+    const searches: string[] = [];
+    (deps.manifest.routes as { dynamicRoutes: unknown[] }).dynamicRoutes.push({
+      sourceRegex: "^[/]?(?<nextLocale>[^/]{1,})(?:/(?<nxtPslug>.+?))?(?:/)?$",
+      destination: "/$nextLocale/[[...slug]]?nxtPslug=$nxtPslug",
+    });
+    deps.manifest.pathnames.push("/fr/[[...slug]]");
+    deps.manifest.dispatch["/fr/[[...slug]]"] = { kind: "lambda", id: "posts" };
+    deps.fetch = (async (input: Request) => {
+      searches.push(new URL(input.url).search);
+      return new Response("origin", { status: 200 });
+    }) as unknown as typeof fetch;
+
+    const res = await serve(new Request("https://app.example/fr/deep/page"), deps);
+
+    expect(res.status).toBe(200);
+    expect(searches[0]).toBe("?nxtPslug=deep%2Fpage");
+  });
+
   it("does not redirect the root towards the default locale", async () => {
     const deps = i18nDeps({ files: { "/en.html": "<h1>home</h1>" } });
 

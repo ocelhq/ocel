@@ -1027,7 +1027,10 @@ function dataPathname(pathname: string, url: URL, manifest: Manifest): string {
 function searchFromQuery(query: Record<string, string | string[]>): string {
   const params = new URLSearchParams();
   for (const [key, value] of Object.entries(query)) {
-    for (const v of Array.isArray(value) ? value : [value]) params.append(key, v);
+    for (const v of Array.isArray(value) ? value : [value]) {
+      if (v === `$${key}`) continue;
+      params.append(key, v);
+    }
   }
   const search = params.toString();
   return search ? `?${search}` : "";
