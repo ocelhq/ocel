@@ -703,6 +703,27 @@ async function noteRevalidation(
   await invalidateSnapshot(config, clockDeps);
 }
 
+const MIDDLEWARE_PREFETCH_HEADER = "x-middleware-prefetch";
+
+function middlewarePrefetchProbe(
+  request: Request,
+  pathname: string,
+  manifest: Manifest,
+): Response | undefined {
+  if (!request.headers.has(MIDDLEWARE_PREFETCH_HEADER)) return undefined;
+  if (!isNextDataPathname(pathname, manifest, manifest.buildId)) return undefined;
+
+  return new Response("{}", {
+    status: 200,
+    headers: {
+      "content-type": "application/json",
+      "x-matched-path": middlewareMatchPathname(pathname, manifest, manifest.buildId),
+      "x-middleware-skip": "1",
+      "cache-control": "private, no-cache, no-store, max-age=0, must-revalidate",
+    },
+  });
+}
+
 async function dispatch(
   result: RouteResult,
   request: Request,
@@ -744,7 +765,7 @@ async function dispatch(
     return doFetch(new Request(result.externalRewrite, request));
   }
   if (!result.resolvedPathname) {
-    return staticAsset();
+    return middlewarePrefetchProbe(request, url.pathname, manifest) ?? staticAsset();
   }
 
   if (hasUndecodableRouteMatch(result.routeMatches)) {

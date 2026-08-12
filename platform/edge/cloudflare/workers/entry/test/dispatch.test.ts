@@ -1745,6 +1745,58 @@ describe("dispatchResult", () => {
     expect(await res.text()).toBe("asset");
   });
 
+  it("answers a middleware-prefetch probe against an unregistered _next/data path with a 200 stub", async () => {
+    const deps = baseDeps({ assetStore: assetStoreServing({}) });
+
+    const res = await dispatchResult(
+      { resolvedPathname: null },
+      new Request("https://app.example/_next/data/test/dashboard.json", {
+        headers: { "x-middleware-prefetch": "1" },
+      }),
+      deps,
+    );
+
+    expect(res.status).toBe(200);
+    expect(await res.text()).toBe("{}");
+    expect(res.headers.get("content-type")).toBe("application/json");
+    expect(res.headers.get("x-matched-path")).toBe("/dashboard");
+    expect(res.headers.get("x-middleware-skip")).toBe("1");
+    expect(res.headers.get("cache-control")).toBe(
+      "private, no-cache, no-store, max-age=0, must-revalidate",
+    );
+  });
+
+  it("still 404s a middleware-prefetch request whose pathname isn't a _next/data path", async () => {
+    const deps = baseDeps({ assetStore: assetStoreServing({}) });
+
+    const res = await dispatchResult(
+      { resolvedPathname: null },
+      new Request("https://app.example/whatever", {
+        headers: { "x-middleware-prefetch": "1" },
+      }),
+      deps,
+    );
+
+    expect(res.status).toBe(404);
+  });
+
+  it("falls through to the R2 asset store for a _next/data request without x-middleware-prefetch", async () => {
+    const deps = baseDeps({
+      assetStore: assetStoreServing({
+        "/_next/data/test/dashboard.json": "asset",
+      }),
+    });
+
+    const res = await dispatchResult(
+      { resolvedPathname: null },
+      new Request("https://app.example/_next/data/test/dashboard.json"),
+      deps,
+    );
+
+    expect(res.status).toBe(200);
+    expect(await res.text()).toBe("asset");
+  });
+
   it("emits a redirect response", async () => {
     const res = await dispatchResult(
       { redirect: { url: "https://app.example/new", status: 308 } },
