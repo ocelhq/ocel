@@ -21,9 +21,12 @@ interface EdgeBundle {
 
 const BUNDLE_VERSION = 2;
 
+export type EdgeEntryKind = "page" | "middleware";
+
 export type EdgeInvoker = (
   entryKey: string,
   request: Request,
+  kind?: EdgeEntryKind,
 ) => Promise<Response>;
 
 export type EdgeCacheStub = Rpc.Provider<EdgeCacheRpc>;
@@ -74,11 +77,12 @@ export function createEdgeInvoker(
     };
   };
 
-  const id = `edge:${JSON.stringify([workers.id, cache?.scope ?? null])}`;
+  const idFor = (kind: EdgeEntryKind) =>
+    `edge:${JSON.stringify([workers.id, cache?.scope ?? null, kind])}`;
 
-  return (entryKey, request) =>
+  return (entryKey, request, kind = "page") =>
     loader
-      .get(id, load)
+      .get(idFor(kind), load)
       .getEntrypoint<undefined>(undefined, { props: { entryKey } })
       .fetch(request);
 }

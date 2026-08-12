@@ -7,6 +7,7 @@ import {
   createEdgeInvoker,
   type EdgeCacheBinding,
   type EdgeCacheStub,
+  type EdgeEntryKind,
   type EdgeInvoker,
 } from "../src/edge";
 import type { AssetBucket } from "../src/assets";
@@ -1081,8 +1082,8 @@ globalThis._ENTRIES[${JSON.stringify(entryKey)}] = {
   const deployment = (id: string, scope: string) =>
     invokerFor({ e: "" }, servedCount, { rpc: remoteStub(), scope }, id);
 
-  const serve = async (edge: EdgeInvoker) =>
-    (await edge("e", new Request("https://x/"))).text();
+  const serve = async (edge: EdgeInvoker, kind?: EdgeEntryKind) =>
+    (await edge("e", new Request("https://x/"), kind)).text();
 
   it("reuses one isolate across the requests of one deployment", async () => {
     const prod = deployment("shared-bundle-a", "prod/p/app/b1");
@@ -1098,6 +1099,21 @@ globalThis._ENTRIES[${JSON.stringify(entryKey)}] = {
 
     expect(await serve(prod)).toBe("1:prod/p/app/b1");
     expect(await serve(preview)).toBe("1:preview/p/app/b1");
+  });
+
+  it("keeps a middleware entry off the isolate a page entry already warmed", async () => {
+    const bundle = deployment("shared-bundle-c", "prod/p/app/b1");
+
+    expect(await serve(bundle)).toBe("1:prod/p/app/b1");
+    expect(await serve(bundle, "middleware")).toBe("1:prod/p/app/b1");
+  });
+
+  it("reuses the middleware isolate across its own requests", async () => {
+    const bundle = deployment("shared-bundle-d", "prod/p/app/b1");
+
+    expect(await serve(bundle, "middleware")).toBe("1:prod/p/app/b1");
+    expect(await serve(bundle, "middleware")).toBe("2:prod/p/app/b1");
+    expect(await serve(bundle)).toBe("1:prod/p/app/b1");
   });
 });
 

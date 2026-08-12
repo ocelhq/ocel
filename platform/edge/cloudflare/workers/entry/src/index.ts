@@ -1185,7 +1185,7 @@ function invokeMiddleware(
   if (!deps.edge) {
     throw new Error("no edge runtime is bound to this deployment");
   }
-  return deps.edge(middleware.entryKey, makeRequest());
+  return deps.edge(middleware.entryKey, makeRequest(), "middleware");
 }
 
 function noFunctionUrl(id: string): Response {
