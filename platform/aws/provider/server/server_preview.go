@@ -193,12 +193,15 @@ func (s *Server) runDestroyPreview(ctx context.Context, req *deploymentsv1.Destr
 		return err
 	}
 	env := req.GetEnvironment()
+	pointer, err := deploy.EnvName(env)
+	if err != nil {
+		return connect.NewError(connect.CodeInvalidArgument, err)
+	}
 	cfg, stack, state, err := s.previewTeardownContext(ctx, opts, req.GetSlug(), env)
 	if err != nil {
 		return err
 	}
 
-	pointer := env.GetIdentity()
 	persistent := env.GetLifecycle() == deploymentsv1.Environment_LIFECYCLE_PERSISTENT
 	return deploy.RemovePreview(ctx, stack, state, cfg, req.GetSlug(), pointer, persistent, progress, logf)
 }
@@ -240,7 +243,7 @@ func (s *Server) previewTeardownContext(ctx context.Context, opts options, slug 
 		return deploy.Config{}, nil, nil, fmt.Errorf("this edge does not support the root stack")
 	}
 
-	envName, err := deploy.EnvName(env)
+	envName, err := deploy.EnvScope(env)
 	if err != nil {
 		return deploy.Config{}, nil, nil, connect.NewError(connect.CodeInvalidArgument, err)
 	}

@@ -7,7 +7,10 @@ import (
 	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
 )
 
-const ProductionEnv = "prod"
+const (
+	ProductionEnv = "prod"
+	EveryPreview  = ""
+)
 
 type Promotion struct {
 	PromotionID string
@@ -29,6 +32,13 @@ func EnvName(env *deploymentsv1.Environment) (string, error) {
 	default:
 		return "", fmt.Errorf("deploys support production and preview, got class %s", env.GetClass())
 	}
+}
+
+func EnvScope(env *deploymentsv1.Environment) (string, error) {
+	if env.GetClass() == deploymentsv1.Environment_CLASS_PREVIEW && env.GetIdentity() == "" {
+		return EveryPreview, nil
+	}
+	return EnvName(env)
 }
 
 func previewEnvName(pointer string) (string, error) {
