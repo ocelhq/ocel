@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 
+const EDGE_CACHED_ROUTES = new Set(["/isr", "/golden"]);
+
 export function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
@@ -19,7 +21,9 @@ export function proxy(request: NextRequest) {
   const headers = new Headers(request.headers);
   headers.set("x-ocel-proxy", "1");
   const response = NextResponse.next({ request: { headers } });
-  response.cookies.set("ocel-proxy-seen", "1");
+  if (!EDGE_CACHED_ROUTES.has(pathname)) {
+    response.cookies.set("ocel-proxy-seen", "1");
+  }
   return response;
 }
 

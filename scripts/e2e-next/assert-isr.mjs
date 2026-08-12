@@ -19,7 +19,8 @@ log(`initial token ${first.token} (${first.tier})`);
 if (!CACHED_TIERS.has(first.tier)) {
   fail(
     `${target} served from tier "${first.tier}", so it is not a cached prerender at all — ` +
-      `the route lost its revalidate config, or the manifest no longer resolves it to a prerender`,
+      `the route lost its revalidate config, the manifest no longer resolves it to a prerender, or ` +
+      `middleware answered it with a Set-Cookie, which takes a prerender off the colo cache by design`,
   );
 }
 
