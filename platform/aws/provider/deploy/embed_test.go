@@ -567,7 +567,7 @@ func TestEmbedTargets(t *testing.T) {
 		targets := embedTargets(
 			Config{ArtifactRoot: root},
 			manifest,
-			map[string]*isrConfig{"web": {Bucket: "assets", Prefix: "prod/proj/web/B1"}},
+			map[string]*bytecodeConfig{"web": {Bucket: "assets", Prefix: "prod/proj/web/B1/bytecode"}},
 			map[string]artifactRef{"web_index": {Bucket: "artifacts", Key: "proj/web/abc123.zip"}},
 			warmed,
 			log,
@@ -578,6 +578,41 @@ func TestEmbedTargets(t *testing.T) {
 		}
 		if targets[0].CacheKey != embedTestCacheKey {
 			t.Errorf("embedTargets[0].CacheKey = %q, want the key the membrane reported", targets[0].CacheKey)
+		}
+	})
+
+	t.Run("keeps a node framework bundle", func(t *testing.T) {
+		root := t.TempDir()
+		if err := os.MkdirAll(filepath.Join(root, "api.func"), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(root, "api.func", "index.mjs"), []byte("x"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		manifest := &deploymentsv1.Manifest{
+			Slug:      "proj",
+			Functions: []*deploymentsv1.ManifestFunction{{LogicalName: "api_handler", Framework: "express", App: "api", ArtifactPath: "api.func"}},
+		}
+		warmed := []warmResult{{
+			Target: warmTarget{App: "api", LogicalName: "api_handler", FunctionName: "ocel-api-handler"},
+			Reply:  warmReply{Key: embedTestCacheKey},
+		}}
+
+		log, out := collectLog()
+		targets := embedTargets(
+			Config{ArtifactRoot: root},
+			manifest,
+			map[string]*bytecodeConfig{"api": {Bucket: "assets", Prefix: "prod/proj/api/API1/bytecode"}},
+			map[string]artifactRef{"api_handler": {Bucket: "artifacts", Key: "proj/api/abc123.zip"}},
+			warmed,
+			log,
+		)
+
+		if len(targets) != 1 {
+			t.Fatalf("embedTargets = %+v, want the express bundle kept (log: %s)", targets, out())
+		}
+		if targets[0].CacheBucket != "assets" {
+			t.Errorf("embedTargets[0].CacheBucket = %q, want the bytecode bucket", targets[0].CacheBucket)
 		}
 	})
 }

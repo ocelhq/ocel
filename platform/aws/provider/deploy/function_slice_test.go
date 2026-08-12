@@ -138,21 +138,14 @@ func isrCacheFor(t *testing.T, env, project, app, buildID string) isrConfig {
 }
 
 func TestISREnv(t *testing.T) {
-	t.Run("sets the bytecode prefix to the asset prefix", func(t *testing.T) {
+	t.Run("says nothing about the bytecode cache", func(t *testing.T) {
 		t.Setenv(bytecodeCacheEnv, "1")
 		cfg := isrCacheFor(t, "prod", "proj123", "marketing", "build456")
 		env := cfg.env()
-		if env["OCEL_BYTECODE_PREFIX"] != cfg.Prefix {
-			t.Errorf("OCEL_BYTECODE_PREFIX = %q, want %q", env["OCEL_BYTECODE_PREFIX"], cfg.Prefix)
-		}
-	})
-
-	t.Run("omits the bytecode prefix when the gate is off", func(t *testing.T) {
-		t.Setenv(bytecodeCacheEnv, "")
-		cfg := isrCacheFor(t, "prod", "proj123", "marketing", "build456")
-		env := cfg.env()
-		if _, ok := env["OCEL_BYTECODE_PREFIX"]; ok {
-			t.Errorf("OCEL_BYTECODE_PREFIX = %q, want it unset without OCEL_BYTECODE_CACHE=1", env["OCEL_BYTECODE_PREFIX"])
+		for _, key := range []string{"OCEL_BYTECODE_PREFIX", "OCEL_BYTECODE_BUCKET"} {
+			if _, ok := env[key]; ok {
+				t.Errorf("%s = %q, want the bytecode cache carried on its own config", key, env[key])
+			}
 		}
 	})
 
@@ -179,41 +172,81 @@ func TestISREnv(t *testing.T) {
 	})
 }
 
-func TestISRPolicy(t *testing.T) {
-	t.Run("covers the composed bytecode key", func(t *testing.T) {
-		t.Setenv(bytecodeCacheEnv, "1")
-		cfg := isrCacheFor(t, "prod", "proj123", "marketing", "build456")
+func bytecodeCacheFor(t *testing.T, env, project, app, buildID string) bytecodeConfig {
+	t.Helper()
+	coord := storageCoordinate(env, project, app, releaseOf(buildOnly(buildID)))
+	return bytecodeConfig{
+		Bucket: "assets-xyz",
+		Prefix: bytecodePrefixOf(coord),
+	}
+}
 
-		prefix := cfg.env()["OCEL_BYTECODE_PREFIX"]
-		bytecodeKey := fmt.Sprintf("%s/bytecode/my-function/node22-x64.tar.gz", prefix)
+func TestBytecodeEnv(t *testing.T) {
+	t.Run("names its own bucket and prefix", func(t *testing.T) {
+		cfg := bytecodeCacheFor(t, "prod", "proj123", "marketing", "build456")
 
-		raw, err := isrPolicy(cfg)
+		env := cfg.env()
+
+		if want := "prod/proj123/marketing/" + releaseTokenFor("build456") + "/bytecode"; env["OCEL_BYTECODE_PREFIX"] != want {
+			t.Errorf("OCEL_BYTECODE_PREFIX = %q, want %q", env["OCEL_BYTECODE_PREFIX"], want)
+		}
+		if env["OCEL_BYTECODE_BUCKET"] != "assets-xyz" {
+			t.Errorf("OCEL_BYTECODE_BUCKET = %q, want the asset bucket", env["OCEL_BYTECODE_BUCKET"])
+		}
+		if _, ok := env["OCEL_ISR_BUCKET"]; ok {
+			t.Error("OCEL_ISR_BUCKET is set; the compile cache has nothing to do with ISR")
+		}
+	})
+}
+
+func TestBytecodePolicy(t *testing.T) {
+	t.Run("covers the composed bytecode key and nothing else", func(t *testing.T) {
+		cfg := bytecodeCacheFor(t, "prod", "proj123", "marketing", "build456")
+		key := fmt.Sprintf("%s/my-function/node22-x64.tar.gz", cfg.Prefix)
+
+		raw, err := bytecodePolicy(cfg)
 		if err != nil {
-			t.Fatalf("isrPolicy: %v", err)
+			t.Fatalf("bytecodePolicy: %v", err)
 		}
-		var doc struct {
-			Statement []struct {
-				Resource string `json:"Resource"`
-			}
-		}
+		var doc policyDoc
 		if err := json.Unmarshal([]byte(raw), &doc); err != nil {
 			t.Fatalf("policy is not valid JSON: %v", err)
 		}
+		if len(doc.Statement) != 1 {
+			t.Fatalf("got %d statements, want the one S3 grant", len(doc.Statement))
+		}
 
-		s3Resource := doc.Statement[0].Resource
-		if !strings.HasPrefix(s3Resource, "arn:aws:s3:::") {
-			t.Fatalf("Statement[0].Resource = %q, want the S3 grant", s3Resource)
+		stmt := doc.Statement[0]
+		if want := "arn:aws:s3:::assets-xyz/prod/proj123/marketing/" + releaseTokenFor("build456") + "/bytecode/*"; stmt.Resource != want {
+			t.Errorf("Resource = %q, want %q", stmt.Resource, want)
 		}
-		pattern := strings.TrimPrefix(s3Resource, "arn:aws:s3:::")
-		if !strings.HasSuffix(pattern, "/*") {
-			t.Fatalf("S3 resource pattern %q does not end in /*", pattern)
+		if want := []string{"s3:GetObject", "s3:PutObject"}; !slices.Equal(stmt.Action, want) {
+			t.Errorf("Action = %v, want exactly %v", stmt.Action, want)
 		}
-		dir := strings.TrimSuffix(pattern, "*")
-		if !strings.HasPrefix(fmt.Sprintf("%s/%s", cfg.Bucket, bytecodeKey), dir) {
-			t.Errorf("bytecode key %s/%s is not covered by the policy's resource pattern %q", cfg.Bucket, bytecodeKey, pattern)
+		dir := strings.TrimSuffix(strings.TrimPrefix(stmt.Resource, "arn:aws:s3:::"), "*")
+		if !strings.HasPrefix(cfg.Bucket+"/"+key, dir) {
+			t.Errorf("bytecode key %s/%s is not covered by %q", cfg.Bucket, key, stmt.Resource)
+		}
+		if strings.Contains(raw, "dynamodb") {
+			t.Errorf("policy mentions DynamoDB; the compile cache keeps no tag ledger: %s", raw)
 		}
 	})
 
+	t.Run("cannot reach another app's prefix", func(t *testing.T) {
+		web := bytecodeCacheFor(t, "prod", "proj", "web", "WEB1")
+		admin := bytecodeCacheFor(t, "prod", "proj", "admin", "ADM1")
+
+		raw, err := bytecodePolicy(web)
+		if err != nil {
+			t.Fatalf("bytecodePolicy: %v", err)
+		}
+		if strings.Contains(raw, admin.Prefix) {
+			t.Errorf("web's policy reaches admin's prefix %q: %s", admin.Prefix, raw)
+		}
+	})
+}
+
+func TestISRPolicy(t *testing.T) {
 	t.Run("scopes to the app's own namespace", func(t *testing.T) {
 		cfg := isrCacheFor(t, "prod", "proj123", "marketing", "build456")
 
@@ -506,7 +539,7 @@ func TestISRCacheStore(t *testing.T) {
 		cfg := isrCacheFor(t, "prod", "proj123", "marketing", "build456")
 		cfg.CacheStoreBucket = "ocel-edge-cache"
 
-		env := functionEnv(map[string]string{}, functionArgs{Handler: "index.mjs"}, &cfg)
+		env := functionEnv(map[string]string{}, functionArgs{Handler: "index.mjs"}, &cfg, nil)
 		for name, value := range env {
 			if strings.Contains(name, "ACCESS_KEY") || strings.Contains(name, "SECRET_ACCESS") {
 				t.Errorf("env carries %s = %q", name, value)

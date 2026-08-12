@@ -736,6 +736,7 @@ func runAppStack(ctx context.Context, cfg Config, manifest *deploymentsv1.Manife
 	name := app.GetName()
 	functions := appFunctions(manifest, name)
 	caches := builds.caches
+	bytecode := builds.bytecode
 
 	if err = checkRuntimeOwnedNames(app); err != nil {
 		return nil, nil, err
@@ -747,7 +748,7 @@ func runAppStack(ctx context.Context, cfg Config, manifest *deploymentsv1.Manife
 	maps.Copy(env, baked.env())
 
 	for _, fn := range functions {
-		if err = checkFunctionEnvBudget(fn.GetLogicalName(), functionEnv(env, translateFunction(fn), caches[name])); err != nil {
+		if err = checkFunctionEnvBudget(fn.GetLogicalName(), functionEnv(env, translateFunction(fn), caches[name], bytecode[name])); err != nil {
 			return nil, nil, err
 		}
 	}
@@ -758,13 +759,13 @@ func runAppStack(ctx context.Context, cfg Config, manifest *deploymentsv1.Manife
 	cfg.reportStage(stage)(fmt.Sprintf("Provisioning %s", name))
 
 	program := func(pctx *pulumi.Context) error {
-		role, err := newFunctionRole(pctx, roleCoordinate(project, stack), appExecutionRole(cfg, name, caches, baked))
+		role, err := newFunctionRole(pctx, roleCoordinate(project, stack), appExecutionRole(cfg, name, caches, bytecode, baked))
 		if err != nil {
 			return err
 		}
 		for _, fn := range functions {
 			logical := fn.GetLogicalName()
-			if err := registerFunction(pctx, logical, functionCoordinate(project, stack, logical), fn.GetRouteId(), translateFunction(fn), artifacts[logical], env, caches[name], role.Arn); err != nil {
+			if err := registerFunction(pctx, logical, functionCoordinate(project, stack, logical), fn.GetRouteId(), translateFunction(fn), artifacts[logical], env, caches[name], bytecode[name], role.Arn); err != nil {
 				return fmt.Errorf("declare %s: %w", logical, err)
 			}
 		}

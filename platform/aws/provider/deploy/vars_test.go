@@ -68,7 +68,7 @@ func TestAppExecutionRole(t *testing.T) {
 
 		caches := map[string]*isrConfig{"web": {Prefix: "prod/proj/web/WEB1"}}
 
-		role := appExecutionRole(Config{VarsKeyARN: productionVarsKeyARN}, "web", caches, appBundle{})
+		role := appExecutionRole(Config{VarsKeyARN: productionVarsKeyARN}, "web", caches, nil, appBundle{})
 		if role.VarsKeyARN != productionVarsKeyARN {
 			t.Errorf("VarsKeyARN = %q, want the substrate's own key", role.VarsKeyARN)
 		}
@@ -76,7 +76,7 @@ func TestAppExecutionRole(t *testing.T) {
 			t.Errorf("Cache = %+v, want the app's own cache", role.Cache)
 		}
 
-		preview := appExecutionRole(Config{VarsKeyARN: previewVarsKeyARN}, "api", caches, appBundle{})
+		preview := appExecutionRole(Config{VarsKeyARN: previewVarsKeyARN}, "api", caches, nil, appBundle{})
 		if preview.VarsKeyARN != previewVarsKeyARN {
 			t.Errorf("VarsKeyARN = %q, want the preview substrate's key", preview.VarsKeyARN)
 		}
@@ -141,7 +141,7 @@ func TestFunctionEnvVariables(t *testing.T) {
 			"POSTHOG_ID":                  "ph-123",
 		}
 
-		env := functionEnv(base, functionArgs{Handler: "src/server.js"}, &isrConfig{Prefix: "prod/proj/web/B1"})
+		env := functionEnv(base, functionArgs{Handler: "src/server.js"}, &isrConfig{Prefix: "prod/proj/web/B1"}, nil)
 
 		for _, key := range []string{"OCEL_RESOURCE_POSTGRES_main", "POSTHOG_ID", "OCEL_HANDLER", "AWS_LAMBDA_EXEC_WRAPPER", "OCEL_ISR_PREFIX"} {
 			if _, ok := env[key]; !ok {

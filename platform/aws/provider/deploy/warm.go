@@ -43,7 +43,7 @@ func warmDeployedFunctions(ctx context.Context, cfg Config, manifest *deployment
 	}
 	return warmPass{
 		invoker: cfg.Invoker,
-		targets: warmTargets(manifest, builds.caches, names),
+		targets: warmTargets(manifest, builds.bytecode, names),
 		budget:  warmPassDeadline,
 		log:     log,
 	}.run(ctx)
@@ -55,7 +55,7 @@ type warmTarget struct {
 	FunctionName string
 }
 
-func warmTargets(manifest *deploymentsv1.Manifest, caches map[string]*isrConfig, names map[string]string) []warmTarget {
+func warmTargets(manifest *deploymentsv1.Manifest, bytecode map[string]*bytecodeConfig, names map[string]string) []warmTarget {
 	if !bytecodeCacheEnabled() {
 		return nil
 	}
@@ -63,7 +63,7 @@ func warmTargets(manifest *deploymentsv1.Manifest, caches map[string]*isrConfig,
 	for _, fn := range manifest.GetFunctions() {
 		app := fn.GetApp()
 		physical := names[fn.GetLogicalName()]
-		if caches[app] == nil || physical == "" {
+		if bytecode[app] == nil || physical == "" {
 			continue
 		}
 		targets = append(targets, warmTarget{App: app, LogicalName: fn.GetLogicalName(), FunctionName: physical})
