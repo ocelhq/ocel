@@ -13,6 +13,7 @@ import (
 
 	"github.com/ocelhq/ocel/cli/internal/deployresult"
 	"github.com/ocelhq/ocel/cli/internal/manifestbuilder"
+	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
 func TestDeployResult(t *testing.T) {
@@ -25,7 +26,7 @@ func TestDeployResult(t *testing.T) {
 		}})
 		root, _ := setUpDeployFixture(t)
 		addAppToFixtureConfig(t, root)
-		writeRoutingManifest(t, root, "api", "bld_api_1")
+		writeServeDescriptor(t, root, "api", "bld_api_1")
 
 		var stdout, stderr bytes.Buffer
 		if err := runDeploy(context.Background(), d, root, deployOptions{yes: true, tag: "v9"}, &stdout, &stderr, strings.NewReader("")); err != nil {
@@ -118,8 +119,8 @@ func readDeployResult(t *testing.T, root string) deployresult.Result {
 	return got
 }
 
-func writeRoutingManifest(t *testing.T, root, app, buildID string) {
+func writeServeDescriptor(t *testing.T, root, app, buildID string) {
 	t.Helper()
-	writeFile(t, filepath.Join(root, ".ocel", "output", "apps", app, "routing-manifest.json"),
-		`{"buildId":"`+buildID+`"}`)
+	writeFile(t, filepath.Join(root, ".ocel", "output", "apps", app, edge.ServeDescriptorFile),
+		`{"framework":"express","buildId":"`+buildID+`"}`)
 }
