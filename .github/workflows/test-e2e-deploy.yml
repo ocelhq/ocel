@@ -128,7 +128,6 @@ jobs:
       ADAPTER_DIR: ${{ github.workspace }}/adapter
       OCEL_ACCESS_TOKEN: ${{ secrets.E2E_OCEL_ACCESS_TOKEN }}
       OCEL_API_URL: ${{ vars.E2E_OCEL_API_URL }}
-      OCEL_E2E_PREVIEW_DOMAIN: ${{ vars.E2E_OCEL_PREVIEW_DOMAIN }}
       OCEL_E2E_SIDECAR_DIR: ${{ github.workspace }}/sidecar
       AWS_REGION: ${{ vars.E2E_AWS_REGION }}
       CLOUDFLARE_ACCOUNT_ID: ${{ secrets.E2E_CLOUDFLARE_ACCOUNT_ID }}
@@ -169,7 +168,6 @@ jobs:
       ADAPTER_DIR: ${{ github.workspace }}/adapter
       OCEL_ACCESS_TOKEN: ${{ secrets.E2E_OCEL_ACCESS_TOKEN }}
       OCEL_API_URL: ${{ vars.E2E_OCEL_API_URL }}
-      OCEL_E2E_PREVIEW_DOMAIN: ${{ vars.E2E_OCEL_PREVIEW_DOMAIN }}
       OCEL_E2E_SIDECAR_DIR: ${{ github.workspace }}/sidecar
       AWS_REGION: ${{ vars.E2E_AWS_REGION }}
       CLOUDFLARE_ACCOUNT_ID: ${{ secrets.E2E_CLOUDFLARE_ACCOUNT_ID }}
@@ -355,7 +353,6 @@ jobs:
 
           OCEL_ACCESS_TOKEN: ${{ secrets.E2E_OCEL_ACCESS_TOKEN }}
           OCEL_API_URL: ${{ vars.E2E_OCEL_API_URL }}
-          OCEL_E2E_PREVIEW_DOMAIN: ${{ vars.E2E_OCEL_PREVIEW_DOMAIN }}
           OCEL_E2E_SIDECAR_DIR: ${{ github.workspace }}/sidecar
         shell: bash
         run: |
@@ -392,7 +389,6 @@ jobs:
       ADAPTER_DIR: ${{ github.workspace }}/adapter
       OCEL_ACCESS_TOKEN: ${{ secrets.E2E_OCEL_ACCESS_TOKEN }}
       OCEL_API_URL: ${{ vars.E2E_OCEL_API_URL }}
-      OCEL_E2E_PREVIEW_DOMAIN: ${{ vars.E2E_OCEL_PREVIEW_DOMAIN }}
       OCEL_E2E_SIDECAR_DIR: ${{ github.workspace }}/sidecar
       AWS_REGION: ${{ vars.E2E_AWS_REGION }}
       CLOUDFLARE_ACCOUNT_ID: ${{ secrets.E2E_CLOUDFLARE_ACCOUNT_ID }}

@@ -162,12 +162,11 @@ describe("strandedProjectSlugs", () => {
 });
 
 describe("renderOcelConfig", () => {
-  const config = renderOcelConfig({ slug: "e2e-42", previewDomain: "*.e2e.example.com" });
+  const config = renderOcelConfig({ slug: "e2e-42" });
 
-  it("carries the run's project slug, the provider and the preview wildcard", () => {
+  it("carries the run's project slug and the provider", () => {
     expect(config).toContain(`slug: "e2e-42"`);
     expect(config).toContain("awsProvider()");
-    expect(config).toContain(`preview: "*.e2e.example.com"`);
   });
 
   it("declares one app explicitly, under the constant app name", () => {
@@ -177,13 +176,13 @@ describe("renderOcelConfig", () => {
 
   it("is pure, so cleanup and teardown re-render byte-for-byte what deploy wrote", () => {
     vi.stubEnv("GITHUB_RUN_ID", "42");
-    const args = { slug: projectSlugForRun(), previewDomain: "*.e2e.example.com" };
+    const args = { slug: projectSlugForRun() };
     expect(renderOcelConfig(args)).toBe(renderOcelConfig(args));
     expect(renderOcelConfig(args)).toContain(`slug: ${JSON.stringify(args.slug)}`);
   });
 
-  it("omits the domains block when no preview domain is configured", () => {
-    expect(renderOcelConfig({ slug: "s" })).not.toContain("domains");
+  it("declares no preview domain, so previews serve on the substrate's", () => {
+    expect(config).not.toContain("domains");
   });
 });
 

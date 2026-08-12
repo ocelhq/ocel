@@ -69,8 +69,8 @@ function sanitizeToken(value) {
     .replace(/^-+|-+$/g, "");
 }
 
-export function renderOcelConfig({ slug, previewDomain }) {
-  const lines = [
+export function renderOcelConfig({ slug }) {
+  return [
     `import { defineConfig } from "ocel/config";`,
     `import awsProvider from "@ocel/provider-aws";`,
     ``,
@@ -78,16 +78,10 @@ export function renderOcelConfig({ slug, previewDomain }) {
     `export default defineConfig({`,
     `  slug: ${JSON.stringify(slug)},`,
     `  provider: awsProvider(),`,
-  ];
-  if (previewDomain) {
-    lines.push(`  domains: {`, `    preview: ${JSON.stringify(previewDomain)},`, `  },`);
-  }
-  lines.push(
     `  apps: [{ name: ${JSON.stringify(APP_NAME)}, path: ".", framework: "next" }],`,
     `});`,
     ``,
-  );
-  return lines.join("\n");
+  ].join("\n");
 }
 
 export function withBuildScript(pkg) {

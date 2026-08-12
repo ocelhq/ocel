@@ -38,7 +38,7 @@ console.error(`[ocel-e2e] ${stranded.length} stranded e2e project(s): ${stranded
 
 const failed = stranded.filter((slug) => !destroyProject(slug));
 if (failed.length > 0) {
-  console.error(`[ocel-e2e] could not reclaim ${failed.join(", ")} — they still hold the preview domain claim`);
+  console.error(`[ocel-e2e] could not reclaim ${failed.join(", ")} — their preview footprint keeps billing`);
   process.exit(1);
 }
 

@@ -51,18 +51,17 @@ try {
 
 function deploy() {
   const adapterDir = required("ADAPTER_DIR");
-  const previewDomain = process.env.OCEL_E2E_PREVIEW_DOMAIN || "";
   const sidecarDir = required("OCEL_E2E_SIDECAR_DIR");
 
   const slug = projectSlugForRun();
   const ref = previewRefForApp(appDir);
   writeFileSync(
     join(appDir, STATE_FILE),
-    JSON.stringify({ slug, ref, appName: APP_NAME, previewDomain, startedAt: Date.now() }, null, 2) + "\n",
+    JSON.stringify({ slug, ref, appName: APP_NAME, startedAt: Date.now() }, null, 2) + "\n",
   );
   console.error(`[ocel-e2e] preview ${ref} of project ${slug} in ${appDir}`);
 
-  writeFileSync(join(appDir, "ocel.config.ts"), renderOcelConfig({ slug, previewDomain }));
+  writeFileSync(join(appDir, "ocel.config.ts"), renderOcelConfig({ slug }));
   patchPackageJson();
   ensureDeps();
   linkSidecar(appDir, sidecarDir);
