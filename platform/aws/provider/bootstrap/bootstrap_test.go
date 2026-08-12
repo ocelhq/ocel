@@ -460,8 +460,8 @@ func TestEdgeUser(t *testing.T) {
 				}
 				if hasAction(st.Action, "lambda:InvokeFunctionUrl") {
 					invoke = true
-					if null, ok := st.Condition["Null"].(map[string]any); ok {
-						if null["aws:ResourceTag/ocel:app"] == "false" {
+					if equals, ok := st.Condition["StringEquals"].(map[string]any); ok {
+						if equals["aws:ResourceTag/ocel:component"] == "function" {
 							invokeTagged = true
 						}
 					}
@@ -483,7 +483,7 @@ func TestEdgeUser(t *testing.T) {
 				t.Error("missing the lambda:Invoke* grant")
 			}
 			if !invokeTagged {
-				t.Error("lambda:Invoke* grant must be gated on the ocel:app tag's presence")
+				t.Error("lambda:Invoke* grant must be gated on ocel:component being function, so it reaches no listener or other Ocel-run function")
 			}
 		})
 	}

@@ -539,7 +539,7 @@ func TestStackTemplateOptimizer(t *testing.T) {
 				if _, ok := tmpl.Outputs[outputImageOptimizerURL]; ok {
 					t.Errorf("a template with no artifact still publishes %s", outputImageOptimizerURL)
 				}
-				if !strings.Contains(tc.template, "aws:ResourceTag/ocel:app") {
+				if !strings.Contains(tc.template, "aws:ResourceTag/ocel:component") {
 					t.Error("the edge user lost its tag-conditioned Lambda grant")
 				}
 			})
