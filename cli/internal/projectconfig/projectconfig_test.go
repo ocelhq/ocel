@@ -594,6 +594,26 @@ export default {
 		}
 	})
 
+	t.Run("rejects a slug carrying the field separator", func(t *testing.T) {
+		t.Parallel()
+
+		root := t.TempDir()
+		writeConfig(t, root, `
+export default {
+  slug: "shop--web",
+};
+`)
+		_, err := Resolve(root)
+		if err == nil {
+			t.Fatal("Resolve(slug=shop--web) err = nil, want a refusal")
+		}
+		for _, want := range []string{"shop--web", `"--"`, "single hyphen"} {
+			if !strings.Contains(err.Error(), want) {
+				t.Errorf("err = %v, want it to contain %q", err, want)
+			}
+		}
+	})
+
 	t.Run("rejects an unsafe app name", func(t *testing.T) {
 		t.Parallel()
 
@@ -807,6 +827,8 @@ func TestValidSlug(t *testing.T) {
 			"trailing-",
 			"has space",
 			"has.dot",
+			"a--b",
+			"double--separator--everywhere",
 			strings.Repeat("a", 64),
 		}
 		for _, s := range invalid {
@@ -859,8 +881,8 @@ func TestValidatePreviewDomain(t *testing.T) {
 		t.Parallel()
 
 		for _, d := range []string{"*.preview.acme.com", "*.acme.com"} {
-			if err := validatePreviewDomain(d); err != nil {
-				t.Errorf("validatePreviewDomain(%q) = %v, want nil", d, err)
+			if err := ValidatePreviewDomain(d); err != nil {
+				t.Errorf("ValidatePreviewDomain(%q) = %v, want nil", d, err)
 			}
 		}
 	})
@@ -877,8 +899,8 @@ func TestValidatePreviewDomain(t *testing.T) {
 			"*",
 		}
 		for _, d := range invalid {
-			if err := validatePreviewDomain(d); err == nil {
-				t.Errorf("validatePreviewDomain(%q) = nil, want error", d)
+			if err := ValidatePreviewDomain(d); err == nil {
+				t.Errorf("ValidatePreviewDomain(%q) = nil, want error", d)
 			}
 		}
 	})

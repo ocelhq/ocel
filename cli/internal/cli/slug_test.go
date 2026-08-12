@@ -17,6 +17,8 @@ func TestSlugify(t *testing.T) {
 		{"My Cool App", "my-cool-app"},
 		{"  leading/trailing -- spaces  ", "leading-trailing-spaces"},
 		{"Already-slugged-123", "already-slugged-123"},
+		{"a--b", "a-b"},
+		{"field -- separator", "field-separator"},
 		{"!!!", ""},
 		{strings.Repeat("a", 100), strings.Repeat("a", 63)},
 	}
