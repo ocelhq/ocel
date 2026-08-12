@@ -100,6 +100,9 @@ func Join(separator string, values ...string) string {
 func Fit(max int, separator string, segments ...Segment) string {
 	values := make([]string, len(segments))
 	for i, s := range segments {
+		if s.Value == "" {
+			continue
+		}
 		values[i] = Sanitize(s.Value)
 	}
 	full := strings.Join(nonEmpty(values), separator)

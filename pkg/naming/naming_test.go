@@ -63,6 +63,17 @@ func TestFitIsStableWhenItFits(t *testing.T) {
 	}
 }
 
+func TestFitOmitsEmptySegments(t *testing.T) {
+	c := Coordinate{Project: "shop", Env: "prod", App: "web", Kind: KindFunction, Release: NewRelease("build-1", "")}
+	want := "shop-prod-web-" + c.Release.String()
+	if got := c.PhysicalName(64); got != want {
+		t.Errorf("PhysicalName = %q, want %q", got, want)
+	}
+	if got := Fit(64, WordSeparator, Fixed("shop"), Compressible(""), Fixed("prod")); got != "shop-prod" {
+		t.Errorf("Fit = %q, want %q", got, "shop-prod")
+	}
+}
+
 func TestReleaseSeparatesBuildFromFingerprint(t *testing.T) {
 	if NewRelease("build-1", "fp-a") == NewRelease("build-1", "fp-b") {
 		t.Error("a changed value fingerprint must mint a new release")
