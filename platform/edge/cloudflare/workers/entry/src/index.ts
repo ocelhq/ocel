@@ -641,7 +641,14 @@ async function serveRequest(
   }
 
   return dispatchResult(
-    { ...preferExactPathname(result, deps.manifest), middleware: outcome },
+    {
+      ...withSourceInvocationTarget(
+        preferExactPathname(result, deps.manifest),
+        routingUrl,
+        deps.manifest,
+      ),
+      middleware: outcome,
+    },
     request,
     deps,
   );
@@ -658,6 +665,94 @@ function preferExactPathname(result: RouteResult, manifest: Manifest): RouteResu
     return { ...result, resolvedPathname: target };
   }
   return result;
+}
+
+function queryFromUrl(url: URL): Record<string, string | string[]> {
+  const query: Record<string, string | string[]> = {};
+  for (const [key, value] of url.searchParams.entries()) {
+    const existing = query[key];
+    if (existing === undefined) query[key] = value;
+    else query[key] = Array.isArray(existing) ? [...existing, value] : [existing, value];
+  }
+  return query;
+}
+
+function ruleDestinationPathname(
+  sourceRegex: string,
+  destination: string,
+  pathname: string,
+): string | undefined {
+  let match: RegExpMatchArray | null;
+  try {
+    match = pathname.match(new RegExp(sourceRegex));
+  } catch {
+    return undefined;
+  }
+  if (!match) return undefined;
+  let out = destination.split("?")[0];
+  for (let i = 1; i < match.length; i++) {
+    if (match[i] !== undefined) out = out.replace(new RegExp(`\\$${i}`, "g"), match[i]);
+  }
+  if (match.groups) {
+    for (const [key, value] of Object.entries(match.groups)) {
+      if (value !== undefined) out = out.replace(new RegExp(`\\$${key}`, "g"), value);
+    }
+  }
+  return out;
+}
+
+function matchesConfigRewrite(
+  pathname: string,
+  resolvedPathname: string,
+  routes: RoutingTable,
+): boolean {
+  const rules = [
+    ...(routes.beforeFiles ?? []),
+    ...(routes.afterFiles ?? []),
+    ...(routes.fallback ?? []),
+  ];
+  const dynamicRoutes = routes.dynamicRoutes ?? [];
+  for (const rule of rules) {
+    if (!rule.destination) continue;
+    const destination = ruleDestinationPathname(rule.sourceRegex, rule.destination, pathname);
+    if (destination === undefined) continue;
+    if (destination === resolvedPathname) return true;
+    for (const dynamic of dynamicRoutes) {
+      if (dynamic.destination?.split("?")[0] !== resolvedPathname) continue;
+      try {
+        if (new RegExp(dynamic.sourceRegex).test(destination)) return true;
+      } catch {
+        continue;
+      }
+    }
+  }
+  return false;
+}
+
+function withSourceInvocationTarget(
+  result: RouteResult,
+  routingUrl: URL,
+  manifest: Manifest,
+): RouteResult {
+  const target = result.invocationTarget;
+  if (!target || !result.resolvedPathname) return result;
+  if (target.pathname === routingUrl.pathname) return result;
+  if (
+    !matchesConfigRewrite(
+      routingUrl.pathname,
+      result.resolvedPathname,
+      manifest.routes as RoutingTable,
+    )
+  ) {
+    return result;
+  }
+  return {
+    ...result,
+    invocationTarget: {
+      pathname: routingUrl.pathname,
+      query: queryFromUrl(routingUrl),
+    },
+  };
 }
 
 export async function dispatchResult(
