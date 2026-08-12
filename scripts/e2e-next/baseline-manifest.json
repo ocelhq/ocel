@@ -361,17 +361,6 @@
     "flakey": [],
     "runtimeError": false
   },
-  "test/e2e/app-dir/parallel-routes-revalidation/parallel-routes-revalidation.test.ts": {
-    "failed": [
-      "parallel-routes-revalidation should not trigger full page when calling router.refresh() on an intercepted route",
-      "parallel-routes-revalidation router.refresh (dynamic) - searchParams: false should correctly refresh data for the intercepted route and previously active page slot",
-      "parallel-routes-revalidation router.refresh (dynamic) - searchParams: false should correctly refresh data for previously intercepted modal and active page slot",
-      "parallel-routes-revalidation router.refresh (dynamic) - searchParams: true should correctly refresh data for the intercepted route and previously active page slot",
-      "parallel-routes-revalidation router.refresh (dynamic) - searchParams: true should correctly refresh data for previously intercepted modal and active page slot"
-    ],
-    "flakey": [],
-    "runtimeError": false
-  },
   "test/e2e/app-dir/ppr-errors/ppr-errors.test.ts": {
     "failed": [],
     "flakey": [],
@@ -525,14 +514,6 @@
   "test/e2e/app-dir/searchparams-reuse-loading/searchparams-reuse-loading.test.ts": {
     "failed": [
       "searchparams-reuse-loading With Middleware should correctly return different RSC data for full prefetches with different searchParam values"
-    ],
-    "flakey": [],
-    "runtimeError": false
-  },
-  "test/e2e/app-dir/segment-cache/basic/segment-cache-basic.test.ts": {
-    "failed": [
-      "segment cache (basic tests) skips static layouts during partially static navigation",
-      "segment cache (basic tests) refreshes page segments when navigating to the exact same URL as the current location"
     ],
     "flakey": [],
     "runtimeError": false
@@ -762,17 +743,6 @@
     "failed": [],
     "flakey": [],
     "runtimeError": true
-  },
-  "test/e2e/edge-pages-support/index.test.ts": {
-    "failed": [
-      "edge-render-getserversideprops should have correct query for pages/api dynamic",
-      "edge-render-getserversideprops should have correct query/params on /[id]",
-      "edge-render-getserversideprops should have correct query/params on rewrite",
-      "edge-render-getserversideprops should have correct query/params on dynamic rewrite",
-      "edge-render-getserversideprops should respond to _next/data for [id] correctly"
-    ],
-    "flakey": [],
-    "runtimeError": false
   },
   "test/e2e/error-handler-not-found-req-url/error-handler-not-found-req-url.test.ts": {
     "failed": [
