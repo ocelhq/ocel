@@ -66,8 +66,9 @@ function deps(
   binding: DeploymentsBinding,
   clock: { ms: number },
   app = "web",
+  host = `${app}.acme.com`,
 ): DeploymentsDeps {
-  return { binding, slug: "acme-web", app, now: () => clock.ms };
+  return { binding, slug: "acme-web", host, app, now: () => clock.ms };
 }
 
 describe("resolveDeployment", () => {
@@ -229,6 +230,7 @@ describe("resolveDeployment", () => {
     const preview = await resolveDeployment({
       binding,
       slug: "acme-web",
+      host: "flaky-web-2626.acme.com",
       app: "web",
       pointer: "flaky-web-2626",
       now: () => clock.ms,
@@ -237,5 +239,85 @@ describe("resolveDeployment", () => {
     expect(production).toEqual({ kind: "found", record: makeRecord() });
     expect(preview).toEqual({ kind: "found", record: previewRecord });
     expect(binding.pointerRecordCalls).toBe(2);
+  });
+
+  it("keeps caches independent across projects sharing one binding", async () => {
+    const records: Record<string, DeploymentRecord> = {
+      acme: makeRecord({ isrPrefix: "prev/acme/web/build-1" }),
+      globex: makeRecord({ isrPrefix: "prev/globex/web/build-1" }),
+    };
+    const binding: DeploymentsBinding = {
+      async pointerRecord(args) {
+        const record = records[args.slug];
+        if (!record) return { kind: "no-pointer" };
+        return { kind: "record", buildId: record.buildId, record };
+      },
+    };
+    const clock = { ms: 0 };
+
+    const acme = await resolveDeployment({
+      binding,
+      slug: "acme",
+      host: "acme--pr-42.preview.ocel.sh",
+      app: "web",
+      pointer: "pr-42",
+      now: () => clock.ms,
+    });
+    const globex = await resolveDeployment({
+      binding,
+      slug: "globex",
+      host: "globex--pr-42.preview.ocel.sh",
+      app: "web",
+      pointer: "pr-42",
+      now: () => clock.ms,
+    });
+
+    expect(acme).toEqual({ kind: "found", record: records.acme });
+    expect(globex).toEqual({ kind: "found", record: records.globex });
+  });
+
+  it("caches on the host, so one host reuses the entry within the TTL", async () => {
+    let calls = 0;
+    const binding: DeploymentsBinding = {
+      async pointerRecord() {
+        calls++;
+        return { kind: "record", buildId: "build-1", record: makeRecord() };
+      },
+    };
+    const clock = { ms: 0 };
+    const d: DeploymentsDeps = {
+      binding,
+      slug: "acme",
+      host: "acme--pr-42.preview.ocel.sh",
+      pointer: "pr-42",
+      now: () => clock.ms,
+    };
+
+    await resolveDeployment(d);
+    await resolveDeployment(d);
+
+    expect(calls).toBe(1);
+  });
+
+  it("passes an absent app through and maps ambiguous-app to not-found", async () => {
+    let seen: { app?: string } | undefined;
+    const binding: DeploymentsBinding = {
+      async pointerRecord(args) {
+        seen = args;
+        return { kind: "ambiguous-app" };
+      },
+    };
+    const clock = { ms: 0 };
+
+    const resolution = await resolveDeployment({
+      binding,
+      slug: "acme",
+      host: "acme--pr-42.preview.ocel.sh",
+      pointer: "pr-42",
+      now: () => clock.ms,
+    });
+
+    expect(seen?.app).toBeUndefined();
+    expect(resolution).toEqual({ kind: "not-found" });
   });
 });

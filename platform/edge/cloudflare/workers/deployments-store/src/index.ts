@@ -110,7 +110,7 @@ export default class extends WorkerEntrypoint<Env> {
 
   async pointerRecord(args: {
     slug: string;
-    app: string;
+    app?: string;
     pointer?: string;
     knownBuildId?: string;
   }): Promise<PointerRecordResult> {

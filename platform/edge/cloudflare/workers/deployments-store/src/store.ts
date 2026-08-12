@@ -209,11 +209,10 @@ export function promote(
   });
 }
 
-export function pointerBuildId(
+function pointerBuilds(
   store: SqlStore,
-  app: string,
-  pointer: string = DEFAULT_POINTER,
-): string | undefined {
+  pointer: string,
+): Record<string, string> | undefined {
   const promotionId = getPointer(store, pointer);
   if (!promotionId) return undefined;
   const row = store.sql
@@ -223,25 +222,45 @@ export function pointerBuildId(
     )
     .toArray()[0];
   if (!row) return undefined;
-  return (JSON.parse(row.builds) as Record<string, string>)[app];
+  return JSON.parse(row.builds) as Record<string, string>;
+}
+
+export function pointerBuildId(
+  store: SqlStore,
+  app: string,
+  pointer: string = DEFAULT_POINTER,
+): string | undefined {
+  return pointerBuilds(store, pointer)?.[app];
 }
 
 export type PointerRecordResult =
   | { kind: "no-pointer" }
+  | { kind: "ambiguous-app" }
   | { kind: "unchanged"; buildId: string }
   | { kind: "record"; buildId: string; record: DeploymentRecord }
   | { kind: "dangling"; buildId: string };
 
 export function pointerRecord(
   store: SqlStore,
-  app: string,
+  app?: string,
   pointer: string = DEFAULT_POINTER,
   knownBuildId?: string,
 ): PointerRecordResult {
-  const buildId = pointerBuildId(store, app, pointer);
+  const builds = pointerBuilds(store, pointer);
+  if (!builds) return { kind: "no-pointer" };
+
+  let target = app;
+  if (target === undefined) {
+    const apps = Object.keys(builds);
+    if (apps.length > 1) return { kind: "ambiguous-app" };
+    if (apps.length === 0) return { kind: "no-pointer" };
+    target = apps[0];
+  }
+
+  const buildId = builds[target];
   if (!buildId) return { kind: "no-pointer" };
   if (buildId === knownBuildId) return { kind: "unchanged", buildId };
-  const rec = record(store, app, buildId);
+  const rec = record(store, target, buildId);
   if (!rec) return { kind: "dangling", buildId };
   return { kind: "record", buildId, record: rec };
 }

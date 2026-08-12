@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vitest";
 
-import { normalizeBaseDomain, previewApps, previewTarget } from "../src/preview";
+import {
+  globalPreviewTarget,
+  normalizeBaseDomain,
+  previewApps,
+  previewTarget,
+} from "../src/preview";
 
 const SOLE = ["web"];
 const MANY = ["web", "admin"];
@@ -107,6 +112,70 @@ describe("previewTarget", () => {
   it("returns null when the project declares no apps", () => {
     expect(previewTarget("pr-42.myapp.com", "myapp.com", [])).toBeNull();
     expect(previewTarget("pr-42--web.myapp.com", "myapp.com", [])).toBeNull();
+  });
+});
+
+describe("globalPreviewTarget", () => {
+  const BASE = "preview.ocel.sh";
+
+  it("reads slug--pointer--app positionally", () => {
+    expect(globalPreviewTarget("acme--pr-42--admin." + BASE, BASE)).toEqual({
+      slug: "acme",
+      pointer: "pr-42",
+      app: "admin",
+    });
+  });
+
+  it("leaves the app unset when the label carries only slug and pointer", () => {
+    expect(globalPreviewTarget("acme--pr-42." + BASE, BASE)).toEqual({
+      slug: "acme",
+      pointer: "pr-42",
+    });
+  });
+
+  it("keeps an app name that itself contains the separator", () => {
+    expect(globalPreviewTarget("acme--pr-42--a--b." + BASE, BASE)).toEqual({
+      slug: "acme",
+      pointer: "pr-42",
+      app: "a--b",
+    });
+  });
+
+  it("returns null for a single token", () => {
+    expect(globalPreviewTarget("acme." + BASE, BASE)).toBeNull();
+  });
+
+  it("returns null when any token is empty", () => {
+    expect(globalPreviewTarget("--pr-42." + BASE, BASE)).toBeNull();
+    expect(globalPreviewTarget("acme--." + BASE, BASE)).toBeNull();
+    expect(globalPreviewTarget("acme--pr-42--." + BASE, BASE)).toBeNull();
+    expect(globalPreviewTarget("acme----admin." + BASE, BASE)).toBeNull();
+  });
+
+  it("lowercases and ignores the port", () => {
+    expect(globalPreviewTarget("Acme--PR-42--Admin." + BASE + ":8787", BASE)).toEqual({
+      slug: "acme",
+      pointer: "pr-42",
+      app: "admin",
+    });
+  });
+
+  it("returns null off the base domain, on the bare base, and on deeper labels", () => {
+    expect(globalPreviewTarget("acme--pr-42.other.com", BASE)).toBeNull();
+    expect(globalPreviewTarget(BASE, BASE)).toBeNull();
+    expect(globalPreviewTarget(BASE + ".evil.com", BASE)).toBeNull();
+    expect(globalPreviewTarget("a.acme--pr-42." + BASE, BASE)).toBeNull();
+  });
+
+  it("returns null when the base domain is empty", () => {
+    expect(globalPreviewTarget("acme--pr-42.preview.ocel.sh", "")).toBeNull();
+  });
+
+  it("tolerates surrounding dots on the base domain", () => {
+    expect(globalPreviewTarget("acme--pr-42." + BASE, "." + BASE + ".")).toEqual({
+      slug: "acme",
+      pointer: "pr-42",
+    });
   });
 });
 

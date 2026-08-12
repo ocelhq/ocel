@@ -45,3 +45,37 @@ export function previewTarget(
   if (apps.length !== 1) return null;
   return { pointer: label, app: apps[0] };
 }
+
+export interface GlobalPreviewTarget {
+  slug: string;
+  pointer: string;
+  app?: string;
+}
+
+export function globalPreviewTarget(
+  host: string,
+  baseDomain: string,
+): GlobalPreviewTarget | null {
+  const label = previewLabel(host, baseDomain);
+  if (label === null) return null;
+
+  const tokens = label.split(APP_SEPARATOR);
+  if (tokens.length < 2 || tokens.some((token) => token === "")) return null;
+
+  const [slug, pointer] = tokens;
+  if (tokens.length === 2) return { slug, pointer };
+  return { slug, pointer, app: tokens.slice(2).join(APP_SEPARATOR) };
+}
+
+function previewLabel(host: string, baseDomain: string): string | null {
+  const h = host.toLowerCase().split(":", 1)[0];
+  const base = normalizeBaseDomain(baseDomain);
+  if (base === "") return null;
+
+  const baseSuffix = "." + base;
+  if (!h.endsWith(baseSuffix)) return null;
+
+  const label = h.slice(0, -baseSuffix.length);
+  if (label === "" || label.includes(".")) return null;
+  return label;
+}

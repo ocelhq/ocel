@@ -69,7 +69,7 @@ export class DeploymentsStore extends DurableObject<Env> {
   }
 
   async pointerRecord(
-    app: string,
+    app?: string,
     pointer?: string,
     knownBuildId?: string,
   ): Promise<store.PointerRecordResult> {
