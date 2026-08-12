@@ -26,6 +26,32 @@ service DeploymentService {
     rpc Rollback(RollbackRequest) returns (RollbackResponse);
 
     rpc Prune(PruneRequest) returns (stream DeployEvent);
+
+    rpc UseDomain(UseDomainRequest) returns (stream DeployEvent);
+
+    rpc ListDomain(ListDomainRequest) returns (ListDomainResponse);
+
+    rpc ReleaseDomain(ReleaseDomainRequest) returns (stream DeployEvent);
+}
+
+message UseDomainRequest {
+  Environment.Class class = 1;
+
+  string base_domain = 2;
+}
+
+message ListDomainRequest {
+  Environment.Class class = 1;
+}
+
+message ListDomainResponse {
+  GlobalPreviewDomain domain = 1;
+
+  repeated string projects = 2;
+}
+
+message ReleaseDomainRequest {
+  Environment.Class class = 1;
 }
 
 message Environment {
@@ -218,6 +244,20 @@ message PreflightResponse {
   repeated string known_slugs = 5;
 
   repeated DomainClaim domain_claims = 6;
+
+  GlobalPreviewDomain global_preview_domain = 7;
+}
+
+message GlobalPreviewDomain {
+  string base_domain = 1;
+
+  string cloudflare_account = 2;
+
+  uint32 grammar_min = 3;
+
+  uint32 grammar_max = 4;
+
+  bool route_installed = 5;
 }
 
 message DomainClaim {

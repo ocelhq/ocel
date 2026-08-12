@@ -62,6 +62,15 @@ const (
 	DeploymentServiceRollbackProcedure = "/deployments.v1.DeploymentService/Rollback"
 	// DeploymentServicePruneProcedure is the fully-qualified name of the DeploymentService's Prune RPC.
 	DeploymentServicePruneProcedure = "/deployments.v1.DeploymentService/Prune"
+	// DeploymentServiceUseDomainProcedure is the fully-qualified name of the DeploymentService's
+	// UseDomain RPC.
+	DeploymentServiceUseDomainProcedure = "/deployments.v1.DeploymentService/UseDomain"
+	// DeploymentServiceListDomainProcedure is the fully-qualified name of the DeploymentService's
+	// ListDomain RPC.
+	DeploymentServiceListDomainProcedure = "/deployments.v1.DeploymentService/ListDomain"
+	// DeploymentServiceReleaseDomainProcedure is the fully-qualified name of the DeploymentService's
+	// ReleaseDomain RPC.
+	DeploymentServiceReleaseDomainProcedure = "/deployments.v1.DeploymentService/ReleaseDomain"
 )
 
 // DeploymentServiceClient is a client for the deployments.v1.DeploymentService service.
@@ -76,6 +85,9 @@ type DeploymentServiceClient interface {
 	ListPromotions(context.Context, *v1.ListPromotionsRequest) (*v1.ListPromotionsResponse, error)
 	Rollback(context.Context, *v1.RollbackRequest) (*v1.RollbackResponse, error)
 	Prune(context.Context, *v1.PruneRequest) (*connect.ServerStreamForClient[v1.DeployEvent], error)
+	UseDomain(context.Context, *v1.UseDomainRequest) (*connect.ServerStreamForClient[v1.DeployEvent], error)
+	ListDomain(context.Context, *v1.ListDomainRequest) (*v1.ListDomainResponse, error)
+	ReleaseDomain(context.Context, *v1.ReleaseDomainRequest) (*connect.ServerStreamForClient[v1.DeployEvent], error)
 }
 
 // NewDeploymentServiceClient constructs a client for the deployments.v1.DeploymentService service.
@@ -149,6 +161,24 @@ func NewDeploymentServiceClient(httpClient connect.HTTPClient, baseURL string, o
 			connect.WithSchema(deploymentServiceMethods.ByName("Prune")),
 			connect.WithClientOptions(opts...),
 		),
+		useDomain: connect.NewClient[v1.UseDomainRequest, v1.DeployEvent](
+			httpClient,
+			baseURL+DeploymentServiceUseDomainProcedure,
+			connect.WithSchema(deploymentServiceMethods.ByName("UseDomain")),
+			connect.WithClientOptions(opts...),
+		),
+		listDomain: connect.NewClient[v1.ListDomainRequest, v1.ListDomainResponse](
+			httpClient,
+			baseURL+DeploymentServiceListDomainProcedure,
+			connect.WithSchema(deploymentServiceMethods.ByName("ListDomain")),
+			connect.WithClientOptions(opts...),
+		),
+		releaseDomain: connect.NewClient[v1.ReleaseDomainRequest, v1.DeployEvent](
+			httpClient,
+			baseURL+DeploymentServiceReleaseDomainProcedure,
+			connect.WithSchema(deploymentServiceMethods.ByName("ReleaseDomain")),
+			connect.WithClientOptions(opts...),
+		),
 	}
 }
 
@@ -164,6 +194,9 @@ type deploymentServiceClient struct {
 	listPromotions     *connect.Client[v1.ListPromotionsRequest, v1.ListPromotionsResponse]
 	rollback           *connect.Client[v1.RollbackRequest, v1.RollbackResponse]
 	prune              *connect.Client[v1.PruneRequest, v1.DeployEvent]
+	useDomain          *connect.Client[v1.UseDomainRequest, v1.DeployEvent]
+	listDomain         *connect.Client[v1.ListDomainRequest, v1.ListDomainResponse]
+	releaseDomain      *connect.Client[v1.ReleaseDomainRequest, v1.DeployEvent]
 }
 
 // Deploy calls deployments.v1.DeploymentService.Deploy.
@@ -236,6 +269,25 @@ func (c *deploymentServiceClient) Prune(ctx context.Context, req *v1.PruneReques
 	return c.prune.CallServerStream(ctx, connect.NewRequest(req))
 }
 
+// UseDomain calls deployments.v1.DeploymentService.UseDomain.
+func (c *deploymentServiceClient) UseDomain(ctx context.Context, req *v1.UseDomainRequest) (*connect.ServerStreamForClient[v1.DeployEvent], error) {
+	return c.useDomain.CallServerStream(ctx, connect.NewRequest(req))
+}
+
+// ListDomain calls deployments.v1.DeploymentService.ListDomain.
+func (c *deploymentServiceClient) ListDomain(ctx context.Context, req *v1.ListDomainRequest) (*v1.ListDomainResponse, error) {
+	response, err := c.listDomain.CallUnary(ctx, connect.NewRequest(req))
+	if response != nil {
+		return response.Msg, err
+	}
+	return nil, err
+}
+
+// ReleaseDomain calls deployments.v1.DeploymentService.ReleaseDomain.
+func (c *deploymentServiceClient) ReleaseDomain(ctx context.Context, req *v1.ReleaseDomainRequest) (*connect.ServerStreamForClient[v1.DeployEvent], error) {
+	return c.releaseDomain.CallServerStream(ctx, connect.NewRequest(req))
+}
+
 // DeploymentServiceHandler is an implementation of the deployments.v1.DeploymentService service.
 type DeploymentServiceHandler interface {
 	Deploy(context.Context, *v1.DeployRequest, *connect.ServerStream[v1.DeployEvent]) error
@@ -248,6 +300,9 @@ type DeploymentServiceHandler interface {
 	ListPromotions(context.Context, *v1.ListPromotionsRequest) (*v1.ListPromotionsResponse, error)
 	Rollback(context.Context, *v1.RollbackRequest) (*v1.RollbackResponse, error)
 	Prune(context.Context, *v1.PruneRequest, *connect.ServerStream[v1.DeployEvent]) error
+	UseDomain(context.Context, *v1.UseDomainRequest, *connect.ServerStream[v1.DeployEvent]) error
+	ListDomain(context.Context, *v1.ListDomainRequest) (*v1.ListDomainResponse, error)
+	ReleaseDomain(context.Context, *v1.ReleaseDomainRequest, *connect.ServerStream[v1.DeployEvent]) error
 }
 
 // NewDeploymentServiceHandler builds an HTTP handler from the service implementation. It returns
@@ -317,6 +372,24 @@ func NewDeploymentServiceHandler(svc DeploymentServiceHandler, opts ...connect.H
 		connect.WithSchema(deploymentServiceMethods.ByName("Prune")),
 		connect.WithHandlerOptions(opts...),
 	)
+	deploymentServiceUseDomainHandler := connect.NewServerStreamHandlerSimple(
+		DeploymentServiceUseDomainProcedure,
+		svc.UseDomain,
+		connect.WithSchema(deploymentServiceMethods.ByName("UseDomain")),
+		connect.WithHandlerOptions(opts...),
+	)
+	deploymentServiceListDomainHandler := connect.NewUnaryHandlerSimple(
+		DeploymentServiceListDomainProcedure,
+		svc.ListDomain,
+		connect.WithSchema(deploymentServiceMethods.ByName("ListDomain")),
+		connect.WithHandlerOptions(opts...),
+	)
+	deploymentServiceReleaseDomainHandler := connect.NewServerStreamHandlerSimple(
+		DeploymentServiceReleaseDomainProcedure,
+		svc.ReleaseDomain,
+		connect.WithSchema(deploymentServiceMethods.ByName("ReleaseDomain")),
+		connect.WithHandlerOptions(opts...),
+	)
 	return "/deployments.v1.DeploymentService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case DeploymentServiceDeployProcedure:
@@ -339,6 +412,12 @@ func NewDeploymentServiceHandler(svc DeploymentServiceHandler, opts ...connect.H
 			deploymentServiceRollbackHandler.ServeHTTP(w, r)
 		case DeploymentServicePruneProcedure:
 			deploymentServicePruneHandler.ServeHTTP(w, r)
+		case DeploymentServiceUseDomainProcedure:
+			deploymentServiceUseDomainHandler.ServeHTTP(w, r)
+		case DeploymentServiceListDomainProcedure:
+			deploymentServiceListDomainHandler.ServeHTTP(w, r)
+		case DeploymentServiceReleaseDomainProcedure:
+			deploymentServiceReleaseDomainHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -386,4 +465,16 @@ func (UnimplementedDeploymentServiceHandler) Rollback(context.Context, *v1.Rollb
 
 func (UnimplementedDeploymentServiceHandler) Prune(context.Context, *v1.PruneRequest, *connect.ServerStream[v1.DeployEvent]) error {
 	return connect.NewError(connect.CodeUnimplemented, errors.New("deployments.v1.DeploymentService.Prune is not implemented"))
+}
+
+func (UnimplementedDeploymentServiceHandler) UseDomain(context.Context, *v1.UseDomainRequest, *connect.ServerStream[v1.DeployEvent]) error {
+	return connect.NewError(connect.CodeUnimplemented, errors.New("deployments.v1.DeploymentService.UseDomain is not implemented"))
+}
+
+func (UnimplementedDeploymentServiceHandler) ListDomain(context.Context, *v1.ListDomainRequest) (*v1.ListDomainResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("deployments.v1.DeploymentService.ListDomain is not implemented"))
+}
+
+func (UnimplementedDeploymentServiceHandler) ReleaseDomain(context.Context, *v1.ReleaseDomainRequest, *connect.ServerStream[v1.DeployEvent]) error {
+	return connect.NewError(connect.CodeUnimplemented, errors.New("deployments.v1.DeploymentService.ReleaseDomain is not implemented"))
 }
