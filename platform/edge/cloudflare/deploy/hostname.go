@@ -82,6 +82,9 @@ func (p *provider) pruneStaleRoutes(ctx context.Context, snap *routeSnapshot, up
 			continue
 		}
 		for _, route := range slices.Clone(inZone) {
+			if route.Script == edge.SharedPreviewEntryScript {
+				continue
+			}
 			if route.Script != up.scriptName && !edge.NameUnderStem(stem, route.Script) {
 				continue
 			}

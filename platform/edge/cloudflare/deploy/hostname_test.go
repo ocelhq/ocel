@@ -2,6 +2,7 @@ package cloudflare
 
 import (
 	"encoding/json"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -31,6 +32,13 @@ type cfMock struct {
 	deletedRoutes        []string
 	deletedCustomDomains []string
 	putScripts           []string
+	putBodies            map[string]putBody
+	deletedScripts       []string
+}
+
+type putBody struct {
+	contentType string
+	content     []byte
 }
 
 func (m *cfMock) server(t *testing.T) *httptest.Server {
@@ -103,7 +111,18 @@ func (m *cfMock) server(t *testing.T) *httptest.Server {
 	})
 
 	mux.HandleFunc("PUT /accounts/acct/workers/scripts/{name}", func(w http.ResponseWriter, r *http.Request) {
-		m.putScripts = append(m.putScripts, r.PathValue("name"))
+		name := r.PathValue("name")
+		content, _ := io.ReadAll(r.Body)
+		m.putScripts = append(m.putScripts, name)
+		if m.putBodies == nil {
+			m.putBodies = map[string]putBody{}
+		}
+		m.putBodies[name] = putBody{contentType: r.Header.Get("Content-Type"), content: content}
+		writeResult(w, map[string]any{"id": name})
+	})
+
+	mux.HandleFunc("DELETE /accounts/acct/workers/scripts/{name}", func(w http.ResponseWriter, r *http.Request) {
+		m.deletedScripts = append(m.deletedScripts, r.PathValue("name"))
 		writeResult(w, map[string]any{"id": r.PathValue("name")})
 	})
 
