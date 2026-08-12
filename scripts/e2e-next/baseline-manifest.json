@@ -793,25 +793,7 @@
     "runtimeError": false
   },
   "test/e2e/getserversideprops/test/index.test.ts": {
-    "failed": [
-      "getServerSideProps should navigate between pages successfully",
-      "getServerSideProps should allow POST request for getServerSideProps page",
-      "getServerSideProps should render 404 correctly when notFound is returned client-transition (non-dynamic)",
-      "getServerSideProps should render 404 correctly when notFound is returned client-transition (dynamic)",
-      "getServerSideProps should SSR normal page correctly",
-      "getServerSideProps should handle throw ENOENT correctly",
-      "getServerSideProps should have gssp in __NEXT_DATA__",
-      "getServerSideProps should have correct req.url and query for direct visit dynamic page rewrite direct",
-      "getServerSideProps should have correct req.url and query for direct visit dynamic page rewrite direct with internal query",
-      "getServerSideProps should have correct req.url and query for direct visit dynamic page rewrite param",
-      "getServerSideProps should not include rewrite query params in `asPath` and `req.url`",
-      "getServerSideProps should navigate to a normal page and back",
-      "getServerSideProps should pass query for data request on navigation",
-      "getServerSideProps should reload page on failed data request",
-      "getServerSideProps should not trigger an error when a data request is cancelled due to another navigation",
-      "getServerSideProps should dedupe server data requests",
-      "getServerSideProps should not show error for invalid JSON returned from getStaticProps on CST"
-    ],
+    "failed": [],
     "flakey": [],
     "runtimeError": false
   },
