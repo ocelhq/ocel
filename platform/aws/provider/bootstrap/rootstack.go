@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"slices"
+	"strings"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/ssm"
@@ -86,6 +88,39 @@ func ReadRootStackStateFor(ctx context.Context, ssmClient SSMAPI, class, slug st
 		return nil, fmt.Errorf("parse root-stack state: %w", err)
 	}
 	return state, nil
+}
+
+type SSMPathAPI interface {
+	GetParametersByPath(ctx context.Context, in *ssm.GetParametersByPathInput, optFns ...func(*ssm.Options)) (*ssm.GetParametersByPathOutput, error)
+}
+
+func RootStackSlugsFor(ctx context.Context, api SSMPathAPI, class string) ([]string, error) {
+	prefix, err := rootStackStateParamPrefixFor(class)
+	if err != nil {
+		return nil, err
+	}
+	var slugs []string
+	var token *string
+	for {
+		out, err := api.GetParametersByPath(ctx, &ssm.GetParametersByPathInput{
+			Path:      aws.String(prefix),
+			NextToken: token,
+		})
+		if err != nil {
+			return nil, fmt.Errorf("list root-stack state parameters: %w", err)
+		}
+		for _, param := range out.Parameters {
+			if slug := strings.TrimPrefix(aws.ToString(param.Name), prefix); slug != "" {
+				slugs = append(slugs, slug)
+			}
+		}
+		if out.NextToken == nil || aws.ToString(out.NextToken) == "" {
+			break
+		}
+		token = out.NextToken
+	}
+	slices.Sort(slugs)
+	return slugs, nil
 }
 
 func DeleteRootStackState(ctx context.Context, ssmClient SSMAPI, slug string) error {
