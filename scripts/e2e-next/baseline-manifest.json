@@ -209,19 +209,6 @@
     "flakey": [],
     "runtimeError": false
   },
-  "test/e2e/app-dir/error-boundary-navigation/override-node-env.test.ts": {
-    "failed": [
-      "app dir - not found navigation - with overridden node env should allow navigation on not-found",
-      "app dir - not found navigation - with overridden node env should allow navigation on error",
-      "app dir - not found navigation - with overridden node env should allow navigation to other routes on route that was initially not-found",
-      "app dir - not found navigation - with overridden node env should allow navigation back to route that was initially not-found",
-      "app dir - not found navigation - with overridden node env should allow navigating to a page calling notfound",
-      "app dir - not found navigation - with overridden node env should allow navigating to a non-existent page",
-      "app dir - not found navigation - with overridden node env should be able to navigate to other page from root not-found page"
-    ],
-    "flakey": [],
-    "runtimeError": false
-  },
   "test/e2e/app-dir/externalize-node-binary/externalize-node-binary.test.ts": {
     "failed": [],
     "flakey": [],
@@ -343,13 +330,6 @@
     "failed": [],
     "flakey": [],
     "runtimeError": true
-  },
-  "test/e2e/app-dir/parallel-route-not-found-params/parallel-route-not-found-params.test.ts": {
-    "failed": [
-      "parallel-route-not-found should behave correctly without any errors"
-    ],
-    "flakey": [],
-    "runtimeError": false
   },
   "test/e2e/app-dir/parallel-routes-generate-static-params/parallel-routes-generate-static-params.test.ts": {
     "failed": [
@@ -798,13 +778,6 @@
     "flakey": [],
     "runtimeError": false
   },
-  "test/e2e/invalid-static-asset-404-app/invalid-static-asset-404-app-base-path.test.ts": {
-    "failed": [
-      "invalid-static-asset-404-app-base-path should return custom 404 page when fetching invalid non-asset path"
-    ],
-    "flakey": [],
-    "runtimeError": false
-  },
   "test/e2e/invalid-static-asset-404-app/invalid-static-asset-404-app.test.ts": {
     "failed": [
       "invalid-static-asset-404-app should return 404 with plain text when fetching invalid asset path"
@@ -815,13 +788,6 @@
   "test/e2e/invalid-static-asset-404-pages/invalid-static-asset-404-pages-asset-prefix.test.ts": {
     "failed": [
       "invalid-static-asset-404-pages-asset-prefix should return 404 with plain text when fetching invalid asset path"
-    ],
-    "flakey": [],
-    "runtimeError": false
-  },
-  "test/e2e/invalid-static-asset-404-pages/invalid-static-asset-404-pages-base-path.test.ts": {
-    "failed": [
-      "invalid-static-asset-404-pages-base-path should return custom 404 page when fetching invalid non-asset path"
     ],
     "flakey": [],
     "runtimeError": false
@@ -1042,12 +1008,9 @@
     "failed": [
       "Prerender should navigate between pages successfully",
       "Prerender should respond with 405 for POST to static page",
-      "Prerender should not supply query values to params in /_next/data request",
-      "Prerender should return data correctly",
       "Prerender should server prerendered path correctly for SSG pages that starts with api-docs",
       "Prerender should render correctly for SSG pages that starts with api-docs",
       "Prerender should return data correctly for SSG pages that starts with api-docs",
-      "Prerender should fetch /_next/data correctly with mismatched href and as",
       "Prerender should revalidate on-demand revalidate with preview cookie"
     ],
     "flakey": [],
