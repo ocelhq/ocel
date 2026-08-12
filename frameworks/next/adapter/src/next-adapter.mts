@@ -298,6 +298,7 @@ const adapter = {
           kind: "lambda",
           id: bundleNameOf(entryKey, routeKey),
           entryKey,
+          ...(isDocumentRouteKind(o.type) && { page: true }),
         },
       };
     });
@@ -382,6 +383,17 @@ const adapter = {
       ...prerenderDispatch,
     ]);
 
+    const isDispatchedErrorPage = (key: string): boolean => {
+      const target = dispatch[key];
+      return target?.kind === "lambda" && target.page === true;
+    };
+    const notFoundKey = `${basePath}/404`;
+    const serverErrorKey = `${basePath}/500`;
+    const errorRoutes = {
+      ...(isDispatchedErrorPage(notFoundKey) && { notFound: notFoundKey }),
+      ...(isDispatchedErrorPage(serverErrorKey) && { serverError: serverErrorKey }),
+    };
+
     const routingManifest = {
       buildId,
       appName,
@@ -426,6 +438,8 @@ const adapter = {
               matchers: middleware.config.matchers ?? [],
             },
       }),
+
+      ...(Object.keys(errorRoutes).length > 0 && { errorRoutes }),
 
       dispatch,
     };
@@ -1053,6 +1067,10 @@ function unindex(pathname: string): string {
 
 function isPagesRouterKind(type: string): boolean {
   return type === "PAGES" || type === "PAGES_API";
+}
+
+function isDocumentRouteKind(type: string): boolean {
+  return type === "PAGES" || type === "APP_PAGE";
 }
 
 function routeKeyOf(

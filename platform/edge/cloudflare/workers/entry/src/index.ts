@@ -174,6 +174,7 @@ type DispatchTarget =
       entryKey?: string;
       parent?: string;
       revalidate?: unknown;
+      page?: boolean;
     }
   | {
       kind: "prerender";
@@ -213,6 +214,7 @@ interface Manifest {
   pathnames: string[];
   routes: unknown;
   dispatch: Record<string, DispatchTarget>;
+  errorRoutes?: { notFound?: string; serverError?: string };
   middleware?:
     | { runtime?: "edge"; entryKey: string; matchers?: MiddlewareMatcher[] }
     | {
@@ -786,12 +788,15 @@ async function dispatch(
     case "lambda": {
       const fnUrl = functionUrls[target.id];
       if (!fnUrl) return noFunctionUrl(target.id);
-      return doOrigin(
+      const response = await doOrigin(
         withEntry(
           forward(originUrl(fnUrl, url, result, manifest), request, headers),
           target.entryKey,
         ),
       );
+      return target.page
+        ? substituteErrorPage(response, request, url, headers, manifest, deps)
+        : response;
     }
 
     case "prerender":
@@ -809,6 +814,51 @@ async function dispatch(
     default:
       return staticAsset();
   }
+}
+
+function errorRouteKind(status: number): "notFound" | "serverError" | undefined {
+  if (status === 404) return "notFound";
+  if (status >= 500 && status < 600) return "serverError";
+  return undefined;
+}
+
+async function substituteErrorPage(
+  response: Response,
+  request: Request,
+  url: URL,
+  headers: Headers,
+  manifest: Manifest,
+  deps: RouteDeps,
+): Promise<Response> {
+  const kind = errorRouteKind(response.status);
+  if (!kind) return response;
+  if (isFlightRequest(request.headers)) return response;
+  if (isNextDataPathname(url.pathname, manifest, manifest.buildId)) return response;
+
+  const errorPathname = manifest.errorRoutes?.[kind];
+  if (!errorPathname) return response;
+  const errorTarget = manifest.dispatch[errorPathname];
+  if (!errorTarget || errorTarget.kind !== "lambda") return response;
+  const fnUrl = deps.functionUrls[errorTarget.id];
+  if (!fnUrl) return response;
+
+  await response.body?.cancel();
+  const doOrigin = originFetch(deps);
+  const errorResult: RouteResult = {
+    resolvedPathname: errorPathname,
+    invocationTarget: { pathname: errorPathname },
+  };
+  const rendered = await doOrigin(
+    withEntry(
+      forward(originUrl(fnUrl, url, errorResult, manifest), request, headers),
+      errorTarget.entryKey,
+    ),
+  );
+  return new Response(rendered.body, {
+    status: response.status,
+    statusText: response.statusText,
+    headers: rendered.headers,
+  });
 }
 
 function hasUndecodableRouteMatch(
