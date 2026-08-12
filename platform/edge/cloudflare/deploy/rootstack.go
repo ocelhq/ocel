@@ -121,12 +121,8 @@ func (p *provider) ReconcileRootStack(ctx context.Context, spec edge.RootStackSp
 	genericUp := upload{accountID: accountID, scriptName: spec.GenericName}
 	if !upToDate {
 		genericUp.worker = generic
-		assetsJWT, err := p.uploadAssets(ctx, genericUp)
-		if err != nil {
-			return nil, fmt.Errorf("upload generic worker assets: %w", err)
-		}
-		if err := p.putScript(ctx, genericUp, assetsJWT); err != nil {
-			return nil, fmt.Errorf("put generic worker: %w", err)
+		if err := p.putWorkerScript(ctx, genericUp, "generic worker"); err != nil {
+			return nil, err
 		}
 	}
 
@@ -160,6 +156,17 @@ func (p *provider) ReconcileRootStack(ctx context.Context, spec edge.RootStackSp
 		edge.RootStackKeySecret:     id.secret,
 		edge.RootStackKeyOwnerToken: id.ownerToken,
 	}, nil
+}
+
+func (p *provider) putWorkerScript(ctx context.Context, up upload, what string) error {
+	assetsJWT, err := p.uploadAssets(ctx, up)
+	if err != nil {
+		return fmt.Errorf("upload %s assets: %w", what, err)
+	}
+	if err := p.putScript(ctx, up, assetsJWT); err != nil {
+		return fmt.Errorf("put %s: %w", what, err)
+	}
+	return nil
 }
 
 type storeIdentity struct {
