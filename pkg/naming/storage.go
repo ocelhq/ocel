@@ -22,6 +22,10 @@ func (c Coordinate) ISRPrefix() string {
 	return c.StoragePrefix() + "isr" + PathSeparator
 }
 
+func (c Coordinate) BytecodePrefix() string {
+	return c.StoragePrefix() + "bytecode" + PathSeparator
+}
+
 func path(parts ...string) string {
 	kept := make([]string, 0, len(parts))
 	for _, p := range parts {

@@ -38,27 +38,27 @@ func TestBytecodeCacheKey(t *testing.T) {
 	}{
 		{
 			name:         "amd64 maps to the AWS x86_64 spelling",
-			prefix:       "ocel",
+			prefix:       "prod/proj/web/r1a2b3c4d/bytecode",
 			functionName: "my-app",
 			nodeVersion:  "24.3.1",
 			goArch:       "amd64",
-			want:         "ocel/bytecode/my-app/node24.3.1-x86_64.tar.gz",
+			want:         "prod/proj/web/r1a2b3c4d/bytecode/my-app/node24.3.1-x86_64.tar.gz",
 		},
 		{
 			name:         "arm64 passes through unchanged",
-			prefix:       "ocel",
+			prefix:       "prod/proj/web/r1a2b3c4d/bytecode",
 			functionName: "my-app",
 			nodeVersion:  "24.3.1",
 			goArch:       "arm64",
-			want:         "ocel/bytecode/my-app/node24.3.1-arm64.tar.gz",
+			want:         "prod/proj/web/r1a2b3c4d/bytecode/my-app/node24.3.1-arm64.tar.gz",
 		},
 		{
 			name:         "an unrecognized arch still passes through",
-			prefix:       "stg/deploy",
+			prefix:       "stg/deploy/api/r9f8e7d6c/bytecode",
 			functionName: "other-fn",
 			nodeVersion:  "20.11.0",
 			goArch:       "riscv64",
-			want:         "stg/deploy/bytecode/other-fn/node20.11.0-riscv64.tar.gz",
+			want:         "stg/deploy/api/r9f8e7d6c/bytecode/other-fn/node20.11.0-riscv64.tar.gz",
 		},
 	}
 	for _, tc := range cases {
@@ -806,7 +806,7 @@ func TestResolveBytecodeResolution(t *testing.T) {
 		for _, tc := range cases {
 			t.Run(tc.name, func(t *testing.T) {
 				t.Setenv(bytecodePrefixEnvVar, tc.prefix)
-				t.Setenv("OCEL_ISR_BUCKET", tc.bucket)
+				t.Setenv(bytecodeBucketEnvVar, tc.bucket)
 				t.Setenv("AWS_LAMBDA_FUNCTION_NAME", tc.function)
 				if got := resolveBytecodeResolution(context.Background(), nodeVersion); got != nil {
 					t.Errorf("resolveBytecodeResolution() = %+v, want nil", got)
@@ -817,7 +817,7 @@ func TestResolveBytecodeResolution(t *testing.T) {
 
 	t.Run("nil when the node version cannot be read", func(t *testing.T) {
 		t.Setenv(bytecodePrefixEnvVar, "ocel")
-		t.Setenv("OCEL_ISR_BUCKET", "assets")
+		t.Setenv(bytecodeBucketEnvVar, "assets")
 		t.Setenv("AWS_LAMBDA_FUNCTION_NAME", "my-app")
 
 		cases := []struct {
@@ -839,8 +839,8 @@ func TestResolveBytecodeResolution(t *testing.T) {
 	})
 
 	t.Run("carries the environment and version into the key", func(t *testing.T) {
-		t.Setenv(bytecodePrefixEnvVar, "ocel/stg")
-		t.Setenv("OCEL_ISR_BUCKET", "assets-xyz")
+		t.Setenv(bytecodePrefixEnvVar, "stg/proj/web/r1a2b3c4d/bytecode")
+		t.Setenv(bytecodeBucketEnvVar, "assets-xyz")
 		t.Setenv("AWS_LAMBDA_FUNCTION_NAME", "my-app")
 		t.Setenv("AWS_REGION", "us-east-1")
 
@@ -856,9 +856,27 @@ func TestResolveBytecodeResolution(t *testing.T) {
 		if r.store == nil {
 			t.Error("store = nil, want an S3-backed store")
 		}
-		want := "ocel/stg/bytecode/my-app/node24.3.1-" + s3Arch(runtime.GOARCH) + ".tar.gz"
+		want := "stg/proj/web/r1a2b3c4d/bytecode/my-app/node24.3.1-" + s3Arch(runtime.GOARCH) + ".tar.gz"
 		if r.key != want {
 			t.Errorf("key = %q, want %q", r.key, want)
+		}
+	})
+
+	t.Run("resolves for a function with no isr bucket", func(t *testing.T) {
+		t.Setenv(bytecodePrefixEnvVar, "ocel/stg")
+		t.Setenv(bytecodeBucketEnvVar, "assets-xyz")
+		t.Setenv("OCEL_ISR_BUCKET", "")
+		t.Setenv("AWS_LAMBDA_FUNCTION_NAME", "my-express-app")
+		t.Setenv("AWS_REGION", "us-east-1")
+
+		nodeVersion := func(context.Context) (string, error) { return "v24.3.1", nil }
+
+		r := resolveBytecodeResolution(context.Background(), nodeVersion)
+		if r == nil {
+			t.Fatal("resolveBytecodeResolution() = nil, want a resolution for a node framework function")
+		}
+		if r.bucket != "assets-xyz" {
+			t.Errorf("bucket = %q, want %q", r.bucket, "assets-xyz")
 		}
 	})
 }

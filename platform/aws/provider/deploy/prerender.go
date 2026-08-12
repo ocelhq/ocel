@@ -37,11 +37,16 @@ func isrPrefixOf(c naming.Coordinate) string {
 	return strings.TrimSuffix(c.ISRPrefix(), naming.PathSeparator)
 }
 
+func bytecodePrefixOf(c naming.Coordinate) string {
+	return strings.TrimSuffix(c.BytecodePrefix(), naming.PathSeparator)
+}
+
 type appBuilds struct {
 	ids        map[string]string
 	identities Identities
 	coords     map[string]naming.Coordinate
 	caches     map[string]*isrConfig
+	bytecode   map[string]*bytecodeConfig
 }
 
 func resolveAppBuilds(cfg Config, manifest *deploymentsv1.Manifest, baked map[string]appBundle) (appBuilds, error) {
@@ -50,6 +55,7 @@ func resolveAppBuilds(cfg Config, manifest *deploymentsv1.Manifest, baked map[st
 		identities: Identities{},
 		coords:     map[string]naming.Coordinate{},
 		caches:     map[string]*isrConfig{},
+		bytecode:   map[string]*bytecodeConfig{},
 	}
 	for _, app := range manifestApps(manifest) {
 		name := app.GetName()
@@ -62,7 +68,12 @@ func resolveAppBuilds(cfg Config, manifest *deploymentsv1.Manifest, baked map[st
 			return appBuilds{}, fmt.Errorf("deployment identity for %s: %w", name, err)
 		}
 		builds.identities[name] = id
-		builds.coords[name] = storageCoordinate(cfg.Env, manifest.GetSlug(), name, releaseOf(id))
+		coord := storageCoordinate(cfg.Env, manifest.GetSlug(), name, releaseOf(id))
+		builds.coords[name] = coord
+		builds.bytecode[name] = &bytecodeConfig{
+			Bucket: cfg.AssetBucket,
+			Prefix: bytecodePrefixOf(coord),
+		}
 	}
 	for _, fn := range manifest.GetFunctions() {
 		app := fn.GetApp()

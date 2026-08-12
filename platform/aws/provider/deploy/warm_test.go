@@ -109,13 +109,13 @@ func TestWarmTargets(t *testing.T) {
 				{LogicalName: "api_handler", App: "api"},
 			},
 		}
-		caches := map[string]*isrConfig{"web": {Prefix: "prod/proj/web/B1"}}
+		bytecode := map[string]*bytecodeConfig{"web": {Prefix: "prod/proj/web/B1/bytecode"}}
 		names := map[string]string{
 			"web_index":   "ocel-web-index-abc",
 			"api_handler": "ocel-api-handler-def",
 		}
 
-		targets := warmTargets(manifest, caches, names)
+		targets := warmTargets(manifest, bytecode, names)
 
 		if len(targets) != 1 {
 			t.Fatalf("warmTargets = %+v, want only web_index", targets)
@@ -125,10 +125,25 @@ func TestWarmTargets(t *testing.T) {
 		}
 	})
 
+	t.Run("takes a node framework function", func(t *testing.T) {
+		t.Setenv(bytecodeCacheEnv, "1")
+		manifest := &deploymentsv1.Manifest{
+			Slug:      "proj",
+			Functions: []*deploymentsv1.ManifestFunction{{LogicalName: "api_handler", Framework: "express", App: "api"}},
+		}
+		bytecode := map[string]*bytecodeConfig{"api": {Prefix: "prod/proj/api/API1/bytecode"}}
+
+		targets := warmTargets(manifest, bytecode, map[string]string{"api_handler": "ocel-api-handler-def"})
+
+		if len(targets) != 1 || targets[0].App != "api" {
+			t.Fatalf("warmTargets = %+v, want the express function warmed like any other", targets)
+		}
+	})
+
 	t.Run("skipped when the gate is off", func(t *testing.T) {
 		t.Setenv(bytecodeCacheEnv, "")
 
-		targets := warmTargets(nextManifest(), map[string]*isrConfig{"web": {Prefix: "p"}}, map[string]string{"web_index": "fn"})
+		targets := warmTargets(nextManifest(), map[string]*bytecodeConfig{"web": {Prefix: "p"}}, map[string]string{"web_index": "fn"})
 
 		if len(targets) != 0 {
 			t.Errorf("warmTargets with the gate off = %+v, want none", targets)

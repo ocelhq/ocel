@@ -182,7 +182,7 @@ func TestFunctionEnv(t *testing.T) {
 	t.Run("without cache", func(t *testing.T) {
 		base := map[string]string{"OCEL_RESOURCE_POSTGRES_main": "{}"}
 
-		env := functionEnv(base, functionArgs{Handler: "src/server.js"}, nil)
+		env := functionEnv(base, functionArgs{Handler: "src/server.js"}, nil, nil)
 
 		want := map[string]string{
 			"OCEL_RESOURCE_POSTGRES_main": "{}",
@@ -190,14 +190,43 @@ func TestFunctionEnv(t *testing.T) {
 			"OCEL_HANDLER":                "/var/task/src/server.js",
 		}
 		if !maps.Equal(env, want) {
-			t.Errorf("functionEnv(base, args, nil) = %v, want %v", env, want)
+			t.Errorf("functionEnv(base, args, nil, nil) = %v, want %v", env, want)
+		}
+	})
+
+	t.Run("a node framework function with no isr still takes the bytecode cache", func(t *testing.T) {
+		t.Setenv(bytecodeCacheEnv, "1")
+		cache := bytecodeConfig{Bucket: "assets-xyz", Prefix: "prod/proj/api/API1/bytecode"}
+
+		env := functionEnv(map[string]string{}, functionArgs{Handler: "index.mjs"}, nil, &cache)
+
+		if got := env["OCEL_BYTECODE_PREFIX"]; got != cache.Prefix {
+			t.Errorf("OCEL_BYTECODE_PREFIX = %q, want %q", got, cache.Prefix)
+		}
+		if got := env["OCEL_BYTECODE_BUCKET"]; got != cache.Bucket {
+			t.Errorf("OCEL_BYTECODE_BUCKET = %q, want %q", got, cache.Bucket)
+		}
+		if _, ok := env["OCEL_ISR_PREFIX"]; ok {
+			t.Error("OCEL_ISR_PREFIX is set on a function with no ISR")
+		}
+	})
+
+	t.Run("carries no bytecode cache with the gate off", func(t *testing.T) {
+		t.Setenv(bytecodeCacheEnv, "")
+
+		env := functionEnv(map[string]string{}, functionArgs{Handler: "index.mjs"}, nil, &bytecodeConfig{Bucket: "assets-xyz", Prefix: "prod/proj/api/API1/bytecode"})
+
+		for _, key := range []string{"OCEL_BYTECODE_PREFIX", "OCEL_BYTECODE_BUCKET"} {
+			if _, ok := env[key]; ok {
+				t.Errorf("%s = %q, want it unset without OCEL_BYTECODE_CACHE=1", key, env[key])
+			}
 		}
 	})
 
 	t.Run("leaves base untouched", func(t *testing.T) {
 		base := map[string]string{"OCEL_RESOURCE_BUCKET_uploads": "{}"}
 
-		functionEnv(base, functionArgs{Handler: "src/server.js"}, &isrConfig{Prefix: "prod/proj/web/B1"})
+		functionEnv(base, functionArgs{Handler: "src/server.js"}, &isrConfig{Prefix: "prod/proj/web/B1"}, nil)
 
 		if got := slices.Sorted(maps.Keys(base)); !slices.Equal(got, []string{"OCEL_RESOURCE_BUCKET_uploads"}) {
 			t.Errorf("base keys = %v, want only OCEL_RESOURCE_BUCKET_uploads", got)

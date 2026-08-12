@@ -29,7 +29,7 @@ import (
 const bytecodeCacheCeiling = 64 << 20
 
 func bytecodeCacheKey(prefix, functionName, nodeVersion, goArch string) string {
-	return fmt.Sprintf("%s/bytecode/%s/node%s-%s.tar.gz", prefix, functionName, nodeVersion, s3Arch(goArch))
+	return fmt.Sprintf("%s/%s/node%s-%s.tar.gz", prefix, functionName, nodeVersion, s3Arch(goArch))
 }
 
 func s3Arch(goArch string) string {
@@ -112,6 +112,8 @@ func buildBytecodeArchive(ctx context.Context, dir string) ([]byte, error) {
 const compileCacheDir = "/tmp/.ocel/compile-cache"
 
 const bytecodePrefixEnvVar = "OCEL_BYTECODE_PREFIX"
+
+const bytecodeBucketEnvVar = "OCEL_BYTECODE_BUCKET"
 
 const bytecodeUploadBudget = 2 * time.Second
 
@@ -516,7 +518,7 @@ func (r *bytecodeResolution) upload(flush func(context.Context) (compileCacheFlu
 
 func resolveBytecodeResolution(ctx context.Context, nodeVersion func(context.Context) (string, error)) *bytecodeResolution {
 	prefix := os.Getenv(bytecodePrefixEnvVar)
-	bucket := os.Getenv("OCEL_ISR_BUCKET")
+	bucket := os.Getenv(bytecodeBucketEnvVar)
 	function := os.Getenv("AWS_LAMBDA_FUNCTION_NAME")
 	if prefix == "" || bucket == "" || function == "" {
 		return nil

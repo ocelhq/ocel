@@ -126,10 +126,37 @@ func (c isrConfig) env() map[string]string {
 		env["OCEL_ISR_WRITER_URL"] = c.WriterURL
 		env["OCEL_ISR_WRITER_SECRET"] = c.WriterSecret
 	}
-	if bytecodeCacheEnabled() {
-		env["OCEL_BYTECODE_PREFIX"] = c.Prefix
-	}
 	return env
+}
+
+type bytecodeConfig struct {
+	Bucket string
+	Prefix string
+}
+
+func (c bytecodeConfig) env() map[string]string {
+	return map[string]string{
+		"OCEL_BYTECODE_BUCKET": c.Bucket,
+		"OCEL_BYTECODE_PREFIX": c.Prefix,
+	}
+}
+
+func bytecodePolicy(c bytecodeConfig) (string, error) {
+	doc := map[string]any{
+		"Version": "2012-10-17",
+		"Statement": []any{
+			map[string]any{
+				"Effect":   "Allow",
+				"Action":   []string{"s3:GetObject", "s3:PutObject"},
+				"Resource": fmt.Sprintf("arn:aws:s3:::%s/%s/*", c.Bucket, c.Prefix),
+			},
+		},
+	}
+	out, err := json.Marshal(doc)
+	if err != nil {
+		return "", fmt.Errorf("render bytecode policy: %w", err)
+	}
+	return string(out), nil
 }
 
 func isrPolicy(c isrConfig) (string, error) {
@@ -269,6 +296,7 @@ func collectFunctionOutput(logicalName, url string) *deploymentsv1.ResourceOutpu
 type executionRole struct {
 	App        string
 	Cache      *isrConfig
+	Bytecode   *bytecodeConfig
 	VarsKeyARN string
 
 	VarsTableARN   string
@@ -277,8 +305,8 @@ type executionRole struct {
 	VarsReferenced []string
 }
 
-func appExecutionRole(cfg Config, app string, caches map[string]*isrConfig, bundle appBundle) executionRole {
-	role := executionRole{App: app, Cache: caches[app], VarsKeyARN: cfg.VarsKeyARN}
+func appExecutionRole(cfg Config, app string, caches map[string]*isrConfig, bytecode map[string]*bytecodeConfig, bundle appBundle) executionRole {
+	role := executionRole{App: app, Cache: caches[app], Bytecode: bytecode[app], VarsKeyARN: cfg.VarsKeyARN}
 	if bundle.hasLive() {
 		role.VarsTableARN = cfg.VarsTableARN
 		role.VarsReferenced = bundle.Referenced
@@ -321,6 +349,18 @@ func newFunctionRole(ctx *pulumi.Context, coord naming.Coordinate, r executionRo
 			return nil, err
 		}
 	}
+	if r.Bytecode != nil && bytecodeCacheEnabled() {
+		policy, err := bytecodePolicy(*r.Bytecode)
+		if err != nil {
+			return nil, err
+		}
+		if _, err := iam.NewRolePolicy(ctx, naming.ResourceID(naming.KindRole, roleLocalName, "policy", "bytecode", "cache"), &iam.RolePolicyArgs{
+			Role:   role.Name,
+			Policy: pulumi.String(policy),
+		}); err != nil {
+			return nil, err
+		}
+	}
 	varsPolicy, err := varsReadPolicy(r)
 	if err != nil {
 		return nil, err
@@ -334,7 +374,7 @@ func newFunctionRole(ctx *pulumi.Context, coord naming.Coordinate, r executionRo
 	return role, nil
 }
 
-func functionEnv(base map[string]string, args functionArgs, isr *isrConfig) map[string]string {
+func functionEnv(base map[string]string, args functionArgs, isr *isrConfig, bytecode *bytecodeConfig) map[string]string {
 	env := make(map[string]string, len(base))
 	maps.Copy(env, base)
 	env["AWS_LAMBDA_EXEC_WRAPPER"] = execWrapper
@@ -342,12 +382,15 @@ func functionEnv(base map[string]string, args functionArgs, isr *isrConfig) map[
 	if isr != nil {
 		maps.Copy(env, isr.env())
 	}
+	if bytecode != nil && bytecodeCacheEnabled() {
+		maps.Copy(env, bytecode.env())
+	}
 	return env
 }
 
-func registerFunction(ctx *pulumi.Context, logicalName string, coord naming.Coordinate, route string, args functionArgs, artifact artifactRef, base map[string]string, isr *isrConfig, roleArn pulumi.StringInput) error {
+func registerFunction(ctx *pulumi.Context, logicalName string, coord naming.Coordinate, route string, args functionArgs, artifact artifactRef, base map[string]string, isr *isrConfig, bytecode *bytecodeConfig, roleArn pulumi.StringInput) error {
 	env := pulumi.StringMap{}
-	for key, value := range functionEnv(base, args, isr) {
+	for key, value := range functionEnv(base, args, isr, bytecode) {
 		env[key] = pulumi.String(value)
 	}
 
