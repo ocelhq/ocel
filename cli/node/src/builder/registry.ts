@@ -1,6 +1,7 @@
+import { bundlePlan } from "./bundle.js";
 import { hasDep } from "./detect.js";
 import { buildNext } from "./next.js";
-import { traceBuild } from "./trace.js";
+import { traceBuild, type TraceSpec } from "./trace.js";
 import type { AppInput, BuildOptions, FunctionSummary } from "./types.js";
 
 export interface Framework {
@@ -18,24 +19,28 @@ const NODE_ENTRYPOINTS = [
 ];
 
 function traced(name: string, dep: string): Framework {
+  const spec: TraceSpec = { name, runtime: RUNTIME, entrypointCandidates: NODE_ENTRYPOINTS };
   return {
     name,
     detect: (dir) => hasDep(dir, dep),
     build: async (input, options) => [
-      await traceBuild(input, options, { name, runtime: RUNTIME, entrypointCandidates: NODE_ENTRYPOINTS }),
+      process.env.OCEL_BUILD_PREFER_TRACING === "1"
+        ? await traceBuild(input, options, spec)
+        : bundlePlan(input, spec),
     ],
   };
 }
 
 export const express = traced("express", "express");
 export const fastify = traced("fastify", "fastify");
+export const hono = traced("hono", "hono");
 export const next: Framework = {
   name: "next",
   detect: (dir) => hasDep(dir, "next"),
   build: buildNext,
 };
 
-export const REGISTRY: Framework[] = [next, express, fastify];
+export const REGISTRY: Framework[] = [next, express, fastify, hono];
 
 const byName = new Map(REGISTRY.map((fw) => [fw.name, fw]));
 
