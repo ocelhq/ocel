@@ -3237,6 +3237,90 @@ describe("the colo cache key under a config rewrite", () => {
   });
 });
 
+describe("a fallback path of a dynamic route's ISR revalidation", () => {
+  it("reads the store at the concrete requested path and enqueues that same concrete path, not the route pattern", async () => {
+    const isrPrefix = "prod/p/app/build";
+    const storeReads: string[] = [];
+    const sent: unknown[] = [];
+    const pending: Promise<unknown>[] = [];
+    const deps = baseDeps({
+      manifest: {
+        buildId: "t",
+        basePath: "",
+        pathnames: ["/posts/[id]"],
+        routes: {
+          beforeMiddleware: [],
+          beforeFiles: [],
+          afterFiles: [],
+          dynamicRoutes: [
+            {
+              sourceRegex: "^/posts/(?<nxtPid>[^/]+?)(?:/)?$",
+              destination: "/posts/[id]?nxtPid=$nxtPid",
+            },
+          ],
+          onMatch: [],
+          fallback: [],
+        } as unknown as RouteDeps["manifest"]["routes"],
+        dispatch: {
+          "/posts/[id]": {
+            kind: "prerender",
+            id: "posts",
+            entryKey: "app/posts/[id]/page",
+            config: { bypassToken: "TOKEN" },
+            fallback: { initialRevalidate: 60 },
+          },
+        },
+      },
+      functionUrls: { posts: "https://fn.example.com" },
+      fetch: (async () =>
+        new Response("rendered", {
+          status: 200,
+          headers: { "cache-control": "s-maxage=60" },
+        })) as unknown as typeof fetch,
+      cache: coloDeps({
+        cache: { match: async () => undefined, put: async () => {} } as unknown as Cache,
+        waitUntil: (p: Promise<unknown>) => pending.push(p),
+        enqueueRevalidation: async (message) => {
+          sent.push(message);
+          return true;
+        },
+      }),
+      interception: {
+        config: { isrPrefix },
+        now: () => 1_000 + 61_000,
+        store: {
+          async get(key: string) {
+            storeReads.push(key);
+            if (key !== `${isrPrefix}/cache/posts/7.cache.json`) return null;
+            return {
+              text: async () =>
+                JSON.stringify({
+                  lastModified: 1_000,
+                  value: {
+                    kind: "APP_PAGE",
+                    html: "<html>post-7</html>",
+                    status: 200,
+                    headers: {},
+                  },
+                }),
+            };
+          },
+        },
+      },
+    });
+
+    const res = await serve(new Request("https://app.example/posts/7"), deps);
+    await Promise.all(pending);
+
+    expect(await res.text()).toBe("<html>post-7</html>");
+    expect(storeReads).toContain("prod/p/app/build/cache/posts/7.cache.json");
+    expect(storeReads).not.toContain("prod/p/app/build/cache/posts/[id].cache.json");
+    expect(sent).toEqual([
+      expect.objectContaining({ routePath: "/posts/7" }),
+    ]);
+  });
+});
+
 describe("a generated interception rewrite's prerender key", () => {
   const isrPrefix = "prod/p/app/build";
   const entryKey = "(.)test-nested";
