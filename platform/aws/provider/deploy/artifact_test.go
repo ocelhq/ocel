@@ -46,7 +46,7 @@ func readZip(t *testing.T, data []byte) map[string]string {
 func writeTree(t *testing.T, files map[string]string) string {
 	t.Helper()
 	dir := t.TempDir()
-	for rel, contents := range files {
+	for rel, contents := range withServeDescriptors(t, files) {
 		full := filepath.Join(dir, rel)
 		if err := os.MkdirAll(filepath.Dir(full), 0o755); err != nil {
 			t.Fatal(err)

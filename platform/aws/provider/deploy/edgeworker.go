@@ -2,7 +2,10 @@ package deploy
 
 import (
 	"context"
+	"encoding/json"
+	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -95,7 +98,7 @@ func manifestApps(manifest *deploymentsv1.Manifest) []*deploymentsv1.ManifestApp
 	return apps
 }
 
-// An app is served from the edge when its build emitted a routing manifest —
+// An app is served from the edge when its build emitted a serve descriptor —
 // a fact about the artifact, not a framework this package has to know by name.
 func workerApps(artifactRoot string, manifest *deploymentsv1.Manifest) []*deploymentsv1.ManifestApp {
 	var apps []*deploymentsv1.ManifestApp
@@ -108,8 +111,23 @@ func workerApps(artifactRoot string, manifest *deploymentsv1.Manifest) []*deploy
 }
 
 func isEdgeServed(artifactRoot, app string) bool {
-	_, err := os.Stat(filepath.Join(appArtifactRoot(artifactRoot, app), edge.RoutingManifestFile))
+	_, err := os.Stat(filepath.Join(appArtifactRoot(artifactRoot, app), edge.ServeDescriptorFile))
 	return err == nil
+}
+
+func readServeDescriptor(artifactRoot, app string) (edge.ServeDescriptor, bool, error) {
+	raw, err := os.ReadFile(filepath.Join(appArtifactRoot(artifactRoot, app), edge.ServeDescriptorFile))
+	if errors.Is(err, fs.ErrNotExist) {
+		return edge.ServeDescriptor{}, false, nil
+	}
+	if err != nil {
+		return edge.ServeDescriptor{}, false, fmt.Errorf("read serve descriptor for %s: %w", app, err)
+	}
+	var desc edge.ServeDescriptor
+	if err := json.Unmarshal(raw, &desc); err != nil {
+		return edge.ServeDescriptor{}, false, fmt.Errorf("parse serve descriptor for %s: %w", app, err)
+	}
+	return desc, true, nil
 }
 
 func appRoutes(functions []*deploymentsv1.ManifestFunction, app *deploymentsv1.ManifestApp) []string {

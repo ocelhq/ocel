@@ -5,7 +5,9 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"io/fs"
 	"maps"
 	"os"
 	"path/filepath"
@@ -582,19 +584,19 @@ func newRandomID() (string, error) {
 	return hex.EncodeToString(buf), nil
 }
 
-func nextBuildID(cfg Config, app string) (string, error) {
-	var pm prerenderManifest
-	raw, err := os.ReadFile(filepath.Join(appArtifactRoot(cfg.ArtifactRoot, app), "routing-manifest.json"))
+func readRoutingManifest(cfg Config, app string) (any, bool, error) {
+	raw, err := os.ReadFile(filepath.Join(appArtifactRoot(cfg.ArtifactRoot, app), edge.RoutingManifestFile))
+	if errors.Is(err, fs.ErrNotExist) {
+		return nil, false, nil
+	}
 	if err != nil {
-		return "", fmt.Errorf("read routing manifest for %s: %w", app, err)
+		return nil, false, fmt.Errorf("read routing manifest for %s: %w", app, err)
 	}
-	if err := json.Unmarshal(raw, &pm); err != nil {
-		return "", fmt.Errorf("parse routing manifest for %s: %w", app, err)
+	var routing any
+	if err := json.Unmarshal(raw, &routing); err != nil {
+		return nil, false, fmt.Errorf("parse routing manifest for %s: %w", app, err)
 	}
-	if pm.BuildID == "" {
-		return "", fmt.Errorf("routing manifest for %s is missing buildId; rebuild the app", app)
-	}
-	return pm.BuildID, nil
+	return routing, true, nil
 }
 
 func buildDeploymentRecord(cfg Config, manifest *deploymentsv1.Manifest, app *deploymentsv1.ManifestApp, id Identity, outs []*deploymentsv1.ResourceOutput, builds appBuilds) (edge.DeploymentRecord, error) {
@@ -610,20 +612,14 @@ func buildDeploymentRecord(cfg Config, manifest *deploymentsv1.Manifest, app *de
 		ValueFingerprint: fingerprint,
 		Variables:        variables,
 	}
-	if app.GetFramework() != frameworkNext {
-		return record, nil
-	}
-	record.AssetPrefix = appAssetPrefix(builds.coords[name])
-
-	raw, err := os.ReadFile(filepath.Join(appArtifactRoot(cfg.ArtifactRoot, name), "routing-manifest.json"))
+	routing, routed, err := readRoutingManifest(cfg, name)
 	if err != nil {
-		return edge.DeploymentRecord{}, fmt.Errorf("read routing manifest for %s: %w", name, err)
+		return edge.DeploymentRecord{}, err
 	}
-	var routing any
-	if err := json.Unmarshal(raw, &routing); err != nil {
-		return edge.DeploymentRecord{}, fmt.Errorf("parse routing manifest for %s: %w", name, err)
+	if routed {
+		record.RoutingManifest = routing
+		record.AssetPrefix = appAssetPrefix(builds.coords[name])
 	}
-	record.RoutingManifest = routing
 
 	if isr := builds.caches[name]; isr != nil {
 		record.IsrPrefix = isr.Prefix
