@@ -964,6 +964,33 @@ test("writes a statically-optimized page under its .html name", async () => {
   expect(manifest.pathnames).toContain("/some");
 });
 
+test("gives a data-fetch-less page no _next/data pathname when the app has no middleware", async () => {
+  const { projectDir, args } = await synthProject();
+  await withStaticPage(projectDir, args, "/some", "<html>some</html>");
+  const adapter = await loadAdapterIn(projectDir);
+
+  await adapter.onBuildComplete(args as never);
+
+  const manifest = await readManifest(projectDir);
+  const dataPathname = `/_next/data/${args.buildId}/some.json`;
+  expect(manifest.pathnames).not.toContain(dataPathname);
+  expect(manifest.dispatch[dataPathname]).toBeUndefined();
+});
+
+test("gives a data-fetch-less page a _next/data pathname and dispatch entry when the app has middleware", async () => {
+  const { projectDir, args } = await synthProject();
+  await withStaticPage(projectDir, args, "/some", "<html>some</html>");
+  await withNodeMiddleware(projectDir, args);
+  const adapter = await loadAdapterIn(projectDir);
+
+  await adapter.onBuildComplete(args as never);
+
+  const manifest = await readManifest(projectDir);
+  const dataPathname = `/_next/data/${args.buildId}/some.json`;
+  expect(manifest.pathnames).toContain(dataPathname);
+  expect(manifest.dispatch[dataPathname]).toEqual(manifest.dispatch["/some"]);
+});
+
 test("emits a page and its own children without colliding", async () => {
   const { projectDir, args } = await synthProject();
   await withStaticPage(projectDir, args, "/overlap", "<html>parent</html>");
