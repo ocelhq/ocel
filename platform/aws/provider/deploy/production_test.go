@@ -1414,17 +1414,17 @@ func TestStackTags(t *testing.T) {
 		}
 	})
 
-	t.Run("the infra stack names itself and claims no release or build", func(t *testing.T) {
+	t.Run("the infra stack names itself and claims nothing that changes between deploys", func(t *testing.T) {
 		t.Parallel()
 
 		cfg := Config{Slug: "shop", Class: deploymentsv1.Environment_CLASS_PRODUCTION}
 
-		tags := stackTags(cfg, naming.InfraStack("prod"), "p7", "")
+		tags := infraStackTags(cfg, naming.InfraStack("prod"))
 
 		if got, want := tags["ocel:stack"], "prod--infra"; got != want {
 			t.Errorf("ocel:stack = %q, want %q", got, want)
 		}
-		for _, key := range []string{"ocel:release", "ocel:build", "ocel:route", "ocel:component"} {
+		for _, key := range []string{"ocel:release", "ocel:build", "ocel:promotion", "ocel:route", "ocel:component"} {
 			if _, ok := tags[key]; ok {
 				t.Errorf("infra stack carries %s = %q, want it absent", key, tags[key])
 			}
