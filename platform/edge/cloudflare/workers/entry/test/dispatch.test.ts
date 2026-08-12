@@ -2,7 +2,7 @@ import type { Route } from "@next/routing";
 import { tagSnapshotKey } from "@framework/next-cache";
 import { describe, expect, it } from "vitest";
 
-import { dispatchResult, serve, type RouteDeps } from "../src/index";
+import { dispatchResult, ruleDestinationPathname, serve, type RouteDeps } from "../src/index";
 import { refreshBackoffSeconds, sentinelUrl } from "../src/cache";
 import { coloDeps } from "./cache-deps";
 import type { AssetBucket } from "../src/assets";
@@ -3194,5 +3194,63 @@ describe("custom error page substitution", () => {
 
     expect(res.status).toBe(404);
     expect(await res.text()).toBe("Not Found");
+  });
+});
+
+describe("ruleDestinationPathname substitution with prefix-colliding groups", () => {
+  it("does not let a numbered $1 eat into $10", () => {
+    const sourceRegex =
+      "^/(a)/(b)/(c)/(d)/(e)/(f)/(g)/(h)/(i)/(j)(?:/)?$";
+    const out = ruleDestinationPathname(
+      sourceRegex,
+      "/$1-$10",
+      "/a/b/c/d/e/f/g/h/i/j",
+    );
+
+    expect(out).toBe("/a-j");
+  });
+
+  it("does not let a named $id eat into $id2", () => {
+    const sourceRegex = "^/(?<id>[^/]+?)/(?<id2>[^/]+?)(?:/)?$";
+    const out = ruleDestinationPathname(sourceRegex, "/$id/$id2", "/a/b");
+
+    expect(out).toBe("/a/b");
+  });
+});
+
+describe("nested dynamic params with a prefix-colliding name", () => {
+  it("resolves the second param from the path, not corrupted by the first's substitution", async () => {
+    let invoked: URL | undefined;
+    const deps = baseDeps({
+      manifest: {
+        buildId: "t",
+        basePath: "",
+        pathnames: ["/[id]/[id2]"],
+        routes: {
+          beforeMiddleware: [],
+          beforeFiles: [],
+          afterFiles: [],
+          dynamicRoutes: [
+            {
+              sourceRegex: "^/(?<nxtPid>[^/]+?)/(?<nxtPid2>[^/]+?)(?:/)?$",
+              destination: "/[id]/[id2]?nxtPid=$nxtPid&nxtPid2=$nxtPid2",
+            },
+          ],
+          onMatch: [],
+          fallback: [],
+        } as unknown as RouteDeps["manifest"]["routes"],
+        dispatch: { "/[id]/[id2]": { kind: "lambda", id: "page" } },
+      },
+      functionUrls: { page: "https://page.example.com" },
+      fetch: (async (req: Request) => {
+        invoked = new URL(req.url);
+        return new Response("ok", { status: 200 });
+      }) as unknown as typeof fetch,
+    });
+
+    await serve(new Request("https://app.example/a/b"), deps);
+
+    expect(invoked?.searchParams.get("nxtPid")).toBe("a");
+    expect(invoked?.searchParams.get("nxtPid2")).toBe("b");
   });
 });
