@@ -60,6 +60,20 @@ export function canonicalPathname(
   return applyPolicy(pathname, config, isDataRequest);
 }
 
+const REPEATED_SLASH_OR_BACKSLASH = /(\\|\/\/)/;
+
+export function needsSlashNormalization(pathWithoutQuery: string): boolean {
+  return REPEATED_SLASH_OR_BACKSLASH.test(pathWithoutQuery);
+}
+
+export function normalizeRepeatedSlashes(pathAndQuery: string): string {
+  const queryIndex = pathAndQuery.indexOf("?");
+  const path = queryIndex === -1 ? pathAndQuery : pathAndQuery.slice(0, queryIndex);
+  const query = queryIndex === -1 ? "" : pathAndQuery.slice(queryIndex);
+  const normalized = path.replace(/\\/g, "/").replace(/\/\/+/g, "/");
+  return normalized + query;
+}
+
 export function routingPathname(pathname: string): string {
   if (pathname === "/" || !pathname.endsWith("/")) return pathname;
   return pathname.slice(0, -1);

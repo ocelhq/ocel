@@ -9,6 +9,8 @@ import {
   isNextDataPathname,
   middlewareMatchPathname,
   middlewarePathname,
+  needsSlashNormalization,
+  normalizeRepeatedSlashes,
   routingPathname,
   withoutBasePath,
 } from "./trailing-slash";
@@ -494,6 +496,16 @@ async function serveRequest(
   request: Request,
   deps: RouteDeps,
 ): Promise<Response> {
+  const pathAndQuery = request.url.replace(/^[a-z][a-z\d+.-]*:\/\/[^/]*/i, "");
+  const queryIndex = pathAndQuery.indexOf("?");
+  const rawPath = queryIndex === -1 ? pathAndQuery : pathAndQuery.slice(0, queryIndex);
+  if (needsSlashNormalization(rawPath)) {
+    return new Response(null, {
+      status: 308,
+      headers: { location: normalizeRepeatedSlashes(pathAndQuery) },
+    });
+  }
+
   const image = imageResponse(request, deps);
   if (image) return image;
 
