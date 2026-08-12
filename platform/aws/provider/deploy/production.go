@@ -626,7 +626,7 @@ func runInfraStack(ctx context.Context, cfg Config, manifest *deploymentsv1.Mani
 		return nil
 	}
 
-	res, err := upStack(ctx, cfg, plan.InfraStack, stackTags(cfg, plan.InfraStack, plan.Promotion.PromotionID, ""), program, log)
+	res, err := upStack(ctx, cfg, plan.InfraStack, infraStackTags(cfg, plan.InfraStack), program, log)
 	if err != nil {
 		return nil, fmt.Errorf("provision infra stack %s: %w", plan.InfraStack, err)
 	}
@@ -685,6 +685,10 @@ func appFunctions(manifest *deploymentsv1.Manifest, app string) []*deploymentsv1
 		}
 	}
 	return fns
+}
+
+func infraStackTags(cfg Config, name naming.StackName) map[string]string {
+	return stackTags(cfg, name, "", "")
 }
 
 func stackTags(cfg Config, name naming.StackName, promotionID, buildID string) map[string]string {
