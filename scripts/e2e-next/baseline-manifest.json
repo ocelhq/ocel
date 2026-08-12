@@ -1011,7 +1011,10 @@
       "Prerender should server prerendered path correctly for SSG pages that starts with api-docs",
       "Prerender should render correctly for SSG pages that starts with api-docs",
       "Prerender should return data correctly for SSG pages that starts with api-docs",
-      "Prerender should revalidate on-demand revalidate with preview cookie"
+      "Prerender should revalidate on-demand revalidate with preview cookie",
+      "Prerender should not supply query values to params in /_next/data request",
+      "Prerender should return data correctly",
+      "Prerender should fetch /_next/data correctly with mismatched href and as"
     ],
     "flakey": [],
     "runtimeError": false
