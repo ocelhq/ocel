@@ -132,7 +132,7 @@ func DestroyPreviewProject(ctx context.Context, stack edge.RootStack, state edge
 	}
 
 	report("Purging preview assets")
-	if err := purgePreviewAssets(ctx, cfg, slug, plan.Pointers); err != nil {
+	if err := purgePreviewAssets(ctx, cfg, slug, previewPurgeEnvs(plan, cfg.Env)); err != nil {
 		errs = append(errs, err)
 	}
 
@@ -175,6 +175,13 @@ func planPreviewProjectTeardown(ctx context.Context, cfg Config, slug string) (P
 	return classifyPreviewStacks(stacks), nil
 }
 
-func purgePreviewAssets(ctx context.Context, cfg Config, slug string, pointers []string) error {
-	return purgeProjectAssets(ctx, cfg, slug, pointers)
+func previewPurgeEnvs(plan PreviewProjectTeardownPlan, env string) []string {
+	if env == EveryPreview || env == ProductionEnv {
+		return plan.Pointers
+	}
+	return purgeEnvs(slices.Concat(plan.AppStacks, plan.InfraStacks), env)
+}
+
+func purgePreviewAssets(ctx context.Context, cfg Config, slug string, envs []string) error {
+	return purgeProjectAssets(ctx, cfg, slug, envs)
 }

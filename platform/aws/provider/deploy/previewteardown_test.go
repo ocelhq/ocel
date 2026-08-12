@@ -104,6 +104,46 @@ func TestClassifyPreviewStacks(t *testing.T) {
 	})
 }
 
+func TestPreviewPurgeEnvs(t *testing.T) {
+	t.Parallel()
+
+	plan := classifyPreviewStacks([]naming.StackName{
+		naming.InfraStack("staging"),
+		naming.AppStack("pr-1", "web", testRelease(t, "b1")),
+	})
+
+	t.Run("the named preview is purged even when the index is empty", func(t *testing.T) {
+		t.Parallel()
+		if got := previewPurgeEnvs(PreviewProjectTeardownPlan{}, "pr-7"); !reflect.DeepEqual(got, []string{"pr-7"}) {
+			t.Errorf("envs = %v, want [pr-7]", got)
+		}
+	})
+
+	t.Run("the named preview joins the ones the index knows", func(t *testing.T) {
+		t.Parallel()
+		if got := previewPurgeEnvs(plan, "pr-7"); !reflect.DeepEqual(got, []string{"pr-1", "pr-7", "staging"}) {
+			t.Errorf("envs = %v, want [pr-1 pr-7 staging]", got)
+		}
+	})
+
+	t.Run("a project-wide scope names no preview of its own", func(t *testing.T) {
+		t.Parallel()
+		if got := previewPurgeEnvs(plan, EveryPreview); !reflect.DeepEqual(got, []string{"pr-1", "staging"}) {
+			t.Errorf("envs = %v, want the index's pointers only", got)
+		}
+		if got := previewPurgeEnvs(PreviewProjectTeardownPlan{}, EveryPreview); len(got) != 0 {
+			t.Errorf("envs = %v, want none: a project-wide scope names no environment to fall back on", got)
+		}
+	})
+
+	t.Run("production is never swept by a preview teardown", func(t *testing.T) {
+		t.Parallel()
+		if got := previewPurgeEnvs(plan, ProductionEnv); !reflect.DeepEqual(got, []string{"pr-1", "staging"}) {
+			t.Errorf("envs = %v, want production left out", got)
+		}
+	})
+}
+
 func TestPreviewProjectWorkers(t *testing.T) {
 	t.Parallel()
 
