@@ -1,4 +1,5 @@
-import { join, relative } from "node:path";
+import { createHash } from "node:crypto";
+import { basename, join, relative } from "node:path";
 
 export const DNS_LABEL = /^[a-z]([a-z0-9-]{0,61}[a-z0-9])?$/;
 
@@ -37,12 +38,18 @@ export function projectSlug({ runId }) {
   return SLUG_PREFIX + run.slice(0, maxRun).replace(/-+$/, "");
 }
 
+export const REF_HINT_LEN = 12;
+
+export const REF_HASH_LEN = 8;
+
 export function previewRef({ dir }) {
-  const ref = String(dir ?? "").trim().replace(/\/+$/, "");
-  if (!ref) {
+  const normalized = String(dir ?? "").trim().replace(/\/+$/, "");
+  if (!normalized) {
     throw new Error("previewRef needs a directory: neither NEXT_TEST_DIR nor a working directory was set");
   }
-  return ref;
+  const hint = sanitizeToken(basename(normalized)).slice(0, REF_HINT_LEN).replace(/-+$/, "");
+  const hash = createHash("sha256").update(normalized).digest("hex").slice(0, REF_HASH_LEN);
+  return hint ? `${hint}-${hash}` : hash;
 }
 
 export function projectSlugForRun() {

@@ -96,12 +96,24 @@ describe("projectSlug", () => {
 });
 
 describe("previewRef", () => {
-  it("is the temp directory, so a stranded pointer names the suite that left it", () => {
-    expect(previewRef({ dir: "/tmp/next-e2e-abc" })).toBe("/tmp/next-e2e-abc");
+  it("keeps the temp directory's name, so a stranded pointer names the suite that left it", () => {
+    expect(previewRef({ dir: "/tmp/next-e2e-abc" })).toMatch(/^next-e2e-abc-[0-9a-f]{8}$/);
   });
 
   it("gives two temp apps in one run their own pointer", () => {
     expect(previewRef({ dir: "/tmp/a" })).not.toBe(previewRef({ dir: "/tmp/b" }));
+  });
+
+  it("separates two temp apps whose names collide once truncated", () => {
+    const install = "next-install-" + "a".repeat(64);
+    expect(previewRef({ dir: `/tmp/${install}` })).not.toBe(previewRef({ dir: `/tmp/${install}x` }));
+  });
+
+  it("leaves the preview label room for the project slug the shared wildcard prefixes it with", () => {
+    const previewidSuffix = "-".length + 8;
+    const slug = projectSlug({ runId: "31599563227" });
+    const pointer = previewRef({ dir: "/tmp/next-install-" + "a".repeat(64) }).length + previewidSuffix;
+    expect(slug.length + 2 + pointer + 2 + APP_NAME.length).toBeLessThanOrEqual(63);
   });
 
   it("resolves two spellings of one directory to one pointer", () => {
