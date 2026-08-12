@@ -342,7 +342,7 @@ func TestRevalidator(t *testing.T) {
 		}
 	})
 
-	t.Run("invoke grant is account wide over ocel tagged functions", func(t *testing.T) {
+	t.Run("invoke grant is account wide over app functions alone", func(t *testing.T) {
 		for _, tc := range revalidatorTemplates() {
 			t.Run(tc.name, func(t *testing.T) {
 				for _, st := range revalidatorPolicy(t, tc.template) {
@@ -356,12 +356,12 @@ func TestRevalidator(t *testing.T) {
 					if !slices.Equal(st.resources(), want) {
 						t.Errorf("invoke grant resource = %v, want %v — the edge user's own '*' region is wider than this consumer needs", st.resources(), want)
 					}
-					null, ok := st.Condition["Null"].(map[string]any)
+					equals, ok := st.Condition["StringEquals"].(map[string]any)
 					if !ok {
-						t.Fatalf("invoke grant condition = %+v, want a Null condition on the ocel:app tag", st.Condition)
+						t.Fatalf("invoke grant condition = %+v, want a StringEquals on the ocel:component tag", st.Condition)
 					}
-					if got := null["aws:ResourceTag/ocel:app"]; got != "false" {
-						t.Errorf("invoke condition = %v, want 'aws:ResourceTag/ocel:app': 'false'", got)
+					if got := equals["aws:ResourceTag/ocel:component"]; got != "function" {
+						t.Errorf("invoke condition = %v, want 'aws:ResourceTag/ocel:component': 'function' — anything looser reaches the bucket listeners too", got)
 					}
 					return
 				}

@@ -581,7 +581,7 @@ func edgeUserResource(userName, class string, trust edge.TrustBoundary, optimize
 	return fmt.Sprintf(`  EdgeUser:
     Type: AWS::IAM::User
     Metadata:
-      Description: "The identity the %s edge signs its calls into this account with, from outside the trust boundary: it reads the asset bucket, writes the fetch cache back, reads and updates tag items, invokes Ocel-tagged functions and enqueues ISR revalidations. Nothing else in this account assumes it. Its access key is the only credential the edge holds; delete the user or its key and the edge is severed from this account, and bootstrap only mints a replacement once the SSM parameter holding the old one is gone too."
+      Description: "The identity the %s edge signs its calls into this account with, from outside the trust boundary: it reads the asset bucket, writes the fetch cache back, reads and updates tag items, invokes the app functions Ocel deploys and enqueues ISR revalidations. Nothing else in this account assumes it. Its access key is the only credential the edge holds; delete the user or its key and the edge is severed from this account, and bootstrap only mints a replacement once the SSM parameter holding the old one is gone too."
     Properties:
       UserName: %s
       Policies:
@@ -617,8 +617,8 @@ func edgeUserResource(userName, class string, trust edge.TrustBoundary, optimize
                   - lambda:InvokeFunction
                 Resource: !Sub 'arn:aws:lambda:*:${AWS::AccountId}:function:*'
                 Condition:
-                  'Null':
-                    'aws:ResourceTag/ocel:app': 'false'
+                  StringEquals:
+                    'aws:ResourceTag/ocel:component': 'function'
               - Effect: Allow
                 Action: sqs:SendMessage
                 Resource: !GetAtt RevalidateQueue.Arn

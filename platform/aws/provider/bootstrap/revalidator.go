@@ -95,7 +95,7 @@ func revalidatorResources(code artifactCode) string {
 	return fmt.Sprintf(`  RevalidatorRole:
     Type: AWS::IAM::Role
     Properties:
-      Description: "Execution role for this substrate's ISR revalidator. Grants it the revalidation queue, the origin descriptors in the asset bucket and invoke on Ocel-tagged functions only, so it can re-render an app but cannot touch state or variables. Managed by ocel bootstrap; deleting it leaves the queue undrained."
+      Description: "Execution role for this substrate's ISR revalidator. Grants it the revalidation queue, the origin descriptors in the asset bucket and invoke on app functions only, so it can re-render an app but cannot touch state, variables or any other function Ocel runs in this account. Managed by ocel bootstrap; deleting it leaves the queue undrained."
       AssumeRolePolicyDocument:
         Version: '2012-10-17'
         Statement:
@@ -131,8 +131,8 @@ func revalidatorResources(code artifactCode) string {
                   - lambda:InvokeFunction
                 Resource: !Sub 'arn:aws:lambda:${AWS::Region}:${AWS::AccountId}:function:*'
                 Condition:
-                  'Null':
-                    'aws:ResourceTag/ocel:app': 'false'
+                  StringEquals:
+                    'aws:ResourceTag/ocel:component': 'function'
   Revalidator:
     Type: AWS::Lambda::Function
     Properties:
