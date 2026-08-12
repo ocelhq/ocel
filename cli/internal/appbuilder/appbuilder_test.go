@@ -16,6 +16,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/manifestbuilder"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
 	"github.com/ocelhq/ocel/cli/node"
+	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
 func lookup(env []string, name string) (string, bool) {
@@ -38,6 +39,20 @@ func writeBuilder(t *testing.T, projectDir string) string {
 		t.Fatal(err)
 	}
 	return path
+}
+
+func writePlan(t *testing.T, outDir string, summaries ...functionSummary) {
+	t.Helper()
+	if err := os.MkdirAll(outDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	data, err := json.Marshal(buildPlan{Functions: summaries})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(outDir, buildPlanFileName), data, 0o644); err != nil {
+		t.Fatal(err)
+	}
 }
 
 func writeFuncConfig(t *testing.T, outDir, app, funcRel string, cfg functionConfig) {
@@ -115,6 +130,9 @@ func TestBuild(t *testing.T) {
 			}
 			writeFuncConfig(t, gotReq.OutDir, "api", "index.func", functionConfig{Runtime: "nodejs24.x", Handler: "index.handler", Framework: "express", App: "api"})
 			writeFuncConfig(t, gotReq.OutDir, "worker", "index.func", functionConfig{Runtime: "nodejs24.x", Handler: "index.handler", Framework: "express", App: "worker"})
+			writePlan(t, gotReq.OutDir,
+				functionSummary{Name: "api", Runtime: "nodejs24.x", Handler: "index.handler", ArtifactPath: filepath.Join("apps", "api", "functions", "index.func"), Framework: "express", Strategy: traceStrategy},
+				functionSummary{Name: "worker", Runtime: "nodejs24.x", Handler: "index.handler", ArtifactPath: filepath.Join("apps", "worker", "functions", "index.func"), Framework: "express", Strategy: traceStrategy})
 			return nil
 		}}
 
@@ -190,7 +208,11 @@ func TestBuild(t *testing.T) {
 
 		var gotReq builderRequest
 		builder := Builder{Exec: func(_ context.Context, _ string, _ []string, request []byte, _ io.Writer) error {
-			return json.Unmarshal(request, &gotReq)
+			if err := json.Unmarshal(request, &gotReq); err != nil {
+				return err
+			}
+			writePlan(t, gotReq.OutDir)
+			return nil
 		}}
 
 		if err := builder.Build(context.Background(), &projectconfig.Config{Dir: root}, nil, io.Discard); err != nil {
@@ -247,6 +269,7 @@ func TestBuild(t *testing.T) {
 		var got []string
 		builder := Builder{Exec: func(_ context.Context, _ string, env []string, _ []byte, _ io.Writer) error {
 			got = env
+			writePlan(t, filepath.Join(root, scratchDirName, outputDirName))
 			return nil
 		}}
 
@@ -267,6 +290,7 @@ func TestBuild(t *testing.T) {
 
 		var got builderRequest
 		builder := Builder{Exec: func(_ context.Context, _ string, _ []string, request []byte, _ io.Writer) error {
+			writePlan(t, filepath.Join(root, scratchDirName, outputDirName))
 			return json.Unmarshal(request, &got)
 		}}
 
@@ -303,6 +327,7 @@ func TestBuild(t *testing.T) {
 
 		var got builderRequest
 		builder := Builder{Exec: func(_ context.Context, _ string, _ []string, request []byte, _ io.Writer) error {
+			writePlan(t, filepath.Join(root, scratchDirName, outputDirName))
 			return json.Unmarshal(request, &got)
 		}}
 
@@ -369,6 +394,7 @@ func TestBuild(t *testing.T) {
 		var got []string
 		builder := Builder{Exec: func(_ context.Context, _ string, env []string, _ []byte, _ io.Writer) error {
 			got = env
+			writePlan(t, filepath.Join(root, scratchDirName, outputDirName))
 			return nil
 		}}
 
@@ -388,6 +414,168 @@ func TestBuild(t *testing.T) {
 			t.Errorf("OCEL_APP_FOLDER = %q, want the project root", value)
 		}
 	})
+
+	t.Run("a planned bundle is produced from Go", func(t *testing.T) {
+		t.Parallel()
+
+		root := t.TempDir()
+		writeBuilder(t, root)
+		entrypoint := filepath.Join(root, "apps", "api", "src", "server.js")
+		if err := os.MkdirAll(filepath.Dir(entrypoint), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(entrypoint, []byte("export default { fetch: () => new Response('hi') };\n"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+
+		builder := Builder{Exec: func(_ context.Context, _ string, _ []string, _ []byte, _ io.Writer) error {
+			writePlan(t, filepath.Join(root, scratchDirName, outputDirName), functionSummary{
+				Name:         "api",
+				Runtime:      "nodejs24.x",
+				Handler:      "index.mjs",
+				ArtifactPath: filepath.Join("apps", "api", "functions", "index.func"),
+				Framework:    "express",
+				Strategy:     bundleStrategy,
+				Entrypoint:   entrypoint,
+			})
+			return nil
+		}}
+
+		cfg := &projectconfig.Config{
+			Dir:  root,
+			Apps: []projectconfig.App{{Name: "api", Path: "apps/api", Framework: "express", Compute: "serverless"}},
+		}
+		if err := builder.Build(context.Background(), cfg, nil, io.Discard); err != nil {
+			t.Fatalf("Build: %v", err)
+		}
+
+		fns, err := CollectFunctions(root)
+		if err != nil {
+			t.Fatalf("CollectFunctions: %v", err)
+		}
+		assertFunctions(t, "CollectFunctions", fns, []manifestbuilder.Function{
+			{Name: "index", Runtime: "nodejs24.x", Handler: "index.mjs", ArtifactPath: "apps/api/functions/index.func", Framework: "express", App: "api"},
+		})
+
+		bundle := filepath.Join(root, scratchDirName, outputDirName, appsDirName, "api", functionsDirName, "index.func", "index.mjs")
+		if _, err := os.Stat(bundle); err != nil {
+			t.Errorf("stat %s: %v (the plan asked Go to bundle)", bundle, err)
+		}
+		if got := BuildID(root, "api"); len(got) != 16 {
+			t.Errorf("BuildID = %q, want the artifact hash the bundle wrote", got)
+		}
+	})
+
+	t.Run("a planned trace leaves the tree the node builder wrote alone", func(t *testing.T) {
+		t.Parallel()
+
+		root := t.TempDir()
+		writeBuilder(t, root)
+
+		builder := Builder{Exec: func(_ context.Context, _ string, _ []string, _ []byte, _ io.Writer) error {
+			outDir := filepath.Join(root, scratchDirName, outputDirName)
+			writeFuncConfig(t, outDir, "web", "index.func",
+				functionConfig{Runtime: "nodejs24.x", Handler: "server.js", Framework: "next", App: "web"})
+			writePlan(t, outDir, functionSummary{
+				Name:         "web",
+				Runtime:      "nodejs24.x",
+				Handler:      "server.js",
+				ArtifactPath: filepath.Join("apps", "web", "functions", "index.func"),
+				Framework:    "next",
+				Strategy:     traceStrategy,
+			})
+			return nil
+		}}
+
+		cfg := &projectconfig.Config{
+			Dir:  root,
+			Apps: []projectconfig.App{{Name: "web", Path: "apps/web", Framework: "next"}},
+		}
+		if err := builder.Build(context.Background(), cfg, nil, io.Discard); err != nil {
+			t.Fatalf("Build: %v", err)
+		}
+
+		funcDir := filepath.Join(root, scratchDirName, outputDirName, appsDirName, "web", functionsDirName, "index.func")
+		entries, err := os.ReadDir(funcDir)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(entries) != 1 || entries[0].Name() != configFileName {
+			t.Errorf("function directory holds %d entries, want only the %s the node builder wrote", len(entries), configFileName)
+		}
+	})
+
+	plans := []struct {
+		name  string
+		plan  func(t *testing.T, outDir string)
+		wants []string
+	}{
+		{
+			name:  "no plan at all",
+			plan:  func(_ *testing.T, _ string) {},
+			wants: []string{buildPlanFileName},
+		},
+		{
+			name: "an unreadable plan",
+			plan: func(t *testing.T, outDir string) {
+				if err := os.WriteFile(filepath.Join(outDir, buildPlanFileName), []byte("not json"), 0o644); err != nil {
+					t.Fatal(err)
+				}
+			},
+			wants: []string{"invalid build plan"},
+		},
+		{
+			name: "a strategy this build does not know",
+			plan: func(t *testing.T, outDir string) {
+				writePlan(t, outDir, functionSummary{Name: "api", Runtime: "nodejs24.x", ArtifactPath: "apps/api/functions/index.func", Framework: "express", Strategy: "teleport"})
+			},
+			wants: []string{"teleport"},
+		},
+		{
+			name: "a bundle with no entrypoint",
+			plan: func(t *testing.T, outDir string) {
+				writePlan(t, outDir, functionSummary{Name: "api", Runtime: "nodejs24.x", ArtifactPath: "apps/api/functions/index.func", Framework: "express", Strategy: bundleStrategy})
+			},
+			wants: []string{"entrypoint"},
+		},
+		{
+			name: "a bundle aimed outside the app layout",
+			plan: func(t *testing.T, outDir string) {
+				writePlan(t, outDir, functionSummary{Name: "api", Runtime: "nodejs24.x", ArtifactPath: "elsewhere/index.func", Framework: "express", Strategy: bundleStrategy, Entrypoint: filepath.Join(outDir, "server.js")})
+			},
+			wants: []string{"elsewhere"},
+		},
+	}
+	for _, tt := range plans {
+		t.Run(tt.name+" fails the build", func(t *testing.T) {
+			t.Parallel()
+
+			root := t.TempDir()
+			writeBuilder(t, root)
+			builder := Builder{Exec: func(_ context.Context, _ string, _ []string, _ []byte, _ io.Writer) error {
+				outDir := filepath.Join(root, scratchDirName, outputDirName)
+				if err := os.MkdirAll(outDir, 0o755); err != nil {
+					return err
+				}
+				tt.plan(t, outDir)
+				return nil
+			}}
+
+			cfg := &projectconfig.Config{
+				Dir:  root,
+				Apps: []projectconfig.App{{Name: "api", Path: "apps/api", Framework: "express"}},
+			}
+			err := builder.Build(context.Background(), cfg, nil, io.Discard)
+			if err == nil {
+				t.Fatal("Build succeeded, want the unusable build plan to fail the build")
+			}
+			for _, want := range tt.wants {
+				if !strings.Contains(err.Error(), want) {
+					t.Errorf("error = %q, want it to name %q", err, want)
+				}
+			}
+		})
+	}
 
 	t.Run("over real node, builds the fixture app it is configured with", func(t *testing.T) {
 		if testing.Short() {
@@ -415,13 +603,16 @@ func TestBuild(t *testing.T) {
 		want := manifestbuilder.Function{
 			Name:         "index",
 			Runtime:      "nodejs24.x",
-			Handler:      "src/server.js",
+			Handler:      "index.mjs",
 			ArtifactPath: "apps/api/functions/index.func",
 			Framework:    "express",
 			App:          "api",
 		}
 		if fns[0] != want {
 			t.Errorf("function = %+v, want %+v", fns[0], want)
+		}
+		if got := BuildID(fixtureRoot, "api"); len(got) != 16 {
+			t.Errorf("BuildID = %q, want the artifact hash the build wrote", got)
 		}
 	})
 
@@ -451,6 +642,71 @@ func TestBuild(t *testing.T) {
 			t.Errorf("detected function app = %q, want %q", fns[0].App, "express-app")
 		}
 	})
+}
+
+func TestBuildID(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name     string
+		app      string
+		contents map[string]string
+		want     string
+	}{
+		{
+			name:     "reads the serve descriptor every framework writes",
+			app:      "api",
+			contents: map[string]string{"api/" + edge.ServeDescriptorFile: `{"framework":"express","buildId":"0123456789abcdef"}`},
+			want:     "0123456789abcdef",
+		},
+		{
+			name:     "next states its own build id there too",
+			app:      "web",
+			contents: map[string]string{"web/" + edge.ServeDescriptorFile: `{"framework":"next","buildId":"UxK1p2"}`},
+			want:     "UxK1p2",
+		},
+		{
+			name:     "a routing manifest alone answers nothing",
+			app:      "web",
+			contents: map[string]string{"web/routing-manifest.json": `{"buildId":"stale"}`},
+			want:     "",
+		},
+		{
+			name: "an app that was never built answers nothing",
+			app:  "api",
+			want: "",
+		},
+		{
+			name:     "an unreadable descriptor answers nothing",
+			app:      "api",
+			contents: map[string]string{"api/" + edge.ServeDescriptorFile: "not json"},
+			want:     "",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			root := t.TempDir()
+			for rel, contents := range tt.contents {
+				writeAppFile(t, root, rel, []byte(contents))
+			}
+			if got := BuildID(root, tt.app); got != tt.want {
+				t.Errorf("BuildID(%q) = %q, want %q", tt.app, got, tt.want)
+			}
+		})
+	}
+}
+
+func writeAppFile(t *testing.T, root, rel string, contents []byte) {
+	t.Helper()
+	dest := filepath.Join(root, scratchDirName, outputDirName, appsDirName, filepath.FromSlash(rel))
+	if err := os.MkdirAll(filepath.Dir(dest), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(dest, contents, 0o644); err != nil {
+		t.Fatal(err)
+	}
 }
 
 func TestCollectFunctions(t *testing.T) {

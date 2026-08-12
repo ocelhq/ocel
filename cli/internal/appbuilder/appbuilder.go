@@ -15,9 +15,11 @@ import (
 	"strings"
 	"unicode"
 
+	"github.com/ocelhq/ocel/cli/internal/appbundler"
 	"github.com/ocelhq/ocel/cli/internal/manifestbuilder"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
 	"github.com/ocelhq/ocel/cli/node"
+	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
 const scratchDirName = ".ocel"
@@ -31,6 +33,26 @@ const functionsDirName = "functions"
 const funcDirSuffix = ".func"
 
 const configFileName = "config.json"
+
+const buildPlanFileName = "build-plan.json"
+
+const traceStrategy = "trace"
+
+const bundleStrategy = "bundle"
+
+type buildPlan struct {
+	Functions []functionSummary `json:"functions"`
+}
+
+type functionSummary struct {
+	Name         string `json:"name"`
+	Runtime      string `json:"runtime"`
+	Handler      string `json:"handler"`
+	ArtifactPath string `json:"artifactPath"`
+	Framework    string `json:"framework"`
+	Strategy     string `json:"strategy"`
+	Entrypoint   string `json:"entrypoint,omitempty"`
+}
 
 type builderRequest struct {
 	OutDir      string     `json:"outDir"`
@@ -151,7 +173,62 @@ func (b Builder) Build(ctx context.Context, cfg *projectconfig.Config, envByApp 
 	if run == nil {
 		run = runNode
 	}
-	return run(ctx, builderPath, builderEnv(node.AdapterPath(cfg.Dir), envByApp[rootAppEnv]), payload, stderr)
+	if err := run(ctx, builderPath, builderEnv(node.AdapterPath(cfg.Dir), envByApp[rootAppEnv]), payload, stderr); err != nil {
+		return err
+	}
+	return bundlePlanned(outputDir, stderr)
+}
+
+func bundlePlanned(outputDir string, stderr io.Writer) error {
+	planPath := filepath.Join(outputDir, buildPlanFileName)
+	raw, err := os.ReadFile(planPath)
+	if err != nil {
+		return fmt.Errorf("the node builder reported no build plan at %s: %w", planPath, err)
+	}
+	var plan buildPlan
+	if err := json.Unmarshal(raw, &plan); err != nil {
+		return fmt.Errorf("%s: invalid build plan: %w", planPath, err)
+	}
+
+	for _, fn := range plan.Functions {
+		switch fn.Strategy {
+		case traceStrategy:
+			continue
+		case bundleStrategy:
+		default:
+			return fmt.Errorf("%s: %q reports build strategy %q, which this build does not know", planPath, fn.Name, fn.Strategy)
+		}
+		if fn.Entrypoint == "" {
+			return fmt.Errorf("%s: %q asks to be bundled without stating an entrypoint", planPath, fn.Name)
+		}
+
+		funcDir := filepath.Join(outputDir, filepath.FromSlash(fn.ArtifactPath))
+		appDir, err := appArtifactRoot(outputDir, funcDir)
+		if err != nil {
+			return err
+		}
+		if err := appbundler.Bundle(appbundler.Target{
+			App:        filepath.Base(appDir),
+			Framework:  fn.Framework,
+			Runtime:    fn.Runtime,
+			Entrypoint: fn.Entrypoint,
+			FuncDir:    funcDir,
+			AppDir:     appDir,
+			Log:        stderr,
+		}); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func appArtifactRoot(outputDir, funcDir string) (string, error) {
+	functionsDir := filepath.Dir(funcDir)
+	appDir := filepath.Dir(functionsDir)
+	if filepath.Base(functionsDir) != functionsDirName || filepath.Dir(appDir) != filepath.Join(outputDir, appsDirName) {
+		return "", fmt.Errorf("%s does not sit under %s", funcDir, filepath.Join(outputDir, appsDirName, "<app>", functionsDirName))
+	}
+	return appDir, nil
 }
 
 func CollectFunctions(projectDir string) ([]manifestbuilder.Function, error) {
@@ -166,17 +243,15 @@ func CollectFunctions(projectDir string) ([]manifestbuilder.Function, error) {
 }
 
 func BuildID(projectDir, app string) string {
-	raw, err := os.ReadFile(filepath.Join(projectDir, scratchDirName, outputDirName, appsDirName, app, "routing-manifest.json"))
+	raw, err := os.ReadFile(filepath.Join(projectDir, scratchDirName, outputDirName, appsDirName, app, edge.ServeDescriptorFile))
 	if err != nil {
 		return ""
 	}
-	var manifest struct {
-		BuildID string `json:"buildId"`
-	}
-	if err := json.Unmarshal(raw, &manifest); err != nil {
+	var descriptor edge.ServeDescriptor
+	if err := json.Unmarshal(raw, &descriptor); err != nil {
 		return ""
 	}
-	return manifest.BuildID
+	return descriptor.BuildID
 }
 
 func collectFunctions(outputDir string) ([]manifestbuilder.Function, error) {
