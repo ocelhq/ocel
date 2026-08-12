@@ -350,7 +350,7 @@ function inFlightFill(
 
 export const joinFillTimeoutMs = 2_000;
 
-function settledWithin(promise: Promise<unknown>, ms: number): Promise<boolean> {
+export function settledWithin(promise: Promise<unknown>, ms: number): Promise<boolean> {
   return new Promise((resolve) => {
     const timer = setTimeout(() => resolve(false), ms);
     promise.then(

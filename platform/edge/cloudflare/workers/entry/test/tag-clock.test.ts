@@ -409,6 +409,49 @@ describe("two builds sharing one binding", () => {
   });
 });
 
+describe("a store read that never settles", () => {
+  function neverSettlingStore() {
+    let calls = 0;
+    return {
+      get calls() {
+        return calls;
+      },
+      async get() {
+        calls++;
+        return new Promise<never>(() => {});
+      },
+    };
+  }
+
+  it("degrades to 'untrusted' once the bound elapses, rather than hanging forever", async () => {
+    const store = neverSettlingStore();
+    const clock = createTagClock(cfg, { store, snapshotReadTimeoutMs: 5 });
+    expect(await clock.expired(["posts"], 1_000, 3_000)).toBe("untrusted");
+  });
+
+  it("does not hang prime() either", async () => {
+    const store = neverSettlingStore();
+    const clock = createTagClock(cfg, { store, snapshotReadTimeoutMs: 5 });
+    expect(await clock.prime(3_000)).toBeNull();
+  });
+
+  it("clears the poisoned cell so the next request starts its own read", async () => {
+    let calls = 0;
+    const store = {
+      async get(key: string) {
+        calls++;
+        if (calls === 1) return new Promise<never>(() => {});
+        return { etag: `"${key}"`, text: async () => JSON.stringify(snapshot()) };
+      },
+    };
+    const clock = createTagClock(cfg, { store, snapshotReadTimeoutMs: 5 });
+
+    expect(await clock.expired(["posts"], 1_000, 3_000)).toBe("untrusted");
+    expect(await clock.expired(["posts"], 1_000, 3_000)).toBe(false);
+    expect(calls).toBe(2);
+  });
+});
+
 describe("the PoP copy's drawn lifetime", () => {
   function recordingCache() {
     const maxAges: number[] = [];
