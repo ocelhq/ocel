@@ -1056,6 +1056,13 @@ function errorRouteKind(status: number): "notFound" | "serverError" | undefined 
   return undefined;
 }
 
+function isRenderedDocument(response: Response): boolean {
+  const contentType = response.headers.get("content-type");
+  if (!contentType || !contentType.startsWith("text/html")) return false;
+  const contentLength = response.headers.get("content-length");
+  return contentLength === null || Number(contentLength) > 0;
+}
+
 async function substituteErrorPage(
   response: Response,
   request: Request,
@@ -1068,6 +1075,7 @@ async function substituteErrorPage(
   if (!kind) return response;
   if (isFlightRequest(request.headers)) return response;
   if (isNextDataPathname(url.pathname, manifest, manifest.buildId)) return response;
+  if (isRenderedDocument(response)) return response;
 
   const errorPathname = manifest.errorRoutes?.[kind];
   if (!errorPathname) return response;

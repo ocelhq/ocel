@@ -3607,6 +3607,65 @@ describe("custom error page substitution", () => {
     expect(await res.text()).toBe("Not Found");
   });
 
+  it("passes through an origin 500 that already rendered a text/html document", async () => {
+    const deps = errorPageDeps(
+      () =>
+        new Response("<html id=\"__next_error__\">origin error boundary</html>", {
+          status: 500,
+          headers: { "content-type": "text/html; charset=utf-8", "x-origin": "1" },
+        }),
+    );
+
+    const res = await dispatchResult(
+      { resolvedPathname: "/not-found", invocationTarget: { pathname: "/not-found" } },
+      new Request("https://app.example/enoent"),
+      deps,
+    );
+
+    expect(res.status).toBe(500);
+    expect(res.headers.get("x-origin")).toBe("1");
+    expect(await res.text()).toBe(
+      "<html id=\"__next_error__\">origin error boundary</html>",
+    );
+  });
+
+  it("passes through an origin 404 from a matched lambda+page target that already rendered a document", async () => {
+    const deps = errorPageDeps(
+      () =>
+        new Response("<html id=\"__next_error__\">route-specific not found</html>", {
+          status: 404,
+          headers: { "content-type": "text/html; charset=utf-8", "x-origin": "1" },
+        }),
+    );
+
+    const res = await dispatchResult(
+      { resolvedPathname: "/not-found", invocationTarget: { pathname: "/not-found" } },
+      new Request("https://app.example/de/show"),
+      deps,
+    );
+
+    expect(res.status).toBe(404);
+    expect(res.headers.get("x-origin")).toBe("1");
+    expect(await res.text()).toBe(
+      "<html id=\"__next_error__\">route-specific not found</html>",
+    );
+  });
+
+  it("still substitutes a bodiless plaintext origin 500 with no content-type", async () => {
+    const deps = errorPageDeps(
+      () => new Response("Internal Server Error", { status: 500 }),
+    );
+
+    const res = await dispatchResult(
+      { resolvedPathname: "/not-found", invocationTarget: { pathname: "/not-found" } },
+      new Request("https://app.example/enoent"),
+      deps,
+    );
+
+    expect(res.status).toBe(500);
+    expect(await res.text()).toBe("<html>custom 500</html>");
+  });
+
   it("substitutes a static-kind error route's body for a document error response", async () => {
     const deps = baseDeps({
       manifest: {
