@@ -21,6 +21,9 @@ env:
   ADAPTER_BASELINE: scripts/e2e-next/baseline-manifest.json
   NODE_VERSION: "22"
   PNPM_VERSION: "11.10.0"
+  # FIXME: must match pinnedPulumiVersion in platform/aws/provider/pulumiruntime/runtime.go —
+  # nothing checks that it does, and a mismatch silently warms the wrong directory.
+  PULUMI_VERSION: "3.146.0"
 
 permissions:
   contents: read
@@ -193,6 +196,14 @@ jobs:
           expected-aws-account-id: ${{ secrets.E2E_EXPECTED_AWS_ACCOUNT_ID }}
           expected-cloudflare-account-id: ${{ secrets.E2E_EXPECTED_CLOUDFLARE_ACCOUNT_ID }}
 
+      - name: Warm the Pulumi runtime the provider installs on first deploy
+        run: |
+          set -euo pipefail
+          root="$HOME/.ocel/pulumi/$PULUMI_VERSION"
+          curl -fsSL https://get.pulumi.com/install.sh | sh -s -- \
+            --no-edit-path --install-root "$root" --version "$PULUMI_VERSION"
+          "$root/bin/pulumi" version
+
       - name: Stage the smoke app
         run: |
           set -euo pipefail
@@ -333,6 +344,14 @@ jobs:
       - name: Ensure Playwright browser
         working-directory: nextjs
         run: pnpm playwright install chromium
+
+      - name: Warm the Pulumi runtime before the concurrent deploys install it
+        run: |
+          set -euo pipefail
+          root="$HOME/.ocel/pulumi/$PULUMI_VERSION"
+          curl -fsSL https://get.pulumi.com/install.sh | sh -s -- \
+            --no-edit-path --install-root "$root" --version "$PULUMI_VERSION"
+          "$root/bin/pulumi" version
 
       - name: Copy the baseline manifest into the Next.js checkout
         if: ${{ !inputs.recordBaseline }}
