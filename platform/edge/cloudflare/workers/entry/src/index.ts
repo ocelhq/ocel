@@ -802,8 +802,8 @@ function withSourceInvocationTarget(
   routingUrl: URL,
   manifest: Manifest,
 ): RouteResult {
-  const routePath = result.resolvedPathname;
   const target = result.invocationTarget;
+  const routePath = target?.pathname ?? result.resolvedPathname;
   if (!target || !result.resolvedPathname) return { ...result, routePath };
   if (target.pathname === routingUrl.pathname) return { ...result, routePath };
   if (
