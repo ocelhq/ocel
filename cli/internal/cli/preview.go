@@ -22,6 +22,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/providerrunner"
 	"github.com/ocelhq/ocel/cli/node"
 	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
+	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
 type previewUpOptions struct {
@@ -156,10 +157,6 @@ func runPreviewUp(ctx context.Context, d deps, cwd string, opts previewUpOptions
 		return err
 	}
 
-	if err := requirePreviewDomain(cfg); err != nil {
-		return err
-	}
-
 	env, err := resolveUpEnvironment(d, cwd, opts)
 	if err != nil {
 		return err
@@ -174,7 +171,7 @@ func runPreviewUp(ctx context.Context, d deps, cwd string, opts previewUpOptions
 
 	provW := ui.BuildWriter()
 	err = runProviderSession(ctx, d, cfg, provider, provW, provW, func(runner *providerrunner.Runner) error {
-		if err := preflightPreviewUp(ctx, d, runner, provider, cfg, stdout); err != nil {
+		if err := preflightPreviewUp(ctx, d, runner, provider, cfg, env.GetIdentity(), stdout); err != nil {
 			return err
 		}
 
@@ -241,14 +238,73 @@ func runPreviewUp(ctx context.Context, d deps, cwd string, opts previewUpOptions
 	return nil
 }
 
-func requirePreviewDomain(cfg *projectconfig.Config) error {
-	if len(cfg.Domains["preview"]) > 0 {
+func requirePreviewDomain(cfg *projectconfig.Config, global *deploymentsv1.GlobalPreviewDomain, id *deploymentsv1.Identity, pointer string, out io.Writer) error {
+	declared := ""
+	if hosts := cfg.Domains["preview"]; len(hosts) > 0 {
+		declared = hosts[0]
+	}
+	base := global.GetBaseDomain()
+
+	switch {
+	case declared == "" && base == "":
+		return fmt.Errorf("this project declares no preview domain and this substrate has no global one, so a preview deploy has nowhere to serve: "+
+			"add a project-level domains.preview wildcard (e.g. `domains: { preview: \"*.preview.acme.com\" }`) to %s, "+
+			"or run `ocel domain use '*.preview.acme.com' --preview` once to serve every project's previews on one shared wildcard — "+
+			"a preview domain binds to the whole project, which serves every app and every preview under that one wildcard, so it is never declared per app",
+			projectconfig.ConfigFileName)
+
+	case declared == "":
+		if err := checkGlobalPreviewDomain(global, id); err != nil {
+			return err
+		}
+		fmt.Fprintf(out, "Serving previews on the global preview domain *.%s — this project declares no domains.preview of its own\n", base)
+
+	case base != "":
+		fmt.Fprintf(out, "Serving previews on %s, this project's own domains.preview — the global preview domain *.%s exists and is ignored (remove domains.preview from %s to serve on it)\n",
+			declared, base, projectconfig.ConfigFileName)
+	}
+
+	labelSlug, labelBase := "", strings.TrimPrefix(declared, "*.")
+	if declared == "" {
+		labelSlug, labelBase = cfg.Slug, base
+	}
+	return edge.PreviewLabelProblem(labelSlug, intendedPreviewHostnames(cfg, labelSlug, pointer, labelBase))
+}
+
+func intendedPreviewHostnames(cfg *projectconfig.Config, slug, pointer, base string) []string {
+	if pointer == "" || base == "" {
 		return nil
 	}
-	return fmt.Errorf("this project declares no preview domain, so a preview deploy has nowhere to serve: "+
-		"add a project-level domains.preview wildcard (e.g. `domains: { preview: \"*.preview.acme.com\" }`) to %s and run it again — "+
-		"a preview domain binds to the whole project, which serves every app and every preview under that one wildcard, so it is never declared per app",
-		projectconfig.ConfigFileName)
+	hosts := make([]string, 0, len(cfg.Apps))
+	for _, app := range cfg.Apps {
+		name := app.Name
+		if len(cfg.Apps) == 1 {
+			name = ""
+		}
+		hosts = append(hosts, edge.PreviewLabel(slug, pointer, name)+"."+base)
+	}
+	return hosts
+}
+
+func checkGlobalPreviewDomain(global *deploymentsv1.GlobalPreviewDomain, id *deploymentsv1.Identity) error {
+	base := global.GetBaseDomain()
+	if want, have := global.GetCloudflareAccount(), id.GetCloudflareAccount(); want != "" && have != "" && want != have {
+		return fmt.Errorf("the global preview domain *.%s lives in Cloudflare account %s, but this deploy is authenticated to account %s: "+
+			"a worker route can only be attached from the account that holds the zone — "+
+			"point CLOUDFLARE_ACCOUNT_ID (and CLOUDFLARE_API_TOKEN) at %s, or declare this project's own domains.preview in %s",
+			base, want, have, want, projectconfig.ConfigFileName)
+	}
+	if !global.GetRouteInstalled() {
+		return fmt.Errorf("the global preview domain *.%s is recorded, but its wildcard route is not installed, so nothing would answer a preview hostname: "+
+			"run `ocel domain use '*.%s' --preview` to reinstall the shared entry worker and reclaim the wildcard",
+			base, base)
+	}
+	if g := edge.PreviewGrammarMax; g < global.GetGrammarMin() || g > global.GetGrammarMax() {
+		return fmt.Errorf("this CLI names preview hostnames with grammar %d, but the shared entry worker on *.%s speaks %d–%d, so it would not route what this deploy creates: "+
+			"run `ocel domain use '*.%s' --preview` to upgrade the worker, or upgrade the CLI if it is the older half",
+			g, base, global.GetGrammarMin(), global.GetGrammarMax(), base)
+	}
+	return nil
 }
 
 func runPreviewRm(ctx context.Context, d deps, cwd string, opts previewRmOptions, stdout, stderr io.Writer, stdin io.Reader) error {
@@ -466,12 +522,15 @@ func preflightPreview(ctx context.Context, d deps, runner *providerrunner.Runner
 	return preflightClass(ctx, d, runner, provider, deploymentsv1.Environment_CLASS_PREVIEW, "ocel bootstrap --preview", out)
 }
 
-func preflightPreviewUp(ctx context.Context, d deps, runner *providerrunner.Runner, provider *projectconfig.ProviderDescriptor, cfg *projectconfig.Config, out io.Writer) error {
+func preflightPreviewUp(ctx context.Context, d deps, runner *providerrunner.Runner, provider *projectconfig.ProviderDescriptor, cfg *projectconfig.Config, pointer string, out io.Writer) error {
 	resp, err := preflight(ctx, d, runner, provider, deploymentsv1.Environment_CLASS_PREVIEW, cfg.Slug, declaredHostnames(cfg, "preview"), "ocel bootstrap --preview", out)
 	if err != nil {
 		return err
 	}
-	return refuseClaimedDomains(resp.GetDomainClaims())
+	if err := refuseClaimedDomains(resp.GetDomainClaims()); err != nil {
+		return err
+	}
+	return requirePreviewDomain(cfg, resp.GetGlobalPreviewDomain(), resp.GetIdentity(), pointer, out)
 }
 
 func preflightDeploy(ctx context.Context, d deps, runner *providerrunner.Runner, provider *projectconfig.ProviderDescriptor, cfg *projectconfig.Config, wantKnownSlugs bool, out io.Writer) ([]string, error) {
@@ -513,6 +572,9 @@ func refuseClaimedDomains(claims []*deploymentsv1.DomainClaim) error {
 	var b strings.Builder
 	for _, claim := range claims {
 		if claim.GetStatus() != deploymentsv1.DomainClaim_STATUS_CLAIMED {
+			continue
+		}
+		if claim.GetOwner() == edge.SharedPreviewEntryScript {
 			continue
 		}
 		if b.Len() == 0 {
