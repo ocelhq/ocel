@@ -19,12 +19,18 @@ If the Next.js repo is not in your context, stop and tell the user to run
 
 **One project per run id, one preview per app.** `projectSlugForRun()` is
 `e2e-<GITHUB_RUN_ID>` (`e2e-local` when unset), and each temp app is a preview
-**ref** inside it — the ref *is* the app directory path
-(`previewRefForApp` reads `NEXT_TEST_DIR || appDir`). Consequences:
+**ref** inside it. The ref is *derived from* the app directory but is **not** the
+directory path: `previewRef` (`lib.mjs`) hashes `NEXT_TEST_DIR || appDir` into
+`<basename hint>-<sha256 prefix>`, e.g. `/tmp/next-test-1786560435077-458` becomes
+`next-test-17-b775867b`. Consequences:
 
-- Both `ocel preview up --ref <dir>` and `ocel preview rm --ref <dir>` resolve
-  the project through the `ocel.config.ts` **in their working directory**, so
-  both must run from the app's own directory.
+- **Pass the recorded ref, never the directory.** `--ref` is taken literally, so
+  `--ref <appDir>` names a ref that does not exist. `preview rm` then reports
+  success having removed nothing, and the deployment stays live. Read the ref
+  from the app's `.ocel-e2e.json`, or from `deploy.mjs`'s stderr line.
+- Both `ocel preview up` and `ocel preview rm` resolve the project through the
+  `ocel.config.ts` **in their working directory**, so both must run from the
+  app's own directory.
 - Set `GITHUB_RUN_ID` to a short greppable token so stranded projects are
   attributable. The run id is truncated to 46 chars inside the slug.
 - Previews serve on the substrate's preview domain, which the shared entry
@@ -147,21 +153,41 @@ Same command with three changes — this leaves the deployment up:
 Take the app URL from `.ocel/deploy-result.json` (`appUrls[0]`). One preview per
 suite, shared by everything debugging it.
 
-**Nothing tears this down automatically.** When finished:
+**Nothing tears this down automatically.** When finished, take the ref and slug
+from the app's `.ocel-e2e.json` — **not** the directory path, see the isolation
+model above — and run from the app's own directory:
 
 ```bash
+ref=$(node -p "require('$appDir/.ocel-e2e.json').ref")
 cd <appDir> && node /home/vndaba/Dev/ocelhq/packages/ocel/bin/run.js \
-  preview rm --ref <appDir> --yes
+  preview rm --ref "$ref" --yes
 ```
 
-If teardown fails, leave the directory in place and report the ref and slug —
-its Lambdas, worker scripts and DNS label are still live. To take the whole
-project instead:
+**`preview rm`'s exit code proves nothing.** It has been observed reporting
+`✓ … torn down` while the Lambda, the worker route and the live URL all remain.
+Always verify, and treat the sweep as part of teardown rather than a fallback:
+
+```bash
+aws resourcegroupstaggingapi get-resources \
+  --tag-filters Key=ocel:project,Values=<slug> \
+  --resource-type-filters lambda:function
+```
+
+Filter on `ocel:project` — **never** `ocel:app`, which is the constant `app` for
+every test app. If that returns anything, or to reclaim the whole project:
 
 ```bash
 ADAPTER_DIR=… OCEL_E2E_SIDECAR_DIR=… \
   node scripts/e2e-next/project-teardown.mjs <slug>
 ```
+
+`project-teardown.mjs` is the only path that reliably clears everything,
+including the project's `/ocel/rootstack-preview/<slug>` SSM parameter, which
+`preview rm` leaves behind even when it does delete the compute.
+
+If teardown fails, **leave the app directory in place** and report the ref and
+slug — its Lambdas, worker scripts and DNS label are still live, and deleting
+the directory first makes the preview unreclaimable from anywhere.
 
 ## Reading the result
 
