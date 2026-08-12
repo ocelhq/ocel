@@ -20,6 +20,25 @@ func nextManifest() *deploymentsv1.Manifest {
 	}
 }
 
+func nodeManifest() *deploymentsv1.Manifest {
+	return &deploymentsv1.Manifest{
+		Slug: "proj",
+		Apps: []*deploymentsv1.ManifestApp{{Name: "api", Framework: "express"}},
+		Functions: []*deploymentsv1.ManifestFunction{
+			{LogicalName: "api_handler", Framework: "express", App: "api", RouteId: "/"},
+		},
+	}
+}
+
+func nodeAppTree(t *testing.T) string {
+	t.Helper()
+	return writeTree(t, map[string]string{
+		"apps/api/serve.json":  serveDescriptor(t, "express", "a1b2c3d4e5f60718"),
+		"apps/api/index.mjs":   "export default {}",
+		"apps/api/config.json": `{"runtime":"nodejs22.x","handler":"index.mjs","framework":"express","app":"api"}`,
+	})
+}
+
 func twoAppManifest() *deploymentsv1.Manifest {
 	return &deploymentsv1.Manifest{
 		Slug: "proj",
@@ -134,6 +153,74 @@ func TestResolveAppBuilds(t *testing.T) {
 		}
 		if builds.caches["web"] == nil {
 			t.Error("the Next app must still have its own cache")
+		}
+	})
+
+	t.Run("a node framework app takes its build id from the serve descriptor", func(t *testing.T) {
+		t.Parallel()
+		cfg := Config{ArtifactRoot: nodeAppTree(t), AssetBucket: "assets", StateTable: "state", Env: "prod"}
+		manifest := nodeManifest()
+
+		builds := appBuildsFor(t, cfg, manifest)
+		if got := builds.identities["api"].BuildID(); got != "a1b2c3d4e5f60718" {
+			t.Errorf("build id = %q, want the descriptor's own", got)
+		}
+		if again := appBuildsFor(t, cfg, manifest).identities["api"].BuildID(); again != builds.identities["api"].BuildID() {
+			t.Errorf("build id moved to %q with nothing rebuilt; a no-op deploy must not churn a release", again)
+		}
+		if builds.caches["api"] != nil {
+			t.Errorf("cache = %+v, want none for a framework with no prerendering", builds.caches["api"])
+		}
+	})
+
+	t.Run("the serve descriptor is authoritative for next too", func(t *testing.T) {
+		t.Parallel()
+		root := writeTree(t, map[string]string{
+			"apps/web/routing-manifest.json": `{"buildId":"STALE"}`,
+			"apps/web/serve.json":            serveDescriptor(t, frameworkNext, "WEB1"),
+		})
+		cfg := Config{ArtifactRoot: root, AssetBucket: "assets", StateTable: "state", Env: "prod"}
+
+		builds := appBuildsFor(t, cfg, nextManifest())
+		if got := builds.identities["web"].BuildID(); got != "WEB1" {
+			t.Errorf("build id = %q, want the descriptor's own", got)
+		}
+	})
+
+	t.Run("a serve descriptor with no build id fails naming the app", func(t *testing.T) {
+		t.Parallel()
+		root := writeTree(t, map[string]string{"apps/api/serve.json": `{"framework":"express"}`})
+		cfg := Config{ArtifactRoot: root, AssetBucket: "assets", StateTable: "state", Env: "prod"}
+
+		_, err := resolveAppBuilds(cfg, nodeManifest(), nil)
+		if err == nil {
+			t.Fatal("expected a descriptor with no build id to fail the deploy")
+		}
+		if !strings.Contains(err.Error(), "api") {
+			t.Errorf("error must name the app, got %q", err)
+		}
+	})
+
+	t.Run("an unparseable serve descriptor fails naming the app", func(t *testing.T) {
+		t.Parallel()
+		root := writeTree(t, map[string]string{"apps/api/serve.json": `{`})
+		cfg := Config{ArtifactRoot: root, AssetBucket: "assets", StateTable: "state", Env: "prod"}
+
+		_, err := resolveAppBuilds(cfg, nodeManifest(), nil)
+		if err == nil {
+			t.Fatal("expected an unparseable descriptor to fail the deploy")
+		}
+		if !strings.Contains(err.Error(), "api") {
+			t.Errorf("error must name the app, got %q", err)
+		}
+	})
+
+	t.Run("an app whose build emitted no descriptor still gets an id", func(t *testing.T) {
+		t.Parallel()
+		cfg := Config{ArtifactRoot: t.TempDir(), AssetBucket: "assets", StateTable: "state", Env: "prod"}
+
+		if got := appBuildsFor(t, cfg, nodeManifest()).identities["api"].BuildID(); got == "" {
+			t.Error("build id is empty; an app with no artifact must still deploy")
 		}
 	})
 }

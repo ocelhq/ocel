@@ -155,6 +155,23 @@ func TestUploadEdgeBundles(t *testing.T) {
 		}
 	})
 
+	t.Run("a build with no edge bundle uploads nothing", func(t *testing.T) {
+		t.Parallel()
+		store := &fakeUploader{exists: map[string]bool{}}
+		cfg := Config{
+			ArtifactRoot: nodeAppTree(t), AssetBucket: "assets", Env: "prod",
+			Uploader:         &fakeUploader{exists: map[string]bool{}},
+			CacheStoreBucket: "isr", CacheStoreUploader: store,
+		}
+
+		if err := uploadEdgeBundles(context.Background(), cfg, nodeManifest(), appBuildsFor(t, cfg, nodeManifest())); err != nil {
+			t.Fatalf("uploadEdgeBundles: %v", err)
+		}
+		if len(store.puts) != 0 {
+			t.Errorf("store received %v, want nothing from a build that emitted no bundle", store.puts)
+		}
+	})
+
 	t.Run("unadopted store uploads nothing", func(t *testing.T) {
 		t.Parallel()
 		asset := &fakeUploader{exists: map[string]bool{}}
