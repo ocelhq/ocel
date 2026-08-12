@@ -31,6 +31,7 @@ type ClassParams struct {
 	ISRWriter        ISRWriter
 	ISRWriterSeed    string
 	RootStackState   edge.RootStackState
+	PreviewDomain    PreviewDomain
 }
 
 func ReadClassParams(ctx context.Context, api SSMBatchAPI, class, slug string) (ClassParams, error) {
@@ -44,7 +45,7 @@ func ReadClassParams(ctx context.Context, api SSMBatchAPI, class, slug string) (
 	}
 	rootStackParam := rootStackStateParamName(prefix, slug)
 
-	found, err := getParameters(ctx, api, []string{
+	wanted := []string{
 		PassphraseParamName,
 		names.credentialsParam,
 		names.valuesParam,
@@ -53,7 +54,12 @@ func ReadClassParams(ctx context.Context, api SSMBatchAPI, class, slug string) (
 		names.isrWriterParam,
 		names.isrWriterSeedParam,
 		rootStackParam,
-	})
+	}
+	if class == ClassPreview {
+		wanted = append(wanted, PreviewDomainParamName)
+	}
+
+	found, err := getParameters(ctx, api, wanted)
 	if err != nil {
 		return ClassParams{}, err
 	}
@@ -98,6 +104,11 @@ func ReadClassParams(ctx context.Context, api SSMBatchAPI, class, slug string) (
 		}
 	}
 	p.ISRWriterSeed = found[names.isrWriterSeedParam]
+	if raw, ok := found[PreviewDomainParamName]; ok {
+		if err := json.Unmarshal([]byte(raw), &p.PreviewDomain); err != nil {
+			return ClassParams{}, fmt.Errorf("parse preview domain: %w", err)
+		}
+	}
 	if raw, ok := found[rootStackParam]; ok {
 		if err := json.Unmarshal([]byte(raw), &p.RootStackState); err != nil {
 			return ClassParams{}, fmt.Errorf("parse root-stack state: %w", err)

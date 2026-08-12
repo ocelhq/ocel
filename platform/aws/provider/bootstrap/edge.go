@@ -31,7 +31,82 @@ const (
 
 	ISRWriterSeedParamName        = "/ocel/edge/isr-writer-seed"
 	ISRWriterSeedPreviewParamName = "/ocel/edge/isr-writer-seed-preview"
+
+	PreviewDomainParamName = "/ocel/edge/preview-domain"
 )
+
+type PreviewDomain struct {
+	BaseDomain        string `json:"baseDomain"`
+	CloudflareAccount string `json:"cloudflareAccount"`
+	GrammarMin        uint32 `json:"grammarMin"`
+	GrammarMax        uint32 `json:"grammarMax"`
+}
+
+func previewDomainParamFor(class string) (string, error) {
+	if class != ClassPreview {
+		return "", fmt.Errorf("preview domain: only the %s substrate class has one, not %q", ClassPreview, class)
+	}
+	return PreviewDomainParamName, nil
+}
+
+func WritePreviewDomain(ctx context.Context, ssmClient SSMAPI, class string, domain PreviewDomain) error {
+	paramName, err := previewDomainParamFor(class)
+	if err != nil {
+		return err
+	}
+	payload, err := json.Marshal(domain)
+	if err != nil {
+		return fmt.Errorf("marshal preview domain: %w", err)
+	}
+	if _, err := ssmClient.PutParameter(ctx, &ssm.PutParameterInput{
+		Name:        aws.String(paramName),
+		Description: aws.String("Ocel: the domain every project without a preview domain of its own serves its previews on, and the Cloudflare account the shared entry worker holding its wildcard lives in. Written by `ocel domain use --preview` and read on every preview deploy. Delete it and those projects lose their preview hostnames until the domain is used again."),
+		Value:       aws.String(string(payload)),
+		Type:        ssmtypes.ParameterTypeSecureString,
+		Overwrite:   aws.Bool(true),
+	}); err != nil {
+		return fmt.Errorf("write preview domain parameter: %w", err)
+	}
+	return nil
+}
+
+func ReadPreviewDomain(ctx context.Context, ssmClient SSMAPI, class string) (PreviewDomain, error) {
+	paramName, err := previewDomainParamFor(class)
+	if err != nil {
+		return PreviewDomain{}, err
+	}
+	out, err := ssmClient.GetParameter(ctx, &ssm.GetParameterInput{
+		Name:           aws.String(paramName),
+		WithDecryption: aws.Bool(true),
+	})
+	if err != nil {
+		var notFound *ssmtypes.ParameterNotFound
+		if errors.As(err, &notFound) {
+			return PreviewDomain{}, nil
+		}
+		return PreviewDomain{}, fmt.Errorf("read preview domain parameter: %w", err)
+	}
+	var domain PreviewDomain
+	if err := json.Unmarshal([]byte(aws.ToString(out.Parameter.Value)), &domain); err != nil {
+		return PreviewDomain{}, fmt.Errorf("parse preview domain: %w", err)
+	}
+	return domain, nil
+}
+
+func DeletePreviewDomain(ctx context.Context, ssmClient SSMAPI, class string) error {
+	paramName, err := previewDomainParamFor(class)
+	if err != nil {
+		return err
+	}
+	if _, err := ssmClient.DeleteParameter(ctx, &ssm.DeleteParameterInput{Name: aws.String(paramName)}); err != nil {
+		var notFound *ssmtypes.ParameterNotFound
+		if errors.As(err, &notFound) {
+			return nil
+		}
+		return fmt.Errorf("delete preview domain parameter: %w", err)
+	}
+	return nil
+}
 
 type IAMAPI interface {
 	ListAccessKeys(ctx context.Context, in *iam.ListAccessKeysInput, optFns ...func(*iam.Options)) (*iam.ListAccessKeysOutput, error)
