@@ -376,4 +376,39 @@ describe("service-binding read path", () => {
       kind: "no-pointer",
     });
   });
+
+  it("resolves the app from the promotion when the caller omits it", async () => {
+    const store = env.DEPLOYMENTS_DO.get(env.DEPLOYMENTS_DO.idFromName(SLUG));
+    await store.putStaged(makeRecord());
+    await store.promote({ promotionId: "promo-1", ts: 1_000, builds: { web: "build-1" } });
+
+    const entry = new (await import("../src/index")).default(
+      createExecutionContext(),
+      env,
+    );
+    expect(await entry.pointerRecord({ slug: SLUG })).toEqual({
+      kind: "record",
+      buildId: "build-1",
+      record: makeRecord(),
+    });
+  });
+
+  it("reports an ambiguous app when the promotion carries several", async () => {
+    const store = env.DEPLOYMENTS_DO.get(env.DEPLOYMENTS_DO.idFromName(SLUG));
+    await store.putStaged(makeRecord());
+    await store.putStaged(makeRecord({ app: "admin", buildId: "build-9" }));
+    await store.promote({
+      promotionId: "promo-1",
+      ts: 1_000,
+      builds: { web: "build-1", admin: "build-9" },
+    });
+
+    const entry = new (await import("../src/index")).default(
+      createExecutionContext(),
+      env,
+    );
+    expect(await entry.pointerRecord({ slug: SLUG })).toEqual({
+      kind: "ambiguous-app",
+    });
+  });
 });

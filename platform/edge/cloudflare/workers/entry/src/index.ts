@@ -58,7 +58,12 @@ import {
 } from "./deployments";
 export { CacheEntrypoint } from "./cache-entrypoint";
 import type { CacheEntrypointProps, IsrWriterBinding } from "./cache-entrypoint";
-import { normalizeBaseDomain, previewApps, previewTarget } from "./preview";
+import {
+  globalPreviewTarget,
+  normalizeBaseDomain,
+  previewApps,
+  previewTarget,
+} from "./preview";
 import { edgeOriginFetch } from "./signing";
 import { retryTransientOrigin } from "./retry";
 import type { ObjectStoreReader } from "./tag-clock";
@@ -115,6 +120,7 @@ export interface Env {
   OCEL_SLUG: string;
   OCEL_APP?: string;
   OCEL_PREVIEW?: string;
+  OCEL_PREVIEW_GLOBAL?: string;
   OCEL_PREVIEW_BASE_DOMAIN?: string;
   OCEL_PREVIEW_APPS?: string;
   OCEL_CACHE_STORE?: R2Bucket;
@@ -306,7 +312,7 @@ function nextRouteDeps(
   return {
     ...rest,
     slug: deployments.slug,
-    app: deployments.app,
+    app: deployments.app ?? record.app,
     edge:
       edgeRuntime && edgeWorkers
         ? createEdgeInvoker(
@@ -1290,15 +1296,25 @@ export default {
       env.OCEL_EDGE_SECRET_KEY,
     );
 
+    const host = new URL(request.url).host;
+    const global = env.OCEL_PREVIEW === "1" && env.OCEL_PREVIEW_GLOBAL === "1";
+
     let pointer: string | undefined;
     let app = env.OCEL_APP;
+    let slug = env.OCEL_SLUG;
     const baseDomain =
       env.OCEL_PREVIEW === "1"
         ? normalizeBaseDomain(env.OCEL_PREVIEW_BASE_DOMAIN)
         : "";
-    if (baseDomain) {
+    if (global) {
+      const target = globalPreviewTarget(host, baseDomain);
+      if (target === null) return deploymentNotFoundResponse();
+      slug = target.slug;
+      pointer = target.pointer;
+      app = target.app;
+    } else if (baseDomain) {
       const target = previewTarget(
-        new URL(request.url).host,
+        host,
         baseDomain,
         previewApps(env.OCEL_PREVIEW_APPS),
       );
@@ -1306,10 +1322,10 @@ export default {
       pointer = target.pointer;
       app = target.app;
     }
-    if (!app) return deploymentNotFoundResponse();
+    if (!app && !global) return deploymentNotFoundResponse();
 
     const deps = await resolveRouteDeps(
-      { binding: env.DEPLOYMENTS, slug: env.OCEL_SLUG, app, pointer },
+      { binding: env.DEPLOYMENTS, slug, host, app, pointer },
       {
         fetch,
         originFetch,

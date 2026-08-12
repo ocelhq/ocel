@@ -208,6 +208,62 @@ describe("pointerRecord", () => {
       buildId: "ghost-build",
     });
   });
+
+  it("resolves the promotion's sole app when no app is given", async () => {
+    const store = storeStub();
+    await store.putStaged(makeRecord());
+    await store.promote(makePromotion());
+
+    expect(await store.pointerRecord(undefined)).toEqual({
+      kind: "record",
+      buildId: "build-1",
+      record: makeRecord(),
+    });
+    expect(await store.pointerRecord(undefined, undefined, "build-1")).toEqual({
+      kind: "unchanged",
+      buildId: "build-1",
+    });
+  });
+
+  it("returns ambiguous-app when the promotion carries more than one app", async () => {
+    const store = storeStub();
+    await store.putStaged(makeRecord());
+    await store.putStaged(makeRecord({ app: "admin", buildId: "build-9" }));
+    await store.promote(
+      makePromotion({ builds: { web: "build-1", admin: "build-9" } }),
+    );
+
+    expect(await store.pointerRecord(undefined)).toEqual({
+      kind: "ambiguous-app",
+    });
+    expect(await store.pointerRecord("admin")).toEqual({
+      kind: "record",
+      buildId: "build-9",
+      record: makeRecord({ app: "admin", buildId: "build-9" }),
+    });
+  });
+
+  it("returns no-pointer without an app when the pointer has no promotion", async () => {
+    const store = storeStub();
+    expect(await store.pointerRecord(undefined, "flaky-web-2626")).toEqual({
+      kind: "no-pointer",
+    });
+  });
+
+  it("resolves the sole app of a named pointer", async () => {
+    const store = storeStub();
+    await store.putStaged(makeRecord({ buildId: "preview-1" }));
+    await store.promote(
+      makePromotion({ promotionId: "promo-p", builds: { web: "preview-1" } }),
+      "flaky-web-2626",
+    );
+
+    expect(await store.pointerRecord(undefined, "flaky-web-2626")).toEqual({
+      kind: "record",
+      buildId: "preview-1",
+      record: makeRecord({ buildId: "preview-1" }),
+    });
+  });
 });
 
 describe("history", () => {
