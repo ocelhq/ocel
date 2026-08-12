@@ -936,24 +936,7 @@
     "runtimeError": false
   },
   "test/e2e/middleware-matcher/index.test.ts": {
-    "failed": [
-      "Middleware can set the matcher in its config does add the header for root request",
-      "Middleware can set the matcher in its config should navigate correctly with matchers",
-      "using a single matcher with i18n for a non-root route adds the header for matched paths",
-      "using a single matcher with i18n for a non-root route adds the header for matched data paths, including the default locale without a prefix",
-      "using a single matcher with i18n for a non-root route and trailingSlash adds the header for matched paths",
-      "using a single matcher with i18n for a non-root route and trailingSlash adds the header for matched data paths, including the default locale without a prefix",
-      "using root matcher adds the header for a matched data path (with header)",
-      "using root matcher adds the header for a matched data path (without header)",
-      "using a single matcher with i18n adds the header for a matched path",
-      "using a single matcher with i18n adds the headers for a matched data path",
-      "using a single matcher with i18n and trailingSlash adds the header for a matched path",
-      "using a single matcher with i18n and trailingSlash adds the header for a mathed root path with /index",
-      "using a single matcher with i18n and trailingSlash does not add the header for an unmatched path",
-      "using a single matcher with i18n and basePath adds the header for a matched path",
-      "using a single matcher with i18n and basePath and trailingSlash adds the header for a matched path",
-      "using a single matcher with i18n and basePath and trailingSlash adds the header for a mathed root path with /index"
-    ],
+    "failed": [],
     "flakey": [],
     "runtimeError": false
   },
