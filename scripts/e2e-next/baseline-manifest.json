@@ -1042,10 +1042,7 @@
     "runtimeError": false
   },
   "test/e2e/middleware-redirects/test/index.test.ts": {
-    "failed": [
-      "Middleware Redirect should implement internal redirects",
-      "Middleware Redirect /fr should implement internal redirects"
-    ],
+    "failed": [],
     "flakey": [],
     "runtimeError": false
   },
