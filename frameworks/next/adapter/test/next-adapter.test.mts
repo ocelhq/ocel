@@ -1404,6 +1404,66 @@ test("regroups a route's prerender outputs into one cache entry", async () => {
   expect(typeof entry.lastModified).toBe("number");
 });
 
+test("carries a pages route's data twin onto its cache entry", async () => {
+  const { projectDir, args } = await synthPrerenderProject();
+  const pagesDir = join(projectDir, ".next/server/pages");
+  await mkdir(pagesDir, { recursive: true });
+  const handler = join(pagesDir, "blog.js");
+  await writeFile(handler, "module.exports = () => {}");
+  await writeFile(join(pagesDir, "blog.html"), "<html>blog</html>");
+  await writeFile(
+    join(pagesDir, "blog.json"),
+    JSON.stringify({ pageProps: { title: "blog" } }),
+  );
+
+  args.outputs.pages.push({
+    pathname: "/blog",
+    id: "/blog",
+    assets: {},
+    runtime: "nodejs",
+    filePath: handler,
+    config: {},
+    type: "PAGES",
+  } as never);
+  args.outputs.prerenders.push(
+    {
+      pathname: "/blog",
+      id: "/blog",
+      type: "PRERENDER",
+      parentOutputId: "/blog",
+      groupId: 2,
+      fallback: {
+        filePath: join(pagesDir, "blog.html"),
+        initialRevalidate: false,
+        initialHeaders: { "content-type": "text/html; charset=utf-8" },
+      },
+      config: { allowQuery: [] },
+    } as never,
+    {
+      pathname: "/_next/data/test-build/blog.json",
+      id: "/_next/data/test-build/blog.json",
+      type: "PRERENDER",
+      parentOutputId: "/blog",
+      groupId: 2,
+      fallback: {
+        filePath: join(pagesDir, "blog.json"),
+        initialRevalidate: false,
+        initialHeaders: { "content-type": "application/json" },
+      },
+      config: { allowQuery: [] },
+    } as never,
+  );
+
+  const adapter = await loadAdapterIn(projectDir);
+  await adapter.onBuildComplete(args as never);
+
+  const entry = await readCacheEntry(projectDir, "blog");
+
+  expect(entry.value.kind).toBe("PAGES");
+  expect(entry.value.html).toBe("<html>blog</html>");
+  expect(entry.value.pageData).toEqual({ pageProps: { title: "blog" } });
+});
+
 test("carries the html variant's headers and status onto an APP_PAGE entry", async () => {
   const { projectDir, args } = await synthPrerenderProject();
   args.outputs.prerenders[0].fallback.initialHeaders = {

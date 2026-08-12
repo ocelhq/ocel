@@ -794,8 +794,11 @@ interface PrerenderGroup {
   entryKey: string;
   html: any;
   rsc: any;
+  data: any;
   segments: any[];
 }
+
+const NEXT_DATA_PRERENDER = /\/_next\/data\/[^/]+\/.*\.json$/;
 
 function groupPrerenders(prerenders: readonly any[]): PrerenderGroup[] {
   const byGroup = new Map<number, any[]>();
@@ -809,12 +812,15 @@ function groupPrerenders(prerenders: readonly any[]): PrerenderGroup[] {
   for (const members of byGroup.values()) {
     const segments = members.filter((m) => segmentPath(m.pathname) !== null);
     const pages = members.filter((m) => segmentPath(m.pathname) === null);
-    const html = pages.find((m) => !m.pathname.endsWith(".rsc"));
+    const html = pages.find(
+      (m) => !m.pathname.endsWith(".rsc") && !NEXT_DATA_PRERENDER.test(m.pathname),
+    );
     if (!html) continue;
     groups.push({
       entryKey: cacheKey(html.pathname),
       html,
       rsc: pages.find((m) => m.pathname.endsWith(".rsc")),
+      data: pages.find((m) => NEXT_DATA_PRERENDER.test(m.pathname)),
       segments,
     });
   }
@@ -853,7 +859,7 @@ async function emitCacheEntries(
 
   await Promise.all(
     groups.map(async (group) => {
-      const { entryKey, html, rsc, segments } = group;
+      const { entryKey, html, rsc, data, segments } = group;
       const body = await readMaybe(html.fallback?.filePath);
       if (!body) return;
 
@@ -872,6 +878,8 @@ async function emitCacheEntries(
         value.html = body.toString("utf8");
         const rscBody = await readMaybe(rsc?.fallback?.filePath);
         if (rscBody) value.rscData = rscBody.toString("base64");
+        const dataBody = await readMaybe(data?.fallback?.filePath);
+        if (dataBody) value.pageData = JSON.parse(dataBody.toString("utf8"));
         Object.assign(value, variantHeadersOf(group));
 
         const segmentData: Record<string, string> = {};
