@@ -569,6 +569,98 @@ describe("dispatchResult", () => {
     expect(captured?.headers.get("next-router-state-tree")).toBe("%5B%22%22%5D");
   });
 
+  it("forwards the client's cookie to an uncacheable prerender origin", async () => {
+    let captured: Request | undefined;
+    const deps = baseDeps({
+      manifest: {
+        buildId: "t",
+        basePath: "",
+        pathnames: [],
+        routes: {},
+        dispatch: {
+          "/blog": {
+            kind: "prerender",
+            id: "/blog",
+            config: { allowHeader: ["host"] },
+          },
+        },
+      },
+      functionUrls: { "/blog": "https://fn.example.com" },
+      fetch: (async (req: Request) => {
+        captured = req;
+        return new Response("rendered", {
+          status: 200,
+          headers: { "cache-control": "s-maxage=60" },
+        });
+      }) as unknown as typeof fetch,
+      cache: missingCache(),
+      interception: {
+        config: { isrPrefix: "prod/p/app/build" },
+        now: () => 2_000,
+        store: { async get() { return null; } },
+      },
+    });
+
+    const res = await dispatchResult(
+      { resolvedPathname: "/blog", invocationTarget: { pathname: "/blog" } },
+      new Request("https://app.example/blog", {
+        headers: {
+          rsc: "1",
+          "next-router-prefetch": "2",
+          cookie: "testCookie=initialValue",
+        },
+      }),
+      deps,
+    );
+
+    expect(res.headers.get("x-ocel-cache")).toBe("MISS");
+    expect(captured?.headers.get("cookie")).toBe("testCookie=initialValue");
+    expect(captured?.headers.get("purpose")).toBe("prefetch");
+  });
+
+  it("still strips the cookie from a cacheable prerender origin", async () => {
+    let captured: Request | undefined;
+    const deps = baseDeps({
+      manifest: {
+        buildId: "t",
+        basePath: "",
+        pathnames: [],
+        routes: {},
+        dispatch: {
+          "/blog": {
+            kind: "prerender",
+            id: "/blog",
+            config: { allowHeader: ["host"] },
+          },
+        },
+      },
+      functionUrls: { "/blog": "https://fn.example.com" },
+      fetch: (async (req: Request) => {
+        captured = req;
+        return new Response("rendered", {
+          status: 200,
+          headers: { "cache-control": "s-maxage=60" },
+        });
+      }) as unknown as typeof fetch,
+      cache: missingCache(),
+    });
+
+    const res = await dispatchResult(
+      { resolvedPathname: "/blog", invocationTarget: { pathname: "/blog" } },
+      new Request("https://app.example/blog", {
+        headers: {
+          rsc: "1",
+          "next-router-prefetch": "1",
+          cookie: "testCookie=initialValue",
+        },
+      }),
+      deps,
+    );
+
+    expect(res.headers.get("x-ocel-cache")).toBe("MISS");
+    expect(captured?.headers.get("cookie")).toBeNull();
+  });
+
   const interceptionConfig = { isrPrefix: "prod/p/app/build" };
 
   function storeOf(entries: Record<string, unknown>) {

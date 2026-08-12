@@ -1001,7 +1001,14 @@ async function dispatchPrerender(
   }
 
   if (!keyResult.cacheable) {
-    return withStatus(await origin(), "MISS");
+    const uncacheableHeaders = new Headers(headers);
+    if (SUPPRESS_SELF_REVALIDATION && admissionTier) {
+      uncacheableHeaders.set(PREFETCH_PURPOSE, "prefetch");
+    }
+    const response = await render(
+      forward(forwardUrl, request, uncacheableHeaders),
+    );
+    return withStatus(response, "MISS");
   }
 
   return serveCached(
