@@ -35,6 +35,13 @@ func (s *Server) Preflight(ctx context.Context, req *deploymentsv1.PreflightRequ
 		return nil, err
 	}
 
+	previewClass := req.GetRequiredClass() == deploymentsv1.Environment_CLASS_PREVIEW
+	if previewClass {
+		if err := deploy.PreviewLabelProblem(req.GetSlug(), req.GetDomains()); err != nil {
+			return nil, connect.NewError(connect.CodeInvalidArgument, err)
+		}
+	}
+
 	resp := &deploymentsv1.PreflightResponse{Identity: &deploymentsv1.Identity{}}
 
 	awsOK := true
@@ -79,6 +86,20 @@ func (s *Server) Preflight(ctx context.Context, req *deploymentsv1.PreflightRequ
 
 		if req.GetRequiredClass() == deploymentsv1.Environment_CLASS_PRODUCTION {
 			resp.KnownSlugs = knownSlugs(ctx, awscfg, production, req.GetSlug())
+		}
+
+		if previewClass && preview.Present {
+			recorded, err := bootstrap.ReadPreviewDomain(ctx, ssm.NewFromConfig(awscfg), bootstrap.ClassPreview)
+			if err != nil {
+				return nil, err
+			}
+			if err := globalPreviewAccountMismatch(recorded); err != nil {
+				return nil, connect.NewError(connect.CodeFailedPrecondition, err)
+			}
+			resp.GlobalPreviewDomain = globalPreviewDomain(ctx, s.edgeRouteOwner(), recorded)
+			if recorded.BaseDomain != "" {
+				resp.KnownSlugs = knownSlugs(ctx, awscfg, preview, req.GetSlug())
+			}
 		}
 	}
 
