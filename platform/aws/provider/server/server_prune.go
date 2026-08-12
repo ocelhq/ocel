@@ -44,6 +44,10 @@ func (s *Server) runPrune(ctx context.Context, req *deploymentsv1.PruneRequest, 
 	}
 
 	if env := req.GetEnvironment(); env.GetClass() == deploymentsv1.Environment_CLASS_PREVIEW {
+		pointer, err := deploy.EnvName(env)
+		if err != nil {
+			return edge.PruneResult{}, connect.NewError(connect.CodeInvalidArgument, err)
+		}
 		cfg, stack, state, err := s.previewTeardownContext(ctx, opts, req.GetSlug(), env)
 		if err != nil {
 			return edge.PruneResult{}, err
@@ -51,7 +55,7 @@ func (s *Server) runPrune(ctx context.Context, req *deploymentsv1.PruneRequest, 
 		if len(state) == 0 {
 			return edge.PruneResult{}, nil
 		}
-		return deploy.Prune(ctx, stack, state, cfg, req.GetSlug(), int(req.GetKeepN()), env.GetIdentity(), progress, logf)
+		return deploy.Prune(ctx, stack, state, cfg, req.GetSlug(), int(req.GetKeepN()), pointer, progress, logf)
 	}
 
 	awscfg, params, err := productionTeardownParams(ctx, opts, req.GetSlug())
