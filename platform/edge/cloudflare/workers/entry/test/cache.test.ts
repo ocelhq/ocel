@@ -354,6 +354,30 @@ describe("serveCached", () => {
     expect(joiner!.headers.get("x-ocel-cache")).toBe("HIT");
   });
 
+  it("answers a joiner whose leader's store never settles", async () => {
+    const clock = { ms: 0 };
+    const stalled = {
+      match: async () => undefined,
+      put: () => new Promise<void>(() => {}),
+      delete: async () => false,
+    } as unknown as Cache;
+    const deps = { ...testDeps(clock, stalled), joinFillTimeoutMs: 50 };
+    const t = target("stalled-store", { refreshKey: "build:/stalled-store" });
+    const origin = countingOrigin("s-maxage=60");
+
+    const leader = await serveCached(req(), t, deps, origin, origin);
+    expect(leader.headers.get("x-ocel-cache")).toBe("MISS");
+
+    const joiner = await Promise.race([
+      serveCached(req(), t, deps, origin, origin),
+      new Promise<"stranded">((resolve) =>
+        setTimeout(() => resolve("stranded"), 1_000),
+      ),
+    ]);
+
+    expect(joiner).not.toBe("stranded");
+  });
+
   it("misses, stores, then serves the second GET from cache without a re-fetch", async () => {
     const clock = { ms: 0 };
     const deps = testDeps(clock);

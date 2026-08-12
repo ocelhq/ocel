@@ -27,6 +27,7 @@ export interface CacheDeps {
   admissionDelay?: (staleForMs: number) => Promise<void>;
   satisfiedFromBelow?: (refreshing: number) => Promise<boolean>;
   enqueueRevalidation?: RevalidationSender;
+  joinFillTimeoutMs?: number;
 }
 
 export interface CacheTarget {
@@ -344,6 +345,24 @@ function inFlightFill(
   return inFlight.get(deps.cache)?.get(key);
 }
 
+export const joinFillTimeoutMs = 2_000;
+
+function settledWithin(promise: Promise<unknown>, ms: number): Promise<boolean> {
+  return new Promise((resolve) => {
+    const timer = setTimeout(() => resolve(false), ms);
+    promise.then(
+      () => {
+        clearTimeout(timer);
+        resolve(true);
+      },
+      () => {
+        clearTimeout(timer);
+        resolve(true);
+      },
+    );
+  });
+}
+
 export const refreshSentinelTtlSeconds = 5;
 
 export const admissionJitterMs = 1_000;
@@ -501,9 +520,14 @@ async function colo(
 
   const filling = inFlightFill(deps, target.key);
   if (filling) {
-    await filling;
-    const joined = await serveOrRefresh();
-    if (joined) return joined;
+    const settled = await settledWithin(
+      filling,
+      deps.joinFillTimeoutMs ?? joinFillTimeoutMs,
+    );
+    if (settled) {
+      const joined = await serveOrRefresh();
+      if (joined) return joined;
+    }
   }
 
   const pending = origin();
