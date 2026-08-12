@@ -270,12 +270,9 @@
     "runtimeError": false
   },
   "test/e2e/app-dir/metadata/metadata.test.ts": {
-    "failed": [
-      "app dir - metadata basic should support other basic tags",
-      "app dir - metadata basic should support other basic tags (edge)"
-    ],
+    "failed": [],
     "flakey": [],
-    "runtimeError": false
+    "runtimeError": true
   },
   "test/e2e/app-dir/navigation-layout-suspense/navigation-layout-suspense.test.ts": {
     "failed": [
