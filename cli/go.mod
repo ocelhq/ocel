@@ -32,6 +32,7 @@ require (
 	github.com/ocelhq/ocel/pkg/channel v0.0.0-00010101000000-000000000000
 	github.com/ocelhq/ocel/pkg/naming v0.0.0-00010101000000-000000000000
 	github.com/ocelhq/ocel/pkg/proto v0.0.0-00010101000000-000000000000
+	github.com/ocelhq/ocel/platform/edge/contract v0.0.0-00010101000000-000000000000
 	github.com/pelletier/go-toml v1.9.5 // indirect
 	github.com/pelletier/go-toml/v2 v2.2.4 // indirect
 	github.com/spf13/afero v1.14.0 // indirect
@@ -54,3 +55,5 @@ replace github.com/ocelhq/ocel/pkg/channel => ../pkg/channel
 replace github.com/ocelhq/ocel/pkg/proto => ../pkg/proto
 
 replace github.com/ocelhq/ocel/pkg/naming => ../pkg/naming
+
+replace github.com/ocelhq/ocel/platform/edge/contract => ../platform/edge/contract
