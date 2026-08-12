@@ -26,7 +26,7 @@ export function destroyProject(slug) {
   const dir = mkdtempSync(join(tmpdir(), `ocel-e2e-teardown-${slug}-`));
   writeFileSync(
     join(dir, "ocel.config.ts"),
-    renderOcelConfig({ slug, previewDomain: process.env.OCEL_E2E_PREVIEW_DOMAIN || "" }),
+    renderOcelConfig({ slug }),
   );
   linkSidecar(dir, sidecarDir);
 
@@ -46,9 +46,10 @@ export function destroyProject(slug) {
     const why = res.error?.message ?? (res.signal ? `killed with ${res.signal}` : `exited with ${res.status}`);
     console.error(
       `[ocel-e2e] PROJECT TEARDOWN FAILED for ${slug}: ${why}\n` +
-        `[ocel-e2e] it still holds the preview domain's wildcard route, which is an ` +
-        `account-wide claim: until it is reclaimed no other project can deploy previews ` +
-        `onto that domain. Retry with \`node scripts/e2e-next/project-teardown.mjs ${slug}\`.`,
+        `[ocel-e2e] its preview footprint is still billing — store instance, staged ` +
+        `deployments and assets — and the slug stays taken. Other projects keep deploying ` +
+        `onto the substrate's preview domain regardless. Retry with ` +
+        `\`node scripts/e2e-next/project-teardown.mjs ${slug}\`.`,
     );
     return false;
   }

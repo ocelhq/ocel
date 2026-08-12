@@ -69,5 +69,5 @@ function ensureConfig(slug) {
     return;
   }
   console.error(`[ocel-e2e] no ocel.config.ts; re-rendering it for project ${slug}`);
-  writeFileSync(path, renderOcelConfig({ slug, previewDomain: process.env.OCEL_E2E_PREVIEW_DOMAIN || "" }));
+  writeFileSync(path, renderOcelConfig({ slug }));
 }

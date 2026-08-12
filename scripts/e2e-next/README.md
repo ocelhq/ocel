@@ -18,19 +18,21 @@ Use a **disposable AWS account and Cloudflare account** that hold nothing else.
 No project is created by hand — each run mints its own — but the zone must be
 prepared:
 
-1. Pick a **Cloudflare zone** and give the previews their wildcard hostname: the
-   `E2E_OCEL_PREVIEW_DOMAIN` value itself, e.g. `*.ocel.site`. Keep it a
-   **single** wildcard level — Cloudflare universal SSL does not cover a nested
-   one, so `*.<run id>.ocel.site` is not an option. The first preview deploy
-   plants a proxied placeholder record and binds the entrypoint worker; a record
-   you made yourself is left alone but must be **proxied (orange cloud)**, since
-   an unproxied hostname never reaches a worker.
-2. Provision the preview substrate once — it is account-global, not per-project.
-   From a scratch directory holding an `ocel.config.ts` that declares the AWS
-   provider:
+1. Pick a **Cloudflare zone** and give the previews their wildcard hostname,
+   e.g. `*.ocel.site`. Keep it a **single** wildcard level — Cloudflare universal
+   SSL does not cover a nested one, so `*.<run id>.ocel.site` is not an option.
+   `ocel domain use` plants a proxied placeholder record and binds the shared
+   entry worker; a record you made yourself is left alone but must be **proxied
+   (orange cloud)**, since an unproxied hostname never reaches a worker.
+2. Provision the preview substrate once and give it the wildcard — both are
+   account-global, not per-project. From a scratch directory holding an
+   `ocel.config.ts` that declares the AWS provider:
    ```bash
    ocel bootstrap --preview
+   ocel domain use '*.ocel.site' --preview
    ```
+   No project declares a preview domain of its own; every run's previews serve
+   on this one, at `<slug>--<ref>.ocel.site`.
 3. Create the **AWS role the workflow assumes** — no access key is stored. It
    needs a GitHub OIDC trust policy (provider
    `token.actions.githubusercontent.com`, audience `sts.amazonaws.com`, subject
@@ -57,7 +59,6 @@ prepared:
 | name                      | what                                                      |
 | ------------------------- | --------------------------------------------------------- |
 | `E2E_OCEL_API_URL`        | Ocel API base URL                                          |
-| `E2E_OCEL_PREVIEW_DOMAIN` | the wildcard from step 1, e.g. `*.e2e.example.com`         |
 | `E2E_AWS_REGION`          | region to deploy into                                      |
 | `TURBO_TEAM`              | Vercel team slug for the remote cache (optional)           |
 
@@ -150,9 +151,11 @@ node scripts/build-native.mjs --host --target cli
 
 A cancelled or timed-out runner strands whatever that job deployed — cleanup and
 the `destroy` job both need a live runner. The next run's `sweep` job reclaims
-it, so nothing accumulates, but until then the stranded project holds the
-preview domain's wildcard route, which is an **account-wide** claim. Two runs
-therefore cannot share the account.
+it, so nothing accumulates, but until then its store instance, staged
+deployments and assets keep billing, and its slug stays taken.
+
+The wildcard itself is held by the shared entry worker, not by any project, so a
+stranded run no longer blocks another from deploying previews.
 
 ```bash
 ADAPTER_DIR=… OCEL_E2E_SIDECAR_DIR=… \

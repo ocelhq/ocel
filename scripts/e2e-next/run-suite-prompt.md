@@ -27,9 +27,10 @@ If the Next.js repo is not in your context, stop and tell the user to run
   both must run from the app's own directory.
 - Set `GITHUB_RUN_ID` to a short greppable token so stranded projects are
   attributable. The run id is truncated to 46 chars inside the slug.
-- The project owns the preview domain wildcard, which is an **account-wide**
-  claim. **Do not run locally while a CI run is live** — they cannot share the
-  account.
+- Previews serve on the substrate's preview domain, which the shared entry
+  worker holds — no project claims it. Runs are separated by slug, so a local
+  run and a CI run no longer collide over the wildcard, though they still share
+  the substrate's store, cache bucket and Cloudflare limits.
 - **The harness deletes the temp app dir when a suite finishes**
   (`rmSync` in `test/lib/next-modes/base.ts`, guarded only by
   `NEXT_TEST_SKIP_CLEANUP`). There is nothing left to redeploy in place.
@@ -47,10 +48,13 @@ Hard-stop on any of these; a bad preflight makes the result meaningless.
    *your* env, not the user's shell.
 2. **Disposable accounts.** `guard-accounts.sh` is a hard gate and exists
    because this provisions real infrastructure. Do not proceed on assumption.
-3. **Proxied wildcard DNS.** The `OCEL_E2E_PREVIEW_DOMAIN` value must exist as a
+3. **Proxied wildcard DNS.** The substrate's preview wildcard must exist as a
    Cloudflare record on that zone and be **orange-clouded**. Deploys only verify
-   it; a missing or grey record fails every deploy.
-4. **`ocel bootstrap --preview` has been run** once on the account.
+   it; a missing or grey record fails every deploy. Check with
+   `ocel domain ls --preview`.
+4. **`ocel bootstrap --preview` and `ocel domain use '<wildcard>' --preview`
+   have been run** once on the account. Without the domain, a preview deploy has
+   nowhere to serve: no project declares one of its own.
 5. **The sidecar carries `ocel`:**
    ```bash
    test -d /home/vndaba/Dev/ocelhq-work/sidecar/node_modules/ocel \
@@ -82,7 +86,6 @@ ADAPTER_DIR="/home/vndaba/Dev/ocelhq" \
 GITHUB_RUN_ID="<RUN_ID>" \
 OCEL_ACCESS_TOKEN=thisdoesntmatter \
 OCEL_API_URL=https://ocel.app \
-OCEL_E2E_PREVIEW_DOMAIN="*.ocel.site" \
 OCEL_E2E_SIDECAR_DIR="/home/vndaba/Dev/ocelhq-work/sidecar" \
 OCEL_E2E_DEPLOY_TIMEOUT_MS=540000 \
 HEADLESS=true \
