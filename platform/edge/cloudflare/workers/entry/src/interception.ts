@@ -79,7 +79,7 @@ export async function intercept(
       (e) => e ?? readFallbackShell(cfg, deps, target),
     );
     const primeP = target.tags?.length ? clock.prime(now) : undefined;
-    void primeP?.catch(() => {});
+    if (primeP) deps.waitUntil?.(primeP.catch(() => {}) as Promise<unknown>);
 
     const entry = await entryP;
     if (!entry) return null;

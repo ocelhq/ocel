@@ -8,6 +8,7 @@ import {
   type InterceptionConfig,
   type InterceptTarget,
 } from "../src/interception";
+import { createTagClock } from "../src/tag-clock";
 
 const cfg: InterceptionConfig = { isrPrefix: "prod/proj/app/build" };
 
@@ -915,6 +916,77 @@ describe("intercept, entry-modified + parallel reads", () => {
     await result;
 
     expect(store.gets.filter((k) => k === snapshotKey).length).toBe(1);
+  });
+});
+
+describe("priming the tag clock past the response", () => {
+  it("hands the prime to waitUntil when the target declares tags", async () => {
+    const store = stored({
+      [entryKey("/blog")]: appPage({ tags: "products", lastModified: 1_000 }),
+      [snapshotKey]: snapshot(),
+    });
+    const pending: Promise<unknown>[] = [];
+    await served(req(), target({ tags: ["products"] }), cfg, {
+      ...storeDeps(store),
+      now: () => 2_000,
+      waitUntil: (p) => pending.push(p),
+    });
+
+    expect(pending).toHaveLength(1);
+    await expect(pending[0]).resolves.not.toThrow();
+  });
+
+  it("does not prime at all for a target with no tags", async () => {
+    const store = stored({ [entryKey("/blog")]: appPage({ lastModified: 1_000 }) });
+    const pending: Promise<unknown>[] = [];
+    await served(req(), target(), cfg, {
+      ...storeDeps(store),
+      now: () => 2_000,
+      waitUntil: (p) => pending.push(p),
+    });
+
+    expect(pending).toHaveLength(0);
+    expect(store.gets).not.toContain(snapshotKey);
+  });
+
+  it("recovers from an orphaned prime so a later request does not hang forever", async () => {
+    let snapshotGets = 0;
+    const store = {
+      gets: [] as string[],
+      async get(key: string) {
+        this.gets.push(key);
+        if (key === snapshotKey) {
+          snapshotGets++;
+          if (snapshotGets === 1) return new Promise<never>(() => {});
+          return { etag: `"${key}"`, text: async () => JSON.stringify(snapshot()) };
+        }
+        const objects: Record<string, string> = {
+          [entryKey("/blog")]: JSON.stringify(
+            appPage({ tags: "products", lastModified: 1_000 }),
+          ),
+        };
+        const body = objects[key];
+        return body === undefined ? null : { etag: `"${key}"`, text: async () => body };
+      },
+    };
+    const tagClock = createTagClock(cfg, { store, snapshotReadTimeoutMs: 5 });
+    const deps: InterceptDeps = { store, now: () => 2_000, tagClock };
+
+    await intercept(
+      req({ headers: { "next-router-segment-prefetch": "/_tree" } }),
+      target({ tags: ["products"] }),
+      cfg,
+      deps,
+    );
+    expect(snapshotGets).toBe(1);
+
+    const stuck = await intercept(req(), target(), cfg, deps);
+    expect(stuck).toBeNull();
+    expect(snapshotGets).toBe(1);
+
+    const recovered = await intercept(req(), target(), cfg, deps);
+    expect(recovered).not.toBeNull();
+    expect(snapshotGets).toBe(2);
   });
 });
 

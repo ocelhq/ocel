@@ -6,6 +6,8 @@ import {
   type TagSnapshot,
 } from "@framework/next-cache";
 
+import { settledWithin } from "./cache";
+
 export interface StoredObject {
   etag?: string;
   text(): Promise<string>;
@@ -25,7 +27,10 @@ export interface TagClockDeps {
   store: ObjectStoreReader;
   snapshotCache?: SnapshotCache;
   waitUntil?: (promise: Promise<unknown>) => void;
+  snapshotReadTimeoutMs?: number;
 }
+
+export const defaultSnapshotReadTimeoutMs = 3_000;
 
 export type TagVerdict = boolean | "untrusted";
 
@@ -125,13 +130,23 @@ async function readSnapshot(
 ): Promise<TagSnapshot | null> {
   const cell = snapshotCell(cfg, deps.store);
   if (cell.memo && now - cell.memo.at < snapshotMemoMs) return cell.memo.snapshot;
-  if (cell.read) return cell.read;
 
-  const read = fillSnapshot(cfg, deps, now, cell).finally(() => {
-    cell.read = undefined;
-  });
-  cell.read = read;
-  return read;
+  if (!cell.read) {
+    const read: Promise<TagSnapshot | null> = fillSnapshot(cfg, deps, now, cell);
+    cell.read = read;
+    read
+      .finally(() => {
+        if (cell.read === read) cell.read = undefined;
+      })
+      .catch(() => {});
+  }
+
+  const pending = cell.read;
+  const timeoutMs = deps.snapshotReadTimeoutMs ?? defaultSnapshotReadTimeoutMs;
+  if (await settledWithin(pending, timeoutMs)) return pending;
+
+  if (cell.read === pending) cell.read = undefined;
+  return null;
 }
 
 async function fillSnapshot(
