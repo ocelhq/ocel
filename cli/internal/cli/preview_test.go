@@ -10,6 +10,7 @@ import (
 
 	"github.com/ocelhq/ocel/cli/internal/manifestbuilder"
 	"github.com/ocelhq/ocel/cli/internal/previewid"
+	"github.com/ocelhq/ocel/cli/internal/projectconfig"
 	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
 )
 
@@ -194,19 +195,50 @@ export default {
 		if err == nil {
 			t.Fatal("runPreviewUp err = nil, want a missing-preview-domain refusal")
 		}
-		for _, want := range []string{"declares no preview domain", "domains.preview", "*.preview."} {
-			if !strings.Contains(err.Error(), want) {
-				t.Errorf("err = %v, want it to contain %q", err, want)
+		out := stdout.String()
+		for _, want := range []string{"declares no preview domain", "domains.preview", "*.preview.", "ocel domain use"} {
+			if !strings.Contains(out, want) {
+				t.Errorf("stdout = %q, want it to contain %q", out, want)
 			}
 		}
 
-		out := stdout.String()
 		if strings.Contains(out, "Building project") {
 			t.Errorf("stdout = %q, want the refusal before anything is built", out)
 		}
 		if strings.Contains(out, "DEPLOY ") {
 			t.Errorf("stdout = %q, want no Deploy to have been driven", out)
 		}
+	})
+
+	t.Run("a project with no preview domain serves on the substrate's global one", func(t *testing.T) {
+		root, sockPath := setUpDeployFixture(t)
+		writeFile(t, filepath.Join(root, "ocel.config.ts"), `
+export default {
+  slug: "test-app",
+  provider: { package: "@ocel/provider-aws", options: {} },
+};
+`)
+		d := defaultDeps()
+		setLoggedIn(&d)
+		stubAppFunctions(&d, nil)
+		stubGit(&d, "feature/login", "")
+		t.Setenv(fakeInfraClassEnvVar, "preview")
+		t.Setenv(fakeInfraPresentEnvVar, "1")
+		t.Setenv(fakeGlobalDomainEnvVar, "previews.ocel.dev")
+
+		var stdout, stderr bytes.Buffer
+		if err := runPreviewUp(context.Background(), d, root, previewUpOptions{}, &stdout, &stderr, strings.NewReader("")); err != nil {
+			t.Fatalf("runPreviewUp err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
+		}
+
+		out := stdout.String()
+		for _, want := range []string{"global preview domain *.previews.ocel.dev", "DEPLOY class=CLASS_PREVIEW"} {
+			if !strings.Contains(out, want) {
+				t.Errorf("stdout = %q, want it to contain %q", out, want)
+			}
+		}
+
+		waitForNoStaleSocket(t, sockPath)
 	})
 
 	t.Run("a class mismatch refuses and drives no Deploy", func(t *testing.T) {
@@ -501,4 +533,152 @@ func TestConfirmDestroyPreview(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestRequirePreviewDomain(t *testing.T) {
+	t.Parallel()
+
+	declared := &projectconfig.Config{Domains: map[string][]string{"preview": {"*.preview.acme.com"}}}
+	bare := &projectconfig.Config{}
+	global := &deploymentsv1.GlobalPreviewDomain{
+		BaseDomain:     "previews.ocel.dev",
+		GrammarMin:     1,
+		GrammarMax:     1,
+		RouteInstalled: true,
+	}
+
+	t.Run("neither a global domain nor a declared one refuses", func(t *testing.T) {
+		t.Parallel()
+
+		var out bytes.Buffer
+		err := requirePreviewDomain(bare, nil, nil, "pr-1", &out)
+		if err == nil {
+			t.Fatal("requirePreviewDomain err = nil, want a refusal")
+		}
+		for _, want := range []string{"declares no preview domain", "no global one", "domains.preview", "ocel domain use"} {
+			if !strings.Contains(err.Error(), want) {
+				t.Errorf("err = %v, want it to contain %q", err, want)
+			}
+		}
+	})
+
+	t.Run("a global domain and no declared one serves globally, and says so", func(t *testing.T) {
+		t.Parallel()
+
+		var out bytes.Buffer
+		if err := requirePreviewDomain(bare, global, nil, "pr-1", &out); err != nil {
+			t.Fatalf("requirePreviewDomain err = %v, want nil", err)
+		}
+		for _, want := range []string{"global preview domain *.previews.ocel.dev", "declares no domains.preview"} {
+			if !strings.Contains(out.String(), want) {
+				t.Errorf("out = %q, want it to contain %q", out.String(), want)
+			}
+		}
+	})
+
+	t.Run("the slug prefix pushing a global label past 63 characters refuses", func(t *testing.T) {
+		t.Parallel()
+
+		cfg := &projectconfig.Config{Slug: "acme", Apps: []projectconfig.App{{Name: "admin"}, {Name: "web"}}}
+		var out bytes.Buffer
+		err := requirePreviewDomain(cfg, global, nil, strings.Repeat("b", 60), &out)
+		if err == nil {
+			t.Fatal("requirePreviewDomain err = nil, want a refusal")
+		}
+		for _, want := range []string{"DNS labels cap at 63", `project "acme" (4)`, "10 over"} {
+			if !strings.Contains(err.Error(), want) {
+				t.Errorf("err = %v, want it to contain %q", err, want)
+			}
+		}
+	})
+
+	t.Run("the same label fits without the slug prefix on a declared domain", func(t *testing.T) {
+		t.Parallel()
+
+		cfg := &projectconfig.Config{
+			Slug:    "acme",
+			Apps:    []projectconfig.App{{Name: "admin"}, {Name: "web"}},
+			Domains: map[string][]string{"preview": {"*.preview.acme.com"}},
+		}
+		var out bytes.Buffer
+		if err := requirePreviewDomain(cfg, nil, nil, strings.Repeat("b", 55), &out); err != nil {
+			t.Fatalf("requirePreviewDomain err = %v, want nil", err)
+		}
+	})
+
+	t.Run("a declared domain and no global one is unchanged and silent", func(t *testing.T) {
+		t.Parallel()
+
+		var out bytes.Buffer
+		if err := requirePreviewDomain(declared, nil, nil, "pr-1", &out); err != nil {
+			t.Fatalf("requirePreviewDomain err = %v, want nil", err)
+		}
+		if out.String() != "" {
+			t.Errorf("out = %q, want nothing said", out.String())
+		}
+	})
+
+	t.Run("a declared domain wins over a global one, which is named as ignored", func(t *testing.T) {
+		t.Parallel()
+
+		var out bytes.Buffer
+		if err := requirePreviewDomain(declared, global, nil, "pr-1", &out); err != nil {
+			t.Fatalf("requirePreviewDomain err = %v, want nil", err)
+		}
+		for _, want := range []string{"*.preview.acme.com", "*.previews.ocel.dev", "ignored"} {
+			if !strings.Contains(out.String(), want) {
+				t.Errorf("out = %q, want it to contain %q", out.String(), want)
+			}
+		}
+	})
+
+	t.Run("a Cloudflare account mismatch refuses with the account to point at", func(t *testing.T) {
+		t.Parallel()
+
+		elsewhere := &deploymentsv1.GlobalPreviewDomain{BaseDomain: "previews.ocel.dev", CloudflareAccount: "cf-owner", GrammarMin: 1, GrammarMax: 1, RouteInstalled: true}
+		var out bytes.Buffer
+		err := requirePreviewDomain(bare, elsewhere, &deploymentsv1.Identity{CloudflareAccount: "cf-other"}, "pr-1", &out)
+		if err == nil {
+			t.Fatal("requirePreviewDomain err = nil, want an account refusal")
+		}
+		for _, want := range []string{"cf-owner", "cf-other", "CLOUDFLARE_ACCOUNT_ID"} {
+			if !strings.Contains(err.Error(), want) {
+				t.Errorf("err = %v, want it to contain %q", err, want)
+			}
+		}
+	})
+
+	t.Run("a missing wildcard route refuses, pointing at ocel domain use", func(t *testing.T) {
+		t.Parallel()
+
+		uninstalled := &deploymentsv1.GlobalPreviewDomain{BaseDomain: "previews.ocel.dev", GrammarMin: 1, GrammarMax: 1}
+		var out bytes.Buffer
+		err := requirePreviewDomain(bare, uninstalled, nil, "pr-1", &out)
+		if err == nil {
+			t.Fatal("requirePreviewDomain err = nil, want a route refusal")
+		}
+		for _, want := range []string{"wildcard route is not installed", "ocel domain use '*.previews.ocel.dev' --preview"} {
+			if !strings.Contains(err.Error(), want) {
+				t.Errorf("err = %v, want it to contain %q", err, want)
+			}
+		}
+	})
+
+	t.Run("a grammar outside the installed worker's range refuses", func(t *testing.T) {
+		t.Parallel()
+
+		for _, g := range []*deploymentsv1.GlobalPreviewDomain{
+			{BaseDomain: "previews.ocel.dev", GrammarMin: 2, GrammarMax: 3, RouteInstalled: true},
+			{BaseDomain: "previews.ocel.dev", GrammarMin: 0, GrammarMax: 0, RouteInstalled: true},
+		} {
+			var out bytes.Buffer
+			err := requirePreviewDomain(bare, g, nil, "pr-1", &out)
+			if err == nil {
+				t.Fatalf("requirePreviewDomain with grammar %d–%d = nil, want a refusal", g.GetGrammarMin(), g.GetGrammarMax())
+			}
+			if !strings.Contains(err.Error(), "ocel domain use") {
+				t.Errorf("err = %v, want it to point at `ocel domain use`", err)
+			}
+		}
+	})
 }

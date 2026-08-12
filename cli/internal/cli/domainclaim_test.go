@@ -9,6 +9,7 @@ import (
 
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
 	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
+	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
 func TestDeclaredHostnames(t *testing.T) {
@@ -100,6 +101,17 @@ func TestRefuseClaimedDomains(t *testing.T) {
 			}
 		})
 	}
+
+	t.Run("the shared preview entry worker is not a rival project", func(t *testing.T) {
+		t.Parallel()
+
+		err := refuseClaimedDomains([]*deploymentsv1.DomainClaim{
+			{Hostname: "*.previews.ocel.dev", Status: deploymentsv1.DomainClaim_STATUS_CLAIMED, Owner: edge.SharedPreviewEntryScript},
+		})
+		if err != nil {
+			t.Fatalf("refuseClaimedDomains err = %v, want the shared entry worker to pass", err)
+		}
+	})
 
 	t.Run("every claimed hostname is named, and no unclaimed one", func(t *testing.T) {
 		t.Parallel()
