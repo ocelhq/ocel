@@ -241,6 +241,16 @@ aws service-quotas get-service-quota --service-code lambda \
 
 - **Cloudflare RUM** on the preview zone injects `/cdn-cgi/rum` beacons into
   request lists that tests assert on. Disable RUM / Web Analytics on the zone.
+  It is injected by Cloudflare's HTML post-processor *after* the entry worker
+  returns, so no adapter change can strip it, and it only appears for a browser
+  User-Agent — a default curl gives a false all-clear. Check a live deployment
+  with:
+  ```bash
+  curl -sS --compressed -A "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 \
+    (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36" <deployment url> |
+    grep -c cloudflareinsights
+  ```
+  Anything but `0` and every exact-request-list assertion in the run is void.
 - **Cloudflare serves a managed `robots.txt`** that never reaches the worker,
   failing the `robots.txt` metadata test independently of any adapter bug.
 - A `routing-manifest.json` sitting in the working tree under
