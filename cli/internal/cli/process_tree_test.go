@@ -34,6 +34,42 @@ func fixtureWorkerTree(t *testing.T, root, name string) (appArgs []string, start
 	return appArgs, startedPath, pidPath
 }
 
+// fixtureDeepWorkerTree returns app args for a 3-level POSIX shell tree —
+// direct child, its child, and that child's child, each staying alive to
+// parent the next rather than exiting once it has forked (unlike
+// fixtureWorkerTree's single background hop) — closer to a real
+// supervisor chain (npm -> sh -> next -> next-server). Every level ignores
+// SIGINT so a foreground-group Ctrl-C alone cannot reap it; only an
+// explicit SIGTERM/SIGKILL (from the CLI's own teardown, not the kernel's
+// group-wide delivery) can, which is what exercises the descendant walk.
+func fixtureDeepWorkerTree(t *testing.T, root, name string) (appArgs []string, startedPath, leafPidPath string) {
+	t.Helper()
+	if runtime.GOOS == "windows" {
+		t.Skip("uses a POSIX shell fixture command")
+	}
+	scriptPath := filepath.Join(root, name+".sh")
+	startedPath = filepath.Join(root, name+".started")
+	pidPrefix := filepath.Join(root, name+".workerpid.")
+	writeFile(t, scriptPath, `#!/bin/sh
+depth="$1"
+started="$2"
+pidprefix="$3"
+trap '' INT
+echo $$ > "${pidprefix}${depth}"
+if [ "$depth" -ge 3 ]; then
+  touch "$started"
+  exec sleep 30
+fi
+next=$((depth + 1))
+sh "$0" "$next" "$started" "$pidprefix" &
+child=$!
+wait "$child"
+`)
+	appArgs = []string{"sh", scriptPath, "1", startedPath, pidPrefix}
+	leafPidPath = pidPrefix + "3"
+	return appArgs, startedPath, leafPidPath
+}
+
 func waitProcessDead(t *testing.T, pidPath string) {
 	t.Helper()
 	waitForFile(t, pidPath)
@@ -94,6 +130,45 @@ export default { slug: "test-app" };
 		}
 
 		waitProcessDead(t, pidPath)
+	})
+
+	t.Run("a standalone `ocel run` kills a 3-level deep descendant, non-tty", func(t *testing.T) {
+		resolveServer := newFakeResolveServer(t)
+		defer resolveServer.Close()
+
+		d := defaultDeps()
+		withCredentials(&d, resolveServer.URL)
+
+		root := t.TempDir()
+		t.Cleanup(func() { _ = lockfile.Remove(root) })
+
+		writeFile(t, filepath.Join(root, "ocel.config.ts"), `
+export default { slug: "test-app" };
+`)
+		writeLink(t, root, resolveServer.URL, testProjectID(t))
+		writeFile(t, filepath.Join(root, "ocel", "main.ts"), declareResourceScript("main"))
+
+		appArgs, startedPath, leafPidPath := fixtureDeepWorkerTree(t, root, "run-deep")
+
+		ctx, cancel := context.WithCancel(context.Background())
+		defer cancel()
+
+		var stdout, stderr bytes.Buffer
+		done := make(chan error, 1)
+		go func() {
+			done <- runRun(ctx, d, nil, root, appArgs, &stdout, &stderr, strings.NewReader(""))
+		}()
+
+		waitForFile(t, startedPath)
+		cancel()
+
+		select {
+		case <-done:
+		case <-time.After(5 * time.Second):
+			t.Fatal("runRun did not exit after cancellation")
+		}
+
+		waitProcessDead(t, leafPidPath)
 	})
 
 	t.Run("a leader `ocel dev` kills its app's grandchildren", func(t *testing.T) {
