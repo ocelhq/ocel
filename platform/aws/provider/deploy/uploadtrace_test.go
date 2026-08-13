@@ -76,9 +76,6 @@ func TestUploadBatchStatsCapsFailuresKeepingTheFirstN(t *testing.T) {
 	if snap.attempts != maxUploadFailureStandouts+5 {
 		t.Fatalf("attempts = %d, want %d: every attempt still counts even once failures are capped", snap.attempts, maxUploadFailureStandouts+5)
 	}
-	if snap.dropped != 0 {
-		t.Fatalf("dropped = %d, want 0 (dropped tracks evicted latency standouts, not capped failures)", snap.dropped)
-	}
 }
 
 func TestUploadBatchStatsDropsCanceledFailures(t *testing.T) {
@@ -113,9 +110,6 @@ func TestUploadBatchStatsCapsLatencyStandoutsKeepingTheSlowest(t *testing.T) {
 	snap := s.snapshot()
 	if len(snap.slowest) != maxUploadLatencyStandouts {
 		t.Fatalf("len(slowest) = %d, want %d", len(snap.slowest), maxUploadLatencyStandouts)
-	}
-	if snap.dropped != 5 {
-		t.Fatalf("dropped = %d, want 5", snap.dropped)
 	}
 	for _, o := range snap.slowest {
 		if o.End.Sub(o.Start) < uploadLatencyOutlierThreshold+6*time.Millisecond {
@@ -190,7 +184,7 @@ func TestEmitUploadBatchEmitsOneSpanWithCountsAndBytes(t *testing.T) {
 	s.record(uploadOutcome{Bytes: 200, Start: base.Add(time.Millisecond), End: base.Add(2 * time.Millisecond), Transferred: true})
 
 	parent := NewRootStage("Uploading")
-	emitUploadBatch(ft, parent.ID, uploadKindStaticAsset, s, nil)
+	emitUploadBatch(ft, parent.ID, uploadKindStaticAsset, s, nil, base)
 
 	if len(ft.spans) != 1 {
 		t.Fatalf("got %d spans, want 1 (no failures or outliers)", len(ft.spans))
@@ -223,7 +217,7 @@ func TestEmitUploadBatchReportsZeroResourceCountForAFullyCachedPhase(t *testing.
 		s.record(uploadOutcome{Start: base, End: base.Add(time.Millisecond), Transferred: false})
 	}
 
-	emitUploadBatch(ft, NewRootStage("Uploading").ID, uploadKindStaticAsset, s, nil)
+	emitUploadBatch(ft, NewRootStage("Uploading").ID, uploadKindStaticAsset, s, nil, base)
 
 	if len(ft.spans) != 1 {
 		t.Fatalf("got %d spans, want 1: a fully-cached phase still emits its batch span", len(ft.spans))
@@ -241,9 +235,30 @@ func TestEmitUploadBatchSkipsWhenNothingHappened(t *testing.T) {
 	t.Parallel()
 
 	ft := &fakeTracer{}
-	emitUploadBatch(ft, NewRootStage("Uploading").ID, uploadKindPrerenderAsset, newUploadBatchStats(), nil)
+	emitUploadBatch(ft, NewRootStage("Uploading").ID, uploadKindPrerenderAsset, newUploadBatchStats(), nil, time.Now())
 	if len(ft.spans) != 0 {
 		t.Fatalf("got %d spans, want 0 for an empty batch", len(ft.spans))
+	}
+}
+
+func TestEmitUploadBatchUsesThePhaseStartWhenNoUploadEverRan(t *testing.T) {
+	t.Parallel()
+
+	ft := &fakeTracer{}
+	phaseStart := time.Unix(6800, 0)
+	phaseErr := errors.New("unknown app")
+
+	emitUploadBatch(ft, NewRootStage("Uploading").ID, uploadKindFunctionArtifact, newUploadBatchStats(), phaseErr, phaseStart)
+
+	if len(ft.spans) != 1 {
+		t.Fatalf("got %d spans, want 1", len(ft.spans))
+	}
+	got := ft.spans[0]
+	if !got.start.Equal(phaseStart) {
+		t.Errorf("start = %v, want the phase start %v", got.start, phaseStart)
+	}
+	if !got.end.Equal(phaseStart) {
+		t.Errorf("end = %v, want the phase start %v", got.end, phaseStart)
 	}
 }
 
@@ -261,7 +276,7 @@ func TestEmitUploadBatchCapsTheCancellationCascadeButKeepsTheCausalFailure(t *te
 	}
 
 	parent := NewRootStage("Uploading")
-	emitUploadBatch(ft, parent.ID, uploadKindFunctionArtifact, s, nil)
+	emitUploadBatch(ft, parent.ID, uploadKindFunctionArtifact, s, nil, base)
 
 	failureSpans := 0
 	for _, sp := range ft.spans {
@@ -292,7 +307,7 @@ func TestEmitUploadBatchCapsSlowStandoutsAndKeepsBatchSpanEvenWithoutFailures(t 
 		s.record(uploadOutcome{Start: base, End: base.Add(dur)})
 	}
 
-	emitUploadBatch(ft, NewRootStage("Uploading").ID, uploadKindPrerenderAsset, s, nil)
+	emitUploadBatch(ft, NewRootStage("Uploading").ID, uploadKindPrerenderAsset, s, nil, base)
 
 	batchSpans, slowSpans := 0, 0
 	for _, sp := range ft.spans {
@@ -323,7 +338,7 @@ func TestEmitUploadBatchMarksTheBatchSpanFailedWhenAnyUploadFails(t *testing.T) 
 	s.record(uploadOutcome{Start: base, End: base.Add(time.Millisecond)})
 	s.record(uploadOutcome{Start: base, End: base.Add(time.Millisecond), Failed: true, Err: errors.New("boom")})
 
-	emitUploadBatch(ft, NewRootStage("Uploading").ID, uploadKindStaticAsset, s, nil)
+	emitUploadBatch(ft, NewRootStage("Uploading").ID, uploadKindStaticAsset, s, nil, base)
 
 	for _, sp := range ft.spans {
 		if sp.name == uploadBatchSpanName(uploadKindStaticAsset) && sp.err == nil {
@@ -374,7 +389,7 @@ func TestUploadFailuresNeverCarryTheRawErrorPastRecord(t *testing.T) {
 	}
 
 	ft := &fakeTracer{}
-	emitUploadBatch(ft, NewRootStage("Uploading").ID, uploadKindFunctionArtifact, s, nil)
+	emitUploadBatch(ft, NewRootStage("Uploading").ID, uploadKindFunctionArtifact, s, nil, base)
 
 	forbidden := []string{secretBucket, secretKey, secretPath, secretURL}
 	for _, sp := range ft.spans {

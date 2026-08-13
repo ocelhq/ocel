@@ -99,7 +99,6 @@ type uploadBatchStats struct {
 
 	failures []recordedFailure
 	slowest  []uploadOutcome
-	dropped  int
 }
 
 func newUploadBatchStats() *uploadBatchStats {
@@ -148,7 +147,6 @@ func (s *uploadBatchStats) keepSlowestLocked(o uploadOutcome) {
 			minIdx, minDur = i, d
 		}
 	}
-	s.dropped++
 	if d := o.End.Sub(o.Start); d > minDur {
 		s.slowest[minIdx] = o
 	}
@@ -162,7 +160,6 @@ type uploadBatchSnapshot struct {
 	end         time.Time
 	failures    []recordedFailure
 	slowest     []uploadOutcome
-	dropped     int
 }
 
 func (s *uploadBatchStats) snapshot() uploadBatchSnapshot {
@@ -176,11 +173,10 @@ func (s *uploadBatchStats) snapshot() uploadBatchSnapshot {
 		end:         s.end,
 		failures:    append([]recordedFailure(nil), s.failures...),
 		slowest:     append([]uploadOutcome(nil), s.slowest...),
-		dropped:     s.dropped,
 	}
 }
 
-func emitUploadBatch(t Tracer, parent StageID, k uploadKind, stats *uploadBatchStats, phaseErr error) {
+func emitUploadBatch(t Tracer, parent StageID, k uploadKind, stats *uploadBatchStats, phaseErr error, phaseStart time.Time) {
 	if t == nil || stats == nil {
 		return
 	}
@@ -193,7 +189,14 @@ func emitUploadBatch(t Tracer, parent StageID, k uploadKind, stats *uploadBatchS
 	if batchErr == nil && len(snap.failures) > 0 {
 		batchErr = errUploadBatchFailed
 	}
-	spanUnder(t, parent, uploadBatchSpanName(k), snap.start, snap.end, batchErr, AttrResourceCount(snap.transferred), AttrBytes(snap.bytes))
+	start, end := snap.start, snap.end
+	if start.IsZero() {
+		start = phaseStart
+	}
+	if end.IsZero() {
+		end = phaseStart
+	}
+	spanUnder(t, parent, uploadBatchSpanName(k), start, end, batchErr, AttrResourceCount(snap.transferred), AttrBytes(snap.bytes))
 
 	for _, f := range snap.failures {
 		spanUnder(t, parent, uploadStandoutName(k, true), f.Start, f.End, errorForKind(f.Kind), AttrBytes(f.Bytes))
