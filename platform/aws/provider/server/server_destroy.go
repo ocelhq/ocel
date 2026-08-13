@@ -65,43 +65,78 @@ func (s *Server) hasRootStack(state edge.RootStackState) (bool, error) {
 	return len(state) > 0, nil
 }
 
-func (s *Server) DestroyProject(ctx context.Context, req *deploymentsv1.DestroyProjectRequest, stream *connect.ServerStream[deploymentsv1.DeployEvent]) error {
-	progress := func(m string) {
-		_ = stream.Send(phaseProgressEvent(nil, deploymentsv1.Phase_PHASE_PROVISIONING, m, 0, 0))
-	}
-	logf := func(m string) { _ = stream.Send(logEvent(m)) }
+func (s *Server) DestroyProject(ctx context.Context, req *deploymentsv1.DestroyProjectRequest, stream *connect.ServerStream[deploymentsv1.DeployEvent]) (err error) {
+	sender := newEventSender(ctx, stream.Send)
+	defer func() { err = sender.close() }()
+	tracer := newEventTracer(sender)
+	stageReport, logf := newTeardownReporter(sender)
 
-	if err := s.runDestroyProject(ctx, req, progress, logf); err != nil {
-		return stream.Send(failureResult(err))
+	if derr := s.runDestroyProject(ctx, req, tracer, stageReport, logf); derr != nil {
+		sender.send(failureResult(derr))
+		return nil
 	}
-	return stream.Send(okResult())
+	sender.send(okResult())
+	return nil
 }
 
-func (s *Server) runDestroyProject(ctx context.Context, req *deploymentsv1.DestroyProjectRequest, progress, logf func(string)) error {
+func newDestroyProjectStages() deploy.ProjectTeardownStages {
+	return deploy.ProjectTeardownStages{
+		Planning:    deploy.NewRootStage("Planning the teardown"),
+		Edge:        deploy.NewRootStage("Destroying edge workers and the deployments store"),
+		AppStacks:   deploy.NewRootStage("Destroying app stacks"),
+		InfraStacks: deploy.NewRootStage("Destroying infra stacks"),
+		Values:      deploy.NewRootStage("Purging stored variable values"),
+		Assets:      deploy.NewRootStage("Purging project assets"),
+		Forget:      deploy.NewRootStage("Forgetting the project"),
+	}
+}
+
+func newDestroyPreviewProjectStages() deploy.ProjectTeardownStages {
+	return deploy.ProjectTeardownStages{
+		Planning:    deploy.NewRootStage("Planning the preview teardown"),
+		Edge:        deploy.NewRootStage("Destroying preview root workers and the deployments store"),
+		AppStacks:   deploy.NewRootStage("Destroying preview app stacks"),
+		InfraStacks: deploy.NewRootStage("Destroying preview infra stacks"),
+		Values:      deploy.NewRootStage("Purging stored variable values"),
+		Assets:      deploy.NewRootStage("Purging preview assets"),
+		Forget:      deploy.NewRootStage("Forgetting the project"),
+	}
+}
+
+func (s *Server) runDestroyProject(ctx context.Context, req *deploymentsv1.DestroyProjectRequest, tracer deploy.Tracer, stageReport func(deploy.StageID) func(string), logf func(string)) error {
+	if env := req.GetEnvironment(); env.GetClass() == deploymentsv1.Environment_CLASS_PREVIEW {
+		return s.runDestroyPreviewProject(ctx, req, env, tracer, stageReport, logf)
+	}
+
+	stages := newDestroyProjectStages()
+	tracer.DeclareStages(false, stages.Roots()...)
+	finish := func(err error) error {
+		if err != nil {
+			closeStages(tracer, err, stages.Roots()...)
+		}
+		return err
+	}
+
 	opts, err := parseOptions(req.GetOptions())
 	if err != nil {
-		return connect.NewError(connect.CodeInvalidArgument, err)
+		return finish(connect.NewError(connect.CodeInvalidArgument, err))
 	}
-
-	if env := req.GetEnvironment(); env.GetClass() == deploymentsv1.Environment_CLASS_PREVIEW {
-		return s.runDestroyPreviewProject(ctx, opts, req.GetSlug(), env, progress, logf)
-	}
-
 	awscfg, params, err := productionTeardownParams(ctx, opts, req.GetSlug())
 	if err != nil {
-		return err
+		return finish(err)
 	}
 	stack, state, err := s.rootStackFor(params.RootStackState)
 	if err != nil && !errors.Is(err, errNoProductionDeploy) {
-		return err
+		return finish(err)
 	}
-
 	cfg, err := s.pruneConfig(ctx, opts, awscfg, params, req.GetSlug())
 	if err != nil {
-		return err
+		return finish(err)
 	}
+	cfg.Tracer = tracer
+	cfg.StageReport = stageReport
 
-	result, derr := deploy.DestroyProject(ctx, stack, state, cfg, req.GetSlug(), progress, logf)
+	result, derr := deploy.DestroyProject(ctx, stack, state, cfg, req.GetSlug(), stages, logf)
 
 	if result.RootTornDown && len(state) > 0 {
 		if err := s.deleteRootStackState(ctx, opts, req.GetSlug()); err != nil {
@@ -119,13 +154,30 @@ func (s *Server) deleteRootStackState(ctx context.Context, opts options, slug st
 	return bootstrap.DeleteRootStackState(ctx, ssm.NewFromConfig(awscfg), slug)
 }
 
-func (s *Server) runDestroyPreviewProject(ctx context.Context, opts options, slug string, env *deploymentsv1.Environment, progress, logf func(string)) error {
-	cfg, stack, state, err := s.previewTeardownContext(ctx, opts, slug, env)
-	if err != nil {
+func (s *Server) runDestroyPreviewProject(ctx context.Context, req *deploymentsv1.DestroyProjectRequest, env *deploymentsv1.Environment, tracer deploy.Tracer, stageReport func(deploy.StageID) func(string), logf func(string)) error {
+	slug := req.GetSlug()
+
+	stages := newDestroyPreviewProjectStages()
+	tracer.DeclareStages(false, stages.Roots()...)
+	finish := func(err error) error {
+		if err != nil {
+			closeStages(tracer, err, stages.Roots()...)
+		}
 		return err
 	}
 
-	result, derr := deploy.DestroyPreviewProject(ctx, stack, state, cfg, slug, progress, logf)
+	opts, err := parseOptions(req.GetOptions())
+	if err != nil {
+		return finish(connect.NewError(connect.CodeInvalidArgument, err))
+	}
+	cfg, stack, state, err := s.previewTeardownContext(ctx, opts, slug, env)
+	if err != nil {
+		return finish(err)
+	}
+	cfg.Tracer = tracer
+	cfg.StageReport = stageReport
+
+	result, derr := deploy.DestroyPreviewProject(ctx, stack, state, cfg, slug, stages, logf)
 
 	if result.RootTornDown && len(state) > 0 {
 		awscfg, awsErr := loadAWS(ctx, opts.Region)

@@ -8,6 +8,7 @@ import (
 	connect "connectrpc.com/connect"
 
 	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
+	"github.com/ocelhq/ocel/platform/aws/provider/deploy"
 )
 
 func TestRunPruneRefusesAPreviewWithoutAPointer(t *testing.T) {
@@ -26,9 +27,11 @@ func TestRunPruneRefusesAPreviewWithoutAPointer(t *testing.T) {
 			t.Parallel()
 			touched := 0
 			note := func(string) { touched++ }
+			tracer := &fakeTracer{}
+			stageReport := func(deploy.StageID) func(string) { return note }
 
 			_, err := (&Server{}).runPrune(context.Background(),
-				&deploymentsv1.PruneRequest{Slug: "shop", KeepN: 3, Environment: tc.env}, note, note)
+				&deploymentsv1.PruneRequest{Slug: "shop", KeepN: 3, Environment: tc.env}, tracer, stageReport, note)
 
 			var connectErr *connect.Error
 			if !errors.As(err, &connectErr) || connectErr.Code() != connect.CodeInvalidArgument {

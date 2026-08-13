@@ -21,63 +21,81 @@ import (
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
-func (s *Server) Prune(ctx context.Context, req *deploymentsv1.PruneRequest, stream *connect.ServerStream[deploymentsv1.DeployEvent]) error {
-	progress := func(m string) {
-		_ = stream.Send(phaseProgressEvent(nil, deploymentsv1.Phase_PHASE_PROVISIONING, m, 0, 0))
-	}
-	logf := func(m string) { _ = stream.Send(logEvent(m)) }
+func (s *Server) Prune(ctx context.Context, req *deploymentsv1.PruneRequest, stream *connect.ServerStream[deploymentsv1.DeployEvent]) (err error) {
+	sender := newEventSender(ctx, stream.Send)
+	defer func() { err = sender.close() }()
+	tracer := newEventTracer(sender)
+	stageReport, logf := newTeardownReporter(sender)
 
-	result, err := s.runPrune(ctx, req, progress, logf)
-	if err != nil {
-		return stream.Send(failureResult(err))
+	result, perr := s.runPrune(ctx, req, tracer, stageReport, logf)
+	if perr != nil {
+		sender.send(failureResult(perr))
+		return nil
 	}
 	for _, line := range pruneSummaryLines(result) {
-		if err := stream.Send(progressEvent(line)); err != nil {
-			return err
-		}
+		sender.send(progressEvent(line))
 	}
-	return stream.Send(okResult())
+	sender.send(okResult())
+	return nil
 }
 
-func (s *Server) runPrune(ctx context.Context, req *deploymentsv1.PruneRequest, progress, logf func(string)) (edge.PruneResult, error) {
+func newPruneStages() deploy.PruneStages {
+	return deploy.PruneStages{
+		Diff:    deploy.NewRootStage("Diffing deployments to reclaim"),
+		Reclaim: deploy.NewRootStage("Reclaiming deployments"),
+	}
+}
+
+func (s *Server) runPrune(ctx context.Context, req *deploymentsv1.PruneRequest, tracer deploy.Tracer, stageReport func(deploy.StageID) func(string), logf func(string)) (edge.PruneResult, error) {
+	stages := newPruneStages()
+	tracer.DeclareStages(false, stages.Diff, stages.Reclaim)
+	finish := func(err error) (edge.PruneResult, error) {
+		closeStages(tracer, err, stages.Diff, stages.Reclaim)
+		return edge.PruneResult{}, err
+	}
+
 	opts, err := parseOptions(req.GetOptions())
 	if err != nil {
-		return edge.PruneResult{}, connect.NewError(connect.CodeInvalidArgument, err)
+		return finish(connect.NewError(connect.CodeInvalidArgument, err))
 	}
 
 	if env := req.GetEnvironment(); env.GetClass() == deploymentsv1.Environment_CLASS_PREVIEW {
 		pointer, err := deploy.EnvName(env)
 		if err != nil {
-			return edge.PruneResult{}, connect.NewError(connect.CodeInvalidArgument, err)
+			return finish(connect.NewError(connect.CodeInvalidArgument, err))
 		}
 		cfg, stack, state, err := s.previewTeardownContext(ctx, opts, req.GetSlug(), env)
 		if err != nil {
-			return edge.PruneResult{}, err
+			return finish(err)
 		}
 		if len(state) == 0 {
-			return edge.PruneResult{}, nil
+			return finish(nil)
 		}
-		return deploy.Prune(ctx, stack, state, cfg, req.GetSlug(), int(req.GetKeepN()), pointer, progress, logf)
+		cfg.Tracer = tracer
+		cfg.StageReport = stageReport
+		return deploy.Prune(ctx, stack, state, cfg, req.GetSlug(), int(req.GetKeepN()), pointer, stages, logf)
 	}
 
 	awscfg, params, err := productionTeardownParams(ctx, opts, req.GetSlug())
 	if err != nil {
-		return edge.PruneResult{}, err
+		return finish(err)
 	}
 	stack, state, err := s.rootStackFor(params.RootStackState)
 	if err != nil {
 		if errors.Is(err, errNoProductionDeploy) {
-			return edge.PruneResult{}, nil
+			return finish(nil)
 		}
-		return edge.PruneResult{}, err
+		return finish(err)
 	}
 
 	cfg, err := s.pruneConfig(ctx, opts, awscfg, params, req.GetSlug())
 	if err != nil {
-		return edge.PruneResult{}, err
+		return finish(err)
 	}
+	cfg.Tracer = tracer
+	cfg.StageReport = stageReport
 
-	return deploy.Prune(ctx, stack, state, cfg, req.GetSlug(), int(req.GetKeepN()), "", progress, logf)
+	return deploy.Prune(ctx, stack, state, cfg, req.GetSlug(), int(req.GetKeepN()), "", stages, logf)
 }
 
 func pruneSummaryLines(result edge.PruneResult) []string {

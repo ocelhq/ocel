@@ -206,33 +206,60 @@ func classToEnum(class string) deploymentsv1.Environment_Class {
 	}
 }
 
-func (s *Server) DestroyPreview(ctx context.Context, req *deploymentsv1.DestroyPreviewRequest, stream *connect.ServerStream[deploymentsv1.DeployEvent]) error {
-	progress := func(m string) { _ = stream.Send(progressEvent(m)) }
-	logf := func(m string) { _ = stream.Send(logEvent(m)) }
+func (s *Server) DestroyPreview(ctx context.Context, req *deploymentsv1.DestroyPreviewRequest, stream *connect.ServerStream[deploymentsv1.DeployEvent]) (err error) {
+	sender := newEventSender(ctx, stream.Send)
+	defer func() { err = sender.close() }()
+	tracer := newEventTracer(sender)
+	stageReport, logf := newTeardownReporter(sender)
 
-	if err := s.runDestroyPreview(ctx, req, progress, logf); err != nil {
-		return stream.Send(failureResult(err))
+	if derr := s.runDestroyPreview(ctx, req, tracer, stageReport, logf); derr != nil {
+		sender.send(failureResult(derr))
+		return nil
 	}
-	return stream.Send(okResult())
+	sender.send(okResult())
+	return nil
 }
 
-func (s *Server) runDestroyPreview(ctx context.Context, req *deploymentsv1.DestroyPreviewRequest, progress, logf func(string)) error {
-	opts, err := parseOptions(req.GetOptions())
-	if err != nil {
+func newPreviewRemovalStages(persistent bool) deploy.PreviewRemovalStages {
+	stages := deploy.PreviewRemovalStages{
+		Pointer: deploy.NewRootStage("Removing the preview pointer"),
+		Reclaim: deploy.NewRootStage("Reclaiming deployments"),
+	}
+	if persistent {
+		stages.Infra = deploy.NewRootStage("Destroying the preview infra stack")
+	}
+	return stages
+}
+
+func (s *Server) runDestroyPreview(ctx context.Context, req *deploymentsv1.DestroyPreviewRequest, tracer deploy.Tracer, stageReport func(deploy.StageID) func(string), logf func(string)) error {
+	env := req.GetEnvironment()
+	persistent := env.GetLifecycle() == deploymentsv1.Environment_LIFECYCLE_PERSISTENT
+
+	stages := newPreviewRemovalStages(persistent)
+	tracer.DeclareStages(false, stages.Roots()...)
+	finish := func(err error) error {
+		if err != nil {
+			closeStages(tracer, err, stages.Roots()...)
+		}
 		return err
 	}
-	env := req.GetEnvironment()
+
+	opts, err := parseOptions(req.GetOptions())
+	if err != nil {
+		return finish(err)
+	}
 	pointer, err := deploy.EnvName(env)
 	if err != nil {
-		return connect.NewError(connect.CodeInvalidArgument, err)
+		return finish(connect.NewError(connect.CodeInvalidArgument, err))
 	}
 	cfg, stack, state, err := s.previewTeardownContext(ctx, opts, req.GetSlug(), env)
 	if err != nil {
-		return err
+		return finish(err)
 	}
+	cfg.Tracer = tracer
+	cfg.StageReport = stageReport
 
-	persistent := env.GetLifecycle() == deploymentsv1.Environment_LIFECYCLE_PERSISTENT
-	return deploy.RemovePreview(ctx, stack, state, cfg, req.GetSlug(), pointer, persistent, progress, logf)
+	return deploy.RemovePreview(ctx, stack, state, cfg, req.GetSlug(), pointer, persistent, stages, logf)
 }
 
 func (s *Server) previewTeardownContext(ctx context.Context, opts options, slug string, env *deploymentsv1.Environment) (deploy.Config, edge.RootStack, edge.RootStackState, error) {
