@@ -29,10 +29,7 @@ func newEventSender(send func(*deploymentsv1.DeployEvent) error) *eventSender {
 func (s *eventSender) drain(send func(*deploymentsv1.DeployEvent) error) {
 	defer close(s.done)
 	for ev := range s.events {
-		if s.err != nil {
-			continue
-		}
-		if err := send(ev); err != nil {
+		if err := send(ev); err != nil && s.err == nil {
 			s.err = err
 		}
 	}
