@@ -69,6 +69,10 @@ func runLink(ctx context.Context, d deps, projectDir, project string, opts linkO
 	}
 
 	apiURL := strings.TrimRight(opts.apiURL, "/")
+	// TODO: linkCmd installs no interrupt handler, so SIGINT still hard-kills here —
+	// migrating these reads to readLine without also adding installInterruptHandler
+	// would look like a cleanup but would reintroduce the raw-mode/masked-SIGINT bug
+	// this package's other commands fixed (see #245).
 	scanner := bufio.NewScanner(stdin)
 	project = strings.TrimSpace(project)
 
