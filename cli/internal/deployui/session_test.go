@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -61,7 +62,7 @@ func readLog(t *testing.T, path string) string {
 }
 
 func TestSession(t *testing.T) {
-	t.Run("raw mode streams events and writes the log", func(t *testing.T) {
+	t.Run("raw mode streams progress and writes the log, but keeps raw log lines out of non-verbose stdout", func(t *testing.T) {
 		t.Parallel()
 		s, out, logPath := newTestSession(t, "ocel deploy")
 
@@ -75,13 +76,15 @@ func TestSession(t *testing.T) {
 		got := out.String()
 		for _, want := range []string{
 			"Uploading function artifacts",
-			"pulumi engine line",
 			"Deployed in",
 			"https://app.example.workers.dev",
 		} {
 			if !strings.Contains(got, want) {
 				t.Errorf("stdout = %q, want it to contain %q", got, want)
 			}
+		}
+		if strings.Contains(got, "pulumi engine line") {
+			t.Errorf("stdout = %q, want raw Log lines held back from the default non-verbose view", got)
 		}
 
 		if err := s.Close(); err != nil {
@@ -92,6 +95,23 @@ func TestSession(t *testing.T) {
 			if !strings.Contains(log, want) {
 				t.Errorf("log = %q, want it to contain %q", log, want)
 			}
+		}
+	})
+
+	t.Run("verbose surfaces raw log lines that non-verbose holds back", func(t *testing.T) {
+		t.Parallel()
+		dir := t.TempDir()
+		run := startTestRun(t, dir, "ocel deploy")
+		var out bytes.Buffer
+		s := New(&out, run, FormatHuman, true)
+		t.Cleanup(func() { _ = s.Close() })
+
+		s.Event(&deploymentsv1.DeployEvent{Event: &deploymentsv1.DeployEvent_Log{
+			Log: &deploymentsv1.LogEvent{Message: "pulumi engine line"},
+		}})
+
+		if !strings.Contains(out.String(), "pulumi engine line") {
+			t.Errorf("stdout = %q, want verbose to surface the raw log line", out.String())
 		}
 	})
 
@@ -300,6 +320,59 @@ func TestSession(t *testing.T) {
 			}
 		}
 	})
+}
+
+func TestAttributeKeyCoversEveryWireValue(t *testing.T) {
+	t.Parallel()
+	for raw, name := range deploymentsv1.AttributeKey_name {
+		k := deploymentsv1.AttributeKey(raw)
+		if k == deploymentsv1.AttributeKey_ATTRIBUTE_KEY_UNSPECIFIED {
+			continue
+		}
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			if _, ok := attributeKey(k); !ok {
+				t.Errorf("attributeKey(%s) = (_, false), want every declared AttributeKey to map somewhere — an unmapped key is silently dropped by spanAttributes, not rejected", name)
+			}
+		})
+	}
+}
+
+func TestIngestedSpanResourceIdentityReachesTheTraceFile(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	run := startTestRun(t, dir, "ocel deploy")
+	var out bytes.Buffer
+	s := New(&out, run, FormatHuman, false)
+	t.Cleanup(func() { _ = s.Close() })
+
+	s.Event(&deploymentsv1.DeployEvent{Event: &deploymentsv1.DeployEvent_Span{
+		Span: &deploymentsv1.SpanEvent{
+			SpanId: []byte{1, 2, 3, 4, 5, 6, 7, 8},
+			Name:   "resource operation failed",
+			Status: deploymentsv1.SpanStatus_SPAN_STATUS_ERROR,
+			Attributes: []*deploymentsv1.SpanAttribute{
+				{Key: deploymentsv1.AttributeKey_ATTRIBUTE_KEY_RESOURCE_TYPE, Value: "aws:s3:Bucket"},
+				{Key: deploymentsv1.AttributeKey_ATTRIBUTE_KEY_RESOURCE_NAME, Value: "uploads"},
+			},
+		},
+	}})
+
+	if err := run.Close(); err != nil {
+		t.Fatalf("run.Close() = %v", err)
+	}
+
+	tracePath := filepath.Join(run.Dir(), run.TraceID()+".otlp.json")
+	raw, err := os.ReadFile(tracePath)
+	if err != nil {
+		t.Fatalf("read trace file: %v", err)
+	}
+	trace := string(raw)
+	for _, want := range []string{"ocel.resource_type", "aws:s3:Bucket", "ocel.resource_name", "uploads"} {
+		if !strings.Contains(trace, want) {
+			t.Errorf("trace file = %s, want it to contain %q — a failing span's resource identity must survive Session.Event -> IngestSpan -> the trace artifact", trace, want)
+		}
+	}
 }
 
 func TestFormatAxis(t *testing.T) {
