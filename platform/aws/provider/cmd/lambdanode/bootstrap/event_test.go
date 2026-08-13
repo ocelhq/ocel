@@ -1,11 +1,16 @@
 package main
 
 import (
+	"bufio"
 	"bytes"
+	"context"
 	"encoding/json"
 	"io"
+	"net"
 	"net/http"
+	"strconv"
 	"testing"
+	"time"
 )
 
 func TestParseEvent(t *testing.T) {
@@ -204,4 +209,83 @@ func TestEncodePrelude(t *testing.T) {
 			t.Errorf("cookies = %v, want two entries", p.Cookies)
 		}
 	})
+}
+
+// unreadBodyServer answers the first request on each connection without
+// reading its body, then discards everything else it sees on that
+// connection without ever answering again — standing in for a Node
+// handler that never drains an unread request, and desyncs whatever
+// reuses the same socket next.
+func unreadBodyServer(t *testing.T) int {
+	t.Helper()
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { ln.Close() })
+
+	go func() {
+		for {
+			conn, err := ln.Accept()
+			if err != nil {
+				return
+			}
+			go func(c net.Conn) {
+				defer c.Close()
+				r := bufio.NewReader(c)
+				if _, err := http.ReadRequest(r); err != nil {
+					return
+				}
+				const body = "ok"
+				io.WriteString(c, "HTTP/1.1 200 OK\r\nContent-Length: "+strconv.Itoa(len(body))+"\r\nConnection: keep-alive\r\n\r\n"+body)
+				io.Copy(io.Discard, r)
+			}(conn)
+		}
+	}()
+
+	_, portStr, err := net.SplitHostPort(ln.Addr().String())
+	if err != nil {
+		t.Fatal(err)
+	}
+	port, err := strconv.Atoi(portStr)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return port
+}
+
+func TestLoopbackClientDoesNotHangOnAConnectionPoisonedByAnUnreadBody(t *testing.T) {
+	port := unreadBodyServer(t)
+	client := newLoopbackClient()
+
+	unread := &funcURLRequest{RawPath: "/_middleware", Body: string(bytes.Repeat([]byte("a"), 300_000))}
+	unread.RequestContext.HTTP.Method = "POST"
+	req1, err := buildLoopbackRequest(t.Context(), port, unread)
+	if err != nil {
+		t.Fatalf("buildLoopbackRequest: %v", err)
+	}
+	resp1, err := client.Do(req1)
+	if err != nil {
+		t.Fatalf("first request: %v", err)
+	}
+	io.ReadAll(resp1.Body)
+	resp1.Body.Close()
+
+	ctx, cancel := context.WithTimeout(t.Context(), 2*time.Second)
+	defer cancel()
+	next := &funcURLRequest{RawPath: "/file"}
+	next.RequestContext.HTTP.Method = "GET"
+	req2, err := buildLoopbackRequest(ctx, port, next)
+	if err != nil {
+		t.Fatalf("buildLoopbackRequest: %v", err)
+	}
+
+	resp2, err := client.Do(req2)
+	if err != nil {
+		t.Fatalf("second request hung instead of completing: %v", err)
+	}
+	defer resp2.Body.Close()
+	if resp2.StatusCode != http.StatusOK {
+		t.Errorf("status = %d, want 200", resp2.StatusCode)
+	}
 }
