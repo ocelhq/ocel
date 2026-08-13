@@ -111,12 +111,16 @@ func TestEventSenderPropagatesSendError(t *testing.T) {
 		return nil
 	})
 
-	for i := 0; i < 5; i++ {
+	const total = 5
+	for i := 0; i < total; i++ {
 		sender.send(logEvent("line"))
 	}
 
 	if err := sender.close(); !errors.Is(err, wantErr) {
 		t.Fatalf("close() error = %v, want %v", err, wantErr)
+	}
+	if calls != total {
+		t.Fatalf("send attempted for %d events, want %d: a mid-stream error must not skip the rest, including the terminal result", calls, total)
 	}
 }
 
