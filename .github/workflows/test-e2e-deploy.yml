@@ -120,7 +120,7 @@ jobs:
           key: build-${{ github.sha }}-${{ github.run_id }}
 
   sweep:
-    name: Reclaim projects earlier runs stranded
+    name: Prepare the shared preview substrate
     needs: build
     runs-on: ubuntu-latest
     timeout-minutes: 60
@@ -158,6 +158,11 @@ jobs:
 
       - name: Reclaim every e2e project that is not this run's
         run: node adapter/scripts/e2e-next/sweep-projects.mjs
+
+      - name: Reconcile the shared preview entry worker
+        env:
+          OCEL_E2E_PREVIEW_DOMAIN: ${{ vars.E2E_PREVIEW_DOMAIN }}
+        run: node adapter/scripts/e2e-next/reconcile-entry.mjs
 
   smoke:
     name: Smoke (one app through deploy/logs, kept as the run's canary)

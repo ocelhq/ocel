@@ -60,6 +60,7 @@ prepared:
 | ------------------------- | --------------------------------------------------------- |
 | `E2E_OCEL_API_URL`        | Ocel API base URL                                          |
 | `E2E_AWS_REGION`          | region to deploy into                                      |
+| `E2E_PREVIEW_DOMAIN`      | the preview wildcard, e.g. `*.ocel.site`; each run reinstalls the shared entry worker on it |
 | `TURBO_TEAM`              | Vercel team slug for the remote cache (optional)           |
 
 The expected account ids are deliberately duplicated: the guard compares the
