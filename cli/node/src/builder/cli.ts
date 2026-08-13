@@ -26,5 +26,5 @@ main().catch((err) => {
   const stack = err instanceof Error ? (err.stack ?? err.message) : String(err);
   if (!isReported(err)) reportError(stack);
   process.stderr.write(`${stack}\n`);
-  process.exit(1);
+  process.exitCode = 1;
 });

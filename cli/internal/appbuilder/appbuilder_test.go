@@ -805,6 +805,23 @@ func TestRunNode(t *testing.T) {
 		}
 	})
 
+	t.Run("a large error record set via process.exitCode is not truncated", func(t *testing.T) {
+		t.Parallel()
+
+		message := strings.Repeat("x", 400*1024)
+		script := fmt.Sprintf(`console.log(%s + JSON.stringify({type:"error",app:"api",stage:"build",message:%s}));
+process.exitCode = 1;
+`, jsString(nodeprotocol.Prefix), jsString(message))
+
+		err := runNodeScript(t, script)
+		if err == nil {
+			t.Fatal("runNode succeeded on a non-zero exit, want error")
+		}
+		if !strings.Contains(err.Error(), message) {
+			t.Errorf("error carries %d bytes, want the full %d-byte record (process.exitCode must not truncate stdout, unlike process.exit)", len(err.Error()), len(message))
+		}
+	})
+
 	t.Run("a silent failure still errors", func(t *testing.T) {
 		t.Parallel()
 
