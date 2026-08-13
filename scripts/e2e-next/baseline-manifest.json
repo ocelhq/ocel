@@ -331,6 +331,14 @@
     "flakey": [],
     "runtimeError": true
   },
+  "test/e2e/app-dir/parallel-routes-root-param-dynamic-child/parallel-routes-root-param-dynamic-child.test.ts": {
+    "failed": [],
+    "flakey": [
+      "parallel-routes-root-param-dynamic-child With generateStaticParams (gsp) Dynamic params (dynamic-123) should render a 404 for /en/gsp/stories/dynamic-123 (slug not in generateStaticParams)",
+      "parallel-routes-root-param-dynamic-child With generateStaticParams (gsp) Dynamic params (dynamic-123) should render a 404 for /fr/gsp/stories/dynamic-123 (slug not in generateStaticParams)"
+    ],
+    "runtimeError": false
+  },
   "test/e2e/app-dir/parallel-routes-generate-static-params/parallel-routes-generate-static-params.test.ts": {
     "failed": [
       "parallel-routes-generate-static-params should render the intercepted/non-intercepted modal"
@@ -519,11 +527,6 @@
       "segment cache (search params) stores prefetched data by its rewritten search params, not the original ones",
       "segment cache (search params) handles rewrites to the same page but with different search params"
     ],
-    "flakey": [],
-    "runtimeError": false
-  },
-  "test/e2e/app-dir/segment-cache/vary-params-base-dynamic/vary-params-base-dynamic.test.ts": {
-    "failed": [],
     "flakey": [],
     "runtimeError": false
   },
