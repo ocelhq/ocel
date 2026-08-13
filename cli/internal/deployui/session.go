@@ -80,6 +80,10 @@ func (s *Session) BuildOK() {
 	s.r.BuildOK()
 }
 
+func (s *Session) RestartBuild() {
+	s.r.RestartLegacyStage(deploymentsv1.Phase_PHASE_BUILDING)
+}
+
 func (s *Session) Waiting(reason, url string) {
 	s.logf("[waiting] %s", withoutFragment(url))
 	s.waiting = true

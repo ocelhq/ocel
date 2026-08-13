@@ -195,3 +195,49 @@ func TestRendererSingleOwnerRaceFree(t *testing.T) {
 		t.Fatalf("Close() = %v", err)
 	}
 }
+
+func TestFormatDurationRoundsToWholeSeconds(t *testing.T) {
+	t.Parallel()
+	cases := []struct {
+		d    time.Duration
+		want string
+	}{
+		{0, "0s"},
+		{400 * time.Millisecond, "1s"},
+		{1100 * time.Millisecond, "1s"},
+		{1600 * time.Millisecond, "2s"},
+		{59*time.Second + 600*time.Millisecond, "1m00s"},
+		{90 * time.Second, "1m30s"},
+	}
+	for _, tc := range cases {
+		if got := formatDuration(tc.d); got != tc.want {
+			t.Errorf("formatDuration(%s) = %q, want %q", tc.d, got, tc.want)
+		}
+	}
+}
+
+func TestRestartLegacyStageDiscardsElapsedTime(t *testing.T) {
+	t.Parallel()
+	var out bytes.Buffer
+	r := newRendererForTest(&out, FormatHuman, true, false)
+	t.Cleanup(func() { _ = r.Close() })
+
+	now := time.Now()
+	r.useClock(func() time.Time { return now })
+
+	r.Building()
+
+	now = now.Add(90 * time.Second)
+	r.RestartLegacyStage(deploymentsv1.Phase_PHASE_BUILDING)
+
+	now = now.Add(1 * time.Second)
+	r.BuildOK()
+
+	got := out.String()
+	if !strings.Contains(got, "1s") {
+		t.Errorf("output = %q, want the committed Building line to show 1s, the successful attempt's own duration", got)
+	}
+	if strings.Contains(got, "91s") || strings.Contains(got, "1m3") {
+		t.Errorf("output = %q, want the discarded attempt and the wait excluded from the displayed duration", got)
+	}
+}

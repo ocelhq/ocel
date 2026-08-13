@@ -47,13 +47,20 @@ type stagePlan struct {
 	droppedNodes   int
 	droppedOrphans int
 	droppedActive  int
+
+	now func() time.Time
 }
 
 func newStagePlan() *stagePlan {
 	return &stagePlan{
 		nodes:   make(map[string]*stageNode),
 		orphans: make(map[string][]string),
+		now:     time.Now,
 	}
+}
+
+func (p *stagePlan) useClock(now func() time.Time) {
+	p.now = now
 }
 
 func stageKey(id []byte) string {
@@ -168,7 +175,7 @@ func (p *stagePlan) attachOrphans(parentID string) {
 func (p *stagePlan) progress(id, message string, current uint32, total *uint32) (n *stageNode, tracked bool) {
 	n, tracked = p.nodeFor(id)
 	if n.state != stageActive {
-		n.started = time.Now()
+		n.started = p.now()
 	}
 	n.state = stageActive
 	n.message = message
@@ -183,6 +190,12 @@ func (p *stagePlan) progress(id, message string, current uint32, total *uint32) 
 		n.state = stageDone
 	}
 	return n, tracked
+}
+
+func (p *stagePlan) restart(id string) {
+	if n, ok := p.nodes[id]; ok {
+		n.started = p.now()
+	}
 }
 
 func (p *stagePlan) ensureActive(id string) {
