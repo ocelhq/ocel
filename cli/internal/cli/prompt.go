@@ -3,6 +3,7 @@ package cli
 import (
 	"bufio"
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -14,6 +15,8 @@ var (
 	stdinMu     sync.Mutex
 	stdinReader *bufio.Reader
 )
+
+var errStdinBusy = errors.New("stdin is already being read by an abandoned prompt")
 
 func readLine(ctx context.Context, stdin io.Reader) (string, error) {
 	select {
@@ -51,7 +54,9 @@ func readLineFrom(stdin io.Reader) (string, error) {
 	var line string
 	var err error
 	if stdin == os.Stdin {
-		stdinMu.Lock()
+		if !stdinMu.TryLock() {
+			return "", errStdinBusy
+		}
 		if stdinReader == nil {
 			stdinReader = bufio.NewReader(os.Stdin)
 		}

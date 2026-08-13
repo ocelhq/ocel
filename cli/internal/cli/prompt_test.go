@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"io"
+	"os"
 	"strings"
 	"testing"
 	"time"
@@ -95,6 +96,34 @@ func TestConfirmYNStillReadsARealAnswer(t *testing.T) {
 	}
 	if !strings.Contains(stdout.String(), "Proceed? [y/N]") {
 		t.Errorf("stdout = %q, want it to contain the prompt", stdout.String())
+	}
+}
+
+func TestReadLineSecondCallWhileFirstStillAbandonedReturnsPromptly(t *testing.T) {
+	// Not t.Parallel(): exercises the package-level stdin lock directly.
+
+	stdinMu.Lock()
+	defer stdinMu.Unlock()
+
+	done := make(chan struct {
+		line string
+		err  error
+	}, 1)
+	go func() {
+		line, err := readLine(context.Background(), os.Stdin)
+		done <- struct {
+			line string
+			err  error
+		}{line, err}
+	}()
+
+	select {
+	case r := <-done:
+		if r.err == nil {
+			t.Fatal("readLine() error = nil, want an error since a prior abandoned read still owns stdin")
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("readLine hung instead of returning an error while stdin is still held by an abandoned read")
 	}
 }
 
