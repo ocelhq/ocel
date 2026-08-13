@@ -135,21 +135,22 @@ func parseOptions(raw []byte) (options, error) {
 	return o, nil
 }
 
-func (s *Server) Deploy(ctx context.Context, req *deploymentsv1.DeployRequest, stream *connect.ServerStream[deploymentsv1.DeployEvent]) error {
+func (s *Server) Deploy(ctx context.Context, req *deploymentsv1.DeployRequest, stream *connect.ServerStream[deploymentsv1.DeployEvent]) (err error) {
 	manifest := req.GetManifest()
 	if err := validateManifest(manifest); err != nil {
 		return connect.NewError(connect.CodeInvalidArgument, err)
 	}
 	sender := newEventSender(ctx, stream.Send)
+	defer func() { err = sender.close() }()
 	progress, logf := newDeployReporter(sender)
 
-	res, err := s.runDeploy(ctx, req, manifest, progress, logf)
-	if err != nil {
-		sender.send(failureResult(err))
+	res, deployErr := s.runDeploy(ctx, req, manifest, progress, logf)
+	if deployErr != nil {
+		sender.send(failureResult(deployErr))
 	} else {
 		sender.send(deployedResult(res))
 	}
-	return sender.close()
+	return nil
 }
 
 func newDeployReporter(sender *eventSender) (deploy.Progress, func(string)) {
