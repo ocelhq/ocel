@@ -22,15 +22,16 @@ const maxSpanNameLen = 200
 
 func (r *Run) IngestSpan(spanID, parentSpanID [8]byte, name string, start, end time.Time, status SpanStatus, attrs []attribute.KeyValue) {
 	ctx := context.Background()
+	parent := r.rootSpan.SpanContext()
 	if parentSpanID != ([8]byte{}) {
-		parent := trace.NewSpanContext(trace.SpanContextConfig{
+		parent = trace.NewSpanContext(trace.SpanContextConfig{
 			TraceID:    r.traceID,
 			SpanID:     trace.SpanID(parentSpanID),
 			TraceFlags: trace.FlagsSampled,
 			Remote:     true,
 		})
-		ctx = trace.ContextWithRemoteSpanContext(ctx, parent)
 	}
+	ctx = trace.ContextWithRemoteSpanContext(ctx, parent)
 	ctx = contextWithSpanID(ctx, trace.SpanID(spanID))
 
 	opts := []trace.SpanStartOption{trace.WithTimestamp(start), trace.WithSpanKind(trace.SpanKindInternal)}
