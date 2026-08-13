@@ -246,3 +246,28 @@ func TestRestartBuildStageDiscardsElapsedTime(t *testing.T) {
 		t.Errorf("output = %q, want the discarded attempt and the wait excluded from the displayed duration", got)
 	}
 }
+
+func TestUntaggedProgressCommitsEachMessageAsItsOwnLine(t *testing.T) {
+	t.Parallel()
+	var out bytes.Buffer
+	r := newRendererForTest(&out, FormatHuman, true, false)
+	t.Cleanup(func() { _ = r.Close() })
+
+	r.Progress(nil, deploymentsv1.Phase_PHASE_UNSPECIFIED, "Reclaimed 3 promotion(s): a, b, c", 0, nil)
+	r.Progress(nil, deploymentsv1.Phase_PHASE_UNSPECIFIED, "Kept 2 promotion(s).", 0, nil)
+
+	if len(r.plan.nodes) != 1 {
+		t.Fatalf("got %d untagged nodes, want 1: untagged progress must share a single node, not one per message", len(r.plan.nodes))
+	}
+
+	got := out.String()
+	if !strings.Contains(got, "Reclaimed 3 promotion(s): a, b, c") {
+		t.Errorf("output = %q, want the first untagged message committed to scrollback before the second overwrote it", got)
+	}
+	if !strings.Contains(got, "Kept 2 promotion(s).") {
+		t.Errorf("output = %q, want the second untagged message live or committed", got)
+	}
+	if got := strings.Count(out.String(), okMark); got != 1 {
+		t.Errorf("got %d committed (checkmarked) lines, want 1: the first message committed when the second arrived, the second is still live", got)
+	}
+}

@@ -231,6 +231,11 @@ func (r *Renderer) progressStageLocked(id string, phase deploymentsv1.Phase, mes
 }
 
 func (r *Renderer) progressUntaggedLocked(phase deploymentsv1.Phase, message string, current uint32, total *uint32) {
+	if r.plan.isActive(untaggedStageID) {
+		if n := r.plan.nodes[untaggedStageID]; n != nil {
+			r.commitLocked(n, r.okColor(), okMark, "")
+		}
+	}
 	n, tracked := r.plan.progress(untaggedStageID, message, current, total)
 	n.title = fallbackTitle(phase, message)
 	if tracked {
