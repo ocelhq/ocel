@@ -508,16 +508,6 @@
       ],
       "flakey": []
     },
-    "test/e2e/middleware-custom-matchers/test/index.test.ts": {
-      "failed": [
-        "Middleware custom matchers should match source path",
-        "Middleware custom matchers should match has header",
-        "Middleware custom matchers should match has query",
-        "Middleware custom matchers should match has cookie",
-        "Middleware custom matchers should match has header value"
-      ],
-      "flakey": []
-    },
     "test/e2e/middleware-dynamic-basepath-matcher-rewrites/middleware-dynamic-basepath-matcher-rewrites.test.ts": {
       "failed": [
         "middleware-dynamic-basepath-matcher-rewrites preserves router.query on client-side navigation to a catch-all page"
@@ -553,14 +543,7 @@
     "test/e2e/middleware-rewrites/test/index.test.ts": {
       "failed": [
         "Middleware Rewrite should handle middleware rewrite with body and headers correctly",
-        "Middleware Rewrite should handle static rewrite from next.config.js correctly",
-        "Middleware Rewrite should return HTML/data correctly for pre-rendered page",
-        "Middleware Rewrite should opt out of prefetch caching for dynamic routes",
-        "Middleware Rewrite should allow to switch locales",
-        "Middleware Rewrite should clear query parameters",
-        "Middleware Rewrite should rewrite without hard navigation",
-        "Middleware Rewrite /fr should clear query parameters",
-        "Middleware Rewrite /fr should rewrite without hard navigation"
+        "Middleware Rewrite should opt out of prefetch caching for dynamic routes"
       ],
       "flakey": []
     },
@@ -572,8 +555,6 @@
     },
     "test/e2e/middleware-trailing-slash/test/index.test.ts": {
       "failed": [
-        "Middleware Runtime trailing slash should have correct query values for rewrite to ssg page",
-        "Middleware Runtime trailing slash should rewrite the same for direct visit and client-transition",
         "Middleware Runtime trailing slash allows shallow linking with middleware"
       ],
       "flakey": []
