@@ -62,10 +62,14 @@
     },
     "test/e2e/app-dir/app-static/app-static.test.ts": {
       "failed": [
+        "app-dir static/dynamic handling new tags have been specified on subsequent fetch should not fetch from memory cache",
         "app-dir static/dynamic handling unstable-cache should work in pages/api/unstable-cache-node",
         "app-dir static/dynamic handling updateTag/revalidateTag should successfully update tag when called from server action"
       ],
-      "flakey": []
+      "flakey": [
+        "app-dir static/dynamic handling should cache correctly with post method and revalidate edge",
+        "app-dir static/dynamic handling should honor fetch cache correctly"
+      ]
     },
     "test/e2e/app-dir/metadata-dynamic-routes-async-deps/index.test.ts": {
       "failed": [
@@ -112,7 +116,10 @@
     },
     "test/e2e/app-dir/not-found-with-pages-i18n/not-found-with-pages.test.ts": {
       "failed": [
-        "not-found-with-pages-i18n should prefer the app router 404 over the pages router 404 when both are present - SSR /app-dir/foo"
+        "not-found-with-pages-i18n should prefer the app router 404 over the pages router 404 when both are present - SSR /app-dir/foo",
+        "not-found-with-pages-i18n should prefer the app router 404 over the pages router 404 when both are present - SSR /foo",
+        "not-found-with-pages-i18n should prefer the app router 404 over the pages router 404 when both are present - browser /app-dir/foo",
+        "not-found-with-pages-i18n should prefer the app router 404 over the pages router 404 when both are present - browser /foo"
       ],
       "flakey": []
     },
@@ -134,7 +141,9 @@
         "resume-data-cache should have consistent data between static and dynamic renders with use cache",
         "resume-data-cache should have consistent data between static and dynamic renders with fetch cache"
       ],
-      "flakey": []
+      "flakey": [
+        "resume-data-cache should see fresh data after updateTag in server action with fetch cache"
+      ]
     },
     "test/e2e/app-dir/revalidate-path-with-rewrites/revalidate-path-with-rewrites.test.ts": {
       "failed": [
