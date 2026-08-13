@@ -14,6 +14,8 @@ const (
 	AttrBytes         = attribute.Key("ocel.bytes")
 	AttrRetryCount    = attribute.Key("ocel.retry_count")
 	AttrDurationMS    = attribute.Key("ocel.duration_ms")
+	AttrResourceType  = attribute.Key("ocel.resource_type")
+	AttrResourceName  = attribute.Key("ocel.resource_name")
 )
 
 var allowedAttributes = map[attribute.Key]struct{}{
@@ -28,6 +30,8 @@ var allowedAttributes = map[attribute.Key]struct{}{
 	AttrBytes:         {},
 	AttrRetryCount:    {},
 	AttrDurationMS:    {},
+	AttrResourceType:  {},
+	AttrResourceName:  {},
 }
 
 func filterAttributes(attrs []attribute.KeyValue) []attribute.KeyValue {
