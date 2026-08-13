@@ -504,6 +504,53 @@ func traceSpanAttrs(t *testing.T, run *obs.Run, spanName string) []traceAttr {
 	return nil
 }
 
+func TestBuildWriterHonoursVerbosityIndependentlyOfLiveness(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		name         string
+		live         bool
+		verbose      bool
+		wantTerminal bool
+	}{
+		{"live, non-verbose: log only", true, false, false},
+		{"live, verbose: log only (live already implies non-verbose, but the writer must not double up)", true, true, false},
+		{"non-live, non-verbose: log only, no firehose to a non-TTY non-verbose terminal", false, false, false},
+		{"non-live, verbose: terminal and log", false, true, true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			var out bytes.Buffer
+			r := newRendererForTest(&out, FormatHuman, tc.live, false)
+
+			logFile, err := os.CreateTemp(t.TempDir(), "session-*.log")
+			if err != nil {
+				t.Fatalf("create log file: %v", err)
+			}
+			defer logFile.Close()
+
+			s := &Session{r: r, verbose: tc.verbose, log: logFile}
+			s.logWriter = &syncFileWriter{f: logFile, mu: &s.logMu}
+
+			const marker = "raw subprocess output"
+			if _, err := s.BuildWriter().Write([]byte(marker)); err != nil {
+				t.Fatalf("Write() = %v", err)
+			}
+
+			if gotTerminal := strings.Contains(out.String(), marker); gotTerminal != tc.wantTerminal {
+				t.Errorf("terminal received the marker = %v, want %v (stdout = %q)", gotTerminal, tc.wantTerminal, out.String())
+			}
+
+			logRaw, err := os.ReadFile(logFile.Name())
+			if err != nil {
+				t.Fatalf("read log file: %v", err)
+			}
+			if !strings.Contains(string(logRaw), marker) {
+				t.Errorf("log file = %q, want the raw output always recorded regardless of verbosity", logRaw)
+			}
+		})
+	}
+}
+
 func TestFormatAxis(t *testing.T) {
 	t.Run("json format emits one machine-readable line per event, never the human text", func(t *testing.T) {
 		t.Parallel()

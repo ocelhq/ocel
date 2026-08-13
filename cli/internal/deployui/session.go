@@ -20,6 +20,7 @@ type Session struct {
 	r       *Renderer
 	run     *obs.Run
 	command string
+	verbose bool
 	waiting bool
 
 	logMu     sync.Mutex
@@ -33,6 +34,7 @@ func New(stdout io.Writer, run *obs.Run, format Format, verbose bool) *Session {
 		r:       NewRenderer(stdout, format, verbose),
 		run:     run,
 		command: run.Command(),
+		verbose: verbose,
 	}
 	p := filepath.Join(run.Dir(), run.TraceID()+".log")
 	if f, err := os.Create(p); err == nil {
@@ -48,7 +50,7 @@ func (s *Session) LogPath() string {
 }
 
 func (s *Session) BuildWriter() io.Writer {
-	if s.r.Live() {
+	if s.r.Live() || !s.verbose {
 		if s.logWriter != nil {
 			return s.logWriter
 		}
