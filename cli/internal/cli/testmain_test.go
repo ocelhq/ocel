@@ -11,6 +11,9 @@ func TestMain(m *testing.M) {
 	if os.Getenv(deployFakeProviderEnvVar) == "1" {
 		os.Exit(runDeployFakeProvider())
 	}
+	if os.Getenv(procTreeModeEnvVar) != "" {
+		os.Exit(runProcessTreeSubprocess())
+	}
 
 	dir, err := os.MkdirTemp("", "ocel-cli-test-config-")
 	if err != nil {

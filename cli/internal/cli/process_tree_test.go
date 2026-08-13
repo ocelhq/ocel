@@ -19,10 +19,10 @@ import (
 )
 
 // fixtureWorkerTree returns app args for a POSIX shell that starts a
-// background "worker" in its own process, signals readiness, and then
-// blocks — the shape of a framework dev server that forks workers that
-// stay in the parent's process group. It also returns the paths the test
-// polls to observe the worker starting and to read its pid.
+// background "worker" in its own process and then blocks — the shape of a
+// framework dev server that forks workers that stay in the parent's
+// process group. It also returns the paths the test polls to observe the
+// worker starting and to read its pid.
 func fixtureWorkerTree(t *testing.T, root, name string) (appArgs []string, startedPath, pidPath string) {
 	t.Helper()
 	if runtime.GOOS == "windows" {

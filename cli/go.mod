@@ -4,6 +4,7 @@ go 1.25.11
 
 require (
 	connectrpc.com/connect v1.20.0
+	github.com/creack/pty v1.1.24
 	github.com/evanw/esbuild v0.28.1
 	github.com/fsnotify/fsnotify v1.10.1
 	github.com/mattn/go-isatty v0.0.22
