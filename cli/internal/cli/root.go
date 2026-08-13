@@ -21,6 +21,25 @@ func verboseEnabled() bool {
 	return ok
 }
 
+// logFormatFlag is an axis independent of verboseFlag: verbosity is how much
+// gets said, format is how it's said. Human-readable is the default
+// everywhere, including a non-TTY (CI reads its own logs), and "json" is
+// opt-in for machine consumers. Unlike verbosity, format never derives from
+// TTY detection.
+const (
+	logFormatHuman = "human"
+	logFormatJSON  = "json"
+)
+
+var logFormatFlag string
+
+func logFormat() string {
+	if logFormatFlag == logFormatJSON {
+		return logFormatJSON
+	}
+	return logFormatHuman
+}
+
 var rootCmd = &cobra.Command{
 	Use:           "ocel",
 	Short:         "Ocel CLI",
@@ -37,6 +56,7 @@ func Execute() error {
 func init() {
 	rootCmd.PersistentFlags().StringVar(&apiURLFlag, "api-url", "", "Base URL of the Ocel server (defaults to $OCEL_API_URL, else https://ocel.app)")
 	rootCmd.PersistentFlags().BoolVarP(&verboseFlag, "verbose", "v", false, "Stream full deploy logs to the terminal instead of the phased progress view (also OCEL_DEBUG)")
+	rootCmd.PersistentFlags().StringVar(&logFormatFlag, "log-format", logFormatHuman, "Output format for command logs: human or json")
 
 	rootCmd.AddCommand(devCmd)
 	rootCmd.AddCommand(runCmd)
