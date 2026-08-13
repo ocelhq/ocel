@@ -1,0 +1,21 @@
+{
+  "name": "@ocel-bench/root",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Deploy benchmark matrix: node frameworks across ocel, sst and a raw lambda baseline",
+  "scripts": {
+    "bench": "node runner/run.mjs",
+    "test": "vitest run --root ."
+  },
+  "devEngines": {
+    "packageManager": {
+      "name": "pnpm",
+      "version": "11.10.0",
+      "onFail": "download"
+    }
+  },
+  "devDependencies": {
+    "vitest": "^4.1.10"
+  }
+}

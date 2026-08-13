@@ -1,0 +1,13 @@
+{
+  "name": "@ocel-bench/runner",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Orchestrates the deploy benchmark matrix: stages each app, drives one platform driver per cell, measures cold and warm latency and renders the results",
+  "scripts": {
+    "test": "vitest run"
+  },
+  "devDependencies": {
+    "vitest": "^4.1.9"
+  }
+}

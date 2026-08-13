@@ -58,6 +58,10 @@ entry before it needs files. Dotfile directories are tooling and are exempt.
 - **`proto/`** — source of truth for the wire format. Bindings are **generated** — never
   hand-edit generated output.
 - **`scripts/`** — development and release tooling, and the e2e harnesses.
+- **`bench/`** — the deploy benchmark: the same app shipped by ocel and by other tools,
+  measured against each other. Its own pnpm workspace, invisible to the root one, and
+  nothing in the product may depend on it. Suites that prove behaviour live in
+  `scripts/`; this one only measures.
 - **`examples/`, `tests/`** — sample apps used as fixtures, and the dev-server suites
   that drive them. Suites that deploy live in `scripts/`, never here.
 - **`docs/agents/`** — configuration the agent skills read. Not product documentation;

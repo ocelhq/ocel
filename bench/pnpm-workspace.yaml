@@ -1,0 +1,8 @@
+packages:
+  - apps/*
+  - runner
+
+allowBuilds:
+  esbuild: true
+
+autoInstallPeers: false
