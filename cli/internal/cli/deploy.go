@@ -470,9 +470,9 @@ func toApps(apps []projectconfig.App) []manifestbuilder.App {
 func failSession(ctx context.Context, ui *deployui.Session, err error) error {
 	if ctx.Err() != nil {
 		ui.Cancel()
-	} else {
-		ui.Fail(err)
+		return &ExitError{Code: interruptExitCode}
 	}
+	ui.Fail(err)
 	return &ExitError{Code: 1}
 }
 
