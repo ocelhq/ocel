@@ -11,6 +11,9 @@ func TestMain(m *testing.M) {
 	if os.Getenv(deployFakeProviderEnvVar) == "1" {
 		os.Exit(runDeployFakeProvider())
 	}
+	if os.Getenv(procTreeSessionHarnessEnvVar) == "1" {
+		os.Exit(runProcessTreeSessionHarness())
+	}
 	if os.Getenv(procTreeModeEnvVar) != "" {
 		os.Exit(runProcessTreeSubprocess())
 	}
