@@ -30,7 +30,11 @@ const DefaultReadyTimeout = 10 * time.Second
 
 const ReadyTimeoutEnvVar = "OCEL_READY_TIMEOUT"
 
-const DefaultGracePeriod = 5 * time.Second
+// DefaultGracePeriod is short because the provider does not wait for
+// in-flight Pulumi work on SIGTERM (see #257) — the grace period only
+// covers the time it takes the process to notice the signal and exit, not
+// any real work it needs to finish first.
+const DefaultGracePeriod = 2 * time.Second
 
 const DefaultReapTimeout = 2 * time.Second
 
@@ -155,6 +159,8 @@ func Spawn(ctx context.Context, cfg Config) (*Runner, error) {
 		done:         make(chan struct{}),
 	}
 
+	registerLive(r)
+
 	var drainWG sync.WaitGroup
 	drainWG.Add(2)
 	go func() { defer drainWG.Done(); r.drainStdout(stdoutPipe) }()
@@ -169,8 +175,10 @@ func Spawn(ctx context.Context, cfg Config) (*Runner, error) {
 		// teardown() signal the pgid on its own schedule, possibly long
 		// after the leader was reaped — is what makes a force-kill safe
 		// unconditionally, without risking a pgid recycled by an unrelated
-		// process in the meantime.
+		// process in the meantime. deregisterLive happens in the same
+		// breath so KillAllLive never sees a runner past this point.
 		_ = procgroup.Kill(cmd)
+		deregisterLive(r)
 		close(r.done)
 	}()
 
@@ -351,6 +359,46 @@ func (r *Runner) driveStream(rpc string, stream *connect.ServerStreamForClient[d
 		return fmt.Errorf("providerrunner: provider connection lost: %w", err)
 	}
 	return fmt.Errorf("providerrunner: provider closed the %s stream without a result", rpc)
+}
+
+var (
+	liveMu sync.Mutex
+	live   = map[*Runner]struct{}{}
+)
+
+func registerLive(r *Runner) {
+	liveMu.Lock()
+	live[r] = struct{}{}
+	liveMu.Unlock()
+}
+
+func deregisterLive(r *Runner) {
+	liveMu.Lock()
+	delete(live, r)
+	liveMu.Unlock()
+}
+
+// KillAllLive force-kills the process group of every Runner that has been
+// spawned and not yet reaped. It exists for a caller with no time left to
+// run the normal Close() sequence — e.g. a second interrupt arriving while
+// a graceful shutdown is still in its window — so it does not signal
+// termination first or wait for anything.
+//
+// It is safe to call concurrently with an in-flight Close()/teardown(): a
+// runner is only registered while its pgid is guaranteed not to have been
+// recycled (see the waiter goroutine in Spawn), so this can never land a
+// signal on the wrong process tree.
+func KillAllLive() {
+	liveMu.Lock()
+	runners := make([]*Runner, 0, len(live))
+	for r := range live {
+		runners = append(runners, r)
+	}
+	liveMu.Unlock()
+
+	for _, r := range runners {
+		_ = procgroup.Kill(r.cmd)
+	}
 }
 
 func (r *Runner) Close() {

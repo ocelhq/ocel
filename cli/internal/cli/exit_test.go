@@ -25,14 +25,30 @@ func fakeExit(t *testing.T) (exit func(int), calls func() []int) {
 		}
 }
 
+func fakeForceKill(t *testing.T) (forceKill func(), callCount func() int) {
+	t.Helper()
+	var mu sync.Mutex
+	var count int
+	return func() {
+			mu.Lock()
+			defer mu.Unlock()
+			count++
+		}, func() int {
+			mu.Lock()
+			defer mu.Unlock()
+			return count
+		}
+}
+
 func TestInterruptHandlerFirstSignalCancelsContext(t *testing.T) {
 	t.Parallel()
 
 	var stderr bytes.Buffer
 	ch := make(chan os.Signal, 2)
 	exit, calls := fakeExit(t)
+	forceKill, forceKillCalls := fakeForceKill(t)
 
-	ctx, stop := interruptHandlerWithExit(context.Background(), &stderr, ch, time.Hour, exit)
+	ctx, stop := interruptHandlerWithExit(context.Background(), &stderr, ch, time.Hour, forceKill, exit)
 	defer stop()
 
 	select {
@@ -52,6 +68,9 @@ func TestInterruptHandlerFirstSignalCancelsContext(t *testing.T) {
 	if got := calls(); len(got) != 0 {
 		t.Errorf("exit called %v after only one signal, want no forced exit", got)
 	}
+	if got := forceKillCalls(); got != 0 {
+		t.Errorf("forceKill called %d times after only one signal, want a normal teardown to run instead", got)
+	}
 }
 
 func TestInterruptHandlerSecondSignalForcesExit(t *testing.T) {
@@ -60,8 +79,9 @@ func TestInterruptHandlerSecondSignalForcesExit(t *testing.T) {
 	var stderr bytes.Buffer
 	ch := make(chan os.Signal, 2)
 	exit, calls := fakeExit(t)
+	forceKill, forceKillCalls := fakeForceKill(t)
 
-	ctx, stop := interruptHandlerWithExit(context.Background(), &stderr, ch, time.Hour, exit)
+	ctx, stop := interruptHandlerWithExit(context.Background(), &stderr, ch, time.Hour, forceKill, exit)
 	defer stop()
 
 	ch <- os.Interrupt
@@ -78,6 +98,12 @@ func TestInterruptHandlerSecondSignalForcesExit(t *testing.T) {
 	if !strings.Contains(stderr.String(), "Interrupted again") {
 		t.Errorf("stderr = %q, want it to say a second interrupt happened", stderr.String())
 	}
+	// A second Ctrl-C mid-teardown is exactly the scenario that used to
+	// orphan a pulumi grandchild: exit() runs with no time left for a
+	// normal Close(), so forceKill is the only thing left to reap it.
+	if got := forceKillCalls(); got != 1 {
+		t.Errorf("forceKill called %d times, want exactly 1 before the forced exit", got)
+	}
 }
 
 func TestInterruptHandlerGracefulWindowExpiryForcesExit(t *testing.T) {
@@ -86,8 +112,9 @@ func TestInterruptHandlerGracefulWindowExpiryForcesExit(t *testing.T) {
 	var stderr bytes.Buffer
 	ch := make(chan os.Signal, 2)
 	exit, calls := fakeExit(t)
+	forceKill, forceKillCalls := fakeForceKill(t)
 
-	ctx, stop := interruptHandlerWithExit(context.Background(), &stderr, ch, 20*time.Millisecond, exit)
+	ctx, stop := interruptHandlerWithExit(context.Background(), &stderr, ch, 20*time.Millisecond, forceKill, exit)
 	defer stop()
 
 	ch <- os.Interrupt
@@ -105,6 +132,9 @@ func TestInterruptHandlerGracefulWindowExpiryForcesExit(t *testing.T) {
 	if !strings.Contains(stderr.String(), "did not finish") {
 		t.Errorf("stderr = %q, want it to say the graceful window expired", stderr.String())
 	}
+	if got := forceKillCalls(); got != 1 {
+		t.Errorf("forceKill called %d times, want exactly 1 when the graceful window itself expires", got)
+	}
 }
 
 func TestInterruptHandlerStopPreventsForcedExit(t *testing.T) {
@@ -113,8 +143,9 @@ func TestInterruptHandlerStopPreventsForcedExit(t *testing.T) {
 	var stderr bytes.Buffer
 	ch := make(chan os.Signal, 2)
 	exit, calls := fakeExit(t)
+	forceKill, forceKillCalls := fakeForceKill(t)
 
-	ctx, stop := interruptHandlerWithExit(context.Background(), &stderr, ch, 20*time.Millisecond, exit)
+	ctx, stop := interruptHandlerWithExit(context.Background(), &stderr, ch, 20*time.Millisecond, forceKill, exit)
 
 	ch <- os.Interrupt
 	<-ctx.Done()
@@ -124,6 +155,9 @@ func TestInterruptHandlerStopPreventsForcedExit(t *testing.T) {
 	if got := calls(); len(got) != 0 {
 		t.Errorf("exit called %v after stop(), want the handler to have shut down cleanly", got)
 	}
+	if got := forceKillCalls(); got != 0 {
+		t.Errorf("forceKill called %d times after stop(), want the handler to have shut down cleanly", got)
+	}
 }
 
 func TestInterruptHandlerStopIsSafeToCallTwice(t *testing.T) {
@@ -132,8 +166,9 @@ func TestInterruptHandlerStopIsSafeToCallTwice(t *testing.T) {
 	var stderr bytes.Buffer
 	ch := make(chan os.Signal, 2)
 	exit, _ := fakeExit(t)
+	forceKill, _ := fakeForceKill(t)
 
-	_, stop := interruptHandlerWithExit(context.Background(), &stderr, ch, time.Hour, exit)
+	_, stop := interruptHandlerWithExit(context.Background(), &stderr, ch, time.Hour, forceKill, exit)
 
 	stop()
 	stop()
