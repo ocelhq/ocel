@@ -220,7 +220,7 @@ func TestFormatDurationRoundsToWholeSeconds(t *testing.T) {
 	}
 }
 
-func TestRestartLegacyStageDiscardsElapsedTime(t *testing.T) {
+func TestRestartBuildStageDiscardsElapsedTime(t *testing.T) {
 	t.Parallel()
 	var out bytes.Buffer
 	r := newRendererForTest(&out, FormatHuman, true, false)
@@ -233,7 +233,7 @@ func TestRestartLegacyStageDiscardsElapsedTime(t *testing.T) {
 	r.Building()
 
 	nowNanos.Add(int64(90 * time.Second))
-	r.RestartLegacyStage(deploymentsv1.Phase_PHASE_BUILDING)
+	r.RestartBuildStage()
 
 	nowNanos.Add(int64(1 * time.Second))
 	r.BuildOK()

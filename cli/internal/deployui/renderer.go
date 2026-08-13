@@ -20,6 +20,10 @@ const (
 	barWidth = 12
 )
 
+var buildStageID = []byte("build")
+
+const untaggedStageID = "untagged"
+
 type Format string
 
 const (
@@ -34,15 +38,14 @@ type Renderer struct {
 	color   bool
 	verbose bool
 
-	mu           sync.Mutex
-	plan         *stagePlan
-	legacyActive string
-	liveLines    int
-	waiting      bool
-	spinning     bool
-	spinMsg      string
-	spinFrame    int
-	start        time.Time
+	mu        sync.Mutex
+	plan      *stagePlan
+	liveLines int
+	waiting   bool
+	spinning  bool
+	spinMsg   string
+	spinFrame int
+	start     time.Time
 
 	tickStop chan struct{}
 	tickDone chan struct{}
@@ -92,10 +95,10 @@ func (r *Renderer) useClock(now func() time.Time) {
 	r.plan.useClock(now)
 }
 
-func (r *Renderer) RestartLegacyStage(phase deploymentsv1.Phase) {
+func (r *Renderer) RestartBuildStage() {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	r.plan.restart(legacyStageID(phase, ""))
+	r.plan.restart(stageKey(buildStageID))
 }
 
 func (r *Renderer) Write(p []byte) (int, error) {
@@ -202,7 +205,7 @@ func (r *Renderer) Progress(stageID []byte, phase deploymentsv1.Phase, message s
 
 	id := stageKey(stageID)
 	if id == "" {
-		r.progressLegacyLocked(phase, message, current, total)
+		r.progressUntaggedLocked(phase, message, current, total)
 	} else {
 		r.progressStageLocked(id, phase, message, current, total)
 	}
@@ -213,7 +216,7 @@ func (r *Renderer) Progress(stageID []byte, phase deploymentsv1.Phase, message s
 func (r *Renderer) progressStageLocked(id string, phase deploymentsv1.Phase, message string, current uint32, total *uint32) {
 	n, tracked := r.plan.progress(id, message, current, total)
 	if n.title == "" {
-		n.title = legacyStageTitle(phase, message)
+		n.title = fallbackTitle(phase, message)
 	}
 	if !tracked {
 		return
@@ -227,20 +230,11 @@ func (r *Renderer) progressStageLocked(id string, phase deploymentsv1.Phase, mes
 	r.plan.ensureActive(id)
 }
 
-func (r *Renderer) progressLegacyLocked(phase deploymentsv1.Phase, message string, current uint32, total *uint32) {
-	key := legacyStageID(phase, message)
-	if r.legacyActive != "" && r.legacyActive != key {
-		if n := r.plan.nodes[r.legacyActive]; n != nil {
-			r.commitLocked(n, r.okColor(), okMark, "")
-		}
-	}
-	r.legacyActive = key
-	n, tracked := r.plan.progress(key, message, current, total)
-	if n.title == "" {
-		n.title = legacyStageTitle(phase, message)
-	}
+func (r *Renderer) progressUntaggedLocked(phase deploymentsv1.Phase, message string, current uint32, total *uint32) {
+	n, tracked := r.plan.progress(untaggedStageID, message, current, total)
+	n.title = fallbackTitle(phase, message)
 	if tracked {
-		r.plan.ensureActive(key)
+		r.plan.ensureActive(untaggedStageID)
 	}
 }
 
@@ -274,13 +268,13 @@ func (r *Renderer) Log(message string) {
 }
 
 func (r *Renderer) Building() {
-	r.Progress(nil, deploymentsv1.Phase_PHASE_BUILDING, "Building project", 0, nil)
+	r.Progress(buildStageID, deploymentsv1.Phase_PHASE_UNSPECIFIED, "Building project", 0, nil)
 }
 
 func (r *Renderer) BuildOK() {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	key := legacyStageID(deploymentsv1.Phase_PHASE_BUILDING, "")
+	key := stageKey(buildStageID)
 	n, ok := r.plan.nodes[key]
 	if !ok || !r.plan.isActive(key) {
 		return
@@ -412,16 +406,12 @@ func (r *Renderer) finishAllLocked(c *color.Color, mark, status string) bool {
 		}
 	}
 	r.plan.activeOrder = nil
-	r.legacyActive = ""
 	return true
 }
 
 func (r *Renderer) commitLocked(n *stageNode, c *color.Color, mark, status string) {
 	r.finalizeLineLocked(n, c, mark, status)
 	r.plan.removeActive(n.id)
-	if r.legacyActive == n.id {
-		r.legacyActive = ""
-	}
 }
 
 func (r *Renderer) finalizeLineLocked(n *stageNode, c *color.Color, mark, status string) {
@@ -540,14 +530,7 @@ func (r *Renderer) emitJSONLocked(kind string, fields map[string]any) {
 	fmt.Fprintln(r.w, string(raw))
 }
 
-func legacyStageID(phase deploymentsv1.Phase, message string) string {
-	if phase == deploymentsv1.Phase_PHASE_UNSPECIFIED {
-		return "legacy:msg:" + message
-	}
-	return "legacy:phase:" + phase.String()
-}
-
-func legacyStageTitle(phase deploymentsv1.Phase, message string) string {
+func fallbackTitle(phase deploymentsv1.Phase, message string) string {
 	if phase == deploymentsv1.Phase_PHASE_UNSPECIFIED {
 		return message
 	}
@@ -556,8 +539,6 @@ func legacyStageTitle(phase deploymentsv1.Phase, message string) string {
 
 func phaseLabel(p deploymentsv1.Phase) string {
 	switch p {
-	case deploymentsv1.Phase_PHASE_BUILDING:
-		return "Building"
 	case deploymentsv1.Phase_PHASE_UPLOADING:
 		return "Uploading"
 	case deploymentsv1.Phase_PHASE_PROVISIONING:

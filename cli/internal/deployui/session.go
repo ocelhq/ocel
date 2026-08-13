@@ -81,7 +81,7 @@ func (s *Session) BuildOK() {
 }
 
 func (s *Session) RestartBuild() {
-	s.r.RestartLegacyStage(deploymentsv1.Phase_PHASE_BUILDING)
+	s.r.RestartBuildStage()
 }
 
 func (s *Session) Waiting(reason, url string) {

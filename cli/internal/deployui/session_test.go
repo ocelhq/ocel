@@ -632,7 +632,7 @@ func TestFormatAxis(t *testing.T) {
 		s := New(&out, run, FormatJSON, true)
 		t.Cleanup(func() { _ = s.Close() })
 
-		s.Event(progress(deploymentsv1.Phase_PHASE_BUILDING, "Building"))
+		s.Event(progress(deploymentsv1.Phase_PHASE_UPLOADING, "Building"))
 
 		var rec map[string]any
 		if err := json.Unmarshal(bytes.TrimSpace(out.Bytes()), &rec); err != nil {
@@ -659,7 +659,7 @@ func TestFormatAxis(t *testing.T) {
 		s := New(&out, run, FormatHuman, true)
 		t.Cleanup(func() { _ = s.Close() })
 
-		s.Event(progress(deploymentsv1.Phase_PHASE_BUILDING, "Building project"))
+		s.Event(progress(deploymentsv1.Phase_PHASE_UPLOADING, "Building project"))
 
 		if !strings.Contains(out.String(), "Building project") {
 			t.Errorf("stdout = %q, want the human-readable line", out.String())
@@ -693,29 +693,13 @@ func TestBar(t *testing.T) {
 	}
 }
 
-func TestLegacyStageIdentity(t *testing.T) {
+func TestFallbackTitle(t *testing.T) {
 	t.Parallel()
 
-	provisioning := legacyStageID(deploymentsv1.Phase_PHASE_PROVISIONING, "Preparing deployment stack")
-	title := legacyStageTitle(deploymentsv1.Phase_PHASE_PROVISIONING, "Preparing deployment stack")
-
-	t.Run("keys a step by its phase, not its message", func(t *testing.T) {
-		t.Parallel()
-		other := legacyStageID(deploymentsv1.Phase_PHASE_PROVISIONING, "Provisioning resources")
-		if provisioning != other {
-			t.Errorf("same-phase messages produced different keys %q vs %q", provisioning, other)
-		}
-		if title != "Provisioning" {
-			t.Errorf("title = %q, want Provisioning", title)
-		}
-	})
-
-	t.Run("gives an unspecified phase its own message-keyed step", func(t *testing.T) {
-		t.Parallel()
-		key := legacyStageID(deploymentsv1.Phase_PHASE_UNSPECIFIED, "Ensuring passphrase")
-		unspecified := legacyStageTitle(deploymentsv1.Phase_PHASE_UNSPECIFIED, "Ensuring passphrase")
-		if key == provisioning || unspecified != "Ensuring passphrase" {
-			t.Errorf("unspecified step identity = (%q,%q), want its own message-keyed step", key, unspecified)
-		}
-	})
+	if got := fallbackTitle(deploymentsv1.Phase_PHASE_PROVISIONING, "Preparing deployment stack"); got != "Provisioning" {
+		t.Errorf("fallbackTitle(PROVISIONING, ...) = %q, want the phase label", got)
+	}
+	if got := fallbackTitle(deploymentsv1.Phase_PHASE_UNSPECIFIED, "Ensuring passphrase"); got != "Ensuring passphrase" {
+		t.Errorf("fallbackTitle(UNSPECIFIED, ...) = %q, want the message itself", got)
+	}
 }
