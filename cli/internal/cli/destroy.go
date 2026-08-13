@@ -236,12 +236,12 @@ func printDestroyPlan(out io.Writer, slug string, plan *deploymentsv1.PlanDestro
 func confirmDestroyProject(ctx context.Context, slug string, stdout io.Writer, stdin io.Reader) (bool, error) {
 	fmt.Fprintf(stdout, "Type the project name (%s) to confirm: ", slug)
 
-	line, ok, err := readLine(ctx, stdin)
+	line, err := readLine(ctx, stdin)
 	if err != nil {
+		if err == io.EOF {
+			return false, nil
+		}
 		return false, err
-	}
-	if !ok {
-		return false, nil
 	}
 	return strings.TrimSpace(line) == slug, nil
 }

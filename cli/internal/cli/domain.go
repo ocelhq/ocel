@@ -300,12 +300,12 @@ func renderGlobalDomainProjects(out io.Writer, projects []string) {
 func confirmReleaseDomain(ctx context.Context, base string, stdout io.Writer, stdin io.Reader) (bool, error) {
 	fmt.Fprintf(stdout, "Type the domain (%s) to confirm: ", base)
 
-	line, ok, err := readLine(ctx, stdin)
+	line, err := readLine(ctx, stdin)
 	if err != nil {
+		if err == io.EOF {
+			return false, nil
+		}
 		return false, err
-	}
-	if !ok {
-		return false, nil
 	}
 	return strings.TrimSpace(line) == base, nil
 }
