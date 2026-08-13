@@ -921,11 +921,12 @@ func TestHandleInvocationBytecode(t *testing.T) {
 		store := &fakeBytecodeStore{}
 		u, _ := uploadFixture(store, compileCacheFlushedPayload{Dir: cacheDirWith(t, "compiled bytes"), OK: true}, true)
 		m := &Membrane{
-			nodePort: portOf(t, node),
-			client:   &http.Client{},
-			control:  goSide,
-			pending:  map[string]chan struct{}{},
-			bytecode: u,
+			nodePort:  portOf(t, node),
+			client:    &http.Client{},
+			control:   goSide,
+			lifecycle: true,
+			pending:   map[string]chan struct{}{},
+			bytecode:  u,
 		}
 		go m.drainControl(bufio.NewReader(goSide))
 
@@ -963,7 +964,7 @@ func controlConnPair(t *testing.T) (*Membrane, *bufio.Reader, net.Conn) {
 	t.Helper()
 	membraneSide, nodeSide := net.Pipe()
 	t.Cleanup(func() { membraneSide.Close(); nodeSide.Close() })
-	m := &Membrane{control: membraneSide, pending: map[string]chan struct{}{}}
+	m := &Membrane{control: membraneSide, lifecycle: true, pending: map[string]chan struct{}{}}
 	go m.drainControl(bufio.NewReader(membraneSide))
 	return m, bufio.NewReader(nodeSide), nodeSide
 }

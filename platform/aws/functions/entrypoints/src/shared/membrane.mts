@@ -198,12 +198,37 @@ function wrapWithOcelContext(invoke: Invoke): http.RequestListener {
 }
 
 export function serveInvoke(invoke: Invoke, onListening?: OnListening): Promise<void> {
-  return startServer(http.createServer(wrapWithOcelContext(invoke)), onListening);
+  return startServer(http.createServer(wrapWithOcelContext(invoke)), onListening, true);
+}
+
+export function serveServer(server: http.Server, onListening?: OnListening): Promise<void> {
+  const lifted = server.listeners("request") as http.RequestListener[];
+  server.removeAllListeners("request");
+
+  const invoke: Invoke = (req, res) => {
+    for (const listener of lifted) listener.call(server, req, res);
+  };
+  server.on("request", wrapWithOcelContext(invoke));
+
+  const realOn = server.on.bind(server);
+  const intercept = (event: string, listener: (...args: any[]) => void): http.Server => {
+    if (event !== "request") return realOn(event, listener);
+    lifted.push(listener as http.RequestListener);
+    return server;
+  };
+  server.on = intercept as typeof server.on;
+  server.addListener = intercept as typeof server.addListener;
+
+  return startServer(server, onListening, true);
 }
 
 export type OnListening = (port: number) => void;
 
-export function startServer(server: http.Server, onListening?: OnListening): Promise<void> {
+export function startServer(
+  server: http.Server,
+  onListening?: OnListening,
+  lifecycle = false,
+): Promise<void> {
   server.keepAliveTimeout = 0;
   server.headersTimeout = 0;
   return new Promise((resolve, reject) => {
@@ -215,7 +240,7 @@ export function startServer(server: http.Server, onListening?: OnListening): Pro
         return;
       }
       onListening?.(addr.port);
-      sendControl("server-ready", { httpPort: addr.port });
+      sendControl("server-ready", { httpPort: addr.port, lifecycle });
       resolve();
     });
   });
