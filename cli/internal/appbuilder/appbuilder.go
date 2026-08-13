@@ -308,18 +308,19 @@ func runNode(ctx context.Context, scriptPath string, env []string, request []byt
 	if stderr != nil {
 		out = io.MultiWriter(stderr, &captured)
 	}
+	safeErr, safeOut := nodeprotocol.SyncPair(out, out)
 
 	cmd := exec.CommandContext(ctx, "node", scriptPath)
 	cmd.Env = env
 	cmd.Stdin = bytes.NewReader(request)
-	cmd.Stderr = out
+	cmd.Stderr = safeErr
 
 	stdout, err := cmd.StdoutPipe()
 	if err != nil {
 		return fmt.Errorf("node-builder failed: %w", err)
 	}
 
-	proc := &nodeprotocol.Processor{Run: obs.FromContext(ctx), Forward: out}
+	proc := &nodeprotocol.Processor{Run: obs.FromContext(ctx), Forward: safeOut}
 
 	if err := cmd.Start(); err != nil {
 		return fmt.Errorf("node-builder failed: %w", err)

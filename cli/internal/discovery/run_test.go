@@ -70,6 +70,22 @@ export {};
 	}
 }
 
+func TestRunWritesToStdoutAndStderrConcurrentlyWithoutRacingWhenTheyAreTheSameWriter(t *testing.T) {
+	entry := bundleFixture(t, `declare global { var __ocelRegister: Promise<unknown>[]; }
+globalThis.__ocelRegister ??= [];
+for (let i = 0; i < 4000; i++) {
+  console.log("out", i);
+  console.error("err", i);
+}
+export {};
+`)
+
+	var shared bytes.Buffer
+	if err := Run(context.Background(), entry, okServer(t), &shared, &shared); err != nil {
+		t.Fatalf("Run: %v; output=%s", err, shared.String())
+	}
+}
+
 func TestRunProducesADiscoverySpan(t *testing.T) {
 	entry := bundleFixture(t, `declare global { var __ocelRegister: Promise<unknown>[]; }
 globalThis.__ocelRegister ??= [];

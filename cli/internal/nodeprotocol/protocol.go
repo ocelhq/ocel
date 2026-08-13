@@ -32,6 +32,33 @@ var validStages = map[string]bool{
 
 const maxAppLen = 128
 
+type syncWriter struct {
+	mu *sync.Mutex
+	w  io.Writer
+}
+
+func (s syncWriter) Write(p []byte) (int, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.w.Write(p)
+}
+
+// SyncPair wraps a and b, which may or may not be the same underlying
+// writer, so that concurrent writes through either one are mutually
+// exclusive. A subprocess's own stderr-draining goroutine and the goroutine
+// running Scan can otherwise write to what turns out to be one writer at
+// once.
+func SyncPair(a, b io.Writer) (io.Writer, io.Writer) {
+	mu := &sync.Mutex{}
+	wrap := func(w io.Writer) io.Writer {
+		if w == nil {
+			return nil
+		}
+		return syncWriter{mu, w}
+	}
+	return wrap(a), wrap(b)
+}
+
 type recordType string
 
 const (

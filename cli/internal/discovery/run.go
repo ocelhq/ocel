@@ -12,16 +12,18 @@ import (
 )
 
 func Run(ctx context.Context, entry, serverURL string, stdout, stderr io.Writer) error {
+	safeStdout, safeStderr := nodeprotocol.SyncPair(stdout, stderr)
+
 	cmd := exec.CommandContext(ctx, "node", "--enable-source-maps", entry)
 	cmd.Env = append(os.Environ(), "OCEL_PHASE=discovery", "OCEL_DEV_SERVER="+serverURL)
-	cmd.Stderr = stderr
+	cmd.Stderr = safeStderr
 
 	pipe, err := cmd.StdoutPipe()
 	if err != nil {
 		return fmt.Errorf("discovery failed: %w", err)
 	}
 
-	proc := &nodeprotocol.Processor{Run: obs.FromContext(ctx), Forward: stdout}
+	proc := &nodeprotocol.Processor{Run: obs.FromContext(ctx), Forward: safeStdout}
 
 	if err := cmd.Start(); err != nil {
 		return fmt.Errorf("discovery failed: %w", err)
