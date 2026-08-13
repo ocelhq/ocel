@@ -143,8 +143,9 @@ func (s *Server) Deploy(ctx context.Context, req *deploymentsv1.DeployRequest, s
 	sender := newEventSender(ctx, stream.Send)
 	defer func() { err = sender.close() }()
 	progress, logf := newDeployReporter(sender)
+	tracer := newEventTracer(sender)
 
-	res, deployErr := s.runDeploy(ctx, req, manifest, progress, logf)
+	res, deployErr := s.runDeploy(ctx, req, manifest, progress, logf, tracer)
 	if deployErr != nil {
 		sender.send(failureResult(deployErr))
 	} else {
@@ -153,14 +154,43 @@ func (s *Server) Deploy(ctx context.Context, req *deploymentsv1.DeployRequest, s
 	return nil
 }
 
-func (s *Server) runDeploy(ctx context.Context, req *deploymentsv1.DeployRequest, manifest *deploymentsv1.Manifest, progress deploy.Progress, logf func(string)) (deploy.Result, error) {
+// deployStages is the top-level stage plan every Deploy declares before any
+// work begins: the same four phases the CLI already knows as Phase values,
+// now as a tree the CLI can render and a trace can be built from.
+type deployStages struct {
+	preparing, uploading, provisioning, finalizing deploy.Stage
+}
+
+func newDeployStages() deployStages {
+	return deployStages{
+		preparing:    deploy.NewRootStage("Preparing"),
+		uploading:    deploy.NewRootStage("Uploading"),
+		provisioning: deploy.NewRootStage("Provisioning"),
+		finalizing:   deploy.NewRootStage("Finalizing"),
+	}
+}
+
+func (s deployStages) declare(tracer deploy.Tracer) {
+	tracer.DeclareStages(false, s.preparing, s.uploading, s.provisioning, s.finalizing)
+}
+
+func (s *Server) runDeploy(ctx context.Context, req *deploymentsv1.DeployRequest, manifest *deploymentsv1.Manifest, progress deploy.Progress, logf func(string), tracer deploy.Tracer) (deploy.Result, error) {
+	stages := newDeployStages()
+	stages.declare(tracer)
+
+	preparingStart := time.Now()
+	finishPreparing := func(err error) error {
+		tracer.Span(stages.preparing.ID, stages.preparing.ParentID, stages.preparing.Title, preparingStart, time.Now(), err)
+		return err
+	}
+
 	opts, err := parseOptions(req.GetOptions())
 	if err != nil {
-		return deploy.Result{}, err
+		return deploy.Result{}, finishPreparing(err)
 	}
 	awscfg, err := loadAWS(ctx, opts.Region)
 	if err != nil {
-		return deploy.Result{}, err
+		return deploy.Result{}, finishPreparing(err)
 	}
 	cfn := cloudformation.NewFromConfig(awscfg)
 	ssmClient := ssm.NewFromConfig(awscfg)
@@ -168,7 +198,7 @@ func (s *Server) runDeploy(ctx context.Context, req *deploymentsv1.DeployRequest
 	env := req.GetEnvironment()
 	envName, err := deploy.EnvName(env)
 	if err != nil {
-		return deploy.Result{}, connect.NewError(connect.CodeInvalidArgument, err)
+		return deploy.Result{}, finishPreparing(connect.NewError(connect.CodeInvalidArgument, err))
 	}
 	preview := env.GetClass() == deploymentsv1.Environment_CLASS_PREVIEW
 	bootstrapCmd := bootstrapCommand(preview)
@@ -176,26 +206,26 @@ func (s *Server) runDeploy(ctx context.Context, req *deploymentsv1.DeployRequest
 	progress(deploymentsv1.Phase_PHASE_UNSPECIFIED, "Checking account bootstrap", 0, 0)
 	deployed, err := s.deployed(ctx, cfn, opts.Region, preview)
 	if err != nil {
-		return deploy.Result{}, err
+		return deploy.Result{}, finishPreparing(err)
 	}
 	compat := bootstrap.CheckCompat(deployed.Version, deployed.Present, bootstrap.RequiredBootstrapVersion)
 	if err := compat.Explain(deployed.Version, bootstrap.RequiredBootstrapVersion, bootstrapCmd); err != nil {
-		return deploy.Result{}, err
+		return deploy.Result{}, finishPreparing(err)
 	}
 	if deployed.StateBucket == "" {
-		return deploy.Result{}, fmt.Errorf("account bootstrap is present but its state bucket is missing (a partial rollback?); re-run `%s`", bootstrapCmd)
+		return deploy.Result{}, finishPreparing(fmt.Errorf("account bootstrap is present but its state bucket is missing (a partial rollback?); re-run `%s`", bootstrapCmd))
 	}
 	if deployed.ArtifactBucket == "" {
-		return deploy.Result{}, fmt.Errorf("account bootstrap is present but its artifact bucket is missing (a partial rollback?); re-run `%s`", bootstrapCmd)
+		return deploy.Result{}, finishPreparing(fmt.Errorf("account bootstrap is present but its artifact bucket is missing (a partial rollback?); re-run `%s`", bootstrapCmd))
 	}
 	if deployed.AssetBucket == "" {
-		return deploy.Result{}, fmt.Errorf("account bootstrap is present but its asset bucket is missing (a partial rollback?); re-run `%s`", bootstrapCmd)
+		return deploy.Result{}, finishPreparing(fmt.Errorf("account bootstrap is present but its asset bucket is missing (a partial rollback?); re-run `%s`", bootstrapCmd))
 	}
 	if deployed.StateTable == "" {
-		return deploy.Result{}, fmt.Errorf("account bootstrap is present but its state table is missing (a partial rollback?); re-run `%s`", bootstrapCmd)
+		return deploy.Result{}, finishPreparing(fmt.Errorf("account bootstrap is present but its state table is missing (a partial rollback?); re-run `%s`", bootstrapCmd))
 	}
 	if deployed.VarsTable == "" || deployed.VarsKeyARN == "" {
-		return deploy.Result{}, fmt.Errorf("account bootstrap is present but its variable store is missing (a partial rollback?); re-run `%s`", bootstrapCmd)
+		return deploy.Result{}, finishPreparing(fmt.Errorf("account bootstrap is present but its variable store is missing (a partial rollback?); re-run `%s`", bootstrapCmd))
 	}
 
 	substrateClass := bootstrap.ClassProduction
@@ -233,7 +263,7 @@ func (s *Server) runDeploy(ctx context.Context, req *deploymentsv1.DeployRequest
 		return err
 	})
 	if err := group.Wait(); err != nil {
-		return deploy.Result{}, err
+		return deploy.Result{}, finishPreparing(err)
 	}
 
 	edgeCreds := params.EdgeCredentials
@@ -254,11 +284,13 @@ func (s *Server) runDeploy(ctx context.Context, req *deploymentsv1.DeployRequest
 
 	stacks, err := stackIndexFor(awscfg, deployed, bootstrapCmd)
 	if err != nil {
-		return deploy.Result{}, err
+		return deploy.Result{}, finishPreparing(err)
 	}
 
 	priorRootStackState := params.RootStackState
 	stateTableARN := fmt.Sprintf("arn:aws:dynamodb:%s:%s:table/%s", awscfg.Region, account, deployed.StateTable)
+
+	finishPreparing(nil)
 
 	res, err := deploy.Run(ctx, deploy.Config{
 		Region:        awscfg.Region,
@@ -314,6 +346,13 @@ func (s *Server) runDeploy(ctx context.Context, req *deploymentsv1.DeployRequest
 		ExpiresAt:      previewExpiry(env.GetLifecycle(), time.Now()),
 		RootStackState: priorRootStackState,
 		Tag:            req.GetTag(),
+
+		Stages: deploy.Stages{
+			Uploading:    stages.uploading,
+			Provisioning: stages.provisioning,
+			Finalizing:   stages.finalizing,
+		},
+		Tracer: tracer,
 	}, manifest, progress, logf)
 
 	if rootStackStateChanged(priorRootStackState, res.RootStackState) {
