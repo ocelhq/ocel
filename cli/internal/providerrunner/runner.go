@@ -29,7 +29,9 @@ const DefaultReadyTimeout = 10 * time.Second
 
 const ReadyTimeoutEnvVar = "OCEL_READY_TIMEOUT"
 
-var gracePeriod = 5 * time.Second
+const DefaultGracePeriod = 5 * time.Second
+
+const DefaultReapTimeout = 2 * time.Second
 
 type Config struct {
 	BinaryPath   string
@@ -38,6 +40,8 @@ type Config struct {
 	Stdout       io.Writer
 	Stderr       io.Writer
 	ReadyTimeout time.Duration
+	GracePeriod  time.Duration
+	ReapTimeout  time.Duration
 }
 
 type EarlyExitError struct {
@@ -83,6 +87,8 @@ type Runner struct {
 	stdout       io.Writer
 	stderr       io.Writer
 	readyTimeout time.Duration
+	gracePeriod  time.Duration
+	reapTimeout  time.Duration
 
 	readyCh chan string
 	scanErr chan error
@@ -141,6 +147,8 @@ func Spawn(ctx context.Context, cfg Config) (*Runner, error) {
 		stdout:       cfg.Stdout,
 		stderr:       cfg.Stderr,
 		readyTimeout: resolveReadyTimeout(cfg.ReadyTimeout),
+		gracePeriod:  resolveDuration(cfg.GracePeriod, DefaultGracePeriod),
+		reapTimeout:  resolveDuration(cfg.ReapTimeout, DefaultReapTimeout),
 		readyCh:      make(chan string, 1),
 		scanErr:      make(chan error, 1),
 		done:         make(chan struct{}),
@@ -177,6 +185,13 @@ func resolveReadyTimeout(override time.Duration) time.Duration {
 		}
 	}
 	return DefaultReadyTimeout
+}
+
+func resolveDuration(override, def time.Duration) time.Duration {
+	if override > 0 {
+		return override
+	}
+	return def
 }
 
 func (r *Runner) Ready(ctx context.Context) error {
@@ -349,20 +364,20 @@ func (r *Runner) teardown() {
 
 	select {
 	case <-r.done:
-		return
 	default:
-	}
-
-	_ = terminateProcessGroup(r.cmd)
-
-	select {
-	case <-r.done:
-		return
-	case <-time.After(gracePeriod):
+		_ = terminateProcessGroup(r.cmd)
+		select {
+		case <-r.done:
+		case <-time.After(r.gracePeriod):
+		}
 	}
 
 	_ = killProcessGroup(r.cmd)
-	<-r.done
+
+	select {
+	case <-r.done:
+	case <-time.After(r.reapTimeout):
+	}
 }
 
 func (r *Runner) drainStdout(stdout io.Reader) {

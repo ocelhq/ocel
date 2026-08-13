@@ -1,0 +1,109 @@
+//go:build unix
+
+package providerrunner
+
+import (
+	"context"
+	"os"
+	"path/filepath"
+	"strconv"
+	"syscall"
+	"testing"
+	"time"
+)
+
+func spawnOrphan(t *testing.T, ctx context.Context, mode string, cfg Config) (*Runner, string) {
+	t.Helper()
+
+	pidFile := filepath.Join(t.TempDir(), "grandchild.pid")
+	cfg.Env = append([]string{fakeProviderGrandchildPidFileEnvVar + "=" + pidFile}, cfg.Env...)
+
+	r, _ := spawnFake(t, ctx, mode, cfg)
+	return r, pidFile
+}
+
+func readGrandchildPid(t *testing.T, pidFile string) int {
+	t.Helper()
+
+	deadline := time.Now().Add(2 * time.Second)
+	for {
+		data, err := os.ReadFile(pidFile)
+		if err == nil {
+			pid, convErr := strconv.Atoi(string(data))
+			if convErr != nil {
+				t.Fatalf("grandchild pidfile %s contains %q, want an integer", pidFile, data)
+			}
+			return pid
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("grandchild never wrote its pid to %s: %v", pidFile, err)
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+}
+
+func processAlive(pid int) bool {
+	return syscall.Kill(pid, 0) == nil
+}
+
+func assertProcessDead(t *testing.T, pid int) {
+	t.Helper()
+
+	deadline := time.Now().Add(2 * time.Second)
+	for processAlive(pid) {
+		if time.Now().After(deadline) {
+			t.Fatalf("pid %d is still alive after teardown", pid)
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+}
+
+func TestTeardownBound(t *testing.T) {
+	t.Parallel()
+
+	t.Run("a grandchild holding the output pipe cannot make teardown hang", func(t *testing.T) {
+		t.Parallel()
+
+		ctx := context.Background()
+		r, pidFile := spawnOrphan(t, ctx, "orphan-holds-pipe", Config{
+			GracePeriod: 100 * time.Millisecond,
+			ReapTimeout: 200 * time.Millisecond,
+		})
+
+		grandchildPid := readGrandchildPid(t, pidFile)
+
+		start := time.Now()
+		r.Close()
+		elapsed := time.Since(start)
+
+		const bound = 3 * time.Second
+		if elapsed > bound {
+			t.Fatalf("Close() took %s, want it bounded well under %s even with a grandchild holding the pipe", elapsed, bound)
+		}
+
+		assertProcessDead(t, grandchildPid)
+	})
+
+	t.Run("the process group is force-killed even when the provider exits inside the grace window", func(t *testing.T) {
+		t.Parallel()
+
+		ctx := context.Background()
+		r, pidFile := spawnOrphan(t, ctx, "orphan-detached-pipe", Config{
+			GracePeriod: 2 * time.Second,
+			ReapTimeout: 200 * time.Millisecond,
+		})
+
+		grandchildPid := readGrandchildPid(t, pidFile)
+
+		start := time.Now()
+		r.Close()
+		elapsed := time.Since(start)
+
+		const bound = 1 * time.Second
+		if elapsed > bound {
+			t.Fatalf("Close() took %s, want it to return well before the 2s grace period once the provider exits on its own", elapsed)
+		}
+
+		assertProcessDead(t, grandchildPid)
+	})
+}

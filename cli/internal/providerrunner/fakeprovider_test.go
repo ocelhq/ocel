@@ -8,6 +8,9 @@ import (
 	"net"
 	"net/http"
 	"os"
+	"os/exec"
+	"os/signal"
+	"syscall"
 	"time"
 
 	"connectrpc.com/connect"
@@ -20,6 +23,8 @@ import (
 const fakeProviderModeEnvVar = "OCEL_TEST_FAKE_PROVIDER_MODE"
 
 const fakeProviderSockEnvVar = "OCEL_TEST_FAKE_PROVIDER_SOCK"
+
+const fakeProviderGrandchildPidFileEnvVar = "OCEL_TEST_FAKE_PROVIDER_GRANDCHILD_PIDFILE"
 
 func runFakeProvider() int {
 	mode := os.Getenv(fakeProviderModeEnvVar)
@@ -34,6 +39,17 @@ func runFakeProvider() int {
 		os.Stdout.Write(bytes.Repeat([]byte("x"), 2*1024*1024))
 		fmt.Println()
 		select {}
+	case "orphan-holds-pipe", "orphan-detached-pipe":
+		if err := spawnGrandchildSurvivor(mode == "orphan-holds-pipe"); err != nil {
+			fmt.Fprintln(os.Stderr, "fake provider: spawn grandchild:", err)
+			return 1
+		}
+		select {}
+	case "grandchild-survivor":
+		sig := make(chan os.Signal, 1)
+		signal.Notify(sig, syscall.SIGTERM)
+		time.Sleep(10 * time.Second)
+		return 0
 	}
 
 	sockPath := os.Getenv(fakeProviderSockEnvVar)
@@ -126,4 +142,21 @@ func (s *fakeProviderServer) Bootstrap(ctx context.Context, req *deploymentsv1.B
 	return stream.Send(&deploymentsv1.DeployEvent{
 		Event: &deploymentsv1.DeployEvent_Result{Result: &deploymentsv1.ResultEvent{Success: true}},
 	})
+}
+
+func spawnGrandchildSurvivor(holdPipe bool) error {
+	cmd := exec.Command(os.Args[0])
+	cmd.Env = append(os.Environ(), fakeProviderEnvVar+"=1", fakeProviderModeEnvVar+"=grandchild-survivor")
+	if holdPipe {
+		cmd.Stdout = os.Stdout
+	}
+	if err := cmd.Start(); err != nil {
+		return err
+	}
+
+	pidFile := os.Getenv(fakeProviderGrandchildPidFileEnvVar)
+	if pidFile == "" {
+		return errors.New("missing grandchild pidfile path")
+	}
+	return os.WriteFile(pidFile, []byte(fmt.Sprintf("%d", cmd.Process.Pid)), 0o600)
 }

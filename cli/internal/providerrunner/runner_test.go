@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io/fs"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"sync/atomic"
@@ -391,6 +392,34 @@ func TestClose(t *testing.T) {
 		r.Close()
 		assertProcessGone(t, r)
 	})
+}
+
+func TestTeardownReapIsBounded(t *testing.T) {
+	t.Parallel()
+
+	cmd := exec.Command(os.Args[0])
+	cmd.Env = append(os.Environ(), fakeProviderEnvVar+"=1", fakeProviderModeEnvVar+"=never-ready")
+	setNewProcessGroup(cmd)
+	if err := cmd.Start(); err != nil {
+		t.Fatalf("start process: %v", err)
+	}
+	t.Cleanup(func() { _ = cmd.Process.Kill() })
+
+	r := &Runner{
+		cmd:         cmd,
+		gracePeriod: 50 * time.Millisecond,
+		reapTimeout: 100 * time.Millisecond,
+		done:        make(chan struct{}),
+	}
+
+	start := time.Now()
+	r.teardown()
+	elapsed := time.Since(start)
+
+	const bound = 2 * time.Second
+	if elapsed > bound {
+		t.Fatalf("teardown() took %s, want it bounded well under %s when the process's output never reaches EOF", elapsed, bound)
+	}
 }
 
 func assertProcessGone(t *testing.T, r *Runner) {
