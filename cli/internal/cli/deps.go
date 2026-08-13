@@ -15,6 +15,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/credentials"
 	"github.com/ocelhq/ocel/cli/internal/declare"
 	"github.com/ocelhq/ocel/cli/internal/deploycollector"
+	"github.com/ocelhq/ocel/cli/internal/deployui"
 	"github.com/ocelhq/ocel/cli/internal/envgate"
 	"github.com/ocelhq/ocel/cli/internal/manifestbuilder"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
@@ -54,7 +55,7 @@ func defaultDeps() deps {
 		discoverPRNumber:     prNumberFromEnv,
 		runPackageManager:    runPackageManagerCommand,
 		stdinIsTerminal:      isReaderTTY,
-		stdoutIsTerminal:     isTTY,
+		stdoutIsTerminal:     deployui.IsTerminal,
 	}
 }
 

@@ -13,7 +13,6 @@ import (
 	"time"
 
 	"github.com/fatih/color"
-	"github.com/mattn/go-isatty"
 	"github.com/spf13/cobra"
 
 	"github.com/ocelhq/ocel/cli/internal/deployui"
@@ -158,7 +157,7 @@ func renderPromotions(stdout io.Writer, promotions []*deploymentsv1.PromotionHis
 	}
 
 	activeStatus := "active"
-	if isWriterTTY(stdout) {
+	if deployui.IsTerminal(stdout) {
 		activeStatus = color.New(color.FgGreen).Sprint("active")
 	}
 
@@ -194,11 +193,6 @@ func deployedIdentities(identityByApp map[string]string) string {
 		pairs = append(pairs, app+"="+identityByApp[app])
 	}
 	return strings.Join(pairs, " ")
-}
-
-func isWriterTTY(w io.Writer) bool {
-	f, ok := w.(*os.File)
-	return ok && isatty.IsTerminal(f.Fd())
 }
 
 func epochTimestamp(sec int64) string {

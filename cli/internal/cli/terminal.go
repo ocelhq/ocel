@@ -4,20 +4,15 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"time"
 
-	"github.com/briandowns/spinner"
 	"github.com/mattn/go-isatty"
+
+	"github.com/ocelhq/ocel/cli/internal/deployui"
 )
 
-func isTTY(w io.Writer) bool {
-	f, ok := w.(*os.File)
-	if !ok {
-		return false
-	}
-	return isatty.IsTerminal(f.Fd())
-}
-
+// isReaderTTY is the one terminal-detection helper deployui does not cover:
+// it answers whether stdin is interactive, for confirm prompts, not
+// whether a target writer may be animated or coloured.
 func isReaderTTY(r io.Reader) bool {
 	f, ok := r.(*os.File)
 	if !ok {
@@ -27,14 +22,12 @@ func isReaderTTY(r io.Reader) bool {
 }
 
 func withSpinner(stdout io.Writer, label string, fn func() error) error {
-	if !isTTY(stdout) {
+	if !deployui.IsTerminal(stdout) {
 		fmt.Fprintln(stdout, label)
 		return fn()
 	}
 
-	s := spinner.New(spinner.CharSets[14], 100*time.Millisecond, spinner.WithWriter(stdout))
-	s.Suffix = " " + label
-	s.Start()
+	s := deployui.StartSpinner(stdout, label)
 	defer s.Stop()
 
 	return fn()
