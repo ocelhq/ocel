@@ -33,10 +33,6 @@ func (f *fakeTracer) Span(id, parentID deploy.StageID, name string, start, end t
 	f.spans = append(f.spans, recordedSpan{id: id, parentID: parentID, name: name, failed: err != nil})
 }
 
-// TestRunDeployDeclaresTheStagePlanBeforeAnyWork exercises runDeploy with a
-// request that fails immediately in parseOptions, before any AWS or Pulumi
-// work starts. The stage plan must already have gone out by then: it is
-// declared before work begins, not once the first phase completes.
 func TestRunDeployDeclaresTheStagePlanBeforeAnyWork(t *testing.T) {
 	t.Parallel()
 
@@ -56,8 +52,8 @@ func TestRunDeployDeclaresTheStagePlanBeforeAnyWork(t *testing.T) {
 		t.Fatal("no stage plan was declared before runDeploy failed")
 	}
 	first := tracer.declared[0]
-	if first.final {
-		t.Error("first declared batch has Final = true, want false: more stages (per-app children) are still to come")
+	if !first.final {
+		t.Error("first declared batch has Final = false, want true: the app list is already known from the manifest")
 	}
 	wantTitles := []string{"Preparing", "Uploading", "Provisioning", "Finalizing"}
 	if len(first.stages) != len(wantTitles) {

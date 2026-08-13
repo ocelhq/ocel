@@ -154,9 +154,6 @@ func (s *Server) Deploy(ctx context.Context, req *deploymentsv1.DeployRequest, s
 	return nil
 }
 
-// deployStages is the top-level stage plan every Deploy declares before any
-// work begins: the same four phases the CLI already knows as Phase values,
-// now as a tree the CLI can render and a trace can be built from.
 type deployStages struct {
 	preparing, uploading, provisioning, finalizing deploy.Stage
 }
@@ -170,17 +167,19 @@ func newDeployStages() deployStages {
 	}
 }
 
-func (s deployStages) declare(tracer deploy.Tracer) {
-	tracer.DeclareStages(false, s.preparing, s.uploading, s.provisioning, s.finalizing)
-}
-
 func (s *Server) runDeploy(ctx context.Context, req *deploymentsv1.DeployRequest, manifest *deploymentsv1.Manifest, progress deploy.Progress, logf func(string), tracer deploy.Tracer) (deploy.Result, error) {
 	stages := newDeployStages()
-	stages.declare(tracer)
+	appStages, appDeclared := deploy.AppStages(stages.provisioning, manifest)
+	if tracer != nil {
+		all := append([]deploy.Stage{stages.preparing, stages.uploading, stages.provisioning, stages.finalizing}, appDeclared...)
+		tracer.DeclareStages(true, all...)
+	}
 
 	preparingStart := time.Now()
 	finishPreparing := func(err error) error {
-		tracer.Span(stages.preparing.ID, stages.preparing.ParentID, stages.preparing.Title, preparingStart, time.Now(), err)
+		if tracer != nil {
+			tracer.Span(stages.preparing.ID, stages.preparing.ParentID, stages.preparing.Title, preparingStart, time.Now(), err)
+		}
 		return err
 	}
 
@@ -352,7 +351,8 @@ func (s *Server) runDeploy(ctx context.Context, req *deploymentsv1.DeployRequest
 			Provisioning: stages.provisioning,
 			Finalizing:   stages.finalizing,
 		},
-		Tracer: tracer,
+		AppStages: appStages,
+		Tracer:    tracer,
 	}, manifest, progress, logf)
 
 	if rootStackStateChanged(priorRootStackState, res.RootStackState) {
