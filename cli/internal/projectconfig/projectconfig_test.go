@@ -2,6 +2,7 @@ package projectconfig
 
 import (
 	"context"
+	"errors"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -838,8 +839,8 @@ export default {
 
 	select {
 	case err := <-done:
-		if err == nil {
-			t.Fatal("Resolve() err = nil, want an error from the cancelled context")
+		if !errors.Is(err, context.Canceled) {
+			t.Fatalf("Resolve() err = %v, want context.Canceled — a cancelled node run must not read as \"run `ocel init`\"", err)
 		}
 	case <-time.After(5 * time.Second):
 		t.Fatal("Resolve did not return promptly after the context was cancelled")

@@ -215,6 +215,9 @@ func ResolveOptional(ctx context.Context, startDir string) (*Config, error) {
 func load(ctx context.Context, configPath string) (*Config, error) {
 	output, err := buildAndRun(ctx, configPath)
 	if err != nil {
+		if ctx.Err() != nil {
+			return nil, ctx.Err()
+		}
 		return nil, fmt.Errorf("could not read %s: %w — %s", configPath, err, initHint)
 	}
 
