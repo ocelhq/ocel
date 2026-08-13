@@ -2070,6 +2070,44 @@ test("resolves the App Router not-found page (/_not-found) as errorRoutes.notFou
   expect(manifest.errorRoutes).toMatchObject({ notFound: "/_not-found" });
 });
 
+test("names /_not-found as errorRoutes.notFoundFlight even when /404 wins notFound", async () => {
+  const { projectDir, args } = await synthProject();
+  await withStaticPage(projectDir, args, "/404", "not found");
+  const notFoundHandler = join(projectDir, ".next/server/app/_not-found.js");
+  await mkdir(dirname(notFoundHandler), { recursive: true });
+  await writeFile(notFoundHandler, "module.exports = () => {}");
+  args.outputs.appPages.push({
+    pathname: "/_not-found",
+    id: "/_not-found",
+    assets: {},
+    runtime: "nodejs",
+    filePath: notFoundHandler,
+    config: {},
+    type: "APP_PAGE",
+  } as never);
+  const adapter = await loadAdapterIn(projectDir);
+
+  await adapter.onBuildComplete(args as never);
+
+  const manifest = await readManifest(projectDir);
+  expect(manifest.errorRoutes).toMatchObject({
+    notFound: "/404",
+    notFoundFlight: "/_not-found",
+  });
+});
+
+test("names no notFoundFlight when the build has no app-router not-found page", async () => {
+  const { projectDir, args } = await synthProject();
+  await withStaticPage(projectDir, args, "/404", "not found");
+  const adapter = await loadAdapterIn(projectDir);
+
+  await adapter.onBuildComplete(args as never);
+
+  const manifest = await readManifest(projectDir);
+  expect(manifest.errorRoutes).toMatchObject({ notFound: "/404" });
+  expect(manifest.errorRoutes.notFoundFlight).toBeUndefined();
+});
+
 test("resolves a static-kind /500 page as errorRoutes.serverError", async () => {
   const { projectDir, args } = await synthProject();
   await withStaticPage(projectDir, args, "/500", "server error");

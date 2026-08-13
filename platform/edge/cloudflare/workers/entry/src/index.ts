@@ -230,7 +230,11 @@ interface Manifest {
   pathnames: string[];
   routes: unknown;
   dispatch: Record<string, DispatchTarget>;
-  errorRoutes?: { notFound?: string; serverError?: string };
+  errorRoutes?: {
+    notFound?: string;
+    notFoundFlight?: string;
+    serverError?: string;
+  };
   middleware?:
     | { runtime?: "edge"; entryKey: string; matchers?: MiddlewareMatcher[] }
     | {
@@ -942,7 +946,6 @@ async function dispatch(
     if (probe) return probe;
     const asset = await staticAsset();
     if (asset.status !== 404) return asset;
-    if (isFlightRequest(request.headers)) return asset;
     if (isNextDataPathname(url.pathname, manifest, manifest.buildId)) return asset;
     if (isNextStaticPathname(url.pathname)) return asset;
     return notFoundResponse(request, url, result, headers, deps, () => asset, staticAsset);
@@ -1017,6 +1020,18 @@ async function renderDispatchTarget(
   }
 }
 
+function notFoundRoute(
+  request: Request,
+  manifest: Manifest,
+): string | undefined {
+  const routes = manifest.errorRoutes;
+  if (!routes) return undefined;
+  if (isFlightRequest(request.headers) && routes.notFoundFlight) {
+    return routes.notFoundFlight;
+  }
+  return routes.notFound;
+}
+
 async function notFoundResponse(
   request: Request,
   url: URL,
@@ -1026,7 +1041,7 @@ async function notFoundResponse(
   fallback: () => Response | Promise<Response>,
   staticAsset: (at?: URL) => Promise<Response>,
 ): Promise<Response> {
-  const notFoundPathname = deps.manifest.errorRoutes?.notFound;
+  const notFoundPathname = notFoundRoute(request, deps.manifest);
   const notFoundTarget = notFoundPathname
     ? deps.manifest.dispatch[notFoundPathname]
     : undefined;
