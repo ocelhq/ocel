@@ -932,8 +932,6 @@ emit({type:"span_end",id:"1",ok:true});
 	})
 }
 
-// jsString renders a Go string as a JS string literal for the inline
-// fixture scripts above.
 func jsString(s string) string {
 	raw, err := json.Marshal(s)
 	if err != nil {
