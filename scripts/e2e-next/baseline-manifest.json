@@ -13,43 +13,21 @@
       ],
       "flakey": []
     },
-    "test/e2e/app-dir/actions/app-action-form-state-node-middleware.test.ts": {
-      "failed": [
-        "app-dir action useActionState should support submitting form state with JS",
-        "app-dir action useActionState should support submitting form state without JS",
-        "app-dir action useActionState should support hydrating the app from progressively enhanced form request",
-        "app-dir action useActionState should send the action to the provided permalink with form state when JS disabled"
-      ],
-      "flakey": []
-    },
     "test/e2e/app-dir/actions/app-action-node-middleware.test.ts": {
       "failed": [
-        "app-dir action handling should handle action correctly with middleware rewrite",
-        "app-dir action handling should handle basic actions correctly",
-        "app-dir action handling should report errors with bad inputs correctly",
-        "app-dir action handling should propagate errors from a `text/plain` response to an error boundary",
-        "app-dir action handling should trigger an error boundary for action responses with an invalid content-type",
-        "app-dir action handling should error if server action arguments list is too long",
-        "app-dir action handling should support headers and cookies",
-        "app-dir action handling should support importing the same action module instance in both server and action layers",
         "app-dir action handling should handle actions executed in quick succession",
-        "app-dir action handling should not error when a forwarded action triggers a redirect (node)",
         "app-dir action handling should not error when a forwarded action triggers a redirect (edge)",
-        "app-dir action handling fetch actions should handle a fetch action initiated from a static page",
         "app-dir action handling redirects redirects properly when route handler uses `redirect`",
         "app-dir action handling redirects redirects properly when route handler uses `permanentRedirect`",
         "app-dir action handling redirects redirects properly when route handler redirects with a 307 status code",
-        "app-dir action handling redirects redirects properly when route handler redirects with a 308 status code",
-        "app-dir action handling request body decoding should correctly decode multi-byte characters in the request body (node)"
+        "app-dir action handling redirects redirects properly when route handler redirects with a 308 status code"
       ],
       "flakey": []
     },
     "test/e2e/app-dir/actions/app-action-size-limit-invalid-node-middleware.test.ts": {
       "failed": [
-        "app-dir action size limit invalid config should respect the size set in serverActions.bodySizeLimit for plaintext fetch actions should not error for requests that stay below the size limit",
         "app-dir action size limit invalid config should respect the size set in serverActions.bodySizeLimit for plaintext fetch actions should error for requests that exceed the size limit",
         "app-dir action size limit invalid config should respect the size set in serverActions.bodySizeLimit for multipart fetch actions should not error for requests that stay below the size limit",
-        "app-dir action size limit invalid config should respect the size set in serverActions.bodySizeLimit for multipart fetch actions should not error for requests that are at the size limit",
         "app-dir action size limit invalid config should respect the size set in serverActions.bodySizeLimit for multipart fetch actions should error for requests that exceed the size limit"
       ],
       "flakey": []
