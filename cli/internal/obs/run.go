@@ -13,6 +13,16 @@ import (
 	"go.opentelemetry.io/otel/trace"
 )
 
+type ctxKey struct{}
+
+// FromContext returns the Run stored on ctx by Start, or nil if ctx carries
+// none — callers several layers below Start (subprocess wiring, in
+// particular) reach the run this way instead of taking it as a parameter.
+func FromContext(ctx context.Context) *Run {
+	r, _ := ctx.Value(ctxKey{}).(*Run)
+	return r
+}
+
 type Run struct {
 	traceID trace.TraceID
 	command string
@@ -64,6 +74,7 @@ func Start(ctx context.Context, projectDir, command string) (context.Context, *R
 
 	ctx, root := r.tracer.Start(ctx, command, trace.WithAttributes(AttrCommand.String(command)))
 	r.rootSpan = root
+	ctx = context.WithValue(ctx, ctxKey{}, r)
 
 	_ = Prune(dir, RunRetention, start)
 
