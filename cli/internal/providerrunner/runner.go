@@ -19,6 +19,7 @@ import (
 
 	"connectrpc.com/connect"
 
+	"github.com/ocelhq/ocel/cli/internal/procgroup"
 	"github.com/ocelhq/ocel/pkg/channel"
 	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
 	"github.com/ocelhq/ocel/pkg/proto/deployments/v1/deploymentsv1connect"
@@ -126,7 +127,7 @@ func Spawn(ctx context.Context, cfg Config) (*Runner, error) {
 
 	cmd := exec.Command(cfg.BinaryPath, cfg.Args...)
 	cmd.Env = env
-	setNewProcessGroup(cmd)
+	procgroup.New(cmd)
 
 	stdoutPipe, err := cmd.StdoutPipe()
 	if err != nil {
@@ -161,6 +162,15 @@ func Spawn(ctx context.Context, cfg Config) (*Runner, error) {
 	go func() {
 		drainWG.Wait()
 		r.waitErr = cmd.Wait()
+		// cmd.Wait() has just reaped the leader: the pgid it held is only
+		// freed once the group is empty, so any group member still alive
+		// right now keeps it allocated and this signal is guaranteed to
+		// land on the right processes. Sweeping here — rather than letting
+		// teardown() signal the pgid on its own schedule, possibly long
+		// after the leader was reaped — is what makes a force-kill safe
+		// unconditionally, without risking a pgid recycled by an unrelated
+		// process in the meantime.
+		_ = procgroup.Kill(cmd)
 		close(r.done)
 	}()
 
@@ -364,16 +374,42 @@ func (r *Runner) teardown() {
 
 	select {
 	case <-r.done:
+		// Already reaped: the waiter goroutine swept the group itself the
+		// instant it called cmd.Wait(), which is the only point that's
+		// guaranteed safe. r.done may have closed long before this Close()
+		// call — Close() is deferred to the end of the session — so a raw
+		// kill here could hit a pgid the kernel has since handed to an
+		// unrelated process.
+		return
 	default:
-		_ = terminateProcessGroup(r.cmd)
+		_ = procgroup.Terminate(r.cmd)
 		select {
 		case <-r.done:
+			return
 		case <-time.After(r.gracePeriod):
 		}
 	}
 
-	_ = killProcessGroup(r.cmd)
+	select {
+	case <-r.done:
+		// Reaped just as the grace period elapsed; the waiter already swept
+		// the group, so signaling it again risks the same recycled-pgid
+		// hazard as above.
+	default:
+		// The leader has not been reaped yet (worst case it's a zombie
+		// waiting on cmd.Wait()), so its pgid is still guaranteed to be its
+		// own: safe to force-kill directly rather than waiting for the
+		// waiter goroutine, which is what unblocks a grandchild holding the
+		// output pipes open.
+		_ = procgroup.Kill(r.cmd)
+	}
 
+	// TODO: if reapTimeout fires here, cmd.Wait() is still blocked and
+	// drainStdout/drainStderr leak with it, since Kill() above only
+	// reaches the group teardown itself owns — a pipe held open by
+	// something outside that group (e.g. reparented onto init) would still
+	// wedge them. Acceptable today because the process is exiting anyway
+	// and takes the leaked goroutines with it.
 	select {
 	case <-r.done:
 	case <-time.After(r.reapTimeout):
