@@ -10,8 +10,6 @@ import (
 	"time"
 )
 
-// fakeExit lets a test observe a would-be os.Exit call without actually
-// terminating the test binary.
 func fakeExit(t *testing.T) (exit func(int), calls func() []int) {
 	t.Helper()
 	var mu sync.Mutex
@@ -77,8 +75,8 @@ func TestInterruptHandlerSecondSignalForcesExit(t *testing.T) {
 	if got := calls(); got[0] != interruptExitCode {
 		t.Errorf("exit code = %d, want %d (the conventional interrupt status)", got[0], interruptExitCode)
 	}
-	if !strings.Contains(stderr.String(), "resources may be mid-flight") {
-		t.Errorf("stderr = %q, want a warning that the exit is unclean", stderr.String())
+	if !strings.Contains(stderr.String(), "Interrupted again") {
+		t.Errorf("stderr = %q, want it to say a second interrupt happened", stderr.String())
 	}
 }
 
@@ -101,6 +99,12 @@ func TestInterruptHandlerGracefulWindowExpiryForcesExit(t *testing.T) {
 	if got := calls(); got[0] != interruptExitCode {
 		t.Errorf("exit code = %d, want %d", got[0], interruptExitCode)
 	}
+	if strings.Contains(stderr.String(), "Interrupted again") {
+		t.Errorf("stderr = %q, want the expiry path not to accuse a single Ctrl-C of being a second interrupt", stderr.String())
+	}
+	if !strings.Contains(stderr.String(), "did not finish") {
+		t.Errorf("stderr = %q, want it to say the graceful window expired", stderr.String())
+	}
 }
 
 func TestInterruptHandlerStopPreventsForcedExit(t *testing.T) {
@@ -120,6 +124,19 @@ func TestInterruptHandlerStopPreventsForcedExit(t *testing.T) {
 	if got := calls(); len(got) != 0 {
 		t.Errorf("exit called %v after stop(), want the handler to have shut down cleanly", got)
 	}
+}
+
+func TestInterruptHandlerStopIsSafeToCallTwice(t *testing.T) {
+	t.Parallel()
+
+	var stderr bytes.Buffer
+	ch := make(chan os.Signal, 2)
+	exit, _ := fakeExit(t)
+
+	_, stop := interruptHandlerWithExit(context.Background(), &stderr, ch, time.Hour, exit)
+
+	stop()
+	stop()
 }
 
 func waitFor(cond func() bool, timeout time.Duration) bool {
