@@ -166,7 +166,13 @@ func runPreviewUp(ctx context.Context, d deps, cwd string, opts previewUpOptions
 		return err
 	}
 
-	ui := deployui.New(stdout, cfg.Dir, "ocel preview up", verboseEnabled())
+	ctx, run, err := startRun(ctx, cfg, "ocel preview up")
+	if err != nil {
+		return err
+	}
+	defer run.Close()
+
+	ui := deployui.New(stdout, run, sessionFormat(), verboseEnabled())
 	defer ui.Close()
 
 	provW := ui.BuildWriter()
@@ -337,7 +343,13 @@ func runPreviewRm(ctx context.Context, d deps, cwd string, opts previewRmOptions
 		}
 	}
 
-	ui := deployui.New(stdout, cfg.Dir, "ocel preview rm", verboseEnabled())
+	ctx, run, err := startRun(ctx, cfg, "ocel preview rm")
+	if err != nil {
+		return err
+	}
+	defer run.Close()
+
+	ui := deployui.New(stdout, run, sessionFormat(), verboseEnabled())
 	defer ui.Close()
 
 	provW := ui.BuildWriter()
@@ -418,7 +430,13 @@ func runPreviewPrune(ctx context.Context, d deps, cwd string, opts previewPruneO
 		return err
 	}
 
-	ui := deployui.New(stdout, cfg.Dir, "ocel preview prune", verboseEnabled())
+	ctx, run, err := startRun(ctx, cfg, "ocel preview prune")
+	if err != nil {
+		return err
+	}
+	defer run.Close()
+
+	ui := deployui.New(stdout, run, sessionFormat(), verboseEnabled())
 	defer ui.Close()
 
 	provW := ui.BuildWriter()

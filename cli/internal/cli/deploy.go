@@ -102,7 +102,13 @@ func runDeploy(ctx context.Context, d deps, cwd string, opts deployOptions, stdo
 		return err
 	}
 
-	ui := deployui.New(stdout, cfg.Dir, "ocel deploy", verboseEnabled())
+	ctx, run, err := startRun(ctx, cfg, "ocel deploy")
+	if err != nil {
+		return err
+	}
+	defer run.Close()
+
+	ui := deployui.New(stdout, run, sessionFormat(), verboseEnabled())
 	defer ui.Close()
 
 	provW := ui.BuildWriter()

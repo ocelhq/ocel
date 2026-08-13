@@ -2,6 +2,8 @@ package deployui
 
 import (
 	"bytes"
+	"context"
+	"encoding/json"
 	"errors"
 	"os"
 	"strings"
@@ -9,14 +11,26 @@ import (
 	"testing"
 	"time"
 
+	"github.com/ocelhq/ocel/cli/internal/obs"
 	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
 )
+
+func startTestRun(t *testing.T, dir, command string) *obs.Run {
+	t.Helper()
+	_, run, err := obs.Start(context.Background(), dir, command)
+	if err != nil {
+		t.Fatalf("obs.Start() = %v", err)
+	}
+	t.Cleanup(func() { _ = run.Close() })
+	return run
+}
 
 func newTestSession(t *testing.T, command string) (*Session, *bytes.Buffer, string) {
 	t.Helper()
 	dir := t.TempDir()
+	run := startTestRun(t, dir, command)
 	var out bytes.Buffer
-	s := New(&out, dir, command, false)
+	s := New(&out, run, FormatHuman, false)
 	t.Cleanup(func() { _ = s.Close() })
 	return s, &out, s.LogPath()
 }
@@ -53,7 +67,8 @@ func (w *lockedWriter) String() string {
 func newCleanTestSession(t *testing.T) (*Session, *lockedWriter) {
 	t.Helper()
 	out := &lockedWriter{}
-	s := newSession(out, t.TempDir(), "ocel deploy", true)
+	run := startTestRun(t, t.TempDir(), "ocel deploy")
+	s := newSession(out, run, FormatHuman, true)
 	t.Cleanup(func() { _ = s.Close() })
 	if !s.clean {
 		t.Fatal("session is not in the phased view, so the render loop is not running")
@@ -246,17 +261,27 @@ func TestSession(t *testing.T) {
 
 		var paths []string
 		for i := 0; i < 12; i++ {
+			_, run, err := obs.Start(context.Background(), dir, "ocel deploy")
+			if err != nil {
+				t.Fatalf("obs.Start() = %v", err)
+			}
 			var out bytes.Buffer
-			s := New(&out, dir, "ocel deploy", false)
+			s := New(&out, run, FormatHuman, false)
 			s.Building()
 			if err := s.Close(); err != nil {
 				t.Fatalf("Close() = %v", err)
+			}
+			if err := run.Close(); err != nil {
+				t.Fatalf("run.Close() = %v", err)
 			}
 			paths = append(paths, s.LogPath())
 		}
 
 		for i, p := range paths {
 			if i < 2 {
+				if _, err := os.Stat(p); !os.IsNotExist(err) {
+					t.Errorf("oldest run %d log %s should have been pruned, stat err = %v", i, p, err)
+				}
 				continue
 			}
 			if _, err := os.Stat(p); err != nil {
@@ -267,6 +292,84 @@ func TestSession(t *testing.T) {
 			if paths[i] == paths[i-1] {
 				t.Fatalf("two runs shared a log file path: %s", paths[i])
 			}
+		}
+	})
+}
+
+func TestFormatAxis(t *testing.T) {
+	t.Run("json format emits one machine-readable line per event, never the human text", func(t *testing.T) {
+		t.Parallel()
+		dir := t.TempDir()
+		run := startTestRun(t, dir, "ocel deploy")
+		var out bytes.Buffer
+		s := New(&out, run, FormatJSON, false)
+		t.Cleanup(func() { _ = s.Close() })
+
+		s.Building()
+		s.Event(progress(deploymentsv1.Phase_PHASE_UPLOADING, "Uploading function artifacts"))
+		s.Deployed("Deployed", []string{"https://app.example.workers.dev"}, nil)
+
+		lines := strings.Split(strings.TrimRight(out.String(), "\n"), "\n")
+		if len(lines) != 3 {
+			t.Fatalf("got %d stdout lines, want 3 (building, progress, deployed): %q", len(lines), out.String())
+		}
+		for _, line := range lines {
+			var rec map[string]any
+			if err := json.Unmarshal([]byte(line), &rec); err != nil {
+				t.Fatalf("line %q is not valid JSON: %v", line, err)
+			}
+			if _, ok := rec["type"]; !ok {
+				t.Errorf("line %q has no %q field", line, "type")
+			}
+		}
+		if strings.Contains(lines[1], "\r") || strings.HasPrefix(lines[1], "Uploading") {
+			t.Errorf("progress line %q looks like the raw human line, not a JSON record", lines[1])
+		}
+	})
+
+	t.Run("verbose does not change the output format", func(t *testing.T) {
+		t.Parallel()
+		dir := t.TempDir()
+		run := startTestRun(t, dir, "ocel deploy")
+		var out bytes.Buffer
+		s := New(&out, run, FormatJSON, true)
+		t.Cleanup(func() { _ = s.Close() })
+
+		s.Event(progress(deploymentsv1.Phase_PHASE_BUILDING, "Building"))
+
+		var rec map[string]any
+		if err := json.Unmarshal(bytes.TrimSpace(out.Bytes()), &rec); err != nil {
+			t.Fatalf("verbose=true changed the json format away from valid JSON: %v (stdout = %q)", err, out.String())
+		}
+	})
+
+	t.Run("json format never enters the phased spinner view", func(t *testing.T) {
+		t.Parallel()
+		dir := t.TempDir()
+		run := startTestRun(t, dir, "ocel deploy")
+		s := New(&bytes.Buffer{}, run, FormatJSON, false)
+		t.Cleanup(func() { _ = s.Close() })
+		if s.clean {
+			t.Error("json format entered the phased spinner view, which only makes sense for human output on a terminal")
+		}
+	})
+
+	t.Run("default format is human-readable, independent of verbosity", func(t *testing.T) {
+		t.Parallel()
+		dir := t.TempDir()
+		run := startTestRun(t, dir, "ocel deploy")
+		var out bytes.Buffer
+		s := New(&out, run, FormatHuman, true)
+		t.Cleanup(func() { _ = s.Close() })
+
+		s.Event(progress(deploymentsv1.Phase_PHASE_BUILDING, "Building project"))
+
+		if !strings.Contains(out.String(), "Building project") {
+			t.Errorf("stdout = %q, want the human-readable line", out.String())
+		}
+		var rec map[string]any
+		if err := json.Unmarshal(bytes.TrimSpace(out.Bytes()), &rec); err == nil {
+			t.Errorf("stdout = %q, want human text, not JSON, when format is human even under verbose", out.String())
 		}
 	})
 }
