@@ -194,6 +194,25 @@ func TestScanNeverHangsOnALineLargerThanTheBuffer(t *testing.T) {
 	}
 }
 
+func TestProcessorRecoversARecordGluedToAPrecedingUnterminatedLine(t *testing.T) {
+	ctx, run := newRun(t)
+	var out strings.Builder
+	p := &Processor{Run: run, Forward: &out}
+
+	raw, err := json.Marshal(record{Type: typeError, App: "api", Stage: "build", Message: "no entrypoint resolved"})
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
+	}
+	p.Scan(ctx, strings.NewReader("Compiling..."+"\n"+Prefix+string(raw)+"\n"))
+
+	if got, want := p.Err(), "no entrypoint resolved"; got != want {
+		t.Errorf("Err() = %q, want %q (a record led by its own newline must survive a preceding partial line)", got, want)
+	}
+	if !strings.Contains(out.String(), "Compiling...") {
+		t.Errorf("forwarded output = %q, want the framework's partial line preserved", out.String())
+	}
+}
+
 func TestProcessorRejectsARecordWithAnUnrecognisedStage(t *testing.T) {
 	ctx, run := newRun(t)
 	var out strings.Builder
