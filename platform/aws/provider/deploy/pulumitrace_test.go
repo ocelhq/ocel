@@ -4,6 +4,7 @@ import (
 	"strings"
 	"testing"
 	"time"
+	"unicode/utf8"
 
 	"github.com/pulumi/pulumi/sdk/v3/go/auto/events"
 	"github.com/pulumi/pulumi/sdk/v3/go/common/apitype"
@@ -133,8 +134,6 @@ func TestEngineTraceBuilderNeverRetainsTheURN(t *testing.T) {
 	if s.Name != "my-bucket" {
 		t.Errorf("Name = %q, want the URN's logical name component", s.Name)
 	}
-	// testURN's stack is "prod" and its project is "proj": ResourceStandout
-	// must carry neither, and Name in particular must not embed them.
 	if strings.Contains(s.Type, "prod") || strings.Contains(s.Type, "proj") {
 		t.Fatalf("Type leaked the URN's stack or project: %q", s.Type)
 	}
@@ -181,6 +180,61 @@ func TestCapIdentifierBoundsLength(t *testing.T) {
 	if len(got) != maxResourceIdentifierLen {
 		t.Fatalf("capIdentifier(long) length = %d, want %d", len(got), maxResourceIdentifierLen)
 	}
+
+	multibyte := strings.Repeat("é", maxResourceIdentifierLen)
+	got = capIdentifier(multibyte)
+	if !utf8.ValidString(got) {
+		t.Fatalf("capIdentifier(multibyte) = %q, not valid UTF-8", got)
+	}
+	if len(got) > maxResourceIdentifierLen {
+		t.Fatalf("capIdentifier(multibyte) length = %d, want <= %d", len(got), maxResourceIdentifierLen)
+	}
+}
+
+func TestEngineTraceBuilderCapsLatencyStandoutsKeepingTheSlowest(t *testing.T) {
+	t.Parallel()
+
+	b := newEngineTraceBuilder(time.Second)
+	base := time.Unix(6000, 0)
+	for i := 0; i < maxLatencyStandouts+5; i++ {
+		urn := "urn:pulumi:prod::proj::aws:s3/bucket:Bucket::bucket-" + strings.Repeat("x", i+1)
+		dur := time.Duration(i+1) * time.Second
+		b.consume(preEvent(urn, "aws:s3/bucket:Bucket"), base)
+		b.consume(outputsEvent(urn, "aws:s3/bucket:Bucket", apitype.OpCreate), base.Add(dur))
+	}
+
+	got := b.result()
+	if len(got.Standouts) != maxLatencyStandouts {
+		t.Fatalf("len(Standouts) = %d, want %d", len(got.Standouts), maxLatencyStandouts)
+	}
+	if got.StandoutsDropped != 5 {
+		t.Fatalf("StandoutsDropped = %d, want 5", got.StandoutsDropped)
+	}
+	for _, s := range got.Standouts {
+		if s.End.Sub(s.Start) < 6*time.Second {
+			t.Fatalf("kept a standout shorter than the evicted ones: %v", s.End.Sub(s.Start))
+		}
+	}
+}
+
+func TestEngineTraceBuilderNeverCapsFailures(t *testing.T) {
+	t.Parallel()
+
+	b := newEngineTraceBuilder(time.Hour)
+	base := time.Unix(7000, 0)
+	for i := 0; i < maxLatencyStandouts+5; i++ {
+		urn := "urn:pulumi:prod::proj::aws:s3/bucket:Bucket::bucket-" + strings.Repeat("x", i+1)
+		b.consume(preEvent(urn, "aws:s3/bucket:Bucket"), base)
+		b.consume(failedEvent(urn, "aws:s3/bucket:Bucket", apitype.OpCreate), base.Add(time.Millisecond))
+	}
+
+	got := b.result()
+	if len(got.Standouts) != maxLatencyStandouts+5 {
+		t.Fatalf("len(Standouts) = %d, want %d: failures must never be dropped", len(got.Standouts), maxLatencyStandouts+5)
+	}
+	if got.StandoutsDropped != 0 {
+		t.Fatalf("StandoutsDropped = %d, want 0", got.StandoutsDropped)
+	}
 }
 
 func TestResourceStandoutNameIsBoundedNeverDynamic(t *testing.T) {
@@ -201,9 +255,6 @@ func TestResourceStandoutNameIsBoundedNeverDynamic(t *testing.T) {
 	if name := resourceStandoutName(apitype.OpCreate, true); name != "resource operation failed" {
 		t.Errorf("resourceStandoutName(create, true) = %q, want the fixed failure string", name)
 	}
-	// The whole point: every name comes from a small closed vocabulary, so
-	// nothing derived from the URN, type token, or diagnostic text can
-	// reach it.
 	if len(seen) > 7 {
 		t.Errorf("resourceStandoutName produced %d distinct strings across %d ops; vocabulary should stay small and fixed", len(seen), len(cases))
 	}
