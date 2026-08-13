@@ -38,7 +38,9 @@ if (mode === "collect") {
   }
   const merged = mergeBaselineManifest(fragments.map((path) => JSON.parse(readFileSync(path, "utf8"))));
   write(out, merged);
-  console.error(`[ocel-e2e] merged ${fragments.length} fragments into ${out} (${Object.keys(merged).length} suites)`);
+  console.error(
+    `[ocel-e2e] merged ${fragments.length} fragments into ${out} (${Object.keys(merged.suites).length} suites)`,
+  );
 } else {
   usage();
 }

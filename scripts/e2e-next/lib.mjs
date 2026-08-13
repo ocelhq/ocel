@@ -571,53 +571,74 @@ export function suitesStartedInHarnessOutput(stdout) {
   return [...started];
 }
 
+export const BASELINE_INCLUDE_PATTERN = "test/e2e/**/*.test.{t,j}s{,x}";
+
 export function suiteResultFromJest(results) {
+  const testResults = results?.testResults ?? [];
+  const execError = testResults.some((suite) => suite?.testExecError);
   let passed = 0;
+  let pending = 0;
   const failed = [];
-  for (const suite of results?.testResults ?? []) {
+  for (const suite of testResults) {
     for (const assertion of suite?.assertionResults ?? []) {
       if (assertion.status === "passed") {
         passed += 1;
       } else if (assertion.status === "failed") {
         failed.push([...(assertion.ancestorTitles ?? []), assertion.title].filter(Boolean).join(" "));
+      } else {
+        pending += 1;
       }
     }
   }
-  return { failed, flakey: [], runtimeError: passed === 0 && failed.length === 0 };
+  if (execError || passed + failed.length + pending === 0) {
+    return { outcome: "runtimeError" };
+  }
+  if (passed === 0 && failed.length === 0) {
+    return { outcome: "whollySkipped" };
+  }
+  return { outcome: "signal", failed, flakey: [] };
 }
 
 export function buildBaselineManifest(suites) {
-  const manifest = {};
+  const manifestSuites = {};
+  const exclude = new Set();
   for (const { suite, results } of suites) {
     const entry = suiteResultFromJest(results);
-    if (entry.failed.length > 0 || entry.flakey.length > 0 || entry.runtimeError) {
-      manifest[suite] = entry;
+    if (entry.outcome === "whollySkipped") continue;
+    if (entry.outcome === "runtimeError") {
+      exclude.add(suite);
+      continue;
+    }
+    if (entry.failed.length > 0 || entry.flakey.length > 0) {
+      manifestSuites[suite] = { failed: entry.failed, flakey: entry.flakey };
     }
   }
-  return manifest;
+  return {
+    version: 2,
+    suites: manifestSuites,
+    rules: { include: [BASELINE_INCLUDE_PATTERN], exclude: [...exclude].sort() },
+  };
 }
 
 export function mergeBaselineManifest(manifests) {
-  const merged = {};
+  const suites = {};
+  const exclude = new Set();
   for (const manifest of manifests) {
-    for (const [suite, entry] of Object.entries(manifest ?? {})) {
-      const prior = merged[suite];
-      if (!prior) {
-        merged[suite] = {
-          failed: [...(entry.failed ?? [])],
-          flakey: [...(entry.flakey ?? [])],
-          runtimeError: Boolean(entry.runtimeError),
-        };
-        continue;
-      }
-      merged[suite] = {
-        failed: union(prior.failed, entry.failed),
-        flakey: union(prior.flakey, entry.flakey),
-        runtimeError: prior.runtimeError || Boolean(entry.runtimeError),
-      };
+    for (const [suite, entry] of Object.entries(manifest?.suites ?? {})) {
+      const prior = suites[suite];
+      suites[suite] = prior
+        ? { failed: union(prior.failed, entry.failed), flakey: union(prior.flakey, entry.flakey) }
+        : { failed: [...(entry.failed ?? [])], flakey: [...(entry.flakey ?? [])] };
+    }
+    for (const pattern of manifest?.rules?.exclude ?? []) {
+      exclude.add(pattern);
     }
   }
-  return Object.fromEntries(Object.keys(merged).sort().map((suite) => [suite, merged[suite]]));
+  return {
+    version: 2,
+    suites: Object.fromEntries(Object.keys(suites).sort().map((suite) => [suite, suites[suite]])),
+    rules: { include: [BASELINE_INCLUDE_PATTERN], exclude: [...exclude].sort() },
+  };
 }
 
 function union(a, b) {
