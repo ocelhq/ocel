@@ -64,9 +64,19 @@ func checkDestroyFlags(preview, yes bool) error {
 	return nil
 }
 
+const destroyBypassEnv = "OCEL_DESTROY_BYPASS_CONFIRMATION"
+
+func destroyConfirmationBypassed() bool {
+	return os.Getenv(destroyBypassEnv) == "1"
+}
+
 func runDestroy(ctx context.Context, d deps, cwd string, stdout, stderr io.Writer, stdin io.Reader) error {
-	if !isReaderTTY(stdin) {
+	bypass := destroyConfirmationBypassed()
+	if !bypass && !isReaderTTY(stdin) {
 		return errors.New("`ocel destroy` needs an interactive terminal to confirm the project name; it cannot be run non-interactively")
+	}
+	if bypass {
+		fmt.Fprintf(stderr, "%s=1: destroying production without confirmation\n", destroyBypassEnv)
 	}
 
 	cfg, err := projectconfig.Resolve(ctx, cwd)
@@ -118,13 +128,15 @@ func runDestroy(ctx context.Context, d deps, cwd string, stdout, stderr io.Write
 		}
 
 		printDestroyPlan(stdout, cfg.Slug, plan)
-		confirmed, err := confirmDestroyProject(ctx, cfg.Slug, stdout, stdin)
-		if err != nil {
-			return err
-		}
-		if !confirmed {
-			fmt.Fprintln(stdout, "Aborted.")
-			return nil
+		if !bypass {
+			confirmed, err := confirmDestroyProject(ctx, cfg.Slug, stdout, stdin)
+			if err != nil {
+				return err
+			}
+			if !confirmed {
+				fmt.Fprintln(stdout, "Aborted.")
+				return nil
+			}
 		}
 
 		req := &deploymentsv1.DestroyProjectRequest{
