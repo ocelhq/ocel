@@ -9,21 +9,8 @@ import (
 	"github.com/pulumi/pulumi/sdk/v3/go/common/apitype"
 )
 
-// errEngineTraceFailed drives ClassifyError/SPAN_STATUS_ERROR for a
-// resource operation the engine reported as failed. It is never surfaced
-// to a caller and carries no text of its own — the failing resource's
-// real error already went to the deploy's own error return.
 var errEngineTraceFailed = errors.New("resource operation failed")
 
-// ResourceStandout is one resource operation worth its own span: a failure,
-// or an operation slower than the outlier threshold. Type and Name identify
-// the resource for a human reading the trace, but neither is the URN: Type
-// is the Pulumi type token the engine already reports as structured data,
-// and Name is only the URN's trailing name component, pulled out by
-// resourceNameFromURN so the URN's stack and project components — which
-// would leak organisation and environment — are never kept. Both are capped
-// before they reach a span. No diagnostic text the engine emitted alongside
-// the operation is kept.
 type ResourceStandout struct {
 	Op     apitype.OpType
 	Type   string
@@ -33,17 +20,13 @@ type ResourceStandout struct {
 	Failed bool
 }
 
-// maxResourceIdentifierLen bounds ResourceStandout's Type and Name: Type
-// comes from a provider's schema and Name from a developer's resource
-// declaration, so neither is ours to trust as bounded before it reaches the
-// wire.
 const maxResourceIdentifierLen = 256
 
 func capIdentifier(s string) string {
 	if len(s) <= maxResourceIdentifierLen {
 		return s
 	}
-	return s[:maxResourceIdentifierLen]
+	return strings.ToValidUTF8(s[:maxResourceIdentifierLen], "")
 }
 
 const (
@@ -51,12 +34,6 @@ const (
 	urnPartDelimiter = "::"
 )
 
-// resourceNameFromURN pulls the trailing name component out of a Pulumi URN
-// (urn:pulumi:<stack>::<project>::<type>::<name>) without keeping or
-// forwarding the URN itself. The stack and project components, everything
-// before the name, are discarded here rather than downstream: they are
-// exactly what would embed organisation and environment into a span.
-// Anything that doesn't match the expected shape yields "".
 func resourceNameFromURN(raw string) string {
 	if !strings.HasPrefix(raw, urnPrefix) {
 		return ""
@@ -68,15 +45,13 @@ func resourceNameFromURN(raw string) string {
 	return capIdentifier(strings.Join(parts[3:], urnPartDelimiter))
 }
 
-// EngineTrace summarizes one Pulumi Automation API operation's structured
-// engine events: a single count/duration rollup for the whole batch, plus
-// the individual resource operations worth surfacing on their own.
 type EngineTrace struct {
-	ResourceCount int
-	Start         time.Time
-	End           time.Time
-	Failed        bool
-	Standouts     []ResourceStandout
+	ResourceCount    int
+	Start            time.Time
+	End              time.Time
+	Failed           bool
+	Standouts        []ResourceStandout
+	StandoutsDropped int
 }
 
 type inflightOp struct {
@@ -84,13 +59,13 @@ type inflightOp struct {
 	start time.Time
 }
 
-// engineTraceBuilder consumes a Pulumi Automation API EngineEvents stream
-// and synthesises an EngineTrace from it. It never retains a resource's URN
-// or any diagnostic message text past the call to consume that carried it.
+const maxLatencyStandouts = 20
+
 type engineTraceBuilder struct {
 	threshold time.Duration
 	inflight  map[string]inflightOp
 	trace     EngineTrace
+	slowest   []ResourceStandout
 }
 
 func newEngineTraceBuilder(threshold time.Duration) *engineTraceBuilder {
@@ -100,9 +75,6 @@ func newEngineTraceBuilder(threshold time.Duration) *engineTraceBuilder {
 	}
 }
 
-// consume folds one engine event into the trace being built. now is the
-// event's observed time, passed in rather than read from the clock so the
-// builder is deterministic under test.
 func (b *engineTraceBuilder) consume(ev events.EngineEvent, now time.Time) {
 	if b.trace.Start.IsZero() {
 		b.trace.Start = now
@@ -131,32 +103,47 @@ func (b *engineTraceBuilder) finish(m apitype.StepEventMetadata, now time.Time, 
 		delete(b.inflight, m.URN)
 	}
 
-	outlier := !failed && b.threshold > 0 && now.Sub(start) >= b.threshold
-	if failed || outlier {
-		b.trace.Standouts = append(b.trace.Standouts, ResourceStandout{
-			Op:     m.Op,
-			Type:   capIdentifier(m.Type),
-			Name:   resourceNameFromURN(m.URN),
-			Start:  start,
-			End:    now,
-			Failed: failed,
-		})
+	standout := ResourceStandout{
+		Op:     m.Op,
+		Type:   capIdentifier(m.Type),
+		Name:   resourceNameFromURN(m.URN),
+		Start:  start,
+		End:    now,
+		Failed: failed,
+	}
+	if failed {
+		b.trace.Standouts = append(b.trace.Standouts, standout)
+		return
+	}
+	if b.threshold > 0 && now.Sub(start) >= b.threshold {
+		b.keepSlowest(standout)
+	}
+}
+
+func (b *engineTraceBuilder) keepSlowest(s ResourceStandout) {
+	if len(b.slowest) < maxLatencyStandouts {
+		b.slowest = append(b.slowest, s)
+		return
+	}
+	minIdx, minDur := 0, b.slowest[0].End.Sub(b.slowest[0].Start)
+	for i := 1; i < len(b.slowest); i++ {
+		if d := b.slowest[i].End.Sub(b.slowest[i].Start); d < minDur {
+			minIdx, minDur = i, d
+		}
+	}
+	b.trace.StandoutsDropped++
+	if d := s.End.Sub(s.Start); d > minDur {
+		b.slowest[minIdx] = s
 	}
 }
 
 func (b *engineTraceBuilder) result() EngineTrace {
+	b.trace.Standouts = append(b.trace.Standouts, b.slowest...)
 	return b.trace
 }
 
-// engineBatchSpanName is the span name for the rollup of one Pulumi
-// Automation API operation's resource changes.
 const engineBatchSpanName = "pulumi resource operations"
 
-// resourceStandoutName is deliberately drawn only from our own bounded
-// vocabulary, keyed on the Pulumi op. It never includes the resource's
-// type token, logical name, or URN: SpanEvent.name is free-form, so nothing
-// dynamic is templated into it. The type token and logical name travel
-// separately, as ATTRIBUTE_KEY_RESOURCE_TYPE/_NAME on the span instead.
 func resourceStandoutName(op apitype.OpType, failed bool) string {
 	if failed {
 		return "resource operation failed"
