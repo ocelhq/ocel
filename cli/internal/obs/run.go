@@ -25,6 +25,8 @@ type Run struct {
 	tp       *sdktrace.TracerProvider
 	tracer   trace.Tracer
 	rootSpan trace.Span
+
+	fileExp *fileExporter
 }
 
 func Start(ctx context.Context, projectDir, command string) (context.Context, *Run, error) {
@@ -42,9 +44,10 @@ func Start(ctx context.Context, projectDir, command string) (context.Context, *R
 	}
 
 	tracePath := filepath.Join(dir, id.String()+".otlp.json")
+	fileExp := newFileExporter(tracePath)
 	opts := []sdktrace.TracerProviderOption{
 		sdktrace.WithIDGenerator(fixedIDGenerator{traceID: id}),
-		sdktrace.WithSpanProcessor(sdktrace.NewSimpleSpanProcessor(allowlistExporter{inner: newFileExporter(tracePath)})),
+		sdktrace.WithSpanProcessor(sdktrace.NewSimpleSpanProcessor(allowlistExporter{inner: fileExp})),
 	}
 	if netExp, netErr := newNetworkExporter(ctx); netErr == nil && netExp != nil {
 		opts = append(opts, sdktrace.WithSpanProcessor(sdktrace.NewBatchSpanProcessor(allowlistExporter{inner: netExp})))
@@ -59,6 +62,7 @@ func Start(ctx context.Context, projectDir, command string) (context.Context, *R
 		logFile: logFile,
 		tp:      tp,
 		tracer:  tp.Tracer("github.com/ocelhq/ocel/cli"),
+		fileExp: fileExp,
 	}
 
 	ctx, root := r.tracer.Start(ctx, command, trace.WithAttributes(AttrCommand.String(command)))
