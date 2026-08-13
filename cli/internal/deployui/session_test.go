@@ -46,12 +46,6 @@ func progressN(phase deploymentsv1.Phase, msg string, current, total uint32) *de
 	}}
 }
 
-func stageProgress(stageID []byte, msg string, current, total uint32) *deploymentsv1.DeployEvent {
-	return &deploymentsv1.DeployEvent{Event: &deploymentsv1.DeployEvent_Progress{
-		Progress: &deploymentsv1.ProgressEvent{StageId: stageID, Message: msg, Current: &current, Total: &total},
-	}}
-}
-
 func readLog(t *testing.T, path string) string {
 	t.Helper()
 	raw, err := os.ReadFile(path)
