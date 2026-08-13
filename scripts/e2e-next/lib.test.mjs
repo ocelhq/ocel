@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 
 import {
   APP_NAME,
+  BASELINE_INCLUDE_PATTERN,
   BYTECODE_EMBEDDED_MARKER,
   BYTECODE_EMBED_ENV,
   BYTECODE_S3_REHYDRATE_MARKER,
@@ -1039,9 +1040,9 @@ describe("suiteResultFromJest", () => {
         ],
       }),
     ).toEqual({
+      outcome: "signal",
       failed: ["app dir revalidates"],
       flakey: [],
-      runtimeError: false,
     });
   });
 
@@ -1065,12 +1066,34 @@ describe("suiteResultFromJest", () => {
     expect(runs.test(jestTestId(["app dir", "revalidation"], "revalidates on a timer"))).toBe(true);
   });
 
-  it("marks a suite that produced no assertions as a runtime error", () => {
-    expect(suiteResultFromJest({ testResults: [] })).toEqual({
-      failed: [],
-      flakey: [],
-      runtimeError: true,
-    });
+  it("marks a suite that produced no assertions at all as a runtime error", () => {
+    expect(suiteResultFromJest({ testResults: [] })).toEqual({ outcome: "runtimeError" });
+    expect(suiteResultFromJest({ testResults: [{ assertionResults: [] }] })).toEqual({ outcome: "runtimeError" });
+  });
+
+  it("marks a suite whose testResult carries a testExecError as a runtime error, even with assertions", () => {
+    expect(
+      suiteResultFromJest({
+        testResults: [
+          { testExecError: { message: "boom" }, assertionResults: [{ title: "renders", status: "passed" }] },
+        ],
+      }),
+    ).toEqual({ outcome: "runtimeError" });
+  });
+
+  it("marks a suite where every case is pending or todo as wholly skipped, not errored", () => {
+    expect(
+      suiteResultFromJest({
+        testResults: [
+          {
+            assertionResults: [
+              { title: "a", status: "pending" },
+              { title: "b", status: "todo" },
+            ],
+          },
+        ],
+      }),
+    ).toEqual({ outcome: "whollySkipped" });
   });
 
   it("does not record passing cases — the harness only ever reads the exclusions", () => {
@@ -1082,6 +1105,12 @@ describe("suiteResultFromJest", () => {
 });
 
 describe("buildBaselineManifest", () => {
+  const v2 = (suites, exclude = []) => ({
+    version: 2,
+    suites,
+    rules: { include: [BASELINE_INCLUDE_PATTERN], exclude },
+  });
+
   it("keys each suite's exclusions by its test file", () => {
     const manifest = buildBaselineManifest([
       {
@@ -1098,9 +1127,7 @@ describe("buildBaselineManifest", () => {
         },
       },
     ]);
-    expect(manifest).toEqual({
-      "test/e2e/a.test.ts": { failed: ["broken"], flakey: [], runtimeError: false },
-    });
+    expect(manifest).toEqual(v2({ "test/e2e/a.test.ts": { failed: ["broken"], flakey: [] } }));
   });
 
   it("omits a fully green suite, which the harness runs in full when unlisted", () => {
@@ -1110,43 +1137,66 @@ describe("buildBaselineManifest", () => {
         results: { testResults: [{ assertionResults: [{ title: "ok", status: "passed" }] }] },
       },
     ]);
-    expect(manifest).toEqual({});
+    expect(manifest).toEqual(v2({}));
   });
 
-  it("keeps a suite that produced nothing, so the whole file stays skipped", () => {
+  it("omits a wholly-skipped suite entirely, rather than recording it as an error", () => {
+    const manifest = buildBaselineManifest([
+      {
+        suite: "test/e2e/pending.test.ts",
+        results: { testResults: [{ assertionResults: [{ title: "later", status: "pending" }] }] },
+      },
+    ]);
+    expect(manifest).toEqual(v2({}));
+  });
+
+  it("excludes a suite that produced nothing by rule, not by a fake suite entry", () => {
     const manifest = buildBaselineManifest([{ suite: "test/e2e/dead.test.ts", results: { testResults: [] } }]);
-    expect(manifest).toEqual({
-      "test/e2e/dead.test.ts": { failed: [], flakey: [], runtimeError: true },
-    });
+    expect(manifest).toEqual(v2({}, ["test/e2e/dead.test.ts"]));
+  });
+
+  it("sorts the excluded files", () => {
+    const manifest = buildBaselineManifest([
+      { suite: "test/e2e/z.test.ts", results: { testResults: [] } },
+      { suite: "test/e2e/a.test.ts", results: { testResults: [] } },
+    ]);
+    expect(manifest.rules.exclude).toEqual(["test/e2e/a.test.ts", "test/e2e/z.test.ts"]);
   });
 });
 
 describe("mergeBaselineManifest", () => {
-  it("unions each suite's excluded cases across groups", () => {
-    const merged = mergeBaselineManifest([
-      { "test/a.test.ts": { failed: ["two"], flakey: [], runtimeError: false } },
-      { "test/a.test.ts": { failed: ["three"], flakey: [], runtimeError: false } },
-      { "test/b.test.ts": { failed: [], flakey: [], runtimeError: true } },
-    ]);
-    expect(merged).toEqual({
-      "test/a.test.ts": { failed: ["two", "three"], flakey: [], runtimeError: false },
-      "test/b.test.ts": { failed: [], flakey: [], runtimeError: true },
-    });
+  const manifest = (suites, exclude = []) => ({
+    version: 2,
+    suites,
+    rules: { include: [BASELINE_INCLUDE_PATTERN], exclude },
   });
 
-  it("keeps a suite that any group saw crash marked as a runtime error", () => {
+  it("unions each suite's excluded cases across groups", () => {
     const merged = mergeBaselineManifest([
-      { "test/a.test.ts": { failed: ["one"], flakey: [], runtimeError: false } },
-      { "test/a.test.ts": { failed: [], flakey: [], runtimeError: true } },
+      manifest({ "test/a.test.ts": { failed: ["two"], flakey: [] } }),
+      manifest({ "test/a.test.ts": { failed: ["three"], flakey: [] } }),
     ]);
-    expect(merged["test/a.test.ts"].runtimeError).toBe(true);
+    expect(merged.suites).toEqual({ "test/a.test.ts": { failed: ["two", "three"], flakey: [] } });
+  });
+
+  it("unions rules.exclude across groups", () => {
+    const merged = mergeBaselineManifest([
+      manifest({}, ["test/a.test.ts"]),
+      manifest({}, ["test/b.test.ts", "test/a.test.ts"]),
+    ]);
+    expect(merged.rules.exclude).toEqual(["test/a.test.ts", "test/b.test.ts"]);
   });
 
   it("sorts suites so a committed baseline has a stable diff", () => {
     const merged = mergeBaselineManifest([
-      { "test/b.test.ts": { failed: [], flakey: [], runtimeError: false } },
-      { "test/a.test.ts": { failed: [], flakey: [], runtimeError: false } },
+      manifest({ "test/b.test.ts": { failed: [], flakey: [] } }),
+      manifest({ "test/a.test.ts": { failed: [], flakey: [] } }),
     ]);
-    expect(Object.keys(merged)).toEqual(["test/a.test.ts", "test/b.test.ts"]);
+    expect(Object.keys(merged.suites)).toEqual(["test/a.test.ts", "test/b.test.ts"]);
+  });
+
+  it("carries the include pattern through untouched", () => {
+    const merged = mergeBaselineManifest([manifest({})]);
+    expect(merged.rules.include).toEqual([BASELINE_INCLUDE_PATTERN]);
   });
 });
