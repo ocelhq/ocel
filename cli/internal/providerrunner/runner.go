@@ -30,10 +30,6 @@ const DefaultReadyTimeout = 10 * time.Second
 
 const ReadyTimeoutEnvVar = "OCEL_READY_TIMEOUT"
 
-// DefaultGracePeriod is short because the provider does not wait for
-// in-flight Pulumi work on SIGTERM (see #257) — the grace period only
-// covers the time it takes the process to notice the signal and exit, not
-// any real work it needs to finish first.
 const DefaultGracePeriod = 2 * time.Second
 
 const DefaultReapTimeout = 2 * time.Second
@@ -168,15 +164,6 @@ func Spawn(ctx context.Context, cfg Config) (*Runner, error) {
 	go func() {
 		drainWG.Wait()
 		r.waitErr = cmd.Wait()
-		// cmd.Wait() has just reaped the leader: the pgid it held is only
-		// freed once the group is empty, so any group member still alive
-		// right now keeps it allocated and this signal is guaranteed to
-		// land on the right processes. Sweeping here — rather than letting
-		// teardown() signal the pgid on its own schedule, possibly long
-		// after the leader was reaped — is what makes a force-kill safe
-		// unconditionally, without risking a pgid recycled by an unrelated
-		// process in the meantime. deregisterLive happens in the same
-		// breath so KillAllLive never sees a runner past this point.
 		_ = procgroup.Kill(cmd)
 		deregisterLive(r)
 		close(r.done)
@@ -378,16 +365,6 @@ func deregisterLive(r *Runner) {
 	liveMu.Unlock()
 }
 
-// KillAllLive force-kills the process group of every Runner that has been
-// spawned and not yet reaped. It exists for a caller with no time left to
-// run the normal Close() sequence — e.g. a second interrupt arriving while
-// a graceful shutdown is still in its window — so it does not signal
-// termination first or wait for anything.
-//
-// It is safe to call concurrently with an in-flight Close()/teardown(): a
-// runner is only registered while its pgid is guaranteed not to have been
-// recycled (see the waiter goroutine in Spawn), so this can never land a
-// signal on the wrong process tree.
 func KillAllLive() {
 	liveMu.Lock()
 	runners := make([]*Runner, 0, len(live))
@@ -422,12 +399,6 @@ func (r *Runner) teardown() {
 
 	select {
 	case <-r.done:
-		// Already reaped: the waiter goroutine swept the group itself the
-		// instant it called cmd.Wait(), which is the only point that's
-		// guaranteed safe. r.done may have closed long before this Close()
-		// call — Close() is deferred to the end of the session — so a raw
-		// kill here could hit a pgid the kernel has since handed to an
-		// unrelated process.
 		return
 	default:
 		_ = procgroup.Terminate(r.cmd)
@@ -440,15 +411,7 @@ func (r *Runner) teardown() {
 
 	select {
 	case <-r.done:
-		// Reaped just as the grace period elapsed; the waiter already swept
-		// the group, so signaling it again risks the same recycled-pgid
-		// hazard as above.
 	default:
-		// The leader has not been reaped yet (worst case it's a zombie
-		// waiting on cmd.Wait()), so its pgid is still guaranteed to be its
-		// own: safe to force-kill directly rather than waiting for the
-		// waiter goroutine, which is what unblocks a grandchild holding the
-		// output pipes open.
 		_ = procgroup.Kill(r.cmd)
 	}
 
