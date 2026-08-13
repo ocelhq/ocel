@@ -28,7 +28,7 @@ func TestPruneKeepsOnlyTheNewestRuns(t *testing.T) {
 		}
 	}
 
-	if err := Prune(dir, keep); err != nil {
+	if err := Prune(dir, keep, time.Now()); err != nil {
 		t.Fatalf("Prune() = %v", err)
 	}
 
@@ -62,7 +62,7 @@ func TestPruneIsANoOpUnderTheLimit(t *testing.T) {
 			t.Fatalf("write: %v", err)
 		}
 	}
-	if err := Prune(dir, RunRetention); err != nil {
+	if err := Prune(dir, RunRetention, time.Now()); err != nil {
 		t.Fatalf("Prune() = %v", err)
 	}
 	entries, err := os.ReadDir(dir)
@@ -75,7 +75,72 @@ func TestPruneIsANoOpUnderTheLimit(t *testing.T) {
 }
 
 func TestPruneOnAMissingDirIsANoOp(t *testing.T) {
-	if err := Prune(filepath.Join(t.TempDir(), "does-not-exist"), RunRetention); err != nil {
+	if err := Prune(filepath.Join(t.TempDir(), "does-not-exist"), RunRetention, time.Now()); err != nil {
 		t.Errorf("Prune() on a missing dir = %v, want nil", err)
+	}
+}
+
+func TestPruneNeverRemovesAnEntryAsNewAsTheCutoff(t *testing.T) {
+	dir := t.TempDir()
+	const total = 12
+	const keep = 10
+
+	now := time.Now()
+	cutoff := now.Add(-time.Hour)
+	for i := 0; i < total; i++ {
+		p := filepath.Join(dir, fmt.Sprintf("run%02d.ndjson", i))
+		if err := os.WriteFile(p, []byte("x"), 0o644); err != nil {
+			t.Fatalf("write %s: %v", p, err)
+		}
+		if err := os.Chtimes(p, now, now); err != nil {
+			t.Fatalf("chtimes %s: %v", p, err)
+		}
+	}
+
+	if err := Prune(dir, keep, cutoff); err != nil {
+		t.Fatalf("Prune() = %v", err)
+	}
+
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		t.Fatalf("read dir: %v", err)
+	}
+	if got := len(entries); got != total {
+		t.Errorf("got %d files after prune, want all %d protected because none are older than the cutoff", got, total)
+	}
+}
+
+func TestPruneRemovesOnlyEntriesOlderThanTheCutoff(t *testing.T) {
+	dir := t.TempDir()
+
+	old := time.Now().Add(-time.Hour)
+	for i := 0; i < 12; i++ {
+		p := filepath.Join(dir, fmt.Sprintf("old%02d.ndjson", i))
+		if err := os.WriteFile(p, []byte("x"), 0o644); err != nil {
+			t.Fatalf("write %s: %v", p, err)
+		}
+		if err := os.Chtimes(p, old.Add(time.Duration(i)*time.Minute), old.Add(time.Duration(i)*time.Minute)); err != nil {
+			t.Fatalf("chtimes %s: %v", p, err)
+		}
+	}
+
+	cutoff := time.Now()
+	fresh := filepath.Join(dir, "fresh00.ndjson")
+	if err := os.WriteFile(fresh, []byte("x"), 0o644); err != nil {
+		t.Fatalf("write %s: %v", fresh, err)
+	}
+	if err := os.Chtimes(fresh, cutoff.Add(time.Minute), cutoff.Add(time.Minute)); err != nil {
+		t.Fatalf("chtimes %s: %v", fresh, err)
+	}
+
+	if err := Prune(dir, 10, cutoff); err != nil {
+		t.Fatalf("Prune() = %v", err)
+	}
+
+	if _, err := os.Stat(fresh); err != nil {
+		t.Errorf("entry newer than the cutoff should never be pruned: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(dir, "old00.ndjson")); !os.IsNotExist(err) {
+		t.Errorf("oldest entry below the cutoff should have been pruned, err=%v", err)
 	}
 }

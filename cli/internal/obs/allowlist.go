@@ -2,12 +2,6 @@ package obs
 
 import "go.opentelemetry.io/otel/attribute"
 
-// The attribute vocabulary. This is the fixed set of keys a log record or a
-// span is permitted to carry — anything else is dropped before it reaches
-// either artifact. Every package that emits against the obs seam attaches
-// attributes through these keys, never ad hoc strings, so a variable value
-// or a credential can never ride along as an attribute: the key it would
-// need doesn't exist.
 const (
 	AttrCommand       = attribute.Key("ocel.command")
 	AttrStage         = attribute.Key("ocel.stage")
