@@ -169,6 +169,28 @@ func TestNewStageStripsControlCharactersAndCapsTheTitle(t *testing.T) {
 	}
 }
 
+func TestSanitizeMessageStripsControlCharactersWithoutTruncatingOrFallingBack(t *testing.T) {
+	t.Parallel()
+
+	dirty := "Destroying app stack prod--web\x1b\x07--r1"
+	got := sanitizeMessage(dirty)
+	if strings.ContainsAny(got, "\x1b\x07") {
+		t.Fatalf("sanitizeMessage(%q) = %q, still contains control characters", dirty, got)
+	}
+	if got != "Destroying app stack prod--web--r1" {
+		t.Errorf("sanitizeMessage(%q) = %q, want the control characters dropped and the rest untouched", dirty, got)
+	}
+
+	long := strings.Repeat("x", maxStageTitleLen*2)
+	if got := sanitizeMessage(long); len(got) != len(long) {
+		t.Errorf("sanitizeMessage truncated a long message to %d chars, want it left at %d: unlike a stage title, a progress message has no length cap", len(got), len(long))
+	}
+
+	if got := sanitizeMessage("   "); got != "" {
+		t.Errorf("sanitizeMessage(blank) = %q, want empty: unlike a stage title, a message has no non-empty fallback", got)
+	}
+}
+
 func TestAttrHelpersUseTheBoundedAttributeKeys(t *testing.T) {
 	t.Parallel()
 

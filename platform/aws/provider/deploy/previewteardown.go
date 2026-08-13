@@ -40,7 +40,7 @@ func RemovePreview(ctx context.Context, stack edge.RootStack, state edge.RootSta
 	var pointerErr error
 	if stack != nil && len(state) > 0 {
 		report := cfg.reportStage(stages.Pointer)
-		report(fmt.Sprintf("Removing preview pointer %q from the store", pointer))
+		report(sanitizeMessage(fmt.Sprintf("Removing preview pointer %q from the store", pointer)))
 		result, err := stack.RemovePointer(ctx, state, pointer)
 		if err != nil {
 			pointerErr = fmt.Errorf("remove preview pointer %q: %w", pointer, err)
