@@ -863,6 +863,20 @@ process.exit(1);
 		}
 	})
 
+	t.Run("stdout and stderr write concurrently without racing on the shared writer", func(t *testing.T) {
+		t.Parallel()
+
+		script := `
+for (let i = 0; i < 4000; i++) {
+  process.stdout.write("out " + i + "\n");
+  process.stderr.write("err " + i + "\n");
+}
+`
+		if err := runNodeScript(t, script); err != nil {
+			t.Fatalf("runNode: %v", err)
+		}
+	})
+
 	t.Run("a span_start/span_end pair for an app produces a span on the run", func(t *testing.T) {
 		t.Parallel()
 
