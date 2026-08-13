@@ -16,6 +16,8 @@ import (
 	"unicode"
 
 	"github.com/ocelhq/ocel/cli/internal/manifestbuilder"
+	"github.com/ocelhq/ocel/cli/internal/nodeprotocol"
+	"github.com/ocelhq/ocel/cli/internal/obs"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
 	"github.com/ocelhq/ocel/cli/node"
 )
@@ -310,14 +312,30 @@ func runNode(ctx context.Context, scriptPath string, env []string, request []byt
 	cmd := exec.CommandContext(ctx, "node", scriptPath)
 	cmd.Env = env
 	cmd.Stdin = bytes.NewReader(request)
-	cmd.Stdout = out
 	cmd.Stderr = out
 
-	if err := cmd.Run(); err != nil {
-		if summary := failureSummary(captured.String()); summary != "" {
-			return fmt.Errorf("node-builder failed (%w): %s", err, summary)
-		}
+	stdout, err := cmd.StdoutPipe()
+	if err != nil {
 		return fmt.Errorf("node-builder failed: %w", err)
+	}
+
+	proc := &nodeprotocol.Processor{Run: obs.FromContext(ctx), Forward: out}
+
+	if err := cmd.Start(); err != nil {
+		return fmt.Errorf("node-builder failed: %w", err)
+	}
+	proc.Scan(ctx, stdout)
+	runErr := cmd.Wait()
+
+	if runErr != nil {
+		proc.Abort()
+		if msg := proc.Err(); msg != "" {
+			return fmt.Errorf("node-builder failed (%w): %s", runErr, msg)
+		}
+		if summary := failureSummary(captured.String()); summary != "" {
+			return fmt.Errorf("node-builder failed (%w): %s", runErr, summary)
+		}
+		return fmt.Errorf("node-builder failed: %w", runErr)
 	}
 	return nil
 }
