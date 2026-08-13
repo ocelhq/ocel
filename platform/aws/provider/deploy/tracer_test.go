@@ -3,6 +3,7 @@ package deploy
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 	"time"
 
@@ -94,7 +95,6 @@ func TestSpanUnderMintsAFreshIDDistinctFromItsParent(t *testing.T) {
 func TestNilTracerIsANoOp(t *testing.T) {
 	t.Parallel()
 
-	// Must not panic.
 	declareStages(nil, true, NewRootStage("Preparing"))
 	spanForStage(nil, NewRootStage("Preparing"), time.Now(), time.Now(), errors.New("boom"))
 	spanUnder(nil, StageID{}, "x", time.Now(), time.Now(), nil)
@@ -140,6 +140,28 @@ type wrapped struct {
 
 func (w *wrapped) Error() string { return w.msg + ": " + w.base.Error() }
 func (w *wrapped) Unwrap() error { return w.base }
+
+func TestNewStageStripsControlCharactersAndCapsTheTitle(t *testing.T) {
+	t.Parallel()
+
+	dirty := "web\x1b[31m\x07" + strings.Repeat("x", maxStageTitleLen*2)
+	root := NewRootStage(dirty)
+	if strings.ContainsAny(root.Title, "\x1b\x07") {
+		t.Fatalf("Title = %q, still contains control characters", root.Title)
+	}
+	if len(root.Title) > maxStageTitleLen {
+		t.Fatalf("len(Title) = %d, want <= %d", len(root.Title), maxStageTitleLen)
+	}
+
+	child := NewStage(root, dirty)
+	if strings.ContainsAny(child.Title, "\x1b\x07") {
+		t.Fatalf("Title = %q, still contains control characters", child.Title)
+	}
+
+	if got := NewRootStage("   ").Title; got != "stage" {
+		t.Errorf("NewRootStage(all-control/blank) Title = %q, want the fallback", got)
+	}
+}
 
 func TestAttrHelpersUseTheBoundedAttributeKeys(t *testing.T) {
 	t.Parallel()
