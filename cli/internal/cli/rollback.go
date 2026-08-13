@@ -5,8 +5,6 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"os/signal"
-	"syscall"
 
 	"github.com/spf13/cobra"
 
@@ -33,7 +31,7 @@ var rollbackCmd = &cobra.Command{
 		if err != nil {
 			return fmt.Errorf("determine working directory: %w", err)
 		}
-		ctx, stop := signal.NotifyContext(cmd.Context(), os.Interrupt, syscall.SIGTERM)
+		ctx, stop := installInterruptHandler(cmd.Context(), cmd.ErrOrStderr())
 		defer stop()
 		return runRollback(ctx, defaultDeps(), cwd, rollbackOpts, cmd.OutOrStdout(), cmd.ErrOrStderr())
 	},

@@ -29,12 +29,12 @@ func TestConfirmDestroyProject(t *testing.T) {
 			t.Parallel()
 
 			var stdout bytes.Buffer
-			got, err := confirmDestroyProject("proj_shop", &stdout, strings.NewReader(tc.input))
+			got, err := confirmDestroyProject(context.Background(), "proj_shop", &stdout, strings.NewReader(tc.input))
 			if err != nil {
-				t.Fatalf("confirmDestroyProject() error = %v", err)
+				t.Fatalf("confirmDestroyProject(context.Background(), ) error = %v", err)
 			}
 			if got != tc.want {
-				t.Errorf("confirmDestroyProject(%q) = %v, want %v", tc.input, got, tc.want)
+				t.Errorf("confirmDestroyProject(context.Background(), %q) = %v, want %v", tc.input, got, tc.want)
 			}
 			if !strings.Contains(stdout.String(), "Type the project name (proj_shop) to confirm:") {
 				t.Errorf("stdout = %q, want the typed-name prompt", stdout.String())

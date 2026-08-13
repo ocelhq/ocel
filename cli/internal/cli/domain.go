@@ -1,15 +1,12 @@
 package cli
 
 import (
-	"bufio"
 	"context"
 	"errors"
 	"fmt"
 	"io"
 	"os"
-	"os/signal"
 	"strings"
-	"syscall"
 
 	"github.com/spf13/cobra"
 
@@ -46,7 +43,7 @@ var domainUseCmd = &cobra.Command{
 		if err != nil {
 			return fmt.Errorf("determine working directory: %w", err)
 		}
-		ctx, stop := signal.NotifyContext(cmd.Context(), os.Interrupt, syscall.SIGTERM)
+		ctx, stop := installInterruptHandler(cmd.Context(), cmd.ErrOrStderr())
 		defer stop()
 		return runDomainUse(ctx, defaultDeps(), cwd, args[0], domainOpts, cmd.OutOrStdout(), cmd.ErrOrStderr())
 	},
@@ -61,7 +58,7 @@ var domainLsCmd = &cobra.Command{
 		if err != nil {
 			return fmt.Errorf("determine working directory: %w", err)
 		}
-		ctx, stop := signal.NotifyContext(cmd.Context(), os.Interrupt, syscall.SIGTERM)
+		ctx, stop := installInterruptHandler(cmd.Context(), cmd.ErrOrStderr())
 		defer stop()
 		return runDomainLs(ctx, defaultDeps(), cwd, domainOpts, cmd.OutOrStdout(), cmd.ErrOrStderr())
 	},
@@ -76,7 +73,7 @@ var domainReleaseCmd = &cobra.Command{
 		if err != nil {
 			return fmt.Errorf("determine working directory: %w", err)
 		}
-		ctx, stop := signal.NotifyContext(cmd.Context(), os.Interrupt, syscall.SIGTERM)
+		ctx, stop := installInterruptHandler(cmd.Context(), cmd.ErrOrStderr())
 		defer stop()
 		return runDomainRelease(ctx, defaultDeps(), cwd, domainOpts, cmd.OutOrStdout(), cmd.ErrOrStderr(), cmd.InOrStdin())
 	},
@@ -213,7 +210,7 @@ func runDomainRelease(ctx context.Context, d deps, cwd string, opts domainOption
 		fmt.Fprintln(stdout, "Every project above keeps its previews deployed, but they stop being reachable until a global domain is in use again or each project declares its own domains.preview.")
 
 		if !opts.yes {
-			confirmed, err := confirmReleaseDomain(base, stdout, stdin)
+			confirmed, err := confirmReleaseDomain(ctx, base, stdout, stdin)
 			if err != nil {
 				return err
 			}
@@ -300,17 +297,17 @@ func renderGlobalDomainProjects(out io.Writer, projects []string) {
 	}
 }
 
-func confirmReleaseDomain(base string, stdout io.Writer, stdin io.Reader) (bool, error) {
+func confirmReleaseDomain(ctx context.Context, base string, stdout io.Writer, stdin io.Reader) (bool, error) {
 	fmt.Fprintf(stdout, "Type the domain (%s) to confirm: ", base)
 
-	scanner := bufio.NewScanner(stdin)
-	if !scanner.Scan() {
-		if err := scanner.Err(); err != nil {
-			return false, fmt.Errorf("failed to read input: %w", err)
-		}
+	line, ok, err := readLine(ctx, stdin)
+	if err != nil {
+		return false, err
+	}
+	if !ok {
 		return false, nil
 	}
-	return strings.TrimSpace(scanner.Text()) == base, nil
+	return strings.TrimSpace(line) == base, nil
 }
 
 func wildcardOf(base string) string {

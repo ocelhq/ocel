@@ -5,9 +5,7 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"os/signal"
 	"slices"
-	"syscall"
 	"text/tabwriter"
 
 	"github.com/spf13/cobra"
@@ -172,7 +170,7 @@ func withEnvCommand(cmd *cobra.Command, run func(context.Context, string) error)
 	if err != nil {
 		return fmt.Errorf("determine working directory: %w", err)
 	}
-	ctx, stop := signal.NotifyContext(cmd.Context(), os.Interrupt, syscall.SIGTERM)
+	ctx, stop := installInterruptHandler(cmd.Context(), cmd.ErrOrStderr())
 	defer stop()
 	return run(ctx, cwd)
 }

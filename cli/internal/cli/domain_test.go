@@ -75,12 +75,12 @@ func TestConfirmReleaseDomain(t *testing.T) {
 			t.Parallel()
 
 			var stdout bytes.Buffer
-			got, err := confirmReleaseDomain("preview.acme.com", &stdout, strings.NewReader(tc.input))
+			got, err := confirmReleaseDomain(context.Background(), "preview.acme.com", &stdout, strings.NewReader(tc.input))
 			if err != nil {
-				t.Fatalf("confirmReleaseDomain() error = %v", err)
+				t.Fatalf("confirmReleaseDomain(context.Background(), ) error = %v", err)
 			}
 			if got != tc.want {
-				t.Errorf("confirmReleaseDomain(%q) = %v, want %v", tc.input, got, tc.want)
+				t.Errorf("confirmReleaseDomain(context.Background(), %q) = %v, want %v", tc.input, got, tc.want)
 			}
 			if !strings.Contains(stdout.String(), "Type the domain (preview.acme.com) to confirm:") {
 				t.Errorf("stdout = %q, want the typed-domain prompt", stdout.String())

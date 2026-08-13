@@ -648,12 +648,12 @@ func TestConfirmDestroyPreview(t *testing.T) {
 			t.Parallel()
 
 			var stdout bytes.Buffer
-			got, err := confirmDestroyPreview("staging", &stdout, strings.NewReader(tc.input))
+			got, err := confirmDestroyPreview(context.Background(), "staging", &stdout, strings.NewReader(tc.input))
 			if err != nil {
-				t.Fatalf("confirmDestroyPreview() error = %v", err)
+				t.Fatalf("confirmDestroyPreview(context.Background(), ) error = %v", err)
 			}
 			if got != tc.want {
-				t.Errorf("confirmDestroyPreview(%q) = %v, want %v", tc.input, got, tc.want)
+				t.Errorf("confirmDestroyPreview(context.Background(), %q) = %v, want %v", tc.input, got, tc.want)
 			}
 			if !strings.Contains(stdout.String(), `Destroy persistent preview "staging"? [y/N]`) {
 				t.Errorf("stdout = %q, want the persistent destroy prompt", stdout.String())

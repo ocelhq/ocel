@@ -6,9 +6,7 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"os/signal"
 	"strings"
-	"syscall"
 	"time"
 
 	"github.com/spf13/cobra"
@@ -74,7 +72,7 @@ var previewRmCmd = &cobra.Command{
 		if err != nil {
 			return fmt.Errorf("determine working directory: %w", err)
 		}
-		ctx, stop := signal.NotifyContext(cmd.Context(), os.Interrupt, syscall.SIGTERM)
+		ctx, stop := installInterruptHandler(cmd.Context(), cmd.ErrOrStderr())
 		defer stop()
 		return runPreviewRm(ctx, defaultDeps(), cwd, previewRmOpts, cmd.OutOrStdout(), cmd.ErrOrStderr(), cmd.InOrStdin())
 	},
@@ -89,7 +87,7 @@ var previewLsCmd = &cobra.Command{
 		if err != nil {
 			return fmt.Errorf("determine working directory: %w", err)
 		}
-		ctx, stop := signal.NotifyContext(cmd.Context(), os.Interrupt, syscall.SIGTERM)
+		ctx, stop := installInterruptHandler(cmd.Context(), cmd.ErrOrStderr())
 		defer stop()
 		return runPreviewLs(ctx, defaultDeps(), cwd, cmd.OutOrStdout(), cmd.ErrOrStderr())
 	},
@@ -100,7 +98,7 @@ func runPreviewUpCmd(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return fmt.Errorf("determine working directory: %w", err)
 	}
-	ctx, stop := signal.NotifyContext(cmd.Context(), os.Interrupt, syscall.SIGTERM)
+	ctx, stop := installInterruptHandler(cmd.Context(), cmd.ErrOrStderr())
 	defer stop()
 	return runPreviewUp(ctx, defaultDeps(), cwd, previewUpOpts, cmd.OutOrStdout(), cmd.ErrOrStderr(), cmd.InOrStdin())
 }
@@ -114,7 +112,7 @@ var previewPruneCmd = &cobra.Command{
 		if err != nil {
 			return fmt.Errorf("determine working directory: %w", err)
 		}
-		ctx, stop := signal.NotifyContext(cmd.Context(), os.Interrupt, syscall.SIGTERM)
+		ctx, stop := installInterruptHandler(cmd.Context(), cmd.ErrOrStderr())
 		defer stop()
 		return runPreviewPrune(ctx, defaultDeps(), cwd, previewPruneOpts, cmd.OutOrStdout(), cmd.ErrOrStderr())
 	},
@@ -333,8 +331,11 @@ func runPreviewRm(ctx context.Context, d deps, cwd string, opts previewRmOptions
 
 	persistent := env.GetLifecycle() == deploymentsv1.Environment_LIFECYCLE_PERSISTENT
 	if persistent && !opts.yes && isReaderTTY(stdin) {
-		proceed, err := confirmDestroyPreview(env.GetIdentity(), stdout, stdin)
+		proceed, err := confirmDestroyPreview(ctx, env.GetIdentity(), stdout, stdin)
 		if err != nil {
+			if ctx.Err() != nil {
+				return &ExitError{Code: 1}
+			}
 			return err
 		}
 		if !proceed {
@@ -531,8 +532,8 @@ func resolveRmEnvironment(d deps, cwd string, opts previewRmOptions) (*deploymen
 	}, nil
 }
 
-func confirmDestroyPreview(name string, stdout io.Writer, stdin io.Reader) (bool, error) {
-	return confirmYN(fmt.Sprintf("Destroy persistent preview %q?", name), stdout, stdin)
+func confirmDestroyPreview(ctx context.Context, name string, stdout io.Writer, stdin io.Reader) (bool, error) {
+	return confirmYN(ctx, fmt.Sprintf("Destroy persistent preview %q?", name), stdout, stdin)
 }
 
 func preflightPreview(ctx context.Context, d deps, runner *providerrunner.Runner, provider *projectconfig.ProviderDescriptor, out io.Writer) error {

@@ -5,8 +5,6 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"os/signal"
-	"syscall"
 
 	"github.com/spf13/cobra"
 
@@ -25,7 +23,7 @@ var buildCmd = &cobra.Command{
 			return fmt.Errorf("determine working directory: %w", err)
 		}
 
-		ctx, stop := signal.NotifyContext(cmd.Context(), os.Interrupt, syscall.SIGTERM)
+		ctx, stop := installInterruptHandler(cmd.Context(), cmd.ErrOrStderr())
 		defer stop()
 
 		return runBuild(ctx, defaultDeps(), cwd, cmd.OutOrStdout(), cmd.ErrOrStderr())
