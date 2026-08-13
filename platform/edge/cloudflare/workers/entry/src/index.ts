@@ -20,8 +20,10 @@ import {
   CacheDeps,
   CacheTarget,
   admitRefresh,
+  asSegmentPayload,
   cacheKey,
   hasDraftCookie,
+  isSegmentPrefetch,
   refreshOutcome,
   SUPPRESS_SELF_REVALIDATION,
   serveCached,
@@ -1155,8 +1157,13 @@ async function dispatchPrerender(
       : doFetch(entried);
   };
 
+  const segment = isSegmentPrefetch(request.headers);
+  const answer = segment
+    ? async (rendered: Request) => asSegmentPayload(await render(rendered))
+    : render;
+
   if (!deps.cache) {
-    return render(forward(forwardUrl, request, headers));
+    return answer(forward(forwardUrl, request, headers));
   }
   const cache = deps.cache;
 
@@ -1166,7 +1173,7 @@ async function dispatchPrerender(
     hasDraftCookie(request) ||
     headers.has("x-middleware-set-cookie")
   ) {
-    const response = await render(forward(forwardUrl, request, headers));
+    const response = await answer(forward(forwardUrl, request, headers));
     return withStatus(response, "BYPASS");
   }
 
@@ -1195,13 +1202,13 @@ async function dispatchPrerender(
   if (SUPPRESS_SELF_REVALIDATION && admissionTier) {
     originHeaders.set(PREFETCH_PURPOSE, "prefetch");
   }
-  const origin = () => render(forward(forwardUrl, request, originHeaders));
+  const origin = () => answer(forward(forwardUrl, request, originHeaders));
 
   const blockingHeaders = new Headers(safeHeaders);
   blockingHeaders.delete(PREFETCH_PURPOSE);
   blockingHeaders.set("x-prerender-revalidate", target.config.bypassToken ?? "");
   const originBlocking = () =>
-    render(forward(forwardUrl, request, blockingHeaders));
+    answer(forward(forwardUrl, request, blockingHeaders));
 
   const revalidates = !edgeEntryKey;
 
@@ -1239,6 +1246,7 @@ async function dispatchPrerender(
     key: keyResult.cacheable ? keyResult.key : "",
     refreshKey,
     revalidation,
+    segment,
     tags: target.tags,
     revalidate:
       typeof target.fallback?.initialRevalidate === "number"
@@ -1359,7 +1367,7 @@ async function dispatchPrerender(
     if (SUPPRESS_SELF_REVALIDATION && admissionTier) {
       uncacheableHeaders.set(PREFETCH_PURPOSE, "prefetch");
     }
-    const response = await render(
+    const response = await answer(
       forward(forwardUrl, request, uncacheableHeaders),
     );
     return withStatus(response, "MISS");

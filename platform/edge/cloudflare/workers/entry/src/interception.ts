@@ -104,6 +104,7 @@ export async function intercept(
     if (segmentPath !== null && value.kind === "APP_PAGE") {
       const response = reconstructSegment(value, segmentPath);
       if (!response) return null;
+      response.headers.set("x-nextjs-postponed", "2");
       response.headers.set("cache-control", `s-maxage=${window}`);
       response.headers.set("x-ocel-entry-modified", String(entry.lastModified));
       return {
