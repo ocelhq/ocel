@@ -16,6 +16,7 @@ import (
 
 	ec2 "github.com/pulumi/pulumi-aws/sdk/v7/go/aws/ec2"
 	"github.com/pulumi/pulumi/sdk/v3/go/auto"
+	"github.com/pulumi/pulumi/sdk/v3/go/auto/events"
 	"github.com/pulumi/pulumi/sdk/v3/go/auto/optup"
 	"github.com/pulumi/pulumi/sdk/v3/go/common/resource/config"
 	"github.com/pulumi/pulumi/sdk/v3/go/common/workspace"
@@ -51,6 +52,16 @@ func realize(ctx context.Context, cfg Config, manifest *deploymentsv1.Manifest, 
 		return Result{}, err
 	}
 
+	apps := manifestApps(manifest)
+	appStages := make(map[string]Stage, len(apps))
+	declared := make([]Stage, 0, len(apps))
+	for _, app := range apps {
+		s := NewStage(cfg.Stages.Provisioning, app.GetName())
+		appStages[app.GetName()] = s
+		declared = append(declared, s)
+	}
+	declareStages(cfg.Tracer, true, declared...)
+
 	baked, err := renderAppBundles(cfg, manifest)
 	if err != nil {
 		return Result{}, err
@@ -64,20 +75,27 @@ func realize(ctx context.Context, cfg Config, manifest *deploymentsv1.Manifest, 
 		return Result{}, err
 	}
 
+	uploadStart := time.Now()
+	finishUploading := func(err error) error {
+		spanForStage(cfg.Tracer, cfg.Stages.Uploading, uploadStart, time.Now(), err)
+		return err
+	}
+
 	artifacts, err := uploadFunctionArtifacts(ctx, cfg, manifest, baked, builds, progress)
 	if err != nil {
-		return Result{}, err
+		return Result{}, finishUploading(err)
 	}
 
 	if err := uploadPrerenderAssets(ctx, cfg, builds); err != nil {
-		return Result{}, err
+		return Result{}, finishUploading(err)
 	}
 	if err := uploadStaticAssets(ctx, cfg, manifest, builds); err != nil {
-		return Result{}, err
+		return Result{}, finishUploading(err)
 	}
 	if err := uploadEdgeBundles(ctx, cfg, manifest, builds); err != nil {
-		return Result{}, err
+		return Result{}, finishUploading(err)
 	}
+	finishUploading(nil)
 
 	identities := builds.identities
 	promotionID, err := newRandomID()
@@ -97,14 +115,20 @@ func realize(ctx context.Context, cfg Config, manifest *deploymentsv1.Manifest, 
 		return Result{}, err
 	}
 
+	provisionStart := time.Now()
+	finishProvisioning := func(err error) error {
+		spanForStage(cfg.Tracer, cfg.Stages.Provisioning, provisionStart, time.Now(), err)
+		return err
+	}
+
 	progress.report(deploymentsv1.Phase_PHASE_PROVISIONING, "Reconciling the root stack", 0, 0)
 	specs, err := rootStackSpecs(cfg, manifest, rootStackVersion, log)
 	if err != nil {
-		return Result{}, err
+		return Result{}, finishProvisioning(err)
 	}
 	state, err := reconcileRootStack(ctx, stack, specs, cfg.RootStackState)
 	if err != nil {
-		return Result{RootStackState: state}, err
+		return Result{RootStackState: state}, finishProvisioning(err)
 	}
 	state = MarkGlobalPreview(state, cfg, manifest)
 
@@ -113,19 +137,18 @@ func realize(ctx context.Context, cfg Config, manifest *deploymentsv1.Manifest, 
 		progress.report(deploymentsv1.Phase_PHASE_PROVISIONING, "Provisioning infra stack", 0, 0)
 		infraOutputs, err = runInfraStack(ctx, cfg, manifest, plan, log)
 		if err != nil {
-			return Result{RootStackState: state}, err
+			return Result{RootStackState: state}, finishProvisioning(err)
 		}
 	}
 	resourceEnv := resourceEnvValues(manifest, infraOutputs)
 
 	progress.report(deploymentsv1.Phase_PHASE_PROVISIONING, "Provisioning app-deploy stacks", 0, 0)
-	apps := manifestApps(manifest)
 	results := make([]appDeployResult, len(apps))
 	appOutputs := make([][]*deploymentsv1.ResourceOutput, len(apps))
 	appFunctionNames := make([]map[string]string, len(apps))
 	runAppStacks(apps, func(i int, app *deploymentsv1.ManifestApp) {
 		id := identities[app.GetName()]
-		outs, names, err := runAppStack(ctx, cfg, manifest, plan, app, id, resourceEnv, artifacts, baked[app.GetName()], builds, log)
+		outs, names, err := runAppStack(ctx, cfg, manifest, plan, app, id, resourceEnv, artifacts, baked[app.GetName()], builds, appStages[app.GetName()], log)
 		appOutputs[i] = outs
 		appFunctionNames[i] = names
 		record, recErr := buildDeploymentRecord(cfg, manifest, app, id, outs, builds)
@@ -138,11 +161,15 @@ func realize(ctx context.Context, cfg Config, manifest *deploymentsv1.Manifest, 
 	warmed := warmDeployedFunctions(ctx, cfg, manifest, appFunctionNames, builds, log)
 
 	embedBytecodeCaches(ctx, cfg, manifest, artifacts, warmed, builds, log)
+	finishProvisioning(nil)
 
+	finalizeStart := time.Now()
 	progress.report(deploymentsv1.Phase_PHASE_FINALIZING, "Staging and promoting", 0, 0)
 	if err := stageAndPromote(ctx, cfg, stack, state, promotionID, cfg.Tag, promotePointer(cfg), time.Now().Unix(), results); err != nil {
+		spanForStage(cfg.Tracer, cfg.Stages.Finalizing, finalizeStart, time.Now(), err)
 		return Result{RootStackState: state}, err
 	}
+	spanForStage(cfg.Tracer, cfg.Stages.Finalizing, finalizeStart, time.Now(), nil)
 
 	outputs := append([]*deploymentsv1.ResourceOutput{}, infraOutputs...)
 	for _, outs := range appOutputs {
@@ -703,19 +730,22 @@ func runInfraStack(ctx context.Context, cfg Config, manifest *deploymentsv1.Mani
 		return nil
 	}
 
-	res, err := upStack(ctx, cfg, plan.InfraStack, infraStackTags(cfg, plan.InfraStack), program, log)
+	res, err := upStack(ctx, cfg, plan.InfraStack, infraStackTags(cfg, plan.InfraStack), program, log, cfg.Stages.Provisioning.ID)
 	if err != nil {
 		return nil, fmt.Errorf("provision infra stack %s: %w", plan.InfraStack, err)
 	}
 	return collectResourceOutputs(ctx, cfg.Secrets, manifest, res.Outputs)
 }
 
-func runAppStack(ctx context.Context, cfg Config, manifest *deploymentsv1.Manifest, plan Plan, app *deploymentsv1.ManifestApp, id Identity, resourceEnv map[string]string, artifacts map[string]artifactRef, baked appBundle, builds appBuilds, log func(string)) ([]*deploymentsv1.ResourceOutput, map[string]string, error) {
+func runAppStack(ctx context.Context, cfg Config, manifest *deploymentsv1.Manifest, plan Plan, app *deploymentsv1.ManifestApp, id Identity, resourceEnv map[string]string, artifacts map[string]artifactRef, baked appBundle, builds appBuilds, stage Stage, log func(string)) (outs []*deploymentsv1.ResourceOutput, names map[string]string, err error) {
+	start := time.Now()
+	defer func() { spanForStage(cfg.Tracer, stage, start, time.Now(), err) }()
+
 	name := app.GetName()
 	functions := appFunctions(manifest, name)
 	caches := builds.caches
 
-	if err := checkRuntimeOwnedNames(app); err != nil {
+	if err = checkRuntimeOwnedNames(app); err != nil {
 		return nil, nil, err
 	}
 
@@ -725,7 +755,7 @@ func runAppStack(ctx context.Context, cfg Config, manifest *deploymentsv1.Manife
 	maps.Copy(env, baked.env())
 
 	for _, fn := range functions {
-		if err := checkFunctionEnvBudget(fn.GetLogicalName(), functionEnv(env, translateFunction(fn), caches[name])); err != nil {
+		if err = checkFunctionEnvBudget(fn.GetLogicalName(), functionEnv(env, translateFunction(fn), caches[name])); err != nil {
 			return nil, nil, err
 		}
 	}
@@ -747,11 +777,13 @@ func runAppStack(ctx context.Context, cfg Config, manifest *deploymentsv1.Manife
 		return nil
 	}
 
-	res, err := upStack(ctx, cfg, stack, stackTags(cfg, stack, plan.Promotion.PromotionID, id.BuildID()), program, log)
-	if err != nil {
-		return nil, nil, fmt.Errorf("provision app-deploy stack %s: %w", stack, err)
+	res, upErr := upStack(ctx, cfg, stack, stackTags(cfg, stack, plan.Promotion.PromotionID, id.BuildID()), program, log, stage.ID)
+	if upErr != nil {
+		err = fmt.Errorf("provision app-deploy stack %s: %w", stack, upErr)
+		return nil, nil, err
 	}
-	return collectAppFunctionOutputs(functions, res.Outputs)
+	outs, names, err = collectAppFunctionOutputs(functions, res.Outputs)
+	return outs, names, err
 }
 
 func appFunctions(manifest *deploymentsv1.Manifest, app string) []*deploymentsv1.ManifestFunction {
@@ -829,7 +861,13 @@ func applyDefaultTags(ctx context.Context, stack auto.Stack, tags map[string]str
 	return nil
 }
 
-func upStack(ctx context.Context, cfg Config, name naming.StackName, tags map[string]string, program pulumi.RunFunc, log func(string)) (auto.UpResult, error) {
+// resourceLatencyOutlierThreshold is how long a single Pulumi resource
+// operation must take before it earns its own span alongside the batch
+// rollup: see the granularity guidance in #241 — one span per batch in the
+// common case, plus individual spans for failures and latency outliers.
+const resourceLatencyOutlierThreshold = 5 * time.Second
+
+func upStack(ctx context.Context, cfg Config, name naming.StackName, tags map[string]string, program pulumi.RunFunc, log func(string), parentStage StageID) (auto.UpResult, error) {
 	stack, err := auto.UpsertStackInlineSource(ctx, name.String(), cfg.PulumiProject, program,
 		auto.Pulumi(cfg.Pulumi),
 		auto.SecretsProvider("passphrase"),
@@ -860,9 +898,46 @@ func upStack(ctx context.Context, cfg Config, name naming.StackName, tags map[st
 	if logWriter != nil {
 		upOpts = append(upOpts, optup.ProgressStreams(logWriter))
 	}
+
+	engineEvents := make(chan events.EngineEvent, 256)
+	builder := newEngineTraceBuilder(resourceLatencyOutlierThreshold)
+	drained := make(chan struct{})
+	go func() {
+		defer close(drained)
+		for ev := range engineEvents {
+			builder.consume(ev, time.Now())
+		}
+	}()
+	upOpts = append(upOpts, optup.EventStreams(engineEvents))
+
 	res, err := stack.Up(ctx, upOpts...)
 	logWriter.Flush()
+	<-drained
+
+	emitEngineTrace(cfg.Tracer, parentStage, builder.result(), err)
 	return res, err
+}
+
+// emitEngineTrace turns a Pulumi Automation API run's structured engine
+// events into spans: one for the whole batch, plus one each for any
+// standout (failed or slow) resource operation.
+func emitEngineTrace(t Tracer, parentStage StageID, trace EngineTrace, upErr error) {
+	if t == nil || trace.ResourceCount == 0 {
+		return
+	}
+	batchErr := upErr
+	if batchErr == nil && trace.Failed {
+		batchErr = errEngineTraceFailed
+	}
+	spanUnder(t, parentStage, engineBatchSpanName, trace.Start, trace.End, batchErr, AttrResourceCount(trace.ResourceCount))
+
+	for _, s := range trace.Standouts {
+		var standoutErr error
+		if s.Failed {
+			standoutErr = errEngineTraceFailed
+		}
+		spanUnder(t, parentStage, resourceStandoutName(s.Op, s.Failed), s.Start, s.End, standoutErr, AttrDurationMS(s.End.Sub(s.Start)))
+	}
 }
 
 func resourceEnvValues(manifest *deploymentsv1.Manifest, outputs []*deploymentsv1.ResourceOutput) map[string]string {
