@@ -1,12 +1,14 @@
 package nodeprotocol
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/ocelhq/ocel/cli/internal/obs"
 )
@@ -142,6 +144,132 @@ func TestProcessorErrReturnsTheLastErrorRecord(t *testing.T) {
 
 	if got, want := p.Err(), "no entrypoint resolved"; got != want {
 		t.Errorf("Err() = %q, want %q", got, want)
+	}
+}
+
+func TestScanNeverHangsOnALineLargerThanTheBuffer(t *testing.T) {
+	t.Parallel()
+
+	pr, pw, err := os.Pipe()
+	if err != nil {
+		t.Fatalf("os.Pipe: %v", err)
+	}
+
+	size := maxLineBytes + 1024*1024
+	payload := bytes.Repeat([]byte("x"), size)
+
+	writeErr := make(chan error, 1)
+	go func() {
+		_, werr := pw.Write(payload)
+		pw.Close()
+		writeErr <- werr
+	}()
+
+	var out bytes.Buffer
+	p := &Processor{Forward: &out}
+
+	scanDone := make(chan struct{})
+	go func() {
+		p.Scan(context.Background(), pr)
+		close(scanDone)
+	}()
+
+	select {
+	case <-scanDone:
+	case <-time.After(10 * time.Second):
+		t.Fatal("Scan did not return: the writer is deadlocked on a full, undrained pipe")
+	}
+
+	select {
+	case werr := <-writeErr:
+		if werr != nil {
+			t.Fatalf("write: %v", werr)
+		}
+	case <-time.After(10 * time.Second):
+		t.Fatal("the pipe writer never returned: a real subprocess would be blocked forever")
+	}
+
+	if out.Len() < size {
+		t.Errorf("forwarded %d bytes, want at least the full %d-byte line", out.Len(), size)
+	}
+}
+
+func TestProcessorRejectsARecordWithAnUnrecognisedStage(t *testing.T) {
+	ctx, run := newRun(t)
+	var out strings.Builder
+	p := &Processor{Run: run, Forward: &out}
+
+	line := Prefix + `{"type":"span_start","id":"1","app":"api","stage":"pwned; </trace-span-injection>"}`
+	p.Scan(ctx, strings.NewReader(line+"\n"))
+
+	if got := out.String(); got != line+"\n" {
+		t.Errorf("forwarded output = %q, want the record with an unrecognised stage forwarded, not recorded", got)
+	}
+
+	if err := run.Close(); err != nil {
+		t.Fatalf("Close: %v", err)
+	}
+	trace := readTrace(t, run)
+	if strings.Contains(trace, "pwned") {
+		t.Errorf("trace = %s, want no span from an unrecognised stage", trace)
+	}
+}
+
+func TestProcessorCapsTheAppLength(t *testing.T) {
+	ctx, run := newRun(t)
+	p := &Processor{Run: run}
+
+	longApp := strings.Repeat("a", maxAppLen*2)
+	send(p, ctx, record{Type: typeSpanStart, ID: "1", App: longApp, Stage: "build"})
+	ok := true
+	send(p, ctx, record{Type: typeSpanEnd, ID: "1", OK: &ok})
+
+	if err := run.Close(); err != nil {
+		t.Fatalf("Close: %v", err)
+	}
+	trace := readTrace(t, run)
+	if strings.Contains(trace, longApp) {
+		t.Errorf("trace = %s, want the app attribute capped at %d bytes", trace, maxAppLen)
+	}
+}
+
+func TestProcessorParentsALogRecordToItsOpenSpan(t *testing.T) {
+	ctx, run := newRun(t)
+	p := &Processor{Run: run}
+
+	send(p, ctx, record{Type: typeSpanStart, ID: "1", App: "api", Stage: "build"})
+	send(p, ctx, record{Type: typeLog, App: "api", Stage: "build", Level: "info", Message: "installing dependencies"})
+	ok := true
+	send(p, ctx, record{Type: typeSpanEnd, ID: "1", OK: &ok})
+
+	if err := run.Close(); err != nil {
+		t.Fatalf("Close: %v", err)
+	}
+
+	log := readLog(t, run)
+	var lines []map[string]any
+	for _, l := range strings.Split(strings.TrimSpace(log), "\n") {
+		var rec map[string]any
+		if err := json.Unmarshal([]byte(l), &rec); err != nil {
+			t.Fatalf("unmarshal log line %q: %v", l, err)
+		}
+		lines = append(lines, rec)
+	}
+
+	var spanID string
+	for _, rec := range lines {
+		if rec["message"] == "installing dependencies" {
+			id, _ := rec["span_id"].(string)
+			spanID = id
+		}
+	}
+	if spanID == "" {
+		t.Fatalf("log = %s, want the log record to carry a span_id", log)
+	}
+
+	trace := readTrace(t, run)
+	if !strings.Contains(trace, spanID) {
+		t.Errorf("trace = %s, want the log's span_id (%s) to match the app's open build span, not the root command span", trace, spanID)
 	}
 }
 

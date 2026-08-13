@@ -7,6 +7,7 @@ package nodeprotocol
 
 import (
 	"bufio"
+	"bytes"
 	"context"
 	"encoding/json"
 	"io"
@@ -20,13 +21,16 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/obs"
 )
 
-// Prefix marks a line as a protocol record rather than free-form output
-// from the framework being built or from user discovery code. It is
-// deliberately a literal a human or a bundler is exceedingly unlikely to
-// print by coincidence, and it is checked with a plain prefix compare
-// before anything is handed to json.Unmarshal, so ordinary JSON a
-// framework prints to stdout is never mistaken for one of these records.
 const Prefix = "@@OCEL_V1@@"
+
+const maxLineBytes = 4 * 1024 * 1024
+
+var validStages = map[string]bool{
+	"build":     true,
+	"discovery": true,
+}
+
+const maxAppLen = 128
 
 type recordType string
 
@@ -50,34 +54,59 @@ type record struct {
 type openSpan struct {
 	ctx  context.Context
 	span trace.Span
+	app  string
 }
 
-// Processor turns one subprocess's protocol stream into spans and log
-// records on Run, forwarding everything else to Forward. Run may be nil,
-// in which case records are parsed (so forwarding still behaves the same)
-// but nothing is recorded — callers that have no active obs.Run still get
-// correct passthrough.
 type Processor struct {
 	Run     *obs.Run
 	Forward io.Writer
 
-	mu    sync.Mutex
-	spans map[string]openSpan
-	err   string
+	mu           sync.Mutex
+	spans        map[string]openSpan
+	spanCtxByApp map[string]context.Context
+	err          string
 }
 
-// Scan reads r line by line until EOF, applying each line. It does not
-// return an error: a read error simply ends the scan, matching the
-// behavior of a subprocess that closed its stdout.
 func (p *Processor) Scan(ctx context.Context, r io.Reader) {
 	scanner := bufio.NewScanner(r)
-	scanner.Buffer(make([]byte, 0, 64*1024), 8*1024*1024)
+	scanner.Buffer(make([]byte, 0, 64*1024), maxLineBytes+64*1024)
+	scanner.Split(splitLines)
 	for scanner.Scan() {
 		p.line(ctx, scanner.Text())
 	}
+	if scanner.Err() != nil {
+		_, _ = io.Copy(p.forwardWriter(), r)
+	}
+}
+
+func splitLines(data []byte, atEOF bool) (advance int, token []byte, err error) {
+	if i := bytes.IndexByte(data, '\n'); i >= 0 {
+		return i + 1, data[:i], nil
+	}
+	if atEOF {
+		if len(data) == 0 {
+			return 0, nil, nil
+		}
+		return len(data), data, nil
+	}
+	if len(data) >= maxLineBytes {
+		return len(data), data, nil
+	}
+	return 0, nil, nil
+}
+
+func (p *Processor) forwardWriter() io.Writer {
+	if p.Forward == nil {
+		return io.Discard
+	}
+	return p.Forward
 }
 
 func (p *Processor) line(ctx context.Context, line string) {
+	if len(line) >= maxLineBytes {
+		p.forward(line)
+		return
+	}
 	payload, ok := strings.CutPrefix(line, Prefix)
 	if !ok {
 		p.forward(line)
@@ -88,10 +117,22 @@ func (p *Processor) line(ctx context.Context, line string) {
 		p.forward(line)
 		return
 	}
+	if rec.Stage != "" && !validStages[rec.Stage] {
+		p.forward(line)
+		return
+	}
+	if len(rec.App) > maxAppLen {
+		rec.App = rec.App[:maxAppLen]
+	}
 	p.apply(ctx, rec)
 }
 
 func (p *Processor) forward(line string) {
+	// TODO: this re-emits a trailing \n on every token, so CRLF fidelity
+	// and byte-for-byte streaming are lost (a bare-\r spinner now flushes
+	// only at the next real newline), and a final partial line gets a \n
+	// the source never wrote. Fixing it needs Scan to thread raw bytes
+	// rather than bufio.Scanner tokens.
 	if p.Forward == nil {
 		return
 	}
@@ -102,7 +143,7 @@ func (p *Processor) apply(ctx context.Context, rec record) {
 	switch rec.Type {
 	case typeLog:
 		if p.Run != nil {
-			p.Run.Log(ctx, obs.Level(rec.Level), obs.Stage(rec.Stage), obs.App(rec.App), rec.Message)
+			p.Run.Log(p.logContext(ctx, rec.App), obs.Level(rec.Level), obs.Stage(rec.Stage), obs.App(rec.App), rec.Message)
 		}
 	case typeSpanStart:
 		p.startSpan(ctx, rec)
@@ -113,9 +154,22 @@ func (p *Processor) apply(ctx context.Context, rec record) {
 		p.err = rec.Message
 		p.mu.Unlock()
 		if p.Run != nil {
-			p.Run.Error(ctx, obs.Stage(rec.Stage), obs.App(rec.App), rec.Message)
+			p.Run.Error(p.logContext(ctx, rec.App), obs.Stage(rec.Stage), obs.App(rec.App), rec.Message)
 		}
 	}
+}
+
+func (p *Processor) logContext(ctx context.Context, app string) context.Context {
+	if app == "" {
+		return ctx
+	}
+	p.mu.Lock()
+	spanCtx, found := p.spanCtxByApp[app]
+	p.mu.Unlock()
+	if !found {
+		return ctx
+	}
+	return spanCtx
 }
 
 func (p *Processor) startSpan(ctx context.Context, rec record) {
@@ -132,7 +186,13 @@ func (p *Processor) startSpan(ctx context.Context, rec record) {
 	if p.spans == nil {
 		p.spans = make(map[string]openSpan)
 	}
-	p.spans[rec.ID] = openSpan{ctx: spanCtx, span: span}
+	p.spans[rec.ID] = openSpan{ctx: spanCtx, span: span, app: rec.App}
+	if rec.App != "" {
+		if p.spanCtxByApp == nil {
+			p.spanCtxByApp = make(map[string]context.Context)
+		}
+		p.spanCtxByApp[rec.App] = spanCtx
+	}
 	p.mu.Unlock()
 }
 
@@ -141,6 +201,9 @@ func (p *Processor) endSpan(rec record) {
 	s, found := p.spans[rec.ID]
 	if found {
 		delete(p.spans, rec.ID)
+		if s.app != "" && p.spanCtxByApp[s.app] == s.ctx {
+			delete(p.spanCtxByApp, s.app)
+		}
 	}
 	p.mu.Unlock()
 	if !found {
@@ -152,14 +215,11 @@ func (p *Processor) endSpan(rec record) {
 	s.span.End()
 }
 
-// Abort ends any span that never received a matching span_end — the
-// process that would have sent it exited first, most often because it
-// crashed mid-span. Ending it as failed keeps a crash from leaving an
-// unterminated span out of the trace file entirely.
 func (p *Processor) Abort() {
 	p.mu.Lock()
 	spans := p.spans
 	p.spans = nil
+	p.spanCtxByApp = nil
 	p.mu.Unlock()
 	for _, s := range spans {
 		s.span.SetStatus(codes.Error, "")
@@ -167,9 +227,6 @@ func (p *Processor) Abort() {
 	}
 }
 
-// Err returns the message of the last error record seen, or "" if none
-// was. This is the actual failure the subprocess reported, as opposed to
-// a heuristic guess at which trailing output line mattered.
 func (p *Processor) Err() string {
 	p.mu.Lock()
 	defer p.mu.Unlock()
