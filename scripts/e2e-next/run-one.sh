@@ -12,12 +12,14 @@ Writes to $OUT_DIR/<suite name>/:
   run.log       everything jest and the deploy scripts printed
   jest.json     jest --json result
   fragment.json this suite's entry in baseline-manifest.json shape, unfiltered
-  deploy.txt    the ref/slug/dir line deploy.mjs printed
+  deploy.txt    every ref/slug/dir line deploy.mjs printed
+  dirs.txt      every app dir this suite deployed
   status        jest's exit code
-  staged.txt    STAGE=1 only: the preview left live, and how to reach it
+  staged.txt    STAGE=1 only: each preview left live, and how to reach it
 
-STAGE=1 keeps the temp app dir and the deployment. Nothing reclaims those but
-you: every staged.txt is an open teardown.
+STAGE=1 keeps the temp app dirs and the deployments. Nothing reclaims those
+but you: every staged.txt is an open teardown, and a suite may deploy more
+than one app.
 EOF
   exit 2
 }
@@ -39,10 +41,12 @@ mkdir -p "$WORK"
 
 finish() {
   local code=$? dir ref
-  dir=$(sed -n 's|^.*\[ocel-e2e\] preview .* in \(/.*\)$|\1|p' "$LOG" | tail -1)
-  grep -m1 '\[ocel-e2e\] preview ' "$LOG" >"$WORK/deploy.txt" 2>/dev/null
+  sed -n 's|^.*\[ocel-e2e\] preview .* in \(/.*\)$|\1|p' "$LOG" | sort -u >"$WORK/dirs.txt"
+  grep '\[ocel-e2e\] preview ' "$LOG" | sort -u >"$WORK/deploy.txt" 2>/dev/null
+  : >"$WORK/staged.txt"
 
-  if [ -n "$dir" ] && [ -f "$dir/.ocel-e2e.json" ]; then
+  while read -r dir; do
+    [ -n "$dir" ] && [ -f "$dir/.ocel-e2e.json" ] || continue
     ref=$(node -p "require('$dir/.ocel-e2e.json').ref")
     if [ "${STAGE:-}" = 1 ]; then
       {
@@ -52,11 +56,12 @@ finish() {
           sed 's/^/url=/'
         printf 'teardown=cd %s && node %s/packages/ocel/bin/run.js preview rm --ref %s --yes\n' \
           "$dir" "$ADAPTER_DIR" "$ref"
-      } >"$WORK/staged.txt"
+      } >>"$WORK/staged.txt"
     else
       (cd "$dir" && node "$ADAPTER_DIR/packages/ocel/bin/run.js" preview rm --ref "$ref" --yes) >>"$LOG" 2>&1
     fi
-  fi
+  done <"$WORK/dirs.txt"
+  [ -s "$WORK/staged.txt" ] || rm -f "$WORK/staged.txt"
 
   if [ -s "$WORK/jest.json" ]; then
     node --input-type=module -e "
