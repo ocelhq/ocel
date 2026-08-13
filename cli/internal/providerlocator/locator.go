@@ -8,7 +8,12 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"time"
+
+	"github.com/ocelhq/ocel/cli/internal/procgroup"
 )
+
+const nodeWaitDelay = 5 * time.Second
 
 //go:embed resolve-provider.cjs
 var resolverScript []byte
@@ -35,8 +40,9 @@ func Locate(ctx context.Context, projectDir, packageName string) (string, error)
 	var stdout, stderr strings.Builder
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr
-	setNewProcessGroup(cmd)
-	cmd.Cancel = func() error { return killProcessGroup(cmd) }
+	procgroup.New(cmd)
+	cmd.Cancel = func() error { return procgroup.Kill(cmd) }
+	cmd.WaitDelay = nodeWaitDelay
 	if err := cmd.Run(); err != nil {
 		msg := strings.TrimSpace(stderr.String())
 		if msg == "" {
