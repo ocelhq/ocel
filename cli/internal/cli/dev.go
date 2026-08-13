@@ -40,7 +40,11 @@ var devCmd = &cobra.Command{
 		if err != nil {
 			return fmt.Errorf("determine working directory: %w", err)
 		}
-		return runDev(cmd.Context(), defaultDeps(), cmd, cwd, args, cmd.OutOrStdout(), cmd.ErrOrStderr(), cmd.InOrStdin())
+
+		ctx, stop := installInterruptHandler(cmd.Context(), cmd.ErrOrStderr())
+		defer stop()
+
+		return runDev(ctx, defaultDeps(), cmd, cwd, args, cmd.OutOrStdout(), cmd.ErrOrStderr(), cmd.InOrStdin())
 	},
 }
 
@@ -128,9 +132,11 @@ func runLeader(ctx context.Context, d deps, role election.Result, creds credenti
 	appCmd.Stdin = stdin
 	appCmd.Stdout = stdout
 	appCmd.Stderr = stderr
-	setNewProcessGroup(appCmd)
-	appCmd.Cancel = func() error { return killProcessGroup(appCmd) }
-	return waitExitError(appCmd.Run())
+	child, err := spawnAppChild(ctx, appCmd, stdin)
+	if err != nil {
+		return err
+	}
+	return waitExitError(child.wait())
 }
 
 func resolveOnce(ctx context.Context, srv *devserver.Server, cfg *projectconfig.Config, projectEnv map[string]string, stdout, stderr io.Writer) (map[string]string, error) {
@@ -239,21 +245,19 @@ func runFollower(ctx context.Context, leaderAddr string, appArgs []string, stdou
 
 	for {
 		select {
-		case err := <-child.done:
+		case err := <-child.err:
 			if ctx.Err() != nil {
 				return nil
 			}
 			return waitExitError(err)
 		case env := <-updates:
-			_ = killProcessGroup(child.cmd)
-			<-child.done
+			child.stop()
 			child, err = startFollowerChild(ctx, appArgs, env, stdin, stdout, stderr)
 			if err != nil {
 				return err
 			}
 		case <-streamDone:
-			_ = killProcessGroup(child.cmd)
-			<-child.done
+			child.stop()
 			if ctx.Err() != nil {
 				return nil
 			}
@@ -263,26 +267,13 @@ func runFollower(ctx context.Context, leaderAddr string, appArgs []string, stdou
 	}
 }
 
-type followerChild struct {
-	cmd  *exec.Cmd
-	done chan error
-}
-
-func startFollowerChild(ctx context.Context, appArgs []string, env map[string]string, stdin io.Reader, stdout, stderr io.Writer) (*followerChild, error) {
+func startFollowerChild(ctx context.Context, appArgs []string, env map[string]string, stdin io.Reader, stdout, stderr io.Writer) (*appChild, error) {
 	appCmd := exec.CommandContext(ctx, appArgs[0], appArgs[1:]...)
 	appCmd.Env = applyEnv(os.Environ(), env)
 	appCmd.Stdin = stdin
 	appCmd.Stdout = stdout
 	appCmd.Stderr = stderr
-	setNewProcessGroup(appCmd)
-	appCmd.Cancel = func() error { return killProcessGroup(appCmd) }
-	if err := appCmd.Start(); err != nil {
-		return nil, err
-	}
-
-	done := make(chan error, 1)
-	go func() { done <- appCmd.Wait() }()
-	return &followerChild{cmd: appCmd, done: done}, nil
+	return spawnAppChild(ctx, appCmd, stdin)
 }
 
 func waitExitError(err error) error {

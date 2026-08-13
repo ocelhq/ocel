@@ -30,7 +30,16 @@ const gracefulShutdownWindow = providerrunner.DefaultGracePeriod + providerrunne
 func installInterruptHandler(parent context.Context, stderr io.Writer) (context.Context, context.CancelFunc) {
 	ch := make(chan os.Signal, 2)
 	signal.Notify(ch, os.Interrupt, syscall.SIGTERM)
-	return interruptHandlerWithExit(parent, stderr, ch, gracefulShutdownWindow, providerrunner.KillAllLive, os.Exit)
+	return interruptHandlerWithExit(parent, stderr, ch, gracefulShutdownWindow, forceKillEverything, os.Exit)
+}
+
+// forceKillEverything reaches both live process-group leaders the CLI can
+// spawn: a provider (deploy/destroy/etc.) and a dev/run app child. Commands
+// that spawn neither leave both registries empty, so this is a no-op call
+// for them.
+func forceKillEverything() {
+	providerrunner.KillAllLive()
+	killAllLiveAppChildren()
 }
 
 func interruptHandlerWithExit(parent context.Context, stderr io.Writer, ch chan os.Signal, window time.Duration, forceKill func(), exit func(int)) (context.Context, context.CancelFunc) {

@@ -29,7 +29,11 @@ var runCmd = &cobra.Command{
 		if err != nil {
 			return fmt.Errorf("determine working directory: %w", err)
 		}
-		return runRun(cmd.Context(), defaultDeps(), cmd, cwd, args, cmd.OutOrStdout(), cmd.ErrOrStderr(), cmd.InOrStdin())
+
+		ctx, stop := installInterruptHandler(cmd.Context(), cmd.ErrOrStderr())
+		defer stop()
+
+		return runRun(ctx, defaultDeps(), cmd, cwd, args, cmd.OutOrStdout(), cmd.ErrOrStderr(), cmd.InOrStdin())
 	},
 }
 
@@ -126,7 +130,9 @@ func runChildOnce(ctx context.Context, appArgs []string, env map[string]string, 
 	appCmd.Stdin = stdin
 	appCmd.Stdout = stdout
 	appCmd.Stderr = stderr
-	setNewProcessGroup(appCmd)
-	appCmd.Cancel = func() error { return killProcessGroup(appCmd) }
-	return waitExitError(appCmd.Run())
+	child, err := spawnAppChild(ctx, appCmd, stdin)
+	if err != nil {
+		return err
+	}
+	return waitExitError(child.wait())
 }
