@@ -6,8 +6,12 @@ import (
 	"fmt"
 	"io"
 
+	"go.opentelemetry.io/otel/codes"
+	"go.opentelemetry.io/otel/trace"
+
 	"github.com/ocelhq/ocel/cli/internal/deployui"
 	"github.com/ocelhq/ocel/cli/internal/envgate"
+	"github.com/ocelhq/ocel/cli/internal/obs"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
 	"github.com/ocelhq/ocel/cli/internal/providerrunner"
 	"github.com/ocelhq/ocel/cli/internal/varsui"
@@ -30,9 +34,17 @@ type gateRecovery struct {
 }
 
 func (r gateRecovery) buildManifest(ctx context.Context, prebuilt bool) (*deploymentsv1.Manifest, error) {
-	for {
+	run := obs.FromContext(ctx)
+	for attempt := 0; ; attempt++ {
 		gate := r.newGate()
-		manifest, err := collectAndBuildManifest(ctx, r.deps, r.cfg, gate, prebuilt, r.ui)
+
+		attemptCtx := ctx
+		var span trace.Span
+		if run != nil {
+			attemptCtx, span = run.StartSpan(ctx, "build", obs.AttrRetryCount.Int(attempt))
+		}
+		manifest, err := collectAndBuildManifest(attemptCtx, r.deps, r.cfg, gate, prebuilt, r.ui)
+		endAttemptSpan(span, err)
 
 		var refusal *envgate.Refusal
 		if !r.enabled || !errors.As(err, &refusal) {
@@ -56,16 +68,36 @@ func (r gateRecovery) fill(ctx context.Context, gate *envgate.Gate, refusal *env
 		fmt.Fprintln(r.stdout, "  Couldn't open your browser automatically — open the link above yourself.")
 	}
 
+	run := obs.FromContext(ctx)
+	var span trace.Span
+	if run != nil {
+		_, span = run.StartSpan(ctx, "await_human_input")
+	}
 	waitErr := session.Wait(ctx)
+	endAttemptSpan(span, waitErr)
+
 	switch {
 	case waitErr == nil:
 		r.ui.Resume()
+		r.ui.RestartBuild()
 		return nil
 	case errors.Is(waitErr, varsui.ErrAbandoned):
 		return &abandonedRefusal{refusal: refusal}
 	default:
 		return waitErr
 	}
+}
+
+func endAttemptSpan(span trace.Span, err error) {
+	if span == nil {
+		return
+	}
+	if err != nil {
+		span.SetStatus(codes.Error, "")
+	} else {
+		span.SetStatus(codes.Ok, "")
+	}
+	span.End()
 }
 
 type abandonedRefusal struct {
