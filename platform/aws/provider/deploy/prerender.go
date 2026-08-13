@@ -165,14 +165,17 @@ func uploadPrerenderAssets(ctx context.Context, cfg Config, builds appBuilds) er
 
 	g, ctx := errgroup.WithContext(ctx)
 	g.SetLimit(uploadConcurrency)
+	stats := newUploadBatchStats()
 	for _, u := range uploads {
 		g.Go(func() error {
-			return uploadArtifact(ctx, u.to.up, u.to.bucket, u.key, "", func() ([]byte, error) {
+			return tracedUpload(ctx, u.to.up, u.to.bucket, u.key, "", func() ([]byte, error) {
 				return os.ReadFile(u.src)
-			})
+			}, stats)
 		})
 	}
-	return g.Wait()
+	err := g.Wait()
+	emitUploadBatch(cfg.Tracer, cfg.Stages.Uploading.ID, uploadKindPrerenderAsset, stats, err)
+	return err
 }
 
 type uploadTarget struct {

@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"sync"
+	"time"
 
 	"golang.org/x/sync/errgroup"
 
@@ -86,6 +87,7 @@ func uploadStaticAssets(ctx context.Context, cfg Config, manifest *deploymentsv1
 
 	g, ctx := errgroup.WithContext(ctx)
 	g.SetLimit(uploadConcurrency)
+	stats := newUploadBatchStats()
 	for _, u := range uploads {
 		read := sync.OnceValues(func() ([]byte, error) { return os.ReadFile(u.src) })
 		for _, to := range u.to {
@@ -93,13 +95,18 @@ func uploadStaticAssets(ctx context.Context, cfg Config, manifest *deploymentsv1
 				if u.replace {
 					data, err := read()
 					if err != nil {
-						return fmt.Errorf("read %s: %w", u.src, err)
+						readErr := fmt.Errorf("read %s: %w", u.src, err)
+						now := time.Now()
+						stats.record(uploadOutcome{Start: now, End: now, Failed: true, Err: readErr})
+						return readErr
 					}
-					return putArtifact(ctx, to.up, to.bucket, u.key, u.contentType, data)
+					return tracedPut(ctx, to.up, to.bucket, u.key, u.contentType, data, stats)
 				}
-				return uploadArtifact(ctx, to.up, to.bucket, u.key, u.contentType, read)
+				return tracedUpload(ctx, to.up, to.bucket, u.key, u.contentType, read, stats)
 			})
 		}
 	}
-	return g.Wait()
+	err := g.Wait()
+	emitUploadBatch(cfg.Tracer, cfg.Stages.Uploading.ID, uploadKindStaticAsset, stats, err)
+	return err
 }
