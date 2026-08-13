@@ -161,7 +161,7 @@ func TestDestroyPhased(t *testing.T) {
 		var mu sync.Mutex
 		var running, finished int
 		var phases []string
-		errs := destroyPhased(
+		appErrs, infraErrs := destroyPhased(
 			appStacks("a1", "a2", "a3", "a4", "a5", "a6"),
 			[]naming.StackName{naming.InfraStack(ProductionEnv), naming.InfraStack("pr-1")},
 			func(naming.StackName) error {
@@ -186,7 +186,7 @@ func TestDestroyPhased(t *testing.T) {
 				return nil
 			})
 
-		if err := errors.Join(errs...); err != nil {
+		if err := errors.Join(append(append([]error{}, appErrs...), infraErrs...)...); err != nil {
 			t.Fatalf("destroyPhased crossed the phase barrier: %v", err)
 		}
 		if want := []string{"app", "app", "app", "app", "app", "app", "infra", "infra"}; !reflect.DeepEqual(phases, want) {
@@ -225,7 +225,8 @@ func TestDestroyPhased(t *testing.T) {
 		for i := range stacks {
 			stacks[i] = naming.AppStack(ProductionEnv, "web", naming.NewRelease(fmt.Sprintf("b%d", i), ""))
 		}
-		if err := errors.Join(destroyPhased(stacks, nil, overlap, nil)...); err != nil {
+		appErrs, _ := destroyPhased(stacks, nil, overlap, nil)
+		if err := errors.Join(appErrs...); err != nil {
 			t.Fatal(err)
 		}
 		if got := peak.Load(); got > teardownConcurrency {
@@ -249,7 +250,8 @@ func TestDestroyPhased(t *testing.T) {
 		}
 		for range 20 {
 			var got []string
-			for _, err := range destroyPhased(apps, infra, fail, fail) {
+			appErrs, infraErrs := destroyPhased(apps, infra, fail, fail)
+			for _, err := range append(append([]error{}, appErrs...), infraErrs...) {
 				got = append(got, err.Error())
 			}
 			if !reflect.DeepEqual(got, want) {

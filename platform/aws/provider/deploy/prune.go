@@ -139,7 +139,10 @@ type reclaimJob struct {
 	stage  Stage
 }
 
-func Reclaim(ctx context.Context, cfg Config, targets []PruneTarget, parent Stage, log func(string)) error {
+func Reclaim(ctx context.Context, cfg Config, targets []PruneTarget, parent Stage, log func(string)) (err error) {
+	start := time.Now()
+	defer func() { spanForStage(cfg.Tracer, parent, start, time.Now(), err) }()
+
 	jobs := make([]reclaimJob, len(targets))
 	declared := make([]Stage, len(targets))
 	for i, t := range targets {
@@ -149,17 +152,18 @@ func Reclaim(ctx context.Context, cfg Config, targets []PruneTarget, parent Stag
 	}
 	declareStages(cfg.Tracer, true, declared...)
 
-	return errors.Join(runBounded(teardownConcurrency, jobs, func(j reclaimJob) (err error) {
+	err = errors.Join(runBounded(teardownConcurrency, jobs, func(j reclaimJob) (err error) {
 		start := time.Now()
 		defer func() { spanForStage(cfg.Tracer, j.stage, start, time.Now(), err) }()
 
 		report := cfg.reportStage(j.stage)
-		report("Reclaiming " + reclaimTitle(j.target))
+		report(sanitizeMessage("Reclaiming " + reclaimTitle(j.target)))
 		if err = reclaimTarget(ctx, cfg, j.target, report, log); err != nil {
 			return err
 		}
 		return nil
 	})...)
+	return err
 }
 
 type prefixTarget struct {

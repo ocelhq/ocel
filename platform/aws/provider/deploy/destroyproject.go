@@ -38,9 +38,10 @@ type DestroyProjectResult struct {
 	RootTornDown bool
 }
 
-func destroyPhased(appStacks, infraStacks []naming.StackName, destroyApp, destroyInfra func(naming.StackName) error) []error {
-	errs := runBounded(teardownConcurrency, appStacks, destroyApp)
-	return append(errs, runBounded(teardownConcurrency, infraStacks, destroyInfra)...)
+func destroyPhased(appStacks, infraStacks []naming.StackName, destroyApp, destroyInfra func(naming.StackName) error) (appErrs, infraErrs []error) {
+	appErrs = runBounded(teardownConcurrency, appStacks, destroyApp)
+	infraErrs = runBounded(teardownConcurrency, infraStacks, destroyInfra)
+	return appErrs, infraErrs
 }
 
 type ProjectTeardownStages struct {
@@ -57,20 +58,15 @@ func (s ProjectTeardownStages) Roots() []Stage {
 	return []Stage{s.Planning, s.Edge, s.AppStacks, s.InfraStacks, s.Values, s.Assets, s.Forget}
 }
 
-func childStagesFor(parent Stage, stacks []naming.StackName) map[naming.StackName]Stage {
+func childStagesFor(parent Stage, stacks []naming.StackName) (map[naming.StackName]Stage, []Stage) {
 	byStack := make(map[naming.StackName]Stage, len(stacks))
+	ordered := make([]Stage, 0, len(stacks))
 	for _, stack := range stacks {
-		byStack[stack] = NewStage(parent, stack.String())
+		stage := NewStage(parent, stack.String())
+		byStack[stack] = stage
+		ordered = append(ordered, stage)
 	}
-	return byStack
-}
-
-func declaredValues[K comparable](byKey map[K]Stage) []Stage {
-	declared := make([]Stage, 0, len(byKey))
-	for _, stage := range byKey {
-		declared = append(declared, stage)
-	}
-	return declared
+	return byStack, ordered
 }
 
 func DestroyProject(ctx context.Context, stack edge.RootStack, state edge.RootStackState, cfg Config, slug string, stages ProjectTeardownStages, log func(string)) (DestroyProjectResult, error) {
@@ -90,9 +86,9 @@ func DestroyProject(ctx context.Context, stack edge.RootStack, state edge.RootSt
 	if !plan.InfraStack.IsZero() {
 		infraStacks = []naming.StackName{plan.InfraStack}
 	}
-	appChildren := childStagesFor(stages.AppStacks, plan.AppStacks)
-	infraChildren := childStagesFor(stages.InfraStacks, infraStacks)
-	declareStages(cfg.Tracer, true, append(declaredValues(appChildren), declaredValues(infraChildren)...)...)
+	appChildren, appDeclared := childStagesFor(stages.AppStacks, plan.AppStacks)
+	infraChildren, infraDeclared := childStagesFor(stages.InfraStacks, infraStacks)
+	declareStages(cfg.Tracer, true, append(appDeclared, infraDeclared...)...)
 
 	edgeStart := time.Now()
 	var edgeErr error
@@ -118,13 +114,18 @@ func DestroyProject(ctx context.Context, stack edge.RootStack, state edge.RootSt
 		errs = append(errs, edgeErr)
 	}
 
-	errs = append(errs, destroyPhased(plan.AppStacks, infraStacks,
+	stacksStart := time.Now()
+	appErrs, infraErrs := destroyPhased(plan.AppStacks, infraStacks,
 		func(stack naming.StackName) error {
 			return destroyStackStage(ctx, cfg, stack, appChildren[stack], "app", log)
 		},
 		func(stack naming.StackName) error {
 			return destroyStackStage(ctx, cfg, stack, infraChildren[stack], "infra", log)
-		})...)
+		})
+	spanForStage(cfg.Tracer, stages.AppStacks, stacksStart, time.Now(), errors.Join(appErrs...))
+	spanForStage(cfg.Tracer, stages.InfraStacks, stacksStart, time.Now(), errors.Join(infraErrs...))
+	errs = append(errs, appErrs...)
+	errs = append(errs, infraErrs...)
 
 	valuesStart := time.Now()
 	verr := purgeProjectValues(ctx, cfg, slug, cfg.reportStage(stages.Values))

@@ -44,20 +44,26 @@ func TestReclaimDeclaresOneChildStagePerTarget(t *testing.T) {
 		}
 	}
 
-	if len(ft.spans) != len(targets) {
-		t.Fatalf("recorded %d spans, want one per target", len(ft.spans))
+	if len(ft.spans) != len(targets)+1 {
+		t.Fatalf("recorded %d spans, want one per target plus the Reclaim parent", len(ft.spans))
 	}
 	wantIDs := make(map[StageID]bool, len(children))
 	for _, child := range children {
 		wantIDs[child.ID] = true
 	}
+	var sawParent bool
 	for _, span := range ft.spans {
-		if !wantIDs[span.id] {
-			t.Errorf("span id %v does not match any declared child stage", span.id)
+		if span.id == parent.ID {
+			sawParent = true
+		} else if !wantIDs[span.id] {
+			t.Errorf("span id %v does not match any declared child stage or the Reclaim parent", span.id)
 		}
 		if span.err == nil {
 			t.Errorf("span for %v has err = nil, want the stack-less Destroy failure reported on its own stage", span.id)
 		}
+	}
+	if !sawParent {
+		t.Error("no span was recorded for the Reclaim parent stage")
 	}
 }
 
