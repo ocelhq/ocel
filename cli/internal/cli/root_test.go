@@ -1,6 +1,14 @@
 package cli
 
-import "testing"
+import (
+	"bytes"
+	"context"
+	"encoding/json"
+	"testing"
+
+	"github.com/ocelhq/ocel/cli/internal/deployui"
+	"github.com/ocelhq/ocel/cli/internal/obs"
+)
 
 func TestLogFormatIsIndependentOfVerbosity(t *testing.T) {
 	origFormat, origVerbose := logFormatFlag, verboseFlag
@@ -27,6 +35,30 @@ func TestLogFormatIsIndependentOfVerbosity(t *testing.T) {
 	verboseFlag = false
 	if got := logFormat(); got != logFormatJSON {
 		t.Errorf("turning verbose off changed logFormat() to %q, want it to stay %q", got, logFormatJSON)
+	}
+}
+
+func TestLogFormatFlagReachesTheSessionOutput(t *testing.T) {
+	origFormat := logFormatFlag
+	t.Cleanup(func() { logFormatFlag = origFormat })
+
+	dir := t.TempDir()
+	_, run, err := obs.Start(context.Background(), dir, "ocel deploy")
+	if err != nil {
+		t.Fatalf("obs.Start() = %v", err)
+	}
+	t.Cleanup(func() { _ = run.Close() })
+
+	logFormatFlag = logFormatJSON
+	var out bytes.Buffer
+	s := deployui.New(&out, run, sessionFormat(), false)
+	t.Cleanup(func() { _ = s.Close() })
+
+	s.Building()
+
+	var rec map[string]any
+	if err := json.Unmarshal(bytes.TrimSpace(out.Bytes()), &rec); err != nil {
+		t.Fatalf("--log-format json did not reach the session: stdout = %q is not JSON: %v", out.String(), err)
 	}
 }
 

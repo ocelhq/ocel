@@ -124,7 +124,13 @@ func runDomainUse(ctx context.Context, d deps, cwd, wildcard string, opts domain
 		return err
 	}
 
-	ui := deployui.New(stdout, cfg.Dir, "ocel domain use", verboseEnabled())
+	ctx, run, err := startRun(ctx, cfg, "ocel domain use")
+	if err != nil {
+		return err
+	}
+	defer run.Close()
+
+	ui := deployui.New(stdout, run, sessionFormat(), verboseEnabled())
 	defer ui.Close()
 
 	provW := ui.BuildWriter()
@@ -181,7 +187,13 @@ func runDomainRelease(ctx context.Context, d deps, cwd string, opts domainOption
 		return err
 	}
 
-	ui := deployui.New(stdout, cfg.Dir, "ocel domain release", verboseEnabled())
+	ctx, run, err := startRun(ctx, cfg, "ocel domain release")
+	if err != nil {
+		return err
+	}
+	defer run.Close()
+
+	ui := deployui.New(stdout, run, sessionFormat(), verboseEnabled())
 	defer ui.Close()
 
 	provW := ui.BuildWriter()

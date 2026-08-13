@@ -119,7 +119,13 @@ func runDeploymentsPrune(ctx context.Context, d deps, cwd string, keepN int, std
 		return err
 	}
 
-	ui := deployui.New(stdout, cfg.Dir, "ocel deployments prune", verboseEnabled())
+	ctx, run, err := startRun(ctx, cfg, "ocel deployments prune")
+	if err != nil {
+		return err
+	}
+	defer run.Close()
+
+	ui := deployui.New(stdout, run, sessionFormat(), verboseEnabled())
 	defer ui.Close()
 
 	provW := ui.BuildWriter()

@@ -85,7 +85,13 @@ func runDestroy(ctx context.Context, d deps, cwd string, stdout, stderr io.Write
 		return err
 	}
 
-	ui := deployui.New(stdout, cfg.Dir, "ocel destroy", verboseEnabled())
+	ctx, run, err := startRun(ctx, cfg, "ocel destroy")
+	if err != nil {
+		return err
+	}
+	defer run.Close()
+
+	ui := deployui.New(stdout, run, sessionFormat(), verboseEnabled())
 	defer ui.Close()
 
 	provW := ui.BuildWriter()
@@ -159,7 +165,13 @@ func runDestroyPreviewProject(ctx context.Context, d deps, cwd string, yes bool,
 		return err
 	}
 
-	ui := deployui.New(stdout, cfg.Dir, "ocel destroy --preview", verboseEnabled())
+	ctx, run, err := startRun(ctx, cfg, "ocel destroy --preview")
+	if err != nil {
+		return err
+	}
+	defer run.Close()
+
+	ui := deployui.New(stdout, run, sessionFormat(), verboseEnabled())
 	defer ui.Close()
 
 	provW := ui.BuildWriter()

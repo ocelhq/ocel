@@ -42,6 +42,12 @@ func runBuild(ctx context.Context, d deps, cwd string, stdout, stderr io.Writer)
 		return err
 	}
 
+	ctx, run, err := startRun(ctx, cfg, "ocel build")
+	if err != nil {
+		return err
+	}
+	defer run.Close()
+
 	if err := d.buildApp(ctx, cfg, nil, stderr); err != nil {
 		return err
 	}

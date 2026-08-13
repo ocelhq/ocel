@@ -1,6 +1,7 @@
 package deployui
 
 import (
+	"encoding/json"
 	"fmt"
 	"io"
 	"os"
@@ -26,6 +27,13 @@ const (
 
 var spinnerFrames = []string{"⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"}
 
+type Format string
+
+const (
+	FormatHuman Format = "human"
+	FormatJSON  Format = "json"
+)
+
 type Session struct {
 	out     io.Writer
 	command string
@@ -34,7 +42,8 @@ type Session struct {
 	log     *os.File
 	logPath string
 
-	clean bool
+	clean  bool
+	format Format
 
 	mu        sync.Mutex
 	active    bool
@@ -52,25 +61,22 @@ type Session struct {
 	renderDone chan struct{}
 }
 
-func New(stdout io.Writer, projectDir, command string, verbose bool) *Session {
-	return newSession(stdout, projectDir, command, isTTY(stdout) && !verbose)
+func New(stdout io.Writer, run *obs.Run, format Format, verbose bool) *Session {
+	return newSession(stdout, run, format, isTTY(stdout) && !verbose && format == FormatHuman)
 }
 
-func newSession(stdout io.Writer, projectDir, command string, clean bool) *Session {
+func newSession(stdout io.Writer, run *obs.Run, format Format, clean bool) *Session {
 	s := &Session{
 		out:     stdout,
-		command: command,
+		command: run.Command(),
 		start:   time.Now(),
 		clean:   clean,
+		format:  format,
 	}
-	logDir := filepath.Join(projectDir, ".ocel", "logs")
-	if err := os.MkdirAll(logDir, 0o755); err == nil {
-		p := filepath.Join(logDir, obs.NewTraceID()+".log")
-		if f, err := os.Create(p); err == nil {
-			s.log = f
-			s.logPath = p
-		}
-		_ = obs.Prune(logDir, obs.RunRetention)
+	p := filepath.Join(run.Dir(), run.TraceID()+".log")
+	if f, err := os.Create(p); err == nil {
+		s.log = f
+		s.logPath = p
 	}
 	if s.clean {
 		s.stopRender = make(chan struct{})
@@ -119,6 +125,10 @@ func (s *Session) BuildWriter() io.Writer {
 func (s *Session) Building() {
 	s.logf("[building] Building project")
 	if !s.clean {
+		if s.format == FormatJSON {
+			s.emit("building", nil)
+			return
+		}
 		fmt.Fprintln(s.out, "Building project")
 		return
 	}
@@ -143,6 +153,10 @@ func (s *Session) Waiting(reason, url string) {
 	s.waiting = true
 	s.mu.Unlock()
 
+	if s.format == FormatJSON {
+		s.emit("waiting", map[string]any{"reason": reason, "url": url})
+		return
+	}
 	fmt.Fprintf(s.out, "\n%s\n  Fill them in at:\n\n    %s\n\n  Waiting for the page — press Ctrl-C to abort. Nothing has been provisioned.\n\n",
 		reason, url)
 }
@@ -171,6 +185,15 @@ func (s *Session) Event(ev *deploymentsv1.DeployEvent) {
 func (s *Session) progress(phase deploymentsv1.Phase, message string, current uint32, total *uint32) {
 	s.logf("[%s] %s", phaseTag(phase), progressLogLine(message, current, total))
 	if !s.clean {
+		if s.format == FormatJSON {
+			fields := map[string]any{"phase": phaseTag(phase), "message": message}
+			if total != nil {
+				fields["current"] = current
+				fields["total"] = *total
+			}
+			s.emit("progress", fields)
+			return
+		}
 		fmt.Fprintln(s.out, message)
 		return
 	}
@@ -187,6 +210,10 @@ func (s *Session) progress(phase deploymentsv1.Phase, message string, current ui
 func (s *Session) logMessage(message string) {
 	s.logf("[log] %s", message)
 	if !s.clean {
+		if s.format == FormatJSON {
+			s.emit("log", map[string]any{"message": message})
+			return
+		}
 		fmt.Fprintln(s.out, message)
 	}
 }
@@ -194,6 +221,16 @@ func (s *Session) logMessage(message string) {
 func (s *Session) Deployed(headline string, appURLs []string, outputs []*deploymentsv1.ResourceOutput) {
 	s.logOutputs(outputs)
 	s.finishStep(color.New(color.FgGreen), okMark, "")
+
+	if s.format == FormatJSON {
+		s.emit("deployed", map[string]any{
+			"headline":   headline,
+			"appUrls":    appURLs,
+			"durationMs": time.Since(s.start).Milliseconds(),
+			"logPath":    s.logPath,
+		})
+		return
+	}
 
 	fmt.Fprintln(s.out)
 	color.New(color.FgGreen, color.Bold).Fprintf(s.out, "%s %s in %s\n", okMark, headline, formatDuration(time.Since(s.start)))
@@ -209,6 +246,14 @@ func (s *Session) Deployed(headline string, appURLs []string, outputs []*deploym
 
 func (s *Session) Finish(headline string) {
 	s.finishStep(color.New(color.FgGreen), okMark, "")
+	if s.format == FormatJSON {
+		s.emit("finished", map[string]any{
+			"headline":   headline,
+			"durationMs": time.Since(s.start).Milliseconds(),
+			"logPath":    s.logPath,
+		})
+		return
+	}
 	fmt.Fprintln(s.out)
 	color.New(color.FgGreen, color.Bold).Fprintf(s.out, "%s %s (%s)\n", okMark, headline, formatDuration(time.Since(s.start)))
 	s.printLogPointer("Details")
@@ -218,7 +263,13 @@ func (s *Session) Fail(err error) {
 	s.logf("[error] %v", err)
 	red := color.New(color.FgRed, color.Bold)
 	if !s.finishStep(red, failMark, "failed") {
-		red.Fprintf(s.out, "%s Failed\n", failMark)
+		if s.format != FormatJSON {
+			red.Fprintf(s.out, "%s Failed\n", failMark)
+		}
+	}
+	if s.format == FormatJSON {
+		s.emit("failed", map[string]any{"error": err.Error(), "logPath": s.logPath})
+		return
 	}
 	for _, line := range strings.Split(strings.TrimRight(err.Error(), "\n"), "\n") {
 		fmt.Fprintf(s.out, "  %s\n", line)
@@ -234,7 +285,13 @@ func (s *Session) Cancel() {
 
 	warn := color.New(color.FgYellow, color.Bold)
 	if !s.finishStep(warn, warnMark, "cancelled") {
-		warn.Fprintf(s.out, "%s Cancelled\n", warnMark)
+		if s.format != FormatJSON {
+			warn.Fprintf(s.out, "%s Cancelled\n", warnMark)
+		}
+	}
+	if s.format == FormatJSON {
+		s.emit("cancelled", map[string]any{"waiting": waiting, "command": s.command, "logPath": s.logPath})
+		return
 	}
 	if waiting {
 		fmt.Fprintln(s.out, "  Nothing has been provisioned.")
@@ -243,6 +300,18 @@ func (s *Session) Cancel() {
 	}
 	fmt.Fprintf(s.out, "  Re-run `%s` to reconcile.\n", s.command)
 	s.printLogPointer("Log")
+}
+
+func (s *Session) emit(kind string, fields map[string]any) {
+	rec := map[string]any{"type": kind}
+	for k, v := range fields {
+		rec[k] = v
+	}
+	raw, err := json.Marshal(rec)
+	if err != nil {
+		return
+	}
+	fmt.Fprintln(s.out, string(raw))
 }
 
 func (s *Session) Close() error {
