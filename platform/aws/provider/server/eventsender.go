@@ -1,12 +1,19 @@
 package server
 
-import deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
+import (
+	"sync"
+
+	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
+)
 
 const eventSenderBuffer = 256
 
 type eventSender struct {
 	events chan *deploymentsv1.DeployEvent
 	done   chan struct{}
+
+	mu     sync.RWMutex
+	closed bool
 	err    error
 }
 
@@ -32,10 +39,18 @@ func (s *eventSender) drain(send func(*deploymentsv1.DeployEvent) error) {
 }
 
 func (s *eventSender) send(ev *deploymentsv1.DeployEvent) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	if s.closed {
+		return
+	}
 	s.events <- ev
 }
 
 func (s *eventSender) close() error {
+	s.mu.Lock()
+	s.closed = true
+	s.mu.Unlock()
 	close(s.events)
 	<-s.done
 	return s.err

@@ -149,3 +149,33 @@ func TestEventSenderAppliesBackpressureWithoutDroppingEvents(t *testing.T) {
 		t.Fatalf("got %d events, want %d", got, total)
 	}
 }
+
+func TestEventSenderSendRacingCloseNeverPanics(t *testing.T) {
+	t.Parallel()
+
+	stream := &recordingStream{}
+	sender := newEventSender(stream.send)
+
+	const concurrent = 50
+	var wg sync.WaitGroup
+	for i := 0; i < concurrent; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			sender.send(logEvent("racing close"))
+		}()
+	}
+
+	closeDone := make(chan struct{})
+	go func() {
+		defer close(closeDone)
+		sender.close()
+	}()
+
+	wg.Wait()
+	<-closeDone
+
+	for i := 0; i < concurrent; i++ {
+		sender.send(logEvent("after close"))
+	}
+}
