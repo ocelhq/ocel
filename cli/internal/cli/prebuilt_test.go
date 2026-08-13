@@ -11,11 +11,27 @@ import (
 	"testing"
 
 	"github.com/ocelhq/ocel/cli/internal/clientenv"
+	"github.com/ocelhq/ocel/cli/internal/deployui"
 	"github.com/ocelhq/ocel/cli/internal/envgate"
 	"github.com/ocelhq/ocel/cli/internal/manifestbuilder"
+	"github.com/ocelhq/ocel/cli/internal/obs"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/resources/v1"
 )
+
+func newBuildManifestSession(t *testing.T) (*deployui.Session, *bytes.Buffer) {
+	t.Helper()
+	_, run, err := obs.Start(context.Background(), t.TempDir(), "ocel deploy")
+	if err != nil {
+		t.Fatalf("obs.Start() = %v", err)
+	}
+	t.Cleanup(func() { _ = run.Close() })
+
+	var out bytes.Buffer
+	s := deployui.New(&out, run, deployui.FormatHuman, true)
+	t.Cleanup(func() { _ = s.Close() })
+	return s, &out
+}
 
 func writePrebuiltFunction(t *testing.T, root, app, route string) {
 	t.Helper()
@@ -115,9 +131,9 @@ func TestCollectAndBuildManifest(t *testing.T) {
 		d := defaultDeps()
 		ran := recordBuildApp(&d)
 
-		var out bytes.Buffer
+		s, out := newBuildManifestSession(t)
 		cfg := prebuiltConfig(root)
-		manifest, err := collectAndBuildManifest(context.Background(), d, cfg, noGate(cfg), true, &out)
+		manifest, err := collectAndBuildManifest(context.Background(), d, cfg, noGate(cfg), true, s)
 		if err != nil {
 			t.Fatalf("collectAndBuildManifest: %v", err)
 		}
@@ -146,8 +162,9 @@ func TestCollectAndBuildManifest(t *testing.T) {
 		d := defaultDeps()
 		ran := recordBuildApp(&d)
 
+		s, _ := newBuildManifestSession(t)
 		cfg := prebuiltConfig(root)
-		if _, err := collectAndBuildManifest(context.Background(), d, cfg, noGate(cfg), false, io.Discard); err != nil {
+		if _, err := collectAndBuildManifest(context.Background(), d, cfg, noGate(cfg), false, s); err != nil {
 			t.Fatalf("collectAndBuildManifest: %v", err)
 		}
 		if !*ran {
@@ -159,8 +176,9 @@ func TestCollectAndBuildManifest(t *testing.T) {
 		d := defaultDeps()
 		recordBuildApp(&d)
 
+		s, _ := newBuildManifestSession(t)
 		cfg := prebuiltConfig(t.TempDir())
-		_, err := collectAndBuildManifest(context.Background(), d, cfg, noGate(cfg), true, io.Discard)
+		_, err := collectAndBuildManifest(context.Background(), d, cfg, noGate(cfg), true, s)
 		if err == nil {
 			t.Fatal("collectAndBuildManifest succeeded with no build output, want error")
 		}
@@ -183,8 +201,9 @@ func TestCollectAndBuildManifest(t *testing.T) {
 			return nil
 		}
 
+		s, _ := newBuildManifestSession(t)
 		cfg := prebuiltConfig(root)
-		if _, err := collectAndBuildManifest(context.Background(), d, cfg, clientValueGate(t, cfg, "https://example.com"), false, io.Discard); err != nil {
+		if _, err := collectAndBuildManifest(context.Background(), d, cfg, clientValueGate(t, cfg, "https://example.com"), false, s); err != nil {
 			t.Fatalf("collectAndBuildManifest: %v", err)
 		}
 
@@ -207,8 +226,9 @@ func TestCollectAndBuildManifest(t *testing.T) {
 			t.Fatal(err)
 		}
 
+		s, _ := newBuildManifestSession(t)
 		gate := clientValueGate(t, cfg, "https://rotated.example.com")
-		_, err := collectAndBuildManifest(context.Background(), d, cfg, gate, true, io.Discard)
+		_, err := collectAndBuildManifest(context.Background(), d, cfg, gate, true, s)
 		if err == nil {
 			t.Fatal("collectAndBuildManifest = nil for a build predating the client value, want a refusal")
 		}
@@ -230,7 +250,8 @@ func TestCollectAndBuildManifest(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		_, err := collectAndBuildManifest(context.Background(), d, cfg, clientValueGate(t, cfg, "https://example.com"), true, io.Discard)
+		s, _ := newBuildManifestSession(t)
+		_, err := collectAndBuildManifest(context.Background(), d, cfg, clientValueGate(t, cfg, "https://example.com"), true, s)
 		if err == nil {
 			t.Fatal("collectAndBuildManifest = nil for an `ocel build` output, want a refusal")
 		}
@@ -255,8 +276,9 @@ func TestCollectAndBuildManifest(t *testing.T) {
 			t.Fatal(err)
 		}
 
+		s, _ := newBuildManifestSession(t)
 		gate := clientValueGate(t, cfg, "https://example.com")
-		if _, err := collectAndBuildManifest(context.Background(), d, cfg, gate, true, io.Discard); err != nil {
+		if _, err := collectAndBuildManifest(context.Background(), d, cfg, gate, true, s); err != nil {
 			t.Fatalf("collectAndBuildManifest: %v", err)
 		}
 	})

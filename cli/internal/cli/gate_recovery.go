@@ -29,10 +29,10 @@ type gateRecovery struct {
 	enabled bool
 }
 
-func (r gateRecovery) buildManifest(ctx context.Context, prebuilt bool, buildOut io.Writer) (*deploymentsv1.Manifest, error) {
+func (r gateRecovery) buildManifest(ctx context.Context, prebuilt bool) (*deploymentsv1.Manifest, error) {
 	for {
 		gate := r.newGate()
-		manifest, err := collectAndBuildManifest(ctx, r.deps, r.cfg, gate, prebuilt, buildOut)
+		manifest, err := collectAndBuildManifest(ctx, r.deps, r.cfg, gate, prebuilt, r.ui)
 
 		var refusal *envgate.Refusal
 		if !r.enabled || !errors.As(err, &refusal) {

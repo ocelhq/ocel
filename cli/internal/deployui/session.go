@@ -62,6 +62,15 @@ func (s *Session) BuildWriter() io.Writer {
 	return s.r
 }
 
+func (s *Session) Diagnostic(message string) {
+	s.logf("[diagnostic] %s", message)
+	if s.r.format == FormatJSON {
+		s.r.emitJSON("diagnostic", map[string]any{"message": message})
+		return
+	}
+	_, _ = fmt.Fprintln(s.r, message)
+}
+
 func (s *Session) Building() {
 	s.logf("[building] Building project")
 	s.r.Building()
