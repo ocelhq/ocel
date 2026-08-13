@@ -25,8 +25,6 @@ type Run struct {
 	tp       *sdktrace.TracerProvider
 	tracer   trace.Tracer
 	rootSpan trace.Span
-
-	fileExp *fileExporter
 }
 
 func Start(ctx context.Context, projectDir, command string) (context.Context, *Run, error) {
@@ -62,7 +60,6 @@ func Start(ctx context.Context, projectDir, command string) (context.Context, *R
 		logFile: logFile,
 		tp:      tp,
 		tracer:  tp.Tracer("github.com/ocelhq/ocel/cli"),
-		fileExp: fileExp,
 	}
 
 	ctx, root := r.tracer.Start(ctx, command, trace.WithAttributes(AttrCommand.String(command)))
