@@ -236,10 +236,10 @@ func (s *Server) runDestroyPreview(ctx context.Context, req *deploymentsv1.Destr
 	persistent := env.GetLifecycle() == deploymentsv1.Environment_LIFECYCLE_PERSISTENT
 
 	stages := newPreviewRemovalStages(persistent)
-	tracer.DeclareStages(false, stages.Roots()...)
+	deploy.DeclareStages(tracer, false, stages.Roots()...)
 	finish := func(err error) error {
 		if err != nil {
-			closeStages(tracer, err, stages.Roots()...)
+			closeStages(tracer)
 		}
 		return err
 	}

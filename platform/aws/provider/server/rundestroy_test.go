@@ -59,13 +59,8 @@ func TestRunDestroyProjectDeclaresTheStagePlanBeforeAnyWork(t *testing.T) {
 	}
 	wantNoProvisioningStage(t, tracer.declared)
 
-	if len(tracer.spans) != len(wantTitles) {
-		t.Fatalf("got %d spans, want one per declared root stage since the failure happened before any of them ran", len(tracer.spans))
-	}
-	for _, span := range tracer.spans {
-		if !span.failed {
-			t.Errorf("span %v was not recorded as failed", span.id)
-		}
+	if len(tracer.spans) != 0 {
+		t.Fatalf("got %d spans, want 0: the failure happened before any declared stage started, and a stage that never ran must not get a fabricated span", len(tracer.spans))
 	}
 
 	last := tracer.declared[len(tracer.declared)-1]

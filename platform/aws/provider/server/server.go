@@ -552,12 +552,8 @@ func stageProgressEvent(id deploy.StageID, phase deploymentsv1.Phase, message st
 	}
 }
 
-func closeStages(tracer deploy.Tracer, err error, stages ...deploy.Stage) {
-	tracer.DeclareStages(true)
-	now := time.Now()
-	for _, s := range stages {
-		tracer.Span(s.ID, s.ParentID, s.Title, now, now, err)
-	}
+func closeStages(tracer deploy.Tracer) {
+	deploy.DeclareStages(tracer, true)
 }
 
 func logEvent(message string) *deploymentsv1.DeployEvent {

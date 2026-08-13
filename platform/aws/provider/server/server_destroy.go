@@ -109,10 +109,10 @@ func (s *Server) runDestroyProject(ctx context.Context, req *deploymentsv1.Destr
 	}
 
 	stages := newDestroyProjectStages()
-	tracer.DeclareStages(false, stages.Roots()...)
+	deploy.DeclareStages(tracer, false, stages.Roots()...)
 	finish := func(err error) error {
 		if err != nil {
-			closeStages(tracer, err, stages.Roots()...)
+			closeStages(tracer)
 		}
 		return err
 	}
@@ -158,10 +158,10 @@ func (s *Server) runDestroyPreviewProject(ctx context.Context, req *deploymentsv
 	slug := req.GetSlug()
 
 	stages := newDestroyPreviewProjectStages()
-	tracer.DeclareStages(false, stages.Roots()...)
+	deploy.DeclareStages(tracer, false, stages.Roots()...)
 	finish := func(err error) error {
 		if err != nil {
-			closeStages(tracer, err, stages.Roots()...)
+			closeStages(tracer)
 		}
 		return err
 	}
