@@ -15,13 +15,19 @@ const (
 	stageDone
 )
 
-// stageNode is one node of the tree a StagePlanEvent grows. Its id is the
-// provider's span id, hex-encoded so it can key a map.
+const (
+	maxStageNodes     = 4096
+	maxOrphanParents  = 4096
+	maxOrphanChildren = 256
+	maxActiveRows     = 20
+	maxTreeDepth      = 64
+)
+
 type stageNode struct {
 	id, parentID string
 	title        string
 	children     []string
-	linked       bool // already attached under its parent (or as a root)
+	linked       bool
 
 	state   stageState
 	message string
@@ -31,16 +37,16 @@ type stageNode struct {
 	frame   int
 }
 
-// stagePlan is the tree a sequence of StagePlanEvents grows, plus the
-// progress state layered onto it. Stages can arrive out of order — a child
-// naming a parent_id not yet seen is buffered and attached once its parent
-// arrives.
 type stagePlan struct {
 	nodes       map[string]*stageNode
 	roots       []string
-	orphans     map[string][]string // parent id -> buffered child ids
+	orphans     map[string][]string
 	final       bool
-	activeOrder []string // stage ids currently in the live region, in the order they started
+	activeOrder []string
+
+	droppedNodes   int
+	droppedOrphans int
+	droppedActive  int
 }
 
 func newStagePlan() *stagePlan {
@@ -71,26 +77,36 @@ func (p *stagePlan) declare(s *deploymentsv1.Stage) {
 	if id == "" {
 		return
 	}
-	n := p.nodeFor(id)
+	if _, exists := p.nodes[id]; exists {
+		return
+	}
+	n, tracked := p.nodeFor(id)
+	if !tracked {
+		return
+	}
 	n.title = s.GetTitle()
 	n.parentID = stageKey(s.GetParentId())
 	p.link(n)
 }
 
-func (p *stagePlan) nodeFor(id string) *stageNode {
-	n, ok := p.nodes[id]
-	if !ok {
-		n = &stageNode{id: id}
-		p.nodes[id] = n
+func (p *stagePlan) nodeFor(id string) (n *stageNode, tracked bool) {
+	if n, ok := p.nodes[id]; ok {
+		return n, true
 	}
-	return n
+	if len(p.nodes) >= maxStageNodes {
+		p.droppedNodes++
+		return &stageNode{id: id}, false
+	}
+	n = &stageNode{id: id}
+	p.nodes[id] = n
+	return n, true
 }
 
 func (p *stagePlan) link(n *stageNode) {
 	if n.linked {
 		return
 	}
-	if n.parentID == "" {
+	if n.parentID == "" || n.parentID == n.id || p.wouldCycle(n.parentID, n.id) {
 		p.roots = append(p.roots, n.id)
 		n.linked = true
 		p.attachOrphans(n.id)
@@ -98,12 +114,42 @@ func (p *stagePlan) link(n *stageNode) {
 	}
 	parent, ok := p.nodes[n.parentID]
 	if !ok {
-		p.orphans[n.parentID] = append(p.orphans[n.parentID], n.id)
+		p.bufferOrphan(n)
 		return
 	}
 	parent.children = append(parent.children, n.id)
 	n.linked = true
 	p.attachOrphans(n.id)
+}
+
+func (p *stagePlan) wouldCycle(candidate, id string) bool {
+	for depth := 0; depth < maxTreeDepth; depth++ {
+		n, ok := p.nodes[candidate]
+		if !ok {
+			return false
+		}
+		if n.id == id {
+			return true
+		}
+		if n.parentID == "" {
+			return false
+		}
+		candidate = n.parentID
+	}
+	return true
+}
+
+func (p *stagePlan) bufferOrphan(n *stageNode) {
+	pending, seen := p.orphans[n.parentID]
+	if !seen && len(p.orphans) >= maxOrphanParents {
+		p.droppedOrphans++
+		return
+	}
+	if len(pending) >= maxOrphanChildren {
+		p.droppedOrphans++
+		return
+	}
+	p.orphans[n.parentID] = append(pending, n.id)
 }
 
 func (p *stagePlan) attachOrphans(parentID string) {
@@ -119,28 +165,46 @@ func (p *stagePlan) attachOrphans(parentID string) {
 	}
 }
 
-// progress records a ProgressEvent against the stage it names, creating the
-// node if its Stage declaration has not arrived yet (defensive: a plan and
-// its progress travel on the same stream, but nothing enforces the order).
-// It reports whether this is the stage's first progress event.
-func (p *stagePlan) progress(id, message string, current uint32, total *uint32) (n *stageNode, started bool) {
-	n = p.nodeFor(id)
-	started = n.state == stagePending
-	if started {
-		n.state = stageActive
+func (p *stagePlan) progress(id, message string, current uint32, total *uint32) (n *stageNode, tracked bool) {
+	n, tracked = p.nodeFor(id)
+	if n.state != stageActive {
 		n.started = time.Now()
 	}
+	n.state = stageActive
 	n.message = message
 	n.current = current
-	n.total = total
-	if total != nil && current >= *total {
+	if total != nil {
+		t := *total
+		n.total = &t
+	} else {
+		n.total = nil
+	}
+	if n.total != nil && current >= *n.total {
 		n.state = stageDone
 	}
-	return n, started
+	return n, tracked
 }
 
-func (n *stageNode) leaf() bool {
-	return len(n.children) == 0
+func (p *stagePlan) ensureActive(id string) {
+	for _, existing := range p.activeOrder {
+		if existing == id {
+			return
+		}
+	}
+	if len(p.activeOrder) >= maxActiveRows {
+		p.droppedActive++
+		return
+	}
+	p.activeOrder = append(p.activeOrder, id)
+}
+
+func (p *stagePlan) isActive(id string) bool {
+	for _, existing := range p.activeOrder {
+		if existing == id {
+			return true
+		}
+	}
+	return false
 }
 
 func (p *stagePlan) removeActive(id string) {
@@ -150,4 +214,25 @@ func (p *stagePlan) removeActive(id string) {
 			return
 		}
 	}
+}
+
+func (p *stagePlan) siblingPosition(id string) (index, count int, ok bool) {
+	n, exists := p.nodes[id]
+	if !exists || !n.linked {
+		return 0, 0, false
+	}
+	list := p.roots
+	if n.parentID != "" {
+		parent, pok := p.nodes[n.parentID]
+		if !pok {
+			return 0, 0, false
+		}
+		list = parent.children
+	}
+	for i, sibling := range list {
+		if sibling == id {
+			return i + 1, len(list), true
+		}
+	}
+	return 0, 0, false
 }
