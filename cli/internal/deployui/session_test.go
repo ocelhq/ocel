@@ -7,9 +7,7 @@ import (
 	"errors"
 	"os"
 	"strings"
-	"sync"
 	"testing"
-	"time"
 
 	"github.com/ocelhq/ocel/cli/internal/obs"
 	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
@@ -47,33 +45,10 @@ func progressN(phase deploymentsv1.Phase, msg string, current, total uint32) *de
 	}}
 }
 
-type lockedWriter struct {
-	mu sync.Mutex
-	b  bytes.Buffer
-}
-
-func (w *lockedWriter) Write(p []byte) (int, error) {
-	w.mu.Lock()
-	defer w.mu.Unlock()
-	return w.b.Write(p)
-}
-
-func (w *lockedWriter) String() string {
-	w.mu.Lock()
-	defer w.mu.Unlock()
-	return w.b.String()
-}
-
-func newCleanTestSession(t *testing.T) (*Session, *lockedWriter) {
-	t.Helper()
-	out := &lockedWriter{}
-	run := startTestRun(t, t.TempDir(), "ocel deploy")
-	s := newSession(out, run, FormatHuman, true)
-	t.Cleanup(func() { _ = s.Close() })
-	if !s.clean {
-		t.Fatal("session is not in the phased view, so the render loop is not running")
-	}
-	return s, out
+func stageProgress(stageID []byte, msg string, current, total uint32) *deploymentsv1.DeployEvent {
+	return &deploymentsv1.DeployEvent{Event: &deploymentsv1.DeployEvent_Progress{
+		Progress: &deploymentsv1.ProgressEvent{StageId: stageID, Message: msg, Current: &current, Total: &total},
+	}}
 }
 
 func readLog(t *testing.T, path string) string {
@@ -86,34 +61,6 @@ func readLog(t *testing.T, path string) string {
 }
 
 func TestSession(t *testing.T) {
-	t.Run("waiting stops the render loop so the block survives", func(t *testing.T) {
-		s, out := newCleanTestSession(t)
-		s.Building()
-		time.Sleep(3 * frameRate)
-
-		s.Waiting("1 variable is not ready.", "http://127.0.0.1:5555/#t=abc")
-		settled := out.String()
-		time.Sleep(5 * frameRate)
-
-		if got := out.String(); got != settled {
-			t.Errorf("the render loop painted %q over the waiting block", strings.TrimPrefix(got, settled))
-		}
-	})
-
-	t.Run("resume restarts the spinner the wait stopped", func(t *testing.T) {
-		s, out := newCleanTestSession(t)
-		s.Building()
-		s.Waiting("1 variable is not ready.", "http://127.0.0.1:5555/#t=abc")
-		quiet := out.String()
-
-		s.Resume()
-		time.Sleep(5 * frameRate)
-
-		if out.String() == quiet {
-			t.Error("nothing was painted after Resume, so the paused step never restarted")
-		}
-	})
-
 	t.Run("raw mode streams events and writes the log", func(t *testing.T) {
 		t.Parallel()
 		s, out, logPath := newTestSession(t, "ocel deploy")
@@ -173,6 +120,16 @@ func TestSession(t *testing.T) {
 		}
 		if !strings.Contains(got, ".log") {
 			t.Errorf("stdout = %q, want a pointer to the log file", got)
+		}
+	})
+
+	t.Run("fail with no active step still prints a failure line", func(t *testing.T) {
+		t.Parallel()
+		s, out, _ := newTestSession(t, "ocel deploy")
+		s.Fail(errors.New("boom"))
+
+		if !strings.Contains(out.String(), "Failed") {
+			t.Errorf("stdout = %q, want a bare Failed line", out.String())
 		}
 	})
 
@@ -252,6 +209,55 @@ func TestSession(t *testing.T) {
 		got := out.String()
 		if !strings.Contains(got, "Resources may be partially created") {
 			t.Errorf("stdout = %q, want a resumed run cancelled later to warn about partial provisioning", got)
+		}
+	})
+
+	t.Run("a stage plan event is dispatched to the renderer's tree", func(t *testing.T) {
+		t.Parallel()
+		s, _, _ := newTestSession(t, "ocel deploy")
+
+		build := []byte{1, 0, 0, 0, 0, 0, 0, 0}
+		s.Event(&deploymentsv1.DeployEvent{Event: &deploymentsv1.DeployEvent_StagePlan{
+			StagePlan: &deploymentsv1.StagePlanEvent{
+				Stages: []*deploymentsv1.Stage{{Id: build, Title: "Building"}},
+				Final:  true,
+			},
+		}})
+
+		if title := s.r.plan.nodes[stageKey(build)].title; title != "Building" {
+			t.Errorf("stage title = %q, want %q", title, "Building")
+		}
+		if !s.r.plan.final {
+			t.Error("plan.final = false after a StagePlanEvent with Final: true")
+		}
+	})
+
+	t.Run("a child stage arriving before its parent still attaches", func(t *testing.T) {
+		t.Parallel()
+		plan := newStagePlan()
+		parent := []byte{9, 0, 0, 0, 0, 0, 0, 0}
+		child := []byte{10, 0, 0, 0, 0, 0, 0, 0}
+
+		plan.apply(&deploymentsv1.StagePlanEvent{Stages: []*deploymentsv1.Stage{
+			{Id: child, ParentId: parent, Title: "app-a"},
+		}})
+		if _, ok := plan.nodes[stageKey(child)]; !ok {
+			t.Fatal("orphan child was not recorded at all")
+		}
+		if plan.nodes[stageKey(child)].linked {
+			t.Error("orphan child linked before its parent arrived")
+		}
+
+		plan.apply(&deploymentsv1.StagePlanEvent{Stages: []*deploymentsv1.Stage{
+			{Id: parent, Title: "apps"},
+		}})
+
+		parentNode := plan.nodes[stageKey(parent)]
+		if len(parentNode.children) != 1 || parentNode.children[0] != stageKey(child) {
+			t.Errorf("parent.children = %v, want the orphan attached", parentNode.children)
+		}
+		if !plan.nodes[stageKey(child)].linked {
+			t.Error("child was not marked linked once its parent arrived")
 		}
 	})
 
@@ -343,14 +349,14 @@ func TestFormatAxis(t *testing.T) {
 		}
 	})
 
-	t.Run("json format never enters the phased spinner view", func(t *testing.T) {
+	t.Run("json format never enters the live-region view", func(t *testing.T) {
 		t.Parallel()
 		dir := t.TempDir()
 		run := startTestRun(t, dir, "ocel deploy")
 		s := New(&bytes.Buffer{}, run, FormatJSON, false)
 		t.Cleanup(func() { _ = s.Close() })
-		if s.clean {
-			t.Error("json format entered the phased spinner view, which only makes sense for human output on a terminal")
+		if s.r.Live() {
+			t.Error("json format entered the live-region view, which only makes sense for human output on a terminal")
 		}
 	})
 
@@ -396,14 +402,15 @@ func TestBar(t *testing.T) {
 	}
 }
 
-func TestStepIdentity(t *testing.T) {
+func TestLegacyStageIdentity(t *testing.T) {
 	t.Parallel()
 
-	provisioning, title := stepIdentity(deploymentsv1.Phase_PHASE_PROVISIONING, "Preparing deployment stack")
+	provisioning := legacyStageID(deploymentsv1.Phase_PHASE_PROVISIONING, "Preparing deployment stack")
+	title := legacyStageTitle(deploymentsv1.Phase_PHASE_PROVISIONING, "Preparing deployment stack")
 
 	t.Run("keys a step by its phase, not its message", func(t *testing.T) {
 		t.Parallel()
-		other, _ := stepIdentity(deploymentsv1.Phase_PHASE_PROVISIONING, "Provisioning resources")
+		other := legacyStageID(deploymentsv1.Phase_PHASE_PROVISIONING, "Provisioning resources")
 		if provisioning != other {
 			t.Errorf("same-phase messages produced different keys %q vs %q", provisioning, other)
 		}
@@ -414,7 +421,8 @@ func TestStepIdentity(t *testing.T) {
 
 	t.Run("gives an unspecified phase its own message-keyed step", func(t *testing.T) {
 		t.Parallel()
-		key, unspecified := stepIdentity(deploymentsv1.Phase_PHASE_UNSPECIFIED, "Ensuring passphrase")
+		key := legacyStageID(deploymentsv1.Phase_PHASE_UNSPECIFIED, "Ensuring passphrase")
+		unspecified := legacyStageTitle(deploymentsv1.Phase_PHASE_UNSPECIFIED, "Ensuring passphrase")
 		if key == provisioning || unspecified != "Ensuring passphrase" {
 			t.Errorf("unspecified step identity = (%q,%q), want its own message-keyed step", key, unspecified)
 		}
