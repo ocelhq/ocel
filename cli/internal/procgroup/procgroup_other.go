@@ -10,6 +10,14 @@ import (
 
 func newGroup(cmd *exec.Cmd) {}
 
+func newForegroundGroup(cmd *exec.Cmd, tty *os.File) {
+	newGroup(cmd)
+}
+
+func restoreForeground(tty *os.File) error {
+	return nil
+}
+
 func terminate(cmd *exec.Cmd) error {
 	return kill(cmd)
 }
