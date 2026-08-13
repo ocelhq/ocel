@@ -15,10 +15,22 @@
     },
     "test/e2e/app-dir/actions/app-action-node-middleware.test.ts": {
       "failed": [
-        "app-dir action handling should handle actions executed in quick succession",
-        "app-dir action handling should not error when a forwarded action triggers a redirect (edge)"
+        "app-dir action handling should handle actions executed in quick succession"
       ],
-      "flakey": []
+      "flakey": [
+        "app-dir action handling fetch actions should handle a fetch action initiated from a static page",
+        "app-dir action handling fetch actions should invalidate client cache when tag is revalidated",
+        "app-dir action handling request body decoding should correctly decode multi-byte characters in the request body (node)",
+        "app-dir action handling should not error when a forwarded action triggers a redirect (edge)",
+        "app-dir action handling should not error when a forwarded action triggers a redirect (node)",
+        "app-dir action handling should support importing the same action module instance in both server and action layers"
+      ]
+    },
+    "test/e2e/app-dir/actions/app-action.test.ts": {
+      "failed": [],
+      "flakey": [
+        "app-dir action handling should handle action correctly with middleware rewrite"
+      ]
     },
     "test/e2e/app-dir/app-basepath/index.test.ts": {
       "failed": [
