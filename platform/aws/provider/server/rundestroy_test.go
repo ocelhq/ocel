@@ -5,10 +5,7 @@ import (
 	"testing"
 
 	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
-	"github.com/ocelhq/ocel/platform/aws/provider/deploy"
 )
-
-func noopStageReport(deploy.StageID) func(string) { return noopLog }
 
 func wantNoProvisioningStage(t *testing.T, declared []recordedDeclare) {
 	t.Helper()
