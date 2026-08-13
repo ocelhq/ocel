@@ -2,6 +2,7 @@ package server
 
 import (
 	"context"
+	"sync"
 	"testing"
 	"time"
 
@@ -21,15 +22,20 @@ type recordedSpan struct {
 }
 
 type fakeTracer struct {
+	mu       sync.Mutex
 	declared []recordedDeclare
 	spans    []recordedSpan
 }
 
 func (f *fakeTracer) DeclareStages(final bool, stages ...deploy.Stage) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
 	f.declared = append(f.declared, recordedDeclare{final: final, stages: stages})
 }
 
 func (f *fakeTracer) Span(id, parentID deploy.StageID, name string, start, end time.Time, err error, attrs ...deploy.Attr) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
 	f.spans = append(f.spans, recordedSpan{id: id, parentID: parentID, name: name, failed: err != nil})
 }
 

@@ -80,3 +80,11 @@ func newDeployReporter(sender *eventSender, stages deployStages) (deploy.Progres
 	logf := func(m string) { sender.send(logEvent(m)) }
 	return progress, stageReport, logf
 }
+
+func newTeardownReporter(sender *eventSender) (func(deploy.StageID) func(string), func(string)) {
+	stageReport := func(id deploy.StageID) func(string) {
+		return func(m string) { sender.send(stageProgressEvent(id, deploymentsv1.Phase_PHASE_DELETING, m)) }
+	}
+	logf := func(m string) { sender.send(logEvent(m)) }
+	return stageReport, logf
+}
