@@ -1,9 +1,11 @@
 package server
 
 import (
+	"context"
 	"errors"
 	"sync"
 	"testing"
+	"time"
 
 	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
 )
@@ -26,7 +28,7 @@ func TestDeployReporterSerializesConcurrentSends(t *testing.T) {
 	t.Parallel()
 
 	stream := &recordingStream{}
-	sender := newEventSender(stream.send)
+	sender := newEventSender(context.Background(), stream.send)
 	progress, logf := newDeployReporter(sender)
 
 	var wg sync.WaitGroup
@@ -64,7 +66,7 @@ func TestDeployReporterParallelMultiAppDeploy(t *testing.T) {
 	const logLinesPerApp = 8
 
 	stream := &recordingStream{}
-	sender := newEventSender(stream.send)
+	sender := newEventSender(context.Background(), stream.send)
 	progress, logf := newDeployReporter(sender)
 
 	var wg sync.WaitGroup
@@ -103,7 +105,7 @@ func TestEventSenderPropagatesSendError(t *testing.T) {
 
 	wantErr := errors.New("boom")
 	var calls int
-	sender := newEventSender(func(*deploymentsv1.DeployEvent) error {
+	sender := newEventSender(context.Background(), func(*deploymentsv1.DeployEvent) error {
 		calls++
 		if calls == 2 {
 			return wantErr
@@ -129,7 +131,7 @@ func TestEventSenderAppliesBackpressureWithoutDroppingEvents(t *testing.T) {
 
 	stream := &recordingStream{}
 	var mu sync.Mutex
-	sender := newEventSender(func(ev *deploymentsv1.DeployEvent) error {
+	sender := newEventSender(context.Background(), func(ev *deploymentsv1.DeployEvent) error {
 		mu.Lock()
 		defer mu.Unlock()
 		return stream.send(ev)
@@ -158,7 +160,7 @@ func TestEventSenderSendRacingCloseNeverPanics(t *testing.T) {
 	t.Parallel()
 
 	stream := &recordingStream{}
-	sender := newEventSender(stream.send)
+	sender := newEventSender(context.Background(), stream.send)
 
 	const concurrent = 50
 	var wg sync.WaitGroup
@@ -182,4 +184,43 @@ func TestEventSenderSendRacingCloseNeverPanics(t *testing.T) {
 	for i := 0; i < concurrent; i++ {
 		sender.send(logEvent("after close"))
 	}
+}
+
+func TestEventSenderSendUnblocksOnContextCancellation(t *testing.T) {
+	t.Parallel()
+
+	blockDrain := make(chan struct{})
+	ctx, cancel := context.WithCancel(context.Background())
+
+	sender := newEventSender(ctx, func(*deploymentsv1.DeployEvent) error {
+		<-blockDrain
+		return nil
+	})
+
+	var fillers sync.WaitGroup
+	for i := 0; i < eventSenderBuffer+1; i++ {
+		fillers.Add(1)
+		go func() {
+			defer fillers.Done()
+			sender.send(logEvent("line"))
+		}()
+	}
+	fillers.Wait()
+
+	cancel()
+
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		sender.send(logEvent("blocked"))
+	}()
+
+	select {
+	case <-done:
+	case <-time.After(5 * time.Second):
+		t.Fatal("send did not observe context cancellation once the buffer was saturated")
+	}
+
+	close(blockDrain)
+	sender.close()
 }

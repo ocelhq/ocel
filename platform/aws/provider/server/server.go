@@ -140,7 +140,7 @@ func (s *Server) Deploy(ctx context.Context, req *deploymentsv1.DeployRequest, s
 	if err := validateManifest(manifest); err != nil {
 		return connect.NewError(connect.CodeInvalidArgument, err)
 	}
-	sender := newEventSender(stream.Send)
+	sender := newEventSender(ctx, stream.Send)
 	progress, logf := newDeployReporter(sender)
 
 	res, err := s.runDeploy(ctx, req, manifest, progress, logf)
