@@ -37,48 +37,41 @@ type appDeployResult struct {
 }
 
 func realize(ctx context.Context, cfg Config, manifest *deploymentsv1.Manifest, progress Progress, log func(string)) (Result, error) {
-	stack, ok := cfg.Edge.(edge.RootStack)
-	if !ok {
-		return Result{}, fmt.Errorf("deploys require an edge that supports the root stack (instant rollback); %s does not", cfg.Edge.Kind())
-	}
-	if cfg.StoreEndpoint == "" {
-		return Result{}, fmt.Errorf("no deployments-store worker found for this account; re-run `%s` to provision it before deploying", bootstrapCommand(cfg))
-	}
-
-	if err := validateTag(cfg.Tag); err != nil {
-		return Result{}, err
-	}
-	if err := checkTagAvailable(ctx, stack, cfg.RootStackState, cfg.Tag); err != nil {
-		return Result{}, err
-	}
-
-	apps := manifestApps(manifest)
-	appStages := make(map[string]Stage, len(apps))
-	declared := make([]Stage, 0, len(apps))
-	for _, app := range apps {
-		s := NewStage(cfg.Stages.Provisioning, app.GetName())
-		appStages[app.GetName()] = s
-		declared = append(declared, s)
-	}
-	declareStages(cfg.Tracer, true, declared...)
-
-	baked, err := renderAppBundles(cfg, manifest)
-	if err != nil {
-		return Result{}, err
-	}
-
-	if err := checkISRWriterAgrees(cfg); err != nil {
-		return Result{}, err
-	}
-	builds, err := resolveAppBuilds(cfg, manifest, baked)
-	if err != nil {
-		return Result{}, err
-	}
-
 	uploadStart := time.Now()
 	finishUploading := func(err error) error {
 		spanForStage(cfg.Tracer, cfg.Stages.Uploading, uploadStart, time.Now(), err)
 		return err
+	}
+
+	stack, ok := cfg.Edge.(edge.RootStack)
+	if !ok {
+		return Result{}, finishUploading(fmt.Errorf("deploys require an edge that supports the root stack (instant rollback); %s does not", cfg.Edge.Kind()))
+	}
+	if cfg.StoreEndpoint == "" {
+		return Result{}, finishUploading(fmt.Errorf("no deployments-store worker found for this account; re-run `%s` to provision it before deploying", bootstrapCommand(cfg)))
+	}
+
+	if err := validateTag(cfg.Tag); err != nil {
+		return Result{}, finishUploading(err)
+	}
+	if err := checkTagAvailable(ctx, stack, cfg.RootStackState, cfg.Tag); err != nil {
+		return Result{}, finishUploading(err)
+	}
+
+	apps := manifestApps(manifest)
+	appStages := cfg.AppStages
+
+	baked, err := renderAppBundles(cfg, manifest)
+	if err != nil {
+		return Result{}, finishUploading(err)
+	}
+
+	if err := checkISRWriterAgrees(cfg); err != nil {
+		return Result{}, finishUploading(err)
+	}
+	builds, err := resolveAppBuilds(cfg, manifest, baked)
+	if err != nil {
+		return Result{}, finishUploading(err)
 	}
 
 	artifacts, err := uploadFunctionArtifacts(ctx, cfg, manifest, baked, builds, progress)
@@ -97,28 +90,28 @@ func realize(ctx context.Context, cfg Config, manifest *deploymentsv1.Manifest, 
 	}
 	finishUploading(nil)
 
-	identities := builds.identities
-	promotionID, err := newRandomID()
-	if err != nil {
-		return Result{}, err
-	}
-	plan, err := BuildPlan(manifest, planEnvironment(cfg), promotionID, identities)
-	if err != nil {
-		return Result{}, err
-	}
-
-	index, err := stackIndex(cfg.Stacks)
-	if err != nil {
-		return Result{}, err
-	}
-	if err := index.AddProject(ctx, naming.Sanitize(manifest.GetSlug())); err != nil {
-		return Result{}, err
-	}
-
 	provisionStart := time.Now()
 	finishProvisioning := func(err error) error {
 		spanForStage(cfg.Tracer, cfg.Stages.Provisioning, provisionStart, time.Now(), err)
 		return err
+	}
+
+	identities := builds.identities
+	promotionID, err := newRandomID()
+	if err != nil {
+		return Result{}, finishProvisioning(err)
+	}
+	plan, err := BuildPlan(manifest, planEnvironment(cfg), promotionID, identities)
+	if err != nil {
+		return Result{}, finishProvisioning(err)
+	}
+
+	index, err := stackIndex(cfg.Stacks)
+	if err != nil {
+		return Result{}, finishProvisioning(err)
+	}
+	if err := index.AddProject(ctx, naming.Sanitize(manifest.GetSlug())); err != nil {
+		return Result{}, finishProvisioning(err)
 	}
 
 	progress.report(deploymentsv1.Phase_PHASE_PROVISIONING, "Reconciling the root stack", 0, 0)
@@ -861,11 +854,30 @@ func applyDefaultTags(ctx context.Context, stack auto.Stack, tags map[string]str
 	return nil
 }
 
-// resourceLatencyOutlierThreshold is how long a single Pulumi resource
-// operation must take before it earns its own span alongside the batch
-// rollup: see the granularity guidance in #241 — one span per batch in the
-// common case, plus individual spans for failures and latency outliers.
-const resourceLatencyOutlierThreshold = 5 * time.Second
+const resourceLatencyOutlierThreshold = 30 * time.Second
+
+const engineDrainGrace = 30 * time.Second
+
+func startEngineTraceDrain(engineEvents <-chan events.EngineEvent, threshold time.Duration) <-chan EngineTrace {
+	result := make(chan EngineTrace, 1)
+	go func() {
+		b := newEngineTraceBuilder(threshold)
+		for ev := range engineEvents {
+			b.consume(ev, time.Now())
+		}
+		result <- b.result()
+	}()
+	return result
+}
+
+func awaitEngineTrace(result <-chan EngineTrace, grace time.Duration) EngineTrace {
+	select {
+	case trace := <-result:
+		return trace
+	case <-time.After(grace):
+		return EngineTrace{}
+	}
+}
 
 func upStack(ctx context.Context, cfg Config, name naming.StackName, tags map[string]string, program pulumi.RunFunc, log func(string), parentStage StageID) (auto.UpResult, error) {
 	stack, err := auto.UpsertStackInlineSource(ctx, name.String(), cfg.PulumiProject, program,
@@ -900,31 +912,24 @@ func upStack(ctx context.Context, cfg Config, name naming.StackName, tags map[st
 	}
 
 	engineEvents := make(chan events.EngineEvent, 256)
-	builder := newEngineTraceBuilder(resourceLatencyOutlierThreshold)
-	drained := make(chan struct{})
-	go func() {
-		defer close(drained)
-		for ev := range engineEvents {
-			builder.consume(ev, time.Now())
-		}
-	}()
+	traceResult := startEngineTraceDrain(engineEvents, resourceLatencyOutlierThreshold)
 	upOpts = append(upOpts, optup.EventStreams(engineEvents))
 
+	upStart := time.Now()
 	res, err := stack.Up(ctx, upOpts...)
+	upEnd := time.Now()
 	logWriter.Flush()
-	<-drained
 
-	emitEngineTrace(cfg.Tracer, parentStage, builder.result(), err)
+	trace := awaitEngineTrace(traceResult, engineDrainGrace)
+	if trace.Start.IsZero() {
+		trace.Start, trace.End = upStart, upEnd
+	}
+	emitEngineTrace(cfg.Tracer, parentStage, trace, err)
 	return res, err
 }
 
-// emitEngineTrace turns a Pulumi Automation API run's structured engine
-// events into spans: one for the whole batch, plus one each for any
-// standout (failed or slow) resource operation. Only a standout span gets
-// ATTRIBUTE_KEY_RESOURCE_TYPE/_NAME — the batch span covers many resources,
-// so a single type/name pair on it would misattribute the rest.
 func emitEngineTrace(t Tracer, parentStage StageID, trace EngineTrace, upErr error) {
-	if t == nil || trace.ResourceCount == 0 {
+	if t == nil || (trace.ResourceCount == 0 && upErr == nil) {
 		return
 	}
 	batchErr := upErr
