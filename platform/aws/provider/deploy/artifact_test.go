@@ -250,8 +250,12 @@ func TestUploadArtifact(t *testing.T) {
 		t.Parallel()
 		f := &fakeUploader{exists: map[string]bool{"k.zip": true}}
 		var zipped bool
-		if err := uploadArtifact(context.Background(), f, "bucket", "k.zip", "", bodyFn(&zipped)); err != nil {
+		transferred, err := uploadArtifact(context.Background(), f, "bucket", "k.zip", "", bodyFn(&zipped))
+		if err != nil {
 			t.Fatalf("uploadArtifact: %v", err)
+		}
+		if transferred {
+			t.Error("transferred = true, want false for a cache hit")
 		}
 		if len(f.puts) != 0 {
 			t.Errorf("PutObject called %d times, want 0 (object already present)", len(f.puts))
@@ -265,8 +269,12 @@ func TestUploadArtifact(t *testing.T) {
 		t.Parallel()
 		f := &fakeUploader{exists: map[string]bool{}}
 		var zipped bool
-		if err := uploadArtifact(context.Background(), f, "bucket", "k.zip", "", bodyFn(&zipped)); err != nil {
+		transferred, err := uploadArtifact(context.Background(), f, "bucket", "k.zip", "", bodyFn(&zipped))
+		if err != nil {
 			t.Fatalf("uploadArtifact: %v", err)
+		}
+		if !transferred {
+			t.Error("transferred = false, want true for a cache miss")
 		}
 		if len(f.puts) != 1 || f.puts[0] != "k.zip" {
 			t.Errorf("PutObject calls = %v, want single [k.zip]", f.puts)
@@ -283,7 +291,7 @@ func TestUploadArtifact(t *testing.T) {
 		t.Parallel()
 		f := &fakeUploader{exists: map[string]bool{}}
 		var invoked bool
-		if err := uploadArtifact(context.Background(), f, "bucket", "app.js", "text/javascript; charset=utf-8", bodyFn(&invoked)); err != nil {
+		if _, err := uploadArtifact(context.Background(), f, "bucket", "app.js", "text/javascript; charset=utf-8", bodyFn(&invoked)); err != nil {
 			t.Fatalf("uploadArtifact: %v", err)
 		}
 		if got := f.contentTypes["app.js"]; got != "text/javascript; charset=utf-8" {
@@ -295,8 +303,12 @@ func TestUploadArtifact(t *testing.T) {
 		t.Parallel()
 		f := &fakeUploader{headErr: errors.New("access denied")}
 		var zipped bool
-		if err := uploadArtifact(context.Background(), f, "bucket", "k.zip", "", bodyFn(&zipped)); err == nil {
+		transferred, err := uploadArtifact(context.Background(), f, "bucket", "k.zip", "", bodyFn(&zipped))
+		if err == nil {
 			t.Fatal("uploadArtifact = nil, want the HeadObject error surfaced")
+		}
+		if transferred {
+			t.Error("transferred = true, want false when HeadObject itself fails")
 		}
 		if len(f.puts) != 0 {
 			t.Errorf("PutObject called despite HeadObject error: %v", f.puts)
@@ -307,7 +319,7 @@ func TestUploadArtifact(t *testing.T) {
 		t.Parallel()
 		denied := errors.New("AccessDenied")
 		for _, bucket := range []string{"r2-cache-store", "s3-asset-bucket"} {
-			head := uploadArtifact(context.Background(), &fakeUploader{headErr: denied}, bucket, "assets/proj/web/B1/logo.png", "", bodyFn(new(bool)))
+			_, head := uploadArtifact(context.Background(), &fakeUploader{headErr: denied}, bucket, "assets/proj/web/B1/logo.png", "", bodyFn(new(bool)))
 			if head == nil || !strings.Contains(head.Error(), bucket) {
 				t.Errorf("head failure = %v, want it to name %q", head, bucket)
 			}

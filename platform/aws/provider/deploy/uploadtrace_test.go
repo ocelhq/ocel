@@ -17,13 +17,16 @@ func TestUploadBatchStatsCountsAndSumsBytes(t *testing.T) {
 
 	s := newUploadBatchStats()
 	base := time.Unix(1000, 0)
-	s.record(uploadOutcome{Bytes: 100, Start: base, End: base.Add(10 * time.Millisecond)})
-	s.record(uploadOutcome{Bytes: 250, Start: base.Add(time.Millisecond), End: base.Add(20 * time.Millisecond)})
-	s.record(uploadOutcome{Bytes: 0, Start: base.Add(2 * time.Millisecond), End: base.Add(5 * time.Millisecond)})
+	s.record(uploadOutcome{Bytes: 100, Start: base, End: base.Add(10 * time.Millisecond), Transferred: true})
+	s.record(uploadOutcome{Bytes: 250, Start: base.Add(time.Millisecond), End: base.Add(20 * time.Millisecond), Transferred: true})
+	s.record(uploadOutcome{Bytes: 0, Start: base.Add(2 * time.Millisecond), End: base.Add(5 * time.Millisecond), Transferred: true})
 
 	snap := s.snapshot()
-	if snap.count != 3 {
-		t.Fatalf("count = %d, want 3", snap.count)
+	if snap.attempts != 3 {
+		t.Fatalf("attempts = %d, want 3", snap.attempts)
+	}
+	if snap.transferred != 3 {
+		t.Fatalf("transferred = %d, want 3", snap.transferred)
 	}
 	if snap.bytes != 350 {
 		t.Fatalf("bytes = %d, want 350", snap.bytes)
@@ -33,6 +36,27 @@ func TestUploadBatchStatsCountsAndSumsBytes(t *testing.T) {
 	}
 	if !snap.end.Equal(base.Add(20 * time.Millisecond)) {
 		t.Errorf("end = %v, want %v", snap.end, base.Add(20*time.Millisecond))
+	}
+}
+
+func TestUploadBatchStatsOnlyCountsTransferredObjects(t *testing.T) {
+	t.Parallel()
+
+	s := newUploadBatchStats()
+	base := time.Unix(1500, 0)
+	for i := 0; i < 5000; i++ {
+		s.record(uploadOutcome{Start: base, End: base, Transferred: false})
+	}
+
+	snap := s.snapshot()
+	if snap.attempts != 5000 {
+		t.Fatalf("attempts = %d, want 5000: a fully-cached phase still processed every object", snap.attempts)
+	}
+	if snap.transferred != 0 {
+		t.Fatalf("transferred = %d, want 0: nothing crossed the wire", snap.transferred)
+	}
+	if snap.bytes != 0 {
+		t.Fatalf("bytes = %d, want 0", snap.bytes)
 	}
 }
 
@@ -49,8 +73,8 @@ func TestUploadBatchStatsCapsFailuresKeepingTheFirstN(t *testing.T) {
 	if len(snap.failures) != maxUploadFailureStandouts {
 		t.Fatalf("len(failures) = %d, want %d", len(snap.failures), maxUploadFailureStandouts)
 	}
-	if snap.count != maxUploadFailureStandouts+5 {
-		t.Fatalf("count = %d, want %d: every attempt still counts even once failures are capped", snap.count, maxUploadFailureStandouts+5)
+	if snap.attempts != maxUploadFailureStandouts+5 {
+		t.Fatalf("attempts = %d, want %d: every attempt still counts even once failures are capped", snap.attempts, maxUploadFailureStandouts+5)
 	}
 	if snap.dropped != 0 {
 		t.Fatalf("dropped = %d, want 0 (dropped tracks evicted latency standouts, not capped failures)", snap.dropped)
@@ -130,19 +154,20 @@ func TestUploadBatchStatsRecordUnderConcurrency(t *testing.T) {
 				err = fmt.Errorf("upload %d failed", i)
 			}
 			s.record(uploadOutcome{
-				Bytes:  int64(i),
-				Start:  base,
-				End:    base.Add(dur),
-				Failed: failed,
-				Err:    err,
+				Bytes:       int64(i),
+				Start:       base,
+				End:         base.Add(dur),
+				Failed:      failed,
+				Err:         err,
+				Transferred: !failed,
 			})
 		}(i)
 	}
 	wg.Wait()
 
 	snap := s.snapshot()
-	if snap.count != n {
-		t.Fatalf("count = %d, want %d", snap.count, n)
+	if snap.attempts != n {
+		t.Fatalf("attempts = %d, want %d", snap.attempts, n)
 	}
 	wantFailures := 0
 	for i := 0; i < n; i++ {
@@ -161,8 +186,8 @@ func TestEmitUploadBatchEmitsOneSpanWithCountsAndBytes(t *testing.T) {
 	ft := &fakeTracer{}
 	s := newUploadBatchStats()
 	base := time.Unix(6000, 0)
-	s.record(uploadOutcome{Bytes: 100, Start: base, End: base.Add(time.Millisecond)})
-	s.record(uploadOutcome{Bytes: 200, Start: base.Add(time.Millisecond), End: base.Add(2 * time.Millisecond)})
+	s.record(uploadOutcome{Bytes: 100, Start: base, End: base.Add(time.Millisecond), Transferred: true})
+	s.record(uploadOutcome{Bytes: 200, Start: base.Add(time.Millisecond), End: base.Add(2 * time.Millisecond), Transferred: true})
 
 	parent := NewRootStage("Uploading")
 	emitUploadBatch(ft, parent.ID, uploadKindStaticAsset, s, nil)
@@ -185,6 +210,30 @@ func TestEmitUploadBatchEmitsOneSpanWithCountsAndBytes(t *testing.T) {
 	}
 	if got := attrValue(got.attrs, AttrBytes(0).Key); got != "300" {
 		t.Errorf("bytes attr = %q, want %q", got, "300")
+	}
+}
+
+func TestEmitUploadBatchReportsZeroResourceCountForAFullyCachedPhase(t *testing.T) {
+	t.Parallel()
+
+	ft := &fakeTracer{}
+	s := newUploadBatchStats()
+	base := time.Unix(6500, 0)
+	for i := 0; i < 5000; i++ {
+		s.record(uploadOutcome{Start: base, End: base.Add(time.Millisecond), Transferred: false})
+	}
+
+	emitUploadBatch(ft, NewRootStage("Uploading").ID, uploadKindStaticAsset, s, nil)
+
+	if len(ft.spans) != 1 {
+		t.Fatalf("got %d spans, want 1: a fully-cached phase still emits its batch span", len(ft.spans))
+	}
+	got := ft.spans[0]
+	if v := attrValue(got.attrs, AttrResourceCount(0).Key); v != "0" {
+		t.Errorf("resource count attr = %q, want %q", v, "0")
+	}
+	if v := attrValue(got.attrs, AttrBytes(0).Key); v != "0" {
+		t.Errorf("bytes attr = %q, want %q", v, "0")
 	}
 }
 

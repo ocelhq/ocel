@@ -198,22 +198,22 @@ func copyFileInto(w io.Writer, path string) error {
 	return err
 }
 
-func uploadArtifact(ctx context.Context, up ArtifactUploader, bucket, key, contentType string, body func() ([]byte, error)) error {
-	_, err := up.HeadObject(ctx, &s3.HeadObjectInput{
+func uploadArtifact(ctx context.Context, up ArtifactUploader, bucket, key, contentType string, body func() ([]byte, error)) (transferred bool, err error) {
+	_, err = up.HeadObject(ctx, &s3.HeadObjectInput{
 		Bucket: aws.String(bucket),
 		Key:    aws.String(key),
 	})
 	if err == nil {
-		return nil
+		return false, nil
 	}
 	if !isNotFound(err) {
-		return fmt.Errorf("head artifact %s/%s: %w", bucket, key, err)
+		return false, fmt.Errorf("head artifact %s/%s: %w", bucket, key, err)
 	}
 	data, err := body()
 	if err != nil {
-		return err
+		return false, err
 	}
-	return putArtifact(ctx, up, bucket, key, contentType, data)
+	return true, putArtifact(ctx, up, bucket, key, contentType, data)
 }
 
 func putArtifact(ctx context.Context, up ArtifactUploader, bucket, key, contentType string, data []byte) error {
@@ -234,7 +234,7 @@ func putArtifact(ctx context.Context, up ArtifactUploader, bucket, key, contentT
 func tracedUpload(ctx context.Context, up ArtifactUploader, bucket, key, contentType string, body func() ([]byte, error), stats *uploadBatchStats) error {
 	start := time.Now()
 	var size int64
-	err := uploadArtifact(ctx, up, bucket, key, contentType, func() ([]byte, error) {
+	transferred, err := uploadArtifact(ctx, up, bucket, key, contentType, func() ([]byte, error) {
 		data, err := body()
 		if err == nil {
 			size = int64(len(data))
@@ -242,7 +242,7 @@ func tracedUpload(ctx context.Context, up ArtifactUploader, bucket, key, content
 		return data, err
 	})
 	if stats != nil {
-		stats.record(uploadOutcome{Bytes: size, Start: start, End: time.Now(), Failed: err != nil, Err: err})
+		stats.record(uploadOutcome{Bytes: size, Start: start, End: time.Now(), Failed: err != nil, Err: err, Transferred: transferred})
 	}
 	return err
 }
@@ -251,7 +251,7 @@ func tracedPut(ctx context.Context, up ArtifactUploader, bucket, key, contentTyp
 	start := time.Now()
 	err := putArtifact(ctx, up, bucket, key, contentType, data)
 	if stats != nil {
-		stats.record(uploadOutcome{Bytes: int64(len(data)), Start: start, End: time.Now(), Failed: err != nil, Err: err})
+		stats.record(uploadOutcome{Bytes: int64(len(data)), Start: start, End: time.Now(), Failed: err != nil, Err: err, Transferred: true})
 	}
 	return err
 }
