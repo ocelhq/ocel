@@ -179,7 +179,7 @@ func envSession(ctx context.Context, d deps, cwd string, opts envOptions, stdout
 	if err := opts.checkEnvironment(); err != nil {
 		return err
 	}
-	cfg, err := projectconfig.Resolve(cwd)
+	cfg, err := projectconfig.Resolve(ctx, cwd)
 	if err != nil {
 		return err
 	}

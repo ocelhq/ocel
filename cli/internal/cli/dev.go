@@ -53,7 +53,7 @@ func runDev(ctx context.Context, d deps, cmd *cobra.Command, cwd string, appArgs
 		return &ExitError{Code: 1}
 	}
 
-	cfg, err := projectconfig.ResolveOptional(cwd)
+	cfg, err := projectconfig.ResolveOptional(ctx, cwd)
 	if err != nil {
 		return err
 	}
@@ -128,6 +128,8 @@ func runLeader(ctx context.Context, d deps, role election.Result, creds credenti
 	appCmd.Stdin = stdin
 	appCmd.Stdout = stdout
 	appCmd.Stderr = stderr
+	setNewProcessGroup(appCmd)
+	appCmd.Cancel = func() error { return killProcessGroup(appCmd) }
 	return waitExitError(appCmd.Run())
 }
 
@@ -273,6 +275,7 @@ func startFollowerChild(ctx context.Context, appArgs []string, env map[string]st
 	appCmd.Stdout = stdout
 	appCmd.Stderr = stderr
 	setNewProcessGroup(appCmd)
+	appCmd.Cancel = func() error { return killProcessGroup(appCmd) }
 	if err := appCmd.Start(); err != nil {
 		return nil, err
 	}

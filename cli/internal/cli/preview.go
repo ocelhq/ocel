@@ -142,7 +142,7 @@ func init() {
 }
 
 func runPreviewUp(ctx context.Context, d deps, cwd string, opts previewUpOptions, stdout, stderr io.Writer, stdin io.Reader) error {
-	cfg, err := projectconfig.Resolve(cwd)
+	cfg, err := projectconfig.Resolve(ctx, cwd)
 	if err != nil {
 		return err
 	}
@@ -311,7 +311,7 @@ func checkGlobalPreviewDomain(global *deploymentsv1.GlobalPreviewDomain, id *dep
 }
 
 func runPreviewRm(ctx context.Context, d deps, cwd string, opts previewRmOptions, stdout, stderr io.Writer, stdin io.Reader) error {
-	cfg, err := projectconfig.Resolve(cwd)
+	cfg, err := projectconfig.Resolve(ctx, cwd)
 	if err != nil {
 		return err
 	}
@@ -379,7 +379,7 @@ func runPreviewRm(ctx context.Context, d deps, cwd string, opts previewRmOptions
 }
 
 func runPreviewLs(ctx context.Context, d deps, cwd string, stdout, stderr io.Writer) error {
-	cfg, err := projectconfig.Resolve(cwd)
+	cfg, err := projectconfig.Resolve(ctx, cwd)
 	if err != nil {
 		return err
 	}
@@ -419,7 +419,7 @@ func runPreviewPrune(ctx context.Context, d deps, cwd string, opts previewPruneO
 		return err
 	}
 
-	cfg, err := projectconfig.Resolve(cwd)
+	cfg, err := projectconfig.Resolve(ctx, cwd)
 	if err != nil {
 		return err
 	}
