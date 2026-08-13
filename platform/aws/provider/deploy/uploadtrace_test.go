@@ -1,6 +1,7 @@
 package deploy
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"strings"
@@ -35,21 +36,43 @@ func TestUploadBatchStatsCountsAndSumsBytes(t *testing.T) {
 	}
 }
 
-func TestUploadBatchStatsRecordsFailuresUncapped(t *testing.T) {
+func TestUploadBatchStatsCapsFailuresKeepingTheFirstN(t *testing.T) {
 	t.Parallel()
 
 	s := newUploadBatchStats()
 	base := time.Unix(2000, 0)
-	for i := 0; i < maxUploadLatencyStandouts+5; i++ {
-		s.record(uploadOutcome{Start: base, End: base.Add(time.Millisecond), Failed: true, Err: errors.New("boom")})
+	for i := 0; i < maxUploadFailureStandouts+5; i++ {
+		s.record(uploadOutcome{Start: base, End: base.Add(time.Millisecond), Failed: true, Err: fmt.Errorf("boom %d", i)})
 	}
 
 	snap := s.snapshot()
-	if len(snap.failures) != maxUploadLatencyStandouts+5 {
-		t.Fatalf("len(failures) = %d, want %d: failures must never be dropped", len(snap.failures), maxUploadLatencyStandouts+5)
+	if len(snap.failures) != maxUploadFailureStandouts {
+		t.Fatalf("len(failures) = %d, want %d", len(snap.failures), maxUploadFailureStandouts)
+	}
+	if snap.count != maxUploadFailureStandouts+5 {
+		t.Fatalf("count = %d, want %d: every attempt still counts even once failures are capped", snap.count, maxUploadFailureStandouts+5)
 	}
 	if snap.dropped != 0 {
-		t.Fatalf("dropped = %d, want 0 (only latency standouts are capped)", snap.dropped)
+		t.Fatalf("dropped = %d, want 0 (dropped tracks evicted latency standouts, not capped failures)", snap.dropped)
+	}
+}
+
+func TestUploadBatchStatsDropsCanceledFailures(t *testing.T) {
+	t.Parallel()
+
+	s := newUploadBatchStats()
+	base := time.Unix(2500, 0)
+	s.record(uploadOutcome{Start: base, End: base.Add(time.Millisecond), Failed: true, Err: errors.New("access denied")})
+	for i := 0; i < 500; i++ {
+		s.record(uploadOutcome{Start: base, End: base.Add(time.Millisecond), Failed: true, Err: context.Canceled})
+	}
+
+	snap := s.snapshot()
+	if len(snap.failures) != 1 {
+		t.Fatalf("len(failures) = %d, want 1: cancellation cascade carries nothing the batch error doesn't already say", len(snap.failures))
+	}
+	if snap.failures[0].Kind != ErrorKindFailed {
+		t.Errorf("kind = %q, want %q", snap.failures[0].Kind, ErrorKindFailed)
 	}
 }
 
@@ -175,15 +198,17 @@ func TestEmitUploadBatchSkipsWhenNothingHappened(t *testing.T) {
 	}
 }
 
-func TestEmitUploadBatchGivesEveryFailureItsOwnSpanUncapped(t *testing.T) {
+func TestEmitUploadBatchCapsTheCancellationCascadeButKeepsTheCausalFailure(t *testing.T) {
 	t.Parallel()
 
 	ft := &fakeTracer{}
 	s := newUploadBatchStats()
 	base := time.Unix(7000, 0)
-	const failures = maxUploadLatencyStandouts + 3
-	for i := 0; i < failures; i++ {
-		s.record(uploadOutcome{Start: base, End: base.Add(time.Millisecond), Failed: true, Err: errors.New("access denied for bucket x")})
+
+	s.record(uploadOutcome{Start: base, End: base.Add(time.Millisecond), Failed: true, Err: errors.New("access denied for bucket x")})
+	const cascade = 5000
+	for i := 0; i < cascade; i++ {
+		s.record(uploadOutcome{Start: base, End: base.Add(time.Millisecond), Failed: true, Err: context.Canceled})
 	}
 
 	parent := NewRootStage("Uploading")
@@ -198,8 +223,11 @@ func TestEmitUploadBatchGivesEveryFailureItsOwnSpanUncapped(t *testing.T) {
 			}
 		}
 	}
-	if failureSpans != failures {
-		t.Fatalf("failure spans = %d, want %d: failures must never be capped", failureSpans, failures)
+	if failureSpans != 1 {
+		t.Fatalf("failure spans = %d, want 1: the cancellation cascade must not each get a span, and the causal failure must survive", failureSpans)
+	}
+	if len(ft.spans) > maxUploadFailureStandouts+maxUploadLatencyStandouts+1 {
+		t.Fatalf("total spans = %d, unbounded relative to the cascade size %d", len(ft.spans), cascade)
 	}
 }
 
@@ -273,7 +301,7 @@ func TestUploadStandoutNameIsBoundedNeverDynamic(t *testing.T) {
 	}
 }
 
-func TestNoFreeFormTextReachesAnUploadSpan(t *testing.T) {
+func TestUploadFailuresNeverCarryTheRawErrorPastRecord(t *testing.T) {
 	t.Parallel()
 
 	const (
@@ -284,19 +312,34 @@ func TestNoFreeFormTextReachesAnUploadSpan(t *testing.T) {
 	)
 	rawErr := fmt.Errorf("upload artifact %s/%s: dial %s: connection refused (path %s)", secretBucket, secretKey, secretURL, secretPath)
 
-	ft := &fakeTracer{}
 	s := newUploadBatchStats()
 	base := time.Unix(10000, 0)
 	s.record(uploadOutcome{Start: base, End: base.Add(time.Millisecond), Failed: true, Err: rawErr})
-	s.record(uploadOutcome{Start: base, End: base.Add(uploadLatencyOutlierThreshold + time.Millisecond)})
 
-	emitUploadBatch(ft, NewRootStage("Uploading").ID, uploadKindFunctionArtifact, s, rawErr)
+	snap := s.snapshot()
+	if len(snap.failures) != 1 {
+		t.Fatalf("failures = %d, want 1", len(snap.failures))
+	}
+	if snap.failures[0].Kind != ErrorKindFailed {
+		t.Errorf("kind = %q, want %q", snap.failures[0].Kind, ErrorKindFailed)
+	}
+
+	ft := &fakeTracer{}
+	emitUploadBatch(ft, NewRootStage("Uploading").ID, uploadKindFunctionArtifact, s, nil)
 
 	forbidden := []string{secretBucket, secretKey, secretPath, secretURL}
 	for _, sp := range ft.spans {
+		if sp.name == uploadStandoutName(uploadKindFunctionArtifact, true) {
+			if sp.err != errUploadBatchFailed && sp.err != context.Canceled && sp.err != context.DeadlineExceeded {
+				t.Fatalf("failure standout span err = %v, not one of the fixed sentinel kinds: the raw error crossed the Tracer boundary", sp.err)
+			}
+		}
 		for _, needle := range forbidden {
 			if strings.Contains(sp.name, needle) {
 				t.Fatalf("span name %q leaked %q", sp.name, needle)
+			}
+			if sp.err != nil && strings.Contains(sp.err.Error(), needle) {
+				t.Fatalf("span %q err leaked %q", sp.name, needle)
 			}
 			for _, a := range sp.attrs {
 				if strings.Contains(a.Value, needle) {
