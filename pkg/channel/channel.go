@@ -1,6 +1,7 @@
 package channel
 
 import (
+	"context"
 	"crypto/subtle"
 	"fmt"
 	"strconv"
@@ -58,6 +59,22 @@ func FormatUnixAddr(path string) string {
 
 func FormatTCPAddr(port int) string {
 	return fmt.Sprintf("tcp:127.0.0.1:%d", port)
+}
+
+const TraceParentHeader = "traceparent"
+
+type traceParentKey struct{}
+
+func WithTraceParent(ctx context.Context, traceparent string) context.Context {
+	if traceparent == "" {
+		return ctx
+	}
+	return context.WithValue(ctx, traceParentKey{}, traceparent)
+}
+
+func TraceParentFromContext(ctx context.Context) (string, bool) {
+	traceparent, ok := ctx.Value(traceParentKey{}).(string)
+	return traceparent, ok
 }
 
 func ParseAddr(addr string) (network, address string, err error) {

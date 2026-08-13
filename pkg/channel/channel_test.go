@@ -1,6 +1,9 @@
 package channel
 
-import "testing"
+import (
+	"context"
+	"testing"
+)
 
 func TestReadinessLine(t *testing.T) {
 	t.Parallel()
@@ -166,6 +169,37 @@ func TestAuthHeader(t *testing.T) {
 					t.Fatalf("ParseAuthHeader(%q) ok = true, want false", tc.value)
 				}
 			})
+		}
+	})
+}
+
+func TestTraceParentContext(t *testing.T) {
+	t.Parallel()
+
+	t.Run("round trips a traceparent", func(t *testing.T) {
+		t.Parallel()
+		ctx := WithTraceParent(context.Background(), "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01")
+		got, ok := TraceParentFromContext(ctx)
+		if !ok {
+			t.Fatalf("TraceParentFromContext() ok = false, want true")
+		}
+		if got != "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01" {
+			t.Fatalf("TraceParentFromContext() = %q", got)
+		}
+	})
+
+	t.Run("an empty traceparent leaves the context untouched", func(t *testing.T) {
+		t.Parallel()
+		ctx := WithTraceParent(context.Background(), "")
+		if _, ok := TraceParentFromContext(ctx); ok {
+			t.Fatalf("TraceParentFromContext() ok = true, want false")
+		}
+	})
+
+	t.Run("a context with nothing stored", func(t *testing.T) {
+		t.Parallel()
+		if _, ok := TraceParentFromContext(context.Background()); ok {
+			t.Fatalf("TraceParentFromContext() ok = true, want false")
 		}
 	})
 }
