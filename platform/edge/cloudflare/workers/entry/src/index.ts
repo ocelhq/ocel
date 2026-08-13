@@ -92,6 +92,10 @@ function isFlightRequest(headers: Headers): boolean {
   return FLIGHT_VARY_HEADERS.some((name) => headers.has(name));
 }
 
+function isRscRequest(headers: Headers): boolean {
+  return headers.get("RSC") === "1";
+}
+
 function withFlightVary(response: Response): Response {
   const tagged = new Response(response.body, response);
   tagged.headers.set("vary", FLIGHT_VARY_HEADERS.join(", "));
@@ -1303,7 +1307,8 @@ async function dispatchPrerender(
     const mayPostpone =
       target.config.renderingMode !== "STATIC" &&
       request.method === "GET" &&
-      !hasDraftCookie(request);
+      !hasDraftCookie(request) &&
+      !isRscRequest(request.headers);
 
     if (mayPostpone) {
       const hit = await read();

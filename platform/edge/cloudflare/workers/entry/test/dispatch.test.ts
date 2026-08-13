@@ -1474,10 +1474,18 @@ describe("dispatchResult", () => {
     resumeRequests: () => Request[];
     cachePuts: () => number;
     plainCalled: () => boolean;
+    storeReads: () => number;
   } {
     const resumeRequests: Request[] = [];
     let puts = 0;
     let plainCalled = false;
+    let reads = 0;
+    const countingStore = (store: { get: (key: string) => Promise<unknown> }) => ({
+      get: async (key: string) => {
+        reads++;
+        return store.get(key);
+      },
+    });
     const record = (async (req: Request) => {
       resumeRequests.push(req);
       return new Response(opts.resume, { status: 200, headers: opts.resumeHeaders });
@@ -1518,8 +1526,10 @@ describe("dispatchResult", () => {
       interception: {
         config: interceptionConfig,
         now: () => 2_000,
-        store: storeOf(
-          opts.entry ? { [entryKey(opts.entryPath ?? "ppr")]: opts.entry } : {},
+        store: countingStore(
+          storeOf(
+            opts.entry ? { [entryKey(opts.entryPath ?? "ppr")]: opts.entry } : {},
+          ),
         ),
       },
     });
@@ -1528,6 +1538,7 @@ describe("dispatchResult", () => {
       resumeRequests: () => resumeRequests,
       cachePuts: () => puts,
       plainCalled: () => plainCalled,
+      storeReads: () => reads,
     };
   }
 
@@ -1627,6 +1638,68 @@ describe("dispatchResult", () => {
     expect(resumeRequests()).toHaveLength(0);
     expect(res.headers.get("x-ocel-cache")).toBe("PRERENDER");
     expect(await res.text()).toBe("[rsc-shell]");
+  });
+
+  const pprShellWithFlight = {
+    lastModified: 1_000,
+    value: {
+      kind: "APP_PAGE",
+      html: "[shell]",
+      rscData: btoa("[rsc-shell]"),
+      postponed: "POSTPONED",
+      status: 200,
+      headers: {},
+    },
+  };
+
+  it("answers a Flight navigation with the origin's render alone, never composed onto the shell", async () => {
+    const { deps, resumeRequests } = pprDeps({
+      resume: "[dynamic]",
+      entry: pprShellWithFlight,
+    });
+
+    const res = await dispatchPpr(deps, { rsc: "1" });
+
+    expect(await res.text()).toBe("[dynamic]");
+    expect(res.headers.get("x-ocel-cache")).toBe("MISS");
+    expect(resumeRequests()).toHaveLength(1);
+    expect(resumeRequests()[0].method).toBe("GET");
+  });
+
+  it("does not read the shell out of the store for a Flight navigation", async () => {
+    const { deps, storeReads } = pprDeps({
+      resume: "[dynamic]",
+      entry: pprShellWithFlight,
+    });
+
+    await (await dispatchPpr(deps, { rsc: "1" })).text();
+
+    expect(storeReads()).toBe(0);
+  });
+
+  it("still composes the document request against the same entry", async () => {
+    const { deps, resumeRequests } = pprDeps({
+      resume: "[dynamic]",
+      entry: pprShellWithFlight,
+    });
+
+    const res = await dispatchPpr(deps);
+
+    expect(await res.text()).toBe("[shell][dynamic]");
+    expect(res.headers.get("x-ocel-cache")).toBe("PRERENDER");
+    expect(resumeRequests()[0].method).toBe("POST");
+  });
+
+  it("treats a malformed RSC header as a document request, matching the origin", async () => {
+    const { deps, resumeRequests } = pprDeps({
+      resume: "[dynamic]",
+      entry: pprShellWithFlight,
+    });
+
+    const res = await dispatchPpr(deps, { rsc: "2" });
+
+    expect(await res.text()).toBe("[shell][dynamic]");
+    expect(resumeRequests()[0].method).toBe("POST");
   });
 
   it("never puts a composed PPR response into the colo cache", async () => {
