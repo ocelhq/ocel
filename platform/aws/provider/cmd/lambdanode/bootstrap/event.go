@@ -62,6 +62,9 @@ func buildLoopbackRequest(ctx context.Context, nodePort int, ev *funcURLRequest)
 	if err != nil {
 		return nil, err
 	}
+	if len(body) > 0 {
+		req.Close = true
+	}
 	for k, v := range ev.Headers {
 		req.Header.Set(k, v)
 	}

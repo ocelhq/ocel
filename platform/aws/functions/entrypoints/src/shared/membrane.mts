@@ -174,6 +174,7 @@ function wrapWithOcelContext(invoke: Invoke): http.RequestListener {
     const finalize = (): void => {
       if (finalized) return;
       finalized = true;
+      if (!req.readableEnded) req.resume();
       sendControl("request-end", {
         requestId,
         status: res.statusCode,
