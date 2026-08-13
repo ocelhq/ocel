@@ -101,23 +101,27 @@ type Config struct {
 
 	RootStackState edge.RootStackState
 
-	// Stages are the top-level stages the caller has already declared
-	// before calling Run, so their execution can be timed and reported as
-	// spans parented correctly under them. A zero Stages is valid: no
-	// spans are produced for these phases.
-	Stages Stages
-
-	// Tracer receives the per-app stage plan and every span Run
-	// synthesises. A nil Tracer is a valid no-op.
-	Tracer Tracer
+	Stages    Stages
+	AppStages map[string]Stage
+	Tracer    Tracer
 }
 
-// Stages are the top-level stage plan a caller declares before invoking
-// Run, mirroring the deploy pipeline's four phases.
 type Stages struct {
 	Uploading    Stage
 	Provisioning Stage
 	Finalizing   Stage
+}
+
+func AppStages(provisioning Stage, manifest *deploymentsv1.Manifest) (map[string]Stage, []Stage) {
+	apps := manifestApps(manifest)
+	byApp := make(map[string]Stage, len(apps))
+	declared := make([]Stage, 0, len(apps))
+	for _, app := range apps {
+		s := NewStage(provisioning, app.GetName())
+		byApp[app.GetName()] = s
+		declared = append(declared, s)
+	}
+	return byApp, declared
 }
 
 type Progress func(phase deploymentsv1.Phase, message string, current, total uint32)
