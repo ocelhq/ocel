@@ -45,6 +45,8 @@ var devCmd = &cobra.Command{
 }
 
 func runDev(ctx context.Context, d deps, cmd *cobra.Command, cwd string, appArgs []string, stdout, stderr io.Writer, stdin io.Reader) error {
+	// TODO: unlike build/deploy, this never calls obs.Start, so discovery
+	// below produces no spans or logs and nothing else says so.
 	creds, err := d.loadCredentials()
 	if err != nil {
 		fmt.Fprintln(stderr, "You're not logged in. Run `ocel login` first.")
