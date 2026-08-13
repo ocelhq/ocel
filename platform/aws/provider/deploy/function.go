@@ -32,6 +32,9 @@ const (
 
 	execWrapper = "/opt/ocel/bootstrap"
 
+	// TODO: layer 32 carries the drain fix but not serveServer; publish a layer from
+	// this tree and move the default onto it, or node apps keep billing a full
+	// invocation budget per request.
 	defaultMembraneLayerARN = "arn:aws:lambda:us-east-1:363236815301:layer:ocel-membrane:32"
 	membraneLayerARNEnv     = "OCEL_MEMBRANE_LAYER_ARN"
 

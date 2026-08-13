@@ -36,6 +36,8 @@ type Membrane struct {
 
 	bytecodeKey string
 
+	lifecycle bool
+
 	mu           sync.Mutex
 	pending      map[string]chan struct{}
 	flushWaiter  chan compileCacheFlushedPayload
@@ -55,7 +57,7 @@ func (m *Membrane) bytecodeCached() bool {
 }
 
 func (m *Membrane) registerWaiter(requestID string) <-chan struct{} {
-	if m.pending == nil {
+	if m.pending == nil || !m.lifecycle {
 		return nil
 	}
 	ch := make(chan struct{})
@@ -258,7 +260,8 @@ type invocationCompletePayload struct {
 	RequestID string `json:"requestId"`
 }
 type serverReadyPayload struct {
-	HTTPPort int `json:"httpPort"`
+	HTTPPort  int  `json:"httpPort"`
+	Lifecycle bool `json:"lifecycle"`
 }
 
 type compileCacheFlushedPayload struct {
@@ -309,9 +312,10 @@ func (l *lastLog) suffix() string {
 }
 
 type nodeReady struct {
-	control  net.Conn
-	reader   *bufio.Reader
-	httpPort int
+	control   net.Conn
+	reader    *bufio.Reader
+	httpPort  int
+	lifecycle bool
 }
 
 func awaitReady(ln net.Listener, exited <-chan error, budget time.Duration, onControl func(io.Writer), abandon <-chan struct{}) (*nodeReady, error) {
@@ -373,7 +377,7 @@ func handshake(ln net.Listener, log *lastLog, onControl func(io.Writer)) (*nodeR
 			if err := json.Unmarshal(msg.Payload, &p); err != nil {
 				return nil, err
 			}
-			return &nodeReady{control: control, reader: reader, httpPort: p.HTTPPort}, nil
+			return &nodeReady{control: control, reader: reader, httpPort: p.HTTPPort, lifecycle: p.Lifecycle}, nil
 		}
 	}
 }
@@ -430,10 +434,15 @@ func startNode(extraEnv []string, budget time.Duration, onControl func(io.Writer
 	}
 
 	m := &Membrane{
-		control:  ready.control,
-		nodePort: ready.httpPort,
-		pending:  map[string]chan struct{}{},
-		client:   newLoopbackClient(),
+		control:   ready.control,
+		nodePort:  ready.httpPort,
+		lifecycle: ready.lifecycle,
+		pending:   map[string]chan struct{}{},
+		client:    newLoopbackClient(),
+	}
+	if !ready.lifecycle {
+		fmt.Fprintln(os.Stderr,
+			"ocel: this app's entrypoint does not signal when an invocation is over, so waitUntil work is not awaited")
 	}
 
 	go m.drainControl(ready.reader)
