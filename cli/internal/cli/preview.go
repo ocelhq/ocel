@@ -334,7 +334,8 @@ func runPreviewRm(ctx context.Context, d deps, cwd string, opts previewRmOptions
 		proceed, err := confirmDestroyPreview(ctx, env.GetIdentity(), stdout, stdin)
 		if err != nil {
 			if ctx.Err() != nil {
-				return &ExitError{Code: 1}
+				fmt.Fprintln(stdout, "Interrupted.")
+				return &ExitError{Code: interruptExitCode}
 			}
 			return err
 		}
