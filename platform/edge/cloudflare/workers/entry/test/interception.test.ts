@@ -540,6 +540,93 @@ describe("intercept, PPR entries", () => {
     expect(await res.text()).toBe("TREE-SEG");
   });
 
+  const segmentReq = () =>
+    req({
+      headers: {
+        RSC: "1",
+        "next-router-prefetch": "1",
+        "next-router-segment-prefetch": "/_tree",
+      },
+    });
+
+  const readSegment = (
+    t: InterceptTarget,
+    entries: Record<string, unknown>,
+    now: number,
+  ) =>
+    intercept(segmentReq(), t, cfg, storeDeps(stored(entries), { now: () => now }));
+
+  const concreteTarget = () =>
+    pprTarget({ routePath: "/posts/7", fallbackPath: "/posts/[id]" });
+
+  it("answers a segment prefetch from the fallback when the concrete entry carries no segmentData", async () => {
+    const outcome = await readSegment(
+      concreteTarget(),
+      {
+        [entryKey("/posts/7")]: pprEntry(),
+        [entryKey("/posts/[id]")]: pprEntry({
+          segmentData: { "/_tree": btoa("FALLBACK-TREE") },
+        }),
+      },
+      2_000,
+    );
+
+    expect(outcome?.kind).toBe("complete");
+    const res = (outcome as { response: Response }).response;
+    expect(res.status).toBe(200);
+    expect(res.headers.get("x-nextjs-postponed")).toBe("2");
+    expect(await res.text()).toBe("FALLBACK-TREE");
+  });
+
+  it("dates a segment served from the fallback by the fallback, not the concrete entry", async () => {
+    const outcome = await readSegment(
+      concreteTarget(),
+      {
+        [entryKey("/posts/7")]: pprEntry({ lastModified: 65_000 }),
+        [entryKey("/posts/[id]")]: pprEntry({
+          lastModified: 1_000,
+          segmentData: { "/_tree": btoa("FALLBACK-TREE") },
+        }),
+      },
+      70_000,
+    );
+
+    expect(outcome).toMatchObject({ lastModified: 1_000, stale: true });
+  });
+
+  it("still prefers the concrete entry when it carries the requested segment", async () => {
+    const outcome = await readSegment(
+      concreteTarget(),
+      {
+        [entryKey("/posts/7")]: pprEntry({
+          segmentData: { "/_tree": btoa("CONCRETE-TREE") },
+        }),
+        [entryKey("/posts/[id]")]: pprEntry({
+          segmentData: { "/_tree": btoa("FALLBACK-TREE") },
+        }),
+      },
+      2_000,
+    );
+
+    const res = (outcome as { response: Response }).response;
+    expect(await res.text()).toBe("CONCRETE-TREE");
+  });
+
+  it("serves nothing when neither the concrete entry nor the fallback holds the segment", async () => {
+    const outcome = await readSegment(
+      concreteTarget(),
+      {
+        [entryKey("/posts/7")]: pprEntry(),
+        [entryKey("/posts/[id]")]: pprEntry({
+          segmentData: { "/_head": btoa("HEAD") },
+        }),
+      },
+      2_000,
+    );
+
+    expect(outcome).toBeNull();
+  });
+
   it("marks a segment prefetch as a segment payload even when the build recorded no such header", async () => {
     const outcome = await intercept(
       req({ headers: { RSC: "1", "next-router-segment-prefetch": "/_tree" } }),

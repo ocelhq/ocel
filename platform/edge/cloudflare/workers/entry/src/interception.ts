@@ -75,8 +75,13 @@ export async function intercept(
     const now = (deps.now ?? Date.now)();
     const clock = deps.tagClock ?? createTagClock(cfg, deps);
 
-    const entryP = readEntry(cfg, deps, target.routePath).then(
-      (e) => e ?? readFallbackShell(cfg, deps, target),
+    const segmentPath = request.headers.get("next-router-segment-prefetch");
+    const entryP = readEntry(cfg, deps, target.routePath).then((concrete) =>
+      concrete && (segmentPath === null || hasSegment(concrete.value, segmentPath))
+        ? concrete
+        : readFallbackEntry(cfg, deps, target, segmentPath).then(
+            (fallback) => fallback ?? concrete,
+          ),
     );
     const primeP = target.tags?.length ? clock.prime(now) : undefined;
     if (primeP) deps.waitUntil?.(primeP.catch(() => {}) as Promise<unknown>);
@@ -100,7 +105,6 @@ export async function intercept(
         ? { stale: false }
         : { stale: true, staleForMs: Math.max(0, staleWindowMs(meta, now)) };
 
-    const segmentPath = request.headers.get("next-router-segment-prefetch");
     if (segmentPath !== null && value.kind === "APP_PAGE") {
       const response = reconstructSegment(value, segmentPath);
       if (!response) return null;
@@ -214,16 +218,21 @@ function isServable(value: Record<string, any>): boolean {
   }
 }
 
-async function readFallbackShell(
+async function readFallbackEntry(
   cfg: InterceptionConfig,
   deps: InterceptDeps,
   target: InterceptTarget,
+  segmentPath: string | null,
 ): Promise<CacheEntryFile | null> {
   if (!target.fallbackPath || target.fallbackPath === target.routePath) {
     return null;
   }
   const entry = await readEntry(cfg, deps, target.fallbackPath);
-  return entry?.value?.postponed === undefined ? null : entry;
+  if (!entry) return null;
+  if (segmentPath !== null) {
+    return hasSegment(entry.value, segmentPath) ? entry : null;
+  }
+  return entry.value?.postponed === undefined ? null : entry;
 }
 
 async function readEntry(
@@ -339,6 +348,13 @@ function reconstruct(
   }
 
   return new Response(body, { status, headers });
+}
+
+function hasSegment(value: Record<string, any>, segmentPath: string): boolean {
+  return (
+    value?.segmentHeaders !== undefined &&
+    value?.segmentData?.[segmentPath] !== undefined
+  );
 }
 
 function reconstructSegment(
