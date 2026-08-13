@@ -291,18 +291,14 @@
     "test/e2e/middleware-general/test/index.test.ts": {
       "failed": [
         "Middleware Runtime with i18n allows to access env variables",
-        "Middleware Runtime with i18n allows shallow linking with middleware",
-        "Middleware Runtime without i18n allows to access env variables",
-        "Middleware Runtime without i18n allows shallow linking with middleware"
+        "Middleware Runtime without i18n allows to access env variables"
       ],
       "flakey": []
     },
     "test/e2e/middleware-general/test/node-runtime.test.ts": {
       "failed": [
         "Middleware Runtime with i18n allows to access env variables",
-        "Middleware Runtime with i18n allows shallow linking with middleware",
-        "Middleware Runtime without i18n allows to access env variables",
-        "Middleware Runtime without i18n allows shallow linking with middleware"
+        "Middleware Runtime without i18n allows to access env variables"
       ],
       "flakey": []
     },
@@ -310,12 +306,6 @@
       "failed": [
         "Middleware Rewrite should handle middleware rewrite with body and headers correctly",
         "Middleware Rewrite should opt out of prefetch caching for dynamic routes"
-      ],
-      "flakey": []
-    },
-    "test/e2e/middleware-trailing-slash/test/index.test.ts": {
-      "failed": [
-        "Middleware Runtime trailing slash allows shallow linking with middleware"
       ],
       "flakey": []
     },
