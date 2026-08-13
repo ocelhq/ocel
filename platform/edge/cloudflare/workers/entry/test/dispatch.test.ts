@@ -3442,6 +3442,120 @@ describe("a generated interception rewrite's prerender key", () => {
   });
 });
 
+describe("an origin that cannot answer a segment prefetch", () => {
+  function scenario(originHeaders: Record<string, string>) {
+    let lambdaCalls = 0;
+    const colo = new Map<string, Response>();
+    const pending: Promise<unknown>[] = [];
+    const settle = async () => {
+      while (pending.length) await pending.shift();
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    };
+
+    const deps = baseDeps({
+      manifest: {
+        buildId: "t",
+        basePath: "",
+        pathnames: ["/settings"],
+        routes: {
+          beforeMiddleware: [],
+          beforeFiles: [],
+          afterFiles: [],
+          dynamicRoutes: [],
+          onMatch: [],
+          fallback: [],
+        } as unknown as RouteDeps["manifest"]["routes"],
+        dispatch: {
+          "/settings": {
+            kind: "prerender",
+            id: "settings",
+            config: { renderingMode: "PARTIALLY_STATIC" },
+            fallback: { initialRevalidate: 60 },
+          },
+        },
+      },
+      functionUrls: { settings: "https://fn.example.com" },
+      fetch: (async () => {
+        lambdaCalls++;
+        return new Response("SHELL-OR-SEGMENT", {
+          status: 200,
+          headers: { "cache-control": "s-maxage=60", ...originHeaders },
+        });
+      }) as unknown as typeof fetch,
+      cache: coloDeps({
+        cache: {
+          match: async (request: Request) => colo.get(request.url)?.clone(),
+          put: async (request: Request, response: Response) => {
+            colo.set(request.url, response);
+          },
+        } as unknown as Cache,
+        waitUntil: (promise: Promise<unknown>) => {
+          pending.push(promise);
+        },
+        now: () => 1_000,
+      }),
+    });
+
+    const prefetch = () =>
+      serve(
+        new Request("https://app.example/settings", {
+          headers: {
+            RSC: "1",
+            "next-router-prefetch": "1",
+            "next-router-segment-prefetch": "/$d$team/$d$project/settings",
+          },
+        }),
+        deps,
+      );
+
+    return { prefetch, settle, colo, lambda: () => lambdaCalls };
+  }
+
+  it("answers a 204 miss instead of handing the client a postponed shell", async () => {
+    const { prefetch, settle } = scenario({ "x-nextjs-postponed": "1" });
+
+    const res = await prefetch();
+    await settle();
+
+    expect(res.status).toBe(204);
+    expect(await res.text()).toBe("");
+  });
+
+  it("stores nothing under the segment key, so the next prefetch is not latched to the shell", async () => {
+    const { prefetch, settle, colo, lambda } = scenario({
+      "x-nextjs-postponed": "1",
+    });
+
+    await (await prefetch()).text();
+    await settle();
+    const second = await prefetch();
+    await settle();
+
+    expect([...colo.keys()]).toEqual([]);
+    expect(second.status).toBe(204);
+    expect(lambda()).toBe(2);
+  });
+
+  it("still caches and serves a real segment payload", async () => {
+    const { prefetch, settle, colo, lambda } = scenario({
+      "x-nextjs-postponed": "2",
+    });
+
+    const first = await prefetch();
+    expect(await first.text()).toBe("SHELL-OR-SEGMENT");
+    await settle();
+
+    const second = await prefetch();
+
+    expect([...colo.keys()]).toEqual([
+      "https://cache.ocel/t/settings.segments/%2F%24d%24team%2F%24d%24project%2Fsettings.segment.rsc",
+    ]);
+    expect(second.headers.get("x-ocel-cache")).toBe("HIT");
+    expect(await second.text()).toBe("SHELL-OR-SEGMENT");
+    expect(lambda()).toBe(1);
+  });
+});
+
 describe("the x-vercel-cache alias", () => {
   const emptyRoutes = {
     beforeMiddleware: [],

@@ -12,6 +12,10 @@ export const NEXT_CACHE_STATUS = "x-nextjs-cache";
 export const VERCEL_CACHE_STATUS = "x-vercel-cache";
 const DRAFT_COOKIE = "__prerender_bypass";
 
+const SEGMENT_PREFETCH = "next-router-segment-prefetch";
+const POSTPONED = "x-nextjs-postponed";
+const SEGMENT_PAYLOAD = "2";
+
 export const SUPPRESS_SELF_REVALIDATION = true;
 
 export type CacheStatus = "HIT" | "PRERENDER" | "MISS" | "STALE" | "BYPASS";
@@ -37,6 +41,7 @@ export interface CacheTarget {
   revalidate?: number;
   expiration?: number;
   revalidation?: RevalidationRoute;
+  segment?: boolean;
 }
 
 export interface CachePolicy {
@@ -131,6 +136,26 @@ export function variantPath(
   if (prefetch !== null) return null;
 
   return renderingMode === "STATIC" ? `${base}.rsc` : null;
+}
+
+export function isSegmentPrefetch(headers: Headers): boolean {
+  return headers.get("RSC") !== null && headers.get(SEGMENT_PREFETCH) !== null;
+}
+
+export function isSegmentPayload(response: Response): boolean {
+  return (
+    response.status === 204 ||
+    response.headers.get(POSTPONED) === SEGMENT_PAYLOAD
+  );
+}
+
+export function asSegmentPayload(response: Response): Response {
+  if (!response.ok || isSegmentPayload(response)) return response;
+  response.body?.cancel();
+  const headers = new Headers();
+  const vary = response.headers.get("vary");
+  if (vary) headers.set("vary", vary);
+  return new Response(null, { status: 204, headers });
 }
 
 export function cacheKey(
@@ -399,7 +424,7 @@ async function claimSentinel(cache: Cache, sentinel: Request): Promise<boolean> 
 export type RefreshOutcome = "landed" | "failed" | "refused";
 
 export function refreshOutcome(response: Response): RefreshOutcome {
-  return response.ok ? "landed" : "refused";
+  return response.ok && response.status !== 204 ? "landed" : "refused";
 }
 
 export const refreshBackoffSeconds = 30;
@@ -464,6 +489,10 @@ async function serveOrAdmitRefresh(
   const now = deps.now ?? Date.now;
   const cached = await deps.cache.match(keyRequest);
   if (!cached || cached.headers.get(ENTRY_VERSION) !== ENTRY_FORMAT) return null;
+  if (target.segment && !isSegmentPayload(cached)) {
+    cached.body?.cancel();
+    return null;
+  }
 
   const modified = Number(cached.headers.get(ENTRY_MODIFIED));
   if (!Number.isFinite(modified)) return null;

@@ -540,6 +540,27 @@ describe("intercept, PPR entries", () => {
     expect(await res.text()).toBe("TREE-SEG");
   });
 
+  it("marks a segment prefetch as a segment payload even when the build recorded no such header", async () => {
+    const outcome = await intercept(
+      req({ headers: { RSC: "1", "next-router-segment-prefetch": "/_tree" } }),
+      pprTarget(),
+      cfg,
+      storeDeps(
+        stored({
+          [entryKey("/blog")]: pprEntry({
+            segmentData: { "/_tree": btoa("TREE-SEG") },
+            segmentHeaders: { "content-type": "text/x-component" },
+          }),
+        }),
+        { now: () => 2_000 },
+      ),
+    );
+
+    const res = (outcome as { response: Response }).response;
+    expect(res.headers.get("x-nextjs-postponed")).toBe("2");
+    expect(await res.text()).toBe("TREE-SEG");
+  });
+
   it.each([
     ["fresh", 2_000, false],
     ["stale", 1_000 + 61_000, true],
