@@ -551,6 +551,54 @@ func TestBuildWriterHonoursVerbosityIndependentlyOfLiveness(t *testing.T) {
 	}
 }
 
+func TestDiagnosticAlwaysReachesTheTerminalRegardlessOfVerbosity(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		name    string
+		verbose bool
+	}{
+		{"non-verbose", false},
+		{"verbose", true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			dir := t.TempDir()
+			run := startTestRun(t, dir, "ocel deploy")
+			var out bytes.Buffer
+			s := New(&out, run, FormatHuman, tc.verbose)
+			t.Cleanup(func() { _ = s.Close() })
+
+			s.Diagnostic("no functions to deploy; deploying infrastructure only")
+
+			if !strings.Contains(out.String(), "no functions to deploy; deploying infrastructure only") {
+				t.Errorf("stdout = %q, want the diagnostic always visible", out.String())
+			}
+		})
+	}
+}
+
+func TestDiagnosticEmitsAStructuredRecordUnderJSONFormat(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	run := startTestRun(t, dir, "ocel deploy")
+	var out bytes.Buffer
+	s := New(&out, run, FormatJSON, false)
+	t.Cleanup(func() { _ = s.Close() })
+
+	s.Diagnostic("warning: POSTHOG_ID is scoped to /web, which no app binds")
+
+	var rec map[string]any
+	if err := json.Unmarshal(bytes.TrimSpace(out.Bytes()), &rec); err != nil {
+		t.Fatalf("stdout = %q is not JSON: %v", out.String(), err)
+	}
+	if rec["type"] != "diagnostic" {
+		t.Errorf("record type = %v, want %q", rec["type"], "diagnostic")
+	}
+	if rec["message"] != "warning: POSTHOG_ID is scoped to /web, which no app binds" {
+		t.Errorf("record message = %v, want the diagnostic text", rec["message"])
+	}
+}
+
 func TestFormatAxis(t *testing.T) {
 	t.Run("json format emits one machine-readable line per event, never the human text", func(t *testing.T) {
 		t.Parallel()

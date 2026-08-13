@@ -2,6 +2,7 @@ package cli
 
 import (
 	"bufio"
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -11,6 +12,7 @@ import (
 	"os/signal"
 	"path/filepath"
 	"strings"
+	"sync"
 	"syscall"
 	"time"
 
@@ -148,7 +150,7 @@ func runDeploy(ctx context.Context, d deps, cwd string, opts deployOptions, stdo
 			stdout:  stdout,
 			enabled: d.canOpenVarsUI(stdin, opts.noUI),
 		}
-		manifest, err := recovery.buildManifest(ctx, opts.prebuilt, ui.BuildWriter())
+		manifest, err := recovery.buildManifest(ctx, opts.prebuilt)
 		if err != nil {
 			return err
 		}
@@ -197,10 +199,14 @@ func runDeploy(ctx context.Context, d deps, cwd string, opts deployOptions, stdo
 	return nil
 }
 
-func collectAndBuildManifest(ctx context.Context, d deps, cfg *projectconfig.Config, gate *envgate.Gate, prebuilt bool, buildOut io.Writer) (*deploymentsv1.Manifest, error) {
-	resources, err := deploycollector.Collect(ctx, cfg, gate, buildOut, buildOut)
+func collectAndBuildManifest(ctx context.Context, d deps, cfg *projectconfig.Config, gate *envgate.Gate, prebuilt bool, ui *deployui.Session) (*deploymentsv1.Manifest, error) {
+	buildOut := ui.BuildWriter()
+
+	captured := &boundedCapture{}
+	tee := io.MultiWriter(buildOut, captured)
+	resources, err := deploycollector.Collect(ctx, cfg, gate, tee, tee)
 	if err != nil {
-		return nil, err
+		return nil, captured.annotate(err)
 	}
 
 	warnings, err := envgate.Lint(gate.Definitions(), envApps(cfg), filepath.Join(cfg.Dir, projectconfig.ConfigFileName))
@@ -208,7 +214,7 @@ func collectAndBuildManifest(ctx context.Context, d deps, cfg *projectconfig.Con
 		return nil, err
 	}
 	for _, warning := range warnings {
-		fmt.Fprintln(buildOut, "warning: "+warning)
+		ui.Diagnostic("warning: " + warning)
 	}
 	if err := gate.Check(); err != nil {
 		return nil, err
@@ -225,7 +231,7 @@ func collectAndBuildManifest(ctx context.Context, d deps, cfg *projectconfig.Con
 		if err := clientenv.CheckFresh(cfg.Dir, clients); err != nil {
 			return nil, err
 		}
-		fmt.Fprintln(buildOut, "using prebuilt output in .ocel/output")
+		ui.Diagnostic("using prebuilt output in .ocel/output")
 	} else {
 		if err := clientenv.Generate(clients); err != nil {
 			return nil, err
@@ -247,10 +253,39 @@ func collectAndBuildManifest(ctx context.Context, d deps, cfg *projectconfig.Con
 		if len(resources) == 0 {
 			return nil, nil
 		}
-		fmt.Fprintln(buildOut, "no functions to deploy; deploying infrastructure only")
+		ui.Diagnostic("no functions to deploy; deploying infrastructure only")
 	}
 
 	return manifestbuilder.Build(cfg.Slug, cfg.Domains, toApps(cfg.Apps), toDeclarations(resources), functions, variablesByApp(variables, functions))
+}
+
+const maxCapturedDiscoveryOutput = 4096
+
+type boundedCapture struct {
+	mu  sync.Mutex
+	buf bytes.Buffer
+}
+
+func (c *boundedCapture) Write(p []byte) (int, error) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if room := maxCapturedDiscoveryOutput - c.buf.Len(); room > 0 {
+		if room > len(p) {
+			room = len(p)
+		}
+		c.buf.Write(p[:room])
+	}
+	return len(p), nil
+}
+
+func (c *boundedCapture) annotate(err error) error {
+	c.mu.Lock()
+	text := strings.TrimSpace(c.buf.String())
+	c.mu.Unlock()
+	if text == "" {
+		return err
+	}
+	return fmt.Errorf("%w\n%s", err, text)
 }
 
 const rootApp = "this project's app"

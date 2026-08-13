@@ -200,7 +200,7 @@ func runPreviewUp(ctx context.Context, d deps, cwd string, opts previewUpOptions
 			stdout:  stdout,
 			enabled: d.canOpenVarsUI(stdin, opts.noUI),
 		}
-		manifest, err := recovery.buildManifest(ctx, opts.prebuilt, ui.BuildWriter())
+		manifest, err := recovery.buildManifest(ctx, opts.prebuilt)
 		if err != nil {
 			return err
 		}
