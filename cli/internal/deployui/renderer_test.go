@@ -204,11 +204,14 @@ func TestFormatDurationRoundsToWholeSeconds(t *testing.T) {
 		want string
 	}{
 		{0, "0s"},
-		{400 * time.Millisecond, "1s"},
+		{40 * time.Millisecond, "<1s"},
+		{499 * time.Millisecond, "<1s"},
+		{500 * time.Millisecond, "1s"},
 		{1100 * time.Millisecond, "1s"},
 		{1600 * time.Millisecond, "2s"},
 		{59*time.Second + 600*time.Millisecond, "1m00s"},
 		{90 * time.Second, "1m30s"},
+		{-2 * time.Second, "0s"},
 	}
 	for _, tc := range cases {
 		if got := formatDuration(tc.d); got != tc.want {

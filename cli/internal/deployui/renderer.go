@@ -590,10 +590,13 @@ func bar(current, total uint32) string {
 }
 
 func formatDuration(d time.Duration) string {
-	rounded := d.Round(time.Second)
-	if rounded <= 0 && d > 0 {
-		rounded = time.Second
+	if d <= 0 {
+		return "0s"
 	}
+	if d < 500*time.Millisecond {
+		return "<1s"
+	}
+	rounded := d.Round(time.Second)
 	if rounded < time.Minute {
 		return fmt.Sprintf("%ds", int(rounded/time.Second))
 	}
