@@ -16,20 +16,7 @@
     "test/e2e/app-dir/actions/app-action-node-middleware.test.ts": {
       "failed": [
         "app-dir action handling should handle actions executed in quick succession",
-        "app-dir action handling should not error when a forwarded action triggers a redirect (edge)",
-        "app-dir action handling redirects redirects properly when route handler uses `redirect`",
-        "app-dir action handling redirects redirects properly when route handler uses `permanentRedirect`",
-        "app-dir action handling redirects redirects properly when route handler redirects with a 307 status code",
-        "app-dir action handling redirects redirects properly when route handler redirects with a 308 status code"
-      ],
-      "flakey": []
-    },
-    "test/e2e/app-dir/actions/app-action.test.ts": {
-      "failed": [
-        "app-dir action handling redirects redirects properly when route handler uses `redirect`",
-        "app-dir action handling redirects redirects properly when route handler uses `permanentRedirect`",
-        "app-dir action handling redirects redirects properly when route handler redirects with a 307 status code",
-        "app-dir action handling redirects redirects properly when route handler redirects with a 308 status code"
+        "app-dir action handling should not error when a forwarded action triggers a redirect (edge)"
       ],
       "flakey": []
     },
@@ -121,6 +108,12 @@
         "parallel-routes-root-param-dynamic-child With generateStaticParams (gsp) Dynamic params (dynamic-123) should render a 404 for /en/gsp/stories/dynamic-123 (slug not in generateStaticParams)",
         "parallel-routes-root-param-dynamic-child With generateStaticParams (gsp) Dynamic params (dynamic-123) should render a 404 for /fr/gsp/stories/dynamic-123 (slug not in generateStaticParams)"
       ]
+    },
+    "test/e2e/app-dir/partial-fallback-shell-upgrade/partial-fallback-shell-upgrade.test.ts": {
+      "failed": [
+        "partial-fallback-shell-upgrade should upgrade the fallback shell to a route shell"
+      ],
+      "flakey": []
     },
     "test/e2e/app-dir/prerender-encoding/prerender-encoding.test.ts": {
       "failed": [
