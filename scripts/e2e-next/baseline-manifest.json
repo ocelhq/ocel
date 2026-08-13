@@ -1,1109 +1,705 @@
 {
-  "test/e2e/app-dir/action-forward-loop/action-forward-loop.test.ts": {
-    "failed": [
-      "action forward loop prevention renders the action-not-found error when a rewrite sends the action POST to a route that does not bundle it"
-    ],
-    "flakey": [],
-    "runtimeError": false
-  },
-  "test/e2e/app-dir/actions-streaming/actions-streaming.test.ts": {
-    "failed": [
-      "actions-streaming actions returning a ReadableStream should properly stream the response without buffering"
-    ],
-    "flakey": [],
-    "runtimeError": false
-  },
-  "test/e2e/app-dir/actions/app-action-form-state-node-middleware.test.ts": {
-    "failed": [
-      "app-dir action useActionState should support submitting form state with JS",
-      "app-dir action useActionState should support submitting form state without JS",
-      "app-dir action useActionState should support hydrating the app from progressively enhanced form request",
-      "app-dir action useActionState should send the action to the provided permalink with form state when JS disabled"
-    ],
-    "flakey": [],
-    "runtimeError": false
-  },
-  "test/e2e/app-dir/actions/app-action-node-middleware.test.ts": {
-    "failed": [
-      "app-dir action handling should handle action correctly with middleware rewrite",
-      "app-dir action handling should handle basic actions correctly",
-      "app-dir action handling should report errors with bad inputs correctly",
-      "app-dir action handling should propagate errors from a `text/plain` response to an error boundary",
-      "app-dir action handling should trigger an error boundary for action responses with an invalid content-type",
-      "app-dir action handling should error if server action arguments list is too long",
-      "app-dir action handling should support headers and cookies",
-      "app-dir action handling should support importing the same action module instance in both server and action layers",
-      "app-dir action handling should handle actions executed in quick succession",
-      "app-dir action handling should not error when a forwarded action triggers a redirect (node)",
-      "app-dir action handling should not error when a forwarded action triggers a redirect (edge)",
-      "app-dir action handling fetch actions should handle a fetch action initiated from a static page",
-      "app-dir action handling redirects redirects properly when route handler uses `redirect`",
-      "app-dir action handling redirects redirects properly when route handler uses `permanentRedirect`",
-      "app-dir action handling redirects redirects properly when route handler redirects with a 307 status code",
-      "app-dir action handling redirects redirects properly when route handler redirects with a 308 status code",
-      "app-dir action handling request body decoding should correctly decode multi-byte characters in the request body (node)"
-    ],
-    "flakey": [],
-    "runtimeError": false
-  },
-  "test/e2e/app-dir/actions/app-action-size-limit-invalid-node-middleware.test.ts": {
-    "failed": [
-      "app-dir action size limit invalid config should respect the size set in serverActions.bodySizeLimit for plaintext fetch actions should not error for requests that stay below the size limit",
-      "app-dir action size limit invalid config should respect the size set in serverActions.bodySizeLimit for plaintext fetch actions should error for requests that exceed the size limit",
-      "app-dir action size limit invalid config should respect the size set in serverActions.bodySizeLimit for multipart fetch actions should not error for requests that stay below the size limit",
-      "app-dir action size limit invalid config should respect the size set in serverActions.bodySizeLimit for multipart fetch actions should not error for requests that are at the size limit",
-      "app-dir action size limit invalid config should respect the size set in serverActions.bodySizeLimit for multipart fetch actions should error for requests that exceed the size limit"
-    ],
-    "flakey": [],
-    "runtimeError": false
-  },
-  "test/e2e/app-dir/actions/app-action.test.ts": {
-    "failed": [
-      "app-dir action handling redirects redirects properly when route handler uses `redirect`",
-      "app-dir action handling redirects redirects properly when route handler uses `permanentRedirect`",
-      "app-dir action handling redirects redirects properly when route handler redirects with a 307 status code",
-      "app-dir action handling redirects redirects properly when route handler redirects with a 308 status code"
-    ],
-    "flakey": [],
-    "runtimeError": false
-  },
-  "test/e2e/app-dir/app-basepath/index.test.ts": {
-    "failed": [
-      "app dir - basepath should redirect externally when encountering absolute URLs on the same host outside the basePath"
-    ],
-    "flakey": [],
-    "runtimeError": false
-  },
-  "test/e2e/app-dir/app-middleware-proxy/app-middleware-proxy-in-src-dir.test.ts": {
-    "failed": [
-      "app dir - with proxy in src dir works without crashing when using RequestStore"
-    ],
-    "flakey": [],
-    "runtimeError": false
-  },
-  "test/e2e/app-dir/app-middleware-proxy/app-middleware-proxy-without-pages-dir.test.ts": {
-    "failed": [
-      "app dir - proxy without pages dir Updates headers"
-    ],
-    "flakey": [],
-    "runtimeError": false
-  },
-  "test/e2e/app-dir/app-middleware-proxy/app-middleware-proxy.test.ts": {
-    "failed": [],
-    "flakey": [],
-    "runtimeError": false
-  },
-  "test/e2e/app-dir/app-middleware/app-middleware.test.ts": {
-    "failed": [
-      "app-dir with middleware should ignore x-middleware-set-cookie as a request header"
-    ],
-    "flakey": [],
-    "runtimeError": false
-  },
-  "test/e2e/app-dir/app-prefetch/prefetching.test.ts": {
-    "failed": [
-      "app dir - prefetching should not unintentionally modify the requested prefetch by escaping the uri encoded query params"
-    ],
-    "flakey": [],
-    "runtimeError": false
-  },
-  "test/e2e/app-dir/app-routes-trailing-slash/app-routes-trailing-slash.test.ts": {
-    "failed": [
-      "app-routes-trailing-slash should handle trailing slash for edge runtime",
-      "app-routes-trailing-slash should handle trailing slash for node runtime"
-    ],
-    "flakey": [],
-    "runtimeError": false
-  },
-  "test/e2e/app-dir/app-routes/app-custom-route-base-path.test.ts": {
-    "failed": [
-      "app-custom-routes works with generateStaticParams correctly revalidates correctly on /revalidate-1/first/data.json",
-      "app-custom-routes works with generateStaticParams correctly revalidates correctly on /revalidate-1/second/data.json",
-      "app-custom-routes works with generateStaticParams correctly revalidates correctly on /revalidate-1/three/data.json",
-      "app-custom-routes body can read a JSON encoded body for DELETE requests"
-    ],
-    "flakey": [],
-    "runtimeError": false
-  },
-  "test/e2e/app-dir/app-routes/app-custom-routes.test.ts": {
-    "failed": [
-      "app-custom-routes body can read a JSON encoded body for DELETE requests"
-    ],
-    "flakey": [],
-    "runtimeError": false
-  },
-  "test/e2e/app-dir/app-static/app-static-custom-handler.test.ts": {
-    "failed": [
-      "app-dir static/dynamic handling new tags have been specified on subsequent fetch should not fetch from memory cache",
-      "app-dir static/dynamic handling unstable-cache should work in pages/api/unstable-cache-node",
-      "app-dir static/dynamic handling updateTag/revalidateTag should successfully update tag when called from server action"
-    ],
-    "flakey": [],
-    "runtimeError": false
-  },
-  "test/e2e/app-dir/app-static/app-static.test.ts": {
-    "failed": [
-      "app-dir static/dynamic handling new tags have been specified on subsequent fetch should not fetch from memory cache",
-      "app-dir static/dynamic handling unstable-cache should work in pages/api/unstable-cache-node",
-      "app-dir static/dynamic handling updateTag/revalidateTag should successfully update tag when called from server action"
-    ],
-    "flakey": [],
-    "runtimeError": false
-  },
-  "test/e2e/app-dir/app/index.test.ts": {
-    "failed": [],
-    "flakey": [],
-    "runtimeError": false
-  },
-  "test/e2e/app-dir/back-button-download-bug/back-button-download-bug.test.ts": {
-    "failed": [],
-    "flakey": [],
-    "runtimeError": true
-  },
-  "test/e2e/app-dir/cache-components-console/cache-components.console.test.ts": {
-    "failed": [],
-    "flakey": [],
-    "runtimeError": true
-  },
-  "test/e2e/app-dir/concurrent-navigations/mismatching-prefetch.test.ts": {
-    "failed": [
-      "mismatching prefetch recovers when a navigation rewrites to a different route than the one that was prefetched"
-    ],
-    "flakey": [],
-    "runtimeError": false
-  },
-  "test/e2e/app-dir/concurrent-navigations/server-patch-history.test.ts": {
-    "failed": [
-      "server patch - history entry server patch preserves the push intent of a suspended transition"
-    ],
-    "flakey": [],
-    "runtimeError": false
-  },
-  "test/e2e/app-dir/create-root-layout/create-root-layout.test.ts": {
-    "failed": [],
-    "flakey": [],
-    "runtimeError": true
-  },
-  "test/e2e/app-dir/css-chunking/css-chunking.test.ts": {
-    "failed": [],
-    "flakey": [],
-    "runtimeError": true
-  },
-  "test/e2e/app-dir/ecmascript-features/webpack/ecmascript-features-webpack.test.ts": {
-    "failed": [],
-    "flakey": [],
-    "runtimeError": true
-  },
-  "test/e2e/app-dir/edge-route-catchall/edge-route-catchall.test.ts": {
-    "failed": [
-      "edge-route-catchall should correctly normalize edge route catch-all with a single param",
-      "edge-route-catchall should correctly normalize edge route catch-all with multiple params"
-    ],
-    "flakey": [],
-    "runtimeError": false
-  },
-  "test/e2e/app-dir/edge-route-rewrite/edge-route-rewrite.test.ts": {
-    "failed": [
-      "edge-route-rewrite it should support a rewrite to a dynamic edge route"
-    ],
-    "flakey": [],
-    "runtimeError": false
-  },
-  "test/e2e/app-dir/externalize-node-binary/externalize-node-binary.test.ts": {
-    "failed": [],
-    "flakey": [],
-    "runtimeError": true
-  },
-  "test/e2e/app-dir/fetch-abort-on-refresh/fetch-abort-on-refresh.test.ts": {
-    "failed": [],
-    "flakey": [],
-    "runtimeError": true
-  },
-  "test/e2e/app-dir/hooks/hooks.test.ts": {
-    "failed": [
-      "app dir - hooks from pages should have the correct hooks at /adapter-hooks/static",
-      "app dir - hooks from pages should have the correct hooks at /adapter-hooks/1",
-      "app dir - hooks from pages should have the correct hooks at /adapter-hooks/2",
-      "app dir - hooks from pages should have the correct hooks at /adapter-hooks/1/account",
-      "app dir - hooks from pages should have the correct hooks at /adapter-hooks/static",
-      "app dir - hooks from pages should have the correct hooks at /adapter-hooks/1",
-      "app dir - hooks from pages should have the correct hooks at /adapter-hooks/2",
-      "app dir - hooks from pages should have the correct hooks at /adapter-hooks/1/account",
-      "app dir - hooks usePathname should have the canonical url pathname on rewrite"
-    ],
-    "flakey": [],
-    "runtimeError": false
-  },
-  "test/e2e/app-dir/interception-dynamic-single-segment/interception-dynamic-single-segment.test.ts": {
-    "failed": [
-      "interception-dynamic-single-segment should intercept with consecutive dynamic segments"
-    ],
-    "flakey": [],
-    "runtimeError": false
-  },
-  "test/e2e/app-dir/mdx/mdx.test.ts": {
-    "failed": [
-      "mdx with-mdx-rs app directory should work with next/image",
-      "mdx without-mdx-rs app directory should work with next/image"
-    ],
-    "flakey": [],
-    "runtimeError": false
-  },
-  "test/e2e/app-dir/metadata-dynamic-routes-async-deps/index.test.ts": {
-    "failed": [
-      "app dir - metadata dynamic routes with async deps should serve the opengraph-image route as a valid image"
-    ],
-    "flakey": [],
-    "runtimeError": false
-  },
-  "test/e2e/app-dir/metadata/metadata.test.ts": {
-    "failed": [],
-    "flakey": [],
-    "runtimeError": true
-  },
-  "test/e2e/app-dir/navigation-layout-suspense/navigation-layout-suspense.test.ts": {
-    "failed": [
-      "app dir - navigation with Suspense in nested layout resolves data after client navigation to a nested layout with Suspense"
-    ],
-    "flakey": [],
-    "runtimeError": false
-  },
-  "test/e2e/app-dir/next-after-app-deploy/index.test.ts": {
-    "failed": [
-      "after() in nodejs runtime triggers revalidate from a page",
-      "after() in nodejs runtime triggers revalidate from a server action",
-      "after() in nodejs runtime triggers revalidate from a route handler",
-      "after() in nodejs runtime triggers revalidate from middleware",
-      "after() in edge runtime triggers revalidate from a page",
-      "after() in edge runtime triggers revalidate from a server action",
-      "after() in edge runtime triggers revalidate from a route handler",
-      "after() in edge runtime triggers revalidate from middleware"
-    ],
-    "flakey": [],
-    "runtimeError": false
-  },
-  "test/e2e/app-dir/next-after-pages/index.test.ts": {
-    "failed": [],
-    "flakey": [],
-    "runtimeError": true
-  },
-  "test/e2e/app-dir/next-dist-client-esm-import/next-dist-client-esm-import.test.ts": {
-    "failed": [
-      "next-dist-client-esm-import should resolve ESM modules that have \"next/dist/client\" in their filename"
-    ],
-    "flakey": [],
-    "runtimeError": false
-  },
-  "test/e2e/app-dir/next-image/next-image-https.test.ts": {
-    "failed": [],
-    "flakey": [],
-    "runtimeError": true
-  },
-  "test/e2e/app-dir/next-image/next-image.test.ts": {
-    "failed": [
-      "app dir - next-image ssr content should render images on / route",
-      "app dir - next-image ssr content should render images on /client route",
-      "app dir - next-image ssr content should render images nested under page dir on /nested route",
-      "app dir - next-image browser content should render images on / route",
-      "app dir - next-image browser content should render images nested under page dir on /nested route"
-    ],
-    "flakey": [],
-    "runtimeError": false
-  },
-  "test/e2e/app-dir/non-ascii-cache-tags/non-ascii-cache-tags.test.ts": {
-    "failed": [
-      "non-ASCII cache tags invalidates a cached entry via revalidateTag with a non-ASCII tag",
-      "non-ASCII cache tags invalidates a fetch entry tagged with a non-ASCII tag via revalidateTag",
-      "non-ASCII cache tags invalidates an `unstable_cache` entry tagged with a non-ASCII tag via revalidateTag"
-    ],
-    "flakey": [],
-    "runtimeError": false
-  },
-  "test/e2e/app-dir/not-found-with-pages-i18n/not-found-with-pages.test.ts": {
-    "failed": [
-      "not-found-with-pages-i18n should prefer the app router 404 over the pages router 404 when both are present - SSR /app-dir/foo"
-    ],
-    "flakey": [],
-    "runtimeError": false
-  },
-  "test/e2e/app-dir/optimistic-routing/optimistic-routing.test.ts": {
-    "failed": [],
-    "flakey": [],
-    "runtimeError": true
-  },
-  "test/e2e/app-dir/parallel-routes-root-param-dynamic-child/parallel-routes-root-param-dynamic-child.test.ts": {
-    "failed": [],
-    "flakey": [
-      "parallel-routes-root-param-dynamic-child With generateStaticParams (gsp) Dynamic params (dynamic-123) should render a 404 for /en/gsp/stories/dynamic-123 (slug not in generateStaticParams)",
-      "parallel-routes-root-param-dynamic-child With generateStaticParams (gsp) Dynamic params (dynamic-123) should render a 404 for /fr/gsp/stories/dynamic-123 (slug not in generateStaticParams)"
-    ],
-    "runtimeError": false
-  },
-  "test/e2e/app-dir/parallel-routes-generate-static-params/parallel-routes-generate-static-params.test.ts": {
-    "failed": [
-      "parallel-routes-generate-static-params should render the intercepted/non-intercepted modal"
-    ],
-    "flakey": [],
-    "runtimeError": false
-  },
-  "test/e2e/app-dir/ppr-errors/ppr-errors.test.ts": {
-    "failed": [],
-    "flakey": [],
-    "runtimeError": true
-  },
-  "test/e2e/app-dir/ppr-full/ppr-full.test.ts": {
-    "failed": [],
-    "flakey": [],
-    "runtimeError": true
-  },
-  "test/e2e/app-dir/ppr-metadata-blocking/ppr-metadata-blocking-ppr-fallback.test.ts": {
-    "failed": [],
-    "flakey": [],
-    "runtimeError": true
-  },
-  "test/e2e/app-dir/ppr-metadata-streaming/ppr-metadata-streaming.test.ts": {
-    "failed": [],
-    "flakey": [],
-    "runtimeError": true
-  },
-  "test/e2e/app-dir/ppr-middleware-rewrite-force-dynamic-ssg-dynamic-params/ppr-middleware-rewrite-force-dynamic-ssg-dynamic-params.test.ts": {
-    "failed": [],
-    "flakey": [],
-    "runtimeError": true
-  },
-  "test/e2e/app-dir/ppr-navigations/prefetch-navigation/prefetch-navigation.test.ts": {
-    "failed": [],
-    "flakey": [],
-    "runtimeError": true
-  },
-  "test/e2e/app-dir/ppr-navigations/search-params/search-params.test.ts": {
-    "failed": [],
-    "flakey": [],
-    "runtimeError": true
-  },
-  "test/e2e/app-dir/ppr-unstable-cache/ppr-unstable-cache.test.ts": {
-    "failed": [],
-    "flakey": [],
-    "runtimeError": true
-  },
-  "test/e2e/app-dir/ppr/ppr.test.ts": {
-    "failed": [],
-    "flakey": [],
-    "runtimeError": true
-  },
-  "test/e2e/app-dir/prefetching-not-found/prefetching-not-found.test.ts": {
-    "failed": [
-      "prefetching-not-found should correctly navigate to/from a global 404 page when following links with prefetch=auto"
-    ],
-    "flakey": [],
-    "runtimeError": false
-  },
-  "test/e2e/app-dir/prerender-encoding/prerender-encoding.test.ts": {
-    "failed": [
-      "prerender-encoding should respond with the prerendered page correctly"
-    ],
-    "flakey": [],
-    "runtimeError": false
-  },
-  "test/e2e/app-dir/proxy-nfc-traced/proxy-nfc-traced.test.ts": {
-    "failed": [
-      "proxy-nfc-traced should successfully build and be redirected from proxy"
-    ],
-    "flakey": [],
-    "runtimeError": false
-  },
-  "test/e2e/app-dir/proxy-runtime-nodejs/proxy-runtime-nodejs.test.ts": {
-    "failed": [
-      "proxy-runtime-nodejs should use nodejs runtime for proxy by default"
-    ],
-    "flakey": [],
-    "runtimeError": false
-  },
-  "test/e2e/app-dir/resume-data-cache/resume-data-cache.test.ts": {
-    "failed": [
-      "resume-data-cache should have consistent data between static and dynamic renders with use cache",
-      "resume-data-cache should have consistent data between static and dynamic renders with fetch cache"
-    ],
-    "flakey": [],
-    "runtimeError": false
-  },
-  "test/e2e/app-dir/revalidate-dynamic/revalidate-dynamic.test.ts": {
-    "failed": [
-      "app-dir revalidate-dynamic should revalidate the data with /api/revalidate-path",
-      "app-dir revalidate-dynamic should revalidate the data with /api/revalidate-tag"
-    ],
-    "flakey": [],
-    "runtimeError": false
-  },
-  "test/e2e/app-dir/revalidate-path-with-rewrites/revalidate-path-with-rewrites.test.ts": {
-    "failed": [
-      "revalidatePath with rewrites static page should revalidate a static page that was rewritten"
-    ],
-    "flakey": [],
-    "runtimeError": false
-  },
-  "test/e2e/app-dir/rewrite-with-search-params/rewrite-with-search-params.test.ts": {
-    "failed": [
-      "rewrite-with-search-params should not contain params in search params after rewrite"
-    ],
-    "flakey": [],
-    "runtimeError": false
-  },
-  "test/e2e/app-dir/rsc-basic/rsc-basic.test.ts": {
-    "failed": [
-      "app dir - rsc basics node should handle dynamic routes when URL segment matches the folder bracket syntax"
-    ],
-    "flakey": [],
-    "runtimeError": false
-  },
-  "test/e2e/app-dir/rsc-webpack-loader/rsc-webpack-loader.test.ts": {
-    "failed": [],
-    "flakey": [],
-    "runtimeError": true
-  },
-  "test/e2e/app-dir/scss/hmr-module/hmr-module.test.ts": {
-    "failed": [],
-    "flakey": [],
-    "runtimeError": true
-  },
-  "test/e2e/app-dir/scss/invalid-global-module/invalid-global-module.test.ts": {
-    "failed": [],
-    "flakey": [],
-    "runtimeError": true
-  },
-  "test/e2e/app-dir/scss/invalid-module-document/invalid-module-document.test.ts": {
-    "failed": [],
-    "flakey": [],
-    "runtimeError": true
-  },
-  "test/e2e/app-dir/scss/invalid-module/invalid-module.test.ts": {
-    "failed": [],
-    "flakey": [],
-    "runtimeError": true
-  },
-  "test/e2e/app-dir/scss/unused/unused.test.ts": {
-    "failed": [],
-    "flakey": [],
-    "runtimeError": true
-  },
-  "test/e2e/app-dir/scss/url-global-asset-prefix-1/url-global-asset-prefix-1.test.ts": {
-    "failed": [],
-    "flakey": [],
-    "runtimeError": true
-  },
-  "test/e2e/app-dir/scss/url-global-asset-prefix-2/url-global-asset-prefix-2.test.ts": {
-    "failed": [],
-    "flakey": [],
-    "runtimeError": true
-  },
-  "test/e2e/app-dir/searchparams-reuse-loading/searchparams-reuse-loading.test.ts": {
-    "failed": [
-      "searchparams-reuse-loading With Middleware should correctly return different RSC data for full prefetches with different searchParam values"
-    ],
-    "flakey": [],
-    "runtimeError": false
-  },
-  "test/e2e/app-dir/segment-cache/client-params/client-params.test.ts": {
-    "failed": [
-      "client params client segments that access dynamic params are fully statically prefetchable"
-    ],
-    "flakey": [],
-    "runtimeError": false
-  },
-  "test/e2e/app-dir/segment-cache/deployment-skew/deployment-skew.test.ts": {
-    "failed": [
-      "segment cache (deployment skew) header with deployment id header is set on RSC responses"
-    ],
-    "flakey": [],
-    "runtimeError": false
-  },
-  "test/e2e/app-dir/segment-cache/prefetch-runtime/prefetch-runtime.test.ts": {
-    "failed": [],
-    "flakey": [],
-    "runtimeError": false
-  },
-  "test/e2e/app-dir/segment-cache/search-params/segment-cache-search-params.test.ts": {
-    "failed": [
-      "segment cache (search params) stores prefetched data by its rewritten search params, not the original ones",
-      "segment cache (search params) handles rewrites to the same page but with different search params"
-    ],
-    "flakey": [],
-    "runtimeError": false
-  },
-  "test/e2e/app-dir/server-actions-redirect-middleware-rewrite/server-actions-redirect-middleware-rewrite.test.ts": {
-    "failed": [
-      "app-dir - server-actions-redirect-middleware-rewrite.test should redirect correctly in edge runtime with middleware rewrite"
-    ],
-    "flakey": [],
-    "runtimeError": false
-  },
-  "test/e2e/app-dir/static-shell-debugging/static-shell-debugging.test.ts": {
-    "failed": [],
-    "flakey": [],
-    "runtimeError": true
-  },
-  "test/e2e/app-dir/trailingslash/trailingslash.test.ts": {
-    "failed": [
-      "app-dir trailingSlash handling should revalidate a page with generated static params (withSlash=true)",
-      "app-dir trailingSlash handling should revalidate a page with generated static params (withSlash=false)"
-    ],
-    "flakey": [],
-    "runtimeError": false
-  },
-  "test/e2e/app-dir/use-cache-route-handler-only/use-cache-route-handler-only.test.ts": {
-    "failed": [
-      "use-cache-route-handler-only should be able to revalidate prerendered route handlers"
-    ],
-    "flakey": [],
-    "runtimeError": false
-  },
-  "test/e2e/app-dir/worker/worker.test.ts": {
-    "failed": [
-      "app dir - workers should support web workers with dynamic imports",
-      "app dir - workers should support module web workers with dynamic imports",
-      "app dir - workers should not bundle web workers with string specifiers",
-      "app dir - workers should have access to NEXT_DEPLOYMENT_ID in web worker",
-      "app dir - workers should support loading WASM files in workers",
-      "app dir - workers should support shared workers",
-      "app dir - workers should support loading PNG files in web workers"
-    ],
-    "flakey": [],
-    "runtimeError": false
-  },
-  "test/e2e/app-document/rendering.test.ts": {
-    "failed": [
-      "Document and App - Rendering via HTTP _document should include required elements in rendered html",
-      "Document and App - Rendering via HTTP _document Document.getInitialProps returns html prop representing app shell",
-      "Document and App - Rendering via HTTP _document renders ctx.renderPage with enhancer correctly",
-      "Document and App - Rendering via HTTP _document renders ctx.renderPage with enhanceComponent correctly",
-      "Document and App - Rendering via HTTP _document renders ctx.renderPage with enhanceApp correctly",
-      "Document and App - Rendering via HTTP _document renders ctx.renderPage with enhanceApp and enhanceComponent correctly",
-      "Document and App - Rendering via HTTP _app shows a custom tag"
-    ],
-    "flakey": [],
-    "runtimeError": false
-  },
-  "test/e2e/async-modules/index.test.ts": {
-    "failed": [
-      "Async modules ssr async page modules",
-      "Async modules csr async page modules",
-      "Async modules works on async api routes",
-      "Async modules works with getServerSideProps",
-      "Async modules can render async error page"
-    ],
-    "flakey": [],
-    "runtimeError": false
-  },
-  "test/e2e/babel/index.test.ts": {
-    "failed": [
-      "Babel Should compile a page with flowtype correctly"
-    ],
-    "flakey": [],
-    "runtimeError": false
-  },
-  "test/e2e/basepath/basepath.test.ts": {
-    "failed": [
-      "basePath should serve public file with basePath correctly",
-      "basePath should 404 for public file without basePath",
-      "basePath should redirect trailing slash correctly",
-      "basePath should redirect trailing slash on root correctly"
-    ],
-    "flakey": [],
-    "runtimeError": false
-  },
-  "test/e2e/basepath/error-pages.test.ts": {
-    "failed": [
-      "basePath manually added basePath in application logic should 404 when manually adding basePath with <Link>",
-      "basePath manually added basePath in application logic should 404 when manually adding basePath with router.push",
-      "basePath manually added basePath in application logic should 404 when manually adding basePath with router.replace"
-    ],
-    "flakey": [],
-    "runtimeError": false
-  },
-  "test/e2e/basepath/redirect-and-rewrite.test.ts": {
-    "failed": [
-      "basePath should rewrite with basePath by default",
-      "basePath should rewrite without basePath when set to false"
-    ],
-    "flakey": [],
-    "runtimeError": false
-  },
-  "test/e2e/basepath/router-events.test.ts": {
-    "failed": [
-      "basePath should use urls with basepath in router events for failed route change"
-    ],
-    "flakey": [],
-    "runtimeError": false
-  },
-  "test/e2e/browserslist/browserslist.test.ts": {
-    "failed": [],
-    "flakey": [],
-    "runtimeError": true
-  },
-  "test/e2e/browserslist/default-target.test.ts": {
-    "failed": [],
-    "flakey": [],
-    "runtimeError": true
-  },
-  "test/e2e/build-indicator/test/index.test.ts": {
-    "failed": [],
-    "flakey": [],
-    "runtimeError": true
-  },
-  "test/e2e/cancel-request/stream-cancel.test.ts": {
-    "failed": [],
-    "flakey": [],
-    "runtimeError": true
-  },
-  "test/e2e/chrome-devtools-workspace/chrome-devtools-workspace.test.ts": {
-    "failed": [
-      "chrome-devtools-workspace default should be able to connect to Chrome DevTools in dev",
-      "chrome-devtools-workspace proxy should be able to connect to Chrome DevTools in dev"
-    ],
-    "flakey": [],
-    "runtimeError": false
-  },
-  "test/e2e/config-promise-export/async-function.test.ts": {
-    "failed": [
-      "async export should work"
-    ],
-    "flakey": [],
-    "runtimeError": false
-  },
-  "test/e2e/config-promise-export/promise.test.ts": {
-    "failed": [
-      "promise export should work"
-    ],
-    "flakey": [],
-    "runtimeError": false
-  },
-  "test/e2e/css-data-url-global-pages/css-data-url-global-pages.test.ts": {
-    "failed": [
-      "css-data-url-global-pages should apply styles from data url correctly"
-    ],
-    "flakey": [],
-    "runtimeError": false
-  },
-  "test/e2e/dynamic-route-interpolation/index.test.ts": {
-    "failed": [
-      "Dynamic Route Interpolation should work with parameter itself",
-      "Dynamic Route Interpolation should work with brackets",
-      "Dynamic Route Interpolation should work with parameter itself in API routes",
-      "Dynamic Route Interpolation should work with brackets in API routes"
-    ],
-    "flakey": [],
-    "runtimeError": false
-  },
-  "test/e2e/edge-api-endpoints-can-receive-body/index.test.ts": {
-    "failed": [
-      "Edge API endpoints can receive body reads the body from index"
-    ],
-    "flakey": [],
-    "runtimeError": false
-  },
-  "test/e2e/edge-async-local-storage/index.test.ts": {
-    "failed": [
-      "edge api can use async local storage cans use a single instance per request",
-      "edge api can use async local storage cans use multiple instances per request"
-    ],
-    "flakey": [],
-    "runtimeError": false
-  },
-  "test/e2e/edge-can-use-wasm-files/index.test.ts": {
-    "failed": [
-      "edge api endpoints can use wasm files uses the wasm file",
-      "middleware can use wasm files uses the wasm file",
-      "middleware can use wasm files can be called twice",
-      "middleware can use wasm files with the experimental modes on uses the wasm file"
-    ],
-    "flakey": [],
-    "runtimeError": false
-  },
-  "test/e2e/edge-configurable-runtime/index.test.ts": {
-    "failed": [],
-    "flakey": [],
-    "runtimeError": true
-  },
-  "test/e2e/error-handler-not-found-req-url/error-handler-not-found-req-url.test.ts": {
-    "failed": [
-      "error-handler-not-found-req-url should log the correct request url and asPath for not found _error page"
-    ],
-    "flakey": [],
-    "runtimeError": false
-  },
-  "test/e2e/esm-externals/esm-externals.test.ts": {
-    "failed": [
-      "esm-externals pages url /ssr should return the correct SSR HTML",
-      "esm-externals pages url /ssr should render the correct page",
-      "esm-externals pages url /ssg should render the correct page",
-      "esm-externals app dir url /server should return the correct SSR HTML",
-      "esm-externals app dir url /server should render the correct page"
-    ],
-    "flakey": [],
-    "runtimeError": false
-  },
-  "test/e2e/getserversideprops/test/index.test.ts": {
-    "failed": [],
-    "flakey": [],
-    "runtimeError": false
-  },
-  "test/e2e/handle-non-hoisted-swc-helpers/index.test.ts": {
-    "failed": [
-      "handle-non-hoisted-swc-helpers should work"
-    ],
-    "flakey": [],
-    "runtimeError": false
-  },
-  "test/e2e/i18n-api-support/index.test.ts": {
-    "failed": [
-      "i18n API support should respond to normal dynamic API request"
-    ],
-    "flakey": [],
-    "runtimeError": false
-  },
-  "test/e2e/i18n-ignore-redirect-source-locale/redirects-with-basepath.test.ts": {
-    "failed": [],
-    "flakey": [],
-    "runtimeError": false
-  },
-  "test/e2e/import-meta/import-meta.test.ts": {
-    "failed": [
-      "import-meta import.meta.url should work on the server",
-      "import-meta import.meta.url should work in browser"
-    ],
-    "flakey": [],
-    "runtimeError": false
-  },
-  "test/e2e/invalid-static-asset-404-app/invalid-static-asset-404-app-asset-prefix.test.ts": {
-    "failed": [
-      "invalid-static-asset-404-app-asset-prefix should return 404 with plain text when fetching invalid asset path"
-    ],
-    "flakey": [],
-    "runtimeError": false
-  },
-  "test/e2e/invalid-static-asset-404-app/invalid-static-asset-404-app.test.ts": {
-    "failed": [
-      "invalid-static-asset-404-app should return 404 with plain text when fetching invalid asset path"
-    ],
-    "flakey": [],
-    "runtimeError": false
-  },
-  "test/e2e/invalid-static-asset-404-pages/invalid-static-asset-404-pages-asset-prefix.test.ts": {
-    "failed": [
-      "invalid-static-asset-404-pages-asset-prefix should return 404 with plain text when fetching invalid asset path"
-    ],
-    "flakey": [],
-    "runtimeError": false
-  },
-  "test/e2e/invalid-static-asset-404-pages/invalid-static-asset-404-pages.test.ts": {
-    "failed": [
-      "invalid-static-asset-404-pages should return 404 with plain text when fetching invalid asset path"
-    ],
-    "flakey": [],
-    "runtimeError": false
-  },
-  "test/e2e/legacy-link-behavior-pages/index.test.ts": {
-    "failed": [
-      "Link with legacyBehavior if the child is an <a> tag forwards the href attribute",
-      "Link with legacyBehavior if the child is an <a> tag navigates correctly"
-    ],
-    "flakey": [],
-    "runtimeError": false
-  },
-  "test/e2e/link-with-api-rewrite/index.test.ts": {
-    "failed": [
-      "link-with-api-rewrite should perform hard navigation for rewritten urls",
-      "link-with-api-rewrite should perform hard navigation for direct urls"
-    ],
-    "flakey": [],
-    "runtimeError": false
-  },
-  "test/e2e/middleware-base-path/test/index.test.ts": {
-    "failed": [
-      "Middleware base tests router.query must exist when Link clicked page routing"
-    ],
-    "flakey": [],
-    "runtimeError": false
-  },
-  "test/e2e/middleware-custom-matchers-i18n/test/index.test.ts": {
-    "failed": [
-      "Middleware custom matchers i18n should match /hello",
-      "Middleware custom matchers i18n should not match /invalid/hello"
-    ],
-    "flakey": [],
-    "runtimeError": false
-  },
-  "test/e2e/middleware-custom-matchers/test/index.test.ts": {
-    "failed": [
-      "Middleware custom matchers should match source path",
-      "Middleware custom matchers should match has header",
-      "Middleware custom matchers should match has query",
-      "Middleware custom matchers should match has cookie",
-      "Middleware custom matchers should match has header value"
-    ],
-    "flakey": [],
-    "runtimeError": false
-  },
-  "test/e2e/middleware-dynamic-basepath-matcher-rewrites/middleware-dynamic-basepath-matcher-rewrites.test.ts": {
-    "failed": [
-      "middleware-dynamic-basepath-matcher-rewrites preserves router.query on client-side navigation to a catch-all page"
-    ],
-    "flakey": [],
-    "runtimeError": false
-  },
-  "test/e2e/middleware-general/test/index.test.ts": {
-    "failed": [
-      "Middleware Runtime with i18n allows to access env variables",
-      "Middleware Runtime with i18n allows shallow linking with middleware",
-      "Middleware Runtime without i18n allows to access env variables",
-      "Middleware Runtime without i18n allows shallow linking with middleware"
-    ],
-    "flakey": [],
-    "runtimeError": false
-  },
-  "test/e2e/middleware-general/test/node-runtime.test.ts": {
-    "failed": [
-      "Middleware Runtime with i18n allows to access env variables",
-      "Middleware Runtime with i18n allows shallow linking with middleware",
-      "Middleware Runtime without i18n allows to access env variables",
-      "Middleware Runtime without i18n allows shallow linking with middleware"
-    ],
-    "flakey": [],
-    "runtimeError": false
-  },
-  "test/e2e/middleware-matcher/index.test.ts": {
-    "failed": [],
-    "flakey": [],
-    "runtimeError": false
-  },
-  "test/e2e/middleware-redirects/test/index.test.ts": {
-    "failed": [],
-    "flakey": [],
-    "runtimeError": false
-  },
-  "test/e2e/middleware-redirects/test/node-runtime.test.ts": {
-    "failed": [],
-    "flakey": [],
-    "runtimeError": false
-  },
-  "test/e2e/middleware-rewrites/test/index.test.ts": {
-    "failed": [
-      "Middleware Rewrite should handle middleware rewrite with body and headers correctly",
-      "Middleware Rewrite should handle static rewrite from next.config.js correctly",
-      "Middleware Rewrite should return HTML/data correctly for pre-rendered page",
-      "Middleware Rewrite should opt out of prefetch caching for dynamic routes",
-      "Middleware Rewrite should allow to switch locales",
-      "Middleware Rewrite should clear query parameters",
-      "Middleware Rewrite should rewrite without hard navigation",
-      "Middleware Rewrite /fr should clear query parameters",
-      "Middleware Rewrite /fr should rewrite without hard navigation"
-    ],
-    "flakey": [],
-    "runtimeError": false
-  },
-  "test/e2e/middleware-shallow-link/index.test.ts": {
-    "failed": [
-      "browser-shallow-navigation should render the correct page"
-    ],
-    "flakey": [],
-    "runtimeError": false
-  },
-  "test/e2e/middleware-trailing-slash/test/index.test.ts": {
-    "failed": [
-      "Middleware Runtime trailing slash should have correct query values for rewrite to ssg page",
-      "Middleware Runtime trailing slash should rewrite the same for direct visit and client-transition",
-      "Middleware Runtime trailing slash allows shallow linking with middleware"
-    ],
-    "flakey": [],
-    "runtimeError": false
-  },
-  "test/e2e/new-link-behavior/child-a-tag-error.test.ts": {
-    "failed": [
-      "New Link Behavior with <a> child should throw error with <a> child"
-    ],
-    "flakey": [],
-    "runtimeError": false
-  },
-  "test/e2e/new-link-behavior/index.test.ts": {
-    "failed": [
-      "New Link Behavior should render link with <a>",
-      "New Link Behavior should navigate to /about"
-    ],
-    "flakey": [],
-    "runtimeError": false
-  },
-  "test/e2e/new-link-behavior/material-ui.test.ts": {
-    "failed": [
-      "New Link Behavior with material-ui should render MuiLink with <a>"
-    ],
-    "flakey": [],
-    "runtimeError": false
-  },
-  "test/e2e/new-link-behavior/stitches.test.ts": {
-    "failed": [
-      "New Link Behavior with stitches should render <a>"
-    ],
-    "flakey": [],
-    "runtimeError": false
-  },
-  "test/e2e/next-config-warnings/esm-externals-false/esm-externals-false.test.ts": {
-    "failed": [],
-    "flakey": [],
-    "runtimeError": true
-  },
-  "test/e2e/next-test/next-test.test.ts": {
-    "failed": [],
-    "flakey": [],
-    "runtimeError": true
-  },
-  "test/e2e/nonce-head-manager/index.test.ts": {
-    "failed": [
-      "nonce head manager should not re-execute the script when re-rendering"
-    ],
-    "flakey": [],
-    "runtimeError": false
-  },
-  "test/e2e/og-api/index.test.ts": {
-    "failed": [
-      "og-api should work in pages/api",
-      "og-api should work in app route",
-      "og-api should work in middleware"
-    ],
-    "flakey": [],
-    "runtimeError": false
-  },
-  "test/e2e/pages-ssg-data-deployment-skew/pages-ssg-data-deployment-skew.test.ts": {
-    "failed": [
-      "pages ssg data deployment skew - hard navigate when a new deployment occurs header with deployment id header is set on data routes"
-    ],
-    "flakey": [],
-    "runtimeError": false
-  },
-  "test/e2e/postcss-config-cjs/index.test.ts": {
-    "failed": [
-      "postcss-config-cjs works with postcss.config.cjs files"
-    ],
-    "flakey": [],
-    "runtimeError": false
-  },
-  "test/e2e/postcss-config-package/index.test.ts": {
-    "failed": [
-      "postcss-config-json works with postcss config specified in package.json"
-    ],
-    "flakey": [],
-    "runtimeError": false
-  },
-  "test/e2e/prerender-crawler.test.ts": {
-    "failed": [
-      "Prerender crawler handling should block for crawler correctly"
-    ],
-    "flakey": [],
-    "runtimeError": false
-  },
-  "test/e2e/prerender-native-module.test.ts": {
-    "failed": [
-      "prerender native module should render /blog/second correctly"
-    ],
-    "flakey": [],
-    "runtimeError": false
-  },
-  "test/e2e/prerender.test.ts": {
-    "failed": [
-      "Prerender should navigate between pages successfully",
-      "Prerender should respond with 405 for POST to static page",
-      "Prerender should server prerendered path correctly for SSG pages that starts with api-docs",
-      "Prerender should render correctly for SSG pages that starts with api-docs",
-      "Prerender should return data correctly for SSG pages that starts with api-docs",
-      "Prerender should revalidate on-demand revalidate with preview cookie"
-    ],
-    "flakey": [],
-    "runtimeError": false
-  },
-  "test/e2e/proxy-request-with-middleware/test/index.test.ts": {
-    "failed": [
-      "Requests not effected when middleware used should proxy GET request ",
-      "Requests not effected when middleware used should proxy POST request with body"
-    ],
-    "flakey": [],
-    "runtimeError": false
-  },
-  "test/e2e/react-dnd-compile/react-dnd-compile.test.ts": {
-    "failed": [
-      "react-dnd-compile should work"
-    ],
-    "flakey": [],
-    "runtimeError": false
-  },
-  "test/e2e/revalidate-reason/revalidate-reason.test.ts": {
-    "failed": [
-      "revalidate-reason should support revalidateReason: \"on-demand\"",
-      "revalidate-reason should support revalidateReason: \"stale\""
-    ],
-    "flakey": [],
-    "runtimeError": false
-  },
-  "test/e2e/skip-trailing-slash-redirect/index.test.ts": {
-    "failed": [
-      "skip-trailing-slash-redirect should merge cookies from middleware and API routes correctly",
-      "skip-trailing-slash-redirect should merge cookies from middleware and edge API routes correctly",
-      "skip-trailing-slash-redirect should apply config redirect correctly",
-      "skip-trailing-slash-redirect pages dir should preserve original trailing slashes to links on client",
-      "skip-trailing-slash-redirect app dir - skip trailing slash redirect should respond to dynamic route correctly",
-      "skip-trailing-slash-redirect app dir - skip trailing slash redirect should navigate client side correctly"
-    ],
-    "flakey": [],
-    "runtimeError": false
-  },
-  "test/e2e/streaming-ssr-edge/streaming-ssr-edge.test.ts": {
-    "failed": [
-      "streaming-ssr-edge should render 500 error from gIP correctly"
-    ],
-    "flakey": [],
-    "runtimeError": false
-  },
-  "test/e2e/swc-warnings/index.test.ts": {
-    "failed": [],
-    "flakey": [],
-    "runtimeError": true
-  },
-  "test/e2e/trailing-slashes/basepath.test.ts": {
-    "failed": [],
-    "flakey": [],
-    "runtimeError": true
-  },
-  "test/e2e/twoslash/index.test.ts": {
-    "failed": [
-      "twoslash should annotate twoslash types default",
-      "twoslash should annotate twoslash types esnext"
-    ],
-    "flakey": [],
-    "runtimeError": false
-  },
-  "test/e2e/url-imports/url-imports.test.ts": {
-    "failed": [],
-    "flakey": [],
-    "runtimeError": true
-  },
-  "test/e2e/useselectedlayoutsegment-s-in-pages-router/useselectedlayoutsegment-s-in-pages-router.test.ts": {
-    "failed": [
-      "useSelectedLayoutSegment(s) in Pages Router Should render with `useSelectedLayoutSegment(s) hooks"
-    ],
-    "flakey": [],
-    "runtimeError": false
-  },
-  "test/e2e/yarn-pnp/test/mdx-pages.test.ts": {
-    "failed": [],
-    "flakey": [],
-    "runtimeError": true
-  },
-  "test/e2e/yarn-pnp/test/with-eslint.test.ts": {
-    "failed": [],
-    "flakey": [],
-    "runtimeError": true
-  },
-  "test/e2e/yarn-pnp/test/with-sass.test.ts": {
-    "failed": [],
-    "flakey": [],
-    "runtimeError": true
+  "version": 2,
+  "suites": {
+    "test/e2e/app-dir/action-forward-loop/action-forward-loop.test.ts": {
+      "failed": [
+        "action forward loop prevention renders the action-not-found error when a rewrite sends the action POST to a route that does not bundle it"
+      ],
+      "flakey": []
+    },
+    "test/e2e/app-dir/actions-streaming/actions-streaming.test.ts": {
+      "failed": [
+        "actions-streaming actions returning a ReadableStream should properly stream the response without buffering"
+      ],
+      "flakey": []
+    },
+    "test/e2e/app-dir/actions/app-action-form-state-node-middleware.test.ts": {
+      "failed": [
+        "app-dir action useActionState should support submitting form state with JS",
+        "app-dir action useActionState should support submitting form state without JS",
+        "app-dir action useActionState should support hydrating the app from progressively enhanced form request",
+        "app-dir action useActionState should send the action to the provided permalink with form state when JS disabled"
+      ],
+      "flakey": []
+    },
+    "test/e2e/app-dir/actions/app-action-node-middleware.test.ts": {
+      "failed": [
+        "app-dir action handling should handle action correctly with middleware rewrite",
+        "app-dir action handling should handle basic actions correctly",
+        "app-dir action handling should report errors with bad inputs correctly",
+        "app-dir action handling should propagate errors from a `text/plain` response to an error boundary",
+        "app-dir action handling should trigger an error boundary for action responses with an invalid content-type",
+        "app-dir action handling should error if server action arguments list is too long",
+        "app-dir action handling should support headers and cookies",
+        "app-dir action handling should support importing the same action module instance in both server and action layers",
+        "app-dir action handling should handle actions executed in quick succession",
+        "app-dir action handling should not error when a forwarded action triggers a redirect (node)",
+        "app-dir action handling should not error when a forwarded action triggers a redirect (edge)",
+        "app-dir action handling fetch actions should handle a fetch action initiated from a static page",
+        "app-dir action handling redirects redirects properly when route handler uses `redirect`",
+        "app-dir action handling redirects redirects properly when route handler uses `permanentRedirect`",
+        "app-dir action handling redirects redirects properly when route handler redirects with a 307 status code",
+        "app-dir action handling redirects redirects properly when route handler redirects with a 308 status code",
+        "app-dir action handling request body decoding should correctly decode multi-byte characters in the request body (node)"
+      ],
+      "flakey": []
+    },
+    "test/e2e/app-dir/actions/app-action-size-limit-invalid-node-middleware.test.ts": {
+      "failed": [
+        "app-dir action size limit invalid config should respect the size set in serverActions.bodySizeLimit for plaintext fetch actions should not error for requests that stay below the size limit",
+        "app-dir action size limit invalid config should respect the size set in serverActions.bodySizeLimit for plaintext fetch actions should error for requests that exceed the size limit",
+        "app-dir action size limit invalid config should respect the size set in serverActions.bodySizeLimit for multipart fetch actions should not error for requests that stay below the size limit",
+        "app-dir action size limit invalid config should respect the size set in serverActions.bodySizeLimit for multipart fetch actions should not error for requests that are at the size limit",
+        "app-dir action size limit invalid config should respect the size set in serverActions.bodySizeLimit for multipart fetch actions should error for requests that exceed the size limit"
+      ],
+      "flakey": []
+    },
+    "test/e2e/app-dir/actions/app-action.test.ts": {
+      "failed": [
+        "app-dir action handling redirects redirects properly when route handler uses `redirect`",
+        "app-dir action handling redirects redirects properly when route handler uses `permanentRedirect`",
+        "app-dir action handling redirects redirects properly when route handler redirects with a 307 status code",
+        "app-dir action handling redirects redirects properly when route handler redirects with a 308 status code"
+      ],
+      "flakey": []
+    },
+    "test/e2e/app-dir/app-basepath/index.test.ts": {
+      "failed": [
+        "app dir - basepath should redirect externally when encountering absolute URLs on the same host outside the basePath"
+      ],
+      "flakey": []
+    },
+    "test/e2e/app-dir/app-middleware-proxy/app-middleware-proxy-in-src-dir.test.ts": {
+      "failed": [
+        "app dir - with proxy in src dir works without crashing when using RequestStore"
+      ],
+      "flakey": []
+    },
+    "test/e2e/app-dir/app-middleware-proxy/app-middleware-proxy-without-pages-dir.test.ts": {
+      "failed": [
+        "app dir - proxy without pages dir Updates headers"
+      ],
+      "flakey": []
+    },
+    "test/e2e/app-dir/app-middleware-proxy/app-middleware-proxy.test.ts": {
+      "failed": [],
+      "flakey": []
+    },
+    "test/e2e/app-dir/app-middleware/app-middleware.test.ts": {
+      "failed": [
+        "app-dir with middleware should ignore x-middleware-set-cookie as a request header"
+      ],
+      "flakey": []
+    },
+    "test/e2e/app-dir/app-prefetch/prefetching.test.ts": {
+      "failed": [
+        "app dir - prefetching should not unintentionally modify the requested prefetch by escaping the uri encoded query params"
+      ],
+      "flakey": []
+    },
+    "test/e2e/app-dir/app-routes-trailing-slash/app-routes-trailing-slash.test.ts": {
+      "failed": [
+        "app-routes-trailing-slash should handle trailing slash for edge runtime",
+        "app-routes-trailing-slash should handle trailing slash for node runtime"
+      ],
+      "flakey": []
+    },
+    "test/e2e/app-dir/app-routes/app-custom-routes.test.ts": {
+      "failed": [
+        "app-custom-routes body can read a JSON encoded body for DELETE requests"
+      ],
+      "flakey": []
+    },
+    "test/e2e/app-dir/app-static/app-static.test.ts": {
+      "failed": [
+        "app-dir static/dynamic handling unstable-cache should work in pages/api/unstable-cache-node",
+        "app-dir static/dynamic handling updateTag/revalidateTag should successfully update tag when called from server action"
+      ],
+      "flakey": []
+    },
+    "test/e2e/app-dir/app/index.test.ts": {
+      "failed": [],
+      "flakey": []
+    },
+    "test/e2e/app-dir/concurrent-navigations/mismatching-prefetch.test.ts": {
+      "failed": [
+        "mismatching prefetch recovers when a navigation rewrites to a different route than the one that was prefetched"
+      ],
+      "flakey": []
+    },
+    "test/e2e/app-dir/concurrent-navigations/server-patch-history.test.ts": {
+      "failed": [
+        "server patch - history entry server patch preserves the push intent of a suspended transition"
+      ],
+      "flakey": []
+    },
+    "test/e2e/app-dir/edge-route-catchall/edge-route-catchall.test.ts": {
+      "failed": [
+        "edge-route-catchall should correctly normalize edge route catch-all with a single param",
+        "edge-route-catchall should correctly normalize edge route catch-all with multiple params"
+      ],
+      "flakey": []
+    },
+    "test/e2e/app-dir/edge-route-rewrite/edge-route-rewrite.test.ts": {
+      "failed": [
+        "edge-route-rewrite it should support a rewrite to a dynamic edge route"
+      ],
+      "flakey": []
+    },
+    "test/e2e/app-dir/hooks/hooks.test.ts": {
+      "failed": [
+        "app dir - hooks from pages should have the correct hooks at /adapter-hooks/static",
+        "app dir - hooks from pages should have the correct hooks at /adapter-hooks/1",
+        "app dir - hooks from pages should have the correct hooks at /adapter-hooks/2",
+        "app dir - hooks from pages should have the correct hooks at /adapter-hooks/1/account",
+        "app dir - hooks from pages should have the correct hooks at /adapter-hooks/static",
+        "app dir - hooks from pages should have the correct hooks at /adapter-hooks/1",
+        "app dir - hooks from pages should have the correct hooks at /adapter-hooks/2",
+        "app dir - hooks from pages should have the correct hooks at /adapter-hooks/1/account",
+        "app dir - hooks usePathname should have the canonical url pathname on rewrite"
+      ],
+      "flakey": []
+    },
+    "test/e2e/app-dir/interception-dynamic-single-segment/interception-dynamic-single-segment.test.ts": {
+      "failed": [
+        "interception-dynamic-single-segment should intercept with consecutive dynamic segments"
+      ],
+      "flakey": []
+    },
+    "test/e2e/app-dir/metadata-dynamic-routes-async-deps/index.test.ts": {
+      "failed": [
+        "app dir - metadata dynamic routes with async deps should serve the opengraph-image route as a valid image"
+      ],
+      "flakey": []
+    },
+    "test/e2e/app-dir/navigation-layout-suspense/navigation-layout-suspense.test.ts": {
+      "failed": [
+        "app dir - navigation with Suspense in nested layout resolves data after client navigation to a nested layout with Suspense"
+      ],
+      "flakey": []
+    },
+    "test/e2e/app-dir/next-after-app-deploy/index.test.ts": {
+      "failed": [
+        "after() in nodejs runtime triggers revalidate from a page",
+        "after() in nodejs runtime triggers revalidate from a server action",
+        "after() in nodejs runtime triggers revalidate from a route handler",
+        "after() in nodejs runtime triggers revalidate from middleware",
+        "after() in edge runtime triggers revalidate from a page",
+        "after() in edge runtime triggers revalidate from a server action",
+        "after() in edge runtime triggers revalidate from a route handler",
+        "after() in edge runtime triggers revalidate from middleware"
+      ],
+      "flakey": []
+    },
+    "test/e2e/app-dir/next-dist-client-esm-import/next-dist-client-esm-import.test.ts": {
+      "failed": [
+        "next-dist-client-esm-import should resolve ESM modules that have \"next/dist/client\" in their filename"
+      ],
+      "flakey": []
+    },
+    "test/e2e/app-dir/next-image/next-image.test.ts": {
+      "failed": [
+        "app dir - next-image ssr content should render images on / route",
+        "app dir - next-image ssr content should render images on /client route",
+        "app dir - next-image ssr content should render images nested under page dir on /nested route",
+        "app dir - next-image browser content should render images on / route",
+        "app dir - next-image browser content should render images nested under page dir on /nested route"
+      ],
+      "flakey": []
+    },
+    "test/e2e/app-dir/non-ascii-cache-tags/non-ascii-cache-tags.test.ts": {
+      "failed": [
+        "non-ASCII cache tags invalidates a cached entry via revalidateTag with a non-ASCII tag",
+        "non-ASCII cache tags invalidates a fetch entry tagged with a non-ASCII tag via revalidateTag",
+        "non-ASCII cache tags invalidates an `unstable_cache` entry tagged with a non-ASCII tag via revalidateTag"
+      ],
+      "flakey": []
+    },
+    "test/e2e/app-dir/not-found-with-pages-i18n/not-found-with-pages.test.ts": {
+      "failed": [
+        "not-found-with-pages-i18n should prefer the app router 404 over the pages router 404 when both are present - SSR /app-dir/foo"
+      ],
+      "flakey": []
+    },
+    "test/e2e/app-dir/parallel-routes-generate-static-params/parallel-routes-generate-static-params.test.ts": {
+      "failed": [
+        "parallel-routes-generate-static-params should render the intercepted/non-intercepted modal"
+      ],
+      "flakey": []
+    },
+    "test/e2e/app-dir/parallel-routes-root-param-dynamic-child/parallel-routes-root-param-dynamic-child.test.ts": {
+      "failed": [],
+      "flakey": [
+        "parallel-routes-root-param-dynamic-child With generateStaticParams (gsp) Dynamic params (dynamic-123) should render a 404 for /en/gsp/stories/dynamic-123 (slug not in generateStaticParams)",
+        "parallel-routes-root-param-dynamic-child With generateStaticParams (gsp) Dynamic params (dynamic-123) should render a 404 for /fr/gsp/stories/dynamic-123 (slug not in generateStaticParams)"
+      ]
+    },
+    "test/e2e/app-dir/prefetching-not-found/prefetching-not-found.test.ts": {
+      "failed": [
+        "prefetching-not-found should correctly navigate to/from a global 404 page when following links with prefetch=auto"
+      ],
+      "flakey": []
+    },
+    "test/e2e/app-dir/prerender-encoding/prerender-encoding.test.ts": {
+      "failed": [
+        "prerender-encoding should respond with the prerendered page correctly"
+      ],
+      "flakey": []
+    },
+    "test/e2e/app-dir/proxy-nfc-traced/proxy-nfc-traced.test.ts": {
+      "failed": [
+        "proxy-nfc-traced should successfully build and be redirected from proxy"
+      ],
+      "flakey": []
+    },
+    "test/e2e/app-dir/proxy-runtime-nodejs/proxy-runtime-nodejs.test.ts": {
+      "failed": [
+        "proxy-runtime-nodejs should use nodejs runtime for proxy by default"
+      ],
+      "flakey": []
+    },
+    "test/e2e/app-dir/resume-data-cache/resume-data-cache.test.ts": {
+      "failed": [
+        "resume-data-cache should have consistent data between static and dynamic renders with use cache",
+        "resume-data-cache should have consistent data between static and dynamic renders with fetch cache"
+      ],
+      "flakey": []
+    },
+    "test/e2e/app-dir/revalidate-path-with-rewrites/revalidate-path-with-rewrites.test.ts": {
+      "failed": [
+        "revalidatePath with rewrites static page should revalidate a static page that was rewritten"
+      ],
+      "flakey": []
+    },
+    "test/e2e/app-dir/rewrite-with-search-params/rewrite-with-search-params.test.ts": {
+      "failed": [
+        "rewrite-with-search-params should not contain params in search params after rewrite"
+      ],
+      "flakey": []
+    },
+    "test/e2e/app-dir/segment-cache/client-params/client-params.test.ts": {
+      "failed": [
+        "client params client segments that access dynamic params are fully statically prefetchable"
+      ],
+      "flakey": []
+    },
+    "test/e2e/app-dir/segment-cache/deployment-skew/deployment-skew.test.ts": {
+      "failed": [
+        "segment cache (deployment skew) header with deployment id header is set on RSC responses"
+      ],
+      "flakey": []
+    },
+    "test/e2e/app-dir/segment-cache/prefetch-runtime/prefetch-runtime.test.ts": {
+      "failed": [],
+      "flakey": []
+    },
+    "test/e2e/app-dir/segment-cache/search-params/segment-cache-search-params.test.ts": {
+      "failed": [
+        "segment cache (search params) stores prefetched data by its rewritten search params, not the original ones",
+        "segment cache (search params) handles rewrites to the same page but with different search params"
+      ],
+      "flakey": []
+    },
+    "test/e2e/app-dir/server-actions-redirect-middleware-rewrite/server-actions-redirect-middleware-rewrite.test.ts": {
+      "failed": [
+        "app-dir - server-actions-redirect-middleware-rewrite.test should redirect correctly in edge runtime with middleware rewrite"
+      ],
+      "flakey": []
+    },
+    "test/e2e/app-dir/trailingslash/trailingslash.test.ts": {
+      "failed": [
+        "app-dir trailingSlash handling should revalidate a page with generated static params (withSlash=true)",
+        "app-dir trailingSlash handling should revalidate a page with generated static params (withSlash=false)"
+      ],
+      "flakey": []
+    },
+    "test/e2e/app-dir/use-cache-route-handler-only/use-cache-route-handler-only.test.ts": {
+      "failed": [
+        "use-cache-route-handler-only should be able to revalidate prerendered route handlers"
+      ],
+      "flakey": []
+    },
+    "test/e2e/app-dir/worker/worker.test.ts": {
+      "failed": [
+        "app dir - workers should support web workers with dynamic imports",
+        "app dir - workers should support module web workers with dynamic imports",
+        "app dir - workers should not bundle web workers with string specifiers",
+        "app dir - workers should have access to NEXT_DEPLOYMENT_ID in web worker",
+        "app dir - workers should support loading WASM files in workers",
+        "app dir - workers should support shared workers",
+        "app dir - workers should support loading PNG files in web workers"
+      ],
+      "flakey": []
+    },
+    "test/e2e/app-document/rendering.test.ts": {
+      "failed": [
+        "Document and App - Rendering via HTTP _document should include required elements in rendered html",
+        "Document and App - Rendering via HTTP _document Document.getInitialProps returns html prop representing app shell",
+        "Document and App - Rendering via HTTP _document renders ctx.renderPage with enhancer correctly",
+        "Document and App - Rendering via HTTP _document renders ctx.renderPage with enhanceComponent correctly",
+        "Document and App - Rendering via HTTP _document renders ctx.renderPage with enhanceApp correctly",
+        "Document and App - Rendering via HTTP _document renders ctx.renderPage with enhanceApp and enhanceComponent correctly",
+        "Document and App - Rendering via HTTP _app shows a custom tag"
+      ],
+      "flakey": []
+    },
+    "test/e2e/async-modules/index.test.ts": {
+      "failed": [
+        "Async modules ssr async page modules",
+        "Async modules csr async page modules",
+        "Async modules works on async api routes",
+        "Async modules works with getServerSideProps",
+        "Async modules can render async error page"
+      ],
+      "flakey": []
+    },
+    "test/e2e/babel/index.test.ts": {
+      "failed": [
+        "Babel Should compile a page with flowtype correctly"
+      ],
+      "flakey": []
+    },
+    "test/e2e/basepath/error-pages.test.ts": {
+      "failed": [
+        "basePath manually added basePath in application logic should 404 when manually adding basePath with <Link>",
+        "basePath manually added basePath in application logic should 404 when manually adding basePath with router.push",
+        "basePath manually added basePath in application logic should 404 when manually adding basePath with router.replace"
+      ],
+      "flakey": []
+    },
+    "test/e2e/basepath/redirect-and-rewrite.test.ts": {
+      "failed": [
+        "basePath should rewrite with basePath by default",
+        "basePath should rewrite without basePath when set to false"
+      ],
+      "flakey": []
+    },
+    "test/e2e/basepath/router-events.test.ts": {
+      "failed": [
+        "basePath should use urls with basepath in router events for failed route change"
+      ],
+      "flakey": []
+    },
+    "test/e2e/chrome-devtools-workspace/chrome-devtools-workspace.test.ts": {
+      "failed": [
+        "chrome-devtools-workspace default should be able to connect to Chrome DevTools in dev",
+        "chrome-devtools-workspace proxy should be able to connect to Chrome DevTools in dev"
+      ],
+      "flakey": []
+    },
+    "test/e2e/config-promise-export/async-function.test.ts": {
+      "failed": [
+        "async export should work"
+      ],
+      "flakey": []
+    },
+    "test/e2e/config-promise-export/promise.test.ts": {
+      "failed": [
+        "promise export should work"
+      ],
+      "flakey": []
+    },
+    "test/e2e/css-data-url-global-pages/css-data-url-global-pages.test.ts": {
+      "failed": [
+        "css-data-url-global-pages should apply styles from data url correctly"
+      ],
+      "flakey": []
+    },
+    "test/e2e/dynamic-route-interpolation/index.test.ts": {
+      "failed": [
+        "Dynamic Route Interpolation should work with parameter itself",
+        "Dynamic Route Interpolation should work with brackets",
+        "Dynamic Route Interpolation should work with parameter itself in API routes",
+        "Dynamic Route Interpolation should work with brackets in API routes"
+      ],
+      "flakey": []
+    },
+    "test/e2e/edge-api-endpoints-can-receive-body/index.test.ts": {
+      "failed": [
+        "Edge API endpoints can receive body reads the body from index"
+      ],
+      "flakey": []
+    },
+    "test/e2e/edge-async-local-storage/index.test.ts": {
+      "failed": [
+        "edge api can use async local storage cans use a single instance per request",
+        "edge api can use async local storage cans use multiple instances per request"
+      ],
+      "flakey": []
+    },
+    "test/e2e/edge-can-use-wasm-files/index.test.ts": {
+      "failed": [
+        "edge api endpoints can use wasm files uses the wasm file",
+        "middleware can use wasm files uses the wasm file",
+        "middleware can use wasm files can be called twice",
+        "middleware can use wasm files with the experimental modes on uses the wasm file"
+      ],
+      "flakey": []
+    },
+    "test/e2e/error-handler-not-found-req-url/error-handler-not-found-req-url.test.ts": {
+      "failed": [
+        "error-handler-not-found-req-url should log the correct request url and asPath for not found _error page"
+      ],
+      "flakey": []
+    },
+    "test/e2e/esm-externals/esm-externals.test.ts": {
+      "failed": [
+        "esm-externals pages url /ssr should return the correct SSR HTML",
+        "esm-externals pages url /ssr should render the correct page",
+        "esm-externals pages url /ssg should render the correct page",
+        "esm-externals app dir url /server should return the correct SSR HTML",
+        "esm-externals app dir url /server should render the correct page"
+      ],
+      "flakey": []
+    },
+    "test/e2e/getserversideprops/test/index.test.ts": {
+      "failed": [],
+      "flakey": []
+    },
+    "test/e2e/handle-non-hoisted-swc-helpers/index.test.ts": {
+      "failed": [
+        "handle-non-hoisted-swc-helpers should work"
+      ],
+      "flakey": []
+    },
+    "test/e2e/i18n-api-support/index.test.ts": {
+      "failed": [
+        "i18n API support should respond to normal dynamic API request"
+      ],
+      "flakey": []
+    },
+    "test/e2e/i18n-ignore-redirect-source-locale/redirects-with-basepath.test.ts": {
+      "failed": [],
+      "flakey": []
+    },
+    "test/e2e/import-meta/import-meta.test.ts": {
+      "failed": [
+        "import-meta import.meta.url should work on the server",
+        "import-meta import.meta.url should work in browser"
+      ],
+      "flakey": []
+    },
+    "test/e2e/invalid-static-asset-404-app/invalid-static-asset-404-app-asset-prefix.test.ts": {
+      "failed": [
+        "invalid-static-asset-404-app-asset-prefix should return 404 with plain text when fetching invalid asset path"
+      ],
+      "flakey": []
+    },
+    "test/e2e/invalid-static-asset-404-app/invalid-static-asset-404-app.test.ts": {
+      "failed": [
+        "invalid-static-asset-404-app should return 404 with plain text when fetching invalid asset path"
+      ],
+      "flakey": []
+    },
+    "test/e2e/invalid-static-asset-404-pages/invalid-static-asset-404-pages-asset-prefix.test.ts": {
+      "failed": [
+        "invalid-static-asset-404-pages-asset-prefix should return 404 with plain text when fetching invalid asset path"
+      ],
+      "flakey": []
+    },
+    "test/e2e/invalid-static-asset-404-pages/invalid-static-asset-404-pages.test.ts": {
+      "failed": [
+        "invalid-static-asset-404-pages should return 404 with plain text when fetching invalid asset path"
+      ],
+      "flakey": []
+    },
+    "test/e2e/legacy-link-behavior-pages/index.test.ts": {
+      "failed": [
+        "Link with legacyBehavior if the child is an <a> tag forwards the href attribute",
+        "Link with legacyBehavior if the child is an <a> tag navigates correctly"
+      ],
+      "flakey": []
+    },
+    "test/e2e/link-with-api-rewrite/index.test.ts": {
+      "failed": [
+        "link-with-api-rewrite should perform hard navigation for rewritten urls",
+        "link-with-api-rewrite should perform hard navigation for direct urls"
+      ],
+      "flakey": []
+    },
+    "test/e2e/middleware-base-path/test/index.test.ts": {
+      "failed": [
+        "Middleware base tests router.query must exist when Link clicked page routing"
+      ],
+      "flakey": []
+    },
+    "test/e2e/middleware-custom-matchers-i18n/test/index.test.ts": {
+      "failed": [
+        "Middleware custom matchers i18n should match /hello",
+        "Middleware custom matchers i18n should not match /invalid/hello"
+      ],
+      "flakey": []
+    },
+    "test/e2e/middleware-custom-matchers/test/index.test.ts": {
+      "failed": [
+        "Middleware custom matchers should match source path",
+        "Middleware custom matchers should match has header",
+        "Middleware custom matchers should match has query",
+        "Middleware custom matchers should match has cookie",
+        "Middleware custom matchers should match has header value"
+      ],
+      "flakey": []
+    },
+    "test/e2e/middleware-dynamic-basepath-matcher-rewrites/middleware-dynamic-basepath-matcher-rewrites.test.ts": {
+      "failed": [
+        "middleware-dynamic-basepath-matcher-rewrites preserves router.query on client-side navigation to a catch-all page"
+      ],
+      "flakey": []
+    },
+    "test/e2e/middleware-general/test/index.test.ts": {
+      "failed": [
+        "Middleware Runtime with i18n allows to access env variables",
+        "Middleware Runtime with i18n allows shallow linking with middleware",
+        "Middleware Runtime without i18n allows to access env variables",
+        "Middleware Runtime without i18n allows shallow linking with middleware"
+      ],
+      "flakey": []
+    },
+    "test/e2e/middleware-general/test/node-runtime.test.ts": {
+      "failed": [
+        "Middleware Runtime with i18n allows to access env variables",
+        "Middleware Runtime with i18n allows shallow linking with middleware",
+        "Middleware Runtime without i18n allows to access env variables",
+        "Middleware Runtime without i18n allows shallow linking with middleware"
+      ],
+      "flakey": []
+    },
+    "test/e2e/middleware-redirects/test/index.test.ts": {
+      "failed": [],
+      "flakey": []
+    },
+    "test/e2e/middleware-redirects/test/node-runtime.test.ts": {
+      "failed": [],
+      "flakey": []
+    },
+    "test/e2e/middleware-rewrites/test/index.test.ts": {
+      "failed": [
+        "Middleware Rewrite should handle middleware rewrite with body and headers correctly",
+        "Middleware Rewrite should handle static rewrite from next.config.js correctly",
+        "Middleware Rewrite should return HTML/data correctly for pre-rendered page",
+        "Middleware Rewrite should opt out of prefetch caching for dynamic routes",
+        "Middleware Rewrite should allow to switch locales",
+        "Middleware Rewrite should clear query parameters",
+        "Middleware Rewrite should rewrite without hard navigation",
+        "Middleware Rewrite /fr should clear query parameters",
+        "Middleware Rewrite /fr should rewrite without hard navigation"
+      ],
+      "flakey": []
+    },
+    "test/e2e/middleware-shallow-link/index.test.ts": {
+      "failed": [
+        "browser-shallow-navigation should render the correct page"
+      ],
+      "flakey": []
+    },
+    "test/e2e/middleware-trailing-slash/test/index.test.ts": {
+      "failed": [
+        "Middleware Runtime trailing slash should have correct query values for rewrite to ssg page",
+        "Middleware Runtime trailing slash should rewrite the same for direct visit and client-transition",
+        "Middleware Runtime trailing slash allows shallow linking with middleware"
+      ],
+      "flakey": []
+    },
+    "test/e2e/new-link-behavior/child-a-tag-error.test.ts": {
+      "failed": [
+        "New Link Behavior with <a> child should throw error with <a> child"
+      ],
+      "flakey": []
+    },
+    "test/e2e/new-link-behavior/index.test.ts": {
+      "failed": [
+        "New Link Behavior should render link with <a>",
+        "New Link Behavior should navigate to /about"
+      ],
+      "flakey": []
+    },
+    "test/e2e/nonce-head-manager/index.test.ts": {
+      "failed": [
+        "nonce head manager should not re-execute the script when re-rendering"
+      ],
+      "flakey": []
+    },
+    "test/e2e/og-api/index.test.ts": {
+      "failed": [
+        "og-api should work in pages/api",
+        "og-api should work in app route",
+        "og-api should work in middleware"
+      ],
+      "flakey": []
+    },
+    "test/e2e/pages-ssg-data-deployment-skew/pages-ssg-data-deployment-skew.test.ts": {
+      "failed": [
+        "pages ssg data deployment skew - hard navigate when a new deployment occurs header with deployment id header is set on data routes"
+      ],
+      "flakey": []
+    },
+    "test/e2e/postcss-config-package/index.test.ts": {
+      "failed": [
+        "postcss-config-json works with postcss config specified in package.json"
+      ],
+      "flakey": []
+    },
+    "test/e2e/prerender-crawler.test.ts": {
+      "failed": [
+        "Prerender crawler handling should block for crawler correctly"
+      ],
+      "flakey": []
+    },
+    "test/e2e/prerender-native-module.test.ts": {
+      "failed": [
+        "prerender native module should render /blog/second correctly"
+      ],
+      "flakey": []
+    },
+    "test/e2e/prerender.test.ts": {
+      "failed": [
+        "Prerender should navigate between pages successfully",
+        "Prerender should respond with 405 for POST to static page",
+        "Prerender should server prerendered path correctly for SSG pages that starts with api-docs",
+        "Prerender should render correctly for SSG pages that starts with api-docs",
+        "Prerender should return data correctly for SSG pages that starts with api-docs",
+        "Prerender should revalidate on-demand revalidate with preview cookie"
+      ],
+      "flakey": []
+    },
+    "test/e2e/proxy-request-with-middleware/test/index.test.ts": {
+      "failed": [
+        "Requests not effected when middleware used should proxy GET request ",
+        "Requests not effected when middleware used should proxy POST request with body"
+      ],
+      "flakey": []
+    },
+    "test/e2e/revalidate-reason/revalidate-reason.test.ts": {
+      "failed": [
+        "revalidate-reason should support revalidateReason: \"on-demand\"",
+        "revalidate-reason should support revalidateReason: \"stale\""
+      ],
+      "flakey": []
+    },
+    "test/e2e/streaming-ssr-edge/streaming-ssr-edge.test.ts": {
+      "failed": [
+        "streaming-ssr-edge should render 500 error from gIP correctly"
+      ],
+      "flakey": []
+    },
+    "test/e2e/twoslash/index.test.ts": {
+      "failed": [
+        "twoslash should annotate twoslash types default",
+        "twoslash should annotate twoslash types esnext"
+      ],
+      "flakey": []
+    },
+    "test/e2e/useselectedlayoutsegment-s-in-pages-router/useselectedlayoutsegment-s-in-pages-router.test.ts": {
+      "failed": [
+        "useSelectedLayoutSegment(s) in Pages Router Should render with `useSelectedLayoutSegment(s) hooks"
+      ],
+      "flakey": []
+    }
+  },
+  "rules": {
+    "include": [
+      "test/e2e/**/*.test.{t,j}s{,x}"
+    ],
+    "exclude": []
   }
 }
