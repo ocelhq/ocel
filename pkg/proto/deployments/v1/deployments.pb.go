@@ -26,7 +26,6 @@ type Phase int32
 
 const (
 	Phase_PHASE_UNSPECIFIED  Phase = 0
-	Phase_PHASE_BUILDING     Phase = 1
 	Phase_PHASE_UPLOADING    Phase = 2
 	Phase_PHASE_PROVISIONING Phase = 3
 	Phase_PHASE_FINALIZING   Phase = 4
@@ -37,7 +36,6 @@ const (
 var (
 	Phase_name = map[int32]string{
 		0: "PHASE_UNSPECIFIED",
-		1: "PHASE_BUILDING",
 		2: "PHASE_UPLOADING",
 		3: "PHASE_PROVISIONING",
 		4: "PHASE_FINALIZING",
@@ -45,7 +43,6 @@ var (
 	}
 	Phase_value = map[string]int32{
 		"PHASE_UNSPECIFIED":  0,
-		"PHASE_BUILDING":     1,
 		"PHASE_UPLOADING":    2,
 		"PHASE_PROVISIONING": 3,
 		"PHASE_FINALIZING":   4,
@@ -3702,14 +3699,13 @@ const file_deployments_v1_deployments_proto_rawDesc = "" +
 	"\aaddress\x18\x01 \x01(\tR\aaddress\x12\x16\n" +
 	"\x06bucket\x18\x02 \x01(\tR\x06bucket\"\"\n" +
 	"\x0eFunctionOutput\x12\x10\n" +
-	"\x03url\x18\x01 \x01(\tR\x03url*\x89\x01\n" +
+	"\x03url\x18\x01 \x01(\tR\x03url*\x8b\x01\n" +
 	"\x05Phase\x12\x15\n" +
-	"\x11PHASE_UNSPECIFIED\x10\x00\x12\x12\n" +
-	"\x0ePHASE_BUILDING\x10\x01\x12\x13\n" +
+	"\x11PHASE_UNSPECIFIED\x10\x00\x12\x13\n" +
 	"\x0fPHASE_UPLOADING\x10\x02\x12\x16\n" +
 	"\x12PHASE_PROVISIONING\x10\x03\x12\x14\n" +
 	"\x10PHASE_FINALIZING\x10\x04\x12\x12\n" +
-	"\x0ePHASE_DELETING\x10\x05*T\n" +
+	"\x0ePHASE_DELETING\x10\x05\"\x04\b\x01\x10\x01*\x0ePHASE_BUILDING*T\n" +
 	"\n" +
 	"SpanStatus\x12\x1b\n" +
 	"\x17SPAN_STATUS_UNSPECIFIED\x10\x00\x12\x12\n" +

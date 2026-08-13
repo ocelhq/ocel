@@ -353,11 +353,13 @@ message DeployEvent {
 
 enum Phase {
   PHASE_UNSPECIFIED = 0;
-  PHASE_BUILDING = 1;
   PHASE_UPLOADING = 2;
   PHASE_PROVISIONING = 3;
   PHASE_FINALIZING = 4;
   PHASE_DELETING = 5;
+
+  reserved 1;
+  reserved "PHASE_BUILDING";
 }
 
 message Stage {
