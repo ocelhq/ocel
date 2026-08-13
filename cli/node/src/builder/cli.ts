@@ -1,4 +1,5 @@
 import { buildApps, detectApp } from "./build.js";
+import { isReported, reportError } from "./protocol.js";
 import type { AppInput, BuildOptions } from "./types.js";
 
 interface BuildRequest extends BuildOptions {
@@ -22,6 +23,8 @@ async function main(): Promise<void> {
 }
 
 main().catch((err) => {
-  process.stderr.write(`${err instanceof Error ? err.stack : String(err)}\n`);
+  const stack = err instanceof Error ? (err.stack ?? err.message) : String(err);
+  if (!isReported(err)) reportError(stack);
+  process.stderr.write(`${stack}\n`);
   process.exit(1);
 });
