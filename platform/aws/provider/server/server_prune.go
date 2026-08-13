@@ -48,9 +48,9 @@ func newPruneStages() deploy.PruneStages {
 
 func (s *Server) runPrune(ctx context.Context, req *deploymentsv1.PruneRequest, tracer deploy.Tracer, stageReport func(deploy.StageID) func(string), logf func(string)) (edge.PruneResult, error) {
 	stages := newPruneStages()
-	tracer.DeclareStages(false, stages.Diff, stages.Reclaim)
+	deploy.DeclareStages(tracer, false, stages.Diff, stages.Reclaim)
 	finish := func(err error) (edge.PruneResult, error) {
-		closeStages(tracer, err, stages.Diff, stages.Reclaim)
+		closeStages(tracer)
 		return edge.PruneResult{}, err
 	}
 

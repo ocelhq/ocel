@@ -116,6 +116,10 @@ func spanUnder(t Tracer, parent StageID, name string, start, end time.Time, err 
 	t.Span(newStageID(), parent, name, start, end, err, attrs...)
 }
 
+func DeclareStages(t Tracer, final bool, stages ...Stage) {
+	declareStages(t, final, stages...)
+}
+
 const (
 	ErrorKindCanceled = "canceled"
 	ErrorKindTimeout  = "timeout"
