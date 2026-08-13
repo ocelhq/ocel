@@ -57,6 +57,14 @@ func AttrDurationMS(d time.Duration) Attr {
 	return Attr{deploymentsv1.AttributeKey_ATTRIBUTE_KEY_DURATION_MS, strconv.FormatInt(d.Milliseconds(), 10)}
 }
 
+func AttrResourceType(typ string) Attr {
+	return Attr{deploymentsv1.AttributeKey_ATTRIBUTE_KEY_RESOURCE_TYPE, typ}
+}
+
+func AttrResourceName(name string) Attr {
+	return Attr{deploymentsv1.AttributeKey_ATTRIBUTE_KEY_RESOURCE_NAME, name}
+}
+
 // Tracer receives the declared stage plan and the spans synthesised for it.
 // A nil Tracer is a valid no-op so callers that don't need tracing (tests,
 // paths other than Deploy) can leave it unset.

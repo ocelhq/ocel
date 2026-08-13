@@ -153,4 +153,10 @@ func TestAttrHelpersUseTheBoundedAttributeKeys(t *testing.T) {
 	if got := AttrDurationMS(1500 * time.Millisecond); got.Key != deploymentsv1.AttributeKey_ATTRIBUTE_KEY_DURATION_MS || got.Value != "1500" {
 		t.Errorf("AttrDurationMS() = %+v", got)
 	}
+	if got := AttrResourceType("aws:s3/bucket:Bucket"); got.Key != deploymentsv1.AttributeKey_ATTRIBUTE_KEY_RESOURCE_TYPE || got.Value != "aws:s3/bucket:Bucket" {
+		t.Errorf("AttrResourceType() = %+v", got)
+	}
+	if got := AttrResourceName("my-bucket"); got.Key != deploymentsv1.AttributeKey_ATTRIBUTE_KEY_RESOURCE_NAME || got.Value != "my-bucket" {
+		t.Errorf("AttrResourceName() = %+v", got)
+	}
 }

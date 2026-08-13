@@ -2,6 +2,7 @@ package deploy
 
 import (
 	"errors"
+	"strings"
 	"time"
 
 	"github.com/pulumi/pulumi/sdk/v3/go/auto/events"
@@ -15,16 +16,56 @@ import (
 var errEngineTraceFailed = errors.New("resource operation failed")
 
 // ResourceStandout is one resource operation worth its own span: a failure,
-// or an operation slower than the outlier threshold. Only what we ourselves
-// control is kept — the Pulumi op and resource-type token, never the
-// resource's URN, its logical name, or any diagnostic text the engine
-// emitted alongside it.
+// or an operation slower than the outlier threshold. Type and Name identify
+// the resource for a human reading the trace, but neither is the URN: Type
+// is the Pulumi type token the engine already reports as structured data,
+// and Name is only the URN's trailing name component, pulled out by
+// resourceNameFromURN so the URN's stack and project components — which
+// would leak organisation and environment — are never kept. Both are capped
+// before they reach a span. No diagnostic text the engine emitted alongside
+// the operation is kept.
 type ResourceStandout struct {
 	Op     apitype.OpType
 	Type   string
+	Name   string
 	Start  time.Time
 	End    time.Time
 	Failed bool
+}
+
+// maxResourceIdentifierLen bounds ResourceStandout's Type and Name: Type
+// comes from a provider's schema and Name from a developer's resource
+// declaration, so neither is ours to trust as bounded before it reaches the
+// wire.
+const maxResourceIdentifierLen = 256
+
+func capIdentifier(s string) string {
+	if len(s) <= maxResourceIdentifierLen {
+		return s
+	}
+	return s[:maxResourceIdentifierLen]
+}
+
+const (
+	urnPrefix        = "urn:pulumi:"
+	urnPartDelimiter = "::"
+)
+
+// resourceNameFromURN pulls the trailing name component out of a Pulumi URN
+// (urn:pulumi:<stack>::<project>::<type>::<name>) without keeping or
+// forwarding the URN itself. The stack and project components, everything
+// before the name, are discarded here rather than downstream: they are
+// exactly what would embed organisation and environment into a span.
+// Anything that doesn't match the expected shape yields "".
+func resourceNameFromURN(raw string) string {
+	if !strings.HasPrefix(raw, urnPrefix) {
+		return ""
+	}
+	parts := strings.Split(raw, urnPartDelimiter)
+	if len(parts) < 4 {
+		return ""
+	}
+	return capIdentifier(strings.Join(parts[3:], urnPartDelimiter))
 }
 
 // EngineTrace summarizes one Pulumi Automation API operation's structured
@@ -94,7 +135,8 @@ func (b *engineTraceBuilder) finish(m apitype.StepEventMetadata, now time.Time, 
 	if failed || outlier {
 		b.trace.Standouts = append(b.trace.Standouts, ResourceStandout{
 			Op:     m.Op,
-			Type:   m.Type,
+			Type:   capIdentifier(m.Type),
+			Name:   resourceNameFromURN(m.URN),
 			Start:  start,
 			End:    now,
 			Failed: failed,
@@ -112,9 +154,9 @@ const engineBatchSpanName = "pulumi resource operations"
 
 // resourceStandoutName is deliberately drawn only from our own bounded
 // vocabulary, keyed on the Pulumi op. It never includes the resource's
-// type token, logical name, or URN: SpanEvent.name is free-form, and the
-// wire format gives a failed resource operation no field of its own to
-// carry an identifier in, so nothing dynamic is templated into it.
+// type token, logical name, or URN: SpanEvent.name is free-form, so nothing
+// dynamic is templated into it. The type token and logical name travel
+// separately, as ATTRIBUTE_KEY_RESOURCE_TYPE/_NAME on the span instead.
 func resourceStandoutName(op apitype.OpType, failed bool) string {
 	if failed {
 		return "resource operation failed"

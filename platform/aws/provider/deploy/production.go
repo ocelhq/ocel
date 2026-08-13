@@ -920,7 +920,9 @@ func upStack(ctx context.Context, cfg Config, name naming.StackName, tags map[st
 
 // emitEngineTrace turns a Pulumi Automation API run's structured engine
 // events into spans: one for the whole batch, plus one each for any
-// standout (failed or slow) resource operation.
+// standout (failed or slow) resource operation. Only a standout span gets
+// ATTRIBUTE_KEY_RESOURCE_TYPE/_NAME — the batch span covers many resources,
+// so a single type/name pair on it would misattribute the rest.
 func emitEngineTrace(t Tracer, parentStage StageID, trace EngineTrace, upErr error) {
 	if t == nil || trace.ResourceCount == 0 {
 		return
@@ -936,7 +938,14 @@ func emitEngineTrace(t Tracer, parentStage StageID, trace EngineTrace, upErr err
 		if s.Failed {
 			standoutErr = errEngineTraceFailed
 		}
-		spanUnder(t, parentStage, resourceStandoutName(s.Op, s.Failed), s.Start, s.End, standoutErr, AttrDurationMS(s.End.Sub(s.Start)))
+		attrs := []Attr{AttrDurationMS(s.End.Sub(s.Start))}
+		if s.Type != "" {
+			attrs = append(attrs, AttrResourceType(s.Type))
+		}
+		if s.Name != "" {
+			attrs = append(attrs, AttrResourceName(s.Name))
+		}
+		spanUnder(t, parentStage, resourceStandoutName(s.Op, s.Failed), s.Start, s.End, standoutErr, attrs...)
 	}
 }
 
