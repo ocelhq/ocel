@@ -32,4 +32,14 @@ func TestExtract(t *testing.T) {
 			t.Fatalf("TraceParentFromContext() ok = true, want false")
 		}
 	})
+
+	t.Run("a malformed traceparent header is rejected rather than propagated", func(t *testing.T) {
+		t.Parallel()
+		header := http.Header{}
+		header.Set(channel.TraceParentHeader, "not-a-traceparent")
+		ctx := extract(context.Background(), header)
+		if _, ok := channel.TraceParentFromContext(ctx); ok {
+			t.Fatalf("TraceParentFromContext() ok = true, want false")
+		}
+	})
 }
