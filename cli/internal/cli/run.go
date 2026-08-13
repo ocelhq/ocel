@@ -58,7 +58,7 @@ func runRun(ctx context.Context, d deps, cmd *cobra.Command, cwd string, appArgs
 		return err
 	}
 	if found {
-		return runOnceAsFollower(ctx, leaderAddr, appArgs, stdout, stderr, stdin)
+		return runOnceAsFollower(ctx, d, leaderAddr, appArgs, stdout, stderr, stdin)
 	}
 
 	link, err := ensureLinked(ctx, d, cfg.Dir, apiURL, stdout, stderr, stdin)
@@ -76,7 +76,7 @@ func runningDevServer(root string) (string, bool, error) {
 	return result.LeaderAddr, result.Role == election.Follower, nil
 }
 
-func runOnceAsFollower(ctx context.Context, leaderAddr string, appArgs []string, stdout, stderr io.Writer, stdin io.Reader) error {
+func runOnceAsFollower(ctx context.Context, d deps, leaderAddr string, appArgs []string, stdout, stderr io.Writer, stdin io.Reader) error {
 	client := devv1connect.NewDevServiceClient(http.DefaultClient, "http://"+leaderAddr)
 
 	stream, err := client.Subscribe(ctx, &devv1.SubscribeRequest{})
@@ -89,7 +89,7 @@ func runOnceAsFollower(ctx context.Context, leaderAddr string, appArgs []string,
 		return fmt.Errorf("connect to leader: %w", stream.Err())
 	}
 
-	return runChildOnce(ctx, appArgs, stream.Msg().Env, stdin, stdout, stderr)
+	return runChildOnce(ctx, d, appArgs, stream.Msg().Env, stdin, stdout, stderr)
 }
 
 func runStandalone(ctx context.Context, d deps, creds credentials.Credentials, apiURL, projectID string, cfg *projectconfig.Config, appArgs []string, stdout, stderr io.Writer, stdin io.Reader) error {
@@ -121,16 +121,16 @@ func runStandalone(ctx context.Context, d deps, creds credentials.Credentials, a
 		return err
 	}
 
-	return runChildOnce(ctx, appArgs, resolved, stdin, stdout, stderr)
+	return runChildOnce(ctx, d, appArgs, resolved, stdin, stdout, stderr)
 }
 
-func runChildOnce(ctx context.Context, appArgs []string, env map[string]string, stdin io.Reader, stdout, stderr io.Writer) error {
+func runChildOnce(ctx context.Context, d deps, appArgs []string, env map[string]string, stdin io.Reader, stdout, stderr io.Writer) error {
 	appCmd := exec.CommandContext(ctx, appArgs[0], appArgs[1:]...)
 	appCmd.Env = applyEnv(os.Environ(), env)
 	appCmd.Stdin = stdin
 	appCmd.Stdout = stdout
 	appCmd.Stderr = stderr
-	child, err := spawnAppChild(ctx, appCmd, stdin)
+	child, err := spawnAppChild(ctx, appCmd, stdin, d.stdinIsTerminal(stdin))
 	if err != nil {
 		return err
 	}

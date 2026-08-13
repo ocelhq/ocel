@@ -71,7 +71,7 @@ func runDev(ctx context.Context, d deps, cmd *cobra.Command, cwd string, appArgs
 		}
 
 		if role.Role == election.Follower {
-			return runFollower(ctx, role.LeaderAddr, appArgs, stdout, stderr, stdin)
+			return runFollower(ctx, d, role.LeaderAddr, appArgs, stdout, stderr, stdin)
 		}
 
 		link, err := ensureLinked(ctx, d, cfg.Dir, apiURL, stdout, stderr, stdin)
@@ -132,7 +132,7 @@ func runLeader(ctx context.Context, d deps, role election.Result, creds credenti
 	appCmd.Stdin = stdin
 	appCmd.Stdout = stdout
 	appCmd.Stderr = stderr
-	child, err := spawnAppChild(ctx, appCmd, stdin)
+	child, err := spawnAppChild(ctx, appCmd, stdin, d.stdinIsTerminal(stdin))
 	if err != nil {
 		return err
 	}
@@ -209,7 +209,7 @@ func watchAndReResolve(ctx context.Context, srv *devserver.Server, cfg *projectc
 	})
 }
 
-func runFollower(ctx context.Context, leaderAddr string, appArgs []string, stdout, stderr io.Writer, stdin io.Reader) error {
+func runFollower(ctx context.Context, d deps, leaderAddr string, appArgs []string, stdout, stderr io.Writer, stdin io.Reader) error {
 	client := devv1connect.NewDevServiceClient(http.DefaultClient, "http://"+leaderAddr)
 
 	stream, err := client.Subscribe(ctx, &devv1.SubscribeRequest{})
@@ -225,7 +225,7 @@ func runFollower(ctx context.Context, leaderAddr string, appArgs []string, stdou
 		return errors.New("connect to leader: stream closed before first env push")
 	}
 
-	child, err := startFollowerChild(ctx, appArgs, stream.Msg().Env, stdin, stdout, stderr)
+	child, err := startFollowerChild(ctx, d, appArgs, stream.Msg().Env, stdin, stdout, stderr)
 	if err != nil {
 		return err
 	}
@@ -252,7 +252,7 @@ func runFollower(ctx context.Context, leaderAddr string, appArgs []string, stdou
 			return waitExitError(err)
 		case env := <-updates:
 			child.stop()
-			child, err = startFollowerChild(ctx, appArgs, env, stdin, stdout, stderr)
+			child, err = startFollowerChild(ctx, d, appArgs, env, stdin, stdout, stderr)
 			if err != nil {
 				return err
 			}
@@ -267,13 +267,13 @@ func runFollower(ctx context.Context, leaderAddr string, appArgs []string, stdou
 	}
 }
 
-func startFollowerChild(ctx context.Context, appArgs []string, env map[string]string, stdin io.Reader, stdout, stderr io.Writer) (*appChild, error) {
+func startFollowerChild(ctx context.Context, d deps, appArgs []string, env map[string]string, stdin io.Reader, stdout, stderr io.Writer) (*appChild, error) {
 	appCmd := exec.CommandContext(ctx, appArgs[0], appArgs[1:]...)
 	appCmd.Env = applyEnv(os.Environ(), env)
 	appCmd.Stdin = stdin
 	appCmd.Stdout = stdout
 	appCmd.Stderr = stderr
-	return spawnAppChild(ctx, appCmd, stdin)
+	return spawnAppChild(ctx, appCmd, stdin, d.stdinIsTerminal(stdin))
 }
 
 func waitExitError(err error) error {
