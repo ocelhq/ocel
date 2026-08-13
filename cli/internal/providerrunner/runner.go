@@ -220,7 +220,7 @@ func (r *Runner) dial(addr string) error {
 		},
 	}
 
-	auth := connect.WithInterceptors(authInterceptor{token: r.token})
+	auth := connect.WithInterceptors(authInterceptor{token: r.token}, traceParentInterceptor{})
 
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -446,5 +446,30 @@ func (a authInterceptor) WrapStreamingClient(next connect.StreamingClientFunc) c
 }
 
 func (a authInterceptor) WrapStreamingHandler(next connect.StreamingHandlerFunc) connect.StreamingHandlerFunc {
+	return next
+}
+
+type traceParentInterceptor struct{}
+
+func (traceParentInterceptor) WrapUnary(next connect.UnaryFunc) connect.UnaryFunc {
+	return func(ctx context.Context, req connect.AnyRequest) (connect.AnyResponse, error) {
+		if traceparent, ok := channel.TraceParentFromContext(ctx); ok {
+			req.Header().Set(channel.TraceParentHeader, traceparent)
+		}
+		return next(ctx, req)
+	}
+}
+
+func (traceParentInterceptor) WrapStreamingClient(next connect.StreamingClientFunc) connect.StreamingClientFunc {
+	return func(ctx context.Context, spec connect.Spec) connect.StreamingClientConn {
+		conn := next(ctx, spec)
+		if traceparent, ok := channel.TraceParentFromContext(ctx); ok {
+			conn.RequestHeader().Set(channel.TraceParentHeader, traceparent)
+		}
+		return conn
+	}
+}
+
+func (traceParentInterceptor) WrapStreamingHandler(next connect.StreamingHandlerFunc) connect.StreamingHandlerFunc {
 	return next
 }

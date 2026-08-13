@@ -346,6 +346,8 @@ message DeployEvent {
     ProgressEvent progress = 1;
     LogEvent log = 2;
     ResultEvent result = 3;
+    StagePlanEvent stage_plan = 4;
+    SpanEvent span = 5;
   }
 }
 
@@ -355,6 +357,43 @@ enum Phase {
   PHASE_UPLOADING = 2;
   PHASE_PROVISIONING = 3;
   PHASE_FINALIZING = 4;
+  PHASE_DELETING = 5;
+}
+
+message Stage {
+  string id = 1;
+
+  string parent_id = 2;
+
+  uint32 position = 3;
+
+  string title = 4;
+}
+
+message StagePlanEvent {
+  repeated Stage stages = 1;
+}
+
+enum SpanStatus {
+  SPAN_STATUS_UNSPECIFIED = 0;
+  SPAN_STATUS_OK = 1;
+  SPAN_STATUS_ERROR = 2;
+}
+
+message SpanEvent {
+  string trace_id = 1;
+  string span_id = 2;
+  string parent_span_id = 3;
+
+  string name = 4;
+
+  int64 start_time_unix_nano = 5;
+  int64 end_time_unix_nano = 6;
+
+  SpanStatus status = 7;
+  string error = 8;
+
+  map<string, string> attributes = 9;
 }
 
 message ProgressEvent {
