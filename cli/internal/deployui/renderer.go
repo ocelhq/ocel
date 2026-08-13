@@ -1,7 +1,3 @@
-// Package deployui renders CLI command output. A Renderer is the sole
-// owner of the terminal it is given: every other part of the CLI —
-// commands, subprocess output, provider events — emits structured calls to
-// it and never writes to the writer directly.
 package deployui
 
 import (
@@ -31,39 +27,46 @@ const (
 	FormatJSON  Format = "json"
 )
 
-// Renderer owns a writer exclusively. Construct one per command invocation
-// and route every event — progress, logs, stage plans, terminal outcomes —
-// through its methods. Nothing else may write to the underlying writer.
 type Renderer struct {
-	w      io.Writer
-	format Format
-	live   bool
-	color  bool
+	w       io.Writer
+	format  Format
+	live    bool
+	color   bool
+	verbose bool
 
 	mu           sync.Mutex
 	plan         *stagePlan
 	legacyActive string
 	liveLines    int
 	waiting      bool
+	spinning     bool
+	spinMsg      string
+	spinFrame    int
 	start        time.Time
 
 	tickStop chan struct{}
 	tickDone chan struct{}
 }
 
-// New builds a Renderer over w. Colour and animation are decided from w
-// itself — never from os.Stdout — so redirecting the writer this Renderer
-// is given produces plain, uncoloured lines. format and verbose are
-// independent of the TTY check: JSON never animates, and verbose forces the
-// plain line-per-event view even on a real terminal.
-func NewRenderer(w io.Writer, format Format, verbose bool) *Renderer {
-	live := format == FormatHuman && !verbose && IsTerminal(w)
-	return newRenderer(w, format, live, IsTerminal(w))
+var liveWriters sync.Map // io.Writer -> *Renderer
+
+func rendererFor(w io.Writer) (*Renderer, bool) {
+	v, ok := liveWriters.Load(w)
+	if !ok {
+		return nil, false
+	}
+	r, ok := v.(*Renderer)
+	return r, ok
 }
 
-// newRenderer is the constructor tests use to force the live-region path
-// deterministically, without needing a real terminal behind w.
-func newRenderer(w io.Writer, format Format, live, colorEnabled bool) *Renderer {
+func NewRenderer(w io.Writer, format Format, verbose bool) *Renderer {
+	live := format == FormatHuman && !verbose && IsTerminal(w)
+	r := newRendererForTest(w, format, live, IsTerminal(w))
+	r.verbose = verbose
+	return r
+}
+
+func newRendererForTest(w io.Writer, format Format, live, colorEnabled bool) *Renderer {
 	r := &Renderer{
 		w:      w,
 		format: format,
@@ -72,6 +75,7 @@ func newRenderer(w io.Writer, format Format, live, colorEnabled bool) *Renderer 
 		plan:   newStagePlan(),
 		start:  time.Now(),
 	}
+	liveWriters.Store(w, r)
 	if r.live {
 		r.tickStop = make(chan struct{})
 		r.tickDone = make(chan struct{})
@@ -82,8 +86,6 @@ func newRenderer(w io.Writer, format Format, live, colorEnabled bool) *Renderer 
 
 func (r *Renderer) Live() bool { return r.live }
 
-// Write lets subprocess output pass through the same single-owner path as
-// every other event. Safe for concurrent callers (drain goroutines).
 func (r *Renderer) Write(p []byte) (int, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -106,11 +108,14 @@ func (r *Renderer) tickLoop() {
 			return
 		case <-t.C:
 			r.mu.Lock()
-			if !r.waiting && len(r.plan.activeOrder) > 0 {
+			if !r.waiting && (len(r.plan.activeOrder) > 0 || r.spinning) {
 				for _, id := range r.plan.activeOrder {
 					if n := r.plan.nodes[id]; n != nil {
 						n.frame++
 					}
+				}
+				if r.spinning {
+					r.spinFrame++
 				}
 				r.eraseLiveLocked()
 				r.drawLiveLocked()
@@ -126,14 +131,39 @@ func (r *Renderer) Close() error {
 		<-r.tickDone
 		r.tickStop = nil
 	}
+	r.mu.Lock()
+	r.eraseLiveLocked()
+	r.mu.Unlock()
+	liveWriters.Delete(r.w)
 	return nil
 }
 
-// Progress renders one ProgressEvent. When stageID is non-empty it is
-// tracked as its own live-region row alongside any other stage in
-// progress — this is what lets a parallel deploy show one line per app.
-// An empty stageID falls back to the single-active-step behaviour keyed by
-// phase, for commands that have not adopted stage plans.
+func (r *Renderer) Spin(msg string) func() {
+	r.mu.Lock()
+	if !r.live || r.waiting {
+		r.mu.Unlock()
+		return func() {}
+	}
+	r.eraseLiveLocked()
+	r.spinning = true
+	r.spinMsg = msg
+	r.spinFrame = 0
+	r.drawLiveLocked()
+	r.mu.Unlock()
+
+	return func() {
+		r.mu.Lock()
+		defer r.mu.Unlock()
+		if !r.spinning {
+			return
+		}
+		r.eraseLiveLocked()
+		r.spinning = false
+		r.spinMsg = ""
+		r.drawLiveLocked()
+	}
+}
+
 func (r *Renderer) Progress(stageID []byte, phase deploymentsv1.Phase, message string, current uint32, total *uint32) {
 	if r.format == FormatJSON {
 		fields := map[string]any{"phase": phaseTag(phase), "message": message}
@@ -169,22 +199,22 @@ func (r *Renderer) Progress(stageID []byte, phase deploymentsv1.Phase, message s
 }
 
 func (r *Renderer) progressStageLocked(id string, phase deploymentsv1.Phase, message string, current uint32, total *uint32) {
-	n := r.plan.nodeFor(id)
+	n, tracked := r.plan.progress(id, message, current, total)
 	if n.title == "" {
 		n.title = legacyStageTitle(phase, message)
 	}
-	_, started := r.plan.progress(id, message, current, total)
-	if started {
-		r.plan.activeOrder = append(r.plan.activeOrder, id)
+	if !tracked {
+		return
 	}
 	if n.state == stageDone {
-		r.commitLocked(n, r.okColor(), okMark, "")
+		if r.plan.isActive(id) {
+			r.commitLocked(n, r.okColor(), okMark, "")
+		}
+		return
 	}
+	r.plan.ensureActive(id)
 }
 
-// progressLegacyLocked reproduces the pre-stage-plan behaviour: one active
-// step at a time, keyed by phase (or by message for an unspecified phase),
-// finalized the moment a differently-keyed step begins.
 func (r *Renderer) progressLegacyLocked(phase deploymentsv1.Phase, message string, current uint32, total *uint32) {
 	key := legacyStageID(phase, message)
 	if r.legacyActive != "" && r.legacyActive != key {
@@ -193,18 +223,15 @@ func (r *Renderer) progressLegacyLocked(phase deploymentsv1.Phase, message strin
 		}
 	}
 	r.legacyActive = key
-	n := r.plan.nodeFor(key)
+	n, tracked := r.plan.progress(key, message, current, total)
 	if n.title == "" {
 		n.title = legacyStageTitle(phase, message)
 	}
-	_, started := r.plan.progress(key, message, current, total)
-	if started {
-		r.plan.activeOrder = append(r.plan.activeOrder, key)
+	if tracked {
+		r.plan.ensureActive(key)
 	}
 }
 
-// StagePlan grows the stage tree. Order is declaration order, root stages
-// have no parent, and a plan can arrive across several events until final.
 func (r *Renderer) StagePlan(ev *deploymentsv1.StagePlanEvent) {
 	if r.format == FormatJSON {
 		r.emitJSON("stagePlan", map[string]any{"final": ev.GetFinal(), "count": len(ev.GetStages())})
@@ -215,7 +242,6 @@ func (r *Renderer) StagePlan(ev *deploymentsv1.StagePlanEvent) {
 	r.plan.apply(ev)
 }
 
-// Log renders a free-form log line (Pulumi engine output, build warnings).
 func (r *Renderer) Log(message string) {
 	if r.format == FormatJSON {
 		r.emitJSON("log", map[string]any{"message": message})
@@ -223,6 +249,9 @@ func (r *Renderer) Log(message string) {
 	}
 	r.mu.Lock()
 	defer r.mu.Unlock()
+	if !r.verbose && !r.live {
+		return
+	}
 	if r.live {
 		r.eraseLiveLocked()
 		fmt.Fprintln(r.w, message)
@@ -239,7 +268,12 @@ func (r *Renderer) Building() {
 func (r *Renderer) BuildOK() {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	r.finishAllLocked(r.okColor(), okMark, "")
+	key := legacyStageID(deploymentsv1.Phase_PHASE_BUILDING, "")
+	n, ok := r.plan.nodes[key]
+	if !ok || !r.plan.isActive(key) {
+		return
+	}
+	r.commitLocked(n, r.okColor(), okMark, "")
 }
 
 func (r *Renderer) Waiting(reason, url string) {
@@ -262,9 +296,6 @@ func (r *Renderer) Resume() {
 	r.drawLiveLocked()
 }
 
-// Deployed, Finish, Fail and Cancel all conclude the run: they finalize
-// whatever rows are still live and print the outcome. Exactly one of them
-// is called once per Session.
 func (r *Renderer) Deployed(headline string, appURLs []string, logPath string) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -357,9 +388,6 @@ func (r *Renderer) printLogPointerLocked(label, logPath string) {
 	r.colorFor(color.Faint).Fprintf(r.w, "  %s: %s\n", label, relLog(logPath))
 }
 
-// finishAllLocked commits every row still in the live region — used when
-// the whole run concludes, so nothing is left spinning. It reports whether
-// there was any row to finalize.
 func (r *Renderer) finishAllLocked(c *color.Color, mark, status string) bool {
 	if len(r.plan.activeOrder) == 0 {
 		return false
@@ -368,6 +396,7 @@ func (r *Renderer) finishAllLocked(c *color.Color, mark, status string) bool {
 	for _, id := range r.plan.activeOrder {
 		if n := r.plan.nodes[id]; n != nil {
 			r.finalizeLineLocked(n, c, mark, status)
+			n.state = stageDone
 		}
 	}
 	r.plan.activeOrder = nil
@@ -375,10 +404,6 @@ func (r *Renderer) finishAllLocked(c *color.Color, mark, status string) bool {
 	return true
 }
 
-// commitLocked finalizes a single row that finished mid-run (its progress
-// reached its total) while leaving the rest of the live region running —
-// this is what lets one app in a parallel deploy finish while others
-// continue.
 func (r *Renderer) commitLocked(n *stageNode, c *color.Color, mark, status string) {
 	r.finalizeLineLocked(n, c, mark, status)
 	r.plan.removeActive(n.id)
@@ -408,20 +433,62 @@ func (r *Renderer) drawLiveLocked() {
 	if !r.live || r.waiting {
 		return
 	}
-	for _, id := range r.plan.activeOrder {
+	width := termWidth(r.w)
+	maxRows := r.effectiveMaxRowsLocked()
+
+	shown := r.plan.activeOrder
+	overflow := r.plan.droppedActive
+	if len(shown) > maxRows {
+		overflow += len(shown) - maxRows
+		shown = shown[:maxRows]
+	}
+
+	lines := 0
+	for _, id := range shown {
 		n := r.plan.nodes[id]
 		if n == nil {
 			continue
 		}
-		fmt.Fprintln(r.w, r.rowLineLocked(n))
+		fmt.Fprintln(r.w, truncateToWidth(r.rowLineLocked(n), width))
+		lines++
 	}
-	r.liveLines = len(r.plan.activeOrder)
+	if overflow > 0 {
+		fmt.Fprintln(r.w, truncateToWidth(r.colorFor(color.Faint).Sprintf("  … and %d more", overflow), width))
+		lines++
+	}
+	if r.spinning {
+		fmt.Fprintln(r.w, truncateToWidth(r.spinRowLocked(), width))
+		lines++
+	}
+	r.liveLines = lines
+}
+
+func (r *Renderer) effectiveMaxRowsLocked() int {
+	limit := maxActiveRows
+	if budget := termHeight(r.w) - 3; budget < limit {
+		if budget < 1 {
+			budget = 1
+		}
+		limit = budget
+	}
+	return limit
+}
+
+func (r *Renderer) spinRowLocked() string {
+	glyph := r.colorFor(color.FgCyan).Sprint(spinnerFrame(r.spinFrame))
+	return fmt.Sprintf("%s %s", glyph, r.spinMsg)
 }
 
 func (r *Renderer) rowLineLocked(n *stageNode) string {
 	glyph := r.colorFor(color.FgCyan).Sprint(spinnerFrame(n.frame))
 	var b strings.Builder
-	fmt.Fprintf(&b, "%s %s  %s", glyph, n.title, r.colorFor(color.Faint).Sprint(formatDuration(time.Since(n.started))))
+	fmt.Fprintf(&b, "%s %s", glyph, n.title)
+	if r.plan.final {
+		if idx, count, ok := r.plan.siblingPosition(n.id); ok && count > 1 {
+			fmt.Fprintf(&b, " %s", r.colorFor(color.Faint).Sprintf("(%d/%d)", idx, count))
+		}
+	}
+	fmt.Fprintf(&b, "  %s", r.colorFor(color.Faint).Sprint(formatDuration(time.Since(n.started))))
 	switch {
 	case n.total != nil:
 		fmt.Fprintf(&b, "  %s %d/%d", bar(n.current, *n.total), n.current, *n.total)

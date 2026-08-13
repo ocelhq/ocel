@@ -21,7 +21,7 @@ func TestLiveRegion(t *testing.T) {
 	t.Run("a parallel deploy shows one line per app, each with its own stage", func(t *testing.T) {
 		t.Parallel()
 		var out bytes.Buffer
-		r := newRenderer(&out, FormatHuman, true, false)
+		r := newRendererForTest(&out, FormatHuman, true, false)
 		t.Cleanup(func() { _ = r.Close() })
 
 		appA, appB := appStage(1), appStage(2)
@@ -46,7 +46,7 @@ func TestLiveRegion(t *testing.T) {
 	t.Run("one app finishing does not stop the other's line from updating", func(t *testing.T) {
 		t.Parallel()
 		var out bytes.Buffer
-		r := newRenderer(&out, FormatHuman, true, false)
+		r := newRendererForTest(&out, FormatHuman, true, false)
 		t.Cleanup(func() { _ = r.Close() })
 
 		appA, appB := appStage(1), appStage(2)
@@ -75,7 +75,7 @@ func TestLiveRegion(t *testing.T) {
 	t.Run("which app is stuck stays answerable: a slow app keeps its own row", func(t *testing.T) {
 		t.Parallel()
 		var out bytes.Buffer
-		r := newRenderer(&out, FormatHuman, true, false)
+		r := newRendererForTest(&out, FormatHuman, true, false)
 		t.Cleanup(func() { _ = r.Close() })
 
 		fast, slow := appStage(1), appStage(2)
@@ -159,7 +159,7 @@ func TestColourIsDecidedFromTheTargetWriter(t *testing.T) {
 // with -race.
 func TestRendererSingleOwnerRaceFree(t *testing.T) {
 	var out bytes.Buffer
-	r := newRenderer(&out, FormatHuman, true, false)
+	r := newRendererForTest(&out, FormatHuman, true, false)
 
 	appA, appB := appStage(1), appStage(2)
 	r.StagePlan(&deploymentsv1.StagePlanEvent{Stages: []*deploymentsv1.Stage{
