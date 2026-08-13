@@ -140,16 +140,24 @@ func (s *Server) Deploy(ctx context.Context, req *deploymentsv1.DeployRequest, s
 	if err := validateManifest(manifest); err != nil {
 		return connect.NewError(connect.CodeInvalidArgument, err)
 	}
-	progress := func(phase deploymentsv1.Phase, m string, current, total uint32) {
-		_ = stream.Send(phaseProgressEvent(phase, m, current, total))
-	}
-	logf := func(m string) { _ = stream.Send(logEvent(m)) }
+	sender := newEventSender(stream.Send)
+	progress, logf := newDeployReporter(sender)
 
 	res, err := s.runDeploy(ctx, req, manifest, progress, logf)
 	if err != nil {
-		return stream.Send(failureResult(err))
+		sender.send(failureResult(err))
+	} else {
+		sender.send(deployedResult(res))
 	}
-	return stream.Send(deployedResult(res))
+	return sender.close()
+}
+
+func newDeployReporter(sender *eventSender) (deploy.Progress, func(string)) {
+	progress := func(phase deploymentsv1.Phase, m string, current, total uint32) {
+		sender.send(phaseProgressEvent(phase, m, current, total))
+	}
+	logf := func(m string) { sender.send(logEvent(m)) }
+	return progress, logf
 }
 
 func (s *Server) runDeploy(ctx context.Context, req *deploymentsv1.DeployRequest, manifest *deploymentsv1.Manifest, progress deploy.Progress, logf func(string)) (deploy.Result, error) {
