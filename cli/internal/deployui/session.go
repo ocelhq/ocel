@@ -15,20 +15,16 @@ import (
 	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
 )
 
-// Session is a per-run identity layered over a Renderer: it owns the
-// run's plaintext transcript file and translates the provider's
-// DeployEvent wire type into calls on the Renderer and into the run's
-// trace artifact. It is the type every command in cli/ constructs and
-// drives; the Renderer underneath is what other tickets extend.
 type Session struct {
 	r       *Renderer
 	run     *obs.Run
 	command string
 	waiting bool
 
-	logMu   sync.Mutex
-	log     *os.File
-	logPath string
+	logMu     sync.Mutex
+	log       *os.File
+	logPath   string
+	logWriter *syncFileWriter
 }
 
 func New(stdout io.Writer, run *obs.Run, format Format, verbose bool) *Session {
@@ -41,6 +37,7 @@ func New(stdout io.Writer, run *obs.Run, format Format, verbose bool) *Session {
 	if f, err := os.Create(p); err == nil {
 		s.log = f
 		s.logPath = p
+		s.logWriter = &syncFileWriter{f: f, mu: &s.logMu}
 	}
 	return s
 }
@@ -49,21 +46,15 @@ func (s *Session) LogPath() string {
 	return s.logPath
 }
 
-// BuildWriter is where subprocess output (the app build, the provider
-// process) enters the single-owner path. While the renderer is animating a
-// live region, raw build output would corrupt it, so it goes only to the
-// transcript file, exactly as it always has; otherwise it also reaches the
-// renderer, which is safe for the concurrent drain goroutines that write to
-// it because the renderer serializes every write.
 func (s *Session) BuildWriter() io.Writer {
 	if s.r.Live() {
-		if s.log != nil {
-			return &syncFileWriter{f: s.log, mu: &s.logMu}
+		if s.logWriter != nil {
+			return s.logWriter
 		}
 		return io.Discard
 	}
-	if s.log != nil {
-		return io.MultiWriter(s.r, &syncFileWriter{f: s.log, mu: &s.logMu})
+	if s.logWriter != nil {
+		return io.MultiWriter(s.r, s.logWriter)
 	}
 	return s.r
 }
@@ -114,16 +105,26 @@ func (s *Session) ingestSpan(span *deploymentsv1.SpanEvent) {
 	if id := span.GetSpanId(); len(id) == 8 {
 		copy(spanID[:], id)
 	} else {
+		s.logf("[warn] dropped a provider span with a malformed span id (%d bytes, want 8)", len(span.GetSpanId()))
 		return
 	}
 	if id := span.GetParentSpanId(); len(id) == 8 {
 		copy(parentSpanID[:], id)
 	}
-	_ = s.run.IngestSpan(
+
+	start := unixNano(span.GetStartTimeUnixNano())
+	end := unixNano(span.GetEndTimeUnixNano())
+	if start.IsZero() {
+		start = time.Now().UTC()
+	}
+	if end.Before(start) {
+		end = start
+	}
+
+	s.run.IngestSpan(
 		spanID, parentSpanID,
 		span.GetName(),
-		unixNano(span.GetStartTimeUnixNano()),
-		unixNano(span.GetEndTimeUnixNano()),
+		start, end,
 		spanStatus(span.GetStatus()),
 		spanAttributes(span.GetAttributes()),
 	)
@@ -157,11 +158,10 @@ func (s *Session) Close() error {
 }
 
 func (s *Session) logf(format string, args ...any) {
-	if s.log == nil {
+	if s.logWriter == nil {
 		return
 	}
-	w := &syncFileWriter{f: s.log, mu: &s.logMu}
-	_, _ = w.Write([]byte(fmt.Sprintf(format, args...) + "\n"))
+	_, _ = s.logWriter.Write([]byte(fmt.Sprintf(format, args...) + "\n"))
 }
 
 func (s *Session) logOutputs(outputs []*deploymentsv1.ResourceOutput) {
@@ -196,6 +196,9 @@ func progressLogLine(message string, current uint32, total *uint32) string {
 }
 
 func unixNano(ns int64) time.Time {
+	if ns <= 0 {
+		return time.Time{}
+	}
 	return time.Unix(0, ns).UTC()
 }
 
@@ -272,6 +275,10 @@ func attributeKey(k deploymentsv1.AttributeKey) (attribute.Key, bool) {
 		return obs.AttrRetryCount, true
 	case deploymentsv1.AttributeKey_ATTRIBUTE_KEY_DURATION_MS:
 		return obs.AttrDurationMS, true
+	case deploymentsv1.AttributeKey_ATTRIBUTE_KEY_RESOURCE_TYPE:
+		return obs.AttrResourceType, true
+	case deploymentsv1.AttributeKey_ATTRIBUTE_KEY_RESOURCE_NAME:
+		return obs.AttrResourceName, true
 	default:
 		return "", false
 	}
