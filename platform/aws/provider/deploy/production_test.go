@@ -10,7 +10,9 @@ import (
 	"reflect"
 	"strings"
 	"testing"
+	"time"
 
+	"github.com/pulumi/pulumi/sdk/v3/go/common/apitype"
 	"github.com/pulumi/pulumi/sdk/v3/go/common/resource/config"
 	"github.com/pulumi/pulumi/sdk/v3/go/common/workspace"
 
@@ -1725,6 +1727,100 @@ func TestDefaultTagsReachTheWholeProgram(t *testing.T) {
 	for _, want := range []string{"aws:defaultTags", "ocel:project: shop", `ocel:expires-at: "1760000000"`} {
 		if !strings.Contains(string(raw), want) {
 			t.Errorf("stack settings\n%s\nmissing %q", raw, want)
+		}
+	}
+}
+
+func TestEmitEngineTraceAttachesResourceIdentityOnlyToStandouts(t *testing.T) {
+	t.Parallel()
+
+	ft := &fakeTracer{}
+	parent := NewRootStage("Provisioning").ID
+	start := time.Unix(6000, 0)
+	trace := EngineTrace{
+		ResourceCount: 2,
+		Start:         start,
+		End:           start.Add(5 * time.Second),
+		Failed:        true,
+		Standouts: []ResourceStandout{
+			{
+				Op:     apitype.OpCreate,
+				Type:   "aws:s3/bucket:Bucket",
+				Name:   "my-bucket",
+				Start:  start,
+				End:    start.Add(5 * time.Second),
+				Failed: true,
+			},
+		},
+	}
+
+	emitEngineTrace(ft, parent, trace, nil)
+
+	if len(ft.spans) != 2 {
+		t.Fatalf("got %d spans, want 2 (batch + standout)", len(ft.spans))
+	}
+
+	batch := ft.spans[0]
+	if batch.name != engineBatchSpanName {
+		t.Fatalf("spans[0].name = %q, want the batch span name", batch.name)
+	}
+	for _, a := range batch.attrs {
+		if a.Key == deploymentsv1.AttributeKey_ATTRIBUTE_KEY_RESOURCE_TYPE || a.Key == deploymentsv1.AttributeKey_ATTRIBUTE_KEY_RESOURCE_NAME {
+			t.Errorf("batch span carries resource identity attr %+v; it covers many resources", a)
+		}
+	}
+
+	standout := ft.spans[1]
+	var sawType, sawName bool
+	for _, a := range standout.attrs {
+		switch a.Key {
+		case deploymentsv1.AttributeKey_ATTRIBUTE_KEY_RESOURCE_TYPE:
+			sawType = true
+			if a.Value != "aws:s3/bucket:Bucket" {
+				t.Errorf("RESOURCE_TYPE = %q, want the type token", a.Value)
+			}
+		case deploymentsv1.AttributeKey_ATTRIBUTE_KEY_RESOURCE_NAME:
+			sawName = true
+			if a.Value != "my-bucket" {
+				t.Errorf("RESOURCE_NAME = %q, want the logical name", a.Value)
+			}
+			if strings.Contains(a.Value, "urn:pulumi") {
+				t.Fatal("RESOURCE_NAME carried the raw URN")
+			}
+		}
+	}
+	if !sawType {
+		t.Error("standout span is missing ATTRIBUTE_KEY_RESOURCE_TYPE")
+	}
+	if !sawName {
+		t.Error("standout span is missing ATTRIBUTE_KEY_RESOURCE_NAME")
+	}
+}
+
+func TestEmitEngineTraceOmitsResourceIdentityWhenTheURNDidNotParse(t *testing.T) {
+	t.Parallel()
+
+	ft := &fakeTracer{}
+	parent := NewRootStage("Provisioning").ID
+	start := time.Unix(7000, 0)
+	trace := EngineTrace{
+		ResourceCount: 1,
+		Start:         start,
+		End:           start.Add(time.Second),
+		Failed:        true,
+		Standouts: []ResourceStandout{
+			{Op: apitype.OpCreate, Type: "", Name: "", Start: start, End: start.Add(time.Second), Failed: true},
+		},
+	}
+
+	emitEngineTrace(ft, parent, trace, nil)
+
+	if len(ft.spans) != 2 {
+		t.Fatalf("got %d spans, want 2", len(ft.spans))
+	}
+	for _, a := range ft.spans[1].attrs {
+		if a.Key == deploymentsv1.AttributeKey_ATTRIBUTE_KEY_RESOURCE_TYPE || a.Key == deploymentsv1.AttributeKey_ATTRIBUTE_KEY_RESOURCE_NAME {
+			t.Errorf("standout span carries resource identity attr %+v despite an unparseable URN", a)
 		}
 	}
 }

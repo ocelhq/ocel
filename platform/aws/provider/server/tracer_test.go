@@ -3,6 +3,7 @@ package server
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 	"time"
 
@@ -135,6 +136,53 @@ func TestEventTracerSpanRecordsAFailureAsAnErrorKindNeverRawText(t *testing.T) {
 
 	if span.GetName() == secret {
 		t.Fatal("SpanEvent.Name carried the raw error text")
+	}
+}
+
+func TestEventTracerSpanCarriesResourceIdentityNeverTheURN(t *testing.T) {
+	t.Parallel()
+
+	stream := &recordingStream{}
+	sender := newEventSender(context.Background(), stream.send)
+	tracer := newEventTracer(sender)
+
+	stack := deploy.NewRootStage("Provisioning")
+	tracer.Span(stack.ID, stack.ParentID, "resource operation failed", time.Now(), time.Now(), errors.New("boom"),
+		deploy.AttrResourceType("aws:s3/bucket:Bucket"), deploy.AttrResourceName("my-bucket"))
+
+	if err := sender.close(); err != nil {
+		t.Fatalf("close() error = %v", err)
+	}
+	span := stream.events[0].GetSpan()
+
+	var sawType, sawName bool
+	for _, a := range span.GetAttributes() {
+		switch a.GetKey() {
+		case deploymentsv1.AttributeKey_ATTRIBUTE_KEY_RESOURCE_TYPE:
+			sawType = true
+			if a.GetValue() != "aws:s3/bucket:Bucket" {
+				t.Errorf("RESOURCE_TYPE = %q, want the type token", a.GetValue())
+			}
+		case deploymentsv1.AttributeKey_ATTRIBUTE_KEY_RESOURCE_NAME:
+			sawName = true
+			if a.GetValue() != "my-bucket" {
+				t.Errorf("RESOURCE_NAME = %q, want the logical name", a.GetValue())
+			}
+		}
+	}
+	if !sawType || !sawName {
+		t.Fatalf("span missing resource identity attrs: %+v", span.GetAttributes())
+	}
+
+	// The URN this identity was derived from would have been
+	// urn:pulumi:prod::acme-shop::aws:s3/bucket:Bucket::my-bucket: neither
+	// the stack ("prod") nor the project ("acme-shop") may appear anywhere
+	// in the emitted SpanEvent, on any field.
+	serialized := span.String()
+	for _, leaked := range []string{"urn:pulumi", "prod", "acme-shop"} {
+		if strings.Contains(serialized, leaked) {
+			t.Fatalf("SpanEvent leaked URN component %q: %s", leaked, serialized)
+		}
 	}
 }
 

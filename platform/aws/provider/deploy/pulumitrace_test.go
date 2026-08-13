@@ -1,6 +1,7 @@
 package deploy
 
 import (
+	"strings"
 	"testing"
 	"time"
 
@@ -119,13 +120,67 @@ func TestEngineTraceBuilderNeverRetainsTheURN(t *testing.T) {
 	b.consume(failedEvent(testURN, "aws:s3/bucket:Bucket", apitype.OpCreate), base.Add(time.Second))
 
 	got := b.result()
-	for _, s := range got.Standouts {
-		if s.Op == "" || s.Type == "" {
-			t.Fatalf("standout missing Op/Type: %+v", s)
-		}
+	if len(got.Standouts) != 1 {
+		t.Fatalf("len(Standouts) = %d, want 1", len(got.Standouts))
 	}
-	// ResourceStandout has no URN or name field: the type itself is the guarantee.
-	var _ = ResourceStandout{Op: apitype.OpCreate, Type: "x", Start: base, End: base, Failed: true}
+	s := got.Standouts[0]
+	if s.Op == "" || s.Type == "" || s.Name == "" {
+		t.Fatalf("standout missing Op/Type/Name: %+v", s)
+	}
+	if s.Type != "aws:s3/bucket:Bucket" {
+		t.Errorf("Type = %q, want the type token", s.Type)
+	}
+	if s.Name != "my-bucket" {
+		t.Errorf("Name = %q, want the URN's logical name component", s.Name)
+	}
+	// testURN's stack is "prod" and its project is "proj": ResourceStandout
+	// must carry neither, and Name in particular must not embed them.
+	if strings.Contains(s.Type, "prod") || strings.Contains(s.Type, "proj") {
+		t.Fatalf("Type leaked the URN's stack or project: %q", s.Type)
+	}
+	if strings.Contains(s.Name, "prod") || strings.Contains(s.Name, "proj") {
+		t.Fatalf("Name leaked the URN's stack or project: %q", s.Name)
+	}
+}
+
+func TestResourceNameFromURNParsesDefensively(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		name string
+		urn  string
+		want string
+	}{
+		{"well-formed", testURN, "my-bucket"},
+		{"empty", "", ""},
+		{"not a urn at all", "not-a-urn", ""},
+		{"missing the name component", "urn:pulumi:prod::proj::aws:s3/bucket:Bucket", ""},
+		{"wrong namespace", "urn:notpulumi:prod::proj::aws:s3/bucket:Bucket::my-bucket", ""},
+		{"name embeds the delimiter", "urn:pulumi:prod::proj::aws:s3/bucket:Bucket::weird::name", "weird::name"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			if got := resourceNameFromURN(tc.urn); got != tc.want {
+				t.Errorf("resourceNameFromURN(%q) = %q, want %q", tc.urn, got, tc.want)
+			}
+		})
+	}
+}
+
+func TestCapIdentifierBoundsLength(t *testing.T) {
+	t.Parallel()
+
+	short := "aws:s3/bucket:Bucket"
+	if got := capIdentifier(short); got != short {
+		t.Errorf("capIdentifier(%q) = %q, want unchanged", short, got)
+	}
+
+	long := strings.Repeat("x", maxResourceIdentifierLen*2)
+	got := capIdentifier(long)
+	if len(got) != maxResourceIdentifierLen {
+		t.Fatalf("capIdentifier(long) length = %d, want %d", len(got), maxResourceIdentifierLen)
+	}
 }
 
 func TestResourceStandoutNameIsBoundedNeverDynamic(t *testing.T) {
