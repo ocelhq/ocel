@@ -234,7 +234,7 @@ func convertValue(v attribute.Value) otlpAnyValue {
 		f := v.AsFloat64()
 		return otlpAnyValue{DoubleValue: &f}
 	default:
-		s := v.Emit()
+		s := v.String()
 		return otlpAnyValue{StringValue: &s}
 	}
 }
