@@ -4,16 +4,14 @@ package cli
 
 import (
 	"os/exec"
-	"syscall"
+
+	"github.com/ocelhq/ocel/cli/internal/procgroup"
 )
 
 func setNewProcessGroup(cmd *exec.Cmd) {
-	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
+	procgroup.New(cmd)
 }
 
 func killProcessGroup(cmd *exec.Cmd) error {
-	if cmd.Process == nil {
-		return nil
-	}
-	return syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL)
+	return procgroup.Kill(cmd)
 }
