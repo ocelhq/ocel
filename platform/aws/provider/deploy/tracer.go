@@ -79,6 +79,10 @@ func AttrResourceCount(n int) Attr {
 	return Attr{deploymentsv1.AttributeKey_ATTRIBUTE_KEY_RESOURCE_COUNT, strconv.Itoa(n)}
 }
 
+func AttrBytes(n int64) Attr {
+	return Attr{deploymentsv1.AttributeKey_ATTRIBUTE_KEY_BYTES, strconv.FormatInt(n, 10)}
+}
+
 func AttrDurationMS(d time.Duration) Attr {
 	return Attr{deploymentsv1.AttributeKey_ATTRIBUTE_KEY_DURATION_MS, strconv.FormatInt(d.Milliseconds(), 10)}
 }
