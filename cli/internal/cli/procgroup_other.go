@@ -2,13 +2,16 @@
 
 package cli
 
-import "os/exec"
+import (
+	"os/exec"
 
-func setNewProcessGroup(cmd *exec.Cmd) {}
+	"github.com/ocelhq/ocel/cli/internal/procgroup"
+)
+
+func setNewProcessGroup(cmd *exec.Cmd) {
+	procgroup.New(cmd)
+}
 
 func killProcessGroup(cmd *exec.Cmd) error {
-	if cmd.Process == nil {
-		return nil
-	}
-	return cmd.Process.Kill()
+	return procgroup.Kill(cmd)
 }
