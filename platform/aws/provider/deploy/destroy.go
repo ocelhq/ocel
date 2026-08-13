@@ -103,7 +103,7 @@ func destroyStackStage(ctx context.Context, cfg Config, stack naming.StackName, 
 	defer func() { spanForStage(cfg.Tracer, stage, start, time.Now(), err) }()
 
 	report := cfg.reportStage(stage)
-	report("Destroying " + kind + " stack " + stack.String())
+	report(sanitizeMessage("Destroying " + kind + " stack " + stack.String()))
 	if derr := Destroy(ctx, teardownConfig(cfg, stack), report, log); derr != nil {
 		err = fmt.Errorf("destroy %s stack %s: %w", kind, stack, derr)
 		return err

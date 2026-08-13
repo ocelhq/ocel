@@ -32,22 +32,30 @@ type Stage struct {
 
 const maxStageTitleLen = 200
 
-func sanitizeTitle(title string) string {
+func stripControlChars(s string, capLen int) string {
 	var b strings.Builder
-	for _, r := range title {
+	for _, r := range s {
 		if r < 0x20 || r == 0x7f {
 			continue
 		}
 		b.WriteRune(r)
-		if b.Len() >= maxStageTitleLen {
+		if capLen > 0 && b.Len() >= capLen {
 			break
 		}
 	}
-	out := strings.TrimSpace(b.String())
+	return strings.TrimSpace(b.String())
+}
+
+func sanitizeTitle(title string) string {
+	out := stripControlChars(title, maxStageTitleLen)
 	if out == "" {
 		return "stage"
 	}
 	return out
+}
+
+func sanitizeMessage(msg string) string {
+	return stripControlChars(msg, 0)
 }
 
 func NewRootStage(title string) Stage {
