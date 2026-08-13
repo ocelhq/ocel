@@ -85,6 +85,7 @@ func uploadStaticAssets(ctx context.Context, cfg Config, manifest *deploymentsv1
 		return err
 	}
 
+	phaseStart := time.Now()
 	g, ctx := errgroup.WithContext(ctx)
 	g.SetLimit(uploadConcurrency)
 	stats := newUploadBatchStats()
@@ -107,6 +108,6 @@ func uploadStaticAssets(ctx context.Context, cfg Config, manifest *deploymentsv1
 		}
 	}
 	err := g.Wait()
-	emitUploadBatch(cfg.Tracer, cfg.Stages.Uploading.ID, uploadKindStaticAsset, stats, err)
+	emitUploadBatch(cfg.Tracer, cfg.Stages.Uploading.ID, uploadKindStaticAsset, stats, err, phaseStart)
 	return err
 }

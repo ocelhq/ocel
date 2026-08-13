@@ -163,6 +163,7 @@ func uploadPrerenderAssets(ctx context.Context, cfg Config, builds appBuilds) er
 		}
 	}
 
+	phaseStart := time.Now()
 	g, ctx := errgroup.WithContext(ctx)
 	g.SetLimit(uploadConcurrency)
 	stats := newUploadBatchStats()
@@ -174,7 +175,7 @@ func uploadPrerenderAssets(ctx context.Context, cfg Config, builds appBuilds) er
 		})
 	}
 	err := g.Wait()
-	emitUploadBatch(cfg.Tracer, cfg.Stages.Uploading.ID, uploadKindPrerenderAsset, stats, err)
+	emitUploadBatch(cfg.Tracer, cfg.Stages.Uploading.ID, uploadKindPrerenderAsset, stats, err, phaseStart)
 	return err
 }
 

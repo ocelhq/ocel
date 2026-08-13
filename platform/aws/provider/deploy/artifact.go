@@ -284,6 +284,7 @@ func uploadFunctionArtifacts(ctx context.Context, cfg Config, manifest *deployme
 	var done atomic.Uint32
 	progress.report(deploymentsv1.Phase_PHASE_UPLOADING, "Uploading function artifacts", 0, total)
 
+	phaseStart := time.Now()
 	g, ctx := errgroup.WithContext(ctx)
 	g.SetLimit(uploadConcurrency)
 
@@ -315,7 +316,7 @@ func uploadFunctionArtifacts(ctx context.Context, cfg Config, manifest *deployme
 		})
 	}
 	err := g.Wait()
-	emitUploadBatch(cfg.Tracer, cfg.Stages.Uploading.ID, uploadKindFunctionArtifact, stats, err)
+	emitUploadBatch(cfg.Tracer, cfg.Stages.Uploading.ID, uploadKindFunctionArtifact, stats, err, phaseStart)
 	if err != nil {
 		return nil, err
 	}
