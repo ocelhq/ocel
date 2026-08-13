@@ -10,6 +10,11 @@ function captureStdout(): { lines: string[] } {
   return { lines };
 }
 
+function parseRecord(line: string): unknown {
+  expect(line.startsWith("\n" + PROTOCOL_PREFIX)).toBe(true);
+  return JSON.parse(line.slice(1 + PROTOCOL_PREFIX.length));
+}
+
 afterEach(() => {
   vi.restoreAllMocks();
 });
@@ -20,9 +25,20 @@ describe("protocol records", () => {
     log("info", "installing dependencies", "api", "build");
 
     expect(lines).toHaveLength(1);
-    expect(lines[0]!.startsWith(PROTOCOL_PREFIX)).toBe(true);
-    const record = JSON.parse(lines[0]!.slice(PROTOCOL_PREFIX.length));
-    expect(record).toEqual({ type: "log", level: "info", message: "installing dependencies", app: "api", stage: "build" });
+    expect(parseRecord(lines[0]!)).toEqual({
+      type: "log",
+      level: "info",
+      message: "installing dependencies",
+      app: "api",
+      stage: "build",
+    });
+  });
+
+  it("leads every record with its own newline, so a framework's unterminated partial line cannot glue onto it", () => {
+    const { lines } = captureStdout();
+    reportError("no entrypoint resolved");
+
+    expect(lines[0]).toMatch(/^\n@@OCEL_V1@@/);
   });
 
   it("reports a span_start/span_end pair around a successful call", async () => {
@@ -30,12 +46,12 @@ describe("protocol records", () => {
     const result = await withSpan("build", "api", async () => "done");
 
     expect(result).toBe("done");
-    const records = lines.map((l) => JSON.parse(l.slice(PROTOCOL_PREFIX.length)));
+    const records = lines.map(parseRecord);
     expect(records).toEqual([
       { type: "span_start", id: expect.any(String), stage: "build", app: "api" },
       { type: "span_end", id: expect.any(String), ok: true },
     ]);
-    expect(records[0].id).toBe(records[1].id);
+    expect((records[0] as { id: string }).id).toBe((records[1] as { id: string }).id);
   });
 
   it("reports the actual error and a failed span_end, then rethrows the same error", async () => {
@@ -44,10 +60,10 @@ describe("protocol records", () => {
 
     await expect(withSpan("build", "api", async () => { throw failure; })).rejects.toBe(failure);
 
-    const records = lines.map((l) => JSON.parse(l.slice(PROTOCOL_PREFIX.length)));
+    const records = lines.map(parseRecord);
     expect(records[0]).toMatchObject({ type: "span_start", stage: "build", app: "api" });
     expect(records[1]).toMatchObject({ type: "error", app: "api", stage: "build" });
-    expect(records[1].message).toContain("no entrypoint resolved");
+    expect((records[1] as { message: string }).message).toContain("no entrypoint resolved");
     expect(records[2]).toMatchObject({ type: "span_end", ok: false });
   });
 
@@ -69,7 +85,6 @@ describe("protocol records", () => {
     const { lines } = captureStdout();
     reportError("could not detect a framework");
 
-    const record = JSON.parse(lines[0]!.slice(PROTOCOL_PREFIX.length));
-    expect(record).toEqual({ type: "error", message: "could not detect a framework" });
+    expect(parseRecord(lines[0]!)).toEqual({ type: "error", message: "could not detect a framework" });
   });
 });

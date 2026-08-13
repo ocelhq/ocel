@@ -13,7 +13,7 @@ interface ProtocolRecord {
 }
 
 function emit(record: ProtocolRecord): void {
-  process.stdout.write(PROTOCOL_PREFIX + JSON.stringify(record) + "\n");
+  process.stdout.write("\n" + PROTOCOL_PREFIX + JSON.stringify(record) + "\n");
 }
 
 export function log(level: Level, message: string, app?: string, stage?: string): void {
@@ -28,10 +28,6 @@ function errorMessage(err: unknown): string {
   return err instanceof Error ? (err.stack ?? err.message) : String(err);
 }
 
-// A span's catch reports the app- and stage-scoped error and reports it up
-// as an error record; a rethrow then has to cross an outer catch (cli.ts's
-// top-level handler) that has neither. Marking it reported here keeps that
-// outer handler from overwriting the specific record with a generic one.
 const reported = new WeakSet<object>();
 
 export function isReported(err: unknown): boolean {

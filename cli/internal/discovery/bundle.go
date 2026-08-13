@@ -13,20 +13,10 @@ import (
 
 const buildDirName = ".ocel"
 
-// protocolBanner installs the nodeprotocol wire format before anything else
-// runs. Discovery imports the user's own declare files as dynamic imports
-// inside a try/catch (see importsAndSync below) rather than static
-// `import` statements specifically so this banner's process.on handlers
-// and span_start are guaranteed to execute first: a static import's
-// dependencies evaluate before the importing module's own top-level code,
-// regardless of source order, so a throwing declare file would otherwise
-// run before the banner ever had a chance to install its handlers. It
-// stays plain console.log/JSON — see the commit body for why this doesn't
-// reach for a logging or tracing dependency.
 const protocolBanner = `
 const __ocelProtoPrefix = "` + nodeprotocol.Prefix + `";
 function __ocelEmit(record) {
-  process.stdout.write(__ocelProtoPrefix + JSON.stringify(record) + "\n");
+  process.stdout.write("\n" + __ocelProtoPrefix + JSON.stringify(record) + "\n");
 }
 let __ocelFailed = false;
 function __ocelFail(err) {
