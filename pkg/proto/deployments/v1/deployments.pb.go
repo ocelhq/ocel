@@ -144,6 +144,8 @@ const (
 	AttributeKey_ATTRIBUTE_KEY_BYTES          AttributeKey = 9
 	AttributeKey_ATTRIBUTE_KEY_RETRY_COUNT    AttributeKey = 10
 	AttributeKey_ATTRIBUTE_KEY_DURATION_MS    AttributeKey = 11
+	AttributeKey_ATTRIBUTE_KEY_RESOURCE_TYPE  AttributeKey = 12
+	AttributeKey_ATTRIBUTE_KEY_RESOURCE_NAME  AttributeKey = 13
 )
 
 // Enum value maps for AttributeKey.
@@ -161,6 +163,8 @@ var (
 		9:  "ATTRIBUTE_KEY_BYTES",
 		10: "ATTRIBUTE_KEY_RETRY_COUNT",
 		11: "ATTRIBUTE_KEY_DURATION_MS",
+		12: "ATTRIBUTE_KEY_RESOURCE_TYPE",
+		13: "ATTRIBUTE_KEY_RESOURCE_NAME",
 	}
 	AttributeKey_value = map[string]int32{
 		"ATTRIBUTE_KEY_UNSPECIFIED":    0,
@@ -175,6 +179,8 @@ var (
 		"ATTRIBUTE_KEY_BYTES":          9,
 		"ATTRIBUTE_KEY_RETRY_COUNT":    10,
 		"ATTRIBUTE_KEY_DURATION_MS":    11,
+		"ATTRIBUTE_KEY_RESOURCE_TYPE":  12,
+		"ATTRIBUTE_KEY_RESOURCE_NAME":  13,
 	}
 )
 
@@ -3708,7 +3714,7 @@ const file_deployments_v1_deployments_proto_rawDesc = "" +
 	"SpanStatus\x12\x1b\n" +
 	"\x17SPAN_STATUS_UNSPECIFIED\x10\x00\x12\x12\n" +
 	"\x0eSPAN_STATUS_OK\x10\x01\x12\x15\n" +
-	"\x11SPAN_STATUS_ERROR\x10\x02*\xe1\x02\n" +
+	"\x11SPAN_STATUS_ERROR\x10\x02*\xa3\x03\n" +
 	"\fAttributeKey\x12\x1d\n" +
 	"\x19ATTRIBUTE_KEY_UNSPECIFIED\x10\x00\x12\x19\n" +
 	"\x15ATTRIBUTE_KEY_COMMAND\x10\x01\x12\x17\n" +
@@ -3722,7 +3728,9 @@ const file_deployments_v1_deployments_proto_rawDesc = "" +
 	"\x13ATTRIBUTE_KEY_BYTES\x10\t\x12\x1d\n" +
 	"\x19ATTRIBUTE_KEY_RETRY_COUNT\x10\n" +
 	"\x12\x1d\n" +
-	"\x19ATTRIBUTE_KEY_DURATION_MS\x10\v2\xee\b\n" +
+	"\x19ATTRIBUTE_KEY_DURATION_MS\x10\v\x12\x1f\n" +
+	"\x1bATTRIBUTE_KEY_RESOURCE_TYPE\x10\f\x12\x1f\n" +
+	"\x1bATTRIBUTE_KEY_RESOURCE_NAME\x10\r2\xee\b\n" +
 	"\x11DeploymentService\x12F\n" +
 	"\x06Deploy\x12\x1d.deployments.v1.DeployRequest\x1a\x1b.deployments.v1.DeployEvent0\x01\x12L\n" +
 	"\tBootstrap\x12 .deployments.v1.BootstrapRequest\x1a\x1b.deployments.v1.DeployEvent0\x01\x12V\n" +
