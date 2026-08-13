@@ -66,7 +66,9 @@ func (s *Server) hasRootStack(state edge.RootStackState) (bool, error) {
 }
 
 func (s *Server) DestroyProject(ctx context.Context, req *deploymentsv1.DestroyProjectRequest, stream *connect.ServerStream[deploymentsv1.DeployEvent]) error {
-	progress := func(m string) { _ = stream.Send(phaseProgressEvent(deploymentsv1.Phase_PHASE_PROVISIONING, m, 0, 0)) }
+	progress := func(m string) {
+		_ = stream.Send(phaseProgressEvent(nil, deploymentsv1.Phase_PHASE_PROVISIONING, m, 0, 0))
+	}
 	logf := func(m string) { _ = stream.Send(logEvent(m)) }
 
 	if err := s.runDestroyProject(ctx, req, progress, logf); err != nil {
