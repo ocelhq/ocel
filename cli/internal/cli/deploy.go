@@ -83,7 +83,7 @@ func runDeploy(ctx context.Context, d deps, cwd string, opts deployOptions, stdo
 		return err
 	}
 
-	cfg, err := projectconfig.Resolve(cwd)
+	cfg, err := projectconfig.Resolve(ctx, cwd)
 	if err != nil {
 		return err
 	}
@@ -477,7 +477,7 @@ func failSession(ctx context.Context, ui *deployui.Session, err error) error {
 }
 
 func runProviderSession(ctx context.Context, d deps, cfg *projectconfig.Config, provider *projectconfig.ProviderDescriptor, stdout, stderr io.Writer, drive func(*providerrunner.Runner) error) error {
-	binPath, err := d.locateProviderBinary(cfg.Dir, provider.Package)
+	binPath, err := d.locateProviderBinary(ctx, cfg.Dir, provider.Package)
 	if err != nil {
 		return fmt.Errorf("locate provider binary: %w", err)
 	}

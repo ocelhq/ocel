@@ -46,7 +46,7 @@ func init() {
 }
 
 func runBootstrap(ctx context.Context, d deps, cwd string, opts bootstrapOptions, stdout, stderr io.Writer, stdin io.Reader) error {
-	cfg, err := projectconfig.Resolve(cwd)
+	cfg, err := projectconfig.Resolve(ctx, cwd)
 	if err != nil {
 		return err
 	}

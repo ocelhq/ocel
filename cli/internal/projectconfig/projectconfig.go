@@ -2,6 +2,7 @@ package projectconfig
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -178,7 +179,7 @@ func PreviewBaseDomain(previewDomain string) string {
 
 const defaultCompute = "serverless"
 
-func Resolve(startDir string) (*Config, error) {
+func Resolve(ctx context.Context, startDir string) (*Config, error) {
 	root, err := findProjectRoot(startDir)
 	if err != nil {
 		return nil, err
@@ -188,10 +189,10 @@ func Resolve(startDir string) (*Config, error) {
 	if !isFile(configPath) {
 		return nil, fmt.Errorf("no %s found in %s or any parent directory — %s", ConfigFileName, startDir, initHint)
 	}
-	return load(configPath)
+	return load(ctx, configPath)
 }
 
-func ResolveOptional(startDir string) (*Config, error) {
+func ResolveOptional(ctx context.Context, startDir string) (*Config, error) {
 	root, err := findProjectRoot(startDir)
 	if err != nil {
 		return nil, err
@@ -204,11 +205,11 @@ func ResolveOptional(startDir string) (*Config, error) {
 			Dir:       root,
 		}, nil
 	}
-	return load(configPath)
+	return load(ctx, configPath)
 }
 
-func load(configPath string) (*Config, error) {
-	output, err := buildAndRun(configPath)
+func load(ctx context.Context, configPath string) (*Config, error) {
+	output, err := buildAndRun(ctx, configPath)
 	if err != nil {
 		return nil, fmt.Errorf("could not read %s: %w — %s", configPath, err, initHint)
 	}
@@ -336,7 +337,7 @@ func normalizeApps(raw rawConfig) ([]App, error) {
 	return apps, nil
 }
 
-func buildAndRun(configPath string) ([]byte, error) {
+func buildAndRun(ctx context.Context, configPath string) ([]byte, error) {
 	dir := filepath.Dir(configPath)
 	outDir := filepath.Join(dir, scratchDirName)
 	if err := os.MkdirAll(outDir, 0o755); err != nil {
@@ -368,9 +369,11 @@ func buildAndRun(configPath string) ([]byte, error) {
 		return nil, fmt.Errorf("node not found on PATH: %w", err)
 	}
 
-	cmd := exec.Command("node", outfile)
+	cmd := exec.CommandContext(ctx, "node", outfile)
 	var stderr strings.Builder
 	cmd.Stderr = &stderr
+	setNewProcessGroup(cmd)
+	cmd.Cancel = func() error { return killProcessGroup(cmd) }
 	stdout, err := cmd.Output()
 	if err != nil {
 		if stderr.Len() > 0 {

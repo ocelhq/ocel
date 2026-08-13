@@ -36,7 +36,7 @@ var generateCmd = &cobra.Command{
 }
 
 func runGenerate(ctx context.Context, d deps, cwd string, stdout, stderr io.Writer) error {
-	cfg, err := projectconfig.Resolve(cwd)
+	cfg, err := projectconfig.Resolve(ctx, cwd)
 	if err != nil {
 		return err
 	}

@@ -1,10 +1,13 @@
 package projectconfig
 
 import (
+	"context"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
+	"time"
 )
 
 func nestedDir(t *testing.T, root string) string {
@@ -425,7 +428,7 @@ export default {
 			root := t.TempDir()
 			writeConfig(t, root, tc.config)
 
-			cfg, err := Resolve(root)
+			cfg, err := Resolve(context.Background(), root)
 			if err != nil {
 				t.Fatalf("Resolve: %v", err)
 			}
@@ -530,7 +533,7 @@ export default {
 			root := t.TempDir()
 			writeConfig(t, root, tc.config)
 
-			_, err := Resolve(root)
+			_, err := Resolve(context.Background(), root)
 			if err == nil {
 				t.Fatalf("Resolve: expected error, got nil — %s", tc.name)
 			}
@@ -547,7 +550,7 @@ export default {
 
 		root := t.TempDir()
 
-		_, err := Resolve(root)
+		_, err := Resolve(context.Background(), root)
 		if err == nil {
 			t.Fatal("Resolve: expected error, got nil")
 		}
@@ -564,7 +567,7 @@ export default {
 			t.Fatalf("mkdir scratch: %v", err)
 		}
 
-		_, err := Resolve(nestedDir(t, root))
+		_, err := Resolve(context.Background(), nestedDir(t, root))
 		if err == nil {
 			t.Fatal("Resolve: expected error, got nil")
 		}
@@ -586,7 +589,7 @@ export default {
   slug: "`+bad+`",
 };
 `)
-				_, err := Resolve(root)
+				_, err := Resolve(context.Background(), root)
 				if err == nil || !strings.Contains(err.Error(), "slug") {
 					t.Fatalf("Resolve(slug=%q) err = %v, want a slug validation error", bad, err)
 				}
@@ -603,7 +606,7 @@ export default {
   slug: "shop--web",
 };
 `)
-		_, err := Resolve(root)
+		_, err := Resolve(context.Background(), root)
 		if err == nil {
 			t.Fatal("Resolve(slug=shop--web) err = nil, want a refusal")
 		}
@@ -629,7 +632,7 @@ export default {
 };
 `)
 
-				_, err := Resolve(root)
+				_, err := Resolve(context.Background(), root)
 				if err == nil {
 					t.Fatal("Resolve: expected error, got nil")
 				}
@@ -655,7 +658,7 @@ export default {
 };
 `)
 
-				_, err := Resolve(root)
+				_, err := Resolve(context.Background(), root)
 				if err == nil {
 					t.Fatal("Resolve: expected error, got nil")
 				}
@@ -684,7 +687,7 @@ export default {
 };
 `)
 
-				cfg, err := Resolve(root)
+				cfg, err := Resolve(context.Background(), root)
 				if err != nil {
 					t.Fatalf("Resolve: %v", err)
 				}
@@ -716,7 +719,7 @@ export default {
 };
 `)
 
-				_, err := Resolve(root)
+				_, err := Resolve(context.Background(), root)
 				if err == nil {
 					t.Fatalf("Resolve(folder=%q) err = nil, want a rejection", folder)
 				}
@@ -736,7 +739,7 @@ func TestResolveOptional(t *testing.T) {
 
 		root := t.TempDir()
 
-		cfg, err := ResolveOptional(root)
+		cfg, err := ResolveOptional(context.Background(), root)
 		if err != nil {
 			t.Fatalf("ResolveOptional: %v", err)
 		}
@@ -759,7 +762,7 @@ func TestResolveOptional(t *testing.T) {
 			t.Fatalf("mkdir scratch: %v", err)
 		}
 
-		cfg, err := ResolveOptional(nestedDir(t, root))
+		cfg, err := ResolveOptional(context.Background(), nestedDir(t, root))
 		if err != nil {
 			t.Fatalf("ResolveOptional: %v", err)
 		}
@@ -779,7 +782,7 @@ export default {
 };
 `)
 
-		cfg, err := ResolveOptional(nestedDir(t, root))
+		cfg, err := ResolveOptional(context.Background(), nestedDir(t, root))
 		if err != nil {
 			t.Fatalf("ResolveOptional: %v", err)
 		}
@@ -797,10 +800,50 @@ export default {
 		root := t.TempDir()
 		writeConfig(t, root, `export default { this is not valid typescript +++`)
 
-		if _, err := ResolveOptional(root); err == nil {
+		if _, err := ResolveOptional(context.Background(), root); err == nil {
 			t.Fatal("ResolveOptional: expected error, got nil")
 		}
 	})
+}
+
+func TestResolveReturnsPromptlyOnCancellation(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("uses a POSIX shell fake node")
+	}
+
+	root := t.TempDir()
+	writeConfig(t, root, `
+export default {
+  slug: "test-app",
+};
+`)
+
+	fakePathDir := t.TempDir()
+	fakeNode := filepath.Join(fakePathDir, "node")
+	if err := os.WriteFile(fakeNode, []byte("#!/bin/sh\nsleep 30\n"), 0o755); err != nil {
+		t.Fatalf("write fake node: %v", err)
+	}
+	t.Setenv("PATH", fakePathDir+string(os.PathListSeparator)+os.Getenv("PATH"))
+
+	ctx, cancel := context.WithCancel(context.Background())
+
+	done := make(chan error, 1)
+	go func() {
+		_, err := Resolve(ctx, root)
+		done <- err
+	}()
+
+	time.Sleep(200 * time.Millisecond)
+	cancel()
+
+	select {
+	case err := <-done:
+		if err == nil {
+			t.Fatal("Resolve() err = nil, want an error from the cancelled context")
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("Resolve did not return promptly after the context was cancelled")
+	}
 }
 
 func TestValidSlug(t *testing.T) {

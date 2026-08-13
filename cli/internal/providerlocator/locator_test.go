@@ -1,12 +1,14 @@
 package providerlocator
 
 import (
+	"context"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"runtime"
 	"strings"
 	"testing"
+	"time"
 )
 
 func hostPlatformSuffix(t *testing.T) string {
@@ -63,7 +65,7 @@ func TestLocate(t *testing.T) {
 	t.Run("errors when node is not on PATH", func(t *testing.T) {
 		t.Setenv("PATH", t.TempDir())
 
-		_, err := Locate(t.TempDir(), "@ocel/provider-aws")
+		_, err := Locate(context.Background(), t.TempDir(), "@ocel/provider-aws")
 		if err == nil {
 			t.Fatal("Locate() err = nil, want an error")
 		}
@@ -81,7 +83,7 @@ func TestLocate(t *testing.T) {
 		platformPkg := "@ocel/provider-aws-" + suffix
 		want := writeFakeBinary(t, projectDir, platformPkg, "deploy")
 
-		got, err := Locate(projectDir, "@ocel/provider-aws")
+		got, err := Locate(context.Background(), projectDir, "@ocel/provider-aws")
 		if err != nil {
 			t.Fatalf("Locate: %v", err)
 		}
@@ -109,7 +111,7 @@ func TestLocate(t *testing.T) {
 			t.Fatalf("symlink: %v", err)
 		}
 
-		got, err := Locate(projectDir, "@ocel/provider-aws")
+		got, err := Locate(context.Background(), projectDir, "@ocel/provider-aws")
 		if err != nil {
 			t.Fatalf("Locate: %v", err)
 		}
@@ -123,7 +125,7 @@ func TestLocate(t *testing.T) {
 		requireNode(t)
 		suffix := hostPlatformSuffix(t)
 
-		_, err := Locate(t.TempDir(), "@ocel/provider-aws")
+		_, err := Locate(context.Background(), t.TempDir(), "@ocel/provider-aws")
 		if err == nil {
 			t.Fatal("Locate() err = nil, want an error")
 		}
@@ -159,7 +161,7 @@ func TestLocate(t *testing.T) {
 			t.Fatalf("go build the aws provider: %v\n%s", err, out)
 		}
 
-		got, err := Locate(projectDir, "@ocel/provider-aws")
+		got, err := Locate(context.Background(), projectDir, "@ocel/provider-aws")
 		if err != nil {
 			t.Fatalf("Locate: %v", err)
 		}
@@ -170,6 +172,39 @@ func TestLocate(t *testing.T) {
 			t.Fatalf("resolved path %q is not a file", got)
 		}
 	})
+}
+
+func TestLocateReturnsPromptlyOnCancellation(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("uses a POSIX shell fake node")
+	}
+
+	fakePathDir := t.TempDir()
+	fakeNode := filepath.Join(fakePathDir, "node")
+	if err := os.WriteFile(fakeNode, []byte("#!/bin/sh\nsleep 30\n"), 0o755); err != nil {
+		t.Fatalf("write fake node: %v", err)
+	}
+	t.Setenv("PATH", fakePathDir+string(os.PathListSeparator)+os.Getenv("PATH"))
+
+	ctx, cancel := context.WithCancel(context.Background())
+
+	done := make(chan error, 1)
+	go func() {
+		_, err := Locate(ctx, t.TempDir(), "@ocel/provider-aws")
+		done <- err
+	}()
+
+	time.Sleep(200 * time.Millisecond)
+	cancel()
+
+	select {
+	case err := <-done:
+		if err == nil {
+			t.Fatal("Locate() err = nil, want an error from the cancelled context")
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("Locate did not return promptly after the context was cancelled")
+	}
 }
 
 func repoRootDir(t *testing.T) string {

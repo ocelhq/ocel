@@ -1,6 +1,7 @@
 package providerlocator
 
 import (
+	"context"
 	_ "embed"
 	"fmt"
 	"os"
@@ -14,7 +15,7 @@ var resolverScript []byte
 
 const scratchDirName = ".ocel"
 
-func Locate(projectDir, packageName string) (string, error) {
+func Locate(ctx context.Context, projectDir, packageName string) (string, error) {
 	if _, err := exec.LookPath("node"); err != nil {
 		return "", fmt.Errorf("node not found on PATH: %w", err)
 	}
@@ -29,11 +30,13 @@ func Locate(projectDir, packageName string) (string, error) {
 		return "", fmt.Errorf("write resolver script: %w", err)
 	}
 
-	cmd := exec.Command("node", scriptPath, packageName)
+	cmd := exec.CommandContext(ctx, "node", scriptPath, packageName)
 	cmd.Dir = projectDir
 	var stdout, stderr strings.Builder
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr
+	setNewProcessGroup(cmd)
+	cmd.Cancel = func() error { return killProcessGroup(cmd) }
 	if err := cmd.Run(); err != nil {
 		msg := strings.TrimSpace(stderr.String())
 		if msg == "" {

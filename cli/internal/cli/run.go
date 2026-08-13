@@ -42,7 +42,7 @@ func runRun(ctx context.Context, d deps, cmd *cobra.Command, cwd string, appArgs
 		return &ExitError{Code: 1}
 	}
 
-	cfg, err := projectconfig.ResolveOptional(cwd)
+	cfg, err := projectconfig.ResolveOptional(ctx, cwd)
 	if err != nil {
 		return err
 	}
@@ -126,5 +126,7 @@ func runChildOnce(ctx context.Context, appArgs []string, env map[string]string, 
 	appCmd.Stdin = stdin
 	appCmd.Stdout = stdout
 	appCmd.Stderr = stderr
+	setNewProcessGroup(appCmd)
+	appCmd.Cancel = func() error { return killProcessGroup(appCmd) }
 	return waitExitError(appCmd.Run())
 }

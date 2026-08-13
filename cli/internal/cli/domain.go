@@ -116,7 +116,7 @@ func runDomainUse(ctx context.Context, d deps, cwd, wildcard string, opts domain
 		return err
 	}
 
-	cfg, provider, err := domainSession(cwd)
+	cfg, provider, err := domainSession(ctx, cwd)
 	if err != nil {
 		return err
 	}
@@ -156,7 +156,7 @@ func runDomainLs(ctx context.Context, d deps, cwd string, opts domainOptions, st
 		return err
 	}
 
-	cfg, provider, err := domainSession(cwd)
+	cfg, provider, err := domainSession(ctx, cwd)
 	if err != nil {
 		return err
 	}
@@ -179,7 +179,7 @@ func runDomainRelease(ctx context.Context, d deps, cwd string, opts domainOption
 		return errors.New("`ocel domain release --preview` needs an interactive terminal to confirm the domain; re-run with --yes to release it non-interactively")
 	}
 
-	cfg, provider, err := domainSession(cwd)
+	cfg, provider, err := domainSession(ctx, cwd)
 	if err != nil {
 		return err
 	}
@@ -233,8 +233,8 @@ func runDomainRelease(ctx context.Context, d deps, cwd string, opts domainOption
 	return nil
 }
 
-func domainSession(cwd string) (*projectconfig.Config, *projectconfig.ProviderDescriptor, error) {
-	cfg, err := projectconfig.Resolve(cwd)
+func domainSession(ctx context.Context, cwd string) (*projectconfig.Config, *projectconfig.ProviderDescriptor, error) {
+	cfg, err := projectconfig.Resolve(ctx, cwd)
 	if err != nil {
 		return nil, nil, err
 	}

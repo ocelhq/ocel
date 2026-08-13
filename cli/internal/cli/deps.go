@@ -28,7 +28,7 @@ import (
 type deps struct {
 	loadCredentials      func() (credentials.Credentials, error)
 	fetchProjectConfig   func(ctx context.Context, apiURL, token, projectID string) (provision.ProjectConfig, error)
-	locateProviderBinary func(projectDir, providerPackage string) (string, error)
+	locateProviderBinary func(ctx context.Context, projectDir, providerPackage string) (string, error)
 	buildApp             func(ctx context.Context, cfg *projectconfig.Config, envByApp map[string]map[string]string, out io.Writer) error
 	collectAppFunctions  func(projectDir string) ([]manifestbuilder.Function, error)
 	collectDeclarations  func(ctx context.Context, cfg *projectconfig.Config, gate *envgate.Gate, stdout, stderr io.Writer) ([]declare.Resource, error)

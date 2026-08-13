@@ -69,7 +69,7 @@ func runDestroy(ctx context.Context, d deps, cwd string, stdout, stderr io.Write
 		return errors.New("`ocel destroy` needs an interactive terminal to confirm the project name; it cannot be run non-interactively")
 	}
 
-	cfg, err := projectconfig.Resolve(cwd)
+	cfg, err := projectconfig.Resolve(ctx, cwd)
 	if err != nil {
 		return err
 	}
@@ -149,7 +149,7 @@ func runDestroyPreviewProject(ctx context.Context, d deps, cwd string, yes bool,
 		return errors.New("`ocel destroy --preview` needs an interactive terminal to confirm the project name; re-run with --yes to tear the preview footprint down non-interactively")
 	}
 
-	cfg, err := projectconfig.Resolve(cwd)
+	cfg, err := projectconfig.Resolve(ctx, cwd)
 	if err != nil {
 		return err
 	}
