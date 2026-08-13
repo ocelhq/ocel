@@ -21,11 +21,6 @@ func verboseEnabled() bool {
 	return ok
 }
 
-// logFormatFlag is an axis independent of verboseFlag: verbosity is how much
-// gets said, format is how it's said. Human-readable is the default
-// everywhere, including a non-TTY (CI reads its own logs), and "json" is
-// opt-in for machine consumers. Unlike verbosity, format never derives from
-// TTY detection.
 const (
 	logFormatHuman = "human"
 	logFormatJSON  = "json"

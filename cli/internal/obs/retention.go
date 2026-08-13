@@ -5,18 +5,12 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"time"
 )
 
-// RunRetention is how many runs' artifacts Prune keeps.
 const RunRetention = 10
 
-// Prune keeps the artifacts of the newest keep runs in dir and removes the
-// rest. Files are grouped by stem — the part of the filename before the
-// first '.' — so a run that left more than one file (an NDJSON log and an
-// OTLP trace, both named by the same trace ID) is pruned as one unit; a run
-// is kept or removed together, never half of it. A group's age is its
-// newest file's mtime.
-func Prune(dir string, keep int) error {
+func Prune(dir string, keep int, cutoff time.Time) error {
 	entries, err := os.ReadDir(dir)
 	if err != nil {
 		if os.IsNotExist(err) {
@@ -37,7 +31,7 @@ func Prune(dir string, keep int) error {
 		}
 		name := e.Name()
 		stem := name
-		if i := strings.Index(name, "."); i >= 0 {
+		if i := strings.Index(name, "."); i > 0 {
 			stem = name[:i]
 		}
 		info, err := e.Info()
@@ -67,6 +61,9 @@ func Prune(dir string, keep int) error {
 
 	var firstErr error
 	for _, g := range ordered[keep:] {
+		if !time.Unix(0, g.newest).Before(cutoff) {
+			continue
+		}
 		for _, f := range g.files {
 			if err := os.Remove(f); err != nil && firstErr == nil {
 				firstErr = err
