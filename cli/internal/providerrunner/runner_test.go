@@ -13,6 +13,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/ocelhq/ocel/cli/internal/procgroup"
 	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
 )
 
@@ -399,7 +400,7 @@ func TestTeardownReapIsBounded(t *testing.T) {
 
 	cmd := exec.Command(os.Args[0])
 	cmd.Env = append(os.Environ(), fakeProviderEnvVar+"=1", fakeProviderModeEnvVar+"=never-ready")
-	setNewProcessGroup(cmd)
+	procgroup.New(cmd)
 	if err := cmd.Start(); err != nil {
 		t.Fatalf("start process: %v", err)
 	}
