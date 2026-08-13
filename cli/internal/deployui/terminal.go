@@ -3,18 +3,69 @@ package deployui
 import (
 	"io"
 	"os"
+	"strconv"
 
 	"github.com/mattn/go-isatty"
+	"golang.org/x/term"
 )
 
-// IsTerminal reports whether w is a terminal the renderer may animate and
-// colour. It is the one place in the CLI that asks the OS this question —
-// callers must check the writer they are about to write to, never
-// os.Stdout, or colour codes leak into redirected output.
+const (
+	defaultWidth  = 80
+	defaultHeight = 24
+)
+
 func IsTerminal(w io.Writer) bool {
 	f, ok := w.(*os.File)
 	if !ok {
 		return false
 	}
 	return isatty.IsTerminal(f.Fd())
+}
+
+func termWidth(w io.Writer) int {
+	if f, ok := w.(*os.File); ok {
+		if width, _, err := term.GetSize(int(f.Fd())); err == nil && width > 0 {
+			return width
+		}
+	}
+	if n, ok := positiveEnvInt("COLUMNS"); ok {
+		return n
+	}
+	return defaultWidth
+}
+
+func termHeight(w io.Writer) int {
+	if f, ok := w.(*os.File); ok {
+		if _, height, err := term.GetSize(int(f.Fd())); err == nil && height > 0 {
+			return height
+		}
+	}
+	if n, ok := positiveEnvInt("LINES"); ok {
+		return n
+	}
+	return defaultHeight
+}
+
+func positiveEnvInt(name string) (int, bool) {
+	raw := os.Getenv(name)
+	if raw == "" {
+		return 0, false
+	}
+	n, err := strconv.Atoi(raw)
+	if err != nil || n <= 0 {
+		return 0, false
+	}
+	return n, true
+}
+
+func truncateToWidth(s string, width int) string {
+	limit := width - 1
+	if limit < 1 {
+		limit = 1
+	}
+	runes := []rune(s)
+	if len(runes) <= limit {
+		return s
+	}
+	return string(runes[:limit])
 }
