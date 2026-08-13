@@ -10,9 +10,6 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/deployui"
 )
 
-// isReaderTTY is the one terminal-detection helper deployui does not cover:
-// it answers whether stdin is interactive, for confirm prompts, not
-// whether a target writer may be animated or coloured.
 func isReaderTTY(r io.Reader) bool {
 	f, ok := r.(*os.File)
 	if !ok {
