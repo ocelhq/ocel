@@ -1,6 +1,7 @@
 package deploy
 
 import (
+	"context"
 	"errors"
 	"sync"
 	"time"
@@ -9,6 +10,7 @@ import (
 const (
 	uploadLatencyOutlierThreshold = 2 * time.Second
 	maxUploadLatencyStandouts     = 20
+	maxUploadFailureStandouts     = 20
 )
 
 var errUploadBatchFailed = errors.New("upload batch failed")
@@ -67,6 +69,24 @@ type uploadOutcome struct {
 	Err    error
 }
 
+type recordedFailure struct {
+	Bytes int64
+	Start time.Time
+	End   time.Time
+	Kind  string
+}
+
+func errorForKind(kind string) error {
+	switch kind {
+	case ErrorKindCanceled:
+		return context.Canceled
+	case ErrorKindTimeout:
+		return context.DeadlineExceeded
+	default:
+		return errUploadBatchFailed
+	}
+}
+
 type uploadBatchStats struct {
 	mu sync.Mutex
 
@@ -75,7 +95,7 @@ type uploadBatchStats struct {
 	start time.Time
 	end   time.Time
 
-	failures []uploadOutcome
+	failures []recordedFailure
 	slowest  []uploadOutcome
 	dropped  int
 }
@@ -98,7 +118,13 @@ func (s *uploadBatchStats) record(o uploadOutcome) {
 	}
 
 	if o.Failed {
-		s.failures = append(s.failures, o)
+		kind := ClassifyError(o.Err)
+		if kind == ErrorKindCanceled {
+			return
+		}
+		if len(s.failures) < maxUploadFailureStandouts {
+			s.failures = append(s.failures, recordedFailure{Bytes: o.Bytes, Start: o.Start, End: o.End, Kind: kind})
+		}
 		return
 	}
 	if uploadLatencyOutlierThreshold > 0 && o.End.Sub(o.Start) >= uploadLatencyOutlierThreshold {
@@ -128,7 +154,7 @@ type uploadBatchSnapshot struct {
 	bytes    int64
 	start    time.Time
 	end      time.Time
-	failures []uploadOutcome
+	failures []recordedFailure
 	slowest  []uploadOutcome
 	dropped  int
 }
@@ -141,7 +167,7 @@ func (s *uploadBatchStats) snapshot() uploadBatchSnapshot {
 		bytes:    s.bytes,
 		start:    s.start,
 		end:      s.end,
-		failures: append([]uploadOutcome(nil), s.failures...),
+		failures: append([]recordedFailure(nil), s.failures...),
 		slowest:  append([]uploadOutcome(nil), s.slowest...),
 		dropped:  s.dropped,
 	}
@@ -163,7 +189,7 @@ func emitUploadBatch(t Tracer, parent StageID, k uploadKind, stats *uploadBatchS
 	spanUnder(t, parent, uploadBatchSpanName(k), snap.start, snap.end, batchErr, AttrResourceCount(snap.count), AttrBytes(snap.bytes))
 
 	for _, f := range snap.failures {
-		spanUnder(t, parent, uploadStandoutName(k, true), f.Start, f.End, f.Err, AttrBytes(f.Bytes))
+		spanUnder(t, parent, uploadStandoutName(k, true), f.Start, f.End, errorForKind(f.Kind), AttrBytes(f.Bytes))
 	}
 	for _, s := range snap.slowest {
 		spanUnder(t, parent, uploadStandoutName(k, false), s.Start, s.End, nil, AttrDurationMS(s.End.Sub(s.Start)), AttrBytes(s.Bytes))
