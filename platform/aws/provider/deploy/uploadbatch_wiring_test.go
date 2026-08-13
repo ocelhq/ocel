@@ -3,6 +3,8 @@ package deploy
 import (
 	"context"
 	"errors"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -84,13 +86,13 @@ func TestUploadStaticAssetsEmitsOneBatchSpan(t *testing.T) {
 	ft := &fakeTracer{}
 	store := &fakeUploader{exists: map[string]bool{}}
 	cfg := Config{
-		ArtifactRoot: staticAppTree(t), AssetBucket: "assets", Env: "prod",
+		ArtifactRoot: imageConfigTree(t), AssetBucket: "assets", Env: "prod",
 		Uploader:         &fakeUploader{exists: map[string]bool{}},
 		CacheStoreBucket: "isr", CacheStoreUploader: store,
 		Stages: Stages{Uploading: NewRootStage("Uploading")},
 		Tracer: ft,
 	}
-	manifest := twoAppManifest()
+	manifest := nextManifest()
 	builds := appBuildsFor(t, cfg, manifest)
 
 	if err := uploadStaticAssets(context.Background(), cfg, manifest, builds); err != nil {
@@ -101,10 +103,55 @@ func TestUploadStaticAssetsEmitsOneBatchSpan(t *testing.T) {
 	for _, sp := range ft.spans {
 		if sp.name == uploadBatchSpanName(uploadKindStaticAsset) {
 			batches++
+			if got := attrValue(sp.attrs, AttrResourceCount(0).Key); got != "3" {
+				t.Errorf("resource count = %q, want %q (logo.png mirrored to both targets, plus the image config)", got, "3")
+			}
 		}
 	}
 	if batches != 1 {
 		t.Fatalf("batch spans = %d, want 1", batches)
+	}
+}
+
+func TestUploadStaticAssetsRecordsAReadFailureAsAStandout(t *testing.T) {
+	t.Parallel()
+
+	root := imageConfigTree(t)
+	path := filepath.Join(root, "apps/web/image-config.json")
+	if err := os.Chmod(path, 0o000); err != nil {
+		t.Fatalf("chmod image config: %v", err)
+	}
+	if _, err := os.ReadFile(path); err == nil {
+		t.Skip("this environment can read a chmod 0000 file (likely running as root)")
+	}
+
+	ft := &fakeTracer{}
+	store := &fakeUploader{exists: map[string]bool{}}
+	cfg := Config{
+		ArtifactRoot: root, AssetBucket: "assets", Env: "prod",
+		Uploader:         &fakeUploader{exists: map[string]bool{}},
+		CacheStoreBucket: "isr", CacheStoreUploader: store,
+		Stages: Stages{Uploading: NewRootStage("Uploading")},
+		Tracer: ft,
+	}
+	manifest := nextManifest()
+	builds := appBuildsFor(t, cfg, manifest)
+
+	if err := uploadStaticAssets(context.Background(), cfg, manifest, builds); err == nil {
+		t.Fatal("uploadStaticAssets = nil, want the missing image config source surfaced")
+	}
+
+	failureSpans := 0
+	for _, sp := range ft.spans {
+		if sp.name == uploadStandoutName(uploadKindStaticAsset, true) {
+			failureSpans++
+			if sp.err == nil {
+				t.Error("failure standout span has no error")
+			}
+		}
+	}
+	if failureSpans == 0 {
+		t.Fatal("got 0 failure spans, want at least 1 for the local read failure")
 	}
 }
 

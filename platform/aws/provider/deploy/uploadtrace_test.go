@@ -347,11 +347,13 @@ func TestEmitUploadBatchMarksTheBatchSpanFailedWhenAnyUploadFails(t *testing.T) 
 	}
 }
 
-func TestUploadStandoutNameIsBoundedNeverDynamic(t *testing.T) {
+func TestUploadStandoutNameAndUploadBatchSpanNameAreAlwaysALiteral(t *testing.T) {
 	t.Parallel()
 
+	kinds := []uploadKind{uploadKindFunctionArtifact, uploadKindStaticAsset, uploadKindPrerenderAsset, uploadKind(99)}
+
 	seen := map[string]bool{}
-	for _, k := range []uploadKind{uploadKindFunctionArtifact, uploadKindStaticAsset, uploadKindPrerenderAsset} {
+	for _, k := range kinds {
 		for _, failed := range []bool{true, false} {
 			name := uploadStandoutName(k, failed)
 			if name == "" {
@@ -359,9 +361,14 @@ func TestUploadStandoutNameIsBoundedNeverDynamic(t *testing.T) {
 			}
 			seen[name] = true
 		}
+		if name := uploadBatchSpanName(k); name == "" {
+			t.Errorf("uploadBatchSpanName(%d) = empty", k)
+		} else {
+			seen[name] = true
+		}
 	}
-	if len(seen) != 6 {
-		t.Errorf("uploadStandoutName produced %d distinct strings, want exactly 6 (3 kinds x pass/fail)", len(seen))
+	if len(seen) != 12 {
+		t.Errorf("got %d distinct strings, want exactly 12 (3 kinds x pass/fail standouts + 3 batch names, plus the unknown-kind fallback of each)", len(seen))
 	}
 }
 
