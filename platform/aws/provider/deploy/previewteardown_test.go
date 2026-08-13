@@ -216,7 +216,7 @@ func TestRemovePreview(t *testing.T) {
 			t.Fatalf("ReconcileRootStack: %v", err)
 		}
 
-		if err := RemovePreview(ctx, fake, state, Config{}, "shop", "pr-1", false, nil, nil); err != nil {
+		if err := RemovePreview(ctx, fake, state, Config{}, "shop", "pr-1", false, PreviewRemovalStages{}, nil); err != nil {
 			t.Fatalf("RemovePreview: %v", err)
 		}
 
@@ -234,7 +234,7 @@ func TestRemovePreview(t *testing.T) {
 	t.Run("no root-stack state touches nothing", func(t *testing.T) {
 		fake := &recordingRootStack{}
 
-		if err := RemovePreview(context.Background(), fake, nil, Config{}, "shop", "pr-1", false, nil, nil); err != nil {
+		if err := RemovePreview(context.Background(), fake, nil, Config{}, "shop", "pr-1", false, PreviewRemovalStages{}, nil); err != nil {
 			t.Fatalf("RemovePreview: %v", err)
 		}
 		if fake.destroyed != 0 || len(fake.removedPointers) != 0 || fake.destroyedInstance != 0 {
@@ -246,7 +246,7 @@ func TestRemovePreview(t *testing.T) {
 		fake := &recordingRootStack{}
 		stale := edge.RootStackState{edge.RootStackKeySlug: "shop", edge.RootStackKeySecret: "stale"}
 
-		err := RemovePreview(context.Background(), fake, stale, Config{}, "shop", "pr-1", false, nil, nil)
+		err := RemovePreview(context.Background(), fake, stale, Config{}, "shop", "pr-1", false, PreviewRemovalStages{}, nil)
 		if err == nil {
 			t.Fatal("RemovePreview err = nil, want the refused removal reported")
 		}

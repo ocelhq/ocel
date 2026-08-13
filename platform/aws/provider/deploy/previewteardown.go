@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"slices"
+	"time"
 
 	"github.com/ocelhq/ocel/pkg/naming"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
@@ -17,32 +18,52 @@ func PreviewInfraStackFor(pointer string, persistent bool) naming.StackName {
 	return naming.InfraStack(pointer)
 }
 
-func RemovePreview(ctx context.Context, stack edge.RootStack, state edge.RootStackState, cfg Config, slug, pointer string, persistent bool, progress, log func(string)) error {
-	report := nilSafe(progress)
+type PreviewRemovalStages struct {
+	Pointer Stage
+	Reclaim Stage
+	Infra   Stage
+}
 
+func (s PreviewRemovalStages) Roots() []Stage {
+	roots := []Stage{s.Pointer, s.Reclaim}
+	if s.Infra.ID != (StageID{}) {
+		roots = append(roots, s.Infra)
+	}
+	return roots
+}
+
+func RemovePreview(ctx context.Context, stack edge.RootStack, state edge.RootStackState, cfg Config, slug, pointer string, persistent bool, stages PreviewRemovalStages, log func(string)) error {
 	var errs []error
 	var removal edge.PruneResult
+
+	pointerStart := time.Now()
+	var pointerErr error
 	if stack != nil && len(state) > 0 {
+		report := cfg.reportStage(stages.Pointer)
 		report(fmt.Sprintf("Removing preview pointer %q from the store", pointer))
 		result, err := stack.RemovePointer(ctx, state, pointer)
 		if err != nil {
-			errs = append(errs, fmt.Errorf("remove preview pointer %q: %w", pointer, err))
+			pointerErr = fmt.Errorf("remove preview pointer %q: %w", pointer, err)
 		} else {
 			removal = result
 		}
 	}
+	spanForStage(cfg.Tracer, stages.Pointer, pointerStart, time.Now(), pointerErr)
+	if pointerErr != nil {
+		errs = append(errs, pointerErr)
+	}
 
 	targets, err := ReclaimTargets(slug, pointer, removal.RemovedRecordKeys, removal.SurvivingRecordKeys, removal.SurvivingPointerRecordKeys)
 	if err != nil {
+		declareStages(cfg.Tracer, true)
 		errs = append(errs, err)
-	} else if err := Reclaim(ctx, cfg, targets, progress, log); err != nil {
+	} else if err := Reclaim(ctx, cfg, targets, stages.Reclaim, log); err != nil {
 		errs = append(errs, err)
 	}
 
 	if infra := PreviewInfraStackFor(pointer, persistent); !infra.IsZero() {
-		report("Destroying preview infra stack " + infra.String() + " (database, bucket)")
-		if err := Destroy(ctx, teardownConfig(cfg, infra), progress, log); err != nil {
-			errs = append(errs, fmt.Errorf("destroy preview infra stack %s: %w", infra, err))
+		if err := destroyStackStage(ctx, cfg, infra, stages.Infra, "preview infra", log); err != nil {
+			errs = append(errs, err)
 		}
 	}
 
@@ -76,68 +97,81 @@ func classifyPreviewStacks(stacks []naming.StackName) PreviewProjectTeardownPlan
 	return plan
 }
 
-func DestroyPreviewProject(ctx context.Context, stack edge.RootStack, state edge.RootStackState, cfg Config, slug string, progress, log func(string)) (DestroyProjectResult, error) {
-	progress, log = serializeReports(progress, log)
-	report := nilSafe(progress)
-
-	plan, err := planPreviewProjectTeardown(ctx, cfg, slug)
+func DestroyPreviewProject(ctx context.Context, stack edge.RootStack, state edge.RootStackState, cfg Config, slug string, stages ProjectTeardownStages, log func(string)) (DestroyProjectResult, error) {
 	var errs []error
+	result := DestroyProjectResult{RootTornDown: true}
+
+	planStart := time.Now()
+	plan, err := planPreviewProjectTeardown(ctx, cfg, slug)
 	if err != nil {
 		errs = append(errs, err)
 	}
-	result := DestroyProjectResult{RootTornDown: true}
+	spanForStage(cfg.Tracer, stages.Planning, planStart, time.Now(), err)
 
+	appChildren := childStagesFor(stages.AppStacks, plan.AppStacks)
+	infraChildren := childStagesFor(stages.InfraStacks, plan.InfraStacks)
+	declareStages(cfg.Tracer, true, append(declaredValues(appChildren), declaredValues(infraChildren)...)...)
+
+	edgeStart := time.Now()
+	var edgeErr error
 	if stack != nil && len(state) > 0 {
+		report := cfg.reportStage(stages.Edge)
 		report("Destroying the preview root workers")
 		stateSlug := state[edge.RootStackKeySlug]
 		var deployed []string
 		for _, stem := range previewWorkerStems(stateSlug) {
 			under, err := stack.ListDeployedWorkers(ctx, stem)
 			if err != nil {
-				errs = append(errs, fmt.Errorf("list preview root workers under %q: %w", stem, err))
+				edgeErr = errors.Join(edgeErr, fmt.Errorf("list preview root workers under %q: %w", stem, err))
 				result.RootTornDown = false
 				continue
 			}
 			deployed = append(deployed, under...)
 		}
 		if err := stack.DestroyRootStack(ctx, previewProjectWorkers(stateSlug, deployed)); err != nil {
-			errs = append(errs, fmt.Errorf("destroy preview root workers: %w", err))
+			edgeErr = errors.Join(edgeErr, fmt.Errorf("destroy preview root workers: %w", err))
 			result.RootTornDown = false
 		}
 		report("Wiping the project's preview deployments-store instance")
 		if err := stack.DestroyInstance(ctx, state); err != nil {
-			errs = append(errs, fmt.Errorf("destroy preview deployments-store instance: %w", err))
+			edgeErr = errors.Join(edgeErr, fmt.Errorf("destroy preview deployments-store instance: %w", err))
 			result.RootTornDown = false
 		}
+	}
+	spanForStage(cfg.Tracer, stages.Edge, edgeStart, time.Now(), edgeErr)
+	if edgeErr != nil {
+		errs = append(errs, edgeErr)
 	}
 
 	errs = append(errs, destroyPhased(plan.AppStacks, plan.InfraStacks,
 		func(stack naming.StackName) error {
-			report("Destroying preview app stack " + stack.String())
-			if err := Destroy(ctx, teardownConfig(cfg, stack), progress, log); err != nil {
-				return fmt.Errorf("destroy preview app stack %s: %w", stack, err)
-			}
-			return nil
+			return destroyStackStage(ctx, cfg, stack, appChildren[stack], "preview app", log)
 		},
 		func(stack naming.StackName) error {
-			report("Destroying preview infra stack " + stack.String() + " (database, bucket)")
-			if err := Destroy(ctx, teardownConfig(cfg, stack), progress, log); err != nil {
-				return fmt.Errorf("destroy preview infra stack %s: %w", stack, err)
-			}
-			return nil
+			return destroyStackStage(ctx, cfg, stack, infraChildren[stack], "preview infra", log)
 		})...)
 
-	if err := purgeProjectValues(ctx, cfg, slug, report); err != nil {
-		errs = append(errs, err)
+	valuesStart := time.Now()
+	verr := purgeProjectValues(ctx, cfg, slug, cfg.reportStage(stages.Values))
+	spanForStage(cfg.Tracer, stages.Values, valuesStart, time.Now(), verr)
+	if verr != nil {
+		errs = append(errs, verr)
 	}
 
-	report("Purging preview assets")
-	if err := purgePreviewAssets(ctx, cfg, slug, previewPurgeEnvs(plan, cfg.Env)); err != nil {
-		errs = append(errs, err)
+	assetsStart := time.Now()
+	cfg.reportStage(stages.Assets)("Purging preview assets")
+	aerr := purgePreviewAssets(ctx, cfg, slug, previewPurgeEnvs(plan, cfg.Env))
+	spanForStage(cfg.Tracer, stages.Assets, assetsStart, time.Now(), aerr)
+	if aerr != nil {
+		errs = append(errs, aerr)
 	}
 
-	if err := forgetProjectIfEmpty(ctx, cfg.Stacks, slug); err != nil {
-		errs = append(errs, err)
+	forgetStart := time.Now()
+	cfg.reportStage(stages.Forget)("Forgetting the project")
+	ferr := forgetProjectIfEmpty(ctx, cfg.Stacks, slug)
+	spanForStage(cfg.Tracer, stages.Forget, forgetStart, time.Now(), ferr)
+	if ferr != nil {
+		errs = append(errs, ferr)
 	}
 
 	return result, errors.Join(errs...)

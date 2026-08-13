@@ -8,6 +8,7 @@ import (
 	"path"
 	"slices"
 	"strings"
+	"time"
 
 	"github.com/ocelhq/ocel/pkg/naming"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
@@ -42,68 +43,110 @@ func destroyPhased(appStacks, infraStacks []naming.StackName, destroyApp, destro
 	return append(errs, runBounded(teardownConcurrency, infraStacks, destroyInfra)...)
 }
 
-func DestroyProject(ctx context.Context, stack edge.RootStack, state edge.RootStackState, cfg Config, slug string, progress, log func(string)) (DestroyProjectResult, error) {
-	progress, log = serializeReports(progress, log)
-	report := nilSafe(progress)
+type ProjectTeardownStages struct {
+	Planning    Stage
+	Edge        Stage
+	AppStacks   Stage
+	InfraStacks Stage
+	Values      Stage
+	Assets      Stage
+	Forget      Stage
+}
 
+func (s ProjectTeardownStages) Roots() []Stage {
+	return []Stage{s.Planning, s.Edge, s.AppStacks, s.InfraStacks, s.Values, s.Assets, s.Forget}
+}
+
+func childStagesFor(parent Stage, stacks []naming.StackName) map[naming.StackName]Stage {
+	byStack := make(map[naming.StackName]Stage, len(stacks))
+	for _, stack := range stacks {
+		byStack[stack] = NewStage(parent, stack.String())
+	}
+	return byStack
+}
+
+func declaredValues[K comparable](byKey map[K]Stage) []Stage {
+	declared := make([]Stage, 0, len(byKey))
+	for _, stage := range byKey {
+		declared = append(declared, stage)
+	}
+	return declared
+}
+
+func DestroyProject(ctx context.Context, stack edge.RootStack, state edge.RootStackState, cfg Config, slug string, stages ProjectTeardownStages, log func(string)) (DestroyProjectResult, error) {
 	var errs []error
 	result := DestroyProjectResult{RootTornDown: true}
 
-	if stack != nil && len(state) > 0 {
-		report("Destroying root stack (workers, custom domain)")
-		workers, err := rootStackWorkerNames(ctx, stack, state, slug, cfg.Env)
-		if err != nil {
-			errs = append(errs, fmt.Errorf("resolve root-stack workers: %w", err))
-			result.RootTornDown = false
-		} else if err := stack.DestroyRootStack(ctx, workers); err != nil {
-			errs = append(errs, fmt.Errorf("destroy root stack: %w", err))
-			result.RootTornDown = false
-		}
-		report("Wiping the project's deployments-store instance")
-		if err := stack.DestroyInstance(ctx, state); err != nil {
-			errs = append(errs, fmt.Errorf("destroy deployments-store instance: %w", err))
-			result.RootTornDown = false
-		}
-	}
-
+	planStart := time.Now()
 	indexed, err := indexedStacks(ctx, cfg.Stacks, slug)
 	if err != nil {
 		errs = append(errs, err)
 	}
 	plan := classifyProjectStacks(indexed)
 	envs := purgeEnvs(indexed, cfg.Env)
+	spanForStage(cfg.Tracer, stages.Planning, planStart, time.Now(), err)
 
 	var infraStacks []naming.StackName
 	if !plan.InfraStack.IsZero() {
 		infraStacks = []naming.StackName{plan.InfraStack}
 	}
+	appChildren := childStagesFor(stages.AppStacks, plan.AppStacks)
+	infraChildren := childStagesFor(stages.InfraStacks, infraStacks)
+	declareStages(cfg.Tracer, true, append(declaredValues(appChildren), declaredValues(infraChildren)...)...)
+
+	edgeStart := time.Now()
+	var edgeErr error
+	if stack != nil && len(state) > 0 {
+		report := cfg.reportStage(stages.Edge)
+		report("Destroying root stack (workers, custom domain)")
+		workers, err := rootStackWorkerNames(ctx, stack, state, slug, cfg.Env)
+		if err != nil {
+			edgeErr = errors.Join(edgeErr, fmt.Errorf("resolve root-stack workers: %w", err))
+			result.RootTornDown = false
+		} else if err := stack.DestroyRootStack(ctx, workers); err != nil {
+			edgeErr = errors.Join(edgeErr, fmt.Errorf("destroy root stack: %w", err))
+			result.RootTornDown = false
+		}
+		report("Wiping the project's deployments-store instance")
+		if err := stack.DestroyInstance(ctx, state); err != nil {
+			edgeErr = errors.Join(edgeErr, fmt.Errorf("destroy deployments-store instance: %w", err))
+			result.RootTornDown = false
+		}
+	}
+	spanForStage(cfg.Tracer, stages.Edge, edgeStart, time.Now(), edgeErr)
+	if edgeErr != nil {
+		errs = append(errs, edgeErr)
+	}
+
 	errs = append(errs, destroyPhased(plan.AppStacks, infraStacks,
 		func(stack naming.StackName) error {
-			report("Destroying app stack " + stack.String())
-			if err := Destroy(ctx, teardownConfig(cfg, stack), progress, log); err != nil {
-				return fmt.Errorf("destroy app stack %s: %w", stack, err)
-			}
-			return nil
+			return destroyStackStage(ctx, cfg, stack, appChildren[stack], "app", log)
 		},
 		func(stack naming.StackName) error {
-			report("Destroying infra stack " + stack.String() + " (databases, buckets)")
-			if err := Destroy(ctx, teardownConfig(cfg, stack), progress, log); err != nil {
-				return fmt.Errorf("destroy infra stack %s: %w", stack, err)
-			}
-			return nil
+			return destroyStackStage(ctx, cfg, stack, infraChildren[stack], "infra", log)
 		})...)
 
-	if err := purgeProjectValues(ctx, cfg, slug, report); err != nil {
-		errs = append(errs, err)
+	valuesStart := time.Now()
+	verr := purgeProjectValues(ctx, cfg, slug, cfg.reportStage(stages.Values))
+	spanForStage(cfg.Tracer, stages.Values, valuesStart, time.Now(), verr)
+	if verr != nil {
+		errs = append(errs, verr)
 	}
 
-	report("Purging project assets")
-	if err := purgeProjectAssets(ctx, cfg, slug, envs); err != nil {
-		errs = append(errs, err)
+	assetsStart := time.Now()
+	cfg.reportStage(stages.Assets)("Purging project assets")
+	aerr := purgeProjectAssets(ctx, cfg, slug, envs)
+	spanForStage(cfg.Tracer, stages.Assets, assetsStart, time.Now(), aerr)
+	if aerr != nil {
+		errs = append(errs, aerr)
 	}
 
-	if err := forgetProjectIfEmpty(ctx, cfg.Stacks, slug); err != nil {
-		errs = append(errs, err)
+	forgetStart := time.Now()
+	cfg.reportStage(stages.Forget)("Forgetting the project")
+	ferr := forgetProjectIfEmpty(ctx, cfg.Stacks, slug)
+	spanForStage(cfg.Tracer, stages.Forget, forgetStart, time.Now(), ferr)
+	if ferr != nil {
+		errs = append(errs, ferr)
 	}
 
 	return result, errors.Join(errs...)
