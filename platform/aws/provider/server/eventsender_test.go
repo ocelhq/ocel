@@ -130,12 +130,7 @@ func TestEventSenderAppliesBackpressureWithoutDroppingEvents(t *testing.T) {
 	t.Parallel()
 
 	stream := &recordingStream{}
-	var mu sync.Mutex
-	sender := newEventSender(context.Background(), func(ev *deploymentsv1.DeployEvent) error {
-		mu.Lock()
-		defer mu.Unlock()
-		return stream.send(ev)
-	})
+	sender := newEventSender(context.Background(), stream.send)
 
 	const total = eventSenderBuffer + 50
 	var wg sync.WaitGroup

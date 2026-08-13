@@ -5,6 +5,7 @@ import (
 	"sync"
 
 	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
+	"github.com/ocelhq/ocel/platform/aws/provider/deploy"
 )
 
 const eventSenderBuffer = 256
@@ -57,4 +58,12 @@ func (s *eventSender) close() error {
 	close(s.events)
 	<-s.done
 	return s.err
+}
+
+func newDeployReporter(sender *eventSender) (deploy.Progress, func(string)) {
+	progress := func(phase deploymentsv1.Phase, m string, current, total uint32) {
+		sender.send(phaseProgressEvent(phase, m, current, total))
+	}
+	logf := func(m string) { sender.send(logEvent(m)) }
+	return progress, logf
 }
