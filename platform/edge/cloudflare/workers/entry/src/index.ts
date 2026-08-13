@@ -850,7 +850,9 @@ export async function dispatchResult(
 
   const tagged = new Response(response.body, response);
   applyResolvedHeaders(tagged.headers, result.resolvedHeaders);
+  const middlewareSkip = tagged.headers.get("x-middleware-skip");
   stripMiddlewareHeaders(tagged.headers);
+  if (middlewareSkip) tagged.headers.set("x-middleware-skip", middlewareSkip);
   if (result.resolvedPathname) {
     tagged.headers.set("x-matched-path", result.resolvedPathname);
   }
@@ -958,6 +960,11 @@ async function dispatch(
   const target = manifest.dispatch[result.resolvedPathname];
   if (!target) {
     return notFoundResponse(request, url, result, headers, deps, staticAsset, staticAsset);
+  }
+
+  if (target.kind === "lambda") {
+    const probe = middlewarePrefetchProbe(request, url.pathname, manifest);
+    if (probe) return probe;
   }
 
   const response = await renderDispatchTarget(

@@ -1870,6 +1870,59 @@ describe("dispatchResult", () => {
     expect(await res.text()).toBe("asset");
   });
 
+  it("answers a middleware-prefetch probe against a resolved lambda page with a 200 stub, never invoking the lambda", async () => {
+    const deps = baseDeps({
+      manifest: {
+        buildId: "test",
+        basePath: "",
+        pathnames: [],
+        routes: {},
+        dispatch: { "/dashboard": { kind: "lambda", id: "/dashboard" } },
+      },
+      functionUrls: { "/dashboard": "https://fn.example.com" },
+      fetch: (async () => {
+        throw new Error("should not invoke the origin");
+      }) as unknown as typeof fetch,
+    });
+
+    const res = await dispatchResult(
+      { resolvedPathname: "/dashboard" },
+      new Request("https://app.example/_next/data/test/dashboard.json", {
+        headers: { "x-middleware-prefetch": "1" },
+      }),
+      deps,
+    );
+
+    expect(res.status).toBe(200);
+    expect(await res.text()).toBe("{}");
+    expect(res.headers.get("x-matched-path")).toBe("/dashboard");
+    expect(res.headers.get("x-middleware-skip")).toBe("1");
+  });
+
+  it("does not probe a resolved static or prerender page for a middleware-prefetch request", async () => {
+    const deps = baseDeps({
+      manifest: {
+        buildId: "test",
+        basePath: "",
+        pathnames: [],
+        routes: {},
+        dispatch: { "/dashboard": { kind: "static" } },
+      },
+      assetStore: assetStoreServing({ "/dashboard": "<html/>" }),
+    });
+
+    const res = await dispatchResult(
+      { resolvedPathname: "/dashboard" },
+      new Request("https://app.example/_next/data/test/dashboard.json", {
+        headers: { "x-middleware-prefetch": "1" },
+      }),
+      deps,
+    );
+
+    expect(res.status).toBe(200);
+    expect(await res.text()).toBe("<html/>");
+  });
+
   it("emits a redirect response", async () => {
     const res = await dispatchResult(
       { redirect: { url: "https://app.example/new", status: 308 } },
