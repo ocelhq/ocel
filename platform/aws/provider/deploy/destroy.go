@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/pulumi/pulumi/sdk/v3/go/auto"
 	"github.com/pulumi/pulumi/sdk/v3/go/auto/optdestroy"
@@ -54,21 +55,6 @@ func runBounded[T any](limit int, items []T, run func(T) error) []error {
 	return errs
 }
 
-func serializeReports(progress, log func(string)) (func(string), func(string)) {
-	var mu sync.Mutex
-	guard := func(f func(string)) func(string) {
-		if f == nil {
-			return nil
-		}
-		return func(msg string) {
-			mu.Lock()
-			defer mu.Unlock()
-			f(msg)
-		}
-	}
-	return guard(progress), guard(log)
-}
-
 func Destroy(ctx context.Context, cfg TeardownConfig, progress, log func(string)) error {
 	report := func(f func(string), msg string) {
 		if f != nil {
@@ -110,6 +96,19 @@ func Destroy(ctx context.Context, cfg TeardownConfig, progress, log func(string)
 		return fmt.Errorf("remove stack %s: %w", name, err)
 	}
 	return index.RemoveStack(ctx, cfg.Project, cfg.Stack)
+}
+
+func destroyStackStage(ctx context.Context, cfg Config, stack naming.StackName, stage Stage, kind string, log func(string)) (err error) {
+	start := time.Now()
+	defer func() { spanForStage(cfg.Tracer, stage, start, time.Now(), err) }()
+
+	report := cfg.reportStage(stage)
+	report("Destroying " + kind + " stack " + stack.String())
+	if derr := Destroy(ctx, teardownConfig(cfg, stack), report, log); derr != nil {
+		err = fmt.Errorf("destroy %s stack %s: %w", kind, stack, derr)
+		return err
+	}
+	return nil
 }
 
 func destroyOptions(cfg TeardownConfig, logWriter *lineForwarder) []optdestroy.Option {

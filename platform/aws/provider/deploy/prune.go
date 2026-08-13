@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
@@ -129,13 +130,35 @@ func asPrefixDeleter(up ArtifactUploader) PrefixDeleter {
 	return d
 }
 
-func Reclaim(ctx context.Context, cfg Config, targets []PruneTarget, progress, log func(string)) error {
-	progress, log = serializeReports(progress, log)
-	return errors.Join(runBounded(teardownConcurrency, targets, func(t PruneTarget) error {
-		if progress != nil {
-			progress(fmt.Sprintf("Reclaiming %s deployment %s", t.App, t.Identity))
+func reclaimTitle(t PruneTarget) string {
+	return fmt.Sprintf("%s %s", t.App, t.Identity)
+}
+
+type reclaimJob struct {
+	target PruneTarget
+	stage  Stage
+}
+
+func Reclaim(ctx context.Context, cfg Config, targets []PruneTarget, parent Stage, log func(string)) error {
+	jobs := make([]reclaimJob, len(targets))
+	declared := make([]Stage, len(targets))
+	for i, t := range targets {
+		stage := NewStage(parent, reclaimTitle(t))
+		jobs[i] = reclaimJob{target: t, stage: stage}
+		declared[i] = stage
+	}
+	declareStages(cfg.Tracer, true, declared...)
+
+	return errors.Join(runBounded(teardownConcurrency, jobs, func(j reclaimJob) (err error) {
+		start := time.Now()
+		defer func() { spanForStage(cfg.Tracer, j.stage, start, time.Now(), err) }()
+
+		report := cfg.reportStage(j.stage)
+		report("Reclaiming " + reclaimTitle(j.target))
+		if err = reclaimTarget(ctx, cfg, j.target, report, log); err != nil {
+			return err
 		}
-		return reclaimTarget(ctx, cfg, t, progress, log)
+		return nil
 	})...)
 }
 
@@ -169,17 +192,30 @@ func reclaimTarget(ctx context.Context, cfg Config, t PruneTarget, progress, log
 	return errors.Join(runBounded(len(reclaims), reclaims, func(run func() error) error { return run() })...)
 }
 
-func Prune(ctx context.Context, stack edge.RootStack, state edge.RootStackState, cfg Config, slug string, keepN int, pointer string, progress, log func(string)) (edge.PruneResult, error) {
+type PruneStages struct {
+	Diff    Stage
+	Reclaim Stage
+}
+
+func Prune(ctx context.Context, stack edge.RootStack, state edge.RootStackState, cfg Config, slug string, keepN int, pointer string, stages PruneStages, log func(string)) (edge.PruneResult, error) {
+	diffStart := time.Now()
+	report := cfg.reportStage(stages.Diff)
+	report("Diffing deployments to reclaim")
 	result, err := stack.DeletePromotionArtifacts(ctx, state, keepN, pointer)
 	if err != nil {
+		spanForStage(cfg.Tracer, stages.Diff, diffStart, time.Now(), err)
+		declareStages(cfg.Tracer, true)
 		return edge.PruneResult{}, fmt.Errorf("delete promotion artifacts: %w", err)
 	}
 
-	targets, err := ReclaimTargets(slug, cfg.Env, result.RemovedRecordKeys, result.SurvivingRecordKeys, result.SurvivingPointerRecordKeys)
-	if err != nil {
-		return result, err
+	targets, terr := ReclaimTargets(slug, cfg.Env, result.RemovedRecordKeys, result.SurvivingRecordKeys, result.SurvivingPointerRecordKeys)
+	spanForStage(cfg.Tracer, stages.Diff, diffStart, time.Now(), terr)
+	if terr != nil {
+		declareStages(cfg.Tracer, true)
+		return result, terr
 	}
-	if err := Reclaim(ctx, cfg, targets, progress, log); err != nil {
+
+	if err := Reclaim(ctx, cfg, targets, stages.Reclaim, log); err != nil {
 		return result, err
 	}
 	return result, nil

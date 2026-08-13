@@ -187,7 +187,7 @@ func TestDestroyProject(t *testing.T) {
 		index := &fakeStackIndex{projects: []string{"shop"}}
 		cfg.Stacks = index
 
-		_, err := DestroyProject(context.Background(), nil, nil, cfg, "shop", nil, nil)
+		_, err := DestroyProject(context.Background(), nil, nil, cfg, "shop", ProjectTeardownStages{}, nil)
 
 		if err == nil || !strings.Contains(err.Error(), "table is on fire") {
 			t.Fatalf("DestroyProject err = %v, want the failed value removal reported", err)
@@ -219,7 +219,7 @@ func TestRemovePreviewPurge(t *testing.T) {
 		}
 		cfg := Config{ArtifactBucket: "artifact-bucket", Uploader: rec}
 
-		if err := RemovePreview(ctx, fake, state, cfg, "shop", "pr-1", false, nil, nil); err != nil {
+		if err := RemovePreview(ctx, fake, state, cfg, "shop", "pr-1", false, PreviewRemovalStages{}, nil); err != nil {
 			t.Fatalf("RemovePreview: %v", err)
 		}
 
@@ -234,7 +234,7 @@ func TestRemovePreviewPurge(t *testing.T) {
 		cfg := Config{ArtifactBucket: "artifact-bucket", Uploader: rec}
 		state := edge.RootStackState{edge.RootStackKeySlug: "shop", edge.RootStackKeySecret: "stale"}
 
-		err := RemovePreview(context.Background(), fake, state, cfg, "shop", "pr-1", false, nil, nil)
+		err := RemovePreview(context.Background(), fake, state, cfg, "shop", "pr-1", false, PreviewRemovalStages{}, nil)
 		if err == nil {
 			t.Fatal("RemovePreview err = nil, want the failed pointer removal reported")
 		}
@@ -252,7 +252,7 @@ func TestRemovePreviewPurge(t *testing.T) {
 			t.Fatalf("ReconcileRootStack: %v", err)
 		}
 
-		if err := RemovePreview(ctx, fake, state, Config{Values: values}, "shop", "pr-1", false, nil, nil); err != nil {
+		if err := RemovePreview(ctx, fake, state, Config{Values: values}, "shop", "pr-1", false, PreviewRemovalStages{}, nil); err != nil {
 			t.Fatalf("RemovePreview: %v", err)
 		}
 

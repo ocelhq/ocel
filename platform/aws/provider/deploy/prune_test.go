@@ -14,6 +14,53 @@ import (
 	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
 )
 
+func TestReclaimDeclaresOneChildStagePerTarget(t *testing.T) {
+	t.Parallel()
+
+	targets := []PruneTarget{
+		reclaimedFor(t, "prod", "shop", "web", buildOnly("build-1")),
+		reclaimedFor(t, "prod", "shop", "api", buildOnly("build-2")),
+	}
+	ft := &fakeTracer{}
+	parent := NewRootStage("Reclaiming deployments")
+
+	if err := Reclaim(context.Background(), Config{Tracer: ft}, targets, parent, nil); err == nil {
+		t.Fatal("Reclaim err = nil, want the stack-less Destroy to fail fast")
+	}
+
+	if len(ft.declared) != 1 || !ft.final[0] {
+		t.Fatalf("declared = %+v final = %v, want exactly one final declaration", ft.declared, ft.final)
+	}
+	children := ft.declared[0]
+	if len(children) != len(targets) {
+		t.Fatalf("declared %d children, want one per reclaimed deployment (%d)", len(children), len(targets))
+	}
+	for i, child := range children {
+		if child.ParentID != parent.ID {
+			t.Errorf("child[%d].ParentID = %v, want the Reclaim stage %v", i, child.ParentID, parent.ID)
+		}
+		if child.Title != reclaimTitle(targets[i]) {
+			t.Errorf("child[%d].Title = %q, want %q", i, child.Title, reclaimTitle(targets[i]))
+		}
+	}
+
+	if len(ft.spans) != len(targets) {
+		t.Fatalf("recorded %d spans, want one per target", len(ft.spans))
+	}
+	wantIDs := make(map[StageID]bool, len(children))
+	for _, child := range children {
+		wantIDs[child.ID] = true
+	}
+	for _, span := range ft.spans {
+		if !wantIDs[span.id] {
+			t.Errorf("span id %v does not match any declared child stage", span.id)
+		}
+		if span.err == nil {
+			t.Errorf("span for %v has err = nil, want the stack-less Destroy failure reported on its own stage", span.id)
+		}
+	}
+}
+
 func reclaimedFor(t *testing.T, env, slug, app string, id Identity) PruneTarget {
 	t.Helper()
 	coord := storageCoordinate(env, slug, app, releaseOf(id))

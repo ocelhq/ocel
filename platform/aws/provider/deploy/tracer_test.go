@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -19,17 +20,22 @@ type spanCall struct {
 }
 
 type fakeTracer struct {
+	mu       sync.Mutex
 	declared [][]Stage
 	final    []bool
 	spans    []spanCall
 }
 
 func (f *fakeTracer) DeclareStages(final bool, stages ...Stage) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
 	f.declared = append(f.declared, stages)
 	f.final = append(f.final, final)
 }
 
 func (f *fakeTracer) Span(id, parentID StageID, name string, start, end time.Time, err error, attrs ...Attr) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
 	f.spans = append(f.spans, spanCall{id, parentID, name, start, end, err, attrs})
 }
 
