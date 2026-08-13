@@ -142,10 +142,13 @@ func (s *Server) Deploy(ctx context.Context, req *deploymentsv1.DeployRequest, s
 	}
 	sender := newEventSender(ctx, stream.Send)
 	defer func() { err = sender.close() }()
-	progress, logf := newDeployReporter(sender)
+
+	stages := newDeployStages()
+	appStages, appDeclared := deploy.AppStages(stages.provisioning, manifest)
+	progress, stageReport, logf := newDeployReporter(sender, stages)
 	tracer := newEventTracer(sender)
 
-	res, deployErr := s.runDeploy(ctx, req, manifest, progress, logf, tracer)
+	res, deployErr := s.runDeploy(ctx, req, manifest, stages, appStages, appDeclared, progress, stageReport, logf, tracer)
 	if deployErr != nil {
 		sender.send(failureResult(deployErr))
 	} else {
@@ -167,9 +170,7 @@ func newDeployStages() deployStages {
 	}
 }
 
-func (s *Server) runDeploy(ctx context.Context, req *deploymentsv1.DeployRequest, manifest *deploymentsv1.Manifest, progress deploy.Progress, logf func(string), tracer deploy.Tracer) (deploy.Result, error) {
-	stages := newDeployStages()
-	appStages, appDeclared := deploy.AppStages(stages.provisioning, manifest)
+func (s *Server) runDeploy(ctx context.Context, req *deploymentsv1.DeployRequest, manifest *deploymentsv1.Manifest, stages deployStages, appStages map[string]deploy.Stage, appDeclared []deploy.Stage, progress deploy.Progress, stageReport func(deploy.StageID) func(string), logf func(string), tracer deploy.Tracer) (deploy.Result, error) {
 	if tracer != nil {
 		all := append([]deploy.Stage{stages.preparing, stages.uploading, stages.provisioning, stages.finalizing}, appDeclared...)
 		tracer.DeclareStages(true, all...)
@@ -351,8 +352,9 @@ func (s *Server) runDeploy(ctx context.Context, req *deploymentsv1.DeployRequest
 			Provisioning: stages.provisioning,
 			Finalizing:   stages.finalizing,
 		},
-		AppStages: appStages,
-		Tracer:    tracer,
+		AppStages:   appStages,
+		Tracer:      tracer,
+		StageReport: stageReport,
 	}, manifest, progress, logf)
 
 	if rootStackStateChanged(priorRootStackState, res.RootStackState) {
@@ -529,14 +531,24 @@ func progressEvent(message string) *deploymentsv1.DeployEvent {
 	}
 }
 
-func phaseProgressEvent(phase deploymentsv1.Phase, message string, current, total uint32) *deploymentsv1.DeployEvent {
-	p := &deploymentsv1.ProgressEvent{Message: message, Phase: phase}
+func phaseProgressEvent(stageID []byte, phase deploymentsv1.Phase, message string, current, total uint32) *deploymentsv1.DeployEvent {
+	p := &deploymentsv1.ProgressEvent{Message: message, Phase: phase, StageId: stageID}
 	if total > 0 {
 		p.Current = &current
 		p.Total = &total
 	}
 	return &deploymentsv1.DeployEvent{
 		Event: &deploymentsv1.DeployEvent_Progress{Progress: p},
+	}
+}
+
+func stageProgressEvent(id deploy.StageID, phase deploymentsv1.Phase, message string) *deploymentsv1.DeployEvent {
+	return &deploymentsv1.DeployEvent{
+		Event: &deploymentsv1.DeployEvent_Progress{Progress: &deploymentsv1.ProgressEvent{
+			Message: message,
+			Phase:   phase,
+			StageId: id[:],
+		}},
 	}
 }
 

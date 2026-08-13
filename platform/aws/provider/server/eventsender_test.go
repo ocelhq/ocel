@@ -8,6 +8,7 @@ import (
 	"time"
 
 	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
+	"github.com/ocelhq/ocel/platform/aws/provider/deploy"
 )
 
 type recordingStream struct {
@@ -29,7 +30,7 @@ func TestDeployReporterSerializesConcurrentSends(t *testing.T) {
 
 	stream := &recordingStream{}
 	sender := newEventSender(context.Background(), stream.send)
-	progress, logf := newDeployReporter(sender)
+	progress, _, logf := newDeployReporter(sender, newDeployStages())
 
 	var wg sync.WaitGroup
 	for i := 0; i < concurrentUploaders; i++ {
@@ -67,7 +68,7 @@ func TestDeployReporterParallelMultiAppDeploy(t *testing.T) {
 
 	stream := &recordingStream{}
 	sender := newEventSender(context.Background(), stream.send)
-	progress, logf := newDeployReporter(sender)
+	progress, _, logf := newDeployReporter(sender, newDeployStages())
 
 	var wg sync.WaitGroup
 	for a := 0; a < apps; a++ {
@@ -97,6 +98,62 @@ func TestDeployReporterParallelMultiAppDeploy(t *testing.T) {
 	want := apps*functionsPerApp + apps*logLinesPerApp
 	if got := len(stream.events); got != want {
 		t.Fatalf("got %d events, want %d", got, want)
+	}
+}
+
+func TestNewDeployReporterTagsEveryPhaseWithItsDeclaredStage(t *testing.T) {
+	t.Parallel()
+
+	stream := &recordingStream{}
+	sender := newEventSender(context.Background(), stream.send)
+	stages := newDeployStages()
+	progress, stageReport, _ := newDeployReporter(sender, stages)
+
+	wantStage := map[deploymentsv1.Phase]deploy.StageID{
+		deploymentsv1.Phase_PHASE_UNSPECIFIED:  stages.preparing.ID,
+		deploymentsv1.Phase_PHASE_UPLOADING:    stages.uploading.ID,
+		deploymentsv1.Phase_PHASE_PROVISIONING: stages.provisioning.ID,
+		deploymentsv1.Phase_PHASE_FINALIZING:   stages.finalizing.ID,
+	}
+	phases := []deploymentsv1.Phase{
+		deploymentsv1.Phase_PHASE_UNSPECIFIED,
+		deploymentsv1.Phase_PHASE_UPLOADING,
+		deploymentsv1.Phase_PHASE_PROVISIONING,
+		deploymentsv1.Phase_PHASE_FINALIZING,
+	}
+	for _, phase := range phases {
+		progress(phase, "message", 0, 0)
+	}
+
+	appStage := deploy.NewStage(stages.provisioning, "myapp")
+	stageReport(appStage.ID)("Provisioning myapp")
+
+	if err := sender.close(); err != nil {
+		t.Fatalf("close() error = %v", err)
+	}
+
+	if len(stream.events) != len(phases)+1 {
+		t.Fatalf("got %d events, want %d", len(stream.events), len(phases)+1)
+	}
+
+	for i, phase := range phases {
+		got := stream.events[i].GetProgress().GetStageId()
+		if len(got) == 0 {
+			t.Fatalf("phase %v produced an untagged progress event", phase)
+		}
+		want := wantStage[phase]
+		if deploy.StageID(got) != want {
+			t.Errorf("phase %v: StageId = %x, want %x (its declared stage)", phase, got, want)
+		}
+	}
+
+	last := stream.events[len(phases)]
+	gotAppID := last.GetProgress().GetStageId()
+	if len(gotAppID) == 0 {
+		t.Fatal("stageReport produced an untagged progress event")
+	}
+	if deploy.StageID(gotAppID) != appStage.ID {
+		t.Errorf("app stage report: StageId = %x, want %x (the app's declared child stage)", gotAppID, appStage.ID)
 	}
 }
 

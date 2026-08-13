@@ -60,10 +60,23 @@ func (s *eventSender) close() error {
 	return s.err
 }
 
-func newDeployReporter(sender *eventSender) (deploy.Progress, func(string)) {
+func newDeployReporter(sender *eventSender, stages deployStages) (deploy.Progress, func(deploy.StageID) func(string), func(string)) {
+	byPhase := map[deploymentsv1.Phase]deploy.StageID{
+		deploymentsv1.Phase_PHASE_UNSPECIFIED:  stages.preparing.ID,
+		deploymentsv1.Phase_PHASE_UPLOADING:    stages.uploading.ID,
+		deploymentsv1.Phase_PHASE_PROVISIONING: stages.provisioning.ID,
+		deploymentsv1.Phase_PHASE_FINALIZING:   stages.finalizing.ID,
+	}
 	progress := func(phase deploymentsv1.Phase, m string, current, total uint32) {
-		sender.send(phaseProgressEvent(phase, m, current, total))
+		var id []byte
+		if stageID, ok := byPhase[phase]; ok {
+			id = stageID[:]
+		}
+		sender.send(phaseProgressEvent(id, phase, m, current, total))
+	}
+	stageReport := func(id deploy.StageID) func(string) {
+		return func(m string) { sender.send(stageProgressEvent(id, deploymentsv1.Phase_PHASE_PROVISIONING, m)) }
 	}
 	logf := func(m string) { sender.send(logEvent(m)) }
-	return progress, logf
+	return progress, stageReport, logf
 }

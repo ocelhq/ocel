@@ -101,9 +101,10 @@ type Config struct {
 
 	RootStackState edge.RootStackState
 
-	Stages    Stages
-	AppStages map[string]Stage
-	Tracer    Tracer
+	Stages      Stages
+	AppStages   map[string]Stage
+	Tracer      Tracer
+	StageReport func(StageID) func(string)
 }
 
 type Stages struct {

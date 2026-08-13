@@ -756,6 +756,8 @@ func runAppStack(ctx context.Context, cfg Config, manifest *deploymentsv1.Manife
 	stack := plan.AppStacks[name]
 	project := naming.Sanitize(manifest.GetSlug())
 
+	cfg.reportStage(stage)(fmt.Sprintf("Provisioning %s", name))
+
 	program := func(pctx *pulumi.Context) error {
 		role, err := newFunctionRole(pctx, roleCoordinate(project, stack), appExecutionRole(cfg, name, caches, baked))
 		if err != nil {

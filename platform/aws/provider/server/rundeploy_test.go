@@ -43,7 +43,9 @@ func TestRunDeployDeclaresTheStagePlanBeforeAnyWork(t *testing.T) {
 		Options:  []byte("not json"),
 	}
 
-	_, err := s.runDeploy(context.Background(), req, req.GetManifest(), noopProgress, noopLog, tracer)
+	stages := newDeployStages()
+	appStages, appDeclared := deploy.AppStages(stages.provisioning, req.GetManifest())
+	_, err := s.runDeploy(context.Background(), req, req.GetManifest(), stages, appStages, appDeclared, noopProgress, noopStageReport, noopLog, tracer)
 	if err == nil {
 		t.Fatal("runDeploy() error = nil, want the parseOptions failure")
 	}
@@ -79,3 +81,4 @@ func TestRunDeployDeclaresTheStagePlanBeforeAnyWork(t *testing.T) {
 
 func noopProgress(deploymentsv1.Phase, string, uint32, uint32) {}
 func noopLog(string)                                           {}
+func noopStageReport(deploy.StageID) func(string)              { return func(string) {} }

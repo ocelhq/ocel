@@ -22,7 +22,9 @@ import (
 )
 
 func (s *Server) Prune(ctx context.Context, req *deploymentsv1.PruneRequest, stream *connect.ServerStream[deploymentsv1.DeployEvent]) error {
-	progress := func(m string) { _ = stream.Send(phaseProgressEvent(deploymentsv1.Phase_PHASE_PROVISIONING, m, 0, 0)) }
+	progress := func(m string) {
+		_ = stream.Send(phaseProgressEvent(nil, deploymentsv1.Phase_PHASE_PROVISIONING, m, 0, 0))
+	}
 	logf := func(m string) { _ = stream.Send(logEvent(m)) }
 
 	result, err := s.runPrune(ctx, req, progress, logf)

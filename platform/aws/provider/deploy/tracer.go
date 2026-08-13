@@ -88,6 +88,13 @@ type Tracer interface {
 	Span(id, parentID StageID, name string, start, end time.Time, err error, attrs ...Attr)
 }
 
+func (cfg Config) reportStage(stage Stage) func(string) {
+	if cfg.StageReport == nil {
+		return func(string) {}
+	}
+	return nilSafe(cfg.StageReport(stage.ID))
+}
+
 func declareStages(t Tracer, final bool, stages ...Stage) {
 	if t == nil {
 		return
