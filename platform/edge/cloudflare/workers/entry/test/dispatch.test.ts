@@ -3967,6 +3967,102 @@ describe("custom error page substitution", () => {
   });
 });
 
+describe("not-found for an unresolved pathname under a flight header", () => {
+  const flightBody = '1:"$Sreact.fragment"\n';
+
+  function notFoundDeps(overrides: { flightRoute?: boolean } = {}) {
+    const entries: string[] = [];
+    return {
+      entries: () => entries,
+      deps: baseDeps({
+        manifest: {
+          buildId: "t",
+          basePath: "",
+          pathnames: ["/404"],
+          routes: {},
+          dispatch: {
+            "/404": { kind: "static" },
+            "/_not-found": {
+              kind: "lambda",
+              id: "page",
+              entryKey: "/_not-found",
+              page: true,
+            },
+          },
+          errorRoutes: {
+            notFound: "/404",
+            ...(overrides.flightRoute === false
+              ? {}
+              : { notFoundFlight: "/_not-found" }),
+          },
+        },
+        functionUrls: { page: "https://fn.example.com" },
+        assetStore: assetStoreServing({ "/404.html": "<html>static 404</html>" }),
+        fetch: (async (req: Request) => {
+          entries.push(req.headers.get("x-ocel-entry") ?? "");
+          return new Response(flightBody, {
+            status: 200,
+            headers: { "content-type": "text/x-component" },
+          });
+        }) as unknown as typeof fetch,
+      }),
+    };
+  }
+
+  const unresolved = (headers?: Record<string, string>) =>
+    new Request("https://app.example/en/gsp/stories/dynamic-123?_rsc=p", {
+      headers,
+    });
+
+  it("renders the flight not-found route instead of the prerendered HTML 404", async () => {
+    const { deps, entries } = notFoundDeps();
+
+    const res = await dispatchResult({}, unresolved({ rsc: "1" }), deps);
+
+    expect(res.status).toBe(404);
+    expect(res.headers.get("content-type")).toBe("text/x-component");
+    expect(await res.text()).toBe(flightBody);
+    expect(entries()).toEqual(["/_not-found"]);
+  });
+
+  it("still serves the prerendered HTML 404 to a document request", async () => {
+    const { deps, entries } = notFoundDeps();
+
+    const res = await dispatchResult({}, unresolved(), deps);
+
+    expect(res.status).toBe(404);
+    expect(res.headers.get("content-type")).toBe("text/html; charset=utf-8");
+    expect(await res.text()).toBe("<html>static 404</html>");
+    expect(entries()).toEqual([]);
+  });
+
+  it("serves the HTML 404 when the build names no flight not-found route", async () => {
+    const { deps, entries } = notFoundDeps({ flightRoute: false });
+
+    const res = await dispatchResult({}, unresolved({ rsc: "1" }), deps);
+
+    expect(res.status).toBe(404);
+    expect(await res.text()).toBe("<html>static 404</html>");
+    expect(entries()).toEqual([]);
+  });
+
+  it("leaves a missing /_next/static asset a plain 404, flight header or not", async () => {
+    const { deps, entries } = notFoundDeps();
+
+    const res = await dispatchResult(
+      {},
+      new Request("https://app.example/_next/static/chunks/gone.js", {
+        headers: { rsc: "1" },
+      }),
+      deps,
+    );
+
+    expect(res.status).toBe(404);
+    expect(res.headers.get("content-type")).not.toBe("text/x-component");
+    expect(entries()).toEqual([]);
+  });
+});
+
 describe("not-found fallback for unmatched pathnames", () => {
   it("renders the notFound error route's body with status 404 when the pathname has no dispatch entry", async () => {
     const deps = baseDeps({

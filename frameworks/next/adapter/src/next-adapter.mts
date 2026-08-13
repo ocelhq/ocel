@@ -396,9 +396,15 @@ const adapter = {
       `${basePath}/404`,
       `${basePath}/_not-found`,
     ]);
+    const notFoundFlightKey = firstDispatchedErrorPage([
+      `${basePath}/_not-found`,
+    ]);
     const serverErrorKey = firstDispatchedErrorPage([`${basePath}/500`]);
     const errorRoutes = {
       ...(notFoundKey !== undefined && { notFound: notFoundKey }),
+      ...(notFoundFlightKey !== undefined && {
+        notFoundFlight: notFoundFlightKey,
+      }),
       ...(serverErrorKey !== undefined && { serverError: serverErrorKey }),
     };
 
