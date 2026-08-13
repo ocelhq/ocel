@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"errors"
 	"os"
-	"path/filepath"
 	"strings"
 	"sync"
 	"testing"
@@ -19,7 +18,7 @@ func newTestSession(t *testing.T, command string) (*Session, *bytes.Buffer, stri
 	var out bytes.Buffer
 	s := New(&out, dir, command, false)
 	t.Cleanup(func() { _ = s.Close() })
-	return s, &out, filepath.Join(dir, ".ocel", "logs", "ocel.log")
+	return s, &out, s.LogPath()
 }
 
 func progress(phase deploymentsv1.Phase, msg string) *deploymentsv1.DeployEvent {
@@ -157,7 +156,7 @@ func TestSession(t *testing.T) {
 		if !strings.Contains(got, "creating rds: InsufficientCapacity") {
 			t.Errorf("stdout = %q, want the error message", got)
 		}
-		if !strings.Contains(got, "ocel.log") {
+		if !strings.Contains(got, ".log") {
 			t.Errorf("stdout = %q, want a pointer to the log file", got)
 		}
 	})
@@ -238,6 +237,36 @@ func TestSession(t *testing.T) {
 		got := out.String()
 		if !strings.Contains(got, "Resources may be partially created") {
 			t.Errorf("stdout = %q, want a resumed run cancelled later to warn about partial provisioning", got)
+		}
+	})
+
+	t.Run("each run gets its own log file and old ones are pruned, not truncated", func(t *testing.T) {
+		t.Parallel()
+		dir := t.TempDir()
+
+		var paths []string
+		for i := 0; i < 12; i++ {
+			var out bytes.Buffer
+			s := New(&out, dir, "ocel deploy", false)
+			s.Building()
+			if err := s.Close(); err != nil {
+				t.Fatalf("Close() = %v", err)
+			}
+			paths = append(paths, s.LogPath())
+		}
+
+		for i, p := range paths {
+			if i < 2 {
+				continue
+			}
+			if _, err := os.Stat(p); err != nil {
+				t.Errorf("run %d log %s should have survived pruning: %v", i, p, err)
+			}
+		}
+		for i := 1; i < len(paths); i++ {
+			if paths[i] == paths[i-1] {
+				t.Fatalf("two runs shared a log file path: %s", paths[i])
+			}
 		}
 	})
 }

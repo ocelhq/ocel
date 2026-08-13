@@ -12,6 +12,7 @@ import (
 	"github.com/fatih/color"
 	"github.com/mattn/go-isatty"
 
+	"github.com/ocelhq/ocel/cli/internal/obs"
 	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
 )
 
@@ -64,11 +65,12 @@ func newSession(stdout io.Writer, projectDir, command string, clean bool) *Sessi
 	}
 	logDir := filepath.Join(projectDir, ".ocel", "logs")
 	if err := os.MkdirAll(logDir, 0o755); err == nil {
-		p := filepath.Join(logDir, "ocel.log")
+		p := filepath.Join(logDir, obs.NewTraceID()+".log")
 		if f, err := os.Create(p); err == nil {
 			s.log = f
 			s.logPath = p
 		}
+		_ = obs.Prune(logDir, obs.RunRetention)
 	}
 	if s.clean {
 		s.stopRender = make(chan struct{})
@@ -95,6 +97,10 @@ func (s *Session) renderLoop() {
 			s.mu.Unlock()
 		}
 	}
+}
+
+func (s *Session) LogPath() string {
+	return s.logPath
 }
 
 func (s *Session) BuildWriter() io.Writer {
