@@ -108,9 +108,9 @@ func DestroyPreviewProject(ctx context.Context, stack edge.RootStack, state edge
 	}
 	spanForStage(cfg.Tracer, stages.Planning, planStart, time.Now(), err)
 
-	appChildren := childStagesFor(stages.AppStacks, plan.AppStacks)
-	infraChildren := childStagesFor(stages.InfraStacks, plan.InfraStacks)
-	declareStages(cfg.Tracer, true, append(declaredValues(appChildren), declaredValues(infraChildren)...)...)
+	appChildren, appDeclared := childStagesFor(stages.AppStacks, plan.AppStacks)
+	infraChildren, infraDeclared := childStagesFor(stages.InfraStacks, plan.InfraStacks)
+	declareStages(cfg.Tracer, true, append(appDeclared, infraDeclared...)...)
 
 	edgeStart := time.Now()
 	var edgeErr error
@@ -143,13 +143,18 @@ func DestroyPreviewProject(ctx context.Context, stack edge.RootStack, state edge
 		errs = append(errs, edgeErr)
 	}
 
-	errs = append(errs, destroyPhased(plan.AppStacks, plan.InfraStacks,
+	stacksStart := time.Now()
+	appErrs, infraErrs := destroyPhased(plan.AppStacks, plan.InfraStacks,
 		func(stack naming.StackName) error {
 			return destroyStackStage(ctx, cfg, stack, appChildren[stack], "preview app", log)
 		},
 		func(stack naming.StackName) error {
 			return destroyStackStage(ctx, cfg, stack, infraChildren[stack], "preview infra", log)
-		})...)
+		})
+	spanForStage(cfg.Tracer, stages.AppStacks, stacksStart, time.Now(), errors.Join(appErrs...))
+	spanForStage(cfg.Tracer, stages.InfraStacks, stacksStart, time.Now(), errors.Join(infraErrs...))
+	errs = append(errs, appErrs...)
+	errs = append(errs, infraErrs...)
 
 	valuesStart := time.Now()
 	verr := purgeProjectValues(ctx, cfg, slug, cfg.reportStage(stages.Values))
