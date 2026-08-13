@@ -202,6 +202,44 @@ func TestTraceParentContext(t *testing.T) {
 			t.Fatalf("TraceParentFromContext() ok = true, want false")
 		}
 	})
+
+	t.Run("a malformed traceparent leaves the context untouched", func(t *testing.T) {
+		t.Parallel()
+		ctx := WithTraceParent(context.Background(), "not-a-traceparent")
+		if _, ok := TraceParentFromContext(ctx); ok {
+			t.Fatalf("TraceParentFromContext() ok = true, want false")
+		}
+	})
+}
+
+func TestValidTraceParent(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		name  string
+		value string
+		want  bool
+	}{
+		{"a well-formed traceparent", "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01", true},
+		{"empty", "", false},
+		{"too few fields", "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7", false},
+		{"too many fields", "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01-extra", false},
+		{"uppercase hex", "00-4BF92F3577B34DA6A3CE929D0E0E4736-00F067AA0BA902B7-01", false},
+		{"a short trace id", "00-4bf92f3577b34da6a3ce929d0e0e4736aa-00f067aa0ba902b7-01", false},
+		{"a short span id", "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902-01", false},
+		{"an all-zero trace id", "00-00000000000000000000000000000000-00f067aa0ba902b7-01", false},
+		{"an all-zero parent id", "00-4bf92f3577b34da6a3ce929d0e0e4736-0000000000000000-01", false},
+		{"the reserved ff version", "ff-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01", false},
+		{"non-hex characters", "00-4bf92f3577b34da6a3ce929d0e0e473g-00f067aa0ba902b7-01", false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			if got := ValidTraceParent(tc.value); got != tc.want {
+				t.Errorf("ValidTraceParent(%q) = %v, want %v", tc.value, got, tc.want)
+			}
+		})
+	}
 }
 
 func TestVerifyAuthHeader(t *testing.T) {
