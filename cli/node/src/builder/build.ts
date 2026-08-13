@@ -1,5 +1,6 @@
 import path from "node:path";
 import { sanitizeName } from "./detect.js";
+import { withSpan } from "./protocol.js";
 import { detectFramework, resolveFramework } from "./registry.js";
 import type { AppInput, BuildOptions, FunctionSummary } from "./types.js";
 
@@ -17,7 +18,7 @@ export async function buildApp(input: AppInput, options: BuildOptions): Promise<
 export async function buildApps(inputs: AppInput[], options: BuildOptions): Promise<FunctionSummary[]> {
   const summaries: FunctionSummary[] = [];
   for (const input of inputs) {
-    summaries.push(...(await buildApp(input, options)));
+    summaries.push(...(await withSpan("build", input.name, () => buildApp(input, options))));
   }
   return summaries;
 }
