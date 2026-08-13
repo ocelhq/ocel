@@ -87,6 +87,8 @@ func newRendererForTest(w io.Writer, format Format, live, colorEnabled bool) *Re
 func (r *Renderer) Live() bool { return r.live }
 
 func (r *Renderer) useClock(now func() time.Time) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
 	r.plan.useClock(now)
 }
 

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -222,15 +223,16 @@ func TestRestartLegacyStageDiscardsElapsedTime(t *testing.T) {
 	r := newRendererForTest(&out, FormatHuman, true, false)
 	t.Cleanup(func() { _ = r.Close() })
 
-	now := time.Now()
-	r.useClock(func() time.Time { return now })
+	var nowNanos atomic.Int64
+	nowNanos.Store(time.Now().UnixNano())
+	r.useClock(func() time.Time { return time.Unix(0, nowNanos.Load()) })
 
 	r.Building()
 
-	now = now.Add(90 * time.Second)
+	nowNanos.Add(int64(90 * time.Second))
 	r.RestartLegacyStage(deploymentsv1.Phase_PHASE_BUILDING)
 
-	now = now.Add(1 * time.Second)
+	nowNanos.Add(int64(1 * time.Second))
 	r.BuildOK()
 
 	got := out.String()
