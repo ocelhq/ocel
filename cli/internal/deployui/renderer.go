@@ -86,6 +86,16 @@ func newRendererForTest(w io.Writer, format Format, live, colorEnabled bool) *Re
 
 func (r *Renderer) Live() bool { return r.live }
 
+func (r *Renderer) useClock(now func() time.Time) {
+	r.plan.useClock(now)
+}
+
+func (r *Renderer) RestartLegacyStage(phase deploymentsv1.Phase) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.plan.restart(legacyStageID(phase, ""))
+}
+
 func (r *Renderer) Write(p []byte) (int, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -415,7 +425,7 @@ func (r *Renderer) commitLocked(n *stageNode, c *color.Color, mark, status strin
 func (r *Renderer) finalizeLineLocked(n *stageNode, c *color.Color, mark, status string) {
 	if status == "" {
 		c.Fprintf(r.w, "%s %s", mark, n.title)
-		r.colorFor(color.Faint).Fprintf(r.w, "  %s\n", formatDuration(time.Since(n.started)))
+		r.colorFor(color.Faint).Fprintf(r.w, "  %s\n", formatDuration(r.plan.now().Sub(n.started)))
 		return
 	}
 	c.Fprintf(r.w, "%s %s %s\n", mark, n.title, status)
@@ -488,7 +498,7 @@ func (r *Renderer) rowLineLocked(n *stageNode) string {
 			fmt.Fprintf(&b, " %s", r.colorFor(color.Faint).Sprintf("(%d/%d)", idx, count))
 		}
 	}
-	fmt.Fprintf(&b, "  %s", r.colorFor(color.Faint).Sprint(formatDuration(time.Since(n.started))))
+	fmt.Fprintf(&b, "  %s", r.colorFor(color.Faint).Sprint(formatDuration(r.plan.now().Sub(n.started))))
 	switch {
 	case n.total != nil:
 		fmt.Fprintf(&b, "  %s %d/%d", bar(n.current, *n.total), n.current, *n.total)
@@ -578,10 +588,14 @@ func bar(current, total uint32) string {
 }
 
 func formatDuration(d time.Duration) string {
-	if d < time.Minute {
-		return fmt.Sprintf("%.1fs", d.Seconds())
+	rounded := d.Round(time.Second)
+	if rounded <= 0 && d > 0 {
+		rounded = time.Second
 	}
-	m := int(d / time.Minute)
-	sec := int((d % time.Minute) / time.Second)
+	if rounded < time.Minute {
+		return fmt.Sprintf("%ds", int(rounded/time.Second))
+	}
+	m := int(rounded / time.Minute)
+	sec := int((rounded % time.Minute) / time.Second)
 	return fmt.Sprintf("%dm%02ds", m, sec)
 }
