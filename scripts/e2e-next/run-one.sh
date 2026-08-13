@@ -71,11 +71,6 @@ finish() {
 }
 trap finish EXIT
 
-set -a
-# shellcheck disable=SC1091
-. "$ADAPTER_DIR/.env"
-set +a
-
 ENVV=(
   ADAPTER_DIR="$ADAPTER_DIR"
   GITHUB_RUN_ID="$RUN_ID"
