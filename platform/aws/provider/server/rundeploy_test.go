@@ -1,0 +1,85 @@
+package server
+
+import (
+	"context"
+	"testing"
+	"time"
+
+	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
+	"github.com/ocelhq/ocel/platform/aws/provider/deploy"
+)
+
+type recordedDeclare struct {
+	final  bool
+	stages []deploy.Stage
+}
+
+type recordedSpan struct {
+	id, parentID deploy.StageID
+	name         string
+	failed       bool
+}
+
+type fakeTracer struct {
+	declared []recordedDeclare
+	spans    []recordedSpan
+}
+
+func (f *fakeTracer) DeclareStages(final bool, stages ...deploy.Stage) {
+	f.declared = append(f.declared, recordedDeclare{final: final, stages: stages})
+}
+
+func (f *fakeTracer) Span(id, parentID deploy.StageID, name string, start, end time.Time, err error, attrs ...deploy.Attr) {
+	f.spans = append(f.spans, recordedSpan{id: id, parentID: parentID, name: name, failed: err != nil})
+}
+
+// TestRunDeployDeclaresTheStagePlanBeforeAnyWork exercises runDeploy with a
+// request that fails immediately in parseOptions, before any AWS or Pulumi
+// work starts. The stage plan must already have gone out by then: it is
+// declared before work begins, not once the first phase completes.
+func TestRunDeployDeclaresTheStagePlanBeforeAnyWork(t *testing.T) {
+	t.Parallel()
+
+	s := &Server{}
+	tracer := &fakeTracer{}
+	req := &deploymentsv1.DeployRequest{
+		Manifest: wellFormedManifest(),
+		Options:  []byte("not json"),
+	}
+
+	_, err := s.runDeploy(context.Background(), req, req.GetManifest(), noopProgress, noopLog, tracer)
+	if err == nil {
+		t.Fatal("runDeploy() error = nil, want the parseOptions failure")
+	}
+
+	if len(tracer.declared) == 0 {
+		t.Fatal("no stage plan was declared before runDeploy failed")
+	}
+	first := tracer.declared[0]
+	if first.final {
+		t.Error("first declared batch has Final = true, want false: more stages (per-app children) are still to come")
+	}
+	wantTitles := []string{"Preparing", "Uploading", "Provisioning", "Finalizing"}
+	if len(first.stages) != len(wantTitles) {
+		t.Fatalf("got %d top-level stages, want %d", len(first.stages), len(wantTitles))
+	}
+	for i, want := range wantTitles {
+		if got := first.stages[i].Title; got != want {
+			t.Errorf("stage[%d].Title = %q, want %q", i, got, want)
+		}
+	}
+
+	if len(tracer.spans) != 1 {
+		t.Fatalf("got %d spans, want 1 (Preparing, failed)", len(tracer.spans))
+	}
+	preparing := first.stages[0]
+	if tracer.spans[0].id != preparing.ID {
+		t.Error("the recorded span's id does not match the declared Preparing stage's id")
+	}
+	if !tracer.spans[0].failed {
+		t.Error("the Preparing span was not recorded as failed")
+	}
+}
+
+func noopProgress(deploymentsv1.Phase, string, uint32, uint32) {}
+func noopLog(string)                                           {}
