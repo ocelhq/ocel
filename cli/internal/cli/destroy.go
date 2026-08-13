@@ -1,15 +1,12 @@
 package cli
 
 import (
-	"bufio"
 	"context"
 	"errors"
 	"fmt"
 	"io"
 	"os"
-	"os/signal"
 	"strings"
-	"syscall"
 
 	"github.com/spf13/cobra"
 
@@ -36,7 +33,7 @@ var destroyCmd = &cobra.Command{
 			return fmt.Errorf("determine working directory: %w", err)
 		}
 
-		ctx, stop := signal.NotifyContext(cmd.Context(), os.Interrupt, syscall.SIGTERM)
+		ctx, stop := installInterruptHandler(cmd.Context(), cmd.ErrOrStderr())
 		defer stop()
 
 		if err := checkDestroyFlags(destroyPreview, destroyYes); err != nil {
@@ -121,7 +118,7 @@ func runDestroy(ctx context.Context, d deps, cwd string, stdout, stderr io.Write
 		}
 
 		printDestroyPlan(stdout, cfg.Slug, plan)
-		confirmed, err := confirmDestroyProject(cfg.Slug, stdout, stdin)
+		confirmed, err := confirmDestroyProject(ctx, cfg.Slug, stdout, stdin)
 		if err != nil {
 			return err
 		}
@@ -188,7 +185,7 @@ func runDestroyPreviewProject(ctx context.Context, d deps, cwd string, yes bool,
 		fmt.Fprintln(stdout, "The account-level preview bootstrap is left intact. This cannot be undone.")
 
 		if !yes {
-			confirmed, err := confirmDestroyProject(cfg.Slug, stdout, stdin)
+			confirmed, err := confirmDestroyProject(ctx, cfg.Slug, stdout, stdin)
 			if err != nil {
 				return err
 			}
@@ -236,15 +233,15 @@ func printDestroyPlan(out io.Writer, slug string, plan *deploymentsv1.PlanDestro
 	fmt.Fprintln(out, "This cannot be undone.")
 }
 
-func confirmDestroyProject(slug string, stdout io.Writer, stdin io.Reader) (bool, error) {
+func confirmDestroyProject(ctx context.Context, slug string, stdout io.Writer, stdin io.Reader) (bool, error) {
 	fmt.Fprintf(stdout, "Type the project name (%s) to confirm: ", slug)
 
-	scanner := bufio.NewScanner(stdin)
-	if !scanner.Scan() {
-		if err := scanner.Err(); err != nil {
-			return false, fmt.Errorf("failed to read input: %w", err)
-		}
+	line, ok, err := readLine(ctx, stdin)
+	if err != nil {
+		return false, err
+	}
+	if !ok {
 		return false, nil
 	}
-	return strings.TrimSpace(scanner.Text()) == slug, nil
+	return strings.TrimSpace(line) == slug, nil
 }

@@ -1,7 +1,6 @@
 package cli
 
 import (
-	"bufio"
 	"bytes"
 	"context"
 	"encoding/json"
@@ -9,11 +8,9 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"os/signal"
 	"path/filepath"
 	"strings"
 	"sync"
-	"syscall"
 	"time"
 
 	"github.com/spf13/cobra"
@@ -65,7 +62,7 @@ var deployCmd = &cobra.Command{
 			return fmt.Errorf("determine working directory: %w", err)
 		}
 
-		ctx, stop := signal.NotifyContext(cmd.Context(), os.Interrupt, syscall.SIGTERM)
+		ctx, stop := installInterruptHandler(cmd.Context(), cmd.ErrOrStderr())
 		defer stop()
 
 		return runDeploy(ctx, defaultDeps(), cwd, deployOpts, cmd.OutOrStdout(), cmd.ErrOrStderr(), cmd.InOrStdin())
@@ -122,7 +119,7 @@ func runDeploy(ctx context.Context, d deps, cwd string, opts deployOptions, stdo
 		}
 
 		if willConfirm {
-			proceed, err := confirmDeploy(cfg.Slug, provider.Package, knownSlugs, stdout, stdin)
+			proceed, err := confirmDeploy(ctx, cfg.Slug, provider.Package, knownSlugs, stdout, stdin)
 			if err != nil {
 				return err
 			}
@@ -528,28 +525,13 @@ func workerBundleEnv(projectDir string) ([]string, error) {
 	), nil
 }
 
-func confirmDeploy(slug, providerPackage string, knownSlugs []string, stdout io.Writer, stdin io.Reader) (bool, error) {
+func confirmDeploy(ctx context.Context, slug, providerPackage string, knownSlugs []string, stdout io.Writer, stdin io.Reader) (bool, error) {
 	if len(knownSlugs) == 0 {
-		return confirmYN(fmt.Sprintf("Deploy %s with %s?", slug, providerPackage), stdout, stdin)
+		return confirmYN(ctx, fmt.Sprintf("Deploy %s with %s?", slug, providerPackage), stdout, stdin)
 	}
 	fmt.Fprintf(stdout, "No existing deployment for slug %q.\nThis will create a NEW project.\nThis backend already has: %s\n",
 		slug, strings.Join(knownSlugs, ", "))
-	return confirmYN("Continue?", stdout, stdin)
-}
-
-func confirmYN(prompt string, stdout io.Writer, stdin io.Reader) (bool, error) {
-	fmt.Fprintf(stdout, "%s [y/N] ", prompt)
-
-	scanner := bufio.NewScanner(stdin)
-	if !scanner.Scan() {
-		if err := scanner.Err(); err != nil {
-			return false, fmt.Errorf("failed to read input: %w", err)
-		}
-		return false, nil
-	}
-
-	answer := strings.TrimSpace(scanner.Text())
-	return strings.EqualFold(answer, "y") || strings.EqualFold(answer, "yes"), nil
+	return confirmYN(ctx, "Continue?", stdout, stdin)
 }
 
 func toDeclarations(resources []declare.Resource) []manifestbuilder.Declaration {

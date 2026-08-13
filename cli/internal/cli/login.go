@@ -5,9 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
-	"os/signal"
 	"strings"
-	"syscall"
 	"time"
 
 	"github.com/pkg/browser"
@@ -61,7 +59,7 @@ func runLogin(cmd *cobra.Command, args []string) error {
 		}
 	}
 
-	ctx, stop := signal.NotifyContext(cmd.Context(), os.Interrupt, syscall.SIGTERM)
+	ctx, stop := installInterruptHandler(cmd.Context(), cmd.ErrOrStderr())
 	defer stop()
 
 	client := authclient.New(apiURL)

@@ -5,8 +5,6 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"os/signal"
-	"syscall"
 
 	"github.com/spf13/cobra"
 
@@ -35,7 +33,7 @@ var bootstrapCmd = &cobra.Command{
 			return fmt.Errorf("determine working directory: %w", err)
 		}
 
-		ctx, stop := signal.NotifyContext(cmd.Context(), os.Interrupt, syscall.SIGTERM)
+		ctx, stop := installInterruptHandler(cmd.Context(), cmd.ErrOrStderr())
 		defer stop()
 
 		return runBootstrap(ctx, defaultDeps(), cwd, bootstrapOpts, cmd.OutOrStdout(), cmd.ErrOrStderr(), cmd.InOrStdin())
@@ -68,8 +66,11 @@ func runBootstrap(ctx context.Context, d deps, cwd string, opts bootstrapOptions
 	}
 
 	if !opts.yes && isReaderTTY(stdin) {
-		proceed, err := confirmBootstrap(class, provider.Package, stdout, stdin)
+		proceed, err := confirmBootstrap(ctx, class, provider.Package, stdout, stdin)
 		if err != nil {
+			if ctx.Err() != nil {
+				return &ExitError{Code: 1}
+			}
 			return err
 		}
 		if !proceed {
@@ -106,10 +107,10 @@ func runBootstrap(ctx context.Context, d deps, cwd string, opts bootstrapOptions
 	return nil
 }
 
-func confirmBootstrap(class deploymentsv1.Environment_Class, providerPackage string, stdout io.Writer, stdin io.Reader) (bool, error) {
+func confirmBootstrap(ctx context.Context, class deploymentsv1.Environment_Class, providerPackage string, stdout io.Writer, stdin io.Reader) (bool, error) {
 	infra := "production"
 	if class == deploymentsv1.Environment_CLASS_PREVIEW {
 		infra = "preview"
 	}
-	return confirmYN(fmt.Sprintf("Bootstrap %s infrastructure with %s?", infra, providerPackage), stdout, stdin)
+	return confirmYN(ctx, fmt.Sprintf("Bootstrap %s infrastructure with %s?", infra, providerPackage), stdout, stdin)
 }

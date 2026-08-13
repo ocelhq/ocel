@@ -41,12 +41,12 @@ func TestConfirmDeploy(t *testing.T) {
 			t.Parallel()
 
 			var stdout bytes.Buffer
-			got, err := confirmDeploy("my-app", "@ocel/provider-aws", nil, &stdout, strings.NewReader(tc.input))
+			got, err := confirmDeploy(context.Background(), "my-app", "@ocel/provider-aws", nil, &stdout, strings.NewReader(tc.input))
 			if err != nil {
-				t.Fatalf("confirmDeploy() error = %v", err)
+				t.Fatalf("confirmDeploy(context.Background(), ) error = %v", err)
 			}
 			if got != tc.want {
-				t.Errorf("confirmDeploy(%q) = %v, want %v", tc.input, got, tc.want)
+				t.Errorf("confirmDeploy(context.Background(), %q) = %v, want %v", tc.input, got, tc.want)
 			}
 			if !strings.Contains(stdout.String(), "Deploy my-app with @ocel/provider-aws? [y/N]") {
 				t.Errorf("stdout = %q, want it to contain the confirm prompt", stdout.String())
@@ -58,12 +58,12 @@ func TestConfirmDeploy(t *testing.T) {
 		t.Parallel()
 
 		var stdout bytes.Buffer
-		got, err := confirmDeploy("my-app", "@ocel/provider-aws", []string{"my-application", "billing"}, &stdout, strings.NewReader("y\n"))
+		got, err := confirmDeploy(context.Background(), "my-app", "@ocel/provider-aws", []string{"my-application", "billing"}, &stdout, strings.NewReader("y\n"))
 		if err != nil {
-			t.Fatalf("confirmDeploy() error = %v", err)
+			t.Fatalf("confirmDeploy(context.Background(), ) error = %v", err)
 		}
 		if !got {
-			t.Error("confirmDeploy() = false, want the y answer to still proceed — the guard is a warning, not a refusal")
+			t.Error("confirmDeploy(context.Background(), ) = false, want the y answer to still proceed — the guard is a warning, not a refusal")
 		}
 
 		out := stdout.String()
@@ -87,12 +87,12 @@ func TestConfirmDeploy(t *testing.T) {
 
 		for _, input := range []string{"\n", "", "sure\n"} {
 			var stdout bytes.Buffer
-			got, err := confirmDeploy("my-app", "@ocel/provider-aws", []string{"my-application"}, &stdout, strings.NewReader(input))
+			got, err := confirmDeploy(context.Background(), "my-app", "@ocel/provider-aws", []string{"my-application"}, &stdout, strings.NewReader(input))
 			if err != nil {
-				t.Fatalf("confirmDeploy(%q) error = %v", input, err)
+				t.Fatalf("confirmDeploy(context.Background(), %q) error = %v", input, err)
 			}
 			if got {
-				t.Errorf("confirmDeploy(%q) = true, want the drift prompt to default to No", input)
+				t.Errorf("confirmDeploy(context.Background(), %q) = true, want the drift prompt to default to No", input)
 			}
 		}
 	})
@@ -102,8 +102,8 @@ func TestConfirmDeploy(t *testing.T) {
 
 		for _, known := range [][]string{nil, {}} {
 			var stdout bytes.Buffer
-			if _, err := confirmDeploy("my-app", "@ocel/provider-aws", known, &stdout, strings.NewReader("y\n")); err != nil {
-				t.Fatalf("confirmDeploy() error = %v", err)
+			if _, err := confirmDeploy(context.Background(), "my-app", "@ocel/provider-aws", known, &stdout, strings.NewReader("y\n")); err != nil {
+				t.Fatalf("confirmDeploy(context.Background(), ) error = %v", err)
 			}
 			out := stdout.String()
 			if !strings.Contains(out, "Deploy my-app with @ocel/provider-aws? [y/N]") {
