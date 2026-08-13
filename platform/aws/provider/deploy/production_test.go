@@ -12,6 +12,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/pulumi/pulumi/sdk/v3/go/auto/events"
 	"github.com/pulumi/pulumi/sdk/v3/go/common/apitype"
 	"github.com/pulumi/pulumi/sdk/v3/go/common/resource/config"
 	"github.com/pulumi/pulumi/sdk/v3/go/common/workspace"
@@ -1822,5 +1823,65 @@ func TestEmitEngineTraceOmitsResourceIdentityWhenTheURNDidNotParse(t *testing.T)
 		if a.Key == deploymentsv1.AttributeKey_ATTRIBUTE_KEY_RESOURCE_TYPE || a.Key == deploymentsv1.AttributeKey_ATTRIBUTE_KEY_RESOURCE_NAME {
 			t.Errorf("standout span carries resource identity attr %+v despite an unparseable URN", a)
 		}
+	}
+}
+
+func TestEmitEngineTraceStillEmitsOnAnUpErrorWithNoResourceOperations(t *testing.T) {
+	t.Parallel()
+
+	ft := &fakeTracer{}
+	parent := NewRootStage("Provisioning").ID
+	start := time.Unix(8000, 0)
+	trace := EngineTrace{Start: start, End: start.Add(time.Second)}
+
+	emitEngineTrace(ft, parent, trace, errors.New("plugin failed to start"))
+
+	if len(ft.spans) != 1 {
+		t.Fatalf("got %d spans, want 1: a Pulumi run that failed before touching a resource must still leave a span", len(ft.spans))
+	}
+	if ft.spans[0].err == nil {
+		t.Error("batch span not recorded as failed")
+	}
+}
+
+func TestEmitEngineTraceStaysSilentOnAQuietSuccessfulRun(t *testing.T) {
+	t.Parallel()
+
+	ft := &fakeTracer{}
+	parent := NewRootStage("Provisioning").ID
+	trace := EngineTrace{}
+
+	emitEngineTrace(ft, parent, trace, nil)
+
+	if len(ft.spans) != 0 {
+		t.Fatalf("got %d spans, want 0: nothing happened and nothing failed", len(ft.spans))
+	}
+}
+
+func TestAwaitEngineTraceReturnsWithinGraceOnAChannelThatIsNeverSentTo(t *testing.T) {
+	t.Parallel()
+
+	result := make(chan EngineTrace)
+	done := make(chan EngineTrace, 1)
+	go func() { done <- awaitEngineTrace(result, 20*time.Millisecond) }()
+
+	select {
+	case <-done:
+	case <-time.After(5 * time.Second):
+		t.Fatal("awaitEngineTrace did not return within its grace period")
+	}
+}
+
+func TestStartEngineTraceDrainDoesNotBlockWhenEngineEventsIsNeverClosed(t *testing.T) {
+	t.Parallel()
+
+	engineEvents := make(chan events.EngineEvent, 4)
+	engineEvents <- events.EngineEvent{}
+
+	result := startEngineTraceDrain(engineEvents, 0)
+
+	trace := awaitEngineTrace(result, 50*time.Millisecond)
+	if !reflect.DeepEqual(trace, EngineTrace{}) {
+		t.Errorf("got %+v, want a zero-value trace: the channel is unclosed so the builder goroutine never sent a result", trace)
 	}
 }
