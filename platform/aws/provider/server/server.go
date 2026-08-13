@@ -153,14 +153,6 @@ func (s *Server) Deploy(ctx context.Context, req *deploymentsv1.DeployRequest, s
 	return nil
 }
 
-func newDeployReporter(sender *eventSender) (deploy.Progress, func(string)) {
-	progress := func(phase deploymentsv1.Phase, m string, current, total uint32) {
-		sender.send(phaseProgressEvent(phase, m, current, total))
-	}
-	logf := func(m string) { sender.send(logEvent(m)) }
-	return progress, logf
-}
-
 func (s *Server) runDeploy(ctx context.Context, req *deploymentsv1.DeployRequest, manifest *deploymentsv1.Manifest, progress deploy.Progress, logf func(string)) (deploy.Result, error) {
 	opts, err := parseOptions(req.GetOptions())
 	if err != nil {
