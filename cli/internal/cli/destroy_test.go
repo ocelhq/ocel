@@ -168,4 +168,25 @@ func TestRunDestroy(t *testing.T) {
 			t.Errorf("err = %v, want the no-TTY refusal", err)
 		}
 	})
+
+	t.Run("the bypass gets past the terminal requirement and says so", func(t *testing.T) {
+		t.Setenv(destroyBypassEnv, "1")
+		var stdout, stderr bytes.Buffer
+		err := runDestroy(context.Background(), defaultDeps(), t.TempDir(), &stdout, &stderr, strings.NewReader(""))
+		if err != nil && strings.Contains(err.Error(), "interactive terminal") {
+			t.Errorf("err = %v, want the bypass to get past the TTY requirement", err)
+		}
+		if !strings.Contains(stderr.String(), destroyBypassEnv) {
+			t.Errorf("stderr = %q, want it to name %s so an unconfirmed destroy is never silent", stderr.String(), destroyBypassEnv)
+		}
+	})
+
+	t.Run("an unset bypass is not a bypass", func(t *testing.T) {
+		t.Setenv(destroyBypassEnv, "")
+		var stdout, stderr bytes.Buffer
+		err := runDestroy(context.Background(), defaultDeps(), t.TempDir(), &stdout, &stderr, strings.NewReader(""))
+		if err == nil || !strings.Contains(err.Error(), "interactive terminal") {
+			t.Errorf("err = %v, want the no-TTY refusal", err)
+		}
+	})
 }
