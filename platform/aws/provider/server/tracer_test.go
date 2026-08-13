@@ -174,10 +174,6 @@ func TestEventTracerSpanCarriesResourceIdentityNeverTheURN(t *testing.T) {
 		t.Fatalf("span missing resource identity attrs: %+v", span.GetAttributes())
 	}
 
-	// The URN this identity was derived from would have been
-	// urn:pulumi:prod::acme-shop::aws:s3/bucket:Bucket::my-bucket: neither
-	// the stack ("prod") nor the project ("acme-shop") may appear anywhere
-	// in the emitted SpanEvent, on any field.
 	serialized := span.String()
 	for _, leaked := range []string{"urn:pulumi", "prod", "acme-shop"} {
 		if strings.Contains(serialized, leaked) {
