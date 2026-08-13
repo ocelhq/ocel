@@ -69,11 +69,12 @@ func (r gateRecovery) fill(ctx context.Context, gate *envgate.Gate, refusal *env
 	}
 
 	run := obs.FromContext(ctx)
+	waitCtx := ctx
 	var span trace.Span
 	if run != nil {
-		_, span = run.StartSpan(ctx, "await_human_input")
+		waitCtx, span = run.StartSpan(ctx, "await_human_input")
 	}
-	waitErr := session.Wait(ctx)
+	waitErr := session.Wait(waitCtx)
 	endAttemptSpan(span, waitErr)
 
 	switch {
