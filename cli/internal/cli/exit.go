@@ -25,7 +25,7 @@ const interruptExitCode = 130
 
 const shutdownSlack = 3 * time.Second
 
-const gracefulShutdownWindow = providerrunner.DefaultGracePeriod + providerrunner.DefaultReapTimeout + shutdownSlack
+const gracefulShutdownWindow = max(providerrunner.DefaultGracePeriod+providerrunner.DefaultReapTimeout, appChildWaitDelay) + shutdownSlack
 
 func installInterruptHandler(parent context.Context, stderr io.Writer) (context.Context, context.CancelFunc) {
 	ch := make(chan os.Signal, 2)
@@ -33,10 +33,6 @@ func installInterruptHandler(parent context.Context, stderr io.Writer) (context.
 	return interruptHandlerWithExit(parent, stderr, ch, gracefulShutdownWindow, forceKillEverything, os.Exit)
 }
 
-// forceKillEverything reaches both live process-group leaders the CLI can
-// spawn: a provider (deploy/destroy/etc.) and a dev/run app child. Commands
-// that spawn neither leave both registries empty, so this is a no-op call
-// for them.
 func forceKillEverything() {
 	providerrunner.KillAllLive()
 	killAllLiveAppChildren()
