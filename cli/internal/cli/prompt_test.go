@@ -9,8 +9,6 @@ import (
 	"time"
 )
 
-// blockingReader never returns from Read until the test is done with it,
-// simulating a real terminal with nothing typed yet.
 type blockingReader struct {
 	unblock chan struct{}
 }
@@ -109,7 +107,7 @@ func TestReadLineCancelledContextReturnsPromptly(t *testing.T) {
 
 	done := make(chan struct{})
 	go func() {
-		if _, _, err := readLine(ctx, reader); err == nil {
+		if _, err := readLine(ctx, reader); err == nil {
 			t.Error("readLine() error = nil, want the context's cancellation error")
 		}
 		close(done)
