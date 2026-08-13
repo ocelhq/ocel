@@ -5,6 +5,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -238,17 +239,36 @@ func spanStatus(s deploymentsv1.SpanStatus) obs.SpanStatus {
 	}
 }
 
+var numericAttributeKeys = map[attribute.Key]struct{}{
+	obs.AttrExitCode:      {},
+	obs.AttrResourceCount: {},
+	obs.AttrBytes:         {},
+	obs.AttrRetryCount:    {},
+	obs.AttrDurationMS:    {},
+}
+
 func spanAttributes(attrs []*deploymentsv1.SpanAttribute) []attribute.KeyValue {
 	if len(attrs) == 0 {
 		return nil
 	}
 	out := make([]attribute.KeyValue, 0, len(attrs))
 	for _, a := range attrs {
-		if key, ok := attributeKey(a.GetKey()); ok {
-			out = append(out, key.String(a.GetValue()))
+		key, ok := attributeKey(a.GetKey())
+		if !ok {
+			continue
 		}
+		out = append(out, attributeValue(key, a.GetValue()))
 	}
 	return out
+}
+
+func attributeValue(key attribute.Key, value string) attribute.KeyValue {
+	if _, numeric := numericAttributeKeys[key]; numeric {
+		if n, err := strconv.ParseInt(value, 10, 64); err == nil {
+			return key.Int64(n)
+		}
+	}
+	return key.String(value)
 }
 
 func attributeKey(k deploymentsv1.AttributeKey) (attribute.Key, bool) {

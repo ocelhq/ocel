@@ -375,6 +375,135 @@ func TestIngestedSpanResourceIdentityReachesTheTraceFile(t *testing.T) {
 	}
 }
 
+func TestNumericSpanAttributesLandAsIntValueInTheTraceFile(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	run := startTestRun(t, dir, "ocel deploy")
+	var out bytes.Buffer
+	s := New(&out, run, FormatHuman, false)
+	t.Cleanup(func() { _ = s.Close() })
+
+	s.Event(&deploymentsv1.DeployEvent{Event: &deploymentsv1.DeployEvent_Span{
+		Span: &deploymentsv1.SpanEvent{
+			SpanId: []byte{1, 2, 3, 4, 5, 6, 7, 8},
+			Name:   "upload batch",
+			Status: deploymentsv1.SpanStatus_SPAN_STATUS_OK,
+			Attributes: []*deploymentsv1.SpanAttribute{
+				{Key: deploymentsv1.AttributeKey_ATTRIBUTE_KEY_BYTES, Value: "1048576"},
+				{Key: deploymentsv1.AttributeKey_ATTRIBUTE_KEY_RESOURCE_COUNT, Value: "42"},
+				{Key: deploymentsv1.AttributeKey_ATTRIBUTE_KEY_DURATION_MS, Value: "150"},
+				{Key: deploymentsv1.AttributeKey_ATTRIBUTE_KEY_RETRY_COUNT, Value: "2"},
+				{Key: deploymentsv1.AttributeKey_ATTRIBUTE_KEY_EXIT_CODE, Value: "1"},
+			},
+		},
+	}})
+
+	if err := run.Close(); err != nil {
+		t.Fatalf("run.Close() = %v", err)
+	}
+
+	attrs := traceSpanAttrs(t, run, "upload batch")
+	want := map[string]string{
+		"ocel.bytes":          "1048576",
+		"ocel.resource_count": "42",
+		"ocel.duration_ms":    "150",
+		"ocel.retry_count":    "2",
+		"ocel.exit_code":      "1",
+	}
+	for _, a := range attrs {
+		wantVal, ok := want[a.Key]
+		if !ok {
+			continue
+		}
+		delete(want, a.Key)
+		iv, ok := a.Value["intValue"]
+		if !ok {
+			t.Errorf("attribute %s value = %v, want an intValue, not a stringValue", a.Key, a.Value)
+			continue
+		}
+		if iv != wantVal {
+			t.Errorf("attribute %s intValue = %v, want %v", a.Key, iv, wantVal)
+		}
+	}
+	if len(want) != 0 {
+		t.Errorf("attributes missing from the trace file: %v", want)
+	}
+}
+
+func TestNonNumericValueForANumericKeyDegradesToStringValue(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	run := startTestRun(t, dir, "ocel deploy")
+	var out bytes.Buffer
+	s := New(&out, run, FormatHuman, false)
+	t.Cleanup(func() { _ = s.Close() })
+
+	s.Event(&deploymentsv1.DeployEvent{Event: &deploymentsv1.DeployEvent_Span{
+		Span: &deploymentsv1.SpanEvent{
+			SpanId: []byte{1, 2, 3, 4, 5, 6, 7, 8},
+			Name:   "malformed byte count",
+			Attributes: []*deploymentsv1.SpanAttribute{
+				{Key: deploymentsv1.AttributeKey_ATTRIBUTE_KEY_BYTES, Value: "not-a-number"},
+			},
+		},
+	}})
+
+	if err := run.Close(); err != nil {
+		t.Fatalf("run.Close() = %v", err)
+	}
+
+	attrs := traceSpanAttrs(t, run, "malformed byte count")
+	if len(attrs) != 1 {
+		t.Fatalf("got %d attributes, want 1", len(attrs))
+	}
+	if attrs[0].Key != "ocel.bytes" {
+		t.Fatalf("attribute key = %q, want ocel.bytes", attrs[0].Key)
+	}
+	if sv, ok := attrs[0].Value["stringValue"]; !ok || sv != "not-a-number" {
+		t.Errorf("attribute value = %v, want a stringValue of %q, not the attribute dropped or coerced", attrs[0].Value, "not-a-number")
+	}
+}
+
+type traceAttr struct {
+	Key   string         `json:"key"`
+	Value map[string]any `json:"value"`
+}
+
+func traceSpanAttrs(t *testing.T, run *obs.Run, spanName string) []traceAttr {
+	t.Helper()
+	tracePath := filepath.Join(run.Dir(), run.TraceID()+".otlp.json")
+	raw, err := os.ReadFile(tracePath)
+	if err != nil {
+		t.Fatalf("read trace file: %v", err)
+	}
+
+	var doc struct {
+		ResourceSpans []struct {
+			ScopeSpans []struct {
+				Spans []struct {
+					Name       string      `json:"name"`
+					Attributes []traceAttr `json:"attributes"`
+				} `json:"spans"`
+			} `json:"scopeSpans"`
+		} `json:"resourceSpans"`
+	}
+	if err := json.Unmarshal(raw, &doc); err != nil {
+		t.Fatalf("trace file is not valid OTLP/JSON: %v", err)
+	}
+
+	for _, rs := range doc.ResourceSpans {
+		for _, ss := range rs.ScopeSpans {
+			for _, sp := range ss.Spans {
+				if sp.Name == spanName {
+					return sp.Attributes
+				}
+			}
+		}
+	}
+	t.Fatalf("no span named %q in the trace file", spanName)
+	return nil
+}
+
 func TestFormatAxis(t *testing.T) {
 	t.Run("json format emits one machine-readable line per event, never the human text", func(t *testing.T) {
 		t.Parallel()
