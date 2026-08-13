@@ -62,16 +62,11 @@ func (e *fileExporter) Shutdown(context.Context) error {
 	return nil
 }
 
-// appendSpan writes a span that was already fully formed on receipt (a
-// provider-reported span), rather than converted from an sdktrace span this
-// process traced itself.
-func (e *fileExporter) appendSpan(s otlpSpan) error {
-	e.mu.Lock()
-	defer e.mu.Unlock()
-	e.spans = append(e.spans, s)
-	return e.flushLocked()
-}
-
+// flushLocked rewrites the whole trace document on every export.
+// TODO: this is O(n^2) over the run once per-resource provider spans land
+// (#241) — each ingested span re-marshals every span that came before it.
+// Append-only NDJSON (like the run's own log) would fix it; left as JSON
+// array output for now since nothing has hit the cost yet.
 func (e *fileExporter) flushLocked() error {
 	doc := otlpTracesData{
 		ResourceSpans: []otlpResourceSpans{{

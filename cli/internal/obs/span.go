@@ -1,18 +1,15 @@
 package obs
 
 import (
-	"encoding/hex"
-	"fmt"
+	"context"
 	"strings"
 	"time"
 
 	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/codes"
+	"go.opentelemetry.io/otel/trace"
 )
 
-// SpanStatus is obs's own status vocabulary for an ingested span. Callers
-// must map into it explicitly (a switch, not a numeric cast) — the wire
-// enum this is fed from does not share ordinals with either this type or
-// go.opentelemetry.io/otel/codes.
 type SpanStatus int
 
 const (
@@ -23,49 +20,41 @@ const (
 
 const maxSpanNameLen = 200
 
-// IngestSpan records a span a provider already finished and shipped back
-// over the wire, rather than one this process traced itself — so it
-// bypasses the tracer's Start/End lifecycle and its own ID generation,
-// using the provider's span and parent ids as given.
-//
-// The span's name arrived as a free-form string, unlike attributes, which
-// are enum-keyed on the wire and so are safe by construction; a provider
-// bug or a malicious provider could otherwise write anything into the
-// trace artifact under the guise of a span name. It is sanitized here,
-// on receipt, rather than trusted.
-func (r *Run) IngestSpan(spanID, parentSpanID [8]byte, name string, start, end time.Time, status SpanStatus, attrs []attribute.KeyValue) error {
-	span := otlpSpan{
-		TraceID:           r.traceID.String(),
-		SpanID:            hex.EncodeToString(spanID[:]),
-		Name:              sanitizeSpanName(name),
-		Kind:              "SPAN_KIND_INTERNAL",
-		StartTimeUnixNano: fmt.Sprintf("%d", start.UnixNano()),
-		EndTimeUnixNano:   fmt.Sprintf("%d", end.UnixNano()),
-		Attributes:        convertAttributes(filterAttributes(attrs)),
-	}
+func (r *Run) IngestSpan(spanID, parentSpanID [8]byte, name string, start, end time.Time, status SpanStatus, attrs []attribute.KeyValue) {
+	ctx := context.Background()
 	if parentSpanID != ([8]byte{}) {
-		span.ParentSpanID = hex.EncodeToString(parentSpanID[:])
+		parent := trace.NewSpanContext(trace.SpanContextConfig{
+			TraceID:    r.traceID,
+			SpanID:     trace.SpanID(parentSpanID),
+			TraceFlags: trace.FlagsSampled,
+			Remote:     true,
+		})
+		ctx = trace.ContextWithRemoteSpanContext(ctx, parent)
 	}
-	if code := spanStatusCodeJSON(status); code != "" {
-		span.Status = &otlpStatus{Code: code}
+	ctx = contextWithSpanID(ctx, trace.SpanID(spanID))
+
+	opts := []trace.SpanStartOption{trace.WithTimestamp(start), trace.WithSpanKind(trace.SpanKindInternal)}
+	if len(attrs) > 0 {
+		opts = append(opts, trace.WithAttributes(attrs...))
 	}
-	return r.fileExp.appendSpan(span)
+	_, span := r.tracer.Start(ctx, sanitizeSpanName(name), opts...)
+	if code, ok := spanStatusCode(status); ok {
+		span.SetStatus(code, "")
+	}
+	span.End(trace.WithTimestamp(end))
 }
 
-func spanStatusCodeJSON(s SpanStatus) string {
+func spanStatusCode(s SpanStatus) (codes.Code, bool) {
 	switch s {
 	case SpanStatusOK:
-		return "STATUS_CODE_OK"
+		return codes.Ok, true
 	case SpanStatusError:
-		return "STATUS_CODE_ERROR"
+		return codes.Error, true
 	default:
-		return ""
+		return codes.Unset, false
 	}
 }
 
-// sanitizeSpanName strips control characters and caps the length of an
-// untrusted, provider-supplied span name before it reaches the trace
-// artifact.
 func sanitizeSpanName(name string) string {
 	var b strings.Builder
 	for _, r := range name {
