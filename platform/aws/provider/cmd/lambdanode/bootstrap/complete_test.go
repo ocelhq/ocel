@@ -29,10 +29,11 @@ func TestHandleInvocationComplete(t *testing.T) {
 
 		goSide, jsSide := net.Pipe()
 		m := &Membrane{
-			nodePort: portOf(t, node),
-			client:   &http.Client{},
-			control:  goSide,
-			pending:  map[string]chan struct{}{},
+			nodePort:  portOf(t, node),
+			client:    &http.Client{},
+			control:   goSide,
+			lifecycle: true,
+			pending:   map[string]chan struct{}{},
 		}
 		go m.drainControl(bufio.NewReader(goSide))
 
@@ -64,9 +65,10 @@ func TestHandleInvocationComplete(t *testing.T) {
 		deadline := time.Now().Add(100 * time.Millisecond)
 		rt := fakeRuntimeWithDeadline(t, []byte(getEvent), deadline)
 		m := &Membrane{
-			nodePort: portOf(t, node),
-			client:   &http.Client{},
-			pending:  map[string]chan struct{}{},
+			nodePort:  portOf(t, node),
+			client:    &http.Client{},
+			lifecycle: true,
+			pending:   map[string]chan struct{}{},
 		}
 
 		done := make(chan error, 1)
@@ -86,6 +88,33 @@ func TestHandleInvocationComplete(t *testing.T) {
 		m.mu.Unlock()
 		if n != 0 {
 			t.Errorf("pending waiters after timeout = %d, want 0", n)
+		}
+	})
+
+	t.Run("an entrypoint that cannot signal completion is never waited on", func(t *testing.T) {
+		node := okNode(t)
+		deadline := time.Now().Add(30 * time.Second)
+		rt := fakeRuntimeWithDeadline(t, []byte(getEvent), deadline)
+		m := &Membrane{
+			nodePort: portOf(t, node),
+			client:   &http.Client{},
+			pending:  map[string]chan struct{}{},
+		}
+
+		done := make(chan error, 1)
+		started := time.Now()
+		go func() { done <- handleInvocation(context.Background(), rt, m) }()
+
+		select {
+		case err := <-done:
+			if err != nil {
+				t.Fatalf("handleInvocation: %v", err)
+			}
+		case <-time.After(2 * time.Second):
+			t.Fatal("handleInvocation waited out the invocation budget for a node that never signals completion")
+		}
+		if elapsed := time.Since(started); elapsed > time.Second {
+			t.Errorf("handleInvocation took %v, want it to return as soon as the response was written", elapsed)
 		}
 	})
 

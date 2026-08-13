@@ -8,7 +8,7 @@ import {
   installCompileCacheWarm,
   reportFatalBoot,
   serveInvoke,
-  startServer,
+  serveServer,
   type Invoke,
 } from "../shared/membrane.mjs";
 
@@ -126,7 +126,7 @@ async function boot(): Promise<void> {
   await awaitLiveValues();
   const loaded = await loadUserApp(process.env.OCEL_HANDLER!);
   if (loaded.kind === "server") {
-    await startServer(loaded.value);
+    await serveServer(loaded.value);
   } else {
     await serveInvoke(invokeFor(resolveHandler(loaded.value)));
   }
