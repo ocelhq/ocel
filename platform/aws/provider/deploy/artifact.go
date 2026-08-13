@@ -16,6 +16,7 @@ import (
 	"slices"
 	"sync"
 	"sync/atomic"
+	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
@@ -230,6 +231,31 @@ func putArtifact(ctx context.Context, up ArtifactUploader, bucket, key, contentT
 	return nil
 }
 
+func tracedUpload(ctx context.Context, up ArtifactUploader, bucket, key, contentType string, body func() ([]byte, error), stats *uploadBatchStats) error {
+	start := time.Now()
+	var size int64
+	err := uploadArtifact(ctx, up, bucket, key, contentType, func() ([]byte, error) {
+		data, err := body()
+		if err == nil {
+			size = int64(len(data))
+		}
+		return data, err
+	})
+	if stats != nil {
+		stats.record(uploadOutcome{Bytes: size, Start: start, End: time.Now(), Failed: err != nil, Err: err})
+	}
+	return err
+}
+
+func tracedPut(ctx context.Context, up ArtifactUploader, bucket, key, contentType string, data []byte, stats *uploadBatchStats) error {
+	start := time.Now()
+	err := putArtifact(ctx, up, bucket, key, contentType, data)
+	if stats != nil {
+		stats.record(uploadOutcome{Bytes: int64(len(data)), Start: start, End: time.Now(), Failed: err != nil, Err: err})
+	}
+	return err
+}
+
 func isNotFound(err error) bool {
 	var nf *s3types.NotFound
 	var nsk *s3types.NoSuchKey
@@ -261,6 +287,7 @@ func uploadFunctionArtifacts(ctx context.Context, cfg Config, manifest *deployme
 	g, ctx := errgroup.WithContext(ctx)
 	g.SetLimit(uploadConcurrency)
 
+	stats := newUploadBatchStats()
 	var mu sync.Mutex
 	for _, fn := range functions {
 		g.Go(func() error {
@@ -275,9 +302,9 @@ func uploadFunctionArtifacts(ctx context.Context, cfg Config, manifest *deployme
 				return err
 			}
 			key := artifactKey(coord, fn.GetLogicalName(), hash)
-			if err := uploadArtifact(ctx, cfg.Uploader, cfg.ArtifactBucket, key, "", func() ([]byte, error) {
+			if err := tracedUpload(ctx, cfg.Uploader, cfg.ArtifactBucket, key, "", func() ([]byte, error) {
 				return zipDir(dir, overlay)
-			}); err != nil {
+			}, stats); err != nil {
 				return err
 			}
 			mu.Lock()
@@ -287,7 +314,9 @@ func uploadFunctionArtifacts(ctx context.Context, cfg Config, manifest *deployme
 			return nil
 		})
 	}
-	if err := g.Wait(); err != nil {
+	err := g.Wait()
+	emitUploadBatch(cfg.Tracer, cfg.Stages.Uploading.ID, uploadKindFunctionArtifact, stats, err)
+	if err != nil {
 		return nil, err
 	}
 	return refs, nil
