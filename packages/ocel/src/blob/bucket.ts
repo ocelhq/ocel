@@ -10,12 +10,10 @@ export interface BucketOptions<TUploaders extends Record<string, AnyUploader>> {
 }
 
 const configSchema = z.object({
-  address: z.string(),
   bucket: z.string(),
 });
 
 export interface ResolvedBucketConfig {
-  address: string;
   bucket: string;
 }
 

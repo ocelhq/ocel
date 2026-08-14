@@ -72,7 +72,7 @@ func rdsIdentifierPrefix(at naming.Coordinate, role string) string {
 	return ident.PhysicalPrefix(maxRDSIdentifierPrefixLen)
 }
 
-func registerPostgres(ctx *pulumi.Context, project, env, logicalName string, args postgresArgs, vpcID, vpcCIDR string, subnetIDs []string) (pulumi.StringOutput, error) {
+func registerPostgres(ctx *pulumi.Context, project, env, logicalName string, args postgresArgs, vpcID, vpcCIDR string, subnetIDs []string) error {
 	at := resourceCoordinate(project, env, logicalName, naming.KindDatabase)
 
 	sg, err := ec2.NewSecurityGroup(ctx, naming.ResourceID(at.Kind, at.Name, "security-group"), &ec2.SecurityGroupArgs{
@@ -99,7 +99,7 @@ func registerPostgres(ctx *pulumi.Context, project, env, logicalName string, arg
 		Tags: resourceTags(at.Kind, "", args.Tags),
 	})
 	if err != nil {
-		return pulumi.StringOutput{}, err
+		return err
 	}
 
 	subnetGroup, err := rds.NewSubnetGroup(ctx, naming.ResourceID(at.Kind, at.Name, "subnet-group"), &rds.SubnetGroupArgs{
@@ -109,7 +109,7 @@ func registerPostgres(ctx *pulumi.Context, project, env, logicalName string, arg
 		Tags:        resourceTags(at.Kind, "", args.Tags),
 	})
 	if err != nil {
-		return pulumi.StringOutput{}, err
+		return err
 	}
 
 	cluster, err := rds.NewCluster(ctx, naming.ResourceID(at.Kind, at.Name), &rds.ClusterArgs{
@@ -131,7 +131,7 @@ func registerPostgres(ctx *pulumi.Context, project, env, logicalName string, arg
 		Tags: resourceTags(at.Kind, "", args.Tags),
 	})
 	if err != nil {
-		return pulumi.StringOutput{}, err
+		return err
 	}
 
 	_, err = rds.NewClusterInstance(ctx, naming.ResourceID(at.Kind, at.Name, "instance"), &rds.ClusterInstanceArgs{
@@ -144,7 +144,7 @@ func registerPostgres(ctx *pulumi.Context, project, env, logicalName string, arg
 		Tags:               resourceTags(at.Kind, "", args.Tags),
 	})
 	if err != nil {
-		return pulumi.StringOutput{}, err
+		return err
 	}
 
 	secretARN := cluster.MasterUserSecrets.Index(pulumi.Int(0)).SecretArn()
@@ -156,7 +156,7 @@ func registerPostgres(ctx *pulumi.Context, project, env, logicalName string, arg
 		outputKeySecretARN: secretARN,
 	})
 
-	return postgresEnvValue(ctx, cluster.MasterUsername, cluster.Endpoint, cluster.Port, args.DatabaseName, secretARN.Elem()), nil
+	return nil
 }
 
 const (

@@ -26,7 +26,7 @@ func masterUserSecret(args pulumi.MockResourceArgs) resource.PropertyMap {
 
 func TestPostgresComponentTags(t *testing.T) {
 	rec := recordTags(t, func(ctx *pulumi.Context) error {
-		_, err := registerPostgres(ctx, "shop", "prod", "db--main", translatePostgres(&resourcesv1.PostgresConfig{}), "vpc-1", "10.0.0.0/16", []string{"subnet-1", "subnet-2"})
+		err := registerPostgres(ctx, "shop", "prod", "db--main", translatePostgres(&resourcesv1.PostgresConfig{}), "vpc-1", "10.0.0.0/16", []string{"subnet-1", "subnet-2"})
 		return err
 	}, masterUserSecret)
 

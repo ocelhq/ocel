@@ -157,6 +157,7 @@ func TestDynamoKeysLeadWithTheProject(t *testing.T) {
 		ProjectKey("shop"),
 		StackKey("shop", stack),
 		VarsKey("shop", "production"),
+		LinkVarsKey("shop", "production", "main"),
 		ISRTagKey("shop", stack, "products"),
 	} {
 		project, err := ProjectOf(key)
@@ -166,6 +167,25 @@ func TestDynamoKeysLeadWithTheProject(t *testing.T) {
 		if project != "shop" {
 			t.Errorf("ProjectOf(%q) = %q, want %q", key, project, "shop")
 		}
+	}
+}
+
+func TestLinkVarsKeysArePerLinkPartitions(t *testing.T) {
+	shared := VarsKey("shop", "production")
+	main := LinkVarsKey("shop", "production", "main")
+	uploads := LinkVarsKey("shop", "production", "uploads")
+
+	if main == uploads {
+		t.Fatalf("both links partition to %q; an IAM LeadingKeys condition could never separate them", main)
+	}
+	if main == shared {
+		t.Fatalf("link values partition to %q, the same partition a user's own values live in", shared)
+	}
+	if !strings.HasPrefix(main, shared+KeySeparator) {
+		t.Errorf("LinkVarsKey = %q, want it under %q so one class's links stay one class's", main, shared)
+	}
+	if LinkVarsKey("shop", "preview", "main") == main {
+		t.Errorf("preview and production share the link partition %q", main)
 	}
 }
 

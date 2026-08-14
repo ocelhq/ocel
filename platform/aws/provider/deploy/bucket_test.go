@@ -92,7 +92,7 @@ func emptyArchive(t *testing.T) string {
 func TestBucketComponentTags(t *testing.T) {
 	code := emptyArchive(t)
 	rec := recordTags(t, func(ctx *pulumi.Context) error {
-		_, err := registerBucket(ctx, "shop", "prod", "bucket--uploads", translateBucket(&resourcesv1.BucketConfig{}), "ocel-state", "arn:aws:dynamodb:eu-west-1:111122223333:table/ocel-state", code)
+		err := registerBucket(ctx, "shop", "prod", "bucket--uploads", translateBucket(&resourcesv1.BucketConfig{}), "ocel-state", "arn:aws:dynamodb:eu-west-1:111122223333:table/ocel-state", code)
 		return err
 	})
 

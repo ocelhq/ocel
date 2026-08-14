@@ -309,6 +309,7 @@ func (s *Server) runDeploy(ctx context.Context, req *deploymentsv1.DeployRequest
 		VarsTableARN:   fmt.Sprintf("arn:aws:dynamodb:%s:%s:table/%s", awscfg.Region, account, deployed.VarsTable),
 		VarsClass:      substrateClass,
 		VarsReferenced: varsReferenced,
+		Links:          linkPublisher(awscfg, deployed, substrateClass),
 
 		CacheStoreBucket:   params.CacheStore.Bucket,
 		CacheStoreUploader: cacheStoreUploader(params.CacheStore),

@@ -52,6 +52,7 @@ type Config struct {
 	VarsClass      string
 	VarsReferenced map[vars.Coordinate]string
 	Values         ValueStore
+	Links          LinkPublisher
 
 	ListenerCodePath string
 

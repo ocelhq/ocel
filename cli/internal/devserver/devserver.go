@@ -27,11 +27,12 @@ import (
 )
 
 type SyncResult struct {
-	ProjectConfig provision.ProjectConfig
-	Resources     []provision.Resource
-	LiveValues    map[string]string
-	LiveKeys      []string
-	Err           error
+	ProjectConfig  provision.ProjectConfig
+	Resources      []provision.Resource
+	RuntimeAddress string
+	LiveValues     map[string]string
+	LiveKeys       []string
+	Err            error
 }
 
 type Server struct {
@@ -245,17 +246,14 @@ func (s *Server) handleSync(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	s.deliverSync(SyncResult{ProjectConfig: cfg, Resources: provisioned, LiveValues: liveValues, LiveKeys: liveKeys})
+	s.deliverSync(SyncResult{ProjectConfig: cfg, Resources: provisioned, RuntimeAddress: s.devServerAddr, LiveValues: liveValues, LiveKeys: liveKeys})
 	w.WriteHeader(http.StatusOK)
 }
 
 func (s *Server) bucketResources(buckets []manifest.Entry) []provision.Resource {
 	out := make([]provision.Resource, 0, len(buckets))
 	for _, b := range buckets {
-		value, _ := json.Marshal(map[string]string{
-			"address": s.devServerAddr,
-			"bucket":  b.Name,
-		})
+		value, _ := json.Marshal(map[string]string{"bucket": b.Name})
 		out = append(out, provision.Resource{
 			Name: b.Name,
 			Type: b.Type,

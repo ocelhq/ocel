@@ -10,7 +10,6 @@ import (
 
 	iam "github.com/pulumi/pulumi-aws/sdk/v7/go/aws/iam"
 	lambda "github.com/pulumi/pulumi-aws/sdk/v7/go/aws/lambda"
-	secretsmanager "github.com/pulumi/pulumi-aws/sdk/v7/go/aws/secretsmanager"
 	"github.com/pulumi/pulumi/sdk/v3/go/pulumi"
 
 	"github.com/ocelhq/ocel/pkg/naming"
@@ -276,8 +275,10 @@ func postgresEnvPayload(username, password, host string, port int, database stri
 	return string(b)
 }
 
-func bucketEnvPayload(address, bucket string) string {
-	b, _ := json.Marshal(map[string]string{"address": address, "bucket": bucket})
+const runtimeAddressEnv = "OCEL_RUNTIME_ADDRESS"
+
+func bucketEnvPayload(bucket string) string {
+	b, _ := json.Marshal(map[string]string{"bucket": bucket})
 	return string(b)
 }
 
@@ -300,6 +301,7 @@ type executionRole struct {
 	Slug           string
 	VarsClass      string
 	VarsReferenced []string
+	VarsLinks      []string
 }
 
 func appExecutionRole(cfg Config, app string, caches map[string]*isrConfig, bytecode map[string]*bytecodeConfig, bundle appBundle, tags map[string]string) executionRole {
@@ -307,6 +309,7 @@ func appExecutionRole(cfg Config, app string, caches map[string]*isrConfig, byte
 	if bundle.hasLive() {
 		role.VarsTableARN = cfg.VarsTableARN
 		role.VarsReferenced = bundle.Referenced
+		role.VarsLinks = bundle.Links
 		role.Slug = cfg.Slug
 		role.VarsClass = cfg.VarsClass
 	}
@@ -433,36 +436,4 @@ func registerFunction(ctx *pulumi.Context, logicalName string, coord naming.Coor
 		outputKeyFunctionName: fn.Name,
 	})
 	return nil
-}
-
-func postgresEnvValue(ctx *pulumi.Context, username, host pulumi.StringInput, port pulumi.IntInput, database string, secretARN pulumi.StringInput) pulumi.StringOutput {
-	secret := secretsmanager.LookupSecretVersionOutput(ctx, secretsmanager.LookupSecretVersionOutputArgs{
-		SecretId: secretARN,
-	}).SecretString()
-	return pulumi.All(username, host, port, secret).ApplyT(func(vs []any) (string, error) {
-		user, _ := vs[0].(string)
-		h, _ := vs[1].(string)
-		p, _ := vs[2].(int)
-		password, err := parseManagedPassword(vs[3].(string))
-		if err != nil {
-			return "", err
-		}
-		return postgresEnvPayload(user, password, h, p, database), nil
-	}).(pulumi.StringOutput)
-}
-
-func bucketEnvValue(bucket pulumi.StringInput) pulumi.StringOutput {
-	return bucket.ToStringOutput().ApplyT(func(b string) string {
-		return bucketEnvPayload(deferredRuntimeAddress, b)
-	}).(pulumi.StringOutput)
-}
-
-func parseManagedPassword(secretJSON string) (string, error) {
-	var parsed struct {
-		Password string `json:"password"`
-	}
-	if err := json.Unmarshal([]byte(secretJSON), &parsed); err != nil {
-		return "", fmt.Errorf("parse managed secret: %w", err)
-	}
-	return parsed.Password, nil
 }

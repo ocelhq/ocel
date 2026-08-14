@@ -400,20 +400,17 @@ func TestPostgresEnvPayload(t *testing.T) {
 }
 
 func TestBucketEnvPayload(t *testing.T) {
-	t.Run("matches the SDK address and bucket shape", func(t *testing.T) {
-		payload := bucketEnvPayload("unix:///run/ocel/runtime.sock", "my-bucket-abc123")
-		var parsed struct {
-			Address string `json:"address"`
-			Bucket  string `json:"bucket"`
-		}
+	t.Run("carries the bucket binding and nothing ambient", func(t *testing.T) {
+		payload := bucketEnvPayload("my-bucket-abc123")
+		var parsed map[string]string
 		if err := json.Unmarshal([]byte(payload), &parsed); err != nil {
 			t.Fatalf("payload is not valid JSON: %v", err)
 		}
-		if parsed.Address != "unix:///run/ocel/runtime.sock" {
-			t.Errorf("address = %q, want the BucketService endpoint", parsed.Address)
+		if parsed["bucket"] != "my-bucket-abc123" {
+			t.Errorf("bucket = %q, want the provisioned bucket binding", parsed["bucket"])
 		}
-		if parsed.Bucket != "my-bucket-abc123" {
-			t.Errorf("bucket = %q, want the provisioned bucket binding", parsed.Bucket)
+		if _, ok := parsed["address"]; ok {
+			t.Errorf("payload = %s, want the runtime address read from %s instead of repeated per bucket", payload, runtimeAddressEnv)
 		}
 	})
 }

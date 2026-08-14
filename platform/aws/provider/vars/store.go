@@ -70,6 +70,8 @@ type item struct {
 	Deleted    bool   `dynamodbav:"deleted"`
 	TargetPK   string `dynamodbav:"gsi1pk"`
 	TargetSK   string `dynamodbav:"gsi1sk"`
+
+	Names []string `dynamodbav:"links"`
 }
 
 func (i item) references() bool { return i.TargetPK != "" && i.TargetSK != "" }
@@ -512,12 +514,16 @@ func (s *Store) query(ctx context.Context, pk, prefix string, ascending bool) ([
 
 func encryptionContext(c Coordinate) map[string]string {
 	c = c.canonical()
-	return map[string]string{
+	ctx := map[string]string{
 		"slug":        c.Slug,
 		"folder":      c.Folder,
 		"key":         c.Key,
 		"environment": c.Environment,
 	}
+	if c.Link != "" {
+		ctx["link"] = c.Link
+	}
+	return ctx
 }
 
 func (s *Store) encrypt(ctx context.Context, c Coordinate, plaintext string) ([]byte, error) {
@@ -573,6 +579,9 @@ func marshal(i item) map[string]ddbtypes.AttributeValue {
 		m["gsi1pk"] = &ddbtypes.AttributeValueMemberS{Value: i.TargetPK}
 		m["gsi1sk"] = &ddbtypes.AttributeValueMemberS{Value: i.TargetSK}
 	}
+	if len(i.Names) > 0 {
+		m["links"] = &ddbtypes.AttributeValueMemberSS{Value: i.Names}
+	}
 	return m
 }
 
@@ -588,6 +597,9 @@ func unmarshal(raw map[string]ddbtypes.AttributeValue) (item, error) {
 	}
 	if v, ok := raw["deleted"].(*ddbtypes.AttributeValueMemberBOOL); ok {
 		i.Deleted = v.Value
+	}
+	if v, ok := raw["links"].(*ddbtypes.AttributeValueMemberSS); ok {
+		i.Names = v.Value
 	}
 	for name, field := range map[string]*int64{"version": &i.Version, "size": &i.Size, "ts": &i.Ts} {
 		v, ok := raw[name].(*ddbtypes.AttributeValueMemberN)

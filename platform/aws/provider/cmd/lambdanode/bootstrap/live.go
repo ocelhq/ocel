@@ -32,6 +32,7 @@ type storeFetcher struct {
 	store *vars.Store
 	slug  string
 	cells []vars.Coordinate
+	links []vars.Coordinate
 }
 
 func (f storeFetcher) fetchLive(ctx context.Context) (map[string]string, error) {
@@ -39,7 +40,19 @@ func (f storeFetcher) fetchLive(ctx context.Context) (map[string]string, error) 
 	if err != nil {
 		return nil, err
 	}
-	return resolved(values), nil
+	derived, err := f.store.RevealLinks(ctx, f.slug, f.links)
+	if err != nil {
+		return nil, err
+	}
+	return merged(values, derived), nil
+}
+
+func merged(values, derived []vars.Value) map[string]string {
+	out := resolved(values)
+	for _, v := range derived {
+		out[v.Coordinate.Key] = v.Plaintext
+	}
+	return out
 }
 
 func resolved(values []vars.Value) map[string]string {
@@ -227,7 +240,7 @@ func resolveLiveValues(ctx context.Context) (*liveValues, error) {
 	if err != nil {
 		return nil, err
 	}
-	if len(manifest.Keys) == 0 {
+	if len(manifest.Keys) == 0 && len(manifest.Links) == 0 {
 		return nil, nil
 	}
 
@@ -245,15 +258,27 @@ func resolveLiveValues(ctx context.Context) (*liveValues, error) {
 		},
 		slug:  manifest.Slug,
 		cells: manifestCells(manifest),
+		links: manifestLinkCells(manifest),
 	}, manifestKeys(manifest), nil), nil
 }
 
 func manifestKeys(m live.Manifest) []string {
-	keys := make([]string, 0, len(m.Keys))
+	keys := make([]string, 0, len(m.Keys)+len(m.Links))
 	for _, k := range m.Keys {
 		keys = append(keys, k.Key)
 	}
+	for _, l := range m.Links {
+		keys = append(keys, l.Key)
+	}
 	return keys
+}
+
+func manifestLinkCells(m live.Manifest) []vars.Coordinate {
+	cells := make([]vars.Coordinate, 0, len(m.Links))
+	for _, l := range m.Links {
+		cells = append(cells, vars.Coordinate{Slug: m.Slug, Link: l.Name, Key: l.Key, Environment: m.Environment})
+	}
+	return cells
 }
 
 func manifestCells(m live.Manifest) []vars.Coordinate {

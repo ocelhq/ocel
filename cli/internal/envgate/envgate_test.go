@@ -388,6 +388,23 @@ func TestDeclareEnv(t *testing.T) {
 		}
 	})
 
+	t.Run("refuses a variable declared as derived", func(t *testing.T) {
+		t.Parallel()
+		g := prefetched(t, newFakeValues())
+
+		_, err := g.DeclareEnv(context.Background(), &resourcesv1.DeclareEnvRequest{
+			Definitions: []*resourcesv1.VariableDefinition{
+				def("DATABASE_URL", resourcesv1.VariableClass_VARIABLE_CLASS_DERIVED),
+			},
+		})
+		if err == nil {
+			t.Fatal("DeclareEnv accepted a derived declaration; ocel writes and prunes that class, so the user's would be overwritten")
+		}
+		if !strings.Contains(err.Error(), "DATABASE_URL") {
+			t.Errorf("err = %v, want the key it refused named", err)
+		}
+	})
+
 	t.Run("reports only cells of keys that were declared", func(t *testing.T) {
 		t.Parallel()
 		values := newFakeValues()

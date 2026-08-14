@@ -268,7 +268,7 @@ func TestRenderBakedBundle(t *testing.T) {
 			},
 		}
 
-		bundle, err := renderAppBundle(liveConfig(), "shop", app)
+		bundle, err := renderAppBundle(liveConfig(), "shop", app, nil)
 		if err != nil {
 			t.Fatalf("renderAppBundle: %v", err)
 		}
@@ -312,11 +312,11 @@ func TestRenderBakedBundle(t *testing.T) {
 			Variables: []*deploymentsv1.ManifestVariable{variable("STRIPE_API_KEY", "sk-live", resourcesv1.VariableClass_VARIABLE_CLASS_SENSITIVE)},
 		}
 
-		first, err := renderAppBundle(liveConfig(), "shop", app)
+		first, err := renderAppBundle(liveConfig(), "shop", app, nil)
 		if err != nil {
 			t.Fatalf("renderAppBundle: %v", err)
 		}
-		second, err := renderAppBundle(liveConfig(), "shop", app)
+		second, err := renderAppBundle(liveConfig(), "shop", app, nil)
 		if err != nil {
 			t.Fatalf("renderAppBundle: %v", err)
 		}
@@ -344,7 +344,7 @@ func TestRenderBakedBundle(t *testing.T) {
 			Variables: []*deploymentsv1.ManifestVariable{variable("POSTHOG_ID", "ph", resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN)},
 		}
 
-		bundle, err := renderAppBundle(liveConfig(), "shop", app)
+		bundle, err := renderAppBundle(liveConfig(), "shop", app, nil)
 		if err != nil {
 			t.Fatalf("renderAppBundle: %v", err)
 		}
@@ -361,11 +361,11 @@ func TestRenderBakedBundle(t *testing.T) {
 			Variables: []*deploymentsv1.ManifestVariable{variable("STRIPE_API_KEY", "sk-live", resourcesv1.VariableClass_VARIABLE_CLASS_SENSITIVE)},
 		}
 
-		first, err := renderAppBundle(liveConfig(), "shop", app)
+		first, err := renderAppBundle(liveConfig(), "shop", app, nil)
 		if err != nil {
 			t.Fatalf("renderAppBundle: %v", err)
 		}
-		second, err := renderAppBundle(liveConfig(), "shop", app)
+		second, err := renderAppBundle(liveConfig(), "shop", app, nil)
 		if err != nil {
 			t.Fatalf("renderAppBundle: %v", err)
 		}
@@ -380,7 +380,7 @@ func TestRenderBakedBundle(t *testing.T) {
 		}
 
 		app.Variables = []*deploymentsv1.ManifestVariable{variable("STRIPE_API_KEY", "sk-live-2", resourcesv1.VariableClass_VARIABLE_CLASS_SENSITIVE)}
-		rotated, err := renderAppBundle(liveConfig(), "shop", app)
+		rotated, err := renderAppBundle(liveConfig(), "shop", app, nil)
 		if err != nil {
 			t.Fatalf("renderAppBundle: %v", err)
 		}
@@ -400,7 +400,7 @@ func TestRenderBakedBundle(t *testing.T) {
 			},
 		}
 
-		bundle, err := renderAppBundle(liveConfig(), "shop", app)
+		bundle, err := renderAppBundle(liveConfig(), "shop", app, nil)
 		if err != nil {
 			t.Fatalf("renderAppBundle: %v", err)
 		}
@@ -430,7 +430,7 @@ func TestRenderBakedBundle(t *testing.T) {
 					},
 				}
 
-				_, err := renderAppBundle(liveConfig(), "shop", app)
+				_, err := renderAppBundle(liveConfig(), "shop", app, nil)
 				if err == nil {
 					t.Fatal("renderAppBundle = nil, want a class it cannot deliver refused")
 				}
