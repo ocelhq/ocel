@@ -7,6 +7,7 @@ import {
   cacheKey,
   deserialize,
   entryObjectKey,
+  tagFreshness,
   tagsOf,
   type TagRecord,
 } from "../src/index.mjs";
@@ -118,6 +119,43 @@ describe("areTagsExpired", () => {
 
   it("ignores tags with no record", () => {
     expect(areTagsExpired(["t"], records({}), 100, 1000)).toBe(false);
+  });
+});
+
+describe("tagFreshness", () => {
+  const records = (m: Record<string, TagRecord>) => new Map(Object.entries(m));
+
+  it("is fresh with no record", () => {
+    expect(tagFreshness(["t"], records({}), 100, 1000)).toBe("fresh");
+  });
+
+  it("is expired when an expiry passed and landed after the entry", () => {
+    expect(tagFreshness(["t"], records({ t: { expired: 500 } }), 100, 1000)).toBe(
+      "expired",
+    );
+  });
+
+  it("is stale when only the stale mark landed after the entry", () => {
+    expect(
+      tagFreshness(["t"], records({ t: { stale: 500, expired: 50_000 } }), 100, 1000),
+    ).toBe("stale");
+  });
+
+  it("is fresh when the stale mark predates the entry", () => {
+    expect(
+      tagFreshness(["t"], records({ t: { stale: 500, expired: 50_000 } }), 800, 1000),
+    ).toBe("fresh");
+  });
+
+  it("prefers the expired verdict over another tag's stale one", () => {
+    expect(
+      tagFreshness(
+        ["a", "b"],
+        records({ a: { stale: 500, expired: 50_000 }, b: { expired: 500 } }),
+        100,
+        1000,
+      ),
+    ).toBe("expired");
   });
 });
 
