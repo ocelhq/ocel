@@ -179,7 +179,12 @@ module.exports = function createDispatch({
   };
 
   let warnedMissingGetter = false;
-  const pinResponseCache = (module) => {
+  const pinResponseCache = (moduleOrPromise) => {
+    if (moduleOrPromise && typeof moduleOrPromise.then === "function") {
+      moduleOrPromise.then(pinResponseCache, () => {});
+      return;
+    }
+    const module = moduleOrPromise;
     const routeModule = module?.routeModule;
     if (!routeModule) return;
     if (typeof routeModule.getResponseCache !== "function") {
@@ -196,6 +201,14 @@ module.exports = function createDispatch({
     } catch (error) {
       console.error(`ocel: response cache pin failed: ${error?.stack ?? error}`);
     }
+  };
+
+  const callHandler = (module, key, req, res, ctx) => {
+    const handler = module?.handler;
+    if (typeof handler !== "function") {
+      return fail(res, `entry ${key} exports no handler function`);
+    }
+    return handler(req, res, ctx);
   };
 
   const loadEntry = (key, { memoizeFailure = true } = {}) => {
@@ -245,11 +258,17 @@ module.exports = function createDispatch({
       if (key === MIDDLEWARE_ENTRY_KEY) {
         return runMiddleware(entry.module, req, res, ctx, nextConfig);
       }
-      const handler = entry.module?.handler;
-      if (typeof handler !== "function") {
-        return fail(res, `entry ${key} exports no handler function`);
+      if (entry.module && typeof entry.module.then === "function") {
+        return entry.module.then(
+          (module) => {
+            entry.module = module;
+            return callHandler(module, key, req, res, ctx);
+          },
+          (error) =>
+            fail(res, `entry ${key} failed to load`, error?.stack ?? error),
+        );
       }
-      return handler(req, res, ctx);
+      return callHandler(entry.module, key, req, res, ctx);
     },
 
     warm({ deadlineMs, ceilingBytes } = {}) {
