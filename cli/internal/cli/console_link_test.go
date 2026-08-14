@@ -87,11 +87,11 @@ func TestRunLink(t *testing.T) {
 		}
 
 		var stderr bytes.Buffer
-		err := runLink(context.Background(), d, t.TempDir(), "", linkOptions{}, &bytes.Buffer{}, &stderr, strings.NewReader(""))
+		err := runConsoleLink(context.Background(), d, t.TempDir(), "", consoleLinkOptions{}, &bytes.Buffer{}, &stderr, strings.NewReader(""))
 
 		var exitErr *ExitError
 		if !errors.As(err, &exitErr) {
-			t.Fatalf("runLink err = %v (%T), want *ExitError", err, err)
+			t.Fatalf("runConsoleLink err = %v (%T), want *ExitError", err, err)
 		}
 		if !strings.Contains(stderr.String(), "ocel login") {
 			t.Fatalf("stderr = %q, want it to mention `ocel login`", stderr.String())
@@ -106,9 +106,9 @@ func TestRunLink(t *testing.T) {
 		srv := newCloudServer(t, project("p1", "My App", "my-app"), project("p2", "Other", "other"))
 		dir := t.TempDir()
 
-		opts := linkOptions{apiURL: srv.URL}
-		if err := runLink(context.Background(), d, dir, "other", opts, &bytes.Buffer{}, &bytes.Buffer{}, strings.NewReader("")); err != nil {
-			t.Fatalf("runLink err = %v", err)
+		opts := consoleLinkOptions{apiURL: srv.URL}
+		if err := runConsoleLink(context.Background(), d, dir, "other", opts, &bytes.Buffer{}, &bytes.Buffer{}, strings.NewReader("")); err != nil {
+			t.Fatalf("runConsoleLink err = %v", err)
 		}
 
 		link := readLink(t, dir, srv.URL)
@@ -134,10 +134,10 @@ func TestRunLink(t *testing.T) {
 		setLoggedIn(&d)
 		srv := newCloudServer(t, project("p1", "My App", "my-app"))
 
-		opts := linkOptions{apiURL: srv.URL}
-		err := runLink(context.Background(), d, t.TempDir(), "nope", opts, &bytes.Buffer{}, &bytes.Buffer{}, strings.NewReader(""))
+		opts := consoleLinkOptions{apiURL: srv.URL}
+		err := runConsoleLink(context.Background(), d, t.TempDir(), "nope", opts, &bytes.Buffer{}, &bytes.Buffer{}, strings.NewReader(""))
 		if err == nil {
-			t.Fatal("runLink err = nil, want error")
+			t.Fatal("runConsoleLink err = nil, want error")
 		}
 		if !strings.Contains(err.Error(), "my-app") {
 			t.Fatalf("err = %v, want it to list the available slugs", err)
@@ -152,10 +152,10 @@ func TestRunLink(t *testing.T) {
 		srv := newCloudServer(t, project("p1", "My App", "my-app"))
 
 		dir := t.TempDir()
-		opts := linkOptions{apiURL: srv.URL}
-		err := runLink(context.Background(), d, dir, "", opts, &bytes.Buffer{}, &bytes.Buffer{}, strings.NewReader(""))
+		opts := consoleLinkOptions{apiURL: srv.URL}
+		err := runConsoleLink(context.Background(), d, dir, "", opts, &bytes.Buffer{}, &bytes.Buffer{}, strings.NewReader(""))
 		if err == nil {
-			t.Fatal("runLink err = nil, want error")
+			t.Fatal("runConsoleLink err = nil, want error")
 		}
 		if !strings.Contains(err.Error(), "--create") {
 			t.Fatalf("err = %v, want it to mention --create", err)
@@ -177,9 +177,9 @@ func TestRunLink(t *testing.T) {
 			t.Fatalf("mkdir: %v", err)
 		}
 
-		opts := linkOptions{apiURL: srv.URL, create: true}
-		if err := runLink(context.Background(), d, dir, "", opts, &bytes.Buffer{}, &bytes.Buffer{}, strings.NewReader("")); err != nil {
-			t.Fatalf("runLink err = %v", err)
+		opts := consoleLinkOptions{apiURL: srv.URL, create: true}
+		if err := runConsoleLink(context.Background(), d, dir, "", opts, &bytes.Buffer{}, &bytes.Buffer{}, strings.NewReader("")); err != nil {
+			t.Fatalf("runConsoleLink err = %v", err)
 		}
 
 		if len(srv.created) != 1 || srv.created[0]["slug"] != "my-fresh-app" {
@@ -198,9 +198,9 @@ func TestRunLink(t *testing.T) {
 		setLoggedIn(&d)
 		srv := newCloudServer(t)
 
-		opts := linkOptions{apiURL: srv.URL, create: true}
-		if err := runLink(context.Background(), d, t.TempDir(), "My Cool App", opts, &bytes.Buffer{}, &bytes.Buffer{}, strings.NewReader("")); err != nil {
-			t.Fatalf("runLink err = %v", err)
+		opts := consoleLinkOptions{apiURL: srv.URL, create: true}
+		if err := runConsoleLink(context.Background(), d, t.TempDir(), "My Cool App", opts, &bytes.Buffer{}, &bytes.Buffer{}, strings.NewReader("")); err != nil {
+			t.Fatalf("runConsoleLink err = %v", err)
 		}
 		if len(srv.created) != 1 || srv.created[0]["slug"] != "my-cool-app" || srv.created[0]["name"] != "My Cool App" {
 			t.Fatalf("created = %v, want name/slug from the argument", srv.created)
@@ -215,10 +215,10 @@ func TestRunLink(t *testing.T) {
 		srv := newCloudServer(t)
 		srv.createConflict = true
 
-		opts := linkOptions{apiURL: srv.URL, create: true}
-		err := runLink(context.Background(), d, t.TempDir(), "My App", opts, &bytes.Buffer{}, &bytes.Buffer{}, strings.NewReader(""))
+		opts := consoleLinkOptions{apiURL: srv.URL, create: true}
+		err := runConsoleLink(context.Background(), d, t.TempDir(), "My App", opts, &bytes.Buffer{}, &bytes.Buffer{}, strings.NewReader(""))
 		if err == nil {
-			t.Fatal("runLink err = nil, want error")
+			t.Fatal("runConsoleLink err = nil, want error")
 		}
 		if !strings.Contains(err.Error(), "ocel console link my-app") {
 			t.Fatalf("err = %v, want it to suggest `ocel console link my-app`", err)
@@ -233,10 +233,10 @@ func TestRunLink(t *testing.T) {
 		srv := newCloudServer(t)
 		srv.orgs = append(srv.orgs, map[string]string{"id": "org_2", "name": "Other Co", "slug": "other-co"})
 
-		opts := linkOptions{apiURL: srv.URL, create: true}
-		err := runLink(context.Background(), d, t.TempDir(), "My App", opts, &bytes.Buffer{}, &bytes.Buffer{}, strings.NewReader(""))
+		opts := consoleLinkOptions{apiURL: srv.URL, create: true}
+		err := runConsoleLink(context.Background(), d, t.TempDir(), "My App", opts, &bytes.Buffer{}, &bytes.Buffer{}, strings.NewReader(""))
 		if err == nil || !strings.Contains(err.Error(), "--org") {
-			t.Fatalf("runLink err = %v, want it to mention --org", err)
+			t.Fatalf("runConsoleLink err = %v, want it to mention --org", err)
 		}
 	})
 
@@ -249,9 +249,9 @@ func TestRunLink(t *testing.T) {
 		srv.orgs = append(srv.orgs, map[string]string{"id": "org_2", "name": "Other Co", "slug": "other-co"})
 
 		dir := t.TempDir()
-		opts := linkOptions{apiURL: srv.URL, create: true, org: "other-co"}
-		if err := runLink(context.Background(), d, dir, "My App", opts, &bytes.Buffer{}, &bytes.Buffer{}, strings.NewReader("")); err != nil {
-			t.Fatalf("runLink err = %v", err)
+		opts := consoleLinkOptions{apiURL: srv.URL, create: true, org: "other-co"}
+		if err := runConsoleLink(context.Background(), d, dir, "My App", opts, &bytes.Buffer{}, &bytes.Buffer{}, strings.NewReader("")); err != nil {
+			t.Fatalf("runConsoleLink err = %v", err)
 		}
 		link := readLink(t, dir, srv.URL)
 		if link == nil || link.OrganizationID != "org_2" {
@@ -266,10 +266,10 @@ func TestRunLink(t *testing.T) {
 		setLoggedIn(&d)
 		srv := newCloudServer(t)
 
-		opts := linkOptions{apiURL: srv.URL, create: true, org: "nope"}
-		err := runLink(context.Background(), d, t.TempDir(), "My App", opts, &bytes.Buffer{}, &bytes.Buffer{}, strings.NewReader(""))
+		opts := consoleLinkOptions{apiURL: srv.URL, create: true, org: "nope"}
+		err := runConsoleLink(context.Background(), d, t.TempDir(), "My App", opts, &bytes.Buffer{}, &bytes.Buffer{}, strings.NewReader(""))
 		if err == nil || !strings.Contains(err.Error(), "acme-inc") {
-			t.Fatalf("runLink err = %v, want it to list the available org slugs", err)
+			t.Fatalf("runConsoleLink err = %v, want it to list the available org slugs", err)
 		}
 	})
 
@@ -288,9 +288,9 @@ func TestRunLink(t *testing.T) {
 		}
 
 		var stdout bytes.Buffer
-		opts := linkOptions{apiURL: srv.URL}
-		if err := runLink(context.Background(), d, dir, "other", opts, &stdout, &bytes.Buffer{}, strings.NewReader("")); err != nil {
-			t.Fatalf("runLink err = %v", err)
+		opts := consoleLinkOptions{apiURL: srv.URL}
+		if err := runConsoleLink(context.Background(), d, dir, "other", opts, &stdout, &bytes.Buffer{}, strings.NewReader("")); err != nil {
+			t.Fatalf("runConsoleLink err = %v", err)
 		}
 		if !strings.Contains(stdout.String(), "linked to My App") {
 			t.Fatalf("stdout = %q, want it to report the previous link", stdout.String())
@@ -315,9 +315,9 @@ func TestRunLink(t *testing.T) {
 		}
 
 		var stdout bytes.Buffer
-		opts := linkOptions{apiURL: srv.URL}
-		if err := runLink(context.Background(), d, dir, "my-app", opts, &stdout, &bytes.Buffer{}, strings.NewReader("")); err != nil {
-			t.Fatalf("runLink err = %v", err)
+		opts := consoleLinkOptions{apiURL: srv.URL}
+		if err := runConsoleLink(context.Background(), d, dir, "my-app", opts, &stdout, &bytes.Buffer{}, strings.NewReader("")); err != nil {
+			t.Fatalf("runConsoleLink err = %v", err)
 		}
 		if strings.Contains(stdout.String(), "Elsewhere") {
 			t.Fatalf("stdout = %q, want no mention of the other control plane's link", stdout.String())
@@ -343,8 +343,8 @@ func TestRunUnlink(t *testing.T) {
 		}
 
 		var stdout bytes.Buffer
-		if err := runUnlink(dir, &stdout); err != nil {
-			t.Fatalf("runUnlink err = %v", err)
+		if err := runConsoleUnlink(dir, &stdout); err != nil {
+			t.Fatalf("runConsoleUnlink err = %v", err)
 		}
 		if !strings.Contains(stdout.String(), "Unlinked") {
 			t.Fatalf("stdout = %q, want it to confirm the unlink", stdout.String())
@@ -358,8 +358,8 @@ func TestRunUnlink(t *testing.T) {
 		t.Parallel()
 
 		var stdout bytes.Buffer
-		if err := runUnlink(t.TempDir(), &stdout); err != nil {
-			t.Fatalf("runUnlink err = %v, want nil", err)
+		if err := runConsoleUnlink(t.TempDir(), &stdout); err != nil {
+			t.Fatalf("runConsoleUnlink err = %v, want nil", err)
 		}
 		if !strings.Contains(stdout.String(), "isn't linked") {
 			t.Fatalf("stdout = %q, want it to say the directory isn't linked", stdout.String())
