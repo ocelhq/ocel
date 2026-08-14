@@ -98,9 +98,6 @@ func TestInterruptHandlerSecondSignalForcesExit(t *testing.T) {
 	if !strings.Contains(stderr.String(), "Interrupted again") {
 		t.Errorf("stderr = %q, want it to say a second interrupt happened", stderr.String())
 	}
-	// A second Ctrl-C mid-teardown is exactly the scenario that used to
-	// orphan a pulumi grandchild: exit() runs with no time left for a
-	// normal Close(), so forceKill is the only thing left to reap it.
 	if got := forceKillCalls(); got != 1 {
 		t.Errorf("forceKill called %d times, want exactly 1 before the forced exit", got)
 	}
