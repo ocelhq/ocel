@@ -16,11 +16,6 @@ export type RevalidationRoute = Omit<
   "v" | "lastModified" | "enqueuedAt"
 >;
 
-export const NEXT_RENDER_RECEIPT = {
-  header: "x-nextjs-cache",
-  value: "REVALIDATED",
-};
-
 export function revalidationMessage(
   route: RevalidationRoute,
   lastModified: number,
