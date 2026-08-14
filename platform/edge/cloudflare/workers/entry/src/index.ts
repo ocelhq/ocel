@@ -351,6 +351,7 @@ const nodeRuntime: FrameworkRuntime = {
       app: deployments.app ?? record.app,
       functionUrls: record.functionUrls,
       originFetch: base.originFetch,
+      originBodyBudget: base.originBodyBudget,
     }),
 };
 
