@@ -1680,7 +1680,7 @@ func TestStackTags(t *testing.T) {
 		for key := range stackTags(cfg, stack, "p7", "B1") {
 			keys[key] = true
 		}
-		for key := range resourceTags(naming.KindFunction, "/api/users") {
+		for key := range resourceTags(naming.KindFunction, "/api/users", nil) {
 			keys[key] = true
 		}
 

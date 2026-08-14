@@ -771,8 +771,13 @@ func runAppStack(ctx context.Context, cfg Config, manifest *deploymentsv1.Manife
 
 	cfg.reportStage(stage)(fmt.Sprintf("Provisioning %s", name))
 
+	var roleTags map[string]string
+	if len(functions) > 0 {
+		roleTags = cfg.transformed.forFunction(functions[0]).Tags
+	}
+
 	program := func(pctx *pulumi.Context) error {
-		role, err := newFunctionRole(pctx, roleCoordinate(project, stack), appExecutionRole(cfg, name, caches, bytecode, baked))
+		role, err := newFunctionRole(pctx, roleCoordinate(project, stack), appExecutionRole(cfg, name, caches, bytecode, baked, roleTags))
 		if err != nil {
 			return err
 		}

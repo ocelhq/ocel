@@ -95,6 +95,7 @@ type functionArgs struct {
 	MemorySizeMB   int
 	TimeoutSeconds int
 	InvokeMode     string
+	Tags           map[string]string
 }
 
 type isrConfig struct {
@@ -245,8 +246,12 @@ func logicalLocalName(logicalName string) string {
 	return fields[len(fields)-1]
 }
 
-func resourceTags(kind naming.Kind, route string) pulumi.StringMap {
-	tags := pulumi.StringMap{tagComponent: pulumi.String(kind.Component())}
+func resourceTags(kind naming.Kind, route string, extra map[string]string) pulumi.StringMap {
+	tags := pulumi.StringMap{}
+	for key, value := range extra {
+		tags[key] = pulumi.String(value)
+	}
+	tags[tagComponent] = pulumi.String(kind.Component())
 	if route != "" {
 		tags[tagRoute] = pulumi.String(route)
 	}
@@ -286,6 +291,7 @@ func collectFunctionOutput(logicalName, url string) *deploymentsv1.FunctionOutpu
 
 type executionRole struct {
 	App        string
+	Tags       map[string]string
 	Cache      *isrConfig
 	Bytecode   *bytecodeConfig
 	VarsKeyARN string
@@ -296,8 +302,8 @@ type executionRole struct {
 	VarsReferenced []string
 }
 
-func appExecutionRole(cfg Config, app string, caches map[string]*isrConfig, bytecode map[string]*bytecodeConfig, bundle appBundle) executionRole {
-	role := executionRole{App: app, Cache: caches[app], Bytecode: bytecode[app], VarsKeyARN: cfg.VarsKeyARN}
+func appExecutionRole(cfg Config, app string, caches map[string]*isrConfig, bytecode map[string]*bytecodeConfig, bundle appBundle, tags map[string]string) executionRole {
+	role := executionRole{App: app, Cache: caches[app], Bytecode: bytecode[app], VarsKeyARN: cfg.VarsKeyARN, Tags: tags}
 	if bundle.hasLive() {
 		role.VarsTableARN = cfg.VarsTableARN
 		role.VarsReferenced = bundle.Referenced
@@ -317,7 +323,7 @@ func newFunctionRole(ctx *pulumi.Context, coord naming.Coordinate, r executionRo
 		NamePrefix:       pulumi.String(rolePrefix(coord)),
 		Description:      describe(coord, "execution role for this app's functions"),
 		AssumeRolePolicy: pulumi.String(assumeRolePolicy(lambdaServicePrincipal)),
-		Tags:             resourceTags(coord.Kind, ""),
+		Tags:             resourceTags(coord.Kind, "", r.Tags),
 	})
 	if err != nil {
 		return nil, err
@@ -403,7 +409,7 @@ func registerFunction(ctx *pulumi.Context, logicalName string, coord naming.Coor
 			Variables: env,
 		},
 
-		Tags: resourceTags(coord.Kind, route),
+		Tags: resourceTags(coord.Kind, route, args.Tags),
 
 		Layers: pulumi.StringArray{
 			pulumi.String(membraneLayerARN()),

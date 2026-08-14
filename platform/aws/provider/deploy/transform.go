@@ -17,11 +17,8 @@ type transformedArgs struct {
 }
 
 type transformCandidate struct {
-	kind     string
-	name     string
-	function functionArgs
-	bucket   bucketArgs
-	postgres postgresArgs
+	name  string
+	apply func(*transformedArgs, transform.Result) error
 }
 
 func resolveTransforms(ctx context.Context, cfg Config, manifest *deploymentsv1.Manifest) (*transformedArgs, error) {
@@ -40,13 +37,21 @@ func resolveTransforms(ctx context.Context, cfg Config, manifest *deploymentsv1.
 			req.Resources = append(req.Resources, transform.Resource{
 				Type: "postgres", Name: name, Surfaces: postgresSurfaces(args),
 			})
-			candidates = append(candidates, transformCandidate{kind: "postgres", name: name, postgres: args})
+			candidates = append(candidates, transformCandidate{name: name, apply: func(out *transformedArgs, result transform.Result) error {
+				applied, err := applyPostgresSurfaces(args, result)
+				out.postgres[name] = applied
+				return err
+			}})
 		case r.GetBucket() != nil:
 			args := translateBucket(r.GetBucket())
 			req.Resources = append(req.Resources, transform.Resource{
 				Type: "bucket", Name: name, Surfaces: bucketSurfaces(args),
 			})
-			candidates = append(candidates, transformCandidate{kind: "bucket", name: name, bucket: args})
+			candidates = append(candidates, transformCandidate{name: name, apply: func(out *transformedArgs, result transform.Result) error {
+				applied, err := applyBucketSurfaces(args, result)
+				out.buckets[name] = applied
+				return err
+			}})
 		}
 	}
 
@@ -56,18 +61,22 @@ func resolveTransforms(ctx context.Context, cfg Config, manifest *deploymentsv1.
 		req.Resources = append(req.Resources, transform.Resource{
 			Type: "function", Name: name, App: fn.GetApp(), Surfaces: functionSurfaces(args),
 		})
-		candidates = append(candidates, transformCandidate{kind: "function", name: name, function: args})
+		candidates = append(candidates, transformCandidate{name: name, apply: func(out *transformedArgs, result transform.Result) error {
+			applied, err := applyFunctionSurfaces(args, result)
+			out.functions[name] = applied
+			return err
+		}})
 	}
 
-	surfaces, err := cfg.Transform.Evaluate(ctx, req)
+	results, err := cfg.Transform.Evaluate(ctx, req)
 	if err != nil {
 		return nil, err
 	}
-	if surfaces == nil {
+	if results == nil {
 		return nil, nil
 	}
-	if len(surfaces) != len(candidates) {
-		return nil, fmt.Errorf("transforms returned %d results for %d resources", len(surfaces), len(candidates))
+	if len(results) != len(candidates) {
+		return nil, fmt.Errorf("transforms returned %d results for %d resources", len(results), len(candidates))
 	}
 
 	out := &transformedArgs{
@@ -76,16 +85,7 @@ func resolveTransforms(ctx context.Context, cfg Config, manifest *deploymentsv1.
 		postgres:  map[string]postgresArgs{},
 	}
 	for i, c := range candidates {
-		var err error
-		switch c.kind {
-		case "function":
-			out.functions[c.name], err = applyFunctionSurfaces(c.function, surfaces[i])
-		case "bucket":
-			out.buckets[c.name], err = applyBucketSurfaces(c.bucket, surfaces[i])
-		case "postgres":
-			out.postgres[c.name], err = applyPostgresSurfaces(c.postgres, surfaces[i])
-		}
-		if err != nil {
+		if err := c.apply(out, results[i]); err != nil {
 			return nil, fmt.Errorf("transform %s: %w", c.name, err)
 		}
 	}
@@ -130,7 +130,9 @@ func functionSurfaces(a functionArgs) transform.Surfaces {
 	}
 }
 
-func applyFunctionSurfaces(a functionArgs, s transform.Surfaces) (functionArgs, error) {
+func applyFunctionSurfaces(a functionArgs, result transform.Result) (functionArgs, error) {
+	a.Tags = result.Tags
+	s := result.Surfaces
 	lambda, err := surfaceAt(s, "lambda")
 	if err != nil {
 		return a, err
@@ -170,7 +172,9 @@ func bucketSurfaces(a bucketArgs) transform.Surfaces {
 	}
 }
 
-func applyBucketSurfaces(a bucketArgs, s transform.Surfaces) (bucketArgs, error) {
+func applyBucketSurfaces(a bucketArgs, result transform.Result) (bucketArgs, error) {
+	a.Tags = result.Tags
+	s := result.Surfaces
 	bucket, err := surfaceAt(s, "bucket")
 	if err != nil {
 		return a, err
@@ -234,7 +238,9 @@ func postgresSurfaces(a postgresArgs) transform.Surfaces {
 	}
 }
 
-func applyPostgresSurfaces(a postgresArgs, s transform.Surfaces) (postgresArgs, error) {
+func applyPostgresSurfaces(a postgresArgs, result transform.Result) (postgresArgs, error) {
+	a.Tags = result.Tags
+	s := result.Surfaces
 	cluster, err := surfaceAt(s, "cluster")
 	if err != nil {
 		return a, err

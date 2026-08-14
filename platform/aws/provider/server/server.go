@@ -486,11 +486,7 @@ func projectRoot() string {
 }
 
 func artifactRoot() string {
-	wd, err := os.Getwd()
-	if err != nil {
-		return artifactRootDirName
-	}
-	return filepath.Join(wd, artifactRootDirName)
+	return filepath.Join(projectRoot(), artifactRootDirName)
 }
 
 type STSAPI interface {

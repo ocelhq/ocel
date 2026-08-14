@@ -24,7 +24,7 @@ type NodePass struct {
 	Modules []string
 }
 
-func (p NodePass) Evaluate(ctx context.Context, req Request) ([]Surfaces, error) {
+func (p NodePass) Evaluate(ctx context.Context, req Request) ([]Result, error) {
 	if len(p.Modules) == 0 || len(req.Resources) == 0 {
 		return nil, nil
 	}
@@ -46,8 +46,9 @@ func (p NodePass) Evaluate(ctx context.Context, req Request) ([]Surfaces, error)
 
 	var decoded struct {
 		Resources []struct {
-			Name     string   `json:"name"`
-			Surfaces Surfaces `json:"surfaces"`
+			Name     string            `json:"name"`
+			Surfaces Surfaces          `json:"surfaces"`
+			Tags     map[string]string `json:"tags"`
 		} `json:"resources"`
 	}
 	if err := json.Unmarshal(out, &decoded); err != nil {
@@ -57,14 +58,14 @@ func (p NodePass) Evaluate(ctx context.Context, req Request) ([]Surfaces, error)
 		return nil, fmt.Errorf("transforms returned %d resources for %d candidates", len(decoded.Resources), len(req.Resources))
 	}
 
-	surfaces := make([]Surfaces, len(decoded.Resources))
+	results := make([]Result, len(decoded.Resources))
 	for i, r := range decoded.Resources {
 		if r.Name != req.Resources[i].Name {
 			return nil, fmt.Errorf("transforms returned %q where %q was asked for", r.Name, req.Resources[i].Name)
 		}
-		surfaces[i] = r.Surfaces
+		results[i] = Result{Surfaces: r.Surfaces, Tags: r.Tags}
 	}
-	return surfaces, nil
+	return results, nil
 }
 
 func (p NodePass) bundle() (string, error) {

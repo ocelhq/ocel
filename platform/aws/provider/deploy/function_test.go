@@ -147,17 +147,49 @@ func TestResourceTags(t *testing.T) {
 	t.Run("a function is tagged with its component and route", func(t *testing.T) {
 		t.Parallel()
 
-		tags := resourceTags(naming.KindFunction, "/api/users")
+		tags := resourceTags(naming.KindFunction, "/api/users", nil)
 		want := pulumi.StringMap{tagComponent: pulumi.String("function"), tagRoute: pulumi.String("/api/users")}
 		if !maps.Equal(tags, want) {
 			t.Errorf("tags = %v, want %v", tags, want)
 		}
 	})
 
+	t.Run("transform tags join the tags ocel writes itself", func(t *testing.T) {
+		t.Parallel()
+
+		tags := resourceTags(naming.KindFunction, "/api/users", map[string]string{"acme:team": "platform"})
+
+		if got := tags["acme:team"]; got != pulumi.String("platform") {
+			t.Errorf("acme:team = %v, want the transform's value", got)
+		}
+		if got := tags[tagComponent]; got != pulumi.String(naming.KindFunction.Component()) {
+			t.Errorf("%s = %v, want ocel's own component tag", tagComponent, got)
+		}
+		if got := tags[tagRoute]; got != pulumi.String("/api/users") {
+			t.Errorf("%s = %v, want ocel's own route tag", tagRoute, got)
+		}
+	})
+
+	t.Run("a transform cannot displace a tag ocel writes itself", func(t *testing.T) {
+		t.Parallel()
+
+		tags := resourceTags(naming.KindFunction, "/api/users", map[string]string{
+			tagComponent: "mine",
+			tagRoute:     "mine",
+		})
+
+		if got := tags[tagComponent]; got != pulumi.String(naming.KindFunction.Component()) {
+			t.Errorf("%s = %v, want ocel's own value to stand", tagComponent, got)
+		}
+		if got := tags[tagRoute]; got != pulumi.String("/api/users") {
+			t.Errorf("%s = %v, want ocel's own value to stand", tagRoute, got)
+		}
+	})
+
 	t.Run("a role carries no route", func(t *testing.T) {
 		t.Parallel()
 
-		tags := resourceTags(naming.KindRole, "")
+		tags := resourceTags(naming.KindRole, "", nil)
 		want := pulumi.StringMap{tagComponent: pulumi.String("role")}
 		if !maps.Equal(tags, want) {
 			t.Errorf("tags = %v, want %v", tags, want)

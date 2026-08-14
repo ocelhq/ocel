@@ -29,6 +29,7 @@ require (
 	github.com/aws/aws-sdk-go-v2/service/sts v1.44.0
 	github.com/aws/smithy-go v1.27.3
 	github.com/blang/semver v3.5.1+incompatible
+	github.com/evanw/esbuild v0.28.1
 	github.com/ocelhq/ocel/pkg/channel v0.0.0-00010101000000-000000000000
 	github.com/ocelhq/ocel/pkg/proto v0.0.0-00010101000000-000000000000
 	github.com/ocelhq/ocel/platform/edge/cloudflare/deploy v0.0.0-00010101000000-000000000000
@@ -40,7 +41,6 @@ require (
 
 require (
 	github.com/cloudflare/cloudflare-go/v4 v4.6.0 // indirect
-	github.com/evanw/esbuild v0.28.1 // indirect
 	github.com/tidwall/gjson v1.14.4 // indirect
 	github.com/tidwall/match v1.1.1 // indirect
 	github.com/tidwall/pretty v1.2.1 // indirect
