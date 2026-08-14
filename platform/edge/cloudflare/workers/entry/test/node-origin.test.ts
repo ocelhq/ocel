@@ -122,6 +122,54 @@ describe("node framework serve path", () => {
     expect(await sent.json()).toEqual({ sku: "x" });
   });
 
+  it("redirects a protocol-relative path rather than letting it retarget the origin", async () => {
+    const wire = capturing();
+    const serve = (await resolved(makeRecord(), { originFetch: wire.fetch })) as ServeFetch;
+
+    const response = await serve(new Request("https://api.example.com//evil.com/x?a=1"));
+
+    expect(response.status).toBe(308);
+    expect(response.headers.get("location")).toBe("/evil.com/x?a=1");
+    expect(wire.calls).toHaveLength(0);
+  });
+
+  it("answers 413 for a body over the origin's payload budget", async () => {
+    const wire = capturing();
+    const serve = (await resolved(makeRecord(), {
+      originFetch: wire.fetch,
+      originBodyBudget: { maxBytes: 16, encoding: "identity" },
+    })) as ServeFetch;
+
+    const response = await serve(
+      new Request("https://api.example.com/upload", {
+        method: "POST",
+        headers: { "content-type": "application/octet-stream" },
+        body: new Uint8Array(64),
+      }),
+    );
+
+    expect(response.status).toBe(413);
+    expect(wire.calls).toHaveLength(0);
+  });
+
+  it("forwards a body inside the origin's payload budget", async () => {
+    const wire = capturing();
+    const serve = (await resolved(makeRecord(), {
+      originFetch: wire.fetch,
+      originBodyBudget: { maxBytes: 1024, encoding: "identity" },
+    })) as ServeFetch;
+
+    await serve(
+      new Request("https://api.example.com/orders", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ sku: "x" }),
+      }),
+    );
+
+    expect(await wire.calls[0].json()).toEqual({ sku: "x" });
+  });
+
   it("binds none of next's machinery onto the forwarded request", async () => {
     const wire = capturing();
     const serve = (await resolved(makeRecord(), { originFetch: wire.fetch })) as ServeFetch;
