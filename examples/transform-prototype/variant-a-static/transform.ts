@@ -1,6 +1,8 @@
 import type { AwsSurfaces, Patch, TagMap } from "../shared/args"
+import type { Selector } from "../shared/selector"
 
-export type StaticTransform = {
+export type TransformRule = {
+  readonly when?: Selector
   readonly tags?: TagMap
 } & {
   readonly [T in keyof AwsSurfaces]?: {
@@ -8,4 +10,6 @@ export type StaticTransform = {
   }
 }
 
-export declare function defineTransform(transform: StaticTransform): StaticTransform
+export declare function defineTransform(
+  rules: TransformRule | readonly TransformRule[],
+): readonly TransformRule[]

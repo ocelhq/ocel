@@ -12,10 +12,13 @@ Verify: `node_modules/.bin/tsc -p examples/transform-prototype` from the repo ro
   underlying resource, an **allowlist** of plain-value fields per key, and
   `output()` / `LinkOutput` for link-crossing values.
 - `shared/wire.ts` — what crosses to Go in each variant.
-- `variant-a-static/` — patches only: `defineTransform` takes plain property objects.
+- `shared/selector.ts` — first-class targeting: the `when` selector every rule
+  may carry.
+- `variant-a-static/` — patches only: `defineTransform` takes rules of plain
+  property objects (`targeting.ts` holds the four targeting cases).
 - `variant-b-functions/` — SST-style split: a plain object is a patch, a function
   is an override that sees the fully-defaulted args and mutates or returns them.
-- `config-sketch.ts` — the `transforms` config key.
+- `config-sketch.ts` — `transforms` as an `awsProvider(...)` argument.
 - `probes.ts` in each variant — one named export per claim.
 
 ## The keys (ground truth, not the ticket's guess)
@@ -64,6 +67,27 @@ link records for grants and values. Node never sees link values, evaluation stay
 deterministic, and an `output()` naming an unlisted or unpublished link fails
 deploy with the same hard error the `links` binding uses (#285).
 
+## Targeting: `when` selectors, first class
+
+`defineTransform` takes a rule or an ordered rule list; each rule optionally
+carries `when`. Selector fields AND together; a list within a field ORs; `app`
+and `name` take globs, `env` matches the environment identity exactly, `envClass`
+is the closed `development | preview | production` union (typo-rejected by probe).
+
+- `when: { app: "api" }` — only that app's resources. Functions carry their app on
+  the manifest; a linkable resource matches through the usage-attribution edge
+  (#282/#284), meaning "an app that uses it" — but patching a *shared* resource
+  through an app selector is ambiguous, so a rule whose `app` selector matches a
+  resource also used by non-matching apps fails deploy validation rather than
+  silently patching shared infrastructure.
+- `when: { name: "assets-*" }` — logical-name glob, any resource type.
+- `when: { envClass: "production" }` / `when: { env: "staging" }` — deploy-context
+  scoping (deletion protection in production, scale-to-zero in previews).
+
+Every predicate is data resolvable Go-side from the manifest and deploy context —
+so targeting does **not** require the function form. Rules apply in order (within
+a module, then across the `transforms` list), later rules winning per field.
+
 ## Evaluation and carriage
 
 The config crossing is `JSON.stringify(defaultExport)` piped from a node child
@@ -84,22 +108,26 @@ The config crossing is `JSON.stringify(defaultExport)` piped from a node child
 
 ## The config key
 
-`transforms: string[]` — top-level in `ocel.config.ts`, ordered, later modules win
-where patches collide. A list because scenario C is naturally three concerns
-(defaults, tags, placement); ordering in config beats ordering by filesystem
-accident. Provider affiliation is intrinsic — the module imports
-`@ocel/provider-aws/transform` — so a transform module whose provider does not
-match the active provider fails deploy; the key itself stays provider-neutral.
-Rejected spellings: `transform` (singular; forces userland composition),
-`provider.options.transform` (buries an account-wide artifact inside an opaque
-options blob — #290 wanted it visible where humans look first).
+`transforms: string[]` — an argument to `awsProvider(...)`, which stays a function
+exactly as today; the top-level config shape does not change. Transforms reshape
+how *this provider* provisions, so the provider call is where they belong, and the
+key stays visible in `ocel.config.ts` because the provider options are authored
+inline there (typed via `AwsProviderOptions`, no longer an untyped record). The
+list is ordered, later modules winning where patches collide — scenario C is
+naturally three concerns (defaults, tags, placement). Provider affiliation is
+doubly enforced: the key lives on the provider, and the module imports
+`@ocel/provider-aws/transform`. Rejected spellings: a top-level `transforms` key
+(reshapes `OcelConfig` for a provider-specific concern) and `transform` singular
+(forces userland composition).
 
 ## Recommendation
 
 **Ship variant A; keep variant B as the pre-designed extension.** Every forcing
 scenario on the map — default memory, org tags, VPC placement via a link output —
-is expressible statically; functions earn their place only for arg-dependent or
-per-resource-conditional logic, which no scenario yet demands. A's authored
+is expressible statically, and first-class `when` selectors keep targeting (by
+app, name, env class, exact env) declarative too; functions earn their place only
+when the *value* must be computed from the args or from logic selectors cannot
+express, which no scenario yet demands. A's authored
 surface is a strict subset of B's (`Patch<T>` is one arm of `Transform<T>`), so
 adopting A forecloses nothing: the `transforms` key, the keys, the allowlist, and
 `output()` all survive verbatim if functions are ever admitted. A static spec is

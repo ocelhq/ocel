@@ -1,14 +1,19 @@
 import type { AwsSurfaces, Patch, TagMap } from "../shared/args"
+import type { EnvClass, Selector } from "../shared/selector"
 
 export interface TransformContext {
   readonly resourceName: string
+  readonly app: string | undefined
+  readonly envClass: EnvClass
+  readonly env: string
 }
 
 export type TransformFn<T> = (args: T, ctx: TransformContext) => T | void
 
 export type Transform<T> = Patch<T> | TransformFn<T>
 
-export type AwsTransform = {
+export type TransformRule = {
+  readonly when?: Selector
   readonly tags?: TagMap
 } & {
   readonly [T in keyof AwsSurfaces]?: {
@@ -16,4 +21,6 @@ export type AwsTransform = {
   }
 }
 
-export declare function defineTransform(transform: AwsTransform): AwsTransform
+export declare function defineTransform(
+  rules: TransformRule | readonly TransformRule[],
+): readonly TransformRule[]

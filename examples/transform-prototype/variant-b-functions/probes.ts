@@ -37,6 +37,17 @@ export const contextCarriesResourceIdentity = defineTransform({
   },
 })
 
+export const selectorAndFunctionCompose = defineTransform({
+  when: { envClass: "production" },
+  function: {
+    lambda: (args, ctx) => {
+      if (ctx.app === "api") {
+        args.memorySizeMb = args.memorySizeMb * 2
+      }
+    },
+  },
+})
+
 export const linkOutputUsableInsideFunctions = defineTransform({
   function: {
     lambda: (args) => {

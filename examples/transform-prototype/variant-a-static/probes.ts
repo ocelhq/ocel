@@ -61,3 +61,27 @@ export const wrongPrimitiveRejected = defineTransform({
     },
   },
 })
+
+export const selectorsCompose = defineTransform({
+  when: { app: ["api", "worker"], envClass: ["production", "preview"], name: "assets-*" },
+  function: { lambda: { timeoutSeconds: 60 } },
+})
+
+export const envClassTypoRejected = defineTransform({
+  // @ts-expect-error
+  when: { envClass: "prod" },
+  postgres: { cluster: { deletionProtection: true } },
+})
+
+export const unknownSelectorFieldRejected = defineTransform({
+  when: {
+    // @ts-expect-error
+    folder: "team-a",
+  },
+  function: { lambda: { memorySizeMb: 512 } },
+})
+
+export const ruleListIsOrdered = defineTransform([
+  { function: { lambda: { memorySizeMb: 512 } } },
+  { when: { app: "api" }, function: { lambda: { memorySizeMb: 2048 } } },
+])
