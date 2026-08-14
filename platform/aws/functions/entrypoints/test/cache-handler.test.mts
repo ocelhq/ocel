@@ -6,6 +6,7 @@ import { afterEach, beforeEach, expect, test } from "vitest";
 import OcelCacheHandler from "../src/next/cache-handler.mjs";
 import { runWithWaitUntil } from "../src/shared/background.mjs";
 import { setTagClockStore } from "../src/next/tag-clock.mjs";
+import { revalidationTicks } from "../src/next/revalidation-signal.mjs";
 import type { CacheEntryFile, CacheStore } from "../src/next/cache-store.mjs";
 
 function fakeStore() {
@@ -220,6 +221,24 @@ test("expires an entry whose tag was revalidated after it was written", async ()
   const entry = await new OcelCacheHandler().get("/", { kind: "APP_PAGE" });
 
   expect(entry).toBeNull();
+});
+
+test("ticks the revalidation signal so the request can announce it", async () => {
+  fakeStore();
+  const before = revalidationTicks();
+
+  await new OcelCacheHandler().revalidateTag("products");
+
+  expect(revalidationTicks()).toBe(before + 1);
+});
+
+test("ticks nothing for a revalidation naming no tags", async () => {
+  fakeStore();
+  const before = revalidationTicks();
+
+  await new OcelCacheHandler().revalidateTag([]);
+
+  expect(revalidationTicks()).toBe(before);
 });
 
 test("keeps an entry written after its tag was revalidated", async () => {

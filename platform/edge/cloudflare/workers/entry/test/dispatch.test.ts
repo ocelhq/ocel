@@ -2428,7 +2428,7 @@ describe("the service-worker chunk", () => {
 describe("a Server Action's invalidation reaching the colo it travelled through", () => {
   const cfg = { isrPrefix: "prod/p/app/build" };
 
-  function scenario() {
+  function scenario(announce = "x-action-revalidated") {
     let now = 10_000;
     let lambdaCalls = 0;
     let actionRevalidates = true;
@@ -2489,7 +2489,7 @@ describe("a Server Action's invalidation reaching the colo it travelled through"
         if (request.method === "POST") {
           return new Response("action", {
             status: 200,
-            headers: actionRevalidates ? { "x-action-revalidated": "1" } : {},
+            headers: actionRevalidates ? { [announce]: "1" } : {},
           });
         }
         return new Response("page", {
@@ -2582,6 +2582,24 @@ describe("a Server Action's invalidation reaching the colo it travelled through"
     expect(after.headers.get("x-ocel-cache")).toBe("MISS");
     await s.settle();
     expect(s.lambdaCalls()).toBe(3);
+  });
+
+  it("takes the origin's own announcement, and keeps it off the client's response", async () => {
+    const s = scenario("x-ocel-revalidated");
+
+    await s.get();
+    await s.settle();
+
+    s.invalidate(20_000);
+    s.advanceTo(15_000);
+    const announced = await s.runAction();
+    expect(announced.headers.has("x-ocel-revalidated")).toBe(false);
+    await s.settle();
+
+    s.advanceTo(30_000);
+    const after = await s.get();
+
+    expect(after.headers.get("x-ocel-cache")).toBe("MISS");
   });
 
   it("keeps answering from the cached replica when the action revalidated nothing", async () => {
