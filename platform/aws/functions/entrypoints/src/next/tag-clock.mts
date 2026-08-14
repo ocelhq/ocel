@@ -3,6 +3,7 @@ import { areTagsExpired, mergeRecord, type TagRecord } from "@framework/next-cac
 import { awsUseCacheStore, type UseCacheStore } from "./use-cache-store.mjs";
 import { now } from "./use-cache-entry.mjs";
 import { noteRevalidation } from "./revalidation-signal.mjs";
+import { mirrorTag } from "./tags-manifest.mjs";
 
 export interface TagClock {
   updateTags(tags: string[], durations?: { expire?: number }): Promise<void>;
@@ -72,7 +73,9 @@ export function setTagClockStore(next: UseCacheStore | null): void {
 }
 
 function observe(tag: string, incoming: TagRecord): void {
-  state.records.set(tag, mergeRecord(state.records.get(tag), incoming));
+  const merged = mergeRecord(state.records.get(tag), incoming);
+  state.records.set(tag, merged);
+  mirrorTag(tag, merged);
 }
 
 async function sync(): Promise<void> {
@@ -109,18 +112,17 @@ export const tagClock: TagClock = {
     const at = now();
     for (const tag of tags) {
       const existing = state.records.get(tag) ?? {};
-      state.records.set(
-        tag,
-        durations
-          ? {
-              ...existing,
-              stale: at,
-              ...(durations.expire !== undefined
-                ? { expired: at + durations.expire * 1000 }
-                : {}),
-            }
-          : { ...existing, expired: at },
-      );
+      const updated: TagRecord = durations
+        ? {
+            ...existing,
+            stale: at,
+            ...(durations.expire !== undefined
+              ? { expired: at + durations.expire * 1000 }
+              : {}),
+          }
+        : { ...existing, expired: at };
+      state.records.set(tag, updated);
+      mirrorTag(tag, updated);
     }
     if (tags.length > 0) noteRevalidation();
 
