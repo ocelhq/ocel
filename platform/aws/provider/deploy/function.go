@@ -38,6 +38,13 @@ const (
 	defaultMembraneLayerARN = "arn:aws:lambda:us-east-1:363236815301:layer:ocel-membrane:32"
 	membraneLayerARNEnv     = "OCEL_MEMBRANE_LAYER_ARN"
 
+	// TODO: layer 32's bootstrap takes the cache bucket from OCEL_ISR_BUCKET and
+	// appends its own bytecode/ segment to the prefix; publish a layer from this
+	// tree, move the default onto it, and delete this along with the env it shapes.
+	bytecodeLegacyLayerARN = "arn:aws:lambda:us-east-1:363236815301:layer:ocel-membrane:32"
+
+	bytecodeLegacySegment = naming.PathSeparator + "bytecode"
+
 	bytecodeCacheEnv = "OCEL_BYTECODE_CACHE"
 
 	bytecodeEmbedEnv = "OCEL_BYTECODE_EMBED"
@@ -144,6 +151,13 @@ type bytecodeConfig struct {
 }
 
 func (c bytecodeConfig) env() map[string]string {
+	if membraneLayerARN() == bytecodeLegacyLayerARN {
+		return map[string]string{
+			"OCEL_ISR_BUCKET":      c.Bucket,
+			"OCEL_BYTECODE_BUCKET": c.Bucket,
+			"OCEL_BYTECODE_PREFIX": strings.TrimSuffix(c.Prefix, bytecodeLegacySegment),
+		}
+	}
 	return map[string]string{
 		"OCEL_BYTECODE_BUCKET": c.Bucket,
 		"OCEL_BYTECODE_PREFIX": c.Prefix,

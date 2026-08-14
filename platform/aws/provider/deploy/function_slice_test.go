@@ -182,7 +182,8 @@ func bytecodeCacheFor(t *testing.T, env, project, app, buildID string) bytecodeC
 }
 
 func TestBytecodeEnv(t *testing.T) {
-	t.Run("names its own bucket and prefix", func(t *testing.T) {
+	t.Run("names its own bucket and prefix on a layer built from this tree", func(t *testing.T) {
+		t.Setenv(membraneLayerARNEnv, "arn:aws:lambda:us-east-1:123:layer:ocel-membrane:99")
 		cfg := bytecodeCacheFor(t, "prod", "proj123", "marketing", "build456")
 
 		env := cfg.env()
@@ -195,6 +196,45 @@ func TestBytecodeEnv(t *testing.T) {
 		}
 		if _, ok := env["OCEL_ISR_BUCKET"]; ok {
 			t.Error("OCEL_ISR_BUCKET is set; the compile cache has nothing to do with ISR")
+		}
+	})
+
+	t.Run("feeds the legacy layer the bucket it reads", func(t *testing.T) {
+		t.Setenv(membraneLayerARNEnv, bytecodeLegacyLayerARN)
+		cfg := bytecodeCacheFor(t, "prod", "proj123", "marketing", "build456")
+
+		env := cfg.env()
+
+		if env["OCEL_ISR_BUCKET"] != "assets-xyz" {
+			t.Errorf("OCEL_ISR_BUCKET = %q, want the asset bucket the legacy bootstrap reads", env["OCEL_ISR_BUCKET"])
+		}
+		if env["OCEL_BYTECODE_BUCKET"] != "assets-xyz" {
+			t.Errorf("OCEL_BYTECODE_BUCKET = %q, want the asset bucket", env["OCEL_BYTECODE_BUCKET"])
+		}
+	})
+
+	t.Run("the legacy layer composes the key a current bootstrap composes", func(t *testing.T) {
+		cfg := bytecodeCacheFor(t, "prod", "proj123", "marketing", "build456")
+
+		t.Setenv(membraneLayerARNEnv, "arn:aws:lambda:us-east-1:123:layer:ocel-membrane:99")
+		current := fmt.Sprintf("%s/my-function/node22-x64.tar.gz", cfg.env()["OCEL_BYTECODE_PREFIX"])
+
+		t.Setenv(membraneLayerARNEnv, bytecodeLegacyLayerARN)
+		legacy := fmt.Sprintf("%s/bytecode/my-function/node22-x64.tar.gz", cfg.env()["OCEL_BYTECODE_PREFIX"])
+
+		if legacy != current {
+			t.Errorf("legacy layer key = %q, want the current bootstrap's %q", legacy, current)
+		}
+	})
+
+	t.Run("the pinned default is the legacy layer", func(t *testing.T) {
+		if defaultMembraneLayerARN != bytecodeLegacyLayerARN {
+			t.Skip("the default layer has moved off the legacy bootstrap")
+		}
+		t.Setenv(membraneLayerARNEnv, "")
+		cfg := bytecodeCacheFor(t, "prod", "proj123", "marketing", "build456")
+		if _, ok := cfg.env()["OCEL_ISR_BUCKET"]; !ok {
+			t.Error("OCEL_ISR_BUCKET is unset under the pinned layer, whose bootstrap reads it")
 		}
 	})
 }
