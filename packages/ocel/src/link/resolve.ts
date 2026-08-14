@@ -2,10 +2,20 @@ import { z } from "zod";
 import { readLive } from "../env/live.js";
 import { shapeOf } from "./registry.js";
 
+/**
+ * Thrown when a link cannot be read: nothing delivered it, what arrived is not
+ * a link record, its token is not the one asked for, or it is missing a
+ * property its type requires.
+ */
 export class LinkError extends Error {
   override name = "LinkError";
 }
 
+// TODO(#304, #305): this key and the {type, properties} envelope are the
+// consuming half of a contract whose producer does not exist yet — nothing in
+// the repo writes OCEL_LINK_*. Reconcile both against the per-link vars
+// partition and the cold-start delivery when they land; a divergence here is a
+// runtime failure, not a compile one.
 const LINK_PREFIX = "OCEL_LINK_";
 
 const recordSchema = z.object({
@@ -25,7 +35,7 @@ export function resolve(
   const raw = readLive(key) ?? process.env[key];
   if (raw === undefined) {
     throw new LinkError(
-      `Link '${name}' has no value. Add it to the app's 'links' binding in ocel.config.ts and publish it before deploying.`,
+      `Link '${name}' was not delivered to this app. Nothing published a record under that name for this environment.`,
     );
   }
 
@@ -66,6 +76,7 @@ function parse(name: string, raw: string): unknown {
 function unresolved(name: string): Record<string, string> {
   return new Proxy({} as Record<string, string>, {
     get(_target, property) {
+      if (typeof property === "symbol") return undefined;
       throw new LinkError(
         `Link '${name}' cannot be read during discovery: tried to access '${String(property)}' before its values were resolved.`,
       );

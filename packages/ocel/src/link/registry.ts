@@ -1,7 +1,5 @@
 import { z } from "zod";
 
-export const TOKEN_NAMESPACE = "ocel:";
-
 export const shapes = {
   "ocel:postgres": z.object({
     host: z.string(),
