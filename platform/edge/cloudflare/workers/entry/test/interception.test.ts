@@ -274,16 +274,28 @@ describe("intercept, complete entries", () => {
 });
 
 describe("intercept, tag state from the snapshot", () => {
-  it("serves stale when a tag was revalidated after the entry", async () => {
+  it("serves stale when a tag was marked stale after the entry", async () => {
     const store = stored({
       [entryKey("/blog")]: appPage({ tags: "products", lastModified: 1_000 }),
-      [snapshotKey]: snapshot({ records: { products: { expired: 1_500 } } }),
+      [snapshotKey]: snapshot({
+        records: { products: { stale: 1_500, expired: 9_000_000 } },
+      }),
     });
     const deps = storeDeps(store, { now: () => 2_000 });
 
     const outcome = await intercept(req(), target(), cfg, deps);
     expect(outcome).toMatchObject({ kind: "complete", stale: true });
     expect(store.gets).toContain(snapshotKey);
+  });
+
+  it("serves nothing when a tag expired after the entry", async () => {
+    const store = stored({
+      [entryKey("/blog")]: appPage({ tags: "products", lastModified: 1_000 }),
+      [snapshotKey]: snapshot({ records: { products: { expired: 1_500 } } }),
+    });
+    const deps = storeDeps(store, { now: () => 2_000 });
+
+    expect(await intercept(req(), target(), cfg, deps)).toBeNull();
   });
 
   it("serves a tagged page whose tag expired before the entry was written", async () => {
@@ -363,7 +375,9 @@ describe("intercept, tag state from the snapshot", () => {
   it("stays correct with an inert PoP cache, paying a store read per request", async () => {
     const store = stored({
       [entryKey("/blog")]: appPage({ tags: "products", lastModified: 1_000 }),
-      [snapshotKey]: snapshot({ records: { products: { expired: 1_500 } } }),
+      [snapshotKey]: snapshot({
+        records: { products: { stale: 1_500, expired: 9_000_000 } },
+      }),
     });
     const snapshotCache = fakeCache({ inert: true });
 
@@ -449,20 +463,34 @@ describe("intercept, PPR entries", () => {
     expect(outcome).toBeNull();
   });
 
-  it("serves a PPR entry whose tags were invalidated stale, within expiration", async () => {
+  it("serves a PPR entry whose tags were marked stale, within expiration", async () => {
     const store = stored({
       [entryKey("/blog")]: pprEntry({ tags: "posts", lastModified: 1_000 }),
-      [snapshotKey]: snapshot({ records: { posts: { expired: 1_500 } } }),
+      [snapshotKey]: snapshot({
+        records: { posts: { stale: 1_500, expired: 9_000_000 } },
+      }),
     });
     expect(
       await intercept(req(), pprTarget(), cfg, storeDeps(store, { now: () => 2_000 })),
     ).toMatchObject({ kind: "ppr", stale: true });
   });
 
-  it("falls open when tags were invalidated past the expiration window", async () => {
+  it("falls open on a PPR entry whose tags expired after it was written", async () => {
     const store = stored({
       [entryKey("/blog")]: pprEntry({ tags: "posts", lastModified: 1_000 }),
       [snapshotKey]: snapshot({ records: { posts: { expired: 1_500 } } }),
+    });
+    expect(
+      await intercept(req(), pprTarget(), cfg, storeDeps(store, { now: () => 2_000 })),
+    ).toBeNull();
+  });
+
+  it("falls open when tags were marked stale past the expiration window", async () => {
+    const store = stored({
+      [entryKey("/blog")]: pprEntry({ tags: "posts", lastModified: 1_000 }),
+      [snapshotKey]: snapshot({
+        records: { posts: { stale: 1_500, expired: 9_000_000 } },
+      }),
     });
     expect(
       await intercept(

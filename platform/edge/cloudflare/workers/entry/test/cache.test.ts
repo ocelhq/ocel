@@ -995,13 +995,13 @@ describe("serveCached", () => {
     expect(origin.calls).toBe(2);
   });
 
-  it("serves a time-fresh but tag-invalidated hit stale and refreshes", async () => {
+  it("serves a time-fresh but tag-stale hit stale and refreshes", async () => {
     const clock = { ms: 0 };
     const deps = testDeps(clock);
     const origin = countingOrigin("s-maxage=1");
     const refresh = countingOrigin("s-maxage=1");
     const t = target("tag-stale", { revalidate: 3600, expiration: 7200, tags: ["posts"] });
-    const clockTags = { async expired() { return true as const; } };
+    const clockTags = { async freshness() { return "stale" as const; } };
 
     await serveCached(req(), t, deps, origin, refresh, clockTags);
     await deps.flush();
@@ -1013,13 +1013,34 @@ describe("serveCached", () => {
     expect(refresh.calls).toBe(1);
   });
 
+  it("never serves a time-fresh but tag-expired entry, rendering through the origin", async () => {
+    const clock = { ms: 0 };
+    const deps = testDeps(clock);
+    const origin = countingOrigin("s-maxage=1");
+    const refresh = countingOrigin("s-maxage=1");
+    const t = target("tag-expired", { revalidate: 3600, expiration: 7200, tags: ["posts"] });
+    const fresh = { async freshness() { return "fresh" as const; } };
+    const expired = { async freshness() { return "expired" as const; } };
+
+    await serveCached(req(), t, deps, origin, refresh, fresh);
+    await deps.flush();
+    expect(origin.calls).toBe(1);
+
+    clock.ms = 1_000;
+    const miss = await serveCached(req(), t, deps, origin, refresh, expired);
+    expect(miss.headers.get("x-ocel-cache")).toBe("MISS");
+    expect(origin.calls).toBe(2);
+    expect(refresh.calls).toBe(0);
+    await deps.flush();
+  });
+
   it("serves stale (not fall-through) when the tag snapshot is untrusted on a hit", async () => {
     const clock = { ms: 0 };
     const deps = testDeps(clock);
     const origin = countingOrigin("s-maxage=1");
     const refresh = countingOrigin("s-maxage=1");
     const t = target("untrusted", { revalidate: 3600, expiration: 7200, tags: ["posts"] });
-    const clockUntrusted = { async expired() { return "untrusted" as const; } };
+    const clockUntrusted = { async freshness() { return "untrusted" as const; } };
 
     await serveCached(req(), t, deps, origin, refresh, clockUntrusted);
     await deps.flush();
