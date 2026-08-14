@@ -8,38 +8,11 @@ import (
 	"strings"
 )
 
-const descendantMaxPIDs = 4096
-
 func descendantPIDs(pid int) []int {
-	parents := ppidTable(descendantMaxPIDs)
-	if len(parents) == 0 {
-		return nil
-	}
-
-	children := make(map[int][]int, len(parents))
-	for child, parent := range parents {
-		children[parent] = append(children[parent], child)
-	}
-
-	var out []int
-	queue := []int{pid}
-	seen := map[int]bool{pid: true}
-	for len(queue) > 0 && len(out) < descendantMaxPIDs {
-		next := queue[0]
-		queue = queue[1:]
-		for _, c := range children[next] {
-			if seen[c] {
-				continue
-			}
-			seen[c] = true
-			out = append(out, c)
-			queue = append(queue, c)
-		}
-	}
-	return out
+	return descendantsOf(ppidTable(), pid)
 }
 
-func ppidTable(limit int) map[int]int {
+func ppidTable() map[int]int {
 	entries, err := os.ReadDir("/proc")
 	if err != nil {
 		return nil
@@ -47,9 +20,6 @@ func ppidTable(limit int) map[int]int {
 
 	table := make(map[int]int, len(entries))
 	for _, e := range entries {
-		if len(table) >= limit {
-			break
-		}
 		pid, err := strconv.Atoi(e.Name())
 		if err != nil {
 			continue
