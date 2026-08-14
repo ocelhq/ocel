@@ -70,7 +70,8 @@ beforeEach(() => {
   vi.spyOn(performance, "now").mockImplementation(() => real() + drift);
 });
 
-afterEach(() => {
+afterEach(async () => {
+  (await import("../src/next/tags-manifest.mjs")).mirrorTagsInto(null);
   vi.restoreAllMocks();
   for (const v of [
     "OCEL_STATE_TABLE",
@@ -483,4 +484,29 @@ test("an empty snapshot counts as a sync where an unusable one does not", async 
 
   expect(await unusable.isr.get("/", { kind: "APP_PAGE" })).not.toBeNull();
   expect(unusable.tagClock.hasSynced).toBe(false);
+});
+
+test("mirrors an invalidation it raises into Next's own tags manifest", async () => {
+  const store = fakeStore();
+  const manifest = new Map<string, { stale?: number; expired?: number }>();
+  const { handler } = await load(store);
+  (await import("../src/next/tags-manifest.mjs")).mirrorTagsInto(manifest);
+
+  await handler.updateTags(["products"], { expire: 3600 });
+
+  const mark = manifest.get("products")!;
+  expect(mark.stale).toBeGreaterThan(0);
+  expect(mark.expired).toBeGreaterThan(mark.stale!);
+});
+
+test("mirrors an invalidation raised elsewhere once it syncs", async () => {
+  const store = fakeStore();
+  const manifest = new Map<string, { stale?: number; expired?: number }>();
+  const { tagClock } = await load(store);
+  (await import("../src/next/tags-manifest.mjs")).mirrorTagsInto(manifest);
+
+  store.seed("products", { stale: 4_000, expired: 9_000, writtenAt: 4_000 });
+  await tagClock.refreshTags();
+
+  expect(manifest.get("products")).toEqual({ stale: 4_000, expired: 9_000 });
 });
