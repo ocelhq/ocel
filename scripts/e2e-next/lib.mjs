@@ -32,6 +32,35 @@ export function withoutSkipDriftChecks(env) {
   return out;
 }
 
+export const ENV_SNAPSHOT_VAR = "OCEL_E2E_ENV_SNAPSHOT";
+
+export const DEPLOY_ENV_VAR = "OCEL_DEPLOY_ENV";
+
+const HARNESS_ENV_KEYS = new Set([
+  "_",
+  "INIT_CWD",
+  "JEST_WORKER_ID",
+  "NODE_ENV",
+  "NODE_OPTIONS",
+  "OLDPWD",
+  "PATH",
+  "PWD",
+]);
+
+const HARNESS_ENV_PREFIXES = ["AWS_", "LAMBDA_", "NEXT_TEST_", "OCEL_", "PNPM_", "__NEXT_", "npm_"];
+
+export function deployEnvDiff(snapshot, current) {
+  const supplied = {};
+  for (const [key, value] of Object.entries(current ?? {})) {
+    if (typeof value !== "string") continue;
+    if ((snapshot ?? {})[key] === value) continue;
+    if (HARNESS_ENV_KEYS.has(key)) continue;
+    if (HARNESS_ENV_PREFIXES.some((prefix) => key.startsWith(prefix))) continue;
+    supplied[key] = value;
+  }
+  return Object.fromEntries(Object.keys(supplied).sort().map((key) => [key, supplied[key]]));
+}
+
 export function projectSlug({ runId }) {
   const run = sanitizeToken(String(runId ?? "")) || LOCAL_RUN_ID;
   const maxRun = MAX_SLUG_LEN - SLUG_PREFIX.length;

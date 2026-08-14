@@ -13,6 +13,7 @@ Writes to $OUT_DIR/<suite name>/:
   jest.json     jest --json result
   fragment.json this suite's entry in baseline-manifest.json shape, unfiltered
   deploy.txt    every ref/slug/dir line deploy.mjs printed
+  env.json      jest's starting env; deploy.mjs diffs it for test-supplied vars
   dirs.txt      every app dir this suite deployed
   status        jest's exit code
   staged.txt    STAGE=1 only: each preview left live, and how to reach it
@@ -92,6 +93,7 @@ ENVV=(
   NEXT_TELEMETRY_DISABLED=1
   NEXT_TEST_DEPLOY_SCRIPT_PATH="$E2E_DIR/deploy.mjs"
   NEXT_TEST_DEPLOY_LOGS_SCRIPT_PATH="$E2E_DIR/logs.mjs"
+  OCEL_E2E_ENV_SNAPSHOT="$WORK/env.json"
 )
 if [ "${STAGE:-}" = 1 ]; then
   ENVV+=(NEXT_TEST_SKIP_CLEANUP=1)
@@ -103,5 +105,8 @@ ARGS=(--runInBand --json --outputFile "$WORK/jest.json" "$SUITE")
 [ -n "${ONLY:-}" ] && ARGS+=(-t "$ONLY")
 
 cd "$NEXT_DIR" || exit 1
+env "${ENVV[@]}" node -e \
+  'require("fs").writeFileSync(process.env.OCEL_E2E_ENV_SNAPSHOT, JSON.stringify(process.env))' ||
+  exit 1
 env "${ENVV[@]}" pnpm jest "${ARGS[@]}" 2>&1 | tee -a "$LOG"
 exit "${PIPESTATUS[0]}"

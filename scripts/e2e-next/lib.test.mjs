@@ -24,6 +24,7 @@ import {
   bytecodeEmbedEnabled,
   bytecodeEmbeddedOutcome,
   bytecodeRehydrateOutcome,
+  deployEnvDiff,
   deployURL,
   embeddedArtifactPairs,
   embeddedBytecodePath,
@@ -55,6 +56,50 @@ import {
   TYPESCRIPT_PIN,
   zipEntryNames,
 } from "./lib.mjs";
+
+describe("deployEnvDiff", () => {
+  const snapshot = {
+    ADAPTER_DIR: "/repo",
+    NEXT_TEST_MODE: "deploy",
+    PATH: "/usr/bin",
+  };
+
+  it("keeps every key a test added or changed", () => {
+    expect(
+      deployEnvDiff(snapshot, {
+        ...snapshot,
+        MIDDLEWARE_TEST: "asdf",
+        ANOTHER_MIDDLEWARE_TEST: "asdf2",
+        NEXT_TEST_MODE: "deploy",
+      }),
+    ).toEqual({ ANOTHER_MIDDLEWARE_TEST: "asdf2", MIDDLEWARE_TEST: "asdf" });
+  });
+
+  it("drops what the harness, jest and pnpm add on the way", () => {
+    expect(
+      deployEnvDiff(snapshot, {
+        ...snapshot,
+        AWS_REGION: "us-east-1",
+        JEST_WORKER_ID: "1",
+        NEXT_TEST_DIR: "/tmp/next-test",
+        NODE_ENV: "test",
+        OCEL_E2E_ENV_SNAPSHOT: "/out/env-snapshot.json",
+        PATH: "/tmp/next-test/node_modules/.bin:/usr/bin",
+        __NEXT_TEST_MODE: "e2e",
+        npm_lifecycle_event: "jest",
+      }),
+    ).toEqual({});
+  });
+
+  it("orders the keys, so two runs of one suite ship the same channel", () => {
+    const supplied = deployEnvDiff(snapshot, { ...snapshot, B: "2", A: "1" });
+    expect(Object.keys(supplied)).toEqual(["A", "B"]);
+  });
+
+  it("supplies nothing when the env never moved", () => {
+    expect(deployEnvDiff(snapshot, snapshot)).toEqual({});
+  });
+});
 
 describe("projectSlug", () => {
   it("is a valid single DNS label carrying the run id", () => {

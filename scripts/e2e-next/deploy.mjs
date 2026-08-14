@@ -7,9 +7,12 @@ import { join } from "node:path";
 import {
   APP_NAME,
   BUILD_LOG_FILE,
+  DEPLOY_ENV_VAR,
   DEPLOY_RESULT_FILE,
+  ENV_SNAPSHOT_VAR,
   SKIP_DRIFT_CHECK_ENV,
   STATE_FILE,
+  deployEnvDiff,
   deployURL,
   previewRefForApp,
   projectSlugForRun,
@@ -28,6 +31,8 @@ const FAILURE_LOG_LINES = 200;
 
 const appDir = process.cwd();
 
+const TEST_ENV = testSuppliedEnv();
+
 const CHILD_ENV = {
   ...process.env,
   NEXT_PRIVATE_TEST_MODE: "e2e",
@@ -35,7 +40,21 @@ const CHILD_ENV = {
   OCEL_EDGE_OBSERVABILITY: "off",
   ...SKIP_DRIFT_CHECK_ENV,
   ...(hasTypeScriptNextConfig() ? { __NEXT_NODE_NATIVE_TS_LOADER_ENABLED: "true" } : {}),
+  ...(Object.keys(TEST_ENV).length > 0 ? { [DEPLOY_ENV_VAR]: JSON.stringify(TEST_ENV) } : {}),
 };
+
+function testSuppliedEnv() {
+  const path = process.env[ENV_SNAPSHOT_VAR];
+  if (!path || !existsSync(path)) {
+    return {};
+  }
+  const supplied = deployEnvDiff(JSON.parse(readFileSync(path, "utf8")), process.env);
+  const keys = Object.keys(supplied);
+  if (keys.length > 0) {
+    console.error(`[ocel-e2e] deploying with test-supplied env ${keys.join(", ")}`);
+  }
+  return supplied;
+}
 
 function hasTypeScriptNextConfig() {
   return ["next.config.ts", "next.config.mts"].some((name) => existsSync(join(appDir, name)));
