@@ -62,16 +62,15 @@ func spawnAppChild(ctx context.Context, cmd *exec.Cmd, stdin io.Reader, isTermin
 	if err := cmd.Start(); err != nil {
 		return nil, err
 	}
-	registerLiveAppChild(cmd, isTerminal, snap)
-
 	done := make(chan struct{})
 	errCh := make(chan error, 1)
+	registerLiveAppChild(cmd, isTerminal, snap, done)
 	go func() {
 		err := cmd.Wait()
-		deregisterLiveAppChild(cmd)
 		snap.restore()
 		errCh <- err
 		close(done)
+		deregisterLiveAppChild(cmd)
 	}()
 
 	go func() {
@@ -83,6 +82,9 @@ func spawnAppChild(ctx context.Context, cmd *exec.Cmd, stdin io.Reader, isTermin
 		select {
 		case <-done:
 		case <-time.After(appChildGracePeriod):
+			if reaped(done) {
+				return
+			}
 			_ = killAppChild(cmd, isTerminal)
 			snap.restore()
 		}
@@ -103,6 +105,10 @@ func (c *appChild) wait() error {
 }
 
 func (c *appChild) stop() {
+	if reaped(c.done) {
+		c.term.restore()
+		return
+	}
 	_ = killAppChild(c.cmd, c.isTerminal)
 	c.term.restore()
 	select {
@@ -111,10 +117,20 @@ func (c *appChild) stop() {
 	}
 }
 
+func reaped(done <-chan struct{}) bool {
+	select {
+	case <-done:
+		return true
+	default:
+		return false
+	}
+}
+
 type liveAppChild struct {
 	cmd        *exec.Cmd
 	isTerminal bool
 	term       termSnapshot
+	done       <-chan struct{}
 }
 
 var (
@@ -122,9 +138,9 @@ var (
 	liveAppChildren   = map[*exec.Cmd]liveAppChild{}
 )
 
-func registerLiveAppChild(cmd *exec.Cmd, isTerminal bool, snap termSnapshot) {
+func registerLiveAppChild(cmd *exec.Cmd, isTerminal bool, snap termSnapshot, done <-chan struct{}) {
 	liveAppChildrenMu.Lock()
-	liveAppChildren[cmd] = liveAppChild{cmd: cmd, isTerminal: isTerminal, term: snap}
+	liveAppChildren[cmd] = liveAppChild{cmd: cmd, isTerminal: isTerminal, term: snap, done: done}
 	liveAppChildrenMu.Unlock()
 }
 
@@ -143,7 +159,9 @@ func killAllLiveAppChildren() {
 	liveAppChildrenMu.Unlock()
 
 	for _, c := range children {
-		_ = killAppChild(c.cmd, c.isTerminal)
+		if !reaped(c.done) {
+			_ = killAppChild(c.cmd, c.isTerminal)
+		}
 		c.term.restore()
 	}
 }
