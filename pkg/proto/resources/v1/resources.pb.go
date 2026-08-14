@@ -117,6 +117,7 @@ type DeclareRequest struct {
 	//	*DeclareRequest_Postgres
 	//	*DeclareRequest_Bucket
 	Config        isDeclareRequest_Config `protobuf_oneof:"config"`
+	Stack         string                  `protobuf:"bytes,4,opt,name=stack,proto3" json:"stack,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -181,6 +182,13 @@ func (x *DeclareRequest) GetBucket() *BucketConfig {
 		}
 	}
 	return nil
+}
+
+func (x *DeclareRequest) GetStack() string {
+	if x != nil {
+		return x.Stack
+	}
+	return ""
 }
 
 type isDeclareRequest_Config interface {
@@ -295,11 +303,12 @@ const file_resources_v1_resources_proto_rawDesc = "" +
 	"\x12ResourceIdentifier\x12\x12\n" +
 	"\x04type\x18\x01 \x01(\tR\x04type\x12\x12\n" +
 	"\x04name\x18\x02 \x01(\tR\x04name\"\x11\n" +
-	"\x0fDeclareResponse\"\xca\x01\n" +
+	"\x0fDeclareResponse\"\xe0\x01\n" +
 	"\x0eDeclareRequest\x12<\n" +
 	"\bresource\x18\x01 \x01(\v2 .resources.v1.ResourceIdentifierR\bresource\x12:\n" +
 	"\bpostgres\x18\x02 \x01(\v2\x1c.resources.v1.PostgresConfigH\x00R\bpostgres\x124\n" +
-	"\x06bucket\x18\x03 \x01(\v2\x1a.resources.v1.BucketConfigH\x00R\x06bucketB\b\n" +
+	"\x06bucket\x18\x03 \x01(\v2\x1a.resources.v1.BucketConfigH\x00R\x06bucket\x12\x14\n" +
+	"\x05stack\x18\x04 \x01(\tR\x05stackB\b\n" +
 	"\x06config\"*\n" +
 	"\x0ePostgresConfig\x12\x18\n" +
 	"\aversion\x18\x01 \x01(\tR\aversion\"7\n" +

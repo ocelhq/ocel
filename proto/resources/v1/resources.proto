@@ -28,6 +28,8 @@ message DeclareRequest {
     PostgresConfig postgres = 2;
     BucketConfig bucket = 3;
   }
+
+  string stack = 4;
 }
 
 message PostgresConfig {

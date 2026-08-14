@@ -16,6 +16,7 @@ export class Postgres implements Component {
     config?: PostgresConfig,
   ) {
     if (process.env.OCEL_PHASE === "discovery") {
+      const stack = new Error().stack ?? "";
       defer(
         rpc.resource.declare({
           resource: { name: id, type: this.type },
@@ -23,6 +24,7 @@ export class Postgres implements Component {
             case: "postgres",
             value: { version: config?.version ?? "17" },
           },
+          stack,
         }),
       );
     }

@@ -96,6 +96,14 @@ message Manifest {
   map<string, DomainList> domains = 5;
 
   repeated ManifestApp apps = 6;
+
+  repeated ManifestUsage usages = 8;
+}
+
+message ManifestUsage {
+  string app = 1;
+  string resource = 2;
+  repeated string files = 3;
 }
 
 message DomainList {

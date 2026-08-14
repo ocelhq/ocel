@@ -30,6 +30,7 @@ export class Bucket<
     public allowedOrigins: string[],
   ) {
     if (process.env.OCEL_PHASE === "discovery") {
+      const stack = new Error().stack ?? "";
       defer(
         rpc.resource.declare({
           resource: { name, type: this.type },
@@ -37,6 +38,7 @@ export class Bucket<
             case: "bucket",
             value: { allowedOrigins },
           },
+          stack,
         }),
       );
     }
