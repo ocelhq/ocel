@@ -231,6 +231,43 @@ describe("serveStaticAsset", () => {
     expect(await res.text()).toBe("Not Found");
   });
 
+  it("answers a _next/static miss in plain text, not with the 404 page", async () => {
+    const url = new URL("https://serve-2c.example/_next/static/chunks/gone.js");
+    const deps = countingDeps(
+      bucketServing({ "assets/p/app/b1/404.html": { body: "<h1>gone</h1>" } }),
+      "assets/p/app/b1",
+    );
+
+    const res = await serveStaticAsset(new Request(url), url, deps);
+
+    expect(res.status).toBe(404);
+    expect(await res.text()).toBe("Not Found");
+    expect(res.headers.get("content-type")).toBe("text/plain; charset=utf-8");
+  });
+
+  it("answers a _next/static miss in plain text under a basePath", async () => {
+    const url = new URL("https://serve-2d.example/docs/_next/static/chunks/gone.js");
+    const deps = countingDeps(
+      bucketServing({ "assets/p/app/b1/404.html": { body: "<h1>gone</h1>" } }),
+      "assets/p/app/b1",
+    );
+
+    const res = await serveStaticAsset(new Request(url), url, deps);
+
+    expect(res.status).toBe(404);
+    expect(res.headers.get("content-type")).toBe("text/plain; charset=utf-8");
+  });
+
+  it("answers a _next/static miss in plain text when no store is bound", async () => {
+    const url = new URL("https://serve-2e.example/_next/static/chunks/gone.js");
+    const deps = countingDeps(undefined, "assets/p/app/b1");
+
+    const res = await serveStaticAsset(new Request(url), url, deps);
+
+    expect(res.status).toBe(404);
+    expect(res.headers.get("content-type")).toBe("text/plain; charset=utf-8");
+  });
+
   it("returns 404 when no store is bound", async () => {
     const url = new URL("https://serve-3.example/next.svg");
     const deps = countingDeps(undefined, "assets/p/app/b1");
