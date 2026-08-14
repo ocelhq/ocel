@@ -124,10 +124,14 @@ export function renderOcelConfig({ slug }) {
 }
 
 export function withBuildScript(pkg) {
-  if (pkg.scripts?.build) {
-    return pkg;
+  if (!pkg.scripts?.build) {
+    return { ...pkg, scripts: { ...pkg.scripts, build: "next build" } };
   }
-  return { ...pkg, scripts: { ...pkg.scripts, build: "next build" } };
+  if (/^npm@/.test(pkg.packageManager ?? "") && pkg.scripts.build.includes("pnpm post-build")) {
+    const build = pkg.scripts.build.replace("pnpm post-build", "npm run post-build");
+    return { ...pkg, scripts: { ...pkg.scripts, build } };
+  }
+  return pkg;
 }
 
 export const TYPESCRIPT_PIN = "^5";
