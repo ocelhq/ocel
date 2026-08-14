@@ -99,6 +99,8 @@ type Runner struct {
 	stderrMu  sync.Mutex
 	stderrBuf bytes.Buffer
 
+	outMu sync.Mutex
+
 	mu               sync.Mutex
 	network, address string
 	client           deploymentsv1connect.DeploymentServiceClient
@@ -415,15 +417,36 @@ func (r *Runner) teardown() {
 		_ = procgroup.Kill(r.cmd)
 	}
 
-	// TODO: if reapTimeout fires here, cmd.Wait() is still blocked and
-	// drainStdout/drainStderr leak with it, since Kill() above only
-	// reaches the group teardown itself owns — a pipe held open by
-	// something outside that group (e.g. reparented onto init) would still
-	// wedge them. Acceptable today because the process is exiting anyway
-	// and takes the leaked goroutines with it.
+	// TODO: a pipe held open outside the group teardown owns (e.g. a
+	// grandchild reparented onto init) keeps cmd.Wait() and the drain
+	// goroutines blocked for the rest of the process lifetime; muting is all
+	// this side can do without reaching outside the group.
 	select {
 	case <-r.done:
 	case <-time.After(r.reapTimeout):
+		r.mute()
+	}
+}
+
+func (r *Runner) mute() {
+	r.outMu.Lock()
+	defer r.outMu.Unlock()
+	r.stdout, r.stderr = nil, nil
+}
+
+func (r *Runner) writeStdout(line string) {
+	r.outMu.Lock()
+	defer r.outMu.Unlock()
+	if r.stdout != nil {
+		fmt.Fprintln(r.stdout, line)
+	}
+}
+
+func (r *Runner) writeStderr(line string) {
+	r.outMu.Lock()
+	defer r.outMu.Unlock()
+	if r.stderr != nil {
+		fmt.Fprintln(r.stderr, line)
 	}
 }
 
@@ -440,9 +463,7 @@ func (r *Runner) drainStdout(stdout io.Reader) {
 				continue
 			}
 		}
-		if r.stdout != nil {
-			fmt.Fprintln(r.stdout, line)
-		}
+		r.writeStdout(line)
 	}
 
 	if err := scanner.Err(); err != nil {
@@ -463,9 +484,7 @@ func (r *Runner) drainStderr(stderr io.Reader) {
 	for scanner.Scan() {
 		line := scanner.Text()
 		r.record(line)
-		if r.stderr != nil {
-			fmt.Fprintln(r.stderr, line)
-		}
+		r.writeStderr(line)
 	}
 
 	if err := scanner.Err(); err != nil {

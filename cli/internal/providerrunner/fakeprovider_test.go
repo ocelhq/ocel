@@ -15,6 +15,7 @@ import (
 
 	"connectrpc.com/connect"
 
+	"github.com/ocelhq/ocel/cli/internal/procgroup"
 	"github.com/ocelhq/ocel/pkg/channel"
 	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
 	"github.com/ocelhq/ocel/pkg/proto/deployments/v1/deploymentsv1connect"
@@ -39,8 +40,14 @@ func runFakeProvider() int {
 		os.Stdout.Write(bytes.Repeat([]byte("x"), 2*1024*1024))
 		fmt.Println()
 		select {}
-	case "orphan-holds-pipe", "orphan-detached-pipe":
-		if err := spawnGrandchildSurvivor(mode == "orphan-holds-pipe"); err != nil {
+	case "orphan-holds-pipe":
+		if err := spawnGrandchildSurvivor(true, true); err != nil {
+			fmt.Fprintln(os.Stderr, "fake provider: spawn grandchild:", err)
+			return 1
+		}
+		select {}
+	case "orphan-detached-pipe":
+		if err := spawnGrandchildSurvivor(false, false); err != nil {
 			fmt.Fprintln(os.Stderr, "fake provider: spawn grandchild:", err)
 			return 1
 		}
@@ -48,7 +55,11 @@ func runFakeProvider() int {
 	case "grandchild-survivor":
 		sig := make(chan os.Signal, 1)
 		signal.Notify(sig, syscall.SIGTERM)
-		time.Sleep(10 * time.Second)
+		deadline := time.Now().Add(10 * time.Second)
+		for time.Now().Before(deadline) {
+			fmt.Println("grandchild still holds the pipe")
+			time.Sleep(20 * time.Millisecond)
+		}
 		return 0
 	}
 
@@ -144,11 +155,14 @@ func (s *fakeProviderServer) Bootstrap(ctx context.Context, req *deploymentsv1.B
 	})
 }
 
-func spawnGrandchildSurvivor(holdPipe bool) error {
+func spawnGrandchildSurvivor(holdPipe, ownGroup bool) error {
 	cmd := exec.Command(os.Args[0])
 	cmd.Env = append(os.Environ(), fakeProviderEnvVar+"=1", fakeProviderModeEnvVar+"=grandchild-survivor")
 	if holdPipe {
 		cmd.Stdout = os.Stdout
+	}
+	if ownGroup {
+		procgroup.New(cmd)
 	}
 	if err := cmd.Start(); err != nil {
 		return err

@@ -3,14 +3,33 @@
 package providerrunner
 
 import (
+	"bytes"
 	"context"
 	"os"
 	"path/filepath"
 	"strconv"
+	"sync"
 	"syscall"
 	"testing"
 	"time"
 )
+
+type syncBuffer struct {
+	mu  sync.Mutex
+	buf bytes.Buffer
+}
+
+func (b *syncBuffer) Write(p []byte) (int, error) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.buf.Write(p)
+}
+
+func (b *syncBuffer) Len() int {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.buf.Len()
+}
 
 func spawnOrphan(t *testing.T, ctx context.Context, mode string, cfg Config) (*Runner, string) {
 	t.Helper()
@@ -65,12 +84,15 @@ func TestTeardownBound(t *testing.T) {
 		t.Parallel()
 
 		ctx := context.Background()
+		out := &syncBuffer{}
 		r, pidFile := spawnOrphan(t, ctx, "orphan-holds-pipe", Config{
+			Stdout:      out,
 			GracePeriod: 100 * time.Millisecond,
 			ReapTimeout: 200 * time.Millisecond,
 		})
 
 		grandchildPid := readGrandchildPid(t, pidFile)
+		t.Cleanup(func() { _ = syscall.Kill(grandchildPid, syscall.SIGKILL) })
 
 		start := time.Now()
 		r.Close()
@@ -81,7 +103,20 @@ func TestTeardownBound(t *testing.T) {
 			t.Fatalf("Close() took %s, want it bounded well under %s even with a grandchild holding the pipe", elapsed, bound)
 		}
 
-		assertProcessDead(t, grandchildPid)
+		if !processAlive(grandchildPid) {
+			t.Fatalf("grandchild %d died with the group, so Close() never reached the reap timeout this test exists to cover", grandchildPid)
+		}
+		select {
+		case <-r.done:
+			t.Fatal("the provider was reaped, so Close() returned on <-done rather than the reap timeout")
+		default:
+		}
+
+		written := out.Len()
+		time.Sleep(300 * time.Millisecond)
+		if grew := out.Len() - written; grew != 0 {
+			t.Fatalf("stdout grew by %d bytes after Close() returned, want the drains muted once teardown gives up on the reap", grew)
+		}
 	})
 
 	t.Run("the process group is force-killed even when the provider exits inside the grace window", func(t *testing.T) {
