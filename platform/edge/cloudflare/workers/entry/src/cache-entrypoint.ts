@@ -57,7 +57,9 @@ export function createEdgeCache(deps: EdgeCacheDeps): EdgeCacheRpc {
         if (all.length === 0) return entry;
 
         const clock = createTagClock({ isrPrefix: scope }, { store: deps.snapshots });
-        return (await clock.expired(all, entry.lastModified, now())) === false ? entry : null;
+        return (await clock.freshness(all, entry.lastModified, now())) === "fresh"
+          ? entry
+          : null;
       } catch {
         return null;
       }
