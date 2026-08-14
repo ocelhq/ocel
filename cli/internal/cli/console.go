@@ -14,8 +14,8 @@ var consoleCmd = &cobra.Command{
 }
 
 func init() {
-	consoleLinkCmd.Flags().StringVar(&linkOpts.org, "org", "", "Select an organization by slug, bypassing the interactive picker")
-	consoleLinkCmd.Flags().BoolVar(&linkOpts.create, "create", false, "Create a new project instead of selecting an existing one")
+	consoleLinkCmd.Flags().StringVar(&consoleLinkOpts.org, "org", "", "Select an organization by slug, bypassing the interactive picker")
+	consoleLinkCmd.Flags().BoolVar(&consoleLinkOpts.create, "create", false, "Create a new project instead of selecting an existing one")
 
 	consoleCmd.AddCommand(consoleLinkCmd)
 	consoleCmd.AddCommand(consoleUnlinkCmd)

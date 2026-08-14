@@ -18,13 +18,13 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/projectclient"
 )
 
-type linkOptions struct {
+type consoleLinkOptions struct {
 	org    string
 	create bool
 	apiURL string
 }
 
-var linkOpts linkOptions
+var consoleLinkOpts consoleLinkOptions
 
 var consoleLinkCmd = &cobra.Command{
 	Use:   "link [project]",
@@ -48,15 +48,15 @@ var consoleLinkCmd = &cobra.Command{
 		}
 
 		d := defaultDeps()
-		opts := linkOpts
+		opts := consoleLinkOpts
 		creds, _ := d.loadCredentials()
 		opts.apiURL = effectiveAPIURL(cmd, creds.APIURL)
 
-		return runLink(cmd.Context(), d, cwd, project, opts, cmd.OutOrStdout(), cmd.ErrOrStderr(), cmd.InOrStdin())
+		return runConsoleLink(cmd.Context(), d, cwd, project, opts, cmd.OutOrStdout(), cmd.ErrOrStderr(), cmd.InOrStdin())
 	},
 }
 
-func runLink(ctx context.Context, d deps, projectDir, project string, opts linkOptions, stdout, stderr io.Writer, stdin io.Reader) error {
+func runConsoleLink(ctx context.Context, d deps, projectDir, project string, opts consoleLinkOptions, stdout, stderr io.Writer, stdin io.Reader) error {
 	creds, err := d.loadCredentials()
 	if err != nil {
 		fmt.Fprintln(stderr, "You're not logged in. Run `ocel login` first.")
@@ -120,13 +120,13 @@ func runLink(ctx context.Context, d deps, projectDir, project string, opts linkO
 	return nil
 }
 
-func ensureLinked(ctx context.Context, d deps, projectDir, apiURL string, stdout, stderr io.Writer, stdin io.Reader) (*consolebinding.Binding, error) {
-	link, err := consolebinding.Read(projectDir, apiURL)
+func ensureConsoleBinding(ctx context.Context, d deps, projectDir, apiURL string, stdout, stderr io.Writer, stdin io.Reader) (*consolebinding.Binding, error) {
+	binding, err := consolebinding.Read(projectDir, apiURL)
 	if err != nil {
 		return nil, err
 	}
-	if link != nil {
-		return link, nil
+	if binding != nil {
+		return binding, nil
 	}
 
 	if !isReaderTTY(stdin) {
@@ -134,25 +134,25 @@ func ensureLinked(ctx context.Context, d deps, projectDir, apiURL string, stdout
 	}
 
 	fmt.Fprintln(stdout, "This directory isn't linked to a console project yet.")
-	if err := runLink(ctx, d, projectDir, "", linkOptions{apiURL: apiURL}, stdout, stderr, stdin); err != nil {
+	if err := runConsoleLink(ctx, d, projectDir, "", consoleLinkOptions{apiURL: apiURL}, stdout, stderr, stdin); err != nil {
 		return nil, err
 	}
 
-	link, err = consolebinding.Read(projectDir, apiURL)
+	binding, err = consolebinding.Read(projectDir, apiURL)
 	if err != nil {
 		return nil, err
 	}
-	if link == nil {
+	if binding == nil {
 		return nil, errors.New("linking recorded no project — run `ocel console link` and try again")
 	}
-	return link, nil
+	return binding, nil
 }
 
 func selectProject(
 	ctx context.Context,
 	client *projectclient.Client,
 	accessToken, projectDir, project string,
-	opts linkOptions,
+	opts consoleLinkOptions,
 	projects []projectclient.Project,
 	org *authclient.Organization,
 	stdout io.Writer,
@@ -269,7 +269,7 @@ func promptProjectName(projectDir string, stdout io.Writer, scanner *bufio.Scann
 	return fallback
 }
 
-func pickOrganization(ctx context.Context, client *authclient.Client, accessToken string, opts linkOptions, stdout io.Writer, stdin io.Reader, scanner *bufio.Scanner) (*authclient.Organization, error) {
+func pickOrganization(ctx context.Context, client *authclient.Client, accessToken string, opts consoleLinkOptions, stdout io.Writer, stdin io.Reader, scanner *bufio.Scanner) (*authclient.Organization, error) {
 	var orgs []authclient.Organization
 	err := withSpinner(stdout, "Resolving organization...", func() error {
 		list, listErr := client.ListOrganizations(ctx, accessToken)

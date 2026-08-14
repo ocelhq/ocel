@@ -74,11 +74,11 @@ func runDev(ctx context.Context, d deps, cmd *cobra.Command, cwd string, appArgs
 			return runFollower(ctx, d, role.LeaderAddr, appArgs, stdout, stderr, stdin)
 		}
 
-		link, err := ensureLinked(ctx, d, cfg.Dir, apiURL, stdout, stderr, stdin)
+		binding, err := ensureConsoleBinding(ctx, d, cfg.Dir, apiURL, stdout, stderr, stdin)
 		if err != nil {
 			return err
 		}
-		if err := runLeader(ctx, d, role, creds, apiURL, link.ProjectID, cfg, appArgs, stdout, stderr, stdin); !errors.Is(err, election.ErrLost) {
+		if err := runLeader(ctx, d, role, creds, apiURL, binding.ProjectID, cfg, appArgs, stdout, stderr, stdin); !errors.Is(err, election.ErrLost) {
 			return err
 		}
 	}

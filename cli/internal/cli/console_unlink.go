@@ -21,11 +21,11 @@ var consoleUnlinkCmd = &cobra.Command{
 		if err != nil {
 			return fmt.Errorf("determine working directory: %w", err)
 		}
-		return runUnlink(cwd, cmd.OutOrStdout())
+		return runConsoleUnlink(cwd, cmd.OutOrStdout())
 	},
 }
 
-func runUnlink(projectDir string, stdout io.Writer) error {
+func runConsoleUnlink(projectDir string, stdout io.Writer) error {
 	removed, err := consolebinding.Clear(projectDir)
 	if err != nil {
 		return err

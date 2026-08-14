@@ -61,11 +61,11 @@ func runRun(ctx context.Context, d deps, cmd *cobra.Command, cwd string, appArgs
 		return runOnceAsFollower(ctx, d, leaderAddr, appArgs, stdout, stderr, stdin)
 	}
 
-	link, err := ensureLinked(ctx, d, cfg.Dir, apiURL, stdout, stderr, stdin)
+	binding, err := ensureConsoleBinding(ctx, d, cfg.Dir, apiURL, stdout, stderr, stdin)
 	if err != nil {
 		return err
 	}
-	return runStandalone(ctx, d, creds, apiURL, link.ProjectID, cfg, appArgs, stdout, stderr, stdin)
+	return runStandalone(ctx, d, creds, apiURL, binding.ProjectID, cfg, appArgs, stdout, stderr, stdin)
 }
 
 func runningDevServer(root string) (string, bool, error) {
