@@ -78,6 +78,7 @@ func Bundle(t Target) error {
 		MinifySyntax:      true,
 		Outfile:           filepath.Join(t.FuncDir, HandlerFile),
 		Write:             true,
+		Metafile:          true,
 		LogLevel:          api.LogLevelSilent,
 		Banner:            map[string]string{"js": banner},
 		Define: map[string]string{
@@ -94,6 +95,7 @@ func Bundle(t Target) error {
 		msgs := api.FormatMessages(result.Warnings, api.FormatMessagesOptions{Color: false, Kind: api.WarningMessage})
 		fmt.Fprintf(t.Log, "ocel: bundling %s reported:\n%s\n", t.App, strings.Join(msgs, "\n"))
 	}
+	reportRuntimeFileRisk(t.Log, t.App, result.Metafile, filepath.Dir(t.Entrypoint))
 
 	if err := native.copyInto(t.FuncDir); err != nil {
 		return err
