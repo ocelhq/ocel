@@ -150,18 +150,37 @@ func TestPublishLinks(t *testing.T) {
 }
 
 func TestPublishLinksSurvivesAConcurrentDeploy(t *testing.T) {
-	t.Run("re-reads the index a racing deploy moved under it", func(t *testing.T) {
+	seed := func(t *testing.T) (*Store, *fakeDynamo) {
+		t.Helper()
 		store, ddb, _ := newTestStore(t)
 		if _, err := store.PublishLinks(context.Background(), "shop", "", linkValues()); err != nil {
 			t.Fatalf("seed PublishLinks: %v", err)
 		}
+		return store, ddb
+	}
 
-		racer := func() {
+	raceTheIndexWrite := func(ddb *fakeDynamo, race func(), everyAttempt bool) {
+		indexSK := linkIndexSortKey("")
+		var arm func()
+		arm = func() {
+			ddb.armBeforePutTo(indexSK, func() {
+				race()
+				if everyAttempt {
+					arm()
+				}
+			})
+		}
+		arm()
+	}
+
+	t.Run("re-reads the index a racing deploy moved under it", func(t *testing.T) {
+		store, ddb := seed(t)
+
+		raceTheIndexWrite(ddb, func() {
 			if _, err := store.PublishLinks(context.Background(), "shop", "", linkValues()); err != nil {
 				t.Errorf("racing PublishLinks: %v", err)
 			}
-		}
-		ddb.beforePut = func() { ddb.beforePut = nil; racer() }
+		}, false)
 
 		if _, err := store.PublishLinks(context.Background(), "shop", "", linkValues()); err != nil {
 			t.Fatalf("PublishLinks lost to a concurrent deploy of the same environment: %v", err)
@@ -171,8 +190,8 @@ func TestPublishLinksSurvivesAConcurrentDeploy(t *testing.T) {
 		if !ok {
 			t.Fatal("no link index survived the race")
 		}
-		if got := numberAttr(index, "version"); got < 2 {
-			t.Errorf("index version = %d, want a version per committed write — an unconditional put would sit at 1", got)
+		if got := numberAttr(index, "version"); got < 3 {
+			t.Errorf("index version = %d, want the seed, the racer and this deploy each committed once — an unconditional put would sit at 1", got)
 		}
 		for _, l := range linkValues() {
 			pk := naming.LinkVarsKey("shop", store.Class, l.Link)
@@ -182,27 +201,27 @@ func TestPublishLinksSurvivesAConcurrentDeploy(t *testing.T) {
 		}
 	})
 
-	t.Run("gives up naming the race rather than pruning on stale reads", func(t *testing.T) {
-		store, ddb, _ := newTestStore(t)
-		if _, err := store.PublishLinks(context.Background(), "shop", "", linkValues()); err != nil {
-			t.Fatalf("seed PublishLinks: %v", err)
-		}
+	t.Run("gives up naming the race rather than pruning on a stale read", func(t *testing.T) {
+		store, ddb := seed(t)
 
-		var reentered bool
-		ddb.beforePut = func() {
-			if reentered {
-				return
-			}
-			reentered = true
-			defer func() { reentered = false }()
-			ddb.beforePut = func() { ddb.beforePut = nil }
+		raceTheIndexWrite(ddb, func() {
 			if _, err := store.PublishLinks(context.Background(), "shop", "", linkValues()); err != nil {
-				return
+				t.Errorf("racing PublishLinks: %v", err)
 			}
-		}
+		}, true)
 
-		if _, err := store.PublishLinks(context.Background(), "shop", "", linkValues()); err != nil && !strings.Contains(err.Error(), "racing") {
-			t.Errorf("err = %v, want either success or a refusal naming the racing deploy", err)
+		_, err := store.PublishLinks(context.Background(), "shop", "", linkValues())
+		if err == nil {
+			t.Fatal("PublishLinks reported success while every attempt was overtaken")
+		}
+		if !strings.Contains(err.Error(), "racing") {
+			t.Errorf("err = %v, want a refusal naming the racing deploy", err)
+		}
+		for _, l := range linkValues() {
+			pk := naming.LinkVarsKey("shop", store.Class, l.Link)
+			if len(ddb.items[pk]) == 0 {
+				t.Errorf("%s was pruned away by a deploy that never committed its index", pk)
+			}
 		}
 	})
 }

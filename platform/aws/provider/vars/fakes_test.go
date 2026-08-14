@@ -67,6 +67,8 @@ func (f *fakeKMS) Decrypt(_ context.Context, in *kms.DecryptInput, _ ...func(*km
 }
 
 type fakeDynamo struct {
+	mu sync.Mutex
+
 	items map[string]map[string]map[string]ddbtypes.AttributeValue
 
 	transactions [][]ddbtypes.TransactWriteItem
@@ -74,7 +76,8 @@ type fakeDynamo struct {
 	queries      []*dynamodb.QueryInput
 
 	beforeTransact func()
-	beforePut      func()
+	beforePut      func(*dynamodb.PutItemInput)
+	beforePutSK    string
 
 	indexBehind bool
 }
@@ -97,6 +100,8 @@ func (f *fakeDynamo) put(item map[string]ddbtypes.AttributeValue) {
 }
 
 func (f *fakeDynamo) GetItem(_ context.Context, in *dynamodb.GetItemInput, _ ...func(*dynamodb.Options)) (*dynamodb.GetItemOutput, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
 	item, ok := f.get(stringAttr(in.Key, "pk"), stringAttr(in.Key, "sk"))
 	if !ok {
 		return &dynamodb.GetItemOutput{}, nil
@@ -105,9 +110,20 @@ func (f *fakeDynamo) GetItem(_ context.Context, in *dynamodb.GetItemInput, _ ...
 }
 
 func (f *fakeDynamo) PutItem(_ context.Context, in *dynamodb.PutItemInput, _ ...func(*dynamodb.Options)) (*dynamodb.PutItemOutput, error) {
+	f.mu.Lock()
 	f.puts = append(f.puts, in)
-	fire(&f.beforePut)
+	var hook func(*dynamodb.PutItemInput)
+	if f.beforePut != nil && (f.beforePutSK == "" || f.beforePutSK == stringAttr(in.Item, "sk")) {
+		hook, f.beforePut, f.beforePutSK = f.beforePut, nil, ""
+	}
+	f.mu.Unlock()
 
+	if hook != nil {
+		hook(in)
+	}
+
+	f.mu.Lock()
+	defer f.mu.Unlock()
 	if in.ConditionExpression != nil && !f.conditionHolds(in.Item, in.ExpressionAttributeValues) {
 		return nil, &ddbtypes.ConditionalCheckFailedException{}
 	}
@@ -124,16 +140,26 @@ func (f *fakeDynamo) conditionHolds(item, values map[string]ddbtypes.AttributeVa
 	return numberAttr(current, "version") == seen
 }
 
-func fire(hook *func()) {
-	if *hook == nil {
-		return
+func (f *fakeDynamo) armBeforePutTo(sk string, hook func()) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.beforePutSK = sk
+	f.beforePut = func(*dynamodb.PutItemInput) { hook() }
+}
+
+func (f *fakeDynamo) fireTransact() {
+	f.mu.Lock()
+	hook := f.beforeTransact
+	f.beforeTransact = nil
+	f.mu.Unlock()
+	if hook != nil {
+		hook()
 	}
-	run := *hook
-	*hook = nil
-	run()
 }
 
 func (f *fakeDynamo) Query(_ context.Context, in *dynamodb.QueryInput, _ ...func(*dynamodb.Options)) (*dynamodb.QueryOutput, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
 	f.queries = append(f.queries, in)
 	if in.IndexName != nil {
 		return f.queryIndex(in)
@@ -193,8 +219,14 @@ func (f *fakeDynamo) queryIndex(in *dynamodb.QueryInput) (*dynamodb.QueryOutput,
 }
 
 func (f *fakeDynamo) TransactWriteItems(_ context.Context, in *dynamodb.TransactWriteItemsInput, _ ...func(*dynamodb.Options)) (*dynamodb.TransactWriteItemsOutput, error) {
+	f.mu.Lock()
 	f.transactions = append(f.transactions, in.TransactItems)
-	fire(&f.beforeTransact)
+	f.mu.Unlock()
+
+	f.fireTransact()
+
+	f.mu.Lock()
+	defer f.mu.Unlock()
 
 	for _, w := range in.TransactItems {
 		if w.Put == nil || w.Put.ConditionExpression == nil {
@@ -246,6 +278,7 @@ func binaryAttr(m map[string]ddbtypes.AttributeValue, name string) []byte {
 func newTestStore(t *testing.T) (*Store, *fakeDynamo, *fakeKMS) {
 	t.Helper()
 	ddb, crypto := newFakeDynamo(), &fakeKMS{}
+	var clock sync.Mutex
 	tick := time.Unix(1_700_000_000, 0)
 	return &Store{
 		Dynamo: ddb,
@@ -254,6 +287,8 @@ func newTestStore(t *testing.T) (*Store, *fakeDynamo, *fakeKMS) {
 		KeyARN: "arn:aws:kms:us-east-1:111122223333:key/abcd",
 		Class:  "production",
 		Now: func() time.Time {
+			clock.Lock()
+			defer clock.Unlock()
 			tick = tick.Add(time.Second)
 			return tick
 		},
