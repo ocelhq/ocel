@@ -327,6 +327,57 @@ test("fails closed on an entry module that exports no handler, naming the key", 
   expect(res.body).toMatch(/app\/page/);
 });
 
+test("awaits an async entry module before reaching for its handler", async () => {
+  const handler = (...args: unknown[]) => ({ path: "async", args });
+  const loads: string[] = [];
+  const dispatch = createDispatch({
+    entries: ENTRIES,
+    primary: null,
+    load: (path: string) => {
+      loads.push(path);
+      return Promise.resolve({ handler });
+    },
+  });
+  const res = fakeRes();
+
+  const result = await dispatch.handler(fakeReq("app/page"), res, {});
+
+  expect(res.statusCode).toBe(200);
+  expect(result).toMatchObject({ path: "async" });
+
+  await dispatch.handler(fakeReq("app/page"), res, {});
+  expect(loads).toEqual([ENTRIES["app/page"]]);
+});
+
+test("fails closed on an async entry module that rejects, naming the key", async () => {
+  silenceErrors();
+  const dispatch = createDispatch({
+    entries: ENTRIES,
+    primary: null,
+    load: () => Promise.reject(new Error("boom")),
+  });
+  const res = fakeRes();
+
+  await dispatch.handler(fakeReq("app/page"), res, {});
+
+  expect(res.statusCode).toBe(502);
+  expect(res.body).toMatch(/app\/page/);
+});
+
+test("pins the response cache of an async entry module once it resolves", async () => {
+  const getResponseCache = vi.fn();
+  const dispatch = createDispatch({
+    entries: ENTRIES,
+    primary: "app/page",
+    load: () =>
+      Promise.resolve({ handler: () => ({}), routeModule: { getResponseCache } }),
+  });
+
+  await dispatch.handler(fakeReq("app/page"), fakeRes(), {});
+
+  expect(getResponseCache).toHaveBeenCalledWith({ headers: {} });
+});
+
 test("a primary that throws on load neither kills the factory nor the other entries", async () => {
   const errors = silenceErrors();
   const { load } = throwingLoader(ENTRIES["app/page"]);
