@@ -2952,6 +2952,57 @@ describe("an afterFiles rewrite shadowed by a dynamic route", () => {
     expect(await res.text()).toBe("dynamic route doc");
   });
 
+  function encodedLiteralDeps() {
+    return baseDeps({
+      manifest: {
+        buildId: "t",
+        basePath: "",
+        pathnames: ["/dynamic/[slug]", "/dynamic/[first]"],
+        routes: {
+          beforeMiddleware: [],
+          beforeFiles: [],
+          afterFiles: [],
+          dynamicRoutes: [
+            {
+              sourceRegex: "^/dynamic/(?<nxtPslug>[^/]+?)(?:/)?$",
+              destination: "/dynamic/[slug]?nxtPslug=$nxtPslug",
+            },
+          ],
+          onMatch: [],
+          fallback: [],
+        },
+        dispatch: {
+          "/dynamic/[slug]": { kind: "static" },
+          "/dynamic/[first]": { kind: "static" },
+        },
+      },
+      assetStore: assetStoreServing({
+        "/dynamic/[slug].html": "template doc",
+        "/dynamic/[first].html": "prerendered doc",
+      }),
+    });
+  }
+
+  it("serves the prerendered literal an encoded request target names", async () => {
+    const res = await serve(
+      new Request("https://app.example/dynamic/%5Bfirst%5D"),
+      encodedLiteralDeps(),
+    );
+
+    expect(res.headers.get("x-matched-path")).toBe("/dynamic/[first]");
+    expect(await res.text()).toBe("prerendered doc");
+  });
+
+  it("still serves the template when the decoded target is no build pathname", async () => {
+    const res = await serve(
+      new Request("https://app.example/dynamic/%5Bsecond%5D"),
+      encodedLiteralDeps(),
+    );
+
+    expect(res.headers.get("x-matched-path")).toBe("/dynamic/[slug]");
+    expect(await res.text()).toBe("template doc");
+  });
+
   it("leaves a redirect result alone rather than stamping x-matched-path on it", async () => {
     const deps = shadowDeps();
     deps.manifest.middleware = { runtime: "edge", entryKey: "mw" };
