@@ -36,6 +36,12 @@ export interface RevalidationIds {
 
 const maxIdLength = 128;
 
+export const revalidationRetryWindowMs = 30_000;
+
+function retryWindow(enqueuedAt: number): number {
+  return Math.floor(enqueuedAt / revalidationRetryWindowMs);
+}
+
 async function sha256Hex(value: string): Promise<string> {
   const digest = await crypto.subtle.digest(
     "SHA-256",
@@ -57,7 +63,7 @@ export async function revalidationIds(
         ? group
         : `${group.slice(0, maxIdLength - hash.length - 1)}:${hash}`,
     MessageDeduplicationId: await sha256Hex(
-      `${group}:${message.lastModified}`,
+      `${group}:${message.lastModified}:${retryWindow(message.enqueuedAt)}`,
     ),
   };
 }
