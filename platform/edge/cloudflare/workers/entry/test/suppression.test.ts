@@ -194,8 +194,11 @@ describe("self-revalidation suppression", () => {
       }),
     ],
     [
-      "a non-GET method",
-      new Request("https://app.example/blog", { method: "POST" }),
+      "a server action",
+      new Request("https://app.example/blog", {
+        method: "POST",
+        headers: { "next-action": "abc" },
+      }),
     ],
   ])("never stamps a bypass forward: %s", async (_name, request) => {
     const origin = recorder();
