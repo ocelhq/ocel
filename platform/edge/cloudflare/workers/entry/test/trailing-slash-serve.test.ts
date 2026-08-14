@@ -508,7 +508,7 @@ describe("the resolved path is what keys the response", () => {
       };
     }
 
-    it("forwards /ssr/ on the slash-free path under trailingSlash: true", async () => {
+    it("forwards /ssr/ with its slash intact under trailingSlash: true", async () => {
       const { scenario, forwarded } = lambdaScenario({
         route: "/ssr",
         trailingSlash: true,
@@ -520,7 +520,7 @@ describe("the resolved path is what keys the response", () => {
       expect(await res.text()).toBe("ssr");
       const url = new URL(forwarded()!.url);
       expect(url.host).toBe("fn.example.com");
-      expect(url.pathname).toBe("/ssr");
+      expect(url.pathname).toBe("/ssr/");
       expect(url.search).toBe("?q=1");
       expect(forwarded()!.headers.get(ENTRY_HEADER)).toBe("page:ssr");
     });
@@ -551,7 +551,7 @@ describe("the resolved path is what keys the response", () => {
       expect(slashed.headers.get("location")).toBe("/ssr");
     });
 
-    it("forwards /docs/ssr/ as /docs/ssr under a basePath", async () => {
+    it("forwards /docs/ssr/ with its slash intact under a basePath", async () => {
       const { scenario, forwarded } = lambdaScenario({
         route: "/docs/ssr",
         trailingSlash: true,
@@ -561,7 +561,7 @@ describe("the resolved path is what keys the response", () => {
       const res = await serve(get("/docs/ssr/"), deps(scenario));
 
       expect(res.status).toBe(200);
-      expect(new URL(forwarded()!.url).pathname).toBe("/docs/ssr");
+      expect(new URL(forwarded()!.url).pathname).toBe("/docs/ssr/");
       expect(forwarded()!.headers.get(ENTRY_HEADER)).toBe("page:ssr");
     });
   });
