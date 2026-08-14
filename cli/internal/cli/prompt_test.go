@@ -100,8 +100,6 @@ func TestConfirmYNStillReadsARealAnswer(t *testing.T) {
 }
 
 func TestReadLineSecondCallWhileFirstStillAbandonedReturnsPromptly(t *testing.T) {
-	// Not t.Parallel(): exercises the package-level stdin lock directly.
-
 	stdinMu.Lock()
 	defer stdinMu.Unlock()
 
