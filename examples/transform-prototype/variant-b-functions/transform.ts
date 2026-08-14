@@ -1,11 +1,8 @@
 import type { AwsSurfaces, Patch, TagMap } from "../shared/args"
-import type { EnvClass, Selector } from "../shared/selector"
+import type { Gate, GateContext } from "../shared/gate"
 
-export interface TransformContext {
+export interface TransformContext extends GateContext {
   readonly resourceName: string
-  readonly app: string | undefined
-  readonly envClass: EnvClass
-  readonly env: string
 }
 
 export type TransformFn<T> = (args: T, ctx: TransformContext) => T | void
@@ -13,7 +10,7 @@ export type TransformFn<T> = (args: T, ctx: TransformContext) => T | void
 export type Transform<T> = Patch<T> | TransformFn<T>
 
 export type TransformRule = {
-  readonly when?: Selector
+  readonly if?: Gate
   readonly tags?: TagMap
 } & {
   readonly [T in keyof AwsSurfaces]?: {

@@ -37,8 +37,8 @@ export const contextCarriesResourceIdentity = defineTransform({
   },
 })
 
-export const selectorAndFunctionCompose = defineTransform({
-  when: { envClass: "production" },
+export const gateAndFunctionCompose = defineTransform({
+  if: (ctx) => ctx.envClass === "production",
   function: {
     lambda: (args, ctx) => {
       if (ctx.app === "api") {

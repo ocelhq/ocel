@@ -1,8 +1,8 @@
 import type { AwsSurfaces, Patch, TagMap } from "../shared/args"
-import type { Selector } from "../shared/selector"
+import type { Gate } from "../shared/gate"
 
 export type TransformRule = {
-  readonly when?: Selector
+  readonly if?: Gate
   readonly tags?: TagMap
 } & {
   readonly [T in keyof AwsSurfaces]?: {

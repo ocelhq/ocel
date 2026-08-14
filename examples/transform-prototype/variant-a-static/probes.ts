@@ -62,26 +62,30 @@ export const wrongPrimitiveRejected = defineTransform({
   },
 })
 
-export const selectorsCompose = defineTransform({
-  when: { app: ["api", "worker"], envClass: ["production", "preview"], name: "assets-*" },
+export const gateIsAPredicateOverAmbientContext = defineTransform({
+  if: (ctx) => ctx.envClass === "production" && ctx.app === "api",
   function: { lambda: { timeoutSeconds: 60 } },
+})
+
+export const gateContextHasNoResourceInfo = defineTransform({
+  // @ts-expect-error
+  if: (ctx) => ctx.resourceName === "assets",
+  function: { lambda: { memorySizeMb: 512 } },
 })
 
 export const envClassTypoRejected = defineTransform({
   // @ts-expect-error
-  when: { envClass: "prod" },
+  if: (ctx) => ctx.envClass === "prod",
   postgres: { cluster: { deletionProtection: true } },
 })
 
-export const unknownSelectorFieldRejected = defineTransform({
-  when: {
-    // @ts-expect-error
-    folder: "team-a",
-  },
+export const gateMustReturnBoolean = defineTransform({
+  // @ts-expect-error
+  if: (ctx) => ctx.env,
   function: { lambda: { memorySizeMb: 512 } },
 })
 
 export const ruleListIsOrdered = defineTransform([
   { function: { lambda: { memorySizeMb: 512 } } },
-  { when: { app: "api" }, function: { lambda: { memorySizeMb: 2048 } } },
+  { if: (ctx) => ctx.app === "api", function: { lambda: { memorySizeMb: 2048 } } },
 ])

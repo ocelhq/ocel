@@ -12,12 +12,13 @@ Verify: `node_modules/.bin/tsc -p examples/transform-prototype` from the repo ro
   underlying resource, an **allowlist** of plain-value fields per key, and
   `output()` / `LinkOutput` for link-crossing values.
 - `shared/wire.ts` — what crosses to Go in each variant.
-- `shared/selector.ts` — first-class targeting: the `when` selector every rule
-  may carry.
-- `variant-a-static/` — patches only: `defineTransform` takes rules of plain
-  property objects (`targeting.ts` holds the four targeting cases).
+- `shared/gate.ts` — first-class gating: the `if` predicate every rule may carry,
+  over ambient context only.
+- `variant-a-static/` — per-resource transforms are patches only: plain property
+  objects (`targeting.ts` holds the gate-expressible targeting cases).
 - `variant-b-functions/` — SST-style split: a plain object is a patch, a function
-  is an override that sees the fully-defaulted args and mutates or returns them.
+  is an override that sees the fully-defaulted args and mutates or returns them
+  (`targeting.ts` adds the name-matching case only functions can express).
 - `config-sketch.ts` — `transforms` as an `awsProvider(...)` argument.
 - `probes.ts` in each variant — one named export per claim.
 
@@ -67,44 +68,41 @@ link records for grants and values. Node never sees link values, evaluation stay
 deterministic, and an `output()` naming an unlisted or unpublished link fails
 deploy with the same hard error the `links` binding uses (#285).
 
-## Targeting: `when` selectors, first class
+## Gating: the `if` predicate
 
 `defineTransform` takes a rule or an ordered rule list; each rule optionally
-carries `when`. Selector fields AND together; a list within a field ORs; `app`
-and `name` take globs, `env` matches the environment identity exactly, `envClass`
-is the closed `development | preview | production` union (typo-rejected by probe).
+carries `if: (ctx) => boolean`. A declarative selector object was tried and
+rejected as too rigid — the gate is an ordinary function. Its context is
+**ambient only**: `envClass` (the closed `development | preview | production`
+union), `env` (the environment identity), and `app` — never anything
+resource-specific, which a probe enforces (`ctx.resourceName` is a type error
+inside a gate). `app` is the app a candidate resource belongs to; a resource
+shared across apps gates with `app: undefined`, so `ctx.app === "api"` is
+safely false for shared infrastructure — no special validation needed.
 
-- `when: { app: "api" }` — only that app's resources. Functions carry their app on
-  the manifest; a linkable resource matches through the usage-attribution edge
-  (#282/#284), meaning "an app that uses it" — but patching a *shared* resource
-  through an app selector is ambiguous, so a rule whose `app` selector matches a
-  resource also used by non-matching apps fails deploy validation rather than
-  silently patching shared infrastructure.
-- `when: { name: "assets-*" }` — logical-name glob, any resource type.
-- `when: { envClass: "production" }` / `when: { env: "staging" }` — deploy-context
-  scoping (deletion protection in production, scale-to-zero in previews).
+Resource-level targeting (a bucket whose name matches `assets-*`) is not the
+gate's job: it lives in the per-resource function form, which receives
+`ctx.resourceName` alongside the ambient fields. This is what finally promotes
+the function form from reserve to required.
 
-Every predicate is data resolvable Go-side from the manifest and deploy context —
-so targeting does **not** require the function form. Rules apply in order (within
-a module, then across the `transforms` list), later rules winning per field.
+Rules apply in order (within a module, then across the `transforms` list),
+later rules winning per field.
 
 ## Evaluation and carriage
 
 The config crossing is `JSON.stringify(defaultExport)` piped from a node child
-(`cli/internal/projectconfig/projectconfig.go:344-389`) — functions cannot ride it.
-
-- **Variant A** needs no new channel: the config evaluator additionally imports
-  each module named in `transforms`, and the whole spec — patches plus `$link`
-  placeholders — serializes into `StaticTransformWire`, carried beside the provider
-  options blob. Go resolves placeholders, merges patches onto defaults, provisions.
-  The spec is inspectable and diffable before anything touches AWS.
-- **Variant B** adds a deploy-time node pass (`EvaluateRequest`/`EvaluateResponse`
-  in `shared/wire.ts`): Go computes the defaulted plain-arg subset per resource,
-  hands it to node, node imports the transform modules and applies patches and
-  functions in order, hands back final surfaces; placeholders survive serialization
-  and Go still resolves them. Deploy already spawns node for discovery, so the hop
-  is cheap — but the applied result is no longer knowable without executing user
-  code against each resource.
+(`cli/internal/projectconfig/projectconfig.go:344-389`) — functions cannot ride
+it, and the `if` gate is a function, so a config-time serialized spec is off the
+table for both variants. The one mechanism is a **deploy-time node pass**
+(`EvaluateRequest`/`EvaluateResponse` in `shared/wire.ts`): Go computes the
+defaulted plain-arg subset per resource plus the ambient context (env class,
+env identity, owning app), hands it to node; node imports the modules named in
+`transforms`, runs each rule's gate against each candidate's ambient context,
+applies surviving patches and functions in order, and hands back final surfaces.
+`$link` placeholders survive serialization and Go resolves them at provision
+time. Deploy already spawns node for discovery, so the hop is cheap, and the
+pass's resolved output is still a concrete, diffable artifact — inspectability
+moves from the authored spec to the evaluated result.
 
 ## The config key
 
@@ -122,14 +120,11 @@ doubly enforced: the key lives on the provider, and the module imports
 
 ## Recommendation
 
-**Ship variant A; keep variant B as the pre-designed extension.** Every forcing
-scenario on the map — default memory, org tags, VPC placement via a link output —
-is expressible statically, and first-class `when` selectors keep targeting (by
-app, name, env class, exact env) declarative too; functions earn their place only
-when the *value* must be computed from the args or from logic selectors cannot
-express, which no scenario yet demands. A's authored
-surface is a strict subset of B's (`Patch<T>` is one arm of `Transform<T>`), so
-adopting A forecloses nothing: the `transforms` key, the keys, the allowlist, and
-`output()` all survive verbatim if functions are ever admitted. A static spec is
-also the more trustworthy artifact — serializable, diffable, resolvable to a
-concrete plan before AWS is touched — which is where Trust > Product lands.
+**Ship variant B's shape.** The reaction rounds settled it: the gate is a
+function by requirement, which already commits deploy to the node evaluate pass,
+and name-scoped targeting is expressible only in the per-resource function form —
+so restricting per-resource transforms to static patches (variant A) buys nothing
+once both are true. Static property objects survive as the common-case sugar
+(`Patch<T>` is one arm of `Transform<T>`): scenario C is still three plain
+objects; functions appear exactly where a gate can't reach (`ctx.resourceName`)
+or a value is computed from the defaulted args.
