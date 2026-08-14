@@ -75,3 +75,50 @@ export default { slug: "test-app" };
 		}
 	})
 }
+
+func TestRunBuildDeployEnv(t *testing.T) {
+	t.Run("hands the app build what OCEL_DEPLOY_ENV supplies", func(t *testing.T) {
+		root := t.TempDir()
+		writeFile(t, filepath.Join(root, "ocel.config.ts"), `
+export default {
+  slug: "test-app",
+  apps: [{ name: "api", path: ".", framework: "express" }],
+};
+`)
+		t.Setenv("OCEL_DEPLOY_ENV", `{"MIDDLEWARE_TEST":"asdf"}`)
+
+		var envByApp map[string]map[string]string
+		d := defaultDeps()
+		d.buildApp = func(_ context.Context, cfg *projectconfig.Config, env map[string]map[string]string, _ io.Writer) error {
+			envByApp = env
+			writePrebuiltFunction(t, cfg.Dir, "api", "index")
+			return nil
+		}
+
+		if err := runBuild(context.Background(), d, root, io.Discard, io.Discard); err != nil {
+			t.Fatalf("runBuild: %v", err)
+		}
+		if got := envByApp["api"]["MIDDLEWARE_TEST"]; got != "asdf" {
+			t.Errorf("api build env = %v, want MIDDLEWARE_TEST=asdf", envByApp["api"])
+		}
+	})
+
+	t.Run("refuses an OCEL_DEPLOY_ENV it cannot read", func(t *testing.T) {
+		root := t.TempDir()
+		writeFile(t, filepath.Join(root, "ocel.config.ts"), `
+export default { slug: "test-app" };
+`)
+		t.Setenv("OCEL_DEPLOY_ENV", `MIDDLEWARE_TEST=asdf`)
+
+		d := defaultDeps()
+		d.buildApp = func(context.Context, *projectconfig.Config, map[string]map[string]string, io.Writer) error {
+			t.Error("runBuild built the app despite an unreadable OCEL_DEPLOY_ENV")
+			return nil
+		}
+
+		err := runBuild(context.Background(), d, root, io.Discard, io.Discard)
+		if err == nil || !strings.Contains(err.Error(), "OCEL_DEPLOY_ENV") {
+			t.Fatalf("runBuild err = %v, want it to name OCEL_DEPLOY_ENV", err)
+		}
+	})
+}

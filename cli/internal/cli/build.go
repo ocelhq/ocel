@@ -9,6 +9,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/ocelhq/ocel/cli/internal/clientenv"
+	"github.com/ocelhq/ocel/cli/internal/deployenv"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
 	"github.com/ocelhq/ocel/cli/node"
 )
@@ -20,7 +21,8 @@ var buildCmd = &cobra.Command{
 		"Express, Fastify and Hono apps are bundled, so only what the entrypoint imports\n" +
 		"reaches the artifact: static directories, view templates and files read at run\n" +
 		"time are left behind. Set OCEL_BUILD_PREFER_TRACING=1 to copy the dependency\n" +
-		"tree instead, at the cost of a slower cold start.",
+		"tree instead, at the cost of a slower cold start.\n\n" +
+		deployEnvUsage,
 	Args: cobra.NoArgs,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		cwd, err := os.Getwd()
@@ -51,7 +53,12 @@ func runBuild(ctx context.Context, d deps, cwd string, stdout, stderr io.Writer)
 	}
 	defer run.Close()
 
-	if err := d.buildApp(ctx, cfg, nil, stderr); err != nil {
+	supplied, err := deployenv.Load()
+	if err != nil {
+		return err
+	}
+
+	if err := d.buildApp(ctx, cfg, deployEnvByApp(cfg, supplied), stderr); err != nil {
 		return err
 	}
 	if err := clientenv.RecordUnresolved(cfg.Dir); err != nil {

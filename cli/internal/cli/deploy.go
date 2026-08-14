@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"maps"
 	"os"
 	"path/filepath"
 	"strings"
@@ -18,6 +19,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/clientenv"
 	"github.com/ocelhq/ocel/cli/internal/declare"
 	"github.com/ocelhq/ocel/cli/internal/deploycollector"
+	"github.com/ocelhq/ocel/cli/internal/deployenv"
 	"github.com/ocelhq/ocel/cli/internal/deployresult"
 	"github.com/ocelhq/ocel/cli/internal/deployui"
 	"github.com/ocelhq/ocel/cli/internal/envgate"
@@ -52,9 +54,14 @@ type deployOptions struct {
 
 var deployOpts deployOptions
 
+const deployEnvUsage = "Set " + deployenv.EnvVar + ` to a JSON object of string values ({"KEY":"value"}) to hand
+the deployment variables this project does not declare. They reach the build, the
+Node runtime and the edge runtime alike, and they are stored nowhere.`
+
 var deployCmd = &cobra.Command{
 	Use:   "deploy",
 	Short: "Deploy your project to its configured cloud provider",
+	Long:  "Deploy your project to its configured cloud provider.\n\n" + deployEnvUsage,
 	Args:  cobra.NoArgs,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		cwd, err := os.Getwd()
@@ -228,6 +235,14 @@ func collectAndBuildManifest(ctx context.Context, d deps, cfg *projectconfig.Con
 		return nil, err
 	}
 
+	supplied, err := deployenv.Load()
+	if err != nil {
+		return nil, err
+	}
+	if err := mergeDeployEnv(variables, supplied); err != nil {
+		return nil, err
+	}
+
 	plans := appPlans(cfg, variables)
 	clients := clientApps(plans)
 	if prebuilt {
@@ -323,6 +338,45 @@ func appVariables(definitions []*resourcesv1.VariableDefinition, resolved map[st
 		})
 	}
 	return variables
+}
+
+func mergeDeployEnv(variables map[string][]manifestbuilder.Variable, supplied map[string]string) error {
+	if len(supplied) == 0 {
+		return nil
+	}
+	keys := deployenv.Keys(supplied)
+	for app, declared := range variables {
+		for _, v := range declared {
+			if _, collides := supplied[v.Key]; collides {
+				return fmt.Errorf(
+					"%s supplies %s, which this project also declares as a variable; drop it from one of the two so the deploy has a single source for its value",
+					deployenv.EnvVar, v.Key,
+				)
+			}
+		}
+		merged := make([]manifestbuilder.Variable, 0, len(declared)+len(keys))
+		merged = append(merged, declared...)
+		for _, key := range keys {
+			merged = append(merged, manifestbuilder.Variable{
+				Key:   key,
+				Class: resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN,
+				Value: supplied[key],
+			})
+		}
+		variables[app] = merged
+	}
+	return nil
+}
+
+func deployEnvByApp(cfg *projectconfig.Config, supplied map[string]string) map[string]map[string]string {
+	if len(supplied) == 0 {
+		return nil
+	}
+	byApp := make(map[string]map[string]string, len(cfg.Apps)+1)
+	for _, plan := range appPlans(cfg, nil) {
+		byApp[plan.name] = maps.Clone(supplied)
+	}
+	return byApp
 }
 
 func variablesByApp(variables map[string][]manifestbuilder.Variable, functions []manifestbuilder.Function) map[string][]manifestbuilder.Variable {
