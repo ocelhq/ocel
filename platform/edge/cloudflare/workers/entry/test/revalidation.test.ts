@@ -7,6 +7,7 @@ import {
   NEXT_RENDER_RECEIPT,
   enqueueTimeoutMs,
   revalidationIds,
+  revalidationRetryWindowMs,
   revalidationMessage,
   revalidationSender,
   type RevalidationRoute,
@@ -68,6 +69,15 @@ describe("revalidationIds", () => {
 
     expect(first.MessageDeduplicationId).toBe(second.MessageDeduplicationId);
     expect(first.MessageDeduplicationId).toMatch(/^[0-9a-f]{64}$/);
+  });
+
+  it("lets an entry that is still stale be re-enqueued a retry window later", async () => {
+    const first = await revalidationIds(revalidationMessage(route, 1_000, 10));
+    const later = await revalidationIds(
+      revalidationMessage(route, 1_000, 10 + revalidationRetryWindowMs),
+    );
+
+    expect(later.MessageDeduplicationId).not.toBe(first.MessageDeduplicationId);
   });
 
   it("derives a different dedup id once lastModified moves", async () => {
