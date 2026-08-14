@@ -260,7 +260,7 @@ func (r *Renderer) Log(message string) {
 	}
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	if !r.verbose && !r.live {
+	if !r.verbose {
 		return
 	}
 	if r.live {
@@ -270,6 +270,31 @@ func (r *Renderer) Log(message string) {
 		return
 	}
 	fmt.Fprintln(r.w, message)
+}
+
+func (r *Renderer) StageEnd(stageID []byte, failed bool, duration time.Duration) {
+	if r.format == FormatJSON {
+		return
+	}
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	id := stageKey(stageID)
+	n, ok := r.plan.nodes[id]
+	if !ok {
+		return
+	}
+	n.state = stageDone
+	if !r.plan.isActive(id) {
+		return
+	}
+	r.eraseLiveLocked()
+	if failed {
+		r.finalizeLineLocked(n, r.colorFor(color.FgRed, color.Bold), failMark, "failed", duration)
+	} else {
+		r.finalizeLineLocked(n, r.okColor(), okMark, "", duration)
+	}
+	r.plan.removeActive(id)
+	r.drawLiveLocked()
 }
 
 func (r *Renderer) Building() {
@@ -406,7 +431,7 @@ func (r *Renderer) finishAllLocked(c *color.Color, mark, status string) bool {
 	r.eraseLiveLocked()
 	for _, id := range r.plan.activeOrder {
 		if n := r.plan.nodes[id]; n != nil {
-			r.finalizeLineLocked(n, c, mark, status)
+			r.finalizeLineLocked(n, c, mark, status, r.plan.now().Sub(n.started))
 			n.state = stageDone
 		}
 	}
@@ -415,14 +440,14 @@ func (r *Renderer) finishAllLocked(c *color.Color, mark, status string) bool {
 }
 
 func (r *Renderer) commitLocked(n *stageNode, c *color.Color, mark, status string) {
-	r.finalizeLineLocked(n, c, mark, status)
+	r.finalizeLineLocked(n, c, mark, status, r.plan.now().Sub(n.started))
 	r.plan.removeActive(n.id)
 }
 
-func (r *Renderer) finalizeLineLocked(n *stageNode, c *color.Color, mark, status string) {
+func (r *Renderer) finalizeLineLocked(n *stageNode, c *color.Color, mark, status string, duration time.Duration) {
 	if status == "" {
 		c.Fprintf(r.w, "%s %s", mark, n.title)
-		r.colorFor(color.Faint).Fprintf(r.w, "  %s\n", formatDuration(r.plan.now().Sub(n.started)))
+		r.colorFor(color.Faint).Fprintf(r.w, "  %s\n", formatDuration(duration))
 		return
 	}
 	c.Fprintf(r.w, "%s %s %s\n", mark, n.title, status)

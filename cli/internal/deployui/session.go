@@ -144,6 +144,8 @@ func (s *Session) ingestSpan(span *deploymentsv1.SpanEvent) {
 		spanStatus(span.GetStatus()),
 		spanAttributes(span.GetAttributes()),
 	)
+
+	s.r.StageEnd(spanID[:], span.GetStatus() == deploymentsv1.SpanStatus_SPAN_STATUS_ERROR, end.Sub(start))
 }
 
 func (s *Session) Deployed(headline string, appURLs []string, outputs []*deploymentsv1.ResourceOutput) {
