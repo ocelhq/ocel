@@ -610,6 +610,36 @@ export default {
 `;
 }
 
+const deployEnvVar = "OCEL_DEPLOY_ENV";
+
+function deployEnv(): Record<string, string> {
+  const raw = process.env[deployEnvVar]?.trim();
+  if (!raw) return {};
+
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw);
+  } catch (error) {
+    throw new Error(
+      `ocel: ${deployEnvVar} must hold a JSON object mapping variable names to string values — ${error instanceof Error ? error.message : String(error)}`,
+    );
+  }
+  if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
+    throw new Error(
+      `ocel: ${deployEnvVar} must hold a JSON object mapping variable names to string values`,
+    );
+  }
+
+  const supplied: Record<string, string> = {};
+  for (const [key, value] of Object.entries(parsed)) {
+    if (typeof value !== "string") {
+      throw new Error(`ocel: ${deployEnvVar} gives "${key}" a non-string value`);
+    }
+    supplied[key] = value;
+  }
+  return supplied;
+}
+
 const EDGE_ENV_MARKER = "EnvEdgeError";
 
 function warnEdgeEnvRoutes(
@@ -743,6 +773,7 @@ async function emitEdgeBundle(
       env[key] = value;
     }
   }
+  Object.assign(env, deployEnv());
 
   const { idByKey: chunkIdByKey, modules: chunks } = await moduleIds(
     chunkPathByKey,

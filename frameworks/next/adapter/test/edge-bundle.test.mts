@@ -464,6 +464,29 @@ test("unions config.env across every edge output", async () => {
   });
 });
 
+test("carries the env supplied through OCEL_DEPLOY_ENV into the bundle", async () => {
+  const { projectDir, args } = await synthEdgeProject();
+  vi.stubEnv("OCEL_DEPLOY_ENV", JSON.stringify({ MIDDLEWARE_TEST: "asdf" }));
+
+  await adapter.onBuildComplete!(args as never);
+
+  const bundle = await readBundle(projectDir);
+  expect(bundle.env).toEqual({
+    ...buildEnv,
+    MIDDLEWARE_ONLY: "1",
+    MIDDLEWARE_TEST: "asdf",
+  });
+});
+
+test("fails the build when OCEL_DEPLOY_ENV is not a JSON object of strings", async () => {
+  const { args } = await synthEdgeProject();
+  vi.stubEnv("OCEL_DEPLOY_ENV", '{"MIDDLEWARE_TEST":1}');
+
+  await expect(adapter.onBuildComplete!(args as never)).rejects.toThrow(
+    /OCEL_DEPLOY_ENV/,
+  );
+});
+
 test("fails the build when two edge outputs disagree on an env value", async () => {
   const { args } = await synthEdgeProject();
   args.outputs.appRoutes[0]!.config.env = { __NEXT_BUILD_ID: "other-build" };
