@@ -18,7 +18,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ocelhq/ocel/cli/internal/cloudlink"
+	"github.com/ocelhq/ocel/cli/internal/consolebinding"
 	"github.com/ocelhq/ocel/cli/internal/credentials"
 	"github.com/ocelhq/ocel/cli/internal/devserver"
 	"github.com/ocelhq/ocel/cli/internal/dotenv"
@@ -120,7 +120,7 @@ func TestRunDev(t *testing.T) {
 		}
 	})
 
-	t.Run("an unlinked directory with no terminal errors toward `ocel link`", func(t *testing.T) {
+	t.Run("an unlinked directory with no terminal errors toward `ocel console link`", func(t *testing.T) {
 		d := defaultDeps()
 		setLoggedIn(&d)
 
@@ -130,12 +130,12 @@ func TestRunDev(t *testing.T) {
 		if err == nil {
 			t.Fatal("runDev: expected an error for an unlinked directory, got nil")
 		}
-		if !strings.Contains(err.Error(), "ocel link") {
-			t.Fatalf("err = %q, want it to point at `ocel link`", err.Error())
+		if !strings.Contains(err.Error(), "ocel console link") {
+			t.Fatalf("err = %q, want it to point at `ocel console link`", err.Error())
 		}
 	})
 
-	t.Run("a directory linked to another control plane errors toward `ocel link`", func(t *testing.T) {
+	t.Run("a directory linked to another control plane errors toward `ocel console link`", func(t *testing.T) {
 		d := defaultDeps()
 		setLoggedIn(&d)
 
@@ -144,8 +144,8 @@ func TestRunDev(t *testing.T) {
 
 		err := runDev(context.Background(), d, nil, root, []string{"true"}, &bytes.Buffer{}, &bytes.Buffer{}, strings.NewReader(""))
 
-		if err == nil || !strings.Contains(err.Error(), "ocel link") {
-			t.Fatalf("runDev err = %v, want it to point at `ocel link`", err)
+		if err == nil || !strings.Contains(err.Error(), "ocel console link") {
+			t.Fatalf("runDev err = %v, want it to point at `ocel console link`", err)
 		}
 	})
 
@@ -827,8 +827,8 @@ func waitForFile(t *testing.T, path string) {
 
 func writeLink(t *testing.T, dir, apiURL, projectID string) {
 	t.Helper()
-	link := cloudlink.Link{APIURL: apiURL, OrganizationID: "org_1", ProjectID: projectID, ProjectName: "Test"}
-	if err := cloudlink.Write(dir, link); err != nil {
+	link := consolebinding.Binding{APIURL: apiURL, OrganizationID: "org_1", ProjectID: projectID, ProjectName: "Test"}
+	if err := consolebinding.Write(dir, link); err != nil {
 		t.Fatalf("write link: %v", err)
 	}
 }

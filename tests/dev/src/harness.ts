@@ -143,17 +143,17 @@ export async function runLink(
   runId: string,
 ): Promise<RunResult> {
   const name = `dev-${spec.framework}-${runId}`;
-  const result = await runOcel(["link", "--create", name], spec, token);
+  const result = await runOcel(["console", "link", "--create", name], spec, token);
   if (result.code !== 0) {
     throw new Error(
-      `ocel link failed (code ${result.code})\nstdout: ${result.stdout}\nstderr: ${result.stderr}`,
+      `ocel console link failed (code ${result.code})\nstdout: ${result.stdout}\nstderr: ${result.stderr}`,
     );
   }
   return result;
 }
 
 export async function clearLink(spec: ExampleSpec) {
-  await rm(path.join(spec.dir, ".ocel", "link.json"), { force: true });
+  await rm(path.join(spec.dir, ".ocel", "console.json"), { force: true });
 }
 
 export async function runMigrate(

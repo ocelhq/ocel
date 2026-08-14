@@ -1,4 +1,4 @@
-package cloudlink
+package consolebinding
 
 import (
 	"encoding/json"
@@ -11,9 +11,9 @@ import (
 
 const scratchDirName = ".ocel"
 
-const fileName = "link.json"
+const fileName = "console.json"
 
-type Link struct {
+type Binding struct {
 	APIURL         string `json:"apiUrl"`
 	OrganizationID string `json:"organizationId"`
 	ProjectID      string `json:"projectId"`
@@ -24,7 +24,7 @@ func path(projectDir string) string {
 	return filepath.Join(projectDir, scratchDirName, fileName)
 }
 
-func Read(projectDir, apiURL string) (*Link, error) {
+func Read(projectDir, apiURL string) (*Binding, error) {
 	data, err := os.ReadFile(path(projectDir))
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
@@ -33,23 +33,23 @@ func Read(projectDir, apiURL string) (*Link, error) {
 		return nil, fmt.Errorf("read %s: %w", path(projectDir), err)
 	}
 
-	var link Link
-	if err := json.Unmarshal(data, &link); err != nil {
-		return nil, fmt.Errorf("read %s: %w (run `ocel unlink` to clear it)", path(projectDir), err)
+	var binding Binding
+	if err := json.Unmarshal(data, &binding); err != nil {
+		return nil, fmt.Errorf("read %s: %w (run `ocel console unlink` to clear it)", path(projectDir), err)
 	}
 
-	if normalizeAPIURL(link.APIURL) != normalizeAPIURL(apiURL) {
+	if normalizeAPIURL(binding.APIURL) != normalizeAPIURL(apiURL) {
 		return nil, nil
 	}
-	return &link, nil
+	return &binding, nil
 }
 
-func Write(projectDir string, link Link) error {
-	link.APIURL = normalizeAPIURL(link.APIURL)
+func Write(projectDir string, binding Binding) error {
+	binding.APIURL = normalizeAPIURL(binding.APIURL)
 
-	doc, err := json.MarshalIndent(link, "", "  ")
+	doc, err := json.MarshalIndent(binding, "", "  ")
 	if err != nil {
-		return fmt.Errorf("encode link: %w", err)
+		return fmt.Errorf("encode binding: %w", err)
 	}
 	doc = append(doc, '\n')
 

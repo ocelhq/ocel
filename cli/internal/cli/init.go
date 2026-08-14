@@ -33,7 +33,7 @@ var initCmd = &cobra.Command{
 		"The slug is the project's deployment identity — every stack and resource\n" +
 		"ocel creates in your own cloud account is keyed on it, so changing it later\n" +
 		"forks a new project. It defaults to this directory's name.\n\n" +
-		"Run `ocel link` to associate this directory with an Ocel console project.",
+		"Run `ocel console link` to associate this directory with an Ocel console project.",
 	Args: cobra.MaximumNArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		cwd, err := os.Getwd()
