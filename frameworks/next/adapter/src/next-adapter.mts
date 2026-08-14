@@ -550,11 +550,13 @@ function edgeEntryOf(output: EdgeOutput): {
 function renderEdgeShim(
   entries: Record<string, EdgeEntry>,
   assetIdByName: Map<string, string>,
+  wasmIdByName: Map<string, string>,
 ): string {
   return `import { AsyncLocalStorage } from "node:async_hooks"
 
 const ENTRIES = ${stableStringify(entries)}
 const ASSETS = ${stableStringify(Object.fromEntries(assetIdByName))}
+const WASM = ${stableStringify(Object.fromEntries(wasmIdByName))}
 
 const ocelFetch = globalThis.fetch
 
@@ -592,6 +594,9 @@ export default {
     globalThis.__OCEL_EDGE_ENTRY = k
     const e = ENTRIES[k]
     if (!e) return new Response(\`unknown edge entry \${k}\`, { status: 500 })
+    for (const [name, id] of Object.entries(WASM)) {
+      globalThis[name] ??= (await import("./" + id)).default
+    }
     for (const id of e.chunks) await import("./" + id)
     const entry = await globalThis._ENTRIES[k]
     const handler = entry[e.handlerExport]
@@ -744,7 +749,7 @@ async function emitEdgeBundle(
     (n) => `c/${n}.js`,
     (bytes) => bytes.toString("utf8"),
   );
-  const { modules: wasmModules } = await moduleIds(
+  const { idByKey: wasmIdByName, modules: wasmModules } = await moduleIds(
     wasmPathByName,
     (n) => `w/${n}.wasm`,
     (bytes) => bytes.toString("base64"),
@@ -768,7 +773,7 @@ async function emitEdgeBundle(
   const json = stableStringify({
     version: 2,
     mainModule: "main.js",
-    shim: renderEdgeShim(entries, assetIdByName),
+    shim: renderEdgeShim(entries, assetIdByName, wasmIdByName),
     chunks,
     wasm: wasmModules,
     assets: assetModules,
