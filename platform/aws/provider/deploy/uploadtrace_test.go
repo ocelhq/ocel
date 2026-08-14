@@ -350,7 +350,7 @@ func TestEmitUploadBatchMarksTheBatchSpanFailedWhenAnyUploadFails(t *testing.T) 
 func TestUploadStandoutNameAndUploadBatchSpanNameAreAlwaysALiteral(t *testing.T) {
 	t.Parallel()
 
-	kinds := []uploadKind{uploadKindFunctionArtifact, uploadKindStaticAsset, uploadKindPrerenderAsset, uploadKind(99)}
+	kinds := []uploadKind{uploadKindFunctionArtifact, uploadKindStaticAsset, uploadKindPrerenderAsset, uploadKindEdgeBundle, uploadKind(99)}
 
 	seen := map[string]bool{}
 	for _, k := range kinds {
@@ -367,8 +367,8 @@ func TestUploadStandoutNameAndUploadBatchSpanNameAreAlwaysALiteral(t *testing.T)
 			seen[name] = true
 		}
 	}
-	if len(seen) != 12 {
-		t.Errorf("got %d distinct strings, want exactly 12 (3 kinds x pass/fail standouts + 3 batch names, plus the unknown-kind fallback of each)", len(seen))
+	if len(seen) != 15 {
+		t.Errorf("got %d distinct strings, want exactly 15 (4 kinds x pass/fail standouts + 4 batch names, plus the unknown-kind fallback of each)", len(seen))
 	}
 }
 
