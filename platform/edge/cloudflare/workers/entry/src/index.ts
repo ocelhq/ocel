@@ -49,7 +49,6 @@ import {
 import type { ImageStore } from "./image-store";
 import { composePpr, resumeRequest } from "./ppr";
 import {
-  NEXT_RENDER_RECEIPT,
   enqueued,
   revalidationSender,
   type RevalidationRoute,
@@ -1335,11 +1334,10 @@ async function dispatchPrerender(
   }
   const origin = () => answer(forward(forwardUrl, request, originHeaders));
 
-  const blockingHeaders = new Headers(safeHeaders);
-  blockingHeaders.delete(PREFETCH_PURPOSE);
-  blockingHeaders.set("x-prerender-revalidate", target.config.bypassToken ?? "");
+  const refreshHeaders = new Headers(safeHeaders);
+  refreshHeaders.delete(PREFETCH_PURPOSE);
   const originBlocking = () =>
-    answer(forward(forwardUrl, request, blockingHeaders));
+    answer(forward(forwardUrl, request, refreshHeaders));
 
   const revalidates = !edgeEntryKey;
 
@@ -1360,14 +1358,13 @@ async function dispatchPrerender(
     admissionTier && revalidates && target.id !== undefined && routePath.startsWith("/")
       ? {
           headers: {
-            "x-prerender-revalidate": target.config.bypassToken ?? "",
             ...(target.entryKey !== undefined
               ? { [ENTRY_HEADER]: target.entryKey }
               : {}),
             "x-forwarded-host": publicUrl.host,
             "x-forwarded-proto": publicUrl.protocol.replace(/:$/, ""),
           },
-          expect: NEXT_RENDER_RECEIPT,
+          expect: null,
           isrPrefix: admissionTier.config.isrPrefix,
           routeId: target.id,
           routePath,
