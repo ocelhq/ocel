@@ -1476,6 +1476,15 @@ function searchFromQuery(query: Record<string, string | string[]>): string {
   return search ? `?${search}` : "";
 }
 
+const REQUEST_TARGET_ILLEGAL = /[[\]^|]/g;
+
+function encodeRequestTarget(pathname: string): string {
+  return pathname.replace(
+    REQUEST_TARGET_ILLEGAL,
+    (character) => `%${character.charCodeAt(0).toString(16).toUpperCase()}`,
+  );
+}
+
 function originUrl(
   fnUrl: string,
   url: URL,
@@ -1486,7 +1495,7 @@ function originUrl(
   const query = result.invocationTarget?.query;
   const search = query ? searchFromQuery(query) : url.search;
   const target = canonicalPathname(dataPathname(pathname, url, manifest), manifest);
-  return new URL(target + search, fnUrl);
+  return new URL(encodeRequestTarget(target) + search, fnUrl);
 }
 
 async function bufferBody(request: Request): Promise<ArrayBuffer | null> {
