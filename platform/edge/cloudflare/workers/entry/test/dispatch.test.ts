@@ -186,6 +186,100 @@ describe("dispatchResult", () => {
     expect(await res.text()).toBe("<html>hello</html>");
   });
 
+  describe("the methods a prerendered document answers", () => {
+    function documentDeps(onOrigin: (req: Request) => void = () => {}) {
+      return baseDeps({
+        manifest: {
+          buildId: "t",
+          basePath: "",
+          pathnames: ["/about", "/blog"],
+          routes: {},
+          dispatch: {
+            "/about": { kind: "static" },
+            "/blog": { kind: "prerender", id: "/blog", config: {} },
+          },
+        },
+        functionUrls: { "/blog": "https://fn.example.com" },
+        fetch: (async (req: Request) => {
+          onOrigin(req);
+          return new Response("rendered", { status: 200 });
+        }) as unknown as typeof fetch,
+        assetStore: assetStoreServing({ "/about.html": "<html>about</html>" }),
+      });
+    }
+
+    function dispatchTo(pathname: string, request: Request, deps = documentDeps()) {
+      return dispatchResult(
+        { resolvedPathname: pathname, invocationTarget: { pathname } },
+        request,
+        deps,
+      );
+    }
+
+    it.each(["/about", "/blog"])("answers a POST to %s with 405", async (pathname) => {
+      let origins = 0;
+      const deps = documentDeps(() => (origins += 1));
+
+      const res = await dispatchTo(
+        pathname,
+        new Request(`https://app.example${pathname}`, { method: "POST" }),
+        deps,
+      );
+
+      expect(res.status).toBe(405);
+      expect(res.headers.get("allow")).toBe("GET, HEAD");
+      expect(origins).toBe(0);
+    });
+
+    it.each(["/about", "/blog"])("still answers a HEAD to %s", async (pathname) => {
+      const res = await dispatchTo(
+        pathname,
+        new Request(`https://app.example${pathname}`, { method: "HEAD" }),
+      );
+
+      expect(res.status).toBe(200);
+    });
+
+    it("lets a server action through to the origin", async () => {
+      let captured: Request | undefined;
+      const deps = documentDeps((req) => (captured = req));
+
+      const res = await dispatchTo(
+        "/blog",
+        new Request("https://app.example/blog", {
+          method: "POST",
+          headers: { "next-action": "abc" },
+          body: "[]",
+        }),
+        deps,
+      );
+
+      expect(res.status).toBe(200);
+      expect(captured?.method).toBe("POST");
+    });
+
+    it.each(["application/x-www-form-urlencoded", "multipart/form-data; boundary=x"])(
+      "lets a %s form post through to the origin",
+      async (contentType) => {
+        let captured: Request | undefined;
+        const deps = documentDeps((req) => (captured = req));
+
+        const res = await dispatchTo(
+          "/blog",
+          new Request("https://app.example/blog", {
+            method: "POST",
+            headers: { "content-type": contentType },
+            body: "a=1",
+          }),
+          deps,
+        );
+
+        expect(res.status).toBe(200);
+        expect(captured?.method).toBe("POST");
+      },
+    );
+  });
+
   it.each([200, 307, 404, 405, 500])(
     "restores the empty body a %i sentinel response stands for",
     async (status) => {
@@ -618,13 +712,13 @@ describe("dispatchResult", () => {
     expect(captured?.headers.get("cookie")).toBe("__prerender_bypass=abc123");
   });
 
-  it("forwards a non-GET to a prerender origin with its own headers", async () => {
+  it("forwards a server action to a prerender origin with its own headers", async () => {
     let captured: Request | undefined;
     const res = await dispatchDraft(
       draftDeps((req) => (captured = req)),
       new Request("https://app.example/ssg-draft-mode/test-1", {
         method: "POST",
-        headers: { cookie: "session=xyz" },
+        headers: { cookie: "session=xyz", "next-action": "abc" },
         body: "{}",
       }),
     );
@@ -633,13 +727,13 @@ describe("dispatchResult", () => {
     expect(captured?.headers.get("cookie")).toBe("session=xyz");
   });
 
-  it("drops a client-forged next-resume from a non-GET prerender forward", async () => {
+  it("drops a client-forged next-resume from a server-action prerender forward", async () => {
     let captured: Request | undefined;
     await dispatchDraft(
       draftDeps((req) => (captured = req)),
       new Request("https://app.example/ssg-draft-mode/test-1", {
         method: "POST",
-        headers: { "next-resume": "1" },
+        headers: { "next-resume": "1", "next-action": "abc" },
         body: "[1,{}]",
       }),
     );
