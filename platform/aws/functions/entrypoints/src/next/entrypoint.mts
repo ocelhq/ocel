@@ -3,6 +3,7 @@ import { dirname, isAbsolute, relative } from "node:path";
 import { pathToFileURL } from "node:url";
 import { runWithWaitUntil } from "../shared/background.mjs";
 import { revalidatedHeader, revalidationTicks } from "./revalidation-signal.mjs";
+import { loadTagsManifest, mirrorTagsInto } from "./tags-manifest.mjs";
 import { loadIncrementalCacheFactory } from "./incremental-cache.mjs";
 import { awaitLiveValues } from "../shared/live-values.mjs";
 import {
@@ -46,6 +47,8 @@ async function boot(): Promise<void> {
   }
 
   installCompileCacheWarm(mod?.warm);
+
+  mirrorTagsInto(loadTagsManifest(dirname(handlerPath)));
 
   const newIncrementalCache = await loadIncrementalCacheFactory(dirname(handlerPath));
 
