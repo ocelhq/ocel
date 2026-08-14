@@ -2,6 +2,7 @@ package cli
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -22,6 +23,20 @@ func (e *ExitError) Error() string {
 }
 
 const interruptExitCode = 130
+
+func ExitCode(err error) (int, bool) {
+	if err == nil {
+		return 0, false
+	}
+	var exitErr *ExitError
+	if errors.As(err, &exitErr) {
+		return exitErr.Code, true
+	}
+	if errors.Is(err, context.Canceled) {
+		return interruptExitCode, true
+	}
+	return 0, false
+}
 
 const shutdownSlack = 3 * time.Second
 

@@ -294,11 +294,36 @@ func procTreeSessionCmd(t *testing.T, root, apiURL string, appArgs []string) (cm
 
 const ctrlC = 0x03
 
+func drainPTY(ptmx *os.File) func() string {
+	var mu sync.Mutex
+	var out strings.Builder
+	go func() {
+		buf := make([]byte, 4096)
+		for {
+			n, err := ptmx.Read(buf)
+			if n > 0 {
+				mu.Lock()
+				out.Write(buf[:n])
+				mu.Unlock()
+			}
+			if err != nil {
+				return
+			}
+		}
+	}()
+	return func() string {
+		mu.Lock()
+		defer mu.Unlock()
+		return out.String()
+	}
+}
+
 func TestProcessTreeNonOrphanedCtrlCReachesCLIAndApp(t *testing.T) {
 	root, apiURL := setUpProcTreeFixtureProject(t)
 	appArgs, startedPath, leafPidPath := fixtureDeepWorkerTree(t, root, "nonorphan-ctrlc")
 
 	cmd, ptmx := procTreeSessionCmd(t, root, apiURL, appArgs)
+	tty := drainPTY(ptmx)
 
 	waitForFile(t, startedPath)
 
@@ -312,10 +337,11 @@ func TestProcessTreeNonOrphanedCtrlCReachesCLIAndApp(t *testing.T) {
 	select {
 	case err := <-waitDone:
 		var exitErr *exec.ExitError
-		if errors.As(err, &exitErr) && exitErr.ExitCode() == interruptExitCode {
-			t.Fatalf("CLI exit code = %d, want anything but interruptExitCode: a single Ctrl-C should take the graceful path, not the force-kill one", exitErr.ExitCode())
-		} else if err != nil && !errors.As(err, &exitErr) {
-			t.Fatalf("session harness wait error = %v, want nil or an *exec.ExitError", err)
+		if !errors.As(err, &exitErr) || exitErr.ExitCode() != interruptExitCode {
+			t.Fatalf("CLI exit error = %v, want exit code %d after a Ctrl-C", err, interruptExitCode)
+		}
+		if out := tty(); strings.Contains(out, "did not finish") || strings.Contains(out, "Interrupted again") {
+			t.Fatalf("tty output = %q, want a single Ctrl-C to take the graceful path, not the force-kill one", out)
 		}
 	case <-time.After(gracefulShutdownWindow + 5*time.Second):
 		_ = cmd.Process.Kill()

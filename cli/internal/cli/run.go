@@ -134,5 +134,5 @@ func runChildOnce(ctx context.Context, d deps, appArgs []string, env map[string]
 	if err != nil {
 		return err
 	}
-	return waitExitError(child.wait())
+	return appExitError(ctx, child.wait())
 }
