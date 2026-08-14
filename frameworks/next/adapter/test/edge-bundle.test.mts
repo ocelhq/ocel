@@ -694,6 +694,37 @@ test("names the edge entry that regenerates a prerender its edge route parents",
   expect(manifest.dispatch["/api/docs"].entryKey).toBe("app/api/docs/route");
 });
 
+test("serves an edge Pages Router API route named by its index file at its directory", async () => {
+  const { projectDir, args } = await synthEdgeProject();
+  args.outputs.pagesApi.push({
+    pathname: "/api/index",
+    id: "pages/api/index",
+    sourcePage: "api/index",
+    assets: {},
+    wasmAssets: {},
+    runtime: "edge",
+    filePath: join(projectDir, ".next/server/edge/chunks/route.js"),
+    edgeRuntime: {
+      modulePath: join(projectDir, ".next/server/edge/chunks/route.js"),
+      entryKey: "middleware_pages/api/index",
+      handlerExport: "handler",
+    },
+    config: { env: buildEnv },
+    type: "PAGES_API",
+  } as never);
+
+  await adapter.onBuildComplete!(args as never);
+
+  const manifest = await readManifest(projectDir);
+  expect(manifest.dispatch["/api"]).toMatchObject({
+    kind: "edge",
+    entryKey: "middleware_pages/api/index",
+  });
+  expect(manifest.dispatch["/api/index"]).toBeUndefined();
+  expect(manifest.pathnames).toContain("/api");
+  expect(manifest.pathnames).not.toContain("/api/index");
+});
+
 test("prints the bundle size, chunk count and entry count", async () => {
   const { args } = await synthEdgeProject();
   const log = vi.spyOn(console, "log").mockImplementation(() => {});
