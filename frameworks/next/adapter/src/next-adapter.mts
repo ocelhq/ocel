@@ -1066,11 +1066,15 @@ function renderLauncher(
   );
 }
 
-function routePathname(pathname: string, basePath: string): string {
-  if (!basePath) return unindex(pathname);
+function routePathname(
+  pathname: string,
+  basePath: string,
+  strip: (pathname: string) => string = unindex,
+): string {
+  if (!basePath) return strip(pathname);
   if (pathname === basePath) return basePath;
   if (!pathname.startsWith(`${basePath}/`)) return pathname;
-  const fixed = unindex(pathname.slice(basePath.length));
+  const fixed = strip(pathname.slice(basePath.length));
   return fixed === "/" ? basePath : `${basePath}${fixed}`;
 }
 
@@ -1081,6 +1085,14 @@ function unindex(pathname: string): string {
   if (pathname === "/index") return "/";
   if (pathname.startsWith("/index/")) return pathname.slice("/index".length);
   return pathname;
+}
+
+function unindexLeaf(pathname: string): string {
+  if (dynamicSegment.test(pathname)) return pathname;
+  if (pathname === "/index") return "/";
+  return pathname.endsWith("/index")
+    ? pathname.slice(0, -"/index".length)
+    : pathname;
 }
 
 function isPagesRouterKind(type: string): boolean {
@@ -1095,9 +1107,12 @@ function routeKeyOf(
   output: { pathname: string; type: string; runtime: string },
   basePath: string,
 ): string {
-  return isPagesRouterKind(output.type) && output.runtime === "nodejs"
-    ? routePathname(output.pathname, basePath)
-    : output.pathname;
+  if (!isPagesRouterKind(output.type)) return output.pathname;
+  return routePathname(
+    output.pathname,
+    basePath,
+    output.runtime === "nodejs" ? unindex : unindexLeaf,
+  );
 }
 
 function staticRouteKeyOf(
