@@ -81,11 +81,12 @@ func (s *Store) PublishLinks(ctx context.Context, slug, environment string, link
 	slices.Sort(published)
 	published = slices.Compact(published)
 
+	ts := s.now()
 	group, writeCtx := errgroup.WithContext(ctx)
 	group.SetLimit(revealConcurrency)
 	for _, l := range links {
 		group.Go(func() error {
-			return s.putLink(writeCtx, Coordinate{Slug: slug, Link: l.Link, Key: l.Key, Environment: environment}, l.Value)
+			return s.putLink(writeCtx, Coordinate{Slug: slug, Link: l.Link, Key: l.Key, Environment: environment}, l.Value, ts)
 		})
 	}
 	if err := group.Wait(); err != nil {
@@ -95,7 +96,7 @@ func (s *Store) PublishLinks(ctx context.Context, slug, environment string, link
 	return s.reconcileLinkIndex(ctx, slug, environment, published)
 }
 
-func (s *Store) putLink(ctx context.Context, c Coordinate, plaintext string) error {
+func (s *Store) putLink(ctx context.Context, c Coordinate, plaintext string, ts int64) error {
 	key := c.canonical()
 	ciphertext, err := s.encrypt(ctx, key, plaintext)
 	if err != nil {
@@ -107,7 +108,7 @@ func (s *Store) putLink(ctx context.Context, c Coordinate, plaintext string) err
 		Version:    1,
 		Ciphertext: ciphertext,
 		Size:       int64(len(plaintext)),
-		Ts:         s.now(),
+		Ts:         ts,
 	}
 	if _, err := s.Dynamo.PutItem(ctx, &dynamodb.PutItemInput{
 		TableName: aws.String(s.Table),

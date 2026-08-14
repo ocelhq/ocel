@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
+	"github.com/aws/aws-sdk-go-v2/service/dynamodb"
 	ddbtypes "github.com/aws/aws-sdk-go-v2/service/dynamodb/types"
 )
 
@@ -473,7 +474,7 @@ func TestDelete(t *testing.T) {
 		if _, err := store.Set(context.Background(), c, "first", nil); err != nil {
 			t.Fatalf("Set err = %v", err)
 		}
-		ddb.beforePut = func() {
+		ddb.beforePut = func(*dynamodb.PutItemInput) {
 			if _, err := store.Set(context.Background(), c, "committed by the other writer", nil); err != nil {
 				t.Fatalf("competing Set err = %v", err)
 			}
