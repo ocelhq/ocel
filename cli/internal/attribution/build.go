@@ -37,9 +37,9 @@ var assetLoaders = map[string]api.Loader{
 	".wasm":  api.LoaderEmpty,
 }
 
-func pureUserModules() api.Plugin {
+func sideEffectFreeModules() api.Plugin {
 	return api.Plugin{
-		Name: "attribution-pure-user-modules",
+		Name: "attribution-side-effect-free-modules",
 		Setup: func(build api.PluginBuild) {
 			build.OnResolve(api.OnResolveOptions{Filter: `.*`}, func(args api.OnResolveArgs) (api.OnResolveResult, error) {
 				if args.PluginData == "resolving" || args.Importer == "" {
@@ -80,7 +80,7 @@ func shakenSurvivors(root string, app App) (map[string]map[string]bool, error) {
 		Metafile:      true,
 		Loader:        assetLoaders,
 		LogOverride:   unresolvableImportLogLevels,
-		Plugins:       []api.Plugin{pureUserModules()},
+		Plugins:       []api.Plugin{sideEffectFreeModules()},
 	})
 	if len(result.Errors) > 0 {
 		msgs := api.FormatMessages(result.Errors, api.FormatMessagesOptions{Color: false})
@@ -124,8 +124,8 @@ func unresolvableImport(root string, app App, warnings []api.Message) error {
 		if _, unresolvable := unresolvableImportLogLevels[w.ID]; !unresolvable || w.Location == nil {
 			continue
 		}
-		file := filepath.ToSlash(w.Location.File)
-		if isVendored(file) || !insideRoot(root, file) {
+		file, ok := userFile(root, w.Location.File)
+		if !ok {
 			continue
 		}
 		return &UnresolvedImportError{App: app.Name, File: file, Line: w.Location.Line, Detail: w.Text}
@@ -133,10 +133,13 @@ func unresolvableImport(root string, app App, warnings []api.Message) error {
 	return nil
 }
 
-func insideRoot(root, file string) bool {
-	if !filepath.IsAbs(file) {
-		return true
+func userFile(root, file string) (string, bool) {
+	rel := filepath.ToSlash(file)
+	if filepath.IsAbs(file) {
+		var inside bool
+		if rel, inside = relativeToRoot(root, file); !inside {
+			return "", false
+		}
 	}
-	rel, err := filepath.Rel(root, file)
-	return err == nil && !strings.HasPrefix(rel, "..")
+	return rel, !isVendored(rel)
 }
