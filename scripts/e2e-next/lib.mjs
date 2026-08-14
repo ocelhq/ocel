@@ -42,12 +42,15 @@ const HARNESS_ENV_KEYS = new Set([
   "JEST_WORKER_ID",
   "NODE_ENV",
   "NODE_OPTIONS",
+  "NODE_PATH",
   "OLDPWD",
   "PATH",
   "PWD",
+  "RUST_MIN_STACK",
+  "TEST_FILE_PATH",
 ]);
 
-const HARNESS_ENV_PREFIXES = ["AWS_", "LAMBDA_", "NEXT_TEST_", "OCEL_", "PNPM_", "__NEXT_", "npm_"];
+const HARNESS_ENV_PREFIXES = ["AWS_", "COREPACK_", "LAMBDA_", "NEXT_TEST_", "OCEL_", "PNPM_", "__NEXT_", "npm_"];
 
 export function deployEnvDiff(snapshot, current) {
   const supplied = {};
