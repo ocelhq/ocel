@@ -23,6 +23,7 @@ import {
   asSegmentPayload,
   cacheKey,
   hasDraftCookie,
+  headResponse,
   isSegmentPrefetch,
   refreshOutcome,
   SUPPRESS_SELF_REVALIDATION,
@@ -1283,11 +1284,17 @@ async function dispatchPrerender(
   }
   const cache = deps.cache;
 
+  const onDemand =
+    isOnDemandRevalidate(request, target.config) &&
+    (request.method === "GET" || request.method === "HEAD") &&
+    !hasDraftCookie(request);
+
   if (
-    shouldBypass(request, url, target.config) ||
-    request.method !== "GET" ||
-    hasDraftCookie(request) ||
-    headers.has("x-middleware-set-cookie")
+    !onDemand &&
+    (shouldBypass(request, url, target.config) ||
+      request.method !== "GET" ||
+      hasDraftCookie(request) ||
+      headers.has("x-middleware-set-cookie"))
   ) {
     const response = await answer(forward(forwardUrl, request, headers));
     return withStatus(response, "BYPASS");
@@ -1368,6 +1375,23 @@ async function dispatchPrerender(
         : undefined,
     expiration: target.fallback?.initialExpiration,
   };
+
+  if (onDemand) {
+    const onDemandHeaders = new Headers(refreshHeaders);
+    onDemandHeaders.set("x-prerender-revalidate", target.config.bypassToken ?? "");
+    const rendered = await render(
+      forward(
+        forwardUrl,
+        new Request(request.url, { method: "GET", headers: request.headers }),
+        onDemandHeaders,
+      ),
+    );
+    if (keyResult.cacheable) {
+      await storeInColo(cacheTarget, cache, rendered.clone());
+    }
+    const answered = withStatus(rendered, "BYPASS");
+    return request.method === "HEAD" ? headResponse(answered) : answered;
+  }
 
   let cachingOrigin = origin;
   let tagClock: TagClock | undefined;
@@ -1797,17 +1821,23 @@ function middlewareOverrides(outcome: MiddlewareOutcome | undefined): Set<string
   );
 }
 
+export function isOnDemandRevalidate(
+  request: Request,
+  config: { bypassToken?: string },
+): boolean {
+  return (
+    config.bypassToken !== undefined &&
+    config.bypassToken !== "" &&
+    request.headers.get("x-prerender-revalidate") === config.bypassToken
+  );
+}
+
 export function shouldBypass(
   request: Request,
   url: URL,
   config: { bypassFor?: RouteHas[]; bypassToken?: string },
 ): boolean {
-  if (
-    config.bypassToken &&
-    request.headers.get("x-prerender-revalidate") === config.bypassToken
-  ) {
-    return true;
-  }
+  if (isOnDemandRevalidate(request, config)) return true;
   return (config.bypassFor ?? []).some((has) =>
     matchesHas(has, request.headers, url),
   );

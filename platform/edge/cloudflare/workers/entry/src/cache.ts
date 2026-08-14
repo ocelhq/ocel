@@ -618,7 +618,7 @@ export async function serveCachedImage(
   return request.method === "HEAD" ? headResponse(response) : response;
 }
 
-function headResponse(response: Response): Response {
+export function headResponse(response: Response): Response {
   response.body?.cancel();
   return new Response(null, {
     status: response.status,
