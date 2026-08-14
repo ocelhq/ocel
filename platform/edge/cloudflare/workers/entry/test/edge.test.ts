@@ -1331,7 +1331,7 @@ describe("the URL middleware is handed", () => {
     });
   });
 
-  it("routes a canonical rewrite destination on its routing form", async () => {
+  it("routes a canonical rewrite destination on its routing form, forwarding it slashed", async () => {
     const edge = middlewareInvoker(
       `async () => new Response(null, { headers: { "x-middleware-rewrite": "/b/" } })`,
     );
@@ -1358,7 +1358,7 @@ describe("the URL middleware is handed", () => {
 
     expect(res.status).toBe(200);
     expect(res.headers.get("x-matched-path")).toBe("/b");
-    expect(await res.text()).toBe("/b");
+    expect(await res.text()).toBe("/b/");
   });
 
   it("forwards a rewrite to another origin byte-verbatim", async () => {

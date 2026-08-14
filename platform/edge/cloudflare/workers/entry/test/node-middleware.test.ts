@@ -295,7 +295,7 @@ describe("node middleware forwarding", () => {
 
     expect(res.status).toBe(200);
     expect(res.headers.get("x-matched-path")).toBe("/b");
-    expect(await res.text()).toBe("/b");
+    expect(await res.text()).toBe("/b/");
   });
 });
 

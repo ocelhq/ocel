@@ -1485,7 +1485,8 @@ function originUrl(
   const pathname = result.invocationTarget?.pathname ?? url.pathname;
   const query = result.invocationTarget?.query;
   const search = query ? searchFromQuery(query) : url.search;
-  return new URL(dataPathname(pathname, url, manifest) + search, fnUrl);
+  const target = canonicalPathname(dataPathname(pathname, url, manifest), manifest);
+  return new URL(target + search, fnUrl);
 }
 
 async function bufferBody(request: Request): Promise<ArrayBuffer | null> {
