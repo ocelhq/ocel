@@ -158,3 +158,29 @@ describe("an on-demand revalidation arriving at the edge", () => {
     expect(served.requests).toEqual([]);
   });
 });
+
+describe("an on-demand revalidation of a personalized response", () => {
+  it("bypasses rather than storing what middleware set a cookie on", async () => {
+    const served = origin(() => "<html>fresh</html>");
+    const store = colo();
+
+    const res = await dispatchResult(
+      {
+        resolvedPathname: "/blog",
+        invocationTarget: { pathname: "/blog" },
+        resolvedHeaders: new Headers({ "x-middleware-set-cookie": "a=1" }),
+        middleware: {
+          response: new Response(null, {
+            headers: { "x-middleware-set-cookie": "a=1" },
+          }),
+          headers: new Headers({ "x-middleware-set-cookie": "a=1" }),
+        },
+      },
+      revalidate("HEAD"),
+      deps(served, store),
+    );
+
+    expect(res.headers.get("x-ocel-cache")).toBe("BYPASS");
+    expect(store.entries.size).toBe(0);
+  });
+});
