@@ -2,6 +2,7 @@ package appbundler
 
 import (
 	"encoding/json"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -175,6 +176,36 @@ func TestBundle(t *testing.T) {
 		bundle := readFile(t, filepath.Join(l.funcDir, HandlerFile))
 		if !strings.Contains(bundle, `"./node_modules/native-dep/build/Release/addon.node"`) {
 			t.Errorf("bundle does not require the copied addon by its output path:\n%s", bundle)
+		}
+	})
+
+	t.Run("every native addon in the graph is copied", func(t *testing.T) {
+		t.Parallel()
+
+		const count = 24
+		files := tree{"package.json": appPkg}
+		var imports, logs strings.Builder
+		for i := range count {
+			name := fmt.Sprintf("native-dep-%02d", i)
+			files["node_modules/"+name+"/package.json"] = `{"name":"` + name + `","main":"index.js"}`
+			files["node_modules/"+name+"/index.js"] = "module.exports = require('./build/Release/addon.node');\n"
+			files["node_modules/"+name+"/build/Release/addon.node"] = "\x7fELF " + name
+			fmt.Fprintf(&imports, "import n%02d from '%s';\n", i, name)
+			fmt.Fprintf(&logs, "console.log(n%02d);\n", i)
+		}
+		files["server.js"] = imports.String() + logs.String()
+		l := newLayout(t, files)
+
+		if err := Bundle(l.target("server.js")); err != nil {
+			t.Fatalf("Bundle: %v", err)
+		}
+
+		for i := range count {
+			name := fmt.Sprintf("native-dep-%02d", i)
+			copied := filepath.Join(l.funcDir, "node_modules", name, "build", "Release", "addon.node")
+			if got, want := readFile(t, copied), "\x7fELF "+name; got != want {
+				t.Errorf("copied addon = %q, want %q", got, want)
+			}
 		}
 	})
 

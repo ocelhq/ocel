@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
+	"sync"
 
 	"github.com/evanw/esbuild/pkg/api"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
@@ -175,6 +176,7 @@ type addon struct {
 }
 
 type addons struct {
+	mu     sync.Mutex
 	placed []addon
 }
 
@@ -231,6 +233,9 @@ func (a *addons) place(args api.OnResolveArgs) (string, error) {
 	}
 
 	dest := addonDest(source)
+
+	a.mu.Lock()
+	defer a.mu.Unlock()
 	for _, placed := range a.placed {
 		if placed.dest != dest {
 			continue
@@ -245,7 +250,10 @@ func (a *addons) place(args api.OnResolveArgs) (string, error) {
 }
 
 func (a *addons) copyInto(funcDir string) error {
-	for _, placed := range a.placed {
+	a.mu.Lock()
+	all := append([]addon(nil), a.placed...)
+	a.mu.Unlock()
+	for _, placed := range all {
 		dest := filepath.Join(funcDir, filepath.FromSlash(placed.dest))
 		if err := os.MkdirAll(filepath.Dir(dest), 0o755); err != nil {
 			return err
