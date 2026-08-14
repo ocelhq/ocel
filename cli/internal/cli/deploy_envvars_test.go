@@ -4,9 +4,11 @@ import (
 	"reflect"
 	"testing"
 
+	"github.com/ocelhq/ocel/cli/internal/attribution"
 	"github.com/ocelhq/ocel/cli/internal/envgate"
 	"github.com/ocelhq/ocel/cli/internal/manifestbuilder"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
+	"github.com/ocelhq/ocel/pkg/naming"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/resources/v1"
 )
 
@@ -264,11 +266,28 @@ func TestToApps(t *testing.T) {
 		got := toApps([]projectconfig.App{
 			{Name: "admin", Framework: "express", Folder: "/admin"},
 			{Name: "web", Framework: "express"},
-		})
+		}, nil)
 
 		want := []manifestbuilder.App{
 			{Name: "admin", Framework: "express", Folder: "/admin"},
 			{Name: "web", Framework: "express"},
+		}
+		if !reflect.DeepEqual(got, want) {
+			t.Errorf("toApps() = %+v, want %+v", got, want)
+		}
+	})
+
+	t.Run("hands each app only the usage edges attributed to it", func(t *testing.T) {
+		t.Parallel()
+
+		got := toApps([]projectconfig.App{{Name: "admin"}, {Name: "web"}}, []attribution.Usage{
+			{App: "web", Type: naming.TokenPostgres, ID: "main", Files: []string{"apps/web/src/server.ts"}},
+			{App: "admin", Type: naming.TokenBucket, ID: "uploads", Files: []string{"apps/admin/src/upload.ts"}},
+		})
+
+		want := []manifestbuilder.App{
+			{Name: "admin", Usages: []manifestbuilder.Usage{{Type: naming.TokenBucket, ID: "uploads", Files: []string{"apps/admin/src/upload.ts"}}}},
+			{Name: "web", Usages: []manifestbuilder.Usage{{Type: naming.TokenPostgres, ID: "main", Files: []string{"apps/web/src/server.ts"}}}},
 		}
 		if !reflect.DeepEqual(got, want) {
 			t.Errorf("toApps() = %+v, want %+v", got, want)

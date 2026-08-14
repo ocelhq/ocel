@@ -131,7 +131,7 @@ func TestToDeclarations(t *testing.T) {
 			},
 		}
 
-		decls := toDeclarations(resources)
+		decls := toDeclarations(t.TempDir(), resources)
 
 		if len(decls) != 1 {
 			t.Fatalf("len(decls) = %d, want 1", len(decls))
@@ -145,6 +145,26 @@ func TestToDeclarations(t *testing.T) {
 		}
 		if d.Postgres.GetVersion() != "17" {
 			t.Errorf("Postgres.Version = %q, want %q", d.Postgres.GetVersion(), "17")
+		}
+	})
+
+	t.Run("reads the declaring file out of the reported stack", func(t *testing.T) {
+		t.Parallel()
+
+		configDir := t.TempDir()
+		resources := []declare.Resource{{
+			Name:  "main",
+			Type:  naming.TokenPostgres,
+			Stack: "Error\n    at Postgres (" + filepath.Join(configDir, "shared", "db.ts") + ":3:15)",
+		}}
+
+		decls := toDeclarations(configDir, resources)
+
+		if len(decls) != 1 {
+			t.Fatalf("len(decls) = %d, want 1", len(decls))
+		}
+		if decls[0].Source != "shared/db.ts" {
+			t.Errorf("Source = %q, want %q", decls[0].Source, "shared/db.ts")
 		}
 	})
 }

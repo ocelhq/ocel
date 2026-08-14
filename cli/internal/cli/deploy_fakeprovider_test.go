@@ -157,6 +157,14 @@ func (s *deployFakeProviderServer) Deploy(ctx context.Context, req *deploymentsv
 		}
 	}
 
+	for _, u := range req.GetManifest().GetUsages() {
+		if err := stream.Send(&deploymentsv1.DeployEvent{
+			Event: &deploymentsv1.DeployEvent_Progress{Progress: &deploymentsv1.ProgressEvent{Message: "USAGE " + describeUsage(u)}},
+		}); err != nil {
+			return err
+		}
+	}
+
 	if err := stream.Send(&deploymentsv1.DeployEvent{
 		Event: &deploymentsv1.DeployEvent_Progress{Progress: &deploymentsv1.ProgressEvent{Message: "provisioning..."}},
 	}); err != nil {
@@ -394,6 +402,10 @@ func describeFunction(f *deploymentsv1.ManifestFunction) string {
 		f.GetLogicalName(), f.GetRuntime(), f.GetHandler(), f.GetArtifactPath(), f.GetFramework(), f.GetApp())
 }
 
+func describeUsage(u *deploymentsv1.ManifestUsage) string {
+	return fmt.Sprintf("app=%s resource=%s files=%s", u.GetApp(), u.GetResource(), strings.Join(u.GetFiles(), ","))
+}
+
 func describeApp(a *deploymentsv1.ManifestApp) string {
 	keys := make([]string, 0, len(a.GetVariables()))
 	for _, v := range a.GetVariables() {
@@ -432,6 +444,14 @@ func validateFixtureManifest(m *deploymentsv1.Manifest) error {
 	}
 	if r.GetPostgres().GetVersion() != "17" {
 		return fmt.Errorf("resource postgres version = %q, want %q", r.GetPostgres().GetVersion(), "17")
+	}
+	for _, u := range m.GetUsages() {
+		if u.GetResource() != r.GetLogicalName() {
+			return fmt.Errorf("usage %s names a resource this manifest never declares", describeUsage(u))
+		}
+		if len(u.GetFiles()) == 0 {
+			return fmt.Errorf("usage %s carries no file provenance", describeUsage(u))
+		}
 	}
 	return nil
 }
