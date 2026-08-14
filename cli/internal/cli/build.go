@@ -16,7 +16,12 @@ import (
 var buildCmd = &cobra.Command{
 	Use:   "build",
 	Short: "Build your project's apps into .ocel/output without deploying",
-	Args:  cobra.NoArgs,
+	Long: "Build your project's apps into .ocel/output without deploying.\n\n" +
+		"Express, Fastify and Hono apps are bundled, so only what the entrypoint imports\n" +
+		"reaches the artifact: static directories, view templates and files read at run\n" +
+		"time are left behind. Set OCEL_BUILD_PREFER_TRACING=1 to copy the dependency\n" +
+		"tree instead, at the cost of a slower cold start.",
+	Args: cobra.NoArgs,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		cwd, err := os.Getwd()
 		if err != nil {
