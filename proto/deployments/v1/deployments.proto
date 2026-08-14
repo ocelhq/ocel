@@ -3,6 +3,7 @@ package deployments.v1;
 
 option go_package = "github.com/ocelhq/ocel/pkg/proto/deployments/v1;deploymentsv1";
 
+import "links/v1/links.proto";
 import "resources/v1/env.proto";
 import "resources/v1/resources.proto";
 
@@ -443,36 +444,19 @@ message ResultEvent {
   bool success = 1;
   string error = 2;
 
-  repeated ResourceOutput outputs = 3;
+  repeated links.v1.Link links = 6;
+
+  repeated FunctionOutput functions = 7;
 
   repeated string app_urls = 4;
 
   string promotion_id = 5;
-}
 
-message ResourceOutput {
-  string logical_name = 1;
-
-  oneof output {
-    PostgresOutput postgres = 2;
-    BucketOutput bucket = 3;
-    FunctionOutput function = 4;
-  }
-}
-
-message PostgresOutput {
-  string host = 1;
-  int32 port = 2;
-  string database = 3;
-  string username = 4;
-  string password = 5 [debug_redact = true];
-}
-
-message BucketOutput {
-  string address = 1;
-  string bucket = 2;
+  reserved 3;
+  reserved "outputs";
 }
 
 message FunctionOutput {
+  string logical_name = 2;
   string url = 1;
 }

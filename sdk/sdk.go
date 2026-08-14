@@ -1,9 +1,3 @@
+// Package sdk is the library Go apps import to declare resources and talk to
+// the dev server.
 package sdk
-
-import (
-	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/resources/v1"
-)
-
-func ResourceTypeName(t resourcesv1.ResourceType) string {
-	return t.String()
-}

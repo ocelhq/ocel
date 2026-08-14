@@ -20,7 +20,7 @@ func workerOutputName(app string) string {
 	return naming.Join(naming.WordSeparator, app, string(naming.KindWorker))
 }
 
-func deployEdgeWorker(ctx context.Context, cfg Config, manifest *deploymentsv1.Manifest, outputs []*deploymentsv1.ResourceOutput, progress func(string)) ([]*deploymentsv1.ResourceOutput, error) {
+func deployEdgeWorker(ctx context.Context, cfg Config, manifest *deploymentsv1.Manifest, functions []*deploymentsv1.FunctionOutput, progress func(string)) ([]*deploymentsv1.FunctionOutput, error) {
 	warnOrphanedWorker(ctx, cfg, progress)
 
 	apps := workerApps(cfg.ArtifactRoot, manifest)
@@ -38,9 +38,9 @@ func deployEdgeWorker(ctx context.Context, cfg Config, manifest *deploymentsv1.M
 	if err != nil {
 		return nil, err
 	}
-	urlByLogical := functionURLsByLogicalName(outputs)
+	urlByLogical := functionURLsByLogicalName(functions)
 
-	var workerOutputs []*deploymentsv1.ResourceOutput
+	var workerOutputs []*deploymentsv1.FunctionOutput
 	bundlePath, err := bundles.Path(cfg.Edge.Kind())
 	if err != nil {
 		return nil, err
@@ -155,12 +155,10 @@ func routeID(fn *deploymentsv1.ManifestFunction) string {
 	return fn.GetLogicalName()
 }
 
-func functionURLsByLogicalName(outputs []*deploymentsv1.ResourceOutput) map[string]string {
+func functionURLsByLogicalName(functions []*deploymentsv1.FunctionOutput) map[string]string {
 	urls := make(map[string]string)
-	for _, o := range outputs {
-		if fn := o.GetFunction(); fn != nil {
-			urls[o.GetLogicalName()] = fn.GetUrl()
-		}
+	for _, fn := range functions {
+		urls[fn.GetLogicalName()] = fn.GetUrl()
 	}
 	return urls
 }

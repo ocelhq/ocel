@@ -3,19 +3,19 @@ package deploy
 import (
 	"testing"
 
+	"github.com/ocelhq/ocel/pkg/naming"
 	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
-	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/resources/v1"
 )
 
 func TestRealizationFor(t *testing.T) {
 	t.Parallel()
 
-	pg := resourcesv1.ResourceType_RESOURCE_TYPE_POSTGRES
-	bucket := resourcesv1.ResourceType_RESOURCE_TYPE_BUCKET
+	pg := naming.TokenPostgres
+	bucket := naming.TokenBucket
 
 	cases := []struct {
 		name      string
-		rt        resourcesv1.ResourceType
+		rt        string
 		lifecycle deploymentsv1.Environment_Lifecycle
 		want      Realization
 	}{

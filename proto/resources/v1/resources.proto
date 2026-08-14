@@ -13,14 +13,8 @@ service ResourceService {
     rpc ReportEnvProblems(ReportEnvProblemsRequest) returns (ReportEnvProblemsResponse);
 }
 
-enum ResourceType {
-    RESOURCE_TYPE_UNSPECIFIED = 0;
-    RESOURCE_TYPE_POSTGRES = 1;
-    RESOURCE_TYPE_BUCKET = 2;
-}
-
 message ResourceIdentifier {
-  ResourceType type = 1;
+  string type = 1;
   string name = 2;
 }
 

@@ -2,14 +2,14 @@ import z from "zod";
 import type { Component } from "../utils/component.js";
 import { defer } from "../utils/defer.js";
 import { getConfig } from "../utils/get-config.js";
-import { rpc, ResourceType } from "../utils/rpc.js";
+import { rpc } from "../utils/rpc.js";
 
 export interface PostgresConfig {
   version?: string;
 }
 
 export class Postgres implements Component {
-  private type = ResourceType.POSTGRES;
+  private type = "ocel:postgres";
 
   constructor(
     public id: string,

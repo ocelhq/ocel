@@ -14,6 +14,7 @@ import (
 	"connectrpc.com/connect"
 
 	"github.com/ocelhq/ocel/pkg/channel"
+	"github.com/ocelhq/ocel/pkg/naming"
 	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
 	"github.com/ocelhq/ocel/pkg/proto/deployments/v1/deploymentsv1connect"
 	"github.com/ocelhq/ocel/pkg/proto/env/v1/envv1connect"
@@ -425,6 +426,9 @@ func validateFixtureManifest(m *deploymentsv1.Manifest) error {
 	r := m.GetResources()[0]
 	if r.GetLogicalName() != "db--main" {
 		return fmt.Errorf("resource logical_name = %q, want %q", r.GetLogicalName(), "db--main")
+	}
+	if r.GetResource().GetType() != naming.TokenPostgres {
+		return fmt.Errorf("resource type = %q, want %q", r.GetResource().GetType(), naming.TokenPostgres)
 	}
 	if r.GetPostgres().GetVersion() != "17" {
 		return fmt.Errorf("resource postgres version = %q, want %q", r.GetPostgres().GetVersion(), "17")

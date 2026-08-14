@@ -9,7 +9,7 @@ import (
 	"time"
 
 	"github.com/ocelhq/ocel/cli/internal/manifest"
-	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/resources/v1"
+	"github.com/ocelhq/ocel/pkg/naming"
 )
 
 func TestFetchProjectConfig(t *testing.T) {
@@ -39,39 +39,41 @@ func TestFetchProjectConfig(t *testing.T) {
 	})
 }
 
-func TestResourceTypeName(t *testing.T) {
+func TestEnvFragment(t *testing.T) {
 	t.Parallel()
 
 	for _, tt := range []struct {
 		name    string
-		typ     resourcesv1.ResourceType
+		typ     string
 		want    string
 		wantErr bool
 	}{
-		{"renders the canonical name", resourcesv1.ResourceType_RESOURCE_TYPE_POSTGRES, "POSTGRES", false},
-		{"rejects an unspecified type", resourcesv1.ResourceType_RESOURCE_TYPE_UNSPECIFIED, "", true},
+		{"renders the env fragment", naming.TokenPostgres, "POSTGRES", false},
+		{"renders the env fragment for buckets", naming.TokenBucket, "BUCKET", false},
+		{"rejects an empty token", "", "", true},
+		{"rejects an unknown token", "ocel:redis", "", true},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			got, err := ResourceTypeName(tt.typ)
+			got, err := envFragment(tt.typ)
 			if tt.wantErr {
 				if err == nil {
-					t.Fatalf("ResourceTypeName(%v) = %q, want an error", tt.typ, got)
+					t.Fatalf("envFragment(%q) = %q, want an error", tt.typ, got)
 				}
 				return
 			}
 			if err != nil {
-				t.Fatalf("ResourceTypeName: %v", err)
+				t.Fatalf("envFragment: %v", err)
 			}
 			if got != tt.want {
-				t.Fatalf("ResourceTypeName() = %q, want %q", got, tt.want)
+				t.Fatalf("envFragment() = %q, want %q", got, tt.want)
 			}
 		})
 	}
 }
 
 func TestProvision(t *testing.T) {
-	onePostgres := []manifest.Entry{{Name: "main", Type: resourcesv1.ResourceType_RESOURCE_TYPE_POSTGRES}}
+	onePostgres := []manifest.Entry{{Name: "main", Type: naming.TokenPostgres}}
 
 	t.Run("an empty manifest yields no resources without calling resolve", func(t *testing.T) {
 		ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -131,7 +133,7 @@ func TestProvision(t *testing.T) {
 		if got[0].Name != "main" {
 			t.Fatalf("Name = %q, want %q", got[0].Name, "main")
 		}
-		if got[0].Type != resourcesv1.ResourceType_RESOURCE_TYPE_POSTGRES {
+		if got[0].Type != naming.TokenPostgres {
 			t.Fatalf("Type = %v, want POSTGRES", got[0].Type)
 		}
 	})

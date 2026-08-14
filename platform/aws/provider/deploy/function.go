@@ -15,7 +15,6 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/naming"
 	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
-	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/resources/v1"
 )
 
 const (
@@ -260,19 +259,8 @@ func describe(c naming.Coordinate, detail string) pulumi.String {
 	return pulumi.String(described)
 }
 
-func functionEnvKey(rt resourcesv1.ResourceType, id string) string {
-	return fmt.Sprintf("OCEL_RESOURCE_%s_%s", resourceTypeToken(rt), id)
-}
-
-func resourceTypeToken(rt resourcesv1.ResourceType) string {
-	switch rt {
-	case resourcesv1.ResourceType_RESOURCE_TYPE_POSTGRES:
-		return "POSTGRES"
-	case resourcesv1.ResourceType_RESOURCE_TYPE_BUCKET:
-		return "BUCKET"
-	default:
-		return "UNSPECIFIED"
-	}
+func functionEnvKey(token, id string) string {
+	return fmt.Sprintf("OCEL_RESOURCE_%s_%s", naming.EnvFragment(token), id)
 }
 
 func postgresEnvPayload(username, password, host string, port int, database string) string {
@@ -290,13 +278,8 @@ func artifactArchivePath(root, artifactPath string) string {
 	return filepath.Join(root, artifactPath)
 }
 
-func collectFunctionOutput(logicalName, url string) *deploymentsv1.ResourceOutput {
-	return &deploymentsv1.ResourceOutput{
-		LogicalName: logicalName,
-		Output: &deploymentsv1.ResourceOutput_Function{
-			Function: &deploymentsv1.FunctionOutput{Url: url},
-		},
-	}
+func collectFunctionOutput(logicalName, url string) *deploymentsv1.FunctionOutput {
+	return &deploymentsv1.FunctionOutput{LogicalName: logicalName, Url: url}
 }
 
 type executionRole struct {

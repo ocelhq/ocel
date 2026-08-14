@@ -13,7 +13,7 @@ import (
 
 	"github.com/ocelhq/ocel/cli/internal/manifest"
 	"github.com/ocelhq/ocel/cli/internal/resolvecache"
-	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/resources/v1"
+	"github.com/ocelhq/ocel/pkg/naming"
 )
 
 func cachingResolver(t *testing.T) (*Resolver, string) {
@@ -51,7 +51,7 @@ func countingResolveServer(t *testing.T) (*httptest.Server, *int) {
 func TestCachedResolve(t *testing.T) {
 	t.Parallel()
 
-	onePostgres := []manifest.Entry{{Name: "main", Type: resourcesv1.ResourceType_RESOURCE_TYPE_POSTGRES}}
+	onePostgres := []manifest.Entry{{Name: "main", Type: naming.TokenPostgres}}
 
 	t.Run("a miss calls the API and persists a 0600 cache file", func(t *testing.T) {
 		t.Parallel()
@@ -124,8 +124,8 @@ func TestCachedResolve(t *testing.T) {
 
 		if _, err := resolver.Resolve(context.Background(), ts.URL, "tok", "proj_1",
 			[]manifest.Entry{
-				{Name: "main", Type: resourcesv1.ResourceType_RESOURCE_TYPE_POSTGRES},
-				{Name: "second", Type: resourcesv1.ResourceType_RESOURCE_TYPE_POSTGRES},
+				{Name: "main", Type: naming.TokenPostgres},
+				{Name: "second", Type: naming.TokenPostgres},
 			}); err != nil {
 			t.Fatalf("Resolve (second): %v", err)
 		}

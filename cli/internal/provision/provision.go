@@ -11,7 +11,7 @@ import (
 
 	"github.com/ocelhq/ocel/cli/internal/manifest"
 	"github.com/ocelhq/ocel/cli/internal/resolvecache"
-	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/resources/v1"
+	"github.com/ocelhq/ocel/pkg/naming"
 )
 
 type ProjectConfig struct {
@@ -25,7 +25,7 @@ type ProjectConfig struct {
 
 type Resource struct {
 	Name string
-	Type resourcesv1.ResourceType
+	Type string
 	Env  map[string]string
 }
 
@@ -84,11 +84,11 @@ func (r *Resolver) Resolve(ctx context.Context, baseURL, token, projectID string
 
 	defs := make([]resolvecache.Def, 0, len(resources))
 	for _, entry := range resources {
-		typeName, err := ResourceTypeName(entry.Type)
+		fragment, err := envFragment(entry.Type)
 		if err != nil {
 			return nil, err
 		}
-		defs = append(defs, resolvecache.Def{Name: entry.Name, Type: typeName})
+		defs = append(defs, resolvecache.Def{Name: entry.Name, Type: fragment})
 	}
 	defsHash := resolvecache.HashDefs(defs)
 	account := resolvecache.Fingerprint(baseURL, token)
@@ -123,11 +123,11 @@ func (r *Resolver) Resolve(ctx context.Context, baseURL, token, projectID string
 func (r *Resolver) callResolve(ctx context.Context, baseURL, token, projectID string, resources []manifest.Entry) (map[string]string, time.Time, error) {
 	entries := make([]resolveResourceEntry, 0, len(resources))
 	for _, resource := range resources {
-		typeName, err := ResourceTypeName(resource.Type)
+		fragment, err := envFragment(resource.Type)
 		if err != nil {
 			return nil, time.Time{}, err
 		}
-		entries = append(entries, resolveResourceEntry{Name: resource.Name, Type: typeName})
+		entries = append(entries, resolveResourceEntry{Name: resource.Name, Type: fragment})
 	}
 
 	body, err := json.Marshal(resolveRequestBody{ProjectID: projectID, Resources: entries})
@@ -167,11 +167,11 @@ func (r *Resolver) callResolve(ctx context.Context, baseURL, token, projectID st
 func resourcesFromEnv(resources []manifest.Entry, env map[string]string) ([]Resource, error) {
 	out := make([]Resource, 0, len(resources))
 	for _, resource := range resources {
-		typeName, err := ResourceTypeName(resource.Type)
+		fragment, err := envFragment(resource.Type)
 		if err != nil {
 			return nil, err
 		}
-		key := fmt.Sprintf("OCEL_RESOURCE_%s_%s", typeName, resource.Name)
+		key := fmt.Sprintf("OCEL_RESOURCE_%s_%s", fragment, resource.Name)
 		value, ok := env[key]
 		if !ok {
 			return nil, fmt.Errorf("resolve response missing env for resource %q", resource.Name)
@@ -181,9 +181,9 @@ func resourcesFromEnv(resources []manifest.Entry, env map[string]string) ([]Reso
 	return out, nil
 }
 
-func ResourceTypeName(t resourcesv1.ResourceType) (string, error) {
-	if t == resourcesv1.ResourceType_RESOURCE_TYPE_UNSPECIFIED {
-		return "", fmt.Errorf("resource has unspecified type")
+func envFragment(token string) (string, error) {
+	if _, ok := naming.TokenKind(token); !ok {
+		return "", fmt.Errorf("resource has unsupported type %q", token)
 	}
-	return strings.TrimPrefix(t.String(), "RESOURCE_TYPE_"), nil
+	return naming.EnvFragment(token), nil
 }

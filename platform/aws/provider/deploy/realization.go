@@ -1,8 +1,8 @@
 package deploy
 
 import (
+	"github.com/ocelhq/ocel/pkg/naming"
 	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
-	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/resources/v1"
 )
 
 type Realization int
@@ -12,8 +12,8 @@ const (
 	RealizationLogicalSlice
 )
 
-func realizationFor(rt resourcesv1.ResourceType, lifecycle deploymentsv1.Environment_Lifecycle) Realization {
-	if rt == resourcesv1.ResourceType_RESOURCE_TYPE_POSTGRES && lifecycle == deploymentsv1.Environment_LIFECYCLE_EPHEMERAL {
+func realizationFor(token string, lifecycle deploymentsv1.Environment_Lifecycle) Realization {
+	if token == naming.TokenPostgres && lifecycle == deploymentsv1.Environment_LIFECYCLE_EPHEMERAL {
 		return RealizationLogicalSlice
 	}
 	return RealizationReal

@@ -3,6 +3,7 @@ package declare
 import (
 	"testing"
 
+	"github.com/ocelhq/ocel/pkg/naming"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/resources/v1"
 )
 
@@ -38,7 +39,7 @@ func TestParse(t *testing.T) {
 		t.Parallel()
 
 		res, err := Parse(&resourcesv1.DeclareRequest{
-			Resource: &resourcesv1.ResourceIdentifier{Name: "main", Type: resourcesv1.ResourceType_RESOURCE_TYPE_POSTGRES},
+			Resource: &resourcesv1.ResourceIdentifier{Name: "main", Type: naming.TokenPostgres},
 		})
 		if err != nil {
 			t.Fatalf("Parse: %v", err)
@@ -46,8 +47,8 @@ func TestParse(t *testing.T) {
 		if res.Name != "main" {
 			t.Fatalf("Name = %q, want %q", res.Name, "main")
 		}
-		if res.Type != resourcesv1.ResourceType_RESOURCE_TYPE_POSTGRES {
-			t.Fatalf("Type = %v, want %v", res.Type, resourcesv1.ResourceType_RESOURCE_TYPE_POSTGRES)
+		if res.Type != naming.TokenPostgres {
+			t.Fatalf("Type = %v, want %v", res.Type, naming.TokenPostgres)
 		}
 	})
 
@@ -55,7 +56,7 @@ func TestParse(t *testing.T) {
 		t.Parallel()
 
 		res, err := Parse(&resourcesv1.DeclareRequest{
-			Resource: &resourcesv1.ResourceIdentifier{Name: "main", Type: resourcesv1.ResourceType_RESOURCE_TYPE_POSTGRES},
+			Resource: &resourcesv1.ResourceIdentifier{Name: "main", Type: naming.TokenPostgres},
 			Config:   &resourcesv1.DeclareRequest_Postgres{Postgres: &resourcesv1.PostgresConfig{Version: "17"}},
 		})
 		if err != nil {
@@ -70,7 +71,7 @@ func TestParse(t *testing.T) {
 		t.Parallel()
 
 		res, err := Parse(&resourcesv1.DeclareRequest{
-			Resource: &resourcesv1.ResourceIdentifier{Name: "storage", Type: resourcesv1.ResourceType_RESOURCE_TYPE_BUCKET},
+			Resource: &resourcesv1.ResourceIdentifier{Name: "storage", Type: naming.TokenBucket},
 			Config:   &resourcesv1.DeclareRequest_Bucket{Bucket: &resourcesv1.BucketConfig{AllowedOrigins: []string{"https://app.example.com"}}},
 		})
 		if err != nil {
@@ -85,7 +86,7 @@ func TestParse(t *testing.T) {
 		t.Parallel()
 
 		res, err := Parse(&resourcesv1.DeclareRequest{
-			Resource: &resourcesv1.ResourceIdentifier{Name: "main", Type: resourcesv1.ResourceType_RESOURCE_TYPE_POSTGRES},
+			Resource: &resourcesv1.ResourceIdentifier{Name: "main", Type: naming.TokenPostgres},
 		})
 		if err != nil {
 			t.Fatalf("Parse: %v", err)

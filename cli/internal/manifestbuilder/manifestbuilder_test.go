@@ -47,7 +47,7 @@ func toGolden(m *deploymentsv1.Manifest) goldenManifest {
 	for _, r := range m.GetResources() {
 		gr := goldenResource{
 			LogicalName: r.GetLogicalName(),
-			Type:        r.GetResource().GetType().String(),
+			Type:        r.GetResource().GetType(),
 			ID:          r.GetResource().GetName(),
 		}
 		if pg := r.GetPostgres(); pg != nil {
@@ -79,8 +79,8 @@ func marshal(t *testing.T, m *deploymentsv1.Manifest) []byte {
 
 func synthDeclarations() []Declaration {
 	return []Declaration{
-		{Type: resourcesv1.ResourceType_RESOURCE_TYPE_POSTGRES, ID: "main", Postgres: &resourcesv1.PostgresConfig{Version: "17"}, Source: "app/db.ts:5"},
-		{Type: resourcesv1.ResourceType_RESOURCE_TYPE_POSTGRES, ID: "analytics", Postgres: &resourcesv1.PostgresConfig{Version: "16"}, Source: "app/analytics.ts:9"},
+		{Type: naming.TokenPostgres, ID: "main", Postgres: &resourcesv1.PostgresConfig{Version: "17"}, Source: "app/db.ts:5"},
+		{Type: naming.TokenPostgres, ID: "analytics", Postgres: &resourcesv1.PostgresConfig{Version: "16"}, Source: "app/analytics.ts:9"},
 	}
 }
 
@@ -198,7 +198,7 @@ func TestBuild(t *testing.T) {
 		}
 
 		withExtra := append(append([]Declaration{}, base...), Declaration{
-			Type: resourcesv1.ResourceType_RESOURCE_TYPE_POSTGRES, ID: "billing", Source: "app/billing.ts:2",
+			Type: naming.TokenPostgres, ID: "billing", Source: "app/billing.ts:2",
 		})
 		after, err := Build("proj-1", nil, nil, withExtra, nil, nil)
 		if err != nil {
@@ -224,7 +224,7 @@ func TestBuild(t *testing.T) {
 		t.Parallel()
 
 		manifest, err := Build("proj-1", nil, nil, []Declaration{
-			{Type: resourcesv1.ResourceType_RESOURCE_TYPE_POSTGRES, ID: "main", Postgres: &resourcesv1.PostgresConfig{Version: "17"}, Source: "app/db.ts:5"},
+			{Type: naming.TokenPostgres, ID: "main", Postgres: &resourcesv1.PostgresConfig{Version: "17"}, Source: "app/db.ts:5"},
 		}, nil, nil)
 		if err != nil {
 			t.Fatalf("Build: %v", err)
@@ -247,7 +247,7 @@ func TestBuild(t *testing.T) {
 		t.Parallel()
 
 		manifest, err := Build("proj-1", nil, nil, []Declaration{
-			{Type: resourcesv1.ResourceType_RESOURCE_TYPE_BUCKET, ID: "storage", Bucket: &resourcesv1.BucketConfig{AllowedOrigins: []string{"https://app.example.com"}}, Source: "app/storage.ts:3"},
+			{Type: naming.TokenBucket, ID: "storage", Bucket: &resourcesv1.BucketConfig{AllowedOrigins: []string{"https://app.example.com"}}, Source: "app/storage.ts:3"},
 		}, nil, nil)
 		if err != nil {
 			t.Fatalf("Build: %v", err)
@@ -273,8 +273,8 @@ func TestBuild(t *testing.T) {
 		t.Parallel()
 
 		_, err := Build("proj-1", nil, nil, []Declaration{
-			{Type: resourcesv1.ResourceType_RESOURCE_TYPE_POSTGRES, ID: "main", Source: "app/db.ts:5"},
-			{Type: resourcesv1.ResourceType_RESOURCE_TYPE_POSTGRES, ID: "main", Source: "app/other.ts:12"},
+			{Type: naming.TokenPostgres, ID: "main", Source: "app/db.ts:5"},
+			{Type: naming.TokenPostgres, ID: "main", Source: "app/other.ts:12"},
 		}, nil, nil)
 		if err == nil {
 			t.Fatal("Build: expected duplicate error, got nil")
@@ -348,8 +348,8 @@ func TestBuild(t *testing.T) {
 		t.Parallel()
 
 		_, err := Build("proj-1", nil, nil, []Declaration{
-			{Type: resourcesv1.ResourceType_RESOURCE_TYPE_BUCKET, ID: "my_uploads", Source: "app/a.ts:1"},
-			{Type: resourcesv1.ResourceType_RESOURCE_TYPE_BUCKET, ID: "my-uploads", Source: "app/b.ts:2"},
+			{Type: naming.TokenBucket, ID: "my_uploads", Source: "app/a.ts:1"},
+			{Type: naming.TokenBucket, ID: "my-uploads", Source: "app/b.ts:2"},
 		}, nil, nil)
 		if err == nil {
 			t.Fatal("Build: expected a collision error, got nil")
@@ -381,7 +381,7 @@ func TestBuild(t *testing.T) {
 		t.Parallel()
 
 		_, err := Build("proj-1", nil, nil, []Declaration{
-			{Type: resourcesv1.ResourceType_RESOURCE_TYPE_UNSPECIFIED, ID: "main"},
+			{Type: "", ID: "main"},
 		}, nil, nil)
 		if err == nil {
 			t.Fatal("Build: expected error for unsupported resource type, got nil")
@@ -392,7 +392,7 @@ func TestBuild(t *testing.T) {
 		t.Parallel()
 
 		_, err := Build("proj-1", nil, nil, []Declaration{
-			{Type: resourcesv1.ResourceType_RESOURCE_TYPE_POSTGRES, ID: ""},
+			{Type: naming.TokenPostgres, ID: ""},
 		}, nil, nil)
 		if err == nil {
 			t.Fatal("Build: expected error for empty id, got nil")

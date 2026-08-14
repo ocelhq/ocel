@@ -4,7 +4,7 @@
   "resources": [
     {
       "logical_name": "db--analytics",
-      "type": "RESOURCE_TYPE_POSTGRES",
+      "type": "ocel:postgres",
       "id": "analytics",
       "postgres": {
         "version": "16"
@@ -12,7 +12,7 @@
     },
     {
       "logical_name": "db--main",
-      "type": "RESOURCE_TYPE_POSTGRES",
+      "type": "ocel:postgres",
       "id": "main",
       "postgres": {
         "version": "17"

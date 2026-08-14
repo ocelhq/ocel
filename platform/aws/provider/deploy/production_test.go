@@ -1033,7 +1033,7 @@ func TestBuildDeploymentRecord(t *testing.T) {
 		manifest := nodeManifest()
 		builds := appBuildsFor(t, cfg, manifest)
 		id := builds.identities["api"]
-		outs := []*deploymentsv1.ResourceOutput{fnOutput("api_handler", "https://api-fn.lambda-url.aws/")}
+		outs := []*deploymentsv1.FunctionOutput{fnOutput("api_handler", "https://api-fn.lambda-url.aws/")}
 
 		record, err := buildDeploymentRecord(cfg, manifest, manifest.GetApps()[0], id, outs, builds)
 		if err != nil {

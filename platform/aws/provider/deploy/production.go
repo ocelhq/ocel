@@ -26,6 +26,7 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/naming"
 	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
+	linksv1 "github.com/ocelhq/ocel/pkg/proto/links/v1"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
@@ -130,19 +131,19 @@ func realize(ctx context.Context, cfg Config, manifest *deploymentsv1.Manifest, 
 	}
 	state = MarkGlobalPreview(state, cfg, manifest)
 
-	var infraOutputs []*deploymentsv1.ResourceOutput
+	var links []*linksv1.Link
 	if !plan.InfraStack.IsZero() {
 		progress.report(deploymentsv1.Phase_PHASE_PROVISIONING, "Provisioning infra stack", 0, 0)
-		infraOutputs, err = runInfraStack(ctx, cfg, manifest, plan, log)
+		links, err = runInfraStack(ctx, cfg, manifest, plan, log)
 		if err != nil {
 			return Result{RootStackState: state}, finishProvisioning(err)
 		}
 	}
-	resourceEnv := resourceEnvValues(manifest, infraOutputs)
+	resourceEnv := resourceEnvValues(manifest, links)
 
 	progress.report(deploymentsv1.Phase_PHASE_PROVISIONING, "Provisioning app-deploy stacks", 0, 0)
 	results := make([]appDeployResult, len(apps))
-	appOutputs := make([][]*deploymentsv1.ResourceOutput, len(apps))
+	appOutputs := make([][]*deploymentsv1.FunctionOutput, len(apps))
 	appFunctionNames := make([]map[string]string, len(apps))
 	runAppStacks(apps, func(i int, app *deploymentsv1.ManifestApp) {
 		id := identities[app.GetName()]
@@ -169,14 +170,15 @@ func realize(ctx context.Context, cfg Config, manifest *deploymentsv1.Manifest, 
 	}
 	spanForStage(cfg.Tracer, cfg.Stages.Finalizing, finalizeStart, time.Now(), nil)
 
-	outputs := append([]*deploymentsv1.ResourceOutput{}, infraOutputs...)
+	var functions []*deploymentsv1.FunctionOutput
 	for _, outs := range appOutputs {
-		outputs = append(outputs, outs...)
+		functions = append(functions, outs...)
 	}
-	outputs = append(outputs, workerURLOutputs(cfg, manifest)...)
+	functions = append(functions, workerURLOutputs(cfg, manifest)...)
 	return Result{
-		Outputs:        outputs,
-		AppURLs:        appURLs(manifest, outputs),
+		Links:          links,
+		Functions:      functions,
+		AppURLs:        appURLs(manifest, functions),
 		PromotionID:    promotionID,
 		RootStackState: state,
 	}, nil
@@ -627,7 +629,7 @@ func readRoutingManifest(cfg Config, app string) (any, bool, error) {
 	return routing, true, nil
 }
 
-func buildDeploymentRecord(cfg Config, manifest *deploymentsv1.Manifest, app *deploymentsv1.ManifestApp, id Identity, outs []*deploymentsv1.ResourceOutput, builds appBuilds) (edge.DeploymentRecord, error) {
+func buildDeploymentRecord(cfg Config, manifest *deploymentsv1.Manifest, app *deploymentsv1.ManifestApp, id Identity, outs []*deploymentsv1.FunctionOutput, builds appBuilds) (edge.DeploymentRecord, error) {
 	name := app.GetName()
 	urlByLogical := functionURLsByLogicalName(outs)
 	fingerprint, variables := recordedAudit(cfg, app)
@@ -669,7 +671,7 @@ func buildDeploymentRecord(cfg Config, manifest *deploymentsv1.Manifest, app *de
 	return record, nil
 }
 
-func workerURLOutputs(cfg Config, manifest *deploymentsv1.Manifest) []*deploymentsv1.ResourceOutput {
+func workerURLOutputs(cfg Config, manifest *deploymentsv1.Manifest) []*deploymentsv1.FunctionOutput {
 	apps := workerApps(cfg.ArtifactRoot, manifest)
 	if len(apps) == 0 {
 		return nil
@@ -678,7 +680,7 @@ func workerURLOutputs(cfg Config, manifest *deploymentsv1.Manifest) []*deploymen
 	if err != nil {
 		return nil
 	}
-	var outs []*deploymentsv1.ResourceOutput
+	var outs []*deploymentsv1.FunctionOutput
 	for _, app := range apps {
 		if url := workerAppURL(resolved.hosts[app.GetName()]); url != "" {
 			outs = append(outs, collectFunctionOutput(workerOutputName(app.GetName()), url))
@@ -699,7 +701,7 @@ func workerAppURL(domains []string) string {
 	return "https://" + domains[0]
 }
 
-func runInfraStack(ctx context.Context, cfg Config, manifest *deploymentsv1.Manifest, plan Plan, log func(string)) ([]*deploymentsv1.ResourceOutput, error) {
+func runInfraStack(ctx context.Context, cfg Config, manifest *deploymentsv1.Manifest, plan Plan, log func(string)) ([]*linksv1.Link, error) {
 	program := func(pctx *pulumi.Context) error {
 		vpc, err := ec2.LookupVpc(pctx, &ec2.LookupVpcArgs{Default: pulumi.BoolRef(true)})
 		if err != nil {
@@ -733,10 +735,10 @@ func runInfraStack(ctx context.Context, cfg Config, manifest *deploymentsv1.Mani
 	if err != nil {
 		return nil, fmt.Errorf("provision infra stack %s: %w", plan.InfraStack, err)
 	}
-	return collectResourceOutputs(ctx, cfg.Secrets, manifest, res.Outputs)
+	return collectLinks(ctx, cfg.Secrets, manifest, res.Outputs)
 }
 
-func runAppStack(ctx context.Context, cfg Config, manifest *deploymentsv1.Manifest, plan Plan, app *deploymentsv1.ManifestApp, id Identity, resourceEnv map[string]string, artifacts map[string]artifactRef, baked appBundle, builds appBuilds, stage Stage, log func(string)) (outs []*deploymentsv1.ResourceOutput, names map[string]string, err error) {
+func runAppStack(ctx context.Context, cfg Config, manifest *deploymentsv1.Manifest, plan Plan, app *deploymentsv1.ManifestApp, id Identity, resourceEnv map[string]string, artifacts map[string]artifactRef, baked appBundle, builds appBuilds, stage Stage, log func(string)) (outs []*deploymentsv1.FunctionOutput, names map[string]string, err error) {
 	start := time.Now()
 	defer func() { spanForStage(cfg.Tracer, stage, start, time.Now(), err) }()
 
@@ -963,33 +965,33 @@ func emitEngineTrace(t Tracer, parentStage StageID, trace EngineTrace, upErr err
 	}
 }
 
-func resourceEnvValues(manifest *deploymentsv1.Manifest, outputs []*deploymentsv1.ResourceOutput) map[string]string {
-	byLogical := make(map[string]*deploymentsv1.ResourceOutput, len(outputs))
-	for _, o := range outputs {
-		byLogical[o.GetLogicalName()] = o
+func resourceEnvValues(manifest *deploymentsv1.Manifest, links []*linksv1.Link) map[string]string {
+	byName := make(map[string]*linksv1.Link, len(links))
+	for _, l := range links {
+		byName[l.GetName()] = l
 	}
 
 	env := make(map[string]string)
 	for _, r := range manifest.GetResources() {
-		out, ok := byLogical[r.GetLogicalName()]
+		link, ok := byName[r.GetLogicalName()]
 		if !ok {
 			continue
 		}
-		key := functionEnvKey(r.GetResource().GetType(), r.GetResource().GetName())
-		switch {
-		case r.GetPostgres() != nil && out.GetPostgres() != nil:
-			pg := out.GetPostgres()
-			env[key] = postgresEnvPayload(pg.GetUsername(), pg.GetPassword(), pg.GetHost(), int(pg.GetPort()), pg.GetDatabase())
-		case r.GetBucket() != nil && out.GetBucket() != nil:
-			b := out.GetBucket()
-			env[key] = bucketEnvPayload(b.GetAddress(), b.GetBucket())
+		key := functionEnvKey(link.GetType(), r.GetResource().GetName())
+		p := link.GetProperties()
+		switch link.GetType() {
+		case naming.TokenPostgres:
+			port, _ := strconv.Atoi(p["port"])
+			env[key] = postgresEnvPayload(p["username"], p["password"], p["host"], port, p["database"])
+		case naming.TokenBucket:
+			env[key] = bucketEnvPayload(deferredRuntimeAddress, p["bucket"])
 		}
 	}
 	return env
 }
 
-func collectResourceOutputs(ctx context.Context, secrets SecretsReader, manifest *deploymentsv1.Manifest, outputs auto.OutputMap) ([]*deploymentsv1.ResourceOutput, error) {
-	var result []*deploymentsv1.ResourceOutput
+func collectLinks(ctx context.Context, secrets SecretsReader, manifest *deploymentsv1.Manifest, outputs auto.OutputMap) ([]*linksv1.Link, error) {
+	var result []*linksv1.Link
 	for _, r := range manifest.GetResources() {
 		if r.GetPostgres() == nil && r.GetBucket() == nil {
 			continue
@@ -1004,14 +1006,14 @@ func collectResourceOutputs(ctx context.Context, secrets SecretsReader, manifest
 			return nil, fmt.Errorf("output for %s is not a map", name)
 		}
 		var (
-			out *deploymentsv1.ResourceOutput
+			out *linksv1.Link
 			err error
 		)
 		switch {
 		case r.GetPostgres() != nil:
-			out, err = collectPostgresOutput(ctx, secrets, name, fields)
+			out, err = collectPostgresLink(ctx, secrets, name, fields)
 		case r.GetBucket() != nil:
-			out, err = collectBucketOutput(name, fields)
+			out, err = collectBucketLink(name, fields)
 		}
 		if err != nil {
 			return nil, err
@@ -1021,8 +1023,8 @@ func collectResourceOutputs(ctx context.Context, secrets SecretsReader, manifest
 	return result, nil
 }
 
-func collectAppFunctionOutputs(functions []*deploymentsv1.ManifestFunction, outputs auto.OutputMap) ([]*deploymentsv1.ResourceOutput, map[string]string, error) {
-	var result []*deploymentsv1.ResourceOutput
+func collectAppFunctionOutputs(functions []*deploymentsv1.ManifestFunction, outputs auto.OutputMap) ([]*deploymentsv1.FunctionOutput, map[string]string, error) {
+	var result []*deploymentsv1.FunctionOutput
 	names := make(map[string]string, len(functions))
 	for _, fn := range functions {
 		name := fn.GetLogicalName()

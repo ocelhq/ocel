@@ -27,6 +27,7 @@ import (
 	"github.com/ocelhq/ocel/cli/node"
 	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
 	envv1 "github.com/ocelhq/ocel/pkg/proto/env/v1"
+	linksv1 "github.com/ocelhq/ocel/pkg/proto/links/v1"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/resources/v1"
 )
 
@@ -169,13 +170,15 @@ func runDeploy(ctx context.Context, d deps, cwd string, opts deployOptions, stdo
 			Tag:             opts.tag,
 		}
 
-		var stackOutputs []*deploymentsv1.ResourceOutput
+		var links []*linksv1.Link
+		var functions []*deploymentsv1.FunctionOutput
 		var appURLs []string
 		var promotionID string
 		onEvent := func(ev *deploymentsv1.DeployEvent) {
 			ui.Event(ev)
 			if res := ev.GetResult(); res != nil {
-				stackOutputs = res.GetOutputs()
+				links = res.GetLinks()
+				functions = res.GetFunctions()
 				appURLs = res.GetAppUrls()
 				promotionID = res.GetPromotionId()
 			}
@@ -187,7 +190,7 @@ func runDeploy(ctx context.Context, d deps, cwd string, opts deployOptions, stdo
 		if err := recordDeployResult(cfg, manifest, env, opts.tag, promotionID, appURLs); err != nil {
 			return err
 		}
-		ui.Deployed("Deployed", appURLs, stackOutputs)
+		ui.Deployed("Deployed", appURLs, links, functions)
 		return nil
 	})
 	if err != nil {

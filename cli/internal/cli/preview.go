@@ -20,6 +20,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/providerrunner"
 	"github.com/ocelhq/ocel/cli/node"
 	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
+	linksv1 "github.com/ocelhq/ocel/pkg/proto/links/v1"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
@@ -215,13 +216,15 @@ func runPreviewUp(ctx context.Context, d deps, cwd string, opts previewUpOptions
 			Environment:     env,
 		}
 
-		var stackOutputs []*deploymentsv1.ResourceOutput
+		var links []*linksv1.Link
+		var functions []*deploymentsv1.FunctionOutput
 		var appURLs []string
 		var promotionID string
 		onEvent := func(ev *deploymentsv1.DeployEvent) {
 			ui.Event(ev)
 			if res := ev.GetResult(); res != nil {
-				stackOutputs = res.GetOutputs()
+				links = res.GetLinks()
+				functions = res.GetFunctions()
 				appURLs = res.GetAppUrls()
 				promotionID = res.GetPromotionId()
 			}
@@ -233,7 +236,7 @@ func runPreviewUp(ctx context.Context, d deps, cwd string, opts previewUpOptions
 		if err := recordDeployResult(cfg, manifest, env, "", promotionID, appURLs); err != nil {
 			return err
 		}
-		ui.Deployed(fmt.Sprintf("Preview %s is up", env.GetIdentity()), appURLs, stackOutputs)
+		ui.Deployed(fmt.Sprintf("Preview %s is up", env.GetIdentity()), appURLs, links, functions)
 		return nil
 	})
 	if err != nil {

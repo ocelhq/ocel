@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/ocelhq/ocel/cli/internal/envgate"
+	"github.com/ocelhq/ocel/pkg/naming"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/resources/v1"
 )
 
@@ -19,7 +20,7 @@ func TestCollector(t *testing.T) {
 		c := New(envgate.New(emptyValues{}, envgate.Scope{}))
 
 		_, err := c.Declare(context.Background(), &resourcesv1.DeclareRequest{
-			Resource: &resourcesv1.ResourceIdentifier{Name: "main", Type: resourcesv1.ResourceType_RESOURCE_TYPE_POSTGRES},
+			Resource: &resourcesv1.ResourceIdentifier{Name: "main", Type: naming.TokenPostgres},
 			Config:   &resourcesv1.DeclareRequest_Postgres{Postgres: &resourcesv1.PostgresConfig{Version: "17"}},
 		})
 		if err != nil {
@@ -33,8 +34,8 @@ func TestCollector(t *testing.T) {
 		if got[0].Name != "main" {
 			t.Errorf("Name = %q, want %q", got[0].Name, "main")
 		}
-		if got[0].Type != resourcesv1.ResourceType_RESOURCE_TYPE_POSTGRES {
-			t.Errorf("Type = %v, want RESOURCE_TYPE_POSTGRES", got[0].Type)
+		if got[0].Type != naming.TokenPostgres {
+			t.Errorf("Type = %q, want %q", got[0].Type, naming.TokenPostgres)
 		}
 		if got[0].Postgres.GetVersion() != "17" {
 			t.Errorf("Postgres.Version = %q, want %q — config oneof must not be discarded", got[0].Postgres.GetVersion(), "17")

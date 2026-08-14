@@ -13,7 +13,9 @@ import (
 	"go.opentelemetry.io/otel/attribute"
 
 	"github.com/ocelhq/ocel/cli/internal/obs"
+	"github.com/ocelhq/ocel/pkg/naming"
 	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
+	linksv1 "github.com/ocelhq/ocel/pkg/proto/links/v1"
 )
 
 type Session struct {
@@ -157,8 +159,8 @@ func (s *Session) now() time.Time {
 	return s.r.plan.now().UTC()
 }
 
-func (s *Session) Deployed(headline string, appURLs []string, outputs []*deploymentsv1.ResourceOutput) {
-	s.logOutputs(outputs)
+func (s *Session) Deployed(headline string, appURLs []string, links []*linksv1.Link, functions []*deploymentsv1.FunctionOutput) {
+	s.logOutputs(links, functions)
 	s.r.Deployed(headline, appURLs, s.logPath)
 }
 
@@ -191,9 +193,12 @@ func (s *Session) logf(format string, args ...any) {
 	_, _ = s.logWriter.Write([]byte(fmt.Sprintf(format, args...) + "\n"))
 }
 
-func (s *Session) logOutputs(outputs []*deploymentsv1.ResourceOutput) {
-	for _, o := range outputs {
-		s.logf("[output] %s", formatOutput(o))
+func (s *Session) logOutputs(links []*linksv1.Link, functions []*deploymentsv1.FunctionOutput) {
+	for _, l := range links {
+		s.logf("[output] %s", formatLink(l))
+	}
+	for _, f := range functions {
+		s.logf("[output] %s: %s", f.GetLogicalName(), f.GetUrl())
 	}
 }
 
@@ -241,17 +246,15 @@ func relLog(logPath string) string {
 	return logPath
 }
 
-func formatOutput(o *deploymentsv1.ResourceOutput) string {
-	if pg := o.GetPostgres(); pg != nil {
-		return fmt.Sprintf("%s: postgres://%s@%s:%d/%s", o.GetLogicalName(), pg.GetUsername(), pg.GetHost(), pg.GetPort(), pg.GetDatabase())
+func formatLink(l *linksv1.Link) string {
+	p := l.GetProperties()
+	switch l.GetType() {
+	case naming.TokenPostgres:
+		return fmt.Sprintf("%s: postgres://%s@%s:%s/%s", l.GetName(), p["username"], p["host"], p["port"], p["database"])
+	case naming.TokenBucket:
+		return fmt.Sprintf("%s: bucket %s", l.GetName(), p["bucket"])
 	}
-	if b := o.GetBucket(); b != nil {
-		return fmt.Sprintf("%s: bucket %s at %s", o.GetLogicalName(), b.GetBucket(), b.GetAddress())
-	}
-	if f := o.GetFunction(); f != nil {
-		return fmt.Sprintf("%s: %s", o.GetLogicalName(), f.GetUrl())
-	}
-	return o.GetLogicalName()
+	return l.GetName()
 }
 
 func spanStatus(s deploymentsv1.SpanStatus) obs.SpanStatus {

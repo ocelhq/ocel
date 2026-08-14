@@ -10,7 +10,7 @@ import (
 	"github.com/pulumi/pulumi/sdk/v3/go/pulumi"
 
 	"github.com/ocelhq/ocel/pkg/naming"
-	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
+	linksv1 "github.com/ocelhq/ocel/pkg/proto/links/v1"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/resources/v1"
 )
 
@@ -288,19 +288,15 @@ func joinArn(arn pulumi.StringOutput, suffix string) pulumi.StringInput {
 	return arn.ApplyT(func(a string) string { return a + suffix }).(pulumi.StringOutput)
 }
 
-func collectBucketOutput(name string, fields map[string]any) (*deploymentsv1.ResourceOutput, error) {
+func collectBucketLink(name string, fields map[string]any) (*linksv1.Link, error) {
 	bucket, err := requireStringField(fields, name, outputKeyBucket)
 	if err != nil {
 		return nil, err
 	}
-	return &deploymentsv1.ResourceOutput{
-		LogicalName: name,
-		Output: &deploymentsv1.ResourceOutput_Bucket{
-			Bucket: &deploymentsv1.BucketOutput{
-				Address: deferredRuntimeAddress,
-				Bucket:  bucket,
-			},
-		},
+	return &linksv1.Link{
+		Name:       name,
+		Type:       naming.TokenBucket,
+		Properties: map[string]string{"bucket": bucket},
 	}, nil
 }
 

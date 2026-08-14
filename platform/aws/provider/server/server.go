@@ -28,7 +28,6 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/naming"
 	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
-	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/resources/v1"
 	"github.com/ocelhq/ocel/platform/aws/provider/bootstrap"
 	"github.com/ocelhq/ocel/platform/aws/provider/deploy"
 	"github.com/ocelhq/ocel/platform/aws/provider/pulumiruntime"
@@ -525,6 +524,16 @@ func resourceSummary(r *deploymentsv1.ManifestResource) string {
 	}
 }
 
+func configMatchesToken(r *deploymentsv1.ManifestResource, token string) bool {
+	switch token {
+	case naming.TokenPostgres:
+		return r.GetPostgres() != nil
+	case naming.TokenBucket:
+		return r.GetBucket() != nil
+	}
+	return false
+}
+
 func progressEvent(message string) *deploymentsv1.DeployEvent {
 	return &deploymentsv1.DeployEvent{
 		Event: &deploymentsv1.DeployEvent_Progress{Progress: &deploymentsv1.ProgressEvent{Message: message}},
@@ -581,7 +590,8 @@ func deployedResult(res deploy.Result) *deploymentsv1.DeployEvent {
 	return &deploymentsv1.DeployEvent{
 		Event: &deploymentsv1.DeployEvent_Result{Result: &deploymentsv1.ResultEvent{
 			Success:     true,
-			Outputs:     res.Outputs,
+			Links:       res.Links,
+			Functions:   res.Functions,
 			AppUrls:     res.AppURLs,
 			PromotionId: res.PromotionID,
 		}},
@@ -602,11 +612,15 @@ func validateManifest(m *deploymentsv1.Manifest) error {
 		if r.GetLogicalName() == "" {
 			return fmt.Errorf("manifest.resources[%d]: logical_name is required", i)
 		}
-		if r.GetResource() == nil || r.GetResource().GetType() == resourcesv1.ResourceType_RESOURCE_TYPE_UNSPECIFIED {
+		token := r.GetResource().GetType()
+		if _, ok := naming.TokenKind(token); !ok {
 			return fmt.Errorf("manifest.resources[%d] (%s): a valid resource type is required", i, r.GetLogicalName())
 		}
 		if r.GetConfig() == nil {
 			return fmt.Errorf("manifest.resources[%d] (%s): typed config is required", i, r.GetLogicalName())
+		}
+		if !configMatchesToken(r, token) {
+			return fmt.Errorf("manifest.resources[%d] (%s): config does not match resource type %q", i, r.GetLogicalName(), token)
 		}
 	}
 	return nil

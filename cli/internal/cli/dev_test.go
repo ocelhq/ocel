@@ -747,7 +747,7 @@ globalThis.__ocelRegister.push(
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
-      resource: { type: "RESOURCE_TYPE_POSTGRES", name: %q },
+      resource: { type: "ocel:postgres", name: %q },
       postgres: { version: "17" },
     }),
   }),

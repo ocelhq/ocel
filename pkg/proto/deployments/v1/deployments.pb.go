@@ -7,6 +7,7 @@
 package deploymentsv1
 
 import (
+	v11 "github.com/ocelhq/ocel/pkg/proto/links/v1"
 	v1 "github.com/ocelhq/ocel/pkg/proto/resources/v1"
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
@@ -3087,7 +3088,8 @@ type ResultEvent struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Success       bool                   `protobuf:"varint,1,opt,name=success,proto3" json:"success,omitempty"`
 	Error         string                 `protobuf:"bytes,2,opt,name=error,proto3" json:"error,omitempty"`
-	Outputs       []*ResourceOutput      `protobuf:"bytes,3,rep,name=outputs,proto3" json:"outputs,omitempty"`
+	Links         []*v11.Link            `protobuf:"bytes,6,rep,name=links,proto3" json:"links,omitempty"`
+	Functions     []*FunctionOutput      `protobuf:"bytes,7,rep,name=functions,proto3" json:"functions,omitempty"`
 	AppUrls       []string               `protobuf:"bytes,4,rep,name=app_urls,json=appUrls,proto3" json:"app_urls,omitempty"`
 	PromotionId   string                 `protobuf:"bytes,5,opt,name=promotion_id,json=promotionId,proto3" json:"promotion_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
@@ -3138,9 +3140,16 @@ func (x *ResultEvent) GetError() string {
 	return ""
 }
 
-func (x *ResultEvent) GetOutputs() []*ResourceOutput {
+func (x *ResultEvent) GetLinks() []*v11.Link {
 	if x != nil {
-		return x.Outputs
+		return x.Links
+	}
+	return nil
+}
+
+func (x *ResultEvent) GetFunctions() []*FunctionOutput {
+	if x != nil {
+		return x.Functions
 	}
 	return nil
 }
@@ -3159,242 +3168,9 @@ func (x *ResultEvent) GetPromotionId() string {
 	return ""
 }
 
-type ResourceOutput struct {
-	state       protoimpl.MessageState `protogen:"open.v1"`
-	LogicalName string                 `protobuf:"bytes,1,opt,name=logical_name,json=logicalName,proto3" json:"logical_name,omitempty"`
-	// Types that are valid to be assigned to Output:
-	//
-	//	*ResourceOutput_Postgres
-	//	*ResourceOutput_Bucket
-	//	*ResourceOutput_Function
-	Output        isResourceOutput_Output `protobuf_oneof:"output"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *ResourceOutput) Reset() {
-	*x = ResourceOutput{}
-	mi := &file_deployments_v1_deployments_proto_msgTypes[41]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *ResourceOutput) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*ResourceOutput) ProtoMessage() {}
-
-func (x *ResourceOutput) ProtoReflect() protoreflect.Message {
-	mi := &file_deployments_v1_deployments_proto_msgTypes[41]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use ResourceOutput.ProtoReflect.Descriptor instead.
-func (*ResourceOutput) Descriptor() ([]byte, []int) {
-	return file_deployments_v1_deployments_proto_rawDescGZIP(), []int{41}
-}
-
-func (x *ResourceOutput) GetLogicalName() string {
-	if x != nil {
-		return x.LogicalName
-	}
-	return ""
-}
-
-func (x *ResourceOutput) GetOutput() isResourceOutput_Output {
-	if x != nil {
-		return x.Output
-	}
-	return nil
-}
-
-func (x *ResourceOutput) GetPostgres() *PostgresOutput {
-	if x != nil {
-		if x, ok := x.Output.(*ResourceOutput_Postgres); ok {
-			return x.Postgres
-		}
-	}
-	return nil
-}
-
-func (x *ResourceOutput) GetBucket() *BucketOutput {
-	if x != nil {
-		if x, ok := x.Output.(*ResourceOutput_Bucket); ok {
-			return x.Bucket
-		}
-	}
-	return nil
-}
-
-func (x *ResourceOutput) GetFunction() *FunctionOutput {
-	if x != nil {
-		if x, ok := x.Output.(*ResourceOutput_Function); ok {
-			return x.Function
-		}
-	}
-	return nil
-}
-
-type isResourceOutput_Output interface {
-	isResourceOutput_Output()
-}
-
-type ResourceOutput_Postgres struct {
-	Postgres *PostgresOutput `protobuf:"bytes,2,opt,name=postgres,proto3,oneof"`
-}
-
-type ResourceOutput_Bucket struct {
-	Bucket *BucketOutput `protobuf:"bytes,3,opt,name=bucket,proto3,oneof"`
-}
-
-type ResourceOutput_Function struct {
-	Function *FunctionOutput `protobuf:"bytes,4,opt,name=function,proto3,oneof"`
-}
-
-func (*ResourceOutput_Postgres) isResourceOutput_Output() {}
-
-func (*ResourceOutput_Bucket) isResourceOutput_Output() {}
-
-func (*ResourceOutput_Function) isResourceOutput_Output() {}
-
-type PostgresOutput struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Host          string                 `protobuf:"bytes,1,opt,name=host,proto3" json:"host,omitempty"`
-	Port          int32                  `protobuf:"varint,2,opt,name=port,proto3" json:"port,omitempty"`
-	Database      string                 `protobuf:"bytes,3,opt,name=database,proto3" json:"database,omitempty"`
-	Username      string                 `protobuf:"bytes,4,opt,name=username,proto3" json:"username,omitempty"`
-	Password      string                 `protobuf:"bytes,5,opt,name=password,proto3" json:"password,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *PostgresOutput) Reset() {
-	*x = PostgresOutput{}
-	mi := &file_deployments_v1_deployments_proto_msgTypes[42]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *PostgresOutput) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*PostgresOutput) ProtoMessage() {}
-
-func (x *PostgresOutput) ProtoReflect() protoreflect.Message {
-	mi := &file_deployments_v1_deployments_proto_msgTypes[42]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use PostgresOutput.ProtoReflect.Descriptor instead.
-func (*PostgresOutput) Descriptor() ([]byte, []int) {
-	return file_deployments_v1_deployments_proto_rawDescGZIP(), []int{42}
-}
-
-func (x *PostgresOutput) GetHost() string {
-	if x != nil {
-		return x.Host
-	}
-	return ""
-}
-
-func (x *PostgresOutput) GetPort() int32 {
-	if x != nil {
-		return x.Port
-	}
-	return 0
-}
-
-func (x *PostgresOutput) GetDatabase() string {
-	if x != nil {
-		return x.Database
-	}
-	return ""
-}
-
-func (x *PostgresOutput) GetUsername() string {
-	if x != nil {
-		return x.Username
-	}
-	return ""
-}
-
-func (x *PostgresOutput) GetPassword() string {
-	if x != nil {
-		return x.Password
-	}
-	return ""
-}
-
-type BucketOutput struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Address       string                 `protobuf:"bytes,1,opt,name=address,proto3" json:"address,omitempty"`
-	Bucket        string                 `protobuf:"bytes,2,opt,name=bucket,proto3" json:"bucket,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *BucketOutput) Reset() {
-	*x = BucketOutput{}
-	mi := &file_deployments_v1_deployments_proto_msgTypes[43]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *BucketOutput) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*BucketOutput) ProtoMessage() {}
-
-func (x *BucketOutput) ProtoReflect() protoreflect.Message {
-	mi := &file_deployments_v1_deployments_proto_msgTypes[43]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use BucketOutput.ProtoReflect.Descriptor instead.
-func (*BucketOutput) Descriptor() ([]byte, []int) {
-	return file_deployments_v1_deployments_proto_rawDescGZIP(), []int{43}
-}
-
-func (x *BucketOutput) GetAddress() string {
-	if x != nil {
-		return x.Address
-	}
-	return ""
-}
-
-func (x *BucketOutput) GetBucket() string {
-	if x != nil {
-		return x.Bucket
-	}
-	return ""
-}
-
 type FunctionOutput struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
+	LogicalName   string                 `protobuf:"bytes,2,opt,name=logical_name,json=logicalName,proto3" json:"logical_name,omitempty"`
 	Url           string                 `protobuf:"bytes,1,opt,name=url,proto3" json:"url,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -3402,7 +3178,7 @@ type FunctionOutput struct {
 
 func (x *FunctionOutput) Reset() {
 	*x = FunctionOutput{}
-	mi := &file_deployments_v1_deployments_proto_msgTypes[44]
+	mi := &file_deployments_v1_deployments_proto_msgTypes[41]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3414,7 +3190,7 @@ func (x *FunctionOutput) String() string {
 func (*FunctionOutput) ProtoMessage() {}
 
 func (x *FunctionOutput) ProtoReflect() protoreflect.Message {
-	mi := &file_deployments_v1_deployments_proto_msgTypes[44]
+	mi := &file_deployments_v1_deployments_proto_msgTypes[41]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3427,7 +3203,14 @@ func (x *FunctionOutput) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use FunctionOutput.ProtoReflect.Descriptor instead.
 func (*FunctionOutput) Descriptor() ([]byte, []int) {
-	return file_deployments_v1_deployments_proto_rawDescGZIP(), []int{44}
+	return file_deployments_v1_deployments_proto_rawDescGZIP(), []int{41}
+}
+
+func (x *FunctionOutput) GetLogicalName() string {
+	if x != nil {
+		return x.LogicalName
+	}
+	return ""
 }
 
 func (x *FunctionOutput) GetUrl() string {
@@ -3441,7 +3224,7 @@ var File_deployments_v1_deployments_proto protoreflect.FileDescriptor
 
 const file_deployments_v1_deployments_proto_rawDesc = "" +
 	"\n" +
-	" deployments/v1/deployments.proto\x12\x0edeployments.v1\x1a\x16resources/v1/env.proto\x1a\x1cresources/v1/resources.proto\"l\n" +
+	" deployments/v1/deployments.proto\x12\x0edeployments.v1\x1a\x14links/v1/links.proto\x1a\x16resources/v1/env.proto\x1a\x1cresources/v1/resources.proto\"l\n" +
 	"\x10UseDomainRequest\x127\n" +
 	"\x05class\x18\x01 \x01(\x0e2!.deployments.v1.Environment.ClassR\x05class\x12\x1f\n" +
 	"\vbase_domain\x18\x02 \x01(\tR\n" +
@@ -3676,29 +3459,16 @@ const file_deployments_v1_deployments_proto_rawDesc = "" +
 	"\b_currentB\b\n" +
 	"\x06_total\"$\n" +
 	"\bLogEvent\x12\x18\n" +
-	"\amessage\x18\x01 \x01(\tR\amessage\"\xb5\x01\n" +
+	"\amessage\x18\x01 \x01(\tR\amessage\"\xee\x01\n" +
 	"\vResultEvent\x12\x18\n" +
 	"\asuccess\x18\x01 \x01(\bR\asuccess\x12\x14\n" +
-	"\x05error\x18\x02 \x01(\tR\x05error\x128\n" +
-	"\aoutputs\x18\x03 \x03(\v2\x1e.deployments.v1.ResourceOutputR\aoutputs\x12\x19\n" +
+	"\x05error\x18\x02 \x01(\tR\x05error\x12$\n" +
+	"\x05links\x18\x06 \x03(\v2\x0e.links.v1.LinkR\x05links\x12<\n" +
+	"\tfunctions\x18\a \x03(\v2\x1e.deployments.v1.FunctionOutputR\tfunctions\x12\x19\n" +
 	"\bapp_urls\x18\x04 \x03(\tR\aappUrls\x12!\n" +
-	"\fpromotion_id\x18\x05 \x01(\tR\vpromotionId\"\xf1\x01\n" +
-	"\x0eResourceOutput\x12!\n" +
-	"\flogical_name\x18\x01 \x01(\tR\vlogicalName\x12<\n" +
-	"\bpostgres\x18\x02 \x01(\v2\x1e.deployments.v1.PostgresOutputH\x00R\bpostgres\x126\n" +
-	"\x06bucket\x18\x03 \x01(\v2\x1c.deployments.v1.BucketOutputH\x00R\x06bucket\x12<\n" +
-	"\bfunction\x18\x04 \x01(\v2\x1e.deployments.v1.FunctionOutputH\x00R\bfunctionB\b\n" +
-	"\x06output\"\x91\x01\n" +
-	"\x0ePostgresOutput\x12\x12\n" +
-	"\x04host\x18\x01 \x01(\tR\x04host\x12\x12\n" +
-	"\x04port\x18\x02 \x01(\x05R\x04port\x12\x1a\n" +
-	"\bdatabase\x18\x03 \x01(\tR\bdatabase\x12\x1a\n" +
-	"\busername\x18\x04 \x01(\tR\busername\x12\x1f\n" +
-	"\bpassword\x18\x05 \x01(\tB\x03\x80\x01\x01R\bpassword\"@\n" +
-	"\fBucketOutput\x12\x18\n" +
-	"\aaddress\x18\x01 \x01(\tR\aaddress\x12\x16\n" +
-	"\x06bucket\x18\x02 \x01(\tR\x06bucket\"\"\n" +
-	"\x0eFunctionOutput\x12\x10\n" +
+	"\fpromotion_id\x18\x05 \x01(\tR\vpromotionIdJ\x04\b\x03\x10\x04R\aoutputs\"E\n" +
+	"\x0eFunctionOutput\x12!\n" +
+	"\flogical_name\x18\x02 \x01(\tR\vlogicalName\x12\x10\n" +
 	"\x03url\x18\x01 \x01(\tR\x03url*\x8b\x01\n" +
 	"\x05Phase\x12\x15\n" +
 	"\x11PHASE_UNSPECIFIED\x10\x00\x12\x13\n" +
@@ -3756,7 +3526,7 @@ func file_deployments_v1_deployments_proto_rawDescGZIP() []byte {
 }
 
 var file_deployments_v1_deployments_proto_enumTypes = make([]protoimpl.EnumInfo, 7)
-var file_deployments_v1_deployments_proto_msgTypes = make([]protoimpl.MessageInfo, 48)
+var file_deployments_v1_deployments_proto_msgTypes = make([]protoimpl.MessageInfo, 45)
 var file_deployments_v1_deployments_proto_goTypes = []any{
 	(Phase)(0),                         // 0: deployments.v1.Phase
 	(SpanStatus)(0),                    // 1: deployments.v1.SpanStatus
@@ -3806,17 +3576,15 @@ var file_deployments_v1_deployments_proto_goTypes = []any{
 	(*ProgressEvent)(nil),              // 45: deployments.v1.ProgressEvent
 	(*LogEvent)(nil),                   // 46: deployments.v1.LogEvent
 	(*ResultEvent)(nil),                // 47: deployments.v1.ResultEvent
-	(*ResourceOutput)(nil),             // 48: deployments.v1.ResourceOutput
-	(*PostgresOutput)(nil),             // 49: deployments.v1.PostgresOutput
-	(*BucketOutput)(nil),               // 50: deployments.v1.BucketOutput
-	(*FunctionOutput)(nil),             // 51: deployments.v1.FunctionOutput
-	nil,                                // 52: deployments.v1.Manifest.DomainsEntry
-	nil,                                // 53: deployments.v1.ManifestApp.DomainsEntry
-	nil,                                // 54: deployments.v1.Promotion.BuildsEntry
-	(v1.VariableClass)(0),              // 55: resources.v1.VariableClass
-	(*v1.ResourceIdentifier)(nil),      // 56: resources.v1.ResourceIdentifier
-	(*v1.PostgresConfig)(nil),          // 57: resources.v1.PostgresConfig
-	(*v1.BucketConfig)(nil),            // 58: resources.v1.BucketConfig
+	(*FunctionOutput)(nil),             // 48: deployments.v1.FunctionOutput
+	nil,                                // 49: deployments.v1.Manifest.DomainsEntry
+	nil,                                // 50: deployments.v1.ManifestApp.DomainsEntry
+	nil,                                // 51: deployments.v1.Promotion.BuildsEntry
+	(v1.VariableClass)(0),              // 52: resources.v1.VariableClass
+	(*v1.ResourceIdentifier)(nil),      // 53: resources.v1.ResourceIdentifier
+	(*v1.PostgresConfig)(nil),          // 54: resources.v1.PostgresConfig
+	(*v1.BucketConfig)(nil),            // 55: resources.v1.BucketConfig
+	(*v11.Link)(nil),                   // 56: links.v1.Link
 }
 var file_deployments_v1_deployments_proto_depIdxs = []int32{
 	3,  // 0: deployments.v1.UseDomainRequest.class:type_name -> deployments.v1.Environment.Class
@@ -3828,14 +3596,14 @@ var file_deployments_v1_deployments_proto_depIdxs = []int32{
 	5,  // 6: deployments.v1.Environment.identity_source:type_name -> deployments.v1.Environment.IdentitySource
 	17, // 7: deployments.v1.Manifest.resources:type_name -> deployments.v1.ManifestResource
 	16, // 8: deployments.v1.Manifest.functions:type_name -> deployments.v1.ManifestFunction
-	52, // 9: deployments.v1.Manifest.domains:type_name -> deployments.v1.Manifest.DomainsEntry
+	49, // 9: deployments.v1.Manifest.domains:type_name -> deployments.v1.Manifest.DomainsEntry
 	14, // 10: deployments.v1.Manifest.apps:type_name -> deployments.v1.ManifestApp
-	53, // 11: deployments.v1.ManifestApp.domains:type_name -> deployments.v1.ManifestApp.DomainsEntry
+	50, // 11: deployments.v1.ManifestApp.domains:type_name -> deployments.v1.ManifestApp.DomainsEntry
 	15, // 12: deployments.v1.ManifestApp.variables:type_name -> deployments.v1.ManifestVariable
-	55, // 13: deployments.v1.ManifestVariable.class:type_name -> resources.v1.VariableClass
-	56, // 14: deployments.v1.ManifestResource.resource:type_name -> resources.v1.ResourceIdentifier
-	57, // 15: deployments.v1.ManifestResource.postgres:type_name -> resources.v1.PostgresConfig
-	58, // 16: deployments.v1.ManifestResource.bucket:type_name -> resources.v1.BucketConfig
+	52, // 13: deployments.v1.ManifestVariable.class:type_name -> resources.v1.VariableClass
+	53, // 14: deployments.v1.ManifestResource.resource:type_name -> resources.v1.ResourceIdentifier
+	54, // 15: deployments.v1.ManifestResource.postgres:type_name -> resources.v1.PostgresConfig
+	55, // 16: deployments.v1.ManifestResource.bucket:type_name -> resources.v1.BucketConfig
 	12, // 17: deployments.v1.DeployRequest.manifest:type_name -> deployments.v1.Manifest
 	11, // 18: deployments.v1.DeployRequest.environment:type_name -> deployments.v1.Environment
 	3,  // 19: deployments.v1.BootstrapRequest.class:type_name -> deployments.v1.Environment.Class
@@ -3850,7 +3618,7 @@ var file_deployments_v1_deployments_proto_depIdxs = []int32{
 	30, // 28: deployments.v1.PreflightResponse.domain_claims:type_name -> deployments.v1.DomainClaim
 	29, // 29: deployments.v1.PreflightResponse.global_preview_domain:type_name -> deployments.v1.GlobalPreviewDomain
 	6,  // 30: deployments.v1.DomainClaim.status:type_name -> deployments.v1.DomainClaim.Status
-	54, // 31: deployments.v1.Promotion.builds:type_name -> deployments.v1.Promotion.BuildsEntry
+	51, // 31: deployments.v1.Promotion.builds:type_name -> deployments.v1.Promotion.BuildsEntry
 	33, // 32: deployments.v1.PromotionHistoryEntry.promotion:type_name -> deployments.v1.Promotion
 	34, // 33: deployments.v1.ListPromotionsResponse.promotions:type_name -> deployments.v1.PromotionHistoryEntry
 	33, // 34: deployments.v1.RollbackResponse.promoted:type_name -> deployments.v1.Promotion
@@ -3865,43 +3633,41 @@ var file_deployments_v1_deployments_proto_depIdxs = []int32{
 	1,  // 43: deployments.v1.SpanEvent.status:type_name -> deployments.v1.SpanStatus
 	43, // 44: deployments.v1.SpanEvent.attributes:type_name -> deployments.v1.SpanAttribute
 	0,  // 45: deployments.v1.ProgressEvent.phase:type_name -> deployments.v1.Phase
-	48, // 46: deployments.v1.ResultEvent.outputs:type_name -> deployments.v1.ResourceOutput
-	49, // 47: deployments.v1.ResourceOutput.postgres:type_name -> deployments.v1.PostgresOutput
-	50, // 48: deployments.v1.ResourceOutput.bucket:type_name -> deployments.v1.BucketOutput
-	51, // 49: deployments.v1.ResourceOutput.function:type_name -> deployments.v1.FunctionOutput
-	13, // 50: deployments.v1.Manifest.DomainsEntry.value:type_name -> deployments.v1.DomainList
-	13, // 51: deployments.v1.ManifestApp.DomainsEntry.value:type_name -> deployments.v1.DomainList
-	18, // 52: deployments.v1.DeploymentService.Deploy:input_type -> deployments.v1.DeployRequest
-	19, // 53: deployments.v1.DeploymentService.Bootstrap:input_type -> deployments.v1.BootstrapRequest
-	20, // 54: deployments.v1.DeploymentService.DestroyPreview:input_type -> deployments.v1.DestroyPreviewRequest
-	21, // 55: deployments.v1.DeploymentService.DestroyProject:input_type -> deployments.v1.DestroyProjectRequest
-	22, // 56: deployments.v1.DeploymentService.PlanDestroyProject:input_type -> deployments.v1.PlanDestroyProjectRequest
-	24, // 57: deployments.v1.DeploymentService.ListEnvironments:input_type -> deployments.v1.ListEnvironmentsRequest
-	27, // 58: deployments.v1.DeploymentService.Preflight:input_type -> deployments.v1.PreflightRequest
-	35, // 59: deployments.v1.DeploymentService.ListPromotions:input_type -> deployments.v1.ListPromotionsRequest
-	37, // 60: deployments.v1.DeploymentService.Rollback:input_type -> deployments.v1.RollbackRequest
-	39, // 61: deployments.v1.DeploymentService.Prune:input_type -> deployments.v1.PruneRequest
-	7,  // 62: deployments.v1.DeploymentService.UseDomain:input_type -> deployments.v1.UseDomainRequest
-	8,  // 63: deployments.v1.DeploymentService.ListDomain:input_type -> deployments.v1.ListDomainRequest
-	10, // 64: deployments.v1.DeploymentService.ReleaseDomain:input_type -> deployments.v1.ReleaseDomainRequest
-	40, // 65: deployments.v1.DeploymentService.Deploy:output_type -> deployments.v1.DeployEvent
-	40, // 66: deployments.v1.DeploymentService.Bootstrap:output_type -> deployments.v1.DeployEvent
-	40, // 67: deployments.v1.DeploymentService.DestroyPreview:output_type -> deployments.v1.DeployEvent
-	40, // 68: deployments.v1.DeploymentService.DestroyProject:output_type -> deployments.v1.DeployEvent
-	23, // 69: deployments.v1.DeploymentService.PlanDestroyProject:output_type -> deployments.v1.PlanDestroyProjectResponse
-	25, // 70: deployments.v1.DeploymentService.ListEnvironments:output_type -> deployments.v1.ListEnvironmentsResponse
-	28, // 71: deployments.v1.DeploymentService.Preflight:output_type -> deployments.v1.PreflightResponse
-	36, // 72: deployments.v1.DeploymentService.ListPromotions:output_type -> deployments.v1.ListPromotionsResponse
-	38, // 73: deployments.v1.DeploymentService.Rollback:output_type -> deployments.v1.RollbackResponse
-	40, // 74: deployments.v1.DeploymentService.Prune:output_type -> deployments.v1.DeployEvent
-	40, // 75: deployments.v1.DeploymentService.UseDomain:output_type -> deployments.v1.DeployEvent
-	9,  // 76: deployments.v1.DeploymentService.ListDomain:output_type -> deployments.v1.ListDomainResponse
-	40, // 77: deployments.v1.DeploymentService.ReleaseDomain:output_type -> deployments.v1.DeployEvent
-	65, // [65:78] is the sub-list for method output_type
-	52, // [52:65] is the sub-list for method input_type
-	52, // [52:52] is the sub-list for extension type_name
-	52, // [52:52] is the sub-list for extension extendee
-	0,  // [0:52] is the sub-list for field type_name
+	56, // 46: deployments.v1.ResultEvent.links:type_name -> links.v1.Link
+	48, // 47: deployments.v1.ResultEvent.functions:type_name -> deployments.v1.FunctionOutput
+	13, // 48: deployments.v1.Manifest.DomainsEntry.value:type_name -> deployments.v1.DomainList
+	13, // 49: deployments.v1.ManifestApp.DomainsEntry.value:type_name -> deployments.v1.DomainList
+	18, // 50: deployments.v1.DeploymentService.Deploy:input_type -> deployments.v1.DeployRequest
+	19, // 51: deployments.v1.DeploymentService.Bootstrap:input_type -> deployments.v1.BootstrapRequest
+	20, // 52: deployments.v1.DeploymentService.DestroyPreview:input_type -> deployments.v1.DestroyPreviewRequest
+	21, // 53: deployments.v1.DeploymentService.DestroyProject:input_type -> deployments.v1.DestroyProjectRequest
+	22, // 54: deployments.v1.DeploymentService.PlanDestroyProject:input_type -> deployments.v1.PlanDestroyProjectRequest
+	24, // 55: deployments.v1.DeploymentService.ListEnvironments:input_type -> deployments.v1.ListEnvironmentsRequest
+	27, // 56: deployments.v1.DeploymentService.Preflight:input_type -> deployments.v1.PreflightRequest
+	35, // 57: deployments.v1.DeploymentService.ListPromotions:input_type -> deployments.v1.ListPromotionsRequest
+	37, // 58: deployments.v1.DeploymentService.Rollback:input_type -> deployments.v1.RollbackRequest
+	39, // 59: deployments.v1.DeploymentService.Prune:input_type -> deployments.v1.PruneRequest
+	7,  // 60: deployments.v1.DeploymentService.UseDomain:input_type -> deployments.v1.UseDomainRequest
+	8,  // 61: deployments.v1.DeploymentService.ListDomain:input_type -> deployments.v1.ListDomainRequest
+	10, // 62: deployments.v1.DeploymentService.ReleaseDomain:input_type -> deployments.v1.ReleaseDomainRequest
+	40, // 63: deployments.v1.DeploymentService.Deploy:output_type -> deployments.v1.DeployEvent
+	40, // 64: deployments.v1.DeploymentService.Bootstrap:output_type -> deployments.v1.DeployEvent
+	40, // 65: deployments.v1.DeploymentService.DestroyPreview:output_type -> deployments.v1.DeployEvent
+	40, // 66: deployments.v1.DeploymentService.DestroyProject:output_type -> deployments.v1.DeployEvent
+	23, // 67: deployments.v1.DeploymentService.PlanDestroyProject:output_type -> deployments.v1.PlanDestroyProjectResponse
+	25, // 68: deployments.v1.DeploymentService.ListEnvironments:output_type -> deployments.v1.ListEnvironmentsResponse
+	28, // 69: deployments.v1.DeploymentService.Preflight:output_type -> deployments.v1.PreflightResponse
+	36, // 70: deployments.v1.DeploymentService.ListPromotions:output_type -> deployments.v1.ListPromotionsResponse
+	38, // 71: deployments.v1.DeploymentService.Rollback:output_type -> deployments.v1.RollbackResponse
+	40, // 72: deployments.v1.DeploymentService.Prune:output_type -> deployments.v1.DeployEvent
+	40, // 73: deployments.v1.DeploymentService.UseDomain:output_type -> deployments.v1.DeployEvent
+	9,  // 74: deployments.v1.DeploymentService.ListDomain:output_type -> deployments.v1.ListDomainResponse
+	40, // 75: deployments.v1.DeploymentService.ReleaseDomain:output_type -> deployments.v1.DeployEvent
+	63, // [63:76] is the sub-list for method output_type
+	50, // [50:63] is the sub-list for method input_type
+	50, // [50:50] is the sub-list for extension type_name
+	50, // [50:50] is the sub-list for extension extendee
+	0,  // [0:50] is the sub-list for field type_name
 }
 
 func init() { file_deployments_v1_deployments_proto_init() }
@@ -3921,18 +3687,13 @@ func file_deployments_v1_deployments_proto_init() {
 		(*DeployEvent_Span)(nil),
 	}
 	file_deployments_v1_deployments_proto_msgTypes[38].OneofWrappers = []any{}
-	file_deployments_v1_deployments_proto_msgTypes[41].OneofWrappers = []any{
-		(*ResourceOutput_Postgres)(nil),
-		(*ResourceOutput_Bucket)(nil),
-		(*ResourceOutput_Function)(nil),
-	}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_deployments_v1_deployments_proto_rawDesc), len(file_deployments_v1_deployments_proto_rawDesc)),
 			NumEnums:      7,
-			NumMessages:   48,
+			NumMessages:   45,
 			NumExtensions: 0,
 			NumServices:   1,
 		},
