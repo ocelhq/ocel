@@ -1,4 +1,4 @@
-//go:build unix
+//go:build linux || darwin
 
 package cli
 
@@ -19,7 +19,7 @@ while true; do sleep 1; done
 
 func termiosOf(t *testing.T, ptmx *os.File) *unix.Termios {
 	t.Helper()
-	term, err := unix.IoctlGetTermios(int(ptmx.Fd()), unix.TCGETS)
+	term, err := unix.IoctlGetTermios(int(ptmx.Fd()), getTermiosRequest)
 	if err != nil {
 		t.Fatalf("IoctlGetTermios: %v", err)
 	}
@@ -29,7 +29,7 @@ func termiosOf(t *testing.T, ptmx *os.File) *unix.Termios {
 func waitForRawMode(t *testing.T, ptmx *os.File) {
 	t.Helper()
 	if !waitFor(func() bool {
-		term, err := unix.IoctlGetTermios(int(ptmx.Fd()), unix.TCGETS)
+		term, err := unix.IoctlGetTermios(int(ptmx.Fd()), getTermiosRequest)
 		return err == nil && (term.Lflag&unix.ICANON == 0 || term.Lflag&unix.ECHO == 0)
 	}, 10*time.Second) {
 		t.Fatalf("app never appeared to disable icanon/echo")
