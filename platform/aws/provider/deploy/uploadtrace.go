@@ -21,6 +21,7 @@ const (
 	uploadKindFunctionArtifact uploadKind = iota
 	uploadKindStaticAsset
 	uploadKindPrerenderAsset
+	uploadKindEdgeBundle
 )
 
 func uploadBatchSpanName(k uploadKind) string {
@@ -31,6 +32,8 @@ func uploadBatchSpanName(k uploadKind) string {
 		return "upload static assets"
 	case uploadKindPrerenderAsset:
 		return "upload prerender assets"
+	case uploadKindEdgeBundle:
+		return "upload edge bundles"
 	default:
 		return "upload batch"
 	}
@@ -53,6 +56,11 @@ func uploadStandoutName(k uploadKind, failed bool) string {
 			return "prerender asset upload failed"
 		}
 		return "slow prerender asset upload"
+	case uploadKindEdgeBundle:
+		if failed {
+			return "edge bundle upload failed"
+		}
+		return "slow edge bundle upload"
 	default:
 		if failed {
 			return "upload failed"

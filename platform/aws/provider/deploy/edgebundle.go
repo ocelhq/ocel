@@ -11,6 +11,7 @@ import (
 	"path"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/ocelhq/ocel/pkg/naming"
 	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
@@ -44,6 +45,14 @@ func uploadEdgeBundles(ctx context.Context, cfg Config, manifest *deploymentsv1.
 	if cfg.CacheStoreBucket == "" || cfg.CacheStoreUploader == nil {
 		return nil
 	}
+	phaseStart := time.Now()
+	stats := newUploadBatchStats()
+	err := putEdgeBundles(ctx, cfg, manifest, builds, stats)
+	emitUploadBatch(cfg.Tracer, cfg.Stages.Uploading.ID, uploadKindEdgeBundle, stats, err, phaseStart)
+	return err
+}
+
+func putEdgeBundles(ctx context.Context, cfg Config, manifest *deploymentsv1.Manifest, builds appBuilds, stats *uploadBatchStats) error {
 	for _, app := range manifestApps(manifest) {
 		if app.GetFramework() != frameworkNext {
 			continue
@@ -51,13 +60,15 @@ func uploadEdgeBundles(ctx context.Context, cfg Config, manifest *deploymentsv1.
 		name := app.GetName()
 		bundle, ok, err := readEdgeBundle(cfg, name)
 		if err != nil {
+			now := time.Now()
+			stats.record(uploadOutcome{Start: now, End: now, Failed: true, Err: err})
 			return err
 		}
 		if !ok {
 			continue
 		}
 		key := appEdgeBundleKey(builds.coords[name])
-		if err := putArtifact(ctx, cfg.CacheStoreUploader, cfg.CacheStoreBucket, key, "application/json", bundle); err != nil {
+		if err := tracedPut(ctx, cfg.CacheStoreUploader, cfg.CacheStoreBucket, key, "application/json", bundle, stats); err != nil {
 			return err
 		}
 	}
