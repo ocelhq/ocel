@@ -178,6 +178,8 @@ const adapter = {
       return name;
     };
 
+    const routeKinds = routeKindsById(allRoutes, outputs.prerenders);
+
     const prerenderGroups = groupPrerenders(outputs.prerenders);
 
     const variantHeaders = JSON.stringify(
@@ -280,7 +282,7 @@ const adapter = {
       ]);
     }
 
-    await emitCacheEntries(outputRoot, prerenderGroups, allRoutes);
+    await emitCacheEntries(outputRoot, prerenderGroups, routeKinds);
     await emitFetchEntries(outputRoot, distDir);
 
     const functionDispatch = functionRoutes.map((o) => {
@@ -298,7 +300,9 @@ const adapter = {
           kind: "lambda",
           id: bundleNameOf(entryKey, routeKey),
           entryKey,
-          ...(isDocumentRouteKind(o.type) && { page: true }),
+          ...(isDocumentRouteKind(routeKinds.get(o.id) ?? o.type) && {
+            page: true,
+          }),
         },
       };
     });
@@ -913,10 +917,8 @@ function variantHeaderProjection(
 async function emitCacheEntries(
   outputRoot: string,
   groups: readonly PrerenderGroup[],
-  routes: readonly { id: string; type?: string }[],
+  kindById: ReadonlyMap<string, string>,
 ): Promise<void> {
-  const kindById = new Map(routes.map((r) => [r.id, r.type]));
-
   const lastModified = Date.now();
 
   await Promise.all(
@@ -1097,6 +1099,22 @@ function unindexLeaf(pathname: string): string {
 
 function isPagesRouterKind(type: string): boolean {
   return type === "PAGES" || type === "PAGES_API";
+}
+
+// TODO: drop once Next stops classifying by `page.startsWith('/api')` in
+// build-complete.ts — that check hands a pages route like /api-docs/[...slug] the
+// PAGES_API kind, and an API route never parents a prerender.
+function routeKindsById(
+  routes: readonly { id: string; type: string }[],
+  prerenders: readonly { parentOutputId: string }[],
+): Map<string, string> {
+  const prerendered = new Set(prerenders.map((p) => p.parentOutputId));
+  return new Map(
+    routes.map((r) => [
+      r.id,
+      r.type === "PAGES_API" && prerendered.has(r.id) ? "PAGES" : r.type,
+    ]),
+  );
 }
 
 function isDocumentRouteKind(type: string): boolean {

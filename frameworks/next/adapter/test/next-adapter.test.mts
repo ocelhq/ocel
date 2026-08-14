@@ -1491,6 +1491,76 @@ test("carries a pages route's data twin onto its cache entry", async () => {
   expect(entry.value.pageData).toEqual({ pageProps: { title: "blog" } });
 });
 
+test("treats a prerendered PAGES_API output as the pages route it really is", async () => {
+  const { projectDir, args } = await synthPrerenderProject();
+  const pagesDir = join(projectDir, ".next/server/pages/api-docs");
+  await mkdir(pagesDir, { recursive: true });
+  const handler = join(pagesDir, "[...slug].js");
+  await writeFile(handler, "module.exports = () => {}");
+  await writeFile(join(pagesDir, "intro.html"), "<html>intro</html>");
+
+  args.outputs.pagesApi.push({
+    pathname: "/api-docs/[...slug]",
+    id: "/api-docs/[...slug]",
+    assets: {},
+    runtime: "nodejs",
+    filePath: handler,
+    config: {},
+    type: "PAGES_API",
+  } as never);
+  args.outputs.prerenders.push({
+    pathname: "/api-docs/intro",
+    id: "/api-docs/intro",
+    type: "PRERENDER",
+    parentOutputId: "/api-docs/[...slug]",
+    groupId: 2,
+    fallback: {
+      filePath: join(pagesDir, "intro.html"),
+      initialRevalidate: false,
+      initialHeaders: { "content-type": "text/html; charset=utf-8" },
+    },
+    config: { allowQuery: [] },
+  } as never);
+
+  const adapter = await loadAdapterIn(projectDir);
+  await adapter.onBuildComplete(args as never);
+
+  const entry = await readCacheEntry(projectDir, "api-docs/intro");
+  expect(entry.value.kind).toBe("PAGES");
+  expect(entry.value.html).toBe("<html>intro</html>");
+
+  const manifest = await readManifest(projectDir);
+  expect(manifest.dispatch["/api-docs/[...slug]"]).toMatchObject({
+    kind: "lambda",
+    page: true,
+  });
+});
+
+test("leaves an API route that parents no prerender out of the pages dispatch", async () => {
+  const { projectDir, args } = await synthPrerenderProject();
+  const pagesDir = join(projectDir, ".next/server/pages/api");
+  await mkdir(pagesDir, { recursive: true });
+  const handler = join(pagesDir, "hello.js");
+  await writeFile(handler, "module.exports = () => {}");
+
+  args.outputs.pagesApi.push({
+    pathname: "/api/hello",
+    id: "/api/hello",
+    assets: {},
+    runtime: "nodejs",
+    filePath: handler,
+    config: {},
+    type: "PAGES_API",
+  } as never);
+
+  const adapter = await loadAdapterIn(projectDir);
+  await adapter.onBuildComplete(args as never);
+
+  const manifest = await readManifest(projectDir);
+  expect(manifest.dispatch["/api/hello"]).toMatchObject({ kind: "lambda" });
+  expect(manifest.dispatch["/api/hello"]).not.toHaveProperty("page");
+});
+
 test("carries the html variant's headers and status onto an APP_PAGE entry", async () => {
   const { projectDir, args } = await synthPrerenderProject();
   args.outputs.prerenders[0].fallback.initialHeaders = {
