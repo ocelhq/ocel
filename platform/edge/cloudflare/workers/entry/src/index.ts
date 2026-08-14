@@ -1301,7 +1301,8 @@ async function dispatchPrerender(
   const onDemand =
     isOnDemandRevalidate(request, target.config) &&
     (request.method === "GET" || request.method === "HEAD") &&
-    !hasDraftCookie(request);
+    !hasDraftCookie(request) &&
+    !headers.has("x-middleware-set-cookie");
 
   if (
     !onDemand &&
