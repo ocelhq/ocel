@@ -560,7 +560,10 @@ func confirmDeploy(ctx context.Context, slug, providerPackage string, knownSlugs
 func toDeclarations(configDir string, resources []declare.Resource) []manifestbuilder.Declaration {
 	decls := make([]manifestbuilder.Declaration, len(resources))
 	for i, r := range resources {
-		source, _ := attribution.DeclaringFile(configDir, r.Stack)
+		var source string
+		if frame, ok := attribution.DeclaringFrame(configDir, r.Stack); ok {
+			source = frame.String()
+		}
 		decls[i] = manifestbuilder.Declaration{
 			Type:     r.Type,
 			ID:       r.Name,

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"path/filepath"
 	"reflect"
+	"slices"
 	"sort"
 	"strings"
 	"testing"
@@ -103,7 +104,22 @@ func TestCompute(t *testing.T) {
 		}
 	})
 
-	t.Run("the whole set is empty when no app declares a path", func(t *testing.T) {
+	t.Run("a file inside an app that only re-exports the handle grants nothing", func(t *testing.T) {
+		root := fixtureRoot(t, "monorepo")
+
+		usages, err := Compute(root, monorepoApps(), monorepoDeclarations(root))
+		if err != nil {
+			t.Fatalf("Compute err = %v", err)
+		}
+
+		for _, u := range usages {
+			if slices.Contains(u.Files, "apps/worker/src/reexport.ts") || slices.Contains(u.Files, "apps/api/src/db-alias.ts") {
+				t.Errorf("%s:%s is provenanced to a conduit file: %v", u.Type, u.ID, u.Files)
+			}
+		}
+	})
+
+	t.Run("no app source to attribute against leaves the declaration unplaced rather than refused", func(t *testing.T) {
 		root := fixtureRoot(t, "monorepo")
 
 		usages, err := Compute(root, []App{{Name: "api"}}, monorepoDeclarations(root))

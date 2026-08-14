@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"slices"
+	"strconv"
 	"strings"
 )
 
@@ -49,7 +50,7 @@ func describeStack(stack string) string {
 	if strings.TrimSpace(stack) == "" {
 		return "the declaration reported no source location"
 	}
-	return "no frame in the declaration's source location points inside the project"
+	return "no frame of the reported source location names a project file outside node_modules"
 }
 
 type UnresolvedImportError struct {
@@ -86,11 +87,11 @@ func Compute(root string, apps []App, declarations []Declaration) ([]Usage, erro
 
 	declaringFiles := make(map[string][]Declaration, len(declarations))
 	for _, d := range declarations {
-		file, ok := DeclaringFile(root, d.Stack)
+		frame, ok := DeclaringFrame(root, d.Stack)
 		if !ok {
 			return nil, &UnresolvedDeclarationError{Type: d.Type, ID: d.ID, Stack: d.Stack}
 		}
-		declaringFiles[file] = append(declaringFiles[file], d)
+		declaringFiles[frame.File] = append(declaringFiles[frame.File], d)
 	}
 
 	var usages []Usage
@@ -134,19 +135,36 @@ func Compute(root string, apps []App, declarations []Declaration) ([]Usage, erro
 
 var frameRE = regexp.MustCompile(`\(?((?:file://)?/[^):\s]+\.(?:ts|tsx|js|jsx|mjs|cjs)):(\d+):(\d+)\)?`)
 
-func DeclaringFile(root, stack string) (string, bool) {
+type Frame struct {
+	File string
+	Line int
+}
+
+func (f Frame) String() string {
+	return fmt.Sprintf("%s:%d", f.File, f.Line)
+}
+
+func DeclaringFrame(root, stack string) (Frame, bool) {
 	for _, m := range frameRE.FindAllStringSubmatch(stack, -1) {
-		rel, err := filepath.Rel(root, strings.TrimPrefix(m[1], "file://"))
-		if err != nil || strings.HasPrefix(rel, "..") {
+		rel, ok := relativeToRoot(root, strings.TrimPrefix(m[1], "file://"))
+		if !ok || isVendored(rel) {
 			continue
 		}
-		rel = filepath.ToSlash(rel)
-		if isVendored(rel) {
+		line, err := strconv.Atoi(m[2])
+		if err != nil {
 			continue
 		}
-		return rel, true
+		return Frame{File: rel, Line: line}, true
 	}
-	return "", false
+	return Frame{}, false
+}
+
+func relativeToRoot(root, path string) (string, bool) {
+	rel, err := filepath.Rel(root, path)
+	if err != nil || strings.HasPrefix(rel, "..") {
+		return "", false
+	}
+	return filepath.ToSlash(rel), true
 }
 
 func isVendored(rel string) bool {

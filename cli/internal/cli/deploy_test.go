@@ -163,8 +163,8 @@ func TestToDeclarations(t *testing.T) {
 		if len(decls) != 1 {
 			t.Fatalf("len(decls) = %d, want 1", len(decls))
 		}
-		if decls[0].Source != "shared/db.ts" {
-			t.Errorf("Source = %q, want %q", decls[0].Source, "shared/db.ts")
+		if decls[0].Source != "shared/db.ts:3" {
+			t.Errorf("Source = %q, want %q", decls[0].Source, "shared/db.ts:3")
 		}
 	})
 }
