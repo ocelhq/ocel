@@ -80,6 +80,12 @@ function ensureDeps() {
   if (existsSync(join(appDir, "node_modules", ".bin", "next"))) {
     return;
   }
+  const pkg = JSON.parse(readFileSync(join(appDir, "package.json"), "utf8"));
+  if (/^npm@/.test(pkg.packageManager ?? "")) {
+    console.error("[ocel-e2e] no node_modules/.bin/next; installing dependencies with npm");
+    run("npm install", "npm", ["install", "--no-audit", "--no-fund", "--prefer-offline"]);
+    return;
+  }
   console.error("[ocel-e2e] no node_modules/.bin/next; installing dependencies");
   run("pnpm install", "pnpm", ["install", "--prefer-offline"]);
 }
