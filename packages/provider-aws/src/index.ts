@@ -1,6 +1,9 @@
 import type { ProviderDescriptor } from "ocel/config";
 
-export type AwsProviderOptions = Record<string, unknown>;
+export interface AwsProviderOptions {
+  region?: string;
+  transforms?: readonly string[];
+}
 
 export default function awsProvider(
   options: AwsProviderOptions = {},

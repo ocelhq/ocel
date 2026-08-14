@@ -38,7 +38,7 @@ type account struct {
 }
 
 type storeKey struct {
-	options options
+	region  string
 	preview bool
 }
 
@@ -59,7 +59,7 @@ func (s *VarsServer) store(ctx context.Context, raw []byte, class deploymentsv1.
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInvalidArgument, err)
 	}
-	key := storeKey{options: opts, preview: class == deploymentsv1.Environment_CLASS_PREVIEW}
+	key := storeKey{region: opts.Region, preview: class == deploymentsv1.Environment_CLASS_PREVIEW}
 
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -82,7 +82,7 @@ func (s *VarsServer) open(ctx context.Context, key storeKey) (*vars.Store, error
 	if reach == nil {
 		reach = awsAccount
 	}
-	cloud, err := reach(ctx, key.options.Region)
+	cloud, err := reach(ctx, key.region)
 	if err != nil {
 		return nil, err
 	}

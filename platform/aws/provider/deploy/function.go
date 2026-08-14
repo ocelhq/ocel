@@ -94,6 +94,7 @@ type functionArgs struct {
 	Handler        string
 	MemorySizeMB   int
 	TimeoutSeconds int
+	InvokeMode     string
 }
 
 type isrConfig struct {
@@ -213,6 +214,7 @@ func translateFunction(fn *deploymentsv1.ManifestFunction) functionArgs {
 		Handler:        handler,
 		MemorySizeMB:   memoryMB,
 		TimeoutSeconds: defaultFunctionTimeoutSeconds,
+		InvokeMode:     functionURLInvokeModeStream,
 	}
 }
 
@@ -414,7 +416,7 @@ func registerFunction(ctx *pulumi.Context, logicalName string, coord naming.Coor
 	url, err := lambda.NewFunctionUrl(ctx, naming.ResourceID(naming.KindFunction, coord.Name, "url"), &lambda.FunctionUrlArgs{
 		FunctionName:      fn.Name,
 		AuthorizationType: pulumi.String(functionURLAuthIAM),
-		InvokeMode:        pulumi.String(functionURLInvokeModeStream),
+		InvokeMode:        pulumi.String(args.InvokeMode),
 	})
 	if err != nil {
 		return err
