@@ -9,6 +9,7 @@ import (
 	"net"
 	"net/http"
 	"strconv"
+	"strings"
 	"testing"
 	"time"
 )
@@ -207,6 +208,43 @@ func TestEncodePrelude(t *testing.T) {
 		}
 		if len(p.Cookies) != 2 {
 			t.Errorf("cookies = %v, want two entries", p.Cookies)
+		}
+	})
+
+	t.Run("reserved x-amzn headers are dropped", func(t *testing.T) {
+		h := http.Header{}
+		h.Set("Content-Type", "text/html")
+		h.Set("X-Powered-By", "Next.js")
+		h.Set("X-Amzn-Requestid", "3f1c0b6e-0000-0000-0000-000000000000")
+		h.Set("X-Amzn-Trace-Id", "Root=1-00000000-000000000000000000000000")
+		h.Set("X-Amzn-Remapped-Date", "Fri, 15 Aug 2026 00:00:00 GMT")
+		h.Add("Set-Cookie", "a=1")
+
+		out, err := encodePrelude(200, h)
+		if err != nil {
+			t.Fatalf("encodePrelude: %v", err)
+		}
+		jsonPart := out[:len(out)-preludeSeparatorLen]
+		var p struct {
+			Headers map[string]string `json:"headers"`
+			Cookies []string          `json:"cookies"`
+		}
+		if err := json.Unmarshal(jsonPart, &p); err != nil {
+			t.Fatalf("prelude JSON invalid: %v", err)
+		}
+		for k := range p.Headers {
+			if strings.HasPrefix(http.CanonicalHeaderKey(k), "X-Amzn-") {
+				t.Errorf("reserved header %q must not appear in prelude: %v", k, p.Headers)
+			}
+		}
+		if p.Headers["Content-Type"] != "text/html" {
+			t.Errorf("Content-Type = %q, want text/html", p.Headers["Content-Type"])
+		}
+		if p.Headers["X-Powered-By"] != "Next.js" {
+			t.Errorf("X-Powered-By = %q, want Next.js", p.Headers["X-Powered-By"])
+		}
+		if len(p.Cookies) != 1 || p.Cookies[0] != "a=1" {
+			t.Errorf("cookies = %v, want [a=1]", p.Cookies)
 		}
 	})
 }

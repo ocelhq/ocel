@@ -3,6 +3,7 @@ package main
 import (
 	"encoding/json"
 	"net/http"
+	"strings"
 )
 
 const (
@@ -41,7 +42,8 @@ func encodePrelude(status int, header http.Header) ([]byte, error) {
 func flattenHeaders(h http.Header) map[string]string {
 	out := make(map[string]string, len(h))
 	for k := range h {
-		if http.CanonicalHeaderKey(k) == "Set-Cookie" {
+		ck := http.CanonicalHeaderKey(k)
+		if ck == "Set-Cookie" || strings.HasPrefix(ck, "X-Amzn-") {
 			continue
 		}
 		out[k] = h.Get(k)
