@@ -149,7 +149,7 @@ export async function intercept(
     const tags = tagsOf(value, {});
     if (tags.length > 0) {
       const tagVerdict = await clock.freshness(tags, entry.lastModified, now);
-      if (tagVerdict === "untrusted") return null; // R2 tier: unknown never serves.
+      if (tagVerdict === "untrusted") return null;
       if (tagVerdict === "expired") return null;
       tagStale = tagVerdict === "stale";
     }
