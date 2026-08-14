@@ -57,6 +57,7 @@ const adapter = {
         ...config,
         cacheMaxMemorySize: 0,
         cacheHandler: await installCacheHandler(),
+        experimental: { ...config.experimental, trustHostHeader: true },
       };
     }
     return config;

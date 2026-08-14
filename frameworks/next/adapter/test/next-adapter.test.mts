@@ -1368,6 +1368,18 @@ test("names the singular handler only, never the 'use cache' map", async () => {
   expect(config.cacheMaxMemorySize).toBe(0);
 });
 
+test("trusts the host header so a deployed res.revalidate can address itself", async () => {
+  const projectDir = await mkdtemp(join(tmpdir(), "ocel-next-cfg-"));
+  const adapter = await loadAdapterIn(projectDir);
+
+  const config = await adapter.modifyConfig!(
+    { experimental: { ppr: true } } as never,
+    { phase: PHASE_PRODUCTION_BUILD, nextVersion: "16.2.10" },
+  );
+
+  expect(config.experimental).toEqual({ ppr: true, trustHostHeader: true });
+});
+
 test("leaves a non-build phase untouched and writes nothing", async () => {
   const projectDir = await mkdtemp(join(tmpdir(), "ocel-next-cfg-"));
   const adapter = await loadAdapterIn(projectDir);
