@@ -115,18 +115,35 @@ export function tagsOf(value: Record<string, any>, ctx: any): string[] {
   return typeof header === "string" && header.length > 0 ? header.split(",") : [];
 }
 
+export type TagFreshness = "fresh" | "stale" | "expired";
+
+export function tagFreshness(
+  tags: string[],
+  records: Map<string, TagRecord>,
+  timestamp: number,
+  now: number,
+): TagFreshness {
+  let stale = false;
+  for (const tag of tags) {
+    const record = records.get(tag);
+    if (record === undefined) continue;
+    const expiredAt = record.expired;
+    if (typeof expiredAt === "number" && expiredAt <= now && expiredAt > timestamp) {
+      return "expired";
+    }
+    const staleAt = record.stale;
+    if (typeof staleAt === "number" && staleAt > timestamp) stale = true;
+  }
+  return stale ? "stale" : "fresh";
+}
+
 export function areTagsExpired(
   tags: string[],
   records: Map<string, TagRecord>,
   timestamp: number,
   now: number,
 ): boolean {
-  for (const tag of tags) {
-    const expiredAt = records.get(tag)?.expired;
-    if (typeof expiredAt !== "number") continue;
-    if (expiredAt <= now && expiredAt > timestamp) return true;
-  }
-  return false;
+  return tagFreshness(tags, records, timestamp, now) === "expired";
 }
 
 export function deserialize(value: Record<string, any>): Record<string, any> {
