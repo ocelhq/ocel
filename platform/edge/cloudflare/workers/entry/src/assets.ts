@@ -93,6 +93,13 @@ function hasExtension(pathname: string): boolean {
   return pathname.slice(pathname.lastIndexOf("/") + 1).includes(".");
 }
 
+function plainNotFound(): Response {
+  return new Response("Not Found", {
+    status: 404,
+    headers: { "content-type": "text/plain; charset=utf-8" },
+  });
+}
+
 async function notFound(deps: AssetStoreDeps, locale?: string): Promise<Response> {
   const names = locale ? [`/${locale}/404.html`, "/404.html"] : ["/404.html"];
   for (const name of names) {
@@ -113,7 +120,10 @@ export async function serveStaticAsset(
   deps: AssetStoreDeps,
   locale?: string,
 ): Promise<Response> {
-  if (!deps.store) return notFound(deps, locale);
+  const miss = () =>
+    isNextStaticPathname(url.pathname) ? plainNotFound() : notFound(deps, locale);
+
+  if (!deps.store) return miss();
 
   const cached = await deps.cache.match(request);
   if (cached) return cached;
@@ -128,7 +138,7 @@ export async function serveStaticAsset(
       break;
     }
   }
-  if (!hit) return notFound(deps, locale);
+  if (!hit) return miss();
 
   const { object } = hit;
   const cacheControl = cacheControlFor(hit.pathname);
