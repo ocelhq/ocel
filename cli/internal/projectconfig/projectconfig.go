@@ -10,7 +10,6 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
-	"time"
 
 	"github.com/evanw/esbuild/pkg/api"
 
@@ -18,8 +17,6 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/procgroup"
 	"github.com/ocelhq/ocel/pkg/naming"
 )
-
-const nodeWaitDelay = 5 * time.Second
 
 const ConfigFileName = "ocel.config.ts"
 
@@ -379,9 +376,7 @@ func buildAndRun(ctx context.Context, configPath string) ([]byte, error) {
 	cmd := exec.CommandContext(ctx, "node", outfile)
 	var stderr strings.Builder
 	cmd.Stderr = &stderr
-	procgroup.New(cmd)
-	cmd.Cancel = func() error { return procgroup.Kill(cmd) }
-	cmd.WaitDelay = nodeWaitDelay
+	procgroup.Guard(cmd)
 	stdout, err := cmd.Output()
 	if err != nil {
 		if stderr.Len() > 0 {
