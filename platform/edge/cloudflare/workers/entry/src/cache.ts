@@ -536,7 +536,7 @@ async function serveOrAdmitRefresh(
     } else refreshOnce(deps, target.key, refresh);
     return policy.forServe(fromStorage(cached, true), "STALE");
   }
-  return null; // "expired" — R2 may already hold a fresher entry.
+  return null;
 }
 
 async function colo(

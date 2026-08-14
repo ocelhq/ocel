@@ -969,7 +969,7 @@ describe("serveCached", () => {
     await serveCached(req(), t, deps, origin, refresh, clockTags);
     await deps.flush();
 
-    clock.ms = 1_000; // time-fresh (age 1s << revalidate 3600) but tag says stale
+    clock.ms = 1_000;
     const hit = await serveCached(req(), t, deps, origin, refresh, clockTags);
     expect(hit.headers.get("x-ocel-cache")).toBe("STALE");
     await deps.flush();
