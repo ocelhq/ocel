@@ -1015,6 +1015,9 @@ async function dispatch(
     if (probe) return probe;
   }
 
+  const disallowed = documentMethodNotAllowed(request, target);
+  if (disallowed) return disallowed;
+
   const response = await renderDispatchTarget(
     target,
     request,
@@ -1027,6 +1030,32 @@ async function dispatch(
   return target.kind === "lambda" && target.page
     ? substituteErrorPage(response, request, url, headers, manifest, deps)
     : response;
+}
+
+const SERVER_ACTION_CONTENT_TYPES = [
+  "application/x-www-form-urlencoded",
+  "multipart/form-data",
+];
+
+function isServerAction(request: Request): boolean {
+  if (request.method !== "POST") return false;
+  if (request.headers.has("next-action")) return true;
+  const contentType = request.headers.get("content-type") ?? "";
+  const media = contentType.split(";")[0].trim().toLowerCase();
+  return SERVER_ACTION_CONTENT_TYPES.includes(media);
+}
+
+function documentMethodNotAllowed(
+  request: Request,
+  target: DispatchTarget,
+): Response | undefined {
+  if (target.kind !== "static" && target.kind !== "prerender") return undefined;
+  if (request.method === "GET" || request.method === "HEAD") return undefined;
+  if (isServerAction(request)) return undefined;
+  return new Response("Method Not Allowed", {
+    status: 405,
+    headers: { allow: "GET, HEAD" },
+  });
 }
 
 async function renderDispatchTarget(
