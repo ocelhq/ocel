@@ -18,11 +18,6 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/lockfile"
 )
 
-// fixtureWorkerTree returns app args for a POSIX shell that starts a
-// background "worker" in its own process and then blocks — the shape of a
-// framework dev server that forks workers that stay in the parent's
-// process group. It also returns the paths the test polls to observe the
-// worker starting and to read its pid.
 func fixtureWorkerTree(t *testing.T, root, name string) (appArgs []string, startedPath, pidPath string) {
 	t.Helper()
 	if runtime.GOOS == "windows" {
@@ -34,14 +29,6 @@ func fixtureWorkerTree(t *testing.T, root, name string) (appArgs []string, start
 	return appArgs, startedPath, pidPath
 }
 
-// fixtureDeepWorkerTree returns app args for a 3-level POSIX shell tree —
-// direct child, its child, and that child's child, each staying alive to
-// parent the next rather than exiting once it has forked (unlike
-// fixtureWorkerTree's single background hop) — closer to a real
-// supervisor chain (npm -> sh -> next -> next-server). Every level ignores
-// SIGINT so a foreground-group Ctrl-C alone cannot reap it; only an
-// explicit SIGTERM/SIGKILL (from the CLI's own teardown, not the kernel's
-// group-wide delivery) can, which is what exercises the descendant walk.
 func fixtureDeepWorkerTree(t *testing.T, root, name string) (appArgs []string, startedPath, leafPidPath string) {
 	t.Helper()
 	if runtime.GOOS == "windows" {

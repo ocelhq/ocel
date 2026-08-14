@@ -23,14 +23,6 @@ type appChild struct {
 	term       termSnapshot
 }
 
-// termSnapshot is stdin's termios as it stood before an app child on the tty
-// path ran — never a raw mode the CLI put it in itself, since GetState only
-// reads. The tty path hands the app child the real terminal (see
-// spawnAppChild's isTerminal branch), so a dev server that legitimately
-// raw-modes it (any interactive keypress UI) can leave it that way if killed
-// before it gets to restore things itself; restoring this snapshot whenever
-// the child is confirmed gone or is about to be force-killed keeps that from
-// becoming the user's problem.
 type termSnapshot struct {
 	fd    int
 	state *term.State
@@ -142,12 +134,6 @@ func deregisterLiveAppChild(cmd *exec.Cmd) {
 	liveAppChildrenMu.Unlock()
 }
 
-// killAllLiveAppChildren is the interrupt handler's forced-exit path (see
-// exit.go's forceKillEverything): a best-effort kill fired synchronously,
-// right before os.Exit, that cannot afford to wait on each child's own
-// cmd.Wait() goroutine to get around to restoring the terminal. It restores
-// eagerly here instead so a second Ctrl-C never trades a hung CLI for a
-// glitched shell.
 func killAllLiveAppChildren() {
 	liveAppChildrenMu.Lock()
 	children := make([]liveAppChild, 0, len(liveAppChildren))
