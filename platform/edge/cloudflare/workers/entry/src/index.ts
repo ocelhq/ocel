@@ -902,12 +902,14 @@ export async function dispatchResult(
   request: Request,
   deps: RouteDeps,
 ): Promise<Response> {
-  const response = await dispatch(
-    result,
-    new Request(request, { headers: withoutControlHeaders(request.headers) }),
+  const response = await noteRevalidation(
+    await dispatch(
+      result,
+      new Request(request, { headers: withoutControlHeaders(request.headers) }),
+      deps,
+    ),
     deps,
   );
-  await noteRevalidation(response, deps);
   if (!result.resolvedHeaders && !result.resolvedPathname) return response;
 
   const tagged = new Response(response.body, response);
@@ -933,15 +935,27 @@ function applyResolvedHeaders(target: Headers, resolved: Headers | undefined): v
 
 const NEXT_ACTION_REVALIDATED = "x-action-revalidated";
 
+export const OCEL_REVALIDATED = "x-ocel-revalidated";
+
 async function noteRevalidation(
   response: Response,
   deps: RouteDeps,
-): Promise<void> {
-  if (!deps.interception) return;
-  if (!response.headers.has(NEXT_ACTION_REVALIDATED)) return;
+): Promise<Response> {
+  const announced = response.headers.has(OCEL_REVALIDATED);
+  if (!announced && !response.headers.has(NEXT_ACTION_REVALIDATED)) return response;
+
+  const answer = announced ? withoutRevalidatedHeader(response) : response;
+  if (!deps.interception) return answer;
 
   const { config, ...clockDeps } = deps.interception;
   await invalidateSnapshot(config, clockDeps);
+  return answer;
+}
+
+function withoutRevalidatedHeader(response: Response): Response {
+  const stripped = new Response(response.body, response);
+  stripped.headers.delete(OCEL_REVALIDATED);
+  return stripped;
 }
 
 const MIDDLEWARE_PREFETCH_HEADER = "x-middleware-prefetch";

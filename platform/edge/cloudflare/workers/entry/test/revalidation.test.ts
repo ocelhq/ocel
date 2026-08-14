@@ -1,4 +1,7 @@
+import contract from "@framework/next-cache/fixtures/edge-contract.json";
 import { afterEach, describe, expect, it, vi } from "vitest";
+
+import { OCEL_REVALIDATED } from "../src/index";
 
 import {
   NEXT_RENDER_RECEIPT,
@@ -244,5 +247,11 @@ describe("revalidationSender", () => {
 
     expect(accepted).toBe(true);
     expect(request?.url).toBe(queueUrl);
+  });
+});
+
+describe("the origin's revalidation announcement", () => {
+  it("is read under the header name the origin writes", () => {
+    expect(OCEL_REVALIDATED).toBe(contract.revalidatedHeader);
   });
 });

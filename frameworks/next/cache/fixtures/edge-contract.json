@@ -12,5 +12,6 @@
   },
   "cacheStoreEnv": {
     "bucket": "OCEL_ISR_STORE_BUCKET"
-  }
+  },
+  "revalidatedHeader": "x-ocel-revalidated"
 }
