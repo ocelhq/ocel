@@ -19,5 +19,6 @@ export type {
   PostgresClusterSurface,
   PostgresInstanceSurface,
   SurfaceType,
+  TagMap,
   TransformContext,
 } from "./surface";

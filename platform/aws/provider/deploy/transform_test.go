@@ -15,10 +15,11 @@ import (
 type fakeEvaluator struct {
 	seen transform.Request
 	out  []transform.Surfaces
+	tags map[string]string
 	err  error
 }
 
-func (f *fakeEvaluator) Evaluate(_ context.Context, req transform.Request) ([]transform.Surfaces, error) {
+func (f *fakeEvaluator) Evaluate(_ context.Context, req transform.Request) ([]transform.Result, error) {
 	f.seen = req
 	if f.err != nil {
 		return nil, f.err
@@ -30,7 +31,11 @@ func (f *fakeEvaluator) Evaluate(_ context.Context, req transform.Request) ([]tr
 			out[i] = r.Surfaces
 		}
 	}
-	return overTheWire(out), nil
+	results := make([]transform.Result, len(out))
+	for i, surfaces := range overTheWire(out) {
+		results[i] = transform.Result{Surfaces: surfaces, Tags: f.tags}
+	}
+	return results, nil
 }
 
 func overTheWire(surfaces []transform.Surfaces) []transform.Surfaces {
@@ -80,10 +85,10 @@ func TestResolveTransforms(t *testing.T) {
 		}
 
 		fn := manifest.GetFunctions()[0]
-		if got, want := resolved.forFunction(fn), translateFunction(fn); got != want {
+		if got, want := resolved.forFunction(fn), translateFunction(fn); !reflect.DeepEqual(got, want) {
 			t.Errorf("forFunction = %+v, want %+v", got, want)
 		}
-		if got, want := resolved.forPostgres("db", manifest.GetResources()[0].GetPostgres()), translatePostgres(nil); got != want {
+		if got, want := resolved.forPostgres("db", manifest.GetResources()[0].GetPostgres()), translatePostgres(nil); !reflect.DeepEqual(got, want) {
 			t.Errorf("forPostgres = %+v, want %+v", got, want)
 		}
 		if got, want := resolved.forBucket("uploads", manifest.GetResources()[1].GetBucket()), translateBucket(nil); !reflect.DeepEqual(got, want) {
@@ -209,6 +214,28 @@ func TestResolveTransforms(t *testing.T) {
 		}
 		if !reflect.DeepEqual(bucket.NotificationEvents, []string{"s3:ObjectCreated:Put"}) {
 			t.Errorf("notification.events = %v, want the transformed events", bucket.NotificationEvents)
+		}
+	})
+
+	t.Run("evaluated tags land on every resource the deploy renders", func(t *testing.T) {
+		t.Parallel()
+
+		manifest := transformManifest()
+		fake := &fakeEvaluator{tags: map[string]string{"acme:team": "platform"}}
+		resolved, err := resolveTransforms(t.Context(), Config{Env: "prod", Transform: fake}, manifest)
+		if err != nil {
+			t.Fatalf("resolveTransforms: %v", err)
+		}
+
+		want := map[string]string{"acme:team": "platform"}
+		if got := resolved.forFunction(manifest.GetFunctions()[0]).Tags; !reflect.DeepEqual(got, want) {
+			t.Errorf("function tags = %v, want %v", got, want)
+		}
+		if got := resolved.forBucket("uploads", manifest.GetResources()[1].GetBucket()).Tags; !reflect.DeepEqual(got, want) {
+			t.Errorf("bucket tags = %v, want %v", got, want)
+		}
+		if got := resolved.forPostgres("db", manifest.GetResources()[0].GetPostgres()).Tags; !reflect.DeepEqual(got, want) {
+			t.Errorf("postgres tags = %v, want %v", got, want)
 		}
 	})
 

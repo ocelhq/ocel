@@ -36,6 +36,8 @@ type bucketArgs struct {
 
 	ForceDestroy bool
 
+	Tags map[string]string
+
 	CORS corsRule
 
 	NotificationEvents []string
@@ -95,7 +97,7 @@ func registerBucket(ctx *pulumi.Context, project, env, logicalName string, args 
 	bucket, err := s3.NewBucketV2(ctx, naming.ResourceID(at.Kind, at.Name), &s3.BucketV2Args{
 		BucketPrefix: pulumi.String(at.PhysicalPrefix(maxS3BucketPrefixLen)),
 		ForceDestroy: pulumi.Bool(args.ForceDestroy),
-		Tags:         resourceTags(at.Kind, ""),
+		Tags:         resourceTags(at.Kind, "", args.Tags),
 	})
 	if err != nil {
 		return pulumi.StringOutput{}, err
@@ -130,6 +132,7 @@ func registerBucket(ctx *pulumi.Context, project, env, logicalName string, args 
 		naming.ResourceID(at.Kind, at.Name, "runtime-role"),
 		at.Description("runtime role for the "+at.Name+" bucket, granting presigned uploads and session bookkeeping"),
 		"ec2.amazonaws.com",
+		args.Tags,
 		map[string]policyStatement{
 			"s3":       {Actions: args.RuntimeS3Actions, Resources: []pulumi.StringInput{joinArn(bucket.Arn, "/*")}},
 			"sessions": sessionStatement(args.RuntimeSessionActions, stateTableARN),
@@ -141,6 +144,7 @@ func registerBucket(ctx *pulumi.Context, project, env, logicalName string, args 
 		naming.ResourceID(at.Kind, at.Name, "event-listener-role"),
 		at.Description("execution role for the "+at.Name+" bucket's upload event listener"),
 		"lambda.amazonaws.com",
+		args.Tags,
 		map[string]policyStatement{
 			"s3":       {Actions: args.ListenerS3Actions, Resources: []pulumi.StringInput{joinArn(bucket.Arn, "/*")}},
 			"sessions": sessionStatement(args.ListenerSessionActions, stateTableARN),
@@ -161,7 +165,7 @@ func registerBucket(ctx *pulumi.Context, project, env, logicalName string, args 
 		Role:        listenerRole.Arn,
 		Timeout:     pulumi.Int(args.ListenerTimeoutSeconds),
 		Description: pulumi.String(at.Description("upload event listener for the " + at.Name + " bucket")),
-		Tags:        resourceTags(naming.KindListener, ""),
+		Tags:        resourceTags(naming.KindListener, "", args.Tags),
 		Code:        pulumi.NewFileArchive(listenerCodePath),
 		Environment: &lambda.FunctionEnvironmentArgs{
 			Variables: pulumi.StringMap{
@@ -221,11 +225,11 @@ func sessionStatement(actions []string, stateTableARN string) policyStatement {
 	}
 }
 
-func newServiceRole(ctx *pulumi.Context, name, description, servicePrincipal string, statements map[string]policyStatement) (*iam.Role, error) {
+func newServiceRole(ctx *pulumi.Context, name, description, servicePrincipal string, tags map[string]string, statements map[string]policyStatement) (*iam.Role, error) {
 	role, err := iam.NewRole(ctx, name, &iam.RoleArgs{
 		AssumeRolePolicy: pulumi.String(assumeRolePolicy(servicePrincipal)),
 		Description:      pulumi.String(description),
-		Tags:             resourceTags(naming.KindRole, ""),
+		Tags:             resourceTags(naming.KindRole, "", tags),
 	})
 	if err != nil {
 		return nil, err

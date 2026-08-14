@@ -17,6 +17,11 @@ type Request struct {
 	Resources []Resource `json:"resources"`
 }
 
+type Result struct {
+	Surfaces Surfaces
+	Tags     map[string]string
+}
+
 type Evaluator interface {
-	Evaluate(ctx context.Context, req Request) ([]Surfaces, error)
+	Evaluate(ctx context.Context, req Request) ([]Result, error)
 }

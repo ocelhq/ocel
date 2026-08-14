@@ -27,7 +27,7 @@ function request(
   };
 }
 
-function module_(
+function transformModule(
   specifier: string,
   rules: ReturnType<typeof defineTransform>,
 ): TransformModule {
@@ -39,13 +39,15 @@ describe("evaluate", () => {
     const req = request();
 
     expect(evaluate(req, [])).toEqual({
-      resources: [{ name: "api-users", surfaces: req.resources[0]!.surfaces }],
+      resources: [
+        { name: "api-users", surfaces: req.resources[0]!.surfaces, tags: {} },
+      ],
     });
   });
 
   it("merges a patch over the defaulted args, leaving unmentioned fields alone", () => {
     const got = evaluate(request(), [
-      module_(
+      transformModule(
         "a.ts",
         defineTransform({ function: { lambda: { memorySizeMb: 2048 } } }),
       ),
@@ -60,7 +62,7 @@ describe("evaluate", () => {
 
   it("applies rules in order within a module, the later rule winning per field", () => {
     const got = evaluate(request(), [
-      module_(
+      transformModule(
         "a.ts",
         defineTransform([
           { function: { lambda: { memorySizeMb: 2048, timeoutSeconds: 10 } } },
@@ -77,11 +79,11 @@ describe("evaluate", () => {
 
   it("applies modules in the order the config lists them, the later module winning", () => {
     const got = evaluate(request(), [
-      module_(
+      transformModule(
         "first.ts",
         defineTransform({ function: { lambda: { memorySizeMb: 2048 } } }),
       ),
-      module_(
+      transformModule(
         "second.ts",
         defineTransform({ function: { lambda: { memorySizeMb: 128 } } }),
       ),
@@ -97,7 +99,7 @@ describe("evaluate", () => {
       function: { lambda: { reservedConcurrency: 4 } as never },
     });
 
-    expect(() => evaluate(request(), [module_("a.ts", rules)])).toThrow(
+    expect(() => evaluate(request(), [transformModule("a.ts", rules)])).toThrow(
       /a\.ts.*function\.lambda\.reservedConcurrency.*not a transformable field/s,
     );
   });
@@ -107,7 +109,7 @@ describe("evaluate", () => {
       function: { logGroup: { retentionDays: 7 } } as never,
     });
 
-    expect(() => evaluate(request(), [module_("a.ts", rules)])).toThrow(
+    expect(() => evaluate(request(), [transformModule("a.ts", rules)])).toThrow(
       /a\.ts.*function\.logGroup.*not a transformable/s,
     );
   });
@@ -115,7 +117,7 @@ describe("evaluate", () => {
   it("hands an override function the fully-defaulted args and keeps its mutations", () => {
     let seen: unknown;
     const got = evaluate(request(), [
-      module_(
+      transformModule(
         "a.ts",
         defineTransform({
           function: {
@@ -140,7 +142,7 @@ describe("evaluate", () => {
 
   it("takes a returned args object in place of the one it handed over", () => {
     const got = evaluate(request(), [
-      module_(
+      transformModule(
         "a.ts",
         defineTransform({
           function: { lambda: (args) => ({ ...args, timeoutSeconds: 60 }) },
@@ -159,14 +161,14 @@ describe("evaluate", () => {
       function: { lambda: (() => ({ timeoutSeconds: 60 })) as never },
     });
 
-    expect(() => evaluate(request(), [module_("a.ts", rules)])).toThrow(
+    expect(() => evaluate(request(), [transformModule("a.ts", rules)])).toThrow(
       /a\.ts.*function\.lambda.*memorySizeMb/s,
     );
   });
 
   it("skips a rule whose gate returns false", () => {
     const got = evaluate(request(), [
-      module_(
+      transformModule(
         "a.ts",
         defineTransform({
           if: (ctx) => ctx.envClass === "preview",
@@ -183,7 +185,7 @@ describe("evaluate", () => {
   it("shows a gate the ambient context only, never the candidate resource", () => {
     let seen: Record<string, unknown> = {};
     evaluate(request(), [
-      module_(
+      transformModule(
         "a.ts",
         defineTransform({
           if: (ctx) => {
@@ -223,7 +225,7 @@ describe("evaluate", () => {
         ],
       }),
       [
-        module_(
+        transformModule(
           "a.ts",
           defineTransform({
             if: (ctx) => {
@@ -263,7 +265,7 @@ describe("evaluate", () => {
         ],
       }),
       [
-        module_(
+        transformModule(
           "a.ts",
           defineTransform({
             postgres: {
@@ -286,13 +288,49 @@ describe("evaluate", () => {
   it("leaves a resource alone when the rule targets another resource type", () => {
     const req = request();
     const got = evaluate(req, [
-      module_(
+      transformModule(
         "a.ts",
         defineTransform({ postgres: { cluster: { maxCapacity: 16 } } }),
       ),
     ]);
 
     expect(got.resources[0]!.surfaces).toEqual(req.resources[0]!.surfaces);
+  });
+
+  it("unions tags from every surviving rule into the resource", () => {
+    const got = evaluate(request(), [
+      transformModule(
+        "a.ts",
+        defineTransform([
+          { tags: { "acme:team": "platform", "acme:env": "unset" } },
+          { if: (ctx) => ctx.envClass === "production", tags: { "acme:env": "prod" } },
+          { if: (ctx) => ctx.envClass === "preview", tags: { "acme:ephemeral": "yes" } },
+        ]),
+      ),
+    ]);
+
+    expect(got.resources[0]!.tags).toEqual({
+      "acme:team": "platform",
+      "acme:env": "prod",
+    });
+  });
+
+  it("rejects a tag under the prefix ocel writes its own tags with", () => {
+    const rules = defineTransform({ tags: { "ocel:component": "mine" } });
+
+    expect(() => evaluate(request(), [transformModule("a.ts", rules)])).toThrow(
+      /a\.ts.*ocel:component.*reserved/s,
+    );
+  });
+
+  it("rejects a rule key that is neither a keyword nor a resource this provider renders", () => {
+    const rules = defineTransform({
+      functions: { lambda: { memorySizeMb: 512 } },
+    } as never);
+
+    expect(() => evaluate(request(), [transformModule("a.ts", rules)])).toThrow(
+      /a\.ts.*functions/s,
+    );
   });
 
   it("returns one entry per requested resource, in request order", () => {
