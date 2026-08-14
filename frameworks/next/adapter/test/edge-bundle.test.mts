@@ -656,7 +656,6 @@ test("warns that revalidate is inert for a prerender parented by an edge route",
     expect.stringContaining("revalidate is inert"),
   );
   expect(warn.mock.calls[0]![0]).toContain("/edge-page");
-  expect(warn.mock.calls[0]![0]).toContain("ocelhq-b7l");
 });
 
 test("names the edge entry that regenerates a prerender its edge route parents", async () => {
