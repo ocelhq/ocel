@@ -341,6 +341,38 @@ describe("an app that calls listen() instead of exporting a handler", () => {
     server.close();
   });
 
+  test("routes once, prepend and removal through the lifted listeners too", async () => {
+    const ran: string[] = [];
+    const server = http.createServer();
+    const removed = (): void => void ran.push("removed");
+    const port = await startServed(server);
+
+    server.on("request", () => ran.push("on"));
+    server.once("request", () => ran.push("once"));
+    server.prependListener("request", () => ran.push("prepended"));
+    server.on("request", removed);
+    server.off("request", removed);
+    server.on("request", (req, res) => {
+      ran.push(String(req.headers["x-ocel-request-id"]));
+      res.end("ok");
+    });
+
+    await request(port, "listen-once-a");
+    await request(port, "listen-once-b");
+
+    expect(ran).toEqual([
+      "prepended",
+      "on",
+      "once",
+      "undefined",
+      "prepended",
+      "on",
+      "undefined",
+    ]);
+
+    server.close();
+  });
+
   test("declares that it can signal the invocation lifecycle", async () => {
     const server = http.createServer((_req, res) => res.end("ok"));
     await startServed(server);
