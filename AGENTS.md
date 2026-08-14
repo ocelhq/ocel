@@ -4,7 +4,9 @@
 - The code is the documentation — get context from it, and don't restate it. Prose may
   name what a human types, never what the code contains.
 - Zero comments by default. Comment only to mark a gap — `TODO`/`FIXME` with a why.
-  Doc-comments only on the exported surface of `packages/` and `sdk/`, for the consumer.
+  Doc-comments only under the literal paths `packages/` and `sdk/` — no other directory
+  qualifies, however public its surface feels. An existing comment elsewhere is debt,
+  not precedent: never match it, never extend it, delete it when touching nearby code.
 - The commits are the ADRs. Rationale belongs in the commit message and PR bodies. Nowhere else.
 - Do not generate changesets unless explicitly instructed.
 
