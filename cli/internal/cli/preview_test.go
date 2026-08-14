@@ -47,6 +47,7 @@ func TestRunPreviewUp(t *testing.T) {
 			"DEPLOY class=CLASS_PREVIEW lifecycle=LIFECYCLE_EPHEMERAL",
 			"identity=" + want.Key,
 			"source=IDENTITY_SOURCE_GIT",
+			"PROMOTION " + fixtureDeploymentID,
 			"Preview " + want.Key + " is up",
 		} {
 			if !strings.Contains(out, sub) {

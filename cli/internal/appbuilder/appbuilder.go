@@ -83,7 +83,7 @@ const adapterPathEnv = "NEXT_ADAPTER_PATH"
 
 const appFolderEnv = "OCEL_APP_FOLDER"
 
-var buildOwnedNames = []string{adapterPathEnv, appFolderEnv, "PATH"}
+var buildOwnedNames = []string{adapterPathEnv, appFolderEnv, deploymentIDEnv, "PATH"}
 
 func checkVariableNames(vars map[string]string) error {
 	for _, name := range buildOwnedNames {
@@ -150,6 +150,14 @@ func (b Builder) Build(ctx context.Context, cfg *projectconfig.Config, envByApp 
 		return fmt.Errorf("create %s: %w", relOutput, err)
 	}
 
+	deploymentID, err := mintDeploymentID()
+	if err != nil {
+		return err
+	}
+	if err := writeDeploymentID(cfg.Dir, deploymentID); err != nil {
+		return err
+	}
+
 	builderPath := node.BuilderPath(cfg.Dir)
 	if _, err := os.Stat(builderPath); err != nil {
 		return fmt.Errorf("node builder not found at %s: %w", builderPath, err)
@@ -162,7 +170,7 @@ func (b Builder) Build(ctx context.Context, cfg *projectconfig.Config, envByApp 
 			Cwd:        filepath.Join(cfg.Dir, a.Path),
 			Entrypoint: a.Entrypoint,
 			Framework:  a.Framework,
-			Env:        envByApp[a.Name],
+			Env:        withDeploymentID(envByApp[a.Name], deploymentID),
 			Folder:     a.Folder,
 		})
 	}
@@ -175,7 +183,8 @@ func (b Builder) Build(ctx context.Context, cfg *projectconfig.Config, envByApp 
 	if run == nil {
 		run = runNode
 	}
-	if err := run(ctx, builderPath, builderEnv(node.AdapterPath(cfg.Dir), envByApp[rootAppEnv]), payload, stderr); err != nil {
+	rootEnv := withDeploymentID(envByApp[rootAppEnv], deploymentID)
+	if err := run(ctx, builderPath, builderEnv(node.AdapterPath(cfg.Dir), rootEnv), payload, stderr); err != nil {
 		return err
 	}
 	return bundlePlanned(outputDir, stderr)

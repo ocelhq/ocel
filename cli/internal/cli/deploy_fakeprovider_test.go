@@ -53,8 +53,9 @@ const (
 )
 
 const (
-	fakeAppURL      = "https://fake-app.example.com"
-	fakePromotionID = "prm_fake_1234"
+	fakeAppURL          = "https://fake-app.example.com"
+	fakePromotionID     = "prm_fake_1234"
+	fixtureDeploymentID = "3f7c1b9a5e2d4c8f0a6b3d1e7c9f5a2b"
 )
 
 func runDeployFakeProvider() int {
@@ -136,6 +137,12 @@ func (s *deployFakeProviderServer) Deploy(ctx context.Context, req *deploymentsv
 
 	if err := stream.Send(&deploymentsv1.DeployEvent{
 		Event: &deploymentsv1.DeployEvent_Progress{Progress: &deploymentsv1.ProgressEvent{Message: "DEPLOY " + describeEnv(req.GetEnvironment())}},
+	}); err != nil {
+		return err
+	}
+
+	if err := stream.Send(&deploymentsv1.DeployEvent{
+		Event: &deploymentsv1.DeployEvent_Progress{Progress: &deploymentsv1.ProgressEvent{Message: "PROMOTION " + req.GetPromotionId()}},
 	}); err != nil {
 		return err
 	}

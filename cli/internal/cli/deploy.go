@@ -157,6 +157,11 @@ func runDeploy(ctx context.Context, d deps, cwd string, opts deployOptions, stdo
 		}
 		ui.BuildOK()
 
+		deploymentID, err := d.deploymentID(cfg.Dir)
+		if err != nil {
+			return err
+		}
+
 		env := &deploymentsv1.Environment{
 			Class:     deploymentsv1.Environment_CLASS_PRODUCTION,
 			Lifecycle: deploymentsv1.Environment_LIFECYCLE_UNSPECIFIED,
@@ -167,6 +172,7 @@ func runDeploy(ctx context.Context, d deps, cwd string, opts deployOptions, stdo
 			ProtocolVersion: manifestbuilder.SchemaVersion,
 			Environment:     env,
 			Tag:             opts.tag,
+			PromotionId:     deploymentID,
 		}
 
 		var stackOutputs []*deploymentsv1.ResourceOutput

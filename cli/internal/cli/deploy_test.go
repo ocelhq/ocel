@@ -233,6 +233,11 @@ export default {
 				t.Errorf("stdout = %q, want the confirm prompt skipped by --yes", out)
 			}
 		})
+		t.Run("promotes under the id the build was stamped with", func(t *testing.T) {
+			if !strings.Contains(out, "PROMOTION "+fixtureDeploymentID) {
+				t.Errorf("stdout = %q, want the recorded deployment id sent as the promotion id", out)
+			}
+		})
 
 		waitForNoStaleSocket(t, sockPath)
 	})
@@ -751,6 +756,8 @@ globalThis.__ocelRegister.push(
 );
 export {};
 `)
+
+	writeFile(t, filepath.Join(root, ".ocel", "output", "deployment-id"), fixtureDeploymentID+"\n")
 
 	binDir := filepath.Join(root, "node_modules", "@ocel", "provider-aws-"+nodePlatformSuffix(t), "bin")
 	if err := os.MkdirAll(binDir, 0o755); err != nil {

@@ -208,11 +208,17 @@ func runPreviewUp(ctx context.Context, d deps, cwd string, opts previewUpOptions
 		}
 		ui.BuildOK()
 
+		deploymentID, err := d.deploymentID(cfg.Dir)
+		if err != nil {
+			return err
+		}
+
 		req := &deploymentsv1.DeployRequest{
 			Manifest:        manifest,
 			Options:         []byte(provider.Options),
 			ProtocolVersion: manifestbuilder.SchemaVersion,
 			Environment:     env,
+			PromotionId:     deploymentID,
 		}
 
 		var stackOutputs []*deploymentsv1.ResourceOutput

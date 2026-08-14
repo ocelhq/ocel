@@ -31,6 +31,7 @@ type deps struct {
 	locateProviderBinary func(ctx context.Context, projectDir, providerPackage string) (string, error)
 	buildApp             func(ctx context.Context, cfg *projectconfig.Config, envByApp map[string]map[string]string, out io.Writer) error
 	collectAppFunctions  func(projectDir string) ([]manifestbuilder.Function, error)
+	deploymentID         func(projectDir string) (string, error)
 	collectDeclarations  func(ctx context.Context, cfg *projectconfig.Config, gate *envgate.Gate, stdout, stderr io.Writer) ([]declare.Resource, error)
 	openBrowser          func(url string) error
 	serveVarsUI          func(ctx context.Context, cfg *projectconfig.Config, provider *projectconfig.ProviderDescriptor, runner *providerrunner.Runner, preview bool, gate *envgate.Gate) (*varsui.Session, error)
@@ -48,6 +49,7 @@ func defaultDeps() deps {
 		locateProviderBinary: providerlocator.Locate,
 		buildApp:             appbuilder.Build,
 		collectAppFunctions:  appbuilder.CollectFunctions,
+		deploymentID:         appbuilder.DeploymentID,
 		collectDeclarations:  deploycollector.Collect,
 		openBrowser:          browser.OpenURL,
 		serveVarsUI:          startVarsUI,

@@ -313,6 +313,9 @@ func TestPrebuiltDeploy(t *testing.T) {
 	t.Run("no build output aborts before the provider is spawned", func(t *testing.T) {
 		root, _ := setUpDeployFixture(t)
 		addAppToFixtureConfig(t, root)
+		if err := os.RemoveAll(filepath.Join(root, ".ocel", "output")); err != nil {
+			t.Fatalf("drop the fixture's build output: %v", err)
+		}
 		d := defaultDeps()
 		recordBuildApp(&d)
 
