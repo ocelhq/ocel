@@ -79,12 +79,15 @@ func realize(ctx context.Context, cfg Config, manifest *deploymentsv1.Manifest, 
 		return Result{}, finishUploading(err)
 	}
 
+	progress.report(deploymentsv1.Phase_PHASE_UPLOADING, "Uploading prerender assets", 0, 0)
 	if err := uploadPrerenderAssets(ctx, cfg, builds); err != nil {
 		return Result{}, finishUploading(err)
 	}
+	progress.report(deploymentsv1.Phase_PHASE_UPLOADING, "Uploading static assets", 0, 0)
 	if err := uploadStaticAssets(ctx, cfg, manifest, builds); err != nil {
 		return Result{}, finishUploading(err)
 	}
+	progress.report(deploymentsv1.Phase_PHASE_UPLOADING, "Uploading edge bundles", 0, 0)
 	if err := uploadEdgeBundles(ctx, cfg, manifest, builds); err != nil {
 		return Result{}, finishUploading(err)
 	}
