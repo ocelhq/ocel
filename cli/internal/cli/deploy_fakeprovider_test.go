@@ -18,6 +18,7 @@ import (
 	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
 	"github.com/ocelhq/ocel/pkg/proto/deployments/v1/deploymentsv1connect"
 	"github.com/ocelhq/ocel/pkg/proto/env/v1/envv1connect"
+	linksv1 "github.com/ocelhq/ocel/pkg/proto/links/v1"
 )
 
 const deployFakeProviderEnvVar = "OCEL_TEST_DEPLOY_FAKE_PROVIDER"
@@ -56,6 +57,7 @@ const (
 const (
 	fakeAppURL      = "https://fake-app.example.com"
 	fakePromotionID = "prm_fake_1234"
+	fakeLinkSecret  = "pw-do-not-publish-9f2c"
 )
 
 func runDeployFakeProvider() int {
@@ -181,8 +183,32 @@ func (s *deployFakeProviderServer) Deploy(ctx context.Context, req *deploymentsv
 			Success:     true,
 			AppUrls:     []string{fakeAppURL},
 			PromotionId: fakePromotionID,
+			Links:       fakeLinks(req.GetManifest()),
 		}},
 	})
+}
+
+func fakeLinks(m *deploymentsv1.Manifest) []*linksv1.Link {
+	out := make([]*linksv1.Link, 0, len(m.GetResources()))
+	for _, r := range m.GetResources() {
+		out = append(out, &linksv1.Link{
+			Name: r.GetLogicalName(),
+			Type: r.GetResource().GetType(),
+			Properties: map[string]string{
+				"host":     "db.fake.internal",
+				"port":     "5432",
+				"username": "app",
+				"password": fakeLinkSecret,
+				"database": r.GetResource().GetName(),
+			},
+			Grants: []*linksv1.Grant{{
+				Actions:   []string{"fake:connect"},
+				Resources: []string{"fake:resource/main"},
+				Label:     "connect",
+			}},
+		})
+	}
+	return out
 }
 
 func (s *deployFakeProviderServer) Bootstrap(ctx context.Context, req *deploymentsv1.BootstrapRequest, stream *connect.ServerStream[deploymentsv1.DeployEvent]) error {

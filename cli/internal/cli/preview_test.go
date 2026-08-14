@@ -6,12 +6,14 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 
 	"github.com/ocelhq/ocel/cli/internal/manifestbuilder"
 	"github.com/ocelhq/ocel/cli/internal/previewid"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
+	"github.com/ocelhq/ocel/cli/internal/servicemap"
 	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
 )
 
@@ -83,6 +85,35 @@ func TestRunPreviewUp(t *testing.T) {
 
 		if !strings.Contains(stdout.String(), "FUNCTION logical_name=fn--api--api runtime=nodejs24.x handler=index.handler artifact_path=output/api framework=express app=api") {
 			t.Errorf("stdout = %q, want the function to have reached the preview manifest", stdout.String())
+		}
+
+		waitForNoStaleSocket(t, sockPath)
+	})
+
+	t.Run("a preview publishes a map whose edges are the manifest's usages", func(t *testing.T) {
+		root, sockPath := setUpDeployFixture(t)
+		writeUsageMonorepo(t, root)
+		d := defaultDeps()
+		setLoggedIn(&d)
+		stubGit(&d, "feature/login", "")
+		t.Setenv(fakeInfraClassEnvVar, "preview")
+		t.Setenv(fakeInfraPresentEnvVar, "1")
+		stubAppFunctions(&d, []manifestbuilder.Function{
+			{Name: "api", Runtime: "nodejs24.x", Handler: "src/server.js", ArtifactPath: "output/api", Framework: "express", App: "api"},
+		})
+
+		var stdout, stderr bytes.Buffer
+		if err := runPreviewUp(context.Background(), d, root, previewUpOptions{}, &stdout, &stderr, strings.NewReader("")); err != nil {
+			t.Fatalf("runPreviewUp err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
+		}
+
+		got := readServiceMap(t, root)
+		want := []servicemap.Usage{{App: "api", Resource: "db--main", Files: []string{"apps/api/src/server.ts"}}}
+		if !reflect.DeepEqual(got.Usages, want) {
+			t.Errorf("usages = %+v, want %+v", got.Usages, want)
+		}
+		if got.Environment.Class != "preview" {
+			t.Errorf("environment = %+v, want the preview's own context", got.Environment)
 		}
 
 		waitForNoStaleSocket(t, sockPath)
