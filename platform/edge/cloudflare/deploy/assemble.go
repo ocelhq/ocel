@@ -50,8 +50,6 @@ func (p *provider) AssembleApp(src edge.WorkerSource, r edge.Resolver) (edge.Wor
 	}, nil
 }
 
-const frameworkNext = "next"
-
 func routingModules(artifactRoot string) ([]edge.WorkerModule, error) {
 	routing, err := os.ReadFile(filepath.Join(artifactRoot, edge.RoutingManifestFile))
 	if err == nil {
@@ -64,26 +62,26 @@ func routingModules(artifactRoot string) ([]edge.WorkerModule, error) {
 	if !errors.Is(err, fs.ErrNotExist) {
 		return nil, fmt.Errorf("read routing manifest: %w", err)
 	}
-	routed, err := routesAtEdge(artifactRoot)
+	descriptor, err := readServeDescriptor(artifactRoot)
 	if err != nil {
 		return nil, err
 	}
-	if routed {
-		return nil, fmt.Errorf("read routing manifest: %w", fs.ErrNotExist)
+	if descriptor.EdgeRouting {
+		return nil, fmt.Errorf("the build declares edge routing but wrote no %s; rebuild the app: %w", edge.RoutingManifestFile, fs.ErrNotExist)
 	}
 	return nil, nil
 }
 
-func routesAtEdge(artifactRoot string) (bool, error) {
+func readServeDescriptor(artifactRoot string) (edge.ServeDescriptor, error) {
 	raw, err := os.ReadFile(filepath.Join(artifactRoot, edge.ServeDescriptorFile))
 	if err != nil {
-		return false, fmt.Errorf("read serve descriptor: %w", err)
+		return edge.ServeDescriptor{}, fmt.Errorf("read serve descriptor: %w", err)
 	}
 	var descriptor edge.ServeDescriptor
 	if err := json.Unmarshal(raw, &descriptor); err != nil {
-		return false, fmt.Errorf("parse serve descriptor: %w", err)
+		return edge.ServeDescriptor{}, fmt.Errorf("parse serve descriptor: %w", err)
 	}
-	return descriptor.Framework == frameworkNext, nil
+	return descriptor, nil
 }
 
 func validateRoutes(routes []string, r edge.Resolver) error {

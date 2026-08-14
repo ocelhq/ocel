@@ -640,9 +640,16 @@ func buildDeploymentRecord(cfg Config, manifest *deploymentsv1.Manifest, app *de
 		ValueFingerprint: fingerprint,
 		Variables:        variables,
 	}
+	desc, _, err := readServeDescriptor(cfg.ArtifactRoot, name)
+	if err != nil {
+		return edge.DeploymentRecord{}, err
+	}
 	routing, routed, err := readRoutingManifest(cfg, name)
 	if err != nil {
 		return edge.DeploymentRecord{}, err
+	}
+	if desc.EdgeRouting && !routed {
+		return edge.DeploymentRecord{}, fmt.Errorf("app %s declares edge routing but its build wrote no %s; rebuild the app", name, edge.RoutingManifestFile)
 	}
 	if routed {
 		record.RoutingManifest = routing

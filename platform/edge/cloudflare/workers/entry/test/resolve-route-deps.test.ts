@@ -111,8 +111,8 @@ describe("resolveRouteDeps", () => {
     expect(await response.text()).toMatch(/deployment/i);
   });
 
-  it("returns 501 for a Deployment declaring another framework", async () => {
-    const record = makeRecord({ framework: "sveltekit" });
+  it("returns 501 for a Deployment that ships no routing manifest", async () => {
+    const record = makeRecord({ framework: "express", routingManifest: undefined });
     const deps = await resolveRouteDeps(
       { binding: bindingReturning("build-1", record), app: "web" },
       { assetStore },
@@ -121,21 +121,7 @@ describe("resolveRouteDeps", () => {
     expect(deps).toBeInstanceOf(Response);
     const response = deps as Response;
     expect(response.status).toBe(501);
-    expect(await response.text()).toMatch(/sveltekit/);
-  });
-
-  it("returns 501 naming the redeploy for a Deployment that declares no framework at all", async () => {
-    const { framework: _dropped, ...record } = makeRecord();
-    const deps = await resolveRouteDeps(
-      { binding: bindingReturning("build-1", record as DeploymentRecord), app: "web" },
-      { assetStore },
-    );
-
-    const response = deps as Response;
-    expect(response.status).toBe(501);
-    const body = await response.text();
-    expect(body).toMatch(/predates/i);
-    expect(body).toMatch(/deploy/i);
+    expect(await response.text()).toMatch(/express/);
   });
 
   it("returns 503 when the store is unreachable on a cold isolate", async () => {

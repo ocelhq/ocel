@@ -465,7 +465,7 @@ const adapter = {
     );
     writeFileSync(
       join(outputRoot, "serve.json"),
-      JSON.stringify({ framework: "next", buildId }),
+      JSON.stringify({ framework: "next", buildId, edgeRouting: true }),
     );
 
     if (images) {

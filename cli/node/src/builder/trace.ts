@@ -229,7 +229,7 @@ export async function artifactHash(dir: string): Promise<string> {
 export async function writeServeDescriptor(
   outDir: string,
   app: string,
-  descriptor: { framework: string; buildId: string },
+  descriptor: { framework: string; buildId: string; edgeRouting: boolean },
 ): Promise<void> {
   const appDir = appOutDir(outDir, app);
   await mkdir(appDir, { recursive: true });
@@ -281,6 +281,7 @@ export async function traceBuild(
   await writeServeDescriptor(options.outDir, input.name, {
     framework: fw.name,
     buildId: await artifactHash(funcDir),
+    edgeRouting: false,
   });
 
   return {
