@@ -152,6 +152,8 @@ message DeployRequest {
   Environment environment = 4;
 
   string tag = 5;
+
+  string promotion_id = 6;
 }
 
 message BootstrapRequest {

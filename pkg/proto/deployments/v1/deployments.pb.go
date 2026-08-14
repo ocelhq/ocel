@@ -1152,6 +1152,7 @@ type DeployRequest struct {
 	ProtocolVersion string                 `protobuf:"bytes,3,opt,name=protocol_version,json=protocolVersion,proto3" json:"protocol_version,omitempty"`
 	Environment     *Environment           `protobuf:"bytes,4,opt,name=environment,proto3" json:"environment,omitempty"`
 	Tag             string                 `protobuf:"bytes,5,opt,name=tag,proto3" json:"tag,omitempty"`
+	PromotionId     string                 `protobuf:"bytes,6,opt,name=promotion_id,json=promotionId,proto3" json:"promotion_id,omitempty"`
 	unknownFields   protoimpl.UnknownFields
 	sizeCache       protoimpl.SizeCache
 }
@@ -1217,6 +1218,13 @@ func (x *DeployRequest) GetEnvironment() *Environment {
 func (x *DeployRequest) GetTag() string {
 	if x != nil {
 		return x.Tag
+	}
+	return ""
+}
+
+func (x *DeployRequest) GetPromotionId() string {
+	if x != nil {
+		return x.PromotionId
 	}
 	return ""
 }
@@ -3513,13 +3521,14 @@ const file_deployments_v1_deployments_proto_rawDesc = "" +
 	"\bresource\x18\x02 \x01(\v2 .resources.v1.ResourceIdentifierR\bresource\x12:\n" +
 	"\bpostgres\x18\x03 \x01(\v2\x1c.resources.v1.PostgresConfigH\x00R\bpostgres\x124\n" +
 	"\x06bucket\x18\x04 \x01(\v2\x1a.resources.v1.BucketConfigH\x00R\x06bucketB\b\n" +
-	"\x06config\"\xdb\x01\n" +
+	"\x06config\"\xfe\x01\n" +
 	"\rDeployRequest\x124\n" +
 	"\bmanifest\x18\x01 \x01(\v2\x18.deployments.v1.ManifestR\bmanifest\x12\x18\n" +
 	"\aoptions\x18\x02 \x01(\fR\aoptions\x12)\n" +
 	"\x10protocol_version\x18\x03 \x01(\tR\x0fprotocolVersion\x12=\n" +
 	"\venvironment\x18\x04 \x01(\v2\x1b.deployments.v1.EnvironmentR\venvironment\x12\x10\n" +
-	"\x03tag\x18\x05 \x01(\tR\x03tag\"\x90\x01\n" +
+	"\x03tag\x18\x05 \x01(\tR\x03tag\x12!\n" +
+	"\fpromotion_id\x18\x06 \x01(\tR\vpromotionId\"\x90\x01\n" +
 	"\x10BootstrapRequest\x12\x18\n" +
 	"\aoptions\x18\x01 \x01(\fR\aoptions\x12)\n" +
 	"\x10protocol_version\x18\x02 \x01(\tR\x0fprotocolVersion\x127\n" +
