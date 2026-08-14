@@ -196,6 +196,7 @@ func TestFunctionEnv(t *testing.T) {
 
 	t.Run("a node framework function with no isr still takes the bytecode cache", func(t *testing.T) {
 		t.Setenv(bytecodeCacheEnv, "1")
+		t.Setenv(membraneLayerARNEnv, "arn:aws:lambda:us-east-1:123:layer:ocel-membrane:99")
 		cache := bytecodeConfig{Bucket: "assets-xyz", Prefix: "prod/proj/api/API1/bytecode"}
 
 		env := functionEnv(map[string]string{}, functionArgs{Handler: "index.mjs"}, nil, &cache)
