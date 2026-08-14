@@ -53,6 +53,9 @@ func realize(ctx context.Context, cfg Config, manifest *deploymentsv1.Manifest, 
 		return Result{}, finishUploading(fmt.Errorf("no deployments-store worker found for this account; re-run `%s` to provision it before deploying", bootstrapCommand(cfg)))
 	}
 
+	if cfg.PromotionID == "" {
+		return Result{}, finishUploading(errors.New("deploy request carries no promotion id; upgrade the CLI so it mints one before the build"))
+	}
 	if err := validateTag(cfg.Tag); err != nil {
 		return Result{}, finishUploading(err)
 	}
@@ -102,10 +105,7 @@ func realize(ctx context.Context, cfg Config, manifest *deploymentsv1.Manifest, 
 	}
 
 	identities := builds.identities
-	promotionID, err := newRandomID()
-	if err != nil {
-		return Result{}, finishProvisioning(err)
-	}
+	promotionID := cfg.PromotionID
 	plan, err := BuildPlan(manifest, planEnvironment(cfg), promotionID, identities)
 	if err != nil {
 		return Result{}, finishProvisioning(err)

@@ -1435,6 +1435,19 @@ func TestBootstrapCommand(t *testing.T) {
 	}
 }
 
+func TestRealizeRequiresAPromotionID(t *testing.T) {
+	t.Parallel()
+
+	cfg := Config{Edge: &recordingRootStack{}, StoreEndpoint: "https://store.example.com"}
+	_, err := realize(context.Background(), cfg, &deploymentsv1.Manifest{Slug: "shop"}, nil, nil)
+	if err == nil {
+		t.Fatal("realize err = nil, want the missing promotion id refused")
+	}
+	if !strings.Contains(err.Error(), "promotion id") {
+		t.Errorf("realize err = %v, want it to name the missing promotion id", err)
+	}
+}
+
 func TestValidateTag(t *testing.T) {
 	t.Parallel()
 	cases := []struct {

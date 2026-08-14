@@ -99,6 +99,8 @@ type Config struct {
 
 	Tag string
 
+	PromotionID string
+
 	RootStackState edge.RootStackState
 
 	Stages      Stages

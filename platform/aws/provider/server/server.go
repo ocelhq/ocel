@@ -346,6 +346,7 @@ func (s *Server) runDeploy(ctx context.Context, req *deploymentsv1.DeployRequest
 		ExpiresAt:      previewExpiry(env.GetLifecycle(), time.Now()),
 		RootStackState: priorRootStackState,
 		Tag:            req.GetTag(),
+		PromotionID:    req.GetPromotionId(),
 
 		Stages: deploy.Stages{
 			Uploading:    stages.uploading,
