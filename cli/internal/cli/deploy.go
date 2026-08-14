@@ -25,6 +25,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/manifestbuilder"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
 	"github.com/ocelhq/ocel/cli/internal/providerrunner"
+	"github.com/ocelhq/ocel/cli/internal/servicemap"
 	"github.com/ocelhq/ocel/cli/node"
 	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
 	envv1 "github.com/ocelhq/ocel/pkg/proto/env/v1"
@@ -100,6 +101,9 @@ func runDeploy(ctx context.Context, d deps, cwd string, opts deployOptions, stdo
 	}
 
 	if err := deployresult.Clear(cfg.Dir); err != nil {
+		return err
+	}
+	if err := servicemap.Clear(cfg.Dir); err != nil {
 		return err
 	}
 
@@ -189,6 +193,9 @@ func runDeploy(ctx context.Context, d deps, cwd string, opts deployOptions, stdo
 		}
 
 		if err := recordDeployResult(cfg, manifest, env, opts.tag, promotionID, appURLs); err != nil {
+			return err
+		}
+		if err := publishServiceMap(cfg, manifest, env, opts.tag, promotionID, links); err != nil {
 			return err
 		}
 		ui.Deployed("Deployed", appURLs, links, functions)
