@@ -1,7 +1,8 @@
 import {
-  areTagsExpired,
   readableSnapshot,
+  tagFreshness,
   tagSnapshotKey,
+  type TagFreshness,
   type TagRecord,
   type TagSnapshot,
 } from "@framework/next-cache";
@@ -32,10 +33,10 @@ export interface TagClockDeps {
 
 export const defaultSnapshotReadTimeoutMs = 3_000;
 
-export type TagVerdict = boolean | "untrusted";
+export type TagVerdict = TagFreshness | "untrusted";
 
 export interface TagClock {
-  expired(tags: string[], timestamp: number, now: number): Promise<TagVerdict>;
+  freshness(tags: string[], timestamp: number, now: number): Promise<TagVerdict>;
   prime(now: number): Promise<unknown>;
 }
 
@@ -94,12 +95,12 @@ export function createTagClock(
   deps: TagClockDeps,
 ): TagClock {
   return {
-    async expired(tags, timestamp, now) {
-      if (tags.length === 0) return false;
+    async freshness(tags, timestamp, now) {
+      if (tags.length === 0) return "fresh";
       try {
         const records = await snapshotRecords(cfg, deps, now);
         if (!records) return "untrusted";
-        return areTagsExpired(tags, records, timestamp, now);
+        return tagFreshness(tags, records, timestamp, now);
       } catch {
         return "untrusted";
       }
