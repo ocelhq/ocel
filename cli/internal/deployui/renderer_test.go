@@ -247,6 +247,54 @@ func TestRestartBuildStageDiscardsElapsedTime(t *testing.T) {
 	}
 }
 
+func TestStageEndCommitsRowsAsSpansArrive(t *testing.T) {
+	t.Parallel()
+	var out bytes.Buffer
+	r := newRendererForTest(&out, FormatHuman, true, false)
+	t.Cleanup(func() { _ = r.Close() })
+
+	appA, appB := appStage(1), appStage(2)
+	r.StagePlan(&deploymentsv1.StagePlanEvent{Stages: []*deploymentsv1.Stage{
+		{Id: appA, Title: "app-a"},
+		{Id: appB, Title: "app-b"},
+	}, Final: true})
+
+	r.Progress(appA, deploymentsv1.Phase_PHASE_PROVISIONING, "provisioning", 0, nil)
+	r.Progress(appB, deploymentsv1.Phase_PHASE_PROVISIONING, "provisioning", 0, nil)
+
+	r.StageEnd(appA, false, 90*time.Second)
+	if len(r.plan.activeOrder) != 1 || r.plan.activeOrder[0] != stageKey(appB) {
+		t.Fatalf("activeOrder = %v, want app-a committed the moment its span arrived", r.plan.activeOrder)
+	}
+	if got := out.String(); !strings.Contains(got, "app-a") || !strings.Contains(got, "1m30s") {
+		t.Errorf("output = %q, want app-a committed with the span's own duration", got)
+	}
+
+	r.StageEnd(appB, true, time.Second)
+	if len(r.plan.activeOrder) != 0 {
+		t.Fatalf("activeOrder = %v, want app-b committed by its error span", r.plan.activeOrder)
+	}
+	if got := out.String(); !strings.Contains(got, "app-b failed") {
+		t.Errorf("output = %q, want app-b committed as failed", got)
+	}
+
+	r.StageEnd([]byte{9, 9, 9, 9, 9, 9, 9, 9}, false, time.Second)
+}
+
+func TestLiveModeHoldsBackRawLogLines(t *testing.T) {
+	t.Parallel()
+	var out bytes.Buffer
+	r := newRendererForTest(&out, FormatHuman, true, false)
+	t.Cleanup(func() { _ = r.Close() })
+
+	r.Progress(appStage(1), deploymentsv1.Phase_PHASE_PROVISIONING, "provisioning", 0, nil)
+	r.Log("pulumi engine line")
+
+	if strings.Contains(out.String(), "pulumi engine line") {
+		t.Errorf("output = %q, want raw Log lines held back from the live view — they belong to the run log", out.String())
+	}
+}
+
 func TestUntaggedProgressCommitsEachMessageAsItsOwnLine(t *testing.T) {
 	t.Parallel()
 	var out bytes.Buffer
