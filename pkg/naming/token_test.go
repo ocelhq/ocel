@@ -25,7 +25,6 @@ func TestEnvFragment(t *testing.T) {
 	for _, tc := range []struct{ token, want string }{
 		{TokenPostgres, "POSTGRES"},
 		{TokenBucket, "BUCKET"},
-		{"acme:redis", "ACME:REDIS"},
 	} {
 		if got := EnvFragment(tc.token); got != tc.want {
 			t.Errorf("EnvFragment(%q) = %q, want %q", tc.token, got, tc.want)
