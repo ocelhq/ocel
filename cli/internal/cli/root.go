@@ -65,8 +65,6 @@ func init() {
 	rootCmd.AddCommand(bootstrapCmd)
 	rootCmd.AddCommand(loginCmd)
 	rootCmd.AddCommand(logoutCmd)
-	rootCmd.AddCommand(linkCmd)
-	rootCmd.AddCommand(unlinkCmd)
 }
 
 func effectiveAPIURL(cmd *cobra.Command, credsURL string) string {

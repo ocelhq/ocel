@@ -7,13 +7,13 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/ocelhq/ocel/cli/internal/cloudlink"
+	"github.com/ocelhq/ocel/cli/internal/consolebinding"
 )
 
-var unlinkCmd = &cobra.Command{
+var consoleUnlinkCmd = &cobra.Command{
 	Use:   "unlink",
 	Short: "Remove this directory's Ocel console link",
-	Long: "Removes .ocel/link.json, leaving this working tree associated with no\n" +
+	Long: "Removes .ocel/console.json, leaving this working tree associated with no\n" +
 		"console project. Nothing on the control plane is deleted.",
 	Args: cobra.NoArgs,
 	RunE: func(cmd *cobra.Command, args []string) error {
@@ -26,7 +26,7 @@ var unlinkCmd = &cobra.Command{
 }
 
 func runUnlink(projectDir string, stdout io.Writer) error {
-	removed, err := cloudlink.Clear(projectDir)
+	removed, err := consolebinding.Clear(projectDir)
 	if err != nil {
 		return err
 	}

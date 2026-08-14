@@ -1,4 +1,4 @@
-package cloudlink
+package consolebinding
 
 import (
 	"os"
@@ -9,8 +9,8 @@ import (
 
 const apiURL = "https://ocel.app"
 
-func sample() Link {
-	return Link{
+func sample() Binding {
+	return Binding{
 		APIURL:         apiURL,
 		OrganizationID: "org_1",
 		ProjectID:      "proj_1",
@@ -26,7 +26,7 @@ func TestRead(t *testing.T) {
 
 	unlinked := []struct {
 		name   string
-		stored *Link
+		stored *Binding
 		reason string
 	}{
 		{
@@ -51,12 +51,12 @@ func TestRead(t *testing.T) {
 				}
 			}
 
-			link, err := Read(dir, apiURL)
+			binding, err := Read(dir, apiURL)
 			if err != nil {
 				t.Fatalf("Read err = %v, want nil", err)
 			}
-			if link != nil {
-				t.Fatalf("Read = %+v, %s", link, tt.reason)
+			if binding != nil {
+				t.Fatalf("Read = %+v, %s", binding, tt.reason)
 			}
 		})
 	}
@@ -65,9 +65,9 @@ func TestRead(t *testing.T) {
 		t.Parallel()
 
 		dir := t.TempDir()
-		link := sample()
-		link.APIURL = apiURL + "/"
-		if err := Write(dir, link); err != nil {
+		binding := sample()
+		binding.APIURL = apiURL + "/"
+		if err := Write(dir, binding); err != nil {
 			t.Fatalf("Write err = %v", err)
 		}
 
@@ -90,14 +90,14 @@ func TestRead(t *testing.T) {
 		if err := os.MkdirAll(filepath.Join(dir, ".ocel"), 0o755); err != nil {
 			t.Fatalf("mkdir: %v", err)
 		}
-		if err := os.WriteFile(filepath.Join(dir, ".ocel", "link.json"), []byte("{not json"), 0o644); err != nil {
+		if err := os.WriteFile(filepath.Join(dir, ".ocel", "console.json"), []byte("{not json"), 0o644); err != nil {
 			t.Fatalf("write: %v", err)
 		}
 
 		if _, err := Read(dir, apiURL); err == nil {
 			t.Fatal("Read err = nil, want an error for a malformed record")
-		} else if !strings.Contains(err.Error(), "ocel unlink") {
-			t.Fatalf("err = %v, want it to suggest `ocel unlink`", err)
+		} else if !strings.Contains(err.Error(), "ocel console unlink") {
+			t.Fatalf("err = %v, want it to suggest `ocel console unlink`", err)
 		}
 	})
 }
@@ -113,15 +113,15 @@ func TestWrite(t *testing.T) {
 			t.Fatalf("Write err = %v", err)
 		}
 
-		link, err := Read(dir, apiURL)
+		binding, err := Read(dir, apiURL)
 		if err != nil {
 			t.Fatalf("Read err = %v", err)
 		}
-		if link == nil {
+		if binding == nil {
 			t.Fatal("Read = nil, want the record just written")
 		}
-		if *link != sample() {
-			t.Fatalf("Read = %+v, want %+v", *link, sample())
+		if *binding != sample() {
+			t.Fatalf("Read = %+v, want %+v", *binding, sample())
 		}
 	})
 
@@ -132,8 +132,8 @@ func TestWrite(t *testing.T) {
 		if err := Write(dir, sample()); err != nil {
 			t.Fatalf("Write err = %v", err)
 		}
-		if _, err := os.Stat(filepath.Join(dir, ".ocel", "link.json")); err != nil {
-			t.Fatalf("stat .ocel/link.json: %v", err)
+		if _, err := os.Stat(filepath.Join(dir, ".ocel", "console.json")); err != nil {
+			t.Fatalf("stat .ocel/console.json: %v", err)
 		}
 	})
 
@@ -145,17 +145,17 @@ func TestWrite(t *testing.T) {
 			t.Fatalf("Write err = %v", err)
 		}
 
-		replacement := Link{APIURL: apiURL, OrganizationID: "org_2", ProjectID: "proj_2", ProjectName: "Other"}
+		replacement := Binding{APIURL: apiURL, OrganizationID: "org_2", ProjectID: "proj_2", ProjectName: "Other"}
 		if err := Write(dir, replacement); err != nil {
 			t.Fatalf("Write err = %v", err)
 		}
 
-		link, err := Read(dir, apiURL)
+		binding, err := Read(dir, apiURL)
 		if err != nil {
 			t.Fatalf("Read err = %v", err)
 		}
-		if link == nil || *link != replacement {
-			t.Fatalf("Read = %+v, want %+v", link, replacement)
+		if binding == nil || *binding != replacement {
+			t.Fatalf("Read = %+v, want %+v", binding, replacement)
 		}
 	})
 }
@@ -163,19 +163,19 @@ func TestWrite(t *testing.T) {
 func TestClear(t *testing.T) {
 	t.Parallel()
 
-	linked := sample()
+	bound := sample()
 	fromAnotherControlPlane := sample()
 	fromAnotherControlPlane.APIURL = "http://localhost:3000"
 
 	tests := []struct {
 		name        string
-		stored      *Link
+		stored      *Binding
 		wantRemoved bool
 		reason      string
 	}{
 		{
 			name:        "removes the record",
-			stored:      &linked,
+			stored:      &bound,
 			wantRemoved: true,
 			reason:      "want true",
 		},
@@ -211,12 +211,12 @@ func TestClear(t *testing.T) {
 				t.Fatalf("Clear removed = %v, %s", removed, tt.reason)
 			}
 
-			link, err := Read(dir, apiURL)
+			binding, err := Read(dir, apiURL)
 			if err != nil {
 				t.Fatalf("Read err = %v", err)
 			}
-			if link != nil {
-				t.Fatalf("Read = %+v after Clear, want nil", link)
+			if binding != nil {
+				t.Fatalf("Read = %+v after Clear, want nil", binding)
 			}
 		})
 	}
