@@ -141,7 +141,7 @@ describe("self-revalidation suppression", () => {
     expect(request.headers.get(PREFETCH)).toBe("sniff");
   });
 
-  it("never stamps the blocking revalidation forward", async () => {
+  it("never stamps the blocking revalidation forward as on-demand", async () => {
     const pending: Promise<unknown>[] = [];
     const origin = recorder();
 
@@ -156,7 +156,7 @@ describe("self-revalidation suppression", () => {
     await Promise.all(pending);
 
     expect(origin.requests).toHaveLength(1);
-    expect(origin.requests[0].headers.get("x-prerender-revalidate")).toBe("TOKEN");
+    expect(origin.requests[0].headers.has("x-prerender-revalidate")).toBe(false);
     expect(origin.purposes()).toEqual([null]);
   });
 

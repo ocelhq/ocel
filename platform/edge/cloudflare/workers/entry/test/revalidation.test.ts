@@ -4,7 +4,6 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { OCEL_REVALIDATED } from "../src/index";
 
 import {
-  NEXT_RENDER_RECEIPT,
   enqueueTimeoutMs,
   revalidationIds,
   revalidationRetryWindowMs,
@@ -20,7 +19,7 @@ const route: RevalidationRoute = {
     "x-forwarded-host": "app.example",
     "x-forwarded-proto": "https",
   },
-  expect: NEXT_RENDER_RECEIPT,
+  expect: null,
   isrPrefix: "prod/p1/web/build-1",
   routeId: "/blog",
   routePath: "/blog",
@@ -128,7 +127,7 @@ describe("revalidationMessage", () => {
     expect(revalidationMessage(route, 1_000, 42)).toEqual({
       v: 1,
       headers: route.headers,
-      expect: { header: "x-nextjs-cache", value: "REVALIDATED" },
+      expect: null,
       isrPrefix: "prod/p1/web/build-1",
       routeId: "/blog",
       routePath: "/blog",

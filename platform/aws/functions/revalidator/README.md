@@ -6,15 +6,15 @@ through its own cache handler. The queue has already deduplicated every other
 colo that asked for the same render; this function is what turns the survivor
 into a render, at a concurrency the event source mapping caps.
 
-It understands no framework. The edge adapter prepares the force-render headers
-and declares the receipt it expects back; the consumer signs what it was handed
+It understands no framework. The edge adapter prepares the headers and declares
+whatever receipt it expects back, if any; the consumer signs what it was handed
 and evaluates only that declared expectation.
 
 ## The message names no host
 
-Every record carries the app's bypass token in `x-prerender-revalidate`, so
-where the trigger is sent is a security decision. The message does not make it.
-It names a route — `isrPrefix` (which deploy) and `routeId` (which of that
+A record is a signed instruction to render, and it can carry whatever headers
+the edge chose to have replayed, so where the trigger is sent is a security
+decision. The message does not make it. It names a route — `isrPrefix` (which deploy) and `routeId` (which of that
 deploy's functions serves it) — and the consumer looks the origin up in the
 record the deploy itself wrote:
 
@@ -47,8 +47,8 @@ real boundary is this, and it is two things, not one:
   would have matched the planted document exactly, and the origin comparison
   below would have agreed with the planted origin. It also stops
   `../../../other-app/BID2`, which reads a *sibling app's* record and delivers
-  app A's bypass token to app B's Function URL — logged, before the check, as
-  `RevalidateExpectMiss`, i.e. as a success.
+  app A's headers, and its render, to app B's Function URL — logged, before the
+  check, as a success.
 - **`routeId` cannot steer anything.** A lie there names a route this deploy
   recorded or one it did not, and the second is a rejection. There is no
   allowlist to keep current.

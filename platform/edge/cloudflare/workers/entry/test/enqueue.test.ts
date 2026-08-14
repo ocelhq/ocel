@@ -18,11 +18,10 @@ const isrPrefix = "prod/p/app/build";
 
 const revalidation: RevalidationRoute = {
   headers: {
-    "x-prerender-revalidate": "TOKEN",
     "x-forwarded-host": "app.example",
     "x-forwarded-proto": "https",
   },
-  expect: { header: "x-nextjs-cache", value: "REVALIDATED" },
+  expect: null,
   isrPrefix,
   routeId: "/blog",
   routePath: "/blog",
@@ -251,7 +250,9 @@ function recorder() {
     requests,
     fetch,
     revalidating: () =>
-      requests.filter((r) => r.headers.has("x-prerender-revalidate")),
+      requests.filter(
+        (r) => r.method === "GET" && r.headers.get("purpose") !== "prefetch",
+      ),
   };
 }
 
@@ -379,12 +380,11 @@ describe("the R2 tier's admitted refresh", () => {
     expect(sender.sent[0]).toEqual({
       v: 1,
       headers: {
-        "x-prerender-revalidate": "TOKEN",
         "x-ocel-entry": "app/blog/page",
         "x-forwarded-host": "app.example",
         "x-forwarded-proto": "https",
       },
-      expect: { header: "x-nextjs-cache", value: "REVALIDATED" },
+      expect: null,
       isrPrefix,
       routeId: "bundle-0",
       routePath: "/blog",

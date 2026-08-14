@@ -300,7 +300,7 @@ describe("a prerender whose parent is a node bundle", () => {
     await Promise.all(pending);
 
     expect(origin.requests).toHaveLength(1);
-    expect(origin.requests[0].headers.get("x-prerender-revalidate")).toBe("TOKEN");
+    expect(origin.requests[0].headers.has("x-prerender-revalidate")).toBe(false);
     expect(origin.entries()).toEqual(["app/blog/page"]);
   });
 });
@@ -381,9 +381,12 @@ describe("a PPR prerender whose parent is a node bundle", () => {
     expect(new Set(origin.entries())).toEqual(new Set(["app/ppr/page"]));
     expect(
       origin.requests.some(
-        (r) => r.headers.get("x-prerender-revalidate") === "TOKEN",
+        (r) => r.method === "GET" && r.headers.get("purpose") !== "prefetch",
       ),
     ).toBe(true);
+    expect(
+      origin.requests.some((r) => r.headers.has("x-prerender-revalidate")),
+    ).toBe(false);
   });
 
   it("drops a client's entry header on the resume of an entryless prerender", async () => {
