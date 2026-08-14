@@ -2563,7 +2563,7 @@ describe("a Server Action's invalidation reaching the colo it travelled through"
     };
   }
 
-  it("serves the invalidated entry as stale on the next request", async () => {
+  it("renders the invalidated entry at the origin on the next request", async () => {
     const s = scenario();
 
     await s.get();
@@ -2580,7 +2580,7 @@ describe("a Server Action's invalidation reaching the colo it travelled through"
     s.advanceTo(30_000);
     const after = await s.get();
 
-    expect(after.headers.get("x-nextjs-cache")).toBe("STALE");
+    expect(after.headers.get("x-ocel-cache")).toBe("MISS");
     await s.settle();
     expect(s.lambdaCalls()).toBe(3);
   });

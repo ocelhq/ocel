@@ -36,42 +36,61 @@ function storeWith(body: string | null, opts: { fail?: boolean } = {}) {
 it("reports a tag expired after the entry was written as expired", async () => {
   const snap = snapshot({ records: { posts: { expired: 2_000 } } });
   const clock = createTagClock(cfg, { store: storeWith(JSON.stringify(snap)) });
-  expect(await clock.expired(["posts"], 1_000, 3_000)).toBe(true);
+  expect(await clock.freshness(["posts"], 1_000, 3_000)).toBe("expired");
 });
 
 it("reports no expiry when the tag lapsed before the entry was written", async () => {
   const snap = snapshot({ records: { posts: { expired: 500 } } });
   const clock = createTagClock(cfg, { store: storeWith(JSON.stringify(snap)) });
-  expect(await clock.expired(["posts"], 1_000, 3_000)).toBe(false);
+  expect(await clock.freshness(["posts"], 1_000, 3_000)).toBe("fresh");
+});
+
+it("reports a record whose expiry is still ahead as stale, not expired", async () => {
+  const snap = snapshot({ records: { posts: { stale: 2_000, expired: 9_000 } } });
+  const clock = createTagClock(cfg, { store: storeWith(JSON.stringify(snap)) });
+  expect(await clock.freshness(["posts"], 1_000, 3_000)).toBe("stale");
+});
+
+it("reports a stale mark predating the entry as fresh", async () => {
+  const snap = snapshot({ records: { posts: { stale: 500, expired: 9_000 } } });
+  const clock = createTagClock(cfg, { store: storeWith(JSON.stringify(snap)) });
+  expect(await clock.freshness(["posts"], 1_000, 3_000)).toBe("fresh");
+});
+
+it("reports no tags as fresh without reading the snapshot", async () => {
+  const store = storeWith(null);
+  const clock = createTagClock(cfg, { store });
+  expect(await clock.freshness([], 1_000, 3_000)).toBe("fresh");
+  expect(store.gets).toEqual([]);
 });
 
 it("returns 'untrusted' on a missing snapshot", async () => {
   const clock = createTagClock(cfg, { store: storeWith(null) });
-  expect(await clock.expired(["posts"], 1_000, 3_000)).toBe("untrusted");
+  expect(await clock.freshness(["posts"], 1_000, 3_000)).toBe("untrusted");
 });
 
 it("answers from a snapshot however long ago it was published", async () => {
   const snap = snapshot({ generatedAt: 900, records: { posts: { expired: 2_000 } } });
   const clock = createTagClock(cfg, { store: storeWith(JSON.stringify(snap)) });
-  expect(await clock.expired(["posts"], 1_000, 3_000e9)).toBe(true);
+  expect(await clock.freshness(["posts"], 1_000, 3_000e9)).toBe("expired");
 });
 
 it("returns 'untrusted' at a version this reader predates", async () => {
   const snap = { ...snapshot(), version: 2 };
   const clock = createTagClock(cfg, { store: storeWith(JSON.stringify(snap)) });
-  expect(await clock.expired(["posts"], 1_000, 3_000)).toBe("untrusted");
+  expect(await clock.freshness(["posts"], 1_000, 3_000)).toBe("untrusted");
 });
 
 it("returns 'untrusted' on a store error", async () => {
   const clock = createTagClock(cfg, { store: storeWith(null, { fail: true }) });
-  expect(await clock.expired(["posts"], 1_000, 3_000)).toBe("untrusted");
+  expect(await clock.freshness(["posts"], 1_000, 3_000)).toBe("untrusted");
 });
 
 it("memoizes an absent snapshot, so one request pays one read", async () => {
   const store = storeWith(null);
   const clock = createTagClock(cfg, { store });
   await clock.prime(3_000);
-  expect(await clock.expired(["posts"], 1_000, 3_000)).toBe("untrusted");
+  expect(await clock.freshness(["posts"], 1_000, 3_000)).toBe("untrusted");
   expect(store.gets).toHaveLength(1);
 });
 
@@ -79,7 +98,7 @@ it("re-reads an absent snapshot once the memo window has passed", async () => {
   const store = storeWith(null);
   const clock = createTagClock(cfg, { store });
   await clock.prime(3_000);
-  await clock.expired(["posts"], 1_000, 5_000);
+  await clock.freshness(["posts"], 1_000, 5_000);
   expect(store.gets).toHaveLength(2);
 });
 
@@ -87,7 +106,7 @@ it("reads the snapshot object under the build prefix", async () => {
   const snap = snapshot();
   const store = storeWith(JSON.stringify(snap));
   const clock = createTagClock(cfg, { store });
-  await clock.expired(["posts"], 1_000, 3_000);
+  await clock.freshness(["posts"], 1_000, 3_000);
   expect(store.gets).toContain(snapshotKey);
 });
 
@@ -101,11 +120,11 @@ it("re-reads inside the memo window once the memo is dropped", async () => {
     },
   };
   const clock = createTagClock(cfg, { store });
-  expect(await clock.expired(["posts"], 1_000, 3_000)).toBe(false);
+  expect(await clock.freshness(["posts"], 1_000, 3_000)).toBe("fresh");
 
   body = JSON.stringify(snapshot({ records: { posts: { expired: 2_000 } } }));
   dropSnapshotMemo(cfg, store);
-  expect(await clock.expired(["posts"], 1_000, 3_000)).toBe(true);
+  expect(await clock.freshness(["posts"], 1_000, 3_000)).toBe("expired");
   expect(gets).toHaveLength(2);
 });
 
@@ -132,8 +151,8 @@ describe("the PoP copy fronting the replica", () => {
     const snapshotCache = popCache();
     const clock = createTagClock(cfg, { store, snapshotCache });
 
-    await clock.expired(["posts"], 1_000, 3_000);
-    await clock.expired(["posts"], 1_000, 9_000);
+    await clock.freshness(["posts"], 1_000, 3_000);
+    await clock.freshness(["posts"], 1_000, 9_000);
 
     expect(store.gets).toHaveLength(1);
   });
@@ -150,12 +169,12 @@ describe("the PoP copy fronting the replica", () => {
     const snapshotCache = popCache();
     const clock = createTagClock(cfg, { store, snapshotCache });
 
-    expect(await clock.expired(["posts"], 1_000, 3_000)).toBe(false);
+    expect(await clock.freshness(["posts"], 1_000, 3_000)).toBe("fresh");
 
     body = JSON.stringify(snapshot({ records: { posts: { expired: 2_000 } } }));
     await invalidateSnapshot(cfg, { store, snapshotCache });
 
-    expect(await clock.expired(["posts"], 1_000, 9_000)).toBe(true);
+    expect(await clock.freshness(["posts"], 1_000, 9_000)).toBe("expired");
     expect(gets).toHaveLength(2);
   });
 
@@ -164,7 +183,7 @@ describe("the PoP copy fronting the replica", () => {
     const snapshotCache = popCache();
     const clock = createTagClock(cfg, { store, snapshotCache });
 
-    await clock.expired(["posts"], 1_000, 3_000);
+    await clock.freshness(["posts"], 1_000, 3_000);
     expect(snapshotCache.entries.size).toBe(1);
 
     await invalidateSnapshot(cfg, { store, snapshotCache });
@@ -188,11 +207,11 @@ describe("the PoP copy fronting the replica", () => {
     };
     const clock = createTagClock(cfg, { store, snapshotCache: inert });
 
-    expect(await clock.expired(["posts"], 1_000, 3_000)).toBe(false);
+    expect(await clock.freshness(["posts"], 1_000, 3_000)).toBe("fresh");
     body = JSON.stringify(snapshot({ records: { posts: { expired: 2_000 } } }));
     await invalidateSnapshot(cfg, { store, snapshotCache: inert });
 
-    expect(await clock.expired(["posts"], 1_000, 3_000)).toBe(true);
+    expect(await clock.freshness(["posts"], 1_000, 3_000)).toBe("expired");
     expect(gets).toHaveLength(2);
   });
 });
@@ -221,13 +240,13 @@ describe("readers arriving together on a cold memo", () => {
     const clock = createTagClock(cfg, { store });
 
     const verdicts = Promise.all([
-      clock.expired(["posts"], 1_000, 3_000),
-      clock.expired(["posts"], 1_000, 3_000),
-      clock.expired(["posts"], 1_000, 3_000),
+      clock.freshness(["posts"], 1_000, 3_000),
+      clock.freshness(["posts"], 1_000, 3_000),
+      clock.freshness(["posts"], 1_000, 3_000),
     ]);
     store.release();
 
-    expect(await verdicts).toEqual([true, true, true]);
+    expect(await verdicts).toEqual(["expired", "expired", "expired"]);
     expect(store.gets).toHaveLength(1);
   });
 
@@ -236,14 +255,14 @@ describe("readers arriving together on a cold memo", () => {
     const clock = createTagClock(cfg, { store: failing });
 
     const verdicts = Promise.all([
-      clock.expired(["posts"], 1_000, 3_000),
-      clock.expired(["posts"], 1_000, 3_000),
+      clock.freshness(["posts"], 1_000, 3_000),
+      clock.freshness(["posts"], 1_000, 3_000),
     ]);
     failing.release();
     expect(await verdicts).toEqual(["untrusted", "untrusted"]);
     expect(failing.gets).toHaveLength(1);
 
-    expect(await clock.expired(["posts"], 1_000, 3_000)).toBe("untrusted");
+    expect(await clock.freshness(["posts"], 1_000, 3_000)).toBe("untrusted");
     expect(failing.gets).toHaveLength(2);
   });
 
@@ -268,13 +287,13 @@ describe("readers arriving together on a cold memo", () => {
     };
     const clock = createTagClock(cfg, { store });
 
-    const before = clock.expired(["posts"], 1_000, 3_000);
+    const before = clock.freshness(["posts"], 1_000, 3_000);
     await invalidateSnapshot(cfg, { store });
-    const after = clock.expired(["posts"], 1_000, 3_000);
+    const after = clock.freshness(["posts"], 1_000, 3_000);
     release();
 
-    expect(await before).toBe(false);
-    expect(await after).toBe(true);
+    expect(await before).toBe("fresh");
+    expect(await after).toBe("expired");
     expect(gets).toHaveLength(2);
   });
 
@@ -294,20 +313,20 @@ describe("readers arriving together on a cold memo", () => {
     };
     const clock = createTagClock(cfg, { store });
 
-    const abandoned = clock.expired(["posts"], 1_000, 3_000);
+    const abandoned = clock.freshness(["posts"], 1_000, 3_000);
     await invalidateSnapshot(cfg, { store });
-    const successor = clock.expired(["posts"], 1_000, 3_000);
+    const successor = clock.freshness(["posts"], 1_000, 3_000);
 
     releases[0]!();
     expect(await abandoned).toBe("untrusted");
 
-    const joiner = clock.expired(["posts"], 1_000, 3_000);
+    const joiner = clock.freshness(["posts"], 1_000, 3_000);
     for (let i = 0; i < 5; i++) {
       releases.forEach((done) => done());
       await Promise.resolve();
     }
-    expect(await successor).toBe(false);
-    expect(await joiner).toBe(false);
+    expect(await successor).toBe("fresh");
+    expect(await joiner).toBe("fresh");
     expect(gets).toHaveLength(2);
   });
 
@@ -341,10 +360,10 @@ describe("readers arriving together on a cold memo", () => {
     };
     const clock = createTagClock(cfg, { store, snapshotCache });
 
-    const abandoned = clock.expired(["posts"], 1_000, 3_000);
+    const abandoned = clock.freshness(["posts"], 1_000, 3_000);
     await invalidateSnapshot(cfg, { store, snapshotCache });
     expect(purged).toBe(1);
-    const successor = clock.expired(["posts"], 1_000, 3_000);
+    const successor = clock.freshness(["posts"], 1_000, 3_000);
 
     for (let i = 0; releases.length < 2 && i < 20; i++) {
       await new Promise((done) => setTimeout(done, 0));
@@ -352,11 +371,11 @@ describe("readers arriving together on a cold memo", () => {
     expect(releases).toHaveLength(2);
 
     releases[1]!();
-    expect(await successor).toBe(true);
+    expect(await successor).toBe("expired");
     releases[0]!();
-    expect(await abandoned).toBe(false);
+    expect(await abandoned).toBe("fresh");
 
-    expect(await clock.expired(["posts"], 1_000, 3_000)).toBe(true);
+    expect(await clock.freshness(["posts"], 1_000, 3_000)).toBe("expired");
     expect(gets).toHaveLength(2);
     expect(puts).toEqual([fresh]);
   });
@@ -390,12 +409,12 @@ describe("two builds sharing one binding", () => {
   it("do not join each other's read", async () => {
     const store = perPrefixStore();
     const verdicts = Promise.all([
-      createTagClock(older, { store }).expired(["posts"], 1_000, 3_000),
-      createTagClock(newer, { store }).expired(["posts"], 1_000, 3_000),
+      createTagClock(older, { store }).freshness(["posts"], 1_000, 3_000),
+      createTagClock(newer, { store }).freshness(["posts"], 1_000, 3_000),
     ]);
     store.release();
 
-    expect(await verdicts).toEqual([false, true]);
+    expect(await verdicts).toEqual(["fresh", "expired"]);
     expect(store.gets).toEqual([tagSnapshotKey(older.isrPrefix), tagSnapshotKey(newer.isrPrefix)]);
   });
 
@@ -403,8 +422,8 @@ describe("two builds sharing one binding", () => {
     const store = perPrefixStore();
     store.release();
 
-    expect(await createTagClock(older, { store }).expired(["posts"], 1_000, 3_000)).toBe(false);
-    expect(await createTagClock(newer, { store }).expired(["posts"], 1_000, 3_000)).toBe(true);
+    expect(await createTagClock(older, { store }).freshness(["posts"], 1_000, 3_000)).toBe("fresh");
+    expect(await createTagClock(newer, { store }).freshness(["posts"], 1_000, 3_000)).toBe("expired");
     expect(store.gets).toHaveLength(2);
   });
 });
@@ -426,7 +445,7 @@ describe("a store read that never settles", () => {
   it("degrades to 'untrusted' once the bound elapses, rather than hanging forever", async () => {
     const store = neverSettlingStore();
     const clock = createTagClock(cfg, { store, snapshotReadTimeoutMs: 5 });
-    expect(await clock.expired(["posts"], 1_000, 3_000)).toBe("untrusted");
+    expect(await clock.freshness(["posts"], 1_000, 3_000)).toBe("untrusted");
   });
 
   it("does not hang prime() either", async () => {
@@ -446,8 +465,8 @@ describe("a store read that never settles", () => {
     };
     const clock = createTagClock(cfg, { store, snapshotReadTimeoutMs: 5 });
 
-    expect(await clock.expired(["posts"], 1_000, 3_000)).toBe("untrusted");
-    expect(await clock.expired(["posts"], 1_000, 3_000)).toBe(false);
+    expect(await clock.freshness(["posts"], 1_000, 3_000)).toBe("untrusted");
+    expect(await clock.freshness(["posts"], 1_000, 3_000)).toBe("fresh");
     expect(calls).toBe(2);
   });
 });

@@ -510,8 +510,12 @@ async function serveOrAdmitRefresh(
   const tags = target.tags ?? [];
   let tagStale = false;
   if (tags.length > 0 && tagClock) {
-    const verdict: TagVerdict = await tagClock.expired(tags, modified, now());
-    tagStale = verdict !== false;
+    const verdict: TagVerdict = await tagClock.freshness(tags, modified, now());
+    if (verdict === "expired") {
+      cached.body?.cancel();
+      return null;
+    }
+    tagStale = verdict !== "fresh";
   }
   const meta: EntryMeta = {
     lastModified: modified,
