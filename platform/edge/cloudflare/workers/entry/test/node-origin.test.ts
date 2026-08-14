@@ -236,15 +236,15 @@ describe("node framework serve path", () => {
     }
   });
 
-  it("still answers 501 for a framework the runtime does not serve", async () => {
-    const response = (await resolved(makeRecord({ framework: "sveltekit" }))) as Response;
+  it("passes a framework it has never heard of through to the origin", async () => {
+    const wire = capturing();
+    const serve = (await resolved(makeRecord({ framework: "sveltekit" }), {
+      originFetch: wire.fetch,
+    })) as ServeFetch;
 
-    expect(response).toBeInstanceOf(Response);
-    expect(response.status).toBe(501);
-    const body = await response.text();
-    expect(body).toMatch(/sveltekit/);
-    expect(body).toMatch(/"next"/);
-    expect(body).toMatch(/"express"/);
+    await serve(new Request("https://api.example.com/ping"));
+
+    expect(wire.calls[0].url).toBe("https://abc123.lambda-url.eu-west-2.on.aws/ping");
   });
 
   it("routes a next deployment through next's own serve", async () => {

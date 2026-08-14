@@ -324,7 +324,7 @@ export type ResolveBase = Omit<
 
 export type ServeFetch = (request: Request) => Promise<Response>;
 
-interface FrameworkRuntime {
+interface ServeRuntime {
   serve: (
     record: DeploymentRecord,
     deployments: DeploymentsDeps,
@@ -337,15 +337,15 @@ interface FrameworkRuntime {
   ) => RouteDeps;
 }
 
-const nextRuntime: FrameworkRuntime = {
+const routedRuntime: ServeRuntime = {
   serve: (record, deployments, base) => {
-    const deps = nextRouteDeps(record, deployments, base);
+    const deps = routedDeps(record, deployments, base);
     return (request) => serve(request, deps);
   },
-  routeDeps: nextRouteDeps,
+  routeDeps: routedDeps,
 };
 
-const nodeRuntime: FrameworkRuntime = {
+const originRuntime: ServeRuntime = {
   serve: (record, deployments, base) =>
     nodeOrigin({
       app: deployments.app ?? record.app,
@@ -355,12 +355,9 @@ const nodeRuntime: FrameworkRuntime = {
     }),
 };
 
-const frameworkRuntimes: Record<string, FrameworkRuntime> = {
-  next: nextRuntime,
-  express: nodeRuntime,
-  fastify: nodeRuntime,
-  hono: nodeRuntime,
-};
+function runtimeFor(record: DeploymentRecord): ServeRuntime {
+  return record.routingManifest ? routedRuntime : originRuntime;
+}
 
 async function resolveRecord(
   deployments: DeploymentsDeps,
@@ -378,10 +375,7 @@ export async function resolveServe(
   const record = await resolveRecord(deployments);
   if (record instanceof Response) return record;
 
-  const runtime = frameworkRuntimes[record.framework];
-  if (!runtime) return unsupportedFrameworkResponse(record.framework);
-
-  return runtime.serve(record, deployments, base);
+  return runtimeFor(record).serve(record, deployments, base);
 }
 
 export async function resolveRouteDeps(
@@ -391,14 +385,13 @@ export async function resolveRouteDeps(
   const record = await resolveRecord(deployments);
   if (record instanceof Response) return record;
 
-  const runtime = frameworkRuntimes[record.framework];
-  if (!runtime) return unsupportedFrameworkResponse(record.framework);
+  const runtime = runtimeFor(record);
   if (!runtime.routeDeps) return unroutedFrameworkResponse(record.framework);
 
   return runtime.routeDeps(record, deployments, base);
 }
 
-function nextRouteDeps(
+function routedDeps(
   record: DeploymentRecord,
   deployments: DeploymentsDeps,
   base: ResolveBase,
@@ -452,19 +445,6 @@ function deploymentNotFoundResponse(): Response {
   return new Response(DEPLOYMENT_NOT_FOUND_HTML, {
     status: 404,
     headers: { "content-type": "text/html; charset=utf-8" },
-  });
-}
-
-function unsupportedFrameworkResponse(framework: string | undefined): Response {
-  const served = Object.keys(frameworkRuntimes)
-    .map((name) => `"${name}"`)
-    .join(", ");
-  const body = framework
-    ? `This deployment declares "${framework}"; this runtime serves ${served}.`
-    : "This deployment predates framework-tagged deployments and cannot be served. Deploy the app again.";
-  return new Response(body, {
-    status: 501,
-    headers: { "content-type": "text/plain; charset=utf-8" },
   });
 }
 

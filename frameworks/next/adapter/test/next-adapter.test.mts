@@ -1695,7 +1695,7 @@ test("states the framework and next's own build id in serve.json", async () => {
   const serve = JSON.parse(
     await readFile(join(projectDir, ".ocel/output/serve.json"), "utf8"),
   );
-  expect(serve).toEqual({ framework: "next", buildId: args.buildId });
+  expect(serve).toEqual({ framework: "next", buildId: args.buildId, edgeRouting: true });
   expect(serve.buildId).toBe((await readManifest(projectDir)).buildId);
 });
 

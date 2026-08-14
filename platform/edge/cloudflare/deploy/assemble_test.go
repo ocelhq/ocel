@@ -1,6 +1,7 @@
 package cloudflare
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
@@ -157,7 +158,7 @@ func TestAssembleApp(t *testing.T) {
 	t.Run("a node framework assembles with no routing module", func(t *testing.T) {
 		t.Parallel()
 
-		src := writeNodeAppArtifacts(t, "express")
+		src := writeDescribedApp(t, "express", false)
 		src.Routes = []string{"/"}
 		r := stubResolver{urls: map[string]string{"/": "https://fn.lambda-url.aws/"}}
 
@@ -173,15 +174,15 @@ func TestAssembleApp(t *testing.T) {
 		}
 	})
 
-	t.Run("next missing its routing manifest is still an error", func(t *testing.T) {
+	t.Run("a build that declares edge routing without a routing manifest is an error", func(t *testing.T) {
 		t.Parallel()
 
-		src := writeNodeAppArtifacts(t, "next")
+		src := writeDescribedApp(t, "next", true)
 		src.Routes = []string{"/"}
 		r := stubResolver{urls: map[string]string{"/": "https://fn.lambda-url.aws/"}}
 
 		if _, err := assembleFor(t)(src, r); err == nil {
-			t.Fatal("a next build without a routing manifest is corrupt and must not deploy")
+			t.Fatal("a build declaring edge routing without a routing manifest is corrupt and must not deploy")
 		}
 	})
 
@@ -202,10 +203,10 @@ func TestAssembleApp(t *testing.T) {
 	})
 }
 
-func writeNodeAppArtifacts(t *testing.T, framework string) edge.WorkerSource {
+func writeDescribedApp(t *testing.T, framework string, edgeRouting bool) edge.WorkerSource {
 	t.Helper()
 	root := t.TempDir()
-	descriptor := `{"framework":"` + framework + `","buildId":"b1"}`
+	descriptor := fmt.Sprintf(`{"framework":%q,"buildId":"b1","edgeRouting":%t}`, framework, edgeRouting)
 	if err := os.WriteFile(filepath.Join(root, edge.ServeDescriptorFile), []byte(descriptor), 0o644); err != nil {
 		t.Fatal(err)
 	}

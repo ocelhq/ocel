@@ -8,4 +8,8 @@ const ServeDescriptorFile = "serve.json"
 type ServeDescriptor struct {
 	Framework string `json:"framework"`
 	BuildID   string `json:"buildId"`
+	// EdgeRouting states that the build ships a routing manifest and the edge
+	// decides each request's fate; without it the edge is a pass-through to
+	// the app's origin.
+	EdgeRouting bool `json:"edgeRouting"`
 }
