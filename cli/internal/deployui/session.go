@@ -131,7 +131,10 @@ func (s *Session) ingestSpan(span *deploymentsv1.SpanEvent) {
 	start := unixNano(span.GetStartTimeUnixNano())
 	end := unixNano(span.GetEndTimeUnixNano())
 	if start.IsZero() {
-		start = time.Now().UTC()
+		start = s.now()
+	}
+	if !end.After(start) {
+		end = s.now()
 	}
 	if end.Before(start) {
 		end = start
@@ -146,6 +149,12 @@ func (s *Session) ingestSpan(span *deploymentsv1.SpanEvent) {
 	)
 
 	s.r.StageEnd(spanID[:], span.GetStatus() == deploymentsv1.SpanStatus_SPAN_STATUS_ERROR, end.Sub(start))
+}
+
+func (s *Session) now() time.Time {
+	s.r.mu.Lock()
+	defer s.r.mu.Unlock()
+	return s.r.plan.now().UTC()
 }
 
 func (s *Session) Deployed(headline string, appURLs []string, outputs []*deploymentsv1.ResourceOutput) {

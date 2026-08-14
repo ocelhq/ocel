@@ -410,3 +410,70 @@ func TestUntaggedProgressCommitsEachMessageAsItsOwnLine(t *testing.T) {
 		t.Errorf("got %d committed (checkmarked) lines, want 1: the first message committed when the second arrived, the second is still live", got)
 	}
 }
+
+func TestRepeatedUntaggedMessageStaysOneLine(t *testing.T) {
+	t.Parallel()
+	var out bytes.Buffer
+	r := newRendererForTest(&out, FormatHuman, true, false)
+	t.Cleanup(func() { _ = r.Close() })
+
+	for i := uint32(1); i <= 4; i++ {
+		r.Progress(nil, deploymentsv1.Phase_PHASE_UPLOADING, "Uploading function artifacts", i, u32(4))
+	}
+
+	if got := strings.Count(out.String(), okMark); got != 0 {
+		t.Errorf("got %d committed lines, want 0: a repeat of the same untagged message updates the live row instead of committing a duplicate", got)
+	}
+
+	r.Progress(nil, deploymentsv1.Phase_PHASE_UPLOADING, "Uploading static assets", 0, nil)
+	if got := strings.Count(out.String(), okMark); got != 1 {
+		t.Errorf("got %d committed lines, want 1: only the change of message commits the outgoing row", got)
+	}
+}
+
+func TestFailedSpanNamesAStageThatNeverReportedProgress(t *testing.T) {
+	t.Parallel()
+	var out bytes.Buffer
+	r := newRendererForTest(&out, FormatHuman, true, false)
+	t.Cleanup(func() { _ = r.Close() })
+
+	app := appStage(1)
+	r.StagePlan(&deploymentsv1.StagePlanEvent{Stages: []*deploymentsv1.Stage{
+		{Id: app, Title: "app-a"},
+	}, Final: true})
+
+	r.StageEnd(app, true, time.Second)
+
+	if got := out.String(); !strings.Contains(got, failMark+" app-a failed") {
+		t.Errorf("output = %q, want the failed stage named even though it never reported progress", got)
+	}
+}
+
+func TestParentSpanLeavesAStillRunningChildLive(t *testing.T) {
+	t.Parallel()
+	var out bytes.Buffer
+	r := newRendererForTest(&out, FormatHuman, true, false)
+	t.Cleanup(func() { _ = r.Close() })
+
+	parent, child := appStage(1), appStage(2)
+	r.StagePlan(&deploymentsv1.StagePlanEvent{Stages: []*deploymentsv1.Stage{
+		{Id: parent, Title: "Provisioning"},
+		{Id: child, ParentId: parent, Title: "next-test"},
+	}, Final: true})
+
+	r.Progress(parent, deploymentsv1.Phase_PHASE_PROVISIONING, "reconciling", 0, nil)
+	r.Progress(child, deploymentsv1.Phase_PHASE_PROVISIONING, "creating resources", 0, nil)
+
+	r.StageEnd(parent, false, 50*time.Second)
+	if len(r.plan.activeOrder) != 1 || r.plan.activeOrder[0] != stageKey(child) {
+		t.Fatalf("activeOrder = %v, want the still-running child left live rather than force-committed as succeeded", r.plan.activeOrder)
+	}
+
+	r.StageEnd(child, true, time.Second)
+	if len(r.plan.activeOrder) != 0 {
+		t.Fatalf("activeOrder = %v, want the child committed by its own span", r.plan.activeOrder)
+	}
+	if got := out.String(); !strings.Contains(got, failMark+" next-test failed") {
+		t.Errorf("output = %q, want the child's late error span rendered as a failed row", got)
+	}
+}

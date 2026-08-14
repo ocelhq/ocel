@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/ocelhq/ocel/cli/internal/obs"
 	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
@@ -669,6 +670,52 @@ func TestFormatAxis(t *testing.T) {
 			t.Errorf("stdout = %q, want human text, not JSON, when format is human even under verbose", out.String())
 		}
 	})
+}
+
+func TestSpanWithoutAUsableEndFallsBackToElapsedWallClock(t *testing.T) {
+	t.Parallel()
+
+	stage := []byte{7, 0, 0, 0, 0, 0, 0, 0}
+	now := time.Now().UTC()
+	start := now.Add(-2 * time.Minute)
+
+	for _, tc := range []struct {
+		name string
+		end  int64
+	}{
+		{"missing end", 0},
+		{"end before start", start.Add(-time.Minute).UnixNano()},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			dir := t.TempDir()
+			run := startTestRun(t, dir, "ocel deploy")
+			var out bytes.Buffer
+			s := New(&out, run, FormatHuman, false)
+			t.Cleanup(func() { _ = s.Close() })
+			s.r.useClock(func() time.Time { return now })
+
+			s.Event(&deploymentsv1.DeployEvent{Event: &deploymentsv1.DeployEvent_StagePlan{
+				StagePlan: &deploymentsv1.StagePlanEvent{
+					Stages: []*deploymentsv1.Stage{{Id: stage, Title: "Provisioning"}},
+					Final:  true,
+				},
+			}})
+			s.Event(&deploymentsv1.DeployEvent{Event: &deploymentsv1.DeployEvent_Span{
+				Span: &deploymentsv1.SpanEvent{
+					SpanId:            stage,
+					Name:              "provision",
+					StartTimeUnixNano: start.UnixNano(),
+					EndTimeUnixNano:   tc.end,
+					Status:            deploymentsv1.SpanStatus_SPAN_STATUS_OK,
+				},
+			}})
+
+			if got := s.r.plan.nodes[stageKey(stage)].doneDur; got != 2*time.Minute {
+				t.Errorf("committed duration = %v, want the 2m the stage actually ran, not a collapsed span end", got)
+			}
+		})
+	}
 }
 
 func TestBar(t *testing.T) {
