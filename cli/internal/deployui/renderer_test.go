@@ -58,7 +58,7 @@ func TestLiveRegion(t *testing.T) {
 
 		r.Progress(appA, deploymentsv1.Phase_PHASE_UPLOADING, "uploading", 1, u32(2))
 		r.Progress(appB, deploymentsv1.Phase_PHASE_UPLOADING, "uploading", 1, u32(2))
-		r.Progress(appA, deploymentsv1.Phase_PHASE_UPLOADING, "uploading", 2, u32(2)) // app-a finishes
+		r.StageEnd(appA, false, time.Second) // app-a finishes
 
 		if len(r.plan.activeOrder) != 1 || r.plan.activeOrder[0] != stageKey(appB) {
 			t.Fatalf("activeOrder = %v, want only app-b still live", r.plan.activeOrder)
@@ -67,7 +67,7 @@ func TestLiveRegion(t *testing.T) {
 			t.Errorf("output = %q, want app-a's finished line committed to scrollback", got)
 		}
 
-		r.Progress(appB, deploymentsv1.Phase_PHASE_UPLOADING, "uploading", 2, u32(2))
+		r.StageEnd(appB, false, time.Second)
 		if len(r.plan.activeOrder) != 0 {
 			t.Errorf("activeOrder = %v, want both apps finished", r.plan.activeOrder)
 		}
@@ -87,6 +87,7 @@ func TestLiveRegion(t *testing.T) {
 
 		r.Progress(fast, deploymentsv1.Phase_PHASE_UPLOADING, "uploading", 1, u32(1))
 		r.Progress(slow, deploymentsv1.Phase_PHASE_UPLOADING, "still going", 1, u32(10))
+		r.StageEnd(fast, false, time.Second)
 
 		if len(r.plan.activeOrder) != 1 || r.plan.activeOrder[0] != stageKey(slow) {
 			t.Fatalf("activeOrder = %v, want only slow-app still shown as live", r.plan.activeOrder)
@@ -279,6 +280,96 @@ func TestStageEndCommitsRowsAsSpansArrive(t *testing.T) {
 	}
 
 	r.StageEnd([]byte{9, 9, 9, 9, 9, 9, 9, 9}, false, time.Second)
+}
+
+func TestFinishedBarWaitsForItsSpan(t *testing.T) {
+	t.Parallel()
+	var out bytes.Buffer
+	r := newRendererForTest(&out, FormatHuman, true, false)
+	t.Cleanup(func() { _ = r.Close() })
+
+	uploading := appStage(1)
+	r.StagePlan(&deploymentsv1.StagePlanEvent{Stages: []*deploymentsv1.Stage{
+		{Id: uploading, Title: "Uploading"},
+	}, Final: true})
+
+	r.Progress(uploading, deploymentsv1.Phase_PHASE_UPLOADING, "Uploading function artifacts", 1, u32(1))
+	if len(r.plan.activeOrder) != 1 {
+		t.Fatalf("activeOrder = %v, want the row still live at 1/1 — only the stage's span ends it", r.plan.activeOrder)
+	}
+
+	r.Progress(uploading, deploymentsv1.Phase_PHASE_UPLOADING, "Uploading static assets", 0, nil)
+	if got := strings.Count(out.String(), okMark); got != 0 {
+		t.Fatalf("got %d committed lines before the span arrived, want 0", got)
+	}
+
+	r.StageEnd(uploading, false, 12*time.Second)
+	if len(r.plan.activeOrder) != 0 {
+		t.Errorf("activeOrder = %v, want the row committed by its span", r.plan.activeOrder)
+	}
+}
+
+func TestChildStageHoldsUnderItsParentUntilTheParentEnds(t *testing.T) {
+	t.Parallel()
+	var out bytes.Buffer
+	r := newRendererForTest(&out, FormatHuman, true, false)
+	t.Cleanup(func() { _ = r.Close() })
+
+	provisioning, app := appStage(1), appStage(2)
+	r.StagePlan(&deploymentsv1.StagePlanEvent{Stages: []*deploymentsv1.Stage{
+		{Id: provisioning, Title: "Provisioning"},
+		{Id: app, ParentId: provisioning, Title: "next-test"},
+	}, Final: true})
+
+	r.Progress(provisioning, deploymentsv1.Phase_PHASE_PROVISIONING, "Reconciling the root stack", 0, nil)
+	r.Progress(app, deploymentsv1.Phase_PHASE_PROVISIONING, "creating resources", 0, nil)
+
+	rows := r.plan.displayRows()
+	if len(rows) != 2 || rows[0].n.title != "Provisioning" || rows[1].n.title != "next-test" || rows[1].depth != 1 {
+		t.Fatalf("displayRows = %+v, want next-test indented under Provisioning", rows)
+	}
+
+	r.StageEnd(app, false, 44*time.Second)
+	if !r.plan.isActive(stageKey(app)) {
+		t.Fatal("want the finished child held in the live region under its still-running parent, not committed to scrollback above it")
+	}
+	if !strings.Contains(out.String(), "  "+okMark+" next-test") {
+		t.Fatalf("output = %q, want the held child drawn with its result mark, indented under the parent", out.String())
+	}
+
+	r.StageEnd(provisioning, false, 50*time.Second)
+	if len(r.plan.activeOrder) != 0 {
+		t.Fatalf("activeOrder = %v, want the whole subtree committed with the parent", r.plan.activeOrder)
+	}
+	got := out.String()
+	final := got[strings.LastIndex(got, "\x1b[J")+len("\x1b[J"):]
+	parent := strings.Index(final, okMark+" Provisioning")
+	child := strings.Index(final, "  "+okMark+" next-test")
+	if parent == -1 || child == -1 || child < parent {
+		t.Errorf("final block = %q, want the parent committed first with the child indented beneath it", final)
+	}
+	if !strings.Contains(final, "44s") || !strings.Contains(final, "50s") {
+		t.Errorf("final block = %q, want each line stamped with its own span duration", final)
+	}
+}
+
+func TestBuildOKLeavesNoStaleSpinnerRow(t *testing.T) {
+	t.Parallel()
+	var out bytes.Buffer
+	r := newRendererForTest(&out, FormatHuman, true, false)
+	t.Cleanup(func() { _ = r.Close() })
+
+	r.Building()
+	r.BuildOK()
+
+	lines := strings.Split(strings.TrimRight(out.String(), "\n"), "\n")
+	last := lines[len(lines)-1]
+	if !strings.Contains(last, okMark+" Building project") {
+		t.Errorf("last line = %q, want the committed Building line to be the final output — anything after it is a stale live row", last)
+	}
+	if !strings.Contains(last, "\033[") {
+		t.Errorf("output = %q, want the live spinner row erased before the committed line was printed", out.String())
+	}
 }
 
 func TestLiveModeHoldsBackRawLogLines(t *testing.T) {

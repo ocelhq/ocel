@@ -29,12 +29,19 @@ type stageNode struct {
 	children     []string
 	linked       bool
 
-	state   stageState
-	message string
-	current uint32
-	total   *uint32
-	started time.Time
-	frame   int
+	state      stageState
+	message    string
+	current    uint32
+	total      *uint32
+	started    time.Time
+	frame      int
+	doneFailed bool
+	doneDur    time.Duration
+}
+
+type displayRow struct {
+	n     *stageNode
+	depth int
 }
 
 type stagePlan struct {
@@ -186,9 +193,6 @@ func (p *stagePlan) progress(id, message string, current uint32, total *uint32) 
 	} else {
 		n.total = nil
 	}
-	if n.total != nil && current >= *n.total {
-		n.state = stageDone
-	}
 	return n, tracked
 }
 
@@ -227,6 +231,68 @@ func (p *stagePlan) removeActive(id string) {
 			return
 		}
 	}
+}
+
+func (p *stagePlan) activeSet() map[string]bool {
+	active := make(map[string]bool, len(p.activeOrder))
+	for _, id := range p.activeOrder {
+		active[id] = true
+	}
+	return active
+}
+
+func (p *stagePlan) hasActiveAncestor(id string) bool {
+	active := p.activeSet()
+	n, ok := p.nodes[id]
+	if !ok {
+		return false
+	}
+	parent := n.parentID
+	for depth := 0; depth < maxTreeDepth && parent != ""; depth++ {
+		if active[parent] {
+			return true
+		}
+		pn, ok := p.nodes[parent]
+		if !ok {
+			return false
+		}
+		parent = pn.parentID
+	}
+	return false
+}
+
+func (p *stagePlan) emitSubtree(out []displayRow, id string, depth int) []displayRow {
+	n, ok := p.nodes[id]
+	if !ok {
+		return out
+	}
+	out = append(out, displayRow{n, depth})
+	if depth >= maxTreeDepth {
+		return out
+	}
+	for _, childID := range p.activeOrder {
+		if c, ok := p.nodes[childID]; ok && childID != id && c.parentID == id {
+			out = p.emitSubtree(out, childID, depth+1)
+		}
+	}
+	return out
+}
+
+func (p *stagePlan) subtreeRows(id string) []displayRow {
+	return p.emitSubtree(nil, id, 0)
+}
+
+func (p *stagePlan) displayRows() []displayRow {
+	if len(p.activeOrder) == 0 {
+		return nil
+	}
+	var out []displayRow
+	for _, id := range p.activeOrder {
+		if !p.hasActiveAncestor(id) {
+			out = p.emitSubtree(out, id, 0)
+		}
+	}
+	return out
 }
 
 func (p *stagePlan) siblingPosition(id string) (index, count int, ok bool) {

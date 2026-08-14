@@ -214,17 +214,14 @@ func (r *Renderer) Progress(stageID []byte, phase deploymentsv1.Phase, message s
 }
 
 func (r *Renderer) progressStageLocked(id string, phase deploymentsv1.Phase, message string, current uint32, total *uint32) {
+	if n, ok := r.plan.nodes[id]; ok && n.state == stageDone {
+		return
+	}
 	n, tracked := r.plan.progress(id, message, current, total)
 	if n.title == "" {
 		n.title = fallbackTitle(phase, message)
 	}
 	if !tracked {
-		return
-	}
-	if n.state == stageDone {
-		if r.plan.isActive(id) {
-			r.commitLocked(n, r.okColor(), okMark, "")
-		}
 		return
 	}
 	r.plan.ensureActive(id)
@@ -284,17 +281,35 @@ func (r *Renderer) StageEnd(stageID []byte, failed bool, duration time.Duration)
 		return
 	}
 	n.state = stageDone
+	n.doneFailed = failed
+	n.doneDur = duration
 	if !r.plan.isActive(id) {
 		return
 	}
-	r.eraseLiveLocked()
-	if failed {
-		r.finalizeLineLocked(n, r.colorFor(color.FgRed, color.Bold), failMark, "failed", duration)
-	} else {
-		r.finalizeLineLocked(n, r.okColor(), okMark, "", duration)
+	if r.plan.hasActiveAncestor(id) {
+		r.eraseLiveLocked()
+		r.drawLiveLocked()
+		return
 	}
-	r.plan.removeActive(id)
+	r.eraseLiveLocked()
+	for _, row := range r.plan.subtreeRows(id) {
+		r.finalizeDoneRowLocked(row)
+		r.plan.removeActive(row.n.id)
+	}
 	r.drawLiveLocked()
+}
+
+func (r *Renderer) finalizeDoneRowLocked(row displayRow) {
+	n := row.n
+	switch {
+	case n.state == stageDone && n.doneFailed:
+		r.finalizeLineLocked(n, r.colorFor(color.FgRed, color.Bold), failMark, "failed", 0, row.depth)
+	case n.state == stageDone:
+		r.finalizeLineLocked(n, r.okColor(), okMark, "", n.doneDur, row.depth)
+	default:
+		r.finalizeLineLocked(n, r.okColor(), okMark, "", r.plan.now().Sub(n.started), row.depth)
+		n.state = stageDone
+	}
 }
 
 func (r *Renderer) Building() {
@@ -309,7 +324,9 @@ func (r *Renderer) BuildOK() {
 	if !ok || !r.plan.isActive(key) {
 		return
 	}
+	r.eraseLiveLocked()
 	r.commitLocked(n, r.okColor(), okMark, "")
+	r.drawLiveLocked()
 }
 
 func (r *Renderer) Waiting(reason, url string) {
@@ -425,32 +442,37 @@ func (r *Renderer) printLogPointerLocked(label, logPath string) {
 }
 
 func (r *Renderer) finishAllLocked(c *color.Color, mark, status string) bool {
-	if len(r.plan.activeOrder) == 0 {
+	rows := r.plan.displayRows()
+	if len(rows) == 0 {
 		return false
 	}
 	r.eraseLiveLocked()
-	for _, id := range r.plan.activeOrder {
-		if n := r.plan.nodes[id]; n != nil {
-			r.finalizeLineLocked(n, c, mark, status, r.plan.now().Sub(n.started))
-			n.state = stageDone
+	for _, row := range rows {
+		if row.n.state == stageDone {
+			r.finalizeDoneRowLocked(row)
+			continue
 		}
+		r.finalizeLineLocked(row.n, c, mark, status, r.plan.now().Sub(row.n.started), row.depth)
+		row.n.state = stageDone
 	}
 	r.plan.activeOrder = nil
 	return true
 }
 
 func (r *Renderer) commitLocked(n *stageNode, c *color.Color, mark, status string) {
-	r.finalizeLineLocked(n, c, mark, status, r.plan.now().Sub(n.started))
+	r.finalizeLineLocked(n, c, mark, status, r.plan.now().Sub(n.started), 0)
+	n.state = stageDone
 	r.plan.removeActive(n.id)
 }
 
-func (r *Renderer) finalizeLineLocked(n *stageNode, c *color.Color, mark, status string, duration time.Duration) {
+func (r *Renderer) finalizeLineLocked(n *stageNode, c *color.Color, mark, status string, duration time.Duration, depth int) {
+	indent := strings.Repeat("  ", depth)
 	if status == "" {
-		c.Fprintf(r.w, "%s %s", mark, n.title)
+		c.Fprintf(r.w, "%s%s %s", indent, mark, n.title)
 		r.colorFor(color.Faint).Fprintf(r.w, "  %s\n", formatDuration(duration))
 		return
 	}
-	c.Fprintf(r.w, "%s %s %s\n", mark, n.title, status)
+	c.Fprintf(r.w, "%s%s %s %s\n", indent, mark, n.title, status)
 }
 
 func (r *Renderer) eraseLiveLocked() {
@@ -468,7 +490,7 @@ func (r *Renderer) drawLiveLocked() {
 	width := termWidth(r.w)
 	maxRows := r.effectiveMaxRowsLocked()
 
-	shown := r.plan.activeOrder
+	shown := r.plan.displayRows()
 	overflow := r.plan.droppedActive
 	if len(shown) > maxRows {
 		overflow += len(shown) - maxRows
@@ -476,12 +498,8 @@ func (r *Renderer) drawLiveLocked() {
 	}
 
 	lines := 0
-	for _, id := range shown {
-		n := r.plan.nodes[id]
-		if n == nil {
-			continue
-		}
-		fmt.Fprintln(r.w, truncateToWidth(r.rowLineLocked(n), width))
+	for _, row := range shown {
+		fmt.Fprintln(r.w, truncateToWidth(r.rowLineLocked(row), width))
 		lines++
 	}
 	if overflow > 0 {
@@ -511,10 +529,21 @@ func (r *Renderer) spinRowLocked() string {
 	return fmt.Sprintf("%s %s", glyph, r.spinMsg)
 }
 
-func (r *Renderer) rowLineLocked(n *stageNode) string {
+func (r *Renderer) rowLineLocked(row displayRow) string {
+	n := row.n
+	indent := strings.Repeat("  ", row.depth)
+	if n.state == stageDone {
+		if n.doneFailed {
+			return indent + r.colorFor(color.FgRed, color.Bold).Sprintf("%s %s failed", failMark, n.title)
+		}
+		return fmt.Sprintf("%s%s  %s",
+			indent,
+			r.okColor().Sprintf("%s %s", okMark, n.title),
+			r.colorFor(color.Faint).Sprint(formatDuration(n.doneDur)))
+	}
 	glyph := r.colorFor(color.FgCyan).Sprint(spinnerFrame(n.frame))
 	var b strings.Builder
-	fmt.Fprintf(&b, "%s %s", glyph, n.title)
+	fmt.Fprintf(&b, "%s%s %s", indent, glyph, n.title)
 	if r.plan.final {
 		if idx, count, ok := r.plan.siblingPosition(n.id); ok && count > 1 {
 			fmt.Fprintf(&b, " %s", r.colorFor(color.Faint).Sprintf("(%d/%d)", idx, count))
