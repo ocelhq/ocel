@@ -206,18 +206,76 @@ export function serveServer(server: http.Server, onListening?: OnListening): Pro
   server.removeAllListeners("request");
 
   const invoke: Invoke = (req, res) => {
-    for (const listener of lifted) listener.call(server, req, res);
+    for (const listener of [...lifted]) listener.call(server, req, res);
   };
   server.on("request", wrapWithOcelContext(invoke));
 
+  type Lifted = http.RequestListener & { listener?: http.RequestListener };
+
+  const drop = (listener: http.RequestListener): void => {
+    for (let i = lifted.length - 1; i >= 0; i--) {
+      const entry = lifted[i] as Lifted;
+      if (entry === listener || entry.listener === listener) {
+        lifted.splice(i, 1);
+        return;
+      }
+    }
+  };
+
+  const onceWrapper = (listener: http.RequestListener): Lifted => {
+    const wrapper: Lifted = function (this: unknown, req, res) {
+      drop(wrapper);
+      listener.call(this, req, res);
+    };
+    wrapper.listener = listener;
+    return wrapper;
+  };
+
   const realOn = server.on.bind(server);
-  const intercept = (event: string, listener: (...args: any[]) => void): http.Server => {
-    if (event !== "request") return realOn(event, listener);
-    lifted.push(listener as http.RequestListener);
+  const realOnce = server.once.bind(server);
+  const realPrependListener = server.prependListener.bind(server);
+  const realPrependOnceListener = server.prependOnceListener.bind(server);
+  const realRemoveListener = server.removeListener.bind(server);
+
+  const add = (
+    listener: http.RequestListener,
+    opts: { once?: boolean; prepend?: boolean },
+  ): http.Server => {
+    const entry = opts.once ? onceWrapper(listener) : listener;
+    if (opts.prepend) lifted.unshift(entry);
+    else lifted.push(entry);
     return server;
   };
-  server.on = intercept as typeof server.on;
-  server.addListener = intercept as typeof server.addListener;
+
+  type Listener = (...args: any[]) => void;
+
+  server.on = ((event: string, listener: Listener) =>
+    event === "request"
+      ? add(listener as http.RequestListener, {})
+      : realOn(event, listener)) as typeof server.on;
+  server.addListener = server.on as typeof server.addListener;
+
+  server.once = ((event: string, listener: Listener) =>
+    event === "request"
+      ? add(listener as http.RequestListener, { once: true })
+      : realOnce(event, listener)) as typeof server.once;
+
+  server.prependListener = ((event: string, listener: Listener) =>
+    event === "request"
+      ? add(listener as http.RequestListener, { prepend: true })
+      : realPrependListener(event, listener)) as typeof server.prependListener;
+
+  server.prependOnceListener = ((event: string, listener: Listener) =>
+    event === "request"
+      ? add(listener as http.RequestListener, { once: true, prepend: true })
+      : realPrependOnceListener(event, listener)) as typeof server.prependOnceListener;
+
+  server.removeListener = ((event: string, listener: Listener) => {
+    if (event !== "request") return realRemoveListener(event, listener);
+    drop(listener as http.RequestListener);
+    return server;
+  }) as typeof server.removeListener;
+  server.off = server.removeListener as typeof server.off;
 
   return startServer(server, onListening, true);
 }
