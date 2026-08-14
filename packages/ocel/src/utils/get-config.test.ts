@@ -31,7 +31,7 @@ describe("getConfig", () => {
     expect(getConfig("storage", "ocel:bucket")).toBe(payload);
   });
 
-  it("derives the env fragment from any namespaced token", () => {
+  it("derives the env fragment from any ocel-namespaced token", () => {
     setEnv("OCEL_RESOURCE_QUEUE_jobs", "queue-url");
 
     expect(getConfig("jobs", "ocel:queue")).toBe("queue-url");
@@ -39,6 +39,10 @@ describe("getConfig", () => {
 
   it("throws when the token carries no fragment", () => {
     expect(() => getConfig("main", "ocel:")).toThrow("ocel:");
+  });
+
+  it("throws on a foreign-namespaced token", () => {
+    expect(() => getConfig("main", "acme:redis")).toThrow("acme:redis");
   });
 
   it("throws when the resource env var is undefined", () => {

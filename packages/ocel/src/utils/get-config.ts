@@ -1,5 +1,5 @@
 const envFragment = (type: string) => {
-  const fragment = type.replace(/^ocel:/, "");
+  const fragment = type.startsWith("ocel:") ? type.slice("ocel:".length) : "";
 
   if (!fragment) {
     throw new Error(`Unknown resource type '${type}'`);
