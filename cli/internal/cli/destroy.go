@@ -24,8 +24,11 @@ var destroyCmd = &cobra.Command{
 	Long: "Permanently destroy this project's entire production deployment: the root stack " +
 		"(edge workers, custom-domain binding, deployments store), the infra stack (databases " +
 		"and buckets, including all their data), and every app-deploy stack.\n\n" +
-		"This is irreversible and always requires typing the project name to confirm. It refuses " +
-		"to run without an interactive terminal.",
+		"This is irreversible and requires typing the project name to confirm; it refuses to run " +
+		"without an interactive terminal.\n\n" +
+		"An automated caller that must tear its own project down unattended can set " +
+		destroyBypassEnv + " to the project name — and only that name — to skip both gates. " +
+		"Any other value is not a bypass.",
 	Args: cobra.NoArgs,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		cwd, err := os.Getwd()
@@ -59,29 +62,37 @@ func init() {
 
 func checkDestroyFlags(preview, yes bool) error {
 	if yes && !preview {
-		return errors.New("`ocel destroy --yes` is only accepted with --preview; destroying production always requires typing the project name at an interactive terminal")
+		return fmt.Errorf("`ocel destroy --yes` is only accepted with --preview; destroying production requires typing the project name at an interactive terminal, or %s set to the project name", destroyBypassEnv)
 	}
 	return nil
 }
 
 const destroyBypassEnv = "OCEL_DESTROY_BYPASS_CONFIRMATION"
 
-func destroyConfirmationBypassed() bool {
-	return os.Getenv(destroyBypassEnv) == "1"
+func destroyBypassRequest() string {
+	return strings.TrimSpace(os.Getenv(destroyBypassEnv))
 }
 
 func runDestroy(ctx context.Context, d deps, cwd string, stdout, stderr io.Writer, stdin io.Reader) error {
-	bypass := destroyConfirmationBypassed()
-	if !bypass && !isReaderTTY(stdin) {
-		return errors.New("`ocel destroy` needs an interactive terminal to confirm the project name; it cannot be run non-interactively")
-	}
-	if bypass {
-		fmt.Fprintf(stderr, "%s=1: destroying production without confirmation\n", destroyBypassEnv)
+	requested := destroyBypassRequest()
+	tty := isReaderTTY(stdin)
+	if requested == "" && !tty {
+		return fmt.Errorf("`ocel destroy` needs an interactive terminal to confirm the project name; to destroy unattended, set %s to the project name", destroyBypassEnv)
 	}
 
 	cfg, err := projectconfig.Resolve(ctx, cwd)
 	if err != nil {
 		return err
+	}
+
+	bypass := requested == cfg.Slug
+	switch {
+	case bypass:
+		fmt.Fprintf(stderr, "%s=%s: destroying production without confirmation\n", destroyBypassEnv, cfg.Slug)
+	case requested != "" && !tty:
+		return fmt.Errorf("%s is set to %q, but this project is %q; it must name the project being destroyed", destroyBypassEnv, requested, cfg.Slug)
+	case requested != "":
+		fmt.Fprintf(stderr, "%s is set to %q, not this project (%s); confirming interactively instead\n", destroyBypassEnv, requested, cfg.Slug)
 	}
 
 	if err := node.Ensure(cfg.Dir); err != nil {

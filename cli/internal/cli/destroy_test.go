@@ -169,15 +169,40 @@ func TestRunDestroy(t *testing.T) {
 		}
 	})
 
-	t.Run("the bypass gets past the terminal requirement and says so", func(t *testing.T) {
-		t.Setenv(destroyBypassEnv, "1")
+	t.Run("the project name gets past the terminal requirement and says so", func(t *testing.T) {
+		root, _ := setUpDeployFixture(t)
+		d := defaultDeps()
+		setLoggedIn(&d)
+		stubAppFunctions(&d, nil)
+		t.Setenv(destroyBypassEnv, "test-app")
+
 		var stdout, stderr bytes.Buffer
-		err := runDestroy(context.Background(), defaultDeps(), t.TempDir(), &stdout, &stderr, strings.NewReader(""))
+		err := runDestroy(context.Background(), d, root, &stdout, &stderr, strings.NewReader(""))
 		if err != nil && strings.Contains(err.Error(), "interactive terminal") {
 			t.Errorf("err = %v, want the bypass to get past the TTY requirement", err)
 		}
+		if strings.Contains(stdout.String(), "Type the project name") {
+			t.Errorf("stdout = %q, want the bypass to skip the typed-name confirmation", stdout.String())
+		}
 		if !strings.Contains(stderr.String(), destroyBypassEnv) {
 			t.Errorf("stderr = %q, want it to name %s so an unconfirmed destroy is never silent", stderr.String(), destroyBypassEnv)
+		}
+	})
+
+	t.Run("a value that is not this project's name is refused without a terminal", func(t *testing.T) {
+		root, _ := setUpDeployFixture(t)
+		d := defaultDeps()
+		setLoggedIn(&d)
+		stubAppFunctions(&d, nil)
+		t.Setenv(destroyBypassEnv, "1")
+
+		var stdout, stderr bytes.Buffer
+		err := runDestroy(context.Background(), d, root, &stdout, &stderr, strings.NewReader(""))
+		if err == nil {
+			t.Fatalf("runDestroy err = nil, want an ambient %s=1 refused; stdout=%s", destroyBypassEnv, stdout.String())
+		}
+		if !strings.Contains(err.Error(), destroyBypassEnv) || !strings.Contains(err.Error(), "test-app") {
+			t.Errorf("err = %v, want it to name %s and the project", err, destroyBypassEnv)
 		}
 	})
 
