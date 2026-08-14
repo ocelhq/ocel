@@ -172,18 +172,18 @@ func TestSync(t *testing.T) {
 		if !ok {
 			t.Fatalf("bucket env = %+v, want OCEL_RESOURCE_BUCKET_storage", result.Resources[i].Env)
 		}
-		var cfg struct {
-			Address string `json:"address"`
-			Bucket  string `json:"bucket"`
-		}
+		var cfg map[string]string
 		if err := json.Unmarshal([]byte(raw), &cfg); err != nil {
 			t.Fatalf("unmarshal bucket env: %v", err)
 		}
-		if cfg.Address != "http://dev.local:1234" {
-			t.Fatalf("bucket address = %q, want the dev server address", cfg.Address)
+		if _, ok := cfg["address"]; ok {
+			t.Fatalf("bucket env = %s, want the runtime address delivered once, not per bucket", raw)
 		}
-		if cfg.Bucket != "storage" {
-			t.Fatalf("bucket logical name = %q, want storage", cfg.Bucket)
+		if cfg["bucket"] != "storage" {
+			t.Fatalf("bucket logical name = %q, want storage", cfg["bucket"])
+		}
+		if result.RuntimeAddress != "http://dev.local:1234" {
+			t.Fatalf("RuntimeAddress = %q, want the dev server address every membrane-backed resource reaches", result.RuntimeAddress)
 		}
 	})
 

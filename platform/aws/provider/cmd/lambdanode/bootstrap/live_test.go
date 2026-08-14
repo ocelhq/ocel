@@ -443,6 +443,41 @@ func TestResolveLiveValues(t *testing.T) {
 		l.refreshIfStale(context.Background())
 	})
 
+	t.Run("addresses each link by the partition its value lives in", func(t *testing.T) {
+		manifest := live.Manifest{
+			Slug:        "shop",
+			Table:       "ocel-vars",
+			KeyARN:      "arn:aws:kms:us-east-1:1234:key/abcd",
+			Class:       "preview",
+			Environment: "pr-42",
+			Links: []live.Link{
+				{Name: "db--main", Key: "OCEL_RESOURCE_POSTGRES_main"},
+				{Name: "bucket--uploads", Key: "OCEL_RESOURCE_BUCKET_uploads"},
+			},
+		}
+
+		cells := manifestLinkCells(manifest)
+		if len(cells) != 2 {
+			t.Fatalf("cells = %+v, want one per link", cells)
+		}
+		for i, want := range manifest.Links {
+			if cells[i].Link != want.Name || cells[i].Key != want.Key {
+				t.Errorf("cell %+v, want link %s read under %s", cells[i], want.Name, want.Key)
+			}
+			if cells[i].Environment != "pr-42" {
+				t.Errorf("cell %+v reads class-wide; a preview's links are its own", cells[i])
+			}
+			if cells[i].Folder != "" {
+				t.Errorf("cell %+v names a folder; a link value is not folder-scoped", cells[i])
+			}
+		}
+
+		keys := manifestKeys(manifest)
+		if len(keys) != 2 {
+			t.Fatalf("declared keys = %v, want the link keys named to the child", keys)
+		}
+	})
+
 	t.Run("reads the pinned coordinates and never the sentinels", func(t *testing.T) {
 		manifest := live.Manifest{
 			Slug:   "shop",
@@ -596,6 +631,41 @@ func TestResolveLiveValues(t *testing.T) {
 		}
 		if strings.Contains(got[0], "/web") {
 			t.Errorf("declaredEnv() = %q, which leaks a folder into the runtime", got[0])
+		}
+	})
+}
+
+func TestMerged(t *testing.T) {
+	t.Run("a derived value is never shadowed by a secret that shares its name", func(t *testing.T) {
+		secret := vars.Value{
+			Metadata:  vars.Metadata{Coordinate: vars.Coordinate{Slug: "shop", Key: "OCEL_RESOURCE_POSTGRES_main"}},
+			Plaintext: "postgres://mine",
+		}
+		derived := vars.Value{
+			Metadata:  vars.Metadata{Coordinate: vars.Coordinate{Slug: "shop", Link: "db--main", Key: "OCEL_RESOURCE_POSTGRES_main"}},
+			Plaintext: `{"connectionString":"postgres://ocel"}`,
+		}
+
+		got := merged([]vars.Value{secret}, []vars.Value{derived})
+		if got["OCEL_RESOURCE_POSTGRES_main"] != derived.Plaintext {
+			t.Errorf("OCEL_RESOURCE_POSTGRES_main = %q, want the value ocel derived from the link; a secret the user named the same way must not stand in for a resource's own credential", got["OCEL_RESOURCE_POSTGRES_main"])
+		}
+	})
+
+	t.Run("carries both when they name different keys", func(t *testing.T) {
+		secret := vars.Value{
+			Metadata:  vars.Metadata{Coordinate: vars.Coordinate{Slug: "shop", Key: "STRIPE_API_KEY"}},
+			Plaintext: "sk_live",
+		}
+		derived := vars.Value{
+			Metadata:  vars.Metadata{Coordinate: vars.Coordinate{Slug: "shop", Link: "db--main", Key: "OCEL_RESOURCE_POSTGRES_main"}},
+			Plaintext: "{}",
+		}
+
+		got := merged([]vars.Value{secret}, []vars.Value{derived})
+		want := map[string]string{"STRIPE_API_KEY": "sk_live", "OCEL_RESOURCE_POSTGRES_main": "{}"}
+		if !reflect.DeepEqual(got, want) {
+			t.Errorf("merged = %v, want %v", got, want)
 		}
 	})
 }

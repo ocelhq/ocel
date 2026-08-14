@@ -143,7 +143,9 @@ func realize(ctx context.Context, cfg Config, manifest *deploymentsv1.Manifest, 
 			return Result{RootStackState: state}, finishProvisioning(err)
 		}
 	}
-	resourceEnv := resourceEnvValues(manifest, links)
+	if err := publishLinkValues(ctx, cfg, manifest, links); err != nil {
+		return Result{RootStackState: state}, finishProvisioning(err)
+	}
 
 	progress.report(deploymentsv1.Phase_PHASE_PROVISIONING, "Provisioning app-deploy stacks", 0, 0)
 	results := make([]appDeployResult, len(apps))
@@ -151,7 +153,7 @@ func realize(ctx context.Context, cfg Config, manifest *deploymentsv1.Manifest, 
 	appFunctionNames := make([]map[string]string, len(apps))
 	runAppStacks(apps, func(i int, app *deploymentsv1.ManifestApp) {
 		id := identities[app.GetName()]
-		outs, names, err := runAppStack(ctx, cfg, manifest, plan, app, id, resourceEnv, artifacts, baked[app.GetName()], builds, appStages[app.GetName()], log)
+		outs, names, err := runAppStack(ctx, cfg, manifest, plan, app, id, artifacts, baked[app.GetName()], builds, appStages[app.GetName()], log)
 		appOutputs[i] = outs
 		appFunctionNames[i] = names
 		record, recErr := buildDeploymentRecord(cfg, manifest, app, id, outs, builds)
@@ -722,9 +724,9 @@ func runInfraStack(ctx context.Context, cfg Config, manifest *deploymentsv1.Mani
 			var err error
 			switch {
 			case r.GetPostgres() != nil:
-				_, err = registerPostgres(pctx, project, env, r.GetLogicalName(), cfg.transformed.forPostgres(r.GetLogicalName(), r.GetPostgres()), vpc.Id, vpc.CidrBlock, subnets.Ids)
+				err = registerPostgres(pctx, project, env, r.GetLogicalName(), cfg.transformed.forPostgres(r.GetLogicalName(), r.GetPostgres()), vpc.Id, vpc.CidrBlock, subnets.Ids)
 			case r.GetBucket() != nil:
-				_, err = registerBucket(pctx, project, env, r.GetLogicalName(), cfg.transformed.forBucket(r.GetLogicalName(), r.GetBucket()), cfg.StateTable, cfg.StateTableARN, cfg.ListenerCodePath)
+				err = registerBucket(pctx, project, env, r.GetLogicalName(), cfg.transformed.forBucket(r.GetLogicalName(), r.GetBucket()), cfg.StateTable, cfg.StateTableARN, cfg.ListenerCodePath)
 			default:
 				continue
 			}
@@ -742,7 +744,7 @@ func runInfraStack(ctx context.Context, cfg Config, manifest *deploymentsv1.Mani
 	return collectLinks(ctx, cfg.Secrets, manifest, res.Outputs)
 }
 
-func runAppStack(ctx context.Context, cfg Config, manifest *deploymentsv1.Manifest, plan Plan, app *deploymentsv1.ManifestApp, id Identity, resourceEnv map[string]string, artifacts map[string]artifactRef, baked appBundle, builds appBuilds, stage Stage, log func(string)) (outs []*deploymentsv1.FunctionOutput, names map[string]string, err error) {
+func runAppStack(ctx context.Context, cfg Config, manifest *deploymentsv1.Manifest, plan Plan, app *deploymentsv1.ManifestApp, id Identity, artifacts map[string]artifactRef, baked appBundle, builds appBuilds, stage Stage, log func(string)) (outs []*deploymentsv1.FunctionOutput, names map[string]string, err error) {
 	start := time.Now()
 	defer func() { spanForStage(cfg.Tracer, stage, start, time.Now(), err) }()
 
@@ -755,8 +757,7 @@ func runAppStack(ctx context.Context, cfg Config, manifest *deploymentsv1.Manife
 		return nil, nil, err
 	}
 
-	env := make(map[string]string, len(resourceEnv))
-	maps.Copy(env, resourceEnv)
+	env := map[string]string{runtimeAddressEnv: deferredRuntimeAddress}
 	maps.Copy(env, variableEnv(app))
 	maps.Copy(env, baked.env())
 
@@ -972,31 +973,6 @@ func emitEngineTrace(t Tracer, parentStage StageID, trace EngineTrace, upErr err
 		}
 		spanUnder(t, parentStage, resourceStandoutName(s.Op, s.Failed), s.Start, s.End, standoutErr, attrs...)
 	}
-}
-
-func resourceEnvValues(manifest *deploymentsv1.Manifest, links []*linksv1.Link) map[string]string {
-	byName := make(map[string]*linksv1.Link, len(links))
-	for _, l := range links {
-		byName[l.GetName()] = l
-	}
-
-	env := make(map[string]string)
-	for _, r := range manifest.GetResources() {
-		link, ok := byName[r.GetLogicalName()]
-		if !ok {
-			continue
-		}
-		key := functionEnvKey(link.GetType(), r.GetResource().GetName())
-		p := link.GetProperties()
-		switch link.GetType() {
-		case naming.TokenPostgres:
-			port, _ := strconv.Atoi(p["port"])
-			env[key] = postgresEnvPayload(p["username"], p["password"], p["host"], port, p["database"])
-		case naming.TokenBucket:
-			env[key] = bucketEnvPayload(deferredRuntimeAddress, p["bucket"])
-		}
-	}
-	return env
 }
 
 func collectLinks(ctx context.Context, secrets SecretsReader, manifest *deploymentsv1.Manifest, outputs auto.OutputMap) ([]*linksv1.Link, error) {

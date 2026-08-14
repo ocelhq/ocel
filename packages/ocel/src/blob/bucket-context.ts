@@ -1,5 +1,6 @@
 import { createConnectTransport } from "@connectrpc/connect-node";
 import type { Bucket } from "./bucket.js";
+import { getRuntimeAddress } from "../utils/get-config.js";
 import { createBucketClient, type BucketServiceClient } from "./bucket-client.js";
 
 export interface BucketContext {
@@ -8,10 +9,10 @@ export interface BucketContext {
 }
 
 export function resolveBucketContext(bucket: Bucket): BucketContext {
-  const { address, bucket: storeBucket } = bucket.__config();
+  const { bucket: storeBucket } = bucket.__config();
   const transport = createConnectTransport({
     httpVersion: "1.1",
-    baseUrl: address,
+    baseUrl: getRuntimeAddress(),
   });
   return { client: createBucketClient(transport), bucket: storeBucket };
 }

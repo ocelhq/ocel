@@ -68,7 +68,7 @@ func TestResolvedEnv(t *testing.T) {
 			{Name: "main", Env: map[string]string{"OCEL_RESOURCE_POSTGRES_main": "conn"}},
 		}
 
-		got := toMap(mergeEnv(base, projectEnv, live, dotfile, resources, ""))
+		got := toMap(mergeEnv(base, projectEnv, live, dotfile, resources, "", ""))
 
 		cases := map[string]string{
 			"PATH":                        "/bin",
@@ -93,7 +93,7 @@ func TestResolvedEnv(t *testing.T) {
 			{Name: "main", Env: map[string]string{"OCEL_RESOURCE_POSTGRES_main": "conn"}},
 		}
 
-		got := resolvedEnv(projectEnv, live, nil, resources, "")
+		got := resolvedEnv(projectEnv, live, nil, resources, "", "")
 
 		cases := map[string]string{
 			"PROJECT_ONLY":                "p",
@@ -111,12 +111,12 @@ func TestResolvedEnv(t *testing.T) {
 	t.Run("the app folder is always stated", func(t *testing.T) {
 		t.Parallel()
 
-		bound := resolvedEnv(nil, nil, nil, nil, "/web")
+		bound := resolvedEnv(nil, nil, nil, nil, "", "/web")
 		if bound["OCEL_APP_FOLDER"] != "/web" {
 			t.Errorf("OCEL_APP_FOLDER = %q, want %q", bound["OCEL_APP_FOLDER"], "/web")
 		}
 
-		unbound := resolvedEnv(nil, nil, nil, nil, "")
+		unbound := resolvedEnv(nil, nil, nil, nil, "", "")
 		folder, ok := unbound["OCEL_APP_FOLDER"]
 		if !ok {
 			t.Fatalf("resolvedEnv = %v, want OCEL_APP_FOLDER written even for an unbound app", unbound)
@@ -125,7 +125,7 @@ func TestResolvedEnv(t *testing.T) {
 			t.Errorf("OCEL_APP_FOLDER = %q, want the project root spelled as the empty string", folder)
 		}
 
-		stale := toMap(mergeEnv([]string{"OCEL_APP_FOLDER=/stale"}, nil, nil, nil, nil, ""))
+		stale := toMap(mergeEnv([]string{"OCEL_APP_FOLDER=/stale"}, nil, nil, nil, nil, "", ""))
 		if stale["OCEL_APP_FOLDER"] != "" {
 			t.Errorf("OCEL_APP_FOLDER = %q, want the shell's stale binding overwritten", stale["OCEL_APP_FOLDER"])
 		}
@@ -135,6 +135,7 @@ func TestResolvedEnv(t *testing.T) {
 			map[string]string{"OCEL_APP_FOLDER": "/from-live"},
 			map[string]string{"OCEL_APP_FOLDER": "/from-dotfile"},
 			[]provision.Resource{{Name: "main", Env: map[string]string{"OCEL_APP_FOLDER": "/from-resource"}}},
+			"",
 			"/web",
 		)
 		if contested["OCEL_APP_FOLDER"] != "/web" {

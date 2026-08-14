@@ -28,6 +28,7 @@ const (
 	VariableClass_VARIABLE_CLASS_PLAIN       VariableClass = 1
 	VariableClass_VARIABLE_CLASS_SENSITIVE   VariableClass = 2
 	VariableClass_VARIABLE_CLASS_SECRET      VariableClass = 3
+	VariableClass_VARIABLE_CLASS_DERIVED     VariableClass = 4
 )
 
 // Enum value maps for VariableClass.
@@ -37,12 +38,14 @@ var (
 		1: "VARIABLE_CLASS_PLAIN",
 		2: "VARIABLE_CLASS_SENSITIVE",
 		3: "VARIABLE_CLASS_SECRET",
+		4: "VARIABLE_CLASS_DERIVED",
 	}
 	VariableClass_value = map[string]int32{
 		"VARIABLE_CLASS_UNSPECIFIED": 0,
 		"VARIABLE_CLASS_PLAIN":       1,
 		"VARIABLE_CLASS_SENSITIVE":   2,
 		"VARIABLE_CLASS_SECRET":      3,
+		"VARIABLE_CLASS_DERIVED":     4,
 	}
 )
 
@@ -533,12 +536,13 @@ const file_resources_v1_env_proto_rawDesc = "" +
 	"\fKIND_INVALID\x10\x02\"U\n" +
 	"\x18ReportEnvProblemsRequest\x129\n" +
 	"\bproblems\x18\x01 \x03(\v2\x1d.resources.v1.VariableProblemR\bproblems\"\x1b\n" +
-	"\x19ReportEnvProblemsResponse*\x82\x01\n" +
+	"\x19ReportEnvProblemsResponse*\x9e\x01\n" +
 	"\rVariableClass\x12\x1e\n" +
 	"\x1aVARIABLE_CLASS_UNSPECIFIED\x10\x00\x12\x18\n" +
 	"\x14VARIABLE_CLASS_PLAIN\x10\x01\x12\x1c\n" +
 	"\x18VARIABLE_CLASS_SENSITIVE\x10\x02\x12\x19\n" +
-	"\x15VARIABLE_CLASS_SECRET\x10\x03B;Z9github.com/ocelhq/ocel/pkg/proto/resources/v1;resourcesv1b\x06proto3"
+	"\x15VARIABLE_CLASS_SECRET\x10\x03\x12\x1a\n" +
+	"\x16VARIABLE_CLASS_DERIVED\x10\x04B;Z9github.com/ocelhq/ocel/pkg/proto/resources/v1;resourcesv1b\x06proto3"
 
 var (
 	file_resources_v1_env_proto_rawDescOnce sync.Once

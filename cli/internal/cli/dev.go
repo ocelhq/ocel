@@ -174,7 +174,7 @@ func discoverAndSync(ctx context.Context, srv *devserver.Server, cfg *projectcon
 	}
 
 	reportLiveValues(stdout, syncResult.LiveKeys)
-	return resolvedEnv(syncResult.ProjectConfig.EnvVars, syncResult.LiveValues, dotfile, syncResult.Resources, appFolder), nil
+	return resolvedEnv(syncResult.ProjectConfig.EnvVars, syncResult.LiveValues, dotfile, syncResult.Resources, syncResult.RuntimeAddress, appFolder), nil
 }
 
 func reportLiveValues(stdout io.Writer, liveKeys []string) {
@@ -291,11 +291,11 @@ func waitExitError(err error) error {
 	return err
 }
 
-func mergeEnv(base []string, projectEnv, liveValues, dotfile map[string]string, resources []provision.Resource, appFolder string) []string {
-	return applyEnv(base, resolvedEnv(projectEnv, liveValues, dotfile, resources, appFolder))
+func mergeEnv(base []string, projectEnv, liveValues, dotfile map[string]string, resources []provision.Resource, runtimeAddress, appFolder string) []string {
+	return applyEnv(base, resolvedEnv(projectEnv, liveValues, dotfile, resources, runtimeAddress, appFolder))
 }
 
-func resolvedEnv(projectEnv, liveValues, dotfile map[string]string, resources []provision.Resource, appFolder string) map[string]string {
+func resolvedEnv(projectEnv, liveValues, dotfile map[string]string, resources []provision.Resource, runtimeAddress, appFolder string) map[string]string {
 	merged := make(map[string]string, len(projectEnv)+len(liveValues)+len(dotfile)+1)
 	for k, v := range projectEnv {
 		merged[k] = v
@@ -311,11 +311,16 @@ func resolvedEnv(projectEnv, liveValues, dotfile map[string]string, resources []
 			merged[k] = v
 		}
 	}
+	if runtimeAddress != "" {
+		merged[runtimeAddressEnv] = runtimeAddress
+	}
 	merged[appFolderEnv] = appFolder
 	return merged
 }
 
 const appFolderEnv = "OCEL_APP_FOLDER"
+
+const runtimeAddressEnv = "OCEL_RUNTIME_ADDRESS"
 
 func applyEnv(base []string, overrides map[string]string) []string {
 	merged := make(map[string]string, len(base)+len(overrides))

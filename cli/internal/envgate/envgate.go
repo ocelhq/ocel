@@ -137,6 +137,12 @@ func (g *Gate) reveal(ctx context.Context, cells []Cell) (map[Cell]revealed, err
 }
 
 func (g *Gate) DeclareEnv(ctx context.Context, req *resourcesv1.DeclareEnvRequest) (*resourcesv1.DeclareEnvResponse, error) {
+	for _, definition := range req.GetDefinitions() {
+		if definition.GetClass() == resourcesv1.VariableClass_VARIABLE_CLASS_DERIVED {
+			return nil, fmt.Errorf("%s is declared as derived, a class ocel writes for the resources an app links and prunes on its own; declare it as plain, sensitive or secret", definition.GetKey())
+		}
+	}
+
 	g.mu.Lock()
 	held := g.resolvedCells()
 	g.definitions = append(g.definitions, req.GetDefinitions()...)

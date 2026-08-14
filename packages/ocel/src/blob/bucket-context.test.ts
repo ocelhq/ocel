@@ -9,14 +9,15 @@ const { resolveBucketContext } = await import("./bucket-context.js");
 
 afterEach(() => {
   delete process.env.OCEL_RESOURCE_BUCKET_storage;
+  delete process.env.OCEL_RUNTIME_ADDRESS;
 });
 
 describe("resolveBucketContext", () => {
-  it("reads the injected address/bucket and builds the typed client", () => {
+  it("reads the bucket binding and the ambient address, and builds the typed client", () => {
     process.env.OCEL_RESOURCE_BUCKET_storage = JSON.stringify({
-      address: "http://localhost:7070",
       bucket: "org-project-store",
     });
+    process.env.OCEL_RUNTIME_ADDRESS = "http://localhost:7070";
 
     const ctx = resolveBucketContext(bucket("storage", { uploaders: {} }));
 
@@ -30,5 +31,15 @@ describe("resolveBucketContext", () => {
     expect(() =>
       resolveBucketContext(bucket("storage", { uploaders: {} })),
     ).toThrow(/OCEL_RESOURCE_BUCKET_storage/);
+  });
+
+  it("throws naming the ambient address when only it is missing", () => {
+    process.env.OCEL_RESOURCE_BUCKET_storage = JSON.stringify({
+      bucket: "org-project-store",
+    });
+
+    expect(() =>
+      resolveBucketContext(bucket("storage", { uploaders: {} })),
+    ).toThrow(/OCEL_RUNTIME_ADDRESS/);
   });
 });

@@ -21,6 +21,7 @@ const (
 	tokenName    = "NAME"
 	tokenEnv     = "ENV"
 	tokenVersion = "VERSION"
+	tokenLinks   = "LINKS"
 
 	currentPrefix      = tokenValue + delimiter
 	historyPrefixToken = tokenHistory + delimiter
@@ -39,6 +40,8 @@ type Coordinate struct {
 	Folder      string
 	Key         string
 	Environment string
+
+	Link string
 }
 
 func (c Coordinate) String() string {
@@ -56,15 +59,23 @@ func (c Coordinate) canonical() Coordinate {
 	if c.Folder == "" {
 		c.Folder = rootFolder
 	}
-	if c.Environment == "" {
-		c.Environment = classWideEnvironment
-	}
+	c.Environment = canonicalEnvironment(c.Environment)
 	return c
+}
+
+func canonicalEnvironment(environment string) string {
+	if environment == "" {
+		return classWideEnvironment
+	}
+	return environment
 }
 
 func (c Coordinate) validate() error {
 	if c.Slug == "" {
 		return fmt.Errorf("a project slug is required")
+	}
+	if c.Link != "" {
+		return fmt.Errorf("%s belongs to link %s: ocel derives it from the resource and prunes it, so there is nothing here to edit", c.Key, c.Link)
 	}
 	if c.Key == "" {
 		return fmt.Errorf("a variable name is required")
@@ -113,6 +124,12 @@ func parsePartitionKey(pk string) (string, error) {
 		return "", fmt.Errorf("unrecognized partition key %q", pk)
 	}
 	return slug, nil
+}
+
+const linkIndexPrefix = tokenLinks + delimiter
+
+func linkIndexSortKey(environment string) string {
+	return linkIndexPrefix + tokenEnv + delimiter + canonicalEnvironment(environment)
 }
 
 func folderPrefix(folder string) string {

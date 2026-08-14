@@ -63,7 +63,7 @@ func TestRenderAppBundle(t *testing.T) {
 			},
 		}
 
-		bundle, err := renderAppBundle(liveConfig(), "shop", app)
+		bundle, err := renderAppBundle(liveConfig(), "shop", app, nil)
 		if err != nil {
 			t.Fatalf("renderAppBundle: %v", err)
 		}
@@ -114,7 +114,7 @@ func TestRenderAppBundle(t *testing.T) {
 			{name: "production", cfg: production},
 		} {
 			t.Run(tc.name, func(t *testing.T) {
-				bundle, err := renderAppBundle(tc.cfg, "shop", app)
+				bundle, err := renderAppBundle(tc.cfg, "shop", app, nil)
 				if err != nil {
 					t.Fatalf("renderAppBundle: %v", err)
 				}
@@ -136,7 +136,7 @@ func TestRenderAppBundle(t *testing.T) {
 			Variables: []*deploymentsv1.ManifestVariable{scopedVariable("DB_PASSWORD", "", resourcesv1.VariableClass_VARIABLE_CLASS_SECRET)},
 		}
 
-		if _, err := renderAppBundle(Config{VarsKeyARN: productionVarsKeyARN}, "shop", app); err == nil {
+		if _, err := renderAppBundle(Config{VarsKeyARN: productionVarsKeyARN}, "shop", app, nil); err == nil {
 			t.Fatal("renderAppBundle accepted a live value with no store to read it from")
 		}
 	})
@@ -148,7 +148,7 @@ func TestRenderAppBundle(t *testing.T) {
 			Variables: []*deploymentsv1.ManifestVariable{variable("POSTHOG_ID", "ph", resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN)},
 		}
 
-		bundle, err := renderAppBundle(liveConfig(), "shop", app)
+		bundle, err := renderAppBundle(liveConfig(), "shop", app, nil)
 		if err != nil {
 			t.Fatalf("renderAppBundle: %v", err)
 		}
@@ -178,7 +178,7 @@ func TestRenderAppBundle(t *testing.T) {
 				scopedVariable("DB_PASSWORD", "", resourcesv1.VariableClass_VARIABLE_CLASS_SECRET),
 			},
 		}
-		bundle, err := renderAppBundle(cfg, "shop", app)
+		bundle, err := renderAppBundle(cfg, "shop", app, nil)
 		if err != nil {
 			t.Fatalf("renderAppBundle: %v", err)
 		}

@@ -38,7 +38,7 @@ func TestMergeEnv(t *testing.T) {
 			{Name: "main", Env: map[string]string{"SHARED": "resource", "OCEL_RESOURCE_POSTGRES_main": "conn"}},
 		}
 
-		got := toMap(mergeEnv(base, projectEnv, nil, nil, resources, ""))
+		got := toMap(mergeEnv(base, projectEnv, nil, nil, resources, "", ""))
 
 		cases := map[string]string{
 			"PATH":                        "/bin",
@@ -58,7 +58,7 @@ func TestMergeEnv(t *testing.T) {
 
 		live := map[string]string{"WEBHOOK_SECRET": "whsec_live"}
 
-		got := mergeEnv([]string{"PATH=/usr/bin"}, map[string]string{"PROJECT_ONLY": "p"}, live, nil, nil, "")
+		got := mergeEnv([]string{"PATH=/usr/bin"}, map[string]string{"PROJECT_ONLY": "p"}, live, nil, nil, "", "")
 
 		for _, kv := range got {
 			if strings.HasPrefix(kv, "OCEL_LIVE_KEYS=") {

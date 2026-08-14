@@ -37,6 +37,9 @@ func varsReadPolicy(r executionRole) (string, error) {
 				partitions = append(partitions, vars.PartitionKey(owner, r.VarsClass))
 			}
 		}
+		for _, link := range r.VarsLinks {
+			partitions = append(partitions, vars.LinkPartitionKey(r.Slug, r.VarsClass, link))
+		}
 		statements = append(statements, map[string]any{
 			"Effect":   "Allow",
 			"Action":   []string{"dynamodb:Query"},
@@ -76,6 +79,7 @@ type appBundle struct {
 	Ciphertext  []byte
 	Live        []byte
 	Referenced  []string
+	Links       []string
 	Fingerprint string
 }
 
@@ -103,9 +107,10 @@ func (b appBundle) overlay() map[string][]byte {
 func (b appBundle) hasLive() bool { return len(b.Live) > 0 }
 
 func renderAppBundles(cfg Config, manifest *deploymentsv1.Manifest) (map[string]appBundle, error) {
+	links := manifestLinks(manifest)
 	bundles := make(map[string]appBundle, len(manifest.GetApps()))
 	for _, app := range manifest.GetApps() {
-		bundle, err := renderAppBundle(cfg, manifest.GetSlug(), app)
+		bundle, err := renderAppBundle(cfg, manifest.GetSlug(), app, links)
 		if err != nil {
 			return nil, err
 		}
@@ -116,7 +121,7 @@ func renderAppBundles(cfg Config, manifest *deploymentsv1.Manifest) (map[string]
 	return bundles, nil
 }
 
-func renderAppBundle(cfg Config, slug string, app *deploymentsv1.ManifestApp) (appBundle, error) {
+func renderAppBundle(cfg Config, slug string, app *deploymentsv1.ManifestApp, links []live.Link) (appBundle, error) {
 	values := make(map[string]string)
 	var keys []live.Key
 	for _, v := range app.GetVariables() {
@@ -138,14 +143,16 @@ func renderAppBundle(cfg Config, slug string, app *deploymentsv1.ManifestApp) (a
 		Class:       cfg.VarsClass,
 		Environment: overrideEnvironment(cfg),
 		Keys:        keys,
+		Links:       links,
 	})
 	if err != nil {
 		return appBundle{}, fmt.Errorf("pin %s's live values: %w", app.GetName(), err)
 	}
 
 	referenced := referencedOwners(cfg, slug, keys)
+	linked := linkNames(links)
 	if len(values) == 0 {
-		return appBundle{Live: manifest, Referenced: referenced}, nil
+		return appBundle{Live: manifest, Referenced: referenced, Links: linked}, nil
 	}
 
 	key := make([]byte, baked.KeyBytes)
@@ -161,8 +168,18 @@ func renderAppBundle(cfg Config, slug string, app *deploymentsv1.ManifestApp) (a
 		Ciphertext:  ciphertext,
 		Live:        manifest,
 		Referenced:  referenced,
+		Links:       linked,
 		Fingerprint: fingerprintValues(values),
 	}, nil
+}
+
+func linkNames(links []live.Link) []string {
+	names := make([]string, 0, len(links))
+	for _, l := range links {
+		names = append(names, l.Name)
+	}
+	slices.Sort(names)
+	return names
 }
 
 func referencedOwners(cfg Config, slug string, keys []live.Key) []string {

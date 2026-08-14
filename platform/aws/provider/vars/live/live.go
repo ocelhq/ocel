@@ -14,6 +14,7 @@ type Manifest struct {
 	Class       string `json:"class"`
 	Environment string `json:"environment,omitempty"`
 	Keys        []Key  `json:"keys"`
+	Links       []Link `json:"links,omitempty"`
 }
 
 type Key struct {
@@ -21,8 +22,13 @@ type Key struct {
 	Folder string `json:"folder,omitempty"`
 }
 
+type Link struct {
+	Name string `json:"name"`
+	Key  string `json:"key"`
+}
+
 func Render(m Manifest) ([]byte, error) {
-	if len(m.Keys) == 0 {
+	if len(m.Keys) == 0 && len(m.Links) == 0 {
 		return nil, nil
 	}
 	for _, component := range []struct{ name, value string }{
@@ -32,7 +38,7 @@ func Render(m Manifest) ([]byte, error) {
 		{"environment class", m.Class},
 	} {
 		if component.value == "" {
-			return nil, fmt.Errorf("the live-value manifest names %d keys but no %s", len(m.Keys), component.name)
+			return nil, fmt.Errorf("the live-value manifest names %d keys but no %s", len(m.Keys)+len(m.Links), component.name)
 		}
 	}
 	return json.Marshal(m)
