@@ -9,6 +9,8 @@ import (
 	"time"
 
 	"golang.org/x/term"
+
+	"github.com/ocelhq/ocel/cli/internal/procgroup"
 )
 
 const appChildGracePeriod = 2 * time.Second
@@ -54,8 +56,8 @@ func spawnAppChild(ctx context.Context, cmd *exec.Cmd, stdin io.Reader, isTermin
 		snap = snapshotTerminal(stdin)
 		cmd.Cancel = func() error { return terminateAppTree(cmd) }
 	} else {
-		setNewProcessGroup(cmd)
-		cmd.Cancel = func() error { return terminateProcessGroup(cmd) }
+		procgroup.New(cmd)
+		cmd.Cancel = func() error { return procgroup.Terminate(cmd) }
 	}
 	cmd.WaitDelay = appChildWaitDelay
 
@@ -97,7 +99,7 @@ func killAppChild(cmd *exec.Cmd, isTerminal bool) error {
 	if isTerminal {
 		return killAppTree(cmd)
 	}
-	return killProcessGroup(cmd)
+	return procgroup.Kill(cmd)
 }
 
 func (c *appChild) wait() error {
