@@ -13,6 +13,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/naming"
 	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
 	linksv1 "github.com/ocelhq/ocel/pkg/proto/links/v1"
+	"github.com/ocelhq/ocel/platform/aws/provider/transform"
 	"github.com/ocelhq/ocel/platform/aws/provider/vars"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
@@ -108,6 +109,10 @@ type Config struct {
 	AppStages   map[string]Stage
 	Tracer      Tracer
 	StageReport func(StageID) func(string)
+
+	Transform transform.Evaluator
+
+	transformed *transformedArgs
 }
 
 type Stages struct {

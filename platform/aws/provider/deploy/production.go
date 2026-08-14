@@ -112,6 +112,10 @@ func realize(ctx context.Context, cfg Config, manifest *deploymentsv1.Manifest, 
 		return Result{}, finishProvisioning(err)
 	}
 
+	if cfg.transformed, err = resolveTransforms(ctx, cfg, manifest); err != nil {
+		return Result{}, finishProvisioning(err)
+	}
+
 	index, err := stackIndex(cfg.Stacks)
 	if err != nil {
 		return Result{}, finishProvisioning(err)
@@ -718,9 +722,9 @@ func runInfraStack(ctx context.Context, cfg Config, manifest *deploymentsv1.Mani
 			var err error
 			switch {
 			case r.GetPostgres() != nil:
-				_, err = registerPostgres(pctx, project, env, r.GetLogicalName(), translatePostgres(r.GetPostgres()), vpc.Id, vpc.CidrBlock, subnets.Ids)
+				_, err = registerPostgres(pctx, project, env, r.GetLogicalName(), cfg.transformed.forPostgres(r.GetLogicalName(), r.GetPostgres()), vpc.Id, vpc.CidrBlock, subnets.Ids)
 			case r.GetBucket() != nil:
-				_, err = registerBucket(pctx, project, env, r.GetLogicalName(), translateBucket(r.GetBucket()), cfg.StateTable, cfg.StateTableARN, cfg.ListenerCodePath)
+				_, err = registerBucket(pctx, project, env, r.GetLogicalName(), cfg.transformed.forBucket(r.GetLogicalName(), r.GetBucket()), cfg.StateTable, cfg.StateTableARN, cfg.ListenerCodePath)
 			default:
 				continue
 			}
@@ -757,7 +761,7 @@ func runAppStack(ctx context.Context, cfg Config, manifest *deploymentsv1.Manife
 	maps.Copy(env, baked.env())
 
 	for _, fn := range functions {
-		if err = checkFunctionEnvBudget(fn.GetLogicalName(), functionEnv(env, translateFunction(fn), caches[name], bytecode[name])); err != nil {
+		if err = checkFunctionEnvBudget(fn.GetLogicalName(), functionEnv(env, cfg.transformed.forFunction(fn), caches[name], bytecode[name])); err != nil {
 			return nil, nil, err
 		}
 	}
@@ -774,7 +778,7 @@ func runAppStack(ctx context.Context, cfg Config, manifest *deploymentsv1.Manife
 		}
 		for _, fn := range functions {
 			logical := fn.GetLogicalName()
-			if err := registerFunction(pctx, logical, functionCoordinate(project, stack, logical), fn.GetRouteId(), translateFunction(fn), artifacts[logical], env, caches[name], bytecode[name], role.Arn); err != nil {
+			if err := registerFunction(pctx, logical, functionCoordinate(project, stack, logical), fn.GetRouteId(), cfg.transformed.forFunction(fn), artifacts[logical], env, caches[name], bytecode[name], role.Arn); err != nil {
 				return fmt.Errorf("declare %s: %w", logical, err)
 			}
 		}

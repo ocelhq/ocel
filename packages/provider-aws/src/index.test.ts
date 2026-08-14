@@ -10,6 +10,31 @@ describe("awsProvider", () => {
     });
   });
 
+  it("carries the ordered transform module list through to the provider", () => {
+    const config = defineConfig({
+      slug: "test-app",
+      provider: awsProvider({
+        transforms: ["./infra/defaults.transform.ts", "./infra/vpc.transform.ts"],
+      }),
+    });
+
+    expect(JSON.parse(JSON.stringify(config.provider))).toEqual({
+      package: "@ocel/provider-aws",
+      options: {
+        transforms: ["./infra/defaults.transform.ts", "./infra/vpc.transform.ts"],
+      },
+    });
+  });
+
+  it("leaves the options bag without a transforms key when none is authored", () => {
+    expect(
+      Object.hasOwn(
+        awsProvider({ region: "us-east-1" }).options as object,
+        "transforms",
+      ),
+    ).toBe(false);
+  });
+
   it("defaults options to an empty object when called with none", () => {
     expect(awsProvider()).toEqual({
       package: "@ocel/provider-aws",

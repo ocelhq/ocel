@@ -34,6 +34,8 @@ const (
 type bucketArgs struct {
 	AllowedOrigins []string
 
+	ForceDestroy bool
+
 	CORS corsRule
 
 	NotificationEvents []string
@@ -92,6 +94,7 @@ func registerBucket(ctx *pulumi.Context, project, env, logicalName string, args 
 
 	bucket, err := s3.NewBucketV2(ctx, naming.ResourceID(at.Kind, at.Name), &s3.BucketV2Args{
 		BucketPrefix: pulumi.String(at.PhysicalPrefix(maxS3BucketPrefixLen)),
+		ForceDestroy: pulumi.Bool(args.ForceDestroy),
 		Tags:         resourceTags(at.Kind, ""),
 	})
 	if err != nil {

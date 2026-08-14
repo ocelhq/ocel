@@ -5,7 +5,9 @@
   "type": "module",
   "description": "AWS provider descriptor for `ocel deploy`",
   "exports": {
-    ".": "./src/index.ts"
+    ".": "./src/index.ts",
+    "./transform": "./src/transform/index.ts",
+    "./transform/run": "./src/transform/run.ts"
   },
   "scripts": {
     "test": "vitest run"

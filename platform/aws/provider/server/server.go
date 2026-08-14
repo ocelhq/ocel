@@ -33,6 +33,7 @@ import (
 	"github.com/ocelhq/ocel/platform/aws/provider/pulumiruntime"
 	"github.com/ocelhq/ocel/platform/aws/provider/sdkconfig"
 	"github.com/ocelhq/ocel/platform/aws/provider/stackindex"
+	"github.com/ocelhq/ocel/platform/aws/provider/transform"
 	"github.com/ocelhq/ocel/platform/aws/provider/vars"
 	cloudflare "github.com/ocelhq/ocel/platform/edge/cloudflare/deploy"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
@@ -120,7 +121,8 @@ func (s *Server) callerIdentity(ctx context.Context, api STSAPI, region string) 
 }
 
 type options struct {
-	Region string `json:"region"`
+	Region     string   `json:"region"`
+	Transforms []string `json:"transforms"`
 }
 
 func parseOptions(raw []byte) (options, error) {
@@ -311,6 +313,8 @@ func (s *Server) runDeploy(ctx context.Context, req *deploymentsv1.DeployRequest
 		CacheStoreBucket:   params.CacheStore.Bucket,
 		CacheStoreUploader: cacheStoreUploader(params.CacheStore),
 
+		Transform: transformPass(opts),
+
 		ListenerCodePath:   listenerCodePath,
 		ArtifactRoot:       artifactRoot(),
 		ArtifactBucket:     deployed.ArtifactBucket,
@@ -465,6 +469,21 @@ const listenerCodePathEnvVar = "OCEL_LISTENER_CODE_PATH"
 var listenerCodePath = os.Getenv(listenerCodePathEnvVar)
 
 const artifactRootDirName = ".ocel/output"
+
+func transformPass(opts options) transform.Evaluator {
+	if len(opts.Transforms) == 0 {
+		return nil
+	}
+	return transform.NodePass{Root: projectRoot(), Modules: opts.Transforms}
+}
+
+func projectRoot() string {
+	wd, err := os.Getwd()
+	if err != nil {
+		return "."
+	}
+	return wd
+}
 
 func artifactRoot() string {
 	wd, err := os.Getwd()
