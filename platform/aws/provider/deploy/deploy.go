@@ -4,12 +4,15 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strconv"
 
 	"github.com/pulumi/pulumi/sdk/v3/go/auto"
 
 	"github.com/aws/aws-sdk-go-v2/service/secretsmanager"
 
+	"github.com/ocelhq/ocel/pkg/naming"
 	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
+	linksv1 "github.com/ocelhq/ocel/pkg/proto/links/v1"
 	"github.com/ocelhq/ocel/platform/aws/provider/vars"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
@@ -134,7 +137,8 @@ func (p Progress) report(phase deploymentsv1.Phase, message string, current, tot
 }
 
 type Result struct {
-	Outputs        []*deploymentsv1.ResourceOutput
+	Links          []*linksv1.Link
+	Functions      []*deploymentsv1.FunctionOutput
 	AppURLs        []string
 	PromotionID    string
 	RootStackState edge.RootStackState
@@ -145,11 +149,11 @@ func Run(ctx context.Context, cfg Config, manifest *deploymentsv1.Manifest, prog
 	return realize(ctx, cfg, manifest, progress, log)
 }
 
-func appURLs(manifest *deploymentsv1.Manifest, outputs []*deploymentsv1.ResourceOutput) []string {
-	urlByLogical := make(map[string]string, len(outputs))
-	for _, o := range outputs {
-		if f := o.GetFunction(); f != nil && f.GetUrl() != "" {
-			urlByLogical[o.GetLogicalName()] = f.GetUrl()
+func appURLs(manifest *deploymentsv1.Manifest, functions []*deploymentsv1.FunctionOutput) []string {
+	urlByLogical := make(map[string]string, len(functions))
+	for _, f := range functions {
+		if f.GetUrl() != "" {
+			urlByLogical[f.GetLogicalName()] = f.GetUrl()
 		}
 	}
 
@@ -179,7 +183,7 @@ func stampExpiry(ctx context.Context, stack auto.Stack, expiresAt int64) error {
 	return nil
 }
 
-func collectPostgresOutput(ctx context.Context, secrets SecretsReader, name string, fields map[string]any) (*deploymentsv1.ResourceOutput, error) {
+func collectPostgresLink(ctx context.Context, secrets SecretsReader, name string, fields map[string]any) (*linksv1.Link, error) {
 	host, err := requireStringField(fields, name, outputKeyHost)
 	if err != nil {
 		return nil, err
@@ -207,16 +211,15 @@ func collectPostgresOutput(ctx context.Context, secrets SecretsReader, name stri
 		return nil, fmt.Errorf("resolve master password for %s: %w", name, err)
 	}
 
-	return &deploymentsv1.ResourceOutput{
-		LogicalName: name,
-		Output: &deploymentsv1.ResourceOutput_Postgres{
-			Postgres: &deploymentsv1.PostgresOutput{
-				Host:     host,
-				Port:     int32(port),
-				Database: database,
-				Username: username,
-				Password: password,
-			},
+	return &linksv1.Link{
+		Name: name,
+		Type: naming.TokenPostgres,
+		Properties: map[string]string{
+			"host":     host,
+			"port":     strconv.Itoa(port),
+			"database": database,
+			"username": username,
+			"password": password,
 		},
 	}, nil
 }

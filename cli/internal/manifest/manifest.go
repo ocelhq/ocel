@@ -1,14 +1,10 @@
 package manifest
 
-import (
-	"sync"
-
-	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/resources/v1"
-)
+import "sync"
 
 type Entry struct {
 	Name string
-	Type resourcesv1.ResourceType
+	Type string
 }
 
 type Manifest struct {

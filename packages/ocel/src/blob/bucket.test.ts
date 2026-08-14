@@ -5,7 +5,6 @@ const declareMock = vi.hoisted(() => vi.fn(() => Promise.resolve({})));
 
 vi.mock("../utils/rpc", () => ({
   rpc: { resource: { declare: declareMock } },
-  ResourceType: { POSTGRES: 1, BUCKET: 2 },
 }));
 
 const { bucket } = await import("./bucket.js");
@@ -26,7 +25,7 @@ describe("Bucket discovery declare", () => {
 
     expect(declareMock).toHaveBeenCalledWith(
       expect.objectContaining({
-        resource: { name: "storage", type: 2 },
+        resource: { name: "storage", type: "ocel:bucket" },
         config: { case: "bucket", value: { allowedOrigins: [] } },
       }),
     );

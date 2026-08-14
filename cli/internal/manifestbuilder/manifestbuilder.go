@@ -13,7 +13,7 @@ import (
 const SchemaVersion = "provider.v1"
 
 type Declaration struct {
-	Type     resourcesv1.ResourceType
+	Type     string
 	ID       string
 	Postgres *resourcesv1.PostgresConfig
 	Bucket   *resourcesv1.BucketConfig
@@ -80,15 +80,10 @@ func sourceOrUnknown(source string) string {
 	return source
 }
 
-var typeKinds = map[resourcesv1.ResourceType]naming.Kind{
-	resourcesv1.ResourceType_RESOURCE_TYPE_POSTGRES: naming.KindDatabase,
-	resourcesv1.ResourceType_RESOURCE_TYPE_BUCKET:   naming.KindBucket,
-}
-
-func typeKind(t resourcesv1.ResourceType) (naming.Kind, error) {
-	kind, ok := typeKinds[t]
+func typeKind(t string) (naming.Kind, error) {
+	kind, ok := naming.TokenKind(t)
 	if !ok {
-		return "", fmt.Errorf("manifestbuilder: unsupported resource type %v", t)
+		return "", fmt.Errorf("manifestbuilder: unsupported resource type %q", t)
 	}
 	return kind, nil
 }
@@ -111,7 +106,7 @@ func describeFunction(f Function) string {
 
 func Build(slug string, domains map[string][]string, apps []App, declarations []Declaration, functions []Function, variables map[string][]Variable) (*deploymentsv1.Manifest, error) {
 	type identity struct {
-		typ resourcesv1.ResourceType
+		typ string
 		id  string
 	}
 	seen := make(map[identity]Declaration, len(declarations))

@@ -1,6 +1,5 @@
 import { afterEach, describe, expect, it } from "vitest";
 import { getConfig } from "./get-config.js";
-import { ResourceType } from "./rpc.js";
 
 describe("getConfig", () => {
   const keys: string[] = [];
@@ -17,7 +16,7 @@ describe("getConfig", () => {
   it("reads a POSTGRES resource from OCEL_RESOURCE_POSTGRES_<id>", () => {
     setEnv("OCEL_RESOURCE_POSTGRES_main", "postgres://localhost/main");
 
-    expect(getConfig("main", ResourceType.POSTGRES)).toBe(
+    expect(getConfig("main", "ocel:postgres")).toBe(
       "postgres://localhost/main",
     );
   });
@@ -29,11 +28,21 @@ describe("getConfig", () => {
     });
     setEnv("OCEL_RESOURCE_BUCKET_storage", payload);
 
-    expect(getConfig("storage", ResourceType.BUCKET)).toBe(payload);
+    expect(getConfig("storage", "ocel:bucket")).toBe(payload);
+  });
+
+  it("derives the env fragment from any namespaced token", () => {
+    setEnv("OCEL_RESOURCE_QUEUE_jobs", "queue-url");
+
+    expect(getConfig("jobs", "ocel:queue")).toBe("queue-url");
+  });
+
+  it("throws when the token carries no fragment", () => {
+    expect(() => getConfig("main", "ocel:")).toThrow("ocel:");
   });
 
   it("throws when the resource env var is undefined", () => {
-    expect(() => getConfig("missing", ResourceType.BUCKET)).toThrow(
+    expect(() => getConfig("missing", "ocel:bucket")).toThrow(
       "OCEL_RESOURCE_BUCKET_missing",
     );
   });

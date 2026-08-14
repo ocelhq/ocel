@@ -1,0 +1,22 @@
+syntax = "proto3";
+package links.v1;
+
+option go_package = "github.com/ocelhq/ocel/pkg/proto/links/v1;linksv1";
+
+message Link {
+  string name = 1;
+
+  string type = 2;
+
+  map<string, string> properties = 3 [debug_redact = true];
+
+  repeated Grant grants = 4;
+}
+
+message Grant {
+  repeated string actions = 1;
+
+  repeated string resources = 2;
+
+  string label = 3;
+}

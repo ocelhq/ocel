@@ -4,7 +4,6 @@ const declareMock = vi.hoisted(() => vi.fn(() => Promise.resolve({})));
 
 vi.mock("../utils/rpc", () => ({
   rpc: { resource: { declare: declareMock } },
-  ResourceType: { POSTGRES: 1 },
 }));
 
 const { Postgres } = await import("./pg.js");
@@ -19,6 +18,7 @@ describe("Postgres discovery declare", () => {
 
     expect(declareMock).toHaveBeenCalledWith(
       expect.objectContaining({
+        resource: { name: "main", type: "ocel:postgres" },
         config: { case: "postgres", value: { version: "17" } },
       }),
     );
@@ -29,6 +29,7 @@ describe("Postgres discovery declare", () => {
 
     expect(declareMock).toHaveBeenCalledWith(
       expect.objectContaining({
+        resource: { name: "main", type: "ocel:postgres" },
         config: { case: "postgres", value: { version: "17" } },
       }),
     );
@@ -39,6 +40,7 @@ describe("Postgres discovery declare", () => {
 
     expect(declareMock).toHaveBeenCalledWith(
       expect.objectContaining({
+        resource: { name: "main", type: "ocel:postgres" },
         config: { case: "postgres", value: { version: "16" } },
       }),
     );

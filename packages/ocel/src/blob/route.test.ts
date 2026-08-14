@@ -4,7 +4,6 @@ import { UploadState } from "../gen/proto/buckets/v1/buckets_pb.js";
 
 vi.mock("../utils/rpc", () => ({
   rpc: { resource: { declare: vi.fn(() => Promise.resolve({})) } },
-  ResourceType: { POSTGRES: 1, BUCKET: 2 },
 }));
 
 const { bucket } = await import("./bucket.js");

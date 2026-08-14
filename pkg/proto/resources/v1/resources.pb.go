@@ -21,58 +21,9 @@ const (
 	_ = protoimpl.EnforceVersion(protoimpl.MaxVersion - 20)
 )
 
-type ResourceType int32
-
-const (
-	ResourceType_RESOURCE_TYPE_UNSPECIFIED ResourceType = 0
-	ResourceType_RESOURCE_TYPE_POSTGRES    ResourceType = 1
-	ResourceType_RESOURCE_TYPE_BUCKET      ResourceType = 2
-)
-
-// Enum value maps for ResourceType.
-var (
-	ResourceType_name = map[int32]string{
-		0: "RESOURCE_TYPE_UNSPECIFIED",
-		1: "RESOURCE_TYPE_POSTGRES",
-		2: "RESOURCE_TYPE_BUCKET",
-	}
-	ResourceType_value = map[string]int32{
-		"RESOURCE_TYPE_UNSPECIFIED": 0,
-		"RESOURCE_TYPE_POSTGRES":    1,
-		"RESOURCE_TYPE_BUCKET":      2,
-	}
-)
-
-func (x ResourceType) Enum() *ResourceType {
-	p := new(ResourceType)
-	*p = x
-	return p
-}
-
-func (x ResourceType) String() string {
-	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
-}
-
-func (ResourceType) Descriptor() protoreflect.EnumDescriptor {
-	return file_resources_v1_resources_proto_enumTypes[0].Descriptor()
-}
-
-func (ResourceType) Type() protoreflect.EnumType {
-	return &file_resources_v1_resources_proto_enumTypes[0]
-}
-
-func (x ResourceType) Number() protoreflect.EnumNumber {
-	return protoreflect.EnumNumber(x)
-}
-
-// Deprecated: Use ResourceType.Descriptor instead.
-func (ResourceType) EnumDescriptor() ([]byte, []int) {
-	return file_resources_v1_resources_proto_rawDescGZIP(), []int{0}
-}
-
 type ResourceIdentifier struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	Type          ResourceType           `protobuf:"varint,1,opt,name=type,proto3,enum=resources.v1.ResourceType" json:"type,omitempty"`
+	Type          string                 `protobuf:"bytes,1,opt,name=type,proto3" json:"type,omitempty"`
 	Name          string                 `protobuf:"bytes,2,opt,name=name,proto3" json:"name,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -108,11 +59,11 @@ func (*ResourceIdentifier) Descriptor() ([]byte, []int) {
 	return file_resources_v1_resources_proto_rawDescGZIP(), []int{0}
 }
 
-func (x *ResourceIdentifier) GetType() ResourceType {
+func (x *ResourceIdentifier) GetType() string {
 	if x != nil {
 		return x.Type
 	}
-	return ResourceType_RESOURCE_TYPE_UNSPECIFIED
+	return ""
 }
 
 func (x *ResourceIdentifier) GetName() string {
@@ -340,9 +291,9 @@ var File_resources_v1_resources_proto protoreflect.FileDescriptor
 
 const file_resources_v1_resources_proto_rawDesc = "" +
 	"\n" +
-	"\x1cresources/v1/resources.proto\x12\fresources.v1\x1a\x16resources/v1/env.proto\"X\n" +
-	"\x12ResourceIdentifier\x12.\n" +
-	"\x04type\x18\x01 \x01(\x0e2\x1a.resources.v1.ResourceTypeR\x04type\x12\x12\n" +
+	"\x1cresources/v1/resources.proto\x12\fresources.v1\x1a\x16resources/v1/env.proto\"<\n" +
+	"\x12ResourceIdentifier\x12\x12\n" +
+	"\x04type\x18\x01 \x01(\tR\x04type\x12\x12\n" +
 	"\x04name\x18\x02 \x01(\tR\x04name\"\x11\n" +
 	"\x0fDeclareResponse\"\xca\x01\n" +
 	"\x0eDeclareRequest\x12<\n" +
@@ -353,11 +304,7 @@ const file_resources_v1_resources_proto_rawDesc = "" +
 	"\x0ePostgresConfig\x12\x18\n" +
 	"\aversion\x18\x01 \x01(\tR\aversion\"7\n" +
 	"\fBucketConfig\x12'\n" +
-	"\x0fallowed_origins\x18\x01 \x03(\tR\x0eallowedOrigins*c\n" +
-	"\fResourceType\x12\x1d\n" +
-	"\x19RESOURCE_TYPE_UNSPECIFIED\x10\x00\x12\x1a\n" +
-	"\x16RESOURCE_TYPE_POSTGRES\x10\x01\x12\x18\n" +
-	"\x14RESOURCE_TYPE_BUCKET\x10\x022\x90\x02\n" +
+	"\x0fallowed_origins\x18\x01 \x03(\tR\x0eallowedOrigins2\x90\x02\n" +
 	"\x0fResourceService\x12F\n" +
 	"\aDeclare\x12\x1c.resources.v1.DeclareRequest\x1a\x1d.resources.v1.DeclareResponse\x12O\n" +
 	"\n" +
@@ -376,36 +323,33 @@ func file_resources_v1_resources_proto_rawDescGZIP() []byte {
 	return file_resources_v1_resources_proto_rawDescData
 }
 
-var file_resources_v1_resources_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
 var file_resources_v1_resources_proto_msgTypes = make([]protoimpl.MessageInfo, 5)
 var file_resources_v1_resources_proto_goTypes = []any{
-	(ResourceType)(0),                 // 0: resources.v1.ResourceType
-	(*ResourceIdentifier)(nil),        // 1: resources.v1.ResourceIdentifier
-	(*DeclareResponse)(nil),           // 2: resources.v1.DeclareResponse
-	(*DeclareRequest)(nil),            // 3: resources.v1.DeclareRequest
-	(*PostgresConfig)(nil),            // 4: resources.v1.PostgresConfig
-	(*BucketConfig)(nil),              // 5: resources.v1.BucketConfig
-	(*DeclareEnvRequest)(nil),         // 6: resources.v1.DeclareEnvRequest
-	(*ReportEnvProblemsRequest)(nil),  // 7: resources.v1.ReportEnvProblemsRequest
-	(*DeclareEnvResponse)(nil),        // 8: resources.v1.DeclareEnvResponse
-	(*ReportEnvProblemsResponse)(nil), // 9: resources.v1.ReportEnvProblemsResponse
+	(*ResourceIdentifier)(nil),        // 0: resources.v1.ResourceIdentifier
+	(*DeclareResponse)(nil),           // 1: resources.v1.DeclareResponse
+	(*DeclareRequest)(nil),            // 2: resources.v1.DeclareRequest
+	(*PostgresConfig)(nil),            // 3: resources.v1.PostgresConfig
+	(*BucketConfig)(nil),              // 4: resources.v1.BucketConfig
+	(*DeclareEnvRequest)(nil),         // 5: resources.v1.DeclareEnvRequest
+	(*ReportEnvProblemsRequest)(nil),  // 6: resources.v1.ReportEnvProblemsRequest
+	(*DeclareEnvResponse)(nil),        // 7: resources.v1.DeclareEnvResponse
+	(*ReportEnvProblemsResponse)(nil), // 8: resources.v1.ReportEnvProblemsResponse
 }
 var file_resources_v1_resources_proto_depIdxs = []int32{
-	0, // 0: resources.v1.ResourceIdentifier.type:type_name -> resources.v1.ResourceType
-	1, // 1: resources.v1.DeclareRequest.resource:type_name -> resources.v1.ResourceIdentifier
-	4, // 2: resources.v1.DeclareRequest.postgres:type_name -> resources.v1.PostgresConfig
-	5, // 3: resources.v1.DeclareRequest.bucket:type_name -> resources.v1.BucketConfig
-	3, // 4: resources.v1.ResourceService.Declare:input_type -> resources.v1.DeclareRequest
-	6, // 5: resources.v1.ResourceService.DeclareEnv:input_type -> resources.v1.DeclareEnvRequest
-	7, // 6: resources.v1.ResourceService.ReportEnvProblems:input_type -> resources.v1.ReportEnvProblemsRequest
-	2, // 7: resources.v1.ResourceService.Declare:output_type -> resources.v1.DeclareResponse
-	8, // 8: resources.v1.ResourceService.DeclareEnv:output_type -> resources.v1.DeclareEnvResponse
-	9, // 9: resources.v1.ResourceService.ReportEnvProblems:output_type -> resources.v1.ReportEnvProblemsResponse
-	7, // [7:10] is the sub-list for method output_type
-	4, // [4:7] is the sub-list for method input_type
-	4, // [4:4] is the sub-list for extension type_name
-	4, // [4:4] is the sub-list for extension extendee
-	0, // [0:4] is the sub-list for field type_name
+	0, // 0: resources.v1.DeclareRequest.resource:type_name -> resources.v1.ResourceIdentifier
+	3, // 1: resources.v1.DeclareRequest.postgres:type_name -> resources.v1.PostgresConfig
+	4, // 2: resources.v1.DeclareRequest.bucket:type_name -> resources.v1.BucketConfig
+	2, // 3: resources.v1.ResourceService.Declare:input_type -> resources.v1.DeclareRequest
+	5, // 4: resources.v1.ResourceService.DeclareEnv:input_type -> resources.v1.DeclareEnvRequest
+	6, // 5: resources.v1.ResourceService.ReportEnvProblems:input_type -> resources.v1.ReportEnvProblemsRequest
+	1, // 6: resources.v1.ResourceService.Declare:output_type -> resources.v1.DeclareResponse
+	7, // 7: resources.v1.ResourceService.DeclareEnv:output_type -> resources.v1.DeclareEnvResponse
+	8, // 8: resources.v1.ResourceService.ReportEnvProblems:output_type -> resources.v1.ReportEnvProblemsResponse
+	6, // [6:9] is the sub-list for method output_type
+	3, // [3:6] is the sub-list for method input_type
+	3, // [3:3] is the sub-list for extension type_name
+	3, // [3:3] is the sub-list for extension extendee
+	0, // [0:3] is the sub-list for field type_name
 }
 
 func init() { file_resources_v1_resources_proto_init() }
@@ -423,14 +367,13 @@ func file_resources_v1_resources_proto_init() {
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_resources_v1_resources_proto_rawDesc), len(file_resources_v1_resources_proto_rawDesc)),
-			NumEnums:      1,
+			NumEnums:      0,
 			NumMessages:   5,
 			NumExtensions: 0,
 			NumServices:   1,
 		},
 		GoTypes:           file_resources_v1_resources_proto_goTypes,
 		DependencyIndexes: file_resources_v1_resources_proto_depIdxs,
-		EnumInfos:         file_resources_v1_resources_proto_enumTypes,
 		MessageInfos:      file_resources_v1_resources_proto_msgTypes,
 	}.Build()
 	File_resources_v1_resources_proto = out.File

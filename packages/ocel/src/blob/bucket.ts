@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { defer } from "../utils/defer.js";
 import { getConfig } from "../utils/get-config.js";
-import { rpc, ResourceType } from "../utils/rpc.js";
+import { rpc } from "../utils/rpc.js";
 import type { AnyUploader } from "./types.js";
 
 export interface BucketOptions<TUploaders extends Record<string, AnyUploader>> {
@@ -22,7 +22,7 @@ export interface ResolvedBucketConfig {
 export class Bucket<
   TUploaders extends Record<string, AnyUploader> = Record<string, AnyUploader>,
 > {
-  private type = ResourceType.BUCKET;
+  private type = "ocel:bucket";
 
   constructor(
     public name: string,

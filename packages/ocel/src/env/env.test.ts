@@ -21,7 +21,6 @@ vi.mock("../utils/rpc", () => ({
       reportEnvProblems: reportEnvProblemsMock,
     },
   },
-  ResourceType: { POSTGRES: 1, BUCKET: 2 },
 }));
 
 const { defineEnv, EnvDefinitionError, EnvScopeError, EnvValueError } =

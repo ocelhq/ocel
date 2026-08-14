@@ -3,20 +3,21 @@ package declare
 import (
 	"fmt"
 
+	"github.com/ocelhq/ocel/pkg/naming"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/resources/v1"
 )
 
 type Resource struct {
 	Name     string
-	Type     resourcesv1.ResourceType
+	Type     string
 	Postgres *resourcesv1.PostgresConfig
 	Bucket   *resourcesv1.BucketConfig
 }
 
 func Parse(req *resourcesv1.DeclareRequest) (Resource, error) {
 	id := req.GetResource()
-	if id.GetType() == resourcesv1.ResourceType_RESOURCE_TYPE_UNSPECIFIED {
-		return Resource{}, fmt.Errorf("unsupported resource type: %v", id.GetType())
+	if _, ok := naming.TokenKind(id.GetType()); !ok {
+		return Resource{}, fmt.Errorf("unsupported resource type: %q", id.GetType())
 	}
 
 	return Resource{

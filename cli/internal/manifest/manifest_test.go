@@ -4,7 +4,7 @@ import (
 	"sync"
 	"testing"
 
-	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/resources/v1"
+	"github.com/ocelhq/ocel/pkg/naming"
 )
 
 func TestManifest(t *testing.T) {
@@ -15,10 +15,10 @@ func TestManifest(t *testing.T) {
 
 		m := New()
 
-		m.Add(Entry{Name: "main", Type: resourcesv1.ResourceType_RESOURCE_TYPE_POSTGRES})
+		m.Add(Entry{Name: "main", Type: naming.TokenPostgres})
 
 		got := m.Snapshot()
-		want := []Entry{{Name: "main", Type: resourcesv1.ResourceType_RESOURCE_TYPE_POSTGRES}}
+		want := []Entry{{Name: "main", Type: naming.TokenPostgres}}
 		if len(got) != len(want) || got[0] != want[0] {
 			t.Fatalf("Snapshot() = %+v, want %+v", got, want)
 		}
@@ -28,7 +28,7 @@ func TestManifest(t *testing.T) {
 		t.Parallel()
 
 		m := New()
-		m.Add(Entry{Name: "main", Type: resourcesv1.ResourceType_RESOURCE_TYPE_POSTGRES})
+		m.Add(Entry{Name: "main", Type: naming.TokenPostgres})
 
 		snap := m.Snapshot()
 		snap[0].Name = "mutated"
@@ -43,7 +43,7 @@ func TestManifest(t *testing.T) {
 		t.Parallel()
 
 		m := New()
-		m.Add(Entry{Name: "main", Type: resourcesv1.ResourceType_RESOURCE_TYPE_POSTGRES})
+		m.Add(Entry{Name: "main", Type: naming.TokenPostgres})
 
 		m.Reset()
 
@@ -51,9 +51,9 @@ func TestManifest(t *testing.T) {
 			t.Fatalf("Snapshot() after Reset = %+v, want empty", got)
 		}
 
-		m.Add(Entry{Name: "second", Type: resourcesv1.ResourceType_RESOURCE_TYPE_POSTGRES})
+		m.Add(Entry{Name: "second", Type: naming.TokenPostgres})
 		got := m.Snapshot()
-		want := []Entry{{Name: "second", Type: resourcesv1.ResourceType_RESOURCE_TYPE_POSTGRES}}
+		want := []Entry{{Name: "second", Type: naming.TokenPostgres}}
 		if len(got) != len(want) || got[0] != want[0] {
 			t.Fatalf("Snapshot() after Reset+Add = %+v, want %+v", got, want)
 		}
@@ -68,7 +68,7 @@ func TestManifest(t *testing.T) {
 			wg.Add(1)
 			go func() {
 				defer wg.Done()
-				m.Add(Entry{Name: "r", Type: resourcesv1.ResourceType_RESOURCE_TYPE_POSTGRES})
+				m.Add(Entry{Name: "r", Type: naming.TokenPostgres})
 			}()
 		}
 		wg.Wait()

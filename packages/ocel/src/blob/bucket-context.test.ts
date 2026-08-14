@@ -2,7 +2,6 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("../utils/rpc", () => ({
   rpc: { resource: { declare: vi.fn(() => Promise.resolve({})) } },
-  ResourceType: { POSTGRES: 1, BUCKET: 2 },
 }));
 
 const { bucket } = await import("./bucket.js");

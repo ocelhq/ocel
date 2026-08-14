@@ -17,13 +17,8 @@ import (
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
-func fnOutput(logicalName, url string) *deploymentsv1.ResourceOutput {
-	return &deploymentsv1.ResourceOutput{
-		LogicalName: logicalName,
-		Output: &deploymentsv1.ResourceOutput_Function{
-			Function: &deploymentsv1.FunctionOutput{Url: url},
-		},
-	}
+func fnOutput(logicalName, url string) *deploymentsv1.FunctionOutput {
+	return &deploymentsv1.FunctionOutput{LogicalName: logicalName, Url: url}
 }
 
 func TestWorkerOutputName(t *testing.T) {
@@ -139,7 +134,7 @@ func TestDeployEdgeWorker(t *testing.T) {
 				{LogicalName: "api_documents", Framework: "next", App: "web", RouteId: "/api/documents"},
 			},
 		}
-		outputs := []*deploymentsv1.ResourceOutput{fnOutput("api_documents", "https://fn.lambda-url.aws/")}
+		outputs := []*deploymentsv1.FunctionOutput{fnOutput("api_documents", "https://fn.lambda-url.aws/")}
 
 		out, err := deployEdgeWorker(context.Background(), cfg, manifest, outputs, nil)
 		if err != nil {
@@ -162,7 +157,7 @@ func TestDeployEdgeWorker(t *testing.T) {
 		if len(up.Worker.Assets) != 1 || up.Worker.Assets[0].Path != "/next.svg" {
 			t.Errorf("expected the static asset, got %v", up.Worker.Assets)
 		}
-		if len(out) != 1 || out[0].GetFunction().GetUrl() != "https://ocel--proj-1--prod--web.acme.workers.dev" {
+		if len(out) != 1 || out[0].GetUrl() != "https://ocel--proj-1--prod--web.acme.workers.dev" {
 			t.Errorf("expected the worker URL output, got %v", out)
 		}
 	})
@@ -191,7 +186,7 @@ func TestDeployEdgeWorker(t *testing.T) {
 				{LogicalName: "index", Framework: "next", App: "web", RouteId: "/"},
 			},
 		}
-		outputs := []*deploymentsv1.ResourceOutput{fnOutput("index", "https://fn.lambda-url.aws/")}
+		outputs := []*deploymentsv1.FunctionOutput{fnOutput("index", "https://fn.lambda-url.aws/")}
 
 		if _, err := deployEdgeWorker(context.Background(), cfg, manifest, outputs, nil); err != nil {
 			t.Fatalf("deployEdgeWorker: %v", err)
@@ -227,7 +222,7 @@ func TestDeployEdgeWorker(t *testing.T) {
 		manifest := &deploymentsv1.Manifest{
 			Functions: []*deploymentsv1.ManifestFunction{{LogicalName: "index", Framework: "next", App: "web", RouteId: "/"}},
 		}
-		outputs := []*deploymentsv1.ResourceOutput{fnOutput("index", "https://fn.lambda-url.aws/")}
+		outputs := []*deploymentsv1.FunctionOutput{fnOutput("index", "https://fn.lambda-url.aws/")}
 
 		if _, err := deployEdgeWorker(context.Background(), cfg, manifest, outputs, nil); err != nil {
 			t.Fatalf("a substrate predating edge credentials must still deploy: %v", err)
@@ -299,7 +294,7 @@ func TestDeployEdgeWorker(t *testing.T) {
 					Functions: []*deploymentsv1.ManifestFunction{{LogicalName: "api_documents", Framework: "next", App: "web", RouteId: "/api/documents"}},
 					Domains:   tc.domains,
 				}
-				outputs := []*deploymentsv1.ResourceOutput{fnOutput("api_documents", "https://fn.lambda-url.aws/")}
+				outputs := []*deploymentsv1.FunctionOutput{fnOutput("api_documents", "https://fn.lambda-url.aws/")}
 
 				if _, err := deployEdgeWorker(context.Background(), cfg, manifest, outputs, nil); err != nil {
 					t.Fatalf("deployEdgeWorker: %v", err)
@@ -374,7 +369,7 @@ func TestDeployEdgeWorker(t *testing.T) {
 				{LogicalName: "api_handler", Framework: "express", App: "api"},
 			},
 		}
-		outputs := []*deploymentsv1.ResourceOutput{
+		outputs := []*deploymentsv1.FunctionOutput{
 			fnOutput("web_index", "https://web-fn.lambda-url.aws/"),
 			fnOutput("api_handler", "https://api-fn.lambda-url.aws/"),
 		}
@@ -544,7 +539,7 @@ func TestDeployEdgeWorker(t *testing.T) {
 				{LogicalName: "api_handler", Framework: "express", App: "api", RouteId: "/"},
 			},
 		}
-		outputs := []*deploymentsv1.ResourceOutput{fnOutput("api_handler", "https://api-fn.lambda-url.aws/")}
+		outputs := []*deploymentsv1.FunctionOutput{fnOutput("api_handler", "https://api-fn.lambda-url.aws/")}
 
 		out, err := deployEdgeWorker(context.Background(), cfg, manifest, outputs, nil)
 		if err != nil {
@@ -581,7 +576,7 @@ func TestDeployEdgeWorker(t *testing.T) {
 			Apps:      []*deploymentsv1.ManifestApp{{Name: "api", Framework: "express"}},
 			Functions: []*deploymentsv1.ManifestFunction{{LogicalName: "api_handler", Framework: "express", App: "api", RouteId: "/"}},
 		}
-		outputs := []*deploymentsv1.ResourceOutput{fnOutput("api_handler", "https://api-fn.lambda-url.aws/")}
+		outputs := []*deploymentsv1.FunctionOutput{fnOutput("api_handler", "https://api-fn.lambda-url.aws/")}
 
 		out, err := deployEdgeWorker(context.Background(), cfg, manifest, outputs, nil)
 		if err != nil {
@@ -606,7 +601,7 @@ func TestDeployEdgeWorker(t *testing.T) {
 			Apps:      []*deploymentsv1.ManifestApp{{Name: "marketing", Framework: "next"}, webApp},
 			Functions: []*deploymentsv1.ManifestFunction{webFn},
 		}
-		outputs := []*deploymentsv1.ResourceOutput{fnOutput("web_index", "https://web-fn.lambda-url.aws/")}
+		outputs := []*deploymentsv1.FunctionOutput{fnOutput("web_index", "https://web-fn.lambda-url.aws/")}
 		fake := &recordingEdge{}
 
 		if _, err := deployEdgeWorker(context.Background(), Config{Edge: fake, ArtifactRoot: artifactRoot, Slug: "proj", Env: "prod"}, manifest, outputs, nil); err != nil {
@@ -840,7 +835,7 @@ func nextApp(name string, domains map[string]*deploymentsv1.DomainList) (*deploy
 		&deploymentsv1.ManifestFunction{LogicalName: name + "_index", Framework: "next", App: name, RouteId: "/"}
 }
 
-func twoNextApps(t *testing.T) (string, *deploymentsv1.Manifest, []*deploymentsv1.ResourceOutput) {
+func twoNextApps(t *testing.T) (string, *deploymentsv1.Manifest, []*deploymentsv1.FunctionOutput) {
 	t.Helper()
 	artifactRoot := t.TempDir()
 	writeRoutingManifest(t, artifactRoot, "web", `{"buildId":"bweb"}`)
@@ -854,7 +849,7 @@ func twoNextApps(t *testing.T) (string, *deploymentsv1.Manifest, []*deploymentsv
 		Apps:      []*deploymentsv1.ManifestApp{webApp, docsApp},
 		Functions: []*deploymentsv1.ManifestFunction{webFn, docsFn},
 	}
-	outputs := []*deploymentsv1.ResourceOutput{
+	outputs := []*deploymentsv1.FunctionOutput{
 		fnOutput("web_index", "https://web-fn.lambda-url.aws/"),
 		fnOutput("docs_index", "https://docs-fn.lambda-url.aws/"),
 	}

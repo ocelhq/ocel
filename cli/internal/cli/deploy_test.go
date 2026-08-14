@@ -17,6 +17,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/declare"
 	"github.com/ocelhq/ocel/cli/internal/manifestbuilder"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
+	"github.com/ocelhq/ocel/pkg/naming"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/resources/v1"
 )
 
@@ -125,7 +126,7 @@ func TestToDeclarations(t *testing.T) {
 		resources := []declare.Resource{
 			{
 				Name:     "main",
-				Type:     resourcesv1.ResourceType_RESOURCE_TYPE_POSTGRES,
+				Type:     naming.TokenPostgres,
 				Postgres: &resourcesv1.PostgresConfig{Version: "17"},
 			},
 		}
@@ -139,8 +140,8 @@ func TestToDeclarations(t *testing.T) {
 		if d.ID != "main" {
 			t.Errorf("ID = %q, want %q", d.ID, "main")
 		}
-		if d.Type != resourcesv1.ResourceType_RESOURCE_TYPE_POSTGRES {
-			t.Errorf("Type = %v, want RESOURCE_TYPE_POSTGRES", d.Type)
+		if d.Type != naming.TokenPostgres {
+			t.Errorf("Type = %q, want %q", d.Type, naming.TokenPostgres)
 		}
 		if d.Postgres.GetVersion() != "17" {
 			t.Errorf("Postgres.Version = %q, want %q", d.Postgres.GetVersion(), "17")
@@ -744,7 +745,7 @@ globalThis.__ocelRegister.push(
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
-      resource: { type: "RESOURCE_TYPE_POSTGRES", name: "main" },
+      resource: { type: "ocel:postgres", name: "main" },
       postgres: { version: "17" },
     }),
   }),

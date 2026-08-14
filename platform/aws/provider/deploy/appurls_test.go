@@ -6,13 +6,6 @@ import (
 	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
 )
 
-func pgOutput(logicalName string) *deploymentsv1.ResourceOutput {
-	return &deploymentsv1.ResourceOutput{
-		LogicalName: logicalName,
-		Output:      &deploymentsv1.ResourceOutput_Postgres{Postgres: &deploymentsv1.PostgresOutput{Host: "db"}},
-	}
-}
-
 func TestAppURLs(t *testing.T) {
 	t.Parallel()
 
@@ -25,10 +18,9 @@ func TestAppURLs(t *testing.T) {
 				{LogicalName: "index", Framework: "next", App: "web"},
 			},
 		}
-		outputs := []*deploymentsv1.ResourceOutput{
+		outputs := []*deploymentsv1.FunctionOutput{
 			fnOutput("index", "https://index.lambda-url.example"),
 			fnOutput(workerOutputName("web"), "https://app.workers.dev"),
-			pgOutput("main"),
 		}
 
 		got := appURLs(manifest, outputs)
@@ -51,12 +43,11 @@ func TestAppURLs(t *testing.T) {
 				{LogicalName: "web_index", Framework: "next", App: "web"},
 			},
 		}
-		outputs := []*deploymentsv1.ResourceOutput{
+		outputs := []*deploymentsv1.FunctionOutput{
 			fnOutput("api_handler", "https://handler.lambda-url.example"),
 			fnOutput("api_worker", "https://worker.lambda-url.example"),
 			fnOutput("web_index", "https://index.lambda-url.example"),
 			fnOutput(workerOutputName("web"), "https://web.workers.dev"),
-			pgOutput("main"),
 		}
 
 		want := []string{
@@ -73,7 +64,7 @@ func TestAppURLs(t *testing.T) {
 		t.Parallel()
 
 		manifest := &deploymentsv1.Manifest{Apps: []*deploymentsv1.ManifestApp{{Name: "web"}}}
-		if got := appURLs(manifest, []*deploymentsv1.ResourceOutput{pgOutput("main")}); len(got) != 0 {
+		if got := appURLs(manifest, nil); len(got) != 0 {
 			t.Fatalf("appURLs = %v, want empty", got)
 		}
 	})

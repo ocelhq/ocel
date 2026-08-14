@@ -14,6 +14,7 @@ import (
 	cfntypes "github.com/aws/aws-sdk-go-v2/service/cloudformation/types"
 	"github.com/aws/aws-sdk-go-v2/service/sts"
 
+	"github.com/ocelhq/ocel/pkg/naming"
 	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/resources/v1"
 	"github.com/ocelhq/ocel/platform/aws/provider/bootstrap"
@@ -28,7 +29,7 @@ func wellFormedManifest() *deploymentsv1.Manifest {
 			{
 				LogicalName: "postgres_main",
 				Resource: &resourcesv1.ResourceIdentifier{
-					Type: resourcesv1.ResourceType_RESOURCE_TYPE_POSTGRES,
+					Type: naming.TokenPostgres,
 					Name: "main",
 				},
 				Config: &deploymentsv1.ManifestResource_Postgres{
@@ -54,7 +55,7 @@ func TestValidateManifest(t *testing.T) {
 		{
 			name: "a resource of an unspecified type",
 			mutate: func(m *deploymentsv1.Manifest) {
-				m.Resources[0].Resource.Type = resourcesv1.ResourceType_RESOURCE_TYPE_UNSPECIFIED
+				m.Resources[0].Resource.Type = ""
 			},
 			wantErr: true,
 		},

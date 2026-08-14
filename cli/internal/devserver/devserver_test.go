@@ -14,6 +14,7 @@ import (
 
 	"github.com/ocelhq/ocel/cli/internal/manifest"
 	"github.com/ocelhq/ocel/cli/internal/provision"
+	"github.com/ocelhq/ocel/pkg/naming"
 	devv1 "github.com/ocelhq/ocel/pkg/proto/dev/v1"
 	"github.com/ocelhq/ocel/pkg/proto/dev/v1/devv1connect"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/resources/v1"
@@ -60,7 +61,7 @@ func serve(t *testing.T, s *Server) string {
 	return ts.URL
 }
 
-func declareResource(t *testing.T, url, name string, typ resourcesv1.ResourceType) {
+func declareResource(t *testing.T, url, name, typ string) {
 	t.Helper()
 	client := resourcesv1connect.NewResourceServiceClient(http.DefaultClient, url)
 	if _, err := client.Declare(context.Background(), &resourcesv1.DeclareRequest{
@@ -102,7 +103,7 @@ func TestSync(t *testing.T) {
 		s := New(resolveServer.URL, "tok", "proj_1", "http://127.0.0.1:0")
 		url := serve(t, s)
 
-		declareResource(t, url, "main", resourcesv1.ResourceType_RESOURCE_TYPE_POSTGRES)
+		declareResource(t, url, "main", naming.TokenPostgres)
 
 		if status := postSync(t, url); status != http.StatusOK {
 			t.Fatalf("POST /sync status = %d, want 200", status)
@@ -150,8 +151,8 @@ func TestSync(t *testing.T) {
 		s := New(resolveServer.URL, "tok", "proj_1", "http://dev.local:1234")
 		url := serve(t, s)
 
-		declareResource(t, url, "main", resourcesv1.ResourceType_RESOURCE_TYPE_POSTGRES)
-		declareResource(t, url, "storage", resourcesv1.ResourceType_RESOURCE_TYPE_BUCKET)
+		declareResource(t, url, "main", naming.TokenPostgres)
+		declareResource(t, url, "storage", naming.TokenBucket)
 
 		if status := postSync(t, url); status != http.StatusOK {
 			t.Fatalf("POST /sync status = %d, want 200", status)
@@ -191,9 +192,9 @@ func TestSync(t *testing.T) {
 		s := New(resolveServer.URL, "tok", "proj_1", "http://127.0.0.1:0")
 		url := serve(t, s)
 
-		declareResource(t, url, "stale", resourcesv1.ResourceType_RESOURCE_TYPE_POSTGRES)
+		declareResource(t, url, "stale", naming.TokenPostgres)
 		s.ResetManifest()
-		declareResource(t, url, "fresh", resourcesv1.ResourceType_RESOURCE_TYPE_POSTGRES)
+		declareResource(t, url, "fresh", naming.TokenPostgres)
 
 		postSync(t, url)
 

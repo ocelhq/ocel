@@ -18,6 +18,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/manifest"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
 	"github.com/ocelhq/ocel/cli/internal/provision"
+	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/proto/buckets/v1/bucketsv1connect"
 	devv1 "github.com/ocelhq/ocel/pkg/proto/dev/v1"
 	"github.com/ocelhq/ocel/pkg/proto/dev/v1/devv1connect"
@@ -208,7 +209,7 @@ func (s *Server) handleSync(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	var toResolve, buckets []manifest.Entry
 	for _, e := range s.manifest.Snapshot() {
-		if e.Type == resourcesv1.ResourceType_RESOURCE_TYPE_BUCKET {
+		if e.Type == naming.TokenBucket {
 			buckets = append(buckets, e)
 		} else {
 			toResolve = append(toResolve, e)

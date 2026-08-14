@@ -1,23 +1,15 @@
-import { ResourceType } from "./rpc.js";
+const envFragment = (type: string) => {
+  const fragment = type.replace(/^ocel:/, "");
 
-const p = (type: string) => (id: string) =>
-  `OCEL_RESOURCE_${type.toUpperCase()}_${id}`;
-
-const resourceToString = (t: ResourceType) => {
-  switch (t) {
-    case ResourceType.POSTGRES: {
-      return "POSTGRES";
-    }
-    case ResourceType.BUCKET: {
-      return "BUCKET";
-    }
-    default:
-      throw new Error("Unknown resource type");
+  if (!fragment) {
+    throw new Error(`Unknown resource type '${type}'`);
   }
+
+  return fragment.toUpperCase();
 };
 
-export const getConfig = <T extends ResourceType>(id: string, type: T) => {
-  const key = p(resourceToString(type))(id);
+export const getConfig = (id: string, type: string) => {
+  const key = `OCEL_RESOURCE_${envFragment(type)}_${id}`;
   const value = process.env[key];
 
   if (!value) {

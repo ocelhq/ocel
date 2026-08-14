@@ -10,7 +10,6 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/naming"
 	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
-	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/resources/v1"
 )
 
 func TestTranslateFunction(t *testing.T) {
@@ -367,12 +366,12 @@ func admits(t *testing.T, pattern, key string) bool {
 func TestFunctionEnvKey(t *testing.T) {
 	cases := []struct {
 		name     string
-		typ      resourcesv1.ResourceType
+		typ      string
 		userID   string
 		wantName string
 	}{
-		{"postgres uses the canonical type token and user ID", resourcesv1.ResourceType_RESOURCE_TYPE_POSTGRES, "main", "OCEL_RESOURCE_POSTGRES_main"},
-		{"bucket uses the canonical type token and user ID", resourcesv1.ResourceType_RESOURCE_TYPE_BUCKET, "uploads", "OCEL_RESOURCE_BUCKET_uploads"},
+		{"postgres uses the canonical type token and user ID", naming.TokenPostgres, "main", "OCEL_RESOURCE_POSTGRES_main"},
+		{"bucket uses the canonical type token and user ID", naming.TokenBucket, "uploads", "OCEL_RESOURCE_BUCKET_uploads"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -435,12 +434,8 @@ func TestCollectFunctionOutput(t *testing.T) {
 		if out.GetLogicalName() != "api" {
 			t.Errorf("LogicalName = %q, want api", out.GetLogicalName())
 		}
-		fn := out.GetFunction()
-		if fn == nil {
-			t.Fatal("output has no FunctionOutput; the Function URL must be reported")
-		}
-		if fn.GetUrl() != "https://abc.lambda-url.us-east-1.on.aws/" {
-			t.Errorf("url = %q, want the Function URL", fn.GetUrl())
+		if out.GetUrl() != "https://abc.lambda-url.us-east-1.on.aws/" {
+			t.Errorf("url = %q, want the Function URL", out.GetUrl())
 		}
 	})
 }
