@@ -25,6 +25,7 @@ const (
 
 type stageNode struct {
 	id, parentID string
+	linkedParent string
 	title        string
 	children     []string
 	linked       bool
@@ -122,6 +123,7 @@ func (p *stagePlan) link(n *stageNode) {
 	}
 	if n.parentID == "" || n.parentID == n.id || p.wouldCycle(n.parentID, n.id) {
 		p.roots = append(p.roots, n.id)
+		n.linkedParent = ""
 		n.linked = true
 		p.attachOrphans(n.id)
 		return
@@ -132,6 +134,7 @@ func (p *stagePlan) link(n *stageNode) {
 		return
 	}
 	parent.children = append(parent.children, n.id)
+	n.linkedParent = n.parentID
 	n.linked = true
 	p.attachOrphans(n.id)
 }
@@ -197,9 +200,15 @@ func (p *stagePlan) progress(id, message string, current uint32, total *uint32) 
 }
 
 func (p *stagePlan) restart(id string) {
-	if n, ok := p.nodes[id]; ok {
-		n.started = p.now()
+	n, ok := p.nodes[id]
+	if !ok {
+		return
 	}
+	n.started = p.now()
+	n.state = stageActive
+	n.doneFailed = false
+	n.doneDur = 0
+	p.ensureActive(id)
 }
 
 func (p *stagePlan) ensureActive(id string) {
@@ -242,26 +251,25 @@ func (p *stagePlan) activeSet() map[string]bool {
 }
 
 func (p *stagePlan) hasActiveAncestor(id string) bool {
-	active := p.activeSet()
 	n, ok := p.nodes[id]
 	if !ok {
 		return false
 	}
-	parent := n.parentID
+	parent := n.linkedParent
 	for depth := 0; depth < maxTreeDepth && parent != ""; depth++ {
-		if active[parent] {
+		if p.isActive(parent) {
 			return true
 		}
 		pn, ok := p.nodes[parent]
 		if !ok {
 			return false
 		}
-		parent = pn.parentID
+		parent = pn.linkedParent
 	}
 	return false
 }
 
-func (p *stagePlan) emitSubtree(out []displayRow, id string, depth int) []displayRow {
+func (p *stagePlan) emitSubtree(out []displayRow, active map[string]bool, id string, depth int) []displayRow {
 	n, ok := p.nodes[id]
 	if !ok {
 		return out
@@ -270,26 +278,27 @@ func (p *stagePlan) emitSubtree(out []displayRow, id string, depth int) []displa
 	if depth >= maxTreeDepth {
 		return out
 	}
-	for _, childID := range p.activeOrder {
-		if c, ok := p.nodes[childID]; ok && childID != id && c.parentID == id {
-			out = p.emitSubtree(out, childID, depth+1)
+	for _, childID := range n.children {
+		if active[childID] {
+			out = p.emitSubtree(out, active, childID, depth+1)
 		}
 	}
 	return out
 }
 
 func (p *stagePlan) subtreeRows(id string) []displayRow {
-	return p.emitSubtree(nil, id, 0)
+	return p.emitSubtree(nil, p.activeSet(), id, 0)
 }
 
 func (p *stagePlan) displayRows() []displayRow {
 	if len(p.activeOrder) == 0 {
 		return nil
 	}
+	active := p.activeSet()
 	var out []displayRow
 	for _, id := range p.activeOrder {
 		if !p.hasActiveAncestor(id) {
-			out = p.emitSubtree(out, id, 0)
+			out = p.emitSubtree(out, active, id, 0)
 		}
 	}
 	return out
@@ -301,8 +310,8 @@ func (p *stagePlan) siblingPosition(id string) (index, count int, ok bool) {
 		return 0, 0, false
 	}
 	list := p.roots
-	if n.parentID != "" {
-		parent, pok := p.nodes[n.parentID]
+	if n.linkedParent != "" {
+		parent, pok := p.nodes[n.linkedParent]
 		if !pok {
 			return 0, 0, false
 		}

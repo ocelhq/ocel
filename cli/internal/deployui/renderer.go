@@ -228,10 +228,8 @@ func (r *Renderer) progressStageLocked(id string, phase deploymentsv1.Phase, mes
 }
 
 func (r *Renderer) progressUntaggedLocked(phase deploymentsv1.Phase, message string, current uint32, total *uint32) {
-	if r.plan.isActive(untaggedStageID) {
-		if n := r.plan.nodes[untaggedStageID]; n != nil {
-			r.commitLocked(n, r.okColor(), okMark, "")
-		}
+	if n := r.plan.nodes[untaggedStageID]; n != nil && n.message != message && r.plan.isActive(untaggedStageID) {
+		r.commitRowLocked(displayRow{n: n}, r.okColor(), okMark, "")
 	}
 	n, tracked := r.plan.progress(untaggedStageID, message, current, total)
 	n.title = fallbackTitle(phase, message)
@@ -280,10 +278,17 @@ func (r *Renderer) StageEnd(stageID []byte, failed bool, duration time.Duration)
 	if !ok {
 		return
 	}
+	wasDone := n.state == stageDone
 	n.state = stageDone
 	n.doneFailed = failed
 	n.doneDur = duration
 	if !r.plan.isActive(id) {
+		if !failed || wasDone {
+			return
+		}
+		r.eraseLiveLocked()
+		r.commitRowLocked(displayRow{n: n}, r.colorFor(color.FgRed, color.Bold), failMark, "failed")
+		r.drawLiveLocked()
 		return
 	}
 	if r.plan.hasActiveAncestor(id) {
@@ -293,27 +298,20 @@ func (r *Renderer) StageEnd(stageID []byte, failed bool, duration time.Duration)
 	}
 	r.eraseLiveLocked()
 	for _, row := range r.plan.subtreeRows(id) {
-		r.finalizeDoneRowLocked(row)
-		r.plan.removeActive(row.n.id)
+		if row.n.id != id && row.n.state != stageDone {
+			continue
+		}
+		r.commitRowLocked(row, r.okColor(), okMark, "")
 	}
 	r.drawLiveLocked()
 }
 
-func (r *Renderer) finalizeDoneRowLocked(row displayRow) {
-	n := row.n
-	switch {
-	case n.state == stageDone && n.doneFailed:
-		r.finalizeLineLocked(n, r.colorFor(color.FgRed, color.Bold), failMark, "failed", 0, row.depth)
-	case n.state == stageDone:
-		r.finalizeLineLocked(n, r.okColor(), okMark, "", n.doneDur, row.depth)
-	default:
-		r.finalizeLineLocked(n, r.okColor(), okMark, "", r.plan.now().Sub(n.started), row.depth)
-		n.state = stageDone
-	}
-}
-
 func (r *Renderer) Building() {
-	r.Progress(buildStageID, deploymentsv1.Phase_PHASE_UNSPECIFIED, "Building project", 0, nil)
+	id := buildStageID
+	if r.format == FormatJSON {
+		id = nil
+	}
+	r.Progress(id, deploymentsv1.Phase_PHASE_UNSPECIFIED, "Building project", 0, nil)
 }
 
 func (r *Renderer) BuildOK() {
@@ -325,7 +323,7 @@ func (r *Renderer) BuildOK() {
 		return
 	}
 	r.eraseLiveLocked()
-	r.commitLocked(n, r.okColor(), okMark, "")
+	r.commitRowLocked(displayRow{n: n}, r.okColor(), okMark, "")
 	r.drawLiveLocked()
 }
 
@@ -448,21 +446,36 @@ func (r *Renderer) finishAllLocked(c *color.Color, mark, status string) bool {
 	}
 	r.eraseLiveLocked()
 	for _, row := range rows {
-		if row.n.state == stageDone {
-			r.finalizeDoneRowLocked(row)
-			continue
-		}
-		r.finalizeLineLocked(row.n, c, mark, status, r.plan.now().Sub(row.n.started), row.depth)
-		row.n.state = stageDone
+		r.commitRowLocked(row, c, mark, status)
 	}
 	r.plan.activeOrder = nil
 	return true
 }
 
-func (r *Renderer) commitLocked(n *stageNode, c *color.Color, mark, status string) {
-	r.finalizeLineLocked(n, c, mark, status, r.plan.now().Sub(n.started), 0)
-	n.state = stageDone
+func (r *Renderer) commitRowLocked(row displayRow, c *color.Color, mark, status string) {
+	n := row.n
+	if n.state != stageDone {
+		n.state = stageDone
+		n.doneFailed = status == "failed"
+		n.doneDur = r.plan.now().Sub(n.started)
+	}
+	if status == "" || status == "failed" {
+		fmt.Fprintln(r.w, r.doneLineLocked(n, row.depth))
+	} else {
+		r.finalizeLineLocked(n, c, mark, status, n.doneDur, row.depth)
+	}
 	r.plan.removeActive(n.id)
+}
+
+func (r *Renderer) doneLineLocked(n *stageNode, depth int) string {
+	indent := strings.Repeat("  ", depth)
+	if n.doneFailed {
+		return indent + r.colorFor(color.FgRed, color.Bold).Sprintf("%s %s failed", failMark, n.title)
+	}
+	return fmt.Sprintf("%s%s  %s",
+		indent,
+		r.okColor().Sprintf("%s %s", okMark, n.title),
+		r.colorFor(color.Faint).Sprint(formatDuration(n.doneDur)))
 }
 
 func (r *Renderer) finalizeLineLocked(n *stageNode, c *color.Color, mark, status string, duration time.Duration, depth int) {
@@ -533,13 +546,7 @@ func (r *Renderer) rowLineLocked(row displayRow) string {
 	n := row.n
 	indent := strings.Repeat("  ", row.depth)
 	if n.state == stageDone {
-		if n.doneFailed {
-			return indent + r.colorFor(color.FgRed, color.Bold).Sprintf("%s %s failed", failMark, n.title)
-		}
-		return fmt.Sprintf("%s%s  %s",
-			indent,
-			r.okColor().Sprintf("%s %s", okMark, n.title),
-			r.colorFor(color.Faint).Sprint(formatDuration(n.doneDur)))
+		return r.doneLineLocked(n, row.depth)
 	}
 	glyph := r.colorFor(color.FgCyan).Sprint(spinnerFrame(n.frame))
 	var b strings.Builder
