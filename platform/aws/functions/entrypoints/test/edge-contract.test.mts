@@ -3,6 +3,7 @@ import contract from "@framework/next-cache/fixtures/edge-contract.json" with {
   type: "json",
 };
 import { afterEach, expect, test } from "vitest";
+import { revalidatedHeader } from "../src/next/revalidation-signal.mjs";
 
 afterEach(() => {
   for (const name of Object.values(contract.cacheStoreEnv)) delete process.env[name];
@@ -47,4 +48,8 @@ test("no store is adopted when the contract's bucket name is unset", async () =>
   const { entriesAdopted } = await import("../src/next/object-store.mjs");
 
   expect(entriesAdopted()).toBe(false);
+});
+
+test("a revalidation is announced under the header name the edge reads", () => {
+  expect(revalidatedHeader).toBe(contract.revalidatedHeader);
 });
