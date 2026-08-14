@@ -14,6 +14,7 @@ import {
   variantHeadersFile,
 } from "@framework/next-cache";
 import { background } from "../shared/background.mjs";
+import { noteRevalidation } from "./revalidation-signal.mjs";
 import { recordTags, tagsExpireEntry } from "./tag-clock.mjs";
 
 function unchunk(html: any): string {
@@ -200,6 +201,7 @@ export default class OcelCacheHandler {
     await this.store.writeTags(list, record);
 
     recordTags(list, record);
+    noteRevalidation();
   }
 
   resetRequestCache(): void {}

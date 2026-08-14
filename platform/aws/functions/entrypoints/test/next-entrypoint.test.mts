@@ -5,9 +5,15 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, beforeAll, expect, test } from "vitest";
 import { writeNextProjectFixture } from "./next-project-fixture.mjs";
+import { noteRevalidation } from "../src/next/revalidation-signal.mjs";
 
 const launcherModule = `module.exports = {
   async handler(req, res, ctx) {
+    if (req.url === "/__revalidate") {
+      globalThis.__ocelTestRevalidate();
+      res.end("ok");
+      return;
+    }
     if (req.url === "/__request-meta") {
       res.setHeader("content-type", "application/json");
       res.end(JSON.stringify(ctx.requestMeta));
@@ -96,6 +102,8 @@ beforeAll(async () => {
   const launcherPath = join(projectDir, "__next_launcher.cjs");
   await writeFile(launcherPath, launcherModule);
 
+  (globalThis as any).__ocelTestRevalidate = noteRevalidation;
+
   process.env.OCEL_CONTROL_SOCKET = sockPath;
   process.env.OCEL_HANDLER = launcherPath;
   await import("../src/next/entrypoint.mjs");
@@ -148,4 +156,18 @@ test.each([
 
   expect(meta.minimalMode).toBeUndefined();
   expect(meta.relativeProjectDir).toBeTruthy();
+});
+
+test("announces a revalidation the request performed", async () => {
+  const res = await fetch(`http://127.0.0.1:${port}/__revalidate`);
+
+  expect(res.headers.get("x-ocel-revalidated")).toBe("1");
+  await res.text();
+});
+
+test("announces nothing on a request that revalidated nothing", async () => {
+  const res = await fetch(`http://127.0.0.1:${port}/__request-meta`);
+
+  expect(res.headers.has("x-ocel-revalidated")).toBe(false);
+  await res.text();
 });

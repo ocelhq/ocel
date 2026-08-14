@@ -2,6 +2,7 @@ import type http from "node:http";
 import { dirname, isAbsolute, relative } from "node:path";
 import { pathToFileURL } from "node:url";
 import { runWithWaitUntil } from "../shared/background.mjs";
+import { revalidatedHeader, revalidationTicks } from "./revalidation-signal.mjs";
 import { loadIncrementalCacheFactory } from "./incremental-cache.mjs";
 import { awaitLiveValues } from "../shared/live-values.mjs";
 import {
@@ -16,6 +17,17 @@ const RSC_REQUEST = Symbol.for("ocel.rsc-request");
 
 function isPprResume(req: http.IncomingMessage): boolean {
   return req.method === "POST" && req.headers["next-resume"] === "1";
+}
+
+function announceRevalidations(res: http.ServerResponse): void {
+  const before = revalidationTicks();
+  const writeHead = res.writeHead;
+  res.writeHead = function (this: http.ServerResponse, ...args: any[]) {
+    if (!this.headersSent && revalidationTicks() !== before) {
+      this.setHeader(revalidatedHeader, "1");
+    }
+    return (writeHead as any).apply(this, args);
+  } as typeof res.writeHead;
 }
 
 async function boot(): Promise<void> {
@@ -39,6 +51,7 @@ async function boot(): Promise<void> {
 
   const invoke: Invoke = (req, res, ocel) => {
     if (req.headers.rsc === "1") (req.headers as any)[RSC_REQUEST] = true;
+    announceRevalidations(res);
     if (newIncrementalCache) {
       (globalThis as any).__incrementalCache = newIncrementalCache(req);
     }

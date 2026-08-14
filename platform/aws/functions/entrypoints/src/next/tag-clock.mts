@@ -2,6 +2,7 @@ import { areTagsExpired, mergeRecord, type TagRecord } from "@framework/next-cac
 
 import { awsUseCacheStore, type UseCacheStore } from "./use-cache-store.mjs";
 import { now } from "./use-cache-entry.mjs";
+import { noteRevalidation } from "./revalidation-signal.mjs";
 
 export interface TagClock {
   updateTags(tags: string[], durations?: { expire?: number }): Promise<void>;
@@ -121,6 +122,7 @@ export const tagClock: TagClock = {
           : { ...existing, expired: at },
       );
     }
+    if (tags.length > 0) noteRevalidation();
 
     const backend = useCacheStore();
     if (!backend) return;
