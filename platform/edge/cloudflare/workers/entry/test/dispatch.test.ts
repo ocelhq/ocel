@@ -300,6 +300,65 @@ describe("dispatchResult", () => {
     expect(captured?.url).toBe("https://fn.example.com/api/documents?q=1");
   });
 
+  it("percent-encodes the request-target characters a Function URL rejects", async () => {
+    let captured: Request | undefined;
+    const deps = baseDeps({
+      manifest: {
+        buildId: "t",
+        basePath: "",
+        pathnames: [],
+        routes: {},
+        dispatch: { "/dynamic/[first]": { kind: "lambda", id: "fn" } },
+      },
+      functionUrls: { fn: "https://fn.example.com" },
+      fetch: (async (req: Request) => {
+        captured = req;
+        return new Response("from-lambda", { status: 200 });
+      }) as unknown as typeof fetch,
+    });
+
+    const res = await dispatchResult(
+      {
+        resolvedPathname: "/dynamic/[first]",
+        invocationTarget: { pathname: "/dynamic/[first]" },
+      },
+      new Request("https://app.example/dynamic/%5Bfirst%5D"),
+      deps,
+    );
+
+    expect(res.status).toBe(200);
+    expect(captured?.url).toBe("https://fn.example.com/dynamic/%5Bfirst%5D");
+  });
+
+  it("leaves an already-encoded request target encoded exactly once", async () => {
+    let captured: Request | undefined;
+    const deps = baseDeps({
+      manifest: {
+        buildId: "t",
+        basePath: "",
+        pathnames: [],
+        routes: {},
+        dispatch: { "/caret": { kind: "lambda", id: "fn" } },
+      },
+      functionUrls: { fn: "https://fn.example.com" },
+      fetch: (async (req: Request) => {
+        captured = req;
+        return new Response("from-lambda", { status: 200 });
+      }) as unknown as typeof fetch,
+    });
+
+    await dispatchResult(
+      {
+        resolvedPathname: "/caret",
+        invocationTarget: { pathname: "/caret/a%5Eb^c|d" },
+      },
+      new Request("https://app.example/caret"),
+      deps,
+    );
+
+    expect(new URL(captured!.url).pathname).toBe("/caret/a%5Eb%5Ec%7Cd");
+  });
+
   it("sets x-forwarded-host to the public host so Next's Server Action origin check passes", async () => {
     let captured: Request | undefined;
     const deps = baseDeps({
