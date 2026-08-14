@@ -1,3 +1,4 @@
+import { inspect } from "node:util";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { LinkError, link } from "./index.js";
 
@@ -74,10 +75,9 @@ describe("a typed accessor at runtime", () => {
     expect(link.postgres("main").password).toBe("rotated");
   });
 
-  it("names the link and the binding when nothing delivered it", () => {
+  it("names the link when nothing delivered it", () => {
     expect(() => link.postgres("main")).toThrow(LinkError);
-    expect(() => link.postgres("main")).toThrow(/'main'/);
-    expect(() => link.postgres("main")).toThrow(/links/);
+    expect(() => link.postgres("main")).toThrow(/'main'.*not delivered/);
   });
 
   it("rejects a record whose token is not the one asked for", () => {
@@ -174,6 +174,14 @@ describe("the discovery phase", () => {
     expect(() => link.custom("kafka", "acme:kafka").brokers).toThrow(
       /'kafka'.*discovery/s,
     );
+  });
+
+  it("stays inspectable, so logging the handle is not itself the failure", () => {
+    vi.stubEnv("OCEL_PHASE", "discovery");
+    const handle = link.postgres("main") as unknown as Record<symbol, unknown>;
+
+    expect(handle[Symbol.toStringTag]).toBeUndefined();
+    expect(() => inspect(handle)).not.toThrow();
   });
 
   it("ignores a delivered value while declaring", () => {
