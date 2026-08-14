@@ -725,6 +725,21 @@ test("serves an edge Pages Router API route named by its index file at its direc
   expect(manifest.pathnames).not.toContain("/api/index");
 });
 
+test("binds each wasm module to the global name its chunks reach for", async () => {
+  const { projectDir, args } = await synthEdgeProject();
+
+  await adapter.onBuildComplete!(args as never);
+
+  const bundle = await readBundle(projectDir);
+  expect(bundle.shim).toContain('const WASM = {"wasm_hello":"w/0.wasm"}');
+  expect(bundle.shim).toContain(
+    'globalThis[name] ??= (await import("./" + id)).default',
+  );
+  expect(bundle.shim.indexOf("WASM")).toBeLessThan(
+    bundle.shim.indexOf("for (const id of e.chunks)"),
+  );
+});
+
 test("prints the bundle size, chunk count and entry count", async () => {
   const { args } = await synthEdgeProject();
   const log = vi.spyOn(console, "log").mockImplementation(() => {});
