@@ -27,6 +27,10 @@
       "types": "./dist/env/client.d.ts",
       "import": "./dist/env/client.js"
     },
+    "./link": {
+      "types": "./dist/link/index.d.ts",
+      "import": "./dist/link/index.js"
+    },
     "./postgres": {
       "types": "./dist/postgres/index.d.ts",
       "import": "./dist/postgres/index.js"
