@@ -25,6 +25,26 @@ type App struct {
 	Framework string
 	Domains   map[string][]string
 	Folder    string
+	Usages    []Usage
+}
+
+type Usage struct {
+	Type  string
+	ID    string
+	Files []string
+}
+
+type DanglingUsageError struct {
+	App  string
+	Type string
+	ID   string
+}
+
+func (e *DanglingUsageError) Error() string {
+	return fmt.Sprintf(
+		"manifestbuilder: app %q is attributed %s %q, which nothing in this project declares",
+		e.App, e.Type, e.ID,
+	)
 }
 
 type Variable struct {
@@ -104,11 +124,12 @@ func describeFunction(f Function) string {
 	return fmt.Sprintf("route %q of app %q", f.Name, f.App)
 }
 
+type identity struct {
+	typ string
+	id  string
+}
+
 func Build(slug string, domains map[string][]string, apps []App, declarations []Declaration, functions []Function, variables map[string][]Variable) (*deploymentsv1.Manifest, error) {
-	type identity struct {
-		typ string
-		id  string
-	}
 	seen := make(map[identity]Declaration, len(declarations))
 	named := make(map[string]string, len(declarations)+len(functions))
 
@@ -188,6 +209,11 @@ func Build(slug string, domains map[string][]string, apps []App, declarations []
 		return strings.Compare(a.LogicalName, b.LogicalName)
 	})
 
+	usages, err := buildUsages(apps, seen)
+	if err != nil {
+		return nil, err
+	}
+
 	return &deploymentsv1.Manifest{
 		SchemaVersion: SchemaVersion,
 		Slug:          slug,
@@ -195,7 +221,51 @@ func Build(slug string, domains map[string][]string, apps []App, declarations []
 		Functions:     manifestFunctions,
 		Domains:       domainLists(domains),
 		Apps:          buildApps(apps, functions, variables),
+		Usages:        usages,
 	}, nil
+}
+
+func buildUsages(apps []App, declared map[identity]Declaration) ([]*deploymentsv1.ManifestUsage, error) {
+	merged := map[string]*deploymentsv1.ManifestUsage{}
+	for _, a := range apps {
+		for _, u := range a.Usages {
+			if _, ok := declared[identity{u.Type, u.ID}]; !ok {
+				return nil, &DanglingUsageError{App: a.Name, Type: u.Type, ID: u.ID}
+			}
+			kind, err := typeKind(u.Type)
+			if err != nil {
+				return nil, err
+			}
+
+			logical := resourceLogicalName(kind, u.ID)
+			edge, ok := merged[a.Name+naming.KeySeparator+logical]
+			if !ok {
+				edge = &deploymentsv1.ManifestUsage{App: a.Name, Resource: logical}
+				merged[a.Name+naming.KeySeparator+logical] = edge
+			}
+			for _, f := range u.Files {
+				if !slices.Contains(edge.Files, f) {
+					edge.Files = append(edge.Files, f)
+				}
+			}
+		}
+	}
+	if len(merged) == 0 {
+		return nil, nil
+	}
+
+	out := make([]*deploymentsv1.ManifestUsage, 0, len(merged))
+	for _, edge := range merged {
+		slices.Sort(edge.Files)
+		out = append(out, edge)
+	}
+	slices.SortFunc(out, func(a, b *deploymentsv1.ManifestUsage) int {
+		if c := strings.Compare(a.App, b.App); c != 0 {
+			return c
+		}
+		return strings.Compare(a.Resource, b.Resource)
+	})
+	return out, nil
 }
 
 func domainLists(domains map[string][]string) map[string]*deploymentsv1.DomainList {

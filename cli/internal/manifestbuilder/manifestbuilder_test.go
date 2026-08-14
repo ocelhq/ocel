@@ -3,6 +3,7 @@ package manifestbuilder
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"os"
 	"strings"
 	"testing"
@@ -716,6 +717,95 @@ func TestManifestVariables(t *testing.T) {
 		}
 		if got[1].GetKey() != "VERSIONED" || got[1].GetVersion() != 4 {
 			t.Errorf("VERSIONED = %v, want the version it resolved at", got[1])
+		}
+	})
+}
+
+func TestBuildUsages(t *testing.T) {
+	t.Parallel()
+
+	declarations := []Declaration{
+		{Type: naming.TokenPostgres, ID: "main", Source: "shared/db.ts:3"},
+		{Type: naming.TokenBucket, ID: "uploads", Source: "shared/files.ts:3"},
+	}
+
+	t.Run("lands one edge per app and resource, files deduped and sorted", func(t *testing.T) {
+		t.Parallel()
+
+		manifest, err := Build("proj-1", nil, []App{
+			{Name: "api", Usages: []Usage{
+				{Type: naming.TokenPostgres, ID: "main", Files: []string{"apps/api/src/server.ts"}},
+				{Type: naming.TokenPostgres, ID: "main", Files: []string{"apps/api/src/reports.ts", "apps/api/src/server.ts"}},
+				{Type: naming.TokenBucket, ID: "uploads", Files: []string{"apps/api/src/server.ts"}},
+			}},
+			{Name: "worker", Usages: []Usage{
+				{Type: naming.TokenPostgres, ID: "main", Files: []string{"apps/worker/src/worker.ts"}},
+			}},
+		}, declarations, nil, nil)
+		if err != nil {
+			t.Fatalf("Build err = %v", err)
+		}
+
+		var got []string
+		for _, u := range manifest.GetUsages() {
+			got = append(got, u.GetApp()+" "+u.GetResource()+" "+strings.Join(u.GetFiles(), ","))
+		}
+		want := []string{
+			"api bucket--uploads apps/api/src/server.ts",
+			"api db--main apps/api/src/reports.ts,apps/api/src/server.ts",
+			"worker db--main apps/worker/src/worker.ts",
+		}
+		if strings.Join(got, "|") != strings.Join(want, "|") {
+			t.Errorf("usages = %v, want %v", got, want)
+		}
+	})
+
+	t.Run("an orphan resource still reaches the manifest", func(t *testing.T) {
+		t.Parallel()
+
+		manifest, err := Build("proj-1", nil, []App{
+			{Name: "api", Usages: []Usage{{Type: naming.TokenPostgres, ID: "main", Files: []string{"apps/api/src/server.ts"}}}},
+		}, declarations, nil, nil)
+		if err != nil {
+			t.Fatalf("Build err = %v", err)
+		}
+
+		if len(manifest.GetResources()) != 2 {
+			t.Fatalf("resources = %v, want the unused bucket to provision alongside the used database", manifest.GetResources())
+		}
+		if len(manifest.GetUsages()) != 1 {
+			t.Errorf("usages = %v, want only the database edge", manifest.GetUsages())
+		}
+	})
+
+	t.Run("a usage naming an undeclared resource fails validation", func(t *testing.T) {
+		t.Parallel()
+
+		_, err := Build("proj-1", nil, []App{
+			{Name: "api", Usages: []Usage{{Type: naming.TokenPostgres, ID: "ghost", Files: []string{"apps/api/src/server.ts"}}}},
+		}, declarations, nil, nil)
+
+		var dangling *DanglingUsageError
+		if !errors.As(err, &dangling) {
+			t.Fatalf("Build err = %v, want a *DanglingUsageError", err)
+		}
+		if dangling.App != "api" || dangling.ID != "ghost" {
+			t.Errorf("err = %+v, want it to name app api and resource ghost", dangling)
+		}
+		if !strings.Contains(err.Error(), "ghost") || !strings.Contains(err.Error(), "api") {
+			t.Errorf("err = %v, want the message to name both", err)
+		}
+	})
+
+	t.Run("no usages leaves the edge list empty", func(t *testing.T) {
+		t.Parallel()
+
+		manifest, err := Build("proj-1", nil, []App{{Name: "api"}}, declarations, nil, nil)
+		if err != nil {
+			t.Fatalf("Build err = %v", err)
+		}
+		if len(manifest.GetUsages()) != 0 {
+			t.Errorf("usages = %v, want none", manifest.GetUsages())
 		}
 	})
 }

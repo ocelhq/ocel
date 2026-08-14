@@ -15,6 +15,7 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/ocelhq/ocel/cli/internal/attribution"
 	"github.com/ocelhq/ocel/cli/internal/clientenv"
 	"github.com/ocelhq/ocel/cli/internal/declare"
 	"github.com/ocelhq/ocel/cli/internal/deploycollector"
@@ -209,6 +210,11 @@ func collectAndBuildManifest(ctx context.Context, d deps, cfg *projectconfig.Con
 		return nil, captured.annotate(err)
 	}
 
+	usages, err := attribution.Compute(cfg.Dir, toAttributionApps(cfg.Apps), toAttributionDeclarations(resources))
+	if err != nil {
+		return nil, err
+	}
+
 	warnings, err := envgate.Lint(gate.Definitions(), envApps(cfg), filepath.Join(cfg.Dir, projectconfig.ConfigFileName))
 	if err != nil {
 		return nil, err
@@ -256,7 +262,7 @@ func collectAndBuildManifest(ctx context.Context, d deps, cfg *projectconfig.Con
 		ui.Diagnostic("no functions to deploy; deploying infrastructure only")
 	}
 
-	return manifestbuilder.Build(cfg.Slug, cfg.Domains, toApps(cfg.Apps), toDeclarations(resources), functions, variablesByApp(variables, functions))
+	return manifestbuilder.Build(cfg.Slug, cfg.Domains, toApps(cfg.Apps, usages), toDeclarations(cfg.Dir, resources), functions, variablesByApp(variables, functions))
 }
 
 const maxCapturedDiscoveryOutput = 4096
@@ -457,7 +463,12 @@ func (v runnerValues) Reveal(ctx context.Context, rows []envgate.Address) (map[e
 	return found, nil
 }
 
-func toApps(apps []projectconfig.App) []manifestbuilder.App {
+func toApps(apps []projectconfig.App, usages []attribution.Usage) []manifestbuilder.App {
+	byApp := make(map[string][]manifestbuilder.Usage, len(apps))
+	for _, u := range usages {
+		byApp[u.App] = append(byApp[u.App], manifestbuilder.Usage{Type: u.Type, ID: u.ID, Files: u.Files})
+	}
+
 	out := make([]manifestbuilder.App, 0, len(apps))
 	for _, a := range apps {
 		out = append(out, manifestbuilder.App{
@@ -465,7 +476,16 @@ func toApps(apps []projectconfig.App) []manifestbuilder.App {
 			Framework: a.Framework,
 			Domains:   a.Domains,
 			Folder:    a.Folder,
+			Usages:    byApp[a.Name],
 		})
+	}
+	return out
+}
+
+func toAttributionApps(apps []projectconfig.App) []attribution.App {
+	out := make([]attribution.App, 0, len(apps))
+	for _, a := range apps {
+		out = append(out, attribution.App{Name: a.Name, Path: a.Path})
 	}
 	return out
 }
@@ -537,15 +557,25 @@ func confirmDeploy(ctx context.Context, slug, providerPackage string, knownSlugs
 	return confirmYN(ctx, "Continue?", stdout, stdin)
 }
 
-func toDeclarations(resources []declare.Resource) []manifestbuilder.Declaration {
+func toDeclarations(configDir string, resources []declare.Resource) []manifestbuilder.Declaration {
 	decls := make([]manifestbuilder.Declaration, len(resources))
 	for i, r := range resources {
+		source, _ := attribution.DeclaringFile(configDir, r.Stack)
 		decls[i] = manifestbuilder.Declaration{
 			Type:     r.Type,
 			ID:       r.Name,
 			Postgres: r.Postgres,
 			Bucket:   r.Bucket,
+			Source:   source,
 		}
+	}
+	return decls
+}
+
+func toAttributionDeclarations(resources []declare.Resource) []attribution.Declaration {
+	decls := make([]attribution.Declaration, len(resources))
+	for i, r := range resources {
+		decls[i] = attribution.Declaration{Type: r.Type, ID: r.Name, Stack: r.Stack}
 	}
 	return decls
 }

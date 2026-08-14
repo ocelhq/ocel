@@ -12,6 +12,7 @@ type Resource struct {
 	Type     string
 	Postgres *resourcesv1.PostgresConfig
 	Bucket   *resourcesv1.BucketConfig
+	Stack    string
 }
 
 func Parse(req *resourcesv1.DeclareRequest) (Resource, error) {
@@ -25,5 +26,6 @@ func Parse(req *resourcesv1.DeclareRequest) (Resource, error) {
 		Type:     id.GetType(),
 		Postgres: req.GetPostgres(),
 		Bucket:   req.GetBucket(),
+		Stack:    req.GetStack(),
 	}, nil
 }
