@@ -136,7 +136,7 @@ func runLeader(ctx context.Context, d deps, role election.Result, creds credenti
 	if err != nil {
 		return err
 	}
-	return waitExitError(child.wait())
+	return appExitError(ctx, child.wait())
 }
 
 func resolveOnce(ctx context.Context, srv *devserver.Server, cfg *projectconfig.Config, projectEnv map[string]string, stdout, stderr io.Writer) (map[string]string, error) {
@@ -246,10 +246,7 @@ func runFollower(ctx context.Context, d deps, leaderAddr string, appArgs []strin
 	for {
 		select {
 		case err := <-child.err:
-			if ctx.Err() != nil {
-				return nil
-			}
-			return waitExitError(err)
+			return appExitError(ctx, err)
 		case env := <-updates:
 			child.stop()
 			child, err = startFollowerChild(ctx, d, appArgs, env, stdin, stdout, stderr)
@@ -259,7 +256,7 @@ func runFollower(ctx context.Context, d deps, leaderAddr string, appArgs []strin
 		case <-streamDone:
 			child.stop()
 			if ctx.Err() != nil {
-				return nil
+				return &ExitError{Code: interruptExitCode}
 			}
 			fmt.Fprintln(stderr, "Leader disconnected. Restart `ocel dev` in the leader's terminal, then re-run this command.")
 			return &ExitError{Code: 1}
@@ -276,13 +273,20 @@ func startFollowerChild(ctx context.Context, d deps, appArgs []string, env map[s
 	return spawnAppChild(ctx, appCmd, stdin, d.stdinIsTerminal(stdin))
 }
 
+func appExitError(ctx context.Context, err error) error {
+	if ctx.Err() != nil {
+		return &ExitError{Code: interruptExitCode}
+	}
+	return waitExitError(err)
+}
+
 func waitExitError(err error) error {
 	if err == nil {
 		return nil
 	}
 	var exitErr *exec.ExitError
 	if errors.As(err, &exitErr) {
-		return &ExitError{Code: exitErr.ExitCode()}
+		return &ExitError{Code: appExitCode(exitErr)}
 	}
 	return err
 }

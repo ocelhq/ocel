@@ -3,7 +3,10 @@ package cli
 import (
 	"bytes"
 	"context"
+	"errors"
+	"fmt"
 	"os"
+	"os/exec"
 	"strings"
 	"sync"
 	"testing"
@@ -169,6 +172,69 @@ func TestInterruptHandlerStopIsSafeToCallTwice(t *testing.T) {
 
 	stop()
 	stop()
+}
+
+func TestExitCodeMapsExitError(t *testing.T) {
+	t.Parallel()
+
+	code, ok := ExitCode(fmt.Errorf("build failed: %w", &ExitError{Code: 7}))
+	if !ok || code != 7 {
+		t.Errorf("ExitCode = (%d, %v), want (7, true)", code, ok)
+	}
+}
+
+func TestExitCodeMapsCancellationToInterrupt(t *testing.T) {
+	t.Parallel()
+
+	code, ok := ExitCode(fmt.Errorf("read ocel.config.ts: %w", context.Canceled))
+	if !ok || code != interruptExitCode {
+		t.Errorf("ExitCode = (%d, %v), want (%d, true)", code, ok, interruptExitCode)
+	}
+}
+
+func TestExitCodeLeavesOrdinaryErrorsAlone(t *testing.T) {
+	t.Parallel()
+
+	if code, ok := ExitCode(errors.New("boom")); ok {
+		t.Errorf("ExitCode = (%d, true), want no mapping so the error is printed and reported as 1", code)
+	}
+	if code, ok := ExitCode(context.DeadlineExceeded); ok {
+		t.Errorf("ExitCode = (%d, true), want a timeout not to look like a Ctrl-C", code)
+	}
+	if code, ok := ExitCode(nil); ok {
+		t.Errorf("ExitCode = (%d, true), want no mapping for a nil error", code)
+	}
+}
+
+func TestAppExitErrorReportsInterruptWhenCancelled(t *testing.T) {
+	t.Parallel()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	for _, err := range []error{nil, context.Canceled, &ExitError{Code: 255}} {
+		got := appExitError(ctx, err)
+		var exitErr *ExitError
+		if !errors.As(got, &exitErr) || exitErr.Code != interruptExitCode {
+			t.Errorf("appExitError(cancelled, %v) = %v, want *ExitError with code %d", err, got, interruptExitCode)
+		}
+	}
+}
+
+func TestAppExitErrorKeepsTheAppsCodeWhenNotCancelled(t *testing.T) {
+	t.Parallel()
+
+	cmd := exec.Command("sh", "-c", "exit 3")
+	waitErr := cmd.Run()
+
+	got := appExitError(context.Background(), waitErr)
+	var exitErr *ExitError
+	if !errors.As(got, &exitErr) || exitErr.Code != 3 {
+		t.Fatalf("appExitError = %v, want *ExitError with code 3", got)
+	}
+	if got := appExitError(context.Background(), nil); got != nil {
+		t.Errorf("appExitError(nil) = %v, want nil", got)
+	}
 }
 
 func waitFor(cond func() bool, timeout time.Duration) bool {

@@ -11,3 +11,7 @@ func terminateAppTree(cmd *exec.Cmd) error {
 func killAppTree(cmd *exec.Cmd) error {
 	return killProcessGroup(cmd)
 }
+
+func appExitCode(err *exec.ExitError) int {
+	return err.ExitCode()
+}
