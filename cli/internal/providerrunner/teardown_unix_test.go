@@ -118,10 +118,6 @@ func TestTeardownBound(t *testing.T) {
 
 		grandchildPid := readGrandchildPid(t, pidFile)
 
-		// Kill only the leader, the way a real provider exits on its own
-		// once it decides it is done, without ever calling Close(). If the
-		// grandchild only got swept from teardown() (i.e. from Close()),
-		// it would still be alive at this point.
 		if err := syscall.Kill(r.cmd.Process.Pid, syscall.SIGTERM); err != nil {
 			t.Fatalf("kill leader: %v", err)
 		}
@@ -131,13 +127,6 @@ func TestTeardownBound(t *testing.T) {
 		case <-time.After(2 * time.Second):
 			t.Fatal("provider was never reaped")
 		}
-		// The waiter goroutine sweeps the group in the same breath it
-		// reaps the leader, so the grandchild must already be dead here —
-		// teardown() (which only runs from Close()) never got involved.
-		// This is what makes it safe for Close() to be deferred to the end
-		// of a session that can run for minutes after the provider itself
-		// exited: by then the group has long since been swept at the one
-		// instant its pgid was guaranteed not to have been recycled.
 		assertProcessDead(t, grandchildPid)
 
 		start := time.Now()
