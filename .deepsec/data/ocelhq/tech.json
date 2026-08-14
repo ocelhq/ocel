@@ -1,0 +1,11 @@
+{
+  "tags": [
+    "github-actions",
+    "node"
+  ],
+  "sentinels": [
+    "package.json"
+  ],
+  "detectedAt": "2026-08-14T00:14:01.216Z",
+  "rootPath": "/home/vndaba/Dev/ocelhq"
+}
