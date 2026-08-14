@@ -752,15 +752,25 @@ function repairPrefixCollidedQuery(result: RouteResult): void {
   }
 }
 
+function decodedPathname(pathname: string): string | undefined {
+  try {
+    return decodeURIComponent(pathname);
+  } catch {
+    return undefined;
+  }
+}
+
 function preferExactPathname(result: RouteResult, manifest: Manifest): RouteResult {
   const target = result.invocationTarget?.pathname;
-  if (
-    result.resolvedPathname &&
-    target !== undefined &&
-    target !== result.resolvedPathname &&
-    manifest.pathnames.includes(target)
-  ) {
-    return { ...result, resolvedPathname: target };
+  if (!result.resolvedPathname || target === undefined) return result;
+  for (const candidate of [target, decodedPathname(target)]) {
+    if (
+      candidate !== undefined &&
+      candidate !== result.resolvedPathname &&
+      manifest.pathnames.includes(candidate)
+    ) {
+      return { ...result, resolvedPathname: candidate };
+    }
   }
   return result;
 }
