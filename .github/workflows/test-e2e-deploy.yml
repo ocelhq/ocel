@@ -18,7 +18,6 @@ concurrency:
 
 env:
   BASELINE_MANIFEST: test/ocel-deploy-tests-manifest.json
-  UPSTREAM_MANIFEST: test/deploy-tests-manifest.json
   ADAPTER_BASELINE: scripts/e2e-next/baseline-manifest.json
   NODE_VERSION: "22"
   PNPM_VERSION: "11.10.0"
@@ -299,6 +298,7 @@ jobs:
       AWS_REGION: ${{ vars.E2E_AWS_REGION }}
       CLOUDFLARE_ACCOUNT_ID: ${{ secrets.E2E_CLOUDFLARE_ACCOUNT_ID }}
       CLOUDFLARE_API_TOKEN: ${{ secrets.E2E_CLOUDFLARE_API_TOKEN }}
+      TESTS_FILTERS: ${{ inputs.recordBaseline && 'test/deploy-tests-manifest.json' || 'test/deploy-tests-manifest.json,test/ocel-deploy-tests-manifest.json' }}
     strategy:
       fail-fast: false
       matrix:
@@ -363,6 +363,9 @@ jobs:
         if: ${{ !inputs.recordBaseline }}
         run: cp "adapter/$ADAPTER_BASELINE" "nextjs/$BASELINE_MANIFEST"
 
+      - name: Assert the manifest chain puts the same suites in scope the baseline assumes
+        run: node adapter/scripts/e2e-next/assert-filter-scope.mjs nextjs "$TESTS_FILTERS"
+
       - name: Run deploy tests
         working-directory: nextjs
         env:
@@ -373,7 +376,7 @@ jobs:
           NEXT_TEST_JOB: 1
           NEXT_TELEMETRY_DISABLED: 1
           NEXT_TEST_CI: 1
-          NEXT_EXTERNAL_TESTS_FILTERS: ${{ inputs.recordBaseline && env.UPSTREAM_MANIFEST || format('{0},{1}', env.UPSTREAM_MANIFEST, env.BASELINE_MANIFEST) }}
+          NEXT_EXTERNAL_TESTS_FILTERS: ${{ env.TESTS_FILTERS }}
           NEXT_TEST_EMIT_ALL_OUTPUT: ${{ inputs.recordBaseline && '1' || '' }}
 
           ADAPTER_DIR: ${{ github.workspace }}/adapter
