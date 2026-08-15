@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"maps"
+	"reflect"
 	"slices"
 	"strings"
 	"testing"
@@ -81,21 +83,24 @@ func TestLinkValues(t *testing.T) {
 		}
 	})
 
-	t.Run("the bucket payload leaves the address behind", func(t *testing.T) {
+	t.Run("the bucket record names its type and leaves the address behind", func(t *testing.T) {
 		t.Parallel()
 		got, err := linkValues(linkedManifest(), provisionedLinks())
 		if err != nil {
 			t.Fatalf("linkValues: %v", err)
 		}
-		var payload map[string]string
-		if err := json.Unmarshal([]byte(got[1].Value), &payload); err != nil {
-			t.Fatalf("bucket payload is not JSON: %v", err)
+		var published live.Record
+		if err := json.Unmarshal([]byte(got[1].Value), &published); err != nil {
+			t.Fatalf("bucket record is not JSON: %v", err)
 		}
-		if _, ok := payload["address"]; ok {
-			t.Errorf("bucket payload = %s, want the runtime address ambient rather than in the property bag", got[1].Value)
+		if published.Type != naming.TokenBucket {
+			t.Errorf("record type = %q, want the publisher's own token so a consumer can tell what it was handed", published.Type)
 		}
-		if payload["bucket"] != "shop-uploads-abc123" {
-			t.Errorf("bucket = %q, want the provisioned bucket", payload["bucket"])
+		if _, ok := published.Properties["address"]; ok {
+			t.Errorf("bucket record = %s, want the runtime address ambient rather than in the property bag", got[1].Value)
+		}
+		if published.Properties["bucket"] != "shop-uploads-abc123" {
+			t.Errorf("bucket = %q, want the provisioned bucket", published.Properties["bucket"])
 		}
 	})
 
@@ -172,11 +177,41 @@ func TestManifestLinks(t *testing.T) {
 	t.Parallel()
 	got := manifestLinks(linkedManifest())
 	want := []live.Link{
-		{Name: "db--main", Key: "OCEL_RESOURCE_POSTGRES_main"},
-		{Name: "bucket--uploads", Key: "OCEL_RESOURCE_BUCKET_uploads"},
+		{Name: "db--main", Key: "OCEL_RESOURCE_POSTGRES_main", Type: naming.TokenPostgres, Properties: []string{"connectionString"}},
+		{Name: "bucket--uploads", Key: "OCEL_RESOURCE_BUCKET_uploads", Type: naming.TokenBucket, Properties: []string{"bucket"}},
 	}
-	if !slices.Equal(got, want) {
-		t.Errorf("manifestLinks = %+v, want %+v — the addresses come from the manifest, before anything is provisioned", got, want)
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("manifestLinks = %+v, want %+v — the addresses and the shape this app was built to read come from the manifest, before anything is provisioned", got, want)
+	}
+}
+
+func TestPublishedRecordsMeetWhatTheManifestDeclares(t *testing.T) {
+	t.Parallel()
+	values, err := linkValues(linkedManifest(), provisionedLinks())
+	if err != nil {
+		t.Fatalf("linkValues: %v", err)
+	}
+
+	published := make(map[string]string, len(values))
+	for _, v := range values {
+		published[v.Key] = v.Value
+	}
+
+	links := manifestLinks(linkedManifest())
+	conformed, err := live.Conform(links, published)
+	if err != nil {
+		t.Fatalf("what this deploy publishes drifts from what it tells the app to expect: %v", err)
+	}
+	for _, l := range links {
+		var properties map[string]string
+		if err := json.Unmarshal([]byte(conformed[l.Key]), &properties); err != nil {
+			t.Fatalf("link %s conformed to %q, which no app can parse: %v", l.Name, conformed[l.Key], err)
+		}
+		for _, want := range l.Properties {
+			if properties[want] == "" {
+				t.Errorf("link %s delivers %v, which carries no %q", l.Name, properties, want)
+			}
+		}
 	}
 }
 
@@ -206,6 +241,42 @@ func TestLinkedAppRendersNoCredential(t *testing.T) {
 	if want := []string{"bucket--uploads", "db--main"}; !slices.Equal(bundle.Links, want) {
 		t.Errorf("bundle.Links = %v, want %v so the role can be scoped to them", bundle.Links, want)
 	}
+
+	env := map[string]string{runtimeAddressEnv: deferredRuntimeAddress}
+	maps.Copy(env, variableEnv(app))
+	maps.Copy(env, bundle.env())
+	for _, published := range publishedProperties(t) {
+		for key, value := range env {
+			if strings.Contains(value, published) {
+				t.Errorf("%s = %q, which carries a published link value; a link value is read live, never written into the function configuration", key, value)
+			}
+		}
+		if strings.Contains(string(bundle.Live), published) {
+			t.Errorf("the packaged manifest carries %q; the artifact carries the address and never the value", published)
+		}
+	}
+}
+
+func publishedProperties(t *testing.T) []string {
+	t.Helper()
+	values, err := linkValues(linkedManifest(), provisionedLinks())
+	if err != nil {
+		t.Fatalf("linkValues: %v", err)
+	}
+	var out []string
+	for _, v := range values {
+		var r live.Record
+		if err := json.Unmarshal([]byte(v.Value), &r); err != nil {
+			t.Fatalf("link %s published %q, which is not a record: %v", v.Link, v.Value, err)
+		}
+		for _, property := range r.Properties {
+			out = append(out, property)
+		}
+	}
+	if len(out) == 0 {
+		t.Fatal("the links published nothing, so nothing was proven about what stays out of the artifact")
+	}
+	return out
 }
 
 func TestVarsReadPolicyScopesEachLink(t *testing.T) {

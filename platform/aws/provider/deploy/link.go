@@ -16,13 +16,21 @@ type LinkPublisher interface {
 	PublishLinks(ctx context.Context, slug, environment string, links []vars.LinkValue) (int, error)
 }
 
+var linkRecordShape = map[string][]string{
+	naming.TokenPostgres: {"connectionString"},
+	naming.TokenBucket:   {"bucket"},
+}
+
 func manifestLinks(manifest *deploymentsv1.Manifest) []live.Link {
 	resources := manifest.GetResources()
 	out := make([]live.Link, 0, len(resources))
 	for _, r := range resources {
+		token := r.GetResource().GetType()
 		out = append(out, live.Link{
-			Name: r.GetLogicalName(),
-			Key:  functionEnvKey(r.GetResource().GetType(), r.GetResource().GetName()),
+			Name:       r.GetLogicalName(),
+			Key:        functionEnvKey(token, r.GetResource().GetName()),
+			Type:       token,
+			Properties: linkRecordShape[token],
 		})
 	}
 	return out
@@ -55,17 +63,20 @@ func linkValues(manifest *deploymentsv1.Manifest, links []*linksv1.Link) ([]vars
 
 func linkPayload(link *linksv1.Link) (string, error) {
 	p := link.GetProperties()
+	var properties map[string]string
 	switch link.GetType() {
 	case naming.TokenPostgres:
 		port, err := strconv.Atoi(p["port"])
 		if err != nil {
 			return "", fmt.Errorf("link %s reports port %q, which is not a number", link.GetName(), p["port"])
 		}
-		return postgresEnvPayload(p["username"], p["password"], p["host"], port, p["database"]), nil
+		properties = postgresRecordProperties(p["username"], p["password"], p["host"], port, p["database"])
 	case naming.TokenBucket:
-		return bucketEnvPayload(p["bucket"]), nil
+		properties = bucketRecordProperties(p["bucket"])
+	default:
+		return "", fmt.Errorf("link %s is a %s, a type this provider ships no client for", link.GetName(), link.GetType())
 	}
-	return "", fmt.Errorf("link %s is a %s, a type this provider ships no client for", link.GetName(), link.GetType())
+	return live.EncodeRecord(live.Record{Type: link.GetType(), Properties: properties}), nil
 }
 
 func publishLinkValues(ctx context.Context, cfg Config, manifest *deploymentsv1.Manifest, links []*linksv1.Link) error {

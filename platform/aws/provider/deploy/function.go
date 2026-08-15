@@ -269,17 +269,15 @@ func functionEnvKey(token, id string) string {
 	return fmt.Sprintf("OCEL_RESOURCE_%s_%s", naming.EnvFragment(token), id)
 }
 
-func postgresEnvPayload(username, password, host string, port int, database string) string {
+func postgresRecordProperties(username, password, host string, port int, database string) map[string]string {
 	conn := fmt.Sprintf("postgres://%s:%s@%s:%d/%s", username, password, host, port, database)
-	b, _ := json.Marshal(map[string]string{"connectionString": conn})
-	return string(b)
+	return map[string]string{"connectionString": conn}
 }
 
 const runtimeAddressEnv = "OCEL_RUNTIME_ADDRESS"
 
-func bucketEnvPayload(bucket string) string {
-	b, _ := json.Marshal(map[string]string{"bucket": bucket})
-	return string(b)
+func bucketRecordProperties(bucket string) map[string]string {
+	return map[string]string{"bucket": bucket}
 }
 
 func artifactArchivePath(root, artifactPath string) string {
