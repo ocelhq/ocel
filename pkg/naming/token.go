@@ -1,6 +1,10 @@
 package naming
 
-import "strings"
+import (
+	"maps"
+	"slices"
+	"strings"
+)
 
 const (
 	TokenNamespace = "ocel:"
@@ -12,6 +16,10 @@ const (
 var tokenKinds = map[string]Kind{
 	TokenPostgres: KindDatabase,
 	TokenBucket:   KindBucket,
+}
+
+func Tokens() []string {
+	return slices.Sorted(maps.Keys(tokenKinds))
 }
 
 func TokenKind(token string) (Kind, bool) {
