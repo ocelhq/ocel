@@ -57,6 +57,9 @@ func realize(ctx context.Context, cfg Config, manifest *deploymentsv1.Manifest, 
 	if err := validateTag(cfg.Tag); err != nil {
 		return Result{}, finishUploading(err)
 	}
+	if err := checkInlinePolicyBudget(manifest); err != nil {
+		return Result{}, finishUploading(err)
+	}
 	if err := checkTagAvailable(ctx, stack, cfg.RootStackState, cfg.Tag); err != nil {
 		return Result{}, finishUploading(err)
 	}
@@ -143,6 +146,9 @@ func realize(ctx context.Context, cfg Config, manifest *deploymentsv1.Manifest, 
 			return Result{RootStackState: state}, finishProvisioning(err)
 		}
 	}
+	if err := checkLinkGrants(links); err != nil {
+		return Result{RootStackState: state}, finishProvisioning(err)
+	}
 	if err := publishLinkValues(ctx, cfg, manifest, links); err != nil {
 		return Result{RootStackState: state}, finishProvisioning(err)
 	}
@@ -153,7 +159,7 @@ func realize(ctx context.Context, cfg Config, manifest *deploymentsv1.Manifest, 
 	appFunctionNames := make([]map[string]string, len(apps))
 	runAppStacks(apps, func(i int, app *deploymentsv1.ManifestApp) {
 		id := identities[app.GetName()]
-		outs, names, err := runAppStack(ctx, cfg, manifest, plan, app, id, artifacts, baked[app.GetName()], builds, appStages[app.GetName()], log)
+		outs, names, err := runAppStack(ctx, cfg, manifest, plan, app, id, artifacts, baked[app.GetName()], builds, links, appStages[app.GetName()], log)
 		appOutputs[i] = outs
 		appFunctionNames[i] = names
 		record, recErr := buildDeploymentRecord(cfg, manifest, app, id, outs, builds)
@@ -744,7 +750,7 @@ func runInfraStack(ctx context.Context, cfg Config, manifest *deploymentsv1.Mani
 	return collectLinks(ctx, cfg.Secrets, manifest, res.Outputs)
 }
 
-func runAppStack(ctx context.Context, cfg Config, manifest *deploymentsv1.Manifest, plan Plan, app *deploymentsv1.ManifestApp, id Identity, artifacts map[string]artifactRef, baked appBundle, builds appBuilds, stage Stage, log func(string)) (outs []*deploymentsv1.FunctionOutput, names map[string]string, err error) {
+func runAppStack(ctx context.Context, cfg Config, manifest *deploymentsv1.Manifest, plan Plan, app *deploymentsv1.ManifestApp, id Identity, artifacts map[string]artifactRef, baked appBundle, builds appBuilds, links []*linksv1.Link, stage Stage, log func(string)) (outs []*deploymentsv1.FunctionOutput, names map[string]string, err error) {
 	start := time.Now()
 	defer func() { spanForStage(cfg.Tracer, stage, start, time.Now(), err) }()
 
@@ -767,6 +773,11 @@ func runAppStack(ctx context.Context, cfg Config, manifest *deploymentsv1.Manife
 		}
 	}
 
+	policies, err := appLinkPolicies(manifest, name, links)
+	if err != nil {
+		return nil, nil, err
+	}
+
 	stack := plan.AppStacks[name]
 	project := naming.Sanitize(manifest.GetSlug())
 
@@ -778,7 +789,7 @@ func runAppStack(ctx context.Context, cfg Config, manifest *deploymentsv1.Manife
 	}
 
 	program := func(pctx *pulumi.Context) error {
-		role, err := newFunctionRole(pctx, roleCoordinate(project, stack), appExecutionRole(cfg, name, caches, bytecode, baked, roleTags))
+		role, err := newFunctionRole(pctx, roleCoordinate(project, stack), appExecutionRole(cfg, name, caches, bytecode, baked, roleTags, policies))
 		if err != nil {
 			return err
 		}
