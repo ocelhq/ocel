@@ -43,6 +43,7 @@ function deps(overrides: Partial<RouteDeps> = {}): RouteDeps {
     },
     functionUrls: {},
     slug: "p1",
+    deploymentId: "d1",
     app: "web",
     assetStore: assetStoreServing({}),
     ...overrides,

@@ -367,6 +367,7 @@ function imageDeps(overrides: Partial<RouteDeps> = {}): RouteDeps {
     },
     functionUrls: {},
     slug: "p1",
+    deploymentId: "d1",
     app: "web",
     assetStore: assetStoreServing({ "/404.html": "<h1>not found</h1>" }),
     ...overrides,

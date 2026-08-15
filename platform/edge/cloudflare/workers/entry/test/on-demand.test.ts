@@ -64,6 +64,7 @@ function deps(served: ReturnType<typeof origin>, store: ReturnType<typeof colo>)
     },
     functionUrls: { "/blog": "https://fn.example.com" },
     slug: "p1",
+    deploymentId: "d1",
     app: "web",
     assetStore: noAssets(),
     fetch: served.fetch,

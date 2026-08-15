@@ -277,6 +277,7 @@ export interface RouteDeps {
   functionUrls: Record<string, string>;
   slug: string;
   app: string;
+  deploymentId: string;
   assetStore: AssetStoreDeps;
   fetch?: typeof fetch;
 
@@ -312,6 +313,7 @@ export type ResolveBase = Omit<
   | "edge"
   | "slug"
   | "app"
+  | "deploymentId"
 > & {
   interception?: Pick<InterceptDeps, "store" | "snapshotCache" | "now" | "waitUntil">;
   assetStore: Omit<AssetStoreDeps, "assetPrefix">;
@@ -402,6 +404,7 @@ function routedDeps(
     ...rest,
     slug: deployments.slug,
     app: deployments.app ?? record.app,
+    deploymentId: record.deploymentId,
     edge:
       edgeRuntime && edgeWorkers
         ? createEdgeInvoker(
@@ -1339,6 +1342,7 @@ async function dispatchPrerender(
 
   const routePath = result.routePath ?? result.resolvedPathname ?? url.pathname;
   const keyResult = cacheKey(
+    deps.deploymentId,
     deps.manifest.buildId,
     url.pathname,
     url,
@@ -1346,7 +1350,7 @@ async function dispatchPrerender(
     target.config.renderingMode,
     target.allowQuery,
   );
-  const refreshKey = `${deps.manifest.buildId}:${routePath}`;
+  const refreshKey = `${deps.deploymentId}/${deps.manifest.buildId}:${routePath}`;
 
   const publicUrl = new URL(request.url);
   const revalidation: RevalidationRoute | undefined =

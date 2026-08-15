@@ -160,6 +160,7 @@ export function asSegmentPayload(response: Response): Response {
 }
 
 export function cacheKey(
+  deploymentId: string,
   buildId: string,
   pathname: string,
   url: URL,
@@ -170,7 +171,7 @@ export function cacheKey(
   const variant = variantPath(pathname, headers, renderingMode);
   if (variant === null) return { cacheable: false };
 
-  const key = new URL(`https://cache.ocel/${buildId}${variant}`);
+  const key = new URL(`https://cache.ocel/${deploymentId}/${buildId}${variant}`);
   const names = (allowQuery ?? [...url.searchParams.keys()]).filter(
     (name) => name !== "_rsc",
   );

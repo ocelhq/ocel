@@ -125,6 +125,7 @@ function deps(scenario: Scenario): RouteDeps {
   const basePath = scenario.basePath ?? "";
   const pages = scenario.pages ?? [];
   return {
+    deploymentId: "d1",
     manifest: {
       buildId: "t",
       basePath,
@@ -617,7 +618,7 @@ describe("the resolved path is what keys the response", () => {
       expect(follow.headers.get("x-ocel-cache")).toBe("HIT");
       expect(await follow.text()).toBe("prerendered");
       expect(renders()).toBe(1);
-      expect(keys()).toEqual(["https://cache.ocel/t/p"]);
+      expect(keys()).toEqual(["https://cache.ocel/d1/t/p"]);
     });
 
     it("gives both served forms one key under skipTrailingSlashRedirect", async () => {
@@ -632,7 +633,7 @@ describe("the resolved path is what keys the response", () => {
       expect(second.headers.get("x-ocel-cache")).toBe("HIT");
       expect(await second.text()).toBe("prerendered");
       expect(renders()).toBe(1);
-      expect(keys()).toEqual(["https://cache.ocel/t/p"]);
+      expect(keys()).toEqual(["https://cache.ocel/d1/t/p"]);
     });
   });
 

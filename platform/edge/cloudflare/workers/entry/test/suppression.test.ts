@@ -85,6 +85,7 @@ function blogDeps(
     },
     functionUrls: { "/blog": "https://fn.example.com" },
     slug: "p1",
+    deploymentId: "d1",
     app: "web",
     assetStore: noAssets(),
     fetch: origin.fetch,

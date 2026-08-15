@@ -7,6 +7,7 @@ function makeRecord(over: Partial<DeploymentRecord> = {}): DeploymentRecord {
   return {
     app: "web",
     framework: "next",
+    deploymentId: "deploy-1",
     buildId: "build-1",
     routingManifest: {
       buildId: "build-1",
@@ -25,14 +26,14 @@ function makeRecord(over: Partial<DeploymentRecord> = {}): DeploymentRecord {
 }
 
 function bindingReturning(
-  buildId: string | undefined,
+  deploymentId: string | undefined,
   record: DeploymentRecord | undefined,
 ): DeploymentsBinding {
   return {
     async pointerRecord() {
-      if (!buildId) return { kind: "no-pointer" };
-      if (!record) return { kind: "dangling", buildId };
-      return { kind: "record", buildId, record };
+      if (!deploymentId) return { kind: "no-pointer" };
+      if (!record) return { kind: "dangling", deploymentId };
+      return { kind: "record", deploymentId, record };
     },
   };
 }
@@ -54,7 +55,7 @@ describe("resolveRouteDeps", () => {
   it("wires the resolved Deployment's manifest and functionUrls into RouteDeps", async () => {
     const record = makeRecord();
     const deps = await resolveRouteDeps(
-      { binding: bindingReturning("build-1", record), app: "web" },
+      { binding: bindingReturning("deploy-1", record), app: "web" },
       { assetStore },
     );
 
@@ -62,12 +63,13 @@ describe("resolveRouteDeps", () => {
     const routeDeps = deps as RouteDeps;
     expect(routeDeps.manifest).toEqual(record.routingManifest);
     expect(routeDeps.functionUrls).toEqual(record.functionUrls);
+    expect(routeDeps.deploymentId).toBe(record.deploymentId);
   });
 
   it("fills the asset store's prefix from the record's asset prefix", async () => {
     const record = makeRecord({ assetPrefix: "assets/p1/web/build-1" });
     const deps = await resolveRouteDeps(
-      { binding: bindingReturning("build-1", record), app: "web" },
+      { binding: bindingReturning("deploy-1", record), app: "web" },
       { assetStore },
     );
 
@@ -79,7 +81,7 @@ describe("resolveRouteDeps", () => {
     const record = makeRecord({ isrPrefix: "prod/p1/web/build-1" });
     const store = { get: async () => null };
     const deps = await resolveRouteDeps(
-      { binding: bindingReturning("build-1", record), app: "web" },
+      { binding: bindingReturning("deploy-1", record), app: "web" },
       { assetStore, interception: { store } },
     );
 
@@ -92,7 +94,7 @@ describe("resolveRouteDeps", () => {
   it("leaves interception undefined when no cache store is bound", async () => {
     const record = makeRecord();
     const deps = await resolveRouteDeps(
-      { binding: bindingReturning("build-1", record), app: "web" },
+      { binding: bindingReturning("deploy-1", record), app: "web" },
       { assetStore },
     );
 
@@ -114,7 +116,7 @@ describe("resolveRouteDeps", () => {
   it("returns 501 for a Deployment that ships no routing manifest", async () => {
     const record = makeRecord({ framework: "express", routingManifest: undefined });
     const deps = await resolveRouteDeps(
-      { binding: bindingReturning("build-1", record), app: "web" },
+      { binding: bindingReturning("deploy-1", record), app: "web" },
       { assetStore },
     );
 

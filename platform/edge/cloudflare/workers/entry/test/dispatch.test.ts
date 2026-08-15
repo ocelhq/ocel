@@ -43,6 +43,7 @@ function baseDeps(overrides: Partial<RouteDeps> = {}): RouteDeps {
     functionUrls: {},
     slug: "p1",
     app: "web",
+    deploymentId: "d1",
     assetStore: noAssets(),
     ...overrides,
   };
@@ -1219,7 +1220,7 @@ describe("dispatchResult", () => {
     await Promise.all(pending);
 
     const sentinelWrites = puts.filter(
-      (put) => put.url === sentinelUrl("t:/blog"),
+      (put) => put.url === sentinelUrl("d1/t:/blog"),
     );
     expect(sentinelWrites.at(-1)?.cacheControl).toBe(
       `max-age=${refreshBackoffSeconds}`,
@@ -1421,7 +1422,7 @@ describe("dispatchResult", () => {
         });
       }) as unknown as typeof fetch,
       cache: coloDeps({
-        cache: coloHoldingSentinel("t:/blog"),
+        cache: coloHoldingSentinel("d1/t:/blog"),
         waitUntil: (p: Promise<unknown>) => {
           pending.push(p);
         },
@@ -1474,7 +1475,7 @@ describe("dispatchResult", () => {
         return new Response("[dynamic]", { status: 200 });
       }) as unknown as typeof fetch,
       cache: coloDeps({
-        cache: coloHoldingSentinel("t:/ppr"),
+        cache: coloHoldingSentinel("d1/t:/ppr"),
         waitUntil: (p: Promise<unknown>) => {
           pending.push(p);
         },
@@ -3896,7 +3897,7 @@ describe("an origin that cannot answer a segment prefetch", () => {
     const second = await prefetch();
 
     expect([...colo.keys()]).toEqual([
-      "https://cache.ocel/t/settings.segments/%2F%24d%24team%2F%24d%24project%2Fsettings.segment.rsc",
+      "https://cache.ocel/d1/t/settings.segments/%2F%24d%24team%2F%24d%24project%2Fsettings.segment.rsc",
     ]);
     expect(second.headers.get("x-ocel-cache")).toBe("HIT");
     expect(await second.text()).toBe("SHELL-OR-SEGMENT");

@@ -314,55 +314,63 @@ describe("cacheKey", () => {
 
   it("scopes the key by buildId so a redeploy misses", () => {
     const url = new URL("https://app.example/blog");
-    const a = cacheKey("build-a", "/blog", url, H(), "STATIC", []);
-    const b = cacheKey("build-b", "/blog", url, H(), "STATIC", []);
-    expect(a).toEqual({ cacheable: true, key: "https://cache.ocel/build-a/blog" });
+    const a = cacheKey("d1", "build-a", "/blog", url, H(), "STATIC", []);
+    const b = cacheKey("d1", "build-b", "/blog", url, H(), "STATIC", []);
+    expect(a).toEqual({ cacheable: true, key: "https://cache.ocel/d1/build-a/blog" });
+    expect(a).not.toEqual(b);
+  });
+
+  it("scopes the key by deployment so two deployments sharing a buildId never collide", () => {
+    const url = new URL("https://app.example/blog");
+    const a = cacheKey("d1", "build-TfctsWXpff2fKS", "/blog", url, H(), "STATIC", []);
+    const b = cacheKey("d2", "build-TfctsWXpff2fKS", "/blog", url, H(), "STATIC", []);
     expect(a).not.toEqual(b);
   });
 
   it("drops query params the route does not allow", () => {
     const url = new URL("https://app.example/blog?page=2&ref=x");
-    expect(cacheKey("b", "/blog", url, H(), "STATIC", [])).toEqual({
+    expect(cacheKey("d1", "b", "/blog", url, H(), "STATIC", [])).toEqual({
       cacheable: true,
-      key: "https://cache.ocel/b/blog",
+      key: "https://cache.ocel/d1/b/blog",
     });
   });
 
   it("keeps allowed query params, normalized by name", () => {
     const url = new URL("https://app.example/blog?b=2&a=1");
-    expect(cacheKey("b", "/blog", url, H(), "STATIC", ["a", "b"])).toEqual({
+    expect(cacheKey("d1", "b", "/blog", url, H(), "STATIC", ["a", "b"])).toEqual({
       cacheable: true,
-      key: "https://cache.ocel/b/blog?a=1&b=2",
+      key: "https://cache.ocel/d1/b/blog?a=1&b=2",
     });
   });
 
   it("strips _rsc from the key even when the route allows all query", () => {
     const url = new URL("https://app.example/blog?_rsc=abc123");
-    expect(cacheKey("b", "/blog", url, H(), "STATIC", undefined)).toEqual({
+    expect(cacheKey("d1", "b", "/blog", url, H(), "STATIC", undefined)).toEqual({
       cacheable: true,
-      key: "https://cache.ocel/b/blog",
+      key: "https://cache.ocel/d1/b/blog",
     });
   });
 
   it("gives an RSC request a different key than the HTML request", () => {
     const url = new URL("https://app.example/blog");
-    const html = cacheKey("b", "/blog", url, H(), "STATIC", []);
-    const rsc = cacheKey("b", "/blog", url, H({ RSC: "1" }), "STATIC", []);
+    const html = cacheKey("d1", "b", "/blog", url, H(), "STATIC", []);
+    const rsc = cacheKey("d1", "b", "/blog", url, H({ RSC: "1" }), "STATIC", []);
     expect(html).not.toEqual(rsc);
   });
 
   it("reports a per-visitor dynamic variant as non-cacheable", () => {
     const url = new URL("https://app.example/blog");
     expect(
-      cacheKey("b", "/blog", url, H({ RSC: "1" }), "PARTIALLY_STATIC", []),
+      cacheKey("d1", "b", "/blog", url, H({ RSC: "1" }), "PARTIALLY_STATIC", []),
     ).toEqual({ cacheable: false });
   });
 
   it("gives an intercepted segment prefetch a different colo key than the same URL without next-url", () => {
     const url = new URL("https://app.example/photo");
     const headers = { RSC: "1", "next-router-segment-prefetch": "/children" };
-    const plain = cacheKey("b", "/photo", url, H(headers), "PARTIALLY_STATIC", []);
+    const plain = cacheKey("d1", "b", "/photo", url, H(headers), "PARTIALLY_STATIC", []);
     const intercepted = cacheKey(
+      "d1",
       "b",
       "/photo",
       url,
