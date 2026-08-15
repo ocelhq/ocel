@@ -869,12 +869,12 @@ describe("serveCached", () => {
       return fn;
     };
 
-    it("from the Lambda is served but not stored", async () => {
+    it("from the Lambda is served but not stored, where we asked it not to revalidate", async () => {
       const clock = { ms: 0 };
       const cache = countingCache();
       const deps = testDeps(clock, cache);
       const origin = lambdaStale();
-      const t = target("lambda-stale");
+      const t = target("lambda-stale", { suppressed: true });
 
       const res = await serveCached(req(), t, deps, origin, origin);
       await deps.flush();
@@ -896,7 +896,11 @@ describe("serveCached", () => {
         response.headers.set("x-ocel-cache", "PRERENDER");
         return response;
       }) as CountingOrigin;
-      const t = target("prerender-stale", { revalidate: 60, expiration: 600 });
+      const t = target("prerender-stale", {
+        revalidate: 60,
+        expiration: 600,
+        suppressed: true,
+      });
 
       await serveCached(req(), t, deps, fromStore, fromStore);
       await deps.flush();
@@ -905,6 +909,54 @@ describe("serveCached", () => {
       const hit = await serveCached(req(), t, deps, fromStore, fromStore);
       expect(hit.headers.get("x-ocel-cache")).toBe("HIT");
       expect(origin.calls).toBe(1);
+    });
+
+    it("of a short-window pages route still converges, refresh after refresh", async () => {
+      const clock = { ms: 0 };
+      const deps = testDeps(clock);
+      let generation = 1;
+      const lambda = (async () =>
+        new Response(`generation ${generation}`, {
+          headers: { "cache-control": "s-maxage=1", "x-nextjs-cache": "STALE" },
+        })) as unknown as CountingOrigin;
+      const t = target("json-data", { revalidate: 1, expiration: 100 });
+
+      await serveCached(req(), t, deps, lambda, lambda);
+      await deps.flush();
+
+      generation = 2;
+      clock.ms = 5_000;
+      await serveCached(req(), t, deps, lambda, lambda);
+      await deps.flush();
+
+      clock.ms = 5_100;
+      const served = await serveCached(req(), t, deps, lambda, lambda);
+      expect(served.headers.get("x-ocel-cache")).toBe("HIT");
+      expect(await served.text()).toBe("generation 2");
+    });
+
+    it("is refused for a route we asked not to revalidate, so it cannot latch", async () => {
+      const clock = { ms: 0 };
+      const deps = testDeps(clock);
+      let generation = 1;
+      const lambda = (async () =>
+        new Response(`generation ${generation}`, {
+          headers: { "cache-control": "s-maxage=1", "x-nextjs-cache": "STALE" },
+        })) as unknown as CountingOrigin;
+      const t = target("json-suppressed", {
+        revalidate: 1,
+        expiration: 100,
+        suppressed: true,
+      });
+
+      await serveCached(req(), t, deps, lambda, lambda);
+      await deps.flush();
+
+      generation = 2;
+      clock.ms = 5_000;
+      const served = await serveCached(req(), t, deps, lambda, lambda);
+      expect(served.headers.get("x-ocel-cache")).toBe("MISS");
+      expect(await served.text()).toBe("generation 2");
     });
 
     it.each(["HIT", "REVALIDATED"])(
@@ -919,7 +971,7 @@ describe("serveCached", () => {
           response.headers.set("x-nextjs-cache", status);
           return response;
         }) as CountingOrigin;
-        const t = target(`lambda-${status}`);
+        const t = target(`lambda-${status}`, { suppressed: true });
 
         await serveCached(req(), t, deps, stamped, stamped);
         await deps.flush();

@@ -42,6 +42,7 @@ export interface CacheTarget {
   expiration?: number;
   revalidation?: RevalidationRoute;
   segment?: boolean;
+  suppressed?: boolean;
 }
 
 export interface CachePolicy {
@@ -245,9 +246,10 @@ interface ColoPolicy {
   forServe(response: Response, status: CacheStatus): Response;
 }
 
-function suppressedStaleServe(response: Response): boolean {
+function suppressedStaleServe(target: CacheTarget, response: Response): boolean {
   return (
     SUPPRESS_SELF_REVALIDATION &&
+    target.suppressed === true &&
     response.headers.get(NEXT_CACHE_STATUS) === "STALE" &&
     response.headers.get(CACHE_STATUS) !== "PRERENDER"
   );
@@ -255,8 +257,7 @@ function suppressedStaleServe(response: Response): boolean {
 
 const prerenderPolicy: ColoPolicy = {
   storable: (response) =>
-    storagePolicy(response.headers.get("cache-control")) !== null &&
-    !suppressedStaleServe(response),
+    storagePolicy(response.headers.get("cache-control")) !== null,
   window: entryWindow,
   forServe: (response, status) => {
     const served = withStatus(response, status);
@@ -321,18 +322,25 @@ function fromStorage(response: Response, stale: boolean): Response {
   return respond(response, headers);
 }
 
+export type StoredFrom = "serve" | "refresh";
+
 async function store(
   keyRequest: Request,
   target: CacheTarget,
   deps: CacheDeps,
   policy: ColoPolicy,
   response: Response,
+  from: StoredFrom,
 ): Promise<void> {
   if (response.status !== 200) {
     response.body?.cancel();
     return;
   }
   if (!policy.storable(response)) {
+    response.body?.cancel();
+    return;
+  }
+  if (from === "serve" && suppressedStaleServe(target, response)) {
     response.body?.cancel();
     return;
   }
@@ -345,7 +353,7 @@ export async function storeInColo(
   deps: CacheDeps,
   response: Response,
 ): Promise<void> {
-  await store(new Request(target.key), target, deps, prerenderPolicy, response);
+  await store(new Request(target.key), target, deps, prerenderPolicy, response, "refresh");
 }
 
 const inFlight = new WeakMap<Cache, Map<string, Promise<unknown>>>();
@@ -522,7 +530,7 @@ async function serveOrAdmitRefresh(
       }
       const response = await originBlocking();
       const outcome = refreshOutcome(response);
-      await store(keyRequest, target, deps, policy, response);
+      await store(keyRequest, target, deps, policy, response, "refresh");
       return outcome;
     };
     if (target.refreshKey) {
@@ -569,7 +577,7 @@ async function colo(
   const pending = origin();
   refreshOnce(deps, target.key, () =>
     pending.then((response) =>
-      store(keyRequest, target, deps, policy, response.clone()),
+      store(keyRequest, target, deps, policy, response.clone(), "serve"),
     ),
   );
   const response = await pending;
