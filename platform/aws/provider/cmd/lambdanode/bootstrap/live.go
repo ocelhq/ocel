@@ -81,6 +81,7 @@ const liveValuesMsgType = "liveValues"
 type liveValues struct {
 	fetcher liveFetcher
 	keys    []string
+	links   []live.Link
 	now     func() time.Time
 
 	failed chan struct{}
@@ -95,11 +96,19 @@ type liveValues struct {
 	refreshing  bool
 }
 
-func newLiveValues(fetcher liveFetcher, keys []string, now func() time.Time) *liveValues {
+func newLiveValues(fetcher liveFetcher, keys []string, links []live.Link, now func() time.Time) *liveValues {
 	if now == nil {
 		now = time.Now
 	}
-	return &liveValues{fetcher: fetcher, keys: keys, now: now, failed: make(chan struct{})}
+	return &liveValues{fetcher: fetcher, keys: keys, links: links, now: now, failed: make(chan struct{})}
+}
+
+func (l *liveValues) resolve(ctx context.Context) (map[string]string, error) {
+	values, err := l.fetcher.fetchLive(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return live.Conform(l.links, values)
 }
 
 const liveKeysEnvVar = "OCEL_LIVE_KEYS"
@@ -119,7 +128,7 @@ func (l *liveValues) start(ctx context.Context) <-chan error {
 	go func() {
 		ctx, cancel := context.WithTimeout(ctx, liveFetchBudget)
 		defer cancel()
-		values, err := l.fetcher.fetchLive(ctx)
+		values, err := l.resolve(ctx)
 		if err != nil {
 			l.mu.Lock()
 			l.failure = err
@@ -184,7 +193,7 @@ func (l *liveValues) refreshIfStale(ctx context.Context) {
 	go func() {
 		ctx, cancel := context.WithTimeout(ctx, liveFetchBudget)
 		defer cancel()
-		values, err := l.fetcher.fetchLive(ctx)
+		values, err := l.resolve(ctx)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "ocel: live value refresh failed, serving the last resolved generation: %v\n", err)
 			l.mu.Lock()
@@ -259,7 +268,7 @@ func resolveLiveValues(ctx context.Context) (*liveValues, error) {
 		slug:  manifest.Slug,
 		cells: manifestCells(manifest),
 		links: manifestLinkCells(manifest),
-	}, manifestKeys(manifest), nil), nil
+	}, manifestKeys(manifest), manifest.Links, nil), nil
 }
 
 func manifestKeys(m live.Manifest) []string {

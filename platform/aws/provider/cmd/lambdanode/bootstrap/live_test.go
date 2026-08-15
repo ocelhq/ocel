@@ -132,7 +132,7 @@ func TestLiveValues(t *testing.T) {
 	t.Run("start kicks the fetch off without waiting on it", func(t *testing.T) {
 		fetcher := &scriptedFetcher{release: make(chan struct{}), results: []fetchResult{{values: map[string]string{"DB_PASSWORD": "hunter2"}}}}
 		out := &sink{}
-		l := newLiveValues(fetcher, []string{"DB_PASSWORD"}, nil)
+		l := newLiveValues(fetcher, []string{"DB_PASSWORD"}, nil, nil)
 		l.attach(out)
 
 		done := l.start(context.Background())
@@ -149,7 +149,7 @@ func TestLiveValues(t *testing.T) {
 
 	t.Run("a generation holding nothing is pushed as an empty map", func(t *testing.T) {
 		out := &sink{}
-		l := newLiveValues(resolves(nil), []string{"DB_PASSWORD"}, nil)
+		l := newLiveValues(resolves(nil), []string{"DB_PASSWORD"}, nil, nil)
 		l.attach(out)
 
 		if err := l.join(l.start(context.Background())); err != nil {
@@ -167,7 +167,7 @@ func TestLiveValues(t *testing.T) {
 
 	t.Run("the first generation is pushed in the shape node decodes", func(t *testing.T) {
 		out := &sink{}
-		l := newLiveValues(resolves(map[string]string{"DB_PASSWORD": "hunter2", "API_KEY": "sk-live"}), []string{"DB_PASSWORD", "API_KEY"}, nil)
+		l := newLiveValues(resolves(map[string]string{"DB_PASSWORD": "hunter2", "API_KEY": "sk-live"}), []string{"DB_PASSWORD", "API_KEY"}, nil, nil)
 		l.attach(out)
 
 		if err := l.join(l.start(context.Background())); err != nil {
@@ -190,7 +190,7 @@ func TestLiveValues(t *testing.T) {
 	})
 
 	t.Run("a generation resolved before node connects is delivered on connect", func(t *testing.T) {
-		l := newLiveValues(resolves(map[string]string{"DB_PASSWORD": "hunter2"}), []string{"DB_PASSWORD"}, nil)
+		l := newLiveValues(resolves(map[string]string{"DB_PASSWORD": "hunter2"}), []string{"DB_PASSWORD"}, nil, nil)
 
 		if err := l.join(l.start(context.Background())); err != nil {
 			t.Fatalf("join: %v", err)
@@ -215,7 +215,7 @@ func TestLiveValues(t *testing.T) {
 		clock := time.Unix(1_700_000_000, 0)
 		fetcher := resolves(map[string]string{"DB_PASSWORD": "hunter2"})
 		out := &sink{}
-		l := newLiveValues(fetcher, []string{"DB_PASSWORD"}, func() time.Time { return clock })
+		l := newLiveValues(fetcher, []string{"DB_PASSWORD"}, nil, func() time.Time { return clock })
 		l.attach(out)
 
 		if err := l.join(l.start(context.Background())); err != nil {
@@ -240,7 +240,7 @@ func TestLiveValues(t *testing.T) {
 			map[string]string{"DB_PASSWORD": "rotated"},
 		)
 		out := &sink{}
-		l := newLiveValues(fetcher, []string{"DB_PASSWORD"}, func() time.Time { return clock })
+		l := newLiveValues(fetcher, []string{"DB_PASSWORD"}, nil, func() time.Time { return clock })
 		l.attach(out)
 
 		if err := l.join(l.start(context.Background())); err != nil {
@@ -274,7 +274,7 @@ func TestLiveValues(t *testing.T) {
 	t.Run("an invocation does not stack refreshes on one already in flight", func(t *testing.T) {
 		clock := time.Unix(1_700_000_000, 0)
 		fetcher := resolves(map[string]string{"DB_PASSWORD": "hunter2"})
-		l := newLiveValues(fetcher, []string{"DB_PASSWORD"}, func() time.Time { return clock })
+		l := newLiveValues(fetcher, []string{"DB_PASSWORD"}, nil, func() time.Time { return clock })
 		l.attach(&sink{})
 
 		if err := l.join(l.start(context.Background())); err != nil {
@@ -293,7 +293,7 @@ func TestLiveValues(t *testing.T) {
 	})
 
 	t.Run("a prefetch that cannot reach the store fails init", func(t *testing.T) {
-		l := newLiveValues(fails(errors.New("dial tcp: connection refused")), []string{"DB_PASSWORD"}, nil)
+		l := newLiveValues(fails(errors.New("dial tcp: connection refused")), []string{"DB_PASSWORD"}, nil, nil)
 		out := &sink{}
 		l.attach(out)
 
@@ -316,7 +316,7 @@ func TestLiveValues(t *testing.T) {
 			{err: errors.New("dial tcp: connection refused")},
 		}}
 		out := &sink{}
-		l := newLiveValues(fetcher, []string{"DB_PASSWORD"}, func() time.Time { return clock })
+		l := newLiveValues(fetcher, []string{"DB_PASSWORD"}, nil, func() time.Time { return clock })
 		l.attach(out)
 
 		if err := l.join(l.start(context.Background())); err != nil {
@@ -341,7 +341,7 @@ func TestLiveValues(t *testing.T) {
 	})
 
 	t.Run("tells node which keys to expect a push for", func(t *testing.T) {
-		l := newLiveValues(resolves(map[string]string{}), []string{"DB_PASSWORD", "SESSION_SECRET"}, nil)
+		l := newLiveValues(resolves(map[string]string{}), []string{"DB_PASSWORD", "SESSION_SECRET"}, nil, nil)
 
 		got := l.declaredEnv()
 		want := []string{"OCEL_LIVE_KEYS=DB_PASSWORD,SESSION_SECRET"}
@@ -353,7 +353,7 @@ func TestLiveValues(t *testing.T) {
 	t.Run("says nothing for a function that declares none", func(t *testing.T) {
 		for name, l := range map[string]*liveValues{
 			"no live manifest at all": nil,
-			"a cache naming no keys":  newLiveValues(resolves(map[string]string{}), nil, nil),
+			"a cache naming no keys":  newLiveValues(resolves(map[string]string{}), nil, nil, nil),
 		} {
 			t.Run(name, func(t *testing.T) {
 				if got := l.declaredEnv(); len(got) != 0 {
@@ -364,11 +364,194 @@ func TestLiveValues(t *testing.T) {
 	})
 }
 
+func record(token string, properties map[string]string) string {
+	return live.EncodeRecord(live.Record{Type: token, Properties: properties})
+}
+
+func postgresLink() live.Link {
+	return live.Link{
+		Name:       "db--main",
+		Key:        "OCEL_RESOURCE_POSTGRES_main",
+		Type:       "ocel:postgres",
+		Properties: []string{"connectionString"},
+	}
+}
+
+func TestLinkColdStart(t *testing.T) {
+	t.Run("a link's value arrives at cold start as the bag the app reads", func(t *testing.T) {
+		link := postgresLink()
+		fetcher := resolves(map[string]string{
+			link.Key:      record(link.Type, map[string]string{"connectionString": "postgres://ocel:s3cr3t@db.host:5432/ocel"}),
+			"DB_PASSWORD": "hunter2",
+		})
+		out := &sink{}
+		l := newLiveValues(fetcher, []string{link.Key, "DB_PASSWORD"}, []live.Link{link}, nil)
+		l.attach(out)
+
+		if err := l.join(l.start(context.Background())); err != nil {
+			t.Fatalf("join: %v", err)
+		}
+
+		msgs := out.messages(t)
+		if len(msgs) != 1 {
+			t.Fatalf("pushed %d messages, want the cold start's generation", len(msgs))
+		}
+		var properties map[string]string
+		if err := json.Unmarshal([]byte(msgs[0].Values[link.Key]), &properties); err != nil {
+			t.Fatalf("the child was handed %q, which it cannot parse: %v", msgs[0].Values[link.Key], err)
+		}
+		if properties["connectionString"] != "postgres://ocel:s3cr3t@db.host:5432/ocel" {
+			t.Errorf("properties = %v, want the published credential", properties)
+		}
+		if _, ok := properties["type"]; ok {
+			t.Errorf("the child was handed %v; the type token is the membrane's to check, not the app's to read", properties)
+		}
+		if msgs[0].Values["DB_PASSWORD"] != "hunter2" {
+			t.Errorf("values = %v, want the user's own secrets delivered alongside", msgs[0].Values)
+		}
+	})
+
+	t.Run("a credential rotated after the deploy is served at the next cold start", func(t *testing.T) {
+		link := postgresLink()
+		fetcher := resolves(
+			map[string]string{link.Key: record(link.Type, map[string]string{"connectionString": "postgres://ocel:old@db.host:5432/ocel"})},
+			map[string]string{link.Key: record(link.Type, map[string]string{"connectionString": "postgres://ocel:rotated@db.host:5432/ocel"})},
+		)
+
+		served := func() string {
+			out := &sink{}
+			l := newLiveValues(fetcher, []string{link.Key}, []live.Link{link}, nil)
+			l.attach(out)
+			if err := l.join(l.start(context.Background())); err != nil {
+				t.Fatalf("join: %v", err)
+			}
+			msgs := out.messages(t)
+			if len(msgs) != 1 {
+				t.Fatalf("pushed %d messages, want the cold start's generation", len(msgs))
+			}
+			return msgs[0].Values[link.Key]
+		}
+
+		first := served()
+		second := served()
+		if !strings.Contains(first, "old") {
+			t.Fatalf("first cold start served %q, want the credential as published", first)
+		}
+		if !strings.Contains(second, "rotated") {
+			t.Errorf("second cold start served %q, want the rotated credential: the artifact never changed, so nothing but a live read can pick it up", second)
+		}
+	})
+
+	t.Run("drift between the published record and this deployment fails cold start", func(t *testing.T) {
+		link := postgresLink()
+		for name, tc := range map[string]struct {
+			values map[string]string
+			names  []string
+		}{
+			"a record published under another type": {
+				values: map[string]string{link.Key: record("sst:aws.Postgres", map[string]string{"connectionString": "postgres://ocel@db.host:5432/ocel"})},
+				names:  []string{"db--main", "sst:aws.Postgres", "ocel:postgres", link.Key},
+			},
+			"a record missing a property this deployment reads": {
+				values: map[string]string{link.Key: record(link.Type, map[string]string{"host": "db.host"})},
+				names:  []string{"db--main", "connectionString", "ocel:postgres", link.Key},
+			},
+			"no record at all": {
+				values: map[string]string{"DB_PASSWORD": "hunter2"},
+				names:  []string{"db--main", link.Key, "ocel:postgres"},
+			},
+			"a value that is not a record": {
+				values: map[string]string{link.Key: "postgres://ocel@db.host:5432/ocel"},
+				names:  []string{"db--main", link.Key},
+			},
+		} {
+			t.Run(name, func(t *testing.T) {
+				out := &sink{}
+				l := newLiveValues(resolves(tc.values), []string{link.Key}, []live.Link{link}, nil)
+				l.attach(out)
+
+				err := l.join(l.start(context.Background()))
+				if err == nil {
+					t.Fatal("join = nil, want a cold start refused rather than an app handed a shape it cannot read")
+				}
+				if !errors.Is(err, live.ErrDrift) {
+					t.Errorf("error = %v, want it named as drift", err)
+				}
+				for _, want := range tc.names {
+					if !strings.Contains(err.Error(), want) {
+						t.Errorf("error = %v, want it to name %q", err, want)
+					}
+				}
+				if msgs := out.messages(t); len(msgs) != 0 {
+					t.Errorf("pushed %+v, want nothing delivered to an app whose links drifted", msgs)
+				}
+			})
+		}
+	})
+
+	t.Run("drift is reported as itself and not as node never starting", func(t *testing.T) {
+		const budget = 5 * time.Second
+		link := postgresLink()
+
+		spawn := func(_ []string, budget time.Duration, _ func(io.Writer), abandon <-chan struct{}) (*Membrane, error) {
+			select {
+			case <-abandon:
+			case <-time.After(budget):
+			}
+			return nil, fmt.Errorf("node did not signal ready within %s", budget)
+		}
+
+		l := newLiveValues(
+			resolves(map[string]string{link.Key: record("sst:aws.Postgres", map[string]string{"connectionString": "postgres://x"})}),
+			[]string{link.Key},
+			[]live.Link{link},
+			nil,
+		)
+
+		_, err := bringUp(spawn, l, l.start(context.Background()), nil, budget)
+		if err == nil {
+			t.Fatal("bringUp = nil, want init refused")
+		}
+		if !strings.Contains(err.Error(), "sst:aws.Postgres") {
+			t.Errorf("error = %v, want the drift named", err)
+		}
+		if strings.Contains(err.Error(), "did not signal ready") {
+			t.Errorf("error = %v, which reports the symptom and buries the cause", err)
+		}
+	})
+
+	t.Run("drift found on a refresh keeps the last good generation serving", func(t *testing.T) {
+		link := postgresLink()
+		clock := time.Unix(1_700_000_000, 0)
+		good := record(link.Type, map[string]string{"connectionString": "postgres://ocel@db.host:5432/ocel"})
+		fetcher := resolves(
+			map[string]string{link.Key: good},
+			map[string]string{link.Key: record("sst:aws.Postgres", map[string]string{"connectionString": "postgres://ocel@db.host:5432/ocel"})},
+		)
+		out := &sink{}
+		l := newLiveValues(fetcher, []string{link.Key}, []live.Link{link}, func() time.Time { return clock })
+		l.attach(out)
+
+		if err := l.join(l.start(context.Background())); err != nil {
+			t.Fatalf("join: %v", err)
+		}
+
+		clock = clock.Add(liveStalenessBound)
+		l.refreshIfStale(context.Background())
+		eventually(t, "the drifting refresh to run", func() bool { return fetcher.count() == 2 })
+
+		consistently(t, "a warm process pushed a generation it could not conform", func() bool { return len(out.messages(t)) == 1 })
+		if msgs := out.messages(t); msgs[0].Values[link.Key] != `{"connectionString":"postgres://ocel@db.host:5432/ocel"}` {
+			t.Errorf("serving %+v, want the last generation that conformed", msgs[0])
+		}
+	})
+}
+
 func TestBringUp(t *testing.T) {
 	t.Run("the spawn runs beside the prefetch rather than behind it", func(t *testing.T) {
 		fetcher := &scriptedFetcher{release: make(chan struct{}), results: []fetchResult{{values: map[string]string{"DB_PASSWORD": "hunter2"}}}}
 		out := &sink{}
-		l := newLiveValues(fetcher, []string{"DB_PASSWORD"}, nil)
+		l := newLiveValues(fetcher, []string{"DB_PASSWORD"}, nil, nil)
 		prefetch := l.start(context.Background())
 
 		spawn := func(_ []string, _ time.Duration, onControl func(io.Writer), _ <-chan struct{}) (*Membrane, error) {
@@ -400,7 +583,7 @@ func TestBringUp(t *testing.T) {
 			return nil, fmt.Errorf("node did not signal ready within %s", budget)
 		}
 
-		l := newLiveValues(fails(errors.New("AccessDeniedException: dynamodb:Query")), []string{"DB_PASSWORD"}, nil)
+		l := newLiveValues(fails(errors.New("AccessDeniedException: dynamodb:Query")), []string{"DB_PASSWORD"}, nil, nil)
 
 		start := time.Now()
 		_, err := bringUp(spawn, l, l.start(context.Background()), nil, budget)
@@ -697,7 +880,7 @@ func TestResolved(t *testing.T) {
 func TestChildEnv(t *testing.T) {
 	t.Run("carries the live declaration beside the delivered class", func(t *testing.T) {
 		bakedEnv := []string{"OCEL_VAR_STRIPE_KEY=sk_baked"}
-		l := newLiveValues(resolves(map[string]string{}), []string{"DB_PASSWORD"}, nil)
+		l := newLiveValues(resolves(map[string]string{}), []string{"DB_PASSWORD"}, nil, nil)
 
 		got := childEnv(bakedEnv, l)
 
@@ -721,7 +904,7 @@ func TestChildEnv(t *testing.T) {
 		l := newLiveValues(resolves(map[string]string{
 			"DB_PASSWORD":    dbPassword,
 			"SESSION_SECRET": sessionSecret,
-		}), []string{"DB_PASSWORD", "SESSION_SECRET"}, nil)
+		}), []string{"DB_PASSWORD", "SESSION_SECRET"}, nil, nil)
 		if err := l.join(l.start(context.Background())); err != nil {
 			t.Fatalf("prefetch: %v", err)
 		}

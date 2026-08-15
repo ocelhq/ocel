@@ -1933,7 +1933,7 @@ func TestBringUpWithBytecode(t *testing.T) {
 	t.Run("rehydrations cost is carved out of startup budget", func(t *testing.T) {
 		const rehydrateCost = 200 * time.Millisecond
 
-		l := newLiveValues(resolves(nil), nil, nil)
+		l := newLiveValues(resolves(nil), nil, nil, nil)
 		bytecodeReady := make(chan *bytecodeResolution, 1)
 		bytecodeReady <- &bytecodeResolution{store: &fakeBytecodeStore{}, bucket: "b", key: "k"}
 
@@ -1958,7 +1958,7 @@ func TestBringUpWithBytecode(t *testing.T) {
 	})
 
 	t.Run("floors the spawn budget", func(t *testing.T) {
-		l := newLiveValues(resolves(nil), nil, nil)
+		l := newLiveValues(resolves(nil), nil, nil, nil)
 		bytecodeReady := make(chan *bytecodeResolution, 1)
 		bytecodeReady <- &bytecodeResolution{store: &fakeBytecodeStore{}, bucket: "b", key: "k"}
 		rehydrate := func(context.Context, *bytecodeResolution) bool { return false }
@@ -1975,7 +1975,7 @@ func TestBringUpWithBytecode(t *testing.T) {
 	})
 
 	t.Run("normal carve out is unaffected by the floor", func(t *testing.T) {
-		l := newLiveValues(resolves(nil), nil, nil)
+		l := newLiveValues(resolves(nil), nil, nil, nil)
 		bytecodeReady := make(chan *bytecodeResolution, 1)
 		bytecodeReady <- &bytecodeResolution{store: &fakeBytecodeStore{}, bucket: "b", key: "k"}
 		rehydrate := func(context.Context, *bytecodeResolution) bool { return false }
@@ -1994,7 +1994,7 @@ func TestBringUpWithBytecode(t *testing.T) {
 	})
 
 	t.Run("a hit disables the upload leg", func(t *testing.T) {
-		l := newLiveValues(resolves(nil), nil, nil)
+		l := newLiveValues(resolves(nil), nil, nil, nil)
 		bytecodeReady := make(chan *bytecodeResolution, 1)
 		bytecodeReady <- &bytecodeResolution{store: &fakeBytecodeStore{}, bucket: "b", key: "k"}
 
@@ -2018,7 +2018,7 @@ func TestBringUpWithBytecode(t *testing.T) {
 	})
 
 	t.Run("a miss attaches the upload leg with the same key", func(t *testing.T) {
-		l := newLiveValues(resolves(nil), nil, nil)
+		l := newLiveValues(resolves(nil), nil, nil, nil)
 		bytecodeReady := make(chan *bytecodeResolution, 1)
 		r := &bytecodeResolution{store: &fakeBytecodeStore{}, bucket: "assets-xyz", key: "ocel/bytecode/my-app/node24.3.1-arm64.tar.gz"}
 		bytecodeReady <- r
@@ -2040,7 +2040,7 @@ func TestBringUpWithBytecode(t *testing.T) {
 	})
 
 	t.Run("nil resolution skips both legs", func(t *testing.T) {
-		l := newLiveValues(resolves(nil), nil, nil)
+		l := newLiveValues(resolves(nil), nil, nil, nil)
 		bytecodeReady := make(chan *bytecodeResolution, 1)
 		bytecodeReady <- nil
 
@@ -2064,7 +2064,7 @@ func TestBringUpWithBytecode(t *testing.T) {
 	})
 
 	t.Run("a resolution that never arrives does not block the spawn", func(t *testing.T) {
-		l := newLiveValues(resolves(nil), nil, nil)
+		l := newLiveValues(resolves(nil), nil, nil, nil)
 		bytecodeReady := make(chan *bytecodeResolution)
 
 		rehydrateCalls := 0
@@ -2106,7 +2106,7 @@ func TestBringUpWithBytecode(t *testing.T) {
 	})
 
 	t.Run("an embedded hit skips the S3 leg", func(t *testing.T) {
-		l := newLiveValues(resolves(nil), nil, nil)
+		l := newLiveValues(resolves(nil), nil, nil, nil)
 		bytecodeReady := make(chan *bytecodeResolution, 1)
 		r := &bytecodeResolution{store: &fakeBytecodeStore{}, bucket: "assets-xyz", key: "ocel/bytecode/my-app/node24.3.1-arm64.tar.gz"}
 		bytecodeReady <- r
@@ -2141,7 +2141,7 @@ func TestBringUpWithBytecode(t *testing.T) {
 	})
 
 	t.Run("no embedded copy falls back to S3", func(t *testing.T) {
-		l := newLiveValues(resolves(nil), nil, nil)
+		l := newLiveValues(resolves(nil), nil, nil, nil)
 		bytecodeReady := make(chan *bytecodeResolution, 1)
 		bytecodeReady <- &bytecodeResolution{store: &fakeBytecodeStore{}, bucket: "b", key: "ocel/bytecode/my-app/node24.3.1-arm64.tar.gz"}
 
@@ -2161,7 +2161,7 @@ func TestBringUpWithBytecode(t *testing.T) {
 	})
 
 	t.Run("miss on both legs reports no source", func(t *testing.T) {
-		l := newLiveValues(resolves(nil), nil, nil)
+		l := newLiveValues(resolves(nil), nil, nil, nil)
 		bytecodeReady := make(chan *bytecodeResolution, 1)
 		bytecodeReady <- &bytecodeResolution{store: &fakeBytecodeStore{}, bucket: "b", key: "k"}
 
@@ -2185,7 +2185,7 @@ func TestBringUpWithBytecode(t *testing.T) {
 	t.Run("a failed embedded attempt leaves the S3 leg the remaining budget", func(t *testing.T) {
 		const embeddedCost = 300 * time.Millisecond
 
-		l := newLiveValues(resolves(nil), nil, nil)
+		l := newLiveValues(resolves(nil), nil, nil, nil)
 		bytecodeReady := make(chan *bytecodeResolution, 1)
 		bytecodeReady <- &bytecodeResolution{store: &fakeBytecodeStore{}, bucket: "b", key: "k"}
 
@@ -2217,7 +2217,7 @@ func TestBringUpWithBytecode(t *testing.T) {
 	})
 
 	t.Run("nil resolution skips the embedded leg too", func(t *testing.T) {
-		l := newLiveValues(resolves(nil), nil, nil)
+		l := newLiveValues(resolves(nil), nil, nil, nil)
 		bytecodeReady := make(chan *bytecodeResolution, 1)
 		bytecodeReady <- nil
 

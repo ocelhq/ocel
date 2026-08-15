@@ -383,34 +383,24 @@ func TestFunctionEnvKey(t *testing.T) {
 	}
 }
 
-func TestPostgresEnvPayload(t *testing.T) {
+func TestPostgresRecordProperties(t *testing.T) {
 	t.Run("matches the SDK connection string shape", func(t *testing.T) {
-		payload := postgresEnvPayload("ocel", "s3cr3t", "db.host", 5432, "ocel")
-		var parsed struct {
-			ConnectionString string `json:"connectionString"`
-		}
-		if err := json.Unmarshal([]byte(payload), &parsed); err != nil {
-			t.Fatalf("payload is not valid JSON: %v", err)
-		}
+		properties := postgresRecordProperties("ocel", "s3cr3t", "db.host", 5432, "ocel")
 		want := "postgres://ocel:s3cr3t@db.host:5432/ocel"
-		if parsed.ConnectionString != want {
-			t.Errorf("connectionString = %q, want %q", parsed.ConnectionString, want)
+		if properties["connectionString"] != want {
+			t.Errorf("connectionString = %q, want %q", properties["connectionString"], want)
 		}
 	})
 }
 
-func TestBucketEnvPayload(t *testing.T) {
+func TestBucketRecordProperties(t *testing.T) {
 	t.Run("carries the bucket binding and nothing ambient", func(t *testing.T) {
-		payload := bucketEnvPayload("my-bucket-abc123")
-		var parsed map[string]string
-		if err := json.Unmarshal([]byte(payload), &parsed); err != nil {
-			t.Fatalf("payload is not valid JSON: %v", err)
+		properties := bucketRecordProperties("my-bucket-abc123")
+		if properties["bucket"] != "my-bucket-abc123" {
+			t.Errorf("bucket = %q, want the provisioned bucket binding", properties["bucket"])
 		}
-		if parsed["bucket"] != "my-bucket-abc123" {
-			t.Errorf("bucket = %q, want the provisioned bucket binding", parsed["bucket"])
-		}
-		if _, ok := parsed["address"]; ok {
-			t.Errorf("payload = %s, want the runtime address read from %s instead of repeated per bucket", payload, runtimeAddressEnv)
+		if _, ok := properties["address"]; ok {
+			t.Errorf("properties = %v, want the runtime address read from %s instead of repeated per bucket", properties, runtimeAddressEnv)
 		}
 	})
 }
