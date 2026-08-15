@@ -7,8 +7,10 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"maps"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -217,11 +219,6 @@ func collectAndBuildManifest(ctx context.Context, d deps, cfg *projectconfig.Con
 		return nil, captured.annotate(err)
 	}
 
-	usages, err := attribution.Compute(cfg.Dir, toAttributionApps(cfg.Apps), toAttributionDeclarations(resources))
-	if err != nil {
-		return nil, err
-	}
-
 	warnings, err := envgate.Lint(gate.Definitions(), envApps(cfg), filepath.Join(cfg.Dir, projectconfig.ConfigFileName))
 	if err != nil {
 		return nil, err
@@ -267,6 +264,15 @@ func collectAndBuildManifest(ctx context.Context, d deps, cfg *projectconfig.Con
 			return nil, nil
 		}
 		ui.Diagnostic("no functions to deploy; deploying infrastructure only")
+	}
+
+	attributionApps, err := toAttributionApps(cfg.Dir, cfg.Apps, functions)
+	if err != nil {
+		return nil, err
+	}
+	usages, err := attribution.Compute(cfg.Dir, attributionApps, toAttributionDeclarations(resources))
+	if err != nil {
+		return nil, err
 	}
 
 	return manifestbuilder.Build(cfg.Slug, cfg.Domains, toApps(cfg.Apps, usages), toDeclarations(cfg.Dir, resources), functions, variablesByApp(variables, functions))
@@ -477,7 +483,9 @@ func toApps(apps []projectconfig.App, usages []attribution.Usage) []manifestbuil
 	}
 
 	out := make([]manifestbuilder.App, 0, len(apps))
+	named := make(map[string]bool, len(apps))
 	for _, a := range apps {
+		named[a.Name] = true
 		out = append(out, manifestbuilder.App{
 			Name:      a.Name,
 			Framework: a.Framework,
@@ -486,15 +494,68 @@ func toApps(apps []projectconfig.App, usages []attribution.Usage) []manifestbuil
 			Usages:    byApp[a.Name],
 		})
 	}
+	for _, name := range slices.Sorted(maps.Keys(byApp)) {
+		if !named[name] {
+			out = append(out, manifestbuilder.App{Name: name, Usages: byApp[name]})
+		}
+	}
 	return out
 }
 
-func toAttributionApps(apps []projectconfig.App) []attribution.App {
+func toAttributionApps(dir string, apps []projectconfig.App, functions []manifestbuilder.Function) ([]attribution.App, error) {
+	detected := detectedApps(functions)
+
+	if len(apps) == 0 {
+		if len(detected) > 1 {
+			return nil, fmt.Errorf(
+				"this project builds %d apps (%s) but names none of them, so ocel cannot tell which source belongs to which and refuses to hand every app every resource: give each one a name and a path under `apps` in %s",
+				len(detected), strings.Join(detected, ", "), projectconfig.ConfigFileName,
+			)
+		}
+		out := make([]attribution.App, 0, len(detected))
+		for _, name := range detected {
+			out = append(out, attribution.App{Name: name, Path: "."})
+		}
+		return out, nil
+	}
+
+	named := make(map[string]bool, len(apps))
 	out := make([]attribution.App, 0, len(apps))
 	for _, a := range apps {
+		if info, err := os.Stat(filepath.Join(dir, a.Path)); err != nil || !info.IsDir() {
+			return nil, fmt.Errorf(
+				"app %q has path %q, which is not a directory of this project: ocel reads an app's source to tell which resources it may be handed, so a path that names nothing would deploy %q alive with no resource at all — point `apps` in %s at %q's source",
+				a.Name, a.Path, a.Name, projectconfig.ConfigFileName, a.Name,
+			)
+		}
+		named[a.Name] = true
 		out = append(out, attribution.App{Name: a.Name, Path: a.Path})
 	}
-	return out
+
+	var unnamed []string
+	for _, name := range detected {
+		if !named[name] {
+			unnamed = append(unnamed, name)
+		}
+	}
+	if len(unnamed) > 0 {
+		return nil, fmt.Errorf(
+			"this project builds %s, which `apps` in %s does not name: ocel reads a named app's source to tell which resources it may be handed, and refuses to deploy an app it can attribute nothing to — give each one a name and a path under `apps`",
+			strings.Join(unnamed, ", "), projectconfig.ConfigFileName,
+		)
+	}
+	return out, nil
+}
+
+func detectedApps(functions []manifestbuilder.Function) []string {
+	var detected []string
+	for _, f := range functions {
+		if f.App != "" && !slices.Contains(detected, f.App) {
+			detected = append(detected, f.App)
+		}
+	}
+	slices.Sort(detected)
+	return detected
 }
 
 func failSession(ctx context.Context, ui *deployui.Session, err error) error {

@@ -8,6 +8,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"maps"
 	"slices"
 	"strconv"
 	"strings"
@@ -74,6 +75,13 @@ func variableEnv(app *deploymentsv1.ManifestApp) map[string]string {
 	return env
 }
 
+func appEnv(app *deploymentsv1.ManifestApp, bundle appBundle) map[string]string {
+	env := map[string]string{runtimeAddressEnv: deferredRuntimeAddress}
+	maps.Copy(env, variableEnv(app))
+	maps.Copy(env, bundle.env())
+	return env
+}
+
 type appBundle struct {
 	Envelope    string
 	Ciphertext  []byte
@@ -107,10 +115,9 @@ func (b appBundle) overlay() map[string][]byte {
 func (b appBundle) hasLive() bool { return len(b.Live) > 0 }
 
 func renderAppBundles(cfg Config, manifest *deploymentsv1.Manifest) (map[string]appBundle, error) {
-	links := manifestLinks(manifest)
 	bundles := make(map[string]appBundle, len(manifest.GetApps()))
 	for _, app := range manifest.GetApps() {
-		bundle, err := renderAppBundle(cfg, manifest.GetSlug(), app, links)
+		bundle, err := renderAppBundle(cfg, manifest.GetSlug(), app, appLinks(manifest, app.GetName()))
 		if err != nil {
 			return nil, err
 		}
