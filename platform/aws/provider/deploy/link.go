@@ -13,7 +13,7 @@ import (
 )
 
 type LinkStore interface {
-	PublishRecords(ctx context.Context, slug, environment, owner string, records []vars.Record) (int, error)
+	PublishRecords(ctx context.Context, slug, environment, owner string, records []vars.Record) (vars.PublishResult, error)
 	ResolveRecords(ctx context.Context, slug, environment string, names []string) ([]vars.PublishedRecord, error)
 	PublishedNames(ctx context.Context, slug, class, environment string) ([]string, error)
 }

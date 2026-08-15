@@ -128,15 +128,18 @@ func (f *fakeDynamo) PutItem(_ context.Context, in *dynamodb.PutItemInput, _ ...
 
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	if in.ConditionExpression != nil && !f.conditionHolds(in.Item, in.ExpressionAttributeValues) {
+	if in.ConditionExpression != nil && !f.conditionHolds(aws.ToString(in.ConditionExpression), in.Item, in.ExpressionAttributeValues) {
 		return nil, &ddbtypes.ConditionalCheckFailedException{}
 	}
 	f.put(in.Item)
 	return &dynamodb.PutItemOutput{}, nil
 }
 
-func (f *fakeDynamo) conditionHolds(item, values map[string]ddbtypes.AttributeValue) bool {
+func (f *fakeDynamo) conditionHolds(expression string, item, values map[string]ddbtypes.AttributeValue) bool {
 	current, exists := f.get(stringAttr(item, "pk"), stringAttr(item, "sk"))
+	if strings.Contains(expression, "#owner") {
+		return !exists || stringAttr(current, "owner") == "" || stringAttr(current, "owner") == stringAttr(values, ":owner")
+	}
 	seen := numberAttr(values, ":seen")
 	if !exists {
 		return seen == 0
@@ -239,18 +242,18 @@ func (f *fakeDynamo) TransactWriteItems(_ context.Context, in *dynamodb.Transact
 
 	if f.cancelTransacts > 0 {
 		f.cancelTransacts--
-		return nil, &ddbtypes.TransactionCanceledException{}
+		return nil, cancelled(in.TransactItems, -1, "TransactionConflict")
 	}
 
 	touched := map[string]bool{}
-	for _, w := range in.TransactItems {
+	for at, w := range in.TransactItems {
 		key, condition, values := transactTarget(w)
 		if touched[cellKey(stringAttr(key, "pk"), stringAttr(key, "sk"))] {
 			return nil, fmt.Errorf("fakeDynamo: %s/%s appears twice in one transaction", stringAttr(key, "pk"), stringAttr(key, "sk"))
 		}
 		touched[cellKey(stringAttr(key, "pk"), stringAttr(key, "sk"))] = true
-		if condition != nil && !f.conditionHolds(key, values) {
-			return nil, &ddbtypes.TransactionCanceledException{}
+		if condition != nil && !f.conditionHolds(aws.ToString(condition), key, values) {
+			return nil, cancelled(in.TransactItems, at, "ConditionalCheckFailed")
 		}
 	}
 
@@ -278,6 +281,18 @@ func (f *fakeDynamo) TransactWriteItems(_ context.Context, in *dynamodb.Transact
 		delete(f.items[stringAttr(key, "pk")], stringAttr(key, "sk"))
 	}
 	return &dynamodb.TransactWriteItemsOutput{}, nil
+}
+
+func cancelled(items []ddbtypes.TransactWriteItem, at int, code string) *ddbtypes.TransactionCanceledException {
+	reasons := make([]ddbtypes.CancellationReason, len(items))
+	for i := range items {
+		reason := "None"
+		if i == at || at < 0 {
+			reason = code
+		}
+		reasons[i] = ddbtypes.CancellationReason{Code: aws.String(reason)}
+	}
+	return &ddbtypes.TransactionCanceledException{CancellationReasons: reasons, Message: aws.String("fakeDynamo: transaction cancelled")}
 }
 
 func transactTarget(w ddbtypes.TransactWriteItem) (map[string]ddbtypes.AttributeValue, *string, map[string]ddbtypes.AttributeValue) {

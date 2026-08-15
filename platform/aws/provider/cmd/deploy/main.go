@@ -22,6 +22,10 @@ func main() {
 }
 
 func run() error {
+	if handled, err := links(os.Args[1:]); handled {
+		return err
+	}
+
 	token := os.Getenv(channel.SessionTokenEnvVar)
 	if token == "" {
 		return fmt.Errorf("%s must be set by the launching CLI", channel.SessionTokenEnvVar)

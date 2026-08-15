@@ -211,12 +211,12 @@ func TestPublishRecords(t *testing.T) {
 		store, ddb, _ := newTestStore(t)
 
 		publish(t, store, "", linkRecords())
-		pruned, err := store.PublishRecords(context.Background(), "shop", "", OwnerOcel, linkRecords()[:1])
+		result, err := store.PublishRecords(context.Background(), "shop", "", OwnerOcel, linkRecords()[:1])
 		if err != nil {
 			t.Fatalf("PublishRecords: %v", err)
 		}
-		if pruned != 2 {
-			t.Errorf("pruned = %d rows, want the dropped link's whole pair", pruned)
+		if result.Pruned != 2 {
+			t.Errorf("pruned = %d rows, want the dropped link's whole pair", result.Pruned)
 		}
 		if pk := naming.LinkVarsKey("shop", store.Class, "uploads"); len(ddb.items[pk]) != 0 {
 			t.Errorf("%s still holds %d rows after the link left the manifest", pk, len(ddb.items[pk]))
@@ -427,7 +427,7 @@ func TestPublishRecordsRefuses(t *testing.T) {
 	}{
 		"no project link":   {record: Record{Type: naming.TokenBucket}},
 		"no type token":     {record: Record{Name: "main"}},
-		"reserved env":      {environment: classWideEnvironment, record: linkRecords()[0]},
+		"reserved env":      {environment: ClassWideEnvironment, record: linkRecords()[0]},
 		"delimited name":    {record: Record{Name: "a" + delimiter + "b", Type: naming.TokenBucket}},
 		"delimited env":     {environment: "a" + delimiter + "b", record: linkRecords()[0]},
 		"property overflow": {record: Record{Name: "main", Type: naming.TokenBucket, Properties: map[string]string{"blob": strings.Repeat("x", MaxValueBytes)}}},
@@ -510,7 +510,7 @@ func TestPublishRecordsSurvivesACancelledTransaction(t *testing.T) {
 			t.Fatal("PublishRecords reported success while every transaction was cancelled")
 		}
 		if !strings.Contains(err.Error(), "racing") {
-			t.Errorf("err = %v, want a refusal naming the racing deploy", err)
+			t.Errorf("err = %v, want a refusal naming a racing deploy or a store shedding load", err)
 		}
 	})
 }
@@ -787,7 +787,7 @@ func TestPublishersPruneOnlyTheirOwnRecords(t *testing.T) {
 		pk := PartitionKey("shop", store.Class)
 		ddb.put(marshal(item{
 			PK:      pk,
-			SK:      linkIndexPrefix + tokenEnv + delimiter + classWideEnvironment,
+			SK:      linkIndexPrefix + tokenEnv + delimiter + ClassWideEnvironment,
 			Version: 1,
 			Names:   []string{"ghost"},
 		}))
@@ -803,7 +803,7 @@ func TestPublishersPruneOnlyTheirOwnRecords(t *testing.T) {
 		}
 	})
 
-	t.Run("a name another publisher still claims survives a prune", func(t *testing.T) {
+	t.Run("a name another owner still claims survives a prune", func(t *testing.T) {
 		store, _, _ := newTestStore(t)
 		foreign := []Record{{
 			Name: "orders", Type: "sst:aws.Postgres", Properties: map[string]string{"connectionString": "postgres://sst/orders"},
@@ -811,20 +811,20 @@ func TestPublishersPruneOnlyTheirOwnRecords(t *testing.T) {
 		mine := []Record{{
 			Name: "orders", Type: naming.TokenPostgres, Properties: map[string]string{"connectionString": "postgres://ocel/orders"},
 		}}
-		if _, err := store.PublishRecords(context.Background(), "shop", "", OwnerOcel, mine); err != nil {
-			t.Fatalf("PublishRecords ocel: %v", err)
-		}
 		if _, err := store.PublishRecords(context.Background(), "shop", "", "SST", foreign); err != nil {
 			t.Fatalf("PublishRecords SST: %v", err)
 		}
-
-		if _, err := store.PublishRecords(context.Background(), "shop", "", OwnerOcel, nil); err != nil {
+		if _, err := store.PublishRecords(context.Background(), "shop", "", OwnerOcel, mine); err != nil {
 			t.Fatalf("PublishRecords ocel: %v", err)
 		}
 
+		if _, err := store.PublishRecords(context.Background(), "shop", "", "SST", nil); err != nil {
+			t.Fatalf("PublishRecords SST: %v", err)
+		}
+
 		got := resolve(t, store, "", "orders")
-		if got[0].Type != "sst:aws.Postgres" {
-			t.Fatalf("record = %+v, want the rows a live publisher still claims left alone", got[0])
+		if got[0].Type != naming.TokenPostgres {
+			t.Fatalf("record = %+v, want the rows a live owner still claims left alone", got[0])
 		}
 	})
 

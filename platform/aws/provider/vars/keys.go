@@ -11,7 +11,7 @@ import (
 const (
 	delimiter = naming.KeySeparator
 
-	classWideEnvironment = "*"
+	ClassWideEnvironment = "*"
 
 	rootFolder = "/"
 
@@ -70,7 +70,7 @@ func (c Coordinate) canonical() Coordinate {
 
 func canonicalEnvironment(environment string) string {
 	if environment == "" {
-		return classWideEnvironment
+		return ClassWideEnvironment
 	}
 	return environment
 }
@@ -85,8 +85,8 @@ func (c Coordinate) validate() error {
 	if c.Key == "" {
 		return fmt.Errorf("a variable name is required")
 	}
-	if c.Environment == classWideEnvironment {
-		return fmt.Errorf("%q is reserved: it names the value that binds class-wide", classWideEnvironment)
+	if c.Environment == ClassWideEnvironment {
+		return fmt.Errorf("%q is reserved: it names the value that binds class-wide", ClassWideEnvironment)
 	}
 	for name, component := range map[string]string{
 		"project slug":     c.Slug,
@@ -182,7 +182,7 @@ func parseCurrentSortKey(slug, sk string) (Coordinate, error) {
 	if c.Folder == rootFolder {
 		c.Folder = ""
 	}
-	if c.Environment == classWideEnvironment {
+	if c.Environment == ClassWideEnvironment {
 		c.Environment = ""
 	}
 	return c, nil

@@ -1,0 +1,13 @@
+{
+  "name": "@ocel-scripts/e2e-sst",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Lifecycle scripts publishing an SST-defined RDS instance as an ocel link and asserting the record it left behind",
+  "scripts": {
+    "test": "vitest run"
+  },
+  "devDependencies": {
+    "vitest": "^4.1.9"
+  }
+}

@@ -65,24 +65,14 @@ func (c Coordinate) partition(class string) string {
 	return PartitionKey(c.Slug, class)
 }
 
-func (c Coordinate) validateDerived() error {
-	if c.Slug == "" {
+func validateLinkTarget(slug, environment string) error {
+	if slug == "" {
 		return fmt.Errorf("a project slug is required")
 	}
-	if c.Link == "" {
-		return fmt.Errorf("a link name is required")
+	if environment == ClassWideEnvironment {
+		return fmt.Errorf("%q is reserved: it names the pair that binds class-wide", ClassWideEnvironment)
 	}
-	if c.Folder != "" {
-		return fmt.Errorf("a link value is delivered to every folder of the apps that use it; %q addresses nothing", c.Folder)
-	}
-	if c.Environment == classWideEnvironment {
-		return fmt.Errorf("%q is reserved: it names the pair that binds class-wide", classWideEnvironment)
-	}
-	for name, component := range map[string]string{
-		"project slug":     c.Slug,
-		"link name":        c.Link,
-		"environment name": c.Environment,
-	} {
+	for name, component := range map[string]string{"project slug": slug, "environment name": environment} {
 		if strings.Contains(component, delimiter) {
 			return fmt.Errorf("%s %q may not contain %q", name, component, delimiter)
 		}
@@ -90,63 +80,25 @@ func (c Coordinate) validateDerived() error {
 	return nil
 }
 
-func (s *Store) PublishRecords(ctx context.Context, slug, environment, owner string, records []Record) (int, error) {
-	if slug == "" {
-		return 0, fmt.Errorf("a project slug is required")
+func (c Coordinate) validateDerived() error {
+	if err := validateLinkTarget(c.Slug, c.Environment); err != nil {
+		return err
 	}
-	if err := validateOwner(owner); err != nil {
-		return 0, err
+	if c.Link == "" {
+		return fmt.Errorf("a link name is required")
 	}
+	if c.Folder != "" {
+		return fmt.Errorf("a link value is delivered to every folder of the apps that use it; %q addresses nothing", c.Folder)
+	}
+	if strings.Contains(c.Link, delimiter) {
+		return fmt.Errorf("link name %q may not contain %q", c.Link, delimiter)
+	}
+	return nil
+}
 
-	sealed := make([][]byte, len(records))
-	rows := make([][]byte, len(records))
-	published := make([]string, 0, len(records))
-	seen := make(map[string]bool, len(records))
-	for i, r := range records {
-		c := linkCoordinate(slug, r.Name, environment)
-		if err := c.validateDerived(); err != nil {
-			return 0, err
-		}
-		if seen[r.Name] {
-			return 0, fmt.Errorf("this deploy publishes link %s twice; the two publishes land on the same rows and whichever finishes last wins, so name one of them something else", r.Name)
-		}
-		seen[r.Name] = true
-		if r.Type == "" {
-			return 0, fmt.Errorf("link %s carries no type token; a consumer has nothing to resolve it against", r.Name)
-		}
-		if err := r.verify(); err != nil {
-			return 0, err
-		}
-		bag, err := json.Marshal(r.bag())
-		if err != nil {
-			return 0, fmt.Errorf("render link %s's properties: %w", r.Name, err)
-		}
-		if len(bag) > MaxValueBytes {
-			return 0, fmt.Errorf("properties of link %s are too large: %d bytes, limit %d", r.Name, len(bag), MaxValueBytes)
-		}
-		if sealed[i], err = s.encrypt(ctx, c.canonical(), string(bag)); err != nil {
-			return 0, err
-		}
-		if rows[i], err = json.Marshal(recordRow{Type: r.Type, Grants: r.Grants}); err != nil {
-			return 0, fmt.Errorf("render link %s's record: %w", r.Name, err)
-		}
-		published = append(published, r.Name)
-	}
-	slices.Sort(published)
-
-	ts := s.now()
-	group, writeCtx := errgroup.WithContext(ctx)
-	group.SetLimit(revealConcurrency)
-	for i, r := range records {
-		group.Go(func() error {
-			return s.writePair(writeCtx, linkCoordinate(slug, r.Name, environment), sealed[i], rows[i], ts)
-		})
-	}
-	if err := group.Wait(); err != nil {
-		return 0, err
-	}
-
-	return s.reconcileLinkIndex(ctx, slug, environment, owner, published)
+type PublishResult struct {
+	Published []string
+	Pruned    int
 }
 
 const OwnerOcel = "OCEL"
@@ -161,6 +113,98 @@ func validateOwner(owner string) error {
 	return nil
 }
 
+func (s *Store) PublishRecords(ctx context.Context, slug, environment, owner string, records []Record) (PublishResult, error) {
+	if err := validateOwner(owner); err != nil {
+		return PublishResult{}, err
+	}
+	return s.publish(ctx, slug, owner, environment, records)
+}
+
+func (s *Store) publish(ctx context.Context, slug, owner, environment string, records []Record) (PublishResult, error) {
+	published, err := publishedNames(slug, environment, records)
+	if err != nil {
+		return PublishResult{}, err
+	}
+
+	claimed, err := s.claims(ctx, slug)
+	if err != nil {
+		return PublishResult{}, err
+	}
+	if err := s.refuseClaimed(owner, published, claimed); err != nil {
+		return PublishResult{}, err
+	}
+	elsewhere := claimedByOthers(owner, environment, claimed)
+
+	sealed := make([][]byte, len(records))
+	rows := make([][]byte, len(records))
+	for i, r := range records {
+		bag, err := json.Marshal(r.bag())
+		if err != nil {
+			return PublishResult{}, fmt.Errorf("render link %s's properties: %w", r.Name, err)
+		}
+		if len(bag) > MaxValueBytes {
+			return PublishResult{}, fmt.Errorf("properties of link %s are too large: %d bytes, limit %d", r.Name, len(bag), MaxValueBytes)
+		}
+		if sealed[i], err = s.encrypt(ctx, linkCoordinate(slug, r.Name, environment).canonical(), string(bag)); err != nil {
+			return PublishResult{}, err
+		}
+		if rows[i], err = json.Marshal(recordRow{Type: r.Type, Grants: r.Grants}); err != nil {
+			return PublishResult{}, fmt.Errorf("render link %s's record: %w", r.Name, err)
+		}
+	}
+
+	if len(published) > 0 {
+		if _, err := s.writeLinkIndex(ctx, slug, owner, environment, published, elsewhere, false); err != nil {
+			return PublishResult{}, err
+		}
+	}
+
+	ts := s.now()
+	group, writeCtx := errgroup.WithContext(ctx)
+	group.SetLimit(revealConcurrency)
+	for i, r := range records {
+		group.Go(func() error {
+			return s.writePair(writeCtx, linkCoordinate(slug, r.Name, environment), owner, sealed[i], rows[i], ts)
+		})
+	}
+	if err := group.Wait(); err != nil {
+		return PublishResult{}, err
+	}
+
+	pruned, err := s.writeLinkIndex(ctx, slug, owner, environment, published, elsewhere, true)
+	if err != nil {
+		return PublishResult{}, err
+	}
+	return PublishResult{Published: published, Pruned: pruned}, nil
+}
+
+func publishedNames(slug, environment string, records []Record) ([]string, error) {
+	if err := validateLinkTarget(slug, environment); err != nil {
+		return nil, err
+	}
+
+	published := make([]string, 0, len(records))
+	seen := make(map[string]bool, len(records))
+	for _, r := range records {
+		if err := linkCoordinate(slug, r.Name, environment).validateDerived(); err != nil {
+			return nil, err
+		}
+		if seen[r.Name] {
+			return nil, fmt.Errorf("this deploy publishes link %s twice; the two publishes land on the same rows and whichever finishes last wins, so name one of them something else", r.Name)
+		}
+		seen[r.Name] = true
+		if r.Type == "" {
+			return nil, fmt.Errorf("link %s carries no type token; a consumer has nothing to resolve it against", r.Name)
+		}
+		if err := r.verify(); err != nil {
+			return nil, err
+		}
+		published = append(published, r.Name)
+	}
+	slices.Sort(published)
+	return published, nil
+}
+
 func (r Record) bag() map[string]string {
 	if r.Properties == nil {
 		return map[string]string{}
@@ -168,8 +212,26 @@ func (r Record) bag() map[string]string {
 	return r.Properties
 }
 
-func (s *Store) writePair(ctx context.Context, c Coordinate, sealed, row []byte, ts int64) error {
+func (s *Store) writePair(ctx context.Context, c Coordinate, owner string, sealed, row []byte, ts int64) error {
 	pk := c.partition(s.Class)
+	record := &ddbtypes.Update{
+		TableName:        aws.String(s.Table),
+		Key:              pointKey(pk, recordSortKey(c.Environment)),
+		UpdateExpression: aws.String("SET #record = :record, #ts = :ts, #owner = :owner ADD #version :one"),
+		ExpressionAttributeNames: map[string]string{
+			"#record": "record", "#ts": "ts", "#version": "version", "#owner": "owner",
+		},
+		ExpressionAttributeValues: map[string]ddbtypes.AttributeValue{
+			":record": &ddbtypes.AttributeValueMemberS{Value: string(row)},
+			":ts":     number(ts),
+			":one":    number(1),
+			":owner":  &ddbtypes.AttributeValueMemberS{Value: owner},
+		},
+	}
+	if owner != OwnerOcel {
+		record.ConditionExpression = aws.String("attribute_not_exists(#owner) OR #owner = :owner")
+	}
+
 	writes := []ddbtypes.TransactWriteItem{
 		{Update: &ddbtypes.Update{
 			TableName:        aws.String(s.Table),
@@ -186,19 +248,7 @@ func (s *Store) writePair(ctx context.Context, c Coordinate, sealed, row []byte,
 				":one":        number(1),
 			},
 		}},
-		{Update: &ddbtypes.Update{
-			TableName:        aws.String(s.Table),
-			Key:              pointKey(pk, recordSortKey(c.Environment)),
-			UpdateExpression: aws.String("SET #record = :record, #ts = :ts ADD #version :one"),
-			ExpressionAttributeNames: map[string]string{
-				"#record": "record", "#ts": "ts", "#version": "version",
-			},
-			ExpressionAttributeValues: map[string]ddbtypes.AttributeValue{
-				":record": &ddbtypes.AttributeValueMemberS{Value: string(row)},
-				":ts":     number(ts),
-				":one":    number(1),
-			},
-		}},
+		{Update: record},
 	}
 	for range linkAttempts {
 		_, err := s.Dynamo.TransactWriteItems(ctx, &dynamodb.TransactWriteItemsInput{TransactItems: writes})
@@ -209,23 +259,43 @@ func (s *Store) writePair(ctx context.Context, c Coordinate, sealed, row []byte,
 		if !errors.As(err, &cancelled) {
 			return fmt.Errorf("publish link %s: %w", c.Link, err)
 		}
+		if conditionFailed(cancelled) {
+			return s.claimedBy(ctx, c, pk)
+		}
 	}
 
 	return fmt.Errorf(
-		"another deploy kept overwriting link %s while this one published it, %d times over. "+
-			"Two deploys of the same environment are racing; run them one after the other",
+		"link %s could not be written %d attempts in a row, each cancelled by the store. "+
+			"Either another deploy of the same environment is racing this one — run them one after the other — or the table is shedding load and this is worth retrying",
 		c.Link, linkAttempts)
+}
+
+func conditionFailed(cancelled *ddbtypes.TransactionCanceledException) bool {
+	for _, reason := range cancelled.CancellationReasons {
+		if aws.ToString(reason.Code) == conditionalCheckFailed {
+			return true
+		}
+	}
+	return false
+}
+
+const conditionalCheckFailed = "ConditionalCheckFailed"
+
+func (s *Store) claimedBy(ctx context.Context, c Coordinate, pk string) error {
+	held, err := s.read(ctx, pk, recordSortKey(c.Environment))
+	if err != nil {
+		return err
+	}
+	return fmt.Errorf(
+		"link %s in %s is already published by %s: one link name belongs to one publisher, and taking it would hand every app consuming that name another resource's values. "+
+			"Give one of them another name: %w",
+		c.Link, s.Class, describeOwner(ownerOf(held)), ErrClaimed)
 }
 
 const linkAttempts = 5
 
-func (s *Store) reconcileLinkIndex(ctx context.Context, slug, environment, owner string, published []string) (int, error) {
+func (s *Store) writeLinkIndex(ctx context.Context, slug, owner, environment string, published []string, elsewhere map[string]bool, prune bool) (int, error) {
 	pk, sk := PartitionKey(slug, s.Class), linkIndexSortKey(owner, environment)
-
-	claimed, err := s.claimedByOthers(ctx, pk, owner, environment)
-	if err != nil {
-		return 0, err
-	}
 
 	pruned := 0
 	for range linkAttempts {
@@ -234,18 +304,33 @@ func (s *Store) reconcileLinkIndex(ctx context.Context, slug, environment, owner
 			return pruned, err
 		}
 
+		owned := published
+		if !prune {
+			owned = union(previous.Names, published)
+		}
 		for _, stale := range previous.Names {
-			if slices.Contains(published, stale) || claimed[stale] {
+			if !prune || slices.Contains(published, stale) || elsewhere[stale] {
 				continue
 			}
-			removed, err := s.dropLink(ctx, slug, environment, stale)
+			removed, err := s.dropLink(ctx, slug, owner, environment, stale)
 			if err != nil {
 				return pruned, err
 			}
 			pruned += removed
 		}
+		if prune && len(owned) == 0 && previous.Version > 0 {
+			err = s.dropIndex(ctx, pk, sk, previous.Version)
+			if err == nil {
+				return pruned, nil
+			}
+			var lost *ddbtypes.TransactionCanceledException
+			if !errors.As(err, &lost) {
+				return pruned, err
+			}
+			continue
+		}
 
-		index := item{PK: pk, SK: sk, Version: previous.Version + 1, Names: published, Ts: s.now()}
+		index := item{PK: pk, SK: sk, Version: previous.Version + 1, Names: owned, Ts: s.now()}
 		_, err = s.Dynamo.PutItem(ctx, &dynamodb.PutItemInput{
 			TableName:                 aws.String(s.Table),
 			Item:                      marshal(index),
@@ -268,23 +353,28 @@ func (s *Store) reconcileLinkIndex(ctx context.Context, slug, environment, owner
 		slug, linkAttempts)
 }
 
-func (s *Store) claimedByOthers(ctx context.Context, pk, owner, environment string) (map[string]bool, error) {
-	indexes, err := s.queryConsistent(ctx, pk, linkIndexPrefix)
-	if err != nil {
-		return nil, err
-	}
+func (s *Store) dropIndex(ctx context.Context, pk, sk string, seen int64) error {
+	_, err := s.Dynamo.TransactWriteItems(ctx, &dynamodb.TransactWriteItemsInput{
+		TransactItems: []ddbtypes.TransactWriteItem{{Delete: &ddbtypes.Delete{
+			TableName:                 aws.String(s.Table),
+			Key:                       pointKey(pk, sk),
+			ConditionExpression:       aws.String("attribute_not_exists(pk) OR #version = :seen"),
+			ExpressionAttributeNames:  map[string]string{"#version": "version"},
+			ExpressionAttributeValues: map[string]ddbtypes.AttributeValue{":seen": number(seen)},
+		}}},
+	})
+	return err
+}
 
-	claimed := map[string]bool{}
-	for _, index := range indexes {
-		by, at, ok := parseLinkIndexSortKey(index.SK)
-		if !ok || by == owner || at != canonicalEnvironment(environment) {
-			continue
-		}
-		for _, name := range index.Names {
-			claimed[name] = true
+func union(previous, published []string) []string {
+	out := slices.Clone(published)
+	for _, name := range previous {
+		if !slices.Contains(out, name) {
+			out = append(out, name)
 		}
 	}
-	return claimed, nil
+	slices.Sort(out)
+	return out
 }
 
 func (s *Store) PublishedNames(ctx context.Context, slug, class, environment string) ([]string, error) {
@@ -309,14 +399,20 @@ func (s *Store) PublishedNames(ctx context.Context, slug, class, environment str
 }
 
 func bindsTo(at, environment string) bool {
-	return at == canonicalEnvironment(environment) || at == classWideEnvironment
+	return at == canonicalEnvironment(environment) || at == ClassWideEnvironment
 }
 
-func (s *Store) dropLink(ctx context.Context, slug, environment, link string) (int, error) {
+func (s *Store) dropLink(ctx context.Context, slug, owner, environment, link string) (int, error) {
 	pk := LinkPartitionKey(slug, s.Class, link)
-	stored, err := s.query(ctx, pk, "", true)
+	stored, err := s.queryConsistent(ctx, pk, "")
 	if err != nil {
 		return 0, err
+	}
+
+	for _, i := range stored {
+		if i.SK == recordSortKey(environment) && ownerOf(i) != owner {
+			return 0, nil
+		}
 	}
 
 	suffix := delimiter + tokenEnv + delimiter + canonicalEnvironment(environment)
@@ -492,7 +588,7 @@ func UnscopedResource(resource string) bool {
 }
 
 func (s *Store) purgeLinks(ctx context.Context, slug string) error {
-	indexes, err := s.query(ctx, PartitionKey(slug, s.Class), linkIndexPrefix, true)
+	indexes, err := s.queryConsistent(ctx, PartitionKey(slug, s.Class), linkIndexPrefix)
 	if err != nil {
 		return err
 	}
@@ -506,7 +602,7 @@ func (s *Store) purgeLinks(ctx context.Context, slug string) error {
 
 	for _, link := range slices.Sorted(maps.Keys(links)) {
 		pk := LinkPartitionKey(slug, s.Class, link)
-		stored, err := s.query(ctx, pk, "", true)
+		stored, err := s.queryConsistent(ctx, pk, "")
 		if err != nil {
 			return err
 		}

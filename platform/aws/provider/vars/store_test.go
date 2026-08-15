@@ -686,7 +686,7 @@ func TestEncryptionContext(t *testing.T) {
 			"slug":        "shop",
 			"folder":      rootFolder,
 			"key":         "STRIPE_API_KEY",
-			"environment": classWideEnvironment,
+			"environment": ClassWideEnvironment,
 		}
 		if len(crypto.contexts) != 1 || !maps.Equal(crypto.contexts[0], want) {
 			t.Fatalf("encryption context = %v, want exactly one %v", crypto.contexts, want)
