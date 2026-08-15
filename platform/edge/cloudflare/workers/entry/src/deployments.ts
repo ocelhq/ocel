@@ -4,6 +4,7 @@ import { lruSet } from "./lru";
 export interface DeploymentRecord {
   app: string;
   framework: string;
+  deploymentId: string;
   buildId: string;
   routingManifest: unknown;
   functionUrls: Record<string, string>;
@@ -17,16 +18,16 @@ export interface DeploymentRecord {
 export type PointerRecordResult =
   | { kind: "no-pointer" }
   | { kind: "ambiguous-app" }
-  | { kind: "unchanged"; buildId: string }
-  | { kind: "record"; buildId: string; record: DeploymentRecord }
-  | { kind: "dangling"; buildId: string };
+  | { kind: "unchanged"; deploymentId: string }
+  | { kind: "record"; deploymentId: string; record: DeploymentRecord }
+  | { kind: "dangling"; deploymentId: string };
 
 export interface DeploymentsBinding {
   pointerRecord(args: {
     slug: string;
     app?: string;
     pointer?: string;
-    knownBuildId?: string;
+    knownDeploymentId?: string;
   }): Promise<PointerRecordResult>;
 }
 
@@ -48,7 +49,7 @@ const RECORD_TTL_MS = 5_000;
 export const RECORD_CACHE_MAX = 64;
 
 interface CacheEntry {
-  buildId: string;
+  deploymentId: string;
   record: DeploymentRecord;
   at: number;
 }
@@ -84,7 +85,7 @@ export async function resolveDeployment(
       slug: deps.slug,
       app: deps.app,
       pointer: deps.pointer,
-      knownBuildId: cached?.buildId,
+      knownDeploymentId: cached?.deploymentId,
     });
   } catch {
     if (cached) return { kind: "found", record: cached.record };
@@ -102,7 +103,7 @@ export async function resolveDeployment(
       lruSet(
         cache,
         key,
-        { buildId: result.buildId, record: result.record, at: now },
+        { deploymentId: result.deploymentId, record: result.record, at: now },
         RECORD_CACHE_MAX,
       );
       return { kind: "found", record: result.record };

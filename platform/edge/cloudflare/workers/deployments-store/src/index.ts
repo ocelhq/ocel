@@ -112,12 +112,12 @@ export default class extends WorkerEntrypoint<Env> {
     slug: string;
     app?: string;
     pointer?: string;
-    knownBuildId?: string;
+    knownDeploymentId?: string;
   }): Promise<PointerRecordResult> {
     return stub(this.env, args.slug).pointerRecord(
       args.app,
       args.pointer,
-      args.knownBuildId,
+      args.knownDeploymentId,
     );
   }
 }

@@ -1070,7 +1070,7 @@ func TestBuildDeploymentRecord(t *testing.T) {
 		}
 	})
 
-	t.Run("the identity is wired as buildId", func(t *testing.T) {
+	t.Run("the deployment id keys the record and the build id rides along", func(t *testing.T) {
 		t.Parallel()
 		cfg := Config{ArtifactRoot: edgeAppTree(t), Env: "prod", Edge: testLoaderEdge()}
 		app := &deploymentsv1.ManifestApp{Name: "web", Framework: frameworkNext}
@@ -1088,8 +1088,11 @@ func TestBuildDeploymentRecord(t *testing.T) {
 		if err := json.Unmarshal(raw, &wire); err != nil {
 			t.Fatalf("unmarshal record: %v", err)
 		}
-		if wire["buildId"] != id.String() {
-			t.Errorf("record JSON buildId = %v, want %q", wire["buildId"], id.String())
+		if wire["deploymentId"] != id.String() {
+			t.Errorf("record JSON deploymentId = %v, want %q", wire["deploymentId"], id.String())
+		}
+		if wire["buildId"] != id.BuildID() {
+			t.Errorf("record JSON buildId = %v, want %q", wire["buildId"], id.BuildID())
 		}
 	})
 }
@@ -1121,13 +1124,13 @@ func TestFinalizeProductionDeploy(t *testing.T) {
 		if fake.promotions[0].PromotionID != "promo1" {
 			t.Errorf("promotion id = %q, want %q", fake.promotions[0].PromotionID, "promo1")
 		}
-		want := map[string]string{"web": "b1", "api": "b2"}
+		want := map[string]string{"web": buildOnly("b1").String(), "api": buildOnly("b2").String()}
 		if len(fake.promotions[0].Builds) != len(want) {
 			t.Fatalf("promotion builds = %v, want %v", fake.promotions[0].Builds, want)
 		}
-		for app, buildID := range want {
-			if got := fake.promotions[0].Builds[app]; got != buildID {
-				t.Errorf("promotion.Builds[%q] = %q, want %q", app, got, buildID)
+		for app, identity := range want {
+			if got := fake.promotions[0].Builds[app]; got != identity {
+				t.Errorf("promotion.Builds[%q] = %q, want %q", app, got, identity)
 			}
 		}
 		if state[edge.RootStackKeyEndpoint] == "" {
@@ -1275,17 +1278,18 @@ func TestFinalizeDeploy(t *testing.T) {
 		if len(fake.staged) != 2 {
 			t.Fatalf("staged = %d records, want 2: a rotation is its own Deployment", len(fake.staged))
 		}
-		if got := []string{fake.staged[0].Identity, fake.staged[1].Identity}; got[0] != "B1" || got[1] != "B1~fp2" {
-			t.Errorf("staged identities = %v, want [B1 B1~fp2]", got)
+		wantStaged := []string{before.String(), after.String()}
+		if got := []string{fake.staged[0].Identity, fake.staged[1].Identity}; got[0] != wantStaged[0] || got[1] != wantStaged[1] {
+			t.Errorf("staged identities = %v, want %v", got, wantStaged)
 		}
 		if len(fake.promotions) != 2 {
 			t.Fatalf("promotions = %d, want 2: a rotation is its own promotion", len(fake.promotions))
 		}
-		if got := fake.promotions[1].Builds["web"]; got != "B1~fp2" {
-			t.Errorf("rotation promotion Builds[web] = %q, want %q", got, "B1~fp2")
+		if got := fake.promotions[1].Builds["web"]; got != after.String() {
+			t.Errorf("rotation promotion Builds[web] = %q, want %q", got, after.String())
 		}
-		if got := fake.promotions[0].Builds["web"]; got != "B1" {
-			t.Errorf("prior promotion Builds[web] = %q, want %q — the prior Deployment stays intact", got, "B1")
+		if got := fake.promotions[0].Builds["web"]; got != before.String() {
+			t.Errorf("prior promotion Builds[web] = %q, want %q — the prior Deployment stays intact", got, before.String())
 		}
 		if a, b := appStack(t, ProductionEnv, "web", before), appStack(t, ProductionEnv, "web", after); a == b {
 			t.Errorf("both Deployments name stack %q; a rotation must provision its own", a)
@@ -1323,9 +1327,9 @@ func TestFinalizeDeploy(t *testing.T) {
 		if len(fake.staged) != 3 || len(fake.promotions) != 3 {
 			t.Fatalf("staged = %d records over %d promotions, want 3 and 3", len(fake.staged), len(fake.promotions))
 		}
-		wantIdentities := []string{"WEB1", "WEB1~fp2", "WEB1~fp3"}
 		names := map[naming.StackName]bool{}
-		for i, want := range wantIdentities {
+		for i, id := range ids {
+			want := id.String()
 			if got := fake.staged[i].Identity; got != want {
 				t.Errorf("staged[%d].Identity = %q, want %q", i, got, want)
 			}
@@ -1594,9 +1598,9 @@ func TestResolvedIdentities(t *testing.T) {
 		want     Identity
 		rendered string
 	}{
-		{"a next app takes its buildID with no fingerprint", nil, buildOnly("WEB1"), "WEB1"},
-		{"baked values fingerprint the identity", map[string]appBundle{"web": {Fingerprint: "abc123"}}, fingerprinted("WEB1", "abc123"), "WEB1~abc123"},
-		{"nothing baked stays the bare buildID", map[string]appBundle{"web": {Live: []byte("{}")}}, buildOnly("WEB1"), "WEB1"},
+		{"a next app takes its buildID with no fingerprint", nil, buildOnly("WEB1"), testDeploymentID + "~WEB1"},
+		{"baked values fingerprint the identity", map[string]appBundle{"web": {Fingerprint: "abc123"}}, fingerprinted("WEB1", "abc123"), testDeploymentID + "~WEB1~abc123"},
+		{"nothing baked stays the bare buildID", map[string]appBundle{"web": {Live: []byte("{}")}}, buildOnly("WEB1"), testDeploymentID + "~WEB1"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -1609,7 +1613,7 @@ func TestResolvedIdentities(t *testing.T) {
 				Apps: []*deploymentsv1.ManifestApp{{Name: "web", Framework: frameworkNext}},
 			}
 
-			builds, err := resolveAppBuilds(cfg, manifest, tc.bundles)
+			builds, err := resolveAppBuilds(deployedConfig(cfg), manifest, tc.bundles)
 			if err != nil {
 				t.Fatalf("resolveAppBuilds: %v", err)
 			}
@@ -1631,7 +1635,7 @@ func TestResolvedIdentities(t *testing.T) {
 		}
 
 		cfg := Config{ArtifactRoot: t.TempDir()}
-		builds, err := resolveAppBuilds(cfg, manifest, nil)
+		builds, err := resolveAppBuilds(deployedConfig(cfg), manifest, nil)
 		if err != nil {
 			t.Fatalf("resolveAppBuilds: %v", err)
 		}

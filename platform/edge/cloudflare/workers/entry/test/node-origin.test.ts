@@ -10,7 +10,8 @@ function makeRecord(over: Partial<DeploymentRecord> = {}): DeploymentRecord {
   return {
     app: "api",
     framework: "express",
-    buildId: "0123456789abcdef",
+    deploymentId: "0123456789abcdef",
+    buildId: "build-1",
     routingManifest: null,
     functionUrls: { api: FN_URL },
     assetPrefix: "",
@@ -23,7 +24,7 @@ function makeRecord(over: Partial<DeploymentRecord> = {}): DeploymentRecord {
 function bindingReturning(record: DeploymentRecord): DeploymentsBinding {
   return {
     async pointerRecord() {
-      return { kind: "record", buildId: record.buildId, record };
+      return { kind: "record", deploymentId: record.deploymentId, record };
     },
   };
 }

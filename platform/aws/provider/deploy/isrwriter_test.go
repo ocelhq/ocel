@@ -81,11 +81,11 @@ func TestResolveAppBuildsISRWriter(t *testing.T) {
 			ISRWriterSeed:          "seed-1",
 		}
 
-		builds, err := resolveAppBuilds(cfg, twoAppManifest(), nil)
+		builds, err := resolveAppBuilds(deployedConfig(cfg), twoAppManifest(), nil)
 		if err != nil {
 			t.Fatalf("resolveAppBuilds: %v", err)
 		}
-		againBuilds, err := resolveAppBuilds(cfg, twoAppManifest(), nil)
+		againBuilds, err := resolveAppBuilds(deployedConfig(cfg), twoAppManifest(), nil)
 		if err != nil {
 			t.Fatalf("resolveAppBuilds (second call): %v", err)
 		}
@@ -106,7 +106,7 @@ func TestResolveAppBuildsISRWriter(t *testing.T) {
 		t.Parallel()
 		cfg := Config{ArtifactRoot: twoAppTree(t), AssetBucket: "assets", StateTable: "state", Env: "prod"}
 
-		builds, err := resolveAppBuilds(cfg, twoAppManifest(), nil)
+		builds, err := resolveAppBuilds(deployedConfig(cfg), twoAppManifest(), nil)
 		if err != nil {
 			t.Fatalf("resolveAppBuilds: %v", err)
 		}

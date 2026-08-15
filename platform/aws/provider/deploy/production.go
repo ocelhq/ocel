@@ -635,6 +635,7 @@ func buildDeploymentRecord(cfg Config, manifest *deploymentsv1.Manifest, app *de
 		App:              name,
 		Framework:        app.GetFramework(),
 		Identity:         id.String(),
+		BuildID:          id.BuildID(),
 		FunctionURLs:     appFunctionURLsByRoute(manifest.GetFunctions(), name, urlByLogical),
 		CreatedAt:        time.Now().Unix(),
 		ValueFingerprint: fingerprint,

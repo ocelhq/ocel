@@ -63,7 +63,7 @@ func resolveAppBuilds(cfg Config, manifest *deploymentsv1.Manifest, baked map[st
 		if err != nil {
 			return appBuilds{}, err
 		}
-		id, err := NewIdentity(buildID, baked[name].Fingerprint)
+		id, err := NewIdentity(cfg.PromotionID, buildID, baked[name].Fingerprint)
 		if err != nil {
 			return appBuilds{}, fmt.Errorf("deployment identity for %s: %w", name, err)
 		}

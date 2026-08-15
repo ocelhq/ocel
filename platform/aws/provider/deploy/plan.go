@@ -55,7 +55,7 @@ func previewEnvName(pointer string) (string, error) {
 }
 
 func releaseOf(id Identity) naming.Release {
-	return naming.NewRelease(id.BuildID(), id.Fingerprint())
+	return naming.NewRelease(id.DeploymentID(), id.BuildID(), id.Fingerprint())
 }
 
 func BuildPlan(manifest *deploymentsv1.Manifest, env *deploymentsv1.Environment, promotionID string, identities Identities) (Plan, error) {

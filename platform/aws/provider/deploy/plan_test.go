@@ -12,10 +12,16 @@ func prodEnv() *deploymentsv1.Environment {
 	return &deploymentsv1.Environment{Class: deploymentsv1.Environment_CLASS_PRODUCTION}
 }
 
+const testDeploymentID = "d1a2b3c4"
+
 func buildOnly(buildID string) Identity { return fingerprinted(buildID, "") }
 
 func fingerprinted(buildID, fingerprint string) Identity {
-	id, err := NewIdentity(buildID, fingerprint)
+	return deployed(testDeploymentID, buildID, fingerprint)
+}
+
+func deployed(deploymentID, buildID, fingerprint string) Identity {
+	id, err := NewIdentity(deploymentID, buildID, fingerprint)
 	if err != nil {
 		panic(err)
 	}
@@ -228,13 +234,13 @@ func TestBuildPlan(t *testing.T) {
 		if plan.Promotion.PromotionID != "promo1" {
 			t.Errorf("PromotionID = %q, want %q", plan.Promotion.PromotionID, "promo1")
 		}
-		want := map[string]string{"web": "buildW", "api": "buildA"}
+		want := map[string]string{"web": buildOnly("buildW").String(), "api": buildOnly("buildA").String()}
 		if len(plan.Promotion.Builds) != len(want) {
 			t.Fatalf("Promotion.Builds = %v, want %v", plan.Promotion.Builds, want)
 		}
-		for app, buildID := range want {
-			if got := plan.Promotion.Builds[app]; got != buildID {
-				t.Errorf("Promotion.Builds[%q] = %q, want %q", app, got, buildID)
+		for app, identity := range want {
+			if got := plan.Promotion.Builds[app]; got != identity {
+				t.Errorf("Promotion.Builds[%q] = %q, want %q", app, got, identity)
 			}
 		}
 	})

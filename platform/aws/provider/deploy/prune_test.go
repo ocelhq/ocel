@@ -67,6 +67,10 @@ func TestReclaimDeclaresOneChildStagePerTarget(t *testing.T) {
 	}
 }
 
+func recordKeyFor(app string, id Identity) string {
+	return removedRecordKeyPrefix + app + "/" + id.String()
+}
+
 func reclaimedFor(t *testing.T, env, slug, app string, id Identity) PruneTarget {
 	t.Helper()
 	coord := storageCoordinate(env, slug, app, releaseOf(id))
@@ -87,7 +91,7 @@ func TestReclaimTargets(t *testing.T) {
 
 	t.Run("derives stack and prefixes per record", func(t *testing.T) {
 		t.Parallel()
-		got, err := ReclaimTargets("proj1", "prod", []string{"record:web/build-1", "record:api/build-2"}, nil, nil)
+		got, err := ReclaimTargets("proj1", "prod", []string{recordKeyFor("web", buildOnly("build-1")), recordKeyFor("api", buildOnly("build-2"))}, nil, nil)
 		if err != nil {
 			t.Fatalf("ReclaimTargets: %v", err)
 		}
@@ -122,7 +126,7 @@ func TestReclaimTargets(t *testing.T) {
 
 	t.Run("every prefix of one record shares the release prefix", func(t *testing.T) {
 		t.Parallel()
-		got, err := ReclaimTargets("proj1", "prod", []string{"record:web/build-1"}, nil, nil)
+		got, err := ReclaimTargets("proj1", "prod", []string{recordKeyFor("web", buildOnly("build-1"))}, nil, nil)
 		if err != nil {
 			t.Fatalf("ReclaimTargets: %v", err)
 		}
@@ -142,11 +146,11 @@ func TestReclaimTargets(t *testing.T) {
 
 	t.Run("another release of one app is a different prefix", func(t *testing.T) {
 		t.Parallel()
-		got, err := ReclaimTargets("proj1", "prod", []string{"record:web/build-1"}, nil, nil)
+		got, err := ReclaimTargets("proj1", "prod", []string{recordKeyFor("web", buildOnly("build-1"))}, nil, nil)
 		if err != nil {
 			t.Fatalf("ReclaimTargets: %v", err)
 		}
-		other, err := ReclaimTargets("proj1", "prod", []string{"record:web/build-2"}, nil, nil)
+		other, err := ReclaimTargets("proj1", "prod", []string{recordKeyFor("web", buildOnly("build-2"))}, nil, nil)
 		if err != nil {
 			t.Fatalf("ReclaimTargets: %v", err)
 		}
@@ -161,14 +165,14 @@ func TestReclaimTargets(t *testing.T) {
 	t.Run("a rotated value fingerprint is its own release and its own storage", func(t *testing.T) {
 		t.Parallel()
 		id := fingerprinted("build-1", "fp1")
-		got, err := ReclaimTargets("proj1", "prod", []string{"record:web/" + id.String()}, nil, nil)
+		got, err := ReclaimTargets("proj1", "prod", []string{recordKeyFor("web", id)}, nil, nil)
 		if err != nil {
 			t.Fatalf("ReclaimTargets: %v", err)
 		}
 		if !reflect.DeepEqual(got, []PruneTarget{reclaimedFor(t, "prod", "proj1", "web", id)}) {
 			t.Errorf("ReclaimTargets = %+v, want %+v", got, reclaimedFor(t, "prod", "proj1", "web", id))
 		}
-		plain, err := ReclaimTargets("proj1", "prod", []string{"record:web/build-1"}, nil, nil)
+		plain, err := ReclaimTargets("proj1", "prod", []string{recordKeyFor("web", buildOnly("build-1"))}, nil, nil)
 		if err != nil {
 			t.Fatalf("ReclaimTargets: %v", err)
 		}
@@ -181,9 +185,9 @@ func TestReclaimTargets(t *testing.T) {
 		t.Parallel()
 		id := fingerprinted("build-1", "fp1")
 		got, err := ReclaimTargets("proj1", "prod",
-			[]string{"record:web/" + id.String()},
-			[]string{"record:web/" + id.String()},
-			[]string{"record:web/" + id.String()})
+			[]string{recordKeyFor("web", id)},
+			[]string{recordKeyFor("web", id)},
+			[]string{recordKeyFor("web", id)})
 		if err != nil {
 			t.Fatalf("ReclaimTargets: %v", err)
 		}
@@ -200,9 +204,9 @@ func TestReclaimTargets(t *testing.T) {
 	t.Run("another app or another release does not shield this one", func(t *testing.T) {
 		t.Parallel()
 		got, err := ReclaimTargets("proj1", "prod",
-			[]string{"record:web/build-1"},
-			[]string{"record:web/build-2", "record:api/build-1"},
-			[]string{"record:web/build-2", "record:api/build-1"})
+			[]string{recordKeyFor("web", buildOnly("build-1"))},
+			[]string{recordKeyFor("web", buildOnly("build-2")), recordKeyFor("api", buildOnly("build-1"))},
+			[]string{recordKeyFor("web", buildOnly("build-2")), recordKeyFor("api", buildOnly("build-1"))})
 		if err != nil {
 			t.Fatalf("ReclaimTargets: %v", err)
 		}
@@ -215,8 +219,8 @@ func TestReclaimTargets(t *testing.T) {
 		t.Parallel()
 		shared := fingerprinted("B1", "fpP")
 		got, err := ReclaimTargets("proj1", "prod",
-			[]string{"record:web/" + shared.String()},
-			[]string{"record:web/" + shared.String()},
+			[]string{recordKeyFor("web", shared)},
+			[]string{recordKeyFor("web", shared)},
 			nil)
 		if err != nil {
 			t.Fatalf("ReclaimTargets: %v", err)
@@ -234,7 +238,7 @@ func TestReclaimTargets(t *testing.T) {
 
 	t.Run("the env leads every prefix", func(t *testing.T) {
 		t.Parallel()
-		got, err := ReclaimTargets("proj1", "pr-7", []string{"record:web/B1"}, nil, nil)
+		got, err := ReclaimTargets("proj1", "pr-7", []string{recordKeyFor("web", buildOnly("B1"))}, nil, nil)
 		if err != nil {
 			t.Fatalf("ReclaimTargets: %v", err)
 		}
@@ -459,7 +463,7 @@ func TestReclaimCoversEveryKeyTheDeployWrote(t *testing.T) {
 	}
 
 	id := builds.identities["web"]
-	targets, err := ReclaimTargets("proj", "prod", []string{"record:web/" + id.String()}, nil, nil)
+	targets, err := ReclaimTargets("proj", "prod", []string{recordKeyFor("web", id)}, nil, nil)
 	if err != nil {
 		t.Fatalf("ReclaimTargets: %v", err)
 	}

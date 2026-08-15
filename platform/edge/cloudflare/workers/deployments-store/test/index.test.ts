@@ -40,10 +40,11 @@ function makeRecord(over: Partial<DeploymentRecord> = {}): DeploymentRecord {
   return {
     app: "web",
     framework: "next",
+    deploymentId: "deploy-1",
     buildId: "build-1",
     routingManifest: { pathnames: [] },
     functionUrls: { "/": "https://fn.example.com" },
-    assetPrefix: "build-1",
+    assetPrefix: "deploy-1",
     isrPrefix: "prod/p1/web/build-1",
     createdAt: 1_000,
     ...over,
@@ -159,7 +160,7 @@ describe("authenticated write endpoint", () => {
     expect(putRes.status).toBe(204);
 
     const store = env.DEPLOYMENTS_DO.get(env.DEPLOYMENTS_DO.idFromName(SLUG));
-    expect(await store.record("web", "build-1")).toEqual(makeRecord());
+    expect(await store.record("web", "deploy-1")).toEqual(makeRecord());
   });
 
   it("promotes, then reports it through history", async () => {
@@ -170,14 +171,14 @@ describe("authenticated write endpoint", () => {
     const promoteRes = await SELF.fetch(
       authedReq("/promote", {
         method: "POST",
-        body: JSON.stringify({ promotionId: "promo-1", ts: 1_000, builds: { web: "build-1" } }),
+        body: JSON.stringify({ promotionId: "promo-1", ts: 1_000, builds: { web: "deploy-1" } }),
       }),
     );
     expect(promoteRes.status).toBe(204);
 
     const historyRes = await SELF.fetch(authedReq("/history"));
     expect(await historyRes.json()).toEqual([
-      { promotionId: "promo-1", ts: 1_000, builds: { web: "build-1" }, active: true },
+      { promotionId: "promo-1", ts: 1_000, builds: { web: "deploy-1" }, active: true },
     ]);
   });
 
@@ -203,20 +204,20 @@ describe("authenticated write endpoint", () => {
 
   it("prunes and reports what was removed", async () => {
     await initialize();
-    for (const buildId of ["build-1", "build-2", "build-3"]) {
+    for (const deploymentId of ["deploy-1", "deploy-2", "deploy-3"]) {
       await SELF.fetch(
         authedReq("/staged", {
           method: "PUT",
-          body: JSON.stringify(makeRecord({ buildId })),
+          body: JSON.stringify(makeRecord({ deploymentId })),
         }),
       );
       await SELF.fetch(
         authedReq("/promote", {
           method: "POST",
           body: JSON.stringify({
-            promotionId: `promo-${buildId}`,
+            promotionId: `promo-${deploymentId}`,
             ts: 1_000,
-            builds: { web: buildId },
+            builds: { web: deploymentId },
           }),
         }),
       );
@@ -227,7 +228,7 @@ describe("authenticated write endpoint", () => {
     );
     expect(pruneRes.status).toBe(200);
     const result = (await pruneRes.json()) as { removedPromotionIds: string[] };
-    expect(result.removedPromotionIds).toEqual(["promo-build-2", "promo-build-1"]);
+    expect(result.removedPromotionIds).toEqual(["promo-deploy-2", "promo-deploy-1"]);
   });
 
   it("removes a whole pointer and reports what was reclaimed", async () => {
@@ -235,7 +236,7 @@ describe("authenticated write endpoint", () => {
     await SELF.fetch(
       authedReq("/staged", {
         method: "PUT",
-        body: JSON.stringify(makeRecord({ buildId: "pr-1" })),
+        body: JSON.stringify(makeRecord({ deploymentId: "pr-1" })),
       }),
     );
     await SELF.fetch(
@@ -321,7 +322,7 @@ describe("service-binding read path", () => {
   it("needs no secret to resolve the active record", async () => {
     const store = env.DEPLOYMENTS_DO.get(env.DEPLOYMENTS_DO.idFromName(SLUG));
     await store.putStaged(makeRecord());
-    await store.promote({ promotionId: "promo-1", ts: 1_000, builds: { web: "build-1" } });
+    await store.promote({ promotionId: "promo-1", ts: 1_000, builds: { web: "deploy-1" } });
 
     const entry = new (await import("../src/index")).default(
       createExecutionContext(),
@@ -329,14 +330,14 @@ describe("service-binding read path", () => {
     );
     expect(await entry.pointerRecord({ slug: SLUG, app: "web" })).toEqual({
       kind: "record",
-      buildId: "build-1",
+      deploymentId: "deploy-1",
       record: makeRecord(),
     });
     expect(
-      await entry.pointerRecord({ slug: SLUG, app: "web", knownBuildId: "build-1" }),
+      await entry.pointerRecord({ slug: SLUG, app: "web", knownDeploymentId: "deploy-1" }),
     ).toEqual({
       kind: "unchanged",
-      buildId: "build-1",
+      deploymentId: "deploy-1",
     });
   });
 
@@ -345,7 +346,7 @@ describe("service-binding read path", () => {
     await SELF.fetch(
       authedReq("/staged", {
         method: "PUT",
-        body: JSON.stringify(makeRecord({ buildId: "preview-build" })),
+        body: JSON.stringify(makeRecord({ deploymentId: "preview-deploy" })),
       }),
     );
     const promoteRes = await SELF.fetch(
@@ -354,7 +355,7 @@ describe("service-binding read path", () => {
         body: JSON.stringify({
           promotionId: "prev-1",
           ts: 1_000,
-          builds: { web: "preview-build" },
+          builds: { web: "preview-deploy" },
           pointer: "flaky-web-2626",
         }),
       }),
@@ -369,8 +370,8 @@ describe("service-binding read path", () => {
       await entry.pointerRecord({ slug: SLUG, app: "web", pointer: "flaky-web-2626" }),
     ).toEqual({
       kind: "record",
-      buildId: "preview-build",
-      record: makeRecord({ buildId: "preview-build" }),
+      deploymentId: "preview-deploy",
+      record: makeRecord({ deploymentId: "preview-deploy" }),
     });
     expect(await entry.pointerRecord({ slug: SLUG, app: "web" })).toEqual({
       kind: "no-pointer",
@@ -380,7 +381,7 @@ describe("service-binding read path", () => {
   it("resolves the app from the promotion when the caller omits it", async () => {
     const store = env.DEPLOYMENTS_DO.get(env.DEPLOYMENTS_DO.idFromName(SLUG));
     await store.putStaged(makeRecord());
-    await store.promote({ promotionId: "promo-1", ts: 1_000, builds: { web: "build-1" } });
+    await store.promote({ promotionId: "promo-1", ts: 1_000, builds: { web: "deploy-1" } });
 
     const entry = new (await import("../src/index")).default(
       createExecutionContext(),
@@ -388,7 +389,7 @@ describe("service-binding read path", () => {
     );
     expect(await entry.pointerRecord({ slug: SLUG })).toEqual({
       kind: "record",
-      buildId: "build-1",
+      deploymentId: "deploy-1",
       record: makeRecord(),
     });
   });
@@ -396,11 +397,11 @@ describe("service-binding read path", () => {
   it("reports an ambiguous app when the promotion carries several", async () => {
     const store = env.DEPLOYMENTS_DO.get(env.DEPLOYMENTS_DO.idFromName(SLUG));
     await store.putStaged(makeRecord());
-    await store.putStaged(makeRecord({ app: "admin", buildId: "build-9" }));
+    await store.putStaged(makeRecord({ app: "admin", deploymentId: "deploy-9" }));
     await store.promote({
       promotionId: "promo-1",
       ts: 1_000,
-      builds: { web: "build-1", admin: "build-9" },
+      builds: { web: "deploy-1", admin: "deploy-9" },
     });
 
     const entry = new (await import("../src/index")).default(

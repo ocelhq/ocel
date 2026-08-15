@@ -47,8 +47,8 @@ type Release struct {
 	token string
 }
 
-func NewRelease(buildID, fingerprint string) Release {
-	sum := sha256.Sum256([]byte(buildID + "\x00" + fingerprint))
+func NewRelease(parts ...string) Release {
+	sum := sha256.Sum256([]byte(strings.Join(parts, "\x00")))
 	return Release{token: releasePrefix + hex.EncodeToString(sum[:])[:8]}
 }
 

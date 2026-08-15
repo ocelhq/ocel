@@ -60,9 +60,16 @@ func twoAppTree(t *testing.T) string {
 	})
 }
 
+func deployedConfig(cfg Config) Config {
+	if cfg.PromotionID == "" {
+		cfg.PromotionID = testDeploymentID
+	}
+	return cfg
+}
+
 func appBuildsFor(t *testing.T, cfg Config, manifest *deploymentsv1.Manifest) appBuilds {
 	t.Helper()
-	builds, err := resolveAppBuilds(cfg, manifest, nil)
+	builds, err := resolveAppBuilds(deployedConfig(cfg), manifest, nil)
 	if err != nil {
 		t.Fatalf("resolveAppBuilds: %v", err)
 	}
@@ -75,7 +82,7 @@ func releaseBuilds(t *testing.T, cfg Config, manifest *deploymentsv1.Manifest, f
 	for _, app := range manifestApps(manifest) {
 		bundles[app.GetName()] = appBundle{Fingerprint: fingerprint}
 	}
-	builds, err := resolveAppBuilds(cfg, manifest, bundles)
+	builds, err := resolveAppBuilds(deployedConfig(cfg), manifest, bundles)
 	if err != nil {
 		t.Fatalf("resolveAppBuilds: %v", err)
 	}
@@ -115,7 +122,7 @@ func TestResolveAppBuilds(t *testing.T) {
 		t.Parallel()
 		cfg := Config{ArtifactRoot: twoAppTree(t), AssetBucket: "assets", StateTable: "state", Env: "prod"}
 
-		builds, err := resolveAppBuilds(cfg, twoAppManifest(), nil)
+		builds, err := resolveAppBuilds(deployedConfig(cfg), twoAppManifest(), nil)
 		if err != nil {
 			t.Fatalf("resolveAppBuilds: %v", err)
 		}
@@ -144,7 +151,7 @@ func TestResolveAppBuilds(t *testing.T) {
 			},
 		}
 
-		builds, err := resolveAppBuilds(cfg, manifest, nil)
+		builds, err := resolveAppBuilds(deployedConfig(cfg), manifest, nil)
 		if err != nil {
 			t.Fatalf("resolveAppBuilds: %v", err)
 		}
@@ -207,7 +214,7 @@ func TestResolveAppBuilds(t *testing.T) {
 		root := writeTree(t, map[string]string{"apps/api/serve.json": `{"framework":"express"}`})
 		cfg := Config{ArtifactRoot: root, AssetBucket: "assets", StateTable: "state", Env: "prod"}
 
-		_, err := resolveAppBuilds(cfg, nodeManifest(), nil)
+		_, err := resolveAppBuilds(deployedConfig(cfg), nodeManifest(), nil)
 		if err == nil {
 			t.Fatal("expected a descriptor with no build id to fail the deploy")
 		}
@@ -221,7 +228,7 @@ func TestResolveAppBuilds(t *testing.T) {
 		root := writeTree(t, map[string]string{"apps/api/serve.json": `{`})
 		cfg := Config{ArtifactRoot: root, AssetBucket: "assets", StateTable: "state", Env: "prod"}
 
-		_, err := resolveAppBuilds(cfg, nodeManifest(), nil)
+		_, err := resolveAppBuilds(deployedConfig(cfg), nodeManifest(), nil)
 		if err == nil {
 			t.Fatal("expected an unparseable descriptor to fail the deploy")
 		}

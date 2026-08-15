@@ -34,7 +34,7 @@ func TestReclaimTargetsScopeByEnv(t *testing.T) {
 
 	t.Run("a preview env names pointer-scoped stacks", func(t *testing.T) {
 		t.Parallel()
-		targets, err := ReclaimTargets("shop", "pr-1", []string{"record:web/b1", "record:api/b2"}, nil, nil)
+		targets, err := ReclaimTargets("shop", "pr-1", []string{recordKeyFor("web", buildOnly("b1")), recordKeyFor("api", buildOnly("b2"))}, nil, nil)
 		if err != nil {
 			t.Fatalf("ReclaimTargets: %v", err)
 		}
@@ -48,7 +48,7 @@ func TestReclaimTargetsScopeByEnv(t *testing.T) {
 		if got, want := byApp["web"].Stack, appStack(t, "pr-1", "web", buildOnly("b1")); got != want {
 			t.Errorf("web stack = %q, want the pointer-scoped preview stack %q", got, want)
 		}
-		prod, err := ReclaimTargets("shop", ProductionEnv, []string{"record:web/b1"}, nil, nil)
+		prod, err := ReclaimTargets("shop", ProductionEnv, []string{recordKeyFor("web", buildOnly("b1"))}, nil, nil)
 		if err != nil {
 			t.Fatalf("ReclaimTargets(production): %v", err)
 		}

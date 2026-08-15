@@ -6,6 +6,7 @@ export interface SqlStore {
 export interface DeploymentRecord {
   app: string;
   framework: string;
+  deploymentId: string;
   buildId: string;
   routingManifest: unknown;
   functionUrls: Record<string, string>;
@@ -58,17 +59,17 @@ const VERSION_KEY = "versionStamp";
 const OWNER_KEY = "ownerToken";
 const SECRET_KEY = "secret";
 
-function recordKey(app: string, buildId: string): string {
-  return `record:${app}/${buildId}`;
+function recordKey(app: string, deploymentId: string): string {
+  return `record:${app}/${deploymentId}`;
 }
 
 export function ensureSchema(store: SqlStore): void {
   store.sql.exec(
     `CREATE TABLE IF NOT EXISTS records (
        app TEXT NOT NULL,
-       build_id TEXT NOT NULL,
+       deployment_id TEXT NOT NULL,
        data TEXT NOT NULL,
-       PRIMARY KEY (app, build_id)
+       PRIMARY KEY (app, deployment_id)
      );
      CREATE TABLE IF NOT EXISTS promotions (
        promotion_id TEXT PRIMARY KEY,
@@ -87,6 +88,19 @@ export function ensureSchema(store: SqlStore): void {
        value TEXT NOT NULL
      );`,
   );
+
+  const recordColumns = store.sql
+    .exec<{ name: string }>(`PRAGMA table_info(records)`)
+    .toArray()
+    .map((c) => c.name);
+  if (
+    recordColumns.includes("build_id") &&
+    !recordColumns.includes("deployment_id")
+  ) {
+    store.sql.exec(
+      `ALTER TABLE records RENAME COLUMN build_id TO deployment_id`,
+    );
+  }
 
   const hasTag = store.sql
     .exec<{ name: string }>(`PRAGMA table_info(promotions)`)
@@ -148,10 +162,10 @@ function setPointer(store: SqlStore, name: string, promotionId: string): void {
 
 export function putStaged(store: SqlStore, record: DeploymentRecord): void {
   store.sql.exec(
-    `INSERT INTO records (app, build_id, data) VALUES (?, ?, ?)
-     ON CONFLICT(app, build_id) DO UPDATE SET data = excluded.data`,
+    `INSERT INTO records (app, deployment_id, data) VALUES (?, ?, ?)
+     ON CONFLICT(app, deployment_id) DO UPDATE SET data = excluded.data`,
     record.app,
-    record.buildId,
+    record.deploymentId,
     JSON.stringify(record),
   );
 }
@@ -159,13 +173,13 @@ export function putStaged(store: SqlStore, record: DeploymentRecord): void {
 export function record(
   store: SqlStore,
   app: string,
-  buildId: string,
+  deploymentId: string,
 ): DeploymentRecord | undefined {
   const row = store.sql
     .exec<{ data: string }>(
-      `SELECT data FROM records WHERE app = ? AND build_id = ?`,
+      `SELECT data FROM records WHERE app = ? AND deployment_id = ?`,
       app,
-      buildId,
+      deploymentId,
     )
     .toArray()[0];
   return row ? (JSON.parse(row.data) as DeploymentRecord) : undefined;
@@ -225,7 +239,7 @@ function pointerBuilds(
   return JSON.parse(row.builds) as Record<string, string>;
 }
 
-export function pointerBuildId(
+export function pointerDeploymentId(
   store: SqlStore,
   app: string,
   pointer: string = DEFAULT_POINTER,
@@ -236,15 +250,15 @@ export function pointerBuildId(
 export type PointerRecordResult =
   | { kind: "no-pointer" }
   | { kind: "ambiguous-app" }
-  | { kind: "unchanged"; buildId: string }
-  | { kind: "record"; buildId: string; record: DeploymentRecord }
-  | { kind: "dangling"; buildId: string };
+  | { kind: "unchanged"; deploymentId: string }
+  | { kind: "record"; deploymentId: string; record: DeploymentRecord }
+  | { kind: "dangling"; deploymentId: string };
 
 export function pointerRecord(
   store: SqlStore,
   app?: string,
   pointer: string = DEFAULT_POINTER,
-  knownBuildId?: string,
+  knownDeploymentId?: string,
 ): PointerRecordResult {
   const builds = pointerBuilds(store, pointer);
   if (!builds) return { kind: "no-pointer" };
@@ -257,12 +271,14 @@ export function pointerRecord(
     target = apps[0];
   }
 
-  const buildId = builds[target];
-  if (!buildId) return { kind: "no-pointer" };
-  if (buildId === knownBuildId) return { kind: "unchanged", buildId };
-  const rec = record(store, target, buildId);
-  if (!rec) return { kind: "dangling", buildId };
-  return { kind: "record", buildId, record: rec };
+  const deploymentId = builds[target];
+  if (!deploymentId) return { kind: "no-pointer" };
+  if (deploymentId === knownDeploymentId) {
+    return { kind: "unchanged", deploymentId };
+  }
+  const rec = record(store, target, deploymentId);
+  if (!rec) return { kind: "dangling", deploymentId };
+  return { kind: "record", deploymentId, record: rec };
 }
 
 export function history(
@@ -320,7 +336,9 @@ export function prune(
     });
 
     const removedRecordKeys = removed.flatMap((p) =>
-      Object.entries(p.builds).map(([app, buildId]) => recordKey(app, buildId)),
+      Object.entries(p.builds).map(([app, deploymentId]) =>
+        recordKey(app, deploymentId),
+      ),
     );
 
     for (const p of removed) {
@@ -328,11 +346,11 @@ export function prune(
         `DELETE FROM promotions WHERE promotion_id = ?`,
         p.promotionId,
       );
-      for (const [app, buildId] of Object.entries(p.builds)) {
+      for (const [app, deploymentId] of Object.entries(p.builds)) {
         store.sql.exec(
-          `DELETE FROM records WHERE app = ? AND build_id = ?`,
+          `DELETE FROM records WHERE app = ? AND deployment_id = ?`,
           app,
-          buildId,
+          deploymentId,
         );
       }
     }
@@ -352,8 +370,8 @@ function promotedRecordKeys(
 ): string[] {
   const keys = new Set<string>();
   for (const p of promotions) {
-    for (const [app, buildId] of Object.entries(p.builds)) {
-      keys.add(recordKey(app, buildId));
+    for (const [app, deploymentId] of Object.entries(p.builds)) {
+      keys.add(recordKey(app, deploymentId));
     }
   }
   return [...keys].sort();
@@ -376,16 +394,18 @@ export function removePointer(
       builds: JSON.parse(r.builds) as Record<string, string>,
     }));
     const removedRecordKeys = removed.flatMap((p) =>
-      Object.entries(p.builds).map(([app, buildId]) => recordKey(app, buildId)),
+      Object.entries(p.builds).map(([app, deploymentId]) =>
+        recordKey(app, deploymentId),
+      ),
     );
 
     for (const p of removed) {
       store.sql.exec(`DELETE FROM promotions WHERE promotion_id = ?`, p.promotionId);
-      for (const [app, buildId] of Object.entries(p.builds)) {
+      for (const [app, deploymentId] of Object.entries(p.builds)) {
         store.sql.exec(
-          `DELETE FROM records WHERE app = ? AND build_id = ?`,
+          `DELETE FROM records WHERE app = ? AND deployment_id = ?`,
           app,
-          buildId,
+          deploymentId,
         );
       }
     }
@@ -403,11 +423,11 @@ export function removePointer(
 
 function remainingRecordKeys(store: SqlStore): string[] {
   return store.sql
-    .exec<{ app: string; build_id: string }>(
-      `SELECT app, build_id FROM records ORDER BY app, build_id`,
+    .exec<{ app: string; deployment_id: string }>(
+      `SELECT app, deployment_id FROM records ORDER BY app, deployment_id`,
     )
     .toArray()
-    .map((r) => recordKey(r.app, r.build_id));
+    .map((r) => recordKey(r.app, r.deployment_id));
 }
 
 export interface Identity {

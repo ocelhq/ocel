@@ -64,7 +64,8 @@ const (
 type DeploymentRecord struct {
 	App              string            `json:"app"`
 	Framework        string            `json:"framework"`
-	Identity         string            `json:"buildId"`
+	Identity         string            `json:"deploymentId"`
+	BuildID          string            `json:"buildId"`
 	RoutingManifest  any               `json:"routingManifest"`
 	FunctionURLs     map[string]string `json:"functionUrls"`
 	AssetPrefix      string            `json:"assetPrefix"`
