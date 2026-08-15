@@ -26,18 +26,28 @@ type linkPolicy struct {
 	Policy string
 }
 
-func bucketGrants(bucket string) []*linksv1.Grant {
+func bucketGrants(bucket string, sessions sessionScope) []*linksv1.Grant {
 	arn := s3ARNPrefix + bucket
 	return []*linksv1.Grant{
 		{
 			Label:     "objects",
-			Actions:   []string{"s3:DeleteObject", "s3:GetObject", "s3:PutObject"},
+			Actions:   []string{"s3:DeleteObject", "s3:GetObject", "s3:PutObject", "s3:PutObjectTagging"},
 			Resources: []string{arn + "/*"},
 		},
 		{
 			Label:     "listing",
 			Actions:   []string{"s3:ListBucket"},
 			Resources: []string{arn},
+		},
+		{
+			Label:     "sessions",
+			Actions:   []string{"dynamodb:GetItem", "dynamodb:PutItem"},
+			Resources: []string{sessions.TableARN},
+			Conditions: []*linksv1.GrantCondition{{
+				Operator: "ForAllValues:StringLike",
+				Key:      "dynamodb:LeadingKeys",
+				Values:   []string{sessions.KeyPrefix + "*"},
+			}},
 		},
 	}
 }
@@ -90,17 +100,41 @@ func linkPolicyDocument(name string, grants []*linksv1.Grant) (string, error) {
 		if err := checkGrant(name, grant); err != nil {
 			return "", err
 		}
-		statements = append(statements, map[string]any{
+		statement := map[string]any{
 			"Effect":   "Allow",
 			"Action":   grant.GetActions(),
 			"Resource": grant.GetResources(),
-		})
+		}
+		if condition := grantCondition(grant); len(condition) > 0 {
+			statement["Condition"] = condition
+		}
+		statements = append(statements, statement)
 	}
 	out, err := json.Marshal(map[string]any{"Version": "2012-10-17", "Statement": statements})
 	if err != nil {
 		return "", fmt.Errorf("render the inline policy for link %s: %w", name, err)
 	}
 	return string(out), nil
+}
+
+func grantCondition(grant *linksv1.Grant) map[string]any {
+	if len(grant.GetConditions()) == 0 {
+		return nil
+	}
+	out := map[string]any{}
+	for _, c := range grant.GetConditions() {
+		keys, ok := out[c.GetOperator()].(map[string][]string)
+		if !ok {
+			keys = map[string][]string{}
+			out[c.GetOperator()] = keys
+		}
+		for _, value := range c.GetValues() {
+			if !slices.Contains(keys[c.GetKey()], value) {
+				keys[c.GetKey()] = append(keys[c.GetKey()], value)
+			}
+		}
+	}
+	return out
 }
 
 func appLinkPolicies(manifest *deploymentsv1.Manifest, app string, links []*linksv1.Link) ([]linkPolicy, error) {
@@ -133,14 +167,14 @@ func usedResources(manifest *deploymentsv1.Manifest, app string) map[string]bool
 	return used
 }
 
-func billedResourcePolicy(r *deploymentsv1.ManifestResource, consumed map[string]Consumed) (string, error) {
+func billedResourcePolicy(r *deploymentsv1.ManifestResource, consumed map[string]Consumed, sessions sessionScope) (string, error) {
 	if r.GetLinked() {
 		return linkPolicyDocument(r.GetLogicalName(), publishedGrants(consumed[r.GetLogicalName()]))
 	}
 	if r.GetBucket() == nil {
 		return "", nil
 	}
-	return linkPolicyDocument(r.GetLogicalName(), bucketGrants(strings.Repeat("b", maxS3BucketNameLen)))
+	return linkPolicyDocument(r.GetLogicalName(), bucketGrants(strings.Repeat("b", maxS3BucketNameLen), sessions))
 }
 
 func publishedGrants(c Consumed) []*linksv1.Grant {
@@ -183,10 +217,10 @@ func (e *PolicyBudgetError) Error() string {
 	return b.String()
 }
 
-func checkInlinePolicyBudget(manifest *deploymentsv1.Manifest, consumed map[string]Consumed) error {
+func checkInlinePolicyBudget(manifest *deploymentsv1.Manifest, consumed map[string]Consumed, sessions sessionScope) error {
 	costs := make(map[string]PolicyBillItem, len(manifest.GetResources()))
 	for _, r := range manifest.GetResources() {
-		policy, err := billedResourcePolicy(r, consumed)
+		policy, err := billedResourcePolicy(r, consumed, sessions)
 		if err != nil {
 			return err
 		}

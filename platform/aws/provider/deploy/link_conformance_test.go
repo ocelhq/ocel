@@ -137,13 +137,17 @@ func TestPostgresProducerEmitsTheFixture(t *testing.T) {
 	assertMatchesFixture(t, got, linksv1.LinkType_LINK_TYPE_POSTGRES)
 }
 
+const fixtureStateTableARN = "arn:aws:dynamodb:us-east-1:111122223333:table/ocel-state"
+
+var fixtureSessions = newSessionScope("shop", "prod", fixtureStateTableARN)
+
 func TestBucketProducerEmitsTheFixture(t *testing.T) {
 	t.Parallel()
 
 	want := linkFixture(t, linksv1.LinkType_LINK_TYPE_BUCKET).GetBucket()
 	fields := map[string]any{outputKeyBucket: want.GetBucket()}
 
-	got, err := collectBucketLink("bucket--uploads", fields)
+	got, err := collectBucketLink("bucket--uploads", fixtureSessions, fields)
 	if err != nil {
 		t.Fatalf("collectBucketLink: %v", err)
 	}

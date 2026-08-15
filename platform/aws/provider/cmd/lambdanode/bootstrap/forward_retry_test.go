@@ -58,7 +58,7 @@ func TestForwardToNodeRetriesStaleReusedConnection(t *testing.T) {
 			reusedConnFailure(io.EOF, false),
 			okResponse(),
 		}}
-		m := &Membrane{nodePort: 1, client: &http.Client{Transport: rt}}
+		m := &nodeChild{nodePort: 1, client: &http.Client{Transport: rt}}
 
 		resp, err := m.forwardToNode(t.Context(), ev)
 		if err != nil {
@@ -76,7 +76,7 @@ func TestForwardToNodeRetriesStaleReusedConnection(t *testing.T) {
 		rt := &scriptedRoundTripper{calls: []func(req *http.Request) (*http.Response, error){
 			reusedConnFailure(io.EOF, true),
 		}}
-		m := &Membrane{nodePort: 1, client: &http.Client{Transport: rt}}
+		m := &nodeChild{nodePort: 1, client: &http.Client{Transport: rt}}
 
 		_, err := m.forwardToNode(t.Context(), ev)
 		if err == nil {
@@ -92,7 +92,7 @@ func TestForwardToNodeRetriesStaleReusedConnection(t *testing.T) {
 			reusedConnFailure(io.EOF, false),
 			reusedConnFailure(io.EOF, false),
 		}}
-		m := &Membrane{nodePort: 1, client: &http.Client{Transport: rt}}
+		m := &nodeChild{nodePort: 1, client: &http.Client{Transport: rt}}
 
 		_, err := m.forwardToNode(t.Context(), ev)
 		if err == nil {
@@ -113,7 +113,7 @@ func TestForwardToNodeRetriesStaleReusedConnection(t *testing.T) {
 				return nil, io.EOF
 			},
 		}}
-		m := &Membrane{nodePort: 1, client: &http.Client{Transport: rt}}
+		m := &nodeChild{nodePort: 1, client: &http.Client{Transport: rt}}
 
 		_, err := m.forwardToNode(t.Context(), ev)
 		if err == nil {

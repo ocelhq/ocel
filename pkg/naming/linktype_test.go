@@ -25,6 +25,22 @@ func TestKindOf(t *testing.T) {
 	}
 }
 
+func TestCrossesMembrane(t *testing.T) {
+	for _, tc := range []struct {
+		typ  linksv1.LinkType
+		want bool
+	}{
+		{linksv1.LinkType_LINK_TYPE_BUCKET, true},
+		{linksv1.LinkType_LINK_TYPE_POSTGRES, false},
+		{linksv1.LinkType_LINK_TYPE_UNSPECIFIED, false},
+		{linksv1.LinkType(99), false},
+	} {
+		if got := CrossesMembrane(tc.typ); got != tc.want {
+			t.Errorf("CrossesMembrane(%v) = %v, want %v", tc.typ, got, tc.want)
+		}
+	}
+}
+
 func TestEnvFragment(t *testing.T) {
 	for _, tc := range []struct {
 		typ  linksv1.LinkType

@@ -84,6 +84,14 @@ var publishedFixtures = map[string]vars.PublishedRecord{
 	},
 }
 
+func sessionConfig() Config {
+	cfg := liveConfig()
+	cfg.StateTable = "ocel-state"
+	cfg.StateTableARN = fixtureStateTableARN
+	cfg.sessions = newSessionScope("shop", "prod", fixtureStateTableARN)
+	return cfg
+}
+
 func linkedManifest() *deploymentsv1.Manifest {
 	return &deploymentsv1.Manifest{
 		Slug: "shop",
@@ -289,7 +297,7 @@ func TestLinkedAppRendersNoCredential(t *testing.T) {
 		t.Errorf("bundle.Links = %v, want %v so the role can be scoped to them", bundle.Links, want)
 	}
 
-	env := appEnv(app, bundle)
+	env := appEnv(linkedManifest(), app, bundle, sessionConfig())
 	for _, published := range publishedProperties(t) {
 		for key, value := range env {
 			if strings.Contains(value, published) {
@@ -304,7 +312,7 @@ func TestLinkedAppRendersNoCredential(t *testing.T) {
 
 func TestDeliveryScopesToTheAppsThatUseTheResource(t *testing.T) {
 	t.Parallel()
-	cfg := liveConfig()
+	cfg := sessionConfig()
 	cfg.Slug = "shop"
 	manifest := linkedManifest()
 	bundles, err := renderAppBundles(cfg, manifest, nil)
@@ -316,7 +324,7 @@ func TestDeliveryScopesToTheAppsThatUseTheResource(t *testing.T) {
 	addresses := map[string][]string{}
 	for _, app := range manifest.GetApps() {
 		bundle := bundles[app.GetName()]
-		envs[app.GetName()] = appEnv(app, bundle)
+		envs[app.GetName()] = appEnv(manifest, app, bundle, cfg)
 		parsed, err := live.Parse(bundle.Live)
 		if err != nil {
 			t.Fatalf("parse %s's live manifest: %v", app.GetName(), err)
@@ -339,8 +347,14 @@ func TestDeliveryScopesToTheAppsThatUseTheResource(t *testing.T) {
 	if want := []string{"bucket--uploads", "db--main"}; !slices.Equal(bundles["api"].Links, want) {
 		t.Errorf("api's bundle names %v, want %v: the app whose edges name both is handed both", bundles["api"].Links, want)
 	}
-	if got := envs["api"][runtimeAddressEnv]; got != deferredRuntimeAddress {
-		t.Errorf("api's env carries %s=%q, want %q so the app it is delivered to can read its values at all", runtimeAddressEnv, got, deferredRuntimeAddress)
+	if got := envs["api"][envStateTable]; got != cfg.StateTable {
+		t.Errorf("api's env carries %s=%q, want %q so the membrane it brings up can keep the bucket's sessions", envStateTable, got, cfg.StateTable)
+	}
+	if got := envs["api"][envSessionPrefix]; got != cfg.sessions.KeyPrefix {
+		t.Errorf("api's env carries %s=%q, want %q so the membrane writes only under this deployment's scope", envSessionPrefix, got, cfg.sessions.KeyPrefix)
+	}
+	if _, ok := envs["web"][envStateTable]; ok {
+		t.Errorf("web's env names the state table for a membrane it never brings up")
 	}
 
 	for key, value := range envs["web"] {

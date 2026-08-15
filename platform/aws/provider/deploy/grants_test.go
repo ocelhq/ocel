@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -93,9 +94,13 @@ func grantsManifest() *deploymentsv1.Manifest {
 	}
 }
 
+const stateTableARN = "arn:aws:dynamodb:us-east-1:1234:table/ocel-state"
+
+var testSessions = newSessionScope("shop", "prod", stateTableARN)
+
 func grantsLinks() []*linksv1.Link {
 	return []*linksv1.Link{
-		{Name: "bucket--uploads", Properties: &linksv1.Link_Bucket{Bucket: &linksv1.BucketProperties{Bucket: "shop-prod-uploads-abc"}}, Grants: bucketGrants("shop-prod-uploads-abc")},
+		{Name: "bucket--uploads", Properties: &linksv1.Link_Bucket{Bucket: &linksv1.BucketProperties{Bucket: "shop-prod-uploads-abc"}}, Grants: bucketGrants("shop-prod-uploads-abc", testSessions)},
 		{Name: "database--main", Properties: &linksv1.Link_Postgres{Postgres: &linksv1.PostgresProperties{Host: "db.host", Port: 5432}}},
 	}
 }
@@ -129,7 +134,8 @@ func TestAppLinkPoliciesRenderOnlyOnTheUsingRole(t *testing.T) {
 			}
 			var doc struct {
 				Statement []struct {
-					Resource []string
+					Resource  []string
+					Condition map[string]map[string][]string
 				}
 			}
 			if err := json.Unmarshal([]byte(policy), &doc); err != nil {
@@ -137,8 +143,15 @@ func TestAppLinkPoliciesRenderOnlyOnTheUsingRole(t *testing.T) {
 			}
 			for _, s := range doc.Statement {
 				for _, r := range s.Resource {
-					if !strings.Contains(r, "shop-prod-uploads-abc") {
-						t.Errorf("resource = %q, want the bucket this link names", r)
+					if strings.Contains(r, "shop-prod-uploads-abc") {
+						continue
+					}
+					if r != stateTableARN {
+						t.Errorf("resource = %q, want the bucket this link names or the table its sessions live in", r)
+						continue
+					}
+					if got := s.Condition["ForAllValues:StringLike"]["dynamodb:LeadingKeys"]; !slices.Equal(got, []string{testSessions.KeyPrefix + "*"}) {
+						t.Errorf("sessions statement condition = %v, want the app held to this deploy's own session keys", s.Condition)
 					}
 				}
 			}
@@ -166,7 +179,7 @@ func TestAppLinkPoliciesRenderOnlyOnTheUsingRole(t *testing.T) {
 		unused := append(grantsLinks(), &linksv1.Link{
 			Name:       "bucket--reports",
 			Properties: &linksv1.Link_Bucket{Bucket: &linksv1.BucketProperties{Bucket: "shop-prod-reports-def"}},
-			Grants:     bucketGrants("shop-prod-reports-def"),
+			Grants:     bucketGrants("shop-prod-reports-def", testSessions),
 		})
 		policies, err := appLinkPolicies(manifest, "web", unused)
 		if err != nil {
@@ -224,7 +237,7 @@ func TestInlinePolicyBudgetPreflight(t *testing.T) {
 	t.Run("a modest app passes", func(t *testing.T) {
 		t.Parallel()
 
-		if err := checkInlinePolicyBudget(grantsManifest(), nil); err != nil {
+		if err := checkInlinePolicyBudget(grantsManifest(), nil, testSessions); err != nil {
 			t.Fatalf("checkInlinePolicyBudget = %v, want nil", err)
 		}
 	})
@@ -242,7 +255,7 @@ func TestInlinePolicyBudgetPreflight(t *testing.T) {
 			})
 			manifest.Usages = append(manifest.Usages, &deploymentsv1.ManifestUsage{App: "web", Resource: name})
 		}
-		if err := checkInlinePolicyBudget(manifest, nil); err != nil {
+		if err := checkInlinePolicyBudget(manifest, nil, testSessions); err != nil {
 			t.Fatalf("checkInlinePolicyBudget = %v, want nil for grant-free links", err)
 		}
 	})
@@ -262,7 +275,7 @@ func TestInlinePolicyBudgetPreflight(t *testing.T) {
 		}
 
 		var budget *PolicyBudgetError
-		err := checkInlinePolicyBudget(manifest, nil)
+		err := checkInlinePolicyBudget(manifest, nil, testSessions)
 		if !errors.As(err, &budget) {
 			t.Fatalf("checkInlinePolicyBudget = %v, want a *PolicyBudgetError", err)
 		}
@@ -309,7 +322,7 @@ func TestInlinePolicyBudgetPreflight(t *testing.T) {
 		}
 
 		var budget *PolicyBudgetError
-		if err := checkInlinePolicyBudget(manifest, nil); !errors.As(err, &budget) {
+		if err := checkInlinePolicyBudget(manifest, nil, testSessions); !errors.As(err, &budget) {
 			t.Fatalf("checkInlinePolicyBudget = %v, want a *PolicyBudgetError", err)
 		}
 		if len(budget.Apps) != 2 || budget.Apps[0].App != "admin" || budget.Apps[1].App != "web" {
@@ -328,7 +341,7 @@ func TestInlinePolicyBudgetPreflight(t *testing.T) {
 
 		manifest := grantsManifest()
 		manifest.Usages = append(manifest.Usages, &deploymentsv1.ManifestUsage{App: "web", Resource: "bucket--uploads"})
-		for i := range 15 {
+		for i := range 8 {
 			name := "bucket--" + string(rune('a'+i%26)) + string(rune('a'+i/26))
 			manifest.Resources = append(manifest.Resources, &deploymentsv1.ManifestResource{
 				LogicalName: name,
@@ -348,7 +361,7 @@ func TestInlinePolicyBudgetPreflight(t *testing.T) {
 		if len(policies) != 1 {
 			t.Fatalf("policies = %+v, want the duplicated link rendered once", policies)
 		}
-		if err := checkInlinePolicyBudget(manifest, nil); err != nil {
+		if err := checkInlinePolicyBudget(manifest, nil, testSessions); err != nil {
 			t.Fatalf("checkInlinePolicyBudget = %v, want duplicated usages billed once", err)
 		}
 	})
@@ -368,7 +381,12 @@ func TestInlinePolicyBudgetPreflight(t *testing.T) {
 		}
 
 		fake := &recordingRootStack{}
-		_, err := Run(context.Background(), Config{Edge: fake, StoreEndpoint: fakeStoreEndpoint}, manifest, nil, func(string) {})
+		_, err := Run(context.Background(), Config{
+			Edge:          fake,
+			StoreEndpoint: fakeStoreEndpoint,
+			Class:         deploymentsv1.Environment_CLASS_PRODUCTION,
+			StateTableARN: stateTableARN,
+		}, manifest, nil, func(string) {})
 
 		var budget *PolicyBudgetError
 		if !errors.As(err, &budget) {
@@ -382,7 +400,7 @@ func TestInlinePolicyBudgetPreflight(t *testing.T) {
 	t.Run("the reserve covers the platform's own policies at the fullest role the budget admits", func(t *testing.T) {
 		t.Parallel()
 
-		worst, err := billedResourcePolicy(grantsManifest().GetResources()[0], nil)
+		worst, err := billedResourcePolicy(grantsManifest().GetResources()[0], nil, testSessions)
 		if err != nil {
 			t.Fatalf("billedResourcePolicy: %v", err)
 		}
@@ -433,7 +451,7 @@ func TestInlinePolicyBudgetPreflight(t *testing.T) {
 		if err != nil {
 			t.Fatalf("appLinkPolicies: %v", err)
 		}
-		worst, err := billedResourcePolicy(grantsManifest().GetResources()[0], nil)
+		worst, err := billedResourcePolicy(grantsManifest().GetResources()[0], nil, testSessions)
 		if err != nil {
 			t.Fatalf("billedResourcePolicy: %v", err)
 		}
@@ -441,4 +459,39 @@ func TestInlinePolicyBudgetPreflight(t *testing.T) {
 			t.Fatalf("worst case is %d characters, under the %d actually rendered", len(worst), len(policies[0].Policy))
 		}
 	})
+}
+
+func TestGrantConditionMergesConditionsOnOneKey(t *testing.T) {
+	t.Parallel()
+
+	grant := &linksv1.Grant{
+		Label:     "sessions",
+		Actions:   []string{"dynamodb:GetItem"},
+		Resources: []string{stateTableARN},
+		Conditions: []*linksv1.GrantCondition{
+			{Operator: "ForAllValues:StringLike", Key: "dynamodb:LeadingKeys", Values: []string{"SESSION#a*"}},
+			{Operator: "ForAllValues:StringLike", Key: "dynamodb:LeadingKeys", Values: []string{"SESSION#b*", "SESSION#a*"}},
+			{Operator: "StringEquals", Key: "dynamodb:Select", Values: []string{"SPECIFIC_ATTRIBUTES"}},
+		},
+	}
+
+	condition := grantCondition(grant)
+
+	leading := condition["ForAllValues:StringLike"].(map[string][]string)["dynamodb:LeadingKeys"]
+	if !slices.Equal(leading, []string{"SESSION#a*", "SESSION#b*"}) {
+		t.Errorf("dynamodb:LeadingKeys = %v, want both conditions on the key merged and deduplicated", leading)
+	}
+	if got := condition["StringEquals"].(map[string][]string)["dynamodb:Select"]; !slices.Equal(got, []string{"SPECIFIC_ATTRIBUTES"}) {
+		t.Errorf("dynamodb:Select = %v, want the condition under its own operator", got)
+	}
+
+	policy, err := linkPolicyDocument("bucket--uploads", []*linksv1.Grant{grant})
+	if err != nil {
+		t.Fatalf("linkPolicyDocument: %v", err)
+	}
+	for _, want := range []string{"SESSION#a*", "SESSION#b*", "SPECIFIC_ATTRIBUTES"} {
+		if !strings.Contains(policy, want) {
+			t.Errorf("policy = %s, missing %q", policy, want)
+		}
+	}
 }

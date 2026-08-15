@@ -34,7 +34,7 @@ func TestMarkSucceeded(t *testing.T) {
 	table := "ocel-listener-ddblocal-" + strings.ReplaceAll(t.Name(), "/", "_")
 	createTable(t, ctx, ddb, table)
 
-	store := &sessionStore{client: ddb, table: table}
+	store := &sessionStore{client: ddb, table: table, keyPrefix: testSessionKeyPrefix}
 	sess := session{
 		SessionID:       "sess_ddblocal",
 		Secret:          "secret",

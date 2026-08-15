@@ -51,24 +51,22 @@ type ddbAPI interface {
 }
 
 type sessionStore struct {
-	client ddbAPI
-	table  string
+	client    ddbAPI
+	table     string
+	keyPrefix string
 }
 
-const (
-	sessionPKPrefix = "SESSION#"
-	sessionSK       = "#META"
-)
+const sessionSK = "#META"
 
-func sessionKey(sessionID string) map[string]ddbtypes.AttributeValue {
+func (s *sessionStore) key(sessionID string) map[string]ddbtypes.AttributeValue {
 	return map[string]ddbtypes.AttributeValue{
-		"pk": &ddbtypes.AttributeValueMemberS{Value: sessionPKPrefix + sessionID},
+		"pk": &ddbtypes.AttributeValueMemberS{Value: s.keyPrefix + sessionID},
 		"sk": &ddbtypes.AttributeValueMemberS{Value: sessionSK},
 	}
 }
 
 func (s *sessionStore) put(ctx context.Context, sess session) error {
-	sess.PK = sessionPKPrefix + sess.SessionID
+	sess.PK = s.keyPrefix + sess.SessionID
 	sess.SK = sessionSK
 	item, err := attributevalue.MarshalMap(sess)
 	if err != nil {
@@ -87,7 +85,7 @@ func (s *sessionStore) put(ctx context.Context, sess session) error {
 func (s *sessionStore) get(ctx context.Context, sessionID string) (session, error) {
 	out, err := s.client.GetItem(ctx, &dynamodb.GetItemInput{
 		TableName: aws.String(s.table),
-		Key:       sessionKey(sessionID),
+		Key:       s.key(sessionID),
 	})
 	if err != nil {
 		return session{}, fmt.Errorf("get session: %w", err)
@@ -106,7 +104,7 @@ func (s *sessionStore) markSucceeded(ctx context.Context, sessionID string, idx 
 	expr := fmt.Sprintf("files[%d].#st", idx)
 	_, err := s.client.UpdateItem(ctx, &dynamodb.UpdateItemInput{
 		TableName:                aws.String(s.table),
-		Key:                      sessionKey(sessionID),
+		Key:                      s.key(sessionID),
 		UpdateExpression:         aws.String("SET " + expr + " = :succeeded"),
 		ConditionExpression:      aws.String(expr + " = :pending"),
 		ExpressionAttributeNames: map[string]string{"#st": "state"},

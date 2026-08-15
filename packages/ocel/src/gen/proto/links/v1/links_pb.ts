@@ -10,7 +10,7 @@ import type { Message } from "@bufbuild/protobuf";
  * Describes the file links/v1/links.proto.
  */
 export const file_links_v1_links: GenFile = /*@__PURE__*/
-  fileDesc("ChRsaW5rcy92MS9saW5rcy5wcm90bxIIbGlua3MudjEiswEKBExpbmsSDAoEbmFtZRgBIAEoCRIwCghwb3N0Z3JlcxgCIAEoCzIcLmxpbmtzLnYxLlBvc3RncmVzUHJvcGVydGllc0gAEiwKBmJ1Y2tldBgDIAEoCzIaLmxpbmtzLnYxLkJ1Y2tldFByb3BlcnRpZXNIABIfCgZncmFudHMYBCADKAsyDy5saW5rcy52MS5HcmFudBIOCgZzb3VyY2UYBSABKAlCDAoKcHJvcGVydGllcyJrChJQb3N0Z3Jlc1Byb3BlcnRpZXMSDAoEaG9zdBgBIAEoCRIMCgRwb3J0GAIgASgFEhAKCGRhdGFiYXNlGAMgASgJEhAKCHVzZXJuYW1lGAQgASgJEhUKCHBhc3N3b3JkGAUgASgJQgOAAQEiIgoQQnVja2V0UHJvcGVydGllcxIOCgZidWNrZXQYASABKAkiOgoFR3JhbnQSDwoHYWN0aW9ucxgBIAMoCRIRCglyZXNvdXJjZXMYAiADKAkSDQoFbGFiZWwYAyABKAkqUwoITGlua1R5cGUSGQoVTElOS19UWVBFX1VOU1BFQ0lGSUVEEAASFgoSTElOS19UWVBFX1BPU1RHUkVTEAESFAoQTElOS19UWVBFX0JVQ0tFVBACQjNaMWdpdGh1Yi5jb20vb2NlbGhxL29jZWwvcGtnL3Byb3RvL2xpbmtzL3YxO2xpbmtzdjFiBnByb3RvMw");
+  fileDesc("ChRsaW5rcy92MS9saW5rcy5wcm90bxIIbGlua3MudjEiswEKBExpbmsSDAoEbmFtZRgBIAEoCRIwCghwb3N0Z3JlcxgCIAEoCzIcLmxpbmtzLnYxLlBvc3RncmVzUHJvcGVydGllc0gAEiwKBmJ1Y2tldBgDIAEoCzIaLmxpbmtzLnYxLkJ1Y2tldFByb3BlcnRpZXNIABIfCgZncmFudHMYBCADKAsyDy5saW5rcy52MS5HcmFudBIOCgZzb3VyY2UYBSABKAlCDAoKcHJvcGVydGllcyJrChJQb3N0Z3Jlc1Byb3BlcnRpZXMSDAoEaG9zdBgBIAEoCRIMCgRwb3J0GAIgASgFEhAKCGRhdGFiYXNlGAMgASgJEhAKCHVzZXJuYW1lGAQgASgJEhUKCHBhc3N3b3JkGAUgASgJQgOAAQEiIgoQQnVja2V0UHJvcGVydGllcxIOCgZidWNrZXQYASABKAkiaAoFR3JhbnQSDwoHYWN0aW9ucxgBIAMoCRIRCglyZXNvdXJjZXMYAiADKAkSDQoFbGFiZWwYAyABKAkSLAoKY29uZGl0aW9ucxgEIAMoCzIYLmxpbmtzLnYxLkdyYW50Q29uZGl0aW9uIj8KDkdyYW50Q29uZGl0aW9uEhAKCG9wZXJhdG9yGAEgASgJEgsKA2tleRgCIAEoCRIOCgZ2YWx1ZXMYAyADKAkqUwoITGlua1R5cGUSGQoVTElOS19UWVBFX1VOU1BFQ0lGSUVEEAASFgoSTElOS19UWVBFX1BPU1RHUkVTEAESFAoQTElOS19UWVBFX0JVQ0tFVBACQjNaMWdpdGh1Yi5jb20vb2NlbGhxL29jZWwvcGtnL3Byb3RvL2xpbmtzL3YxO2xpbmtzdjFiBnByb3RvMw");
 
 /**
  * @generated from message links.v1.Link
@@ -128,6 +128,11 @@ export type Grant = Message<"links.v1.Grant"> & {
    * @generated from field: string label = 3;
    */
   label: string;
+
+  /**
+   * @generated from field: repeated links.v1.GrantCondition conditions = 4;
+   */
+  conditions: GrantCondition[];
 };
 
 /**
@@ -136,6 +141,33 @@ export type Grant = Message<"links.v1.Grant"> & {
  */
 export const GrantSchema: GenMessage<Grant> = /*@__PURE__*/
   messageDesc(file_links_v1_links, 3);
+
+/**
+ * @generated from message links.v1.GrantCondition
+ */
+export type GrantCondition = Message<"links.v1.GrantCondition"> & {
+  /**
+   * @generated from field: string operator = 1;
+   */
+  operator: string;
+
+  /**
+   * @generated from field: string key = 2;
+   */
+  key: string;
+
+  /**
+   * @generated from field: repeated string values = 3;
+   */
+  values: string[];
+};
+
+/**
+ * Describes the message links.v1.GrantCondition.
+ * Use `create(GrantConditionSchema)` to create a new message.
+ */
+export const GrantConditionSchema: GenMessage<GrantCondition> = /*@__PURE__*/
+  messageDesc(file_links_v1_links, 4);
 
 /**
  * @generated from enum links.v1.LinkType

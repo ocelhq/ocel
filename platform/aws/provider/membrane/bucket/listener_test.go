@@ -66,7 +66,7 @@ func seedPendingSession(t *testing.T, ddb *fakeDDB, callbackURL string) (id, sec
 	t.Helper()
 	id = "sess_test1"
 	secret = "supersecret"
-	store := &sessionStore{client: ddb, table: "sessions"}
+	store := &sessionStore{client: ddb, table: "sessions", keyPrefix: testSessionKeyPrefix}
 	err := store.put(context.Background(), session{
 		SessionID:       id,
 		Secret:          secret,
@@ -94,11 +94,12 @@ func objectCreatedEvent(bucket, key string) S3Event {
 
 func newListener(ddb *fakeDDB, tagger objectTagger, doer httpDoer, origins []string) *Listener {
 	return NewListener(ListenerConfig{
-		DDB:            ddb,
-		Tagger:         tagger,
-		HTTP:           doer,
-		Table:          "sessions",
-		AllowedOrigins: origins,
+		DDB:              ddb,
+		Tagger:           tagger,
+		HTTP:             doer,
+		Table:            "sessions",
+		SessionKeyPrefix: testSessionKeyPrefix,
+		AllowedOrigins:   origins,
 	})
 }
 
@@ -124,7 +125,7 @@ func TestListener(t *testing.T) {
 			t.Fatalf("callback url op = %q, want callback (url %q)", got, post.url)
 		}
 
-		svc := &Service{store: &sessionStore{client: ddb, table: "sessions"}}
+		svc := &Service{store: &sessionStore{client: ddb, table: "sessions", keyPrefix: testSessionKeyPrefix}}
 		resp, err := svc.VerifyUploadSignature(context.Background(), verifyReq(id, post.body))
 		if err != nil {
 			t.Fatalf("VerifyUploadSignature: %v", err)
@@ -153,7 +154,7 @@ func TestListener(t *testing.T) {
 		forged := doer.posts[0].body
 		forged.Signature = forged.Signature[:len(forged.Signature)-1] + "0"
 
-		svc := &Service{store: &sessionStore{client: ddb, table: "sessions"}}
+		svc := &Service{store: &sessionStore{client: ddb, table: "sessions", keyPrefix: testSessionKeyPrefix}}
 		resp, err := svc.VerifyUploadSignature(context.Background(), verifyReq(id, forged))
 		if err != nil {
 			t.Fatalf("VerifyUploadSignature: %v", err)

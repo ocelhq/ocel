@@ -86,8 +86,10 @@ func (p *fakePresigner) PresignPutObject(_ context.Context, in *s3.PutObjectInpu
 	return &v4.PresignedHTTPRequest{URL: u, Method: "PUT"}, nil
 }
 
+const testSessionKeyPrefix = "PROJECT#shop#ENV#prod#SESSION#"
+
 func newTestService(ddb ddbAPI, ps presignAPI) *Service {
-	s := New(Config{DDB: ddb, Presigner: ps, Table: "sessions", Bucket: "prod-bucket"})
+	s := New(Config{DDB: ddb, Presigner: ps, Table: "sessions", SessionKeyPrefix: testSessionKeyPrefix})
 	s.newID = func() string { return "sess_fixed" }
 	s.newSecret = func() string { return "test-secret" }
 	s.now = func() time.Time { return time.Unix(1_000_000, 0) }
@@ -121,8 +123,11 @@ func TestPresignUpload(t *testing.T) {
 			t.Fatalf("targets = %d, want 1", len(resp.GetFiles()))
 		}
 		target := resp.GetFiles()[0]
-		if !strings.Contains(target.GetUrl(), "prod-bucket/avatar.png") {
-			t.Fatalf("url does not use the prod bucket + as-is key: %s", target.GetUrl())
+		if !strings.Contains(target.GetUrl(), "storage/avatar.png") {
+			t.Fatalf("url does not use the requested bucket + as-is key: %s", target.GetUrl())
+		}
+		if sess, err := svc.store.get(context.Background(), "sess_fixed"); err != nil || sess.Bucket != "storage" {
+			t.Fatalf("session bucket = %q (err %v), want the bucket the request named", sess.Bucket, err)
 		}
 
 		in := ps.lastInput
@@ -151,6 +156,24 @@ func TestPresignUpload(t *testing.T) {
 		}
 		if sess.ExpiresAt <= sess.CreatedAt {
 			t.Fatalf("expires_at %d must be after created_at %d", sess.ExpiresAt, sess.CreatedAt)
+		}
+		if sess.PK != testSessionKeyPrefix+"sess_fixed" {
+			t.Fatalf("pk = %q, want %q — every other deploy sharing this account's table reads and writes under its own scope",
+				sess.PK, testSessionKeyPrefix+"sess_fixed")
+		}
+	})
+
+	t.Run("refuses a request naming no bucket", func(t *testing.T) {
+		t.Parallel()
+		svc := newTestService(newFakeDDB(), &fakePresigner{})
+
+		_, err := svc.PresignUpload(context.Background(), &bucketsv1.PresignUploadRequest{
+			Files: []*bucketsv1.PresignFile{{Key: "a.png", Name: "a.png", Size: 1, MimeType: "image/png"}},
+		})
+
+		var connectErr *connect.Error
+		if !errors.As(err, &connectErr) || connectErr.Code() != connect.CodeInvalidArgument {
+			t.Fatalf("PresignUpload with no bucket err = %v, want CodeInvalidArgument", err)
 		}
 	})
 

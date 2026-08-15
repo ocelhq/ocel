@@ -189,6 +189,13 @@ func (l *liveValues) declaredEnv() []string {
 	return []string{liveKeysEnvVar + "=" + strings.Join(l.keys, ",")}
 }
 
+func (l *liveValues) declaredLinks() []live.Link {
+	if l == nil {
+		return nil
+	}
+	return l.links
+}
+
 func (l *liveValues) start(ctx context.Context) <-chan error {
 	if l == nil {
 		return nil

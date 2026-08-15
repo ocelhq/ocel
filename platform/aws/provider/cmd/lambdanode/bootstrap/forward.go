@@ -14,7 +14,7 @@ import (
 	"github.com/aws/aws-lambda-go/lambdacontext"
 )
 
-func handleInvocation(ctx context.Context, rt *runtimeClient, m *Membrane) error {
+func handleInvocation(ctx context.Context, rt *runtimeClient, m *nodeChild) error {
 	inv, err := rt.next(ctx)
 	if err != nil {
 		return err
@@ -56,7 +56,7 @@ func handleInvocation(ctx context.Context, rt *runtimeClient, m *Membrane) error
 	return nil
 }
 
-func (m *Membrane) forward(ctx context.Context, inv *invocation, rw *responseWriter) (reached bool, err error) {
+func (m *nodeChild) forward(ctx context.Context, inv *invocation, rw *responseWriter) (reached bool, err error) {
 	ev, err := parseEvent(inv.Payload)
 	if err != nil {
 		return false, m.fail(rw, fmt.Sprintf("bad event payload: %v", err))
@@ -105,7 +105,7 @@ func (m *Membrane) forward(ctx context.Context, inv *invocation, rw *responseWri
 	return true, rw.Close()
 }
 
-func (m *Membrane) forwardToNode(ctx context.Context, ev *funcURLRequest) (*http.Response, error) {
+func (m *nodeChild) forwardToNode(ctx context.Context, ev *funcURLRequest) (*http.Response, error) {
 	req, err := buildForwardRequest(ctx, m.nodePort, ev)
 	if err != nil {
 		return nil, err
@@ -135,7 +135,7 @@ func buildForwardRequest(ctx context.Context, nodePort int, ev *funcURLRequest) 
 	return req, nil
 }
 
-func (m *Membrane) roundTrip(req *http.Request) (resp *http.Response, retryable bool, err error) {
+func (m *nodeChild) roundTrip(req *http.Request) (resp *http.Response, retryable bool, err error) {
 	var reused, wrote bool
 	trace := &httptrace.ClientTrace{
 		GotConn: func(info httptrace.GotConnInfo) {
@@ -162,7 +162,7 @@ func selfTerminating(status int) bool {
 	return status == http.StatusNoContent || status == http.StatusNotModified
 }
 
-func (m *Membrane) fail(rw *responseWriter, message string) error {
+func (m *nodeChild) fail(rw *responseWriter, message string) error {
 	header := http.Header{"Content-Type": []string{"text/plain; charset=utf-8"}}
 	prelude, err := encodePrelude(http.StatusBadGateway, header)
 	if err != nil {

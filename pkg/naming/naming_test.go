@@ -189,6 +189,22 @@ func TestLinkVarsKeysArePerLinkPartitions(t *testing.T) {
 	}
 }
 
+func TestSessionKeysPartitionByProjectAndEnvironment(t *testing.T) {
+	prod := SessionKeyPrefix("shop", "prod")
+
+	for _, other := range []string{SessionKeyPrefix("shop", "pr-7"), SessionKeyPrefix("bank", "prod")} {
+		if strings.HasPrefix(other, prod) || strings.HasPrefix(prod, other) {
+			t.Errorf("%q and %q overlap; a LeadingKeys condition on one would reach the other's sessions", prod, other)
+		}
+	}
+	if !strings.HasSuffix(prod, KeySeparator) {
+		t.Errorf("SessionKeyPrefix = %q, want it to end on %q so %q* cannot match a longer scope", prod, KeySeparator, prod)
+	}
+	if strings.HasPrefix(ProjectKey("shop")+KeySeparator, prod) {
+		t.Errorf("SessionKeyPrefix = %q reaches the project's own keys", prod)
+	}
+}
+
 func TestStackKeysRoundTrip(t *testing.T) {
 	want := AppStack("pr-7", "web", NewRelease("build-1", "fp"))
 	project, got, err := ParseStackKey(StackKey("shop", want))

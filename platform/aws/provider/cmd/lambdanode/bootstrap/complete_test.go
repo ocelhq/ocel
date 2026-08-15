@@ -28,7 +28,7 @@ func TestHandleInvocationComplete(t *testing.T) {
 		rt, _ := fakeRuntime(t, []byte(getEvent))
 
 		goSide, jsSide := net.Pipe()
-		m := &Membrane{
+		m := &nodeChild{
 			nodePort:  portOf(t, node),
 			client:    &http.Client{},
 			control:   goSide,
@@ -64,7 +64,7 @@ func TestHandleInvocationComplete(t *testing.T) {
 		node := okNode(t)
 		deadline := time.Now().Add(100 * time.Millisecond)
 		rt := fakeRuntimeWithDeadline(t, []byte(getEvent), deadline)
-		m := &Membrane{
+		m := &nodeChild{
 			nodePort:  portOf(t, node),
 			client:    &http.Client{},
 			lifecycle: true,
@@ -95,7 +95,7 @@ func TestHandleInvocationComplete(t *testing.T) {
 		node := okNode(t)
 		deadline := time.Now().Add(30 * time.Second)
 		rt := fakeRuntimeWithDeadline(t, []byte(getEvent), deadline)
-		m := &Membrane{
+		m := &nodeChild{
 			nodePort: portOf(t, node),
 			client:   &http.Client{},
 			pending:  map[string]chan struct{}{},
@@ -127,7 +127,7 @@ func TestHandleInvocationComplete(t *testing.T) {
 		l.Close()
 
 		rt := fakeRuntimeWithDeadline(t, []byte(getEvent), time.Now().Add(30*time.Second))
-		m := &Membrane{
+		m := &nodeChild{
 			nodePort: deadPort,
 			client:   &http.Client{},
 			pending:  map[string]chan struct{}{},

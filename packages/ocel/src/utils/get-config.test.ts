@@ -138,9 +138,9 @@ describe("getRuntimeAddress", () => {
   });
 
   it("reads the one address every membrane-backed resource shares", () => {
-    process.env.OCEL_RUNTIME_ADDRESS = "unix:///run/ocel/runtime.sock";
+    process.env.OCEL_RUNTIME_ADDRESS = "http://127.0.0.1:41235";
 
-    expect(getRuntimeAddress()).toBe("unix:///run/ocel/runtime.sock");
+    expect(getRuntimeAddress()).toBe("http://127.0.0.1:41235");
   });
 
   it("throws when the runtime address is undefined", () => {

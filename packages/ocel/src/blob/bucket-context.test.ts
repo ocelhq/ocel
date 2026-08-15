@@ -1,3 +1,5 @@
+import { createServer } from "node:http";
+import type { AddressInfo } from "node:net";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("../utils/rpc", () => ({
@@ -10,6 +12,7 @@ const { resolveBucketContext } = await import("./bucket-context.js");
 afterEach(() => {
   delete process.env.OCEL_RESOURCE_BUCKET_storage;
   delete process.env.OCEL_RUNTIME_ADDRESS;
+  delete process.env.OCEL_SESSION_TOKEN;
 });
 
 describe("resolveBucketContext", () => {
@@ -32,6 +35,34 @@ describe("resolveBucketContext", () => {
     expect(() =>
       resolveBucketContext(bucket("storage", { uploaders: {} })),
     ).toThrow(/OCEL_RESOURCE_BUCKET_storage/);
+  });
+
+  it("presents the session token the runtime handed it", async () => {
+    const seen: (string | undefined)[] = [];
+    const server = createServer((req, res) => {
+      seen.push(req.headers.authorization);
+      res.statusCode = 500;
+      res.end();
+    });
+    await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+    const { port } = server.address() as AddressInfo;
+
+    process.env.OCEL_RESOURCE_BUCKET_storage = JSON.stringify({
+      name: "storage",
+      bucket: { bucket: "org-project-store" },
+    });
+    process.env.OCEL_RUNTIME_ADDRESS = `http://127.0.0.1:${port}`;
+    process.env.OCEL_SESSION_TOKEN = "session-token";
+
+    const ctx = resolveBucketContext(bucket("storage", { uploaders: {} }));
+    await expect(
+      ctx.client.presignUpload({ bucket: "org-project-store", files: [] }),
+    ).rejects.toThrow();
+
+    await new Promise<void>((resolve, reject) =>
+      server.close((err) => (err ? reject(err) : resolve())),
+    );
+    expect(seen).toEqual(["Bearer session-token"]);
   });
 
   it("throws naming the ambient address when only it is missing", () => {

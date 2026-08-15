@@ -113,6 +113,7 @@ type Config struct {
 	Transform transform.Evaluator
 
 	transformed *transformedArgs
+	sessions    sessionScope
 }
 
 type Stages struct {

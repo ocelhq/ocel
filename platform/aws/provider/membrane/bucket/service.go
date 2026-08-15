@@ -31,7 +31,6 @@ type presignAPI interface {
 type Service struct {
 	store     *sessionStore
 	presigner presignAPI
-	bucket    string
 
 	now       func() time.Time
 	newID     func() string
@@ -41,17 +40,16 @@ type Service struct {
 var _ bucketsv1connect.BucketServiceHandler = (*Service)(nil)
 
 type Config struct {
-	DDB       ddbAPI
-	Presigner presignAPI
-	Table     string
-	Bucket    string
+	DDB              ddbAPI
+	Presigner        presignAPI
+	Table            string
+	SessionKeyPrefix string
 }
 
 func New(cfg Config) *Service {
 	return &Service{
-		store:     &sessionStore{client: cfg.DDB, table: cfg.Table},
+		store:     &sessionStore{client: cfg.DDB, table: cfg.Table, keyPrefix: cfg.SessionKeyPrefix},
 		presigner: cfg.Presigner,
-		bucket:    cfg.Bucket,
 		now:       time.Now,
 		newID:     func() string { return "sess_" + randomHex(16) },
 		newSecret: func() string { return randomHex(32) },
@@ -65,6 +63,9 @@ func randomHex(n int) string {
 }
 
 func (s *Service) PresignUpload(ctx context.Context, req *bucketsv1.PresignUploadRequest) (*bucketsv1.PresignUploadResponse, error) {
+	if req.GetBucket() == "" {
+		return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("presign requires the bucket the upload lands in"))
+	}
 	if len(req.GetFiles()) == 0 {
 		return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("presign requires at least one file"))
 	}
@@ -77,7 +78,7 @@ func (s *Service) PresignUpload(ctx context.Context, req *bucketsv1.PresignUploa
 	targets := make([]*bucketsv1.PresignedTarget, len(req.GetFiles()))
 
 	for i, f := range req.GetFiles() {
-		url, err := s.presignPut(ctx, f.GetKey(), f.GetMimeType(), f.GetSize(), sessionID, req.GetContentDisposition())
+		url, err := s.presignPut(ctx, req.GetBucket(), f.GetKey(), f.GetMimeType(), f.GetSize(), sessionID, req.GetContentDisposition())
 		if err != nil {
 			return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("presign %q: %w", f.GetKey(), err))
 		}
@@ -99,7 +100,7 @@ func (s *Service) PresignUpload(ctx context.Context, req *bucketsv1.PresignUploa
 	sess := session{
 		SessionID:          sessionID,
 		Secret:             secret,
-		Bucket:             s.bucket,
+		Bucket:             req.GetBucket(),
 		CallbackBaseURL:    req.GetCallbackBaseUrl(),
 		ContentDisposition: req.GetContentDisposition(),
 		Metadata:           req.GetMetadata(),
@@ -114,9 +115,9 @@ func (s *Service) PresignUpload(ctx context.Context, req *bucketsv1.PresignUploa
 	return &bucketsv1.PresignUploadResponse{SessionId: sessionID, Files: targets}, nil
 }
 
-func (s *Service) presignPut(ctx context.Context, key, contentType string, size int64, sessionID, contentDisposition string) (string, error) {
+func (s *Service) presignPut(ctx context.Context, bucket, key, contentType string, size int64, sessionID, contentDisposition string) (string, error) {
 	in := &s3.PutObjectInput{
-		Bucket:        aws.String(s.bucket),
+		Bucket:        aws.String(bucket),
 		Key:           aws.String(key),
 		ContentType:   aws.String(contentType),
 		ContentLength: aws.Int64(size),

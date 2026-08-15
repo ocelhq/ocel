@@ -69,6 +69,8 @@ export function getConfig<TCase extends LinkCase>(
 
 export const RUNTIME_ADDRESS = "OCEL_RUNTIME_ADDRESS";
 
+export const SESSION_TOKEN = "OCEL_SESSION_TOKEN";
+
 export const getRuntimeAddress = () => {
   const address = process.env[RUNTIME_ADDRESS];
 
@@ -80,3 +82,5 @@ export const getRuntimeAddress = () => {
 
   return address;
 };
+
+export const getSessionToken = () => process.env[SESSION_TOKEN];

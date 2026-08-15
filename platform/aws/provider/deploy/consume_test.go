@@ -264,14 +264,14 @@ func TestConsumedLinksAreBilledAgainstTheRoleCeiling(t *testing.T) {
 	manifest := consumingManifest()
 	consumed := mustConsume(t, consumingConfig("main"), manifest)
 
-	policy, err := billedResourcePolicy(manifest.GetResources()[0], consumed)
+	policy, err := billedResourcePolicy(manifest.GetResources()[0], consumed, testSessions)
 	if err != nil {
 		t.Fatalf("billedResourcePolicy: %v", err)
 	}
 	if !strings.Contains(policy, "rds-db:connect") {
 		t.Errorf("bill = %q, want a bound link billed at the grants it actually carries", policy)
 	}
-	if err := checkInlinePolicyBudget(manifest, consumed); err != nil {
+	if err := checkInlinePolicyBudget(manifest, consumed, testSessions); err != nil {
 		t.Errorf("checkInlinePolicyBudget = %v, want two links well inside the ceiling", err)
 	}
 }
@@ -293,7 +293,7 @@ func TestAnUnscopedPublishedGrantIsRefusedBeforeAnyCloudCall(t *testing.T) {
 	}}
 
 	var unscoped *UnscopedGrantError
-	if err := checkInlinePolicyBudget(manifest, consumed); !errors.As(err, &unscoped) {
+	if err := checkInlinePolicyBudget(manifest, consumed, testSessions); !errors.As(err, &unscoped) {
 		t.Fatalf("checkInlinePolicyBudget = %v, want an *UnscopedGrantError: a publisher may not hand an app blanket access", err)
 	}
 }

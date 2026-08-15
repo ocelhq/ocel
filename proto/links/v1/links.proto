@@ -40,4 +40,14 @@ message Grant {
   repeated string resources = 2;
 
   string label = 3;
+
+  repeated GrantCondition conditions = 4;
+}
+
+message GrantCondition {
+  string operator = 1;
+
+  string key = 2;
+
+  repeated string values = 3;
 }
