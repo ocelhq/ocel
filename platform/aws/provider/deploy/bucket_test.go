@@ -92,7 +92,7 @@ func emptyArchive(t *testing.T) string {
 func TestBucketComponentTags(t *testing.T) {
 	code := emptyArchive(t)
 	rec := recordTags(t, func(ctx *pulumi.Context) error {
-		err := registerBucket(ctx, "shop", "prod", "bucket--uploads", translateBucket(&resourcesv1.BucketConfig{}), "ocel-state", "arn:aws:dynamodb:eu-west-1:111122223333:table/ocel-state", code)
+		err := registerBucket(ctx, "shop", "prod", "bucket--uploads", translateBucket(&resourcesv1.BucketConfig{}), "ocel-state", newSessionScope("shop", "prod", "arn:aws:dynamodb:eu-west-1:111122223333:table/ocel-state"), code)
 		return err
 	})
 
@@ -102,7 +102,6 @@ func TestBucketComponentTags(t *testing.T) {
 		want      string
 	}{
 		{"aws:s3/bucketV2:BucketV2", "bucket-uploads", naming.KindBucket.Component()},
-		{"aws:iam/role:Role", "bucket-uploads-runtime-role", naming.KindRole.Component()},
 		{"aws:iam/role:Role", "bucket-uploads-event-listener-role", naming.KindRole.Component()},
 		{"aws:lambda/function:Function", "bucket-uploads-event-listener", naming.KindListener.Component()},
 	}
@@ -122,7 +121,6 @@ func TestBucketResourceIDs(t *testing.T) {
 		"bucket-uploads":                            naming.ResourceID(at.Kind, at.Name),
 		"bucket-uploads-public-access-block":        naming.ResourceID(at.Kind, at.Name, "public-access-block"),
 		"bucket-uploads-cors":                       naming.ResourceID(at.Kind, at.Name, "cors"),
-		"bucket-uploads-runtime-role":               naming.ResourceID(at.Kind, at.Name, "runtime-role"),
 		"bucket-uploads-event-listener":             naming.ResourceID(at.Kind, at.Name, "event-listener"),
 		"bucket-uploads-event-listener-permission":  naming.ResourceID(at.Kind, at.Name, "event-listener-permission"),
 		"bucket-uploads-notification":               naming.ResourceID(at.Kind, at.Name, "notification"),
@@ -271,15 +269,6 @@ func TestTranslateBucket(t *testing.T) {
 
 		got := translateBucket(&resourcesv1.BucketConfig{})
 
-		if !slices.Contains(got.RuntimeS3Actions, "s3:PutObject") {
-			t.Errorf("RuntimeS3Actions = %v, want it to include s3:PutObject (presign)", got.RuntimeS3Actions)
-		}
-		for _, want := range []string{"dynamodb:GetItem", "dynamodb:PutItem", "dynamodb:UpdateItem"} {
-			if !slices.Contains(got.RuntimeSessionActions, want) {
-				t.Errorf("RuntimeSessionActions = %v, want it to include %q", got.RuntimeSessionActions, want)
-			}
-		}
-
 		if !slices.Contains(got.ListenerS3Actions, "s3:GetObjectTagging") {
 			t.Errorf("ListenerS3Actions = %v, want it to include s3:GetObjectTagging", got.ListenerS3Actions)
 		}
@@ -309,7 +298,8 @@ func TestSessionStatement(t *testing.T) {
 	t.Run("reaches only the app's own session keys", func(t *testing.T) {
 		t.Parallel()
 
-		stmt := sessionStatement([]string{"dynamodb:Query"}, tableARN)
+		sessions := newSessionScope("shop", "prod", tableARN)
+		stmt := sessionStatement([]string{"dynamodb:Query"}, sessions)
 		doc, err := inlinePolicy(stmt.Actions, []string{tableARN}, stmt.Condition)
 		if err != nil {
 			t.Fatalf("inlinePolicy: %v", err)
@@ -324,8 +314,8 @@ func TestSessionStatement(t *testing.T) {
 			t.Fatalf("unmarshal policy: %v", err)
 		}
 		keys := parsed.Statement[0].Condition["ForAllValues:StringLike"]["dynamodb:LeadingKeys"]
-		if !reflect.DeepEqual(keys, []string{sessionKeyPrefix + "*"}) {
-			t.Fatalf("LeadingKeys = %v, want %q — an app must not read or write the stack index", keys, sessionKeyPrefix+"*")
+		if !reflect.DeepEqual(keys, []string{sessions.KeyPrefix + "*"}) {
+			t.Fatalf("LeadingKeys = %v, want %q — a role must reach neither the stack index nor another deploy's sessions", keys, sessions.KeyPrefix+"*")
 		}
 	})
 

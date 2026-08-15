@@ -77,7 +77,7 @@ func warmRuntime(t *testing.T, event []byte, deadline time.Time) (*runtimeClient
 	return newRuntimeClient(strings.TrimPrefix(srv.URL, "http://")), captured
 }
 
-func warmFixture(t *testing.T, store bytecodeStore, dir, reply string) *Membrane {
+func warmFixture(t *testing.T, store bytecodeStore, dir, reply string) *nodeChild {
 	t.Helper()
 	m, nodeReader, nodeConn := controlConnPair(t)
 	u, _ := uploadFixture(store, compileCacheFlushedPayload{Dir: dir, OK: true}, true)
@@ -210,7 +210,7 @@ func TestWarmBytecodeCache(t *testing.T) {
 	})
 
 	t.Run("disabled for an unconfigured deployment", func(t *testing.T) {
-		m := &Membrane{}
+		m := &nodeChild{}
 
 		got := m.warmBytecodeCache(warmCtx(t, 10*time.Second))
 
@@ -460,7 +460,7 @@ func TestWarmCompileCache(t *testing.T) {
 	})
 
 	t.Run("no ops without a control connection", func(t *testing.T) {
-		m := &Membrane{}
+		m := &nodeChild{}
 		if _, _, ok := m.warmCompileCache(context.Background(), time.Now().Add(time.Second)); ok {
 			t.Error("warmCompileCache() ok = true, want false with no child attached")
 		}
@@ -529,7 +529,7 @@ func TestHandleInvocationWarm(t *testing.T) {
 		defer node.Close()
 
 		rt, captured := fakeRuntime(t, []byte(getEvent))
-		m := &Membrane{nodePort: portOf(t, node), client: newLoopbackClient()}
+		m := &nodeChild{nodePort: portOf(t, node), client: newLoopbackClient()}
 
 		if err := handleInvocation(context.Background(), rt, m); err != nil {
 			t.Fatalf("handleInvocation: %v", err)
@@ -545,12 +545,12 @@ func TestHandleInvocationWarm(t *testing.T) {
 	})
 
 	t.Run("a warm failure still answers the invocation", func(t *testing.T) {
-		membraneSide, nodeSide := net.Pipe()
+		parentSide, nodeSide := net.Pipe()
 		nodeSide.Close()
 		store := &fakeBytecodeStore{putErr: errors.New("access denied")}
 		u, _ := uploadFixture(store, compileCacheFlushedPayload{Dir: cacheDirWith(t, "x"), OK: true}, true)
-		m := &Membrane{control: membraneSide, pending: map[string]chan struct{}{}, bytecode: u}
-		go m.drainControl(bufio.NewReader(membraneSide))
+		m := &nodeChild{control: parentSide, pending: map[string]chan struct{}{}, bytecode: u}
+		go m.drainControl(bufio.NewReader(parentSide))
 
 		rt, captured := warmRuntime(t, []byte(warmEvent), time.Now().Add(10*time.Second))
 		if err := handleInvocation(context.Background(), rt, m); err != nil {

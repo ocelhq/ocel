@@ -2,6 +2,7 @@ package deploy
 
 import (
 	"encoding/json"
+	"fmt"
 	"strings"
 
 	iam "github.com/pulumi/pulumi-aws/sdk/v7/go/aws/iam"
@@ -28,8 +29,18 @@ const (
 	listenerTimeoutSeconds = 30
 
 	envStateTable     = "OCEL_RUNTIME_STATE_TABLE"
+	envSessionPrefix  = "OCEL_RUNTIME_SESSION_PREFIX"
 	envAllowedOrigins = "OCEL_LISTENER_ALLOWED_ORIGINS"
 )
+
+type sessionScope struct {
+	TableARN  string
+	KeyPrefix string
+}
+
+func newSessionScope(project, env, tableARN string) sessionScope {
+	return sessionScope{TableARN: tableARN, KeyPrefix: naming.SessionKeyPrefix(project, env)}
+}
 
 type bucketArgs struct {
 	AllowedOrigins []string
@@ -45,9 +56,6 @@ type bucketArgs struct {
 	ListenerRuntime        string
 	ListenerHandler        string
 	ListenerTimeoutSeconds int
-
-	RuntimeS3Actions      []string
-	RuntimeSessionActions []string
 
 	ListenerS3Actions      []string
 	ListenerSessionActions []string
@@ -76,8 +84,6 @@ func translateBucket(cfg *resourcesv1.BucketConfig) bucketArgs {
 		ListenerRuntime:        listenerRuntime,
 		ListenerHandler:        listenerHandler,
 		ListenerTimeoutSeconds: listenerTimeoutSeconds,
-		RuntimeS3Actions:       []string{"s3:PutObject"},
-		RuntimeSessionActions:  []string{"dynamodb:GetItem", "dynamodb:PutItem", "dynamodb:UpdateItem", "dynamodb:Query"},
 		ListenerS3Actions:      []string{"s3:GetObjectTagging"},
 		ListenerSessionActions: []string{"dynamodb:GetItem", "dynamodb:UpdateItem"},
 	}
@@ -91,7 +97,7 @@ func resourceCoordinate(project, env, logicalName string, kind naming.Kind) nami
 	return naming.Coordinate{Project: project, Env: env, App: naming.InfraApp, Kind: kind, Name: name}
 }
 
-func registerBucket(ctx *pulumi.Context, project, env, logicalName string, args bucketArgs, stateTableName, stateTableARN, listenerCodePath string) error {
+func registerBucket(ctx *pulumi.Context, project, env, logicalName string, args bucketArgs, stateTableName string, sessions sessionScope, listenerCodePath string) error {
 	at := resourceCoordinate(project, env, logicalName, naming.KindBucket)
 
 	bucket, err := s3.NewBucketV2(ctx, naming.ResourceID(at.Kind, at.Name), &s3.BucketV2Args{
@@ -128,18 +134,6 @@ func registerBucket(ctx *pulumi.Context, project, env, logicalName string, args 
 		return err
 	}
 
-	if _, err := newServiceRole(ctx,
-		naming.ResourceID(at.Kind, at.Name, "runtime-role"),
-		at.Description("runtime role for the "+at.Name+" bucket, granting presigned uploads and session bookkeeping"),
-		"ec2.amazonaws.com",
-		args.Tags,
-		map[string]policyStatement{
-			"s3":       {Actions: args.RuntimeS3Actions, Resources: []pulumi.StringInput{joinArn(bucket.Arn, "/*")}},
-			"sessions": sessionStatement(args.RuntimeSessionActions, stateTableARN),
-		}); err != nil {
-		return err
-	}
-
 	listenerRole, err := newServiceRole(ctx,
 		naming.ResourceID(at.Kind, at.Name, "event-listener-role"),
 		at.Description("execution role for the "+at.Name+" bucket's upload event listener"),
@@ -147,7 +141,7 @@ func registerBucket(ctx *pulumi.Context, project, env, logicalName string, args 
 		args.Tags,
 		map[string]policyStatement{
 			"s3":       {Actions: args.ListenerS3Actions, Resources: []pulumi.StringInput{joinArn(bucket.Arn, "/*")}},
-			"sessions": sessionStatement(args.ListenerSessionActions, stateTableARN),
+			"sessions": sessionStatement(args.ListenerSessionActions, sessions),
 		})
 	if err != nil {
 		return err
@@ -170,6 +164,7 @@ func registerBucket(ctx *pulumi.Context, project, env, logicalName string, args 
 		Environment: &lambda.FunctionEnvironmentArgs{
 			Variables: pulumi.StringMap{
 				envStateTable:     pulumi.String(stateTableName),
+				envSessionPrefix:  pulumi.String(sessions.KeyPrefix),
 				envAllowedOrigins: pulumi.String(strings.Join(args.AllowedOrigins, ",")),
 			},
 		},
@@ -211,15 +206,13 @@ type policyStatement struct {
 	Condition map[string]any
 }
 
-const sessionKeyPrefix = "SESSION#"
-
-func sessionStatement(actions []string, stateTableARN string) policyStatement {
+func sessionStatement(actions []string, sessions sessionScope) policyStatement {
 	return policyStatement{
 		Actions:   actions,
-		Resources: []pulumi.StringInput{pulumi.String(stateTableARN)},
+		Resources: []pulumi.StringInput{pulumi.String(sessions.TableARN)},
 		Condition: map[string]any{
 			"ForAllValues:StringLike": map[string]any{
-				"dynamodb:LeadingKeys": []string{sessionKeyPrefix + "*"},
+				"dynamodb:LeadingKeys": []string{sessions.KeyPrefix + "*"},
 			},
 		},
 	}
@@ -295,18 +288,19 @@ func joinArn(arn pulumi.StringOutput, suffix string) pulumi.StringInput {
 	return arn.ApplyT(func(a string) string { return a + suffix }).(pulumi.StringOutput)
 }
 
-func collectBucketLink(name string, fields map[string]any) (*linksv1.Link, error) {
+func collectBucketLink(name string, sessions sessionScope, fields map[string]any) (*linksv1.Link, error) {
 	bucket, err := requireStringField(fields, name, outputKeyBucket)
 	if err != nil {
 		return nil, err
 	}
+	if sessions.TableARN == "" {
+		return nil, fmt.Errorf("bucket %s keeps its upload sessions in this account's state table, and this deploy resolved no ARN for it", name)
+	}
 	return &linksv1.Link{
 		Name:       name,
 		Properties: &linksv1.Link_Bucket{Bucket: &linksv1.BucketProperties{Bucket: bucket}},
-		Grants:     bucketGrants(bucket),
+		Grants:     bucketGrants(bucket, sessions),
 	}, nil
 }
-
-const deferredRuntimeAddress = "unix:///run/ocel/runtime.sock"
 
 const outputKeyBucket = "bucket"

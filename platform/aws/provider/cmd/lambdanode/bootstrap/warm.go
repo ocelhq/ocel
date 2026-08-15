@@ -59,7 +59,7 @@ func warmLoadDeadline(ctx context.Context) (time.Time, bool) {
 	return load, true
 }
 
-func (m *Membrane) answerWarmInvocation(ctx context.Context, rw *responseWriter) error {
+func (m *nodeChild) answerWarmInvocation(ctx context.Context, rw *responseWriter) error {
 	summary, err := json.Marshal(m.warmBytecodeCache(ctx))
 	if err != nil {
 		return rw.closeWithError(errTypeUpstream, err.Error())
@@ -71,7 +71,7 @@ func (m *Membrane) answerWarmInvocation(ctx context.Context, rw *responseWriter)
 	return rw.Close()
 }
 
-func (m *Membrane) warmBytecodeCache(ctx context.Context) warmSummary {
+func (m *nodeChild) warmBytecodeCache(ctx context.Context) warmSummary {
 	source := m.bytecodeCacheSource()
 	if m.bytecodeCached() {
 		return warmSummary{State: warmStateAlreadyCached, Key: m.bytecodeKey, Source: source}

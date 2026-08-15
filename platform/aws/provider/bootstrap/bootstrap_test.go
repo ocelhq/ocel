@@ -538,7 +538,7 @@ func TestEdgeTagKeys(t *testing.T) {
 			naming.ProjectKey("shop"),
 			naming.VarsKey("shop", "production"),
 			naming.StackKey("shop", stack),
-			"SESSION#01hxyz",
+			naming.SessionKeyPrefix("shop", "prod") + "01hxyz",
 		} {
 			if stringLike(t, edgeTagKeyPattern, key) {
 				t.Errorf("%q admits %q, which is not a tag partition", edgeTagKeyPattern, key)

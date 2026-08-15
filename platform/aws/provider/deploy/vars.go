@@ -75,8 +75,12 @@ func variableEnv(app *deploymentsv1.ManifestApp) map[string]string {
 	return env
 }
 
-func appEnv(app *deploymentsv1.ManifestApp, bundle appBundle) map[string]string {
-	env := map[string]string{runtimeAddressEnv: deferredRuntimeAddress}
+func appEnv(manifest *deploymentsv1.Manifest, app *deploymentsv1.ManifestApp, bundle appBundle, cfg Config) map[string]string {
+	env := map[string]string{}
+	if appCrossesMembrane(manifest, app.GetName()) {
+		env[envStateTable] = cfg.StateTable
+		env[envSessionPrefix] = cfg.sessions.KeyPrefix
+	}
 	maps.Copy(env, variableEnv(app))
 	maps.Copy(env, bundle.env())
 	return env

@@ -27,6 +27,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/naming"
 	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
 	linksv1 "github.com/ocelhq/ocel/pkg/proto/links/v1"
+	"github.com/ocelhq/ocel/platform/aws/provider/membrane"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
@@ -57,11 +58,19 @@ func realize(ctx context.Context, cfg Config, manifest *deploymentsv1.Manifest, 
 	if err := validateTag(cfg.Tag); err != nil {
 		return Result{}, finishUploading(err)
 	}
+	if err := checkMembraneServices(manifest, membrane.Serves); err != nil {
+		return Result{}, finishUploading(err)
+	}
 	consumed, err := consumeLinks(ctx, cfg, manifest, log)
 	if err != nil {
 		return Result{}, finishUploading(err)
 	}
-	if err := checkInlinePolicyBudget(manifest, consumed); err != nil {
+	envName, err := EnvName(planEnvironment(cfg))
+	if err != nil {
+		return Result{}, finishUploading(err)
+	}
+	cfg.sessions = newSessionScope(naming.Sanitize(manifest.GetSlug()), envName, cfg.StateTableARN)
+	if err := checkInlinePolicyBudget(manifest, consumed, cfg.sessions); err != nil {
 		return Result{}, finishUploading(err)
 	}
 	if err := checkTagAvailable(ctx, stack, cfg.RootStackState, cfg.Tag); err != nil {
@@ -741,7 +750,7 @@ func runInfraStack(ctx context.Context, cfg Config, manifest *deploymentsv1.Mani
 			case r.GetPostgres() != nil:
 				err = registerPostgres(pctx, project, env, r.GetLogicalName(), cfg.transformed.forPostgres(r.GetLogicalName(), r.GetPostgres()), vpc.Id, vpc.CidrBlock, subnets.Ids)
 			case r.GetBucket() != nil:
-				err = registerBucket(pctx, project, env, r.GetLogicalName(), cfg.transformed.forBucket(r.GetLogicalName(), r.GetBucket()), cfg.StateTable, cfg.StateTableARN, cfg.ListenerCodePath)
+				err = registerBucket(pctx, project, env, r.GetLogicalName(), cfg.transformed.forBucket(r.GetLogicalName(), r.GetBucket()), cfg.StateTable, cfg.sessions, cfg.ListenerCodePath)
 			default:
 				continue
 			}
@@ -764,7 +773,7 @@ func runInfraStack(ctx context.Context, cfg Config, manifest *deploymentsv1.Mani
 	if err != nil {
 		return nil, fmt.Errorf("provision infra stack %s: %w", plan.InfraStack, err)
 	}
-	return collectLinks(ctx, cfg.Secrets, manifest, res.Outputs)
+	return collectLinks(ctx, cfg.Secrets, cfg.sessions, manifest, res.Outputs)
 }
 
 func refuseHandover(ctx context.Context, stack auto.Stack, manifest *deploymentsv1.Manifest, name naming.StackName) error {
@@ -795,7 +804,7 @@ func runAppStack(ctx context.Context, cfg Config, manifest *deploymentsv1.Manife
 		return nil, nil, err
 	}
 
-	env := appEnv(app, baked)
+	env := appEnv(manifest, app, baked, cfg)
 
 	for _, fn := range functions {
 		if err = checkFunctionEnvBudget(fn.GetLogicalName(), functionEnv(env, cfg.transformed.forFunction(fn), caches[name], bytecode[name])); err != nil {
@@ -1031,7 +1040,7 @@ func emitEngineTrace(t Tracer, parentStage StageID, trace EngineTrace, upErr err
 	}
 }
 
-func collectLinks(ctx context.Context, secrets SecretsReader, manifest *deploymentsv1.Manifest, outputs auto.OutputMap) ([]*linksv1.Link, error) {
+func collectLinks(ctx context.Context, secrets SecretsReader, sessions sessionScope, manifest *deploymentsv1.Manifest, outputs auto.OutputMap) ([]*linksv1.Link, error) {
 	var result []*linksv1.Link
 	for _, r := range manifest.GetResources() {
 		if r.GetLinked() || (r.GetPostgres() == nil && r.GetBucket() == nil) {
@@ -1054,7 +1063,7 @@ func collectLinks(ctx context.Context, secrets SecretsReader, manifest *deployme
 		case r.GetPostgres() != nil:
 			out, err = collectPostgresLink(ctx, secrets, name, fields)
 		case r.GetBucket() != nil:
-			out, err = collectBucketLink(name, fields)
+			out, err = collectBucketLink(name, sessions, fields)
 		}
 		if err != nil {
 			return nil, err

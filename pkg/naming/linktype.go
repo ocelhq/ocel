@@ -16,6 +16,14 @@ var linkKinds = map[linksv1.LinkType]Kind{
 	linksv1.LinkType_LINK_TYPE_BUCKET:   KindBucket,
 }
 
+var membraneTypes = map[linksv1.LinkType]bool{
+	linksv1.LinkType_LINK_TYPE_BUCKET: true,
+}
+
+func CrossesMembrane(t linksv1.LinkType) bool {
+	return membraneTypes[t]
+}
+
 func LinkTypes() []linksv1.LinkType {
 	return slices.Sorted(maps.Keys(linkKinds))
 }

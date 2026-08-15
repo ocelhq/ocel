@@ -11,7 +11,13 @@ const (
 	tokenClass   = "CLASS"
 	tokenTag     = "TAG"
 	tokenLink    = "LINK"
+	tokenEnv     = "ENV"
+	tokenSession = "SESSION"
 )
+
+func SessionKeyPrefix(project, env string) string {
+	return token(tokenProject, project) + KeySeparator + token(tokenEnv, env) + KeySeparator + tokenSession + KeySeparator
+}
 
 func ProjectKey(project string) string {
 	return token(tokenProject, project)

@@ -301,6 +301,7 @@ type Grant struct {
 	Actions       []string               `protobuf:"bytes,1,rep,name=actions,proto3" json:"actions,omitempty"`
 	Resources     []string               `protobuf:"bytes,2,rep,name=resources,proto3" json:"resources,omitempty"`
 	Label         string                 `protobuf:"bytes,3,opt,name=label,proto3" json:"label,omitempty"`
+	Conditions    []*GrantCondition      `protobuf:"bytes,4,rep,name=conditions,proto3" json:"conditions,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -356,6 +357,73 @@ func (x *Grant) GetLabel() string {
 	return ""
 }
 
+func (x *Grant) GetConditions() []*GrantCondition {
+	if x != nil {
+		return x.Conditions
+	}
+	return nil
+}
+
+type GrantCondition struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Operator      string                 `protobuf:"bytes,1,opt,name=operator,proto3" json:"operator,omitempty"`
+	Key           string                 `protobuf:"bytes,2,opt,name=key,proto3" json:"key,omitempty"`
+	Values        []string               `protobuf:"bytes,3,rep,name=values,proto3" json:"values,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GrantCondition) Reset() {
+	*x = GrantCondition{}
+	mi := &file_links_v1_links_proto_msgTypes[4]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GrantCondition) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GrantCondition) ProtoMessage() {}
+
+func (x *GrantCondition) ProtoReflect() protoreflect.Message {
+	mi := &file_links_v1_links_proto_msgTypes[4]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GrantCondition.ProtoReflect.Descriptor instead.
+func (*GrantCondition) Descriptor() ([]byte, []int) {
+	return file_links_v1_links_proto_rawDescGZIP(), []int{4}
+}
+
+func (x *GrantCondition) GetOperator() string {
+	if x != nil {
+		return x.Operator
+	}
+	return ""
+}
+
+func (x *GrantCondition) GetKey() string {
+	if x != nil {
+		return x.Key
+	}
+	return ""
+}
+
+func (x *GrantCondition) GetValues() []string {
+	if x != nil {
+		return x.Values
+	}
+	return nil
+}
+
 var File_links_v1_links_proto protoreflect.FileDescriptor
 
 const file_links_v1_links_proto_rawDesc = "" +
@@ -376,11 +444,18 @@ const file_links_v1_links_proto_rawDesc = "" +
 	"\busername\x18\x04 \x01(\tR\busername\x12\x1f\n" +
 	"\bpassword\x18\x05 \x01(\tB\x03\x80\x01\x01R\bpassword\"*\n" +
 	"\x10BucketProperties\x12\x16\n" +
-	"\x06bucket\x18\x01 \x01(\tR\x06bucket\"U\n" +
+	"\x06bucket\x18\x01 \x01(\tR\x06bucket\"\x8f\x01\n" +
 	"\x05Grant\x12\x18\n" +
 	"\aactions\x18\x01 \x03(\tR\aactions\x12\x1c\n" +
 	"\tresources\x18\x02 \x03(\tR\tresources\x12\x14\n" +
-	"\x05label\x18\x03 \x01(\tR\x05label*S\n" +
+	"\x05label\x18\x03 \x01(\tR\x05label\x128\n" +
+	"\n" +
+	"conditions\x18\x04 \x03(\v2\x18.links.v1.GrantConditionR\n" +
+	"conditions\"V\n" +
+	"\x0eGrantCondition\x12\x1a\n" +
+	"\boperator\x18\x01 \x01(\tR\boperator\x12\x10\n" +
+	"\x03key\x18\x02 \x01(\tR\x03key\x12\x16\n" +
+	"\x06values\x18\x03 \x03(\tR\x06values*S\n" +
 	"\bLinkType\x12\x19\n" +
 	"\x15LINK_TYPE_UNSPECIFIED\x10\x00\x12\x16\n" +
 	"\x12LINK_TYPE_POSTGRES\x10\x01\x12\x14\n" +
@@ -399,23 +474,25 @@ func file_links_v1_links_proto_rawDescGZIP() []byte {
 }
 
 var file_links_v1_links_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
-var file_links_v1_links_proto_msgTypes = make([]protoimpl.MessageInfo, 4)
+var file_links_v1_links_proto_msgTypes = make([]protoimpl.MessageInfo, 5)
 var file_links_v1_links_proto_goTypes = []any{
 	(LinkType)(0),              // 0: links.v1.LinkType
 	(*Link)(nil),               // 1: links.v1.Link
 	(*PostgresProperties)(nil), // 2: links.v1.PostgresProperties
 	(*BucketProperties)(nil),   // 3: links.v1.BucketProperties
 	(*Grant)(nil),              // 4: links.v1.Grant
+	(*GrantCondition)(nil),     // 5: links.v1.GrantCondition
 }
 var file_links_v1_links_proto_depIdxs = []int32{
 	2, // 0: links.v1.Link.postgres:type_name -> links.v1.PostgresProperties
 	3, // 1: links.v1.Link.bucket:type_name -> links.v1.BucketProperties
 	4, // 2: links.v1.Link.grants:type_name -> links.v1.Grant
-	3, // [3:3] is the sub-list for method output_type
-	3, // [3:3] is the sub-list for method input_type
-	3, // [3:3] is the sub-list for extension type_name
-	3, // [3:3] is the sub-list for extension extendee
-	0, // [0:3] is the sub-list for field type_name
+	5, // 3: links.v1.Grant.conditions:type_name -> links.v1.GrantCondition
+	4, // [4:4] is the sub-list for method output_type
+	4, // [4:4] is the sub-list for method input_type
+	4, // [4:4] is the sub-list for extension type_name
+	4, // [4:4] is the sub-list for extension extendee
+	0, // [0:4] is the sub-list for field type_name
 }
 
 func init() { file_links_v1_links_proto_init() }
@@ -433,7 +510,7 @@ func file_links_v1_links_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_links_v1_links_proto_rawDesc), len(file_links_v1_links_proto_rawDesc)),
 			NumEnums:      1,
-			NumMessages:   4,
+			NumMessages:   5,
 			NumExtensions: 0,
 			NumServices:   0,
 		},

@@ -15,6 +15,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/ocelhq/ocel/pkg/channel"
 	linksv1 "github.com/ocelhq/ocel/pkg/proto/links/v1"
 	"github.com/ocelhq/ocel/platform/aws/provider/vars"
 	"github.com/ocelhq/ocel/platform/aws/provider/vars/live"
@@ -101,7 +102,7 @@ func (s *sink) messages(t *testing.T) []liveValuesMsg {
 	for _, line := range s.lines {
 		var msg liveValuesMsg
 		if err := json.Unmarshal([]byte(line), &msg); err != nil {
-			t.Fatalf("the membrane pushed %q, which node cannot decode: %v", line, err)
+			t.Fatalf("the bootstrap pushed %q, which node cannot decode: %v", line, err)
 		}
 		out = append(out, msg)
 	}
@@ -519,7 +520,7 @@ func TestLinkColdStart(t *testing.T) {
 		const budget = 5 * time.Second
 		link := postgresLink()
 
-		spawn := func(_ []string, budget time.Duration, _ func(io.Writer), abandon <-chan struct{}) (*Membrane, error) {
+		spawn := func(_ []string, budget time.Duration, _ func(io.Writer), abandon <-chan struct{}) (*nodeChild, error) {
 			select {
 			case <-abandon:
 			case <-time.After(budget):
@@ -534,9 +535,9 @@ func TestLinkColdStart(t *testing.T) {
 			nil,
 		)
 
-		_, err := bringUp(spawn, l, l.start(context.Background()), nil, budget)
+		_, err := bringUpChild(spawn, l, l.start(context.Background()), nil, budget)
 		if err == nil {
-			t.Fatal("bringUp = nil, want init refused")
+			t.Fatal("bringUpChild = nil, want init refused")
 		}
 		if !strings.Contains(err.Error(), "LINK_TYPE_BUCKET") {
 			t.Errorf("error = %v, want the drift named", err)
@@ -580,18 +581,18 @@ func TestBringUp(t *testing.T) {
 		l := newLiveValues(fetcher, []string{"DB_PASSWORD"}, nil, nil)
 		prefetch := l.start(context.Background())
 
-		spawn := func(_ []string, _ time.Duration, onControl func(io.Writer), _ <-chan struct{}) (*Membrane, error) {
+		spawn := func(_ []string, _ time.Duration, onControl func(io.Writer), _ <-chan struct{}) (*nodeChild, error) {
 			close(fetcher.release)
 			onControl(out)
-			return &Membrane{}, nil
+			return &nodeChild{}, nil
 		}
 
-		membrane, err := bringUp(spawn, l, prefetch, nil, time.Minute)
+		child, err := bringUpChild(spawn, l, prefetch, nil, time.Minute)
 		if err != nil {
-			t.Fatalf("bringUp: %v", err)
+			t.Fatalf("bringUpChild: %v", err)
 		}
-		if membrane.live != l {
-			t.Error("the membrane was not given the cache the invocations it serves refresh from")
+		if child.live != l {
+			t.Error("the child was not given the cache the invocations it serves refresh from")
 		}
 		if msgs := out.messages(t); len(msgs) != 1 || msgs[0].Values["DB_PASSWORD"] != "hunter2" {
 			t.Errorf("messages = %+v, want the prefetched generation delivered to the child", msgs)
@@ -601,7 +602,7 @@ func TestBringUp(t *testing.T) {
 	t.Run("a failed prefetch is reported as the store error not as node never starting", func(t *testing.T) {
 		const budget = 5 * time.Second
 
-		spawn := func(_ []string, budget time.Duration, _ func(io.Writer), abandon <-chan struct{}) (*Membrane, error) {
+		spawn := func(_ []string, budget time.Duration, _ func(io.Writer), abandon <-chan struct{}) (*nodeChild, error) {
 			select {
 			case <-abandon:
 			case <-time.After(budget):
@@ -612,11 +613,11 @@ func TestBringUp(t *testing.T) {
 		l := newLiveValues(fails(errors.New("AccessDeniedException: dynamodb:Query")), []string{"DB_PASSWORD"}, nil, nil)
 
 		start := time.Now()
-		_, err := bringUp(spawn, l, l.start(context.Background()), nil, budget)
+		_, err := bringUpChild(spawn, l, l.start(context.Background()), nil, budget)
 		took := time.Since(start)
 
 		if err == nil {
-			t.Fatal("bringUp = nil, want a function that cannot resolve a value it declared refused")
+			t.Fatal("bringUpChild = nil, want a function that cannot resolve a value it declared refused")
 		}
 		if !strings.Contains(err.Error(), "AccessDeniedException") {
 			t.Errorf("error = %v, want what the store said: node timing out is the symptom, not the cause", err)
@@ -922,7 +923,7 @@ func TestChildEnv(t *testing.T) {
 		bakedEnv := []string{"OCEL_VAR_STRIPE_KEY=sk_baked"}
 		l := newLiveValues(resolves(map[string]string{}), []string{"DB_PASSWORD"}, nil, nil)
 
-		got := childEnv(bakedEnv, l)
+		got := childEnv(bakedEnv, l, nil)
 
 		for _, want := range []string{"OCEL_VAR_STRIPE_KEY=sk_baked", "OCEL_LIVE_KEYS=DB_PASSWORD"} {
 			if !slices.Contains(got, want) {
@@ -930,9 +931,25 @@ func TestChildEnv(t *testing.T) {
 			}
 		}
 
-		bare := childEnv(bakedEnv, nil)
+		bare := childEnv(bakedEnv, nil, nil)
 		if len(bare) != 1 {
 			t.Errorf("childEnv for a function with no live values = %q, want only the class delivered in the environment", bare)
+		}
+	})
+
+	t.Run("hands the child the membrane it must reach and the token that opens it", func(t *testing.T) {
+		membraneEnv := []string{
+			runtimeAddressEnvVar + "=http://127.0.0.1:41000",
+			channel.SessionTokenEnvVar + "=deadbeef",
+		}
+		l := newLiveValues(resolves(map[string]string{}), []string{"DB_PASSWORD"}, nil, nil)
+
+		got := childEnv([]string{"OCEL_VAR_STRIPE_KEY=sk_baked"}, l, membraneEnv)
+
+		for _, want := range membraneEnv {
+			if !slices.Contains(got, want) {
+				t.Errorf("childEnv = %q, missing %q, so the app cannot reach the membrane serving its links", got, want)
+			}
 		}
 	})
 
@@ -952,7 +969,7 @@ func TestChildEnv(t *testing.T) {
 		bakedEnv := []string{"OCEL_VAR_STRIPE_KEY=sk_baked"}
 		before := os.Environ()
 
-		got := childEnv(bakedEnv, l)
+		got := childEnv(bakedEnv, l, nil)
 
 		for _, entry := range got {
 			for _, secret := range secrets {

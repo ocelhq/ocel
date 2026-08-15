@@ -40,36 +40,42 @@ func main() {
 		fatalInit(fmt.Sprintf("failed to open this deployment's encrypted variables: %v", err))
 	}
 
-	membrane, err := bringUpWithBytecode(ctx, startNode, live, prefetch, childEnv(bakedEnv, live), start, bytecodeReady, bytecodeEmbedded, bytecodeRehydrate)
+	membraneEnv, membraneServed, err := serveMembrane(ctx, live.declaredLinks(), os.Getenv(stateTableEnvVar), os.Getenv(sessionPrefixEnvVar))
+	if err != nil {
+		fatalInit(fmt.Sprintf("failed to serve this deployment's membrane: %v", err))
+	}
+	go superviseMembrane(membraneServed)
+
+	child, err := bringUpChildWithBytecode(ctx, startNode, live, prefetch, childEnv(bakedEnv, live, membraneEnv), start, bytecodeReady, bytecodeEmbedded, bytecodeRehydrate)
 	if err != nil {
 		fatalInit(err.Error())
 	}
 
 	rt := newRuntimeClient(os.Getenv("AWS_LAMBDA_RUNTIME_API"))
 	for {
-		if err := handleInvocation(ctx, rt, membrane); err != nil {
+		if err := handleInvocation(ctx, rt, child); err != nil {
 			fmt.Fprintf(os.Stderr, "ocel: runtime loop error: %v\n", err)
 			os.Exit(1)
 		}
 	}
 }
 
-type spawner func(extraEnv []string, budget time.Duration, onControl func(io.Writer), abandon <-chan struct{}) (*Membrane, error)
+type spawner func(extraEnv []string, budget time.Duration, onControl func(io.Writer), abandon <-chan struct{}) (*nodeChild, error)
 
-func bringUp(spawn spawner, live *liveValues, prefetch <-chan error, env []string, budget time.Duration) (*Membrane, error) {
-	membrane, err := spawn(env, budget, live.attach, live.prefetchFailed())
+func bringUpChild(spawn spawner, live *liveValues, prefetch <-chan error, env []string, budget time.Duration) (*nodeChild, error) {
+	child, err := spawn(env, budget, live.attach, live.prefetchFailed())
 	if err != nil {
 		if prefetchErr := live.prefetchError(); prefetchErr != nil {
 			return nil, fmt.Errorf("failed to resolve this deployment's live variables: %w", prefetchErr)
 		}
 		return nil, fmt.Errorf("failed to start node runtime: %w", err)
 	}
-	membrane.live = live
+	child.live = live
 
 	if err := live.join(prefetch); err != nil {
 		return nil, fmt.Errorf("failed to resolve this deployment's live variables: %w", err)
 	}
-	return membrane, nil
+	return child, nil
 }
 
 func bytecodeRehydrate(ctx context.Context, r *bytecodeResolution) bool {
@@ -84,7 +90,7 @@ func bytecodeEmbedded(ctx context.Context, r *bytecodeResolution) bool {
 	return embeddedBytecodeCache(ctx, tarPath, compileCacheDir)
 }
 
-func bringUpWithBytecode(
+func bringUpChildWithBytecode(
 	ctx context.Context,
 	spawn spawner,
 	live *liveValues,
@@ -94,7 +100,7 @@ func bringUpWithBytecode(
 	bytecodeReady <-chan *bytecodeResolution,
 	embedded func(context.Context, *bytecodeResolution) bool,
 	rehydrate func(context.Context, *bytecodeResolution) bool,
-) (*Membrane, error) {
+) (*nodeChild, error) {
 	joinWait := time.Until(start.Add(bytecodeResolveBudget))
 	if joinWait < 0 {
 		joinWait = 0
@@ -122,25 +128,26 @@ func bringUpWithBytecode(
 	if spawnBudget < minSpawnBudget {
 		spawnBudget = minSpawnBudget
 	}
-	membrane, err := bringUp(spawn, live, prefetch, env, spawnBudget)
+	child, err := bringUpChild(spawn, live, prefetch, env, spawnBudget)
 	if err != nil {
 		return nil, err
 	}
 
-	membrane.bytecodeSource = source
+	child.bytecodeSource = source
 	if bytecode != nil {
-		membrane.bytecodeKey = bytecode.key
-		if !membrane.bytecodeCached() {
-			membrane.bytecode = bytecode.upload(membrane.flushCompileCache)
+		child.bytecodeKey = bytecode.key
+		if !child.bytecodeCached() {
+			child.bytecode = bytecode.upload(child.flushCompileCache)
 		}
 	}
-	return membrane, nil
+	return child, nil
 }
 
-func childEnv(bakedEnv []string, live *liveValues) []string {
-	env := make([]string, 0, len(bakedEnv)+1)
+func childEnv(bakedEnv []string, live *liveValues, membraneEnv []string) []string {
+	env := make([]string, 0, len(bakedEnv)+len(membraneEnv)+1)
 	env = append(env, bakedEnv...)
-	return append(env, live.declaredEnv()...)
+	env = append(env, live.declaredEnv()...)
+	return append(env, membraneEnv...)
 }
 
 func fatalInit(msg string) {

@@ -31,7 +31,7 @@ const (
 
 	execWrapper = "/opt/ocel/bootstrap"
 
-	defaultMembraneLayerARN = "arn:aws:lambda:us-east-1:363236815301:layer:ocel-membrane:32"
+	defaultMembraneLayerARN = "arn:aws:lambda:us-east-1:363236815301:layer:ocel-membrane:34"
 	membraneLayerARNEnv     = "OCEL_MEMBRANE_LAYER_ARN"
 
 	bytecodeCacheEnv = "OCEL_BYTECODE_CACHE"
@@ -279,8 +279,6 @@ func describe(c naming.Coordinate, detail string) pulumi.String {
 func functionEnvKey(t linksv1.LinkType, id string) string {
 	return fmt.Sprintf("OCEL_RESOURCE_%s_%s", naming.EnvFragment(t), id)
 }
-
-const runtimeAddressEnv = "OCEL_RUNTIME_ADDRESS"
 
 func artifactArchivePath(root, artifactPath string) string {
 	return filepath.Join(root, artifactPath)

@@ -740,7 +740,7 @@ func TestUploadBytecodeCacheOnce(t *testing.T) {
 		dir := cacheDirWith(t, "compiled bytes")
 		store := &fakeBytecodeStore{}
 		u, flushes := uploadFixture(store, compileCacheFlushedPayload{Dir: dir, OK: true}, true)
-		m := &Membrane{bytecode: u}
+		m := &nodeChild{bytecode: u}
 
 		for range 3 {
 			m.uploadBytecodeCacheOnce(context.Background())
@@ -757,7 +757,7 @@ func TestUploadBytecodeCacheOnce(t *testing.T) {
 	t.Run("does not retry after a failure", func(t *testing.T) {
 		store := &fakeBytecodeStore{putErr: errors.New("access denied")}
 		u, flushes := uploadFixture(store, compileCacheFlushedPayload{Dir: cacheDirWith(t, "x"), OK: true}, true)
-		m := &Membrane{bytecode: u}
+		m := &nodeChild{bytecode: u}
 
 		m.uploadBytecodeCacheOnce(context.Background())
 		m.uploadBytecodeCacheOnce(context.Background())
@@ -768,7 +768,7 @@ func TestUploadBytecodeCacheOnce(t *testing.T) {
 	})
 
 	t.Run("no ops for an unconfigured function", func(t *testing.T) {
-		m := &Membrane{}
+		m := &nodeChild{}
 		m.uploadBytecodeCacheOnce(context.Background())
 	})
 }
@@ -920,7 +920,7 @@ func TestHandleInvocationBytecode(t *testing.T) {
 
 		store := &fakeBytecodeStore{}
 		u, _ := uploadFixture(store, compileCacheFlushedPayload{Dir: cacheDirWith(t, "compiled bytes"), OK: true}, true)
-		m := &Membrane{
+		m := &nodeChild{
 			nodePort:  portOf(t, node),
 			client:    &http.Client{},
 			control:   goSide,
@@ -960,12 +960,12 @@ func TestHandleInvocationBytecode(t *testing.T) {
 	})
 }
 
-func controlConnPair(t *testing.T) (*Membrane, *bufio.Reader, net.Conn) {
+func controlConnPair(t *testing.T) (*nodeChild, *bufio.Reader, net.Conn) {
 	t.Helper()
-	membraneSide, nodeSide := net.Pipe()
-	t.Cleanup(func() { membraneSide.Close(); nodeSide.Close() })
-	m := &Membrane{control: membraneSide, lifecycle: true, pending: map[string]chan struct{}{}}
-	go m.drainControl(bufio.NewReader(membraneSide))
+	parentSide, nodeSide := net.Pipe()
+	t.Cleanup(func() { parentSide.Close(); nodeSide.Close() })
+	m := &nodeChild{control: parentSide, lifecycle: true, pending: map[string]chan struct{}{}}
+	go m.drainControl(bufio.NewReader(parentSide))
 	return m, bufio.NewReader(nodeSide), nodeSide
 }
 
@@ -974,7 +974,7 @@ type flushOutcome struct {
 	ok  bool
 }
 
-func startFlush(m *Membrane, ctx context.Context) <-chan flushOutcome {
+func startFlush(m *nodeChild, ctx context.Context) <-chan flushOutcome {
 	done := make(chan flushOutcome, 1)
 	go func() {
 		ack, ok := m.flushCompileCache(ctx)
@@ -1083,7 +1083,7 @@ func TestFlushCompileCache(t *testing.T) {
 	})
 
 	t.Run("no ops without a control connection", func(t *testing.T) {
-		m := &Membrane{}
+		m := &nodeChild{}
 		if _, ok := m.flushCompileCache(context.Background()); ok {
 			t.Error("flushCompileCache() ok = true, want false with no child attached")
 		}
@@ -1920,12 +1920,12 @@ func TestBytecodeRehydrate(t *testing.T) {
 }
 
 func fakeSpawn(gotBudget *time.Duration) spawner {
-	return func(_ []string, budget time.Duration, onControl func(io.Writer), _ <-chan struct{}) (*Membrane, error) {
+	return func(_ []string, budget time.Duration, onControl func(io.Writer), _ <-chan struct{}) (*nodeChild, error) {
 		*gotBudget = budget
 		if onControl != nil {
 			onControl(&sink{})
 		}
-		return &Membrane{}, nil
+		return &nodeChild{}, nil
 	}
 }
 
@@ -1944,16 +1944,16 @@ func TestBringUpWithBytecode(t *testing.T) {
 
 		var gotBudget time.Duration
 		start := time.Now()
-		membrane, err := bringUpWithBytecode(context.Background(), fakeSpawn(&gotBudget), l, l.start(context.Background()), nil, start, bytecodeReady, neverEmbedded, rehydrate)
+		child, err := bringUpChildWithBytecode(context.Background(), fakeSpawn(&gotBudget), l, l.start(context.Background()), nil, start, bytecodeReady, neverEmbedded, rehydrate)
 		if err != nil {
-			t.Fatalf("bringUpWithBytecode: %v", err)
+			t.Fatalf("bringUpChildWithBytecode: %v", err)
 		}
-		if membrane.bytecode == nil {
+		if child.bytecode == nil {
 			t.Fatal("bytecode = nil, want the upload leg attached on a miss")
 		}
 
 		if gotBudget > startupBudget-rehydrateCost/2 {
-			t.Errorf("budget handed to bringUp = %s, want it reduced by rehydration's %s cost", gotBudget, rehydrateCost)
+			t.Errorf("budget handed to bringUpChild = %s, want it reduced by rehydration's %s cost", gotBudget, rehydrateCost)
 		}
 	})
 
@@ -1966,11 +1966,11 @@ func TestBringUpWithBytecode(t *testing.T) {
 		start := time.Now().Add(-2 * startupBudget)
 
 		var gotBudget time.Duration
-		if _, err := bringUpWithBytecode(context.Background(), fakeSpawn(&gotBudget), l, l.start(context.Background()), nil, start, bytecodeReady, neverEmbedded, rehydrate); err != nil {
-			t.Fatalf("bringUpWithBytecode: %v", err)
+		if _, err := bringUpChildWithBytecode(context.Background(), fakeSpawn(&gotBudget), l, l.start(context.Background()), nil, start, bytecodeReady, neverEmbedded, rehydrate); err != nil {
+			t.Fatalf("bringUpChildWithBytecode: %v", err)
 		}
 		if gotBudget != minSpawnBudget {
-			t.Errorf("budget handed to bringUp = %s, want the floor of %s", gotBudget, minSpawnBudget)
+			t.Errorf("budget handed to bringUpChild = %s, want the floor of %s", gotBudget, minSpawnBudget)
 		}
 	})
 
@@ -1982,14 +1982,14 @@ func TestBringUpWithBytecode(t *testing.T) {
 
 		start := time.Now()
 		var gotBudget time.Duration
-		if _, err := bringUpWithBytecode(context.Background(), fakeSpawn(&gotBudget), l, l.start(context.Background()), nil, start, bytecodeReady, neverEmbedded, rehydrate); err != nil {
-			t.Fatalf("bringUpWithBytecode: %v", err)
+		if _, err := bringUpChildWithBytecode(context.Background(), fakeSpawn(&gotBudget), l, l.start(context.Background()), nil, start, bytecodeReady, neverEmbedded, rehydrate); err != nil {
+			t.Fatalf("bringUpChildWithBytecode: %v", err)
 		}
 		if gotBudget <= minSpawnBudget {
-			t.Errorf("budget handed to bringUp = %s, want it well above the floor for a start this recent", gotBudget)
+			t.Errorf("budget handed to bringUpChild = %s, want it well above the floor for a start this recent", gotBudget)
 		}
 		if gotBudget > startupBudget {
-			t.Errorf("budget handed to bringUp = %s, want it at most startupBudget", gotBudget)
+			t.Errorf("budget handed to bringUpChild = %s, want it at most startupBudget", gotBudget)
 		}
 	})
 
@@ -2005,14 +2005,14 @@ func TestBringUpWithBytecode(t *testing.T) {
 		}
 
 		var gotBudget time.Duration
-		membrane, err := bringUpWithBytecode(context.Background(), fakeSpawn(&gotBudget), l, l.start(context.Background()), nil, time.Now(), bytecodeReady, neverEmbedded, rehydrate)
+		child, err := bringUpChildWithBytecode(context.Background(), fakeSpawn(&gotBudget), l, l.start(context.Background()), nil, time.Now(), bytecodeReady, neverEmbedded, rehydrate)
 		if err != nil {
-			t.Fatalf("bringUpWithBytecode: %v", err)
+			t.Fatalf("bringUpChildWithBytecode: %v", err)
 		}
 		if rehydrateCalls != 1 {
 			t.Errorf("rehydrate calls = %d, want 1", rehydrateCalls)
 		}
-		if membrane.bytecode != nil {
+		if child.bytecode != nil {
 			t.Error("bytecode != nil, want the upload leg disabled after a rehydrate hit")
 		}
 	})
@@ -2026,16 +2026,16 @@ func TestBringUpWithBytecode(t *testing.T) {
 		rehydrate := func(context.Context, *bytecodeResolution) bool { return false }
 
 		var gotBudget time.Duration
-		membrane, err := bringUpWithBytecode(context.Background(), fakeSpawn(&gotBudget), l, l.start(context.Background()), nil, time.Now(), bytecodeReady, neverEmbedded, rehydrate)
+		child, err := bringUpChildWithBytecode(context.Background(), fakeSpawn(&gotBudget), l, l.start(context.Background()), nil, time.Now(), bytecodeReady, neverEmbedded, rehydrate)
 		if err != nil {
-			t.Fatalf("bringUpWithBytecode: %v", err)
+			t.Fatalf("bringUpChildWithBytecode: %v", err)
 		}
-		if membrane.bytecode == nil {
+		if child.bytecode == nil {
 			t.Fatal("bytecode = nil, want the upload leg attached on a miss")
 		}
-		if membrane.bytecode.bucket != r.bucket || membrane.bytecode.key != r.key {
+		if child.bytecode.bucket != r.bucket || child.bytecode.key != r.key {
 			t.Errorf("upload bucket/key = %s/%s, want the resolution's %s/%s",
-				membrane.bytecode.bucket, membrane.bytecode.key, r.bucket, r.key)
+				child.bytecode.bucket, child.bytecode.key, r.bucket, r.key)
 		}
 	})
 
@@ -2051,14 +2051,14 @@ func TestBringUpWithBytecode(t *testing.T) {
 		}
 
 		var gotBudget time.Duration
-		membrane, err := bringUpWithBytecode(context.Background(), fakeSpawn(&gotBudget), l, l.start(context.Background()), nil, time.Now(), bytecodeReady, neverEmbedded, rehydrate)
+		child, err := bringUpChildWithBytecode(context.Background(), fakeSpawn(&gotBudget), l, l.start(context.Background()), nil, time.Now(), bytecodeReady, neverEmbedded, rehydrate)
 		if err != nil {
-			t.Fatalf("bringUpWithBytecode: %v", err)
+			t.Fatalf("bringUpChildWithBytecode: %v", err)
 		}
 		if rehydrateCalls != 0 {
 			t.Errorf("rehydrate calls = %d, want 0 for an unconfigured deployment", rehydrateCalls)
 		}
-		if membrane.bytecode != nil {
+		if child.bytecode != nil {
 			t.Error("bytecode != nil, want no upload leg for an unconfigured deployment")
 		}
 	})
@@ -2076,32 +2076,32 @@ func TestBringUpWithBytecode(t *testing.T) {
 		var gotBudget time.Duration
 		start := time.Now()
 		done := make(chan struct{})
-		var membrane *Membrane
+		var child *nodeChild
 		var err error
 		go func() {
-			membrane, err = bringUpWithBytecode(context.Background(), fakeSpawn(&gotBudget), l, l.start(context.Background()), nil, start, bytecodeReady, neverEmbedded, rehydrate)
+			child, err = bringUpChildWithBytecode(context.Background(), fakeSpawn(&gotBudget), l, l.start(context.Background()), nil, start, bytecodeReady, neverEmbedded, rehydrate)
 			close(done)
 		}()
 
 		select {
 		case <-done:
 		case <-time.After(startupBudget):
-			t.Fatal("bringUpWithBytecode never returned; a resolution that never arrived blocked the spawn")
+			t.Fatal("bringUpChildWithBytecode never returned; a resolution that never arrived blocked the spawn")
 		}
 		if err != nil {
-			t.Fatalf("bringUpWithBytecode: %v", err)
+			t.Fatalf("bringUpChildWithBytecode: %v", err)
 		}
 		if rehydrateCalls != 0 {
 			t.Errorf("rehydrate calls = %d, want 0 when the resolution never arrived", rehydrateCalls)
 		}
-		if membrane.bytecode != nil {
+		if child.bytecode != nil {
 			t.Error("bytecode != nil, want no upload leg when the resolution never arrived")
 		}
 		if gotBudget <= 0 {
-			t.Errorf("budget handed to bringUp = %s, want a positive budget rather than one driven negative", gotBudget)
+			t.Errorf("budget handed to bringUpChild = %s, want a positive budget rather than one driven negative", gotBudget)
 		}
 		if gotBudget >= startupBudget {
-			t.Errorf("budget handed to bringUp = %s, want it reduced by the time spent waiting on the resolution", gotBudget)
+			t.Errorf("budget handed to bringUpChild = %s, want it reduced by the time spent waiting on the resolution", gotBudget)
 		}
 	})
 
@@ -2119,24 +2119,24 @@ func TestBringUpWithBytecode(t *testing.T) {
 		}
 
 		var gotBudget time.Duration
-		membrane, err := bringUpWithBytecode(context.Background(), fakeSpawn(&gotBudget), l, l.start(context.Background()), nil, time.Now(), bytecodeReady, embedded, rehydrate)
+		child, err := bringUpChildWithBytecode(context.Background(), fakeSpawn(&gotBudget), l, l.start(context.Background()), nil, time.Now(), bytecodeReady, embedded, rehydrate)
 		if err != nil {
-			t.Fatalf("bringUpWithBytecode: %v", err)
+			t.Fatalf("bringUpChildWithBytecode: %v", err)
 		}
 		if rehydrateCalls != 0 {
 			t.Errorf("rehydrate calls = %d, want the S3 leg skipped entirely", rehydrateCalls)
 		}
-		if membrane.bytecode != nil {
+		if child.bytecode != nil {
 			t.Error("bytecode != nil, want the upload leg disabled after an embedded hit")
 		}
-		if !membrane.bytecodeCached() {
+		if !child.bytecodeCached() {
 			t.Error("bytecodeCached() = false, want the hit recorded")
 		}
-		if membrane.bytecodeSource != bytecodeSourceEmbedded {
-			t.Errorf("bytecodeSource = %q, want %q", membrane.bytecodeSource, bytecodeSourceEmbedded)
+		if child.bytecodeSource != bytecodeSourceEmbedded {
+			t.Errorf("bytecodeSource = %q, want %q", child.bytecodeSource, bytecodeSourceEmbedded)
 		}
-		if membrane.bytecodeKey != r.key {
-			t.Errorf("bytecodeKey = %q, want the resolution's %q", membrane.bytecodeKey, r.key)
+		if child.bytecodeKey != r.key {
+			t.Errorf("bytecodeKey = %q, want the resolution's %q", child.bytecodeKey, r.key)
 		}
 	})
 
@@ -2148,14 +2148,14 @@ func TestBringUpWithBytecode(t *testing.T) {
 		rehydrate := func(context.Context, *bytecodeResolution) bool { return true }
 
 		var gotBudget time.Duration
-		membrane, err := bringUpWithBytecode(context.Background(), fakeSpawn(&gotBudget), l, l.start(context.Background()), nil, time.Now(), bytecodeReady, neverEmbedded, rehydrate)
+		child, err := bringUpChildWithBytecode(context.Background(), fakeSpawn(&gotBudget), l, l.start(context.Background()), nil, time.Now(), bytecodeReady, neverEmbedded, rehydrate)
 		if err != nil {
-			t.Fatalf("bringUpWithBytecode: %v", err)
+			t.Fatalf("bringUpChildWithBytecode: %v", err)
 		}
-		if membrane.bytecodeSource != bytecodeSourceS3 {
-			t.Errorf("bytecodeSource = %q, want %q", membrane.bytecodeSource, bytecodeSourceS3)
+		if child.bytecodeSource != bytecodeSourceS3 {
+			t.Errorf("bytecodeSource = %q, want %q", child.bytecodeSource, bytecodeSourceS3)
 		}
-		if membrane.bytecode != nil {
+		if child.bytecode != nil {
 			t.Error("bytecode != nil, want the upload leg disabled after an S3 hit")
 		}
 	})
@@ -2166,18 +2166,18 @@ func TestBringUpWithBytecode(t *testing.T) {
 		bytecodeReady <- &bytecodeResolution{store: &fakeBytecodeStore{}, bucket: "b", key: "k"}
 
 		var gotBudget time.Duration
-		membrane, err := bringUpWithBytecode(context.Background(), fakeSpawn(&gotBudget), l, l.start(context.Background()), nil, time.Now(), bytecodeReady, neverEmbedded,
+		child, err := bringUpChildWithBytecode(context.Background(), fakeSpawn(&gotBudget), l, l.start(context.Background()), nil, time.Now(), bytecodeReady, neverEmbedded,
 			func(context.Context, *bytecodeResolution) bool { return false })
 		if err != nil {
-			t.Fatalf("bringUpWithBytecode: %v", err)
+			t.Fatalf("bringUpChildWithBytecode: %v", err)
 		}
-		if membrane.bytecodeSource != bytecodeSourceNone {
-			t.Errorf("bytecodeSource = %q, want %q", membrane.bytecodeSource, bytecodeSourceNone)
+		if child.bytecodeSource != bytecodeSourceNone {
+			t.Errorf("bytecodeSource = %q, want %q", child.bytecodeSource, bytecodeSourceNone)
 		}
-		if membrane.bytecodeCached() {
+		if child.bytecodeCached() {
 			t.Error("bytecodeCached() = true, want a miss on both legs")
 		}
-		if membrane.bytecode == nil {
+		if child.bytecode == nil {
 			t.Fatal("bytecode = nil, want the upload leg armed on a miss")
 		}
 	})
@@ -2205,8 +2205,8 @@ func TestBringUpWithBytecode(t *testing.T) {
 		}
 
 		var gotBudget time.Duration
-		if _, err := bringUpWithBytecode(context.Background(), fakeSpawn(&gotBudget), l, l.start(context.Background()), nil, time.Now(), bytecodeReady, embedded, rehydrate); err != nil {
-			t.Fatalf("bringUpWithBytecode: %v", err)
+		if _, err := bringUpChildWithBytecode(context.Background(), fakeSpawn(&gotBudget), l, l.start(context.Background()), nil, time.Now(), bytecodeReady, embedded, rehydrate); err != nil {
+			t.Fatalf("bringUpChildWithBytecode: %v", err)
 		}
 		if remaining > bytecodeRehydrateBudget-embeddedCost/2 {
 			t.Errorf("S3 leg budget = %s, want it short by the %s the embedded attempt spent", remaining, embeddedCost)
@@ -2228,19 +2228,19 @@ func TestBringUpWithBytecode(t *testing.T) {
 		}
 
 		var gotBudget time.Duration
-		membrane, err := bringUpWithBytecode(context.Background(), fakeSpawn(&gotBudget), l, l.start(context.Background()), nil, time.Now(), bytecodeReady, embedded,
+		child, err := bringUpChildWithBytecode(context.Background(), fakeSpawn(&gotBudget), l, l.start(context.Background()), nil, time.Now(), bytecodeReady, embedded,
 			func(context.Context, *bytecodeResolution) bool { return false })
 		if err != nil {
-			t.Fatalf("bringUpWithBytecode: %v", err)
+			t.Fatalf("bringUpChildWithBytecode: %v", err)
 		}
 		if embeddedCalls != 0 {
 			t.Errorf("embedded calls = %d, want 0 for an unconfigured deployment", embeddedCalls)
 		}
-		if membrane.bytecodeSource != bytecodeSourceNone {
-			t.Errorf("bytecodeSource = %q, want %q", membrane.bytecodeSource, bytecodeSourceNone)
+		if child.bytecodeSource != bytecodeSourceNone {
+			t.Errorf("bytecodeSource = %q, want %q", child.bytecodeSource, bytecodeSourceNone)
 		}
-		if membrane.bytecodeKey != "" {
-			t.Errorf("bytecodeKey = %q, want none for an unconfigured deployment", membrane.bytecodeKey)
+		if child.bytecodeKey != "" {
+			t.Errorf("bytecodeKey = %q, want none for an unconfigured deployment", child.bytecodeKey)
 		}
 	})
 }

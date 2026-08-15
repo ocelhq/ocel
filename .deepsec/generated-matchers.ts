@@ -207,7 +207,7 @@ const specs = [
       "platform/aws/provider/membrane/mux.go",
       "platform/aws/provider/membrane/bucket/service.go",
       "platform/aws/provider/cmd/deploy/main.go",
-      "platform/aws/provider/cmd/runtime/main.go",
+      "platform/aws/provider/cmd/lambdanode/bootstrap/membraneserver.go",
       "platform/aws/provider/channelauth/interceptor.go",
       "pkg/channel/channel.go"
     ],

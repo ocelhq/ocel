@@ -51,11 +51,12 @@ type Listener struct {
 }
 
 type ListenerConfig struct {
-	DDB            ddbAPI
-	Tagger         objectTagger
-	HTTP           httpDoer
-	Table          string
-	AllowedOrigins []string
+	DDB              ddbAPI
+	Tagger           objectTagger
+	HTTP             httpDoer
+	Table            string
+	SessionKeyPrefix string
+	AllowedOrigins   []string
 }
 
 func NewListener(cfg ListenerConfig) *Listener {
@@ -64,7 +65,7 @@ func NewListener(cfg ListenerConfig) *Listener {
 		h = http.DefaultClient
 	}
 	return &Listener{
-		store:          &sessionStore{client: cfg.DDB, table: cfg.Table},
+		store:          &sessionStore{client: cfg.DDB, table: cfg.Table, keyPrefix: cfg.SessionKeyPrefix},
 		tagger:         cfg.Tagger,
 		http:           h,
 		allowedOrigins: cfg.AllowedOrigins,

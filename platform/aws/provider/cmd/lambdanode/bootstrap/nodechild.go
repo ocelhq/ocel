@@ -23,7 +23,7 @@ const minSpawnBudget = 4 * time.Second
 
 const nodeBinaryPath = "/var/lang/bin/node"
 
-type Membrane struct {
+type nodeChild struct {
 	nodePort int
 	control  net.Conn
 	client   *http.Client
@@ -45,18 +45,18 @@ type Membrane struct {
 	bytecodeDone bool
 }
 
-func (m *Membrane) bytecodeCacheSource() bytecodeSource {
+func (m *nodeChild) bytecodeCacheSource() bytecodeSource {
 	if m.bytecodeSource == "" {
 		return bytecodeSourceNone
 	}
 	return m.bytecodeSource
 }
 
-func (m *Membrane) bytecodeCached() bool {
+func (m *nodeChild) bytecodeCached() bool {
 	return m.bytecodeCacheSource() != bytecodeSourceNone
 }
 
-func (m *Membrane) registerWaiter(requestID string) <-chan struct{} {
+func (m *nodeChild) registerWaiter(requestID string) <-chan struct{} {
 	if m.pending == nil || !m.lifecycle {
 		return nil
 	}
@@ -67,7 +67,7 @@ func (m *Membrane) registerWaiter(requestID string) <-chan struct{} {
 	return ch
 }
 
-func (m *Membrane) dropWaiter(requestID string) (chan struct{}, bool) {
+func (m *nodeChild) dropWaiter(requestID string) (chan struct{}, bool) {
 	m.mu.Lock()
 	ch, ok := m.pending[requestID]
 	if ok {
@@ -77,13 +77,13 @@ func (m *Membrane) dropWaiter(requestID string) (chan struct{}, bool) {
 	return ch, ok
 }
 
-func (m *Membrane) signalComplete(requestID string) {
+func (m *nodeChild) signalComplete(requestID string) {
 	if ch, ok := m.dropWaiter(requestID); ok {
 		close(ch)
 	}
 }
 
-func (m *Membrane) awaitCompletion(ctx context.Context, requestID string, waiter <-chan struct{}) {
+func (m *nodeChild) awaitCompletion(ctx context.Context, requestID string, waiter <-chan struct{}) {
 	if waiter == nil {
 		return
 	}
@@ -107,7 +107,7 @@ func (m *Membrane) awaitCompletion(ctx context.Context, requestID string, waiter
 
 const flushCompileCacheLine = `{"type":"flush-compile-cache"}` + "\n"
 
-func (m *Membrane) flushCompileCache(ctx context.Context) (compileCacheFlushedPayload, bool) {
+func (m *nodeChild) flushCompileCache(ctx context.Context) (compileCacheFlushedPayload, bool) {
 	if m.control == nil {
 		return compileCacheFlushedPayload{}, false
 	}
@@ -138,7 +138,7 @@ func (m *Membrane) flushCompileCache(ctx context.Context) (compileCacheFlushedPa
 	return compileCacheFlushedPayload{}, false
 }
 
-func (m *Membrane) writeFlushRequest(ctx context.Context) error {
+func (m *nodeChild) writeFlushRequest(ctx context.Context) error {
 	deadline, ok := ctx.Deadline()
 	if !ok {
 		deadline = time.Now().Add(compileCacheFlushTimeout)
@@ -146,7 +146,7 @@ func (m *Membrane) writeFlushRequest(ctx context.Context) error {
 	return m.writeControlRequest([]byte(flushCompileCacheLine), deadline)
 }
 
-func (m *Membrane) writeControlRequest(line []byte, deadline time.Time) error {
+func (m *nodeChild) writeControlRequest(line []byte, deadline time.Time) error {
 	if err := m.control.SetWriteDeadline(deadline); err != nil {
 		return err
 	}
@@ -155,7 +155,7 @@ func (m *Membrane) writeControlRequest(line []byte, deadline time.Time) error {
 	return err
 }
 
-func (m *Membrane) warmCompileCache(ctx context.Context, deadline time.Time) (compileCacheWarmedPayload, <-chan compileCacheWarmedPayload, bool) {
+func (m *nodeChild) warmCompileCache(ctx context.Context, deadline time.Time) (compileCacheWarmedPayload, <-chan compileCacheWarmedPayload, bool) {
 	if m.control == nil {
 		return compileCacheWarmedPayload{}, nil, false
 	}
@@ -189,7 +189,7 @@ func collectWarmReport(waiter <-chan compileCacheWarmedPayload) (compileCacheWar
 	}
 }
 
-func (m *Membrane) endWarmExchange() {
+func (m *nodeChild) endWarmExchange() {
 	m.mu.Lock()
 	m.warmWaiter = nil
 	m.mu.Unlock()
@@ -217,7 +217,7 @@ type warmCompileCacheParams struct {
 	CeilingBytes int64 `json:"ceilingBytes"`
 }
 
-func (m *Membrane) deliverCompileCacheFlush(p compileCacheFlushedPayload) {
+func (m *nodeChild) deliverCompileCacheFlush(p compileCacheFlushedPayload) {
 	m.mu.Lock()
 	ack := m.flushWaiter
 	m.flushWaiter = nil
@@ -227,7 +227,7 @@ func (m *Membrane) deliverCompileCacheFlush(p compileCacheFlushedPayload) {
 	}
 }
 
-func (m *Membrane) deliverCompileCacheWarm(p compileCacheWarmedPayload) {
+func (m *nodeChild) deliverCompileCacheWarm(p compileCacheWarmedPayload) {
 	m.mu.Lock()
 	reply := m.warmWaiter
 	m.warmWaiter = nil
@@ -237,7 +237,7 @@ func (m *Membrane) deliverCompileCacheWarm(p compileCacheWarmedPayload) {
 	}
 }
 
-func (m *Membrane) claimBytecodeUpload() bool {
+func (m *nodeChild) claimBytecodeUpload() bool {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	claimed := !m.bytecodeDone
@@ -245,7 +245,7 @@ func (m *Membrane) claimBytecodeUpload() bool {
 	return claimed
 }
 
-func (m *Membrane) uploadBytecodeCacheOnce(ctx context.Context) {
+func (m *nodeChild) uploadBytecodeCacheOnce(ctx context.Context) {
 	if m.bytecode == nil || !m.claimBytecodeUpload() {
 		return
 	}
@@ -406,7 +406,7 @@ func entrypointPath() string {
 	return nodeEntry
 }
 
-func startNode(extraEnv []string, budget time.Duration, onControl func(io.Writer), abandon <-chan struct{}) (*Membrane, error) {
+func startNode(extraEnv []string, budget time.Duration, onControl func(io.Writer), abandon <-chan struct{}) (*nodeChild, error) {
 	// TODO: randomize
 	sockPath := "/tmp/ocel-control.sock"
 	_ = os.Remove(sockPath)
@@ -433,7 +433,7 @@ func startNode(extraEnv []string, budget time.Duration, onControl func(io.Writer
 		return nil, err
 	}
 
-	m := &Membrane{
+	m := &nodeChild{
 		control:   ready.control,
 		nodePort:  ready.httpPort,
 		lifecycle: ready.lifecycle,
@@ -469,7 +469,7 @@ func superviseNode(exited <-chan error) {
 	os.Exit(1)
 }
 
-func (m *Membrane) drainControl(reader *bufio.Reader) {
+func (m *nodeChild) drainControl(reader *bufio.Reader) {
 	for {
 		line, err := reader.ReadBytes('\n')
 		if err != nil {
