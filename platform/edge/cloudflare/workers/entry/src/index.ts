@@ -1336,8 +1336,10 @@ async function dispatchPrerender(
   const admissionTier =
     deps.interception && !isNextData ? deps.interception : undefined;
 
+  const suppressed = SUPPRESS_SELF_REVALIDATION && admissionTier !== undefined;
+
   const originHeaders = new Headers(safeHeaders);
-  if (SUPPRESS_SELF_REVALIDATION && admissionTier) {
+  if (suppressed) {
     originHeaders.set(PREFETCH_PURPOSE, "prefetch");
   }
   const origin = () => answer(forward(forwardUrl, request, originHeaders));
@@ -1384,6 +1386,7 @@ async function dispatchPrerender(
     refreshKey,
     revalidation,
     segment,
+    suppressed,
     tags: target.tags,
     revalidate:
       typeof target.fallback?.initialRevalidate === "number"
@@ -1519,7 +1522,7 @@ async function dispatchPrerender(
 
   if (!keyResult.cacheable) {
     const uncacheableHeaders = new Headers(headers);
-    if (SUPPRESS_SELF_REVALIDATION && admissionTier) {
+    if (suppressed) {
       uncacheableHeaders.set(PREFETCH_PURPOSE, "prefetch");
     }
     const response = await answer(
