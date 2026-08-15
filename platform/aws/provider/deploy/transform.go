@@ -78,6 +78,9 @@ func resolveTransforms(ctx context.Context, cfg Config, manifest *deploymentsv1.
 	if len(results) != len(candidates) {
 		return nil, fmt.Errorf("transforms returned %d results for %d resources", len(results), len(candidates))
 	}
+	if err := resolveOutputs(ctx, cfg, manifest, candidates, results); err != nil {
+		return nil, err
+	}
 
 	out := &transformedArgs{
 		functions: map[string]functionArgs{},
@@ -127,6 +130,10 @@ func functionSurfaces(a functionArgs) transform.Surfaces {
 			"runtime":        a.Runtime,
 		},
 		"url": {"invokeMode": a.InvokeMode},
+		"vpc": {
+			"subnetIds":        surfaceList(a.VPC.SubnetIDs),
+			"securityGroupIds": surfaceList(a.VPC.SecurityGroupIDs),
+		},
 	}
 }
 
@@ -152,6 +159,17 @@ func applyFunctionSurfaces(a functionArgs, result transform.Result) (functionArg
 		return a, err
 	}
 	if a.InvokeMode, err = surfaceString(url, "url", "invokeMode"); err != nil {
+		return a, err
+	}
+
+	vpc, err := surfaceAt(s, "vpc")
+	if err != nil {
+		return a, err
+	}
+	if a.VPC.SubnetIDs, err = surfaceStrings(vpc, "vpc", "subnetIds"); err != nil {
+		return a, err
+	}
+	if a.VPC.SecurityGroupIDs, err = surfaceStrings(vpc, "vpc", "securityGroupIds"); err != nil {
 		return a, err
 	}
 	return a, nil

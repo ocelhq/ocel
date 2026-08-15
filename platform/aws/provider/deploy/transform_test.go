@@ -178,6 +178,7 @@ func TestResolveTransforms(t *testing.T) {
 			{
 				"lambda": {"memorySizeMb": float64(2048), "timeoutSeconds": float64(60), "runtime": "nodejs22.x"},
 				"url":    {"invokeMode": "BUFFERED"},
+				"vpc":    {"subnetIds": []any{}, "securityGroupIds": []any{}},
 			},
 		}}
 
@@ -248,6 +249,7 @@ func TestResolveTransforms(t *testing.T) {
 		fake := &fakeEvaluator{out: []transform.Surfaces{{
 			"lambda": {"memorySizeMb": "plenty", "timeoutSeconds": float64(30), "runtime": "nodejs24.x"},
 			"url":    {"invokeMode": "BUFFERED"},
+			"vpc":    {"subnetIds": []any{}, "securityGroupIds": []any{}},
 		}}}
 
 		_, err := resolveTransforms(t.Context(), Config{Env: "prod", Transform: fake}, manifest)

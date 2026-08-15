@@ -186,11 +186,11 @@ func TestRenderAppBundle(t *testing.T) {
 			t.Errorf("Referenced = %v, want %v: the owners behind this app's live cells, at its own environment and class-wide", bundle.Referenced, want)
 		}
 
-		role := appExecutionRole(cfg, "web", nil, nil, bundle, nil, nil)
+		role := appExecutionRole(cfg, "web", nil, nil, bundle, nil, nil, false)
 		if !slices.Equal(role.VarsReferenced, bundle.Referenced) {
 			t.Errorf("role VarsReferenced = %v, want the app's own owners %v", role.VarsReferenced, bundle.Referenced)
 		}
-		other := appExecutionRole(cfg, "admin", nil, nil, appBundle{Live: []byte(`{"slug":"shop"}`)}, nil, nil)
+		other := appExecutionRole(cfg, "admin", nil, nil, appBundle{Live: []byte(`{"slug":"shop"}`)}, nil, nil, false)
 		if len(other.VarsReferenced) != 0 {
 			t.Errorf("an app reading no reference took %v, want no partition but its own", other.VarsReferenced)
 		}
@@ -329,7 +329,7 @@ func TestAppExecutionRoleLiveValues(t *testing.T) {
 		t.Parallel()
 		cfg := liveConfig()
 		cfg.Slug = "shop"
-		withLive := appExecutionRole(cfg, "web", nil, nil, appBundle{Live: []byte(`{"slug":"shop"}`)}, nil, nil)
+		withLive := appExecutionRole(cfg, "web", nil, nil, appBundle{Live: []byte(`{"slug":"shop"}`)}, nil, nil, false)
 		if withLive.VarsTableARN != varsTableARN {
 			t.Errorf("VarsTableARN = %q, want the vars table", withLive.VarsTableARN)
 		}
@@ -337,7 +337,7 @@ func TestAppExecutionRoleLiveValues(t *testing.T) {
 			t.Errorf("role = %+v, want the partition it may read named", withLive)
 		}
 
-		withoutLive := appExecutionRole(cfg, "admin", nil, nil, appBundle{}, nil, nil)
+		withoutLive := appExecutionRole(cfg, "admin", nil, nil, appBundle{}, nil, nil, false)
 		if withoutLive.VarsTableARN != "" {
 			t.Errorf("VarsTableARN = %q, want no table grant for an app with no live values", withoutLive.VarsTableARN)
 		}

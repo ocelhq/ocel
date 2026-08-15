@@ -15,7 +15,7 @@ const conformanceModule = `
 	import { defineTransform } from "@ocel/provider-aws/transform"
 	const identity = (args) => args
 	export default defineTransform({
-		function: { lambda: identity, url: identity },
+		function: { lambda: identity, url: identity, vpc: identity },
 		bucket: { bucket: identity, cors: identity, listener: identity, notification: identity },
 		postgres: { cluster: identity, instance: identity },
 	})
@@ -25,7 +25,7 @@ func TestSurfaceConformance(t *testing.T) {
 	t.Parallel()
 
 	targeted := map[string][]string{
-		"function": {"lambda", "url"},
+		"function": {"lambda", "url", "vpc"},
 		"bucket":   {"bucket", "cors", "listener", "notification"},
 		"postgres": {"cluster", "instance"},
 	}

@@ -27,6 +27,10 @@ type recordingPublisher struct {
 
 	published map[string][]string
 	resolved  map[string]vars.PublishedRecord
+
+	reads            int
+	readEnvironment  string
+	namesEnvironment string
 }
 
 func (p *recordingPublisher) PublishRecords(_ context.Context, slug, environment, owner string, records []vars.Record) (int, error) {
@@ -34,13 +38,16 @@ func (p *recordingPublisher) PublishRecords(_ context.Context, slug, environment
 	return 0, p.err
 }
 
-func (p *recordingPublisher) PublishedNames(_ context.Context, _, class, _ string) ([]string, error) {
+func (p *recordingPublisher) PublishedNames(_ context.Context, _, class, environment string) ([]string, error) {
+	p.reads++
+	p.namesEnvironment = environment
 	names := slices.Clone(p.published[class])
 	slices.Sort(names)
 	return names, nil
 }
 
 func (p *recordingPublisher) ResolveRecords(_ context.Context, _, environment string, names []string) ([]vars.PublishedRecord, error) {
+	p.readEnvironment = environment
 	out := make([]vars.PublishedRecord, 0, len(names))
 	for _, name := range names {
 		record, ok := p.resolved[name]
@@ -355,7 +362,7 @@ func TestDeliveryScopesToTheAppsThatUseTheResource(t *testing.T) {
 		t.Error("web packages the bucket's address; a compromise of web must expose no credential it never needed")
 	}
 
-	raw, err := varsReadPolicy(appExecutionRole(cfg, "web", nil, nil, bundles["web"], nil, nil))
+	raw, err := varsReadPolicy(appExecutionRole(cfg, "web", nil, nil, bundles["web"], nil, nil, false))
 	if err != nil {
 		t.Fatalf("varsReadPolicy: %v", err)
 	}
@@ -366,7 +373,7 @@ func TestDeliveryScopesToTheAppsThatUseTheResource(t *testing.T) {
 		t.Errorf("web's role cannot reach the postgres it does use: %s", raw)
 	}
 
-	raw, err = varsReadPolicy(appExecutionRole(cfg, "api", nil, nil, bundles["api"], nil, nil))
+	raw, err = varsReadPolicy(appExecutionRole(cfg, "api", nil, nil, bundles["api"], nil, nil, false))
 	if err != nil {
 		t.Fatalf("varsReadPolicy: %v", err)
 	}

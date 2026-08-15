@@ -94,7 +94,17 @@ type functionArgs struct {
 	MemorySizeMB   int
 	TimeoutSeconds int
 	InvokeMode     string
+	VPC            functionVPC
 	Tags           map[string]string
+}
+
+type functionVPC struct {
+	SubnetIDs        []string
+	SecurityGroupIDs []string
+}
+
+func (v functionVPC) placed() bool {
+	return len(v.SubnetIDs) > 0 || len(v.SecurityGroupIDs) > 0
 }
 
 type isrConfig struct {
@@ -294,6 +304,7 @@ type executionRole struct {
 	Cache      *isrConfig
 	Bytecode   *bytecodeConfig
 	VarsKeyARN string
+	VPCAccess  bool
 
 	VarsTableARN   string
 	Slug           string
@@ -304,8 +315,8 @@ type executionRole struct {
 	LinkPolicies []linkPolicy
 }
 
-func appExecutionRole(cfg Config, app string, caches map[string]*isrConfig, bytecode map[string]*bytecodeConfig, bundle appBundle, tags map[string]string, policies []linkPolicy) executionRole {
-	role := executionRole{App: app, Cache: caches[app], Bytecode: bytecode[app], VarsKeyARN: cfg.VarsKeyARN, Tags: tags, LinkPolicies: policies}
+func appExecutionRole(cfg Config, app string, caches map[string]*isrConfig, bytecode map[string]*bytecodeConfig, bundle appBundle, tags map[string]string, policies []linkPolicy, vpcAccess bool) executionRole {
+	role := executionRole{App: app, Cache: caches[app], Bytecode: bytecode[app], VarsKeyARN: cfg.VarsKeyARN, Tags: tags, LinkPolicies: policies, VPCAccess: vpcAccess}
 	if bundle.hasLive() {
 		role.VarsTableARN = cfg.VarsTableARN
 		role.VarsReferenced = bundle.Referenced
@@ -336,6 +347,14 @@ func newFunctionRole(ctx *pulumi.Context, coord naming.Coordinate, r executionRo
 		PolicyArn: pulumi.String("arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"),
 	}); err != nil {
 		return nil, err
+	}
+	if r.VPCAccess {
+		if _, err := iam.NewRolePolicyAttachment(ctx, naming.ResourceID(naming.KindRole, roleLocalName, "policy", "vpc"), &iam.RolePolicyAttachmentArgs{
+			Role:      role.Name,
+			PolicyArn: pulumi.String("arn:aws:iam::aws:policy/service-role/AWSLambdaVPCAccessExecutionRole"),
+		}); err != nil {
+			return nil, err
+		}
 	}
 	if r.Cache != nil {
 		policy, err := isrPolicy(*r.Cache)
@@ -396,6 +415,22 @@ func functionEnv(base map[string]string, args functionArgs, isr *isrConfig, byte
 	return env
 }
 
+func functionVPCConfig(logicalName string, v functionVPC) (lambda.FunctionVpcConfigPtrInput, error) {
+	if !v.placed() {
+		return nil, nil
+	}
+	if len(v.SubnetIDs) == 0 {
+		return nil, fmt.Errorf("a transform places %s in a VPC with %d security groups and no subnets; a Lambda reaches a VPC through the subnets it is given, so name at least one", logicalName, len(v.SecurityGroupIDs))
+	}
+	if len(v.SecurityGroupIDs) == 0 {
+		return nil, fmt.Errorf("a transform places %s in %d subnets with no security group; a Lambda in a VPC is refused without one, so name at least one", logicalName, len(v.SubnetIDs))
+	}
+	return lambda.FunctionVpcConfigArgs{
+		SubnetIds:        pulumi.ToStringArray(v.SubnetIDs),
+		SecurityGroupIds: pulumi.ToStringArray(v.SecurityGroupIDs),
+	}, nil
+}
+
 func registerFunction(ctx *pulumi.Context, logicalName string, coord naming.Coordinate, route string, args functionArgs, artifact artifactRef, base map[string]string, isr *isrConfig, bytecode *bytecodeConfig, roleArn pulumi.StringInput) error {
 	env := pulumi.StringMap{}
 	for key, value := range functionEnv(base, args, isr, bytecode) {
@@ -405,6 +440,11 @@ func registerFunction(ctx *pulumi.Context, logicalName string, coord naming.Coor
 	resourceName := coord.PhysicalName(maxLambdaBaseNameLen)
 	if route == "" {
 		route = naming.PathSeparator + coord.Name
+	}
+
+	vpcConfig, err := functionVPCConfig(logicalName, args.VPC)
+	if err != nil {
+		return err
 	}
 
 	fn, err := lambda.NewFunction(ctx, resourceName, &lambda.FunctionArgs{
@@ -419,6 +459,7 @@ func registerFunction(ctx *pulumi.Context, logicalName string, coord naming.Coor
 		Environment: &lambda.FunctionEnvironmentArgs{
 			Variables: env,
 		},
+		VpcConfig: vpcConfig,
 
 		Tags: resourceTags(coord.Kind, route, args.Tags),
 
