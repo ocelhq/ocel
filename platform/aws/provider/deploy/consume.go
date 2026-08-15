@@ -198,15 +198,9 @@ func consumeLinks(ctx context.Context, cfg Config, manifest *deploymentsv1.Manif
 
 func (cfg Config) refuseUnpublished(ctx context.Context, slug, environment string, missing, published []string) error {
 	found := map[string][]string{}
-	for _, class := range cfg.VarsSiblingClasses {
-		if class == cfg.VarsClass {
-			continue
-		}
-		elsewhere := cfg.publishedOrNothing(ctx, slug, class, environment)
-		for _, name := range missing {
-			if slices.Contains(elsewhere, name) {
-				found[name] = append(found[name], class)
-			}
+	for _, name := range missing {
+		if classes := cfg.classesPublishing(ctx, slug, environment, name); len(classes) > 0 {
+			found[name] = classes
 		}
 	}
 	return &UnpublishedLinkError{
@@ -216,6 +210,19 @@ func (cfg Config) refuseUnpublished(ctx context.Context, slug, environment strin
 		Siblings:    published,
 		FoundIn:     found,
 	}
+}
+
+func (cfg Config) classesPublishing(ctx context.Context, slug, environment, name string) []string {
+	var found []string
+	for _, class := range cfg.VarsSiblingClasses {
+		if class == cfg.VarsClass {
+			continue
+		}
+		if slices.Contains(cfg.publishedOrNothing(ctx, slug, class, environment), name) {
+			found = append(found, class)
+		}
+	}
+	return found
 }
 
 func (cfg Config) publishedOrNothing(ctx context.Context, slug, class, environment string) []string {

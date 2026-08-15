@@ -17,7 +17,7 @@ describe("defineTransform", () => {
   });
 
   it("exposes only the underlying resources this provider renders", () => {
-    expect(Object.keys(surfaceFields.function)).toEqual(["lambda", "url"]);
+    expect(Object.keys(surfaceFields.function)).toEqual(["lambda", "url", "vpc"]);
     expect(Object.keys(surfaceFields.bucket)).toEqual([
       "bucket",
       "cors",

@@ -6,6 +6,8 @@ export type {
   TransformFn,
   TransformRule,
 } from "./define";
+export { isLinkOutput, output, outputList } from "./output";
+export type { Linked, LinkOutput, LinkOutputRef } from "./output";
 export type {
   AwsSurfaces,
   BucketBucketSurface,
@@ -15,6 +17,7 @@ export type {
   EnvClass,
   FunctionLambdaSurface,
   FunctionUrlSurface,
+  FunctionVpcSurface,
   GateContext,
   PostgresClusterSurface,
   PostgresInstanceSurface,

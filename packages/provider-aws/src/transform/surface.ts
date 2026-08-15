@@ -1,3 +1,5 @@
+import type { Linked } from "./output";
+
 /** The environment classes a deploy can target. */
 export type EnvClass = "development" | "preview" | "production";
 
@@ -39,6 +41,16 @@ export interface FunctionLambdaSurface {
 /** The tunable args of that function's URL. */
 export interface FunctionUrlSurface {
   invokeMode: "RESPONSE_STREAM" | "BUFFERED";
+}
+
+/**
+ * Where that function's Lambda runs. Both lists empty leaves it outside any
+ * VPC, which is how ocel renders it; filling both places it in yours, and the
+ * ids are what a link your own infrastructure published carries.
+ */
+export interface FunctionVpcSurface {
+  subnetIds: Linked<Linked<string>[]>;
+  securityGroupIds: Linked<Linked<string>[]>;
 }
 
 /** The tunable args of the S3 bucket itself. */
@@ -89,6 +101,7 @@ export interface AwsSurfaces {
   function: {
     lambda: FunctionLambdaSurface;
     url: FunctionUrlSurface;
+    vpc: FunctionVpcSurface;
   };
   bucket: {
     bucket: BucketBucketSurface;
@@ -126,6 +139,7 @@ export const surfaceFields = {
       "runtime",
     ),
     url: allFields<FunctionUrlSurface>()("invokeMode"),
+    vpc: allFields<FunctionVpcSurface>()("subnetIds", "securityGroupIds"),
   },
   bucket: {
     bucket: allFields<BucketBucketSurface>()("forceDestroy"),

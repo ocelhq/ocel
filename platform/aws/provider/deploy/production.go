@@ -817,9 +817,13 @@ func runAppStack(ctx context.Context, cfg Config, manifest *deploymentsv1.Manife
 	if len(functions) > 0 {
 		roleTags = cfg.transformed.forFunction(functions[0]).Tags
 	}
+	vpcAccess := false
+	for _, fn := range functions {
+		vpcAccess = vpcAccess || cfg.transformed.forFunction(fn).VPC.placed()
+	}
 
 	program := func(pctx *pulumi.Context) error {
-		role, err := newFunctionRole(pctx, roleCoordinate(project, stack), appExecutionRole(cfg, name, caches, bytecode, baked, roleTags, policies))
+		role, err := newFunctionRole(pctx, roleCoordinate(project, stack), appExecutionRole(cfg, name, caches, bytecode, baked, roleTags, policies, vpcAccess))
 		if err != nil {
 			return err
 		}
