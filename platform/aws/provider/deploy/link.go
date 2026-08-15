@@ -21,10 +21,14 @@ var linkRecordShape = map[string][]string{
 	naming.TokenBucket:   {"bucket"},
 }
 
-func manifestLinks(manifest *deploymentsv1.Manifest) []live.Link {
+func appLinks(manifest *deploymentsv1.Manifest, app string) []live.Link {
+	used := usedResources(manifest, app)
 	resources := manifest.GetResources()
 	out := make([]live.Link, 0, len(resources))
 	for _, r := range resources {
+		if !used[r.GetLogicalName()] {
+			continue
+		}
 		token := r.GetResource().GetType()
 		out = append(out, live.Link{
 			Name:       r.GetLogicalName(),

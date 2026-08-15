@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"maps"
 	"reflect"
 	"slices"
 	"strings"
@@ -44,6 +43,12 @@ func linkedManifest() *deploymentsv1.Manifest {
 				Resource:    &resourcesv1.ResourceIdentifier{Type: naming.TokenBucket, Name: "uploads"},
 				Config:      &deploymentsv1.ManifestResource_Bucket{Bucket: &resourcesv1.BucketConfig{}},
 			},
+		},
+		Apps: []*deploymentsv1.ManifestApp{{Name: "api"}, {Name: "web"}},
+		Usages: []*deploymentsv1.ManifestUsage{
+			{App: "api", Resource: "bucket--uploads", Files: []string{"apps/api/src/upload.ts"}},
+			{App: "api", Resource: "db--main", Files: []string{"apps/api/src/server.ts"}},
+			{App: "web", Resource: "db--main", Files: []string{"apps/web/src/page.ts"}},
 		},
 	}
 }
@@ -169,21 +174,28 @@ func TestPublishLinkRecords(t *testing.T) {
 	})
 }
 
-func TestManifestLinks(t *testing.T) {
+func TestAppLinks(t *testing.T) {
 	t.Parallel()
-	got := manifestLinks(linkedManifest())
+	got := appLinks(linkedManifest(), "api")
 	want := []live.Link{
 		{Name: "db--main", Key: "OCEL_RESOURCE_POSTGRES_main", Type: naming.TokenPostgres, Properties: []string{"connectionString"}},
 		{Name: "bucket--uploads", Key: "OCEL_RESOURCE_BUCKET_uploads", Type: naming.TokenBucket, Properties: []string{"bucket"}},
 	}
 	if !reflect.DeepEqual(got, want) {
-		t.Errorf("manifestLinks = %+v, want %+v — the addresses and the shape this app was built to read come from the manifest, before anything is provisioned", got, want)
+		t.Errorf("appLinks = %+v, want %+v — the addresses and the shape this app was built to read come from the manifest, before anything is provisioned", got, want)
+	}
+
+	if got := appLinks(linkedManifest(), "web"); !reflect.DeepEqual(got, want[:1]) {
+		t.Errorf("appLinks(web) = %+v, want %+v: an app is handed an address only for what its usage edges name", got, want[:1])
+	}
+	if got := appLinks(linkedManifest(), "cron"); len(got) != 0 {
+		t.Errorf("appLinks(cron) = %+v, want nothing for an app carrying no usage edge at all", got)
 	}
 }
 
 func TestPublishedRecordsMeetWhatTheManifestDeclares(t *testing.T) {
 	t.Parallel()
-	links := manifestLinks(linkedManifest())
+	links := appLinks(linkedManifest(), "api")
 	published, err := publishedRecords(t, links)
 	if err != nil {
 		t.Fatalf("linkRecords: %v", err)
@@ -208,8 +220,8 @@ func TestPublishedRecordsMeetWhatTheManifestDeclares(t *testing.T) {
 
 func TestLinkedAppRendersNoCredential(t *testing.T) {
 	t.Parallel()
-	app := &deploymentsv1.ManifestApp{Name: "web"}
-	bundle, err := renderAppBundle(liveConfig(), "shop", app, manifestLinks(linkedManifest()))
+	app := &deploymentsv1.ManifestApp{Name: "api"}
+	bundle, err := renderAppBundle(liveConfig(), "shop", app, appLinks(linkedManifest(), "api"))
 	if err != nil {
 		t.Fatalf("renderAppBundle: %v", err)
 	}
@@ -233,9 +245,7 @@ func TestLinkedAppRendersNoCredential(t *testing.T) {
 		t.Errorf("bundle.Links = %v, want %v so the role can be scoped to them", bundle.Links, want)
 	}
 
-	env := map[string]string{runtimeAddressEnv: deferredRuntimeAddress}
-	maps.Copy(env, variableEnv(app))
-	maps.Copy(env, bundle.env())
+	env := appEnv(app, bundle)
 	for _, published := range publishedProperties(t) {
 		for key, value := range env {
 			if strings.Contains(value, published) {
@@ -244,6 +254,78 @@ func TestLinkedAppRendersNoCredential(t *testing.T) {
 		}
 		if strings.Contains(string(bundle.Live), published) {
 			t.Errorf("the packaged manifest carries %q; the artifact carries the address and never the value", published)
+		}
+	}
+}
+
+func TestDeliveryScopesToTheAppsThatUseTheResource(t *testing.T) {
+	t.Parallel()
+	cfg := liveConfig()
+	cfg.Slug = "shop"
+	manifest := linkedManifest()
+	bundles, err := renderAppBundles(cfg, manifest)
+	if err != nil {
+		t.Fatalf("renderAppBundles: %v", err)
+	}
+
+	envs := map[string]map[string]string{}
+	addresses := map[string][]string{}
+	for _, app := range manifest.GetApps() {
+		bundle := bundles[app.GetName()]
+		envs[app.GetName()] = appEnv(app, bundle)
+		parsed, err := live.Parse(bundle.Live)
+		if err != nil {
+			t.Fatalf("parse %s's live manifest: %v", app.GetName(), err)
+		}
+		for _, l := range parsed.Links {
+			addresses[app.GetName()] = append(addresses[app.GetName()], l.Key)
+		}
+	}
+
+	if want := []string{"OCEL_RESOURCE_POSTGRES_main", "OCEL_RESOURCE_BUCKET_uploads"}; !slices.Equal(addresses["api"], want) {
+		t.Errorf("api reads %v, want %v", addresses["api"], want)
+	}
+	if want := []string{"OCEL_RESOURCE_POSTGRES_main"}; !slices.Equal(addresses["web"], want) {
+		t.Errorf("web reads %v, want %v: web uses the shared postgres and never the bucket", addresses["web"], want)
+	}
+
+	if want := []string{"db--main"}; !slices.Equal(bundles["web"].Links, want) {
+		t.Errorf("web's bundle names %v, want %v so its role reaches no other link's partition", bundles["web"].Links, want)
+	}
+	if want := []string{"bucket--uploads", "db--main"}; !slices.Equal(bundles["api"].Links, want) {
+		t.Errorf("api's bundle names %v, want %v: the app whose edges name both is handed both", bundles["api"].Links, want)
+	}
+	if got := envs["api"][runtimeAddressEnv]; got != deferredRuntimeAddress {
+		t.Errorf("api's env carries %s=%q, want %q so the app it is delivered to can read its values at all", runtimeAddressEnv, got, deferredRuntimeAddress)
+	}
+
+	for key, value := range envs["web"] {
+		if strings.Contains(key, "BUCKET") || strings.Contains(value, "uploads") {
+			t.Errorf("web's env carries %s=%q for a bucket it never uses", key, value)
+		}
+	}
+	if strings.Contains(string(bundles["web"].Live), "bucket--uploads") {
+		t.Error("web packages the bucket's address; a compromise of web must expose no credential it never needed")
+	}
+
+	raw, err := varsReadPolicy(appExecutionRole(cfg, "web", nil, nil, bundles["web"], nil, nil))
+	if err != nil {
+		t.Fatalf("varsReadPolicy: %v", err)
+	}
+	if strings.Contains(raw, vars.LinkPartitionKey("shop", varsClass, "bucket--uploads")) {
+		t.Errorf("web's role reaches the bucket's partition: %s", raw)
+	}
+	if !strings.Contains(raw, vars.LinkPartitionKey("shop", varsClass, "db--main")) {
+		t.Errorf("web's role cannot reach the postgres it does use: %s", raw)
+	}
+
+	raw, err = varsReadPolicy(appExecutionRole(cfg, "api", nil, nil, bundles["api"], nil, nil))
+	if err != nil {
+		t.Fatalf("varsReadPolicy: %v", err)
+	}
+	for _, link := range []string{"db--main", "bucket--uploads"} {
+		if !strings.Contains(raw, vars.LinkPartitionKey("shop", varsClass, link)) {
+			t.Errorf("api's role cannot reach %s, which its usage edges name: %s", link, raw)
 		}
 	}
 }

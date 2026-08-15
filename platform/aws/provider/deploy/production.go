@@ -8,7 +8,6 @@ import (
 	"errors"
 	"fmt"
 	"io/fs"
-	"maps"
 	"os"
 	"path/filepath"
 	"runtime/debug"
@@ -763,9 +762,7 @@ func runAppStack(ctx context.Context, cfg Config, manifest *deploymentsv1.Manife
 		return nil, nil, err
 	}
 
-	env := map[string]string{runtimeAddressEnv: deferredRuntimeAddress}
-	maps.Copy(env, variableEnv(app))
-	maps.Copy(env, baked.env())
+	env := appEnv(app, baked)
 
 	for _, fn := range functions {
 		if err = checkFunctionEnvBudget(fn.GetLogicalName(), functionEnv(env, cfg.transformed.forFunction(fn), caches[name], bytecode[name])); err != nil {

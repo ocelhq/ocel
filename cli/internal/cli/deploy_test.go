@@ -631,6 +631,7 @@ export default {
   apps: [{ name: "api", path: "apps/api", framework: "express", domains: { production: "Api.Acme.com" } }],
 };
 `)
+		writeAppSource(t, root, "api")
 
 		var stdout, stderr bytes.Buffer
 		if err := runDeploy(context.Background(), d, root, deployOptions{yes: true}, &stdout, &stderr, strings.NewReader("")); err != nil {
@@ -669,6 +670,7 @@ export default {
   ],
 };
 `)
+		writeAppSource(t, root, "web", "admin")
 
 		var stdout, stderr bytes.Buffer
 		if err := runDeploy(context.Background(), d, root, deployOptions{yes: true}, &stdout, &stderr, strings.NewReader("")); err != nil {
@@ -759,6 +761,7 @@ export default {
 declare global {
   var __ocelRegister: Promise<unknown>[];
 }
+const stack = new Error().stack ?? "";
 globalThis.__ocelRegister ??= [];
 globalThis.__ocelRegister.push(
   fetch(new URL("/resources.v1.ResourceService/Declare", process.env.OCEL_DEV_SERVER), {
@@ -767,6 +770,7 @@ globalThis.__ocelRegister.push(
     body: JSON.stringify({
       resource: { type: "ocel:postgres", name: "main" },
       postgres: { version: "17" },
+      stack,
     }),
   }),
 );
@@ -805,6 +809,18 @@ export default {
   apps: [{ name: "api", path: "apps/api", framework: "express" }],
 };
 `)
+	writeAppSource(t, root, "api")
+}
+
+func writeAppSource(t *testing.T, root string, apps ...string) {
+	t.Helper()
+	for _, app := range apps {
+		writeFile(t, filepath.Join(root, "apps", app, "src", "server.ts"), `
+export function handler() {
+  return "`+app+`";
+}
+`)
+	}
 }
 
 func nodePlatformSuffix(t *testing.T) string {

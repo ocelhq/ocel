@@ -212,6 +212,7 @@ export default {
   apps: [{ name: "api", path: "apps/api", framework: "express", domains: { production: "api.acme.com" } }],
 };
 `)
+		writeAppSource(t, root, "api")
 		d := defaultDeps()
 		stubAppFunctions(&d, nil)
 

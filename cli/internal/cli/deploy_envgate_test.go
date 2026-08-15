@@ -243,6 +243,7 @@ func TestEnvGateOnDeploy(t *testing.T) {
 	t.Run("a folder no app binds is a warning, not a refusal", func(t *testing.T) {
 		root := setUpEnvGateFixture(t, `[{"key":"POSTHOG_ID","class":"VARIABLE_CLASS_PLAIN","required":true,"folders":["/web"]}]`)
 		writeAppsConfig(t, root, `{ name: "api", path: "apps/api", framework: "express" }`)
+		writeAppSource(t, root, "api")
 		envSet(t, root, "POSTHOG_ID", "ph_web", envOptions{folder: "/web"})
 		d := defaultDeps()
 		stubAppFunctions(&d, nil)
@@ -262,6 +263,7 @@ func TestEnvGateOnDeploy(t *testing.T) {
 		writeAppsConfig(t, root, `
     { name: "web", path: "apps/web", framework: "express", folder: "/web" },
     { name: "admin", path: "apps/admin", framework: "express", folder: "/admin" }`)
+		writeAppSource(t, root, "web", "admin")
 		envSet(t, root, "POSTHOG_ID", "ph_web", envOptions{folder: "/web"})
 		envSet(t, root, "POSTHOG_ID", "ph_admin", envOptions{folder: "/admin"})
 

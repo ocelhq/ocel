@@ -7,6 +7,7 @@ import (
 	"net"
 	"net/http"
 	"os"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -162,6 +163,14 @@ func (s *deployFakeProviderServer) Deploy(ctx context.Context, req *deploymentsv
 	for _, u := range req.GetManifest().GetUsages() {
 		if err := stream.Send(&deploymentsv1.DeployEvent{
 			Event: &deploymentsv1.DeployEvent_Progress{Progress: &deploymentsv1.ProgressEvent{Message: "USAGE " + describeUsage(u)}},
+		}); err != nil {
+			return err
+		}
+	}
+
+	for _, a := range req.GetManifest().GetApps() {
+		if err := stream.Send(&deploymentsv1.DeployEvent{
+			Event: &deploymentsv1.DeployEvent_Progress{Progress: &deploymentsv1.ProgressEvent{Message: "DELIVER " + describeDelivery(req.GetManifest(), a.GetName())}},
 		}); err != nil {
 			return err
 		}
@@ -432,6 +441,23 @@ func describeUsage(u *deploymentsv1.ManifestUsage) string {
 	return fmt.Sprintf("app=%s resource=%s files=%s", u.GetApp(), u.GetResource(), strings.Join(u.GetFiles(), ","))
 }
 
+func describeDelivery(m *deploymentsv1.Manifest, app string) string {
+	used := map[string]bool{}
+	for _, u := range m.GetUsages() {
+		if u.GetApp() == app {
+			used[u.GetResource()] = true
+		}
+	}
+	var delivered []string
+	for _, r := range m.GetResources() {
+		if used[r.GetLogicalName()] {
+			delivered = append(delivered, r.GetLogicalName())
+		}
+	}
+	slices.Sort(delivered)
+	return fmt.Sprintf("app=%s resources=%s", app, strings.Join(delivered, ","))
+}
+
 func describeApp(a *deploymentsv1.ManifestApp) string {
 	keys := make([]string, 0, len(a.GetVariables()))
 	for _, v := range a.GetVariables() {
@@ -458,21 +484,21 @@ func validateFixtureManifest(m *deploymentsv1.Manifest) error {
 	if m.GetSchemaVersion() == "" {
 		return errors.New("manifest missing schema_version")
 	}
-	if len(m.GetResources()) != 1 {
-		return fmt.Errorf("manifest has %d resources, want 1", len(m.GetResources()))
-	}
-	r := m.GetResources()[0]
-	if r.GetLogicalName() != "db--main" {
-		return fmt.Errorf("resource logical_name = %q, want %q", r.GetLogicalName(), "db--main")
-	}
-	if r.GetResource().GetType() != naming.TokenPostgres {
-		return fmt.Errorf("resource type = %q, want %q", r.GetResource().GetType(), naming.TokenPostgres)
-	}
-	if r.GetPostgres().GetVersion() != "17" {
-		return fmt.Errorf("resource postgres version = %q, want %q", r.GetPostgres().GetVersion(), "17")
+	declared := map[string]bool{}
+	for _, r := range m.GetResources() {
+		if r.GetLogicalName() == "" {
+			return fmt.Errorf("resource %s carries no logical name", r.GetResource().GetType())
+		}
+		if _, ok := naming.TokenKind(r.GetResource().GetType()); !ok {
+			return fmt.Errorf("resource %s has type %q, which names no resource kind", r.GetLogicalName(), r.GetResource().GetType())
+		}
+		if r.GetResource().GetType() == naming.TokenPostgres && r.GetPostgres().GetVersion() != "17" {
+			return fmt.Errorf("resource %s postgres version = %q, want %q", r.GetLogicalName(), r.GetPostgres().GetVersion(), "17")
+		}
+		declared[r.GetLogicalName()] = true
 	}
 	for _, u := range m.GetUsages() {
-		if u.GetResource() != r.GetLogicalName() {
+		if !declared[u.GetResource()] {
 			return fmt.Errorf("usage %s names a resource this manifest never declares", describeUsage(u))
 		}
 		if len(u.GetFiles()) == 0 {
