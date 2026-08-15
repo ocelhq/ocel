@@ -44,15 +44,16 @@ type Config struct {
 
 	realized *realizedStacks
 
-	StateTable     string
-	StateTableARN  string
-	VarsKeyARN     string
-	VarsTable      string
-	VarsTableARN   string
-	VarsClass      string
-	VarsReferenced map[vars.Coordinate]string
-	Values         ValueStore
-	Links          LinkPublisher
+	StateTable         string
+	StateTableARN      string
+	VarsKeyARN         string
+	VarsTable          string
+	VarsTableARN       string
+	VarsClass          string
+	VarsSiblingClasses []string
+	VarsReferenced     map[vars.Coordinate]string
+	Values             ValueStore
+	Links              LinkStore
 
 	ListenerCodePath string
 

@@ -113,7 +113,7 @@ func (s *VarsServer) open(ctx context.Context, key storeKey) (*vars.Store, error
 	}, nil
 }
 
-func linkPublisher(awscfg aws.Config, deployed bootstrap.Deployed, class string) deploy.LinkPublisher {
+func linkStore(awscfg aws.Config, deployed bootstrap.Deployed, class string) deploy.LinkStore {
 	store := substrateStore(awscfg, deployed, class)
 	if store == nil {
 		return nil

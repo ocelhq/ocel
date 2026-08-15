@@ -50,6 +50,7 @@ type Config struct {
 	Discovery Discovery
 	Provider  *ProviderDescriptor
 	Apps      []App
+	Links     []string
 	Domains   map[string][]string
 	Dir       string
 }
@@ -78,6 +79,7 @@ type rawConfig struct {
 		Folder     string     `json:"folder"`
 		Domains    rawDomains `json:"domains"`
 	} `json:"apps"`
+	Links   []string   `json:"links"`
 	Domains rawDomains `json:"domains"`
 }
 
@@ -255,14 +257,43 @@ func load(ctx context.Context, configPath string) (*Config, error) {
 		return nil, fmt.Errorf("%s: %w", configPath, err)
 	}
 
+	links, err := normalizeLinks(raw.Links)
+	if err != nil {
+		return nil, fmt.Errorf("%s: %w", configPath, err)
+	}
+
 	return &Config{
 		Slug:      raw.Slug,
 		Discovery: Discovery{Paths: paths},
 		Provider:  provider,
 		Apps:      apps,
+		Links:     links,
 		Domains:   domains,
 		Dir:       filepath.Dir(configPath),
 	}, nil
+}
+
+func normalizeLinks(raw []string) ([]string, error) {
+	if len(raw) == 0 {
+		return nil, nil
+	}
+	out := make([]string, 0, len(raw))
+	seen := make(map[string]bool, len(raw))
+	for _, name := range raw {
+		link := strings.TrimSpace(name)
+		if link == "" {
+			return nil, fmt.Errorf("`links` holds an empty name — every entry names one resource your own infrastructure publishes")
+		}
+		if strings.Contains(link, naming.KeySeparator) {
+			return nil, fmt.Errorf("link %q may not contain %q: it separates the fields of the key the published record is stored under", link, naming.KeySeparator)
+		}
+		if seen[link] {
+			return nil, fmt.Errorf("`links` names %q twice — one entry binds it", link)
+		}
+		seen[link] = true
+		out = append(out, link)
+	}
+	return out, nil
 }
 
 var dnsLabelPattern = regexp.MustCompile(`^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$`)

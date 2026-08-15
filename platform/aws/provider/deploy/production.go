@@ -11,6 +11,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime/debug"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -56,7 +57,11 @@ func realize(ctx context.Context, cfg Config, manifest *deploymentsv1.Manifest, 
 	if err := validateTag(cfg.Tag); err != nil {
 		return Result{}, finishUploading(err)
 	}
-	if err := checkInlinePolicyBudget(manifest); err != nil {
+	consumed, err := consumeLinks(ctx, cfg, manifest, log)
+	if err != nil {
+		return Result{}, finishUploading(err)
+	}
+	if err := checkInlinePolicyBudget(manifest, consumed); err != nil {
 		return Result{}, finishUploading(err)
 	}
 	if err := checkTagAvailable(ctx, stack, cfg.RootStackState, cfg.Tag); err != nil {
@@ -66,7 +71,7 @@ func realize(ctx context.Context, cfg Config, manifest *deploymentsv1.Manifest, 
 	apps := manifestApps(manifest)
 	appStages := cfg.AppStages
 
-	baked, err := renderAppBundles(cfg, manifest)
+	baked, err := renderAppBundles(cfg, manifest, consumed)
 	if err != nil {
 		return Result{}, finishUploading(err)
 	}
@@ -151,6 +156,8 @@ func realize(ctx context.Context, cfg Config, manifest *deploymentsv1.Manifest, 
 	if err := publishLinkRecords(ctx, cfg, manifest, links); err != nil {
 		return Result{RootStackState: state}, finishProvisioning(err)
 	}
+	reportGrantVersions(consumed, log)
+	granting := append(slices.Clone(links), consumedLinks(consumed)...)
 
 	progress.report(deploymentsv1.Phase_PHASE_PROVISIONING, "Provisioning app-deploy stacks", 0, 0)
 	results := make([]appDeployResult, len(apps))
@@ -158,7 +165,7 @@ func realize(ctx context.Context, cfg Config, manifest *deploymentsv1.Manifest, 
 	appFunctionNames := make([]map[string]string, len(apps))
 	runAppStacks(apps, func(i int, app *deploymentsv1.ManifestApp) {
 		id := identities[app.GetName()]
-		outs, names, err := runAppStack(ctx, cfg, manifest, plan, app, id, artifacts, baked[app.GetName()], builds, links, appStages[app.GetName()], log)
+		outs, names, err := runAppStack(ctx, cfg, manifest, plan, app, id, artifacts, baked[app.GetName()], builds, granting, appStages[app.GetName()], log)
 		appOutputs[i] = outs
 		appFunctionNames[i] = names
 		record, recErr := buildDeploymentRecord(cfg, manifest, app, id, outs, builds)
@@ -726,6 +733,9 @@ func runInfraStack(ctx context.Context, cfg Config, manifest *deploymentsv1.Mani
 		}
 		project, env := naming.Sanitize(manifest.GetSlug()), plan.InfraStack.Env
 		for _, r := range manifest.GetResources() {
+			if r.GetLinked() {
+				continue
+			}
 			var err error
 			switch {
 			case r.GetPostgres() != nil:
@@ -742,11 +752,34 @@ func runInfraStack(ctx context.Context, cfg Config, manifest *deploymentsv1.Mani
 		return nil
 	}
 
-	res, err := upStack(ctx, cfg, plan.InfraStack, infraStackTags(cfg, plan.InfraStack), program, log, cfg.Stages.Provisioning.ID)
+	stack, err := prepareStack(ctx, cfg, plan.InfraStack, infraStackTags(cfg, plan.InfraStack), program)
+	if err != nil {
+		return nil, fmt.Errorf("provision infra stack %s: %w", plan.InfraStack, err)
+	}
+	if err := refuseHandover(ctx, stack, manifest, plan.InfraStack); err != nil {
+		return nil, err
+	}
+
+	res, err := runStack(ctx, cfg, stack, log, cfg.Stages.Provisioning.ID)
 	if err != nil {
 		return nil, fmt.Errorf("provision infra stack %s: %w", plan.InfraStack, err)
 	}
 	return collectLinks(ctx, cfg.Secrets, manifest, res.Outputs)
+}
+
+func refuseHandover(ctx context.Context, stack auto.Stack, manifest *deploymentsv1.Manifest, name naming.StackName) error {
+	if len(linkedResources(manifest)) == 0 {
+		return nil
+	}
+	outputs, err := stack.Outputs(ctx)
+	if err != nil {
+		return fmt.Errorf("read what infra stack %s already provisions: %w", name, err)
+	}
+	provisioned := make(map[string]bool, len(outputs))
+	for logical := range outputs {
+		provisioned[logical] = true
+	}
+	return handedOver(manifest, provisioned, name.String())
 }
 
 func runAppStack(ctx context.Context, cfg Config, manifest *deploymentsv1.Manifest, plan Plan, app *deploymentsv1.ManifestApp, id Identity, artifacts map[string]artifactRef, baked appBundle, builds appBuilds, links []*linksv1.Link, stage Stage, log func(string)) (outs []*deploymentsv1.FunctionOutput, names map[string]string, err error) {
@@ -909,31 +942,42 @@ func awaitEngineTrace(result <-chan EngineTrace, grace time.Duration) EngineTrac
 }
 
 func upStack(ctx context.Context, cfg Config, name naming.StackName, tags map[string]string, program pulumi.RunFunc, log func(string), parentStage StageID) (auto.UpResult, error) {
+	stack, err := prepareStack(ctx, cfg, name, tags, program)
+	if err != nil {
+		return auto.UpResult{}, err
+	}
+	return runStack(ctx, cfg, stack, log, parentStage)
+}
+
+func prepareStack(ctx context.Context, cfg Config, name naming.StackName, tags map[string]string, program pulumi.RunFunc) (auto.Stack, error) {
 	stack, err := auto.UpsertStackInlineSource(ctx, name.String(), cfg.PulumiProject, program,
 		auto.Pulumi(cfg.Pulumi),
 		auto.SecretsProvider("passphrase"),
 		auto.EnvVars(pulumiEnv(cfg.Region, cfg.BackendURL, cfg.Passphrase)),
 	)
 	if err != nil {
-		return auto.UpResult{}, fmt.Errorf("prepare stack %s: %w", name, err)
+		return auto.Stack{}, fmt.Errorf("prepare stack %s: %w", name, err)
 	}
 
 	if err := applyDefaultTags(ctx, stack, tags); err != nil {
-		return auto.UpResult{}, err
+		return auto.Stack{}, err
 	}
 
 	index, err := stackIndex(cfg.Stacks)
 	if err != nil {
-		return auto.UpResult{}, err
+		return auto.Stack{}, err
 	}
 	if err := cfg.realized.realize(ctx, index, naming.Sanitize(cfg.Slug), name); err != nil {
-		return auto.UpResult{}, err
+		return auto.Stack{}, err
 	}
 
 	if err := stampExpiry(ctx, stack, cfg.ExpiresAt); err != nil {
-		return auto.UpResult{}, err
+		return auto.Stack{}, err
 	}
+	return stack, nil
+}
 
+func runStack(ctx context.Context, cfg Config, stack auto.Stack, log func(string), parentStage StageID) (auto.UpResult, error) {
 	logWriter := lineWriter(log)
 	upOpts := []optup.Option{optup.Parallel(64)}
 	if logWriter != nil {
@@ -986,7 +1030,7 @@ func emitEngineTrace(t Tracer, parentStage StageID, trace EngineTrace, upErr err
 func collectLinks(ctx context.Context, secrets SecretsReader, manifest *deploymentsv1.Manifest, outputs auto.OutputMap) ([]*linksv1.Link, error) {
 	var result []*linksv1.Link
 	for _, r := range manifest.GetResources() {
-		if r.GetPostgres() == nil && r.GetBucket() == nil {
+		if r.GetLinked() || (r.GetPostgres() == nil && r.GetBucket() == nil) {
 			continue
 		}
 		name := r.GetLogicalName()

@@ -1125,6 +1125,7 @@ type ManifestResource struct {
 	//	*ManifestResource_Postgres
 	//	*ManifestResource_Bucket
 	Config        isManifestResource_Config `protobuf_oneof:"config"`
+	Linked        bool                      `protobuf:"varint,5,opt,name=linked,proto3" json:"linked,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1196,6 +1197,13 @@ func (x *ManifestResource) GetBucket() *v1.BucketConfig {
 		}
 	}
 	return nil
+}
+
+func (x *ManifestResource) GetLinked() bool {
+	if x != nil {
+		return x.Linked
+	}
+	return false
 }
 
 type isManifestResource_Config interface {
@@ -3363,12 +3371,13 @@ const file_deployments_v1_deployments_proto_rawDesc = "" +
 	"\rartifact_path\x18\x04 \x01(\tR\fartifactPath\x12\x1c\n" +
 	"\tframework\x18\x05 \x01(\tR\tframework\x12\x19\n" +
 	"\broute_id\x18\x06 \x01(\tR\arouteId\x12\x10\n" +
-	"\x03app\x18\a \x01(\tR\x03app\"\xef\x01\n" +
+	"\x03app\x18\a \x01(\tR\x03app\"\x87\x02\n" +
 	"\x10ManifestResource\x12!\n" +
 	"\flogical_name\x18\x01 \x01(\tR\vlogicalName\x12<\n" +
 	"\bresource\x18\x02 \x01(\v2 .resources.v1.ResourceIdentifierR\bresource\x12:\n" +
 	"\bpostgres\x18\x03 \x01(\v2\x1c.resources.v1.PostgresConfigH\x00R\bpostgres\x124\n" +
-	"\x06bucket\x18\x04 \x01(\v2\x1a.resources.v1.BucketConfigH\x00R\x06bucketB\b\n" +
+	"\x06bucket\x18\x04 \x01(\v2\x1a.resources.v1.BucketConfigH\x00R\x06bucket\x12\x16\n" +
+	"\x06linked\x18\x05 \x01(\bR\x06linkedB\b\n" +
 	"\x06config\"\xdb\x01\n" +
 	"\rDeployRequest\x124\n" +
 	"\bmanifest\x18\x01 \x01(\v2\x18.deployments.v1.ManifestR\bmanifest\x12\x18\n" +

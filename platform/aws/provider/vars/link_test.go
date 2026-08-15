@@ -48,7 +48,7 @@ func recordNames(records []Record) []string {
 
 func publish(t *testing.T, s *Store, environment string, records []Record) {
 	t.Helper()
-	if _, err := s.PublishRecords(context.Background(), "shop", environment, records); err != nil {
+	if _, err := s.PublishRecords(context.Background(), "shop", environment, OwnerOcel, records); err != nil {
 		t.Fatalf("PublishRecords %q: %v", environment, err)
 	}
 }
@@ -211,7 +211,7 @@ func TestPublishRecords(t *testing.T) {
 		store, ddb, _ := newTestStore(t)
 
 		publish(t, store, "", linkRecords())
-		pruned, err := store.PublishRecords(context.Background(), "shop", "", linkRecords()[:1])
+		pruned, err := store.PublishRecords(context.Background(), "shop", "", OwnerOcel, linkRecords()[:1])
 		if err != nil {
 			t.Fatalf("PublishRecords: %v", err)
 		}
@@ -433,14 +433,14 @@ func TestPublishRecordsRefuses(t *testing.T) {
 		"property overflow": {record: Record{Name: "main", Type: naming.TokenBucket, Properties: map[string]string{"blob": strings.Repeat("x", MaxValueBytes)}}},
 	} {
 		t.Run(name, func(t *testing.T) {
-			if _, err := store.PublishRecords(context.Background(), "shop", tc.environment, []Record{tc.record}); err == nil {
+			if _, err := store.PublishRecords(context.Background(), "shop", tc.environment, OwnerOcel, []Record{tc.record}); err == nil {
 				t.Fatalf("PublishRecords accepted %+v", tc.record)
 			}
 		})
 	}
 
 	t.Run("no slug", func(t *testing.T) {
-		if _, err := store.PublishRecords(context.Background(), "", "", linkRecords()); err == nil {
+		if _, err := store.PublishRecords(context.Background(), "", "", OwnerOcel, linkRecords()); err == nil {
 			t.Fatal("PublishRecords wrote a pair addressed to no project")
 		}
 	})
@@ -450,7 +450,7 @@ func TestPublishRecordsRefuses(t *testing.T) {
 		twice := []Record{linkRecords()[0], linkRecords()[0]}
 		twice[1].Properties = map[string]string{"connectionString": "postgres://other"}
 
-		if _, err := store.PublishRecords(context.Background(), "shop", "", twice); err == nil {
+		if _, err := store.PublishRecords(context.Background(), "shop", "", OwnerOcel, twice); err == nil {
 			t.Fatal("PublishRecords raced two publishes of one link onto the same rows")
 		}
 		if pk := naming.LinkVarsKey("shop", store.Class, "main"); len(ddb.items[pk]) != 0 {
@@ -465,7 +465,7 @@ func TestPublishRecordsRefuses(t *testing.T) {
 				record := linkRecords()[1]
 				record.Grants = []Grant{grant}
 
-				_, err := store.PublishRecords(context.Background(), "shop", "", []Record{record})
+				_, err := store.PublishRecords(context.Background(), "shop", "", OwnerOcel, []Record{record})
 				if !errors.Is(err, ErrUnscopedGrant) {
 					t.Fatalf("err = %v, want %v — the deploy that introduces the grant is the one that can still fix it", err, ErrUnscopedGrant)
 				}
@@ -505,7 +505,7 @@ func TestPublishRecordsSurvivesACancelledTransaction(t *testing.T) {
 		store, ddb, _ := newTestStore(t)
 		ddb.cancelTransacts = linkAttempts
 
-		_, err := store.PublishRecords(context.Background(), "shop", "", linkRecords()[:1])
+		_, err := store.PublishRecords(context.Background(), "shop", "", OwnerOcel, linkRecords()[:1])
 		if err == nil {
 			t.Fatal("PublishRecords reported success while every transaction was cancelled")
 		}
@@ -578,7 +578,7 @@ func TestPublishRecordsSurvivesAConcurrentDeploy(t *testing.T) {
 	}
 
 	raceTheIndexWrite := func(ddb *fakeDynamo, race func(), everyAttempt bool) {
-		indexSK := linkIndexSortKey("")
+		indexSK := linkIndexSortKey(OwnerOcel, "")
 		var arm func()
 		arm = func() {
 			ddb.armBeforePutTo(indexSK, func() {
@@ -595,16 +595,16 @@ func TestPublishRecordsSurvivesAConcurrentDeploy(t *testing.T) {
 		store, ddb := seed(t)
 
 		raceTheIndexWrite(ddb, func() {
-			if _, err := store.PublishRecords(context.Background(), "shop", "", linkRecords()); err != nil {
+			if _, err := store.PublishRecords(context.Background(), "shop", "", OwnerOcel, linkRecords()); err != nil {
 				t.Errorf("racing PublishRecords: %v", err)
 			}
 		}, false)
 
-		if _, err := store.PublishRecords(context.Background(), "shop", "", linkRecords()); err != nil {
+		if _, err := store.PublishRecords(context.Background(), "shop", "", OwnerOcel, linkRecords()); err != nil {
 			t.Fatalf("PublishRecords lost to a concurrent deploy of the same environment: %v", err)
 		}
 
-		index, ok := ddb.get(PartitionKey("shop", store.Class), linkIndexSortKey(""))
+		index, ok := ddb.get(PartitionKey("shop", store.Class), linkIndexSortKey(OwnerOcel, ""))
 		if !ok {
 			t.Fatal("no link index survived the race")
 		}
@@ -623,12 +623,12 @@ func TestPublishRecordsSurvivesAConcurrentDeploy(t *testing.T) {
 		store, ddb := seed(t)
 
 		raceTheIndexWrite(ddb, func() {
-			if _, err := store.PublishRecords(context.Background(), "shop", "", linkRecords()); err != nil {
+			if _, err := store.PublishRecords(context.Background(), "shop", "", OwnerOcel, linkRecords()); err != nil {
 				t.Errorf("racing PublishRecords: %v", err)
 			}
 		}, true)
 
-		_, err := store.PublishRecords(context.Background(), "shop", "", linkRecords())
+		_, err := store.PublishRecords(context.Background(), "shop", "", OwnerOcel, linkRecords())
 		if err == nil {
 			t.Fatal("PublishRecords reported success while every attempt was overtaken")
 		}
@@ -734,4 +734,104 @@ func overwriteRecordRow(t *testing.T, ddb *fakeDynamo, store *Store, link, envir
 	}
 	stored["record"] = &ddbtypes.AttributeValueMemberS{Value: string(encoded)}
 	ddb.put(stored)
+}
+
+func TestPublishersPruneOnlyTheirOwnRecords(t *testing.T) {
+	t.Run("one publisher's inventory survives another's publish", func(t *testing.T) {
+		store, _, _ := newTestStore(t)
+		foreign := []Record{{
+			Name:       "orders",
+			Type:       "sst:aws.Postgres",
+			Properties: map[string]string{"connectionString": "postgres://sst/orders"},
+		}}
+		if _, err := store.PublishRecords(context.Background(), "shop", "", "SST", foreign); err != nil {
+			t.Fatalf("PublishRecords SST: %v", err)
+		}
+
+		publish(t, store, "", linkRecords())
+
+		got := resolve(t, store, "", "orders")
+		if got[0].Type != "sst:aws.Postgres" {
+			t.Fatalf("record = %+v, want the foreign publisher's record untouched by ocel's own publish", got[0])
+		}
+	})
+
+	t.Run("published names read back across every publisher", func(t *testing.T) {
+		store, _, _ := newTestStore(t)
+		if _, err := store.PublishRecords(context.Background(), "shop", "", "SST", []Record{{
+			Name: "orders", Type: "sst:aws.Postgres", Properties: map[string]string{"connectionString": "postgres://sst/orders"},
+		}}); err != nil {
+			t.Fatalf("PublishRecords SST: %v", err)
+		}
+		publish(t, store, "pr-42", linkRecords()[:1])
+
+		names, err := store.PublishedNames(context.Background(), "shop", store.Class, "pr-42")
+		if err != nil {
+			t.Fatalf("PublishedNames: %v", err)
+		}
+		if !slices.Equal(names, []string{"main", "orders"}) {
+			t.Errorf("names = %v, want the preview's own names beside the class-wide ones, whoever published them", names)
+		}
+
+		elsewhere, err := store.PublishedNames(context.Background(), "shop", store.Class, "pr-7")
+		if err != nil {
+			t.Fatalf("PublishedNames: %v", err)
+		}
+		if !slices.Equal(elsewhere, []string{"orders"}) {
+			t.Errorf("names = %v, want a sibling preview to see only what binds class-wide", elsewhere)
+		}
+	})
+
+	t.Run("an index row from before the per-publisher split binds nothing", func(t *testing.T) {
+		store, ddb, _ := newTestStore(t)
+		pk := PartitionKey("shop", store.Class)
+		ddb.put(marshal(item{
+			PK:      pk,
+			SK:      linkIndexPrefix + tokenEnv + delimiter + classWideEnvironment,
+			Version: 1,
+			Names:   []string{"ghost"},
+		}))
+
+		publish(t, store, "", linkRecords())
+
+		names, err := store.PublishedNames(context.Background(), "shop", store.Class, "pr-42")
+		if err != nil {
+			t.Fatalf("PublishedNames: %v", err)
+		}
+		if slices.Contains(names, "ghost") {
+			t.Errorf("names = %v, want a row nothing can prune or rewrite to bind nothing", names)
+		}
+	})
+
+	t.Run("a name another publisher still claims survives a prune", func(t *testing.T) {
+		store, _, _ := newTestStore(t)
+		foreign := []Record{{
+			Name: "orders", Type: "sst:aws.Postgres", Properties: map[string]string{"connectionString": "postgres://sst/orders"},
+		}}
+		mine := []Record{{
+			Name: "orders", Type: naming.TokenPostgres, Properties: map[string]string{"connectionString": "postgres://ocel/orders"},
+		}}
+		if _, err := store.PublishRecords(context.Background(), "shop", "", OwnerOcel, mine); err != nil {
+			t.Fatalf("PublishRecords ocel: %v", err)
+		}
+		if _, err := store.PublishRecords(context.Background(), "shop", "", "SST", foreign); err != nil {
+			t.Fatalf("PublishRecords SST: %v", err)
+		}
+
+		if _, err := store.PublishRecords(context.Background(), "shop", "", OwnerOcel, nil); err != nil {
+			t.Fatalf("PublishRecords ocel: %v", err)
+		}
+
+		got := resolve(t, store, "", "orders")
+		if got[0].Type != "sst:aws.Postgres" {
+			t.Fatalf("record = %+v, want the rows a live publisher still claims left alone", got[0])
+		}
+	})
+
+	t.Run("an unnamed publisher is refused", func(t *testing.T) {
+		store, _, _ := newTestStore(t)
+		if _, err := store.PublishRecords(context.Background(), "shop", "", "", linkRecords()); err == nil {
+			t.Fatal("PublishRecords accepted an unnamed publisher, whose index row every other publisher would prune")
+		}
+	})
 }

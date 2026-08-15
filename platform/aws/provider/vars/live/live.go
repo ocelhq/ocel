@@ -30,6 +30,7 @@ type Link struct {
 	Key        string   `json:"key"`
 	Type       string   `json:"type"`
 	Properties []string `json:"properties,omitempty"`
+	Granted    int64    `json:"granted,omitempty"`
 }
 
 type Record struct {

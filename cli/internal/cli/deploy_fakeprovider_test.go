@@ -43,6 +43,8 @@ const (
 
 const fakeKnownSlugsEnvVar = "OCEL_TEST_FAKE_KNOWN_SLUGS"
 
+const fakePublishedLinksEnvVar = "OCEL_TEST_FAKE_PUBLISHED_LINKS"
+
 const fakePreflightJournalEnvVar = "OCEL_TEST_FAKE_PREFLIGHT_JOURNAL"
 
 const fakeDomainOwnerEnvVar = "OCEL_TEST_FAKE_DOMAIN_OWNER"
@@ -160,6 +162,19 @@ func (s *deployFakeProviderServer) Deploy(ctx context.Context, req *deploymentsv
 		}
 	}
 
+	for _, message := range consumeFakeLinks(req.GetManifest()) {
+		if err := stream.Send(&deploymentsv1.DeployEvent{
+			Event: &deploymentsv1.DeployEvent_Progress{Progress: &deploymentsv1.ProgressEvent{Message: message}},
+		}); err != nil {
+			return err
+		}
+	}
+	if refusal := refuseUnpublishedFakeLinks(req.GetManifest()); refusal != "" {
+		return stream.Send(&deploymentsv1.DeployEvent{
+			Event: &deploymentsv1.DeployEvent_Result{Result: &deploymentsv1.ResultEvent{Success: false, Error: refusal}},
+		})
+	}
+
 	for _, u := range req.GetManifest().GetUsages() {
 		if err := stream.Send(&deploymentsv1.DeployEvent{
 			Event: &deploymentsv1.DeployEvent_Progress{Progress: &deploymentsv1.ProgressEvent{Message: "USAGE " + describeUsage(u)}},
@@ -197,9 +212,52 @@ func (s *deployFakeProviderServer) Deploy(ctx context.Context, req *deploymentsv
 	})
 }
 
+func fakePublishedLinks() []string {
+	var out []string
+	for _, name := range strings.Split(os.Getenv(fakePublishedLinksEnvVar), ",") {
+		if name = strings.TrimSpace(name); name != "" {
+			out = append(out, name)
+		}
+	}
+	return out
+}
+
+func consumeFakeLinks(m *deploymentsv1.Manifest) []string {
+	published := fakePublishedLinks()
+	var out []string
+	for _, r := range m.GetResources() {
+		id := r.GetResource().GetName()
+		if r.GetLinked() {
+			out = append(out, "LINK bound="+r.GetLogicalName()+" name="+id)
+			continue
+		}
+		if slices.Contains(published, id) {
+			out = append(out, "LINK shadowed="+r.GetLogicalName()+" name="+id)
+		}
+	}
+	return out
+}
+
+func refuseUnpublishedFakeLinks(m *deploymentsv1.Manifest) string {
+	published := fakePublishedLinks()
+	var missing []string
+	for _, r := range m.GetResources() {
+		if r.GetLinked() && !slices.Contains(published, r.GetResource().GetName()) {
+			missing = append(missing, r.GetResource().GetName())
+		}
+	}
+	if len(missing) == 0 {
+		return ""
+	}
+	return "nothing has published a link named " + strings.Join(missing, ", ") + " to production"
+}
+
 func fakeLinks(m *deploymentsv1.Manifest) []*linksv1.Link {
 	out := make([]*linksv1.Link, 0, len(m.GetResources()))
 	for _, r := range m.GetResources() {
+		if r.GetLinked() {
+			continue
+		}
 		out = append(out, &linksv1.Link{
 			Name: r.GetLogicalName(),
 			Type: r.GetResource().GetType(),
