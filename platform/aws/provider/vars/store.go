@@ -71,7 +71,8 @@ type item struct {
 	TargetPK   string `dynamodbav:"gsi1pk"`
 	TargetSK   string `dynamodbav:"gsi1sk"`
 
-	Names []string `dynamodbav:"links"`
+	Names  []string `dynamodbav:"links"`
+	Record string   `dynamodbav:"record"`
 }
 
 func (i item) references() bool { return i.TargetPK != "" && i.TargetSK != "" }
@@ -478,6 +479,14 @@ func (s *Store) read(ctx context.Context, pk, sk string) (item, error) {
 }
 
 func (s *Store) query(ctx context.Context, pk, prefix string, ascending bool) ([]item, error) {
+	return s.scan(ctx, pk, prefix, ascending, false)
+}
+
+func (s *Store) queryConsistent(ctx context.Context, pk string) ([]item, error) {
+	return s.scan(ctx, pk, "", true, true)
+}
+
+func (s *Store) scan(ctx context.Context, pk, prefix string, ascending, consistent bool) ([]item, error) {
 	condition := "pk = :pk"
 	values := map[string]ddbtypes.AttributeValue{":pk": &ddbtypes.AttributeValueMemberS{Value: pk}}
 	if prefix != "" {
@@ -493,6 +502,7 @@ func (s *Store) query(ctx context.Context, pk, prefix string, ascending bool) ([
 			KeyConditionExpression:    aws.String(condition),
 			ExpressionAttributeValues: values,
 			ScanIndexForward:          aws.Bool(ascending),
+			ConsistentRead:            aws.Bool(consistent),
 			ExclusiveStartKey:         start,
 		})
 		if err != nil {
@@ -587,7 +597,7 @@ func marshal(i item) map[string]ddbtypes.AttributeValue {
 
 func unmarshal(raw map[string]ddbtypes.AttributeValue) (item, error) {
 	i := item{}
-	for name, field := range map[string]*string{"pk": &i.PK, "sk": &i.SK, "gsi1pk": &i.TargetPK, "gsi1sk": &i.TargetSK} {
+	for name, field := range map[string]*string{"pk": &i.PK, "sk": &i.SK, "gsi1pk": &i.TargetPK, "gsi1sk": &i.TargetSK, "record": &i.Record} {
 		if v, ok := raw[name].(*ddbtypes.AttributeValueMemberS); ok {
 			*field = v.Value
 		}

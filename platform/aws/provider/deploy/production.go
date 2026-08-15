@@ -149,7 +149,7 @@ func realize(ctx context.Context, cfg Config, manifest *deploymentsv1.Manifest, 
 	if err := checkLinkGrants(links); err != nil {
 		return Result{RootStackState: state}, finishProvisioning(err)
 	}
-	if err := publishLinkValues(ctx, cfg, manifest, links); err != nil {
+	if err := publishLinkRecords(ctx, cfg, manifest, links); err != nil {
 		return Result{RootStackState: state}, finishProvisioning(err)
 	}
 

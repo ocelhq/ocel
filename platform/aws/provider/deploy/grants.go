@@ -10,14 +10,13 @@ import (
 
 	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
 	linksv1 "github.com/ocelhq/ocel/pkg/proto/links/v1"
+	"github.com/ocelhq/ocel/platform/aws/provider/vars"
 )
 
 const (
 	rolePolicyCeilingChars     = 10240
 	platformPolicyReserveChars = 4608
 	policyBudgetChars          = rolePolicyCeilingChars - platformPolicyReserveChars
-
-	grantWildcard = "*"
 
 	s3ARNPrefix = "arn:aws:s3:::"
 )
@@ -73,10 +72,10 @@ func checkGrant(link string, grant *linksv1.Grant) error {
 	if label == "" {
 		label = "unlabelled"
 	}
-	if len(grant.GetActions()) == 0 || slices.Contains(grant.GetActions(), grantWildcard) {
+	if len(grant.GetActions()) == 0 || slices.ContainsFunc(grant.GetActions(), vars.UnscopedAction) {
 		return &UnscopedGrantError{Link: link, Label: label, Field: "action set"}
 	}
-	if len(grant.GetResources()) == 0 || slices.Contains(grant.GetResources(), grantWildcard) {
+	if len(grant.GetResources()) == 0 || slices.ContainsFunc(grant.GetResources(), vars.UnscopedResource) {
 		return &UnscopedGrantError{Link: link, Label: label, Field: "resource set"}
 	}
 	return nil

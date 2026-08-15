@@ -13,7 +13,7 @@ import (
 )
 
 type LinkPublisher interface {
-	PublishLinks(ctx context.Context, slug, environment string, links []vars.LinkValue) (int, error)
+	PublishRecords(ctx context.Context, slug, environment string, records []vars.Record) (int, error)
 }
 
 var linkRecordShape = map[string][]string{
@@ -36,61 +36,71 @@ func manifestLinks(manifest *deploymentsv1.Manifest) []live.Link {
 	return out
 }
 
-func linkValues(manifest *deploymentsv1.Manifest, links []*linksv1.Link) ([]vars.LinkValue, error) {
+func linkRecords(manifest *deploymentsv1.Manifest, links []*linksv1.Link) ([]vars.Record, error) {
 	byName := make(map[string]*linksv1.Link, len(links))
 	for _, l := range links {
 		byName[l.GetName()] = l
 	}
 
-	out := make([]vars.LinkValue, 0, len(links))
+	out := make([]vars.Record, 0, len(links))
 	for _, r := range manifest.GetResources() {
 		link, ok := byName[r.GetLogicalName()]
 		if !ok {
 			continue
 		}
-		value, err := linkPayload(link)
+		properties, err := linkProperties(link)
 		if err != nil {
 			return nil, err
 		}
-		out = append(out, vars.LinkValue{
-			Link:  r.GetLogicalName(),
-			Key:   functionEnvKey(link.GetType(), r.GetResource().GetName()),
-			Value: value,
+		out = append(out, vars.Record{
+			Name:       r.GetLogicalName(),
+			Type:       link.GetType(),
+			Properties: properties,
+			Grants:     linkGrants(link),
 		})
 	}
 	return out, nil
 }
 
-func linkPayload(link *linksv1.Link) (string, error) {
+func linkGrants(link *linksv1.Link) []vars.Grant {
+	granted := link.GetGrants()
+	if len(granted) == 0 {
+		return nil
+	}
+	out := make([]vars.Grant, 0, len(granted))
+	for _, g := range granted {
+		out = append(out, vars.Grant{Actions: g.GetActions(), Resources: g.GetResources(), Label: g.GetLabel()})
+	}
+	return out
+}
+
+func linkProperties(link *linksv1.Link) (map[string]string, error) {
 	p := link.GetProperties()
-	var properties map[string]string
 	switch link.GetType() {
 	case naming.TokenPostgres:
 		port, err := strconv.Atoi(p["port"])
 		if err != nil {
-			return "", fmt.Errorf("link %s reports port %q, which is not a number", link.GetName(), p["port"])
+			return nil, fmt.Errorf("link %s reports port %q, which is not a number", link.GetName(), p["port"])
 		}
-		properties = postgresRecordProperties(p["username"], p["password"], p["host"], port, p["database"])
+		return postgresRecordProperties(p["username"], p["password"], p["host"], port, p["database"]), nil
 	case naming.TokenBucket:
-		properties = bucketRecordProperties(p["bucket"])
-	default:
-		return "", fmt.Errorf("link %s is a %s, a type this provider ships no client for", link.GetName(), link.GetType())
+		return bucketRecordProperties(p["bucket"]), nil
 	}
-	return live.EncodeRecord(live.Record{Type: link.GetType(), Properties: properties}), nil
+	return nil, fmt.Errorf("link %s is a %s, a type this provider ships no client for", link.GetName(), link.GetType())
 }
 
-func publishLinkValues(ctx context.Context, cfg Config, manifest *deploymentsv1.Manifest, links []*linksv1.Link) error {
-	values, err := linkValues(manifest, links)
+func publishLinkRecords(ctx context.Context, cfg Config, manifest *deploymentsv1.Manifest, links []*linksv1.Link) error {
+	records, err := linkRecords(manifest, links)
 	if err != nil {
 		return err
 	}
 	if cfg.Links == nil {
-		if len(values) == 0 {
+		if len(records) == 0 {
 			return nil
 		}
-		return fmt.Errorf("this deploy provisions %d linked resources but reached no variable store to deliver their values through", len(values))
+		return fmt.Errorf("this deploy provisions %d linked resources but reached no variable store to deliver their values through", len(records))
 	}
-	if _, err := cfg.Links.PublishLinks(ctx, manifest.GetSlug(), overrideEnvironment(cfg), values); err != nil {
+	if _, err := cfg.Links.PublishRecords(ctx, manifest.GetSlug(), overrideEnvironment(cfg), records); err != nil {
 		return fmt.Errorf("deliver link values: %w", err)
 	}
 	return nil

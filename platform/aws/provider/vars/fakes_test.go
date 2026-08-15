@@ -4,7 +4,9 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"maps"
 	"slices"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
@@ -75,9 +77,11 @@ type fakeDynamo struct {
 	puts         []*dynamodb.PutItemInput
 	queries      []*dynamodb.QueryInput
 
-	beforeTransact func()
-	beforePut      func(*dynamodb.PutItemInput)
-	beforePutSK    string
+	beforeTransact  func()
+	beforePut       func(*dynamodb.PutItemInput)
+	beforePutSK     string
+	afterQuery      func()
+	cancelTransacts int
 
 	indexBehind bool
 }
@@ -183,6 +187,11 @@ func (f *fakeDynamo) Query(_ context.Context, in *dynamodb.QueryInput, _ ...func
 	for _, sk := range sks {
 		out.Items = append(out.Items, f.items[pk][sk])
 	}
+	if f.afterQuery != nil {
+		hook := f.afterQuery
+		f.afterQuery = nil
+		hook()
+	}
 	return out, nil
 }
 
@@ -228,25 +237,118 @@ func (f *fakeDynamo) TransactWriteItems(_ context.Context, in *dynamodb.Transact
 	f.mu.Lock()
 	defer f.mu.Unlock()
 
+	if f.cancelTransacts > 0 {
+		f.cancelTransacts--
+		return nil, &ddbtypes.TransactionCanceledException{}
+	}
+
+	touched := map[string]bool{}
 	for _, w := range in.TransactItems {
-		if w.Put == nil || w.Put.ConditionExpression == nil {
-			continue
+		key, condition, values := transactTarget(w)
+		if touched[cellKey(stringAttr(key, "pk"), stringAttr(key, "sk"))] {
+			return nil, fmt.Errorf("fakeDynamo: %s/%s appears twice in one transaction", stringAttr(key, "pk"), stringAttr(key, "sk"))
 		}
-		if !f.conditionHolds(w.Put.Item, w.Put.ExpressionAttributeValues) {
+		touched[cellKey(stringAttr(key, "pk"), stringAttr(key, "sk"))] = true
+		if condition != nil && !f.conditionHolds(key, values) {
 			return nil, &ddbtypes.TransactionCanceledException{}
 		}
 	}
 
+	staged := make([]map[string]ddbtypes.AttributeValue, 0, len(in.TransactItems))
+	var removed []map[string]ddbtypes.AttributeValue
 	for _, w := range in.TransactItems {
 		switch {
 		case w.Put != nil:
-			f.put(w.Put.Item)
+			staged = append(staged, w.Put.Item)
 		case w.Delete != nil:
-			pk, sk := stringAttr(w.Delete.Key, "pk"), stringAttr(w.Delete.Key, "sk")
-			delete(f.items[pk], sk)
+			removed = append(removed, w.Delete.Key)
+		case w.Update != nil:
+			updated, err := f.applyUpdate(w.Update)
+			if err != nil {
+				return nil, err
+			}
+			staged = append(staged, updated)
 		}
 	}
+
+	for _, item := range staged {
+		f.put(item)
+	}
+	for _, key := range removed {
+		delete(f.items[stringAttr(key, "pk")], stringAttr(key, "sk"))
+	}
 	return &dynamodb.TransactWriteItemsOutput{}, nil
+}
+
+func transactTarget(w ddbtypes.TransactWriteItem) (map[string]ddbtypes.AttributeValue, *string, map[string]ddbtypes.AttributeValue) {
+	switch {
+	case w.Put != nil:
+		return w.Put.Item, w.Put.ConditionExpression, w.Put.ExpressionAttributeValues
+	case w.Delete != nil:
+		return w.Delete.Key, w.Delete.ConditionExpression, w.Delete.ExpressionAttributeValues
+	case w.Update != nil:
+		return w.Update.Key, w.Update.ConditionExpression, w.Update.ExpressionAttributeValues
+	}
+	return nil, nil, nil
+}
+
+func (f *fakeDynamo) applyUpdate(u *ddbtypes.Update) (map[string]ddbtypes.AttributeValue, error) {
+	item := map[string]ddbtypes.AttributeValue{}
+	if current, ok := f.get(stringAttr(u.Key, "pk"), stringAttr(u.Key, "sk")); ok {
+		maps.Copy(item, current)
+	}
+	maps.Copy(item, u.Key)
+
+	for clause, assignments := range updateClauses(aws.ToString(u.UpdateExpression)) {
+		for _, assignment := range assignments {
+			name, value, err := resolveAssignment(clause, assignment, u.ExpressionAttributeNames, u.ExpressionAttributeValues)
+			if err != nil {
+				return nil, err
+			}
+			if clause == "ADD" {
+				delta, ok := value.(*ddbtypes.AttributeValueMemberN)
+				if !ok {
+					return nil, fmt.Errorf("fakeDynamo: ADD %s takes a number", name)
+				}
+				n, err := strconv.ParseInt(delta.Value, 10, 64)
+				if err != nil {
+					return nil, err
+				}
+				value = &ddbtypes.AttributeValueMemberN{Value: strconv.FormatInt(numberAttr(item, name)+n, 10)}
+			}
+			item[name] = value
+		}
+	}
+	return item, nil
+}
+
+func updateClauses(expression string) map[string][]string {
+	sets, adds, added := strings.Cut(expression, " ADD ")
+	out := map[string][]string{"SET": strings.Split(strings.TrimPrefix(sets, "SET "), ", ")}
+	if added {
+		out["ADD"] = strings.Split(adds, ", ")
+	}
+	return out
+}
+
+func resolveAssignment(clause, assignment string, names map[string]string, values map[string]ddbtypes.AttributeValue) (string, ddbtypes.AttributeValue, error) {
+	separator := " "
+	if clause == "SET" {
+		separator = " = "
+	}
+	alias, placeholder, ok := strings.Cut(assignment, separator)
+	if !ok {
+		return "", nil, fmt.Errorf("fakeDynamo: %s clause %q is not one this double understands", clause, assignment)
+	}
+	name, ok := names[alias]
+	if !ok {
+		return "", nil, fmt.Errorf("fakeDynamo: %q names no attribute", alias)
+	}
+	value, ok := values[placeholder]
+	if !ok {
+		return "", nil, fmt.Errorf("fakeDynamo: %q carries no value", placeholder)
+	}
+	return name, value, nil
 }
 
 func stringAttr(m map[string]ddbtypes.AttributeValue, name string) string {
