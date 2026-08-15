@@ -304,6 +304,7 @@ func collectBucketLink(name string, fields map[string]any) (*linksv1.Link, error
 		Name:       name,
 		Type:       naming.TokenBucket,
 		Properties: map[string]string{"bucket": bucket},
+		Grants:     bucketGrants(bucket),
 	}, nil
 }
 
