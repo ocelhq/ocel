@@ -87,8 +87,8 @@ func TestReveal(t *testing.T) {
 		folders := map[string]bool{}
 		for _, c := range crypto.decryptContexts {
 			folders[c["folder"]] = true
-			if c["environment"] != classWideEnvironment {
-				t.Errorf("decrypt presented environment %q, want the class-wide sentinel %q", c["environment"], classWideEnvironment)
+			if c["environment"] != ClassWideEnvironment {
+				t.Errorf("decrypt presented environment %q, want the class-wide sentinel %q", c["environment"], ClassWideEnvironment)
 			}
 			if c["slug"] != "shop" {
 				t.Errorf("decrypt presented slug %q, want %q", c["slug"], "shop")
@@ -231,7 +231,7 @@ func TestReveal(t *testing.T) {
 
 		_, err := store.Reveal(context.Background(), "shop", []Coordinate{
 			{Slug: "shop", Key: "OK"},
-			{Slug: "shop", Key: "BAD", Environment: classWideEnvironment},
+			{Slug: "shop", Key: "BAD", Environment: ClassWideEnvironment},
 		})
 		if err == nil {
 			t.Fatal("Reveal accepted the class-wide sentinel as an environment name")

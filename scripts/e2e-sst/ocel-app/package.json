@@ -1,0 +1,10 @@
+{
+  "name": "ocel-e2e-sst-consumer",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "express": "~5.0.0",
+    "pg": "^8.13.1"
+  }
+}

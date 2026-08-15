@@ -29,9 +29,9 @@ type recordingPublisher struct {
 	resolved  map[string]vars.PublishedRecord
 }
 
-func (p *recordingPublisher) PublishRecords(_ context.Context, slug, environment, owner string, records []vars.Record) (int, error) {
+func (p *recordingPublisher) PublishRecords(_ context.Context, slug, environment, owner string, records []vars.Record) (vars.PublishResult, error) {
 	p.slug, p.environment, p.owner, p.records = slug, environment, owner, records
-	return 0, p.err
+	return vars.PublishResult{}, p.err
 }
 
 func (p *recordingPublisher) PublishedNames(_ context.Context, _, class, _ string) ([]string, error) {

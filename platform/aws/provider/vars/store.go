@@ -73,6 +73,7 @@ type item struct {
 
 	Names  []string `dynamodbav:"links"`
 	Record string   `dynamodbav:"record"`
+	Owner  string   `dynamodbav:"owner"`
 }
 
 func (i item) references() bool { return i.TargetPK != "" && i.TargetSK != "" }
@@ -597,7 +598,7 @@ func marshal(i item) map[string]ddbtypes.AttributeValue {
 
 func unmarshal(raw map[string]ddbtypes.AttributeValue) (item, error) {
 	i := item{}
-	for name, field := range map[string]*string{"pk": &i.PK, "sk": &i.SK, "gsi1pk": &i.TargetPK, "gsi1sk": &i.TargetSK, "record": &i.Record} {
+	for name, field := range map[string]*string{"pk": &i.PK, "sk": &i.SK, "gsi1pk": &i.TargetPK, "gsi1sk": &i.TargetSK, "record": &i.Record, "owner": &i.Owner} {
 		if v, ok := raw[name].(*ddbtypes.AttributeValueMemberS); ok {
 			*field = v.Value
 		}

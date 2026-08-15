@@ -199,9 +199,9 @@ func TestValidate(t *testing.T) {
 	t.Run("rejects the class wide sentinel as an environment", func(t *testing.T) {
 		t.Parallel()
 
-		c := Coordinate{Slug: "shop", Key: "K", Environment: classWideEnvironment}
+		c := Coordinate{Slug: "shop", Key: "K", Environment: ClassWideEnvironment}
 		if err := c.validate(); err == nil {
-			t.Errorf("validate() accepted %q as an environment name; it is the class-wide sentinel", classWideEnvironment)
+			t.Errorf("validate() accepted %q as an environment name; it is the class-wide sentinel", ClassWideEnvironment)
 		}
 	})
 }
