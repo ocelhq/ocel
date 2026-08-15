@@ -21,12 +21,12 @@ import (
 type recordingPublisher struct {
 	slug        string
 	environment string
-	values      []vars.LinkValue
+	records     []vars.Record
 	err         error
 }
 
-func (p *recordingPublisher) PublishLinks(_ context.Context, slug, environment string, links []vars.LinkValue) (int, error) {
-	p.slug, p.environment, p.values = slug, environment, links
+func (p *recordingPublisher) PublishRecords(_ context.Context, slug, environment string, records []vars.Record) (int, error) {
+	p.slug, p.environment, p.records = slug, environment, records
 	return 0, p.err
 }
 
@@ -65,72 +65,68 @@ func provisionedLinks() []*linksv1.Link {
 	}
 }
 
-func TestLinkValues(t *testing.T) {
-	t.Run("addresses each link by its own name and the key the app reads", func(t *testing.T) {
+func TestLinkRecords(t *testing.T) {
+	t.Run("names each link by its logical name and its type token", func(t *testing.T) {
 		t.Parallel()
-		got, err := linkValues(linkedManifest(), provisionedLinks())
+		got, err := linkRecords(linkedManifest(), provisionedLinks())
 		if err != nil {
-			t.Fatalf("linkValues: %v", err)
+			t.Fatalf("linkRecords: %v", err)
 		}
 		if len(got) != 2 {
-			t.Fatalf("linkValues returned %d values, want one per provisioned link", len(got))
+			t.Fatalf("linkRecords returned %d records, want one per provisioned link", len(got))
 		}
-		if got[0].Link != "db--main" || got[0].Key != "OCEL_RESOURCE_POSTGRES_main" {
-			t.Errorf("postgres value = %+v, want it partitioned by logical name and keyed by the SDK's lookup", got[0])
+		if got[0].Name != "db--main" || got[0].Type != naming.TokenPostgres {
+			t.Errorf("postgres record = %+v, want it partitioned by logical name under its own token", got[0])
 		}
-		if got[1].Link != "bucket--uploads" || got[1].Key != "OCEL_RESOURCE_BUCKET_uploads" {
-			t.Errorf("bucket value = %+v, want it partitioned by logical name and keyed by the SDK's lookup", got[1])
+		if got[1].Name != "bucket--uploads" || got[1].Type != naming.TokenBucket {
+			t.Errorf("bucket record = %+v, want it partitioned by logical name under its own token", got[1])
 		}
 	})
 
-	t.Run("the bucket record names its type and leaves the address behind", func(t *testing.T) {
+	t.Run("the bucket bag leaves the address behind", func(t *testing.T) {
 		t.Parallel()
-		got, err := linkValues(linkedManifest(), provisionedLinks())
+		got, err := linkRecords(linkedManifest(), provisionedLinks())
 		if err != nil {
-			t.Fatalf("linkValues: %v", err)
+			t.Fatalf("linkRecords: %v", err)
 		}
-		var published live.Record
-		if err := json.Unmarshal([]byte(got[1].Value), &published); err != nil {
-			t.Fatalf("bucket record is not JSON: %v", err)
+		if got[1].Type != naming.TokenBucket {
+			t.Errorf("record type = %q, want the publisher's own token so a consumer can tell what it was handed", got[1].Type)
 		}
-		if published.Type != naming.TokenBucket {
-			t.Errorf("record type = %q, want the publisher's own token so a consumer can tell what it was handed", published.Type)
+		if _, ok := got[1].Properties["address"]; ok {
+			t.Errorf("bucket bag = %+v, want the runtime address ambient rather than in the property bag", got[1].Properties)
 		}
-		if _, ok := published.Properties["address"]; ok {
-			t.Errorf("bucket record = %s, want the runtime address ambient rather than in the property bag", got[1].Value)
-		}
-		if published.Properties["bucket"] != "shop-uploads-abc123" {
-			t.Errorf("bucket = %q, want the provisioned bucket", published.Properties["bucket"])
+		if got[1].Properties["bucket"] != "shop-uploads-abc123" {
+			t.Errorf("bucket = %q, want the provisioned bucket", got[1].Properties["bucket"])
 		}
 	})
 
 	t.Run("refuses a token this provider ships no client for", func(t *testing.T) {
 		t.Parallel()
 		foreign := []*linksv1.Link{{Name: "db--main", Type: "sst:aws.Postgres", Properties: map[string]string{}}}
-		if _, err := linkValues(linkedManifest(), foreign); err == nil {
-			t.Fatal("linkValues accepted a foreign token, delivering an app a shape it cannot read")
+		if _, err := linkRecords(linkedManifest(), foreign); err == nil {
+			t.Fatal("linkRecords accepted a foreign token, delivering an app a shape it cannot read")
 		}
 	})
 }
 
-func TestPublishLinkValues(t *testing.T) {
+func TestPublishLinkRecords(t *testing.T) {
 	t.Run("routes every credential through the store, never an env map", func(t *testing.T) {
 		t.Parallel()
 		publisher := &recordingPublisher{}
 		cfg := liveConfig()
 		cfg.Links = publisher
 
-		if err := publishLinkValues(context.Background(), cfg, linkedManifest(), provisionedLinks()); err != nil {
-			t.Fatalf("publishLinkValues: %v", err)
+		if err := publishLinkRecords(context.Background(), cfg, linkedManifest(), provisionedLinks()); err != nil {
+			t.Fatalf("publishLinkRecords: %v", err)
 		}
 		if publisher.slug != "shop" {
 			t.Errorf("published under %q, want the project's own slug", publisher.slug)
 		}
-		if len(publisher.values) != 2 {
-			t.Fatalf("published %d values, want one per link", len(publisher.values))
+		if len(publisher.records) != 2 {
+			t.Fatalf("published %d records, want one per link", len(publisher.records))
 		}
-		if !strings.Contains(publisher.values[0].Value, "s3cr3t") {
-			t.Errorf("postgres value = %q, want the credential delivered through the store", publisher.values[0].Value)
+		if !strings.Contains(publisher.records[0].Properties["connectionString"], "s3cr3t") {
+			t.Errorf("postgres bag = %+v, want the credential delivered through the store", publisher.records[0].Properties)
 		}
 	})
 
@@ -140,8 +136,8 @@ func TestPublishLinkValues(t *testing.T) {
 		cfg := previewOf(liveConfig(), "pr-42")
 		cfg.Links = publisher
 
-		if err := publishLinkValues(context.Background(), cfg, linkedManifest(), provisionedLinks()); err != nil {
-			t.Fatalf("publishLinkValues: %v", err)
+		if err := publishLinkRecords(context.Background(), cfg, linkedManifest(), provisionedLinks()); err != nil {
+			t.Fatalf("publishLinkRecords: %v", err)
 		}
 		if publisher.environment != "pr-42" {
 			t.Errorf("environment = %q, want the preview's own, so a sibling preview's values never shadow it", publisher.environment)
@@ -150,15 +146,15 @@ func TestPublishLinkValues(t *testing.T) {
 
 	t.Run("refuses to strand link values when no store is reachable", func(t *testing.T) {
 		t.Parallel()
-		if err := publishLinkValues(context.Background(), liveConfig(), linkedManifest(), provisionedLinks()); err == nil {
-			t.Fatal("publishLinkValues succeeded with no store; the apps would cold-start without their resources")
+		if err := publishLinkRecords(context.Background(), liveConfig(), linkedManifest(), provisionedLinks()); err == nil {
+			t.Fatal("publishLinkRecords succeeded with no store; the apps would cold-start without their resources")
 		}
 	})
 
 	t.Run("a project with no links needs no store", func(t *testing.T) {
 		t.Parallel()
-		if err := publishLinkValues(context.Background(), liveConfig(), &deploymentsv1.Manifest{Slug: "shop"}, nil); err != nil {
-			t.Fatalf("publishLinkValues: %v", err)
+		if err := publishLinkRecords(context.Background(), liveConfig(), &deploymentsv1.Manifest{Slug: "shop"}, nil); err != nil {
+			t.Fatalf("publishLinkRecords: %v", err)
 		}
 	})
 
@@ -166,7 +162,7 @@ func TestPublishLinkValues(t *testing.T) {
 		t.Parallel()
 		cfg := liveConfig()
 		cfg.Links = &recordingPublisher{err: errors.New("table is gone")}
-		err := publishLinkValues(context.Background(), cfg, linkedManifest(), provisionedLinks())
+		err := publishLinkRecords(context.Background(), cfg, linkedManifest(), provisionedLinks())
 		if err == nil || !strings.Contains(err.Error(), "table is gone") {
 			t.Errorf("err = %v, want the store's own refusal named", err)
 		}
@@ -187,17 +183,12 @@ func TestManifestLinks(t *testing.T) {
 
 func TestPublishedRecordsMeetWhatTheManifestDeclares(t *testing.T) {
 	t.Parallel()
-	values, err := linkValues(linkedManifest(), provisionedLinks())
-	if err != nil {
-		t.Fatalf("linkValues: %v", err)
-	}
-
-	published := make(map[string]string, len(values))
-	for _, v := range values {
-		published[v.Key] = v.Value
-	}
-
 	links := manifestLinks(linkedManifest())
+	published, err := publishedRecords(t, links)
+	if err != nil {
+		t.Fatalf("linkRecords: %v", err)
+	}
+
 	conformed, err := live.Conform(links, published)
 	if err != nil {
 		t.Fatalf("what this deploy publishes drifts from what it tells the app to expect: %v", err)
@@ -257,18 +248,31 @@ func TestLinkedAppRendersNoCredential(t *testing.T) {
 	}
 }
 
+func publishedRecords(t *testing.T, links []live.Link) (map[string]string, error) {
+	t.Helper()
+	records, err := linkRecords(linkedManifest(), provisionedLinks())
+	if err != nil {
+		return nil, err
+	}
+	keys := make(map[string]string, len(links))
+	for _, l := range links {
+		keys[l.Name] = l.Key
+	}
+	out := make(map[string]string, len(records))
+	for _, r := range records {
+		out[keys[r.Name]] = live.EncodeRecord(live.Record{Type: r.Type, Properties: r.Properties})
+	}
+	return out, nil
+}
+
 func publishedProperties(t *testing.T) []string {
 	t.Helper()
-	values, err := linkValues(linkedManifest(), provisionedLinks())
+	records, err := linkRecords(linkedManifest(), provisionedLinks())
 	if err != nil {
-		t.Fatalf("linkValues: %v", err)
+		t.Fatalf("linkRecords: %v", err)
 	}
 	var out []string
-	for _, v := range values {
-		var r live.Record
-		if err := json.Unmarshal([]byte(v.Value), &r); err != nil {
-			t.Fatalf("link %s published %q, which is not a record: %v", v.Link, v.Value, err)
-		}
+	for _, r := range records {
 		for _, property := range r.Properties {
 			out = append(out, property)
 		}

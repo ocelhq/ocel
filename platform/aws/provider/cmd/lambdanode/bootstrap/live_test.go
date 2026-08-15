@@ -15,6 +15,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/platform/aws/provider/vars"
 	"github.com/ocelhq/ocel/platform/aws/provider/vars/live"
 )
@@ -626,7 +627,7 @@ func TestResolveLiveValues(t *testing.T) {
 		l.refreshIfStale(context.Background())
 	})
 
-	t.Run("addresses each link by the partition its value lives in", func(t *testing.T) {
+	t.Run("addresses each link by the partition its pair lives in", func(t *testing.T) {
 		manifest := live.Manifest{
 			Slug:        "shop",
 			Table:       "ocel-vars",
@@ -639,19 +640,23 @@ func TestResolveLiveValues(t *testing.T) {
 			},
 		}
 
-		cells := manifestLinkCells(manifest)
-		if len(cells) != 2 {
-			t.Fatalf("cells = %+v, want one per link", cells)
+		names := linkNames(manifest.Links)
+		if len(names) != 2 {
+			t.Fatalf("names = %v, want one per link", names)
 		}
 		for i, want := range manifest.Links {
-			if cells[i].Link != want.Name || cells[i].Key != want.Key {
-				t.Errorf("cell %+v, want link %s read under %s", cells[i], want.Name, want.Key)
+			if names[i] != want.Name {
+				t.Errorf("name %q, want the link %q the record is published under", names[i], want.Name)
 			}
-			if cells[i].Environment != "pr-42" {
-				t.Errorf("cell %+v reads class-wide; a preview's links are its own", cells[i])
-			}
-			if cells[i].Folder != "" {
-				t.Errorf("cell %+v names a folder; a link value is not folder-scoped", cells[i])
+		}
+
+		values := merged(nil, manifest.Links, []vars.PublishedRecord{
+			{Record: vars.Record{Name: "db--main", Type: naming.TokenPostgres, Properties: map[string]string{"connectionString": "postgres://u@h/d"}}},
+			{Record: vars.Record{Name: "bucket--uploads", Type: naming.TokenBucket, Properties: map[string]string{"bucket": "shop-uploads"}}},
+		})
+		for _, l := range manifest.Links {
+			if values[l.Key] == "" {
+				t.Errorf("%s reached the child under no key; the record is filed under the key the app reads", l.Name)
 			}
 		}
 
@@ -819,19 +824,26 @@ func TestResolveLiveValues(t *testing.T) {
 }
 
 func TestMerged(t *testing.T) {
-	t.Run("a derived value is never shadowed by a secret that shares its name", func(t *testing.T) {
+	links := []live.Link{{Name: "db--main", Key: "OCEL_RESOURCE_POSTGRES_main"}}
+	records := []vars.PublishedRecord{{Record: vars.Record{
+		Name:       "db--main",
+		Type:       naming.TokenPostgres,
+		Properties: map[string]string{"connectionString": "postgres://ocel"},
+	}}}
+	published := live.EncodeRecord(live.Record{
+		Type:       naming.TokenPostgres,
+		Properties: map[string]string{"connectionString": "postgres://ocel"},
+	})
+
+	t.Run("a link is never shadowed by a secret that shares its name", func(t *testing.T) {
 		secret := vars.Value{
 			Metadata:  vars.Metadata{Coordinate: vars.Coordinate{Slug: "shop", Key: "OCEL_RESOURCE_POSTGRES_main"}},
 			Plaintext: "postgres://mine",
 		}
-		derived := vars.Value{
-			Metadata:  vars.Metadata{Coordinate: vars.Coordinate{Slug: "shop", Link: "db--main", Key: "OCEL_RESOURCE_POSTGRES_main"}},
-			Plaintext: `{"connectionString":"postgres://ocel"}`,
-		}
 
-		got := merged([]vars.Value{secret}, []vars.Value{derived})
-		if got["OCEL_RESOURCE_POSTGRES_main"] != derived.Plaintext {
-			t.Errorf("OCEL_RESOURCE_POSTGRES_main = %q, want the value ocel derived from the link; a secret the user named the same way must not stand in for a resource's own credential", got["OCEL_RESOURCE_POSTGRES_main"])
+		got := merged([]vars.Value{secret}, links, records)
+		if got["OCEL_RESOURCE_POSTGRES_main"] != published {
+			t.Errorf("OCEL_RESOURCE_POSTGRES_main = %q, want the record ocel published for the link; a secret the user named the same way must not stand in for a resource's own credential", got["OCEL_RESOURCE_POSTGRES_main"])
 		}
 	})
 
@@ -840,13 +852,9 @@ func TestMerged(t *testing.T) {
 			Metadata:  vars.Metadata{Coordinate: vars.Coordinate{Slug: "shop", Key: "STRIPE_API_KEY"}},
 			Plaintext: "sk_live",
 		}
-		derived := vars.Value{
-			Metadata:  vars.Metadata{Coordinate: vars.Coordinate{Slug: "shop", Link: "db--main", Key: "OCEL_RESOURCE_POSTGRES_main"}},
-			Plaintext: "{}",
-		}
 
-		got := merged([]vars.Value{secret}, []vars.Value{derived})
-		want := map[string]string{"STRIPE_API_KEY": "sk_live", "OCEL_RESOURCE_POSTGRES_main": "{}"}
+		got := merged([]vars.Value{secret}, links, records)
+		want := map[string]string{"STRIPE_API_KEY": "sk_live", "OCEL_RESOURCE_POSTGRES_main": published}
 		if !reflect.DeepEqual(got, want) {
 			t.Errorf("merged = %v, want %v", got, want)
 		}

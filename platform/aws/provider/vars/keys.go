@@ -22,8 +22,12 @@ const (
 	tokenEnv     = "ENV"
 	tokenVersion = "VERSION"
 	tokenLinks   = "LINKS"
+	tokenRecord  = "RECORD"
+
+	linkValueKey = "PROPERTIES"
 
 	currentPrefix      = tokenValue + delimiter
+	recordPrefix       = tokenRecord + delimiter
 	historyPrefixToken = tokenHistory + delimiter
 
 	historyWindow = 50
@@ -75,7 +79,7 @@ func (c Coordinate) validate() error {
 		return fmt.Errorf("a project slug is required")
 	}
 	if c.Link != "" {
-		return fmt.Errorf("%s belongs to link %s: ocel derives it from the resource and prunes it, so there is nothing here to edit", c.Key, c.Link)
+		return fmt.Errorf("that value belongs to link %s: ocel derives it from the resource and prunes it, so there is nothing here to edit", c.Link)
 	}
 	if c.Key == "" {
 		return fmt.Errorf("a variable name is required")
@@ -130,6 +134,10 @@ const linkIndexPrefix = tokenLinks + delimiter
 
 func linkIndexSortKey(environment string) string {
 	return linkIndexPrefix + tokenEnv + delimiter + canonicalEnvironment(environment)
+}
+
+func recordSortKey(environment string) string {
+	return recordPrefix + tokenEnv + delimiter + canonicalEnvironment(environment)
 }
 
 func folderPrefix(folder string) string {

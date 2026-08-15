@@ -29,10 +29,11 @@ type liveFetcher interface {
 }
 
 type storeFetcher struct {
-	store *vars.Store
-	slug  string
-	cells []vars.Coordinate
-	links []vars.Coordinate
+	store       *vars.Store
+	slug        string
+	environment string
+	cells       []vars.Coordinate
+	links       []live.Link
 }
 
 func (f storeFetcher) fetchLive(ctx context.Context) (map[string]string, error) {
@@ -40,17 +41,25 @@ func (f storeFetcher) fetchLive(ctx context.Context) (map[string]string, error) 
 	if err != nil {
 		return nil, err
 	}
-	derived, err := f.store.RevealLinks(ctx, f.slug, f.links)
+	records, err := f.store.ResolveRecords(ctx, f.slug, f.environment, linkNames(f.links))
 	if err != nil {
 		return nil, err
 	}
-	return merged(values, derived), nil
+	return merged(values, f.links, records), nil
 }
 
-func merged(values, derived []vars.Value) map[string]string {
+func linkNames(links []live.Link) []string {
+	names := make([]string, 0, len(links))
+	for _, l := range links {
+		names = append(names, l.Name)
+	}
+	return names
+}
+
+func merged(values []vars.Value, links []live.Link, records []vars.PublishedRecord) map[string]string {
 	out := resolved(values)
-	for _, v := range derived {
-		out[v.Coordinate.Key] = v.Plaintext
+	for i, record := range records {
+		out[links[i].Key] = live.EncodeRecord(live.Record{Type: record.Type, Properties: record.Properties})
 	}
 	return out
 }
@@ -265,9 +274,10 @@ func resolveLiveValues(ctx context.Context) (*liveValues, error) {
 			KeyARN: manifest.KeyARN,
 			Class:  manifest.Class,
 		},
-		slug:  manifest.Slug,
-		cells: manifestCells(manifest),
-		links: manifestLinkCells(manifest),
+		slug:        manifest.Slug,
+		environment: manifest.Environment,
+		cells:       manifestCells(manifest),
+		links:       manifest.Links,
 	}, manifestKeys(manifest), manifest.Links, nil), nil
 }
 
@@ -280,14 +290,6 @@ func manifestKeys(m live.Manifest) []string {
 		keys = append(keys, l.Key)
 	}
 	return keys
-}
-
-func manifestLinkCells(m live.Manifest) []vars.Coordinate {
-	cells := make([]vars.Coordinate, 0, len(m.Links))
-	for _, l := range m.Links {
-		cells = append(cells, vars.Coordinate{Slug: m.Slug, Link: l.Name, Key: l.Key, Environment: m.Environment})
-	}
-	return cells
 }
 
 func manifestCells(m live.Manifest) []vars.Coordinate {
