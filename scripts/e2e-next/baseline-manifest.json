@@ -43,13 +43,6 @@
       ],
       "flakey": []
     },
-    "test/e2e/app-dir/app-routes-trailing-slash/app-routes-trailing-slash.test.ts": {
-      "failed": [
-        "app-routes-trailing-slash should handle trailing slash for edge runtime",
-        "app-routes-trailing-slash should handle trailing slash for node runtime"
-      ],
-      "flakey": []
-    },
     "test/e2e/app-dir/app-static/app-static.test.ts": {
       "failed": [
         "app-dir static/dynamic handling unstable-cache should work in pages/api/unstable-cache-node",
@@ -59,12 +52,6 @@
         "app-dir static/dynamic handling should cache correctly with post method and revalidate edge",
         "app-dir static/dynamic handling should honor fetch cache correctly"
       ]
-    },
-    "test/e2e/app-dir/metadata-dynamic-routes-async-deps/index.test.ts": {
-      "failed": [
-        "app dir - metadata dynamic routes with async deps should serve the opengraph-image route as a valid image"
-      ],
-      "flakey": []
     },
     "test/e2e/app-dir/next-after-app-deploy/index.test.ts": {
       "failed": [
@@ -82,16 +69,6 @@
     "test/e2e/app-dir/next-dist-client-esm-import/next-dist-client-esm-import.test.ts": {
       "failed": [
         "next-dist-client-esm-import should resolve ESM modules that have \"next/dist/client\" in their filename"
-      ],
-      "flakey": []
-    },
-    "test/e2e/app-dir/next-image/next-image.test.ts": {
-      "failed": [
-        "app dir - next-image ssr content should render images on / route",
-        "app dir - next-image ssr content should render images on /client route",
-        "app dir - next-image ssr content should render images nested under page dir on /nested route",
-        "app dir - next-image browser content should render images on / route",
-        "app dir - next-image browser content should render images nested under page dir on /nested route"
       ],
       "flakey": []
     },
@@ -152,12 +129,6 @@
       ],
       "flakey": []
     },
-    "test/e2e/app-dir/segment-cache/deployment-skew/deployment-skew.test.ts": {
-      "failed": [
-        "segment cache (deployment skew) header with deployment id header is set on RSC responses"
-      ],
-      "flakey": []
-    },
     "test/e2e/app-dir/server-actions-redirect-middleware-rewrite/server-actions-redirect-middleware-rewrite.test.ts": {
       "failed": [
         "app-dir - server-actions-redirect-middleware-rewrite.test should redirect correctly in edge runtime with middleware rewrite"
@@ -172,49 +143,14 @@
       "flakey": []
     },
     "test/e2e/app-dir/use-cache-route-handler-only/use-cache-route-handler-only.test.ts": {
-      "failed": [
+      "failed": [],
+      "flakey": [
         "use-cache-route-handler-only should be able to revalidate prerendered route handlers"
-      ],
-      "flakey": []
-    },
-    "test/e2e/app-dir/worker/worker.test.ts": {
-      "failed": [
-        "app dir - workers should support web workers with dynamic imports",
-        "app dir - workers should support module web workers with dynamic imports",
-        "app dir - workers should not bundle web workers with string specifiers",
-        "app dir - workers should have access to NEXT_DEPLOYMENT_ID in web worker",
-        "app dir - workers should support loading WASM files in workers",
-        "app dir - workers should support shared workers",
-        "app dir - workers should support loading PNG files in web workers"
-      ],
-      "flakey": []
-    },
-    "test/e2e/async-modules/index.test.ts": {
-      "failed": [
-        "Async modules works on async api routes",
-        "Async modules works with getServerSideProps",
-        "Async modules can render async error page"
-      ],
-      "flakey": []
+      ]
     },
     "test/e2e/basepath/redirect-and-rewrite.test.ts": {
       "failed": [
         "basePath should rewrite without basePath when set to false"
-      ],
-      "flakey": []
-    },
-    "test/e2e/dynamic-route-interpolation/index.test.ts": {
-      "failed": [
-        "Dynamic Route Interpolation should work with parameter itself",
-        "Dynamic Route Interpolation should work with brackets",
-        "Dynamic Route Interpolation should work with parameter itself in API routes",
-        "Dynamic Route Interpolation should work with brackets in API routes"
-      ],
-      "flakey": []
-    },
-    "test/e2e/edge-api-endpoints-can-receive-body/index.test.ts": {
-      "failed": [
-        "Edge API endpoints can receive body reads the body from index"
       ],
       "flakey": []
     },
@@ -240,60 +176,9 @@
       ],
       "flakey": []
     },
-    "test/e2e/esm-externals/esm-externals.test.ts": {
-      "failed": [
-        "esm-externals pages url /ssr should return the correct SSR HTML",
-        "esm-externals pages url /ssr should render the correct page"
-      ],
-      "flakey": []
-    },
-    "test/e2e/handle-non-hoisted-swc-helpers/index.test.ts": {
-      "failed": [
-        "handle-non-hoisted-swc-helpers should work"
-      ],
-      "flakey": []
-    },
     "test/e2e/i18n-api-support/index.test.ts": {
       "failed": [
         "i18n API support should respond to normal dynamic API request"
-      ],
-      "flakey": []
-    },
-    "test/e2e/invalid-static-asset-404-app/invalid-static-asset-404-app-asset-prefix.test.ts": {
-      "failed": [
-        "invalid-static-asset-404-app-asset-prefix should return 404 with plain text when fetching invalid asset path"
-      ],
-      "flakey": []
-    },
-    "test/e2e/invalid-static-asset-404-app/invalid-static-asset-404-app.test.ts": {
-      "failed": [
-        "invalid-static-asset-404-app should return 404 with plain text when fetching invalid asset path"
-      ],
-      "flakey": []
-    },
-    "test/e2e/invalid-static-asset-404-pages/invalid-static-asset-404-pages-asset-prefix.test.ts": {
-      "failed": [
-        "invalid-static-asset-404-pages-asset-prefix should return 404 with plain text when fetching invalid asset path"
-      ],
-      "flakey": []
-    },
-    "test/e2e/invalid-static-asset-404-pages/invalid-static-asset-404-pages.test.ts": {
-      "failed": [
-        "invalid-static-asset-404-pages should return 404 with plain text when fetching invalid asset path"
-      ],
-      "flakey": []
-    },
-    "test/e2e/middleware-general/test/index.test.ts": {
-      "failed": [
-        "Middleware Runtime with i18n allows to access env variables",
-        "Middleware Runtime without i18n allows to access env variables"
-      ],
-      "flakey": []
-    },
-    "test/e2e/middleware-general/test/node-runtime.test.ts": {
-      "failed": [
-        "Middleware Runtime with i18n allows to access env variables",
-        "Middleware Runtime without i18n allows to access env variables"
       ],
       "flakey": []
     },
@@ -304,63 +189,23 @@
       ],
       "flakey": []
     },
-    "test/e2e/og-api/index.test.ts": {
-      "failed": [
-        "og-api should work in pages/api",
-        "og-api should work in app route",
-        "og-api should work in middleware"
-      ],
-      "flakey": []
-    },
-    "test/e2e/pages-ssg-data-deployment-skew/pages-ssg-data-deployment-skew.test.ts": {
-      "failed": [
-        "pages ssg data deployment skew - hard navigate when a new deployment occurs header with deployment id header is set on data routes"
-      ],
-      "flakey": []
-    },
     "test/e2e/prerender-crawler.test.ts": {
       "failed": [
         "Prerender crawler handling should block for crawler correctly"
       ],
       "flakey": []
     },
-    "test/e2e/prerender-native-module.test.ts": {
-      "failed": [
-        "prerender native module should render /blog/second correctly"
-      ],
-      "flakey": []
-    },
     "test/e2e/prerender.test.ts": {
       "failed": [
-        "Prerender should navigate between pages successfully",
-        "Prerender should respond with 405 for POST to static page",
-        "Prerender should server prerendered path correctly for SSG pages that starts with api-docs",
-        "Prerender should render correctly for SSG pages that starts with api-docs",
-        "Prerender should return data correctly for SSG pages that starts with api-docs",
-        "Prerender should revalidate on-demand revalidate with preview cookie"
-      ],
-      "flakey": []
-    },
-    "test/e2e/proxy-request-with-middleware/test/index.test.ts": {
-      "failed": [
-        "Requests not effected when middleware used should proxy GET request ",
-        "Requests not effected when middleware used should proxy POST request with body"
+        "Prerender should navigate between pages successfully"
       ],
       "flakey": []
     },
     "test/e2e/revalidate-reason/revalidate-reason.test.ts": {
-      "failed": [
-        "revalidate-reason should support revalidateReason: \"on-demand\"",
-        "revalidate-reason should support revalidateReason: \"stale\""
-      ],
-      "flakey": []
-    },
-    "test/e2e/twoslash/index.test.ts": {
-      "failed": [
-        "twoslash should annotate twoslash types default",
-        "twoslash should annotate twoslash types esnext"
-      ],
-      "flakey": []
+      "failed": [],
+      "flakey": [
+        "revalidate-reason should support revalidateReason: \"on-demand\""
+      ]
     }
   },
   "rules": {
