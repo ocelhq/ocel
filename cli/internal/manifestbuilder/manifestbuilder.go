@@ -129,7 +129,31 @@ type identity struct {
 	id  string
 }
 
-func Build(slug string, domains map[string][]string, apps []App, declarations []Declaration, functions []Function, variables map[string][]Variable) (*deploymentsv1.Manifest, error) {
+type UnboundLinkError struct {
+	Link string
+}
+
+func (e *UnboundLinkError) Error() string {
+	return fmt.Sprintf(
+		"manifestbuilder: `links` binds %q, which nothing in this project declares — a link binds a resource your app already declares, so declare it or drop it from the list",
+		e.Link,
+	)
+}
+
+type AmbiguousLinkError struct {
+	Link   string
+	First  string
+	Second string
+}
+
+func (e *AmbiguousLinkError) Error() string {
+	return fmt.Sprintf(
+		"manifestbuilder: `links` binds %q, which names both %s and %s — one published record cannot back two resources, so rename one of them",
+		e.Link, e.First, e.Second,
+	)
+}
+
+func Build(slug string, domains map[string][]string, apps []App, declarations []Declaration, links []string, functions []Function, variables map[string][]Variable) (*deploymentsv1.Manifest, error) {
 	seen := make(map[identity]Declaration, len(declarations))
 	named := make(map[string]string, len(declarations)+len(functions))
 
@@ -182,6 +206,10 @@ func Build(slug string, domains map[string][]string, apps []App, declarations []
 		return strings.Compare(a.LogicalName, b.LogicalName)
 	})
 
+	if err := bindLinks(resources, links); err != nil {
+		return nil, err
+	}
+
 	manifestFunctions := make([]*deploymentsv1.ManifestFunction, 0, len(functions))
 	for _, f := range functions {
 		if f.App == "" || f.Name == "" {
@@ -223,6 +251,27 @@ func Build(slug string, domains map[string][]string, apps []App, declarations []
 		Apps:          buildApps(apps, functions, variables),
 		Usages:        usages,
 	}, nil
+}
+
+func bindLinks(resources []*deploymentsv1.ManifestResource, links []string) error {
+	byID := make(map[string][]*deploymentsv1.ManifestResource, len(resources))
+	for _, r := range resources {
+		id := r.GetResource().GetName()
+		byID[id] = append(byID[id], r)
+	}
+
+	for _, link := range links {
+		bound := byID[link]
+		switch len(bound) {
+		case 0:
+			return &UnboundLinkError{Link: link}
+		case 1:
+			bound[0].Linked = true
+		default:
+			return &AmbiguousLinkError{Link: link, First: bound[0].GetLogicalName(), Second: bound[1].GetLogicalName()}
+		}
+	}
+	return nil
 }
 
 func buildUsages(apps []App, declared map[identity]Declaration) ([]*deploymentsv1.ManifestUsage, error) {

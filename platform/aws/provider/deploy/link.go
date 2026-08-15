@@ -12,8 +12,10 @@ import (
 	"github.com/ocelhq/ocel/platform/aws/provider/vars/live"
 )
 
-type LinkPublisher interface {
-	PublishRecords(ctx context.Context, slug, environment string, records []vars.Record) (int, error)
+type LinkStore interface {
+	PublishRecords(ctx context.Context, slug, environment, owner string, records []vars.Record) (int, error)
+	ResolveRecords(ctx context.Context, slug, environment string, names []string) ([]vars.PublishedRecord, error)
+	PublishedNames(ctx context.Context, slug, class, environment string) ([]string, error)
 }
 
 var linkRecordShape = map[string][]string{
@@ -21,7 +23,14 @@ var linkRecordShape = map[string][]string{
 	naming.TokenBucket:   {"bucket"},
 }
 
-func appLinks(manifest *deploymentsv1.Manifest, app string) []live.Link {
+func linkName(r *deploymentsv1.ManifestResource) string {
+	if r.GetLinked() {
+		return r.GetResource().GetName()
+	}
+	return r.GetLogicalName()
+}
+
+func appLinks(manifest *deploymentsv1.Manifest, app string, consumed map[string]Consumed) []live.Link {
 	used := usedResources(manifest, app)
 	resources := manifest.GetResources()
 	out := make([]live.Link, 0, len(resources))
@@ -30,12 +39,17 @@ func appLinks(manifest *deploymentsv1.Manifest, app string) []live.Link {
 			continue
 		}
 		token := r.GetResource().GetType()
-		out = append(out, live.Link{
-			Name:       r.GetLogicalName(),
+		record := live.Link{
+			Name:       linkName(r),
 			Key:        functionEnvKey(token, r.GetResource().GetName()),
 			Type:       token,
 			Properties: linkRecordShape[token],
-		})
+		}
+		if r.GetLinked() {
+			published := consumed[r.GetLogicalName()].Record
+			record.Type, record.Granted = published.Type, published.Version
+		}
+		out = append(out, record)
 	}
 	return out
 }
@@ -49,7 +63,7 @@ func linkRecords(manifest *deploymentsv1.Manifest, links []*linksv1.Link) ([]var
 	out := make([]vars.Record, 0, len(links))
 	for _, r := range manifest.GetResources() {
 		link, ok := byName[r.GetLogicalName()]
-		if !ok {
+		if !ok || r.GetLinked() {
 			continue
 		}
 		properties, err := linkProperties(link)
@@ -104,7 +118,7 @@ func publishLinkRecords(ctx context.Context, cfg Config, manifest *deploymentsv1
 		}
 		return fmt.Errorf("this deploy provisions %d linked resources but reached no variable store to deliver their values through", len(records))
 	}
-	if _, err := cfg.Links.PublishRecords(ctx, manifest.GetSlug(), overrideEnvironment(cfg), records); err != nil {
+	if _, err := cfg.Links.PublishRecords(ctx, manifest.GetSlug(), overrideEnvironment(cfg), vars.OwnerOcel, records); err != nil {
 		return fmt.Errorf("deliver link values: %w", err)
 	}
 	return nil

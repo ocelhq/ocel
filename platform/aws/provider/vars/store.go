@@ -482,8 +482,8 @@ func (s *Store) query(ctx context.Context, pk, prefix string, ascending bool) ([
 	return s.scan(ctx, pk, prefix, ascending, false)
 }
 
-func (s *Store) queryConsistent(ctx context.Context, pk string) ([]item, error) {
-	return s.scan(ctx, pk, "", true, true)
+func (s *Store) queryConsistent(ctx context.Context, pk, prefix string) ([]item, error) {
+	return s.scan(ctx, pk, prefix, true, true)
 }
 
 func (s *Store) scan(ctx context.Context, pk, prefix string, ascending, consistent bool) ([]item, error) {

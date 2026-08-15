@@ -90,9 +90,12 @@ func (c Coordinate) validateDerived() error {
 	return nil
 }
 
-func (s *Store) PublishRecords(ctx context.Context, slug, environment string, records []Record) (int, error) {
+func (s *Store) PublishRecords(ctx context.Context, slug, environment, owner string, records []Record) (int, error) {
 	if slug == "" {
 		return 0, fmt.Errorf("a project slug is required")
+	}
+	if err := validateOwner(owner); err != nil {
+		return 0, err
 	}
 
 	sealed := make([][]byte, len(records))
@@ -143,7 +146,19 @@ func (s *Store) PublishRecords(ctx context.Context, slug, environment string, re
 		return 0, err
 	}
 
-	return s.reconcileLinkIndex(ctx, slug, environment, published)
+	return s.reconcileLinkIndex(ctx, slug, environment, owner, published)
+}
+
+const OwnerOcel = "OCEL"
+
+func validateOwner(owner string) error {
+	if owner == "" {
+		return fmt.Errorf("a publisher name is required: it is what keeps one publisher from pruning another's records")
+	}
+	if strings.Contains(owner, delimiter) {
+		return fmt.Errorf("publisher name %q may not contain %q", owner, delimiter)
+	}
+	return nil
 }
 
 func (r Record) bag() map[string]string {
@@ -204,8 +219,13 @@ func (s *Store) writePair(ctx context.Context, c Coordinate, sealed, row []byte,
 
 const linkAttempts = 5
 
-func (s *Store) reconcileLinkIndex(ctx context.Context, slug, environment string, published []string) (int, error) {
-	pk, sk := PartitionKey(slug, s.Class), linkIndexSortKey(environment)
+func (s *Store) reconcileLinkIndex(ctx context.Context, slug, environment, owner string, published []string) (int, error) {
+	pk, sk := PartitionKey(slug, s.Class), linkIndexSortKey(owner, environment)
+
+	claimed, err := s.claimedByOthers(ctx, pk, owner, environment)
+	if err != nil {
+		return 0, err
+	}
 
 	pruned := 0
 	for range linkAttempts {
@@ -215,7 +235,7 @@ func (s *Store) reconcileLinkIndex(ctx context.Context, slug, environment string
 		}
 
 		for _, stale := range previous.Names {
-			if slices.Contains(published, stale) {
+			if slices.Contains(published, stale) || claimed[stale] {
 				continue
 			}
 			removed, err := s.dropLink(ctx, slug, environment, stale)
@@ -246,6 +266,50 @@ func (s *Store) reconcileLinkIndex(ctx context.Context, slug, environment string
 		"another deploy of %s kept rewriting its published links while this one tried to record its own, %d times over. "+
 			"Two deploys of the same environment are racing; run them one after the other",
 		slug, linkAttempts)
+}
+
+func (s *Store) claimedByOthers(ctx context.Context, pk, owner, environment string) (map[string]bool, error) {
+	indexes, err := s.queryConsistent(ctx, pk, linkIndexPrefix)
+	if err != nil {
+		return nil, err
+	}
+
+	claimed := map[string]bool{}
+	for _, index := range indexes {
+		by, at, ok := parseLinkIndexSortKey(index.SK)
+		if !ok || by == owner || at != canonicalEnvironment(environment) {
+			continue
+		}
+		for _, name := range index.Names {
+			claimed[name] = true
+		}
+	}
+	return claimed, nil
+}
+
+func (s *Store) PublishedNames(ctx context.Context, slug, class, environment string) ([]string, error) {
+	if slug == "" {
+		return nil, fmt.Errorf("a project slug is required")
+	}
+	indexes, err := s.queryConsistent(ctx, PartitionKey(slug, class), linkIndexPrefix)
+	if err != nil {
+		return nil, err
+	}
+
+	names := map[string]bool{}
+	for _, index := range indexes {
+		if _, at, ok := parseLinkIndexSortKey(index.SK); !ok || !bindsTo(at, environment) {
+			continue
+		}
+		for _, name := range index.Names {
+			names[name] = true
+		}
+	}
+	return slices.Sorted(maps.Keys(names)), nil
+}
+
+func bindsTo(at, environment string) bool {
+	return at == canonicalEnvironment(environment) || at == classWideEnvironment
 }
 
 func (s *Store) dropLink(ctx context.Context, slug, environment, link string) (int, error) {
@@ -330,7 +394,7 @@ func (s *Store) resolveRecord(ctx context.Context, slug, environment, name strin
 }
 
 func (s *Store) readPair(ctx context.Context, slug, environment, name string) (PublishedRecord, error) {
-	stored, err := s.queryConsistent(ctx, linkCoordinate(slug, name, environment).partition(s.Class))
+	stored, err := s.queryConsistent(ctx, linkCoordinate(slug, name, environment).partition(s.Class), "")
 	if err != nil {
 		return PublishedRecord{}, err
 	}

@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"reflect"
 	"slices"
 	"strings"
@@ -20,13 +21,59 @@ import (
 type recordingPublisher struct {
 	slug        string
 	environment string
+	owner       string
 	records     []vars.Record
 	err         error
+
+	published map[string][]string
+	resolved  map[string]vars.PublishedRecord
 }
 
-func (p *recordingPublisher) PublishRecords(_ context.Context, slug, environment string, records []vars.Record) (int, error) {
-	p.slug, p.environment, p.records = slug, environment, records
+func (p *recordingPublisher) PublishRecords(_ context.Context, slug, environment, owner string, records []vars.Record) (int, error) {
+	p.slug, p.environment, p.owner, p.records = slug, environment, owner, records
 	return 0, p.err
+}
+
+func (p *recordingPublisher) PublishedNames(_ context.Context, _, class, _ string) ([]string, error) {
+	names := slices.Clone(p.published[class])
+	slices.Sort(names)
+	return names, nil
+}
+
+func (p *recordingPublisher) ResolveRecords(_ context.Context, _, environment string, names []string) ([]vars.PublishedRecord, error) {
+	out := make([]vars.PublishedRecord, 0, len(names))
+	for _, name := range names {
+		record, ok := p.resolved[name]
+		if !ok {
+			record, ok = publishedFixtures[name]
+		}
+		if !ok {
+			return nil, fmt.Errorf("link %s is not published: %w", name, vars.ErrNotPublished)
+		}
+		record.Record.Name, record.Environment = name, environment
+		out = append(out, record)
+	}
+	return out, nil
+}
+
+var publishedFixtures = map[string]vars.PublishedRecord{
+	"main": {
+		Record: vars.Record{
+			Type:       "sst:aws.Postgres",
+			Properties: map[string]string{"connectionString": "postgres://sst/main"},
+			Grants: []vars.Grant{
+				{Label: "connect", Actions: []string{"rds-db:connect"}, Resources: []string{"arn:aws:rds-db:us-east-1:1:dbuser:db-main/app"}},
+			},
+		},
+		Version: 4,
+	},
+	"uploads": {
+		Record: vars.Record{
+			Type:       naming.TokenBucket,
+			Properties: map[string]string{"bucket": "sst-uploads"},
+		},
+		Version: 1,
+	},
 }
 
 func linkedManifest() *deploymentsv1.Manifest {
@@ -176,7 +223,7 @@ func TestPublishLinkRecords(t *testing.T) {
 
 func TestAppLinks(t *testing.T) {
 	t.Parallel()
-	got := appLinks(linkedManifest(), "api")
+	got := appLinks(linkedManifest(), "api", nil)
 	want := []live.Link{
 		{Name: "db--main", Key: "OCEL_RESOURCE_POSTGRES_main", Type: naming.TokenPostgres, Properties: []string{"connectionString"}},
 		{Name: "bucket--uploads", Key: "OCEL_RESOURCE_BUCKET_uploads", Type: naming.TokenBucket, Properties: []string{"bucket"}},
@@ -185,17 +232,17 @@ func TestAppLinks(t *testing.T) {
 		t.Errorf("appLinks = %+v, want %+v — the addresses and the shape this app was built to read come from the manifest, before anything is provisioned", got, want)
 	}
 
-	if got := appLinks(linkedManifest(), "web"); !reflect.DeepEqual(got, want[:1]) {
+	if got := appLinks(linkedManifest(), "web", nil); !reflect.DeepEqual(got, want[:1]) {
 		t.Errorf("appLinks(web) = %+v, want %+v: an app is handed an address only for what its usage edges name", got, want[:1])
 	}
-	if got := appLinks(linkedManifest(), "cron"); len(got) != 0 {
+	if got := appLinks(linkedManifest(), "cron", nil); len(got) != 0 {
 		t.Errorf("appLinks(cron) = %+v, want nothing for an app carrying no usage edge at all", got)
 	}
 }
 
 func TestPublishedRecordsMeetWhatTheManifestDeclares(t *testing.T) {
 	t.Parallel()
-	links := appLinks(linkedManifest(), "api")
+	links := appLinks(linkedManifest(), "api", nil)
 	published, err := publishedRecords(t, links)
 	if err != nil {
 		t.Fatalf("linkRecords: %v", err)
@@ -221,7 +268,7 @@ func TestPublishedRecordsMeetWhatTheManifestDeclares(t *testing.T) {
 func TestLinkedAppRendersNoCredential(t *testing.T) {
 	t.Parallel()
 	app := &deploymentsv1.ManifestApp{Name: "api"}
-	bundle, err := renderAppBundle(liveConfig(), "shop", app, appLinks(linkedManifest(), "api"))
+	bundle, err := renderAppBundle(liveConfig(), "shop", app, appLinks(linkedManifest(), "api", nil))
 	if err != nil {
 		t.Fatalf("renderAppBundle: %v", err)
 	}
@@ -263,7 +310,7 @@ func TestDeliveryScopesToTheAppsThatUseTheResource(t *testing.T) {
 	cfg := liveConfig()
 	cfg.Slug = "shop"
 	manifest := linkedManifest()
-	bundles, err := renderAppBundles(cfg, manifest)
+	bundles, err := renderAppBundles(cfg, manifest, nil)
 	if err != nil {
 		t.Fatalf("renderAppBundles: %v", err)
 	}

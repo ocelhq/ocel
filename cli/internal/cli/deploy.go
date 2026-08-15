@@ -275,7 +275,7 @@ func collectAndBuildManifest(ctx context.Context, d deps, cfg *projectconfig.Con
 		return nil, err
 	}
 
-	return manifestbuilder.Build(cfg.Slug, cfg.Domains, toApps(cfg.Apps, usages), toDeclarations(cfg.Dir, resources), functions, variablesByApp(variables, functions))
+	return manifestbuilder.Build(cfg.Slug, cfg.Domains, toApps(cfg.Apps, usages), toDeclarations(cfg.Dir, resources), cfg.Links, functions, variablesByApp(variables, functions))
 }
 
 const maxCapturedDiscoveryOutput = 4096

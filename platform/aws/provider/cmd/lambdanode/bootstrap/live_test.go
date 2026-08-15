@@ -956,3 +956,52 @@ func TestLiveStalenessBound(t *testing.T) {
 		}
 	})
 }
+
+func TestGrantLag(t *testing.T) {
+	bound := func(granted int64) live.Link {
+		link := postgresLink()
+		link.Granted = granted
+		return link
+	}
+	published := func(version int64) []vars.PublishedRecord {
+		return []vars.PublishedRecord{{Record: vars.Record{Name: "main", Type: "ocel:postgres"}, Version: version}}
+	}
+
+	t.Run("names the publishes an app's grants are behind", func(t *testing.T) {
+		got := grantLag([]live.Link{bound(3)}, published(5))
+		if len(got) != 1 {
+			t.Fatalf("grantLag = %v, want the lag reported once", got)
+		}
+		for _, want := range []string{"main", "2 more time", "version 3", "version 5"} {
+			if !strings.Contains(got[0].Message, want) {
+				t.Errorf("report = %q, want it to carry %q", got[0].Message, want)
+			}
+		}
+	})
+
+	t.Run("says nothing while the grants match the record", func(t *testing.T) {
+		if got := grantLag([]live.Link{bound(5)}, published(5)); len(got) != 0 {
+			t.Errorf("grantLag = %v, want silence when the running grants came from the live version", got)
+		}
+	})
+
+	t.Run("says nothing for a link this deploy provisioned and granted in one pass", func(t *testing.T) {
+		if got := grantLag([]live.Link{postgresLink()}, published(9)); len(got) != 0 {
+			t.Errorf("grantLag = %v, want no lag where publish and grant are the same act", got)
+		}
+	})
+
+	t.Run("repeats itself only when the record moves again", func(t *testing.T) {
+		fetcher := &storeFetcher{links: []live.Link{bound(3)}}
+
+		if got := fetcher.unreportedGrantLag(published(5)); len(got) != 1 {
+			t.Fatalf("first refresh reported %v, want the lag once", got)
+		}
+		if got := fetcher.unreportedGrantLag(published(5)); len(got) != 0 {
+			t.Errorf("second refresh reported %v, want a standing lag reported once, not on every refresh", got)
+		}
+		if got := fetcher.unreportedGrantLag(published(6)); len(got) != 1 {
+			t.Errorf("a further publish reported %v, want the widened lag named again", got)
+		}
+	})
+}

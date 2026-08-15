@@ -23,6 +23,7 @@ const (
 	tokenVersion = "VERSION"
 	tokenLinks   = "LINKS"
 	tokenRecord  = "RECORD"
+	tokenOwner   = "OWNER"
 
 	linkValueKey = "PROPERTIES"
 
@@ -132,8 +133,16 @@ func parsePartitionKey(pk string) (string, error) {
 
 const linkIndexPrefix = tokenLinks + delimiter
 
-func linkIndexSortKey(environment string) string {
-	return linkIndexPrefix + tokenEnv + delimiter + canonicalEnvironment(environment)
+func linkIndexSortKey(owner, environment string) string {
+	return linkIndexPrefix + tokenOwner + delimiter + owner + delimiter + tokenEnv + delimiter + canonicalEnvironment(environment)
+}
+
+func parseLinkIndexSortKey(sk string) (owner, environment string, ok bool) {
+	parts := strings.Split(sk, delimiter)
+	if len(parts) != 5 || parts[0] != tokenLinks || parts[1] != tokenOwner || parts[3] != tokenEnv {
+		return "", "", false
+	}
+	return parts[2], parts[4], true
 }
 
 func recordSortKey(environment string) string {

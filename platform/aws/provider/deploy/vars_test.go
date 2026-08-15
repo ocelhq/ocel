@@ -535,7 +535,7 @@ func TestRenderBakedBundles(t *testing.T) {
 			},
 		}}
 
-		bundles, err := renderAppBundles(liveConfig(), manifest)
+		bundles, err := renderAppBundles(liveConfig(), manifest, nil)
 		if err != nil {
 			t.Fatalf("renderAppBundles: %v", err)
 		}
@@ -616,7 +616,7 @@ func TestBakedDelivery(t *testing.T) {
 		}
 		manifest.Functions[0].ArtifactPath = filepath.Base(dir)
 
-		bundles, err := renderAppBundles(liveConfig(), manifest)
+		bundles, err := renderAppBundles(liveConfig(), manifest, nil)
 		if err != nil {
 			t.Fatalf("renderAppBundles: %v", err)
 		}

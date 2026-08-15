@@ -133,11 +133,22 @@ func usedResources(manifest *deploymentsv1.Manifest, app string) map[string]bool
 	return used
 }
 
-func worstCaseResourcePolicy(r *deploymentsv1.ManifestResource) (string, error) {
+func billedResourcePolicy(r *deploymentsv1.ManifestResource, consumed map[string]Consumed) (string, error) {
+	if r.GetLinked() {
+		return linkPolicyDocument(r.GetLogicalName(), publishedGrants(consumed[r.GetLogicalName()]))
+	}
 	if r.GetBucket() == nil {
 		return "", nil
 	}
 	return linkPolicyDocument(r.GetLogicalName(), bucketGrants(strings.Repeat("b", maxS3BucketNameLen)))
+}
+
+func publishedGrants(c Consumed) []*linksv1.Grant {
+	out := make([]*linksv1.Grant, 0, len(c.Record.Grants))
+	for _, g := range c.Record.Grants {
+		out = append(out, &linksv1.Grant{Actions: g.Actions, Resources: g.Resources, Label: g.Label})
+	}
+	return out
 }
 
 type PolicyBillItem struct {
@@ -176,10 +187,10 @@ func (e *PolicyBudgetError) Error() string {
 	return b.String()
 }
 
-func checkInlinePolicyBudget(manifest *deploymentsv1.Manifest) error {
+func checkInlinePolicyBudget(manifest *deploymentsv1.Manifest, consumed map[string]Consumed) error {
 	costs := make(map[string]PolicyBillItem, len(manifest.GetResources()))
 	for _, r := range manifest.GetResources() {
-		policy, err := worstCaseResourcePolicy(r)
+		policy, err := billedResourcePolicy(r, consumed)
 		if err != nil {
 			return err
 		}

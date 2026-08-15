@@ -224,7 +224,7 @@ func TestAppBundle(t *testing.T) {
 			}},
 		}
 
-		bundles, err := renderAppBundles(liveConfig(), manifest)
+		bundles, err := renderAppBundles(liveConfig(), manifest, nil)
 		if err != nil {
 			t.Fatalf("renderAppBundles: %v", err)
 		}
@@ -371,7 +371,7 @@ func TestLiveDelivery(t *testing.T) {
 		cfg.ArtifactBucket = "artifacts"
 		cfg.Uploader = uploader
 
-		bundles, err := renderAppBundles(cfg, manifest)
+		bundles, err := renderAppBundles(cfg, manifest, nil)
 		if err != nil {
 			t.Fatalf("renderAppBundles: %v", err)
 		}

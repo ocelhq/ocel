@@ -34,9 +34,12 @@ type storeFetcher struct {
 	environment string
 	cells       []vars.Coordinate
 	links       []live.Link
+
+	mu       sync.Mutex
+	reported map[string]int64
 }
 
-func (f storeFetcher) fetchLive(ctx context.Context) (map[string]string, error) {
+func (f *storeFetcher) fetchLive(ctx context.Context) (map[string]string, error) {
 	values, err := f.store.Reveal(ctx, f.slug, f.cells)
 	if err != nil {
 		return nil, err
@@ -45,7 +48,57 @@ func (f storeFetcher) fetchLive(ctx context.Context) (map[string]string, error) 
 	if err != nil {
 		return nil, err
 	}
+	for _, lag := range f.unreportedGrantLag(records) {
+		fmt.Fprintln(os.Stderr, "ocel: "+lag)
+	}
 	return merged(values, f.links, records), nil
+}
+
+func (f *storeFetcher) unreportedGrantLag(records []vars.PublishedRecord) []string {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.reported == nil {
+		f.reported = map[string]int64{}
+	}
+
+	var out []string
+	for _, lag := range grantLag(f.links, records) {
+		if f.reported[lag.Name] == lag.Version {
+			continue
+		}
+		f.reported[lag.Name] = lag.Version
+		out = append(out, lag.Message)
+	}
+	return out
+}
+
+type lagged struct {
+	Name    string
+	Version int64
+	Message string
+}
+
+func grantLag(links []live.Link, records []vars.PublishedRecord) []lagged {
+	var out []lagged
+	for i, record := range records {
+		granted := links[i].Granted
+		if granted == 0 || record.Version <= granted {
+			continue
+		}
+		out = append(out, lagged{Name: record.Name, Version: record.Version, Message: fmt.Sprintf(
+			"link %s has been published %s since this deployment's IAM grants were rendered, from version %d. "+
+				"Its values are live and current; its permissions are not, and ocel widens no permission on its own — deploy again to move them to version %d",
+			record.Name, republished(record.Version-granted), granted, record.Version,
+		)})
+	}
+	return out
+}
+
+func republished(n int64) string {
+	if n == 1 {
+		return "once more"
+	}
+	return fmt.Sprintf("%d more times", n)
 }
 
 func linkNames(links []live.Link) []string {
@@ -266,7 +319,7 @@ func resolveLiveValues(ctx context.Context) (*liveValues, error) {
 	if err != nil {
 		return nil, fmt.Errorf("load aws config: %w", err)
 	}
-	return newLiveValues(storeFetcher{
+	return newLiveValues(&storeFetcher{
 		store: &vars.Store{
 			Dynamo: dynamodb.NewFromConfig(cfg),
 			KMS:    kms.NewFromConfig(cfg),

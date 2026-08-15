@@ -114,10 +114,10 @@ func (b appBundle) overlay() map[string][]byte {
 
 func (b appBundle) hasLive() bool { return len(b.Live) > 0 }
 
-func renderAppBundles(cfg Config, manifest *deploymentsv1.Manifest) (map[string]appBundle, error) {
+func renderAppBundles(cfg Config, manifest *deploymentsv1.Manifest, consumed map[string]Consumed) (map[string]appBundle, error) {
 	bundles := make(map[string]appBundle, len(manifest.GetApps()))
 	for _, app := range manifest.GetApps() {
-		bundle, err := renderAppBundle(cfg, manifest.GetSlug(), app, appLinks(manifest, app.GetName()))
+		bundle, err := renderAppBundle(cfg, manifest.GetSlug(), app, appLinks(manifest, app.GetName(), consumed))
 		if err != nil {
 			return nil, err
 		}

@@ -149,6 +149,8 @@ message ManifestResource {
     resources.v1.PostgresConfig postgres = 3;
     resources.v1.BucketConfig bucket = 4;
   }
+
+  bool linked = 5;
 }
 
 message DeployRequest {

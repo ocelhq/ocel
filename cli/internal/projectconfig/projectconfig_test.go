@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -420,6 +421,33 @@ export default {
 				}
 			},
 		},
+		{
+			name: "carries the links binding through unchanged",
+			config: `
+export default {
+  slug: "test-app",
+  links: ["main", "uploads"],
+};
+`,
+			check: func(t *testing.T, root string, cfg *Config) {
+				if !slices.Equal(cfg.Links, []string{"main", "uploads"}) {
+					t.Fatalf("Links = %v, want the listed names in the order they were written", cfg.Links)
+				}
+			},
+		},
+		{
+			name: "a config listing no links binds none",
+			config: `
+export default {
+  slug: "test-app",
+};
+`,
+			check: func(t *testing.T, root string, cfg *Config) {
+				if len(cfg.Links) != 0 {
+					t.Fatalf("Links = %v, want nothing bound where nothing is listed", cfg.Links)
+				}
+			},
+		},
 	}
 
 	for _, tc := range accepted {
@@ -524,6 +552,26 @@ export default {
 };
 `,
 			wantErr: []string{"/shared"},
+		},
+		{
+			name: "rejects a link listed twice",
+			config: `
+export default {
+  slug: "test-app",
+  links: ["main", "main"],
+};
+`,
+			wantErr: []string{"twice", "main"},
+		},
+		{
+			name: "rejects a link name carrying the key separator",
+			config: `
+export default {
+  slug: "test-app",
+  links: ["main#db"],
+};
+`,
+			wantErr: []string{"main#db"},
 		},
 	}
 

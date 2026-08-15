@@ -224,7 +224,7 @@ func TestInlinePolicyBudgetPreflight(t *testing.T) {
 	t.Run("a modest app passes", func(t *testing.T) {
 		t.Parallel()
 
-		if err := checkInlinePolicyBudget(grantsManifest()); err != nil {
+		if err := checkInlinePolicyBudget(grantsManifest(), nil); err != nil {
 			t.Fatalf("checkInlinePolicyBudget = %v, want nil", err)
 		}
 	})
@@ -242,7 +242,7 @@ func TestInlinePolicyBudgetPreflight(t *testing.T) {
 			})
 			manifest.Usages = append(manifest.Usages, &deploymentsv1.ManifestUsage{App: "web", Resource: name})
 		}
-		if err := checkInlinePolicyBudget(manifest); err != nil {
+		if err := checkInlinePolicyBudget(manifest, nil); err != nil {
 			t.Fatalf("checkInlinePolicyBudget = %v, want nil for grant-free links", err)
 		}
 	})
@@ -262,7 +262,7 @@ func TestInlinePolicyBudgetPreflight(t *testing.T) {
 		}
 
 		var budget *PolicyBudgetError
-		err := checkInlinePolicyBudget(manifest)
+		err := checkInlinePolicyBudget(manifest, nil)
 		if !errors.As(err, &budget) {
 			t.Fatalf("checkInlinePolicyBudget = %v, want a *PolicyBudgetError", err)
 		}
@@ -309,7 +309,7 @@ func TestInlinePolicyBudgetPreflight(t *testing.T) {
 		}
 
 		var budget *PolicyBudgetError
-		if err := checkInlinePolicyBudget(manifest); !errors.As(err, &budget) {
+		if err := checkInlinePolicyBudget(manifest, nil); !errors.As(err, &budget) {
 			t.Fatalf("checkInlinePolicyBudget = %v, want a *PolicyBudgetError", err)
 		}
 		if len(budget.Apps) != 2 || budget.Apps[0].App != "admin" || budget.Apps[1].App != "web" {
@@ -348,7 +348,7 @@ func TestInlinePolicyBudgetPreflight(t *testing.T) {
 		if len(policies) != 1 {
 			t.Fatalf("policies = %+v, want the duplicated link rendered once", policies)
 		}
-		if err := checkInlinePolicyBudget(manifest); err != nil {
+		if err := checkInlinePolicyBudget(manifest, nil); err != nil {
 			t.Fatalf("checkInlinePolicyBudget = %v, want duplicated usages billed once", err)
 		}
 	})
@@ -382,9 +382,9 @@ func TestInlinePolicyBudgetPreflight(t *testing.T) {
 	t.Run("the reserve covers the platform's own policies at the fullest role the budget admits", func(t *testing.T) {
 		t.Parallel()
 
-		worst, err := worstCaseResourcePolicy(grantsManifest().GetResources()[0])
+		worst, err := billedResourcePolicy(grantsManifest().GetResources()[0], nil)
 		if err != nil {
-			t.Fatalf("worstCaseResourcePolicy: %v", err)
+			t.Fatalf("billedResourcePolicy: %v", err)
 		}
 
 		links := make([]string, 0, policyBudgetChars/len(worst))
@@ -433,9 +433,9 @@ func TestInlinePolicyBudgetPreflight(t *testing.T) {
 		if err != nil {
 			t.Fatalf("appLinkPolicies: %v", err)
 		}
-		worst, err := worstCaseResourcePolicy(grantsManifest().GetResources()[0])
+		worst, err := billedResourcePolicy(grantsManifest().GetResources()[0], nil)
 		if err != nil {
-			t.Fatalf("worstCaseResourcePolicy: %v", err)
+			t.Fatalf("billedResourcePolicy: %v", err)
 		}
 		if len(worst) < len(policies[0].Policy) {
 			t.Fatalf("worst case is %d characters, under the %d actually rendered", len(worst), len(policies[0].Policy))

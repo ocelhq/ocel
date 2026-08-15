@@ -1,0 +1,265 @@
+package deploy
+
+import (
+	"context"
+	"fmt"
+	"maps"
+	"slices"
+	"strings"
+
+	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
+	linksv1 "github.com/ocelhq/ocel/pkg/proto/links/v1"
+	"github.com/ocelhq/ocel/platform/aws/provider/vars"
+)
+
+type Consumed struct {
+	Resource string
+	Record   vars.PublishedRecord
+}
+
+type UnpublishedLinkError struct {
+	Links       []string
+	Class       string
+	Environment string
+	Siblings    []string
+	FoundIn     map[string][]string
+}
+
+func (e *UnpublishedLinkError) Error() string {
+	var b strings.Builder
+	fmt.Fprintf(&b,
+		"`links` binds %s, and nothing has published a record under %s to %s. "+
+			"Ocel never runs your infrastructure tool for you: run it, then deploy again",
+		quoteAll(e.Links), thatName(len(e.Links)), describeCoordinate(e.Class, e.Environment),
+	)
+	for _, link := range e.Links {
+		if classes := e.FoundIn[link]; len(classes) > 0 {
+			fmt.Fprintf(&b, "\n\n%q is published to %s instead. A publisher writes to one coordinate: point one at %s as well",
+				link, strings.Join(classes, " and "), e.Class)
+		}
+	}
+	if len(e.Siblings) == 0 {
+		fmt.Fprintf(&b, "\n\nNothing at all is published to %s.", describeCoordinate(e.Class, e.Environment))
+		return b.String()
+	}
+	fmt.Fprintf(&b, "\n\nPublished to %s: %s.", describeCoordinate(e.Class, e.Environment), strings.Join(e.Siblings, ", "))
+	return b.String()
+}
+
+type HandoverError struct {
+	Links []string
+	Stack string
+}
+
+func (e *HandoverError) Error() string {
+	return fmt.Sprintf(
+		"`links` binds %s, which ocel provisions in this environment today — stack %s still holds what it provisioned under %s. "+
+			"Binding it hands ownership to your own infrastructure, and this deploy would delete ocel's copy: a database is torn down with no final snapshot, and its data goes with it. "+
+			"Ocel hands no live resource over on its own. Back the data up, drop %s from the resource declarations and from `links`, deploy once to let ocel release it, then declare it again with the link in place",
+		quoteAll(e.Links), e.Stack, thatName(len(e.Links)), quoteAll(e.Links),
+	)
+}
+
+func handedOver(manifest *deploymentsv1.Manifest, provisioned map[string]bool, stack string) error {
+	var handed []string
+	for _, r := range linkedResources(manifest) {
+		if provisioned[r.GetLogicalName()] {
+			handed = append(handed, r.GetResource().GetName())
+		}
+	}
+	if len(handed) == 0 {
+		return nil
+	}
+	return &HandoverError{Links: handed, Stack: stack}
+}
+
+type LinkShapeError struct {
+	Link    string
+	Type    string
+	Missing []string
+	Carries []string
+}
+
+func (e *LinkShapeError) Error() string {
+	return fmt.Sprintf(
+		"`links` binds %q to a record that carries no %s, and a %s is read through %s. "+
+			"Every app that uses %q would fail at its first cold start, so this deploy stops here. "+
+			"The record carries %s — republish it with %s",
+		e.Link, strings.Join(e.Missing, ", "), e.Type, quoteAll(linkRecordShape[e.Type]),
+		e.Link, carried(e.Carries), strings.Join(e.Missing, ", "),
+	)
+}
+
+func carried(properties []string) string {
+	if len(properties) == 0 {
+		return "no properties at all"
+	}
+	return strings.Join(properties, ", ")
+}
+
+func readableAs(record vars.PublishedRecord, token string) error {
+	var missing []string
+	for _, property := range linkRecordShape[token] {
+		if _, carries := record.Properties[property]; !carries {
+			missing = append(missing, property)
+		}
+	}
+	if len(missing) == 0 {
+		return nil
+	}
+	return &LinkShapeError{
+		Link:    record.Name,
+		Type:    token,
+		Missing: missing,
+		Carries: slices.Sorted(maps.Keys(record.Properties)),
+	}
+}
+
+func thatName(n int) string {
+	if n == 1 {
+		return "that name"
+	}
+	return "those names"
+}
+
+func quoteAll(names []string) string {
+	quoted := make([]string, 0, len(names))
+	for _, n := range names {
+		quoted = append(quoted, fmt.Sprintf("%q", n))
+	}
+	return strings.Join(quoted, ", ")
+}
+
+func describeCoordinate(class, environment string) string {
+	if environment == "" {
+		return class
+	}
+	return class + "/" + environment
+}
+
+func linkedResources(manifest *deploymentsv1.Manifest) []*deploymentsv1.ManifestResource {
+	var out []*deploymentsv1.ManifestResource
+	for _, r := range manifest.GetResources() {
+		if r.GetLinked() {
+			out = append(out, r)
+		}
+	}
+	return out
+}
+
+func consumeLinks(ctx context.Context, cfg Config, manifest *deploymentsv1.Manifest, warn func(string)) (map[string]Consumed, error) {
+	linked := linkedResources(manifest)
+	if cfg.Links == nil {
+		if len(linked) == 0 {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("this deploy binds %d linked resources but reached no variable store to read their records from", len(linked))
+	}
+
+	environment := overrideEnvironment(cfg)
+	published, err := cfg.Links.PublishedNames(ctx, manifest.GetSlug(), cfg.VarsClass, environment)
+	if err != nil {
+		return nil, err
+	}
+	warnShadowedProvisioning(cfg, manifest, published, warn)
+	if len(linked) == 0 {
+		return nil, nil
+	}
+
+	names := make([]string, 0, len(linked))
+	var missing []string
+	for _, r := range linked {
+		name := r.GetResource().GetName()
+		names = append(names, name)
+		if !slices.Contains(published, name) {
+			missing = append(missing, name)
+		}
+	}
+	if len(missing) > 0 {
+		return nil, cfg.refuseUnpublished(ctx, manifest.GetSlug(), environment, missing, published)
+	}
+
+	records, err := cfg.Links.ResolveRecords(ctx, manifest.GetSlug(), environment, names)
+	if err != nil {
+		return nil, err
+	}
+	for i, r := range linked {
+		if err := readableAs(records[i], r.GetResource().GetType()); err != nil {
+			return nil, err
+		}
+	}
+
+	out := make(map[string]Consumed, len(linked))
+	for i, r := range linked {
+		out[r.GetLogicalName()] = Consumed{Resource: r.GetLogicalName(), Record: records[i]}
+	}
+	return out, nil
+}
+
+func (cfg Config) refuseUnpublished(ctx context.Context, slug, environment string, missing, published []string) error {
+	found := map[string][]string{}
+	for _, class := range cfg.VarsSiblingClasses {
+		if class == cfg.VarsClass {
+			continue
+		}
+		elsewhere := cfg.publishedOrNothing(ctx, slug, class, environment)
+		for _, name := range missing {
+			if slices.Contains(elsewhere, name) {
+				found[name] = append(found[name], class)
+			}
+		}
+	}
+	return &UnpublishedLinkError{
+		Links:       missing,
+		Class:       cfg.VarsClass,
+		Environment: environment,
+		Siblings:    published,
+		FoundIn:     found,
+	}
+}
+
+func (cfg Config) publishedOrNothing(ctx context.Context, slug, class, environment string) []string {
+	names, err := cfg.Links.PublishedNames(ctx, slug, class, environment)
+	if err != nil {
+		return nil
+	}
+	return names
+}
+
+func warnShadowedProvisioning(cfg Config, manifest *deploymentsv1.Manifest, published []string, warn func(string)) {
+	for _, r := range manifest.GetResources() {
+		name := r.GetResource().GetName()
+		if r.GetLinked() || !slices.Contains(published, name) {
+			continue
+		}
+		warn(fmt.Sprintf(
+			"a link named %q is already published to %s, and this deploy provisions %s beside it. "+
+				"Ocel binds neither to the other on its own: add %q to `links` to consume the published record instead",
+			name, describeCoordinate(cfg.VarsClass, overrideEnvironment(cfg)), r.GetLogicalName(), name,
+		))
+	}
+}
+
+func consumedLinks(consumed map[string]Consumed) []*linksv1.Link {
+	out := make([]*linksv1.Link, 0, len(consumed))
+	for _, name := range slices.Sorted(maps.Keys(consumed)) {
+		c := consumed[name]
+		out = append(out, &linksv1.Link{
+			Name:       c.Resource,
+			Type:       c.Record.Type,
+			Properties: c.Record.Properties,
+			Grants:     publishedGrants(c),
+		})
+	}
+	return out
+}
+
+func reportGrantVersions(consumed map[string]Consumed, log func(string)) {
+	for _, name := range slices.Sorted(maps.Keys(consumed)) {
+		c := consumed[name]
+		log(fmt.Sprintf(
+			"link %s is published at version %d; the apps that use it are deployed with the grants that version carries",
+			c.Record.Name, c.Record.Version,
+		))
+	}
+}
