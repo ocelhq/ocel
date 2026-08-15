@@ -1,0 +1,11 @@
+{
+  "name": "db--main",
+  "type": "ocel:postgres",
+  "properties": {
+    "host": "shop-prod-main-r1a2b3c4.cluster-cxyz.us-east-1.rds.amazonaws.com",
+    "port": "5433",
+    "database": "fixture_catalog",
+    "username": "fixture_operator",
+    "password": "fixture-password-not-a-secret"
+  }
+}

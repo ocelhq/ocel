@@ -1,0 +1,7 @@
+{
+  "name": "bucket--uploads",
+  "type": "ocel:bucket",
+  "properties": {
+    "bucket": "shop-prod-uploads-t7d8e9f0"
+  }
+}
