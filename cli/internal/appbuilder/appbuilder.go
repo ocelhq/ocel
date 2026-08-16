@@ -83,7 +83,7 @@ const adapterPathEnv = "NEXT_ADAPTER_PATH"
 
 const appFolderEnv = "OCEL_APP_FOLDER"
 
-var buildOwnedNames = []string{adapterPathEnv, appFolderEnv, "PATH"}
+var buildOwnedNames = []string{adapterPathEnv, appFolderEnv, deploymentIDEnv, "PATH"}
 
 func checkVariableNames(vars map[string]string) error {
 	for _, name := range buildOwnedNames {
@@ -150,6 +150,18 @@ func (b Builder) Build(ctx context.Context, cfg *projectconfig.Config, envByApp 
 		return fmt.Errorf("create %s: %w", relOutput, err)
 	}
 
+	deploymentIDs := make(map[string]string, len(cfg.Apps))
+	for _, a := range cfg.Apps {
+		id, err := mintDeploymentID()
+		if err != nil {
+			return err
+		}
+		if err := writeDeploymentID(cfg.Dir, a.Name, id); err != nil {
+			return err
+		}
+		deploymentIDs[a.Name] = id
+	}
+
 	builderPath := node.BuilderPath(cfg.Dir)
 	if _, err := os.Stat(builderPath); err != nil {
 		return fmt.Errorf("node builder not found at %s: %w", builderPath, err)
@@ -162,7 +174,7 @@ func (b Builder) Build(ctx context.Context, cfg *projectconfig.Config, envByApp 
 			Cwd:        filepath.Join(cfg.Dir, a.Path),
 			Entrypoint: a.Entrypoint,
 			Framework:  a.Framework,
-			Env:        envByApp[a.Name],
+			Env:        withDeploymentID(envByApp[a.Name], deploymentIDs[a.Name]),
 			Folder:     a.Folder,
 		})
 	}
@@ -175,10 +187,45 @@ func (b Builder) Build(ctx context.Context, cfg *projectconfig.Config, envByApp 
 	if run == nil {
 		run = runNode
 	}
-	if err := run(ctx, builderPath, builderEnv(node.AdapterPath(cfg.Dir), envByApp[rootAppEnv]), payload, stderr); err != nil {
+	rootEnv := envByApp[rootAppEnv]
+	detectedID := ""
+	if len(cfg.Apps) == 0 {
+		id, err := mintDeploymentID()
+		if err != nil {
+			return err
+		}
+		detectedID = id
+		rootEnv = withDeploymentID(rootEnv, id)
+	}
+	if err := run(ctx, builderPath, builderEnv(node.AdapterPath(cfg.Dir), rootEnv), payload, stderr); err != nil {
 		return err
 	}
-	return bundlePlanned(outputDir, stderr)
+	if err := bundlePlanned(outputDir, stderr); err != nil {
+		return err
+	}
+	return recordDetectedDeploymentID(cfg.Dir, outputDir, detectedID)
+}
+
+func recordDetectedDeploymentID(projectDir, outputDir, id string) error {
+	if id == "" {
+		return nil
+	}
+	entries, err := os.ReadDir(filepath.Join(outputDir, appsDirName))
+	if err != nil {
+		if errors.Is(err, fs.ErrNotExist) {
+			return nil
+		}
+		return err
+	}
+	for _, entry := range entries {
+		if !entry.IsDir() {
+			continue
+		}
+		if err := writeDeploymentID(projectDir, entry.Name(), id); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func bundlePlanned(outputDir string, stderr io.Writer) error {

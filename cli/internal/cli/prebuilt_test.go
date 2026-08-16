@@ -54,6 +54,7 @@ func writePrebuiltFunction(t *testing.T, root, app, route string) {
 }
 
 func recordBuildApp(d *deps) *bool {
+	stubRecordedDeploymentIDs(d)
 	ran := false
 	d.buildApp = func(context.Context, *projectconfig.Config, map[string]map[string]string, io.Writer) error {
 		ran = true
@@ -187,11 +188,47 @@ func TestCollectAndBuildManifest(t *testing.T) {
 		}
 	})
 
+	t.Run("--prebuilt carries the id the output tree recorded for each app", func(t *testing.T) {
+		root := t.TempDir()
+		writePrebuiltFunction(t, root, "api", "index")
+		recorded := "d1a2b3c4d5e6f708192a3b4c5d6e7f80"
+		writeFile(t, filepath.Join(root, ".ocel", "output", "apps", "api", "deployment-id"), recorded+"\n")
+		d := defaultDeps()
+
+		s, _ := newBuildManifestSession(t)
+		cfg := prebuiltConfig(root)
+		manifest, err := collectAndBuildManifest(context.Background(), d, cfg, noGate(cfg), true, s)
+		if err != nil {
+			t.Fatalf("collectAndBuildManifest: %v", err)
+		}
+		apps := manifest.GetApps()
+		if len(apps) != 1 || apps[0].GetDeploymentId() != recorded {
+			t.Errorf("manifest apps = %v, want api carrying %q", apps, recorded)
+		}
+	})
+
+	t.Run("--prebuilt refuses an app the output tree recorded no id for", func(t *testing.T) {
+		root := t.TempDir()
+		writePrebuiltFunction(t, root, "api", "index")
+		d := defaultDeps()
+
+		s, _ := newBuildManifestSession(t)
+		cfg := prebuiltConfig(root)
+		_, err := collectAndBuildManifest(context.Background(), d, cfg, noGate(cfg), true, s)
+		if err == nil {
+			t.Fatal("collectAndBuildManifest succeeded for an app no build stamped, want error")
+		}
+		if !strings.Contains(err.Error(), "ocel build") || !strings.Contains(err.Error(), "api") {
+			t.Errorf("error = %q, want it to name the app and point at `ocel build`", err)
+		}
+	})
+
 	t.Run("the client accessor is generated before the build", func(t *testing.T) {
 		root := t.TempDir()
 		writePrebuiltFunction(t, root, "api", "index")
 		generated := ""
 		d := defaultDeps()
+		stubRecordedDeploymentIDs(&d)
 		d.buildApp = func(context.Context, *projectconfig.Config, map[string]map[string]string, io.Writer) error {
 			data, err := os.ReadFile(filepath.Join(root, ".ocel", "env-client.ts"))
 			if err != nil {
@@ -313,6 +350,9 @@ func TestPrebuiltDeploy(t *testing.T) {
 	t.Run("no build output aborts before the provider is spawned", func(t *testing.T) {
 		root, _ := setUpDeployFixture(t)
 		addAppToFixtureConfig(t, root)
+		if err := os.RemoveAll(filepath.Join(root, ".ocel", "output")); err != nil {
+			t.Fatalf("drop the fixture's build output: %v", err)
+		}
 		d := defaultDeps()
 		recordBuildApp(&d)
 

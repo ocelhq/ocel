@@ -644,6 +644,13 @@ func TestBuild(t *testing.T) {
 		if fns[0].App != "express-app" {
 			t.Errorf("detected function app = %q, want %q", fns[0].App, "express-app")
 		}
+		id, err := DeploymentID(fixtureRoot, fns[0].App)
+		if err != nil {
+			t.Fatalf("DeploymentID(%q): %v", fns[0].App, err)
+		}
+		if len(id) != 32 {
+			t.Errorf("DeploymentID = %q, want the id the build minted", id)
+		}
 	})
 }
 

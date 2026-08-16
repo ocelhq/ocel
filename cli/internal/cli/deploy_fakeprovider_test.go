@@ -2,6 +2,8 @@ package cli
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"net"
@@ -62,6 +64,11 @@ const (
 	fakePromotionID = "prm_fake_1234"
 	fakeLinkSecret  = "pw-do-not-publish-9f2c"
 )
+
+func fixtureDeploymentID(app string) string {
+	sum := sha256.Sum256([]byte("ocel-test-deployment/" + app))
+	return hex.EncodeToString(sum[:])[:32]
+}
 
 func runDeployFakeProvider() int {
 	sockPath := os.Getenv(deployFakeProviderSockEnvVar)
@@ -526,8 +533,8 @@ func describeApp(a *deploymentsv1.ManifestApp) string {
 	for _, v := range a.GetVariables() {
 		keys = append(keys, v.GetKey())
 	}
-	return fmt.Sprintf("name=%s framework=%s production_domain=%s vars=%s",
-		a.GetName(), a.GetFramework(), strings.Join(a.GetDomains()["production"].GetHostnames(), ","), strings.Join(keys, ","))
+	return fmt.Sprintf("name=%s framework=%s production_domain=%s vars=%s deployment=%s",
+		a.GetName(), a.GetFramework(), strings.Join(a.GetDomains()["production"].GetHostnames(), ","), strings.Join(keys, ","), a.GetDeploymentId())
 }
 
 func parseInfraClass(s string) deploymentsv1.Environment_Class {
@@ -546,6 +553,11 @@ func parseInfraClass(s string) deploymentsv1.Environment_Class {
 func validateFixtureManifest(m *deploymentsv1.Manifest) error {
 	if m.GetSchemaVersion() == "" {
 		return errors.New("manifest missing schema_version")
+	}
+	for _, a := range m.GetApps() {
+		if err := naming.ValidateDeploymentID(a.GetDeploymentId()); err != nil {
+			return fmt.Errorf("app %s: %w", a.GetName(), err)
+		}
 	}
 	declared := map[string]bool{}
 	for _, r := range m.GetResources() {
