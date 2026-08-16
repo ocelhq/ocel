@@ -623,6 +623,257 @@ const specs = [
     "closesSurfaceIds": [
       "dynamodb-tag-publisher"
     ]
+  },
+  {
+    "version": 1,
+    "slug": "aws-connect-deploy-handler",
+    "description": "AWS provider ConnectRPC handler method implementations (DeploymentService/EnvVarsService) plus the channel bearer-auth and traceparent interceptors that guard them.",
+    "noiseTier": "normal",
+    "filePatterns": [
+      "platform/aws/provider/server/*.go",
+      "platform/aws/provider/channelauth/*.go",
+      "platform/aws/provider/tracecontext/*.go"
+    ],
+    "patterns": [
+      {
+        "source": "func \\(\\w+ \\*(Server|VarsServer)\\) [A-Z]\\w+\\(ctx context\\.Context, req \\*\\w+v1\\.",
+        "label": "connectrpc-handler-method"
+      },
+      {
+        "source": "func \\(\\w+ \\*interceptor\\) check\\(header http\\.Header\\) error",
+        "label": "channel-bearer-check"
+      },
+      {
+        "source": "channel\\.WithTraceParent\\(ctx,",
+        "label": "traceparent-extract"
+      }
+    ],
+    "excludeFilePatterns": [
+      "**/*_test.go"
+    ],
+    "examples": [
+      "func (s *Server) Deploy(ctx context.Context, req *deploymentsv1.DeployRequest, stream *connect.ServerStream[deploymentsv1.DeployEvent]) (err error) {",
+      "func (s *VarsServer) SetValue(ctx context.Context, req *envv1.SetValueRequest) (*envv1.SetValueResponse, error) {",
+      "func (a *interceptor) check(header http.Header) error {",
+      "return channel.WithTraceParent(ctx, header.Get(channel.TraceParentHeader))"
+    ],
+    "closesSurfaceIds": [
+      "aws-provider-rpc"
+    ]
+  },
+  {
+    "version": 1,
+    "slug": "aws-deploy-event-stream",
+    "description": "The DeployEvent serialization path of the AWS provider streaming RPCs: the buffered event sender and tracer that relay provider logs, errors, and spans back to the CLI over the ConnectRPC stream.",
+    "noiseTier": "normal",
+    "filePatterns": [
+      "platform/aws/provider/server/*.go"
+    ],
+    "patterns": [
+      {
+        "source": "newEventSender\\(",
+        "label": "event-sender"
+      },
+      {
+        "source": "DeployEvent_(Log|Result|Progress|Span|StagePlan)\\{",
+        "label": "deploy-event-variant"
+      },
+      {
+        "source": "func \\(t \\*eventTracer\\)",
+        "label": "event-tracer-method"
+      },
+      {
+        "source": "\\.Get(StagePlan|Span)\\(\\)",
+        "label": "deploy-event-accessor"
+      }
+    ],
+    "examples": [
+      "sender := newEventSender(context.Background(), stream.send)",
+      "Event: &deploymentsv1.DeployEvent_Log{Log: &deploymentsv1.LogEvent{Message: message}},",
+      "func (t *eventTracer) Span(id, parentID deploy.StageID, name string, start, end time.Time, err error, attrs ...deploy.Attr) {",
+      "first := stream.events[0].GetStagePlan()"
+    ],
+    "closesSurfaceIds": [
+      "aws-provider-rpc"
+    ]
+  },
+  {
+    "version": 1,
+    "slug": "membrane-bucket-service-handler",
+    "description": "Go membrane BucketService ConnectRPC handler implementations: presigned S3 PUT issuance, upload-signature verification, and upload-status reporting.",
+    "noiseTier": "precise",
+    "filePatterns": [
+      "platform/aws/provider/membrane/bucket/*.go"
+    ],
+    "patterns": [
+      {
+        "source": "func \\(s \\*Service\\) (PresignUpload|VerifyUploadSignature|GetUploadStatus)\\(ctx context\\.Context, req \\*bucketsv1\\.",
+        "label": "bucket-service-handler-method"
+      },
+      {
+        "source": "bucketsv1connect\\.BucketServiceHandler",
+        "label": "bucket-service-handler-binding"
+      }
+    ],
+    "examples": [
+      "func (s *Service) PresignUpload(ctx context.Context, req *bucketsv1.PresignUploadRequest) (*bucketsv1.PresignUploadResponse, error) {",
+      "func (s *Service) VerifyUploadSignature(ctx context.Context, req *bucketsv1.VerifyUploadSignatureRequest) (*bucketsv1.VerifyUploadSignatureResponse, error) {",
+      "var _ bucketsv1connect.BucketServiceHandler = (*Service)(nil)"
+    ],
+    "closesSurfaceIds": [
+      "membrane-bucket-rpc"
+    ]
+  },
+  {
+    "version": 1,
+    "slug": "membrane-upload-hmac",
+    "description": "HMAC-SHA256 signing and constant-time verification of canonical upload payloads that authenticate bucket upload completions in the membrane.",
+    "noiseTier": "precise",
+    "filePatterns": [
+      "platform/aws/provider/membrane/bucket/*.go"
+    ],
+    "patterns": [
+      {
+        "source": "func verifyUpload\\(secret, sessionID string,",
+        "label": "verify-upload-signature"
+      },
+      {
+        "source": "hmac\\.Equal\\(\\[\\]byte\\(expected\\), \\[\\]byte\\(signature\\)\\)",
+        "label": "constant-time-compare"
+      },
+      {
+        "source": "signUpload\\(sess\\.Secret,",
+        "label": "sign-completion-with-session-secret"
+      }
+    ],
+    "examples": [
+      "func verifyUpload(secret, sessionID string, file SignedFile, signature string) (bool, error) {",
+      "return hmac.Equal([]byte(expected), []byte(signature)), nil",
+      "signature, err := signUpload(sess.Secret, sess.SessionID, signed)"
+    ],
+    "closesSurfaceIds": [
+      "membrane-bucket-rpc"
+    ]
+  },
+  {
+    "version": 1,
+    "slug": "membrane-upload-callback-listener",
+    "description": "S3 object-created Lambda listener that resolves the upload session by object tag and posts an HMAC-signed completion to the session's callback origin, gated by an allow-list.",
+    "noiseTier": "precise",
+    "filePatterns": [
+      "platform/aws/provider/membrane/bucket/*.go"
+    ],
+    "patterns": [
+      {
+        "source": "func \\(l \\*Listener\\) Handle\\(ctx context\\.Context, event S3Event\\)",
+        "label": "s3-event-handler"
+      },
+      {
+        "source": "func originAllowed\\(rawURL string, allowed \\[\\]string\\)",
+        "label": "callback-origin-allowlist"
+      },
+      {
+        "source": "signedCompletion\\{",
+        "label": "signed-completion-callback"
+      }
+    ],
+    "examples": [
+      "func (l *Listener) Handle(ctx context.Context, event S3Event) error {",
+      "func originAllowed(rawURL string, allowed []string) bool {",
+      "body, err := json.Marshal(signedCompletion{"
+    ],
+    "closesSurfaceIds": [
+      "membrane-bucket-rpc"
+    ]
+  },
+  {
+    "version": 1,
+    "slug": "membrane-upload-session-store",
+    "description": "DynamoDB upload-session store for the membrane bucket service, including the conditional UpdateItem that guards the idempotent pending-to-succeeded file transition.",
+    "noiseTier": "normal",
+    "filePatterns": [
+      "platform/aws/provider/membrane/bucket/*.go"
+    ],
+    "patterns": [
+      {
+        "source": "func \\(s \\*sessionStore\\) (put|get|markSucceeded)\\(ctx context\\.Context",
+        "label": "session-store-op"
+      },
+      {
+        "source": "ConditionExpression:\\s+aws\\.String\\(expr",
+        "label": "conditional-transition-guard"
+      }
+    ],
+    "examples": [
+      "func (s *sessionStore) markSucceeded(ctx context.Context, sessionID string, idx int) (bool, error) {",
+      "func (s *sessionStore) get(ctx context.Context, sessionID string) (session, error) {",
+      "ConditionExpression:      aws.String(expr + \" = :pending\"),"
+    ],
+    "closesSurfaceIds": [
+      "membrane-bucket-rpc"
+    ]
+  },
+  {
+    "version": 1,
+    "slug": "cli-console-auth-client",
+    "description": "The ocel CLI's console auth HTTP client: OAuth 2.0 device-authorization grant polling and bearer-token attachment against the console /api/auth endpoints.",
+    "noiseTier": "precise",
+    "filePatterns": [
+      "cli/internal/authclient/*.go"
+    ],
+    "patterns": [
+      {
+        "source": "Header\\.Set\\(\"User-Agent\", \"ocel-cli\"\\)",
+        "label": "cli-auth-request"
+      },
+      {
+        "source": "oauth:grant-type:device_code",
+        "label": "device-authorization-grant"
+      },
+      {
+        "source": "Header\\.Set\\(\"Authorization\", \"Bearer \"\\s*\\+\\s*accessToken\\)",
+        "label": "bearer-token-attach"
+      }
+    ],
+    "examples": [
+      "req.Header.Set(\"User-Agent\", \"ocel-cli\")",
+      "\"grant_type\":  \"urn:ietf:params:oauth:grant-type:device_code\",",
+      "req.Header.Set(\"Authorization\", \"Bearer \"+accessToken)"
+    ],
+    "closesSurfaceIds": [
+      "ocel-cli"
+    ]
+  },
+  {
+    "version": 1,
+    "slug": "cli-credential-store",
+    "description": "The ocel CLI credential store: OS keyring with a 0600 file fallback and an OCEL_ACCESS_TOKEN environment override for the console access token.",
+    "noiseTier": "precise",
+    "filePatterns": [
+      "cli/internal/credentials/*.go"
+    ],
+    "patterns": [
+      {
+        "source": "keyring\\.(Set|Get|Delete)\\(service, user",
+        "label": "keyring-access"
+      },
+      {
+        "source": "os\\.WriteFile\\(path, data, 0o600\\)",
+        "label": "credential-file-fallback"
+      },
+      {
+        "source": "os\\.Getenv\\(envAccessToken\\)",
+        "label": "env-token-override"
+      }
+    ],
+    "examples": [
+      "if err := keyring.Set(service, user, string(data)); err == nil {",
+      "if err := os.WriteFile(path, data, 0o600); err != nil {",
+      "if token := os.Getenv(envAccessToken); token != \"\" {"
+    ],
+    "closesSurfaceIds": [
+      "ocel-cli"
+    ]
   }
 ];
 
