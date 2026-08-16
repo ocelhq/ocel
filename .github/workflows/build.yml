@@ -28,11 +28,11 @@ jobs:
       - name: pnpm --filter @cli/node typecheck
         run: pnpm --filter @cli/node typecheck
 
-      - name: pnpm --filter @ocel/provider-aws typecheck
-        run: pnpm --filter @ocel/provider-aws typecheck
-
       - name: pnpm --filter ocel build (tsc)
         run: pnpm --filter ocel build
+
+      - name: pnpm --filter @ocel/provider-aws typecheck
+        run: pnpm --filter @ocel/provider-aws typecheck
 
       - name: pnpm --filter @ocel/sst build (tsc)
         run: pnpm --filter @ocel/sst build
