@@ -1,6 +1,7 @@
 package attribution
 
 import (
+	"cmp"
 	"fmt"
 	"maps"
 	"path/filepath"
@@ -8,10 +9,12 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+
+	linksv1 "github.com/ocelhq/ocel/pkg/proto/links/v1"
 )
 
 type Declaration struct {
-	Type  string
+	Type  linksv1.LinkType
 	ID    string
 	Stack string
 }
@@ -23,18 +26,18 @@ type App struct {
 
 type Usage struct {
 	App   string
-	Type  string
+	Type  linksv1.LinkType
 	ID    string
 	Files []string
 }
 
 type identity struct {
-	typ string
+	typ linksv1.LinkType
 	id  string
 }
 
 type UnresolvedDeclarationError struct {
-	Type  string
+	Type  linksv1.LinkType
 	ID    string
 	Stack string
 }
@@ -125,7 +128,7 @@ func Compute(root string, apps []App, declarations []Declaration) ([]Usage, erro
 		if c := strings.Compare(a.App, b.App); c != 0 {
 			return c
 		}
-		if c := strings.Compare(a.Type, b.Type); c != 0 {
+		if c := cmp.Compare(a.Type, b.Type); c != 0 {
 			return c
 		}
 		return strings.Compare(a.ID, b.ID)

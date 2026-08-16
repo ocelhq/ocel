@@ -11,6 +11,8 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/cloudformation"
 	cfntypes "github.com/aws/aws-sdk-go-v2/service/cloudformation/types"
 
+	"github.com/ocelhq/ocel/pkg/naming"
+	linksv1 "github.com/ocelhq/ocel/pkg/proto/links/v1"
 	"github.com/ocelhq/ocel/platform/aws/provider/bootstrap"
 )
 
@@ -82,16 +84,14 @@ func TestSubstrateNamesItsAbsence(t *testing.T) {
 	})
 }
 
+const ordersRecord = `{"name":"orders","source":"sst","postgres":{"host":"h","port":5432,"database":"d","username":"u","password":"p"}}`
+
 func TestRequestValidates(t *testing.T) {
 	valid := Request{
 		Project:   "shop",
 		Publisher: "sst",
 		Class:     bootstrap.ClassProduction,
-		Records: []Record{{
-			Name:       "orders",
-			Type:       "sst:aws.Postgres",
-			Properties: map[string]string{"host": "h"},
-		}},
+		Records:   []json.RawMessage{json.RawMessage(ordersRecord)},
 	}
 	if err := valid.validate(); err != nil {
 		t.Fatalf("validate: %v", err)
@@ -102,14 +102,35 @@ func TestRequestValidates(t *testing.T) {
 		"no publisher":      func(r *Request) { r.Publisher = "" },
 		"unknown class":     func(r *Request) { r.Class = "staging" },
 		"class-wide marker": func(r *Request) { r.Environment = "*" },
-		"unnamed record":    func(r *Request) { r.Records[0].Name = "" },
-		"untyped record":    func(r *Request) { r.Records[0].Type = "" },
 	} {
 		t.Run(name, func(t *testing.T) {
-			req := Request{Project: valid.Project, Publisher: valid.Publisher, Class: valid.Class, Records: []Record{valid.Records[0]}}
+			req := Request{Project: valid.Project, Publisher: valid.Publisher, Class: valid.Class, Records: []json.RawMessage{valid.Records[0]}}
 			mutate(&req)
 			if err := req.validate(); err == nil {
 				t.Fatalf("validate accepted %s", name)
+			}
+		})
+	}
+}
+
+func TestRecordsRefuseWhatTheStoreCannotBind(t *testing.T) {
+	for name, tc := range map[string]struct {
+		record string
+		want   string
+	}{
+		"unnamed record":        {`{"source":"sst","postgres":{"host":"h"}}`, "carries no name"},
+		"untyped record":        {`{"name":"orders","source":"sst"}`, "carries no properties"},
+		"not a link at all":     {`{"name":"orders","type":"sst:aws.Postgres","properties":{"host":"h"}}`, "not a links.v1.Link"},
+		"grant over a wildcard": {`{"name":"orders","source":"sst","postgres":{"host":"h"},"grants":[{"actions":["rds-db:connect"],"resources":["*"]}]}`, "nothing else"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			req := Request{Records: []json.RawMessage{json.RawMessage(tc.record)}}
+			_, err := req.records()
+			if err == nil {
+				t.Fatalf("records() accepted %s", name)
+			}
+			if !strings.Contains(err.Error(), tc.want) {
+				t.Errorf("records() = %v, want it to say %q", err, tc.want)
 			}
 		})
 	}
@@ -144,36 +165,39 @@ func TestRequestRefusesAnEnvironmentOutsidePreview(t *testing.T) {
 	}
 }
 
-func TestRecordsFlattenToWhatTheStoreTakes(t *testing.T) {
+func TestRecordsDecodeToWhatTheStoreTakes(t *testing.T) {
 	req := Request{
 		Project:   "shop",
 		Publisher: "sst",
 		Class:     bootstrap.ClassProduction,
-		Records: []Record{{
-			Name:       "orders",
-			Type:       "sst:aws.Postgres",
-			Properties: map[string]string{"host": "h", "port": "5432"},
-			Grants: []Grant{{
-				Actions:   []string{"rds-db:connect"},
-				Resources: []string{"arn:aws:rds-db:us-east-1:1234:dbuser:db-ORDERS/app"},
-				Label:     "connect",
-			}},
-		}},
+		Records: []json.RawMessage{json.RawMessage(`{
+			"name": "orders",
+			"source": "sst",
+			"postgres": {"host": "h", "port": 5432, "database": "d", "username": "u", "password": "p"},
+			"grants": [{
+				"actions": ["rds-db:connect"],
+				"resources": ["arn:aws:rds-db:us-east-1:1234:dbuser:db-ORDERS/app"],
+				"label": "connect"
+			}]
+		}`)},
 	}
 
-	got := req.records()
+	got, err := req.records()
+	if err != nil {
+		t.Fatalf("records(): %v", err)
+	}
 
 	if len(got) != 1 {
 		t.Fatalf("records() returned %d, want one per consumable resource", len(got))
 	}
-	if got[0].Name != "orders" || got[0].Type != "sst:aws.Postgres" {
+	if got[0].GetName() != "orders" || got[0].GetSource() != "sst" || naming.LinkTypeOf(got[0]) != linksv1.LinkType_LINK_TYPE_POSTGRES {
 		t.Errorf("records()[0] = %+v", got[0])
 	}
-	if got[0].Properties["port"] != "5432" {
-		t.Errorf("records()[0] lost a property: %+v", got[0].Properties)
+	if got[0].GetPostgres().GetPort() != 5432 || got[0].GetPostgres().GetHost() != "h" {
+		t.Errorf("records()[0] lost a property: %+v", got[0].GetPostgres())
 	}
-	if len(got[0].Grants) != 1 || got[0].Grants[0].Label != "connect" {
-		t.Errorf("records()[0] grants = %+v", got[0].Grants)
+	if len(got[0].GetGrants()) != 1 || got[0].GetGrants()[0].GetLabel() != "connect" {
+		t.Errorf("records()[0] grants = %+v", got[0].GetGrants())
 	}
 }
 
@@ -187,8 +211,8 @@ func TestRequestDecodesTheWireShape(t *testing.T) {
 		"region": "us-east-1",
 		"records": [{
 			"name": "orders",
-			"type": "sst:aws.Postgres",
-			"properties": {"host": "h"},
+			"source": "sst",
+			"postgres": {"host": "h", "port": 5432, "database": "d", "username": "u", "password": "p"},
 			"grants": [{"actions": ["rds-db:connect"], "resources": ["arn:x"], "label": "connect"}]
 		}]
 	}`), &req); err != nil {
@@ -196,6 +220,9 @@ func TestRequestDecodesTheWireShape(t *testing.T) {
 	}
 	if err := req.validate(); err != nil {
 		t.Fatalf("validate: %v", err)
+	}
+	if _, err := req.records(); err != nil {
+		t.Fatalf("records(): %v", err)
 	}
 	if req.Environment != "pr-9" || req.Region != "us-east-1" {
 		t.Fatalf("decoded %+v", req)

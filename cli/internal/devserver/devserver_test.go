@@ -14,11 +14,13 @@ import (
 
 	"github.com/ocelhq/ocel/cli/internal/manifest"
 	"github.com/ocelhq/ocel/cli/internal/provision"
-	"github.com/ocelhq/ocel/pkg/naming"
 	devv1 "github.com/ocelhq/ocel/pkg/proto/dev/v1"
 	"github.com/ocelhq/ocel/pkg/proto/dev/v1/devv1connect"
+	linksv1 "github.com/ocelhq/ocel/pkg/proto/links/v1"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/resources/v1"
 	"github.com/ocelhq/ocel/pkg/proto/resources/v1/resourcesv1connect"
+	"google.golang.org/protobuf/encoding/protojson"
+	"google.golang.org/protobuf/proto"
 )
 
 func newFakeResolveServer(t *testing.T) *httptest.Server {
@@ -42,7 +44,7 @@ func newFakeResolveServer(t *testing.T) *httptest.Server {
 		env := make(map[string]string, len(req.Resources))
 		for _, r := range req.Resources {
 			key := fmt.Sprintf("OCEL_RESOURCE_%s_%s", r.Type, r.Name)
-			env[key] = fmt.Sprintf(`{"connectionString":"postgres://resolved/%s"}`, r.Name)
+			env[key] = fmt.Sprintf(`{"name":%q,"postgres":{"host":"resolved","port":5432,"database":%q}}`, r.Name, r.Name)
 		}
 
 		json.NewEncoder(w).Encode(map[string]any{
@@ -61,12 +63,17 @@ func serve(t *testing.T, s *Server) string {
 	return ts.URL
 }
 
-func declareResource(t *testing.T, url, name, typ string) {
+func declareResource(t *testing.T, url, name string, typ linksv1.LinkType) {
 	t.Helper()
 	client := resourcesv1connect.NewResourceServiceClient(http.DefaultClient, url)
-	if _, err := client.Declare(context.Background(), &resourcesv1.DeclareRequest{
-		Resource: &resourcesv1.ResourceIdentifier{Name: name, Type: typ},
-	}); err != nil {
+	req := &resourcesv1.DeclareRequest{Resource: &resourcesv1.ResourceIdentifier{Name: name, Type: typ}}
+	switch typ {
+	case linksv1.LinkType_LINK_TYPE_POSTGRES:
+		req.Config = &resourcesv1.DeclareRequest_Postgres{Postgres: &resourcesv1.PostgresConfig{}}
+	case linksv1.LinkType_LINK_TYPE_BUCKET:
+		req.Config = &resourcesv1.DeclareRequest_Bucket{Bucket: &resourcesv1.BucketConfig{}}
+	}
+	if _, err := client.Declare(context.Background(), req); err != nil {
 		t.Fatalf("Declare %s: %v", name, err)
 	}
 }
@@ -103,7 +110,7 @@ func TestSync(t *testing.T) {
 		s := New(resolveServer.URL, "tok", "proj_1", "http://127.0.0.1:0")
 		url := serve(t, s)
 
-		declareResource(t, url, "main", naming.TokenPostgres)
+		declareResource(t, url, "main", linksv1.LinkType_LINK_TYPE_POSTGRES)
 
 		if status := postSync(t, url); status != http.StatusOK {
 			t.Fatalf("POST /sync status = %d, want 200", status)
@@ -139,7 +146,7 @@ func TestSync(t *testing.T) {
 					http.Error(w, "resolve must never see a BUCKET", http.StatusBadRequest)
 					return
 				}
-				env[fmt.Sprintf("OCEL_RESOURCE_%s_%s", res.Type, res.Name)] = `{"connectionString":"postgres://x"}`
+				env[fmt.Sprintf("OCEL_RESOURCE_%s_%s", res.Type, res.Name)] = `{"name":"main","postgres":{"host":"x","port":5432,"database":"main"}}`
 			}
 			json.NewEncoder(w).Encode(map[string]any{
 				"env":       env,
@@ -151,8 +158,8 @@ func TestSync(t *testing.T) {
 		s := New(resolveServer.URL, "tok", "proj_1", "http://dev.local:1234")
 		url := serve(t, s)
 
-		declareResource(t, url, "main", naming.TokenPostgres)
-		declareResource(t, url, "storage", naming.TokenBucket)
+		declareResource(t, url, "main", linksv1.LinkType_LINK_TYPE_POSTGRES)
+		declareResource(t, url, "storage", linksv1.LinkType_LINK_TYPE_BUCKET)
 
 		if status := postSync(t, url); status != http.StatusOK {
 			t.Fatalf("POST /sync status = %d, want 200", status)
@@ -172,15 +179,13 @@ func TestSync(t *testing.T) {
 		if !ok {
 			t.Fatalf("bucket env = %+v, want OCEL_RESOURCE_BUCKET_storage", result.Resources[i].Env)
 		}
-		var cfg map[string]string
-		if err := json.Unmarshal([]byte(raw), &cfg); err != nil {
+		var link linksv1.Link
+		if err := protojson.Unmarshal([]byte(raw), &link); err != nil {
 			t.Fatalf("unmarshal bucket env: %v", err)
 		}
-		if _, ok := cfg["address"]; ok {
-			t.Fatalf("bucket env = %s, want the runtime address delivered once, not per bucket", raw)
-		}
-		if cfg["bucket"] != "storage" {
-			t.Fatalf("bucket logical name = %q, want storage", cfg["bucket"])
+		want := &linksv1.Link{Name: "storage", Properties: &linksv1.Link_Bucket{Bucket: &linksv1.BucketProperties{Bucket: "storage"}}}
+		if !proto.Equal(&link, want) {
+			t.Fatalf("bucket env = %s, want %v", raw, want)
 		}
 		if result.RuntimeAddress != "http://dev.local:1234" {
 			t.Fatalf("RuntimeAddress = %q, want the dev server address every membrane-backed resource reaches", result.RuntimeAddress)
@@ -192,9 +197,9 @@ func TestSync(t *testing.T) {
 		s := New(resolveServer.URL, "tok", "proj_1", "http://127.0.0.1:0")
 		url := serve(t, s)
 
-		declareResource(t, url, "stale", naming.TokenPostgres)
+		declareResource(t, url, "stale", linksv1.LinkType_LINK_TYPE_POSTGRES)
 		s.ResetManifest()
-		declareResource(t, url, "fresh", naming.TokenPostgres)
+		declareResource(t, url, "fresh", linksv1.LinkType_LINK_TYPE_POSTGRES)
 
 		postSync(t, url)
 

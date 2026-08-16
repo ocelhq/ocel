@@ -8,8 +8,16 @@ if (!databaseUrl) {
   process.exit(1);
 }
 
+const parsed = new URL(databaseUrl);
 process.env.OCEL_RESOURCE_POSTGRES_main = JSON.stringify({
-  connectionString: databaseUrl,
+  name: "main",
+  postgres: {
+    host: parsed.hostname,
+    port: Number(parsed.port || 5432),
+    database: parsed.pathname.slice(1),
+    username: decodeURIComponent(parsed.username),
+    password: decodeURIComponent(parsed.password),
+  },
 });
 
 const extraArgs = process.argv.slice(2);

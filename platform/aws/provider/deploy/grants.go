@@ -144,16 +144,12 @@ func billedResourcePolicy(r *deploymentsv1.ManifestResource, consumed map[string
 }
 
 func publishedGrants(c Consumed) []*linksv1.Grant {
-	out := make([]*linksv1.Grant, 0, len(c.Record.Grants))
-	for _, g := range c.Record.Grants {
-		out = append(out, &linksv1.Grant{Actions: g.Actions, Resources: g.Resources, Label: g.Label})
-	}
-	return out
+	return c.Record.Link.GetGrants()
 }
 
 type PolicyBillItem struct {
 	Link  string
-	Type  string
+	Type  linksv1.LinkType
 	Chars int
 }
 

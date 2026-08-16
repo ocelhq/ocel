@@ -16,17 +16,23 @@ export interface ProvisionedResource {
 }
 
 export interface ResourceTypeHandler {
-  buildConnectionString(assignment: ResourceAssignmentRow): string;
+  link(name: string, assignment: ResourceAssignmentRow): string;
   provision(identity: ResourceIdentity): Promise<ProvisionedResource>;
 }
 
 const postgresHandler: ResourceTypeHandler = {
-  buildConnectionString(assignment) {
-    const url = getCloudAdminUrl();
-    url.username = assignment.roleName;
-    url.password = assignment.password;
-    url.pathname = `/${assignment.databaseName}`;
-    return url.toString();
+  link(name, assignment) {
+    const admin = getCloudAdminUrl();
+    return JSON.stringify({
+      name,
+      postgres: {
+        host: admin.hostname,
+        port: Number(admin.port || 5432),
+        database: assignment.databaseName,
+        username: assignment.roleName,
+        password: assignment.password,
+      },
+    });
   },
 
   async provision(identity) {

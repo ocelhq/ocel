@@ -51,7 +51,7 @@ func (f *storeFetcher) fetchLive(ctx context.Context) (map[string]string, error)
 	for _, lag := range f.unreportedGrantLag(records) {
 		fmt.Fprintln(os.Stderr, "ocel: "+lag)
 	}
-	return merged(values, f.links, records), nil
+	return merged(values, f.links, records)
 }
 
 func (f *storeFetcher) unreportedGrantLag(records []vars.PublishedRecord) []string {
@@ -85,10 +85,10 @@ func grantLag(links []live.Link, records []vars.PublishedRecord) []lagged {
 		if granted == 0 || record.Version <= granted {
 			continue
 		}
-		out = append(out, lagged{Name: record.Name, Version: record.Version, Message: fmt.Sprintf(
+		out = append(out, lagged{Name: record.Name(), Version: record.Version, Message: fmt.Sprintf(
 			"link %s has been published %s since this deployment's IAM grants were rendered, from version %d. "+
 				"Its values are live and current; its permissions are not, and ocel widens no permission on its own — deploy again to move them to version %d",
-			record.Name, republished(record.Version-granted), granted, record.Version,
+			record.Name(), republished(record.Version-granted), granted, record.Version,
 		)})
 	}
 	return out
@@ -109,12 +109,16 @@ func linkNames(links []live.Link) []string {
 	return names
 }
 
-func merged(values []vars.Value, links []live.Link, records []vars.PublishedRecord) map[string]string {
+func merged(values []vars.Value, links []live.Link, records []vars.PublishedRecord) (map[string]string, error) {
 	out := resolved(values)
 	for i, record := range records {
-		out[links[i].Key] = live.EncodeRecord(live.Record{Type: record.Type, Properties: record.Properties})
+		encoded, err := vars.EncodeLink(record.Link)
+		if err != nil {
+			return nil, fmt.Errorf("render link %s: %w", record.Name(), err)
+		}
+		out[links[i].Key] = string(encoded)
 	}
-	return out
+	return out, nil
 }
 
 func resolved(values []vars.Value) map[string]string {
@@ -170,7 +174,10 @@ func (l *liveValues) resolve(ctx context.Context) (map[string]string, error) {
 	if err != nil {
 		return nil, err
 	}
-	return live.Conform(l.links, values)
+	if err := live.Conform(l.links, values); err != nil {
+		return nil, err
+	}
+	return values, nil
 }
 
 const liveKeysEnvVar = "OCEL_LIVE_KEYS"

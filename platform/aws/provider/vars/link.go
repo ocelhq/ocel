@@ -2,7 +2,6 @@ package vars
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"maps"
@@ -14,7 +13,12 @@ import (
 	ddbtypes "github.com/aws/aws-sdk-go-v2/service/dynamodb/types"
 	"golang.org/x/sync/errgroup"
 
+	"google.golang.org/protobuf/encoding/protojson"
+	"google.golang.org/protobuf/proto"
+	"google.golang.org/protobuf/reflect/protoreflect"
+
 	"github.com/ocelhq/ocel/pkg/naming"
+	linksv1 "github.com/ocelhq/ocel/pkg/proto/links/v1"
 )
 
 var ErrNotPublished = errors.New("vars: link not published")
@@ -25,29 +29,40 @@ var ErrUnscopedGrant = errors.New("vars: unscoped grant")
 
 var errTornPair = errors.New("vars: torn link pair")
 
-type Grant struct {
-	Actions   []string `json:"actions,omitempty"`
-	Resources []string `json:"resources,omitempty"`
-	Label     string   `json:"label,omitempty"`
-}
-
-type Record struct {
-	Name       string
-	Type       string
-	Properties map[string]string
-	Grants     []Grant
-}
-
 type PublishedRecord struct {
-	Record
+	Link        *linksv1.Link
 	Environment string
 	Version     int64
 	UpdatedAt   int64
 }
 
-type recordRow struct {
-	Type   string  `json:"type"`
-	Grants []Grant `json:"grants,omitempty"`
+func (r PublishedRecord) Name() string {
+	return r.Link.GetName()
+}
+
+func (r PublishedRecord) Type() linksv1.LinkType {
+	return naming.LinkTypeOf(r.Link)
+}
+
+func EncodeLink(link *linksv1.Link) ([]byte, error) {
+	return protojson.Marshal(link)
+}
+
+func DecodeLink(raw []byte) (*linksv1.Link, error) {
+	link := &linksv1.Link{}
+	if err := protojson.Unmarshal(raw, link); err != nil {
+		return nil, err
+	}
+	return link, nil
+}
+
+func redacted(link *linksv1.Link) *linksv1.Link {
+	out := proto.Clone(link).(*linksv1.Link)
+	m := out.ProtoReflect()
+	if fd := m.WhichOneof(m.Descriptor().Oneofs().ByName("properties")); fd != nil {
+		m.Set(fd, protoreflect.ValueOfMessage(m.Get(fd).Message().New()))
+	}
+	return out
 }
 
 func LinkPartitionKey(slug, class, link string) string {
@@ -113,14 +128,14 @@ func validateOwner(owner string) error {
 	return nil
 }
 
-func (s *Store) PublishRecords(ctx context.Context, slug, environment, owner string, records []Record) (PublishResult, error) {
+func (s *Store) PublishRecords(ctx context.Context, slug, environment, owner string, records []*linksv1.Link) (PublishResult, error) {
 	if err := validateOwner(owner); err != nil {
 		return PublishResult{}, err
 	}
 	return s.publish(ctx, slug, owner, environment, records)
 }
 
-func (s *Store) publish(ctx context.Context, slug, owner, environment string, records []Record) (PublishResult, error) {
+func (s *Store) publish(ctx context.Context, slug, owner, environment string, records []*linksv1.Link) (PublishResult, error) {
 	published, err := publishedNames(slug, environment, records)
 	if err != nil {
 		return PublishResult{}, err
@@ -138,18 +153,18 @@ func (s *Store) publish(ctx context.Context, slug, owner, environment string, re
 	sealed := make([][]byte, len(records))
 	rows := make([][]byte, len(records))
 	for i, r := range records {
-		bag, err := json.Marshal(r.bag())
+		value, err := EncodeLink(r)
 		if err != nil {
-			return PublishResult{}, fmt.Errorf("render link %s's properties: %w", r.Name, err)
+			return PublishResult{}, fmt.Errorf("render link %s: %w", r.GetName(), err)
 		}
-		if len(bag) > MaxValueBytes {
-			return PublishResult{}, fmt.Errorf("properties of link %s are too large: %d bytes, limit %d", r.Name, len(bag), MaxValueBytes)
+		if len(value) > MaxValueBytes {
+			return PublishResult{}, fmt.Errorf("link %s is too large: %d bytes, limit %d", r.GetName(), len(value), MaxValueBytes)
 		}
-		if sealed[i], err = s.encrypt(ctx, linkCoordinate(slug, r.Name, environment).canonical(), string(bag)); err != nil {
+		if sealed[i], err = s.encrypt(ctx, linkCoordinate(slug, r.GetName(), environment).canonical(), string(value)); err != nil {
 			return PublishResult{}, err
 		}
-		if rows[i], err = json.Marshal(recordRow{Type: r.Type, Grants: r.Grants}); err != nil {
-			return PublishResult{}, fmt.Errorf("render link %s's record: %w", r.Name, err)
+		if rows[i], err = EncodeLink(redacted(r)); err != nil {
+			return PublishResult{}, fmt.Errorf("render link %s's record: %w", r.GetName(), err)
 		}
 	}
 
@@ -164,7 +179,7 @@ func (s *Store) publish(ctx context.Context, slug, owner, environment string, re
 	group.SetLimit(revealConcurrency)
 	for i, r := range records {
 		group.Go(func() error {
-			return s.writePair(writeCtx, linkCoordinate(slug, r.Name, environment), owner, sealed[i], rows[i], ts)
+			return s.writePair(writeCtx, linkCoordinate(slug, r.GetName(), environment), owner, sealed[i], rows[i], ts)
 		})
 	}
 	if err := group.Wait(); err != nil {
@@ -178,7 +193,7 @@ func (s *Store) publish(ctx context.Context, slug, owner, environment string, re
 	return PublishResult{Published: published, Pruned: pruned}, nil
 }
 
-func publishedNames(slug, environment string, records []Record) ([]string, error) {
+func publishedNames(slug, environment string, records []*linksv1.Link) ([]string, error) {
 	if err := validateLinkTarget(slug, environment); err != nil {
 		return nil, err
 	}
@@ -186,30 +201,20 @@ func publishedNames(slug, environment string, records []Record) ([]string, error
 	published := make([]string, 0, len(records))
 	seen := make(map[string]bool, len(records))
 	for _, r := range records {
-		if err := linkCoordinate(slug, r.Name, environment).validateDerived(); err != nil {
+		if err := linkCoordinate(slug, r.GetName(), environment).validateDerived(); err != nil {
 			return nil, err
 		}
-		if seen[r.Name] {
-			return nil, fmt.Errorf("this deploy publishes link %s twice; the two publishes land on the same rows and whichever finishes last wins, so name one of them something else", r.Name)
+		if seen[r.GetName()] {
+			return nil, fmt.Errorf("this deploy publishes link %s twice; the two publishes land on the same rows and whichever finishes last wins, so name one of them something else", r.GetName())
 		}
-		seen[r.Name] = true
-		if r.Type == "" {
-			return nil, fmt.Errorf("link %s carries no type token; a consumer has nothing to resolve it against", r.Name)
-		}
-		if err := r.verify(); err != nil {
+		seen[r.GetName()] = true
+		if err := Verify(r); err != nil {
 			return nil, err
 		}
-		published = append(published, r.Name)
+		published = append(published, r.GetName())
 	}
 	slices.Sort(published)
 	return published, nil
-}
-
-func (r Record) bag() map[string]string {
-	if r.Properties == nil {
-		return map[string]string{}
-	}
-	return r.Properties
 }
 
 func (s *Store) writePair(ctx context.Context, c Coordinate, owner string, sealed, row []byte, ts int64) error {
@@ -530,8 +535,8 @@ func describeEnvironment(environment string) string {
 }
 
 func (s *Store) openPair(ctx context.Context, c Coordinate, record, value item) (PublishedRecord, error) {
-	var row recordRow
-	if err := json.Unmarshal([]byte(record.Record), &row); err != nil {
+	row, err := DecodeLink([]byte(record.Record))
+	if err != nil {
 		return PublishedRecord{}, fmt.Errorf("read link %s's record: %v: %w", c.Link, err, ErrUnreadableRecord)
 	}
 
@@ -539,35 +544,41 @@ func (s *Store) openPair(ctx context.Context, c Coordinate, record, value item) 
 	if err != nil {
 		return PublishedRecord{}, fmt.Errorf("open link %s's value: %v: %w", c.Link, err, ErrUnreadableRecord)
 	}
-	properties := map[string]string{}
-	if err := json.Unmarshal([]byte(plaintext), &properties); err != nil {
-		return PublishedRecord{}, fmt.Errorf("read link %s's properties: %v: %w", c.Link, err, ErrUnreadableRecord)
+	link, err := DecodeLink([]byte(plaintext))
+	if err != nil {
+		return PublishedRecord{}, fmt.Errorf("read link %s's value: %w", c.Link, ErrUnreadableRecord)
+	}
+	if link.GetName() != c.Link || naming.LinkTypeOf(link) != naming.LinkTypeOf(row) {
+		return PublishedRecord{}, fmt.Errorf("link %s's record and the value beside it describe different links: %w", c.Link, ErrUnreadableRecord)
 	}
 
 	resolved := PublishedRecord{
-		Record:      Record{Name: c.Link, Type: row.Type, Properties: properties, Grants: row.Grants},
+		Link:        link,
 		Environment: c.Environment,
 		Version:     record.Version,
 		UpdatedAt:   record.Ts,
 	}
-	if err := resolved.verify(); err != nil {
+	if err := Verify(link); err != nil {
 		return PublishedRecord{}, err
 	}
 	return resolved, nil
 }
 
-func (r Record) verify() error {
-	if r.Type == "" {
-		return fmt.Errorf("link %s carries no type token: %w", r.Name, ErrUnreadableRecord)
+func Verify(link *linksv1.Link) error {
+	if link.GetName() == "" {
+		return fmt.Errorf("a link carries no name; the name is what a consuming app binds to: %w", ErrUnreadableRecord)
 	}
-	for _, g := range r.Grants {
-		if len(g.Actions) == 0 || slices.ContainsFunc(g.Actions, UnscopedAction) {
+	if naming.LinkTypeOf(link) == linksv1.LinkType_LINK_TYPE_UNSPECIFIED {
+		return fmt.Errorf("link %s carries no properties, so it has no type a consumer can resolve it against: %w", link.GetName(), ErrUnreadableRecord)
+	}
+	for _, g := range link.GetGrants() {
+		if len(g.GetActions()) == 0 || slices.ContainsFunc(g.GetActions(), UnscopedAction) {
 			return fmt.Errorf("link %s grants %v over %v: an action naming a whole service reaches past the resource it links: %w",
-				r.Name, g.Actions, g.Resources, ErrUnscopedGrant)
+				link.GetName(), g.GetActions(), g.GetResources(), ErrUnscopedGrant)
 		}
-		if len(g.Resources) == 0 || slices.ContainsFunc(g.Resources, UnscopedResource) {
+		if len(g.GetResources()) == 0 || slices.ContainsFunc(g.GetResources(), UnscopedResource) {
 			return fmt.Errorf("link %s grants %v over %v: an app receives permissions for the resource it links and nothing else: %w",
-				r.Name, g.Actions, g.Resources, ErrUnscopedGrant)
+				link.GetName(), g.GetActions(), g.GetResources(), ErrUnscopedGrant)
 		}
 	}
 	return nil

@@ -7,7 +7,9 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/ocelhq/ocel/pkg/naming"
 	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
+	linksv1 "github.com/ocelhq/ocel/pkg/proto/links/v1"
 	"github.com/ocelhq/ocel/platform/aws/provider/transform"
 )
 
@@ -259,9 +261,9 @@ func readOutputs(ctx context.Context, cfg Config, slug string, placed []placedOu
 	if len(records) != len(names) {
 		return nil, fmt.Errorf("the variable store resolved %d records for %d links a transform reads", len(records), len(names))
 	}
-	properties := make(map[string]map[string]string, len(records))
+	links := make(map[string]*linksv1.Link, len(records))
 	for i, name := range names {
-		properties[name] = records[i].Properties
+		links[name] = records[i].Link
 	}
 
 	values := make(map[outputRef]any, len(placed))
@@ -269,10 +271,10 @@ func readOutputs(ctx context.Context, cfg Config, slug string, placed []placedOu
 		if _, done := values[p.Ref]; done {
 			continue
 		}
-		raw, carries := properties[p.Ref.Link][p.Ref.Property]
+		raw, carries := naming.LinkProperty(links[p.Ref.Link], p.Ref.Property)
 		if !carries {
 			return nil, &OutputPropertyError{
-				Ref: p.Ref, At: p.At, Carries: slices.Sorted(maps.Keys(properties[p.Ref.Link])),
+				Ref: p.Ref, At: p.At, Carries: naming.LinkPropertyNames(links[p.Ref.Link]),
 			}
 		}
 		value := outputValue(p.Ref, raw)
@@ -282,6 +284,13 @@ func readOutputs(ctx context.Context, cfg Config, slug string, placed []placedOu
 		values[p.Ref] = value
 	}
 	return values, nil
+}
+
+func carried(properties []string) string {
+	if len(properties) == 0 {
+		return "no properties at all"
+	}
+	return strings.Join(properties, ", ")
 }
 
 func outputValue(ref outputRef, raw string) any {

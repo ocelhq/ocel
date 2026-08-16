@@ -12,6 +12,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/manifest"
 	"github.com/ocelhq/ocel/cli/internal/resolvecache"
 	"github.com/ocelhq/ocel/pkg/naming"
+	linksv1 "github.com/ocelhq/ocel/pkg/proto/links/v1"
 )
 
 type ProjectConfig struct {
@@ -25,7 +26,7 @@ type ProjectConfig struct {
 
 type Resource struct {
 	Name string
-	Type string
+	Type linksv1.LinkType
 	Env  map[string]string
 }
 
@@ -181,9 +182,9 @@ func resourcesFromEnv(resources []manifest.Entry, env map[string]string) ([]Reso
 	return out, nil
 }
 
-func envFragment(token string) (string, error) {
-	if _, ok := naming.TokenKind(token); !ok {
-		return "", fmt.Errorf("resource has unsupported type %q", token)
+func envFragment(t linksv1.LinkType) (string, error) {
+	if _, ok := naming.KindOf(t); !ok {
+		return "", fmt.Errorf("resource has unsupported type %s", t)
 	}
-	return naming.EnvFragment(token), nil
+	return naming.EnvFragment(t), nil
 }

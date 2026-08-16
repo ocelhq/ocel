@@ -9,7 +9,8 @@ import (
 	"time"
 
 	"github.com/ocelhq/ocel/cli/internal/manifest"
-	"github.com/ocelhq/ocel/pkg/naming"
+	linksv1 "github.com/ocelhq/ocel/pkg/proto/links/v1"
+	"google.golang.org/protobuf/encoding/protojson"
 )
 
 func TestFetchProjectConfig(t *testing.T) {
@@ -44,21 +45,21 @@ func TestEnvFragment(t *testing.T) {
 
 	for _, tt := range []struct {
 		name    string
-		typ     string
+		typ     linksv1.LinkType
 		want    string
 		wantErr bool
 	}{
-		{"renders the env fragment", naming.TokenPostgres, "POSTGRES", false},
-		{"renders the env fragment for buckets", naming.TokenBucket, "BUCKET", false},
-		{"rejects an empty token", "", "", true},
-		{"rejects an unknown token", "ocel:redis", "", true},
+		{"renders the env fragment", linksv1.LinkType_LINK_TYPE_POSTGRES, "POSTGRES", false},
+		{"renders the env fragment for buckets", linksv1.LinkType_LINK_TYPE_BUCKET, "BUCKET", false},
+		{"rejects an unspecified type", linksv1.LinkType_LINK_TYPE_UNSPECIFIED, "", true},
+		{"rejects an unknown type", linksv1.LinkType(99), "", true},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 			got, err := envFragment(tt.typ)
 			if tt.wantErr {
 				if err == nil {
-					t.Fatalf("envFragment(%q) = %q, want an error", tt.typ, got)
+					t.Fatalf("envFragment(%v) = %q, want an error", tt.typ, got)
 				}
 				return
 			}
@@ -73,7 +74,7 @@ func TestEnvFragment(t *testing.T) {
 }
 
 func TestProvision(t *testing.T) {
-	onePostgres := []manifest.Entry{{Name: "main", Type: naming.TokenPostgres}}
+	onePostgres := []manifest.Entry{{Name: "main", Type: linksv1.LinkType_LINK_TYPE_POSTGRES}}
 
 	t.Run("an empty manifest yields no resources without calling resolve", func(t *testing.T) {
 		ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -112,7 +113,7 @@ func TestProvision(t *testing.T) {
 
 			_ = json.NewEncoder(w).Encode(resolveResponseBody{
 				Env: map[string]string{
-					"OCEL_RESOURCE_POSTGRES_main": `{"connectionString":"postgres://resolved/main"}`,
+					"OCEL_RESOURCE_POSTGRES_main": `{"name":"main","postgres":{"host":"resolved","port":5432,"database":"main"}}`,
 				},
 				ExpiresAt: time.Now().Add(time.Hour).Format(time.RFC3339),
 			})
@@ -133,16 +134,16 @@ func TestProvision(t *testing.T) {
 		if got[0].Name != "main" {
 			t.Fatalf("Name = %q, want %q", got[0].Name, "main")
 		}
-		if got[0].Type != naming.TokenPostgres {
+		if got[0].Type != linksv1.LinkType_LINK_TYPE_POSTGRES {
 			t.Fatalf("Type = %v, want POSTGRES", got[0].Type)
 		}
 	})
 
-	t.Run("injects the connection string under the canonical env key", func(t *testing.T) {
+	t.Run("injects the link under the canonical env key", func(t *testing.T) {
 		ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 			_ = json.NewEncoder(w).Encode(resolveResponseBody{
 				Env: map[string]string{
-					"OCEL_RESOURCE_POSTGRES_main": `{"connectionString":"postgres://resolved/main"}`,
+					"OCEL_RESOURCE_POSTGRES_main": `{"name":"main","postgres":{"host":"resolved","port":5432,"database":"main"}}`,
 				},
 				ExpiresAt: time.Now().Add(time.Hour).Format(time.RFC3339),
 			})
@@ -163,14 +164,12 @@ func TestProvision(t *testing.T) {
 			t.Fatalf("Env missing key %q, got %+v", key, got[0].Env)
 		}
 
-		var parsed struct {
-			ConnectionString string `json:"connectionString"`
+		var link linksv1.Link
+		if err := protojson.Unmarshal([]byte(raw), &link); err != nil {
+			t.Fatalf("Env[%q] = %q is not a link: %v", key, raw, err)
 		}
-		if err := json.Unmarshal([]byte(raw), &parsed); err != nil {
-			t.Fatalf("Env[%q] = %q is not valid JSON: %v", key, raw, err)
-		}
-		if parsed.ConnectionString != "postgres://resolved/main" {
-			t.Fatalf("connectionString = %q, want %q", parsed.ConnectionString, "postgres://resolved/main")
+		if link.GetPostgres().GetHost() != "resolved" || link.GetPostgres().GetDatabase() != "main" {
+			t.Fatalf("link = %v, want host resolved and database main", &link)
 		}
 	})
 

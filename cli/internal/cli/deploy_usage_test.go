@@ -283,12 +283,12 @@ function register(body: Record<string, unknown>) {
 }
 
 export function declarePostgres(name: string, stack: string) {
-  register({ resource: { type: "ocel:postgres", name }, postgres: { version: "17" }, stack });
+  register({ resource: { type: "LINK_TYPE_POSTGRES", name }, postgres: { version: "17" }, stack });
   return { name };
 }
 
 export function declareBucket(name: string, stack: string) {
-  register({ resource: { type: "ocel:bucket", name }, bucket: {}, stack });
+  register({ resource: { type: "LINK_TYPE_BUCKET", name }, bucket: {}, stack });
   return { name };
 }
 `)

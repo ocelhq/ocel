@@ -1,27 +1,71 @@
+import { fromJson } from "@bufbuild/protobuf";
 import { readLive } from "../env/live.js";
+import {
+  LinkSchema,
+  LinkType,
+  type Link,
+} from "../gen/proto/links/v1/links_pb.js";
 
-const envFragment = (type: string) => {
-  const fragment = type.startsWith("ocel:") ? type.slice("ocel:".length) : "";
+export type LinkCase = NonNullable<Link["properties"]["case"]>;
 
-  if (!fragment) {
-    throw new Error(`Unknown resource type '${type}'`);
-  }
+export type LinkProperties<TCase extends LinkCase> = Extract<
+  Link["properties"],
+  { case: TCase }
+>["value"];
 
-  return fragment.toUpperCase();
+const typeOfCase: { [TCase in LinkCase]: LinkType } = {
+  postgres: LinkType.POSTGRES,
+  bucket: LinkType.BUCKET,
 };
 
-export const getConfig = (id: string, type: string) => {
-  const key = `OCEL_RESOURCE_${envFragment(type)}_${id}`;
-  const value = readLive(key) ?? process.env[key];
+/** The type a link's properties case declares; UNSPECIFIED when it carries none. */
+export function linkTypeOf(link: Link): LinkType {
+  return link.properties.case
+    ? typeOfCase[link.properties.case]
+    : LinkType.UNSPECIFIED;
+}
 
-  if (!value) {
+/** The env key a link of the given type is delivered under. */
+export function linkKey(name: string, type: LinkType): string {
+  return `OCEL_RESOURCE_${LinkType[type]}_${name}`;
+}
+
+/**
+ * Reads the link delivered for a resource and hands back its typed
+ * properties. Throws when nothing was delivered, when the payload is not a
+ * link record, or when the record is of another type than the one asked for.
+ */
+export function getConfig<TCase extends LinkCase>(
+  name: string,
+  kind: TCase,
+): LinkProperties<TCase> {
+  const type = typeOfCase[kind];
+  const key = linkKey(name, type);
+  const raw = readLive(key) ?? process.env[key];
+
+  if (!raw) {
     throw new Error(
       `Value for ${key} is not defined. Run \`ocel dev\` to resolve it locally, or \`ocel deploy\` to have it delivered from the resource this app links.`,
     );
   }
 
-  return value;
-};
+  let link: Link;
+  try {
+    link = fromJson(LinkSchema, JSON.parse(raw));
+  } catch (cause) {
+    throw new Error(
+      `${key} does not carry a link record, so this app cannot read it as a ${LinkType[type]}`,
+      { cause },
+    );
+  }
+
+  if (link.properties.case !== kind) {
+    throw new Error(
+      `${key} carries a ${LinkType[linkTypeOf(link)]} link, and this app reads it as a ${LinkType[type]}`,
+    );
+  }
+  return link.properties.value as LinkProperties<TCase>;
+}
 
 export const RUNTIME_ADDRESS = "OCEL_RUNTIME_ADDRESS";
 

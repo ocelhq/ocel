@@ -10,6 +10,7 @@ import (
 	"sort"
 	"time"
 
+	"github.com/ocelhq/ocel/pkg/naming"
 	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
 	linksv1 "github.com/ocelhq/ocel/pkg/proto/links/v1"
 )
@@ -39,6 +40,7 @@ type Environment struct {
 type Link struct {
 	Name    string   `json:"name"`
 	Type    string   `json:"type"`
+	Source  string   `json:"source,omitempty"`
 	VarKeys []string `json:"varKeys"`
 	Grants  []Grant  `json:"grants"`
 }
@@ -75,18 +77,17 @@ func Derive(d Deploy, manifest *deploymentsv1.Manifest, links []*linksv1.Link) R
 func deriveLinks(links []*linksv1.Link) []Link {
 	out := make([]Link, 0, len(links))
 	for _, l := range links {
-		keys := make([]string, 0, len(l.GetProperties()))
-		for k := range l.GetProperties() {
-			keys = append(keys, k)
+		keys := naming.LinkPropertyNames(l)
+		if keys == nil {
+			keys = []string{}
 		}
-		sort.Strings(keys)
 
 		grants := make([]Grant, 0, len(l.GetGrants()))
 		for _, g := range l.GetGrants() {
 			grants = append(grants, Grant{Verb: g.GetLabel(), Actions: append([]string(nil), g.GetActions()...)})
 		}
 
-		out = append(out, Link{Name: l.GetName(), Type: l.GetType(), VarKeys: keys, Grants: grants})
+		out = append(out, Link{Name: l.GetName(), Type: naming.LinkTypeOf(l).String(), Source: l.GetSource(), VarKeys: keys, Grants: grants})
 	}
 	sort.SliceStable(out, func(i, j int) bool { return out[i].Name < out[j].Name })
 	return out

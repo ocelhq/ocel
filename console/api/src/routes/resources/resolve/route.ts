@@ -122,10 +122,10 @@ export async function resolveResources(request: Request): Promise<Response> {
       );
     }
 
-    const connectionString = handler.buildConnectionString(assignment);
-    env[buildResourceEnvKey(resource.type, resource.name)] = JSON.stringify({
-      connectionString,
-    });
+    env[buildResourceEnvKey(resource.type, resource.name)] = handler.link(
+      resource.name,
+      assignment,
+    );
   }
 
   return Response.json(

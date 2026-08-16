@@ -16,13 +16,25 @@ export function postgres(id: string, config?: PostgresConfig): PgReturn {
     });
   }
 
-  const { connectionString } = pg.__config();
+  const { host, port, database, username, password } = pg.__config();
 
-  const client = new Pool({
-    connectionString,
-  });
+  const client = new Pool({ host, port, database, user: username, password });
 
   return Object.assign(client, {
-    connectionString,
+    connectionString: connectionStringFor(host, port, database, username, password),
   });
+}
+
+export function connectionStringFor(
+  host: string,
+  port: number,
+  database: string,
+  username: string,
+  password: string,
+): string {
+  const url = new URL(`postgres://${host}:${port}/`);
+  url.pathname = `/${database}`;
+  url.username = username;
+  url.password = password;
+  return url.toString();
 }

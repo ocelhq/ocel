@@ -83,12 +83,16 @@ describe("POST /api/resources/resolve", () => {
 
       const raw = body.env.OCEL_RESOURCE_POSTGRES_main;
       expect(raw).toBeTruthy();
-      const { connectionString } = JSON.parse(raw);
-      const url = new URL(connectionString);
-      expect(url.username).toBe("role_main_seed");
-      expect(url.password).toBe("s3cret-pw");
-      expect(url.pathname).toBe("/db_main_seed");
-      expect(url.hostname).toBe("cloud-host.invalid");
+      expect(JSON.parse(raw)).toEqual({
+        name: "main",
+        postgres: {
+          host: "cloud-host.invalid",
+          port: 5432,
+          database: "db_main_seed",
+          username: "role_main_seed",
+          password: "s3cret-pw",
+        },
+      });
     } finally {
       if (previousAdminUrl === undefined) {
         delete process.env.OCEL_CLOUD_ADMIN_URL;
@@ -117,19 +121,24 @@ describe("POST /api/resources/resolve", () => {
 
       expect(first.status).toBe(200);
       const firstBody = await first.json();
-      const { connectionString: firstConnectionString } = JSON.parse(
+      const { postgres } = JSON.parse(
         firstBody.env.OCEL_RESOURCE_POSTGRES_main,
       );
 
-      const client = new Client({ connectionString: firstConnectionString });
+      const client = new Client({
+        host: postgres.host,
+        port: postgres.port,
+        database: postgres.database,
+        user: postgres.username,
+        password: postgres.password,
+      });
       await client.connect();
       try {
         const result = await client.query(
           "select current_database() as db, current_user as role",
         );
-        const url = new URL(firstConnectionString);
-        expect(result.rows[0].db).toBe(url.pathname.slice(1));
-        expect(result.rows[0].role).toBe(url.username);
+        expect(result.rows[0].db).toBe(postgres.database);
+        expect(result.rows[0].role).toBe(postgres.username);
       } finally {
         await client.end();
       }

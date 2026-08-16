@@ -193,8 +193,8 @@ func TestRunDev(t *testing.T) {
 			if !ok {
 				t.Fatalf("app env missing OCEL_RESOURCE_POSTGRES_main, got: %s", dumped)
 			}
-			if !strings.Contains(raw, "connectionString") {
-				t.Fatalf("OCEL_RESOURCE_POSTGRES_main = %q, want it to contain connectionString", raw)
+			if !strings.Contains(raw, `"postgres"`) {
+				t.Fatalf("OCEL_RESOURCE_POSTGRES_main = %q, want it to carry a postgres link", raw)
 			}
 		})
 	})
@@ -257,8 +257,8 @@ export default { slug: "test-app", apps: [{ name: "web", path: "apps/web", folde
 		if !ok {
 			t.Fatalf("follower env missing OCEL_RESOURCE_POSTGRES_main, got: %s", dumped)
 		}
-		if !strings.Contains(raw, "connectionString") {
-			t.Fatalf("OCEL_RESOURCE_POSTGRES_main = %q, want it to contain connectionString", raw)
+		if !strings.Contains(raw, `"postgres"`) {
+			t.Fatalf("OCEL_RESOURCE_POSTGRES_main = %q, want it to carry a postgres link", raw)
 		}
 
 		if got, ok := env["OCEL_APP_FOLDER"]; !ok || got != "/web" {
@@ -610,7 +610,7 @@ export default { slug: "test-app" };
 		projectID := "proj_" + t.Name()
 		const apiURL = "https://api.example.com"
 		srv := devserver.New(apiURL, "tok", projectID, "http://127.0.0.1:0")
-		srv.PushEnv(map[string]string{"OCEL_RESOURCE_POSTGRES_main": `{"connectionString":"conn"}`})
+		srv.PushEnv(map[string]string{"OCEL_RESOURCE_POSTGRES_main": `{"name":"main","postgres":{"host":"resolved","port":5432,"database":"main","username":"u","password":"p"}}`})
 
 		listener, err := net.Listen("tcp", "127.0.0.1:0")
 		if err != nil {
@@ -697,7 +697,7 @@ func newFakeResolveServer(t *testing.T) *httptest.Server {
 		env := make(map[string]string, len(req.Resources))
 		for _, r := range req.Resources {
 			key := fmt.Sprintf("OCEL_RESOURCE_%s_%s", r.Type, r.Name)
-			env[key] = fmt.Sprintf(`{"connectionString":"postgres://resolved/%s"}`, r.Name)
+			env[key] = fmt.Sprintf(`{"name":%q,"postgres":{"host":"resolved","port":5432,"database":%q}}`, r.Name, r.Name)
 		}
 
 		json.NewEncoder(w).Encode(map[string]any{
@@ -747,7 +747,7 @@ globalThis.__ocelRegister.push(
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
-      resource: { type: "ocel:postgres", name: %q },
+      resource: { type: "LINK_TYPE_POSTGRES", name: %q },
       postgres: { version: "17" },
     }),
   }),

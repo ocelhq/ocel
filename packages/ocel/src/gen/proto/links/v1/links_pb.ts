@@ -2,15 +2,15 @@
 // @generated from file links/v1/links.proto (package links.v1, syntax proto3)
 /* eslint-disable */
 
-import type { GenFile, GenMessage } from "@bufbuild/protobuf/codegenv2";
-import { fileDesc, messageDesc } from "@bufbuild/protobuf/codegenv2";
+import type { GenEnum, GenFile, GenMessage } from "@bufbuild/protobuf/codegenv2";
+import { enumDesc, fileDesc, messageDesc } from "@bufbuild/protobuf/codegenv2";
 import type { Message } from "@bufbuild/protobuf";
 
 /**
  * Describes the file links/v1/links.proto.
  */
 export const file_links_v1_links: GenFile = /*@__PURE__*/
-  fileDesc("ChRsaW5rcy92MS9saW5rcy5wcm90bxIIbGlua3MudjEirwEKBExpbmsSDAoEbmFtZRgBIAEoCRIMCgR0eXBlGAIgASgJEjcKCnByb3BlcnRpZXMYAyADKAsyHi5saW5rcy52MS5MaW5rLlByb3BlcnRpZXNFbnRyeUIDgAEBEh8KBmdyYW50cxgEIAMoCzIPLmxpbmtzLnYxLkdyYW50GjEKD1Byb3BlcnRpZXNFbnRyeRILCgNrZXkYASABKAkSDQoFdmFsdWUYAiABKAk6AjgBIjoKBUdyYW50Eg8KB2FjdGlvbnMYASADKAkSEQoJcmVzb3VyY2VzGAIgAygJEg0KBWxhYmVsGAMgASgJQjNaMWdpdGh1Yi5jb20vb2NlbGhxL29jZWwvcGtnL3Byb3RvL2xpbmtzL3YxO2xpbmtzdjFiBnByb3RvMw");
+  fileDesc("ChRsaW5rcy92MS9saW5rcy5wcm90bxIIbGlua3MudjEiswEKBExpbmsSDAoEbmFtZRgBIAEoCRIwCghwb3N0Z3JlcxgCIAEoCzIcLmxpbmtzLnYxLlBvc3RncmVzUHJvcGVydGllc0gAEiwKBmJ1Y2tldBgDIAEoCzIaLmxpbmtzLnYxLkJ1Y2tldFByb3BlcnRpZXNIABIfCgZncmFudHMYBCADKAsyDy5saW5rcy52MS5HcmFudBIOCgZzb3VyY2UYBSABKAlCDAoKcHJvcGVydGllcyJrChJQb3N0Z3Jlc1Byb3BlcnRpZXMSDAoEaG9zdBgBIAEoCRIMCgRwb3J0GAIgASgFEhAKCGRhdGFiYXNlGAMgASgJEhAKCHVzZXJuYW1lGAQgASgJEhUKCHBhc3N3b3JkGAUgASgJQgOAAQEiIgoQQnVja2V0UHJvcGVydGllcxIOCgZidWNrZXQYASABKAkiOgoFR3JhbnQSDwoHYWN0aW9ucxgBIAMoCRIRCglyZXNvdXJjZXMYAiADKAkSDQoFbGFiZWwYAyABKAkqUwoITGlua1R5cGUSGQoVTElOS19UWVBFX1VOU1BFQ0lGSUVEEAASFgoSTElOS19UWVBFX1BPU1RHUkVTEAESFAoQTElOS19UWVBFX0JVQ0tFVBACQjNaMWdpdGh1Yi5jb20vb2NlbGhxL29jZWwvcGtnL3Byb3RvL2xpbmtzL3YxO2xpbmtzdjFiBnByb3RvMw");
 
 /**
  * @generated from message links.v1.Link
@@ -22,19 +22,31 @@ export type Link = Message<"links.v1.Link"> & {
   name: string;
 
   /**
-   * @generated from field: string type = 2;
+   * @generated from oneof links.v1.Link.properties
    */
-  type: string;
-
-  /**
-   * @generated from field: map<string, string> properties = 3;
-   */
-  properties: { [key: string]: string };
+  properties: {
+    /**
+     * @generated from field: links.v1.PostgresProperties postgres = 2;
+     */
+    value: PostgresProperties;
+    case: "postgres";
+  } | {
+    /**
+     * @generated from field: links.v1.BucketProperties bucket = 3;
+     */
+    value: BucketProperties;
+    case: "bucket";
+  } | { case: undefined; value?: undefined };
 
   /**
    * @generated from field: repeated links.v1.Grant grants = 4;
    */
   grants: Grant[];
+
+  /**
+   * @generated from field: string source = 5;
+   */
+  source: string;
 };
 
 /**
@@ -43,6 +55,60 @@ export type Link = Message<"links.v1.Link"> & {
  */
 export const LinkSchema: GenMessage<Link> = /*@__PURE__*/
   messageDesc(file_links_v1_links, 0);
+
+/**
+ * @generated from message links.v1.PostgresProperties
+ */
+export type PostgresProperties = Message<"links.v1.PostgresProperties"> & {
+  /**
+   * @generated from field: string host = 1;
+   */
+  host: string;
+
+  /**
+   * @generated from field: int32 port = 2;
+   */
+  port: number;
+
+  /**
+   * @generated from field: string database = 3;
+   */
+  database: string;
+
+  /**
+   * @generated from field: string username = 4;
+   */
+  username: string;
+
+  /**
+   * @generated from field: string password = 5;
+   */
+  password: string;
+};
+
+/**
+ * Describes the message links.v1.PostgresProperties.
+ * Use `create(PostgresPropertiesSchema)` to create a new message.
+ */
+export const PostgresPropertiesSchema: GenMessage<PostgresProperties> = /*@__PURE__*/
+  messageDesc(file_links_v1_links, 1);
+
+/**
+ * @generated from message links.v1.BucketProperties
+ */
+export type BucketProperties = Message<"links.v1.BucketProperties"> & {
+  /**
+   * @generated from field: string bucket = 1;
+   */
+  bucket: string;
+};
+
+/**
+ * Describes the message links.v1.BucketProperties.
+ * Use `create(BucketPropertiesSchema)` to create a new message.
+ */
+export const BucketPropertiesSchema: GenMessage<BucketProperties> = /*@__PURE__*/
+  messageDesc(file_links_v1_links, 2);
 
 /**
  * @generated from message links.v1.Grant
@@ -69,5 +135,31 @@ export type Grant = Message<"links.v1.Grant"> & {
  * Use `create(GrantSchema)` to create a new message.
  */
 export const GrantSchema: GenMessage<Grant> = /*@__PURE__*/
-  messageDesc(file_links_v1_links, 1);
+  messageDesc(file_links_v1_links, 3);
+
+/**
+ * @generated from enum links.v1.LinkType
+ */
+export enum LinkType {
+  /**
+   * @generated from enum value: LINK_TYPE_UNSPECIFIED = 0;
+   */
+  UNSPECIFIED = 0,
+
+  /**
+   * @generated from enum value: LINK_TYPE_POSTGRES = 1;
+   */
+  POSTGRES = 1,
+
+  /**
+   * @generated from enum value: LINK_TYPE_BUCKET = 2;
+   */
+  BUCKET = 2,
+}
+
+/**
+ * Describes the enum links.v1.LinkType.
+ */
+export const LinkTypeSchema: GenEnum<LinkType> = /*@__PURE__*/
+  enumDesc(file_links_v1_links, 0);
 

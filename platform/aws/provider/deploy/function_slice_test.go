@@ -10,6 +10,7 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/naming"
 	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
+	linksv1 "github.com/ocelhq/ocel/pkg/proto/links/v1"
 )
 
 func TestTranslateFunction(t *testing.T) {
@@ -366,12 +367,12 @@ func admits(t *testing.T, pattern, key string) bool {
 func TestFunctionEnvKey(t *testing.T) {
 	cases := []struct {
 		name     string
-		typ      string
+		typ      linksv1.LinkType
 		userID   string
 		wantName string
 	}{
-		{"postgres uses the canonical type token and user ID", naming.TokenPostgres, "main", "OCEL_RESOURCE_POSTGRES_main"},
-		{"bucket uses the canonical type token and user ID", naming.TokenBucket, "uploads", "OCEL_RESOURCE_BUCKET_uploads"},
+		{"postgres uses the type's env fragment and user ID", linksv1.LinkType_LINK_TYPE_POSTGRES, "main", "OCEL_RESOURCE_POSTGRES_main"},
+		{"bucket uses the type's env fragment and user ID", linksv1.LinkType_LINK_TYPE_BUCKET, "uploads", "OCEL_RESOURCE_BUCKET_uploads"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -381,28 +382,6 @@ func TestFunctionEnvKey(t *testing.T) {
 			}
 		})
 	}
-}
-
-func TestPostgresRecordProperties(t *testing.T) {
-	t.Run("matches the SDK connection string shape", func(t *testing.T) {
-		properties := postgresRecordProperties("ocel", "s3cr3t", "db.host", 5432, "ocel")
-		want := "postgres://ocel:s3cr3t@db.host:5432/ocel"
-		if properties["connectionString"] != want {
-			t.Errorf("connectionString = %q, want %q", properties["connectionString"], want)
-		}
-	})
-}
-
-func TestBucketRecordProperties(t *testing.T) {
-	t.Run("carries the bucket binding and nothing ambient", func(t *testing.T) {
-		properties := bucketRecordProperties("my-bucket-abc123")
-		if properties["bucket"] != "my-bucket-abc123" {
-			t.Errorf("bucket = %q, want the provisioned bucket binding", properties["bucket"])
-		}
-		if _, ok := properties["address"]; ok {
-			t.Errorf("properties = %v, want the runtime address read from %s instead of repeated per bucket", properties, runtimeAddressEnv)
-		}
-	})
 }
 
 func TestArtifactArchivePath(t *testing.T) {

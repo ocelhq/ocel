@@ -208,7 +208,7 @@ export default { slug: "test-app" };
 		projectID := testProjectID(t)
 		const apiURL = "https://api.example.com"
 		srv := devserver.New(apiURL, "tok", projectID, "http://127.0.0.1:0")
-		srv.PushEnv(map[string]string{"OCEL_RESOURCE_POSTGRES_main": `{"connectionString":"conn"}`})
+		srv.PushEnv(map[string]string{"OCEL_RESOURCE_POSTGRES_main": `{"name":"main","postgres":{"host":"resolved","port":5432,"database":"main","username":"u","password":"p"}}`})
 
 		listener, err := net.Listen("tcp", "127.0.0.1:0")
 		if err != nil {

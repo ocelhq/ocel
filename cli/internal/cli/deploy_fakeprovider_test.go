@@ -258,22 +258,27 @@ func fakeLinks(m *deploymentsv1.Manifest) []*linksv1.Link {
 		if r.GetLinked() {
 			continue
 		}
-		out = append(out, &linksv1.Link{
+		link := &linksv1.Link{
 			Name: r.GetLogicalName(),
-			Type: r.GetResource().GetType(),
-			Properties: map[string]string{
-				"host":     "db.fake.internal",
-				"port":     "5432",
-				"username": "app",
-				"password": fakeLinkSecret,
-				"database": r.GetResource().GetName(),
-			},
 			Grants: []*linksv1.Grant{{
 				Actions:   []string{"fake:connect"},
 				Resources: []string{"fake:resource/main"},
 				Label:     "connect",
 			}},
-		})
+		}
+		switch r.GetResource().GetType() {
+		case linksv1.LinkType_LINK_TYPE_BUCKET:
+			link.Properties = &linksv1.Link_Bucket{Bucket: &linksv1.BucketProperties{Bucket: r.GetResource().GetName() + "-" + fakeLinkSecret}}
+		default:
+			link.Properties = &linksv1.Link_Postgres{Postgres: &linksv1.PostgresProperties{
+				Host:     "db.fake.internal",
+				Port:     5432,
+				Username: "app",
+				Password: fakeLinkSecret,
+				Database: r.GetResource().GetName(),
+			}}
+		}
+		out = append(out, link)
 	}
 	return out
 }
@@ -547,10 +552,10 @@ func validateFixtureManifest(m *deploymentsv1.Manifest) error {
 		if r.GetLogicalName() == "" {
 			return fmt.Errorf("resource %s carries no logical name", r.GetResource().GetType())
 		}
-		if _, ok := naming.TokenKind(r.GetResource().GetType()); !ok {
-			return fmt.Errorf("resource %s has type %q, which names no resource kind", r.GetLogicalName(), r.GetResource().GetType())
+		if _, ok := naming.KindOf(r.GetResource().GetType()); !ok {
+			return fmt.Errorf("resource %s has type %v, which names no resource kind", r.GetLogicalName(), r.GetResource().GetType())
 		}
-		if r.GetResource().GetType() == naming.TokenPostgres && r.GetPostgres().GetVersion() != "17" {
+		if r.GetResource().GetType() == linksv1.LinkType_LINK_TYPE_POSTGRES && r.GetPostgres().GetVersion() != "17" {
 			return fmt.Errorf("resource %s postgres version = %q, want %q", r.GetLogicalName(), r.GetPostgres().GetVersion(), "17")
 		}
 		declared[r.GetLogicalName()] = true

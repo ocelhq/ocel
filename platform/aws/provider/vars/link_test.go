@@ -2,51 +2,67 @@ package vars
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"slices"
 	"strings"
 	"testing"
 
 	ddbtypes "github.com/aws/aws-sdk-go-v2/service/dynamodb/types"
+	"google.golang.org/protobuf/proto"
 
 	"github.com/ocelhq/ocel/pkg/naming"
+	linksv1 "github.com/ocelhq/ocel/pkg/proto/links/v1"
 )
 
-func linkRecords() []Record {
-	return []Record{
-		{
-			Name:       "main",
-			Type:       naming.TokenPostgres,
-			Properties: map[string]string{"connectionString": "postgres://u:p@h:5432/d"},
-			Grants: []Grant{{
-				Actions:   []string{"rds-db:connect"},
-				Resources: []string{"arn:aws:rds-db:us-east-1:1234:dbuser:db-ABCD/ocel"},
-				Label:     "connect",
-			}},
-		},
-		{
-			Name:       "uploads",
-			Type:       naming.TokenBucket,
-			Properties: map[string]string{"bucket": "shop-uploads"},
-			Grants: []Grant{{
-				Actions:   []string{"s3:GetObject", "s3:PutObject"},
-				Resources: []string{"arn:aws:s3:::shop-uploads/*"},
-				Label:     "read/write",
-			}},
-		},
+const (
+	mainHost     = "db.host.example"
+	mainPassword = "s3cr3t-pw"
+)
+
+func postgresLink(name, host, source string, grants ...*linksv1.Grant) *linksv1.Link {
+	return &linksv1.Link{
+		Name:   name,
+		Source: source,
+		Properties: &linksv1.Link_Postgres{Postgres: &linksv1.PostgresProperties{
+			Host: host, Port: 5432, Database: "d", Username: "u", Password: mainPassword,
+		}},
+		Grants: grants,
 	}
 }
 
-func recordNames(records []Record) []string {
+func bucketLink(name, bucket, source string, grants ...*linksv1.Grant) *linksv1.Link {
+	return &linksv1.Link{
+		Name:       name,
+		Source:     source,
+		Properties: &linksv1.Link_Bucket{Bucket: &linksv1.BucketProperties{Bucket: bucket}},
+		Grants:     grants,
+	}
+}
+
+func linkRecords() []*linksv1.Link {
+	return []*linksv1.Link{
+		postgresLink("main", mainHost, "", &linksv1.Grant{
+			Actions:   []string{"rds-db:connect"},
+			Resources: []string{"arn:aws:rds-db:us-east-1:1234:dbuser:db-ABCD/ocel"},
+			Label:     "connect",
+		}),
+		bucketLink("uploads", "shop-uploads", "", &linksv1.Grant{
+			Actions:   []string{"s3:GetObject", "s3:PutObject"},
+			Resources: []string{"arn:aws:s3:::shop-uploads/*"},
+			Label:     "read/write",
+		}),
+	}
+}
+
+func recordNames(records []*linksv1.Link) []string {
 	names := make([]string, 0, len(records))
 	for _, r := range records {
-		names = append(names, r.Name)
+		names = append(names, r.GetName())
 	}
 	return names
 }
 
-func publish(t *testing.T, s *Store, environment string, records []Record) {
+func publish(t *testing.T, s *Store, environment string, records []*linksv1.Link) {
 	t.Helper()
 	if _, err := s.PublishRecords(context.Background(), "shop", environment, OwnerOcel, records); err != nil {
 		t.Fatalf("PublishRecords %q: %v", environment, err)
@@ -69,7 +85,7 @@ func TestPublishRecords(t *testing.T) {
 		publish(t, store, "", linkRecords())
 
 		for _, r := range linkRecords() {
-			pk := naming.LinkVarsKey("shop", store.Class, r.Name)
+			pk := naming.LinkVarsKey("shop", store.Class, r.GetName())
 			if len(ddb.items[pk]) != 2 {
 				t.Errorf("%s holds %d rows, want the value row and the record row", pk, len(ddb.items[pk]))
 			}
@@ -116,8 +132,13 @@ func TestPublishRecords(t *testing.T) {
 			for sk, item := range sks {
 				for name, attr := range item {
 					s, ok := attr.(*ddbtypes.AttributeValueMemberS)
-					if ok && strings.Contains(s.Value, "postgres://u:p@h:5432/d") {
-						t.Fatalf("connection string at rest in %s/%s attribute %q", pk, sk, name)
+					if !ok {
+						continue
+					}
+					for _, secret := range []string{mainPassword, mainHost} {
+						if strings.Contains(s.Value, secret) {
+							t.Fatalf("%q at rest in %s/%s attribute %q", secret, pk, sk, name)
+						}
 					}
 				}
 			}
@@ -135,16 +156,11 @@ func TestPublishRecords(t *testing.T) {
 			t.Fatalf("ResolveRecords returned %d records, want %d", len(got), len(want))
 		}
 		for i, p := range got {
-			if p.Type != want[i].Type {
-				t.Errorf("%s = type %q, want %q", p.Name, p.Type, want[i].Type)
+			if p.Type() != naming.LinkTypeOf(want[i]) {
+				t.Errorf("%s = type %v, want %v", p.Name(), p.Type(), naming.LinkTypeOf(want[i]))
 			}
-			for key, value := range want[i].Properties {
-				if p.Properties[key] != value {
-					t.Errorf("%s property %s = %q, want %q", p.Name, key, p.Properties[key], value)
-				}
-			}
-			if !slices.EqualFunc(p.Grants, want[i].Grants, sameGrant) {
-				t.Errorf("%s grants = %+v, want %+v", p.Name, p.Grants, want[i].Grants)
+			if !proto.Equal(p.Link, want[i]) {
+				t.Errorf("%s = %+v, want %+v", p.Name(), p.Link, want[i])
 			}
 		}
 	})
@@ -188,9 +204,8 @@ func TestPublishRecords(t *testing.T) {
 		first := linkRecords()[:1]
 		publish(t, store, "", first)
 
-		second := linkRecords()[:1]
-		second[0].Properties = map[string]string{"connectionString": "postgres://u:p@rotated:5432/d"}
-		second[0].Grants = []Grant{{Actions: []string{"rds-db:connect"}, Resources: []string{"arn:aws:rds-db:us-east-1:1234:dbuser:db-EFGH/ocel"}}}
+		second := []*linksv1.Link{postgresLink("main", "rotated.host.example", "",
+			&linksv1.Grant{Actions: []string{"rds-db:connect"}, Resources: []string{"arn:aws:rds-db:us-east-1:1234:dbuser:db-EFGH/ocel"}})}
 
 		var midflight []PublishedRecord
 		ddb.beforeTransact = func() { midflight = resolve(t, store, "", "main") }
@@ -199,11 +214,11 @@ func TestPublishRecords(t *testing.T) {
 		if len(midflight) != 1 {
 			t.Fatalf("a read during the publish saw %d records, want the link it had all along", len(midflight))
 		}
-		if got := midflight[0].Properties["connectionString"]; got != first[0].Properties["connectionString"] {
+		if got := midflight[0].Link.GetPostgres().GetHost(); got != first[0].GetPostgres().GetHost() {
 			t.Errorf("value = %q mid-publish, want the published pair or the previous one, never a mix", got)
 		}
-		if !slices.EqualFunc(midflight[0].Grants, first[0].Grants, sameGrant) {
-			t.Errorf("grants = %+v mid-publish, want the ones the value was published with", midflight[0].Grants)
+		if !slices.EqualFunc(midflight[0].Link.GetGrants(), first[0].GetGrants(), sameGrant) {
+			t.Errorf("grants = %+v mid-publish, want the ones the value was published with", midflight[0].Link.GetGrants())
 		}
 	})
 
@@ -228,32 +243,27 @@ func TestPublishRecords(t *testing.T) {
 
 	t.Run("prunes only the environment it publishes for", func(t *testing.T) {
 		store, _, _ := newTestStore(t)
-		mine := []Record{{Name: "other", Type: naming.TokenBucket, Properties: map[string]string{"bucket": "b"}}}
-		theirs := []Record{{Name: "main", Type: naming.TokenBucket, Properties: map[string]string{"bucket": "c"}}}
+		mine := []*linksv1.Link{bucketLink("other", "b", "")}
+		theirs := []*linksv1.Link{bucketLink("main", "c", "")}
 
 		publish(t, store, "pr-42", theirs)
 		publish(t, store, "pr-1", theirs)
 		publish(t, store, "pr-1", mine)
 
 		got := resolve(t, store, "pr-42", "main")
-		if len(got) != 1 || got[0].Properties["bucket"] != "c" {
+		if len(got) != 1 || got[0].Link.GetBucket().GetBucket() != "c" {
 			t.Errorf("pr-42 read %+v, want its own pair — a concurrent pr-1 deploy pruned it", got)
 		}
 	})
 }
 
 func TestResolveRecordsShadowing(t *testing.T) {
-	classWide := []Record{{
+	classWide := []*linksv1.Link{postgresLink("main", "shared", "",
+		&linksv1.Grant{Actions: []string{"rds-db:connect"}, Resources: []string{"arn:shared"}})}
+	named := []*linksv1.Link{{
 		Name:       "main",
-		Type:       naming.TokenPostgres,
-		Properties: map[string]string{"connectionString": "postgres://shared", "sslmode": "require"},
-		Grants:     []Grant{{Actions: []string{"rds-db:connect"}, Resources: []string{"arn:shared"}}},
-	}}
-	named := []Record{{
-		Name:       "main",
-		Type:       naming.TokenPostgres,
-		Properties: map[string]string{"connectionString": "postgres://staging"},
-		Grants:     []Grant{{Actions: []string{"rds-db:connect"}, Resources: []string{"arn:staging"}}},
+		Properties: &linksv1.Link_Postgres{Postgres: &linksv1.PostgresProperties{Host: "staging"}},
+		Grants:     []*linksv1.Grant{{Actions: []string{"rds-db:connect"}, Resources: []string{"arn:staging"}}},
 	}}
 
 	t.Run("serves every environment of the class from one publish", func(t *testing.T) {
@@ -262,7 +272,7 @@ func TestResolveRecordsShadowing(t *testing.T) {
 
 		for _, environment := range []string{"", "staging", "pr-42"} {
 			got := resolve(t, store, environment, "main")
-			if len(got) != 1 || got[0].Properties["connectionString"] != "postgres://shared" {
+			if len(got) != 1 || got[0].Link.GetPostgres().GetHost() != "shared" {
 				t.Errorf("%q read %+v, want the class-wide pair — an ephemeral preview publishes nothing of its own", environment, got)
 			}
 			if got[0].Environment != "" {
@@ -280,20 +290,20 @@ func TestResolveRecordsShadowing(t *testing.T) {
 		if len(got) != 1 {
 			t.Fatalf("ResolveRecords returned %d records, want 1", len(got))
 		}
-		if got[0].Properties["connectionString"] != "postgres://staging" {
-			t.Errorf("connectionString = %q, want staging's own", got[0].Properties["connectionString"])
+		if got[0].Link.GetPostgres().GetHost() != "staging" {
+			t.Errorf("host = %q, want staging's own", got[0].Link.GetPostgres().GetHost())
 		}
-		if _, merged := got[0].Properties["sslmode"]; merged {
-			t.Errorf("properties = %+v, want only staging's publish — a link is one coherent fact, not a merge of two", got[0].Properties)
+		if got[0].Link.GetPostgres().GetDatabase() != "" {
+			t.Errorf("properties = %+v, want only staging's publish — a link is one coherent fact, not a merge of two", got[0].Link.GetPostgres())
 		}
-		if !slices.EqualFunc(got[0].Grants, named[0].Grants, sameGrant) {
-			t.Errorf("grants = %+v, want the ones staging published beside its values", got[0].Grants)
+		if !slices.EqualFunc(got[0].Link.GetGrants(), named[0].GetGrants(), sameGrant) {
+			t.Errorf("grants = %+v, want the ones staging published beside its values", got[0].Link.GetGrants())
 		}
 		if got[0].Environment != "staging" {
 			t.Errorf("resolved environment = %q, want staging", got[0].Environment)
 		}
 
-		if wide := resolve(t, store, "", "main"); wide[0].Properties["connectionString"] != "postgres://shared" {
+		if wide := resolve(t, store, "", "main"); wide[0].Link.GetPostgres().GetHost() != "shared" {
 			t.Errorf("the class-wide pair read %+v after staging shadowed it", wide[0])
 		}
 	})
@@ -309,11 +319,11 @@ func TestResolveRecordsShadowing(t *testing.T) {
 		if len(midflight) != 1 {
 			t.Fatalf("a read during the shadowing publish saw %d records, want 1", len(midflight))
 		}
-		if got := midflight[0].Properties["connectionString"]; got != "postgres://shared" {
+		if got := midflight[0].Link.GetPostgres().GetHost(); got != "shared" {
 			t.Errorf("value = %q mid-publish, want the class-wide pair until the named one lands whole", got)
 		}
-		if !slices.EqualFunc(midflight[0].Grants, classWide[0].Grants, sameGrant) {
-			t.Errorf("grants = %+v mid-publish, want the class-wide pair's own", midflight[0].Grants)
+		if !slices.EqualFunc(midflight[0].Link.GetGrants(), classWide[0].GetGrants(), sameGrant) {
+			t.Errorf("grants = %+v mid-publish, want the class-wide pair's own", midflight[0].Link.GetGrants())
 		}
 	})
 }
@@ -337,9 +347,13 @@ func TestResolveRecordsVerifies(t *testing.T) {
 			t.Run(name, func(t *testing.T) {
 				store, ddb, _ := newTestStore(t)
 				publish(t, store, "", linkRecords()[1:])
-				overwriteRecordRow(t, ddb, store, "uploads", "", recordRow{Type: naming.TokenBucket, Grants: []Grant{grant}})
+				smuggled, err := EncodeLink(bucketLink("uploads", "shop-uploads", "", grant))
+				if err != nil {
+					t.Fatalf("encode: %v", err)
+				}
+				corruptValue(t, ddb, store, "uploads", "", string(smuggled))
 
-				_, err := store.ResolveRecords(context.Background(), "shop", "", []string{"uploads"})
+				_, err = store.ResolveRecords(context.Background(), "shop", "", []string{"uploads"})
 				if !errors.Is(err, ErrUnscopedGrant) {
 					t.Fatalf("err = %v, want %v", err, ErrUnscopedGrant)
 				}
@@ -375,17 +389,17 @@ func TestResolveRecordsVerifies(t *testing.T) {
 		}
 	})
 
-	t.Run("rejects a bag nothing can parse", func(t *testing.T) {
+	t.Run("rejects a value nothing can parse", func(t *testing.T) {
 		store, ddb, _ := newTestStore(t)
 		publish(t, store, "", linkRecords()[:1])
-		corruptValue(t, ddb, store, "main", "", "not a property bag")
+		corruptValue(t, ddb, store, "main", "", "not a link")
 
 		_, err := store.ResolveRecords(context.Background(), "shop", "", []string{"main"})
 		if !errors.Is(err, ErrUnreadableRecord) {
 			t.Fatalf("err = %v, want %v", err, ErrUnreadableRecord)
 		}
 		if !strings.Contains(err.Error(), "main") {
-			t.Errorf("err = %v, want the link whose bag will not parse named", err)
+			t.Errorf("err = %v, want the link whose value will not parse named", err)
 		}
 	})
 
@@ -401,6 +415,38 @@ func TestResolveRecordsVerifies(t *testing.T) {
 		_, err := store.ResolveRecords(context.Background(), "shop", "", []string{"main"})
 		if !errors.Is(err, ErrUnreadableRecord) {
 			t.Fatalf("err = %v, want %v", err, ErrUnreadableRecord)
+		}
+	})
+
+	t.Run("rejects a pair whose rows describe different links", func(t *testing.T) {
+		for name, tamper := range map[string]func(t *testing.T, ddb *fakeDynamo, store *Store){
+			"the value names another link": func(t *testing.T, ddb *fakeDynamo, store *Store) {
+				smuggled, err := EncodeLink(bucketLink("other", "shop-uploads", ""))
+				if err != nil {
+					t.Fatalf("encode: %v", err)
+				}
+				corruptValue(t, ddb, store, "uploads", "", string(smuggled))
+			},
+			"the record row carries another type": func(t *testing.T, ddb *fakeDynamo, store *Store) {
+				overwriteRecordRow(t, ddb, store, "uploads", "", &linksv1.Link{
+					Name:       "uploads",
+					Properties: &linksv1.Link_Postgres{Postgres: &linksv1.PostgresProperties{}},
+				})
+			},
+		} {
+			t.Run(name, func(t *testing.T) {
+				store, ddb, _ := newTestStore(t)
+				publish(t, store, "", linkRecords()[1:])
+				tamper(t, ddb, store)
+
+				_, err := store.ResolveRecords(context.Background(), "shop", "", []string{"uploads"})
+				if !errors.Is(err, ErrUnreadableRecord) {
+					t.Fatalf("err = %v, want %v", err, ErrUnreadableRecord)
+				}
+				if !strings.Contains(err.Error(), "uploads") {
+					t.Errorf("err = %v, want the link whose pair disagrees named", err)
+				}
+			})
 		}
 	})
 
@@ -423,17 +469,17 @@ func TestPublishRecordsRefuses(t *testing.T) {
 
 	for name, tc := range map[string]struct {
 		environment string
-		record      Record
+		record      *linksv1.Link
 	}{
-		"no project link":   {record: Record{Type: naming.TokenBucket}},
-		"no type token":     {record: Record{Name: "main"}},
+		"no project link":   {record: bucketLink("", "b", "")},
+		"no properties":     {record: &linksv1.Link{Name: "main"}},
 		"reserved env":      {environment: ClassWideEnvironment, record: linkRecords()[0]},
-		"delimited name":    {record: Record{Name: "a" + delimiter + "b", Type: naming.TokenBucket}},
+		"delimited name":    {record: bucketLink("a"+delimiter+"b", "b", "")},
 		"delimited env":     {environment: "a" + delimiter + "b", record: linkRecords()[0]},
-		"property overflow": {record: Record{Name: "main", Type: naming.TokenBucket, Properties: map[string]string{"blob": strings.Repeat("x", MaxValueBytes)}}},
+		"property overflow": {record: bucketLink("main", strings.Repeat("x", MaxValueBytes), "")},
 	} {
 		t.Run(name, func(t *testing.T) {
-			if _, err := store.PublishRecords(context.Background(), "shop", tc.environment, OwnerOcel, []Record{tc.record}); err == nil {
+			if _, err := store.PublishRecords(context.Background(), "shop", tc.environment, OwnerOcel, []*linksv1.Link{tc.record}); err == nil {
 				t.Fatalf("PublishRecords accepted %+v", tc.record)
 			}
 		})
@@ -447,8 +493,7 @@ func TestPublishRecordsRefuses(t *testing.T) {
 
 	t.Run("the same link twice", func(t *testing.T) {
 		store, ddb, _ := newTestStore(t)
-		twice := []Record{linkRecords()[0], linkRecords()[0]}
-		twice[1].Properties = map[string]string{"connectionString": "postgres://other"}
+		twice := []*linksv1.Link{linkRecords()[0], postgresLink("main", "other", "")}
 
 		if _, err := store.PublishRecords(context.Background(), "shop", "", OwnerOcel, twice); err == nil {
 			t.Fatal("PublishRecords raced two publishes of one link onto the same rows")
@@ -463,9 +508,9 @@ func TestPublishRecordsRefuses(t *testing.T) {
 			t.Run(name, func(t *testing.T) {
 				store, ddb, _ := newTestStore(t)
 				record := linkRecords()[1]
-				record.Grants = []Grant{grant}
+				record.Grants = []*linksv1.Grant{grant}
 
-				_, err := store.PublishRecords(context.Background(), "shop", "", OwnerOcel, []Record{record})
+				_, err := store.PublishRecords(context.Background(), "shop", "", OwnerOcel, []*linksv1.Link{record})
 				if !errors.Is(err, ErrUnscopedGrant) {
 					t.Fatalf("err = %v, want %v — the deploy that introduces the grant is the one that can still fix it", err, ErrUnscopedGrant)
 				}
@@ -478,8 +523,8 @@ func TestPublishRecordsRefuses(t *testing.T) {
 
 }
 
-func unscopedGrants() map[string]Grant {
-	return map[string]Grant{
+func unscopedGrants() map[string]*linksv1.Grant {
+	return map[string]*linksv1.Grant{
 		"every resource": {Actions: []string{"s3:GetObject"}, Resources: []string{"*"}},
 		"no resource":    {Actions: []string{"s3:GetObject"}},
 		"every action":   {Actions: []string{"*"}, Resources: []string{"arn:aws:s3:::shop-uploads/*"}},
@@ -552,8 +597,8 @@ func TestResolveRecordsNeverMergesAPair(t *testing.T) {
 
 	t.Run("falls through to the class-wide pair once a teardown finishes", func(t *testing.T) {
 		store, ddb, _ := newTestStore(t)
-		classWide := []Record{{Name: "main", Type: naming.TokenBucket, Properties: map[string]string{"bucket": "shared"}}}
-		preview := []Record{{Name: "main", Type: naming.TokenBucket, Properties: map[string]string{"bucket": "pr-42"}}}
+		classWide := []*linksv1.Link{bucketLink("main", "shared", "")}
+		preview := []*linksv1.Link{bucketLink("main", "pr-42", "")}
 		publish(t, store, "", classWide)
 		publish(t, store, "pr-42", preview)
 
@@ -563,7 +608,7 @@ func TestResolveRecordsNeverMergesAPair(t *testing.T) {
 		ddb.afterQuery = func() { delete(ddb.items[pk], recordSortKey("pr-42")) }
 
 		got := resolve(t, store, "pr-42", "main")
-		if len(got) != 1 || got[0].Properties["bucket"] != "shared" {
+		if len(got) != 1 || got[0].Link.GetBucket().GetBucket() != "shared" {
 			t.Errorf("pr-42 read %+v, want the class-wide pair sitting in the same partition", got)
 		}
 	})
@@ -612,7 +657,7 @@ func TestPublishRecordsSurvivesAConcurrentDeploy(t *testing.T) {
 			t.Errorf("index version = %d, want the seed, the racer and this deploy each committed once — an unconditional put would sit at 1", got)
 		}
 		for _, r := range linkRecords() {
-			pk := naming.LinkVarsKey("shop", store.Class, r.Name)
+			pk := naming.LinkVarsKey("shop", store.Class, r.GetName())
 			if len(ddb.items[pk]) == 0 {
 				t.Errorf("%s was pruned away by a deploy that also publishes it", pk)
 			}
@@ -636,7 +681,7 @@ func TestPublishRecordsSurvivesAConcurrentDeploy(t *testing.T) {
 			t.Errorf("err = %v, want a refusal naming the racing deploy", err)
 		}
 		for _, r := range linkRecords() {
-			pk := naming.LinkVarsKey("shop", store.Class, r.Name)
+			pk := naming.LinkVarsKey("shop", store.Class, r.GetName())
 			if len(ddb.items[pk]) == 0 {
 				t.Errorf("%s was pruned away by a deploy that never committed its index", pk)
 			}
@@ -703,8 +748,8 @@ func TestPurgeTakesTheLinkPartitions(t *testing.T) {
 	}
 }
 
-func sameGrant(a, b Grant) bool {
-	return slices.Equal(a.Actions, b.Actions) && slices.Equal(a.Resources, b.Resources) && a.Label == b.Label
+func sameGrant(a, b *linksv1.Grant) bool {
+	return proto.Equal(a, b)
 }
 
 func corruptValue(t *testing.T, ddb *fakeDynamo, store *Store, link, environment, plaintext string) {
@@ -722,9 +767,9 @@ func corruptValue(t *testing.T, ddb *fakeDynamo, store *Store, link, environment
 	ddb.put(row)
 }
 
-func overwriteRecordRow(t *testing.T, ddb *fakeDynamo, store *Store, link, environment string, row recordRow) {
+func overwriteRecordRow(t *testing.T, ddb *fakeDynamo, store *Store, link, environment string, row *linksv1.Link) {
 	t.Helper()
-	encoded, err := json.Marshal(row)
+	encoded, err := EncodeLink(redacted(row))
 	if err != nil {
 		t.Fatalf("marshal record row: %v", err)
 	}
@@ -739,11 +784,7 @@ func overwriteRecordRow(t *testing.T, ddb *fakeDynamo, store *Store, link, envir
 func TestPublishersPruneOnlyTheirOwnRecords(t *testing.T) {
 	t.Run("one publisher's inventory survives another's publish", func(t *testing.T) {
 		store, _, _ := newTestStore(t)
-		foreign := []Record{{
-			Name:       "orders",
-			Type:       "sst:aws.Postgres",
-			Properties: map[string]string{"connectionString": "postgres://sst/orders"},
-		}}
+		foreign := []*linksv1.Link{postgresLink("orders", "sst.orders", "sst")}
 		if _, err := store.PublishRecords(context.Background(), "shop", "", "SST", foreign); err != nil {
 			t.Fatalf("PublishRecords SST: %v", err)
 		}
@@ -751,16 +792,14 @@ func TestPublishersPruneOnlyTheirOwnRecords(t *testing.T) {
 		publish(t, store, "", linkRecords())
 
 		got := resolve(t, store, "", "orders")
-		if got[0].Type != "sst:aws.Postgres" {
+		if got[0].Link.GetSource() != "sst" {
 			t.Fatalf("record = %+v, want the foreign publisher's record untouched by ocel's own publish", got[0])
 		}
 	})
 
 	t.Run("published names read back across every publisher", func(t *testing.T) {
 		store, _, _ := newTestStore(t)
-		if _, err := store.PublishRecords(context.Background(), "shop", "", "SST", []Record{{
-			Name: "orders", Type: "sst:aws.Postgres", Properties: map[string]string{"connectionString": "postgres://sst/orders"},
-		}}); err != nil {
+		if _, err := store.PublishRecords(context.Background(), "shop", "", "SST", []*linksv1.Link{postgresLink("orders", "sst.orders", "sst")}); err != nil {
 			t.Fatalf("PublishRecords SST: %v", err)
 		}
 		publish(t, store, "pr-42", linkRecords()[:1])
@@ -805,12 +844,8 @@ func TestPublishersPruneOnlyTheirOwnRecords(t *testing.T) {
 
 	t.Run("a name another owner still claims survives a prune", func(t *testing.T) {
 		store, _, _ := newTestStore(t)
-		foreign := []Record{{
-			Name: "orders", Type: "sst:aws.Postgres", Properties: map[string]string{"connectionString": "postgres://sst/orders"},
-		}}
-		mine := []Record{{
-			Name: "orders", Type: naming.TokenPostgres, Properties: map[string]string{"connectionString": "postgres://ocel/orders"},
-		}}
+		foreign := []*linksv1.Link{postgresLink("orders", "sst.orders", "sst")}
+		mine := []*linksv1.Link{postgresLink("orders", "ocel.orders", "")}
 		if _, err := store.PublishRecords(context.Background(), "shop", "", "SST", foreign); err != nil {
 			t.Fatalf("PublishRecords SST: %v", err)
 		}
@@ -823,7 +858,7 @@ func TestPublishersPruneOnlyTheirOwnRecords(t *testing.T) {
 		}
 
 		got := resolve(t, store, "", "orders")
-		if got[0].Type != naming.TokenPostgres {
+		if got[0].Link.GetSource() != "" || got[0].Link.GetPostgres().GetHost() != "ocel.orders" {
 			t.Fatalf("record = %+v, want the rows a live owner still claims left alone", got[0])
 		}
 	})

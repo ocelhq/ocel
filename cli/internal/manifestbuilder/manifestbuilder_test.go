@@ -10,6 +10,7 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/naming"
 	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
+	linksv1 "github.com/ocelhq/ocel/pkg/proto/links/v1"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/resources/v1"
 )
 
@@ -48,7 +49,7 @@ func toGolden(m *deploymentsv1.Manifest) goldenManifest {
 	for _, r := range m.GetResources() {
 		gr := goldenResource{
 			LogicalName: r.GetLogicalName(),
-			Type:        r.GetResource().GetType(),
+			Type:        r.GetResource().GetType().String(),
 			ID:          r.GetResource().GetName(),
 		}
 		if pg := r.GetPostgres(); pg != nil {
@@ -80,8 +81,8 @@ func marshal(t *testing.T, m *deploymentsv1.Manifest) []byte {
 
 func synthDeclarations() []Declaration {
 	return []Declaration{
-		{Type: naming.TokenPostgres, ID: "main", Postgres: &resourcesv1.PostgresConfig{Version: "17"}, Source: "app/db.ts:5"},
-		{Type: naming.TokenPostgres, ID: "analytics", Postgres: &resourcesv1.PostgresConfig{Version: "16"}, Source: "app/analytics.ts:9"},
+		{Type: linksv1.LinkType_LINK_TYPE_POSTGRES, ID: "main", Postgres: &resourcesv1.PostgresConfig{Version: "17"}, Source: "app/db.ts:5"},
+		{Type: linksv1.LinkType_LINK_TYPE_POSTGRES, ID: "analytics", Postgres: &resourcesv1.PostgresConfig{Version: "16"}, Source: "app/analytics.ts:9"},
 	}
 }
 
@@ -199,7 +200,7 @@ func TestBuild(t *testing.T) {
 		}
 
 		withExtra := append(append([]Declaration{}, base...), Declaration{
-			Type: naming.TokenPostgres, ID: "billing", Source: "app/billing.ts:2",
+			Type: linksv1.LinkType_LINK_TYPE_POSTGRES, ID: "billing", Source: "app/billing.ts:2",
 		})
 		after, err := Build("proj-1", nil, nil, withExtra, nil, nil, nil)
 		if err != nil {
@@ -225,7 +226,7 @@ func TestBuild(t *testing.T) {
 		t.Parallel()
 
 		manifest, err := Build("proj-1", nil, nil, []Declaration{
-			{Type: naming.TokenPostgres, ID: "main", Postgres: &resourcesv1.PostgresConfig{Version: "17"}, Source: "app/db.ts:5"},
+			{Type: linksv1.LinkType_LINK_TYPE_POSTGRES, ID: "main", Postgres: &resourcesv1.PostgresConfig{Version: "17"}, Source: "app/db.ts:5"},
 		}, nil, nil, nil)
 		if err != nil {
 			t.Fatalf("Build: %v", err)
@@ -248,7 +249,7 @@ func TestBuild(t *testing.T) {
 		t.Parallel()
 
 		manifest, err := Build("proj-1", nil, nil, []Declaration{
-			{Type: naming.TokenBucket, ID: "storage", Bucket: &resourcesv1.BucketConfig{AllowedOrigins: []string{"https://app.example.com"}}, Source: "app/storage.ts:3"},
+			{Type: linksv1.LinkType_LINK_TYPE_BUCKET, ID: "storage", Bucket: &resourcesv1.BucketConfig{AllowedOrigins: []string{"https://app.example.com"}}, Source: "app/storage.ts:3"},
 		}, nil, nil, nil)
 		if err != nil {
 			t.Fatalf("Build: %v", err)
@@ -274,8 +275,8 @@ func TestBuild(t *testing.T) {
 		t.Parallel()
 
 		_, err := Build("proj-1", nil, nil, []Declaration{
-			{Type: naming.TokenPostgres, ID: "main", Source: "app/db.ts:5"},
-			{Type: naming.TokenPostgres, ID: "main", Source: "app/other.ts:12"},
+			{Type: linksv1.LinkType_LINK_TYPE_POSTGRES, ID: "main", Source: "app/db.ts:5"},
+			{Type: linksv1.LinkType_LINK_TYPE_POSTGRES, ID: "main", Source: "app/other.ts:12"},
 		}, nil, nil, nil)
 		if err == nil {
 			t.Fatal("Build: expected duplicate error, got nil")
@@ -349,8 +350,8 @@ func TestBuild(t *testing.T) {
 		t.Parallel()
 
 		_, err := Build("proj-1", nil, nil, []Declaration{
-			{Type: naming.TokenBucket, ID: "my_uploads", Source: "app/a.ts:1"},
-			{Type: naming.TokenBucket, ID: "my-uploads", Source: "app/b.ts:2"},
+			{Type: linksv1.LinkType_LINK_TYPE_BUCKET, ID: "my_uploads", Source: "app/a.ts:1"},
+			{Type: linksv1.LinkType_LINK_TYPE_BUCKET, ID: "my-uploads", Source: "app/b.ts:2"},
 		}, nil, nil, nil)
 		if err == nil {
 			t.Fatal("Build: expected a collision error, got nil")
@@ -382,7 +383,7 @@ func TestBuild(t *testing.T) {
 		t.Parallel()
 
 		_, err := Build("proj-1", nil, nil, []Declaration{
-			{Type: "", ID: "main"},
+			{Type: linksv1.LinkType_LINK_TYPE_UNSPECIFIED, ID: "main"},
 		}, nil, nil, nil)
 		if err == nil {
 			t.Fatal("Build: expected error for unsupported resource type, got nil")
@@ -393,7 +394,7 @@ func TestBuild(t *testing.T) {
 		t.Parallel()
 
 		_, err := Build("proj-1", nil, nil, []Declaration{
-			{Type: naming.TokenPostgres, ID: ""},
+			{Type: linksv1.LinkType_LINK_TYPE_POSTGRES, ID: ""},
 		}, nil, nil, nil)
 		if err == nil {
 			t.Fatal("Build: expected error for empty id, got nil")
@@ -725,8 +726,8 @@ func TestBuildUsages(t *testing.T) {
 	t.Parallel()
 
 	declarations := []Declaration{
-		{Type: naming.TokenPostgres, ID: "main", Source: "shared/db.ts:3"},
-		{Type: naming.TokenBucket, ID: "uploads", Source: "shared/files.ts:3"},
+		{Type: linksv1.LinkType_LINK_TYPE_POSTGRES, ID: "main", Source: "shared/db.ts:3"},
+		{Type: linksv1.LinkType_LINK_TYPE_BUCKET, ID: "uploads", Source: "shared/files.ts:3"},
 	}
 
 	t.Run("lands one edge per app and resource, files deduped and sorted", func(t *testing.T) {
@@ -734,12 +735,12 @@ func TestBuildUsages(t *testing.T) {
 
 		manifest, err := Build("proj-1", nil, []App{
 			{Name: "api", Usages: []Usage{
-				{Type: naming.TokenPostgres, ID: "main", Files: []string{"apps/api/src/server.ts"}},
-				{Type: naming.TokenPostgres, ID: "main", Files: []string{"apps/api/src/reports.ts", "apps/api/src/server.ts"}},
-				{Type: naming.TokenBucket, ID: "uploads", Files: []string{"apps/api/src/server.ts"}},
+				{Type: linksv1.LinkType_LINK_TYPE_POSTGRES, ID: "main", Files: []string{"apps/api/src/server.ts"}},
+				{Type: linksv1.LinkType_LINK_TYPE_POSTGRES, ID: "main", Files: []string{"apps/api/src/reports.ts", "apps/api/src/server.ts"}},
+				{Type: linksv1.LinkType_LINK_TYPE_BUCKET, ID: "uploads", Files: []string{"apps/api/src/server.ts"}},
 			}},
 			{Name: "worker", Usages: []Usage{
-				{Type: naming.TokenPostgres, ID: "main", Files: []string{"apps/worker/src/worker.ts"}},
+				{Type: linksv1.LinkType_LINK_TYPE_POSTGRES, ID: "main", Files: []string{"apps/worker/src/worker.ts"}},
 			}},
 		}, declarations, nil, nil, nil)
 		if err != nil {
@@ -764,7 +765,7 @@ func TestBuildUsages(t *testing.T) {
 		t.Parallel()
 
 		manifest, err := Build("proj-1", nil, []App{
-			{Name: "api", Usages: []Usage{{Type: naming.TokenPostgres, ID: "main", Files: []string{"apps/api/src/server.ts"}}}},
+			{Name: "api", Usages: []Usage{{Type: linksv1.LinkType_LINK_TYPE_POSTGRES, ID: "main", Files: []string{"apps/api/src/server.ts"}}}},
 		}, declarations, nil, nil, nil)
 		if err != nil {
 			t.Fatalf("Build err = %v", err)
@@ -782,7 +783,7 @@ func TestBuildUsages(t *testing.T) {
 		t.Parallel()
 
 		_, err := Build("proj-1", nil, []App{
-			{Name: "api", Usages: []Usage{{Type: naming.TokenPostgres, ID: "ghost", Files: []string{"apps/api/src/server.ts"}}}},
+			{Name: "api", Usages: []Usage{{Type: linksv1.LinkType_LINK_TYPE_POSTGRES, ID: "ghost", Files: []string{"apps/api/src/server.ts"}}}},
 		}, declarations, nil, nil, nil)
 
 		var dangling *DanglingUsageError
@@ -812,8 +813,8 @@ func TestBuildUsages(t *testing.T) {
 
 func TestBindLinks(t *testing.T) {
 	declarations := []Declaration{
-		{Type: "ocel:postgres", ID: "main", Postgres: &resourcesv1.PostgresConfig{Version: "17"}, Source: "ocel/db.ts:1"},
-		{Type: "ocel:bucket", ID: "uploads", Bucket: &resourcesv1.BucketConfig{}, Source: "ocel/bucket.ts:1"},
+		{Type: linksv1.LinkType_LINK_TYPE_POSTGRES, ID: "main", Postgres: &resourcesv1.PostgresConfig{Version: "17"}, Source: "ocel/db.ts:1"},
+		{Type: linksv1.LinkType_LINK_TYPE_BUCKET, ID: "uploads", Bucket: &resourcesv1.BucketConfig{}, Source: "ocel/bucket.ts:1"},
 	}
 
 	t.Run("a listed id marks the resource ocel does not provision", func(t *testing.T) {
@@ -845,7 +846,7 @@ func TestBindLinks(t *testing.T) {
 
 	t.Run("a listed id two resources answer to is refused", func(t *testing.T) {
 		t.Parallel()
-		ambiguous := append(append([]Declaration{}, declarations...), Declaration{Type: "ocel:bucket", ID: "main", Bucket: &resourcesv1.BucketConfig{}, Source: "ocel/blob.ts:1"})
+		ambiguous := append(append([]Declaration{}, declarations...), Declaration{Type: linksv1.LinkType_LINK_TYPE_BUCKET, ID: "main", Bucket: &resourcesv1.BucketConfig{}, Source: "ocel/blob.ts:1"})
 		_, err := Build("proj-1", nil, nil, ambiguous, []string{"main"}, nil, nil)
 		var clash *AmbiguousLinkError
 		if !errors.As(err, &clash) {

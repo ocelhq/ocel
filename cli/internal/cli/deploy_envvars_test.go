@@ -8,7 +8,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/envgate"
 	"github.com/ocelhq/ocel/cli/internal/manifestbuilder"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
-	"github.com/ocelhq/ocel/pkg/naming"
+	linksv1 "github.com/ocelhq/ocel/pkg/proto/links/v1"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/resources/v1"
 )
 
@@ -281,13 +281,13 @@ func TestToApps(t *testing.T) {
 		t.Parallel()
 
 		got := toApps([]projectconfig.App{{Name: "admin"}, {Name: "web"}}, []attribution.Usage{
-			{App: "web", Type: naming.TokenPostgres, ID: "main", Files: []string{"apps/web/src/server.ts"}},
-			{App: "admin", Type: naming.TokenBucket, ID: "uploads", Files: []string{"apps/admin/src/upload.ts"}},
+			{App: "web", Type: linksv1.LinkType_LINK_TYPE_POSTGRES, ID: "main", Files: []string{"apps/web/src/server.ts"}},
+			{App: "admin", Type: linksv1.LinkType_LINK_TYPE_BUCKET, ID: "uploads", Files: []string{"apps/admin/src/upload.ts"}},
 		})
 
 		want := []manifestbuilder.App{
-			{Name: "admin", Usages: []manifestbuilder.Usage{{Type: naming.TokenBucket, ID: "uploads", Files: []string{"apps/admin/src/upload.ts"}}}},
-			{Name: "web", Usages: []manifestbuilder.Usage{{Type: naming.TokenPostgres, ID: "main", Files: []string{"apps/web/src/server.ts"}}}},
+			{Name: "admin", Usages: []manifestbuilder.Usage{{Type: linksv1.LinkType_LINK_TYPE_BUCKET, ID: "uploads", Files: []string{"apps/admin/src/upload.ts"}}}},
+			{Name: "web", Usages: []manifestbuilder.Usage{{Type: linksv1.LinkType_LINK_TYPE_POSTGRES, ID: "main", Files: []string{"apps/web/src/server.ts"}}}},
 		}
 		if !reflect.DeepEqual(got, want) {
 			t.Errorf("toApps() = %+v, want %+v", got, want)

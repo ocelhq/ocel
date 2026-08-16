@@ -1,4 +1,7 @@
-import { z } from "zod";
+import {
+  LinkType,
+  type BucketProperties,
+} from "../gen/proto/links/v1/links_pb.js";
 import { defer } from "../utils/defer.js";
 import { getConfig } from "../utils/get-config.js";
 import { rpc } from "../utils/rpc.js";
@@ -9,18 +12,12 @@ export interface BucketOptions<TUploaders extends Record<string, AnyUploader>> {
   uploaders: TUploaders;
 }
 
-const configSchema = z.object({
-  bucket: z.string(),
-});
-
-export interface ResolvedBucketConfig {
-  bucket: string;
-}
+export type ResolvedBucketConfig = Pick<BucketProperties, "bucket">;
 
 export class Bucket<
   TUploaders extends Record<string, AnyUploader> = Record<string, AnyUploader>,
 > {
-  private type = "ocel:bucket";
+  private type = LinkType.BUCKET;
 
   constructor(
     public name: string,
@@ -43,13 +40,7 @@ export class Bucket<
   }
 
   __config(): ResolvedBucketConfig {
-    const opts = configSchema.safeParse(
-      JSON.parse(getConfig(this.name, this.type)),
-    );
-    if (!opts.success) {
-      throw new Error(`Ocel could not resolve 'bucket(${this.name})' correctly.`);
-    }
-    return opts.data;
+    return getConfig(this.name, "bucket");
   }
 }
 

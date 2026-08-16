@@ -203,3 +203,5 @@ cli/platform/dist/
 
 examples/next-cache-lab/*
 !examples/next-cache-lab/package.json
+
+/bootstrap

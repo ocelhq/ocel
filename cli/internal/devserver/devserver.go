@@ -2,7 +2,6 @@ package devserver
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
@@ -22,8 +21,10 @@ import (
 	"github.com/ocelhq/ocel/pkg/proto/buckets/v1/bucketsv1connect"
 	devv1 "github.com/ocelhq/ocel/pkg/proto/dev/v1"
 	"github.com/ocelhq/ocel/pkg/proto/dev/v1/devv1connect"
+	linksv1 "github.com/ocelhq/ocel/pkg/proto/links/v1"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/resources/v1"
 	"github.com/ocelhq/ocel/pkg/proto/resources/v1/resourcesv1connect"
+	"google.golang.org/protobuf/encoding/protojson"
 )
 
 type SyncResult struct {
@@ -210,7 +211,7 @@ func (s *Server) handleSync(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	var toResolve, buckets []manifest.Entry
 	for _, e := range s.manifest.Snapshot() {
-		if e.Type == naming.TokenBucket {
+		if e.Type == linksv1.LinkType_LINK_TYPE_BUCKET {
 			buckets = append(buckets, e)
 		} else {
 			toResolve = append(toResolve, e)
@@ -253,11 +254,14 @@ func (s *Server) handleSync(w http.ResponseWriter, r *http.Request) {
 func (s *Server) bucketResources(buckets []manifest.Entry) []provision.Resource {
 	out := make([]provision.Resource, 0, len(buckets))
 	for _, b := range buckets {
-		value, _ := json.Marshal(map[string]string{"bucket": b.Name})
+		value, _ := protojson.Marshal(&linksv1.Link{
+			Name:       b.Name,
+			Properties: &linksv1.Link_Bucket{Bucket: &linksv1.BucketProperties{Bucket: b.Name}},
+		})
 		out = append(out, provision.Resource{
 			Name: b.Name,
 			Type: b.Type,
-			Env:  map[string]string{"OCEL_RESOURCE_BUCKET_" + b.Name: string(value)},
+			Env:  map[string]string{"OCEL_RESOURCE_" + naming.EnvFragment(b.Type) + "_" + b.Name: string(value)},
 		})
 	}
 	return out

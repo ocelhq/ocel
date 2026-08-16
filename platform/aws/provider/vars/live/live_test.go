@@ -4,16 +4,19 @@ import (
 	"errors"
 	"strings"
 	"testing"
+
+	linksv1 "github.com/ocelhq/ocel/pkg/proto/links/v1"
 )
 
 func postgresLink() Link {
 	return Link{
-		Name:       "db--main",
-		Key:        "OCEL_RESOURCE_POSTGRES_main",
-		Type:       "ocel:postgres",
-		Properties: []string{"connectionString"},
+		Name: "db--main",
+		Key:  "OCEL_RESOURCE_POSTGRES_main",
+		Type: linksv1.LinkType_LINK_TYPE_POSTGRES,
 	}
 }
+
+const postgresRecord = `{"name":"db--main","postgres":{"host":"h","port":5432,"database":"d","username":"u","password":"p"}}`
 
 func TestConform(t *testing.T) {
 	t.Parallel()
@@ -23,7 +26,7 @@ func TestConform(t *testing.T) {
 
 		const secret = "xq7#!zv%"
 		link := postgresLink()
-		_, err := Conform([]Link{link}, map[string]string{link.Key: secret})
+		err := Conform([]Link{link}, map[string]string{link.Key: secret})
 		if err == nil {
 			t.Fatal("Conform = nil, want a value that is not a record refused")
 		}
@@ -35,20 +38,20 @@ func TestConform(t *testing.T) {
 				t.Errorf("error = %v, which carries %q from a value this deployment must treat as a credential", err, string(b))
 			}
 		}
-		for _, want := range []string{link.Name, link.Key, link.Type} {
+		for _, want := range []string{link.Name, link.Key, link.Type.String()} {
 			if !strings.Contains(err.Error(), want) {
 				t.Errorf("error = %v, want it to name %q", err, want)
 			}
 		}
 	})
 
-	t.Run("names a record that carries no type token", func(t *testing.T) {
+	t.Run("names a record that carries no properties", func(t *testing.T) {
 		t.Parallel()
 
 		link := postgresLink()
-		_, err := Conform([]Link{link}, map[string]string{link.Key: `{"properties":{"connectionString":"postgres://ocel@db.host:5432/ocel"}}`})
+		err := Conform([]Link{link}, map[string]string{link.Key: `{"name":"db--main"}`})
 		if err == nil {
-			t.Fatal("Conform = nil, want a record naming no type refused")
+			t.Fatal("Conform = nil, want a record carrying no properties refused")
 		}
 		if !errors.Is(err, ErrDrift) {
 			t.Errorf("error = %v, want it named as drift", err)
@@ -56,29 +59,54 @@ func TestConform(t *testing.T) {
 		if strings.Contains(err.Error(), "  ") {
 			t.Errorf("error = %v, which renders the missing token as a hole rather than naming it", err)
 		}
-		for _, want := range []string{link.Name, link.Key, link.Type} {
+		for _, want := range []string{link.Name, link.Key, link.Type.String()} {
 			if !strings.Contains(err.Error(), want) {
 				t.Errorf("error = %v, want it to name %q", err, want)
 			}
 		}
 	})
 
-	t.Run("hands the app the property bag alone", func(t *testing.T) {
+	t.Run("names a record of another type", func(t *testing.T) {
 		t.Parallel()
 
 		link := postgresLink()
-		out, err := Conform([]Link{link}, map[string]string{
-			link.Key:      EncodeRecord(Record{Type: link.Type, Properties: map[string]string{"connectionString": "postgres://ocel@db.host:5432/ocel"}}),
-			"DB_PASSWORD": "hunter2",
-		})
-		if err != nil {
+		err := Conform([]Link{link}, map[string]string{link.Key: `{"name":"db--main","bucket":{"bucket":"b"}}`})
+		if err == nil {
+			t.Fatal("Conform = nil, want a bucket record under a postgres link refused")
+		}
+		if !errors.Is(err, ErrDrift) {
+			t.Errorf("error = %v, want it named as drift", err)
+		}
+		for _, want := range []string{link.Name, link.Key, link.Type.String(), linksv1.LinkType_LINK_TYPE_BUCKET.String()} {
+			if !strings.Contains(err.Error(), want) {
+				t.Errorf("error = %v, want it to name %q", err, want)
+			}
+		}
+	})
+
+	t.Run("names a link that published nothing", func(t *testing.T) {
+		t.Parallel()
+
+		link := postgresLink()
+		err := Conform([]Link{link}, map[string]string{"DB_PASSWORD": "hunter2"})
+		if err == nil {
+			t.Fatal("Conform = nil, want a link with no record refused")
+		}
+		if !errors.Is(err, ErrDrift) {
+			t.Errorf("error = %v, want it named as drift", err)
+		}
+	})
+
+	t.Run("accepts a record of the declared type", func(t *testing.T) {
+		t.Parallel()
+
+		link := postgresLink()
+		values := map[string]string{link.Key: postgresRecord, "DB_PASSWORD": "hunter2"}
+		if err := Conform([]Link{link}, values); err != nil {
 			t.Fatalf("Conform: %v", err)
 		}
-		if out[link.Key] != `{"connectionString":"postgres://ocel@db.host:5432/ocel"}` {
-			t.Errorf("conformed = %q, want the property bag with the record envelope stripped", out[link.Key])
-		}
-		if out["DB_PASSWORD"] != "hunter2" {
-			t.Errorf("values = %v, want everything that is not a link left as published", out)
+		if values[link.Key] != postgresRecord || values["DB_PASSWORD"] != "hunter2" {
+			t.Errorf("values = %v, want everything left as published", values)
 		}
 	})
 }
@@ -150,6 +178,38 @@ func TestRenderParse(t *testing.T) {
 		}
 		if len(got.Keys) != 2 || got.Keys[0] != want.Keys[0] || got.Keys[1] != want.Keys[1] {
 			t.Errorf("keys = %+v, want %+v in the order the deploy pinned them", got.Keys, want.Keys)
+		}
+	})
+
+	t.Run("links carry their type by name", func(t *testing.T) {
+		t.Parallel()
+
+		want := postgresLink()
+		want.Granted = 3
+		raw, err := Render(Manifest{
+			Slug: "shop", Table: "ocel-vars", KeyARN: "arn:key", Class: "production",
+			Links: []Link{want},
+		})
+		if err != nil {
+			t.Fatalf("Render: %v", err)
+		}
+		if !strings.Contains(string(raw), `"type":"LINK_TYPE_POSTGRES"`) {
+			t.Errorf("rendered %s, want the link type written by its name", raw)
+		}
+		got, err := Parse(raw)
+		if err != nil {
+			t.Fatalf("Parse: %v", err)
+		}
+		if len(got.Links) != 1 || got.Links[0] != want {
+			t.Errorf("links = %+v, want %+v", got.Links, []Link{want})
+		}
+	})
+
+	t.Run("refuses a link type no link type is called", func(t *testing.T) {
+		t.Parallel()
+
+		if _, err := Parse([]byte(`{"slug":"shop","table":"t","keyArn":"k","class":"production","links":[{"name":"x","key":"K","type":"ocel:postgres"}]}`)); err == nil {
+			t.Fatal("Parse absorbed a link type it does not know")
 		}
 	})
 

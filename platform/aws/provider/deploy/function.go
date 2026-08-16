@@ -14,6 +14,7 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/naming"
 	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
+	linksv1 "github.com/ocelhq/ocel/pkg/proto/links/v1"
 )
 
 const (
@@ -275,20 +276,11 @@ func describe(c naming.Coordinate, detail string) pulumi.String {
 	return pulumi.String(described)
 }
 
-func functionEnvKey(token, id string) string {
-	return fmt.Sprintf("OCEL_RESOURCE_%s_%s", naming.EnvFragment(token), id)
-}
-
-func postgresRecordProperties(username, password, host string, port int, database string) map[string]string {
-	conn := fmt.Sprintf("postgres://%s:%s@%s:%d/%s", username, password, host, port, database)
-	return map[string]string{"connectionString": conn}
+func functionEnvKey(t linksv1.LinkType, id string) string {
+	return fmt.Sprintf("OCEL_RESOURCE_%s_%s", naming.EnvFragment(t), id)
 }
 
 const runtimeAddressEnv = "OCEL_RUNTIME_ADDRESS"
-
-func bucketRecordProperties(bucket string) map[string]string {
-	return map[string]string{"bucket": bucket}
-}
 
 func artifactArchivePath(root, artifactPath string) string {
 	return filepath.Join(root, artifactPath)
