@@ -124,6 +124,8 @@ message ManifestApp {
   repeated ManifestVariable variables = 4;
 
   string folder = 5;
+
+  string deployment_id = 6;
 }
 
 message ManifestVariable {

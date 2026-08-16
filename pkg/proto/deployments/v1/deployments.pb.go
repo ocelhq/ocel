@@ -879,6 +879,7 @@ type ManifestApp struct {
 	Domains       map[string]*DomainList `protobuf:"bytes,3,rep,name=domains,proto3" json:"domains,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
 	Variables     []*ManifestVariable    `protobuf:"bytes,4,rep,name=variables,proto3" json:"variables,omitempty"`
 	Folder        string                 `protobuf:"bytes,5,opt,name=folder,proto3" json:"folder,omitempty"`
+	DeploymentId  string                 `protobuf:"bytes,6,opt,name=deployment_id,json=deploymentId,proto3" json:"deployment_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -944,6 +945,13 @@ func (x *ManifestApp) GetVariables() []*ManifestVariable {
 func (x *ManifestApp) GetFolder() string {
 	if x != nil {
 		return x.Folder
+	}
+	return ""
+}
+
+func (x *ManifestApp) GetDeploymentId() string {
+	if x != nil {
+		return x.DeploymentId
 	}
 	return ""
 }
@@ -3876,13 +3884,14 @@ const file_deployments_v1_deployments_proto_rawDesc = "" +
 	"\x05files\x18\x03 \x03(\tR\x05files\"*\n" +
 	"\n" +
 	"DomainList\x12\x1c\n" +
-	"\thostnames\x18\x01 \x03(\tR\thostnames\"\xb3\x02\n" +
+	"\thostnames\x18\x01 \x03(\tR\thostnames\"\xd8\x02\n" +
 	"\vManifestApp\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12\x1c\n" +
 	"\tframework\x18\x02 \x01(\tR\tframework\x12B\n" +
 	"\adomains\x18\x03 \x03(\v2(.deployments.v1.ManifestApp.DomainsEntryR\adomains\x12>\n" +
 	"\tvariables\x18\x04 \x03(\v2 .deployments.v1.ManifestVariableR\tvariables\x12\x16\n" +
-	"\x06folder\x18\x05 \x01(\tR\x06folder\x1aV\n" +
+	"\x06folder\x18\x05 \x01(\tR\x06folder\x12#\n" +
+	"\rdeployment_id\x18\x06 \x01(\tR\fdeploymentId\x1aV\n" +
 	"\fDomainsEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x120\n" +
 	"\x05value\x18\x02 \x01(\v2\x1a.deployments.v1.DomainListR\x05value:\x028\x01\"\x9f\x01\n" +
