@@ -139,9 +139,9 @@ func TestNodePassEvaluate(t *testing.T) {
 		t.Parallel()
 
 		root := transformtest.Root(t, map[string]string{
-			"ocel/transform.ts": transformtest.ExampleModule(t, "with-transforms", "ocel/transform.ts"),
+			"infra/defaults.transform.ts": transformtest.ExampleModule(t, "with-transforms", "infra/defaults.transform.ts"),
 		})
-		pass := NodePass{Root: root, Modules: []string{"./ocel/transform.ts"}}
+		pass := NodePass{Root: root, Modules: []string{"./infra/defaults.transform.ts"}}
 
 		results, err := pass.Evaluate(t.Context(), exampleRequest("production"))
 		if err != nil {

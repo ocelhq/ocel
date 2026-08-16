@@ -2,7 +2,7 @@
 
 Rung two of the [examples ladder](../README.md). The app is modeled on the
 [express](../express) example, with a `postgres` resource; what this example adds is
-`ocel.config.ts` and `ocel/transform.ts`. The module is the whole of what it has to show.
+`ocel.config.ts` and `infra/defaults.transform.ts`. The module is the whole of what it has to show.
 
 ## Run it
 
