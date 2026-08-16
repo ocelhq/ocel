@@ -9,14 +9,16 @@ import (
 
 	ddbtypes "github.com/aws/aws-sdk-go-v2/service/dynamodb/types"
 	"google.golang.org/protobuf/proto"
+	"google.golang.org/protobuf/types/known/structpb"
 
 	"github.com/ocelhq/ocel/pkg/naming"
 	linksv1 "github.com/ocelhq/ocel/pkg/proto/links/v1"
 )
 
 const (
-	mainHost     = "db.host.example"
-	mainPassword = "s3cr3t-pw"
+	mainHost      = "db.host.example"
+	mainPassword  = "s3cr3t-pw"
+	networkSubnet = "subnet-0a1"
 )
 
 func postgresLink(name, host, source string, grants ...*linksv1.Grant) *linksv1.Link {
@@ -28,6 +30,19 @@ func postgresLink(name, host, source string, grants ...*linksv1.Grant) *linksv1.
 		}},
 		Grants: grants,
 	}
+}
+
+func customLink(t *testing.T, name, source string) *linksv1.Link {
+	t.Helper()
+	properties, err := structpb.NewStruct(map[string]any{
+		"subnetIds": []any{networkSubnet, "subnet-0b2"},
+		"port":      float64(5432),
+		"private":   true,
+	})
+	if err != nil {
+		t.Fatalf("build the custom properties: %v", err)
+	}
+	return &linksv1.Link{Name: name, Source: source, Properties: &linksv1.Link_Custom{Custom: properties}}
 }
 
 func bucketLink(name, bucket, source string, grants ...*linksv1.Grant) *linksv1.Link {

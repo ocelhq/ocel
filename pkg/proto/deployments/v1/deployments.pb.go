@@ -3687,6 +3687,7 @@ type LinkSummary struct {
 	Source        string                 `protobuf:"bytes,3,opt,name=source,proto3" json:"source,omitempty"`
 	Owner         string                 `protobuf:"bytes,4,opt,name=owner,proto3" json:"owner,omitempty"`
 	Version       uint64                 `protobuf:"varint,5,opt,name=version,proto3" json:"version,omitempty"`
+	Properties    []*PropertyShape       `protobuf:"bytes,6,rep,name=properties,proto3" json:"properties,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -3754,6 +3755,73 @@ func (x *LinkSummary) GetVersion() uint64 {
 		return x.Version
 	}
 	return 0
+}
+
+func (x *LinkSummary) GetProperties() []*PropertyShape {
+	if x != nil {
+		return x.Properties
+	}
+	return nil
+}
+
+type PropertyShape struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Name          string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
+	JsonType      string                 `protobuf:"bytes,2,opt,name=json_type,json=jsonType,proto3" json:"json_type,omitempty"`
+	List          bool                   `protobuf:"varint,3,opt,name=list,proto3" json:"list,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *PropertyShape) Reset() {
+	*x = PropertyShape{}
+	mi := &file_deployments_v1_deployments_proto_msgTypes[50]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *PropertyShape) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*PropertyShape) ProtoMessage() {}
+
+func (x *PropertyShape) ProtoReflect() protoreflect.Message {
+	mi := &file_deployments_v1_deployments_proto_msgTypes[50]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use PropertyShape.ProtoReflect.Descriptor instead.
+func (*PropertyShape) Descriptor() ([]byte, []int) {
+	return file_deployments_v1_deployments_proto_rawDescGZIP(), []int{50}
+}
+
+func (x *PropertyShape) GetName() string {
+	if x != nil {
+		return x.Name
+	}
+	return ""
+}
+
+func (x *PropertyShape) GetJsonType() string {
+	if x != nil {
+		return x.JsonType
+	}
+	return ""
+}
+
+func (x *PropertyShape) GetList() bool {
+	if x != nil {
+		return x.List
+	}
+	return false
 }
 
 var File_deployments_v1_deployments_proto protoreflect.FileDescriptor
@@ -4038,13 +4106,20 @@ const file_deployments_v1_deployments_proto_rawDesc = "" +
 	"\x05class\x18\x04 \x01(\x0e2!.deployments.v1.Environment.ClassR\x05class\x12 \n" +
 	"\venvironment\x18\x05 \x01(\tR\venvironment\"F\n" +
 	"\x11ListLinksResponse\x121\n" +
-	"\x05links\x18\x01 \x03(\v2\x1b.deployments.v1.LinkSummaryR\x05links\"\x91\x01\n" +
+	"\x05links\x18\x01 \x03(\v2\x1b.deployments.v1.LinkSummaryR\x05links\"\xd0\x01\n" +
 	"\vLinkSummary\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12&\n" +
 	"\x04type\x18\x02 \x01(\x0e2\x12.links.v1.LinkTypeR\x04type\x12\x16\n" +
 	"\x06source\x18\x03 \x01(\tR\x06source\x12\x14\n" +
 	"\x05owner\x18\x04 \x01(\tR\x05owner\x12\x18\n" +
-	"\aversion\x18\x05 \x01(\x04R\aversion*\x8b\x01\n" +
+	"\aversion\x18\x05 \x01(\x04R\aversion\x12=\n" +
+	"\n" +
+	"properties\x18\x06 \x03(\v2\x1d.deployments.v1.PropertyShapeR\n" +
+	"properties\"T\n" +
+	"\rPropertyShape\x12\x12\n" +
+	"\x04name\x18\x01 \x01(\tR\x04name\x12\x1b\n" +
+	"\tjson_type\x18\x02 \x01(\tR\bjsonType\x12\x12\n" +
+	"\x04list\x18\x03 \x01(\bR\x04list*\x8b\x01\n" +
 	"\x05Phase\x12\x15\n" +
 	"\x11PHASE_UNSPECIFIED\x10\x00\x12\x13\n" +
 	"\x0fPHASE_UPLOADING\x10\x02\x12\x16\n" +
@@ -4106,7 +4181,7 @@ func file_deployments_v1_deployments_proto_rawDescGZIP() []byte {
 }
 
 var file_deployments_v1_deployments_proto_enumTypes = make([]protoimpl.EnumInfo, 7)
-var file_deployments_v1_deployments_proto_msgTypes = make([]protoimpl.MessageInfo, 53)
+var file_deployments_v1_deployments_proto_msgTypes = make([]protoimpl.MessageInfo, 54)
 var file_deployments_v1_deployments_proto_goTypes = []any{
 	(Phase)(0),                         // 0: deployments.v1.Phase
 	(SpanStatus)(0),                    // 1: deployments.v1.SpanStatus
@@ -4165,15 +4240,16 @@ var file_deployments_v1_deployments_proto_goTypes = []any{
 	(*ListLinksRequest)(nil),           // 54: deployments.v1.ListLinksRequest
 	(*ListLinksResponse)(nil),          // 55: deployments.v1.ListLinksResponse
 	(*LinkSummary)(nil),                // 56: deployments.v1.LinkSummary
-	nil,                                // 57: deployments.v1.Manifest.DomainsEntry
-	nil,                                // 58: deployments.v1.ManifestApp.DomainsEntry
-	nil,                                // 59: deployments.v1.Promotion.BuildsEntry
-	(v1.VariableClass)(0),              // 60: resources.v1.VariableClass
-	(*v1.ResourceIdentifier)(nil),      // 61: resources.v1.ResourceIdentifier
-	(*v1.PostgresConfig)(nil),          // 62: resources.v1.PostgresConfig
-	(*v1.BucketConfig)(nil),            // 63: resources.v1.BucketConfig
-	(*v11.Link)(nil),                   // 64: links.v1.Link
-	(v11.LinkType)(0),                  // 65: links.v1.LinkType
+	(*PropertyShape)(nil),              // 57: deployments.v1.PropertyShape
+	nil,                                // 58: deployments.v1.Manifest.DomainsEntry
+	nil,                                // 59: deployments.v1.ManifestApp.DomainsEntry
+	nil,                                // 60: deployments.v1.Promotion.BuildsEntry
+	(v1.VariableClass)(0),              // 61: resources.v1.VariableClass
+	(*v1.ResourceIdentifier)(nil),      // 62: resources.v1.ResourceIdentifier
+	(*v1.PostgresConfig)(nil),          // 63: resources.v1.PostgresConfig
+	(*v1.BucketConfig)(nil),            // 64: resources.v1.BucketConfig
+	(*v11.Link)(nil),                   // 65: links.v1.Link
+	(v11.LinkType)(0),                  // 66: links.v1.LinkType
 }
 var file_deployments_v1_deployments_proto_depIdxs = []int32{
 	3,  // 0: deployments.v1.UseDomainRequest.class:type_name -> deployments.v1.Environment.Class
@@ -4185,15 +4261,15 @@ var file_deployments_v1_deployments_proto_depIdxs = []int32{
 	5,  // 6: deployments.v1.Environment.identity_source:type_name -> deployments.v1.Environment.IdentitySource
 	18, // 7: deployments.v1.Manifest.resources:type_name -> deployments.v1.ManifestResource
 	17, // 8: deployments.v1.Manifest.functions:type_name -> deployments.v1.ManifestFunction
-	57, // 9: deployments.v1.Manifest.domains:type_name -> deployments.v1.Manifest.DomainsEntry
+	58, // 9: deployments.v1.Manifest.domains:type_name -> deployments.v1.Manifest.DomainsEntry
 	15, // 10: deployments.v1.Manifest.apps:type_name -> deployments.v1.ManifestApp
 	13, // 11: deployments.v1.Manifest.usages:type_name -> deployments.v1.ManifestUsage
-	58, // 12: deployments.v1.ManifestApp.domains:type_name -> deployments.v1.ManifestApp.DomainsEntry
+	59, // 12: deployments.v1.ManifestApp.domains:type_name -> deployments.v1.ManifestApp.DomainsEntry
 	16, // 13: deployments.v1.ManifestApp.variables:type_name -> deployments.v1.ManifestVariable
-	60, // 14: deployments.v1.ManifestVariable.class:type_name -> resources.v1.VariableClass
-	61, // 15: deployments.v1.ManifestResource.resource:type_name -> resources.v1.ResourceIdentifier
-	62, // 16: deployments.v1.ManifestResource.postgres:type_name -> resources.v1.PostgresConfig
-	63, // 17: deployments.v1.ManifestResource.bucket:type_name -> resources.v1.BucketConfig
+	61, // 14: deployments.v1.ManifestVariable.class:type_name -> resources.v1.VariableClass
+	62, // 15: deployments.v1.ManifestResource.resource:type_name -> resources.v1.ResourceIdentifier
+	63, // 16: deployments.v1.ManifestResource.postgres:type_name -> resources.v1.PostgresConfig
+	64, // 17: deployments.v1.ManifestResource.bucket:type_name -> resources.v1.BucketConfig
 	12, // 18: deployments.v1.DeployRequest.manifest:type_name -> deployments.v1.Manifest
 	11, // 19: deployments.v1.DeployRequest.environment:type_name -> deployments.v1.Environment
 	3,  // 20: deployments.v1.BootstrapRequest.class:type_name -> deployments.v1.Environment.Class
@@ -4208,7 +4284,7 @@ var file_deployments_v1_deployments_proto_depIdxs = []int32{
 	31, // 29: deployments.v1.PreflightResponse.domain_claims:type_name -> deployments.v1.DomainClaim
 	30, // 30: deployments.v1.PreflightResponse.global_preview_domain:type_name -> deployments.v1.GlobalPreviewDomain
 	6,  // 31: deployments.v1.DomainClaim.status:type_name -> deployments.v1.DomainClaim.Status
-	59, // 32: deployments.v1.Promotion.builds:type_name -> deployments.v1.Promotion.BuildsEntry
+	60, // 32: deployments.v1.Promotion.builds:type_name -> deployments.v1.Promotion.BuildsEntry
 	34, // 33: deployments.v1.PromotionHistoryEntry.promotion:type_name -> deployments.v1.Promotion
 	35, // 34: deployments.v1.ListPromotionsResponse.promotions:type_name -> deployments.v1.PromotionHistoryEntry
 	34, // 35: deployments.v1.RollbackResponse.promoted:type_name -> deployments.v1.Promotion
@@ -4223,53 +4299,54 @@ var file_deployments_v1_deployments_proto_depIdxs = []int32{
 	1,  // 44: deployments.v1.SpanEvent.status:type_name -> deployments.v1.SpanStatus
 	44, // 45: deployments.v1.SpanEvent.attributes:type_name -> deployments.v1.SpanAttribute
 	0,  // 46: deployments.v1.ProgressEvent.phase:type_name -> deployments.v1.Phase
-	64, // 47: deployments.v1.ResultEvent.links:type_name -> links.v1.Link
+	65, // 47: deployments.v1.ResultEvent.links:type_name -> links.v1.Link
 	49, // 48: deployments.v1.ResultEvent.functions:type_name -> deployments.v1.FunctionOutput
 	3,  // 49: deployments.v1.SetLinkRequest.class:type_name -> deployments.v1.Environment.Class
-	64, // 50: deployments.v1.SetLinkRequest.link:type_name -> links.v1.Link
+	65, // 50: deployments.v1.SetLinkRequest.link:type_name -> links.v1.Link
 	3,  // 51: deployments.v1.RemoveLinkRequest.class:type_name -> deployments.v1.Environment.Class
 	3,  // 52: deployments.v1.ListLinksRequest.class:type_name -> deployments.v1.Environment.Class
 	56, // 53: deployments.v1.ListLinksResponse.links:type_name -> deployments.v1.LinkSummary
-	65, // 54: deployments.v1.LinkSummary.type:type_name -> links.v1.LinkType
-	14, // 55: deployments.v1.Manifest.DomainsEntry.value:type_name -> deployments.v1.DomainList
-	14, // 56: deployments.v1.ManifestApp.DomainsEntry.value:type_name -> deployments.v1.DomainList
-	19, // 57: deployments.v1.DeploymentService.Deploy:input_type -> deployments.v1.DeployRequest
-	20, // 58: deployments.v1.DeploymentService.Bootstrap:input_type -> deployments.v1.BootstrapRequest
-	21, // 59: deployments.v1.DeploymentService.DestroyPreview:input_type -> deployments.v1.DestroyPreviewRequest
-	22, // 60: deployments.v1.DeploymentService.DestroyProject:input_type -> deployments.v1.DestroyProjectRequest
-	23, // 61: deployments.v1.DeploymentService.PlanDestroyProject:input_type -> deployments.v1.PlanDestroyProjectRequest
-	25, // 62: deployments.v1.DeploymentService.ListEnvironments:input_type -> deployments.v1.ListEnvironmentsRequest
-	28, // 63: deployments.v1.DeploymentService.Preflight:input_type -> deployments.v1.PreflightRequest
-	36, // 64: deployments.v1.DeploymentService.ListPromotions:input_type -> deployments.v1.ListPromotionsRequest
-	38, // 65: deployments.v1.DeploymentService.Rollback:input_type -> deployments.v1.RollbackRequest
-	40, // 66: deployments.v1.DeploymentService.Prune:input_type -> deployments.v1.PruneRequest
-	7,  // 67: deployments.v1.DeploymentService.UseDomain:input_type -> deployments.v1.UseDomainRequest
-	8,  // 68: deployments.v1.DeploymentService.ListDomain:input_type -> deployments.v1.ListDomainRequest
-	10, // 69: deployments.v1.DeploymentService.ReleaseDomain:input_type -> deployments.v1.ReleaseDomainRequest
-	50, // 70: deployments.v1.DeploymentService.SetLink:input_type -> deployments.v1.SetLinkRequest
-	52, // 71: deployments.v1.DeploymentService.RemoveLink:input_type -> deployments.v1.RemoveLinkRequest
-	54, // 72: deployments.v1.DeploymentService.ListLinks:input_type -> deployments.v1.ListLinksRequest
-	41, // 73: deployments.v1.DeploymentService.Deploy:output_type -> deployments.v1.DeployEvent
-	41, // 74: deployments.v1.DeploymentService.Bootstrap:output_type -> deployments.v1.DeployEvent
-	41, // 75: deployments.v1.DeploymentService.DestroyPreview:output_type -> deployments.v1.DeployEvent
-	41, // 76: deployments.v1.DeploymentService.DestroyProject:output_type -> deployments.v1.DeployEvent
-	24, // 77: deployments.v1.DeploymentService.PlanDestroyProject:output_type -> deployments.v1.PlanDestroyProjectResponse
-	26, // 78: deployments.v1.DeploymentService.ListEnvironments:output_type -> deployments.v1.ListEnvironmentsResponse
-	29, // 79: deployments.v1.DeploymentService.Preflight:output_type -> deployments.v1.PreflightResponse
-	37, // 80: deployments.v1.DeploymentService.ListPromotions:output_type -> deployments.v1.ListPromotionsResponse
-	39, // 81: deployments.v1.DeploymentService.Rollback:output_type -> deployments.v1.RollbackResponse
-	41, // 82: deployments.v1.DeploymentService.Prune:output_type -> deployments.v1.DeployEvent
-	41, // 83: deployments.v1.DeploymentService.UseDomain:output_type -> deployments.v1.DeployEvent
-	9,  // 84: deployments.v1.DeploymentService.ListDomain:output_type -> deployments.v1.ListDomainResponse
-	41, // 85: deployments.v1.DeploymentService.ReleaseDomain:output_type -> deployments.v1.DeployEvent
-	51, // 86: deployments.v1.DeploymentService.SetLink:output_type -> deployments.v1.SetLinkResponse
-	53, // 87: deployments.v1.DeploymentService.RemoveLink:output_type -> deployments.v1.RemoveLinkResponse
-	55, // 88: deployments.v1.DeploymentService.ListLinks:output_type -> deployments.v1.ListLinksResponse
-	73, // [73:89] is the sub-list for method output_type
-	57, // [57:73] is the sub-list for method input_type
-	57, // [57:57] is the sub-list for extension type_name
-	57, // [57:57] is the sub-list for extension extendee
-	0,  // [0:57] is the sub-list for field type_name
+	66, // 54: deployments.v1.LinkSummary.type:type_name -> links.v1.LinkType
+	57, // 55: deployments.v1.LinkSummary.properties:type_name -> deployments.v1.PropertyShape
+	14, // 56: deployments.v1.Manifest.DomainsEntry.value:type_name -> deployments.v1.DomainList
+	14, // 57: deployments.v1.ManifestApp.DomainsEntry.value:type_name -> deployments.v1.DomainList
+	19, // 58: deployments.v1.DeploymentService.Deploy:input_type -> deployments.v1.DeployRequest
+	20, // 59: deployments.v1.DeploymentService.Bootstrap:input_type -> deployments.v1.BootstrapRequest
+	21, // 60: deployments.v1.DeploymentService.DestroyPreview:input_type -> deployments.v1.DestroyPreviewRequest
+	22, // 61: deployments.v1.DeploymentService.DestroyProject:input_type -> deployments.v1.DestroyProjectRequest
+	23, // 62: deployments.v1.DeploymentService.PlanDestroyProject:input_type -> deployments.v1.PlanDestroyProjectRequest
+	25, // 63: deployments.v1.DeploymentService.ListEnvironments:input_type -> deployments.v1.ListEnvironmentsRequest
+	28, // 64: deployments.v1.DeploymentService.Preflight:input_type -> deployments.v1.PreflightRequest
+	36, // 65: deployments.v1.DeploymentService.ListPromotions:input_type -> deployments.v1.ListPromotionsRequest
+	38, // 66: deployments.v1.DeploymentService.Rollback:input_type -> deployments.v1.RollbackRequest
+	40, // 67: deployments.v1.DeploymentService.Prune:input_type -> deployments.v1.PruneRequest
+	7,  // 68: deployments.v1.DeploymentService.UseDomain:input_type -> deployments.v1.UseDomainRequest
+	8,  // 69: deployments.v1.DeploymentService.ListDomain:input_type -> deployments.v1.ListDomainRequest
+	10, // 70: deployments.v1.DeploymentService.ReleaseDomain:input_type -> deployments.v1.ReleaseDomainRequest
+	50, // 71: deployments.v1.DeploymentService.SetLink:input_type -> deployments.v1.SetLinkRequest
+	52, // 72: deployments.v1.DeploymentService.RemoveLink:input_type -> deployments.v1.RemoveLinkRequest
+	54, // 73: deployments.v1.DeploymentService.ListLinks:input_type -> deployments.v1.ListLinksRequest
+	41, // 74: deployments.v1.DeploymentService.Deploy:output_type -> deployments.v1.DeployEvent
+	41, // 75: deployments.v1.DeploymentService.Bootstrap:output_type -> deployments.v1.DeployEvent
+	41, // 76: deployments.v1.DeploymentService.DestroyPreview:output_type -> deployments.v1.DeployEvent
+	41, // 77: deployments.v1.DeploymentService.DestroyProject:output_type -> deployments.v1.DeployEvent
+	24, // 78: deployments.v1.DeploymentService.PlanDestroyProject:output_type -> deployments.v1.PlanDestroyProjectResponse
+	26, // 79: deployments.v1.DeploymentService.ListEnvironments:output_type -> deployments.v1.ListEnvironmentsResponse
+	29, // 80: deployments.v1.DeploymentService.Preflight:output_type -> deployments.v1.PreflightResponse
+	37, // 81: deployments.v1.DeploymentService.ListPromotions:output_type -> deployments.v1.ListPromotionsResponse
+	39, // 82: deployments.v1.DeploymentService.Rollback:output_type -> deployments.v1.RollbackResponse
+	41, // 83: deployments.v1.DeploymentService.Prune:output_type -> deployments.v1.DeployEvent
+	41, // 84: deployments.v1.DeploymentService.UseDomain:output_type -> deployments.v1.DeployEvent
+	9,  // 85: deployments.v1.DeploymentService.ListDomain:output_type -> deployments.v1.ListDomainResponse
+	41, // 86: deployments.v1.DeploymentService.ReleaseDomain:output_type -> deployments.v1.DeployEvent
+	51, // 87: deployments.v1.DeploymentService.SetLink:output_type -> deployments.v1.SetLinkResponse
+	53, // 88: deployments.v1.DeploymentService.RemoveLink:output_type -> deployments.v1.RemoveLinkResponse
+	55, // 89: deployments.v1.DeploymentService.ListLinks:output_type -> deployments.v1.ListLinksResponse
+	74, // [74:90] is the sub-list for method output_type
+	58, // [58:74] is the sub-list for method input_type
+	58, // [58:58] is the sub-list for extension type_name
+	58, // [58:58] is the sub-list for extension extendee
+	0,  // [0:58] is the sub-list for field type_name
 }
 
 func init() { file_deployments_v1_deployments_proto_init() }
@@ -4295,7 +4372,7 @@ func file_deployments_v1_deployments_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_deployments_v1_deployments_proto_rawDesc), len(file_deployments_v1_deployments_proto_rawDesc)),
 			NumEnums:      7,
-			NumMessages:   53,
+			NumMessages:   54,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

@@ -2,11 +2,13 @@ package vars
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"maps"
 	"slices"
 	"strings"
+	"unicode"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb"
@@ -58,6 +60,21 @@ func DecodeLink(raw []byte) (*linksv1.Link, error) {
 	return link, nil
 }
 
+func encodeShapes(link *linksv1.Link) ([]byte, error) {
+	return json.Marshal(naming.LinkPropertyShapes(link))
+}
+
+func decodeShapes(raw string) ([]naming.PropertyShape, error) {
+	if raw == "" {
+		return nil, nil
+	}
+	var shapes []naming.PropertyShape
+	if err := json.Unmarshal([]byte(raw), &shapes); err != nil {
+		return nil, err
+	}
+	return shapes, nil
+}
+
 func redacted(link *linksv1.Link) *linksv1.Link {
 	out := proto.Clone(link).(*linksv1.Link)
 	m := out.ProtoReflect()
@@ -94,6 +111,13 @@ func ValidateLinkTarget(slug, environment string) error {
 	for name, component := range map[string]string{"project slug": slug, "environment name": environment} {
 		if strings.Contains(component, delimiter) {
 			return fmt.Errorf("%s %q may not contain %q", name, component, delimiter)
+		}
+		for _, r := range component {
+			if unicode.IsControl(r) {
+				return fmt.Errorf(
+					"%s %q carries the control character %q: a coordinate is written into store keys, log lines and generated files, and a character that breaks a line breaks all three",
+					name, component, r)
+			}
 		}
 	}
 	return nil
@@ -153,6 +177,7 @@ func (s *Store) publish(ctx context.Context, slug, owner, environment string, re
 
 	sealed := make([][]byte, len(records))
 	rows := make([][]byte, len(records))
+	shapes := make([][]byte, len(records))
 	for i, r := range records {
 		value, err := EncodeLink(r)
 		if err != nil {
@@ -167,6 +192,9 @@ func (s *Store) publish(ctx context.Context, slug, owner, environment string, re
 		if rows[i], err = EncodeLink(redacted(r)); err != nil {
 			return PublishResult{}, fmt.Errorf("render link %s's record: %w", r.GetName(), err)
 		}
+		if shapes[i], err = encodeShapes(r); err != nil {
+			return PublishResult{}, fmt.Errorf("render link %s's shape: %w", r.GetName(), err)
+		}
 	}
 
 	if len(published) > 0 {
@@ -180,7 +208,7 @@ func (s *Store) publish(ctx context.Context, slug, owner, environment string, re
 	group.SetLimit(revealConcurrency)
 	for i, r := range records {
 		group.Go(func() error {
-			return s.writePair(writeCtx, linkCoordinate(slug, r.GetName(), environment), owner, sealed[i], rows[i], ts)
+			return s.writePair(writeCtx, linkCoordinate(slug, r.GetName(), environment), owner, sealed[i], rows[i], shapes[i], ts)
 		})
 	}
 	if err := group.Wait(); err != nil {
@@ -218,17 +246,18 @@ func publishedNames(slug, environment string, records []*linksv1.Link) ([]string
 	return published, nil
 }
 
-func (s *Store) writePair(ctx context.Context, c Coordinate, owner string, sealed, row []byte, ts int64) error {
+func (s *Store) writePair(ctx context.Context, c Coordinate, owner string, sealed, row, shapes []byte, ts int64) error {
 	pk := c.partition(s.Class)
 	record := &ddbtypes.Update{
 		TableName:        aws.String(s.Table),
 		Key:              pointKey(pk, recordSortKey(c.Environment)),
-		UpdateExpression: aws.String("SET #record = :record, #ts = :ts, #owner = :owner ADD #version :one"),
+		UpdateExpression: aws.String("SET #record = :record, #shapes = :shapes, #ts = :ts, #owner = :owner ADD #version :one"),
 		ExpressionAttributeNames: map[string]string{
-			"#record": "record", "#ts": "ts", "#version": "version", "#owner": "owner",
+			"#record": "record", "#shapes": "shapes", "#ts": "ts", "#version": "version", "#owner": "owner",
 		},
 		ExpressionAttributeValues: map[string]ddbtypes.AttributeValue{
 			":record": &ddbtypes.AttributeValueMemberS{Value: string(row)},
+			":shapes": &ddbtypes.AttributeValueMemberS{Value: string(shapes)},
 			":ts":     number(ts),
 			":one":    number(1),
 			":owner":  &ddbtypes.AttributeValueMemberS{Value: owner},

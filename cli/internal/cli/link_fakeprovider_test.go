@@ -28,6 +28,7 @@ type fakeLink struct {
 	Source      string                          `json:"source"`
 	Owner       string                          `json:"owner"`
 	Version     uint64                          `json:"version"`
+	Properties  []naming.PropertyShape          `json:"properties"`
 }
 
 type fakeLinkStore map[string]*fakeLink
@@ -104,6 +105,7 @@ func (s *deployFakeProviderServer) SetLink(ctx context.Context, req *deployments
 		Source:      link.GetSource(),
 		Owner:       req.GetOwner(),
 		Version:     version,
+		Properties:  naming.LinkPropertyShapes(link),
 	}
 	if err := saveFakeLinkStore(store); err != nil {
 		return nil, err
@@ -155,11 +157,12 @@ func (s *deployFakeProviderServer) ListLinks(ctx context.Context, req *deploymen
 			continue
 		}
 		resp.Links = append(resp.Links, &deploymentsv1.LinkSummary{
-			Name:    held.Name,
-			Type:    held.Type,
-			Source:  held.Source,
-			Owner:   held.Owner,
-			Version: held.Version,
+			Name:       held.Name,
+			Type:       held.Type,
+			Source:     held.Source,
+			Owner:      held.Owner,
+			Version:    held.Version,
+			Properties: naming.PropertyShapeMessages(held.Properties),
 		})
 	}
 	return resp, nil

@@ -2,6 +2,7 @@ package server
 
 import (
 	"context"
+	"slices"
 	"strings"
 	"testing"
 
@@ -13,6 +14,7 @@ import (
 
 	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
 	linksv1 "github.com/ocelhq/ocel/pkg/proto/links/v1"
+	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/structpb"
 )
 
@@ -139,6 +141,12 @@ func TestLinkHandlersRefuseACoordinateNothingBindsTo(t *testing.T) {
 		},
 		"a delimiter in the environment": {
 			Slug: "shop", Class: deploymentsv1.Environment_CLASS_PREVIEW, Environment: "pr#9", Owner: "sst", Link: ordersLink(),
+		},
+		"a newline in the environment": {
+			Slug: "shop", Class: deploymentsv1.Environment_CLASS_PREVIEW, Environment: "pr-9\ndeclare const x: string", Owner: "sst", Link: ordersLink(),
+		},
+		"a control character in the slug": {
+			Slug: "sh\x00op", Class: deploymentsv1.Environment_CLASS_PRODUCTION, Owner: "sst", Link: ordersLink(),
 		},
 		"a delimiter in the link name": {
 			Slug: "shop", Class: deploymentsv1.Environment_CLASS_PRODUCTION, Owner: "sst",
@@ -298,4 +306,66 @@ func TestLinkHandlersNameAnAbsentSubstrate(t *testing.T) {
 			t.Errorf("SetLink said %q, which never names what a user runs to fix it", err)
 		}
 	})
+}
+
+func TestListLinksDescribesEachRecordWithoutItsValues(t *testing.T) {
+	s := linksServer(t)
+	ctx := context.Background()
+
+	for _, link := range []*linksv1.Link{
+		ordersLink(),
+		{Name: "network", Source: "sst", Properties: networkProperties(t)},
+	} {
+		if _, err := s.SetLink(ctx, &deploymentsv1.SetLinkRequest{
+			Slug: "shop", Class: deploymentsv1.Environment_CLASS_PRODUCTION, Owner: "sst", Link: link,
+		}); err != nil {
+			t.Fatalf("SetLink %s: %v", link.GetName(), err)
+		}
+	}
+
+	listed, err := s.ListLinks(ctx, &deploymentsv1.ListLinksRequest{Slug: "shop", Class: deploymentsv1.Environment_CLASS_PRODUCTION})
+	if err != nil {
+		t.Fatalf("ListLinks: %v", err)
+	}
+
+	want := map[string][]*deploymentsv1.PropertyShape{
+		"network": {
+			{Name: "securityGroupIds", JsonType: "string", List: true},
+			{Name: "subnetIds", JsonType: "string", List: true},
+		},
+		"orders": {
+			{Name: "host", JsonType: "string"},
+			{Name: "port", JsonType: "number"},
+			{Name: "database", JsonType: "string"},
+			{Name: "username", JsonType: "string"},
+			{Name: "password", JsonType: "string"},
+		},
+	}
+	if len(listed.GetLinks()) != len(want) {
+		t.Fatalf("ListLinks = %+v, want one summary per published record", listed.GetLinks())
+	}
+	for _, got := range listed.GetLinks() {
+		expected, published := want[got.GetName()]
+		if !published {
+			t.Fatalf("ListLinks named %q, which nothing published", got.GetName())
+		}
+		if len(got.GetProperties()) != len(expected) {
+			t.Fatalf("ListLinks %s properties = %+v, want %+v", got.GetName(), got.GetProperties(), expected)
+		}
+		for i, shape := range got.GetProperties() {
+			if !proto.Equal(shape, expected[i]) {
+				t.Errorf("ListLinks %s property %d = %+v, want %+v", got.GetName(), i, shape, expected[i])
+			}
+		}
+	}
+
+	fields := (&deploymentsv1.PropertyShape{}).ProtoReflect().Descriptor().Fields()
+	described := make([]string, 0, fields.Len())
+	for i := range fields.Len() {
+		described = append(described, string(fields.Get(i).Name()))
+	}
+	if !slices.Equal(described, []string{"name", "json_type", "list"}) {
+		t.Errorf("PropertyShape carries %v; a shape names a property and says how it reads, and carries nothing else", described)
+	}
+
 }

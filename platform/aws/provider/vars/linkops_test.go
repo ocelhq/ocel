@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/ocelhq/ocel/pkg/naming"
 	linksv1 "github.com/ocelhq/ocel/pkg/proto/links/v1"
 )
 
@@ -143,6 +144,7 @@ func TestListLinksReportsWhatBindsWithoutOpeningIt(t *testing.T) {
 	store, _, crypto := newTestStore(t)
 	publishFor(t, store, sstPublisher, "", sstRecords())
 	publish(t, store, "", []*linksv1.Link{postgresLink("main", mainHost, "")})
+	setLink(t, store, "terraform", "", customLink(t, "network", "terraform"))
 	before := crypto.decrypts
 
 	got, err := store.ListLinks(context.Background(), "shop", "")
@@ -153,14 +155,14 @@ func TestListLinksReportsWhatBindsWithoutOpeningIt(t *testing.T) {
 		t.Errorf("ListLinks decrypted %d values; a listing never opens one", crypto.decrypts-before)
 	}
 
-	if len(got) != 3 {
-		t.Fatalf("ListLinks = %d links, want invoices, main and orders", len(got))
+	if len(got) != 4 {
+		t.Fatalf("ListLinks = %d links, want invoices, main, network and orders", len(got))
 	}
-	if got[0].Name != "invoices" || got[1].Name != "main" || got[2].Name != "orders" {
+	if got[0].Name != "invoices" || got[1].Name != "main" || got[2].Name != "network" || got[3].Name != "orders" {
 		t.Fatalf("ListLinks = %+v, want them sorted by name", got)
 	}
 
-	orders := got[2]
+	orders := got[3]
 	if orders.Type != linksv1.LinkType_LINK_TYPE_POSTGRES {
 		t.Errorf("orders = type %v, want postgres", orders.Type)
 	}
@@ -174,10 +176,49 @@ func TestListLinksReportsWhatBindsWithoutOpeningIt(t *testing.T) {
 		t.Errorf("main = owner %q, want ocel's own", got[1].Owner)
 	}
 
+	network := got[2]
+	if network.Type != linksv1.LinkType_LINK_TYPE_CUSTOM {
+		t.Errorf("network = type %v, want custom", network.Type)
+	}
+	want := []naming.PropertyShape{
+		{Name: "port", JSONType: naming.JSONTypeNumber},
+		{Name: "private", JSONType: naming.JSONTypeBoolean},
+		{Name: "subnetIds", JSONType: naming.JSONTypeString, List: true},
+	}
+	if !slices.Equal(network.Properties, want) {
+		t.Errorf("network = properties %+v, want %+v", network.Properties, want)
+	}
+
+	published := []string{mainPassword, mainHost, networkSubnet, "5432"}
 	for _, summary := range got {
-		if strings.Contains(summary.Source, mainPassword) || strings.Contains(summary.Name, mainPassword) {
-			t.Errorf("ListLinks carried a property value out: %+v", summary)
+		for _, carried := range summaryStrings(summary) {
+			if slices.Contains(published, carried) {
+				t.Errorf("ListLinks carried the published value %q out in %+v", carried, summary)
+			}
 		}
+	}
+}
+
+func summaryStrings(summary LinkSummary) []string {
+	out := []string{summary.Name, summary.Source, summary.Owner}
+	for _, shape := range summary.Properties {
+		out = append(out, shape.Name, shape.JSONType)
+	}
+	return out
+}
+
+func TestListLinksDescribesACustomRecordItCannotOpen(t *testing.T) {
+	store, ddb, _ := newTestStore(t)
+	setLink(t, store, "terraform", "", customLink(t, "network", "terraform"))
+	pk := LinkPartitionKey("shop", store.Class, "network")
+	delete(ddb.items[pk], currentSortKey(linkCoordinate("shop", "network", "").canonical()))
+
+	got, err := store.ListLinks(context.Background(), "shop", "")
+	if err != nil {
+		t.Fatalf("ListLinks with no value beside the record: %v", err)
+	}
+	if len(got) != 1 || len(got[0].Properties) != 3 {
+		t.Fatalf("ListLinks = %+v, want the custom record's three properties", got)
 	}
 }
 
