@@ -5,12 +5,11 @@ import (
 	"errors"
 	"fmt"
 	"slices"
-	"strings"
 
-	"github.com/ocelhq/ocel/pkg/naming"
+	linksv1 "github.com/ocelhq/ocel/pkg/proto/links/v1"
 )
 
-var ErrReservedToken = errors.New("vars: reserved type token")
+var ErrUnsourced = errors.New("vars: unsourced link")
 
 var ErrClaimed = errors.New("vars: link claimed by another publisher")
 
@@ -28,16 +27,16 @@ func describeOwner(owner string) string {
 	return "publisher " + owner
 }
 
-func (s *Store) PublishFor(ctx context.Context, slug, publisher, environment string, records []Record) (PublishResult, error) {
+func (s *Store) PublishFor(ctx context.Context, slug, publisher, environment string, records []*linksv1.Link) (PublishResult, error) {
 	if err := validatePublisher(publisher); err != nil {
 		return PublishResult{}, err
 	}
 	for _, r := range records {
-		if strings.HasPrefix(r.Type, naming.TokenNamespace) {
+		if r.GetSource() == "" {
 			return PublishResult{}, fmt.Errorf(
-				"publisher %s types link %s as %s: the %s namespace names what ocel's own provisioning produces, and an app binds a client to it on that promise. "+
-					"Namespace the token after your publisher instead: %w",
-				publisher, r.Name, r.Type, naming.TokenNamespace, ErrReservedToken)
+				"publisher %s leaves link %s unsourced: an empty source names what ocel's own provisioning produces, and an app binds a client to it on that promise. "+
+					"Name the tool that publishes it: %w",
+				publisher, r.GetName(), ErrUnsourced)
 		}
 	}
 	return s.publish(ctx, slug, publisher, environment, records)

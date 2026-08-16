@@ -13,7 +13,7 @@ import (
 
 	"github.com/ocelhq/ocel/cli/internal/manifest"
 	"github.com/ocelhq/ocel/cli/internal/resolvecache"
-	"github.com/ocelhq/ocel/pkg/naming"
+	linksv1 "github.com/ocelhq/ocel/pkg/proto/links/v1"
 )
 
 func cachingResolver(t *testing.T) (*Resolver, string) {
@@ -37,7 +37,7 @@ func countingResolveServer(t *testing.T) (*httptest.Server, *int) {
 		}
 		env := make(map[string]string, len(req.Resources))
 		for _, res := range req.Resources {
-			env[fmt.Sprintf("OCEL_RESOURCE_%s_%s", res.Type, res.Name)] = fmt.Sprintf(`{"connectionString":"postgres://resolved/%s"}`, res.Name)
+			env[fmt.Sprintf("OCEL_RESOURCE_%s_%s", res.Type, res.Name)] = fmt.Sprintf(`{"name":%q,"postgres":{"host":"resolved","port":5432,"database":%q}}`, res.Name, res.Name)
 		}
 		_ = json.NewEncoder(w).Encode(resolveResponseBody{
 			Env:       env,
@@ -51,7 +51,7 @@ func countingResolveServer(t *testing.T) (*httptest.Server, *int) {
 func TestCachedResolve(t *testing.T) {
 	t.Parallel()
 
-	onePostgres := []manifest.Entry{{Name: "main", Type: naming.TokenPostgres}}
+	onePostgres := []manifest.Entry{{Name: "main", Type: linksv1.LinkType_LINK_TYPE_POSTGRES}}
 
 	t.Run("a miss calls the API and persists a 0600 cache file", func(t *testing.T) {
 		t.Parallel()
@@ -124,8 +124,8 @@ func TestCachedResolve(t *testing.T) {
 
 		if _, err := resolver.Resolve(context.Background(), ts.URL, "tok", "proj_1",
 			[]manifest.Entry{
-				{Name: "main", Type: naming.TokenPostgres},
-				{Name: "second", Type: naming.TokenPostgres},
+				{Name: "main", Type: linksv1.LinkType_LINK_TYPE_POSTGRES},
+				{Name: "second", Type: linksv1.LinkType_LINK_TYPE_POSTGRES},
 			}); err != nil {
 			t.Fatalf("Resolve (second): %v", err)
 		}

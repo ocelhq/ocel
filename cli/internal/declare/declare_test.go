@@ -3,7 +3,7 @@ package declare
 import (
 	"testing"
 
-	"github.com/ocelhq/ocel/pkg/naming"
+	linksv1 "github.com/ocelhq/ocel/pkg/proto/links/v1"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/resources/v1"
 )
 
@@ -24,6 +24,19 @@ func TestParse(t *testing.T) {
 			name: "rejects a missing resource",
 			req:  &resourcesv1.DeclareRequest{},
 		},
+		{
+			name: "rejects a type without its config",
+			req: &resourcesv1.DeclareRequest{
+				Resource: &resourcesv1.ResourceIdentifier{Name: "main", Type: linksv1.LinkType_LINK_TYPE_POSTGRES},
+			},
+		},
+		{
+			name: "rejects a config that contradicts the type",
+			req: &resourcesv1.DeclareRequest{
+				Resource: &resourcesv1.ResourceIdentifier{Name: "main", Type: linksv1.LinkType_LINK_TYPE_POSTGRES},
+				Config:   &resourcesv1.DeclareRequest_Bucket{Bucket: &resourcesv1.BucketConfig{}},
+			},
+		},
 	}
 	for _, tc := range rejects {
 		t.Run(tc.name, func(t *testing.T) {
@@ -39,7 +52,8 @@ func TestParse(t *testing.T) {
 		t.Parallel()
 
 		res, err := Parse(&resourcesv1.DeclareRequest{
-			Resource: &resourcesv1.ResourceIdentifier{Name: "main", Type: naming.TokenPostgres},
+			Resource: &resourcesv1.ResourceIdentifier{Name: "main", Type: linksv1.LinkType_LINK_TYPE_POSTGRES},
+			Config:   &resourcesv1.DeclareRequest_Postgres{Postgres: &resourcesv1.PostgresConfig{}},
 		})
 		if err != nil {
 			t.Fatalf("Parse: %v", err)
@@ -47,8 +61,8 @@ func TestParse(t *testing.T) {
 		if res.Name != "main" {
 			t.Fatalf("Name = %q, want %q", res.Name, "main")
 		}
-		if res.Type != naming.TokenPostgres {
-			t.Fatalf("Type = %v, want %v", res.Type, naming.TokenPostgres)
+		if res.Type != linksv1.LinkType_LINK_TYPE_POSTGRES {
+			t.Fatalf("Type = %v, want %v", res.Type, linksv1.LinkType_LINK_TYPE_POSTGRES)
 		}
 	})
 
@@ -56,7 +70,7 @@ func TestParse(t *testing.T) {
 		t.Parallel()
 
 		res, err := Parse(&resourcesv1.DeclareRequest{
-			Resource: &resourcesv1.ResourceIdentifier{Name: "main", Type: naming.TokenPostgres},
+			Resource: &resourcesv1.ResourceIdentifier{Name: "main", Type: linksv1.LinkType_LINK_TYPE_POSTGRES},
 			Config:   &resourcesv1.DeclareRequest_Postgres{Postgres: &resourcesv1.PostgresConfig{Version: "17"}},
 		})
 		if err != nil {
@@ -71,7 +85,7 @@ func TestParse(t *testing.T) {
 		t.Parallel()
 
 		res, err := Parse(&resourcesv1.DeclareRequest{
-			Resource: &resourcesv1.ResourceIdentifier{Name: "storage", Type: naming.TokenBucket},
+			Resource: &resourcesv1.ResourceIdentifier{Name: "storage", Type: linksv1.LinkType_LINK_TYPE_BUCKET},
 			Config:   &resourcesv1.DeclareRequest_Bucket{Bucket: &resourcesv1.BucketConfig{AllowedOrigins: []string{"https://app.example.com"}}},
 		})
 		if err != nil {
@@ -82,11 +96,12 @@ func TestParse(t *testing.T) {
 		}
 	})
 
-	t.Run("no config leaves postgres nil", func(t *testing.T) {
+	t.Run("bucket config leaves postgres nil", func(t *testing.T) {
 		t.Parallel()
 
 		res, err := Parse(&resourcesv1.DeclareRequest{
-			Resource: &resourcesv1.ResourceIdentifier{Name: "main", Type: naming.TokenPostgres},
+			Resource: &resourcesv1.ResourceIdentifier{Name: "storage", Type: linksv1.LinkType_LINK_TYPE_BUCKET},
+			Config:   &resourcesv1.DeclareRequest_Bucket{Bucket: &resourcesv1.BucketConfig{}},
 		})
 		if err != nil {
 			t.Fatalf("Parse: %v", err)

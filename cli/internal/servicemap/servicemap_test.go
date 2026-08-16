@@ -21,8 +21,8 @@ func fixtureManifest() *deploymentsv1.Manifest {
 	return &deploymentsv1.Manifest{
 		Slug: "proj-123",
 		Resources: []*deploymentsv1.ManifestResource{
-			{LogicalName: "db--main", Resource: &resourcesv1.ResourceIdentifier{Type: "ocel:postgres", Name: "main"}},
-			{LogicalName: "bucket--uploads", Resource: &resourcesv1.ResourceIdentifier{Type: "ocel:bucket", Name: "uploads"}},
+			{LogicalName: "db--main", Resource: &resourcesv1.ResourceIdentifier{Type: linksv1.LinkType_LINK_TYPE_POSTGRES, Name: "main"}},
+			{LogicalName: "bucket--uploads", Resource: &resourcesv1.ResourceIdentifier{Type: linksv1.LinkType_LINK_TYPE_BUCKET, Name: "uploads"}},
 		},
 		Usages: []*deploymentsv1.ManifestUsage{
 			{App: "api", Resource: "db--main", Files: []string{"apps/api/src/server.ts", "shared/db.ts"}},
@@ -35,22 +35,20 @@ func fixtureLinks() []*linksv1.Link {
 	return []*linksv1.Link{
 		{
 			Name: "db--main",
-			Type: "ocel:postgres",
-			Properties: map[string]string{
-				"host":     "db.internal",
-				"port":     "5432",
-				"username": "app",
-				"password": fixtureSecret,
-				"database": "main",
-			},
+			Properties: &linksv1.Link_Postgres{Postgres: &linksv1.PostgresProperties{
+				Host:     "db.internal",
+				Port:     5432,
+				Username: "app",
+				Password: fixtureSecret,
+				Database: "main",
+			}},
 			Grants: []*linksv1.Grant{
 				{Actions: []string{"fake:connect"}, Resources: []string{"fake:resource/main-" + fixtureSecret}, Label: "connect"},
 			},
 		},
 		{
 			Name:       "bucket--uploads",
-			Type:       "ocel:bucket",
-			Properties: map[string]string{"bucket": "proj-123-uploads-" + fixtureSecret},
+			Properties: &linksv1.Link_Bucket{Bucket: &linksv1.BucketProperties{Bucket: "proj-123-uploads-" + fixtureSecret}},
 			Grants: []*linksv1.Grant{
 				{Actions: []string{"fake:get", "fake:put"}, Resources: []string{"fake:resource/uploads-" + fixtureSecret}},
 			},

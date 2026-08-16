@@ -14,8 +14,8 @@ import (
 	cfntypes "github.com/aws/aws-sdk-go-v2/service/cloudformation/types"
 	"github.com/aws/aws-sdk-go-v2/service/sts"
 
-	"github.com/ocelhq/ocel/pkg/naming"
 	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
+	linksv1 "github.com/ocelhq/ocel/pkg/proto/links/v1"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/resources/v1"
 	"github.com/ocelhq/ocel/platform/aws/provider/bootstrap"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
@@ -29,7 +29,7 @@ func wellFormedManifest() *deploymentsv1.Manifest {
 			{
 				LogicalName: "postgres_main",
 				Resource: &resourcesv1.ResourceIdentifier{
-					Type: naming.TokenPostgres,
+					Type: linksv1.LinkType_LINK_TYPE_POSTGRES,
 					Name: "main",
 				},
 				Config: &deploymentsv1.ManifestResource_Postgres{
@@ -55,7 +55,14 @@ func TestValidateManifest(t *testing.T) {
 		{
 			name: "a resource of an unspecified type",
 			mutate: func(m *deploymentsv1.Manifest) {
-				m.Resources[0].Resource.Type = ""
+				m.Resources[0].Resource.Type = linksv1.LinkType_LINK_TYPE_UNSPECIFIED
+			},
+			wantErr: true,
+		},
+		{
+			name: "a resource whose config contradicts its type",
+			mutate: func(m *deploymentsv1.Manifest) {
+				m.Resources[0].Resource.Type = linksv1.LinkType_LINK_TYPE_BUCKET
 			},
 			wantErr: true,
 		},
@@ -76,6 +83,16 @@ func TestValidateManifest(t *testing.T) {
 			}
 		})
 	}
+
+	t.Run("a mismatch names the declared type", func(t *testing.T) {
+		t.Parallel()
+		m := wellFormedManifest()
+		m.Resources[0].Resource.Type = linksv1.LinkType_LINK_TYPE_BUCKET
+		err := validateManifest(m)
+		if err == nil || !strings.Contains(err.Error(), "config does not match resource type LINK_TYPE_BUCKET") {
+			t.Fatalf("validateManifest() error = %v, want the enum name in the refusal", err)
+		}
+	})
 
 	t.Run("a nil manifest", func(t *testing.T) {
 		t.Parallel()

@@ -6,37 +6,54 @@ import (
 	"slices"
 	"testing"
 
+	"google.golang.org/protobuf/proto"
+
 	"github.com/ocelhq/ocel/pkg/naming"
+	linksv1 "github.com/ocelhq/ocel/pkg/proto/links/v1"
 )
 
 const sstPublisher = "sst"
 
-func sstRecords() []Record {
-	return []Record{
-		{
-			Name:       "orders",
-			Type:       "sst:aws.Postgres",
-			Properties: map[string]string{"host": "orders.cluster-abc.us-east-1.rds.amazonaws.com", "port": "5432", "database": "orders"},
-			Grants: []Grant{{
-				Actions:   []string{"rds-db:connect"},
-				Resources: []string{"arn:aws:rds-db:us-east-1:1234:dbuser:db-ORDERS/app"},
-				Label:     "connect",
-			}},
-		},
-		{
-			Name:       "invoices",
-			Type:       "sst:aws.Bucket",
-			Properties: map[string]string{"bucket": "acme-invoices"},
-			Grants: []Grant{{
-				Actions:   []string{"s3:GetObject"},
-				Resources: []string{"arn:aws:s3:::acme-invoices/*"},
-				Label:     "read",
-			}},
-		},
+func sstPostgres(name, host string) *linksv1.Link {
+	return &linksv1.Link{
+		Name:   name,
+		Source: sstPublisher,
+		Properties: &linksv1.Link_Postgres{Postgres: &linksv1.PostgresProperties{
+			Host: host, Port: 5432, Database: "orders", Username: "app", Password: "pw",
+		}},
 	}
 }
 
-func publishFor(t *testing.T, s *Store, publisher, environment string, records []Record) PublishResult {
+func sstRecords() []*linksv1.Link {
+	orders := sstPostgres("orders", "orders.cluster-abc.us-east-1.rds.amazonaws.com")
+	orders.Grants = []*linksv1.Grant{{
+		Actions:   []string{"rds-db:connect"},
+		Resources: []string{"arn:aws:rds-db:us-east-1:1234:dbuser:db-ORDERS/app"},
+		Label:     "connect",
+	}}
+	return []*linksv1.Link{
+		orders,
+		bucketLink("invoices", "acme-invoices", sstPublisher, &linksv1.Grant{
+			Actions:   []string{"s3:GetObject"},
+			Resources: []string{"arn:aws:s3:::acme-invoices/*"},
+			Label:     "read",
+		}),
+	}
+}
+
+func linkOfType(t *testing.T, kind linksv1.LinkType, name, source string) *linksv1.Link {
+	t.Helper()
+	switch kind {
+	case linksv1.LinkType_LINK_TYPE_POSTGRES:
+		return postgresLink(name, "h", source)
+	case linksv1.LinkType_LINK_TYPE_BUCKET:
+		return bucketLink(name, "b", source)
+	}
+	t.Fatalf("no fixture builds a %v link", kind)
+	return nil
+}
+
+func publishFor(t *testing.T, s *Store, publisher, environment string, records []*linksv1.Link) PublishResult {
 	t.Helper()
 	result, err := s.PublishFor(context.Background(), "shop", publisher, environment, records)
 	if err != nil {
@@ -52,7 +69,7 @@ func TestPublishForRoundTripsThroughTheSamePair(t *testing.T) {
 	publishFor(t, store, sstPublisher, "", want)
 
 	for _, r := range want {
-		pk := naming.LinkVarsKey("shop", store.Class, r.Name)
+		pk := naming.LinkVarsKey("shop", store.Class, r.GetName())
 		if len(ddb.items[pk]) != 2 {
 			t.Errorf("%s holds %d rows, want the value row and the record row", pk, len(ddb.items[pk]))
 		}
@@ -63,35 +80,34 @@ func TestPublishForRoundTripsThroughTheSamePair(t *testing.T) {
 		t.Fatalf("ResolveRecords returned %d records, want %d", len(got), len(want))
 	}
 	for i, p := range got {
-		if p.Type != want[i].Type {
-			t.Errorf("%s = type %q, want %q", p.Name, p.Type, want[i].Type)
+		if p.Type() != naming.LinkTypeOf(want[i]) {
+			t.Errorf("%s = type %v, want %v", p.Name(), p.Type(), naming.LinkTypeOf(want[i]))
 		}
-		for key, value := range want[i].Properties {
-			if p.Properties[key] != value {
-				t.Errorf("%s property %q = %q, want %q", p.Name, key, p.Properties[key], value)
-			}
+		if p.Link.GetSource() != sstPublisher {
+			t.Errorf("%s = source %q, want %q", p.Name(), p.Link.GetSource(), sstPublisher)
 		}
-		if len(p.Grants) != len(want[i].Grants) {
-			t.Errorf("%s carries %d grants, want %d", p.Name, len(p.Grants), len(want[i].Grants))
+		if !proto.Equal(p.Link, want[i]) {
+			t.Errorf("%s = %+v, want %+v", p.Name(), p.Link, want[i])
 		}
 	}
 }
 
-func TestPublishForRefusesTheOcelNamespace(t *testing.T) {
-	for _, token := range append(naming.Tokens(), naming.TokenNamespace+"kafka") {
+func TestPublishForRefusesAnUnsourcedLink(t *testing.T) {
+	for _, kind := range naming.LinkTypes() {
 		store, ddb, _ := newTestStore(t)
 
-		_, err := store.PublishFor(context.Background(), "shop", sstPublisher, "", []Record{{
-			Name:       "orders",
-			Type:       token,
-			Properties: map[string]string{"host": "h"},
-		}})
+		_, err := store.PublishFor(context.Background(), "shop", sstPublisher, "", []*linksv1.Link{linkOfType(t, kind, "orders", "")})
 
-		if !errors.Is(err, ErrReservedToken) {
-			t.Errorf("PublishFor %q = %v, want ErrReservedToken", token, err)
+		if !errors.Is(err, ErrUnsourced) {
+			t.Errorf("PublishFor %v = %v, want ErrUnsourced", kind, err)
 		}
 		if len(ddb.transactions) != 0 {
-			t.Errorf("PublishFor %q wrote %d transactions before refusing", token, len(ddb.transactions))
+			t.Errorf("PublishFor %v wrote %d transactions before refusing", kind, len(ddb.transactions))
+		}
+
+		publishFor(t, store, sstPublisher, "", []*linksv1.Link{linkOfType(t, kind, "orders", sstPublisher)})
+		if got := resolve(t, store, "", "orders"); got[0].Link.GetSource() != sstPublisher {
+			t.Errorf("PublishFor %v = source %q, want the publisher's own", kind, got[0].Link.GetSource())
 		}
 	}
 }
@@ -99,12 +115,9 @@ func TestPublishForRefusesTheOcelNamespace(t *testing.T) {
 func TestPublishForRefusesAnUnscopedGrant(t *testing.T) {
 	store, _, _ := newTestStore(t)
 
-	_, err := store.PublishFor(context.Background(), "shop", sstPublisher, "", []Record{{
-		Name:       "orders",
-		Type:       "sst:aws.Bucket",
-		Properties: map[string]string{"bucket": "acme-invoices"},
-		Grants:     []Grant{{Actions: []string{"s3:*"}, Resources: []string{"arn:aws:s3:::acme-invoices/*"}}},
-	}})
+	_, err := store.PublishFor(context.Background(), "shop", sstPublisher, "", []*linksv1.Link{
+		bucketLink("orders", "acme-invoices", sstPublisher, &linksv1.Grant{Actions: []string{"s3:*"}, Resources: []string{"arn:aws:s3:::acme-invoices/*"}}),
+	})
 
 	if !errors.Is(err, ErrUnscopedGrant) {
 		t.Fatalf("PublishFor = %v, want ErrUnscopedGrant", err)
@@ -155,12 +168,12 @@ func TestPruneForTakesEveryRecordItPublished(t *testing.T) {
 	}
 
 	for _, r := range published {
-		pk := naming.LinkVarsKey("shop", store.Class, r.Name)
+		pk := naming.LinkVarsKey("shop", store.Class, r.GetName())
 		if len(ddb.items[pk]) != 0 {
 			t.Errorf("%s still holds %d rows after the stack was destroyed", pk, len(ddb.items[pk]))
 		}
-		if _, err := store.ResolveRecords(context.Background(), "shop", "", []string{r.Name}); !errors.Is(err, ErrNotPublished) {
-			t.Errorf("ResolveRecords %s = %v, want ErrNotPublished", r.Name, err)
+		if _, err := store.ResolveRecords(context.Background(), "shop", "", []string{r.GetName()}); !errors.Is(err, ErrNotPublished) {
+			t.Errorf("ResolveRecords %s = %v, want ErrNotPublished", r.GetName(), err)
 		}
 	}
 
@@ -178,8 +191,8 @@ func TestPublishForPrunesWhatItStoppedPublishing(t *testing.T) {
 	if _, err := store.ResolveRecords(context.Background(), "shop", "", []string{"invoices"}); !errors.Is(err, ErrNotPublished) {
 		t.Errorf("ResolveRecords invoices = %v, want ErrNotPublished", err)
 	}
-	if got := resolve(t, store, "", "orders"); got[0].Type != "sst:aws.Postgres" {
-		t.Errorf("orders = type %q, want it left alone", got[0].Type)
+	if got := resolve(t, store, "", "orders"); got[0].Link.GetSource() != sstPublisher {
+		t.Errorf("orders = source %q, want it left alone", got[0].Link.GetSource())
 	}
 }
 
@@ -200,11 +213,7 @@ func TestOneLinkNameBelongsToOnePublisher(t *testing.T) {
 		store, _, _ := newTestStore(t)
 		publish(t, store, "", linkRecords())
 
-		_, err := store.PublishFor(context.Background(), "shop", sstPublisher, "", []Record{{
-			Name:       "main",
-			Type:       "sst:aws.Postgres",
-			Properties: map[string]string{"host": "h"},
-		}})
+		_, err := store.PublishFor(context.Background(), "shop", sstPublisher, "", []*linksv1.Link{sstPostgres("main", "h")})
 		if !errors.Is(err, ErrClaimed) {
 			t.Fatalf("PublishFor = %v, want ErrClaimed", err)
 		}
@@ -214,11 +223,7 @@ func TestOneLinkNameBelongsToOnePublisher(t *testing.T) {
 		store, _, _ := newTestStore(t)
 		publishFor(t, store, sstPublisher, "", sstRecords())
 
-		_, err := store.PublishFor(context.Background(), "shop", "pulumi", "", []Record{{
-			Name:       "orders",
-			Type:       "pulumi:aws.Rds",
-			Properties: map[string]string{"host": "h"},
-		}})
+		_, err := store.PublishFor(context.Background(), "shop", "pulumi", "", []*linksv1.Link{postgresLink("orders", "h", "pulumi")})
 		if !errors.Is(err, ErrClaimed) {
 			t.Fatalf("PublishFor = %v, want ErrClaimed", err)
 		}
@@ -226,26 +231,18 @@ func TestOneLinkNameBelongsToOnePublisher(t *testing.T) {
 
 	t.Run("an ocel deploy shadows a published link rather than aborting mid-deploy", func(t *testing.T) {
 		store, _, _ := newTestStore(t)
-		publishFor(t, store, sstPublisher, "", []Record{{
-			Name:       "main",
-			Type:       "sst:aws.Postgres",
-			Properties: map[string]string{"host": "published.example"},
-		}})
+		publishFor(t, store, sstPublisher, "", []*linksv1.Link{sstPostgres("main", "published.example")})
 
 		if _, err := store.PublishRecords(context.Background(), "shop", "", OwnerOcel, linkRecords()); err != nil {
 			t.Fatalf("PublishRecords = %v, want the resources this deploy provisioned delivered", err)
 		}
 
 		got := resolve(t, store, "", "main")
-		if got[0].Type != naming.TokenPostgres {
-			t.Errorf("main = type %q, want the resource ocel provisioned to own the name it provisioned", got[0].Type)
+		if got[0].Link.GetSource() != "" || got[0].Link.GetPostgres().GetHost() != mainHost {
+			t.Errorf("main = %+v, want the resource ocel provisioned to own the name it provisioned", got[0].Link)
 		}
 
-		_, err := store.PublishFor(context.Background(), "shop", sstPublisher, "", []Record{{
-			Name:       "main",
-			Type:       "sst:aws.Postgres",
-			Properties: map[string]string{"host": "published.example"},
-		}})
+		_, err := store.PublishFor(context.Background(), "shop", sstPublisher, "", []*linksv1.Link{sstPostgres("main", "published.example")})
 		if !errors.Is(err, ErrClaimed) {
 			t.Fatalf("PublishFor = %v, want the publisher refused once ocel provisions that name", err)
 		}
@@ -257,16 +254,12 @@ func TestOneLinkNameBelongsToOnePublisher(t *testing.T) {
 			publishFor(t, store, sstPublisher, "", sstRecords()[:1])
 		})
 
-		_, err := store.PublishFor(context.Background(), "shop", "pulumi", "", []Record{{
-			Name:       "orders",
-			Type:       "pulumi:aws.Rds",
-			Properties: map[string]string{"host": "pulumi.example"},
-		}})
+		_, err := store.PublishFor(context.Background(), "shop", "pulumi", "", []*linksv1.Link{postgresLink("orders", "pulumi.example", "pulumi")})
 		if !errors.Is(err, ErrClaimed) {
 			t.Fatalf("PublishFor = %v, want ErrClaimed: the name was taken between this publish's check and its write", err)
 		}
-		if got := resolve(t, store, "", "orders"); got[0].Type != "sst:aws.Postgres" {
-			t.Errorf("orders = type %q, want the publisher that took the name first to still hold it", got[0].Type)
+		if got := resolve(t, store, "", "orders"); got[0].Link.GetSource() != sstPublisher {
+			t.Errorf("orders = source %q, want the publisher that took the name first to still hold it", got[0].Link.GetSource())
 		}
 	})
 
@@ -275,19 +268,15 @@ func TestOneLinkNameBelongsToOnePublisher(t *testing.T) {
 		ddb.armBeforePutTo(linkIndexSortKey("pulumi", ""), func() {
 			publishFor(t, store, sstPublisher, "", sstRecords()[:1])
 		})
-		if _, err := store.PublishFor(context.Background(), "shop", "pulumi", "", []Record{{
-			Name:       "orders",
-			Type:       "pulumi:aws.Rds",
-			Properties: map[string]string{"host": "pulumi.example"},
-		}}); !errors.Is(err, ErrClaimed) {
+		if _, err := store.PublishFor(context.Background(), "shop", "pulumi", "", []*linksv1.Link{postgresLink("orders", "pulumi.example", "pulumi")}); !errors.Is(err, ErrClaimed) {
 			t.Fatalf("PublishFor = %v, want ErrClaimed", err)
 		}
 
 		if _, err := store.PruneFor(context.Background(), "shop", "pulumi", ""); err != nil {
 			t.Fatalf("PruneFor: %v", err)
 		}
-		if got := resolve(t, store, "", "orders"); got[0].Type != "sst:aws.Postgres" {
-			t.Errorf("orders = type %q, want a destroy to take only what its own publisher wrote", got[0].Type)
+		if got := resolve(t, store, "", "orders"); got[0].Link.GetSource() != sstPublisher {
+			t.Errorf("orders = source %q, want a destroy to take only what its own publisher wrote", got[0].Link.GetSource())
 		}
 	})
 
@@ -295,11 +284,7 @@ func TestOneLinkNameBelongsToOnePublisher(t *testing.T) {
 		store, _, _ := newTestStore(t)
 		publish(t, store, "", linkRecords())
 
-		_, err := store.PublishFor(context.Background(), "shop", sstPublisher, "pr-9", []Record{{
-			Name:       "main",
-			Type:       "sst:aws.Postgres",
-			Properties: map[string]string{"host": "h"},
-		}})
+		_, err := store.PublishFor(context.Background(), "shop", sstPublisher, "pr-9", []*linksv1.Link{sstPostgres("main", "h")})
 		if !errors.Is(err, ErrClaimed) {
 			t.Fatalf("PublishFor = %v, want ErrClaimed", err)
 		}
@@ -318,21 +303,17 @@ func TestPublishForShadowsTheClassWidePair(t *testing.T) {
 	classWide := sstRecords()[:1]
 	publishFor(t, store, sstPublisher, "", classWide)
 
-	named := []Record{{
-		Name:       "orders",
-		Type:       "sst:aws.Postgres",
-		Properties: map[string]string{"host": "pr-9.cluster-abc.us-east-1.rds.amazonaws.com", "port": "5432", "database": "orders"},
-	}}
+	named := []*linksv1.Link{sstPostgres("orders", "pr-9.cluster-abc.us-east-1.rds.amazonaws.com")}
 	publishFor(t, store, sstPublisher, "pr-9", named)
 
-	if got := resolve(t, store, "pr-9", "orders"); got[0].Properties["host"] != named[0].Properties["host"] {
-		t.Errorf("pr-9 read host %q, want the named pair's %q", got[0].Properties["host"], named[0].Properties["host"])
+	if got := resolve(t, store, "pr-9", "orders"); got[0].Link.GetPostgres().GetHost() != named[0].GetPostgres().GetHost() {
+		t.Errorf("pr-9 read host %q, want the named pair's %q", got[0].Link.GetPostgres().GetHost(), named[0].GetPostgres().GetHost())
 	}
-	if got := resolve(t, store, "pr-9", "orders"); got[0].Properties["database"] != "orders" {
+	if got := resolve(t, store, "pr-9", "orders"); len(got[0].Link.GetGrants()) != 0 {
 		t.Errorf("the named pair was merged cell-by-cell with the class-wide one")
 	}
-	if got := resolve(t, store, "", "orders"); got[0].Properties["host"] != classWide[0].Properties["host"] {
-		t.Errorf("the class-wide read saw host %q, want %q", got[0].Properties["host"], classWide[0].Properties["host"])
+	if got := resolve(t, store, "", "orders"); got[0].Link.GetPostgres().GetHost() != classWide[0].GetPostgres().GetHost() {
+		t.Errorf("the class-wide read saw host %q, want %q", got[0].Link.GetPostgres().GetHost(), classWide[0].GetPostgres().GetHost())
 	}
 }
 
@@ -346,7 +327,7 @@ func TestPruneForLeavesASiblingEnvironmentAlone(t *testing.T) {
 		t.Fatalf("PruneFor pr-9: %v", err)
 	}
 
-	if got := resolve(t, store, "", "orders"); got[0].Name != "orders" {
+	if got := resolve(t, store, "", "orders"); got[0].Name() != "orders" {
 		t.Errorf("tearing down pr-9 took the class-wide pair with it")
 	}
 }
@@ -354,15 +335,15 @@ func TestPruneForLeavesASiblingEnvironmentAlone(t *testing.T) {
 func TestACompositePublishesOneRecordPerConsumableResource(t *testing.T) {
 	store, ddb, _ := newTestStore(t)
 
-	composite := []Record{
-		{Name: "orders", Type: "sst:aws.Postgres", Properties: map[string]string{"host": "h", "port": "5432", "database": "orders"}},
-		{Name: "orders-events", Type: "sst:aws.Bus", Properties: map[string]string{"arn": "arn:aws:events:us-east-1:1234:event-bus/orders"}},
+	composite := []*linksv1.Link{
+		sstPostgres("orders", "h"),
+		bucketLink("orders-attachments", "acme-orders-attachments", sstPublisher),
 	}
 
 	publishFor(t, store, sstPublisher, "", composite)
 
 	for _, r := range composite {
-		pk := naming.LinkVarsKey("shop", store.Class, r.Name)
+		pk := naming.LinkVarsKey("shop", store.Class, r.GetName())
 		if len(ddb.items[pk]) != 2 {
 			t.Errorf("%s holds %d rows, want exactly the one pair", pk, len(ddb.items[pk]))
 		}
@@ -377,7 +358,7 @@ func TestACompositePublishesOneRecordPerConsumableResource(t *testing.T) {
 		t.Fatalf("unmarshal index: %v", err)
 	}
 	slices.Sort(names.Names)
-	if !slices.Equal(names.Names, []string{"orders", "orders-events"}) {
+	if !slices.Equal(names.Names, []string{"orders", "orders-attachments"}) {
 		t.Errorf("the publisher owns %v, want one name per consumable resource and no constituents", names.Names)
 	}
 }

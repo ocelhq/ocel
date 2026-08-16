@@ -2,6 +2,7 @@ package linkpublish
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 
@@ -9,6 +10,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb"
 	"github.com/aws/aws-sdk-go-v2/service/kms"
 
+	linksv1 "github.com/ocelhq/ocel/pkg/proto/links/v1"
 	"github.com/ocelhq/ocel/platform/aws/provider/bootstrap"
 	"github.com/ocelhq/ocel/platform/aws/provider/sdkconfig"
 	"github.com/ocelhq/ocel/platform/aws/provider/vars"
@@ -16,26 +18,13 @@ import (
 
 var ErrNoSubstrate = errors.New("linkpublish: no ocel substrate")
 
-type Grant struct {
-	Actions   []string `json:"actions"`
-	Resources []string `json:"resources"`
-	Label     string   `json:"label,omitempty"`
-}
-
-type Record struct {
-	Name       string            `json:"name"`
-	Type       string            `json:"type"`
-	Properties map[string]string `json:"properties"`
-	Grants     []Grant           `json:"grants,omitempty"`
-}
-
 type Request struct {
-	Project     string   `json:"project"`
-	Publisher   string   `json:"publisher"`
-	Class       string   `json:"class"`
-	Environment string   `json:"environment,omitempty"`
-	Region      string   `json:"region,omitempty"`
-	Records     []Record `json:"records,omitempty"`
+	Project     string            `json:"project"`
+	Publisher   string            `json:"publisher"`
+	Class       string            `json:"class"`
+	Environment string            `json:"environment,omitempty"`
+	Region      string            `json:"region,omitempty"`
+	Records     []json.RawMessage `json:"records,omitempty"`
 }
 
 type Response struct {
@@ -62,30 +51,22 @@ func (r Request) validate() error {
 		return fmt.Errorf("environment %q is named alongside class %q: an ocel coordinate is a class and, in %s, one preview environment; leave the environment off",
 			r.Environment, r.Class, bootstrap.ClassPreview)
 	}
-	for _, record := range r.Records {
-		if record.Name == "" {
-			return fmt.Errorf("a record carries no link name; the name is what a consuming app binds to")
-		}
-		if record.Type == "" {
-			return fmt.Errorf("link %s carries no type token; a consumer has nothing to resolve it against", record.Name)
-		}
-	}
 	return nil
 }
 
-func (r Request) records() []vars.Record {
-	out := make([]vars.Record, 0, len(r.Records))
-	for _, record := range r.Records {
-		grants := make([]vars.Grant, 0, len(record.Grants))
-		for _, g := range record.Grants {
-			grants = append(grants, vars.Grant{Actions: g.Actions, Resources: g.Resources, Label: g.Label})
+func (r Request) records() ([]*linksv1.Link, error) {
+	out := make([]*linksv1.Link, 0, len(r.Records))
+	for i, raw := range r.Records {
+		link, err := vars.DecodeLink(raw)
+		if err != nil {
+			return nil, fmt.Errorf("record %d is not a links.v1.Link: %w", i, err)
 		}
-		if len(grants) == 0 {
-			grants = nil
+		if err := vars.Verify(link); err != nil {
+			return nil, err
 		}
-		out = append(out, vars.Record{Name: record.Name, Type: record.Type, Properties: record.Properties, Grants: grants})
+		out = append(out, link)
 	}
-	return out
+	return out, nil
 }
 
 func Substrate(ctx context.Context, cfn bootstrap.CFNDescriber, class string) (bootstrap.Deployed, error) {
@@ -142,7 +123,11 @@ func Apply(ctx context.Context, clients Clients, req Request) (Response, error) 
 	if err != nil {
 		return Response{}, err
 	}
-	result, err := store.PublishFor(ctx, req.Project, req.Publisher, req.Environment, req.records())
+	records, err := req.records()
+	if err != nil {
+		return Response{}, err
+	}
+	result, err := store.PublishFor(ctx, req.Project, req.Publisher, req.Environment, records)
 	if err != nil {
 		return Response{}, err
 	}

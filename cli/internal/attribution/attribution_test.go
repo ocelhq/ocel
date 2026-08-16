@@ -10,7 +10,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ocelhq/ocel/pkg/naming"
+	linksv1 "github.com/ocelhq/ocel/pkg/proto/links/v1"
 )
 
 func fixtureRoot(t *testing.T, name string) string {
@@ -29,11 +29,11 @@ func stackAt(root, file string) string {
 
 func monorepoDeclarations(root string) []Declaration {
 	return []Declaration{
-		{Type: naming.TokenPostgres, ID: "main-db", Stack: stackAt(root, "shared/db.ts")},
-		{Type: naming.TokenPostgres, ID: "analytics-db", Stack: stackAt(root, "shared/analytics.ts")},
-		{Type: naming.TokenPostgres, ID: "audit-db", Stack: stackAt(root, "shared/audit.ts")},
-		{Type: naming.TokenPostgres, ID: "tenant-db", Stack: stackAt(root, "shared/tenant.ts")},
-		{Type: naming.TokenBucket, ID: "uploads", Stack: stackAt(root, "shared/files.ts")},
+		{Type: linksv1.LinkType_LINK_TYPE_POSTGRES, ID: "main-db", Stack: stackAt(root, "shared/db.ts")},
+		{Type: linksv1.LinkType_LINK_TYPE_POSTGRES, ID: "analytics-db", Stack: stackAt(root, "shared/analytics.ts")},
+		{Type: linksv1.LinkType_LINK_TYPE_POSTGRES, ID: "audit-db", Stack: stackAt(root, "shared/audit.ts")},
+		{Type: linksv1.LinkType_LINK_TYPE_POSTGRES, ID: "tenant-db", Stack: stackAt(root, "shared/tenant.ts")},
+		{Type: linksv1.LinkType_LINK_TYPE_BUCKET, ID: "uploads", Stack: stackAt(root, "shared/files.ts")},
 	}
 }
 
@@ -63,11 +63,11 @@ func TestCompute(t *testing.T) {
 		}
 
 		want := []string{
-			"api -> ocel:bucket:uploads [apps/api/src/server.ts]",
-			"api -> ocel:postgres:main-db [apps/api/src/reports.ts apps/api/src/server.ts]",
-			"api -> ocel:postgres:tenant-db [apps/api/src/server.ts]",
-			"worker -> ocel:postgres:analytics-db [apps/worker/src/jobs.ts apps/worker/src/worker.ts]",
-			"worker -> ocel:postgres:main-db [apps/worker/src/worker.ts]",
+			"api -> LINK_TYPE_BUCKET:uploads [apps/api/src/server.ts]",
+			"api -> LINK_TYPE_POSTGRES:main-db [apps/api/src/reports.ts apps/api/src/server.ts]",
+			"api -> LINK_TYPE_POSTGRES:tenant-db [apps/api/src/server.ts]",
+			"worker -> LINK_TYPE_POSTGRES:analytics-db [apps/worker/src/jobs.ts apps/worker/src/worker.ts]",
+			"worker -> LINK_TYPE_POSTGRES:main-db [apps/worker/src/worker.ts]",
 		}
 		if got := edgeStrings(usages); !reflect.DeepEqual(got, want) {
 			t.Errorf("edges =\n  %s\nwant\n  %s", strings.Join(got, "\n  "), strings.Join(want, "\n  "))
@@ -135,7 +135,7 @@ func TestCompute(t *testing.T) {
 		root := fixtureRoot(t, "computed-import")
 
 		_, err := Compute(root, []App{{Name: "worker", Path: "apps/worker"}}, []Declaration{
-			{Type: naming.TokenPostgres, ID: "metrics-db", Stack: stackAt(root, "shared/metrics.ts")},
+			{Type: linksv1.LinkType_LINK_TYPE_POSTGRES, ID: "metrics-db", Stack: stackAt(root, "shared/metrics.ts")},
 		})
 
 		var unresolved *UnresolvedImportError
@@ -157,7 +157,7 @@ func TestCompute(t *testing.T) {
 		root := fixtureRoot(t, "monorepo")
 
 		_, err := Compute(root, monorepoApps(), []Declaration{
-			{Type: naming.TokenPostgres, ID: "main-db", Stack: "Error\n    at node:internal/modules/esm/module_job:271:25"},
+			{Type: linksv1.LinkType_LINK_TYPE_POSTGRES, ID: "main-db", Stack: "Error\n    at node:internal/modules/esm/module_job:271:25"},
 		})
 
 		var unresolved *UnresolvedDeclarationError
@@ -176,7 +176,7 @@ func TestCompute(t *testing.T) {
 		root := fixtureRoot(t, "monorepo")
 
 		_, err := Compute(root, monorepoApps(), []Declaration{
-			{Type: naming.TokenPostgres, ID: "main-db"},
+			{Type: linksv1.LinkType_LINK_TYPE_POSTGRES, ID: "main-db"},
 		})
 
 		var unresolved *UnresolvedDeclarationError
@@ -189,7 +189,7 @@ func TestCompute(t *testing.T) {
 		root := fixtureRoot(t, "monorepo")
 
 		_, err := Compute(root, monorepoApps(), []Declaration{
-			{Type: naming.TokenPostgres, ID: "main-db", Stack: stackAt(t.TempDir(), "elsewhere.ts")},
+			{Type: linksv1.LinkType_LINK_TYPE_POSTGRES, ID: "main-db", Stack: stackAt(t.TempDir(), "elsewhere.ts")},
 		})
 
 		var unresolved *UnresolvedDeclarationError

@@ -4,13 +4,11 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"strconv"
 
 	"github.com/pulumi/pulumi/sdk/v3/go/auto"
 
 	"github.com/aws/aws-sdk-go-v2/service/secretsmanager"
 
-	"github.com/ocelhq/ocel/pkg/naming"
 	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
 	linksv1 "github.com/ocelhq/ocel/pkg/proto/links/v1"
 	"github.com/ocelhq/ocel/platform/aws/provider/transform"
@@ -220,14 +218,13 @@ func collectPostgresLink(ctx context.Context, secrets SecretsReader, name string
 
 	return &linksv1.Link{
 		Name: name,
-		Type: naming.TokenPostgres,
-		Properties: map[string]string{
-			"host":     host,
-			"port":     strconv.Itoa(port),
-			"database": database,
-			"username": username,
-			"password": password,
-		},
+		Properties: &linksv1.Link_Postgres{Postgres: &linksv1.PostgresProperties{
+			Host:     host,
+			Port:     int32(port),
+			Database: database,
+			Username: username,
+			Password: password,
+		}},
 	}, nil
 }
 

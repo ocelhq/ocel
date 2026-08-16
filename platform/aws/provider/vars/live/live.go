@@ -4,8 +4,11 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"maps"
-	"strings"
+
+	"google.golang.org/protobuf/encoding/protojson"
+
+	"github.com/ocelhq/ocel/pkg/naming"
+	linksv1 "github.com/ocelhq/ocel/pkg/proto/links/v1"
 )
 
 const FilePath = ".ocel/variables.live.json"
@@ -26,69 +29,66 @@ type Key struct {
 }
 
 type Link struct {
-	Name       string   `json:"name"`
-	Key        string   `json:"key"`
-	Type       string   `json:"type"`
-	Properties []string `json:"properties,omitempty"`
-	Granted    int64    `json:"granted,omitempty"`
+	Name    string           `json:"name"`
+	Key     string           `json:"key"`
+	Type    linksv1.LinkType `json:"type"`
+	Granted int64            `json:"granted,omitempty"`
 }
 
-type Record struct {
-	Type       string            `json:"type"`
-	Properties map[string]string `json:"properties"`
+func (l Link) MarshalJSON() ([]byte, error) {
+	type wire Link
+	return json.Marshal(struct {
+		wire
+		Type string `json:"type"`
+	}{wire(l), l.Type.String()})
+}
+
+func (l *Link) UnmarshalJSON(data []byte) error {
+	type wire Link
+	var decoded struct {
+		wire
+		Type string `json:"type"`
+	}
+	if err := json.Unmarshal(data, &decoded); err != nil {
+		return err
+	}
+	value, ok := linksv1.LinkType_value[decoded.Type]
+	if !ok {
+		return fmt.Errorf("link %s names type %q, which no link type is called", decoded.Name, decoded.Type)
+	}
+	*l = Link(decoded.wire)
+	l.Type = linksv1.LinkType(value)
+	return nil
 }
 
 var ErrDrift = errors.New("link record drift")
 
-func EncodeRecord(r Record) string {
-	if r.Properties == nil {
-		r.Properties = map[string]string{}
-	}
-	encoded, _ := json.Marshal(r)
-	return string(encoded)
-}
-
-func Conform(links []Link, values map[string]string) (map[string]string, error) {
-	if len(links) == 0 {
-		return values, nil
-	}
-	out := maps.Clone(values)
+func Conform(links []Link, values map[string]string) error {
 	for _, l := range links {
 		raw, ok := values[l.Key]
 		if !ok {
-			return nil, fmt.Errorf("%w: link %s published no record under %s, which this deployment reads as a %s", ErrDrift, l.Name, l.Key, l.Type)
+			return fmt.Errorf("%w: link %s published no record under %s, which this deployment reads as a %s", ErrDrift, l.Name, l.Key, l.Type)
 		}
-		properties, err := l.conform(raw)
-		if err != nil {
-			return nil, err
+		if err := l.conform(raw); err != nil {
+			return err
 		}
-		out[l.Key] = properties
 	}
-	return out, nil
+	return nil
 }
 
-func (l Link) conform(raw string) (string, error) {
-	var r Record
-	if err := json.Unmarshal([]byte(raw), &r); err != nil {
-		return "", fmt.Errorf("%w: link %s published something under %s that is not a link record at all, and this deployment was built to read a %s", ErrDrift, l.Name, l.Key, l.Type)
+func (l Link) conform(raw string) error {
+	link := &linksv1.Link{}
+	if err := protojson.Unmarshal([]byte(raw), link); err != nil {
+		return fmt.Errorf("%w: link %s published something under %s that is not a link record at all, and this deployment was built to read a %s", ErrDrift, l.Name, l.Key, l.Type)
 	}
-	if r.Type == "" {
-		return "", fmt.Errorf("%w: link %s published a record under %s that names no type, and this deployment was built to read a %s", ErrDrift, l.Name, l.Key, l.Type)
+	published := naming.LinkTypeOf(link)
+	if published == linksv1.LinkType_LINK_TYPE_UNSPECIFIED {
+		return fmt.Errorf("%w: link %s published a record under %s that carries no properties, and this deployment was built to read a %s", ErrDrift, l.Name, l.Key, l.Type)
 	}
-	if r.Type != l.Type {
-		return "", fmt.Errorf("%w: link %s publishes a %s record under %s, and this deployment was built to read a %s", ErrDrift, l.Name, r.Type, l.Key, l.Type)
+	if published != l.Type {
+		return fmt.Errorf("%w: link %s publishes a %s record under %s, and this deployment was built to read a %s", ErrDrift, l.Name, published, l.Key, l.Type)
 	}
-	for _, want := range l.Properties {
-		if _, ok := r.Properties[want]; !ok {
-			return "", fmt.Errorf("%w: link %s's %s record carries no %q under %s, and this deployment was built to read %s", ErrDrift, l.Name, r.Type, want, l.Key, strings.Join(l.Properties, ", "))
-		}
-	}
-	properties := r.Properties
-	if properties == nil {
-		properties = map[string]string{}
-	}
-	encoded, _ := json.Marshal(properties)
-	return string(encoded), nil
+	return nil
 }
 
 func Render(m Manifest) ([]byte, error) {

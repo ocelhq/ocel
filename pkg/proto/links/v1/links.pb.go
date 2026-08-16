@@ -21,12 +21,65 @@ const (
 	_ = protoimpl.EnforceVersion(protoimpl.MaxVersion - 20)
 )
 
+type LinkType int32
+
+const (
+	LinkType_LINK_TYPE_UNSPECIFIED LinkType = 0
+	LinkType_LINK_TYPE_POSTGRES    LinkType = 1
+	LinkType_LINK_TYPE_BUCKET      LinkType = 2
+)
+
+// Enum value maps for LinkType.
+var (
+	LinkType_name = map[int32]string{
+		0: "LINK_TYPE_UNSPECIFIED",
+		1: "LINK_TYPE_POSTGRES",
+		2: "LINK_TYPE_BUCKET",
+	}
+	LinkType_value = map[string]int32{
+		"LINK_TYPE_UNSPECIFIED": 0,
+		"LINK_TYPE_POSTGRES":    1,
+		"LINK_TYPE_BUCKET":      2,
+	}
+)
+
+func (x LinkType) Enum() *LinkType {
+	p := new(LinkType)
+	*p = x
+	return p
+}
+
+func (x LinkType) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (LinkType) Descriptor() protoreflect.EnumDescriptor {
+	return file_links_v1_links_proto_enumTypes[0].Descriptor()
+}
+
+func (LinkType) Type() protoreflect.EnumType {
+	return &file_links_v1_links_proto_enumTypes[0]
+}
+
+func (x LinkType) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use LinkType.Descriptor instead.
+func (LinkType) EnumDescriptor() ([]byte, []int) {
+	return file_links_v1_links_proto_rawDescGZIP(), []int{0}
+}
+
 type Link struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Name          string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
-	Type          string                 `protobuf:"bytes,2,opt,name=type,proto3" json:"type,omitempty"`
-	Properties    map[string]string      `protobuf:"bytes,3,rep,name=properties,proto3" json:"properties,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
-	Grants        []*Grant               `protobuf:"bytes,4,rep,name=grants,proto3" json:"grants,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	Name  string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
+	// Types that are valid to be assigned to Properties:
+	//
+	//	*Link_Postgres
+	//	*Link_Bucket
+	Properties    isLink_Properties `protobuf_oneof:"properties"`
+	Grants        []*Grant          `protobuf:"bytes,4,rep,name=grants,proto3" json:"grants,omitempty"`
+	Source        string            `protobuf:"bytes,5,opt,name=source,proto3" json:"source,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -68,16 +121,27 @@ func (x *Link) GetName() string {
 	return ""
 }
 
-func (x *Link) GetType() string {
-	if x != nil {
-		return x.Type
-	}
-	return ""
-}
-
-func (x *Link) GetProperties() map[string]string {
+func (x *Link) GetProperties() isLink_Properties {
 	if x != nil {
 		return x.Properties
+	}
+	return nil
+}
+
+func (x *Link) GetPostgres() *PostgresProperties {
+	if x != nil {
+		if x, ok := x.Properties.(*Link_Postgres); ok {
+			return x.Postgres
+		}
+	}
+	return nil
+}
+
+func (x *Link) GetBucket() *BucketProperties {
+	if x != nil {
+		if x, ok := x.Properties.(*Link_Bucket); ok {
+			return x.Bucket
+		}
 	}
 	return nil
 }
@@ -87,6 +151,149 @@ func (x *Link) GetGrants() []*Grant {
 		return x.Grants
 	}
 	return nil
+}
+
+func (x *Link) GetSource() string {
+	if x != nil {
+		return x.Source
+	}
+	return ""
+}
+
+type isLink_Properties interface {
+	isLink_Properties()
+}
+
+type Link_Postgres struct {
+	Postgres *PostgresProperties `protobuf:"bytes,2,opt,name=postgres,proto3,oneof"`
+}
+
+type Link_Bucket struct {
+	Bucket *BucketProperties `protobuf:"bytes,3,opt,name=bucket,proto3,oneof"`
+}
+
+func (*Link_Postgres) isLink_Properties() {}
+
+func (*Link_Bucket) isLink_Properties() {}
+
+type PostgresProperties struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Host          string                 `protobuf:"bytes,1,opt,name=host,proto3" json:"host,omitempty"`
+	Port          int32                  `protobuf:"varint,2,opt,name=port,proto3" json:"port,omitempty"`
+	Database      string                 `protobuf:"bytes,3,opt,name=database,proto3" json:"database,omitempty"`
+	Username      string                 `protobuf:"bytes,4,opt,name=username,proto3" json:"username,omitempty"`
+	Password      string                 `protobuf:"bytes,5,opt,name=password,proto3" json:"password,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *PostgresProperties) Reset() {
+	*x = PostgresProperties{}
+	mi := &file_links_v1_links_proto_msgTypes[1]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *PostgresProperties) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*PostgresProperties) ProtoMessage() {}
+
+func (x *PostgresProperties) ProtoReflect() protoreflect.Message {
+	mi := &file_links_v1_links_proto_msgTypes[1]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use PostgresProperties.ProtoReflect.Descriptor instead.
+func (*PostgresProperties) Descriptor() ([]byte, []int) {
+	return file_links_v1_links_proto_rawDescGZIP(), []int{1}
+}
+
+func (x *PostgresProperties) GetHost() string {
+	if x != nil {
+		return x.Host
+	}
+	return ""
+}
+
+func (x *PostgresProperties) GetPort() int32 {
+	if x != nil {
+		return x.Port
+	}
+	return 0
+}
+
+func (x *PostgresProperties) GetDatabase() string {
+	if x != nil {
+		return x.Database
+	}
+	return ""
+}
+
+func (x *PostgresProperties) GetUsername() string {
+	if x != nil {
+		return x.Username
+	}
+	return ""
+}
+
+func (x *PostgresProperties) GetPassword() string {
+	if x != nil {
+		return x.Password
+	}
+	return ""
+}
+
+type BucketProperties struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Bucket        string                 `protobuf:"bytes,1,opt,name=bucket,proto3" json:"bucket,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *BucketProperties) Reset() {
+	*x = BucketProperties{}
+	mi := &file_links_v1_links_proto_msgTypes[2]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *BucketProperties) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*BucketProperties) ProtoMessage() {}
+
+func (x *BucketProperties) ProtoReflect() protoreflect.Message {
+	mi := &file_links_v1_links_proto_msgTypes[2]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use BucketProperties.ProtoReflect.Descriptor instead.
+func (*BucketProperties) Descriptor() ([]byte, []int) {
+	return file_links_v1_links_proto_rawDescGZIP(), []int{2}
+}
+
+func (x *BucketProperties) GetBucket() string {
+	if x != nil {
+		return x.Bucket
+	}
+	return ""
 }
 
 type Grant struct {
@@ -100,7 +307,7 @@ type Grant struct {
 
 func (x *Grant) Reset() {
 	*x = Grant{}
-	mi := &file_links_v1_links_proto_msgTypes[1]
+	mi := &file_links_v1_links_proto_msgTypes[3]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -112,7 +319,7 @@ func (x *Grant) String() string {
 func (*Grant) ProtoMessage() {}
 
 func (x *Grant) ProtoReflect() protoreflect.Message {
-	mi := &file_links_v1_links_proto_msgTypes[1]
+	mi := &file_links_v1_links_proto_msgTypes[3]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -125,7 +332,7 @@ func (x *Grant) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Grant.ProtoReflect.Descriptor instead.
 func (*Grant) Descriptor() ([]byte, []int) {
-	return file_links_v1_links_proto_rawDescGZIP(), []int{1}
+	return file_links_v1_links_proto_rawDescGZIP(), []int{3}
 }
 
 func (x *Grant) GetActions() []string {
@@ -155,19 +362,29 @@ const file_links_v1_links_proto_rawDesc = "" +
 	"\n" +
 	"\x14links/v1/links.proto\x12\blinks.v1\"\xdb\x01\n" +
 	"\x04Link\x12\x12\n" +
-	"\x04name\x18\x01 \x01(\tR\x04name\x12\x12\n" +
-	"\x04type\x18\x02 \x01(\tR\x04type\x12C\n" +
+	"\x04name\x18\x01 \x01(\tR\x04name\x12:\n" +
+	"\bpostgres\x18\x02 \x01(\v2\x1c.links.v1.PostgresPropertiesH\x00R\bpostgres\x124\n" +
+	"\x06bucket\x18\x03 \x01(\v2\x1a.links.v1.BucketPropertiesH\x00R\x06bucket\x12'\n" +
+	"\x06grants\x18\x04 \x03(\v2\x0f.links.v1.GrantR\x06grants\x12\x16\n" +
+	"\x06source\x18\x05 \x01(\tR\x06sourceB\f\n" +
 	"\n" +
-	"properties\x18\x03 \x03(\v2\x1e.links.v1.Link.PropertiesEntryB\x03\x80\x01\x01R\n" +
-	"properties\x12'\n" +
-	"\x06grants\x18\x04 \x03(\v2\x0f.links.v1.GrantR\x06grants\x1a=\n" +
-	"\x0fPropertiesEntry\x12\x10\n" +
-	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
-	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"U\n" +
+	"properties\"\x95\x01\n" +
+	"\x12PostgresProperties\x12\x12\n" +
+	"\x04host\x18\x01 \x01(\tR\x04host\x12\x12\n" +
+	"\x04port\x18\x02 \x01(\x05R\x04port\x12\x1a\n" +
+	"\bdatabase\x18\x03 \x01(\tR\bdatabase\x12\x1a\n" +
+	"\busername\x18\x04 \x01(\tR\busername\x12\x1f\n" +
+	"\bpassword\x18\x05 \x01(\tB\x03\x80\x01\x01R\bpassword\"*\n" +
+	"\x10BucketProperties\x12\x16\n" +
+	"\x06bucket\x18\x01 \x01(\tR\x06bucket\"U\n" +
 	"\x05Grant\x12\x18\n" +
 	"\aactions\x18\x01 \x03(\tR\aactions\x12\x1c\n" +
 	"\tresources\x18\x02 \x03(\tR\tresources\x12\x14\n" +
-	"\x05label\x18\x03 \x01(\tR\x05labelB3Z1github.com/ocelhq/ocel/pkg/proto/links/v1;linksv1b\x06proto3"
+	"\x05label\x18\x03 \x01(\tR\x05label*S\n" +
+	"\bLinkType\x12\x19\n" +
+	"\x15LINK_TYPE_UNSPECIFIED\x10\x00\x12\x16\n" +
+	"\x12LINK_TYPE_POSTGRES\x10\x01\x12\x14\n" +
+	"\x10LINK_TYPE_BUCKET\x10\x02B3Z1github.com/ocelhq/ocel/pkg/proto/links/v1;linksv1b\x06proto3"
 
 var (
 	file_links_v1_links_proto_rawDescOnce sync.Once
@@ -181,20 +398,24 @@ func file_links_v1_links_proto_rawDescGZIP() []byte {
 	return file_links_v1_links_proto_rawDescData
 }
 
-var file_links_v1_links_proto_msgTypes = make([]protoimpl.MessageInfo, 3)
+var file_links_v1_links_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
+var file_links_v1_links_proto_msgTypes = make([]protoimpl.MessageInfo, 4)
 var file_links_v1_links_proto_goTypes = []any{
-	(*Link)(nil),  // 0: links.v1.Link
-	(*Grant)(nil), // 1: links.v1.Grant
-	nil,           // 2: links.v1.Link.PropertiesEntry
+	(LinkType)(0),              // 0: links.v1.LinkType
+	(*Link)(nil),               // 1: links.v1.Link
+	(*PostgresProperties)(nil), // 2: links.v1.PostgresProperties
+	(*BucketProperties)(nil),   // 3: links.v1.BucketProperties
+	(*Grant)(nil),              // 4: links.v1.Grant
 }
 var file_links_v1_links_proto_depIdxs = []int32{
-	2, // 0: links.v1.Link.properties:type_name -> links.v1.Link.PropertiesEntry
-	1, // 1: links.v1.Link.grants:type_name -> links.v1.Grant
-	2, // [2:2] is the sub-list for method output_type
-	2, // [2:2] is the sub-list for method input_type
-	2, // [2:2] is the sub-list for extension type_name
-	2, // [2:2] is the sub-list for extension extendee
-	0, // [0:2] is the sub-list for field type_name
+	2, // 0: links.v1.Link.postgres:type_name -> links.v1.PostgresProperties
+	3, // 1: links.v1.Link.bucket:type_name -> links.v1.BucketProperties
+	4, // 2: links.v1.Link.grants:type_name -> links.v1.Grant
+	3, // [3:3] is the sub-list for method output_type
+	3, // [3:3] is the sub-list for method input_type
+	3, // [3:3] is the sub-list for extension type_name
+	3, // [3:3] is the sub-list for extension extendee
+	0, // [0:3] is the sub-list for field type_name
 }
 
 func init() { file_links_v1_links_proto_init() }
@@ -202,18 +423,23 @@ func file_links_v1_links_proto_init() {
 	if File_links_v1_links_proto != nil {
 		return
 	}
+	file_links_v1_links_proto_msgTypes[0].OneofWrappers = []any{
+		(*Link_Postgres)(nil),
+		(*Link_Bucket)(nil),
+	}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_links_v1_links_proto_rawDesc), len(file_links_v1_links_proto_rawDesc)),
-			NumEnums:      0,
-			NumMessages:   3,
+			NumEnums:      1,
+			NumMessages:   4,
 			NumExtensions: 0,
 			NumServices:   0,
 		},
 		GoTypes:           file_links_v1_links_proto_goTypes,
 		DependencyIndexes: file_links_v1_links_proto_depIdxs,
+		EnumInfos:         file_links_v1_links_proto_enumTypes,
 		MessageInfos:      file_links_v1_links_proto_msgTypes,
 	}.Build()
 	File_links_v1_links_proto = out.File

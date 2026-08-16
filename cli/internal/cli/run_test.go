@@ -88,8 +88,8 @@ export default { slug: "test-app" };
 			if !ok {
 				t.Fatalf("app env missing OCEL_RESOURCE_POSTGRES_main, got: %s", dumped)
 			}
-			if !strings.Contains(raw, "connectionString") {
-				t.Fatalf("OCEL_RESOURCE_POSTGRES_main = %q, want it to contain connectionString", raw)
+			if !strings.Contains(raw, `"postgres"`) {
+				t.Fatalf("OCEL_RESOURCE_POSTGRES_main = %q, want it to carry a postgres link", raw)
 			}
 		})
 
@@ -155,8 +155,8 @@ export default { slug: "test-app" };
 		if !ok {
 			t.Fatalf("run env missing OCEL_RESOURCE_POSTGRES_main, got: %s", dumped)
 		}
-		if !strings.Contains(raw, "connectionString") {
-			t.Fatalf("OCEL_RESOURCE_POSTGRES_main = %q, want it to contain connectionString", raw)
+		if !strings.Contains(raw, `"postgres"`) {
+			t.Fatalf("OCEL_RESOURCE_POSTGRES_main = %q, want it to carry a postgres link", raw)
 		}
 
 		cancelLeader()
@@ -181,7 +181,7 @@ export default { slug: "test-app" };
 		projectID := testProjectID(t)
 		const apiURL = "https://api.example.com"
 		srv := devserver.New(apiURL, "tok", projectID, "http://127.0.0.1:0")
-		srv.PushEnv(map[string]string{"OCEL_RESOURCE_POSTGRES_main": `{"connectionString":"conn"}`})
+		srv.PushEnv(map[string]string{"OCEL_RESOURCE_POSTGRES_main": `{"name":"main","postgres":{"host":"resolved","port":5432,"database":"main","username":"u","password":"p"}}`})
 
 		listener, err := net.Listen("tcp", "127.0.0.1:0")
 		if err != nil {

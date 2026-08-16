@@ -1,18 +1,19 @@
 package deploy
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"os"
 	"path/filepath"
 	"slices"
-	"strconv"
 	"strings"
 	"testing"
 
 	"github.com/aws/aws-sdk-go-v2/service/secretsmanager"
 	"github.com/ocelhq/ocel/pkg/naming"
 	linksv1 "github.com/ocelhq/ocel/pkg/proto/links/v1"
+	"github.com/ocelhq/ocel/platform/aws/provider/vars"
 	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/proto"
 )
@@ -29,25 +30,43 @@ func fixtureDir(t *testing.T) string {
 	return filepath.Join(repoRoot(t), "proto", "links", "v1", "fixtures")
 }
 
-func fixtureFile(token string) string {
-	return strings.ReplaceAll(token, ":", "-") + ".json"
+func fixtureFile(typ linksv1.LinkType) string {
+	return strings.ToLower(naming.EnvFragment(typ)) + ".json"
 }
 
-func linkFixture(t *testing.T, token string) *linksv1.Link {
+func fixtureBytes(t *testing.T, typ linksv1.LinkType) []byte {
 	t.Helper()
-	path := filepath.Join(fixtureDir(t), fixtureFile(token))
+	path := filepath.Join(fixtureDir(t), fixtureFile(typ))
 	body, err := os.ReadFile(path)
 	if err != nil {
-		t.Fatalf("read link fixture for %s: %v", token, err)
+		t.Fatalf("read link fixture for %s: %v", typ, err)
 	}
+	return body
+}
+
+func linkFixture(t *testing.T, typ linksv1.LinkType) *linksv1.Link {
+	t.Helper()
 	link := &linksv1.Link{}
-	if err := protojson.Unmarshal(body, link); err != nil {
-		t.Fatalf("link fixture %s is not a links.v1.Link: %v", path, err)
+	if err := protojson.Unmarshal(fixtureBytes(t, typ), link); err != nil {
+		t.Fatalf("link fixture %s is not a links.v1.Link: %v", fixtureFile(typ), err)
 	}
 	return link
 }
 
-func TestLinkFixtureExistsPerOwnedToken(t *testing.T) {
+func canonicalJSON(t *testing.T, raw []byte) []byte {
+	t.Helper()
+	var decoded any
+	if err := json.Unmarshal(raw, &decoded); err != nil {
+		t.Fatalf("not JSON: %v\n%s", err, raw)
+	}
+	out, err := json.Marshal(decoded)
+	if err != nil {
+		t.Fatalf("re-encode JSON: %v", err)
+	}
+	return out
+}
+
+func TestLinkFixtureExistsPerLinkType(t *testing.T) {
 	t.Parallel()
 
 	entries, err := os.ReadDir(fixtureDir(t))
@@ -60,69 +79,73 @@ func TestLinkFixtureExistsPerOwnedToken(t *testing.T) {
 	}
 
 	var want []string
-	for _, token := range naming.Tokens() {
-		want = append(want, fixtureFile(token))
-		if got := linkFixture(t, token).GetType(); got != token {
-			t.Errorf("fixture %s carries type %q, want %q", fixtureFile(token), got, token)
+	for _, typ := range naming.LinkTypes() {
+		want = append(want, fixtureFile(typ))
+		if got := naming.LinkTypeOf(linkFixture(t, typ)); got != typ {
+			t.Errorf("fixture %s carries a %s, want %s", fixtureFile(typ), got, typ)
 		}
 	}
 
 	slices.Sort(found)
 	slices.Sort(want)
 	if !slices.Equal(found, want) {
-		t.Errorf("fixtures = %v, want exactly one per ocel-owned token %v", found, want)
+		t.Errorf("fixtures = %v, want exactly one per link type %v", found, want)
 	}
 }
 
-func assertMatchesFixture(t *testing.T, got, want *linksv1.Link) {
+func assertMatchesFixture(t *testing.T, got *linksv1.Link, typ linksv1.LinkType) {
 	t.Helper()
+	want := linkFixture(t, typ)
 	if !proto.Equal(got, want) {
 		t.Errorf("producer emitted %v, want the checked-in record %v — the consumer suite parses that fixture, so a divergence here is cross-language drift", got, want)
+	}
+
+	payload, err := vars.EncodeLink(got)
+	if err != nil {
+		t.Fatalf("encode the produced link as the store and the app payload do: %v", err)
+	}
+	if wantBytes := canonicalJSON(t, fixtureBytes(t, typ)); !bytes.Equal(canonicalJSON(t, payload), wantBytes) {
+		t.Errorf("app payload = %s, want the checked-in fixture byte for byte %s", payload, wantBytes)
 	}
 }
 
 func TestPostgresProducerEmitsTheFixture(t *testing.T) {
 	t.Parallel()
 
-	want := linkFixture(t, naming.TokenPostgres)
-	props := want.GetProperties()
+	want := linkFixture(t, linksv1.LinkType_LINK_TYPE_POSTGRES).GetPostgres()
 
-	port, err := strconv.Atoi(props["port"])
-	if err != nil {
-		t.Fatalf("fixture port %q is not an integer: %v", props["port"], err)
-	}
 	secret, err := json.Marshal(map[string]string{
 		"username": "fixture_secret_principal",
-		"password": props["password"],
+		"password": want.GetPassword(),
 	})
 	if err != nil {
 		t.Fatalf("encode stub secret: %v", err)
 	}
 
 	fields := map[string]any{
-		outputKeyHost:      props["host"],
-		outputKeyPort:      float64(port),
-		outputKeyDatabase:  props["database"],
-		outputKeyUsername:  props["username"],
+		outputKeyHost:      want.GetHost(),
+		outputKeyPort:      float64(want.GetPort()),
+		outputKeyDatabase:  want.GetDatabase(),
+		outputKeyUsername:  want.GetUsername(),
 		outputKeySecretARN: "arn:aws:secretsmanager:us-east-1:111122223333:secret:shop-prod-main-AbCdEf",
 	}
 
-	got, err := collectPostgresLink(context.Background(), stubSecrets{secretString: string(secret)}, want.GetName(), fields)
+	got, err := collectPostgresLink(context.Background(), stubSecrets{secretString: string(secret)}, "db--main", fields)
 	if err != nil {
 		t.Fatalf("collectPostgresLink: %v", err)
 	}
-	assertMatchesFixture(t, got, want)
+	assertMatchesFixture(t, got, linksv1.LinkType_LINK_TYPE_POSTGRES)
 }
 
 func TestBucketProducerEmitsTheFixture(t *testing.T) {
 	t.Parallel()
 
-	want := linkFixture(t, naming.TokenBucket)
-	fields := map[string]any{outputKeyBucket: want.GetProperties()["bucket"]}
+	want := linkFixture(t, linksv1.LinkType_LINK_TYPE_BUCKET).GetBucket()
+	fields := map[string]any{outputKeyBucket: want.GetBucket()}
 
-	got, err := collectBucketLink(want.GetName(), fields)
+	got, err := collectBucketLink("bucket--uploads", fields)
 	if err != nil {
 		t.Fatalf("collectBucketLink: %v", err)
 	}
-	assertMatchesFixture(t, got, want)
+	assertMatchesFixture(t, got, linksv1.LinkType_LINK_TYPE_BUCKET)
 }

@@ -1,4 +1,7 @@
-import z from "zod";
+import {
+  LinkType,
+  type PostgresProperties,
+} from "../gen/proto/links/v1/links_pb.js";
 import type { Component } from "../utils/component.js";
 import { defer } from "../utils/defer.js";
 import { getConfig } from "../utils/get-config.js";
@@ -9,7 +12,7 @@ export interface PostgresConfig {
 }
 
 export class Postgres implements Component {
-  private type = "ocel:postgres";
+  private type = LinkType.POSTGRES;
 
   constructor(
     public id: string,
@@ -34,21 +37,7 @@ export class Postgres implements Component {
     return this.id;
   }
 
-  __config() {
-    const config = JSON.parse(getConfig(this.id, this.type));
-    const schema = z.object({
-      connectionString: z.string(),
-    });
-
-    const opts = schema.safeParse(config);
-    if (!opts.success) {
-      throw new Error(
-        `Ocel could not resolve 'postgres(${this.id})' correctly.`,
-      );
-    }
-
-    return {
-      connectionString: opts.data.connectionString,
-    };
+  __config(): PostgresProperties {
+    return getConfig(this.id, "postgres");
   }
 }

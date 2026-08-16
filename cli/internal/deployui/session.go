@@ -13,7 +13,6 @@ import (
 	"go.opentelemetry.io/otel/attribute"
 
 	"github.com/ocelhq/ocel/cli/internal/obs"
-	"github.com/ocelhq/ocel/pkg/naming"
 	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
 	linksv1 "github.com/ocelhq/ocel/pkg/proto/links/v1"
 )
@@ -247,12 +246,11 @@ func relLog(logPath string) string {
 }
 
 func formatLink(l *linksv1.Link) string {
-	p := l.GetProperties()
-	switch l.GetType() {
-	case naming.TokenPostgres:
-		return fmt.Sprintf("%s: postgres://%s@%s:%s/%s", l.GetName(), p["username"], p["host"], p["port"], p["database"])
-	case naming.TokenBucket:
-		return fmt.Sprintf("%s: bucket %s", l.GetName(), p["bucket"])
+	switch p := l.GetProperties().(type) {
+	case *linksv1.Link_Postgres:
+		return fmt.Sprintf("%s: postgres://%s@%s:%d/%s", l.GetName(), p.Postgres.GetUsername(), p.Postgres.GetHost(), p.Postgres.GetPort(), p.Postgres.GetDatabase())
+	case *linksv1.Link_Bucket:
+		return fmt.Sprintf("%s: bucket %s", l.GetName(), p.Bucket.GetBucket())
 	}
 	return l.GetName()
 }

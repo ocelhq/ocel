@@ -10,6 +10,7 @@ import (
 	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
 	linksv1 "github.com/ocelhq/ocel/pkg/proto/links/v1"
 	"github.com/ocelhq/ocel/platform/aws/provider/vars"
+	"google.golang.org/protobuf/proto"
 )
 
 type Consumed struct {
@@ -74,45 +75,47 @@ func handedOver(manifest *deploymentsv1.Manifest, provisioned map[string]bool, s
 }
 
 type LinkShapeError struct {
-	Link    string
-	Type    string
-	Missing []string
-	Carries []string
+	Link      string
+	Declared  linksv1.LinkType
+	Published linksv1.LinkType
 }
 
 func (e *LinkShapeError) Error() string {
 	return fmt.Sprintf(
-		"`links` binds %q to a record that carries no %s, and a %s is read through %s. "+
+		"`links` binds %q as a %s, and the record published under that name is a %s. "+
 			"Every app that uses %q would fail at its first cold start, so this deploy stops here. "+
-			"The record carries %s — republish it with %s",
-		e.Link, strings.Join(e.Missing, ", "), e.Type, quoteAll(linkRecordShape[e.Type]),
-		e.Link, carried(e.Carries), strings.Join(e.Missing, ", "),
+			"Declare it as what was published, or republish it as a %s",
+		e.Link, e.Declared, e.Published, e.Link, e.Declared,
 	)
 }
 
-func carried(properties []string) string {
-	if len(properties) == 0 {
-		return "no properties at all"
-	}
-	return strings.Join(properties, ", ")
+type LinkSourceError struct {
+	Link   string
+	Type   linksv1.LinkType
+	Source string
 }
 
-func readableAs(record vars.PublishedRecord, token string) error {
-	var missing []string
-	for _, property := range linkRecordShape[token] {
-		if _, carries := record.Properties[property]; !carries {
-			missing = append(missing, property)
-		}
+func (e *LinkSourceError) Error() string {
+	return fmt.Sprintf(
+		"`links` binds %q to a %s record published by %s, and ocel's bucket client cannot serve a bucket it did not provision. "+
+			"Hand the app its bucket name as an env var (`ocel env set`) instead",
+		e.Link, e.Type, e.Source,
+	)
+}
+
+var foreignSourceAdmitted = map[linksv1.LinkType]bool{
+	linksv1.LinkType_LINK_TYPE_POSTGRES: true,
+	linksv1.LinkType_LINK_TYPE_BUCKET:   false,
+}
+
+func readableAs(record vars.PublishedRecord, declared linksv1.LinkType) error {
+	if published := record.Type(); published != declared {
+		return &LinkShapeError{Link: record.Name(), Declared: declared, Published: published}
 	}
-	if len(missing) == 0 {
-		return nil
+	if source := record.Link.GetSource(); source != "" && !foreignSourceAdmitted[declared] {
+		return &LinkSourceError{Link: record.Name(), Type: declared, Source: source}
 	}
-	return &LinkShapeError{
-		Link:    record.Name,
-		Type:    token,
-		Missing: missing,
-		Carries: slices.Sorted(maps.Keys(record.Properties)),
-	}
+	return nil
 }
 
 func thatName(n int) string {
@@ -251,12 +254,9 @@ func consumedLinks(consumed map[string]Consumed) []*linksv1.Link {
 	out := make([]*linksv1.Link, 0, len(consumed))
 	for _, name := range slices.Sorted(maps.Keys(consumed)) {
 		c := consumed[name]
-		out = append(out, &linksv1.Link{
-			Name:       c.Resource,
-			Type:       c.Record.Type,
-			Properties: c.Record.Properties,
-			Grants:     publishedGrants(c),
-		})
+		link := proto.Clone(c.Record.Link).(*linksv1.Link)
+		link.Name = c.Resource
+		out = append(out, link)
 	}
 	return out
 }
@@ -266,7 +266,7 @@ func reportGrantVersions(consumed map[string]Consumed, log func(string)) {
 		c := consumed[name]
 		log(fmt.Sprintf(
 			"link %s is published at version %d; the apps that use it are deployed with the grants that version carries",
-			c.Record.Name, c.Record.Version,
+			c.Record.Name(), c.Record.Version,
 		))
 	}
 }

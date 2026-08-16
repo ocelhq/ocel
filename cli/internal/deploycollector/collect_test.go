@@ -10,7 +10,7 @@ import (
 
 	"github.com/ocelhq/ocel/cli/internal/envgate"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
-	"github.com/ocelhq/ocel/pkg/naming"
+	linksv1 "github.com/ocelhq/ocel/pkg/proto/links/v1"
 )
 
 func TestCollect(t *testing.T) {
@@ -37,11 +37,11 @@ function declareResource(body: unknown) {
 }
 
 declareResource({
-  resource: { type: "ocel:postgres", name: "main" },
+  resource: { type: "LINK_TYPE_POSTGRES", name: "main" },
   postgres: { version: "17" },
 });
 declareResource({
-  resource: { type: "ocel:postgres", name: "reporting" },
+  resource: { type: "LINK_TYPE_POSTGRES", name: "reporting" },
   postgres: { version: "16" },
 });
 export {};
@@ -65,8 +65,8 @@ export {};
 
 		byName := make(map[string]string, len(resources))
 		for _, r := range resources {
-			if r.Type != naming.TokenPostgres {
-				t.Errorf("resource %q Type = %q, want %q", r.Name, r.Type, naming.TokenPostgres)
+			if r.Type != linksv1.LinkType_LINK_TYPE_POSTGRES {
+				t.Errorf("resource %q Type = %v, want %v", r.Name, r.Type, linksv1.LinkType_LINK_TYPE_POSTGRES)
 			}
 			byName[r.Name] = r.Postgres.GetVersion()
 		}

@@ -28,6 +28,7 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/naming"
 	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
+	linksv1 "github.com/ocelhq/ocel/pkg/proto/links/v1"
 	"github.com/ocelhq/ocel/platform/aws/provider/bootstrap"
 	"github.com/ocelhq/ocel/platform/aws/provider/deploy"
 	"github.com/ocelhq/ocel/platform/aws/provider/pulumiruntime"
@@ -541,11 +542,11 @@ func resourceSummary(r *deploymentsv1.ManifestResource) string {
 	}
 }
 
-func configMatchesToken(r *deploymentsv1.ManifestResource, token string) bool {
-	switch token {
-	case naming.TokenPostgres:
+func configMatchesType(r *deploymentsv1.ManifestResource, t linksv1.LinkType) bool {
+	switch t {
+	case linksv1.LinkType_LINK_TYPE_POSTGRES:
 		return r.GetPostgres() != nil
-	case naming.TokenBucket:
+	case linksv1.LinkType_LINK_TYPE_BUCKET:
 		return r.GetBucket() != nil
 	}
 	return false
@@ -629,15 +630,15 @@ func validateManifest(m *deploymentsv1.Manifest) error {
 		if r.GetLogicalName() == "" {
 			return fmt.Errorf("manifest.resources[%d]: logical_name is required", i)
 		}
-		token := r.GetResource().GetType()
-		if _, ok := naming.TokenKind(token); !ok {
+		t := r.GetResource().GetType()
+		if _, ok := naming.KindOf(t); !ok {
 			return fmt.Errorf("manifest.resources[%d] (%s): a valid resource type is required", i, r.GetLogicalName())
 		}
 		if r.GetConfig() == nil {
 			return fmt.Errorf("manifest.resources[%d] (%s): typed config is required", i, r.GetLogicalName())
 		}
-		if !configMatchesToken(r, token) {
-			return fmt.Errorf("manifest.resources[%d] (%s): config does not match resource type %q", i, r.GetLogicalName(), token)
+		if !configMatchesType(r, t) {
+			return fmt.Errorf("manifest.resources[%d] (%s): config does not match resource type %s", i, r.GetLogicalName(), t)
 		}
 	}
 	return nil

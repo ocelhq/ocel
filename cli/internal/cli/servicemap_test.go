@@ -13,6 +13,7 @@ import (
 
 	"github.com/ocelhq/ocel/cli/internal/manifestbuilder"
 	"github.com/ocelhq/ocel/cli/internal/servicemap"
+	linksv1 "github.com/ocelhq/ocel/pkg/proto/links/v1"
 )
 
 func TestServiceMap(t *testing.T) {
@@ -73,7 +74,7 @@ func TestServiceMap(t *testing.T) {
 		got := readServiceMap(t, root)
 		want := []servicemap.Link{{
 			Name:    "db--main",
-			Type:    "ocel:postgres",
+			Type:    linksv1.LinkType_LINK_TYPE_POSTGRES.String(),
 			VarKeys: []string{"database", "host", "password", "port", "username"},
 			Grants:  []servicemap.Grant{{Verb: "connect", Actions: []string{"fake:connect"}}},
 		}}

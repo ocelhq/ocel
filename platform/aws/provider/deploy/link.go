@@ -3,9 +3,7 @@ package deploy
 import (
 	"context"
 	"fmt"
-	"strconv"
 
-	"github.com/ocelhq/ocel/pkg/naming"
 	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
 	linksv1 "github.com/ocelhq/ocel/pkg/proto/links/v1"
 	"github.com/ocelhq/ocel/platform/aws/provider/vars"
@@ -13,14 +11,9 @@ import (
 )
 
 type LinkStore interface {
-	PublishRecords(ctx context.Context, slug, environment, owner string, records []vars.Record) (vars.PublishResult, error)
+	PublishRecords(ctx context.Context, slug, environment, owner string, records []*linksv1.Link) (vars.PublishResult, error)
 	ResolveRecords(ctx context.Context, slug, environment string, names []string) ([]vars.PublishedRecord, error)
 	PublishedNames(ctx context.Context, slug, class, environment string) ([]string, error)
-}
-
-var linkRecordShape = map[string][]string{
-	naming.TokenPostgres: {"connectionString"},
-	naming.TokenBucket:   {"bucket"},
 }
 
 func linkName(r *deploymentsv1.ManifestResource) string {
@@ -38,80 +31,38 @@ func appLinks(manifest *deploymentsv1.Manifest, app string, consumed map[string]
 		if !used[r.GetLogicalName()] {
 			continue
 		}
-		token := r.GetResource().GetType()
 		record := live.Link{
-			Name:       linkName(r),
-			Key:        functionEnvKey(token, r.GetResource().GetName()),
-			Type:       token,
-			Properties: linkRecordShape[token],
+			Name: linkName(r),
+			Key:  functionEnvKey(r.GetResource().GetType(), r.GetResource().GetName()),
+			Type: r.GetResource().GetType(),
 		}
 		if r.GetLinked() {
-			published := consumed[r.GetLogicalName()].Record
-			record.Type, record.Granted = published.Type, published.Version
+			record.Granted = consumed[r.GetLogicalName()].Record.Version
 		}
 		out = append(out, record)
 	}
 	return out
 }
 
-func linkRecords(manifest *deploymentsv1.Manifest, links []*linksv1.Link) ([]vars.Record, error) {
+func linkRecords(manifest *deploymentsv1.Manifest, links []*linksv1.Link) []*linksv1.Link {
 	byName := make(map[string]*linksv1.Link, len(links))
 	for _, l := range links {
 		byName[l.GetName()] = l
 	}
 
-	out := make([]vars.Record, 0, len(links))
+	out := make([]*linksv1.Link, 0, len(links))
 	for _, r := range manifest.GetResources() {
 		link, ok := byName[r.GetLogicalName()]
 		if !ok || r.GetLinked() {
 			continue
 		}
-		properties, err := linkProperties(link)
-		if err != nil {
-			return nil, err
-		}
-		out = append(out, vars.Record{
-			Name:       r.GetLogicalName(),
-			Type:       link.GetType(),
-			Properties: properties,
-			Grants:     linkGrants(link),
-		})
-	}
-	return out, nil
-}
-
-func linkGrants(link *linksv1.Link) []vars.Grant {
-	granted := link.GetGrants()
-	if len(granted) == 0 {
-		return nil
-	}
-	out := make([]vars.Grant, 0, len(granted))
-	for _, g := range granted {
-		out = append(out, vars.Grant{Actions: g.GetActions(), Resources: g.GetResources(), Label: g.GetLabel()})
+		out = append(out, link)
 	}
 	return out
 }
 
-func linkProperties(link *linksv1.Link) (map[string]string, error) {
-	p := link.GetProperties()
-	switch link.GetType() {
-	case naming.TokenPostgres:
-		port, err := strconv.Atoi(p["port"])
-		if err != nil {
-			return nil, fmt.Errorf("link %s reports port %q, which is not a number", link.GetName(), p["port"])
-		}
-		return postgresRecordProperties(p["username"], p["password"], p["host"], port, p["database"]), nil
-	case naming.TokenBucket:
-		return bucketRecordProperties(p["bucket"]), nil
-	}
-	return nil, fmt.Errorf("link %s is a %s, a type this provider ships no client for", link.GetName(), link.GetType())
-}
-
 func publishLinkRecords(ctx context.Context, cfg Config, manifest *deploymentsv1.Manifest, links []*linksv1.Link) error {
-	records, err := linkRecords(manifest, links)
-	if err != nil {
-		return err
-	}
+	records := linkRecords(manifest, links)
 	if cfg.Links == nil {
 		if len(records) == 0 {
 			return nil

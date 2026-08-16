@@ -1,10 +1,14 @@
 package manifest
 
-import "sync"
+import (
+	"sync"
+
+	linksv1 "github.com/ocelhq/ocel/pkg/proto/links/v1"
+)
 
 type Entry struct {
 	Name string
-	Type string
+	Type linksv1.LinkType
 }
 
 type Manifest struct {

@@ -15,7 +15,8 @@ afterEach(() => {
 describe("resolveBucketContext", () => {
   it("reads the bucket binding and the ambient address, and builds the typed client", () => {
     process.env.OCEL_RESOURCE_BUCKET_storage = JSON.stringify({
-      bucket: "org-project-store",
+      name: "storage",
+      bucket: { bucket: "org-project-store" },
     });
     process.env.OCEL_RUNTIME_ADDRESS = "http://localhost:7070";
 
@@ -35,7 +36,8 @@ describe("resolveBucketContext", () => {
 
   it("throws naming the ambient address when only it is missing", () => {
     process.env.OCEL_RESOURCE_BUCKET_storage = JSON.stringify({
-      bucket: "org-project-store",
+      name: "storage",
+      bucket: { bucket: "org-project-store" },
     });
 
     expect(() =>

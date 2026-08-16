@@ -175,9 +175,10 @@ describe("ocel/blob dev e2e (MinIO)", () => {
       );
       const devServerAddr = await waitForDevServerAddr(devServer);
 
+      process.env.OCEL_RUNTIME_ADDRESS = devServerAddr;
       process.env.OCEL_RESOURCE_BUCKET_storage = JSON.stringify({
-        address: devServerAddr,
-        bucket: "storage",
+        name: "storage",
+        bucket: { bucket: "storage" },
       });
 
       const route = createRouteHandler(storageBucket);

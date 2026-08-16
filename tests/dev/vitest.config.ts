@@ -1,4 +1,5 @@
 import { defineConfig } from "vitest/config";
+import { postgresLink } from "./src/env";
 
 export default defineConfig({
   test: {
@@ -14,11 +15,11 @@ export default defineConfig({
         "postgres://postgres:postgres@localhost:5432/postgres",
       OCEL_RESOURCE_POSTGRES_main:
         process.env.OCEL_RESOURCE_POSTGRES_main ??
-        JSON.stringify({
-          connectionString:
-            process.env.DATABASE_URL ??
+        postgresLink(
+          "main",
+          process.env.DATABASE_URL ??
             "postgres://postgres:postgres@localhost:5432/postgres",
-        }),
+        ),
     },
     server: {
       deps: {

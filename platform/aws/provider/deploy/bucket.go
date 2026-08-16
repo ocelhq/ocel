@@ -302,8 +302,7 @@ func collectBucketLink(name string, fields map[string]any) (*linksv1.Link, error
 	}
 	return &linksv1.Link{
 		Name:       name,
-		Type:       naming.TokenBucket,
-		Properties: map[string]string{"bucket": bucket},
+		Properties: &linksv1.Link_Bucket{Bucket: &linksv1.BucketProperties{Bucket: bucket}},
 		Grants:     bucketGrants(bucket),
 	}, nil
 }

@@ -77,12 +77,12 @@ func grantsManifest() *deploymentsv1.Manifest {
 		Resources: []*deploymentsv1.ManifestResource{
 			{
 				LogicalName: "bucket--uploads",
-				Resource:    &resourcesv1.ResourceIdentifier{Type: naming.TokenBucket, Name: "uploads"},
+				Resource:    &resourcesv1.ResourceIdentifier{Type: linksv1.LinkType_LINK_TYPE_BUCKET, Name: "uploads"},
 				Config:      &deploymentsv1.ManifestResource_Bucket{Bucket: &resourcesv1.BucketConfig{}},
 			},
 			{
 				LogicalName: "database--main",
-				Resource:    &resourcesv1.ResourceIdentifier{Type: naming.TokenPostgres, Name: "main"},
+				Resource:    &resourcesv1.ResourceIdentifier{Type: linksv1.LinkType_LINK_TYPE_POSTGRES, Name: "main"},
 				Config:      &deploymentsv1.ManifestResource_Postgres{Postgres: &resourcesv1.PostgresConfig{}},
 			},
 		},
@@ -95,8 +95,8 @@ func grantsManifest() *deploymentsv1.Manifest {
 
 func grantsLinks() []*linksv1.Link {
 	return []*linksv1.Link{
-		{Name: "bucket--uploads", Type: naming.TokenBucket, Grants: bucketGrants("shop-prod-uploads-abc")},
-		{Name: "database--main", Type: naming.TokenPostgres},
+		{Name: "bucket--uploads", Properties: &linksv1.Link_Bucket{Bucket: &linksv1.BucketProperties{Bucket: "shop-prod-uploads-abc"}}, Grants: bucketGrants("shop-prod-uploads-abc")},
+		{Name: "database--main", Properties: &linksv1.Link_Postgres{Postgres: &linksv1.PostgresProperties{Host: "db.host", Port: 5432}}},
 	}
 }
 
@@ -164,9 +164,9 @@ func TestAppLinkPoliciesRenderOnlyOnTheUsingRole(t *testing.T) {
 		t.Parallel()
 
 		unused := append(grantsLinks(), &linksv1.Link{
-			Name:   "bucket--reports",
-			Type:   naming.TokenBucket,
-			Grants: bucketGrants("shop-prod-reports-def"),
+			Name:       "bucket--reports",
+			Properties: &linksv1.Link_Bucket{Bucket: &linksv1.BucketProperties{Bucket: "shop-prod-reports-def"}},
+			Grants:     bucketGrants("shop-prod-reports-def"),
 		})
 		policies, err := appLinkPolicies(manifest, "web", unused)
 		if err != nil {
@@ -194,7 +194,7 @@ func TestUnscopedGrantsAreRejected(t *testing.T) {
 		t.Run(tc.name+" is rejected", func(t *testing.T) {
 			t.Parallel()
 
-			links := []*linksv1.Link{{Name: "bucket--uploads", Type: naming.TokenBucket, Grants: []*linksv1.Grant{tc.grant}}}
+			links := []*linksv1.Link{{Name: "bucket--uploads", Properties: &linksv1.Link_Bucket{Bucket: &linksv1.BucketProperties{Bucket: "b"}}, Grants: []*linksv1.Grant{tc.grant}}}
 
 			var unscoped *UnscopedGrantError
 			if err := checkLinkGrants(links); !errors.As(err, &unscoped) {
@@ -237,7 +237,7 @@ func TestInlinePolicyBudgetPreflight(t *testing.T) {
 			name := "database--" + strings.Repeat("d", 40) + string(rune('a'+i%26)) + string(rune('a'+i/26))
 			manifest.Resources = append(manifest.Resources, &deploymentsv1.ManifestResource{
 				LogicalName: name,
-				Resource:    &resourcesv1.ResourceIdentifier{Type: naming.TokenPostgres, Name: name},
+				Resource:    &resourcesv1.ResourceIdentifier{Type: linksv1.LinkType_LINK_TYPE_POSTGRES, Name: name},
 				Config:      &deploymentsv1.ManifestResource_Postgres{Postgres: &resourcesv1.PostgresConfig{}},
 			})
 			manifest.Usages = append(manifest.Usages, &deploymentsv1.ManifestUsage{App: "web", Resource: name})
@@ -255,7 +255,7 @@ func TestInlinePolicyBudgetPreflight(t *testing.T) {
 			name := "bucket--" + string(rune('a'+i%26)) + string(rune('a'+i/26))
 			manifest.Resources = append(manifest.Resources, &deploymentsv1.ManifestResource{
 				LogicalName: name,
-				Resource:    &resourcesv1.ResourceIdentifier{Type: naming.TokenBucket, Name: name},
+				Resource:    &resourcesv1.ResourceIdentifier{Type: linksv1.LinkType_LINK_TYPE_BUCKET, Name: name},
 				Config:      &deploymentsv1.ManifestResource_Bucket{Bucket: &resourcesv1.BucketConfig{}},
 			})
 			manifest.Usages = append(manifest.Usages, &deploymentsv1.ManifestUsage{App: "web", Resource: name})
@@ -299,7 +299,7 @@ func TestInlinePolicyBudgetPreflight(t *testing.T) {
 			name := "bucket--" + string(rune('a'+i%26)) + string(rune('a'+i/26))
 			manifest.Resources = append(manifest.Resources, &deploymentsv1.ManifestResource{
 				LogicalName: name,
-				Resource:    &resourcesv1.ResourceIdentifier{Type: naming.TokenBucket, Name: name},
+				Resource:    &resourcesv1.ResourceIdentifier{Type: linksv1.LinkType_LINK_TYPE_BUCKET, Name: name},
 				Config:      &deploymentsv1.ManifestResource_Bucket{Bucket: &resourcesv1.BucketConfig{}},
 			})
 			manifest.Usages = append(manifest.Usages,
@@ -332,7 +332,7 @@ func TestInlinePolicyBudgetPreflight(t *testing.T) {
 			name := "bucket--" + string(rune('a'+i%26)) + string(rune('a'+i/26))
 			manifest.Resources = append(manifest.Resources, &deploymentsv1.ManifestResource{
 				LogicalName: name,
-				Resource:    &resourcesv1.ResourceIdentifier{Type: naming.TokenBucket, Name: name},
+				Resource:    &resourcesv1.ResourceIdentifier{Type: linksv1.LinkType_LINK_TYPE_BUCKET, Name: name},
 				Config:      &deploymentsv1.ManifestResource_Bucket{Bucket: &resourcesv1.BucketConfig{}},
 			})
 			manifest.Usages = append(manifest.Usages,
@@ -361,7 +361,7 @@ func TestInlinePolicyBudgetPreflight(t *testing.T) {
 			name := "bucket--" + string(rune('a'+i%26)) + string(rune('a'+i/26))
 			manifest.Resources = append(manifest.Resources, &deploymentsv1.ManifestResource{
 				LogicalName: name,
-				Resource:    &resourcesv1.ResourceIdentifier{Type: naming.TokenBucket, Name: name},
+				Resource:    &resourcesv1.ResourceIdentifier{Type: linksv1.LinkType_LINK_TYPE_BUCKET, Name: name},
 				Config:      &deploymentsv1.ManifestResource_Bucket{Bucket: &resourcesv1.BucketConfig{}},
 			})
 			manifest.Usages = append(manifest.Usages, &deploymentsv1.ManifestUsage{App: "web", Resource: name})

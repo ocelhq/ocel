@@ -8,8 +8,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ocelhq/ocel/pkg/naming"
 	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
+	linksv1 "github.com/ocelhq/ocel/pkg/proto/links/v1"
 	"github.com/ocelhq/ocel/platform/aws/provider/vars"
 	"github.com/ocelhq/ocel/platform/aws/provider/vars/live"
 )
@@ -45,13 +45,16 @@ func TestConsumeLinks(t *testing.T) {
 		if !bound {
 			t.Fatalf("consumed = %+v, want the bound resource keyed by its logical name", consumed)
 		}
-		if got.Record.Type != "sst:aws.Postgres" {
-			t.Errorf("type = %q, want the publisher's own token rather than the one ocel would have produced", got.Record.Type)
+		if got.Record.Link.GetSource() != "sst" {
+			t.Errorf("source = %q, want the publisher's own provenance rather than ocel's", got.Record.Link.GetSource())
+		}
+		if got.Record.Type() != linksv1.LinkType_LINK_TYPE_POSTGRES {
+			t.Errorf("type = %s, want the postgres shape the publisher wrote", got.Record.Type())
 		}
 		if got.Record.Version != 4 {
 			t.Errorf("version = %d, want the version the record was published at", got.Record.Version)
 		}
-		if consumed["bucket--uploads"].Record.Type != "" {
+		if _, read := consumed["bucket--uploads"]; read {
 			t.Errorf("consumed = %+v, want nothing read for the resource this deploy still provisions", consumed)
 		}
 	})
@@ -118,13 +121,13 @@ func TestConsumeLinks(t *testing.T) {
 		}
 	})
 
-	t.Run("a record the app cannot be read through is refused before it deploys", func(t *testing.T) {
+	t.Run("a record of another shape than the declaration is refused before it deploys", func(t *testing.T) {
 		t.Parallel()
 		cfg := consumingConfig("main")
 		cfg.Links = &recordingPublisher{
 			published: map[string][]string{varsClass: {"main"}},
 			resolved: map[string]vars.PublishedRecord{"main": {
-				Record:  vars.Record{Type: "sst:aws.Postgres", Properties: map[string]string{"host": "db.example", "port": "5432"}},
+				Link:    &linksv1.Link{Source: "sst", Properties: &linksv1.Link_Bucket{Bucket: &linksv1.BucketProperties{Bucket: "main"}}},
 				Version: 2,
 			}},
 		}
@@ -134,19 +137,58 @@ func TestConsumeLinks(t *testing.T) {
 		if !errors.As(err, &refusal) {
 			t.Fatalf("consumeLinks err = %v, want a *LinkShapeError rather than a cold start that fails in production", err)
 		}
-		if !reflect.DeepEqual(refusal.Missing, []string{"connectionString"}) {
-			t.Errorf("missing = %v, want the property the deployment reads and the record lacks", refusal.Missing)
+		if refusal.Declared != linksv1.LinkType_LINK_TYPE_POSTGRES || refusal.Published != linksv1.LinkType_LINK_TYPE_BUCKET {
+			t.Errorf("refusal = %+v, want it to name the declared and the published shapes", refusal)
 		}
-		for _, want := range []string{`"main"`, "connectionString", "host, port"} {
+		for _, want := range []string{`"main"`, linksv1.LinkType_LINK_TYPE_POSTGRES.String(), linksv1.LinkType_LINK_TYPE_BUCKET.String()} {
 			if !strings.Contains(refusal.Error(), want) {
 				t.Errorf("refusal = %q, want it to carry %q", refusal.Error(), want)
 			}
 		}
 	})
 
-	t.Run("a record carrying the shape the deployment reads is consumed", func(t *testing.T) {
+	t.Run("a bucket somebody else provisioned is refused", func(t *testing.T) {
 		t.Parallel()
-		mustConsume(t, consumingConfig("main"), consumingManifest())
+		manifest := linkedManifest()
+		manifest.GetResources()[1].Linked = true
+		cfg := consumingConfig("uploads")
+		cfg.Links = &recordingPublisher{
+			published: map[string][]string{varsClass: {"uploads"}},
+			resolved: map[string]vars.PublishedRecord{"uploads": {
+				Link:    &linksv1.Link{Source: "sst", Properties: &linksv1.Link_Bucket{Bucket: &linksv1.BucketProperties{Bucket: "sst-uploads"}}},
+				Version: 2,
+			}},
+		}
+
+		_, err := consumeLinks(context.Background(), cfg, manifest, func(string) {})
+		var refusal *LinkSourceError
+		if !errors.As(err, &refusal) {
+			t.Fatalf("consumeLinks err = %v, want a *LinkSourceError: ocel's bucket client reads only what ocel provisioned", err)
+		}
+		if refusal.Source != "sst" || refusal.Link != "uploads" {
+			t.Errorf("refusal = %+v, want it to name the link and who published it", refusal)
+		}
+		if !strings.Contains(refusal.Error(), "cannot serve a bucket it did not provision") {
+			t.Errorf("refusal = %q, want it to say why the bucket is unusable", refusal.Error())
+		}
+	})
+
+	t.Run("a bucket published without a source is consumed", func(t *testing.T) {
+		t.Parallel()
+		manifest := linkedManifest()
+		manifest.GetResources()[1].Linked = true
+		consumed := mustConsume(t, consumingConfig("uploads"), manifest)
+		if consumed["bucket--uploads"].Record.Link.GetBucket().GetBucket() != "sst-uploads" {
+			t.Errorf("consumed = %+v, want the bucket record read through", consumed)
+		}
+	})
+
+	t.Run("a postgres published by another tool is consumed", func(t *testing.T) {
+		t.Parallel()
+		consumed := mustConsume(t, consumingConfig("main"), consumingManifest())
+		if consumed["db--main"].Record.Link.GetSource() != "sst" {
+			t.Errorf("consumed = %+v, want the foreign postgres read through", consumed)
+		}
 	})
 
 	t.Run("binding a link with no store to read it from is refused", func(t *testing.T) {
@@ -190,11 +232,11 @@ func TestConsumedLinksReachAppsLikeProvisionedOnes(t *testing.T) {
 
 	links := appLinks(manifest, "api", consumed)
 	want := []live.Link{
-		{Name: "main", Key: "OCEL_RESOURCE_POSTGRES_main", Type: "sst:aws.Postgres", Properties: []string{"connectionString"}, Granted: 4},
-		{Name: "bucket--uploads", Key: "OCEL_RESOURCE_BUCKET_uploads", Type: naming.TokenBucket, Properties: []string{"bucket"}},
+		{Name: "main", Key: "OCEL_RESOURCE_POSTGRES_main", Type: linksv1.LinkType_LINK_TYPE_POSTGRES, Granted: 4},
+		{Name: "bucket--uploads", Key: "OCEL_RESOURCE_BUCKET_uploads", Type: linksv1.LinkType_LINK_TYPE_BUCKET},
 	}
 	if !reflect.DeepEqual(links, want) {
-		t.Errorf("appLinks = %+v, want %+v: a bound link is addressed at the key its app already reads, conformed against the token its publisher wrote", links, want)
+		t.Errorf("appLinks = %+v, want %+v: a bound link is addressed at the key its app already reads, conformed against the shape its publisher wrote", links, want)
 	}
 
 	if got := appLinks(manifest, "cron", consumed); len(got) != 0 {
@@ -240,7 +282,12 @@ func TestAnUnscopedPublishedGrantIsRefusedBeforeAnyCloudCall(t *testing.T) {
 	consumed := map[string]Consumed{"db--main": {
 		Resource: "db--main",
 		Record: vars.PublishedRecord{
-			Record:  vars.Record{Name: "main", Type: "sst:aws.Postgres", Grants: []vars.Grant{{Label: "everything", Actions: []string{"s3:*"}, Resources: []string{"*"}}}},
+			Link: &linksv1.Link{
+				Name:       "main",
+				Source:     "sst",
+				Properties: &linksv1.Link_Postgres{Postgres: &linksv1.PostgresProperties{Host: "sst"}},
+				Grants:     []*linksv1.Grant{{Label: "everything", Actions: []string{"s3:*"}, Resources: []string{"*"}}},
+			},
 			Version: 1,
 		},
 	}}
@@ -262,7 +309,7 @@ func TestOcelNeverRepublishesABoundLink(t *testing.T) {
 	}
 	names := make([]string, 0, len(publisher.records))
 	for _, r := range publisher.records {
-		names = append(names, r.Name)
+		names = append(names, r.GetName())
 	}
 	if !slices.Equal(names, []string{"bucket--uploads"}) {
 		t.Errorf("published = %v, want only what this deploy provisioned; the bound link belongs to whoever wrote it", names)

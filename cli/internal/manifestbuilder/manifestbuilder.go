@@ -7,13 +7,14 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/naming"
 	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
+	linksv1 "github.com/ocelhq/ocel/pkg/proto/links/v1"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/resources/v1"
 )
 
 const SchemaVersion = "provider.v1"
 
 type Declaration struct {
-	Type     string
+	Type     linksv1.LinkType
 	ID       string
 	Postgres *resourcesv1.PostgresConfig
 	Bucket   *resourcesv1.BucketConfig
@@ -29,14 +30,14 @@ type App struct {
 }
 
 type Usage struct {
-	Type  string
+	Type  linksv1.LinkType
 	ID    string
 	Files []string
 }
 
 type DanglingUsageError struct {
 	App  string
-	Type string
+	Type linksv1.LinkType
 	ID   string
 }
 
@@ -100,10 +101,10 @@ func sourceOrUnknown(source string) string {
 	return source
 }
 
-func typeKind(t string) (naming.Kind, error) {
-	kind, ok := naming.TokenKind(t)
+func typeKind(t linksv1.LinkType) (naming.Kind, error) {
+	kind, ok := naming.KindOf(t)
 	if !ok {
-		return "", fmt.Errorf("manifestbuilder: unsupported resource type %q", t)
+		return "", fmt.Errorf("manifestbuilder: unsupported resource type %s", t)
 	}
 	return kind, nil
 }
@@ -125,7 +126,7 @@ func describeFunction(f Function) string {
 }
 
 type identity struct {
-	typ string
+	typ linksv1.LinkType
 	id  string
 }
 

@@ -28,7 +28,7 @@ func TestCache(t *testing.T) {
 			DefsHash:  "hash_1",
 			Account:   "acct_1",
 			ExpiresAt: time.Now().Add(time.Hour).Truncate(time.Second).UTC(),
-			Env:       map[string]string{"OCEL_RESOURCE_POSTGRES_main": `{"connectionString":"postgres://x"}`},
+			Env:       map[string]string{"OCEL_RESOURCE_POSTGRES_main": `{"name":"main","postgres":{"host":"resolved","port":5432,"database":"main","username":"u","password":"p"}}`},
 		}
 		if err := cache.Save("proj_1", want); err != nil {
 			t.Fatalf("Save: %v", err)

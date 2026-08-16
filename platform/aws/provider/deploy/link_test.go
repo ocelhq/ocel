@@ -16,13 +16,14 @@ import (
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/resources/v1"
 	"github.com/ocelhq/ocel/platform/aws/provider/vars"
 	"github.com/ocelhq/ocel/platform/aws/provider/vars/live"
+	"google.golang.org/protobuf/proto"
 )
 
 type recordingPublisher struct {
 	slug        string
 	environment string
 	owner       string
-	records     []vars.Record
+	records     []*linksv1.Link
 	err         error
 
 	published map[string][]string
@@ -33,7 +34,7 @@ type recordingPublisher struct {
 	namesEnvironment string
 }
 
-func (p *recordingPublisher) PublishRecords(_ context.Context, slug, environment, owner string, records []vars.Record) (vars.PublishResult, error) {
+func (p *recordingPublisher) PublishRecords(_ context.Context, slug, environment, owner string, records []*linksv1.Link) (vars.PublishResult, error) {
 	p.slug, p.environment, p.owner, p.records = slug, environment, owner, records
 	return vars.PublishResult{}, p.err
 }
@@ -57,7 +58,8 @@ func (p *recordingPublisher) ResolveRecords(_ context.Context, _, environment st
 		if !ok {
 			return nil, fmt.Errorf("link %s is not published: %w", name, vars.ErrNotPublished)
 		}
-		record.Record.Name, record.Environment = name, environment
+		record.Link = proto.Clone(record.Link).(*linksv1.Link)
+		record.Link.Name, record.Environment = name, environment
 		out = append(out, record)
 	}
 	return out, nil
@@ -65,19 +67,18 @@ func (p *recordingPublisher) ResolveRecords(_ context.Context, _, environment st
 
 var publishedFixtures = map[string]vars.PublishedRecord{
 	"main": {
-		Record: vars.Record{
-			Type:       "sst:aws.Postgres",
-			Properties: map[string]string{"connectionString": "postgres://sst/main"},
-			Grants: []vars.Grant{
+		Link: &linksv1.Link{
+			Source:     "sst",
+			Properties: &linksv1.Link_Postgres{Postgres: &linksv1.PostgresProperties{Host: "sst", Port: 5432, Database: "main", Username: "sst", Password: "sst-main"}},
+			Grants: []*linksv1.Grant{
 				{Label: "connect", Actions: []string{"rds-db:connect"}, Resources: []string{"arn:aws:rds-db:us-east-1:1:dbuser:db-main/app"}},
 			},
 		},
 		Version: 4,
 	},
 	"uploads": {
-		Record: vars.Record{
-			Type:       naming.TokenBucket,
-			Properties: map[string]string{"bucket": "sst-uploads"},
+		Link: &linksv1.Link{
+			Properties: &linksv1.Link_Bucket{Bucket: &linksv1.BucketProperties{Bucket: "sst-uploads"}},
 		},
 		Version: 1,
 	},
@@ -89,12 +90,12 @@ func linkedManifest() *deploymentsv1.Manifest {
 		Resources: []*deploymentsv1.ManifestResource{
 			{
 				LogicalName: "db--main",
-				Resource:    &resourcesv1.ResourceIdentifier{Type: naming.TokenPostgres, Name: "main"},
+				Resource:    &resourcesv1.ResourceIdentifier{Type: linksv1.LinkType_LINK_TYPE_POSTGRES, Name: "main"},
 				Config:      &deploymentsv1.ManifestResource_Postgres{Postgres: &resourcesv1.PostgresConfig{}},
 			},
 			{
 				LogicalName: "bucket--uploads",
-				Resource:    &resourcesv1.ResourceIdentifier{Type: naming.TokenBucket, Name: "uploads"},
+				Resource:    &resourcesv1.ResourceIdentifier{Type: linksv1.LinkType_LINK_TYPE_BUCKET, Name: "uploads"},
 				Config:      &deploymentsv1.ManifestResource_Bucket{Bucket: &resourcesv1.BucketConfig{}},
 			},
 		},
@@ -111,59 +112,51 @@ func provisionedLinks() []*linksv1.Link {
 	return []*linksv1.Link{
 		{
 			Name: "db--main",
-			Type: naming.TokenPostgres,
-			Properties: map[string]string{
-				"username": "ocel", "password": "s3cr3t", "host": "db.host", "port": "5432", "database": "ocel",
-			},
+			Properties: &linksv1.Link_Postgres{Postgres: &linksv1.PostgresProperties{
+				Username: "app_user", Password: "s3cr3t", Host: "db.host", Port: 5432, Database: "shopdb",
+			}},
 		},
 		{
 			Name:       "bucket--uploads",
-			Type:       naming.TokenBucket,
-			Properties: map[string]string{"bucket": "shop-uploads-abc123"},
+			Properties: &linksv1.Link_Bucket{Bucket: &linksv1.BucketProperties{Bucket: "shop-uploads-abc123"}},
 		},
 	}
 }
 
 func TestLinkRecords(t *testing.T) {
-	t.Run("names each link by its logical name and its type token", func(t *testing.T) {
+	t.Run("names each link by its logical name and its typed properties", func(t *testing.T) {
 		t.Parallel()
-		got, err := linkRecords(linkedManifest(), provisionedLinks())
-		if err != nil {
-			t.Fatalf("linkRecords: %v", err)
-		}
+		got := linkRecords(linkedManifest(), provisionedLinks())
 		if len(got) != 2 {
 			t.Fatalf("linkRecords returned %d records, want one per provisioned link", len(got))
 		}
-		if got[0].Name != "db--main" || got[0].Type != naming.TokenPostgres {
-			t.Errorf("postgres record = %+v, want it partitioned by logical name under its own token", got[0])
+		if got[0].GetName() != "db--main" || naming.LinkTypeOf(got[0]) != linksv1.LinkType_LINK_TYPE_POSTGRES {
+			t.Errorf("postgres record = %+v, want it partitioned by logical name under its own type", got[0])
 		}
-		if got[1].Name != "bucket--uploads" || got[1].Type != naming.TokenBucket {
-			t.Errorf("bucket record = %+v, want it partitioned by logical name under its own token", got[1])
-		}
-	})
-
-	t.Run("the bucket bag leaves the address behind", func(t *testing.T) {
-		t.Parallel()
-		got, err := linkRecords(linkedManifest(), provisionedLinks())
-		if err != nil {
-			t.Fatalf("linkRecords: %v", err)
-		}
-		if got[1].Type != naming.TokenBucket {
-			t.Errorf("record type = %q, want the publisher's own token so a consumer can tell what it was handed", got[1].Type)
-		}
-		if _, ok := got[1].Properties["address"]; ok {
-			t.Errorf("bucket bag = %+v, want the runtime address ambient rather than in the property bag", got[1].Properties)
-		}
-		if got[1].Properties["bucket"] != "shop-uploads-abc123" {
-			t.Errorf("bucket = %q, want the provisioned bucket", got[1].Properties["bucket"])
+		if got[1].GetName() != "bucket--uploads" || naming.LinkTypeOf(got[1]) != linksv1.LinkType_LINK_TYPE_BUCKET {
+			t.Errorf("bucket record = %+v, want it partitioned by logical name under its own type", got[1])
 		}
 	})
 
-	t.Run("refuses a token this provider ships no client for", func(t *testing.T) {
+	t.Run("the bucket record carries the bucket and nothing ambient", func(t *testing.T) {
 		t.Parallel()
-		foreign := []*linksv1.Link{{Name: "db--main", Type: "sst:aws.Postgres", Properties: map[string]string{}}}
-		if _, err := linkRecords(linkedManifest(), foreign); err == nil {
-			t.Fatal("linkRecords accepted a foreign token, delivering an app a shape it cannot read")
+		got := linkRecords(linkedManifest(), provisionedLinks())
+		if got[1].GetBucket().GetBucket() != "shop-uploads-abc123" {
+			t.Errorf("bucket = %q, want the provisioned bucket", got[1].GetBucket().GetBucket())
+		}
+		if got[1].GetSource() != "" {
+			t.Errorf("source = %q, want ocel's own provisioning left unsourced", got[1].GetSource())
+		}
+	})
+
+	t.Run("hands back the producer's links unchanged", func(t *testing.T) {
+		t.Parallel()
+		links := provisionedLinks()
+		got := linkRecords(linkedManifest(), links)
+		for i, l := range links {
+			if !proto.Equal(got[i], l) {
+				t.Errorf("record %d = %+v, want the provisioned link %+v", i, got[i], l)
+			}
 		}
 	})
 }
@@ -184,8 +177,8 @@ func TestPublishLinkRecords(t *testing.T) {
 		if len(publisher.records) != 2 {
 			t.Fatalf("published %d records, want one per link", len(publisher.records))
 		}
-		if !strings.Contains(publisher.records[0].Properties["connectionString"], "s3cr3t") {
-			t.Errorf("postgres bag = %+v, want the credential delivered through the store", publisher.records[0].Properties)
+		if publisher.records[0].GetPostgres().GetPassword() != "s3cr3t" {
+			t.Errorf("postgres record = %+v, want the credential delivered through the store", publisher.records[0])
 		}
 	})
 
@@ -232,8 +225,8 @@ func TestAppLinks(t *testing.T) {
 	t.Parallel()
 	got := appLinks(linkedManifest(), "api", nil)
 	want := []live.Link{
-		{Name: "db--main", Key: "OCEL_RESOURCE_POSTGRES_main", Type: naming.TokenPostgres, Properties: []string{"connectionString"}},
-		{Name: "bucket--uploads", Key: "OCEL_RESOURCE_BUCKET_uploads", Type: naming.TokenBucket, Properties: []string{"bucket"}},
+		{Name: "db--main", Key: "OCEL_RESOURCE_POSTGRES_main", Type: linksv1.LinkType_LINK_TYPE_POSTGRES},
+		{Name: "bucket--uploads", Key: "OCEL_RESOURCE_BUCKET_uploads", Type: linksv1.LinkType_LINK_TYPE_BUCKET},
 	}
 	if !reflect.DeepEqual(got, want) {
 		t.Errorf("appLinks = %+v, want %+v — the addresses and the shape this app was built to read come from the manifest, before anything is provisioned", got, want)
@@ -252,22 +245,19 @@ func TestPublishedRecordsMeetWhatTheManifestDeclares(t *testing.T) {
 	links := appLinks(linkedManifest(), "api", nil)
 	published, err := publishedRecords(t, links)
 	if err != nil {
-		t.Fatalf("linkRecords: %v", err)
+		t.Fatalf("publishedRecords: %v", err)
 	}
 
-	conformed, err := live.Conform(links, published)
-	if err != nil {
+	if err := live.Conform(links, published); err != nil {
 		t.Fatalf("what this deploy publishes drifts from what it tells the app to expect: %v", err)
 	}
 	for _, l := range links {
-		var properties map[string]string
-		if err := json.Unmarshal([]byte(conformed[l.Key]), &properties); err != nil {
-			t.Fatalf("link %s conformed to %q, which no app can parse: %v", l.Name, conformed[l.Key], err)
+		link, err := vars.DecodeLink([]byte(published[l.Key]))
+		if err != nil {
+			t.Fatalf("link %s conformed to %q, which no app can parse: %v", l.Name, published[l.Key], err)
 		}
-		for _, want := range l.Properties {
-			if properties[want] == "" {
-				t.Errorf("link %s delivers %v, which carries no %q", l.Name, properties, want)
-			}
+		if got := naming.LinkTypeOf(link); got != l.Type {
+			t.Errorf("link %s delivers a %s, want the %s the app was built to read", l.Name, got, l.Type)
 		}
 	}
 }
@@ -386,31 +376,29 @@ func TestDeliveryScopesToTheAppsThatUseTheResource(t *testing.T) {
 
 func publishedRecords(t *testing.T, links []live.Link) (map[string]string, error) {
 	t.Helper()
-	records, err := linkRecords(linkedManifest(), provisionedLinks())
-	if err != nil {
-		return nil, err
-	}
+	records := linkRecords(linkedManifest(), provisionedLinks())
 	keys := make(map[string]string, len(links))
 	for _, l := range links {
 		keys[l.Name] = l.Key
 	}
 	out := make(map[string]string, len(records))
 	for _, r := range records {
-		out[keys[r.Name]] = live.EncodeRecord(live.Record{Type: r.Type, Properties: r.Properties})
+		encoded, err := vars.EncodeLink(r)
+		if err != nil {
+			return nil, err
+		}
+		out[keys[r.GetName()]] = string(encoded)
 	}
 	return out, nil
 }
 
 func publishedProperties(t *testing.T) []string {
 	t.Helper()
-	records, err := linkRecords(linkedManifest(), provisionedLinks())
-	if err != nil {
-		t.Fatalf("linkRecords: %v", err)
-	}
 	var out []string
-	for _, r := range records {
-		for _, property := range r.Properties {
-			out = append(out, property)
+	for _, r := range linkRecords(linkedManifest(), provisionedLinks()) {
+		for _, name := range naming.LinkPropertyNames(r) {
+			value, _ := naming.LinkProperty(r, name)
+			out = append(out, value)
 		}
 	}
 	if len(out) == 0 {
