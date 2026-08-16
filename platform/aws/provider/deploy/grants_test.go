@@ -382,10 +382,11 @@ func TestInlinePolicyBudgetPreflight(t *testing.T) {
 
 		fake := &recordingRootStack{}
 		_, err := Run(context.Background(), Config{
-			Edge:          fake,
-			StoreEndpoint: fakeStoreEndpoint,
-			Class:         deploymentsv1.Environment_CLASS_PRODUCTION,
-			StateTableARN: stateTableARN,
+			Edge:             fake,
+			StoreEndpoint:    fakeStoreEndpoint,
+			Class:            deploymentsv1.Environment_CLASS_PRODUCTION,
+			StateTableARN:    stateTableARN,
+			ListenerCodePath: "dist/ocel-listener.zip",
 		}, manifest, nil, func(string) {})
 
 		var budget *PolicyBudgetError

@@ -86,3 +86,52 @@ func TestCheckMembraneServices(t *testing.T) {
 		}
 	})
 }
+
+func TestCheckListenerCode(t *testing.T) {
+	t.Parallel()
+
+	t.Run("a bucket with no listener code fails before any cloud call", func(t *testing.T) {
+		t.Parallel()
+
+		err := checkListenerCode(membraneManifest(), "")
+
+		var missing *MissingListenerCodeError
+		if !errors.As(err, &missing) {
+			t.Fatalf("checkListenerCode = %v, want a *MissingListenerCodeError", err)
+		}
+		for _, want := range []string{"bucket--uploads", listenerCodePathEnvVar} {
+			if !strings.Contains(missing.Error(), want) {
+				t.Errorf("Error() = %q, missing %q", missing.Error(), want)
+			}
+		}
+	})
+
+	t.Run("a shipped listener passes", func(t *testing.T) {
+		t.Parallel()
+
+		if err := checkListenerCode(membraneManifest(), "dist/ocel-listener.zip"); err != nil {
+			t.Fatalf("checkListenerCode = %v, want nil", err)
+		}
+	})
+
+	t.Run("postgres alone needs no listener", func(t *testing.T) {
+		t.Parallel()
+
+		manifest := &deploymentsv1.Manifest{Resources: membraneManifest().GetResources()[:1]}
+
+		if err := checkListenerCode(manifest, ""); err != nil {
+			t.Fatalf("checkListenerCode = %v, want nil", err)
+		}
+	})
+
+	t.Run("a linked bucket ships no listener of ours", func(t *testing.T) {
+		t.Parallel()
+
+		manifest := membraneManifest()
+		manifest.Resources[1].Linked = true
+
+		if err := checkListenerCode(manifest, ""); err != nil {
+			t.Fatalf("checkListenerCode = %v, want nil", err)
+		}
+	})
+}
