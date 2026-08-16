@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -144,7 +145,7 @@ func init() {
 }
 
 func runPreviewUp(ctx context.Context, d deps, cwd string, opts previewUpOptions, stdout, stderr io.Writer, stdin io.Reader) error {
-	cfg, err := projectconfig.Resolve(ctx, cwd)
+	cfg, err := projectconfig.Resolve(ctx, cwd, explicitConfigPath())
 	if err != nil {
 		return err
 	}
@@ -258,6 +259,7 @@ func requirePreviewDomain(cfg *projectconfig.Config, global *deploymentsv1.Globa
 		declared = hosts[0]
 	}
 	base := global.GetBaseDomain()
+	configName := filepath.Base(cfg.Path)
 
 	switch {
 	case declared == "" && base == "":
@@ -265,17 +267,17 @@ func requirePreviewDomain(cfg *projectconfig.Config, global *deploymentsv1.Globa
 			"add a project-level domains.preview wildcard (e.g. `domains: { preview: \"*.preview.acme.com\" }`) to %s, "+
 			"or run `ocel domain use '*.preview.acme.com' --preview` once to serve every project's previews on one shared wildcard — "+
 			"a preview domain binds to the whole project, which serves every app and every preview under that one wildcard, so it is never declared per app",
-			projectconfig.ConfigFileName)
+			configName)
 
 	case declared == "":
-		if err := checkGlobalPreviewDomain(global, id); err != nil {
+		if err := checkGlobalPreviewDomain(global, id, configName); err != nil {
 			return err
 		}
 		fmt.Fprintf(out, "Serving previews on the global preview domain *.%s — this project declares no domains.preview of its own\n", base)
 
 	case base != "":
 		fmt.Fprintf(out, "Serving previews on %s, this project's own domains.preview — the global preview domain *.%s exists and is ignored (remove domains.preview from %s to serve on it)\n",
-			declared, base, projectconfig.ConfigFileName)
+			declared, base, configName)
 	}
 
 	labelSlug, labelBase := "", strings.TrimPrefix(declared, "*.")
@@ -299,13 +301,13 @@ func intendedPreviewHostnames(cfg *projectconfig.Config, slug, pointer, base str
 	return hosts
 }
 
-func checkGlobalPreviewDomain(global *deploymentsv1.GlobalPreviewDomain, id *deploymentsv1.Identity) error {
+func checkGlobalPreviewDomain(global *deploymentsv1.GlobalPreviewDomain, id *deploymentsv1.Identity, configName string) error {
 	base := global.GetBaseDomain()
 	if want, have := global.GetCloudflareAccount(), id.GetCloudflareAccount(); want != "" && have != "" && want != have {
 		return fmt.Errorf("the global preview domain *.%s lives in Cloudflare account %s, but this deploy is authenticated to account %s: "+
 			"a worker route can only be attached from the account that holds the zone — "+
 			"point CLOUDFLARE_ACCOUNT_ID (and CLOUDFLARE_API_TOKEN) at %s, or declare this project's own domains.preview in %s",
-			base, want, have, want, projectconfig.ConfigFileName)
+			base, want, have, want, configName)
 	}
 	if !global.GetRouteInstalled() {
 		return fmt.Errorf("the global preview domain *.%s is recorded, but its wildcard route is not installed, so nothing would answer a preview hostname: "+
@@ -321,7 +323,7 @@ func checkGlobalPreviewDomain(global *deploymentsv1.GlobalPreviewDomain, id *dep
 }
 
 func runPreviewRm(ctx context.Context, d deps, cwd string, opts previewRmOptions, stdout, stderr io.Writer, stdin io.Reader) error {
-	cfg, err := projectconfig.Resolve(ctx, cwd)
+	cfg, err := projectconfig.Resolve(ctx, cwd, explicitConfigPath())
 	if err != nil {
 		return err
 	}
@@ -389,7 +391,7 @@ func runPreviewRm(ctx context.Context, d deps, cwd string, opts previewRmOptions
 }
 
 func runPreviewLs(ctx context.Context, d deps, cwd string, stdout, stderr io.Writer) error {
-	cfg, err := projectconfig.Resolve(ctx, cwd)
+	cfg, err := projectconfig.Resolve(ctx, cwd, explicitConfigPath())
 	if err != nil {
 		return err
 	}
@@ -429,7 +431,7 @@ func runPreviewPrune(ctx context.Context, d deps, cwd string, opts previewPruneO
 		return err
 	}
 
-	cfg, err := projectconfig.Resolve(ctx, cwd)
+	cfg, err := projectconfig.Resolve(ctx, cwd, explicitConfigPath())
 	if err != nil {
 		return err
 	}
@@ -556,7 +558,7 @@ func preflightPreviewUp(ctx context.Context, d deps, runner *providerrunner.Runn
 	if err != nil {
 		return err
 	}
-	if err := refuseClaimedDomains(resp.GetDomainClaims()); err != nil {
+	if err := refuseClaimedDomains(resp.GetDomainClaims(), filepath.Base(cfg.Path)); err != nil {
 		return err
 	}
 	return requirePreviewDomain(cfg, resp.GetGlobalPreviewDomain(), resp.GetIdentity(), pointer, out)
@@ -572,7 +574,7 @@ func preflightDeploy(ctx context.Context, d deps, runner *providerrunner.Runner,
 	if err != nil {
 		return nil, err
 	}
-	if err := refuseClaimedDomains(resp.GetDomainClaims()); err != nil {
+	if err := refuseClaimedDomains(resp.GetDomainClaims(), filepath.Base(cfg.Path)); err != nil {
 		return nil, err
 	}
 	return resp.GetKnownSlugs(), nil
@@ -597,7 +599,7 @@ func declaredHostnames(cfg *projectconfig.Config, class string) []string {
 	return hosts
 }
 
-func refuseClaimedDomains(claims []*deploymentsv1.DomainClaim) error {
+func refuseClaimedDomains(claims []*deploymentsv1.DomainClaim, configName string) error {
 	var b strings.Builder
 	for _, claim := range claims {
 		if claim.GetStatus() != deploymentsv1.DomainClaim_STATUS_CLAIMED {
@@ -615,7 +617,7 @@ func refuseClaimedDomains(claims []*deploymentsv1.DomainClaim) error {
 		return nil
 	}
 	b.WriteString("\n    → a hostname belongs to one project, so deploying would take it over: remove it from this project's " +
-		projectconfig.ConfigFileName + ", or tear the owning project down (`ocel destroy` / `ocel destroy --preview` in it), then deploy again")
+		configName + ", or tear the owning project down (`ocel destroy` / `ocel destroy --preview` in it), then deploy again")
 	return errors.New(b.String())
 }
 

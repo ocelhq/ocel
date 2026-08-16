@@ -70,6 +70,8 @@ export default defineConfig({
 });
 ```
 
+Point any command at a different config with `--config <path>` (or `OCEL_CONFIG`).
+
 ```ts
 // ocel/index.ts
 import { bucket, uploader } from "ocel/blob/next";

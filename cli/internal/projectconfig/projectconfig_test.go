@@ -457,7 +457,7 @@ export default {
 			root := t.TempDir()
 			writeConfig(t, root, tc.config)
 
-			cfg, err := Resolve(context.Background(), root)
+			cfg, err := Resolve(context.Background(), root, "")
 			if err != nil {
 				t.Fatalf("Resolve: %v", err)
 			}
@@ -582,7 +582,7 @@ export default {
 			root := t.TempDir()
 			writeConfig(t, root, tc.config)
 
-			_, err := Resolve(context.Background(), root)
+			_, err := Resolve(context.Background(), root, "")
 			if err == nil {
 				t.Fatalf("Resolve: expected error, got nil — %s", tc.name)
 			}
@@ -599,7 +599,7 @@ export default {
 
 		root := t.TempDir()
 
-		_, err := Resolve(context.Background(), root)
+		_, err := Resolve(context.Background(), root, "")
 		if err == nil {
 			t.Fatal("Resolve: expected error, got nil")
 		}
@@ -616,7 +616,7 @@ export default {
 			t.Fatalf("mkdir scratch: %v", err)
 		}
 
-		_, err := Resolve(context.Background(), nestedDir(t, root))
+		_, err := Resolve(context.Background(), nestedDir(t, root), "")
 		if err == nil {
 			t.Fatal("Resolve: expected error, got nil")
 		}
@@ -638,7 +638,7 @@ export default {
   slug: "`+bad+`",
 };
 `)
-				_, err := Resolve(context.Background(), root)
+				_, err := Resolve(context.Background(), root, "")
 				if err == nil || !strings.Contains(err.Error(), "slug") {
 					t.Fatalf("Resolve(slug=%q) err = %v, want a slug validation error", bad, err)
 				}
@@ -655,7 +655,7 @@ export default {
   slug: "shop--web",
 };
 `)
-		_, err := Resolve(context.Background(), root)
+		_, err := Resolve(context.Background(), root, "")
 		if err == nil {
 			t.Fatal("Resolve(slug=shop--web) err = nil, want a refusal")
 		}
@@ -681,7 +681,7 @@ export default {
 };
 `)
 
-				_, err := Resolve(context.Background(), root)
+				_, err := Resolve(context.Background(), root, "")
 				if err == nil {
 					t.Fatal("Resolve: expected error, got nil")
 				}
@@ -707,7 +707,7 @@ export default {
 };
 `)
 
-				_, err := Resolve(context.Background(), root)
+				_, err := Resolve(context.Background(), root, "")
 				if err == nil {
 					t.Fatal("Resolve: expected error, got nil")
 				}
@@ -736,7 +736,7 @@ export default {
 };
 `)
 
-				cfg, err := Resolve(context.Background(), root)
+				cfg, err := Resolve(context.Background(), root, "")
 				if err != nil {
 					t.Fatalf("Resolve: %v", err)
 				}
@@ -768,7 +768,7 @@ export default {
 };
 `)
 
-				_, err := Resolve(context.Background(), root)
+				_, err := Resolve(context.Background(), root, "")
 				if err == nil {
 					t.Fatalf("Resolve(folder=%q) err = nil, want a rejection", folder)
 				}
@@ -788,7 +788,7 @@ func TestResolveOptional(t *testing.T) {
 
 		root := t.TempDir()
 
-		cfg, err := ResolveOptional(context.Background(), root)
+		cfg, err := ResolveOptional(context.Background(), root, "")
 		if err != nil {
 			t.Fatalf("ResolveOptional: %v", err)
 		}
@@ -811,7 +811,7 @@ func TestResolveOptional(t *testing.T) {
 			t.Fatalf("mkdir scratch: %v", err)
 		}
 
-		cfg, err := ResolveOptional(context.Background(), nestedDir(t, root))
+		cfg, err := ResolveOptional(context.Background(), nestedDir(t, root), "")
 		if err != nil {
 			t.Fatalf("ResolveOptional: %v", err)
 		}
@@ -831,7 +831,7 @@ export default {
 };
 `)
 
-		cfg, err := ResolveOptional(context.Background(), nestedDir(t, root))
+		cfg, err := ResolveOptional(context.Background(), nestedDir(t, root), "")
 		if err != nil {
 			t.Fatalf("ResolveOptional: %v", err)
 		}
@@ -849,7 +849,7 @@ export default {
 		root := t.TempDir()
 		writeConfig(t, root, `export default { this is not valid typescript +++`)
 
-		if _, err := ResolveOptional(context.Background(), root); err == nil {
+		if _, err := ResolveOptional(context.Background(), root, ""); err == nil {
 			t.Fatal("ResolveOptional: expected error, got nil")
 		}
 	})
@@ -878,7 +878,7 @@ export default {
 
 	done := make(chan error, 1)
 	go func() {
-		_, err := Resolve(ctx, root)
+		_, err := Resolve(ctx, root, "")
 		done <- err
 	}()
 
@@ -1036,4 +1036,174 @@ func TestNormalizeProductionDomains(t *testing.T) {
 			t.Fatal("want error when a production hostname equals the preview wildcard")
 		}
 	})
+}
+
+func TestResolveExplicitPath(t *testing.T) {
+	t.Parallel()
+
+	const contents = `
+export default {
+  slug: "test-app",
+  discovery: { paths: ["resources"] },
+};
+`
+
+	t.Run("loads a config the discovery walk would never find", func(t *testing.T) {
+		t.Parallel()
+
+		root := t.TempDir()
+		configDir := filepath.Join(root, "infra")
+		if err := os.MkdirAll(configDir, 0o755); err != nil {
+			t.Fatalf("mkdir infra: %v", err)
+		}
+		configPath := filepath.Join(configDir, "staging.ocel.ts")
+		if err := os.WriteFile(configPath, []byte(contents), 0o644); err != nil {
+			t.Fatalf("write config: %v", err)
+		}
+
+		cfg, err := Resolve(context.Background(), t.TempDir(), configPath)
+		if err != nil {
+			t.Fatalf("Resolve: %v", err)
+		}
+		if cfg.Slug != "test-app" {
+			t.Fatalf("Slug = %q, want %q", cfg.Slug, "test-app")
+		}
+		if cfg.Dir != configDir {
+			t.Fatalf("Dir = %q, want %q", cfg.Dir, configDir)
+		}
+		if cfg.Path != configPath {
+			t.Fatalf("Path = %q, want %q", cfg.Path, configPath)
+		}
+	})
+
+	t.Run("resolves a relative path against the start dir", func(t *testing.T) {
+		t.Parallel()
+
+		root := t.TempDir()
+		configPath := filepath.Join(root, "custom.ts")
+		if err := os.WriteFile(configPath, []byte(contents), 0o644); err != nil {
+			t.Fatalf("write config: %v", err)
+		}
+
+		cfg, err := Resolve(context.Background(), root, filepath.Join(".", "custom.ts"))
+		if err != nil {
+			t.Fatalf("Resolve: %v", err)
+		}
+		if cfg.Path != configPath {
+			t.Fatalf("Path = %q, want %q", cfg.Path, configPath)
+		}
+		if cfg.Dir != root {
+			t.Fatalf("Dir = %q, want %q", cfg.Dir, root)
+		}
+	})
+
+	t.Run("a missing path is an error even with a discoverable config alongside", func(t *testing.T) {
+		t.Parallel()
+
+		root := t.TempDir()
+		writeConfig(t, root, contents)
+
+		_, err := Resolve(context.Background(), root, "nope.ts")
+		if err == nil {
+			t.Fatal("Resolve: expected an error for a config path that names nothing")
+		}
+		if !strings.Contains(err.Error(), filepath.Join(root, "nope.ts")) {
+			t.Fatalf("Resolve err = %v, want it to name the path asked for", err)
+		}
+	})
+
+	t.Run("a directory is not a config", func(t *testing.T) {
+		t.Parallel()
+
+		root := t.TempDir()
+		_, err := Resolve(context.Background(), root, ".")
+		if err == nil {
+			t.Fatal("Resolve: expected an error for a directory")
+		}
+		if !strings.Contains(err.Error(), "is a directory") {
+			t.Fatalf("Resolve err = %v, want it to say the path is a directory", err)
+		}
+	})
+
+	t.Run("ResolveOptional refuses a missing explicit path rather than defaulting", func(t *testing.T) {
+		t.Parallel()
+
+		root := t.TempDir()
+		_, err := ResolveOptional(context.Background(), root, "nope.ts")
+		if err == nil {
+			t.Fatal("ResolveOptional: expected an error, got the synthetic default")
+		}
+		if !strings.Contains(err.Error(), "nope.ts") {
+			t.Fatalf("ResolveOptional err = %v, want it to name the path asked for", err)
+		}
+	})
+
+	t.Run("ResolveOptional loads an explicit path", func(t *testing.T) {
+		t.Parallel()
+
+		root := t.TempDir()
+		configPath := filepath.Join(root, "custom.ts")
+		if err := os.WriteFile(configPath, []byte(contents), 0o644); err != nil {
+			t.Fatalf("write config: %v", err)
+		}
+
+		cfg, err := ResolveOptional(context.Background(), t.TempDir(), configPath)
+		if err != nil {
+			t.Fatalf("ResolveOptional: %v", err)
+		}
+		if cfg.Path != configPath {
+			t.Fatalf("Path = %q, want %q", cfg.Path, configPath)
+		}
+	})
+}
+
+func TestBundleName(t *testing.T) {
+	t.Parallel()
+
+	cases := map[string]string{
+		ConfigFileName:    "config.mjs",
+		"staging.ocel.ts": "config.staging.ocel.mjs",
+		"custom.ts":       "config.custom.mjs",
+	}
+	for base, want := range cases {
+		if got := bundleName(filepath.Join("/proj", base)); got != want {
+			t.Errorf("bundleName(%q) = %q, want %q", base, got, want)
+		}
+	}
+}
+
+func TestTwoConfigsInOneDirDoNotShareABundle(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	slugs := map[string]string{"staging.ocel.ts": "staging-app", "prod.ocel.ts": "prod-app"}
+	for name, slug := range slugs {
+		contents := "export default { slug: \"" + slug + "\" };\n"
+		if err := os.WriteFile(filepath.Join(root, name), []byte(contents), 0o644); err != nil {
+			t.Fatalf("write %s: %v", name, err)
+		}
+	}
+
+	type result struct {
+		name string
+		cfg  *Config
+		err  error
+	}
+	results := make(chan result, len(slugs))
+	for name := range slugs {
+		go func() {
+			cfg, err := Resolve(context.Background(), root, name)
+			results <- result{name: name, cfg: cfg, err: err}
+		}()
+	}
+
+	for range slugs {
+		got := <-results
+		if got.err != nil {
+			t.Fatalf("Resolve(%q) err = %v", got.name, got.err)
+		}
+		if got.cfg.Slug != slugs[got.name] {
+			t.Fatalf("Resolve(%q).Slug = %q, want %q — the two configs shared one bundle outfile", got.name, got.cfg.Slug, slugs[got.name])
+		}
+	}
 }

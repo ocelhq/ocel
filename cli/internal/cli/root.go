@@ -13,6 +13,15 @@ var apiURLFlag string
 
 var verboseFlag bool
 
+var configFlag string
+
+func explicitConfigPath() string {
+	if configFlag != "" {
+		return configFlag
+	}
+	return os.Getenv("OCEL_CONFIG")
+}
+
 func verboseEnabled() bool {
 	if verboseFlag {
 		return true
@@ -51,6 +60,7 @@ func Execute() error {
 func init() {
 	rootCmd.PersistentFlags().StringVar(&apiURLFlag, "api-url", "", "Base URL of the Ocel server (defaults to $OCEL_API_URL, else https://ocel.app)")
 	rootCmd.PersistentFlags().BoolVarP(&verboseFlag, "verbose", "v", false, "Stream full deploy logs to the terminal instead of the phased progress view (also OCEL_DEBUG)")
+	rootCmd.PersistentFlags().StringVarP(&configFlag, "config", "c", "", "Path to the project config file, resolved relative to the working directory (defaults to $OCEL_CONFIG, else the nearest ocel.config.ts)")
 	rootCmd.PersistentFlags().StringVar(&logFormatFlag, "log-format", logFormatHuman, "Output format for command logs: human or json")
 
 	rootCmd.AddCommand(devCmd)

@@ -111,7 +111,7 @@ func devReadBy(apps []envgate.App, folder string) string {
 	return ", read by " + strings.Join(names, ", ")
 }
 
-func checkStatableBinding(apps []projectconfig.App, stated string, scoped map[string][]string) error {
+func checkStatableBinding(apps []projectconfig.App, stated, configName string, scoped map[string][]string) error {
 	var keys []string
 	losing := make([]bool, len(apps))
 	for key, folders := range scoped {
@@ -145,8 +145,8 @@ func checkStatableBinding(apps []projectconfig.App, stated string, scoped map[st
 
   %s
 
-`+"`ocel dev` and `ocel run` spawn one child for the whole project and nothing tells it which app that child is, so the binding they state is %s. A scoped read refuses under it, even with the value in %s.\n\nfix: bind every app to the same folder in ocel.config.ts, or drop `folders:` from those declarations",
-		scopedPlural(keys), strings.Join(bindings, "\n  "), folderLabel(stated), dotenv.FileName)
+`+"`ocel dev` and `ocel run` spawn one child for the whole project and nothing tells it which app that child is, so the binding they state is %s. A scoped read refuses under it, even with the value in %s.\n\nfix: bind every app to the same folder in %s, or drop `folders:` from those declarations",
+		scopedPlural(keys), strings.Join(bindings, "\n  "), folderLabel(stated), dotenv.FileName, configName)
 }
 
 func scopedPlural(keys []string) string {

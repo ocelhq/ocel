@@ -67,7 +67,7 @@ func init() {
 }
 
 func runDeploymentsLs(ctx context.Context, d deps, cwd string, stdout, stderr io.Writer) error {
-	cfg, err := projectconfig.Resolve(ctx, cwd)
+	cfg, err := projectconfig.Resolve(ctx, cwd, explicitConfigPath())
 	if err != nil {
 		return err
 	}
@@ -103,7 +103,7 @@ func runDeploymentsLs(ctx context.Context, d deps, cwd string, stdout, stderr io
 }
 
 func runDeploymentsPrune(ctx context.Context, d deps, cwd string, keepN int, stdout, stderr io.Writer) error {
-	cfg, err := projectconfig.Resolve(ctx, cwd)
+	cfg, err := projectconfig.Resolve(ctx, cwd, explicitConfigPath())
 	if err != nil {
 		return err
 	}
