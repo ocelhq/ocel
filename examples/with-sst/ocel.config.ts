@@ -3,7 +3,7 @@ import awsProvider from "@ocel/provider-aws";
 
 export default defineConfig({
   slug: "with-sst",
-  provider: awsProvider(),
+  provider: awsProvider({ transforms: ["./infra/network.transform.ts"] }),
   links: ["orders"],
   apps: [{ name: "api", framework: "express", path: "." }],
 });
