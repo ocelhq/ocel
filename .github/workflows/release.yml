@@ -180,10 +180,13 @@ jobs:
       - name: Build ocel (tsc)
         run: pnpm --filter ocel build
 
+      - name: Build @ocel/sst (tsc)
+        run: pnpm --filter @ocel/sst build
+
       - name: Publish packages
         run: |
           set -euo pipefail
-          for pkg in ocel native-lib/cli-darwin-arm64 native-lib/cli-darwin-x64 native-lib/cli-linux-x64 native-lib/cli-win32-x64; do
+          for pkg in ocel sst native-lib/cli-darwin-arm64 native-lib/cli-darwin-x64 native-lib/cli-linux-x64 native-lib/cli-win32-x64; do
             (cd "packages/$pkg" && pnpm publish --access public --provenance --no-git-checks)
           done
         env:

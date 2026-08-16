@@ -8,23 +8,29 @@ export const CONSUMER_APP = "orders";
 
 export const DEPLOY_RESULT_FILE = ".ocel/deploy-result.json";
 
-export const PUBLISHER_INSTANCE = "OcelLinks";
-
-export const PUBLISHER = `sst:${PUBLISHER_INSTANCE}`;
-
 export const LINK_NAME = "orders";
 
-export const LINK_TYPE = "sst:aws.Postgres";
+export const LINK_TYPE = "postgres";
+
+export const LINK_SOURCE = "sst";
 
 export const CLASS = "production";
 
 export const LOG_PREFIX = "[ocel-e2e-sst]";
 
-export const UNPLUMBED = `${LOG_PREFIX} this suite cannot run: @ocel/sst shapes link records and stops there, and nothing carries them into the store until the adapter is re-plumbed onto \`ocel link\`. Nothing was staged, deployed or torn down.`;
+export const DYNAMIC_RESOURCE_TYPE = "pulumi:pulumi:Stack$pulumi-nodejs:dynamic:Resource";
 
-export function refuseUntilRePlumbed(exit = process.exit) {
-  console.error(UNPLUMBED);
-  exit(1);
+export function logicalName(link = LINK_NAME) {
+  return `ocel-link-${link}`;
+}
+
+export function linkOwner({ app, stage, link = LINK_NAME }) {
+  return [
+    `urn:pulumi:${stage}`,
+    app,
+    DYNAMIC_RESOURCE_TYPE,
+    logicalName(link),
+  ].join("::");
 }
 
 export function projectSlugForRun(runId = process.env.GITHUB_RUN_ID) {
@@ -52,9 +58,7 @@ export function linkEnvKey(link = LINK_NAME) {
   return `OCEL_RESOURCE_POSTGRES_${link}`;
 }
 
-// FIXME: `publish` left @ocel/sst with the direct-binary hop; the successor ticket
-// re-plumbs the adapter onto `ocel link` and rewrites this template around it.
-export function renderSstConfig({ app, project, region, link = LINK_NAME }) {
+export function renderSstConfig({ app, projectDir, region, link = LINK_NAME }) {
   return `/// <reference path="./.sst/platform/config.d.ts" />
 
 export default $config({
@@ -62,35 +66,30 @@ export default $config({
     return { name: ${JSON.stringify(app)}, home: "aws", providers: { aws: { region: ${JSON.stringify(region)} } } };
   },
   async run() {
-    const { publish } = await import("@ocel/sst");
+    const { link } = await import("@ocel/sst");
     const vpc = new sst.aws.Vpc("Vpc");
     const orders = new sst.aws.Postgres("Orders", { vpc });
     const account = aws.getCallerIdentityOutput().accountId;
-    publish(${JSON.stringify(PUBLISHER_INSTANCE)}, {
-      project: ${JSON.stringify(project)},
-      class: ${JSON.stringify(CLASS)},
-      region: ${JSON.stringify(region)},
-      links: {
-        ${JSON.stringify(link)}: {
-          urn: orders.urn,
-          properties: {
-            connectionString: $interpolate\`postgresql://\${orders.username}:\${orders.password}@\${orders.host}:\${orders.port}/\${orders.database}\`,
-            host: orders.host,
-            port: orders.port,
-            database: orders.database,
+    link.postgres(
+      ${JSON.stringify(link)},
+      {
+        host: orders.host,
+        port: orders.port,
+        database: orders.database,
+        username: orders.username,
+        password: orders.password,
+        grants: [
+          {
+            label: "connect",
+            actions: ["rds-db:connect"],
+            resources: [
+              $interpolate\`arn:aws:rds-db:${region}:\${account}:dbuser:\${orders.nodes.cluster.clusterResourceId}/\${orders.username}\`,
+            ],
           },
-          grants: [
-            {
-              label: "connect",
-              actions: ["rds-db:connect"],
-              resources: [
-                $interpolate\`arn:aws:rds-db:${region}:\${account}:dbuser:\${orders.nodes.cluster.clusterResourceId}/\${orders.username}\`,
-              ],
-            },
-          ],
-        },
+        ],
       },
-    });
+      { class: ${JSON.stringify(CLASS)}, project: ${JSON.stringify(projectDir)} },
+    );
     return { host: orders.host, database: orders.database, port: orders.port };
   },
 });
@@ -110,6 +109,12 @@ export default defineConfig({
 `;
 }
 
+const PROPERTY_KINDS = ["postgres", "bucket"];
+
+export function linkTypeOf(record) {
+  return PROPERTY_KINDS.find((kind) => record?.[kind] !== undefined) ?? null;
+}
+
 export function parsePublishedRecord(row) {
   if (!row || !row.record || typeof row.record.S !== "string") {
     return { problem: "the record row carries no record attribute" };
@@ -120,10 +125,58 @@ export function parsePublishedRecord(row) {
   } catch (err) {
     return { problem: `the record row is not parseable JSON: ${err.message}` };
   }
-  if (!record.type) {
-    return { problem: "the record names no type token" };
+  if (!record.name) {
+    return { problem: "the record carries no name, which is what a consuming app binds to" };
   }
-  return { record, version: Number(row.version?.N ?? 0) };
+  const type = linkTypeOf(record);
+  if (!type) {
+    return { problem: "the record carries no properties, so it names no type a consumer can resolve it against" };
+  }
+  return { record, type, version: Number(row.version?.N ?? 0) };
+}
+
+export function recordShapeProblem(record, { name = LINK_NAME, type = LINK_TYPE, source = LINK_SOURCE } = {}) {
+  if (record?.name !== name) {
+    return `the record is published as ${JSON.stringify(record?.name ?? null)}, want ${JSON.stringify(name)}`;
+  }
+  const published = linkTypeOf(record);
+  if (published !== type) {
+    return `the record carries ${published ?? "no"} properties, want ${type}`;
+  }
+  if (record.source !== source) {
+    return `the record is sourced ${JSON.stringify(record.source ?? null)}, want ${JSON.stringify(source)}; an empty source names what ocel's own provisioning produces`;
+  }
+  return null;
+}
+
+export function redactionProblem(record) {
+  const type = linkTypeOf(record);
+  if (!type) {
+    return "the record carries no properties, so nothing proves the store redacted them";
+  }
+  const kept = Object.keys(record[type] ?? {});
+  if (kept.length > 0) {
+    return `the record row carries ${kept.join(", ")} in the clear; the record beside the sealed value holds no property`;
+  }
+  return null;
+}
+
+export function listedLinkProblem(links, { name = LINK_NAME, type = LINK_TYPE, source = LINK_SOURCE, owner }) {
+  const listed = (links ?? []).filter((entry) => entry.name === name);
+  if (listed.length !== 1) {
+    return `\`ocel link ls\` lists ${JSON.stringify((links ?? []).map((entry) => entry.name))}, want exactly one ${name}`;
+  }
+  const [entry] = listed;
+  if (entry.type !== type) {
+    return `${name} is listed as ${entry.type}, want ${type}`;
+  }
+  if (entry.source !== source) {
+    return `${name} is listed with source ${JSON.stringify(entry.source ?? null)}, want ${JSON.stringify(source)}`;
+  }
+  if (entry.owner !== owner) {
+    return `${name} is listed as owned by ${entry.owner}, want ${owner}`;
+  }
+  return null;
 }
 
 export function unscopedAction(action) {
@@ -209,8 +262,11 @@ function listOf(value) {
 }
 
 export function grantsDeliveredProblem(documents, grants) {
+  if (!grants || grants.length === 0) {
+    return "the record grants nothing, so the deploy had no permission to render and this proves nothing";
+  }
   const statements = statementsOf(documents);
-  for (const grant of grants ?? []) {
+  for (const grant of grants) {
     for (const action of grant.actions ?? []) {
       for (const resource of grant.resources ?? []) {
         const granted = statements.some(

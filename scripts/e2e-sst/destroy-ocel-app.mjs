@@ -12,10 +12,7 @@ import {
   LOG_PREFIX,
   linkPartitionKey,
   recordSortKey,
-  refuseUntilRePlumbed,
 } from "./lib.mjs";
-
-refuseUntilRePlumbed();
 
 const appDir = process.cwd();
 
