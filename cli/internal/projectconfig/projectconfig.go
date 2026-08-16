@@ -53,11 +53,12 @@ type Config struct {
 	Links     []string
 	Domains   map[string][]string
 	Dir       string
+	Path      string
 }
 
 func (c *Config) RequireProvider() (*ProviderDescriptor, error) {
 	if c.Provider == nil {
-		return nil, fmt.Errorf("no provider configured in %s — add `provider: awsProvider({...})` (from @ocel/provider-aws) to your config", ConfigFileName)
+		return nil, fmt.Errorf("no provider configured in %s — add `provider: awsProvider({...})` (from @ocel/provider-aws) to your config", filepath.Base(c.Path))
 	}
 	return c.Provider, nil
 }
@@ -182,7 +183,23 @@ func PreviewBaseDomain(previewDomain string) string {
 
 const defaultCompute = "serverless"
 
-func Resolve(ctx context.Context, startDir string) (*Config, error) {
+func Resolve(ctx context.Context, startDir, explicitPath string) (*Config, error) {
+	return resolve(ctx, startDir, explicitPath, false)
+}
+
+func ResolveOptional(ctx context.Context, startDir, explicitPath string) (*Config, error) {
+	return resolve(ctx, startDir, explicitPath, true)
+}
+
+func resolve(ctx context.Context, startDir, explicitPath string, optional bool) (*Config, error) {
+	if explicitPath != "" {
+		configPath, err := explicitConfigFile(startDir, explicitPath)
+		if err != nil {
+			return nil, err
+		}
+		return load(ctx, configPath)
+	}
+
 	root, err := findProjectRoot(startDir)
 	if err != nil {
 		return nil, err
@@ -190,25 +207,34 @@ func Resolve(ctx context.Context, startDir string) (*Config, error) {
 
 	configPath := filepath.Join(root, ConfigFileName)
 	if !isFile(configPath) {
+		if optional {
+			return &Config{
+				Discovery: Discovery{Paths: defaultDiscoveryPaths},
+				Dir:       root,
+				Path:      configPath,
+			}, nil
+		}
 		return nil, fmt.Errorf("no %s found in %s or any parent directory — %s", ConfigFileName, startDir, initHint)
 	}
 	return load(ctx, configPath)
 }
 
-func ResolveOptional(ctx context.Context, startDir string) (*Config, error) {
-	root, err := findProjectRoot(startDir)
+func explicitConfigFile(startDir, explicitPath string) (string, error) {
+	path := explicitPath
+	if !filepath.IsAbs(path) {
+		path = filepath.Join(startDir, path)
+	}
+	abs, err := filepath.Abs(path)
 	if err != nil {
-		return nil, err
+		return "", err
 	}
-
-	configPath := filepath.Join(root, ConfigFileName)
-	if !isFile(configPath) {
-		return &Config{
-			Discovery: Discovery{Paths: defaultDiscoveryPaths},
-			Dir:       root,
-		}, nil
+	if isDir(abs) {
+		return "", fmt.Errorf("config file %s (from --config / OCEL_CONFIG) is a directory, not a config file", abs)
 	}
-	return load(ctx, configPath)
+	if !isFile(abs) {
+		return "", fmt.Errorf("config file %s (from --config / OCEL_CONFIG) not found", abs)
+	}
+	return abs, nil
 }
 
 func load(ctx context.Context, configPath string) (*Config, error) {
@@ -270,6 +296,7 @@ func load(ctx context.Context, configPath string) (*Config, error) {
 		Links:     links,
 		Domains:   domains,
 		Dir:       filepath.Dir(configPath),
+		Path:      configPath,
 	}, nil
 }
 
@@ -378,7 +405,7 @@ func buildAndRun(ctx context.Context, configPath string) ([]byte, error) {
 	if err := os.MkdirAll(outDir, 0o755); err != nil {
 		return nil, fmt.Errorf("create %s: %w", scratchDirName, err)
 	}
-	outfile := filepath.Join(outDir, "config.mjs")
+	outfile := filepath.Join(outDir, bundleName(configPath))
 
 	entry := fmt.Sprintf("import config from %q;\nprocess.stdout.write(JSON.stringify(config));\n", configPath)
 
@@ -417,6 +444,14 @@ func buildAndRun(ctx context.Context, configPath string) ([]byte, error) {
 	}
 
 	return stdout, nil
+}
+
+func bundleName(configPath string) string {
+	base := filepath.Base(configPath)
+	if base == ConfigFileName {
+		return "config.mjs"
+	}
+	return "config." + strings.TrimSuffix(base, filepath.Ext(base)) + ".mjs"
 }
 
 func findProjectRoot(startDir string) (string, error) {

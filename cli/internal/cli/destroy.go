@@ -80,7 +80,7 @@ func runDestroy(ctx context.Context, d deps, cwd string, stdout, stderr io.Write
 		return fmt.Errorf("`ocel destroy` needs an interactive terminal to confirm the project name; to destroy unattended, set %s to the project name", destroyBypassEnv)
 	}
 
-	cfg, err := projectconfig.Resolve(ctx, cwd)
+	cfg, err := projectconfig.Resolve(ctx, cwd, explicitConfigPath())
 	if err != nil {
 		return err
 	}
@@ -172,7 +172,7 @@ func runDestroyPreviewProject(ctx context.Context, d deps, cwd string, yes bool,
 		return errors.New("`ocel destroy --preview` needs an interactive terminal to confirm the project name; re-run with --yes to tear the preview footprint down non-interactively")
 	}
 
-	cfg, err := projectconfig.Resolve(ctx, cwd)
+	cfg, err := projectconfig.Resolve(ctx, cwd, explicitConfigPath())
 	if err != nil {
 		return err
 	}

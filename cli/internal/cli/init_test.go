@@ -288,6 +288,91 @@ func TestRunInit(t *testing.T) {
 			t.Fatalf("stdout = %q, want the command the user should run", stdout.String())
 		}
 	})
+
+	t.Run("--config writes the config where the path points", func(t *testing.T) {
+		t.Parallel()
+
+		root := t.TempDir()
+		cwd := filepath.Join(root, "app")
+		if err := os.MkdirAll(cwd, 0o755); err != nil {
+			t.Fatalf("create cwd: %v", err)
+		}
+		infra := filepath.Join(root, "infra")
+		if err := os.MkdirAll(infra, 0o755); err != nil {
+			t.Fatalf("create infra dir: %v", err)
+		}
+		for _, name := range []string{"package.json", "pnpm-lock.yaml"} {
+			if err := os.WriteFile(filepath.Join(infra, name), []byte("{}\n"), 0o644); err != nil {
+				t.Fatalf("write %s: %v", name, err)
+			}
+		}
+
+		d := defaultDeps()
+		argv := stubPackageManager(&d, nil)
+		opts := initOptions{configPath: filepath.Join("..", "infra", "ocel.ts")}
+
+		var stdout bytes.Buffer
+		if err := runInit(context.Background(), d, cwd, "", opts, &stdout, &bytes.Buffer{}); err != nil {
+			t.Fatalf("runInit err = %v; stdout=%s", err, stdout.String())
+		}
+
+		content, err := os.ReadFile(filepath.Join(infra, "ocel.ts"))
+		if err != nil {
+			t.Fatalf("read the config --config named: %v", err)
+		}
+		if !strings.Contains(string(content), `slug: "infra"`) {
+			t.Errorf("config = %q, want the slug derived from the config's own directory", content)
+		}
+		if got := *argv; !slices.Equal(got, []string{"pnpm", "add", sdkPackage, defaultProviderPackage}) {
+			t.Errorf("ran %v, want the dependencies added beside the config, not beside the working directory", got)
+		}
+		if !strings.Contains(stdout.String(), "Wrote ocel.ts") {
+			t.Errorf("stdout = %q, want it to name the config written", stdout.String())
+		}
+	})
+
+	t.Run("--config creates the directories leading to the path", func(t *testing.T) {
+		t.Parallel()
+
+		d := defaultDeps()
+		stubPackageManager(&d, nil)
+		dir := initTestDir(t, "proj")
+
+		opts := initOptions{configPath: filepath.Join("nested", "deep", "ocel.ts")}
+		if err := runInit(context.Background(), d, dir, "my-app", opts, &bytes.Buffer{}, &bytes.Buffer{}); err != nil {
+			t.Fatalf("runInit err = %v", err)
+		}
+		if _, err := os.Stat(filepath.Join(dir, "nested", "deep", "ocel.ts")); err != nil {
+			t.Fatalf("stat the config --config named: %v", err)
+		}
+	})
+
+	t.Run("--config never overwrites an existing config", func(t *testing.T) {
+		t.Parallel()
+
+		d := defaultDeps()
+		argv := stubPackageManager(&d, nil)
+		dir := initTestDir(t, "proj")
+		configPath := filepath.Join(dir, "ocel.ts")
+		if err := os.WriteFile(configPath, []byte("existing"), 0o644); err != nil {
+			t.Fatalf("write existing config: %v", err)
+		}
+
+		err := runInit(context.Background(), d, dir, "my-app", initOptions{configPath: "ocel.ts"}, &bytes.Buffer{}, &bytes.Buffer{})
+		if err == nil {
+			t.Fatal("runInit err = nil, want error")
+		}
+		if !strings.Contains(err.Error(), "ocel.ts") {
+			t.Fatalf("err = %v, want it to mention ocel.ts", err)
+		}
+		content, readErr := os.ReadFile(configPath)
+		if readErr != nil || string(content) != "existing" {
+			t.Fatalf("config = %q (err %v), want the existing file untouched", content, readErr)
+		}
+		if *argv != nil {
+			t.Fatalf("ran %v, want no package manager call", *argv)
+		}
+	})
 }
 
 func TestProviderIdentifier(t *testing.T) {

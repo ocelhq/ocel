@@ -46,7 +46,7 @@ func runRun(ctx context.Context, d deps, cmd *cobra.Command, cwd string, appArgs
 		return &ExitError{Code: 1}
 	}
 
-	cfg, err := projectconfig.ResolveOptional(ctx, cwd)
+	cfg, err := projectconfig.ResolveOptional(ctx, cwd, explicitConfigPath())
 	if err != nil {
 		return err
 	}

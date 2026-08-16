@@ -23,6 +23,7 @@ func TestMain(m *testing.M) {
 		panic(err)
 	}
 	os.Setenv("XDG_CONFIG_HOME", dir)
+	os.Unsetenv("OCEL_CONFIG")
 	code := m.Run()
 	os.RemoveAll(dir)
 	os.Exit(code)

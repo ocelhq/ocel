@@ -57,7 +57,7 @@ func runDev(ctx context.Context, d deps, cmd *cobra.Command, cwd string, appArgs
 		return &ExitError{Code: 1}
 	}
 
-	cfg, err := projectconfig.ResolveOptional(ctx, cwd)
+	cfg, err := projectconfig.ResolveOptional(ctx, cwd, explicitConfigPath())
 	if err != nil {
 		return err
 	}
@@ -159,7 +159,7 @@ func discoverAndSync(ctx context.Context, srv *devserver.Server, cfg *projectcon
 	}
 
 	appFolder := appbuilder.AppFolder(cfg.Apps)
-	if err := checkStatableBinding(cfg.Apps, appFolder, srv.ScopedFolders()); err != nil {
+	if err := checkStatableBinding(cfg.Apps, appFolder, filepath.Base(cfg.Path), srv.ScopedFolders()); err != nil {
 		return nil, err
 	}
 

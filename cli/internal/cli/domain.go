@@ -234,7 +234,7 @@ func runDomainRelease(ctx context.Context, d deps, cwd string, opts domainOption
 }
 
 func domainSession(ctx context.Context, cwd string) (*projectconfig.Config, *projectconfig.ProviderDescriptor, error) {
-	cfg, err := projectconfig.Resolve(ctx, cwd)
+	cfg, err := projectconfig.Resolve(ctx, cwd, explicitConfigPath())
 	if err != nil {
 		return nil, nil, err
 	}

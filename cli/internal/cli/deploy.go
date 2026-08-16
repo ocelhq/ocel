@@ -88,7 +88,7 @@ func runDeploy(ctx context.Context, d deps, cwd string, opts deployOptions, stdo
 		return err
 	}
 
-	cfg, err := projectconfig.Resolve(ctx, cwd)
+	cfg, err := projectconfig.Resolve(ctx, cwd, explicitConfigPath())
 	if err != nil {
 		return err
 	}
@@ -219,7 +219,7 @@ func collectAndBuildManifest(ctx context.Context, d deps, cfg *projectconfig.Con
 		return nil, captured.annotate(err)
 	}
 
-	warnings, err := envgate.Lint(gate.Definitions(), envApps(cfg), filepath.Join(cfg.Dir, projectconfig.ConfigFileName))
+	warnings, err := envgate.Lint(gate.Definitions(), envApps(cfg), cfg.Path)
 	if err != nil {
 		return nil, err
 	}
@@ -266,7 +266,7 @@ func collectAndBuildManifest(ctx context.Context, d deps, cfg *projectconfig.Con
 		ui.Diagnostic("no functions to deploy; deploying infrastructure only")
 	}
 
-	attributionApps, err := toAttributionApps(cfg.Dir, cfg.Apps, functions)
+	attributionApps, err := toAttributionApps(cfg, functions)
 	if err != nil {
 		return nil, err
 	}
@@ -502,14 +502,16 @@ func toApps(apps []projectconfig.App, usages []attribution.Usage) []manifestbuil
 	return out
 }
 
-func toAttributionApps(dir string, apps []projectconfig.App, functions []manifestbuilder.Function) ([]attribution.App, error) {
+func toAttributionApps(cfg *projectconfig.Config, functions []manifestbuilder.Function) ([]attribution.App, error) {
 	detected := detectedApps(functions)
+	apps := cfg.Apps
+	configName := filepath.Base(cfg.Path)
 
 	if len(apps) == 0 {
 		if len(detected) > 1 {
 			return nil, fmt.Errorf(
 				"this project builds %d apps (%s) but names none of them, so ocel cannot tell which source belongs to which and refuses to hand every app every resource: give each one a name and a path under `apps` in %s",
-				len(detected), strings.Join(detected, ", "), projectconfig.ConfigFileName,
+				len(detected), strings.Join(detected, ", "), configName,
 			)
 		}
 		out := make([]attribution.App, 0, len(detected))
@@ -522,10 +524,10 @@ func toAttributionApps(dir string, apps []projectconfig.App, functions []manifes
 	named := make(map[string]bool, len(apps))
 	out := make([]attribution.App, 0, len(apps))
 	for _, a := range apps {
-		if info, err := os.Stat(filepath.Join(dir, a.Path)); err != nil || !info.IsDir() {
+		if info, err := os.Stat(filepath.Join(cfg.Dir, a.Path)); err != nil || !info.IsDir() {
 			return nil, fmt.Errorf(
 				"app %q has path %q, which is not a directory of this project: ocel reads an app's source to tell which resources it may be handed, so a path that names nothing would deploy %q alive with no resource at all — point `apps` in %s at %q's source",
-				a.Name, a.Path, a.Name, projectconfig.ConfigFileName, a.Name,
+				a.Name, a.Path, a.Name, configName, a.Name,
 			)
 		}
 		named[a.Name] = true
@@ -541,7 +543,7 @@ func toAttributionApps(dir string, apps []projectconfig.App, functions []manifes
 	if len(unnamed) > 0 {
 		return nil, fmt.Errorf(
 			"this project builds %s, which `apps` in %s does not name: ocel reads a named app's source to tell which resources it may be handed, and refuses to deploy an app it can attribute nothing to — give each one a name and a path under `apps`",
-			strings.Join(unnamed, ", "), projectconfig.ConfigFileName,
+			strings.Join(unnamed, ", "), configName,
 		)
 	}
 	return out, nil

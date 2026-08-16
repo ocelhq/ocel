@@ -84,7 +84,7 @@ func TestRefuseClaimedDomains(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 
-			err := refuseClaimedDomains(tc.claims)
+			err := refuseClaimedDomains(tc.claims, projectconfig.ConfigFileName)
 			if !tc.refuse {
 				if err != nil {
 					t.Fatalf("refuseClaimedDomains err = %v, want nil", err)
@@ -107,7 +107,7 @@ func TestRefuseClaimedDomains(t *testing.T) {
 
 		err := refuseClaimedDomains([]*deploymentsv1.DomainClaim{
 			{Hostname: "*.previews.ocel.dev", Status: deploymentsv1.DomainClaim_STATUS_CLAIMED, Owner: edge.SharedPreviewEntryScript},
-		})
+		}, projectconfig.ConfigFileName)
 		if err != nil {
 			t.Fatalf("refuseClaimedDomains err = %v, want the shared entry worker to pass", err)
 		}
@@ -120,7 +120,7 @@ func TestRefuseClaimedDomains(t *testing.T) {
 			{Hostname: "acme.com", Status: deploymentsv1.DomainClaim_STATUS_CLAIMED, Owner: "ocel-other-production-web"},
 			{Hostname: "www.acme.com", Status: deploymentsv1.DomainClaim_STATUS_UNCLAIMED},
 			{Hostname: "shop.acme.com", Status: deploymentsv1.DomainClaim_STATUS_CLAIMED, Owner: "ocel-third-production-web"},
-		})
+		}, projectconfig.ConfigFileName)
 		if err == nil {
 			t.Fatal("refuseClaimedDomains err = nil, want a refusal")
 		}

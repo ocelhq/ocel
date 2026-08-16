@@ -20,7 +20,8 @@ const sdkPackage = "ocel"
 const defaultProviderPackage = "@ocel/provider-aws"
 
 type initOptions struct {
-	provider string
+	provider   string
+	configPath string
 }
 
 var initOpts initOptions
@@ -46,7 +47,10 @@ var initCmd = &cobra.Command{
 			slug = args[0]
 		}
 
-		return runInit(cmd.Context(), defaultDeps(), cwd, slug, initOpts, cmd.OutOrStdout(), cmd.ErrOrStderr())
+		opts := initOpts
+		opts.configPath = explicitConfigPath()
+
+		return runInit(cmd.Context(), defaultDeps(), cwd, slug, opts, cmd.OutOrStdout(), cmd.ErrOrStderr())
 	},
 }
 
@@ -54,7 +58,17 @@ func init() {
 	initCmd.Flags().StringVar(&initOpts.provider, "provider", defaultProviderPackage, "Provider package to scaffold with")
 }
 
-func runInit(ctx context.Context, d deps, projectDir, slug string, opts initOptions, stdout, stderr io.Writer) error {
+func runInit(ctx context.Context, d deps, cwd, slug string, opts initOptions, stdout, stderr io.Writer) error {
+	configPath := filepath.Join(cwd, projectconfig.ConfigFileName)
+	if opts.configPath != "" {
+		configPath = opts.configPath
+		if !filepath.IsAbs(configPath) {
+			configPath = filepath.Join(cwd, configPath)
+		}
+	}
+	projectDir := filepath.Dir(configPath)
+	name := filepath.Base(configPath)
+
 	slug, err := resolveSlug(projectDir, slug)
 	if err != nil {
 		return err
@@ -65,17 +79,19 @@ func runInit(ctx context.Context, d deps, projectDir, slug string, opts initOpti
 		providerPkg = defaultProviderPackage
 	}
 
-	configPath := filepath.Join(projectDir, projectconfig.ConfigFileName)
 	if _, err := os.Stat(configPath); err == nil {
-		return fmt.Errorf("%s already exists in this directory", projectconfig.ConfigFileName)
+		return fmt.Errorf("%s already exists", name)
 	} else if !errors.Is(err, fs.ErrNotExist) {
-		return fmt.Errorf("check for existing %s: %w", projectconfig.ConfigFileName, err)
+		return fmt.Errorf("check for existing %s: %w", name, err)
 	}
 
-	if err := os.WriteFile(configPath, []byte(configTemplate(slug, providerPkg)), 0o644); err != nil {
-		return fmt.Errorf("write %s: %w", projectconfig.ConfigFileName, err)
+	if err := os.MkdirAll(projectDir, 0o755); err != nil {
+		return fmt.Errorf("create directory for %s: %w", name, err)
 	}
-	fmt.Fprintf(stdout, "✓ Wrote %s (slug: %s)\n", projectconfig.ConfigFileName, slug)
+	if err := os.WriteFile(configPath, []byte(configTemplate(slug, providerPkg)), 0o644); err != nil {
+		return fmt.Errorf("write %s: %w", name, err)
+	}
+	fmt.Fprintf(stdout, "✓ Wrote %s (slug: %s)\n", name, slug)
 
 	addDependencies(ctx, d, projectDir, []string{sdkPackage, providerPkg}, stdout, stderr)
 

@@ -50,7 +50,7 @@ func runRollback(ctx context.Context, d deps, cwd string, opts rollbackOptions, 
 		return err
 	}
 
-	cfg, err := projectconfig.Resolve(ctx, cwd)
+	cfg, err := projectconfig.Resolve(ctx, cwd, explicitConfigPath())
 	if err != nil {
 		return err
 	}
