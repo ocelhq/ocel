@@ -21,7 +21,7 @@ jobs:
     runs-on: ubuntu-latest
     env:
       DATABASE_URL: postgres://postgres:postgres@localhost:5432/postgres
-      OCEL_RESOURCE_POSTGRES_main: '{"connectionString":"postgres://postgres:postgres@localhost:5432/postgres"}'
+      OCEL_RESOURCE_POSTGRES_main: '{"name":"main","postgres":{"host":"localhost","port":5432,"database":"postgres","username":"postgres","password":"postgres"}}'
       OCEL_CLOUD_ADMIN_URL: postgres://postgres:postgres@localhost:5433/postgres
       BETTER_AUTH_SECRET: e2e-test-secret-not-for-production
       BETTER_AUTH_URL: http://localhost:3000
