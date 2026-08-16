@@ -11,38 +11,11 @@ export default $config({
     };
   },
   async run() {
-    const { publish } = await import("@ocel/sst");
-
-    const vpc = new sst.aws.Vpc("Vpc");
-    const orders = new sst.aws.Postgres("Orders", { vpc });
-    const account = aws.getCallerIdentityOutput().accountId;
-
-    publish("OcelLinks", {
-      project: "with-sst",
-      class: "production",
-      region,
-      links: {
-        orders: {
-          urn: orders.urn,
-          properties: {
-            connectionString: $interpolate`postgresql://${orders.username}:${orders.password}@${orders.host}:${orders.port}/${orders.database}`,
-            host: orders.host,
-            port: orders.port,
-            database: orders.database,
-          },
-          grants: [
-            {
-              label: "connect",
-              actions: ["rds-db:connect"],
-              resources: [
-                $interpolate`arn:aws:rds-db:${region}:${account}:dbuser:${orders.nodes.cluster.clusterResourceId}/${orders.username}`,
-              ],
-            },
-          ],
-        },
-      },
-    });
-
-    return { host: orders.host, database: orders.database };
+    // FIXME: @ocel/sst shapes link records and stops there. Publishing `orders` as an
+    // ocel link waits on the successor ticket re-plumbing the adapter onto `ocel link`,
+    // which rewrites this run block.
+    throw new Error(
+      "with-sst publishes nothing: @ocel/sst has not been re-plumbed onto `ocel link`, so no ocel link record reaches the store and the app consuming `orders` would resolve nothing",
+    );
   },
 });

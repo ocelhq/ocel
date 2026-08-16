@@ -80,12 +80,14 @@ func (c Coordinate) partition(class string) string {
 	return PartitionKey(c.Slug, class)
 }
 
-func validateLinkTarget(slug, environment string) error {
+func ValidateLinkTarget(slug, environment string) error {
 	if slug == "" {
 		return fmt.Errorf("a project slug is required")
 	}
 	if environment == ClassWideEnvironment {
-		return fmt.Errorf("%q is reserved: it names the pair that binds class-wide", ClassWideEnvironment)
+		return fmt.Errorf(
+			"%q is reserved: it names the pair that binds class-wide. Leave the environment off to publish there, which serves every preview including the ephemeral ones",
+			ClassWideEnvironment)
 	}
 	for name, component := range map[string]string{"project slug": slug, "environment name": environment} {
 		if strings.Contains(component, delimiter) {
@@ -95,18 +97,15 @@ func validateLinkTarget(slug, environment string) error {
 	return nil
 }
 
-func (c Coordinate) validateDerived() error {
-	if err := validateLinkTarget(c.Slug, c.Environment); err != nil {
+func ValidateLinkName(slug, environment, name string) error {
+	if err := ValidateLinkTarget(slug, environment); err != nil {
 		return err
 	}
-	if c.Link == "" {
+	if name == "" {
 		return fmt.Errorf("a link name is required")
 	}
-	if c.Folder != "" {
-		return fmt.Errorf("a link value is delivered to every folder of the apps that use it; %q addresses nothing", c.Folder)
-	}
-	if strings.Contains(c.Link, delimiter) {
-		return fmt.Errorf("link name %q may not contain %q", c.Link, delimiter)
+	if strings.Contains(name, delimiter) {
+		return fmt.Errorf("link name %q may not contain %q", name, delimiter)
 	}
 	return nil
 }
@@ -194,14 +193,14 @@ func (s *Store) publish(ctx context.Context, slug, owner, environment string, re
 }
 
 func publishedNames(slug, environment string, records []*linksv1.Link) ([]string, error) {
-	if err := validateLinkTarget(slug, environment); err != nil {
+	if err := ValidateLinkTarget(slug, environment); err != nil {
 		return nil, err
 	}
 
 	published := make([]string, 0, len(records))
 	seen := make(map[string]bool, len(records))
 	for _, r := range records {
-		if err := linkCoordinate(slug, r.GetName(), environment).validateDerived(); err != nil {
+		if err := ValidateLinkName(slug, environment, r.GetName()); err != nil {
 			return nil, err
 		}
 		if seen[r.GetName()] {
@@ -420,14 +419,7 @@ func (s *Store) dropLink(ctx context.Context, slug, owner, environment, link str
 		}
 	}
 
-	suffix := delimiter + tokenEnv + delimiter + canonicalEnvironment(environment)
-	var keys []map[string]ddbtypes.AttributeValue
-	for _, i := range stored {
-		if strings.HasSuffix(i.SK, suffix) {
-			keys = append(keys, pointKey(pk, i.SK))
-		}
-	}
-	return len(keys), s.deleteAll(ctx, keys, link)
+	return s.deleteRows(ctx, pk, stored, environment, link)
 }
 
 func (s *Store) deleteAll(ctx context.Context, keys []map[string]ddbtypes.AttributeValue, what string) error {
@@ -475,8 +467,7 @@ func (s *Store) ResolveRecords(ctx context.Context, slug, environment string, na
 }
 
 func (s *Store) resolveRecord(ctx context.Context, slug, environment, name string) (PublishedRecord, error) {
-	c := linkCoordinate(slug, name, environment)
-	if err := c.validateDerived(); err != nil {
+	if err := ValidateLinkName(slug, environment, name); err != nil {
 		return PublishedRecord{}, err
 	}
 

@@ -2,6 +2,8 @@ package server
 
 import (
 	"context"
+	"fmt"
+	"maps"
 	"slices"
 	"strconv"
 	"strings"
@@ -83,15 +85,15 @@ func (f *fakeDynamo) Query(_ context.Context, in *dynamodb.QueryInput, _ ...func
 	defer f.mu.Unlock()
 	f.queries++
 
-	pk, _ := in.ExpressionAttributeValues[":pk"].(*ddbtypes.AttributeValueMemberS)
-	prefix, _ := in.ExpressionAttributeValues[":prefix"].(*ddbtypes.AttributeValueMemberS)
 	if in.IndexName != nil {
 		return f.queryIndex(in), nil
 	}
+	pk := keyOf(in.ExpressionAttributeValues, ":pk")
+	prefix := keyOf(in.ExpressionAttributeValues, ":prefix")
 
 	var sks []string
-	for sk := range f.items[pk.Value] {
-		if strings.HasPrefix(sk, prefix.Value) {
+	for sk := range f.items[pk] {
+		if strings.HasPrefix(sk, prefix) {
 			sks = append(sks, sk)
 		}
 	}
@@ -99,7 +101,7 @@ func (f *fakeDynamo) Query(_ context.Context, in *dynamodb.QueryInput, _ ...func
 
 	out := &dynamodb.QueryOutput{}
 	for _, sk := range sks {
-		out.Items = append(out.Items, f.items[pk.Value][sk])
+		out.Items = append(out.Items, f.items[pk][sk])
 	}
 	return out, nil
 }
@@ -128,9 +130,61 @@ func (f *fakeDynamo) TransactWriteItems(_ context.Context, in *dynamodb.Transact
 			f.put(write.Put.Item)
 		case write.Delete != nil:
 			delete(f.items[keyOf(write.Delete.Key, "pk")], keyOf(write.Delete.Key, "sk"))
+		case write.Update != nil:
+			updated, err := f.applyUpdate(write.Update)
+			if err != nil {
+				return nil, err
+			}
+			f.put(updated)
 		}
 	}
 	return &dynamodb.TransactWriteItemsOutput{}, nil
+}
+
+func (f *fakeDynamo) applyUpdate(u *ddbtypes.Update) (map[string]ddbtypes.AttributeValue, error) {
+	item := map[string]ddbtypes.AttributeValue{}
+	maps.Copy(item, f.items[keyOf(u.Key, "pk")][keyOf(u.Key, "sk")])
+	maps.Copy(item, u.Key)
+
+	sets, adds, added := strings.Cut(aws.ToString(u.UpdateExpression), " ADD ")
+	assignments := map[string][]string{"SET": strings.Split(strings.TrimPrefix(sets, "SET "), ", ")}
+	if added {
+		assignments["ADD"] = strings.Split(adds, ", ")
+	}
+	for clause, clauseAssignments := range assignments {
+		separator := " "
+		if clause == "SET" {
+			separator = " = "
+		}
+		for _, assignment := range clauseAssignments {
+			alias, placeholder, ok := strings.Cut(assignment, separator)
+			if !ok {
+				return nil, fmt.Errorf("fakeDynamo: %s clause %q is not one this double understands", clause, assignment)
+			}
+			name, known := u.ExpressionAttributeNames[alias]
+			value, carried := u.ExpressionAttributeValues[placeholder]
+			if !known || !carried {
+				return nil, fmt.Errorf("fakeDynamo: %q or %q names nothing", alias, placeholder)
+			}
+			if clause == "ADD" {
+				value = &ddbtypes.AttributeValueMemberN{Value: strconv.FormatInt(numberOf(item, name)+numberOf(u.ExpressionAttributeValues, placeholder), 10)}
+			}
+			item[name] = value
+		}
+	}
+	return item, nil
+}
+
+func numberOf(m map[string]ddbtypes.AttributeValue, name string) int64 {
+	v, ok := m[name].(*ddbtypes.AttributeValueMemberN)
+	if !ok {
+		return 0
+	}
+	n, err := strconv.ParseInt(v.Value, 10, 64)
+	if err != nil {
+		return 0
+	}
+	return n
 }
 
 func (f *fakeDynamo) PutItem(_ context.Context, in *dynamodb.PutItemInput, _ ...func(*dynamodb.Options)) (*dynamodb.PutItemOutput, error) {
@@ -171,7 +225,11 @@ func (f *fakeKMS) count() int {
 }
 
 func testAccount(cfn *countingCFN, ddb *fakeDynamo, crypto *fakeKMS) *VarsServer {
-	return &VarsServer{openAccount: func(context.Context, string) (account, error) {
+	return &VarsServer{stores: testStores(cfn, ddb, crypto)}
+}
+
+func testStores(cfn *countingCFN, ddb *fakeDynamo, crypto *fakeKMS) stores {
+	return stores{openAccount: func(context.Context, string) (account, error) {
 		return account{CFN: cfn, Dynamo: ddb, KMS: crypto}, nil
 	}}
 }

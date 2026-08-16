@@ -6,7 +6,9 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { LOG_PREFIX, STATE_FILE, projectSlugForRun, renderSstConfig } from "./lib.mjs";
+import { LOG_PREFIX, STATE_FILE, projectSlugForRun, refuseUntilRePlumbed, renderSstConfig } from "./lib.mjs";
+
+refuseUntilRePlumbed();
 
 const here = fileURLToPath(new URL(".", import.meta.url));
 

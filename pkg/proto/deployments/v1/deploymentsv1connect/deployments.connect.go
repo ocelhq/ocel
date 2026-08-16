@@ -71,6 +71,15 @@ const (
 	// DeploymentServiceReleaseDomainProcedure is the fully-qualified name of the DeploymentService's
 	// ReleaseDomain RPC.
 	DeploymentServiceReleaseDomainProcedure = "/deployments.v1.DeploymentService/ReleaseDomain"
+	// DeploymentServiceSetLinkProcedure is the fully-qualified name of the DeploymentService's SetLink
+	// RPC.
+	DeploymentServiceSetLinkProcedure = "/deployments.v1.DeploymentService/SetLink"
+	// DeploymentServiceRemoveLinkProcedure is the fully-qualified name of the DeploymentService's
+	// RemoveLink RPC.
+	DeploymentServiceRemoveLinkProcedure = "/deployments.v1.DeploymentService/RemoveLink"
+	// DeploymentServiceListLinksProcedure is the fully-qualified name of the DeploymentService's
+	// ListLinks RPC.
+	DeploymentServiceListLinksProcedure = "/deployments.v1.DeploymentService/ListLinks"
 )
 
 // DeploymentServiceClient is a client for the deployments.v1.DeploymentService service.
@@ -88,6 +97,9 @@ type DeploymentServiceClient interface {
 	UseDomain(context.Context, *v1.UseDomainRequest) (*connect.ServerStreamForClient[v1.DeployEvent], error)
 	ListDomain(context.Context, *v1.ListDomainRequest) (*v1.ListDomainResponse, error)
 	ReleaseDomain(context.Context, *v1.ReleaseDomainRequest) (*connect.ServerStreamForClient[v1.DeployEvent], error)
+	SetLink(context.Context, *v1.SetLinkRequest) (*v1.SetLinkResponse, error)
+	RemoveLink(context.Context, *v1.RemoveLinkRequest) (*v1.RemoveLinkResponse, error)
+	ListLinks(context.Context, *v1.ListLinksRequest) (*v1.ListLinksResponse, error)
 }
 
 // NewDeploymentServiceClient constructs a client for the deployments.v1.DeploymentService service.
@@ -179,6 +191,24 @@ func NewDeploymentServiceClient(httpClient connect.HTTPClient, baseURL string, o
 			connect.WithSchema(deploymentServiceMethods.ByName("ReleaseDomain")),
 			connect.WithClientOptions(opts...),
 		),
+		setLink: connect.NewClient[v1.SetLinkRequest, v1.SetLinkResponse](
+			httpClient,
+			baseURL+DeploymentServiceSetLinkProcedure,
+			connect.WithSchema(deploymentServiceMethods.ByName("SetLink")),
+			connect.WithClientOptions(opts...),
+		),
+		removeLink: connect.NewClient[v1.RemoveLinkRequest, v1.RemoveLinkResponse](
+			httpClient,
+			baseURL+DeploymentServiceRemoveLinkProcedure,
+			connect.WithSchema(deploymentServiceMethods.ByName("RemoveLink")),
+			connect.WithClientOptions(opts...),
+		),
+		listLinks: connect.NewClient[v1.ListLinksRequest, v1.ListLinksResponse](
+			httpClient,
+			baseURL+DeploymentServiceListLinksProcedure,
+			connect.WithSchema(deploymentServiceMethods.ByName("ListLinks")),
+			connect.WithClientOptions(opts...),
+		),
 	}
 }
 
@@ -197,6 +227,9 @@ type deploymentServiceClient struct {
 	useDomain          *connect.Client[v1.UseDomainRequest, v1.DeployEvent]
 	listDomain         *connect.Client[v1.ListDomainRequest, v1.ListDomainResponse]
 	releaseDomain      *connect.Client[v1.ReleaseDomainRequest, v1.DeployEvent]
+	setLink            *connect.Client[v1.SetLinkRequest, v1.SetLinkResponse]
+	removeLink         *connect.Client[v1.RemoveLinkRequest, v1.RemoveLinkResponse]
+	listLinks          *connect.Client[v1.ListLinksRequest, v1.ListLinksResponse]
 }
 
 // Deploy calls deployments.v1.DeploymentService.Deploy.
@@ -288,6 +321,33 @@ func (c *deploymentServiceClient) ReleaseDomain(ctx context.Context, req *v1.Rel
 	return c.releaseDomain.CallServerStream(ctx, connect.NewRequest(req))
 }
 
+// SetLink calls deployments.v1.DeploymentService.SetLink.
+func (c *deploymentServiceClient) SetLink(ctx context.Context, req *v1.SetLinkRequest) (*v1.SetLinkResponse, error) {
+	response, err := c.setLink.CallUnary(ctx, connect.NewRequest(req))
+	if response != nil {
+		return response.Msg, err
+	}
+	return nil, err
+}
+
+// RemoveLink calls deployments.v1.DeploymentService.RemoveLink.
+func (c *deploymentServiceClient) RemoveLink(ctx context.Context, req *v1.RemoveLinkRequest) (*v1.RemoveLinkResponse, error) {
+	response, err := c.removeLink.CallUnary(ctx, connect.NewRequest(req))
+	if response != nil {
+		return response.Msg, err
+	}
+	return nil, err
+}
+
+// ListLinks calls deployments.v1.DeploymentService.ListLinks.
+func (c *deploymentServiceClient) ListLinks(ctx context.Context, req *v1.ListLinksRequest) (*v1.ListLinksResponse, error) {
+	response, err := c.listLinks.CallUnary(ctx, connect.NewRequest(req))
+	if response != nil {
+		return response.Msg, err
+	}
+	return nil, err
+}
+
 // DeploymentServiceHandler is an implementation of the deployments.v1.DeploymentService service.
 type DeploymentServiceHandler interface {
 	Deploy(context.Context, *v1.DeployRequest, *connect.ServerStream[v1.DeployEvent]) error
@@ -303,6 +363,9 @@ type DeploymentServiceHandler interface {
 	UseDomain(context.Context, *v1.UseDomainRequest, *connect.ServerStream[v1.DeployEvent]) error
 	ListDomain(context.Context, *v1.ListDomainRequest) (*v1.ListDomainResponse, error)
 	ReleaseDomain(context.Context, *v1.ReleaseDomainRequest, *connect.ServerStream[v1.DeployEvent]) error
+	SetLink(context.Context, *v1.SetLinkRequest) (*v1.SetLinkResponse, error)
+	RemoveLink(context.Context, *v1.RemoveLinkRequest) (*v1.RemoveLinkResponse, error)
+	ListLinks(context.Context, *v1.ListLinksRequest) (*v1.ListLinksResponse, error)
 }
 
 // NewDeploymentServiceHandler builds an HTTP handler from the service implementation. It returns
@@ -390,6 +453,24 @@ func NewDeploymentServiceHandler(svc DeploymentServiceHandler, opts ...connect.H
 		connect.WithSchema(deploymentServiceMethods.ByName("ReleaseDomain")),
 		connect.WithHandlerOptions(opts...),
 	)
+	deploymentServiceSetLinkHandler := connect.NewUnaryHandlerSimple(
+		DeploymentServiceSetLinkProcedure,
+		svc.SetLink,
+		connect.WithSchema(deploymentServiceMethods.ByName("SetLink")),
+		connect.WithHandlerOptions(opts...),
+	)
+	deploymentServiceRemoveLinkHandler := connect.NewUnaryHandlerSimple(
+		DeploymentServiceRemoveLinkProcedure,
+		svc.RemoveLink,
+		connect.WithSchema(deploymentServiceMethods.ByName("RemoveLink")),
+		connect.WithHandlerOptions(opts...),
+	)
+	deploymentServiceListLinksHandler := connect.NewUnaryHandlerSimple(
+		DeploymentServiceListLinksProcedure,
+		svc.ListLinks,
+		connect.WithSchema(deploymentServiceMethods.ByName("ListLinks")),
+		connect.WithHandlerOptions(opts...),
+	)
 	return "/deployments.v1.DeploymentService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case DeploymentServiceDeployProcedure:
@@ -418,6 +499,12 @@ func NewDeploymentServiceHandler(svc DeploymentServiceHandler, opts ...connect.H
 			deploymentServiceListDomainHandler.ServeHTTP(w, r)
 		case DeploymentServiceReleaseDomainProcedure:
 			deploymentServiceReleaseDomainHandler.ServeHTTP(w, r)
+		case DeploymentServiceSetLinkProcedure:
+			deploymentServiceSetLinkHandler.ServeHTTP(w, r)
+		case DeploymentServiceRemoveLinkProcedure:
+			deploymentServiceRemoveLinkHandler.ServeHTTP(w, r)
+		case DeploymentServiceListLinksProcedure:
+			deploymentServiceListLinksHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -477,4 +564,16 @@ func (UnimplementedDeploymentServiceHandler) ListDomain(context.Context, *v1.Lis
 
 func (UnimplementedDeploymentServiceHandler) ReleaseDomain(context.Context, *v1.ReleaseDomainRequest, *connect.ServerStream[v1.DeployEvent]) error {
 	return connect.NewError(connect.CodeUnimplemented, errors.New("deployments.v1.DeploymentService.ReleaseDomain is not implemented"))
+}
+
+func (UnimplementedDeploymentServiceHandler) SetLink(context.Context, *v1.SetLinkRequest) (*v1.SetLinkResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("deployments.v1.DeploymentService.SetLink is not implemented"))
+}
+
+func (UnimplementedDeploymentServiceHandler) RemoveLink(context.Context, *v1.RemoveLinkRequest) (*v1.RemoveLinkResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("deployments.v1.DeploymentService.RemoveLink is not implemented"))
+}
+
+func (UnimplementedDeploymentServiceHandler) ListLinks(context.Context, *v1.ListLinksRequest) (*v1.ListLinksResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("deployments.v1.DeploymentService.ListLinks is not implemented"))
 }

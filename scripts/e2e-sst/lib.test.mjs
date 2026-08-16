@@ -9,13 +9,13 @@ import {
   linkEnvKey,
   linkIndexSortKey,
   linkPartitionKey,
-  namesAbsentSubstrate,
   ownerProblem,
   pairProblem,
   parsePublishedRecord,
   parseSstOutputs,
   projectSlugForRun,
   recordSortKey,
+  refuseUntilRePlumbed,
   renderOcelConfig,
   renderSstConfig,
   resolvedProblem,
@@ -50,6 +50,14 @@ describe("ownerProblem", () => {
     expect(ownerProblem({ owner: { S: PUBLISHER } }, PUBLISHER)).toBeNull();
     expect(ownerProblem({ owner: { S: "OCEL" } }, PUBLISHER)).toMatch(/stamped OCEL/);
     expect(ownerProblem({}, PUBLISHER)).toMatch(/no owner stamp/);
+  });
+});
+
+describe("refuseUntilRePlumbed", () => {
+  it("fails the leg rather than letting it look like a passing run", () => {
+    const codes = [];
+    refuseUntilRePlumbed((code) => codes.push(code));
+    expect(codes).toEqual([1]);
   });
 });
 
@@ -246,17 +254,5 @@ describe("pairProblem", () => {
     expect(pairProblem({ record: { version: { N: "3" } } })).toMatch(/without the value/);
     expect(pairProblem({ value: { version: { N: "3" } } })).toMatch(/without the record/);
     expect(pairProblem({})).toMatch(/neither/);
-  });
-});
-
-describe("namesAbsentSubstrate", () => {
-  it("recognises the publisher's own refusal, not any failure", () => {
-    expect(
-      namesAbsentSubstrate(
-        "ocel aws provider: this AWS account holds no ocel production substrate, so the links this stack publishes have nowhere to land. Run `ocel bootstrap` against this account",
-      ),
-    ).toBe(true);
-    expect(namesAbsentSubstrate("AccessDenied")).toBe(false);
-    expect(namesAbsentSubstrate("")).toBe(false);
   });
 });

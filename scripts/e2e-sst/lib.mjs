@@ -1,6 +1,3 @@
-import { createRequire } from "node:module";
-import { dirname, join } from "node:path";
-
 export const SLUG_PREFIX = "e2es";
 
 export const STATE_FILE = ".ocel-e2e-sst.json";
@@ -22,6 +19,13 @@ export const LINK_TYPE = "sst:aws.Postgres";
 export const CLASS = "production";
 
 export const LOG_PREFIX = "[ocel-e2e-sst]";
+
+export const UNPLUMBED = `${LOG_PREFIX} this suite cannot run: @ocel/sst shapes link records and stops there, and nothing carries them into the store until the adapter is re-plumbed onto \`ocel link\`. Nothing was staged, deployed or torn down.`;
+
+export function refuseUntilRePlumbed(exit = process.exit) {
+  console.error(UNPLUMBED);
+  exit(1);
+}
 
 export function projectSlugForRun(runId = process.env.GITHUB_RUN_ID) {
   const sanitized = String(runId ?? "").replace(/[^a-z0-9]/gi, "").toLowerCase();
@@ -48,12 +52,8 @@ export function linkEnvKey(link = LINK_NAME) {
   return `OCEL_RESOURCE_POSTGRES_${link}`;
 }
 
-export function publisherBinary(platform = process.platform, arch = process.arch) {
-  const require = createRequire(new URL("../../packages/sst/package.json", import.meta.url));
-  const manifest = require.resolve(`@ocel/provider-aws-${platform}-${arch}/package.json`);
-  return join(dirname(manifest), "bin", platform === "win32" ? "deploy.exe" : "deploy");
-}
-
+// FIXME: `publish` left @ocel/sst with the direct-binary hop; the successor ticket
+// re-plumbs the adapter onto `ocel link` and rewrites this template around it.
 export function renderSstConfig({ app, project, region, link = LINK_NAME }) {
   return `/// <reference path="./.sst/platform/config.d.ts" />
 
@@ -247,9 +247,4 @@ export function resolvedProblem(reported, expected) {
     }
   }
   return null;
-}
-
-export function namesAbsentSubstrate(stderr) {
-  const said = String(stderr ?? "");
-  return said.includes("no ocel") && said.includes("substrate") && said.includes("ocel bootstrap");
 }

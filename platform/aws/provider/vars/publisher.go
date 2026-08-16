@@ -32,14 +32,21 @@ func (s *Store) PublishFor(ctx context.Context, slug, publisher, environment str
 		return PublishResult{}, err
 	}
 	for _, r := range records {
-		if r.GetSource() == "" {
-			return PublishResult{}, fmt.Errorf(
-				"publisher %s leaves link %s unsourced: an empty source names what ocel's own provisioning produces, and an app binds a client to it on that promise. "+
-					"Name the tool that publishes it: %w",
-				publisher, r.GetName(), ErrUnsourced)
+		if err := refuseUnsourced(publisher, r); err != nil {
+			return PublishResult{}, err
 		}
 	}
 	return s.publish(ctx, slug, publisher, environment, records)
+}
+
+func refuseUnsourced(publisher string, link *linksv1.Link) error {
+	if link.GetSource() != "" {
+		return nil
+	}
+	return fmt.Errorf(
+		"publisher %s leaves link %s unsourced: an empty source names what ocel's own provisioning produces, and an app binds a client to it on that promise. "+
+			"Name the tool that publishes it: %w",
+		publisher, link.GetName(), ErrUnsourced)
 }
 
 func (s *Store) PruneFor(ctx context.Context, slug, publisher, environment string) (PublishResult, error) {

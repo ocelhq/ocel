@@ -1,11 +1,20 @@
-import type { PublishRequest } from "./hop.js";
 import {
   grantsFor,
   recordFor,
   type Grant,
+  type LinkRecord,
   type Linkable,
   type SSTInclude,
 } from "./record.js";
+
+/** The ocel coordinate a publisher instance targets, and what it publishes there. */
+export interface PublishRequest {
+  project: string;
+  publisher: string;
+  class: "production" | "preview";
+  environment?: string;
+  records?: LinkRecord[];
+}
 
 const tool = "sst";
 
@@ -34,7 +43,7 @@ export interface Described {
 }
 
 /**
- * The ocel coordinate one `publish` instance targets.
+ * The ocel coordinate one publisher instance targets.
  *
  * `class` is explicit: nothing is reconciled between SST stages and ocel
  * environments, and a stage name is never read. `environment` names one preview
@@ -50,7 +59,6 @@ export interface Coordinate {
   class: "production" | "preview";
   instance?: string;
   environment?: string;
-  region?: string;
 }
 
 /** A coordinate and the resources published there, one link record per binding. */
@@ -58,6 +66,14 @@ export interface PublisherInputs extends Coordinate {
   links: Record<string, SSTLinkable | Described>;
 }
 
+/**
+ * The publish request a set of SST-defined resources amounts to.
+ *
+ * The coordinate is validated and the resources become one link record each,
+ * named by the binding they were given. Anything a consuming app could not
+ * resolve — an unnamed link, a composite's constituent, a nested property bag,
+ * a grant reaching past the resource — is refused here rather than published.
+ */
 export function requestFor(inputs: PublisherInputs): PublishRequest {
   const request = coordinateFor(inputs);
   request.records = Object.entries(inputs.links).map(([name, resource]) =>
@@ -66,6 +82,12 @@ export function requestFor(inputs: PublisherInputs): PublishRequest {
   return request;
 }
 
+/**
+ * The same request carrying no records: the coordinate alone.
+ *
+ * It addresses what a publisher already wrote without describing a resource
+ * again, so a stack can prune its own records once the resources are gone.
+ */
 export function coordinateFor(inputs: Coordinate): PublishRequest {
   if (!inputs.project) {
     throw new Error(
@@ -96,12 +118,16 @@ export function coordinateFor(inputs: Coordinate): PublishRequest {
   if (inputs.environment) {
     request.environment = inputs.environment;
   }
-  if (inputs.region) {
-    request.region = inputs.region;
-  }
   return request;
 }
 
+/**
+ * The publisher name an SST instance writes under, namespaced to `sst:`.
+ *
+ * Records belong to the publisher that wrote them, and only that publisher may
+ * overwrite or prune them — so two stacks writing into one ocel project must be
+ * given different instance names.
+ */
 export function publisherName(instance: string | undefined): string {
   if (!instance) {
     throw new Error(
@@ -114,29 +140,6 @@ export function publisherName(instance: string | undefined): string {
     );
   }
   return `${tool}:${instance}`;
-}
-
-export function idFor(request: PublishRequest): string {
-  const coordinate = [request.publisher, request.project, request.class];
-  if (request.environment) {
-    coordinate.push(request.environment);
-  }
-  return coordinate.join("/");
-}
-
-export function replacesFor(olds: Coordinate, news: PublisherInputs): string[] {
-  const previous = {
-    project: olds.project,
-    class: olds.class,
-    instance: olds.instance,
-    environment: olds.environment,
-    region: olds.region,
-  };
-  return Object.keys(previous).filter(
-    (field) =>
-      previous[field as keyof typeof previous] !==
-      news[field as keyof typeof previous],
-  );
 }
 
 function linkableOf(name: string, resource: SSTLinkable | Described): Linkable {

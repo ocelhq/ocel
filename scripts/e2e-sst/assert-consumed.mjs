@@ -30,9 +30,12 @@ import {
   ownerProblem,
   parsePublishedRecord,
   recordSortKey,
+  refuseUntilRePlumbed,
   resolvedProblem,
   varsReachProblem,
 } from "./lib.mjs";
+
+refuseUntilRePlumbed();
 
 const failures = [];
 

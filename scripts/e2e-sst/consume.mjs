@@ -4,7 +4,9 @@ import { spawnSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 
-import { CONSUMER_STATE_FILE, DEPLOY_RESULT_FILE, LOG_PREFIX } from "./lib.mjs";
+import { CONSUMER_STATE_FILE, DEPLOY_RESULT_FILE, LOG_PREFIX, refuseUntilRePlumbed } from "./lib.mjs";
+
+refuseUntilRePlumbed();
 
 const appDir = process.cwd();
 

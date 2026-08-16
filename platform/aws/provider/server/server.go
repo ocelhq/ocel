@@ -43,6 +43,8 @@ import (
 const deployEnv = deploy.ProductionEnv
 
 type Server struct {
+	stores
+
 	memo memo
 }
 
