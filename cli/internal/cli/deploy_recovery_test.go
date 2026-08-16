@@ -243,7 +243,7 @@ func TestGateRecoveryOnDeploy(t *testing.T) {
 		}
 
 		got := out.String()
-		if !strings.Contains(got, "vars=STRIPE_API_KEY\n") {
+		if !strings.Contains(got, "vars=STRIPE_API_KEY deployment=") {
 			t.Errorf("stdout = %q, want the resumed manifest to carry STRIPE_API_KEY exactly once", got)
 		}
 		if strings.Contains(got, "pk_filled_in") {

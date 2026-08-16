@@ -33,8 +33,9 @@ type Environment struct {
 }
 
 type App struct {
-	Name    string `json:"name"`
-	BuildID string `json:"buildId,omitempty"`
+	Name         string `json:"name"`
+	BuildID      string `json:"buildId,omitempty"`
+	DeploymentID string `json:"deploymentId,omitempty"`
 }
 
 func Path(projectDir string) string {

@@ -12,7 +12,11 @@ import (
 func recordDeployResult(cfg *projectconfig.Config, manifest *deploymentsv1.Manifest, env *deploymentsv1.Environment, tag, promotionID string, appURLs []string) error {
 	apps := make([]deployresult.App, 0, len(manifest.GetApps()))
 	for _, a := range manifest.GetApps() {
-		apps = append(apps, deployresult.App{Name: a.GetName(), BuildID: appbuilder.BuildID(cfg.Dir, a.GetName())})
+		apps = append(apps, deployresult.App{
+			Name:         a.GetName(),
+			BuildID:      appbuilder.BuildID(cfg.Dir, a.GetName()),
+			DeploymentID: a.GetDeploymentId(),
+		})
 	}
 
 	if err := deployresult.Write(cfg.Dir, deployresult.Result{

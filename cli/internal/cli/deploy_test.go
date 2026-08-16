@@ -645,6 +645,9 @@ export default {
 		if !strings.Contains(out, "APP name=api framework=express production_domain=api.acme.com") {
 			t.Errorf("stdout = %q, want the app with its per-app production domain", out)
 		}
+		if !strings.Contains(out, "deployment="+fixtureDeploymentID("api")) {
+			t.Errorf("stdout = %q, want the app deployed under the id its build recorded", out)
+		}
 		if !strings.Contains(out, "framework=express app=api") {
 			t.Errorf("stdout = %q, want the function attributed to the api app", out)
 		}
@@ -693,6 +696,17 @@ export default {
 		if !strings.Contains(out, "logical_name=fn--admin--admin") || !strings.Contains(out, "artifact_path=output/admin framework=express app=admin") {
 			t.Errorf("stdout = %q, want the admin function attributed to the admin app", out)
 		}
+		for _, app := range []string{"web", "admin"} {
+			if !strings.Contains(out, "name="+app+" framework=express production_domain=") {
+				t.Errorf("stdout = %q, want %s echoed", out, app)
+			}
+			if !strings.Contains(out, "deployment="+fixtureDeploymentID(app)) {
+				t.Errorf("stdout = %q, want %s deployed under the id its own build recorded", out, app)
+			}
+		}
+		if fixtureDeploymentID("web") == fixtureDeploymentID("admin") {
+			t.Fatal("the fixture gives both apps one id, so this proves nothing")
+		}
 
 		waitForNoStaleSocket(t, sockPath)
 	})
@@ -729,6 +743,11 @@ func stubAppFunctions(d *deps, functions []manifestbuilder.Function) {
 	d.collectAppFunctions = func(string) ([]manifestbuilder.Function, error) {
 		return functions, nil
 	}
+	stubRecordedDeploymentIDs(d)
+}
+
+func stubRecordedDeploymentIDs(d *deps) {
+	d.deploymentID = func(_, app string) (string, error) { return fixtureDeploymentID(app), nil }
 }
 
 func pretendStdoutIsTerminal(d *deps) {

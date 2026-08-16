@@ -95,6 +95,7 @@ func stubAppBuildRecorder(d *deps, built *bool) {
 }
 
 func captureBuildEnv(d *deps) *map[string]map[string]string {
+	stubRecordedDeploymentIDs(d)
 	var got map[string]map[string]string
 	d.buildApp = func(_ context.Context, _ *projectconfig.Config, envByApp map[string]map[string]string, _ io.Writer) error {
 		got = envByApp
