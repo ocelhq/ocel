@@ -5,7 +5,14 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
 import { awsUnreachable, partitionRows, varsTable } from "./aws.mjs";
-import { CLASS, LINK_NAME, LOG_PREFIX, STATE_FILE, linkPartitionKey } from "./lib.mjs";
+import {
+  CLASS,
+  CUSTOM_LINK_NAME,
+  LINK_NAME,
+  LOG_PREFIX,
+  STATE_FILE,
+  linkPartitionKey,
+} from "./lib.mjs";
 
 const stage = process.env.OCEL_E2E_SST_STAGE || "e2e";
 
@@ -32,10 +39,12 @@ if (!table) {
   process.exit(2);
 }
 
-const left = partitionRows(table, linkPartitionKey(state.project, CLASS, LINK_NAME));
-if (Object.keys(left).length > 0) {
-  console.error(`${LOG_PREFIX} destroy: FAILED — ${Object.keys(left).join(", ")} survived the destroy as consumable state`);
-  process.exit(1);
+for (const link of [LINK_NAME, CUSTOM_LINK_NAME]) {
+  const left = partitionRows(table, linkPartitionKey(state.project, CLASS, link));
+  if (Object.keys(left).length > 0) {
+    console.error(`${LOG_PREFIX} destroy: FAILED — ${link}'s ${Object.keys(left).join(", ")} survived the destroy as consumable state`);
+    process.exit(1);
+  }
 }
 
-console.error(`${LOG_PREFIX} destroy: PASSED — the destroy took the published record with it`);
+console.error(`${LOG_PREFIX} destroy: PASSED — the destroy took both published records with it`);

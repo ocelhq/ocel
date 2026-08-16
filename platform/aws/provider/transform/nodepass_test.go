@@ -18,6 +18,7 @@ func functionRequest() Request {
 			Surfaces: Surfaces{
 				"lambda": {"memorySizeMb": 1024, "timeoutSeconds": 30, "runtime": "nodejs24.x"},
 				"url":    {"invokeMode": "RESPONSE_STREAM"},
+				"vpc":    {"subnetIds": []any{}, "securityGroupIds": []any{}},
 			},
 		}},
 	}
@@ -35,6 +36,7 @@ func exampleRequest(envClass string) Request {
 				Surfaces: Surfaces{
 					"lambda": {"memorySizeMb": 1024, "timeoutSeconds": 30, "runtime": "nodejs24.x"},
 					"url":    {"invokeMode": "RESPONSE_STREAM"},
+					"vpc":    {"subnetIds": []any{}, "securityGroupIds": []any{}},
 				},
 			},
 			{
@@ -177,6 +179,36 @@ func TestNodePassEvaluate(t *testing.T) {
 		}
 		if got := preview[1].Surfaces["cluster"]["maxCapacity"]; got != float64(4) {
 			t.Errorf("maxCapacity = %v, want the provider's own 4 for a preview", got)
+		}
+	})
+
+	t.Run("the with-sst example places every function in the network its own IaC published", func(t *testing.T) {
+		t.Parallel()
+
+		root := transformtest.Root(t, map[string]string{
+			"infra/network.transform.ts": transformtest.ExampleModule(t, "with-sst", "infra/network.transform.ts"),
+		})
+		pass := NodePass{Root: root, Modules: []string{"./infra/network.transform.ts"}}
+
+		results, err := pass.Evaluate(t.Context(), exampleRequest("production"))
+		if err != nil {
+			t.Fatalf("Evaluate: %v", err)
+		}
+		for _, field := range []string{"subnetIds", "securityGroupIds"} {
+			placeholder, ok := results[0].Surfaces["vpc"][field].(map[string]any)
+			if !ok {
+				t.Fatalf("vpc.%s = %#v, want a link output the deploy resolves", field, results[0].Surfaces["vpc"][field])
+			}
+			ref, ok := placeholder["$ocelOutput"].(map[string]any)
+			if !ok {
+				t.Fatalf("vpc.%s = %#v, want a link output the deploy resolves", field, placeholder)
+			}
+			if ref["link"] != "network" || ref["property"] != field {
+				t.Errorf("vpc.%s reads %v, want network's %s", field, ref, field)
+			}
+		}
+		if _, placed := results[1].Surfaces["vpc"]; placed {
+			t.Errorf("the postgres resource carries a vpc surface it has no field for")
 		}
 	})
 

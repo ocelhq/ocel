@@ -98,6 +98,18 @@ export function roleInlinePolicies(roleName) {
   });
 }
 
+export function roleAttachedPolicyArns(roleName) {
+  const raw = aws([
+    "iam",
+    "list-attached-role-policies",
+    "--role-name",
+    roleName,
+    "--output",
+    "json",
+  ]);
+  return (JSON.parse(raw).AttachedPolicies ?? []).map((policy) => policy.PolicyArn);
+}
+
 export function roleNameOf(roleArn) {
   return String(roleArn ?? "").split("/").pop();
 }

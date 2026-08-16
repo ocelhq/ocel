@@ -12,6 +12,12 @@ export const LINK_NAME = "orders";
 
 export const LINK_TYPE = "postgres";
 
+export const CUSTOM_LINK_NAME = "network";
+
+export const CUSTOM_LINK_TYPE = "custom";
+
+export const TRANSFORM_MODULE = "./infra/network.transform.ts";
+
 export const LINK_SOURCE = "sst";
 
 export const CLASS = "production";
@@ -58,7 +64,13 @@ export function linkEnvKey(link = LINK_NAME) {
   return `OCEL_RESOURCE_POSTGRES_${link}`;
 }
 
-export function renderSstConfig({ app, projectDir, region, link = LINK_NAME }) {
+export function renderSstConfig({
+  app,
+  projectDir,
+  region,
+  link = LINK_NAME,
+  custom = CUSTOM_LINK_NAME,
+}) {
   return `/// <reference path="./.sst/platform/config.d.ts" />
 
 export default $config({
@@ -68,6 +80,23 @@ export default $config({
   async run() {
     const { link } = await import("@ocel/sst");
     const vpc = new sst.aws.Vpc("Vpc");
+    const routeTableIds = vpc.nodes.privateRouteTables.apply((tables) => tables.map((t) => t.id));
+    for (const [name, service] of [["S3", "s3"], ["Dynamo", "dynamodb"]]) {
+      new aws.ec2.VpcEndpoint(name, {
+        vpcId: vpc.id,
+        serviceName: \`com.amazonaws.${region}.\${service}\`,
+        vpcEndpointType: "Gateway",
+        routeTableIds,
+      });
+    }
+    new aws.ec2.VpcEndpoint("Kms", {
+      vpcId: vpc.id,
+      serviceName: ${JSON.stringify(`com.amazonaws.${region}.kms`)},
+      vpcEndpointType: "Interface",
+      privateDnsEnabled: true,
+      subnetIds: vpc.privateSubnets,
+      securityGroupIds: vpc.securityGroups,
+    });
     const orders = new sst.aws.Postgres("Orders", { vpc });
     const account = aws.getCallerIdentityOutput().accountId;
     link.postgres(
@@ -90,26 +119,42 @@ export default $config({
       },
       { class: ${JSON.stringify(CLASS)}, project: ${JSON.stringify(projectDir)} },
     );
-    return { host: orders.host, database: orders.database, port: orders.port };
+    link.custom(
+      ${JSON.stringify(custom)},
+      { properties: { subnetIds: vpc.privateSubnets, securityGroupIds: vpc.securityGroups } },
+      { class: ${JSON.stringify(CLASS)}, project: ${JSON.stringify(projectDir)} },
+    );
+    return {
+      host: orders.host,
+      database: orders.database,
+      port: orders.port,
+      subnetIds: vpc.privateSubnets.apply((ids) => ids.join(",")),
+      securityGroupIds: vpc.securityGroups.apply((ids) => ids.join(",")),
+    };
   },
 });
 `;
 }
 
-export function renderOcelConfig({ slug, app = CONSUMER_APP, link = LINK_NAME }) {
+export function renderOcelConfig({
+  slug,
+  app = CONSUMER_APP,
+  links = [LINK_NAME],
+  transform = TRANSFORM_MODULE,
+}) {
   return `import { defineConfig } from "ocel/config";
 import awsProvider from "@ocel/provider-aws";
 
 export default defineConfig({
   slug: ${JSON.stringify(slug)},
-  provider: awsProvider(),
-  links: [${JSON.stringify(link)}],
+  provider: awsProvider({ transforms: [${JSON.stringify(transform)}] }),
+  links: ${JSON.stringify(links)},
   apps: [{ name: ${JSON.stringify(app)}, framework: "express", path: "." }],
 });
 `;
 }
 
-const PROPERTY_KINDS = ["postgres", "bucket"];
+const PROPERTY_KINDS = ["postgres", "bucket", "custom"];
 
 export function linkTypeOf(record) {
   return PROPERTY_KINDS.find((kind) => record?.[kind] !== undefined) ?? null;
@@ -291,6 +336,55 @@ export function varsReachProblem(documents, partitionKey) {
   return reaches
     ? null
     : `no inline policy reaches ${partitionKey}, so the app cannot read the link's values at cold start`;
+}
+
+export function publishedIds(value) {
+  return String(value ?? "")
+    .split(",")
+    .map((id) => id.trim())
+    .filter(Boolean);
+}
+
+export function vpcPlacementProblem(configuration, { subnetIds, securityGroupIds }) {
+  if (subnetIds.length === 0 || securityGroupIds.length === 0) {
+    return "the publisher recorded no subnet or security-group ids, so nothing here proves a placement";
+  }
+  const placed = configuration?.VpcConfig ?? {};
+  for (const [what, want, got] of [
+    ["subnets", subnetIds, placed.SubnetIds ?? []],
+    ["security groups", securityGroupIds, placed.SecurityGroupIds ?? []],
+  ]) {
+    const sorted = [...got].sort();
+    if (JSON.stringify(sorted) !== JSON.stringify([...want].sort())) {
+      return `the function runs in ${what} ${JSON.stringify(sorted)}, and the transform filled that field from a record naming ${JSON.stringify([...want].sort())}`;
+    }
+  }
+  return null;
+}
+
+const VPC_ACCESS_POLICY = "arn:aws:iam::aws:policy/service-role/AWSLambdaVPCAccessExecutionRole";
+
+export function vpcAccessProblem(policyArns) {
+  return (policyArns ?? []).includes(VPC_ACCESS_POLICY)
+    ? null
+    : `the execution role carries ${JSON.stringify(policyArns ?? [])}, and none of them is ${VPC_ACCESS_POLICY}; a Lambda placed in a VPC without it never attaches a network interface`;
+}
+
+const VPC_FILL_SITES = ["vpc.subnetIds", "vpc.securityGroupIds"];
+
+export function refusalProblem(status, output) {
+  if (status === 0) {
+    return `ocel deploy exited 0 with nothing published under ${CUSTOM_LINK_NAME}; a transform input is resolved before anything is provisioned, so the deploy had no value to fill the placement with`;
+  }
+  const text = String(output ?? "");
+  const unnamed = [
+    text.includes(`"${CUSTOM_LINK_NAME}"`) ? null : `the link ${CUSTOM_LINK_NAME}`,
+    VPC_FILL_SITES.some((site) => text.includes(site)) ? null : VPC_FILL_SITES.join(" or "),
+    text.includes("nothing has published a record under that name") ? null : "why it stopped",
+  ].filter(Boolean);
+  return unnamed.length === 0
+    ? null
+    : `ocel deploy refused without naming ${unnamed.join(", ")}, so the refusal does not point at the transform site: ${text.trim()}`;
 }
 
 export function resolvedProblem(reported, expected) {

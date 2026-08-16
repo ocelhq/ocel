@@ -37,7 +37,7 @@ if (shown.status !== 0) {
 }
 
 const outputs = parseSstOutputs(shown.stdout);
-for (const key of ["host", "port", "database"]) {
+for (const key of ["host", "port", "database", "subnetIds", "securityGroupIds"]) {
   if (!outputs[key]) {
     console.error(`${LOG_PREFIX} sst published no ${key} output; the consume leg has nothing to check against`);
     process.exit(1);

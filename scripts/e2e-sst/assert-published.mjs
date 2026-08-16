@@ -7,6 +7,8 @@ import { join } from "node:path";
 import { awsUnreachable, item, partitionRows, varsTable } from "./aws.mjs";
 import {
   CLASS,
+  CUSTOM_LINK_NAME,
+  CUSTOM_LINK_TYPE,
   LINK_NAME,
   LOG_PREFIX,
   STATE_FILE,
@@ -55,7 +57,9 @@ if (!state.stage) {
   die("the state file records no stage; run publish.mjs before this leg, since the owner is the deployed resource's URN");
 }
 
-const owner = linkOwner({ app: state.app ?? state.project, stage: state.stage });
+const publishingApp = state.app ?? state.project;
+const owner = linkOwner({ app: publishingApp, stage: state.stage });
+const customOwner = linkOwner({ app: publishingApp, stage: state.stage, link: CUSTOM_LINK_NAME });
 
 const listed = spawnSync(
   process.execPath,
@@ -65,7 +69,16 @@ const listed = spawnSync(
 if (listed.status !== 0) {
   die(`ocel link ls exited ${listed.status} in ${state.projectDir}: ${String(listed.stderr ?? "").trim()}`);
 }
-check("the published link is the one the project lists", listedLinkProblem(links(listed.stdout), { owner }));
+const listedLinks = links(listed.stdout);
+check("the published link is the one the project lists", listedLinkProblem(listedLinks, { owner }));
+check(
+  "the record only a transform reads is listed beside it, as a custom link SST sourced",
+  listedLinkProblem(listedLinks, {
+    name: CUSTOM_LINK_NAME,
+    type: CUSTOM_LINK_TYPE,
+    owner: customOwner,
+  }),
+);
 
 const table = varsTable();
 if (!table) {
@@ -102,16 +115,56 @@ check(
   rows[valueSortKey("")]?.ciphertext?.B ? null : "the value row carries no ciphertext",
 );
 
-const index = item(table, `PROJECT#${state.project}#CLASS#${CLASS}`, linkIndexSortKey(owner, ""));
-check("the resource owns what it published", index ? null : "the publish recorded no index, so nothing can prune it");
-if (index) {
-  const owned = index.links?.SS ?? [];
+const customPk = linkPartitionKey(state.project, CLASS, CUSTOM_LINK_NAME);
+const customRows = partitionRows(table, customPk);
+
+check(
+  "the custom pair is whole",
+  pairProblem({ record: customRows[recordSortKey("")], value: customRows[valueSortKey("")] }),
+);
+
+const parsedCustom = parsePublishedRecord(customRows[recordSortKey("")]);
+check("the custom record parses and names a type", parsedCustom.problem ?? null);
+if (parsedCustom.record) {
   check(
-    "one record per link resource, no constituents",
-    owned.length === 1 && owned[0] === LINK_NAME
-      ? null
-      : `the resource owns ${JSON.stringify(owned)}, want exactly ["${LINK_NAME}"]`,
+    "the record is the custom link a transform reads, sourced from SST",
+    recordShapeProblem(parsedCustom.record, { name: CUSTOM_LINK_NAME, type: CUSTOM_LINK_TYPE }),
   );
+  check(
+    "the custom record beside the sealed value holds no property",
+    redactionProblem(parsedCustom.record),
+  );
+  check(
+    "the custom record claims no grant, since nothing consumes one",
+    (parsedCustom.record.grants ?? []).length === 0
+      ? null
+      : "the custom record carries grants; no app binds a custom link, so nobody would attach them",
+  );
+}
+
+check(
+  "the value is sealed rather than stored in the clear",
+  customRows[valueSortKey("")]?.ciphertext?.B ? null : "the custom value row carries no ciphertext",
+);
+
+for (const [link, publisher] of [
+  [LINK_NAME, owner],
+  [CUSTOM_LINK_NAME, customOwner],
+]) {
+  const index = item(table, `PROJECT#${state.project}#CLASS#${CLASS}`, linkIndexSortKey(publisher, ""));
+  check(
+    `the resource behind ${link} owns what it published`,
+    index ? null : "the publish recorded no index, so nothing can prune it",
+  );
+  if (index) {
+    const owned = index.links?.SS ?? [];
+    check(
+      `one record per link resource, no constituents, for ${link}`,
+      owned.length === 1 && owned[0] === link
+        ? null
+        : `the resource owns ${JSON.stringify(owned)}, want exactly ["${link}"]`,
+    );
+  }
 }
 
 if (failures.length > 0) {

@@ -1,9 +1,9 @@
 #!/usr/bin/env node
 
 import { execFileSync } from "node:child_process";
-import { cpSync, mkdtempSync, writeFileSync } from "node:fs";
+import { cpSync, existsSync, mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import {
@@ -11,6 +11,7 @@ import {
   CONSUMER_STATE_FILE,
   LINK_NAME,
   LOG_PREFIX,
+  TRANSFORM_MODULE,
   projectSlugForRun,
   renderOcelConfig,
 } from "./lib.mjs";
@@ -34,6 +35,16 @@ try {
 const root = process.env.OCEL_E2E_SST_STAGE_ROOT || tmpdir();
 const staged = mkdtempSync(join(root, "ocel-e2e-sst-consumer-"));
 cpSync(join(here, "ocel-app"), staged, { recursive: true });
+
+const transformSource = join(adapterDir, "examples", "with-sst", TRANSFORM_MODULE);
+if (!existsSync(transformSource)) {
+  console.error(
+    `${LOG_PREFIX} ${transformSource} is not there; this suite deploys the example's own transform module, and there is nothing else to deploy`,
+  );
+  process.exit(2);
+}
+mkdirSync(join(staged, dirname(TRANSFORM_MODULE)), { recursive: true });
+cpSync(transformSource, join(staged, TRANSFORM_MODULE));
 
 const slug = projectSlugForRun();
 writeFileSync(join(staged, "ocel.config.ts"), renderOcelConfig({ slug }));
