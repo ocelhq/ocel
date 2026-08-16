@@ -18,24 +18,21 @@ import {
   CONSUMER_STATE_FILE,
   DEPLOY_RESULT_FILE,
   LINK_NAME,
-  LINK_TYPE,
   LOG_PREFIX,
-  PUBLISHER,
   credentialLeakProblem,
   deliveredEnvProblem,
   grantsDeliveredProblem,
   linkEnvKey,
   linkIndexSortKey,
+  linkOwner,
   linkPartitionKey,
   ownerProblem,
   parsePublishedRecord,
+  recordShapeProblem,
   recordSortKey,
-  refuseUntilRePlumbed,
   resolvedProblem,
   varsReachProblem,
 } from "./lib.mjs";
-
-refuseUntilRePlumbed();
 
 const failures = [];
 
@@ -70,6 +67,11 @@ const publisher = JSON.parse(readFileSync(publisherStatePath, "utf8"));
 if (!publisher.outputs?.host) {
   die("the publisher's state records no host; run publish.mjs before this leg");
 }
+if (!publisher.stage) {
+  die("the publisher's state records no stage, and the owner of a published link is the deployed resource's URN");
+}
+
+const owner = linkOwner({ app: publisher.app ?? publisher.project, stage: publisher.stage });
 
 const table = varsTable();
 if (!table) {
@@ -79,10 +81,10 @@ if (!table) {
 const rows = partitionRows(table, linkPartitionKey(state.slug, CLASS, LINK_NAME));
 const record = rows[recordSortKey("")];
 
-check("the publisher still owns the record the deploy consumed", ownerProblem(record, PUBLISHER));
+check("the SST resource still owns the record the deploy consumed", ownerProblem(record, owner));
 
 const parsed = parsePublishedRecord(record);
-check("the record still carries the publisher's own token", parsed.problem ?? (parsed.record.type === LINK_TYPE ? null : `the record names ${parsed.record.type}, want ${LINK_TYPE}`));
+check("the record still names its type and its source", parsed.problem ?? recordShapeProblem(parsed.record));
 
 const ocelIndex = item(table, `PROJECT#${state.slug}#CLASS#${CLASS}`, linkIndexSortKey("OCEL", ""));
 check(

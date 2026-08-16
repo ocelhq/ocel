@@ -12,12 +12,9 @@ import {
   LINK_NAME,
   LOG_PREFIX,
   projectSlugForRun,
-  refuseUntilRePlumbed,
   renderOcelConfig,
 } from "./lib.mjs";
 import { assertToolchain, linkOcel } from "./toolchain.mjs";
-
-refuseUntilRePlumbed();
 
 const here = fileURLToPath(new URL(".", import.meta.url));
 
@@ -54,7 +51,9 @@ linkOcel(staged, adapterDir);
 console.error(`${LOG_PREFIX} staged ${staged} to consume ${LINK_NAME} as project ${slug}`);
 console.log(staged);
 if (process.argv[2]) {
-  writeFileSync(process.argv[2], `CONSUMER_STAGED=${staged}\nOCEL_E2E_SST_PROJECT=${slug}\n`, {
-    flag: "a",
-  });
+  writeFileSync(
+    process.argv[2],
+    `CONSUMER_STAGED=${staged}\nOCEL_E2E_SST_PROJECT=${slug}\nOCEL_E2E_SST_PROJECT_DIR=${staged}\n`,
+    { flag: "a" },
+  );
 }

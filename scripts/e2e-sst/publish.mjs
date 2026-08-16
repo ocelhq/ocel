@@ -4,9 +4,7 @@ import { spawnSync } from "node:child_process";
 import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
-import { LOG_PREFIX, STATE_FILE, parseSstOutputs, refuseUntilRePlumbed } from "./lib.mjs";
-
-refuseUntilRePlumbed();
+import { LOG_PREFIX, STATE_FILE, parseSstOutputs } from "./lib.mjs";
 
 const cwd = process.cwd();
 const stage = process.env.OCEL_E2E_SST_STAGE || "e2e";
@@ -26,7 +24,7 @@ if (result.status !== 0) {
   console.error(`${LOG_PREFIX} sst deploy exited ${result.status}`);
   process.exit(1);
 }
-console.error(`${LOG_PREFIX} sst deploy landed; the publisher ran as its side effect`);
+console.error(`${LOG_PREFIX} sst deploy landed; the link resource published as part of it`);
 
 const shown = spawnSync("npx", ["sst", "outputs", "--stage", stage], {
   cwd,

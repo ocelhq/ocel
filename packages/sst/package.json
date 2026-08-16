@@ -1,21 +1,37 @@
 {
   "name": "@ocel/sst",
   "version": "0.0.1-alpha.0",
-  "private": true,
+  "private": false,
   "type": "module",
-  "description": "Shapes SST-defined resources into ocel link records",
+  "description": "Publishes SST-defined resources as ocel links, one link per call",
+  "files": [
+    "dist/",
+    "README.md"
+  ],
   "exports": {
-    ".": "./src/index.ts",
-    "./record": "./src/record.ts"
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./package.json": "./package.json"
   },
   "scripts": {
+    "build": "tsc",
     "test": "vitest run",
-    "typecheck": "tsc"
+    "typecheck": "tsc --noEmit"
+  },
+  "peerDependencies": {
+    "ocel": "workspace:^"
   },
   "devDependencies": {
+    "@types/node": "^20",
     "typescript": "^5.9.3",
     "vite": "^8.1.3",
     "vitest": "^4.1.9"
   },
-  "license": "MIT"
+  "license": "MIT",
+  "publishConfig": {
+    "access": "public",
+    "registry": "https://registry.npmjs.org/"
+  }
 }

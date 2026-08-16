@@ -1,27 +1,31 @@
 import { describe, expect, it } from "vitest";
 import {
   LINK_NAME,
-  PUBLISHER,
   credentialLeakProblem,
   deliveredEnvProblem,
   grantProblem,
   grantsDeliveredProblem,
   linkEnvKey,
   linkIndexSortKey,
+  linkOwner,
   linkPartitionKey,
+  listedLinkProblem,
   ownerProblem,
   pairProblem,
   parsePublishedRecord,
   parseSstOutputs,
   projectSlugForRun,
+  recordShapeProblem,
   recordSortKey,
-  refuseUntilRePlumbed,
+  redactionProblem,
   renderOcelConfig,
   renderSstConfig,
   resolvedProblem,
   valueSortKey,
   varsReachProblem,
 } from "./lib.mjs";
+
+const OWNER = linkOwner({ app: "e2es-1", stage: "e2e" });
 
 describe("projectSlugForRun", () => {
   it("namespaces this suite's projects apart from every other suite's", () => {
@@ -31,57 +35,74 @@ describe("projectSlugForRun", () => {
   });
 });
 
+describe("linkOwner", () => {
+  it("is the URN of the one dynamic resource the link call declares", () => {
+    expect(OWNER).toBe(
+      "urn:pulumi:e2e::e2es-1::pulumi:pulumi:Stack$pulumi-nodejs:dynamic:Resource::ocel-link-orders",
+    );
+    expect(linkOwner({ app: "a", stage: "s", link: "other" })).toMatch(/::ocel-link-other$/);
+  });
+
+  it("carries no key delimiter, so it addresses one index row of its own", () => {
+    expect(OWNER).not.toContain("#");
+  });
+});
+
 describe("store keys", () => {
-  it("address the per-link partition the publisher writes into", () => {
+  it("address the per-link partition the publish writes into", () => {
     expect(linkPartitionKey("e2es-1", "production", "orders")).toBe(
       "PROJECT#e2es-1#CLASS#production#LINK#orders",
     );
     expect(recordSortKey("")).toBe("RECORD#ENV#*");
     expect(valueSortKey("")).toBe("VALUE#FOLDER#/#NAME#PROPERTIES#ENV#*");
-    expect(linkIndexSortKey(PUBLISHER, "")).toBe("LINKS#OWNER#sst:OcelLinks#ENV#*");
-    expect(linkIndexSortKey(PUBLISHER, "pr-9")).toBe("LINKS#OWNER#sst:OcelLinks#ENV#pr-9");
+    expect(linkIndexSortKey(OWNER, "")).toBe(`LINKS#OWNER#${OWNER}#ENV#*`);
+    expect(linkIndexSortKey(OWNER, "pr-9")).toBe(`LINKS#OWNER#${OWNER}#ENV#pr-9`);
     expect(linkIndexSortKey("OCEL", "")).toBe("LINKS#OWNER#OCEL#ENV#*");
     expect(linkEnvKey("orders")).toBe("OCEL_RESOURCE_POSTGRES_orders");
   });
 });
 
 describe("ownerProblem", () => {
-  it("passes a row the publisher stamped and names one it did not", () => {
-    expect(ownerProblem({ owner: { S: PUBLISHER } }, PUBLISHER)).toBeNull();
-    expect(ownerProblem({ owner: { S: "OCEL" } }, PUBLISHER)).toMatch(/stamped OCEL/);
-    expect(ownerProblem({}, PUBLISHER)).toMatch(/no owner stamp/);
-  });
-});
-
-describe("refuseUntilRePlumbed", () => {
-  it("fails the leg rather than letting it look like a passing run", () => {
-    const codes = [];
-    refuseUntilRePlumbed((code) => codes.push(code));
-    expect(codes).toEqual([1]);
+  it("passes a row the link resource stamped and names one it did not", () => {
+    expect(ownerProblem({ owner: { S: OWNER } }, OWNER)).toBeNull();
+    expect(ownerProblem({ owner: { S: "OCEL" } }, OWNER)).toMatch(/stamped OCEL/);
+    expect(ownerProblem({}, OWNER)).toMatch(/no owner stamp/);
   });
 });
 
 describe("renderSstConfig", () => {
-  it("publishes as a side effect of the user's own run, wrapping nothing", () => {
-    const config = renderSstConfig({ app: "e2es", project: "e2es-1", region: "us-east-1" });
+  const config = renderSstConfig({
+    app: "e2es-1",
+    projectDir: "/tmp/ocel-e2e-sst-consumer-x",
+    region: "us-east-1",
+  });
+
+  it("links as a side effect of the user's own run, wrapping nothing", () => {
     expect(config).toContain('new sst.aws.Postgres("Orders"');
-    expect(config).toContain('publish("OcelLinks"');
-    expect(config).toContain('project: "e2es-1"');
+    expect(config).toContain('const { link } = await import("@ocel/sst")');
+    expect(config).toContain('link.postgres(\n      "orders"');
     expect(config).not.toContain("ocel deploy");
     expect(config).not.toContain("$app.stage");
   });
 
-  it("publishes the component itself, never a resource it is built out of", () => {
-    const config = renderSstConfig({ app: "e2es", project: "e2es-1", region: "us-east-1" });
-    expect(config).toContain("urn: orders.urn");
-    expect(config).not.toContain("nodes.cluster.urn");
+  it("names the ocel project directory the CLI publishes into, never a slug", () => {
+    expect(config).toContain('project: "/tmp/ocel-e2e-sst-consumer-x"');
+    expect(config).toContain('class: "production"');
+    expect(config).not.toContain("region:\n");
+    expect(config).not.toContain("publish(");
+    expect(config).not.toContain("urn:");
   });
 
-  it("carries the property an ocel-declared postgres is read through, and a scoped grant", () => {
-    const config = renderSstConfig({ app: "e2es", project: "e2es-1", region: "us-east-1" });
-    expect(config).toContain("connectionString:");
+  it("carries every property a postgres link is, and a scoped grant", () => {
+    for (const field of ["host", "port", "database", "username", "password"]) {
+      expect(config).toContain(`${field}: orders.${field}`);
+    }
     expect(config).toContain('actions: ["rds-db:connect"]');
     expect(config).not.toContain('resources: ["*"]');
+  });
+
+  it("returns the outputs the consume leg checks what the app resolved against", () => {
+    expect(config).toContain("return { host: orders.host, database: orders.database, port: orders.port };");
   });
 });
 
@@ -151,6 +172,11 @@ describe("grantsDeliveredProblem", () => {
     ).toMatch(/rds-db:connect/);
   });
 
+  it("refuses to pass a record that grants nothing, which would prove nothing", () => {
+    expect(grantsDeliveredProblem([{ Statement: [] }], [])).toMatch(/grants nothing/);
+    expect(grantsDeliveredProblem([{ Statement: [] }], undefined)).toMatch(/grants nothing/);
+  });
+
   it("accepts a single-valued statement, which IAM renders unwrapped", () => {
     expect(
       grantsDeliveredProblem(
@@ -209,24 +235,72 @@ describe("resolvedProblem", () => {
 });
 
 describe("parsePublishedRecord", () => {
-  it("reads the type and grants a publisher wrote", () => {
-    const parsed = parsePublishedRecord({
-      record: {
-        S: JSON.stringify({
-          type: "sst:aws.Postgres",
-          grants: [{ actions: ["rds-db:connect"], resources: ["arn:x"] }],
-        }),
-      },
-      version: { N: "1" },
-    });
-    expect(parsed.record.type).toBe("sst:aws.Postgres");
+  const row = (record, version = "1") => ({
+    record: { S: JSON.stringify(record) },
+    version: { N: version },
+  });
+
+  it("reads the redacted links.v1.Link the store keeps beside the sealed value", () => {
+    const parsed = parsePublishedRecord(
+      row({
+        name: "orders",
+        postgres: {},
+        source: "sst",
+        grants: [{ actions: ["rds-db:connect"], resources: ["arn:x"] }],
+      }),
+    );
+    expect(parsed.type).toBe("postgres");
+    expect(parsed.record.source).toBe("sst");
     expect(parsed.version).toBe(1);
   });
 
-  it("names an unparseable bag rather than reporting a pass", () => {
+  it("names a record that is unparseable, nameless or typeless", () => {
     expect(parsePublishedRecord({ record: { S: "{" } }).problem).toMatch(/parseable/);
     expect(parsePublishedRecord({}).problem).toMatch(/no record/);
-    expect(parsePublishedRecord({ record: { S: "{}" } }).problem).toMatch(/type/);
+    expect(parsePublishedRecord(row({ postgres: {} })).problem).toMatch(/no name/);
+    expect(parsePublishedRecord(row({ name: "orders" })).problem).toMatch(/no properties/);
+  });
+});
+
+describe("recordShapeProblem", () => {
+  it("passes the postgres link this suite publishes from SST", () => {
+    expect(recordShapeProblem({ name: "orders", postgres: {}, source: "sst" })).toBeNull();
+  });
+
+  it("names a record published under another name, type or source", () => {
+    expect(recordShapeProblem({ name: "other", postgres: {}, source: "sst" })).toMatch(/"other"/);
+    expect(recordShapeProblem({ name: "orders", bucket: {}, source: "sst" })).toMatch(/bucket/);
+    expect(recordShapeProblem({ name: "orders", postgres: {} })).toMatch(/sourced null/);
+    expect(recordShapeProblem({ name: "orders", postgres: {}, source: "" })).toMatch(/ocel's own/);
+  });
+});
+
+describe("redactionProblem", () => {
+  it("passes a record whose properties the store stripped", () => {
+    expect(redactionProblem({ name: "orders", postgres: {} })).toBeNull();
+  });
+
+  it("names a record row that kept a property in the clear", () => {
+    expect(redactionProblem({ name: "orders", postgres: { host: "h", password: "p" } })).toMatch(
+      /host, password/,
+    );
+    expect(redactionProblem({ name: "orders" })).toMatch(/no properties/);
+  });
+});
+
+describe("listedLinkProblem", () => {
+  const listed = [{ name: "orders", type: "postgres", source: "sst", owner: OWNER, version: 1 }];
+
+  it("passes the one link `ocel link ls` reports for this project", () => {
+    expect(listedLinkProblem(listed, { owner: OWNER })).toBeNull();
+  });
+
+  it("names a project listing another link, another type, source or owner", () => {
+    expect(listedLinkProblem([], { owner: OWNER })).toMatch(/want exactly one orders/);
+    expect(listedLinkProblem([...listed, ...listed], { owner: OWNER })).toMatch(/want exactly one orders/);
+    expect(listedLinkProblem([{ ...listed[0], type: "bucket" }], { owner: OWNER })).toMatch(/bucket/);
+    expect(listedLinkProblem([{ ...listed[0], source: "" }], { owner: OWNER })).toMatch(/source/);
+    expect(listedLinkProblem([{ ...listed[0], owner: "cli" }], { owner: OWNER })).toMatch(/owned by cli/);
   });
 });
 

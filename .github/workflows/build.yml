@@ -31,7 +31,11 @@ jobs:
       - name: pnpm --filter ocel build (tsc)
         run: pnpm --filter ocel build
 
+      - name: pnpm --filter @ocel/sst build (tsc)
+        run: pnpm --filter @ocel/sst build
+
       - name: JS unit tests
         run: |
           pnpm --filter ocel test
           pnpm --filter @cli/node test
+          pnpm --filter @ocel/sst test

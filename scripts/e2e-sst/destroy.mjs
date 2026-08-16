@@ -5,9 +5,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
 import { awsUnreachable, partitionRows, varsTable } from "./aws.mjs";
-import { CLASS, LINK_NAME, LOG_PREFIX, STATE_FILE, linkPartitionKey, refuseUntilRePlumbed } from "./lib.mjs";
-
-refuseUntilRePlumbed();
+import { CLASS, LINK_NAME, LOG_PREFIX, STATE_FILE, linkPartitionKey } from "./lib.mjs";
 
 const stage = process.env.OCEL_E2E_SST_STAGE || "e2e";
 
