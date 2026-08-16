@@ -23,6 +23,39 @@ func functionRequest() Request {
 	}
 }
 
+func exampleRequest(envClass string) Request {
+	return Request{
+		EnvClass: envClass,
+		Env:      "prod",
+		Resources: []Resource{
+			{
+				Type: "function",
+				Name: "api-todos",
+				App:  "api",
+				Surfaces: Surfaces{
+					"lambda": {"memorySizeMb": 1024, "timeoutSeconds": 30, "runtime": "nodejs24.x"},
+					"url":    {"invokeMode": "RESPONSE_STREAM"},
+				},
+			},
+			{
+				Type: "postgres",
+				Name: "main",
+				App:  "api",
+				Surfaces: Surfaces{
+					"cluster": {
+						"engineVersion":      "16.6",
+						"minCapacity":        0,
+						"maxCapacity":        4,
+						"deletionProtection": false,
+						"skipFinalSnapshot":  true,
+					},
+					"instance": {"instanceClass": "db.serverless", "publiclyAccessible": false},
+				},
+			},
+		},
+	}
+}
+
 func TestNodePassEvaluate(t *testing.T) {
 	t.Parallel()
 
@@ -99,6 +132,51 @@ func TestNodePassEvaluate(t *testing.T) {
 
 		if got := results[0].Surfaces["lambda"]["memorySizeMb"]; got != float64(1024) {
 			t.Errorf("memorySizeMb = %v, want the provider's own 1024", got)
+		}
+	})
+
+	t.Run("the with-transforms example raises every route and widens production's cluster", func(t *testing.T) {
+		t.Parallel()
+
+		root := transformtest.Root(t, map[string]string{
+			"ocel/transform.ts": transformtest.ExampleModule(t, "with-transforms", "ocel/transform.ts"),
+		})
+		pass := NodePass{Root: root, Modules: []string{"./ocel/transform.ts"}}
+
+		results, err := pass.Evaluate(t.Context(), exampleRequest("production"))
+		if err != nil {
+			t.Fatalf("Evaluate: %v", err)
+		}
+		if got := results[0].Surfaces["lambda"]["memorySizeMb"]; got != float64(2048) {
+			t.Errorf("memorySizeMb = %v, want the example's raised 2048", got)
+		}
+		if got := results[0].Surfaces["lambda"]["timeoutSeconds"]; got != float64(60) {
+			t.Errorf("timeoutSeconds = %v, want the example's raised 60", got)
+		}
+		if got := results[1].Surfaces["cluster"]["minCapacity"]; got != float64(2) {
+			t.Errorf("minCapacity = %v, want production raised to 2", got)
+		}
+		if got := results[1].Surfaces["cluster"]["maxCapacity"]; got != float64(16) {
+			t.Errorf("maxCapacity = %v, want production widened to 16", got)
+		}
+		if got := results[1].Surfaces["cluster"]["deletionProtection"]; got != true {
+			t.Errorf("deletionProtection = %v, want production protected", got)
+		}
+		for i, result := range results {
+			if got := result.Tags["acme:cost-center"]; got != "platform" {
+				t.Errorf("resource %d tags = %v, want the org tag on everything", i, result.Tags)
+			}
+		}
+
+		preview, err := pass.Evaluate(t.Context(), exampleRequest("preview"))
+		if err != nil {
+			t.Fatalf("Evaluate preview: %v", err)
+		}
+		if got := preview[1].Surfaces["cluster"]["deletionProtection"]; got != false {
+			t.Errorf("deletionProtection = %v, want the production gate closed for a preview", got)
+		}
+		if got := preview[1].Surfaces["cluster"]["maxCapacity"]; got != float64(4) {
+			t.Errorf("maxCapacity = %v, want the provider's own 4 for a preview", got)
 		}
 	})
 
