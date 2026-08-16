@@ -8,18 +8,32 @@ import (
 	"testing"
 )
 
+func repo(t *testing.T) string {
+	t.Helper()
+	_, thisFile, _, ok := runtime.Caller(0)
+	if !ok {
+		t.Fatal("locate the test source")
+	}
+	return filepath.Clean(filepath.Join(filepath.Dir(thisFile), "..", "..", "..", "..", ".."))
+}
+
+func ExampleModule(t *testing.T, example, module string) string {
+	t.Helper()
+	path := filepath.Join(repo(t), "examples", example, filepath.FromSlash(module))
+	source, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read the %s example module: %v", example, err)
+	}
+	return string(source)
+}
+
 func Root(t *testing.T, modules map[string]string) string {
 	t.Helper()
 	if _, err := exec.LookPath("node"); err != nil {
 		t.Skip("node is not on PATH")
 	}
 
-	_, thisFile, _, ok := runtime.Caller(0)
-	if !ok {
-		t.Fatal("locate the test source")
-	}
-	repo := filepath.Clean(filepath.Join(filepath.Dir(thisFile), "..", "..", "..", "..", ".."))
-	pkg := filepath.Join(repo, "packages", "provider-aws")
+	pkg := filepath.Join(repo(t), "packages", "provider-aws")
 	if _, err := os.Stat(filepath.Join(pkg, "package.json")); err != nil {
 		t.Skipf("the provider-aws package is not checked out: %v", err)
 	}

@@ -732,6 +732,37 @@ importers:
         specifier: ^5
         version: 5.9.3
 
+  examples/with-transforms:
+    dependencies:
+      '@ocel/provider-aws':
+        specifier: workspace:^
+        version: link:../../packages/provider-aws
+      express:
+        specifier: ~5.0.0
+        version: 5.0.1
+      ocel:
+        specifier: workspace:^
+        version: link:../../packages/ocel
+      pg:
+        specifier: ^8.22.0
+        version: 8.22.0
+    devDependencies:
+      '@types/express':
+        specifier: ~5.0.0
+        version: 5.0.6
+      '@types/node':
+        specifier: ^20
+        version: 20.19.43
+      '@types/pg':
+        specifier: ^8.20.0
+        version: 8.20.0
+      tsx:
+        specifier: ^4.19.2
+        version: 4.23.0
+      typescript:
+        specifier: ^5
+        version: 5.9.3
+
   frameworks/next/adapter:
     dependencies:
       '@framework/next-cache':
