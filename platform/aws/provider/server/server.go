@@ -469,9 +469,7 @@ func checkBootstrap(ctx context.Context, api bootstrap.CFNDescriber, preview boo
 	return bootstrap.CheckDeployed(ctx, api)
 }
 
-const listenerCodePathEnvVar = "OCEL_LISTENER_CODE_PATH"
-
-var listenerCodePath = os.Getenv(listenerCodePathEnvVar)
+var listenerCodePath = os.Getenv("OCEL_LISTENER_CODE_PATH")
 
 const artifactRootDirName = ".ocel/output"
 

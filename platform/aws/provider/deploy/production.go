@@ -61,6 +61,9 @@ func realize(ctx context.Context, cfg Config, manifest *deploymentsv1.Manifest, 
 	if err := checkMembraneServices(manifest, membrane.Serves); err != nil {
 		return Result{}, finishUploading(err)
 	}
+	if err := checkListenerCode(manifest, cfg.ListenerCodePath); err != nil {
+		return Result{}, finishUploading(err)
+	}
 	consumed, err := consumeLinks(ctx, cfg, manifest, log)
 	if err != nil {
 		return Result{}, finishUploading(err)
