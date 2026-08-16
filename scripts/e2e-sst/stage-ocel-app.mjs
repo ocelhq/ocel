@@ -12,9 +12,12 @@ import {
   LINK_NAME,
   LOG_PREFIX,
   projectSlugForRun,
+  refuseUntilRePlumbed,
   renderOcelConfig,
 } from "./lib.mjs";
 import { assertToolchain, linkOcel } from "./toolchain.mjs";
+
+refuseUntilRePlumbed();
 
 const here = fileURLToPath(new URL(".", import.meta.url));
 

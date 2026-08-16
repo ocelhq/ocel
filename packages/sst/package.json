@@ -3,7 +3,7 @@
   "version": "0.0.1-alpha.0",
   "private": true,
   "type": "module",
-  "description": "Publishes SST-defined resources as ocel links, as a side effect of `sst deploy`",
+  "description": "Shapes SST-defined resources into ocel link records",
   "exports": {
     ".": "./src/index.ts",
     "./record": "./src/record.ts"
@@ -11,12 +11,6 @@
   "scripts": {
     "test": "vitest run",
     "typecheck": "tsc"
-  },
-  "optionalDependencies": {
-    "@ocel/provider-aws-darwin-arm64": "workspace:^",
-    "@ocel/provider-aws-darwin-x64": "workspace:^",
-    "@ocel/provider-aws-linux-x64": "workspace:^",
-    "@ocel/provider-aws-win32-x64": "workspace:^"
   },
   "devDependencies": {
     "typescript": "^5.9.3",

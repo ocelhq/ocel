@@ -18,8 +18,11 @@ import {
   parsePublishedRecord,
   linkIndexSortKey,
   recordSortKey,
+  refuseUntilRePlumbed,
   valueSortKey,
 } from "./lib.mjs";
+
+refuseUntilRePlumbed();
 
 const failures = [];
 

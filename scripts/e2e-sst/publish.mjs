@@ -4,7 +4,9 @@ import { spawnSync } from "node:child_process";
 import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
-import { LOG_PREFIX, STATE_FILE, parseSstOutputs } from "./lib.mjs";
+import { LOG_PREFIX, STATE_FILE, parseSstOutputs, refuseUntilRePlumbed } from "./lib.mjs";
+
+refuseUntilRePlumbed();
 
 const cwd = process.cwd();
 const stage = process.env.OCEL_E2E_SST_STAGE || "e2e";

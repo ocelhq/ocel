@@ -33,6 +33,12 @@ service DeploymentService {
     rpc ListDomain(ListDomainRequest) returns (ListDomainResponse);
 
     rpc ReleaseDomain(ReleaseDomainRequest) returns (stream DeployEvent);
+
+    rpc SetLink(SetLinkRequest) returns (SetLinkResponse);
+
+    rpc RemoveLink(RemoveLinkRequest) returns (RemoveLinkResponse);
+
+    rpc ListLinks(ListLinksRequest) returns (ListLinksResponse);
 }
 
 message UseDomainRequest {
@@ -469,4 +475,70 @@ message ResultEvent {
 message FunctionOutput {
   string logical_name = 2;
   string url = 1;
+}
+
+message SetLinkRequest {
+  bytes options = 1;
+
+  string protocol_version = 2;
+
+  string slug = 3;
+
+  Environment.Class class = 4;
+
+  string environment = 5;
+
+  links.v1.Link link = 6;
+
+  string owner = 7;
+}
+
+message SetLinkResponse {
+  uint64 version = 1;
+}
+
+message RemoveLinkRequest {
+  bytes options = 1;
+
+  string protocol_version = 2;
+
+  string slug = 3;
+
+  Environment.Class class = 4;
+
+  string environment = 5;
+
+  string name = 6;
+}
+
+message RemoveLinkResponse {
+  bool removed = 1;
+}
+
+message ListLinksRequest {
+  bytes options = 1;
+
+  string protocol_version = 2;
+
+  string slug = 3;
+
+  Environment.Class class = 4;
+
+  string environment = 5;
+}
+
+message ListLinksResponse {
+  repeated LinkSummary links = 1;
+}
+
+message LinkSummary {
+  string name = 1;
+
+  links.v1.LinkType type = 2;
+
+  string source = 3;
+
+  string owner = 4;
+
+  uint64 version = 5;
 }

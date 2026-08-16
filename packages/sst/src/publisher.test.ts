@@ -1,11 +1,5 @@
 import { describe, expect, it } from "vitest";
-import {
-  coordinateFor,
-  idFor,
-  replacesFor,
-  requestFor,
-  type PublisherInputs,
-} from "./publisher.js";
+import { coordinateFor, requestFor, type PublisherInputs } from "./publisher.js";
 
 const orders = {
   urn: "urn:pulumi:production::acme::sst:aws:Postgres::Orders",
@@ -181,36 +175,10 @@ describe("coordinateFor", () => {
     expect(coordinate.project).toBe("acme");
     expect(coordinate.publisher).toBe("sst:OcelLinks");
   });
-});
-
-describe("replacesFor", () => {
-  it("replaces when the coordinate moves, so the old one is pruned", () => {
-    expect(
-      replacesFor(inputs, { ...inputs, class: "preview", environment: "pr-9" }),
-    ).toEqual(["class", "environment"]);
-    expect(replacesFor(inputs, { ...inputs, instance: "Other" })).toEqual([
-      "instance",
-    ]);
-  });
-
-  it("does not replace when only the links change", () => {
-    expect(replacesFor(inputs, { ...inputs, links: { orders } })).toEqual([]);
-  });
-});
-
-describe("idFor", () => {
-  it("is the coordinate, so one publisher instance is one coordinate", () => {
-    expect(idFor(requestFor(inputs))).toBe("sst:OcelLinks/acme/production");
-    expect(
-      idFor(
-        requestFor({ ...inputs, class: "preview", environment: "pr-9" }),
-      ),
-    ).toBe("sst:OcelLinks/acme/preview/pr-9");
-  });
 
   it("tells two instances of one coordinate apart", () => {
-    expect(idFor(requestFor(inputs))).not.toBe(
-      idFor(requestFor({ ...inputs, instance: "Other" })),
-    );
+    expect(
+      coordinateFor({ ...inputs, instance: "Other" }).publisher,
+    ).not.toBe(coordinateFor(inputs).publisher);
   });
 });

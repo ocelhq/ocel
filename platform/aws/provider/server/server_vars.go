@@ -23,12 +23,16 @@ import (
 )
 
 type VarsServer struct {
-	openAccount func(ctx context.Context, region string) (account, error)
+	stores
 
 	listEnvironments func(ctx context.Context, options []byte, slug string) ([]string, error)
+}
+
+type stores struct {
+	openAccount func(ctx context.Context, region string) (account, error)
 
 	mu     sync.Mutex
-	stores map[storeKey]*vars.Store
+	cached map[storeKey]*vars.Store
 }
 
 type account struct {
@@ -54,7 +58,7 @@ func awsAccount(ctx context.Context, region string) (account, error) {
 	}, nil
 }
 
-func (s *VarsServer) store(ctx context.Context, raw []byte, class deploymentsv1.Environment_Class) (*vars.Store, error) {
+func (s *stores) store(ctx context.Context, raw []byte, class deploymentsv1.Environment_Class) (*vars.Store, error) {
 	opts, err := parseOptions(raw)
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInvalidArgument, err)
@@ -63,21 +67,21 @@ func (s *VarsServer) store(ctx context.Context, raw []byte, class deploymentsv1.
 
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if store, ok := s.stores[key]; ok {
+	if store, ok := s.cached[key]; ok {
 		return store, nil
 	}
 	store, err := s.open(ctx, key)
 	if err != nil {
 		return nil, err
 	}
-	if s.stores == nil {
-		s.stores = map[storeKey]*vars.Store{}
+	if s.cached == nil {
+		s.cached = map[storeKey]*vars.Store{}
 	}
-	s.stores[key] = store
+	s.cached[key] = store
 	return store, nil
 }
 
-func (s *VarsServer) open(ctx context.Context, key storeKey) (*vars.Store, error) {
+func (s *stores) open(ctx context.Context, key storeKey) (*vars.Store, error) {
 	reach := s.openAccount
 	if reach == nil {
 		reach = awsAccount
