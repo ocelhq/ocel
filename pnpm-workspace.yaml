@@ -14,6 +14,7 @@ packages:
 
 allowBuilds:
   '@bufbuild/buf': true
+  aws-sdk: false
   esbuild: true
   sharp: true
   unrs-resolver: true
