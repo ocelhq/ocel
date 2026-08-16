@@ -101,7 +101,7 @@ describe("parseSstOutputs", () => {
 describe("deliveredEnvProblem", () => {
   it("wants the declared key, whoever provisioned the resource", () => {
     expect(deliveredEnvProblem({ OCEL_RESOURCE_POSTGRES_orders: "x" }, "orders")).toBeNull();
-    expect(deliveredEnvProblem({ OCEL_LINK_orders: "x" }, "orders")).toMatch(
+    expect(deliveredEnvProblem({ OCEL_RESOURCE_POSTGRES_other: "x" }, "orders")).toMatch(
       /OCEL_RESOURCE_POSTGRES_orders/,
     );
   });
