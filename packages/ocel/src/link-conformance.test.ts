@@ -26,7 +26,9 @@ const fixtures = new URL("proto/links/v1/fixtures/", repoRoot());
 
 const types = Object.values(LinkType).filter(
   (value): value is LinkType =>
-    typeof value === "number" && value !== LinkType.UNSPECIFIED,
+    typeof value === "number" &&
+    value !== LinkType.UNSPECIFIED &&
+    value !== LinkType.CUSTOM,
 );
 
 function fileOf(type: LinkType) {
@@ -46,7 +48,7 @@ describe("the link conformance fixtures", () => {
     vi.unstubAllEnvs();
   });
 
-  it("carry exactly one record per link type", () => {
+  it("carry exactly one record per link type an app resolves", () => {
     expect(readdirSync(fixtures).sort()).toEqual(types.map(fileOf).sort());
   });
 

@@ -83,7 +83,41 @@ A name belongs to whoever published it, so two stacks publishing `orders` into
 one project is refused rather than silently handing every app bound to that name
 another database.
 
+## `link.custom(name, { properties }, opts?)`
+
+Publishes values ocel neither types nor delivers, for a transform to read:
+
+```ts
+link.custom("network", {
+  properties: {
+    subnetIds: vpc.privateSubnets,
+    securityGroupIds: [vpc.securityGroup],
+  },
+});
+```
+
+A transform module in the ocel project reads them by name:
+
+```ts
+export default defineTransform(({ links }) => ({
+  function: {
+    vpc: {
+      subnetIds: links.network.subnetIds,
+      securityGroupIds: links.network.securityGroupIds,
+    },
+  },
+}));
+```
+
+The properties are inserted verbatim — string, number, boolean, list or object —
+and the surface being filled is what rejects a value of the wrong shape. `opts`
+is the same as for `link.postgres`.
+
+No app reads a custom link, so it takes no `grants`: nothing would attach them.
+Naming one in `links` is refused for the same reason.
+
 ## Types
 
-There is one function per ocel link type. A resource ocel cannot type is not
-linkable, so there is no function to call for it.
+There is one function per ocel link type an app resolves. A resource ocel cannot
+type is not linkable by name — publish what a transform needs from it with
+`link.custom` instead.

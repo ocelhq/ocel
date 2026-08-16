@@ -4,13 +4,14 @@
 
 import type { GenEnum, GenFile, GenMessage } from "@bufbuild/protobuf/codegenv2";
 import { enumDesc, fileDesc, messageDesc } from "@bufbuild/protobuf/codegenv2";
-import type { Message } from "@bufbuild/protobuf";
+import { file_google_protobuf_struct } from "@bufbuild/protobuf/wkt";
+import type { JsonObject, Message } from "@bufbuild/protobuf";
 
 /**
  * Describes the file links/v1/links.proto.
  */
 export const file_links_v1_links: GenFile = /*@__PURE__*/
-  fileDesc("ChRsaW5rcy92MS9saW5rcy5wcm90bxIIbGlua3MudjEiswEKBExpbmsSDAoEbmFtZRgBIAEoCRIwCghwb3N0Z3JlcxgCIAEoCzIcLmxpbmtzLnYxLlBvc3RncmVzUHJvcGVydGllc0gAEiwKBmJ1Y2tldBgDIAEoCzIaLmxpbmtzLnYxLkJ1Y2tldFByb3BlcnRpZXNIABIfCgZncmFudHMYBCADKAsyDy5saW5rcy52MS5HcmFudBIOCgZzb3VyY2UYBSABKAlCDAoKcHJvcGVydGllcyJrChJQb3N0Z3Jlc1Byb3BlcnRpZXMSDAoEaG9zdBgBIAEoCRIMCgRwb3J0GAIgASgFEhAKCGRhdGFiYXNlGAMgASgJEhAKCHVzZXJuYW1lGAQgASgJEhUKCHBhc3N3b3JkGAUgASgJQgOAAQEiIgoQQnVja2V0UHJvcGVydGllcxIOCgZidWNrZXQYASABKAkiaAoFR3JhbnQSDwoHYWN0aW9ucxgBIAMoCRIRCglyZXNvdXJjZXMYAiADKAkSDQoFbGFiZWwYAyABKAkSLAoKY29uZGl0aW9ucxgEIAMoCzIYLmxpbmtzLnYxLkdyYW50Q29uZGl0aW9uIj8KDkdyYW50Q29uZGl0aW9uEhAKCG9wZXJhdG9yGAEgASgJEgsKA2tleRgCIAEoCRIOCgZ2YWx1ZXMYAyADKAkqUwoITGlua1R5cGUSGQoVTElOS19UWVBFX1VOU1BFQ0lGSUVEEAASFgoSTElOS19UWVBFX1BPU1RHUkVTEAESFAoQTElOS19UWVBFX0JVQ0tFVBACQjNaMWdpdGh1Yi5jb20vb2NlbGhxL29jZWwvcGtnL3Byb3RvL2xpbmtzL3YxO2xpbmtzdjFiBnByb3RvMw");
+  fileDesc("ChRsaW5rcy92MS9saW5rcy5wcm90bxIIbGlua3MudjEi3gEKBExpbmsSDAoEbmFtZRgBIAEoCRIwCghwb3N0Z3JlcxgCIAEoCzIcLmxpbmtzLnYxLlBvc3RncmVzUHJvcGVydGllc0gAEiwKBmJ1Y2tldBgDIAEoCzIaLmxpbmtzLnYxLkJ1Y2tldFByb3BlcnRpZXNIABIpCgZjdXN0b20YBiABKAsyFy5nb29nbGUucHJvdG9idWYuU3RydWN0SAASHwoGZ3JhbnRzGAQgAygLMg8ubGlua3MudjEuR3JhbnQSDgoGc291cmNlGAUgASgJQgwKCnByb3BlcnRpZXMiawoSUG9zdGdyZXNQcm9wZXJ0aWVzEgwKBGhvc3QYASABKAkSDAoEcG9ydBgCIAEoBRIQCghkYXRhYmFzZRgDIAEoCRIQCgh1c2VybmFtZRgEIAEoCRIVCghwYXNzd29yZBgFIAEoCUIDgAEBIiIKEEJ1Y2tldFByb3BlcnRpZXMSDgoGYnVja2V0GAEgASgJImgKBUdyYW50Eg8KB2FjdGlvbnMYASADKAkSEQoJcmVzb3VyY2VzGAIgAygJEg0KBWxhYmVsGAMgASgJEiwKCmNvbmRpdGlvbnMYBCADKAsyGC5saW5rcy52MS5HcmFudENvbmRpdGlvbiI/Cg5HcmFudENvbmRpdGlvbhIQCghvcGVyYXRvchgBIAEoCRILCgNrZXkYAiABKAkSDgoGdmFsdWVzGAMgAygJKmkKCExpbmtUeXBlEhkKFUxJTktfVFlQRV9VTlNQRUNJRklFRBAAEhYKEkxJTktfVFlQRV9QT1NUR1JFUxABEhQKEExJTktfVFlQRV9CVUNLRVQQAhIUChBMSU5LX1RZUEVfQ1VTVE9NEANCM1oxZ2l0aHViLmNvbS9vY2VsaHEvb2NlbC9wa2cvcHJvdG8vbGlua3MvdjE7bGlua3N2MWIGcHJvdG8z", [file_google_protobuf_struct]);
 
 /**
  * @generated from message links.v1.Link
@@ -36,6 +37,12 @@ export type Link = Message<"links.v1.Link"> & {
      */
     value: BucketProperties;
     case: "bucket";
+  } | {
+    /**
+     * @generated from field: google.protobuf.Struct custom = 6;
+     */
+    value: JsonObject;
+    case: "custom";
   } | { case: undefined; value?: undefined };
 
   /**
@@ -187,6 +194,11 @@ export enum LinkType {
    * @generated from enum value: LINK_TYPE_BUCKET = 2;
    */
   BUCKET = 2,
+
+  /**
+   * @generated from enum value: LINK_TYPE_CUSTOM = 3;
+   */
+  CUSTOM = 3,
 }
 
 /**

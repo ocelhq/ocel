@@ -412,7 +412,7 @@ func publishedProperties(t *testing.T) []string {
 	for _, r := range linkRecords(linkedManifest(), provisionedLinks()) {
 		for _, name := range naming.LinkPropertyNames(r) {
 			value, _ := naming.LinkProperty(r, name)
-			out = append(out, value)
+			out = append(out, fmt.Sprint(value))
 		}
 	}
 	if len(out) == 0 {

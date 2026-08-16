@@ -1,12 +1,15 @@
 syntax = "proto3";
 package links.v1;
 
+import "google/protobuf/struct.proto";
+
 option go_package = "github.com/ocelhq/ocel/pkg/proto/links/v1;linksv1";
 
 enum LinkType {
   LINK_TYPE_UNSPECIFIED = 0;
   LINK_TYPE_POSTGRES = 1;
   LINK_TYPE_BUCKET = 2;
+  LINK_TYPE_CUSTOM = 3;
 }
 
 message Link {
@@ -15,6 +18,7 @@ message Link {
   oneof properties {
     PostgresProperties postgres = 2;
     BucketProperties bucket = 3;
+    google.protobuf.Struct custom = 6;
   }
 
   repeated Grant grants = 4;

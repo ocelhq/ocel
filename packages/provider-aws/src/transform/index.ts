@@ -4,10 +4,18 @@ export type {
   Patch,
   Transform,
   TransformFn,
+  TransformInputs,
   TransformRule,
+  TransformRules,
 } from "./define";
-export { isLinkOutput, output, outputList } from "./output";
-export type { Linked, LinkOutput, LinkOutputRef } from "./output";
+export { isLinkOutput, links } from "./output";
+export type {
+  Linked,
+  LinkOutput,
+  LinkOutputRef,
+  LinkPlaceholders,
+  LinkProperties,
+} from "./output";
 export type {
   AwsSurfaces,
   BucketBucketSurface,

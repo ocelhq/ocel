@@ -108,7 +108,22 @@ var foreignSourceAdmitted = map[linksv1.LinkType]bool{
 	linksv1.LinkType_LINK_TYPE_BUCKET:   false,
 }
 
+type CustomLinkBoundError struct {
+	Link string
+}
+
+func (e *CustomLinkBoundError) Error() string {
+	return fmt.Sprintf(
+		"`links` binds %q, and the record published under that name is a custom one: "+
+			"a custom link is read by transforms; it is external by definition and never provisioned, so it is not bound here. "+
+			"Drop %q from `links` and read it from a transform as `links.%s.<property>`",
+		e.Link, e.Link, e.Link)
+}
+
 func readableAs(record vars.PublishedRecord, declared linksv1.LinkType) error {
+	if record.Type() == linksv1.LinkType_LINK_TYPE_CUSTOM {
+		return &CustomLinkBoundError{Link: record.Name()}
+	}
 	if published := record.Type(); published != declared {
 		return &LinkShapeError{Link: record.Name(), Declared: declared, Published: published}
 	}

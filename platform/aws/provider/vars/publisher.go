@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"slices"
 
+	"github.com/ocelhq/ocel/pkg/naming"
 	linksv1 "github.com/ocelhq/ocel/pkg/proto/links/v1"
 )
 
@@ -39,9 +40,19 @@ func (s *Store) PublishFor(ctx context.Context, slug, publisher, environment str
 	return s.publish(ctx, slug, publisher, environment, records)
 }
 
+func unsourcedCustom(link *linksv1.Link) error {
+	return fmt.Errorf(
+		"link %s is a custom record with no source: only your own infrastructure publishes a custom link; ocel provisions nothing it cannot type. "+
+			"Name the tool that publishes it: %w",
+		link.GetName(), ErrUnsourced)
+}
+
 func refuseUnsourced(publisher string, link *linksv1.Link) error {
 	if link.GetSource() != "" {
 		return nil
+	}
+	if naming.LinkTypeOf(link) == linksv1.LinkType_LINK_TYPE_CUSTOM {
+		return unsourcedCustom(link)
 	}
 	return fmt.Errorf(
 		"publisher %s leaves link %s unsourced: an empty source names what ocel's own provisioning produces, and an app binds a client to it on that promise. "+

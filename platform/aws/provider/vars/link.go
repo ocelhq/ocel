@@ -27,6 +27,8 @@ var ErrUnreadableRecord = errors.New("vars: unreadable link record")
 
 var ErrUnscopedGrant = errors.New("vars: unscoped grant")
 
+var ErrUnattachedGrant = errors.New("vars: unattached grant")
+
 var errTornPair = errors.New("vars: torn link pair")
 
 type PublishedRecord struct {
@@ -561,6 +563,17 @@ func Verify(link *linksv1.Link) error {
 	}
 	if naming.LinkTypeOf(link) == linksv1.LinkType_LINK_TYPE_UNSPECIFIED {
 		return fmt.Errorf("link %s carries no properties, so it has no type a consumer can resolve it against: %w", link.GetName(), ErrUnreadableRecord)
+	}
+	if naming.LinkTypeOf(link) == linksv1.LinkType_LINK_TYPE_CUSTOM {
+		if link.GetSource() == "" {
+			return unsourcedCustom(link)
+		}
+		if len(link.GetGrants()) > 0 {
+			return fmt.Errorf(
+				"link %s is a custom record carrying %d grants: no consumer attaches a custom link's grants yet; a grant nobody attaches is a permission the record claims and no app holds. "+
+					"Publish it without them: %w",
+				link.GetName(), len(link.GetGrants()), ErrUnattachedGrant)
+		}
 	}
 	for _, g := range link.GetGrants() {
 		if len(g.GetActions()) == 0 || slices.ContainsFunc(g.GetActions(), UnscopedAction) {

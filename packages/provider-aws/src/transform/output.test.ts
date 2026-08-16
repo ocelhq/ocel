@@ -1,12 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { defineTransform } from "./define";
 import { evaluate, type EvaluateRequest, type TransformModule } from "./evaluate";
-import {
-  isLinkOutput,
-  output,
-  outputList,
-  outputPlaceholderKey,
-} from "./output";
+import { isLinkOutput, links, outputPlaceholderKey } from "./output";
 
 function request(): EvaluateRequest {
   return {
@@ -38,9 +33,9 @@ function transformModule(
   return { specifier, rules };
 }
 
-describe("output", () => {
+describe("links", () => {
   it("names one property of one published record", () => {
-    expect(output("network", "lambdaSecurityGroupId")).toEqual({
+    expect(links.network.lambdaSecurityGroupId).toEqual({
       [outputPlaceholderKey]: {
         link: "network",
         property: "lambdaSecurityGroupId",
@@ -48,23 +43,36 @@ describe("output", () => {
     });
   });
 
-  it("marks a list output so the deploy splits the published value", () => {
-    expect(outputList("network", "privateSubnetIds")).toEqual({
-      [outputPlaceholderKey]: {
-        link: "network",
-        property: "privateSubnetIds",
-        list: true,
-      },
-    });
+  it("hands out a frozen placeholder that names no list", () => {
+    const placeholder = links.network.privateSubnetIds;
+
+    expect(Object.isFrozen(placeholder)).toBe(true);
+    expect(Object.isFrozen(placeholder[outputPlaceholderKey])).toBe(true);
+    expect(Object.keys(placeholder[outputPlaceholderKey])).toEqual([
+      "link",
+      "property",
+    ]);
   });
 
   it("refuses an output that names no link or no property", () => {
-    expect(() => output("", "privateSubnetIds")).toThrow(/names no link/);
-    expect(() => outputList("network", "")).toThrow(/names no property/);
+    expect(() => links[""]!.privateSubnetIds).toThrow(/names no link/);
+    expect(() => links.network[""]).toThrow(/names no property/);
+  });
+
+  it("manufactures nothing for a symbol or for the thenable trap", async () => {
+    const published = links as Record<string | symbol, unknown>;
+    const network = links.network as Record<string | symbol, unknown>;
+
+    expect(published.then).toBeUndefined();
+    expect(published[Symbol.iterator]).toBeUndefined();
+    expect(network.then).toBeUndefined();
+    expect(network[Symbol.toPrimitive]).toBeUndefined();
+    expect(() => `${network}`).toThrow(TypeError);
+    await expect(Promise.resolve(network)).resolves.toBe(network);
   });
 
   it("recognises what it authored and nothing else", () => {
-    expect(isLinkOutput(output("network", "vpcId"))).toBe(true);
+    expect(isLinkOutput(links.network.vpcId)).toBe(true);
     expect(isLinkOutput("subnet-a")).toBe(false);
     expect(isLinkOutput(null)).toBe(false);
     expect(isLinkOutput(["subnet-a"])).toBe(false);
@@ -76,30 +84,28 @@ describe("evaluate with link outputs", () => {
     const got = evaluate(request(), [
       transformModule(
         "vpc.ts",
-        defineTransform({
+        defineTransform(({ links: published }) => ({
           function: {
             vpc: {
-              subnetIds: outputList("network", "privateSubnetIds"),
-              securityGroupIds: [output("network", "lambdaSecurityGroupId")],
+              subnetIds: published.network.privateSubnetIds,
+              securityGroupIds: published.network.lambdaSecurityGroupIds,
             },
           },
-        }),
+        })),
       ),
     ]);
 
     expect(got.resources[0]!.surfaces.vpc).toEqual({
-      subnetIds: outputList("network", "privateSubnetIds"),
-      securityGroupIds: [output("network", "lambdaSecurityGroupId")],
+      subnetIds: links.network.privateSubnetIds,
+      securityGroupIds: links.network.lambdaSecurityGroupIds,
     });
   });
 
   it("serializes to what the deploy decodes", () => {
-    expect(JSON.parse(JSON.stringify(outputList("network", "privateSubnetIds")))).toEqual({
-      $ocelOutput: {
-        link: "network",
-        property: "privateSubnetIds",
-        list: true,
-      },
+    expect(
+      JSON.parse(JSON.stringify(links.network.privateSubnetIds)),
+    ).toEqual({
+      $ocelOutput: { link: "network", property: "privateSubnetIds" },
     });
   });
 
@@ -111,7 +117,7 @@ describe("evaluate with link outputs", () => {
           defineTransform({
             function: {
               vpc: () =>
-                ({ subnetIds: output("network", "privateSubnetIds") }) as never,
+                ({ subnetIds: links.network.privateSubnetIds }) as never,
             },
           }),
         ),
@@ -126,7 +132,7 @@ describe("evaluate with link outputs", () => {
           "vpc.ts",
           defineTransform({
             function: {
-              vpc: { vpcId: output("network", "vpcId") } as never,
+              vpc: { vpcId: links.network.vpcId } as never,
             },
           }),
         ),
