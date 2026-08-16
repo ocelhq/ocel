@@ -16,11 +16,12 @@ import (
 )
 
 type LinkSummary struct {
-	Name    string
-	Type    linksv1.LinkType
-	Source  string
-	Owner   string
-	Version int64
+	Name       string
+	Type       linksv1.LinkType
+	Source     string
+	Owner      string
+	Version    int64
+	Properties []naming.PropertyShape
 }
 
 func (s *Store) SetLink(ctx context.Context, slug, owner, environment string, link *linksv1.Link) (int64, error) {
@@ -62,11 +63,15 @@ func (s *Store) SetLink(ctx context.Context, slug, owner, environment string, li
 	if err != nil {
 		return 0, fmt.Errorf("render link %s's record: %w", link.GetName(), err)
 	}
+	shapes, err := encodeShapes(link)
+	if err != nil {
+		return 0, fmt.Errorf("render link %s's shape: %w", link.GetName(), err)
+	}
 
 	if _, err := s.writeLinkIndex(ctx, slug, owner, environment, published, nil, false); err != nil {
 		return 0, err
 	}
-	if err := s.writePair(ctx, c, owner, sealed, row, s.now()); err != nil {
+	if err := s.writePair(ctx, c, owner, sealed, row, shapes, s.now()); err != nil {
 		return 0, err
 	}
 
@@ -203,12 +208,17 @@ func (s *Store) ListLinks(ctx context.Context, slug, environment string) ([]Link
 			if err != nil {
 				return nil, fmt.Errorf("read link %s's record: %v: %w", name, err, ErrUnreadableRecord)
 			}
+			shapes, err := decodeShapes(record.Shapes)
+			if err != nil {
+				return nil, fmt.Errorf("read link %s's shape: %v: %w", name, err, ErrUnreadableRecord)
+			}
 			out = append(out, LinkSummary{
-				Name:    name,
-				Type:    naming.LinkTypeOf(link),
-				Source:  link.GetSource(),
-				Owner:   ownerOf(record),
-				Version: record.Version,
+				Name:       name,
+				Type:       naming.LinkTypeOf(link),
+				Source:     link.GetSource(),
+				Owner:      ownerOf(record),
+				Version:    record.Version,
+				Properties: shapes,
 			})
 			break
 		}

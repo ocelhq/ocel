@@ -10,7 +10,8 @@
     "./transform/run": "./src/transform/run.ts"
   },
   "scripts": {
-    "test": "vitest run"
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit && tsc --noEmit -p tsconfig.typetests.json && tsc --noEmit -p tsconfig.typetests-empty.json && tsc --noEmit -p tsconfig.typetests-open.json"
   },
   "optionalDependencies": {
     "@ocel/provider-aws-darwin-arm64": "workspace:^",
@@ -22,6 +23,7 @@
     "ocel": "workspace:^"
   },
   "devDependencies": {
+    "@types/node": "^26.1.1",
     "ocel": "workspace:^",
     "typescript": "^5.9.3",
     "vite": "^8.1.3",

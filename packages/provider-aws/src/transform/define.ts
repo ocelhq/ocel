@@ -1,4 +1,5 @@
-import { links, type LinkPlaceholders } from "./output";
+import type { TransformLinks } from "./index";
+import { links } from "./output";
 import type {
   AwsSurfaces,
   GateContext,
@@ -40,7 +41,7 @@ export const ruleKeywords = ["if", "tags"] as const;
 
 /** What a callback form of `defineTransform` is handed, and nothing besides. */
 export interface TransformInputs {
-  readonly links: LinkPlaceholders;
+  readonly links: TransformLinks;
 }
 
 /** The rules a module contributes, written down or returned from the callback. */
@@ -57,7 +58,10 @@ export type TransformRules = TransformRule | readonly TransformRule[];
 export function defineTransform(
   rules: TransformRules | ((inputs: TransformInputs) => TransformRules),
 ): readonly TransformRule[] {
-  const authored = typeof rules === "function" ? rules({ links }) : rules;
+  const authored =
+    typeof rules === "function"
+      ? rules({ links: links as TransformLinks })
+      : rules;
   return Array.isArray(authored)
     ? (authored as readonly TransformRule[])
     : [authored as TransformRule];

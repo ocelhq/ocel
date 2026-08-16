@@ -7,6 +7,7 @@ import (
 
 	connect "connectrpc.com/connect"
 
+	"github.com/ocelhq/ocel/pkg/naming"
 	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
 	"github.com/ocelhq/ocel/platform/aws/provider/bootstrap"
 	"github.com/ocelhq/ocel/platform/aws/provider/vars"
@@ -66,11 +67,12 @@ func (s *Server) ListLinks(ctx context.Context, req *deploymentsv1.ListLinksRequ
 	resp := &deploymentsv1.ListLinksResponse{Links: make([]*deploymentsv1.LinkSummary, 0, len(found))}
 	for _, l := range found {
 		resp.Links = append(resp.Links, &deploymentsv1.LinkSummary{
-			Name:    l.Name,
-			Type:    l.Type,
-			Source:  l.Source,
-			Owner:   l.Owner,
-			Version: uint64(l.Version),
+			Name:       l.Name,
+			Type:       l.Type,
+			Source:     l.Source,
+			Owner:      l.Owner,
+			Version:    uint64(l.Version),
+			Properties: naming.PropertyShapeMessages(l.Properties),
 		})
 	}
 	return resp, nil

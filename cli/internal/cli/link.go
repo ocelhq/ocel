@@ -7,6 +7,8 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"os"
+	"path/filepath"
 	"strings"
 	"text/tabwriter"
 
@@ -91,8 +93,26 @@ var linkLsCmd = &cobra.Command{
 	},
 }
 
+var linkGenerateCmd = &cobra.Command{
+	Use:   "generate",
+	Short: "Write the transform types for the links published to one coordinate",
+	Long: "Write the transform types for the links published to one coordinate.\n\n" +
+		"Reads the records published to production, or to the preview coordinate --preview and " +
+		"--environment name, and writes " + linkTypesFileName + " beside your ocel config. The file " +
+		"names each record and the properties it carries, so `links.<name>.<property>` in a transform " +
+		"is checked where it is written instead of at the deploy. Check it in, and run this again when " +
+		"what you publish changes.\n\n" +
+		"Unlike `ocel generate`, this reads the published records: it logs in and runs the provider.",
+	Args: cobra.NoArgs,
+	RunE: func(cmd *cobra.Command, args []string) error {
+		return withEnvCommand(cmd, func(ctx context.Context, cwd string) error {
+			return runLinkGenerate(ctx, defaultDeps(), cwd, linkOpts, cmd.OutOrStdout(), cmd.ErrOrStderr())
+		})
+	},
+}
+
 func init() {
-	for _, c := range []*cobra.Command{linkSetCmd, linkRmCmd, linkLsCmd} {
+	for _, c := range []*cobra.Command{linkSetCmd, linkRmCmd, linkLsCmd, linkGenerateCmd} {
 		c.Flags().BoolVar(&linkOpts.preview, "preview", false, "Act on the preview substrate instead of production")
 		c.Flags().StringVar(&linkOpts.environment, "environment", "", "Address the link this named preview environment holds instead of the class-wide one")
 		linkCmd.AddCommand(c)
@@ -198,6 +218,55 @@ func runLinkLs(ctx context.Context, d deps, cwd string, opts linkOptions, stdout
 		renderLinks(stdout, resp.GetLinks())
 		return nil
 	})
+}
+
+func runLinkGenerate(ctx context.Context, d deps, cwd string, opts linkOptions, stdout, stderr io.Writer) error {
+	return envSession(ctx, d, cwd, opts.substrate(), stdout, stderr, func(runner *providerrunner.Runner, cfg *projectconfig.Config, provider *projectconfig.ProviderDescriptor) error {
+		client, err := runner.Deployments()
+		if err != nil {
+			return err
+		}
+		resp, err := client.ListLinks(ctx, &deploymentsv1.ListLinksRequest{
+			Options:         []byte(provider.Options),
+			ProtocolVersion: manifestbuilder.SchemaVersion,
+			Slug:            cfg.Slug,
+			Class:           envClass(opts.substrate()),
+			Environment:     opts.environment,
+		})
+		if err != nil {
+			return err
+		}
+
+		path := filepath.Join(cfg.Dir, linkTypesFileName)
+		if err := os.WriteFile(path, []byte(renderLinkTypes(provider.Package, describeLinkCoordinate(opts), resp.GetLinks())), 0o644); err != nil {
+			return fmt.Errorf("write %s: %w", linkTypesFileName, err)
+		}
+
+		if logFormat() == logFormatJSON {
+			return writeLinkJSON(stdout, linkGenerateReport{Path: path, Links: linkReports(resp.GetLinks())})
+		}
+		if len(resp.GetLinks()) == 0 {
+			fmt.Fprintf(stdout, "Nothing is published to %s; wrote %s, which names no record and so leaves no link name open.\n", describeLinkCoordinate(opts), path)
+			return nil
+		}
+		fmt.Fprintf(stdout, "Wrote %s from the %d links published to %s.\n", path, len(resp.GetLinks()), describeLinkCoordinate(opts))
+		return nil
+	})
+}
+
+func describeLinkCoordinate(opts linkOptions) string {
+	if !opts.preview {
+		return "production"
+	}
+	if opts.environment == "" {
+		return "preview"
+	}
+	return "the preview environment " + opts.environment
+}
+
+type linkGenerateReport struct {
+	Path  string       `json:"path"`
+	Links []linkReport `json:"links"`
 }
 
 type linkSetReport struct {

@@ -541,4 +541,14 @@ message LinkSummary {
   string owner = 4;
 
   uint64 version = 5;
+
+  repeated PropertyShape properties = 6;
+}
+
+message PropertyShape {
+  string name = 1;
+
+  string json_type = 2;
+
+  bool list = 3;
 }
