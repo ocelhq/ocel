@@ -1,11 +1,8 @@
 import { createHash } from "node:crypto";
 import { checkTarget, runLink, type Target } from "./cli.js";
+import { customLink, type DescribedCustom } from "./custom.js";
 import type { Grant, SSTInclude } from "./grants.js";
-import {
-  postgresLink,
-  type DescribedPostgres,
-  type PostgresLink,
-} from "./postgres.js";
+import { postgresLink, type DescribedPostgres } from "./postgres.js";
 
 /** An SST component, as SST already describes itself to its own link consumers. */
 export interface SSTPostgresLinkable {
@@ -39,10 +36,14 @@ export interface LinkOptions {
   project?: string;
 }
 
-interface PostgresInputs extends Target, DescribedPostgres {
+interface LinkInputs extends Target {
   name: string;
   owner: string;
 }
+
+interface PostgresInputs extends LinkInputs, DescribedPostgres {}
+
+interface CustomInputs extends LinkInputs, DescribedCustom {}
 
 interface LinkState extends Target {
   name: string;
@@ -50,33 +51,75 @@ interface LinkState extends Target {
   digest: string;
 }
 
-export const postgresProvider = {
-  async create(inputs: PostgresInputs) {
-    set(inputs);
-    return { id: idFor(inputs), outs: stateOf(inputs) };
-  },
+function linkProvider<I extends LinkInputs>(
+  recordFor: (inputs: I) => object,
+  resolved: (inputs: I) => boolean,
+) {
+  const digestOf = (inputs: I) =>
+    createHash("sha256")
+      .update(JSON.stringify(recordFor(inputs)))
+      .digest("hex");
 
-  async diff(_id: string, olds: LinkState, news: PostgresInputs) {
-    const replaces = replacesFor(olds, news);
-    return {
-      changes:
-        replaces.length > 0 ||
-        !resolved(news) ||
-        olds.digest !== digestOf(news),
-      replaces,
-      deleteBeforeReplace: replaces.length > 0,
-    };
-  },
+  const stateOf = (inputs: I): LinkState => ({
+    name: inputs.name,
+    owner: inputs.owner,
+    project: inputs.project,
+    class: inputs.class,
+    environment: inputs.environment,
+    digest: digestOf(inputs),
+  });
 
-  async update(_id: string, _olds: LinkState, news: PostgresInputs) {
-    set(news);
-    return { outs: stateOf(news) };
-  },
+  const set = (inputs: I) =>
+    runLink(
+      ["set", "--owner", inputs.owner],
+      inputs,
+      `${JSON.stringify(recordFor(inputs))}\n`,
+    );
 
-  async delete(_id: string, props: LinkState) {
-    runLink(["rm", props.name], props);
-  },
-};
+  return {
+    async create(inputs: I) {
+      set(inputs);
+      return { id: idFor(inputs), outs: stateOf(inputs) };
+    },
+
+    async diff(_id: string, olds: LinkState, news: I) {
+      const replaces = replacesFor(olds, news);
+      return {
+        changes:
+          replaces.length > 0 ||
+          !resolved(news) ||
+          olds.digest !== digestOf(news),
+        replaces,
+        deleteBeforeReplace: replaces.length > 0,
+      };
+    },
+
+    async update(_id: string, _olds: LinkState, news: I) {
+      set(news);
+      return { outs: stateOf(news) };
+    },
+
+    async delete(_id: string, props: LinkState) {
+      runLink(["rm", props.name], props);
+    },
+  };
+}
+
+export const postgresProvider = linkProvider<PostgresInputs>(
+  (inputs) =>
+    postgresLink(inputs.name, {
+      properties: inputs.properties,
+      include: inputs.include,
+      grants: inputs.grants,
+    }),
+  (inputs) => linkFields.every((field) => inputs.properties[field] !== undefined),
+);
+
+export const customProvider = linkProvider<CustomInputs>(
+  (inputs) => customLink(inputs.name, { properties: inputs.properties }),
+  (inputs) =>
+    Object.values(inputs.properties).every((value) => value !== undefined),
+);
 
 /**
  * Publishes one SST-defined resource as one ocel link, as a side effect of this apply.
@@ -110,40 +153,51 @@ export function postgres(
   });
 }
 
-function set(inputs: PostgresInputs): void {
-  runLink(
-    ["set", "--owner", inputs.owner],
-    inputs,
-    `${JSON.stringify(recordFor(inputs))}\n`,
-  );
+/**
+ * A record only transforms read: the properties written out by hand, under a
+ * name a transform names.
+ *
+ * Ocel neither types nor interprets what a custom link carries — it hands the
+ * values to a transform that fills a surface field with them, so nothing is
+ * delivered to an app and no grants are accepted.
+ */
+export interface DescribedCustomResource {
+  properties: Record<string, Input<unknown>>;
 }
 
-function recordFor(inputs: PostgresInputs): PostgresLink {
-  return postgresLink(inputs.name, {
-    properties: inputs.properties,
-    include: inputs.include,
-    grants: inputs.grants,
+/**
+ * Publishes one set of values your own infrastructure holds as one ocel custom
+ * link, as a side effect of this apply.
+ *
+ * The name is the one a transform reads — `link.custom("network", …)` here,
+ * `links.network.subnetIds` in a transform module. `class` defaults to
+ * production, `environment` names one preview environment, and `project` is the
+ * directory holding `ocel.config.ts`, which is the SST config root unless it is
+ * given.
+ */
+export function custom(
+  name: string,
+  resource: DescribedCustomResource,
+  opts?: LinkOptions,
+): void {
+  const util = host();
+  const target: Target = {
+    project: opts?.project ?? configRoot(),
+    class: opts?.class ?? "production",
+    environment: opts?.environment,
+  };
+  checkTarget(target);
+
+  const logical = `ocel-link-${name}`;
+  new util.dynamic.Resource(customProvider, logical, {
+    ...target,
+    name,
+    owner: ownerFor(util, logical),
+    properties: resource.properties,
   });
 }
 
-function stateOf(inputs: PostgresInputs): LinkState {
-  return {
-    name: inputs.name,
-    owner: inputs.owner,
-    project: inputs.project,
-    class: inputs.class,
-    environment: inputs.environment,
-    digest: digestOf(inputs),
-  };
-}
-
-function digestOf(inputs: PostgresInputs): string {
-  return createHash("sha256")
-    .update(JSON.stringify(recordFor(inputs)))
-    .digest("hex");
-}
-
-function idFor(inputs: PostgresInputs): string {
+function idFor(inputs: LinkInputs): string {
   return [inputs.class, inputs.environment, inputs.name]
     .filter(Boolean)
     .join("/");
@@ -151,7 +205,7 @@ function idFor(inputs: PostgresInputs): string {
 
 const identity = ["name", "owner", "project", "class", "environment"] as const;
 
-function replacesFor(olds: LinkState, news: PostgresInputs): string[] {
+function replacesFor(olds: LinkState, news: LinkInputs): string[] {
   return identity.filter((field) => olds[field] !== news[field]);
 }
 
@@ -162,10 +216,6 @@ const linkFields = [
   "username",
   "password",
 ] as const;
-
-function resolved(inputs: PostgresInputs): boolean {
-  return linkFields.every((field) => inputs.properties[field] !== undefined);
-}
 
 function describe(
   resource: SSTPostgresLinkable | DescribedPostgresResource,

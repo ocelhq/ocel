@@ -16,6 +16,37 @@ describe("defineTransform", () => {
     expect(defineTransform([first, second])).toEqual([first, second]);
   });
 
+  it("hands a callback the published records and nothing besides", () => {
+    let seen: string[] = [];
+
+    const rules = defineTransform((inputs) => {
+      seen = Object.keys(inputs);
+      return {
+        function: { vpc: { subnetIds: inputs.links.network.subnetIds } },
+      };
+    });
+
+    expect(seen).toEqual(["links"]);
+    expect(rules[0]!.function!.vpc).toEqual({
+      subnetIds: { $ocelOutput: { link: "network", property: "subnetIds" } },
+    });
+  });
+
+  it("keeps a callback returning a list in the order it was written", () => {
+    const rules = defineTransform(({ links }) => [
+      { function: { lambda: { memorySizeMb: 512 } } },
+      { function: { vpc: { securityGroupIds: [links.network.primaryGroupId] } } },
+    ]);
+
+    expect(rules).toHaveLength(2);
+    expect(rules[0]!.function!.lambda).toEqual({ memorySizeMb: 512 });
+    expect(rules[1]!.function!.vpc).toEqual({
+      securityGroupIds: [
+        { $ocelOutput: { link: "network", property: "primaryGroupId" } },
+      ],
+    });
+  });
+
   it("exposes only the underlying resources this provider renders", () => {
     expect(Object.keys(surfaceFields.function)).toEqual(["lambda", "url", "vpc"]);
     expect(Object.keys(surfaceFields.bucket)).toEqual([

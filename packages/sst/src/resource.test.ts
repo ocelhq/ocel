@@ -1,7 +1,7 @@
 import { spawnSync } from "node:child_process";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { postgres, postgresProvider } from "./resource.js";
+import { custom, customProvider, postgres, postgresProvider } from "./resource.js";
 
 vi.mock("node:child_process", () => ({ spawnSync: vi.fn() }));
 
@@ -238,5 +238,78 @@ describe("removing a postgres link", () => {
 
     expect(argv().args).toEqual([entry, "link", "rm", "orders"]);
     expect(argv().options).toMatchObject({ cwd: root });
+  });
+});
+
+describe("declaring a custom link", () => {
+  const network = {
+    subnetIds: ["subnet-0a1", "subnet-0b2"],
+    securityGroupIds: ["sg-0c3"],
+  };
+
+  function declareCustom(opts?: Parameters<typeof custom>[2]) {
+    custom("network", { properties: network }, opts);
+    return latest();
+  }
+
+  it("builds one resource per call, owned by that resource alone", () => {
+    const one = declareCustom();
+
+    expect(one.name).toBe("ocel-link-network");
+    expect(one.props).toMatchObject({
+      name: "network",
+      class: "production",
+      project: root,
+      owner:
+        "urn:pulumi:production::shop::pulumi:pulumi:Stack$pulumi-nodejs:dynamic:Resource::ocel-link-network",
+      properties: network,
+    });
+  });
+
+  it("runs ocel link set with a custom record sourced to sst", async () => {
+    const created = await customProvider.create(declareCustom().props as never);
+
+    const { args, options } = argv();
+    expect(args).toEqual([
+      entry,
+      "link",
+      "set",
+      "--owner",
+      "urn:pulumi:production::shop::pulumi:pulumi:Stack$pulumi-nodejs:dynamic:Resource::ocel-link-network",
+    ]);
+    expect(JSON.parse(String(options?.input))).toEqual({
+      name: "network",
+      custom: network,
+      source: "sst",
+    });
+    expect(created.id).toBe("production/network");
+  });
+
+  it("reports a change rather than throwing while a property is still unknown", async () => {
+    const olds = (await customProvider.create(declareCustom().props as never))
+      .outs;
+    custom("network", { properties: { ...network, subnetIds: undefined } });
+
+    expect(
+      await customProvider.diff("id", olds, latest().props as never),
+    ).toMatchObject({ changes: true, replaces: [] });
+  });
+
+  it("holds still when nothing changed", async () => {
+    const olds = (await customProvider.create(declareCustom().props as never))
+      .outs;
+
+    expect(
+      await customProvider.diff("id", olds, declareCustom().props as never),
+    ).toMatchObject({ changes: false, replaces: [] });
+  });
+
+  it("runs ocel link rm for the name it published", async () => {
+    const created = await customProvider.create(declareCustom().props as never);
+    run.mockClear();
+
+    await customProvider.delete("id", created.outs);
+
+    expect(argv().args).toEqual([entry, "link", "rm", "network"]);
   });
 });

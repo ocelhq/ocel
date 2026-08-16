@@ -1,6 +1,7 @@
 import { existsSync, readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
-import { postgresLink, source } from "./postgres.js";
+import { source } from "./cli.js";
+import { postgresLink } from "./postgres.js";
 
 function repoRoot() {
   let dir = new URL("./", import.meta.url);

@@ -13,6 +13,7 @@ import (
 
 	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
 	linksv1 "github.com/ocelhq/ocel/pkg/proto/links/v1"
+	"google.golang.org/protobuf/types/known/structpb"
 )
 
 type outputCFN struct {
@@ -50,6 +51,18 @@ func ordersLink() *linksv1.Link {
 			Host: "h", Port: 5432, Database: "d", Username: "u", Password: "pw",
 		}},
 	}
+}
+
+func networkProperties(t *testing.T) *linksv1.Link_Custom {
+	t.Helper()
+	custom, err := structpb.NewStruct(map[string]any{
+		"subnetIds":        []any{"subnet-0a1", "subnet-0b2"},
+		"securityGroupIds": []any{"sg-0c3"},
+	})
+	if err != nil {
+		t.Fatalf("build the published struct: %v", err)
+	}
+	return &linksv1.Link_Custom{Custom: custom}
 }
 
 func codeOf(t *testing.T, err error) connect.Code {
@@ -159,13 +172,30 @@ func TestSetLinkRefusesARecordNoConsumerCouldResolve(t *testing.T) {
 	for name, tc := range map[string]struct {
 		owner string
 		link  *linksv1.Link
+		says  string
 	}{
-		"a record with no properties": {"sst", &linksv1.Link{Name: "orders", Source: "sst"}},
-		"an unsourced record":         {"sst", &linksv1.Link{Name: "orders", Properties: ordersLink().GetProperties()}},
-		"a grant over a wildcard": {"sst", &linksv1.Link{
+		"a record with no properties": {owner: "sst", link: &linksv1.Link{Name: "orders", Source: "sst"}},
+		"an unsourced record":         {owner: "sst", link: &linksv1.Link{Name: "orders", Properties: ordersLink().GetProperties()}},
+		"a grant over a wildcard": {owner: "sst", link: &linksv1.Link{
 			Name: "orders", Source: "sst", Properties: ordersLink().GetProperties(),
 			Grants: []*linksv1.Grant{{Actions: []string{"rds-db:connect"}, Resources: []string{"*"}}},
 		}},
+		"an unsourced custom record": {
+			owner: "sst",
+			link:  &linksv1.Link{Name: "network", Properties: networkProperties(t)},
+			says:  "only your own infrastructure publishes a custom link; ocel provisions nothing it cannot type",
+		},
+		"a custom record carrying grants": {
+			owner: "sst",
+			link: &linksv1.Link{
+				Name: "network", Source: "sst", Properties: networkProperties(t),
+				Grants: []*linksv1.Grant{{
+					Actions:   []string{"ec2:CreateNetworkInterface"},
+					Resources: []string{"arn:aws:ec2:eu-west-1:111122223333:subnet/subnet-0a1"},
+				}},
+			},
+			says: "no consumer attaches a custom link's grants yet; a grant nobody attaches is a permission the record claims and no app holds",
+		},
 	} {
 		t.Run(name, func(t *testing.T) {
 			_, err := linksServer(t).SetLink(ctx, &deploymentsv1.SetLinkRequest{
@@ -174,7 +204,33 @@ func TestSetLinkRefusesARecordNoConsumerCouldResolve(t *testing.T) {
 			if got := codeOf(t, err); got != connect.CodeInvalidArgument {
 				t.Errorf("SetLink %s = %v (%v), want CodeInvalidArgument", name, got, err)
 			}
+			if tc.says != "" && !strings.Contains(err.Error(), tc.says) {
+				t.Errorf("SetLink %s = %q, missing %q", name, err, tc.says)
+			}
 		})
+	}
+}
+
+func TestSetLinkPublishesASourcedCustomRecord(t *testing.T) {
+	s := linksServer(t)
+	ctx := context.Background()
+
+	if _, err := s.SetLink(ctx, &deploymentsv1.SetLinkRequest{
+		Slug: "shop", Class: deploymentsv1.Environment_CLASS_PRODUCTION, Owner: "sst",
+		Link: &linksv1.Link{Name: "network", Source: "sst", Properties: networkProperties(t)},
+	}); err != nil {
+		t.Fatalf("SetLink: %v", err)
+	}
+
+	listed, err := s.ListLinks(ctx, &deploymentsv1.ListLinksRequest{Slug: "shop", Class: deploymentsv1.Environment_CLASS_PRODUCTION})
+	if err != nil {
+		t.Fatalf("ListLinks: %v", err)
+	}
+	if len(listed.GetLinks()) != 1 {
+		t.Fatalf("ListLinks = %+v, want the custom link just set", listed.GetLinks())
+	}
+	if got := listed.GetLinks()[0]; got.GetType() != linksv1.LinkType_LINK_TYPE_CUSTOM || got.GetSource() != "sst" {
+		t.Errorf("ListLinks = %+v, want a custom record sourced to sst", got)
 	}
 }
 

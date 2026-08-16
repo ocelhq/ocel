@@ -2,8 +2,10 @@ package deploy
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"maps"
+	"reflect"
 	"slices"
 	"strings"
 
@@ -18,7 +20,6 @@ const outputPlaceholderKey = "$ocelOutput"
 type outputRef struct {
 	Link     string
 	Property string
-	List     bool
 }
 
 type outputSite struct {
@@ -43,7 +44,7 @@ type OutputPlaceholderError struct {
 
 func (e *OutputPlaceholderError) Error() string {
 	return fmt.Sprintf(
-		"a transform fills %s with a link output that %s; author one with `output(link, property)` or `outputList(link, property)`",
+		"a transform fills %s with a link output that %s; author one as `links.<name>.<property>` from a callback transform",
 		e.At, e.Reason)
 }
 
@@ -112,28 +113,58 @@ func (e *EmptyOutputError) Error() string {
 		e.At, e.Ref.Link, e.Ref.Property, e.Ref.Link, e.Ref.Property)
 }
 
-func resolveOutputs(ctx context.Context, cfg Config, manifest *deploymentsv1.Manifest, candidates []transformCandidate, results []transform.Result) error {
+func resolveOutputs(ctx context.Context, cfg Config, manifest *deploymentsv1.Manifest, candidates []transformCandidate, results []transform.Result) ([]placedOutput, error) {
 	var placed []placedOutput
 	if err := walkOutputs(candidates, results, func(ref outputRef, at outputSite, authored any) (any, error) {
 		placed = append(placed, placedOutput{Ref: ref, At: at})
 		return authored, nil
 	}); err != nil {
-		return err
+		return nil, err
 	}
 	if len(placed) == 0 {
-		return nil
+		return nil, nil
 	}
 	if err := refuseProvisionedOutputs(manifest, placed); err != nil {
-		return err
+		return nil, err
 	}
 
 	values, err := readOutputs(ctx, cfg, manifest.GetSlug(), placed)
 	if err != nil {
-		return err
+		return nil, err
 	}
-	return walkOutputs(candidates, results, func(ref outputRef, _ outputSite, _ any) (any, error) {
+	if err := walkOutputs(candidates, results, func(ref outputRef, _ outputSite, _ any) (any, error) {
 		return values[ref], nil
-	})
+	}); err != nil {
+		return nil, err
+	}
+	return placed, nil
+}
+
+type OutputShapeError struct {
+	Ref outputRef
+	At  outputSite
+	Err error
+}
+
+func (e *OutputShapeError) Error() string {
+	return fmt.Sprintf(
+		"a transform fills %s from link %q's %s, and the record's value is not what that field takes: %v",
+		e.At, e.Ref.Link, e.Ref.Property, e.Err)
+}
+
+func (e *OutputShapeError) Unwrap() error { return e.Err }
+
+func nameOutputBehind(placed []placedOutput, resource string, err error) error {
+	var undecodable *surfaceFieldError
+	if !errors.As(err, &undecodable) {
+		return nil
+	}
+	for _, p := range placed {
+		if p.At == (outputSite{Resource: resource, Surface: undecodable.Surface, Field: undecodable.Field}) {
+			return &OutputShapeError{Ref: p.Ref, At: p.At, Err: err}
+		}
+	}
+	return nil
 }
 
 func refuseProvisionedOutputs(manifest *deploymentsv1.Manifest, placed []placedOutput) error {
@@ -221,8 +252,7 @@ func readOutputRef(m map[string]any, at outputSite) (outputRef, bool, error) {
 	if property == "" {
 		return outputRef{}, false, &OutputPlaceholderError{At: at, Reason: fmt.Sprintf("names link %q and no property on it", link)}
 	}
-	list, _ := fields["list"].(bool)
-	return outputRef{Link: link, Property: property, List: list}, true, nil
+	return outputRef{Link: link, Property: property}, true, nil
 }
 
 func readOutputs(ctx context.Context, cfg Config, slug string, placed []placedOutput) (map[outputRef]any, error) {
@@ -271,13 +301,12 @@ func readOutputs(ctx context.Context, cfg Config, slug string, placed []placedOu
 		if _, done := values[p.Ref]; done {
 			continue
 		}
-		raw, carries := naming.LinkProperty(links[p.Ref.Link], p.Ref.Property)
+		value, carries := naming.LinkProperty(links[p.Ref.Link], p.Ref.Property)
 		if !carries {
 			return nil, &OutputPropertyError{
 				Ref: p.Ref, At: p.At, Carries: naming.LinkPropertyNames(links[p.Ref.Link]),
 			}
 		}
-		value := outputValue(p.Ref, raw)
 		if emptyOutput(value) {
 			return nil, &EmptyOutputError{Ref: p.Ref, At: p.At}
 		}
@@ -293,25 +322,13 @@ func carried(properties []string) string {
 	return strings.Join(properties, ", ")
 }
 
-func outputValue(ref outputRef, raw string) any {
-	if !ref.List {
-		return raw
-	}
-	out := []any{}
-	for _, item := range strings.Split(raw, ",") {
-		if item = strings.TrimSpace(item); item != "" {
-			out = append(out, item)
-		}
-	}
-	return out
-}
-
 func emptyOutput(value any) bool {
-	switch t := value.(type) {
-	case string:
-		return strings.TrimSpace(t) == ""
-	case []any:
-		return len(t) == 0
+	if text, ok := value.(string); ok {
+		return strings.TrimSpace(text) == ""
+	}
+	switch v := reflect.ValueOf(value); v.Kind() {
+	case reflect.Slice, reflect.Array, reflect.Map:
+		return v.Len() == 0
 	}
 	return false
 }

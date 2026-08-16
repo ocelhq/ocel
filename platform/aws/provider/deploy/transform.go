@@ -78,7 +78,8 @@ func resolveTransforms(ctx context.Context, cfg Config, manifest *deploymentsv1.
 	if len(results) != len(candidates) {
 		return nil, fmt.Errorf("transforms returned %d results for %d resources", len(results), len(candidates))
 	}
-	if err := resolveOutputs(ctx, cfg, manifest, candidates, results); err != nil {
+	placed, err := resolveOutputs(ctx, cfg, manifest, candidates, results)
+	if err != nil {
 		return nil, err
 	}
 
@@ -89,6 +90,9 @@ func resolveTransforms(ctx context.Context, cfg Config, manifest *deploymentsv1.
 	}
 	for i, c := range candidates {
 		if err := c.apply(out, results[i]); err != nil {
+			if named := nameOutputBehind(placed, c.name, err); named != nil {
+				return nil, named
+			}
 			return nil, fmt.Errorf("transform %s: %w", c.name, err)
 		}
 	}
@@ -300,10 +304,24 @@ func surfaceAt(s transform.Surfaces, key string) (map[string]any, error) {
 	return args, nil
 }
 
+type surfaceFieldError struct {
+	Surface string
+	Field   string
+	Reason  string
+}
+
+func (e *surfaceFieldError) Error() string {
+	return fmt.Sprintf("%s.%s %s", e.Surface, e.Field, e.Reason)
+}
+
+func surfaceProblem(key, field, reason string, args ...any) error {
+	return &surfaceFieldError{Surface: key, Field: field, Reason: fmt.Sprintf(reason, args...)}
+}
+
 func surfaceValue(m map[string]any, key, field string) (any, error) {
 	value, ok := m[field]
 	if !ok {
-		return nil, fmt.Errorf("transforms dropped %s.%s", key, field)
+		return nil, surfaceProblem(key, field, "was dropped by transforms")
 	}
 	return value, nil
 }
@@ -315,7 +333,7 @@ func surfaceFloat(m map[string]any, key, field string) (float64, error) {
 	}
 	number, ok := value.(float64)
 	if !ok {
-		return 0, fmt.Errorf("%s.%s must be a number, got %T", key, field, value)
+		return 0, surfaceProblem(key, field, "must be a number, got %T", value)
 	}
 	return number, nil
 }
@@ -326,7 +344,7 @@ func surfaceInt(m map[string]any, key, field string) (int, error) {
 		return 0, err
 	}
 	if number != math.Trunc(number) {
-		return 0, fmt.Errorf("%s.%s must be a whole number, got %v", key, field, number)
+		return 0, surfaceProblem(key, field, "must be a whole number, got %v", number)
 	}
 	return int(number), nil
 }
@@ -338,7 +356,7 @@ func surfaceString(m map[string]any, key, field string) (string, error) {
 	}
 	text, ok := value.(string)
 	if !ok {
-		return "", fmt.Errorf("%s.%s must be a string, got %T", key, field, value)
+		return "", surfaceProblem(key, field, "must be a string, got %T", value)
 	}
 	return text, nil
 }
@@ -350,7 +368,7 @@ func surfaceBool(m map[string]any, key, field string) (bool, error) {
 	}
 	flag, ok := value.(bool)
 	if !ok {
-		return false, fmt.Errorf("%s.%s must be true or false, got %T", key, field, value)
+		return false, surfaceProblem(key, field, "must be true or false, got %T", value)
 	}
 	return flag, nil
 }
@@ -372,13 +390,13 @@ func surfaceStrings(m map[string]any, key, field string) ([]string, error) {
 	}
 	items, ok := value.([]any)
 	if !ok {
-		return nil, fmt.Errorf("%s.%s must be a list of strings, got %T", key, field, value)
+		return nil, surfaceProblem(key, field, "must be a list of strings, got %T", value)
 	}
 	out := make([]string, 0, len(items))
 	for _, item := range items {
 		text, ok := item.(string)
 		if !ok {
-			return nil, fmt.Errorf("%s.%s must be a list of strings, got a %T in it", key, field, item)
+			return nil, surfaceProblem(key, field, "must be a list of strings, got a %T in it", item)
 		}
 		out = append(out, text)
 	}

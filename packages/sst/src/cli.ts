@@ -2,6 +2,8 @@ import { spawnSync } from "node:child_process";
 import { createRequire } from "node:module";
 import { dirname, join } from "node:path";
 
+export const source = "sst";
+
 export interface Target {
   project: string;
   class: "production" | "preview";

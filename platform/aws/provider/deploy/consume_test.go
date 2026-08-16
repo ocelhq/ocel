@@ -12,6 +12,7 @@ import (
 	linksv1 "github.com/ocelhq/ocel/pkg/proto/links/v1"
 	"github.com/ocelhq/ocel/platform/aws/provider/vars"
 	"github.com/ocelhq/ocel/platform/aws/provider/vars/live"
+	"google.golang.org/protobuf/types/known/structpb"
 )
 
 func consumingManifest() *deploymentsv1.Manifest {
@@ -144,6 +145,31 @@ func TestConsumeLinks(t *testing.T) {
 			if !strings.Contains(refusal.Error(), want) {
 				t.Errorf("refusal = %q, want it to carry %q", refusal.Error(), want)
 			}
+		}
+	})
+
+	t.Run("a custom record bound through `links` is refused before it deploys", func(t *testing.T) {
+		t.Parallel()
+		custom, err := structpb.NewStruct(map[string]any{"subnetIds": []any{"subnet-0a1"}})
+		if err != nil {
+			t.Fatalf("build the published struct: %v", err)
+		}
+		cfg := consumingConfig("main")
+		cfg.Links = &recordingPublisher{
+			published: map[string][]string{varsClass: {"main"}},
+			resolved: map[string]vars.PublishedRecord{"main": {
+				Link:    &linksv1.Link{Name: "main", Source: "sst", Properties: &linksv1.Link_Custom{Custom: custom}},
+				Version: 2,
+			}},
+		}
+
+		_, err = consumeLinks(context.Background(), cfg, consumingManifest(), func(string) {})
+		var refusal *CustomLinkBoundError
+		if !errors.As(err, &refusal) {
+			t.Fatalf("consumeLinks err = %v, want a *CustomLinkBoundError", err)
+		}
+		if !strings.Contains(refusal.Error(), "read by transforms") || !strings.Contains(refusal.Error(), "never provisioned") {
+			t.Errorf("refusal = %q, want it to say where a custom link is read instead", refusal.Error())
 		}
 	})
 

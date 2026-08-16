@@ -105,7 +105,8 @@ func linksError(err error) error {
 	switch {
 	case errors.Is(err, vars.ErrClaimed):
 		return connect.NewError(connect.CodeFailedPrecondition, err)
-	case errors.Is(err, vars.ErrUnsourced), errors.Is(err, vars.ErrUnreadableRecord), errors.Is(err, vars.ErrUnscopedGrant):
+	case errors.Is(err, vars.ErrUnsourced), errors.Is(err, vars.ErrUnreadableRecord),
+		errors.Is(err, vars.ErrUnscopedGrant), errors.Is(err, vars.ErrUnattachedGrant):
 		return connect.NewError(connect.CodeInvalidArgument, err)
 	case errors.Is(err, vars.ErrNotPublished):
 		return connect.NewError(connect.CodeNotFound, err)

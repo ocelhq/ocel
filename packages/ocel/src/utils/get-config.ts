@@ -6,16 +6,23 @@ import {
   type Link,
 } from "../gen/proto/links/v1/links_pb.js";
 
-export type LinkCase = NonNullable<Link["properties"]["case"]>;
+/** The link types an app resolves; a custom record is read by transforms alone. */
+export type LinkCase = Exclude<
+  NonNullable<Link["properties"]["case"]>,
+  "custom"
+>;
 
 export type LinkProperties<TCase extends LinkCase> = Extract<
   Link["properties"],
   { case: TCase }
 >["value"];
 
-const typeOfCase: { [TCase in LinkCase]: LinkType } = {
+const typeOfCase: {
+  [TCase in NonNullable<Link["properties"]["case"]>]: LinkType;
+} = {
   postgres: LinkType.POSTGRES,
   bucket: LinkType.BUCKET,
+  custom: LinkType.CUSTOM,
 };
 
 /** The type a link's properties case declares; UNSPECIFIED when it carries none. */

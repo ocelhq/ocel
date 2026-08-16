@@ -9,6 +9,7 @@ package linksv1
 import (
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
+	structpb "google.golang.org/protobuf/types/known/structpb"
 	reflect "reflect"
 	sync "sync"
 	unsafe "unsafe"
@@ -27,6 +28,7 @@ const (
 	LinkType_LINK_TYPE_UNSPECIFIED LinkType = 0
 	LinkType_LINK_TYPE_POSTGRES    LinkType = 1
 	LinkType_LINK_TYPE_BUCKET      LinkType = 2
+	LinkType_LINK_TYPE_CUSTOM      LinkType = 3
 )
 
 // Enum value maps for LinkType.
@@ -35,11 +37,13 @@ var (
 		0: "LINK_TYPE_UNSPECIFIED",
 		1: "LINK_TYPE_POSTGRES",
 		2: "LINK_TYPE_BUCKET",
+		3: "LINK_TYPE_CUSTOM",
 	}
 	LinkType_value = map[string]int32{
 		"LINK_TYPE_UNSPECIFIED": 0,
 		"LINK_TYPE_POSTGRES":    1,
 		"LINK_TYPE_BUCKET":      2,
+		"LINK_TYPE_CUSTOM":      3,
 	}
 )
 
@@ -77,6 +81,7 @@ type Link struct {
 	//
 	//	*Link_Postgres
 	//	*Link_Bucket
+	//	*Link_Custom
 	Properties    isLink_Properties `protobuf_oneof:"properties"`
 	Grants        []*Grant          `protobuf:"bytes,4,rep,name=grants,proto3" json:"grants,omitempty"`
 	Source        string            `protobuf:"bytes,5,opt,name=source,proto3" json:"source,omitempty"`
@@ -146,6 +151,15 @@ func (x *Link) GetBucket() *BucketProperties {
 	return nil
 }
 
+func (x *Link) GetCustom() *structpb.Struct {
+	if x != nil {
+		if x, ok := x.Properties.(*Link_Custom); ok {
+			return x.Custom
+		}
+	}
+	return nil
+}
+
 func (x *Link) GetGrants() []*Grant {
 	if x != nil {
 		return x.Grants
@@ -172,9 +186,15 @@ type Link_Bucket struct {
 	Bucket *BucketProperties `protobuf:"bytes,3,opt,name=bucket,proto3,oneof"`
 }
 
+type Link_Custom struct {
+	Custom *structpb.Struct `protobuf:"bytes,6,opt,name=custom,proto3,oneof"`
+}
+
 func (*Link_Postgres) isLink_Properties() {}
 
 func (*Link_Bucket) isLink_Properties() {}
+
+func (*Link_Custom) isLink_Properties() {}
 
 type PostgresProperties struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
@@ -428,11 +448,12 @@ var File_links_v1_links_proto protoreflect.FileDescriptor
 
 const file_links_v1_links_proto_rawDesc = "" +
 	"\n" +
-	"\x14links/v1/links.proto\x12\blinks.v1\"\xdb\x01\n" +
+	"\x14links/v1/links.proto\x12\blinks.v1\x1a\x1cgoogle/protobuf/struct.proto\"\x8e\x02\n" +
 	"\x04Link\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12:\n" +
 	"\bpostgres\x18\x02 \x01(\v2\x1c.links.v1.PostgresPropertiesH\x00R\bpostgres\x124\n" +
-	"\x06bucket\x18\x03 \x01(\v2\x1a.links.v1.BucketPropertiesH\x00R\x06bucket\x12'\n" +
+	"\x06bucket\x18\x03 \x01(\v2\x1a.links.v1.BucketPropertiesH\x00R\x06bucket\x121\n" +
+	"\x06custom\x18\x06 \x01(\v2\x17.google.protobuf.StructH\x00R\x06custom\x12'\n" +
 	"\x06grants\x18\x04 \x03(\v2\x0f.links.v1.GrantR\x06grants\x12\x16\n" +
 	"\x06source\x18\x05 \x01(\tR\x06sourceB\f\n" +
 	"\n" +
@@ -455,11 +476,12 @@ const file_links_v1_links_proto_rawDesc = "" +
 	"\x0eGrantCondition\x12\x1a\n" +
 	"\boperator\x18\x01 \x01(\tR\boperator\x12\x10\n" +
 	"\x03key\x18\x02 \x01(\tR\x03key\x12\x16\n" +
-	"\x06values\x18\x03 \x03(\tR\x06values*S\n" +
+	"\x06values\x18\x03 \x03(\tR\x06values*i\n" +
 	"\bLinkType\x12\x19\n" +
 	"\x15LINK_TYPE_UNSPECIFIED\x10\x00\x12\x16\n" +
 	"\x12LINK_TYPE_POSTGRES\x10\x01\x12\x14\n" +
-	"\x10LINK_TYPE_BUCKET\x10\x02B3Z1github.com/ocelhq/ocel/pkg/proto/links/v1;linksv1b\x06proto3"
+	"\x10LINK_TYPE_BUCKET\x10\x02\x12\x14\n" +
+	"\x10LINK_TYPE_CUSTOM\x10\x03B3Z1github.com/ocelhq/ocel/pkg/proto/links/v1;linksv1b\x06proto3"
 
 var (
 	file_links_v1_links_proto_rawDescOnce sync.Once
@@ -482,17 +504,19 @@ var file_links_v1_links_proto_goTypes = []any{
 	(*BucketProperties)(nil),   // 3: links.v1.BucketProperties
 	(*Grant)(nil),              // 4: links.v1.Grant
 	(*GrantCondition)(nil),     // 5: links.v1.GrantCondition
+	(*structpb.Struct)(nil),    // 6: google.protobuf.Struct
 }
 var file_links_v1_links_proto_depIdxs = []int32{
 	2, // 0: links.v1.Link.postgres:type_name -> links.v1.PostgresProperties
 	3, // 1: links.v1.Link.bucket:type_name -> links.v1.BucketProperties
-	4, // 2: links.v1.Link.grants:type_name -> links.v1.Grant
-	5, // 3: links.v1.Grant.conditions:type_name -> links.v1.GrantCondition
-	4, // [4:4] is the sub-list for method output_type
-	4, // [4:4] is the sub-list for method input_type
-	4, // [4:4] is the sub-list for extension type_name
-	4, // [4:4] is the sub-list for extension extendee
-	0, // [0:4] is the sub-list for field type_name
+	6, // 2: links.v1.Link.custom:type_name -> google.protobuf.Struct
+	4, // 3: links.v1.Link.grants:type_name -> links.v1.Grant
+	5, // 4: links.v1.Grant.conditions:type_name -> links.v1.GrantCondition
+	5, // [5:5] is the sub-list for method output_type
+	5, // [5:5] is the sub-list for method input_type
+	5, // [5:5] is the sub-list for extension type_name
+	5, // [5:5] is the sub-list for extension extendee
+	0, // [0:5] is the sub-list for field type_name
 }
 
 func init() { file_links_v1_links_proto_init() }
@@ -503,6 +527,7 @@ func file_links_v1_links_proto_init() {
 	file_links_v1_links_proto_msgTypes[0].OneofWrappers = []any{
 		(*Link_Postgres)(nil),
 		(*Link_Bucket)(nil),
+		(*Link_Custom)(nil),
 	}
 	type x struct{}
 	out := protoimpl.TypeBuilder{

@@ -1,6 +1,5 @@
+import { source } from "./cli.js";
 import { grantsFor, scoped, type Grant, type SSTInclude } from "./grants.js";
-
-export const source = "sst";
 
 /** The typed properties a postgres link carries, as `links.v1.PostgresProperties`. */
 export interface PostgresProperties {

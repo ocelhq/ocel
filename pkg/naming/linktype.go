@@ -43,6 +43,8 @@ func LinkTypeOf(l *linksv1.Link) linksv1.LinkType {
 		return linksv1.LinkType_LINK_TYPE_POSTGRES
 	case *linksv1.Link_Bucket:
 		return linksv1.LinkType_LINK_TYPE_BUCKET
+	case *linksv1.Link_Custom:
+		return linksv1.LinkType_LINK_TYPE_CUSTOM
 	}
 	return linksv1.LinkType_LINK_TYPE_UNSPECIFIED
 }
@@ -56,19 +58,29 @@ func linkProperties(l *linksv1.Link) protoreflect.Message {
 	return m.Get(fd).Message()
 }
 
-func LinkProperty(l *linksv1.Link, name string) (string, bool) {
+func LinkProperty(l *linksv1.Link, name string) (any, bool) {
+	if custom := l.GetCustom(); custom != nil {
+		value, carries := custom.GetFields()[name]
+		if !carries {
+			return nil, false
+		}
+		return value.AsInterface(), true
+	}
 	properties := linkProperties(l)
 	if properties == nil {
-		return "", false
+		return nil, false
 	}
 	fd := properties.Descriptor().Fields().ByJSONName(name)
 	if fd == nil {
-		return "", false
+		return nil, false
 	}
-	return properties.Get(fd).String(), true
+	return propertyValue(fd, properties.Get(fd)), true
 }
 
 func LinkPropertyNames(l *linksv1.Link) []string {
+	if custom := l.GetCustom(); custom != nil {
+		return slices.Sorted(maps.Keys(custom.GetFields()))
+	}
 	properties := linkProperties(l)
 	if properties == nil {
 		return nil
@@ -80,4 +92,31 @@ func LinkPropertyNames(l *linksv1.Link) []string {
 	}
 	slices.Sort(out)
 	return out
+}
+
+func propertyValue(fd protoreflect.FieldDescriptor, v protoreflect.Value) any {
+	if !fd.IsList() {
+		return propertyScalar(fd, v)
+	}
+	list := v.List()
+	out := make([]any, list.Len())
+	for i := range out {
+		out[i] = propertyScalar(fd, list.Get(i))
+	}
+	return out
+}
+
+func propertyScalar(fd protoreflect.FieldDescriptor, v protoreflect.Value) any {
+	switch fd.Kind() {
+	case protoreflect.BoolKind:
+		return v.Bool()
+	case protoreflect.Int32Kind, protoreflect.Sint32Kind, protoreflect.Sfixed32Kind,
+		protoreflect.Int64Kind, protoreflect.Sint64Kind, protoreflect.Sfixed64Kind:
+		return float64(v.Int())
+	case protoreflect.Uint32Kind, protoreflect.Fixed32Kind, protoreflect.Uint64Kind, protoreflect.Fixed64Kind:
+		return float64(v.Uint())
+	case protoreflect.FloatKind, protoreflect.DoubleKind:
+		return v.Float()
+	}
+	return v.String()
 }

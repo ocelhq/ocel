@@ -17,6 +17,7 @@ import (
 	"github.com/ocelhq/ocel/platform/aws/provider/transform"
 	"github.com/ocelhq/ocel/platform/aws/provider/transform/transformtest"
 	"github.com/ocelhq/ocel/platform/aws/provider/vars"
+	"google.golang.org/protobuf/types/known/structpb"
 )
 
 func outputManifest() *deploymentsv1.Manifest {
@@ -30,14 +31,26 @@ func networkStore(properties *linksv1.PostgresProperties) *recordingPublisher {
 	if properties == nil {
 		properties = &linksv1.PostgresProperties{}
 	}
+	return storeHolding(&linksv1.Link{
+		Name: "network", Source: "sst", Properties: &linksv1.Link_Postgres{Postgres: properties},
+	})
+}
+
+func customNetworkStore(t *testing.T, properties map[string]any) *recordingPublisher {
+	t.Helper()
+	custom, err := structpb.NewStruct(properties)
+	if err != nil {
+		t.Fatalf("build the published struct: %v", err)
+	}
+	return storeHolding(&linksv1.Link{
+		Name: "network", Source: "sst", Properties: &linksv1.Link_Custom{Custom: custom},
+	})
+}
+
+func storeHolding(link *linksv1.Link) *recordingPublisher {
 	return &recordingPublisher{
 		published: map[string][]string{"production": {"network"}},
-		resolved: map[string]vars.PublishedRecord{
-			"network": {
-				Link:    &linksv1.Link{Source: "sst", Properties: &linksv1.Link_Postgres{Postgres: properties}},
-				Version: 3,
-			},
-		},
+		resolved:  map[string]vars.PublishedRecord{"network": {Link: link, Version: 3}},
 	}
 }
 
@@ -45,12 +58,8 @@ func outputConfig(store LinkStore, evaluator transform.Evaluator) Config {
 	return Config{Env: "prod", VarsClass: "production", Links: store, Transform: evaluator}
 }
 
-func vpcPlaceholder(link, property string, list bool) map[string]any {
-	ref := map[string]any{"link": link, "property": property}
-	if list {
-		ref["list"] = true
-	}
-	return map[string]any{outputPlaceholderKey: ref}
+func vpcPlaceholder(link, property string) map[string]any {
+	return map[string]any{outputPlaceholderKey: map[string]any{"link": link, "property": property}}
 }
 
 func placedFunction(subnets, groups any) []transform.Surfaces {
@@ -68,10 +77,13 @@ func TestResolveOutputs(t *testing.T) {
 		t.Parallel()
 
 		manifest := outputManifest()
-		store := networkStore(&linksv1.PostgresProperties{Host: "subnet-a, subnet-b", Username: "sg-1"})
+		store := customNetworkStore(t, map[string]any{
+			"subnetIds":        []any{"subnet-a", "subnet-b"},
+			"securityGroupIds": []any{"sg-1"},
+		})
 		fake := &fakeEvaluator{out: placedFunction(
-			vpcPlaceholder("network", "host", true),
-			[]any{vpcPlaceholder("network", "username", false)},
+			vpcPlaceholder("network", "subnetIds"),
+			vpcPlaceholder("network", "securityGroupIds"),
 		)}
 
 		resolved, err := resolveTransforms(t.Context(), outputConfig(store, fake), manifest)
@@ -86,30 +98,60 @@ func TestResolveOutputs(t *testing.T) {
 		}
 	})
 
-	t.Run("a numeric property renders as its decimal string", func(t *testing.T) {
+	t.Run("a scalar property lands as a scalar beside a list that lands as a list", func(t *testing.T) {
 		t.Parallel()
 
 		manifest := outputManifest()
-		store := networkStore(&linksv1.PostgresProperties{Host: "subnet-a", Port: 5433})
-		fake := &fakeEvaluator{out: placedFunction(
-			vpcPlaceholder("network", "host", true),
-			[]any{vpcPlaceholder("network", "port", false)},
-		)}
+		store := customNetworkStore(t, map[string]any{
+			"subnetIds":      []any{"subnet-a"},
+			"primaryGroupId": "sg-1",
+			"functionMemory": float64(2048),
+		})
+		surfaces := placedFunction(
+			vpcPlaceholder("network", "subnetIds"),
+			[]any{vpcPlaceholder("network", "primaryGroupId")},
+		)
+		surfaces[0]["lambda"]["memorySizeMb"] = vpcPlaceholder("network", "functionMemory")
+		fake := &fakeEvaluator{out: surfaces}
 
 		resolved, err := resolveTransforms(t.Context(), outputConfig(store, fake), manifest)
 		if err != nil {
 			t.Fatalf("resolveTransforms: %v", err)
 		}
-		if got := resolved.forFunction(manifest.GetFunctions()[0]).VPC.SecurityGroupIDs; !reflect.DeepEqual(got, []string{"5433"}) {
-			t.Errorf("securityGroupIds = %v, want the int32 port rendered as %q", got, "5433")
+
+		args := resolved.forFunction(manifest.GetFunctions()[0])
+		want := functionVPC{SubnetIDs: []string{"subnet-a"}, SecurityGroupIDs: []string{"sg-1"}}
+		if !reflect.DeepEqual(args.VPC, want) {
+			t.Errorf("vpc = %+v, want %+v", args.VPC, want)
+		}
+		if args.MemorySizeMB != 2048 {
+			t.Errorf("memorySizeMb = %d, want the published number itself", args.MemorySizeMB)
+		}
+	})
+
+	t.Run("a property the surface cannot decode fails the deploy by surface, field, link and property", func(t *testing.T) {
+		t.Parallel()
+
+		store := customNetworkStore(t, map[string]any{"subnetIds": float64(7)})
+		fake := &fakeEvaluator{out: placedFunction(vpcPlaceholder("network", "subnetIds"), []any{"sg-1"})}
+
+		_, err := resolveTransforms(t.Context(), outputConfig(store, fake), outputManifest())
+		var shape *OutputShapeError
+		if !errors.As(err, &shape) {
+			t.Fatalf("resolveTransforms error = %v, want an OutputShapeError", err)
+		}
+		for _, fact := range []string{"fn--api--users", "vpc.subnetIds", "network", "subnetIds", "list of strings"} {
+			if !strings.Contains(err.Error(), fact) {
+				t.Errorf("error = %q, missing %q", err, fact)
+			}
 		}
 	})
 
 	t.Run("the store is read at the class and environment this deploy targets", func(t *testing.T) {
 		t.Parallel()
 
-		store := networkStore(&linksv1.PostgresProperties{Host: "subnet-a"})
-		fake := &fakeEvaluator{out: placedFunction(vpcPlaceholder("network", "host", true), []any{"sg-1"})}
+		store := customNetworkStore(t, map[string]any{"subnetIds": []any{"subnet-a"}})
+		fake := &fakeEvaluator{out: placedFunction(vpcPlaceholder("network", "subnetIds"), []any{"sg-1"})}
 		cfg := outputConfig(store, fake)
 		cfg.Class = deploymentsv1.Environment_CLASS_PREVIEW
 		cfg.Identity = "pr-4"
@@ -129,7 +171,7 @@ func TestResolveOutputs(t *testing.T) {
 	t.Run("a deploy naming no output never reaches the store", func(t *testing.T) {
 		t.Parallel()
 
-		store := networkStore(nil)
+		store := customNetworkStore(t, map[string]any{"subnetIds": []any{"subnet-a"}})
 		fake := &fakeEvaluator{}
 		if _, err := resolveTransforms(t.Context(), outputConfig(store, fake), outputManifest()); err != nil {
 			t.Fatalf("resolveTransforms: %v", err)
@@ -142,16 +184,16 @@ func TestResolveOutputs(t *testing.T) {
 	t.Run("an output naming an unpublished link fails the deploy by name", func(t *testing.T) {
 		t.Parallel()
 
-		store := networkStore(&linksv1.PostgresProperties{Host: "subnet-a"})
+		store := customNetworkStore(t, map[string]any{"subnetIds": []any{"subnet-a"}})
 		store.published = map[string][]string{"production": {"uploads"}}
-		fake := &fakeEvaluator{out: placedFunction(vpcPlaceholder("network", "host", true), []any{"sg-1"})}
+		fake := &fakeEvaluator{out: placedFunction(vpcPlaceholder("network", "subnetIds"), []any{"sg-1"})}
 
 		_, err := resolveTransforms(t.Context(), outputConfig(store, fake), outputManifest())
 		var unpublished *UnpublishedOutputError
 		if !errors.As(err, &unpublished) {
 			t.Fatalf("resolveTransforms error = %v, want an UnpublishedOutputError", err)
 		}
-		for _, fact := range []string{"fn--api--users", "vpc.subnetIds", "network", "host", "production", "uploads"} {
+		for _, fact := range []string{"fn--api--users", "vpc.subnetIds", "network", "subnetIds", "production", "uploads"} {
 			if !strings.Contains(err.Error(), fact) {
 				t.Errorf("error = %q, missing %q", err, fact)
 			}
@@ -161,9 +203,9 @@ func TestResolveOutputs(t *testing.T) {
 	t.Run("a link published to another class is named as such", func(t *testing.T) {
 		t.Parallel()
 
-		store := networkStore(&linksv1.PostgresProperties{Host: "subnet-a"})
+		store := customNetworkStore(t, map[string]any{"subnetIds": []any{"subnet-a"}})
 		store.published = map[string][]string{"preview": {"network"}}
-		fake := &fakeEvaluator{out: placedFunction(vpcPlaceholder("network", "host", true), []any{"sg-1"})}
+		fake := &fakeEvaluator{out: placedFunction(vpcPlaceholder("network", "subnetIds"), []any{"sg-1"})}
 		cfg := outputConfig(store, fake)
 		cfg.VarsSiblingClasses = []string{"production", "preview"}
 
@@ -183,22 +225,23 @@ func TestResolveOutputs(t *testing.T) {
 	t.Run("an output resolving to nothing fails the deploy rather than un-placing the function", func(t *testing.T) {
 		t.Parallel()
 
-		for name, published := range map[string]string{
-			"a property published empty":          "",
-			"a property carrying separators only": " , ,",
+		for name, published := range map[string]any{
+			"blank string": " ",
+			"empty list":   []any{},
+			"empty map":    map[string]any{},
 		} {
 			t.Run(name, func(t *testing.T) {
 				t.Parallel()
 
-				store := networkStore(&linksv1.PostgresProperties{Host: published})
-				fake := &fakeEvaluator{out: placedFunction(vpcPlaceholder("network", "host", true), []any{"sg-1"})}
+				store := customNetworkStore(t, map[string]any{"subnetIds": published})
+				fake := &fakeEvaluator{out: placedFunction(vpcPlaceholder("network", "subnetIds"), []any{"sg-1"})}
 
 				_, err := resolveTransforms(t.Context(), outputConfig(store, fake), outputManifest())
 				var empty *EmptyOutputError
 				if !errors.As(err, &empty) {
 					t.Fatalf("resolveTransforms error = %v, want an EmptyOutputError", err)
 				}
-				for _, fact := range []string{"fn--api--users", "vpc.subnetIds", "network", "host"} {
+				for _, fact := range []string{"fn--api--users", "vpc.subnetIds", "network", "subnetIds"} {
 					if !strings.Contains(err.Error(), fact) {
 						t.Errorf("error = %q, missing %q", err, fact)
 					}
@@ -216,7 +259,7 @@ func TestResolveOutputs(t *testing.T) {
 			Resource:    &resourcesv1.ResourceIdentifier{Type: linksv1.LinkType_LINK_TYPE_BUCKET, Name: "network"},
 			Config:      &deploymentsv1.ManifestResource_Bucket{Bucket: &resourcesv1.BucketConfig{}},
 		}}
-		store := networkStore(&linksv1.PostgresProperties{Host: "subnet-a"})
+		store := customNetworkStore(t, map[string]any{"subnetIds": []any{"subnet-a"}})
 		fake := &fakeEvaluator{out: []transform.Surfaces{
 			{
 				"bucket":       {"forceDestroy": false},
@@ -224,7 +267,7 @@ func TestResolveOutputs(t *testing.T) {
 				"listener":     {"timeoutSeconds": float64(30)},
 				"notification": {"events": []any{}},
 			},
-			placedFunction(vpcPlaceholder("network", "host", true), []any{"sg-1"})[0],
+			placedFunction(vpcPlaceholder("network", "subnetIds"), []any{"sg-1"})[0],
 		}}
 
 		_, err := resolveTransforms(t.Context(), outputConfig(store, fake), manifest)
@@ -252,7 +295,7 @@ func TestResolveOutputs(t *testing.T) {
 			Resource:    &resourcesv1.ResourceIdentifier{Type: linksv1.LinkType_LINK_TYPE_BUCKET, Name: "network"},
 			Config:      &deploymentsv1.ManifestResource_Bucket{Bucket: &resourcesv1.BucketConfig{}},
 		}}
-		store := networkStore(&linksv1.PostgresProperties{Host: "subnet-a"})
+		store := customNetworkStore(t, map[string]any{"subnetIds": []any{"subnet-a"}})
 		fake := &fakeEvaluator{out: []transform.Surfaces{
 			{
 				"bucket":       {"forceDestroy": false},
@@ -260,7 +303,7 @@ func TestResolveOutputs(t *testing.T) {
 				"listener":     {"timeoutSeconds": float64(30)},
 				"notification": {"events": []any{}},
 			},
-			placedFunction(vpcPlaceholder("network", "host", true), []any{"sg-1"})[0],
+			placedFunction(vpcPlaceholder("network", "subnetIds"), []any{"sg-1"})[0],
 		}}
 
 		resolved, err := resolveTransforms(t.Context(), outputConfig(store, fake), manifest)
@@ -275,8 +318,32 @@ func TestResolveOutputs(t *testing.T) {
 	t.Run("an output naming a property the record does not carry fails the deploy by name", func(t *testing.T) {
 		t.Parallel()
 
-		store := networkStore(&linksv1.PostgresProperties{Host: "subnet-a"})
-		fake := &fakeEvaluator{out: placedFunction(vpcPlaceholder("network", "privateSubnetIds", true), []any{"sg-1"})}
+		store := customNetworkStore(t, map[string]any{
+			"subnetIds":        []any{"subnet-a"},
+			"securityGroupIds": []any{"sg-1"},
+		})
+		fake := &fakeEvaluator{out: placedFunction(vpcPlaceholder("network", "privateSubnetIds"), []any{"sg-1"})}
+
+		_, err := resolveTransforms(t.Context(), outputConfig(store, fake), outputManifest())
+		var missing *OutputPropertyError
+		if !errors.As(err, &missing) {
+			t.Fatalf("resolveTransforms error = %v, want an OutputPropertyError", err)
+		}
+		if want := []string{"securityGroupIds", "subnetIds"}; !reflect.DeepEqual(missing.Carries, want) {
+			t.Errorf("carries = %v, want the published record's own keys %v", missing.Carries, want)
+		}
+		for _, fact := range []string{"fn--api--users", "vpc.subnetIds", "network", "privateSubnetIds", "securityGroupIds, subnetIds"} {
+			if !strings.Contains(err.Error(), fact) {
+				t.Errorf("error = %q, missing %q", err, fact)
+			}
+		}
+	})
+
+	t.Run("an output naming a property no owned type declares fails the deploy by name", func(t *testing.T) {
+		t.Parallel()
+
+		store := networkStore(&linksv1.PostgresProperties{Host: "db.internal"})
+		fake := &fakeEvaluator{out: placedFunction(vpcPlaceholder("network", "privateSubnetIds"), []any{"sg-1"})}
 
 		_, err := resolveTransforms(t.Context(), outputConfig(store, fake), outputManifest())
 		var missing *OutputPropertyError
@@ -285,11 +352,6 @@ func TestResolveOutputs(t *testing.T) {
 		}
 		if want := []string{"database", "host", "password", "port", "username"}; !reflect.DeepEqual(missing.Carries, want) {
 			t.Errorf("carries = %v, want the typed record's own fields %v", missing.Carries, want)
-		}
-		for _, fact := range []string{"fn--api--users", "vpc.subnetIds", "network", "privateSubnetIds", "database, host, password, port, username"} {
-			if !strings.Contains(err.Error(), fact) {
-				t.Errorf("error = %q, missing %q", err, fact)
-			}
 		}
 	})
 
@@ -320,7 +382,7 @@ func TestResolveOutputs(t *testing.T) {
 	t.Run("an output with no store to read from fails the deploy by name", func(t *testing.T) {
 		t.Parallel()
 
-		fake := &fakeEvaluator{out: placedFunction(vpcPlaceholder("network", "host", true), []any{"sg-1"})}
+		fake := &fakeEvaluator{out: placedFunction(vpcPlaceholder("network", "subnetIds"), []any{"sg-1"})}
 		_, err := resolveTransforms(t.Context(), Config{Env: "prod", VarsClass: "production", Transform: fake}, outputManifest())
 		if err == nil {
 			t.Fatal("resolveTransforms succeeded, want the unreachable store refused")
@@ -336,7 +398,7 @@ func TestResolveOutputs(t *testing.T) {
 func TestMapOutputsReachesEveryPlaceholderInAField(t *testing.T) {
 	t.Parallel()
 
-	authored := map[string]any{"placement": map[string]any{"subnets": []any{vpcPlaceholder("network", "privateSubnetIds", false)}}}
+	authored := map[string]any{"placement": map[string]any{"subnets": []any{vpcPlaceholder("network", "privateSubnetIds")}}}
 	resolved, err := mapOutputs(authored, outputSite{Resource: "fn--api--users", Surface: "vpc", Field: "subnetIds"},
 		func(ref outputRef, _ outputSite, _ any) (any, error) { return ref.Property, nil })
 	if err != nil {
@@ -349,16 +411,16 @@ func TestMapOutputsReachesEveryPlaceholderInAField(t *testing.T) {
 }
 
 const vpcPlacementModule = `
-	import { defineTransform, output, outputList } from "@ocel/provider-aws/transform"
-	export default defineTransform({
+	import { defineTransform } from "@ocel/provider-aws/transform"
+	export default defineTransform(({ links }) => ({
 		if: (ctx) => ctx.envClass === "production",
 		function: {
 			vpc: {
-				subnetIds: outputList("network", "host"),
-				securityGroupIds: [output("network", "username")],
+				subnetIds: links.network.subnetIds,
+				securityGroupIds: links.network.securityGroupIds,
 			},
 		},
-	})
+	}))
 `
 
 func TestVPCPlacementFromLinkOutput(t *testing.T) {
@@ -366,7 +428,10 @@ func TestVPCPlacementFromLinkOutput(t *testing.T) {
 
 	root := transformtest.Root(t, map[string]string{"vpc.transform.ts": vpcPlacementModule})
 	manifest := outputManifest()
-	store := networkStore(&linksv1.PostgresProperties{Host: "subnet-0a1,subnet-0b2", Username: "sg-0c3"})
+	store := customNetworkStore(t, map[string]any{
+		"subnetIds":        []any{"subnet-0a1", "subnet-0b2"},
+		"securityGroupIds": []any{"sg-0c3"},
+	})
 	cfg := outputConfig(store, transform.NodePass{Root: root, Modules: []string{"./vpc.transform.ts"}})
 
 	resolved, err := resolveTransforms(t.Context(), cfg, manifest)
@@ -404,6 +469,32 @@ func TestVPCPlacementFromLinkOutput(t *testing.T) {
 		return strings.HasSuffix(arn, "AWSLambdaVPCAccessExecutionRole")
 	}) {
 		t.Errorf("role policy attachments = %v, want the VPC access one among them", rec.attachments())
+	}
+}
+
+const postgresSmuggleModule = `
+	import { defineTransform } from "@ocel/provider-aws/transform"
+	export default defineTransform(({ links }) => ({
+		function: { vpc: { subnetIds: links.network.host, securityGroupIds: links.network.username } },
+	}))
+`
+
+func TestVPCPlacementCannotBeSmuggledThroughPostgresProperties(t *testing.T) {
+	t.Parallel()
+
+	root := transformtest.Root(t, map[string]string{"vpc.transform.ts": postgresSmuggleModule})
+	store := networkStore(&linksv1.PostgresProperties{Host: "subnet-0a1,subnet-0b2", Username: "sg-0c3"})
+	cfg := outputConfig(store, transform.NodePass{Root: root, Modules: []string{"./vpc.transform.ts"}})
+
+	_, err := resolveTransforms(t.Context(), cfg, outputManifest())
+	var shape *OutputShapeError
+	if !errors.As(err, &shape) {
+		t.Fatalf("resolveTransforms error = %v, want the postgres host refused where a list of subnet ids belongs", err)
+	}
+	for _, fact := range []string{"fn--api--users", "vpc.subnetIds", "network", "host"} {
+		if !strings.Contains(err.Error(), fact) {
+			t.Errorf("error = %q, missing %q", err, fact)
+		}
 	}
 }
 
