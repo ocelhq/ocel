@@ -616,26 +616,6 @@ export default {
 `;
 }
 
-const EDGE_ENV_MARKER = "EnvEdgeError";
-
-function warnEdgeEnvRoutes(
-  chunkKeysByPathname: Map<string, string[]>,
-  chunkIdByKey: Map<string, string>,
-  chunks: Record<string, string>,
-): void {
-  const pathnames = [...chunkKeysByPathname]
-    .filter(([, keys]) =>
-      keys.some((key) => chunks[chunkIdByKey.get(key)!]?.includes(EDGE_ENV_MARKER)),
-    )
-    .map(([pathname]) => pathname)
-    .sort();
-  if (pathnames.length === 0) return;
-
-  console.warn(
-    `ocel: ocel/env is imported by edge entr${pathnames.length === 1 ? "y" : "ies"} ${pathnames.join(", ")} — no variable class is deliverable to the edge runtime, so reading one there throws on the first request. Move the entry to the nodejs runtime.`,
-  );
-}
-
 async function moduleIds(
   pathByKey: Map<string, string>,
   idOf: (index: number) => string,
@@ -712,7 +692,6 @@ async function emitEdgeBundle(
   const env: Record<string, string> = {};
   const entryAssets = new Map<string, Set<string>>();
   const handlerExports = new Map<string, string>();
-  const chunkKeysByPathname = new Map<string, string[]>();
 
   for (const source of sources) {
     const { entryKey, handlerExport } = edgeEntryOf(source);
@@ -720,7 +699,6 @@ async function emitEdgeBundle(
 
     const assets = entryAssets.get(entryKey) ?? new Set<string>();
     entryAssets.set(entryKey, assets);
-    const ownChunkKeys: string[] = [];
     for (const [key, abs] of Object.entries(source.assets)) {
       if (isAsset(key)) {
         assetPathByName.set(key, abs);
@@ -729,12 +707,7 @@ async function emitEdgeBundle(
       if (!isChunk(key)) continue;
       chunkPathByKey.set(key, abs);
       assets.add(key);
-      ownChunkKeys.push(key);
     }
-    chunkKeysByPathname.set(source.pathname, [
-      ...(chunkKeysByPathname.get(source.pathname) ?? []),
-      ...ownChunkKeys,
-    ]);
 
     for (const [name, abs] of Object.entries(source.wasmAssets ?? {})) {
       wasmPathByName.set(name, abs);
@@ -766,8 +739,6 @@ async function emitEdgeBundle(
     (n) => `a/${n}.bin`,
     (bytes) => bytes.toString("base64"),
   );
-
-  warnEdgeEnvRoutes(chunkKeysByPathname, chunkIdByKey, chunks);
 
   const entries: Record<string, EdgeEntry> = {};
   for (const [entryKey, keys] of entryAssets) {

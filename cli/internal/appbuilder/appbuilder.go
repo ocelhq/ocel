@@ -291,6 +291,26 @@ func CollectFunctions(projectDir string) ([]manifestbuilder.Function, error) {
 	return collectFunctions(outputDir)
 }
 
+func EdgeApps(projectDir string) []string {
+	appsDir := filepath.Join(projectDir, scratchDirName, outputDirName, appsDirName)
+	entries, err := os.ReadDir(appsDir)
+	if err != nil {
+		return nil
+	}
+
+	var apps []string
+	for _, entry := range entries {
+		if !entry.IsDir() {
+			continue
+		}
+		bundle := filepath.Join(appsDir, entry.Name(), filepath.FromSlash(edge.AppBundleFile))
+		if _, err := os.Stat(bundle); err == nil {
+			apps = append(apps, entry.Name())
+		}
+	}
+	return apps
+}
+
 func BuildID(projectDir, app string) string {
 	raw, err := os.ReadFile(filepath.Join(projectDir, scratchDirName, outputDirName, appsDirName, app, edge.ServeDescriptorFile))
 	if err != nil {

@@ -47,53 +47,122 @@ describe("declaring on the edge", () => {
 });
 
 describe("reading on the edge", () => {
-  it("throws naming the key, the tier and the one real remedy", () => {
-    const env = defineEnv({ EDGE_READ: { class: "plain" } });
+  const written: string[] = [];
+
+  function write(key: string, value: string): void {
+    process.env[key] = value;
+    written.push(key);
+  }
+
+  afterEach(() => {
+    for (const key of written.splice(0)) delete process.env[key];
+  });
+
+  it("reads a plain value the same way the node build does", () => {
+    write("EDGE_PLAIN", "bare");
+    const env = defineEnv({ EDGE_PLAIN: { class: "plain" } });
+    expect(env.EDGE_PLAIN).toBe("bare");
+  });
+
+  it("prefers the membrane's name over the bare one, for both readable classes", () => {
+    write("EDGE_PLAIN_BOTH", "bare");
+    write("OCEL_VAR_EDGE_PLAIN_BOTH", "delivered");
+    write("EDGE_SENSITIVE_BOTH", "bare");
+    write("OCEL_VAR_EDGE_SENSITIVE_BOTH", "delivered");
+
+    const env = defineEnv({
+      EDGE_PLAIN_BOTH: { class: "plain" },
+      EDGE_SENSITIVE_BOTH: { class: "sensitive" },
+    });
+
+    expect(env.EDGE_PLAIN_BOTH).toBe("delivered");
+    expect(env.EDGE_SENSITIVE_BOTH).toBe("delivered");
+  });
+
+  it("reads a sensitive value, which arrives unsealed under the membrane's name", () => {
+    write("OCEL_VAR_EDGE_SENSITIVE", "unsealed");
+    const env = defineEnv({
+      EDGE_SENSITIVE: { class: "sensitive", schema: z.string() },
+    });
+    expect(env.EDGE_SENSITIVE).toBe("unsealed");
+  });
+
+  it("throws for a key with no delivered value, as the node build does", () => {
+    const env = defineEnv({ EDGE_UNSET: { class: "plain" } });
+    expect(() => void env.EDGE_UNSET).toThrow(EnvValueError);
+  });
+
+  it("throws for a key no defineEnv call declares", () => {
+    const env = defineEnv({ EDGE_DECLARED: { class: "plain" } }) as Record<
+      string,
+      unknown
+    >;
+    expect(() => void env.EDGE_UNDECLARED).toThrow(EnvValueError);
+  });
+
+  it("refuses a secret, naming the key, its class and the two remedies", () => {
+    write("OCEL_VAR_EDGE_SECRET", "would-be-stale");
+    const env = defineEnv({ EDGE_SECRET: { class: "secret" } });
+
     let thrown: unknown;
     try {
-      void env.EDGE_READ;
+      void env.EDGE_SECRET;
     } catch (error) {
       thrown = error;
     }
     expect(thrown).toBeInstanceOf(EnvEdgeError);
     const message = (thrown as Error).message;
-    expect(message).toContain("EDGE_READ");
-    expect(message).toContain("edge");
+    expect(message).toContain("EDGE_SECRET");
+    expect(message).toContain("secret");
     expect(message).toContain("nodejs");
-    expect(message).not.toContain("reclassif");
-    expect(message).not.toContain("ocel env set");
+    expect(message).toContain("sensitive");
   });
 
   it("names the entry the shim is running when it knows one", () => {
     (globalThis as Record<string, unknown>)[ENTRY_GLOBAL] =
       "middleware_app/api/edge/route";
-    const env = defineEnv({ EDGE_ENTRY_NAMED: { class: "plain" } });
+    const env = defineEnv({ EDGE_ENTRY_NAMED: { class: "secret" } });
     expect(() => void env.EDGE_ENTRY_NAMED).toThrow(
       /middleware_app\/api\/edge\/route/,
     );
   });
 
-  it("throws for every class, because none is deliverable to the edge", () => {
+  it("asserts the folder scope against the app's binding", () => {
+    write("OCEL_VAR_EDGE_SCOPED", "for-web");
     const env = defineEnv({
-      EDGE_PLAIN: { class: "plain" },
-      EDGE_SENSITIVE: { class: "sensitive" },
-      EDGE_SECRET: { class: "secret" },
+      EDGE_SCOPED: { class: "plain", folders: ["/web"] },
     });
-    for (const key of ["EDGE_PLAIN", "EDGE_SENSITIVE", "EDGE_SECRET"] as const) {
-      expect(() => void env[key]).toThrow(EnvEdgeError);
-    }
+
+    write("OCEL_APP_FOLDER", "/admin");
+    expect(() => void env.EDGE_SCOPED).toThrow(EnvScopeError);
+
+    process.env.OCEL_APP_FOLDER = "/web";
+    expect(env.EDGE_SCOPED).toBe("for-web");
   });
 
-  it("throws even when the environment carries a value", () => {
-    process.env.EDGE_SET = "from-the-environment";
-    process.env.OCEL_VAR_EDGE_SET = "from-the-membrane";
-    try {
-      const env = defineEnv({ EDGE_SET: { class: "plain" } });
-      expect(() => void env.EDGE_SET).toThrow(EnvEdgeError);
-    } finally {
-      delete process.env.EDGE_SET;
-      delete process.env.OCEL_VAR_EDGE_SET;
-    }
+  it("asserts the folder scope before the class, as the node build does", () => {
+    write("OCEL_APP_FOLDER", "/admin");
+    const env = defineEnv({
+      EDGE_SCOPED_SECRET: { class: "secret", folders: ["/web"] },
+    });
+    expect(() => void env.EDGE_SCOPED_SECRET).toThrow(EnvScopeError);
+  });
+
+  it("reads a value once and answers every later read from the memo", () => {
+    write("OCEL_VAR_EDGE_MEMO", "first");
+    const env = defineEnv({ EDGE_MEMO: { class: "plain" } });
+    expect(env.EDGE_MEMO).toBe("first");
+
+    process.env.OCEL_VAR_EDGE_MEMO = "second";
+    expect(env.EDGE_MEMO).toBe("first");
+  });
+
+  it("does not memoize a read that threw, so a fixed value is seen", () => {
+    const env = defineEnv({ EDGE_MEMO_UNSET: { class: "plain" } });
+    expect(() => void env.EDGE_MEMO_UNSET).toThrow(EnvValueError);
+
+    write("OCEL_VAR_EDGE_MEMO_UNSET", "set-late");
+    expect(env.EDGE_MEMO_UNSET).toBe("set-late");
   });
 });
 

@@ -779,36 +779,6 @@ test("prints the bundle size, chunk count and entry count", async () => {
   );
 });
 
-test("warns naming every edge route whose chunks carry ocel/env's edge build", async () => {
-  const { projectDir, args } = await synthEdgeProject();
-  const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
-  await writeFile(
-    join(projectDir, ".next/server/edge/chunks/route.js"),
-    'class EnvEdgeError extends Error { name = "EnvEdgeError" }',
-  );
-
-  await adapter.onBuildComplete!(args as never);
-
-  const call = warn.mock.calls
-    .map(([message]) => String(message))
-    .find((message) => message.includes("ocel/env"));
-  expect(call).toBeDefined();
-  expect(call).toContain("/api/edge");
-  expect(call).not.toContain("/edge-page");
-  expect(call).toContain("nodejs");
-});
-
-test("stays silent when no edge chunk carries ocel/env", async () => {
-  const { args } = await synthEdgeProject();
-  const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
-
-  await adapter.onBuildComplete!(args as never);
-
-  for (const [message] of warn.mock.calls) {
-    expect(String(message)).not.toContain("ocel/env");
-  }
-});
-
 test("hands the running entry key to the chunks on a global, before they evaluate", async () => {
   const { projectDir, args } = await synthEdgeProject();
 

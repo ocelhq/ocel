@@ -18,8 +18,6 @@ import (
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
-const edgeBundleFile = "edge/bundle.json"
-
 const edgeSealedFile = "sealed.bin"
 
 const edgeKind = "edge"
@@ -37,7 +35,7 @@ func appEdgeSealedKey(c naming.Coordinate) string {
 }
 
 func readEdgeBundle(cfg Config, app string) ([]byte, bool, error) {
-	raw, err := os.ReadFile(filepath.Join(appArtifactRoot(cfg.ArtifactRoot, app), filepath.FromSlash(edgeBundleFile)))
+	raw, err := os.ReadFile(filepath.Join(appArtifactRoot(cfg.ArtifactRoot, app), filepath.FromSlash(edge.AppBundleFile)))
 	if errors.Is(err, fs.ErrNotExist) {
 		return nil, false, nil
 	}

@@ -11,6 +11,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"slices"
 	"strings"
 	"testing"
 
@@ -706,6 +707,32 @@ func TestBuildID(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestEdgeApps(t *testing.T) {
+	t.Parallel()
+
+	t.Run("names every built app carrying an edge bundle", func(t *testing.T) {
+		t.Parallel()
+
+		root := t.TempDir()
+		writeAppFile(t, root, "web/"+edge.AppBundleFile, []byte(`{"version":2}`))
+		writeAppFile(t, root, "admin/"+edge.AppBundleFile, []byte(`{"version":2}`))
+		writeAppFile(t, root, "api/"+edge.ServeDescriptorFile, []byte(`{"framework":"express"}`))
+
+		apps := EdgeApps(root)
+		if !slices.Equal(apps, []string{"admin", "web"}) {
+			t.Errorf("EdgeApps = %v, want only the apps with an edge bundle", apps)
+		}
+	})
+
+	t.Run("a project that was never built names nothing", func(t *testing.T) {
+		t.Parallel()
+
+		if apps := EdgeApps(t.TempDir()); len(apps) != 0 {
+			t.Errorf("EdgeApps = %v, want no apps before a build", apps)
+		}
+	})
 }
 
 func writeAppFile(t *testing.T, root, rel string, contents []byte) {
