@@ -2,9 +2,7 @@ import type { StandardSchemaV1 } from "@standard-schema/spec";
 import { defer } from "../utils/defer.js";
 import { declareEnv } from "./declare.js";
 import {
-  complaint,
   isLive,
-  parse,
   validateDefinitions,
   type Definitions,
   type VariableDefinition,
@@ -12,6 +10,7 @@ import {
 import { EnvValueError } from "./errors.js";
 import { liveGeneration, NO_GENERATION, readLive } from "./live.js";
 import { assertInScope, callSite, inScope } from "./scope.js";
+import { coerce, readDelivered, undeclared } from "./value.js";
 
 export {
   EnvDefinitionError,
@@ -46,11 +45,7 @@ export function defineEnv<const TDefinitions extends Definitions>(
 
       const key = property;
       const definition = definitions[key];
-      if (!definition) {
-        throw new EnvValueError(
-          `'${key}' is not a declared variable. Add it to a defineEnv call.`,
-        );
-      }
+      if (!definition) throw undeclared(key);
       const generation = generationOf(definition);
       const memo = resolved.get(key);
       if (memo?.generation === generation) return memo.value;
@@ -94,32 +89,13 @@ function resolve(key: string, definition: VariableDefinition): unknown {
 
   assertInScope(key, definition.folders ?? []);
 
-  const raw = read(key, definition);
-  if (!definition.schema) {
-    if (raw === undefined) throw unset(key);
-    return raw;
-  }
-
-  const result = parse(definition.schema, raw);
-  if (result.ok) return result.value;
-  if (raw === undefined) throw unset(key);
-  throw new EnvValueError(
-    `'${key}' is set but does not satisfy its schema: ${complaint(definition, result.message)}. Fix it with \`ocel env set ${key} <VALUE>\`.`,
-  );
+  return coerce(key, definition, read(key, definition));
 }
-
-const BAKED_PREFIX = "OCEL_VAR_";
 
 function read(key: string, definition: VariableDefinition): string | undefined {
   if (isLive(definition)) {
     const pushed = readLive(key);
     if (pushed !== undefined) return pushed;
   }
-  return process.env[BAKED_PREFIX + key] ?? process.env[key];
-}
-
-function unset(key: string): EnvValueError {
-  return new EnvValueError(
-    `'${key}' has no value. Set one with \`ocel env set ${key} <VALUE>\`.`,
-  );
+  return readDelivered(key);
 }

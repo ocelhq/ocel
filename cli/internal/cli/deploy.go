@@ -17,6 +17,7 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/ocelhq/ocel/cli/internal/appbuilder"
 	"github.com/ocelhq/ocel/cli/internal/attribution"
 	"github.com/ocelhq/ocel/cli/internal/clientenv"
 	"github.com/ocelhq/ocel/cli/internal/declare"
@@ -259,6 +260,14 @@ func collectAndBuildManifest(ctx context.Context, d deps, cfg *projectconfig.Con
 		return nil, err
 	}
 
+	edgeWarnings, err := envgate.LintEdge(gate.Definitions(), envApps(cfg), edgeApps(cfg))
+	if err != nil {
+		return nil, err
+	}
+	for _, warning := range edgeWarnings {
+		ui.Diagnostic("warning: " + warning)
+	}
+
 	if len(functions) == 0 {
 		if len(resources) == 0 {
 			return nil, nil
@@ -410,6 +419,17 @@ func clientApps(plans []appPlan) []clientenv.App {
 
 func envScope(cfg *projectconfig.Config, preview bool, environment string) envgate.Scope {
 	return envgate.Scope{Apps: envApps(cfg), Preview: preview, Environment: environment}
+}
+
+func edgeApps(cfg *projectconfig.Config) []string {
+	built := appbuilder.EdgeApps(cfg.Dir)
+	if len(cfg.Apps) > 0 {
+		return built
+	}
+	if len(built) == 0 {
+		return nil
+	}
+	return []string{rootApp}
 }
 
 func envApps(cfg *projectconfig.Config) []envgate.App {

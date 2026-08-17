@@ -1,7 +1,13 @@
 import type { StandardSchemaV1 } from "@standard-schema/spec";
-import { validateDefinitions, type Definitions } from "./definition.js";
+import {
+  isLive,
+  validateDefinitions,
+  type Definitions,
+  type VariableDefinition,
+} from "./definition.js";
 import { EnvEdgeError } from "./errors.js";
-import { callSite } from "./scope.js";
+import { assertInScope, callSite } from "./scope.js";
+import { coerce, readDelivered, undeclared } from "./value.js";
 
 export {
   EnvDefinitionError,
@@ -26,21 +32,36 @@ export function defineEnv<const TDefinitions extends Definitions>(
 ): Env<TDefinitions> {
   validateDefinitions(definitions, callSite());
 
+  const resolved = new Map<string, unknown>();
   return new Proxy({} as Env<TDefinitions>, {
     get(_target, property) {
       if (typeof property === "symbol") return undefined;
-      throw unreadable(property);
+
+      const key = property;
+      const definition = definitions[key];
+      if (!definition) throw undeclared(key);
+      if (resolved.has(key)) return resolved.get(key);
+
+      const value = resolve(key, definition);
+      resolved.set(key, value);
+      return value;
     },
   });
 }
 
-function unreadable(key: string): EnvEdgeError {
+function resolve(key: string, definition: VariableDefinition): unknown {
+  assertInScope(key, definition.folders ?? []);
+  if (isLive(definition)) throw notLive(key, definition);
+  return coerce(key, definition, readDelivered(key));
+}
+
+function notLive(key: string, definition: VariableDefinition): EnvEdgeError {
   const entry = (globalThis as Record<string, unknown>)[ENTRY_GLOBAL];
   const where =
     typeof entry === "string" && entry !== ""
       ? `edge entry '${entry}'`
       : "an edge entry";
   return new EnvEdgeError(
-    `'${key}' cannot be read from ${where}: no variable class is deliverable to the edge runtime — a value reaches a function's environment, a bundle the membrane opens, or the membrane itself, and the edge tier has none of them. Move this entry to the nodejs runtime.`,
+    `'${key}' is class '${definition.class}' and cannot be read from ${where}: a '${definition.class}' value is read live on every request, and the edge tier has no live channel to read it over. Move this entry to the nodejs runtime, or declare '${key}' as 'sensitive'.`,
   );
 }
