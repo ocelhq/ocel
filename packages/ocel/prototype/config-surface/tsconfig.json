@@ -1,0 +1,18 @@
+{
+  "compilerOptions": {
+    "strict": true,
+    "noEmit": true,
+    "module": "esnext",
+    "moduleResolution": "bundler",
+    "target": "es2022",
+    "types": [],
+    "paths": {
+      "ocel/config": ["./ocel/config.ts"],
+      "ocel/edge": ["./ocel/edge.ts"],
+      "ocel/dns": ["./ocel/dns.ts"],
+      "@ocel/provider-aws": ["./provider-aws/index.ts"],
+      "@ocel/provider-aws/dns": ["./provider-aws/dns.ts"]
+    }
+  },
+  "include": ["**/*.ts"]
+}
