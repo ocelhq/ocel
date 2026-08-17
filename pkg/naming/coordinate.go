@@ -47,8 +47,8 @@ type Release struct {
 	token string
 }
 
-func NewRelease(buildID, fingerprint string) Release {
-	sum := sha256.Sum256([]byte(buildID + "\x00" + fingerprint))
+func NewRelease(deploymentID, fingerprint string) Release {
+	sum := sha256.Sum256([]byte(deploymentID + "\x00" + fingerprint))
 	return Release{token: releasePrefix + hex.EncodeToString(sum[:])[:8]}
 }
 
@@ -126,12 +126,13 @@ func (c Coordinate) Description(detail string) string {
 }
 
 type Facts struct {
-	ManagedBy string
-	EnvClass  string
-	BuildID   string
-	Promotion string
-	Route     string
-	ExpiresAt string
+	ManagedBy  string
+	EnvClass   string
+	BuildID    string
+	Deployment string
+	Promotion  string
+	Route      string
+	ExpiresAt  string
 }
 
 func (c Coordinate) Tags(f Facts) map[string]string {
@@ -143,6 +144,7 @@ func (c Coordinate) Tags(f Facts) map[string]string {
 		"ocel:app":        c.App,
 		"ocel:release":    c.Release.String(),
 		"ocel:build":      f.BuildID,
+		"ocel:deployment": f.Deployment,
 		"ocel:promotion":  f.Promotion,
 		"ocel:component":  c.Kind.Component(),
 		"ocel:route":      f.Route,

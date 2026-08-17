@@ -784,7 +784,7 @@ func recordVariables(t *testing.T, variables ...*deploymentsv1.ManifestVariable)
 	t.Helper()
 	manifest := varsManifest(variables...)
 	cfg := varsConfig(t, deploymentsv1.Environment_CLASS_PRODUCTION)
-	record, err := buildDeploymentRecord(cfg, manifest, manifest.GetApps()[0], buildOnly("WEB1"), nil, appBuildsFor(t, cfg, manifest))
+	record, err := buildDeploymentRecord(cfg, manifest, manifest.GetApps()[0], deployedAs("WEB1"), nil, appBuildsFor(t, cfg, manifest))
 	if err != nil {
 		t.Fatalf("buildDeploymentRecord: %v", err)
 	}
@@ -809,7 +809,7 @@ func TestBuildDeploymentRecord(t *testing.T) {
 			Identity:     "pr-42",
 		}
 
-		record, err := buildDeploymentRecord(cfg, manifest, manifest.GetApps()[0], buildOnly("WEB1"), nil, appBuildsFor(t, cfg, manifest))
+		record, err := buildDeploymentRecord(cfg, manifest, manifest.GetApps()[0], deployedAs("WEB1"), nil, appBuildsFor(t, cfg, manifest))
 		if err != nil {
 			t.Fatalf("buildDeploymentRecord: %v", err)
 		}
@@ -834,7 +834,7 @@ func TestBuildDeploymentRecord(t *testing.T) {
 			Slug:         "proj",
 		}
 
-		record, err := buildDeploymentRecord(cfg, manifest, manifest.GetApps()[0], buildOnly("WEB1"), nil, appBuildsFor(t, cfg, manifest))
+		record, err := buildDeploymentRecord(cfg, manifest, manifest.GetApps()[0], deployedAs("WEB1"), nil, appBuildsFor(t, cfg, manifest))
 		if err != nil {
 			t.Fatalf("buildDeploymentRecord: %v", err)
 		}
@@ -855,7 +855,7 @@ func TestBuildDeploymentRecord(t *testing.T) {
 			Slug:         "proj",
 		}
 
-		bare, err := buildDeploymentRecord(cfg, manifest, manifest.GetApps()[1], buildOnly("DOCS1"), nil, appBuildsFor(t, cfg, manifest))
+		bare, err := buildDeploymentRecord(cfg, manifest, manifest.GetApps()[1], deployedAs("DOCS1"), nil, appBuildsFor(t, cfg, manifest))
 		if err != nil {
 			t.Fatalf("buildDeploymentRecord: %v", err)
 		}
@@ -1100,8 +1100,8 @@ func TestFinalizeProductionDeploy(t *testing.T) {
 		ctx := context.Background()
 		specs := []edge.RootStackSpec{{Version: "v1", GenericName: "web-generic"}}
 		results := []appDeployResult{
-			{App: "web", Identity: buildOnly("b1"), Record: edge.DeploymentRecord{App: "web", Identity: "b1"}},
-			{App: "api", Identity: buildOnly("b2"), Record: edge.DeploymentRecord{App: "api", Identity: "b2"}},
+			{App: "web", Identity: deployedAs("b1"), Record: edge.DeploymentRecord{App: "web", Identity: "b1"}},
+			{App: "api", Identity: deployedAs("b2"), Record: edge.DeploymentRecord{App: "api", Identity: "b2"}},
 		}
 
 		state, err := finalizeDeploy(ctx, Config{}, fake, specs, nil, "promo1", "", "", 100, results)
@@ -1121,13 +1121,13 @@ func TestFinalizeProductionDeploy(t *testing.T) {
 		if fake.promotions[0].PromotionID != "promo1" {
 			t.Errorf("promotion id = %q, want %q", fake.promotions[0].PromotionID, "promo1")
 		}
-		want := map[string]string{"web": "b1", "api": "b2"}
+		want := map[string]string{"web": deployedAs("b1").String(), "api": deployedAs("b2").String()}
 		if len(fake.promotions[0].Builds) != len(want) {
 			t.Fatalf("promotion builds = %v, want %v", fake.promotions[0].Builds, want)
 		}
-		for app, buildID := range want {
-			if got := fake.promotions[0].Builds[app]; got != buildID {
-				t.Errorf("promotion.Builds[%q] = %q, want %q", app, got, buildID)
+		for app, identity := range want {
+			if got := fake.promotions[0].Builds[app]; got != identity {
+				t.Errorf("promotion.Builds[%q] = %q, want %q", app, got, identity)
 			}
 		}
 		if state[edge.RootStackKeyEndpoint] == "" {
@@ -1139,7 +1139,7 @@ func TestFinalizeProductionDeploy(t *testing.T) {
 		fake := &recordingRootStack{}
 		ctx := context.Background()
 		results := []appDeployResult{
-			{App: "web", Identity: buildOnly("b1"), Record: edge.DeploymentRecord{App: "web", Identity: "b1"}},
+			{App: "web", Identity: deployedAs("b1"), Record: edge.DeploymentRecord{App: "web", Identity: "b1"}},
 		}
 
 		if _, err := finalizeDeploy(ctx, Config{}, fake, []edge.RootStackSpec{{Version: "v1"}}, nil, "promo1", "v1.2.3", "", 100, results); err != nil {
@@ -1155,7 +1155,7 @@ func TestFinalizeProductionDeploy(t *testing.T) {
 		fake := &orderTrackingRootStack{recordingRootStack: &recordingRootStack{}}
 		ctx := context.Background()
 		results := []appDeployResult{
-			{App: "web", Identity: buildOnly("b1"), Record: edge.DeploymentRecord{App: "web", Identity: "b1"}},
+			{App: "web", Identity: deployedAs("b1"), Record: edge.DeploymentRecord{App: "web", Identity: "b1"}},
 		}
 
 		if _, err := finalizeDeploy(ctx, Config{}, fake, []edge.RootStackSpec{{Version: "v1"}}, nil, "promo1", "", "", 100, results); err != nil {
@@ -1177,7 +1177,7 @@ func TestFinalizeProductionDeploy(t *testing.T) {
 		fake := &recordingRootStack{}
 		ctx := context.Background()
 		results := []appDeployResult{
-			{App: "web", Identity: buildOnly("b1"), Record: edge.DeploymentRecord{App: "web", Identity: "b1"}},
+			{App: "web", Identity: deployedAs("b1"), Record: edge.DeploymentRecord{App: "web", Identity: "b1"}},
 			{App: "api", Err: errors.New("app-deploy stack failed")},
 		}
 
@@ -1198,14 +1198,14 @@ func TestFinalizeProductionDeploy(t *testing.T) {
 		fake := &recordingRootStack{}
 		ctx := context.Background()
 		specs := []edge.RootStackSpec{{Version: "v1"}}
-		results := []appDeployResult{{App: "web", Identity: buildOnly("b1"), Record: edge.DeploymentRecord{App: "web", Identity: "b1"}}}
+		results := []appDeployResult{{App: "web", Identity: deployedAs("b1"), Record: edge.DeploymentRecord{App: "web", Identity: "b1"}}}
 
 		state, err := finalizeDeploy(ctx, Config{}, fake, specs, nil, "promo1", "", "", 100, results)
 		if err != nil {
 			t.Fatalf("first finalizeDeploy: %v", err)
 		}
 
-		results2 := []appDeployResult{{App: "web", Identity: buildOnly("b2"), Record: edge.DeploymentRecord{App: "web", Identity: "b2"}}}
+		results2 := []appDeployResult{{App: "web", Identity: deployedAs("b2"), Record: edge.DeploymentRecord{App: "web", Identity: "b2"}}}
 		if _, err := finalizeDeploy(ctx, Config{}, fake, specs, state, "promo2", "", "", 200, results2); err != nil {
 			t.Fatalf("second finalizeDeploy: %v", err)
 		}
@@ -1223,7 +1223,7 @@ func TestFinalizeDeploy(t *testing.T) {
 	t.Run("production promotes the reserved default pointer", func(t *testing.T) {
 		ctx := context.Background()
 		results := []appDeployResult{
-			{App: "web", Identity: buildOnly("b1"), Record: edge.DeploymentRecord{App: "web", Identity: "b1"}},
+			{App: "web", Identity: deployedAs("b1"), Record: edge.DeploymentRecord{App: "web", Identity: "b1"}},
 		}
 
 		prod := &recordingRootStack{}
@@ -1238,7 +1238,7 @@ func TestFinalizeDeploy(t *testing.T) {
 	t.Run("a preview promotes the given pointer", func(t *testing.T) {
 		ctx := context.Background()
 		results := []appDeployResult{
-			{App: "web", Identity: buildOnly("b1"), Record: edge.DeploymentRecord{App: "web", Identity: "b1"}},
+			{App: "web", Identity: deployedAs("b1"), Record: edge.DeploymentRecord{App: "web", Identity: "b1"}},
 		}
 
 		preview := &recordingRootStack{}
@@ -1254,7 +1254,7 @@ func TestFinalizeDeploy(t *testing.T) {
 		fake := &recordingRootStack{}
 		ctx := context.Background()
 		specs := []edge.RootStackSpec{{Version: "v1"}}
-		before, after := buildOnly("B1"), fingerprinted("B1", "fp2")
+		before, after := deployedAs("B1"), fingerprinted("B1", "fp2")
 
 		result := func(id Identity) []appDeployResult {
 			return []appDeployResult{{
@@ -1275,17 +1275,17 @@ func TestFinalizeDeploy(t *testing.T) {
 		if len(fake.staged) != 2 {
 			t.Fatalf("staged = %d records, want 2: a rotation is its own Deployment", len(fake.staged))
 		}
-		if got := []string{fake.staged[0].Identity, fake.staged[1].Identity}; got[0] != "B1" || got[1] != "B1~fp2" {
-			t.Errorf("staged identities = %v, want [B1 B1~fp2]", got)
+		if got := []string{fake.staged[0].Identity, fake.staged[1].Identity}; got[0] != before.String() || got[1] != after.String() {
+			t.Errorf("staged identities = %v, want [%s %s]", got, before, after)
 		}
 		if len(fake.promotions) != 2 {
 			t.Fatalf("promotions = %d, want 2: a rotation is its own promotion", len(fake.promotions))
 		}
-		if got := fake.promotions[1].Builds["web"]; got != "B1~fp2" {
-			t.Errorf("rotation promotion Builds[web] = %q, want %q", got, "B1~fp2")
+		if got := fake.promotions[1].Builds["web"]; got != after.String() {
+			t.Errorf("rotation promotion Builds[web] = %q, want %q", got, after)
 		}
-		if got := fake.promotions[0].Builds["web"]; got != "B1" {
-			t.Errorf("prior promotion Builds[web] = %q, want %q — the prior Deployment stays intact", got, "B1")
+		if got := fake.promotions[0].Builds["web"]; got != before.String() {
+			t.Errorf("prior promotion Builds[web] = %q, want %q — the prior Deployment stays intact", got, before)
 		}
 		if a, b := appStack(t, ProductionEnv, "web", before), appStack(t, ProductionEnv, "web", after); a == b {
 			t.Errorf("both Deployments name stack %q; a rotation must provision its own", a)
@@ -1323,9 +1323,9 @@ func TestFinalizeDeploy(t *testing.T) {
 		if len(fake.staged) != 3 || len(fake.promotions) != 3 {
 			t.Fatalf("staged = %d records over %d promotions, want 3 and 3", len(fake.staged), len(fake.promotions))
 		}
-		wantIdentities := []string{"WEB1", "WEB1~fp2", "WEB1~fp3"}
 		names := map[naming.StackName]bool{}
-		for i, want := range wantIdentities {
+		for i, id := range ids {
+			want := id.String()
 			if got := fake.staged[i].Identity; got != want {
 				t.Errorf("staged[%d].Identity = %q, want %q", i, got, want)
 			}
@@ -1430,6 +1430,46 @@ func TestBootstrapCommand(t *testing.T) {
 			t.Parallel()
 			if got := bootstrapCommand(Config{Class: tc.class}); got != tc.want {
 				t.Errorf("bootstrapCommand(%s) = %q", tc.name, got)
+			}
+		})
+	}
+}
+
+func TestRealizeRequiresADeploymentIDPerApp(t *testing.T) {
+	t.Parallel()
+
+	for _, tc := range []struct {
+		name  string
+		apps  []*deploymentsv1.ManifestApp
+		wants string
+	}{
+		{
+			name:  "an app carrying none",
+			apps:  []*deploymentsv1.ManifestApp{{Name: "web"}},
+			wants: "web",
+		},
+		{
+			name:  "one app of two carrying none",
+			apps:  []*deploymentsv1.ManifestApp{{Name: "web", DeploymentId: testDeploymentID}, {Name: "admin"}},
+			wants: "admin",
+		},
+		{
+			name:  "an app carrying something no mint produces",
+			apps:  []*deploymentsv1.ManifestApp{{Name: "web", DeploymentId: "build-TfctsWXpff2fKS"}},
+			wants: "web",
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			cfg := Config{Edge: &recordingRootStack{}, StoreEndpoint: "https://store.example.com"}
+			manifest := &deploymentsv1.Manifest{Slug: "shop", Apps: tc.apps}
+			_, err := realize(context.Background(), cfg, manifest, nil, nil)
+			if err == nil {
+				t.Fatal("realize err = nil, want the app without a deployment id refused")
+			}
+			if !strings.Contains(err.Error(), "deployment id") || !strings.Contains(err.Error(), tc.wants) {
+				t.Errorf("realize err = %v, want it to name %q and its missing deployment id", err, tc.wants)
 			}
 		})
 	}
@@ -1575,40 +1615,64 @@ func TestReconcileRootStack(t *testing.T) {
 func TestResolvedIdentities(t *testing.T) {
 	t.Parallel()
 
+	nextApp := func(t *testing.T) (Config, *deploymentsv1.Manifest) {
+		t.Helper()
+		return Config{ArtifactRoot: writeTree(t, map[string]string{
+				"apps/web/routing-manifest.json": `{"buildId":"WEB1"}`,
+			})}, &deploymentsv1.Manifest{
+				Slug: "proj",
+				Apps: []*deploymentsv1.ManifestApp{{Name: "web", Framework: frameworkNext}},
+			}
+	}
+
 	cases := []struct {
-		name     string
-		bundles  map[string]appBundle
-		want     Identity
-		rendered string
+		name    string
+		bundles map[string]appBundle
+		want    Identity
 	}{
-		{"a next app takes its buildID with no fingerprint", nil, buildOnly("WEB1"), "WEB1"},
-		{"baked values fingerprint the identity", map[string]appBundle{"web": {Fingerprint: "abc123"}}, fingerprinted("WEB1", "abc123"), "WEB1~abc123"},
-		{"nothing baked stays the bare buildID", map[string]appBundle{"web": {Live: []byte("{}")}}, buildOnly("WEB1"), "WEB1"},
+		{"nothing baked still fingerprints the environment", nil, deployedAs(testDeploymentID)},
+		{"baked values fingerprint the identity", map[string]appBundle{"web": {Fingerprint: "abc123"}}, fingerprinted(testDeploymentID, "abc123")},
+		{"a live-only bundle bakes nothing", map[string]appBundle{"web": {Live: []byte("{}")}}, deployedAs(testDeploymentID)},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			cfg := Config{ArtifactRoot: writeTree(t, map[string]string{
-				"apps/web/routing-manifest.json": `{"buildId":"WEB1"}`,
-			})}
-			manifest := &deploymentsv1.Manifest{
-				Slug: "proj",
-				Apps: []*deploymentsv1.ManifestApp{{Name: "web", Framework: frameworkNext}},
-			}
+			cfg, manifest := nextApp(t)
 
-			builds, err := resolveAppBuilds(cfg, manifest, tc.bundles)
+			builds, err := resolveAppBuilds(deployedConfig(cfg), deployedManifest(manifest), tc.bundles)
 			if err != nil {
 				t.Fatalf("resolveAppBuilds: %v", err)
 			}
-			ids := builds.identities
-			if got := ids["web"]; got != tc.want {
+			if got := builds.identities["web"]; got != tc.want {
 				t.Errorf("identities[web] = %+v, want %+v", got, tc.want)
 			}
-			if got := ids["web"].String(); got != tc.rendered {
-				t.Errorf("rendered identity = %q, want %q", got, tc.rendered)
+			if got, want := builds.identities["web"].String(), testDeploymentID+identitySeparator+tc.want.Fingerprint(); got != want {
+				t.Errorf("rendered identity = %q, want %q", got, want)
 			}
 		})
 	}
+
+	t.Run("one build in two environments is two identities", func(t *testing.T) {
+		t.Parallel()
+		cfg, manifest := nextApp(t)
+
+		prod, err := resolveAppBuilds(deployedConfig(cfg), deployedManifest(manifest), nil)
+		if err != nil {
+			t.Fatalf("resolveAppBuilds(production): %v", err)
+		}
+		cfg.Env = "pr-7"
+		preview, err := resolveAppBuilds(deployedConfig(cfg), deployedManifest(manifest), nil)
+		if err != nil {
+			t.Fatalf("resolveAppBuilds(preview): %v", err)
+		}
+
+		if prod.identities["web"] == preview.identities["web"] {
+			t.Fatalf("both environments claim the identity %s", prod.identities["web"])
+		}
+		if prod.coords["web"].Release == preview.coords["web"].Release {
+			t.Errorf("both environments claim the release %s; one deploy would overwrite the other's artifacts", prod.coords["web"].Release)
+		}
+	})
 
 	t.Run("a framework with no buildID gets a minted one", func(t *testing.T) {
 		t.Parallel()
@@ -1618,16 +1682,15 @@ func TestResolvedIdentities(t *testing.T) {
 		}
 
 		cfg := Config{ArtifactRoot: t.TempDir()}
-		builds, err := resolveAppBuilds(cfg, manifest, nil)
+		builds, err := resolveAppBuilds(deployedConfig(cfg), deployedManifest(manifest), nil)
 		if err != nil {
 			t.Fatalf("resolveAppBuilds: %v", err)
 		}
-		ids := builds.identities
-		if ids["api"].BuildID() == "" {
-			t.Error("identities[api] carries no build id")
+		if builds.ids["api"] == "" {
+			t.Error("no build id was minted for api")
 		}
-		if ids["api"].Fingerprint() != "" {
-			t.Errorf("Fingerprint = %q, want empty: nothing is baked yet", ids["api"].Fingerprint())
+		if got := builds.identities["api"]; got.DeploymentID() != testDeploymentID {
+			t.Errorf("identities[api] = %+v, want the deployment's own id", got)
 		}
 	})
 }
@@ -1652,7 +1715,7 @@ func TestStackTags(t *testing.T) {
 		cfg := Config{Slug: "shop", Class: deploymentsv1.Environment_CLASS_PRODUCTION}
 		stack := naming.AppStack("prod", "web", release)
 
-		tags := stackTags(cfg, stack, "p7", "B1")
+		tags := stackTags(cfg, stack, "p7", "d1", "B1")
 
 		want := map[string]string{
 			"ocel:managed-by": managedBy(),
@@ -1662,6 +1725,7 @@ func TestStackTags(t *testing.T) {
 			"ocel:app":        "web",
 			"ocel:release":    release.String(),
 			"ocel:build":      "B1",
+			"ocel:deployment": "d1",
 			"ocel:promotion":  "p7",
 			"ocel:stack":      stack.String(),
 		}
@@ -1677,7 +1741,7 @@ func TestStackTags(t *testing.T) {
 		stack := naming.AppStack("pr-7", "web", release)
 
 		keys := map[string]bool{}
-		for key := range stackTags(cfg, stack, "p7", "B1") {
+		for key := range stackTags(cfg, stack, "p7", "d1", "B1") {
 			keys[key] = true
 		}
 		for key := range resourceTags(naming.KindFunction, "/api/users", nil) {
@@ -1686,7 +1750,7 @@ func TestStackTags(t *testing.T) {
 
 		for _, key := range []string{
 			"ocel:managed-by", "ocel:project", "ocel:env", "ocel:env-class", "ocel:app",
-			"ocel:release", "ocel:build", "ocel:promotion", "ocel:component", "ocel:route",
+			"ocel:release", "ocel:build", "ocel:deployment", "ocel:promotion", "ocel:component", "ocel:route",
 			"ocel:stack", "ocel:expires-at",
 		} {
 			if !keys[key] {
@@ -1700,7 +1764,7 @@ func TestStackTags(t *testing.T) {
 
 		cfg := Config{Slug: "shop", Class: deploymentsv1.Environment_CLASS_PREVIEW, ExpiresAt: 1760000000}
 
-		tags := stackTags(cfg, naming.AppStack("pr-7", "web", release), "p7", "B1")
+		tags := stackTags(cfg, naming.AppStack("pr-7", "web", release), "p7", "d1", "B1")
 
 		if got, want := tags["ocel:env-class"], "preview"; got != want {
 			t.Errorf("ocel:env-class = %q, want %q", got, want)

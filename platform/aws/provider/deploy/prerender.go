@@ -59,11 +59,10 @@ func resolveAppBuilds(cfg Config, manifest *deploymentsv1.Manifest, baked map[st
 	}
 	for _, app := range manifestApps(manifest) {
 		name := app.GetName()
-		buildID, err := builds.resolve(cfg, app)
-		if err != nil {
+		if err := builds.recordBuildID(cfg, app); err != nil {
 			return appBuilds{}, err
 		}
-		id, err := NewIdentity(buildID, baked[name].Fingerprint)
+		id, err := NewIdentity(app.GetDeploymentId(), cfg.Env, baked[name].Fingerprint)
 		if err != nil {
 			return appBuilds{}, fmt.Errorf("deployment identity for %s: %w", name, err)
 		}
@@ -102,17 +101,17 @@ func resolveAppBuilds(cfg Config, manifest *deploymentsv1.Manifest, baked map[st
 	return builds, nil
 }
 
-func (b appBuilds) resolve(cfg Config, app *deploymentsv1.ManifestApp) (string, error) {
+func (b appBuilds) recordBuildID(cfg Config, app *deploymentsv1.ManifestApp) error {
 	name := app.GetName()
-	if id := b.ids[name]; id != "" {
-		return id, nil
+	if b.ids[name] != "" {
+		return nil
 	}
 	id, err := appBuildID(cfg, app)
 	if err != nil {
-		return "", err
+		return err
 	}
 	b.ids[name] = id
-	return id, nil
+	return nil
 }
 
 func appBuildID(cfg Config, app *deploymentsv1.ManifestApp) (string, error) {

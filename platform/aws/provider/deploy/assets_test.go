@@ -49,26 +49,26 @@ func publishedImageConfig(key string) bool {
 	return strings.HasSuffix(key, "/"+imageConfigFile) && !strings.Contains(key, "/assets/")
 }
 
-func assetPrefixFor(app, buildID string) string {
-	return storagePrefixFor("prod", "proj", app, buildID) + "assets"
+func assetPrefixFor(app, deploymentID string) string {
+	return storagePrefixFor("prod", "proj", app, deploymentID) + "assets"
 }
 
-func assetKeyFor(app, buildID, rest string) string {
-	return assetPrefixFor(app, buildID) + "/" + rest
+func assetKeyFor(app, deploymentID, rest string) string {
+	return assetPrefixFor(app, deploymentID) + "/" + rest
 }
 
-func imageConfigKeyFor(app, buildID string) string {
-	return storagePrefixFor("prod", "proj", app, buildID) + "image-config.json"
+func imageConfigKeyFor(app, deploymentID string) string {
+	return storagePrefixFor("prod", "proj", app, deploymentID) + "image-config.json"
 }
 
 func TestAppAssetPrefix(t *testing.T) {
 	t.Parallel()
-	got := appAssetPrefix(storageCoordinate("prod", "proj", "web", releaseOf(buildOnly("WEB1"))))
-	want := assetPrefixFor("web", "WEB1")
+	got := appAssetPrefix(storageCoordinate("prod", "proj", "web", releaseOf(deployedAs(testDeploymentID))))
+	want := assetPrefixFor("web", testDeploymentID)
 	if got != want {
 		t.Errorf("appAssetPrefix = %q, want %q", got, want)
 	}
-	if config := imageConfigKeyFor("web", "WEB1"); !strings.HasPrefix(config, strings.TrimSuffix(got, "assets")) {
+	if config := imageConfigKeyFor("web", testDeploymentID); !strings.HasPrefix(config, strings.TrimSuffix(got, "assets")) {
 		t.Errorf("image config %q does not sit beside the assets under one release prefix %q", config, got)
 	}
 }
@@ -92,9 +92,9 @@ func TestUploadStaticAssets(t *testing.T) {
 		got := append([]string(nil), store.puts...)
 		slices.Sort(got)
 		want := []string{
-			assetKeyFor("admin", "ADM1", "favicon.ico"),
-			assetKeyFor("web", "WEB1", "_next/static/chunk.js"),
-			assetKeyFor("web", "WEB1", "next.svg"),
+			assetKeyFor("admin", testDeploymentID, "favicon.ico"),
+			assetKeyFor("web", testDeploymentID, "_next/static/chunk.js"),
+			assetKeyFor("web", testDeploymentID, "next.svg"),
 		}
 		if len(got) != len(want) {
 			t.Fatalf("uploaded keys = %v, want %v", got, want)
@@ -209,11 +209,11 @@ func TestUploadStaticAssets(t *testing.T) {
 			t.Fatalf("uploadStaticAssets: %v", err)
 		}
 
-		key := assetKeyFor("web", "WEB1", "logo.png")
+		key := assetKeyFor("web", testDeploymentID, "logo.png")
 		if got := sortedPuts(store); !reflect.DeepEqual(got, []string{key}) {
 			t.Errorf("cache store keys = %v, want %v", got, []string{key})
 		}
-		want := []string{key, imageConfigKeyFor("web", "WEB1")}
+		want := []string{key, imageConfigKeyFor("web", testDeploymentID)}
 		if got := sortedPuts(asset); !reflect.DeepEqual(got, want) {
 			t.Errorf("asset bucket keys = %v, want %v", got, want)
 		}
@@ -236,7 +236,7 @@ func TestUploadStaticAssets(t *testing.T) {
 			t.Fatalf("uploadStaticAssets: %v", err)
 		}
 
-		key := imageConfigKeyFor("web", "WEB1")
+		key := imageConfigKeyFor("web", testDeploymentID)
 		if got, want := asset.putBodies[key], `{"formats":["image/webp"]}`; got != want {
 			t.Errorf("image config bytes = %q, want %q — the origin hashes exactly these", got, want)
 		}
@@ -267,10 +267,10 @@ func TestUploadStaticAssets(t *testing.T) {
 			t.Fatalf("uploadStaticAssets: %v", err)
 		}
 
-		if got, want := asset.putBodies[assetKeyFor("web", "WEB1", "image-config.json")], `{"mine":true}`; got != want {
+		if got, want := asset.putBodies[assetKeyFor("web", testDeploymentID, "image-config.json")], `{"mine":true}`; got != want {
 			t.Errorf("the project's own public/image-config.json = %q, want %q", got, want)
 		}
-		if got, want := asset.putBodies[imageConfigKeyFor("web", "WEB1")], `{"formats":["image/webp"]}`; got != want {
+		if got, want := asset.putBodies[imageConfigKeyFor("web", testDeploymentID)], `{"formats":["image/webp"]}`; got != want {
 			t.Errorf("compiled image config = %q, want %q", got, want)
 		}
 	})
@@ -293,8 +293,8 @@ func TestUploadStaticAssets(t *testing.T) {
 	t.Run("republishes the image config over a present object", func(t *testing.T) {
 		t.Parallel()
 		present := map[string]bool{
-			imageConfigKeyFor("web", "WEB1"):       true,
-			assetKeyFor("web", "WEB1", "logo.png"): true,
+			imageConfigKeyFor("web", testDeploymentID):       true,
+			assetKeyFor("web", testDeploymentID, "logo.png"): true,
 		}
 		store := &fakeUploader{exists: present}
 		asset := &fakeUploader{exists: present}
@@ -307,7 +307,7 @@ func TestUploadStaticAssets(t *testing.T) {
 		if got := sortedPuts(store); got != nil {
 			t.Errorf("cache store keys = %v, want nothing re-put", got)
 		}
-		want := []string{imageConfigKeyFor("web", "WEB1")}
+		want := []string{imageConfigKeyFor("web", testDeploymentID)}
 		if got := sortedPuts(asset); !reflect.DeepEqual(got, want) {
 			t.Errorf("asset bucket keys = %v, want %v", got, want)
 		}
@@ -366,8 +366,8 @@ func TestUploadPrerenderAssetsMirroring(t *testing.T) {
 			t.Fatalf("uploadPrerenderAssets: %v", err)
 		}
 
-		entry := isrKeyFor("web", "WEB1", "cache/index.cache.json")
-		if got := sortedPuts(store); !reflect.DeepEqual(got, []string{entry, isrKeyFor("web", "WEB1", "tag-clock.json")}) {
+		entry := isrKeyFor("web", testDeploymentID, "cache/index.cache.json")
+		if got := sortedPuts(store); !reflect.DeepEqual(got, []string{entry, isrKeyFor("web", testDeploymentID, "tag-clock.json")}) {
 			t.Errorf("cache store keys = %v, want the route entry and the tag clock", got)
 		}
 		for _, key := range sortedPuts(asset) {
@@ -387,11 +387,11 @@ func TestBuildDeploymentRecordAssets(t *testing.T) {
 		manifest := nextManifest()
 		app := &deploymentsv1.ManifestApp{Name: "web", Framework: frameworkNext}
 
-		record, err := buildDeploymentRecord(cfg, manifest, app, buildOnly("WEB1"), nil, appBuildsFor(t, cfg, manifest))
+		record, err := buildDeploymentRecord(cfg, manifest, app, deployedAs("WEB1"), nil, appBuildsFor(t, cfg, manifest))
 		if err != nil {
 			t.Fatalf("buildDeploymentRecord: %v", err)
 		}
-		if want := assetPrefixFor("web", "WEB1"); record.AssetPrefix != want {
+		if want := assetPrefixFor("web", testDeploymentID); record.AssetPrefix != want {
 			t.Errorf("AssetPrefix = %q, want %q", record.AssetPrefix, want)
 		}
 	})
@@ -404,11 +404,11 @@ func TestBuildDeploymentRecordAssets(t *testing.T) {
 		manifest := nextManifest()
 		app := &deploymentsv1.ManifestApp{Name: "web", Framework: frameworkNext}
 
-		record, err := buildDeploymentRecord(cfg, manifest, app, buildOnly("WEB1"), nil, appBuildsFor(t, cfg, manifest))
+		record, err := buildDeploymentRecord(cfg, manifest, app, deployedAs("WEB1"), nil, appBuildsFor(t, cfg, manifest))
 		if err != nil {
 			t.Fatalf("buildDeploymentRecord: %v", err)
 		}
-		if want := isrPrefixFor("web", "WEB1"); record.IsrPrefix != want {
+		if want := isrPrefixFor("web", testDeploymentID); record.IsrPrefix != want {
 			t.Errorf("IsrPrefix = %q, want %q", record.IsrPrefix, want)
 		}
 	})
@@ -418,7 +418,7 @@ func TestBuildDeploymentRecordAssets(t *testing.T) {
 		manifest := &deploymentsv1.Manifest{Slug: "proj"}
 		app := &deploymentsv1.ManifestApp{Name: "api", Framework: "express"}
 
-		record, err := buildDeploymentRecord(cfg, manifest, app, buildOnly("API1"), nil, appBuildsFor(t, cfg, manifest))
+		record, err := buildDeploymentRecord(cfg, manifest, app, deployedAs("API1"), nil, appBuildsFor(t, cfg, manifest))
 		if err != nil {
 			t.Fatalf("buildDeploymentRecord: %v", err)
 		}
@@ -443,11 +443,11 @@ func TestBuildDeploymentRecordAssets(t *testing.T) {
 		manifest := nextManifest()
 		app := &deploymentsv1.ManifestApp{Name: "web", Framework: frameworkNext}
 
-		record, err := buildDeploymentRecord(cfg, manifest, app, buildOnly("WEB1"), nil, appBuildsFor(t, cfg, manifest))
+		record, err := buildDeploymentRecord(cfg, manifest, app, deployedAs("WEB1"), nil, appBuildsFor(t, cfg, manifest))
 		if err != nil {
 			t.Fatalf("buildDeploymentRecord: %v", err)
 		}
-		if want := isrWriteSecret("seed-1", isrPrefixFor("web", "WEB1")); record.IsrWriteSecret != want {
+		if want := isrWriteSecret("seed-1", isrPrefixFor("web", testDeploymentID)); record.IsrWriteSecret != want {
 			t.Errorf("IsrWriteSecret = %q, want the secret derived for this build's prefix", record.IsrWriteSecret)
 		}
 	})
@@ -457,7 +457,7 @@ func TestBuildDeploymentRecordAssets(t *testing.T) {
 			"apps/web/routing-manifest.json": `{"buildId":"WEB1"}`,
 		})
 		cfg := Config{ArtifactRoot: root, Env: "prod"}
-		record, err := buildDeploymentRecord(cfg, nextManifest(), &deploymentsv1.ManifestApp{Name: "web", Framework: frameworkNext}, buildOnly("WEB1"), nil, appBuildsFor(t, cfg, nextManifest()))
+		record, err := buildDeploymentRecord(cfg, nextManifest(), &deploymentsv1.ManifestApp{Name: "web", Framework: frameworkNext}, deployedAs("WEB1"), nil, appBuildsFor(t, cfg, nextManifest()))
 		if err != nil {
 			t.Fatalf("buildDeploymentRecord: %v", err)
 		}

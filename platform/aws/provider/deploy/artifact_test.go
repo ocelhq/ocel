@@ -170,7 +170,7 @@ func TestHashArtifact(t *testing.T) {
 }
 
 func TestArtifactKey(t *testing.T) {
-	coord := storageCoordinate("prod", "proj-123", "web", releaseOf(buildOnly("WEB1")))
+	coord := storageCoordinate("prod", "proj-123", "web", releaseOf(deployedAs("WEB1")))
 	got := artifactKey(coord, "web_index", "abc123")
 	want := "prod/proj-123/web/" + releaseTokenFor("WEB1") + "/fn/web-index/abc123.zip"
 	if got != want {
@@ -179,7 +179,7 @@ func TestArtifactKey(t *testing.T) {
 	if !strings.HasPrefix(got, functionArtifactPrefix(coord)+"/") {
 		t.Errorf("artifactKey = %q, want it under the release's function prefix %q", got, functionArtifactPrefix(coord))
 	}
-	if other := artifactKey(storageCoordinate("prod", "proj-123", "web", releaseOf(buildOnly("WEB2"))), "web_index", "abc123"); other == got {
+	if other := artifactKey(storageCoordinate("prod", "proj-123", "web", releaseOf(deployedAs("WEB2"))), "web_index", "abc123"); other == got {
 		t.Errorf("two releases share the artifact key %q", got)
 	}
 }

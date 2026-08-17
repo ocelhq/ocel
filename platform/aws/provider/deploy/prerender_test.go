@@ -60,9 +60,27 @@ func twoAppTree(t *testing.T) string {
 	})
 }
 
+func deployedConfig(cfg Config) Config {
+	if cfg.Env == "" {
+		cfg.Env = ProductionEnv
+	}
+	return cfg
+}
+
+func deployedManifest(manifest *deploymentsv1.Manifest) *deploymentsv1.Manifest {
+	apps := manifestApps(manifest)
+	for _, app := range apps {
+		if app.GetDeploymentId() == "" {
+			app.DeploymentId = testDeploymentID
+		}
+	}
+	manifest.Apps = apps
+	return manifest
+}
+
 func appBuildsFor(t *testing.T, cfg Config, manifest *deploymentsv1.Manifest) appBuilds {
 	t.Helper()
-	builds, err := resolveAppBuilds(cfg, manifest, nil)
+	builds, err := resolveAppBuilds(deployedConfig(cfg), deployedManifest(manifest), nil)
 	if err != nil {
 		t.Fatalf("resolveAppBuilds: %v", err)
 	}
@@ -75,27 +93,27 @@ func releaseBuilds(t *testing.T, cfg Config, manifest *deploymentsv1.Manifest, f
 	for _, app := range manifestApps(manifest) {
 		bundles[app.GetName()] = appBundle{Fingerprint: fingerprint}
 	}
-	builds, err := resolveAppBuilds(cfg, manifest, bundles)
+	builds, err := resolveAppBuilds(deployedConfig(cfg), deployedManifest(manifest), bundles)
 	if err != nil {
 		t.Fatalf("resolveAppBuilds: %v", err)
 	}
 	return builds
 }
 
-func releaseTokenFor(buildID string) string {
-	return releaseOf(buildOnly(buildID)).String()
+func releaseTokenFor(deploymentID string) string {
+	return releaseOf(deployedAs(deploymentID)).String()
 }
 
-func storagePrefixFor(env, slug, app, buildID string) string {
-	return env + "/" + slug + "/" + app + "/" + releaseTokenFor(buildID) + "/"
+func storagePrefixFor(env, slug, app, deploymentID string) string {
+	return env + "/" + slug + "/" + app + "/" + releaseTokenFor(deploymentID) + "/"
 }
 
-func isrPrefixFor(app, buildID string) string {
-	return storagePrefixFor("prod", "proj", app, buildID) + "isr"
+func isrPrefixFor(app, deploymentID string) string {
+	return storagePrefixFor("prod", "proj", app, deploymentID) + "isr"
 }
 
-func isrKeyFor(app, buildID, rest string) string {
-	return isrPrefixFor(app, buildID) + "/" + rest
+func isrKeyFor(app, deploymentID, rest string) string {
+	return isrPrefixFor(app, deploymentID) + "/" + rest
 }
 
 func entryPuts(puts []string) []string {
@@ -115,18 +133,62 @@ func TestResolveAppBuilds(t *testing.T) {
 		t.Parallel()
 		cfg := Config{ArtifactRoot: twoAppTree(t), AssetBucket: "assets", StateTable: "state", Env: "prod"}
 
-		builds, err := resolveAppBuilds(cfg, twoAppManifest(), nil)
+		builds, err := resolveAppBuilds(deployedConfig(cfg), deployedManifest(twoAppManifest()), nil)
 		if err != nil {
 			t.Fatalf("resolveAppBuilds: %v", err)
 		}
 		if len(builds.caches) != 2 {
 			t.Fatalf("got %d caches, want one per app", len(builds.caches))
 		}
-		if want := isrPrefixFor("web", "WEB1"); builds.caches["web"].Prefix != want {
+		if want := isrPrefixFor("web", testDeploymentID); builds.caches["web"].Prefix != want {
 			t.Errorf("web prefix = %q, want %q", builds.caches["web"].Prefix, want)
 		}
-		if want := isrPrefixFor("admin", "ADM1"); builds.caches["admin"].Prefix != want {
+		if want := isrPrefixFor("admin", testDeploymentID); builds.caches["admin"].Prefix != want {
 			t.Errorf("admin prefix = %q, want %q", builds.caches["admin"].Prefix, want)
+		}
+	})
+
+	t.Run("identifies each app by the id its own build carries", func(t *testing.T) {
+		t.Parallel()
+		cfg := Config{ArtifactRoot: twoAppTree(t), AssetBucket: "assets", StateTable: "state", Env: "prod"}
+		webID := "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+		adminID := "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+		manifest := twoAppManifest()
+		manifest.Apps = []*deploymentsv1.ManifestApp{
+			{Name: "web", Framework: "next", DeploymentId: webID},
+			{Name: "admin", Framework: "next", DeploymentId: adminID},
+		}
+
+		builds, err := resolveAppBuilds(deployedConfig(cfg), manifest, nil)
+		if err != nil {
+			t.Fatalf("resolveAppBuilds: %v", err)
+		}
+		if got := builds.identities["web"].DeploymentID(); got != webID {
+			t.Errorf("web deployment id = %q, want %q", got, webID)
+		}
+		if got := builds.identities["admin"].DeploymentID(); got != adminID {
+			t.Errorf("admin deployment id = %q, want %q", got, adminID)
+		}
+		if want := isrPrefixFor("web", webID); builds.caches["web"].Prefix != want {
+			t.Errorf("web prefix = %q, want %q", builds.caches["web"].Prefix, want)
+		}
+		if want := isrPrefixFor("admin", adminID); builds.caches["admin"].Prefix != want {
+			t.Errorf("admin prefix = %q, want %q", builds.caches["admin"].Prefix, want)
+		}
+	})
+
+	t.Run("refuses an app the build never stamped", func(t *testing.T) {
+		t.Parallel()
+		cfg := Config{ArtifactRoot: twoAppTree(t), AssetBucket: "assets", StateTable: "state", Env: "prod"}
+		manifest := twoAppManifest()
+		manifest.Apps = []*deploymentsv1.ManifestApp{
+			{Name: "web", Framework: "next", DeploymentId: testDeploymentID},
+			{Name: "admin", Framework: "next"},
+		}
+
+		_, err := resolveAppBuilds(deployedConfig(cfg), manifest, nil)
+		if err == nil || !strings.Contains(err.Error(), "admin") {
+			t.Errorf("resolveAppBuilds err = %v, want it to name the app carrying no deployment id", err)
 		}
 	})
 
@@ -144,7 +206,7 @@ func TestResolveAppBuilds(t *testing.T) {
 			},
 		}
 
-		builds, err := resolveAppBuilds(cfg, manifest, nil)
+		builds, err := resolveAppBuilds(deployedConfig(cfg), deployedManifest(manifest), nil)
 		if err != nil {
 			t.Fatalf("resolveAppBuilds: %v", err)
 		}
@@ -167,11 +229,11 @@ func TestResolveAppBuilds(t *testing.T) {
 		manifest := nodeManifest()
 
 		builds := appBuildsFor(t, cfg, manifest)
-		if got := builds.identities["api"].BuildID(); got != "a1b2c3d4e5f60718" {
+		if got := builds.ids["api"]; got != "a1b2c3d4e5f60718" {
 			t.Errorf("build id = %q, want the descriptor's own", got)
 		}
-		if again := appBuildsFor(t, cfg, manifest).identities["api"].BuildID(); again != builds.identities["api"].BuildID() {
-			t.Errorf("build id moved to %q with nothing rebuilt; a no-op deploy must not churn a release", again)
+		if again := appBuildsFor(t, cfg, manifest).ids["api"]; again != builds.ids["api"] {
+			t.Errorf("build id moved to %q with nothing rebuilt", again)
 		}
 		if builds.caches["api"] != nil {
 			t.Errorf("cache = %+v, want none for a framework with no prerendering", builds.caches["api"])
@@ -197,7 +259,7 @@ func TestResolveAppBuilds(t *testing.T) {
 		cfg := Config{ArtifactRoot: root, AssetBucket: "assets", StateTable: "state", Env: "prod"}
 
 		builds := appBuildsFor(t, cfg, nextManifest())
-		if got := builds.identities["web"].BuildID(); got != "WEB1" {
+		if got := builds.ids["web"]; got != "WEB1" {
 			t.Errorf("build id = %q, want the descriptor's own", got)
 		}
 	})
@@ -207,7 +269,7 @@ func TestResolveAppBuilds(t *testing.T) {
 		root := writeTree(t, map[string]string{"apps/api/serve.json": `{"framework":"express"}`})
 		cfg := Config{ArtifactRoot: root, AssetBucket: "assets", StateTable: "state", Env: "prod"}
 
-		_, err := resolveAppBuilds(cfg, nodeManifest(), nil)
+		_, err := resolveAppBuilds(deployedConfig(cfg), deployedManifest(nodeManifest()), nil)
 		if err == nil {
 			t.Fatal("expected a descriptor with no build id to fail the deploy")
 		}
@@ -221,7 +283,7 @@ func TestResolveAppBuilds(t *testing.T) {
 		root := writeTree(t, map[string]string{"apps/api/serve.json": `{`})
 		cfg := Config{ArtifactRoot: root, AssetBucket: "assets", StateTable: "state", Env: "prod"}
 
-		_, err := resolveAppBuilds(cfg, nodeManifest(), nil)
+		_, err := resolveAppBuilds(deployedConfig(cfg), deployedManifest(nodeManifest()), nil)
 		if err == nil {
 			t.Fatal("expected an unparseable descriptor to fail the deploy")
 		}
@@ -234,7 +296,7 @@ func TestResolveAppBuilds(t *testing.T) {
 		t.Parallel()
 		cfg := Config{ArtifactRoot: t.TempDir(), AssetBucket: "assets", StateTable: "state", Env: "prod"}
 
-		if got := appBuildsFor(t, cfg, nodeManifest()).identities["api"].BuildID(); got == "" {
+		if got := appBuildsFor(t, cfg, nodeManifest()).ids["api"]; got == "" {
 			t.Error("build id is empty; an app with no artifact must still deploy")
 		}
 	})
@@ -255,9 +317,9 @@ func TestUploadPrerenderAssets(t *testing.T) {
 		got := entryPuts(f.puts)
 		slices.Sort(got)
 		want := []string{
-			isrKeyFor("admin", "ADM1", "cache/dash.cache.json"),
-			isrKeyFor("admin", "ADM1", "cache/users.cache.json"),
-			isrKeyFor("web", "WEB1", "cache/index.cache.json"),
+			isrKeyFor("admin", testDeploymentID, "cache/dash.cache.json"),
+			isrKeyFor("admin", testDeploymentID, "cache/users.cache.json"),
+			isrKeyFor("web", testDeploymentID, "cache/index.cache.json"),
 		}
 		if len(got) != len(want) {
 			t.Fatalf("uploaded keys = %v, want %v", got, want)
@@ -289,11 +351,11 @@ func TestUploadPrerenderAssets(t *testing.T) {
 		got := append([]string(nil), store.puts...)
 		slices.Sort(got)
 		want := []string{
-			isrKeyFor("admin", "ADM1", "cache/dash.cache.json"),
-			isrKeyFor("admin", "ADM1", "cache/users.cache.json"),
-			isrKeyFor("admin", "ADM1", "tag-clock.json"),
-			isrKeyFor("web", "WEB1", "cache/index.cache.json"),
-			isrKeyFor("web", "WEB1", "tag-clock.json"),
+			isrKeyFor("admin", testDeploymentID, "cache/dash.cache.json"),
+			isrKeyFor("admin", testDeploymentID, "cache/users.cache.json"),
+			isrKeyFor("admin", testDeploymentID, "tag-clock.json"),
+			isrKeyFor("web", testDeploymentID, "cache/index.cache.json"),
+			isrKeyFor("web", testDeploymentID, "tag-clock.json"),
 		}
 		if len(got) != len(want) {
 			t.Fatalf("uploaded keys = %v, want %v", got, want)
@@ -343,7 +405,7 @@ func TestUploadPrerenderAssets(t *testing.T) {
 		}
 		after := time.Now().UnixMilli()
 
-		for _, key := range []string{isrKeyFor("web", "WEB1", "tag-clock.json"), isrKeyFor("admin", "ADM1", "tag-clock.json")} {
+		for _, key := range []string{isrKeyFor("web", testDeploymentID, "tag-clock.json"), isrKeyFor("admin", testDeploymentID, "tag-clock.json")} {
 			body, ok := store.putBodies[key]
 			if !ok {
 				t.Fatalf("no snapshot seeded at %q; puts = %v", key, store.puts)
@@ -381,7 +443,7 @@ func TestUploadPrerenderAssets(t *testing.T) {
 			t.Fatalf("uploadPrerenderAssets: %v", err)
 		}
 
-		for _, key := range []string{isrKeyFor("web", "WEB1", "tag-clock.json"), isrKeyFor("admin", "ADM1", "tag-clock.json")} {
+		for _, key := range []string{isrKeyFor("web", testDeploymentID, "tag-clock.json"), isrKeyFor("admin", testDeploymentID, "tag-clock.json")} {
 			mine, ok := own.putBodies[key]
 			if !ok {
 				t.Fatalf("no snapshot seeded into the provider's own bucket at %q; puts = %v", key, own.puts)
@@ -394,7 +456,7 @@ func TestUploadPrerenderAssets(t *testing.T) {
 
 	t.Run("keeps an existing snapshot", func(t *testing.T) {
 		t.Parallel()
-		store := &fakeUploader{exists: map[string]bool{isrKeyFor("web", "WEB1", "tag-clock.json"): true}}
+		store := &fakeUploader{exists: map[string]bool{isrKeyFor("web", testDeploymentID, "tag-clock.json"): true}}
 		cfg := Config{
 			ArtifactRoot: twoAppTree(t), AssetBucket: "assets", Env: "prod",
 			Uploader: &fakeUploader{exists: map[string]bool{}}, CacheStoreBucket: "isr", CacheStoreUploader: store,
@@ -405,10 +467,10 @@ func TestUploadPrerenderAssets(t *testing.T) {
 			t.Fatalf("uploadPrerenderAssets: %v", err)
 		}
 
-		if _, ok := store.putBodies[isrKeyFor("web", "WEB1", "tag-clock.json")]; ok {
+		if _, ok := store.putBodies[isrKeyFor("web", testDeploymentID, "tag-clock.json")]; ok {
 			t.Error("an existing snapshot was overwritten, want it left as the publisher last wrote it")
 		}
-		if _, ok := store.putBodies[isrKeyFor("admin", "ADM1", "tag-clock.json")]; !ok {
+		if _, ok := store.putBodies[isrKeyFor("admin", testDeploymentID, "tag-clock.json")]; !ok {
 			t.Error("the other app's snapshot was not seeded; one refusal must not stop the rest")
 		}
 	})
@@ -495,8 +557,8 @@ func TestUploadPrerenderAssets(t *testing.T) {
 		got := entryPuts(f.puts)
 		slices.Sort(got)
 		want := []string{
-			isrKeyFor("web", "BID", "cache/blog/post.cache.json"),
-			isrKeyFor("web", "BID", "cache/index.cache.json"),
+			isrKeyFor("web", testDeploymentID, "cache/blog/post.cache.json"),
+			isrKeyFor("web", testDeploymentID, "cache/index.cache.json"),
 		}
 		if len(got) != len(want) {
 			t.Fatalf("uploaded keys = %v, want %v", got, want)
@@ -529,7 +591,7 @@ func TestUploadPrerenderAssets(t *testing.T) {
 			t.Fatalf("uploadPrerenderAssets: %v", err)
 		}
 
-		want := isrKeyFor("web", "WEB1", "fetch-cache/") + hash + ".cache.json"
+		want := isrKeyFor("web", testDeploymentID, "fetch-cache/") + hash + ".cache.json"
 		if got := entryPuts(asset.puts); len(got) != 1 || got[0] != want {
 			t.Fatalf("asset bucket got %v, want exactly [%s]", got, want)
 		}

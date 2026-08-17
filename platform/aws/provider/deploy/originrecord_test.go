@@ -19,7 +19,7 @@ func originStore(cfg Config) Config {
 func isrResult(app, prefix string, urls map[string]string) appDeployResult {
 	return appDeployResult{
 		App:      app,
-		Identity: buildOnly("B1"),
+		Identity: deployedAs("B1"),
 		Record:   edge.DeploymentRecord{App: app, IsrPrefix: prefix, FunctionURLs: urls},
 	}
 }
