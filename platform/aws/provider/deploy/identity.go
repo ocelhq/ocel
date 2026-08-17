@@ -1,46 +1,55 @@
 package deploy
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
 	"strings"
+
+	"github.com/ocelhq/ocel/pkg/naming"
 )
 
 const identitySeparator = "~"
 
 type Identity struct {
-	buildID     string
-	fingerprint string
+	deploymentID string
+	fingerprint  string
 }
 
-func (id Identity) BuildID() string { return id.buildID }
+func (id Identity) DeploymentID() string { return id.deploymentID }
 
 func (id Identity) Fingerprint() string { return id.fingerprint }
 
 type Identities map[string]Identity
 
-func NewIdentity(buildID, fingerprint string) (Identity, error) {
-	if buildID == "" {
-		return Identity{}, fmt.Errorf("deployment identity requires a build id")
+func NewIdentity(deploymentID, environment, values string) (Identity, error) {
+	if err := naming.ValidateDeploymentID(deploymentID); err != nil {
+		return Identity{}, fmt.Errorf("deployment identity: %w", err)
 	}
-	for label, part := range map[string]string{"build id": buildID, "value fingerprint": fingerprint} {
-		if strings.Contains(part, identitySeparator) {
-			return Identity{}, fmt.Errorf("%s %q contains the reserved character %q", label, part, identitySeparator)
-		}
+	if environment == "" {
+		return Identity{}, fmt.Errorf("deployment identity for %q requires an environment name", deploymentID)
 	}
-	return Identity{buildID: buildID, fingerprint: fingerprint}, nil
+	return Identity{deploymentID: deploymentID, fingerprint: fingerprintIdentity(environment, values)}, nil
+}
+
+func fingerprintIdentity(environment, values string) string {
+	h := sha256.New()
+	writeLenPrefixed(h, []byte(environment))
+	writeLenPrefixed(h, []byte(values))
+	return hex.EncodeToString(h.Sum(nil))[:fingerprintValuesHexLen]
 }
 
 func (id Identity) String() string {
-	if id.fingerprint == "" {
-		return id.buildID
-	}
-	return id.buildID + identitySeparator + id.fingerprint
+	return id.deploymentID + identitySeparator + id.fingerprint
 }
 
 func ParseIdentity(s string) (Identity, error) {
-	buildID, fingerprint, split := strings.Cut(s, identitySeparator)
-	if split && fingerprint == "" {
-		return Identity{}, fmt.Errorf("deployment identity %q has an empty value fingerprint", s)
+	deploymentID, fingerprint, split := strings.Cut(s, identitySeparator)
+	if !split || deploymentID == "" || fingerprint == "" {
+		return Identity{}, fmt.Errorf("deployment identity %q must be a deployment id and a fingerprint joined by %q", s, identitySeparator)
 	}
-	return NewIdentity(buildID, fingerprint)
+	if strings.Contains(fingerprint, identitySeparator) {
+		return Identity{}, fmt.Errorf("deployment identity %q carries more than one %q", s, identitySeparator)
+	}
+	return Identity{deploymentID: deploymentID, fingerprint: fingerprint}, nil
 }

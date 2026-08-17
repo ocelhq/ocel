@@ -387,7 +387,7 @@ func TestInlinePolicyBudgetPreflight(t *testing.T) {
 			Class:            deploymentsv1.Environment_CLASS_PRODUCTION,
 			StateTableARN:    stateTableARN,
 			ListenerCodePath: "dist/ocel-listener.zip",
-		}, manifest, nil, func(string) {})
+		}, deployedManifest(manifest), nil, func(string) {})
 
 		var budget *PolicyBudgetError
 		if !errors.As(err, &budget) {

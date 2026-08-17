@@ -34,7 +34,7 @@ func TestReclaimTargetsScopeByEnv(t *testing.T) {
 
 	t.Run("a preview env names pointer-scoped stacks", func(t *testing.T) {
 		t.Parallel()
-		targets, err := ReclaimTargets("shop", "pr-1", []string{"record:web/b1", "record:api/b2"}, nil, nil)
+		targets, err := ReclaimTargets("shop", "pr-1", []string{recordKeyFor("web", deployedInto("pr-1", "b1", "")), recordKeyFor("api", deployedInto("pr-1", "b2", ""))}, nil, nil)
 		if err != nil {
 			t.Fatalf("ReclaimTargets: %v", err)
 		}
@@ -45,17 +45,17 @@ func TestReclaimTargetsScopeByEnv(t *testing.T) {
 		for _, tg := range targets {
 			byApp[tg.App] = tg
 		}
-		if got, want := byApp["web"].Stack, appStack(t, "pr-1", "web", buildOnly("b1")); got != want {
+		if got, want := byApp["web"].Stack, appStack(t, "pr-1", "web", deployedInto("pr-1", "b1", "")); got != want {
 			t.Errorf("web stack = %q, want the pointer-scoped preview stack %q", got, want)
 		}
-		prod, err := ReclaimTargets("shop", ProductionEnv, []string{"record:web/b1"}, nil, nil)
+		prod, err := ReclaimTargets("shop", ProductionEnv, []string{recordKeyFor("web", deployedAs("b1"))}, nil, nil)
 		if err != nil {
 			t.Fatalf("ReclaimTargets(production): %v", err)
 		}
 		if prod[0].Stack == byApp["web"].Stack {
 			t.Error("preview and production reclaim resolved the same stack name")
 		}
-		if prod[0].Stack != appStack(t, ProductionEnv, "web", buildOnly("b1")) {
+		if prod[0].Stack != appStack(t, ProductionEnv, "web", deployedAs("b1")) {
 			t.Errorf("production stack = %q, want the production env's", prod[0].Stack)
 		}
 	})

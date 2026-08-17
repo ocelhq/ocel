@@ -46,21 +46,21 @@ func edgeAppTree(t *testing.T) string {
 	})
 }
 
-func edgeBundleKeyFor(app, buildID string) string {
-	return storagePrefixFor("prod", "proj", app, buildID) + "edge/bundle.json"
+func edgeBundleKeyFor(app, deploymentID string) string {
+	return storagePrefixFor("prod", "proj", app, deploymentID) + "edge/bundle.json"
 }
 
 func TestAppEdgeBundleKey(t *testing.T) {
-	coord := storageCoordinate("prod", "proj", "web", releaseOf(buildOnly("WEB1")))
+	coord := storageCoordinate("prod", "proj", "web", releaseOf(deployedAs(testDeploymentID)))
 	got := appEdgeBundleKey(coord)
-	want := edgeBundleKeyFor("web", "WEB1")
+	want := edgeBundleKeyFor("web", testDeploymentID)
 	if got != want {
 		t.Errorf("appEdgeBundleKey = %q, want %q", got, want)
 	}
 	if !strings.HasPrefix(got, appEdgePrefix(coord)+"/") {
 		t.Errorf("key %q must live under the release's own prune-able prefix", got)
 	}
-	if other := appEdgeBundleKey(storageCoordinate("prod", "proj", "web", releaseOf(buildOnly("WEB2")))); other == got {
+	if other := appEdgeBundleKey(storageCoordinate("prod", "proj", "web", releaseOf(deployedAs("d2")))); other == got {
 		t.Error("two releases of one app must not share a bundle key")
 	}
 }
@@ -81,7 +81,7 @@ func TestUploadEdgeBundles(t *testing.T) {
 
 		got := append([]string(nil), store.puts...)
 		slices.Sort(got)
-		want := []string{edgeBundleKeyFor("web", "WEB1")}
+		want := []string{edgeBundleKeyFor("web", testDeploymentID)}
 		if len(got) != len(want) || got[0] != want[0] {
 			t.Fatalf("uploaded keys = %v, want %v", got, want)
 		}
@@ -100,7 +100,7 @@ func TestUploadEdgeBundles(t *testing.T) {
 
 	t.Run("replaces the object already under the key", func(t *testing.T) {
 		t.Parallel()
-		key := edgeBundleKeyFor("web", "WEB1")
+		key := edgeBundleKeyFor("web", testDeploymentID)
 		store := &fakeUploader{exists: map[string]bool{key: true}}
 		cfg := Config{
 			ArtifactRoot: writeTree(t, map[string]string{
@@ -147,10 +147,10 @@ func TestUploadEdgeBundles(t *testing.T) {
 		for _, key := range store.puts {
 			distinct[key] = true
 		}
-		if len(store.puts) != 2 || len(distinct) != 1 || !distinct[edgeBundleKeyFor("web", "WEB1")] {
-			t.Fatalf("uploaded keys = %v, want the same %q twice", store.puts, edgeBundleKeyFor("web", "WEB1"))
+		if len(store.puts) != 2 || len(distinct) != 1 || !distinct[edgeBundleKeyFor("web", testDeploymentID)] {
+			t.Fatalf("uploaded keys = %v, want the same %q twice", store.puts, edgeBundleKeyFor("web", testDeploymentID))
 		}
-		if body := store.putBodies[edgeBundleKeyFor("web", "WEB1")]; body != `{"version":1,"mainModule":"main.js"}` {
+		if body := store.putBodies[edgeBundleKeyFor("web", testDeploymentID)]; body != `{"version":1,"mainModule":"main.js"}` {
 			t.Errorf("object after the rotation = %q, want the build's bundle unchanged", body)
 		}
 	})
@@ -193,14 +193,14 @@ func TestBuildDeploymentRecordEdgeWorkers(t *testing.T) {
 		manifest := nextManifest()
 		app := &deploymentsv1.ManifestApp{Name: "web", Framework: frameworkNext}
 
-		record, err := buildDeploymentRecord(cfg, manifest, app, buildOnly("WEB1"), nil, appBuildsFor(t, cfg, manifest))
+		record, err := buildDeploymentRecord(cfg, manifest, app, deployedAs("WEB1"), nil, appBuildsFor(t, cfg, manifest))
 		if err != nil {
 			t.Fatalf("buildDeploymentRecord: %v", err)
 		}
 		if record.EdgeWorkers == nil {
 			t.Fatal("EdgeWorkers = nil, want the build's edge bundle")
 		}
-		if want := edgeBundleKeyFor("web", "WEB1"); record.EdgeWorkers.BundleKey != want {
+		if want := edgeBundleKeyFor("web", testDeploymentID); record.EdgeWorkers.BundleKey != want {
 			t.Errorf("BundleKey = %q, want %q", record.EdgeWorkers.BundleKey, want)
 		}
 		if record.EdgeWorkers.CompatDate != "2026-07-13" {
@@ -237,7 +237,7 @@ func TestBuildDeploymentRecordEdgeWorkers(t *testing.T) {
 		manifest := twoAppManifest()
 		app := &deploymentsv1.ManifestApp{Name: "admin", Framework: frameworkNext}
 
-		record, err := buildDeploymentRecord(cfg, manifest, app, buildOnly("ADM1"), nil, appBuildsFor(t, cfg, manifest))
+		record, err := buildDeploymentRecord(cfg, manifest, app, deployedAs("ADM1"), nil, appBuildsFor(t, cfg, manifest))
 		if err != nil {
 			t.Fatalf("buildDeploymentRecord: %v", err)
 		}

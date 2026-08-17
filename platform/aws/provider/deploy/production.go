@@ -55,6 +55,11 @@ func realize(ctx context.Context, cfg Config, manifest *deploymentsv1.Manifest, 
 		return Result{}, finishUploading(fmt.Errorf("no deployments-store worker found for this account; re-run `%s` to provision it before deploying", bootstrapCommand(cfg)))
 	}
 
+	for _, app := range manifestApps(manifest) {
+		if err := naming.ValidateDeploymentID(app.GetDeploymentId()); err != nil {
+			return Result{}, finishUploading(fmt.Errorf("app %q: %w; upgrade the CLI so every app is built under one", app.GetName(), err))
+		}
+	}
 	if err := validateTag(cfg.Tag); err != nil {
 		return Result{}, finishUploading(err)
 	}
@@ -848,7 +853,7 @@ func runAppStack(ctx context.Context, cfg Config, manifest *deploymentsv1.Manife
 		return nil
 	}
 
-	res, upErr := upStack(ctx, cfg, stack, stackTags(cfg, stack, plan.Promotion.PromotionID, id.BuildID()), program, log, stage.ID)
+	res, upErr := upStack(ctx, cfg, stack, stackTags(cfg, stack, plan.Promotion.PromotionID, id.DeploymentID(), builds.ids[name]), program, log, stage.ID)
 	if upErr != nil {
 		err = fmt.Errorf("provision app-deploy stack %s: %w", stack, upErr)
 		return nil, nil, err
@@ -868,10 +873,10 @@ func appFunctions(manifest *deploymentsv1.Manifest, app string) []*deploymentsv1
 }
 
 func infraStackTags(cfg Config, name naming.StackName) map[string]string {
-	return stackTags(cfg, name, "", "")
+	return stackTags(cfg, name, "", "", "")
 }
 
-func stackTags(cfg Config, name naming.StackName, promotionID, buildID string) map[string]string {
+func stackTags(cfg Config, name naming.StackName, promotionID, deploymentID, buildID string) map[string]string {
 	coord := naming.Coordinate{
 		Project: naming.Sanitize(cfg.Slug),
 		Env:     name.Env,
@@ -879,11 +884,12 @@ func stackTags(cfg Config, name naming.StackName, promotionID, buildID string) m
 		Release: name.Release,
 	}
 	return coord.Tags(naming.Facts{
-		ManagedBy: managedBy(),
-		EnvClass:  envClass(cfg.Class),
-		BuildID:   buildID,
-		Promotion: promotionID,
-		ExpiresAt: expiresAt(cfg.ExpiresAt),
+		ManagedBy:  managedBy(),
+		EnvClass:   envClass(cfg.Class),
+		BuildID:    buildID,
+		Deployment: deploymentID,
+		Promotion:  promotionID,
+		ExpiresAt:  expiresAt(cfg.ExpiresAt),
 	})
 }
 

@@ -1,6 +1,8 @@
 package deploy
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"strings"
 	"testing"
 
@@ -12,10 +14,24 @@ func prodEnv() *deploymentsv1.Environment {
 	return &deploymentsv1.Environment{Class: deploymentsv1.Environment_CLASS_PRODUCTION}
 }
 
-func buildOnly(buildID string) Identity { return fingerprinted(buildID, "") }
+const testDeploymentID = "d1a2b3c4d5e6f708192a3b4c5d6e7f80"
 
-func fingerprinted(buildID, fingerprint string) Identity {
-	id, err := NewIdentity(buildID, fingerprint)
+func deploymentIDFor(label string) string {
+	if naming.ValidateDeploymentID(label) == nil {
+		return label
+	}
+	sum := sha256.Sum256([]byte(label))
+	return hex.EncodeToString(sum[:16])
+}
+
+func deployedAs(deploymentID string) Identity { return fingerprinted(deploymentID, "") }
+
+func fingerprinted(deploymentID, values string) Identity {
+	return deployedInto(ProductionEnv, deploymentID, values)
+}
+
+func deployedInto(environment, deploymentID, values string) Identity {
+	id, err := NewIdentity(deploymentIDFor(deploymentID), environment, values)
 	if err != nil {
 		panic(err)
 	}
@@ -152,7 +168,7 @@ func TestReleaseOf(t *testing.T) {
 
 	t.Run("fixed arity whatever the identity carries", func(t *testing.T) {
 		t.Parallel()
-		plain := appStack(t, "prod", "web", buildOnly("build1"))
+		plain := appStack(t, "prod", "web", deployedAs("build1"))
 		full := appStack(t, "prod", "web", fingerprinted("build1", "fp1"))
 		for _, stack := range []naming.StackName{plain, full} {
 			if got := len(strings.Split(stack.String(), naming.FieldSeparator)); got != 3 {
@@ -166,7 +182,7 @@ func TestReleaseOf(t *testing.T) {
 		base := appStack(t, "prod", "web", fingerprinted("build1", "fp1"))
 		newBuild := appStack(t, "prod", "web", fingerprinted("build2", "fp1"))
 		newValues := appStack(t, "prod", "web", fingerprinted("build1", "fp2"))
-		noValues := appStack(t, "prod", "web", buildOnly("build1"))
+		noValues := appStack(t, "prod", "web", deployedAs("build1"))
 
 		for _, other := range []naming.StackName{newBuild, newValues, noValues} {
 			if base == other {
@@ -177,14 +193,14 @@ func TestReleaseOf(t *testing.T) {
 
 	t.Run("no collision between a fingerprint and a hyphenated build id", func(t *testing.T) {
 		t.Parallel()
-		if a, b := appStack(t, "prod", "web", fingerprinted("b", "f")), appStack(t, "prod", "web", buildOnly("b-f")); a == b {
+		if a, b := appStack(t, "prod", "web", fingerprinted("b", "f")), appStack(t, "prod", "web", deployedAs("b-f")); a == b {
 			t.Errorf("distinct identities collided on %q", a)
 		}
 	})
 
 	t.Run("is deterministic", func(t *testing.T) {
 		t.Parallel()
-		if a, b := releaseOf(buildOnly("build1")), releaseOf(buildOnly("build1")); a != b {
+		if a, b := releaseOf(deployedAs("build1")), releaseOf(deployedAs("build1")); a != b {
 			t.Errorf("releaseOf is not deterministic: %q then %q", a, b)
 		}
 	})
@@ -202,7 +218,7 @@ func TestBuildPlan(t *testing.T) {
 				{Name: "api"},
 			},
 		}
-		identities := Identities{"web": buildOnly("buildW"), "api": buildOnly("buildA")}
+		identities := Identities{"web": deployedAs("buildW"), "api": deployedAs("buildA")}
 
 		plan, err := BuildPlan(manifest, prodEnv(), "promo1", identities)
 		if err != nil {
@@ -213,8 +229,8 @@ func TestBuildPlan(t *testing.T) {
 			t.Errorf("InfraStack = %q, want %q", plan.InfraStack, want)
 		}
 
-		wantWeb := appStack(t, ProductionEnv, "web", buildOnly("buildW"))
-		wantAPI := appStack(t, ProductionEnv, "api", buildOnly("buildA"))
+		wantWeb := appStack(t, ProductionEnv, "web", deployedAs("buildW"))
+		wantAPI := appStack(t, ProductionEnv, "api", deployedAs("buildA"))
 		if plan.AppStacks["web"] != wantWeb {
 			t.Errorf("AppStacks[web] = %q, want %q", plan.AppStacks["web"], wantWeb)
 		}
@@ -228,13 +244,13 @@ func TestBuildPlan(t *testing.T) {
 		if plan.Promotion.PromotionID != "promo1" {
 			t.Errorf("PromotionID = %q, want %q", plan.Promotion.PromotionID, "promo1")
 		}
-		want := map[string]string{"web": "buildW", "api": "buildA"}
+		want := map[string]string{"web": identities["web"].String(), "api": identities["api"].String()}
 		if len(plan.Promotion.Builds) != len(want) {
 			t.Fatalf("Promotion.Builds = %v, want %v", plan.Promotion.Builds, want)
 		}
-		for app, buildID := range want {
-			if got := plan.Promotion.Builds[app]; got != buildID {
-				t.Errorf("Promotion.Builds[%q] = %q, want %q", app, got, buildID)
+		for app, identity := range want {
+			if got := plan.Promotion.Builds[app]; got != identity {
+				t.Errorf("Promotion.Builds[%q] = %q, want %q", app, got, identity)
 			}
 		}
 	})
@@ -243,14 +259,14 @@ func TestBuildPlan(t *testing.T) {
 		t.Parallel()
 		manifest := &deploymentsv1.Manifest{Slug: "shop", Apps: []*deploymentsv1.ManifestApp{{Name: "web"}}}
 
-		plan, err := BuildPlan(manifest, prodEnv(), "promo1", Identities{"web": buildOnly("b")})
+		plan, err := BuildPlan(manifest, prodEnv(), "promo1", Identities{"web": deployedAs("b")})
 		if err != nil {
 			t.Fatalf("BuildPlan: %v", err)
 		}
 		if got, want := plan.InfraStack.String(), "prod--infra"; got != want {
 			t.Errorf("InfraStack = %q, want %q — the project belongs to the Pulumi project", got, want)
 		}
-		release := releaseOf(buildOnly("b")).String()
+		release := releaseOf(deployedAs("b")).String()
 		if got, want := plan.AppStacks["web"].String(), "prod--web--"+release; got != want {
 			t.Errorf("AppStacks[web] = %q, want %q", got, want)
 		}
@@ -286,7 +302,7 @@ func TestBuildPlan(t *testing.T) {
 			Slug: "proj",
 			Apps: []*deploymentsv1.ManifestApp{{Name: "web"}, {Name: "api"}},
 		}
-		identities := Identities{"web": buildOnly("buildW")}
+		identities := Identities{"web": deployedAs("buildW")}
 
 		if _, err := BuildPlan(manifest, prodEnv(), "promo1", identities); err == nil {
 			t.Fatal("BuildPlan with a missing app build id should error, got nil")
@@ -300,7 +316,7 @@ func TestBuildPlan(t *testing.T) {
 			Apps: []*deploymentsv1.ManifestApp{{Name: naming.InfraApp}},
 		}
 
-		if _, err := BuildPlan(manifest, prodEnv(), "promo1", Identities{naming.InfraApp: buildOnly("b")}); err == nil {
+		if _, err := BuildPlan(manifest, prodEnv(), "promo1", Identities{naming.InfraApp: deployedAs("b")}); err == nil {
 			t.Fatal("BuildPlan with an app named infra should error, got nil")
 		}
 	})
@@ -312,7 +328,7 @@ func TestBuildPlan(t *testing.T) {
 			Apps: []*deploymentsv1.ManifestApp{{Name: "web"}},
 		}
 
-		if _, err := BuildPlan(manifest, &deploymentsv1.Environment{}, "promo1", Identities{"web": buildOnly("b")}); err == nil {
+		if _, err := BuildPlan(manifest, &deploymentsv1.Environment{}, "promo1", Identities{"web": deployedAs("b")}); err == nil {
 			t.Fatal("BuildPlan for an unspecified class should error, got nil")
 		}
 	})
@@ -324,7 +340,7 @@ func TestBuildPlan(t *testing.T) {
 			Apps: []*deploymentsv1.ManifestApp{{Name: "web"}},
 		}
 
-		plan, err := BuildPlan(manifest, previewEnv(deploymentsv1.Environment_LIFECYCLE_PERSISTENT), "promo1", Identities{"web": buildOnly("b")})
+		plan, err := BuildPlan(manifest, previewEnv(deploymentsv1.Environment_LIFECYCLE_PERSISTENT), "promo1", Identities{"web": deployedAs("b")})
 		if err != nil {
 			t.Fatalf("BuildPlan: %v", err)
 		}
@@ -334,7 +350,7 @@ func TestBuildPlan(t *testing.T) {
 		if plan.InfraStack == naming.InfraStack(ProductionEnv) {
 			t.Error("persistent preview infra stack collides with production infra stack")
 		}
-		if plan.AppStacks["web"] == appStack(t, ProductionEnv, "web", buildOnly("b")) {
+		if plan.AppStacks["web"] == appStack(t, ProductionEnv, "web", deployedAs("b")) {
 			t.Error("preview app-deploy stack collides with the production one for the same build")
 		}
 	})
@@ -346,7 +362,7 @@ func TestBuildPlan(t *testing.T) {
 			Apps: []*deploymentsv1.ManifestApp{{Name: "web"}},
 		}
 
-		plan, err := BuildPlan(manifest, previewEnv(deploymentsv1.Environment_LIFECYCLE_EPHEMERAL), "promo1", Identities{"web": buildOnly("b")})
+		plan, err := BuildPlan(manifest, previewEnv(deploymentsv1.Environment_LIFECYCLE_EPHEMERAL), "promo1", Identities{"web": deployedAs("b")})
 		if err != nil {
 			t.Fatalf("BuildPlan: %v", err)
 		}
@@ -366,7 +382,7 @@ func TestBuildPlan(t *testing.T) {
 		}
 		env := &deploymentsv1.Environment{Class: deploymentsv1.Environment_CLASS_PREVIEW}
 
-		if _, err := BuildPlan(manifest, env, "promo1", Identities{"web": buildOnly("b")}); err == nil {
+		if _, err := BuildPlan(manifest, env, "promo1", Identities{"web": deployedAs("b")}); err == nil {
 			t.Fatal("BuildPlan for a preview with no identity should error, got nil")
 		}
 	})
@@ -377,8 +393,8 @@ func TestBuildPlan(t *testing.T) {
 		staging := &deploymentsv1.Environment{Class: deploymentsv1.Environment_CLASS_PREVIEW, Lifecycle: deploymentsv1.Environment_LIFECYCLE_PERSISTENT, Identity: "staging"}
 		demo := &deploymentsv1.Environment{Class: deploymentsv1.Environment_CLASS_PREVIEW, Lifecycle: deploymentsv1.Environment_LIFECYCLE_PERSISTENT, Identity: "demo"}
 
-		a, _ := BuildPlan(manifest, staging, "p", Identities{"web": buildOnly("b")})
-		b, _ := BuildPlan(manifest, demo, "p", Identities{"web": buildOnly("b")})
+		a, _ := BuildPlan(manifest, staging, "p", Identities{"web": deployedAs("b")})
+		b, _ := BuildPlan(manifest, demo, "p", Identities{"web": deployedAs("b")})
 		if a.InfraStack == b.InfraStack {
 			t.Errorf("two persistent previews share an infra stack: %q", a.InfraStack)
 		}
@@ -405,7 +421,7 @@ func TestBuildPlan(t *testing.T) {
 		manifest := &deploymentsv1.Manifest{Slug: "proj", Apps: []*deploymentsv1.ManifestApp{{Name: "web"}, {Name: "api"}}}
 
 		plan, err := BuildPlan(manifest, previewEnv(deploymentsv1.Environment_LIFECYCLE_PERSISTENT), "p", Identities{
-			"web": buildOnly("b1"),
+			"web": deployedAs("b1"),
 			"api": fingerprinted("b2", "fp"),
 		})
 		if err != nil {
