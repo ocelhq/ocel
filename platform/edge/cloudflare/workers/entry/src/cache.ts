@@ -158,8 +158,18 @@ export function asSegmentPayload(response: Response): Response {
   return new Response(null, { status: 204, headers });
 }
 
+export interface DeploymentScope {
+  slug: string;
+  app: string;
+  deploymentId: string;
+}
+
+export function deploymentScope(deps: DeploymentScope): string {
+  return `${deps.slug}/${deps.app}/${deps.deploymentId}`;
+}
+
 export function cacheKey(
-  buildId: string,
+  scope: string,
   pathname: string,
   url: URL,
   headers: Headers,
@@ -169,7 +179,7 @@ export function cacheKey(
   const variant = variantPath(pathname, headers, renderingMode);
   if (variant === null) return { cacheable: false };
 
-  const key = new URL(`https://cache.ocel/${buildId}${variant}`);
+  const key = new URL(`https://cache.ocel/${scope}${variant}`);
   const names = (allowQuery ?? [...url.searchParams.keys()]).filter(
     (name) => name !== "_rsc",
   );

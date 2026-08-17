@@ -29,6 +29,7 @@ function originDeps(overrides: Partial<RouteDeps> = {}): RouteDeps {
     },
     functionUrls: { "/api/upload": "https://fn.example.com" },
     slug: "p1",
+    deploymentId: "d1",
     app: "web",
     assetStore: noAssets(),
     ...overrides,

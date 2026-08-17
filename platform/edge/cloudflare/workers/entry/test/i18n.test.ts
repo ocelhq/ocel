@@ -79,6 +79,7 @@ function i18nDeps(
     },
     functionUrls: { posts: "https://fn.example.com", api: "https://fn.example.com" },
     slug: "p1",
+    deploymentId: "d1",
     app: "web",
     assetStore: assetStore(over.files ?? {}),
     fetch: (async (input: Request) => {
