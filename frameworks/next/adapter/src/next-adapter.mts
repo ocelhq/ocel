@@ -189,11 +189,14 @@ const adapter = {
 
     const routes = routeTable(entryKeyByPathname, routing.dynamicRoutes ?? []);
 
+    const assetSuffix = clientAssetSuffix(config);
+
     const nextConfigProjection = {
       basePath: config.basePath || "",
       i18n: config.i18n ?? null,
       trailingSlash: !!config.trailingSlash,
       experimental: config.experimental ?? {},
+      clientAssetSuffix: assetSuffix,
     };
 
     await Promise.all(
@@ -480,7 +483,7 @@ const adapter = {
       );
     }
 
-    await emitEdgeBundle(outputRoot, distDir, [
+    await emitEdgeBundle(outputRoot, distDir, assetSuffix, [
       ...edgeRoutes,
       ...(middleware?.runtime === "edge" ? [middleware] : []),
     ]);
@@ -551,8 +554,11 @@ function renderEdgeShim(
   entries: Record<string, EdgeEntry>,
   assetIdByName: Map<string, string>,
   wasmIdByName: Map<string, string>,
+  clientAssetSuffix: string,
 ): string {
   return `import { AsyncLocalStorage } from "node:async_hooks"
+
+globalThis.NEXT_CLIENT_ASSET_SUFFIX = ${JSON.stringify(clientAssetSuffix)}
 
 const ENTRIES = ${stableStringify(entries)}
 const ASSETS = ${stableStringify(Object.fromEntries(assetIdByName))}
@@ -687,6 +693,7 @@ async function edgeAssetNames(distDir: string): Promise<Set<string> | null> {
 async function emitEdgeBundle(
   outputRoot: string,
   distDir: string,
+  clientAssetSuffix: string,
   sources: readonly EdgeOutput[],
 ): Promise<void> {
   if (sources.length === 0) return;
@@ -773,7 +780,7 @@ async function emitEdgeBundle(
   const json = stableStringify({
     version: 2,
     mainModule: "main.js",
-    shim: renderEdgeShim(entries, assetIdByName, wasmIdByName),
+    shim: renderEdgeShim(entries, assetIdByName, wasmIdByName, clientAssetSuffix),
     chunks,
     wasm: wasmModules,
     assets: assetModules,
@@ -1046,6 +1053,15 @@ interface NextConfigProjection {
   i18n: unknown;
   trailingSlash: boolean;
   experimental: unknown;
+  clientAssetSuffix: string;
+}
+
+function clientAssetSuffix(config: {
+  deploymentId?: string;
+  experimental?: { immutableAssetToken?: string };
+}): string {
+  const token = config.experimental?.immutableAssetToken || config.deploymentId;
+  return token ? `?dpl=${token}` : "";
 }
 
 function renderLauncher(

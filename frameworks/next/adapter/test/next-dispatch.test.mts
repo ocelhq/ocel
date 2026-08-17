@@ -18,6 +18,17 @@ const ENTRIES = {
   "app/api/x/route": "./.next/server/app/api/x/route.js",
 };
 
+function projectedConfig(over: { clientAssetSuffix?: string } = {}) {
+  return {
+    basePath: "",
+    i18n: null,
+    trailingSlash: false,
+    experimental: {},
+    clientAssetSuffix: "",
+    ...over,
+  };
+}
+
 function fakeLoader() {
   const loads: string[] = [];
   const load = (path: string) => {
@@ -122,7 +133,12 @@ function fakeRes() {
 test("loads the primary entry once while the launcher is still being required", () => {
   const { loads, load } = fakeLoader();
 
-  createDispatch({ entries: ENTRIES, primary: "app/page", load });
+  createDispatch({
+    nextConfig: projectedConfig(),
+    entries: ENTRIES,
+    primary: "app/page",
+    load,
+  });
 
   expect(loads).toEqual([ENTRIES["app/page"]]);
 });
@@ -130,14 +146,24 @@ test("loads the primary entry once while the launcher is still being required", 
 test("loads nothing eagerly without a primary", () => {
   const { loads, load } = fakeLoader();
 
-  createDispatch({ entries: ENTRIES, primary: null, load });
+  createDispatch({
+    nextConfig: projectedConfig(),
+    entries: ENTRIES,
+    primary: null,
+    load,
+  });
 
   expect(loads).toEqual([]);
 });
 
 test("loads a lazy entry on its first request and never again", async () => {
   const { loads, load } = fakeLoader();
-  const dispatch = createDispatch({ entries: ENTRIES, primary: null, load });
+  const dispatch = createDispatch({
+    nextConfig: projectedConfig(),
+    entries: ENTRIES,
+    primary: null,
+    load,
+  });
 
   await dispatch.handler(fakeReq("app/api/x/route"), fakeRes(), {});
   await dispatch.handler(fakeReq("app/api/x/route"), fakeRes(), {});
@@ -147,7 +173,12 @@ test("loads a lazy entry on its first request and never again", async () => {
 
 test("reuses the eagerly loaded primary when a request hits it", async () => {
   const { loads, load } = fakeLoader();
-  const dispatch = createDispatch({ entries: ENTRIES, primary: "app/page", load });
+  const dispatch = createDispatch({
+    nextConfig: projectedConfig(),
+    entries: ENTRIES,
+    primary: "app/page",
+    load,
+  });
 
   await dispatch.handler(fakeReq("app/page"), fakeRes(), {});
 
@@ -157,7 +188,7 @@ test("reuses the eagerly loaded primary when a request hits it", async () => {
 test("passes req, res and ctx through to the entry untouched", async () => {
   const seen: unknown[] = [];
   const dispatch = createDispatch({
-    entries: ENTRIES,
+    nextConfig: projectedConfig(),    entries: ENTRIES,
     primary: null,
     load: () => ({
       handler: (...args: unknown[]) => {
@@ -179,7 +210,12 @@ test("passes req, res and ctx through to the entry untouched", async () => {
 
 test("fails closed on a request with no entry header and no route for its path", async () => {
   const { load } = fakeLoader();
-  const dispatch = createDispatch({ entries: ENTRIES, primary: null, load });
+  const dispatch = createDispatch({
+    nextConfig: projectedConfig(),
+    entries: ENTRIES,
+    primary: null,
+    load,
+  });
   const res = fakeRes();
 
   await dispatch.handler(fakeReq(undefined, "/nowhere"), res, {});
@@ -203,7 +239,7 @@ const ROUTED = {
 test("a self-fetch is served by the route it asks for, not the one it came from", async () => {
   const { loads, load } = fakeLoader();
   const dispatch = createDispatch({
-    entries: ROUTED,
+    nextConfig: projectedConfig(),    entries: ROUTED,
     primary: null,
     routes: ROUTES,
     load,
@@ -222,7 +258,7 @@ test("a self-fetch is served by the route it asks for, not the one it came from"
 test("a dynamic route serves a concrete pathname beneath it", async () => {
   const { load } = fakeLoader();
   const dispatch = createDispatch({
-    entries: ROUTED,
+    nextConfig: projectedConfig(),    entries: ROUTED,
     primary: null,
     routes: ROUTES,
     load,
@@ -236,7 +272,7 @@ test("a dynamic route serves a concrete pathname beneath it", async () => {
 test("an exact route wins over a dynamic one that also matches", async () => {
   const { load } = fakeLoader();
   const dispatch = createDispatch({
-    entries: ROUTED,
+    nextConfig: projectedConfig(),    entries: ROUTED,
     primary: null,
     routes: {
       exact: { "/blog/featured": "/header" },
@@ -253,7 +289,7 @@ test("an exact route wins over a dynamic one that also matches", async () => {
 test("a named request is served by the name, never by its pathname", async () => {
   const { load } = fakeLoader();
   const dispatch = createDispatch({
-    entries: ROUTED,
+    nextConfig: projectedConfig(),    entries: ROUTED,
     primary: null,
     routes: ROUTES,
     load,
@@ -267,7 +303,7 @@ test("a named request is served by the name, never by its pathname", async () =>
 test("a basePath route is served under the path the build gave it", async () => {
   const { load } = fakeLoader();
   const dispatch = createDispatch({
-    entries: { "/docs/header": "./.next/server/app/header/page.js" },
+    nextConfig: projectedConfig(),    entries: { "/docs/header": "./.next/server/app/header/page.js" },
     primary: null,
     routes: {
       exact: { "/docs/header": "/docs/header" },
@@ -284,7 +320,7 @@ test("a basePath route is served under the path the build gave it", async () => 
 test("a pathname another bundle owns fails by name, not by a local catch-all", async () => {
   const { loads, load } = fakeLoader();
   const dispatch = createDispatch({
-    entries: { "/files/[...path]": "./.next/server/app/files/[...path]/page.js" },
+    nextConfig: projectedConfig(),    entries: { "/files/[...path]": "./.next/server/app/files/[...path]/page.js" },
     primary: null,
     routes: {
       exact: { "/elsewhere": "/elsewhere" },
@@ -303,7 +339,12 @@ test("a pathname another bundle owns fails by name, not by a local catch-all", a
 
 test("fails closed on a key the bundle does not carry, naming it", async () => {
   const { loads, load } = fakeLoader();
-  const dispatch = createDispatch({ entries: ENTRIES, primary: null, load });
+  const dispatch = createDispatch({
+    nextConfig: projectedConfig(),
+    entries: ENTRIES,
+    primary: null,
+    load,
+  });
   const res = fakeRes();
 
   await dispatch.handler(fakeReq("app/ghost/page"), res, {});
@@ -315,7 +356,7 @@ test("fails closed on a key the bundle does not carry, naming it", async () => {
 
 test("fails closed on an entry module that exports no handler, naming the key", async () => {
   const dispatch = createDispatch({
-    entries: ENTRIES,
+    nextConfig: projectedConfig(),    entries: ENTRIES,
     primary: null,
     load: () => ({}),
   });
@@ -331,7 +372,7 @@ test("awaits an async entry module before reaching for its handler", async () =>
   const handler = (...args: unknown[]) => ({ path: "async", args });
   const loads: string[] = [];
   const dispatch = createDispatch({
-    entries: ENTRIES,
+    nextConfig: projectedConfig(),    entries: ENTRIES,
     primary: null,
     load: (path: string) => {
       loads.push(path);
@@ -352,7 +393,7 @@ test("awaits an async entry module before reaching for its handler", async () =>
 test("fails closed on an async entry module that rejects, naming the key", async () => {
   silenceErrors();
   const dispatch = createDispatch({
-    entries: ENTRIES,
+    nextConfig: projectedConfig(),    entries: ENTRIES,
     primary: null,
     load: () => Promise.reject(new Error("boom")),
   });
@@ -367,7 +408,7 @@ test("fails closed on an async entry module that rejects, naming the key", async
 test("pins the response cache of an async entry module once it resolves", async () => {
   const getResponseCache = vi.fn();
   const dispatch = createDispatch({
-    entries: ENTRIES,
+    nextConfig: projectedConfig(),    entries: ENTRIES,
     primary: "app/page",
     load: () =>
       Promise.resolve({ handler: () => ({}), routeModule: { getResponseCache } }),
@@ -382,7 +423,12 @@ test("a primary that throws on load neither kills the factory nor the other entr
   const errors = silenceErrors();
   const { load } = throwingLoader(ENTRIES["app/page"]);
 
-  const dispatch = createDispatch({ entries: ENTRIES, primary: "app/page", load });
+  const dispatch = createDispatch({
+    nextConfig: projectedConfig(),
+    entries: ENTRIES,
+    primary: "app/page",
+    load,
+  });
   const res = fakeRes();
   const result = await dispatch.handler(fakeReq("app/api/x/route"), res, {});
 
@@ -395,7 +441,12 @@ test("a primary that throws on load neither kills the factory nor the other entr
 test("the broken primary's own key fails closed, naming it", async () => {
   silenceErrors();
   const { load } = throwingLoader(ENTRIES["app/page"]);
-  const dispatch = createDispatch({ entries: ENTRIES, primary: "app/page", load });
+  const dispatch = createDispatch({
+    nextConfig: projectedConfig(),
+    entries: ENTRIES,
+    primary: "app/page",
+    load,
+  });
   const res = fakeRes();
 
   await dispatch.handler(fakeReq("app/page"), res, {});
@@ -408,7 +459,12 @@ test("the broken primary's own key fails closed, naming it", async () => {
 test("a lazy entry that throws on load fails closed instead of propagating", async () => {
   silenceErrors();
   const { load } = throwingLoader(ENTRIES["app/api/x/route"]);
-  const dispatch = createDispatch({ entries: ENTRIES, primary: null, load });
+  const dispatch = createDispatch({
+    nextConfig: projectedConfig(),
+    entries: ENTRIES,
+    primary: null,
+    load,
+  });
   const res = fakeRes();
 
   await dispatch.handler(fakeReq("app/api/x/route"), res, {});
@@ -420,7 +476,12 @@ test("a lazy entry that throws on load fails closed instead of propagating", asy
 test("memoizes a failed load so a doomed require is never re-attempted", async () => {
   silenceErrors();
   const { loads, load } = throwingLoader(ENTRIES["app/api/x/route"]);
-  const dispatch = createDispatch({ entries: ENTRIES, primary: null, load });
+  const dispatch = createDispatch({
+    nextConfig: projectedConfig(),
+    entries: ENTRIES,
+    primary: null,
+    load,
+  });
 
   await dispatch.handler(fakeReq("app/api/x/route"), fakeRes(), {});
   const second = fakeRes();
@@ -434,7 +495,12 @@ test("memoizes a failed load so a doomed require is never re-attempted", async (
 test("memoizes a failed prime so the broken primary is required only at init", async () => {
   silenceErrors();
   const { loads, load } = throwingLoader(ENTRIES["app/page"]);
-  const dispatch = createDispatch({ entries: ENTRIES, primary: "app/page", load });
+  const dispatch = createDispatch({
+    nextConfig: projectedConfig(),
+    entries: ENTRIES,
+    primary: "app/page",
+    load,
+  });
 
   await dispatch.handler(fakeReq("app/page"), fakeRes(), {});
   await dispatch.handler(fakeReq("app/page"), fakeRes(), {});
@@ -446,7 +512,7 @@ test("warms every entry, primary first and then in table order", () => {
   const dir = stubCompileCache();
   const { loads, load } = cachingLoader({});
   const dispatch = createDispatch({
-    entries: WARM_ENTRIES,
+    nextConfig: projectedConfig(),    entries: WARM_ENTRIES,
     primary: "app/a/page",
     load,
   });
@@ -473,7 +539,7 @@ test("reuses the primary's init load rather than requiring it twice", () => {
   stubCompileCache();
   const { loads, load } = cachingLoader({});
   const dispatch = createDispatch({
-    entries: WARM_ENTRIES,
+    nextConfig: projectedConfig(),    entries: WARM_ENTRIES,
     primary: "app/page",
     load,
   });
@@ -486,7 +552,12 @@ test("reuses the primary's init load rather than requiring it twice", () => {
 test("serves a warmed entry without requiring it again", async () => {
   stubCompileCache();
   const { loads, load } = cachingLoader({});
-  const dispatch = createDispatch({ entries: WARM_ENTRIES, primary: null, load });
+  const dispatch = createDispatch({
+    nextConfig: projectedConfig(),
+    entries: WARM_ENTRIES,
+    primary: null,
+    load,
+  });
 
   dispatch.warm(NO_LIMITS);
   await dispatch.handler(fakeReq("app/b/page"), fakeRes(), {});
@@ -497,7 +568,12 @@ test("serves a warmed entry without requiring it again", async () => {
 test("reports a warm-time failure without abandoning the rest of the bundle", () => {
   stubCompileCache();
   const { load } = cachingLoader({}, [WARM_ENTRIES["app/a/page"]]);
-  const dispatch = createDispatch({ entries: WARM_ENTRIES, primary: null, load });
+  const dispatch = createDispatch({
+    nextConfig: projectedConfig(),
+    entries: WARM_ENTRIES,
+    primary: null,
+    load,
+  });
 
   const report = dispatch.warm(NO_LIMITS);
 
@@ -519,7 +595,12 @@ test("does not memoize a warm-time failure, so the request path retries it", asy
     }
     return { handler: () => path };
   };
-  const dispatch = createDispatch({ entries: WARM_ENTRIES, primary: null, load });
+  const dispatch = createDispatch({
+    nextConfig: projectedConfig(),
+    entries: WARM_ENTRIES,
+    primary: null,
+    load,
+  });
 
   dispatch.warm(NO_LIMITS);
   const res = fakeRes();
@@ -536,7 +617,7 @@ test("stops between entries once the deadline has passed", () => {
   vi.spyOn(Date, "now").mockImplementation(() => now);
   const { loads, load } = cachingLoader({});
   const dispatch = createDispatch({
-    entries: WARM_ENTRIES,
+    nextConfig: projectedConfig(),    entries: WARM_ENTRIES,
     primary: "app/page",
     load: (path: string) => {
       now += 10;
@@ -561,7 +642,7 @@ test("stops before the ceiling, predicting the next entry by the largest growth 
     [WARM_ENTRIES["app/b/page"]]: 1000,
   });
   const dispatch = createDispatch({
-    entries: WARM_ENTRIES,
+    nextConfig: projectedConfig(),    entries: WARM_ENTRIES,
     primary: "app/page",
     load,
   });
@@ -583,7 +664,7 @@ test("charges 512 bytes per cached file, matching what the uploader charges", ()
     [WARM_ENTRIES["app/b/page"]]: 30,
   });
   const dispatch = createDispatch({
-    entries: WARM_ENTRIES,
+    nextConfig: projectedConfig(),    entries: WARM_ENTRIES,
     primary: "app/page",
     load,
   });
@@ -597,7 +678,7 @@ test("flushes before every measurement, including the last entry's", () => {
   stubCompileCache();
   const { load } = cachingLoader({});
   const dispatch = createDispatch({
-    entries: WARM_ENTRIES,
+    nextConfig: projectedConfig(),    entries: WARM_ENTRIES,
     primary: "app/page",
     load,
   });
@@ -610,7 +691,12 @@ test("flushes before every measurement, including the last entry's", () => {
 test("reports unsupported when flushCompileCache is genuinely absent (old Node)", () => {
   stubCompileCache({ flushCompileCache: undefined });
   const { loads, load } = cachingLoader({});
-  const dispatch = createDispatch({ entries: WARM_ENTRIES, primary: null, load });
+  const dispatch = createDispatch({
+    nextConfig: projectedConfig(),
+    entries: WARM_ENTRIES,
+    primary: null,
+    load,
+  });
 
   expect(dispatch.warm(NO_LIMITS)).toEqual({
     ok: false,
@@ -630,7 +716,12 @@ test("reports unsupported when flushCompileCache is genuinely absent (old Node)"
 test("reports unsupported when getCompileCacheDir is genuinely absent (old Node)", () => {
   stubCompileCache({ getCompileCacheDir: undefined });
   const { load } = cachingLoader({});
-  const dispatch = createDispatch({ entries: WARM_ENTRIES, primary: null, load });
+  const dispatch = createDispatch({
+    nextConfig: projectedConfig(),
+    entries: WARM_ENTRIES,
+    primary: null,
+    load,
+  });
 
   expect(dispatch.warm(NO_LIMITS)).toMatchObject({
     ok: false,
@@ -642,7 +733,12 @@ test("reports unsupported when getCompileCacheDir is genuinely absent (old Node)
 test("reports unsupported when the compile cache is off, leaving no dir", () => {
   stubCompileCache({ getCompileCacheDir: () => "" });
   const { load } = cachingLoader({});
-  const dispatch = createDispatch({ entries: WARM_ENTRIES, primary: null, load });
+  const dispatch = createDispatch({
+    nextConfig: projectedConfig(),
+    entries: WARM_ENTRIES,
+    primary: null,
+    load,
+  });
 
   expect(dispatch.warm(NO_LIMITS)).toMatchObject({
     ok: false,
@@ -657,7 +753,12 @@ test("names the entries a stopped walk never reached", () => {
     [WARM_ENTRIES["app/a/page"]]: 1000,
     [WARM_ENTRIES["app/b/page"]]: 1000,
   });
-  const dispatch = createDispatch({ entries: WARM_ENTRIES, primary: "app/page", load });
+  const dispatch = createDispatch({
+    nextConfig: projectedConfig(),
+    entries: WARM_ENTRIES,
+    primary: "app/page",
+    load,
+  });
 
   const report = dispatch.warm({ deadlineMs: Date.now() + 600_000, ceilingBytes: 4096 });
 
@@ -671,7 +772,12 @@ test("names the entries a stopped walk never reached", () => {
 test("a walk that reached every entry skips nothing", () => {
   stubCompileCache();
   const { load } = cachingLoader({});
-  const dispatch = createDispatch({ entries: WARM_ENTRIES, primary: "app/page", load });
+  const dispatch = createDispatch({
+    nextConfig: projectedConfig(),
+    entries: WARM_ENTRIES,
+    primary: "app/page",
+    load,
+  });
 
   expect(dispatch.warm(NO_LIMITS)).toMatchObject({ skipped: [], skippedCount: 0 });
 });
@@ -681,7 +787,12 @@ test("bounds the skipped list but not the skipped count", () => {
   const entries: Record<string, string> = { "app/page": "./.next/server/app/page.js" };
   for (let i = 0; i < 60; i++) entries[`app/r${i}/page`] = `./.next/server/app/r${i}/page.js`;
   const { load } = cachingLoader({});
-  const dispatch = createDispatch({ entries, primary: "app/page", load });
+  const dispatch = createDispatch({
+    nextConfig: projectedConfig(),
+    entries,
+    primary: "app/page",
+    load,
+  });
 
   const report = dispatch.warm({ deadlineMs: Date.now() - 1, ceilingBytes: 64 << 20 });
 
@@ -695,7 +806,12 @@ test("measures in strides while the ceiling is far away", () => {
   const entries: Record<string, string> = { "app/page": "./.next/server/app/page.js" };
   for (let i = 0; i < 40; i++) entries[`app/r${i}/page`] = `./.next/server/app/r${i}/page.js`;
   const { load } = cachingLoader({});
-  const dispatch = createDispatch({ entries, primary: "app/page", load });
+  const dispatch = createDispatch({
+    nextConfig: projectedConfig(),
+    entries,
+    primary: "app/page",
+    load,
+  });
 
   const report = dispatch.warm(NO_LIMITS);
 
@@ -713,7 +829,12 @@ test("still stops before the ceiling when entries are large", () => {
     sizes[`./.next/server/app/r${i}/page.js`] = 1000;
   }
   const { loads, load } = cachingLoader(sizes);
-  const dispatch = createDispatch({ entries, primary: null, load });
+  const dispatch = createDispatch({
+    nextConfig: projectedConfig(),
+    entries,
+    primary: null,
+    load,
+  });
 
   const report = dispatch.warm({ deadlineMs: Date.now() + 600_000, ceilingBytes: 8192 });
 
@@ -725,7 +846,12 @@ test("still stops before the ceiling when entries are large", () => {
 test("stops rather than undercounting when the cache cannot be measured", () => {
   const dir = stubCompileCache();
   const { loads, load } = cachingLoader({});
-  const dispatch = createDispatch({ entries: WARM_ENTRIES, primary: null, load });
+  const dispatch = createDispatch({
+    nextConfig: projectedConfig(),
+    entries: WARM_ENTRIES,
+    primary: null,
+    load,
+  });
   const readdir = vi.spyOn(fs, "readdirSync").mockImplementation(((target: string) => {
     if (target === dir) throw Object.assign(new Error("EACCES"), { code: "EACCES" });
     return [];
@@ -743,7 +869,12 @@ test("measures a cache directory that does not exist yet as empty", () => {
   const dir = stubCompileCache();
   rmSync(dir, { recursive: true, force: true });
   const { load } = cachingLoader({});
-  const dispatch = createDispatch({ entries: WARM_ENTRIES, primary: null, load });
+  const dispatch = createDispatch({
+    nextConfig: projectedConfig(),
+    entries: WARM_ENTRIES,
+    primary: null,
+    load,
+  });
 
   const report = dispatch.warm({ deadlineMs: Date.now() + 600_000, ceilingBytes: 64 << 20 });
 
@@ -780,7 +911,12 @@ function resumeReq() {
 test("builds an entry's response cache non-minimal as it loads the entry", () => {
   const { caches, routeModule, load } = routeModuleLoader();
 
-  createDispatch({ entries: ENTRIES, primary: "app/page", load });
+  createDispatch({
+    nextConfig: projectedConfig(),
+    entries: ENTRIES,
+    primary: "app/page",
+    load,
+  });
 
   expect(caches).toEqual([false]);
   expect(routeModule.responseCache).toEqual({ minimal: false });
@@ -788,7 +924,12 @@ test("builds an entry's response cache non-minimal as it loads the entry", () =>
 
 test("keeps that cache non-minimal when a minimal-mode request arrives first", () => {
   const { caches, routeModule, load } = routeModuleLoader();
-  const dispatch = createDispatch({ entries: ENTRIES, primary: null, load });
+  const dispatch = createDispatch({
+    nextConfig: projectedConfig(),
+    entries: ENTRIES,
+    primary: null,
+    load,
+  });
 
   dispatch.handler(fakeReq("app/page"), fakeRes(), {});
   const cache = routeModule.getResponseCache(resumeReq());
@@ -802,7 +943,12 @@ test("still serves an entry whose response cache refuses to be built", () => {
   const { load } = routeModuleLoader(() => {
     throw new Error("boom");
   });
-  const dispatch = createDispatch({ entries: ENTRIES, primary: null, load });
+  const dispatch = createDispatch({
+    nextConfig: projectedConfig(),
+    entries: ENTRIES,
+    primary: null,
+    load,
+  });
 
   const res = fakeRes();
   dispatch.handler(fakeReq("app/page"), res, {});
@@ -813,7 +959,12 @@ test("still serves an entry whose response cache refuses to be built", () => {
 test("reports a route module that exposes no response-cache getter, once", () => {
   const errors = silenceErrors();
   const load = () => ({ handler: () => {}, routeModule: {} });
-  const dispatch = createDispatch({ entries: ENTRIES, primary: null, load });
+  const dispatch = createDispatch({
+    nextConfig: projectedConfig(),
+    entries: ENTRIES,
+    primary: null,
+    load,
+  });
 
   dispatch.handler(fakeReq("app/page"), fakeRes(), {});
   dispatch.handler(fakeReq("app/api/x/route"), fakeRes(), {});
@@ -859,7 +1010,7 @@ test("loads the middleware entry at INIT alongside the primary", () => {
   const { loads, load } = fakeLoader();
 
   createDispatch({
-    entries: { ...ENTRIES, [MIDDLEWARE_KEY]: "./.next/server/middleware.js" },
+    nextConfig: projectedConfig(),    entries: { ...ENTRIES, [MIDDLEWARE_KEY]: "./.next/server/middleware.js" },
     primary: "app/page",
     load,
   });
@@ -874,7 +1025,7 @@ test("loads the middleware entry at INIT even with no primary to elect", () => {
   const { loads, load } = fakeLoader();
 
   createDispatch({
-    entries: { [MIDDLEWARE_KEY]: "./.next/server/middleware.js" },
+    nextConfig: projectedConfig(),    entries: { [MIDDLEWARE_KEY]: "./.next/server/middleware.js" },
     primary: null,
     load,
   });
@@ -920,6 +1071,28 @@ test("dispatches the reserved key through the adapter-function contract, not .ha
   expect(call.request.body).toBeUndefined();
 });
 
+test("sets the client asset suffix Next's own server would have set", () => {
+  createDispatch({
+    entries: ENTRIES,
+    primary: null,
+    nextConfig: projectedConfig({ clientAssetSuffix: "?dpl=3f7c1b9a5e2d4c8f" }),
+    load: () => ({}),
+  });
+
+  expect(globalThis.NEXT_CLIENT_ASSET_SUFFIX).toBe("?dpl=3f7c1b9a5e2d4c8f");
+});
+
+test("leaves the client asset suffix empty when the build stamped no deployment id", () => {
+  createDispatch({
+    entries: ENTRIES,
+    primary: null,
+    nextConfig: projectedConfig({ clientAssetSuffix: "" }),
+    load: () => ({}),
+  });
+
+  expect(globalThis.NEXT_CLIENT_ASSET_SUFFIX).toBe("");
+});
+
 test("prefers the forwarded host and proto the membrane normalizes onto the request", async () => {
   let seenUrl = "";
   const load = () => ({
@@ -929,7 +1102,7 @@ test("prefers the forwarded host and proto the membrane normalizes onto the requ
     },
   });
   const dispatch = createDispatch({
-    entries: { [MIDDLEWARE_KEY]: "./middleware.js" },
+    nextConfig: projectedConfig(),    entries: { [MIDDLEWARE_KEY]: "./middleware.js" },
     primary: null,
     load,
   });
@@ -964,7 +1137,7 @@ test("carries a POST body as a readable web stream of the request's real bytes",
     },
   });
   const dispatch = createDispatch({
-    entries: { [MIDDLEWARE_KEY]: "./middleware.js" },
+    nextConfig: projectedConfig(),    entries: { [MIDDLEWARE_KEY]: "./middleware.js" },
     primary: null,
     load,
   });
@@ -990,7 +1163,7 @@ test("forwards every Set-Cookie value onto the real response", async () => {
   response.headers.append("set-cookie", "b=2; Path=/");
   const load = () => ({ default: () => ({ response }) });
   const dispatch = createDispatch({
-    entries: { [MIDDLEWARE_KEY]: "./middleware.js" },
+    nextConfig: projectedConfig(),    entries: { [MIDDLEWARE_KEY]: "./middleware.js" },
     primary: null,
     load,
   });
@@ -1009,7 +1182,7 @@ test("declares the middleware's own header names so the hop can be told apart fr
   response.headers.append("set-cookie", "a=1; Path=/");
   const load = () => ({ default: () => ({ response }) });
   const dispatch = createDispatch({
-    entries: { [MIDDLEWARE_KEY]: "./middleware.js" },
+    nextConfig: projectedConfig(),    entries: { [MIDDLEWARE_KEY]: "./middleware.js" },
     primary: null,
     load,
   });
@@ -1028,7 +1201,7 @@ test("awaits a top-level-await middleware module before reading its default expo
   const load = () =>
     Promise.resolve({ default: () => ({ response: new Response("hi", { status: 200 }) }) });
   const dispatch = createDispatch({
-    entries: { [MIDDLEWARE_KEY]: "./middleware.js" },
+    nextConfig: projectedConfig(),    entries: { [MIDDLEWARE_KEY]: "./middleware.js" },
     primary: null,
     load,
   });
@@ -1044,7 +1217,7 @@ test("fails closed on both requests when a top-level-await module rejects", asyn
   const errors = silenceErrors();
   const load = () => Promise.reject(new Error("boom"));
   const dispatch = createDispatch({
-    entries: { [MIDDLEWARE_KEY]: "./middleware.js" },
+    nextConfig: projectedConfig(),    entries: { [MIDDLEWARE_KEY]: "./middleware.js" },
     primary: null,
     load,
   });
@@ -1072,7 +1245,7 @@ test("primes a top-level-await middleware module at INIT, not deferred to first 
   };
 
   createDispatch({
-    entries: { [MIDDLEWARE_KEY]: "./middleware.js" },
+    nextConfig: projectedConfig(),    entries: { [MIDDLEWARE_KEY]: "./middleware.js" },
     primary: null,
     load,
   });
@@ -1089,7 +1262,7 @@ test("registers the adapter's waitUntil on the invocation's own ctx", async () =
     default: () => ({ response: new Response(null, { status: 200 }), waitUntil: backgroundWork }),
   });
   const dispatch = createDispatch({
-    entries: { [MIDDLEWARE_KEY]: "./middleware.js" },
+    nextConfig: projectedConfig(),    entries: { [MIDDLEWARE_KEY]: "./middleware.js" },
     primary: null,
     load,
   });
@@ -1113,7 +1286,7 @@ test("passes a request.waitUntil that forwards to the invocation's own ctx", asy
     },
   });
   const dispatch = createDispatch({
-    entries: { [MIDDLEWARE_KEY]: "./middleware.js" },
+    nextConfig: projectedConfig(),    entries: { [MIDDLEWARE_KEY]: "./middleware.js" },
     primary: null,
     load,
   });
@@ -1134,7 +1307,7 @@ test("fails closed when the middleware module throws, without leaking its stack 
     },
   });
   const dispatch = createDispatch({
-    entries: { [MIDDLEWARE_KEY]: "./middleware.js" },
+    nextConfig: projectedConfig(),    entries: { [MIDDLEWARE_KEY]: "./middleware.js" },
     primary: null,
     load,
   });
@@ -1152,7 +1325,7 @@ test("fails closed when the middleware module throws, without leaking its stack 
 test("fails closed when the middleware module exports no adapter function", async () => {
   const load = () => ({ notAnAdapter: true });
   const dispatch = createDispatch({
-    entries: { [MIDDLEWARE_KEY]: "./middleware.js" },
+    nextConfig: projectedConfig(),    entries: { [MIDDLEWARE_KEY]: "./middleware.js" },
     primary: null,
     load,
   });
@@ -1167,7 +1340,7 @@ test("fails closed when the middleware module exports no adapter function", asyn
 test("fails closed when the adapter function returns no Response", async () => {
   const load = () => ({ default: () => ({ response: undefined }) });
   const dispatch = createDispatch({
-    entries: { [MIDDLEWARE_KEY]: "./middleware.js" },
+    nextConfig: projectedConfig(),    entries: { [MIDDLEWARE_KEY]: "./middleware.js" },
     primary: null,
     load,
   });
@@ -1182,7 +1355,7 @@ test("warm() picks up the middleware entry for free", () => {
   stubCompileCache();
   const { loads, load } = cachingLoader({});
   const dispatch = createDispatch({
-    entries: { ...WARM_ENTRIES, [MIDDLEWARE_KEY]: "./middleware.js" },
+    nextConfig: projectedConfig(),    entries: { ...WARM_ENTRIES, [MIDDLEWARE_KEY]: "./middleware.js" },
     primary: "app/page",
     load,
   });

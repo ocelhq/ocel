@@ -166,6 +166,8 @@ module.exports = function createDispatch({
   nextConfig,
   load,
 }) {
+  globalThis.NEXT_CLIENT_ASSET_SUFFIX = nextConfig.clientAssetSuffix;
+
   const loaded = new Map();
 
   const dynamic = routes.dynamic.map(([source, key]) => [new RegExp(source, "i"), key]);

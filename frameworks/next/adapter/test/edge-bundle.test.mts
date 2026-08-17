@@ -203,7 +203,11 @@ async function synthEdgeProject() {
     projectDir,
     repoRoot: projectDir,
     distDir: join(projectDir, ".next"),
-    config: { basePath: "", images: defaultImages },
+    config: { basePath: "", images: defaultImages } as {
+      basePath: string;
+      images: unknown;
+      deploymentId?: string;
+    },
     nextVersion: "16.2.10",
     buildId: "test-build",
   };
@@ -261,6 +265,28 @@ test("gives every edge entry key one bundle entry, variants folded together", as
   ]);
   expect(bundle.entries["middleware_app/edge-page/page"].handlerExport).toBe(
     "handler",
+  );
+});
+
+test("gives the edge runtime the client asset suffix Next's sandbox would have set", async () => {
+  const { projectDir, args } = await synthEdgeProject();
+  args.config.deploymentId = "3f7c1b9a5e2d4c8f";
+
+  await adapter.onBuildComplete!(args as never);
+
+  const bundle = await readBundle(projectDir);
+  expect(bundle.shim).toContain(
+    'globalThis.NEXT_CLIENT_ASSET_SUFFIX = "?dpl=3f7c1b9a5e2d4c8f"',
+  );
+});
+
+test("leaves the client asset suffix empty when no deployment id was stamped", async () => {
+  const { projectDir, args } = await synthEdgeProject();
+
+  await adapter.onBuildComplete!(args as never);
+
+  expect((await readBundle(projectDir)).shim).toContain(
+    'globalThis.NEXT_CLIENT_ASSET_SUFFIX = ""',
   );
 });
 
