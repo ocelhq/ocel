@@ -3,8 +3,12 @@ package cloudflare
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"regexp"
+	"strconv"
 	"testing"
 
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
@@ -457,4 +461,39 @@ func TestDestroyInstance(t *testing.T) {
 			t.Fatalf("DestroyInstance on an already-wiped instance: err = %v, want nil", err)
 		}
 	})
+}
+
+func TestStoreSchemaVersionMatchesTheWorker(t *testing.T) {
+	t.Parallel()
+
+	const source = "../workers/deployments-store/src/store.ts"
+	src, err := os.ReadFile(source)
+	if err != nil {
+		t.Fatalf("read %s: %v", source, err)
+	}
+	match := regexp.MustCompile(`(?m)^export const SCHEMA_VERSION = (\d+);$`).FindSubmatch(src)
+	if match == nil {
+		t.Fatalf("%s declares no exported SCHEMA_VERSION", source)
+	}
+	got, err := strconv.Atoi(string(match[1]))
+	if err != nil {
+		t.Fatalf("parse SCHEMA_VERSION from %s: %v", source, err)
+	}
+	if got != edge.StoreSchemaVersion {
+		t.Errorf("%s speaks schema %d, the contract speaks %d; a deploy would refuse every store this worker serves", source, got, edge.StoreSchemaVersion)
+	}
+}
+
+func TestStoreSchemaVersionUnreadableWhenTheStorePredatesTheCheck(t *testing.T) {
+	t.Parallel()
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		http.Error(w, "Unauthorized", http.StatusUnauthorized)
+	}))
+	defer server.Close()
+
+	p := &provider{}
+	if _, err := p.StoreSchemaVersion(context.Background(), server.URL, "shop"); !errors.Is(err, edge.ErrStoreSchemaUnreadable) {
+		t.Errorf("StoreSchemaVersion err = %v, want %v", err, edge.ErrStoreSchemaUnreadable)
+	}
 }

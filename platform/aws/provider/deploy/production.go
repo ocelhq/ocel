@@ -60,6 +60,9 @@ func realize(ctx context.Context, cfg Config, manifest *deploymentsv1.Manifest, 
 			return Result{}, finishUploading(fmt.Errorf("app %q: %w; upgrade the CLI so every app is built under one", app.GetName(), err))
 		}
 	}
+	if err := checkStoreSchema(ctx, stack, cfg); err != nil {
+		return Result{}, finishUploading(err)
+	}
 	if err := validateTag(cfg.Tag); err != nil {
 		return Result{}, finishUploading(err)
 	}
@@ -217,6 +220,19 @@ func realize(ctx context.Context, cfg Config, manifest *deploymentsv1.Manifest, 
 		PromotionID:    promotionID,
 		RootStackState: state,
 	}, nil
+}
+
+func checkStoreSchema(ctx context.Context, stack edge.RootStack, cfg Config) error {
+	got, err := stack.StoreSchemaVersion(ctx, cfg.StoreEndpoint, cfg.Slug)
+	switch {
+	case errors.Is(err, edge.ErrStoreSchemaUnreadable):
+		return fmt.Errorf("the deployments store predates the schema-version check, so this deploy cannot tell what it speaks; re-run `%s`", bootstrapCommand(cfg))
+	case err != nil:
+		return fmt.Errorf("read the deployments store schema version: %w; re-run `%s` to bring the store up to date", err, bootstrapCommand(cfg))
+	case got != edge.StoreSchemaVersion:
+		return fmt.Errorf("the deployments store speaks schema %d, this CLI speaks %d; re-run `%s`", got, edge.StoreSchemaVersion, bootstrapCommand(cfg))
+	}
+	return nil
 }
 
 const maxTagLen = 64
@@ -672,6 +688,8 @@ func buildDeploymentRecord(cfg Config, manifest *deploymentsv1.Manifest, app *de
 		App:              name,
 		Framework:        app.GetFramework(),
 		Identity:         id.String(),
+		DeploymentID:     id.DeploymentID(),
+		BuildID:          builds.ids[name],
 		FunctionURLs:     appFunctionURLsByRoute(manifest.GetFunctions(), name, urlByLogical),
 		CreatedAt:        time.Now().Unix(),
 		ValueFingerprint: fingerprint,

@@ -2,6 +2,7 @@ package edge
 
 import (
 	"context"
+	"errors"
 	"strings"
 )
 
@@ -12,8 +13,14 @@ func NameUnderStem(stem, name string) bool {
 	return name == stem || strings.HasPrefix(name, stem+"-")
 }
 
+const StoreSchemaVersion = 2
+
+var ErrStoreSchemaUnreadable = errors.New("deployments store does not report a schema version")
+
 type RootStack interface {
 	ReconcileRootStack(ctx context.Context, spec RootStackSpec, prior RootStackState) (RootStackState, error)
+
+	StoreSchemaVersion(ctx context.Context, endpoint, slug string) (int, error)
 
 	PutStaged(ctx context.Context, state RootStackState, record DeploymentRecord) error
 
@@ -64,7 +71,9 @@ const (
 type DeploymentRecord struct {
 	App              string            `json:"app"`
 	Framework        string            `json:"framework"`
-	Identity         string            `json:"buildId"`
+	Identity         string            `json:"identity"`
+	DeploymentID     string            `json:"deploymentId"`
+	BuildID          string            `json:"buildId"`
 	RoutingManifest  any               `json:"routingManifest"`
 	FunctionURLs     map[string]string `json:"functionUrls"`
 	AssetPrefix      string            `json:"assetPrefix"`

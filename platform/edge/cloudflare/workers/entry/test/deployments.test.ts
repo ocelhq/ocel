@@ -13,10 +13,12 @@ function makeRecord(over: Partial<DeploymentRecord> = {}): DeploymentRecord {
   return {
     app: "web",
     framework: "next",
+    identity: "deploy-1",
+    deploymentId: "deploy-1",
     buildId: "build-1",
     routingManifest: { pathnames: [] },
     functionUrls: { "/": "https://fn.example.com" },
-    assetPrefix: "build-1",
+    assetPrefix: "deploy-1",
     isrPrefix: "prod/p1/web/build-1",
     createdAt: 1_000,
     ...over,
@@ -24,7 +26,7 @@ function makeRecord(over: Partial<DeploymentRecord> = {}): DeploymentRecord {
 }
 
 function countingBinding(opts: {
-  pointerBuildId: Record<string, string | undefined>;
+  pointerIdentity: Record<string, string | undefined>;
   records: Record<string, DeploymentRecord>;
 }): DeploymentsBinding & {
   pointerRecordCalls: number;
@@ -39,26 +41,26 @@ function countingBinding(opts: {
       slug: string;
       app: string;
       pointer?: string;
-      knownBuildId?: string;
+      knownIdentity?: string;
     }): Promise<PointerRecordResult> {
       this.pointerRecordCalls++;
       if (this.down) throw new Error("store unreachable");
-      const buildId = opts.pointerBuildId[`${args.app}/${args.pointer ?? ""}`];
-      if (!buildId) {
+      const identity = opts.pointerIdentity[`${args.app}/${args.pointer ?? ""}`];
+      if (!identity) {
         this.lastCarriedRecord = false;
         return { kind: "no-pointer" };
       }
-      if (buildId === args.knownBuildId) {
+      if (identity === args.knownIdentity) {
         this.lastCarriedRecord = false;
-        return { kind: "unchanged", buildId };
+        return { kind: "unchanged", identity };
       }
-      const record = opts.records[`${args.app}/${buildId}`];
+      const record = opts.records[`${args.app}/${identity}`];
       if (!record) {
         this.lastCarriedRecord = false;
-        return { kind: "dangling", buildId };
+        return { kind: "dangling", identity };
       }
       this.lastCarriedRecord = true;
-      return { kind: "record", buildId, record };
+      return { kind: "record", identity, record };
     },
   };
 }
@@ -75,8 +77,8 @@ function deps(
 describe("resolveDeployment", () => {
   it("resolves and returns the active Deployment record", async () => {
     const binding = countingBinding({
-      pointerBuildId: { "web/": "build-1" },
-      records: { "web/build-1": makeRecord() },
+      pointerIdentity: { "web/": "deploy-1" },
+      records: { "web/deploy-1": makeRecord() },
     });
     const clock = { ms: 0 };
 
@@ -86,7 +88,7 @@ describe("resolveDeployment", () => {
   });
 
   it("returns not-found when no active pointer exists for the app", async () => {
-    const binding = countingBinding({ pointerBuildId: {}, records: {} });
+    const binding = countingBinding({ pointerIdentity: {}, records: {} });
     const clock = { ms: 0 };
 
     const resolution = await resolveDeployment(deps(binding, clock));
@@ -96,8 +98,8 @@ describe("resolveDeployment", () => {
 
   it("serves the cached record within the TTL without calling the store", async () => {
     const binding = countingBinding({
-      pointerBuildId: { "web/": "build-1" },
-      records: { "web/build-1": makeRecord() },
+      pointerIdentity: { "web/": "deploy-1" },
+      records: { "web/deploy-1": makeRecord() },
     });
     const clock = { ms: 0 };
     const d = deps(binding, clock);
@@ -110,8 +112,8 @@ describe("resolveDeployment", () => {
 
   it("revalidates after the TTL without re-transferring an unchanged record", async () => {
     const binding = countingBinding({
-      pointerBuildId: { "web/": "build-1" },
-      records: { "web/build-1": makeRecord() },
+      pointerIdentity: { "web/": "deploy-1" },
+      records: { "web/deploy-1": makeRecord() },
     });
     const clock = { ms: 0 };
     const d = deps(binding, clock);
@@ -129,12 +131,12 @@ describe("resolveDeployment", () => {
   });
 
   it("re-reads the record when the build moves (promotion/rollback)", async () => {
-    const pointerBuildId: Record<string, string> = { "web/": "build-1" };
+    const pointerIdentity: Record<string, string> = { "web/": "deploy-1" };
     const binding = countingBinding({
-      pointerBuildId,
+      pointerIdentity,
       records: {
-        "web/build-1": makeRecord(),
-        "web/build-2": makeRecord({ buildId: "build-2" }),
+        "web/deploy-1": makeRecord(),
+        "web/deploy-2": makeRecord({ identity: "deploy-2" }),
       },
     });
     const clock = { ms: 0 };
@@ -143,21 +145,21 @@ describe("resolveDeployment", () => {
     const first = await resolveDeployment(d);
     expect(first).toEqual({ kind: "found", record: makeRecord() });
 
-    pointerBuildId["web/"] = "build-2";
+    pointerIdentity["web/"] = "deploy-2";
     clock.ms = 5_001;
     const second = await resolveDeployment(d);
 
     expect(second).toEqual({
       kind: "found",
-      record: makeRecord({ buildId: "build-2" }),
+      record: makeRecord({ identity: "deploy-2" }),
     });
     expect(binding.lastCarriedRecord).toBe(true);
   });
 
   it("serves the cached record during a transient store outage", async () => {
     const binding = countingBinding({
-      pointerBuildId: { "web/": "build-1" },
-      records: { "web/build-1": makeRecord() },
+      pointerIdentity: { "web/": "deploy-1" },
+      records: { "web/deploy-1": makeRecord() },
     });
     const clock = { ms: 0 };
     const d = deps(binding, clock);
@@ -172,7 +174,7 @@ describe("resolveDeployment", () => {
   });
 
   it("returns unavailable on a cold isolate when the store is unreachable", async () => {
-    const binding = countingBinding({ pointerBuildId: {}, records: {} });
+    const binding = countingBinding({ pointerIdentity: {}, records: {} });
     binding.down = true;
     const clock = { ms: 0 };
 
@@ -183,7 +185,7 @@ describe("resolveDeployment", () => {
 
   it("returns unavailable when the pointer names a build with no record", async () => {
     const binding = countingBinding({
-      pointerBuildId: { "web/": "build-1" },
+      pointerIdentity: { "web/": "deploy-1" },
       records: {},
     });
     const clock = { ms: 0 };
@@ -195,10 +197,10 @@ describe("resolveDeployment", () => {
 
   it("keeps caches independent across apps", async () => {
     const binding = countingBinding({
-      pointerBuildId: { "web/": "build-1", "admin/": "build-9" },
+      pointerIdentity: { "web/": "deploy-1", "admin/": "deploy-9" },
       records: {
-        "web/build-1": makeRecord(),
-        "admin/build-9": makeRecord({ app: "admin", buildId: "build-9" }),
+        "web/deploy-1": makeRecord(),
+        "admin/deploy-9": makeRecord({ app: "admin", identity: "deploy-9" }),
       },
     });
     const clock = { ms: 0 };
@@ -209,20 +211,20 @@ describe("resolveDeployment", () => {
     expect(web).toEqual({ kind: "found", record: makeRecord() });
     expect(admin).toEqual({
       kind: "found",
-      record: makeRecord({ app: "admin", buildId: "build-9" }),
+      record: makeRecord({ app: "admin", identity: "deploy-9" }),
     });
   });
 
   it("resolves a named preview pointer independently of the default", async () => {
-    const previewRecord = makeRecord({ buildId: "preview-build" });
+    const previewRecord = makeRecord({ identity: "preview-deploy" });
     const binding = countingBinding({
-      pointerBuildId: {
-        "web/": "build-1",
-        "web/flaky-web-2626": "preview-build",
+      pointerIdentity: {
+        "web/": "deploy-1",
+        "web/flaky-web-2626": "preview-deploy",
       },
       records: {
-        "web/build-1": makeRecord(),
-        "web/preview-build": previewRecord,
+        "web/deploy-1": makeRecord(),
+        "web/preview-deploy": previewRecord,
       },
     });
     const clock = { ms: 0 };
@@ -251,7 +253,7 @@ describe("resolveDeployment", () => {
       async pointerRecord(args) {
         const record = records[args.slug];
         if (!record) return { kind: "no-pointer" };
-        return { kind: "record", buildId: record.buildId, record };
+        return { kind: "record", identity: record.identity, record };
       },
     };
     const clock = { ms: 0 };
@@ -282,7 +284,7 @@ describe("resolveDeployment", () => {
     const binding: DeploymentsBinding = {
       async pointerRecord() {
         calls++;
-        return { kind: "record", buildId: "build-1", record: makeRecord() };
+        return { kind: "record", identity: "deploy-1", record: makeRecord() };
       },
     };
     const clock = { ms: 0 };
@@ -305,7 +307,7 @@ describe("resolveDeployment", () => {
     const binding: DeploymentsBinding = {
       async pointerRecord(args) {
         calls[args.slug] = (calls[args.slug] ?? 0) + 1;
-        return { kind: "record", buildId: args.slug, record: makeRecord() };
+        return { kind: "record", identity: args.slug, record: makeRecord() };
       },
     };
     const clock = { ms: 0 };
@@ -332,7 +334,7 @@ describe("resolveDeployment", () => {
     const binding: DeploymentsBinding = {
       async pointerRecord(args) {
         calls[args.slug] = (calls[args.slug] ?? 0) + 1;
-        return { kind: "record", buildId: args.slug, record: makeRecord() };
+        return { kind: "record", identity: args.slug, record: makeRecord() };
       },
     };
     const clock = { ms: 0 };

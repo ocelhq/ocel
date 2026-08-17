@@ -1070,11 +1070,11 @@ func TestBuildDeploymentRecord(t *testing.T) {
 		}
 	})
 
-	t.Run("the identity is wired as buildId", func(t *testing.T) {
+	t.Run("the identity keys the record, the deployment and the build ride along", func(t *testing.T) {
 		t.Parallel()
 		cfg := Config{ArtifactRoot: edgeAppTree(t), Env: "prod", Edge: testLoaderEdge()}
 		app := &deploymentsv1.ManifestApp{Name: "web", Framework: frameworkNext}
-		id := fingerprinted("WEB1", "fp1")
+		id := fingerprinted("dep1", "fp1")
 
 		record, err := buildDeploymentRecord(cfg, nextManifest(), app, id, nil, appBuildsFor(t, cfg, nextManifest()))
 		if err != nil {
@@ -1088,8 +1088,14 @@ func TestBuildDeploymentRecord(t *testing.T) {
 		if err := json.Unmarshal(raw, &wire); err != nil {
 			t.Fatalf("unmarshal record: %v", err)
 		}
-		if wire["buildId"] != id.String() {
-			t.Errorf("record JSON buildId = %v, want %q", wire["buildId"], id.String())
+		if wire["identity"] != id.String() {
+			t.Errorf("record JSON identity = %v, want %q", wire["identity"], id.String())
+		}
+		if wire["deploymentId"] != id.DeploymentID() {
+			t.Errorf("record JSON deploymentId = %v, want the bare deployment id", wire["deploymentId"])
+		}
+		if wire["buildId"] != "WEB1" {
+			t.Errorf("record JSON buildId = %v, want the framework's own build id", wire["buildId"])
 		}
 	})
 }
@@ -1472,6 +1478,44 @@ func TestRealizeRequiresADeploymentIDPerApp(t *testing.T) {
 				t.Errorf("realize err = %v, want it to name %q and its missing deployment id", err, tc.wants)
 			}
 		})
+	}
+}
+
+func TestRealizeRefusesAStaleStore(t *testing.T) {
+	t.Parallel()
+
+	stale := edge.StoreSchemaVersion - 1
+	cfg := Config{
+		Edge:          &recordingRootStack{storeSchemaVersion: &stale},
+		StoreEndpoint: fakeStoreEndpoint,
+		Slug:          "shop",
+	}
+	_, err := realize(context.Background(), cfg, &deploymentsv1.Manifest{Slug: "shop"}, nil, nil)
+	if err == nil {
+		t.Fatal("realize err = nil, want the superseded store refused")
+	}
+	if !strings.Contains(err.Error(), "ocel bootstrap") {
+		t.Errorf("realize err = %v, want it to point at `ocel bootstrap`", err)
+	}
+}
+
+func TestRealizeRefusesAStoreThatCannotReportItsSchema(t *testing.T) {
+	t.Parallel()
+
+	cfg := Config{
+		Edge:          &recordingRootStack{storeSchemaVersionErr: edge.ErrStoreSchemaUnreadable},
+		StoreEndpoint: fakeStoreEndpoint,
+		Slug:          "shop",
+	}
+	_, err := realize(context.Background(), cfg, &deploymentsv1.Manifest{Slug: "shop"}, nil, nil)
+	if err == nil {
+		t.Fatal("realize err = nil, want the unreadable store refused")
+	}
+	if !strings.Contains(err.Error(), "predates") || !strings.Contains(err.Error(), "ocel bootstrap") {
+		t.Errorf("realize err = %v, want it to say the store predates the check and point at `ocel bootstrap`", err)
+	}
+	if strings.Contains(err.Error(), "Unauthorized") {
+		t.Errorf("realize err = %v, want the 401 not surfaced as an authorization failure", err)
 	}
 }
 
