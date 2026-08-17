@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"path/filepath"
 	"slices"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -193,6 +194,91 @@ func TestCheckRuntimeOwnedNames(t *testing.T) {
 
 		if err := checkRuntimeOwnedNames(app); err != nil {
 			t.Errorf("checkRuntimeOwnedNames = %v, want every one of these accepted", err)
+		}
+	})
+}
+
+func TestCheckEdgeOwnedNames(t *testing.T) {
+	t.Parallel()
+
+	for _, key := range []string{"OCEL_CACHE_RPC", "OCEL_CACHE_SCOPE", "OCEL_VAR_STRIPE_API_KEY"} {
+		t.Run("refuses "+key, func(t *testing.T) {
+			t.Parallel()
+
+			app := &deploymentsv1.ManifestApp{
+				Name:      "web",
+				Variables: []*deploymentsv1.ManifestVariable{variable(key, "mine", resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN)},
+			}
+
+			err := checkEdgeOwnedNames(app)
+			if err == nil {
+				t.Fatalf("%s was accepted; the entry worker would overwrite it", key)
+			}
+			for _, want := range []string{key, "web"} {
+				if !strings.Contains(err.Error(), want) {
+					t.Errorf("error = %q, want it to name %s", err, want)
+				}
+			}
+		})
+	}
+
+	t.Run("leaves every other name alone", func(t *testing.T) {
+		t.Parallel()
+
+		app := &deploymentsv1.ManifestApp{
+			Name: "web",
+			Variables: []*deploymentsv1.ManifestVariable{
+				variable("OCEL_CACHE_TTL", "60", resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN),
+				variable("POSTHOG_ID", "ph-123", resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN),
+				variable("OCEL_CACHE_RPC", "sk-live", resourcesv1.VariableClass_VARIABLE_CLASS_SENSITIVE),
+			},
+		}
+
+		if err := checkEdgeOwnedNames(app); err != nil {
+			t.Errorf("checkEdgeOwnedNames = %v, want every one of these accepted", err)
+		}
+	})
+}
+
+func TestCheckEdgeEnvBudget(t *testing.T) {
+	t.Parallel()
+
+	t.Run("the ciphertext is charged with the plain values", func(t *testing.T) {
+		t.Parallel()
+
+		env := map[string]string{"POSTHOG_ID": "ph-123"}
+		ciphertext := make([]byte, functionEnvBudgetBytes)
+
+		if err := checkEdgeEnvBudget("web", env, nil); err != nil {
+			t.Errorf("checkEdgeEnvBudget without a seal: %v", err)
+		}
+		err := checkEdgeEnvBudget("web", env, ciphertext)
+		if err == nil {
+			t.Fatal("an over-budget edge environment was accepted")
+		}
+		msg := err.Error()
+		for _, want := range []string{"web", "POSTHOG_ID", "sealed.bin", strconv.Itoa(functionEnvBudgetBytes)} {
+			if !strings.Contains(msg, want) {
+				t.Errorf("message is missing %q:\n%s", want, msg)
+			}
+		}
+	})
+
+	t.Run("refuses what an app declares, not what it seals alone", func(t *testing.T) {
+		t.Parallel()
+
+		app := &deploymentsv1.ManifestApp{
+			Name: "web",
+			Variables: []*deploymentsv1.ManifestVariable{
+				variable("BIG_ONE", strings.Repeat("a", functionEnvBudgetBytes), resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN),
+			},
+		}
+
+		if err := checkEdgeVariables(app, appBundle{}); err == nil {
+			t.Fatal("checkEdgeVariables = nil, want the app's own environment charged")
+		}
+		if err := checkEdgeVariables(&deploymentsv1.ManifestApp{Name: "web"}, appBundle{}); err != nil {
+			t.Errorf("checkEdgeVariables on an app that declares nothing: %v", err)
 		}
 	})
 }
@@ -620,7 +706,7 @@ func TestBakedDelivery(t *testing.T) {
 		if err != nil {
 			t.Fatalf("renderAppBundles: %v", err)
 		}
-		if _, err := uploadFunctionArtifacts(context.Background(), cfg, manifest, bundles, appBuildsFor(t, cfg, manifest), nil); err != nil {
+		if _, err := uploadFunctionArtifacts(context.Background(), cfg, manifest, bakedBuilds(t, cfg, manifest, bundles), nil); err != nil {
 			t.Fatalf("uploadFunctionArtifacts: %v", err)
 		}
 

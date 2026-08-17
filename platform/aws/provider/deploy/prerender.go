@@ -47,6 +47,7 @@ type appBuilds struct {
 	coords     map[string]naming.Coordinate
 	caches     map[string]*isrConfig
 	bytecode   map[string]*bytecodeConfig
+	baked      map[string]appBundle
 }
 
 func resolveAppBuilds(cfg Config, manifest *deploymentsv1.Manifest, baked map[string]appBundle) (appBuilds, error) {
@@ -56,6 +57,7 @@ func resolveAppBuilds(cfg Config, manifest *deploymentsv1.Manifest, baked map[st
 		coords:     map[string]naming.Coordinate{},
 		caches:     map[string]*isrConfig{},
 		bytecode:   map[string]*bytecodeConfig{},
+		baked:      baked,
 	}
 	for _, app := range manifestApps(manifest) {
 		name := app.GetName()

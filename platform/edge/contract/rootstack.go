@@ -83,7 +83,11 @@ type DeploymentRecord struct {
 	EdgeWorkers      *Code             `json:"edgeWorkers,omitempty"`
 	ValueFingerprint string            `json:"valueFingerprint,omitempty"`
 	Variables        []VariableRecord  `json:"variables,omitempty"`
+	Env              map[string]string `json:"env,omitempty"`
+	Envelope         string            `json:"envelope,omitempty"`
 }
+
+var OwnedVariableNames = []string{"OCEL_CACHE_RPC", "OCEL_CACHE_SCOPE"}
 
 type VariableRecord struct {
 	Key     string `json:"key"`

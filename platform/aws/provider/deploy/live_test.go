@@ -375,7 +375,7 @@ func TestLiveDelivery(t *testing.T) {
 		if err != nil {
 			t.Fatalf("renderAppBundles: %v", err)
 		}
-		if _, err := uploadFunctionArtifacts(context.Background(), cfg, manifest, bundles, appBuildsFor(t, cfg, manifest), nil); err != nil {
+		if _, err := uploadFunctionArtifacts(context.Background(), cfg, manifest, bakedBuilds(t, cfg, manifest, bundles), nil); err != nil {
 			t.Fatalf("uploadFunctionArtifacts: %v", err)
 		}
 		if len(uploader.puts) != 1 {

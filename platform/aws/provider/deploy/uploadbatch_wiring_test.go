@@ -22,7 +22,7 @@ func TestUploadFunctionArtifactsEmitsOneBatchSpan(t *testing.T) {
 	manifest := twoAppManifest()
 	builds := appBuildsFor(t, cfg, manifest)
 
-	if _, err := uploadFunctionArtifacts(context.Background(), cfg, manifest, nil, builds, nil); err != nil {
+	if _, err := uploadFunctionArtifacts(context.Background(), cfg, manifest, builds, nil); err != nil {
 		t.Fatalf("uploadFunctionArtifacts: %v", err)
 	}
 
@@ -57,7 +57,7 @@ func TestUploadFunctionArtifactsFailurePathEmitsAStandoutPerFailure(t *testing.T
 	manifest := twoAppManifest()
 	builds := appBuildsFor(t, cfg, manifest)
 
-	if _, err := uploadFunctionArtifacts(context.Background(), cfg, manifest, nil, builds, nil); err == nil {
+	if _, err := uploadFunctionArtifacts(context.Background(), cfg, manifest, builds, nil); err == nil {
 		t.Fatal("uploadFunctionArtifacts = nil error, want the HeadObject failure surfaced")
 	}
 

@@ -442,7 +442,7 @@ func TestReclaimCoversEveryKeyTheDeployWrote(t *testing.T) {
 
 	builds := releaseBuilds(t, cfg, manifest, "fp1")
 	ctx := context.Background()
-	if _, err := uploadFunctionArtifacts(ctx, cfg, manifest, nil, builds, nil); err != nil {
+	if _, err := uploadFunctionArtifacts(ctx, cfg, manifest, builds, nil); err != nil {
 		t.Fatalf("uploadFunctionArtifacts: %v", err)
 	}
 	if err := uploadPrerenderAssets(ctx, cfg, builds); err != nil {
