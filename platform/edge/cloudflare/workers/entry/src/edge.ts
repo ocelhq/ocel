@@ -1,6 +1,13 @@
 import type { EdgeCacheRpc } from "@framework/next-cache";
 
-import type { ObjectStoreReader } from "./tag-clock";
+export interface EdgeStoredObject {
+  text(): Promise<string>;
+  arrayBuffer(): Promise<ArrayBuffer>;
+}
+
+export interface EdgeObjectStore {
+  get(key: string): Promise<EdgeStoredObject | null>;
+}
 
 export interface EdgeWorkers {
   bundleKey: string;
@@ -21,6 +28,18 @@ interface EdgeBundle {
 
 const BUNDLE_VERSION = 2;
 
+const SEALED_FILE = "sealed.bin";
+
+const NONCE_BYTES = 12;
+
+const VARIABLE_PREFIX = "OCEL_VAR_";
+
+export interface EdgeVariables {
+  env?: Record<string, string>;
+  envelope?: string;
+  valueFingerprint?: string;
+}
+
 export type EdgeEntryKind = "page" | "middleware";
 
 export type EdgeInvoker = (
@@ -39,13 +58,23 @@ export interface EdgeCacheBinding {
 export function createEdgeInvoker(
   loader: WorkerLoader,
   workers: EdgeWorkers,
-  store: ObjectStoreReader,
+  store: EdgeObjectStore,
   cache?: EdgeCacheBinding,
+  variables?: EdgeVariables,
 ): EdgeInvoker {
+  const envelope = variables?.envelope;
+  const sealedKey = siblingKey(workers.bundleKey, SEALED_FILE);
+
   const load = async (): Promise<WorkerLoaderWorkerCode> => {
-    const object = await store.get(workers.bundleKey);
+    const [object, sealed] = await Promise.all([
+      store.get(workers.bundleKey),
+      envelope ? store.get(sealedKey) : null,
+    ]);
     if (!object) {
       throw new Error(`ocel: no edge bundle at ${workers.bundleKey}`);
+    }
+    if (envelope && !sealed) {
+      throw new Error(`ocel: no sealed edge variables at ${sealedKey}`);
     }
     const bundle = JSON.parse(await object.text()) as EdgeBundle;
     if (bundle.version !== BUNDLE_VERSION) {
@@ -72,19 +101,64 @@ export function createEdgeInvoker(
       modules,
       env: {
         ...(bundle.env ?? {}),
+        ...(variables?.env ?? {}),
+        ...(envelope && sealed
+          ? prefixed(await unseal(envelope, await sealed.arrayBuffer()))
+          : {}),
         ...(cache && { OCEL_CACHE_RPC: cache.rpc, OCEL_CACHE_SCOPE: cache.scope }),
       },
     };
   };
 
   const idFor = (kind: EdgeEntryKind) =>
-    `edge:${JSON.stringify([workers.id, cache?.scope ?? null, kind])}`;
+    `edge:${JSON.stringify([
+      workers.id,
+      cache?.scope ?? null,
+      variables?.valueFingerprint ?? null,
+      kind,
+    ])}`;
 
   return (entryKey, request, kind = "page") =>
     loader
       .get(idFor(kind), load)
       .getEntrypoint<undefined>(undefined, { props: { entryKey } })
       .fetch(request);
+}
+
+function siblingKey(key: string, name: string): string {
+  return key.slice(0, key.lastIndexOf("/") + 1) + name;
+}
+
+async function unseal(
+  envelope: string,
+  sealed: ArrayBuffer,
+): Promise<Record<string, string>> {
+  const key = await crypto.subtle.importKey(
+    "raw",
+    base64Bytes(envelope),
+    { name: "AES-GCM" },
+    false,
+    ["decrypt"],
+  );
+  const bytes = new Uint8Array(sealed);
+  const payload = await crypto.subtle.decrypt(
+    { name: "AES-GCM", iv: bytes.subarray(0, NONCE_BYTES) },
+    key,
+    bytes.subarray(NONCE_BYTES),
+  );
+  try {
+    return JSON.parse(new TextDecoder().decode(payload)) as Record<string, string>;
+  } catch {
+    throw new Error("ocel: sealed edge variables are not JSON");
+  }
+}
+
+function prefixed(values: Record<string, string>): Record<string, string> {
+  const env: Record<string, string> = {};
+  for (const [key, value] of Object.entries(values)) {
+    env[VARIABLE_PREFIX + key] = value;
+  }
+  return env;
 }
 
 function base64Bytes(base64: string): ArrayBuffer {

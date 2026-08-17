@@ -15,7 +15,12 @@ import {
   withoutBasePath,
 } from "./trailing-slash";
 import { localeOf, resolveLocale } from "./i18n";
-import { createEdgeInvoker, type EdgeCacheStub, type EdgeInvoker } from "./edge";
+import {
+  createEdgeInvoker,
+  type EdgeCacheStub,
+  type EdgeInvoker,
+  type EdgeObjectStore,
+} from "./edge";
 import {
   CacheDeps,
   CacheTarget,
@@ -72,7 +77,6 @@ import {
 import { nodeOrigin } from "./node";
 import { edgeOriginFetch } from "./signing";
 import { retryTransientOrigin } from "./retry";
-import type { ObjectStoreReader } from "./tag-clock";
 
 const RSC_FORWARD_HEADERS = new Set([
   "rsc",
@@ -320,7 +324,7 @@ export type ResolveBase = Omit<
   assetStore: Omit<AssetStoreDeps, "assetPrefix">;
   edgeRuntime?: {
     loader: WorkerLoader;
-    store: ObjectStoreReader;
+    store: EdgeObjectStore;
     cacheEntrypoint?: (opts: { props: CacheEntrypointProps }) => EdgeCacheStub;
   };
 };
@@ -420,6 +424,11 @@ function routedDeps(
                   scope: record.isrPrefix,
                 }
               : undefined,
+            {
+              env: record.env,
+              envelope: record.envelope,
+              valueFingerprint: record.valueFingerprint,
+            },
           )
         : undefined,
     manifest: record.routingManifest as Manifest,
