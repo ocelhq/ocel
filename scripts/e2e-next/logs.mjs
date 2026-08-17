@@ -17,7 +17,7 @@ const appDir = process.cwd();
 const state = readJSON(join(appDir, STATE_FILE)) ?? {};
 const result = readJSON(join(appDir, DEPLOY_RESULT_FILE)) ?? {};
 
-for (const line of markerLines({ buildId: readBuildID(), promotionId: result.promotionId })) {
+for (const line of markerLines({ buildId: readBuildID(), deploymentId: readDeploymentID() })) {
   console.log(line);
 }
 
@@ -31,6 +31,10 @@ function readBuildID() {
     return readFileSync(path, "utf8").trim();
   }
   return result.apps?.[0]?.buildId;
+}
+
+function readDeploymentID() {
+  return result.apps?.[0]?.deploymentId;
 }
 
 function replay(label, path) {
