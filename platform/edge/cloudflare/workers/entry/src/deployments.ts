@@ -14,6 +14,9 @@ export interface DeploymentRecord {
   isrWriteSecret?: string;
   createdAt: number;
   edgeWorkers?: EdgeWorkers;
+  env?: Record<string, string>;
+  envelope?: string;
+  valueFingerprint?: string;
 }
 
 export type PointerRecordResult =

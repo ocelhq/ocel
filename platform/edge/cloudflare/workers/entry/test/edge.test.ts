@@ -9,6 +9,8 @@ import {
   type EdgeCacheStub,
   type EdgeEntryKind,
   type EdgeInvoker,
+  type EdgeObjectStore,
+  type EdgeVariables,
 } from "../src/edge";
 import type { AssetBucket } from "../src/assets";
 import type { ObjectStoreReader } from "../src/tag-clock";
@@ -97,6 +99,13 @@ globalThis._ENTRIES[${JSON.stringify(entryKey)}] = {
 `;
 }
 
+function storedJson(json: string) {
+  return {
+    text: async () => json,
+    arrayBuffer: async () => new TextEncoder().encode(json).buffer,
+  };
+}
+
 function base64Of(bytes: Uint8Array): string {
   return btoa(String.fromCharCode(...bytes));
 }
@@ -141,9 +150,9 @@ function invokerFor(
 
   const seq = bundles++;
   const bundleKey = `edge/${seq}/bundle.json`;
-  const store: ObjectStoreReader = {
+  const store: EdgeObjectStore = {
     async get(key) {
-      return key === bundleKey ? { text: async () => json } : null;
+      return key === bundleKey ? storedJson(json) : null;
     },
   };
   return createEdgeInvoker(
@@ -172,7 +181,7 @@ function futureBundleInvoker(): EdgeInvoker {
   return createEdgeInvoker(
     env.LOADER,
     { bundleKey, id: `edge-future-${seq}`, compatDate: "2026-03-10" },
-    { async get(key) { return key === bundleKey ? { text: async () => json } : null; } },
+    { async get(key) { return key === bundleKey ? storedJson(json) : null; } },
   );
 }
 
@@ -997,9 +1006,7 @@ describe("edge-parented prerenders", () => {
     return {
       async get(key) {
         const entry = entries[key];
-        return entry === undefined
-          ? null
-          : { text: async () => JSON.stringify(entry) };
+        return entry === undefined ? null : storedJson(JSON.stringify(entry));
       },
     };
   }
@@ -1504,5 +1511,221 @@ describe("the URL middleware is handed", () => {
         expect(res.headers.get("x-matched-path")).toBe(path);
       },
     );
+  });
+});
+
+describe("the variables a deployment declares", () => {
+  const GO_ENVELOPE = "AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8=";
+  const GO_SEALED =
+    "WnCHaOVOjB8oK/58SKZv0K2RggIVKRExHOoE8aOhDN5fsE1/ykforc+CJza3Ybm8JMnr3TJRBvuJ6b+ZfvNMf+hh6dMuz39GTxr2W6pURmg3NoPiQXUaeBc=";
+  const GO_VALUES = { STRIPE_API_KEY: "sk-live-abc", WEBHOOK_SECRET: "whsec-xyz" };
+
+  const NONCE_BYTES = 12;
+  const TAG_BYTES = 16;
+
+  function bytesOf(base64: string): Uint8Array {
+    const binary = atob(base64);
+    const bytes = new Uint8Array(binary.length);
+    for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+    return bytes;
+  }
+
+  async function seal(envelope: string, plaintext: string): Promise<Uint8Array> {
+    const key = await crypto.subtle.importKey(
+      "raw",
+      bytesOf(envelope),
+      { name: "AES-GCM" },
+      false,
+      ["encrypt"],
+    );
+    const nonce = crypto.getRandomValues(new Uint8Array(NONCE_BYTES));
+    const ciphertext = new Uint8Array(
+      await crypto.subtle.encrypt(
+        { name: "AES-GCM", iv: nonce },
+        key,
+        new TextEncoder().encode(plaintext),
+      ),
+    );
+    const framed = new Uint8Array(nonce.length + ciphertext.length);
+    framed.set(nonce);
+    framed.set(ciphertext, nonce.length);
+    return framed;
+  }
+
+  const DUMP = `async () =>
+     new Response(JSON.stringify(Object.fromEntries(Object.entries(process.env))))`;
+
+  const COUNTER = `(() => {
+     let served = 0
+     return async () => new Response(String(++served))
+   })()`;
+
+  interface VarsBundle {
+    handler?: string;
+    bundleEnv?: Record<string, string>;
+    variables?: EdgeVariables;
+    sealed?: Uint8Array;
+    cache?: EdgeCacheBinding;
+    id?: string;
+  }
+
+  function varsInvoker(bundle: VarsBundle): {
+    edge: EdgeInvoker;
+    reads: string[];
+  } {
+    const seq = bundles++;
+    const prefix = `edge/vars/${seq}`;
+    const bundleKey = `${prefix}/bundle.json`;
+    const entries = { e: { chunks: ["c/0.js"], handlerExport: "handler" } };
+    const json = JSON.stringify({
+      version: 2,
+      mainModule: "main.js",
+      shim: shimFor(entries),
+      chunks: { "c/0.js": chunkFor("e", bundle.handler ?? DUMP) },
+      env: bundle.bundleEnv ?? { __NEXT_BUILD_ID: "t" },
+    });
+
+    const reads: string[] = [];
+    const store: EdgeObjectStore = {
+      async get(key) {
+        reads.push(key);
+        if (key === bundleKey) return storedJson(json);
+        const sealed = bundle.sealed;
+        if (key === `${prefix}/sealed.bin` && sealed) {
+          return {
+            text: async () => "",
+            arrayBuffer: async () =>
+              sealed.buffer.slice(
+                sealed.byteOffset,
+                sealed.byteOffset + sealed.byteLength,
+              ),
+          };
+        }
+        return null;
+      },
+    };
+
+    const edge = createEdgeInvoker(
+      env.LOADER,
+      {
+        bundleKey,
+        id: bundle.id ?? `vars-${seq}`,
+        compatDate: "2026-03-10",
+        compatFlags: ["nodejs_compat"],
+      },
+      store,
+      bundle.cache,
+      bundle.variables,
+    );
+    return { edge, reads };
+  }
+
+  const workerEnv = async (edge: EdgeInvoker) =>
+    JSON.parse(await (await edge("e", new Request("https://x/"))).text()) as
+      Record<string, string>;
+
+  it("hands a plain value to the worker under its own name", async () => {
+    const { edge } = varsInvoker({ variables: { env: { API_URL: "https://api" } } });
+
+    expect(await workerEnv(edge)).toMatchObject({
+      API_URL: "https://api",
+      __NEXT_BUILD_ID: "t",
+    });
+  });
+
+  it("lets a declared value win over the bundle's own env", async () => {
+    const { edge } = varsInvoker({
+      bundleEnv: { __NEXT_BUILD_ID: "t", SHARED: "from-bundle" },
+      variables: { env: { SHARED: "from-record" } },
+    });
+
+    expect((await workerEnv(edge)).SHARED).toBe("from-record");
+  });
+
+  it("keeps the names it owns for itself", async () => {
+    const { edge } = varsInvoker({
+      cache: { rpc: remoteStub(), scope: "prod/p/app/b1" },
+      variables: {
+        env: { OCEL_CACHE_SCOPE: "hijacked", OCEL_CACHE_RPC: "hijacked" },
+      },
+    });
+
+    const values = await workerEnv(edge);
+    expect(values.OCEL_CACHE_SCOPE).toBe("prod/p/app/b1");
+    expect(values.OCEL_CACHE_RPC).not.toBe("hijacked");
+  });
+
+  it("unseals what the origin sealed in Go, prefixed and never bare", async () => {
+    const sealed = bytesOf(GO_SEALED);
+    expect(sealed.length).toBe(
+      NONCE_BYTES + JSON.stringify(GO_VALUES).length + TAG_BYTES,
+    );
+
+    const { edge } = varsInvoker({
+      variables: { envelope: GO_ENVELOPE },
+      sealed,
+    });
+
+    const values = await workerEnv(edge);
+    expect(values.OCEL_VAR_STRIPE_API_KEY).toBe("sk-live-abc");
+    expect(values.OCEL_VAR_WEBHOOK_SECRET).toBe("whsec-xyz");
+    expect(values.STRIPE_API_KEY).toBeUndefined();
+    expect(values.WEBHOOK_SECRET).toBeUndefined();
+  });
+
+  it("unseals a nonce-prefixed AES-GCM payload of its own making", async () => {
+    const values = { TOKEN: "t0ken" };
+    const sealed = await seal(GO_ENVELOPE, JSON.stringify(values));
+    expect(sealed.length).toBe(
+      NONCE_BYTES + JSON.stringify(values).length + TAG_BYTES,
+    );
+
+    const { edge } = varsInvoker({ variables: { envelope: GO_ENVELOPE }, sealed });
+
+    expect((await workerEnv(edge)).OCEL_VAR_TOKEN).toBe("t0ken");
+  });
+
+  it("names a non-JSON payload without quoting what it decrypted", async () => {
+    const plaintext = "sk-live-abc is not JSON";
+    const sealed = await seal(GO_ENVELOPE, plaintext);
+
+    const { edge } = varsInvoker({ variables: { envelope: GO_ENVELOPE }, sealed });
+
+    const failure = await edge("e", new Request("https://x/")).then(
+      () => null,
+      (error: Error) => error,
+    );
+    expect(failure?.message).toBe("ocel: sealed edge variables are not JSON");
+  });
+
+  it("refuses to load when the envelope names bytes the store has not got", async () => {
+    const { edge } = varsInvoker({ variables: { envelope: GO_ENVELOPE } });
+
+    await expect(edge("e", new Request("https://x/"))).rejects.toThrow(
+      /no sealed edge variables at .*\/sealed\.bin/,
+    );
+  });
+
+  it("never reads the sealed object when nothing was sealed", async () => {
+    const { edge, reads } = varsInvoker({ variables: { env: { A: "one" } } });
+
+    await workerEnv(edge);
+    expect(reads.filter((key) => key.endsWith("/sealed.bin"))).toEqual([]);
+  });
+
+  it("reloads the isolate when only the values changed", async () => {
+    const deployment = (valueFingerprint: string) =>
+      varsInvoker({
+        handler: COUNTER,
+        id: "shared-bundle-vars",
+        cache: { rpc: remoteStub(), scope: "prod/p/app/b1" },
+        variables: { valueFingerprint },
+      }).edge;
+    const served = async (edge: EdgeInvoker) =>
+      (await edge("e", new Request("https://x/"))).text();
+
+    expect(await served(deployment("fp-1"))).toBe("1");
+    expect(await served(deployment("fp-1"))).toBe("2");
+    expect(await served(deployment("fp-2"))).toBe("1");
   });
 });
