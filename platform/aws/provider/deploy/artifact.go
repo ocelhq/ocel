@@ -267,7 +267,7 @@ type artifactRef struct {
 	Key    string
 }
 
-func uploadFunctionArtifacts(ctx context.Context, cfg Config, manifest *deploymentsv1.Manifest, baked map[string]appBundle, builds appBuilds, progress Progress) (map[string]artifactRef, error) {
+func uploadFunctionArtifacts(ctx context.Context, cfg Config, manifest *deploymentsv1.Manifest, builds appBuilds, progress Progress) (map[string]artifactRef, error) {
 	functions := manifest.GetFunctions()
 	refs := make(map[string]artifactRef, len(functions))
 	if len(functions) == 0 {
@@ -297,7 +297,7 @@ func uploadFunctionArtifacts(ctx context.Context, cfg Config, manifest *deployme
 				return fmt.Errorf("function %s names the app %q, which this manifest does not declare", fn.GetLogicalName(), fn.GetApp())
 			}
 			dir := artifactArchivePath(cfg.ArtifactRoot, fn.GetArtifactPath())
-			overlay := baked[fn.GetApp()].overlay()
+			overlay := builds.baked[fn.GetApp()].overlay()
 			hash, err := hashArtifact(dir, overlay)
 			if err != nil {
 				return err

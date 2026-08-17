@@ -104,7 +104,7 @@ func realize(ctx context.Context, cfg Config, manifest *deploymentsv1.Manifest, 
 		return Result{}, finishUploading(err)
 	}
 
-	artifacts, err := uploadFunctionArtifacts(ctx, cfg, manifest, baked, builds, progress)
+	artifacts, err := uploadFunctionArtifacts(ctx, cfg, manifest, builds, progress)
 	if err != nil {
 		return Result{}, finishUploading(err)
 	}
@@ -721,6 +721,14 @@ func buildDeploymentRecord(cfg Config, manifest *deploymentsv1.Manifest, app *de
 		return edge.DeploymentRecord{}, err
 	}
 	record.EdgeWorkers = edgeWorkers
+	if edgeWorkers != nil {
+		if env := variableEnv(app); len(env) > 0 {
+			record.Env = env
+		}
+		if bundle := builds.baked[name]; edgeSealedDelivered(cfg, bundle) {
+			record.Envelope = bundle.Envelope
+		}
+	}
 	return record, nil
 }
 
@@ -827,6 +835,9 @@ func runAppStack(ctx context.Context, cfg Config, manifest *deploymentsv1.Manife
 	bytecode := builds.bytecode
 
 	if err = checkRuntimeOwnedNames(app); err != nil {
+		return nil, nil, err
+	}
+	if err = checkAppEdgeVariables(cfg, app, baked); err != nil {
 		return nil, nil, err
 	}
 

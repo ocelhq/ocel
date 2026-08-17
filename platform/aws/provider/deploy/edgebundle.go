@@ -20,6 +20,8 @@ import (
 
 const edgeBundleFile = "edge/bundle.json"
 
+const edgeSealedFile = "sealed.bin"
+
 const edgeKind = "edge"
 
 func appEdgePrefix(c naming.Coordinate) string {
@@ -28,6 +30,10 @@ func appEdgePrefix(c naming.Coordinate) string {
 
 func appEdgeBundleKey(c naming.Coordinate) string {
 	return path.Join(appEdgePrefix(c), "bundle.json")
+}
+
+func appEdgeSealedKey(c naming.Coordinate) string {
+	return path.Join(appEdgePrefix(c), edgeSealedFile)
 }
 
 func readEdgeBundle(cfg Config, app string) ([]byte, bool, error) {
@@ -39,6 +45,10 @@ func readEdgeBundle(cfg Config, app string) ([]byte, bool, error) {
 		return nil, false, fmt.Errorf("read edge bundle for %s: %w", app, err)
 	}
 	return raw, true, nil
+}
+
+func edgeSealedDelivered(cfg Config, bundle appBundle) bool {
+	return cfg.CacheStoreBucket != "" && cfg.CacheStoreUploader != nil && len(bundle.Ciphertext) > 0
 }
 
 func uploadEdgeBundles(ctx context.Context, cfg Config, manifest *deploymentsv1.Manifest, builds appBuilds) error {
@@ -57,19 +67,38 @@ func putEdgeBundles(ctx context.Context, cfg Config, manifest *deploymentsv1.Man
 		name := app.GetName()
 		bundle, ok, err := readEdgeBundle(cfg, name)
 		if err != nil {
-			now := time.Now()
-			stats.record(uploadOutcome{Start: now, End: now, Failed: true, Err: err})
-			return err
+			return recordUploadFailure(stats, err)
 		}
 		if !ok {
 			continue
 		}
-		key := appEdgeBundleKey(builds.coords[name])
-		if err := tracedPut(ctx, cfg.CacheStoreUploader, cfg.CacheStoreBucket, key, "application/json", bundle, stats); err != nil {
+		sealed := builds.baked[name]
+		coord := builds.coords[name]
+		if err := tracedPut(ctx, cfg.CacheStoreUploader, cfg.CacheStoreBucket, appEdgeBundleKey(coord), "application/json", bundle, stats); err != nil {
+			return err
+		}
+		if !edgeSealedDelivered(cfg, sealed) {
+			continue
+		}
+		if err := tracedPut(ctx, cfg.CacheStoreUploader, cfg.CacheStoreBucket, appEdgeSealedKey(coord), "application/octet-stream", sealed.Ciphertext, stats); err != nil {
 			return err
 		}
 	}
 	return nil
+}
+
+func checkAppEdgeVariables(cfg Config, app *deploymentsv1.ManifestApp, bundle appBundle) error {
+	_, ok, err := readEdgeBundle(cfg, app.GetName())
+	if err != nil || !ok {
+		return err
+	}
+	return checkEdgeVariables(app, bundle)
+}
+
+func recordUploadFailure(stats *uploadBatchStats, err error) error {
+	now := time.Now()
+	stats.record(uploadOutcome{Start: now, End: now, Failed: true, Err: err})
+	return err
 }
 
 func appEdgeWorkers(cfg Config, c naming.Coordinate, app string) (*edge.Code, error) {

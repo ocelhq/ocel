@@ -80,7 +80,12 @@ func deployedManifest(manifest *deploymentsv1.Manifest) *deploymentsv1.Manifest 
 
 func appBuildsFor(t *testing.T, cfg Config, manifest *deploymentsv1.Manifest) appBuilds {
 	t.Helper()
-	builds, err := resolveAppBuilds(deployedConfig(cfg), deployedManifest(manifest), nil)
+	return bakedBuilds(t, cfg, manifest, nil)
+}
+
+func bakedBuilds(t *testing.T, cfg Config, manifest *deploymentsv1.Manifest, baked map[string]appBundle) appBuilds {
+	t.Helper()
+	builds, err := resolveAppBuilds(deployedConfig(cfg), deployedManifest(manifest), baked)
 	if err != nil {
 		t.Fatalf("resolveAppBuilds: %v", err)
 	}

@@ -288,23 +288,32 @@ func fingerprintValues(values map[string]string) string {
 
 var runtimeOwnedPrefixes = []string{"AWS_", "LAMBDA_"}
 
-func checkRuntimeOwnedNames(app *deploymentsv1.ManifestApp) error {
+func plainNamesTaken(app *deploymentsv1.ManifestApp, owned func(string) bool) []string {
 	var taken []string
 	for _, v := range app.GetVariables() {
 		if v.GetClass() != resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN {
 			continue
 		}
-		for _, prefix := range runtimeOwnedPrefixes {
-			if strings.HasPrefix(v.GetKey(), prefix) {
-				taken = append(taken, v.GetKey())
-				break
-			}
+		if owned(v.GetKey()) {
+			taken = append(taken, v.GetKey())
 		}
 	}
+	slices.Sort(taken)
+	return taken
+}
+
+func checkRuntimeOwnedNames(app *deploymentsv1.ManifestApp) error {
+	taken := plainNamesTaken(app, func(key string) bool {
+		for _, prefix := range runtimeOwnedPrefixes {
+			if strings.HasPrefix(key, prefix) {
+				return true
+			}
+		}
+		return false
+	})
 	if len(taken) == 0 {
 		return nil
 	}
-	slices.Sort(taken)
 
 	return fmt.Errorf(
 		"app %s declares %s, which the AWS Lambda runtime injects into every function environment (%s). "+
@@ -314,29 +323,77 @@ func checkRuntimeOwnedNames(app *deploymentsv1.ManifestApp) error {
 	)
 }
 
-func checkFunctionEnvBudget(function string, env map[string]string) error {
+func checkEdgeOwnedNames(app *deploymentsv1.ManifestApp) error {
+	taken := plainNamesTaken(app, func(key string) bool {
+		return slices.Contains(edge.OwnedVariableNames, key) || strings.HasPrefix(key, baked.Prefix)
+	})
+	if len(taken) == 0 {
+		return nil
+	}
+
+	return fmt.Errorf(
+		"app %s declares %s, which the edge entry worker injects into every worker environment (%s, %s*). "+
+			"A plaintext variable is delivered under its own name, so the entry worker would overwrite it. "+
+			"Rename it, or reclassify it as `sensitive` to deliver it inside the sealed overlay instead",
+		app.GetName(), strings.Join(taken, ", "), strings.Join(edge.OwnedVariableNames, ", "), baked.Prefix,
+	)
+}
+
+func checkEdgeVariables(app *deploymentsv1.ManifestApp, bundle appBundle) error {
+	if err := checkEdgeOwnedNames(app); err != nil {
+		return err
+	}
+	return checkEdgeEnvBudget(app.GetName(), variableEnv(app), bundle.Ciphertext)
+}
+
+func envBudget(env map[string]string) (int, []string) {
 	total := 0
 	keys := make([]string, 0, len(env))
 	for key, value := range env {
 		total += len(key) + len(value)
 		keys = append(keys, key)
 	}
-	if total <= functionEnvBudgetBytes {
-		return nil
-	}
-
 	slices.SortFunc(keys, func(a, b string) int {
 		if c := cmp.Compare(len(b)+len(env[b]), len(a)+len(env[a])); c != 0 {
 			return c
 		}
 		return cmp.Compare(a, b)
 	})
+	return total, keys
+}
+
+func writeEnvBudgetEntries(b *strings.Builder, env map[string]string, keys []string) {
+	for _, key := range keys {
+		fmt.Fprintf(b, "\n  %s  %d bytes", key, len(key)+len(env[key]))
+	}
+}
+
+func checkFunctionEnvBudget(function string, env map[string]string) error {
+	total, keys := envBudget(env)
+	if total <= functionEnvBudgetBytes {
+		return nil
+	}
 
 	var b strings.Builder
 	fmt.Fprintf(&b, "the environment for function %s is %d bytes, over the %d-byte limit:\n", function, total, functionEnvBudgetBytes)
-	for _, key := range keys {
-		fmt.Fprintf(&b, "\n  %s  %d bytes", key, len(key)+len(env[key]))
-	}
+	writeEnvBudgetEntries(&b, env, keys)
 	b.WriteString("\n\nReclassify a variable as `sensitive` to deliver it as ciphertext inside the bundle instead of in the function environment.")
+	return fmt.Errorf("%s", b.String())
+}
+
+func checkEdgeEnvBudget(app string, env map[string]string, ciphertext []byte) error {
+	total, keys := envBudget(env)
+	total += len(ciphertext)
+	if total <= functionEnvBudgetBytes {
+		return nil
+	}
+
+	var b strings.Builder
+	fmt.Fprintf(&b, "the environment for app %s at the edge is %d bytes, over the %d-byte limit:\n", app, total, functionEnvBudgetBytes)
+	writeEnvBudgetEntries(&b, env, keys)
+	if len(ciphertext) > 0 {
+		fmt.Fprintf(&b, "\n  %s  %d bytes", edgeSealedFile, len(ciphertext))
+	}
+	b.WriteString("\n\nDrop a variable or shorten a value: the edge carries plaintext and `sensitive` variables under one budget.")
 	return fmt.Errorf("%s", b.String())
 }
