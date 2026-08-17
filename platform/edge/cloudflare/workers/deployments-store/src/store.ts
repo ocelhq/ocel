@@ -6,6 +6,8 @@ export interface SqlStore {
 export interface DeploymentRecord {
   app: string;
   framework: string;
+  identity: string;
+  deploymentId: string;
   buildId: string;
   routingManifest: unknown;
   functionUrls: Record<string, string>;
@@ -53,22 +55,42 @@ export interface PruneResult {
   survivingPointerRecordKeys: string[];
 }
 
+export const SCHEMA_VERSION = 2;
+
 const DEFAULT_POINTER = "@production";
 const VERSION_KEY = "versionStamp";
 const OWNER_KEY = "ownerToken";
 const SECRET_KEY = "secret";
+const SCHEMA_KEY = "schemaVersion";
 
-function recordKey(app: string, buildId: string): string {
-  return `record:${app}/${buildId}`;
+function recordKey(app: string, identity: string): string {
+  return `record:${app}/${identity}`;
+}
+
+function dropSupersededSchema(store: SqlStore): void {
+  const recorded = store.sql
+    .exec<{ value: string }>(`SELECT value FROM meta WHERE key = ?`, SCHEMA_KEY)
+    .toArray()[0]?.value;
+  if (recorded === String(SCHEMA_VERSION)) return;
+  for (const table of ["records", "promotions", "pointers"]) {
+    store.sql.exec(`DROP TABLE IF EXISTS ${table}`);
+  }
 }
 
 export function ensureSchema(store: SqlStore): void {
   store.sql.exec(
+    `CREATE TABLE IF NOT EXISTS meta (
+       key TEXT PRIMARY KEY,
+       value TEXT NOT NULL
+     );`,
+  );
+  dropSupersededSchema(store);
+  store.sql.exec(
     `CREATE TABLE IF NOT EXISTS records (
        app TEXT NOT NULL,
-       build_id TEXT NOT NULL,
+       identity TEXT NOT NULL,
        data TEXT NOT NULL,
-       PRIMARY KEY (app, build_id)
+       PRIMARY KEY (app, identity)
      );
      CREATE TABLE IF NOT EXISTS promotions (
        promotion_id TEXT PRIMARY KEY,
@@ -81,34 +103,13 @@ export function ensureSchema(store: SqlStore): void {
      CREATE TABLE IF NOT EXISTS pointers (
        name TEXT PRIMARY KEY,
        promotion_id TEXT NOT NULL
-     );
-     CREATE TABLE IF NOT EXISTS meta (
-       key TEXT PRIMARY KEY,
-       value TEXT NOT NULL
      );`,
   );
-
-  const hasTag = store.sql
-    .exec<{ name: string }>(`PRAGMA table_info(promotions)`)
-    .toArray()
-    .some((c) => c.name === "tag");
-  if (!hasTag) {
-    store.sql.exec(`ALTER TABLE promotions ADD COLUMN tag TEXT`);
-  }
   store.sql.exec(
     `CREATE UNIQUE INDEX IF NOT EXISTS promotions_tag_unique
        ON promotions(tag) WHERE tag IS NOT NULL`,
   );
-
-  const hasPointer = store.sql
-    .exec<{ name: string }>(`PRAGMA table_info(promotions)`)
-    .toArray()
-    .some((c) => c.name === "pointer");
-  if (!hasPointer) {
-    store.sql.exec(
-      `ALTER TABLE promotions ADD COLUMN pointer TEXT NOT NULL DEFAULT '${DEFAULT_POINTER}'`,
-    );
-  }
+  setMeta(store, SCHEMA_KEY, String(SCHEMA_VERSION));
 }
 
 function getMeta(store: SqlStore, key: string): string | undefined {
@@ -148,10 +149,10 @@ function setPointer(store: SqlStore, name: string, promotionId: string): void {
 
 export function putStaged(store: SqlStore, record: DeploymentRecord): void {
   store.sql.exec(
-    `INSERT INTO records (app, build_id, data) VALUES (?, ?, ?)
-     ON CONFLICT(app, build_id) DO UPDATE SET data = excluded.data`,
+    `INSERT INTO records (app, identity, data) VALUES (?, ?, ?)
+     ON CONFLICT(app, identity) DO UPDATE SET data = excluded.data`,
     record.app,
-    record.buildId,
+    record.identity,
     JSON.stringify(record),
   );
 }
@@ -159,13 +160,13 @@ export function putStaged(store: SqlStore, record: DeploymentRecord): void {
 export function record(
   store: SqlStore,
   app: string,
-  buildId: string,
+  identity: string,
 ): DeploymentRecord | undefined {
   const row = store.sql
     .exec<{ data: string }>(
-      `SELECT data FROM records WHERE app = ? AND build_id = ?`,
+      `SELECT data FROM records WHERE app = ? AND identity = ?`,
       app,
-      buildId,
+      identity,
     )
     .toArray()[0];
   return row ? (JSON.parse(row.data) as DeploymentRecord) : undefined;
@@ -225,7 +226,7 @@ function pointerBuilds(
   return JSON.parse(row.builds) as Record<string, string>;
 }
 
-export function pointerBuildId(
+export function pointerIdentity(
   store: SqlStore,
   app: string,
   pointer: string = DEFAULT_POINTER,
@@ -236,15 +237,15 @@ export function pointerBuildId(
 export type PointerRecordResult =
   | { kind: "no-pointer" }
   | { kind: "ambiguous-app" }
-  | { kind: "unchanged"; buildId: string }
-  | { kind: "record"; buildId: string; record: DeploymentRecord }
-  | { kind: "dangling"; buildId: string };
+  | { kind: "unchanged"; identity: string }
+  | { kind: "record"; identity: string; record: DeploymentRecord }
+  | { kind: "dangling"; identity: string };
 
 export function pointerRecord(
   store: SqlStore,
   app?: string,
   pointer: string = DEFAULT_POINTER,
-  knownBuildId?: string,
+  knownIdentity?: string,
 ): PointerRecordResult {
   const builds = pointerBuilds(store, pointer);
   if (!builds) return { kind: "no-pointer" };
@@ -257,12 +258,12 @@ export function pointerRecord(
     target = apps[0];
   }
 
-  const buildId = builds[target];
-  if (!buildId) return { kind: "no-pointer" };
-  if (buildId === knownBuildId) return { kind: "unchanged", buildId };
-  const rec = record(store, target, buildId);
-  if (!rec) return { kind: "dangling", buildId };
-  return { kind: "record", buildId, record: rec };
+  const identity = builds[target];
+  if (!identity) return { kind: "no-pointer" };
+  if (identity === knownIdentity) return { kind: "unchanged", identity };
+  const rec = record(store, target, identity);
+  if (!rec) return { kind: "dangling", identity };
+  return { kind: "record", identity, record: rec };
 }
 
 export function history(
@@ -320,7 +321,7 @@ export function prune(
     });
 
     const removedRecordKeys = removed.flatMap((p) =>
-      Object.entries(p.builds).map(([app, buildId]) => recordKey(app, buildId)),
+      Object.entries(p.builds).map(([app, identity]) => recordKey(app, identity)),
     );
 
     for (const p of removed) {
@@ -328,11 +329,11 @@ export function prune(
         `DELETE FROM promotions WHERE promotion_id = ?`,
         p.promotionId,
       );
-      for (const [app, buildId] of Object.entries(p.builds)) {
+      for (const [app, identity] of Object.entries(p.builds)) {
         store.sql.exec(
-          `DELETE FROM records WHERE app = ? AND build_id = ?`,
+          `DELETE FROM records WHERE app = ? AND identity = ?`,
           app,
-          buildId,
+          identity,
         );
       }
     }
@@ -352,8 +353,8 @@ function promotedRecordKeys(
 ): string[] {
   const keys = new Set<string>();
   for (const p of promotions) {
-    for (const [app, buildId] of Object.entries(p.builds)) {
-      keys.add(recordKey(app, buildId));
+    for (const [app, identity] of Object.entries(p.builds)) {
+      keys.add(recordKey(app, identity));
     }
   }
   return [...keys].sort();
@@ -376,16 +377,16 @@ export function removePointer(
       builds: JSON.parse(r.builds) as Record<string, string>,
     }));
     const removedRecordKeys = removed.flatMap((p) =>
-      Object.entries(p.builds).map(([app, buildId]) => recordKey(app, buildId)),
+      Object.entries(p.builds).map(([app, identity]) => recordKey(app, identity)),
     );
 
     for (const p of removed) {
       store.sql.exec(`DELETE FROM promotions WHERE promotion_id = ?`, p.promotionId);
-      for (const [app, buildId] of Object.entries(p.builds)) {
+      for (const [app, identity] of Object.entries(p.builds)) {
         store.sql.exec(
-          `DELETE FROM records WHERE app = ? AND build_id = ?`,
+          `DELETE FROM records WHERE app = ? AND identity = ?`,
           app,
-          buildId,
+          identity,
         );
       }
     }
@@ -403,11 +404,11 @@ export function removePointer(
 
 function remainingRecordKeys(store: SqlStore): string[] {
   return store.sql
-    .exec<{ app: string; build_id: string }>(
-      `SELECT app, build_id FROM records ORDER BY app, build_id`,
+    .exec<{ app: string; identity: string }>(
+      `SELECT app, identity FROM records ORDER BY app, identity`,
     )
     .toArray()
-    .map((r) => recordKey(r.app, r.build_id));
+    .map((r) => recordKey(r.app, r.identity));
 }
 
 export interface Identity {

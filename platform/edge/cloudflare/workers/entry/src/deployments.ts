@@ -4,6 +4,8 @@ import { lruSet } from "./lru";
 export interface DeploymentRecord {
   app: string;
   framework: string;
+  identity: string;
+  deploymentId: string;
   buildId: string;
   routingManifest: unknown;
   functionUrls: Record<string, string>;
@@ -17,16 +19,16 @@ export interface DeploymentRecord {
 export type PointerRecordResult =
   | { kind: "no-pointer" }
   | { kind: "ambiguous-app" }
-  | { kind: "unchanged"; buildId: string }
-  | { kind: "record"; buildId: string; record: DeploymentRecord }
-  | { kind: "dangling"; buildId: string };
+  | { kind: "unchanged"; identity: string }
+  | { kind: "record"; identity: string; record: DeploymentRecord }
+  | { kind: "dangling"; identity: string };
 
 export interface DeploymentsBinding {
   pointerRecord(args: {
     slug: string;
     app?: string;
     pointer?: string;
-    knownBuildId?: string;
+    knownIdentity?: string;
   }): Promise<PointerRecordResult>;
 }
 
@@ -48,7 +50,7 @@ const RECORD_TTL_MS = 5_000;
 export const RECORD_CACHE_MAX = 64;
 
 interface CacheEntry {
-  buildId: string;
+  identity: string;
   record: DeploymentRecord;
   at: number;
 }
@@ -84,7 +86,7 @@ export async function resolveDeployment(
       slug: deps.slug,
       app: deps.app,
       pointer: deps.pointer,
-      knownBuildId: cached?.buildId,
+      knownIdentity: cached?.identity,
     });
   } catch {
     if (cached) return { kind: "found", record: cached.record };
@@ -102,7 +104,7 @@ export async function resolveDeployment(
       lruSet(
         cache,
         key,
-        { buildId: result.buildId, record: result.record, at: now },
+        { identity: result.identity, record: result.record, at: now },
         RECORD_CACHE_MAX,
       );
       return { kind: "found", record: result.record };

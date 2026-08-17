@@ -102,6 +102,20 @@ func (p *provider) initializeInstance(ctx context.Context, endpoint, slug, boots
 	return storeIdentity{secret: out.Secret, ownerToken: out.OwnerToken}, nil
 }
 
+func (p *provider) StoreSchemaVersion(ctx context.Context, endpoint, slug string) (int, error) {
+	var out struct {
+		SchemaVersion int `json:"schemaVersion"`
+	}
+	res, err := p.storeRequestTo(ctx, endpoint, slug, "", http.MethodGet, "/schema-version", nil, &out)
+	if err != nil {
+		if unauthorized(res) {
+			return 0, edge.ErrStoreSchemaUnreadable
+		}
+		return 0, err
+	}
+	return out.SchemaVersion, nil
+}
+
 func (p *provider) getVersionStamp(ctx context.Context, endpoint, slug, secret string) (string, *http.Response, error) {
 	var out struct {
 		Version *string `json:"version"`

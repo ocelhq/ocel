@@ -31,6 +31,9 @@ type recordingRootStack struct {
 	listWorkersErr    error
 	destroyedInstance int
 
+	storeSchemaVersion    *int
+	storeSchemaVersionErr error
+
 	history             []edge.HistoryEntry
 	pruneResult         edge.PruneResult
 	destroyRootStackErr error
@@ -55,6 +58,16 @@ func (f *recordingRootStack) ReconcileRootStack(_ context.Context, spec edge.Roo
 		edge.RootStackKeyEndpoint: fakeStoreEndpoint,
 		edge.RootStackKeySecret:   f.secret,
 	}, nil
+}
+
+func (f *recordingRootStack) StoreSchemaVersion(_ context.Context, _, _ string) (int, error) {
+	if f.storeSchemaVersionErr != nil {
+		return 0, f.storeSchemaVersionErr
+	}
+	if f.storeSchemaVersion == nil {
+		return edge.StoreSchemaVersion, nil
+	}
+	return *f.storeSchemaVersion, nil
 }
 
 func (f *recordingRootStack) checkAuth(state edge.RootStackState) error {

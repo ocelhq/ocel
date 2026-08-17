@@ -54,26 +54,26 @@ export class DeploymentsStore extends DurableObject<Env> {
     }
   }
 
-  async pointerBuildId(
+  async pointerIdentity(
     app: string,
     pointer?: string,
   ): Promise<string | undefined> {
-    return store.pointerBuildId(this.ctx.storage, app, pointer);
+    return store.pointerIdentity(this.ctx.storage, app, pointer);
   }
 
   async record(
     app: string,
-    buildId: string,
+    identity: string,
   ): Promise<DeploymentRecord | undefined> {
-    return store.record(this.ctx.storage, app, buildId);
+    return store.record(this.ctx.storage, app, identity);
   }
 
   async pointerRecord(
     app?: string,
     pointer?: string,
-    knownBuildId?: string,
+    knownIdentity?: string,
   ): Promise<store.PointerRecordResult> {
-    return store.pointerRecord(this.ctx.storage, app, pointer, knownBuildId);
+    return store.pointerRecord(this.ctx.storage, app, pointer, knownIdentity);
   }
 
   async history(pointer?: string): Promise<HistoryEntry[]> {
