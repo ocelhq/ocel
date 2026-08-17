@@ -62,7 +62,7 @@ function deps(
     config: BASE_CONFIG,
     basePath: "",
     app: "web",
-    buildId: "b1",
+    deploymentId: "d1",
     origin: unprovisionedImageOrigin,
     ...overrides,
   };
@@ -327,12 +327,12 @@ describe("the image cache key", () => {
     });
     const assetHashes = { "/a.png": "c0ffee".repeat(10) };
 
-    await get(deps({ slug: "redeploy", cache, origin, assetHashes, buildId: "b1" }));
+    await get(deps({ slug: "redeploy", cache, origin, assetHashes, deploymentId: "d1" }));
     await cache.flush();
 
     clock.ms = 1_000;
     const next = await get(
-      deps({ slug: "redeploy", cache, origin, assetHashes, buildId: "b2" }),
+      deps({ slug: "redeploy", cache, origin, assetHashes, deploymentId: "d2" }),
     );
     expect(next.headers.get("x-ocel-cache")).toBe("HIT");
     expect(origin.calls).toBe(1);
@@ -350,7 +350,7 @@ describe("the image cache key", () => {
         slug: "rehash",
         cache,
         origin,
-        buildId: "b1",
+        deploymentId: "d1",
         assetHashes: { "/a.png": "a".repeat(64) },
       }),
     );
@@ -362,7 +362,7 @@ describe("the image cache key", () => {
         slug: "rehash",
         cache,
         origin,
-        buildId: "b2",
+        deploymentId: "d2",
         assetHashes: { "/a.png": "b".repeat(64) },
       }),
     );
@@ -370,22 +370,46 @@ describe("the image cache key", () => {
     expect(origin.calls).toBe(2);
   });
 
-  it("falls back to a build-scoped identity for a path the build never hashed", async () => {
+  it("falls back to a deployment-scoped identity for a path the build never hashed", async () => {
     const clock = { ms: 0 };
     const cache = testDeps(clock);
     const origin = optimizer("optimized", {
       headers: { "cache-control": "public, max-age=60" },
     });
 
-    await get(deps({ slug: "nohash", cache, origin, buildId: "b1" }));
+    await get(deps({ slug: "nohash", cache, origin, deploymentId: "d1" }));
     await cache.flush();
 
     clock.ms = 1_000;
-    const sameBuild = await get(deps({ slug: "nohash", cache, origin, buildId: "b1" }));
-    expect(sameBuild.headers.get("x-ocel-cache")).toBe("HIT");
+    const sameDeployment = await get(
+      deps({ slug: "nohash", cache, origin, deploymentId: "d1" }),
+    );
+    expect(sameDeployment.headers.get("x-ocel-cache")).toBe("HIT");
 
-    const redeployed = await get(deps({ slug: "nohash", cache, origin, buildId: "b2" }));
+    const redeployed = await get(deps({ slug: "nohash", cache, origin, deploymentId: "d2" }));
     expect(redeployed.headers.get("x-ocel-cache")).toBe("MISS");
+  });
+
+  it("keeps two apps of one project apart in the fallback", async () => {
+    const clock = { ms: 0 };
+    const cache = testDeps(clock);
+    const origin = optimizer("optimized", {
+      headers: { "cache-control": "public, max-age=60" },
+    });
+
+    await get(deps({ slug: "twoapps", cache, origin, app: "web", deploymentId: "d1" }));
+    await cache.flush();
+
+    clock.ms = 1_000;
+    const sameApp = await get(
+      deps({ slug: "twoapps", cache, origin, app: "web", deploymentId: "d1" }),
+    );
+    expect(sameApp.headers.get("x-ocel-cache")).toBe("HIT");
+
+    const otherApp = await get(
+      deps({ slug: "twoapps", cache, origin, app: "admin", deploymentId: "d1" }),
+    );
+    expect(otherApp.headers.get("x-ocel-cache")).toBe("MISS");
   });
 
   it("strips the basePath the browser saw before consulting the hash map", async () => {
@@ -403,7 +427,7 @@ describe("the image cache key", () => {
         origin,
         assetHashes,
         basePath: "/docs",
-        buildId: "b1",
+        deploymentId: "d1",
         config: { ...BASE_CONFIG, localPatterns: undefined },
       }),
       "url=%2Fdocs%2Fa.png&w=640&q=75",
@@ -418,7 +442,7 @@ describe("the image cache key", () => {
         origin,
         assetHashes,
         basePath: "/docs",
-        buildId: "b2",
+        deploymentId: "d2",
         config: { ...BASE_CONFIG, localPatterns: undefined },
       }),
       "url=%2Fdocs%2Fa.png&w=640&q=75",
@@ -432,7 +456,7 @@ describe("the image cache key", () => {
     const origin = optimizer("optimized", {
       headers: { "cache-control": "public, max-age=60" },
     });
-    const d = deps({ slug: "remote", cache, origin, buildId: "b1" });
+    const d = deps({ slug: "remote", cache, origin, deploymentId: "d1" });
     const src = (path: string) =>
       `url=${encodeURIComponent(`https://cdn.allowed.example${path}`)}&w=640&q=75`;
 
@@ -441,7 +465,7 @@ describe("the image cache key", () => {
 
     clock.ms = 1_000;
     const normalized = await get(
-      deps({ slug: "remote", cache, origin, buildId: "b2" }),
+      deps({ slug: "remote", cache, origin, deploymentId: "d2" }),
       src("/img/../img/a.png"),
     );
     expect(normalized.headers.get("x-ocel-cache")).toBe("HIT");
@@ -743,7 +767,7 @@ describe("what the image cache key does and does not collapse", () => {
       slug: "fallback-normal",
       cache,
       origin: o,
-      buildId: "b1",
+      deploymentId: "d1",
       config: { ...BASE_CONFIG, localPatterns: undefined },
     });
     const src = (path: string) => `url=${encodeURIComponent(path)}&w=640&q=75`;
@@ -791,7 +815,7 @@ describe("what the image cache key does and does not collapse", () => {
       cache,
       origin: o,
       basePath: "/docs",
-      buildId: "b1",
+      deploymentId: "d1",
       assetHashes: { "/a.png": "a".repeat(64) },
       config: { ...BASE_CONFIG, localPatterns: undefined },
     });

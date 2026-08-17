@@ -150,6 +150,7 @@ function deps(scenario: Scenario): RouteDeps {
     },
     functionUrls: scenario.functionUrls ?? {},
     slug: "p1",
+    deploymentId: "d1",
     app: "web",
     assetStore: assetStoreServing(
       { "/404.html": "not found", ...(scenario.files ?? {}) },
@@ -617,7 +618,7 @@ describe("the resolved path is what keys the response", () => {
       expect(follow.headers.get("x-ocel-cache")).toBe("HIT");
       expect(await follow.text()).toBe("prerendered");
       expect(renders()).toBe(1);
-      expect(keys()).toEqual(["https://cache.ocel/t/p"]);
+      expect(keys()).toEqual(["https://cache.ocel/p1/web/d1/p"]);
     });
 
     it("gives both served forms one key under skipTrailingSlashRedirect", async () => {
@@ -632,7 +633,45 @@ describe("the resolved path is what keys the response", () => {
       expect(second.headers.get("x-ocel-cache")).toBe("HIT");
       expect(await second.text()).toBe("prerendered");
       expect(renders()).toBe(1);
-      expect(keys()).toEqual(["https://cache.ocel/t/p"]);
+      expect(keys()).toEqual(["https://cache.ocel/p1/web/d1/p"]);
+    });
+
+    it("gives two apps of one project a key each", async () => {
+      const { scenario, settle, renders, keys } = coloScenario(true, true);
+      const web = deps(scenario);
+      const admin = { ...web, app: "admin" };
+
+      expect((await serve(get("/p"), web)).headers.get("x-ocel-cache")).toBe("MISS");
+      await settle();
+      expect((await serve(get("/p"), admin)).headers.get("x-ocel-cache")).toBe("MISS");
+      await settle();
+
+      expect(web.deploymentId).toBe(admin.deploymentId);
+      expect(web.manifest.buildId).toBe(admin.manifest.buildId);
+      expect(renders()).toBe(2);
+      expect(keys()).toEqual([
+        "https://cache.ocel/p1/web/d1/p",
+        "https://cache.ocel/p1/admin/d1/p",
+      ]);
+    });
+
+    it("gives two deployments of one app a key each", async () => {
+      const { scenario, settle, renders, keys } = coloScenario(true, true);
+      const first = deps(scenario);
+      const second = { ...first, deploymentId: "d2" };
+
+      expect((await serve(get("/p"), first)).headers.get("x-ocel-cache")).toBe("MISS");
+      await settle();
+      expect((await serve(get("/p"), second)).headers.get("x-ocel-cache")).toBe("MISS");
+      await settle();
+
+      expect(first.app).toBe(second.app);
+      expect(first.manifest.buildId).toBe(second.manifest.buildId);
+      expect(renders()).toBe(2);
+      expect(keys()).toEqual([
+        "https://cache.ocel/p1/web/d1/p",
+        "https://cache.ocel/p1/web/d2/p",
+      ]);
     });
   });
 

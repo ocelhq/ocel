@@ -42,7 +42,8 @@ async function resolved(
   over: Partial<ResolveBase> = {},
 ): Promise<ServeFetch | Response> {
   return resolveServe(
-    { binding: bindingReturning(record), slug: "p1", host: "api.example.com", app: record.app },
+    { binding: bindingReturning(record), slug: "p1",
+    deploymentId: "d1", host: "api.example.com", app: record.app },
     base(over),
   );
 }

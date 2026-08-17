@@ -92,6 +92,7 @@ describe("a url no runtime can parse", () => {
         basePath: "",
         assetPrefix: ASSET_PREFIX,
         slug: "p1",
+        deploymentId: "d1",
         buildId: "build-7",
         origin: async () => new Response("optimized"),
       });
@@ -109,6 +110,7 @@ describe("a url no runtime can parse", () => {
         basePath: "",
         assetPrefix: ASSET_PREFIX,
         slug: "p1",
+        deploymentId: "d1",
         buildId: "build-7",
         origin: async () => {
           called = true;
@@ -248,6 +250,7 @@ describe("serveImage", () => {
       basePath: "",
       assetPrefix: ASSET_PREFIX,
       slug: "p1",
+      deploymentId: "d1",
       buildId: "build-7",
       origin: async (payload) => {
         seen.push(payload);
@@ -279,6 +282,7 @@ describe("serveImage", () => {
       basePath: "",
       assetPrefix: ASSET_PREFIX,
       slug: "p1",
+      deploymentId: "d1",
       buildId: "build-7",
       origin: async (payload) => {
         seen.push(payload);
@@ -297,6 +301,7 @@ describe("serveImage", () => {
       basePath: "",
       assetPrefix: ASSET_PREFIX,
       slug: "p1",
+      deploymentId: "d1",
       buildId: "build-7",
       origin: async () => {
         called = true;
@@ -367,6 +372,7 @@ function imageDeps(overrides: Partial<RouteDeps> = {}): RouteDeps {
     },
     functionUrls: {},
     slug: "p1",
+    deploymentId: "d1",
     app: "web",
     assetStore: assetStoreServing({ "/404.html": "<h1>not found</h1>" }),
     ...overrides,
@@ -478,6 +484,44 @@ describe("the /_next/image route", () => {
     expect(redeployed.headers.get("x-ocel-cache")).toBe("HIT");
     expect(await redeployed.text()).toBe("optimized");
     expect(calls).toBe(1);
+  });
+
+  it("never shares an unhashed variant between two deployments of one build", async () => {
+    const clock = { ms: 0 };
+    const pending: Promise<unknown>[] = [];
+    const cache: CacheDeps = coloDeps({
+      cache: caches.default,
+      now: () => clock.ms,
+      waitUntil: (promise) => {
+        pending.push(promise);
+      },
+    });
+    let calls = 0;
+    const imageOrigin = async () => {
+      calls++;
+      return new Response("optimized", {
+        status: 200,
+        headers: { "cache-control": "public, max-age=60" },
+      });
+    };
+    const image = (deps: RouteDeps) =>
+      serve(
+        imageRequest("https://app.example/_next/image?url=%2Fa.png&w=640&q=75"),
+        deps,
+      );
+
+    const first = imageDeps({ cache, imageOrigin, deploymentId: "d1" });
+    const second = imageDeps({ cache, imageOrigin, deploymentId: "d2" });
+    expect(second.manifest.buildId).toBe(first.manifest.buildId);
+    expect(first.manifest.assetHashes).toBeUndefined();
+
+    expect((await image(first)).headers.get("x-ocel-cache")).toBe("MISS");
+    await Promise.all(pending.splice(0));
+
+    clock.ms = 1_000;
+    expect((await image(first)).headers.get("x-ocel-cache")).toBe("HIT");
+    expect((await image(second)).headers.get("x-ocel-cache")).toBe("MISS");
+    expect(calls).toBe(2);
   });
 
   it("answers a validated request with 502 when no origin is provisioned", async () => {

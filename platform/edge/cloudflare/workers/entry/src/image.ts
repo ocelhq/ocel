@@ -63,7 +63,8 @@ export interface ImageDeps {
   basePath: string;
   assetPrefix: string;
   slug: string;
-  buildId: string;
+  app: string;
+  deploymentId: string;
   origin: ImageOrigin;
   assetHashes?: Record<string, string>;
   cache?: CacheDeps;
@@ -377,7 +378,7 @@ function sourceIdentity(params: ImageParams, deps: ImageDeps): string {
   if (params.isAbsolute) return params.href;
   const path = assetPath(params.href, deps.basePath);
   const hash = path === undefined ? undefined : deps.assetHashes?.[path];
-  return hash ?? `${deps.buildId}${normalized(params.href)}`;
+  return hash ?? `${deps.app}/${deps.deploymentId}${normalized(params.href)}`;
 }
 
 function assetPath(href: string, basePath: string): string | undefined {
