@@ -219,10 +219,10 @@ export function deployURL(result) {
   return url;
 }
 
-export function markerLines({ buildId, promotionId }) {
+export function markerLines({ buildId, deploymentId }) {
   return [
     `BUILD_ID: ${buildId || "undefined"}`,
-    `DEPLOYMENT_ID: ${promotionId || "undefined"}`,
+    `DEPLOYMENT_ID: ${deploymentId || "undefined"}`,
     `IMMUTABLE_ASSET_TOKEN: undefined`,
   ];
 }

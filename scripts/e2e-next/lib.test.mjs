@@ -370,9 +370,9 @@ describe("goldenDifferences", () => {
 
 describe("markerLines", () => {
   it("emits the three harness markers in order", () => {
-    expect(markerLines({ buildId: "bld", promotionId: "prm" })).toEqual([
+    expect(markerLines({ buildId: "bld", deploymentId: "dpl" })).toEqual([
       "BUILD_ID: bld",
-      "DEPLOYMENT_ID: prm",
+      "DEPLOYMENT_ID: dpl",
       "IMMUTABLE_ASSET_TOKEN: undefined",
     ]);
   });
