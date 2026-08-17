@@ -284,18 +284,18 @@
       "flakey": []
     },
     "test/e2e/middleware-general/test/index.test.ts": {
-      "failed": [
+      "failed": [],
+      "flakey": [
         "Middleware Runtime with i18n allows to access env variables",
         "Middleware Runtime without i18n allows to access env variables"
-      ],
-      "flakey": []
+      ]
     },
     "test/e2e/middleware-general/test/node-runtime.test.ts": {
-      "failed": [
+      "failed": [],
+      "flakey": [
         "Middleware Runtime with i18n allows to access env variables",
         "Middleware Runtime without i18n allows to access env variables"
-      ],
-      "flakey": []
+      ]
     },
     "test/e2e/middleware-rewrites/test/index.test.ts": {
       "failed": [
