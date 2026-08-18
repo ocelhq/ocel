@@ -136,13 +136,26 @@ export default $config({
 `;
 }
 
+export const PRODUCTION_DOMAIN_ENV_VAR = "OCEL_E2E_SST_PRODUCTION_DOMAIN";
+
+export function productionHostFor(slug, base = process.env[PRODUCTION_DOMAIN_ENV_VAR]) {
+  const zone = String(base ?? "").trim().replace(/^\*\./, "");
+  if (!zone) {
+    return "";
+  }
+  return `${slug}.${zone}`;
+}
+
 export function renderOcelConfig({
   slug,
   app = CONSUMER_APP,
   links = [LINK_NAME],
   transform = TRANSFORM_MODULE,
+  host = productionHostFor(slug),
 }) {
+  const declared = host ? `  domains: { production: [${JSON.stringify(host)}] },\n` : "";
   return `import { defineConfig } from "ocel/config";
+import { cloudflareDns } from "ocel/dns";
 import { cfEdge } from "ocel/edge";
 import awsProvider from "@ocel/provider-aws";
 
@@ -150,7 +163,8 @@ export default defineConfig({
   slug: ${JSON.stringify(slug)},
   provider: awsProvider({ transforms: [${JSON.stringify(transform)}] }),
   edge: cfEdge(),
-  links: ${JSON.stringify(links)},
+  dns: cloudflareDns(),
+${declared}  links: ${JSON.stringify(links)},
   apps: [{ name: ${JSON.stringify(app)}, framework: "express", path: "." }],
 });
 `;

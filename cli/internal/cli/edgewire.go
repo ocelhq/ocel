@@ -49,6 +49,11 @@ func (e edgeWire) applyToRemoveDomain(req *deploymentsv1.RemoveDomainRequest) *d
 	return req
 }
 
+func (e edgeWire) applyToDomainStatus(req *deploymentsv1.DomainStatusRequest) *deploymentsv1.DomainStatusRequest {
+	req.EdgeKind, req.Dns = string(e.kind), e.dns
+	return req
+}
+
 func (e edgeWire) applyToDestroyProject(req *deploymentsv1.DestroyProjectRequest) *deploymentsv1.DestroyProjectRequest {
 	req.Dns = e.dns
 	return req

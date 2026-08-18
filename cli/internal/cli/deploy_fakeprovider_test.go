@@ -126,10 +126,11 @@ type deployFakeProviderServer struct {
 	token string
 	mode  string
 
-	mu               sync.Mutex
-	preflightSlug    string
-	preflightDomains []string
-	preflightClass   deploymentsv1.Environment_Class
+	mu                sync.Mutex
+	domainStatusCalls int
+	preflightSlug     string
+	preflightDomains  []string
+	preflightClass    deploymentsv1.Environment_Class
 }
 
 func (s *deployFakeProviderServer) recordPreflight(slug string, domains []string, class deploymentsv1.Environment_Class) {
@@ -681,6 +682,57 @@ func fakeDomainTargets(configured []string, host string) []string {
 		return []string{host}
 	}
 	return configured
+}
+
+const (
+	fakeDomainReadyAfterEnvVar = "OCEL_TEST_FAKE_DOMAIN_READY_AFTER"
+	fakeDomainCertEnvVar       = "OCEL_TEST_FAKE_DOMAIN_CERT"
+	fakeDomainRenewalEnvVar    = "OCEL_TEST_FAKE_DOMAIN_RENEWAL"
+	fakeDomainExpiresEnvVar    = "OCEL_TEST_FAKE_DOMAIN_EXPIRES"
+	fakeDomainFailUntilEnvVar  = "OCEL_TEST_FAKE_DOMAIN_FAIL_UNTIL"
+)
+
+func (s *deployFakeProviderServer) DomainStatus(ctx context.Context, req *deploymentsv1.DomainStatusRequest) (*deploymentsv1.DomainStatusResponse, error) {
+	if err := s.checkToken(ctx); err != nil {
+		return nil, err
+	}
+	s.mu.Lock()
+	s.domainStatusCalls++
+	call := s.domainStatusCalls
+	s.mu.Unlock()
+
+	if failUntil, _ := strconv.Atoi(os.Getenv(fakeDomainFailUntilEnvVar)); call > 1 && call <= failUntil {
+		return nil, connect.NewError(connect.CodeUnavailable, fmt.Errorf("the provider is briefly unreachable"))
+	}
+	readyAfter, _ := strconv.Atoi(os.Getenv(fakeDomainReadyAfterEnvVar))
+	ready := call > readyAfter
+	status, certID, _ := strings.Cut(os.Getenv(fakeDomainCertEnvVar), " ")
+	expires, _ := strconv.ParseInt(os.Getenv(fakeDomainExpiresEnvVar), 10, 64)
+
+	resp := &deploymentsv1.DomainStatusResponse{Ready: ready && len(req.GetConfigured()) > 0}
+	for _, host := range req.GetConfigured() {
+		row := &deploymentsv1.DomainHost{
+			Hostname:          host,
+			Declared:          true,
+			CertificateId:     certID,
+			CertificateStatus: status,
+			RenewalStatus:     os.Getenv(fakeDomainRenewalEnvVar),
+			ExpiresAt:         expires,
+			ExpiringSoon:      expires != 0 && os.Getenv(fakeDomainRenewalEnvVar) != "SUCCESS",
+			RecordsWritten:    []string{host + " AAAA 100::"},
+			RecordsOwed:       splitList(os.Getenv(fakeGlobalDomainOwedEnvVar)),
+			LastProbeAt:       1755500000,
+			LastProbeOk:       ready,
+			LastProbeEdge:     string(edge.KindCloudflare),
+			ServingPointer:    string(edge.KindCloudflare),
+			Ready:             ready,
+		}
+		if !ready {
+			row.Pending = fmt.Sprintf("%s does not answer as the %s edge yet", host, edge.KindCloudflare)
+		}
+		resp.Hosts = append(resp.Hosts, row)
+	}
+	return resp, nil
 }
 
 func (s *deployFakeProviderServer) ListDomain(ctx context.Context, req *deploymentsv1.ListDomainRequest) (*deploymentsv1.ListDomainResponse, error) {

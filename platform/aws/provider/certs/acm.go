@@ -36,6 +36,18 @@ type Certificate struct {
 	Domains    []string      `json:"domains,omitempty"`
 	Adopted    bool          `json:"adopted,omitempty"`
 	Validation []edge.Record `json:"validation,omitempty"`
+	NotAfter   time.Time     `json:"notAfter,omitzero"`
+	Renewal    string        `json:"renewal,omitempty"`
+}
+
+const RenewalWindow = 30 * 24 * time.Hour
+
+func (c Certificate) Renewed() bool {
+	return c.Renewal == string(acmtypes.RenewalStatusSuccess)
+}
+
+func (c Certificate) ExpiringSoon(now time.Time) bool {
+	return !c.NotAfter.IsZero() && !c.Renewed() && c.NotAfter.Sub(now) < RenewalWindow
 }
 
 func (c Certificate) Issued() bool {
@@ -200,6 +212,10 @@ func (i Issuer) AwaitIssued(ctx context.Context, cert Certificate, say func(stri
 	)
 }
 
+func (i Issuer) Describe(ctx context.Context, cert Certificate) (Certificate, error) {
+	return i.describe(ctx, cert)
+}
+
 func (i Issuer) describe(ctx context.Context, cert Certificate) (Certificate, error) {
 	out, err := i.API.DescribeCertificate(ctx, &acm.DescribeCertificateInput{
 		CertificateArn: aws.String(cert.ARN),
@@ -209,6 +225,11 @@ func (i Issuer) describe(ctx context.Context, cert Certificate) (Certificate, er
 	}
 	cert.Status = string(out.Certificate.Status)
 	cert.Domains = certificateNames(aws.ToString(out.Certificate.DomainName), out.Certificate.SubjectAlternativeNames)
+	cert.NotAfter = aws.ToTime(out.Certificate.NotAfter)
+	cert.Renewal = ""
+	if summary := out.Certificate.RenewalSummary; summary != nil {
+		cert.Renewal = string(summary.RenewalStatus)
+	}
 	if records := validationRecords(out.Certificate.DomainValidationOptions); len(records) > 0 {
 		cert.Validation = records
 	}

@@ -8,6 +8,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -208,6 +209,23 @@ func (d *deployResolver) EdgeCredentials() (edge.Credentials, bool) {
 		AccessKeyID: d.cfg.EdgeAccessKeyID,
 		SecretKey:   d.cfg.EdgeSecretKey,
 	}, true
+}
+
+func DeclaredHostnames(manifest *deploymentsv1.Manifest, class deploymentsv1.Environment_Class) []string {
+	key := domainClassKeyFor(class)
+	var hosts []string
+	add := func(names []string) {
+		for _, host := range names {
+			if host != "" && !slices.Contains(hosts, host) {
+				hosts = append(hosts, host)
+			}
+		}
+	}
+	add(manifest.GetDomains()[key].GetHostnames())
+	for _, app := range manifestApps(manifest) {
+		add(app.GetDomains()[key].GetHostnames())
+	}
+	return hosts
 }
 
 func domainClassKeyFor(class deploymentsv1.Environment_Class) string {

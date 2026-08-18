@@ -1,8 +1,10 @@
 package edge
 
 import (
+	"context"
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestSelectZone(t *testing.T) {
@@ -162,5 +164,34 @@ func TestRecordApexNote(t *testing.T) {
 				t.Errorf("ApexNote(%q) = %q, want nothing said", tc.zone, note)
 			}
 		})
+	}
+}
+
+type plainWriter struct{}
+
+func (plainWriter) EnsureRecords(context.Context, []Record, func(string)) ([]Record, error) {
+	return nil, nil
+}
+
+func (plainWriter) DeleteRecords(context.Context, []Record) error { return nil }
+
+type ttlWriter struct {
+	plainWriter
+	ttl time.Duration
+}
+
+func (w ttlWriter) RecordTTL() time.Duration { return w.ttl }
+
+func TestWriteTTL(t *testing.T) {
+	t.Parallel()
+
+	if got := WriteTTL(ttlWriter{ttl: 90 * time.Second}); got != 90*time.Second {
+		t.Errorf("WriteTTL = %s, want the TTL the writer serves its records with", got)
+	}
+	if got := WriteTTL(plainWriter{}); got != 0 {
+		t.Errorf("WriteTTL = %s, want nothing claimed for a writer that names no TTL", got)
+	}
+	if got := WriteTTL(nil); got != 0 {
+		t.Errorf("WriteTTL = %s, want nothing claimed when no writer writes", got)
 	}
 }

@@ -30,6 +30,7 @@ import (
 	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
 	linksv1 "github.com/ocelhq/ocel/pkg/proto/links/v1"
 	"github.com/ocelhq/ocel/platform/aws/provider/bootstrap"
+	"github.com/ocelhq/ocel/platform/aws/provider/certs"
 	"github.com/ocelhq/ocel/platform/aws/provider/deploy"
 	"github.com/ocelhq/ocel/platform/aws/provider/dns"
 	"github.com/ocelhq/ocel/platform/aws/provider/edges"
@@ -299,6 +300,23 @@ func (s *Server) runDeploy(ctx context.Context, req *deploymentsv1.DeployRequest
 		return deploy.Result{}, finishPreparing(err)
 	}
 
+	recordedDomains, err := bootstrap.ReadProduction(params.StackState)
+	if err != nil {
+		return deploy.Result{}, finishPreparing(err)
+	}
+	admitted, err := admitDomains(ctx, domainGate{
+		kind:      edgeFront.Kind(),
+		state:     params.StackState,
+		recorded:  recordedDomains,
+		issuer:    certs.IssuerFor(edgeFront.Kind(), certs.Deps{AWS: awscfg}),
+		prober:    certs.NewProber(),
+		pins:      normalizePins(opts.Certificates),
+		previewOn: params.PreviewDomain.BaseDomain,
+	}, env.GetClass(), manifest, logf)
+	if err != nil {
+		return deploy.Result{}, finishPreparing(err)
+	}
+
 	edgeCreds := params.EdgeCredentials
 	if params.EdgeCredentialsErr != nil {
 		logf("edge reader credentials unavailable: " + params.EdgeCredentialsErr.Error() +
@@ -404,6 +422,10 @@ func (s *Server) runDeploy(ctx context.Context, req *deploymentsv1.DeployRequest
 		Tracer:      tracer,
 		StageReport: stageReport,
 	}, manifest, progress, logf)
+
+	if err == nil && admitted.withheldURLs != "" {
+		res.AppURLs, res.URLNote = nil, admitted.withheldURLs
+	}
 
 	if stackStateChanged(priorStackState, res.StackState) {
 		if writeErr := bootstrap.WriteStackStateFor(ctx, ssmClient, substrateClass, manifest.GetSlug(), res.StackState); writeErr != nil {
@@ -665,6 +687,7 @@ func deployedResult(res deploy.Result) *deploymentsv1.DeployEvent {
 			Links:       res.Links,
 			Functions:   res.Functions,
 			AppUrls:     res.AppURLs,
+			UrlNote:     res.URLNote,
 			PromotionId: res.PromotionID,
 			FlipBound:   toFlipBoundProto(res.Flip),
 		}},

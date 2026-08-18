@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestRequirePreviewClass(t *testing.T) {
@@ -55,6 +56,72 @@ func TestGlobalPreviewBaseDomain(t *testing.T) {
 			}
 		}
 	})
+}
+
+func writeProductionConfig(t *testing.T, root string) {
+	t.Helper()
+	writeFile(t, filepath.Join(root, "ocel.config.ts"), `
+export default {
+  slug: "test-app",
+  provider: { package: "@ocel/provider-aws", options: {} },
+  domains: { production: "shop.app.com" },
+  dns: { kind: "cloudflare" },
+};
+`)
+}
+
+func quickDomainWait(t *testing.T) {
+	t.Helper()
+	orig := domainWait
+	t.Cleanup(func() { domainWait = orig })
+	domainWait = domainWaitSchedule{first: time.Millisecond, most: 2 * time.Millisecond, cap: 10 * time.Second}
+}
+
+func TestRunDomainStatusJSON(t *testing.T) {
+	root, sockPath := setUpDeployFixture(t)
+	writeProductionConfig(t, root)
+	jsonOutput(t)
+	d := defaultDeps()
+	setLoggedIn(&d)
+	t.Setenv(fakeInfraClassEnvVar, "production")
+	t.Setenv(fakeInfraPresentEnvVar, "1")
+	t.Setenv(fakeDomainCertEnvVar, "ISSUED arn:aws:acm:us-east-1:111122223333:certificate/abcd-1234")
+	t.Setenv(fakeDomainExpiresEnvVar, "1757000000")
+
+	var stdout, stderr bytes.Buffer
+	if err := runDomainStatus(context.Background(), d, root, domainOptions{}, &stdout, &stderr); err != nil {
+		t.Fatalf("runDomainStatus err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
+	}
+	report := asJSON(t, stdout.String())
+	if report["ready"] != true {
+		t.Errorf("json = %v, want it to report the project ready", report)
+	}
+	hosts, ok := report["hosts"].([]any)
+	if !ok || len(hosts) != 1 {
+		t.Fatalf("json hosts = %v, want one host", report["hosts"])
+	}
+	host, _ := hosts[0].(map[string]any)
+	for field, want := range map[string]any{
+		"hostname":          "shop.app.com",
+		"declared":          true,
+		"ready":             true,
+		"certificate":       "arn:aws:acm:us-east-1:111122223333:certificate/abcd-1234",
+		"certificateStatus": "ISSUED",
+		"expiresAt":         "2025-09-04T15:33:20Z",
+		"lastProbeAt":       "2025-08-18T06:53:20Z",
+		"lastProbeOk":       true,
+		"lastProbeEdge":     "cloudflare",
+		"servingPointer":    "cloudflare",
+	} {
+		if host[field] != want {
+			t.Errorf("json host %s = %v, want %v", field, host[field], want)
+		}
+	}
+	written, _ := host["recordsWritten"].([]any)
+	if len(written) != 1 || written[0] != "shop.app.com AAAA 100::" {
+		t.Errorf("json recordsWritten = %v, want the record ocel wrote", host["recordsWritten"])
+	}
+	waitForNoStaleSocket(t, sockPath)
 }
 
 func TestRunDomain(t *testing.T) {
@@ -470,6 +537,157 @@ export default {
 			if !strings.Contains(out, want) {
 				t.Errorf("stdout = %q, want it to contain %q", out, want)
 			}
+		}
+		waitForNoStaleSocket(t, sockPath)
+	})
+
+	t.Run("status shows the certificate, the records, the probe and what serves each host", func(t *testing.T) {
+		root, sockPath := setUpDeployFixture(t)
+		writeProductionConfig(t, root)
+		d := defaultDeps()
+		setLoggedIn(&d)
+		t.Setenv(fakeInfraClassEnvVar, "production")
+		t.Setenv(fakeInfraPresentEnvVar, "1")
+		t.Setenv(fakeDomainCertEnvVar, "ISSUED arn:aws:acm:us-east-1:111122223333:certificate/abcd-1234")
+		t.Setenv(fakeDomainExpiresEnvVar, "1757000000")
+		t.Setenv(fakeGlobalDomainOwedEnvVar, "_ocel.shop.app.com CNAME _target.acm-validations.aws")
+
+		var stdout, stderr bytes.Buffer
+		if err := runDomainStatus(context.Background(), d, root, domainOptions{}, &stdout, &stderr); err != nil {
+			t.Fatalf("runDomainStatus err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
+		}
+		out := stdout.String()
+		for _, want := range []string{
+			"shop.app.com  READY",
+			"Certificate          ISSUED  arn:aws:acm:us-east-1:111122223333:certificate/abcd-1234",
+			"Renewal              expires 2025-09-04T15:33:20Z",
+			"Records ocel wrote   shop.app.com AAAA 100::",
+			"Records you own      _ocel.shop.app.com CNAME _target.acm-validations.aws",
+			"Last probe           2025-08-18T06:53:20Z  x-ocel-edge: cloudflare",
+			"Served by            cloudflare",
+		} {
+			if !strings.Contains(out, want) {
+				t.Errorf("stdout = %q, want it to contain %q", out, want)
+			}
+		}
+		waitForNoStaleSocket(t, sockPath)
+	})
+
+	t.Run("status --wait polls until every hostname is ready", func(t *testing.T) {
+		root, sockPath := setUpDeployFixture(t)
+		writeProductionConfig(t, root)
+		d := defaultDeps()
+		setLoggedIn(&d)
+		t.Setenv(fakeInfraClassEnvVar, "production")
+		t.Setenv(fakeInfraPresentEnvVar, "1")
+		t.Setenv(fakeDomainReadyAfterEnvVar, "2")
+		quickDomainWait(t)
+
+		var stdout, stderr bytes.Buffer
+		if err := runDomainStatus(context.Background(), d, root, domainOptions{wait: true}, &stdout, &stderr); err != nil {
+			t.Fatalf("runDomainStatus --wait err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
+		}
+		out := stdout.String()
+		if !strings.Contains(out, "shop.app.com  READY") {
+			t.Errorf("stdout = %q, want --wait to keep polling until the host is ready", out)
+		}
+		if strings.Contains(out, "PENDING") {
+			t.Errorf("stdout = %q, want only the settled status rendered", out)
+		}
+		waitForNoStaleSocket(t, sockPath)
+	})
+
+	t.Run("status without --wait renders what is outstanding and does not poll", func(t *testing.T) {
+		root, sockPath := setUpDeployFixture(t)
+		writeProductionConfig(t, root)
+		d := defaultDeps()
+		setLoggedIn(&d)
+		t.Setenv(fakeInfraClassEnvVar, "production")
+		t.Setenv(fakeInfraPresentEnvVar, "1")
+		t.Setenv(fakeDomainReadyAfterEnvVar, "5")
+
+		var stdout, stderr bytes.Buffer
+		if err := runDomainStatus(context.Background(), d, root, domainOptions{}, &stdout, &stderr); err != nil {
+			t.Fatalf("runDomainStatus err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
+		}
+		out := stdout.String()
+		for _, want := range []string{"shop.app.com  PENDING", "Outstanding", "does not answer as the cloudflare edge yet"} {
+			if !strings.Contains(out, want) {
+				t.Errorf("stdout = %q, want it to contain %q", out, want)
+			}
+		}
+		waitForNoStaleSocket(t, sockPath)
+	})
+
+	t.Run("status says so when the project declares no production hostname", func(t *testing.T) {
+		root, sockPath := setUpDeployFixture(t)
+		d := defaultDeps()
+		setLoggedIn(&d)
+		t.Setenv(fakeInfraClassEnvVar, "production")
+		t.Setenv(fakeInfraPresentEnvVar, "1")
+
+		var stdout, stderr bytes.Buffer
+		if err := runDomainStatus(context.Background(), d, root, domainOptions{}, &stdout, &stderr); err != nil {
+			t.Fatalf("runDomainStatus err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
+		}
+		if !strings.Contains(stdout.String(), "declares no domains.production") {
+			t.Errorf("stdout = %q, want it to say nothing is declared", stdout.String())
+		}
+		waitForNoStaleSocket(t, sockPath)
+	})
+
+	t.Run("status --wait rides out a provider that is briefly unreachable", func(t *testing.T) {
+		root, sockPath := setUpDeployFixture(t)
+		writeProductionConfig(t, root)
+		d := defaultDeps()
+		setLoggedIn(&d)
+		t.Setenv(fakeInfraClassEnvVar, "production")
+		t.Setenv(fakeInfraPresentEnvVar, "1")
+		t.Setenv(fakeDomainReadyAfterEnvVar, "3")
+		t.Setenv(fakeDomainFailUntilEnvVar, "3")
+		quickDomainWait(t)
+
+		var stdout, stderr bytes.Buffer
+		if err := runDomainStatus(context.Background(), d, root, domainOptions{wait: true}, &stdout, &stderr); err != nil {
+			t.Fatalf("runDomainStatus --wait err = %v, want a wait that outlasts a couple of failed checks; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
+		}
+		if !strings.Contains(stdout.String(), "shop.app.com  READY") {
+			t.Errorf("stdout = %q, want the wait to reach ready", stdout.String())
+		}
+		waitForNoStaleSocket(t, sockPath)
+	})
+
+	t.Run("status --wait gives up once the provider keeps failing", func(t *testing.T) {
+		root, sockPath := setUpDeployFixture(t)
+		writeProductionConfig(t, root)
+		d := defaultDeps()
+		setLoggedIn(&d)
+		t.Setenv(fakeInfraClassEnvVar, "production")
+		t.Setenv(fakeInfraPresentEnvVar, "1")
+		t.Setenv(fakeDomainReadyAfterEnvVar, "99")
+		t.Setenv(fakeDomainFailUntilEnvVar, "99")
+		quickDomainWait(t)
+
+		var stdout, stderr bytes.Buffer
+		err := runDomainStatus(context.Background(), d, root, domainOptions{wait: true}, &stdout, &stderr)
+		if err == nil || !strings.Contains(err.Error(), "failed checks in a row") {
+			t.Fatalf("runDomainStatus --wait err = %v, want it to give up naming the repeated failures", err)
+		}
+		waitForNoStaleSocket(t, sockPath)
+	})
+
+	t.Run("status --wait fails fast when the project declares no production hostname", func(t *testing.T) {
+		root, sockPath := setUpDeployFixture(t)
+		d := defaultDeps()
+		setLoggedIn(&d)
+		t.Setenv(fakeInfraClassEnvVar, "production")
+		t.Setenv(fakeInfraPresentEnvVar, "1")
+		quickDomainWait(t)
+
+		var stdout, stderr bytes.Buffer
+		err := runDomainStatus(context.Background(), d, root, domainOptions{wait: true}, &stdout, &stderr)
+		if err == nil || !strings.Contains(err.Error(), "nothing to wait for") {
+			t.Fatalf("runDomainStatus --wait err = %v, want it to refuse at once with nothing declared", err)
 		}
 		waitForNoStaleSocket(t, sockPath)
 	})

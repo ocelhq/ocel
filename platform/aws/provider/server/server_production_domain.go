@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"slices"
 	"strings"
+	"time"
 
 	connect "connectrpc.com/connect"
 
@@ -79,6 +80,8 @@ type domainSession struct {
 	prober     certs.Prober
 	issuer     certs.Issuer
 	discarder  func(certs.Certificate) certs.Issuer
+	open       func(edge.Kind) (edge.EdgeStack, error)
+	ttl        time.Duration
 	pins       map[string]string
 	zone       string
 	configured []string
@@ -145,6 +148,14 @@ func (s *Server) domainSession(ctx context.Context, req domainRequest) (*domainS
 		discarder: func(cert certs.Certificate) certs.Issuer {
 			return certs.DiscardIssuerFor(cert, certs.Deps{AWS: awscfg})
 		},
+		open: func(kind edge.Kind) (edge.EdgeStack, error) {
+			front, err := s.edge(kind, awscfg.Region)
+			if err != nil {
+				return nil, err
+			}
+			return front.Open(state)
+		},
+		ttl:        edge.WriteTTL(writer),
 		pins:       normalizePins(opts.Certificates),
 		zone:       req.dns.GetZone(),
 		configured: configured,
@@ -256,6 +267,7 @@ func (d *domainSession) addHost(ctx context.Context, host string, progress func(
 		return err
 	}
 	provisioned := d.recorded.Host(host)
+	serving := servingEdge(provisioned)
 	provisioned.Certificate = certificate
 	d.recorded = d.recorded.WithHost(provisioned)
 	if err := d.save(ctx); err != nil {
@@ -298,7 +310,37 @@ func (d *domainSession) addHost(ctx context.Context, host string, progress func(
 		return err
 	}
 	progress(fmt.Sprintf("%s is served by the %s edge", host, d.kind))
+	return d.retire(ctx, host, serving, progress)
+}
+
+func servingEdge(provisioned bootstrap.Provisioned) edge.Kind {
+	if !provisioned.Probe.OK {
+		return ""
+	}
+	return provisioned.Probe.Edge
+}
+
+func (d *domainSession) retire(ctx context.Context, host string, serving edge.Kind, progress func(string)) error {
+	if serving == "" || serving == d.kind || d.open == nil {
+		return nil
+	}
+	stack, err := d.open(serving)
+	if err != nil {
+		return err
+	}
+	progress(fmt.Sprintf("Unbinding %s from the %s edge it moved off", host, serving))
+	if err := stack.UnbindDomain(ctx, host); err != nil {
+		return err
+	}
+	progress(fmt.Sprintf("%s answers on both edges until resolvers drop the record they hold: %s", host, d.flipWindow()))
 	return nil
+}
+
+func (d *domainSession) flipWindow() string {
+	if d.ttl <= 0 {
+		return "whatever TTL your DNS provider serves that record with"
+	}
+	return d.ttl.String()
 }
 
 func (d *domainSession) remove(ctx context.Context, progress func(string)) error {

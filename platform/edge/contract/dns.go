@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"slices"
 	"strings"
+	"time"
 )
 
 type RecordType string
@@ -56,6 +57,18 @@ type DNSWriter interface {
 	EnsureRecords(ctx context.Context, records []Record, say func(string)) ([]Record, error)
 
 	DeleteRecords(ctx context.Context, records []Record) error
+}
+
+type TTLBound interface {
+	RecordTTL() time.Duration
+}
+
+func WriteTTL(writer DNSWriter) time.Duration {
+	bound, ok := writer.(TTLBound)
+	if !ok {
+		return 0
+	}
+	return bound.RecordTTL()
 }
 
 type ZoneFinder interface {

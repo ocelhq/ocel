@@ -224,6 +224,7 @@ func runPreviewUp(ctx context.Context, d deps, cwd string, opts previewUpOptions
 		var links []*linksv1.Link
 		var functions []*deploymentsv1.FunctionOutput
 		var appURLs []string
+		var urlNote string
 		var promotionID string
 		var flip deployui.Flip
 		onEvent := func(ev *deploymentsv1.DeployEvent) {
@@ -232,6 +233,7 @@ func runPreviewUp(ctx context.Context, d deps, cwd string, opts previewUpOptions
 				links = res.GetLinks()
 				functions = res.GetFunctions()
 				appURLs = res.GetAppUrls()
+				urlNote = res.GetUrlNote()
 				promotionID = res.GetPromotionId()
 				flip = flipFor(res.GetFlipBound())
 			}
@@ -246,7 +248,7 @@ func runPreviewUp(ctx context.Context, d deps, cwd string, opts previewUpOptions
 		if err := publishServiceMap(cfg, manifest, env, "", promotionID, links); err != nil {
 			return err
 		}
-		ui.Deployed(fmt.Sprintf("Preview %s is up", env.GetIdentity()), appURLs, flip, links, functions)
+		ui.Deployed(fmt.Sprintf("Preview %s is up", env.GetIdentity()), appURLs, urlNote, flip, links, functions)
 		return nil
 	})
 	if err != nil {
