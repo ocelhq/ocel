@@ -69,10 +69,10 @@ func (l *Ledger) partition() string { return partition + "#" + l.Scope }
 
 func (l *Ledger) ready() error {
 	if l.Dynamo == nil {
-		return fmt.Errorf("the deployments ledger has no DynamoDB client; bootstrap the account first")
+		return fmt.Errorf("%w: the deployments ledger has no DynamoDB client; bootstrap the account first", edge.ErrStoreAbsent)
 	}
 	if l.Table == "" {
-		return fmt.Errorf("the deployments ledger names no state table; bootstrap the account first")
+		return fmt.Errorf("%w: the deployments ledger names no state table; bootstrap the account first", edge.ErrStoreAbsent)
 	}
 	if l.Scope == "" {
 		return fmt.Errorf("the deployments ledger names no project scope")

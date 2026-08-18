@@ -1585,6 +1585,53 @@ func TestRealizeRefusesAStoreThatCannotReportItsSchema(t *testing.T) {
 	}
 }
 
+func TestRealizeChecksTheSchemaAgainstTheRecordedStackState(t *testing.T) {
+	t.Parallel()
+
+	fake := &recordingEdge{}
+	cfg := Config{
+		Edge:          fake,
+		StoreEndpoint: fakeStoreEndpoint,
+		Slug:          "shop",
+		StackState:    edge.StackState{"stateTable": "ocel-deployments", edge.StackKeySecret: "fake-secret"},
+	}
+	realize(context.Background(), cfg, &deploymentsv1.Manifest{Slug: "shop"}, nil, nil)
+
+	if len(fake.opens) == 0 {
+		t.Fatal("no stack opened, want the schema check to open one")
+	}
+	opened := fake.opens[0]
+	if opened["stateTable"] != "ocel-deployments" {
+		t.Errorf("opened stateTable = %q, want the recorded state carried into the schema check", opened["stateTable"])
+	}
+	if opened[edge.StackKeyEndpoint] != fakeStoreEndpoint || opened[edge.StackKeySlug] != "shop" {
+		t.Errorf("opened state = %v, want it to name this deploy's store and slug", opened)
+	}
+}
+
+func TestRealizeChecksNoSchemaBeforeTheStoreExists(t *testing.T) {
+	t.Parallel()
+
+	cfg := Config{
+		Edge: &recordingEdge{kind: edge.KindNone, storeSchemaVersionErr: edge.ErrStoreAbsent},
+		Slug: "shop",
+	}
+	_, err := realize(context.Background(), cfg, &deploymentsv1.Manifest{Slug: "shop"}, nil, nil)
+	if err != nil && strings.Contains(err.Error(), "ocel bootstrap") {
+		t.Errorf("realize err = %v, want the deploy past the store prechecks that its own reconcile satisfies", err)
+	}
+}
+
+func TestRealizeRefusesAnEdgeWhoseStoreWorkerIsMissing(t *testing.T) {
+	t.Parallel()
+
+	cfg := Config{Edge: &recordingEdge{kind: edge.KindCloudflare}, Slug: "shop"}
+	_, err := realize(context.Background(), cfg, &deploymentsv1.Manifest{Slug: "shop"}, nil, nil)
+	if err == nil || !strings.Contains(err.Error(), "deployments-store worker") {
+		t.Errorf("realize err = %v, want the missing store worker refused", err)
+	}
+}
+
 func TestValidateTag(t *testing.T) {
 	t.Parallel()
 	cases := []struct {

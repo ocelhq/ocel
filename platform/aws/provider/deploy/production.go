@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"io/fs"
+	"maps"
 	"os"
 	"path/filepath"
 	"runtime/debug"
@@ -48,7 +49,7 @@ func realize(ctx context.Context, cfg Config, manifest *deploymentsv1.Manifest, 
 		return err
 	}
 
-	if cfg.StoreEndpoint == "" {
+	if cfg.Edge.Kind() == edge.KindCloudflare && cfg.StoreEndpoint == "" {
 		return Result{}, finishUploading(fmt.Errorf("no deployments-store worker found for this account; re-run `%s` to provision it before deploying", bootstrapCommand(cfg)))
 	}
 
@@ -231,15 +232,23 @@ func realize(ctx context.Context, cfg Config, manifest *deploymentsv1.Manifest, 
 }
 
 func checkStoreSchema(ctx context.Context, cfg Config) error {
-	stack, err := cfg.Edge.Open(edge.StackState{
-		edge.StackKeySlug:     cfg.Slug,
-		edge.StackKeyEndpoint: cfg.StoreEndpoint,
-	})
+	state := maps.Clone(cfg.StackState)
+	if state == nil {
+		state = edge.StackState{}
+	}
+	state[edge.StackKeySlug] = cfg.Slug
+	state[edge.StackKeyClass] = string(edgeClass(cfg.Class))
+	if cfg.StoreEndpoint != "" {
+		state[edge.StackKeyEndpoint] = cfg.StoreEndpoint
+	}
+	stack, err := cfg.Edge.Open(state)
 	if err != nil {
 		return err
 	}
 	got, err := stack.Ledger().SchemaVersion(ctx)
 	switch {
+	case errors.Is(err, edge.ErrStoreAbsent):
+		return nil
 	case errors.Is(err, edge.ErrStoreSchemaUnreadable):
 		return fmt.Errorf("the deployments store predates the schema-version check, so this deploy cannot tell what it speaks; re-run `%s`", bootstrapCommand(cfg))
 	case err != nil:

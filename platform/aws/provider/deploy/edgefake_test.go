@@ -23,6 +23,7 @@ type recordingEdge struct {
 	existing map[string]bool
 	asked    []string
 
+	opens        []edge.StackState
 	reconciles   []edge.StackSpec
 	reconcileErr error
 	redeploys    int
@@ -120,6 +121,7 @@ func (f *recordingEdge) ReconcilePreviewWildcard(context.Context, edge.PreviewWi
 func (f *recordingEdge) DestroyPreviewWildcard(context.Context, string) error { return nil }
 
 func (f *recordingEdge) Open(state edge.StackState) (edge.EdgeStack, error) {
+	f.opens = append(f.opens, state)
 	return &recordingStack{edge: f, state: state}, nil
 }
 
