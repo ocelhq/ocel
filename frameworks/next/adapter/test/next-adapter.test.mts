@@ -1777,13 +1777,88 @@ test("states the framework and next's own build id in serve.json", async () => {
   const serve = JSON.parse(
     await readFile(join(projectDir, ".ocel/output/serve.json"), "utf8"),
   );
+  const manifest = await readManifest(projectDir);
   expect(serve).toEqual({
     framework: "next",
     buildId: args.buildId,
     edgeRouting: true,
+    entry: manifest.entry,
     needs: {},
   });
-  expect(serve.buildId).toBe((await readManifest(projectDir)).buildId);
+  expect(serve.buildId).toBe(manifest.buildId);
+});
+
+test("names the bundle serving the root route as the entry", async () => {
+  const { projectDir, args } = await synthPrerenderProject();
+  const adapter = await loadAdapterIn(projectDir);
+
+  await adapter.onBuildComplete(args as never);
+
+  const manifest = await readManifest(projectDir);
+  expect(manifest.dispatch["/"].id).toBe(manifest.entry);
+  expect(
+    await exists(join(projectDir, `.ocel/output/functions/${manifest.entry}.func`)),
+  ).toBe(true);
+});
+
+test("names no entry when no function serves the root route", async () => {
+  const { projectDir, args } = await synthProject();
+  const adapter = await loadAdapterIn(projectDir);
+
+  await adapter.onBuildComplete(args as never);
+
+  const manifest = await readManifest(projectDir);
+  const serve = JSON.parse(
+    await readFile(join(projectDir, ".ocel/output/serve.json"), "utf8"),
+  );
+  expect(manifest.dispatch["/"]).toBeUndefined();
+  expect(manifest.entry).toBe("");
+  expect(serve.entry).toBe("");
+  expect(
+    await exists(join(projectDir, ".ocel/output/functions/bundle-0.func")),
+  ).toBe(true);
+});
+
+test("names the root route's bundle in a build split across several bundles", async () => {
+  const { projectDir, args } = await synthDedupProject();
+  const filler = join(projectDir, ".next/server/chunks/filler.js");
+  await writeFile(filler, "x".repeat(4096));
+  (args.outputs.appRoutes[0] as Record<string, unknown>).assets = {
+    "chunks/filler.js": filler,
+  };
+  args.outputs.appRoutes[1]!.assets = args.outputs.appRoutes[0]!.assets;
+  const shared = args.outputs.appPages[0]!.assets["chunks/shared.js"]!;
+  await writeFile(shared, "x".repeat(4096));
+  await withNodeMiddleware(projectDir, args as never);
+
+  process.chdir(projectDir);
+  vi.resetModules();
+  vi.doMock("../src/pack.mts", async () => {
+    const actual =
+      await vi.importActual<typeof import("../src/pack.mts")>("../src/pack.mts");
+    return {
+      ...actual,
+      packBundles: (members: never, opts: never) =>
+        actual.packBundles(members, { ...(opts as object), budgetBytes: 6000 }),
+    };
+  });
+  try {
+    const { default: adapter } = await import("../src/next-adapter.mts");
+    await adapter.onBuildComplete(args as never);
+  } finally {
+    vi.doUnmock("../src/pack.mts");
+    vi.resetModules();
+  }
+
+  const { real } = await partitionFuncDirs(projectDir);
+  expect(real).toEqual(["bundle-0.func", "bundle-1.func"]);
+
+  const manifest = await readManifest(projectDir);
+  expect(manifest.entry).toBe(manifest.dispatch["/"].id);
+  expect(manifest.entry).not.toBe(manifest.dispatch["/api/documents"].id);
+  expect(
+    Object.keys((await readLauncher(projectDir, manifest.entry)).entries),
+  ).toEqual(["/", "/_middleware"]);
 });
 
 async function readServeNeeds(projectDir: string) {

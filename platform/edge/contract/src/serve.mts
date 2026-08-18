@@ -15,5 +15,6 @@ export type ServeDescriptor = {
   framework: string;
   buildId: string;
   edgeRouting: boolean;
+  entry: string;
   needs: Partial<Record<Need, NeedDetail>>;
 };

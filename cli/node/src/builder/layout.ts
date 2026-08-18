@@ -12,6 +12,8 @@ export function appOutDir(outDir: string, appName: string): string {
 
 export const SERVE_DESCRIPTOR_FILE = "serve.json";
 
+export const NODE_ENTRY_ROUTE_ID = "/";
+
 export const BUILD_PLAN_FILE = "build-plan.json";
 
 export function functionRel(appName: string): string {

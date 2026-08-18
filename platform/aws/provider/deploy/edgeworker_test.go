@@ -77,10 +77,10 @@ func TestDeployEdgeWorker(t *testing.T) {
 		cfg := Config{Edge: fake, ArtifactRoot: artifactRoot, Slug: "proj_1", Env: "prod"}
 		manifest := &deploymentsv1.Manifest{
 			Functions: []*deploymentsv1.ManifestFunction{
-				{LogicalName: "api_documents", Framework: "next", App: "web", RouteId: "/api/documents"},
+				{LogicalName: "index", Framework: "next", App: "web", RouteId: "/"},
 			},
 		}
-		outputs := []*deploymentsv1.FunctionOutput{fnOutput("api_documents", "https://fn.lambda-url.aws/")}
+		outputs := []*deploymentsv1.FunctionOutput{fnOutput("index", "https://fn.lambda-url.aws/")}
 
 		out, err := deployEdgeWorker(context.Background(), cfg, manifest, outputs, nil)
 		if err != nil {
@@ -237,10 +237,10 @@ func TestDeployEdgeWorker(t *testing.T) {
 				fake := &recordingEdge{}
 				cfg := Config{Edge: fake, ArtifactRoot: artifactRoot, Slug: "proj_1", Env: "prod", Class: tc.class}
 				manifest := &deploymentsv1.Manifest{
-					Functions: []*deploymentsv1.ManifestFunction{{LogicalName: "api_documents", Framework: "next", App: "web", RouteId: "/api/documents"}},
+					Functions: []*deploymentsv1.ManifestFunction{{LogicalName: "index", Framework: "next", App: "web", RouteId: "/"}},
 					Domains:   tc.domains,
 				}
-				outputs := []*deploymentsv1.FunctionOutput{fnOutput("api_documents", "https://fn.lambda-url.aws/")}
+				outputs := []*deploymentsv1.FunctionOutput{fnOutput("index", "https://fn.lambda-url.aws/")}
 
 				if _, err := deployEdgeWorker(context.Background(), cfg, manifest, outputs, nil); err != nil {
 					t.Fatalf("deployEdgeWorker: %v", err)
@@ -695,7 +695,7 @@ func writeServeDescriptor(t *testing.T, artifactRoot, app, framework, buildID st
 
 func serveDescriptor(t *testing.T, framework, buildID string) string {
 	t.Helper()
-	raw, err := json.Marshal(edge.ServeDescriptor{Framework: framework, BuildID: buildID})
+	raw, err := json.Marshal(edge.ServeDescriptor{Framework: framework, BuildID: buildID, Entry: "/"})
 	if err != nil {
 		t.Fatal(err)
 	}

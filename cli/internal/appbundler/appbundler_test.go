@@ -110,7 +110,7 @@ func TestBundle(t *testing.T) {
 		if err := json.Unmarshal([]byte(readFile(t, filepath.Join(l.funcDir, configFileName))), &cfg); err != nil {
 			t.Fatal(err)
 		}
-		want := functionConfig{Runtime: "nodejs24.x", Handler: HandlerFile, Framework: "express", App: "api"}
+		want := functionConfig{Runtime: "nodejs24.x", Handler: HandlerFile, Framework: "express", ID: entryRouteID, App: "api"}
 		if cfg != want {
 			t.Errorf("%s = %+v, want %+v", configFileName, cfg, want)
 		}
@@ -128,6 +128,9 @@ func TestBundle(t *testing.T) {
 		}
 		if descriptor.Needs == nil {
 			t.Errorf("%s = %s, want needs stated as an empty object, not null", edge.ServeDescriptorFile, readFile(t, descriptorPath))
+		}
+		if descriptor.Entry != cfg.ID {
+			t.Errorf("%s entry = %q, want the sole function's route id %q", edge.ServeDescriptorFile, descriptor.Entry, cfg.ID)
 		}
 		if _, err := os.Stat(filepath.Join(l.funcDir, edge.ServeDescriptorFile)); err == nil {
 			t.Errorf("%s landed inside the function directory, want it in the app artifact root", edge.ServeDescriptorFile)

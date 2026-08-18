@@ -6,7 +6,12 @@ import { nodeFileTrace } from "@vercel/nft";
 import type { ServeDescriptor } from "@platform/edge-contract/serve";
 import { init as lexerInit, parse as parseImports } from "es-module-lexer";
 import ts from "typescript";
-import { SERVE_DESCRIPTOR_FILE, appOutDir, functionRel } from "./layout.js";
+import {
+  NODE_ENTRY_ROUTE_ID,
+  SERVE_DESCRIPTOR_FILE,
+  appOutDir,
+  functionRel,
+} from "./layout.js";
 import type { AppInput, BuildOptions, FunctionSummary } from "./types.js";
 
 export interface TraceSpec {
@@ -276,13 +281,14 @@ export async function traceBuild(
   const handler = toOutExt(placeFile(entrypoint, input.cwd, pkgCache).dest).split(path.sep).join("/");
   await writeFile(
     path.join(funcDir, "config.json"),
-    `${JSON.stringify({ runtime: fw.runtime, handler, framework: fw.name, app: input.name }, null, 2)}\n`,
+    `${JSON.stringify({ runtime: fw.runtime, handler, framework: fw.name, id: NODE_ENTRY_ROUTE_ID, app: input.name }, null, 2)}\n`,
   );
 
   await writeServeDescriptor(options.outDir, input.name, {
     framework: fw.name,
     buildId: await artifactHash(funcDir),
     edgeRouting: false,
+    entry: NODE_ENTRY_ROUTE_ID,
     needs: {},
   });
 

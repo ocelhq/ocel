@@ -33,6 +33,10 @@ func (p *provider) AssembleApp(src edge.WorkerSource, r edge.Resolver) (edge.Wor
 	if err := validateRoutes(src.Routes, r); err != nil {
 		return edge.Worker{}, err
 	}
+	routed := len(modules) > 0
+	if err := validateEntry(src.Entry, routed, r); err != nil {
+		return edge.Worker{}, err
+	}
 	vars, secrets := signingBindings(r)
 
 	return edge.Worker{
@@ -82,6 +86,19 @@ func readServeDescriptor(artifactRoot string) (edge.ServeDescriptor, error) {
 		return edge.ServeDescriptor{}, fmt.Errorf("parse serve descriptor: %w", err)
 	}
 	return descriptor, nil
+}
+
+func validateEntry(entry string, routed bool, r edge.Resolver) error {
+	if entry == "" {
+		if routed {
+			return nil
+		}
+		return errors.New("the build named no entry route; rebuild the app")
+	}
+	if _, err := r.FunctionURL(entry); err != nil {
+		return fmt.Errorf("entry route %q: %w", entry, err)
+	}
+	return nil
 }
 
 func validateRoutes(routes []string, r edge.Resolver) error {

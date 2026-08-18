@@ -14,5 +14,6 @@ type ServeDescriptor struct {
 	Framework   string              `json:"framework"`
 	BuildID     string              `json:"buildId"`
 	EdgeRouting bool                `json:"edgeRouting"`
+	Entry       string              `json:"entry"`
 	Needs       map[Need]NeedDetail `json:"needs"`
 }
