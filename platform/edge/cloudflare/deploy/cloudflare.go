@@ -69,6 +69,10 @@ func New() edge.Edge {
 	return &provider{client: cf.NewClient(option.WithMaxRetries(clientMaxRetries))}
 }
 
+func NewAt(baseURL string) edge.Edge {
+	return &provider{client: cf.NewClient(option.WithMaxRetries(clientMaxRetries), option.WithBaseURL(baseURL))}
+}
+
 const clientMaxRetries = 5
 
 func (p *provider) Kind() edge.Kind { return edge.KindCloudflare }

@@ -29,13 +29,18 @@ type acmStep struct {
 }
 
 type fakeACM struct {
-	steps      []acmStep
-	requested  []*acm.RequestCertificateInput
-	minted     map[string]string
-	deleted    []string
-	describes  int
-	requestErr error
-	deleteErr  error
+	steps       []acmStep
+	domains     []string
+	requested   []*acm.RequestCertificateInput
+	minted      map[string]string
+	deleted     []string
+	listed      [][]acmtypes.CertificateSummary
+	lists       int
+	describes   int
+	requestErr  error
+	describeErr error
+	deleteErr   error
+	listErr     error
 }
 
 func (f *fakeACM) RequestCertificate(_ context.Context, in *acm.RequestCertificateInput, _ ...func(*acm.Options)) (*acm.RequestCertificateOutput, error) {
@@ -59,11 +64,20 @@ func (f *fakeACM) RequestCertificate(_ context.Context, in *acm.RequestCertifica
 }
 
 func (f *fakeACM) DescribeCertificate(_ context.Context, in *acm.DescribeCertificateInput, _ ...func(*acm.Options)) (*acm.DescribeCertificateOutput, error) {
-	step := f.steps[min(f.describes, len(f.steps)-1)]
 	f.describes++
+	if f.describeErr != nil && f.describes == 1 {
+		return nil, f.describeErr
+	}
+	step := f.steps[min(f.describes-1, len(f.steps)-1)]
+	names := f.domains
+	if names == nil {
+		names = []string{wildcard}
+	}
 	out := &acm.DescribeCertificateOutput{Certificate: &acmtypes.CertificateDetail{
-		CertificateArn: in.CertificateArn,
-		Status:         acmtypes.CertificateStatus(step.status),
+		CertificateArn:          in.CertificateArn,
+		Status:                  acmtypes.CertificateStatus(step.status),
+		DomainName:              aws.String(names[0]),
+		SubjectAlternativeNames: names[1:],
 	}}
 	if step.validation {
 		out.Certificate.DomainValidationOptions = []acmtypes.DomainValidation{{
@@ -85,6 +99,22 @@ func (f *fakeACM) DeleteCertificate(_ context.Context, in *acm.DeleteCertificate
 	return &acm.DeleteCertificateOutput{}, nil
 }
 
+func (f *fakeACM) ListCertificates(_ context.Context, in *acm.ListCertificatesInput, _ ...func(*acm.Options)) (*acm.ListCertificatesOutput, error) {
+	if f.listErr != nil {
+		return nil, f.listErr
+	}
+	page := f.lists
+	f.lists++
+	out := &acm.ListCertificatesOutput{}
+	if page < len(f.listed) {
+		out.CertificateSummaryList = f.listed[page]
+	}
+	if page+1 < len(f.listed) {
+		out.NextToken = aws.String(fmt.Sprintf("page-%d", page+1))
+	}
+	return out, nil
+}
+
 func testIssuer(api ACMAPI, attempts int) Issuer {
 	return Issuer{
 		API:      api,
@@ -102,7 +132,7 @@ func TestIssuerRequest(t *testing.T) {
 		t.Parallel()
 
 		api := &fakeACM{}
-		cert, err := testIssuer(api, 1).Request(t.Context(), "*.preview.acme.com")
+		cert, err := testIssuer(api, 1).Request(t.Context(), []string{"*.preview.acme.com"})
 		if err != nil {
 			t.Fatalf("Request: %v", err)
 		}
@@ -118,11 +148,11 @@ func TestIssuerRequest(t *testing.T) {
 			t.Errorf("idempotency token = %q, %d characters; ACM caps at 32", token, len(token))
 		}
 
-		again, _ := testIssuer(api, 1).Request(t.Context(), "*.preview.acme.com")
+		again, _ := testIssuer(api, 1).Request(t.Context(), []string{"*.preview.acme.com"})
 		if again.ARN != cert.ARN {
 			t.Error("a re-request under the same hostname did not reuse the certificate")
 		}
-		other, _ := testIssuer(api, 1).Request(t.Context(), "*.preview.other.com")
+		other, _ := testIssuer(api, 1).Request(t.Context(), []string{"*.preview.other.com"})
 		if other.ARN == cert.ARN {
 			t.Error("a different hostname was answered with the same certificate")
 		}
@@ -135,7 +165,7 @@ func TestIssuerRequest(t *testing.T) {
 		t.Parallel()
 
 		api := &fakeACM{requestErr: errors.New("quota exceeded")}
-		_, err := testIssuer(api, 1).Request(t.Context(), "*.preview.acme.com")
+		_, err := testIssuer(api, 1).Request(t.Context(), []string{"*.preview.acme.com"})
 		if err == nil {
 			t.Fatal("Request err = nil, want the refusal surfaced")
 		}
@@ -240,9 +270,27 @@ func TestIssuerDiscard(t *testing.T) {
 		t.Parallel()
 
 		api := &fakeACM{}
-		testIssuer(api, 1).Discard(t.Context(), Certificate{ARN: testARN}, func(string) {})
+		if err := testIssuer(api, 1).Discard(t.Context(), Certificate{ARN: testARN}, func(string) {}); err != nil {
+			t.Fatalf("Discard: %v", err)
+		}
 		if len(api.deleted) != 1 || api.deleted[0] != testARN {
 			t.Errorf("deleted = %v, want %q", api.deleted, testARN)
+		}
+	})
+
+	t.Run("a certificate ocel adopted is left standing", func(t *testing.T) {
+		t.Parallel()
+
+		api := &fakeACM{}
+		var said []string
+		if err := testIssuer(api, 1).Discard(t.Context(), Certificate{ARN: testARN, Adopted: true}, func(m string) { said = append(said, m) }); err != nil {
+			t.Fatalf("Discard: %v", err)
+		}
+		if len(api.deleted) != 0 {
+			t.Errorf("deleted = %v, want a certificate ocel adopted left alone", api.deleted)
+		}
+		if len(said) != 1 || !strings.Contains(said[0], testARN) {
+			t.Errorf("said = %v, want the certificate left standing named", said)
 		}
 	})
 
@@ -251,7 +299,10 @@ func TestIssuerDiscard(t *testing.T) {
 
 		api := &fakeACM{deleteErr: errors.New("ResourceInUseException")}
 		var said []string
-		testIssuer(api, 1).Discard(t.Context(), Certificate{ARN: testARN}, func(m string) { said = append(said, m) })
+		err := testIssuer(api, 1).Discard(t.Context(), Certificate{ARN: testARN}, func(m string) { said = append(said, m) })
+		if err == nil {
+			t.Fatal("Discard err = nil, want the refusal reported so nothing forgets the certificate")
+		}
 		if len(said) != 1 || !strings.Contains(said[0], testARN) {
 			t.Errorf("said = %v, want the certificate left standing named", said)
 		}
@@ -260,8 +311,10 @@ func TestIssuerDiscard(t *testing.T) {
 	t.Run("an edge that needs no certificate has nothing to delete", func(t *testing.T) {
 		t.Parallel()
 
-		Issuer{}.Discard(t.Context(), Certificate{ARN: testARN}, func(string) {
+		if err := (Issuer{}).Discard(t.Context(), Certificate{ARN: testARN}, func(string) {
 			t.Error("said something with no ACM client in hand")
-		})
+		}); err != nil {
+			t.Fatalf("Discard: %v", err)
+		}
 	})
 }

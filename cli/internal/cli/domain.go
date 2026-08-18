@@ -6,12 +6,14 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
 	"github.com/spf13/cobra"
 
 	"github.com/ocelhq/ocel/cli/internal/deployui"
+	"github.com/ocelhq/ocel/cli/internal/manifestbuilder"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
 	"github.com/ocelhq/ocel/cli/internal/providerrunner"
 	"github.com/ocelhq/ocel/cli/node"
@@ -27,11 +29,13 @@ var domainOpts domainOptions
 
 var domainCmd = &cobra.Command{
 	Use:   "domain",
-	Short: "Manage the substrate-wide domain every project's previews are served on",
-	Long: "Manage the substrate-wide domain every project's previews are served on.\n\n" +
-		"One shared entry worker on one wildcard serves every project bootstrapped into the " +
-		"preview class, at \"<project>--<preview>[--<app>].<domain>\". A project that declares " +
-		"its own domains.preview keeps it and ignores this one.",
+	Short: "Manage this project's production hostnames, and the domain every project's previews are served on",
+	Long: "Manage this project's production hostnames, and the substrate-wide domain every project's previews are served on.\n\n" +
+		"`add` and `rm` are project-scoped and read domains.production, which is the declaration: " +
+		"no command edits it. `use`, `ls` and `release` take --preview and act on the substrate, where " +
+		"one shared entry worker on one wildcard serves every project bootstrapped into the preview " +
+		"class, at \"<project>--<preview>[--<app>].<domain>\". A project that declares its own " +
+		"domains.preview keeps it and ignores this one.",
 	Args: cobra.NoArgs,
 }
 
@@ -80,12 +84,51 @@ var domainReleaseCmd = &cobra.Command{
 	},
 }
 
+var domainAddCmd = &cobra.Command{
+	Use:   "add [host]",
+	Short: "Provision the certificate, the edge surface and the DNS for this project's production hostnames",
+	Args:  cobra.MaximumNArgs(1),
+	RunE: func(cmd *cobra.Command, args []string) error {
+		cwd, err := os.Getwd()
+		if err != nil {
+			return fmt.Errorf("determine working directory: %w", err)
+		}
+		ctx, stop := installInterruptHandler(cmd.Context(), cmd.ErrOrStderr())
+		defer stop()
+		return runAddDomain(ctx, defaultDeps(), cwd, firstArg(args), cmd.OutOrStdout(), cmd.ErrOrStderr())
+	},
+}
+
+var domainRmCmd = &cobra.Command{
+	Use:   "rm [host]",
+	Short: "Unbind production hostnames this project no longer declares, and remove what ocel created for them",
+	Args:  cobra.MaximumNArgs(1),
+	RunE: func(cmd *cobra.Command, args []string) error {
+		cwd, err := os.Getwd()
+		if err != nil {
+			return fmt.Errorf("determine working directory: %w", err)
+		}
+		ctx, stop := installInterruptHandler(cmd.Context(), cmd.ErrOrStderr())
+		defer stop()
+		return runDomainRm(ctx, defaultDeps(), cwd, firstArg(args), cmd.OutOrStdout(), cmd.ErrOrStderr())
+	},
+}
+
+func firstArg(args []string) string {
+	if len(args) == 0 {
+		return ""
+	}
+	return args[0]
+}
+
 func init() {
 	for _, c := range []*cobra.Command{domainUseCmd, domainLsCmd, domainReleaseCmd} {
 		c.Flags().BoolVar(&domainOpts.preview, "preview", false, "Act on the preview class (required)")
 	}
 	domainReleaseCmd.Flags().BoolVarP(&domainOpts.yes, "yes", "y", false, "Skip the typed confirmation, for CI")
 
+	domainCmd.AddCommand(domainAddCmd)
+	domainCmd.AddCommand(domainRmCmd)
 	domainCmd.AddCommand(domainUseCmd)
 	domainCmd.AddCommand(domainLsCmd)
 	domainCmd.AddCommand(domainReleaseCmd)
@@ -227,6 +270,87 @@ func runDomainRelease(ctx context.Context, d deps, cwd string, opts domainOption
 		}
 		ui.Finish(fmt.Sprintf("Released %s", wildcardOf(base)))
 		return nil
+	})
+	if err != nil {
+		return failSession(ctx, ui, err)
+	}
+	return nil
+}
+
+func runAddDomain(ctx context.Context, d deps, cwd, host string, stdout, stderr io.Writer) error {
+	cfg, provider, err := domainSession(ctx, cwd)
+	if err != nil {
+		return err
+	}
+	configured := declaredHostnames(cfg, "production")
+	if len(configured) == 0 {
+		return fmt.Errorf("this project declares no domains.production in %s, so there is no production hostname to add: declare one and run `ocel domain add` again — no command edits the config", filepath.Base(cfg.Path))
+	}
+	return runDomainStream(ctx, d, cfg, provider, "ocel domain add", stdout, stderr, func(runner *providerrunner.Runner, ui *deployui.Session) error {
+		req := edgeSettings(cfg).applyToAddDomain(&deploymentsv1.AddDomainRequest{
+			Options:         []byte(provider.Options),
+			ProtocolVersion: manifestbuilder.SchemaVersion,
+			Slug:            cfg.Slug,
+			Configured:      configured,
+			Host:            host,
+		})
+		if err := runner.AddDomain(ctx, req, ui.Event); err != nil {
+			return err
+		}
+		ui.Finish(fmt.Sprintf("Serving %s", strings.Join(addedHosts(configured, host), ", ")))
+		return nil
+	})
+}
+
+func addedHosts(configured []string, host string) []string {
+	if host == "" {
+		return configured
+	}
+	return []string{host}
+}
+
+func runDomainRm(ctx context.Context, d deps, cwd, host string, stdout, stderr io.Writer) error {
+	cfg, provider, err := domainSession(ctx, cwd)
+	if err != nil {
+		return err
+	}
+
+	return runDomainStream(ctx, d, cfg, provider, "ocel domain rm", stdout, stderr, func(runner *providerrunner.Runner, ui *deployui.Session) error {
+		req := edgeSettings(cfg).applyToRemoveDomain(&deploymentsv1.RemoveDomainRequest{
+			Options:         []byte(provider.Options),
+			ProtocolVersion: manifestbuilder.SchemaVersion,
+			Slug:            cfg.Slug,
+			Configured:      declaredHostnames(cfg, "production"),
+			Host:            host,
+		})
+		if err := runner.RemoveDomain(ctx, req, ui.Event); err != nil {
+			return err
+		}
+		if host != "" {
+			ui.Finish(fmt.Sprintf("Removed %s", host))
+			return nil
+		}
+		ui.Finish("Removed every hostname this project no longer declares")
+		return nil
+	})
+}
+
+func runDomainStream(ctx context.Context, d deps, cfg *projectconfig.Config, provider *projectconfig.ProviderDescriptor, command string, stdout, stderr io.Writer, act func(*providerrunner.Runner, *deployui.Session) error) error {
+	ctx, run, err := startRun(ctx, cfg, command)
+	if err != nil {
+		return err
+	}
+	defer run.Close()
+
+	ui := deployui.New(stdout, run, sessionFormat(), verboseEnabled())
+	defer ui.Close()
+
+	provW := ui.BuildWriter()
+	err = runProviderSession(ctx, d, cfg, provider, provW, provW, func(runner *providerrunner.Runner) error {
+		if err := preflightClass(ctx, d, runner, provider, deploymentsv1.Environment_CLASS_PRODUCTION, "ocel bootstrap", stdout); err != nil {
+			return err
+		}
+		return act(runner, ui)
 	})
 	if err != nil {
 		return failSession(ctx, ui, err)

@@ -594,6 +594,95 @@ func (s *deployFakeProviderServer) ReleaseDomain(ctx context.Context, req *deplo
 	})
 }
 
+const fakeDomainTimeoutEnvVar = "OCEL_TEST_FAKE_DOMAIN_TIMEOUT"
+
+func (s *deployFakeProviderServer) AddDomain(ctx context.Context, req *deploymentsv1.AddDomainRequest, stream *connect.ServerStream[deploymentsv1.DeployEvent]) error {
+	if err := s.checkToken(ctx); err != nil {
+		return err
+	}
+	say := func(message string) error {
+		return stream.Send(&deploymentsv1.DeployEvent{
+			Event: &deploymentsv1.DeployEvent_Progress{Progress: &deploymentsv1.ProgressEvent{Message: message}},
+		})
+	}
+	if host := req.GetHost(); host != "" && !slices.Contains(req.GetConfigured(), host) {
+		return stream.Send(&deploymentsv1.DeployEvent{
+			Event: &deploymentsv1.DeployEvent_Result{Result: &deploymentsv1.ResultEvent{
+				Success: false,
+				Error:   fmt.Sprintf("this project does not declare %q: add it to domains.production and run this again — no command edits the config, which declares %s", host, strings.Join(req.GetConfigured(), ", ")),
+			}},
+		})
+	}
+	hosts := fakeDomainTargets(req.GetConfigured(), req.GetHost())
+	if err := say(fmt.Sprintf("DOMAIN ADD slug=%s hosts=%s dns=%s edge=%s", req.GetSlug(), strings.Join(hosts, ","), req.GetDns().GetKind(), req.GetEdgeKind())); err != nil {
+		return err
+	}
+	if err := say(fmt.Sprintf("Requesting a certificate for %s in us-east-1", strings.Join(hosts, ", "))); err != nil {
+		return err
+	}
+	for _, host := range hosts {
+		if err := say(fmt.Sprintf("Binding %s to the cloudflare edge", host)); err != nil {
+			return err
+		}
+		records, err := edge.RecordsFor(edge.DNSTarget{Kind: edge.KindCloudflare}, []string{host})
+		if err != nil {
+			return err
+		}
+		for _, rec := range records {
+			message := "Writing " + rec.String()
+			if req.GetDns() == nil {
+				message = rec.Instruction()
+			}
+			if err := say(message); err != nil {
+				return err
+			}
+		}
+		if outstanding := os.Getenv(fakeDomainTimeoutEnvVar); outstanding != "" {
+			return stream.Send(&deploymentsv1.DeployEvent{
+				Event: &deploymentsv1.DeployEvent_Result{Result: &deploymentsv1.ResultEvent{
+					Success: false,
+					Error:   fmt.Sprintf("gave up after 5m0s waiting for https://%s/ to answer as the cloudflare edge; still outstanding: %s", host, outstanding),
+				}},
+			})
+		}
+		if err := say(fmt.Sprintf("%s is served by the cloudflare edge", host)); err != nil {
+			return err
+		}
+	}
+	return stream.Send(&deploymentsv1.DeployEvent{
+		Event: &deploymentsv1.DeployEvent_Result{Result: &deploymentsv1.ResultEvent{Success: true}},
+	})
+}
+
+func (s *deployFakeProviderServer) RemoveDomain(ctx context.Context, req *deploymentsv1.RemoveDomainRequest, stream *connect.ServerStream[deploymentsv1.DeployEvent]) error {
+	if err := s.checkToken(ctx); err != nil {
+		return err
+	}
+	say := func(message string) error {
+		return stream.Send(&deploymentsv1.DeployEvent{
+			Event: &deploymentsv1.DeployEvent_Progress{Progress: &deploymentsv1.ProgressEvent{Message: message}},
+		})
+	}
+	if err := say(fmt.Sprintf("DOMAIN RM slug=%s host=%s configured=%s dns=%s edge=%s", req.GetSlug(), req.GetHost(), strings.Join(req.GetConfigured(), ","), req.GetDns().GetKind(), req.GetEdgeKind())); err != nil {
+		return err
+	}
+	for _, host := range fakeDomainTargets(nil, req.GetHost()) {
+		if err := say(fmt.Sprintf("Unbinding %s from the cloudflare edge", host)); err != nil {
+			return err
+		}
+	}
+	return stream.Send(&deploymentsv1.DeployEvent{
+		Event: &deploymentsv1.DeployEvent_Result{Result: &deploymentsv1.ResultEvent{Success: true}},
+	})
+}
+
+func fakeDomainTargets(configured []string, host string) []string {
+	if host != "" {
+		return []string{host}
+	}
+	return configured
+}
+
 func (s *deployFakeProviderServer) ListDomain(ctx context.Context, req *deploymentsv1.ListDomainRequest) (*deploymentsv1.ListDomainResponse, error) {
 	if err := s.checkToken(ctx); err != nil {
 		return nil, err

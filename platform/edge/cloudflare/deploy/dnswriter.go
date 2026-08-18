@@ -55,6 +55,10 @@ func NewDNS(zone string) (edge.DNSWriter, error) {
 	}, nil
 }
 
+func (w *dnsWriter) ZoneOf(ctx context.Context, hostname string) (edge.Zone, error) {
+	return w.zoneFor(ctx, hostname)
+}
+
 func (w *dnsWriter) EnsureRecords(ctx context.Context, records []edge.Record, say func(string)) ([]edge.Record, error) {
 	written := make([]edge.Record, 0, len(records))
 	for _, want := range records {

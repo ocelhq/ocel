@@ -47,6 +47,8 @@ const (
 	StackKeySecret     = "secret"
 	StackKeyOwnerToken = "ownerToken"
 	StackKeyClass      = "class"
+
+	StackKeyProductionDomains = "productionDomains"
 )
 
 type DeploymentRecord struct {

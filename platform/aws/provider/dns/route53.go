@@ -31,6 +31,8 @@ type route53Writer struct {
 
 var _ edge.DNSWriter = (*route53Writer)(nil)
 
+var _ edge.ZoneFinder = (*route53Writer)(nil)
+
 func NewRoute53(api Route53API, zone string) edge.DNSWriter {
 	return &route53Writer{api: api, named: zone}
 }
@@ -110,6 +112,10 @@ func recordSet(want edge.Record) *r53types.ResourceRecordSet {
 		TTL:             aws.Int64(recordTTL),
 		ResourceRecords: []r53types.ResourceRecord{{Value: aws.String(want.Value)}},
 	}
+}
+
+func (w *route53Writer) ZoneOf(ctx context.Context, hostname string) (edge.Zone, error) {
+	return w.zoneFor(ctx, hostname)
 }
 
 func (w *route53Writer) zoneFor(ctx context.Context, hostname string) (edge.Zone, error) {

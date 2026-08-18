@@ -7,6 +7,8 @@ import (
 	"strings"
 	"testing"
 
+	acmtypes "github.com/aws/aws-sdk-go-v2/service/acm/types"
+
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
@@ -130,20 +132,39 @@ func TestFlowSettle(t *testing.T) {
 	t.Run("resumes from an issued certificate straight into the probe", func(t *testing.T) {
 		t.Parallel()
 
-		api := &fakeACM{steps: issuing}
+		api := &fakeACM{steps: []acmStep{{status: StatusIssued}}}
 		writer := &fakeWriter{}
 		flow := Flow{Issuer: testIssuer(api, 5), Writer: writer, Prober: passingProber(t, "native")}
-		prior := Settlement{Certificate: Certificate{ARN: testARN, Region: CloudFrontRegion, Status: StatusIssued}}
+		prior := Settlement{Certificate: Certificate{ARN: testARN, Region: CloudFrontRegion, Status: StatusIssued, Domains: []string{wildcard}}}
 
 		got, err := flow.Settle(t.Context(), wildcard, edge.KindNative, prior, func(string) {}, func(Settlement) error { return nil })
 		if err != nil {
 			t.Fatalf("Settle: %v", err)
 		}
-		if api.describes != 0 || len(writer.written) != 0 {
-			t.Errorf("describes = %d written = %+v, want issuance skipped entirely", api.describes, writer.written)
+		if api.describes != 1 || len(writer.written) != 0 {
+			t.Errorf("describes = %d written = %+v, want the recorded certificate re-read once and issuance skipped", api.describes, writer.written)
 		}
 		if !got.Probe.OK {
 			t.Error("the probe did not run on a rerun of an already-issued certificate")
+		}
+	})
+
+	t.Run("a recorded certificate ACM no longer has is settled again", func(t *testing.T) {
+		t.Parallel()
+
+		api := &fakeACM{steps: issuing, describeErr: &acmtypes.ResourceNotFoundException{}}
+		flow := Flow{Issuer: testIssuer(api, 5), Writer: &fakeWriter{}, Prober: passingProber(t, "native")}
+		prior := Settlement{Certificate: Certificate{ARN: testARN, Region: CloudFrontRegion, Status: StatusIssued, Domains: []string{wildcard}}}
+
+		got, err := flow.Settle(t.Context(), wildcard, edge.KindNative, prior, func(string) {}, func(Settlement) error { return nil })
+		if err != nil {
+			t.Fatalf("Settle: %v", err)
+		}
+		if len(api.requested) != 1 {
+			t.Errorf("requested = %+v, want a certificate requested once the recorded one turned out to be gone", api.requested)
+		}
+		if !got.Certificate.Issued() || got.Certificate.ARN == "" {
+			t.Errorf("certificate = %+v, want a live one", got.Certificate)
 		}
 	})
 

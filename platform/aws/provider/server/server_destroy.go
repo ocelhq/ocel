@@ -10,6 +10,7 @@ import (
 
 	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
 	"github.com/ocelhq/ocel/platform/aws/provider/bootstrap"
+	"github.com/ocelhq/ocel/platform/aws/provider/certs"
 	"github.com/ocelhq/ocel/platform/aws/provider/deploy"
 	"github.com/ocelhq/ocel/platform/aws/provider/dns"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
@@ -156,6 +157,12 @@ func (s *Server) runDestroyProject(ctx context.Context, req *deploymentsv1.Destr
 	result, derr := deploy.DestroyProject(ctx, stack, cfg, req.GetSlug(), stages, logf)
 
 	if result.EdgeTornDown && len(params.StackState) > 0 {
+		discarder := func(cert certs.Certificate) certs.Issuer {
+			return certs.DiscardIssuerFor(cert, certs.Deps{AWS: awscfg})
+		}
+		if err := releaseProductionDomains(ctx, params.StackState, cfg.DNS, discarder, logf); err != nil {
+			derr = errors.Join(derr, err)
+		}
 		if err := s.deleteStackState(ctx, opts, req.GetSlug()); err != nil {
 			derr = errors.Join(derr, err)
 		}

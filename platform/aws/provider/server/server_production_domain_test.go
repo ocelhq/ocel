@@ -1,0 +1,936 @@
+package server
+
+import (
+	"context"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"net/http"
+	"net/http/httptest"
+	"slices"
+	"strings"
+	"testing"
+	"time"
+
+	"github.com/aws/aws-sdk-go-v2/aws"
+	"github.com/aws/aws-sdk-go-v2/service/acm"
+	acmtypes "github.com/aws/aws-sdk-go-v2/service/acm/types"
+
+	"github.com/ocelhq/ocel/platform/aws/provider/bootstrap"
+	"github.com/ocelhq/ocel/platform/aws/provider/certs"
+	"github.com/ocelhq/ocel/platform/aws/provider/dns"
+	cloudflare "github.com/ocelhq/ocel/platform/edge/cloudflare/deploy"
+	edge "github.com/ocelhq/ocel/platform/edge/contract"
+)
+
+const domainSlug = "acme-web"
+
+type boundStack struct {
+	state   edge.StackState
+	bound   []edge.DomainBinding
+	unbound []string
+	bindErr error
+}
+
+func (s *boundStack) State() edge.StackState { return s.state }
+
+func (s *boundStack) Ledger() edge.Ledger { return nil }
+
+func (s *boundStack) Promote(context.Context, edge.Promotion, string) error { return nil }
+
+func (s *boundStack) RemovePointer(context.Context, string) (edge.PruneResult, error) {
+	return edge.PruneResult{}, nil
+}
+
+func (s *boundStack) BindDomain(_ context.Context, binding edge.DomainBinding) error {
+	if s.bindErr != nil {
+		return s.bindErr
+	}
+	s.bound = append(s.bound, binding)
+	s.state = edge.RecordBoundDomain(s.state, binding.Hostname)
+	return nil
+}
+
+func (s *boundStack) UnbindDomain(_ context.Context, hostname string) error {
+	s.unbound = append(s.unbound, hostname)
+	s.state = edge.ForgetBoundDomain(s.state, hostname)
+	return nil
+}
+
+func (s *boundStack) Destroy(context.Context) error { return nil }
+
+func newBoundStack() *boundStack {
+	return &boundStack{state: edge.StackState{edge.StackKeySlug: domainSlug}}
+}
+
+type domainWriter struct {
+	written []edge.Record
+	deleted []edge.Record
+}
+
+func (w *domainWriter) EnsureRecords(_ context.Context, records []edge.Record, _ func(string)) ([]edge.Record, error) {
+	w.written = append(w.written, records...)
+	return records, nil
+}
+
+func (w *domainWriter) DeleteRecords(_ context.Context, records []edge.Record) error {
+	w.deleted = append(w.deleted, records...)
+	return nil
+}
+
+type domainACM struct {
+	requested [][]string
+	deleted   []string
+	deleteErr error
+	listed    []acmtypes.CertificateSummary
+	details   map[string]*acmtypes.CertificateDetail
+	minted    int
+}
+
+func newDomainACM() *domainACM {
+	return &domainACM{details: map[string]*acmtypes.CertificateDetail{}}
+}
+
+func (a *domainACM) issue(arn string, names ...string) {
+	a.details[arn] = &acmtypes.CertificateDetail{
+		CertificateArn:          aws.String(arn),
+		DomainName:              aws.String(names[0]),
+		SubjectAlternativeNames: names[1:],
+		Status:                  acmtypes.CertificateStatusIssued,
+		DomainValidationOptions: validationFor(names),
+	}
+}
+
+func validationFor(names []string) []acmtypes.DomainValidation {
+	options := make([]acmtypes.DomainValidation, 0, len(names))
+	for _, name := range names {
+		options = append(options, acmtypes.DomainValidation{ResourceRecord: &acmtypes.ResourceRecord{
+			Name:  aws.String("_ocel." + name + "."),
+			Type:  acmtypes.RecordTypeCname,
+			Value: aws.String("_target.acm-validations.aws."),
+		}})
+	}
+	return options
+}
+
+func (a *domainACM) RequestCertificate(_ context.Context, in *acm.RequestCertificateInput, _ ...func(*acm.Options)) (*acm.RequestCertificateOutput, error) {
+	names := append([]string{aws.ToString(in.DomainName)}, in.SubjectAlternativeNames...)
+	a.requested = append(a.requested, names)
+	a.minted++
+	arn := fmt.Sprintf("arn:aws:acm:us-east-1:111122223333:certificate/minted-%d", a.minted)
+	a.issue(arn, names...)
+	return &acm.RequestCertificateOutput{CertificateArn: aws.String(arn)}, nil
+}
+
+func (a *domainACM) DescribeCertificate(_ context.Context, in *acm.DescribeCertificateInput, _ ...func(*acm.Options)) (*acm.DescribeCertificateOutput, error) {
+	detail, ok := a.details[aws.ToString(in.CertificateArn)]
+	if !ok {
+		return nil, fmt.Errorf("no certificate %s", aws.ToString(in.CertificateArn))
+	}
+	return &acm.DescribeCertificateOutput{Certificate: detail}, nil
+}
+
+func (a *domainACM) DeleteCertificate(_ context.Context, in *acm.DeleteCertificateInput, _ ...func(*acm.Options)) (*acm.DeleteCertificateOutput, error) {
+	if a.deleteErr != nil {
+		return nil, a.deleteErr
+	}
+	a.deleted = append(a.deleted, aws.ToString(in.CertificateArn))
+	return &acm.DeleteCertificateOutput{}, nil
+}
+
+func (a *domainACM) ListCertificates(context.Context, *acm.ListCertificatesInput, ...func(*acm.Options)) (*acm.ListCertificatesOutput, error) {
+	return &acm.ListCertificatesOutput{CertificateSummaryList: a.listed}, nil
+}
+
+type domainFixture struct {
+	session *domainSession
+	stack   *boundStack
+	writer  *domainWriter
+	acm     *domainACM
+	ssm     *stateSSM
+	said    []string
+}
+
+func (f *domainFixture) say(message string) { f.said = append(f.said, message) }
+
+func (f *domainFixture) spoke(want string) bool {
+	return slices.ContainsFunc(f.said, func(line string) bool { return strings.Contains(line, want) })
+}
+
+func (f *domainFixture) recorded(t *testing.T) bootstrap.Production {
+	t.Helper()
+	state, err := bootstrap.ReadStackStateFor(t.Context(), f.ssm, bootstrap.ClassProduction, domainSlug)
+	if err != nil {
+		t.Fatalf("ReadStackStateFor: %v", err)
+	}
+	recorded, err := bootstrap.ReadProduction(state)
+	if err != nil {
+		t.Fatalf("ReadProduction: %v", err)
+	}
+	return recorded
+}
+
+func (f *domainFixture) surfaces(t *testing.T) []string {
+	t.Helper()
+	state, err := bootstrap.ReadStackStateFor(t.Context(), f.ssm, bootstrap.ClassProduction, domainSlug)
+	if err != nil {
+		t.Fatalf("ReadStackStateFor: %v", err)
+	}
+	return edge.BoundDomains(state)
+}
+
+type domainFixtureOptions struct {
+	edge       edge.EdgeStack
+	configured []string
+	host       string
+	pins       map[string]string
+	prior      bootstrap.Production
+	certified  bool
+	stack      *boundStack
+	writer     *domainWriter
+	acm        *domainACM
+	probe      string
+}
+
+func newDomainFixture(opts domainFixtureOptions) *domainFixture {
+	if opts.stack == nil {
+		opts.stack = newBoundStack()
+	}
+	if opts.acm == nil {
+		opts.acm = newDomainACM()
+	}
+	probe := opts.probe
+	if probe == "" {
+		probe = string(edge.KindCloudflare)
+	}
+	f := &domainFixture{stack: opts.stack, writer: opts.writer, acm: opts.acm, ssm: &stateSSM{params: map[string]string{}}}
+	front := edge.EdgeStack(opts.stack)
+	if opts.edge != nil {
+		front = opts.edge
+	}
+
+	var writer edge.DNSWriter
+	if opts.writer != nil {
+		writer = opts.writer
+	}
+	session := &domainSession{
+		ssm:    f.ssm,
+		slug:   domainSlug,
+		kind:   edge.KindCloudflare,
+		stack:  front,
+		writer: writer,
+		poller: dns.Poller{
+			Lookup:   func(context.Context, string) ([]string, error) { return []string{"192.0.2.1"}, nil },
+			Wait:     func(context.Context, time.Duration) error { return nil },
+			Attempts: 1,
+			Every:    time.Millisecond,
+		},
+		prober: certs.Prober{
+			Get: func(context.Context, string) (http.Header, error) {
+				header := http.Header{}
+				header.Set(edge.HeaderEdge, probe)
+				return header, nil
+			},
+			Wait:     func(context.Context, time.Duration) error { return nil },
+			Attempts: 1,
+			Every:    time.Millisecond,
+			Now:      func() time.Time { return time.Unix(1755500000, 0).UTC() },
+			Jitter:   func() float64 { return 0.5 },
+		},
+		discarder: func(certs.Certificate) certs.Issuer {
+			return certs.Issuer{API: opts.acm, Region: certs.CloudFrontRegion}
+		},
+		pins:       opts.pins,
+		configured: opts.configured,
+		host:       opts.host,
+		recorded:   opts.prior,
+	}
+	if opts.certified {
+		session.issuer = certs.Issuer{
+			API:      opts.acm,
+			Region:   certs.CloudFrontRegion,
+			Wait:     func(context.Context, time.Duration) error { return nil },
+			Attempts: 2,
+			Every:    time.Millisecond,
+		}
+	}
+	f.session = session
+	return f
+}
+
+func TestAddDomain(t *testing.T) {
+	t.Parallel()
+
+	t.Run("with no argument it settles every configured host", func(t *testing.T) {
+		t.Parallel()
+
+		f := newDomainFixture(domainFixtureOptions{
+			configured: []string{"shop.app.com", "www.app.com"},
+			writer:     &domainWriter{},
+			certified:  true,
+		})
+		if err := f.session.add(t.Context(), f.say); err != nil {
+			t.Fatalf("add: %v", err)
+		}
+
+		if len(f.acm.requested) != 1 || !slices.Equal(f.acm.requested[0], []string{"shop.app.com", "www.app.com"}) {
+			t.Errorf("requested = %v, want one SAN certificate over both hosts", f.acm.requested)
+		}
+		if len(f.stack.bound) != 2 || f.stack.bound[0].Hostname != "shop.app.com" || f.stack.bound[1].Hostname != "www.app.com" {
+			t.Errorf("bound = %+v, want both hosts bound", f.stack.bound)
+		}
+		if f.stack.bound[0].Certificate == "" {
+			t.Error("the binding carries no certificate")
+		}
+
+		recorded := f.recorded(t)
+		if !slices.Equal(recorded.Hostnames(), []string{"shop.app.com", "www.app.com"}) {
+			t.Errorf("recorded hosts = %v", recorded.Hostnames())
+		}
+		if !recorded.Ready("shop.app.com", edge.KindCloudflare) || !recorded.Ready("www.app.com", edge.KindCloudflare) {
+			t.Errorf("recorded = %+v, want both hosts probed live", recorded.Hosts)
+		}
+		if len(recorded.Host("shop.app.com").Written) != 1 {
+			t.Errorf("recorded records = %+v, want the front record ocel wrote", recorded.Host("shop.app.com").Written)
+		}
+		if recorded.Certificate.ARN == "" || recorded.Certificate.Adopted {
+			t.Errorf("recorded certificate = %+v, want the one ocel requested", recorded.Certificate)
+		}
+		if !slices.Equal(f.surfaces(t), []string{"shop.app.com", "www.app.com"}) {
+			t.Errorf("surfaces = %v, want both recorded on the stack state", f.surfaces(t))
+		}
+	})
+
+	t.Run("an argument settles only that host", func(t *testing.T) {
+		t.Parallel()
+
+		f := newDomainFixture(domainFixtureOptions{
+			configured: []string{"shop.app.com", "www.app.com"},
+			host:       "www.app.com",
+			writer:     &domainWriter{},
+			certified:  true,
+		})
+		if err := f.session.add(t.Context(), f.say); err != nil {
+			t.Fatalf("add: %v", err)
+		}
+		if len(f.stack.bound) != 1 || f.stack.bound[0].Hostname != "www.app.com" {
+			t.Errorf("bound = %+v, want only the named host", f.stack.bound)
+		}
+		if !slices.Equal(f.acm.requested[0], []string{"shop.app.com", "www.app.com"}) {
+			t.Errorf("requested = %v, want the certificate to cover everything configured", f.acm.requested)
+		}
+	})
+
+	t.Run("a host the config does not declare is refused", func(t *testing.T) {
+		t.Parallel()
+
+		f := newDomainFixture(domainFixtureOptions{configured: []string{"shop.app.com"}, host: "other.app.com"})
+		err := f.session.add(t.Context(), f.say)
+		if err == nil {
+			t.Fatal("add err = nil, want a refusal: the config is the declaration")
+		}
+		if !strings.Contains(err.Error(), "domains.production") {
+			t.Errorf("err = %v, want it to name where the hostname is declared", err)
+		}
+	})
+
+	t.Run("a project declaring nothing is refused", func(t *testing.T) {
+		t.Parallel()
+
+		f := newDomainFixture(domainFixtureOptions{})
+		if err := f.session.add(t.Context(), f.say); err == nil {
+			t.Fatal("add err = nil, want a refusal with nothing declared")
+		}
+	})
+
+	t.Run("a host set that changed swaps the certificate", func(t *testing.T) {
+		t.Parallel()
+
+		api := newDomainACM()
+		api.issue("arn:aws:acm:us-east-1:111122223333:certificate/old", "shop.app.com")
+		prior := bootstrap.Production{
+			Certificate: certs.Certificate{
+				ARN:     "arn:aws:acm:us-east-1:111122223333:certificate/old",
+				Region:  certs.CloudFrontRegion,
+				Status:  certs.StatusIssued,
+				Domains: []string{"shop.app.com"},
+			},
+			Hosts: []bootstrap.Provisioned{{
+				Hostname:    "shop.app.com",
+				Certificate: "arn:aws:acm:us-east-1:111122223333:certificate/old",
+				Probe:       certs.Probe{At: time.Unix(1, 0), Edge: edge.KindCloudflare, OK: true},
+			}},
+		}
+		f := newDomainFixture(domainFixtureOptions{
+			configured: []string{"shop.app.com", "www.app.com"},
+			writer:     &domainWriter{},
+			certified:  true,
+			acm:        api,
+			prior:      prior,
+		})
+		if err := f.session.add(t.Context(), f.say); err != nil {
+			t.Fatalf("add: %v", err)
+		}
+		if len(api.requested) != 1 || !slices.Equal(api.requested[0], []string{"shop.app.com", "www.app.com"}) {
+			t.Errorf("requested = %v, want a fresh certificate over the new host set", api.requested)
+		}
+		recorded := f.recorded(t)
+		if recorded.Certificate.ARN == prior.Certificate.ARN || recorded.Certificate.ARN == "" {
+			t.Fatalf("recorded certificate = %+v, want the fresh one", recorded.Certificate)
+		}
+		for _, host := range []string{"shop.app.com", "www.app.com"} {
+			if got := recorded.Host(host).Certificate; got != recorded.Certificate.ARN {
+				t.Errorf("%s holds certificate %q, want the settled %q", host, got, recorded.Certificate.ARN)
+			}
+			if !slices.ContainsFunc(f.stack.bound, func(b edge.DomainBinding) bool {
+				return b.Hostname == host && b.Certificate == recorded.Certificate.ARN
+			}) {
+				t.Errorf("bound = %+v, want %s re-bound behind the new certificate", f.stack.bound, host)
+			}
+		}
+		if !slices.Equal(api.deleted, []string{prior.Certificate.ARN}) {
+			t.Errorf("deleted = %v, want the superseded certificate discarded once nothing holds it", api.deleted)
+		}
+	})
+
+	t.Run("discarding the superseded certificate keeps the validation records the new one renews through", func(t *testing.T) {
+		t.Parallel()
+
+		shopValidation := edge.Record{Name: "_ocel.shop.app.com", Type: edge.RecordTypeCNAME, Value: "_target.acm-validations.aws"}
+		api := newDomainACM()
+		api.issue("arn:aws:acm:us-east-1:111122223333:certificate/old", "shop.app.com")
+		prior := bootstrap.Production{
+			Certificate: certs.Certificate{
+				ARN:     "arn:aws:acm:us-east-1:111122223333:certificate/old",
+				Region:  certs.CloudFrontRegion,
+				Status:  certs.StatusIssued,
+				Domains: []string{"shop.app.com"},
+			},
+			Written: []edge.Record{shopValidation},
+			Hosts: []bootstrap.Provisioned{{
+				Hostname:    "shop.app.com",
+				Certificate: "arn:aws:acm:us-east-1:111122223333:certificate/old",
+				Probe:       certs.Probe{At: time.Unix(1, 0), Edge: edge.KindCloudflare, OK: true},
+			}},
+		}
+		f := newDomainFixture(domainFixtureOptions{
+			configured: []string{"shop.app.com", "www.app.com"},
+			writer:     &domainWriter{},
+			certified:  true,
+			acm:        api,
+			prior:      prior,
+		})
+		if err := f.session.add(t.Context(), f.say); err != nil {
+			t.Fatalf("add: %v", err)
+		}
+		if slices.Contains(f.writer.deleted, shopValidation) {
+			t.Errorf("deleted = %+v, want the validation record the new certificate renews through left standing", f.writer.deleted)
+		}
+		if !slices.Contains(f.recorded(t).Written, shopValidation) {
+			t.Errorf("recorded validation = %+v, want it still written for the new certificate", f.recorded(t).Written)
+		}
+	})
+
+	t.Run("a binding that fails is still recorded so rm can undo it", func(t *testing.T) {
+		t.Parallel()
+
+		stack := newBoundStack()
+		stack.bindErr = errors.New("the edge refused")
+		f := newDomainFixture(domainFixtureOptions{
+			configured: []string{"shop.app.com"},
+			writer:     &domainWriter{},
+			stack:      stack,
+		})
+		if err := f.session.add(t.Context(), f.say); err == nil {
+			t.Fatal("add err = nil, want the edge's refusal")
+		}
+		if !slices.Equal(f.recorded(t).Hostnames(), []string{"shop.app.com"}) {
+			t.Errorf("recorded = %v, want the intended host on record before the edge was touched", f.recorded(t).Hostnames())
+		}
+	})
+
+	t.Run("a certificate that already covers the set is reused by name", func(t *testing.T) {
+		t.Parallel()
+
+		api := newDomainACM()
+		api.listed = []acmtypes.CertificateSummary{{
+			CertificateArn:                  aws.String("arn:aws:acm:us-east-1:111122223333:certificate/theirs"),
+			DomainName:                      aws.String("*.app.com"),
+			SubjectAlternativeNameSummaries: []string{"app.com"},
+		}}
+		f := newDomainFixture(domainFixtureOptions{
+			configured: []string{"shop.app.com", "www.app.com"},
+			writer:     &domainWriter{},
+			certified:  true,
+			acm:        api,
+		})
+		if err := f.session.add(t.Context(), f.say); err != nil {
+			t.Fatalf("add: %v", err)
+		}
+		if len(api.requested) != 0 {
+			t.Errorf("requested = %v, want the certificate already in ACM reused", api.requested)
+		}
+		recorded := f.recorded(t)
+		if recorded.Certificate.ARN != "arn:aws:acm:us-east-1:111122223333:certificate/theirs" || !recorded.Certificate.Adopted {
+			t.Errorf("recorded certificate = %+v, want the reused one, unclaimed", recorded.Certificate)
+		}
+	})
+
+	t.Run("a pinned certificate is verified and never requested", func(t *testing.T) {
+		t.Parallel()
+
+		api := newDomainACM()
+		api.issue("arn:aws:acm:us-east-1:111122223333:certificate/pinned", "shop.app.com")
+		f := newDomainFixture(domainFixtureOptions{
+			configured: []string{"shop.app.com"},
+			pins:       map[string]string{"shop.app.com": "arn:aws:acm:us-east-1:111122223333:certificate/pinned"},
+			writer:     &domainWriter{},
+			certified:  true,
+			acm:        api,
+		})
+		if err := f.session.add(t.Context(), f.say); err != nil {
+			t.Fatalf("add: %v", err)
+		}
+		if len(api.requested) != 0 {
+			t.Errorf("requested = %v, want nothing requested when every host is pinned", api.requested)
+		}
+		if f.stack.bound[0].Certificate != "arn:aws:acm:us-east-1:111122223333:certificate/pinned" {
+			t.Errorf("binding = %+v, want the pinned certificate", f.stack.bound[0])
+		}
+		if f.recorded(t).Certificate.ARN != "" {
+			t.Error("a pinned certificate was claimed as ocel's own")
+		}
+	})
+
+	t.Run("a pinned certificate that does not cover the host is refused", func(t *testing.T) {
+		t.Parallel()
+
+		api := newDomainACM()
+		api.issue("arn:aws:acm:us-east-1:111122223333:certificate/elsewhere", "other.example.com")
+		f := newDomainFixture(domainFixtureOptions{
+			configured: []string{"shop.app.com"},
+			pins:       map[string]string{"shop.app.com": "arn:aws:acm:us-east-1:111122223333:certificate/elsewhere"},
+			certified:  true,
+			acm:        api,
+		})
+		err := f.session.add(t.Context(), f.say)
+		if err == nil {
+			t.Fatal("add err = nil, want a refusal: the pin covers nothing here")
+		}
+		for _, want := range []string{"shop.app.com", "other.example.com"} {
+			if !strings.Contains(err.Error(), want) {
+				t.Errorf("err = %v, want it to name %q", err, want)
+			}
+		}
+		if len(f.stack.bound) != 0 {
+			t.Errorf("bound = %+v, want nothing bound behind a certificate that covers nothing", f.stack.bound)
+		}
+	})
+
+	t.Run("a pinned certificate in another region is refused", func(t *testing.T) {
+		t.Parallel()
+
+		api := newDomainACM()
+		api.issue("arn:aws:acm:eu-west-1:111122223333:certificate/elsewhere", "shop.app.com")
+		f := newDomainFixture(domainFixtureOptions{
+			configured: []string{"shop.app.com"},
+			pins:       map[string]string{"shop.app.com": "arn:aws:acm:eu-west-1:111122223333:certificate/elsewhere"},
+			certified:  true,
+			acm:        api,
+		})
+		err := f.session.add(t.Context(), f.say)
+		if err == nil {
+			t.Fatal("add err = nil, want a refusal: TLS never terminates in that region")
+		}
+		for _, want := range []string{"eu-west-1", certs.CloudFrontRegion} {
+			if !strings.Contains(err.Error(), want) {
+				t.Errorf("err = %v, want it to name %q", err, want)
+			}
+		}
+	})
+
+	t.Run("a rerun resumes from what is recorded", func(t *testing.T) {
+		t.Parallel()
+
+		api := newDomainACM()
+		api.issue("arn:aws:acm:us-east-1:111122223333:certificate/half", "shop.app.com")
+		prior := bootstrap.Production{
+			Certificate: certs.Certificate{
+				ARN:     "arn:aws:acm:us-east-1:111122223333:certificate/half",
+				Region:  certs.CloudFrontRegion,
+				Status:  certs.StatusPendingValidation,
+				Domains: []string{"shop.app.com"},
+			},
+		}
+		f := newDomainFixture(domainFixtureOptions{
+			configured: []string{"shop.app.com"},
+			writer:     &domainWriter{},
+			certified:  true,
+			acm:        api,
+			prior:      prior,
+		})
+		if err := f.session.add(t.Context(), f.say); err != nil {
+			t.Fatalf("add: %v", err)
+		}
+		if len(api.requested) != 0 {
+			t.Errorf("requested = %v, want the half-finished certificate picked up, not a second one", api.requested)
+		}
+		if !f.recorded(t).Ready("shop.app.com", edge.KindCloudflare) {
+			t.Error("the resumed run did not finish the host")
+		}
+	})
+
+	t.Run("an already-served host is left alone", func(t *testing.T) {
+		t.Parallel()
+
+		prior := bootstrap.Production{Hosts: []bootstrap.Provisioned{{
+			Hostname: "shop.app.com",
+			Probe:    certs.Probe{At: time.Unix(1, 0), Edge: edge.KindCloudflare, OK: true},
+		}}}
+		f := newDomainFixture(domainFixtureOptions{configured: []string{"shop.app.com"}, prior: prior})
+		if err := f.session.add(t.Context(), f.say); err != nil {
+			t.Fatalf("add: %v", err)
+		}
+		if len(f.stack.bound) != 0 {
+			t.Errorf("bound = %+v, want a host already served left alone", f.stack.bound)
+		}
+		if !f.spoke("already served") {
+			t.Errorf("said = %v, want it to say there was nothing to do", f.said)
+		}
+	})
+
+	t.Run("without a dns writer the record is printed and waited on", func(t *testing.T) {
+		t.Parallel()
+
+		f := newDomainFixture(domainFixtureOptions{configured: []string{"shop.app.com"}})
+		if err := f.session.add(t.Context(), f.say); err != nil {
+			t.Fatalf("add: %v", err)
+		}
+		if !f.spoke("add a proxied (orange cloud) DNS record at shop.app.com") {
+			t.Errorf("said = %v, want the record the user has to add", f.said)
+		}
+		if f.spoke("Writing ") {
+			t.Errorf("said = %v, want nothing claimed as written with no writer in hand", f.said)
+		}
+		if owed := f.recorded(t).Host("shop.app.com").Owed; len(owed) != 1 {
+			t.Errorf("owed = %+v, want the record recorded as the user's", owed)
+		}
+	})
+
+	t.Run("a probe that never answers as this edge fails and names what is outstanding", func(t *testing.T) {
+		t.Parallel()
+
+		f := newDomainFixture(domainFixtureOptions{configured: []string{"shop.app.com"}, probe: "someone-else"})
+		err := f.session.add(t.Context(), f.say)
+		if err == nil {
+			t.Fatal("add err = nil, want a bounded refusal")
+		}
+		for _, want := range []string{"shop.app.com", "still outstanding"} {
+			if !strings.Contains(err.Error(), want) {
+				t.Errorf("err = %v, want it to name %q", err, want)
+			}
+		}
+		if f.recorded(t).Ready("shop.app.com", edge.KindCloudflare) {
+			t.Error("a failed probe was recorded as live")
+		}
+	})
+}
+
+func TestAddDomainOnCloudflare(t *testing.T) {
+	t.Run("the cloudflare edge binds the worker route the host is served by", func(t *testing.T) {
+		front := cloudflareFront(t)
+		f := newDomainFixture(domainFixtureOptions{
+			configured: []string{"shop.app.com"},
+			writer:     &domainWriter{},
+			edge:       front.stack(t),
+		})
+		if err := f.session.add(t.Context(), f.say); err != nil {
+			t.Fatalf("add: %v", err)
+		}
+		if len(front.routes) != 1 || front.routes[0]["pattern"] != "shop.app.com/*" || front.routes[0]["script"] != cloudflareEntryScript {
+			t.Errorf("routes = %v, want shop.app.com/* on %s", front.routes, cloudflareEntryScript)
+		}
+	})
+
+	t.Run("a host the cloudflare edge terminates no TLS for is refused before DNS", func(t *testing.T) {
+		front := cloudflareFront(t)
+		f := newDomainFixture(domainFixtureOptions{
+			configured: []string{"eu.shop.app.com"},
+			writer:     &domainWriter{},
+			edge:       front.stack(t),
+		})
+		err := f.session.add(t.Context(), f.say)
+		if err == nil {
+			t.Fatal("add err = nil, want the edge's refusal surfaced")
+		}
+		if !strings.Contains(err.Error(), "Advanced Certificate") {
+			t.Errorf("err = %v, want the certificate-pack message the edge gave", err)
+		}
+		if len(front.routes) != 0 {
+			t.Errorf("routes = %v, want nothing bound for a host nothing terminates TLS for", front.routes)
+		}
+		if len(f.writer.written) != 0 {
+			t.Errorf("written = %+v, want no record for a host nothing terminates TLS for", f.writer.written)
+		}
+	})
+
+}
+
+func TestRemoveDomain(t *testing.T) {
+	t.Parallel()
+
+	written := edge.Record{Name: "www.app.com", Type: edge.RecordTypeAAAA, Value: edge.ProxyPlaceholder, Proxied: true}
+	owed := edge.Record{Name: "shop.app.com", Type: edge.RecordTypeAAAA, Value: edge.ProxyPlaceholder, Proxied: true}
+
+	prior := func() bootstrap.Production {
+		return bootstrap.Production{
+			Certificate: certs.Certificate{
+				ARN:     "arn:aws:acm:us-east-1:111122223333:certificate/ours",
+				Region:  certs.CloudFrontRegion,
+				Status:  certs.StatusIssued,
+				Domains: []string{"shop.app.com", "www.app.com"},
+			},
+			Hosts: []bootstrap.Provisioned{
+				{Hostname: "shop.app.com", Certificate: "arn:aws:acm:us-east-1:111122223333:certificate/ours", Owed: []edge.Record{owed}},
+				{Hostname: "www.app.com", Certificate: "arn:aws:acm:us-east-1:111122223333:certificate/ours", Written: []edge.Record{written}},
+			},
+		}
+	}
+
+	t.Run("with no argument it removes every host the config dropped", func(t *testing.T) {
+		t.Parallel()
+
+		f := newDomainFixture(domainFixtureOptions{
+			configured: []string{"shop.app.com"},
+			writer:     &domainWriter{},
+			prior:      prior(),
+		})
+		f.stack.state = edge.RecordBoundDomain(edge.RecordBoundDomain(f.stack.state, "shop.app.com"), "www.app.com")
+
+		if err := f.session.remove(t.Context(), f.say); err != nil {
+			t.Fatalf("remove: %v", err)
+		}
+		if !slices.Equal(f.stack.unbound, []string{"www.app.com"}) {
+			t.Errorf("unbound = %v, want only the host the config dropped", f.stack.unbound)
+		}
+		if len(f.writer.deleted) != 1 || f.writer.deleted[0] != written {
+			t.Errorf("deleted = %+v, want only the record ocel wrote", f.writer.deleted)
+		}
+		if !slices.Equal(f.recorded(t).Hostnames(), []string{"shop.app.com"}) {
+			t.Errorf("recorded = %v, want the removed host gone from state", f.recorded(t).Hostnames())
+		}
+		if !slices.Equal(f.surfaces(t), []string{"shop.app.com"}) {
+			t.Errorf("surfaces = %v, want the removed surface gone", f.surfaces(t))
+		}
+		if len(f.acm.deleted) != 0 {
+			t.Errorf("deleted certificates = %v, want the certificate a remaining host holds kept", f.acm.deleted)
+		}
+	})
+
+	t.Run("removing the last host discards the certificate ocel requested", func(t *testing.T) {
+		t.Parallel()
+
+		f := newDomainFixture(domainFixtureOptions{writer: &domainWriter{}, prior: prior()})
+		if err := f.session.remove(t.Context(), f.say); err != nil {
+			t.Fatalf("remove: %v", err)
+		}
+		if !slices.Equal(f.acm.deleted, []string{"arn:aws:acm:us-east-1:111122223333:certificate/ours"}) {
+			t.Errorf("deleted certificates = %v, want the one ocel requested discarded", f.acm.deleted)
+		}
+		recorded := f.recorded(t)
+		if len(recorded.Hosts) != 0 || recorded.Certificate.ARN != "" {
+			t.Errorf("recorded = %+v, want nothing left", recorded)
+		}
+	})
+
+	t.Run("a certificate ACM refuses to delete is not forgotten", func(t *testing.T) {
+		t.Parallel()
+
+		api := newDomainACM()
+		api.deleteErr = errors.New("ResourceInUseException")
+		f := newDomainFixture(domainFixtureOptions{writer: &domainWriter{}, acm: api, prior: prior()})
+		if err := f.session.remove(t.Context(), f.say); err == nil {
+			t.Fatal("remove err = nil, want the ACM refusal surfaced rather than swallowed")
+		}
+		if f.recorded(t).Certificate.ARN == "" {
+			t.Error("the certificate was forgotten even though ACM still holds it")
+		}
+	})
+
+	t.Run("a record the user owns and a certificate ocel never requested are left standing", func(t *testing.T) {
+		t.Parallel()
+
+		state := prior()
+		state.Certificate.Adopted = true
+		f := newDomainFixture(domainFixtureOptions{writer: &domainWriter{}, prior: state})
+
+		if err := f.session.remove(t.Context(), f.say); err != nil {
+			t.Fatalf("remove: %v", err)
+		}
+		if slices.Contains(f.writer.deleted, owed) {
+			t.Errorf("deleted = %+v, want the record ocel never wrote left alone", f.writer.deleted)
+		}
+		if len(f.acm.deleted) != 0 {
+			t.Errorf("deleted certificates = %v, want a certificate ocel never requested left standing", f.acm.deleted)
+		}
+		if !f.spoke("did not request it") {
+			t.Errorf("said = %v, want it to say why the certificate stays", f.said)
+		}
+	})
+
+	t.Run("an argument removes that host even while it is still declared", func(t *testing.T) {
+		t.Parallel()
+
+		f := newDomainFixture(domainFixtureOptions{
+			configured: []string{"shop.app.com", "www.app.com"},
+			host:       "www.app.com",
+			writer:     &domainWriter{},
+			prior:      prior(),
+		})
+		if err := f.session.remove(t.Context(), f.say); err != nil {
+			t.Fatalf("remove: %v", err)
+		}
+		if !slices.Equal(f.stack.unbound, []string{"www.app.com"}) {
+			t.Errorf("unbound = %v", f.stack.unbound)
+		}
+	})
+
+	t.Run("a host this project never served is refused", func(t *testing.T) {
+		t.Parallel()
+
+		f := newDomainFixture(domainFixtureOptions{host: "nope.app.com", prior: prior()})
+		err := f.session.remove(t.Context(), f.say)
+		if err == nil {
+			t.Fatal("remove err = nil, want a refusal naming what is served")
+		}
+		if !strings.Contains(err.Error(), "shop.app.com") {
+			t.Errorf("err = %v, want it to name what this project does serve", err)
+		}
+	})
+
+	t.Run("nothing dropped is nothing to do", func(t *testing.T) {
+		t.Parallel()
+
+		f := newDomainFixture(domainFixtureOptions{configured: []string{"shop.app.com", "www.app.com"}, prior: prior()})
+		if err := f.session.remove(t.Context(), f.say); err != nil {
+			t.Fatalf("remove: %v", err)
+		}
+		if len(f.stack.unbound) != 0 {
+			t.Errorf("unbound = %v, want nothing removed while the config still declares it", f.stack.unbound)
+		}
+	})
+}
+
+func TestReleaseProductionDomains(t *testing.T) {
+	t.Parallel()
+
+	front := edge.Record{Name: "shop.app.com", Type: edge.RecordTypeAAAA, Value: edge.ProxyPlaceholder, Proxied: true}
+	validation := edge.Record{Name: "_ocel.shop.app.com", Type: edge.RecordTypeCNAME, Value: "_target.acm-validations.aws"}
+	recorded := bootstrap.Production{
+		Certificate: certs.Certificate{ARN: "arn:aws:acm:us-east-1:111122223333:certificate/ours", Region: certs.CloudFrontRegion, Status: certs.StatusIssued},
+		Written:     []edge.Record{validation},
+		Hosts:       []bootstrap.Provisioned{{Hostname: "shop.app.com", Written: []edge.Record{front}}},
+	}
+	state, err := bootstrap.WithProduction(edge.StackState{edge.StackKeySlug: domainSlug}, recorded)
+	if err != nil {
+		t.Fatalf("WithProduction: %v", err)
+	}
+
+	writer := &domainWriter{}
+	api := newDomainACM()
+	discarder := func(certs.Certificate) certs.Issuer {
+		return certs.Issuer{API: api, Region: certs.CloudFrontRegion}
+	}
+	if err := releaseProductionDomains(t.Context(), state, writer, discarder, func(string) {}); err != nil {
+		t.Fatalf("releaseProductionDomains: %v", err)
+	}
+	if !slices.Equal(writer.deleted, []edge.Record{front, validation}) {
+		t.Errorf("deleted = %+v, want the front record and the certificate's validation record released", writer.deleted)
+	}
+	if !slices.Equal(api.deleted, []string{recorded.Certificate.ARN}) {
+		t.Errorf("deleted certificates = %v, want the one ocel requested discarded on teardown", api.deleted)
+	}
+}
+
+func TestProductionHost(t *testing.T) {
+	t.Parallel()
+
+	got, err := productionHost("  Shop.App.com. ")
+	if err != nil {
+		t.Fatalf("productionHost: %v", err)
+	}
+	if got != "shop.app.com" {
+		t.Errorf("got %q", got)
+	}
+	for _, in := range []string{"*.app.com", "https://app.com", "app"} {
+		if _, err := productionHost(in); err == nil {
+			t.Errorf("expected %q to be refused", in)
+		}
+	}
+}
+
+const cloudflareEntryScript = "ocel-acme-web-prod"
+
+type cloudflareEdge struct {
+	zoneID string
+	routes []map[string]any
+}
+
+func cloudflareFront(t *testing.T) *cloudflareEdge {
+	t.Helper()
+	return &cloudflareEdge{zoneID: "zone1"}
+}
+
+func (c *cloudflareEdge) stack(t *testing.T) edge.EdgeStack {
+	t.Helper()
+	t.Setenv("CLOUDFLARE_ACCOUNT_ID", "acct")
+	t.Setenv("CLOUDFLARE_API_TOKEN", "test")
+
+	write := func(w http.ResponseWriter, result any) {
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"success": true, "errors": []any{}, "messages": []any{}, "result": result,
+			"result_info": map[string]any{"page": 1, "per_page": 100, "count": 1, "total_count": 1},
+		})
+	}
+	firstPage := func(r *http.Request) bool {
+		page := r.URL.Query().Get("page")
+		return page == "" || page == "1"
+	}
+
+	mux := http.NewServeMux()
+	mux.HandleFunc("/zones", func(w http.ResponseWriter, r *http.Request) {
+		if !firstPage(r) {
+			write(w, []any{})
+			return
+		}
+		write(w, []map[string]any{{"id": c.zoneID, "name": "app.com"}})
+	})
+	mux.HandleFunc("GET /zones/"+c.zoneID+"/ssl/certificate_packs", func(w http.ResponseWriter, _ *http.Request) {
+		write(w, []any{})
+	})
+	mux.HandleFunc("/zones/"+c.zoneID+"/workers/routes", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodPost {
+			var body map[string]any
+			_ = json.NewDecoder(r.Body).Decode(&body)
+			c.routes = append(c.routes, body)
+			write(w, map[string]any{"id": "route-1", "pattern": body["pattern"], "script": body["script"]})
+			return
+		}
+		write(w, c.routes)
+	})
+	mux.HandleFunc("/zones/"+c.zoneID+"/dns_records", func(w http.ResponseWriter, _ *http.Request) {
+		write(w, []any{})
+	})
+	srv := httptest.NewServer(mux)
+	t.Cleanup(srv.Close)
+
+	stack, err := cloudflare.NewAt(srv.URL + "/").Open(edge.StackState{
+		edge.StackKeySlug: domainSlug,
+		"entryWorker":     cloudflareEntryScript,
+	})
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	return stack
+}
