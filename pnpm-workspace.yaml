@@ -16,6 +16,7 @@ allowBuilds:
   '@bufbuild/buf': true
   aws-sdk: false
   esbuild: true
+  protobufjs: false
   sharp: true
   unrs-resolver: true
   workerd: true
