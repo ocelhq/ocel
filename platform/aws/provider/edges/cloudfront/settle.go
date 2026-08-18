@@ -2,9 +2,10 @@ package cloudfront
 
 import (
 	"context"
-	"fmt"
 	"math/rand/v2"
 	"time"
+
+	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
 const (
@@ -59,7 +60,7 @@ func (s Settler) hold(ctx context.Context) error {
 	return waitFor(ctx, s.interval())
 }
 
-func (s Settler) settled(ctx context.Context, id string, status func(context.Context) (string, error)) error {
+func (s Settler) settled(ctx context.Context, kind, id string, status func(context.Context) (string, error)) error {
 	for attempt := 0; attempt < s.attempts(); attempt++ {
 		if attempt > 0 {
 			if err := s.hold(ctx); err != nil {
@@ -77,7 +78,11 @@ func (s Settler) settled(ctx context.Context, id string, status func(context.Con
 			return nil
 		}
 	}
-	return fmt.Errorf("distribution %s was still rolling out to CloudFront's edge after about %s, so it cannot be deleted yet. Nothing is lost: re-run the same command once it reports Deployed and it will pick up where this one stopped", id, s.window())
+	return &edge.OutstandingError{
+		Because: "CloudFront was still rolling the disable out to its edges, so nothing may be deleted yet",
+		Waited:  s.window(),
+		Items:   []edge.Outstanding{{Kind: kind, Name: id}},
+	}
 }
 
 func waitFor(ctx context.Context, delay time.Duration) error {

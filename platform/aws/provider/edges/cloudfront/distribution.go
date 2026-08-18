@@ -267,7 +267,7 @@ func dropAlias(ctx context.Context, c Clients, plan distributionPlan, id, hostna
 	return putConfig(ctx, c, id, etag, plan.config(aliases, certificate))
 }
 
-func (p *provider) deleteDistribution(ctx context.Context, c Clients, id string) error {
+func (p *provider) deleteDistribution(ctx context.Context, c Clients, kind, id string) error {
 	held, etag, err := configOf(ctx, c, id)
 	if err != nil {
 		if isNotFound(err) {
@@ -284,7 +284,7 @@ func (p *provider) deleteDistribution(ctx context.Context, c Clients, id string)
 			return err
 		}
 	}
-	if err := p.settler().settled(ctx, id, func(ctx context.Context) (string, error) {
+	if err := p.settler().settled(ctx, kind, id, func(ctx context.Context) (string, error) {
 		out, err := c.CloudFront.GetDistribution(ctx, &cloudfront.GetDistributionInput{Id: aws.String(id)})
 		if err != nil {
 			return "", fmt.Errorf("read the rollout status of distribution %s: %w", id, err)

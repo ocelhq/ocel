@@ -357,14 +357,17 @@ func (s *stack) Destroy(ctx context.Context) error {
 	if unrouted != nil {
 		errs = append(errs, fmt.Errorf("stop serving this project's previews before erasing the deployments ledger that names them, so a re-run still knows which hostnames to withdraw: %w", unrouted))
 	}
+	gone := true
 	if !s.onPreviewWildcard() {
 		held, found, err := s.findDistributionFor(ctx, c, s.plan().name)
 		switch {
 		case err != nil:
 			errs = append(errs, err)
+			gone = false
 		case found:
-			if err := s.p.deleteDistribution(ctx, c, held.id); err != nil {
+			if err := s.p.deleteDistribution(ctx, c, kindDistribution, held.id); err != nil {
 				errs = append(errs, err)
+				gone = false
 			} else if err := s.ledger(c).ForgetInvalidationTarget(ctx, held.id); err != nil {
 				errs = append(errs, err)
 			}
@@ -372,7 +375,7 @@ func (s *stack) Destroy(ctx context.Context) error {
 	}
 	delete(s.state, stackKeyDistribution)
 	delete(s.state, edge.StackKeyFront)
-	if unrouted == nil {
+	if unrouted == nil && gone {
 		if err := s.ledger(c).Destroy(ctx); err != nil {
 			errs = append(errs, err)
 		}

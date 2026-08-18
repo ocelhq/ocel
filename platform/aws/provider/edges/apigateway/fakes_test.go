@@ -8,6 +8,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/apigateway"
@@ -53,7 +54,22 @@ func (w *world) clients() Clients {
 }
 
 func (w *world) edge() *provider {
-	return &provider{open: func(context.Context) (Clients, error) { return w.clients(), nil }}
+	return &provider{
+		open:   func(context.Context) (Clients, error) { return w.clients(), nil },
+		delete: w.deleter(30),
+	}
+}
+
+func (w *world) deleter(attempts int) *Deleter {
+	return &Deleter{
+		Wait: func(_ context.Context, held time.Duration) error {
+			w.gateway.note("hold " + held.String())
+			return nil
+		},
+		Attempts: attempts,
+		Every:    30 * time.Second,
+		Jitter:   func() float64 { return 0 },
+	}
 }
 
 type fakeCFN struct {
@@ -194,6 +210,9 @@ type fakeGateway struct {
 	stageErr    error
 	resourceErr error
 
+	deleteErr     error
+	deleteRefused int
+
 	beforeRule func(*fakeGateway, int32)
 }
 
@@ -221,6 +240,12 @@ func page[T any](items []T, position *string, size int) ([]T, *string, error) {
 }
 
 func (f *fakeGateway) record(call string) { f.calls = append(f.calls, call) }
+
+func (f *fakeGateway) note(call string) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.record(call)
+}
 
 func (f *fakeGateway) mutations() []string {
 	var out []string
@@ -295,6 +320,10 @@ func (f *fakeGateway) DeleteRestApi(_ context.Context, in *apigateway.DeleteRest
 	defer f.mu.Unlock()
 	id := aws.ToString(in.RestApiId)
 	f.record("DeleteRestApi " + id)
+	if f.deleteRefused > 0 {
+		f.deleteRefused--
+		return nil, f.deleteErr
+	}
 	if _, ok := f.apis[id]; !ok {
 		return nil, &agtypes.NotFoundException{Message: aws.String("no api " + id)}
 	}

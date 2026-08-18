@@ -94,6 +94,28 @@ func TestPrintDestroyPlan(t *testing.T) {
 		}
 	})
 
+	t.Run("with no edge bought the quota-paced deletions read as slow", func(t *testing.T) {
+		t.Parallel()
+
+		var out bytes.Buffer
+		printDestroyPlan(&out, "proj_shop", false, &deploymentsv1.PlanDestroyProjectResponse{
+			EdgeStack: &deploymentsv1.EdgeStackPlan{
+				EdgeKind: "none",
+				Items: []*deploymentsv1.TeardownItem{
+					{Kind: "REST APIs", Name: "shop", Action: deploymentsv1.TeardownItem_ACTION_DELETE, Slow: true},
+					{Kind: "domain names", Name: "shop.example.com", Action: deploymentsv1.TeardownItem_ACTION_DELETE},
+				},
+			},
+		})
+		got := out.String()
+		if !strings.Contains(got, "delete REST APIs shop (this one is slow)") {
+			t.Errorf("printDestroyPlan output missing the slow REST APIs line; got:\n%s", got)
+		}
+		if !strings.Contains(got, "delete domain names shop.example.com\n") {
+			t.Errorf("printDestroyPlan marked an unpaced item slow; got:\n%s", got)
+		}
+	})
+
 	t.Run("an action this CLI does not know reads as a sentence", func(t *testing.T) {
 		t.Parallel()
 
