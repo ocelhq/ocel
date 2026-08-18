@@ -1,3 +1,5 @@
+import type { ResponseCache } from "./http-cache.mjs";
+
 const IMMUTABLE_CACHE_CONTROL = "public, max-age=31536000, immutable";
 const REVALIDATE_CACHE_CONTROL = "public, max-age=0, must-revalidate";
 
@@ -14,7 +16,7 @@ export interface AssetStoreDeps {
   store?: AssetBucket;
   assetPrefix: string;
   basePath?: string;
-  cache: Pick<Cache, "match" | "put">;
+  cache: ResponseCache;
   waitUntil: (promise: Promise<unknown>) => void;
 }
 

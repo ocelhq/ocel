@@ -12,7 +12,7 @@ import {
   type EdgeObjectStore,
   type EdgeVariables,
 } from "../src/edge";
-import type { AssetBucket } from "../src/assets";
+import type { AssetBucket } from "@framework/next-router/assets";
 import type { ObjectStoreReader } from "../src/tag-clock";
 
 declare module "cloudflare:test" {

@@ -6,7 +6,7 @@ import {
   type I18nConfig,
 } from "@next/routing";
 
-import { dataPagePathname, withoutBasePath } from "./trailing-slash";
+import { dataPagePathname, withoutBasePath } from "./trailing-slash.mjs";
 
 export interface LocaleResolution {
   pathname: string;

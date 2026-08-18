@@ -15,7 +15,7 @@ import {
   parseJson,
   type ObjectStoreReader,
 } from "./tag-clock";
-import type { Env } from "./index";
+import type { CacheEntrypointProps, Env, IsrWriterBinding } from "./env";
 
 export type SnapshotRaiser = (
   scope: string,
@@ -152,10 +152,6 @@ async function dynamoError(response: Response): Promise<Error> {
   return error;
 }
 
-export interface IsrWriterBinding {
-  fetch(request: Request): Promise<Response>;
-}
-
 export function tagRaiser(
   writer: IsrWriterBinding | undefined,
   secret: string | undefined,
@@ -175,10 +171,6 @@ export function tagRaiser(
       throw new Error(`ocel: the isr writer refused the tag raise with ${response.status}`);
     }
   };
-}
-
-export interface CacheEntrypointProps {
-  isrWriteSecret?: string;
 }
 
 export class CacheEntrypoint

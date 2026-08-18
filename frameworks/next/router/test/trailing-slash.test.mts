@@ -8,7 +8,7 @@ import {
   normalizeRepeatedSlashes,
   routingPathname,
   type TrailingSlashConfig,
-} from "../src/trailing-slash";
+} from "../src/trailing-slash.mjs";
 
 const BUILD_ID = "t";
 

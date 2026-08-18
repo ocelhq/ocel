@@ -1,3 +1,20 @@
+import {
+  CACHE_STATUS,
+  NEXT_CACHE_STATUS,
+  deltaSeconds,
+  headResponse,
+  respond,
+  storagePolicy,
+  withStatus,
+  withVercelCacheAlias,
+  type CacheStatus,
+} from "@framework/next-router/http-cache";
+import {
+  asSegmentPayload,
+  isSegmentPayload,
+  isSegmentPrefetch,
+} from "@framework/next-router/segment";
+
 import { enqueued, type RevalidationRoute, type RevalidationSender } from "./revalidation";
 import type { TagClock, TagVerdict } from "./tag-clock";
 
@@ -7,18 +24,10 @@ const ENTRY_VERSION = "x-ocel-entry-version";
 const ENTRY_FORMAT = "1";
 const STATIC_WINDOW = 31536000;
 
-export const CACHE_STATUS = "x-ocel-cache";
-export const NEXT_CACHE_STATUS = "x-nextjs-cache";
-export const VERCEL_CACHE_STATUS = "x-vercel-cache";
 const DRAFT_COOKIE = "__prerender_bypass";
-
-const SEGMENT_PREFETCH = "next-router-segment-prefetch";
-const POSTPONED = "x-nextjs-postponed";
-const SEGMENT_PAYLOAD = "2";
 
 export const SUPPRESS_SELF_REVALIDATION = true;
 
-export type CacheStatus = "HIT" | "PRERENDER" | "MISS" | "STALE" | "BYPASS";
 type NextCacheStatus = "HIT" | "STALE";
 
 const nextCacheStatus = (stale: boolean): NextCacheStatus =>
@@ -46,53 +55,6 @@ export interface CacheTarget {
 }
 
 export type OriginBlocking = (refreshing: number) => Promise<Response>;
-
-export interface CachePolicy {
-  sMaxAge: number;
-  swr: number;
-}
-
-function directives(cacheControl: string | null): Map<string, string> {
-  const parsed = new Map<string, string>();
-  if (!cacheControl) return parsed;
-  for (const part of cacheControl.split(",")) {
-    const [name, value = ""] = part.trim().toLowerCase().split("=");
-    parsed.set(name, value);
-  }
-  return parsed;
-}
-
-export function deltaSeconds(
-  cacheControl: string | null,
-  ...names: string[]
-): number | undefined {
-  const parsed = directives(cacheControl);
-  for (const name of names) {
-    if (!parsed.has(name)) continue;
-    const value = Number(parsed.get(name));
-    if (Number.isFinite(value) && value >= 0) return value;
-  }
-  return undefined;
-}
-
-export function storagePolicy(cacheControl: string | null): CachePolicy | null {
-  if (!cacheControl) return null;
-
-  const parsed = directives(cacheControl);
-  if (
-    parsed.has("no-store") ||
-    parsed.has("no-cache") ||
-    parsed.has("private")
-  ) {
-    return null;
-  }
-
-  const sMaxAge = Number(parsed.get("s-maxage"));
-  if (!Number.isFinite(sMaxAge) || sMaxAge <= 0) return null;
-
-  const swr = Number(parsed.get("stale-while-revalidate") ?? 0);
-  return { sMaxAge, swr: Number.isFinite(swr) && swr > 0 ? swr : 0 };
-}
 
 export interface EntryMeta {
   lastModified: number;
@@ -124,7 +86,7 @@ export function variantPath(
   headers: Headers,
   renderingMode: "STATIC" | "PARTIALLY_STATIC" | undefined,
 ): string | null {
-  if (headers.get("RSC") === null) return pathname; // HTML document / shell.
+  if (headers.get("RSC") === null) return pathname;
 
   const nextUrl = headers.get("next-url");
   const base = nextUrl !== null ? `${pathname}.iu/${encodeURIComponent(nextUrl)}` : pathname;
@@ -139,26 +101,6 @@ export function variantPath(
   if (prefetch !== null) return null;
 
   return renderingMode === "STATIC" ? `${base}.rsc` : null;
-}
-
-export function isSegmentPrefetch(headers: Headers): boolean {
-  return headers.get("RSC") !== null && headers.get(SEGMENT_PREFETCH) !== null;
-}
-
-export function isSegmentPayload(response: Response): boolean {
-  return (
-    response.status === 204 ||
-    response.headers.get(POSTPONED) === SEGMENT_PAYLOAD
-  );
-}
-
-export function asSegmentPayload(response: Response): Response {
-  if (!response.ok || isSegmentPayload(response)) return response;
-  response.body?.cancel();
-  const headers = new Headers();
-  const vary = response.headers.get("vary");
-  if (vary) headers.set("vary", vary);
-  return new Response(null, { status: 204, headers });
 }
 
 export interface DeploymentScope {
@@ -207,32 +149,6 @@ export function servedFromStore(response: Response, stale: boolean): Response {
   const served = withStatus(response, "PRERENDER");
   served.headers.set(NEXT_CACHE_STATUS, nextCacheStatus(stale));
   return served;
-}
-
-export function withStatus(response: Response, status: CacheStatus): Response {
-  const headers = new Headers(response.headers);
-  headers.set(CACHE_STATUS, status);
-  return respond(response, headers);
-}
-
-export function withVercelCacheAlias(
-  response: Response,
-  enabled: boolean | undefined,
-): Response {
-  if (!enabled) return response;
-  const status = response.headers.get(CACHE_STATUS);
-  if (status === null) return response;
-  const aliased = new Response(response.body, response);
-  aliased.headers.set(VERCEL_CACHE_STATUS, status);
-  return aliased;
-}
-
-function respond(response: Response, headers: Headers): Response {
-  return new Response(response.body, {
-    status: response.status,
-    statusText: response.statusText,
-    headers,
-  });
 }
 
 function entryWindow(
@@ -632,11 +548,3 @@ export async function serveCachedImage(
   return request.method === "HEAD" ? headResponse(response) : response;
 }
 
-export function headResponse(response: Response): Response {
-  response.body?.cancel();
-  return new Response(null, {
-    status: response.status,
-    statusText: response.statusText,
-    headers: response.headers,
-  });
-}

@@ -1,8 +1,8 @@
 import type { Route } from "@next/routing";
 import { describe, expect, it } from "vitest";
 
-import { serve, type RouteDeps } from "../src/index";
-import type { AssetBucket } from "../src/assets";
+import { serve, type RouteDeps } from "../src/index.mjs";
+import type { AssetBucket } from "../src/assets.mjs";
 
 function assetStoreServing(files: Record<string, string>): RouteDeps["assetStore"] {
   const store: AssetBucket = {
@@ -24,6 +24,7 @@ function assetStoreServing(files: Record<string, string>): RouteDeps["assetStore
 function deps(basePath = ""): RouteDeps {
   return {
     manifest: {
+      entry: "",
       buildId: "t",
       basePath,
       trailingSlash: false,

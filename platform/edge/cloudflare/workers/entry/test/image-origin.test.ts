@@ -3,12 +3,12 @@ import { describe, expect, it } from "vitest";
 import type { CacheDeps } from "../src/cache";
 import {
   functionUrlImageOrigin,
-  serveImage,
   unprovisionedImageOrigin,
   type ImageConfig,
   type ImageOriginRequest,
-} from "../src/image";
-import fixtures from "./fixtures/image-conformance.json";
+} from "@framework/next-router/image";
+import { serveImage } from "../src/image";
+import fixtures from "@framework/next-router/fixtures/image-conformance.json";
 import { coloDeps } from "./cache-deps";
 
 const BASE_CONFIG = (fixtures.variants as unknown as Array<{ config: ImageConfig }>)[0]

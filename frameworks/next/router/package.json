@@ -1,0 +1,35 @@
+{
+  "name": "@framework/next-router",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.mts",
+    "./accept": "./src/accept.mts",
+    "./assets": "./src/assets.mts",
+    "./fixtures/*": "./fixtures/*",
+    "./http-cache": "./src/http-cache.mts",
+    "./i18n": "./src/i18n.mts",
+    "./image": "./src/image.mts",
+    "./origin-body": "./src/origin-body.mts",
+    "./retry": "./src/retry.mts",
+    "./segment": "./src/segment.mts",
+    "./test-support/*": "./test-support/*.mts",
+    "./trailing-slash": "./src/trailing-slash.mts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "fixtures:image": "node scripts/generate-image-fixtures.mjs"
+  },
+  "dependencies": {
+    "@framework/next-cache": "workspace:*",
+    "@framework/next-protocol": "workspace:*",
+    "@next/routing": "^16.2.10"
+  },
+  "devDependencies": {
+    "@types/node": "^24",
+    "typescript": "^5.9.3",
+    "vitest": "^3.2.7"
+  }
+}

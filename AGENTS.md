@@ -50,8 +50,8 @@ entry before it needs files. Dotfile directories are tooling and are exempt.
   edges bought _independently of an origin cloud_ — a vendor's native edge belongs under
   that vendor instead.
 - **`frameworks/<name>/`** — framework support, holding only what is **not** a branch of
-  some host: shared protocol and the build-time adapter. Host-specific glue lives with
-  the host.
+  some host: shared protocol, the build-time adapter, and the host-neutral serving
+  runtime a host drives through ports. Host-specific glue lives with the host.
 - **`cli/`** — the `ocel` binary: Go internals plus the Node half that is bundled and
   embedded into it.
 - **`sdk/`** — the Go SDK apps import to declare resources and talk to the dev server.

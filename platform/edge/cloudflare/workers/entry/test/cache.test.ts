@@ -1,27 +1,22 @@
 import { describe, expect, it, vi } from "vitest";
 
+import { deltaSeconds } from "@framework/next-router/http-cache";
+
 import {
   admissionDrawMs,
   admissionJitterMs,
   admitRefresh,
-  asSegmentPayload,
   cacheKey,
-  deltaSeconds,
   deploymentScope,
   evaluate,
-  isSegmentPayload,
-  isSegmentPrefetch,
   refreshOutcome,
   refreshBackoffSeconds,
   refreshSentinelTtlSeconds,
   serveCached,
   sentinelUrl,
   serveCachedImage,
-  storagePolicy,
   storeInColo,
   variantPath,
-  withStatus,
-  withVercelCacheAlias,
   type CacheDeps,
   type CacheTarget,
   type EntryMeta,
@@ -173,34 +168,6 @@ function countingRun(outcome: RefreshOutcome | "threw" = "landed") {
 
 const req = (url = "https://app.example/", init?: RequestInit) =>
   new Request(url, init);
-
-describe("storagePolicy", () => {
-  it("reads a bare s-maxage as a zero-swr policy", () => {
-    expect(storagePolicy("s-maxage=31536000")).toEqual({
-      sMaxAge: 31536000,
-      swr: 0,
-    });
-  });
-
-  it("reads s-maxage plus stale-while-revalidate", () => {
-    expect(storagePolicy("s-maxage=60, stale-while-revalidate=30")).toEqual({
-      sMaxAge: 60,
-      swr: 30,
-    });
-  });
-
-  it("refuses to store private / no-store / no-cache responses", () => {
-    expect(
-      storagePolicy("private, no-cache, no-store, max-age=0, must-revalidate"),
-    ).toBeNull();
-  });
-
-  it("refuses responses with no positive s-maxage", () => {
-    expect(storagePolicy("max-age=0")).toBeNull();
-    expect(storagePolicy("s-maxage=0")).toBeNull();
-    expect(storagePolicy(null)).toBeNull();
-  });
-});
 
 describe("evaluate", () => {
   const at = (lastModified: number, over: Partial<EntryMeta> = {}): EntryMeta => ({
@@ -412,60 +379,7 @@ describe("cacheKey", () => {
   });
 });
 
-describe("the segment-prefetch payload guard", () => {
-  const H = (init?: Record<string, string>) => new Headers(init);
-
-  it("reads a segment prefetch only where variantPath mints a segment key", () => {
-    expect(
-      isSegmentPrefetch(H({ RSC: "1", "next-router-segment-prefetch": "/_tree" })),
-    ).toBe(true);
-    expect(isSegmentPrefetch(H({ "next-router-segment-prefetch": "/_tree" }))).toBe(
-      false,
-    );
-    expect(isSegmentPrefetch(H({ RSC: "1", "next-router-prefetch": "1" }))).toBe(
-      false,
-    );
-  });
-
-  it("accepts the two shapes the client accepts: a segment payload and a 204 miss", () => {
-    expect(
-      isSegmentPayload(new Response("seg", { headers: { "x-nextjs-postponed": "2" } })),
-    ).toBe(true);
-    expect(isSegmentPayload(new Response(null, { status: 204 }))).toBe(true);
-  });
-
-  it("rejects the postponed shell the origin returns when it cannot answer a segment", () => {
-    expect(
-      isSegmentPayload(new Response("shell", { headers: { "x-nextjs-postponed": "1" } })),
-    ).toBe(false);
-    expect(isSegmentPayload(new Response("rsc"))).toBe(false);
-  });
-
-  it("replaces a shell answering a segment prefetch with an empty 204, keeping vary", async () => {
-    const shell = new Response("shell", {
-      headers: { "x-nextjs-postponed": "1", vary: "rsc", "cache-control": "s-maxage=60" },
-    });
-
-    const answer = asSegmentPayload(shell);
-
-    expect(answer.status).toBe(204);
-    expect(answer.headers.get("vary")).toBe("rsc");
-    expect(answer.headers.has("x-nextjs-postponed")).toBe(false);
-    expect(await answer.text()).toBe("");
-  });
-
-  it("passes a segment payload and a 204 through untouched", () => {
-    const segment = new Response("seg", { headers: { "x-nextjs-postponed": "2" } });
-    const miss = new Response(null, { status: 204 });
-    expect(asSegmentPayload(segment)).toBe(segment);
-    expect(asSegmentPayload(miss)).toBe(miss);
-  });
-
-  it("leaves a failed origin response alone so the client still sees the failure", () => {
-    const failed = new Response("boom", { status: 500 });
-    expect(asSegmentPayload(failed)).toBe(failed);
-  });
-
+describe("refreshOutcome", () => {
   it("reports a 204 refresh as refused, because it stored nothing", () => {
     expect(refreshOutcome(new Response(null, { status: 204 }))).toBe("refused");
     expect(refreshOutcome(new Response("ok"))).toBe("landed");
@@ -1769,47 +1683,5 @@ describe("admitRefresh", () => {
     await deps.flush();
 
     expect(run.calls).toBe(1);
-  });
-});
-
-describe("withVercelCacheAlias", () => {
-  it("returns the response untouched when the build did not opt in", () => {
-    const response = withStatus(new Response("body"), "HIT");
-
-    const aliased = withVercelCacheAlias(response, undefined);
-
-    expect(aliased).toBe(response);
-    expect(aliased.headers.get("x-vercel-cache")).toBeNull();
-  });
-
-  it("emits no alias for a response no tier stamped a status on", () => {
-    const response = new Response("body");
-
-    const aliased = withVercelCacheAlias(response, true);
-
-    expect(aliased).toBe(response);
-    expect(aliased.headers.get("x-vercel-cache")).toBeNull();
-  });
-
-  it("copies the status verbatim, body and headers intact", async () => {
-    const response = withStatus(
-      new Response("body", { headers: { "content-type": "text/plain" } }),
-      "STALE",
-    );
-
-    const aliased = withVercelCacheAlias(response, true);
-
-    expect(aliased.headers.get("x-vercel-cache")).toBe("STALE");
-    expect(aliased.headers.get("x-ocel-cache")).toBe("STALE");
-    expect(aliased.headers.get("content-type")).toBe("text/plain");
-    expect(await aliased.text()).toBe("body");
-  });
-
-  it("leaves the response the caller may still store unaliased", () => {
-    const stored = withStatus(new Response("body"), "PRERENDER");
-
-    withVercelCacheAlias(stored, true);
-
-    expect(stored.headers.get("x-vercel-cache")).toBeNull();
   });
 });

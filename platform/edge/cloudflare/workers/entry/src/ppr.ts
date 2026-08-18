@@ -1,4 +1,4 @@
-import { CACHE_STATUS } from "./cache";
+import { CACHE_STATUS } from "@framework/next-router/http-cache";
 import type { Interception } from "./interception";
 
 export type PprHit = Extract<Interception, { kind: "ppr" }>;

@@ -40,6 +40,9 @@ jobs:
       - name: pnpm --filter @ocel/pulumi build (tsc)
         run: pnpm --filter @ocel/pulumi build
 
+      - name: pnpm --filter @framework/next-router typecheck
+        run: pnpm --filter @framework/next-router typecheck
+
       - name: JS unit tests
         run: |
           pnpm --filter ocel test
@@ -47,3 +50,4 @@ jobs:
           pnpm --filter @ocel/sst test
           pnpm --filter @ocel/pulumi test
           pnpm --filter @ocel/provider-aws test
+          pnpm --filter @framework/next-router test

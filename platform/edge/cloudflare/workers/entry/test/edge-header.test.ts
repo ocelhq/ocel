@@ -8,7 +8,7 @@ import {
   type RouteDeps,
   type ServeFetch,
 } from "../src/index";
-import type { AssetBucket } from "../src/assets";
+import type { AssetBucket } from "@framework/next-router/assets";
 import type {
   DeploymentRecord,
   DeploymentsBinding,

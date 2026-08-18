@@ -8,10 +8,10 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 import { animatedGif, ico, notAnImage, png, svg } from "./fixture-assets.mjs";
 
 const here = dirname(fileURLToPath(import.meta.url));
-const workerRoot = join(here, "..");
-const repoRoot = join(workerRoot, "..", "..");
+const packageRoot = join(here, "..");
+const repoRoot = join(packageRoot, "..", "..", "..");
 const appRoot = join(repoRoot, "examples", "next-test");
-const fixtureFile = join(workerRoot, "test", "fixtures", "image-conformance.json");
+const fixtureFile = join(packageRoot, "fixtures", "image-conformance.json");
 const port = Number(process.env.OCEL_IMAGE_FIXTURE_PORT ?? 3111);
 const origin = `http://127.0.0.1:${port}`;
 

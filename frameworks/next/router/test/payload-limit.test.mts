@@ -1,26 +1,19 @@
 import { describe, expect, it } from "vitest";
 
+import { dispatchResult, type RouteDeps } from "../src/index.mjs";
 import {
-  dispatchResult,
   originBodyBudget,
   originBodyBytes,
   type OriginBodyBudget,
-  type RouteDeps,
-} from "../src/index";
+} from "../src/origin-body.mjs";
+import { noAssets } from "../test-support/dispatch-scenario.mjs";
 
 const LIMIT = 6_289_408;
-
-function noAssets(): RouteDeps["assetStore"] {
-  return {
-    assetPrefix: "",
-    cache: { match: async () => undefined, put: async () => {} },
-    waitUntil: () => {},
-  };
-}
 
 function originDeps(overrides: Partial<RouteDeps> = {}): RouteDeps {
   return {
     manifest: {
+      entry: "",
       buildId: "test",
       basePath: "",
       pathnames: [],
@@ -54,7 +47,7 @@ function recordingDeps(
 
 function dispatchUpload(
   deps: RouteDeps,
-  body: BodyInit,
+  body: RequestInit["body"],
   headers: Record<string, string> = {},
 ): Promise<Response> {
   return dispatchResult(

@@ -1,9 +1,9 @@
 import { describe, expect, it } from "vitest";
 import { resolveRoutes, type I18nConfig } from "@next/routing";
 
-import { serve, type RouteDeps } from "../src/index";
-import type { AssetBucket } from "../src/assets";
-import { localeOf, resolveLocale } from "../src/i18n";
+import { serve, type RouteDeps } from "../src/index.mjs";
+import type { AssetBucket } from "../src/assets.mjs";
+import { localeOf, resolveLocale } from "../src/i18n.mjs";
 
 function assetStore(files: Record<string, string>): RouteDeps["assetStore"] {
   const store: AssetBucket = {
@@ -38,6 +38,7 @@ function i18nDeps(
   const unlocalized = over.unlocalized ?? [];
   return {
     manifest: {
+      entry: "",
       buildId: "b1",
       basePath,
       ...(i18n && { i18n }),

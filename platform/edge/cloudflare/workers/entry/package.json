@@ -8,7 +8,6 @@
     "dev": "wrangler dev",
     "start": "wrangler dev",
     "test": "vitest",
-    "fixtures:image": "node scripts/generate-image-fixtures.mjs",
     "typecheck": "tsc --noEmit",
     "cf-typegen": "wrangler types"
   },
@@ -22,6 +21,7 @@
   "dependencies": {
     "@framework/next-cache": "workspace:*",
     "@framework/next-protocol": "workspace:*",
+    "@framework/next-router": "workspace:*",
     "@next/routing": "^16.2.10",
     "@platform/edge-contract": "workspace:*",
     "aws4fetch": "^1.0.20"

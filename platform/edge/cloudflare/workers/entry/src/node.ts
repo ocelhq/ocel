@@ -1,5 +1,11 @@
-import { originBodyBytes, type OriginBodyBudget } from "./index";
-import { needsSlashNormalization, normalizeRepeatedSlashes } from "./trailing-slash";
+import {
+  originBodyBytes,
+  type OriginBodyBudget,
+} from "@framework/next-router/origin-body";
+import {
+  needsSlashNormalization,
+  normalizeRepeatedSlashes,
+} from "@framework/next-router/trailing-slash";
 
 export interface NodeOriginDeps {
   app: string;

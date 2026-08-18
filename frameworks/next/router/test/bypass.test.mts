@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { shouldBypass } from "../src/index";
+import { shouldBypass } from "../src/index.mjs";
 
 const check = (
   config: Parameters<typeof shouldBypass>[2],
