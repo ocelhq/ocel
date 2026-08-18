@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"path/filepath"
+	"slices"
 	"strings"
 
 	"github.com/evanw/esbuild/pkg/api"
@@ -52,13 +53,20 @@ func sideEffectFreeModules() api.Plugin {
 					Kind:       args.Kind,
 					PluginData: "resolving",
 				})
-				if len(r.Errors) > 0 || r.External {
+				if len(r.Errors) > 0 {
+					return api.OnResolveResult{External: importedByDependency(args.Importer)}, nil
+				}
+				if r.External {
 					return api.OnResolveResult{}, nil
 				}
 				return api.OnResolveResult{Path: r.Path, SideEffects: api.SideEffectsFalse}, nil
 			})
 		},
 	}
+}
+
+func importedByDependency(importer string) bool {
+	return slices.Contains(strings.Split(filepath.ToSlash(importer), "/"), "node_modules")
 }
 
 func shakenSurvivors(root string, app App) (map[string]map[string]bool, error) {
