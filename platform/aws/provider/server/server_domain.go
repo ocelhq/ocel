@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"slices"
 	"strings"
 
 	connect "connectrpc.com/connect"
@@ -14,6 +15,7 @@ import (
 
 	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
 	"github.com/ocelhq/ocel/platform/aws/provider/bootstrap"
+	"github.com/ocelhq/ocel/platform/aws/provider/certs"
 	"github.com/ocelhq/ocel/platform/aws/provider/deploy"
 	"github.com/ocelhq/ocel/platform/aws/provider/dns"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
@@ -112,32 +114,83 @@ func (s *Server) runUseDomain(ctx context.Context, req *deploymentsv1.UseDomainR
 		return err
 	}
 
-	progress(fmt.Sprintf("Reconciling the shared preview entry on %s", edge.PreviewWildcard(baseDomain)))
+	wildcard := edge.PreviewWildcard(baseDomain)
+	progress(fmt.Sprintf("Reconciling the shared preview entry on %s", wildcard))
 	if err := edgeFront.ReconcilePreviewWildcard(ctx, spec); err != nil {
 		return err
 	}
 
-	return settleRecords(ctx, writer, dns.NewPoller(), records, progress, func(written []edge.Record) error {
-		return bootstrap.WritePreviewDomain(ctx, ssmClient, bootstrap.ClassPreview, bootstrap.PreviewDomain{
-			BaseDomain:        baseDomain,
-			CloudflareAccount: os.Getenv(cloudflareAccountEnvVar),
-			GrammarMin:        edge.PreviewGrammarMin,
-			GrammarMax:        edge.PreviewGrammarMax,
-			Records:           written,
-		})
+	domain := bootstrap.PreviewDomain{
+		BaseDomain:        baseDomain,
+		CloudflareAccount: os.Getenv(cloudflareAccountEnvVar),
+		GrammarMin:        edge.PreviewGrammarMin,
+		GrammarMax:        edge.PreviewGrammarMax,
+		Certificate:       recorded.Certificate,
+		Probe:             recorded.Probe,
+	}
+	save := func() error {
+		return bootstrap.WritePreviewDomain(ctx, ssmClient, bootstrap.ClassPreview, domain)
+	}
+
+	var hostWritten, hostOwed []edge.Record
+	if err := settleRecords(ctx, writer, dns.NewPoller(), records, progress, func(written, owed []edge.Record) error {
+		hostWritten, hostOwed = written, owed
+		domain.Records, domain.Owed = written, owed
+		return save()
+	}); err != nil {
+		return err
+	}
+
+	flow := certs.Flow{
+		Issuer: certs.IssuerFor(edgeFront.Kind(), certs.Deps{AWS: awscfg}),
+		Writer: writer,
+		Prober: certs.NewProber(),
+		Front:  hostOwed,
+	}
+	_, err = flow.Settle(ctx, wildcard, edgeFront.Kind(), priorSettlement(recorded), progress, func(settled certs.Settlement) error {
+		domain.Certificate, domain.Probe = settled.Certificate, settled.Probe
+		domain.Records = append(slices.Clone(hostWritten), settled.Written...)
+		domain.Owed = append(slices.Clone(hostOwed), settled.Owed...)
+		return save()
 	})
+	return err
 }
 
-func settleRecords(ctx context.Context, writer edge.DNSWriter, poller dns.Poller, records []edge.Record, say func(string), record func([]edge.Record) error) error {
-	var written []edge.Record
+func priorSettlement(recorded bootstrap.PreviewDomain) certs.Settlement {
+	validation := recorded.Certificate.Validation
+	return certs.Settlement{
+		Certificate: recorded.Certificate,
+		Probe:       recorded.Probe,
+		Written:     recordsAmong(recorded.Records, validation),
+		Owed:        recordsAmong(recorded.Owed, validation),
+	}
+}
+
+func recordsAmong(recorded, wanted []edge.Record) []edge.Record {
+	var kept []edge.Record
+	for _, rec := range recorded {
+		if slices.ContainsFunc(wanted, func(want edge.Record) bool {
+			return want.Name == rec.Name && want.Type == rec.Type
+		}) {
+			kept = append(kept, rec)
+		}
+	}
+	return kept
+}
+
+func settleRecords(ctx context.Context, writer edge.DNSWriter, poller dns.Poller, records []edge.Record, say func(string), record func(written, owed []edge.Record) error) error {
+	var written, owed []edge.Record
 	var writeErr error
 	if writer != nil {
 		for _, rec := range records {
 			say(fmt.Sprintf("Writing %s", rec))
 		}
 		written, writeErr = writer.EnsureRecords(ctx, records, say)
+		owed = edge.Unwritten(records, written)
+	} else {
+		owed = records
 	}
-	if err := record(written); err != nil {
+	if err := record(written, owed); err != nil {
 		return errors.Join(writeErr, err)
 	}
 	if writeErr != nil {
@@ -187,14 +240,31 @@ func (s *Server) runReleaseDomain(ctx context.Context, req *deploymentsv1.Releas
 		return err
 	}
 
+	return releaseDomain(ctx, releaseDeps{
+		ssm:    ssmClient,
+		edge:   edgeFront,
+		writer: writer,
+		issuer: certs.DiscardIssuerFor(recorded.Certificate, certs.Deps{AWS: awscfg}),
+	}, recorded, progress)
+}
+
+type releaseDeps struct {
+	ssm    bootstrap.SSMAPI
+	edge   edge.Edge
+	writer edge.DNSWriter
+	issuer certs.Issuer
+}
+
+func releaseDomain(ctx context.Context, deps releaseDeps, recorded bootstrap.PreviewDomain, progress func(string)) error {
 	progress(fmt.Sprintf("Removing the shared preview entry on %s", edge.PreviewWildcard(recorded.BaseDomain)))
-	if err := edgeFront.DestroyPreviewWildcard(ctx, recorded.BaseDomain); err != nil {
+	if err := deps.edge.DestroyPreviewWildcard(ctx, recorded.BaseDomain); err != nil {
 		return err
 	}
-	if err := dns.Release(ctx, writer, recorded.Records, progress); err != nil {
+	if err := dns.Release(ctx, deps.writer, recorded.Records, progress); err != nil {
 		return err
 	}
-	return bootstrap.DeletePreviewDomain(ctx, ssmClient, bootstrap.ClassPreview)
+	deps.issuer.Discard(ctx, recorded.Certificate, progress)
+	return bootstrap.DeletePreviewDomain(ctx, deps.ssm, bootstrap.ClassPreview)
 }
 
 func (s *Server) ListDomain(ctx context.Context, req *deploymentsv1.ListDomainRequest) (*deploymentsv1.ListDomainResponse, error) {
@@ -273,7 +343,29 @@ func globalPreviewDomain(ctx context.Context, owner routeOwnerFunc, recorded boo
 		GrammarMin:        recorded.GrammarMin,
 		GrammarMax:        recorded.GrammarMax,
 		RouteInstalled:    sharedEntryRouteInstalled(ctx, owner, recorded.BaseDomain),
+		CertificateId:     recorded.Certificate.ARN,
+		CertificateStatus: recorded.Certificate.Status,
+		RecordsWritten:    recordLines(recorded.Records),
+		RecordsOwed:       recordLines(recorded.Owed),
+		LastProbeAt:       probeUnix(recorded.Probe),
+		LastProbeOk:       recorded.Probe.OK,
+		LastProbeEdge:     string(recorded.Probe.Edge),
 	}
+}
+
+func recordLines(records []edge.Record) []string {
+	lines := make([]string, 0, len(records))
+	for _, rec := range records {
+		lines = append(lines, rec.String())
+	}
+	return lines
+}
+
+func probeUnix(probe certs.Probe) int64 {
+	if probe.At.IsZero() {
+		return 0
+	}
+	return probe.At.Unix()
 }
 
 func sharedEntryRouteInstalled(ctx context.Context, owner routeOwnerFunc, baseDomain string) bool {

@@ -2485,6 +2485,13 @@ type GlobalPreviewDomain struct {
 	GrammarMin        uint32                 `protobuf:"varint,3,opt,name=grammar_min,json=grammarMin,proto3" json:"grammar_min,omitempty"`
 	GrammarMax        uint32                 `protobuf:"varint,4,opt,name=grammar_max,json=grammarMax,proto3" json:"grammar_max,omitempty"`
 	RouteInstalled    bool                   `protobuf:"varint,5,opt,name=route_installed,json=routeInstalled,proto3" json:"route_installed,omitempty"`
+	CertificateId     string                 `protobuf:"bytes,6,opt,name=certificate_id,json=certificateId,proto3" json:"certificate_id,omitempty"`
+	CertificateStatus string                 `protobuf:"bytes,7,opt,name=certificate_status,json=certificateStatus,proto3" json:"certificate_status,omitempty"`
+	RecordsWritten    []string               `protobuf:"bytes,8,rep,name=records_written,json=recordsWritten,proto3" json:"records_written,omitempty"`
+	RecordsOwed       []string               `protobuf:"bytes,9,rep,name=records_owed,json=recordsOwed,proto3" json:"records_owed,omitempty"`
+	LastProbeAt       int64                  `protobuf:"varint,10,opt,name=last_probe_at,json=lastProbeAt,proto3" json:"last_probe_at,omitempty"`
+	LastProbeOk       bool                   `protobuf:"varint,11,opt,name=last_probe_ok,json=lastProbeOk,proto3" json:"last_probe_ok,omitempty"`
+	LastProbeEdge     string                 `protobuf:"bytes,12,opt,name=last_probe_edge,json=lastProbeEdge,proto3" json:"last_probe_edge,omitempty"`
 	unknownFields     protoimpl.UnknownFields
 	sizeCache         protoimpl.SizeCache
 }
@@ -2552,6 +2559,55 @@ func (x *GlobalPreviewDomain) GetRouteInstalled() bool {
 		return x.RouteInstalled
 	}
 	return false
+}
+
+func (x *GlobalPreviewDomain) GetCertificateId() string {
+	if x != nil {
+		return x.CertificateId
+	}
+	return ""
+}
+
+func (x *GlobalPreviewDomain) GetCertificateStatus() string {
+	if x != nil {
+		return x.CertificateStatus
+	}
+	return ""
+}
+
+func (x *GlobalPreviewDomain) GetRecordsWritten() []string {
+	if x != nil {
+		return x.RecordsWritten
+	}
+	return nil
+}
+
+func (x *GlobalPreviewDomain) GetRecordsOwed() []string {
+	if x != nil {
+		return x.RecordsOwed
+	}
+	return nil
+}
+
+func (x *GlobalPreviewDomain) GetLastProbeAt() int64 {
+	if x != nil {
+		return x.LastProbeAt
+	}
+	return 0
+}
+
+func (x *GlobalPreviewDomain) GetLastProbeOk() bool {
+	if x != nil {
+		return x.LastProbeOk
+	}
+	return false
+}
+
+func (x *GlobalPreviewDomain) GetLastProbeEdge() string {
+	if x != nil {
+		return x.LastProbeEdge
+	}
+	return ""
 }
 
 type DomainClaim struct {
@@ -4661,7 +4717,7 @@ const file_deployments_v1_deployments_proto_rawDesc = "" +
 	"\vknown_slugs\x18\x05 \x03(\tR\n" +
 	"knownSlugs\x12@\n" +
 	"\rdomain_claims\x18\x06 \x03(\v2\x1b.deployments.v1.DomainClaimR\fdomainClaims\x12W\n" +
-	"\x15global_preview_domain\x18\a \x01(\v2#.deployments.v1.GlobalPreviewDomainR\x13globalPreviewDomain\"\xd0\x01\n" +
+	"\x15global_preview_domain\x18\a \x01(\v2#.deployments.v1.GlobalPreviewDomainR\x13globalPreviewDomain\"\xe2\x03\n" +
 	"\x13GlobalPreviewDomain\x12\x1f\n" +
 	"\vbase_domain\x18\x01 \x01(\tR\n" +
 	"baseDomain\x12-\n" +
@@ -4670,7 +4726,15 @@ const file_deployments_v1_deployments_proto_rawDesc = "" +
 	"grammarMin\x12\x1f\n" +
 	"\vgrammar_max\x18\x04 \x01(\rR\n" +
 	"grammarMax\x12'\n" +
-	"\x0froute_installed\x18\x05 \x01(\bR\x0erouteInstalled\"\xc7\x01\n" +
+	"\x0froute_installed\x18\x05 \x01(\bR\x0erouteInstalled\x12%\n" +
+	"\x0ecertificate_id\x18\x06 \x01(\tR\rcertificateId\x12-\n" +
+	"\x12certificate_status\x18\a \x01(\tR\x11certificateStatus\x12'\n" +
+	"\x0frecords_written\x18\b \x03(\tR\x0erecordsWritten\x12!\n" +
+	"\frecords_owed\x18\t \x03(\tR\vrecordsOwed\x12\"\n" +
+	"\rlast_probe_at\x18\n" +
+	" \x01(\x03R\vlastProbeAt\x12\"\n" +
+	"\rlast_probe_ok\x18\v \x01(\bR\vlastProbeOk\x12&\n" +
+	"\x0flast_probe_edge\x18\f \x01(\tR\rlastProbeEdge\"\xc7\x01\n" +
 	"\vDomainClaim\x12\x1a\n" +
 	"\bhostname\x18\x01 \x01(\tR\bhostname\x12:\n" +
 	"\x06status\x18\x02 \x01(\x0e2\".deployments.v1.DomainClaim.StatusR\x06status\x12\x14\n" +

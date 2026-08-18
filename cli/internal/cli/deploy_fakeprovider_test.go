@@ -68,6 +68,10 @@ const (
 	fakeGlobalDomainRouteEnvVar    = "OCEL_TEST_FAKE_GLOBAL_DOMAIN_ROUTE"
 	fakeGlobalDomainGrammarEnvVar  = "OCEL_TEST_FAKE_GLOBAL_DOMAIN_GRAMMAR"
 	fakeGlobalDomainProjectsEnvVar = "OCEL_TEST_FAKE_GLOBAL_DOMAIN_PROJECTS"
+	fakeGlobalDomainCertEnvVar     = "OCEL_TEST_FAKE_GLOBAL_DOMAIN_CERT"
+	fakeGlobalDomainRecordsEnvVar  = "OCEL_TEST_FAKE_GLOBAL_DOMAIN_RECORDS"
+	fakeGlobalDomainOwedEnvVar     = "OCEL_TEST_FAKE_GLOBAL_DOMAIN_OWED"
+	fakeGlobalDomainProbeEnvVar    = "OCEL_TEST_FAKE_GLOBAL_DOMAIN_PROBE"
 )
 
 const (
@@ -499,13 +503,44 @@ func fakeGlobalDomain() *deploymentsv1.GlobalPreviewDomain {
 		lo, hi, _ := strings.Cut(g, "-")
 		grammarMin, grammarMax = parseGrammar(lo), parseGrammar(hi)
 	}
+	status, certID, _ := strings.Cut(os.Getenv(fakeGlobalDomainCertEnvVar), " ")
+	probeAt, probeEdge, probeOK := fakeGlobalDomainProbe()
 	return &deploymentsv1.GlobalPreviewDomain{
 		BaseDomain:        base,
 		CloudflareAccount: os.Getenv(fakeGlobalDomainAccountEnvVar),
 		GrammarMin:        grammarMin,
 		GrammarMax:        grammarMax,
 		RouteInstalled:    os.Getenv(fakeGlobalDomainRouteEnvVar) != "0",
+		CertificateId:     certID,
+		CertificateStatus: status,
+		RecordsWritten:    splitList(os.Getenv(fakeGlobalDomainRecordsEnvVar)),
+		RecordsOwed:       splitList(os.Getenv(fakeGlobalDomainOwedEnvVar)),
+		LastProbeAt:       probeAt,
+		LastProbeEdge:     probeEdge,
+		LastProbeOk:       probeOK,
 	}
+}
+
+func splitList(raw string) []string {
+	var out []string
+	for _, item := range strings.Split(raw, ",") {
+		if item = strings.TrimSpace(item); item != "" {
+			out = append(out, item)
+		}
+	}
+	return out
+}
+
+func fakeGlobalDomainProbe() (int64, string, bool) {
+	fields := strings.Fields(os.Getenv(fakeGlobalDomainProbeEnvVar))
+	if len(fields) < 2 {
+		return 0, "", false
+	}
+	at, err := strconv.ParseInt(fields[0], 10, 64)
+	if err != nil {
+		return 0, "", false
+	}
+	return at, fields[1], len(fields) < 3 || fields[2] != "failed"
 }
 
 func parseGrammar(s string) uint32 {

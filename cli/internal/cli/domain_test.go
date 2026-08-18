@@ -189,6 +189,63 @@ export default {
 		waitForNoStaleSocket(t, sockPath)
 	})
 
+	t.Run("ls shows the certificate, the records and the last probe", func(t *testing.T) {
+		root, sockPath := setUpDeployFixture(t)
+		d := defaultDeps()
+		setLoggedIn(&d)
+		t.Setenv(fakeInfraClassEnvVar, "preview")
+		t.Setenv(fakeInfraPresentEnvVar, "1")
+		t.Setenv(fakeGlobalDomainEnvVar, "preview.acme.com")
+		t.Setenv(fakeGlobalDomainCertEnvVar, "ISSUED arn:aws:acm:us-east-1:111122223333:certificate/abcd-1234")
+		t.Setenv(fakeGlobalDomainRecordsEnvVar, "*.preview.acme.com AAAA 100::")
+		t.Setenv(fakeGlobalDomainOwedEnvVar, "_ocel.preview.acme.com CNAME _target.acm-validations.aws")
+		t.Setenv(fakeGlobalDomainProbeEnvVar, "1755500000 cloudflare")
+
+		var stdout, stderr bytes.Buffer
+		if err := runDomainLs(context.Background(), d, root, domainOptions{preview: true}, &stdout, &stderr); err != nil {
+			t.Fatalf("runDomainLs err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
+		}
+		out := stdout.String()
+		for _, want := range []string{
+			"Certificate          ISSUED  arn:aws:acm:us-east-1:111122223333:certificate/abcd-1234",
+			"Records ocel wrote   *.preview.acme.com AAAA 100::",
+			"Records you own      _ocel.preview.acme.com CNAME _target.acm-validations.aws",
+			"Last probe           2025-08-18T06:53:20Z  x-ocel-edge: cloudflare",
+		} {
+			if !strings.Contains(out, want) {
+				t.Errorf("stdout = %q, want it to contain %q", out, want)
+			}
+		}
+		waitForNoStaleSocket(t, sockPath)
+	})
+
+	t.Run("ls says an unprobed domain has never been probed", func(t *testing.T) {
+		root, sockPath := setUpDeployFixture(t)
+		d := defaultDeps()
+		setLoggedIn(&d)
+		t.Setenv(fakeInfraClassEnvVar, "preview")
+		t.Setenv(fakeInfraPresentEnvVar, "1")
+		t.Setenv(fakeGlobalDomainEnvVar, "preview.acme.com")
+
+		var stdout, stderr bytes.Buffer
+		if err := runDomainLs(context.Background(), d, root, domainOptions{preview: true}, &stdout, &stderr); err != nil {
+			t.Fatalf("runDomainLs err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
+		}
+		out := stdout.String()
+		if !strings.Contains(out, "Last probe           never") {
+			t.Errorf("stdout = %q, want it to say the domain has never been probed", out)
+		}
+		if strings.Contains(out, "Certificate") {
+			t.Errorf("stdout = %q, want no certificate line when none is recorded", out)
+		}
+		for _, want := range []string{"Records ocel wrote   none", "Records you own      none outstanding"} {
+			if !strings.Contains(out, want) {
+				t.Errorf("stdout = %q, want it to contain %q", out, want)
+			}
+		}
+		waitForNoStaleSocket(t, sockPath)
+	})
+
 	t.Run("ls says so when no global domain is configured", func(t *testing.T) {
 		root, sockPath := setUpDeployFixture(t)
 		d := defaultDeps()
