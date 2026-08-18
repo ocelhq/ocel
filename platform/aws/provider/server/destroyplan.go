@@ -86,6 +86,7 @@ func surfaceItems(scope projectPlanScope) []*deploymentsv1.TeardownItem {
 			Name:   scope.slug,
 			Action: deploymentsv1.TeardownItem_ACTION_DELETE,
 			Reason: restAPIsReason(scope.class),
+			Slow:   true,
 		}}
 		if len(hostnames) > 0 {
 			items = append(items, &deploymentsv1.TeardownItem{
@@ -100,10 +101,11 @@ func surfaceItems(scope projectPlanScope) []*deploymentsv1.TeardownItem {
 }
 
 func restAPIsReason(class string) string {
+	const paced = "; API Gateway deletes at most one REST API every 30 seconds per account, so a project with many previews takes a while"
 	if class == bootstrap.ClassPreview {
-		return "every preview API this project is served through, and the host rules routing to them"
+		return "every preview API this project is served through, and the host rules routing to them" + paced
 	}
-	return "the production API and every preview API this project is served through, and the host rules routing to them"
+	return "the production API and every preview API this project is served through, and the host rules routing to them" + paced
 }
 
 func certificateItems(recorded bootstrap.Production) []*deploymentsv1.TeardownItem {

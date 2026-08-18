@@ -148,8 +148,15 @@ func TestDestroyPlanItemsPerEdge(t *testing.T) {
 		if err != nil {
 			t.Fatalf("destroyPlanItems: %v", err)
 		}
-		if got := itemFor(t, items, "REST APIs", "shop").GetAction(); got != deploymentsv1.TeardownItem_ACTION_DELETE {
-			t.Errorf("REST APIs action = %v, want DELETE", got)
+		apis := itemFor(t, items, "REST APIs", "shop")
+		if apis.GetAction() != deploymentsv1.TeardownItem_ACTION_DELETE {
+			t.Errorf("REST APIs action = %v, want DELETE", apis.GetAction())
+		}
+		if !apis.GetSlow() {
+			t.Error("REST APIs slow = false: API Gateway paces their deletion to one every 30 seconds, and the plan is where that is said")
+		}
+		if got := itemFor(t, items, "domain names", "shop.example.com").GetSlow(); got {
+			t.Error("domain names slow = true, want only the quota-paced items marked slow")
 		}
 		if got := itemFor(t, items, "domain names", "shop.example.com").GetAction(); got != deploymentsv1.TeardownItem_ACTION_DELETE {
 			t.Errorf("domain names action = %v, want DELETE", got)

@@ -23,7 +23,7 @@ func TestSettler(t *testing.T) {
 		}
 		polls := 0
 
-		if err := s.settled(context.Background(), "E1", func(context.Context) (string, error) {
+		if err := s.settled(context.Background(), kindDistribution, "E1", func(context.Context) (string, error) {
 			polls++
 			if polls < 3 {
 				return "InProgress", nil
@@ -51,14 +51,14 @@ func TestSettler(t *testing.T) {
 			Jitter:   func() float64 { return 0.5 },
 		}
 
-		err := s.settled(context.Background(), "E1", func(context.Context) (string, error) {
+		err := s.settled(context.Background(), kindDistribution, "E1", func(context.Context) (string, error) {
 			return "InProgress", nil
 		})
 
 		if err == nil {
 			t.Fatal("settled error = nil, want it to give up")
 		}
-		for _, want := range []string{"E1", "about " + s.window().String(), "re-run the same command"} {
+		for _, want := range []string{"• distribution E1", "about " + s.window().String(), "re-run the same command"} {
 			if !strings.Contains(err.Error(), want) {
 				t.Errorf("err = %q, want it to contain %q: the jitter makes the window an estimate, and the message must not pretend otherwise", err, want)
 			}
@@ -75,7 +75,7 @@ func TestSettler(t *testing.T) {
 			Jitter:   func() float64 { return 0.5 },
 		}
 
-		err := s.settled(context.Background(), "E1", func(context.Context) (string, error) {
+		err := s.settled(context.Background(), kindDistribution, "E1", func(context.Context) (string, error) {
 			return "InProgress", nil
 		})
 
@@ -95,7 +95,7 @@ func TestSettler(t *testing.T) {
 		}
 		polls := 0
 
-		if err := s.settled(context.Background(), "E1", func(context.Context) (string, error) {
+		if err := s.settled(context.Background(), kindDistribution, "E1", func(context.Context) (string, error) {
 			polls++
 			if polls < 4 {
 				return "", throttlingError()

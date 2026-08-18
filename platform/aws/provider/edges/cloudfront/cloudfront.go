@@ -44,6 +44,9 @@ const (
 	stackKeyHeadersPolicy = "responseHeadersPolicyId"
 	stackKeyOAC           = "originAccessControlId"
 	stackKeyPreviewBase   = "previewBase"
+
+	kindDistribution         = "distribution"
+	kindWildcardDistribution = "wildcard distribution"
 )
 
 type CloudFrontAPI interface {

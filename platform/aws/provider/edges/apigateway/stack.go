@@ -229,7 +229,7 @@ func (s *stack) RemovePointer(ctx context.Context, pointer string) (edge.PruneRe
 			return edge.PruneResult{}, err
 		}
 		if found {
-			if err := deleteAPI(ctx, c, id); err != nil {
+			if err := s.p.deleter().drain(ctx, c, []string{id}); err != nil {
 				return edge.PruneResult{}, err
 			}
 		}
@@ -378,10 +378,9 @@ func (s *stack) Destroy(ctx context.Context) error {
 	if err != nil {
 		return errors.Join(append(errs, err)...)
 	}
-	for _, id := range ids {
-		if err := deleteAPI(ctx, c, id); err != nil {
-			errs = append(errs, err)
-		}
+	drained := s.p.deleter().drain(ctx, c, ids)
+	if drained != nil {
+		return errors.Join(append(errs, drained)...)
 	}
 	delete(s.state, stackKeyAPI)
 	if err := ledger.Destroy(ctx); err != nil {

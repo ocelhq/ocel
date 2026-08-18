@@ -93,13 +93,14 @@ type provider struct {
 	open func(context.Context) (Clients, error)
 
 	mu      sync.Mutex
+	delete  *Deleter
 	clients *Clients
 }
 
 var _ edge.Edge = (*provider)(nil)
 
 func New(open func(context.Context) (Clients, error)) edge.Edge {
-	return &provider{open: open}
+	return &provider{open: open, delete: NewDeleter()}
 }
 
 func FromConfig(load func(context.Context) (aws.Config, error)) func(context.Context) (Clients, error) {
@@ -120,6 +121,15 @@ func FromConfig(load func(context.Context) (aws.Config, error)) func(context.Con
 			Region:     awscfg.Region,
 		}, nil
 	}
+}
+
+func (p *provider) deleter() *Deleter {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	if p.delete == nil {
+		p.delete = NewDeleter()
+	}
+	return p.delete
 }
 
 func (p *provider) Kind() edge.Kind { return edge.KindNone }
@@ -202,7 +212,7 @@ func (p *provider) Teardown(ctx context.Context, class edge.Class) error {
 	case err != nil:
 		errs = append(errs, err)
 	case found:
-		if err := deleteAPI(ctx, c, id); err != nil {
+		if err := p.deleter().drain(ctx, c, []string{id}); err != nil {
 			errs = append(errs, err)
 		}
 	}

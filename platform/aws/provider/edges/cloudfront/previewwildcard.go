@@ -156,7 +156,7 @@ func (p *provider) DestroyPreviewWildcard(ctx context.Context, baseDomain string
 	case err != nil:
 		errs = append(errs, err)
 	case found:
-		if err := p.deleteDistribution(ctx, c, held.id); err != nil {
+		if err := p.deleteDistribution(ctx, c, kindWildcardDistribution, held.id); err != nil {
 			errs = append(errs, err)
 		} else if err := p.forgetPreviewWildcardTarget(ctx, c, held.id); err != nil {
 			errs = append(errs, err)

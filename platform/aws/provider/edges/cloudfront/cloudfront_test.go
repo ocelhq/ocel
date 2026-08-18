@@ -566,6 +566,41 @@ func TestDestroyGivesUpOnADistributionStillRollingOut(t *testing.T) {
 	}
 }
 
+func TestDestroyKeepsTheLedgerUntilTheDistributionIsActuallyGone(t *testing.T) {
+	t.Parallel()
+
+	w := newWorld()
+	stack := reconciled(t, w)
+	id := stack.State()[stackKeyDistribution]
+	w.front.rollout = 99
+
+	err := stack.Destroy(context.Background())
+	if err == nil {
+		t.Fatal("Destroy error = nil, want the run to stop while the distribution is still rolling out")
+	}
+	var outstanding *edge.OutstandingError
+	if !errors.As(err, &outstanding) {
+		t.Fatalf("Destroy error = %v, want the distribution named as still standing", err)
+	}
+	if len(w.front.distributions) != 1 {
+		t.Fatalf("%d distributions left, want the one the rollout would not release", len(w.front.distributions))
+	}
+	if len(w.dynamo.items) == 0 {
+		t.Error("the deployments ledger was erased while the distribution it names is still standing; a re-run would never find it")
+	}
+
+	w.front.distributions[id].rollout = 0
+	if err := stack.Destroy(context.Background()); err != nil {
+		t.Fatalf("re-run: %v", err)
+	}
+	if len(w.front.distributions) != 0 {
+		t.Errorf("%d distributions survived the re-run, want none", len(w.front.distributions))
+	}
+	if len(w.dynamo.items) != 0 {
+		t.Errorf("the ledger left %d items behind after the re-run, want none", len(w.dynamo.items))
+	}
+}
+
 func TestReconcileLeavesTheTagInvalidatorAFrontToReach(t *testing.T) {
 	t.Parallel()
 

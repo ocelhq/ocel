@@ -13,6 +13,7 @@ import (
 
 	"github.com/ocelhq/ocel/cli/internal/obs"
 	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
+	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
 func startTestRun(t *testing.T, dir, command string) *obs.Run {
@@ -135,6 +136,29 @@ func TestSession(t *testing.T) {
 		}
 		if !strings.Contains(got, ".log") {
 			t.Errorf("stdout = %q, want a pointer to the log file", got)
+		}
+	})
+
+	t.Run("fail lists what a slow delete left standing, one item to a line", func(t *testing.T) {
+		t.Parallel()
+		s, out, _ := newTestSession(t, "ocel destroy")
+		s.Fail(&edge.OutstandingError{
+			Because: "API Gateway paces deletions",
+			Waited:  14*time.Minute + 30*time.Second,
+			Items: []edge.Outstanding{
+				{Kind: "REST API", Name: "api1"},
+				{Kind: "REST API", Name: "api2"},
+			},
+		})
+
+		got := out.String()
+		for _, want := range []string{"re-run the same command", "• REST API api1", "• REST API api2"} {
+			if !strings.Contains(got, want) {
+				t.Errorf("stdout = %q, want it to contain %q", got, want)
+			}
+		}
+		if strings.Contains(got, "api1  • REST API api2") {
+			t.Errorf("stdout = %q, want each outstanding item on its own line", got)
 		}
 	})
 
