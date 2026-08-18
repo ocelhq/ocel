@@ -1,10 +1,12 @@
 import { refreshHeader } from "@framework/next-cache";
+import type {
+  DispatchTarget,
+  MiddlewareMatcher,
+  RouteHas,
+  RoutingManifest,
+} from "@framework/next-protocol/routing-manifest";
 
-import {
-  resolveRoutes,
-  responseToMiddlewareResult,
-  type I18nConfig,
-} from "@next/routing";
+import { resolveRoutes, responseToMiddlewareResult } from "@next/routing";
 import { isNextStaticPathname, serveStaticAsset, type AssetStoreDeps } from "./assets";
 import {
   canonicalPathname,
@@ -189,85 +191,6 @@ export interface OriginBodyBudget {
   encoding: OriginBodyEncoding;
 }
 
-type RouteHas =
-  | {
-      type: "header" | "cookie" | "query";
-      key: string;
-      value?: string;
-    }
-  | {
-      type: "host";
-      key?: undefined;
-      value: string;
-    };
-
-type DispatchTarget =
-  | { kind: "static" }
-  | {
-      kind: "lambda";
-      id: string;
-      entryKey?: string;
-      parent?: string;
-      revalidate?: unknown;
-      page?: boolean;
-    }
-  | {
-      kind: "prerender";
-      id?: string;
-      entryKey?: string;
-      tags?: string[];
-      allowQuery?: string[];
-      fallback?: {
-        initialExpiration?: number;
-        initialRevalidate?: number | false;
-      };
-      pprChain?: { headers: Record<string, string> };
-      edgeEntryKey?: string;
-      config: {
-        allowQuery?: string[];
-        allowHeader?: string[];
-        bypassFor?: RouteHas[];
-        renderingMode?: "STATIC" | "PARTIALLY_STATIC";
-        partialFallback?: boolean;
-        bypassToken?: string;
-      };
-    }
-  | { kind: "edge"; entryKey?: string };
-
-interface MiddlewareMatcher {
-  sourceRegex: string;
-  has?: RouteHas[];
-  missing?: RouteHas[];
-}
-
-interface Manifest {
-  buildId: string;
-  basePath: string;
-  trailingSlash?: boolean;
-  skipTrailingSlashRedirect?: boolean;
-  skipMiddlewareUrlNormalize?: boolean;
-  pathnames: string[];
-  routes: unknown;
-  dispatch: Record<string, DispatchTarget>;
-  errorRoutes?: {
-    notFound?: string;
-    notFoundFlight?: string;
-    serverError?: string;
-  };
-  middleware?:
-    | { runtime?: "edge"; entryKey: string; matchers?: MiddlewareMatcher[] }
-    | {
-        runtime: "nodejs";
-        id: string;
-        entryKey: string;
-        matchers?: MiddlewareMatcher[];
-      };
-  images?: ImageConfig;
-  i18n?: I18nConfig;
-  assetHashes?: Record<string, string>;
-  vercelCacheAlias?: boolean;
-}
-
 export interface MiddlewareOutcome {
   response: Response;
   headers: Headers;
@@ -291,7 +214,7 @@ interface RouteResult {
 }
 
 export interface RouteDeps {
-  manifest: Manifest;
+  manifest: RoutingManifest;
   functionUrls: Record<string, string>;
   slug: string;
   app: string;
@@ -419,6 +342,12 @@ function routedDeps(
 ): RouteDeps {
   const { edgeRuntime, ...rest } = base;
   const { edgeWorkers } = record;
+  const manifest = record.routingManifest;
+  if (!manifest) {
+    throw new Error(
+      `deployment ${record.deploymentId} carries no routing manifest to route with`,
+    );
+  }
   return {
     ...rest,
     slug: deployments.slug,
@@ -445,7 +374,7 @@ function routedDeps(
             },
           )
         : undefined,
-    manifest: record.routingManifest as Manifest,
+    manifest,
     functionUrls: record.functionUrls,
     interception: base.interception && {
       ...base.interception,
@@ -454,7 +383,7 @@ function routedDeps(
     assetStore: {
       ...base.assetStore,
       assetPrefix: record.assetPrefix,
-      basePath: (record.routingManifest as Manifest).basePath,
+      basePath: manifest.basePath,
     },
   };
 }
@@ -800,7 +729,7 @@ function decodedPathname(pathname: string): string | undefined {
   }
 }
 
-function preferExactPathname(result: RouteResult, manifest: Manifest): RouteResult {
+function preferExactPathname(result: RouteResult, manifest: RoutingManifest): RouteResult {
   const target = result.invocationTarget?.pathname;
   if (!result.resolvedPathname || target === undefined) return result;
   for (const candidate of [target, decodedPathname(target)]) {
@@ -815,7 +744,7 @@ function preferExactPathname(result: RouteResult, manifest: Manifest): RouteResu
   return result;
 }
 
-function dropShadowedDynamicParams(result: RouteResult, manifest: Manifest): RouteResult {
+function dropShadowedDynamicParams(result: RouteResult, manifest: RoutingManifest): RouteResult {
   const target = result.invocationTarget;
   if (
     !target ||
@@ -898,7 +827,7 @@ function matchesConfigRewrite(
 function withSourceInvocationTarget(
   result: RouteResult,
   routingUrl: URL,
-  manifest: Manifest,
+  manifest: RoutingManifest,
 ): RouteResult {
   const target = result.invocationTarget;
   const routePath = target?.pathname ?? result.resolvedPathname;
@@ -982,7 +911,7 @@ const MIDDLEWARE_PREFETCH_HEADER = "x-middleware-prefetch";
 function middlewarePrefetchProbe(
   request: Request,
   pathname: string,
-  manifest: Manifest,
+  manifest: RoutingManifest,
 ): Response | undefined {
   if (!request.headers.has(MIDDLEWARE_PREFETCH_HEADER)) return undefined;
   if (!isNextDataPathname(pathname, manifest, manifest.buildId)) return undefined;
@@ -1153,7 +1082,7 @@ async function renderDispatchTarget(
 
 function notFoundRoute(
   request: Request,
-  manifest: Manifest,
+  manifest: RoutingManifest,
 ): string | undefined {
   const routes = manifest.errorRoutes;
   if (!routes) return undefined;
@@ -1220,7 +1149,7 @@ async function substituteErrorPage(
   request: Request,
   url: URL,
   headers: Headers,
-  manifest: Manifest,
+  manifest: RoutingManifest,
   deps: RouteDeps,
 ): Promise<Response> {
   const kind = errorRouteKind(response.status);
@@ -1564,7 +1493,7 @@ function once<T>(run: () => Promise<T>): () => Promise<T> {
   return () => (pending ??= run());
 }
 
-function dataPathname(pathname: string, url: URL, manifest: Manifest): string {
+function dataPathname(pathname: string, url: URL, manifest: RoutingManifest): string {
   const base = manifest.basePath ?? "";
   const prefix = `${base}/_next/data/${manifest.buildId}`;
   if (!url.pathname.startsWith(`${prefix}/`) || !url.pathname.endsWith(".json")) {
@@ -1600,7 +1529,7 @@ function originUrl(
   fnUrl: string,
   url: URL,
   result: RouteResult,
-  manifest: Manifest,
+  manifest: RoutingManifest,
 ): URL {
   const pathname = result.invocationTarget?.pathname ?? url.pathname;
   const query = result.invocationTarget?.query;
@@ -1750,7 +1679,7 @@ function originAuthoredResponse(response: Response): Response {
 }
 
 function invokeMiddleware(
-  middleware: NonNullable<Manifest["middleware"]>,
+  middleware: NonNullable<RoutingManifest["middleware"]>,
   deps: RouteDeps,
   makeRequest: () => Request,
 ): Promise<Response> {

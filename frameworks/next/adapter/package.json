@@ -5,7 +5,8 @@
   "type": "module",
   "main": "./dist/next-adapter.mjs",
   "dependencies": {
-    "@framework/next-cache": "workspace:*"
+    "@framework/next-cache": "workspace:*",
+    "@framework/next-protocol": "workspace:*"
   },
   "scripts": {
     "build": "tsc && node scripts/copy-edge-handler.mjs",

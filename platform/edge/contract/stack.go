@@ -55,6 +55,7 @@ type DeploymentRecord struct {
 	Identity         string            `json:"identity"`
 	DeploymentID     string            `json:"deploymentId"`
 	BuildID          string            `json:"buildId"`
+	Entry            string            `json:"entry"`
 	RoutingManifest  any               `json:"routingManifest"`
 	FunctionURLs     map[string]string `json:"functionUrls"`
 	AssetPrefix      string            `json:"assetPrefix"`

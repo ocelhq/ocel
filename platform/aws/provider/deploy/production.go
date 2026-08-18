@@ -741,6 +741,7 @@ func buildDeploymentRecord(cfg Config, manifest *deploymentsv1.Manifest, app *de
 	if desc.EdgeRouting && !routed {
 		return edge.DeploymentRecord{}, fmt.Errorf("app %s declares edge routing but its build wrote no %s; rebuild the app", name, edge.RoutingManifestFile)
 	}
+	record.Entry = desc.Entry
 	if routed {
 		record.RoutingManifest = routing
 		record.AssetPrefix = appAssetPrefix(builds.coords[name])

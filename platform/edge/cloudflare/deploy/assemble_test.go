@@ -47,7 +47,7 @@ func writeAppArtifacts(t *testing.T) edge.WorkerSource {
 	if err := os.WriteFile(bundle, []byte("export default {}"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	return edge.WorkerSource{ArtifactRoot: root, BundlePath: bundle}
+	return edge.WorkerSource{ArtifactRoot: root, BundlePath: bundle, Entry: "/"}
 }
 
 func assembleFor(t *testing.T) func(edge.WorkerSource, edge.Resolver) (edge.Worker, error) {
@@ -62,6 +62,7 @@ func TestAssembleApp(t *testing.T) {
 		t.Parallel()
 
 		src := writeAppArtifacts(t)
+		src.Entry = "/api/documents"
 		src.Routes = []string{"/api/documents"}
 		r := stubResolver{
 			urls:     map[string]string{"/api/documents": "https://fn.lambda-url.aws/"},
@@ -174,6 +175,61 @@ func TestAssembleApp(t *testing.T) {
 		}
 	})
 
+	t.Run("the entry resolves through the routeId the build named", func(t *testing.T) {
+		t.Parallel()
+
+		src := writeAppArtifacts(t)
+		src.Entry = "bundle-7"
+		src.Routes = []string{"bundle-7", "bundle-0"}
+		r := stubResolver{urls: map[string]string{
+			"bundle-0": "https://first.lambda-url.aws/",
+			"bundle-7": "https://entry.lambda-url.aws/",
+		}}
+
+		if _, err := assembleFor(t)(src, r); err != nil {
+			t.Fatalf("an entry named by the build must not have to match any convention: %v", err)
+		}
+	})
+
+	t.Run("an entry that resolves to no Function URL is an error", func(t *testing.T) {
+		t.Parallel()
+
+		src := writeAppArtifacts(t)
+		src.Entry = "bundle-7"
+		src.Routes = []string{"/"}
+		r := stubResolver{urls: map[string]string{"/": "https://fn.lambda-url.aws/"}}
+
+		if _, err := assembleFor(t)(src, r); err == nil {
+			t.Fatal("an entry no Function URL was realized for cannot be served")
+		}
+	})
+
+	t.Run("a routed build naming no entry is served by its manifest alone", func(t *testing.T) {
+		t.Parallel()
+
+		src := writeAppArtifacts(t)
+		src.Entry = ""
+		src.Routes = []string{"/api/documents"}
+		r := stubResolver{urls: map[string]string{"/api/documents": "https://fn.lambda-url.aws/"}}
+
+		if _, err := assembleFor(t)(src, r); err != nil {
+			t.Fatalf("an app no function serves at its root still routes through its manifest: %v", err)
+		}
+	})
+
+	t.Run("an unrouted build naming no entry is an error", func(t *testing.T) {
+		t.Parallel()
+
+		src := writeDescribedApp(t, "express", false)
+		src.Entry = ""
+		src.Routes = []string{"/"}
+		r := stubResolver{urls: map[string]string{"/": "https://fn.lambda-url.aws/"}}
+
+		if _, err := assembleFor(t)(src, r); err == nil {
+			t.Fatal("a front has no route to send traffic to when an unrouted build names no entry")
+		}
+	})
+
 	t.Run("a build that declares edge routing without a routing manifest is an error", func(t *testing.T) {
 		t.Parallel()
 
@@ -206,7 +262,7 @@ func TestAssembleApp(t *testing.T) {
 func writeDescribedApp(t *testing.T, framework string, edgeRouting bool) edge.WorkerSource {
 	t.Helper()
 	root := t.TempDir()
-	descriptor := fmt.Sprintf(`{"framework":%q,"buildId":"b1","edgeRouting":%t}`, framework, edgeRouting)
+	descriptor := fmt.Sprintf(`{"framework":%q,"buildId":"b1","edgeRouting":%t,"entry":"/"}`, framework, edgeRouting)
 	if err := os.WriteFile(filepath.Join(root, edge.ServeDescriptorFile), []byte(descriptor), 0o644); err != nil {
 		t.Fatal(err)
 	}
@@ -214,7 +270,7 @@ func writeDescribedApp(t *testing.T, framework string, edgeRouting bool) edge.Wo
 	if err := os.WriteFile(bundle, []byte("export default {}"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	return edge.WorkerSource{ArtifactRoot: root, BundlePath: bundle}
+	return edge.WorkerSource{ArtifactRoot: root, BundlePath: bundle, Entry: "/"}
 }
 
 func TestCollectStaticAssets(t *testing.T) {

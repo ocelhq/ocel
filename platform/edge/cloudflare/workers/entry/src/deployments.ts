@@ -1,3 +1,4 @@
+import type { RoutingManifest } from "@framework/next-protocol/routing-manifest";
 import type { EdgeWorkers } from "./edge";
 import { lruSet } from "./lru";
 
@@ -7,7 +8,8 @@ export interface DeploymentRecord {
   identity: string;
   deploymentId: string;
   buildId: string;
-  routingManifest: unknown;
+  entry?: string;
+  routingManifest?: RoutingManifest | null;
   functionUrls: Record<string, string>;
   assetPrefix: string;
   isrPrefix: string;

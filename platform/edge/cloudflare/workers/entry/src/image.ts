@@ -1,3 +1,9 @@
+import type {
+  CompiledLocalPattern,
+  CompiledRemotePattern,
+  ImageConfig,
+} from "@framework/next-protocol/routing-manifest";
+
 import { mediaType } from "./accept";
 import {
   answerableImageRequest,
@@ -14,37 +20,7 @@ import {
   type ImageStore,
 } from "./image-store";
 
-export interface CompiledRemotePattern {
-  protocol?: string;
-  hostname: string;
-  port?: string;
-  pathname: string;
-  search?: string;
-}
-
-export interface CompiledLocalPattern {
-  pathname: string;
-  search?: string;
-}
-
-export interface ImageConfig {
-  path: string;
-  deviceSizes: number[];
-  imageSizes: number[];
-  qualities?: number[];
-  formats: string[];
-  domains: string[];
-  minimumCacheTTL: number;
-  maximumRedirects: number;
-  maximumResponseBody: number;
-  dangerouslyAllowSVG: boolean;
-  dangerouslyAllowLocalIP: boolean;
-  contentSecurityPolicy: string;
-  contentDispositionType: string;
-  remotePatterns: CompiledRemotePattern[];
-  localPatterns?: CompiledLocalPattern[];
-  configHash: string;
-}
+export type { CompiledLocalPattern, CompiledRemotePattern, ImageConfig };
 
 export interface ImageOriginRequest {
   assetPrefix: string;

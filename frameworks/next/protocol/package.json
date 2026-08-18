@@ -1,0 +1,20 @@
+{
+  "name": "@framework/next-protocol",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "what a next build emits and whatever serves it reads",
+  "exports": {
+    "./routing-manifest": "./src/routing-manifest.mts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@next/routing": "^16.2.10"
+  },
+  "devDependencies": {
+    "@types/node": "^24",
+    "typescript": "^5.9.3"
+  }
+}

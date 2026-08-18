@@ -52,10 +52,15 @@ func deployEdgeWorker(ctx context.Context, cfg Config, manifest *deploymentsv1.M
 
 	for _, app := range apps {
 		name := app.GetName()
+		desc, _, err := readServeDescriptor(cfg.ArtifactRoot, name)
+		if err != nil {
+			return nil, err
+		}
 		worker, err := program.AssembleApp(
 			edge.WorkerSource{
 				ArtifactRoot: appArtifactRoot(cfg.ArtifactRoot, name),
 				BundlePath:   bundlePath,
+				Entry:        desc.Entry,
 				Routes:       appRoutes(manifest.GetFunctions(), app),
 			},
 			&deployResolver{

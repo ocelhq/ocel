@@ -16,7 +16,12 @@ import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } 
 import { buildApp, buildApps, detectApp, placeFile, writeBuildPlan } from "./build.js";
 import { BUNDLE_HANDLER } from "./bundle.js";
 import { sanitizeName } from "./detect.js";
-import { BUILD_PLAN_FILE, SERVE_DESCRIPTOR_FILE, appOutDir } from "./layout.js";
+import {
+  BUILD_PLAN_FILE,
+  NODE_ENTRY_ROUTE_ID,
+  SERVE_DESCRIPTOR_FILE,
+  appOutDir,
+} from "./layout.js";
 import { artifactHash } from "./trace.js";
 
 function importEntryInNode(entryMjs: string): { defaultType: string } {
@@ -69,6 +74,7 @@ describe("buildApp", () => {
       runtime: "nodejs24.x",
       handler: "src/server.js",
       framework: "express",
+      id: NODE_ENTRY_ROUTE_ID,
       app: "api",
     });
 
@@ -314,6 +320,7 @@ describe("serve descriptor", () => {
     expect(readServe(outDir, "api")).toEqual({
       framework: "express",
       edgeRouting: false,
+      entry: NODE_ENTRY_ROUTE_ID,
       needs: {},
       buildId: expect.stringMatching(/^[0-9a-f]{16}$/),
     });

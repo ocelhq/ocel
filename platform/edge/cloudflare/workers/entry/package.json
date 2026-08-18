@@ -21,6 +21,7 @@
   },
   "dependencies": {
     "@framework/next-cache": "workspace:*",
+    "@framework/next-protocol": "workspace:*",
     "@next/routing": "^16.2.10",
     "@platform/edge-contract": "workspace:*",
     "aws4fetch": "^1.0.20"

@@ -458,7 +458,7 @@ func TestBuild(t *testing.T) {
 			t.Fatalf("CollectFunctions: %v", err)
 		}
 		assertFunctions(t, "CollectFunctions", fns, []manifestbuilder.Function{
-			{Name: "index", Runtime: "nodejs24.x", Handler: "index.mjs", ArtifactPath: "apps/api/functions/index.func", Framework: "express", App: "api"},
+			{Name: "index", Runtime: "nodejs24.x", Handler: "index.mjs", ArtifactPath: "apps/api/functions/index.func", Framework: "express", RouteID: "/", App: "api"},
 		})
 
 		bundle := filepath.Join(root, scratchDirName, outputDirName, appsDirName, "api", functionsDirName, "index.func", "index.mjs")
@@ -610,6 +610,7 @@ func TestBuild(t *testing.T) {
 			Handler:      "index.mjs",
 			ArtifactPath: "apps/api/functions/index.func",
 			Framework:    "express",
+			RouteID:      "/",
 			App:          "api",
 		}
 		if fns[0] != want {

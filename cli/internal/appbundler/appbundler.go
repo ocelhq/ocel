@@ -19,6 +19,8 @@ const HandlerFile = "index.mjs"
 
 const configFileName = "config.json"
 
+const entryRouteID = "/"
+
 const nativeDirName = "native"
 
 const nodeModulesDirName = "node_modules"
@@ -46,6 +48,7 @@ type functionConfig struct {
 	Runtime   string `json:"runtime"`
 	Handler   string `json:"handler"`
 	Framework string `json:"framework"`
+	ID        string `json:"id"`
 	App       string `json:"app"`
 }
 
@@ -104,6 +107,7 @@ func Bundle(t Target) error {
 		Runtime:   t.Runtime,
 		Handler:   HandlerFile,
 		Framework: t.Framework,
+		ID:        entryRouteID,
 		App:       t.App,
 	}); err != nil {
 		return err
@@ -116,6 +120,7 @@ func Bundle(t Target) error {
 	return writeJSON(filepath.Join(t.AppDir, edge.ServeDescriptorFile), edge.ServeDescriptor{
 		Framework: t.Framework,
 		BuildID:   buildID,
+		Entry:     entryRouteID,
 		Needs:     map[edge.Need]edge.NeedDetail{},
 	})
 }

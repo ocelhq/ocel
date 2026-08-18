@@ -1,5 +1,6 @@
 import { boundCacheTags } from "@framework/next-cache/cache-tags";
 import { cacheKey, variantHeadersFile } from "@framework/next-cache/naming";
+import type { RoutingManifest } from "@framework/next-protocol/routing-manifest";
 import type { ServeDescriptor } from "@platform/edge-contract/serve";
 import type { AdapterOutput, NextAdapter } from "next";
 import { PHASE_PRODUCTION_BUILD } from "next/constants.js";
@@ -27,6 +28,11 @@ import {
 } from "./image-config.mjs";
 import { packBundles, type PackedMember } from "./pack.mjs";
 import { stableStringify } from "./stable-json.mjs";
+
+const exactly =
+  <T,>() =>
+  <U extends T & Record<Exclude<keyof U, keyof T>, never>>(value: U): U =>
+    value;
 
 const launcherName = "__next_launcher.cjs";
 const dispatchName = "__ocel_dispatch.cjs";
@@ -180,6 +186,11 @@ const adapter = {
       }
       return name;
     };
+
+    const rootPathname = basePath || "/";
+    const rootEntryKey = entryKeyByPathname.get(rootPathname);
+    const entry =
+      rootEntryKey === undefined ? "" : bundleNameOf(rootEntryKey, rootPathname);
 
     const routeKinds = routeKindsById(allRoutes, outputs.prerenders);
 
@@ -410,29 +421,55 @@ const adapter = {
       `${basePath}/_not-found`,
     ]);
     const serverErrorKey = firstDispatchedErrorPage([`${basePath}/500`]);
-    const errorRoutes = {
-      ...(notFoundKey !== undefined && { notFound: notFoundKey }),
-      ...(notFoundFlightKey !== undefined && {
-        notFoundFlight: notFoundFlightKey,
-      }),
-      ...(serverErrorKey !== undefined && { serverError: serverErrorKey }),
-    };
+    const errorRoutes: NonNullable<RoutingManifest["errorRoutes"]> = {};
+    if (notFoundKey !== undefined) errorRoutes.notFound = notFoundKey;
+    if (notFoundFlightKey !== undefined) {
+      errorRoutes.notFoundFlight = notFoundFlightKey;
+    }
+    if (serverErrorKey !== undefined) errorRoutes.serverError = serverErrorKey;
 
-    const routingManifest = {
+    const imagesField: Partial<Pick<RoutingManifest, "images">> = images
+      ? { images: { ...images, configHash: imageConfigHash(images) } }
+      : {};
+
+    const vercelCacheField: Partial<Pick<RoutingManifest, "vercelCacheAlias">> =
+      process.env.OCEL_E2E_VERCEL_CACHE_HEADER === "1"
+        ? { vercelCacheAlias: true }
+        : {};
+
+    const middlewareField: Partial<Pick<RoutingManifest, "middleware">> =
+      middleware
+        ? {
+            middleware: nodeMiddleware
+              ? {
+                  runtime: "nodejs",
+                  id: nodeMiddlewareBundleId!,
+                  entryKey: middlewareEntryKey,
+                  matchers: nodeMiddleware.config.matchers ?? [],
+                }
+              : {
+                  runtime: "edge",
+                  entryKey: edgeEntryOf(middleware).entryKey,
+                  matchers: middleware.config.matchers ?? [],
+                },
+          }
+        : {};
+
+    const errorRoutesField: Partial<Pick<RoutingManifest, "errorRoutes">> =
+      Object.keys(errorRoutes).length > 0 ? { errorRoutes } : {};
+
+    const routingManifest = exactly<RoutingManifest>()({
+      entry,
       buildId,
       appName,
       basePath: config.basePath || "",
       trailingSlash: !!config.trailingSlash,
       skipTrailingSlashRedirect: !!config.skipTrailingSlashRedirect,
       skipMiddlewareUrlNormalize: !!config.skipMiddlewareUrlNormalize,
-      i18n: config.i18n ?? undefined,
-      ...(images && {
-        images: { ...images, configHash: imageConfigHash(images) },
-      }),
+      i18n: (config.i18n ?? undefined) as RoutingManifest["i18n"],
+      ...imagesField,
 
-      ...(process.env.OCEL_E2E_VERCEL_CACHE_HEADER === "1" && {
-        vercelCacheAlias: true,
-      }),
+      ...vercelCacheField,
 
       assetHashes,
       pathnames: [
@@ -448,25 +485,12 @@ const adapter = {
       ],
       routes: routing,
 
-      ...(middleware && {
-        middleware: nodeMiddleware
-          ? {
-              runtime: "nodejs" as const,
-              id: nodeMiddlewareBundleId!,
-              entryKey: middlewareEntryKey,
-              matchers: nodeMiddleware.config.matchers ?? [],
-            }
-          : {
-              runtime: "edge" as const,
-              entryKey: edgeEntryOf(middleware).entryKey,
-              matchers: middleware.config.matchers ?? [],
-            },
-      }),
+      ...middlewareField,
 
-      ...(Object.keys(errorRoutes).length > 0 && { errorRoutes }),
+      ...errorRoutesField,
 
       dispatch,
-    };
+    });
 
     await mkdir(outputRoot, { recursive: true });
     writeFileSync(
@@ -513,6 +537,7 @@ const adapter = {
       framework: "next",
       buildId,
       edgeRouting: true,
+      entry,
       needs,
     };
     writeFileSync(join(outputRoot, "serve.json"), JSON.stringify(serve));

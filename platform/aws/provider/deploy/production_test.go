@@ -1066,10 +1066,47 @@ func TestBuildDeploymentRecord(t *testing.T) {
 		if err := json.Unmarshal(raw, &wire); err != nil {
 			t.Fatalf("unmarshal record: %v", err)
 		}
-		for _, key := range []string{"framework", "buildId", "functionUrls"} {
+		if record.Entry != "/" {
+			t.Errorf("Entry = %q, want the route id the node build named on serve.json", record.Entry)
+		}
+		for _, key := range []string{"framework", "buildId", "entry", "functionUrls"} {
 			if _, ok := wire[key]; !ok {
 				t.Errorf("record JSON %s is missing %q", raw, key)
 			}
+		}
+	})
+
+	t.Run("a next app records the entry its build named", func(t *testing.T) {
+		t.Parallel()
+		root := writeTree(t, map[string]string{
+			"apps/web/routing-manifest.json": `{"buildId":"WEB1","entry":"bundle-3"}`,
+			"apps/web/serve.json":            `{"framework":"next","buildId":"WEB1","edgeRouting":true,"entry":"bundle-3"}`,
+		})
+		cfg := Config{ArtifactRoot: root, Env: "prod", Edge: testLoaderEdge()}
+		manifest := nextManifest()
+		app := &deploymentsv1.ManifestApp{Name: "web", Framework: frameworkNext}
+		builds := releaseBuilds(t, cfg, manifest, "fp1")
+
+		record, err := buildDeploymentRecord(cfg, manifest, app, builds.identities["web"], nil, builds)
+		if err != nil {
+			t.Fatalf("buildDeploymentRecord: %v", err)
+		}
+		if record.Entry != "bundle-3" {
+			t.Errorf("Entry = %q, want the bundle the build named, not one derived from a name", record.Entry)
+		}
+
+		raw, err := json.Marshal(record)
+		if err != nil {
+			t.Fatalf("marshal record: %v", err)
+		}
+		var wire struct {
+			Entry string `json:"entry"`
+		}
+		if err := json.Unmarshal(raw, &wire); err != nil {
+			t.Fatalf("unmarshal record: %v", err)
+		}
+		if wire.Entry != "bundle-3" {
+			t.Errorf("record JSON %s carries entry %q", raw, wire.Entry)
 		}
 	})
 
