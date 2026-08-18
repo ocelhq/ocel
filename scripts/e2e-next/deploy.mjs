@@ -1,7 +1,15 @@
 #!/usr/bin/env node
 
 import { spawnSync } from "node:child_process";
-import { existsSync, openSync, readFileSync, closeSync, writeFileSync } from "node:fs";
+import {
+  existsSync,
+  openSync,
+  readFileSync,
+  readdirSync,
+  closeSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { join } from "node:path";
 
 import {
@@ -25,6 +33,10 @@ const DEFAULT_TIMEOUT_MS = 25 * 60 * 1000;
 const deadline = Date.now() + (Number(process.env.OCEL_E2E_DEPLOY_TIMEOUT_MS) || DEFAULT_TIMEOUT_MS);
 
 const FAILURE_LOG_LINES = 200;
+
+const HARNESS_TEST_FILE = /\.(test|spec)\.[cm]?[jt]sx?$/;
+
+const NOT_APP_SOURCE = new Set(["node_modules", ".next", ".ocel", ".git"]);
 
 const appDir = process.cwd();
 
@@ -62,6 +74,7 @@ function deploy() {
   console.error(`[ocel-e2e] preview ${ref} of project ${slug} in ${appDir}`);
 
   writeFileSync(join(appDir, "ocel.config.ts"), renderOcelConfig({ slug }));
+  dropHarnessTests();
   patchPackageJson();
   ensureDeps();
   linkSidecar(appDir, sidecarDir);
@@ -74,6 +87,16 @@ function deploy() {
     throw new Error(`${resultPath} was not written; the deploy reported success but produced no result`);
   }
   return deployURL(JSON.parse(readFileSync(resultPath, "utf8")));
+}
+
+function dropHarnessTests(dir = appDir) {
+  for (const entry of readdirSync(dir, { withFileTypes: true })) {
+    if (entry.isDirectory()) {
+      if (!NOT_APP_SOURCE.has(entry.name)) dropHarnessTests(join(dir, entry.name));
+    } else if (HARNESS_TEST_FILE.test(entry.name)) {
+      rmSync(join(dir, entry.name));
+    }
+  }
 }
 
 function ensureDeps() {
