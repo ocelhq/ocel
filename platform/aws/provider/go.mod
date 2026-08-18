@@ -23,6 +23,7 @@ require (
 	github.com/aws/aws-sdk-go-v2/service/iam v1.55.1
 	github.com/aws/aws-sdk-go-v2/service/kms v1.30.1
 	github.com/aws/aws-sdk-go-v2/service/lambda v1.99.0
+	github.com/aws/aws-sdk-go-v2/service/route53 v1.42.3
 	github.com/aws/aws-sdk-go-v2/service/s3 v1.66.0
 	github.com/aws/aws-sdk-go-v2/service/secretsmanager v1.43.0
 	github.com/aws/aws-sdk-go-v2/service/ssm v1.71.0
@@ -31,7 +32,7 @@ require (
 	github.com/blang/semver v3.5.1+incompatible
 	github.com/evanw/esbuild v0.28.1
 	github.com/ocelhq/ocel/pkg/channel v0.0.0-00010101000000-000000000000
-	github.com/ocelhq/ocel/pkg/proto v0.0.0-00010101000000-000000000000
+	github.com/ocelhq/ocel/pkg/proto v0.0.0
 	github.com/ocelhq/ocel/platform/edge/cloudflare/deploy v0.0.0-00010101000000-000000000000
 	github.com/ocelhq/ocel/platform/edge/contract v0.0.0-00010101000000-000000000000
 	github.com/pulumi/pulumi-aws/sdk/v7 v7.36.0
@@ -41,6 +42,7 @@ require (
 
 require (
 	github.com/cloudflare/cloudflare-go/v4 v4.6.0 // indirect
+	github.com/jmespath/go-jmespath v0.4.0 // indirect
 	github.com/tidwall/gjson v1.14.4 // indirect
 	github.com/tidwall/match v1.1.1 // indirect
 	github.com/tidwall/pretty v1.2.1 // indirect
@@ -169,7 +171,7 @@ require (
 	google.golang.org/genproto/googleapis/api v0.0.0-20260401024825-9d38bb4040a9 // indirect
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20260401024825-9d38bb4040a9 // indirect
 	google.golang.org/grpc v1.80.0 // indirect
-	google.golang.org/protobuf v1.36.11 // indirect
+	google.golang.org/protobuf v1.36.11
 	gopkg.in/tomb.v1 v1.0.0-20141024135613-dd632973f1e7 // indirect
 	lukechampine.com/frand v1.4.2 // indirect
 )

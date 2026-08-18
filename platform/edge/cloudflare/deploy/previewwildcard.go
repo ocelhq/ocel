@@ -80,13 +80,8 @@ func (p *provider) stripPreviewWildcardRoute(ctx context.Context, accountID, bas
 	}
 
 	pattern := routePattern(wildcard)
-	foreign := false
 	for _, route := range slices.Clone(inZone) {
-		if route.Pattern != pattern {
-			continue
-		}
-		if route.Script != previewEntryScript {
-			foreign = true
+		if route.Pattern != pattern || route.Script != previewEntryScript {
 			continue
 		}
 		if _, err := p.client.Workers.Routes.Delete(ctx, route.ID, workers.RouteDeleteParams{ZoneID: cf.F(zoneID)}); err != nil {
@@ -94,10 +89,7 @@ func (p *provider) stripPreviewWildcardRoute(ctx context.Context, accountID, bas
 		}
 		snap.detached(zoneID, route.ID)
 	}
-	if foreign {
-		return nil
-	}
-	return p.deleteProxiedRecord(ctx, zoneID, wildcard)
+	return nil
 }
 
 func previewEntryWorker(spec edge.PreviewWildcardSpec) edge.Worker {

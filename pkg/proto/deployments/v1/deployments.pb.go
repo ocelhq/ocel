@@ -464,6 +464,7 @@ type UseDomainRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Class         Environment_Class      `protobuf:"varint,1,opt,name=class,proto3,enum=deployments.v1.Environment_Class" json:"class,omitempty"`
 	BaseDomain    string                 `protobuf:"bytes,2,opt,name=base_domain,json=baseDomain,proto3" json:"base_domain,omitempty"`
+	Dns           *Dns                   `protobuf:"bytes,3,opt,name=dns,proto3" json:"dns,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -510,6 +511,13 @@ func (x *UseDomainRequest) GetBaseDomain() string {
 		return x.BaseDomain
 	}
 	return ""
+}
+
+func (x *UseDomainRequest) GetDns() *Dns {
+	if x != nil {
+		return x.Dns
+	}
+	return nil
 }
 
 type ListDomainRequest struct {
@@ -611,6 +619,7 @@ func (x *ListDomainResponse) GetProjects() []string {
 type ReleaseDomainRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Class         Environment_Class      `protobuf:"varint,1,opt,name=class,proto3,enum=deployments.v1.Environment_Class" json:"class,omitempty"`
+	Dns           *Dns                   `protobuf:"bytes,2,opt,name=dns,proto3" json:"dns,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -650,6 +659,13 @@ func (x *ReleaseDomainRequest) GetClass() Environment_Class {
 		return x.Class
 	}
 	return Environment_CLASS_UNSPECIFIED
+}
+
+func (x *ReleaseDomainRequest) GetDns() *Dns {
+	if x != nil {
+		return x.Dns
+	}
+	return nil
 }
 
 type Environment struct {
@@ -1796,6 +1812,7 @@ type DestroyProjectRequest struct {
 	ProtocolVersion string                 `protobuf:"bytes,2,opt,name=protocol_version,json=protocolVersion,proto3" json:"protocol_version,omitempty"`
 	Slug            string                 `protobuf:"bytes,3,opt,name=slug,proto3" json:"slug,omitempty"`
 	Environment     *Environment           `protobuf:"bytes,4,opt,name=environment,proto3" json:"environment,omitempty"`
+	Dns             *Dns                   `protobuf:"bytes,5,opt,name=dns,proto3" json:"dns,omitempty"`
 	unknownFields   protoimpl.UnknownFields
 	sizeCache       protoimpl.SizeCache
 }
@@ -1854,6 +1871,13 @@ func (x *DestroyProjectRequest) GetSlug() string {
 func (x *DestroyProjectRequest) GetEnvironment() *Environment {
 	if x != nil {
 		return x.Environment
+	}
+	return nil
+}
+
+func (x *DestroyProjectRequest) GetDns() *Dns {
+	if x != nil {
+		return x.Dns
 	}
 	return nil
 }
@@ -4388,18 +4412,20 @@ var File_deployments_v1_deployments_proto protoreflect.FileDescriptor
 
 const file_deployments_v1_deployments_proto_rawDesc = "" +
 	"\n" +
-	" deployments/v1/deployments.proto\x12\x0edeployments.v1\x1a\x14links/v1/links.proto\x1a\x16resources/v1/env.proto\x1a\x1cresources/v1/resources.proto\"l\n" +
+	" deployments/v1/deployments.proto\x12\x0edeployments.v1\x1a\x14links/v1/links.proto\x1a\x16resources/v1/env.proto\x1a\x1cresources/v1/resources.proto\"\x93\x01\n" +
 	"\x10UseDomainRequest\x127\n" +
 	"\x05class\x18\x01 \x01(\x0e2!.deployments.v1.Environment.ClassR\x05class\x12\x1f\n" +
 	"\vbase_domain\x18\x02 \x01(\tR\n" +
-	"baseDomain\"L\n" +
+	"baseDomain\x12%\n" +
+	"\x03dns\x18\x03 \x01(\v2\x13.deployments.v1.DnsR\x03dns\"L\n" +
 	"\x11ListDomainRequest\x127\n" +
 	"\x05class\x18\x01 \x01(\x0e2!.deployments.v1.Environment.ClassR\x05class\"m\n" +
 	"\x12ListDomainResponse\x12;\n" +
 	"\x06domain\x18\x01 \x01(\v2#.deployments.v1.GlobalPreviewDomainR\x06domain\x12\x1a\n" +
-	"\bprojects\x18\x02 \x03(\tR\bprojects\"O\n" +
+	"\bprojects\x18\x02 \x03(\tR\bprojects\"v\n" +
 	"\x14ReleaseDomainRequest\x127\n" +
-	"\x05class\x18\x01 \x01(\x0e2!.deployments.v1.Environment.ClassR\x05class\"\xb7\x04\n" +
+	"\x05class\x18\x01 \x01(\x0e2!.deployments.v1.Environment.ClassR\x05class\x12%\n" +
+	"\x03dns\x18\x02 \x01(\v2\x13.deployments.v1.DnsR\x03dns\"\xb7\x04\n" +
 	"\vEnvironment\x127\n" +
 	"\x05class\x18\x01 \x01(\x0e2!.deployments.v1.Environment.ClassR\x05class\x12C\n" +
 	"\tlifecycle\x18\x02 \x01(\x0e2%.deployments.v1.Environment.LifecycleR\tlifecycle\x12\x1a\n" +
@@ -4506,12 +4532,13 @@ const file_deployments_v1_deployments_proto_rawDesc = "" +
 	"\venvironment\x18\x01 \x01(\v2\x1b.deployments.v1.EnvironmentR\venvironment\x12\x18\n" +
 	"\aoptions\x18\x02 \x01(\fR\aoptions\x12)\n" +
 	"\x10protocol_version\x18\x03 \x01(\tR\x0fprotocolVersion\x12\x12\n" +
-	"\x04slug\x18\x04 \x01(\tR\x04slug\"\xaf\x01\n" +
+	"\x04slug\x18\x04 \x01(\tR\x04slug\"\xd6\x01\n" +
 	"\x15DestroyProjectRequest\x12\x18\n" +
 	"\aoptions\x18\x01 \x01(\fR\aoptions\x12)\n" +
 	"\x10protocol_version\x18\x02 \x01(\tR\x0fprotocolVersion\x12\x12\n" +
 	"\x04slug\x18\x03 \x01(\tR\x04slug\x12=\n" +
-	"\venvironment\x18\x04 \x01(\v2\x1b.deployments.v1.EnvironmentR\venvironment\"t\n" +
+	"\venvironment\x18\x04 \x01(\v2\x1b.deployments.v1.EnvironmentR\venvironment\x12%\n" +
+	"\x03dns\x18\x05 \x01(\v2\x13.deployments.v1.DnsR\x03dns\"t\n" +
 	"\x19PlanDestroyProjectRequest\x12\x18\n" +
 	"\aoptions\x18\x01 \x01(\fR\aoptions\x12)\n" +
 	"\x10protocol_version\x18\x02 \x01(\tR\x0fprotocolVersion\x12\x12\n" +
@@ -4869,114 +4896,117 @@ var file_deployments_v1_deployments_proto_goTypes = []any{
 }
 var file_deployments_v1_deployments_proto_depIdxs = []int32{
 	3,  // 0: deployments.v1.UseDomainRequest.class:type_name -> deployments.v1.Environment.Class
-	3,  // 1: deployments.v1.ListDomainRequest.class:type_name -> deployments.v1.Environment.Class
-	37, // 2: deployments.v1.ListDomainResponse.domain:type_name -> deployments.v1.GlobalPreviewDomain
-	3,  // 3: deployments.v1.ReleaseDomainRequest.class:type_name -> deployments.v1.Environment.Class
-	3,  // 4: deployments.v1.Environment.class:type_name -> deployments.v1.Environment.Class
-	4,  // 5: deployments.v1.Environment.lifecycle:type_name -> deployments.v1.Environment.Lifecycle
-	5,  // 6: deployments.v1.Environment.identity_source:type_name -> deployments.v1.Environment.IdentitySource
-	19, // 7: deployments.v1.Manifest.resources:type_name -> deployments.v1.ManifestResource
-	18, // 8: deployments.v1.Manifest.functions:type_name -> deployments.v1.ManifestFunction
-	66, // 9: deployments.v1.Manifest.domains:type_name -> deployments.v1.Manifest.DomainsEntry
-	16, // 10: deployments.v1.Manifest.apps:type_name -> deployments.v1.ManifestApp
-	14, // 11: deployments.v1.Manifest.usages:type_name -> deployments.v1.ManifestUsage
-	67, // 12: deployments.v1.ManifestApp.domains:type_name -> deployments.v1.ManifestApp.DomainsEntry
-	17, // 13: deployments.v1.ManifestApp.variables:type_name -> deployments.v1.ManifestVariable
-	69, // 14: deployments.v1.ManifestVariable.class:type_name -> resources.v1.VariableClass
-	70, // 15: deployments.v1.ManifestResource.resource:type_name -> resources.v1.ResourceIdentifier
-	71, // 16: deployments.v1.ManifestResource.postgres:type_name -> resources.v1.PostgresConfig
-	72, // 17: deployments.v1.ManifestResource.bucket:type_name -> resources.v1.BucketConfig
-	13, // 18: deployments.v1.DeployRequest.manifest:type_name -> deployments.v1.Manifest
-	12, // 19: deployments.v1.DeployRequest.environment:type_name -> deployments.v1.Environment
-	22, // 20: deployments.v1.DeployRequest.dns:type_name -> deployments.v1.Dns
-	3,  // 21: deployments.v1.BootstrapRequest.class:type_name -> deployments.v1.Environment.Class
-	22, // 22: deployments.v1.BootstrapRequest.dns:type_name -> deployments.v1.Dns
-	3,  // 23: deployments.v1.TeardownRequest.class:type_name -> deployments.v1.Environment.Class
-	3,  // 24: deployments.v1.PlanTeardownRequest.class:type_name -> deployments.v1.Environment.Class
-	30, // 25: deployments.v1.PlanTeardownResponse.items:type_name -> deployments.v1.TeardownItem
-	12, // 26: deployments.v1.DestroyPreviewRequest.environment:type_name -> deployments.v1.Environment
-	12, // 27: deployments.v1.DestroyProjectRequest.environment:type_name -> deployments.v1.Environment
-	31, // 28: deployments.v1.PlanDestroyProjectResponse.edge_stack:type_name -> deployments.v1.EdgeStackPlan
-	6,  // 29: deployments.v1.TeardownItem.action:type_name -> deployments.v1.TeardownItem.Action
-	30, // 30: deployments.v1.EdgeStackPlan.items:type_name -> deployments.v1.TeardownItem
-	34, // 31: deployments.v1.ListEnvironmentsResponse.environments:type_name -> deployments.v1.PreviewEnvironment
-	4,  // 32: deployments.v1.PreviewEnvironment.lifecycle:type_name -> deployments.v1.Environment.Lifecycle
-	3,  // 33: deployments.v1.PreflightRequest.required_class:type_name -> deployments.v1.Environment.Class
-	3,  // 34: deployments.v1.PreflightResponse.infra_class:type_name -> deployments.v1.Environment.Class
-	39, // 35: deployments.v1.PreflightResponse.identity:type_name -> deployments.v1.Identity
-	40, // 36: deployments.v1.PreflightResponse.credential_problems:type_name -> deployments.v1.CredentialProblem
-	38, // 37: deployments.v1.PreflightResponse.domain_claims:type_name -> deployments.v1.DomainClaim
-	37, // 38: deployments.v1.PreflightResponse.global_preview_domain:type_name -> deployments.v1.GlobalPreviewDomain
-	7,  // 39: deployments.v1.DomainClaim.status:type_name -> deployments.v1.DomainClaim.Status
-	68, // 40: deployments.v1.Promotion.builds:type_name -> deployments.v1.Promotion.BuildsEntry
-	41, // 41: deployments.v1.Promotion.flip_bound:type_name -> deployments.v1.FlipBound
-	42, // 42: deployments.v1.PromotionHistoryEntry.promotion:type_name -> deployments.v1.Promotion
-	43, // 43: deployments.v1.ListPromotionsResponse.promotions:type_name -> deployments.v1.PromotionHistoryEntry
-	42, // 44: deployments.v1.RollbackResponse.promoted:type_name -> deployments.v1.Promotion
-	12, // 45: deployments.v1.PruneRequest.environment:type_name -> deployments.v1.Environment
-	54, // 46: deployments.v1.DeployEvent.progress:type_name -> deployments.v1.ProgressEvent
-	55, // 47: deployments.v1.DeployEvent.log:type_name -> deployments.v1.LogEvent
-	56, // 48: deployments.v1.DeployEvent.result:type_name -> deployments.v1.ResultEvent
-	51, // 49: deployments.v1.DeployEvent.stage_plan:type_name -> deployments.v1.StagePlanEvent
-	53, // 50: deployments.v1.DeployEvent.span:type_name -> deployments.v1.SpanEvent
-	50, // 51: deployments.v1.StagePlanEvent.stages:type_name -> deployments.v1.Stage
-	2,  // 52: deployments.v1.SpanAttribute.key:type_name -> deployments.v1.AttributeKey
-	1,  // 53: deployments.v1.SpanEvent.status:type_name -> deployments.v1.SpanStatus
-	52, // 54: deployments.v1.SpanEvent.attributes:type_name -> deployments.v1.SpanAttribute
-	0,  // 55: deployments.v1.ProgressEvent.phase:type_name -> deployments.v1.Phase
-	73, // 56: deployments.v1.ResultEvent.links:type_name -> links.v1.Link
-	57, // 57: deployments.v1.ResultEvent.functions:type_name -> deployments.v1.FunctionOutput
-	41, // 58: deployments.v1.ResultEvent.flip_bound:type_name -> deployments.v1.FlipBound
-	3,  // 59: deployments.v1.SetLinkRequest.class:type_name -> deployments.v1.Environment.Class
-	73, // 60: deployments.v1.SetLinkRequest.link:type_name -> links.v1.Link
-	3,  // 61: deployments.v1.RemoveLinkRequest.class:type_name -> deployments.v1.Environment.Class
-	3,  // 62: deployments.v1.ListLinksRequest.class:type_name -> deployments.v1.Environment.Class
-	64, // 63: deployments.v1.ListLinksResponse.links:type_name -> deployments.v1.LinkSummary
-	74, // 64: deployments.v1.LinkSummary.type:type_name -> links.v1.LinkType
-	65, // 65: deployments.v1.LinkSummary.properties:type_name -> deployments.v1.PropertyShape
-	15, // 66: deployments.v1.Manifest.DomainsEntry.value:type_name -> deployments.v1.DomainList
-	15, // 67: deployments.v1.ManifestApp.DomainsEntry.value:type_name -> deployments.v1.DomainList
-	20, // 68: deployments.v1.DeploymentService.Deploy:input_type -> deployments.v1.DeployRequest
-	21, // 69: deployments.v1.DeploymentService.Bootstrap:input_type -> deployments.v1.BootstrapRequest
-	23, // 70: deployments.v1.DeploymentService.Teardown:input_type -> deployments.v1.TeardownRequest
-	24, // 71: deployments.v1.DeploymentService.PlanTeardown:input_type -> deployments.v1.PlanTeardownRequest
-	26, // 72: deployments.v1.DeploymentService.DestroyPreview:input_type -> deployments.v1.DestroyPreviewRequest
-	27, // 73: deployments.v1.DeploymentService.DestroyProject:input_type -> deployments.v1.DestroyProjectRequest
-	28, // 74: deployments.v1.DeploymentService.PlanDestroyProject:input_type -> deployments.v1.PlanDestroyProjectRequest
-	32, // 75: deployments.v1.DeploymentService.ListEnvironments:input_type -> deployments.v1.ListEnvironmentsRequest
-	35, // 76: deployments.v1.DeploymentService.Preflight:input_type -> deployments.v1.PreflightRequest
-	44, // 77: deployments.v1.DeploymentService.ListPromotions:input_type -> deployments.v1.ListPromotionsRequest
-	46, // 78: deployments.v1.DeploymentService.Rollback:input_type -> deployments.v1.RollbackRequest
-	48, // 79: deployments.v1.DeploymentService.Prune:input_type -> deployments.v1.PruneRequest
-	8,  // 80: deployments.v1.DeploymentService.UseDomain:input_type -> deployments.v1.UseDomainRequest
-	9,  // 81: deployments.v1.DeploymentService.ListDomain:input_type -> deployments.v1.ListDomainRequest
-	11, // 82: deployments.v1.DeploymentService.ReleaseDomain:input_type -> deployments.v1.ReleaseDomainRequest
-	58, // 83: deployments.v1.DeploymentService.SetLink:input_type -> deployments.v1.SetLinkRequest
-	60, // 84: deployments.v1.DeploymentService.RemoveLink:input_type -> deployments.v1.RemoveLinkRequest
-	62, // 85: deployments.v1.DeploymentService.ListLinks:input_type -> deployments.v1.ListLinksRequest
-	49, // 86: deployments.v1.DeploymentService.Deploy:output_type -> deployments.v1.DeployEvent
-	49, // 87: deployments.v1.DeploymentService.Bootstrap:output_type -> deployments.v1.DeployEvent
-	49, // 88: deployments.v1.DeploymentService.Teardown:output_type -> deployments.v1.DeployEvent
-	25, // 89: deployments.v1.DeploymentService.PlanTeardown:output_type -> deployments.v1.PlanTeardownResponse
-	49, // 90: deployments.v1.DeploymentService.DestroyPreview:output_type -> deployments.v1.DeployEvent
-	49, // 91: deployments.v1.DeploymentService.DestroyProject:output_type -> deployments.v1.DeployEvent
-	29, // 92: deployments.v1.DeploymentService.PlanDestroyProject:output_type -> deployments.v1.PlanDestroyProjectResponse
-	33, // 93: deployments.v1.DeploymentService.ListEnvironments:output_type -> deployments.v1.ListEnvironmentsResponse
-	36, // 94: deployments.v1.DeploymentService.Preflight:output_type -> deployments.v1.PreflightResponse
-	45, // 95: deployments.v1.DeploymentService.ListPromotions:output_type -> deployments.v1.ListPromotionsResponse
-	47, // 96: deployments.v1.DeploymentService.Rollback:output_type -> deployments.v1.RollbackResponse
-	49, // 97: deployments.v1.DeploymentService.Prune:output_type -> deployments.v1.DeployEvent
-	49, // 98: deployments.v1.DeploymentService.UseDomain:output_type -> deployments.v1.DeployEvent
-	10, // 99: deployments.v1.DeploymentService.ListDomain:output_type -> deployments.v1.ListDomainResponse
-	49, // 100: deployments.v1.DeploymentService.ReleaseDomain:output_type -> deployments.v1.DeployEvent
-	59, // 101: deployments.v1.DeploymentService.SetLink:output_type -> deployments.v1.SetLinkResponse
-	61, // 102: deployments.v1.DeploymentService.RemoveLink:output_type -> deployments.v1.RemoveLinkResponse
-	63, // 103: deployments.v1.DeploymentService.ListLinks:output_type -> deployments.v1.ListLinksResponse
-	86, // [86:104] is the sub-list for method output_type
-	68, // [68:86] is the sub-list for method input_type
-	68, // [68:68] is the sub-list for extension type_name
-	68, // [68:68] is the sub-list for extension extendee
-	0,  // [0:68] is the sub-list for field type_name
+	22, // 1: deployments.v1.UseDomainRequest.dns:type_name -> deployments.v1.Dns
+	3,  // 2: deployments.v1.ListDomainRequest.class:type_name -> deployments.v1.Environment.Class
+	37, // 3: deployments.v1.ListDomainResponse.domain:type_name -> deployments.v1.GlobalPreviewDomain
+	3,  // 4: deployments.v1.ReleaseDomainRequest.class:type_name -> deployments.v1.Environment.Class
+	22, // 5: deployments.v1.ReleaseDomainRequest.dns:type_name -> deployments.v1.Dns
+	3,  // 6: deployments.v1.Environment.class:type_name -> deployments.v1.Environment.Class
+	4,  // 7: deployments.v1.Environment.lifecycle:type_name -> deployments.v1.Environment.Lifecycle
+	5,  // 8: deployments.v1.Environment.identity_source:type_name -> deployments.v1.Environment.IdentitySource
+	19, // 9: deployments.v1.Manifest.resources:type_name -> deployments.v1.ManifestResource
+	18, // 10: deployments.v1.Manifest.functions:type_name -> deployments.v1.ManifestFunction
+	66, // 11: deployments.v1.Manifest.domains:type_name -> deployments.v1.Manifest.DomainsEntry
+	16, // 12: deployments.v1.Manifest.apps:type_name -> deployments.v1.ManifestApp
+	14, // 13: deployments.v1.Manifest.usages:type_name -> deployments.v1.ManifestUsage
+	67, // 14: deployments.v1.ManifestApp.domains:type_name -> deployments.v1.ManifestApp.DomainsEntry
+	17, // 15: deployments.v1.ManifestApp.variables:type_name -> deployments.v1.ManifestVariable
+	69, // 16: deployments.v1.ManifestVariable.class:type_name -> resources.v1.VariableClass
+	70, // 17: deployments.v1.ManifestResource.resource:type_name -> resources.v1.ResourceIdentifier
+	71, // 18: deployments.v1.ManifestResource.postgres:type_name -> resources.v1.PostgresConfig
+	72, // 19: deployments.v1.ManifestResource.bucket:type_name -> resources.v1.BucketConfig
+	13, // 20: deployments.v1.DeployRequest.manifest:type_name -> deployments.v1.Manifest
+	12, // 21: deployments.v1.DeployRequest.environment:type_name -> deployments.v1.Environment
+	22, // 22: deployments.v1.DeployRequest.dns:type_name -> deployments.v1.Dns
+	3,  // 23: deployments.v1.BootstrapRequest.class:type_name -> deployments.v1.Environment.Class
+	22, // 24: deployments.v1.BootstrapRequest.dns:type_name -> deployments.v1.Dns
+	3,  // 25: deployments.v1.TeardownRequest.class:type_name -> deployments.v1.Environment.Class
+	3,  // 26: deployments.v1.PlanTeardownRequest.class:type_name -> deployments.v1.Environment.Class
+	30, // 27: deployments.v1.PlanTeardownResponse.items:type_name -> deployments.v1.TeardownItem
+	12, // 28: deployments.v1.DestroyPreviewRequest.environment:type_name -> deployments.v1.Environment
+	12, // 29: deployments.v1.DestroyProjectRequest.environment:type_name -> deployments.v1.Environment
+	22, // 30: deployments.v1.DestroyProjectRequest.dns:type_name -> deployments.v1.Dns
+	31, // 31: deployments.v1.PlanDestroyProjectResponse.edge_stack:type_name -> deployments.v1.EdgeStackPlan
+	6,  // 32: deployments.v1.TeardownItem.action:type_name -> deployments.v1.TeardownItem.Action
+	30, // 33: deployments.v1.EdgeStackPlan.items:type_name -> deployments.v1.TeardownItem
+	34, // 34: deployments.v1.ListEnvironmentsResponse.environments:type_name -> deployments.v1.PreviewEnvironment
+	4,  // 35: deployments.v1.PreviewEnvironment.lifecycle:type_name -> deployments.v1.Environment.Lifecycle
+	3,  // 36: deployments.v1.PreflightRequest.required_class:type_name -> deployments.v1.Environment.Class
+	3,  // 37: deployments.v1.PreflightResponse.infra_class:type_name -> deployments.v1.Environment.Class
+	39, // 38: deployments.v1.PreflightResponse.identity:type_name -> deployments.v1.Identity
+	40, // 39: deployments.v1.PreflightResponse.credential_problems:type_name -> deployments.v1.CredentialProblem
+	38, // 40: deployments.v1.PreflightResponse.domain_claims:type_name -> deployments.v1.DomainClaim
+	37, // 41: deployments.v1.PreflightResponse.global_preview_domain:type_name -> deployments.v1.GlobalPreviewDomain
+	7,  // 42: deployments.v1.DomainClaim.status:type_name -> deployments.v1.DomainClaim.Status
+	68, // 43: deployments.v1.Promotion.builds:type_name -> deployments.v1.Promotion.BuildsEntry
+	41, // 44: deployments.v1.Promotion.flip_bound:type_name -> deployments.v1.FlipBound
+	42, // 45: deployments.v1.PromotionHistoryEntry.promotion:type_name -> deployments.v1.Promotion
+	43, // 46: deployments.v1.ListPromotionsResponse.promotions:type_name -> deployments.v1.PromotionHistoryEntry
+	42, // 47: deployments.v1.RollbackResponse.promoted:type_name -> deployments.v1.Promotion
+	12, // 48: deployments.v1.PruneRequest.environment:type_name -> deployments.v1.Environment
+	54, // 49: deployments.v1.DeployEvent.progress:type_name -> deployments.v1.ProgressEvent
+	55, // 50: deployments.v1.DeployEvent.log:type_name -> deployments.v1.LogEvent
+	56, // 51: deployments.v1.DeployEvent.result:type_name -> deployments.v1.ResultEvent
+	51, // 52: deployments.v1.DeployEvent.stage_plan:type_name -> deployments.v1.StagePlanEvent
+	53, // 53: deployments.v1.DeployEvent.span:type_name -> deployments.v1.SpanEvent
+	50, // 54: deployments.v1.StagePlanEvent.stages:type_name -> deployments.v1.Stage
+	2,  // 55: deployments.v1.SpanAttribute.key:type_name -> deployments.v1.AttributeKey
+	1,  // 56: deployments.v1.SpanEvent.status:type_name -> deployments.v1.SpanStatus
+	52, // 57: deployments.v1.SpanEvent.attributes:type_name -> deployments.v1.SpanAttribute
+	0,  // 58: deployments.v1.ProgressEvent.phase:type_name -> deployments.v1.Phase
+	73, // 59: deployments.v1.ResultEvent.links:type_name -> links.v1.Link
+	57, // 60: deployments.v1.ResultEvent.functions:type_name -> deployments.v1.FunctionOutput
+	41, // 61: deployments.v1.ResultEvent.flip_bound:type_name -> deployments.v1.FlipBound
+	3,  // 62: deployments.v1.SetLinkRequest.class:type_name -> deployments.v1.Environment.Class
+	73, // 63: deployments.v1.SetLinkRequest.link:type_name -> links.v1.Link
+	3,  // 64: deployments.v1.RemoveLinkRequest.class:type_name -> deployments.v1.Environment.Class
+	3,  // 65: deployments.v1.ListLinksRequest.class:type_name -> deployments.v1.Environment.Class
+	64, // 66: deployments.v1.ListLinksResponse.links:type_name -> deployments.v1.LinkSummary
+	74, // 67: deployments.v1.LinkSummary.type:type_name -> links.v1.LinkType
+	65, // 68: deployments.v1.LinkSummary.properties:type_name -> deployments.v1.PropertyShape
+	15, // 69: deployments.v1.Manifest.DomainsEntry.value:type_name -> deployments.v1.DomainList
+	15, // 70: deployments.v1.ManifestApp.DomainsEntry.value:type_name -> deployments.v1.DomainList
+	20, // 71: deployments.v1.DeploymentService.Deploy:input_type -> deployments.v1.DeployRequest
+	21, // 72: deployments.v1.DeploymentService.Bootstrap:input_type -> deployments.v1.BootstrapRequest
+	23, // 73: deployments.v1.DeploymentService.Teardown:input_type -> deployments.v1.TeardownRequest
+	24, // 74: deployments.v1.DeploymentService.PlanTeardown:input_type -> deployments.v1.PlanTeardownRequest
+	26, // 75: deployments.v1.DeploymentService.DestroyPreview:input_type -> deployments.v1.DestroyPreviewRequest
+	27, // 76: deployments.v1.DeploymentService.DestroyProject:input_type -> deployments.v1.DestroyProjectRequest
+	28, // 77: deployments.v1.DeploymentService.PlanDestroyProject:input_type -> deployments.v1.PlanDestroyProjectRequest
+	32, // 78: deployments.v1.DeploymentService.ListEnvironments:input_type -> deployments.v1.ListEnvironmentsRequest
+	35, // 79: deployments.v1.DeploymentService.Preflight:input_type -> deployments.v1.PreflightRequest
+	44, // 80: deployments.v1.DeploymentService.ListPromotions:input_type -> deployments.v1.ListPromotionsRequest
+	46, // 81: deployments.v1.DeploymentService.Rollback:input_type -> deployments.v1.RollbackRequest
+	48, // 82: deployments.v1.DeploymentService.Prune:input_type -> deployments.v1.PruneRequest
+	8,  // 83: deployments.v1.DeploymentService.UseDomain:input_type -> deployments.v1.UseDomainRequest
+	9,  // 84: deployments.v1.DeploymentService.ListDomain:input_type -> deployments.v1.ListDomainRequest
+	11, // 85: deployments.v1.DeploymentService.ReleaseDomain:input_type -> deployments.v1.ReleaseDomainRequest
+	58, // 86: deployments.v1.DeploymentService.SetLink:input_type -> deployments.v1.SetLinkRequest
+	60, // 87: deployments.v1.DeploymentService.RemoveLink:input_type -> deployments.v1.RemoveLinkRequest
+	62, // 88: deployments.v1.DeploymentService.ListLinks:input_type -> deployments.v1.ListLinksRequest
+	49, // 89: deployments.v1.DeploymentService.Deploy:output_type -> deployments.v1.DeployEvent
+	49, // 90: deployments.v1.DeploymentService.Bootstrap:output_type -> deployments.v1.DeployEvent
+	49, // 91: deployments.v1.DeploymentService.Teardown:output_type -> deployments.v1.DeployEvent
+	25, // 92: deployments.v1.DeploymentService.PlanTeardown:output_type -> deployments.v1.PlanTeardownResponse
+	49, // 93: deployments.v1.DeploymentService.DestroyPreview:output_type -> deployments.v1.DeployEvent
+	49, // 94: deployments.v1.DeploymentService.DestroyProject:output_type -> deployments.v1.DeployEvent
+	29, // 95: deployments.v1.DeploymentService.PlanDestroyProject:output_type -> deployments.v1.PlanDestroyProjectResponse
+	33, // 96: deployments.v1.DeploymentService.ListEnvironments:output_type -> deployments.v1.ListEnvironmentsResponse
+	36, // 97: deployments.v1.DeploymentService.Preflight:output_type -> deployments.v1.PreflightResponse
+	45, // 98: deployments.v1.DeploymentService.ListPromotions:output_type -> deployments.v1.ListPromotionsResponse
+	47, // 99: deployments.v1.DeploymentService.Rollback:output_type -> deployments.v1.RollbackResponse
+	49, // 100: deployments.v1.DeploymentService.Prune:output_type -> deployments.v1.DeployEvent
+	49, // 101: deployments.v1.DeploymentService.UseDomain:output_type -> deployments.v1.DeployEvent
+	10, // 102: deployments.v1.DeploymentService.ListDomain:output_type -> deployments.v1.ListDomainResponse
+	49, // 103: deployments.v1.DeploymentService.ReleaseDomain:output_type -> deployments.v1.DeployEvent
+	59, // 104: deployments.v1.DeploymentService.SetLink:output_type -> deployments.v1.SetLinkResponse
+	61, // 105: deployments.v1.DeploymentService.RemoveLink:output_type -> deployments.v1.RemoveLinkResponse
+	63, // 106: deployments.v1.DeploymentService.ListLinks:output_type -> deployments.v1.ListLinksResponse
+	89, // [89:107] is the sub-list for method output_type
+	71, // [71:89] is the sub-list for method input_type
+	71, // [71:71] is the sub-list for extension type_name
+	71, // [71:71] is the sub-list for extension extendee
+	0,  // [0:71] is the sub-list for field type_name
 }
 
 func init() { file_deployments_v1_deployments_proto_init() }

@@ -16,11 +16,6 @@ import (
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
-const (
-	routeRecordContent = "100::"
-	routeRecordComment = "managed by ocel — worker route placeholder"
-)
-
 type routePlan struct {
 	desired        []string
 	bound          []string
@@ -59,12 +54,6 @@ func (p *provider) reconcileWorkerRoutes(ctx context.Context, up upload, plan ro
 		if err := p.ensureRoute(ctx, routes, zoneID, routePattern(host), up.scriptName); err != nil {
 			return err
 		}
-		if plan.requiredRecord != "" {
-			continue
-		}
-		if err := p.ensureProxiedRecord(ctx, zoneID, host, warn); err != nil {
-			return err
-		}
 	}
 
 	if !plan.prune {
@@ -101,9 +90,6 @@ func (p *provider) pruneStaleRoutes(ctx context.Context, snap *routeSnapshot, up
 				continue
 			}
 			snap.detached(zone.id, route.ID)
-			if err := p.deleteProxiedRecord(ctx, zone.id, host); err != nil {
-				errs = append(errs, err)
-			}
 		}
 	}
 	return errors.Join(errs...)
@@ -247,37 +233,6 @@ func (p *provider) addressRecordsAt(ctx context.Context, zoneID, hostname string
 	return haveAddress, haveProxied, nil
 }
 
-func (p *provider) ensureProxiedRecord(ctx context.Context, zoneID, hostname string, warn func(string)) error {
-	haveAddress, haveProxied, err := p.addressRecordsAt(ctx, zoneID, hostname)
-	if err != nil {
-		return err
-	}
-	if haveAddress {
-		if !haveProxied {
-			warn(fmt.Sprintf("%s already has a DNS record that is not proxied through Cloudflare, so the worker route will not serve it — set that record to proxied (orange cloud) for %s to go live", hostname, hostname))
-		}
-		return nil
-	}
-	return p.plantProxiedRecord(ctx, zoneID, hostname)
-}
-
-func (p *provider) plantProxiedRecord(ctx context.Context, zoneID, hostname string) error {
-	if _, err := p.client.DNS.Records.New(ctx, dns.RecordNewParams{
-		ZoneID: cf.F(zoneID),
-		Body: dns.AAAARecordParam{
-			Name:    cf.F(hostname),
-			Type:    cf.F(dns.AAAARecordTypeAAAA),
-			Content: cf.F(routeRecordContent),
-			Proxied: cf.F(true),
-			TTL:     cf.F(dns.TTL(1)),
-			Comment: cf.F(routeRecordComment),
-		},
-	}); err != nil {
-		return fmt.Errorf("plant proxied DNS record for %q: %w", hostname, err)
-	}
-	return nil
-}
-
 func isAddressRecord(t dns.RecordResponseType) bool {
 	switch t {
 	case dns.RecordResponseTypeA, dns.RecordResponseTypeAAAA, dns.RecordResponseTypeCNAME:
@@ -285,52 +240,6 @@ func isAddressRecord(t dns.RecordResponseType) bool {
 	default:
 		return false
 	}
-}
-
-func (p *provider) detachRouteRecords(ctx context.Context, snap *routeSnapshot, accountID, scriptName string) error {
-	owned, err := p.accountZones(ctx, accountID)
-	if err != nil {
-		return err
-	}
-	var errs []error
-	for _, zone := range owned {
-		inZone, err := snap.inZone(ctx, zone.id)
-		if err != nil {
-			errs = append(errs, err)
-			continue
-		}
-		for _, route := range inZone {
-			if route.Script != scriptName {
-				continue
-			}
-			hostname := strings.TrimSuffix(route.Pattern, "/*")
-			if err := p.deleteProxiedRecord(ctx, zone.id, hostname); err != nil {
-				errs = append(errs, err)
-			}
-		}
-	}
-	return errors.Join(errs...)
-}
-
-func (p *provider) deleteProxiedRecord(ctx context.Context, zoneID, hostname string) error {
-	records := p.client.DNS.Records.ListAutoPaging(ctx, dns.RecordListParams{
-		ZoneID: cf.F(zoneID),
-		Name:   cf.F(dns.RecordListParamsName{Exact: cf.F(hostname)}),
-		Type:   cf.F(dns.RecordListParamsTypeAAAA),
-	})
-	for records.Next() {
-		rec := records.Current()
-		if rec.Content != routeRecordContent || rec.Comment != routeRecordComment {
-			continue
-		}
-		if _, err := p.client.DNS.Records.Delete(ctx, rec.ID, dns.RecordDeleteParams{ZoneID: cf.F(zoneID)}); err != nil {
-			return fmt.Errorf("delete DNS record %q: %w", hostname, err)
-		}
-	}
-	if err := records.Err(); err != nil {
-		return fmt.Errorf("list DNS records for %q: %w", hostname, err)
-	}
-	return nil
 }
 
 func (p *provider) detachCustomDomains(ctx context.Context, accountID, scriptName string) error {

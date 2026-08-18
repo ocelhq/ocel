@@ -49,6 +49,8 @@ message UseDomainRequest {
   Environment.Class class = 1;
 
   string base_domain = 2;
+
+  Dns dns = 3;
 }
 
 message ListDomainRequest {
@@ -63,6 +65,8 @@ message ListDomainResponse {
 
 message ReleaseDomainRequest {
   Environment.Class class = 1;
+
+  Dns dns = 2;
 }
 
 message Environment {
@@ -251,6 +255,8 @@ message DestroyProjectRequest {
   string slug = 3;
 
   Environment environment = 4;
+
+  Dns dns = 5;
 }
 
 message PlanDestroyProjectRequest {

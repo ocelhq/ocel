@@ -36,7 +36,7 @@ func (s *stack) BindDomain(ctx context.Context, binding edge.DomainBinding) erro
 	if err := s.p.ensureRoute(ctx, s.p.routeSnapshot(), zoneID, routePattern(binding.Hostname), script); err != nil {
 		return err
 	}
-	if err := s.p.bindProxiedPlaceholder(ctx, zoneID, binding.Hostname); err != nil {
+	if err := s.p.refuseGreyCloud(ctx, zoneID, binding.Hostname); err != nil {
 		return err
 	}
 	s.state = edge.RecordBoundDomain(s.state, binding.Hostname)
@@ -56,9 +56,6 @@ func (s *stack) UnbindDomain(ctx context.Context, hostname string) error {
 		return err
 	}
 	if err := s.p.detachRoute(ctx, zoneID, routePattern(hostname), scripts); err != nil {
-		return err
-	}
-	if err := s.p.deleteProxiedRecord(ctx, zoneID, hostname); err != nil {
 		return err
 	}
 	s.state = edge.ForgetBoundDomain(s.state, hostname)
@@ -120,15 +117,12 @@ func (p *provider) detachRoute(ctx context.Context, zoneID, pattern string, scri
 	return nil
 }
 
-func (p *provider) bindProxiedPlaceholder(ctx context.Context, zoneID, hostname string) error {
+func (p *provider) refuseGreyCloud(ctx context.Context, zoneID, hostname string) error {
 	haveAddress, haveProxied, err := p.addressRecordsAt(ctx, zoneID, hostname)
 	if err != nil {
 		return err
 	}
-	switch {
-	case !haveAddress:
-		return p.plantProxiedRecord(ctx, zoneID, hostname)
-	case !haveProxied:
+	if haveAddress && !haveProxied {
 		return fmt.Errorf("the DNS record for %q is not proxied through Cloudflare, so no worker route under it can ever fire — set %q to proxied (orange cloud) and bind it again", hostname, hostname)
 	}
 	return nil

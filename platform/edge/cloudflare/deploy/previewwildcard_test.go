@@ -57,7 +57,7 @@ func previewWildcardSpec() edge.PreviewWildcardSpec {
 func TestReconcilePreviewWildcard(t *testing.T) {
 	t.Setenv(envAccountID, "acct")
 
-	t.Run("the shared worker claims the substrate wildcard and plants its record", func(t *testing.T) {
+	t.Run("the shared worker claims the substrate wildcard and plants nothing", func(t *testing.T) {
 		m := &cfMock{
 			zoneID:   "zone1",
 			zoneName: "app.com",
@@ -82,8 +82,8 @@ func TestReconcilePreviewWildcard(t *testing.T) {
 		if m.createdRoutes[0]["script"] != previewEntryScript {
 			t.Errorf("route script = %v, want %s", m.createdRoutes[0]["script"], previewEntryScript)
 		}
-		if len(m.createdRecords) != 1 || m.createdRecords[0]["name"] != "*.preview.app.com" || m.createdRecords[0]["proxied"] != true {
-			t.Errorf("created records = %v, want a proxied placeholder for *.preview.app.com", m.createdRecords)
+		if len(m.createdRecords) != 0 {
+			t.Errorf("created records = %v, want none: the wildcard's record is the DNS axis's to write", m.createdRecords)
 		}
 		if len(m.deletedRoutes) != 0 || len(m.deletedRecords) != 0 {
 			t.Errorf("deleted routes = %v and records = %v, want none: the shared entry never prunes a project's routes", m.deletedRoutes, m.deletedRecords)
@@ -159,7 +159,7 @@ func TestReconcilePreviewWildcard(t *testing.T) {
 func TestDestroyPreviewWildcard(t *testing.T) {
 	t.Setenv(envAccountID, "acct")
 
-	t.Run("the wildcard route, its record and the script all go", func(t *testing.T) {
+	t.Run("the wildcard route and the script go, the record stays", func(t *testing.T) {
 		m := &cfMock{
 			zoneID:   "zone1",
 			zoneName: "app.com",
@@ -168,8 +168,8 @@ func TestDestroyPreviewWildcard(t *testing.T) {
 				{"id": "project", "pattern": "pr-1-abc1234567.preview.app.com/*", "script": "ocel-shop-preview"},
 			},
 			existingRecords: []map[string]any{
-				{"id": "wildcard", "name": "*.preview.app.com", "type": "AAAA", "content": "100::", "comment": routeRecordComment, "proxied": true},
-				{"id": "projectrec", "name": "pr-1-abc1234567.preview.app.com", "type": "AAAA", "content": "100::", "comment": routeRecordComment, "proxied": true},
+				{"id": "wildcard", "name": "*.preview.app.com", "type": "AAAA", "content": "100::", "comment": recordComment, "proxied": true},
+				{"id": "projectrec", "name": "pr-1-abc1234567.preview.app.com", "type": "AAAA", "content": "100::", "comment": recordComment, "proxied": true},
 			},
 			existingCustomDomains: []map[string]any{{"id": "cd1", "hostname": "preview.app.com", "service": previewEntryScript}},
 		}
@@ -179,7 +179,7 @@ func TestDestroyPreviewWildcard(t *testing.T) {
 		}
 
 		assertSet(t, "deleted routes", m.deletedRoutes, []string{"entry"})
-		assertSet(t, "deleted records", m.deletedRecords, []string{"wildcard"})
+		assertSet(t, "deleted records", m.deletedRecords, nil)
 		assertSet(t, "deleted scripts", m.deletedScripts, []string{previewEntryScript})
 		assertSet(t, "detached custom domains", m.deletedCustomDomains, []string{"cd1"})
 	})
@@ -192,7 +192,7 @@ func TestDestroyPreviewWildcard(t *testing.T) {
 				{"id": "someone-elses", "pattern": "*.preview.app.com/*", "script": "ocel-shop-preview"},
 			},
 			existingRecords: []map[string]any{
-				{"id": "wildcard", "name": "*.preview.app.com", "type": "AAAA", "content": "100::", "comment": routeRecordComment, "proxied": true},
+				{"id": "wildcard", "name": "*.preview.app.com", "type": "AAAA", "content": "100::", "comment": recordComment, "proxied": true},
 			},
 		}
 
@@ -202,25 +202,7 @@ func TestDestroyPreviewWildcard(t *testing.T) {
 		if len(m.deletedRoutes) != 0 {
 			t.Errorf("deleted routes = %v, want none: the wildcard belongs to another worker", m.deletedRoutes)
 		}
-		if len(m.deletedRecords) != 0 {
-			t.Errorf("deleted records = %v, want none: the surviving route needs its placeholder", m.deletedRecords)
-		}
 		assertSet(t, "deleted scripts", m.deletedScripts, []string{previewEntryScript})
-	})
-
-	t.Run("a route already gone still takes its record", func(t *testing.T) {
-		m := &cfMock{
-			zoneID:   "zone1",
-			zoneName: "app.com",
-			existingRecords: []map[string]any{
-				{"id": "wildcard", "name": "*.preview.app.com", "type": "AAAA", "content": "100::", "comment": routeRecordComment, "proxied": true},
-			},
-		}
-
-		if err := m.provider(t).DestroyPreviewWildcard(t.Context(), "preview.app.com"); err != nil {
-			t.Fatalf("DestroyPreviewWildcard: %v", err)
-		}
-		assertSet(t, "deleted records", m.deletedRecords, []string{"wildcard"})
 	})
 
 	t.Run("an unset account id is an error", func(t *testing.T) {
@@ -261,7 +243,7 @@ func TestPruneStaleRoutesSparesThePreviewEntry(t *testing.T) {
 					{"id": "entry", "pattern": "*.preview.app.com/*", "script": previewEntryScript},
 				},
 				existingRecords: []map[string]any{
-					{"id": "wildcard", "name": "*.preview.app.com", "type": "AAAA", "content": "100::", "comment": routeRecordComment, "proxied": true},
+					{"id": "wildcard", "name": "*.preview.app.com", "type": "AAAA", "content": "100::", "comment": recordComment, "proxied": true},
 				},
 			}
 
@@ -270,9 +252,6 @@ func TestPruneStaleRoutesSparesThePreviewEntry(t *testing.T) {
 			}
 			if len(m.deletedRoutes) != 0 {
 				t.Errorf("deleted routes = %v, want none: a project deploy must never unhook the shared preview entry", m.deletedRoutes)
-			}
-			if len(m.deletedRecords) != 0 {
-				t.Errorf("deleted records = %v, want none: the shared entry's placeholder outlives every project", m.deletedRecords)
 			}
 		})
 	}

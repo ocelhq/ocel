@@ -31,6 +31,7 @@ import (
 	linksv1 "github.com/ocelhq/ocel/pkg/proto/links/v1"
 	"github.com/ocelhq/ocel/platform/aws/provider/bootstrap"
 	"github.com/ocelhq/ocel/platform/aws/provider/deploy"
+	"github.com/ocelhq/ocel/platform/aws/provider/dns"
 	"github.com/ocelhq/ocel/platform/aws/provider/edges"
 	"github.com/ocelhq/ocel/platform/aws/provider/pulumiruntime"
 	"github.com/ocelhq/ocel/platform/aws/provider/sdkconfig"
@@ -308,6 +309,11 @@ func (s *Server) runDeploy(ctx context.Context, req *deploymentsv1.DeployRequest
 		return deploy.Result{}, finishPreparing(err)
 	}
 
+	dnsWriter, err := dns.WriterFor(req.GetDns().GetKind(), req.GetDns().GetZone(), dns.Deps{AWS: awscfg})
+	if err != nil {
+		return deploy.Result{}, finishPreparing(err)
+	}
+
 	priorStackState := params.StackState
 	stateTableARN := fmt.Sprintf("arn:aws:dynamodb:%s:%s:table/%s", awscfg.Region, account, deployed.StateTable)
 
@@ -365,6 +371,8 @@ func (s *Server) runDeploy(ctx context.Context, req *deploymentsv1.DeployRequest
 		Getter:      s3.NewFromConfig(awscfg),
 		CodeUpdater: lambda.NewFromConfig(awscfg),
 		Edge:        edgeFront,
+		DNS:         dnsWriter,
+		DNSAwait:    dns.NewPoller(),
 		Class:       env.GetClass(),
 		Lifecycle:   env.GetLifecycle(),
 		Identity:    env.GetIdentity(),

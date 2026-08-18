@@ -11,6 +11,7 @@ import (
 	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
 	"github.com/ocelhq/ocel/platform/aws/provider/bootstrap"
 	"github.com/ocelhq/ocel/platform/aws/provider/deploy"
+	"github.com/ocelhq/ocel/platform/aws/provider/dns"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
@@ -148,6 +149,9 @@ func (s *Server) runDestroyProject(ctx context.Context, req *deploymentsv1.Destr
 	}
 	cfg.Tracer = tracer
 	cfg.StageReport = stageReport
+	if cfg.DNS, err = dns.WriterFor(req.GetDns().GetKind(), req.GetDns().GetZone(), dns.Deps{AWS: awscfg}); err != nil {
+		return finish(err)
+	}
 
 	result, derr := deploy.DestroyProject(ctx, stack, cfg, req.GetSlug(), stages, logf)
 
@@ -187,16 +191,19 @@ func (s *Server) runDestroyPreviewProject(ctx context.Context, req *deploymentsv
 	if err != nil {
 		return finish(err)
 	}
+	awscfg, err := loadAWS(ctx, opts.Region)
+	if err != nil {
+		return finish(err)
+	}
 	cfg.Tracer = tracer
 	cfg.StageReport = stageReport
+	if cfg.DNS, err = dns.WriterFor(req.GetDns().GetKind(), req.GetDns().GetZone(), dns.Deps{AWS: awscfg}); err != nil {
+		return finish(err)
+	}
 
 	result, derr := deploy.DestroyPreviewProject(ctx, stack, cfg, slug, stages, logf)
 
 	if result.EdgeTornDown && len(stack.State()) > 0 {
-		awscfg, awsErr := loadAWS(ctx, opts.Region)
-		if awsErr != nil {
-			return awsErr
-		}
 		if err := bootstrap.DeleteStackStateFor(ctx, ssm.NewFromConfig(awscfg), bootstrap.ClassPreview, slug); err != nil {
 			derr = errors.Join(derr, err)
 		}

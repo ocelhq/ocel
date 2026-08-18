@@ -2,6 +2,7 @@ package server
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"strings"
@@ -14,6 +15,7 @@ import (
 	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
 	"github.com/ocelhq/ocel/platform/aws/provider/bootstrap"
 	"github.com/ocelhq/ocel/platform/aws/provider/deploy"
+	"github.com/ocelhq/ocel/platform/aws/provider/dns"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
@@ -101,17 +103,50 @@ func (s *Server) runUseDomain(ctx context.Context, req *deploymentsv1.UseDomainR
 		return err
 	}
 
+	writer, err := dns.WriterFor(req.GetDns().GetKind(), req.GetDns().GetZone(), dns.Deps{AWS: awscfg})
+	if err != nil {
+		return err
+	}
+	records, err := edge.RecordsFor(edge.DNSTarget{Kind: edgeFront.Kind()}, []string{edge.PreviewWildcard(baseDomain)})
+	if err != nil {
+		return err
+	}
+
 	progress(fmt.Sprintf("Reconciling the shared preview entry on %s", edge.PreviewWildcard(baseDomain)))
 	if err := edgeFront.ReconcilePreviewWildcard(ctx, spec); err != nil {
 		return err
 	}
 
-	return bootstrap.WritePreviewDomain(ctx, ssmClient, bootstrap.ClassPreview, bootstrap.PreviewDomain{
-		BaseDomain:        baseDomain,
-		CloudflareAccount: os.Getenv(cloudflareAccountEnvVar),
-		GrammarMin:        edge.PreviewGrammarMin,
-		GrammarMax:        edge.PreviewGrammarMax,
+	return settleRecords(ctx, writer, dns.NewPoller(), records, progress, func(written []edge.Record) error {
+		return bootstrap.WritePreviewDomain(ctx, ssmClient, bootstrap.ClassPreview, bootstrap.PreviewDomain{
+			BaseDomain:        baseDomain,
+			CloudflareAccount: os.Getenv(cloudflareAccountEnvVar),
+			GrammarMin:        edge.PreviewGrammarMin,
+			GrammarMax:        edge.PreviewGrammarMax,
+			Records:           written,
+		})
 	})
+}
+
+func settleRecords(ctx context.Context, writer edge.DNSWriter, poller dns.Poller, records []edge.Record, say func(string), record func([]edge.Record) error) error {
+	var written []edge.Record
+	var writeErr error
+	if writer != nil {
+		for _, rec := range records {
+			say(fmt.Sprintf("Writing %s", rec))
+		}
+		written, writeErr = writer.EnsureRecords(ctx, records, say)
+	}
+	if err := record(written); err != nil {
+		return errors.Join(writeErr, err)
+	}
+	if writeErr != nil {
+		return writeErr
+	}
+	if writer != nil {
+		return nil
+	}
+	return poller.Await(ctx, records, say)
 }
 
 func (s *Server) ReleaseDomain(ctx context.Context, req *deploymentsv1.ReleaseDomainRequest, stream *connect.ServerStream[deploymentsv1.DeployEvent]) error {
@@ -147,8 +182,16 @@ func (s *Server) runReleaseDomain(ctx context.Context, req *deploymentsv1.Releas
 		return err
 	}
 
+	writer, err := dns.WriterFor(req.GetDns().GetKind(), req.GetDns().GetZone(), dns.Deps{AWS: awscfg})
+	if err != nil {
+		return err
+	}
+
 	progress(fmt.Sprintf("Removing the shared preview entry on %s", edge.PreviewWildcard(recorded.BaseDomain)))
 	if err := edgeFront.DestroyPreviewWildcard(ctx, recorded.BaseDomain); err != nil {
+		return err
+	}
+	if err := dns.Release(ctx, writer, recorded.Records, progress); err != nil {
 		return err
 	}
 	return bootstrap.DeletePreviewDomain(ctx, ssmClient, bootstrap.ClassPreview)

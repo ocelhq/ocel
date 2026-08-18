@@ -3,6 +3,7 @@ package cli
 import (
 	"bytes"
 	"context"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -92,6 +93,57 @@ func TestRunDomain(t *testing.T) {
 		}
 		out := stdout.String()
 		for _, want := range []string{"USE DOMAIN class=CLASS_PREVIEW base=preview.acme.com", "Previews are served on *.preview.acme.com"} {
+			if !strings.Contains(out, want) {
+				t.Errorf("stdout = %q, want it to contain %q", out, want)
+			}
+		}
+		waitForNoStaleSocket(t, sockPath)
+	})
+
+	t.Run("use without a dns prints the record to add", func(t *testing.T) {
+		root, sockPath := setUpDeployFixture(t)
+		d := defaultDeps()
+		setLoggedIn(&d)
+		t.Setenv(fakeInfraClassEnvVar, "preview")
+		t.Setenv(fakeInfraPresentEnvVar, "1")
+
+		var stdout, stderr bytes.Buffer
+		if err := runDomainUse(context.Background(), d, root, "*.preview.acme.com", domainOptions{preview: true}, &stdout, &stderr); err != nil {
+			t.Fatalf("runDomainUse err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
+		}
+		out := stdout.String()
+		for _, want := range []string{"dns=", "add a proxied (orange cloud) DNS record at *.preview.acme.com"} {
+			if !strings.Contains(out, want) {
+				t.Errorf("stdout = %q, want it to contain %q", out, want)
+			}
+		}
+		if strings.Contains(out, "Writing") {
+			t.Errorf("stdout = %q, want no record written without a dns", out)
+		}
+		waitForNoStaleSocket(t, sockPath)
+	})
+
+	t.Run("use with cloudflareDns writes the record", func(t *testing.T) {
+		root, sockPath := setUpDeployFixture(t)
+		writeFile(t, filepath.Join(root, "ocel.config.ts"), `
+export default {
+  slug: "test-app",
+  provider: { package: "@ocel/provider-aws", options: {} },
+  domains: { preview: "*.preview.acme.com" },
+  dns: { kind: "cloudflare" },
+};
+`)
+		d := defaultDeps()
+		setLoggedIn(&d)
+		t.Setenv(fakeInfraClassEnvVar, "preview")
+		t.Setenv(fakeInfraPresentEnvVar, "1")
+
+		var stdout, stderr bytes.Buffer
+		if err := runDomainUse(context.Background(), d, root, "*.preview.acme.com", domainOptions{preview: true}, &stdout, &stderr); err != nil {
+			t.Fatalf("runDomainUse err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
+		}
+		out := stdout.String()
+		for _, want := range []string{"dns=cloudflare", "Writing *.preview.acme.com AAAA 100::"} {
 			if !strings.Contains(out, want) {
 				t.Errorf("stdout = %q, want it to contain %q", out, want)
 			}

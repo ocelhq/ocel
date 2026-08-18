@@ -3,6 +3,7 @@ package cli
 import (
 	"bytes"
 	"context"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -195,11 +196,36 @@ func TestRunDestroyPreviewProject(t *testing.T) {
 		}
 
 		out := stdout.String()
-		if !strings.Contains(out, "DESTROY PROJECT project=test-app class=CLASS_PREVIEW") {
+		if !strings.Contains(out, "DESTROY PROJECT project=test-app dns= class=CLASS_PREVIEW") {
 			t.Errorf("stdout = %q, want the preview DestroyProject echo", out)
 		}
 		if strings.Contains(out, "Type the project name") {
 			t.Errorf("stdout = %q, want --yes to skip the typed-name confirmation", out)
+		}
+	})
+
+	t.Run("the dns descriptor rides along so the teardown can delete what it wrote", func(t *testing.T) {
+		root, _ := setUpDeployFixture(t)
+		writeFile(t, filepath.Join(root, "ocel.config.ts"), `
+export default {
+  slug: "test-app",
+  provider: { package: "@ocel/provider-aws", options: {} },
+  domains: { preview: "*.preview.acme.com" },
+  dns: { kind: "route53" },
+};
+`)
+		d := defaultDeps()
+		setLoggedIn(&d)
+		stubAppFunctions(&d, nil)
+		t.Setenv(fakeInfraClassEnvVar, "preview")
+		t.Setenv(fakeInfraPresentEnvVar, "1")
+
+		var stdout, stderr bytes.Buffer
+		if err := runDestroyPreviewProject(context.Background(), d, root, true, &stdout, &stderr, strings.NewReader("")); err != nil {
+			t.Fatalf("runDestroyPreviewProject err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
+		}
+		if out := stdout.String(); !strings.Contains(out, "DESTROY PROJECT project=test-app dns=route53") {
+			t.Errorf("stdout = %q, want the dns descriptor on the teardown request", out)
 		}
 	})
 

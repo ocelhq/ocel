@@ -392,7 +392,7 @@ func (tc routeCase) run(t *testing.T) {
 func TestReconcileWorkerRoutes(t *testing.T) {
 	t.Parallel()
 
-	t.Run("a wildcard hostname gets a proxied AAAA placeholder and a nil warn is tolerated", func(t *testing.T) {
+	t.Run("a wildcard hostname gets its route and nothing in the zone's records", func(t *testing.T) {
 		t.Parallel()
 
 		m := &cfMock{zoneID: "zone1", zoneName: "app.com"}
@@ -408,35 +408,21 @@ func TestReconcileWorkerRoutes(t *testing.T) {
 			t.Errorf("route pattern = %v, want *.preview.app.com/*", got)
 		}
 
-		if len(m.createdRecords) != 1 {
-			t.Fatalf("expected one DNS record created, got %d", len(m.createdRecords))
-		}
-		rec := m.createdRecords[0]
-		if rec["name"] != "*.preview.app.com" {
-			t.Errorf("record name = %v, want *.preview.app.com", rec["name"])
-		}
-		if rec["type"] != "AAAA" {
-			t.Errorf("record type = %v, want AAAA", rec["type"])
-		}
-		if rec["content"] != routeRecordContent {
-			t.Errorf("record content = %v, want %q", rec["content"], routeRecordContent)
-		}
-		if rec["proxied"] != true {
-			t.Errorf("record proxied = %v, want true", rec["proxied"])
+		if len(m.createdRecords) != 0 {
+			t.Errorf("created records = %v, want none: the edge plants nothing in the zone", m.createdRecords)
 		}
 	})
 
 	for _, tc := range []routeCase{
 		{
-			name:           "every desired domain is attached and given a placeholder",
-			mock:           &cfMock{zoneID: "zone1", zoneName: "app.com"},
-			script:         "ocel-prod",
-			plan:           prunedPlan("app.com", "www.app.com"),
-			createdRoutes:  []string{"app.com/*", "www.app.com/*"},
-			createdRecords: 2,
+			name:          "every desired domain is attached",
+			mock:          &cfMock{zoneID: "zone1", zoneName: "app.com"},
+			script:        "ocel-prod",
+			plan:          prunedPlan("app.com", "www.app.com"),
+			createdRoutes: []string{"app.com/*", "www.app.com/*"},
 		},
 		{
-			name: "a route and record already in place are left untouched",
+			name: "a route already in place is left untouched",
 			mock: &cfMock{
 				zoneID:   "zone1",
 				zoneName: "app.com",
@@ -444,7 +430,7 @@ func TestReconcileWorkerRoutes(t *testing.T) {
 					{"id": "route1", "pattern": "*.preview.app.com/*", "script": "ocel-preview"},
 				},
 				existingRecords: []map[string]any{
-					{"id": "record1", "name": "*.preview.app.com", "type": "AAAA", "content": "100::", "comment": routeRecordComment, "proxied": true},
+					{"id": "record1", "name": "*.preview.app.com", "type": "AAAA", "content": "100::", "comment": recordComment, "proxied": true},
 				},
 			},
 			script:   "ocel-preview",
@@ -452,7 +438,7 @@ func TestReconcileWorkerRoutes(t *testing.T) {
 			warnings: []string{"Advanced Certificate"},
 		},
 		{
-			name: "a domain dropped from the plan loses its route and placeholder",
+			name: "a domain dropped from the plan loses its route",
 			mock: &cfMock{
 				zoneID:   "zone1",
 				zoneName: "app.com",
@@ -462,14 +448,12 @@ func TestReconcileWorkerRoutes(t *testing.T) {
 					{"id": "other", "pattern": "x.app.com/*", "script": "someone-else"},
 				},
 				existingRecords: []map[string]any{
-					{"id": "wwwrec", "name": "www.app.com", "type": "AAAA", "content": "100::", "comment": routeRecordComment, "proxied": true},
+					{"id": "wwwrec", "name": "www.app.com", "type": "AAAA", "content": "100::", "comment": recordComment, "proxied": true},
 				},
 			},
-			script:         "ocel-prod",
-			plan:           prunedPlan("app.com"),
-			deletedRoutes:  []string{"stale"},
-			deletedRecords: []string{"wwwrec"},
-			createdRecords: 1,
+			script:        "ocel-prod",
+			plan:          prunedPlan("app.com"),
+			deletedRoutes: []string{"stale"},
 		},
 		{
 			name: "a stem sweeps routes on the worker family below it",
@@ -480,16 +464,14 @@ func TestReconcileWorkerRoutes(t *testing.T) {
 					{"id": "perapp", "pattern": "pr-1.preview.app.com/*", "script": "ocel-shop-preview-web"},
 				},
 				existingRecords: []map[string]any{
-					{"id": "perapprec", "name": "pr-1.preview.app.com", "type": "AAAA", "content": "100::", "comment": routeRecordComment, "proxied": true},
+					{"id": "perapprec", "name": "pr-1.preview.app.com", "type": "AAAA", "content": "100::", "comment": recordComment, "proxied": true},
 				},
 			},
-			script:         "ocel-shop-preview",
-			plan:           stemPlan("ocel-shop-preview", "*.preview.app.com"),
-			createdRoutes:  []string{"*.preview.app.com/*"},
-			deletedRoutes:  []string{"perapp"},
-			deletedRecords: []string{"perapprec"},
-			createdRecords: 1,
-			warnings:       []string{"Advanced Certificate"},
+			script:        "ocel-shop-preview",
+			plan:          stemPlan("ocel-shop-preview", "*.preview.app.com"),
+			createdRoutes: []string{"*.preview.app.com/*"},
+			deletedRoutes: []string{"perapp"},
+			warnings:      []string{"Advanced Certificate"},
 		},
 		{
 			name: "a stem never reaches another worker family",
@@ -503,11 +485,10 @@ func TestReconcileWorkerRoutes(t *testing.T) {
 					{"id": "lookalike", "pattern": "pr-3.preview.app.com/*", "script": "ocel-shop-previewer"},
 				},
 			},
-			script:         "ocel-shop-preview",
-			plan:           stemPlan("ocel-shop-preview", "*.preview.app.com"),
-			createdRoutes:  []string{"*.preview.app.com/*"},
-			createdRecords: 1,
-			warnings:       []string{"Advanced Certificate"},
+			script:        "ocel-shop-preview",
+			plan:          stemPlan("ocel-shop-preview", "*.preview.app.com"),
+			createdRoutes: []string{"*.preview.app.com/*"},
+			warnings:      []string{"Advanced Certificate"},
 		},
 		{
 			name: "a stem never prunes a hostname the plan still wants",
@@ -521,7 +502,6 @@ func TestReconcileWorkerRoutes(t *testing.T) {
 			script:          "ocel-shop-preview",
 			plan:            stemPlan("ocel-shop-preview", "*.preview.app.com"),
 			repointedRoutes: []string{"wildcard"},
-			createdRecords:  1,
 			warnings:        []string{"Advanced Certificate"},
 		},
 		{
@@ -533,11 +513,10 @@ func TestReconcileWorkerRoutes(t *testing.T) {
 					{"id": "perapp", "pattern": "pr-1.preview.app.com/*", "script": "ocel-shop-preview-web"},
 				},
 			},
-			script:         "ocel-shop-preview",
-			plan:           prunedPlan("*.preview.app.com"),
-			createdRoutes:  []string{"*.preview.app.com/*"},
-			createdRecords: 1,
-			warnings:       []string{"Advanced Certificate"},
+			script:        "ocel-shop-preview",
+			plan:          prunedPlan("*.preview.app.com"),
+			createdRoutes: []string{"*.preview.app.com/*"},
+			warnings:      []string{"Advanced Certificate"},
 		},
 		{
 			name: "without pruning a route this reconcile did not name survives",
@@ -548,7 +527,7 @@ func TestReconcileWorkerRoutes(t *testing.T) {
 					{"id": "unnamed", "pattern": "pr-1-abc1234567.preview.app.com/*", "script": "ocel-preview"},
 				},
 				existingRecords: []map[string]any{
-					{"id": "wildcard", "name": "*.preview.app.com", "type": "AAAA", "content": "100::", "comment": routeRecordComment, "proxied": true},
+					{"id": "wildcard", "name": "*.preview.app.com", "type": "AAAA", "content": "100::", "comment": recordComment, "proxied": true},
 				},
 			},
 			script:        "ocel-preview",
@@ -562,7 +541,7 @@ func TestReconcileWorkerRoutes(t *testing.T) {
 				zoneID:   "zone1",
 				zoneName: "app.com",
 				existingRecords: []map[string]any{
-					{"id": "wildcard", "name": "*.preview.app.com", "type": "AAAA", "content": "100::", "comment": routeRecordComment, "proxied": true},
+					{"id": "wildcard", "name": "*.preview.app.com", "type": "AAAA", "content": "100::", "comment": recordComment, "proxied": true},
 				},
 			},
 			script:        "ocel-preview",
@@ -583,7 +562,7 @@ func TestReconcileWorkerRoutes(t *testing.T) {
 				zoneID:   "zone1",
 				zoneName: "app.com",
 				existingRecords: []map[string]any{
-					{"id": "wildcard", "name": "*.preview.app.com", "type": "AAAA", "content": "100::", "comment": routeRecordComment, "proxied": false},
+					{"id": "wildcard", "name": "*.preview.app.com", "type": "AAAA", "content": "100::", "comment": recordComment, "proxied": false},
 				},
 			},
 			script:  "ocel-preview",
@@ -600,58 +579,15 @@ func TestReconcileWorkerRoutes(t *testing.T) {
 			script:          "ocel-prod",
 			plan:            prunedPlan("app.com"),
 			createdRoutes:   []string{"app.com/*"},
-			createdRecords:  1,
 			detachedDomains: []string{"cd1"},
 		},
 		{
-			name:           "a hostname Universal SSL does not cover is warned about",
-			mock:           &cfMock{zoneID: "zone1", zoneName: "app.com"},
-			script:         "ocel-preview",
-			plan:           prunedPlan("*.preview.app.com"),
-			createdRoutes:  []string{"*.preview.app.com/*"},
-			createdRecords: 1,
-			warnings:       []string{"Advanced Certificate"},
-		},
-		{
-			name: "a user's unproxied record is warned about, never overwritten",
-			mock: &cfMock{
-				zoneID:   "zone1",
-				zoneName: "app.com",
-				existingRecords: []map[string]any{
-					{"id": "user", "name": "app.com", "type": "A", "content": "203.0.113.1", "proxied": false},
-				},
-			},
-			script:        "ocel-prod",
-			plan:          prunedPlan("app.com"),
-			createdRoutes: []string{"app.com/*"},
-			warnings:      []string{"proxied"},
-		},
-		{
-			name: "a TXT record at the hostname does not block the placeholder",
-			mock: &cfMock{
-				zoneID:   "zone1",
-				zoneName: "app.com",
-				existingRecords: []map[string]any{
-					{"id": "spf", "name": "app.com", "type": "TXT", "content": "v=spf1 -all", "proxied": false},
-				},
-			},
-			script:         "ocel-prod",
-			plan:           prunedPlan("app.com"),
-			createdRoutes:  []string{"app.com/*"},
-			createdRecords: 1,
-		},
-		{
-			name: "a user's proxied address record is left alone without a warning",
-			mock: &cfMock{
-				zoneID:   "zone1",
-				zoneName: "app.com",
-				existingRecords: []map[string]any{
-					{"id": "user", "name": "app.com", "type": "A", "content": "203.0.113.1", "proxied": true},
-				},
-			},
-			script:        "ocel-prod",
-			plan:          prunedPlan("app.com"),
-			createdRoutes: []string{"app.com/*"},
+			name:          "a hostname Universal SSL does not cover is warned about",
+			mock:          &cfMock{zoneID: "zone1", zoneName: "app.com"},
+			script:        "ocel-preview",
+			plan:          prunedPlan("*.preview.app.com"),
+			createdRoutes: []string{"*.preview.app.com/*"},
+			warnings:      []string{"Advanced Certificate"},
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -682,7 +618,7 @@ func TestReconcileWorkerRoutesRequestBudget(t *testing.T) {
 		},
 		{
 			name:       "a required record costs no extra list",
-			mock:       &cfMock{zoneID: "zone1", zoneName: "app.com", existingRecords: []map[string]any{{"id": "wildcard", "name": "*.preview.app.com", "type": "AAAA", "content": "100::", "comment": routeRecordComment, "proxied": true}}},
+			mock:       &cfMock{zoneID: "zone1", zoneName: "app.com", existingRecords: []map[string]any{{"id": "wildcard", "name": "*.preview.app.com", "type": "AAAA", "content": "100::", "comment": recordComment, "proxied": true}}},
 			plan:       requiredRecordPlan("*.preview.app.com", "pr-1.preview.app.com", "pr-2.preview.app.com"),
 			zoneLists:  1,
 			routeLists: 1,
@@ -816,69 +752,6 @@ func TestRouteOwner(t *testing.T) {
 			if n := len(tc.mock.createdRoutes) + len(tc.mock.createdRecords) + len(tc.mock.deletedRoutes); n != 0 {
 				t.Error("DomainOwner changed the zone; it is read-only")
 			}
-		})
-	}
-}
-
-func TestDetachRouteRecords(t *testing.T) {
-	t.Parallel()
-
-	for _, tc := range []struct {
-		name string
-		mock *cfMock
-		want []string
-	}{
-		{
-			name: "removes only the placeholders ocel planted",
-			mock: &cfMock{
-				zoneID:   "zone1",
-				zoneName: "app.com",
-				existingRoutes: []map[string]any{
-					{"id": "route1", "pattern": "*.preview.app.com/*", "script": "ocel-preview"},
-					{"id": "route2", "pattern": "other.app.com/*", "script": "someone-else"},
-				},
-				existingRecords: []map[string]any{
-					{"id": "ours", "name": "*.preview.app.com", "type": "AAAA", "content": "100::", "comment": routeRecordComment, "proxied": true},
-				},
-			},
-			want: []string{"ours"},
-		},
-		{
-			name: "leaves a user's own AAAA record standing",
-			mock: &cfMock{
-				zoneID:   "zone1",
-				zoneName: "app.com",
-				existingRoutes: []map[string]any{
-					{"id": "route1", "pattern": "*.preview.app.com/*", "script": "ocel-preview"},
-				},
-				existingRecords: []map[string]any{
-					{"id": "user", "name": "*.preview.app.com", "type": "AAAA", "content": "2606:4700::1", "proxied": true},
-				},
-			},
-		},
-		{
-			name: "leaves a record no route of its own names",
-			mock: &cfMock{
-				zoneID:   "zone1",
-				zoneName: "app.com",
-				existingRoutes: []map[string]any{
-					{"id": "route1", "pattern": "pr-1-abc1234567.preview.app.com/*", "script": "ocel-preview"},
-					{"id": "route2", "pattern": "pr-2-abc1234567.preview.app.com/*", "script": "ocel-preview"},
-				},
-				existingRecords: []map[string]any{
-					{"id": "base", "name": "*.preview.app.com", "type": "AAAA", "content": "100::", "comment": routeRecordComment, "proxied": true},
-				},
-			},
-		},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			t.Parallel()
-
-			p := tc.mock.provider(t)
-			if err := p.detachRouteRecords(t.Context(), p.routeSnapshot(), "acct", "ocel-preview"); err != nil {
-				t.Fatalf("detachRouteRecords: %v", err)
-			}
-			assertSet(t, "deleted records", tc.mock.deletedRecords, tc.want)
 		})
 	}
 }

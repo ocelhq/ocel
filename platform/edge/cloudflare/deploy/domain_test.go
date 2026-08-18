@@ -24,7 +24,7 @@ func zoneMock() *cfMock {
 }
 
 func TestBindDomain(t *testing.T) {
-	t.Run("a host Universal SSL covers gets a route and a proxied placeholder", func(t *testing.T) {
+	t.Run("a host Universal SSL covers gets a route and nothing in the zone's records", func(t *testing.T) {
 		m := zoneMock()
 		s := domainStack(t, m)
 
@@ -38,11 +38,8 @@ func TestBindDomain(t *testing.T) {
 		if m.createdRoutes[0]["pattern"] != "shop.app.com/*" || m.createdRoutes[0]["script"] != domainEntryScript {
 			t.Errorf("created route = %v, want shop.app.com/* on %s", m.createdRoutes[0], domainEntryScript)
 		}
-		if len(m.createdRecords) != 1 {
-			t.Fatalf("created records = %v, want the proxied placeholder", m.createdRecords)
-		}
-		if m.createdRecords[0]["proxied"] != true || m.createdRecords[0]["content"] != routeRecordContent {
-			t.Errorf("created record = %v, want a proxied placeholder", m.createdRecords[0])
+		if len(m.createdRecords) != 0 {
+			t.Errorf("created records = %v, want none: binding a domain plants nothing", m.createdRecords)
 		}
 		if got := edge.BoundDomains(s.State()); len(got) != 1 || got[0] != "shop.app.com" {
 			t.Errorf("bound domains = %v, want [shop.app.com]", got)
@@ -188,13 +185,13 @@ func TestBindDomain(t *testing.T) {
 }
 
 func TestUnbindDomain(t *testing.T) {
-	t.Run("takes the route and the placeholder it planted", func(t *testing.T) {
+	t.Run("takes the route and leaves the zone's records alone", func(t *testing.T) {
 		m := zoneMock()
 		m.existingRoutes = []map[string]any{
 			{"id": "bound", "pattern": "shop.app.com/*", "script": domainEntryScript},
 		}
 		m.existingRecords = []map[string]any{
-			{"id": "placeholder", "name": "shop.app.com", "type": "AAAA", "content": routeRecordContent, "comment": routeRecordComment, "proxied": true},
+			{"id": "placeholder", "name": "shop.app.com", "type": "AAAA", "content": edge.ProxyPlaceholder, "comment": recordComment, "proxied": true},
 		}
 		s := domainStack(t, m)
 		s.state = edge.RecordBoundDomain(s.state, "shop.app.com")
@@ -204,7 +201,7 @@ func TestUnbindDomain(t *testing.T) {
 		}
 
 		assertSet(t, "deleted routes", m.deletedRoutes, []string{"bound"})
-		assertSet(t, "deleted records", m.deletedRecords, []string{"placeholder"})
+		assertSet(t, "deleted records", m.deletedRecords, nil)
 		if got := edge.BoundDomains(s.State()); len(got) != 0 {
 			t.Errorf("bound domains = %v, want none", got)
 		}
@@ -225,39 +222,6 @@ func TestUnbindDomain(t *testing.T) {
 		}
 	})
 
-	t.Run("leaves a user's own placeholder-shaped record where it stands", func(t *testing.T) {
-		m := zoneMock()
-		m.existingRoutes = []map[string]any{
-			{"id": "bound", "pattern": "shop.app.com/*", "script": domainEntryScript},
-		}
-		m.existingRecords = []map[string]any{
-			{"id": "theirs", "name": "shop.app.com", "type": "AAAA", "content": routeRecordContent, "proxied": true},
-		}
-		s := domainStack(t, m)
-		s.state = edge.RecordBoundDomain(s.state, "shop.app.com")
-
-		if err := s.UnbindDomain(t.Context(), "shop.app.com"); err != nil {
-			t.Fatalf("UnbindDomain: %v", err)
-		}
-		if len(m.deletedRecords) != 0 {
-			t.Errorf("deleted records = %v, want a record ocel never planted untouched", m.deletedRecords)
-		}
-	})
-
-	t.Run("leaves a record it never planted where it stands", func(t *testing.T) {
-		m := zoneMock()
-		m.existingRecords = []map[string]any{
-			{"id": "own", "name": "shop.app.com", "type": "AAAA", "content": "2001:db8::1", "proxied": true},
-		}
-		s := domainStack(t, m)
-
-		if err := s.UnbindDomain(t.Context(), "shop.app.com"); err != nil {
-			t.Fatalf("UnbindDomain: %v", err)
-		}
-		if len(m.deletedRecords) != 0 {
-			t.Errorf("deleted records = %v, want the user's own record untouched", m.deletedRecords)
-		}
-	})
 }
 
 func TestReconcileRecordsItsEntryWorker(t *testing.T) {
@@ -298,9 +262,6 @@ func TestReconcileKeepsWhatABindingPut(t *testing.T) {
 	if !hasRoute(m, "shop.app.com/*") {
 		t.Errorf("routes = %v, want the bound host's route to survive the next deploy", m.existingRoutes)
 	}
-	if !hasRecord(m, "shop.app.com") {
-		t.Errorf("records = %v, want the bound host's placeholder to survive the next deploy", m.existingRecords)
-	}
 	if got := edge.BoundDomains(redeployed.State()); len(got) != 1 || got[0] != "shop.app.com" {
 		t.Errorf("bound domains = %v, want the deploy to carry [shop.app.com] forward", got)
 	}
@@ -308,8 +269,8 @@ func TestReconcileKeepsWhatABindingPut(t *testing.T) {
 	if err := redeployed.Destroy(t.Context()); err != nil {
 		t.Fatalf("Destroy: %v", err)
 	}
-	if hasRoute(m, "shop.app.com/*") || hasRecord(m, "shop.app.com") {
-		t.Errorf("routes = %v and records = %v, want the bound host's surface gone with the stack", m.existingRoutes, m.existingRecords)
+	if hasRoute(m, "shop.app.com/*") {
+		t.Errorf("routes = %v, want the bound host's route gone with the stack", m.existingRoutes)
 	}
 }
 
@@ -356,12 +317,6 @@ func TestPruneOnlyRecordsNoEntryWorker(t *testing.T) {
 func hasRoute(m *cfMock, pattern string) bool {
 	return slices.ContainsFunc(m.existingRoutes, func(route map[string]any) bool {
 		return route["pattern"] == pattern
-	})
-}
-
-func hasRecord(m *cfMock, name string) bool {
-	return slices.ContainsFunc(m.existingRecords, func(rec map[string]any) bool {
-		return rec["name"] == name
 	})
 }
 
