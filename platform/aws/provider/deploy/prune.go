@@ -201,11 +201,11 @@ type PruneStages struct {
 	Reclaim Stage
 }
 
-func Prune(ctx context.Context, stack edge.RootStack, state edge.RootStackState, cfg Config, slug string, keepN int, pointer string, stages PruneStages, log func(string)) (edge.PruneResult, error) {
+func Prune(ctx context.Context, stack edge.EdgeStack, cfg Config, slug string, keepN int, pointer string, stages PruneStages, log func(string)) (edge.PruneResult, error) {
 	diffStart := time.Now()
 	report := cfg.reportStage(stages.Diff)
 	report("Diffing deployments to reclaim")
-	result, err := stack.DeletePromotionArtifacts(ctx, state, keepN, pointer)
+	result, err := stack.Ledger().Prune(ctx, keepN, pointer)
 	if err != nil {
 		spanForStage(cfg.Tracer, stages.Diff, diffStart, time.Now(), err)
 		declareStages(cfg.Tracer, true)

@@ -493,7 +493,7 @@ func TestRunRevalidator(t *testing.T) {
 		}
 		for _, tc := range []struct {
 			name      string
-			run       func(context.Context, CFNAPI, SSMAPI, IAMAPI, edge.Provider, Artifacts, func(string), func(string)) error
+			run       func(context.Context, CFNAPI, SSMAPI, IAMAPI, edge.Edge, Artifacts, func(string), func(string)) error
 			stackName string
 		}{
 			{"production", Run, StackName},

@@ -187,7 +187,7 @@ func TestDestroyProject(t *testing.T) {
 		index := &fakeStackIndex{projects: []string{"shop"}}
 		cfg.Stacks = index
 
-		_, err := DestroyProject(context.Background(), nil, nil, cfg, "shop", ProjectTeardownStages{}, nil)
+		_, err := DestroyProject(context.Background(), nil, cfg, "shop", ProjectTeardownStages{}, nil)
 
 		if err == nil || !strings.Contains(err.Error(), "table is on fire") {
 			t.Fatalf("DestroyProject err = %v, want the failed value removal reported", err)
@@ -211,15 +211,12 @@ func TestDestroyProject(t *testing.T) {
 func TestRemovePreviewPurge(t *testing.T) {
 	t.Run("never purges the project's artifacts", func(t *testing.T) {
 		rec := &sweepRecorder{}
-		fake := &recordingRootStack{}
+		fake := &recordingEdge{}
 		ctx := context.Background()
-		state, err := fake.ReconcileRootStack(ctx, edge.RootStackSpec{Version: "v1", Slug: "shop"}, nil)
-		if err != nil {
-			t.Fatalf("ReconcileRootStack: %v", err)
-		}
+		state := fake.reconciled(t, edge.StackSpec{Version: "v1", Slug: "shop"})
 		cfg := Config{ArtifactBucket: "artifact-bucket", Uploader: rec}
 
-		if err := RemovePreview(ctx, fake, state, cfg, "shop", "pr-1", false, PreviewRemovalStages{}, nil); err != nil {
+		if err := RemovePreview(ctx, state, cfg, "shop", "pr-1", false, PreviewRemovalStages{}, nil); err != nil {
 			t.Fatalf("RemovePreview: %v", err)
 		}
 
@@ -230,11 +227,11 @@ func TestRemovePreviewPurge(t *testing.T) {
 
 	t.Run("leaves artifacts when the pointer removal failed", func(t *testing.T) {
 		rec := &sweepRecorder{}
-		fake := &recordingRootStack{}
+		fake := &recordingEdge{}
 		cfg := Config{ArtifactBucket: "artifact-bucket", Uploader: rec}
-		state := edge.RootStackState{edge.RootStackKeySlug: "shop", edge.RootStackKeySecret: "stale"}
+		stale := fake.opened(t, edge.StackState{edge.StackKeySlug: "shop", edge.StackKeySecret: "stale"})
 
-		err := RemovePreview(context.Background(), fake, state, cfg, "shop", "pr-1", false, PreviewRemovalStages{}, nil)
+		err := RemovePreview(context.Background(), stale, cfg, "shop", "pr-1", false, PreviewRemovalStages{}, nil)
 		if err == nil {
 			t.Fatal("RemovePreview err = nil, want the failed pointer removal reported")
 		}
@@ -245,14 +242,11 @@ func TestRemovePreviewPurge(t *testing.T) {
 
 	t.Run("keeps the environment's overrides", func(t *testing.T) {
 		values := &valueRecorder{}
-		fake := &recordingRootStack{}
+		fake := &recordingEdge{}
 		ctx := context.Background()
-		state, err := fake.ReconcileRootStack(ctx, edge.RootStackSpec{Version: "v1", Slug: "shop"}, nil)
-		if err != nil {
-			t.Fatalf("ReconcileRootStack: %v", err)
-		}
+		state := fake.reconciled(t, edge.StackSpec{Version: "v1", Slug: "shop"})
 
-		if err := RemovePreview(ctx, fake, state, Config{Values: values}, "shop", "pr-1", false, PreviewRemovalStages{}, nil); err != nil {
+		if err := RemovePreview(ctx, state, Config{Values: values}, "shop", "pr-1", false, PreviewRemovalStages{}, nil); err != nil {
 			t.Fatalf("RemovePreview: %v", err)
 		}
 

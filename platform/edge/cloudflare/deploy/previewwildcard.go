@@ -13,22 +13,25 @@ import (
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
-var _ edge.SharedEntry = (*provider)(nil)
+const previewEntryScript = "ocel-preview-entry"
 
-func (p *provider) ReconcileSharedEntry(ctx context.Context, spec edge.SharedEntrySpec) error {
+func (p *provider) ReconcilePreviewWildcard(ctx context.Context, spec edge.PreviewWildcardSpec) error {
 	accountID := os.Getenv(envAccountID)
 	if accountID == "" {
 		return fmt.Errorf("%s is not set; it is required to reconcile the shared preview entry worker", envAccountID)
 	}
-	wildcard := edge.SharedEntryWildcard(spec.BaseDomain)
+	wildcard := edge.PreviewWildcard(spec.BaseDomain)
 	if wildcard == "" {
 		return errors.New("the shared preview entry worker needs a base domain to serve")
 	}
 
+	if spec.Program == nil {
+		return errors.New("the Cloudflare edge runs the preview entry worker; this wildcard carries no program")
+	}
 	up := upload{
 		accountID:  accountID,
-		scriptName: sharedEntryScriptName(spec),
-		worker:     sharedEntryWorker(spec),
+		scriptName: previewEntryScript,
+		worker:     previewEntryWorker(spec),
 	}
 	if err := p.putWorkerScript(ctx, up, "shared preview entry worker"); err != nil {
 		return err
@@ -42,27 +45,27 @@ func (p *provider) ReconcileSharedEntry(ctx context.Context, spec edge.SharedEnt
 	return nil
 }
 
-func (p *provider) DestroySharedEntry(ctx context.Context, baseDomain string) error {
+func (p *provider) DestroyPreviewWildcard(ctx context.Context, baseDomain string) error {
 	accountID := os.Getenv(envAccountID)
 	if accountID == "" {
 		return fmt.Errorf("%s is not set; it is required to destroy the shared preview entry worker", envAccountID)
 	}
 
 	var errs []error
-	if err := p.stripSharedEntryRoute(ctx, accountID, baseDomain); err != nil {
+	if err := p.stripPreviewWildcardRoute(ctx, accountID, baseDomain); err != nil {
 		errs = append(errs, err)
 	}
-	if err := p.detachCustomDomains(ctx, accountID, edge.SharedPreviewEntryScript); err != nil {
+	if err := p.detachCustomDomains(ctx, accountID, previewEntryScript); err != nil {
 		errs = append(errs, err)
 	}
-	if err := p.deleteScript(ctx, accountID, edge.SharedPreviewEntryScript); err != nil {
-		errs = append(errs, fmt.Errorf("delete worker %q: %w", edge.SharedPreviewEntryScript, err))
+	if err := p.deleteScript(ctx, accountID, previewEntryScript); err != nil {
+		errs = append(errs, fmt.Errorf("delete worker %q: %w", previewEntryScript, err))
 	}
 	return errors.Join(errs...)
 }
 
-func (p *provider) stripSharedEntryRoute(ctx context.Context, accountID, baseDomain string) error {
-	wildcard := edge.SharedEntryWildcard(baseDomain)
+func (p *provider) stripPreviewWildcardRoute(ctx context.Context, accountID, baseDomain string) error {
+	wildcard := edge.PreviewWildcard(baseDomain)
 	if wildcard == "" {
 		return nil
 	}
@@ -76,13 +79,13 @@ func (p *provider) stripSharedEntryRoute(ctx context.Context, accountID, baseDom
 		return err
 	}
 
-	pattern := RoutePattern(wildcard)
+	pattern := routePattern(wildcard)
 	foreign := false
 	for _, route := range slices.Clone(inZone) {
 		if route.Pattern != pattern {
 			continue
 		}
-		if route.Script != edge.SharedPreviewEntryScript {
+		if route.Script != previewEntryScript {
 			foreign = true
 			continue
 		}
@@ -97,17 +100,10 @@ func (p *provider) stripSharedEntryRoute(ctx context.Context, accountID, baseDom
 	return p.deleteProxiedRecord(ctx, zoneID, wildcard)
 }
 
-func sharedEntryWorker(spec edge.SharedEntrySpec) edge.Worker {
-	worker := spec.Generic
-	if spec.ISRWriterScriptName != "" {
-		worker = withService(worker, genericISRWriterBinding, spec.ISRWriterScriptName)
+func previewEntryWorker(spec edge.PreviewWildcardSpec) edge.Worker {
+	worker := spec.Program.Worker
+	if spec.Program.ISRWriterScriptName != "" {
+		worker = withService(worker, genericISRWriterBinding, spec.Program.ISRWriterScriptName)
 	}
 	return bindCodeLoader(bindObjectStore(worker, spec.Values))
-}
-
-func sharedEntryScriptName(spec edge.SharedEntrySpec) string {
-	if spec.ScriptName == "" {
-		return edge.SharedPreviewEntryScript
-	}
-	return spec.ScriptName
 }

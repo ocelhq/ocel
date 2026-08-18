@@ -18,8 +18,8 @@ func unauthorized(res *http.Response) bool {
 	return res != nil && res.StatusCode == http.StatusUnauthorized
 }
 
-func (p *provider) DestroyInstance(ctx context.Context, state edge.RootStackState) error {
-	if state[edge.RootStackKeySecret] == "" {
+func (p *provider) destroyInstance(ctx context.Context, state edge.StackState) error {
+	if state[edge.StackKeySecret] == "" {
 		return nil
 	}
 	res, err := p.storeRequest(ctx, state, http.MethodPost, "/destroy", nil, nil)
@@ -40,8 +40,8 @@ func (p *provider) deleteScript(ctx context.Context, accountID, scriptName strin
 	return err
 }
 
-func (p *provider) PutStaged(ctx context.Context, state edge.RootStackState, record edge.DeploymentRecord) error {
-	_, err := p.storeRequest(ctx, state, http.MethodPut, "/staged", record, nil)
+func (s *stack) PutStaged(ctx context.Context, record edge.DeploymentRecord) error {
+	_, err := s.p.storeRequest(ctx, s.state, http.MethodPut, "/staged", record, nil)
 	return err
 }
 
@@ -50,38 +50,38 @@ type promoteBody struct {
 	Pointer string `json:"pointer,omitempty"`
 }
 
-func (p *provider) Promote(ctx context.Context, state edge.RootStackState, promotion edge.Promotion, pointer string) error {
-	_, err := p.storeRequest(ctx, state, http.MethodPost, "/promote", promoteBody{Promotion: promotion, Pointer: pointer}, nil)
+func (s *stack) Promote(ctx context.Context, promotion edge.Promotion, pointer string) error {
+	_, err := s.p.storeRequest(ctx, s.state, http.MethodPost, "/promote", promoteBody{Promotion: promotion, Pointer: pointer}, nil)
 	return err
 }
 
-func (p *provider) History(ctx context.Context, state edge.RootStackState, pointer string) ([]edge.HistoryEntry, error) {
+func (s *stack) History(ctx context.Context, pointer string) ([]edge.HistoryEntry, error) {
 	subpath := "/history"
 	if pointer != "" {
 		subpath += "?pointer=" + url.QueryEscape(pointer)
 	}
 	var history []edge.HistoryEntry
-	if _, err := p.storeRequest(ctx, state, http.MethodGet, subpath, nil, &history); err != nil {
+	if _, err := s.p.storeRequest(ctx, s.state, http.MethodGet, subpath, nil, &history); err != nil {
 		return nil, err
 	}
 	return history, nil
 }
 
-func (p *provider) RemovePointer(ctx context.Context, state edge.RootStackState, pointer string) (edge.PruneResult, error) {
+func (s *stack) RemovePointer(ctx context.Context, pointer string) (edge.PruneResult, error) {
 	var result edge.PruneResult
-	if _, err := p.storeRequest(ctx, state, http.MethodPost, "/remove-pointer", map[string]string{"pointer": pointer}, &result); err != nil {
+	if _, err := s.p.storeRequest(ctx, s.state, http.MethodPost, "/remove-pointer", map[string]string{"pointer": pointer}, &result); err != nil {
 		return edge.PruneResult{}, err
 	}
 	return result, nil
 }
 
-func (p *provider) DeletePromotionArtifacts(ctx context.Context, state edge.RootStackState, keepN int, pointer string) (edge.PruneResult, error) {
+func (s *stack) Prune(ctx context.Context, keepN int, pointer string) (edge.PruneResult, error) {
 	body := map[string]any{"keepN": keepN}
 	if pointer != "" {
 		body["pointer"] = pointer
 	}
 	var result edge.PruneResult
-	if _, err := p.storeRequest(ctx, state, http.MethodPost, "/prune", body, &result); err != nil {
+	if _, err := s.p.storeRequest(ctx, s.state, http.MethodPost, "/prune", body, &result); err != nil {
 		return edge.PruneResult{}, err
 	}
 	return result, nil
@@ -102,11 +102,11 @@ func (p *provider) initializeInstance(ctx context.Context, endpoint, slug, boots
 	return storeIdentity{secret: out.Secret, ownerToken: out.OwnerToken}, nil
 }
 
-func (p *provider) StoreSchemaVersion(ctx context.Context, endpoint, slug string) (int, error) {
+func (s *stack) SchemaVersion(ctx context.Context) (int, error) {
 	var out struct {
 		SchemaVersion int `json:"schemaVersion"`
 	}
-	res, err := p.storeRequestTo(ctx, endpoint, slug, "", http.MethodGet, "/schema-version", nil, &out)
+	res, err := s.p.storeRequestTo(ctx, s.state[edge.StackKeyEndpoint], s.state[edge.StackKeySlug], "", http.MethodGet, "/schema-version", nil, &out)
 	if err != nil {
 		if unauthorized(res) {
 			return 0, edge.ErrStoreSchemaUnreadable
@@ -135,8 +135,8 @@ func (p *provider) putVersionStamp(ctx context.Context, endpoint, slug, secret, 
 	return err
 }
 
-func (p *provider) storeRequest(ctx context.Context, state edge.RootStackState, method, subpath string, body, out any) (*http.Response, error) {
-	return p.storeRequestTo(ctx, state[edge.RootStackKeyEndpoint], state[edge.RootStackKeySlug], state[edge.RootStackKeySecret], method, subpath, body, out)
+func (p *provider) storeRequest(ctx context.Context, state edge.StackState, method, subpath string, body, out any) (*http.Response, error) {
+	return p.storeRequestTo(ctx, state[edge.StackKeyEndpoint], state[edge.StackKeySlug], state[edge.StackKeySecret], method, subpath, body, out)
 }
 
 func (p *provider) storeRequestTo(ctx context.Context, endpoint, slug, secret, method, subpath string, body, out any) (*http.Response, error) {

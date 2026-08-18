@@ -44,18 +44,17 @@ func uploadedMetadata(t *testing.T, m *cfMock, scriptName string) map[string]any
 	return nil
 }
 
-func sharedEntrySpec() edge.SharedEntrySpec {
-	return edge.SharedEntrySpec{
+func previewWildcardSpec() edge.PreviewWildcardSpec {
+	return edge.PreviewWildcardSpec{
 		Version:    "v1",
-		ScriptName: edge.SharedPreviewEntryScript,
-		Generic:    edge.Worker{Main: mainModule()},
 		BaseDomain: "preview.app.com",
 		GrammarMin: edge.PreviewGrammarMin,
 		GrammarMax: edge.PreviewGrammarMax,
+		Program:    &edge.ProgramSpec{Worker: edge.Worker{Main: mainModule()}},
 	}
 }
 
-func TestReconcileSharedEntry(t *testing.T) {
+func TestReconcilePreviewWildcard(t *testing.T) {
 	t.Setenv(envAccountID, "acct")
 
 	t.Run("the shared worker claims the substrate wildcard and plants its record", func(t *testing.T) {
@@ -68,20 +67,20 @@ func TestReconcileSharedEntry(t *testing.T) {
 		}
 
 		var warnings []string
-		spec := sharedEntrySpec()
+		spec := previewWildcardSpec()
 		spec.Warn = func(s string) { warnings = append(warnings, s) }
-		if err := m.provider(t).ReconcileSharedEntry(t.Context(), spec); err != nil {
-			t.Fatalf("ReconcileSharedEntry: %v", err)
+		if err := m.provider(t).ReconcilePreviewWildcard(t.Context(), spec); err != nil {
+			t.Fatalf("ReconcilePreviewWildcard: %v", err)
 		}
 
-		if len(m.putScripts) != 1 || m.putScripts[0] != edge.SharedPreviewEntryScript {
-			t.Errorf("uploaded scripts = %v, want [%s]", m.putScripts, edge.SharedPreviewEntryScript)
+		if len(m.putScripts) != 1 || m.putScripts[0] != previewEntryScript {
+			t.Errorf("uploaded scripts = %v, want [%s]", m.putScripts, previewEntryScript)
 		}
 		if len(m.createdRoutes) != 1 || m.createdRoutes[0]["pattern"] != "*.preview.app.com/*" {
 			t.Errorf("created routes = %v, want the substrate wildcard *.preview.app.com/*", m.createdRoutes)
 		}
-		if m.createdRoutes[0]["script"] != edge.SharedPreviewEntryScript {
-			t.Errorf("route script = %v, want %s", m.createdRoutes[0]["script"], edge.SharedPreviewEntryScript)
+		if m.createdRoutes[0]["script"] != previewEntryScript {
+			t.Errorf("route script = %v, want %s", m.createdRoutes[0]["script"], previewEntryScript)
 		}
 		if len(m.createdRecords) != 1 || m.createdRecords[0]["name"] != "*.preview.app.com" || m.createdRecords[0]["proxied"] != true {
 			t.Errorf("created records = %v, want a proxied placeholder for *.preview.app.com", m.createdRecords)
@@ -98,11 +97,11 @@ func TestReconcileSharedEntry(t *testing.T) {
 		m := &cfMock{zoneID: "zone1", zoneName: "app.com"}
 		store := fakeStoreServer(t, "s3cr3t")
 
-		if err := m.provider(t).ReconcileSharedEntry(t.Context(), sharedEntrySpec()); err != nil {
-			t.Fatalf("ReconcileSharedEntry: %v", err)
+		if err := m.provider(t).ReconcilePreviewWildcard(t.Context(), previewWildcardSpec()); err != nil {
+			t.Fatalf("ReconcilePreviewWildcard: %v", err)
 		}
 
-		meta := uploadedMetadata(t, m, edge.SharedPreviewEntryScript)
+		meta := uploadedMetadata(t, m, previewEntryScript)
 		for _, typ := range []string{"secret_text", "plain_text"} {
 			if got := bindingsByType(meta, typ); len(got) != 0 {
 				t.Errorf("%s bindings = %v, want none: the shared entry serves no single project", typ, got)
@@ -116,15 +115,15 @@ func TestReconcileSharedEntry(t *testing.T) {
 
 	t.Run("the cache bucket and the isr writer are bound", func(t *testing.T) {
 		m := &cfMock{zoneID: "zone1", zoneName: "app.com"}
-		spec := sharedEntrySpec()
+		spec := previewWildcardSpec()
 		spec.Values = map[string]string{valueKeyCacheBucket: "ocel-edge-cache-preview"}
-		spec.ISRWriterScriptName = "ocel-isr-writer-preview"
+		spec.Program.ISRWriterScriptName = "ocel-isr-writer-preview"
 
-		if err := m.provider(t).ReconcileSharedEntry(t.Context(), spec); err != nil {
-			t.Fatalf("ReconcileSharedEntry: %v", err)
+		if err := m.provider(t).ReconcilePreviewWildcard(t.Context(), spec); err != nil {
+			t.Fatalf("ReconcilePreviewWildcard: %v", err)
 		}
 
-		meta := uploadedMetadata(t, m, edge.SharedPreviewEntryScript)
+		meta := uploadedMetadata(t, m, previewEntryScript)
 		buckets := bindingsByType(meta, "r2_bucket")
 		if len(buckets) != 1 || buckets[0]["name"] != cacheStoreBinding || buckets[0]["bucket_name"] != "ocel-edge-cache-preview" {
 			t.Errorf("r2_bucket bindings = %v, want %s bound to the preview cache bucket: without it every static asset 404s", buckets, cacheStoreBinding)
@@ -138,39 +137,26 @@ func TestReconcileSharedEntry(t *testing.T) {
 		}
 	})
 
-	t.Run("a spec without a script name falls back to the contract's", func(t *testing.T) {
-		m := &cfMock{zoneID: "zone1", zoneName: "app.com"}
-		spec := sharedEntrySpec()
-		spec.ScriptName = ""
-
-		if err := m.provider(t).ReconcileSharedEntry(t.Context(), spec); err != nil {
-			t.Fatalf("ReconcileSharedEntry: %v", err)
-		}
-		if len(m.putScripts) != 1 || m.putScripts[0] != edge.SharedPreviewEntryScript {
-			t.Errorf("uploaded scripts = %v, want [%s]", m.putScripts, edge.SharedPreviewEntryScript)
-		}
-	})
-
 	t.Run("a spec without a base domain is an error", func(t *testing.T) {
 		m := &cfMock{zoneID: "zone1", zoneName: "app.com"}
-		spec := sharedEntrySpec()
+		spec := previewWildcardSpec()
 		spec.BaseDomain = ""
 
-		if err := m.provider(t).ReconcileSharedEntry(t.Context(), spec); err == nil {
-			t.Fatal("ReconcileSharedEntry without a base domain err = nil, want an error")
+		if err := m.provider(t).ReconcilePreviewWildcard(t.Context(), spec); err == nil {
+			t.Fatal("ReconcilePreviewWildcard without a base domain err = nil, want an error")
 		}
 	})
 
 	t.Run("an unset account id is an error", func(t *testing.T) {
 		t.Setenv(envAccountID, "")
 
-		if err := (&provider{}).ReconcileSharedEntry(t.Context(), sharedEntrySpec()); err == nil {
-			t.Fatal("ReconcileSharedEntry without an account id err = nil, want an error")
+		if err := (&provider{}).ReconcilePreviewWildcard(t.Context(), previewWildcardSpec()); err == nil {
+			t.Fatal("ReconcilePreviewWildcard without an account id err = nil, want an error")
 		}
 	})
 }
 
-func TestDestroySharedEntry(t *testing.T) {
+func TestDestroyPreviewWildcard(t *testing.T) {
 	t.Setenv(envAccountID, "acct")
 
 	t.Run("the wildcard route, its record and the script all go", func(t *testing.T) {
@@ -178,23 +164,23 @@ func TestDestroySharedEntry(t *testing.T) {
 			zoneID:   "zone1",
 			zoneName: "app.com",
 			existingRoutes: []map[string]any{
-				{"id": "entry", "pattern": "*.preview.app.com/*", "script": edge.SharedPreviewEntryScript},
+				{"id": "entry", "pattern": "*.preview.app.com/*", "script": previewEntryScript},
 				{"id": "project", "pattern": "pr-1-abc1234567.preview.app.com/*", "script": "ocel-shop-preview"},
 			},
 			existingRecords: []map[string]any{
 				{"id": "wildcard", "name": "*.preview.app.com", "type": "AAAA", "content": "100::", "proxied": true},
 				{"id": "projectrec", "name": "pr-1-abc1234567.preview.app.com", "type": "AAAA", "content": "100::", "proxied": true},
 			},
-			existingCustomDomains: []map[string]any{{"id": "cd1", "hostname": "preview.app.com", "service": edge.SharedPreviewEntryScript}},
+			existingCustomDomains: []map[string]any{{"id": "cd1", "hostname": "preview.app.com", "service": previewEntryScript}},
 		}
 
-		if err := m.provider(t).DestroySharedEntry(t.Context(), "preview.app.com"); err != nil {
-			t.Fatalf("DestroySharedEntry: %v", err)
+		if err := m.provider(t).DestroyPreviewWildcard(t.Context(), "preview.app.com"); err != nil {
+			t.Fatalf("DestroyPreviewWildcard: %v", err)
 		}
 
 		assertSet(t, "deleted routes", m.deletedRoutes, []string{"entry"})
 		assertSet(t, "deleted records", m.deletedRecords, []string{"wildcard"})
-		assertSet(t, "deleted scripts", m.deletedScripts, []string{edge.SharedPreviewEntryScript})
+		assertSet(t, "deleted scripts", m.deletedScripts, []string{previewEntryScript})
 		assertSet(t, "detached custom domains", m.deletedCustomDomains, []string{"cd1"})
 	})
 
@@ -210,8 +196,8 @@ func TestDestroySharedEntry(t *testing.T) {
 			},
 		}
 
-		if err := m.provider(t).DestroySharedEntry(t.Context(), "preview.app.com"); err != nil {
-			t.Fatalf("DestroySharedEntry: %v", err)
+		if err := m.provider(t).DestroyPreviewWildcard(t.Context(), "preview.app.com"); err != nil {
+			t.Fatalf("DestroyPreviewWildcard: %v", err)
 		}
 		if len(m.deletedRoutes) != 0 {
 			t.Errorf("deleted routes = %v, want none: the wildcard belongs to another worker", m.deletedRoutes)
@@ -219,7 +205,7 @@ func TestDestroySharedEntry(t *testing.T) {
 		if len(m.deletedRecords) != 0 {
 			t.Errorf("deleted records = %v, want none: the surviving route needs its placeholder", m.deletedRecords)
 		}
-		assertSet(t, "deleted scripts", m.deletedScripts, []string{edge.SharedPreviewEntryScript})
+		assertSet(t, "deleted scripts", m.deletedScripts, []string{previewEntryScript})
 	})
 
 	t.Run("a route already gone still takes its record", func(t *testing.T) {
@@ -231,8 +217,8 @@ func TestDestroySharedEntry(t *testing.T) {
 			},
 		}
 
-		if err := m.provider(t).DestroySharedEntry(t.Context(), "preview.app.com"); err != nil {
-			t.Fatalf("DestroySharedEntry: %v", err)
+		if err := m.provider(t).DestroyPreviewWildcard(t.Context(), "preview.app.com"); err != nil {
+			t.Fatalf("DestroyPreviewWildcard: %v", err)
 		}
 		assertSet(t, "deleted records", m.deletedRecords, []string{"wildcard"})
 	})
@@ -240,13 +226,13 @@ func TestDestroySharedEntry(t *testing.T) {
 	t.Run("an unset account id is an error", func(t *testing.T) {
 		t.Setenv(envAccountID, "")
 
-		if err := (&provider{}).DestroySharedEntry(t.Context(), "preview.app.com"); err == nil {
-			t.Fatal("DestroySharedEntry without an account id err = nil, want an error")
+		if err := (&provider{}).DestroyPreviewWildcard(t.Context(), "preview.app.com"); err == nil {
+			t.Fatal("DestroyPreviewWildcard without an account id err = nil, want an error")
 		}
 	})
 }
 
-func TestPruneStaleRoutesSparesTheSharedEntry(t *testing.T) {
+func TestPruneStaleRoutesSparesThePreviewEntry(t *testing.T) {
 	t.Parallel()
 
 	for _, tc := range []struct {
@@ -261,7 +247,7 @@ func TestPruneStaleRoutesSparesTheSharedEntry(t *testing.T) {
 		},
 		{
 			name:   "the shared script does not sweep its own route",
-			script: edge.SharedPreviewEntryScript,
+			script: previewEntryScript,
 			plan:   prunedPlan("pr-1-abc1234567.preview.app.com"),
 		},
 	} {
@@ -272,7 +258,7 @@ func TestPruneStaleRoutesSparesTheSharedEntry(t *testing.T) {
 				zoneID:   "zone1",
 				zoneName: "app.com",
 				existingRoutes: []map[string]any{
-					{"id": "entry", "pattern": "*.preview.app.com/*", "script": edge.SharedPreviewEntryScript},
+					{"id": "entry", "pattern": "*.preview.app.com/*", "script": previewEntryScript},
 				},
 				existingRecords: []map[string]any{
 					{"id": "wildcard", "name": "*.preview.app.com", "type": "AAAA", "content": "100::", "proxied": true},

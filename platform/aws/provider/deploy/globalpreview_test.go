@@ -52,7 +52,7 @@ func TestPreviewLabelProblem(t *testing.T) {
 	})
 }
 
-func TestSharedPreviewEntrySpec(t *testing.T) {
+func TestPreviewWildcardSpecFor(t *testing.T) {
 	setWorkerBundle(t)
 
 	cfg := Config{
@@ -69,12 +69,9 @@ func TestSharedPreviewEntrySpec(t *testing.T) {
 		EdgeValues:          map[string]string{"cacheBucket": "ocel-edge-cache-preview"},
 	}
 
-	spec, err := SharedPreviewEntrySpec(cfg, "preview.acme.com", nil)
+	spec, err := PreviewWildcardSpecFor(cfg, "preview.acme.com", nil)
 	if err != nil {
-		t.Fatalf("SharedPreviewEntrySpec: %v", err)
-	}
-	if spec.ScriptName != edge.SharedPreviewEntryScript {
-		t.Errorf("ScriptName = %q, want %q", spec.ScriptName, edge.SharedPreviewEntryScript)
+		t.Fatalf("PreviewWildcardSpecFor: %v", err)
 	}
 	if spec.BaseDomain != "preview.acme.com" {
 		t.Errorf("BaseDomain = %q", spec.BaseDomain)
@@ -82,8 +79,8 @@ func TestSharedPreviewEntrySpec(t *testing.T) {
 	if spec.GrammarMin != edge.PreviewGrammarMin || spec.GrammarMax != edge.PreviewGrammarMax {
 		t.Errorf("grammar = [%d,%d], want [%d,%d]", spec.GrammarMin, spec.GrammarMax, edge.PreviewGrammarMin, edge.PreviewGrammarMax)
 	}
-	if spec.Generic.Services[storeServiceBinding] != cfg.StoreScriptName {
-		t.Errorf("Services = %v, want the preview store bound", spec.Generic.Services)
+	if spec.Program.Worker.Services[storeServiceBinding] != cfg.StoreScriptName {
+		t.Errorf("Services = %v, want the preview store bound", spec.Program.Worker.Services)
 	}
 	for name, want := range map[string]string{
 		envPreview:                 "1",
@@ -98,15 +95,15 @@ func TestSharedPreviewEntrySpec(t *testing.T) {
 		edge.OriginBodyLimitVar:    "6289408",
 		edge.OriginBodyEncodingVar: edge.OriginBodyEncodingBase64,
 	} {
-		if spec.Generic.Vars[name] != want {
-			t.Errorf("Vars[%s] = %q, want %q", name, spec.Generic.Vars[name], want)
+		if spec.Program.Worker.Vars[name] != want {
+			t.Errorf("Vars[%s] = %q, want %q", name, spec.Program.Worker.Vars[name], want)
 		}
 	}
-	if spec.Generic.Secrets[edge.EdgeSecretKeyVar] != "secret" {
+	if spec.Program.Worker.Secrets[edge.EdgeSecretKeyVar] != "secret" {
 		t.Errorf("Secrets[%s] missing", edge.EdgeSecretKeyVar)
 	}
 	for _, unwanted := range []string{envPreviewApps, "OCEL_SLUG"} {
-		if _, ok := spec.Generic.Vars[unwanted]; ok {
+		if _, ok := spec.Program.Worker.Vars[unwanted]; ok {
 			t.Errorf("Vars carries %s, which is per-project", unwanted)
 		}
 	}
@@ -114,11 +111,11 @@ func TestSharedPreviewEntrySpec(t *testing.T) {
 	if spec.Values["cacheBucket"] != "ocel-edge-cache-preview" {
 		t.Errorf("Values = %v, want the cache bucket the entry serves assets from", spec.Values)
 	}
-	if spec.ISRWriterScriptName != cfg.ISRWriterScriptName {
-		t.Errorf("ISRWriterScriptName = %q, want %q", spec.ISRWriterScriptName, cfg.ISRWriterScriptName)
+	if spec.Program.ISRWriterScriptName != cfg.ISRWriterScriptName {
+		t.Errorf("ISRWriterScriptName = %q, want %q", spec.Program.ISRWriterScriptName, cfg.ISRWriterScriptName)
 	}
 
-	if _, err := SharedPreviewEntrySpec(cfg, "", nil); err == nil {
+	if _, err := PreviewWildcardSpecFor(cfg, "", nil); err == nil {
 		t.Error("expected an empty domain to be refused")
 	}
 }
@@ -130,8 +127,8 @@ func TestMarkGlobalPreview(t *testing.T) {
 		return &deploymentsv1.Manifest{Slug: "proj"}
 	}
 	preview := Config{Slug: "proj", Class: deploymentsv1.Environment_CLASS_PREVIEW, GlobalPreviewDomain: "preview.acme.com"}
-	state := func() edge.RootStackState {
-		return edge.RootStackState{edge.RootStackKeySlug: "proj"}
+	state := func() edge.StackState {
+		return edge.StackState{edge.StackKeySlug: "proj"}
 	}
 
 	t.Run("an ambient project records the domain serving it", func(t *testing.T) {
@@ -158,10 +155,10 @@ func TestMarkGlobalPreview(t *testing.T) {
 		m := manifest()
 		m.Domains = map[string]*deploymentsv1.DomainList{"preview": {Hostnames: []string{"*.preview.proj.com"}}}
 		prior := state()
-		prior[edge.RootStackKeyGlobalPreview] = "preview.acme.com"
+		prior[edge.StackKeyGlobalPreview] = "preview.acme.com"
 
 		marked := MarkGlobalPreview(prior, preview, m)
-		if _, ok := marked[edge.RootStackKeyGlobalPreview]; ok {
+		if _, ok := marked[edge.StackKeyGlobalPreview]; ok {
 			t.Errorf("state = %v, want the stale mark gone", marked)
 		}
 	})
@@ -207,9 +204,9 @@ func TestRootStackSpecsGlobalPreview(t *testing.T) {
 			ArtifactRoot:        specsArtifactRoot(t, m),
 		}
 
-		specs, err := rootStackSpecs(cfg, m, "v1", nil)
+		specs, err := stackSpecs(cfg, m, "v1", nil)
 		if err != nil {
-			t.Fatalf("rootStackSpecs: %v", err)
+			t.Fatalf("stackSpecs: %v", err)
 		}
 		if len(specs) != 1 {
 			t.Fatalf("specs = %d, want 1: the shared entry serves this project, but its store instance is still its own", len(specs))
@@ -217,8 +214,8 @@ func TestRootStackSpecsGlobalPreview(t *testing.T) {
 		if len(specs[0].Domains) != 0 {
 			t.Errorf("Domains = %v, want none", specs[0].Domains)
 		}
-		if specs[0].PruneWorkerStem != previewWorkerStem("proj") {
-			t.Errorf("PruneWorkerStem = %q, want %q", specs[0].PruneWorkerStem, previewWorkerStem("proj"))
+		if specs[0].Program.PruneWorkerStem != previewWorkerStem("proj") {
+			t.Errorf("PruneWorkerStem = %q, want %q", specs[0].Program.PruneWorkerStem, previewWorkerStem("proj"))
 		}
 	})
 
@@ -234,9 +231,9 @@ func TestRootStackSpecsGlobalPreview(t *testing.T) {
 			ArtifactRoot:        specsArtifactRoot(t, m),
 		}
 
-		specs, err := rootStackSpecs(cfg, m, "v1", nil)
+		specs, err := stackSpecs(cfg, m, "v1", nil)
 		if err != nil {
-			t.Fatalf("rootStackSpecs: %v", err)
+			t.Fatalf("stackSpecs: %v", err)
 		}
 		if len(specs) != 1 {
 			t.Fatalf("specs = %d, want 1", len(specs))
@@ -258,9 +255,9 @@ func TestRootStackSpecsGlobalPreview(t *testing.T) {
 			ArtifactRoot:        specsArtifactRoot(t, m),
 		}
 
-		specs, err := rootStackSpecs(cfg, m, "v1", nil)
+		specs, err := stackSpecs(cfg, m, "v1", nil)
 		if err != nil {
-			t.Fatalf("rootStackSpecs: %v", err)
+			t.Fatalf("stackSpecs: %v", err)
 		}
 		if len(specs) != 1 {
 			t.Fatalf("specs = %d, want 1", len(specs))
@@ -277,7 +274,7 @@ func TestRootStackSpecsGlobalPreview(t *testing.T) {
 			ArtifactRoot: specsArtifactRoot(t, m),
 		}
 
-		if _, err := rootStackSpecs(cfg, m, "v1", nil); err == nil {
+		if _, err := stackSpecs(cfg, m, "v1", nil); err == nil {
 			t.Fatal("expected a preview deploy with nowhere to serve to be refused")
 		}
 	})

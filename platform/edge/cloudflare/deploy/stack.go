@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"maps"
 	"mime/multipart"
 	"os"
 	"slices"
@@ -94,14 +95,31 @@ const genericISRWriterBinding = "ISR_WRITER"
 
 const genericSlugBinding = "OCEL_SLUG"
 
-func (p *provider) ReconcileRootStack(ctx context.Context, spec edge.RootStackSpec, prior edge.RootStackState) (edge.RootStackState, error) {
+type stack struct {
+	p     *provider
+	state edge.StackState
+}
+
+func (s *stack) State() edge.StackState { return s.state }
+
+func (s *stack) Ledger() edge.Ledger { return s }
+
+func (p *provider) Open(state edge.StackState) (edge.EdgeStack, error) {
+	return &stack{p: p, state: state}, nil
+}
+
+func (p *provider) Reconcile(ctx context.Context, spec edge.StackSpec, prior edge.StackState) (edge.EdgeStack, error) {
 	accountID := os.Getenv(envAccountID)
 	if accountID == "" {
-		return nil, fmt.Errorf("%s is not set; it is required to reconcile the Cloudflare root stack", envAccountID)
+		return nil, fmt.Errorf("%s is not set; it is required to reconcile the Cloudflare stack", envAccountID)
+	}
+	program := spec.Program
+	if program == nil {
+		return nil, fmt.Errorf("the Cloudflare edge runs the entry worker; stack %q carries no program", spec.Slug)
 	}
 
 	slug := spec.Slug
-	endpoint := spec.StoreEndpoint
+	endpoint := program.StoreEndpoint
 
 	generic := genericWorker(spec, slug)
 	stamp, err := specStamp(spec, generic)
@@ -113,16 +131,19 @@ func (p *provider) ReconcileRootStack(ctx context.Context, spec edge.RootStackSp
 	if err != nil {
 		return nil, err
 	}
-	upToDate := stamps[spec.GenericName] == stamp
+	opened := func(state edge.StackState) (edge.EdgeStack, error) {
+		return &stack{p: p, state: state}, nil
+	}
+	upToDate := stamps[program.Name] == stamp
 	if upToDate && skipEdgeReconcile() {
-		return prior, nil
+		return opened(prior)
 	}
 
-	if spec.PruneOnly && spec.GenericName == edge.SharedPreviewEntryScript {
-		return nil, fmt.Errorf("prune-only root stack may not target the shared preview entry worker %q", spec.GenericName)
+	if spec.PruneOnly && program.Name == previewEntryScript {
+		return nil, fmt.Errorf("prune-only stack may not target the shared preview entry worker %q", program.Name)
 	}
 
-	genericUp := upload{accountID: accountID, scriptName: spec.GenericName}
+	genericUp := upload{accountID: accountID, scriptName: program.Name}
 	if !upToDate && !spec.PruneOnly {
 		genericUp.worker = generic
 		if err := p.putWorkerScript(ctx, genericUp, "generic worker"); err != nil {
@@ -133,37 +154,38 @@ func (p *provider) ReconcileRootStack(ctx context.Context, spec edge.RootStackSp
 	if err := p.reconcileWorkerRoutes(ctx, genericUp, routePlan{
 		desired:        spec.Domains,
 		prune:          spec.PruneRoutes,
-		pruneStem:      spec.PruneWorkerStem,
-		requiredRecord: spec.RequiredRecord,
+		pruneStem:      program.PruneWorkerStem,
+		requiredRecord: program.RequiredRecord,
 	}, spec.Warn); err != nil {
 		return nil, err
 	}
 	if upToDate {
-		return prior, nil
+		return opened(prior)
 	}
 
 	if spec.PruneOnly {
-		if err := p.deleteScript(ctx, accountID, spec.GenericName); err != nil {
-			return nil, fmt.Errorf("delete retired generic worker %q: %w", spec.GenericName, err)
+		if err := p.deleteScript(ctx, accountID, program.Name); err != nil {
+			return nil, fmt.Errorf("delete retired generic worker %q: %w", program.Name, err)
 		}
 	} else if _, err := p.setSubdomain(ctx, genericUp, len(spec.Domains) == 0); err != nil {
 		return nil, fmt.Errorf("set generic worker subdomain: %w", err)
 	}
-	stamps[spec.GenericName] = stamp
+	stamps[program.Name] = stamp
 	encoded, err := stamps.encode()
 	if err != nil {
 		return nil, err
 	}
 	if err := p.putVersionStamp(ctx, endpoint, slug, id.secret, encoded); err != nil {
-		return nil, fmt.Errorf("set root-stack version stamp: %w", err)
+		return nil, fmt.Errorf("set stack version stamp: %w", err)
 	}
 
-	return edge.RootStackState{
-		edge.RootStackKeySlug:       slug,
-		edge.RootStackKeyEndpoint:   endpoint,
-		edge.RootStackKeySecret:     id.secret,
-		edge.RootStackKeyOwnerToken: id.ownerToken,
-	}, nil
+	return opened(edge.StackState{
+		edge.StackKeySlug:       slug,
+		edge.StackKeyEndpoint:   endpoint,
+		edge.StackKeySecret:     id.secret,
+		edge.StackKeyOwnerToken: id.ownerToken,
+		edge.StackKeyClass:      string(spec.Class),
+	})
 }
 
 func (p *provider) putWorkerScript(ctx context.Context, up upload, what string) error {
@@ -182,14 +204,14 @@ type storeIdentity struct {
 	ownerToken string
 }
 
-func (p *provider) ensureInstance(ctx context.Context, spec edge.RootStackSpec, prior edge.RootStackState) (storeIdentity, stampSet, error) {
-	if secret := prior[edge.RootStackKeySecret]; secret != "" && prior[edge.RootStackKeySlug] == spec.Slug {
-		current, res, err := p.getVersionStamp(ctx, spec.StoreEndpoint, spec.Slug, secret)
+func (p *provider) ensureInstance(ctx context.Context, spec edge.StackSpec, prior edge.StackState) (storeIdentity, stampSet, error) {
+	if secret := prior[edge.StackKeySecret]; secret != "" && prior[edge.StackKeySlug] == spec.Slug {
+		current, res, err := p.getVersionStamp(ctx, spec.Program.StoreEndpoint, spec.Slug, secret)
 		switch {
 		case err == nil:
-			return storeIdentity{secret: secret, ownerToken: prior[edge.RootStackKeyOwnerToken]}, decodeStampSet(current), nil
+			return storeIdentity{secret: secret, ownerToken: prior[edge.StackKeyOwnerToken]}, decodeStampSet(current), nil
 		case !unauthorized(res):
-			return storeIdentity{}, nil, fmt.Errorf("read root-stack version stamp: %w", err)
+			return storeIdentity{}, nil, fmt.Errorf("read stack version stamp: %w", err)
 		}
 	}
 
@@ -197,7 +219,7 @@ func (p *provider) ensureInstance(ctx context.Context, spec edge.RootStackSpec, 
 	if err != nil {
 		return storeIdentity{}, nil, err
 	}
-	adopted, err := p.initializeInstance(ctx, spec.StoreEndpoint, spec.Slug, spec.BootstrapCred, minted)
+	adopted, err := p.initializeInstance(ctx, spec.Program.StoreEndpoint, spec.Slug, spec.Program.BootstrapCred, minted)
 	if err != nil {
 		return storeIdentity{}, nil, fmt.Errorf("initialize project store instance: %w", err)
 	}
@@ -216,28 +238,80 @@ func mintIdentity() (storeIdentity, error) {
 	return storeIdentity{secret: secret, ownerToken: ownerToken}, nil
 }
 
-func (p *provider) ListDeployedWorkers(ctx context.Context, stem string) ([]string, error) {
-	accountID := os.Getenv(envAccountID)
-	if accountID == "" {
-		return nil, fmt.Errorf("%s is not set; it is required to list deployed workers", envAccountID)
-	}
-	var names []string
-	iter := p.client.Workers.Scripts.ListAutoPaging(ctx, workers.ScriptListParams{AccountID: cf.F(accountID)})
-	for iter.Next() {
-		if name := iter.Current().ID; edge.NameUnderStem(stem, name) {
-			names = append(names, name)
-		}
-	}
-	if err := iter.Err(); err != nil {
-		return nil, fmt.Errorf("list workers: %w", err)
-	}
-	return names, nil
+func (s *stack) BindDomain(context.Context, edge.DomainBinding) error {
+	return errors.New("binding a domain to a Cloudflare stack is not implemented in this slice")
 }
 
-func (p *provider) DestroyRootStack(ctx context.Context, names []string) error {
+func (s *stack) UnbindDomain(context.Context, string) error {
+	return errors.New("unbinding a domain from a Cloudflare stack is not implemented in this slice")
+}
+
+func (s *stack) Destroy(ctx context.Context) error {
+	names, err := s.p.stackWorkers(ctx, s.state)
+	if err != nil {
+		return err
+	}
+	if err := s.p.destroyWorkers(ctx, names); err != nil {
+		return err
+	}
+	if err := s.p.destroyInstance(ctx, s.state); err != nil {
+		return fmt.Errorf("destroy deployments-store instance: %w", err)
+	}
+	return nil
+}
+
+func (p *provider) stackWorkers(ctx context.Context, state edge.StackState) ([]string, error) {
+	named := map[string]bool{}
+	var apps []string
+	if secret := state[edge.StackKeySecret]; secret != "" {
+		stamped, res, err := p.getVersionStamp(ctx, state[edge.StackKeyEndpoint], state[edge.StackKeySlug], secret)
+		if err != nil {
+			if unauthorized(res) {
+				return nil, fmt.Errorf("read stack version stamp: the deployments store rejected project %q's secret, so the workers it deployed cannot be named: %w", state[edge.StackKeySlug], err)
+			}
+			return nil, fmt.Errorf("read stack version stamp: %w", err)
+		}
+		for name := range decodeStampSet(stamped) {
+			named[name] = true
+		}
+		deployed, err := p.deployedApps(ctx, state)
+		if err != nil {
+			return nil, err
+		}
+		apps = deployed
+	}
+
+	conventional, err := conventionWorkerNames(state[edge.StackKeySlug], edge.Class(state[edge.StackKeyClass]), apps)
+	if err != nil {
+		return nil, err
+	}
+	for _, name := range conventional {
+		named[name] = true
+	}
+	return slices.Sorted(maps.Keys(named)), nil
+}
+
+func (p *provider) deployedApps(ctx context.Context, state edge.StackState) ([]string, error) {
+	history, err := (&stack{p: p, state: state}).History(ctx, "")
+	if err != nil {
+		return nil, fmt.Errorf("read the project's promotion history, which names the workers it deployed: %w", err)
+	}
+	apps := map[string]bool{}
+	for _, entry := range history {
+		for app := range entry.Builds {
+			apps[app] = true
+		}
+	}
+	return slices.Sorted(maps.Keys(apps)), nil
+}
+
+func (p *provider) destroyWorkers(ctx context.Context, names []string) error {
 	accountID := os.Getenv(envAccountID)
 	if accountID == "" {
-		return fmt.Errorf("%s is not set; it is required to destroy the Cloudflare root stack", envAccountID)
+		return fmt.Errorf("%s is not set; it is required to destroy the Cloudflare stack", envAccountID)
+	}
+	if len(names) == 0 {
+		return nil
 	}
 
 	routes := p.routeSnapshot()
@@ -360,14 +434,14 @@ func withSecret(worker edge.Worker, name, value string) edge.Worker {
 	return worker
 }
 
-func genericWorker(spec edge.RootStackSpec, slug string) edge.Worker {
+func genericWorker(spec edge.StackSpec, slug string) edge.Worker {
 	worker := withVar(
-		withService(spec.Generic, genericStoreBinding, spec.StoreScriptName),
+		withService(spec.Program.Worker, genericStoreBinding, spec.Program.StoreScriptName),
 		genericSlugBinding,
 		slug,
 	)
-	if spec.ISRWriterScriptName != "" {
-		worker = withService(worker, genericISRWriterBinding, spec.ISRWriterScriptName)
+	if spec.Program.ISRWriterScriptName != "" {
+		worker = withService(worker, genericISRWriterBinding, spec.Program.ISRWriterScriptName)
 	}
 	return bindCodeLoader(bindObjectStore(worker, spec.Values))
 }

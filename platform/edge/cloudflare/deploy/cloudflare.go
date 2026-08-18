@@ -56,15 +56,30 @@ type provider struct {
 	zonesSeen map[string][]zoneRef
 }
 
-var _ edge.RootStack = (*provider)(nil)
+var (
+	_ edge.Edge         = (*provider)(nil)
+	_ edge.Programmable = (*provider)(nil)
+)
 
-func New() edge.Provider {
+func New() edge.Edge {
 	return &provider{client: cf.NewClient(option.WithMaxRetries(clientMaxRetries))}
 }
 
 const clientMaxRetries = 5
 
 func (p *provider) Kind() edge.Kind { return edge.KindCloudflare }
+
+func (p *provider) Supports(need edge.Need) bool {
+	return edge.CapabilitiesOf(p.Kind()).Supports(need)
+}
+
+func (p *provider) Supported() []edge.Need {
+	return edge.CapabilitiesOf(p.Kind()).Supported()
+}
+
+func (p *provider) FlipBound() edge.FlipBound {
+	return edge.CapabilitiesOf(p.Kind()).FlipBound()
+}
 
 func (p *provider) CodeRuntime() (string, []string) { return compatDate, compatFlags }
 
@@ -93,6 +108,28 @@ func (p *provider) Bootstrap(ctx context.Context, class edge.Class) (edge.Bootst
 	}
 	out.Offers = append(out.Offers, writerOffer)
 	return out, nil
+}
+
+func (p *provider) Teardown(ctx context.Context, class edge.Class) error {
+	accountID := os.Getenv(envAccountID)
+	if accountID == "" {
+		return fmt.Errorf("%s is not set; it is required to tear the Cloudflare edge down", envAccountID)
+	}
+	storeScript, err := storeScriptNameFor(class)
+	if err != nil {
+		return err
+	}
+	writerScript, err := isrWriterScriptNameFor(class)
+	if err != nil {
+		return err
+	}
+	var errs []error
+	for _, name := range []string{storeScript, writerScript} {
+		if err := p.deleteScript(ctx, accountID, name); err != nil {
+			errs = append(errs, fmt.Errorf("delete worker %q: %w", name, err))
+		}
+	}
+	return errors.Join(errs...)
 }
 
 func (p *provider) bootstrapISRWriter(ctx context.Context, accountID string, class edge.Class) (edge.Offer, error) {

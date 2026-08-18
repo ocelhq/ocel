@@ -91,7 +91,7 @@ type Config struct {
 	ISRWriterScriptName    string
 	ISRWriterSeed          string
 
-	Edge edge.Provider
+	Edge edge.Edge
 
 	Class                  deploymentsv1.Environment_Class
 	Lifecycle              deploymentsv1.Environment_Lifecycle
@@ -103,7 +103,7 @@ type Config struct {
 
 	Tag string
 
-	RootStackState edge.RootStackState
+	StackState edge.StackState
 
 	Stages      Stages
 	AppStages   map[string]Stage
@@ -143,11 +143,11 @@ func (p Progress) report(phase deploymentsv1.Phase, message string, current, tot
 }
 
 type Result struct {
-	Links          []*linksv1.Link
-	Functions      []*deploymentsv1.FunctionOutput
-	AppURLs        []string
-	PromotionID    string
-	RootStackState edge.RootStackState
+	Links       []*linksv1.Link
+	Functions   []*deploymentsv1.FunctionOutput
+	AppURLs     []string
+	PromotionID string
+	StackState  edge.StackState
 }
 
 func Run(ctx context.Context, cfg Config, manifest *deploymentsv1.Manifest, progress Progress, log func(string)) (Result, error) {

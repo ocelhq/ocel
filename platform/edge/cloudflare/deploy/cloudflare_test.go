@@ -409,18 +409,18 @@ func TestProviderRequiresItsCredentials(t *testing.T) {
 		name      string
 		accountID string
 		apiToken  string
-		call      func(context.Context, edge.Provider) error
+		call      func(context.Context, edge.Edge) error
 	}{
 		{
 			name: "DeployApp without an account id is an error",
-			call: func(ctx context.Context, p edge.Provider) error {
-				_, err := p.DeployApp(ctx, edge.AppDeployment{Name: "ocel-proj-prod"})
+			call: func(ctx context.Context, p edge.Edge) error {
+				_, err := p.(edge.Programmable).DeployApp(ctx, edge.AppDeployment{Name: "ocel-proj-prod"})
 				return err
 			},
 		},
 		{
 			name: "Bootstrap without an account id is an error",
-			call: func(ctx context.Context, p edge.Provider) error {
+			call: func(ctx context.Context, p edge.Edge) error {
 				_, err := p.Bootstrap(ctx, edge.ClassProduction)
 				return err
 			},
@@ -428,7 +428,7 @@ func TestProviderRequiresItsCredentials(t *testing.T) {
 		{
 			name:     "VerifyCredentials without an account id is an error",
 			apiToken: "tok",
-			call: func(ctx context.Context, p edge.Provider) error {
+			call: func(ctx context.Context, p edge.Edge) error {
 				_, err := p.(edge.CredentialVerifier).VerifyCredentials(ctx)
 				return err
 			},
@@ -436,7 +436,7 @@ func TestProviderRequiresItsCredentials(t *testing.T) {
 		{
 			name:      "VerifyCredentials without an API token is an error",
 			accountID: "acct-123",
-			call: func(ctx context.Context, p edge.Provider) error {
+			call: func(ctx context.Context, p edge.Edge) error {
 				_, err := p.(edge.CredentialVerifier).VerifyCredentials(ctx)
 				return err
 			},
@@ -459,17 +459,67 @@ func TestProviderRequiresItsCredentials(t *testing.T) {
 	})
 }
 
+func TestTeardown(t *testing.T) {
+	for _, tc := range []struct {
+		name  string
+		class edge.Class
+		want  []string
+	}{
+		{
+			name:  "production takes the workers production bootstrapped",
+			class: edge.ClassProduction,
+			want:  []string{sharedStoreScriptName, isrWriterScriptName},
+		},
+		{
+			name:  "preview takes the workers preview bootstrapped",
+			class: edge.ClassPreview,
+			want:  []string{previewStoreScriptName, previewISRWriterScriptName},
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Setenv(envAccountID, "acct")
+
+			m := &cfMock{zoneID: "zone1", zoneName: "app.com"}
+			p := m.provider(t)
+			if err := p.Teardown(t.Context(), tc.class); err != nil {
+				t.Fatalf("Teardown: %v", err)
+			}
+			assertSet(t, "deleted scripts", m.deletedScripts, tc.want)
+		})
+	}
+
+	t.Run("an unknown class deletes nothing", func(t *testing.T) {
+		t.Setenv(envAccountID, "acct")
+
+		m := &cfMock{zoneID: "zone1", zoneName: "app.com"}
+		if err := m.provider(t).Teardown(t.Context(), edge.Class("nonsense")); err == nil {
+			t.Fatal("Teardown(unknown class) err = nil, want an error")
+		}
+		if len(m.deletedScripts) != 0 {
+			t.Errorf("deleted scripts = %v, want none", m.deletedScripts)
+		}
+	})
+
+	t.Run("an unset account id is an error", func(t *testing.T) {
+		t.Setenv(envAccountID, "")
+
+		if err := New().Teardown(t.Context(), edge.ClassProduction); err == nil {
+			t.Fatal("Teardown without an account id err = nil, want an error")
+		}
+	})
+}
+
 func TestCodeRuntime(t *testing.T) {
 	t.Parallel()
 
 	t.Run("reports the compat settings the uploaded script carries", func(t *testing.T) {
 		t.Parallel()
 
-		loader, ok := New().(edge.CodeLoader)
+		program, ok := New().(edge.Programmable)
 		if !ok {
-			t.Fatalf("cloudflare provider does not implement edge.CodeLoader")
+			t.Fatalf("cloudflare provider does not implement edge.Programmable")
 		}
-		date, flags := loader.CodeRuntime()
+		date, flags := program.CodeRuntime()
 		if date != compatDate {
 			t.Errorf("CodeRuntime date = %q, want %q", date, compatDate)
 		}

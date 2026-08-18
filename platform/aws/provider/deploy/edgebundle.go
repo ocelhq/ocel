@@ -100,7 +100,7 @@ func recordUploadFailure(stats *uploadBatchStats, err error) error {
 }
 
 func appEdgeWorkers(cfg Config, c naming.Coordinate, app string) (*edge.Code, error) {
-	loader, ok := cfg.Edge.(edge.CodeLoader)
+	program, ok := cfg.Edge.(edge.Programmable)
 	if !ok {
 		return nil, nil
 	}
@@ -108,7 +108,7 @@ func appEdgeWorkers(cfg Config, c naming.Coordinate, app string) (*edge.Code, er
 	if err != nil || !ok {
 		return nil, err
 	}
-	compatDate, compatFlags := loader.CodeRuntime()
+	compatDate, compatFlags := program.CodeRuntime()
 	return &edge.Code{
 		BundleKey:   appEdgeBundleKey(c),
 		ID:          loaderID(bundle, compatDate, compatFlags),

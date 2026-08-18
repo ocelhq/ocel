@@ -16,64 +16,64 @@ import (
 )
 
 const (
-	RootStackStateParamPrefix        = "/ocel/rootstack/"
-	PreviewRootStackStateParamPrefix = "/ocel/rootstack-preview/"
+	StackStateParamPrefix        = "/ocel/rootstack/"
+	PreviewStackStateParamPrefix = "/ocel/rootstack-preview/"
 )
 
-func rootStackStateParamPrefixFor(class string) (string, error) {
+func stackStateParamPrefixFor(class string) (string, error) {
 	switch class {
 	case ClassProduction:
-		return RootStackStateParamPrefix, nil
+		return StackStateParamPrefix, nil
 	case ClassPreview:
-		return PreviewRootStackStateParamPrefix, nil
+		return PreviewStackStateParamPrefix, nil
 	default:
-		return "", fmt.Errorf("root-stack state: unknown substrate class %q", class)
+		return "", fmt.Errorf("edge stack state: unknown substrate class %q", class)
 	}
 }
 
-func rootStackStateParamName(prefix, slug string) string {
+func stackStateParamName(prefix, slug string) string {
 	return prefix + slug
 }
 
-func rootStackStateParamDescription(class, slug string) string {
+func stackStateParamDescription(class, slug string) string {
 	return fmt.Sprintf(
 		"Ocel: what the %s edge was left holding for project %q - the handles Ocel needs to recognise, update and eventually remove the root worker fronting this project. Written by every deploy of %q and read by the next deploy and by teardown. Delete it and Ocel loses track of edge resources it has already created for %q: they keep serving traffic, and teardown will not reclaim them.",
 		class, slug, slug, slug,
 	)
 }
 
-func WriteRootStackStateFor(ctx context.Context, ssmClient SSMAPI, class, slug string, state edge.RootStackState) error {
-	prefix, err := rootStackStateParamPrefixFor(class)
+func WriteStackStateFor(ctx context.Context, ssmClient SSMAPI, class, slug string, state edge.StackState) error {
+	prefix, err := stackStateParamPrefixFor(class)
 	if err != nil {
 		return err
 	}
 	payload, err := json.Marshal(state)
 	if err != nil {
-		return fmt.Errorf("marshal root-stack state: %w", err)
+		return fmt.Errorf("marshal edge-stack state: %w", err)
 	}
 	if _, err := ssmClient.PutParameter(ctx, &ssm.PutParameterInput{
-		Name:        aws.String(rootStackStateParamName(prefix, slug)),
-		Description: aws.String(rootStackStateParamDescription(class, slug)),
+		Name:        aws.String(stackStateParamName(prefix, slug)),
+		Description: aws.String(stackStateParamDescription(class, slug)),
 		Value:       aws.String(string(payload)),
 		Type:        ssmtypes.ParameterTypeSecureString,
 		Overwrite:   aws.Bool(true),
 	}); err != nil {
-		return fmt.Errorf("write root-stack state parameter: %w", err)
+		return fmt.Errorf("write edge-stack state parameter: %w", err)
 	}
 	return nil
 }
 
-func ReadRootStackState(ctx context.Context, ssmClient SSMAPI, slug string) (edge.RootStackState, error) {
-	return ReadRootStackStateFor(ctx, ssmClient, ClassProduction, slug)
+func ReadStackState(ctx context.Context, ssmClient SSMAPI, slug string) (edge.StackState, error) {
+	return ReadStackStateFor(ctx, ssmClient, ClassProduction, slug)
 }
 
-func ReadRootStackStateFor(ctx context.Context, ssmClient SSMAPI, class, slug string) (edge.RootStackState, error) {
-	prefix, err := rootStackStateParamPrefixFor(class)
+func ReadStackStateFor(ctx context.Context, ssmClient SSMAPI, class, slug string) (edge.StackState, error) {
+	prefix, err := stackStateParamPrefixFor(class)
 	if err != nil {
 		return nil, err
 	}
 	out, err := ssmClient.GetParameter(ctx, &ssm.GetParameterInput{
-		Name:           aws.String(rootStackStateParamName(prefix, slug)),
+		Name:           aws.String(stackStateParamName(prefix, slug)),
 		WithDecryption: aws.Bool(true),
 	})
 	if err != nil {
@@ -81,11 +81,11 @@ func ReadRootStackStateFor(ctx context.Context, ssmClient SSMAPI, class, slug st
 		if errors.As(err, &notFound) {
 			return nil, nil
 		}
-		return nil, fmt.Errorf("read root-stack state parameter: %w", err)
+		return nil, fmt.Errorf("read edge-stack state parameter: %w", err)
 	}
-	var state edge.RootStackState
+	var state edge.StackState
 	if err := json.Unmarshal([]byte(aws.ToString(out.Parameter.Value)), &state); err != nil {
-		return nil, fmt.Errorf("parse root-stack state: %w", err)
+		return nil, fmt.Errorf("parse edge-stack state: %w", err)
 	}
 	return state, nil
 }
@@ -94,8 +94,8 @@ type SSMPathAPI interface {
 	GetParametersByPath(ctx context.Context, in *ssm.GetParametersByPathInput, optFns ...func(*ssm.Options)) (*ssm.GetParametersByPathOutput, error)
 }
 
-func RootStackSlugsFor(ctx context.Context, api SSMPathAPI, class string) ([]string, error) {
-	prefix, err := rootStackStateParamPrefixFor(class)
+func StackSlugsFor(ctx context.Context, api SSMPathAPI, class string) ([]string, error) {
+	prefix, err := stackStateParamPrefixFor(class)
 	if err != nil {
 		return nil, err
 	}
@@ -107,7 +107,7 @@ func RootStackSlugsFor(ctx context.Context, api SSMPathAPI, class string) ([]str
 			NextToken: token,
 		})
 		if err != nil {
-			return nil, fmt.Errorf("list root-stack state parameters: %w", err)
+			return nil, fmt.Errorf("list edge-stack state parameters: %w", err)
 		}
 		for _, param := range out.Parameters {
 			if slug := strings.TrimPrefix(aws.ToString(param.Name), prefix); slug != "" {
@@ -123,23 +123,23 @@ func RootStackSlugsFor(ctx context.Context, api SSMPathAPI, class string) ([]str
 	return slugs, nil
 }
 
-func DeleteRootStackState(ctx context.Context, ssmClient SSMAPI, slug string) error {
-	return DeleteRootStackStateFor(ctx, ssmClient, ClassProduction, slug)
+func DeleteStackState(ctx context.Context, ssmClient SSMAPI, slug string) error {
+	return DeleteStackStateFor(ctx, ssmClient, ClassProduction, slug)
 }
 
-func DeleteRootStackStateFor(ctx context.Context, ssmClient SSMAPI, class, slug string) error {
-	prefix, err := rootStackStateParamPrefixFor(class)
+func DeleteStackStateFor(ctx context.Context, ssmClient SSMAPI, class, slug string) error {
+	prefix, err := stackStateParamPrefixFor(class)
 	if err != nil {
 		return err
 	}
 	if _, err := ssmClient.DeleteParameter(ctx, &ssm.DeleteParameterInput{
-		Name: aws.String(rootStackStateParamName(prefix, slug)),
+		Name: aws.String(stackStateParamName(prefix, slug)),
 	}); err != nil {
 		var notFound *ssmtypes.ParameterNotFound
 		if errors.As(err, &notFound) {
 			return nil
 		}
-		return fmt.Errorf("delete root-stack state parameter: %w", err)
+		return fmt.Errorf("delete edge-stack state parameter: %w", err)
 	}
 	return nil
 }

@@ -1,7 +1,6 @@
 package edge
 
 import (
-	"context"
 	"errors"
 	"strings"
 )
@@ -17,55 +16,37 @@ const StoreSchemaVersion = 2
 
 var ErrStoreSchemaUnreadable = errors.New("deployments store does not report a schema version")
 
-type RootStack interface {
-	ReconcileRootStack(ctx context.Context, spec RootStackSpec, prior RootStackState) (RootStackState, error)
-
-	StoreSchemaVersion(ctx context.Context, endpoint, slug string) (int, error)
-
-	PutStaged(ctx context.Context, state RootStackState, record DeploymentRecord) error
-
-	Promote(ctx context.Context, state RootStackState, promotion Promotion, pointer string) error
-
-	History(ctx context.Context, state RootStackState, pointer string) ([]HistoryEntry, error)
-
-	DeletePromotionArtifacts(ctx context.Context, state RootStackState, keepN int, pointer string) (PruneResult, error)
-
-	RemovePointer(ctx context.Context, state RootStackState, pointer string) (PruneResult, error)
-
-	RouteOwner(ctx context.Context, pattern string) (string, error)
-
-	DestroyRootStack(ctx context.Context, workers []string) error
-
-	ListDeployedWorkers(ctx context.Context, stem string) ([]string, error)
-
-	DestroyInstance(ctx context.Context, state RootStackState) error
+type StackSpec struct {
+	Version     string
+	Class       Class
+	Slug        string
+	Domains     []string
+	Values      map[string]string
+	PruneOnly   bool
+	PruneRoutes bool
+	Warn        func(string)
+	Program     *ProgramSpec
 }
 
-type RootStackSpec struct {
-	Version             string
-	GenericName         string
-	Generic             Worker
-	Slug                string
+type ProgramSpec struct {
+	Name                string
+	Worker              Worker
 	StoreScriptName     string
 	ISRWriterScriptName string
 	StoreEndpoint       string
 	BootstrapCred       string
-	Domains             []string
-	PruneOnly           bool
-	PruneRoutes         bool
 	PruneWorkerStem     string
 	RequiredRecord      string
-	Values              map[string]string
-	Warn                func(string)
 }
 
-type RootStackState map[string]string
+type StackState map[string]string
 
 const (
-	RootStackKeySlug       = "slug"
-	RootStackKeyEndpoint   = "endpoint"
-	RootStackKeySecret     = "secret"
-	RootStackKeyOwnerToken = "ownerToken"
+	StackKeySlug       = "slug"
+	StackKeyEndpoint   = "endpoint"
+	StackKeySecret     = "secret"
+	StackKeyOwnerToken = "ownerToken"
+	StackKeyClass      = "class"
 )
 
 type DeploymentRecord struct {
@@ -85,6 +66,9 @@ type DeploymentRecord struct {
 	Variables        []VariableRecord  `json:"variables,omitempty"`
 	Env              map[string]string `json:"env,omitempty"`
 	Envelope         string            `json:"envelope,omitempty"`
+	Needs            []Need            `json:"needs,omitempty"`
+	SupportInEffect  []Need            `json:"supportInEffect,omitempty"`
+	Waived           []Need            `json:"waived,omitempty"`
 }
 
 var OwnedVariableNames = []string{"OCEL_CACHE_RPC", "OCEL_CACHE_SCOPE"}
@@ -108,6 +92,7 @@ type Promotion struct {
 	Ts          int64             `json:"ts"`
 	Builds      map[string]string `json:"builds"`
 	Tag         string            `json:"tag,omitempty"`
+	Flip        *FlipBound        `json:"flip,omitempty"`
 }
 
 type HistoryEntry struct {

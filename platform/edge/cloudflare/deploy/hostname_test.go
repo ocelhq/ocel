@@ -11,6 +11,8 @@ import (
 
 	cf "github.com/cloudflare/cloudflare-go/v4"
 	"github.com/cloudflare/cloudflare-go/v4/option"
+
+	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
 type cfMock struct {
@@ -20,6 +22,7 @@ type cfMock struct {
 	existingRecords       []map[string]any
 	existingCustomDomains []map[string]any
 	existingScripts       []string
+	refuseScriptDeletes   map[string]bool
 
 	requests   int
 	zoneLists  int
@@ -128,6 +131,10 @@ func (m *cfMock) server(t *testing.T) *httptest.Server {
 	})
 
 	mux.HandleFunc("DELETE /accounts/acct/workers/scripts/{name}", func(w http.ResponseWriter, r *http.Request) {
+		if m.refuseScriptDeletes[r.PathValue("name")] {
+			w.WriteHeader(http.StatusInternalServerError)
+			return
+		}
 		m.deletedScripts = append(m.deletedScripts, r.PathValue("name"))
 		writeResult(w, map[string]any{"id": r.PathValue("name")})
 	})
@@ -636,8 +643,8 @@ func TestRouteOwnerRequestBudget(t *testing.T) {
 	m := &cfMock{zoneID: "zone1", zoneName: "app.com"}
 	p := m.provider(t)
 	for _, host := range []string{"app.com", "www.app.com"} {
-		if _, err := p.RouteOwner(t.Context(), RoutePattern(host)); err != nil {
-			t.Fatalf("RouteOwner: %v", err)
+		if _, err := p.DomainOwner(t.Context(), host); err != nil {
+			t.Fatalf("DomainOwner: %v", err)
 		}
 	}
 	if m.zoneLists != 1 {
@@ -651,8 +658,8 @@ func TestRoutePattern(t *testing.T) {
 	t.Run("is the one spelling of a hostname as a route", func(t *testing.T) {
 		t.Parallel()
 
-		if got := RoutePattern("*.preview.app.com"); got != "*.preview.app.com/*" {
-			t.Errorf("RoutePattern = %q, want *.preview.app.com/*", got)
+		if got := routePattern("*.preview.app.com"); got != "*.preview.app.com/*" {
+			t.Errorf("routePattern = %q, want *.preview.app.com/*", got)
 		}
 	})
 }
@@ -661,11 +668,11 @@ func TestRouteOwner(t *testing.T) {
 	t.Setenv(envAccountID, "acct")
 
 	for _, tc := range []struct {
-		name    string
-		mock    *cfMock
-		pattern string
-		want    string
-		wantErr bool
+		name     string
+		mock     *cfMock
+		hostname string
+		want     string
+		wantErr  bool
 	}{
 		{
 			name: "reports the script bound to the pattern",
@@ -676,13 +683,25 @@ func TestRouteOwner(t *testing.T) {
 					{"id": "route1", "pattern": "*.preview.app.com/*", "script": "ocel-other-preview"},
 				},
 			},
-			pattern: RoutePattern("*.preview.app.com"),
-			want:    "ocel-other-preview",
+			hostname: "*.preview.app.com",
+			want:     "ocel-other-preview",
 		},
 		{
-			name:    "a pattern nothing holds is unclaimed",
-			mock:    &cfMock{zoneID: "zone1", zoneName: "app.com"},
-			pattern: RoutePattern("*.preview.app.com"),
+			name: "the preview entry worker answers as the contract's owner token",
+			mock: &cfMock{
+				zoneID:   "zone1",
+				zoneName: "app.com",
+				existingRoutes: []map[string]any{
+					{"id": "route1", "pattern": "*.preview.app.com/*", "script": previewEntryScript},
+				},
+			},
+			hostname: "*.preview.app.com",
+			want:     edge.PreviewEntryOwner,
+		},
+		{
+			name:     "a pattern nothing holds is unclaimed",
+			mock:     &cfMock{zoneID: "zone1", zoneName: "app.com"},
+			hostname: "*.preview.app.com",
 		},
 		{
 			name: "an overlapping wildcard is not a match",
@@ -693,31 +712,31 @@ func TestRouteOwner(t *testing.T) {
 					{"id": "route1", "pattern": "*.app.com/*", "script": "ocel-other-preview"},
 				},
 			},
-			pattern: RoutePattern("*.preview.app.com"),
+			hostname: "*.preview.app.com",
 		},
 		{
-			name:    "a hostname outside the account is an error",
-			mock:    &cfMock{zoneID: "zone1", zoneName: "app.com"},
-			pattern: RoutePattern("*.preview.elsewhere.com"),
-			wantErr: true,
+			name:     "a hostname outside the account is an error",
+			mock:     &cfMock{zoneID: "zone1", zoneName: "app.com"},
+			hostname: "*.preview.elsewhere.com",
+			wantErr:  true,
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			owner, err := tc.mock.provider(t).RouteOwner(t.Context(), tc.pattern)
+			owner, err := tc.mock.provider(t).DomainOwner(t.Context(), tc.hostname)
 			if tc.wantErr {
 				if err == nil {
-					t.Fatal("RouteOwner err = nil, want the unresolvable zone reported")
+					t.Fatal("DomainOwner err = nil, want the unresolvable zone reported")
 				}
 				return
 			}
 			if err != nil {
-				t.Fatalf("RouteOwner: %v", err)
+				t.Fatalf("DomainOwner: %v", err)
 			}
 			if owner != tc.want {
 				t.Errorf("owner = %q, want %q", owner, tc.want)
 			}
 			if n := len(tc.mock.createdRoutes) + len(tc.mock.createdRecords) + len(tc.mock.deletedRoutes); n != 0 {
-				t.Error("RouteOwner changed the zone; it is read-only")
+				t.Error("DomainOwner changed the zone; it is read-only")
 			}
 		})
 	}

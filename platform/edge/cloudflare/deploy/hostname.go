@@ -52,7 +52,7 @@ func (p *provider) reconcileWorkerRoutes(ctx context.Context, up upload, plan ro
 		if !coveredByUniversalSSL(host, zoneName) {
 			warn(fmt.Sprintf("%s is more than one label below %s, which the zone's Universal SSL certificate does not cover — TLS will fail there until you add a Cloudflare Advanced Certificate for it", host, zoneName))
 		}
-		if err := p.ensureRoute(ctx, routes, zoneID, RoutePattern(host), up.scriptName); err != nil {
+		if err := p.ensureRoute(ctx, routes, zoneID, routePattern(host), up.scriptName); err != nil {
 			return err
 		}
 		if plan.requiredRecord != "" {
@@ -82,7 +82,7 @@ func (p *provider) pruneStaleRoutes(ctx context.Context, snap *routeSnapshot, up
 			continue
 		}
 		for _, route := range slices.Clone(inZone) {
-			if route.Script == edge.SharedPreviewEntryScript {
+			if route.Script == previewEntryScript {
 				continue
 			}
 			if route.Script != up.scriptName && !edge.NameUnderStem(stem, route.Script) {
@@ -139,16 +139,16 @@ func nilSafeWarn(warn func(string)) func(string) {
 	return warn
 }
 
-func RoutePattern(hostname string) string {
+func routePattern(hostname string) string {
 	return hostname + "/*"
 }
 
-func (p *provider) RouteOwner(ctx context.Context, pattern string) (string, error) {
+func (p *provider) DomainOwner(ctx context.Context, hostname string) (string, error) {
 	accountID := os.Getenv(envAccountID)
 	if accountID == "" {
 		return "", fmt.Errorf("%s is not set; it is required to read Cloudflare worker routes", envAccountID)
 	}
-	zoneID, _, err := p.resolveZone(ctx, accountID, routeBaseDomain(strings.TrimSuffix(pattern, "/*")))
+	zoneID, _, err := p.resolveZone(ctx, accountID, routeBaseDomain(hostname))
 	if err != nil {
 		return "", err
 	}
@@ -156,10 +156,15 @@ func (p *provider) RouteOwner(ctx context.Context, pattern string) (string, erro
 	if err != nil {
 		return "", err
 	}
+	pattern := routePattern(hostname)
 	for _, route := range inZone {
-		if route.Pattern == pattern {
-			return route.Script, nil
+		if route.Pattern != pattern {
+			continue
 		}
+		if route.Script == previewEntryScript {
+			return edge.PreviewEntryOwner, nil
+		}
+		return route.Script, nil
 	}
 	return "", nil
 }

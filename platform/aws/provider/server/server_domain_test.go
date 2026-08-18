@@ -86,13 +86,13 @@ func TestGlobalPreviewDomain(t *testing.T) {
 	t.Run("reports the route the shared entry actually holds", func(t *testing.T) {
 		t.Parallel()
 		var asked string
-		owner := func(_ context.Context, pattern string) (string, error) {
-			asked = pattern
-			return edge.SharedPreviewEntryScript, nil
+		owner := func(_ context.Context, hostname string) (string, error) {
+			asked = hostname
+			return edge.PreviewEntryOwner, nil
 		}
 		got := globalPreviewDomain(context.Background(), owner, recorded)
-		if asked != "*.preview.acme.com/*" {
-			t.Errorf("asked %q, want the wildcard route", asked)
+		if asked != "*.preview.acme.com" {
+			t.Errorf("asked %q, want the wildcard hostname", asked)
 		}
 		if !got.GetRouteInstalled() {
 			t.Error("RouteInstalled = false, want true")
@@ -143,13 +143,13 @@ func TestGlobalPreviewProjects(t *testing.T) {
 
 	ctx := context.Background()
 	ssmc := &stateSSM{params: map[string]string{}}
-	for slug, state := range map[string]edge.RootStackState{
-		"ambient":     {edge.RootStackKeySlug: "ambient", edge.RootStackKeyGlobalPreview: "preview.acme.com"},
-		"own-domain":  {edge.RootStackKeySlug: "own-domain"},
-		"other-usage": {edge.RootStackKeySlug: "other-usage", edge.RootStackKeyGlobalPreview: "preview.old.com"},
+	for slug, state := range map[string]edge.StackState{
+		"ambient":     {edge.StackKeySlug: "ambient", edge.StackKeyGlobalPreview: "preview.acme.com"},
+		"own-domain":  {edge.StackKeySlug: "own-domain"},
+		"other-usage": {edge.StackKeySlug: "other-usage", edge.StackKeyGlobalPreview: "preview.old.com"},
 	} {
-		if err := bootstrap.WriteRootStackStateFor(ctx, ssmc, bootstrap.ClassPreview, slug, state); err != nil {
-			t.Fatalf("WriteRootStackStateFor(%s): %v", slug, err)
+		if err := bootstrap.WriteStackStateFor(ctx, ssmc, bootstrap.ClassPreview, slug, state); err != nil {
+			t.Fatalf("WriteStackStateFor(%s): %v", slug, err)
 		}
 	}
 

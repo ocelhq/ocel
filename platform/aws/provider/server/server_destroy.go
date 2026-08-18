@@ -33,7 +33,7 @@ func (s *Server) PlanDestroyProject(ctx context.Context, req *deploymentsv1.Plan
 		return nil, err
 	}
 
-	rootStack, err := s.hasRootStack(params.RootStackState)
+	rootStack, err := s.hasStack(params.StackState)
 	if err != nil {
 		return nil, err
 	}
@@ -54,15 +54,15 @@ func (s *Server) PlanDestroyProject(ctx context.Context, req *deploymentsv1.Plan
 	}, nil
 }
 
-func (s *Server) hasRootStack(state edge.RootStackState) (bool, error) {
-	_, state, err := s.rootStackFor(state)
+func (s *Server) hasStack(state edge.StackState) (bool, error) {
+	stack, err := s.openStackFor(state)
 	if err != nil {
 		if errors.Is(err, errNoProductionDeploy) {
 			return false, nil
 		}
 		return false, err
 	}
-	return len(state) > 0, nil
+	return len(stack.State()) > 0, nil
 }
 
 func (s *Server) DestroyProject(ctx context.Context, req *deploymentsv1.DestroyProjectRequest, stream *connect.ServerStream[deploymentsv1.DeployEvent]) (err error) {
@@ -125,7 +125,7 @@ func (s *Server) runDestroyProject(ctx context.Context, req *deploymentsv1.Destr
 	if err != nil {
 		return finish(err)
 	}
-	stack, state, err := s.rootStackFor(params.RootStackState)
+	stack, err := s.openStackFor(params.StackState)
 	if err != nil && !errors.Is(err, errNoProductionDeploy) {
 		return finish(err)
 	}
@@ -136,22 +136,22 @@ func (s *Server) runDestroyProject(ctx context.Context, req *deploymentsv1.Destr
 	cfg.Tracer = tracer
 	cfg.StageReport = stageReport
 
-	result, derr := deploy.DestroyProject(ctx, stack, state, cfg, req.GetSlug(), stages, logf)
+	result, derr := deploy.DestroyProject(ctx, stack, cfg, req.GetSlug(), stages, logf)
 
-	if result.RootTornDown && len(state) > 0 {
-		if err := s.deleteRootStackState(ctx, opts, req.GetSlug()); err != nil {
+	if result.EdgeTornDown && len(params.StackState) > 0 {
+		if err := s.deleteStackState(ctx, opts, req.GetSlug()); err != nil {
 			derr = errors.Join(derr, err)
 		}
 	}
 	return derr
 }
 
-func (s *Server) deleteRootStackState(ctx context.Context, opts options, slug string) error {
+func (s *Server) deleteStackState(ctx context.Context, opts options, slug string) error {
 	awscfg, err := loadAWS(ctx, opts.Region)
 	if err != nil {
 		return err
 	}
-	return bootstrap.DeleteRootStackState(ctx, ssm.NewFromConfig(awscfg), slug)
+	return bootstrap.DeleteStackState(ctx, ssm.NewFromConfig(awscfg), slug)
 }
 
 func (s *Server) runDestroyPreviewProject(ctx context.Context, req *deploymentsv1.DestroyProjectRequest, env *deploymentsv1.Environment, tracer deploy.Tracer, stageReport func(deploy.StageID) func(string), logf func(string)) error {
@@ -170,21 +170,21 @@ func (s *Server) runDestroyPreviewProject(ctx context.Context, req *deploymentsv
 	if err != nil {
 		return finish(connect.NewError(connect.CodeInvalidArgument, err))
 	}
-	cfg, stack, state, err := s.previewTeardownContext(ctx, opts, slug, env)
+	cfg, stack, err := s.previewTeardownContext(ctx, opts, slug, env)
 	if err != nil {
 		return finish(err)
 	}
 	cfg.Tracer = tracer
 	cfg.StageReport = stageReport
 
-	result, derr := deploy.DestroyPreviewProject(ctx, stack, state, cfg, slug, stages, logf)
+	result, derr := deploy.DestroyPreviewProject(ctx, stack, cfg, slug, stages, logf)
 
-	if result.RootTornDown && len(state) > 0 {
+	if result.EdgeTornDown && len(stack.State()) > 0 {
 		awscfg, awsErr := loadAWS(ctx, opts.Region)
 		if awsErr != nil {
 			return awsErr
 		}
-		if err := bootstrap.DeleteRootStackStateFor(ctx, ssm.NewFromConfig(awscfg), bootstrap.ClassPreview, slug); err != nil {
+		if err := bootstrap.DeleteStackStateFor(ctx, ssm.NewFromConfig(awscfg), bootstrap.ClassPreview, slug); err != nil {
 			derr = errors.Join(derr, err)
 		}
 	}

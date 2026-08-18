@@ -54,7 +54,7 @@ type memo struct {
 	identity map[string]*entry[callerIdentity]
 
 	edgeOnce sync.Once
-	edge     edge.Provider
+	edge     edge.Edge
 }
 
 type entry[T any] struct {
@@ -106,7 +106,7 @@ func (m *memo) forgetDeployed() {
 	m.deployed = nil
 }
 
-func (s *Server) edge() edge.Provider {
+func (s *Server) edge() edge.Edge {
 	s.memo.edgeOnce.Do(func() { s.memo.edge = cloudflare.New() })
 	return s.memo.edge
 }
@@ -291,7 +291,7 @@ func (s *Server) runDeploy(ctx context.Context, req *deploymentsv1.DeployRequest
 		return deploy.Result{}, finishPreparing(err)
 	}
 
-	priorRootStackState := params.RootStackState
+	priorStackState := params.StackState
 	stateTableARN := fmt.Sprintf("arn:aws:dynamodb:%s:%s:table/%s", awscfg.Region, account, deployed.StateTable)
 
 	finishPreparing(nil)
@@ -343,17 +343,17 @@ func (s *Server) runDeploy(ctx context.Context, req *deploymentsv1.DeployRequest
 		ISRWriterScriptName:    params.ISRWriter.ScriptName,
 		ISRWriterSeed:          params.ISRWriterSeed,
 
-		Uploader:       s3.NewFromConfig(awscfg),
-		Invoker:        lambda.NewFromConfig(awscfg),
-		Getter:         s3.NewFromConfig(awscfg),
-		CodeUpdater:    lambda.NewFromConfig(awscfg),
-		Edge:           s.edge(),
-		Class:          env.GetClass(),
-		Lifecycle:      env.GetLifecycle(),
-		Identity:       env.GetIdentity(),
-		ExpiresAt:      previewExpiry(env.GetLifecycle(), time.Now()),
-		RootStackState: priorRootStackState,
-		Tag:            req.GetTag(),
+		Uploader:    s3.NewFromConfig(awscfg),
+		Invoker:     lambda.NewFromConfig(awscfg),
+		Getter:      s3.NewFromConfig(awscfg),
+		CodeUpdater: lambda.NewFromConfig(awscfg),
+		Edge:        s.edge(),
+		Class:       env.GetClass(),
+		Lifecycle:   env.GetLifecycle(),
+		Identity:    env.GetIdentity(),
+		ExpiresAt:   previewExpiry(env.GetLifecycle(), time.Now()),
+		StackState:  priorStackState,
+		Tag:         req.GetTag(),
 
 		Stages: deploy.Stages{
 			Uploading:    stages.uploading,
@@ -365,10 +365,10 @@ func (s *Server) runDeploy(ctx context.Context, req *deploymentsv1.DeployRequest
 		StageReport: stageReport,
 	}, manifest, progress, logf)
 
-	if rootStackStateChanged(priorRootStackState, res.RootStackState) {
-		if writeErr := bootstrap.WriteRootStackStateFor(ctx, ssmClient, substrateClass, manifest.GetSlug(), res.RootStackState); writeErr != nil {
+	if stackStateChanged(priorStackState, res.StackState) {
+		if writeErr := bootstrap.WriteStackStateFor(ctx, ssmClient, substrateClass, manifest.GetSlug(), res.StackState); writeErr != nil {
 			if err != nil {
-				return res, fmt.Errorf("%w (additionally failed to persist root-stack state: %v)", err, writeErr)
+				return res, fmt.Errorf("%w (additionally failed to persist edge-stack state: %v)", err, writeErr)
 			}
 			return res, writeErr
 		}
@@ -376,7 +376,7 @@ func (s *Server) runDeploy(ctx context.Context, req *deploymentsv1.DeployRequest
 	return res, err
 }
 
-func rootStackStateChanged(prior, reconciled edge.RootStackState) bool {
+func stackStateChanged(prior, reconciled edge.StackState) bool {
 	return reconciled != nil && !maps.Equal(reconciled, prior)
 }
 
@@ -438,7 +438,7 @@ func (s *Server) Bootstrap(ctx context.Context, req *deploymentsv1.BootstrapRequ
 	return stream.Send(okResult())
 }
 
-type bootstrapRun func(ctx context.Context, cfn bootstrap.CFNAPI, ssmClient bootstrap.SSMAPI, iamClient bootstrap.IAMAPI, edgeProvider edge.Provider, artifact bootstrap.Artifacts, progress, log func(string)) error
+type bootstrapRun func(ctx context.Context, cfn bootstrap.CFNAPI, ssmClient bootstrap.SSMAPI, iamClient bootstrap.IAMAPI, edgeProvider edge.Edge, artifact bootstrap.Artifacts, progress, log func(string)) error
 
 func bootstrapRunner(preview bool) bootstrapRun {
 	if preview {

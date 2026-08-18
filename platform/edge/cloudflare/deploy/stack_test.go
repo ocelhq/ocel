@@ -236,33 +236,39 @@ func TestAccountScriptNameFor(t *testing.T) {
 	})
 }
 
-func testSpec(endpoint, version string) edge.RootStackSpec {
-	return edge.RootStackSpec{
-		Slug:          "acme-web",
-		StoreEndpoint: endpoint,
-		BootstrapCred: storeBootstrapCred,
-		Version:       version,
+func testSpec(endpoint, version string) edge.StackSpec {
+	return edge.StackSpec{
+		Slug:    "acme-web",
+		Class:   edge.ClassProduction,
+		Version: version,
+		Program: &edge.ProgramSpec{
+			StoreEndpoint: endpoint,
+			BootstrapCred: storeBootstrapCred,
+		},
 	}
 }
 
-func previewSpec(endpoint, version string) edge.RootStackSpec {
+func previewSpec(endpoint, version string) edge.StackSpec {
 	spec := testSpec(endpoint, version)
-	spec.GenericName = "ocel-preview"
-	spec.Generic = testStoreWorker()
+	spec.Class = edge.ClassPreview
+	program := *spec.Program
+	program.Name = "ocel-preview"
+	program.Worker = testStoreWorker()
+	spec.Program = &program
 	spec.Domains = []string{"*.preview.app.com"}
 	spec.PruneRoutes = true
 	return spec
 }
 
-func pruneOnlySpec(endpoint, version string) edge.RootStackSpec {
+func pruneOnlySpec(endpoint, version string) edge.StackSpec {
 	spec := previewSpec(endpoint, version)
 	spec.Domains = nil
 	spec.PruneOnly = true
-	spec.PruneWorkerStem = "ocel-preview"
+	spec.Program.PruneWorkerStem = "ocel-preview"
 	return spec
 }
 
-func specStampFor(t *testing.T, spec edge.RootStackSpec) string {
+func specStampFor(t *testing.T, spec edge.StackSpec) string {
 	t.Helper()
 	stamp, err := specStamp(spec, genericWorker(spec, spec.Slug))
 	if err != nil {
@@ -301,7 +307,7 @@ func previewZoneMock() *cfMock {
 	}
 }
 
-func TestReconcileRootStack(t *testing.T) {
+func TestReconcile(t *testing.T) {
 	t.Setenv(envAccountID, "acct")
 
 	t.Run("a root stack already at the spec stamp still reconciles its route", func(t *testing.T) {
@@ -309,12 +315,12 @@ func TestReconcileRootStack(t *testing.T) {
 		m := previewZoneMock()
 		p := m.provider(t)
 		spec := previewSpec(store.URL, "v2")
-		putStampSet(t, p, store.URL, "s3cr3t", stampSet{spec.GenericName: specStampFor(t, spec)})
+		putStampSet(t, p, store.URL, "s3cr3t", stampSet{spec.Program.Name: specStampFor(t, spec)})
 
 		prior := testState(store.URL, "s3cr3t")
-		state, err := p.ReconcileRootStack(t.Context(), spec, prior)
+		state, err := reconcileState(t, p, spec, prior)
 		if err != nil {
-			t.Fatalf("ReconcileRootStack: %v", err)
+			t.Fatalf("Reconcile: %v", err)
 		}
 
 		if !reflect.DeepEqual(state, prior) {
@@ -336,8 +342,8 @@ func TestReconcileRootStack(t *testing.T) {
 			{"id": "other", "pattern": "pr-2-abc1234567.preview.app.com/*", "script": "someone-else"},
 		}
 
-		if _, err := m.provider(t).ReconcileRootStack(t.Context(), previewSpec(store.URL, "v2"), testState(store.URL, "s3cr3t")); err != nil {
-			t.Fatalf("ReconcileRootStack: %v", err)
+		if _, err := reconcileState(t, m.provider(t), previewSpec(store.URL, "v2"), testState(store.URL, "s3cr3t")); err != nil {
+			t.Fatalf("Reconcile: %v", err)
 		}
 
 		if len(m.deletedRoutes) != 1 || m.deletedRoutes[0] != "stale" {
@@ -350,8 +356,8 @@ func TestReconcileRootStack(t *testing.T) {
 		m := previewZoneMock()
 		m.existingRecords = nil
 
-		if _, err := m.provider(t).ReconcileRootStack(t.Context(), previewSpec(store.URL, "v2"), testState(store.URL, "s3cr3t")); err != nil {
-			t.Fatalf("ReconcileRootStack: %v", err)
+		if _, err := reconcileState(t, m.provider(t), previewSpec(store.URL, "v2"), testState(store.URL, "s3cr3t")); err != nil {
+			t.Fatalf("Reconcile: %v", err)
 		}
 
 		if len(m.createdRecords) != 1 || m.createdRecords[0]["name"] != "*.preview.app.com" {
@@ -365,9 +371,9 @@ func TestReconcileRootStack(t *testing.T) {
 		p := m.provider(t)
 		spec := previewSpec(store.URL, "v2")
 
-		state, err := p.ReconcileRootStack(t.Context(), spec, testState(store.URL, "s3cr3t"))
+		state, err := reconcileState(t, p, spec, testState(store.URL, "s3cr3t"))
 		if err != nil {
-			t.Fatalf("ReconcileRootStack: %v", err)
+			t.Fatalf("Reconcile: %v", err)
 		}
 
 		if len(m.putScripts) != 1 || m.putScripts[0] != "ocel-preview" {
@@ -376,9 +382,9 @@ func TestReconcileRootStack(t *testing.T) {
 		if len(m.createdRoutes) != 1 {
 			t.Errorf("created routes = %v, want the project's wildcard route", m.createdRoutes)
 		}
-		stamps := readStampSet(t, p, store.URL, state[edge.RootStackKeySecret])
-		if want := specStampFor(t, spec); stamps[spec.GenericName] != want {
-			t.Errorf("version stamps = %v, want %q under %q", stamps, want, spec.GenericName)
+		stamps := readStampSet(t, p, store.URL, state[edge.StackKeySecret])
+		if want := specStampFor(t, spec); stamps[spec.Program.Name] != want {
+			t.Errorf("version stamps = %v, want %q under %q", stamps, want, spec.Program.Name)
 		}
 	})
 
@@ -390,14 +396,14 @@ func TestReconcileRootStack(t *testing.T) {
 		p := m.provider(t)
 		spec := previewSpec(store.URL, "v2")
 
-		state, err := p.ReconcileRootStack(t.Context(), spec, testState(store.URL, "s3cr3t"))
+		state, err := reconcileState(t, p, spec, testState(store.URL, "s3cr3t"))
 		if err != nil {
-			t.Fatalf("ReconcileRootStack: %v", err)
+			t.Fatalf("Reconcile: %v", err)
 		}
 
 		spent := m.requests
-		if _, err := p.ReconcileRootStack(t.Context(), spec, state); err != nil {
-			t.Fatalf("second ReconcileRootStack: %v", err)
+		if _, err := reconcileState(t, p, spec, state); err != nil {
+			t.Fatalf("second Reconcile: %v", err)
 		}
 		if m.requests != spent {
 			t.Errorf("Cloudflare requests = %d, want the %d the first reconcile already spent", m.requests, spent)
@@ -410,13 +416,13 @@ func TestReconcileRootStack(t *testing.T) {
 		p := m.provider(t)
 		spec := previewSpec(store.URL, "v2")
 
-		state, err := p.ReconcileRootStack(t.Context(), spec, testState(store.URL, "s3cr3t"))
+		state, err := reconcileState(t, p, spec, testState(store.URL, "s3cr3t"))
 		if err != nil {
-			t.Fatalf("ReconcileRootStack: %v", err)
+			t.Fatalf("Reconcile: %v", err)
 		}
 
-		if _, err := p.ReconcileRootStack(t.Context(), spec, state); err != nil {
-			t.Fatalf("second ReconcileRootStack: %v", err)
+		if _, err := reconcileState(t, p, spec, state); err != nil {
+			t.Fatalf("second Reconcile: %v", err)
 		}
 		if m.routeLists != 2 {
 			t.Errorf("route lists = %d, want 2: every deploy repairs its routes unless %s says otherwise", m.routeLists, envSkipEdgeReconcile)
@@ -434,16 +440,16 @@ func TestReconcileRootStack(t *testing.T) {
 		p := m.provider(t)
 
 		spec := previewSpec(store.URL, "v2")
-		spec.Generic = withVar(spec.Generic, "OCEL_PREVIEW_APPS", "web")
-		state, err := p.ReconcileRootStack(t.Context(), spec, testState(store.URL, "s3cr3t"))
+		spec.Program.Worker = withVar(spec.Program.Worker, "OCEL_PREVIEW_APPS", "web")
+		state, err := reconcileState(t, p, spec, testState(store.URL, "s3cr3t"))
 		if err != nil {
-			t.Fatalf("ReconcileRootStack: %v", err)
+			t.Fatalf("Reconcile: %v", err)
 		}
 
 		grown := previewSpec(store.URL, "v2")
-		grown.Generic = withVar(grown.Generic, "OCEL_PREVIEW_APPS", "web,api")
-		if _, err := p.ReconcileRootStack(t.Context(), grown, state); err != nil {
-			t.Fatalf("ReconcileRootStack after the app list grew: %v", err)
+		grown.Program.Worker = withVar(grown.Program.Worker, "OCEL_PREVIEW_APPS", "web,api")
+		if _, err := reconcileState(t, p, grown, state); err != nil {
+			t.Fatalf("Reconcile after the app list grew: %v", err)
 		}
 
 		if len(m.putScripts) != 2 {
@@ -458,21 +464,21 @@ func TestReconcileRootStack(t *testing.T) {
 		m := previewZoneMock()
 		p := m.provider(t)
 
-		appSpec := func(name string) edge.RootStackSpec {
+		appSpec := func(name string) edge.StackSpec {
 			spec := testSpec(store.URL, "v2")
-			spec.GenericName = "ocel-" + name
-			spec.Generic = withVar(testStoreWorker(), "OCEL_APP", name)
+			spec.Program.Name = "ocel-" + name
+			spec.Program.Worker = withVar(testStoreWorker(), "OCEL_APP", name)
 			spec.Domains = []string{name + ".app.com"}
 			return spec
 		}
-		specs := []edge.RootStackSpec{appSpec("web"), appSpec("api")}
+		specs := []edge.StackSpec{appSpec("web"), appSpec("api")}
 
 		state := testState(store.URL, "s3cr3t")
 		for pass := range 2 {
 			for _, spec := range specs {
-				next, err := p.ReconcileRootStack(t.Context(), spec, state)
+				next, err := reconcileState(t, p, spec, state)
 				if err != nil {
-					t.Fatalf("pass %d, %s: %v", pass, spec.GenericName, err)
+					t.Fatalf("pass %d, %s: %v", pass, spec.Program.Name, err)
 				}
 				state = next
 			}
@@ -481,10 +487,10 @@ func TestReconcileRootStack(t *testing.T) {
 		if len(m.putScripts) != 2 {
 			t.Errorf("uploaded scripts = %v, want each app's worker uploaded once: on the second pass every app must find its own stamp, not the app reconciled after it", m.putScripts)
 		}
-		stamps := readStampSet(t, p, store.URL, state[edge.RootStackKeySecret])
+		stamps := readStampSet(t, p, store.URL, state[edge.StackKeySecret])
 		for _, spec := range specs {
-			if want := specStampFor(t, spec); stamps[spec.GenericName] != want {
-				t.Errorf("version stamps = %v, want %q under %q", stamps, want, spec.GenericName)
+			if want := specStampFor(t, spec); stamps[spec.Program.Name] != want {
+				t.Errorf("version stamps = %v, want %q under %q", stamps, want, spec.Program.Name)
 			}
 		}
 	})
@@ -493,15 +499,15 @@ func TestReconcileRootStack(t *testing.T) {
 		store := fakeStoreServer(t, "s3cr3t")
 		m := previewZoneMock()
 
-		state, err := m.provider(t).ReconcileRootStack(t.Context(), previewSpec(store.URL, "v3"), nil)
+		state, err := reconcileState(t, m.provider(t), previewSpec(store.URL, "v3"), nil)
 		if err != nil {
-			t.Fatalf("ReconcileRootStack: %v", err)
+			t.Fatalf("Reconcile: %v", err)
 		}
-		if state[edge.RootStackKeySecret] != "s3cr3t" {
-			t.Errorf("persisted secret = %q, want the instance's own", state[edge.RootStackKeySecret])
+		if state[edge.StackKeySecret] != "s3cr3t" {
+			t.Errorf("persisted secret = %q, want the instance's own", state[edge.StackKeySecret])
 		}
-		if state[edge.RootStackKeyOwnerToken] != storeOwnerToken {
-			t.Errorf("persisted owner token = %q, want the instance's own", state[edge.RootStackKeyOwnerToken])
+		if state[edge.StackKeyOwnerToken] != storeOwnerToken {
+			t.Errorf("persisted owner token = %q, want the instance's own", state[edge.StackKeyOwnerToken])
 		}
 	})
 
@@ -511,15 +517,15 @@ func TestReconcileRootStack(t *testing.T) {
 		m.existingRoutes = []map[string]any{
 			{"id": "stale", "pattern": "pr-1-abc1234567.preview.app.com/*", "script": "ocel-preview"},
 			{"id": "sibling", "pattern": "pr-2-abc1234567.preview.app.com/*", "script": "ocel-preview--web"},
-			{"id": "entry", "pattern": "*.preview.ocel.app/*", "script": edge.SharedPreviewEntryScript},
+			{"id": "entry", "pattern": "*.preview.ocel.app/*", "script": previewEntryScript},
 			{"id": "other", "pattern": "pr-3-abc1234567.preview.app.com/*", "script": "someone-else"},
 		}
 		p := m.provider(t)
 		spec := pruneOnlySpec(store.URL, "v2")
 
-		state, err := p.ReconcileRootStack(t.Context(), spec, testState(store.URL, "s3cr3t"))
+		state, err := reconcileState(t, p, spec, testState(store.URL, "s3cr3t"))
 		if err != nil {
-			t.Fatalf("ReconcileRootStack: %v", err)
+			t.Fatalf("Reconcile: %v", err)
 		}
 
 		if len(m.putScripts) != 0 {
@@ -528,88 +534,146 @@ func TestReconcileRootStack(t *testing.T) {
 		if len(m.subdomainCalls) != 0 {
 			t.Errorf("subdomain calls = %v, want none: a prune-only worker is never exposed on workers.dev", m.subdomainCalls)
 		}
-		if !slices.Equal(m.deletedScripts, []string{spec.GenericName}) {
+		if !slices.Equal(m.deletedScripts, []string{spec.Program.Name}) {
 			t.Errorf("deleted scripts = %v, want the retired per-project preview worker alone", m.deletedScripts)
 		}
 		if len(m.createdRoutes) != 0 {
 			t.Errorf("created routes = %v, want none", m.createdRoutes)
 		}
 		assertSet(t, "deleted routes", m.deletedRoutes, []string{"stale", "sibling"})
-		if state[edge.RootStackKeySecret] != "s3cr3t" || state[edge.RootStackKeyEndpoint] != store.URL {
+		if state[edge.StackKeySecret] != "s3cr3t" || state[edge.StackKeyEndpoint] != store.URL {
 			t.Errorf("state = %v, want the store instance's identity", state)
 		}
-		stamps := readStampSet(t, p, store.URL, state[edge.RootStackKeySecret])
-		if want := specStampFor(t, spec); stamps[spec.GenericName] != want {
-			t.Errorf("version stamps = %v, want %q under %q", stamps, want, spec.GenericName)
+		stamps := readStampSet(t, p, store.URL, state[edge.StackKeySecret])
+		if want := specStampFor(t, spec); stamps[spec.Program.Name] != want {
+			t.Errorf("version stamps = %v, want %q under %q", stamps, want, spec.Program.Name)
 		}
 	})
 
 	t.Run("a prune-only spec refuses to target the shared entry worker", func(t *testing.T) {
 		store := fakeStoreServer(t, "s3cr3t")
 		spec := pruneOnlySpec(store.URL, "v2")
-		spec.GenericName = edge.SharedPreviewEntryScript
+		spec.Program.Name = previewEntryScript
 
-		if _, err := previewZoneMock().provider(t).ReconcileRootStack(t.Context(), spec, testState(store.URL, "s3cr3t")); err == nil {
-			t.Fatal("ReconcileRootStack err = nil, want a refusal to prune the shared entry worker")
+		if _, err := reconcileState(t, previewZoneMock().provider(t), spec, testState(store.URL, "s3cr3t")); err == nil {
+			t.Fatal("Reconcile err = nil, want a refusal to prune the shared entry worker")
 		}
 	})
 }
 
-func TestListDeployedWorkers(t *testing.T) {
-	t.Setenv(envAccountID, "acct")
+func TestDestroy(t *testing.T) {
+	t.Run("the workers this project's names cover go with the stamped ones", func(t *testing.T) {
+		t.Setenv(envAccountID, "acct")
 
-	for _, tc := range []struct {
-		name    string
-		scripts []string
-		want    []string
-	}{
-		{
-			name: "only the stem's own family comes back",
-			scripts: []string{
-				"ocel-shop-preview",
-				"ocel-shop-preview-web",
-				"ocel-shop-previewer",
-				"ocel-shopfoo-preview",
-				"ocel-shop-prod-web",
-				"ocel-other-preview",
-			},
-			want: []string{"ocel-shop-preview", "ocel-shop-preview-web"},
-		},
-		{
-			name:    "nothing under the stem is not an error",
-			scripts: []string{"ocel-other-preview"},
-		},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			m := &cfMock{zoneID: "zone1", zoneName: "app.com", existingScripts: tc.scripts}
+		store := fakeStoreServer(t, "s3cr3t")
+		m := previewZoneMock()
+		p := m.provider(t)
+		state := testState(store.URL, "s3cr3t")
+		promote(t, p, state, "api", "b1")
+		promote(t, p, state, "web", "b2")
+		putStampSet(t, p, store.URL, "s3cr3t", stampSet{"ocel--acme-web--prod--web": "v1"})
 
-			names, err := m.provider(t).ListDeployedWorkers(t.Context(), "ocel-shop-preview")
-			if err != nil {
-				t.Fatalf("ListDeployedWorkers: %v", err)
-			}
-			if !slices.Equal(names, tc.want) {
-				t.Errorf("names = %v, want %v", names, tc.want)
-			}
+		if err := stackOn(p, state).Destroy(t.Context()); err != nil {
+			t.Fatalf("Destroy: %v", err)
+		}
+		assertSet(t, "deleted scripts", m.deletedScripts, []string{
+			"ocel--acme-web--prod--web",
+			"ocel--acme-web--prod--api",
+			"ocel--acme-web--prod--root",
+			"ocel-acme-web--prod-web",
+			"ocel-acme-web--prod-api",
+			"ocel-acme-web--prod-root",
+			"ocel-acme-web-prod",
 		})
-	}
-}
+		if _, err := stackOn(p, state).History(t.Context(), ""); err == nil {
+			t.Error("history after Destroy: err = nil, want the wiped instance to reject the secret")
+		}
+	})
 
-func TestDestroyRootStack(t *testing.T) {
-	t.Run("an empty list is a no-op", func(t *testing.T) {
-		t.Setenv(envAccountID, "acct-1")
+	t.Run("every worker the stack stamped is destroyed with its instance", func(t *testing.T) {
+		t.Setenv(envAccountID, "acct")
 
-		if err := (&provider{}).DestroyRootStack(t.Context(), nil); err != nil {
-			t.Fatalf("DestroyRootStack(nil) err = %v, want nil", err)
+		store := fakeStoreServer(t, "s3cr3t")
+		m := previewZoneMock()
+		p := m.provider(t)
+		state := testState(store.URL, "s3cr3t")
+		putStampSet(t, p, store.URL, "s3cr3t", stampSet{"ocel-preview": "v1", "ocel-preview--web": "v1"})
+
+		if err := stackOn(p, state).Destroy(t.Context()); err != nil {
+			t.Fatalf("Destroy: %v", err)
+		}
+		if !slices.Contains(m.deletedScripts, "ocel-preview") || !slices.Contains(m.deletedScripts, "ocel-preview--web") {
+			t.Errorf("deleted scripts = %v, want both stamped workers", m.deletedScripts)
+		}
+		if _, err := stackOn(p, state).History(t.Context(), ""); err == nil {
+			t.Error("history after Destroy: err = nil, want the wiped instance to reject the secret")
+		}
+	})
+
+	t.Run("a store that rejects the secret stops the teardown", func(t *testing.T) {
+		t.Setenv(envAccountID, "acct")
+
+		store := fakeStoreServer(t, "s3cr3t")
+		m := previewZoneMock()
+		p := m.provider(t)
+
+		err := stackOn(p, testState(store.URL, "stale")).Destroy(t.Context())
+		if err == nil {
+			t.Fatal("Destroy err = nil, want a store that cannot be read to fail the teardown loudly")
+		}
+		if len(m.deletedScripts) != 0 {
+			t.Errorf("deleted scripts = %v, want none: the workers to destroy were never established", m.deletedScripts)
+		}
+		if _, err := stackOn(p, testState(store.URL, "s3cr3t")).History(t.Context(), ""); err != nil {
+			t.Errorf("history after a refused Destroy: %v, want the instance still holding the record of what was deployed", err)
+		}
+	})
+
+	t.Run("the instance outlives a worker that would not delete", func(t *testing.T) {
+		t.Setenv(envAccountID, "acct")
+
+		store := fakeStoreServer(t, "s3cr3t")
+		m := previewZoneMock()
+		m.refuseScriptDeletes = map[string]bool{"ocel--acme-web--prod--web": true}
+		p := m.provider(t)
+		state := testState(store.URL, "s3cr3t")
+		putStampSet(t, p, store.URL, "s3cr3t", stampSet{"ocel--acme-web--prod--web": "v1"})
+
+		if err := stackOn(p, state).Destroy(t.Context()); err == nil {
+			t.Fatal("Destroy err = nil, want the worker that survived reported")
+		}
+		if _, err := stackOn(p, state).History(t.Context(), ""); err != nil {
+			t.Errorf("history after a failed Destroy: %v, want the instance still naming the worker left behind", err)
 		}
 	})
 
 	t.Run("an unset account id is an error", func(t *testing.T) {
 		t.Setenv(envAccountID, "")
 
-		if err := (&provider{}).DestroyRootStack(t.Context(), []string{"ocel-proj-prod-web"}); err == nil {
-			t.Fatal("DestroyRootStack without an account id err = nil, want an error")
+		if err := (&provider{}).destroyWorkers(t.Context(), nil); err == nil {
+			t.Fatal("destroyWorkers without an account id err = nil, want an error")
 		}
 	})
+}
+
+func promote(t *testing.T, p *provider, state edge.StackState, app, build string) {
+	t.Helper()
+	s := stackOn(p, state)
+	if err := s.PutStaged(t.Context(), edge.DeploymentRecord{App: app, Identity: build}); err != nil {
+		t.Fatalf("PutStaged(%s): %v", app, err)
+	}
+	if err := s.Promote(t.Context(), edge.Promotion{PromotionID: app + "-1", Ts: 1, Builds: map[string]string{app: build}}, ""); err != nil {
+		t.Fatalf("Promote(%s): %v", app, err)
+	}
+}
+
+func reconcileState(t *testing.T, p *provider, spec edge.StackSpec, prior edge.StackState) (edge.StackState, error) {
+	t.Helper()
+	stack, err := p.Reconcile(t.Context(), spec, prior)
+	if err != nil {
+		return nil, err
+	}
+	return stack.State(), nil
 }
 
 func TestEnsureInstance(t *testing.T) {
@@ -622,8 +686,8 @@ func TestEnsureInstance(t *testing.T) {
 		p := &provider{}
 		state := testState(srv.URL, "s3cr3t")
 
-		if err := p.DestroyInstance(t.Context(), state); err != nil {
-			t.Fatalf("DestroyInstance: %v", err)
+		if err := p.destroyInstance(t.Context(), state); err != nil {
+			t.Fatalf("destroyInstance: %v", err)
 		}
 
 		id, stamps, err := p.ensureInstance(t.Context(), testSpec(srv.URL, "v2"), state)
@@ -780,11 +844,11 @@ func TestWorkerDecoration(t *testing.T) {
 	t.Run("the generic worker binds every account worker it reaches", func(t *testing.T) {
 		t.Parallel()
 
-		spec := edge.RootStackSpec{
-			Generic:             testStoreWorker(),
+		spec := edge.StackSpec{Program: &edge.ProgramSpec{
+			Worker:              testStoreWorker(),
 			StoreScriptName:     "ocel-deployments-store",
 			ISRWriterScriptName: "ocel-isr-writer",
-		}
+		}}
 
 		worker := genericWorker(spec, "acme-web")
 
@@ -802,7 +866,7 @@ func TestWorkerDecoration(t *testing.T) {
 	t.Run("the isr writer is left unbound when the substrate offers none", func(t *testing.T) {
 		t.Parallel()
 
-		spec := edge.RootStackSpec{Generic: testStoreWorker(), StoreScriptName: "ocel-deployments-store"}
+		spec := edge.StackSpec{Program: &edge.ProgramSpec{Worker: testStoreWorker(), StoreScriptName: "ocel-deployments-store"}}
 
 		worker := genericWorker(spec, "acme-web")
 

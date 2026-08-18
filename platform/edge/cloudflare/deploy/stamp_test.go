@@ -26,11 +26,16 @@ func TestSpecStampShape(t *testing.T) {
 		want []string
 	}{
 		{
-			typ: reflect.TypeFor[edge.RootStackSpec](),
+			typ: reflect.TypeFor[edge.StackSpec](),
 			want: []string{
-				"BootstrapCred", "Domains", "Generic", "GenericName", "ISRWriterScriptName",
-				"PruneOnly", "PruneRoutes", "PruneWorkerStem", "RequiredRecord", "Slug", "StoreEndpoint",
-				"StoreScriptName", "Values", "Version", "Warn",
+				"Class", "Domains", "Program", "PruneOnly", "PruneRoutes", "Slug", "Values", "Version", "Warn",
+			},
+		},
+		{
+			typ: reflect.TypeFor[edge.ProgramSpec](),
+			want: []string{
+				"BootstrapCred", "ISRWriterScriptName", "Name", "PruneWorkerStem", "RequiredRecord",
+				"StoreEndpoint", "StoreScriptName", "Worker",
 			},
 		},
 		{
@@ -84,7 +89,7 @@ func TestSpecStampCoversDeployedMetadata(t *testing.T) {
 	})
 
 	t.Run("turning observability off restamps the spec", func(t *testing.T) {
-		spec := edge.RootStackSpec{Slug: "acme-web", GenericName: "ocel-web", Version: "v2"}
+		spec := edge.StackSpec{Slug: "acme-web", Version: "v2", Program: &edge.ProgramSpec{Name: "ocel-web"}}
 		generic := genericWorker(spec, spec.Slug)
 
 		t.Setenv(envObservability, "on")

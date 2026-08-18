@@ -64,23 +64,23 @@ func (s *Server) runPrune(ctx context.Context, req *deploymentsv1.PruneRequest, 
 		if err != nil {
 			return finish(connect.NewError(connect.CodeInvalidArgument, err))
 		}
-		cfg, stack, state, err := s.previewTeardownContext(ctx, opts, req.GetSlug(), env)
+		cfg, stack, err := s.previewTeardownContext(ctx, opts, req.GetSlug(), env)
 		if err != nil {
 			return finish(err)
 		}
-		if len(state) == 0 {
+		if len(stack.State()) == 0 {
 			return finish(nil)
 		}
 		cfg.Tracer = tracer
 		cfg.StageReport = stageReport
-		return deploy.Prune(ctx, stack, state, cfg, req.GetSlug(), int(req.GetKeepN()), pointer, stages, logf)
+		return deploy.Prune(ctx, stack, cfg, req.GetSlug(), int(req.GetKeepN()), pointer, stages, logf)
 	}
 
 	awscfg, params, err := productionTeardownParams(ctx, opts, req.GetSlug())
 	if err != nil {
 		return finish(err)
 	}
-	stack, state, err := s.rootStackFor(params.RootStackState)
+	stack, err := s.openStackFor(params.StackState)
 	if err != nil {
 		if errors.Is(err, errNoProductionDeploy) {
 			return finish(nil)
@@ -95,7 +95,7 @@ func (s *Server) runPrune(ctx context.Context, req *deploymentsv1.PruneRequest, 
 	cfg.Tracer = tracer
 	cfg.StageReport = stageReport
 
-	return deploy.Prune(ctx, stack, state, cfg, req.GetSlug(), int(req.GetKeepN()), "", stages, logf)
+	return deploy.Prune(ctx, stack, cfg, req.GetSlug(), int(req.GetKeepN()), "", stages, logf)
 }
 
 func pruneSummaryLines(result edge.PruneResult) []string {
