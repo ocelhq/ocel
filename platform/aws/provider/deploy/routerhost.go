@@ -105,6 +105,9 @@ func resolveRouterHost(cfg Config, app *deploymentsv1.ManifestApp, coord naming.
 }
 
 func (h *routerHost) entryEnv(base map[string]string) map[string]string {
+	if h == nil {
+		return base
+	}
 	env := make(map[string]string, len(base)+len(h.Env))
 	maps.Copy(env, base)
 	maps.Copy(env, h.Env)

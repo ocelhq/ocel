@@ -49,6 +49,7 @@ type appBuilds struct {
 	bytecode   map[string]*bytecodeConfig
 	baked      map[string]appBundle
 	routers    map[string]*routerHost
+	guards     map[string]*originGuard
 }
 
 func resolveAppBuilds(cfg Config, manifest *deploymentsv1.Manifest, baked map[string]appBundle) (appBuilds, error) {
@@ -60,6 +61,7 @@ func resolveAppBuilds(cfg Config, manifest *deploymentsv1.Manifest, baked map[st
 		bytecode:   map[string]*bytecodeConfig{},
 		baked:      baked,
 		routers:    map[string]*routerHost{},
+		guards:     map[string]*originGuard{},
 	}
 	for _, app := range manifestApps(manifest) {
 		name := app.GetName()
@@ -83,6 +85,13 @@ func resolveAppBuilds(cfg Config, manifest *deploymentsv1.Manifest, baked map[st
 		}
 		if router != nil {
 			builds.routers[name] = router
+		}
+		guard, err := resolveOriginGuard(cfg, app)
+		if err != nil {
+			return appBuilds{}, err
+		}
+		if guard != nil {
+			builds.guards[name] = guard
 		}
 	}
 	for _, fn := range manifest.GetFunctions() {

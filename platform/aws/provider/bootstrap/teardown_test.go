@@ -282,6 +282,55 @@ func TestTeardownRereadsTheSiblingBeforeDroppingThePassphrase(t *testing.T) {
 	}
 }
 
+func TestTeardownReclaimsTheClassOriginSecret(t *testing.T) {
+	t.Parallel()
+
+	for _, tc := range []struct {
+		class string
+		stack string
+		mine  string
+		other string
+	}{
+		{ClassProduction, StackName, OriginSecretParamName, OriginSecretPreviewParamName},
+		{ClassPreview, PreviewStackName, OriginSecretPreviewParamName, OriginSecretParamName},
+	} {
+		t.Run(tc.class, func(t *testing.T) {
+			t.Parallel()
+
+			cfn := &teardownCFN{stacks: map[string]teardownStack{tc.stack: {}}}
+			ssmc := newFakeSSM()
+			names, err := ClassParamNames(tc.class)
+			if err != nil {
+				t.Fatalf("ClassParamNames: %v", err)
+			}
+			for _, name := range names {
+				ssmc.params[name] = "{}"
+			}
+			ssmc.params[tc.other] = "the other substrate's secret"
+			user, err := EdgeUserNameFor(tc.class)
+			if err != nil {
+				t.Fatalf("EdgeUserNameFor: %v", err)
+			}
+			apis := TeardownAPIs{
+				CFN:     cfn,
+				SSM:     ssmc,
+				IAM:     &teardownIAM{keys: map[string][]string{user: {"AKIAOLD"}}},
+				Buckets: &teardownS3{pages: map[string][]objectPage{}},
+			}
+
+			if err := Teardown(context.Background(), apis, tc.class, nil, nil); err != nil {
+				t.Fatalf("Teardown: %v", err)
+			}
+			if _, held := ssmc.params[tc.mine]; held {
+				t.Errorf("%s outlived its substrate; the next bootstrap adopts a secret no release demands", tc.mine)
+			}
+			if _, held := ssmc.params[tc.other]; !held {
+				t.Errorf("tearing down %s took %s with it, stranding every release the other substrate still serves", tc.class, tc.other)
+			}
+		})
+	}
+}
+
 func TestTeardownDropsThePassphraseWithNoSibling(t *testing.T) {
 	t.Parallel()
 

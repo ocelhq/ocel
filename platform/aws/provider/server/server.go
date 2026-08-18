@@ -366,6 +366,8 @@ func (s *Server) runDeploy(ctx context.Context, req *deploymentsv1.DeployRequest
 		ISRWriterScriptName:    params.ISRWriter.ScriptName,
 		ISRWriterSeed:          params.ISRWriterSeed,
 
+		OriginSecret: params.OriginSecret,
+
 		Uploader:      s3.NewFromConfig(awscfg),
 		Invoker:       lambda.NewFromConfig(awscfg),
 		Getter:        s3.NewFromConfig(awscfg),

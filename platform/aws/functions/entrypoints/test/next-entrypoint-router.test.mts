@@ -8,6 +8,8 @@ import { writeNextProjectFixture } from "./next-project-fixture.mjs";
 
 const ENTRY_BUNDLE = "page-bundle";
 
+const originSecret = "3c2b1a09f8e7d6c5b4a39281706f5e4d";
+
 const launcherModule = `module.exports = {
   async handler(req, res) {
     const path = req.url.split("?")[0];
@@ -136,6 +138,7 @@ beforeAll(async () => {
 
   process.env.OCEL_ISR_PREFIX = "prod/shop/web/r0a1b2c3d/isr";
   process.env.OCEL_EDGE_KIND = "native";
+  process.env.OCEL_ORIGIN_SECRET = originSecret;
   process.env.OCEL_ROUTING_MANIFEST = manifestPath;
   process.env.OCEL_CONTROL_SOCKET = sockPath;
   process.env.OCEL_HANDLER = launcherPath;
@@ -150,12 +153,26 @@ afterAll(async () => {
   await rm(dir, { recursive: true, force: true });
 });
 
+function front(path: string, init: RequestInit = {}): Promise<Response> {
+  return fetch(`http://127.0.0.1:${port}${path}`, {
+    ...init,
+    headers: { ...(init.headers as Record<string, string>), "x-ocel-origin-secret": originSecret },
+  });
+}
+
+test("the unsigned front door refuses a request the origin secret does not open", async () => {
+  const response = await fetch(`http://127.0.0.1:${port}/page`);
+
+  expect(response.status).toBe(403);
+  await response.text();
+});
+
 test("the announced server is the router, not the app's own loopback", () => {
   expect(process.env.__NEXT_PRIVATE_ORIGIN).not.toBe(`http://127.0.0.1:${port}`);
 });
 
 test("a routed request reaches the app through the entry the manifest names", async () => {
-  const response = await fetch(`http://127.0.0.1:${port}/page`, {
+  const response = await front(`/page`, {
     headers: {
       "x-ocel-entry": "/admin",
       "x-middleware-subrequest": "middleware",
@@ -174,7 +191,7 @@ test("a routed request reaches the app through the entry the manifest names", as
 });
 
 test("every Set-Cookie the app writes survives the router", async () => {
-  const response = await fetch(`http://127.0.0.1:${port}/page`, {
+  const response = await front(`/page`, {
     headers: { "x-set-cookies": "1" },
   });
 
@@ -185,7 +202,7 @@ test("every Set-Cookie the app writes survives the router", async () => {
 });
 
 test("a forwarded host a client forges is not the host the app answers as", async () => {
-  const response = await fetch(`http://127.0.0.1:${port}/page`, {
+  const response = await front(`/page`, {
     headers: { "x-forwarded-host": "evil.example", "x-forwarded-proto": "https" },
   });
 
@@ -195,27 +212,27 @@ test("a forwarded host a client forges is not the host the app answers as", asyn
 });
 
 test("a pathname the manifest does not route is a 404 the router answers", async () => {
-  const response = await fetch(`http://127.0.0.1:${port}/nowhere`);
+  const response = await front(`/nowhere`);
 
   expect(response.status).toBe(404);
 });
 
 test("clamps the cache-control of a response Next marked STALE", async () => {
-  const res = await fetch(`http://127.0.0.1:${port}/__stale`);
+  const res = await front(`/__stale`);
 
   expect(res.headers.get("cache-control")).toBe("s-maxage=0, must-revalidate");
   await res.text();
 });
 
 test("leaves a stale response Next marked private alone", async () => {
-  const res = await fetch(`http://127.0.0.1:${port}/__private`);
+  const res = await front(`/__private`);
 
   expect(res.headers.get("cache-control")).toBe("private, no-store");
   await res.text();
 });
 
 test("shapes an ISR page's s-maxage from its initialRevalidateSeconds", async () => {
-  const res = await fetch(`http://127.0.0.1:${port}/isr`);
+  const res = await front(`/isr`);
 
   expect(res.headers.get("cache-control")).toBe(
     "s-maxage=60, stale-while-revalidate=600",
@@ -224,21 +241,21 @@ test("shapes an ISR page's s-maxage from its initialRevalidateSeconds", async ()
 });
 
 test("shapes a dynamic ISR route from its fallbackRevalidate", async () => {
-  const res = await fetch(`http://127.0.0.1:${port}/blog/hello`);
+  const res = await front(`/blog/hello`);
 
   expect(res.headers.get("cache-control")).toBe("s-maxage=120");
   await res.text();
 });
 
 test("leaves a route the prerender manifest does not revalidate uncached", async () => {
-  const res = await fetch(`http://127.0.0.1:${port}/static`);
+  const res = await front(`/static`);
 
   expect(res.headers.has("cache-control")).toBe(false);
   await res.text();
 });
 
 test("leaves an error page on a revalidating route uncached", async () => {
-  const res = await fetch(`http://127.0.0.1:${port}/isr?fail=1`);
+  const res = await front(`/isr?fail=1`);
 
   expect(res.status).toBe(500);
   expect(res.headers.has("cache-control")).toBe(false);
@@ -246,7 +263,7 @@ test("leaves an error page on a revalidating route uncached", async () => {
 });
 
 test("leaves a response that sets a cookie uncached", async () => {
-  const res = await fetch(`http://127.0.0.1:${port}/isr?cookie=1`);
+  const res = await front(`/isr?cookie=1`);
 
   expect(res.headers.has("cache-control")).toBe(false);
   await res.text();

@@ -20,6 +20,7 @@ type appStackFunctions struct {
 	ISR       *isrConfig
 	Bytecode  *bytecodeConfig
 	Router    *routerHost
+	Guard     *originGuard
 	RoleArn   pulumi.StringInput
 	RoleName  pulumi.StringInput
 }
@@ -29,11 +30,11 @@ func (a appStackFunctions) register(ctx *pulumi.Context) error {
 	var arns []pulumi.StringInput
 	var entry *deploymentsv1.ManifestFunction
 	for _, fn := range a.Functions {
-		if a.Router.hosts(fn) {
+		if a.Router.hosts(fn) || a.Guard.hosts(fn) {
 			entry = fn
 			continue
 		}
-		ref, err := a.declare(ctx, fn, a.Env, nil)
+		ref, err := a.declare(ctx, fn, a.Env, nil, functionURLAuthIAM)
 		if err != nil {
 			return err
 		}
@@ -43,12 +44,14 @@ func (a appStackFunctions) register(ctx *pulumi.Context) error {
 	if entry == nil {
 		return nil
 	}
-	if err := a.grantInvoke(ctx, arns); err != nil {
-		return err
+	var resolved map[string]pulumi.StringInput
+	if a.Router != nil {
+		if err := a.grantInvoke(ctx, arns); err != nil {
+			return err
+		}
+		resolved = map[string]pulumi.StringInput{functionURLsEnv: siblingFunctionURLs(siblings)}
 	}
-	_, err := a.declare(ctx, entry, a.Router.entryEnv(a.Env), map[string]pulumi.StringInput{
-		functionURLsEnv: siblingFunctionURLs(siblings),
-	})
+	_, err := a.declare(ctx, entry, a.Guard.entryEnv(a.Router.entryEnv(a.Env)), resolved, a.Guard.entryURLAuth())
 	return err
 }
 
@@ -88,10 +91,11 @@ func (a appStackFunctions) declare(
 	fn *deploymentsv1.ManifestFunction,
 	env map[string]string,
 	resolved map[string]pulumi.StringInput,
+	urlAuth string,
 ) (functionRef, error) {
 	logical := fn.GetLogicalName()
 	ref, err := registerFunction(ctx, logical, functionCoordinate(a.Project, a.Stack, logical),
-		fn.GetRouteId(), a.Args(fn), a.Artifacts[logical], env, resolved, a.ISR, a.Bytecode, a.RoleArn)
+		fn.GetRouteId(), a.Args(fn), a.Artifacts[logical], env, resolved, a.ISR, a.Bytecode, a.RoleArn, urlAuth)
 	if err != nil {
 		return ref, fmt.Errorf("declare %s: %w", logical, err)
 	}

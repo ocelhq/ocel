@@ -338,6 +338,7 @@ func TestBuildDeploymentRecordCarriesTheNeedsAndWhatBecameOfThem(t *testing.T) {
 		ArtifactRoot:  root,
 		Slug:          "proj",
 		Edge:          &recordingEdge{kind: edge.KindNative},
+		OriginSecret:  testOriginSecret,
 		AllowDegraded: []string{"edge-middleware"},
 	}
 
@@ -421,6 +422,7 @@ func TestStagedRecordCarriesTheNeedsAndWhatBecameOfThem(t *testing.T) {
 		AssetBucket:   "assets",
 		Uploader:      &fakeUploader{exists: map[string]bool{}},
 		Edge:          ed,
+		OriginSecret:  testOriginSecret,
 		AllowDegraded: []string{"edge-middleware"},
 	}
 

@@ -2,6 +2,7 @@ package bootstrap
 
 import (
 	"context"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"regexp"
@@ -146,6 +147,20 @@ func hasEdgeUser(t *testing.T, template string) bool {
 	return false
 }
 
+func assertMintedSecrets(t *testing.T, ssmc *fakeSSM, names ...string) {
+	t.Helper()
+	for _, name := range names {
+		value, ok := ssmc.params[name]
+		if !ok {
+			t.Errorf("bootstrap left %s empty; every deploy that reads it refuses", name)
+			continue
+		}
+		if _, err := hex.DecodeString(value); err != nil || len(value) != 64 {
+			t.Errorf("%s = %q, want 32 random bytes", name, value)
+		}
+	}
+}
+
 func TestRun(t *testing.T) {
 	t.Run("external trust provisions edge reader", func(t *testing.T) {
 		cfn, ssmc, iamc := newFakeCFN(), newFakeSSM(), &fakeIAM{}
@@ -166,6 +181,19 @@ func TestRun(t *testing.T) {
 		if _, ok := ssmc.params[EdgeCredentialsParamName]; !ok {
 			t.Errorf("no static key stored at %s", EdgeCredentialsParamName)
 		}
+	})
+
+	t.Run("mints the secrets a release and its publisher authenticate with", func(t *testing.T) {
+		ssmc := newFakeSSM()
+		ed := &fakeEdge{out: edge.BootstrapOutput{
+			Trust:  edge.TrustExternal,
+			Offers: []edge.Offer{{Kind: edge.OfferISRWriter, Values: offeredISRWriter("", "cred-prod")}},
+		}}
+
+		if err := Run(context.Background(), newFakeCFN(), ssmc, &fakeIAM{}, ed, preloadedArtifact(), nil, nil); err != nil {
+			t.Fatalf("Run: %v", err)
+		}
+		assertMintedSecrets(t, ssmc, OriginSecretParamName, ISRWriterSeedParamName)
 	})
 
 	t.Run("bootstraps the edge for its own substrate class", func(t *testing.T) {
@@ -478,6 +506,24 @@ func TestRun(t *testing.T) {
 }
 
 func TestRunPreview(t *testing.T) {
+	t.Run("mints the preview secrets a release and its publisher authenticate with", func(t *testing.T) {
+		ssmc := newFakeSSM()
+		ed := &fakeEdge{out: edge.BootstrapOutput{
+			Trust:  edge.TrustExternal,
+			Offers: []edge.Offer{{Kind: edge.OfferISRWriter, Values: offeredISRWriter("-preview", "cred-preview")}},
+		}}
+
+		if err := RunPreview(context.Background(), newFakeCFN(), ssmc, &fakeIAM{}, ed, preloadedArtifact(), nil, nil); err != nil {
+			t.Fatalf("RunPreview: %v", err)
+		}
+		assertMintedSecrets(t, ssmc, OriginSecretPreviewParamName, ISRWriterSeedPreviewParamName)
+		for _, name := range []string{OriginSecretParamName, ISRWriterSeedParamName} {
+			if _, ok := ssmc.params[name]; ok {
+				t.Errorf("a preview bootstrap wrote %s, want the production secrets left alone", name)
+			}
+		}
+	})
+
 	t.Run("idempotent", func(t *testing.T) {
 		cfn, ssmc, iamc := newFakeCFN(), newFakeSSM(), &fakeIAM{}
 		values := map[string]string{"namespaceId": "ns-42"}

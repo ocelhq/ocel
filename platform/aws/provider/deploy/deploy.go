@@ -91,6 +91,8 @@ type Config struct {
 	ISRWriterScriptName    string
 	ISRWriterSeed          string
 
+	OriginSecret string
+
 	Edge edge.Edge
 
 	DNS      edge.DNSWriter

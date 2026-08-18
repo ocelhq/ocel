@@ -950,11 +950,15 @@ func runAppStack(ctx context.Context, cfg Config, manifest *deploymentsv1.Manife
 
 	env := appEnv(manifest, app, baked, cfg)
 	router := builds.routers[name]
+	guard := builds.guards[name]
 
 	for _, fn := range functions {
 		declared := env
 		if router.hosts(fn) {
 			declared = router.plannedEntryEnv(env, functions)
+		}
+		if guard.hosts(fn) {
+			declared = guard.entryEnv(declared)
 		}
 		if err = checkFunctionEnvBudget(fn.GetLogicalName(), functionEnv(declared, cfg.transformed.forFunction(fn), caches[name], bytecode[name])); err != nil {
 			return nil, nil, err
@@ -995,6 +999,7 @@ func runAppStack(ctx context.Context, cfg Config, manifest *deploymentsv1.Manife
 			ISR:       caches[name],
 			Bytecode:  bytecode[name],
 			Router:    router,
+			Guard:     guard,
 			RoleArn:   role.Arn,
 			RoleName:  role.Name,
 		}.register(pctx)

@@ -31,14 +31,15 @@ const (
 
 	execWrapper = "/opt/ocel/bootstrap"
 
-	defaultMembraneLayerARN = "arn:aws:lambda:us-east-1:363236815301:layer:ocel-membrane:35"
+	defaultMembraneLayerARN = "arn:aws:lambda:us-east-1:363236815301:layer:ocel-membrane:37"
 	membraneLayerARNEnv     = "OCEL_MEMBRANE_LAYER_ARN"
 
 	bytecodeCacheEnv = "OCEL_BYTECODE_CACHE"
 
 	bytecodeEmbedEnv = "OCEL_BYTECODE_EMBED"
 
-	functionURLAuthIAM = "AWS_IAM"
+	functionURLAuthIAM  = "AWS_IAM"
+	functionURLAuthNone = "NONE"
 
 	tagComponent = "ocel:component"
 	tagRoute     = "ocel:route"
@@ -493,7 +494,7 @@ func functionVPCConfig(logicalName string, v functionVPC) (lambda.FunctionVpcCon
 	}, nil
 }
 
-func registerFunction(ctx *pulumi.Context, logicalName string, coord naming.Coordinate, route string, args functionArgs, artifact artifactRef, base map[string]string, resolved map[string]pulumi.StringInput, isr *isrConfig, bytecode *bytecodeConfig, roleArn pulumi.StringInput) (functionRef, error) {
+func registerFunction(ctx *pulumi.Context, logicalName string, coord naming.Coordinate, route string, args functionArgs, artifact artifactRef, base map[string]string, resolved map[string]pulumi.StringInput, isr *isrConfig, bytecode *bytecodeConfig, roleArn pulumi.StringInput, urlAuth string) (functionRef, error) {
 	var none functionRef
 
 	env := pulumi.StringMap{}
@@ -540,11 +541,22 @@ func registerFunction(ctx *pulumi.Context, logicalName string, coord naming.Coor
 
 	url, err := lambda.NewFunctionUrl(ctx, naming.ResourceID(naming.KindFunction, coord.Name, "url"), &lambda.FunctionUrlArgs{
 		FunctionName:      fn.Name,
-		AuthorizationType: pulumi.String(functionURLAuthIAM),
+		AuthorizationType: pulumi.String(urlAuth),
 		InvokeMode:        pulumi.String(args.InvokeMode),
 	})
 	if err != nil {
 		return none, err
+	}
+
+	if urlAuth == functionURLAuthNone {
+		if _, err := lambda.NewPermission(ctx, naming.ResourceID(naming.KindFunction, coord.Name, "url", "invoke"), &lambda.PermissionArgs{
+			Action:              pulumi.String("lambda:InvokeFunctionUrl"),
+			Function:            fn.Name,
+			Principal:           pulumi.String("*"),
+			FunctionUrlAuthType: pulumi.String(functionURLAuthNone),
+		}); err != nil {
+			return none, err
+		}
 	}
 
 	ctx.Export(logicalName, pulumi.Map{

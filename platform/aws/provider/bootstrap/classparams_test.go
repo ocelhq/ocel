@@ -49,6 +49,7 @@ func fullProductionParams() map[string]string {
 		DeploymentsStoreParamName:        `{"endpoint":"https://store","scriptName":"store","bootstrapCred":"cred"}`,
 		ISRWriterParamName:               `{"endpoint":"https://isr","scriptName":"isr","bootstrapCred":"isr-cred"}`,
 		ISRWriterSeedParamName:           "seed-1",
+		OriginSecretParamName:            "origin-1",
 		StackStateParamPrefix + "proj-1": `{"zone":"z1"}`,
 	}
 }
@@ -71,6 +72,7 @@ func TestReadClassParamsBatches(t *testing.T) {
 		DeploymentsStoreParamName,
 		ISRWriterParamName,
 		ISRWriterSeedParamName,
+		OriginSecretParamName,
 		StackStateParamPrefix + "proj-1",
 	}
 	slices.Sort(want)
