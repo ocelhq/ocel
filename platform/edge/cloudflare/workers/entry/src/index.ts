@@ -1300,18 +1300,18 @@ async function dispatchPrerender(
   }
   const cache = deps.cache;
 
+  const personalized =
+    hasDraftCookie(request) || headers.has("x-middleware-set-cookie");
   const onDemand =
     isOnDemandRevalidate(request, target.config) &&
     (request.method === "GET" || request.method === "HEAD") &&
-    !hasDraftCookie(request) &&
-    !headers.has("x-middleware-set-cookie");
+    !personalized;
 
   if (
     !onDemand &&
     (shouldBypass(request, url, target.config) ||
       request.method !== "GET" ||
-      hasDraftCookie(request) ||
-      headers.has("x-middleware-set-cookie"))
+      personalized)
   ) {
     const response = await answer(forward(forwardUrl, request, headers));
     return withStatus(response, "BYPASS");
@@ -1404,11 +1404,7 @@ async function dispatchPrerender(
     const onDemandHeaders = new Headers(plainHeaders);
     onDemandHeaders.set("x-prerender-revalidate", target.config.bypassToken ?? "");
     const rendered = await render(
-      forward(
-        forwardUrl,
-        new Request(request.url, { method: "GET", headers: request.headers }),
-        onDemandHeaders,
-      ),
+      forward(forwardUrl, new Request(request.url, { method: "GET" }), onDemandHeaders),
     );
     if (keyResult.cacheable) {
       await storeInColo(cacheTarget, cache, rendered.clone());
