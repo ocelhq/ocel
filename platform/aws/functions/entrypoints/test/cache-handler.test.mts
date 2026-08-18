@@ -59,6 +59,7 @@ function fakeStore() {
       fetches.set(hash, entry);
     },
     async writeTags(names, record) {
+      if (gate) await gate;
       for (const n of names) tags.set(n, { ...tags.get(n), ...record });
     },
   };
@@ -230,6 +231,19 @@ test("ticks the revalidation signal so the request can announce it", async () =>
   await new OcelCacheHandler().revalidateTag("products");
 
   expect(revalidationTicks()).toBe(before + 1);
+});
+
+test("ticks before the tag write settles, so a response sent meanwhile announces it", async () => {
+  const store = fakeStore();
+  const release = store.holdWrites();
+  const before = revalidationTicks();
+
+  const pending = new OcelCacheHandler().revalidateTag("products");
+  await Promise.resolve();
+
+  expect(revalidationTicks()).toBe(before + 1);
+  release();
+  await pending;
 });
 
 test("ticks nothing for a revalidation naming no tags", async () => {
