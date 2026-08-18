@@ -36,10 +36,11 @@ const (
 )
 
 type PreviewDomain struct {
-	BaseDomain        string `json:"baseDomain"`
-	CloudflareAccount string `json:"cloudflareAccount"`
-	GrammarMin        uint32 `json:"grammarMin"`
-	GrammarMax        uint32 `json:"grammarMax"`
+	BaseDomain        string        `json:"baseDomain"`
+	CloudflareAccount string        `json:"cloudflareAccount"`
+	GrammarMin        uint32        `json:"grammarMin"`
+	GrammarMax        uint32        `json:"grammarMax"`
+	Records           []edge.Record `json:"records,omitempty"`
 }
 
 func previewDomainParamFor(class string) (string, error) {

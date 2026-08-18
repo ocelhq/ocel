@@ -135,10 +135,10 @@ func runDomainUse(ctx context.Context, d deps, cwd, wildcard string, opts domain
 		if err := preflightPreview(ctx, d, runner, provider, stdout); err != nil {
 			return err
 		}
-		req := &deploymentsv1.UseDomainRequest{
+		req := edgeSettings(cfg).applyToUseDomain(&deploymentsv1.UseDomainRequest{
 			Class:      deploymentsv1.Environment_CLASS_PREVIEW,
 			BaseDomain: base,
-		}
+		})
 		if err := runner.UseDomain(ctx, req, ui.Event); err != nil {
 			return err
 		}
@@ -220,7 +220,7 @@ func runDomainRelease(ctx context.Context, d deps, cwd string, opts domainOption
 			}
 		}
 
-		req := &deploymentsv1.ReleaseDomainRequest{Class: deploymentsv1.Environment_CLASS_PREVIEW}
+		req := edgeSettings(cfg).applyToReleaseDomain(&deploymentsv1.ReleaseDomainRequest{Class: deploymentsv1.Environment_CLASS_PREVIEW})
 		if err := runner.ReleaseDomain(ctx, req, ui.Event); err != nil {
 			return err
 		}

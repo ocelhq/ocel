@@ -22,6 +22,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/proto/deployments/v1/deploymentsv1connect"
 	"github.com/ocelhq/ocel/pkg/proto/env/v1/envv1connect"
 	linksv1 "github.com/ocelhq/ocel/pkg/proto/links/v1"
+	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
 const deployFakeProviderEnvVar = "OCEL_TEST_DEPLOY_FAKE_PROVIDER"
@@ -491,9 +492,24 @@ func (s *deployFakeProviderServer) UseDomain(ctx context.Context, req *deploymen
 		return err
 	}
 	if err := stream.Send(&deploymentsv1.DeployEvent{
-		Event: &deploymentsv1.DeployEvent_Progress{Progress: &deploymentsv1.ProgressEvent{Message: "USE DOMAIN class=" + req.GetClass().String() + " base=" + req.GetBaseDomain()}},
+		Event: &deploymentsv1.DeployEvent_Progress{Progress: &deploymentsv1.ProgressEvent{Message: "USE DOMAIN class=" + req.GetClass().String() + " base=" + req.GetBaseDomain() + " dns=" + req.GetDns().GetKind()}},
 	}); err != nil {
 		return err
+	}
+	records, err := edge.RecordsFor(edge.DNSTarget{Kind: edge.KindCloudflare}, []string{"*." + req.GetBaseDomain()})
+	if err != nil {
+		return err
+	}
+	for _, rec := range records {
+		message := "Writing " + rec.String()
+		if req.GetDns() == nil {
+			message = rec.Instruction()
+		}
+		if err := stream.Send(&deploymentsv1.DeployEvent{
+			Event: &deploymentsv1.DeployEvent_Progress{Progress: &deploymentsv1.ProgressEvent{Message: message}},
+		}); err != nil {
+			return err
+		}
 	}
 	return stream.Send(&deploymentsv1.DeployEvent{
 		Event: &deploymentsv1.DeployEvent_Result{Result: &deploymentsv1.ResultEvent{Success: true}},
@@ -505,7 +521,7 @@ func (s *deployFakeProviderServer) ReleaseDomain(ctx context.Context, req *deplo
 		return err
 	}
 	if err := stream.Send(&deploymentsv1.DeployEvent{
-		Event: &deploymentsv1.DeployEvent_Progress{Progress: &deploymentsv1.ProgressEvent{Message: "RELEASE DOMAIN class=" + req.GetClass().String()}},
+		Event: &deploymentsv1.DeployEvent_Progress{Progress: &deploymentsv1.ProgressEvent{Message: "RELEASE DOMAIN class=" + req.GetClass().String() + " dns=" + req.GetDns().GetKind()}},
 	}); err != nil {
 		return err
 	}
@@ -579,7 +595,7 @@ func (s *deployFakeProviderServer) DestroyProject(ctx context.Context, req *depl
 		return err
 	}
 	if err := stream.Send(&deploymentsv1.DeployEvent{
-		Event: &deploymentsv1.DeployEvent_Progress{Progress: &deploymentsv1.ProgressEvent{Message: "DESTROY PROJECT project=" + req.GetSlug() + " " + describeEnv(req.GetEnvironment())}},
+		Event: &deploymentsv1.DeployEvent_Progress{Progress: &deploymentsv1.ProgressEvent{Message: "DESTROY PROJECT project=" + req.GetSlug() + " dns=" + req.GetDns().GetKind() + " " + describeEnv(req.GetEnvironment())}},
 	}); err != nil {
 		return err
 	}

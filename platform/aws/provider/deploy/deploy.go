@@ -93,6 +93,9 @@ type Config struct {
 
 	Edge edge.Edge
 
+	DNS      edge.DNSWriter
+	DNSAwait RecordWaiter
+
 	Class                  deploymentsv1.Environment_Class
 	Lifecycle              deploymentsv1.Environment_Lifecycle
 	Identity               string
@@ -114,6 +117,10 @@ type Config struct {
 
 	transformed *transformedArgs
 	sessions    sessionScope
+}
+
+type RecordWaiter interface {
+	Await(ctx context.Context, records []edge.Record, say func(string)) error
 }
 
 type Stages struct {

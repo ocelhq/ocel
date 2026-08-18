@@ -338,16 +338,12 @@ func (p *provider) destroyWorkers(ctx context.Context, names []string) error {
 		return nil
 	}
 
-	routes := p.routeSnapshot()
 	var errs []error
 	for _, name := range names {
 		if name == "" {
 			continue
 		}
 		if err := p.detachCustomDomains(ctx, accountID, name); err != nil {
-			errs = append(errs, err)
-		}
-		if err := p.detachRouteRecords(ctx, routes, accountID, name); err != nil {
 			errs = append(errs, err)
 		}
 		if err := p.deleteScript(ctx, accountID, name); err != nil {

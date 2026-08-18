@@ -302,7 +302,7 @@ func previewZoneMock() *cfMock {
 		zoneID:   "zone1",
 		zoneName: "app.com",
 		existingRecords: []map[string]any{
-			{"id": "wildcard", "name": "*.preview.app.com", "type": "AAAA", "content": "100::", "comment": routeRecordComment, "proxied": true},
+			{"id": "wildcard", "name": "*.preview.app.com", "type": "AAAA", "content": "100::", "comment": recordComment, "proxied": true},
 		},
 	}
 }
@@ -356,7 +356,7 @@ func TestReconcile(t *testing.T) {
 		}
 	})
 
-	t.Run("a preview plants its own wildcard record", func(t *testing.T) {
+	t.Run("a preview plants no record of its own", func(t *testing.T) {
 		store := fakeStoreServer(t, "s3cr3t")
 		m := previewZoneMock()
 		m.existingRecords = nil
@@ -365,8 +365,8 @@ func TestReconcile(t *testing.T) {
 			t.Fatalf("Reconcile: %v", err)
 		}
 
-		if len(m.createdRecords) != 1 || m.createdRecords[0]["name"] != "*.preview.app.com" {
-			t.Errorf("created records = %v, want the proxied placeholder for *.preview.app.com", m.createdRecords)
+		if len(m.createdRecords) != 0 {
+			t.Errorf("created records = %v, want none: the wildcard's record is the DNS axis's to write", m.createdRecords)
 		}
 	})
 

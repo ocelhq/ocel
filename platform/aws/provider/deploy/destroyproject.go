@@ -95,9 +95,12 @@ func DestroyProject(ctx context.Context, stack edge.EdgeStack, cfg Config, slug 
 	if stack != nil && len(stack.State()) > 0 {
 		report := cfg.reportStage(stages.Edge)
 		report("Destroying the edge stack (workers, custom domain, deployments-store instance)")
+		prior := stack.State()
 		if err := stack.Destroy(ctx); err != nil {
 			edgeErr = errors.Join(edgeErr, fmt.Errorf("destroy the edge stack: %w", err))
 			result.EdgeTornDown = false
+		} else if err := releaseRecords(ctx, cfg, prior, report); err != nil {
+			edgeErr = errors.Join(edgeErr, err)
 		}
 	}
 	spanForStage(cfg.Tracer, stages.Edge, edgeStart, time.Now(), edgeErr)

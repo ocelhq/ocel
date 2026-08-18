@@ -32,6 +32,21 @@ func (e edgeWire) applyToDeploy(req *deploymentsv1.DeployRequest) *deploymentsv1
 	return req
 }
 
+func (e edgeWire) applyToUseDomain(req *deploymentsv1.UseDomainRequest) *deploymentsv1.UseDomainRequest {
+	req.Dns = e.dns
+	return req
+}
+
+func (e edgeWire) applyToReleaseDomain(req *deploymentsv1.ReleaseDomainRequest) *deploymentsv1.ReleaseDomainRequest {
+	req.Dns = e.dns
+	return req
+}
+
+func (e edgeWire) applyToDestroyProject(req *deploymentsv1.DestroyProjectRequest) *deploymentsv1.DestroyProjectRequest {
+	req.Dns = e.dns
+	return req
+}
+
 func (e edgeWire) applyToBootstrap(req *deploymentsv1.BootstrapRequest) *deploymentsv1.BootstrapRequest {
 	req.EdgeKind, req.EdgeOptions, req.Dns, req.AllowDegraded = string(e.kind), e.options, e.dns, e.allowDegraded
 	return req

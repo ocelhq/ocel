@@ -150,11 +150,11 @@ func runDestroy(ctx context.Context, d deps, cwd string, stdout, stderr io.Write
 			}
 		}
 
-		req := &deploymentsv1.DestroyProjectRequest{
+		req := edgeSettings(cfg).applyToDestroyProject(&deploymentsv1.DestroyProjectRequest{
 			Options:         []byte(provider.Options),
 			ProtocolVersion: manifestbuilder.SchemaVersion,
 			Slug:            cfg.Slug,
-		}
+		})
 		if err := runner.DestroyProject(ctx, req, ui.Event); err != nil {
 			return err
 		}
@@ -218,12 +218,12 @@ func runDestroyPreviewProject(ctx context.Context, d deps, cwd string, yes bool,
 			}
 		}
 
-		req := &deploymentsv1.DestroyProjectRequest{
+		req := edgeSettings(cfg).applyToDestroyProject(&deploymentsv1.DestroyProjectRequest{
 			Options:         []byte(provider.Options),
 			ProtocolVersion: manifestbuilder.SchemaVersion,
 			Slug:            cfg.Slug,
 			Environment:     &deploymentsv1.Environment{Class: deploymentsv1.Environment_CLASS_PREVIEW},
-		}
+		})
 		if err := runner.DestroyProject(ctx, req, ui.Event); err != nil {
 			return err
 		}

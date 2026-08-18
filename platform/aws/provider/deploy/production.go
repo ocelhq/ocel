@@ -27,6 +27,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/naming"
 	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
 	linksv1 "github.com/ocelhq/ocel/pkg/proto/links/v1"
+	"github.com/ocelhq/ocel/platform/aws/provider/dns"
 	"github.com/ocelhq/ocel/platform/aws/provider/membrane"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
@@ -157,6 +158,10 @@ func realize(ctx context.Context, cfg Config, manifest *deploymentsv1.Manifest, 
 		return Result{StackState: reconciledState(edgeStack, cfg)}, finishProvisioning(err)
 	}
 	state := MarkGlobalPreview(edgeStack.State(), cfg, manifest)
+	state, err = settleStackRecords(ctx, cfg, specs, state, log)
+	if err != nil {
+		return Result{StackState: state}, finishProvisioning(err)
+	}
 
 	var links []*linksv1.Link
 	if !plan.InfraStack.IsZero() {
@@ -299,6 +304,58 @@ func specName(spec edge.StackSpec) string {
 		return spec.Slug
 	}
 	return spec.Program.Name
+}
+
+func settleStackRecords(ctx context.Context, cfg Config, specs []edge.StackSpec, state edge.StackState, say func(string)) (edge.StackState, error) {
+	var hosts []string
+	for _, spec := range specs {
+		hosts = append(hosts, spec.Domains...)
+	}
+	records, err := edge.RecordsFor(edge.DNSTarget{Kind: cfg.Edge.Kind()}, hosts)
+	if err != nil {
+		return state, err
+	}
+	if cfg.DNS == nil {
+		if len(records) == 0 || cfg.DNSAwait == nil {
+			return state, nil
+		}
+		return state, cfg.DNSAwait.Await(ctx, records, say)
+	}
+	prior, err := edge.WrittenRecords(cfg.StackState)
+	if err != nil {
+		return state, err
+	}
+	written, err := cfg.DNS.EnsureRecords(ctx, records, say)
+	if err != nil {
+		return state, err
+	}
+	if departed := recordsDropped(prior, written); len(departed) > 0 {
+		for _, rec := range departed {
+			say(fmt.Sprintf("Removing %s: no app serves it any more", rec))
+		}
+		if err := cfg.DNS.DeleteRecords(ctx, departed); err != nil {
+			return state, err
+		}
+	}
+	return edge.WithWrittenRecords(state, written)
+}
+
+func releaseRecords(ctx context.Context, cfg Config, state edge.StackState, say func(string)) error {
+	records, err := edge.WrittenRecords(state)
+	if err != nil {
+		return err
+	}
+	return dns.Release(ctx, cfg.DNS, records, say)
+}
+
+func recordsDropped(prior, kept []edge.Record) []edge.Record {
+	var dropped []edge.Record
+	for _, rec := range prior {
+		if !slices.Contains(kept, rec) {
+			dropped = append(dropped, rec)
+		}
+	}
+	return dropped
 }
 
 func reconciledState(stack edge.EdgeStack, cfg Config) edge.StackState {

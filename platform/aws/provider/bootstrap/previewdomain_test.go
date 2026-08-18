@@ -2,6 +2,7 @@ package bootstrap
 
 import (
 	"context"
+	"reflect"
 	"slices"
 	"strings"
 	"testing"
@@ -9,6 +10,8 @@ import (
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/ssm"
 	ssmtypes "github.com/aws/aws-sdk-go-v2/service/ssm/types"
+
+	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
 func TestPreviewDomainParam(t *testing.T) {
@@ -17,7 +20,13 @@ func TestPreviewDomainParam(t *testing.T) {
 	t.Run("round-trips the record as a SecureString", func(t *testing.T) {
 		t.Parallel()
 		fake := newFakeSSM()
-		want := PreviewDomain{BaseDomain: "preview.acme.com", CloudflareAccount: "acct", GrammarMin: 1, GrammarMax: 1}
+		want := PreviewDomain{
+			BaseDomain:        "preview.acme.com",
+			CloudflareAccount: "acct",
+			GrammarMin:        1,
+			GrammarMax:        1,
+			Records:           []edge.Record{{Name: "*.preview.acme.com", Type: edge.RecordTypeAAAA, Value: edge.ProxyPlaceholder, Proxied: true}},
+		}
 
 		if err := WritePreviewDomain(context.Background(), fake, ClassPreview, want); err != nil {
 			t.Fatalf("WritePreviewDomain: %v", err)
@@ -29,7 +38,7 @@ func TestPreviewDomainParam(t *testing.T) {
 		if err != nil {
 			t.Fatalf("ReadPreviewDomain: %v", err)
 		}
-		if got != want {
+		if !reflect.DeepEqual(got, want) {
 			t.Errorf("ReadPreviewDomain = %+v, want %+v", got, want)
 		}
 	})
@@ -40,7 +49,7 @@ func TestPreviewDomainParam(t *testing.T) {
 		if err != nil {
 			t.Fatalf("ReadPreviewDomain: %v", err)
 		}
-		if got != (PreviewDomain{}) {
+		if !reflect.DeepEqual(got, PreviewDomain{}) {
 			t.Errorf("ReadPreviewDomain = %+v, want the zero record", got)
 		}
 	})
@@ -111,7 +120,7 @@ func TestReadClassParamsPreviewDomain(t *testing.T) {
 		if err != nil {
 			t.Fatalf("ReadClassParams: %v", err)
 		}
-		if params.PreviewDomain != (PreviewDomain{}) {
+		if !reflect.DeepEqual(params.PreviewDomain, PreviewDomain{}) {
 			t.Errorf("PreviewDomain = %+v, want the zero record", params.PreviewDomain)
 		}
 	})
