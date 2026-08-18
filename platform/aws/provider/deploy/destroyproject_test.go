@@ -12,15 +12,6 @@ import (
 	"github.com/ocelhq/ocel/pkg/naming"
 )
 
-func contains(xs []string, want string) bool {
-	for _, x := range xs {
-		if x == want {
-			return true
-		}
-	}
-	return false
-}
-
 func TestClassifyProjectStacks(t *testing.T) {
 	t.Parallel()
 
