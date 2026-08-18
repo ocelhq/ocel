@@ -2433,6 +2433,7 @@ describe("a Server Action's invalidation reaching the colo it travelled through"
     let now = 10_000;
     let lambdaCalls = 0;
     let actionRevalidates = true;
+    let pagesAnnounce = false;
     let replica = JSON.stringify({
       version: 1,
       deployedAt: 0,
@@ -2498,6 +2499,7 @@ describe("a Server Action's invalidation reaching the colo it travelled through"
           headers: {
             "cache-control": "s-maxage=31536000",
             "x-nextjs-cache": "HIT",
+            ...(pagesAnnounce ? { [announce]: "1" } : {}),
           },
         });
       }) as unknown as typeof fetch,
@@ -2552,6 +2554,9 @@ describe("a Server Action's invalidation reaching the colo it travelled through"
       actionRevalidatesNothing: () => {
         actionRevalidates = false;
       },
+      announceOnPages: () => {
+        pagesAnnounce = true;
+      },
       invalidate: (at: number) => {
         replica = JSON.stringify({
           version: 1,
@@ -2601,6 +2606,26 @@ describe("a Server Action's invalidation reaching the colo it travelled through"
     const after = await s.get();
 
     expect(after.headers.get("x-ocel-cache")).toBe("MISS");
+  });
+
+  it("keeps the origin's announcement out of the colo entry it stores", async () => {
+    const s = scenario("x-ocel-revalidated");
+    s.announceOnPages();
+
+    const first = await s.get();
+    expect(first.headers.has("x-ocel-revalidated")).toBe(false);
+    await s.settle();
+
+    s.advanceTo(15_000);
+    s.invalidate(12_000);
+    const hit = await s.get();
+    expect(hit.headers.get("x-ocel-cache")).toBe("HIT");
+    expect(hit.headers.has("x-ocel-revalidated")).toBe(false);
+    await s.settle();
+
+    s.advanceTo(30_000);
+    const again = await s.get();
+    expect(again.headers.get("x-ocel-cache")).toBe("HIT");
   });
 
   it("keeps answering from the cached replica when the action revalidated nothing", async () => {

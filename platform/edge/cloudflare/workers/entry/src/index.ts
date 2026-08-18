@@ -943,21 +943,14 @@ async function noteRevalidation(
   response: Response,
   deps: RouteDeps,
 ): Promise<Response> {
-  const announced = response.headers.has(OCEL_REVALIDATED);
-  if (!announced && !response.headers.has(NEXT_ACTION_REVALIDATED)) return response;
-
-  const answer = announced ? withoutRevalidatedHeader(response) : response;
-  if (!deps.interception) return answer;
-
-  const { config, ...clockDeps } = deps.interception;
-  await invalidateSnapshot(config, clockDeps);
-  return answer;
+  if (response.headers.has(NEXT_ACTION_REVALIDATED)) await forgetSnapshot(deps);
+  return response;
 }
 
-function withoutRevalidatedHeader(response: Response): Response {
-  const stripped = new Response(response.body, response);
-  stripped.headers.delete(OCEL_REVALIDATED);
-  return stripped;
+async function forgetSnapshot(deps: RouteDeps): Promise<void> {
+  if (!deps.interception) return;
+  const { config, ...clockDeps } = deps.interception;
+  await invalidateSnapshot(config, clockDeps);
 }
 
 const MIDDLEWARE_PREFETCH_HEADER = "x-middleware-prefetch";
@@ -1661,12 +1654,15 @@ function originFetch(deps: RouteDeps): typeof fetch {
       : doFetch(input as RequestInfo, init));
     const hasEmptyBody = response.headers.has(EMPTY_BODY_HEADER);
     const hasCacheTags = response.headers.has(NEXT_CACHE_TAGS_HEADER);
-    if (!hasEmptyBody && !hasCacheTags) return response;
+    const announced = response.headers.has(OCEL_REVALIDATED);
+    if (!hasEmptyBody && !hasCacheTags && !announced) return response;
 
+    if (announced) await forgetSnapshot(deps);
     if (hasEmptyBody) await response.body?.cancel();
     const rebuilt = new Response(hasEmptyBody ? null : response.body, response);
     rebuilt.headers.delete(EMPTY_BODY_HEADER);
     rebuilt.headers.delete(NEXT_CACHE_TAGS_HEADER);
+    rebuilt.headers.delete(OCEL_REVALIDATED);
     return rebuilt;
   }) as typeof fetch;
 }
