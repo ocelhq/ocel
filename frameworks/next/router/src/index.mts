@@ -184,6 +184,8 @@ export interface RouteDeps {
   hostRequestInit?: (request: Request) => HostRequestExtras;
 
   onRevalidated?: () => Promise<void>;
+
+  keepCacheTags?: boolean;
 }
 
 function imageResponse(
@@ -1092,9 +1094,10 @@ function originFetch(deps: RouteDeps): typeof fetch {
       ? doFetch(request)
       : doFetch(input as RequestInfo, init));
     const hasEmptyBody = response.headers.has(EMPTY_BODY_HEADER);
+    const keepCacheTags = deps.keepCacheTags === true;
     const hasCacheTags =
       response.headers.has(NEXT_CACHE_TAGS_HEADER) ||
-      response.headers.has(CACHE_TAG_HEADER);
+      (!keepCacheTags && response.headers.has(CACHE_TAG_HEADER));
     const announced = response.headers.has(OCEL_REVALIDATED);
     if (!hasEmptyBody && !hasCacheTags && !announced) return response;
 
@@ -1103,7 +1106,7 @@ function originFetch(deps: RouteDeps): typeof fetch {
     const rebuilt = new Response(hasEmptyBody ? null : response.body, response);
     rebuilt.headers.delete(EMPTY_BODY_HEADER);
     rebuilt.headers.delete(NEXT_CACHE_TAGS_HEADER);
-    rebuilt.headers.delete(CACHE_TAG_HEADER);
+    if (!keepCacheTags) rebuilt.headers.delete(CACHE_TAG_HEADER);
     rebuilt.headers.delete(OCEL_REVALIDATED);
     return rebuilt;
   }) as typeof fetch;

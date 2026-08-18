@@ -250,13 +250,19 @@ func ensureHeadersPolicy(ctx context.Context, c Clients, class edge.Class) (stri
 	out, err := c.CloudFront.CreateResponseHeadersPolicy(ctx, &cloudfront.CreateResponseHeadersPolicyInput{
 		ResponseHeadersPolicyConfig: &cftypes.ResponseHeadersPolicyConfig{
 			Name:    aws.String(name),
-			Comment: aws.String("Ocel: marks every response the native edge served, so a liveness probe can tell which front answered."),
+			Comment: aws.String("Ocel: marks every response the native edge served, so a liveness probe can tell which front answered, and keeps the origin's cache tags off the wire to the viewer."),
 			CustomHeadersConfig: &cftypes.ResponseHeadersPolicyCustomHeadersConfig{
 				Quantity: ptr(int32(1)),
 				Items: []cftypes.ResponseHeadersPolicyCustomHeader{{
 					Header:   aws.String(edge.HeaderEdge),
 					Value:    aws.String(edgeHeaderValue),
 					Override: ptr(true),
+				}},
+			},
+			RemoveHeadersConfig: &cftypes.ResponseHeadersPolicyRemoveHeadersConfig{
+				Quantity: ptr(int32(1)),
+				Items: []cftypes.ResponseHeadersPolicyRemoveHeader{{
+					Header: aws.String(cacheTagHeader),
 				}},
 			},
 		},

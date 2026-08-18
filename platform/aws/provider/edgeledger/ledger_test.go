@@ -5,6 +5,8 @@ import (
 	"errors"
 	"fmt"
 	"maps"
+	"os"
+	"regexp"
 	"slices"
 	"strconv"
 	"strings"
@@ -155,14 +157,38 @@ func (f *fakeDynamo) BatchWriteItem(_ context.Context, in *dynamodb.BatchWriteIt
 func (f *fakeDynamo) UpdateItem(_ context.Context, in *dynamodb.UpdateItemInput, _ ...func(*dynamodb.Options)) (*dynamodb.UpdateItemOutput, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	if aws.ToString(in.UpdateExpression) != "ADD #seq :one" {
-		return nil, fmt.Errorf("fake dynamo understands only the sequence counter, got %q", aws.ToString(in.UpdateExpression))
+	expression := aws.ToString(in.UpdateExpression)
+	if expression != "ADD #seq :one" && expression != "ADD #targets :target" && expression != "DELETE #targets :target" {
+		return nil, fmt.Errorf("fake dynamo understands only the sequence counter and the invalidation targets, got %q", expression)
 	}
 	f.calls = append(f.calls, "UpdateItem")
 	key := itemKey(in.Key)
 	item, ok := f.items[key]
 	if !ok {
 		item = maps.Clone(in.Key)
+	}
+	if strings.HasSuffix(expression, "#targets :target") {
+		changed, ok := in.ExpressionAttributeValues[":target"].(*ddbtypes.AttributeValueMemberSS)
+		if !ok {
+			return nil, errors.New("fake dynamo changes the invalidation targets only by a string set")
+		}
+		attribute := in.ExpressionAttributeNames["#targets"]
+		held, _ := item[attribute].(*ddbtypes.AttributeValueMemberSS)
+		members := []string{}
+		if held != nil {
+			members = held.Value
+		}
+		for _, member := range changed.Value {
+			switch {
+			case strings.HasPrefix(expression, "DELETE"):
+				members = slices.DeleteFunc(members, func(m string) bool { return m == member })
+			case !slices.Contains(members, member):
+				members = append(members, member)
+			}
+		}
+		item[attribute] = &ddbtypes.AttributeValueMemberSS{Value: members}
+		f.items[key] = item
+		return &dynamodb.UpdateItemOutput{}, nil
 	}
 	current := int64(0)
 	if seq, ok := item["seq"].(*ddbtypes.AttributeValueMemberN); ok {
@@ -611,5 +637,128 @@ func TestRecordRoundTripsWhatTheDeployStaged(t *testing.T) {
 	}
 	if err := l.PutStaged(ctx, edge.DeploymentRecord{App: "web"}); err == nil {
 		t.Error("PutStaged accepted a record with no identity; the ledger keys records by both")
+	}
+}
+
+func targetsHeld(t *testing.T, dynamo *fakeDynamo, ledgerScope string) []string {
+	t.Helper()
+	item, ok := dynamo.items[partition+"#"+ledgerScope+"\x00"+invalidationKey]
+	if !ok {
+		return nil
+	}
+	held, ok := item[invalidationTargetsAttribute].(*ddbtypes.AttributeValueMemberSS)
+	if !ok {
+		t.Fatalf("the invalidation targets of %s are not a string set: %#v", ledgerScope, item[invalidationTargetsAttribute])
+	}
+	return held.Value
+}
+
+func TestNoteInvalidationTargetGathersEveryFrontOnce(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	dynamo := newFakeDynamo()
+	l := ledgerOn(dynamo)
+
+	for _, distribution := range []string{"E1PROD", "E2WILD", "E1PROD"} {
+		if err := l.NoteInvalidationTarget(ctx, distribution); err != nil {
+			t.Fatalf("NoteInvalidationTarget(%s): %v", distribution, err)
+		}
+	}
+	if got := targetsHeld(t, dynamo, scope); !slices.Equal(got, []string{"E1PROD", "E2WILD"}) {
+		t.Errorf("targets = %v, want each front once", got)
+	}
+
+	other := &Ledger{Dynamo: dynamo, Table: table, Scope: "production/other"}
+	if err := other.NoteInvalidationTarget(ctx, "E3OTHER"); err != nil {
+		t.Fatalf("NoteInvalidationTarget(other): %v", err)
+	}
+	if got := targetsHeld(t, dynamo, scope); !slices.Equal(got, []string{"E1PROD", "E2WILD"}) {
+		t.Errorf("targets = %v after another project noted a front of its own", got)
+	}
+
+	if err := l.NoteInvalidationTarget(ctx, ""); err == nil {
+		t.Error("NoteInvalidationTarget accepted a front with no id")
+	}
+}
+
+func TestDestroyForgetsTheInvalidationTargets(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	dynamo := newFakeDynamo()
+	l := ledgerOn(dynamo)
+	if err := l.NoteInvalidationTarget(ctx, "E1PROD"); err != nil {
+		t.Fatalf("NoteInvalidationTarget: %v", err)
+	}
+	if err := l.Destroy(ctx); err != nil {
+		t.Fatalf("Destroy: %v", err)
+	}
+	if got := targetsHeld(t, dynamo, scope); got != nil {
+		t.Errorf("targets = %v, want a destroyed scope to invalidate nothing", got)
+	}
+}
+
+func TestForgetInvalidationTargetLeavesTheLiveFrontsAlone(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	dynamo := newFakeDynamo()
+	l := ledgerOn(dynamo)
+
+	for _, distribution := range []string{"E1PROD", "E2SECOND"} {
+		if err := l.NoteInvalidationTarget(ctx, distribution); err != nil {
+			t.Fatalf("NoteInvalidationTarget(%s): %v", distribution, err)
+		}
+	}
+	if err := l.ForgetInvalidationTarget(ctx, "E1PROD"); err != nil {
+		t.Fatalf("ForgetInvalidationTarget: %v", err)
+	}
+	if got := targetsHeld(t, dynamo, scope); !slices.Equal(got, []string{"E2SECOND"}) {
+		t.Errorf("targets = %v, want only the front this project still serves from", got)
+	}
+	if err := l.ForgetInvalidationTarget(ctx, ""); err == nil {
+		t.Error("ForgetInvalidationTarget accepted a front with no id")
+	}
+}
+
+func TestSubstrateScopeHoldsTheFrontsEveryProjectShares(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	dynamo := newFakeDynamo()
+	substrate := &Ledger{Dynamo: dynamo, Table: table, Scope: Scope(edge.ClassPreview, "")}
+
+	if err := substrate.NoteInvalidationTarget(ctx, "EWILDCARD"); err != nil {
+		t.Fatalf("NoteInvalidationTarget: %v", err)
+	}
+	if got := targetsHeld(t, dynamo, string(edge.ClassPreview)); !slices.Equal(got, []string{"EWILDCARD"}) {
+		t.Errorf("substrate targets = %v, want the wildcard every preview is served from", got)
+	}
+	if got := targetsHeld(t, dynamo, scope); got != nil {
+		t.Errorf("project targets = %v, want a substrate-wide front recorded once rather than per project", got)
+	}
+}
+
+func TestTheInvalidatorReadsTheKeysThisLedgerWrites(t *testing.T) {
+	t.Parallel()
+
+	const targets = "../../functions/tag-invalidator/src/targets.mts"
+	source, err := os.ReadFile(targets)
+	if err != nil {
+		t.Fatalf("read the invalidator's view of the ledger: %v", err)
+	}
+	for what, want := range map[string]string{
+		"targetsSortKey":   invalidationKey,
+		"targetsAttribute": invalidationTargetsAttribute,
+		"partitionPrefix":  partition + "#",
+	} {
+		named := regexp.MustCompile(what + ` = "([^"]+)"`).FindSubmatch(source)
+		if named == nil {
+			t.Fatalf("%s no longer names %s", targets, what)
+		}
+		if got := string(named[1]); got != want {
+			t.Errorf("the invalidator reads %s %q and this ledger writes %q, so every raise reads an item nobody wrote", what, got, want)
+		}
 	}
 }

@@ -217,6 +217,15 @@ test("a pathname the manifest does not route is a 404 the router answers", async
   expect(response.status).toBe(404);
 });
 
+test("carries the origin's cache tags out through the router to the front", async () => {
+  const res = await front(`/__stale`);
+
+  expect(res.headers.get("cache-tag")).toBe(
+    "r0a1b2c3d|_N_T_/products,r0a1b2c3d|products",
+  );
+  await res.text();
+});
+
 test("clamps the cache-control of a response Next marked STALE", async () => {
   const res = await front(`/__stale`);
 

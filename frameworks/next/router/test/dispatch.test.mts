@@ -297,6 +297,64 @@ describe("dispatchResult", () => {
     expect(res.headers.get("x-custom")).toBe("kept");
   });
 
+  it("strips cache-tag from a response the front does not invalidate by", async () => {
+    const deps = baseDeps({
+      manifest: {
+        buildId: "t",
+        basePath: "",
+        pathnames: [],
+        routes: {},
+        dispatch: { "/tags": { kind: "lambda", id: "/tags" } },
+      },
+      functionUrls: { "/tags": "https://fn.example.com" },
+      fetch: (async () =>
+        new Response("from-lambda", {
+          status: 200,
+          headers: { "cache-tag": "r0a1b2c3d|products", "x-custom": "kept" },
+        })) as unknown as typeof fetch,
+    });
+
+    const res = await dispatchResult(
+      { resolvedPathname: "/tags", invocationTarget: { pathname: "/tags" } },
+      new Request("https://app.example/tags"),
+      deps,
+    );
+
+    expect(res.headers.get("cache-tag")).toBeNull();
+    expect(res.headers.get("x-custom")).toBe("kept");
+  });
+
+  it("carries cache-tag out to a front that invalidates by it", async () => {
+    const deps = baseDeps({
+      keepCacheTags: true,
+      manifest: {
+        buildId: "t",
+        basePath: "",
+        pathnames: [],
+        routes: {},
+        dispatch: { "/tags": { kind: "lambda", id: "/tags" } },
+      },
+      functionUrls: { "/tags": "https://fn.example.com" },
+      fetch: (async () =>
+        new Response("from-lambda", {
+          status: 200,
+          headers: {
+            "cache-tag": "r0a1b2c3d|products",
+            "x-next-cache-tags": "products",
+          },
+        })) as unknown as typeof fetch,
+    });
+
+    const res = await dispatchResult(
+      { resolvedPathname: "/tags", invocationTarget: { pathname: "/tags" } },
+      new Request("https://app.example/tags"),
+      deps,
+    );
+
+    expect(res.headers.get("cache-tag")).toBe("r0a1b2c3d|products");
+    expect(res.headers.get("x-next-cache-tags")).toBeNull();
+  });
+
   it("leaves a body that is genuinely one byte alone", async () => {
     const deps = baseDeps({
       manifest: {

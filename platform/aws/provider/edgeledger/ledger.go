@@ -14,6 +14,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb"
 	ddbtypes "github.com/aws/aws-sdk-go-v2/service/dynamodb/types"
 
+	"github.com/ocelhq/ocel/pkg/naming"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
@@ -22,11 +23,14 @@ const (
 
 	DefaultPointer = "@production"
 
-	schemaKey     = "META#schema"
-	sequenceKey   = "META#seq"
-	pointerStem   = "POINTER#"
-	promotionStem = "PROMOTION#"
-	recordStem    = "RECORD#"
+	schemaKey       = "META#schema"
+	sequenceKey     = "META#seq"
+	invalidationKey = "META#invalidation"
+	pointerStem     = "POINTER#"
+	promotionStem   = "PROMOTION#"
+	recordStem      = "RECORD#"
+
+	invalidationTargetsAttribute = "distributions"
 
 	recordKeyPrefix = "record:"
 
@@ -51,6 +55,13 @@ type Ledger struct {
 }
 
 var _ edge.Ledger = (*Ledger)(nil)
+
+func Scope(class edge.Class, slug string) string {
+	if slug == "" {
+		return string(class)
+	}
+	return string(class) + naming.PathSeparator + naming.Sanitize(slug)
+}
 
 func RecordKey(app, identity string) string {
 	return recordKeyPrefix + app + "/" + identity
@@ -138,6 +149,50 @@ func (l *Ledger) PutStaged(ctx context.Context, record edge.DeploymentRecord) er
 	})
 	if err != nil {
 		return fmt.Errorf("stage the deployment record for %s: %w", record.App, err)
+	}
+	return nil
+}
+
+func (l *Ledger) NoteInvalidationTarget(ctx context.Context, distribution string) error {
+	if err := l.ready(); err != nil {
+		return err
+	}
+	if distribution == "" {
+		return fmt.Errorf("note an invalidation target for %s: it names no front to invalidate", l.Scope)
+	}
+	_, err := l.Dynamo.UpdateItem(ctx, &dynamodb.UpdateItemInput{
+		TableName:                aws.String(l.Table),
+		Key:                      key(l.partition(), invalidationKey),
+		UpdateExpression:         aws.String("ADD #targets :target"),
+		ExpressionAttributeNames: map[string]string{"#targets": invalidationTargetsAttribute},
+		ExpressionAttributeValues: map[string]ddbtypes.AttributeValue{
+			":target": &ddbtypes.AttributeValueMemberSS{Value: []string{distribution}},
+		},
+	})
+	if err != nil {
+		return fmt.Errorf("note %s as a front invalidation reaches for %s: %w", distribution, l.Scope, err)
+	}
+	return nil
+}
+
+func (l *Ledger) ForgetInvalidationTarget(ctx context.Context, distribution string) error {
+	if err := l.ready(); err != nil {
+		return err
+	}
+	if distribution == "" {
+		return fmt.Errorf("forget an invalidation target for %s: it names no front", l.Scope)
+	}
+	_, err := l.Dynamo.UpdateItem(ctx, &dynamodb.UpdateItemInput{
+		TableName:                aws.String(l.Table),
+		Key:                      key(l.partition(), invalidationKey),
+		UpdateExpression:         aws.String("DELETE #targets :target"),
+		ExpressionAttributeNames: map[string]string{"#targets": invalidationTargetsAttribute},
+		ExpressionAttributeValues: map[string]ddbtypes.AttributeValue{
+			":target": &ddbtypes.AttributeValueMemberSS{Value: []string{distribution}},
+		},
+	})
+	if err != nil {
+		return fmt.Errorf("forget %s as a front invalidation reaches for %s: %w", distribution, l.Scope, err)
 	}
 	return nil
 }

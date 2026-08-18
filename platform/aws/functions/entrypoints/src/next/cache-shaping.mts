@@ -1,9 +1,13 @@
 import type http from "node:http";
+import { storedCacheTags } from "@framework/next-cache";
 import { collectTags, notedTags } from "./origin-tags.mjs";
 import type { ProjectManifest } from "./project-manifest.mjs";
-import { routerMode } from "../shared/edge-kind.mjs";
+import { invalidatesByCacheTag, routerMode } from "../shared/edge-kind.mjs";
 
 const cacheTagHeader = "cache-tag";
+
+const tagsPerObject = 50;
+
 const nextCacheHeader = "x-nextjs-cache";
 const staleCacheControl = "s-maxage=0, must-revalidate";
 
@@ -58,7 +62,7 @@ export function originShaping(
   }
 
   return {
-    release: releaseOf(env.OCEL_ISR_PREFIX),
+    release: invalidatesByCacheTag(env.OCEL_EDGE_KIND) ? releaseOf(env.OCEL_ISR_PREFIX) : null,
     basePath: typeof manifest?.config?.basePath === "string" ? manifest.config.basePath : "",
     routes,
     dynamicRoutes,
@@ -85,9 +89,20 @@ function shape(
 ): void {
   if (!cacheable(req, res)) return;
 
-  const tags = notedTags(req.headers as Record<string | symbol, any>);
-  if (shaping.release !== null && tags.length > 0) {
-    res.setHeader(cacheTagHeader, tags.map((tag) => `${shaping.release}|${tag}`).join(","));
+  if (shaping.release !== null) {
+    const noted = notedTags(req.headers as Record<string | symbol, any>);
+    const { tags, unstorable, overflowed } = storedCacheTags(
+      shaping.release,
+      noted,
+      tagsPerObject,
+    );
+    if (tags.length > 0) res.setHeader(cacheTagHeader, tags.join(","));
+    const lost = [...unstorable, ...overflowed];
+    if (lost.length > 0) {
+      console.warn(
+        `ocel: ${req.url} carries ${noted.length} cache tags and the front stores ${tagsPerObject} that fit its alphabet, so revalidating ${lost.join(", ")} will not reach it`,
+      );
+    }
   }
 
   const declared = String(res.getHeader("cache-control") ?? "");

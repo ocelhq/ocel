@@ -3,6 +3,7 @@ package cloudfront
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"maps"
 	"slices"
@@ -85,6 +86,14 @@ func (w *world) clients() Clients {
 		CFN:           w.cfn,
 		Region:        fakeRegion,
 	}
+}
+
+func (w *world) invalidationTargets(scope string) []string {
+	held, _ := w.dynamo.items["EDGELEDGER#"+scope+"\x00META#invalidation"]["distributions"].(*ddbtypes.AttributeValueMemberSS)
+	if held == nil {
+		return nil
+	}
+	return held.Value
 }
 
 func (w *world) edge() *provider {
@@ -905,8 +914,9 @@ func (f *fakeDynamo) DeleteItem(_ context.Context, in *dynamodb.DeleteItemInput,
 func (f *fakeDynamo) UpdateItem(_ context.Context, in *dynamodb.UpdateItemInput, _ ...func(*dynamodb.Options)) (*dynamodb.UpdateItemOutput, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	if aws.ToString(in.UpdateExpression) != "ADD #seq :one" {
-		return nil, fmt.Errorf("fake dynamo understands only the sequence counter, got %q", aws.ToString(in.UpdateExpression))
+	expression := aws.ToString(in.UpdateExpression)
+	if expression != "ADD #seq :one" && expression != "ADD #targets :target" && expression != "DELETE #targets :target" {
+		return nil, fmt.Errorf("fake dynamo understands only the sequence counter and the invalidation targets, got %q", expression)
 	}
 	key := dynamoKey(in.Key)
 	item, ok := f.items[key]
@@ -915,6 +925,29 @@ func (f *fakeDynamo) UpdateItem(_ context.Context, in *dynamodb.UpdateItemInput,
 		for name, value := range in.Key {
 			item[name] = value
 		}
+	}
+	if strings.HasSuffix(expression, "#targets :target") {
+		changed, ok := in.ExpressionAttributeValues[":target"].(*ddbtypes.AttributeValueMemberSS)
+		if !ok {
+			return nil, errors.New("fake dynamo changes the invalidation targets only by a string set")
+		}
+		attribute := in.ExpressionAttributeNames["#targets"]
+		held, _ := item[attribute].(*ddbtypes.AttributeValueMemberSS)
+		members := []string{}
+		if held != nil {
+			members = held.Value
+		}
+		for _, member := range changed.Value {
+			switch {
+			case strings.HasPrefix(expression, "DELETE"):
+				members = slices.DeleteFunc(members, func(m string) bool { return m == member })
+			case !slices.Contains(members, member):
+				members = append(members, member)
+			}
+		}
+		item[attribute] = &ddbtypes.AttributeValueMemberSS{Value: members}
+		f.items[key] = item
+		return &dynamodb.UpdateItemOutput{}, nil
 	}
 	current := int64(0)
 	if seq, ok := item["seq"].(*ddbtypes.AttributeValueMemberN); ok {

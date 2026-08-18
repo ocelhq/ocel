@@ -45,7 +45,7 @@ func (s *stack) ledger(c Clients) *edgeledger.Ledger {
 	return &edgeledger.Ledger{
 		Dynamo: c.Dynamo,
 		Table:  s.state[stackKeyStateTable],
-		Scope:  string(s.class()) + "/" + s.slug(),
+		Scope:  edgeledger.Scope(s.class(), s.slug()),
 	}
 }
 
