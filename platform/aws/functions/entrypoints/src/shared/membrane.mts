@@ -154,8 +154,14 @@ export async function drainWaitUntil(pending: Promise<unknown>[]): Promise<void>
 
 const cloudflareEdgeKind = "cloudflare";
 
+const nativeEdgeKind = "native";
+
 export function routerMode(edgeKind: string | undefined): boolean {
   return edgeKind !== undefined && edgeKind !== "" && edgeKind !== cloudflareEdgeKind;
+}
+
+export function invalidatesByCacheTag(edgeKind: string | undefined): boolean {
+  return edgeKind === nativeEdgeKind;
 }
 
 const originSecretVar = "OCEL_ORIGIN_SECRET";

@@ -137,21 +137,28 @@ func checkStack(ctx context.Context, api CFNDescriber, stackName string) (Deploy
 type stackArtifacts struct {
 	optimizer   artifactCode
 	publisher   artifactCode
+	invalidator artifactCode
 	revalidator artifactCode
 }
 
 type stackPins struct {
 	optimizer   artifactPin
 	publisher   artifactPin
+	invalidator artifactPin
 	revalidator artifactPin
 }
 
 func (p stackPins) pinned() bool {
-	return p.optimizer.pinned() || p.publisher.pinned() || p.revalidator.pinned()
+	return p.optimizer.pinned() || p.publisher.pinned() || p.invalidator.pinned() || p.revalidator.pinned()
 }
 
 func pinnedArtifacts() stackPins {
-	return stackPins{optimizer: pinnedOptimizer(), publisher: pinnedTagPublisher(), revalidator: pinnedRevalidator()}
+	return stackPins{
+		optimizer:   pinnedOptimizer(),
+		publisher:   pinnedTagPublisher(),
+		invalidator: pinnedTagInvalidator(),
+		revalidator: pinnedRevalidator(),
+	}
 }
 
 type substrate struct {
@@ -256,6 +263,12 @@ func run(ctx context.Context, cfn CFNAPI, ssmClient SSMAPI, iamClient IAMAPI, ed
 			return err
 		}
 	}
+	invalidates := edgeProvider.Kind() == edge.KindNative
+	if invalidates {
+		if code.invalidator, err = ensureTagInvalidatorArtifact(ctx, artifact, deployed.ArtifactBucket, pins.invalidator); err != nil {
+			return err
+		}
+	}
 	if code.revalidator, err = ensureRevalidatorArtifact(ctx, artifact, deployed.ArtifactBucket, pins.revalidator); err != nil {
 		return err
 	}
@@ -264,6 +277,9 @@ func run(ctx context.Context, cfn CFNAPI, ssmClient SSMAPI, iamClient IAMAPI, ed
 	}
 	if !code.revalidator.present() {
 		report(log, "no revalidator artifact is pinned in this provider build; the revalidation queue is created but nothing drains it, so the edge is not told its URL and every admitted refresh renders through the origin as it does today")
+	}
+	if invalidates && !code.invalidator.present() {
+		report(log, "no tag invalidator artifact is pinned in this provider build; none is created, so a page the origin re-renders keeps being served from the fronts until its cache-control window ends")
 	}
 	if !isrWriterAdopted {
 		report(log, "this substrate adopted no ISR writer, so no tag publisher is created; there is no edge replica for it to publish into")
@@ -400,9 +416,9 @@ func generatePassphrase() (string, error) {
 
 func stackTemplate(trust edge.TrustBoundary, code stackArtifacts, version int) string {
 	return fmt.Sprintf(`AWSTemplateFormatVersion: '2010-09-09'
-Description: "Ocel bootstrap (production) - the account-global substrate every production app Ocel deploys into this AWS account is built on: the Pulumi state bucket and state table, the artifact and asset buckets, the variable store, and the image optimizer, tag publisher and ISR revalidator all apps share. Created and updated by ocel bootstrap; it holds no app of its own. Deleting this stack orphans every app deployed from it: the Pulumi state describing them goes with its bucket, and no deploy or teardown can run until it is recreated."
+Description: "Ocel bootstrap (production) - the account-global substrate every production app Ocel deploys into this AWS account is built on: the Pulumi state bucket and state table, the artifact and asset buckets, the variable store, and the image optimizer, tag publisher, tag invalidator and ISR revalidator all apps share. Created and updated by ocel bootstrap; it holds no app of its own. Deleting this stack orphans every app deployed from it: the Pulumi state describing them goes with its bucket, and no deploy or teardown can run until it is recreated."
 Resources:
-%s%s%s%s%s%s%s%s%s%s%sOutputs:
+%s%s%s%s%s%s%s%s%s%s%s%sOutputs:
   %s:
     Description: "S3 bucket holding the Pulumi state Ocel plans every production deploy and teardown from. One versioned object per app stack."
     Value: !Ref StateBucket
@@ -412,14 +428,14 @@ Resources:
   %s:
     Description: "Class this substrate is stamped with, verified before an action runs so that a preview deploy cannot reach production state, variables or caches."
     Value: '%s'
-`, stateBucketResource(ClassProduction), stateTableResource(), artifactBucketResource(), assetBucketResource(), assetBucketPolicyResource(), varsResources(ClassProduction), imageOptimizerResources(code.optimizer), tagPublisherResources(code.publisher, ClassProduction), revalidateQueueResources(ClassProduction), revalidatorResources(code.revalidator), edgeUserResource(EdgeUserName, ClassProduction, trust, code.optimizer), outputStateBucket, stateTableOutput(), artifactBucketOutput(), assetBucketOutput(), varsOutputs(), imageOptimizerOutput(code.optimizer), revalidateQueueOutput(code.revalidator), outputVersion, version, outputInfraClass, ClassProduction)
+`, stateBucketResource(ClassProduction), stateTableResource(), artifactBucketResource(), assetBucketResource(), assetBucketPolicyResource(), varsResources(ClassProduction), imageOptimizerResources(code.optimizer), tagPublisherResources(code.publisher, ClassProduction), tagInvalidatorResources(code.invalidator, ClassProduction), revalidateQueueResources(ClassProduction), revalidatorResources(code.revalidator), edgeUserResource(EdgeUserName, ClassProduction, trust, code.optimizer), outputStateBucket, stateTableOutput(), artifactBucketOutput(), assetBucketOutput(), varsOutputs(), imageOptimizerOutput(code.optimizer), revalidateQueueOutput(code.revalidator), outputVersion, version, outputInfraClass, ClassProduction)
 }
 
 func previewStackTemplate(trust edge.TrustBoundary, code stackArtifacts, version int) string {
 	return fmt.Sprintf(`AWSTemplateFormatVersion: '2010-09-09'
 Description: "Ocel bootstrap (preview) - the account-global substrate every preview environment Ocel deploys into this AWS account is carved from, deliberately separate from the production bootstrap so a per-PR preview can never reach production state, variables or caches. Created and updated by ocel bootstrap --preview. Deleting this stack orphans every live preview: the Pulumi state describing them goes with its bucket, and no preview deploy or teardown can run until it is recreated."
 Resources:
-%s%s%s%s%s%s%s%s%s%s%sOutputs:
+%s%s%s%s%s%s%s%s%s%s%s%sOutputs:
   %s:
     Description: "S3 bucket holding the Pulumi state Ocel plans every preview deploy and teardown from. One versioned object per preview stack."
     Value: !Ref StateBucket
@@ -429,7 +445,7 @@ Resources:
   %s:
     Description: "Class this substrate is stamped with, verified before an action runs so that a preview deploy cannot reach production state, variables or caches."
     Value: '%s'
-`, stateBucketResource(ClassPreview), stateTableResource(), artifactBucketResource(), assetBucketResource(), assetBucketPolicyResource(), varsResources(ClassPreview), imageOptimizerResources(code.optimizer), tagPublisherResources(code.publisher, ClassPreview), revalidateQueueResources(ClassPreview), revalidatorResources(code.revalidator), edgeUserResource(EdgePreviewUserName, ClassPreview, trust, code.optimizer), outputStateBucket, stateTableOutput(), artifactBucketOutput(), assetBucketOutput(), varsOutputs(), imageOptimizerOutput(code.optimizer), revalidateQueueOutput(code.revalidator), outputVersion, version, outputInfraClass, ClassPreview)
+`, stateBucketResource(ClassPreview), stateTableResource(), artifactBucketResource(), assetBucketResource(), assetBucketPolicyResource(), varsResources(ClassPreview), imageOptimizerResources(code.optimizer), tagPublisherResources(code.publisher, ClassPreview), tagInvalidatorResources(code.invalidator, ClassPreview), revalidateQueueResources(ClassPreview), revalidatorResources(code.revalidator), edgeUserResource(EdgePreviewUserName, ClassPreview, trust, code.optimizer), outputStateBucket, stateTableOutput(), artifactBucketOutput(), assetBucketOutput(), varsOutputs(), imageOptimizerOutput(code.optimizer), revalidateQueueOutput(code.revalidator), outputVersion, version, outputInfraClass, ClassPreview)
 }
 
 func stateBucketResource(class string) string {

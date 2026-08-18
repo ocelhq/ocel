@@ -85,13 +85,19 @@ func (f *fakeCFN) UpdateStack(_ context.Context, in *cloudformation.UpdateStackI
 }
 
 type fakeEdge struct {
+	kind       edge.Kind
 	out        edge.BootstrapOutput
 	err        error
 	bootstraps int
 	class      edge.Class
 }
 
-func (f *fakeEdge) Kind() edge.Kind { return "fake" }
+func (f *fakeEdge) Kind() edge.Kind {
+	if f.kind == "" {
+		return "fake"
+	}
+	return f.kind
+}
 
 func (f *fakeEdge) Bootstrap(_ context.Context, class edge.Class) (edge.BootstrapOutput, error) {
 	f.bootstraps++

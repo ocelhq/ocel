@@ -46,6 +46,7 @@ type parsedPublisher struct {
 			Environment struct {
 				Variables map[string]string `yaml:"Variables"`
 			} `yaml:"Environment"`
+			EventSourceArn                 string   `yaml:"EventSourceArn"`
 			StartingPosition               string   `yaml:"StartingPosition"`
 			BatchSize                      int      `yaml:"BatchSize"`
 			MaximumBatchingWindowInSeconds *int     `yaml:"MaximumBatchingWindowInSeconds"`

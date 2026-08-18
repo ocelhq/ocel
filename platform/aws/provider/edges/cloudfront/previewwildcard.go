@@ -12,7 +12,9 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/cloudfrontkeyvaluestore"
 
 	"github.com/ocelhq/ocel/pkg/naming"
+	"github.com/ocelhq/ocel/platform/aws/provider/bootstrap"
 	"github.com/ocelhq/ocel/platform/aws/provider/certs"
+	"github.com/ocelhq/ocel/platform/aws/provider/edgeledger"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
@@ -37,35 +39,54 @@ func (p *provider) ReconcilePreviewWildcard(ctx context.Context, spec edge.Previ
 	if err != nil {
 		return "", err
 	}
-	plan, err := p.previewWildcardPlan(ctx, c, spec.BaseDomain)
+	plan, deployed, err := p.previewWildcardPlan(ctx, c, spec.BaseDomain)
 	if err != nil {
 		return "", err
 	}
-	held, found, err := findDistribution(ctx, c, plan.name)
+	held, err := reconcileWildcardDistribution(ctx, c, plan, wildcard, spec.Certificate)
 	if err != nil {
 		return "", err
 	}
-	if !found {
-		created, createErr := createDistribution(ctx, c, plan, []string{wildcard}, spec.Certificate)
-		if createErr == nil {
-			return created.domainName, nil
-		}
-		if !distributionTaken(createErr) {
-			return "", createErr
-		}
-		raced, racedFound, findErr := findDistribution(ctx, c, plan.name)
-		if findErr != nil {
-			return "", findErr
-		}
-		if !racedFound {
-			return "", createErr
-		}
-		held = raced
-	}
-	if err := convergeWildcard(ctx, c, plan, held.id, wildcard, spec.Certificate); err != nil {
+	if err := substrateLedger(c, edge.ClassPreview, deployed).NoteInvalidationTarget(ctx, held.id); err != nil {
 		return "", err
 	}
 	return held.domainName, nil
+}
+
+func reconcileWildcardDistribution(ctx context.Context, c Clients, plan distributionPlan, wildcard, certificate string) (front, error) {
+	held, found, err := findDistribution(ctx, c, plan.name)
+	if err != nil {
+		return front{}, err
+	}
+	if !found {
+		created, createErr := createDistribution(ctx, c, plan, []string{wildcard}, certificate)
+		if createErr == nil {
+			return created, nil
+		}
+		if !distributionTaken(createErr) {
+			return front{}, createErr
+		}
+		raced, racedFound, findErr := findDistribution(ctx, c, plan.name)
+		if findErr != nil {
+			return front{}, findErr
+		}
+		if !racedFound {
+			return front{}, createErr
+		}
+		held = raced
+	}
+	if err := convergeWildcard(ctx, c, plan, held.id, wildcard, certificate); err != nil {
+		return front{}, err
+	}
+	return held, nil
+}
+
+func substrateLedger(c Clients, class edge.Class, deployed bootstrap.Deployed) *edgeledger.Ledger {
+	return &edgeledger.Ledger{
+		Dynamo: c.Dynamo,
+		Table:  deployed.StateTable,
+		Scope:  edgeledger.Scope(class, ""),
+	}
 }
 
 func cloudFrontCertificate(wildcard, certificate string) error {
@@ -96,17 +117,17 @@ func convergeWildcard(ctx context.Context, c Clients, plan distributionPlan, id,
 	return putConfig(ctx, c, id, etag, plan.config([]string{wildcard}, certificate))
 }
 
-func (p *provider) previewWildcardPlan(ctx context.Context, c Clients, baseDomain string) (distributionPlan, error) {
+func (p *provider) previewWildcardPlan(ctx context.Context, c Clients, baseDomain string) (distributionPlan, bootstrap.Deployed, error) {
 	deployed, err := p.substrate(ctx, c, edge.ClassPreview)
 	if err != nil {
-		return distributionPlan{}, err
+		return distributionPlan{}, bootstrap.Deployed{}, err
 	}
 	if !deployed.Present {
-		return distributionPlan{}, fmt.Errorf("the preview substrate is not bootstrapped, so nothing would answer a hostname on %s; run `ocel bootstrap --preview` first", edge.PreviewWildcard(baseDomain))
+		return distributionPlan{}, bootstrap.Deployed{}, fmt.Errorf("the preview substrate is not bootstrapped, so nothing would answer a hostname on %s; run `ocel bootstrap --preview` first", edge.PreviewWildcard(baseDomain))
 	}
 	set, err := findEdgeSet(ctx, c, edge.ClassPreview, edgeSet{})
 	if err != nil {
-		return distributionPlan{}, err
+		return distributionPlan{}, bootstrap.Deployed{}, err
 	}
 	return distributionPlan{
 		name:          previewWildcardName(baseDomain),
@@ -115,7 +136,7 @@ func (p *provider) previewWildcardPlan(ctx context.Context, c Clients, baseDomai
 		cachePolicy:   set.cachePolicy,
 		headersPolicy: set.headersPolicy,
 		oac:           set.originAccessControl,
-	}, nil
+	}, deployed, nil
 }
 
 func (p *provider) DestroyPreviewWildcard(ctx context.Context, baseDomain string) error {
@@ -137,9 +158,22 @@ func (p *provider) DestroyPreviewWildcard(ctx context.Context, baseDomain string
 	case found:
 		if err := p.deleteDistribution(ctx, c, held.id); err != nil {
 			errs = append(errs, err)
+		} else if err := p.forgetPreviewWildcardTarget(ctx, c, held.id); err != nil {
+			errs = append(errs, err)
 		}
 	}
 	return errors.Join(errs...)
+}
+
+func (p *provider) forgetPreviewWildcardTarget(ctx context.Context, c Clients, distribution string) error {
+	deployed, err := p.substrate(ctx, c, edge.ClassPreview)
+	if err != nil {
+		return err
+	}
+	if !deployed.Present {
+		return nil
+	}
+	return substrateLedger(c, edge.ClassPreview, deployed).ForgetInvalidationTarget(ctx, distribution)
 }
 
 func sweepPreviewRoutes(ctx context.Context, c Clients, baseDomain string) error {

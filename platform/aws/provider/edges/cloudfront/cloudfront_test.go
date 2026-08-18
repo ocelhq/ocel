@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"errors"
 	"maps"
+	"os"
+	"regexp"
 	"slices"
 	"strings"
 	"testing"
@@ -13,6 +15,7 @@ import (
 	cftypes "github.com/aws/aws-sdk-go-v2/service/cloudfront/types"
 	kvstypes "github.com/aws/aws-sdk-go-v2/service/cloudfrontkeyvaluestore/types"
 
+	"github.com/ocelhq/ocel/platform/aws/provider/edgeledger"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 	"github.com/ocelhq/ocel/platform/edge/contract/edgeconformance"
 )
@@ -296,8 +299,8 @@ func TestReconcile(t *testing.T) {
 		if aws.ToString(behavior.CachePolicyId) != stack.State()[stackKeyCachePolicy] {
 			t.Errorf("cache policy = %q, want the one bootstrap made (%q)", aws.ToString(behavior.CachePolicyId), stack.State()[stackKeyCachePolicy])
 		}
-		if aws.ToString(held.config.CacheTagConfig.HeaderName) != cacheTagHeader {
-			t.Errorf("cache tag header = %q, want %q", aws.ToString(held.config.CacheTagConfig.HeaderName), cacheTagHeader)
+		if got := aws.ToString(held.config.CacheTagConfig.HeaderName); got != cacheTagHeader {
+			t.Errorf("cache tag header = %q, want %q", got, cacheTagHeader)
 		}
 		origin := held.config.Origins.Items[0]
 		if aws.ToString(origin.DomainName) != assetOriginDomain(fakeAssetBucket, fakeRegion) {
@@ -560,6 +563,59 @@ func TestDestroyGivesUpOnADistributionStillRollingOut(t *testing.T) {
 	}
 	if !strings.Contains(destroyErr.Error(), "Re-run") {
 		t.Errorf("err = %q, want it to say that re-running picks up where this stopped", destroyErr)
+	}
+}
+
+func TestReconcileLeavesTheTagInvalidatorAFrontToReach(t *testing.T) {
+	t.Parallel()
+
+	w := newWorld()
+	stack := reconciled(t, w)
+
+	held := w.invalidationTargets(edgeledger.Scope(edge.ClassProduction, conformanceSlug))
+	if held == nil {
+		t.Fatalf("the ledger names no front for the tag invalidator to reach; it holds %v", slices.Sorted(maps.Keys(w.dynamo.items)))
+	}
+	if want := stack.State()[stackKeyDistribution]; !slices.Equal(held, []string{want}) {
+		t.Errorf("invalidation targets = %v, want the distribution this reconcile fronts the project with (%q)", held, want)
+	}
+}
+
+func TestTheFrontKeepsTheOriginsCacheTagsOffTheWire(t *testing.T) {
+	t.Parallel()
+
+	w := newWorld()
+	reconciled(t, w)
+
+	for id, config := range w.front.headerPolicy {
+		removed := config.RemoveHeadersConfig
+		if removed == nil {
+			t.Fatalf("response headers policy %s removes nothing, so every viewer is told the release and tags of the page it was served", id)
+		}
+		var names []string
+		for _, item := range removed.Items {
+			names = append(names, aws.ToString(item.Header))
+		}
+		if !slices.Contains(names, cacheTagHeader) {
+			t.Errorf("response headers policy %s removes %v, want %q among them", id, names, cacheTagHeader)
+		}
+	}
+}
+
+func TestCacheTagHeaderIsTheOneTheOriginWrites(t *testing.T) {
+	t.Parallel()
+
+	const shaping = "../../../functions/entrypoints/src/next/cache-shaping.mts"
+	source, err := os.ReadFile(shaping)
+	if err != nil {
+		t.Fatalf("read the origin's cache shaping: %v", err)
+	}
+	named := regexp.MustCompile(`cacheTagHeader = "([^"]+)"`).FindSubmatch(source)
+	if named == nil {
+		t.Fatalf("%s no longer names the header the origin puts its cache tags in", shaping)
+	}
+	if got := string(named[1]); got != cacheTagHeader {
+		t.Errorf("the origin writes its tags in %q and the cache policy reads %q, so CloudFront stores no tag at all and every invalidation misses", got, cacheTagHeader)
 	}
 }
 

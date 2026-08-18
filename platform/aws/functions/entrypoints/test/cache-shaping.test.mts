@@ -5,7 +5,7 @@ import {
   shapeOriginCache,
   type OriginShaping,
 } from "../src/next/cache-shaping.mjs";
-import { routerMode } from "../src/shared/edge-kind.mjs";
+import { invalidatesByCacheTag, routerMode } from "../src/shared/edge-kind.mjs";
 import { noteTags } from "../src/next/origin-tags.mjs";
 import type { ProjectManifest } from "../src/next/project-manifest.mjs";
 
@@ -62,7 +62,7 @@ const isrRoutes = {
 
 function shaping(env: Record<string, string> = {}, config: Record<string, unknown> = {}) {
   return originShaping(manifest(isrRoutes, config), {
-    OCEL_EDGE_KIND: "aws",
+    OCEL_EDGE_KIND: "native",
     OCEL_ISR_PREFIX: prefix,
     ...env,
   } as NodeJS.ProcessEnv)!;
@@ -79,8 +79,23 @@ test("the gate stays shut behind cloudflare, which tiers its own responses", () 
 });
 
 test("the gate opens for an edge that does not tier its own responses", () => {
-  expect(routerMode("aws")).toBe(true);
-  expect(originShaping(manifest(isrRoutes), { OCEL_EDGE_KIND: "aws" } as any)).not.toBeNull();
+  expect(routerMode("native")).toBe(true);
+  expect(originShaping(manifest(isrRoutes), { OCEL_EDGE_KIND: "native" } as any)).not.toBeNull();
+});
+
+test("only the native front reads cache tags, so only it is given them", () => {
+  expect(invalidatesByCacheTag("native")).toBe(true);
+  for (const kind of [undefined, "", "none", "cloudflare"]) {
+    expect(invalidatesByCacheTag(kind)).toBe(false);
+  }
+});
+
+test("leaves the tag header off a front that invalidates by nothing", () => {
+  const headers = serve(shaping({ OCEL_EDGE_KIND: "none" }), "/isr", fakeRes(), {
+    tags: ["products"],
+  });
+
+  expect(headers["cache-tag"]).toBeUndefined();
 });
 
 test("reads the release out of the isr prefix", () => {
@@ -239,5 +254,25 @@ test("tags an rsc response too, so a purge reaches both variants", () => {
     tags: ["products", "_N_T_/products"],
   });
 
-  expect(headers["cache-tag"]).toBe("r0a1b2c3d|products,r0a1b2c3d|_N_T_/products");
+  expect(headers["cache-tag"]).toBe("r0a1b2c3d|_N_T_/products,r0a1b2c3d|products");
+});
+
+test("stamps the soft tags first, since CloudFront keeps only the first fifty", () => {
+  const many = Array.from({ length: 60 }, (_, i) => `t${i}`);
+  const headers = serve(shaping(), "/isr", fakeRes({ "content-type": "text/x-component" }), {
+    tags: [...many, "_N_T_/products"],
+  });
+
+  const stored = headers["cache-tag"]!.split(",");
+  expect(stored).toHaveLength(50);
+  expect(stored[0]).toBe("r0a1b2c3d|_N_T_/products");
+  expect(stored.at(-1)).toBe("r0a1b2c3d|t48");
+});
+
+test("leaves out a tag CloudFront could never store", () => {
+  const headers = serve(shaping(), "/isr", fakeRes({ "content-type": "text/x-component" }), {
+    tags: ["with,comma", "x".repeat(256), "kept"],
+  });
+
+  expect(headers["cache-tag"]).toBe("r0a1b2c3d|kept");
 });

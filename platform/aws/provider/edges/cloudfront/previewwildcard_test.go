@@ -12,6 +12,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/aws"
 	cftypes "github.com/aws/aws-sdk-go-v2/service/cloudfront/types"
 
+	"github.com/ocelhq/ocel/platform/aws/provider/edgeledger"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
@@ -258,6 +259,39 @@ func TestReconcilePreviewWildcard(t *testing.T) {
 
 		if _, err := newWorld().edge().ReconcilePreviewWildcard(ctx, previewWildcardSpec()); err == nil {
 			t.Error("ReconcilePreviewWildcard without a bootstrapped edge set err = nil, want an error")
+		}
+	})
+}
+
+func TestTheWildcardIsAFrontTheTagInvalidatorReaches(t *testing.T) {
+	t.Run("reconciling it names it once for every project it fronts", func(t *testing.T) {
+		w := newWorld()
+		if _, err := previewBootstrapped(t, w).ReconcilePreviewWildcard(context.Background(), previewWildcardSpec()); err != nil {
+			t.Fatalf("ReconcilePreviewWildcard: %v", err)
+		}
+
+		raised := w.front.named(previewWildcardName(previewBase))
+		held := w.invalidationTargets(edgeledger.Scope(edge.ClassPreview, ""))
+		if !slices.Equal(held, []string{raised.id}) {
+			t.Errorf("substrate invalidation targets = %v, want the wildcard every preview is served from (%q)", held, raised.id)
+		}
+		if perProject := w.invalidationTargets(edgeledger.Scope(edge.ClassPreview, conformanceSlug)); perProject != nil {
+			t.Errorf("project invalidation targets = %v, want a shared front named once rather than per project", perProject)
+		}
+	})
+
+	t.Run("destroying it takes the name back", func(t *testing.T) {
+		w := newWorld()
+		e := previewBootstrapped(t, w)
+		ctx := context.Background()
+		if _, err := e.ReconcilePreviewWildcard(ctx, previewWildcardSpec()); err != nil {
+			t.Fatalf("ReconcilePreviewWildcard: %v", err)
+		}
+		if err := e.DestroyPreviewWildcard(ctx, previewBase); err != nil {
+			t.Fatalf("DestroyPreviewWildcard: %v", err)
+		}
+		if held := w.invalidationTargets(edgeledger.Scope(edge.ClassPreview, "")); len(held) != 0 {
+			t.Errorf("substrate invalidation targets = %v, want a torn-down wildcard invalidated by nobody", held)
 		}
 	})
 }

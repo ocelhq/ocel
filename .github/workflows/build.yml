@@ -53,3 +53,4 @@ jobs:
           pnpm --filter @framework/next-router test
           pnpm --filter @platform/cf-entry test
           pnpm --filter @platform/cloudfront-resolver test
+          pnpm --filter @platform/aws-tag-invalidator test

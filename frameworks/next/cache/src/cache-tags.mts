@@ -4,13 +4,34 @@ const maxTagsBytes = 16 * 1024;
 
 const encoder = new TextEncoder();
 
+const softTagPrefix = "_N_T_/";
+
+const releaseSeparator = "|";
+
+const maxStoredTagLength = 256;
+
 export interface BoundCacheTags {
   tags: string[];
   dropped: number;
 }
 
+function percentEncode(ch: string): string {
+  let out = "";
+  for (const byte of encoder.encode(ch)) {
+    out += "%" + byte.toString(16).toUpperCase().padStart(2, "0");
+  }
+  return out;
+}
+
+function transmittable(ch: string): boolean {
+  const code = ch.codePointAt(0)!;
+  return code >= 33 && code <= 126 && ch !== "," && ch !== "%";
+}
+
 function sanitize(tag: string): string {
-  return tag.replace(/[\t ]/g, (c) => encodeURIComponent(c));
+  let out = "";
+  for (const ch of tag) out += transmittable(ch) ? ch : percentEncode(ch);
+  return out;
 }
 
 export function boundCacheTags(raw: readonly string[]): BoundCacheTags {
@@ -40,4 +61,46 @@ export function boundCacheTags(raw: readonly string[]): BoundCacheTags {
   }
 
   return { tags, dropped };
+}
+
+function soft(tag: string): boolean {
+  return tag.startsWith(softTagPrefix);
+}
+
+export interface StoredCacheTags {
+  tags: string[];
+  unstorable: string[];
+  overflowed: string[];
+}
+
+export function storedCacheTags(
+  release: string,
+  raw: readonly string[],
+  limit = Number.POSITIVE_INFINITY,
+): StoredCacheTags {
+  const ordered = [...raw]
+    .filter((tag) => tag !== "")
+    .sort((a, b) => Number(soft(b)) - Number(soft(a)));
+
+  const tags: string[] = [];
+  const unstorable: string[] = [];
+  const overflowed: string[] = [];
+  const seen = new Set<string>();
+
+  for (const tag of ordered) {
+    const stamped = release + releaseSeparator + tag;
+    if (stamped.length > maxStoredTagLength || sanitize(tag) !== tag) {
+      unstorable.push(tag);
+      continue;
+    }
+    if (seen.has(stamped)) continue;
+    seen.add(stamped);
+    if (tags.length >= limit) {
+      overflowed.push(tag);
+      continue;
+    }
+    tags.push(stamped);
+  }
+
+  return { tags, unstorable, overflowed };
 }

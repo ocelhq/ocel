@@ -29,7 +29,7 @@ const (
 	tagPublisherSeedParamEnvVar   = "OCEL_ISR_WRITER_SEED_PARAM"
 )
 
-const tagPublisherFilter = `{"dynamodb":{"Keys":{"pk":{"S":[{"prefix":"PROJECT#"}]},"sk":{"S":["#META"]}}}}`
+const tagRecordStreamFilter = `{"dynamodb":{"Keys":{"pk":{"S":[{"prefix":"PROJECT#"}]},"sk":{"S":["#META"]}}}}`
 
 func pinnedTagPublisher() artifactPin {
 	return artifactPin{version: TagPublisherArtifactVersion, sha256: TagPublisherArtifactSHA256}
@@ -150,7 +150,7 @@ func tagPublisherResources(code artifactCode, class string) string {
 		tagPublisherRuntime, tagPublisherArchitecture, tagPublisherHandler, tagPublisherMemoryMB, tagPublisherTimeoutSeconds,
 		code.bucket, code.key,
 		tagPublisherAssetBucketEnvVar, tagPublisherWriterParamEnvVar, writerParam, tagPublisherSeedParamEnvVar, seedParam,
-		tagPublisherBatchSize, tagPublisherRetries, tagPublisherFilter)
+		tagPublisherBatchSize, tagPublisherRetries, tagRecordStreamFilter)
 }
 
 func isrWriterParamNames(class string) (writer, seed string) {

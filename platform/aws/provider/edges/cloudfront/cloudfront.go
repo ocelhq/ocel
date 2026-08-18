@@ -28,7 +28,7 @@ const (
 
 	cacheKeyHeader = "x-ocel-cache-key"
 
-	cacheTagHeader = "x-ocel-cache-tag"
+	cacheTagHeader = "cache-tag"
 
 	namespace = "ocel"
 

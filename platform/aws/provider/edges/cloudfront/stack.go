@@ -46,7 +46,7 @@ func (s *stack) ledger(c Clients) *edgeledger.Ledger {
 	return &edgeledger.Ledger{
 		Dynamo: c.Dynamo,
 		Table:  s.state[stackKeyStateTable],
-		Scope:  string(s.class()) + "/" + s.slug(),
+		Scope:  edgeledger.Scope(s.class(), s.slug()),
 	}
 }
 
@@ -105,9 +105,15 @@ func (s *stack) reconcileDistribution(ctx context.Context, c Clients) (front, er
 		return front{}, err
 	}
 	if !found {
-		return createDistribution(ctx, c, plan, nil, "")
+		created, err := createDistribution(ctx, c, plan, nil, "")
+		if err != nil {
+			return front{}, err
+		}
+		held = created
+	} else if err := reshapeDistribution(ctx, c, plan, held.id); err != nil {
+		return front{}, err
 	}
-	if err := reshapeDistribution(ctx, c, plan, held.id); err != nil {
+	if err := s.ledger(c).NoteInvalidationTarget(ctx, held.id); err != nil {
 		return front{}, err
 	}
 	return held, nil
@@ -124,6 +130,9 @@ func (s *stack) ensureDistribution(ctx context.Context, c Clients) (front, error
 	}
 	created, err := createDistribution(ctx, c, plan, nil, "")
 	if err != nil {
+		return front{}, err
+	}
+	if err := s.ledger(c).NoteInvalidationTarget(ctx, created.id); err != nil {
 		return front{}, err
 	}
 	s.state[stackKeyDistribution] = created.id
@@ -355,6 +364,8 @@ func (s *stack) Destroy(ctx context.Context) error {
 			errs = append(errs, err)
 		case found:
 			if err := s.p.deleteDistribution(ctx, c, held.id); err != nil {
+				errs = append(errs, err)
+			} else if err := s.ledger(c).ForgetInvalidationTarget(ctx, held.id); err != nil {
 				errs = append(errs, err)
 			}
 		}

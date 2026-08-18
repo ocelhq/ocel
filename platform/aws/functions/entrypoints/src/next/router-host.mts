@@ -7,7 +7,11 @@ import { originBodyBudget } from "@framework/next-router/origin-body";
 import type { RoutingManifest } from "@framework/next-protocol/routing-manifest";
 
 import type { Invoke } from "../shared/membrane.mjs";
-import { routingManifestPathVar, withEdgeHeader } from "../shared/edge-kind.mjs";
+import {
+  invalidatesByCacheTag,
+  routingManifestPathVar,
+  withEdgeHeader,
+} from "../shared/edge-kind.mjs";
 import { fetchToNodeHandler } from "../node/fetch-bridge.mjs";
 import { s3AssetBucket, uncachedResponses } from "./router-assets.mjs";
 import {
@@ -64,6 +68,7 @@ function routerDeps(
     app: host.app,
     deploymentId: host.deploymentId,
     originFetch: host.originFetch,
+    keepCacheTags: invalidatesByCacheTag(host.edgeKind),
     originBodyBudget: originBodyBudget(
       host.originBodyLimit,
       host.originBodyEncoding,
