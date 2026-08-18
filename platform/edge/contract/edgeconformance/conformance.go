@@ -18,7 +18,7 @@ func Run(t *testing.T, suite Suite) {
 	t.Run("the programmable surface is exactly the declared code needs", func(t *testing.T) {
 		e, _ := suite.New(t)
 		_, programmable := e.(edge.Programmable)
-		wants := e.Supports(edge.NeedEdgeMiddleware) || e.Supports(edge.NeedEdgeRuntime)
+		wants := slices.ContainsFunc(edge.CodeNeeds(), e.Supports)
 		if programmable != wants {
 			t.Errorf("Programmable = %v, but Supports(edge-middleware|edge-runtime) = %v; an edge that runs code must be programmable and one that does not must not be", programmable, wants)
 		}

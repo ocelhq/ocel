@@ -1777,8 +1777,124 @@ test("states the framework and next's own build id in serve.json", async () => {
   const serve = JSON.parse(
     await readFile(join(projectDir, ".ocel/output/serve.json"), "utf8"),
   );
-  expect(serve).toEqual({ framework: "next", buildId: args.buildId, edgeRouting: true });
+  expect(serve).toEqual({
+    framework: "next",
+    buildId: args.buildId,
+    edgeRouting: true,
+    needs: {},
+  });
   expect(serve.buildId).toBe((await readManifest(projectDir)).buildId);
+});
+
+async function readServeNeeds(projectDir: string) {
+  const serve = JSON.parse(
+    await readFile(join(projectDir, ".ocel/output/serve.json"), "utf8"),
+  );
+  return serve.needs;
+}
+
+test("declares the edge-middleware need with the matchers behind it", async () => {
+  const { projectDir, args } = await synthProject();
+  const edgeFile = join(projectDir, ".next/server/edge/middleware.js");
+  await mkdir(dirname(edgeFile), { recursive: true });
+  await writeFile(edgeFile, "export default () => {}");
+  args.outputs.middleware = {
+    pathname: "/_middleware",
+    id: "middleware",
+    sourcePage: "middleware",
+    assets: {},
+    wasmAssets: {},
+    type: "MIDDLEWARE",
+    runtime: "edge",
+    filePath: edgeFile,
+    edgeRuntime: {
+      modulePath: edgeFile,
+      entryKey: "middleware_middleware",
+      handlerExport: "handler",
+    },
+    config: {
+      matchers: [
+        { source: "/dashboard/:path*", sourceRegex: "^/dashboard(?:/(.*))?$" },
+      ],
+    },
+  } as never;
+  const adapter = await loadAdapterIn(projectDir);
+
+  await adapter.onBuildComplete(args as never);
+
+  expect(await readServeNeeds(projectDir)).toEqual({
+    "edge-middleware": {
+      count: 1,
+      matchers: ["^/dashboard(?:/(.*))?$"],
+    },
+  });
+});
+
+test("a nodejs middleware declares no edge-middleware need", async () => {
+  const { projectDir, args } = await synthProject();
+  await withNodeMiddleware(projectDir, args);
+  const adapter = await loadAdapterIn(projectDir);
+
+  await adapter.onBuildComplete(args as never);
+
+  expect(await readServeNeeds(projectDir)).toEqual({});
+});
+
+test("declares the edge-runtime need with the routes that render at the edge", async () => {
+  const { projectDir, args } = await synthProject();
+  const edgePage = join(projectDir, ".next/server/app/edgy/page.js");
+  await mkdir(dirname(edgePage), { recursive: true });
+  await writeFile(edgePage, "module.exports = () => {}");
+  args.outputs.appPages.push(
+    {
+      pathname: "/edgy",
+      id: "/edgy",
+      assets: {},
+      runtime: "edge",
+      filePath: edgePage,
+      config: {},
+      type: "APP_PAGE",
+      edgeRuntime: { entryKey: "app/edgy/page", handlerExport: "default" },
+    } as never,
+    {
+      pathname: "/edgy.rsc",
+      id: "/edgy.rsc",
+      assets: {},
+      runtime: "edge",
+      filePath: edgePage,
+      config: {},
+      type: "APP_PAGE",
+      edgeRuntime: { entryKey: "app/edgy/page", handlerExport: "default" },
+    } as never,
+  );
+  const adapter = await loadAdapterIn(projectDir);
+
+  await adapter.onBuildComplete(args as never);
+
+  expect(await readServeNeeds(projectDir)).toEqual({
+    "edge-runtime": { count: 1, routes: ["/edgy"] },
+    streaming: { count: 1 },
+  });
+});
+
+test("declares ppr-resume, edge-cache and streaming from an app router's prerenders", async () => {
+  const { projectDir, args } = await synthPrerenderProject();
+  for (const prerender of args.outputs.prerenders) {
+    (prerender as Record<string, unknown>).pprChain = {
+      headers: { "next-resume": "1" },
+    };
+  }
+  const adapter = await loadAdapterIn(projectDir);
+
+  await adapter.onBuildComplete(args as never);
+
+  expect(args.outputs.prerenders).toHaveLength(3);
+  expect(args.outputs.appPages).toHaveLength(2);
+  expect(await readServeNeeds(projectDir)).toEqual({
+    "ppr-resume": { count: 1, routes: ["/"] },
+    "edge-cache": { count: 1 },
+    streaming: { count: 1 },
+  });
 });
 
 test("two apps exposing the same route path do not overwrite each other", async () => {

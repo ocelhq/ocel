@@ -303,8 +303,11 @@ func EdgeApps(projectDir string) []string {
 		if !entry.IsDir() {
 			continue
 		}
-		bundle := filepath.Join(appsDir, entry.Name(), filepath.FromSlash(edge.AppBundleFile))
-		if _, err := os.Stat(bundle); err == nil {
+		needs := serveDescriptor(projectDir, entry.Name()).Needs
+		if slices.ContainsFunc(edge.CodeNeeds(), func(need edge.Need) bool {
+			_, ok := needs[need]
+			return ok
+		}) {
 			apps = append(apps, entry.Name())
 		}
 	}
@@ -312,15 +315,19 @@ func EdgeApps(projectDir string) []string {
 }
 
 func BuildID(projectDir, app string) string {
+	return serveDescriptor(projectDir, app).BuildID
+}
+
+func serveDescriptor(projectDir, app string) edge.ServeDescriptor {
 	raw, err := os.ReadFile(filepath.Join(projectDir, scratchDirName, outputDirName, appsDirName, app, edge.ServeDescriptorFile))
 	if err != nil {
-		return ""
+		return edge.ServeDescriptor{}
 	}
 	var descriptor edge.ServeDescriptor
 	if err := json.Unmarshal(raw, &descriptor); err != nil {
-		return ""
+		return edge.ServeDescriptor{}
 	}
-	return descriptor.BuildID
+	return descriptor
 }
 
 func collectFunctions(outputDir string) ([]manifestbuilder.Function, error) {

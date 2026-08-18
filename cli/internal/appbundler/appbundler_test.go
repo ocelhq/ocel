@@ -126,6 +126,9 @@ func TestBundle(t *testing.T) {
 		if len(descriptor.BuildID) != buildIDLength {
 			t.Errorf("%s buildId = %q, want %d hex characters", edge.ServeDescriptorFile, descriptor.BuildID, buildIDLength)
 		}
+		if descriptor.Needs == nil {
+			t.Errorf("%s = %s, want needs stated as an empty object, not null", edge.ServeDescriptorFile, readFile(t, descriptorPath))
+		}
 		if _, err := os.Stat(filepath.Join(l.funcDir, edge.ServeDescriptorFile)); err == nil {
 			t.Errorf("%s landed inside the function directory, want it in the app artifact root", edge.ServeDescriptorFile)
 		}

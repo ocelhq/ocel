@@ -314,6 +314,7 @@ describe("serve descriptor", () => {
     expect(readServe(outDir, "api")).toEqual({
       framework: "express",
       edgeRouting: false,
+      needs: {},
       buildId: expect.stringMatching(/^[0-9a-f]{16}$/),
     });
     expect(existsSync(path.join(appFuncDir(outDir, "api"), SERVE_DESCRIPTOR_FILE))).toBe(false);
