@@ -183,10 +183,13 @@ jobs:
       - name: Build @ocel/sst (tsc)
         run: pnpm --filter @ocel/sst build
 
+      - name: Build @ocel/pulumi (tsc)
+        run: pnpm --filter @ocel/pulumi build
+
       - name: Publish packages
         run: |
           set -euo pipefail
-          for pkg in ocel sst native-lib/cli-darwin-arm64 native-lib/cli-darwin-x64 native-lib/cli-linux-x64 native-lib/cli-win32-x64; do
+          for pkg in ocel sst pulumi native-lib/cli-darwin-arm64 native-lib/cli-darwin-x64 native-lib/cli-linux-x64 native-lib/cli-win32-x64; do
             (cd "packages/$pkg" && pnpm publish --access public --provenance --no-git-checks)
           done
         env:
