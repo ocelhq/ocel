@@ -306,6 +306,9 @@ func uploadFunctionArtifacts(ctx context.Context, cfg Config, manifest *deployme
 			}
 			dir := artifactArchivePath(cfg.ArtifactRoot, fn.GetArtifactPath())
 			overlay := builds.baked[fn.GetApp()].overlay()
+			if router := builds.routers[fn.GetApp()]; router.hosts(fn) {
+				overlay = withOverlay(overlay, router.overlay())
+			}
 			hash, err := hashArtifact(dir, overlay)
 			if err != nil {
 				return err

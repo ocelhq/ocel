@@ -451,8 +451,9 @@ func TestVPCPlacementFromLinkOutput(t *testing.T) {
 		if err != nil {
 			return err
 		}
-		return registerFunction(pctx, "fn--api--users", functionCoordinate("shop", testStack(t, "prod", "api"), "fn--api--users"),
-			"/users", args, artifactRef{Bucket: "artifacts", Key: "fn.zip"}, nil, nil, nil, role.Arn)
+		_, err = registerFunction(pctx, "fn--api--users", functionCoordinate("shop", testStack(t, "prod", "api"), "fn--api--users"),
+			"/users", args, artifactRef{Bucket: "artifacts", Key: "fn.zip"}, nil, nil, nil, nil, role.Arn)
+		return err
 	}
 	if err := pulumi.RunErr(program, pulumi.WithMocks("shop", "prod--api", rec)); err != nil {
 		t.Fatalf("run program: %v", err)
@@ -508,8 +509,9 @@ func TestFunctionOutsideAVPCRendersNoVPCConfig(t *testing.T) {
 		if err != nil {
 			return err
 		}
-		return registerFunction(pctx, "fn--api--users", functionCoordinate("shop", testStack(t, "prod", "api"), "fn--api--users"),
-			"/users", args, artifactRef{Bucket: "artifacts", Key: "fn.zip"}, nil, nil, nil, role.Arn)
+		_, err = registerFunction(pctx, "fn--api--users", functionCoordinate("shop", testStack(t, "prod", "api"), "fn--api--users"),
+			"/users", args, artifactRef{Bucket: "artifacts", Key: "fn.zip"}, nil, nil, nil, nil, role.Arn)
+		return err
 	}
 	if err := pulumi.RunErr(program, pulumi.WithMocks("shop", "prod--api", rec)); err != nil {
 		t.Fatalf("run program: %v", err)
@@ -538,6 +540,12 @@ func TestFunctionVPCConfigRefusesHalfAPlacement(t *testing.T) {
 	}
 }
 
+const mockAccount = "123456789012"
+
+func mockAccountARN(service, suffix string) string {
+	return "arn:aws:" + service + ":us-east-1:" + mockAccount + ":" + suffix
+}
+
 type inputRecorder struct {
 	mu       sync.Mutex
 	recorded map[string]resource.PropertyMap
@@ -551,6 +559,21 @@ func (r *inputRecorder) NewResource(args pulumi.MockResourceArgs) (string, resou
 		r.recorded = map[string]resource.PropertyMap{}
 	}
 	r.recorded[args.TypeToken+"::"+args.Name] = args.Inputs
+	if args.TypeToken == "aws:lambda/functionUrl:FunctionUrl" {
+		state := args.Inputs.Copy()
+		state["functionUrl"] = resource.NewStringProperty("https://" + args.Name + ".lambda-url.us-east-1.on.aws/")
+		return args.Name + "-id", state, nil
+	}
+	if args.TypeToken == "aws:lambda/function:Function" {
+		state := args.Inputs.Copy()
+		state["arn"] = resource.NewStringProperty(mockAccountARN("lambda", "function:"+args.Name))
+		return args.Name + "-id", state, nil
+	}
+	if args.TypeToken == "aws:iam/role:Role" {
+		state := args.Inputs.Copy()
+		state["arn"] = resource.NewStringProperty("arn:aws:iam::" + mockAccount + ":role/" + args.Name)
+		return args.Name + "-id", state, nil
+	}
 	if args.TypeToken == "aws:iam/rolePolicyAttachment:RolePolicyAttachment" {
 		if arn, ok := args.Inputs["policyArn"]; ok && arn.IsString() {
 			r.attached = append(r.attached, arn.StringValue())

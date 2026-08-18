@@ -43,6 +43,8 @@ const (
 	tagComponent = "ocel:component"
 	tagRoute     = "ocel:route"
 
+	tagImageOptimizer = "image-optimizer"
+
 	roleLocalName = "app"
 
 	lambdaServicePrincipal = "lambda.amazonaws.com"
@@ -176,6 +178,63 @@ func bytecodePolicy(c bytecodeConfig) (string, error) {
 	return string(out), nil
 }
 
+func assetReadPolicy(h *routerHost) (string, error) {
+	doc := map[string]any{
+		"Version": "2012-10-17",
+		"Statement": []any{
+			map[string]any{
+				"Effect":   "Allow",
+				"Action":   []string{"s3:GetObject"},
+				"Resource": fmt.Sprintf("arn:aws:s3:::%s/%s/*", h.AssetBucket, h.AssetPrefix),
+			},
+		},
+	}
+	out, err := json.Marshal(doc)
+	if err != nil {
+		return "", fmt.Errorf("render asset read policy: %w", err)
+	}
+	return string(out), nil
+}
+
+func routerInvokePolicy(siblings []string, account string, optimizer bool) (string, error) {
+	statements := []any{}
+	if len(siblings) > 0 {
+		statements = append(statements, map[string]any{
+			"Effect":   "Allow",
+			"Action":   []string{"lambda:InvokeFunctionUrl"},
+			"Resource": siblings,
+		})
+	}
+	if optimizer {
+		statements = append(statements, map[string]any{
+			"Effect":   "Allow",
+			"Action":   []string{"lambda:InvokeFunctionUrl"},
+			"Resource": fmt.Sprintf("arn:aws:lambda:*:%s:function:*", account),
+			"Condition": map[string]any{
+				"StringEquals": map[string]any{
+					"aws:ResourceTag/" + tagComponent: tagImageOptimizer,
+				},
+			},
+		})
+	}
+	if len(statements) == 0 {
+		return "", nil
+	}
+	out, err := json.Marshal(map[string]any{"Version": "2012-10-17", "Statement": statements})
+	if err != nil {
+		return "", fmt.Errorf("render router invoke policy: %w", err)
+	}
+	return string(out), nil
+}
+
+func accountOfARN(arn string) string {
+	parts := strings.Split(arn, ":")
+	if len(parts) < 5 {
+		return ""
+	}
+	return parts[4]
+}
+
 func isrPolicy(c isrConfig) (string, error) {
 	namespace := c.tagNamespace()
 	if namespace == "" {
@@ -295,6 +354,7 @@ type executionRole struct {
 	Bytecode   *bytecodeConfig
 	VarsKeyARN string
 	VPCAccess  bool
+	Router     *routerHost
 
 	VarsTableARN   string
 	Slug           string
@@ -305,8 +365,8 @@ type executionRole struct {
 	LinkPolicies []linkPolicy
 }
 
-func appExecutionRole(cfg Config, app string, caches map[string]*isrConfig, bytecode map[string]*bytecodeConfig, bundle appBundle, tags map[string]string, policies []linkPolicy, vpcAccess bool) executionRole {
-	role := executionRole{App: app, Cache: caches[app], Bytecode: bytecode[app], VarsKeyARN: cfg.VarsKeyARN, Tags: tags, LinkPolicies: policies, VPCAccess: vpcAccess}
+func appExecutionRole(cfg Config, app string, caches map[string]*isrConfig, bytecode map[string]*bytecodeConfig, bundle appBundle, tags map[string]string, policies []linkPolicy, vpcAccess bool, router *routerHost) executionRole {
+	role := executionRole{App: app, Cache: caches[app], Bytecode: bytecode[app], VarsKeyARN: cfg.VarsKeyARN, Tags: tags, LinkPolicies: policies, VPCAccess: vpcAccess, Router: router}
 	if bundle.hasLive() {
 		role.VarsTableARN = cfg.VarsTableARN
 		role.VarsReferenced = bundle.Referenced
@@ -370,6 +430,18 @@ func newFunctionRole(ctx *pulumi.Context, coord naming.Coordinate, r executionRo
 			return nil, err
 		}
 	}
+	if r.Router != nil && r.Router.AssetBucket != "" {
+		policy, err := assetReadPolicy(r.Router)
+		if err != nil {
+			return nil, err
+		}
+		if _, err := iam.NewRolePolicy(ctx, naming.ResourceID(naming.KindRole, roleLocalName, "policy", "asset", "read"), &iam.RolePolicyArgs{
+			Role:   role.Name,
+			Policy: pulumi.String(policy),
+		}); err != nil {
+			return nil, err
+		}
+	}
 	for _, link := range r.LinkPolicies {
 		if _, err := iam.NewRolePolicy(ctx, naming.ResourceID(naming.KindRole, roleLocalName, "policy", "link", link.Link), &iam.RolePolicyArgs{
 			Role:   role.Name,
@@ -421,10 +493,15 @@ func functionVPCConfig(logicalName string, v functionVPC) (lambda.FunctionVpcCon
 	}, nil
 }
 
-func registerFunction(ctx *pulumi.Context, logicalName string, coord naming.Coordinate, route string, args functionArgs, artifact artifactRef, base map[string]string, isr *isrConfig, bytecode *bytecodeConfig, roleArn pulumi.StringInput) error {
+func registerFunction(ctx *pulumi.Context, logicalName string, coord naming.Coordinate, route string, args functionArgs, artifact artifactRef, base map[string]string, resolved map[string]pulumi.StringInput, isr *isrConfig, bytecode *bytecodeConfig, roleArn pulumi.StringInput) (functionRef, error) {
+	var none functionRef
+
 	env := pulumi.StringMap{}
 	for key, value := range functionEnv(base, args, isr, bytecode) {
 		env[key] = pulumi.String(value)
+	}
+	for key, value := range resolved {
+		env[key] = value
 	}
 
 	resourceName := coord.PhysicalName(maxLambdaBaseNameLen)
@@ -434,7 +511,7 @@ func registerFunction(ctx *pulumi.Context, logicalName string, coord naming.Coor
 
 	vpcConfig, err := functionVPCConfig(logicalName, args.VPC)
 	if err != nil {
-		return err
+		return none, err
 	}
 
 	fn, err := lambda.NewFunction(ctx, resourceName, &lambda.FunctionArgs{
@@ -458,7 +535,7 @@ func registerFunction(ctx *pulumi.Context, logicalName string, coord naming.Coor
 		},
 	})
 	if err != nil {
-		return err
+		return none, err
 	}
 
 	url, err := lambda.NewFunctionUrl(ctx, naming.ResourceID(naming.KindFunction, coord.Name, "url"), &lambda.FunctionUrlArgs{
@@ -467,12 +544,17 @@ func registerFunction(ctx *pulumi.Context, logicalName string, coord naming.Coor
 		InvokeMode:        pulumi.String(args.InvokeMode),
 	})
 	if err != nil {
-		return err
+		return none, err
 	}
 
 	ctx.Export(logicalName, pulumi.Map{
 		outputKeyFunctionURL:  url.FunctionUrl,
 		outputKeyFunctionName: fn.Name,
 	})
-	return nil
+	return functionRef{URL: url.FunctionUrl, ARN: fn.Arn}, nil
+}
+
+type functionRef struct {
+	URL pulumi.StringOutput
+	ARN pulumi.StringOutput
 }

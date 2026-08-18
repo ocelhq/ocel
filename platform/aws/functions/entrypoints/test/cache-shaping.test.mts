@@ -3,9 +3,9 @@ import {
   originShaping,
   releaseOf,
   shapeOriginCache,
-  shapingEnabled,
   type OriginShaping,
 } from "../src/next/cache-shaping.mjs";
+import { routerMode } from "../src/shared/edge-kind.mjs";
 import { noteTags } from "../src/next/origin-tags.mjs";
 import type { ProjectManifest } from "../src/next/project-manifest.mjs";
 
@@ -69,17 +69,17 @@ function shaping(env: Record<string, string> = {}, config: Record<string, unknow
 }
 
 test("the gate stays shut when no edge kind is declared", () => {
-  expect(shapingEnabled(undefined)).toBe(false);
-  expect(shapingEnabled("")).toBe(false);
+  expect(routerMode(undefined)).toBe(false);
+  expect(routerMode("")).toBe(false);
 });
 
 test("the gate stays shut behind cloudflare, which tiers its own responses", () => {
-  expect(shapingEnabled("cloudflare")).toBe(false);
+  expect(routerMode("cloudflare")).toBe(false);
   expect(originShaping(manifest(isrRoutes), { OCEL_EDGE_KIND: "cloudflare" } as any)).toBeNull();
 });
 
 test("the gate opens for an edge that does not tier its own responses", () => {
-  expect(shapingEnabled("aws")).toBe(true);
+  expect(routerMode("aws")).toBe(true);
   expect(originShaping(manifest(isrRoutes), { OCEL_EDGE_KIND: "aws" } as any)).not.toBeNull();
 });
 

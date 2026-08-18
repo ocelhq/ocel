@@ -61,7 +61,7 @@ func renderAppRole(t *testing.T, app string, policies []linkPolicy) *policyRecor
 	t.Helper()
 	rec := &policyRecorder{}
 	program := func(pctx *pulumi.Context) error {
-		role := appExecutionRole(Config{VarsKeyARN: "arn:aws:kms:us-east-1:1:key/k"}, app, nil, nil, appBundle{}, nil, policies, false)
+		role := appExecutionRole(Config{VarsKeyARN: "arn:aws:kms:us-east-1:1:key/k"}, app, nil, nil, appBundle{}, nil, policies, false, nil)
 		_, err := newFunctionRole(pctx, roleCoordinate("shop", testStack(t, "prod", app)), role)
 		return err
 	}

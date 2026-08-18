@@ -48,6 +48,7 @@ type appBuilds struct {
 	caches     map[string]*isrConfig
 	bytecode   map[string]*bytecodeConfig
 	baked      map[string]appBundle
+	routers    map[string]*routerHost
 }
 
 func resolveAppBuilds(cfg Config, manifest *deploymentsv1.Manifest, baked map[string]appBundle) (appBuilds, error) {
@@ -58,6 +59,7 @@ func resolveAppBuilds(cfg Config, manifest *deploymentsv1.Manifest, baked map[st
 		caches:     map[string]*isrConfig{},
 		bytecode:   map[string]*bytecodeConfig{},
 		baked:      baked,
+		routers:    map[string]*routerHost{},
 	}
 	for _, app := range manifestApps(manifest) {
 		name := app.GetName()
@@ -74,6 +76,13 @@ func resolveAppBuilds(cfg Config, manifest *deploymentsv1.Manifest, baked map[st
 		builds.bytecode[name] = &bytecodeConfig{
 			Bucket: cfg.AssetBucket,
 			Prefix: bytecodePrefixOf(coord),
+		}
+		router, err := resolveRouterHost(cfg, app, coord, id.DeploymentID())
+		if err != nil {
+			return appBuilds{}, err
+		}
+		if router != nil {
+			builds.routers[name] = router
 		}
 	}
 	for _, fn := range manifest.GetFunctions() {

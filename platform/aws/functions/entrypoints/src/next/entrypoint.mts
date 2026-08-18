@@ -8,11 +8,14 @@ import { loadIncrementalCacheFactory } from "./incremental-cache.mjs";
 import { originShaping, shapeOriginCache } from "./cache-shaping.mjs";
 import { loadProjectManifest } from "./project-manifest.mjs";
 import { awaitLiveValues } from "../shared/live-values.mjs";
+import { routerMode } from "../shared/edge-kind.mjs";
 import {
   installCompileCacheFlush,
   installCompileCacheWarm,
   reportFatalBoot,
+  serveEntry,
   serveInvoke,
+  serveLocal,
   type Invoke,
 } from "../shared/membrane.mjs";
 
@@ -75,9 +78,18 @@ async function boot(): Promise<void> {
     );
   };
 
-  await serveInvoke(invoke, (port) => {
-    process.env.__NEXT_PRIVATE_ORIGIN = `http://127.0.0.1:${port}`;
-  });
+  if (!routerMode(process.env.OCEL_EDGE_KIND)) {
+    await serveInvoke(invoke, (port) => {
+      process.env.__NEXT_PRIVATE_ORIGIN = `http://127.0.0.1:${port}`;
+    });
+    return;
+  }
+
+  const localOrigin = `http://127.0.0.1:${await serveLocal(invoke)}`;
+  process.env.__NEXT_PRIVATE_ORIGIN = localOrigin;
+
+  const { routerHostFromEnv, routerHostInvoke } = await import("./router-host.mjs");
+  await serveEntry(routerHostInvoke(routerHostFromEnv(process.env, localOrigin)));
 }
 
 boot().catch((err) => {

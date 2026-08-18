@@ -22,6 +22,9 @@ const (
 	optimizerThreadpoolSize = 4
 
 	optimizerBucketEnvVar = "OCEL_IMAGE_ASSET_BUCKET"
+
+	optimizerComponentTagKey   = "ocel:component"
+	optimizerComponentTagValue = "image-optimizer"
 )
 
 const optimizerLabel = "image optimizer"
@@ -87,6 +90,9 @@ func imageOptimizerResources(code artifactCode) string {
         Variables:
           %s: !Ref AssetBucket
           UV_THREADPOOL_SIZE: '%d'
+      Tags:
+        - Key: %s
+          Value: %s
   ImageOptimizerUrl:
     Type: AWS::Lambda::Url
     Metadata:
@@ -96,7 +102,8 @@ func imageOptimizerResources(code artifactCode) string {
       AuthType: AWS_IAM
       InvokeMode: RESPONSE_STREAM
 `, optimizerRuntime, optimizerArchitecture, optimizerHandler, optimizerMemoryMB, optimizerTimeoutSeconds,
-		code.bucket, code.key, optimizerBucketEnvVar, optimizerThreadpoolSize)
+		code.bucket, code.key, optimizerBucketEnvVar, optimizerThreadpoolSize,
+		optimizerComponentTagKey, optimizerComponentTagValue)
 }
 
 func imageOptimizerOutput(code artifactCode) string {
