@@ -14,6 +14,28 @@ const launcherModule = `module.exports = {
       res.end("ok");
       return;
     }
+    if (req.url === "/__tagged" || req.url === "/__stale" || req.url === "/__private") {
+      const copied = Object.assign({}, req.headers);
+      copied[Symbol.for("ocel.next.origin-cache-tags.v1")].push("products", "_N_T_/products");
+      if (req.url === "/__stale") {
+        res.setHeader("x-nextjs-cache", "STALE");
+        res.setHeader("cache-control", "s-maxage=60, stale-while-revalidate=600");
+      }
+      if (req.url === "/__private") {
+        res.setHeader("x-nextjs-cache", "STALE");
+        res.setHeader("cache-control", "private, no-store");
+      }
+      res.setHeader("content-type", "text/html; charset=utf-8");
+      res.end("<html>ok</html>");
+      return;
+    }
+    if (req.url.startsWith("/isr") || req.url === "/static" || req.url === "/blog/hello") {
+      if (req.url === "/isr?fail=1") res.statusCode = 500;
+      if (req.url === "/isr?cookie=1") res.setHeader("set-cookie", "sid=1");
+      res.setHeader("content-type", "text/html; charset=utf-8");
+      res.end("<html>page</html>");
+      return;
+    }
     if (req.url === "/__request-meta") {
       res.setHeader("content-type", "application/json");
       res.end(JSON.stringify(ctx.requestMeta));
@@ -98,12 +120,29 @@ beforeAll(async () => {
   await new Promise<void>((resolve) => controlServer.listen(sockPath, resolve));
 
   const projectDir = join(dir, "project");
-  await writeNextProjectFixture(projectDir);
+  await writeNextProjectFixture(
+    projectDir,
+    {},
+    {
+      routes: {
+        "/isr": { initialRevalidateSeconds: 60, initialExpireSeconds: 660 },
+        "/static": { initialRevalidateSeconds: false },
+      },
+      dynamicRoutes: {
+        "/blog/[slug]": {
+          routeRegex: "^/blog/([^/]+?)(?:/)?$",
+          fallbackRevalidate: 120,
+        },
+      },
+    },
+  );
   const launcherPath = join(projectDir, "__next_launcher.cjs");
   await writeFile(launcherPath, launcherModule);
 
   (globalThis as any).__ocelTestRevalidate = noteRevalidation;
 
+  process.env.OCEL_ISR_PREFIX = "prod/shop/web/r0a1b2c3d/isr";
+  process.env.OCEL_EDGE_KIND = "aws";
   process.env.OCEL_CONTROL_SOCKET = sockPath;
   process.env.OCEL_HANDLER = launcherPath;
   await import("../src/next/entrypoint.mjs");
@@ -162,6 +201,70 @@ test("announces a revalidation the request performed", async () => {
   const res = await fetch(`http://127.0.0.1:${port}/__revalidate`);
 
   expect(res.headers.get("x-ocel-revalidated")).toBe("1");
+  await res.text();
+});
+
+test("carries the tags the render collected, prefixed by the release", async () => {
+  const res = await fetch(`http://127.0.0.1:${port}/__tagged`);
+
+  expect(res.headers.get("cache-tag")).toBe(
+    "r0a1b2c3d|products,r0a1b2c3d|_N_T_/products",
+  );
+  await res.text();
+});
+
+test("clamps the cache-control of a response Next marked STALE", async () => {
+  const res = await fetch(`http://127.0.0.1:${port}/__stale`);
+
+  expect(res.headers.get("cache-control")).toBe("s-maxage=0, must-revalidate");
+  expect(res.headers.get("cache-tag")).toBe(
+    "r0a1b2c3d|products,r0a1b2c3d|_N_T_/products",
+  );
+  await res.text();
+});
+
+test("leaves a stale response Next marked private alone", async () => {
+  const res = await fetch(`http://127.0.0.1:${port}/__private`);
+
+  expect(res.headers.get("cache-control")).toBe("private, no-store");
+  await res.text();
+});
+
+test("shapes an ISR page's s-maxage from its initialRevalidateSeconds", async () => {
+  const res = await fetch(`http://127.0.0.1:${port}/isr`);
+
+  expect(res.headers.get("cache-control")).toBe(
+    "s-maxage=60, stale-while-revalidate=600",
+  );
+  await res.text();
+});
+
+test("shapes a dynamic ISR route from its fallbackRevalidate", async () => {
+  const res = await fetch(`http://127.0.0.1:${port}/blog/hello`);
+
+  expect(res.headers.get("cache-control")).toBe("s-maxage=120");
+  await res.text();
+});
+
+test("leaves a route the prerender manifest does not revalidate uncached", async () => {
+  const res = await fetch(`http://127.0.0.1:${port}/static`);
+
+  expect(res.headers.has("cache-control")).toBe(false);
+  await res.text();
+});
+
+test("leaves an error page on a revalidating route uncached", async () => {
+  const res = await fetch(`http://127.0.0.1:${port}/isr?fail=1`);
+
+  expect(res.status).toBe(500);
+  expect(res.headers.has("cache-control")).toBe(false);
+  await res.text();
+});
+
+test("leaves a response that sets a cookie uncached", async () => {
+  const res = await fetch(`http://127.0.0.1:${port}/isr?cookie=1`);
+
+  expect(res.headers.has("cache-control")).toBe(false);
   await res.text();
 });
 

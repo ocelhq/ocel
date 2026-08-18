@@ -5,6 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, beforeAll, expect, test } from "vitest";
 import { loadIncrementalCacheFactory } from "../src/next/incremental-cache.mjs";
+import { loadProjectManifest } from "../src/next/project-manifest.mjs";
 import { previewModeId, writeNextProjectFixture } from "./next-project-fixture.mjs";
 
 let dir: string;
@@ -16,10 +17,14 @@ afterAll(async () => {
   await rm(dir, { recursive: true, force: true });
 });
 
+async function factoryFor(projectDir: string) {
+  return loadIncrementalCacheFactory(projectDir, await loadProjectManifest(projectDir));
+}
+
 async function makeFixture(name: string, overrides: Record<string, unknown> = {}) {
   const projectDir = join(dir, name);
   await writeNextProjectFixture(projectDir, overrides);
-  const make = await loadIncrementalCacheFactory(projectDir);
+  const make = await factoryFor(projectDir);
   const requireFromApp = createRequire(join(projectDir, "package.json"));
   const StubCacheHandler = requireFromApp(join(projectDir, "stub-cache-handler.cjs")).default;
   return { projectDir, make: make!, StubCacheHandler };
@@ -119,14 +124,14 @@ test("returns null when the bundle has no required-server-files manifest", async
   await writeNextProjectFixture(projectDir);
   await rm(join(projectDir, ".next/required-server-files.json"));
 
-  expect(await loadIncrementalCacheFactory(projectDir)).toBeNull();
+  expect(await factoryFor(projectDir)).toBeNull();
 });
 
 test("returns null when the manifest names no cacheHandler", async () => {
   const projectDir = join(dir, "no-handler");
   await writeNextProjectFixture(projectDir, { cacheHandler: undefined });
 
-  expect(await loadIncrementalCacheFactory(projectDir)).toBeNull();
+  expect(await factoryFor(projectDir)).toBeNull();
 });
 
 test("accepts a cache handler exported as plain module.exports", async () => {
@@ -137,7 +142,7 @@ test("accepts a cache handler exported as plain module.exports", async () => {
     "class PlainHandler { async get() { return null; } }\nmodule.exports = PlainHandler;\n",
   );
 
-  const make = await loadIncrementalCacheFactory(projectDir);
+  const make = await factoryFor(projectDir);
   const cache: any = make!(fakeReq());
   expect(await cache.get("k", { kind: "FETCH" })).toBeNull();
 });

@@ -1599,6 +1599,7 @@ function streamOf(body: ArrayBuffer | null): ReadableStream | null {
 const EMPTY_BODY_HEADER = "x-ocel-empty-body";
 
 const NEXT_CACHE_TAGS_HEADER = "x-next-cache-tags";
+const CACHE_TAG_HEADER = "cache-tag";
 
 const TEXT_CONTENT_TYPE =
   /^(text\/|application\/(json|javascript|xml|x-www-form-urlencoded)\b|[^;]+\+(json|xml)\b)/i;
@@ -1653,7 +1654,9 @@ function originFetch(deps: RouteDeps): typeof fetch {
       ? doFetch(request)
       : doFetch(input as RequestInfo, init));
     const hasEmptyBody = response.headers.has(EMPTY_BODY_HEADER);
-    const hasCacheTags = response.headers.has(NEXT_CACHE_TAGS_HEADER);
+    const hasCacheTags =
+      response.headers.has(NEXT_CACHE_TAGS_HEADER) ||
+      response.headers.has(CACHE_TAG_HEADER);
     const announced = response.headers.has(OCEL_REVALIDATED);
     if (!hasEmptyBody && !hasCacheTags && !announced) return response;
 
@@ -1662,6 +1665,7 @@ function originFetch(deps: RouteDeps): typeof fetch {
     const rebuilt = new Response(hasEmptyBody ? null : response.body, response);
     rebuilt.headers.delete(EMPTY_BODY_HEADER);
     rebuilt.headers.delete(NEXT_CACHE_TAGS_HEADER);
+    rebuilt.headers.delete(CACHE_TAG_HEADER);
     rebuilt.headers.delete(OCEL_REVALIDATED);
     return rebuilt;
   }) as typeof fetch;

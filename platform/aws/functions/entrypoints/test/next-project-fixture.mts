@@ -34,6 +34,7 @@ export interface NextProjectFixture {
 export async function writeNextProjectFixture(
   projectDir: string,
   configOverrides: Record<string, unknown> = {},
+  prerenderOverrides: Record<string, unknown> = {},
 ): Promise<NextProjectFixture> {
   await mkdir(join(projectDir, ".next"), { recursive: true });
 
@@ -56,7 +57,13 @@ export async function writeNextProjectFixture(
   );
   await writeFile(
     join(projectDir, ".next/prerender-manifest.json"),
-    JSON.stringify({ version: 4, routes: {}, preview: { previewModeId } }),
+    JSON.stringify({
+      version: 4,
+      routes: {},
+      dynamicRoutes: {},
+      preview: { previewModeId },
+      ...prerenderOverrides,
+    }),
   );
 
   return { projectDir, cacheHandlerPath };

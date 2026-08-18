@@ -1,8 +1,8 @@
 import { createHash } from "node:crypto";
-import { readFile } from "node:fs/promises";
 import { createRequire } from "node:module";
 import { join } from "node:path";
 import type http from "node:http";
+import type { ProjectManifest } from "./project-manifest.mjs";
 
 const MAIN_KEY_PREFIX = "v4";
 const PRERENDER_REVALIDATE_HEADER = "x-prerender-revalidate";
@@ -59,33 +59,18 @@ class PagesRuntimeIncrementalCache {
 
 export type IncrementalCacheFactory = (req: http.IncomingMessage) => unknown;
 
-export async function loadIncrementalCacheFactory(
+export function loadIncrementalCacheFactory(
   projectDir: string,
-): Promise<IncrementalCacheFactory | null> {
-  let manifest: any;
-  try {
-    manifest = JSON.parse(
-      await readFile(join(projectDir, ".next", "required-server-files.json"), "utf8"),
-    );
-  } catch {
-    return null;
-  }
-  const config = manifest?.config;
-  if (!config?.cacheHandler) return null;
+  manifest: ProjectManifest | null,
+): IncrementalCacheFactory | null {
+  if (!manifest?.config?.cacheHandler) return null;
+  const { config, distDir } = manifest;
 
   const appRequire = createRequire(join(projectDir, "package.json"));
   const handlerModule = appRequire(config.cacheHandler);
   const CurCacheHandler = handlerModule.default ?? handlerModule;
   const fetchCacheKeyPrefix = config.experimental?.fetchCacheKeyPrefix ?? "";
-
-  const distDir = join(projectDir, config.distDir || ".next");
-  let previewModeId: string | undefined;
-  try {
-    const prerenderManifest = JSON.parse(
-      await readFile(join(distDir, "prerender-manifest.json"), "utf8"),
-    );
-    previewModeId = prerenderManifest?.preview?.previewModeId;
-  } catch {}
+  const previewModeId: string | undefined = manifest.prerender?.preview?.previewModeId;
 
   return (req) =>
     new PagesRuntimeIncrementalCache({

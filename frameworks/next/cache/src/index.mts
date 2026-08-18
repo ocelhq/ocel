@@ -16,6 +16,7 @@ export {
   type TagSnapshotStore,
 } from "./tag-snapshot.mjs";
 export type { EdgeCacheRpc, FetchCacheEntry } from "./edge-cache-rpc.mjs";
+export { boundCacheTags, type BoundCacheTags } from "./cache-tags.mjs";
 export { cacheKey, variantHeadersFile } from "./naming.mjs";
 
 export interface CacheEntryFile {
