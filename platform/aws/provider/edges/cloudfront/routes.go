@@ -20,9 +20,9 @@ import (
 )
 
 const (
-	routeAttempts     = 5
+	routeAttempts     = 10
 	routeRetryBase    = 200 * time.Millisecond
-	routeRetryCeiling = 4 * time.Second
+	routeRetryCeiling = 10 * time.Second
 )
 
 type route struct {

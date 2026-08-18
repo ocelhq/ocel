@@ -105,7 +105,7 @@ func (s *stack) reconcileDistribution(ctx context.Context, c Clients) (front, er
 		return front{}, err
 	}
 	if !found {
-		return createDistribution(ctx, c, plan)
+		return createDistribution(ctx, c, plan, nil, "")
 	}
 	if err := reshapeDistribution(ctx, c, plan, held.id); err != nil {
 		return front{}, err
@@ -122,7 +122,7 @@ func (s *stack) ensureDistribution(ctx context.Context, c Clients) (front, error
 	if found {
 		return held, nil
 	}
-	created, err := createDistribution(ctx, c, plan)
+	created, err := createDistribution(ctx, c, plan, nil, "")
 	if err != nil {
 		return front{}, err
 	}
@@ -145,8 +145,8 @@ func (s *stack) Promote(ctx context.Context, promotion edge.Promotion, pointer s
 	if err != nil {
 		return err
 	}
-	hostnames := edge.BoundDomains(s.state)
-	if pointerOr(pointer) == edgeledger.DefaultPointer && len(hostnames) > 0 {
+	hostnames := s.servedHostnames(pointer)
+	if len(hostnames) > 0 {
 		published, err := s.routeFor(ctx, c, promotion)
 		if err != nil {
 			return err
@@ -159,7 +159,74 @@ func (s *stack) Promote(ctx context.Context, promotion edge.Promotion, pointer s
 			return err
 		}
 	}
-	return s.ledger(c).Promote(ctx, promotion, pointer)
+	if err := s.ledger(c).Promote(ctx, promotion, pointer); err != nil {
+		return errors.Join(err, s.unpublishUnrecorded(ctx, c, pointer))
+	}
+	return nil
+}
+
+func (s *stack) unpublishUnrecorded(ctx context.Context, c Clients, pointer string) error {
+	host := s.previewHost(pointer)
+	if host == "" {
+		return nil
+	}
+	pointers, err := s.ledger(c).Pointers(ctx)
+	if err != nil || slices.Contains(pointers, pointerOr(pointer)) {
+		return err
+	}
+	return s.routes(c).apply(ctx, nil, []string{host})
+}
+
+func (s *stack) servedHostnames(pointer string) []string {
+	if host := s.previewHost(pointer); host != "" {
+		return []string{host}
+	}
+	if pointerOr(pointer) != edgeledger.DefaultPointer {
+		return nil
+	}
+	return edge.BoundDomains(s.state)
+}
+
+func (s *stack) previewBase() string {
+	if s.class() != edge.ClassPreview {
+		return ""
+	}
+	if base := s.state[edge.StackKeyGlobalPreview]; base != "" {
+		return base
+	}
+	return s.state[stackKeyPreviewBase]
+}
+
+func (s *stack) onPreviewWildcard() bool {
+	return s.state[stackKeyDistribution] == "" && s.previewBase() != ""
+}
+
+func (s *stack) previewHost(pointer string) string {
+	base := s.previewBase()
+	if base == "" || pointerOr(pointer) == edgeledger.DefaultPointer {
+		return ""
+	}
+	return edge.PreviewHost(s.slug(), pointer, "", base)
+}
+
+func (s *stack) unroutePreviews(ctx context.Context, c Clients) error {
+	if s.previewBase() == "" {
+		return nil
+	}
+	pointers, err := s.ledger(c).Pointers(ctx)
+	if err != nil {
+		return err
+	}
+	hosts := make([]string, 0, len(pointers))
+	for _, pointer := range pointers {
+		if host := s.previewHost(pointer); host != "" {
+			hosts = append(hosts, host)
+		}
+	}
+	if len(hosts) == 0 {
+		return nil
+	}
+	return s.routes(c).apply(ctx, nil, hosts)
 }
 
 func (s *stack) routeFor(ctx context.Context, c Clients, promotion edge.Promotion) (route, error) {
@@ -225,6 +292,11 @@ func (s *stack) RemovePointer(ctx context.Context, pointer string) (edge.PruneRe
 	if err != nil {
 		return edge.PruneResult{}, err
 	}
+	if host := s.previewHost(pointer); host != "" {
+		if err := s.routes(c).apply(ctx, nil, []string{host}); err != nil {
+			return edge.PruneResult{}, err
+		}
+	}
 	return s.ledger(c).RemovePointer(ctx, pointer)
 }
 
@@ -272,19 +344,27 @@ func (s *stack) Destroy(ctx context.Context) error {
 			errs = append(errs, fmt.Errorf("unbind %q before destroying the stack that serves it: %w", hostname, err))
 		}
 	}
-	held, found, err := s.findDistributionFor(ctx, c, s.plan().name)
-	switch {
-	case err != nil:
-		errs = append(errs, err)
-	case found:
-		if err := s.p.deleteDistribution(ctx, c, s.plan(), held.id); err != nil {
+	unrouted := s.unroutePreviews(ctx, c)
+	if unrouted != nil {
+		errs = append(errs, fmt.Errorf("stop serving this project's previews before erasing the deployments ledger that names them, so a re-run still knows which hostnames to withdraw: %w", unrouted))
+	}
+	if !s.onPreviewWildcard() {
+		held, found, err := s.findDistributionFor(ctx, c, s.plan().name)
+		switch {
+		case err != nil:
 			errs = append(errs, err)
+		case found:
+			if err := s.p.deleteDistribution(ctx, c, held.id); err != nil {
+				errs = append(errs, err)
+			}
 		}
 	}
 	delete(s.state, stackKeyDistribution)
 	delete(s.state, edge.StackKeyFront)
-	if err := s.ledger(c).Destroy(ctx); err != nil {
-		errs = append(errs, err)
+	if unrouted == nil {
+		if err := s.ledger(c).Destroy(ctx); err != nil {
+			errs = append(errs, err)
+		}
 	}
 	return errors.Join(errs...)
 }

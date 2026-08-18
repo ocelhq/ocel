@@ -163,12 +163,12 @@ func findDistribution(ctx context.Context, c Clients, name string) (front, bool,
 	return front{}, false, nil
 }
 
-func createDistribution(ctx context.Context, c Clients, plan distributionPlan) (front, error) {
+func createDistribution(ctx context.Context, c Clients, plan distributionPlan, aliases []string, certificate string) (front, error) {
 	if err := plan.ready(); err != nil {
 		return front{}, err
 	}
 	out, err := c.CloudFront.CreateDistribution(ctx, &cloudfront.CreateDistributionInput{
-		DistributionConfig: plan.config(nil, ""),
+		DistributionConfig: plan.config(aliases, certificate),
 	})
 	if err != nil {
 		return front{}, createError("distribution", plan.name, err)
@@ -267,7 +267,7 @@ func dropAlias(ctx context.Context, c Clients, plan distributionPlan, id, hostna
 	return putConfig(ctx, c, id, etag, plan.config(aliases, certificate))
 }
 
-func (p *provider) deleteDistribution(ctx context.Context, c Clients, plan distributionPlan, id string) error {
+func (p *provider) deleteDistribution(ctx context.Context, c Clients, id string) error {
 	held, etag, err := configOf(ctx, c, id)
 	if err != nil {
 		if isNotFound(err) {
@@ -276,9 +276,8 @@ func (p *provider) deleteDistribution(ctx context.Context, c Clients, plan distr
 		return err
 	}
 	if aws.ToBool(held.Enabled) {
-		disabled := plan.config(aliasesOf(held), certificateOf(held))
-		disabled.Enabled = ptr(false)
-		if err := putConfig(ctx, c, id, etag, disabled); err != nil {
+		held.Enabled = ptr(false)
+		if err := putConfig(ctx, c, id, etag, held); err != nil {
 			return err
 		}
 		if err := p.settler().hold(ctx); err != nil {
