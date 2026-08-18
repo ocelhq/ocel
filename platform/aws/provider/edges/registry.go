@@ -1,18 +1,25 @@
 package edges
 
 import (
+	"context"
 	"fmt"
 	"slices"
 	"strings"
 
+	"github.com/aws/aws-sdk-go-v2/aws"
+
+	"github.com/ocelhq/ocel/platform/aws/provider/edges/apigateway"
 	cloudflare "github.com/ocelhq/ocel/platform/edge/cloudflare/deploy"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
-type Deps struct{}
+type Deps struct {
+	AWS func(ctx context.Context) (aws.Config, error)
+}
 
 var constructors = map[edge.Kind]func(Deps) edge.Edge{
 	edge.KindCloudflare: func(Deps) edge.Edge { return cloudflare.New() },
+	edge.KindNone:       func(deps Deps) edge.Edge { return apigateway.New(apigateway.FromConfig(deps.AWS)) },
 }
 
 func SupportedEdges() []edge.Kind {

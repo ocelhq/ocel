@@ -454,7 +454,7 @@ func TestReclaimCoversEveryKeyTheDeployWrote(t *testing.T) {
 	if err := uploadEdgeBundles(ctx, cfg, manifest, builds); err != nil {
 		t.Fatalf("uploadEdgeBundles: %v", err)
 	}
-	record, err := buildDeploymentRecord(cfg, manifest, manifest.GetApps()[0], builds.identities["web"], nil, builds)
+	record, err := buildDeploymentRecord(cfg, manifest, manifest.GetApps()[0], builds.identities["web"], nil, builds, nil)
 	if err != nil {
 		t.Fatalf("buildDeploymentRecord: %v", err)
 	}

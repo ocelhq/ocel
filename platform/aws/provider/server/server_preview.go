@@ -58,9 +58,9 @@ func (s *Server) Preflight(ctx context.Context, req *deploymentsv1.PreflightRequ
 		resp.Identity.AwsProfile = os.Getenv("AWS_PROFILE")
 	}
 
-	resp.DomainClaims = domainClaims(ctx, s.edgeRouteOwner(), req.GetSlug(), req.GetDomains())
+	resp.DomainClaims = domainClaims(ctx, s.edgeRouteOwner(awscfg.Region), req.GetSlug(), req.GetDomains())
 
-	edgeFront, err := s.originEdge()
+	edgeFront, err := s.originEdge(awscfg.Region)
 	if err != nil {
 		return nil, err
 	}
@@ -99,7 +99,7 @@ func (s *Server) Preflight(ctx context.Context, req *deploymentsv1.PreflightRequ
 			if err := globalPreviewProblem(recorded, req); err != nil {
 				return nil, connect.NewError(connect.CodeFailedPrecondition, err)
 			}
-			resp.GlobalPreviewDomain = globalPreviewDomain(ctx, s.edgeRouteOwner(), recorded)
+			resp.GlobalPreviewDomain = globalPreviewDomain(ctx, s.edgeRouteOwner(awscfg.Region), recorded)
 			if recorded.BaseDomain != "" {
 				resp.KnownSlugs = knownSlugs(ctx, awscfg, preview, req.GetSlug())
 			}
@@ -119,9 +119,9 @@ func globalPreviewProblem(recorded bootstrap.PreviewDomain, req *deploymentsv1.P
 
 type routeOwnerFunc func(ctx context.Context, hostname string) (string, error)
 
-func (s *Server) edgeRouteOwner() routeOwnerFunc {
+func (s *Server) edgeRouteOwner(region string) routeOwnerFunc {
 	return func(ctx context.Context, hostname string) (string, error) {
-		edgeFront, err := s.originEdge()
+		edgeFront, err := s.originEdge(region)
 		if err != nil {
 			return "", err
 		}
@@ -328,7 +328,7 @@ func (s *Server) previewTeardownContext(ctx context.Context, opts options, slug 
 
 		Values: teardownValues(awscfg, deployed, bootstrap.ClassPreview),
 	}
-	edgeFront, err := s.originEdge()
+	edgeFront, err := s.originEdge(awscfg.Region)
 	if err != nil {
 		return deploy.Config{}, nil, err
 	}

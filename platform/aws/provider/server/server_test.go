@@ -566,15 +566,15 @@ func TestServerBootstrapForgetsDeployed(t *testing.T) {
 func TestServerEdge(t *testing.T) {
 	t.Parallel()
 
-	t.Run("it comes from the registry, once per kind", func(t *testing.T) {
+	t.Run("it comes from the registry, once per kind and region", func(t *testing.T) {
 		t.Parallel()
 
 		s := &Server{}
-		first, err := s.edge(edge.KindCloudflare)
+		first, err := s.edge(edge.KindCloudflare, "eu-west-1")
 		if err != nil {
 			t.Fatalf("edge() error = %v", err)
 		}
-		second, err := s.edge(edge.KindCloudflare)
+		second, err := s.edge(edge.KindCloudflare, "eu-west-1")
 		if err != nil {
 			t.Fatalf("second edge() error = %v", err)
 		}
@@ -584,13 +584,20 @@ func TestServerEdge(t *testing.T) {
 		if first.Kind() != edge.KindCloudflare {
 			t.Errorf("Kind() = %q, want the kind this origin constructs today", first.Kind())
 		}
+		elsewhere, err := s.edge(edge.KindCloudflare, "us-east-1")
+		if err != nil {
+			t.Fatalf("edge() in another region: %v", err)
+		}
+		if first == elsewhere {
+			t.Error("edge() handed one region's edge to another; an edge holds the clients of the region it was opened for")
+		}
 	})
 
 	t.Run("an unnamed kind falls back to the one this origin carries", func(t *testing.T) {
 		t.Parallel()
 
 		s := &Server{}
-		got, err := s.edge("")
+		got, err := s.edge("", "eu-west-1")
 		if err != nil {
 			t.Fatalf("edge() error = %v", err)
 		}
@@ -603,10 +610,10 @@ func TestServerEdge(t *testing.T) {
 		t.Parallel()
 
 		s := &Server{}
-		if _, err := s.edge(edge.KindNative); err == nil {
+		if _, err := s.edge(edge.KindNative, "eu-west-1"); err == nil {
 			t.Fatal("edge(native) error = nil, want it refused until that slice lands")
 		}
-		got, err := s.edge(edge.KindCloudflare)
+		got, err := s.edge(edge.KindCloudflare, "eu-west-1")
 		if err != nil {
 			t.Fatalf("edge(cloudflare) after the refusal: %v", err)
 		}

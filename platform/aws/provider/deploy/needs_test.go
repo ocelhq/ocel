@@ -348,7 +348,7 @@ func TestBuildDeploymentRecordCarriesTheNeedsAndWhatBecameOfThem(t *testing.T) {
 	}
 	cfg.needs = records
 
-	record, err := buildDeploymentRecord(cfg, manifest, manifest.GetApps()[0], deployedAs("WEB1"), nil, appBuildsFor(t, cfg, manifest))
+	record, err := buildDeploymentRecord(cfg, manifest, manifest.GetApps()[0], deployedAs("WEB1"), nil, appBuildsFor(t, cfg, manifest), nil)
 	if err != nil {
 		t.Fatalf("buildDeploymentRecord: %v", err)
 	}
@@ -375,7 +375,7 @@ func TestBuildDeploymentRecordLeavesNeedsOutForAnAppWithNone(t *testing.T) {
 	}
 	cfg := Config{ArtifactRoot: root, Slug: "proj", Edge: &recordingEdge{}}
 
-	record, err := buildDeploymentRecord(cfg, manifest, manifest.GetApps()[0], deployedAs("API1"), nil, appBuildsFor(t, cfg, manifest))
+	record, err := buildDeploymentRecord(cfg, manifest, manifest.GetApps()[0], deployedAs("API1"), nil, appBuildsFor(t, cfg, manifest), nil)
 	if err != nil {
 		t.Fatalf("buildDeploymentRecord: %v", err)
 	}
@@ -431,7 +431,7 @@ func TestStagedRecordCarriesTheNeedsAndWhatBecameOfThem(t *testing.T) {
 		t.Fatalf("checkNeeds err = %v, want the waived need through", err)
 	}
 	cfg.needs = records
-	record, err := buildDeploymentRecord(cfg, manifest, manifest.GetApps()[0], deployedAs("WEB1"), nil, appBuildsFor(t, cfg, manifest))
+	record, err := buildDeploymentRecord(cfg, manifest, manifest.GetApps()[0], deployedAs("WEB1"), nil, appBuildsFor(t, cfg, manifest), nil)
 	if err != nil {
 		t.Fatalf("buildDeploymentRecord: %v", err)
 	}
@@ -601,7 +601,7 @@ func TestStagedRecordWaivesTheNeedThePlanWithholds(t *testing.T) {
 		t.Fatalf("checkNeeds err = %v, want the waived need through", err)
 	}
 	cfg.needs = records
-	record, err := buildDeploymentRecord(cfg, manifest, manifest.GetApps()[0], deployedAs("WEB1"), nil, appBuildsFor(t, cfg, manifest))
+	record, err := buildDeploymentRecord(cfg, manifest, manifest.GetApps()[0], deployedAs("WEB1"), nil, appBuildsFor(t, cfg, manifest), nil)
 	if err != nil {
 		t.Fatalf("buildDeploymentRecord: %v", err)
 	}
