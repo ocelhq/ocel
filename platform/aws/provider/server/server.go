@@ -31,12 +31,12 @@ import (
 	linksv1 "github.com/ocelhq/ocel/pkg/proto/links/v1"
 	"github.com/ocelhq/ocel/platform/aws/provider/bootstrap"
 	"github.com/ocelhq/ocel/platform/aws/provider/deploy"
+	"github.com/ocelhq/ocel/platform/aws/provider/edges"
 	"github.com/ocelhq/ocel/platform/aws/provider/pulumiruntime"
 	"github.com/ocelhq/ocel/platform/aws/provider/sdkconfig"
 	"github.com/ocelhq/ocel/platform/aws/provider/stackindex"
 	"github.com/ocelhq/ocel/platform/aws/provider/transform"
 	"github.com/ocelhq/ocel/platform/aws/provider/vars"
-	cloudflare "github.com/ocelhq/ocel/platform/edge/cloudflare/deploy"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
@@ -44,6 +44,8 @@ const deployEnv = deploy.ProductionEnv
 
 type Server struct {
 	stores
+
+	edgeKind edge.Kind
 
 	memo memo
 }
@@ -55,6 +57,7 @@ type memo struct {
 
 	edgeOnce sync.Once
 	edge     edge.Edge
+	edgeErr  error
 }
 
 type entry[T any] struct {
@@ -106,9 +109,15 @@ func (m *memo) forgetDeployed() {
 	m.deployed = nil
 }
 
-func (s *Server) edge() edge.Edge {
-	s.memo.edgeOnce.Do(func() { s.memo.edge = cloudflare.New() })
-	return s.memo.edge
+func (s *Server) edge() (edge.Edge, error) {
+	s.memo.edgeOnce.Do(func() {
+		kind := s.edgeKind
+		if kind == "" {
+			kind = edge.KindCloudflare
+		}
+		s.memo.edge, s.memo.edgeErr = edges.EdgeFor(kind, edges.Deps{})
+	})
+	return s.memo.edge, s.memo.edgeErr
 }
 
 func (s *Server) deployed(ctx context.Context, api bootstrap.CFNDescriber, region string, preview bool) (bootstrap.Deployed, error) {
@@ -291,6 +300,11 @@ func (s *Server) runDeploy(ctx context.Context, req *deploymentsv1.DeployRequest
 		return deploy.Result{}, finishPreparing(err)
 	}
 
+	edgeFront, err := s.edge()
+	if err != nil {
+		return deploy.Result{}, finishPreparing(err)
+	}
+
 	priorStackState := params.StackState
 	stateTableARN := fmt.Sprintf("arn:aws:dynamodb:%s:%s:table/%s", awscfg.Region, account, deployed.StateTable)
 
@@ -347,7 +361,7 @@ func (s *Server) runDeploy(ctx context.Context, req *deploymentsv1.DeployRequest
 		Invoker:     lambda.NewFromConfig(awscfg),
 		Getter:      s3.NewFromConfig(awscfg),
 		CodeUpdater: lambda.NewFromConfig(awscfg),
-		Edge:        s.edge(),
+		Edge:        edgeFront,
 		Class:       env.GetClass(),
 		Lifecycle:   env.GetLifecycle(),
 		Identity:    env.GetIdentity(),
@@ -448,7 +462,11 @@ func bootstrapRunner(preview bool) bootstrapRun {
 }
 
 func (s *Server) runBootstrap(ctx context.Context, run bootstrapRun, cfn bootstrap.CFNAPI, ssmClient bootstrap.SSMAPI, iamClient bootstrap.IAMAPI, artifact bootstrap.Artifacts, progress, logf func(string)) error {
-	if err := run(ctx, cfn, ssmClient, iamClient, cloudflare.New(), artifact, progress, logf); err != nil {
+	edgeFront, err := s.edge()
+	if err != nil {
+		return err
+	}
+	if err := run(ctx, cfn, ssmClient, iamClient, edgeFront, artifact, progress, logf); err != nil {
 		return err
 	}
 	s.memo.forgetDeployed()

@@ -310,7 +310,7 @@ func previewZoneMock() *cfMock {
 func TestReconcile(t *testing.T) {
 	t.Setenv(envAccountID, "acct")
 
-	t.Run("a root stack already at the spec stamp still reconciles its route", func(t *testing.T) {
+	t.Run("an edge stack already at the spec stamp still reconciles its route", func(t *testing.T) {
 		store := fakeStoreServer(t, "s3cr3t")
 		m := previewZoneMock()
 		p := m.provider(t)
@@ -330,7 +330,7 @@ func TestReconcile(t *testing.T) {
 			t.Errorf("created routes = %v, want the project's wildcard route", m.createdRoutes)
 		}
 		if len(m.putScripts) != 0 {
-			t.Errorf("uploaded scripts = %v, want none: the root stack already carries this spec's stamp", m.putScripts)
+			t.Errorf("uploaded scripts = %v, want none: the edge stack already carries this spec's stamp", m.putScripts)
 		}
 	})
 
@@ -365,7 +365,7 @@ func TestReconcile(t *testing.T) {
 		}
 	})
 
-	t.Run("a root stack behind the spec stamp uploads and stamps", func(t *testing.T) {
+	t.Run("an edge stack behind the spec stamp uploads and stamps", func(t *testing.T) {
 		store := fakeStoreServer(t, "s3cr3t")
 		m := previewZoneMock()
 		p := m.provider(t)
@@ -737,7 +737,7 @@ func TestEnsureInstance(t *testing.T) {
 			t.Fatalf("ensureInstance: %v", err)
 		}
 		if stamps[""] != "stamp-v2" {
-			t.Errorf("stamps = %v, want the stamp the root stack already carries", stamps)
+			t.Errorf("stamps = %v, want the stamp the edge stack already carries", stamps)
 		}
 		if id.secret != "s3cr3t" {
 			t.Errorf("secret = %q, want the one already in state", id.secret)
@@ -755,7 +755,7 @@ func TestEnsureInstance(t *testing.T) {
 			t.Fatalf("ensureInstance with no prior state: %v", err)
 		}
 		if len(stamps) != 0 {
-			t.Errorf("stamps = %v, want none for a project with no root stack yet", stamps)
+			t.Errorf("stamps = %v, want none for a project with no edge stack yet", stamps)
 		}
 		if id.secret == "" || id.ownerToken == "" || id.secret == id.ownerToken {
 			t.Fatalf("minted identity = %+v, want two distinct non-empty credentials", id)

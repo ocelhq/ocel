@@ -181,7 +181,7 @@ func TestMarkGlobalPreview(t *testing.T) {
 	})
 }
 
-func TestRootStackSpecsGlobalPreview(t *testing.T) {
+func TestEdgeStackSpecsGlobalPreview(t *testing.T) {
 	setWorkerBundle(t)
 	setStoreWorkerBundle(t)
 

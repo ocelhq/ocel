@@ -20,6 +20,11 @@ func (s *Server) PlanDestroyProject(ctx context.Context, req *deploymentsv1.Plan
 		return nil, connect.NewError(connect.CodeInvalidArgument, err)
 	}
 
+	edgeFront, err := s.edge()
+	if err != nil {
+		return nil, err
+	}
+
 	awscfg, params, err := productionTeardownParams(ctx, opts, req.GetSlug())
 	if err != nil {
 		return nil, err
@@ -33,7 +38,7 @@ func (s *Server) PlanDestroyProject(ctx context.Context, req *deploymentsv1.Plan
 		return nil, err
 	}
 
-	rootStack, err := s.hasStack(params.StackState)
+	edgeStack, err := s.edgeStackPlan(edgeFront, params.StackState, req.GetSlug())
 	if err != nil {
 		return nil, err
 	}
@@ -50,19 +55,27 @@ func (s *Server) PlanDestroyProject(ctx context.Context, req *deploymentsv1.Plan
 	return &deploymentsv1.PlanDestroyProjectResponse{
 		AppStacks:  appStacks,
 		InfraStack: infraStack,
-		RootStack:  rootStack,
+		EdgeStack:  edgeStack,
 	}, nil
 }
 
-func (s *Server) hasStack(state edge.StackState) (bool, error) {
-	stack, err := s.openStackFor(state)
-	if err != nil {
+func (s *Server) edgeStackPlan(edgeFront edge.Edge, state edge.StackState, slug string) (*deploymentsv1.EdgeStackPlan, error) {
+	plan := &deploymentsv1.EdgeStackPlan{EdgeKind: string(edgeFront.Kind())}
+
+	if _, err := s.openStackFor(state); err != nil {
 		if errors.Is(err, errNoProductionDeploy) {
-			return false, nil
+			return plan, nil
 		}
-		return false, err
+		return nil, err
 	}
-	return len(stack.State()) > 0, nil
+
+	plan.Items = append(plan.Items, &deploymentsv1.EdgeStackPlan_Item{
+		Kind:   "edge stack",
+		Name:   slug,
+		Action: deploymentsv1.EdgeStackPlan_Item_ACTION_DELETE,
+		Reason: "edge workers, custom-domain binding and the deployments store this project is fronted by",
+	})
+	return plan, nil
 }
 
 func (s *Server) DestroyProject(ctx context.Context, req *deploymentsv1.DestroyProjectRequest, stream *connect.ServerStream[deploymentsv1.DeployEvent]) (err error) {

@@ -79,6 +79,11 @@ func (s *Server) runUseDomain(ctx context.Context, req *deploymentsv1.UseDomainR
 		return err
 	}
 
+	edgeFront, err := s.edge()
+	if err != nil {
+		return err
+	}
+
 	spec, err := deploy.PreviewWildcardSpecFor(deploy.Config{
 		Region:              awscfg.Region,
 		StateTable:          deployed.StateTable,
@@ -90,14 +95,14 @@ func (s *Server) runUseDomain(ctx context.Context, req *deploymentsv1.UseDomainR
 		StoreScriptName:     store.ScriptName,
 		ISRWriterScriptName: isrWriter.ScriptName,
 		EdgeValues:          edgeValues,
-		Edge:                s.edge(),
+		Edge:                edgeFront,
 	}, baseDomain, logf)
 	if err != nil {
 		return err
 	}
 
 	progress(fmt.Sprintf("Reconciling the shared preview entry on %s", edge.PreviewWildcard(baseDomain)))
-	if err := s.edge().ReconcilePreviewWildcard(ctx, spec); err != nil {
+	if err := edgeFront.ReconcilePreviewWildcard(ctx, spec); err != nil {
 		return err
 	}
 
@@ -137,8 +142,13 @@ func (s *Server) runReleaseDomain(ctx context.Context, req *deploymentsv1.Releas
 		return nil
 	}
 
+	edgeFront, err := s.edge()
+	if err != nil {
+		return err
+	}
+
 	progress(fmt.Sprintf("Removing the shared preview entry on %s", edge.PreviewWildcard(recorded.BaseDomain)))
-	if err := s.edge().DestroyPreviewWildcard(ctx, recorded.BaseDomain); err != nil {
+	if err := edgeFront.DestroyPreviewWildcard(ctx, recorded.BaseDomain); err != nil {
 		return err
 	}
 	return bootstrap.DeletePreviewDomain(ctx, ssmClient, bootstrap.ClassPreview)

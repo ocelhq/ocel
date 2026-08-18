@@ -60,7 +60,11 @@ func (s *Server) Preflight(ctx context.Context, req *deploymentsv1.PreflightRequ
 
 	resp.DomainClaims = domainClaims(ctx, s.edgeRouteOwner(), req.GetSlug(), req.GetDomains())
 
-	if v, ok := s.edge().(edge.CredentialVerifier); ok {
+	edgeFront, err := s.edge()
+	if err != nil {
+		return nil, err
+	}
+	if v, ok := edgeFront.(edge.CredentialVerifier); ok {
 		if id, err := v.VerifyCredentials(ctx); err != nil {
 			resp.CredentialProblems = append(resp.CredentialProblems, &deploymentsv1.CredentialProblem{
 				Provider: "Cloudflare",
@@ -116,7 +120,13 @@ func globalPreviewProblem(recorded bootstrap.PreviewDomain, req *deploymentsv1.P
 type routeOwnerFunc func(ctx context.Context, hostname string) (string, error)
 
 func (s *Server) edgeRouteOwner() routeOwnerFunc {
-	return s.edge().DomainOwner
+	return func(ctx context.Context, hostname string) (string, error) {
+		edgeFront, err := s.edge()
+		if err != nil {
+			return "", err
+		}
+		return edgeFront.DomainOwner(ctx, hostname)
+	}
 }
 
 func domainClaims(ctx context.Context, owner routeOwnerFunc, slug string, domains []string) []*deploymentsv1.DomainClaim {
@@ -318,7 +328,11 @@ func (s *Server) previewTeardownContext(ctx context.Context, opts options, slug 
 
 		Values: teardownValues(awscfg, deployed, bootstrap.ClassPreview),
 	}
-	stack, err := s.edge().Open(params.StackState)
+	edgeFront, err := s.edge()
+	if err != nil {
+		return deploy.Config{}, nil, err
+	}
+	stack, err := edgeFront.Open(params.StackState)
 	if err != nil {
 		return deploy.Config{}, nil, err
 	}

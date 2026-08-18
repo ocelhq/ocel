@@ -432,6 +432,39 @@ func (s *deployFakeProviderServer) DestroyPreview(ctx context.Context, req *depl
 	})
 }
 
+func (s *deployFakeProviderServer) PlanDestroyProject(ctx context.Context, req *deploymentsv1.PlanDestroyProjectRequest) (*deploymentsv1.PlanDestroyProjectResponse, error) {
+	if err := s.checkToken(ctx); err != nil {
+		return nil, err
+	}
+	slug := req.GetSlug()
+	return &deploymentsv1.PlanDestroyProjectResponse{
+		EdgeStack: &deploymentsv1.EdgeStackPlan{
+			EdgeKind: "cloudflare",
+			Items: []*deploymentsv1.EdgeStackPlan_Item{
+				{
+					Kind:   "edge stack",
+					Name:   slug,
+					Action: deploymentsv1.EdgeStackPlan_Item_ACTION_DELETE,
+				},
+				{
+					Kind:   "distribution",
+					Name:   "E1" + slug,
+					Action: deploymentsv1.EdgeStackPlan_Item_ACTION_DISABLE_THEN_DELETE,
+					Slow:   true,
+				},
+				{
+					Kind:   "certificate",
+					Name:   slug + ".example.com",
+					Action: deploymentsv1.EdgeStackPlan_Item_ACTION_KEEP,
+					Reason: "you pinned this certificate; Ocel never deletes one it did not request",
+				},
+			},
+		},
+		InfraStack: slug + "--infra",
+		AppStacks:  []string{slug + "--web--b1"},
+	}, nil
+}
+
 func (s *deployFakeProviderServer) DestroyProject(ctx context.Context, req *deploymentsv1.DestroyProjectRequest, stream *connect.ServerStream[deploymentsv1.DeployEvent]) error {
 	if err := s.checkToken(ctx); err != nil {
 		return err

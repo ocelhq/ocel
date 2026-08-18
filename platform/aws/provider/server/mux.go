@@ -12,10 +12,14 @@ import (
 )
 
 func NewMux(token string) *http.ServeMux {
+	return newMux(&Server{}, token)
+}
+
+func newMux(deployments *Server, token string) *http.ServeMux {
 	mux := http.NewServeMux()
 	interceptors := connect.WithInterceptors(channelauth.Interceptor(token), tracecontext.Interceptor())
 
-	path, handler := deploymentsv1connect.NewDeploymentServiceHandler(&Server{}, interceptors)
+	path, handler := deploymentsv1connect.NewDeploymentServiceHandler(deployments, interceptors)
 	mux.Handle(path, handler)
 
 	path, handler = envv1connect.NewEnvVarsServiceHandler(&VarsServer{}, interceptors)

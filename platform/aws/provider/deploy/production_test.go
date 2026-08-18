@@ -36,7 +36,7 @@ func setStoreWorkerBundle(t *testing.T) {
 	t.Setenv(edge.EnvStoreWorkerBundles, string(raw))
 }
 
-func TestRootStackSpecs(t *testing.T) {
+func TestEdgeStackSpecs(t *testing.T) {
 	setWorkerBundle(t)
 	setStoreWorkerBundle(t)
 

@@ -321,7 +321,7 @@ func TestChildStageHoldsUnderItsParentUntilTheParentEnds(t *testing.T) {
 		{Id: app, ParentId: provisioning, Title: "next-test"},
 	}, Final: true})
 
-	r.Progress(provisioning, deploymentsv1.Phase_PHASE_PROVISIONING, "Reconciling the root stack", 0, nil)
+	r.Progress(provisioning, deploymentsv1.Phase_PHASE_PROVISIONING, "Reconciling the edge stack", 0, nil)
 	r.Progress(app, deploymentsv1.Phase_PHASE_PROVISIONING, "creating resources", 0, nil)
 
 	rows := r.plan.displayRows()

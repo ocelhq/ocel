@@ -33,7 +33,11 @@ func (s *Server) openStackFor(state edge.StackState) (edge.EdgeStack, error) {
 	if len(state) == 0 {
 		return nil, errNoProductionDeploy
 	}
-	return s.edge().Open(state)
+	edgeFront, err := s.edge()
+	if err != nil {
+		return nil, err
+	}
+	return edgeFront.Open(state)
 }
 
 func (s *Server) ListPromotions(ctx context.Context, req *deploymentsv1.ListPromotionsRequest) (*deploymentsv1.ListPromotionsResponse, error) {
