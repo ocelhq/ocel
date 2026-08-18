@@ -3,6 +3,8 @@ import { copyFile, mkdir, rm } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
+import { runtimeFiles } from "../../frameworks/next/adapter/scripts/runtime-files.mjs";
+
 const platformDir = dirname(fileURLToPath(import.meta.url));
 const root = dirname(dirname(platformDir));
 const dist = join(platformDir, "dist");
@@ -44,7 +46,7 @@ await copyFile(
 );
 
 await Promise.all(
-  ["edge-cache-handler.cjs", "next-dispatch.cjs"].map((name) =>
+  runtimeFiles.map((name) =>
     copyFile(
       join(root, "frameworks/next/adapter/src", name),
       join(dist, "next-adapter", name),

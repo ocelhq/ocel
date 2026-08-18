@@ -19,7 +19,14 @@ async function main(): Promise<void> {
   const req = await readRequest();
   const detected = req.apps.length === 0 ? detectApp(req.projectRoot) : undefined;
   const apps = detected ? [detected] : req.apps;
-  await writeBuildPlan(req.outDir, await buildApps(apps, { outDir: req.outDir }));
+  await writeBuildPlan(
+    req.outDir,
+    await buildApps(apps, {
+      outDir: req.outDir,
+      edgeKind: req.edgeKind,
+      allowDegraded: req.allowDegraded,
+    }),
+  );
 }
 
 main().catch((err) => {

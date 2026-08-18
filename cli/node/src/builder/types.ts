@@ -9,6 +9,8 @@ export interface AppInput {
 
 export interface BuildOptions {
   outDir: string;
+  edgeKind?: string;
+  allowDegraded?: string[];
 }
 
 export interface FunctionSummary {

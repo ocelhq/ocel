@@ -21,6 +21,8 @@ export async function buildNext(input: AppInput, options: BuildOptions): Promise
     OCEL_APP_NAME: input.name,
     OCEL_OUTPUT_DIR: appOutDir(options.outDir, input.name),
     OCEL_APP_FOLDER: input.folder ?? "",
+    OCEL_EDGE_KIND: options.edgeKind ?? "",
+    OCEL_ALLOW_DEGRADED: (options.allowDegraded ?? []).join(","),
   });
   process.stderr.write(`ocel: Next app "${input.name}" built\n`);
   return [];

@@ -72,6 +72,17 @@ type Config struct {
 	Path          string
 }
 
+func (c *Config) EdgeKind() edge.Kind {
+	switch {
+	case c.EdgeDisabled:
+		return edge.KindNone
+	case c.Edge != nil:
+		return edge.Kind(c.Edge.Kind)
+	default:
+		return edge.KindNative
+	}
+}
+
 func (c *Config) RequireProvider() (*ProviderDescriptor, error) {
 	if c.Provider == nil {
 		return nil, fmt.Errorf("no provider configured in %s — add `provider: awsProvider({...})` (from @ocel/provider-aws) to your config", filepath.Base(c.Path))

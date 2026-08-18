@@ -57,9 +57,11 @@ type functionSummary struct {
 }
 
 type builderRequest struct {
-	OutDir      string     `json:"outDir"`
-	ProjectRoot string     `json:"projectRoot"`
-	Apps        []appInput `json:"apps"`
+	OutDir        string     `json:"outDir"`
+	ProjectRoot   string     `json:"projectRoot"`
+	EdgeKind      string     `json:"edgeKind"`
+	AllowDegraded []string   `json:"allowDegraded,omitempty"`
+	Apps          []appInput `json:"apps"`
 }
 
 type appInput struct {
@@ -167,7 +169,13 @@ func (b Builder) Build(ctx context.Context, cfg *projectconfig.Config, envByApp 
 		return fmt.Errorf("node builder not found at %s: %w", builderPath, err)
 	}
 
-	req := builderRequest{OutDir: outputDir, ProjectRoot: cfg.Dir, Apps: make([]appInput, 0, len(cfg.Apps))}
+	req := builderRequest{
+		OutDir:        outputDir,
+		ProjectRoot:   cfg.Dir,
+		EdgeKind:      string(cfg.EdgeKind()),
+		AllowDegraded: cfg.AllowDegraded,
+		Apps:          make([]appInput, 0, len(cfg.Apps)),
+	}
 	for _, a := range cfg.Apps {
 		req.Apps = append(req.Apps, appInput{
 			Name:       a.Name,
