@@ -102,6 +102,22 @@ func TestSettleStackRecords(t *testing.T) {
 		}
 	})
 
+	t.Run("a non-cloudflare edge points the hostname at the front its stack published", func(t *testing.T) {
+		t.Parallel()
+
+		writer := &recordingDNS{}
+		cfg := Config{Edge: &recordingEdge{kind: edge.KindNative}, DNS: writer}
+		state := edge.StackState{edge.StackKeyFront: "d111111abcdef8.cloudfront.net"}
+
+		if _, err := settleStackRecords(t.Context(), cfg, specs, state, func(string) {}); err != nil {
+			t.Fatalf("settleStackRecords: %v", err)
+		}
+		want := edge.Record{Name: "shop.app.com", Type: edge.RecordTypeCNAME, Value: "d111111abcdef8.cloudfront.net"}
+		if len(writer.written) != 1 || writer.written[0] != want {
+			t.Errorf("written = %v, want %v", writer.written, want)
+		}
+	})
+
 	t.Run("a hostname dropped from the deploy has its record deleted", func(t *testing.T) {
 		t.Parallel()
 

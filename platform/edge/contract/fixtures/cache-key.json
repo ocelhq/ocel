@@ -1,0 +1,143 @@
+{
+  "release": "rel-7f3a",
+  "cases": [
+    {
+      "name": "a plain document keeps the pathname",
+      "pathname": "/blog",
+      "headers": {},
+      "draft": false,
+      "variantStatic": "/blog",
+      "variantPartiallyStatic": "/blog"
+    },
+    {
+      "name": "an RSC request on a static route takes the rsc variant",
+      "pathname": "/blog",
+      "headers": {
+        "rsc": "1"
+      },
+      "draft": false,
+      "variantStatic": "/blog.rsc",
+      "variantPartiallyStatic": null
+    },
+    {
+      "name": "next-router-state-tree does not vary the key",
+      "pathname": "/blog",
+      "headers": {
+        "rsc": "1",
+        "next-router-state-tree": "%5B%22%22%2C%7B%7D%5D"
+      },
+      "draft": false,
+      "variantStatic": "/blog.rsc",
+      "variantPartiallyStatic": null
+    },
+    {
+      "name": "a router prefetch takes the prefetch variant under either rendering mode",
+      "pathname": "/blog",
+      "headers": {
+        "rsc": "1",
+        "next-router-prefetch": "1"
+      },
+      "draft": false,
+      "variantStatic": "/blog.prefetch.rsc",
+      "variantPartiallyStatic": "/blog.prefetch.rsc"
+    },
+    {
+      "name": "a prefetch header other than 1 is not cacheable",
+      "pathname": "/blog",
+      "headers": {
+        "rsc": "1",
+        "next-router-prefetch": "0"
+      },
+      "draft": false,
+      "variantStatic": null,
+      "variantPartiallyStatic": null
+    },
+    {
+      "name": "a prefetch header other than 1 under an interception url is not cacheable either",
+      "pathname": "/photo",
+      "headers": {
+        "rsc": "1",
+        "next-url": "/photo/1",
+        "next-router-prefetch": "0"
+      },
+      "draft": false,
+      "variantStatic": null,
+      "variantPartiallyStatic": null
+    },
+    {
+      "name": "a prefetch header other than 1 under a different interception url is not cacheable either",
+      "pathname": "/photo",
+      "headers": {
+        "rsc": "1",
+        "next-url": "/feed",
+        "next-router-prefetch": "0"
+      },
+      "draft": false,
+      "variantStatic": null,
+      "variantPartiallyStatic": null
+    },
+    {
+      "name": "a prefetch header of 2 is not cacheable",
+      "pathname": "/blog",
+      "headers": {
+        "rsc": "1",
+        "next-router-prefetch": "2"
+      },
+      "draft": false,
+      "variantStatic": null,
+      "variantPartiallyStatic": null
+    },
+    {
+      "name": "a segment prefetch takes the segment variant",
+      "pathname": "/blog",
+      "headers": {
+        "rsc": "1",
+        "next-router-segment-prefetch": "/blog"
+      },
+      "draft": false,
+      "variantStatic": "/blog.segments/%2Fblog.segment.rsc",
+      "variantPartiallyStatic": "/blog.segments/%2Fblog.segment.rsc"
+    },
+    {
+      "name": "an interception url splits the variant",
+      "pathname": "/photo",
+      "headers": {
+        "rsc": "1",
+        "next-url": "/photo/1"
+      },
+      "draft": false,
+      "variantStatic": "/photo.iu/%2Fphoto%2F1.rsc",
+      "variantPartiallyStatic": null
+    },
+    {
+      "name": "a segment prefetch under an interception url carries both",
+      "pathname": "/photo",
+      "headers": {
+        "rsc": "1",
+        "next-url": "/feed",
+        "next-router-segment-prefetch": "/photo"
+      },
+      "draft": false,
+      "variantStatic": "/photo.iu/%2Ffeed.segments/%2Fphoto.segment.rsc",
+      "variantPartiallyStatic": "/photo.iu/%2Ffeed.segments/%2Fphoto.segment.rsc"
+    },
+    {
+      "name": "a draft-mode request is its own partition",
+      "pathname": "/blog",
+      "headers": {},
+      "draft": true,
+      "variantStatic": "/blog",
+      "variantPartiallyStatic": "/blog"
+    },
+    {
+      "name": "a draft-mode RSC request keeps both marks",
+      "pathname": "/blog",
+      "headers": {
+        "rsc": "1"
+      },
+      "draft": true,
+      "variantStatic": "/blog.rsc",
+      "variantPartiallyStatic": null
+    }
+  ]
+}

@@ -22,6 +22,8 @@ import {
   type EntryMeta,
   type RefreshOutcome,
 } from "../src/cache";
+import cacheKeyFixture from "@platform/edge-contract/fixtures/cache-key" with { type: "json" };
+import { hasDraftCookie } from "../src/cache";
 import type { TagVerdict } from "../src/tag-clock";
 import { coloDeps } from "./cache-deps";
 
@@ -203,6 +205,26 @@ describe("evaluate", () => {
   it("never expires a static, tag-stale entry with no expiration window", () => {
     expect(evaluate(at(0, {}), 31_000_000_000, true)).toBe("stale");
   });
+});
+
+describe("the shared cache-key variants", () => {
+  const H = (init?: Record<string, string>) => new Headers(init);
+
+  for (const testCase of cacheKeyFixture.cases) {
+    it(testCase.name, () => {
+      expect(variantPath(testCase.pathname, H(testCase.headers), "STATIC")).toBe(
+        testCase.variantStatic,
+      );
+      expect(
+        variantPath(testCase.pathname, H(testCase.headers), "PARTIALLY_STATIC"),
+      ).toBe(testCase.variantPartiallyStatic);
+
+      const cookie = testCase.draft ? "__prerender_bypass=1" : "other=1";
+      expect(
+        hasDraftCookie(new Request("https://app.example/", { headers: { cookie } })),
+      ).toBe(testCase.draft);
+    });
+  }
 });
 
 describe("variantPath", () => {

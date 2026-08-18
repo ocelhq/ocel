@@ -10,6 +10,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
 func nestedDir(t *testing.T, root string) string {
@@ -1375,5 +1377,27 @@ func TestTwoConfigsInOneDirDoNotShareABundle(t *testing.T) {
 		if got.cfg.Slug != slugs[got.name] {
 			t.Fatalf("Resolve(%q).Slug = %q, want %q — the two configs shared one bundle outfile", got.name, got.cfg.Slug, slugs[got.name])
 		}
+	}
+}
+
+func TestEdgeKind(t *testing.T) {
+	t.Parallel()
+
+	for _, tc := range []struct {
+		name   string
+		config Config
+		want   edge.Kind
+	}{
+		{name: "a config that names no edge is fronted by the origin cloud's own", config: Config{}, want: edge.KindNative},
+		{name: "a config that names one is fronted by that one", config: Config{Edge: &EdgeDescriptor{Kind: "cloudflare"}}, want: edge.KindCloudflare},
+		{name: "a config that turns the edge off is fronted by nothing", config: Config{EdgeDisabled: true}, want: edge.KindNone},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			if got := tc.config.EdgeKind(); got != tc.want {
+				t.Errorf("EdgeKind() = %q, want %q", got, tc.want)
+			}
+		})
 	}
 }

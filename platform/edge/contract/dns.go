@@ -46,6 +46,10 @@ type DNSTarget struct {
 	Front string
 }
 
+const StackKeyFront = "front"
+
+func FrontOf(state StackState) string { return state[StackKeyFront] }
+
 func RecordsFor(target DNSTarget, hostnames []string) ([]Record, error) {
 	records := make([]Record, 0, len(hostnames))
 	for _, host := range hostnames {

@@ -2,6 +2,7 @@ package bootstrap
 
 import (
 	"context"
+	"maps"
 	"path"
 	"slices"
 	"strconv"
@@ -48,6 +49,22 @@ type parsedTemplate struct {
 			StreamSpecification struct {
 				StreamViewType string `yaml:"StreamViewType"`
 			} `yaml:"StreamSpecification"`
+			Bucket         string `yaml:"Bucket"`
+			PolicyDocument struct {
+				Version   string `yaml:"Version"`
+				Statement []struct {
+					Sid       string `yaml:"Sid"`
+					Effect    string `yaml:"Effect"`
+					Principal struct {
+						Service string `yaml:"Service"`
+					} `yaml:"Principal"`
+					Action    string `yaml:"Action"`
+					Resource  string `yaml:"Resource"`
+					Condition struct {
+						StringEquals map[string]string `yaml:"StringEquals"`
+					} `yaml:"Condition"`
+				} `yaml:"Statement"`
+			} `yaml:"PolicyDocument"`
 			PublicAccessBlockConfiguration struct {
 				BlockPublicAcls       bool `yaml:"BlockPublicAcls"`
 				BlockPublicPolicy     bool `yaml:"BlockPublicPolicy"`
@@ -557,4 +574,46 @@ func stringLike(t *testing.T, pattern, value string) bool {
 		t.Fatalf("path.Match(%q, %q): %v", pattern, value, err)
 	}
 	return ok
+}
+
+func TestAssetBucketGrantsCloudFrontRead(t *testing.T) {
+	for _, tc := range []struct {
+		name     string
+		template string
+	}{
+		{"production", stackTemplate(edge.TrustExternal, fixtureArtifacts(), RequiredBootstrapVersion)},
+		{"preview", previewStackTemplate(edge.TrustExternal, fixtureArtifacts(), RequiredBootstrapVersion)},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			tmpl := parseTemplateStr(t, tc.template)
+
+			policy, held := tmpl.Resources["AssetBucketPolicy"]
+			if !held {
+				t.Fatalf("the template holds %v, want a bucket policy: nothing else lets a CloudFront distribution read a static asset out of the bucket", slices.Sorted(maps.Keys(tmpl.Resources)))
+			}
+			if policy.Type != "AWS::S3::BucketPolicy" {
+				t.Errorf("AssetBucketPolicy type = %q, want AWS::S3::BucketPolicy", policy.Type)
+			}
+			if got := policy.Properties.Bucket; got != "AssetBucket" {
+				t.Errorf("the policy is attached to %q, want the asset bucket", got)
+			}
+			statements := policy.Properties.PolicyDocument.Statement
+			if len(statements) != 1 {
+				t.Fatalf("the policy holds %d statements, want exactly one: it is written once by the bootstrap and never rewritten per deploy", len(statements))
+			}
+			grant := statements[0]
+			if grant.Effect != "Allow" || grant.Action != "s3:GetObject" {
+				t.Errorf("the grant is %s %s, want Allow s3:GetObject", grant.Effect, grant.Action)
+			}
+			if grant.Principal.Service != "cloudfront.amazonaws.com" {
+				t.Errorf("principal = %q, want the CloudFront service principal and nothing wider", grant.Principal.Service)
+			}
+			if got := grant.Resource; got != "${AssetBucket.Arn}/*" {
+				t.Errorf("resource = %q, want every object in the asset bucket and nothing outside it", got)
+			}
+			if got := grant.Condition.StringEquals["AWS:SourceAccount"]; got != "AWS::AccountId" {
+				t.Errorf("source account condition = %q, want this account, so no other account's distribution can read the bucket", got)
+			}
+		})
+	}
 }

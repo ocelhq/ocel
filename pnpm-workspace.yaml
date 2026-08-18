@@ -4,6 +4,7 @@ packages:
   - packages/*
   - frameworks/*/*
   - platform/aws/functions/*
+  - platform/aws/provider/edges/cloudfront/resolver
   - platform/edge/contract
   - platform/edge/cloudflare/workers/*
   - platform/edge/cloudflare/lib/*

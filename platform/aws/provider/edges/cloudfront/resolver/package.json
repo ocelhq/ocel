@@ -1,0 +1,14 @@
+{
+  "name": "@platform/cloudfront-resolver",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "vitest run"
+  },
+  "devDependencies": {
+    "@platform/edge-contract": "workspace:*",
+    "@types/node": "^24",
+    "vitest": "^3.2.7"
+  }
+}
