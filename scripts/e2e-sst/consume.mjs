@@ -21,6 +21,8 @@ const deadline =
 
 run("ocel build", ["build"]);
 run("ocel deploy", ["deploy", "--prebuilt", "--yes"]);
+run("ocel domain add", ["domain", "add"]);
+run("ocel domain status", ["domain", "status", "--wait"]);
 
 const resultPath = join(appDir, DEPLOY_RESULT_FILE);
 if (!existsSync(resultPath)) {

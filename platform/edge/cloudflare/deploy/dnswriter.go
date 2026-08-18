@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"sync"
+	"time"
 
 	cf "github.com/cloudflare/cloudflare-go/v4"
 	"github.com/cloudflare/cloudflare-go/v4/dns"
@@ -16,6 +17,8 @@ import (
 )
 
 const recordComment = "managed by ocel"
+
+const automaticTTL = 300 * time.Second
 
 type recordAPI interface {
 	List(ctx context.Context, params dns.RecordListParams, opts ...option.RequestOption) (*pagination.V4PagePaginationArray[dns.RecordResponse], error)
@@ -53,6 +56,10 @@ func NewDNS(zone string) (edge.DNSWriter, error) {
 		accountID: accountID,
 		named:     zone,
 	}, nil
+}
+
+func (w *dnsWriter) RecordTTL() time.Duration {
+	return automaticTTL
 }
 
 func (w *dnsWriter) ZoneOf(ctx context.Context, hostname string) (edge.Zone, error) {

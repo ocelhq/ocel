@@ -11,7 +11,9 @@ import {
   CONSUMER_STATE_FILE,
   LINK_NAME,
   LOG_PREFIX,
+  PRODUCTION_DOMAIN_ENV_VAR,
   TRANSFORM_MODULE,
+  productionHostFor,
   projectSlugForRun,
   renderOcelConfig,
 } from "./lib.mjs";
@@ -47,10 +49,17 @@ mkdirSync(join(staged, dirname(TRANSFORM_MODULE)), { recursive: true });
 cpSync(transformSource, join(staged, TRANSFORM_MODULE));
 
 const slug = projectSlugForRun();
-writeFileSync(join(staged, "ocel.config.ts"), renderOcelConfig({ slug }));
+const host = productionHostFor(slug);
+if (!host) {
+  console.error(
+    `${LOG_PREFIX} ${PRODUCTION_DOMAIN_ENV_VAR} is not set; a production deploy serves a hostname this project declares, so set it to a zone these credentials own (e.g. e2e.example.com) and run this again`,
+  );
+  process.exit(2);
+}
+writeFileSync(join(staged, "ocel.config.ts"), renderOcelConfig({ slug, host }));
 writeFileSync(
   join(staged, CONSUMER_STATE_FILE),
-  JSON.stringify({ slug, app: CONSUMER_APP, link: LINK_NAME, staged }, null, 2),
+  JSON.stringify({ slug, app: CONSUMER_APP, link: LINK_NAME, host, staged }, null, 2),
 );
 
 execFileSync("npm", ["install", "--no-audit", "--no-fund", "--omit=dev"], {

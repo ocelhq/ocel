@@ -46,8 +46,8 @@ if (Object.keys(surviving).length > 0) {
 }
 
 const configPath = join(appDir, "ocel.config.ts");
-const bound = renderOcelConfig({ slug: state.slug });
-writeFileSync(configPath, renderOcelConfig({ slug: state.slug, links: [] }));
+const bound = renderOcelConfig({ slug: state.slug, host: state.host });
+writeFileSync(configPath, renderOcelConfig({ slug: state.slug, host: state.host, links: [] }));
 
 const built = ocel(["build"], "inherit");
 if (built.status !== 0) {

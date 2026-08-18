@@ -148,7 +148,7 @@ func TestColourIsDecidedFromTheTargetWriter(t *testing.T) {
 
 	r.Building()
 	r.Progress(nil, deploymentsv1.Phase_PHASE_UPLOADING, "uploading", 1, u32(2))
-	r.Deployed("Deployed", []string{"https://app.example.workers.dev"}, Flip{}, "")
+	r.Deployed("Deployed", []string{"https://app.example.workers.dev"}, "", Flip{}, "")
 
 	if got := out.String(); strings.Contains(got, "\x1b[") {
 		t.Errorf("output = %q, want no ANSI escape codes when the writer is not a terminal", got)
@@ -487,7 +487,7 @@ func TestDeployedFlip(t *testing.T) {
 		r := NewRenderer(&out, FormatHuman, false)
 		t.Cleanup(func() { _ = r.Close() })
 
-		r.Deployed("Deployed", []string{"https://app.example.workers.dev"}, Flip{Note: "propagates within ~5 s"}, "")
+		r.Deployed("Deployed", []string{"https://app.example.workers.dev"}, "", Flip{Note: "propagates within ~5 s"}, "")
 
 		lines := strings.Split(strings.TrimRight(out.String(), "\n"), "\n")
 		idx := slices.Index(lines, "  propagates within ~5 s")
@@ -513,7 +513,7 @@ func TestDeployedFlip(t *testing.T) {
 			{&without, Flip{}},
 		} {
 			r := NewRenderer(tc.out, FormatHuman, false)
-			r.Deployed("Deployed", []string{"https://app.example.workers.dev"}, tc.flip, "")
+			r.Deployed("Deployed", []string{"https://app.example.workers.dev"}, "", tc.flip, "")
 			_ = r.Close()
 		}
 		if withBound.String() != without.String() {
@@ -527,7 +527,7 @@ func TestDeployedFlip(t *testing.T) {
 		r := NewRenderer(&out, FormatJSON, false)
 		t.Cleanup(func() { _ = r.Close() })
 
-		r.Deployed("Deployed", nil, Flip{
+		r.Deployed("Deployed", nil, "", Flip{
 			Note:  "propagates within ~5 s",
 			Bound: &deploymentsv1.FlipBound{TypicalMs: 5000, Published: true},
 		}, "")
@@ -552,13 +552,43 @@ func TestDeployedFlip(t *testing.T) {
 		}
 	})
 
+	t.Run("a deploy with no address of its own prints why, and never a vendor hostname", func(t *testing.T) {
+		t.Parallel()
+		var out bytes.Buffer
+		r := NewRenderer(&out, FormatHuman, false)
+		t.Cleanup(func() { _ = r.Close() })
+
+		r.Deployed("Deployed", nil, "run `ocel domain add` to settle shop.app.com", Flip{}, "")
+
+		if !strings.Contains(out.String(), "ocel domain add") {
+			t.Errorf("stdout = %q, want the direction printed in place of the addresses", out.String())
+		}
+	})
+
+	t.Run("json carries the note the provider sent instead of addresses", func(t *testing.T) {
+		t.Parallel()
+		var out bytes.Buffer
+		r := NewRenderer(&out, FormatJSON, false)
+		t.Cleanup(func() { _ = r.Close() })
+
+		r.Deployed("Deployed", nil, "run `ocel domain add`", Flip{}, "")
+
+		var rec map[string]any
+		if err := json.Unmarshal(bytes.TrimSpace(out.Bytes()), &rec); err != nil {
+			t.Fatalf("stdout = %q is not JSON: %v", out.String(), err)
+		}
+		if rec["urlNote"] != "run `ocel domain add`" {
+			t.Errorf("json urlNote = %v, want the provider's note", rec["urlNote"])
+		}
+	})
+
 	t.Run("json omits the bound when none was recorded", func(t *testing.T) {
 		t.Parallel()
 		var out bytes.Buffer
 		r := NewRenderer(&out, FormatJSON, false)
 		t.Cleanup(func() { _ = r.Close() })
 
-		r.Deployed("Deployed", nil, Flip{}, "")
+		r.Deployed("Deployed", nil, "", Flip{}, "")
 
 		var rec map[string]any
 		if err := json.Unmarshal(bytes.TrimSpace(out.Bytes()), &rec); err != nil {

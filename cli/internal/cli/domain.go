@@ -2,9 +2,11 @@ package cli
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
+	"math/rand/v2"
 	"os"
 	"path/filepath"
 	"strings"
@@ -18,11 +20,13 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/providerrunner"
 	"github.com/ocelhq/ocel/cli/node"
 	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
+	"github.com/ocelhq/ocel/pkg/proto/deployments/v1/deploymentsv1connect"
 )
 
 type domainOptions struct {
 	preview bool
 	yes     bool
+	wait    bool
 }
 
 var domainOpts domainOptions
@@ -114,6 +118,21 @@ var domainRmCmd = &cobra.Command{
 	},
 }
 
+var domainStatusCmd = &cobra.Command{
+	Use:   "status",
+	Short: "Show, per production hostname, its certificate, the records it needs, what last answered for it and what is still outstanding",
+	Args:  cobra.NoArgs,
+	RunE: func(cmd *cobra.Command, args []string) error {
+		cwd, err := os.Getwd()
+		if err != nil {
+			return fmt.Errorf("determine working directory: %w", err)
+		}
+		ctx, stop := installInterruptHandler(cmd.Context(), cmd.ErrOrStderr())
+		defer stop()
+		return runDomainStatus(ctx, defaultDeps(), cwd, domainOpts, cmd.OutOrStdout(), cmd.ErrOrStderr())
+	},
+}
+
 func firstArg(args []string) string {
 	if len(args) == 0 {
 		return ""
@@ -126,7 +145,9 @@ func init() {
 		c.Flags().BoolVar(&domainOpts.preview, "preview", false, "Act on the preview class (required)")
 	}
 	domainReleaseCmd.Flags().BoolVarP(&domainOpts.yes, "yes", "y", false, "Skip the typed confirmation, for CI")
+	domainStatusCmd.Flags().BoolVar(&domainOpts.wait, "wait", false, "Keep polling until every declared hostname is served, or give up")
 
+	domainCmd.AddCommand(domainStatusCmd)
 	domainCmd.AddCommand(domainAddCmd)
 	domainCmd.AddCommand(domainRmCmd)
 	domainCmd.AddCommand(domainUseCmd)
@@ -458,4 +479,257 @@ func renderGlobalDomainProjects(out io.Writer, projects []string) {
 
 func wildcardOf(base string) string {
 	return "*." + base
+}
+
+type domainWaitSchedule struct {
+	first, most, cap time.Duration
+}
+
+var domainWait = domainWaitSchedule{first: 2 * time.Second, most: 30 * time.Second, cap: 15 * time.Minute}
+
+func runDomainStatus(ctx context.Context, d deps, cwd string, opts domainOptions, stdout, stderr io.Writer) error {
+	cfg, provider, err := domainSession(ctx, cwd)
+	if err != nil {
+		return err
+	}
+	configured := declaredHostnames(cfg, "production")
+
+	return runProviderSession(ctx, d, cfg, provider, stdout, stderr, func(runner *providerrunner.Runner) error {
+		if err := preflightClass(ctx, d, runner, provider, deploymentsv1.Environment_CLASS_PRODUCTION, "ocel bootstrap", stdout); err != nil {
+			return err
+		}
+		client, err := runner.Deployments()
+		if err != nil {
+			return err
+		}
+		req := edgeSettings(cfg).applyToDomainStatus(&deploymentsv1.DomainStatusRequest{
+			Options:         []byte(provider.Options),
+			ProtocolVersion: manifestbuilder.SchemaVersion,
+			Slug:            cfg.Slug,
+			Configured:      configured,
+		})
+		resp, err := awaitDomainStatus(ctx, client, req, opts.wait, stdout)
+		if err != nil {
+			return err
+		}
+		if logFormat() == logFormatJSON {
+			return writeDomainStatusJSON(stdout, resp)
+		}
+		renderDomainStatus(stdout, resp, filepath.Base(cfg.Path))
+		return nil
+	})
+}
+
+const domainWaitFailures = 4
+
+func awaitDomainStatus(ctx context.Context, client deploymentsv1connect.DeploymentServiceClient, req *deploymentsv1.DomainStatusRequest, wait bool, out io.Writer) (*deploymentsv1.DomainStatusResponse, error) {
+	resp, err := client.DomainStatus(ctx, req)
+	if err != nil || !wait || resp.GetReady() {
+		return resp, err
+	}
+	if declaredHosts(resp) == 0 {
+		return resp, fmt.Errorf("this project declares no production hostname, so there is nothing to wait for: declare one under domains.production and run `ocel domain add`")
+	}
+
+	spinner := deployui.StartSpinner(out, "Waiting for every declared hostname to answer")
+	defer spinner.Stop()
+
+	giveUp := time.Now().Add(domainWait.cap)
+	every := domainWait.first
+	var failures int
+	var lastErr error
+	for {
+		if err := holdFor(ctx, jittered(every)); err != nil {
+			return nil, err
+		}
+		every = min(every*2, domainWait.most)
+		next, err := client.DomainStatus(ctx, req)
+		switch {
+		case err != nil:
+			failures, lastErr = failures+1, err
+			if failures >= domainWaitFailures {
+				return resp, fmt.Errorf("gave up after %d failed checks in a row; the last one said: %w", failures, err)
+			}
+		default:
+			failures, lastErr, resp = 0, nil, next
+			if resp.GetReady() {
+				return resp, nil
+			}
+		}
+		if time.Now().After(giveUp) {
+			if lastErr != nil {
+				return resp, fmt.Errorf("gave up after %s waiting for every production hostname to answer; the last check failed: %w", domainWait.cap, lastErr)
+			}
+			return resp, fmt.Errorf("gave up after %s waiting for every production hostname to answer; still outstanding: %s", domainWait.cap, outstandingHosts(resp))
+		}
+	}
+}
+
+func declaredHosts(resp *deploymentsv1.DomainStatusResponse) int {
+	var declared int
+	for _, host := range resp.GetHosts() {
+		if host.GetDeclared() {
+			declared++
+		}
+	}
+	return declared
+}
+
+func jittered(every time.Duration) time.Duration {
+	return every + time.Duration(rand.Float64()*float64(every)/4)
+}
+
+func holdFor(ctx context.Context, d time.Duration) error {
+	timer := time.NewTimer(d)
+	defer timer.Stop()
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case <-timer.C:
+		return nil
+	}
+}
+
+func outstandingHosts(resp *deploymentsv1.DomainStatusResponse) string {
+	var pending []string
+	for _, host := range resp.GetHosts() {
+		if !host.GetReady() {
+			pending = append(pending, host.GetPending())
+		}
+	}
+	if len(pending) == 0 {
+		return "nothing this project declares"
+	}
+	return strings.Join(pending, "; ")
+}
+
+type domainStatusReport struct {
+	Ready          bool               `json:"ready"`
+	RecordsWritten []string           `json:"recordsWritten,omitempty"`
+	RecordsOwed    []string           `json:"recordsOwed,omitempty"`
+	Hosts          []domainHostReport `json:"hosts"`
+}
+
+type domainHostReport struct {
+	Hostname       string   `json:"hostname"`
+	Declared       bool     `json:"declared"`
+	Ready          bool     `json:"ready"`
+	Pending        string   `json:"pending,omitempty"`
+	Certificate    string   `json:"certificate,omitempty"`
+	CertStatus     string   `json:"certificateStatus,omitempty"`
+	Renewal        string   `json:"renewal,omitempty"`
+	ExpiresAt      string   `json:"expiresAt,omitempty"`
+	ExpiringSoon   bool     `json:"expiringSoon,omitempty"`
+	RecordsWritten []string `json:"recordsWritten,omitempty"`
+	RecordsOwed    []string `json:"recordsOwed,omitempty"`
+	LastProbeAt    string   `json:"lastProbeAt,omitempty"`
+	LastProbeOk    bool     `json:"lastProbeOk"`
+	LastProbeEdge  string   `json:"lastProbeEdge,omitempty"`
+	ServingPointer string   `json:"servingPointer,omitempty"`
+}
+
+func writeDomainStatusJSON(out io.Writer, resp *deploymentsv1.DomainStatusResponse) error {
+	report := domainStatusReport{
+		Ready:          resp.GetReady(),
+		RecordsWritten: resp.GetRecordsWritten(),
+		RecordsOwed:    resp.GetRecordsOwed(),
+		Hosts:          make([]domainHostReport, 0, len(resp.GetHosts())),
+	}
+	for _, host := range resp.GetHosts() {
+		report.Hosts = append(report.Hosts, domainHostReport{
+			Hostname:       host.GetHostname(),
+			Declared:       host.GetDeclared(),
+			Ready:          host.GetReady(),
+			Pending:        host.GetPending(),
+			Certificate:    host.GetCertificateId(),
+			CertStatus:     host.GetCertificateStatus(),
+			Renewal:        host.GetRenewalStatus(),
+			ExpiresAt:      stamp(host.GetExpiresAt()),
+			ExpiringSoon:   host.GetExpiringSoon(),
+			RecordsWritten: host.GetRecordsWritten(),
+			RecordsOwed:    host.GetRecordsOwed(),
+			LastProbeAt:    stamp(host.GetLastProbeAt()),
+			LastProbeOk:    host.GetLastProbeOk(),
+			LastProbeEdge:  host.GetLastProbeEdge(),
+			ServingPointer: host.GetServingPointer(),
+		})
+	}
+	enc := json.NewEncoder(out)
+	enc.SetIndent("", "  ")
+	return enc.Encode(report)
+}
+
+func stamp(unix int64) string {
+	if unix == 0 {
+		return ""
+	}
+	return time.Unix(unix, 0).UTC().Format(time.RFC3339)
+}
+
+func renderDomainStatus(out io.Writer, resp *deploymentsv1.DomainStatusResponse, configName string) {
+	if len(resp.GetHosts()) == 0 {
+		fmt.Fprintf(out, "This project declares no domains.production in %s, so nothing is served under a hostname of its own.\n", configName)
+		return
+	}
+	if len(resp.GetRecordsWritten()) > 0 || len(resp.GetRecordsOwed()) > 0 {
+		fmt.Fprintln(out, "Certificate validation")
+		renderDomainRecords(out, "Records ocel wrote", resp.GetRecordsWritten(), "none — nothing here writes DNS")
+		renderDomainRecords(out, "Records you own", resp.GetRecordsOwed(), "none outstanding")
+		fmt.Fprintln(out)
+	}
+	for i, host := range resp.GetHosts() {
+		if i > 0 {
+			fmt.Fprintln(out)
+		}
+		fmt.Fprintf(out, "%s  %s\n", host.GetHostname(), domainHostState(host))
+		if !host.GetDeclared() {
+			fmt.Fprintf(out, "  %-20s no — %s no longer declares it\n", "Declared", configName)
+		}
+		if id := host.GetCertificateId(); id != "" {
+			fmt.Fprintf(out, "  %-20s %s  %s\n", "Certificate", host.GetCertificateStatus(), id)
+			fmt.Fprintf(out, "  %-20s %s\n", "Renewal", domainRenewal(host))
+		}
+		renderDomainRecords(out, "Records ocel wrote", host.GetRecordsWritten(), "none — nothing here writes DNS")
+		renderDomainRecords(out, "Records you own", host.GetRecordsOwed(), "none outstanding")
+		fmt.Fprintf(out, "  %-20s %s\n", "Last probe", domainHostProbe(host))
+		if pointer := host.GetServingPointer(); pointer != "" {
+			fmt.Fprintf(out, "  %-20s %s\n", "Served by", pointer)
+		}
+		if pending := host.GetPending(); pending != "" {
+			fmt.Fprintf(out, "  %-20s %s\n", "Outstanding", pending)
+		}
+	}
+}
+
+func domainHostState(host *deploymentsv1.DomainHost) string {
+	if host.GetReady() {
+		return "READY"
+	}
+	return "PENDING"
+}
+
+func domainRenewal(host *deploymentsv1.DomainHost) string {
+	expiry := "no expiry reported"
+	if at := host.GetExpiresAt(); at != 0 {
+		expiry = "expires " + stamp(at)
+	}
+	status := host.GetRenewalStatus()
+	if status == "" {
+		status = "not reported"
+	}
+	if host.GetExpiringSoon() {
+		return fmt.Sprintf("%s, %s — EXPIRING SOON", expiry, status)
+	}
+	return fmt.Sprintf("%s, %s", expiry, status)
+}
+
+func domainHostProbe(host *deploymentsv1.DomainHost) string {
+	if host.GetLastProbeAt() == 0 {
+		return "never — run `ocel domain add` to bind it and check the edge answers"
+	}
+	at := stamp(host.GetLastProbeAt())
+	if !host.GetLastProbeOk() {
+		return fmt.Sprintf("%s  FAILED — nothing answered as the %s edge", at, host.GetLastProbeEdge())
+	}
+	return fmt.Sprintf("%s  x-ocel-edge: %s", at, host.GetLastProbeEdge())
 }

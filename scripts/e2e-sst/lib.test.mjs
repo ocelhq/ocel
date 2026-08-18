@@ -17,6 +17,7 @@ import {
   pairProblem,
   parsePublishedRecord,
   parseSstOutputs,
+  productionHostFor,
   projectSlugForRun,
   publishedIds,
   recordShapeProblem,
@@ -147,6 +148,18 @@ describe("renderOcelConfig", () => {
   it("reads the custom record through a transform module, never through `links`", () => {
     expect(config).toContain(`transforms: ["${TRANSFORM_MODULE}"]`);
     expect(config).not.toContain(`"${CUSTOM_LINK_NAME}"`);
+  });
+
+  it("declares the production hostname the deploy serves, and the DNS its record is written into", () => {
+    const served = renderOcelConfig({ slug: "e2es-1", host: "e2es-1.e2e.example.com" });
+    expect(served).toContain('domains: { production: ["e2es-1.e2e.example.com"] }');
+    expect(served).toContain("dns: cloudflareDns()");
+  });
+
+  it("derives the production hostname from the zone the run is given", () => {
+    expect(productionHostFor("e2es-1", "*.e2e.example.com")).toBe("e2es-1.e2e.example.com");
+    expect(productionHostFor("e2es-1", " e2e.example.com ")).toBe("e2es-1.e2e.example.com");
+    expect(productionHostFor("e2es-1", "")).toBe("");
   });
 
   it("keeps the transform when the refusal leg unbinds every link, so it is the first thing missing", () => {

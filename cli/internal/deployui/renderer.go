@@ -369,7 +369,7 @@ type Flip struct {
 	Bound *deploymentsv1.FlipBound
 }
 
-func (r *Renderer) Deployed(headline string, appURLs []string, flip Flip, logPath string) {
+func (r *Renderer) Deployed(headline string, appURLs []string, note string, flip Flip, logPath string) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	r.finishAllLocked(r.okColor(), okMark, "")
@@ -380,6 +380,9 @@ func (r *Renderer) Deployed(headline string, appURLs []string, flip Flip, logPat
 			"appUrls":    appURLs,
 			"durationMs": time.Since(r.start).Milliseconds(),
 			"logPath":    logPath,
+		}
+		if note != "" {
+			fields["urlNote"] = note
 		}
 		if flip.Bound != nil {
 			fields["flipBound"] = map[string]any{
@@ -393,12 +396,16 @@ func (r *Renderer) Deployed(headline string, appURLs []string, flip Flip, logPat
 
 	fmt.Fprintln(r.w)
 	r.colorFor(color.FgGreen, color.Bold).Fprintf(r.w, "%s %s in %s\n", okMark, headline, formatDuration(time.Since(r.start)))
-	if len(appURLs) > 0 {
+	switch {
+	case len(appURLs) > 0:
 		fmt.Fprintln(r.w)
 		url := r.colorFor(color.FgCyan, color.Bold)
 		for _, u := range appURLs {
 			url.Fprintf(r.w, "  %s\n", u)
 		}
+	case note != "":
+		fmt.Fprintln(r.w)
+		r.colorFor(color.FgYellow).Fprintf(r.w, "  %s\n", note)
 	}
 	if flip.Note != "" {
 		fmt.Fprintln(r.w)

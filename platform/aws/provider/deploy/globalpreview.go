@@ -15,16 +15,7 @@ const (
 )
 
 func declaresPreviewDomain(manifest *deploymentsv1.Manifest) bool {
-	key := domainClassKeyFor(deploymentsv1.Environment_CLASS_PREVIEW)
-	if len(manifest.GetDomains()[key].GetHostnames()) > 0 {
-		return true
-	}
-	for _, app := range manifestApps(manifest) {
-		if len(app.GetDomains()[key].GetHostnames()) > 0 {
-			return true
-		}
-	}
-	return false
+	return len(DeclaredHostnames(manifest, deploymentsv1.Environment_CLASS_PREVIEW)) > 0
 }
 
 func PreviewWildcardSpecFor(cfg Config, baseDomain string, warn func(string)) (edge.PreviewWildcardSpec, error) {

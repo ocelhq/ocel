@@ -42,6 +42,8 @@ service DeploymentService {
 
     rpc RemoveDomain(RemoveDomainRequest) returns (stream DeployEvent);
 
+    rpc DomainStatus(DomainStatusRequest) returns (DomainStatusResponse);
+
     rpc SetLink(SetLinkRequest) returns (SetLinkResponse);
 
     rpc RemoveLink(RemoveLinkRequest) returns (RemoveLinkResponse);
@@ -103,6 +105,62 @@ message RemoveDomainRequest {
   string edge_kind = 6;
 
   Dns dns = 7;
+}
+
+message DomainStatusRequest {
+  bytes options = 1;
+
+  string protocol_version = 2;
+
+  string slug = 3;
+
+  repeated string configured = 4;
+
+  string edge_kind = 5;
+
+  Dns dns = 6;
+}
+
+message DomainStatusResponse {
+  repeated DomainHost hosts = 1;
+
+  bool ready = 2;
+
+  repeated string records_written = 3;
+
+  repeated string records_owed = 4;
+}
+
+message DomainHost {
+  string hostname = 1;
+
+  bool declared = 2;
+
+  string certificate_id = 3;
+
+  string certificate_status = 4;
+
+  string renewal_status = 5;
+
+  int64 expires_at = 6;
+
+  bool expiring_soon = 7;
+
+  repeated string records_written = 8;
+
+  repeated string records_owed = 9;
+
+  int64 last_probe_at = 10;
+
+  bool last_probe_ok = 11;
+
+  string last_probe_edge = 12;
+
+  string serving_pointer = 13;
+
+  bool ready = 14;
+
+  string pending = 15;
 }
 
 message Environment {
@@ -613,6 +671,8 @@ message ResultEvent {
   string promotion_id = 5;
 
   FlipBound flip_bound = 8;
+
+  string url_note = 9;
 
   reserved 3;
   reserved "outputs";

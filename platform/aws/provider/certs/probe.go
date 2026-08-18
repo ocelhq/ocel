@@ -81,6 +81,10 @@ func (p Prober) hold(ctx context.Context) error {
 	return waitFor(ctx, p.interval())
 }
 
+func (p Prober) Clock() time.Time {
+	return p.now()
+}
+
 func (p Prober) now() time.Time {
 	if p.Now == nil {
 		return time.Now()

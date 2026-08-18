@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/route53"
@@ -35,6 +36,10 @@ var _ edge.ZoneFinder = (*route53Writer)(nil)
 
 func NewRoute53(api Route53API, zone string) edge.DNSWriter {
 	return &route53Writer{api: api, named: zone}
+}
+
+func (w *route53Writer) RecordTTL() time.Duration {
+	return recordTTL * time.Second
 }
 
 func (w *route53Writer) EnsureRecords(ctx context.Context, records []edge.Record, _ func(string)) ([]edge.Record, error) {

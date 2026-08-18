@@ -159,6 +159,7 @@ type Result struct {
 	Links       []*linksv1.Link
 	Functions   []*deploymentsv1.FunctionOutput
 	AppURLs     []string
+	URLNote     string
 	PromotionID string
 	Flip        *edge.FlipBound
 	StackState  edge.StackState

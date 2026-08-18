@@ -25,7 +25,20 @@ import (
 
 const domainSlug = "acme-web"
 
+type callLog struct {
+	calls []string
+}
+
+func (l *callLog) note(format string, args ...any) {
+	if l == nil {
+		return
+	}
+	l.calls = append(l.calls, fmt.Sprintf(format, args...))
+}
+
 type boundStack struct {
+	name    string
+	log     *callLog
 	state   edge.StackState
 	bound   []edge.DomainBinding
 	unbound []string
@@ -46,12 +59,14 @@ func (s *boundStack) BindDomain(_ context.Context, binding edge.DomainBinding) e
 	if s.bindErr != nil {
 		return s.bindErr
 	}
+	s.log.note("bind %s on %s", binding.Hostname, s.name)
 	s.bound = append(s.bound, binding)
 	s.state = edge.RecordBoundDomain(s.state, binding.Hostname)
 	return nil
 }
 
 func (s *boundStack) UnbindDomain(_ context.Context, hostname string) error {
+	s.log.note("unbind %s from %s", hostname, s.name)
 	s.unbound = append(s.unbound, hostname)
 	s.state = edge.ForgetBoundDomain(s.state, hostname)
 	return nil
@@ -64,11 +79,17 @@ func newBoundStack() *boundStack {
 }
 
 type domainWriter struct {
+	log     *callLog
 	written []edge.Record
 	deleted []edge.Record
 }
 
+func (w *domainWriter) RecordTTL() time.Duration { return 5 * time.Minute }
+
 func (w *domainWriter) EnsureRecords(_ context.Context, records []edge.Record, _ func(string)) ([]edge.Record, error) {
+	for _, rec := range records {
+		w.log.note("write %s", rec)
+	}
 	w.written = append(w.written, records...)
 	return records, nil
 }
@@ -79,12 +100,15 @@ func (w *domainWriter) DeleteRecords(_ context.Context, records []edge.Record) e
 }
 
 type domainACM struct {
-	requested [][]string
-	deleted   []string
-	deleteErr error
-	listed    []acmtypes.CertificateSummary
-	details   map[string]*acmtypes.CertificateDetail
-	minted    int
+	log         *callLog
+	requested   [][]string
+	deleted     []string
+	deleteErr   error
+	listed      []acmtypes.CertificateSummary
+	details     map[string]*acmtypes.CertificateDetail
+	described   []string
+	describeErr error
+	minted      int
 }
 
 func newDomainACM() *domainACM {
@@ -115,6 +139,7 @@ func validationFor(names []string) []acmtypes.DomainValidation {
 
 func (a *domainACM) RequestCertificate(_ context.Context, in *acm.RequestCertificateInput, _ ...func(*acm.Options)) (*acm.RequestCertificateOutput, error) {
 	names := append([]string{aws.ToString(in.DomainName)}, in.SubjectAlternativeNames...)
+	a.log.note("request certificate for %s", strings.Join(names, ", "))
 	a.requested = append(a.requested, names)
 	a.minted++
 	arn := fmt.Sprintf("arn:aws:acm:us-east-1:111122223333:certificate/minted-%d", a.minted)
@@ -123,6 +148,10 @@ func (a *domainACM) RequestCertificate(_ context.Context, in *acm.RequestCertifi
 }
 
 func (a *domainACM) DescribeCertificate(_ context.Context, in *acm.DescribeCertificateInput, _ ...func(*acm.Options)) (*acm.DescribeCertificateOutput, error) {
+	a.described = append(a.described, aws.ToString(in.CertificateArn))
+	if a.describeErr != nil {
+		return nil, a.describeErr
+	}
 	detail, ok := a.details[aws.ToString(in.CertificateArn)]
 	if !ok {
 		return nil, fmt.Errorf("no certificate %s", aws.ToString(in.CertificateArn))
@@ -148,6 +177,7 @@ type domainFixture struct {
 	writer  *domainWriter
 	acm     *domainACM
 	ssm     *stateSSM
+	log     *callLog
 	said    []string
 }
 
@@ -186,6 +216,8 @@ type domainFixtureOptions struct {
 	pins       map[string]string
 	prior      bootstrap.Production
 	certified  bool
+	kind       edge.Kind
+	priorEdge  *boundStack
 	stack      *boundStack
 	writer     *domainWriter
 	acm        *domainACM
@@ -199,11 +231,26 @@ func newDomainFixture(opts domainFixtureOptions) *domainFixture {
 	if opts.acm == nil {
 		opts.acm = newDomainACM()
 	}
+	kind := opts.kind
+	if kind == "" {
+		kind = edge.KindCloudflare
+	}
 	probe := opts.probe
 	if probe == "" {
-		probe = string(edge.KindCloudflare)
+		probe = string(kind)
 	}
-	f := &domainFixture{stack: opts.stack, writer: opts.writer, acm: opts.acm, ssm: &stateSSM{params: map[string]string{}}}
+	if opts.stack.name == "" {
+		opts.stack.name = string(kind)
+	}
+	log := &callLog{}
+	opts.stack.log, opts.acm.log = log, log
+	if opts.writer != nil {
+		opts.writer.log = log
+	}
+	if opts.priorEdge != nil {
+		opts.priorEdge.log = log
+	}
+	f := &domainFixture{stack: opts.stack, writer: opts.writer, acm: opts.acm, ssm: &stateSSM{params: map[string]string{}}, log: log}
 	front := edge.EdgeStack(opts.stack)
 	if opts.edge != nil {
 		front = opts.edge
@@ -216,7 +263,7 @@ func newDomainFixture(opts domainFixtureOptions) *domainFixture {
 	session := &domainSession{
 		ssm:    f.ssm,
 		slug:   domainSlug,
-		kind:   edge.KindCloudflare,
+		kind:   kind,
 		stack:  front,
 		writer: writer,
 		poller: dns.Poller{
@@ -226,7 +273,8 @@ func newDomainFixture(opts domainFixtureOptions) *domainFixture {
 			Every:    time.Millisecond,
 		},
 		prober: certs.Prober{
-			Get: func(context.Context, string) (http.Header, error) {
+			Get: func(_ context.Context, target string) (http.Header, error) {
+				log.note("probe %s", target)
 				header := http.Header{}
 				header.Set(edge.HeaderEdge, probe)
 				return header, nil
@@ -244,8 +292,15 @@ func newDomainFixture(opts domainFixtureOptions) *domainFixture {
 		configured: opts.configured,
 		host:       opts.host,
 		recorded:   opts.prior,
+		ttl:        edge.WriteTTL(writer),
 	}
-	if opts.certified {
+	if opts.priorEdge != nil {
+		session.open = func(edge.Kind) (edge.EdgeStack, error) { return opts.priorEdge, nil }
+	}
+	switch {
+	case opts.kind != "":
+		session.issuer = fakeIssuer(opts.kind, opts.acm)
+	case opts.certified:
 		session.issuer = certs.Issuer{
 			API:      opts.acm,
 			Region:   certs.CloudFrontRegion,

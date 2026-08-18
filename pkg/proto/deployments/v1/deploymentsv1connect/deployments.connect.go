@@ -83,6 +83,9 @@ const (
 	// DeploymentServiceRemoveDomainProcedure is the fully-qualified name of the DeploymentService's
 	// RemoveDomain RPC.
 	DeploymentServiceRemoveDomainProcedure = "/deployments.v1.DeploymentService/RemoveDomain"
+	// DeploymentServiceDomainStatusProcedure is the fully-qualified name of the DeploymentService's
+	// DomainStatus RPC.
+	DeploymentServiceDomainStatusProcedure = "/deployments.v1.DeploymentService/DomainStatus"
 	// DeploymentServiceSetLinkProcedure is the fully-qualified name of the DeploymentService's SetLink
 	// RPC.
 	DeploymentServiceSetLinkProcedure = "/deployments.v1.DeploymentService/SetLink"
@@ -113,6 +116,7 @@ type DeploymentServiceClient interface {
 	ReleaseDomain(context.Context, *v1.ReleaseDomainRequest) (*connect.ServerStreamForClient[v1.DeployEvent], error)
 	AddDomain(context.Context, *v1.AddDomainRequest) (*connect.ServerStreamForClient[v1.DeployEvent], error)
 	RemoveDomain(context.Context, *v1.RemoveDomainRequest) (*connect.ServerStreamForClient[v1.DeployEvent], error)
+	DomainStatus(context.Context, *v1.DomainStatusRequest) (*v1.DomainStatusResponse, error)
 	SetLink(context.Context, *v1.SetLinkRequest) (*v1.SetLinkResponse, error)
 	RemoveLink(context.Context, *v1.RemoveLinkRequest) (*v1.RemoveLinkResponse, error)
 	ListLinks(context.Context, *v1.ListLinksRequest) (*v1.ListLinksResponse, error)
@@ -231,6 +235,12 @@ func NewDeploymentServiceClient(httpClient connect.HTTPClient, baseURL string, o
 			connect.WithSchema(deploymentServiceMethods.ByName("RemoveDomain")),
 			connect.WithClientOptions(opts...),
 		),
+		domainStatus: connect.NewClient[v1.DomainStatusRequest, v1.DomainStatusResponse](
+			httpClient,
+			baseURL+DeploymentServiceDomainStatusProcedure,
+			connect.WithSchema(deploymentServiceMethods.ByName("DomainStatus")),
+			connect.WithClientOptions(opts...),
+		),
 		setLink: connect.NewClient[v1.SetLinkRequest, v1.SetLinkResponse](
 			httpClient,
 			baseURL+DeploymentServiceSetLinkProcedure,
@@ -271,6 +281,7 @@ type deploymentServiceClient struct {
 	releaseDomain      *connect.Client[v1.ReleaseDomainRequest, v1.DeployEvent]
 	addDomain          *connect.Client[v1.AddDomainRequest, v1.DeployEvent]
 	removeDomain       *connect.Client[v1.RemoveDomainRequest, v1.DeployEvent]
+	domainStatus       *connect.Client[v1.DomainStatusRequest, v1.DomainStatusResponse]
 	setLink            *connect.Client[v1.SetLinkRequest, v1.SetLinkResponse]
 	removeLink         *connect.Client[v1.RemoveLinkRequest, v1.RemoveLinkResponse]
 	listLinks          *connect.Client[v1.ListLinksRequest, v1.ListLinksResponse]
@@ -389,6 +400,15 @@ func (c *deploymentServiceClient) RemoveDomain(ctx context.Context, req *v1.Remo
 	return c.removeDomain.CallServerStream(ctx, connect.NewRequest(req))
 }
 
+// DomainStatus calls deployments.v1.DeploymentService.DomainStatus.
+func (c *deploymentServiceClient) DomainStatus(ctx context.Context, req *v1.DomainStatusRequest) (*v1.DomainStatusResponse, error) {
+	response, err := c.domainStatus.CallUnary(ctx, connect.NewRequest(req))
+	if response != nil {
+		return response.Msg, err
+	}
+	return nil, err
+}
+
 // SetLink calls deployments.v1.DeploymentService.SetLink.
 func (c *deploymentServiceClient) SetLink(ctx context.Context, req *v1.SetLinkRequest) (*v1.SetLinkResponse, error) {
 	response, err := c.setLink.CallUnary(ctx, connect.NewRequest(req))
@@ -435,6 +455,7 @@ type DeploymentServiceHandler interface {
 	ReleaseDomain(context.Context, *v1.ReleaseDomainRequest, *connect.ServerStream[v1.DeployEvent]) error
 	AddDomain(context.Context, *v1.AddDomainRequest, *connect.ServerStream[v1.DeployEvent]) error
 	RemoveDomain(context.Context, *v1.RemoveDomainRequest, *connect.ServerStream[v1.DeployEvent]) error
+	DomainStatus(context.Context, *v1.DomainStatusRequest) (*v1.DomainStatusResponse, error)
 	SetLink(context.Context, *v1.SetLinkRequest) (*v1.SetLinkResponse, error)
 	RemoveLink(context.Context, *v1.RemoveLinkRequest) (*v1.RemoveLinkResponse, error)
 	ListLinks(context.Context, *v1.ListLinksRequest) (*v1.ListLinksResponse, error)
@@ -549,6 +570,12 @@ func NewDeploymentServiceHandler(svc DeploymentServiceHandler, opts ...connect.H
 		connect.WithSchema(deploymentServiceMethods.ByName("RemoveDomain")),
 		connect.WithHandlerOptions(opts...),
 	)
+	deploymentServiceDomainStatusHandler := connect.NewUnaryHandlerSimple(
+		DeploymentServiceDomainStatusProcedure,
+		svc.DomainStatus,
+		connect.WithSchema(deploymentServiceMethods.ByName("DomainStatus")),
+		connect.WithHandlerOptions(opts...),
+	)
 	deploymentServiceSetLinkHandler := connect.NewUnaryHandlerSimple(
 		DeploymentServiceSetLinkProcedure,
 		svc.SetLink,
@@ -603,6 +630,8 @@ func NewDeploymentServiceHandler(svc DeploymentServiceHandler, opts ...connect.H
 			deploymentServiceAddDomainHandler.ServeHTTP(w, r)
 		case DeploymentServiceRemoveDomainProcedure:
 			deploymentServiceRemoveDomainHandler.ServeHTTP(w, r)
+		case DeploymentServiceDomainStatusProcedure:
+			deploymentServiceDomainStatusHandler.ServeHTTP(w, r)
 		case DeploymentServiceSetLinkProcedure:
 			deploymentServiceSetLinkHandler.ServeHTTP(w, r)
 		case DeploymentServiceRemoveLinkProcedure:
@@ -684,6 +713,10 @@ func (UnimplementedDeploymentServiceHandler) AddDomain(context.Context, *v1.AddD
 
 func (UnimplementedDeploymentServiceHandler) RemoveDomain(context.Context, *v1.RemoveDomainRequest, *connect.ServerStream[v1.DeployEvent]) error {
 	return connect.NewError(connect.CodeUnimplemented, errors.New("deployments.v1.DeploymentService.RemoveDomain is not implemented"))
+}
+
+func (UnimplementedDeploymentServiceHandler) DomainStatus(context.Context, *v1.DomainStatusRequest) (*v1.DomainStatusResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("deployments.v1.DeploymentService.DomainStatus is not implemented"))
 }
 
 func (UnimplementedDeploymentServiceHandler) SetLink(context.Context, *v1.SetLinkRequest) (*v1.SetLinkResponse, error) {
