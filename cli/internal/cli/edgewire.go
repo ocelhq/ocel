@@ -36,3 +36,13 @@ func (e edgeWire) applyToBootstrap(req *deploymentsv1.BootstrapRequest) *deploym
 	req.EdgeKind, req.EdgeOptions, req.Dns, req.AllowDegraded = string(e.kind), e.options, e.dns, e.allowDegraded
 	return req
 }
+
+func (e edgeWire) applyToPlanTeardown(req *deploymentsv1.PlanTeardownRequest) *deploymentsv1.PlanTeardownRequest {
+	req.EdgeKind = string(e.kind)
+	return req
+}
+
+func (e edgeWire) applyToTeardown(req *deploymentsv1.TeardownRequest) *deploymentsv1.TeardownRequest {
+	req.EdgeKind = string(e.kind)
+	return req
+}

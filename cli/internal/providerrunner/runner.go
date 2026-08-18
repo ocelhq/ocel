@@ -286,6 +286,12 @@ func (r *Runner) Bootstrap(ctx context.Context, req *deploymentsv1.BootstrapRequ
 	})
 }
 
+func (r *Runner) Teardown(ctx context.Context, req *deploymentsv1.TeardownRequest, onEvent func(*deploymentsv1.DeployEvent)) error {
+	return r.stream(ctx, "Teardown", onEvent, func(client deploymentsv1connect.DeploymentServiceClient) (*connect.ServerStreamForClient[deploymentsv1.DeployEvent], error) {
+		return client.Teardown(ctx, req)
+	})
+}
+
 func (r *Runner) DestroyPreview(ctx context.Context, req *deploymentsv1.DestroyPreviewRequest, onEvent func(*deploymentsv1.DeployEvent)) error {
 	return r.stream(ctx, "DestroyPreview", onEvent, func(client deploymentsv1connect.DeploymentServiceClient) (*connect.ServerStreamForClient[deploymentsv1.DeployEvent], error) {
 		return client.DestroyPreview(ctx, req)

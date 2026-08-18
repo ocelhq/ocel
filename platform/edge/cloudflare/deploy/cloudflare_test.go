@@ -479,12 +479,18 @@ func TestTeardown(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Setenv(envAccountID, "acct")
 
-			m := &cfMock{zoneID: "zone1", zoneName: "app.com"}
+			store := cacheStoreName(tc.class)
+			m := &cfMock{
+				zoneID:         "zone1",
+				zoneName:       "app.com",
+				existingTokens: []map[string]any{{"id": "token-" + string(tc.class), "name": store}},
+			}
 			p := m.provider(t)
 			if err := p.Teardown(t.Context(), tc.class); err != nil {
 				t.Fatalf("Teardown: %v", err)
 			}
 			assertSet(t, "deleted scripts", m.deletedScripts, tc.want)
+			assertSet(t, "deleted tokens", m.deletedTokens, []string{"token-" + string(tc.class)})
 		})
 	}
 

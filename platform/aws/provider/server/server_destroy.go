@@ -69,10 +69,10 @@ func (s *Server) edgeStackPlan(edgeFront edge.Edge, state edge.StackState, slug 
 		return nil, err
 	}
 
-	plan.Items = append(plan.Items, &deploymentsv1.EdgeStackPlan_Item{
+	plan.Items = append(plan.Items, &deploymentsv1.TeardownItem{
 		Kind:   "edge stack",
 		Name:   slug,
-		Action: deploymentsv1.EdgeStackPlan_Item_ACTION_DELETE,
+		Action: deploymentsv1.TeardownItem_ACTION_DELETE,
 		Reason: "edge workers, custom-domain binding and the deployments store this project is fronted by",
 	})
 	return plan, nil

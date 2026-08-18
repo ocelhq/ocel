@@ -133,6 +133,16 @@ func (s *stateSSM) PutParameter(_ context.Context, in *ssm.PutParameterInput, _ 
 	return &ssm.PutParameterOutput{}, nil
 }
 
+func (s *stateSSM) GetParametersByPath(_ context.Context, in *ssm.GetParametersByPathInput, _ ...func(*ssm.Options)) (*ssm.GetParametersByPathOutput, error) {
+	out := &ssm.GetParametersByPathOutput{}
+	for name := range s.params {
+		if strings.HasPrefix(name, aws.ToString(in.Path)) {
+			out.Parameters = append(out.Parameters, ssmtypes.Parameter{Name: aws.String(name)})
+		}
+	}
+	return out, nil
+}
+
 func (s *stateSSM) DeleteParameter(_ context.Context, in *ssm.DeleteParameterInput, _ ...func(*ssm.Options)) (*ssm.DeleteParameterOutput, error) {
 	delete(s.params, aws.ToString(in.Name))
 	return &ssm.DeleteParameterOutput{}, nil

@@ -328,6 +328,59 @@ func (s *deployFakeProviderServer) Bootstrap(ctx context.Context, req *deploymen
 	})
 }
 
+func (s *deployFakeProviderServer) PlanTeardown(ctx context.Context, req *deploymentsv1.PlanTeardownRequest) (*deploymentsv1.PlanTeardownResponse, error) {
+	if err := s.checkToken(ctx); err != nil {
+		return nil, err
+	}
+	journalEdge(req.GetEdgeKind(), nil, nil, nil)
+	if err := refuseEdge(); err != nil {
+		return nil, err
+	}
+	class := strings.ToLower(strings.TrimPrefix(req.GetClass().String(), "CLASS_"))
+	return &deploymentsv1.PlanTeardownResponse{
+		EdgeKind: req.GetEdgeKind(),
+		Items: []*deploymentsv1.TeardownItem{
+			{
+				Kind:   "edge bootstrap",
+				Name:   req.GetEdgeKind(),
+				Action: deploymentsv1.TeardownItem_ACTION_DELETE,
+				Reason: "every worker the edge stood up for the " + class + " substrate",
+			},
+			{
+				Kind:   "bucket",
+				Name:   "ocel-state-" + class,
+				Action: deploymentsv1.TeardownItem_ACTION_DELETE,
+				Reason: "the Pulumi state of every stack this substrate deployed",
+				Slow:   true,
+			},
+			{
+				Kind:   "parameter",
+				Name:   "/ocel/pulumi/passphrase",
+				Action: deploymentsv1.TeardownItem_ACTION_KEEP,
+				Reason: "the production substrate is still bootstrapped and its Pulumi state is encrypted under it",
+			},
+		},
+	}, nil
+}
+
+func (s *deployFakeProviderServer) Teardown(ctx context.Context, req *deploymentsv1.TeardownRequest, stream *connect.ServerStream[deploymentsv1.DeployEvent]) error {
+	if err := s.checkToken(ctx); err != nil {
+		return err
+	}
+	journalEdge(req.GetEdgeKind(), nil, nil, nil)
+	if err := refuseEdge(); err != nil {
+		return err
+	}
+	if err := stream.Send(&deploymentsv1.DeployEvent{
+		Event: &deploymentsv1.DeployEvent_Progress{Progress: &deploymentsv1.ProgressEvent{Message: "TEARDOWN class=" + req.GetClass().String()}},
+	}); err != nil {
+		return err
+	}
+	return stream.Send(&deploymentsv1.DeployEvent{
+		Event: &deploymentsv1.DeployEvent_Result{Result: &deploymentsv1.ResultEvent{Success: true}},
+	})
+}
+
 func (s *deployFakeProviderServer) Preflight(ctx context.Context, req *deploymentsv1.PreflightRequest) (*deploymentsv1.PreflightResponse, error) {
 	if err := s.checkToken(ctx); err != nil {
 		return nil, err
@@ -496,22 +549,22 @@ func (s *deployFakeProviderServer) PlanDestroyProject(ctx context.Context, req *
 	return &deploymentsv1.PlanDestroyProjectResponse{
 		EdgeStack: &deploymentsv1.EdgeStackPlan{
 			EdgeKind: "cloudflare",
-			Items: []*deploymentsv1.EdgeStackPlan_Item{
+			Items: []*deploymentsv1.TeardownItem{
 				{
 					Kind:   "edge stack",
 					Name:   slug,
-					Action: deploymentsv1.EdgeStackPlan_Item_ACTION_DELETE,
+					Action: deploymentsv1.TeardownItem_ACTION_DELETE,
 				},
 				{
 					Kind:   "distribution",
 					Name:   "E1" + slug,
-					Action: deploymentsv1.EdgeStackPlan_Item_ACTION_DISABLE_THEN_DELETE,
+					Action: deploymentsv1.TeardownItem_ACTION_DISABLE_THEN_DELETE,
 					Slow:   true,
 				},
 				{
 					Kind:   "certificate",
 					Name:   slug + ".example.com",
-					Action: deploymentsv1.EdgeStackPlan_Item_ACTION_KEEP,
+					Action: deploymentsv1.TeardownItem_ACTION_KEEP,
 					Reason: "you pinned this certificate; Ocel never deletes one it did not request",
 				},
 			},

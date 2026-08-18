@@ -210,7 +210,7 @@ func runDomainRelease(ctx context.Context, d deps, cwd string, opts domainOption
 		fmt.Fprintln(stdout, "Every project above keeps its previews deployed, but they stop being reachable until a global domain is in use again or each project declares its own domains.preview.")
 
 		if !opts.yes {
-			confirmed, err := confirmReleaseDomain(ctx, base, stdout, stdin)
+			confirmed, err := confirmPhrase(ctx, "domain", base, stdout, stdin)
 			if err != nil {
 				return err
 			}
@@ -295,19 +295,6 @@ func renderGlobalDomainProjects(out io.Writer, projects []string) {
 	for _, p := range projects {
 		fmt.Fprintf(out, "  • %s\n", p)
 	}
-}
-
-func confirmReleaseDomain(ctx context.Context, base string, stdout io.Writer, stdin io.Reader) (bool, error) {
-	fmt.Fprintf(stdout, "Type the domain (%s) to confirm: ", base)
-
-	line, err := readLine(ctx, stdin)
-	if err != nil {
-		if err == io.EOF {
-			return false, nil
-		}
-		return false, err
-	}
-	return strings.TrimSpace(line) == base, nil
 }
 
 func wildcardOf(base string) string {

@@ -56,39 +56,6 @@ func TestGlobalPreviewBaseDomain(t *testing.T) {
 	})
 }
 
-func TestConfirmReleaseDomain(t *testing.T) {
-	t.Parallel()
-
-	cases := []struct {
-		name  string
-		input string
-		want  bool
-	}{
-		{"exact domain proceeds", "preview.acme.com\n", true},
-		{"surrounding space proceeds", "  preview.acme.com  \n", true},
-		{"the wildcard form aborts", "*.preview.acme.com\n", false},
-		{"reflexive yes aborts", "y\n", false},
-		{"closed stdin aborts", "", false},
-	}
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			t.Parallel()
-
-			var stdout bytes.Buffer
-			got, err := confirmReleaseDomain(context.Background(), "preview.acme.com", &stdout, strings.NewReader(tc.input))
-			if err != nil {
-				t.Fatalf("confirmReleaseDomain(context.Background(), ) error = %v", err)
-			}
-			if got != tc.want {
-				t.Errorf("confirmReleaseDomain(context.Background(), %q) = %v, want %v", tc.input, got, tc.want)
-			}
-			if !strings.Contains(stdout.String(), "Type the domain (preview.acme.com) to confirm:") {
-				t.Errorf("stdout = %q, want the typed-domain prompt", stdout.String())
-			}
-		})
-	}
-}
-
 func TestRunDomain(t *testing.T) {
 	t.Run("every subcommand refuses without --preview", func(t *testing.T) {
 		root, _ := setUpDeployFixture(t)
