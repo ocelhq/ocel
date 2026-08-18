@@ -5,10 +5,14 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"net/http"
+	"slices"
 	"strings"
 	"testing"
 	"time"
 
+	awssdk "github.com/aws/aws-sdk-go-v2/aws"
+	"github.com/aws/aws-sdk-go-v2/service/s3"
+	s3types "github.com/aws/aws-sdk-go-v2/service/s3/types"
 	cf "github.com/cloudflare/cloudflare-go/v4"
 	"github.com/cloudflare/cloudflare-go/v4/option"
 	"github.com/cloudflare/cloudflare-go/v4/packages/pagination"
@@ -22,9 +26,11 @@ import (
 const testAccountID = "acct-123"
 
 type fakeBuckets struct {
-	existing map[string]bool
-	created  []r2.BucketNewParams
-	newErr   error
+	existing  map[string]bool
+	created   []r2.BucketNewParams
+	deleted   []string
+	newErr    error
+	deleteErr error
 }
 
 func (f *fakeBuckets) Get(_ context.Context, name string, _ r2.BucketGetParams, _ ...option.RequestOption) (*r2.Bucket, error) {
@@ -42,11 +48,69 @@ func (f *fakeBuckets) New(_ context.Context, params r2.BucketNewParams, _ ...opt
 	return &r2.Bucket{Name: params.Name.Value}, nil
 }
 
+func (f *fakeBuckets) Delete(_ context.Context, name string, _ r2.BucketDeleteParams, _ ...option.RequestOption) (*r2.BucketDeleteResponse, error) {
+	if f.deleteErr != nil {
+		return nil, f.deleteErr
+	}
+	f.deleted = append(f.deleted, name)
+	delete(f.existing, name)
+	var deleted r2.BucketDeleteResponse
+	return &deleted, nil
+}
+
+type fakeCredentials struct {
+	minted []r2.TemporaryCredentialParam
+	err    error
+}
+
+func (f *fakeCredentials) New(_ context.Context, params r2.TemporaryCredentialNewParams, _ ...option.RequestOption) (*r2.TemporaryCredentialNewResponse, error) {
+	if f.err != nil {
+		return nil, f.err
+	}
+	f.minted = append(f.minted, params.TemporaryCredential)
+	return &r2.TemporaryCredentialNewResponse{AccessKeyID: "temp-id", SecretAccessKey: "temp-secret", SessionToken: "temp-session"}, nil
+}
+
+type fakeObjects struct {
+	pages   [][]string
+	refused []s3types.Error
+	err     error
+	listed  int
+	deleted []string
+}
+
+func (f *fakeObjects) ListObjectsV2(_ context.Context, _ *s3.ListObjectsV2Input, _ ...func(*s3.Options)) (*s3.ListObjectsV2Output, error) {
+	if f.err != nil {
+		return nil, f.err
+	}
+	page := f.listed
+	f.listed++
+	if page >= len(f.pages) {
+		return &s3.ListObjectsV2Output{}, nil
+	}
+	out := &s3.ListObjectsV2Output{IsTruncated: awssdk.Bool(page+1 < len(f.pages))}
+	for _, key := range f.pages[page] {
+		out.Contents = append(out.Contents, s3types.Object{Key: awssdk.String(key)})
+	}
+	if page+1 < len(f.pages) {
+		out.NextContinuationToken = awssdk.String("page")
+	}
+	return out, nil
+}
+
+func (f *fakeObjects) DeleteObjects(_ context.Context, in *s3.DeleteObjectsInput, _ ...func(*s3.Options)) (*s3.DeleteObjectsOutput, error) {
+	for _, obj := range in.Delete.Objects {
+		f.deleted = append(f.deleted, awssdk.ToString(obj.Key))
+	}
+	return &s3.DeleteObjectsOutput{Errors: f.refused}, nil
+}
+
 type fakeTokens struct {
 	existing    []shared.Token
 	listErr     error
 	newErr      error
 	minted      []user.TokenNewParams
+	revoked     []string
 	value       string
 	verifyFails int
 	verifyCalls int
@@ -78,6 +142,11 @@ func (f *fakeTokens) Verify(_ context.Context, _ ...option.RequestOption) (*user
 	return &user.TokenVerifyResponse{ID: "token-id"}, nil
 }
 
+func (f *fakeTokens) Delete(_ context.Context, tokenID string, _ ...option.RequestOption) (*user.TokenDeleteResponse, error) {
+	f.revoked = append(f.revoked, tokenID)
+	return &user.TokenDeleteResponse{ID: tokenID}, nil
+}
+
 type fakeGroups struct {
 	err error
 }
@@ -99,10 +168,12 @@ func newTestStore(buckets *fakeBuckets, tokens *fakeTokens, groups *fakeGroups) 
 		buckets.existing = map[string]bool{}
 	}
 	return cacheStore{
-		buckets: buckets,
-		tokens:  tokens,
-		groups:  groups,
-		wait:    func(context.Context, time.Duration) error { return nil },
+		buckets:     buckets,
+		tokens:      tokens,
+		groups:      groups,
+		credentials: &fakeCredentials{},
+		objects:     func(string, r2.TemporaryCredentialNewResponse) objectAPI { return &fakeObjects{} },
+		wait:        func(context.Context, time.Duration) error { return nil },
 	}
 }
 
@@ -318,6 +389,115 @@ func TestCacheStoreBootstrap(t *testing.T) {
 		_, err := newTestStore(&fakeBuckets{}, &fakeTokens{}, &fakeGroups{}).bootstrap(t.Context(), testAccountID, edge.Class("staging"))
 		if err == nil {
 			t.Fatal("expected an error for a substrate class with no cache store")
+		}
+	})
+}
+
+func TestCacheStoreTeardown(t *testing.T) {
+	t.Parallel()
+
+	t.Run("it empties the bucket, deletes it and revokes the token", func(t *testing.T) {
+		t.Parallel()
+
+		name := cacheStoreName(edge.ClassProduction)
+		buckets := &fakeBuckets{existing: map[string]bool{name: true}}
+		tokens := &fakeTokens{existing: []shared.Token{{ID: "token-id", Name: name}}}
+		objects := &fakeObjects{pages: [][]string{{"prod/a"}, {"prod/b"}}}
+		creds := &fakeCredentials{}
+		store := newTestStore(buckets, tokens, &fakeGroups{})
+		store.credentials = creds
+		store.objects = func(endpoint string, _ r2.TemporaryCredentialNewResponse) objectAPI {
+			if endpoint != "https://"+testAccountID+".r2.cloudflarestorage.com" {
+				t.Errorf("endpoint = %q, want the account's R2 endpoint", endpoint)
+			}
+			return objects
+		}
+
+		if err := store.teardown(t.Context(), testAccountID, edge.ClassProduction); err != nil {
+			t.Fatalf("teardown: %v", err)
+		}
+		if !slices.Equal(objects.deleted, []string{"prod/a", "prod/b"}) {
+			t.Errorf("deleted objects = %v, want every page of the bucket", objects.deleted)
+		}
+		if !slices.Equal(buckets.deleted, []string{name}) {
+			t.Errorf("deleted buckets = %v, want [%s]", buckets.deleted, name)
+		}
+		if !slices.Equal(tokens.revoked, []string{"token-id"}) {
+			t.Errorf("revoked tokens = %v, want the R2 write credential gone with the bucket", tokens.revoked)
+		}
+		if len(creds.minted) != 1 || creds.minted[0].Bucket.Value != name || creds.minted[0].ParentAccessKeyID.Value != "token-id" {
+			t.Errorf("minted credentials = %+v, want one scoped to %s under the store's own token", creds.minted, name)
+		}
+	})
+
+	t.Run("it takes only its own class", func(t *testing.T) {
+		t.Parallel()
+
+		production := cacheStoreName(edge.ClassProduction)
+		preview := cacheStoreName(edge.ClassPreview)
+		buckets := &fakeBuckets{existing: map[string]bool{production: true, preview: true}}
+		tokens := &fakeTokens{existing: []shared.Token{{ID: "prod-token", Name: production}, {ID: "preview-token", Name: preview}}}
+		store := newTestStore(buckets, tokens, &fakeGroups{})
+
+		if err := store.teardown(t.Context(), testAccountID, edge.ClassPreview); err != nil {
+			t.Fatalf("teardown: %v", err)
+		}
+		if !slices.Equal(buckets.deleted, []string{preview}) {
+			t.Errorf("deleted buckets = %v, want only the preview store", buckets.deleted)
+		}
+		if !slices.Equal(tokens.revoked, []string{"preview-token"}) {
+			t.Errorf("revoked tokens = %v, want only the preview token", tokens.revoked)
+		}
+	})
+
+	t.Run("a store that is already gone is not an error", func(t *testing.T) {
+		t.Parallel()
+
+		buckets := &fakeBuckets{deleteErr: &cf.Error{StatusCode: http.StatusNotFound}}
+		store := newTestStore(buckets, &fakeTokens{}, &fakeGroups{})
+
+		if err := store.teardown(t.Context(), testAccountID, edge.ClassProduction); err != nil {
+			t.Fatalf("teardown: %v", err)
+		}
+	})
+
+	t.Run("objects R2 refuses to delete are named, and the bucket stays", func(t *testing.T) {
+		t.Parallel()
+
+		name := cacheStoreName(edge.ClassProduction)
+		buckets := &fakeBuckets{existing: map[string]bool{name: true}}
+		tokens := &fakeTokens{existing: []shared.Token{{ID: "token-id", Name: name}}}
+		store := newTestStore(buckets, tokens, &fakeGroups{})
+		store.objects = func(string, r2.TemporaryCredentialNewResponse) objectAPI {
+			return &fakeObjects{
+				pages:   [][]string{{"locked"}},
+				refused: []s3types.Error{{Key: awssdk.String("locked"), Code: awssdk.String("AccessDenied"), Message: awssdk.String("under legal hold")}},
+			}
+		}
+
+		err := store.teardown(t.Context(), testAccountID, edge.ClassProduction)
+		if err == nil {
+			t.Fatal("teardown = nil, want the refused objects reported")
+		}
+		for _, want := range []string{name, "locked", "legal hold"} {
+			if !strings.Contains(err.Error(), want) {
+				t.Errorf("err = %v, want it to name %q", err, want)
+			}
+		}
+		if len(buckets.deleted) != 0 || len(tokens.revoked) != 0 {
+			t.Error("nothing may be deleted while the bucket still holds objects")
+		}
+	})
+
+	t.Run("an unknown class removes nothing", func(t *testing.T) {
+		t.Parallel()
+
+		buckets := &fakeBuckets{}
+		if err := newTestStore(buckets, &fakeTokens{}, &fakeGroups{}).teardown(t.Context(), testAccountID, edge.Class("nonsense")); err == nil {
+			t.Fatal("teardown(unknown class) = nil, want an error")
+		}
+		if len(buckets.deleted) != 0 {
+			t.Errorf("deleted buckets = %v, want none", buckets.deleted)
 		}
 	})
 }

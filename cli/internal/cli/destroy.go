@@ -140,7 +140,7 @@ func runDestroy(ctx context.Context, d deps, cwd string, stdout, stderr io.Write
 
 		printDestroyPlan(stdout, cfg.Slug, plan)
 		if !bypass {
-			confirmed, err := confirmDestroyProject(ctx, cfg.Slug, stdout, stdin)
+			confirmed, err := confirmPhrase(ctx, "project name", cfg.Slug, stdout, stdin)
 			if err != nil {
 				return err
 			}
@@ -208,7 +208,7 @@ func runDestroyPreviewProject(ctx context.Context, d deps, cwd string, yes bool,
 		fmt.Fprintln(stdout, "The account-level preview bootstrap is left intact. This cannot be undone.")
 
 		if !yes {
-			confirmed, err := confirmDestroyProject(ctx, cfg.Slug, stdout, stdin)
+			confirmed, err := confirmPhrase(ctx, "project name", cfg.Slug, stdout, stdin)
 			if err != nil {
 				return err
 			}
@@ -249,13 +249,13 @@ func printDestroyPlan(out io.Writer, slug string, plan *deploymentsv1.PlanDestro
 	}
 	fmt.Fprintf(out, "%s:\n", header)
 
-	var kept []*deploymentsv1.EdgeStackPlan_Item
+	var kept []*deploymentsv1.TeardownItem
 	for _, item := range plan.GetEdgeStack().GetItems() {
-		if item.GetAction() == deploymentsv1.EdgeStackPlan_Item_ACTION_KEEP {
+		if item.GetAction() == deploymentsv1.TeardownItem_ACTION_KEEP {
 			kept = append(kept, item)
 			continue
 		}
-		fmt.Fprintf(out, "  • %s\n", destroyPlanItem(item))
+		fmt.Fprintf(out, "  • %s\n", teardownItemLine(item))
 	}
 	if s := plan.GetInfraStack(); s != "" {
 		fmt.Fprintf(out, "  • infra stack %s — databases and buckets, INCLUDING ALL DATA\n", s)
@@ -270,13 +270,13 @@ func printDestroyPlan(out io.Writer, slug string, plan *deploymentsv1.PlanDestro
 	if len(kept) > 0 {
 		fmt.Fprintln(out, "Left in place:")
 		for _, item := range kept {
-			fmt.Fprintf(out, "  • %s\n", destroyPlanItem(item))
+			fmt.Fprintf(out, "  • %s\n", teardownItemLine(item))
 		}
 	}
 }
 
-func destroyPlanItem(item *deploymentsv1.EdgeStackPlan_Item) string {
-	line := fmt.Sprintf("%s %s %s", destroyPlanAction(item.GetAction()), item.GetKind(), item.GetName())
+func teardownItemLine(item *deploymentsv1.TeardownItem) string {
+	line := fmt.Sprintf("%s %s %s", teardownItemAction(item.GetAction()), item.GetKind(), item.GetName())
 	if reason := item.GetReason(); reason != "" {
 		line += " — " + reason
 	}
@@ -286,28 +286,15 @@ func destroyPlanItem(item *deploymentsv1.EdgeStackPlan_Item) string {
 	return line
 }
 
-func destroyPlanAction(action deploymentsv1.EdgeStackPlan_Item_Action) string {
+func teardownItemAction(action deploymentsv1.TeardownItem_Action) string {
 	switch action {
-	case deploymentsv1.EdgeStackPlan_Item_ACTION_DELETE:
+	case deploymentsv1.TeardownItem_ACTION_DELETE:
 		return "delete"
-	case deploymentsv1.EdgeStackPlan_Item_ACTION_DISABLE_THEN_DELETE:
+	case deploymentsv1.TeardownItem_ACTION_DISABLE_THEN_DELETE:
 		return "disable, then delete"
-	case deploymentsv1.EdgeStackPlan_Item_ACTION_KEEP:
+	case deploymentsv1.TeardownItem_ACTION_KEEP:
 		return "keep"
 	default:
 		return fmt.Sprintf("act on (%s, an action this CLI does not know)", action)
 	}
-}
-
-func confirmDestroyProject(ctx context.Context, slug string, stdout io.Writer, stdin io.Reader) (bool, error) {
-	fmt.Fprintf(stdout, "Type the project name (%s) to confirm: ", slug)
-
-	line, err := readLine(ctx, stdin)
-	if err != nil {
-		if err == io.EOF {
-			return false, nil
-		}
-		return false, err
-	}
-	return strings.TrimSpace(line) == slug, nil
 }

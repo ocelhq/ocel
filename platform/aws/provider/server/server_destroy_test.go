@@ -68,7 +68,7 @@ func TestEdgeStackPlan(t *testing.T) {
 		if item.GetName() != "shop" {
 			t.Errorf("name = %q, want the project slug", item.GetName())
 		}
-		if item.GetAction() != deploymentsv1.EdgeStackPlan_Item_ACTION_DELETE {
+		if item.GetAction() != deploymentsv1.TeardownItem_ACTION_DELETE {
 			t.Errorf("action = %v, want DELETE", item.GetAction())
 		}
 		if !strings.Contains(item.GetReason(), "deployments store") {

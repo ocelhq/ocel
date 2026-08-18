@@ -90,3 +90,16 @@ func confirmYN(ctx context.Context, prompt string, stdout io.Writer, stdin io.Re
 	answer := strings.TrimSpace(line)
 	return strings.EqualFold(answer, "y") || strings.EqualFold(answer, "yes"), nil
 }
+
+func confirmPhrase(ctx context.Context, label, phrase string, stdout io.Writer, stdin io.Reader) (bool, error) {
+	fmt.Fprintf(stdout, "Type the %s (%s) to confirm: ", label, phrase)
+
+	line, err := readLine(ctx, stdin)
+	if err != nil {
+		if err == io.EOF {
+			return false, nil
+		}
+		return false, err
+	}
+	return strings.TrimSpace(line) == phrase, nil
+}

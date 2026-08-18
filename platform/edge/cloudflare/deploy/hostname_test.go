@@ -26,6 +26,8 @@ type cfMock struct {
 	certificatePacks      []map[string]any
 	existingScripts       []string
 	refuseScriptDeletes   map[string]bool
+	existingBuckets       []string
+	existingTokens        []map[string]any
 
 	requests   int
 	zoneLists  int
@@ -40,6 +42,8 @@ type cfMock struct {
 	putScripts           []string
 	putBodies            map[string]putBody
 	deletedScripts       []string
+	deletedBuckets       []string
+	deletedTokens        []string
 	subdomainCalls       []subdomainCall
 }
 
@@ -218,6 +222,43 @@ func (m *cfMock) server(t *testing.T) *httptest.Server {
 			})
 			writeResult(w, map[string]any{"id": id})
 		}
+	})
+
+	mux.HandleFunc("GET /user/tokens", func(w http.ResponseWriter, r *http.Request) {
+		if !firstPage(r) {
+			writeResult(w, []any{})
+			return
+		}
+		writeResult(w, m.existingTokens)
+	})
+
+	mux.HandleFunc("DELETE /user/tokens/{id}", func(w http.ResponseWriter, r *http.Request) {
+		m.deletedTokens = append(m.deletedTokens, r.PathValue("id"))
+		writeResult(w, map[string]any{"id": r.PathValue("id")})
+	})
+
+	mux.HandleFunc("GET /accounts/acct/r2/buckets/{name}", func(w http.ResponseWriter, r *http.Request) {
+		name := r.PathValue("name")
+		if !slices.Contains(m.existingBuckets, name) {
+			w.WriteHeader(http.StatusNotFound)
+			return
+		}
+		writeResult(w, map[string]any{"name": name})
+	})
+
+	mux.HandleFunc("DELETE /accounts/acct/r2/buckets/{name}", func(w http.ResponseWriter, r *http.Request) {
+		name := r.PathValue("name")
+		if !slices.Contains(m.existingBuckets, name) {
+			w.WriteHeader(http.StatusNotFound)
+			return
+		}
+		m.deletedBuckets = append(m.deletedBuckets, name)
+		m.existingBuckets = slices.DeleteFunc(m.existingBuckets, func(bucket string) bool { return bucket == name })
+		writeResult(w, map[string]any{})
+	})
+
+	mux.HandleFunc("POST /accounts/acct/r2/temp-access-credentials", func(w http.ResponseWriter, _ *http.Request) {
+		writeResult(w, map[string]any{"accessKeyId": "temp-id", "secretAccessKey": "temp-secret", "sessionToken": "temp-session"})
 	})
 
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

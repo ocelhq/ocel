@@ -9,35 +9,42 @@ import (
 	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
 )
 
-func TestConfirmDestroyProject(t *testing.T) {
+func TestConfirmPhrase(t *testing.T) {
 	t.Parallel()
 
 	cases := []struct {
-		name  string
-		input string
-		want  bool
+		name   string
+		label  string
+		phrase string
+		input  string
+		want   bool
+		prompt string
 	}{
-		{"exact name proceeds", "proj_shop\n", true},
-		{"exact name with surrounding space proceeds", "  proj_shop  \n", true},
-		{"wrong name aborts", "proj_shopp\n", false},
-		{"reflexive yes aborts", "y\n", false},
-		{"empty aborts", "\n", false},
-		{"closed stdin aborts", "", false},
+		{"the exact project name proceeds", "project name", "proj_shop", "proj_shop\n", true, "Type the project name (proj_shop) to confirm:"},
+		{"surrounding space is trimmed", "project name", "proj_shop", "  proj_shop  \n", true, "Type the project name (proj_shop) to confirm:"},
+		{"a near miss aborts", "project name", "proj_shop", "proj_shopp\n", false, "Type the project name (proj_shop) to confirm:"},
+		{"reflexive yes aborts", "project name", "proj_shop", "y\n", false, "Type the project name (proj_shop) to confirm:"},
+		{"empty aborts", "project name", "proj_shop", "\n", false, "Type the project name (proj_shop) to confirm:"},
+		{"closed stdin aborts", "project name", "proj_shop", "", false, "Type the project name (proj_shop) to confirm:"},
+		{"the base domain is its own scope", "domain", "preview.acme.com", "preview.acme.com\n", true, "Type the domain (preview.acme.com) to confirm:"},
+		{"another scope's phrase does not carry", "domain", "preview.acme.com", "proj_shop\n", false, "Type the domain (preview.acme.com) to confirm:"},
+		{"the class name is the substrate's phrase", "class name", "preview", "preview\n", true, "Type the class name (preview) to confirm:"},
+		{"the other class does not confirm this one", "class name", "preview", "production\n", false, "Type the class name (preview) to confirm:"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 
 			var stdout bytes.Buffer
-			got, err := confirmDestroyProject(context.Background(), "proj_shop", &stdout, strings.NewReader(tc.input))
+			got, err := confirmPhrase(context.Background(), tc.label, tc.phrase, &stdout, strings.NewReader(tc.input))
 			if err != nil {
-				t.Fatalf("confirmDestroyProject(context.Background(), ) error = %v", err)
+				t.Fatalf("confirmPhrase() error = %v", err)
 			}
 			if got != tc.want {
-				t.Errorf("confirmDestroyProject(context.Background(), %q) = %v, want %v", tc.input, got, tc.want)
+				t.Errorf("confirmPhrase(%q, %q) = %v, want %v", tc.phrase, tc.input, got, tc.want)
 			}
-			if !strings.Contains(stdout.String(), "Type the project name (proj_shop) to confirm:") {
-				t.Errorf("stdout = %q, want the typed-name prompt", stdout.String())
+			if !strings.Contains(stdout.String(), tc.prompt) {
+				t.Errorf("stdout = %q, want the prompt %q", stdout.String(), tc.prompt)
 			}
 		})
 	}
@@ -56,8 +63,8 @@ func TestDestroyPlanEmpty(t *testing.T) {
 			"a plan with an edge-stack item to delete is not empty",
 			&deploymentsv1.PlanDestroyProjectResponse{EdgeStack: &deploymentsv1.EdgeStackPlan{
 				EdgeKind: "cloudflare",
-				Items: []*deploymentsv1.EdgeStackPlan_Item{
-					{Kind: "edge stack", Name: "shop", Action: deploymentsv1.EdgeStackPlan_Item_ACTION_DELETE},
+				Items: []*deploymentsv1.TeardownItem{
+					{Kind: "edge stack", Name: "shop", Action: deploymentsv1.TeardownItem_ACTION_DELETE},
 				},
 			}},
 			false,
@@ -66,8 +73,8 @@ func TestDestroyPlanEmpty(t *testing.T) {
 			"a plan whose only edge-stack item is kept still has an edge stack to tear down",
 			&deploymentsv1.PlanDestroyProjectResponse{EdgeStack: &deploymentsv1.EdgeStackPlan{
 				EdgeKind: "cloudflare",
-				Items: []*deploymentsv1.EdgeStackPlan_Item{
-					{Kind: "certificate", Name: "shop.example.com", Action: deploymentsv1.EdgeStackPlan_Item_ACTION_KEEP, Reason: "you pinned this certificate"},
+				Items: []*deploymentsv1.TeardownItem{
+					{Kind: "certificate", Name: "shop.example.com", Action: deploymentsv1.TeardownItem_ACTION_KEEP, Reason: "you pinned this certificate"},
 				},
 			}},
 			false,
@@ -101,10 +108,10 @@ func TestPrintDestroyPlan(t *testing.T) {
 		printDestroyPlan(&out, "proj_shop", &deploymentsv1.PlanDestroyProjectResponse{
 			EdgeStack: &deploymentsv1.EdgeStackPlan{
 				EdgeKind: "cloudflare",
-				Items: []*deploymentsv1.EdgeStackPlan_Item{
-					{Kind: "edge stack", Name: "shop", Action: deploymentsv1.EdgeStackPlan_Item_ACTION_DELETE},
-					{Kind: "distribution", Name: "E1SHOP", Action: deploymentsv1.EdgeStackPlan_Item_ACTION_DISABLE_THEN_DELETE, Slow: true},
-					{Kind: "certificate", Name: "shop.example.com", Action: deploymentsv1.EdgeStackPlan_Item_ACTION_KEEP, Reason: "you pinned this certificate"},
+				Items: []*deploymentsv1.TeardownItem{
+					{Kind: "edge stack", Name: "shop", Action: deploymentsv1.TeardownItem_ACTION_DELETE},
+					{Kind: "distribution", Name: "E1SHOP", Action: deploymentsv1.TeardownItem_ACTION_DISABLE_THEN_DELETE, Slow: true},
+					{Kind: "certificate", Name: "shop.example.com", Action: deploymentsv1.TeardownItem_ACTION_KEEP, Reason: "you pinned this certificate"},
 				},
 			},
 			InfraStack: "shop--infra",
@@ -137,13 +144,13 @@ func TestPrintDestroyPlan(t *testing.T) {
 	t.Run("an action this CLI does not know reads as a sentence", func(t *testing.T) {
 		t.Parallel()
 
-		got := destroyPlanItem(&deploymentsv1.EdgeStackPlan_Item{
+		got := teardownItemLine(&deploymentsv1.TeardownItem{
 			Kind:   "certificate",
 			Name:   "shop.example.com",
-			Action: deploymentsv1.EdgeStackPlan_Item_Action(97),
+			Action: deploymentsv1.TeardownItem_Action(97),
 		})
 		if !strings.Contains(got, "an action this CLI does not know") || !strings.HasSuffix(got, "certificate shop.example.com") {
-			t.Errorf("destroyPlanItem() = %q, want the unknown action named before the resource", got)
+			t.Errorf("teardownItemLine() = %q, want the unknown action named before the resource", got)
 		}
 	})
 }

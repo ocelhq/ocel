@@ -144,6 +144,22 @@ func TestUnsupportedEdgeKind(t *testing.T) {
 			_, err = drainStream(stream)
 			return err
 		}},
+		{"PlanTeardown", func(client deploymentsv1connect.DeploymentServiceClient) error {
+			_, err := client.PlanTeardown(context.Background(), &deploymentsv1.PlanTeardownRequest{
+				EdgeKind: string(edge.KindNative),
+			})
+			return err
+		}},
+		{"Teardown", func(client deploymentsv1connect.DeploymentServiceClient) error {
+			stream, err := client.Teardown(context.Background(), &deploymentsv1.TeardownRequest{
+				EdgeKind: string(edge.KindNative),
+			})
+			if err != nil {
+				return err
+			}
+			_, err = drainStream(stream)
+			return err
+		}},
 	}
 	for _, tc := range calls {
 		t.Run(tc.name+" refuses an edge this origin cannot front, naming the ones it can", func(t *testing.T) {

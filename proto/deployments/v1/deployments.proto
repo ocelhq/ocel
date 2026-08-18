@@ -12,6 +12,10 @@ service DeploymentService {
 
     rpc Bootstrap(BootstrapRequest) returns (stream DeployEvent);
 
+    rpc Teardown(TeardownRequest) returns (stream DeployEvent);
+
+    rpc PlanTeardown(PlanTeardownRequest) returns (PlanTeardownResponse);
+
     rpc DestroyPreview(DestroyPreviewRequest) returns (stream DeployEvent);
 
     rpc DestroyProject(DestroyProjectRequest) returns (stream DeployEvent);
@@ -203,6 +207,32 @@ message Dns {
   string zone = 2;
 }
 
+message TeardownRequest {
+  bytes options = 1;
+
+  string protocol_version = 2;
+
+  Environment.Class class = 3;
+
+  string edge_kind = 4;
+}
+
+message PlanTeardownRequest {
+  bytes options = 1;
+
+  string protocol_version = 2;
+
+  Environment.Class class = 3;
+
+  string edge_kind = 4;
+}
+
+message PlanTeardownResponse {
+  string edge_kind = 1;
+
+  repeated TeardownItem items = 2;
+}
+
 message DestroyPreviewRequest {
   Environment environment = 1;
 
@@ -239,25 +269,25 @@ message PlanDestroyProjectResponse {
   EdgeStackPlan edge_stack = 3;
 }
 
-message EdgeStackPlan {
-  message Item {
-    enum Action {
-      ACTION_UNSPECIFIED = 0;
-      ACTION_DELETE = 1;
-      ACTION_DISABLE_THEN_DELETE = 2;
-      ACTION_KEEP = 3;
-    }
-
-    string kind = 1;
-    string name = 2;
-    Action action = 3;
-    string reason = 4;
-    bool slow = 5;
+message TeardownItem {
+  enum Action {
+    ACTION_UNSPECIFIED = 0;
+    ACTION_DELETE = 1;
+    ACTION_DISABLE_THEN_DELETE = 2;
+    ACTION_KEEP = 3;
   }
 
+  string kind = 1;
+  string name = 2;
+  Action action = 3;
+  string reason = 4;
+  bool slow = 5;
+}
+
+message EdgeStackPlan {
   string edge_kind = 1;
 
-  repeated Item items = 2;
+  repeated TeardownItem items = 2;
 }
 
 message ListEnvironmentsRequest {

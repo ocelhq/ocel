@@ -132,6 +132,9 @@ func (p *provider) Teardown(ctx context.Context, class edge.Class) error {
 			errs = append(errs, fmt.Errorf("delete worker %q: %w", name, err))
 		}
 	}
+	if err := newCacheStore(p.client).teardown(ctx, accountID, class); err != nil {
+		errs = append(errs, err)
+	}
 	return errors.Join(errs...)
 }
 
