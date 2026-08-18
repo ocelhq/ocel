@@ -299,8 +299,8 @@ func (p *provider) DomainOwner(ctx context.Context, hostname string) (string, er
 	return "", nil
 }
 
-func (p *provider) ReconcilePreviewWildcard(context.Context, edge.PreviewWildcardSpec) error {
-	return nil
+func (p *provider) ReconcilePreviewWildcard(context.Context, edge.PreviewWildcardSpec) (string, error) {
+	return "", nil
 }
 
 func (p *provider) DestroyPreviewWildcard(context.Context, string) error { return nil }

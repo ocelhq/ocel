@@ -26,6 +26,14 @@ func PreviewLabel(slug, pointer, app string) string {
 	return strings.Join(parts, PreviewAppSeparator)
 }
 
+func PreviewHost(slug, pointer, app, baseDomain string) string {
+	label := PreviewLabel(slug, pointer, app)
+	if label == "" || baseDomain == "" {
+		return ""
+	}
+	return label + "." + baseDomain
+}
+
 func PreviewLabelProblem(slug string, hostnames []string) error {
 	for _, hostname := range hostnames {
 		label, _, _ := strings.Cut(hostname, ".")

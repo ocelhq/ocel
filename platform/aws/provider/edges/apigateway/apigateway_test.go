@@ -43,6 +43,14 @@ func TestConformance(t *testing.T) {
 			return bootstrapped(t, newWorld()), testSpec()
 		},
 		Hostname: "shop.example.com",
+		Previews: func(t *testing.T) (edge.Edge, edge.StackSpec, edge.PreviewWildcardSpec) {
+			w := newWorld()
+			e := w.edge()
+			if _, err := e.Bootstrap(context.Background(), edge.ClassPreview); err != nil {
+				t.Fatalf("Bootstrap(preview): %v", err)
+			}
+			return e, previewStackSpec(), previewWildcardSpec()
+		},
 	})
 }
 

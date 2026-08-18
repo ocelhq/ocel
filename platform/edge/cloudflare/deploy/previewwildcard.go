@@ -15,18 +15,18 @@ import (
 
 const previewEntryScript = "ocel-preview-entry"
 
-func (p *provider) ReconcilePreviewWildcard(ctx context.Context, spec edge.PreviewWildcardSpec) error {
+func (p *provider) ReconcilePreviewWildcard(ctx context.Context, spec edge.PreviewWildcardSpec) (string, error) {
 	accountID := os.Getenv(envAccountID)
 	if accountID == "" {
-		return fmt.Errorf("%s is not set; it is required to reconcile the shared preview entry worker", envAccountID)
+		return "", fmt.Errorf("%s is not set; it is required to reconcile the shared preview entry worker", envAccountID)
 	}
 	wildcard := edge.PreviewWildcard(spec.BaseDomain)
 	if wildcard == "" {
-		return errors.New("the shared preview entry worker needs a base domain to serve")
+		return "", errors.New("the shared preview entry worker needs a base domain to serve")
 	}
 
 	if spec.Program == nil {
-		return errors.New("the Cloudflare edge runs the preview entry worker; this wildcard carries no program")
+		return "", errors.New("the Cloudflare edge runs the preview entry worker; this wildcard carries no program")
 	}
 	up := upload{
 		accountID:  accountID,
@@ -34,15 +34,15 @@ func (p *provider) ReconcilePreviewWildcard(ctx context.Context, spec edge.Previ
 		worker:     previewEntryWorker(spec),
 	}
 	if err := p.putWorkerScript(ctx, up, "shared preview entry worker"); err != nil {
-		return err
+		return "", err
 	}
 	if err := p.reconcileWorkerRoutes(ctx, up, routePlan{desired: []string{wildcard}}, spec.Warn); err != nil {
-		return err
+		return "", err
 	}
 	if _, err := p.setSubdomain(ctx, up, false); err != nil {
-		return fmt.Errorf("set shared preview entry worker subdomain: %w", err)
+		return "", fmt.Errorf("set shared preview entry worker subdomain: %w", err)
 	}
-	return nil
+	return "", nil
 }
 
 func (p *provider) DestroyPreviewWildcard(ctx context.Context, baseDomain string) error {

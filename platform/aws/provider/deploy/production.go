@@ -158,7 +158,7 @@ func realize(ctx context.Context, cfg Config, manifest *deploymentsv1.Manifest, 
 	if err != nil {
 		return Result{}, finishProvisioning(err)
 	}
-	edgeStack, err := reconcileStack(ctx, cfg.Edge, specs, cfg.StackState)
+	edgeStack, err := reconcileStack(ctx, cfg.Edge, specs, MarkGlobalPreview(cfg.StackState, cfg, manifest))
 	if err != nil {
 		return Result{StackState: reconciledState(edgeStack, cfg)}, finishProvisioning(err)
 	}
@@ -294,12 +294,13 @@ func reconcileStack(ctx context.Context, e edge.Edge, specs []edge.StackSpec, pr
 	if err != nil {
 		return nil, err
 	}
+	var reconciled edge.EdgeStack
 	for _, spec := range specs {
 		next, err := e.Reconcile(ctx, spec, stack.State())
 		if err != nil {
-			return stack, fmt.Errorf("reconcile stack %q: %w", specName(spec), err)
+			return reconciled, fmt.Errorf("reconcile stack %q: %w", specName(spec), err)
 		}
-		stack = next
+		stack, reconciled = next, next
 	}
 	return stack, nil
 }
@@ -629,11 +630,11 @@ func globalPreviewHostnames(cfg Config, apps []*deploymentsv1.ManifestApp) (work
 		if len(apps) == 1 {
 			qualifier = ""
 		}
-		label := edge.PreviewLabel(cfg.Slug, cfg.Identity, qualifier)
-		if label == "" {
+		host := edge.PreviewHost(cfg.Slug, cfg.Identity, qualifier, cfg.GlobalPreviewDomain)
+		if host == "" {
 			continue
 		}
-		hosts[name] = []string{label + "." + cfg.GlobalPreviewDomain}
+		hosts[name] = []string{host}
 	}
 	return workerHostnames{hosts: hosts, previewBase: cfg.GlobalPreviewDomain}, nil
 }

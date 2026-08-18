@@ -70,7 +70,7 @@ type Edge interface {
 
 	Open(state StackState) (EdgeStack, error)
 
-	ReconcilePreviewWildcard(ctx context.Context, spec PreviewWildcardSpec) error
+	ReconcilePreviewWildcard(ctx context.Context, spec PreviewWildcardSpec) (string, error)
 
 	DestroyPreviewWildcard(ctx context.Context, baseDomain string) error
 

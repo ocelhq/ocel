@@ -118,7 +118,35 @@ func TestPreviewWildcardSpecFor(t *testing.T) {
 	if _, err := PreviewWildcardSpecFor(cfg, "", nil); err == nil {
 		t.Error("expected an empty domain to be refused")
 	}
+
+	t.Run("an edge that runs no code of ours carries no program", func(t *testing.T) {
+		bare := cfg
+		bare.Edge = unprogrammableEdge{}
+		bare.StoreScriptName = ""
+		bare.ISRWriterScriptName = ""
+
+		spec, err := PreviewWildcardSpecFor(bare, "preview.acme.com", nil)
+		if err != nil {
+			t.Fatalf("PreviewWildcardSpecFor: %v", err)
+		}
+		if spec.Program != nil {
+			t.Errorf("Program = %+v, want none: an edge that cannot run a worker has no deployments-store worker to bind, and demanding one puts `ocel domain use --preview` out of reach of every such edge", spec.Program)
+		}
+		if spec.BaseDomain != "preview.acme.com" || spec.GrammarMax != edge.PreviewGrammarMax {
+			t.Errorf("spec = %+v, want the wildcard it still has to raise", spec)
+		}
+	})
+
+	t.Run("an edge that does run our code still needs the store worker", func(t *testing.T) {
+		missing := cfg
+		missing.StoreScriptName = ""
+		if _, err := PreviewWildcardSpecFor(missing, "preview.acme.com", nil); err == nil {
+			t.Error("expected a programmable edge with no deployments-store worker to be refused")
+		}
+	})
 }
+
+type unprogrammableEdge struct{ edge.Edge }
 
 func TestMarkGlobalPreview(t *testing.T) {
 	t.Parallel()
@@ -173,9 +201,18 @@ func TestMarkGlobalPreview(t *testing.T) {
 		}
 	})
 
-	t.Run("no state is left alone", func(t *testing.T) {
+	t.Run("a project deployed for the first time is marked before it has any state", func(t *testing.T) {
 		t.Parallel()
-		if marked := MarkGlobalPreview(nil, preview, manifest()); marked != nil {
+		if marked := MarkGlobalPreview(nil, preview, manifest()); !edge.ServedOnGlobalPreview(marked, "preview.acme.com") {
+			t.Errorf("state = %v, want the mark the stack reads when it routes the preview's hostname", marked)
+		}
+	})
+
+	t.Run("no state on a project off the global preview domain stays empty", func(t *testing.T) {
+		t.Parallel()
+		cfg := preview
+		cfg.GlobalPreviewDomain = ""
+		if marked := MarkGlobalPreview(nil, cfg, manifest()); marked != nil {
 			t.Errorf("state = %v, want nil", marked)
 		}
 	})
