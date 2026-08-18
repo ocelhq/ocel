@@ -333,24 +333,60 @@ export default {
 		waitForNoStaleSocket(t, sockPath)
 	})
 
-	t.Run("release lists the projects and releases with --yes", func(t *testing.T) {
+	t.Run("release refuses while projects still hold previews on the wildcard", func(t *testing.T) {
 		root, sockPath := setUpDeployFixture(t)
 		d := defaultDeps()
 		setLoggedIn(&d)
 		t.Setenv(fakeInfraClassEnvVar, "preview")
 		t.Setenv(fakeInfraPresentEnvVar, "1")
 		t.Setenv(fakeGlobalDomainEnvVar, "preview.acme.com")
-		t.Setenv(fakeGlobalDomainProjectsEnvVar, "shop,blog")
+		t.Setenv(fakeServedPreviewsEnvVar, "shop, blog")
+
+		var stdout, stderr bytes.Buffer
+		err := runDomainRelease(context.Background(), d, root, domainOptions{preview: true, yes: true}, &stdout, &stderr, strings.NewReader(""))
+		if err == nil {
+			t.Fatalf("runDomainRelease err = nil, want the release refused; stdout=%s", stdout.String())
+		}
+		for _, want := range []string{"shop", "blog", "ocel preview rm", "ocel destroy --preview"} {
+			if !strings.Contains(stdout.String(), want) {
+				t.Errorf("stdout = %q, want the refusal to contain %q", stdout.String(), want)
+			}
+		}
+		if strings.Contains(stdout.String(), "RELEASE DOMAIN") {
+			t.Errorf("stdout = %q, want nothing released while previews are still served", stdout.String())
+		}
+		waitForNoStaleSocket(t, sockPath)
+	})
+
+	t.Run("release plans, then releases with --yes once nothing is served", func(t *testing.T) {
+		root, sockPath := setUpDeployFixture(t)
+		d := defaultDeps()
+		setLoggedIn(&d)
+		t.Setenv(fakeInfraClassEnvVar, "preview")
+		t.Setenv(fakeInfraPresentEnvVar, "1")
+		t.Setenv(fakeGlobalDomainEnvVar, "preview.acme.com")
 
 		var stdout, stderr bytes.Buffer
 		if err := runDomainRelease(context.Background(), d, root, domainOptions{preview: true, yes: true}, &stdout, &stderr, strings.NewReader("")); err != nil {
 			t.Fatalf("runDomainRelease err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 		}
 		out := stdout.String()
-		for _, want := range []string{"shop", "blog", "RELEASE DOMAIN class=CLASS_PREVIEW", "Released *.preview.acme.com"} {
+		for _, want := range []string{
+			"This will release *.preview.acme.com",
+			"fronted by the cloudflare edge",
+			"delete preview entry worker *.preview.acme.com",
+			"This cannot be undone.",
+			"Left in place:",
+			"keep DNS record *.preview.acme.com CNAME you.example.com — you created it yourself; ocel never wrote it",
+			"RELEASE DOMAIN class=CLASS_PREVIEW",
+			"Released *.preview.acme.com",
+		} {
 			if !strings.Contains(out, want) {
 				t.Errorf("stdout = %q, want it to contain %q", out, want)
 			}
+		}
+		if strings.Index(out, "keep DNS record") < strings.Index(out, "This cannot be undone.") {
+			t.Errorf("stdout listed a kept item among the doomed ones:\n%s", out)
 		}
 		waitForNoStaleSocket(t, sockPath)
 	})

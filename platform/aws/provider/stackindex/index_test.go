@@ -2,7 +2,9 @@ package stackindex
 
 import (
 	"context"
+	"fmt"
 	"reflect"
+	"strings"
 	"testing"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
@@ -13,10 +15,11 @@ import (
 )
 
 type recordingDynamo struct {
-	pages   [][]map[string]ddbtypes.AttributeValue
-	queries []*dynamodb.QueryInput
-	written []map[string]ddbtypes.AttributeValue
-	deleted []map[string]ddbtypes.AttributeValue
+	rows     []map[string]ddbtypes.AttributeValue
+	pageSize int
+	queries  []*dynamodb.QueryInput
+	written  []map[string]ddbtypes.AttributeValue
+	deleted  []map[string]ddbtypes.AttributeValue
 }
 
 func (d *recordingDynamo) PutItem(_ context.Context, in *dynamodb.PutItemInput, _ ...func(*dynamodb.Options)) (*dynamodb.PutItemOutput, error) {
@@ -31,34 +34,148 @@ func (d *recordingDynamo) DeleteItem(_ context.Context, in *dynamodb.DeleteItemI
 
 func (d *recordingDynamo) Query(_ context.Context, in *dynamodb.QueryInput, _ ...func(*dynamodb.Options)) (*dynamodb.QueryOutput, error) {
 	d.queries = append(d.queries, in)
-	page := d.pages[len(d.queries)-1]
-	out := &dynamodb.QueryOutput{Items: page}
-	if len(d.queries) < len(d.pages) {
-		out.LastEvaluatedKey = item("more", "more")
+	index := aws.ToString(in.IndexName)
+	if index != "" && index != IndexName {
+		return nil, fmt.Errorf("recordingDynamo: no index named %q", index)
 	}
-	return out, nil
+	if index != "" && aws.ToBool(in.ConsistentRead) {
+		return nil, fmt.Errorf("recordingDynamo: index %q cannot be read consistently", index)
+	}
+	var matched []map[string]ddbtypes.AttributeValue
+	for _, row := range d.rows {
+		held, err := conditionHolds(row, in)
+		if err != nil {
+			return nil, err
+		}
+		if held {
+			matched = append(matched, row)
+		}
+	}
+	if index != "" {
+		matched = asProjected(matched)
+	}
+	return d.paginate(matched, in.ExclusiveStartKey), nil
 }
 
-func stackPages(project string, pages ...[]naming.StackName) [][]map[string]ddbtypes.AttributeValue {
-	out := make([][]map[string]ddbtypes.AttributeValue, 0, len(pages))
-	for _, page := range pages {
-		entries := make([]map[string]ddbtypes.AttributeValue, 0, len(page))
-		for _, stack := range page {
-			entries = append(entries, map[string]ddbtypes.AttributeValue{
-				sortAttribute: &ddbtypes.AttributeValueMemberS{Value: naming.StackKey(project, stack)},
-			})
+func conditionHolds(row map[string]ddbtypes.AttributeValue, in *dynamodb.QueryInput) (bool, error) {
+	for _, clause := range strings.Split(aws.ToString(in.KeyConditionExpression), " AND ") {
+		attribute, operand, prefix, err := clauseOf(clause, in)
+		if err != nil {
+			return false, err
 		}
-		out = append(out, entries)
+		stored, ok := row[attribute].(*ddbtypes.AttributeValueMemberS)
+		switch {
+		case !ok:
+			return false, nil
+		case prefix && !strings.HasPrefix(stored.Value, operand):
+			return false, nil
+		case !prefix && stored.Value != operand:
+			return false, nil
+		}
+	}
+	return true, nil
+}
+
+func clauseOf(clause string, in *dynamodb.QueryInput) (string, string, bool, error) {
+	clause = strings.TrimSpace(clause)
+	var fields []string
+	prefix := strings.HasPrefix(clause, "begins_with(")
+	if prefix {
+		fields = strings.SplitN(strings.TrimSuffix(strings.TrimPrefix(clause, "begins_with("), ")"), ", ", 2)
+	} else {
+		fields = strings.SplitN(clause, " = ", 2)
+	}
+	if len(fields) != 2 {
+		return "", "", false, fmt.Errorf("recordingDynamo: cannot read key condition %q", clause)
+	}
+	attribute, ok := in.ExpressionAttributeNames[fields[0]]
+	if !ok {
+		return "", "", false, fmt.Errorf("recordingDynamo: %q names no attribute", fields[0])
+	}
+	operand, ok := in.ExpressionAttributeValues[fields[1]].(*ddbtypes.AttributeValueMemberS)
+	if !ok {
+		return "", "", false, fmt.Errorf("recordingDynamo: %q carries no string value", fields[1])
+	}
+	return attribute, operand.Value, prefix, nil
+}
+
+func asProjected(rows []map[string]ddbtypes.AttributeValue) []map[string]ddbtypes.AttributeValue {
+	out := make([]map[string]ddbtypes.AttributeValue, 0, len(rows))
+	for _, row := range rows {
+		projected := map[string]ddbtypes.AttributeValue{}
+		for _, name := range []string{"pk", sortAttribute, tagNamespaceAttribute, "gsi1sk", "expired", "stale", "tag"} {
+			if value, ok := row[name]; ok {
+				projected[name] = value
+			}
+		}
+		out = append(out, projected)
 	}
 	return out
 }
 
-func projectPage(projects ...string) [][]map[string]ddbtypes.AttributeValue {
-	entries := make([]map[string]ddbtypes.AttributeValue, 0, len(projects))
-	for _, project := range projects {
-		entries = append(entries, item(projectsPartition, naming.ProjectKey(project)))
+func (d *recordingDynamo) paginate(rows []map[string]ddbtypes.AttributeValue, start map[string]ddbtypes.AttributeValue) *dynamodb.QueryOutput {
+	if len(start) > 0 {
+		for i, row := range rows {
+			if valueOf(row, "pk") == valueOf(start, "pk") && valueOf(row, sortAttribute) == valueOf(start, sortAttribute) {
+				rows = rows[i+1:]
+				break
+			}
+		}
 	}
-	return [][]map[string]ddbtypes.AttributeValue{entries}
+	if d.pageSize > 0 && len(rows) > d.pageSize {
+		page := rows[:d.pageSize]
+		last := page[len(page)-1]
+		return &dynamodb.QueryOutput{Items: page, LastEvaluatedKey: item(valueOf(last, "pk"), valueOf(last, sortAttribute))}
+	}
+	return &dynamodb.QueryOutput{Items: rows}
+}
+
+func valueOf(entry map[string]ddbtypes.AttributeValue, name string) string {
+	value, ok := entry[name].(*ddbtypes.AttributeValueMemberS)
+	if !ok {
+		return ""
+	}
+	return value.Value
+}
+
+func stackRow(project string, stack naming.StackName) map[string]ddbtypes.AttributeValue {
+	return item(naming.ProjectKey(project), naming.StackKey(project, stack))
+}
+
+func projectRow(project string) map[string]ddbtypes.AttributeValue {
+	return item(projectsPartition, naming.ProjectKey(project))
+}
+
+func tagRow(project string, stack naming.StackName, tag string) map[string]ddbtypes.AttributeValue {
+	entry := item(naming.ISRTagKey(project, stack, tag), tagSortKey)
+	entry[tagNamespaceAttribute] = &ddbtypes.AttributeValueMemberS{Value: naming.ISRTagPrefix(project, stack)}
+	entry["gsi1sk"] = &ddbtypes.AttributeValueMemberS{Value: "000001700000000"}
+	entry["tag"] = &ddbtypes.AttributeValueMemberS{Value: tag}
+	return entry
+}
+
+func stackRows(project string, stacks ...naming.StackName) []map[string]ddbtypes.AttributeValue {
+	rows := make([]map[string]ddbtypes.AttributeValue, 0, len(stacks))
+	for _, stack := range stacks {
+		rows = append(rows, stackRow(project, stack))
+	}
+	return rows
+}
+
+func projectRows(projects ...string) []map[string]ddbtypes.AttributeValue {
+	rows := make([]map[string]ddbtypes.AttributeValue, 0, len(projects))
+	for _, project := range projects {
+		rows = append(rows, projectRow(project))
+	}
+	return rows
+}
+
+func deletedKeys(entries []map[string]ddbtypes.AttributeValue) []string {
+	keys := make([]string, 0, len(entries))
+	for _, entry := range entries {
+		keys = append(keys, valueOf(entry, "pk")+" "+valueOf(entry, sortAttribute))
+	}
+	return keys
 }
 
 func release(t *testing.T, token string) naming.Release {
@@ -96,7 +213,7 @@ func TestStacksPagesToTheEnd(t *testing.T) {
 		naming.AppStack("prod", "web", release(t, "rcafef00d")),
 		naming.AppStack("pr-7", "web", release(t, "rdeadbeef")),
 	}
-	ddb := &recordingDynamo{pages: stackPages("shop", want[:2], want[2:])}
+	ddb := &recordingDynamo{rows: stackRows("shop", want...), pageSize: 2}
 	ix := &Index{Dynamo: ddb, Table: "state"}
 
 	got, err := ix.Stacks(context.Background(), "shop")
@@ -119,11 +236,11 @@ func TestStacksPagesToTheEnd(t *testing.T) {
 func TestReadsAreConsistent(t *testing.T) {
 	t.Parallel()
 
-	stacks := &recordingDynamo{pages: stackPages("shop", []naming.StackName{naming.InfraStack("prod")})}
+	stacks := &recordingDynamo{rows: stackRows("shop", naming.InfraStack("prod"))}
 	if _, err := (&Index{Dynamo: stacks, Table: "state"}).Stacks(context.Background(), "shop"); err != nil {
 		t.Fatalf("Stacks: %v", err)
 	}
-	projects := &recordingDynamo{pages: projectPage("shop")}
+	projects := &recordingDynamo{rows: projectRows("shop")}
 	if _, err := (&Index{Dynamo: projects, Table: "state"}).Projects(context.Background()); err != nil {
 		t.Fatalf("Projects: %v", err)
 	}
@@ -139,7 +256,7 @@ func TestReadsAreConsistent(t *testing.T) {
 func TestProjectsAndStacksLiveInDifferentPartitions(t *testing.T) {
 	t.Parallel()
 
-	ddb := &recordingDynamo{pages: projectPage("billing", "shop")}
+	ddb := &recordingDynamo{rows: projectRows("billing", "shop")}
 	ix := &Index{Dynamo: ddb, Table: "state"}
 
 	got, err := ix.Projects(context.Background())
@@ -246,9 +363,9 @@ func TestUnreadableNamesAreRefused(t *testing.T) {
 func TestAStoredNameThatCannotBeReadStopsTheListing(t *testing.T) {
 	t.Parallel()
 
-	ddb := &recordingDynamo{pages: [][]map[string]ddbtypes.AttributeValue{{
-		{sortAttribute: &ddbtypes.AttributeValueMemberS{Value: "PROJECT#shop#STACK#prod--web"}},
-	}}}
+	ddb := &recordingDynamo{rows: []map[string]ddbtypes.AttributeValue{
+		item(naming.ProjectKey("shop"), "PROJECT#shop#STACK#prod--web"),
+	}}
 	if _, err := (&Index{Dynamo: ddb, Table: "state"}).Stacks(context.Background(), "shop"); err == nil {
 		t.Fatal("Stacks over an unparseable entry err = nil, want the teardown told rather than silently short")
 	}

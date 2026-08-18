@@ -36,6 +36,8 @@ service DeploymentService {
 
     rpc ListDomain(ListDomainRequest) returns (ListDomainResponse);
 
+    rpc PlanReleaseDomain(PlanReleaseDomainRequest) returns (PlanReleaseDomainResponse);
+
     rpc ReleaseDomain(ReleaseDomainRequest) returns (stream DeployEvent);
 
     rpc AddDomain(AddDomainRequest) returns (stream DeployEvent);
@@ -359,14 +361,28 @@ message PlanDestroyProjectRequest {
   string protocol_version = 2;
 
   string slug = 3;
+
+  Environment environment = 4;
 }
 
 message PlanDestroyProjectResponse {
   repeated string app_stacks = 1;
 
-  string infra_stack = 2;
+  repeated string infra_stacks = 2;
 
   EdgeStackPlan edge_stack = 3;
+
+  bool nothing_to_destroy = 4;
+}
+
+message PlanReleaseDomainRequest {
+  Environment.Class class = 1;
+}
+
+message PlanReleaseDomainResponse {
+  string base_domain = 1;
+
+  EdgeStackPlan edge_stack = 2;
 }
 
 message TeardownItem {

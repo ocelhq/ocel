@@ -10,6 +10,7 @@ import (
 
 	connect "connectrpc.com/connect"
 
+	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/cloudformation"
 	"github.com/aws/aws-sdk-go-v2/service/ssm"
 
@@ -242,6 +243,79 @@ func settleRecords(ctx context.Context, writer edge.DNSWriter, poller dns.Poller
 	return poller.Await(ctx, records, say)
 }
 
+func (s *Server) PlanReleaseDomain(ctx context.Context, req *deploymentsv1.PlanReleaseDomainRequest) (*deploymentsv1.PlanReleaseDomainResponse, error) {
+	if err := requirePreviewClass(req.GetClass()); err != nil {
+		return nil, connect.NewError(connect.CodeInvalidArgument, err)
+	}
+	awscfg, err := loadAWS(ctx, "")
+	if err != nil {
+		return nil, err
+	}
+	ssmClient := ssm.NewFromConfig(awscfg)
+
+	recorded, err := bootstrap.ReadPreviewDomain(ctx, ssmClient, bootstrap.ClassPreview)
+	if err != nil {
+		return nil, err
+	}
+	if recorded.BaseDomain == "" {
+		return &deploymentsv1.PlanReleaseDomainResponse{}, nil
+	}
+	edgeFront, err := s.originEdge(awscfg.Region)
+	if err != nil {
+		return nil, err
+	}
+	if err := refusePreviewReleaseWhileServed(ctx, ssmClient, recorded.BaseDomain, s.livePreviewStacks(awscfg)); err != nil {
+		return nil, connect.NewError(connect.CodeFailedPrecondition, err)
+	}
+	return &deploymentsv1.PlanReleaseDomainResponse{
+		BaseDomain: recorded.BaseDomain,
+		EdgeStack: &deploymentsv1.EdgeStackPlan{
+			EdgeKind: string(edgeFront.Kind()),
+			Items:    releasePlanItems(edgeFront.Kind(), recorded),
+		},
+	}, nil
+}
+
+func (s *Server) livePreviewStacks(awscfg aws.Config) func(context.Context, string) (int, error) {
+	return func(ctx context.Context, slug string) (int, error) {
+		deployed, err := s.deployed(ctx, cloudformation.NewFromConfig(awscfg), awscfg.Region, true)
+		if err != nil {
+			return 0, err
+		}
+		index, err := stackIndexFor(awscfg, deployed, bootstrapCommand(true))
+		if err != nil {
+			return 0, err
+		}
+		stacks, err := deploy.ListPreviewStacks(ctx, index, slug)
+		if err != nil {
+			return 0, err
+		}
+		return len(stacks), nil
+	}
+}
+
+func refusePreviewReleaseWhileServed(ctx context.Context, ssmClient substrateSSMAPI, baseDomain string, live func(context.Context, string) (int, error)) error {
+	slugs, err := bootstrap.StackSlugsFor(ctx, ssmClient, bootstrap.ClassPreview)
+	if err != nil {
+		return err
+	}
+	recorded, err := globalPreviewProjects(ctx, ssmClient, slugs, baseDomain)
+	if err != nil {
+		return err
+	}
+	var served []string
+	for _, slug := range recorded {
+		previews, err := live(ctx, slug)
+		if err != nil {
+			return err
+		}
+		if previews > 0 {
+			served = append(served, slug)
+		}
+	}
+	return refusePreviewRelease(baseDomain, served)
+}
+
 func (s *Server) ReleaseDomain(ctx context.Context, req *deploymentsv1.ReleaseDomainRequest, stream *connect.ServerStream[deploymentsv1.DeployEvent]) error {
 	progress := func(m string) { _ = stream.Send(progressEvent(m)) }
 
@@ -268,6 +342,10 @@ func (s *Server) runReleaseDomain(ctx context.Context, req *deploymentsv1.Releas
 	if recorded.BaseDomain == "" {
 		progress("This preview substrate has no global preview domain")
 		return nil
+	}
+
+	if err := refusePreviewReleaseWhileServed(ctx, ssmClient, recorded.BaseDomain, s.livePreviewStacks(awscfg)); err != nil {
+		return err
 	}
 
 	edgeFront, err := s.originEdge(awscfg.Region)
@@ -303,7 +381,9 @@ func releaseDomain(ctx context.Context, deps releaseDeps, recorded bootstrap.Pre
 	if err := dns.Release(ctx, deps.writer, recorded.Records, progress); err != nil {
 		return err
 	}
-	deps.issuer.Discard(ctx, recorded.Certificate, progress)
+	if err := deps.issuer.Discard(ctx, recorded.Certificate, progress); err != nil {
+		return err
+	}
 	return bootstrap.DeletePreviewDomain(ctx, deps.ssm, bootstrap.ClassPreview)
 }
 

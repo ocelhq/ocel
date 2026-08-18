@@ -51,54 +51,6 @@ func TestConfirmPhrase(t *testing.T) {
 	}
 }
 
-func TestDestroyPlanEmpty(t *testing.T) {
-	t.Parallel()
-
-	cases := []struct {
-		name string
-		plan *deploymentsv1.PlanDestroyProjectResponse
-		want bool
-	}{
-		{"an all-empty plan is empty", &deploymentsv1.PlanDestroyProjectResponse{}, true},
-		{
-			"a plan with an edge-stack item to delete is not empty",
-			&deploymentsv1.PlanDestroyProjectResponse{EdgeStack: &deploymentsv1.EdgeStackPlan{
-				EdgeKind: "cloudflare",
-				Items: []*deploymentsv1.TeardownItem{
-					{Kind: "edge stack", Name: "shop", Action: deploymentsv1.TeardownItem_ACTION_DELETE},
-				},
-			}},
-			false,
-		},
-		{
-			"a plan whose only edge-stack item is kept still has an edge stack to tear down",
-			&deploymentsv1.PlanDestroyProjectResponse{EdgeStack: &deploymentsv1.EdgeStackPlan{
-				EdgeKind: "cloudflare",
-				Items: []*deploymentsv1.TeardownItem{
-					{Kind: "certificate", Name: "shop.example.com", Action: deploymentsv1.TeardownItem_ACTION_KEEP, Reason: "you pinned this certificate"},
-				},
-			}},
-			false,
-		},
-		{
-			"a plan carrying only the edge kind and no items is empty",
-			&deploymentsv1.PlanDestroyProjectResponse{EdgeStack: &deploymentsv1.EdgeStackPlan{EdgeKind: "cloudflare"}},
-			true,
-		},
-		{"a plan with an infra stack is not empty", &deploymentsv1.PlanDestroyProjectResponse{InfraStack: "shop--infra"}, false},
-		{"a plan with app stacks is not empty", &deploymentsv1.PlanDestroyProjectResponse{AppStacks: []string{"shop--web--b1"}}, false},
-	}
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			t.Parallel()
-
-			if got := destroyPlanEmpty(tc.plan); got != tc.want {
-				t.Errorf("destroyPlanEmpty() = %v, want %v", got, tc.want)
-			}
-		})
-	}
-}
-
 func TestPrintDestroyPlan(t *testing.T) {
 	t.Parallel()
 
@@ -106,7 +58,7 @@ func TestPrintDestroyPlan(t *testing.T) {
 		t.Parallel()
 
 		var out bytes.Buffer
-		printDestroyPlan(&out, "proj_shop", &deploymentsv1.PlanDestroyProjectResponse{
+		printDestroyPlan(&out, "proj_shop", false, &deploymentsv1.PlanDestroyProjectResponse{
 			EdgeStack: &deploymentsv1.EdgeStackPlan{
 				EdgeKind: "cloudflare",
 				Items: []*deploymentsv1.TeardownItem{
@@ -115,8 +67,8 @@ func TestPrintDestroyPlan(t *testing.T) {
 					{Kind: "certificate", Name: "shop.example.com", Action: deploymentsv1.TeardownItem_ACTION_KEEP, Reason: "you pinned this certificate"},
 				},
 			},
-			InfraStack: "shop--infra",
-			AppStacks:  []string{"shop--web--b1", "shop--api--b2"},
+			InfraStacks: []string{"shop--infra"},
+			AppStacks:   []string{"shop--web--b1", "shop--api--b2"},
 		})
 		got := out.String()
 		for _, want := range []string{
@@ -196,8 +148,25 @@ func TestRunDestroyPreviewProject(t *testing.T) {
 		}
 
 		out := stdout.String()
-		if !strings.Contains(out, "DESTROY PROJECT project=test-app dns= class=CLASS_PREVIEW") {
-			t.Errorf("stdout = %q, want the preview DestroyProject echo", out)
+		for _, want := range []string{
+			`ENTIRE preview footprint of project "test-app"`,
+			"fronted by the cloudflare edge",
+			"delete edge workers test-app",
+			"infra stack test-app--pr-1--infra — databases and buckets, INCLUDING ALL DATA",
+			"infra stack test-app--pr-2--infra",
+			"app stack test-app--pr-1--web--b1",
+			"every preview variable value",
+			"The account-level preview bootstrap is left intact. This cannot be undone.",
+			"Left in place:",
+			"keep preview wildcard *.preview.acme.com — substrate-scoped",
+			"DESTROY PROJECT project=test-app dns= class=CLASS_PREVIEW",
+		} {
+			if !strings.Contains(out, want) {
+				t.Errorf("stdout = %q, want it to contain %q", out, want)
+			}
+		}
+		if strings.Index(out, "keep preview wildcard") < strings.Index(out, "This cannot be undone.") {
+			t.Errorf("stdout listed a kept item among the doomed ones:\n%s", out)
 		}
 		if strings.Contains(out, "Type the project name") {
 			t.Errorf("stdout = %q, want --yes to skip the typed-name confirmation", out)

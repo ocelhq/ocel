@@ -303,7 +303,7 @@ func (p *provider) DomainOwner(ctx context.Context, hostname string) (string, er
 
 func apiName(slug string, class edge.Class, pointer string) string {
 	fields := []string{apiNamespace, slug, string(class)}
-	if p := pointerOr(pointer); p != edgeledger.DefaultPointer {
+	if p := pointerOr(pointer); p != edge.DefaultPointer {
 		fields = append(fields, p)
 	}
 	return naming.Join(naming.FieldSeparator, fields...)
@@ -315,7 +315,7 @@ func notFoundAPIName(class edge.Class) string {
 
 func pointerOr(pointer string) string {
 	if pointer == "" {
-		return edgeledger.DefaultPointer
+		return edge.DefaultPointer
 	}
 	return pointer
 }

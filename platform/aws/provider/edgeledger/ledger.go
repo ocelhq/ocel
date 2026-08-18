@@ -21,8 +21,6 @@ import (
 const (
 	partition = "EDGELEDGER"
 
-	DefaultPointer = "@production"
-
 	schemaKey       = "META#schema"
 	sequenceKey     = "META#seq"
 	invalidationKey = "META#invalidation"
@@ -84,7 +82,7 @@ func (l *Ledger) ready() error {
 
 func pointerOr(pointer string) string {
 	if pointer == "" {
-		return DefaultPointer
+		return edge.DefaultPointer
 	}
 	return pointer
 }

@@ -202,8 +202,8 @@ func TestDestroyProject(t *testing.T) {
 		if cacheSide.swept == nil {
 			t.Error("the cache store was never swept, want the asset purge to have run anyway")
 		}
-		if !reflect.DeepEqual(index.projectsGone, []string{"shop"}) {
-			t.Errorf("index projects dropped = %v, want [shop] — a torn-down project leaves no entry", index.projectsGone)
+		if index.projectsGone != nil {
+			t.Errorf("index projects dropped = %v, want the project kept: the rerun that finishes the value removal reads it", index.projectsGone)
 		}
 	})
 }

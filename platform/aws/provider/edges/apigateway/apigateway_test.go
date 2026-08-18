@@ -553,6 +553,31 @@ func TestDestroyTakesTheAPIAndItsDomains(t *testing.T) {
 	}
 }
 
+func TestDestroyErasesTheDeploymentsLedger(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	w := newWorld()
+	stack := reconciled(t, w)
+	staged(t, stack, "arn:aws:lambda:eu-west-1:123456789012:function:entry", "assets/")
+
+	if !slices.ContainsFunc(slices.Collect(maps.Keys(w.dynamo.items)), func(key string) bool {
+		return strings.HasPrefix(key, "EDGELEDGER#")
+	}) {
+		t.Fatal("nothing was staged into the ledger, so its erasure proves nothing")
+	}
+
+	if err := stack.Destroy(ctx); err != nil {
+		t.Fatalf("Destroy: %v", err)
+	}
+
+	for key := range w.dynamo.items {
+		if strings.HasPrefix(key, "EDGELEDGER#") {
+			t.Errorf("ledger row %q survived the destroy", key)
+		}
+	}
+}
+
 func TestTeardownTakesTheBootstrapSet(t *testing.T) {
 	t.Parallel()
 

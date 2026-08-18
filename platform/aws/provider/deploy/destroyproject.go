@@ -46,16 +46,42 @@ func destroyPhased(appStacks, infraStacks []naming.StackName, destroyApp, destro
 
 type ProjectTeardownStages struct {
 	Planning    Stage
-	Edge        Stage
+	Unbind      Stage
 	AppStacks   Stage
 	InfraStacks Stage
+	Edge        Stage
 	Values      Stage
 	Assets      Stage
 	Forget      Stage
 }
 
 func (s ProjectTeardownStages) Roots() []Stage {
-	return []Stage{s.Planning, s.Edge, s.AppStacks, s.InfraStacks, s.Values, s.Assets, s.Forget}
+	return []Stage{s.Planning, s.Unbind, s.AppStacks, s.InfraStacks, s.Edge, s.Values, s.Assets, s.Forget}
+}
+
+func unbindRouting(ctx context.Context, stack edge.EdgeStack, cfg Config, stage Stage, pointers []string) (err error) {
+	start := time.Now()
+	defer func() { spanForStage(cfg.Tracer, stage, start, time.Now(), err) }()
+
+	if stack == nil || len(stack.State()) == 0 {
+		return nil
+	}
+	report := cfg.reportStage(stage)
+	var errs []error
+	for _, hostname := range edge.BoundDomains(stack.State()) {
+		report(sanitizeMessage(fmt.Sprintf("Unbinding %s from the edge", hostname)))
+		if err := stack.UnbindDomain(ctx, hostname); err != nil {
+			errs = append(errs, fmt.Errorf("unbind %q before the origin it fronts is destroyed: %w", hostname, err))
+		}
+	}
+	for _, pointer := range pointers {
+		report(sanitizeMessage(fmt.Sprintf("Removing pointer %q from the store", pointer)))
+		if _, err := stack.RemovePointer(ctx, pointer); err != nil {
+			errs = append(errs, fmt.Errorf("remove pointer %q before the origin it points at is destroyed: %w", pointer, err))
+		}
+	}
+	err = errors.Join(errs...)
+	return err
 }
 
 func childStagesFor(parent Stage, stacks []naming.StackName) (map[naming.StackName]Stage, []Stage) {
@@ -90,22 +116,8 @@ func DestroyProject(ctx context.Context, stack edge.EdgeStack, cfg Config, slug 
 	infraChildren, infraDeclared := childStagesFor(stages.InfraStacks, infraStacks)
 	declareStages(cfg.Tracer, true, append(appDeclared, infraDeclared...)...)
 
-	edgeStart := time.Now()
-	var edgeErr error
-	if stack != nil && len(stack.State()) > 0 {
-		report := cfg.reportStage(stages.Edge)
-		report("Destroying the edge stack (workers, custom domain, deployments-store instance)")
-		prior := stack.State()
-		if err := stack.Destroy(ctx); err != nil {
-			edgeErr = errors.Join(edgeErr, fmt.Errorf("destroy the edge stack: %w", err))
-			result.EdgeTornDown = false
-		} else if err := releaseRecords(ctx, cfg, prior, report); err != nil {
-			edgeErr = errors.Join(edgeErr, err)
-		}
-	}
-	spanForStage(cfg.Tracer, stages.Edge, edgeStart, time.Now(), edgeErr)
-	if edgeErr != nil {
-		errs = append(errs, edgeErr)
+	if err := unbindRouting(ctx, stack, cfg, stages.Unbind, []string{edge.DefaultPointer}); err != nil {
+		errs = append(errs, err)
 	}
 
 	stacksStart := time.Now()
@@ -120,6 +132,12 @@ func DestroyProject(ctx context.Context, stack edge.EdgeStack, cfg Config, slug 
 	spanForStage(cfg.Tracer, stages.InfraStacks, stacksStart, time.Now(), errors.Join(infraErrs...))
 	errs = append(errs, appErrs...)
 	errs = append(errs, infraErrs...)
+
+	edgeErr := destroyEdgeStack(ctx, stack, cfg, stages.Edge, "Destroying what the edge stack owns (surfaces, routes, deployments ledger)")
+	if edgeErr != nil {
+		result.EdgeTornDown = false
+		errs = append(errs, edgeErr)
+	}
 
 	valuesStart := time.Now()
 	verr := purgeProjectValues(ctx, cfg, slug, cfg.reportStage(stages.Values))
@@ -137,14 +155,43 @@ func DestroyProject(ctx context.Context, stack edge.EdgeStack, cfg Config, slug 
 	}
 
 	forgetStart := time.Now()
-	cfg.reportStage(stages.Forget)("Forgetting the project")
-	ferr := forgetProjectIfEmpty(ctx, cfg.Stacks, slug)
+	ferr := forgetProject(ctx, cfg, slug, stages.Forget, errors.Join(errs...))
 	spanForStage(cfg.Tracer, stages.Forget, forgetStart, time.Now(), ferr)
 	if ferr != nil {
 		errs = append(errs, ferr)
 	}
 
 	return result, errors.Join(errs...)
+}
+
+func forgetProject(ctx context.Context, cfg Config, slug string, stage Stage, unfinished error) error {
+	report := cfg.reportStage(stage)
+	if unfinished != nil {
+		report("Leaving the project indexed: the rerun reads its progress from what is still here")
+		return nil
+	}
+	report("Forgetting the project")
+	return forgetProjectIfEmpty(ctx, cfg.Stacks, slug)
+}
+
+func destroyEdgeStack(ctx context.Context, stack edge.EdgeStack, cfg Config, stage Stage, what string) (err error) {
+	start := time.Now()
+	defer func() { spanForStage(cfg.Tracer, stage, start, time.Now(), err) }()
+
+	if stack == nil || len(stack.State()) == 0 {
+		return nil
+	}
+	report := cfg.reportStage(stage)
+	report(what)
+	prior := stack.State()
+	if derr := stack.Destroy(ctx); derr != nil {
+		err = fmt.Errorf("destroy the edge stack: %w", derr)
+		return err
+	}
+	if rerr := releaseRecords(ctx, cfg, prior, report); rerr != nil {
+		err = rerr
+	}
+	return err
 }
 
 type ValueStore interface {

@@ -3,6 +3,7 @@ package deploy
 import (
 	"context"
 	"fmt"
+	"slices"
 	"sync"
 
 	"github.com/ocelhq/ocel/pkg/naming"
@@ -63,6 +64,18 @@ func indexedStacks(ctx context.Context, index StackIndex, slug string) ([]naming
 		return nil, err
 	}
 	return ix.Stacks(ctx, naming.Sanitize(slug))
+}
+
+func ProjectIndexed(ctx context.Context, index StackIndex, slug string) (bool, error) {
+	ix, err := stackIndex(index)
+	if err != nil {
+		return false, err
+	}
+	projects, err := ix.Projects(ctx)
+	if err != nil {
+		return false, err
+	}
+	return slices.Contains(projects, naming.Sanitize(slug)), nil
 }
 
 func forgetProjectIfEmpty(ctx context.Context, index StackIndex, slug string) error {

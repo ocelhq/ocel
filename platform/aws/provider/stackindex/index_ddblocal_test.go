@@ -97,6 +97,20 @@ func TestIndexAgainstDynamoDBLocal(t *testing.T) {
 	})
 
 	t.Run("teardown leaves neither stack nor project behind", func(t *testing.T) {
+		clocked := naming.AppStack("prod", "web", naming.NewRelease("clock", ""))
+		if err := ix.AddStack(ctx, "billing", clocked); err != nil {
+			t.Fatalf("AddStack: %v", err)
+		}
+		for _, tag := range []string{"products", "carts"} {
+			writeTagClock(t, ctx, ddb, table, "billing", clocked, tag)
+		}
+		if err := ix.RemoveStack(ctx, "billing", clocked); err != nil {
+			t.Fatalf("RemoveStack: %v", err)
+		}
+		if left := tagClockRows(t, ctx, ddb, table, "billing", clocked); len(left) != 0 {
+			t.Fatalf("tag clock rows %v survived the stack that wrote them", left)
+		}
+
 		if err := ix.RemoveStack(ctx, "billing", naming.InfraStack("prod")); err != nil {
 			t.Fatalf("RemoveStack: %v", err)
 		}
@@ -124,6 +138,31 @@ func TestIndexAgainstDynamoDBLocal(t *testing.T) {
 	})
 }
 
+func writeTagClock(t *testing.T, ctx context.Context, ddb *dynamodb.Client, table, project string, stack naming.StackName, tag string) {
+	t.Helper()
+	if _, err := ddb.PutItem(ctx, &dynamodb.PutItemInput{
+		TableName: aws.String(table),
+		Item: map[string]ddbtypes.AttributeValue{
+			"pk":     &ddbtypes.AttributeValueMemberS{Value: naming.ISRTagKey(project, stack, tag)},
+			"sk":     &ddbtypes.AttributeValueMemberS{Value: tagSortKey},
+			"gsi1pk": &ddbtypes.AttributeValueMemberS{Value: naming.ISRTagPrefix(project, stack)},
+			"gsi1sk": &ddbtypes.AttributeValueMemberS{Value: "000001700000000"},
+			"tag":    &ddbtypes.AttributeValueMemberS{Value: tag},
+		},
+	}); err != nil {
+		t.Fatalf("write tag clock %s: %v", tag, err)
+	}
+}
+
+func tagClockRows(t *testing.T, ctx context.Context, ddb *dynamodb.Client, table, project string, stack naming.StackName) []string {
+	t.Helper()
+	rows, err := (&Index{Dynamo: ddb, Table: table}).tagPartitions(ctx, naming.ISRTagPrefix(project, stack))
+	if err != nil {
+		t.Fatalf("read tag clock rows: %v", err)
+	}
+	return rows
+}
+
 func createTable(t *testing.T, ctx context.Context, ddb *dynamodb.Client, table string) {
 	t.Helper()
 	if _, err := ddb.CreateTable(ctx, &dynamodb.CreateTableInput{
@@ -132,11 +171,24 @@ func createTable(t *testing.T, ctx context.Context, ddb *dynamodb.Client, table 
 		AttributeDefinitions: []ddbtypes.AttributeDefinition{
 			{AttributeName: aws.String("pk"), AttributeType: ddbtypes.ScalarAttributeTypeS},
 			{AttributeName: aws.String("sk"), AttributeType: ddbtypes.ScalarAttributeTypeS},
+			{AttributeName: aws.String("gsi1pk"), AttributeType: ddbtypes.ScalarAttributeTypeS},
+			{AttributeName: aws.String("gsi1sk"), AttributeType: ddbtypes.ScalarAttributeTypeS},
 		},
 		KeySchema: []ddbtypes.KeySchemaElement{
 			{AttributeName: aws.String("pk"), KeyType: ddbtypes.KeyTypeHash},
 			{AttributeName: aws.String("sk"), KeyType: ddbtypes.KeyTypeRange},
 		},
+		GlobalSecondaryIndexes: []ddbtypes.GlobalSecondaryIndex{{
+			IndexName: aws.String(IndexName),
+			KeySchema: []ddbtypes.KeySchemaElement{
+				{AttributeName: aws.String("gsi1pk"), KeyType: ddbtypes.KeyTypeHash},
+				{AttributeName: aws.String("gsi1sk"), KeyType: ddbtypes.KeyTypeRange},
+			},
+			Projection: &ddbtypes.Projection{
+				ProjectionType:   ddbtypes.ProjectionTypeInclude,
+				NonKeyAttributes: []string{"expired", "stale", "tag"},
+			},
+		}},
 	}); err != nil {
 		t.Fatalf("create table: %v", err)
 	}

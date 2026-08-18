@@ -77,6 +77,8 @@ type Edge interface {
 	DomainOwner(ctx context.Context, hostname string) (string, error)
 }
 
+const DefaultPointer = "@production"
+
 type EdgeStack interface {
 	State() StackState
 

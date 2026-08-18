@@ -39,9 +39,10 @@ func TestRunDestroyProjectDeclaresTheStagePlanBeforeAnyWork(t *testing.T) {
 	}
 	wantTitles := []string{
 		"Planning the teardown",
-		"Destroying edge workers and the deployments store",
+		"Unbinding what routes to this project",
 		"Destroying app stacks",
 		"Destroying infra stacks",
+		"Destroying the edge stack, its domain surfaces and the deployments ledger",
 		"Purging stored variable values",
 		"Purging project assets",
 		"Forgetting the project",

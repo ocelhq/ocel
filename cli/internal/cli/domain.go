@@ -260,19 +260,29 @@ func runDomainRelease(ctx context.Context, d deps, cwd string, opts domainOption
 
 	provW := ui.BuildWriter()
 	err = runProviderSession(ctx, d, cfg, provider, provW, provW, func(runner *providerrunner.Runner) error {
-		resp, err := listGlobalPreviewDomain(ctx, d, runner, provider, stdout)
+		if err := preflightPreview(ctx, d, runner, provider, stdout); err != nil {
+			return err
+		}
+		client, err := runner.Deployments()
 		if err != nil {
 			return err
 		}
-		base := resp.GetDomain().GetBaseDomain()
+
+		spinner := deployui.StartSpinner(stdout, "Enumerating what releasing the domain would remove")
+		plan, err := client.PlanReleaseDomain(ctx, &deploymentsv1.PlanReleaseDomainRequest{
+			Class: deploymentsv1.Environment_CLASS_PREVIEW,
+		})
+		spinner.Stop()
+		if err != nil {
+			return err
+		}
+		base := plan.GetBaseDomain()
 		if base == "" {
 			ui.Finish("No global preview domain is configured")
 			return nil
 		}
 
-		fmt.Fprintf(stdout, "This will tear down the shared entry worker on %s and release the wildcard.\n", wildcardOf(base))
-		renderGlobalDomainProjects(stdout, resp.GetProjects())
-		fmt.Fprintln(stdout, "Every project above keeps its previews deployed, but they stop being reachable until a global domain is in use again or each project declares its own domains.preview.")
+		printReleasePlan(stdout, base, plan)
 
 		if !opts.yes {
 			confirmed, err := confirmPhrase(ctx, "domain", base, stdout, stdin)
@@ -296,6 +306,17 @@ func runDomainRelease(ctx context.Context, d deps, cwd string, opts domainOption
 		return failSession(ctx, ui, err)
 	}
 	return nil
+}
+
+func printReleasePlan(out io.Writer, base string, plan *deploymentsv1.PlanReleaseDomainResponse) {
+	header := fmt.Sprintf("This will release %s and stop serving every project's previews on it", wildcardOf(base))
+	if kind := plan.GetEdgeStack().GetEdgeKind(); kind != "" {
+		header += fmt.Sprintf(", fronted by the %s edge", kind)
+	}
+	fmt.Fprintf(out, "%s:\n", header)
+	kept := printPlanItems(out, plan.GetEdgeStack().GetItems())
+	fmt.Fprintln(out, "This cannot be undone.")
+	printKeptItems(out, kept)
 }
 
 func runAddDomain(ctx context.Context, d deps, cwd, host string, stdout, stderr io.Writer) error {

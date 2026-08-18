@@ -38,6 +38,8 @@ type recordingEdge struct {
 	historyPointers []string
 	destroyed       int
 	destroyErr      error
+	calls           []string
+	record          func(string)
 
 	storeSchemaVersion    *int
 	storeSchemaVersionErr error
@@ -58,6 +60,13 @@ var (
 	_ edge.Edge         = (*recordingEdge)(nil)
 	_ edge.Programmable = (*recordingEdge)(nil)
 )
+
+func (f *recordingEdge) recordCall(call string) {
+	f.calls = append(f.calls, call)
+	if f.record != nil {
+		f.record(call)
+	}
+}
 
 func (f *recordingEdge) Kind() edge.Kind {
 	if f.kind == "" {
@@ -260,6 +269,7 @@ func (s *recordingStack) RemovePointer(_ context.Context, pointer string) (edge.
 	if err := s.checkAuth(); err != nil {
 		return edge.PruneResult{}, err
 	}
+	s.edge.recordCall("remove-pointer " + pointer)
 	s.edge.removedPointers = append(s.edge.removedPointers, pointer)
 	var removed []string
 	kept := make([]pointedPromotion, 0, len(s.edge.promoted))
@@ -287,6 +297,7 @@ func (s *recordingStack) BindDomain(_ context.Context, binding edge.DomainBindin
 }
 
 func (s *recordingStack) UnbindDomain(_ context.Context, hostname string) error {
+	s.edge.recordCall("unbind " + hostname)
 	delete(s.edge.bound, hostname)
 	s.state = edge.ForgetBoundDomain(s.state, hostname)
 	return nil
@@ -301,6 +312,7 @@ func (s *recordingStack) Destroy(ctx context.Context) error {
 			return err
 		}
 	}
+	s.edge.recordCall("destroy")
 	s.edge.destroyed++
 	return s.edge.destroyErr
 }

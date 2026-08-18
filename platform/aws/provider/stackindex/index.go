@@ -14,6 +14,11 @@ import (
 const (
 	projectsPartition = "PROJECTS"
 	sortAttribute     = "sk"
+
+	IndexName = "gsi1"
+
+	tagNamespaceAttribute = "gsi1pk"
+	tagSortKey            = "#META"
 )
 
 type DynamoAPI interface {
@@ -61,10 +66,65 @@ func (ix *Index) RemoveStack(ctx context.Context, project string, stack naming.S
 	if err := readable(project, stack); err != nil {
 		return fmt.Errorf("drop a stack from the index: %w", err)
 	}
+	if err := ix.sweepTagClock(ctx, project, stack); err != nil {
+		return fmt.Errorf("drop stack %s/%s from the index: %w", project, stack, err)
+	}
 	if err := ix.delete(ctx, item(naming.ProjectKey(project), naming.StackKey(project, stack))); err != nil {
 		return fmt.Errorf("drop stack %s/%s from the index: %w", project, stack, err)
 	}
 	return nil
+}
+
+func (ix *Index) sweepTagClock(ctx context.Context, project string, stack naming.StackName) error {
+	partitions, err := ix.tagPartitions(ctx, naming.ISRTagPrefix(project, stack))
+	if err != nil {
+		return err
+	}
+	for _, pk := range partitions {
+		if err := ix.delete(ctx, item(pk, tagSortKey)); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (ix *Index) tagPartitions(ctx context.Context, namespace string) ([]string, error) {
+	var (
+		out   []string
+		start map[string]ddbtypes.AttributeValue
+	)
+	for {
+		page, err := ix.Dynamo.Query(ctx, &dynamodb.QueryInput{
+			TableName:              aws.String(ix.Table),
+			IndexName:              aws.String(IndexName),
+			KeyConditionExpression: aws.String("#ns = :ns"),
+			ProjectionExpression:   aws.String("#pk, #sk"),
+			ExpressionAttributeNames: map[string]string{
+				"#ns": tagNamespaceAttribute,
+				"#pk": "pk",
+				"#sk": sortAttribute,
+			},
+			ExpressionAttributeValues: map[string]ddbtypes.AttributeValue{
+				":ns": &ddbtypes.AttributeValueMemberS{Value: namespace},
+			},
+			ExclusiveStartKey: start,
+		})
+		if err != nil {
+			return nil, err
+		}
+		for _, entry := range page.Items {
+			pk, ok := entry["pk"].(*ddbtypes.AttributeValueMemberS)
+			sk, sorted := entry[sortAttribute].(*ddbtypes.AttributeValueMemberS)
+			if !ok || pk.Value == "" || !sorted || sk.Value != tagSortKey {
+				continue
+			}
+			out = append(out, pk.Value)
+		}
+		if len(page.LastEvaluatedKey) == 0 {
+			return out, nil
+		}
+		start = page.LastEvaluatedKey
+	}
 }
 
 func (ix *Index) Stacks(ctx context.Context, project string) ([]naming.StackName, error) {
