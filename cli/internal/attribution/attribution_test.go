@@ -131,6 +131,22 @@ func TestCompute(t *testing.T) {
 		}
 	})
 
+	t.Run("JSX in a .js file reads as the framework reads it", func(t *testing.T) {
+		root := fixtureRoot(t, "jsx-in-js")
+
+		usages, err := Compute(root, []App{{Name: "web", Path: "apps/web"}}, []Declaration{
+			{Type: linksv1.LinkType_LINK_TYPE_POSTGRES, ID: "metrics-db", Stack: stackAt(root, "shared/metrics.ts")},
+		})
+		if err != nil {
+			t.Fatalf("Compute err = %v", err)
+		}
+
+		want := []string{"web -> LINK_TYPE_POSTGRES:metrics-db [apps/web/pages/index.js]"}
+		if got := edgeStrings(usages); !reflect.DeepEqual(got, want) {
+			t.Errorf("edges = %v, want %v", got, want)
+		}
+	})
+
 	t.Run("a runtime-computed import specifier fails closed", func(t *testing.T) {
 		root := fixtureRoot(t, "computed-import")
 
