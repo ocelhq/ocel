@@ -182,6 +182,11 @@ describe("renderOcelConfig", () => {
     expect(config).toContain("awsProvider()");
   });
 
+  it("names the cloudflare edge, the only one this origin fronts deployments with", () => {
+    expect(config).toContain(`import { cfEdge } from "ocel/edge";`);
+    expect(config).toContain("edge: cfEdge()");
+  });
+
   it("declares one app explicitly, under the constant app name", () => {
     expect(APP_NAME).toBe("app");
     expect(config).toContain(`apps: [{ name: "app", path: ".", framework: "next" }]`);

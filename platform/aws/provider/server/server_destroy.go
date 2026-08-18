@@ -20,7 +20,7 @@ func (s *Server) PlanDestroyProject(ctx context.Context, req *deploymentsv1.Plan
 		return nil, connect.NewError(connect.CodeInvalidArgument, err)
 	}
 
-	edgeFront, err := s.edge()
+	edgeFront, err := s.originEdge()
 	if err != nil {
 		return nil, err
 	}

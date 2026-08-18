@@ -79,7 +79,7 @@ func (s *Server) runUseDomain(ctx context.Context, req *deploymentsv1.UseDomainR
 		return err
 	}
 
-	edgeFront, err := s.edge()
+	edgeFront, err := s.originEdge()
 	if err != nil {
 		return err
 	}
@@ -142,7 +142,7 @@ func (s *Server) runReleaseDomain(ctx context.Context, req *deploymentsv1.Releas
 		return nil
 	}
 
-	edgeFront, err := s.edge()
+	edgeFront, err := s.originEdge()
 	if err != nil {
 		return err
 	}

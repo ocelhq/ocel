@@ -60,7 +60,7 @@ func (s *Server) Preflight(ctx context.Context, req *deploymentsv1.PreflightRequ
 
 	resp.DomainClaims = domainClaims(ctx, s.edgeRouteOwner(), req.GetSlug(), req.GetDomains())
 
-	edgeFront, err := s.edge()
+	edgeFront, err := s.originEdge()
 	if err != nil {
 		return nil, err
 	}
@@ -121,7 +121,7 @@ type routeOwnerFunc func(ctx context.Context, hostname string) (string, error)
 
 func (s *Server) edgeRouteOwner() routeOwnerFunc {
 	return func(ctx context.Context, hostname string) (string, error) {
-		edgeFront, err := s.edge()
+		edgeFront, err := s.originEdge()
 		if err != nil {
 			return "", err
 		}
@@ -328,7 +328,7 @@ func (s *Server) previewTeardownContext(ctx context.Context, opts options, slug 
 
 		Values: teardownValues(awscfg, deployed, bootstrap.ClassPreview),
 	}
-	edgeFront, err := s.edge()
+	edgeFront, err := s.originEdge()
 	if err != nil {
 		return deploy.Config{}, nil, err
 	}

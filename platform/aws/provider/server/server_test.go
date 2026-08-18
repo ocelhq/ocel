@@ -527,7 +527,7 @@ func TestServerBootstrapForgetsDeployed(t *testing.T) {
 		run := func(context.Context, bootstrap.CFNAPI, bootstrap.SSMAPI, bootstrap.IAMAPI, edge.Edge, bootstrap.Artifacts, func(string), func(string)) error {
 			return nil
 		}
-		if err := s.runBootstrap(context.Background(), run, nil, nil, nil, bootstrap.Artifacts{}, func(string) {}, func(string) {}); err != nil {
+		if err := s.runBootstrap(context.Background(), run, nil, nil, nil, nil, bootstrap.Artifacts{}, func(string) {}, func(string) {}); err != nil {
 			t.Fatalf("runBootstrap: %v", err)
 		}
 
@@ -551,7 +551,7 @@ func TestServerBootstrapForgetsDeployed(t *testing.T) {
 		run := func(context.Context, bootstrap.CFNAPI, bootstrap.SSMAPI, bootstrap.IAMAPI, edge.Edge, bootstrap.Artifacts, func(string), func(string)) error {
 			return errors.New("stack rolled back")
 		}
-		if err := s.runBootstrap(context.Background(), run, nil, nil, nil, bootstrap.Artifacts{}, func(string) {}, func(string) {}); err == nil {
+		if err := s.runBootstrap(context.Background(), run, nil, nil, nil, nil, bootstrap.Artifacts{}, func(string) {}, func(string) {}); err == nil {
 			t.Fatal("runBootstrap = nil error, want the failure")
 		}
 		if _, err := s.deployed(context.Background(), cfn, "eu-west-1", false); err != nil {
@@ -566,15 +566,15 @@ func TestServerBootstrapForgetsDeployed(t *testing.T) {
 func TestServerEdge(t *testing.T) {
 	t.Parallel()
 
-	t.Run("it comes from the registry, once", func(t *testing.T) {
+	t.Run("it comes from the registry, once per kind", func(t *testing.T) {
 		t.Parallel()
 
 		s := &Server{}
-		first, err := s.edge()
+		first, err := s.edge(edge.KindCloudflare)
 		if err != nil {
 			t.Fatalf("edge() error = %v", err)
 		}
-		second, err := s.edge()
+		second, err := s.edge(edge.KindCloudflare)
 		if err != nil {
 			t.Fatalf("second edge() error = %v", err)
 		}
@@ -583,6 +583,35 @@ func TestServerEdge(t *testing.T) {
 		}
 		if first.Kind() != edge.KindCloudflare {
 			t.Errorf("Kind() = %q, want the kind this origin constructs today", first.Kind())
+		}
+	})
+
+	t.Run("an unnamed kind falls back to the one this origin carries", func(t *testing.T) {
+		t.Parallel()
+
+		s := &Server{}
+		got, err := s.edge("")
+		if err != nil {
+			t.Fatalf("edge() error = %v", err)
+		}
+		if got.Kind() != edge.KindCloudflare {
+			t.Errorf("Kind() = %q, want the origin's own edge", got.Kind())
+		}
+	})
+
+	t.Run("a kind this origin does not carry is refused without spoiling the ones it does", func(t *testing.T) {
+		t.Parallel()
+
+		s := &Server{}
+		if _, err := s.edge(edge.KindNative); err == nil {
+			t.Fatal("edge(native) error = nil, want it refused until that slice lands")
+		}
+		got, err := s.edge(edge.KindCloudflare)
+		if err != nil {
+			t.Fatalf("edge(cloudflare) after the refusal: %v", err)
+		}
+		if got.Kind() != edge.KindCloudflare {
+			t.Errorf("Kind() = %q, want the refusal to have left this kind alone", got.Kind())
 		}
 	})
 }

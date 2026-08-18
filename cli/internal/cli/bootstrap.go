@@ -91,11 +91,11 @@ func runBootstrap(ctx context.Context, d deps, cwd string, opts bootstrapOptions
 
 	provW := ui.BuildWriter()
 	err = runProviderSession(ctx, d, cfg, provider, provW, provW, func(runner *providerrunner.Runner) error {
-		req := &deploymentsv1.BootstrapRequest{
+		req := edgeSettings(cfg).applyToBootstrap(&deploymentsv1.BootstrapRequest{
 			Options:         []byte(provider.Options),
 			ProtocolVersion: manifestbuilder.SchemaVersion,
 			Class:           class,
-		}
+		})
 		if err := runner.Bootstrap(ctx, req, ui.Event); err != nil {
 			return err
 		}

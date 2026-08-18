@@ -214,12 +214,12 @@ func runPreviewUp(ctx context.Context, d deps, cwd string, opts previewUpOptions
 		}
 		ui.BuildOK()
 
-		req := &deploymentsv1.DeployRequest{
+		req := edgeSettings(cfg).applyToDeploy(&deploymentsv1.DeployRequest{
 			Manifest:        manifest,
 			Options:         []byte(provider.Options),
 			ProtocolVersion: manifestbuilder.SchemaVersion,
 			Environment:     env,
-		}
+		})
 
 		var links []*linksv1.Link
 		var functions []*deploymentsv1.FunctionOutput
