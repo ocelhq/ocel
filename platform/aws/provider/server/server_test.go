@@ -170,26 +170,26 @@ func TestCacheStoreUploader(t *testing.T) {
 	})
 }
 
-func markedGlobalPreview(state edge.RootStackState, baseDomain string) edge.RootStackState {
+func markedGlobalPreview(state edge.StackState, baseDomain string) edge.StackState {
 	marked := maps.Clone(state)
-	marked[edge.RootStackKeyGlobalPreview] = baseDomain
+	marked[edge.StackKeyGlobalPreview] = baseDomain
 	return marked
 }
 
-func TestRootStackStateChanged(t *testing.T) {
+func TestStackStateChanged(t *testing.T) {
 	t.Parallel()
 
-	reconciled := edge.RootStackState{
-		edge.RootStackKeySlug:       "proj-123",
-		edge.RootStackKeyEndpoint:   "https://store.workers.dev",
-		edge.RootStackKeySecret:     "s3cret",
-		edge.RootStackKeyOwnerToken: "owner",
+	reconciled := edge.StackState{
+		edge.StackKeySlug:       "proj-123",
+		edge.StackKeyEndpoint:   "https://store.workers.dev",
+		edge.StackKeySecret:     "s3cret",
+		edge.StackKeyOwnerToken: "owner",
 	}
 
 	tests := []struct {
 		name       string
-		prior      edge.RootStackState
-		reconciled edge.RootStackState
+		prior      edge.StackState
+		reconciled edge.StackState
 		want       bool
 	}{
 		{
@@ -207,22 +207,22 @@ func TestRootStackStateChanged(t *testing.T) {
 		{
 			name:  "an adopted instance answering with a different secret is persisted",
 			prior: maps.Clone(reconciled),
-			reconciled: edge.RootStackState{
-				edge.RootStackKeySlug:       "proj-123",
-				edge.RootStackKeyEndpoint:   "https://store.workers.dev",
-				edge.RootStackKeySecret:     "rotated",
-				edge.RootStackKeyOwnerToken: "owner",
+			reconciled: edge.StackState{
+				edge.StackKeySlug:       "proj-123",
+				edge.StackKeyEndpoint:   "https://store.workers.dev",
+				edge.StackKeySecret:     "rotated",
+				edge.StackKeyOwnerToken: "owner",
 			},
 			want: true,
 		},
 		{
 			name:  "a renamed project names a different instance",
 			prior: maps.Clone(reconciled),
-			reconciled: edge.RootStackState{
-				edge.RootStackKeySlug:       "proj-456",
-				edge.RootStackKeyEndpoint:   "https://store.workers.dev",
-				edge.RootStackKeySecret:     "s3cret",
-				edge.RootStackKeyOwnerToken: "owner",
+			reconciled: edge.StackState{
+				edge.StackKeySlug:       "proj-456",
+				edge.StackKeyEndpoint:   "https://store.workers.dev",
+				edge.StackKeySecret:     "s3cret",
+				edge.StackKeyOwnerToken: "owner",
 			},
 			want: true,
 		},
@@ -249,8 +249,8 @@ func TestRootStackStateChanged(t *testing.T) {
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			if got := rootStackStateChanged(tc.prior, tc.reconciled); got != tc.want {
-				t.Errorf("rootStackStateChanged() = %v, want %v", got, tc.want)
+			if got := stackStateChanged(tc.prior, tc.reconciled); got != tc.want {
+				t.Errorf("stackStateChanged() = %v, want %v", got, tc.want)
 			}
 		})
 	}
@@ -524,7 +524,7 @@ func TestServerBootstrapForgetsDeployed(t *testing.T) {
 		}
 
 		cfn.present[bootstrap.StackName] = true
-		run := func(context.Context, bootstrap.CFNAPI, bootstrap.SSMAPI, bootstrap.IAMAPI, edge.Provider, bootstrap.Artifacts, func(string), func(string)) error {
+		run := func(context.Context, bootstrap.CFNAPI, bootstrap.SSMAPI, bootstrap.IAMAPI, edge.Edge, bootstrap.Artifacts, func(string), func(string)) error {
 			return nil
 		}
 		if err := s.runBootstrap(context.Background(), run, nil, nil, nil, bootstrap.Artifacts{}, func(string) {}, func(string) {}); err != nil {
@@ -548,7 +548,7 @@ func TestServerBootstrapForgetsDeployed(t *testing.T) {
 		if _, err := s.deployed(context.Background(), cfn, "eu-west-1", false); err != nil {
 			t.Fatalf("deployed: %v", err)
 		}
-		run := func(context.Context, bootstrap.CFNAPI, bootstrap.SSMAPI, bootstrap.IAMAPI, edge.Provider, bootstrap.Artifacts, func(string), func(string)) error {
+		run := func(context.Context, bootstrap.CFNAPI, bootstrap.SSMAPI, bootstrap.IAMAPI, edge.Edge, bootstrap.Artifacts, func(string), func(string)) error {
 			return errors.New("stack rolled back")
 		}
 		if err := s.runBootstrap(context.Background(), run, nil, nil, nil, bootstrap.Artifacts{}, func(string) {}, func(string) {}); err == nil {

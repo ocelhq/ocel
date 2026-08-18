@@ -32,16 +32,16 @@ func (s PreviewRemovalStages) Roots() []Stage {
 	return roots
 }
 
-func RemovePreview(ctx context.Context, stack edge.RootStack, state edge.RootStackState, cfg Config, slug, pointer string, persistent bool, stages PreviewRemovalStages, log func(string)) error {
+func RemovePreview(ctx context.Context, stack edge.EdgeStack, cfg Config, slug, pointer string, persistent bool, stages PreviewRemovalStages, log func(string)) error {
 	var errs []error
 	var removal edge.PruneResult
 
 	pointerStart := time.Now()
 	var pointerErr error
-	if stack != nil && len(state) > 0 {
+	if stack != nil && len(stack.State()) > 0 {
 		report := cfg.reportStage(stages.Pointer)
 		report(sanitizeMessage(fmt.Sprintf("Removing preview pointer %q from the store", pointer)))
-		result, err := stack.RemovePointer(ctx, state, pointer)
+		result, err := stack.RemovePointer(ctx, pointer)
 		if err != nil {
 			pointerErr = fmt.Errorf("remove preview pointer %q: %w", pointer, err)
 		} else {
@@ -97,9 +97,9 @@ func classifyPreviewStacks(stacks []naming.StackName) PreviewProjectTeardownPlan
 	return plan
 }
 
-func DestroyPreviewProject(ctx context.Context, stack edge.RootStack, state edge.RootStackState, cfg Config, slug string, stages ProjectTeardownStages, log func(string)) (DestroyProjectResult, error) {
+func DestroyPreviewProject(ctx context.Context, stack edge.EdgeStack, cfg Config, slug string, stages ProjectTeardownStages, log func(string)) (DestroyProjectResult, error) {
 	var errs []error
-	result := DestroyProjectResult{RootTornDown: true}
+	result := DestroyProjectResult{EdgeTornDown: true}
 
 	planStart := time.Now()
 	plan, err := planPreviewProjectTeardown(ctx, cfg, slug)
@@ -114,28 +114,12 @@ func DestroyPreviewProject(ctx context.Context, stack edge.RootStack, state edge
 
 	edgeStart := time.Now()
 	var edgeErr error
-	if stack != nil && len(state) > 0 {
+	if stack != nil && len(stack.State()) > 0 {
 		report := cfg.reportStage(stages.Edge)
-		report("Destroying the preview root workers")
-		stateSlug := state[edge.RootStackKeySlug]
-		var deployed []string
-		for _, stem := range previewWorkerStems(stateSlug) {
-			under, err := stack.ListDeployedWorkers(ctx, stem)
-			if err != nil {
-				edgeErr = errors.Join(edgeErr, fmt.Errorf("list preview root workers under %q: %w", stem, err))
-				result.RootTornDown = false
-				continue
-			}
-			deployed = append(deployed, under...)
-		}
-		if err := stack.DestroyRootStack(ctx, previewProjectWorkers(stateSlug, deployed)); err != nil {
-			edgeErr = errors.Join(edgeErr, fmt.Errorf("destroy preview root workers: %w", err))
-			result.RootTornDown = false
-		}
-		report("Wiping the project's preview deployments-store instance")
-		if err := stack.DestroyInstance(ctx, state); err != nil {
-			edgeErr = errors.Join(edgeErr, fmt.Errorf("destroy preview deployments-store instance: %w", err))
-			result.RootTornDown = false
+		report("Destroying the preview root workers and the deployments-store instance")
+		if err := stack.Destroy(ctx); err != nil {
+			edgeErr = errors.Join(edgeErr, fmt.Errorf("destroy the preview edge stack: %w", err))
+			result.EdgeTornDown = false
 		}
 	}
 	spanForStage(cfg.Tracer, stages.Edge, edgeStart, time.Now(), edgeErr)
@@ -180,30 +164,6 @@ func DestroyPreviewProject(ctx context.Context, stack edge.RootStack, state edge
 	}
 
 	return result, errors.Join(errs...)
-}
-
-func previewWorkerStems(slug string) []string {
-	if slug == "" {
-		return nil
-	}
-	return []string{previewWorkerStem(slug), retiredPreviewWorkerStem(slug)}
-}
-
-func previewProjectWorkers(slug string, deployed []string) []string {
-	stems := previewWorkerStems(slug)
-	if len(stems) == 0 {
-		return nil
-	}
-	names := []string{previewWorkerName(slug), retiredPreviewWorkerStem(slug)}
-	for _, name := range deployed {
-		for _, stem := range stems {
-			if edge.NameUnderStem(stem, name) && !slices.Contains(names, name) {
-				names = append(names, name)
-			}
-		}
-	}
-	slices.Sort(names)
-	return names
 }
 
 func planPreviewProjectTeardown(ctx context.Context, cfg Config, slug string) (PreviewProjectTeardownPlan, error) {

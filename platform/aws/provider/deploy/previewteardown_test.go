@@ -144,116 +144,47 @@ func TestPreviewPurgeEnvs(t *testing.T) {
 	})
 }
 
-func TestPreviewProjectWorkers(t *testing.T) {
-	t.Parallel()
-
-	t.Run("reclaims the whole worker family", func(t *testing.T) {
-		t.Parallel()
-		got := previewProjectWorkers("shop", []string{
-			previewWorkerStem("shop") + "--web",
-			previewWorkerName("shop"),
-			previewWorkerStem("shop") + "--api",
-		})
-		want := []string{
-			"ocel--shop--preview--api",
-			"ocel--shop--preview--root",
-			"ocel--shop--preview--web",
-			"ocel-shop--preview",
-		}
-		if !reflect.DeepEqual(got, want) {
-			t.Errorf("workers = %v, want %v", got, want)
-		}
-	})
-
-	t.Run("an empty list still reclaims both entrypoints", func(t *testing.T) {
-		t.Parallel()
-		got := previewProjectWorkers("shop", nil)
-		want := []string{"ocel--shop--preview--root", "ocel-shop--preview"}
-		if !reflect.DeepEqual(got, want) {
-			t.Errorf("workers = %v, want the current and retired entrypoints", got)
-		}
-	})
-
-	t.Run("reclaims the retired family so the cutover strands nothing", func(t *testing.T) {
-		t.Parallel()
-		got := previewProjectWorkers("shop", []string{"ocel-shop--preview-web"})
-		want := []string{"ocel--shop--preview--root", "ocel-shop--preview", "ocel-shop--preview-web"}
-		if !reflect.DeepEqual(got, want) {
-			t.Errorf("workers = %v, want %v", got, want)
-		}
-	})
-
-	t.Run("never adopts a name outside the family", func(t *testing.T) {
-		t.Parallel()
-		got := previewProjectWorkers("shop", []string{
-			previewWorkerName("shopfoo"),
-			previewWorkerStem("other") + "--web",
-			"ocel--shop--previewer",
-			"ocel--shop-preview--prod--web",
-			workerScriptName("shop", "prod", "web"),
-			"my-worker",
-		})
-		want := []string{"ocel--shop--preview--root", "ocel-shop--preview"}
-		if !reflect.DeepEqual(got, want) {
-			t.Errorf("workers = %v, want %v", got, want)
-		}
-	})
-
-	t.Run("no slug names nothing", func(t *testing.T) {
-		t.Parallel()
-		if got := previewProjectWorkers("", []string{"ocel--shop--preview--root"}); got != nil {
-			t.Errorf("workers = %v, want none for a project with no slug", got)
-		}
-	})
-}
-
 func TestRemovePreview(t *testing.T) {
 	t.Run("touches no project-level edge state", func(t *testing.T) {
-		fake := &recordingRootStack{}
+		fake := &recordingEdge{}
 		ctx := context.Background()
-		state, err := fake.ReconcileRootStack(ctx, edge.RootStackSpec{Version: "v1", Slug: "shop"}, nil)
-		if err != nil {
-			t.Fatalf("ReconcileRootStack: %v", err)
-		}
+		state := fake.reconciled(t, edge.StackSpec{Version: "v1", Slug: "shop"})
 
-		if err := RemovePreview(ctx, fake, state, Config{}, "shop", "pr-1", false, PreviewRemovalStages{}, nil); err != nil {
+		if err := RemovePreview(ctx, state, Config{}, "shop", "pr-1", false, PreviewRemovalStages{}, nil); err != nil {
 			t.Fatalf("RemovePreview: %v", err)
 		}
 
 		if !reflect.DeepEqual(fake.removedPointers, []string{"pr-1"}) {
 			t.Errorf("removed pointers = %v, want [pr-1]", fake.removedPointers)
 		}
-		if fake.destroyed != 0 || len(fake.destroyedWorkers) != 0 {
-			t.Errorf("destroyed workers %v: the entrypoint worker outlives every pointer", fake.destroyedWorkers)
-		}
-		if fake.destroyedInstance != 0 {
-			t.Error("wiped the store instance: it outlives every pointer and only `ocel destroy --preview` retires it")
+		if fake.destroyed != 0 {
+			t.Error("destroyed the stack: the entrypoint worker and the store instance outlive every pointer, and only `ocel destroy --preview` retires them")
 		}
 	})
 
 	t.Run("no root-stack state touches nothing", func(t *testing.T) {
-		fake := &recordingRootStack{}
+		fake := &recordingEdge{}
 
-		if err := RemovePreview(context.Background(), fake, nil, Config{}, "shop", "pr-1", false, PreviewRemovalStages{}, nil); err != nil {
+		if err := RemovePreview(context.Background(), fake.opened(t, nil), Config{}, "shop", "pr-1", false, PreviewRemovalStages{}, nil); err != nil {
 			t.Fatalf("RemovePreview: %v", err)
 		}
-		if fake.destroyed != 0 || len(fake.removedPointers) != 0 || fake.destroyedInstance != 0 {
+		if fake.destroyed != 0 || len(fake.removedPointers) != 0 {
 			t.Errorf("RemovePreview touched the edge with no root-stack state: %+v", fake)
 		}
 	})
 
 	t.Run("reports a failed pointer removal", func(t *testing.T) {
-		fake := &recordingRootStack{}
-		stale := edge.RootStackState{edge.RootStackKeySlug: "shop", edge.RootStackKeySecret: "stale"}
+		fake := &recordingEdge{}
+		stale := edge.StackState{edge.StackKeySlug: "shop", edge.StackKeySecret: "stale"}
 
-		err := RemovePreview(context.Background(), fake, stale, Config{}, "shop", "pr-1", false, PreviewRemovalStages{}, nil)
+		err := RemovePreview(context.Background(), fake.opened(t, stale), Config{}, "shop", "pr-1", false, PreviewRemovalStages{}, nil)
 		if err == nil {
 			t.Fatal("RemovePreview err = nil, want the refused removal reported")
 		}
 		if !strings.Contains(err.Error(), "pr-1") {
 			t.Errorf("error %q does not name the pointer it failed to remove", err)
 		}
-		if fake.destroyed != 0 || fake.destroyedInstance != 0 {
+		if fake.destroyed != 0 {
 			t.Errorf("touched the project's edge state: %+v", fake)
 		}
 	})

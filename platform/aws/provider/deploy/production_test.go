@@ -51,9 +51,9 @@ func TestRootStackSpecs(t *testing.T) {
 	t.Run("threads edge values with no worker-fronted apps", func(t *testing.T) {
 		cfg := Config{Edge: &recordingEdge{}, EdgeValues: map[string]string{"cacheBucket": "ocel-proj-cache"}}
 		manifest := &deploymentsv1.Manifest{Slug: "proj"}
-		specs, err := rootStackSpecs(cfg, manifest, "v1", nil)
+		specs, err := stackSpecs(cfg, manifest, "v1", nil)
 		if err != nil {
-			t.Fatalf("rootStackSpecs: %v", err)
+			t.Fatalf("stackSpecs: %v", err)
 		}
 		if len(specs) != 1 {
 			t.Fatalf("specs = %d, want 1", len(specs))
@@ -65,9 +65,9 @@ func TestRootStackSpecs(t *testing.T) {
 
 	t.Run("threads edge values with a worker-fronted app", func(t *testing.T) {
 		cfg := Config{Edge: &recordingEdge{}, EdgeValues: map[string]string{"cacheBucket": "ocel-proj-cache"}}
-		specs, err := rootStackSpecs(cfg, webManifest(), "v1", nil)
+		specs, err := stackSpecs(cfg, webManifest(), "v1", nil)
 		if err != nil {
-			t.Fatalf("rootStackSpecs: %v", err)
+			t.Fatalf("stackSpecs: %v", err)
 		}
 		if len(specs) != 1 {
 			t.Fatalf("specs = %d, want 1", len(specs))
@@ -80,9 +80,9 @@ func TestRootStackSpecs(t *testing.T) {
 	t.Run("production prunes stale routes", func(t *testing.T) {
 		cfg := Config{Edge: &recordingEdge{}, Class: deploymentsv1.Environment_CLASS_PRODUCTION, ArtifactRoot: t.TempDir()}
 
-		specs, err := rootStackSpecs(cfg, &deploymentsv1.Manifest{Slug: "proj"}, "v1", nil)
+		specs, err := stackSpecs(cfg, &deploymentsv1.Manifest{Slug: "proj"}, "v1", nil)
 		if err != nil {
-			t.Fatalf("rootStackSpecs: %v", err)
+			t.Fatalf("stackSpecs: %v", err)
 		}
 		if len(specs) != 1 {
 			t.Fatalf("specs = %d, want 1", len(specs))
@@ -90,8 +90,8 @@ func TestRootStackSpecs(t *testing.T) {
 		if !specs[0].PruneRoutes {
 			t.Error("PruneRoutes = false, want true for production")
 		}
-		if specs[0].PruneWorkerStem != "" {
-			t.Errorf("PruneWorkerStem = %q, want empty: a production spec sweeps its own script alone", specs[0].PruneWorkerStem)
+		if specs[0].Program.PruneWorkerStem != "" {
+			t.Errorf("PruneWorkerStem = %q, want empty: a production spec sweeps its own script alone", specs[0].Program.PruneWorkerStem)
 		}
 	})
 
@@ -99,7 +99,7 @@ func TestRootStackSpecs(t *testing.T) {
 		manifest := webManifest()
 		cfg := Config{Edge: &recordingEdge{}, Slug: "proj", Class: deploymentsv1.Environment_CLASS_PREVIEW, Identity: "pr-42", ArtifactRoot: specsArtifactRoot(t, manifest)}
 
-		_, err := rootStackSpecs(cfg, manifest, "v1", nil)
+		_, err := stackSpecs(cfg, manifest, "v1", nil)
 		if err == nil {
 			t.Fatal("expected a preview deploy with no declared preview domain to be refused")
 		}
@@ -113,7 +113,7 @@ func TestRootStackSpecs(t *testing.T) {
 		manifest.Domains = map[string]*deploymentsv1.DomainList{"preview": {Hostnames: []string{"app.acme.com"}}}
 		cfg := Config{Edge: &recordingEdge{}, Slug: "proj", Class: deploymentsv1.Environment_CLASS_PREVIEW, Identity: "pr-42", ArtifactRoot: specsArtifactRoot(t, manifest)}
 
-		_, err := rootStackSpecs(cfg, manifest, "v1", nil)
+		_, err := stackSpecs(cfg, manifest, "v1", nil)
 		if err == nil {
 			t.Fatal("expected a preview whose declared domain is not a wildcard to fail the deploy")
 		}
@@ -140,16 +140,16 @@ func TestRootStackSpecs(t *testing.T) {
 			ArtifactRoot: specsArtifactRoot(t, manifest),
 		}
 
-		specs, err := rootStackSpecs(cfg, manifest, "v1", nil)
+		specs, err := stackSpecs(cfg, manifest, "v1", nil)
 		if err != nil {
-			t.Fatalf("rootStackSpecs: %v", err)
+			t.Fatalf("stackSpecs: %v", err)
 		}
 		if len(specs) != 1 {
 			t.Fatalf("specs = %d, want 1 for the whole project", len(specs))
 		}
 		spec := specs[0]
-		if spec.GenericName != previewWorkerName("proj") {
-			t.Errorf("GenericName = %q, want %q", spec.GenericName, previewWorkerName("proj"))
+		if spec.Program.Name != previewWorkerName("proj") {
+			t.Errorf("Program.Name = %q, want %q", spec.Program.Name, previewWorkerName("proj"))
 		}
 		if !slicesEqual(spec.Domains, []string{"*.preview.acme.com"}) {
 			t.Errorf("Domains = %v, want the declared wildcard", spec.Domains)
@@ -157,22 +157,22 @@ func TestRootStackSpecs(t *testing.T) {
 		if !spec.PruneRoutes {
 			t.Error("PruneRoutes = false: the wildcard is the project's complete desired route set")
 		}
-		if spec.RequiredRecord != "" {
-			t.Errorf("RequiredRecord = %q, want empty: the project owns the base domain, so Ocel plants the record", spec.RequiredRecord)
+		if spec.Program.RequiredRecord != "" {
+			t.Errorf("RequiredRecord = %q, want empty: the project owns the base domain, so Ocel plants the record", spec.Program.RequiredRecord)
 		}
-		if spec.PruneWorkerStem != previewWorkerStem("proj") {
-			t.Errorf("PruneWorkerStem = %q, want %q", spec.PruneWorkerStem, previewWorkerStem("proj"))
+		if spec.Program.PruneWorkerStem != previewWorkerStem("proj") {
+			t.Errorf("PruneWorkerStem = %q, want %q", spec.Program.PruneWorkerStem, previewWorkerStem("proj"))
 		}
-		if spec.Generic.Vars[envPreview] != "1" {
-			t.Errorf("Vars[%s] = %q, want 1", envPreview, spec.Generic.Vars[envPreview])
+		if spec.Program.Worker.Vars[envPreview] != "1" {
+			t.Errorf("Vars[%s] = %q, want 1", envPreview, spec.Program.Worker.Vars[envPreview])
 		}
-		if spec.Generic.Vars[envPreviewBaseDomain] != "preview.acme.com" {
-			t.Errorf("Vars[%s] = %q, want preview.acme.com", envPreviewBaseDomain, spec.Generic.Vars[envPreviewBaseDomain])
+		if spec.Program.Worker.Vars[envPreviewBaseDomain] != "preview.acme.com" {
+			t.Errorf("Vars[%s] = %q, want preview.acme.com", envPreviewBaseDomain, spec.Program.Worker.Vars[envPreviewBaseDomain])
 		}
-		if app, ok := spec.Generic.Vars["OCEL_APP"]; ok {
+		if app, ok := spec.Program.Worker.Vars["OCEL_APP"]; ok {
 			t.Errorf("Vars[OCEL_APP] = %q, want it unset for preview", app)
 		}
-		if got := spec.Generic.Vars[envPreviewApps]; got != "web,api" {
+		if got := spec.Program.Worker.Vars[envPreviewApps]; got != "web,api" {
 			t.Errorf("Vars[%s] = %q, want web,api", envPreviewApps, got)
 		}
 	})
@@ -181,12 +181,12 @@ func TestRootStackSpecs(t *testing.T) {
 		manifest := &deploymentsv1.Manifest{Slug: "proj"}
 		cfg := Config{Edge: &recordingEdge{}, Slug: "proj", Class: deploymentsv1.Environment_CLASS_PREVIEW, Identity: "pr-42", ArtifactRoot: specsArtifactRoot(t, manifest)}
 
-		specs, err := rootStackSpecs(cfg, manifest, "v1", nil)
+		specs, err := stackSpecs(cfg, manifest, "v1", nil)
 		if err != nil {
-			t.Fatalf("rootStackSpecs: %v", err)
+			t.Fatalf("stackSpecs: %v", err)
 		}
-		if _, ok := specs[0].Generic.Vars[envPreviewApps]; !ok {
-			t.Errorf("Vars = %v, want %s bound even with no app to name", specs[0].Generic.Vars, envPreviewApps)
+		if _, ok := specs[0].Program.Worker.Vars[envPreviewApps]; !ok {
+			t.Errorf("Vars = %v, want %s bound even with no app to name", specs[0].Program.Worker.Vars, envPreviewApps)
 		}
 	})
 
@@ -194,15 +194,15 @@ func TestRootStackSpecs(t *testing.T) {
 		manifest := webManifest()
 		cfg := Config{Edge: &recordingEdge{}, Slug: "proj", Class: deploymentsv1.Environment_CLASS_PRODUCTION, ArtifactRoot: specsArtifactRoot(t, manifest)}
 
-		specs, err := rootStackSpecs(cfg, manifest, "v1", nil)
+		specs, err := stackSpecs(cfg, manifest, "v1", nil)
 		if err != nil {
-			t.Fatalf("rootStackSpecs: %v", err)
+			t.Fatalf("stackSpecs: %v", err)
 		}
 		for _, spec := range specs {
-			if got := spec.Generic.Vars[edge.OriginBodyLimitVar]; got != "6289408" {
+			if got := spec.Program.Worker.Vars[edge.OriginBodyLimitVar]; got != "6289408" {
 				t.Errorf("Vars[%s] = %q, want 6289408", edge.OriginBodyLimitVar, got)
 			}
-			if got := spec.Generic.Vars[edge.OriginBodyEncodingVar]; got != edge.OriginBodyEncodingBase64 {
+			if got := spec.Program.Worker.Vars[edge.OriginBodyEncodingVar]; got != edge.OriginBodyEncodingBase64 {
 				t.Errorf("Vars[%s] = %q, want %q", edge.OriginBodyEncodingVar, got, edge.OriginBodyEncodingBase64)
 			}
 		}
@@ -213,9 +213,9 @@ func TestRootStackSpecs(t *testing.T) {
 		manifest.Domains = map[string]*deploymentsv1.DomainList{"production": {Hostnames: []string{"acme.com", "www.acme.com"}}}
 		cfg := Config{Edge: &recordingEdge{}, Slug: "proj", Class: deploymentsv1.Environment_CLASS_PRODUCTION, ArtifactRoot: specsArtifactRoot(t, manifest)}
 
-		specs, err := rootStackSpecs(cfg, manifest, "v1", nil)
+		specs, err := stackSpecs(cfg, manifest, "v1", nil)
 		if err != nil {
-			t.Fatalf("rootStackSpecs: %v", err)
+			t.Fatalf("stackSpecs: %v", err)
 		}
 		spec := specs[0]
 		if !slicesEqual(spec.Domains, []string{"acme.com", "www.acme.com"}) {
@@ -224,18 +224,18 @@ func TestRootStackSpecs(t *testing.T) {
 		if !spec.PruneRoutes {
 			t.Error("PruneRoutes = false, want true for production")
 		}
-		if spec.RequiredRecord != "" {
-			t.Errorf("RequiredRecord = %q, want empty: production plants its own records", spec.RequiredRecord)
+		if spec.Program.RequiredRecord != "" {
+			t.Errorf("RequiredRecord = %q, want empty: production plants its own records", spec.Program.RequiredRecord)
 		}
 	})
 
 	t.Run("binds edge signing credentials when the substrate has them", func(t *testing.T) {
 		cfg := Config{Edge: &recordingEdge{}, EdgeAccessKeyID: "AKIAEDGE", EdgeSecretKey: "secret-edge"}
-		specs, err := rootStackSpecs(cfg, webManifest(), "v1", nil)
+		specs, err := stackSpecs(cfg, webManifest(), "v1", nil)
 		if err != nil {
-			t.Fatalf("rootStackSpecs: %v", err)
+			t.Fatalf("stackSpecs: %v", err)
 		}
-		g := specs[0].Generic
+		g := specs[0].Program.Worker
 		if g.Vars[edge.EdgeAccessKeyIDVar] != "AKIAEDGE" {
 			t.Errorf("generic Vars[%s] = %q, want AKIAEDGE", edge.EdgeAccessKeyIDVar, g.Vars[edge.EdgeAccessKeyIDVar])
 		}
@@ -249,11 +249,11 @@ func TestRootStackSpecs(t *testing.T) {
 
 	t.Run("edge signing credentials are absent on a substrate predating them", func(t *testing.T) {
 		cfg := Config{Edge: &recordingEdge{}}
-		specs, err := rootStackSpecs(cfg, webManifest(), "v1", nil)
+		specs, err := stackSpecs(cfg, webManifest(), "v1", nil)
 		if err != nil {
-			t.Fatalf("rootStackSpecs: %v", err)
+			t.Fatalf("stackSpecs: %v", err)
 		}
-		g := specs[0].Generic
+		g := specs[0].Program.Worker
 		if _, ok := g.Vars[edge.EdgeAccessKeyIDVar]; ok {
 			t.Error("no access-key var expected without edge credentials")
 		}
@@ -264,11 +264,11 @@ func TestRootStackSpecs(t *testing.T) {
 
 	t.Run("binds cache coordinates from the substrate's stores", func(t *testing.T) {
 		cfg := Config{Edge: &recordingEdge{}, Region: "eu-west-1", StateTable: "state-abc", AssetBucket: "assets-xyz"}
-		specs, err := rootStackSpecs(cfg, webManifest(), "v1", nil)
+		specs, err := stackSpecs(cfg, webManifest(), "v1", nil)
 		if err != nil {
-			t.Fatalf("rootStackSpecs: %v", err)
+			t.Fatalf("stackSpecs: %v", err)
 		}
-		vars := specs[0].Generic.Vars
+		vars := specs[0].Program.Worker.Vars
 		for name, want := range map[string]string{
 			edge.AWSRegionVar:   "eu-west-1",
 			edge.StateTableVar:  "state-abc",
@@ -282,11 +282,11 @@ func TestRootStackSpecs(t *testing.T) {
 
 	t.Run("cache coordinates are absent on a substrate predating a store", func(t *testing.T) {
 		cfg := Config{Edge: &recordingEdge{}, Region: "eu-west-1"}
-		specs, err := rootStackSpecs(cfg, webManifest(), "v1", nil)
+		specs, err := stackSpecs(cfg, webManifest(), "v1", nil)
 		if err != nil {
-			t.Fatalf("rootStackSpecs: %v", err)
+			t.Fatalf("stackSpecs: %v", err)
 		}
-		vars := specs[0].Generic.Vars
+		vars := specs[0].Program.Worker.Vars
 		for _, name := range []string{edge.StateTableVar, edge.AssetBucketVar} {
 			if _, ok := vars[name]; ok {
 				t.Errorf("Vars[%s] must be unset, not bound empty", name)
@@ -297,22 +297,22 @@ func TestRootStackSpecs(t *testing.T) {
 	t.Run("binds the image optimizer URL from the substrate's optimizer", func(t *testing.T) {
 		url := "https://opt123.lambda-url.eu-west-1.on.aws/"
 		cfg := Config{Edge: &recordingEdge{}, Region: "eu-west-1", ImageOptimizerURL: url}
-		specs, err := rootStackSpecs(cfg, webManifest(), "v1", nil)
+		specs, err := stackSpecs(cfg, webManifest(), "v1", nil)
 		if err != nil {
-			t.Fatalf("rootStackSpecs: %v", err)
+			t.Fatalf("stackSpecs: %v", err)
 		}
-		if got := specs[0].Generic.Vars[edge.ImageOptimizerURLVar]; got != url {
+		if got := specs[0].Program.Worker.Vars[edge.ImageOptimizerURLVar]; got != url {
 			t.Errorf("Vars[%s] = %q, want %q", edge.ImageOptimizerURLVar, got, url)
 		}
 	})
 
 	t.Run("the image optimizer URL is absent on a substrate with no optimizer", func(t *testing.T) {
 		cfg := Config{Edge: &recordingEdge{}, Region: "eu-west-1"}
-		specs, err := rootStackSpecs(cfg, webManifest(), "v1", nil)
+		specs, err := stackSpecs(cfg, webManifest(), "v1", nil)
 		if err != nil {
-			t.Fatalf("rootStackSpecs: %v", err)
+			t.Fatalf("stackSpecs: %v", err)
 		}
-		if _, ok := specs[0].Generic.Vars[edge.ImageOptimizerURLVar]; ok {
+		if _, ok := specs[0].Program.Worker.Vars[edge.ImageOptimizerURLVar]; ok {
 			t.Errorf("Vars[%s] must be unset, not bound empty", edge.ImageOptimizerURLVar)
 		}
 	})
@@ -320,22 +320,22 @@ func TestRootStackSpecs(t *testing.T) {
 	t.Run("binds the revalidate queue URL when the substrate published one", func(t *testing.T) {
 		url := "https://sqs.eu-west-1.amazonaws.com/1234/ocel-revalidate.fifo"
 		cfg := Config{Edge: &recordingEdge{}, Region: "eu-west-1", RevalidateQueueURL: url}
-		specs, err := rootStackSpecs(cfg, webManifest(), "v1", nil)
+		specs, err := stackSpecs(cfg, webManifest(), "v1", nil)
 		if err != nil {
-			t.Fatalf("rootStackSpecs: %v", err)
+			t.Fatalf("stackSpecs: %v", err)
 		}
-		if got := specs[0].Generic.Vars[edge.RevalidateQueueURLVar]; got != url {
+		if got := specs[0].Program.Worker.Vars[edge.RevalidateQueueURLVar]; got != url {
 			t.Errorf("Vars[%s] = %q, want %q", edge.RevalidateQueueURLVar, got, url)
 		}
 	})
 
 	t.Run("the revalidate queue URL is absent where nothing drains the queue", func(t *testing.T) {
 		cfg := Config{Edge: &recordingEdge{}, Region: "eu-west-1"}
-		specs, err := rootStackSpecs(cfg, webManifest(), "v1", nil)
+		specs, err := stackSpecs(cfg, webManifest(), "v1", nil)
 		if err != nil {
-			t.Fatalf("rootStackSpecs: %v", err)
+			t.Fatalf("stackSpecs: %v", err)
 		}
-		if _, ok := specs[0].Generic.Vars[edge.RevalidateQueueURLVar]; ok {
+		if _, ok := specs[0].Program.Worker.Vars[edge.RevalidateQueueURLVar]; ok {
 			t.Errorf("Vars[%s] must be unset, not bound empty: the edge would enqueue into a queue with no consumer and report the refresh landed", edge.RevalidateQueueURLVar)
 		}
 	})
@@ -502,29 +502,30 @@ func TestAmbientPreview(t *testing.T) {
 
 	t.Run("a first ambient deploy still writes the project's root-stack state", func(t *testing.T) {
 		m := manifest("web")
-		specs, err := rootStackSpecs(ambient(t, m), m, "v1", nil)
+		specs, err := stackSpecs(ambient(t, m), m, "v1", nil)
 		if err != nil {
-			t.Fatalf("rootStackSpecs: %v", err)
+			t.Fatalf("stackSpecs: %v", err)
 		}
 
-		fake := &recordingRootStack{}
-		state, err := reconcileRootStack(context.Background(), fake, specs, nil)
+		fake := &recordingEdge{}
+		stack, err := reconcileStack(context.Background(), fake, specs, nil)
 		if err != nil {
-			t.Fatalf("reconcileRootStack: %v", err)
+			t.Fatalf("reconcileStack: %v", err)
 		}
-		if state[edge.RootStackKeyEndpoint] == "" {
+		state := stack.State()
+		if state[edge.StackKeyEndpoint] == "" {
 			t.Fatalf("state = %v, want a store endpoint: staging a deployment reads it", state)
 		}
-		if state[edge.RootStackKeySlug] != "proj" {
-			t.Errorf("state[%s] = %q, want proj: `ocel domain ls` and preview pruning find the project by it", edge.RootStackKeySlug, state[edge.RootStackKeySlug])
+		if state[edge.StackKeySlug] != "proj" {
+			t.Errorf("state[%s] = %q, want proj: `ocel domain ls` and preview pruning find the project by it", edge.StackKeySlug, state[edge.StackKeySlug])
 		}
 	})
 
 	t.Run("an ambient deploy claims no hostname of its own", func(t *testing.T) {
 		m := manifest("web")
-		specs, err := rootStackSpecs(ambient(t, m), m, "v1", nil)
+		specs, err := stackSpecs(ambient(t, m), m, "v1", nil)
 		if err != nil {
-			t.Fatalf("rootStackSpecs: %v", err)
+			t.Fatalf("stackSpecs: %v", err)
 		}
 		if len(specs) != 1 {
 			t.Fatalf("specs = %d, want 1", len(specs))
@@ -533,26 +534,26 @@ func TestAmbientPreview(t *testing.T) {
 		if len(spec.Domains) != 0 {
 			t.Errorf("Domains = %v, want none: the shared entry worker serves the global wildcard", spec.Domains)
 		}
-		if got, ok := spec.Generic.Vars[envPreviewBaseDomain]; ok {
+		if got, ok := spec.Program.Worker.Vars[envPreviewBaseDomain]; ok {
 			t.Errorf("Vars[%s] = %q, want unset: no per-project worker answers on the global domain", envPreviewBaseDomain, got)
 		}
 	})
 
 	t.Run("dropping a declared preview domain prunes the worker it left behind", func(t *testing.T) {
 		m := manifest("web")
-		specs, err := rootStackSpecs(ambient(t, m), m, "v1", nil)
+		specs, err := stackSpecs(ambient(t, m), m, "v1", nil)
 		if err != nil {
-			t.Fatalf("rootStackSpecs: %v", err)
+			t.Fatalf("stackSpecs: %v", err)
 		}
 		spec := specs[0]
-		if spec.GenericName != previewWorkerName("proj") {
-			t.Errorf("GenericName = %q, want %q", spec.GenericName, previewWorkerName("proj"))
+		if spec.Program.Name != previewWorkerName("proj") {
+			t.Errorf("Program.Name = %q, want %q", spec.Program.Name, previewWorkerName("proj"))
 		}
 		if !spec.PruneRoutes {
 			t.Error("PruneRoutes = false: the old wildcard route must stop serving the last promoted build")
 		}
-		if spec.PruneWorkerStem != previewWorkerStem("proj") {
-			t.Errorf("PruneWorkerStem = %q, want %q", spec.PruneWorkerStem, previewWorkerStem("proj"))
+		if spec.Program.PruneWorkerStem != previewWorkerStem("proj") {
+			t.Errorf("PruneWorkerStem = %q, want %q", spec.Program.PruneWorkerStem, previewWorkerStem("proj"))
 		}
 		if !spec.PruneOnly {
 			t.Error("PruneOnly = false: an ambient project must not upload or expose a per-project preview worker")
@@ -562,9 +563,9 @@ func TestAmbientPreview(t *testing.T) {
 	t.Run("a preview on its own domain still ships a worker", func(t *testing.T) {
 		m := manifest("web")
 		m.Domains = map[string]*deploymentsv1.DomainList{"preview": {Hostnames: []string{"*.preview.proj.com"}}}
-		specs, err := rootStackSpecs(ambient(t, m), m, "v1", nil)
+		specs, err := stackSpecs(ambient(t, m), m, "v1", nil)
 		if err != nil {
-			t.Fatalf("rootStackSpecs: %v", err)
+			t.Fatalf("stackSpecs: %v", err)
 		}
 		if specs[0].PruneOnly {
 			t.Error("PruneOnly = true: a project serving its own preview wildcard needs its worker")
@@ -577,9 +578,9 @@ func TestAmbientPreview(t *testing.T) {
 			m.Domains = map[string]*deploymentsv1.DomainList{"preview": {Hostnames: []string{"*.preview.proj.com"}}}
 			cfg := ambient(t, m)
 			cfg.GlobalPreviewDomain = base
-			specs, err := rootStackSpecs(cfg, m, "v1", nil)
+			specs, err := stackSpecs(cfg, m, "v1", nil)
 			if err != nil {
-				t.Fatalf("rootStackSpecs: %v", err)
+				t.Fatalf("stackSpecs: %v", err)
 			}
 			if len(specs) != 1 {
 				t.Fatalf("specs = %d, want 1", len(specs))
@@ -616,18 +617,19 @@ func TestAmbientPreview(t *testing.T) {
 	t.Run("the deploy marks the project as served on the global domain", func(t *testing.T) {
 		m := manifest("web")
 		cfg := ambient(t, m)
-		specs, err := rootStackSpecs(cfg, m, "v1", nil)
+		specs, err := stackSpecs(cfg, m, "v1", nil)
 		if err != nil {
-			t.Fatalf("rootStackSpecs: %v", err)
+			t.Fatalf("stackSpecs: %v", err)
 		}
 
-		fake := &recordingRootStack{}
-		state, err := reconcileRootStack(context.Background(), fake, specs, edge.RootStackState{
-			edge.RootStackKeyGlobalPreview: cfg.GlobalPreviewDomain,
+		fake := &recordingEdge{}
+		stack, err := reconcileStack(context.Background(), fake, specs, edge.StackState{
+			edge.StackKeyGlobalPreview: cfg.GlobalPreviewDomain,
 		})
 		if err != nil {
-			t.Fatalf("reconcileRootStack: %v", err)
+			t.Fatalf("reconcileStack: %v", err)
 		}
+		state := stack.State()
 		if edge.ServedOnGlobalPreview(state, cfg.GlobalPreviewDomain) {
 			t.Fatal("the reconciled state kept the prior mark; stamping it before the reconcile would then be enough, and this test proves nothing")
 		}
@@ -642,22 +644,23 @@ func TestAmbientPreview(t *testing.T) {
 		m := manifest("web")
 		cfg := ambient(t, m)
 		m.Domains = map[string]*deploymentsv1.DomainList{"preview": {Hostnames: []string{"*.preview.proj.com"}}}
-		specs, err := rootStackSpecs(cfg, m, "v1", nil)
+		specs, err := stackSpecs(cfg, m, "v1", nil)
 		if err != nil {
-			t.Fatalf("rootStackSpecs: %v", err)
+			t.Fatalf("stackSpecs: %v", err)
 		}
 
-		fake := &recordingRootStack{version: "v1", secret: "fake-secret"}
-		prior := edge.RootStackState{
-			edge.RootStackKeySlug:          "proj",
-			edge.RootStackKeyEndpoint:      fakeStoreEndpoint,
-			edge.RootStackKeySecret:        "fake-secret",
-			edge.RootStackKeyGlobalPreview: cfg.GlobalPreviewDomain,
+		fake := &recordingEdge{version: "v1", secret: "fake-secret"}
+		prior := edge.StackState{
+			edge.StackKeySlug:          "proj",
+			edge.StackKeyEndpoint:      fakeStoreEndpoint,
+			edge.StackKeySecret:        "fake-secret",
+			edge.StackKeyGlobalPreview: cfg.GlobalPreviewDomain,
 		}
-		state, err := reconcileRootStack(context.Background(), fake, specs, prior)
+		stack, err := reconcileStack(context.Background(), fake, specs, prior)
 		if err != nil {
-			t.Fatalf("reconcileRootStack: %v", err)
+			t.Fatalf("reconcileStack: %v", err)
 		}
+		state := stack.State()
 
 		state = MarkGlobalPreview(state, cfg, m)
 		if edge.ServedOnGlobalPreview(state, cfg.GlobalPreviewDomain) {
@@ -674,7 +677,7 @@ func TestAmbientPreview(t *testing.T) {
 			cfg.Slug = "acme"
 			cfg.Identity = pointer
 
-			_, err := rootStackSpecs(cfg, m, "v1", nil)
+			_, err := stackSpecs(cfg, m, "v1", nil)
 			if err == nil {
 				t.Fatalf("expected a %d-character label to be refused", len("acme--")+len(pointer))
 			}
@@ -691,7 +694,7 @@ func TestAmbientPreview(t *testing.T) {
 			cfg := ambient(t, m)
 			cfg.Identity = pointer + "pppppp"
 
-			_, err := rootStackSpecs(cfg, m, "v1", nil)
+			_, err := stackSpecs(cfg, m, "v1", nil)
 			if err == nil {
 				t.Fatalf("expected a %d-character label to be refused", len(cfg.Identity))
 			}
@@ -708,9 +711,9 @@ func TestAmbientPreview(t *testing.T) {
 		m.Domains = map[string]*deploymentsv1.DomainList{"preview": {Hostnames: []string{"*.preview.proj.com"}}}
 		cfg := ambient(t, m)
 
-		specs, err := rootStackSpecs(cfg, m, "v1", nil)
+		specs, err := stackSpecs(cfg, m, "v1", nil)
 		if err != nil {
-			t.Fatalf("rootStackSpecs: %v", err)
+			t.Fatalf("stackSpecs: %v", err)
 		}
 		if !slicesEqual(specs[0].Domains, []string{"*.preview.proj.com"}) {
 			t.Errorf("Domains = %v, want the project's own wildcard", specs[0].Domains)
@@ -1102,15 +1105,15 @@ func TestBuildDeploymentRecord(t *testing.T) {
 
 func TestFinalizeProductionDeploy(t *testing.T) {
 	t.Run("reconcile then stage then promote in order", func(t *testing.T) {
-		fake := &recordingRootStack{}
+		fake := &recordingEdge{}
 		ctx := context.Background()
-		specs := []edge.RootStackSpec{{Version: "v1", GenericName: "web-generic"}}
+		specs := []edge.StackSpec{{Version: "v1", Program: &edge.ProgramSpec{Name: "web-generic"}}}
 		results := []appDeployResult{
 			{App: "web", Identity: deployedAs("b1"), Record: edge.DeploymentRecord{App: "web", Identity: "b1"}},
 			{App: "api", Identity: deployedAs("b2"), Record: edge.DeploymentRecord{App: "api", Identity: "b2"}},
 		}
 
-		state, err := finalizeDeploy(ctx, Config{}, fake, specs, nil, "promo1", "", "", 100, results)
+		state, err := finalizeDeploy(ctx, withEdge(Config{}, fake), specs, nil, "promo1", "", "", 100, results)
 		if err != nil {
 			t.Fatalf("finalizeDeploy: %v", err)
 		}
@@ -1136,19 +1139,19 @@ func TestFinalizeProductionDeploy(t *testing.T) {
 				t.Errorf("promotion.Builds[%q] = %q, want %q", app, got, identity)
 			}
 		}
-		if state[edge.RootStackKeyEndpoint] == "" {
+		if state[edge.StackKeyEndpoint] == "" {
 			t.Error("expected a reconciled state to be returned")
 		}
 	})
 
 	t.Run("stamps the tag onto the promotion", func(t *testing.T) {
-		fake := &recordingRootStack{}
+		fake := &recordingEdge{}
 		ctx := context.Background()
 		results := []appDeployResult{
 			{App: "web", Identity: deployedAs("b1"), Record: edge.DeploymentRecord{App: "web", Identity: "b1"}},
 		}
 
-		if _, err := finalizeDeploy(ctx, Config{}, fake, []edge.RootStackSpec{{Version: "v1"}}, nil, "promo1", "v1.2.3", "", 100, results); err != nil {
+		if _, err := finalizeDeploy(ctx, withEdge(Config{}, fake), []edge.StackSpec{{Version: "v1"}}, nil, "promo1", "v1.2.3", "", 100, results); err != nil {
 			t.Fatalf("finalizeDeploy: %v", err)
 		}
 
@@ -1158,13 +1161,13 @@ func TestFinalizeProductionDeploy(t *testing.T) {
 	})
 
 	t.Run("stages before any promote", func(t *testing.T) {
-		fake := &orderTrackingRootStack{recordingRootStack: &recordingRootStack{}}
+		fake := &orderTrackingEdge{recordingEdge: &recordingEdge{}}
 		ctx := context.Background()
 		results := []appDeployResult{
 			{App: "web", Identity: deployedAs("b1"), Record: edge.DeploymentRecord{App: "web", Identity: "b1"}},
 		}
 
-		if _, err := finalizeDeploy(ctx, Config{}, fake, []edge.RootStackSpec{{Version: "v1"}}, nil, "promo1", "", "", 100, results); err != nil {
+		if _, err := finalizeDeploy(ctx, withEdge(Config{}, fake), []edge.StackSpec{{Version: "v1"}}, nil, "promo1", "", "", 100, results); err != nil {
 			t.Fatalf("finalizeDeploy: %v", err)
 		}
 
@@ -1180,14 +1183,14 @@ func TestFinalizeProductionDeploy(t *testing.T) {
 	})
 
 	t.Run("an app failure aborts the promote", func(t *testing.T) {
-		fake := &recordingRootStack{}
+		fake := &recordingEdge{}
 		ctx := context.Background()
 		results := []appDeployResult{
 			{App: "web", Identity: deployedAs("b1"), Record: edge.DeploymentRecord{App: "web", Identity: "b1"}},
 			{App: "api", Err: errors.New("app-deploy stack failed")},
 		}
 
-		_, err := finalizeDeploy(ctx, Config{}, fake, []edge.RootStackSpec{{Version: "v1"}}, nil, "promo1", "", "", 100, results)
+		_, err := finalizeDeploy(ctx, withEdge(Config{}, fake), []edge.StackSpec{{Version: "v1"}}, nil, "promo1", "", "", 100, results)
 		if err == nil {
 			t.Fatal("expected an error when one app's deploy failed")
 		}
@@ -1201,18 +1204,18 @@ func TestFinalizeProductionDeploy(t *testing.T) {
 	})
 
 	t.Run("a second deploy produces a new promotion retaining the prior one", func(t *testing.T) {
-		fake := &recordingRootStack{}
+		fake := &recordingEdge{}
 		ctx := context.Background()
-		specs := []edge.RootStackSpec{{Version: "v1"}}
+		specs := []edge.StackSpec{{Version: "v1"}}
 		results := []appDeployResult{{App: "web", Identity: deployedAs("b1"), Record: edge.DeploymentRecord{App: "web", Identity: "b1"}}}
 
-		state, err := finalizeDeploy(ctx, Config{}, fake, specs, nil, "promo1", "", "", 100, results)
+		state, err := finalizeDeploy(ctx, withEdge(Config{}, fake), specs, nil, "promo1", "", "", 100, results)
 		if err != nil {
 			t.Fatalf("first finalizeDeploy: %v", err)
 		}
 
 		results2 := []appDeployResult{{App: "web", Identity: deployedAs("b2"), Record: edge.DeploymentRecord{App: "web", Identity: "b2"}}}
-		if _, err := finalizeDeploy(ctx, Config{}, fake, specs, state, "promo2", "", "", 200, results2); err != nil {
+		if _, err := finalizeDeploy(ctx, withEdge(Config{}, fake), specs, state, "promo2", "", "", 200, results2); err != nil {
 			t.Fatalf("second finalizeDeploy: %v", err)
 		}
 
@@ -1232,8 +1235,8 @@ func TestFinalizeDeploy(t *testing.T) {
 			{App: "web", Identity: deployedAs("b1"), Record: edge.DeploymentRecord{App: "web", Identity: "b1"}},
 		}
 
-		prod := &recordingRootStack{}
-		if _, err := finalizeDeploy(ctx, Config{}, prod, []edge.RootStackSpec{{Version: "v1"}}, nil, "promo1", "", "", 100, results); err != nil {
+		prod := &recordingEdge{}
+		if _, err := finalizeDeploy(ctx, withEdge(Config{}, prod), []edge.StackSpec{{Version: "v1"}}, nil, "promo1", "", "", 100, results); err != nil {
 			t.Fatalf("finalizeDeploy(production): %v", err)
 		}
 		if len(prod.promotePointers) != 1 || prod.promotePointers[0] != "" {
@@ -1247,8 +1250,8 @@ func TestFinalizeDeploy(t *testing.T) {
 			{App: "web", Identity: deployedAs("b1"), Record: edge.DeploymentRecord{App: "web", Identity: "b1"}},
 		}
 
-		preview := &recordingRootStack{}
-		if _, err := finalizeDeploy(ctx, Config{}, preview, []edge.RootStackSpec{{Version: "v1"}}, nil, "promo1", "", "pr-42", 100, results); err != nil {
+		preview := &recordingEdge{}
+		if _, err := finalizeDeploy(ctx, withEdge(Config{}, preview), []edge.StackSpec{{Version: "v1"}}, nil, "promo1", "", "pr-42", 100, results); err != nil {
 			t.Fatalf("finalizeDeploy(preview): %v", err)
 		}
 		if len(preview.promotePointers) != 1 || preview.promotePointers[0] != "pr-42" {
@@ -1257,9 +1260,9 @@ func TestFinalizeDeploy(t *testing.T) {
 	})
 
 	t.Run("a rotation of one build is a new deployment and promotion", func(t *testing.T) {
-		fake := &recordingRootStack{}
+		fake := &recordingEdge{}
 		ctx := context.Background()
-		specs := []edge.RootStackSpec{{Version: "v1"}}
+		specs := []edge.StackSpec{{Version: "v1"}}
 		before, after := deployedAs("B1"), fingerprinted("B1", "fp2")
 
 		result := func(id Identity) []appDeployResult {
@@ -1270,11 +1273,11 @@ func TestFinalizeDeploy(t *testing.T) {
 			}}
 		}
 
-		state, err := finalizeDeploy(ctx, Config{}, fake, specs, nil, "promo1", "", "", 100, result(before))
+		state, err := finalizeDeploy(ctx, withEdge(Config{}, fake), specs, nil, "promo1", "", "", 100, result(before))
 		if err != nil {
 			t.Fatalf("first finalizeDeploy: %v", err)
 		}
-		if _, err := finalizeDeploy(ctx, Config{}, fake, specs, state, "promo2", "", "", 200, result(after)); err != nil {
+		if _, err := finalizeDeploy(ctx, withEdge(Config{}, fake), specs, state, "promo2", "", "", 200, result(after)); err != nil {
 			t.Fatalf("rotation finalizeDeploy: %v", err)
 		}
 
@@ -1306,10 +1309,10 @@ func TestFinalizeDeploy(t *testing.T) {
 		ids := make([]Identity, len(fingerprints))
 		prefixes := map[string]bool{}
 
-		fake := &recordingRootStack{}
+		fake := &recordingEdge{}
 		ctx := context.Background()
-		specs := []edge.RootStackSpec{{Version: "v1"}}
-		var state edge.RootStackState
+		specs := []edge.StackSpec{{Version: "v1"}}
+		var state edge.StackState
 		for i, fingerprint := range fingerprints {
 			builds := releaseBuilds(t, cfg, manifest, fingerprint)
 			id := builds.identities["web"]
@@ -1318,7 +1321,7 @@ func TestFinalizeDeploy(t *testing.T) {
 			if err != nil {
 				t.Fatalf("buildDeploymentRecord: %v", err)
 			}
-			next, err := finalizeDeploy(ctx, originStore(cfg), fake, specs, state, fmt.Sprintf("promo%d", i+1), "", "", int64(100*(i+1)), []appDeployResult{{App: "web", Identity: id, Record: record}})
+			next, err := finalizeDeploy(ctx, withEdge(originStore(cfg), fake), specs, state, fmt.Sprintf("promo%d", i+1), "", "", int64(100*(i+1)), []appDeployResult{{App: "web", Identity: id, Record: record}})
 			if err != nil {
 				t.Fatalf("finalizeDeploy %d: %v", i+1, err)
 			}
@@ -1362,13 +1365,13 @@ func TestFinalizeDeploy(t *testing.T) {
 	})
 
 	t.Run("the promotion carries rendered identities", func(t *testing.T) {
-		fake := &recordingRootStack{}
+		fake := &recordingEdge{}
 		id := fingerprinted("b1", "fp1")
 		results := []appDeployResult{
 			{App: "web", Identity: id, Record: edge.DeploymentRecord{App: "web", Identity: id.String()}},
 		}
 
-		if _, err := finalizeDeploy(context.Background(), Config{}, fake, []edge.RootStackSpec{{Version: "v1"}}, nil, "promo1", "", "", 100, results); err != nil {
+		if _, err := finalizeDeploy(context.Background(), withEdge(Config{}, fake), []edge.StackSpec{{Version: "v1"}}, nil, "promo1", "", "", 100, results); err != nil {
 			t.Fatalf("finalizeDeploy: %v", err)
 		}
 		if len(fake.promotions) != 1 {
@@ -1468,7 +1471,7 @@ func TestRealizeRequiresADeploymentIDPerApp(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 
-			cfg := Config{Edge: &recordingRootStack{}, StoreEndpoint: "https://store.example.com"}
+			cfg := Config{Edge: &recordingEdge{}, StoreEndpoint: "https://store.example.com"}
 			manifest := &deploymentsv1.Manifest{Slug: "shop", Apps: tc.apps}
 			_, err := realize(context.Background(), cfg, manifest, nil, nil)
 			if err == nil {
@@ -1486,7 +1489,7 @@ func TestRealizeRefusesAStaleStore(t *testing.T) {
 
 	stale := edge.StoreSchemaVersion - 1
 	cfg := Config{
-		Edge:          &recordingRootStack{storeSchemaVersion: &stale},
+		Edge:          &recordingEdge{storeSchemaVersion: &stale},
 		StoreEndpoint: fakeStoreEndpoint,
 		Slug:          "shop",
 	}
@@ -1503,7 +1506,7 @@ func TestRealizeRefusesAStoreThatCannotReportItsSchema(t *testing.T) {
 	t.Parallel()
 
 	cfg := Config{
-		Edge:          &recordingRootStack{storeSchemaVersionErr: edge.ErrStoreSchemaUnreadable},
+		Edge:          &recordingEdge{storeSchemaVersionErr: edge.ErrStoreSchemaUnreadable},
 		StoreEndpoint: fakeStoreEndpoint,
 		Slug:          "shop",
 	}
@@ -1547,8 +1550,8 @@ func TestValidateTag(t *testing.T) {
 }
 
 func TestCheckTagAvailable(t *testing.T) {
-	taggedHistory := func() *recordingRootStack {
-		return &recordingRootStack{
+	taggedHistory := func() *recordingEdge {
+		return &recordingEdge{
 			history: []edge.HistoryEntry{
 				{Promotion: edge.Promotion{PromotionID: "promo-1", Tag: "v1.2.3"}, Active: true},
 			},
@@ -1567,12 +1570,9 @@ func TestCheckTagAvailable(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			fake := taggedHistory()
 			ctx := context.Background()
-			state, err := fake.ReconcileRootStack(ctx, edge.RootStackSpec{Version: "v1"}, nil)
-			if err != nil {
-				t.Fatalf("ReconcileRootStack: %v", err)
-			}
+			stack := fake.reconciled(t, edge.StackSpec{Version: "v1"})
 
-			err = checkTagAvailable(ctx, fake, state, tc.tag)
+			err := checkTagAvailable(ctx, Config{Edge: fake, StackState: stack.State()}, tc.tag)
 			if tc.wantErr && err == nil {
 				t.Fatal("expected a duplicate tag to be rejected")
 			}
@@ -1584,73 +1584,101 @@ func TestCheckTagAvailable(t *testing.T) {
 
 	t.Run("no op for an untagged deploy", func(t *testing.T) {
 		fake := taggedHistory()
-		if err := checkTagAvailable(context.Background(), fake, edge.RootStackState{edge.RootStackKeyEndpoint: "http://store"}, ""); err != nil {
+		if err := checkTagAvailable(context.Background(), Config{Edge: fake, StackState: edge.StackState{edge.StackKeyEndpoint: "http://store"}}, ""); err != nil {
 			t.Errorf("untagged deploy should never fail the tag check: %v", err)
 		}
 	})
 
 	t.Run("no op for a first deploy", func(t *testing.T) {
 		fake := taggedHistory()
-		if err := checkTagAvailable(context.Background(), fake, nil, "v1.2.3"); err != nil {
+		if err := checkTagAvailable(context.Background(), Config{Edge: fake}, "v1.2.3"); err != nil {
 			t.Errorf("first deploy (no store) should never fail the tag check: %v", err)
 		}
 	})
 }
 
-type orderTrackingRootStack struct {
-	*recordingRootStack
+type orderTrackingEdge struct {
+	*recordingEdge
 	calls []string
 }
 
-func (f *orderTrackingRootStack) ReconcileRootStack(ctx context.Context, spec edge.RootStackSpec, prior edge.RootStackState) (edge.RootStackState, error) {
+func (f *orderTrackingEdge) Reconcile(ctx context.Context, spec edge.StackSpec, prior edge.StackState) (edge.EdgeStack, error) {
 	f.calls = append(f.calls, "reconcile")
-	return f.recordingRootStack.ReconcileRootStack(ctx, spec, prior)
+	stack, err := f.recordingEdge.Reconcile(ctx, spec, prior)
+	if err != nil {
+		return nil, err
+	}
+	return &orderTrackingStack{EdgeStack: stack, edge: f}, nil
 }
 
-func (f *orderTrackingRootStack) PutStaged(ctx context.Context, state edge.RootStackState, record edge.DeploymentRecord) error {
-	f.calls = append(f.calls, "stage")
-	return f.recordingRootStack.PutStaged(ctx, state, record)
+func (f *orderTrackingEdge) Open(state edge.StackState) (edge.EdgeStack, error) {
+	stack, err := f.recordingEdge.Open(state)
+	if err != nil {
+		return nil, err
+	}
+	return &orderTrackingStack{EdgeStack: stack, edge: f}, nil
 }
 
-func (f *orderTrackingRootStack) Promote(ctx context.Context, state edge.RootStackState, promotion edge.Promotion, pointer string) error {
-	f.calls = append(f.calls, "promote")
-	return f.recordingRootStack.Promote(ctx, state, promotion, pointer)
+type orderTrackingStack struct {
+	edge.EdgeStack
+	edge *orderTrackingEdge
 }
 
-func TestReconcileRootStack(t *testing.T) {
+func (s *orderTrackingStack) Ledger() edge.Ledger {
+	return &orderTrackingLedger{Ledger: s.EdgeStack.Ledger(), edge: s.edge}
+}
+
+func (s *orderTrackingStack) Promote(ctx context.Context, promotion edge.Promotion, pointer string) error {
+	s.edge.calls = append(s.edge.calls, "promote")
+	return s.EdgeStack.Promote(ctx, promotion, pointer)
+}
+
+type orderTrackingLedger struct {
+	edge.Ledger
+	edge *orderTrackingEdge
+}
+
+func (l *orderTrackingLedger) PutStaged(ctx context.Context, record edge.DeploymentRecord) error {
+	l.edge.calls = append(l.edge.calls, "stage")
+	return l.Ledger.PutStaged(ctx, record)
+}
+
+func TestReconcileStack(t *testing.T) {
 	t.Run("threads state across multiple specs", func(t *testing.T) {
-		fake := &recordingRootStack{}
+		fake := &recordingEdge{}
 		ctx := context.Background()
-		specs := []edge.RootStackSpec{
-			{Version: "v1", GenericName: "web-generic"},
-			{Version: "v1", GenericName: "admin-generic"},
+		specs := []edge.StackSpec{
+			{Version: "v1", Program: &edge.ProgramSpec{Name: "web-generic"}},
+			{Version: "v1", Program: &edge.ProgramSpec{Name: "admin-generic"}},
 		}
 
-		state, err := reconcileRootStack(ctx, fake, specs, nil)
+		stack, err := reconcileStack(ctx, fake, specs, nil)
 		if err != nil {
-			t.Fatalf("reconcileRootStack: %v", err)
+			t.Fatalf("reconcileStack: %v", err)
 		}
+		state := stack.State()
 		if len(fake.reconciles) != 2 {
 			t.Fatalf("reconciles = %d, want 2 (one per spec)", len(fake.reconciles))
 		}
-		if state[edge.RootStackKeyEndpoint] == "" {
+		if state[edge.StackKeyEndpoint] == "" {
 			t.Error("expected a non-empty reconciled state")
 		}
 	})
 
 	t.Run("no specs returns prior unchanged", func(t *testing.T) {
-		fake := &recordingRootStack{}
+		fake := &recordingEdge{}
 		ctx := context.Background()
-		prior := edge.RootStackState{edge.RootStackKeyEndpoint: "https://prior"}
+		prior := edge.StackState{edge.StackKeyEndpoint: "https://prior"}
 
-		state, err := reconcileRootStack(ctx, fake, nil, prior)
+		stack, err := reconcileStack(ctx, fake, nil, prior)
 		if err != nil {
-			t.Fatalf("reconcileRootStack: %v", err)
+			t.Fatalf("reconcileStack: %v", err)
 		}
+		state := stack.State()
 		if len(fake.reconciles) != 0 {
 			t.Errorf("reconciles = %d, want 0", len(fake.reconciles))
 		}
-		if state[edge.RootStackKeyEndpoint] != "https://prior" {
+		if state[edge.StackKeyEndpoint] != "https://prior" {
 			t.Errorf("state = %v, want prior unchanged", state)
 		}
 	})

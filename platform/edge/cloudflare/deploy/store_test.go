@@ -21,11 +21,24 @@ const (
 
 func fakeStoreServer(t *testing.T, secret string) *httptest.Server {
 	t.Helper()
+	type pointed struct {
+		pointer string
+		entry   edge.HistoryEntry
+	}
 	var (
 		staged  []edge.DeploymentRecord
-		history []edge.HistoryEntry
+		history []pointed
 		version *string
 	)
+	under := func(pointer string) []edge.HistoryEntry {
+		var out []edge.HistoryEntry
+		for _, p := range history {
+			if p.pointer == pointer {
+				out = append(out, p.entry)
+			}
+		}
+		return out
+	}
 	owner, live := storeOwnerToken, secret
 	if secret == "" {
 		owner = ""
@@ -69,30 +82,62 @@ func fakeStoreServer(t *testing.T, secret string) *httptest.Server {
 		w.WriteHeader(http.StatusNoContent)
 	}))
 	mux.HandleFunc("POST /{slug}/promote", authed(func(w http.ResponseWriter, r *http.Request) {
-		var p edge.Promotion
-		if err := json.NewDecoder(r.Body).Decode(&p); err != nil {
+		var body struct {
+			edge.Promotion
+			Pointer string `json:"pointer"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 			w.WriteHeader(http.StatusBadRequest)
 			return
 		}
-		history = append([]edge.HistoryEntry{{Promotion: p, Active: true}}, history...)
-		for i := range history[1:] {
-			history[i+1].Active = false
+		history = append([]pointed{{pointer: body.Pointer, entry: edge.HistoryEntry{Promotion: body.Promotion, Active: true}}}, history...)
+		seen := false
+		for i := range history {
+			if history[i].pointer != body.Pointer {
+				continue
+			}
+			history[i].entry.Active = !seen
+			seen = true
 		}
 		w.WriteHeader(http.StatusNoContent)
 	}))
-	mux.HandleFunc("GET /{slug}/history", authed(func(w http.ResponseWriter, _ *http.Request) {
-		_ = json.NewEncoder(w).Encode(history)
+	mux.HandleFunc("GET /{slug}/history", authed(func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewEncoder(w).Encode(under(r.URL.Query().Get("pointer")))
 	}))
-	mux.HandleFunc("POST /{slug}/prune", authed(func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("GET /{slug}/schema-version", func(w http.ResponseWriter, _ *http.Request) {
+		_ = json.NewEncoder(w).Encode(map[string]int{"schemaVersion": edge.StoreSchemaVersion})
+	})
+	mux.HandleFunc("POST /{slug}/remove-pointer", authed(func(w http.ResponseWriter, r *http.Request) {
 		var body struct {
-			KeepN int `json:"keepN"`
+			Pointer string `json:"pointer"`
 		}
 		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 			w.WriteHeader(http.StatusBadRequest)
 			return
 		}
 		result := edge.PruneResult{}
-		for i, h := range history {
+		kept := make([]pointed, 0, len(history))
+		for _, p := range history {
+			if p.pointer == body.Pointer {
+				result.RemovedPromotionIDs = append(result.RemovedPromotionIDs, p.entry.PromotionID)
+				continue
+			}
+			kept = append(kept, p)
+		}
+		history = kept
+		_ = json.NewEncoder(w).Encode(result)
+	}))
+	mux.HandleFunc("POST /{slug}/prune", authed(func(w http.ResponseWriter, r *http.Request) {
+		var body struct {
+			KeepN   int    `json:"keepN"`
+			Pointer string `json:"pointer"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
+		result := edge.PruneResult{}
+		for i, h := range under(body.Pointer) {
 			if i < body.KeepN || h.Active {
 				result.KeptPromotionIDs = append(result.KeptPromotionIDs, h.PromotionID)
 			} else {
@@ -125,12 +170,17 @@ func fakeStoreServer(t *testing.T, secret string) *httptest.Server {
 	return srv
 }
 
-func testState(endpoint, secret string) edge.RootStackState {
-	return edge.RootStackState{
-		edge.RootStackKeySlug:       "acme-web",
-		edge.RootStackKeyEndpoint:   endpoint,
-		edge.RootStackKeySecret:     secret,
-		edge.RootStackKeyOwnerToken: storeOwnerToken,
+func stackOn(p *provider, state edge.StackState) *stack {
+	return &stack{p: p, state: state}
+}
+
+func testState(endpoint, secret string) edge.StackState {
+	return edge.StackState{
+		edge.StackKeySlug:       "acme-web",
+		edge.StackKeyEndpoint:   endpoint,
+		edge.StackKeySecret:     secret,
+		edge.StackKeyOwnerToken: storeOwnerToken,
+		edge.StackKeyClass:      string(edge.ClassProduction),
 	}
 }
 
@@ -145,7 +195,7 @@ func TestPutStaged(t *testing.T) {
 			App: "web", Identity: "b1", FunctionURLs: map[string]string{"/": "https://fn"},
 			AssetPrefix: "b1", IsrPrefix: "prod/proj/web/b1", CreatedAt: 100,
 		}
-		if err := (&provider{}).PutStaged(t.Context(), testState(srv.URL, "s3cr3t"), record); err != nil {
+		if err := stackOn(&provider{}, testState(srv.URL, "s3cr3t")).PutStaged(t.Context(), record); err != nil {
 			t.Fatalf("PutStaged: %v", err)
 		}
 	})
@@ -154,7 +204,7 @@ func TestPutStaged(t *testing.T) {
 		t.Parallel()
 
 		srv := fakeStoreServer(t, "s3cr3t")
-		err := (&provider{}).PutStaged(t.Context(), testState(srv.URL, "wrong"), edge.DeploymentRecord{App: "web", Identity: "b1"})
+		err := stackOn(&provider{}, testState(srv.URL, "wrong")).PutStaged(t.Context(), edge.DeploymentRecord{App: "web", Identity: "b1"})
 		if err == nil {
 			t.Fatal("expected an error for the wrong write secret")
 		}
@@ -172,10 +222,10 @@ func TestPromotionHistory(t *testing.T) {
 		state := testState(srv.URL, "s3cr3t")
 		promotion := edge.Promotion{PromotionID: "promo-1", Ts: 1000, Builds: map[string]string{"web": "b1"}}
 
-		if err := p.Promote(t.Context(), state, promotion, ""); err != nil {
+		if err := stackOn(p, state).Promote(t.Context(), promotion, ""); err != nil {
 			t.Fatalf("Promote: %v", err)
 		}
-		history, err := p.History(t.Context(), state, "")
+		history, err := stackOn(p, state).History(t.Context(), "")
 		if err != nil {
 			t.Fatalf("History: %v", err)
 		}
@@ -195,14 +245,14 @@ func TestPromotionHistory(t *testing.T) {
 		state := testState(srv.URL, "s3cr3t")
 
 		for _, id := range []string{"p1", "p2", "p3"} {
-			if err := p.Promote(t.Context(), state, edge.Promotion{PromotionID: id, Ts: 1, Builds: map[string]string{"web": id}}, ""); err != nil {
+			if err := stackOn(p, state).Promote(t.Context(), edge.Promotion{PromotionID: id, Ts: 1, Builds: map[string]string{"web": id}}, ""); err != nil {
 				t.Fatalf("Promote(%s): %v", id, err)
 			}
 		}
 
-		result, err := p.DeletePromotionArtifacts(t.Context(), state, 1, "")
+		result, err := stackOn(p, state).Prune(t.Context(), 1, "")
 		if err != nil {
-			t.Fatalf("DeletePromotionArtifacts: %v", err)
+			t.Fatalf("Prune: %v", err)
 		}
 		want := []string{"p2", "p1"}
 		if len(result.RemovedPromotionIDs) != len(want) || result.RemovedPromotionIDs[0] != want[0] || result.RemovedPromotionIDs[1] != want[1] {
@@ -246,22 +296,22 @@ func TestStorePointer(t *testing.T) {
 		state := testState(srv.URL, "s3cr3t")
 		ctx := t.Context()
 
-		if err := p.Promote(ctx, state, edge.Promotion{PromotionID: "p1", Ts: 1, Builds: map[string]string{"web": "b1"}}, "pr-42"); err != nil {
+		if err := stackOn(p, state).Promote(ctx, edge.Promotion{PromotionID: "p1", Ts: 1, Builds: map[string]string{"web": "b1"}}, "pr-42"); err != nil {
 			t.Fatalf("Promote(preview): %v", err)
 		}
-		if _, err := p.History(ctx, state, "pr-42"); err != nil {
+		if _, err := stackOn(p, state).History(ctx, "pr-42"); err != nil {
 			t.Fatalf("History(preview): %v", err)
 		}
-		if _, err := p.DeletePromotionArtifacts(ctx, state, 3, "pr-42"); err != nil {
+		if _, err := stackOn(p, state).Prune(ctx, 3, "pr-42"); err != nil {
 			t.Fatalf("Prune(preview): %v", err)
 		}
-		if err := p.Promote(ctx, state, edge.Promotion{PromotionID: "p2", Ts: 2, Builds: map[string]string{"web": "b2"}}, ""); err != nil {
+		if err := stackOn(p, state).Promote(ctx, edge.Promotion{PromotionID: "p2", Ts: 2, Builds: map[string]string{"web": "b2"}}, ""); err != nil {
 			t.Fatalf("Promote(prod): %v", err)
 		}
-		if _, err := p.History(ctx, state, ""); err != nil {
+		if _, err := stackOn(p, state).History(ctx, ""); err != nil {
 			t.Fatalf("History(prod): %v", err)
 		}
-		if _, err := p.DeletePromotionArtifacts(ctx, state, 3, ""); err != nil {
+		if _, err := stackOn(p, state).Prune(ctx, 3, ""); err != nil {
 			t.Fatalf("Prune(prod): %v", err)
 		}
 
@@ -297,7 +347,7 @@ func TestStorePointer(t *testing.T) {
 		srv := httptest.NewServer(mux)
 		t.Cleanup(srv.Close)
 
-		result, err := (&provider{}).RemovePointer(t.Context(), testState(srv.URL, "s3cr3t"), "pr-42")
+		result, err := stackOn(&provider{}, testState(srv.URL, "s3cr3t")).RemovePointer(t.Context(), "pr-42")
 		if err != nil {
 			t.Fatalf("RemovePointer: %v", err)
 		}
@@ -316,7 +366,7 @@ func TestStoreRequest(t *testing.T) {
 	t.Run("a state carrying no endpoint is an error", func(t *testing.T) {
 		t.Parallel()
 
-		err := (&provider{}).PutStaged(t.Context(), edge.RootStackState{}, edge.DeploymentRecord{App: "web", Identity: "b1"})
+		err := stackOn(&provider{}, edge.StackState{}).PutStaged(t.Context(), edge.DeploymentRecord{App: "web", Identity: "b1"})
 		if err == nil {
 			t.Fatal("expected an error when the root-stack state carries no endpoint")
 		}
@@ -339,7 +389,7 @@ func TestStoreRequest(t *testing.T) {
 		srv := httptest.NewServer(mux)
 		t.Cleanup(srv.Close)
 
-		if err := (&provider{}).PutStaged(t.Context(), testState(srv.URL, "s3cr3t"), edge.DeploymentRecord{App: "web"}); err != nil {
+		if err := stackOn(&provider{}, testState(srv.URL, "s3cr3t")).PutStaged(t.Context(), edge.DeploymentRecord{App: "web"}); err != nil {
 			t.Fatalf("PutStaged: %v", err)
 		}
 		if attempts != 3 {
@@ -357,7 +407,7 @@ func TestStoreRequest(t *testing.T) {
 		}))
 		t.Cleanup(srv.Close)
 
-		if err := (&provider{}).PutStaged(t.Context(), testState(srv.URL, "wrong"), edge.DeploymentRecord{App: "web"}); err == nil {
+		if err := stackOn(&provider{}, testState(srv.URL, "wrong")).PutStaged(t.Context(), edge.DeploymentRecord{App: "web"}); err == nil {
 			t.Fatal("PutStaged err = nil, want the rejection surfaced")
 		}
 		if attempts != 1 {
@@ -377,7 +427,7 @@ func TestStoreRequest(t *testing.T) {
 		}))
 		t.Cleanup(srv.Close)
 
-		if err := (&provider{}).PutStaged(ctx, testState(srv.URL, "s3cr3t"), edge.DeploymentRecord{App: "web"}); err == nil {
+		if err := stackOn(&provider{}, testState(srv.URL, "s3cr3t")).PutStaged(ctx, edge.DeploymentRecord{App: "web"}); err == nil {
 			t.Fatal("PutStaged err = nil, want the failure surfaced")
 		}
 		if attempts != 1 {
@@ -426,8 +476,8 @@ func TestDestroyInstance(t *testing.T) {
 	t.Run("a state carrying no secret is a no-op", func(t *testing.T) {
 		t.Parallel()
 
-		if err := (&provider{}).DestroyInstance(t.Context(), edge.RootStackState{}); err != nil {
-			t.Fatalf("DestroyInstance(empty) err = %v, want nil", err)
+		if err := (&provider{}).destroyInstance(t.Context(), edge.StackState{}); err != nil {
+			t.Fatalf("destroyInstance(empty) err = %v, want nil", err)
 		}
 	})
 
@@ -437,13 +487,13 @@ func TestDestroyInstance(t *testing.T) {
 		srv := fakeStoreServer(t, "s3cr3t")
 		p := &provider{}
 		state := testState(srv.URL, "s3cr3t")
-		if err := p.Promote(t.Context(), state, edge.Promotion{PromotionID: "p1", Ts: 1, Builds: map[string]string{"web": "b1"}}, ""); err != nil {
+		if err := stackOn(p, state).Promote(t.Context(), edge.Promotion{PromotionID: "p1", Ts: 1, Builds: map[string]string{"web": "b1"}}, ""); err != nil {
 			t.Fatalf("Promote: %v", err)
 		}
-		if err := p.DestroyInstance(t.Context(), state); err != nil {
-			t.Fatalf("DestroyInstance: %v", err)
+		if err := p.destroyInstance(t.Context(), state); err != nil {
+			t.Fatalf("destroyInstance: %v", err)
 		}
-		if _, err := p.History(t.Context(), state, ""); err == nil {
+		if _, err := stackOn(p, state).History(t.Context(), ""); err == nil {
 			t.Error("history after destroy: err = nil, want the wiped instance to reject the secret")
 		}
 	})
@@ -454,11 +504,11 @@ func TestDestroyInstance(t *testing.T) {
 		srv := fakeStoreServer(t, "s3cr3t")
 		p := &provider{}
 		state := testState(srv.URL, "s3cr3t")
-		if err := p.DestroyInstance(t.Context(), state); err != nil {
-			t.Fatalf("DestroyInstance: %v", err)
+		if err := p.destroyInstance(t.Context(), state); err != nil {
+			t.Fatalf("destroyInstance: %v", err)
 		}
-		if err := p.DestroyInstance(t.Context(), state); err != nil {
-			t.Fatalf("DestroyInstance on an already-wiped instance: err = %v, want nil", err)
+		if err := p.destroyInstance(t.Context(), state); err != nil {
+			t.Fatalf("destroyInstance on an already-wiped instance: err = %v, want nil", err)
 		}
 	})
 }
@@ -493,7 +543,7 @@ func TestStoreSchemaVersionUnreadableWhenTheStorePredatesTheCheck(t *testing.T) 
 	defer server.Close()
 
 	p := &provider{}
-	if _, err := p.StoreSchemaVersion(context.Background(), server.URL, "shop"); !errors.Is(err, edge.ErrStoreSchemaUnreadable) {
-		t.Errorf("StoreSchemaVersion err = %v, want %v", err, edge.ErrStoreSchemaUnreadable)
+	if _, err := stackOn(p, testState(server.URL, "")).SchemaVersion(context.Background()); !errors.Is(err, edge.ErrStoreSchemaUnreadable) {
+		t.Errorf("SchemaVersion err = %v, want %v", err, edge.ErrStoreSchemaUnreadable)
 	}
 }

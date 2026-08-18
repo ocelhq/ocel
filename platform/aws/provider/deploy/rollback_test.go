@@ -98,19 +98,16 @@ func TestRollbackTarget(t *testing.T) {
 func TestRollback(t *testing.T) {
 	t.Run("promotes the target under a fresh timestamp", func(t *testing.T) {
 		t.Parallel()
-		fake := &recordingRootStack{
+		fake := &recordingEdge{
 			history: []edge.HistoryEntry{
 				{Promotion: edge.Promotion{PromotionID: "promo-2", Ts: 200, Builds: map[string]string{"web": "b2"}}, Active: true},
 				{Promotion: edge.Promotion{PromotionID: "promo-1", Ts: 100, Builds: map[string]string{"web": "b1"}}, Active: false},
 			},
 		}
 		ctx := context.Background()
-		state, err := fake.ReconcileRootStack(ctx, edge.RootStackSpec{Version: "v1"}, nil)
-		if err != nil {
-			t.Fatalf("ReconcileRootStack: %v", err)
-		}
+		state := fake.reconciled(t, edge.StackSpec{Version: "v1"})
 
-		promoted, err := Rollback(ctx, fake, state, "", "", 999)
+		promoted, err := Rollback(ctx, state, "", "", 999)
 		if err != nil {
 			t.Fatalf("Rollback: %v", err)
 		}
@@ -131,7 +128,7 @@ func TestRollback(t *testing.T) {
 
 	t.Run("across a rotation re-points at the rotated identity", func(t *testing.T) {
 		t.Parallel()
-		fake := &recordingRootStack{
+		fake := &recordingEdge{
 			history: []edge.HistoryEntry{
 				{Promotion: edge.Promotion{PromotionID: "p3", Ts: 300, Builds: map[string]string{"web": "B2"}}, Active: true},
 				{Promotion: edge.Promotion{PromotionID: "p2", Ts: 200, Builds: map[string]string{"web": "B1~fp2"}}, Active: false},
@@ -139,12 +136,9 @@ func TestRollback(t *testing.T) {
 			},
 		}
 		ctx := context.Background()
-		state, err := fake.ReconcileRootStack(ctx, edge.RootStackSpec{Version: "v1"}, nil)
-		if err != nil {
-			t.Fatalf("ReconcileRootStack: %v", err)
-		}
+		state := fake.reconciled(t, edge.StackSpec{Version: "v1"})
 
-		promoted, err := Rollback(ctx, fake, state, "", "", 999)
+		promoted, err := Rollback(ctx, state, "", "", 999)
 		if err != nil {
 			t.Fatalf("Rollback: %v", err)
 		}
@@ -164,7 +158,7 @@ func TestRollback(t *testing.T) {
 
 	t.Run("to a specific promotion", func(t *testing.T) {
 		t.Parallel()
-		fake := &recordingRootStack{
+		fake := &recordingEdge{
 			history: []edge.HistoryEntry{
 				{Promotion: edge.Promotion{PromotionID: "promo-3", Ts: 300}, Active: true},
 				{Promotion: edge.Promotion{PromotionID: "promo-2", Ts: 200}, Active: false},
@@ -172,12 +166,9 @@ func TestRollback(t *testing.T) {
 			},
 		}
 		ctx := context.Background()
-		state, err := fake.ReconcileRootStack(ctx, edge.RootStackSpec{Version: "v1"}, nil)
-		if err != nil {
-			t.Fatalf("ReconcileRootStack: %v", err)
-		}
+		state := fake.reconciled(t, edge.StackSpec{Version: "v1"})
 
-		promoted, err := Rollback(ctx, fake, state, "promo-1", "", 999)
+		promoted, err := Rollback(ctx, state, "promo-1", "", 999)
 		if err != nil {
 			t.Fatalf("Rollback: %v", err)
 		}
@@ -188,19 +179,16 @@ func TestRollback(t *testing.T) {
 
 	t.Run("by tag carries the tag onto the re-promotion", func(t *testing.T) {
 		t.Parallel()
-		fake := &recordingRootStack{
+		fake := &recordingEdge{
 			history: []edge.HistoryEntry{
 				{Promotion: edge.Promotion{PromotionID: "promo-2", Ts: 200, Builds: map[string]string{"web": "b2"}}, Active: true},
 				{Promotion: edge.Promotion{PromotionID: "promo-1", Ts: 100, Tag: "v1.2.3", Builds: map[string]string{"web": "b1"}}, Active: false},
 			},
 		}
 		ctx := context.Background()
-		state, err := fake.ReconcileRootStack(ctx, edge.RootStackSpec{Version: "v1"}, nil)
-		if err != nil {
-			t.Fatalf("ReconcileRootStack: %v", err)
-		}
+		state := fake.reconciled(t, edge.StackSpec{Version: "v1"})
 
-		promoted, err := Rollback(ctx, fake, state, "", "v1.2.3", 999)
+		promoted, err := Rollback(ctx, state, "", "v1.2.3", 999)
 		if err != nil {
 			t.Fatalf("Rollback: %v", err)
 		}
@@ -217,18 +205,15 @@ func TestRollback(t *testing.T) {
 
 	t.Run("unknown to errors and never promotes", func(t *testing.T) {
 		t.Parallel()
-		fake := &recordingRootStack{
+		fake := &recordingEdge{
 			history: []edge.HistoryEntry{
 				{Promotion: edge.Promotion{PromotionID: "promo-1"}, Active: true},
 			},
 		}
 		ctx := context.Background()
-		state, err := fake.ReconcileRootStack(ctx, edge.RootStackSpec{Version: "v1"}, nil)
-		if err != nil {
-			t.Fatalf("ReconcileRootStack: %v", err)
-		}
+		state := fake.reconciled(t, edge.StackSpec{Version: "v1"})
 
-		if _, err := Rollback(ctx, fake, state, "no-such-promotion", "", 999); err == nil {
+		if _, err := Rollback(ctx, state, "no-such-promotion", "", 999); err == nil {
 			t.Fatal("expected an error for an unknown promotion id")
 		}
 		if len(fake.promotions) != 0 {

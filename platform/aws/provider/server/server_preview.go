@@ -19,7 +19,6 @@ import (
 	"github.com/ocelhq/ocel/platform/aws/provider/bootstrap"
 	"github.com/ocelhq/ocel/platform/aws/provider/deploy"
 	"github.com/ocelhq/ocel/platform/aws/provider/pulumiruntime"
-	cloudflare "github.com/ocelhq/ocel/platform/edge/cloudflare/deploy"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
@@ -114,10 +113,10 @@ func globalPreviewProblem(recorded bootstrap.PreviewDomain, req *deploymentsv1.P
 	return globalPreviewAccountMismatch(recorded)
 }
 
-type routeOwnerFunc func(ctx context.Context, pattern string) (string, error)
+type routeOwnerFunc func(ctx context.Context, hostname string) (string, error)
 
 func (s *Server) edgeRouteOwner() routeOwnerFunc {
-	return s.edge().(edge.RootStack).RouteOwner
+	return s.edge().DomainOwner
 }
 
 func domainClaims(ctx context.Context, owner routeOwnerFunc, slug string, domains []string) []*deploymentsv1.DomainClaim {
@@ -128,7 +127,7 @@ func domainClaims(ctx context.Context, owner routeOwnerFunc, slug string, domain
 	for _, hostname := range domains {
 		claim := &deploymentsv1.DomainClaim{Hostname: hostname}
 		claims = append(claims, claim)
-		script, err := owner(ctx, cloudflare.RoutePattern(hostname))
+		script, err := owner(ctx, hostname)
 		switch {
 		case err != nil:
 			continue
@@ -252,56 +251,51 @@ func (s *Server) runDestroyPreview(ctx context.Context, req *deploymentsv1.Destr
 	if err != nil {
 		return finish(connect.NewError(connect.CodeInvalidArgument, err))
 	}
-	cfg, stack, state, err := s.previewTeardownContext(ctx, opts, req.GetSlug(), env)
+	cfg, stack, err := s.previewTeardownContext(ctx, opts, req.GetSlug(), env)
 	if err != nil {
 		return finish(err)
 	}
 	cfg.Tracer = tracer
 	cfg.StageReport = stageReport
 
-	return deploy.RemovePreview(ctx, stack, state, cfg, req.GetSlug(), pointer, persistent, stages, logf)
+	return deploy.RemovePreview(ctx, stack, cfg, req.GetSlug(), pointer, persistent, stages, logf)
 }
 
-func (s *Server) previewTeardownContext(ctx context.Context, opts options, slug string, env *deploymentsv1.Environment) (deploy.Config, edge.RootStack, edge.RootStackState, error) {
+func (s *Server) previewTeardownContext(ctx context.Context, opts options, slug string, env *deploymentsv1.Environment) (deploy.Config, edge.EdgeStack, error) {
 	awscfg, err := loadAWS(ctx, opts.Region)
 	if err != nil {
-		return deploy.Config{}, nil, nil, err
+		return deploy.Config{}, nil, err
 	}
 	cfn := cloudformation.NewFromConfig(awscfg)
 	ssmClient := ssm.NewFromConfig(awscfg)
 
 	deployed, err := s.deployed(ctx, cfn, opts.Region, true)
 	if err != nil {
-		return deploy.Config{}, nil, nil, err
+		return deploy.Config{}, nil, err
 	}
 	if !deployed.Present || deployed.StateBucket == "" {
-		return deploy.Config{}, nil, nil, errPreviewInfraMissing
+		return deploy.Config{}, nil, errPreviewInfraMissing
 	}
 	stacks, err := stackIndexFor(awscfg, deployed, bootstrapCommand(true))
 	if err != nil {
-		return deploy.Config{}, nil, nil, err
+		return deploy.Config{}, nil, err
 	}
 
 	params, err := bootstrap.ReadTeardownParams(ctx, ssmClient, bootstrap.ClassPreview, slug)
 	if err != nil {
-		return deploy.Config{}, nil, nil, err
+		return deploy.Config{}, nil, err
 	}
 	if params.PassphraseErr != nil {
-		return deploy.Config{}, nil, nil, params.PassphraseErr
+		return deploy.Config{}, nil, params.PassphraseErr
 	}
 	pulumiCmd, err := pulumiruntime.Ensure(ctx, nil)
 	if err != nil {
-		return deploy.Config{}, nil, nil, err
-	}
-
-	stack, ok := s.edge().(edge.RootStack)
-	if !ok {
-		return deploy.Config{}, nil, nil, fmt.Errorf("this edge does not support the root stack")
+		return deploy.Config{}, nil, err
 	}
 
 	envName, err := deploy.EnvScope(env)
 	if err != nil {
-		return deploy.Config{}, nil, nil, connect.NewError(connect.CodeInvalidArgument, err)
+		return deploy.Config{}, nil, connect.NewError(connect.CodeInvalidArgument, err)
 	}
 
 	cfg := deploy.Config{
@@ -324,7 +318,11 @@ func (s *Server) previewTeardownContext(ctx context.Context, opts options, slug 
 
 		Values: teardownValues(awscfg, deployed, bootstrap.ClassPreview),
 	}
-	return cfg, stack, params.RootStackState, nil
+	stack, err := s.edge().Open(params.StackState)
+	if err != nil {
+		return deploy.Config{}, nil, err
+	}
+	return cfg, stack, nil
 }
 
 func (s *Server) ListEnvironments(ctx context.Context, req *deploymentsv1.ListEnvironmentsRequest) (*deploymentsv1.ListEnvironmentsResponse, error) {

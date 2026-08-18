@@ -1,7 +1,6 @@
 package deploy
 
 import (
-	"context"
 	"errors"
 	"fmt"
 	"reflect"
@@ -11,7 +10,6 @@ import (
 	"time"
 
 	"github.com/ocelhq/ocel/pkg/naming"
-	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
 func contains(xs []string, want string) bool {
@@ -21,66 +19,6 @@ func contains(xs []string, want string) bool {
 		}
 	}
 	return false
-}
-
-func TestRootStackWorkerNames(t *testing.T) {
-	t.Parallel()
-
-	t.Run("covers every app from history not the shared store", func(t *testing.T) {
-		t.Parallel()
-
-		f := &recordingRootStack{
-			history: []edge.HistoryEntry{
-				{Promotion: edge.Promotion{PromotionID: "p2", Builds: map[string]string{"web": "b2", "api": "b2"}}},
-				{Promotion: edge.Promotion{PromotionID: "p1", Builds: map[string]string{"web": "b1"}}},
-			},
-		}
-		ctx := context.Background()
-		state, err := f.ReconcileRootStack(ctx, edge.RootStackSpec{Version: "v1", Slug: "proj-x"}, nil)
-		if err != nil {
-			t.Fatalf("ReconcileRootStack: %v", err)
-		}
-
-		names, err := rootStackWorkerNames(ctx, f, state, "proj_x", "prod")
-		if err != nil {
-			t.Fatalf("rootStackWorkerNames: %v", err)
-		}
-
-		want := []string{
-			rootWorkerName("proj_x", "prod"),
-			workerScriptName("proj_x", "prod", "web"),
-			workerScriptName("proj_x", "prod", "api"),
-		}
-		want = append(want, retiredWorkerNames("proj_x", "prod", []string{"api", "web"})...)
-		for _, want := range want {
-			if !contains(names, want) {
-				t.Errorf("worker names %v missing %q", names, want)
-			}
-		}
-
-		for _, n := range names {
-			if n == "ocel-deployments-store" {
-				t.Errorf("worker names %v must not include the shared store worker", names)
-			}
-		}
-
-		seen := map[string]bool{}
-		for _, n := range names {
-			if seen[n] {
-				t.Errorf("duplicate worker name %q in %v", n, names)
-			}
-			seen[n] = true
-		}
-	})
-
-	t.Run("propagates the history error", func(t *testing.T) {
-		t.Parallel()
-
-		_, err := rootStackWorkerNames(context.Background(), &recordingRootStack{}, edge.RootStackState{}, "proj_x", "prod")
-		if err == nil {
-			t.Fatal("rootStackWorkerNames with an unreadable store err = nil, want the history error")
-		}
-	})
 }
 
 func TestClassifyProjectStacks(t *testing.T) {

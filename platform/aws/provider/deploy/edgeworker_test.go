@@ -11,8 +11,6 @@ import (
 	"strings"
 	"testing"
 
-	cloudflare "github.com/ocelhq/ocel/platform/edge/cloudflare/deploy"
-
 	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
@@ -32,54 +30,6 @@ func TestWorkerOutputName(t *testing.T) {
 	}
 }
 
-type recordingEdge struct {
-	deployed []edge.AppDeployment
-}
-
-func (f *recordingEdge) Kind() edge.Kind { return edge.KindCloudflare }
-
-func (f *recordingEdge) AssembleApp(src edge.WorkerSource, r edge.Resolver) (edge.Worker, error) {
-	return cloudflare.New().AssembleApp(src, r)
-}
-
-func (f *recordingEdge) Bootstrap(context.Context, edge.Class) (edge.BootstrapOutput, error) {
-	return edge.BootstrapOutput{Trust: edge.TrustExternal}, nil
-}
-
-func (f *recordingEdge) DeployApp(_ context.Context, app edge.AppDeployment) (edge.AppResult, error) {
-	f.deployed = append(f.deployed, app)
-	return edge.AppResult{URL: "https://" + app.Name + ".acme.workers.dev"}, nil
-}
-
-func (f *recordingEdge) called() bool { return len(f.deployed) > 0 }
-
-func (f *recordingEdge) only(t *testing.T) edge.AppDeployment {
-	t.Helper()
-	if len(f.deployed) != 1 {
-		t.Fatalf("expected exactly one deployment, got %d", len(f.deployed))
-	}
-	return f.deployed[0]
-}
-
-func (f *recordingEdge) names() []string {
-	var names []string
-	for _, d := range f.deployed {
-		names = append(names, d.Name)
-	}
-	return names
-}
-
-type legacyEdge struct {
-	recordingEdge
-	existing map[string]bool
-	asked    []string
-}
-
-func (l *legacyEdge) FindApp(_ context.Context, name string) (bool, error) {
-	l.asked = append(l.asked, name)
-	return l.existing[name], nil
-}
-
 type descriptorEdge struct{ recordingEdge }
 
 func (d *descriptorEdge) AssembleApp(src edge.WorkerSource, r edge.Resolver) (edge.Worker, error) {
@@ -90,10 +40,6 @@ func (d *descriptorEdge) AssembleApp(src edge.WorkerSource, r edge.Resolver) (ed
 	}
 	return edge.Worker{Main: edge.WorkerModule{Name: "index.js"}}, nil
 }
-
-type otherEdge struct{ recordingEdge }
-
-func (o *otherEdge) Kind() edge.Kind { return "provider-native" }
 
 func TestDeployEdgeWorker(t *testing.T) {
 	t.Run("a framework with no worker is a no-op", func(t *testing.T) {
@@ -259,7 +205,7 @@ func TestDeployEdgeWorker(t *testing.T) {
 
 	t.Run("an unsupported edge names the edge", func(t *testing.T) {
 		artifactRoot := writeMinimalWorkerArtifacts(t)
-		cfg := Config{Edge: &otherEdge{}, ArtifactRoot: artifactRoot, Slug: "proj_1", Env: "prod"}
+		cfg := Config{Edge: &recordingEdge{kind: "provider-native"}, ArtifactRoot: artifactRoot, Slug: "proj_1", Env: "prod"}
 		manifest := &deploymentsv1.Manifest{
 			Functions: []*deploymentsv1.ManifestFunction{{LogicalName: "index", Framework: "next", App: "web", RouteId: "/"}},
 		}
@@ -436,7 +382,7 @@ func TestDeployEdgeWorker(t *testing.T) {
 
 	t.Run("warns about a worker at the previous name", func(t *testing.T) {
 		artifactRoot, manifest, outputs := twoNextApps(t)
-		fake := &legacyEdge{existing: map[string]bool{"ocel-proj-prod": true}}
+		fake := &recordingEdge{existing: map[string]bool{"ocel-proj-prod": true}}
 		cfg := Config{Edge: fake, ArtifactRoot: artifactRoot, Slug: "proj", Env: "prod"}
 
 		var msgs []string
@@ -461,7 +407,7 @@ func TestDeployEdgeWorker(t *testing.T) {
 
 	t.Run("no warning without a legacy worker", func(t *testing.T) {
 		artifactRoot, manifest, outputs := twoNextApps(t)
-		fake := &legacyEdge{}
+		fake := &recordingEdge{}
 		cfg := Config{Edge: fake, ArtifactRoot: artifactRoot, Slug: "proj", Env: "prod"}
 
 		var msgs []string
@@ -720,16 +666,6 @@ func TestProjectWorkerStems(t *testing.T) {
 			t.Errorf("the production root worker sits under the preview stem %q", stem)
 		}
 	})
-}
-
-func TestRetiredWorkerNames(t *testing.T) {
-	t.Parallel()
-
-	got := retiredWorkerNames("shop", "prod", []string{"web"})
-	want := []string{"ocel-shop-prod", "ocel-shop--prod-root", "ocel-shop--prod-web"}
-	if !slicesEqual(got, want) {
-		t.Errorf("retiredWorkerNames = %v, want %v", got, want)
-	}
 }
 
 func writeRoutingManifest(t *testing.T, artifactRoot, app, content string) string {

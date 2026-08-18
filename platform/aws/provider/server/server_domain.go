@@ -14,7 +14,6 @@ import (
 	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
 	"github.com/ocelhq/ocel/platform/aws/provider/bootstrap"
 	"github.com/ocelhq/ocel/platform/aws/provider/deploy"
-	cloudflare "github.com/ocelhq/ocel/platform/edge/cloudflare/deploy"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
@@ -38,11 +37,6 @@ func (s *Server) runUseDomain(ctx context.Context, req *deploymentsv1.UseDomainR
 	if err != nil {
 		return err
 	}
-	entry, err := s.sharedEntry()
-	if err != nil {
-		return err
-	}
-
 	awscfg, err := loadAWS(ctx, "")
 	if err != nil {
 		return err
@@ -85,7 +79,7 @@ func (s *Server) runUseDomain(ctx context.Context, req *deploymentsv1.UseDomainR
 		return err
 	}
 
-	spec, err := deploy.SharedPreviewEntrySpec(deploy.Config{
+	spec, err := deploy.PreviewWildcardSpecFor(deploy.Config{
 		Region:              awscfg.Region,
 		StateTable:          deployed.StateTable,
 		AssetBucket:         deployed.AssetBucket,
@@ -102,8 +96,8 @@ func (s *Server) runUseDomain(ctx context.Context, req *deploymentsv1.UseDomainR
 		return err
 	}
 
-	progress(fmt.Sprintf("Reconciling the shared preview entry on %s", edge.SharedEntryWildcard(baseDomain)))
-	if err := entry.ReconcileSharedEntry(ctx, spec); err != nil {
+	progress(fmt.Sprintf("Reconciling the shared preview entry on %s", edge.PreviewWildcard(baseDomain)))
+	if err := s.edge().ReconcilePreviewWildcard(ctx, spec); err != nil {
 		return err
 	}
 
@@ -128,10 +122,6 @@ func (s *Server) runReleaseDomain(ctx context.Context, req *deploymentsv1.Releas
 	if err := requirePreviewClass(req.GetClass()); err != nil {
 		return err
 	}
-	entry, err := s.sharedEntry()
-	if err != nil {
-		return err
-	}
 	awscfg, err := loadAWS(ctx, "")
 	if err != nil {
 		return err
@@ -147,8 +137,8 @@ func (s *Server) runReleaseDomain(ctx context.Context, req *deploymentsv1.Releas
 		return nil
 	}
 
-	progress(fmt.Sprintf("Removing the shared preview entry on %s", edge.SharedEntryWildcard(recorded.BaseDomain)))
-	if err := entry.DestroySharedEntry(ctx, recorded.BaseDomain); err != nil {
+	progress(fmt.Sprintf("Removing the shared preview entry on %s", edge.PreviewWildcard(recorded.BaseDomain)))
+	if err := s.edge().DestroyPreviewWildcard(ctx, recorded.BaseDomain); err != nil {
 		return err
 	}
 	return bootstrap.DeletePreviewDomain(ctx, ssmClient, bootstrap.ClassPreview)
@@ -171,7 +161,7 @@ func (s *Server) ListDomain(ctx context.Context, req *deploymentsv1.ListDomainRe
 	if recorded.BaseDomain == "" {
 		return &deploymentsv1.ListDomainResponse{}, nil
 	}
-	slugs, err := bootstrap.RootStackSlugsFor(ctx, ssmClient, bootstrap.ClassPreview)
+	slugs, err := bootstrap.StackSlugsFor(ctx, ssmClient, bootstrap.ClassPreview)
 	if err != nil {
 		return nil, err
 	}
@@ -188,7 +178,7 @@ func (s *Server) ListDomain(ctx context.Context, req *deploymentsv1.ListDomainRe
 func globalPreviewProjects(ctx context.Context, ssmClient bootstrap.SSMAPI, slugs []string, baseDomain string) ([]string, error) {
 	var served []string
 	for _, slug := range slugs {
-		state, err := bootstrap.ReadRootStackStateFor(ctx, ssmClient, bootstrap.ClassPreview, slug)
+		state, err := bootstrap.ReadStackStateFor(ctx, ssmClient, bootstrap.ClassPreview, slug)
 		if err != nil {
 			return nil, err
 		}
@@ -197,14 +187,6 @@ func globalPreviewProjects(ctx context.Context, ssmClient bootstrap.SSMAPI, slug
 		}
 	}
 	return served, nil
-}
-
-func (s *Server) sharedEntry() (edge.SharedEntry, error) {
-	entry, ok := s.edge().(edge.SharedEntry)
-	if !ok {
-		return nil, fmt.Errorf("this edge does not serve a shared preview entry")
-	}
-	return entry, nil
 }
 
 func requirePreviewClass(class deploymentsv1.Environment_Class) error {
@@ -242,11 +224,11 @@ func globalPreviewDomain(ctx context.Context, owner routeOwnerFunc, recorded boo
 }
 
 func sharedEntryRouteInstalled(ctx context.Context, owner routeOwnerFunc, baseDomain string) bool {
-	script, err := owner(ctx, cloudflare.RoutePattern(edge.SharedEntryWildcard(baseDomain)))
+	script, err := owner(ctx, edge.PreviewWildcard(baseDomain))
 	if err != nil {
 		return false
 	}
-	return script == edge.SharedPreviewEntryScript
+	return script == edge.PreviewEntryOwner
 }
 
 func globalPreviewAccountMismatch(recorded bootstrap.PreviewDomain) error {
@@ -257,6 +239,6 @@ func globalPreviewAccountMismatch(recorded bootstrap.PreviewDomain) error {
 	return fmt.Errorf(
 		"the global preview domain %q was claimed in Cloudflare account %s, but %s is %s: this deploy would publish previews the entry worker on %q cannot serve — point %s at %s, or release the domain with `ocel domain release --preview` and use it again from this account",
 		recorded.BaseDomain, recorded.CloudflareAccount, cloudflareAccountEnvVar, ambient,
-		edge.SharedEntryWildcard(recorded.BaseDomain), cloudflareAccountEnvVar, recorded.CloudflareAccount,
+		edge.PreviewWildcard(recorded.BaseDomain), cloudflareAccountEnvVar, recorded.CloudflareAccount,
 	)
 }

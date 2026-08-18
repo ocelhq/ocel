@@ -149,18 +149,18 @@ func (f *fakePathSSM) GetParametersByPath(_ context.Context, in *ssm.GetParamete
 	return out, nil
 }
 
-func TestRootStackSlugsFor(t *testing.T) {
+func TestStackSlugsFor(t *testing.T) {
 	t.Parallel()
 
 	fake := &fakePathSSM{names: []string{
-		PreviewRootStackStateParamPrefix + "web",
-		PreviewRootStackStateParamPrefix + "acme",
-		RootStackStateParamPrefix + "other",
+		PreviewStackStateParamPrefix + "web",
+		PreviewStackStateParamPrefix + "acme",
+		StackStateParamPrefix + "other",
 	}}
 
-	slugs, err := RootStackSlugsFor(context.Background(), fake, ClassPreview)
+	slugs, err := StackSlugsFor(context.Background(), fake, ClassPreview)
 	if err != nil {
-		t.Fatalf("RootStackSlugsFor: %v", err)
+		t.Fatalf("StackSlugsFor: %v", err)
 	}
 	if !slices.Equal(slugs, []string{"acme", "web"}) {
 		t.Errorf("slugs = %v, want the preview class sorted", slugs)

@@ -40,26 +40,26 @@ type stampedSpec struct {
 	Observability       map[string]any
 }
 
-func specStamp(spec edge.RootStackSpec, generic edge.Worker) (string, error) {
+func specStamp(spec edge.StackSpec, generic edge.Worker) (string, error) {
 	sum := sha256.New()
 	if err := json.NewEncoder(sum).Encode(stampedSpec{
 		Generic:             generic,
-		GenericName:         spec.GenericName,
+		GenericName:         spec.Program.Name,
 		Slug:                spec.Slug,
-		StoreScriptName:     spec.StoreScriptName,
-		ISRWriterScriptName: spec.ISRWriterScriptName,
-		StoreEndpoint:       spec.StoreEndpoint,
+		StoreScriptName:     spec.Program.StoreScriptName,
+		ISRWriterScriptName: spec.Program.ISRWriterScriptName,
+		StoreEndpoint:       spec.Program.StoreEndpoint,
 		Domains:             spec.Domains,
 		PruneOnly:           spec.PruneOnly,
 		PruneRoutes:         spec.PruneRoutes,
-		PruneWorkerStem:     spec.PruneWorkerStem,
-		RequiredRecord:      spec.RequiredRecord,
+		PruneWorkerStem:     spec.Program.PruneWorkerStem,
+		RequiredRecord:      spec.Program.RequiredRecord,
 		Values:              spec.Values,
 		CompatDate:          compatDate,
 		CompatFlags:         compatFlags,
 		Observability:       observability(),
 	}); err != nil {
-		return "", fmt.Errorf("hash root-stack spec: %w", err)
+		return "", fmt.Errorf("hash stack spec: %w", err)
 	}
 	return spec.Version + "." + hex.EncodeToString(sum.Sum(nil)), nil
 }
@@ -80,7 +80,7 @@ func decodeStampSet(raw string) stampSet {
 func (s stampSet) encode() (string, error) {
 	encoded, err := json.Marshal(s)
 	if err != nil {
-		return "", fmt.Errorf("encode root-stack version stamps: %w", err)
+		return "", fmt.Errorf("encode stack version stamps: %w", err)
 	}
 	return string(encoded), nil
 }

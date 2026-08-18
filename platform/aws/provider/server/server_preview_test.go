@@ -157,12 +157,12 @@ func TestPreflightResponse(t *testing.T) {
 	}
 }
 
-func routeOwners(byPattern map[string]string, fail map[string]bool) routeOwnerFunc {
-	return func(_ context.Context, pattern string) (string, error) {
-		if fail[pattern] {
-			return "", errors.New("cloudflare said no")
+func routeOwners(byHostname map[string]string, fail map[string]bool) routeOwnerFunc {
+	return func(_ context.Context, hostname string) (string, error) {
+		if fail[hostname] {
+			return "", errors.New("the edge said no")
 		}
-		return byPattern[pattern], nil
+		return byHostname[hostname], nil
 	}
 }
 
@@ -172,8 +172,8 @@ func TestDomainClaims(t *testing.T) {
 	t.Run("answers in request order, naming the owning script", func(t *testing.T) {
 		t.Parallel()
 		owner := routeOwners(map[string]string{
-			"*.preview.app.com/*": "ocel--other--preview--root",
-			"shop.com/*":          "ocel--shop--prod--web",
+			"*.preview.app.com": "ocel--other--preview--root",
+			"shop.com":          "ocel--shop--prod--web",
 		}, nil)
 
 		got := domainClaims(context.Background(), owner, "shop", []string{"*.preview.app.com", "free.com", "shop.com"})
@@ -194,7 +194,7 @@ func TestDomainClaims(t *testing.T) {
 
 	t.Run("a hold under this project's retired name is still its own", func(t *testing.T) {
 		t.Parallel()
-		owner := routeOwners(map[string]string{"shop.com/*": "ocel-shop--prod-web"}, nil)
+		owner := routeOwners(map[string]string{"shop.com": "ocel-shop--prod-web"}, nil)
 
 		got := domainClaims(context.Background(), owner, "shop", []string{"shop.com"})
 		if len(got) != 1 || got[0].GetStatus() != deploymentsv1.DomainClaim_STATUS_UNCLAIMED {
@@ -204,7 +204,7 @@ func TestDomainClaims(t *testing.T) {
 
 	t.Run("an edge that cannot answer leaves the claim unspecified", func(t *testing.T) {
 		t.Parallel()
-		failing := domainClaims(context.Background(), routeOwners(nil, map[string]bool{"app.com/*": true}), "shop", []string{"app.com"})
+		failing := domainClaims(context.Background(), routeOwners(nil, map[string]bool{"app.com": true}), "shop", []string{"app.com"})
 		if len(failing) != 1 || failing[0].GetHostname() != "app.com" || failing[0].GetStatus() != deploymentsv1.DomainClaim_STATUS_UNSPECIFIED {
 			t.Errorf("claims = %+v, want a failed lookup reported as unanswerable", failing)
 		}

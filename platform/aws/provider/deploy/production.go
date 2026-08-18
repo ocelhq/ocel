@@ -31,7 +31,7 @@ import (
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
-const rootStackVersion = "12"
+const stackVersion = "12"
 
 type appDeployResult struct {
 	App      string
@@ -47,10 +47,6 @@ func realize(ctx context.Context, cfg Config, manifest *deploymentsv1.Manifest, 
 		return err
 	}
 
-	stack, ok := cfg.Edge.(edge.RootStack)
-	if !ok {
-		return Result{}, finishUploading(fmt.Errorf("deploys require an edge that supports the root stack (instant rollback); %s does not", cfg.Edge.Kind()))
-	}
 	if cfg.StoreEndpoint == "" {
 		return Result{}, finishUploading(fmt.Errorf("no deployments-store worker found for this account; re-run `%s` to provision it before deploying", bootstrapCommand(cfg)))
 	}
@@ -60,7 +56,7 @@ func realize(ctx context.Context, cfg Config, manifest *deploymentsv1.Manifest, 
 			return Result{}, finishUploading(fmt.Errorf("app %q: %w; upgrade the CLI so every app is built under one", app.GetName(), err))
 		}
 	}
-	if err := checkStoreSchema(ctx, stack, cfg); err != nil {
+	if err := checkStoreSchema(ctx, cfg); err != nil {
 		return Result{}, finishUploading(err)
 	}
 	if err := validateTag(cfg.Tag); err != nil {
@@ -84,7 +80,7 @@ func realize(ctx context.Context, cfg Config, manifest *deploymentsv1.Manifest, 
 	if err := checkInlinePolicyBudget(manifest, consumed, cfg.sessions); err != nil {
 		return Result{}, finishUploading(err)
 	}
-	if err := checkTagAvailable(ctx, stack, cfg.RootStackState, cfg.Tag); err != nil {
+	if err := checkTagAvailable(ctx, cfg, cfg.Tag); err != nil {
 		return Result{}, finishUploading(err)
 	}
 
@@ -151,30 +147,30 @@ func realize(ctx context.Context, cfg Config, manifest *deploymentsv1.Manifest, 
 		return Result{}, finishProvisioning(err)
 	}
 
-	progress.report(deploymentsv1.Phase_PHASE_PROVISIONING, "Reconciling the root stack", 0, 0)
-	specs, err := rootStackSpecs(cfg, manifest, rootStackVersion, log)
+	progress.report(deploymentsv1.Phase_PHASE_PROVISIONING, "Reconciling the edge stack", 0, 0)
+	specs, err := stackSpecs(cfg, manifest, stackVersion, log)
 	if err != nil {
 		return Result{}, finishProvisioning(err)
 	}
-	state, err := reconcileRootStack(ctx, stack, specs, cfg.RootStackState)
+	edgeStack, err := reconcileStack(ctx, cfg.Edge, specs, cfg.StackState)
 	if err != nil {
-		return Result{RootStackState: state}, finishProvisioning(err)
+		return Result{StackState: reconciledState(edgeStack, cfg)}, finishProvisioning(err)
 	}
-	state = MarkGlobalPreview(state, cfg, manifest)
+	state := MarkGlobalPreview(edgeStack.State(), cfg, manifest)
 
 	var links []*linksv1.Link
 	if !plan.InfraStack.IsZero() {
 		progress.report(deploymentsv1.Phase_PHASE_PROVISIONING, "Provisioning infra stack", 0, 0)
 		links, err = runInfraStack(ctx, cfg, manifest, plan, log)
 		if err != nil {
-			return Result{RootStackState: state}, finishProvisioning(err)
+			return Result{StackState: state}, finishProvisioning(err)
 		}
 	}
 	if err := checkLinkGrants(links); err != nil {
-		return Result{RootStackState: state}, finishProvisioning(err)
+		return Result{StackState: state}, finishProvisioning(err)
 	}
 	if err := publishLinkRecords(ctx, cfg, manifest, links); err != nil {
-		return Result{RootStackState: state}, finishProvisioning(err)
+		return Result{StackState: state}, finishProvisioning(err)
 	}
 	reportGrantVersions(consumed, log)
 	granting := append(slices.Clone(links), consumedLinks(consumed)...)
@@ -202,9 +198,9 @@ func realize(ctx context.Context, cfg Config, manifest *deploymentsv1.Manifest, 
 
 	finalizeStart := time.Now()
 	progress.report(deploymentsv1.Phase_PHASE_FINALIZING, "Staging and promoting", 0, 0)
-	if err := stageAndPromote(ctx, cfg, stack, state, promotionID, cfg.Tag, promotePointer(cfg), time.Now().Unix(), results); err != nil {
+	if err := stageAndPromote(ctx, cfg, edgeStack, promotionID, cfg.Tag, promotePointer(cfg), time.Now().Unix(), results); err != nil {
 		spanForStage(cfg.Tracer, cfg.Stages.Finalizing, finalizeStart, time.Now(), err)
-		return Result{RootStackState: state}, err
+		return Result{StackState: state}, err
 	}
 	spanForStage(cfg.Tracer, cfg.Stages.Finalizing, finalizeStart, time.Now(), nil)
 
@@ -214,16 +210,23 @@ func realize(ctx context.Context, cfg Config, manifest *deploymentsv1.Manifest, 
 	}
 	functions = append(functions, workerURLOutputs(cfg, manifest)...)
 	return Result{
-		Links:          links,
-		Functions:      functions,
-		AppURLs:        appURLs(manifest, functions),
-		PromotionID:    promotionID,
-		RootStackState: state,
+		Links:       links,
+		Functions:   functions,
+		AppURLs:     appURLs(manifest, functions),
+		PromotionID: promotionID,
+		StackState:  state,
 	}, nil
 }
 
-func checkStoreSchema(ctx context.Context, stack edge.RootStack, cfg Config) error {
-	got, err := stack.StoreSchemaVersion(ctx, cfg.StoreEndpoint, cfg.Slug)
+func checkStoreSchema(ctx context.Context, cfg Config) error {
+	stack, err := cfg.Edge.Open(edge.StackState{
+		edge.StackKeySlug:     cfg.Slug,
+		edge.StackKeyEndpoint: cfg.StoreEndpoint,
+	})
+	if err != nil {
+		return err
+	}
+	got, err := stack.Ledger().SchemaVersion(ctx)
 	switch {
 	case errors.Is(err, edge.ErrStoreSchemaUnreadable):
 		return fmt.Errorf("the deployments store predates the schema-version check, so this deploy cannot tell what it speaks; re-run `%s`", bootstrapCommand(cfg))
@@ -254,11 +257,15 @@ func validateTag(tag string) error {
 	return nil
 }
 
-func checkTagAvailable(ctx context.Context, stack edge.RootStack, state edge.RootStackState, tag string) error {
-	if tag == "" || state[edge.RootStackKeyEndpoint] == "" {
+func checkTagAvailable(ctx context.Context, cfg Config, tag string) error {
+	if tag == "" || cfg.StackState[edge.StackKeyEndpoint] == "" {
 		return nil
 	}
-	history, err := stack.History(ctx, state, "")
+	stack, err := cfg.Edge.Open(cfg.StackState)
+	if err != nil {
+		return err
+	}
+	history, err := stack.Ledger().History(ctx, "")
 	if err != nil {
 		return fmt.Errorf("check tag availability: %w", err)
 	}
@@ -270,19 +277,36 @@ func checkTagAvailable(ctx context.Context, stack edge.RootStack, state edge.Roo
 	return nil
 }
 
-func reconcileRootStack(ctx context.Context, stack edge.RootStack, specs []edge.RootStackSpec, prior edge.RootStackState) (edge.RootStackState, error) {
-	state := prior
-	for _, spec := range specs {
-		next, err := stack.ReconcileRootStack(ctx, spec, state)
-		if err != nil {
-			return state, fmt.Errorf("reconcile root stack %q: %w", spec.GenericName, err)
-		}
-		state = next
+func reconcileStack(ctx context.Context, e edge.Edge, specs []edge.StackSpec, prior edge.StackState) (edge.EdgeStack, error) {
+	stack, err := e.Open(prior)
+	if err != nil {
+		return nil, err
 	}
-	return state, nil
+	for _, spec := range specs {
+		next, err := e.Reconcile(ctx, spec, stack.State())
+		if err != nil {
+			return stack, fmt.Errorf("reconcile stack %q: %w", specName(spec), err)
+		}
+		stack = next
+	}
+	return stack, nil
 }
 
-func stageAndPromote(ctx context.Context, cfg Config, stack edge.RootStack, state edge.RootStackState, promotionID, tag, pointer string, now int64, results []appDeployResult) error {
+func specName(spec edge.StackSpec) string {
+	if spec.Program == nil {
+		return spec.Slug
+	}
+	return spec.Program.Name
+}
+
+func reconciledState(stack edge.EdgeStack, cfg Config) edge.StackState {
+	if stack == nil {
+		return cfg.StackState
+	}
+	return stack.State()
+}
+
+func stageAndPromote(ctx context.Context, cfg Config, stack edge.EdgeStack, promotionID, tag, pointer string, now int64, results []appDeployResult) error {
 	if err := writeOriginRecords(ctx, cfg, results); err != nil {
 		return err
 	}
@@ -294,7 +318,7 @@ func stageAndPromote(ctx context.Context, cfg Config, stack edge.RootStack, stat
 			failed = append(failed, fmt.Sprintf("%s: %v", r.App, r.Err))
 			continue
 		}
-		if err := stack.PutStaged(ctx, state, r.Record); err != nil {
+		if err := stack.Ledger().PutStaged(ctx, r.Record); err != nil {
 			return fmt.Errorf("stage deployment for %s: %w", r.App, err)
 		}
 		builds[r.App] = r.Identity.String()
@@ -303,7 +327,7 @@ func stageAndPromote(ctx context.Context, cfg Config, stack edge.RootStack, stat
 		return fmt.Errorf("app-deploy failed for %s; promote aborted, the previous Deployment keeps serving", strings.Join(failed, "; "))
 	}
 
-	if err := stack.Promote(ctx, state, edge.Promotion{PromotionID: promotionID, Ts: now, Builds: builds, Tag: tag}, pointer); err != nil {
+	if err := stack.Promote(ctx, edge.Promotion{PromotionID: promotionID, Ts: now, Builds: builds, Tag: tag}, pointer); err != nil {
 		return fmt.Errorf("promote %s: %w", promotionID, err)
 	}
 	return nil
@@ -331,15 +355,15 @@ func bootstrapCommand(cfg Config) string {
 	return "ocel bootstrap"
 }
 
-func finalizeDeploy(ctx context.Context, cfg Config, stack edge.RootStack, specs []edge.RootStackSpec, prior edge.RootStackState, promotionID, tag, pointer string, now int64, results []appDeployResult) (edge.RootStackState, error) {
-	state, err := reconcileRootStack(ctx, stack, specs, prior)
+func finalizeDeploy(ctx context.Context, cfg Config, specs []edge.StackSpec, prior edge.StackState, promotionID, tag, pointer string, now int64, results []appDeployResult) (edge.StackState, error) {
+	stack, err := reconcileStack(ctx, cfg.Edge, specs, prior)
 	if err != nil {
 		return prior, err
 	}
-	if err := stageAndPromote(ctx, cfg, stack, state, promotionID, tag, pointer, now, results); err != nil {
-		return state, err
+	if err := stageAndPromote(ctx, cfg, stack, promotionID, tag, pointer, now, results); err != nil {
+		return stack.State(), err
 	}
-	return state, nil
+	return stack.State(), nil
 }
 
 func sharedWorker(cfg Config) (edge.Worker, error) {
@@ -350,74 +374,85 @@ func sharedWorker(cfg Config) (edge.Worker, error) {
 	return withOriginBodyBudget(withRevalidateQueue(withImageOptimizer(withCacheCoordinates(withEdgeSigningCreds(generic, cfg), cfg), cfg), cfg)), nil
 }
 
-func rootStackSpecs(cfg Config, manifest *deploymentsv1.Manifest, version string, warn func(string)) ([]edge.RootStackSpec, error) {
+func stackSpecs(cfg Config, manifest *deploymentsv1.Manifest, version string, warn func(string)) ([]edge.StackSpec, error) {
 	generic, err := sharedWorker(cfg)
 	if err != nil {
 		return nil, err
 	}
 
-	base := edge.RootStackSpec{
-		Version:         version,
-		Generic:         generic,
-		Slug:            cfg.Slug,
-		StoreScriptName: cfg.StoreScriptName,
-		StoreEndpoint:   cfg.StoreEndpoint,
-		BootstrapCred:   cfg.StoreBootstrapCred,
-
-		ISRWriterScriptName: cfg.ISRWriterScriptName,
-		Values:              cfg.EdgeValues,
-		PruneRoutes:         true,
-		Warn:                warn,
+	base := edge.StackSpec{
+		Version:     version,
+		Class:       edgeClass(cfg.Class),
+		Slug:        cfg.Slug,
+		Values:      cfg.EdgeValues,
+		PruneRoutes: true,
+		Warn:        warn,
+	}
+	program := func(name string, worker edge.Worker) *edge.ProgramSpec {
+		return &edge.ProgramSpec{
+			Name:                name,
+			Worker:              worker,
+			StoreScriptName:     cfg.StoreScriptName,
+			StoreEndpoint:       cfg.StoreEndpoint,
+			BootstrapCred:       cfg.StoreBootstrapCred,
+			ISRWriterScriptName: cfg.ISRWriterScriptName,
+		}
 	}
 
 	apps := workerApps(cfg.ArtifactRoot, manifest)
 
 	if cfg.Class == deploymentsv1.Environment_CLASS_PREVIEW {
 		spec := base
-		spec.GenericName = previewWorkerName(cfg.Slug)
-		spec.PruneWorkerStem = previewWorkerStem(cfg.Slug)
+		spec.Program = program(previewWorkerName(cfg.Slug), generic)
+		spec.Program.PruneWorkerStem = previewWorkerStem(cfg.Slug)
 		if servesOnGlobalPreviewDomain(cfg, manifest) {
 			if _, err := resolveWorkerHostnames(cfg, manifest, apps); err != nil {
 				return nil, err
 			}
-			spec.Generic = withPreviewVars(generic, "", apps)
+			spec.Program.Worker = withPreviewVars(generic, "", apps)
 			spec.PruneOnly = true
-			return []edge.RootStackSpec{spec}, nil
+			return []edge.StackSpec{spec}, nil
 		}
 		if len(apps) == 0 {
-			spec.Generic = withPreviewVars(generic, "", apps)
+			spec.Program.Worker = withPreviewVars(generic, "", apps)
 			spec.PruneOnly = true
-			return []edge.RootStackSpec{spec}, nil
+			return []edge.StackSpec{spec}, nil
 		}
 		resolved, err := resolveWorkerHostnames(cfg, manifest, apps)
 		if err != nil {
 			return nil, err
 		}
 		spec.Domains = []string{previewWildcard(resolved.previewBase)}
-		spec.Generic = withPreviewVars(generic, resolved.previewBase, apps)
-		return []edge.RootStackSpec{spec}, nil
+		spec.Program.Worker = withPreviewVars(generic, resolved.previewBase, apps)
+		return []edge.StackSpec{spec}, nil
 	}
 
 	if len(apps) == 0 {
 		spec := base
-		spec.GenericName = rootWorkerName(cfg.Slug, cfg.Env)
-		return []edge.RootStackSpec{spec}, nil
+		spec.Program = program(rootWorkerName(cfg.Slug, cfg.Env), generic)
+		return []edge.StackSpec{spec}, nil
 	}
 
 	resolved, err := resolveWorkerHostnames(cfg, manifest, apps)
 	if err != nil {
 		return nil, err
 	}
-	specs := make([]edge.RootStackSpec, 0, len(apps))
+	specs := make([]edge.StackSpec, 0, len(apps))
 	for _, app := range apps {
 		name := app.GetName()
 		spec := base
-		spec.GenericName = workerScriptName(cfg.Slug, cfg.Env, name)
-		spec.Generic = withVar(generic, "OCEL_APP", name)
+		spec.Program = program(workerScriptName(cfg.Slug, cfg.Env, name), withVar(generic, "OCEL_APP", name))
 		spec.Domains = resolved.hosts[name]
 		specs = append(specs, spec)
 	}
 	return specs, nil
+}
+
+func edgeClass(class deploymentsv1.Environment_Class) edge.Class {
+	if class == deploymentsv1.Environment_CLASS_PREVIEW {
+		return edge.ClassPreview
+	}
+	return edge.ClassProduction
 }
 
 const (

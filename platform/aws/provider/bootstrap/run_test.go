@@ -83,10 +83,6 @@ func (f *fakeCFN) UpdateStack(_ context.Context, in *cloudformation.UpdateStackI
 	return &cloudformation.UpdateStackOutput{}, nil
 }
 
-func (*fakeEdge) AssembleApp(edge.WorkerSource, edge.Resolver) (edge.Worker, error) {
-	return edge.Worker{}, errors.New("bootstrap never assembles an app worker")
-}
-
 type fakeEdge struct {
 	out        edge.BootstrapOutput
 	err        error
@@ -102,8 +98,34 @@ func (f *fakeEdge) Bootstrap(_ context.Context, class edge.Class) (edge.Bootstra
 	return f.out, f.err
 }
 
-func (f *fakeEdge) DeployApp(context.Context, edge.AppDeployment) (edge.AppResult, error) {
-	return edge.AppResult{}, errors.New("DeployApp must not run during bootstrap")
+func (f *fakeEdge) Teardown(context.Context, edge.Class) error { return nil }
+
+func (f *fakeEdge) Supports(need edge.Need) bool {
+	return edge.CapabilitiesOf(f.Kind()).Supports(need)
+}
+
+func (f *fakeEdge) Supported() []edge.Need { return edge.CapabilitiesOf(f.Kind()).Supported() }
+
+func (f *fakeEdge) FlipBound() edge.FlipBound { return edge.CapabilitiesOf(f.Kind()).FlipBound() }
+
+func (f *fakeEdge) Reconcile(context.Context, edge.StackSpec, edge.StackState) (edge.EdgeStack, error) {
+	return nil, errors.New("bootstrap never reconciles a project stack")
+}
+
+func (f *fakeEdge) Open(edge.StackState) (edge.EdgeStack, error) {
+	return nil, errors.New("bootstrap never opens a project stack")
+}
+
+func (f *fakeEdge) ReconcilePreviewWildcard(context.Context, edge.PreviewWildcardSpec) error {
+	return errors.New("bootstrap never reconciles the preview wildcard")
+}
+
+func (f *fakeEdge) DestroyPreviewWildcard(context.Context, string) error {
+	return errors.New("bootstrap never destroys the preview wildcard")
+}
+
+func (f *fakeEdge) DomainOwner(context.Context, string) (string, error) {
+	return "", errors.New("bootstrap never reads a domain owner")
 }
 
 func hasEdgeUser(t *testing.T, template string) bool {
@@ -148,7 +170,7 @@ func TestRun(t *testing.T) {
 
 	t.Run("bootstraps the edge for its own substrate class", func(t *testing.T) {
 		for _, tc := range []struct {
-			run  func(context.Context, CFNAPI, SSMAPI, IAMAPI, edge.Provider, Artifacts, func(string), func(string)) error
+			run  func(context.Context, CFNAPI, SSMAPI, IAMAPI, edge.Edge, Artifacts, func(string), func(string)) error
 			want edge.Class
 		}{
 			{Run, edge.ClassProduction},
@@ -169,7 +191,7 @@ func TestRun(t *testing.T) {
 	t.Run("internal trust leaves no credential", func(t *testing.T) {
 		for _, tc := range []struct {
 			name      string
-			run       func(context.Context, CFNAPI, SSMAPI, IAMAPI, edge.Provider, Artifacts, func(string), func(string)) error
+			run       func(context.Context, CFNAPI, SSMAPI, IAMAPI, edge.Edge, Artifacts, func(string), func(string)) error
 			stackName string
 			credParam string
 		}{
@@ -304,7 +326,7 @@ func TestRun(t *testing.T) {
 	t.Run("adopts cache store per class", func(t *testing.T) {
 		for _, tc := range []struct {
 			name  string
-			run   func(context.Context, CFNAPI, SSMAPI, IAMAPI, edge.Provider, Artifacts, func(string), func(string)) error
+			run   func(context.Context, CFNAPI, SSMAPI, IAMAPI, edge.Edge, Artifacts, func(string), func(string)) error
 			class string
 			param string
 		}{

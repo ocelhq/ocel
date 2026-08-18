@@ -106,7 +106,7 @@ func TestRefuseClaimedDomains(t *testing.T) {
 		t.Parallel()
 
 		err := refuseClaimedDomains([]*deploymentsv1.DomainClaim{
-			{Hostname: "*.previews.ocel.dev", Status: deploymentsv1.DomainClaim_STATUS_CLAIMED, Owner: edge.SharedPreviewEntryScript},
+			{Hostname: "*.previews.ocel.dev", Status: deploymentsv1.DomainClaim_STATUS_CLAIMED, Owner: edge.PreviewEntryOwner},
 		}, projectconfig.ConfigFileName)
 		if err != nil {
 			t.Fatalf("refuseClaimedDomains err = %v, want the shared entry worker to pass", err)

@@ -27,44 +27,46 @@ func declaresPreviewDomain(manifest *deploymentsv1.Manifest) bool {
 	return false
 }
 
-func SharedPreviewEntrySpec(cfg Config, baseDomain string, warn func(string)) (edge.SharedEntrySpec, error) {
+func PreviewWildcardSpecFor(cfg Config, baseDomain string, warn func(string)) (edge.PreviewWildcardSpec, error) {
 	if baseDomain == "" {
-		return edge.SharedEntrySpec{}, fmt.Errorf("a preview domain is required")
+		return edge.PreviewWildcardSpec{}, fmt.Errorf("a preview domain is required")
 	}
 	generic, err := sharedWorker(cfg)
 	if err != nil {
-		return edge.SharedEntrySpec{}, err
+		return edge.PreviewWildcardSpec{}, err
 	}
 	if cfg.StoreScriptName == "" {
-		return edge.SharedEntrySpec{}, fmt.Errorf("no deployments-store worker found for the preview substrate; re-run `ocel bootstrap --preview` to provision it")
+		return edge.PreviewWildcardSpec{}, fmt.Errorf("no deployments-store worker found for the preview substrate; re-run `ocel bootstrap --preview` to provision it")
 	}
 	generic = withService(generic, storeServiceBinding, cfg.StoreScriptName)
 	generic = withVar(generic, envPreview, "1")
 	generic = withVar(generic, envPreviewGlobal, "1")
 	generic = withVar(generic, envPreviewBaseDomain, baseDomain)
 
-	return edge.SharedEntrySpec{
-		Version:             rootStackVersion,
-		ScriptName:          edge.SharedPreviewEntryScript,
-		Generic:             generic,
-		BaseDomain:          baseDomain,
-		GrammarMin:          edge.PreviewGrammarMin,
-		GrammarMax:          edge.PreviewGrammarMax,
-		ISRWriterScriptName: cfg.ISRWriterScriptName,
-		Values:              cfg.EdgeValues,
-		Warn:                warn,
+	return edge.PreviewWildcardSpec{
+		Version:    stackVersion,
+		BaseDomain: baseDomain,
+		GrammarMin: edge.PreviewGrammarMin,
+		GrammarMax: edge.PreviewGrammarMax,
+		Values:     cfg.EdgeValues,
+		Warn:       warn,
+		Program: &edge.ProgramSpec{
+			Worker:              generic,
+			StoreScriptName:     cfg.StoreScriptName,
+			ISRWriterScriptName: cfg.ISRWriterScriptName,
+		},
 	}, nil
 }
 
-func MarkGlobalPreview(state edge.RootStackState, cfg Config, manifest *deploymentsv1.Manifest) edge.RootStackState {
+func MarkGlobalPreview(state edge.StackState, cfg Config, manifest *deploymentsv1.Manifest) edge.StackState {
 	if len(state) == 0 || cfg.Class != deploymentsv1.Environment_CLASS_PREVIEW {
 		return state
 	}
 	marked := maps.Clone(state)
 	if servesOnGlobalPreviewDomain(cfg, manifest) {
-		marked[edge.RootStackKeyGlobalPreview] = cfg.GlobalPreviewDomain
+		marked[edge.StackKeyGlobalPreview] = cfg.GlobalPreviewDomain
 	} else {
-		delete(marked, edge.RootStackKeyGlobalPreview)
+		delete(marked, edge.StackKeyGlobalPreview)
 	}
 	return marked
 }

@@ -380,7 +380,7 @@ func TestInlinePolicyBudgetPreflight(t *testing.T) {
 			manifest.Usages = append(manifest.Usages, &deploymentsv1.ManifestUsage{App: "web", Resource: name})
 		}
 
-		fake := &recordingRootStack{}
+		fake := &recordingEdge{}
 		_, err := Run(context.Background(), Config{
 			Edge:             fake,
 			StoreEndpoint:    fakeStoreEndpoint,

@@ -605,7 +605,7 @@ func refuseClaimedDomains(claims []*deploymentsv1.DomainClaim, configName string
 		if claim.GetStatus() != deploymentsv1.DomainClaim_STATUS_CLAIMED {
 			continue
 		}
-		if claim.GetOwner() == edge.SharedPreviewEntryScript {
+		if claim.GetOwner() == edge.PreviewEntryOwner {
 			continue
 		}
 		if b.Len() == 0 {

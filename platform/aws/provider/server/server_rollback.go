@@ -17,27 +17,23 @@ import (
 
 var errNoProductionDeploy = errors.New("this project has no production deploys yet; run `ocel deploy` first")
 
-func (s *Server) rootStack(ctx context.Context, opts options, slug string) (edge.RootStack, edge.RootStackState, error) {
+func (s *Server) openStack(ctx context.Context, opts options, slug string) (edge.EdgeStack, error) {
 	awscfg, err := loadAWS(ctx, opts.Region)
 	if err != nil {
-		return nil, nil, err
+		return nil, err
 	}
-	state, err := bootstrap.ReadRootStackState(ctx, ssm.NewFromConfig(awscfg), slug)
+	state, err := bootstrap.ReadStackState(ctx, ssm.NewFromConfig(awscfg), slug)
 	if err != nil {
-		return nil, nil, err
+		return nil, err
 	}
-	return s.rootStackFor(state)
+	return s.openStackFor(state)
 }
 
-func (s *Server) rootStackFor(state edge.RootStackState) (edge.RootStack, edge.RootStackState, error) {
+func (s *Server) openStackFor(state edge.StackState) (edge.EdgeStack, error) {
 	if len(state) == 0 {
-		return nil, nil, errNoProductionDeploy
+		return nil, errNoProductionDeploy
 	}
-	stack, ok := s.edge().(edge.RootStack)
-	if !ok {
-		return nil, nil, errors.New("this edge does not support the root stack (instant rollback)")
-	}
-	return stack, state, nil
+	return s.edge().Open(state)
 }
 
 func (s *Server) ListPromotions(ctx context.Context, req *deploymentsv1.ListPromotionsRequest) (*deploymentsv1.ListPromotionsResponse, error) {
@@ -45,7 +41,7 @@ func (s *Server) ListPromotions(ctx context.Context, req *deploymentsv1.ListProm
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInvalidArgument, err)
 	}
-	stack, state, err := s.rootStack(ctx, opts, req.GetSlug())
+	stack, err := s.openStack(ctx, opts, req.GetSlug())
 	if err != nil {
 		if errors.Is(err, errNoProductionDeploy) {
 			return &deploymentsv1.ListPromotionsResponse{}, nil
@@ -53,7 +49,7 @@ func (s *Server) ListPromotions(ctx context.Context, req *deploymentsv1.ListProm
 		return nil, err
 	}
 
-	history, err := stack.History(ctx, state, "")
+	history, err := stack.Ledger().History(ctx, "")
 	if err != nil {
 		return nil, err
 	}
@@ -65,12 +61,12 @@ func (s *Server) Rollback(ctx context.Context, req *deploymentsv1.RollbackReques
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInvalidArgument, err)
 	}
-	stack, state, err := s.rootStack(ctx, opts, req.GetSlug())
+	stack, err := s.openStack(ctx, opts, req.GetSlug())
 	if err != nil {
 		return nil, err
 	}
 
-	promoted, err := deploy.Rollback(ctx, stack, state, req.GetTo(), req.GetTag(), time.Now().Unix())
+	promoted, err := deploy.Rollback(ctx, stack, req.GetTo(), req.GetTag(), time.Now().Unix())
 	if err != nil {
 		return nil, err
 	}

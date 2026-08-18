@@ -11,33 +11,11 @@ import (
 	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/resources/v1"
 	"github.com/ocelhq/ocel/platform/aws/provider/vars/baked"
-	cloudflare "github.com/ocelhq/ocel/platform/edge/cloudflare/deploy"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
-type loaderEdge struct {
-	compatDate  string
-	compatFlags []string
-}
-
-func (loaderEdge) Kind() edge.Kind { return edge.KindCloudflare }
-
-func (loaderEdge) AssembleApp(src edge.WorkerSource, r edge.Resolver) (edge.Worker, error) {
-	return cloudflare.New().AssembleApp(src, r)
-}
-
-func (loaderEdge) Bootstrap(context.Context, edge.Class) (edge.BootstrapOutput, error) {
-	return edge.BootstrapOutput{}, nil
-}
-
-func (loaderEdge) DeployApp(context.Context, edge.AppDeployment) (edge.AppResult, error) {
-	return edge.AppResult{}, nil
-}
-
-func (e loaderEdge) CodeRuntime() (string, []string) { return e.compatDate, e.compatFlags }
-
-func testLoaderEdge() loaderEdge {
-	return loaderEdge{compatDate: "2026-07-13", compatFlags: []string{"nodejs_compat"}}
+func testLoaderEdge() *recordingEdge {
+	return &recordingEdge{compatDate: "2026-07-13", compatFlags: []string{"nodejs_compat"}}
 }
 
 func edgeAppTree(t *testing.T) string {

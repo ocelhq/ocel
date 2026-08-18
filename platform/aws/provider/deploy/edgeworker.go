@@ -45,10 +45,14 @@ func deployEdgeWorker(ctx context.Context, cfg Config, manifest *deploymentsv1.M
 	if err != nil {
 		return nil, err
 	}
+	program, ok := cfg.Edge.(edge.Programmable)
+	if !ok {
+		return nil, fmt.Errorf("project has an edge-served %s app but %s runs no code", apps[0].GetFramework(), cfg.Edge.Kind())
+	}
 
 	for _, app := range apps {
 		name := app.GetName()
-		worker, err := cfg.Edge.AssembleApp(
+		worker, err := program.AssembleApp(
 			edge.WorkerSource{
 				ArtifactRoot: appArtifactRoot(cfg.ArtifactRoot, name),
 				BundlePath:   bundlePath,
@@ -68,7 +72,7 @@ func deployEdgeWorker(ctx context.Context, cfg Config, manifest *deploymentsv1.M
 		if progress != nil {
 			progress(fmt.Sprintf("Deploying %s to the edge", name))
 		}
-		result, err := cfg.Edge.DeployApp(ctx, edge.AppDeployment{
+		result, err := program.DeployApp(ctx, edge.AppDeployment{
 			Name:    workerScriptName(cfg.Slug, cfg.Env, name),
 			Domains: domains[name],
 			Worker:  worker,
@@ -299,18 +303,6 @@ func retiredProjectWorkerStem(slug string) string {
 	return naming.Join(naming.WordSeparator, workerNamespace, slug) + naming.FieldSeparator
 }
 
-func retiredPreviewWorkerStem(slug string) string {
-	return retiredProjectWorkerStem(slug) + previewWorkerEnv
-}
-
-func retiredWorkerNames(slug, env string, apps []string) []string {
-	names := []string{legacyWorkerName(slug, env)}
-	for _, app := range append([]string{rootWorkerApp}, apps...) {
-		names = append(names, retiredProjectWorkerStem(slug)+naming.Join(naming.WordSeparator, env, app))
-	}
-	return names
-}
-
 func legacyWorkerName(slug, env string) string {
 	return naming.Join(naming.WordSeparator, workerNamespace, slug, env)
 }
@@ -319,12 +311,12 @@ func warnOrphanedWorker(ctx context.Context, cfg Config, progress func(string)) 
 	if cfg.Edge == nil || progress == nil {
 		return
 	}
-	finder, ok := cfg.Edge.(edge.AppFinder)
+	program, ok := cfg.Edge.(edge.Programmable)
 	if !ok {
 		return
 	}
 	name := legacyWorkerName(cfg.Slug, cfg.Env)
-	if found, err := finder.FindApp(ctx, name); err != nil || !found {
+	if found, err := program.FindApp(ctx, name); err != nil || !found {
 		return
 	}
 	progress(fmt.Sprintf("Warning: an edge worker remains at %q, the name this project deployed under before workers were named per app. Deploys no longer update it; delete it once nothing points at it.", name))
