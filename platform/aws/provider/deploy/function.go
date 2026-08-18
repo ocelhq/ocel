@@ -31,7 +31,7 @@ const (
 
 	execWrapper = "/opt/ocel/bootstrap"
 
-	defaultMembraneLayerARN = "arn:aws:lambda:us-east-1:363236815301:layer:ocel-membrane:34"
+	defaultMembraneLayerARN = "arn:aws:lambda:us-east-1:363236815301:layer:ocel-membrane:35"
 	membraneLayerARNEnv     = "OCEL_MEMBRANE_LAYER_ARN"
 
 	bytecodeCacheEnv = "OCEL_BYTECODE_CACHE"
