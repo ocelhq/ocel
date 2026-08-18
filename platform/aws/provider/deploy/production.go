@@ -316,7 +316,7 @@ func settleStackRecords(ctx context.Context, cfg Config, specs []edge.StackSpec,
 	for _, spec := range specs {
 		hosts = append(hosts, spec.Domains...)
 	}
-	records, err := edge.RecordsFor(edge.DNSTarget{Kind: cfg.Edge.Kind()}, hosts)
+	records, err := edge.RecordsFor(edge.DNSTarget{Kind: cfg.Edge.Kind(), Front: edge.FrontOf(state)}, hosts)
 	if err != nil {
 		return state, err
 	}

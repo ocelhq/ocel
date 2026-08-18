@@ -114,6 +114,8 @@ func TestDeploy(t *testing.T) {
 	}
 }
 
+const unfrontedKind = edge.Kind("fastly")
+
 func TestUnsupportedEdgeKind(t *testing.T) {
 	t.Parallel()
 
@@ -124,7 +126,7 @@ func TestUnsupportedEdgeKind(t *testing.T) {
 		{"Deploy", func(client deploymentsv1connect.DeploymentServiceClient) error {
 			stream, err := client.Deploy(context.Background(), &deploymentsv1.DeployRequest{
 				Manifest: wellFormedManifest(),
-				EdgeKind: string(edge.KindNative),
+				EdgeKind: string(unfrontedKind),
 				Dns:      &deploymentsv1.Dns{Kind: "cloudflare", Zone: "acme.com"},
 			})
 			if err != nil {
@@ -135,7 +137,7 @@ func TestUnsupportedEdgeKind(t *testing.T) {
 		}},
 		{"Bootstrap", func(client deploymentsv1connect.DeploymentServiceClient) error {
 			stream, err := client.Bootstrap(context.Background(), &deploymentsv1.BootstrapRequest{
-				EdgeKind: string(edge.KindNative),
+				EdgeKind: string(unfrontedKind),
 				Dns:      &deploymentsv1.Dns{Kind: "cloudflare", Zone: "acme.com"},
 			})
 			if err != nil {
@@ -146,13 +148,13 @@ func TestUnsupportedEdgeKind(t *testing.T) {
 		}},
 		{"PlanTeardown", func(client deploymentsv1connect.DeploymentServiceClient) error {
 			_, err := client.PlanTeardown(context.Background(), &deploymentsv1.PlanTeardownRequest{
-				EdgeKind: string(edge.KindNative),
+				EdgeKind: string(unfrontedKind),
 			})
 			return err
 		}},
 		{"Teardown", func(client deploymentsv1connect.DeploymentServiceClient) error {
 			stream, err := client.Teardown(context.Background(), &deploymentsv1.TeardownRequest{
-				EdgeKind: string(edge.KindNative),
+				EdgeKind: string(unfrontedKind),
 			})
 			if err != nil {
 				return err
@@ -171,7 +173,7 @@ func TestUnsupportedEdgeKind(t *testing.T) {
 			if !errors.As(err, &connectErr) || connectErr.Code() != connect.CodeInvalidArgument {
 				t.Fatalf("%s() err = %v, want %v", tc.name, err, connect.CodeInvalidArgument)
 			}
-			for _, want := range []string{string(edge.KindNative), string(edge.KindCloudflare)} {
+			for _, want := range []string{string(unfrontedKind), string(edge.KindCloudflare)} {
 				if !strings.Contains(err.Error(), want) {
 					t.Errorf("err = %v, want it to name %q", err, want)
 				}

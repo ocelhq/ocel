@@ -610,8 +610,8 @@ func TestServerEdge(t *testing.T) {
 		t.Parallel()
 
 		s := &Server{}
-		if _, err := s.edge(edge.KindNative, "eu-west-1"); err == nil {
-			t.Fatal("edge(native) error = nil, want it refused until that slice lands")
+		if _, err := s.edge(unfrontedKind, "eu-west-1"); err == nil {
+			t.Fatalf("edge(%s) error = nil, want it refused: this origin fronts nothing with it", unfrontedKind)
 		}
 		got, err := s.edge(edge.KindCloudflare, "eu-west-1")
 		if err != nil {

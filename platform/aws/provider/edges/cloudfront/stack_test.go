@@ -1,0 +1,195 @@
+package cloudfront
+
+import (
+	"context"
+	"slices"
+	"strings"
+	"testing"
+	"time"
+
+	edge "github.com/ocelhq/ocel/platform/edge/contract"
+)
+
+func TestPromoteOntoAPointerOtherThanTheDefaultLeavesTheHostnameAlone(t *testing.T) {
+	t.Parallel()
+
+	w := newWorld()
+	stack := reconciled(t, w)
+	bound(t, stack)
+	staged(t, stack, fakeEntryURL, fakeAssetPrefix)
+	if err := stack.Promote(context.Background(), promotion(), ""); err != nil {
+		t.Fatalf("Promote: %v", err)
+	}
+	live := routeOn(t, w, stack, boundHost)
+	wrote := w.store.count("kvs.UpdateKeys")
+
+	preview := promotion()
+	preview.PromotionID = "p2"
+	preview.Builds = map[string]string{"web": "d2.f2"}
+	if err := stack.Promote(context.Background(), preview, "pr-7"); err != nil {
+		t.Fatalf("Promote onto a preview pointer: %v", err)
+	}
+
+	if got := w.store.count("kvs.UpdateKeys"); got != wrote {
+		t.Errorf("UpdateKeys calls = %d, want %d: only the default pointer owns the hostnames this stack bound", got, wrote)
+	}
+	if after := routeOn(t, w, stack, boundHost); after.Release != live.Release {
+		t.Errorf("the hostname now answers with release %q, want the production release %q: promoting a preview must not repoint production", after.Release, live.Release)
+	}
+}
+
+func TestRemovePointerLeavesTheHostnameServing(t *testing.T) {
+	t.Parallel()
+
+	for _, tc := range []struct {
+		name    string
+		pointer string
+	}{
+		{"a preview pointer", "pr-7"},
+		{"the default pointer", ""},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			w := newWorld()
+			stack := reconciled(t, w)
+			bound(t, stack)
+			staged(t, stack, fakeEntryURL, fakeAssetPrefix)
+			if err := stack.Promote(context.Background(), promotion(), ""); err != nil {
+				t.Fatalf("Promote: %v", err)
+			}
+
+			if _, err := stack.RemovePointer(context.Background(), tc.pointer); err != nil {
+				t.Fatalf("RemovePointer: %v", err)
+			}
+
+			if published := routeOn(t, w, stack, boundHost); published.Origin != fakeEntryHost {
+				t.Errorf("the hostname answers with %q, want the release it was promoted to: only unbinding the domain takes its route away", published.Origin)
+			}
+		})
+	}
+}
+
+func TestDomainOwnerAsksTheRouteStoreBeforeListingTheAccount(t *testing.T) {
+	t.Parallel()
+
+	w := newWorld()
+	e := bootstrapped(t, w)
+	stack, err := e.Reconcile(context.Background(), testSpec(), nil)
+	if err != nil {
+		t.Fatalf("Reconcile: %v", err)
+	}
+	bound(t, stack)
+	staged(t, stack, fakeEntryURL, fakeAssetPrefix)
+	if err := stack.Promote(context.Background(), promotion(), ""); err != nil {
+		t.Fatalf("Promote: %v", err)
+	}
+	listed := w.front.count("ListDistributions")
+
+	owner, err := e.DomainOwner(context.Background(), strings.ToUpper(boundHost))
+	if err != nil {
+		t.Fatalf("DomainOwner: %v", err)
+	}
+
+	if owner != productionDistributionName() {
+		t.Errorf("DomainOwner(%q) = %q, want the stack the route names (%q)", boundHost, owner, productionDistributionName())
+	}
+	if got := w.front.count("ListDistributions"); got != listed {
+		t.Errorf("ListDistributions calls = %d, want %d: the route store is keyed by hostname, so nothing has to be paged through", got, listed)
+	}
+}
+
+func TestASecondReconcileRereadsNothingImmutable(t *testing.T) {
+	t.Parallel()
+
+	w := newWorld()
+	e := bootstrapped(t, w)
+	first, err := e.Reconcile(context.Background(), testSpec(), nil)
+	if err != nil {
+		t.Fatalf("Reconcile: %v", err)
+	}
+	before := map[string]int{}
+	for _, call := range []string{"ListCachePolicies", "ListResponseHeadersPolicies", "ListOriginAccessControls"} {
+		before[call] = w.front.count(call)
+	}
+
+	second, err := e.Reconcile(context.Background(), testSpec(), first.State())
+	if err != nil {
+		t.Fatalf("Reconcile again: %v", err)
+	}
+
+	for _, call := range slices.Sorted(keysOfCount(before)) {
+		if got := w.front.count(call); got != before[call] {
+			t.Errorf("%s calls = %d, want %d: the stack already names an id CloudFront never changes", call, got, before[call])
+		}
+	}
+	for _, key := range []string{stackKeyCachePolicy, stackKeyHeadersPolicy, stackKeyOAC} {
+		if got, want := second.State()[key], first.State()[key]; got != want {
+			t.Errorf("state[%s] = %q, want the id the first reconcile recorded (%q)", key, got, want)
+		}
+	}
+}
+
+func keysOfCount(held map[string]int) func(func(string) bool) {
+	return func(yield func(string) bool) {
+		for key := range held {
+			if !yield(key) {
+				return
+			}
+		}
+	}
+}
+
+func TestDestroyWaitsOutAThrottledRolloutCheck(t *testing.T) {
+	t.Parallel()
+
+	w := newWorld()
+	stack := reconciled(t, w)
+	w.front.statusThrottles = 2
+
+	if err := stack.Destroy(context.Background()); err != nil {
+		t.Fatalf("Destroy: %v", err)
+	}
+
+	if len(w.front.distributions) != 0 {
+		t.Errorf("%d distributions survived destroy, want none: a throttled status check is not a reason to leave one behind", len(w.front.distributions))
+	}
+}
+
+func TestDestroyHoldsBeforeItFirstAsksHowTheRolloutIsGoing(t *testing.T) {
+	t.Parallel()
+
+	w := newWorld()
+	e := &provider{
+		open: func(context.Context) (Clients, error) { return w.clients(), nil },
+		settle: Settler{
+			Wait: func(context.Context, time.Duration) error {
+				w.trail.record("hold")
+				return nil
+			},
+			Attempts: 5,
+			Every:    time.Second,
+			Jitter:   func() float64 { return 0.5 },
+		},
+	}
+	if _, err := e.Bootstrap(context.Background(), edge.ClassProduction); err != nil {
+		t.Fatalf("Bootstrap: %v", err)
+	}
+	stack, err := e.Reconcile(context.Background(), testSpec(), nil)
+	if err != nil {
+		t.Fatalf("Reconcile: %v", err)
+	}
+	id := stack.State()[stackKeyDistribution]
+
+	if err := stack.Destroy(context.Background()); err != nil {
+		t.Fatalf("Destroy: %v", err)
+	}
+
+	steps := w.trail.taken()
+	disabled := indexOf(t, steps, "UpdateDistribution "+id)
+	polled := indexOf(t, steps, "GetDistribution "+id)
+	held := slices.Index(steps[disabled:], "hold")
+	if held < 0 || disabled+held > polled {
+		t.Errorf("the calls were %v, want a hold between disabling the distribution and asking whether it settled", steps)
+	}
+}

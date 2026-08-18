@@ -402,7 +402,7 @@ func stackTemplate(trust edge.TrustBoundary, code stackArtifacts, version int) s
 	return fmt.Sprintf(`AWSTemplateFormatVersion: '2010-09-09'
 Description: "Ocel bootstrap (production) - the account-global substrate every production app Ocel deploys into this AWS account is built on: the Pulumi state bucket and state table, the artifact and asset buckets, the variable store, and the image optimizer, tag publisher and ISR revalidator all apps share. Created and updated by ocel bootstrap; it holds no app of its own. Deleting this stack orphans every app deployed from it: the Pulumi state describing them goes with its bucket, and no deploy or teardown can run until it is recreated."
 Resources:
-%s%s%s%s%s%s%s%s%s%sOutputs:
+%s%s%s%s%s%s%s%s%s%s%sOutputs:
   %s:
     Description: "S3 bucket holding the Pulumi state Ocel plans every production deploy and teardown from. One versioned object per app stack."
     Value: !Ref StateBucket
@@ -412,14 +412,14 @@ Resources:
   %s:
     Description: "Class this substrate is stamped with, verified before an action runs so that a preview deploy cannot reach production state, variables or caches."
     Value: '%s'
-`, stateBucketResource(ClassProduction), stateTableResource(), artifactBucketResource(), assetBucketResource(), varsResources(ClassProduction), imageOptimizerResources(code.optimizer), tagPublisherResources(code.publisher, ClassProduction), revalidateQueueResources(ClassProduction), revalidatorResources(code.revalidator), edgeUserResource(EdgeUserName, ClassProduction, trust, code.optimizer), outputStateBucket, stateTableOutput(), artifactBucketOutput(), assetBucketOutput(), varsOutputs(), imageOptimizerOutput(code.optimizer), revalidateQueueOutput(code.revalidator), outputVersion, version, outputInfraClass, ClassProduction)
+`, stateBucketResource(ClassProduction), stateTableResource(), artifactBucketResource(), assetBucketResource(), assetBucketPolicyResource(), varsResources(ClassProduction), imageOptimizerResources(code.optimizer), tagPublisherResources(code.publisher, ClassProduction), revalidateQueueResources(ClassProduction), revalidatorResources(code.revalidator), edgeUserResource(EdgeUserName, ClassProduction, trust, code.optimizer), outputStateBucket, stateTableOutput(), artifactBucketOutput(), assetBucketOutput(), varsOutputs(), imageOptimizerOutput(code.optimizer), revalidateQueueOutput(code.revalidator), outputVersion, version, outputInfraClass, ClassProduction)
 }
 
 func previewStackTemplate(trust edge.TrustBoundary, code stackArtifacts, version int) string {
 	return fmt.Sprintf(`AWSTemplateFormatVersion: '2010-09-09'
 Description: "Ocel bootstrap (preview) - the account-global substrate every preview environment Ocel deploys into this AWS account is carved from, deliberately separate from the production bootstrap so a per-PR preview can never reach production state, variables or caches. Created and updated by ocel bootstrap --preview. Deleting this stack orphans every live preview: the Pulumi state describing them goes with its bucket, and no preview deploy or teardown can run until it is recreated."
 Resources:
-%s%s%s%s%s%s%s%s%s%sOutputs:
+%s%s%s%s%s%s%s%s%s%s%sOutputs:
   %s:
     Description: "S3 bucket holding the Pulumi state Ocel plans every preview deploy and teardown from. One versioned object per preview stack."
     Value: !Ref StateBucket
@@ -429,7 +429,7 @@ Resources:
   %s:
     Description: "Class this substrate is stamped with, verified before an action runs so that a preview deploy cannot reach production state, variables or caches."
     Value: '%s'
-`, stateBucketResource(ClassPreview), stateTableResource(), artifactBucketResource(), assetBucketResource(), varsResources(ClassPreview), imageOptimizerResources(code.optimizer), tagPublisherResources(code.publisher, ClassPreview), revalidateQueueResources(ClassPreview), revalidatorResources(code.revalidator), edgeUserResource(EdgePreviewUserName, ClassPreview, trust, code.optimizer), outputStateBucket, stateTableOutput(), artifactBucketOutput(), assetBucketOutput(), varsOutputs(), imageOptimizerOutput(code.optimizer), revalidateQueueOutput(code.revalidator), outputVersion, version, outputInfraClass, ClassPreview)
+`, stateBucketResource(ClassPreview), stateTableResource(), artifactBucketResource(), assetBucketResource(), assetBucketPolicyResource(), varsResources(ClassPreview), imageOptimizerResources(code.optimizer), tagPublisherResources(code.publisher, ClassPreview), revalidateQueueResources(ClassPreview), revalidatorResources(code.revalidator), edgeUserResource(EdgePreviewUserName, ClassPreview, trust, code.optimizer), outputStateBucket, stateTableOutput(), artifactBucketOutput(), assetBucketOutput(), varsOutputs(), imageOptimizerOutput(code.optimizer), revalidateQueueOutput(code.revalidator), outputVersion, version, outputInfraClass, ClassPreview)
 }
 
 func stateBucketResource(class string) string {
@@ -570,6 +570,28 @@ func assetBucketResource() string {
             AbortIncompleteMultipartUpload:
               DaysAfterInitiation: %d
 `, artifactAbortMultipartDays)
+}
+
+func assetBucketPolicyResource() string {
+	return `  AssetBucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    Metadata:
+      Description: "The only grant on the asset bucket. It lets CloudFront distributions in this account, and no one else, read objects out of it over an origin access control; the bucket itself stays closed to the public. One statement for the whole account, so no deploy ever rewrites it and concurrent deploys cannot clobber each other."
+    Properties:
+      Bucket: !Ref AssetBucket
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Sid: AllowCloudFrontOriginAccessControlRead
+            Effect: Allow
+            Principal:
+              Service: cloudfront.amazonaws.com
+            Action: s3:GetObject
+            Resource: !Sub '${AssetBucket.Arn}/*'
+            Condition:
+              StringEquals:
+                AWS:SourceAccount: !Ref AWS::AccountId
+`
 }
 
 func assetBucketOutput() string {

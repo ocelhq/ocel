@@ -51,3 +51,5 @@ jobs:
           pnpm --filter @ocel/pulumi test
           pnpm --filter @ocel/provider-aws test
           pnpm --filter @framework/next-router test
+          pnpm --filter @platform/cf-entry test
+          pnpm --filter @platform/cloudfront-resolver test

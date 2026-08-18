@@ -7,7 +7,8 @@
   "exports": {
     "./revalidation": "./src/revalidation.mts",
     "./serve": "./src/serve.mts",
-    "./revalidation/sample": "./src/revalidation-sample.mts"
+    "./revalidation/sample": "./src/revalidation-sample.mts",
+    "./fixtures/cache-key": "./fixtures/cache-key.json"
   },
   "scripts": {
     "typecheck": "tsc --noEmit",
