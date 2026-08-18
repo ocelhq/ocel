@@ -21,14 +21,21 @@ function mirror(): Mirror {
   return (host[stateKey] ??= { manifest: null });
 }
 
+function unmirrored(reason: string): null {
+  console.warn(`ocel: tag staleness will not reach Next's manifest: ${reason}`);
+  return null;
+}
+
 export function loadTagsManifest(projectDir: string): Manifest | null {
+  let manifest: unknown;
   try {
-    const load = createRequire(join(projectDir, "package.json"));
-    const manifest = load(manifestModule)?.tagsManifest;
-    return manifest instanceof Map ? manifest : null;
-  } catch {
-    return null;
+    manifest = createRequire(join(projectDir, "package.json"))(manifestModule)?.tagsManifest;
+  } catch (err) {
+    return unmirrored(`${manifestModule} did not resolve from ${projectDir}: ${String(err)}`);
   }
+  return manifest instanceof Map
+    ? manifest
+    : unmirrored(`${manifestModule} exports no tagsManifest Map`);
 }
 
 export function mirrorTagsInto(manifest: Manifest | null): void {

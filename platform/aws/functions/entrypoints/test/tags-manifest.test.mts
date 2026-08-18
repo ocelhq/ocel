@@ -1,9 +1,58 @@
-import { afterEach, expect, test } from "vitest";
+import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { dirname, join } from "node:path";
+import { createRequire } from "node:module";
+import { afterEach, expect, test, vi } from "vitest";
 
-import { mirrorTag, mirrorTagsInto } from "../src/next/tags-manifest.mjs";
+import { loadTagsManifest, mirrorTag, mirrorTagsInto } from "../src/next/tags-manifest.mjs";
+
+const manifestModule = "next/dist/server/lib/incremental-cache/tags-manifest.external.js";
+const adapterDir = join(import.meta.dirname, "../../../../../frameworks/next/adapter");
 
 afterEach(() => {
   mirrorTagsInto(null);
+  vi.restoreAllMocks();
+});
+
+test("resolves the Map the pinned Next's runtimes share", () => {
+  const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+
+  const manifest = loadTagsManifest(adapterDir);
+
+  const nextsOwn = createRequire(join(adapterDir, "package.json"))(manifestModule).tagsManifest;
+  expect(manifest).toBe(nextsOwn);
+  expect(warn).not.toHaveBeenCalled();
+});
+
+test("warns and mirrors nothing when the project's Next does not expose the manifest", () => {
+  const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+  const projectDir = mkdtempSync(join(tmpdir(), "ocel-no-next-"));
+  const nextDir = join(projectDir, "node_modules", "next");
+  mkdirSync(nextDir, { recursive: true });
+  writeFileSync(join(nextDir, "package.json"), JSON.stringify({ name: "next", exports: {} }));
+  try {
+    expect(loadTagsManifest(projectDir)).toBeNull();
+  } finally {
+    rmSync(projectDir, { recursive: true, force: true });
+  }
+
+  expect(warn).toHaveBeenCalledTimes(1);
+  expect(warn.mock.calls[0]![0]).toContain(manifestModule);
+});
+
+test("warns when the module resolves but exports no Map", () => {
+  const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+  const projectDir = mkdtempSync(join(tmpdir(), "ocel-odd-next-"));
+  const modulePath = join(projectDir, "node_modules", manifestModule);
+  mkdirSync(dirname(modulePath), { recursive: true });
+  writeFileSync(modulePath, "module.exports = { tagsManifest: {} };\n");
+  try {
+    expect(loadTagsManifest(projectDir)).toBeNull();
+  } finally {
+    rmSync(projectDir, { recursive: true, force: true });
+  }
+
+  expect(warn).toHaveBeenCalledTimes(1);
 });
 
 test("mirrors nothing while no manifest is registered", () => {
