@@ -19,16 +19,23 @@ Declare the link in the Pulumi program:
 
 ```ts
 import * as aws from "@pulumi/aws";
+import { Config } from "@pulumi/pulumi";
 import { link } from "@ocel/pulumi";
 
-const orders = new aws.rds.Instance("orders", { engine: "postgres" /* … */ });
+const password = new Config().requireSecret("dbPassword");
+
+const orders = new aws.rds.Instance("orders", {
+  engine: "postgres",
+  password,
+  /* … */
+});
 
 link.postgres("orders", {
   host: orders.address,
   port: orders.port,
   database: orders.dbName,
   username: orders.username,
-  password: orders.password.apply(String),
+  password,
 });
 ```
 
