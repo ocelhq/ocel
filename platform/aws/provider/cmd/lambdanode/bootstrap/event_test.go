@@ -63,11 +63,114 @@ func TestParseEvent(t *testing.T) {
 			t.Errorf("decoded body = %q, want hi", body)
 		}
 	})
+	t.Run("payload V1 method path query", func(t *testing.T) {
+		payload := []byte(`{
+			"version": "1.0",
+			"path": "/hello",
+			"httpMethod": "POST",
+			"queryStringParameters": {"a": "2"},
+			"multiValueQueryStringParameters": {"a": ["1", "2"]},
+			"headers": {"content-type": "application/json", "accept": "text/html"},
+			"multiValueHeaders": {"accept": ["text/html", "application/json"]},
+			"body": "hi there",
+			"isBase64Encoded": false
+		}`)
+
+		ev, err := parseEvent(payload)
+		if err != nil {
+			t.Fatalf("parseEvent: %v", err)
+		}
+		if ev.method() != "POST" {
+			t.Errorf("method = %q, want POST", ev.method())
+		}
+		if ev.path() != "/hello" {
+			t.Errorf("path = %q, want /hello", ev.path())
+		}
+		if ev.query() != "a=1&a=2" {
+			t.Errorf("query = %q, want a=1&a=2; a repeated parameter must survive", ev.query())
+		}
+		if got := ev.header().Values("Accept"); len(got) != 2 || got[0] != "text/html" || got[1] != "application/json" {
+			t.Errorf("Accept = %v, want both values the REST API sent", got)
+		}
+		if got := ev.header().Get("Content-Type"); got != "application/json" {
+			t.Errorf("Content-Type = %q, want the single-valued header carried through", got)
+		}
+		body, err := ev.decodedBody()
+		if err != nil {
+			t.Fatalf("decodedBody: %v", err)
+		}
+		if string(body) != "hi there" {
+			t.Errorf("body = %q, want %q", body, "hi there")
+		}
+	})
+
+	t.Run("payload V1 without repeated parameters", func(t *testing.T) {
+		ev, err := parseEvent([]byte(`{"version":"1.0","path":"/","httpMethod":"GET","queryStringParameters":{"a":"1"}}`))
+		if err != nil {
+			t.Fatalf("parseEvent: %v", err)
+		}
+		if ev.query() != "a=1" {
+			t.Errorf("query = %q, want a=1", ev.query())
+		}
+	})
+
+	t.Run("payload V1 carries cookies in a header", func(t *testing.T) {
+		ev, err := parseEvent([]byte(`{"version":"1.0","path":"/","httpMethod":"GET","headers":{"Cookie":"s=1; t=2"}}`))
+		if err != nil {
+			t.Fatalf("parseEvent: %v", err)
+		}
+		req, err := buildLoopbackRequest(t.Context(), 4321, ev)
+		if err != nil {
+			t.Fatalf("buildLoopbackRequest: %v", err)
+		}
+		if got := req.Header.Get("Cookie"); got != "s=1; t=2" {
+			t.Errorf("Cookie = %q, want the header a REST API sends cookies in", got)
+		}
+	})
+}
+
+func TestBuildLoopbackRequestFromARestProxyEvent(t *testing.T) {
+	ev, err := parseEvent([]byte(`{
+		"version": "1.0",
+		"path": "/blog/post",
+		"httpMethod": "POST",
+		"multiValueQueryStringParameters": {"tag": ["a", "b"]},
+		"multiValueHeaders": {"x-try": ["1", "2"], "host": ["shop.example.com"]},
+		"body": "aGk=",
+		"isBase64Encoded": true
+	}`))
+	if err != nil {
+		t.Fatalf("parseEvent: %v", err)
+	}
+
+	req, err := buildLoopbackRequest(t.Context(), 4321, ev)
+	if err != nil {
+		t.Fatalf("buildLoopbackRequest: %v", err)
+	}
+	if req.Method != "POST" {
+		t.Errorf("method = %q, want POST", req.Method)
+	}
+	if req.URL.Path != "/blog/post" {
+		t.Errorf("path = %q, want /blog/post", req.URL.Path)
+	}
+	if req.URL.RawQuery != "tag=a&tag=b" {
+		t.Errorf("query = %q, want tag=a&tag=b", req.URL.RawQuery)
+	}
+	if got := req.Header.Values("X-Try"); len(got) != 2 {
+		t.Errorf("X-Try = %v, want both values", got)
+	}
+	if req.Host != "shop.example.com" {
+		t.Errorf("req.Host = %q, want the public authority the REST API forwarded", req.Host)
+	}
+	body, _ := io.ReadAll(req.Body)
+	if string(body) != "hi" {
+		t.Errorf("body = %q, want the base64 body decoded", body)
+	}
 }
 
 func TestBuildLoopbackRequest(t *testing.T) {
 	t.Run("path query headers cookies", func(t *testing.T) {
-		ev := &funcURLRequest{
+		ev := &httpEvent{
 			RawPath:        "/hello",
 			RawQueryString: "a=1",
 			Headers:        map[string]string{"content-type": "application/json"},
@@ -134,7 +237,7 @@ func TestBuildLoopbackRequest(t *testing.T) {
 			},
 		} {
 			t.Run(tc.name, func(t *testing.T) {
-				ev := &funcURLRequest{RawPath: "/", Headers: tc.headers}
+				ev := &httpEvent{RawPath: "/", Headers: tc.headers}
 				ev.RequestContext.HTTP.Method = "GET"
 
 				req, err := buildLoopbackRequest(t.Context(), 4321, ev)
@@ -208,6 +311,26 @@ func TestEncodePrelude(t *testing.T) {
 		}
 		if len(p.Cookies) != 2 {
 			t.Errorf("cookies = %v, want two entries", p.Cookies)
+		}
+	})
+
+	t.Run("the edge header the router set reaches the prelude", func(t *testing.T) {
+		h := http.Header{}
+		h.Set("Content-Type", "text/html")
+		h.Set("X-Ocel-Edge", "none")
+
+		out, err := encodePrelude(200, h)
+		if err != nil {
+			t.Fatalf("encodePrelude: %v", err)
+		}
+		var p struct {
+			Headers map[string]string `json:"headers"`
+		}
+		if err := json.Unmarshal(out[:len(out)-preludeSeparatorLen], &p); err != nil {
+			t.Fatalf("prelude JSON invalid: %v", err)
+		}
+		if p.Headers["X-Ocel-Edge"] != "none" {
+			t.Errorf("headers = %v, want the edge header the router set carried through; it is the only thing that marks a streamed response", p.Headers)
 		}
 	})
 
@@ -296,7 +419,7 @@ func TestLoopbackClientDoesNotHangOnAConnectionPoisonedByAnUnreadBody(t *testing
 	port := unreadBodyServer(t)
 	client := newLoopbackClient()
 
-	unread := &funcURLRequest{RawPath: "/_middleware", Body: string(bytes.Repeat([]byte("a"), 300_000))}
+	unread := &httpEvent{RawPath: "/_middleware", Body: string(bytes.Repeat([]byte("a"), 300_000))}
 	unread.RequestContext.HTTP.Method = "POST"
 	req1, err := buildLoopbackRequest(t.Context(), port, unread)
 	if err != nil {
@@ -311,7 +434,7 @@ func TestLoopbackClientDoesNotHangOnAConnectionPoisonedByAnUnreadBody(t *testing
 
 	ctx, cancel := context.WithTimeout(t.Context(), 2*time.Second)
 	defer cancel()
-	next := &funcURLRequest{RawPath: "/file"}
+	next := &httpEvent{RawPath: "/file"}
 	next.RequestContext.HTTP.Method = "GET"
 	req2, err := buildLoopbackRequest(ctx, port, next)
 	if err != nil {

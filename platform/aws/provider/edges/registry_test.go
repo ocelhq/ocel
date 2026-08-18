@@ -11,8 +11,8 @@ import (
 func TestSupportedEdges(t *testing.T) {
 	t.Parallel()
 
-	if got := SupportedEdges(); !slices.Equal(got, []edge.Kind{edge.KindCloudflare}) {
-		t.Errorf("SupportedEdges() = %v, want only cloudflare", got)
+	if got := SupportedEdges(); !slices.Equal(got, []edge.Kind{edge.KindCloudflare, edge.KindNone}) {
+		t.Errorf("SupportedEdges() = %v, want cloudflare and none", got)
 	}
 }
 
@@ -43,13 +43,23 @@ func TestEdgeFor(t *testing.T) {
 		}
 	})
 
+	t.Run("the none kind resolves to the API Gateway edge", func(t *testing.T) {
+		t.Parallel()
+
+		e, err := EdgeFor(edge.KindNone, Deps{})
+		if err != nil {
+			t.Fatalf("EdgeFor(none) error = %v", err)
+		}
+		if e.Kind() != edge.KindNone {
+			t.Errorf("Kind() = %q, want none", e.Kind())
+		}
+	})
+
 	t.Run("a kind the contract knows but this origin has not registered is unsupported", func(t *testing.T) {
 		t.Parallel()
 
-		for _, kind := range []edge.Kind{edge.KindNative, edge.KindNone} {
-			if _, err := EdgeFor(kind, Deps{}); err == nil {
-				t.Errorf("EdgeFor(%q) error = nil, want it unsupported until its slice lands", kind)
-			}
+		if _, err := EdgeFor(edge.KindNative, Deps{}); err == nil {
+			t.Error("EdgeFor(native) error = nil, want it unsupported until its slice lands")
 		}
 	})
 }

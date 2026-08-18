@@ -56,7 +56,7 @@ type memo struct {
 	deployed map[string]*entry[bootstrap.Deployed]
 	identity map[string]*entry[callerIdentity]
 
-	edgeByKind map[string]*entry[edge.Edge]
+	edgeByOrigin map[string]*entry[edge.Edge]
 }
 
 type entry[T any] struct {
@@ -108,21 +108,31 @@ func (m *memo) forgetDeployed() {
 	m.deployed = nil
 }
 
-func (m *memo) edgeFor(kind edge.Kind) *entry[edge.Edge] {
-	return entryFor(m, &m.edgeByKind, string(kind))
+func (m *memo) edgeFor(kind edge.Kind, region string) *entry[edge.Edge] {
+	return entryFor(m, &m.edgeByOrigin, string(kind)+"|"+region)
 }
 
-func (s *Server) edge(kind edge.Kind) (edge.Edge, error) {
+func (s *Server) edge(kind edge.Kind, region string) (edge.Edge, error) {
 	if kind == "" {
 		kind = edge.KindCloudflare
 	}
-	return s.memo.edgeFor(kind).resolve(func() (edge.Edge, error) {
-		return edges.EdgeFor(kind, edges.Deps{})
+	return s.memo.edgeFor(kind, region).resolve(func() (edge.Edge, error) {
+		return edges.EdgeFor(kind, edges.Deps{
+			AWS: func(ctx context.Context) (aws.Config, error) { return loadAWS(ctx, region) },
+		})
 	})
 }
 
-func (s *Server) originEdge() (edge.Edge, error) {
-	return s.edge(s.edgeKind)
+func (s *Server) originEdge(region string) (edge.Edge, error) {
+	return s.edge(s.edgeKind, region)
+}
+
+func optionsRegion(raw []byte) string {
+	opts, err := parseOptions(raw)
+	if err != nil {
+		return ""
+	}
+	return opts.Region
 }
 
 func (s *Server) deployed(ctx context.Context, api bootstrap.CFNDescriber, region string, preview bool) (bootstrap.Deployed, error) {
@@ -158,7 +168,7 @@ func (s *Server) Deploy(ctx context.Context, req *deploymentsv1.DeployRequest, s
 	if err := validateManifest(manifest); err != nil {
 		return connect.NewError(connect.CodeInvalidArgument, err)
 	}
-	edgeFront, edgeErr := s.edge(edge.Kind(req.GetEdgeKind()))
+	edgeFront, edgeErr := s.edge(edge.Kind(req.GetEdgeKind()), optionsRegion(req.GetOptions()))
 	if edgeErr != nil {
 		return connect.NewError(connect.CodeInvalidArgument, edgeErr)
 	}
@@ -432,7 +442,7 @@ func previewExpiry(lifecycle deploymentsv1.Environment_Lifecycle, now time.Time)
 }
 
 func (s *Server) Bootstrap(ctx context.Context, req *deploymentsv1.BootstrapRequest, stream *connect.ServerStream[deploymentsv1.DeployEvent]) error {
-	edgeFront, err := s.edge(edge.Kind(req.GetEdgeKind()))
+	edgeFront, err := s.edge(edge.Kind(req.GetEdgeKind()), optionsRegion(req.GetOptions()))
 	if err != nil {
 		return connect.NewError(connect.CodeInvalidArgument, err)
 	}

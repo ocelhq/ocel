@@ -3,7 +3,7 @@ import { afterAll, beforeAll, expect, test } from "vitest";
 
 import type { RoutingManifest } from "@framework/next-protocol/routing-manifest";
 
-import { routerMode } from "../src/shared/edge-kind.mjs";
+import { edgeHeader, routerMode } from "../src/shared/edge-kind.mjs";
 import {
   routerHostFromEnv,
   serveRouted,
@@ -17,6 +17,7 @@ import { isLoopback, siblingOriginFetch } from "../src/next/router-signing.mjs";
 const LOCAL_BUNDLE = "local-bundle";
 const SIBLING_BUNDLE = "other-bundle";
 const SIBLING_URL = "https://abc123.lambda-url.us-east-1.on.aws";
+const EDGE_KIND = "none";
 
 const credentials = {
   AWS_ACCESS_KEY_ID: "AKIAEXAMPLE",
@@ -77,6 +78,7 @@ function host(): RouterHost {
 
   return {
     manifest,
+    edgeKind: EDGE_KIND,
     localOrigin,
     functionUrls: { [SIBLING_BUNDLE]: SIBLING_URL },
     slug: "p1",
@@ -219,6 +221,7 @@ test("the env names the entry function's own bundle as the loopback origin", asy
   );
 
   expect(built.manifest.entry).toBe(LOCAL_BUNDLE);
+  expect(built.edgeKind).toBe("native");
   expect(built.functionUrls).toEqual({ [SIBLING_BUNDLE]: SIBLING_URL });
   expect(built.assetPrefix).toBe("prod/shop/web/r0a1b2c3d/assets");
   expect(built.assetBucket).toBeUndefined();
@@ -297,4 +300,32 @@ test("a sibling call with no credentials fails loudly", async () => {
   const originFetch = siblingOriginFetch({}, "us-east-1");
 
   await expect(originFetch(`${SIBLING_URL}/sibling`)).rejects.toThrow(/credentials/);
+});
+
+test("every routed response names the edge that served it", async () => {
+  for (const path of ["/local", "/sibling"]) {
+    const response = await serving(path, forged);
+    expect(response.headers.get(edgeHeader)).toBe(EDGE_KIND);
+  }
+});
+
+test("the edge an origin claims is replaced by the edge in front of it", async () => {
+  const marked = await serveRouted(
+    new Request("https://app.example/sibling"),
+    { ...host(), edgeKind: "cloudflare" },
+    () => {},
+  );
+
+  expect(marked.headers.get(edgeHeader)).toBe("cloudflare");
+  expect(await marked.text()).toBe("sibling");
+});
+
+test("a router hosted behind no edge marks nothing", async () => {
+  const bare = await serveRouted(
+    new Request("https://app.example/sibling"),
+    { ...host(), edgeKind: "" },
+    () => {},
+  );
+
+  expect(bare.headers.get(edgeHeader)).toBeNull();
 });

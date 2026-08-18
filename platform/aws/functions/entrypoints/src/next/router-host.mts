@@ -7,7 +7,7 @@ import { originBodyBudget } from "@framework/next-router/origin-body";
 import type { RoutingManifest } from "@framework/next-protocol/routing-manifest";
 
 import type { Invoke } from "../shared/membrane.mjs";
-import { routingManifestPathVar } from "../shared/edge-kind.mjs";
+import { routingManifestPathVar, withEdgeHeader } from "../shared/edge-kind.mjs";
 import { fetchToNodeHandler } from "../node/fetch-bridge.mjs";
 import { s3AssetBucket, uncachedResponses } from "./router-assets.mjs";
 import {
@@ -36,6 +36,7 @@ export function withoutClientControl(headers: Headers): Headers {
 
 export interface RouterHost {
   manifest: RoutingManifest;
+  edgeKind: string;
   localOrigin: string;
   functionUrls: Record<string, string>;
   slug: string;
@@ -81,7 +82,7 @@ function routerDeps(
   };
 }
 
-export function serveRouted(
+export async function serveRouted(
   request: Request,
   host: RouterHost,
   waitUntil: (promise: Promise<unknown>) => void,
@@ -89,7 +90,10 @@ export function serveRouted(
   const stripped = new Request(request, {
     headers: withoutClientControl(request.headers),
   });
-  return serve(stripped, routerDeps(host, waitUntil));
+  return withEdgeHeader(
+    await serve(stripped, routerDeps(host, waitUntil)),
+    host.edgeKind,
+  );
 }
 
 export function routerHostInvoke(host: RouterHost): Invoke {
@@ -142,6 +146,7 @@ export function routerHostFromEnv(
 
   return {
     manifest,
+    edgeKind: env.OCEL_EDGE_KIND ?? "",
     localOrigin,
     functionUrls: siblingFunctionUrls(env[functionUrlsVar]),
     slug: env.OCEL_SLUG ?? "",

@@ -105,7 +105,7 @@ func (m *nodeChild) forward(ctx context.Context, inv *invocation, rw *responseWr
 	return true, rw.Close()
 }
 
-func (m *nodeChild) forwardToNode(ctx context.Context, ev *funcURLRequest) (*http.Response, error) {
+func (m *nodeChild) forwardToNode(ctx context.Context, ev *httpEvent) (*http.Response, error) {
 	req, err := buildForwardRequest(ctx, m.nodePort, ev)
 	if err != nil {
 		return nil, err
@@ -123,7 +123,7 @@ func (m *nodeChild) forwardToNode(ctx context.Context, ev *funcURLRequest) (*htt
 	return resp, err
 }
 
-func buildForwardRequest(ctx context.Context, nodePort int, ev *funcURLRequest) (*http.Request, error) {
+func buildForwardRequest(ctx context.Context, nodePort int, ev *httpEvent) (*http.Request, error) {
 	req, err := buildLoopbackRequest(ctx, nodePort, ev)
 	if err != nil {
 		return nil, err

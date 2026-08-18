@@ -83,7 +83,7 @@ func (s *Server) runUseDomain(ctx context.Context, req *deploymentsv1.UseDomainR
 		return err
 	}
 
-	edgeFront, err := s.originEdge()
+	edgeFront, err := s.originEdge(awscfg.Region)
 	if err != nil {
 		return err
 	}
@@ -230,7 +230,7 @@ func (s *Server) runReleaseDomain(ctx context.Context, req *deploymentsv1.Releas
 		return nil
 	}
 
-	edgeFront, err := s.originEdge()
+	edgeFront, err := s.originEdge(awscfg.Region)
 	if err != nil {
 		return err
 	}
@@ -293,7 +293,7 @@ func (s *Server) ListDomain(ctx context.Context, req *deploymentsv1.ListDomainRe
 		return nil, err
 	}
 	return &deploymentsv1.ListDomainResponse{
-		Domain:   globalPreviewDomain(ctx, s.edgeRouteOwner(), recorded),
+		Domain:   globalPreviewDomain(ctx, s.edgeRouteOwner(awscfg.Region), recorded),
 		Projects: served,
 	}, nil
 }

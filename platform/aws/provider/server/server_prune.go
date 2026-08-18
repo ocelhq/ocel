@@ -80,7 +80,7 @@ func (s *Server) runPrune(ctx context.Context, req *deploymentsv1.PruneRequest, 
 	if err != nil {
 		return finish(err)
 	}
-	stack, err := s.openStackFor(params.StackState)
+	stack, err := s.openStackFor(params.StackState, awscfg.Region)
 	if err != nil {
 		if errors.Is(err, errNoProductionDeploy) {
 			return finish(nil)

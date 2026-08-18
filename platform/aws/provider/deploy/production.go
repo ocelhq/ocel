@@ -194,7 +194,7 @@ func realize(ctx context.Context, cfg Config, manifest *deploymentsv1.Manifest, 
 		outs, names, err := runAppStack(ctx, cfg, manifest, plan, app, id, artifacts, baked[app.GetName()], builds, granting, appStages[app.GetName()], log)
 		appOutputs[i] = outs
 		appFunctionNames[i] = names
-		record, recErr := buildDeploymentRecord(cfg, manifest, app, id, outs, builds)
+		record, recErr := buildDeploymentRecord(cfg, manifest, app, id, outs, builds, names)
 		if err == nil {
 			err = recErr
 		}
@@ -785,7 +785,7 @@ func readRoutingManifest(cfg Config, app string) (any, bool, error) {
 	return routing, true, nil
 }
 
-func buildDeploymentRecord(cfg Config, manifest *deploymentsv1.Manifest, app *deploymentsv1.ManifestApp, id Identity, outs []*deploymentsv1.FunctionOutput, builds appBuilds) (edge.DeploymentRecord, error) {
+func buildDeploymentRecord(cfg Config, manifest *deploymentsv1.Manifest, app *deploymentsv1.ManifestApp, id Identity, outs []*deploymentsv1.FunctionOutput, builds appBuilds, functionNames map[string]string) (edge.DeploymentRecord, error) {
 	name := app.GetName()
 	urlByLogical := functionURLsByLogicalName(outs)
 	fingerprint, variables := recordedAudit(cfg, app)
@@ -812,6 +812,7 @@ func buildDeploymentRecord(cfg Config, manifest *deploymentsv1.Manifest, app *de
 		return edge.DeploymentRecord{}, fmt.Errorf("app %s declares edge routing but its build wrote no %s; rebuild the app", name, edge.RoutingManifestFile)
 	}
 	record.Entry = desc.Entry
+	record.EntryFunction = functionNames[entryLogicalName(manifest, name, desc.Entry)]
 	record.Needs, record.SupportInEffect, record.Waived = cfg.needs.forApp(name)
 	if routed {
 		record.RoutingManifest = routing
@@ -837,6 +838,18 @@ func buildDeploymentRecord(cfg Config, manifest *deploymentsv1.Manifest, app *de
 		}
 	}
 	return record, nil
+}
+
+func entryLogicalName(manifest *deploymentsv1.Manifest, app, entry string) string {
+	if entry == "" {
+		return ""
+	}
+	for _, fn := range manifest.GetFunctions() {
+		if fn.GetApp() == app && routeID(fn) == entry {
+			return fn.GetLogicalName()
+		}
+	}
+	return ""
 }
 
 func workerURLOutputs(cfg Config, manifest *deploymentsv1.Manifest) []*deploymentsv1.FunctionOutput {

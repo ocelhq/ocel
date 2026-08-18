@@ -26,16 +26,20 @@ func (s *Server) openStack(ctx context.Context, opts options, slug string) (edge
 	if err != nil {
 		return nil, err
 	}
-	return s.openStackFor(state)
+	return s.openStackFor(state, awscfg.Region)
 }
 
-func (s *Server) openStackFor(state edge.StackState) (edge.EdgeStack, error) {
-	if len(state) == 0 {
-		return nil, errNoProductionDeploy
-	}
-	edgeFront, err := s.originEdge()
+func (s *Server) openStackFor(state edge.StackState, region string) (edge.EdgeStack, error) {
+	edgeFront, err := s.originEdge(region)
 	if err != nil {
 		return nil, err
+	}
+	return openStackOn(edgeFront, state)
+}
+
+func openStackOn(edgeFront edge.Edge, state edge.StackState) (edge.EdgeStack, error) {
+	if len(state) == 0 {
+		return nil, errNoProductionDeploy
 	}
 	return edgeFront.Open(state)
 }
@@ -65,7 +69,7 @@ func (s *Server) Rollback(ctx context.Context, req *deploymentsv1.RollbackReques
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInvalidArgument, err)
 	}
-	edgeFront, err := s.originEdge()
+	edgeFront, err := s.originEdge(opts.Region)
 	if err != nil {
 		return nil, err
 	}

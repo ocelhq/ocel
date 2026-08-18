@@ -13,6 +13,26 @@ type Suite struct {
 	Hostname string
 }
 
+func promote(t *testing.T, stack edge.EdgeStack, promotion edge.Promotion, pointer string) {
+	t.Helper()
+
+	ctx := context.Background()
+	for app, identity := range promotion.Builds {
+		staged := edge.DeploymentRecord{
+			App:           app,
+			Identity:      identity,
+			Entry:         "/",
+			EntryFunction: "conformance-prod-" + app + "-r0a1b2c3d",
+		}
+		if err := stack.Ledger().PutStaged(ctx, staged); err != nil {
+			t.Fatalf("PutStaged(%s/%s): %v", app, identity, err)
+		}
+	}
+	if err := stack.Promote(ctx, promotion, pointer); err != nil {
+		t.Fatalf("Promote(%s): %v", promotion.PromotionID, err)
+	}
+}
+
 func Run(t *testing.T, suite Suite) {
 	t.Helper()
 
@@ -72,13 +92,8 @@ func Run(t *testing.T, suite Suite) {
 		if err != nil {
 			t.Fatalf("Reconcile: %v", err)
 		}
-		if err := stack.Ledger().PutStaged(ctx, edge.DeploymentRecord{App: "web", Identity: "b1"}); err != nil {
-			t.Fatalf("PutStaged: %v", err)
-		}
 		promotion := edge.Promotion{PromotionID: "conformance-reopen", Ts: 1, Builds: map[string]string{"web": "b1"}}
-		if err := stack.Promote(ctx, promotion, ""); err != nil {
-			t.Fatalf("Promote: %v", err)
-		}
+		promote(t, stack, promotion, "")
 
 		reopened, err := e.Open(stack.State())
 		if err != nil {
@@ -107,13 +122,8 @@ func Run(t *testing.T, suite Suite) {
 	t.Run("a promoted record shows up in history", func(t *testing.T) {
 		ctx := context.Background()
 		stack := reconciled(t, suite)
-		if err := stack.Ledger().PutStaged(ctx, edge.DeploymentRecord{App: "web", Identity: "b1"}); err != nil {
-			t.Fatalf("PutStaged: %v", err)
-		}
 		promotion := edge.Promotion{PromotionID: "conformance-1", Ts: 1, Builds: map[string]string{"web": "b1"}}
-		if err := stack.Promote(ctx, promotion, ""); err != nil {
-			t.Fatalf("Promote: %v", err)
-		}
+		promote(t, stack, promotion, "")
 		history, err := stack.Ledger().History(ctx, "")
 		if err != nil {
 			t.Fatalf("History: %v", err)
@@ -128,9 +138,7 @@ func Run(t *testing.T, suite Suite) {
 		stack := reconciled(t, suite)
 		ids := []string{"conformance-1", "conformance-2", "conformance-3"}
 		for i, id := range ids {
-			if err := stack.Promote(ctx, edge.Promotion{PromotionID: id, Ts: int64(i), Builds: map[string]string{"web": id}}, ""); err != nil {
-				t.Fatalf("Promote(%s): %v", id, err)
-			}
+			promote(t, stack, edge.Promotion{PromotionID: id, Ts: int64(i), Builds: map[string]string{"web": id}}, "")
 		}
 		result, err := stack.Ledger().Prune(ctx, 1, "")
 		if err != nil {
@@ -161,12 +169,8 @@ func Run(t *testing.T, suite Suite) {
 		ctx := context.Background()
 		stack := reconciled(t, suite)
 		const pointer = "conformance-pointer"
-		if err := stack.Promote(ctx, edge.Promotion{PromotionID: "held", Ts: 1, Builds: map[string]string{"web": "b1"}}, ""); err != nil {
-			t.Fatalf("Promote(production): %v", err)
-		}
-		if err := stack.Promote(ctx, edge.Promotion{PromotionID: "pointed", Ts: 2, Builds: map[string]string{"web": "b2"}}, pointer); err != nil {
-			t.Fatalf("Promote(pointer): %v", err)
-		}
+		promote(t, stack, edge.Promotion{PromotionID: "held", Ts: 1, Builds: map[string]string{"web": "b1"}}, "")
+		promote(t, stack, edge.Promotion{PromotionID: "pointed", Ts: 2, Builds: map[string]string{"web": "b2"}}, pointer)
 
 		result, err := stack.RemovePointer(ctx, pointer)
 		if err != nil {
