@@ -31,6 +31,12 @@ const (
 )
 
 const (
+	OriginSecretVar    = "OCEL_ORIGIN_SECRET"
+	OriginSignedVar    = "OCEL_ORIGIN_SIGNED"
+	OriginSecretHeader = "x-ocel-origin-secret"
+)
+
+const (
 	OriginBodyEncodingIdentity = "identity"
 	OriginBodyEncodingBase64   = "base64"
 )

@@ -30,6 +30,7 @@ type ClassParams struct {
 	DeploymentsStore DeploymentsStore
 	ISRWriter        ISRWriter
 	ISRWriterSeed    string
+	OriginSecret     string
 	StackState       edge.StackState
 	PreviewDomain    PreviewDomain
 }
@@ -53,6 +54,7 @@ func ReadClassParams(ctx context.Context, api SSMBatchAPI, class, slug string) (
 		names.deploymentsStoreParam,
 		names.isrWriterParam,
 		names.isrWriterSeedParam,
+		names.originSecretParam,
 		stackParam,
 	}
 	if class == ClassPreview {
@@ -104,6 +106,7 @@ func ReadClassParams(ctx context.Context, api SSMBatchAPI, class, slug string) (
 		}
 	}
 	p.ISRWriterSeed = found[names.isrWriterSeedParam]
+	p.OriginSecret = found[names.originSecretParam]
 	if raw, ok := found[PreviewDomainParamName]; ok {
 		if err := json.Unmarshal([]byte(raw), &p.PreviewDomain); err != nil {
 			return ClassParams{}, fmt.Errorf("parse preview domain: %w", err)

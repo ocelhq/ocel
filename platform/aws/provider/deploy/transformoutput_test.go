@@ -452,7 +452,7 @@ func TestVPCPlacementFromLinkOutput(t *testing.T) {
 			return err
 		}
 		_, err = registerFunction(pctx, "fn--api--users", functionCoordinate("shop", testStack(t, "prod", "api"), "fn--api--users"),
-			"/users", args, artifactRef{Bucket: "artifacts", Key: "fn.zip"}, nil, nil, nil, nil, role.Arn)
+			"/users", args, artifactRef{Bucket: "artifacts", Key: "fn.zip"}, nil, nil, nil, nil, role.Arn, functionURLAuthIAM)
 		return err
 	}
 	if err := pulumi.RunErr(program, pulumi.WithMocks("shop", "prod--api", rec)); err != nil {
@@ -510,7 +510,7 @@ func TestFunctionOutsideAVPCRendersNoVPCConfig(t *testing.T) {
 			return err
 		}
 		_, err = registerFunction(pctx, "fn--api--users", functionCoordinate("shop", testStack(t, "prod", "api"), "fn--api--users"),
-			"/users", args, artifactRef{Bucket: "artifacts", Key: "fn.zip"}, nil, nil, nil, nil, role.Arn)
+			"/users", args, artifactRef{Bucket: "artifacts", Key: "fn.zip"}, nil, nil, nil, nil, role.Arn, functionURLAuthIAM)
 		return err
 	}
 	if err := pulumi.RunErr(program, pulumi.WithMocks("shop", "prod--api", rec)); err != nil {

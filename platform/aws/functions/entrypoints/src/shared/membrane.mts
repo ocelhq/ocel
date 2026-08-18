@@ -1,6 +1,7 @@
 import net from "node:net";
 import http from "node:http";
 import Module from "node:module";
+import { createHash, timingSafeEqual } from "node:crypto";
 
 let controlSocket: net.Socket | null = null;
 const controlHandlers = new Set<(message: unknown) => void>();
@@ -151,9 +152,43 @@ export async function drainWaitUntil(pending: Promise<unknown>[]): Promise<void>
   }
 }
 
+const cloudflareEdgeKind = "cloudflare";
+
+export function routerMode(edgeKind: string | undefined): boolean {
+  return edgeKind !== undefined && edgeKind !== "" && edgeKind !== cloudflareEdgeKind;
+}
+
+const originSecretVar = "OCEL_ORIGIN_SECRET";
+
+const originSignedVar = "OCEL_ORIGIN_SIGNED";
+
+const originSecretHeader = "x-ocel-origin-secret";
+
+type OriginGuard = (headers: http.IncomingHttpHeaders) => boolean;
+
+function digest(value: string): Buffer {
+  return createHash("sha256").update(value, "utf8").digest();
+}
+
+function presentedSecret(headers: http.IncomingHttpHeaders): string {
+  const value = headers[originSecretHeader];
+  if (Array.isArray(value)) return value[0] ?? "";
+  return value ?? "";
+}
+
+function originGuard(env: NodeJS.ProcessEnv): OriginGuard | undefined {
+  const secret = env[originSecretVar];
+  delete env[originSecretVar];
+  if (!routerMode(env.OCEL_EDGE_KIND) || env[originSignedVar]) return undefined;
+  if (!secret) return () => false;
+  const expected = digest(secret);
+  return (headers) => timingSafeEqual(digest(presentedSecret(headers)), expected);
+}
+
 interface Trust {
   entry?: boolean;
   forwarded?: boolean;
+  guard?: OriginGuard;
 }
 
 function normalizeLoopbackHeaders(
@@ -172,11 +207,13 @@ function normalizeLoopbackHeaders(
   }
   delete headers["x-ocel-request-id"];
   delete headers["x-ocel-trace-id"];
+  delete headers[originSecretHeader];
 }
 
 function wrapWithOcelContext(invoke: Invoke, trust: Trust): http.RequestListener {
   return (req, res) => {
     const requestId = req.headers["x-ocel-request-id"];
+    const admitted = !trust.guard || trust.guard(req.headers);
     normalizeLoopbackHeaders(req.headers, trust);
     const start = performance.now();
 
@@ -203,7 +240,15 @@ function wrapWithOcelContext(invoke: Invoke, trust: Trust): http.RequestListener
     res.once("close", finalize);
 
     Promise.resolve()
-      .then(() => invoke(req, res, { waitUntil }))
+      .then(() => {
+        if (!admitted) {
+          req.resume();
+          res.writeHead(403);
+          res.end();
+          return;
+        }
+        return invoke(req, res, { waitUntil });
+      })
       .catch((err: any) => {
         sendControl("log", { level: "error", message: String(err?.stack || err) });
         if (!res.headersSent) res.writeHead(500);
@@ -214,14 +259,20 @@ function wrapWithOcelContext(invoke: Invoke, trust: Trust): http.RequestListener
 
 export function serveInvoke(invoke: Invoke, onListening?: OnListening): Promise<void> {
   return startServer(
-    http.createServer(wrapWithOcelContext(invoke, { forwarded: true })),
+    http.createServer(
+      wrapWithOcelContext(invoke, { forwarded: true, guard: originGuard(process.env) }),
+    ),
     onListening,
     true,
   );
 }
 
 export function serveEntry(invoke: Invoke): Promise<void> {
-  return startServer(http.createServer(wrapWithOcelContext(invoke, {})), undefined, true);
+  return startServer(
+    http.createServer(wrapWithOcelContext(invoke, { guard: originGuard(process.env) })),
+    undefined,
+    true,
+  );
 }
 
 export function serveLocal(invoke: Invoke): Promise<number> {
@@ -235,7 +286,10 @@ export function serveServer(server: http.Server, onListening?: OnListening): Pro
   const invoke: Invoke = (req, res) => {
     for (const listener of [...lifted]) listener.call(server, req, res);
   };
-  server.on("request", wrapWithOcelContext(invoke, { forwarded: true }));
+  server.on(
+    "request",
+    wrapWithOcelContext(invoke, { forwarded: true, guard: originGuard(process.env) }),
+  );
 
   type Lifted = http.RequestListener & { listener?: http.RequestListener };
 

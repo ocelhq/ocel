@@ -2,8 +2,6 @@ package bootstrap
 
 import (
 	"context"
-	"crypto/rand"
-	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -32,6 +30,9 @@ const (
 
 	ISRWriterSeedParamName        = "/ocel/edge/isr-writer-seed"
 	ISRWriterSeedPreviewParamName = "/ocel/edge/isr-writer-seed-preview"
+
+	OriginSecretParamName        = "/ocel/origin/secret"
+	OriginSecretPreviewParamName = "/ocel/origin/secret-preview"
 
 	PreviewDomainParamName = "/ocel/edge/preview-domain"
 )
@@ -131,11 +132,12 @@ type edgeNames struct {
 	deploymentsStoreParam string
 	isrWriterParam        string
 	isrWriterSeedParam    string
+	originSecretParam     string
 }
 
 var edgeNamesByClass = map[string]edgeNames{
-	ClassProduction: {EdgeUserName, EdgeCredentialsParamName, EdgeValuesParamName, CacheStoreParamName, DeploymentsStoreParamName, ISRWriterParamName, ISRWriterSeedParamName},
-	ClassPreview:    {EdgePreviewUserName, EdgeCredentialsPreviewParamName, EdgeValuesPreviewParamName, CacheStorePreviewParamName, DeploymentsStorePreviewParamName, ISRWriterPreviewParamName, ISRWriterSeedPreviewParamName},
+	ClassProduction: {EdgeUserName, EdgeCredentialsParamName, EdgeValuesParamName, CacheStoreParamName, DeploymentsStoreParamName, ISRWriterParamName, ISRWriterSeedParamName, OriginSecretParamName},
+	ClassPreview:    {EdgePreviewUserName, EdgeCredentialsPreviewParamName, EdgeValuesPreviewParamName, CacheStorePreviewParamName, DeploymentsStorePreviewParamName, ISRWriterPreviewParamName, ISRWriterSeedPreviewParamName, OriginSecretPreviewParamName},
 }
 
 func edgeNamesFor(class string) (edgeNames, error) {
@@ -418,44 +420,7 @@ func ensureISRWriterSeed(ctx context.Context, ssmClient SSMAPI, class string) (s
 	if err != nil {
 		return "", err
 	}
-	out, err := ssmClient.GetParameter(ctx, &ssm.GetParameterInput{
-		Name:           aws.String(paramName),
-		WithDecryption: aws.Bool(true),
-	})
-	if err == nil {
-		return aws.ToString(out.Parameter.Value), nil
-	}
-	var notFound *ssmtypes.ParameterNotFound
-	if !errors.As(err, &notFound) {
-		return "", fmt.Errorf("read isr writer seed parameter: %w", err)
-	}
-
-	buf := make([]byte, 32)
-	if _, err := rand.Read(buf); err != nil {
-		return "", fmt.Errorf("generate isr writer seed: %w", err)
-	}
-	seed := hex.EncodeToString(buf)
-	if _, err := ssmClient.PutParameter(ctx, &ssm.PutParameterInput{
-		Name:        aws.String(paramName),
-		Description: aws.String(fmt.Sprintf("Ocel: the shared secret the tag publisher authenticates its writes to the %s edge's ISR writer with. Generated once and never rotated; the publisher reads it at runtime by name. Delete it and the next bootstrap generates a different secret, which the edge side will not recognise until it is bootstrapped again.", class)),
-		Value:       aws.String(seed),
-		Type:        ssmtypes.ParameterTypeSecureString,
-		Overwrite:   aws.Bool(false),
-	}); err != nil {
-		var exists *ssmtypes.ParameterAlreadyExists
-		if !errors.As(err, &exists) {
-			return "", fmt.Errorf("write isr writer seed parameter: %w", err)
-		}
-		out, err := ssmClient.GetParameter(ctx, &ssm.GetParameterInput{
-			Name:           aws.String(paramName),
-			WithDecryption: aws.Bool(true),
-		})
-		if err != nil {
-			return "", fmt.Errorf("read isr writer seed parameter a concurrent bootstrap created: %w", err)
-		}
-		return aws.ToString(out.Parameter.Value), nil
-	}
-	return seed, nil
+	return ensureSecret(ctx, ssmClient, paramName, fmt.Sprintf("Ocel: the shared secret the tag publisher authenticates its writes to the %s edge's ISR writer with. Generated once and never rotated; the publisher reads it at runtime by name. Delete it and the next bootstrap generates a different secret, which the edge side will not recognise until it is bootstrapped again.", class))
 }
 
 func ReadISRWriterSeedFor(ctx context.Context, ssmClient SSMAPI, class string) (string, error) {

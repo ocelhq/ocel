@@ -79,6 +79,9 @@ func appEnv(manifest *deploymentsv1.Manifest, app *deploymentsv1.ManifestApp, bu
 	env := map[string]string{}
 	if cfg.Edge != nil {
 		env[edgeKindEnv] = string(cfg.Edge.Kind())
+		if cfg.Edge.Kind() != edge.KindCloudflare {
+			env[edge.OriginSignedVar] = "1"
+		}
 	}
 	if appCrossesMembrane(manifest, app.GetName()) {
 		env[envStateTable] = cfg.StateTable

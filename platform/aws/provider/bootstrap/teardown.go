@@ -81,6 +81,7 @@ func ClassParamNames(class string) ([]string, error) {
 		names.deploymentsStoreParam,
 		names.isrWriterParam,
 		names.isrWriterSeedParam,
+		names.originSecretParam,
 	}
 	if class == ClassPreview {
 		params = append(params, PreviewDomainParamName)

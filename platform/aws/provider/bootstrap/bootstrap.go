@@ -226,6 +226,11 @@ func run(ctx context.Context, cfn CFNAPI, ssmClient SSMAPI, iamClient IAMAPI, ed
 		}
 	}
 
+	report(progress, "Ensuring the secret the origin's own front authenticates with (SSM SecureString)")
+	if _, err := ensureOriginSecret(ctx, ssmClient, sub.class); err != nil {
+		return err
+	}
+
 	report(progress, sub.stackStep)
 	namedIAM := []cfntypes.Capability{cfntypes.CapabilityCapabilityNamedIam}
 
