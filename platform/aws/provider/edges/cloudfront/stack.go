@@ -190,7 +190,7 @@ func (s *stack) servedHostnames(pointer string) []string {
 	if host := s.previewHost(pointer); host != "" {
 		return []string{host}
 	}
-	if pointerOr(pointer) != edgeledger.DefaultPointer {
+	if pointerOr(pointer) != edge.DefaultPointer {
 		return nil
 	}
 	return edge.BoundDomains(s.state)
@@ -212,7 +212,7 @@ func (s *stack) onPreviewWildcard() bool {
 
 func (s *stack) previewHost(pointer string) string {
 	base := s.previewBase()
-	if base == "" || pointerOr(pointer) == edgeledger.DefaultPointer {
+	if base == "" || pointerOr(pointer) == edge.DefaultPointer {
 		return ""
 	}
 	return edge.PreviewHost(s.slug(), pointer, "", base)

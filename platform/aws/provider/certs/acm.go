@@ -289,7 +289,7 @@ func (i Issuer) Discard(ctx context.Context, cert Certificate, say func(string))
 	}
 	if _, err := i.API.DeleteCertificate(ctx, &acm.DeleteCertificateInput{
 		CertificateArn: aws.String(cert.ARN),
-	}); err != nil {
+	}); err != nil && !gone(err) {
 		say(fmt.Sprintf("Leaving certificate %s standing: %v — delete it in ACM once nothing uses it", cert.ARN, err))
 		return fmt.Errorf("delete certificate %s: %w", cert.ARN, err)
 	}

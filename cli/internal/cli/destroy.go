@@ -133,12 +133,12 @@ func runDestroy(ctx context.Context, d deps, cwd string, stdout, stderr io.Write
 		if err != nil {
 			return err
 		}
-		if destroyPlanEmpty(plan) {
+		if plan.GetNothingToDestroy() {
 			ui.Finish("Nothing to destroy")
 			return nil
 		}
 
-		printDestroyPlan(stdout, cfg.Slug, plan)
+		printDestroyPlan(stdout, cfg.Slug, false, plan)
 		if !bypass {
 			confirmed, err := confirmPhrase(ctx, "project name", cfg.Slug, stdout, stdin)
 			if err != nil {
@@ -200,12 +200,28 @@ func runDestroyPreviewProject(ctx context.Context, d deps, cwd string, yes bool,
 			return err
 		}
 
-		fmt.Fprintf(stdout, "This will permanently destroy the ENTIRE preview footprint of project %q:\n", cfg.Slug)
-		fmt.Fprintln(stdout, "  • every preview (persistent and ephemeral): app-deploy stacks, per-name infra stacks INCLUDING ALL DATA")
-		fmt.Fprintln(stdout, "  • the project's preview deployments-store instance and preview edge worker(s)")
-		fmt.Fprintln(stdout, "  • all stored preview assets belonging to this project")
-		fmt.Fprintln(stdout, "  • every preview variable value this project holds, including each preview's own overrides")
-		fmt.Fprintln(stdout, "The account-level preview bootstrap is left intact. This cannot be undone.")
+		client, err := runner.Deployments()
+		if err != nil {
+			return err
+		}
+
+		spinner := deployui.StartSpinner(stdout, "Enumerating what would be destroyed")
+		plan, err := client.PlanDestroyProject(ctx, &deploymentsv1.PlanDestroyProjectRequest{
+			Options:         []byte(provider.Options),
+			ProtocolVersion: manifestbuilder.SchemaVersion,
+			Slug:            cfg.Slug,
+			Environment:     &deploymentsv1.Environment{Class: deploymentsv1.Environment_CLASS_PREVIEW},
+		})
+		spinner.Stop()
+		if err != nil {
+			return err
+		}
+		if plan.GetNothingToDestroy() {
+			ui.Finish("Nothing to destroy")
+			return nil
+		}
+
+		printDestroyPlan(stdout, cfg.Slug, true, plan)
 
 		if !yes {
 			confirmed, err := confirmPhrase(ctx, "project name", cfg.Slug, stdout, stdin)
@@ -236,42 +252,54 @@ func runDestroyPreviewProject(ctx context.Context, d deps, cwd string, yes bool,
 	return nil
 }
 
-func destroyPlanEmpty(plan *deploymentsv1.PlanDestroyProjectResponse) bool {
-	return len(plan.GetEdgeStack().GetItems()) == 0 &&
-		plan.GetInfraStack() == "" &&
-		len(plan.GetAppStacks()) == 0
-}
-
-func printDestroyPlan(out io.Writer, slug string, plan *deploymentsv1.PlanDestroyProjectResponse) {
+func printDestroyPlan(out io.Writer, slug string, preview bool, plan *deploymentsv1.PlanDestroyProjectResponse) {
 	header := fmt.Sprintf("This will permanently destroy production project %q", slug)
+	if preview {
+		header = fmt.Sprintf("This will permanently destroy the ENTIRE preview footprint of project %q", slug)
+	}
 	if kind := plan.GetEdgeStack().GetEdgeKind(); kind != "" {
 		header += fmt.Sprintf(", fronted by the %s edge", kind)
 	}
 	fmt.Fprintf(out, "%s:\n", header)
 
+	kept := printPlanItems(out, plan.GetEdgeStack().GetItems())
+	for _, s := range plan.GetInfraStacks() {
+		fmt.Fprintf(out, "  • infra stack %s — databases and buckets, INCLUDING ALL DATA\n", s)
+	}
+	for _, s := range plan.GetAppStacks() {
+		fmt.Fprintf(out, "  • app stack %s\n", s)
+	}
+	if preview {
+		fmt.Fprintln(out, "  • all stored preview assets belonging to this project")
+		fmt.Fprintln(out, "  • every preview variable value this project holds, including each preview's own overrides")
+		fmt.Fprintln(out, "The account-level preview bootstrap is left intact. This cannot be undone.")
+	} else {
+		fmt.Fprintln(out, "  • all stored assets belonging to this project")
+		fmt.Fprintln(out, "  • every production variable value this project holds, and their history")
+		fmt.Fprintln(out, "This cannot be undone.")
+	}
+	printKeptItems(out, kept)
+}
+
+func printPlanItems(out io.Writer, items []*deploymentsv1.TeardownItem) []*deploymentsv1.TeardownItem {
 	var kept []*deploymentsv1.TeardownItem
-	for _, item := range plan.GetEdgeStack().GetItems() {
+	for _, item := range items {
 		if item.GetAction() == deploymentsv1.TeardownItem_ACTION_KEEP {
 			kept = append(kept, item)
 			continue
 		}
 		fmt.Fprintf(out, "  • %s\n", teardownItemLine(item))
 	}
-	if s := plan.GetInfraStack(); s != "" {
-		fmt.Fprintf(out, "  • infra stack %s — databases and buckets, INCLUDING ALL DATA\n", s)
-	}
-	for _, s := range plan.GetAppStacks() {
-		fmt.Fprintf(out, "  • app stack %s\n", s)
-	}
-	fmt.Fprintln(out, "  • all stored assets belonging to this project")
-	fmt.Fprintln(out, "  • every production variable value this project holds, and their history")
-	fmt.Fprintln(out, "This cannot be undone.")
+	return kept
+}
 
-	if len(kept) > 0 {
-		fmt.Fprintln(out, "Left in place:")
-		for _, item := range kept {
-			fmt.Fprintf(out, "  • %s\n", teardownItemLine(item))
-		}
+func printKeptItems(out io.Writer, kept []*deploymentsv1.TeardownItem) {
+	if len(kept) == 0 {
+		return
+	}
+	fmt.Fprintln(out, "Left in place:")
+	for _, item := range kept {
+		fmt.Fprintf(out, "  • %s\n", teardownItemLine(item))
 	}
 }
 

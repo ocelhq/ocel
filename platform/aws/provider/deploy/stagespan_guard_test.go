@@ -29,6 +29,7 @@ func requireExactlyOneSpanEach(t *testing.T, spans []spanCall, roots []Stage) {
 func newProjectTeardownStages() ProjectTeardownStages {
 	return ProjectTeardownStages{
 		Planning:    NewRootStage("Planning"),
+		Unbind:      NewRootStage("Unbind"),
 		Edge:        NewRootStage("Edge"),
 		AppStacks:   NewRootStage("AppStacks"),
 		InfraStacks: NewRootStage("InfraStacks"),

@@ -379,7 +379,7 @@ func TestPromoteMovesThePointerOnlyFromWhereItWas(t *testing.T) {
 	promoted(t, l, "p1", "", map[string]string{"web": "b1"})
 
 	dynamo.beforePut = func(key string) {
-		if !strings.HasSuffix(key, pointerStem+DefaultPointer) {
+		if !strings.HasSuffix(key, pointerStem+edge.DefaultPointer) {
 			return
 		}
 		dynamo.beforePut = nil
@@ -395,7 +395,7 @@ func TestPromoteMovesThePointerOnlyFromWhereItWas(t *testing.T) {
 			t.Errorf("error = %v, want it to name %q", err, want)
 		}
 	}
-	if got, err := l.pointerAt(ctx, DefaultPointer); err != nil || got != "racer" {
+	if got, err := l.pointerAt(ctx, edge.DefaultPointer); err != nil || got != "racer" {
 		t.Errorf("pointer = %q (%v), want the promotion that won left in place", got, err)
 	}
 	if got := historyIDs(t, l, ""); !slices.Equal(got, []string{"p2", "p1"}) {
@@ -516,7 +516,7 @@ func TestRemovePointerTakesItsOwnAndLeavesTheRest(t *testing.T) {
 	if got := historyIDs(t, l, ""); !slices.Equal(got, []string{"held"}) {
 		t.Errorf("history outside the pointer = %v, want what the pointer never held", got)
 	}
-	if got, err := l.Pointers(ctx); err != nil || !slices.Equal(got, []string{DefaultPointer}) {
+	if got, err := l.Pointers(ctx); err != nil || !slices.Equal(got, []string{edge.DefaultPointer}) {
 		t.Errorf("Pointers = %v (%v), want the pointer forgotten", got, err)
 	}
 }
@@ -568,7 +568,7 @@ func TestDropTakesTheRowItReports(t *testing.T) {
 	promoted(t, l, "p1", "", map[string]string{"web": "b1"})
 	promoted(t, l, "p2", "", map[string]string{"web": "b2"})
 
-	row := dynamo.items[partition+"#"+scope+"\x00"+promotionStem+DefaultPointer+"#p1"]
+	row := dynamo.items[partition+"#"+scope+"\x00"+promotionStem+edge.DefaultPointer+"#p1"]
 	delete(row, "promotionId")
 
 	result, err := l.Prune(ctx, 1, "")
@@ -582,7 +582,7 @@ func TestDropTakesTheRowItReports(t *testing.T) {
 		if strings.HasPrefix(sk, promotionStem) && strings.HasSuffix(sk, "#p1") {
 			t.Errorf("%q survived a prune that reported it removed", sk)
 		}
-		if sk == promotionStem+DefaultPointer+"#" {
+		if sk == promotionStem+edge.DefaultPointer+"#" {
 			t.Errorf("the prune deleted %q, a key no promotion ever had", sk)
 		}
 	}

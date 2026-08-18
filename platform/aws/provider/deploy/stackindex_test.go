@@ -127,9 +127,9 @@ func TestPlanPreviewProjectTeardown(t *testing.T) {
 		},
 	}}
 
-	plan, err := planPreviewProjectTeardown(context.Background(), Config{Stacks: index}, "shop")
+	plan, err := PlanPreviewProjectTeardown(context.Background(), Config{Stacks: index}, "shop")
 	if err != nil {
-		t.Fatalf("planPreviewProjectTeardown: %v", err)
+		t.Fatalf("PlanPreviewProjectTeardown: %v", err)
 	}
 	want := PreviewProjectTeardownPlan{
 		InfraStacks: []naming.StackName{naming.InfraStack("staging")},
@@ -137,7 +137,7 @@ func TestPlanPreviewProjectTeardown(t *testing.T) {
 		Pointers:    []string{"staging"},
 	}
 	if !reflect.DeepEqual(plan, want) {
-		t.Fatalf("planPreviewProjectTeardown = %+v, want %+v — production stacks are not preview ones", plan, want)
+		t.Fatalf("PlanPreviewProjectTeardown = %+v, want %+v — production stacks are not preview ones", plan, want)
 	}
 }
 

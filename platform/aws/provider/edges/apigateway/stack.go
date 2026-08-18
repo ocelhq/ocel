@@ -141,7 +141,7 @@ func (s *stack) apiFor(ctx context.Context, c Clients, pointer string) (apiPlan,
 }
 
 func (s *stack) findAPIFor(ctx context.Context, c Clients, pointer, name string) (string, bool, error) {
-	if pointerOr(pointer) == edgeledger.DefaultPointer {
+	if pointerOr(pointer) == edge.DefaultPointer {
 		if id := s.state[stackKeyAPI]; id != "" {
 			return id, true, nil
 		}
@@ -220,7 +220,7 @@ func (s *stack) RemovePointer(ctx context.Context, pointer string) (edge.PruneRe
 	if err != nil {
 		return edge.PruneResult{}, err
 	}
-	if pointerOr(pointer) != edgeledger.DefaultPointer {
+	if pointerOr(pointer) != edge.DefaultPointer {
 		if err := s.unroutePreview(ctx, c, pointer); err != nil {
 			return edge.PruneResult{}, err
 		}
@@ -242,7 +242,7 @@ func (s *stack) previewHost(pointer string) (string, string) {
 	if base == "" || s.class() != edge.ClassPreview {
 		return "", ""
 	}
-	if pointerOr(pointer) == edgeledger.DefaultPointer {
+	if pointerOr(pointer) == edge.DefaultPointer {
 		return "", ""
 	}
 	host := edge.PreviewHost(s.slug(), pointer, "", base)

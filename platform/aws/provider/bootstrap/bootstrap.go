@@ -17,6 +17,7 @@ import (
 	ssmtypes "github.com/aws/aws-sdk-go-v2/service/ssm/types"
 	smithy "github.com/aws/smithy-go"
 
+	"github.com/ocelhq/ocel/platform/aws/provider/stackindex"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
@@ -30,7 +31,7 @@ const (
 	EdgeUserName        = "ocel-edge"
 	EdgePreviewUserName = "ocel-edge-preview"
 
-	StateTableIndexName = "gsi1"
+	StateTableIndexName = stackindex.IndexName
 
 	outputStateBucket    = "StateBucketName"
 	outputStateTable     = "StateTableName"

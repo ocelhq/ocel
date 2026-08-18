@@ -361,7 +361,7 @@ func originHost(rawURL string) string {
 
 func pointerOr(pointer string) string {
 	if pointer == "" {
-		return edgeledger.DefaultPointer
+		return edge.DefaultPointer
 	}
 	return pointer
 }

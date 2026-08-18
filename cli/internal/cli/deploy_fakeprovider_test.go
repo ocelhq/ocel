@@ -581,6 +581,44 @@ func (s *deployFakeProviderServer) UseDomain(ctx context.Context, req *deploymen
 	})
 }
 
+const fakeServedPreviewsEnvVar = "OCEL_TEST_FAKE_SERVED_PREVIEWS"
+
+func (s *deployFakeProviderServer) PlanReleaseDomain(ctx context.Context, req *deploymentsv1.PlanReleaseDomainRequest) (*deploymentsv1.PlanReleaseDomainResponse, error) {
+	if err := s.checkToken(ctx); err != nil {
+		return nil, err
+	}
+	base := os.Getenv(fakeGlobalDomainEnvVar)
+	if base == "" {
+		return &deploymentsv1.PlanReleaseDomainResponse{}, nil
+	}
+	if served := os.Getenv(fakeServedPreviewsEnvVar); served != "" {
+		return nil, connect.NewError(connect.CodeFailedPrecondition, fmt.Errorf(
+			"*.%s still carries live preview pointers for %s — run `ocel preview rm` or `ocel destroy --preview` in each of them first",
+			base, served,
+		))
+	}
+	return &deploymentsv1.PlanReleaseDomainResponse{
+		BaseDomain: base,
+		EdgeStack: &deploymentsv1.EdgeStackPlan{
+			EdgeKind: "cloudflare",
+			Items: []*deploymentsv1.TeardownItem{
+				{
+					Kind:   "preview entry worker",
+					Name:   "*." + base,
+					Action: deploymentsv1.TeardownItem_ACTION_DELETE,
+					Reason: "the shared entry worker holding this wildcard",
+				},
+				{
+					Kind:   "DNS record",
+					Name:   "*." + base + " CNAME you.example.com",
+					Action: deploymentsv1.TeardownItem_ACTION_KEEP,
+					Reason: "you created it yourself; ocel never wrote it",
+				},
+			},
+		},
+	}, nil
+}
+
 func (s *deployFakeProviderServer) ReleaseDomain(ctx context.Context, req *deploymentsv1.ReleaseDomainRequest, stream *connect.ServerStream[deploymentsv1.DeployEvent]) error {
 	if err := s.checkToken(ctx); err != nil {
 		return err
@@ -767,6 +805,28 @@ func (s *deployFakeProviderServer) PlanDestroyProject(ctx context.Context, req *
 		return nil, err
 	}
 	slug := req.GetSlug()
+	if req.GetEnvironment().GetClass() == deploymentsv1.Environment_CLASS_PREVIEW {
+		return &deploymentsv1.PlanDestroyProjectResponse{
+			EdgeStack: &deploymentsv1.EdgeStackPlan{
+				EdgeKind: "cloudflare",
+				Items: []*deploymentsv1.TeardownItem{
+					{
+						Kind:   "edge workers",
+						Name:   slug,
+						Action: deploymentsv1.TeardownItem_ACTION_DELETE,
+					},
+					{
+						Kind:   "preview wildcard",
+						Name:   "*.preview.acme.com",
+						Action: deploymentsv1.TeardownItem_ACTION_KEEP,
+						Reason: "substrate-scoped: every project's previews are served on it",
+					},
+				},
+			},
+			InfraStacks: []string{slug + "--pr-1--infra", slug + "--pr-2--infra"},
+			AppStacks:   []string{slug + "--pr-1--web--b1"},
+		}, nil
+	}
 	return &deploymentsv1.PlanDestroyProjectResponse{
 		EdgeStack: &deploymentsv1.EdgeStackPlan{
 			EdgeKind: "cloudflare",
@@ -790,8 +850,8 @@ func (s *deployFakeProviderServer) PlanDestroyProject(ctx context.Context, req *
 				},
 			},
 		},
-		InfraStack: slug + "--infra",
-		AppStacks:  []string{slug + "--web--b1"},
+		InfraStacks: []string{slug + "--infra"},
+		AppStacks:   []string{slug + "--web--b1"},
 	}, nil
 }
 

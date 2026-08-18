@@ -74,6 +74,9 @@ const (
 	// DeploymentServiceListDomainProcedure is the fully-qualified name of the DeploymentService's
 	// ListDomain RPC.
 	DeploymentServiceListDomainProcedure = "/deployments.v1.DeploymentService/ListDomain"
+	// DeploymentServicePlanReleaseDomainProcedure is the fully-qualified name of the
+	// DeploymentService's PlanReleaseDomain RPC.
+	DeploymentServicePlanReleaseDomainProcedure = "/deployments.v1.DeploymentService/PlanReleaseDomain"
 	// DeploymentServiceReleaseDomainProcedure is the fully-qualified name of the DeploymentService's
 	// ReleaseDomain RPC.
 	DeploymentServiceReleaseDomainProcedure = "/deployments.v1.DeploymentService/ReleaseDomain"
@@ -113,6 +116,7 @@ type DeploymentServiceClient interface {
 	Prune(context.Context, *v1.PruneRequest) (*connect.ServerStreamForClient[v1.DeployEvent], error)
 	UseDomain(context.Context, *v1.UseDomainRequest) (*connect.ServerStreamForClient[v1.DeployEvent], error)
 	ListDomain(context.Context, *v1.ListDomainRequest) (*v1.ListDomainResponse, error)
+	PlanReleaseDomain(context.Context, *v1.PlanReleaseDomainRequest) (*v1.PlanReleaseDomainResponse, error)
 	ReleaseDomain(context.Context, *v1.ReleaseDomainRequest) (*connect.ServerStreamForClient[v1.DeployEvent], error)
 	AddDomain(context.Context, *v1.AddDomainRequest) (*connect.ServerStreamForClient[v1.DeployEvent], error)
 	RemoveDomain(context.Context, *v1.RemoveDomainRequest) (*connect.ServerStreamForClient[v1.DeployEvent], error)
@@ -217,6 +221,12 @@ func NewDeploymentServiceClient(httpClient connect.HTTPClient, baseURL string, o
 			connect.WithSchema(deploymentServiceMethods.ByName("ListDomain")),
 			connect.WithClientOptions(opts...),
 		),
+		planReleaseDomain: connect.NewClient[v1.PlanReleaseDomainRequest, v1.PlanReleaseDomainResponse](
+			httpClient,
+			baseURL+DeploymentServicePlanReleaseDomainProcedure,
+			connect.WithSchema(deploymentServiceMethods.ByName("PlanReleaseDomain")),
+			connect.WithClientOptions(opts...),
+		),
 		releaseDomain: connect.NewClient[v1.ReleaseDomainRequest, v1.DeployEvent](
 			httpClient,
 			baseURL+DeploymentServiceReleaseDomainProcedure,
@@ -278,6 +288,7 @@ type deploymentServiceClient struct {
 	prune              *connect.Client[v1.PruneRequest, v1.DeployEvent]
 	useDomain          *connect.Client[v1.UseDomainRequest, v1.DeployEvent]
 	listDomain         *connect.Client[v1.ListDomainRequest, v1.ListDomainResponse]
+	planReleaseDomain  *connect.Client[v1.PlanReleaseDomainRequest, v1.PlanReleaseDomainResponse]
 	releaseDomain      *connect.Client[v1.ReleaseDomainRequest, v1.DeployEvent]
 	addDomain          *connect.Client[v1.AddDomainRequest, v1.DeployEvent]
 	removeDomain       *connect.Client[v1.RemoveDomainRequest, v1.DeployEvent]
@@ -385,6 +396,15 @@ func (c *deploymentServiceClient) ListDomain(ctx context.Context, req *v1.ListDo
 	return nil, err
 }
 
+// PlanReleaseDomain calls deployments.v1.DeploymentService.PlanReleaseDomain.
+func (c *deploymentServiceClient) PlanReleaseDomain(ctx context.Context, req *v1.PlanReleaseDomainRequest) (*v1.PlanReleaseDomainResponse, error) {
+	response, err := c.planReleaseDomain.CallUnary(ctx, connect.NewRequest(req))
+	if response != nil {
+		return response.Msg, err
+	}
+	return nil, err
+}
+
 // ReleaseDomain calls deployments.v1.DeploymentService.ReleaseDomain.
 func (c *deploymentServiceClient) ReleaseDomain(ctx context.Context, req *v1.ReleaseDomainRequest) (*connect.ServerStreamForClient[v1.DeployEvent], error) {
 	return c.releaseDomain.CallServerStream(ctx, connect.NewRequest(req))
@@ -452,6 +472,7 @@ type DeploymentServiceHandler interface {
 	Prune(context.Context, *v1.PruneRequest, *connect.ServerStream[v1.DeployEvent]) error
 	UseDomain(context.Context, *v1.UseDomainRequest, *connect.ServerStream[v1.DeployEvent]) error
 	ListDomain(context.Context, *v1.ListDomainRequest) (*v1.ListDomainResponse, error)
+	PlanReleaseDomain(context.Context, *v1.PlanReleaseDomainRequest) (*v1.PlanReleaseDomainResponse, error)
 	ReleaseDomain(context.Context, *v1.ReleaseDomainRequest, *connect.ServerStream[v1.DeployEvent]) error
 	AddDomain(context.Context, *v1.AddDomainRequest, *connect.ServerStream[v1.DeployEvent]) error
 	RemoveDomain(context.Context, *v1.RemoveDomainRequest, *connect.ServerStream[v1.DeployEvent]) error
@@ -552,6 +573,12 @@ func NewDeploymentServiceHandler(svc DeploymentServiceHandler, opts ...connect.H
 		connect.WithSchema(deploymentServiceMethods.ByName("ListDomain")),
 		connect.WithHandlerOptions(opts...),
 	)
+	deploymentServicePlanReleaseDomainHandler := connect.NewUnaryHandlerSimple(
+		DeploymentServicePlanReleaseDomainProcedure,
+		svc.PlanReleaseDomain,
+		connect.WithSchema(deploymentServiceMethods.ByName("PlanReleaseDomain")),
+		connect.WithHandlerOptions(opts...),
+	)
 	deploymentServiceReleaseDomainHandler := connect.NewServerStreamHandlerSimple(
 		DeploymentServiceReleaseDomainProcedure,
 		svc.ReleaseDomain,
@@ -624,6 +651,8 @@ func NewDeploymentServiceHandler(svc DeploymentServiceHandler, opts ...connect.H
 			deploymentServiceUseDomainHandler.ServeHTTP(w, r)
 		case DeploymentServiceListDomainProcedure:
 			deploymentServiceListDomainHandler.ServeHTTP(w, r)
+		case DeploymentServicePlanReleaseDomainProcedure:
+			deploymentServicePlanReleaseDomainHandler.ServeHTTP(w, r)
 		case DeploymentServiceReleaseDomainProcedure:
 			deploymentServiceReleaseDomainHandler.ServeHTTP(w, r)
 		case DeploymentServiceAddDomainProcedure:
@@ -701,6 +730,10 @@ func (UnimplementedDeploymentServiceHandler) UseDomain(context.Context, *v1.UseD
 
 func (UnimplementedDeploymentServiceHandler) ListDomain(context.Context, *v1.ListDomainRequest) (*v1.ListDomainResponse, error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("deployments.v1.DeploymentService.ListDomain is not implemented"))
+}
+
+func (UnimplementedDeploymentServiceHandler) PlanReleaseDomain(context.Context, *v1.PlanReleaseDomainRequest) (*v1.PlanReleaseDomainResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("deployments.v1.DeploymentService.PlanReleaseDomain is not implemented"))
 }
 
 func (UnimplementedDeploymentServiceHandler) ReleaseDomain(context.Context, *v1.ReleaseDomainRequest, *connect.ServerStream[v1.DeployEvent]) error {

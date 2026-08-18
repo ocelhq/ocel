@@ -102,7 +102,7 @@ func DestroyPreviewProject(ctx context.Context, stack edge.EdgeStack, cfg Config
 	result := DestroyProjectResult{EdgeTornDown: true}
 
 	planStart := time.Now()
-	plan, err := planPreviewProjectTeardown(ctx, cfg, slug)
+	plan, err := PlanPreviewProjectTeardown(ctx, cfg, slug)
 	if err != nil {
 		errs = append(errs, err)
 	}
@@ -112,22 +112,8 @@ func DestroyPreviewProject(ctx context.Context, stack edge.EdgeStack, cfg Config
 	infraChildren, infraDeclared := childStagesFor(stages.InfraStacks, plan.InfraStacks)
 	declareStages(cfg.Tracer, true, append(appDeclared, infraDeclared...)...)
 
-	edgeStart := time.Now()
-	var edgeErr error
-	if stack != nil && len(stack.State()) > 0 {
-		report := cfg.reportStage(stages.Edge)
-		report("Destroying the preview root workers and the deployments-store instance")
-		prior := stack.State()
-		if err := stack.Destroy(ctx); err != nil {
-			edgeErr = errors.Join(edgeErr, fmt.Errorf("destroy the preview edge stack: %w", err))
-			result.EdgeTornDown = false
-		} else if err := releaseRecords(ctx, cfg, prior, report); err != nil {
-			edgeErr = errors.Join(edgeErr, err)
-		}
-	}
-	spanForStage(cfg.Tracer, stages.Edge, edgeStart, time.Now(), edgeErr)
-	if edgeErr != nil {
-		errs = append(errs, edgeErr)
+	if err := unbindRouting(ctx, stack, cfg, stages.Unbind, plan.Pointers); err != nil {
+		errs = append(errs, err)
 	}
 
 	stacksStart := time.Now()
@@ -142,6 +128,11 @@ func DestroyPreviewProject(ctx context.Context, stack edge.EdgeStack, cfg Config
 	spanForStage(cfg.Tracer, stages.InfraStacks, stacksStart, time.Now(), errors.Join(infraErrs...))
 	errs = append(errs, appErrs...)
 	errs = append(errs, infraErrs...)
+
+	if edgeErr := destroyEdgeStack(ctx, stack, cfg, stages.Edge, "Destroying what the preview edge stack owns (routes, workers, deployments ledger)"); edgeErr != nil {
+		result.EdgeTornDown = false
+		errs = append(errs, edgeErr)
+	}
 
 	valuesStart := time.Now()
 	verr := purgeProjectValues(ctx, cfg, slug, cfg.reportStage(stages.Values))
@@ -159,8 +150,7 @@ func DestroyPreviewProject(ctx context.Context, stack edge.EdgeStack, cfg Config
 	}
 
 	forgetStart := time.Now()
-	cfg.reportStage(stages.Forget)("Forgetting the project")
-	ferr := forgetProjectIfEmpty(ctx, cfg.Stacks, slug)
+	ferr := forgetProject(ctx, cfg, slug, stages.Forget, errors.Join(errs...))
 	spanForStage(cfg.Tracer, stages.Forget, forgetStart, time.Now(), ferr)
 	if ferr != nil {
 		errs = append(errs, ferr)
@@ -169,7 +159,7 @@ func DestroyPreviewProject(ctx context.Context, stack edge.EdgeStack, cfg Config
 	return result, errors.Join(errs...)
 }
 
-func planPreviewProjectTeardown(ctx context.Context, cfg Config, slug string) (PreviewProjectTeardownPlan, error) {
+func PlanPreviewProjectTeardown(ctx context.Context, cfg Config, slug string) (PreviewProjectTeardownPlan, error) {
 	stacks, err := indexedStacks(ctx, cfg.Stacks, slug)
 	if err != nil {
 		return PreviewProjectTeardownPlan{}, err
