@@ -14,7 +14,7 @@ interface MediaSelection {
 
 export function mediaType(header: string, preferences: string[]): string {
   const selections = mediaSelections(header, preferences);
-  return selections.length ? selections[0] : "";
+  return selections[0] ?? "";
 }
 
 function normalizeAccept(header: string): {
@@ -67,7 +67,7 @@ function mediaSelections(header: string, preferences: string[]): string[] {
     for (const piece of pieces) {
       const pair = piece.split("=");
       if (pair.length !== 2 || !pair[1]) return [];
-      const [key, raw] = pair;
+      const [key = "", raw = ""] = pair;
       if (key === "q" || key === "Q") {
         seenQ = true;
         const parsed = parseFloat(raw);
@@ -80,7 +80,7 @@ function mediaSelections(header: string, preferences: string[]): string[] {
     }
 
     const names = Object.keys(params);
-    const [type, subtype] = token.split("/");
+    const [type = "", subtype = ""] = token.split("/");
     const selection: MediaSelection = {
       token,
       type,
@@ -114,13 +114,14 @@ function preferred(
   for (const preference of preferences) {
     const lowered = preference.toLowerCase();
     byLowered[lowered] = preference;
-    const [type, subtype] = lowered.split("/");
+    const [type = "", subtype = ""] = lowered.split("/");
     if (type === "*") {
       anyType = true;
       continue;
     }
-    bySubtype[type] = bySubtype[type] || Object.create(null);
-    bySubtype[type][subtype] = preference;
+    const known = bySubtype[type] ?? Object.create(null);
+    bySubtype[type] = known;
+    known[subtype] = preference;
   }
 
   const result: string[] = [];
@@ -128,8 +129,8 @@ function preferred(
     const { token, type, subtype, original } = selection;
     const subtypes = bySubtype[type];
     if (type === "*") {
-      for (const lowered of Object.keys(byLowered)) {
-        if (!byToken[lowered]) result.push(byLowered[lowered]);
+      for (const [lowered, preference] of Object.entries(byLowered)) {
+        if (!byToken[lowered]) result.push(preference);
       }
       if (anyType) result.push("*/*");
       continue;
@@ -144,8 +145,8 @@ function preferred(
       continue;
     }
     if (subtypes) {
-      for (const name of Object.keys(subtypes)) {
-        if (!byToken[`${type}/${name}`]) result.push(subtypes[name]);
+      for (const [name, preference] of Object.entries(subtypes)) {
+        if (!byToken[`${type}/${name}`]) result.push(preference);
       }
     }
   }

@@ -40,13 +40,9 @@ export interface EdgeVariables {
   valueFingerprint?: string;
 }
 
-export type EdgeEntryKind = "page" | "middleware";
+import type { EdgeEntryKind, EdgeInvoker } from "@framework/next-router";
 
-export type EdgeInvoker = (
-  entryKey: string,
-  request: Request,
-  kind?: EdgeEntryKind,
-) => Promise<Response>;
+export type { EdgeEntryKind, EdgeInvoker };
 
 export type EdgeCacheStub = Rpc.Provider<EdgeCacheRpc>;
 

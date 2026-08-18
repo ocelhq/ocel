@@ -1,7 +1,8 @@
 import { describe, expect, it, vi } from "vitest";
 
-import { serve, type RouteDeps } from "../src/index";
-import type { AssetBucket } from "../src/assets";
+import { serve, type RouteDeps } from "../src/index.mjs";
+import type { AssetBucket } from "../src/assets.mjs";
+import type { TestRouteDeps } from "../test-support/dispatch-scenario.mjs";
 
 const ENTRY_HEADER = "x-ocel-entry";
 const MW_ID = "middleware-bundle";
@@ -32,7 +33,7 @@ function assetStoreServing(files: Record<string, string>): RouteDeps["assetStore
   };
 }
 
-function deps(overrides: Partial<RouteDeps> = {}): RouteDeps {
+function deps(overrides: TestRouteDeps = {}): RouteDeps {
   return {
     manifest: {
       buildId: "t",
@@ -50,7 +51,7 @@ function deps(overrides: Partial<RouteDeps> = {}): RouteDeps {
   } as RouteDeps;
 }
 
-function staticDeps(middleware: unknown, overrides: Partial<RouteDeps> = {}): RouteDeps {
+function staticDeps(middleware: unknown, overrides: TestRouteDeps = {}): RouteDeps {
   return deps({
     manifest: {
       buildId: "t",
@@ -63,7 +64,7 @@ function staticDeps(middleware: unknown, overrides: Partial<RouteDeps> = {}): Ro
     assetStore: assetStoreServing({ "/static.txt": "the-file" }),
     functionUrls: { [MW_ID]: MW_URL },
     ...overrides,
-  } as Partial<RouteDeps>);
+  } as TestRouteDeps);
 }
 
 function nodeMiddleware(matchers?: unknown) {
@@ -77,11 +78,11 @@ function nodeMiddleware(matchers?: unknown) {
 
 function fakeOrigin(handler: (request: Request) => Response | Promise<Response>) {
   const requests: Request[] = [];
-  const fetch = (async (input: Request) => {
+  const fetching = (async (input: Request) => {
     requests.push(input);
     return handler(input);
   }) as unknown as typeof fetch;
-  return { fetch, requests };
+  return { fetch: fetching, requests };
 }
 
 function serviceThrottle() {
@@ -93,7 +94,7 @@ function serviceThrottle() {
 
 function mwResponse(
   headers: Record<string, string> = {},
-  init: { status?: number; body?: BodyInit | null } = {},
+  init: { status?: number; body?: RequestInit["body"] } = {},
 ): Response {
   return new Response(init.body ?? null, {
     status: init.status ?? 200,
@@ -103,7 +104,7 @@ function mwResponse(
 
 function transportResponse(
   headers: Record<string, string> = {},
-  init: { status?: number; body?: BodyInit | null } = {},
+  init: { status?: number; body?: RequestInit["body"] } = {},
 ): Response {
   return new Response(init.body ?? null, { status: init.status ?? 200, headers });
 }
@@ -148,7 +149,7 @@ describe("node middleware forwarding", () => {
     );
 
     expect(origin.requests.length).toBe(1);
-    const forwarded = origin.requests[0];
+    const forwarded = origin.requests[0]!;
     expect(new URL(forwarded.url).host).toBe(new URL(MW_URL).host);
     expect(forwarded.headers.get(ENTRY_HEADER)).toBe("/_middleware");
   });
@@ -162,7 +163,7 @@ describe("node middleware forwarding", () => {
       staticDeps(nodeMiddleware(), { fetch: origin.fetch }),
     );
 
-    const forwarded = origin.requests[0];
+    const forwarded = origin.requests[0]!;
     const url = new URL(forwarded.url);
     expect(url.pathname).toBe("/static.txt");
     expect(url.search).toBe("?a=1");
@@ -260,7 +261,7 @@ describe("node middleware forwarding", () => {
         },
         functionUrls: { [MW_ID]: MW_URL, "/api/me": "https://fn.example.com" },
         fetch: origin.fetch,
-      } as Partial<RouteDeps>),
+      } as TestRouteDeps),
     );
 
     expect(await res.text()).toBe("alice");
@@ -291,7 +292,7 @@ describe("node middleware forwarding", () => {
         assetStore: assetStoreServing({ [`${PAGE}.html`]: "the page", "/404.html": "nope" }),
         functionUrls: { [MW_ID]: MW_URL, "/b": "https://fn.example.com" },
         fetch: origin.fetch,
-      } as Partial<RouteDeps>),
+      } as TestRouteDeps),
     );
 
     expect(res.status).toBe(200);
@@ -312,7 +313,7 @@ describe("Next's internal protocol headers are not honoured from the client", ()
       staticDeps(nodeMiddleware(), { fetch: origin.fetch }),
     );
 
-    expect(origin.requests[0].headers.has("x-nextjs-data")).toBe(false);
+    expect(origin.requests[0]!.headers.has("x-nextjs-data")).toBe(false);
   });
 
   it("does not forward a client-supplied x-matched-path header to node middleware", async () => {
@@ -326,7 +327,7 @@ describe("Next's internal protocol headers are not honoured from the client", ()
       staticDeps(nodeMiddleware(), { fetch: origin.fetch }),
     );
 
-    expect(origin.requests[0].headers.has("x-matched-path")).toBe(false);
+    expect(origin.requests[0]!.headers.has("x-matched-path")).toBe(false);
   });
 });
 
@@ -340,7 +341,7 @@ describe("x-nextjs-data on the middleware invocation", () => {
       staticDeps(nodeMiddleware(), { fetch: origin.fetch }),
     );
 
-    expect(origin.requests[0].headers.get("x-nextjs-data")).toBe("1");
+    expect(origin.requests[0]!.headers.get("x-nextjs-data")).toBe("1");
   });
 
   it("does not set x-nextjs-data on an ordinary document request", async () => {
@@ -352,7 +353,7 @@ describe("x-nextjs-data on the middleware invocation", () => {
       staticDeps(nodeMiddleware(), { fetch: origin.fetch }),
     );
 
-    expect(origin.requests[0].headers.has("x-nextjs-data")).toBe(false);
+    expect(origin.requests[0]!.headers.has("x-nextjs-data")).toBe(false);
   });
 
   it("carries a data-request redirect through as x-nextjs-redirect with no Location", async () => {
@@ -548,7 +549,7 @@ describe("the Function URL hop's transport headers stay off both the client resp
         },
         functionUrls: { [MW_ID]: MW_URL, "/api/upload": "https://fn.example.com" },
         fetch: origin.fetch,
-      } as Partial<RouteDeps>),
+      } as TestRouteDeps),
     );
 
     expect(await res.text()).toBe("multipart/form-data; boundary=x");
@@ -586,7 +587,7 @@ describe("legacy edge middleware is unaffected", () => {
       },
       assetStore: assetStoreServing({ "/static.txt": "the-file" }),
       ...overrides,
-    } as Partial<RouteDeps>);
+    } as TestRouteDeps);
   }
 
   it("still calls deps.edge for an explicit runtime: 'edge' manifest", async () => {

@@ -1,8 +1,9 @@
+import { NEXT_CACHE_STATUS } from "@framework/next-router/http-cache";
+
 import {
   imageStorable,
   refreshOnce,
   servedFromStore,
-  NEXT_CACHE_STATUS,
   type CacheDeps,
 } from "./cache";
 

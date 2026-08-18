@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { refreshHeader } from "@framework/next-cache";
+import { deltaSeconds } from "@framework/next-router/http-cache";
 
 import {
-  deltaSeconds,
   refreshBackoffSeconds,
   refreshSentinelTtlSeconds,
   sentinelUrl,

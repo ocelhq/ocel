@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { isServiceThrottle, retryTransientOrigin } from "../src/retry";
+import { isServiceThrottle, retryTransientOrigin } from "../src/retry.mjs";
 
 const noDelay = { sleep: async () => {}, random: () => 0 };
 

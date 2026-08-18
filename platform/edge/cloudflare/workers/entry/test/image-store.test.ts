@@ -2,13 +2,12 @@ import { describe, expect, it } from "vitest";
 
 import type { CacheDeps } from "../src/cache";
 import {
-  serveImage,
   unprovisionedImageOrigin,
   type ImageConfig,
-  type ImageDeps,
-} from "../src/image";
+} from "@framework/next-router/image";
+import { serveImage, type ImageDeps } from "../src/image";
 import type { ImagePutOptions, ImageStore } from "../src/image-store";
-import fixtures from "./fixtures/image-conformance.json";
+import fixtures from "@framework/next-router/fixtures/image-conformance.json";
 import { coloDeps } from "./cache-deps";
 
 const BASE_CONFIG = (fixtures.variants as unknown as Array<{ config: ImageConfig }>)[0]

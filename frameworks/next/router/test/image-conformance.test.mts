@@ -1,12 +1,12 @@
 import { describe, expect, it } from "vitest";
 
-import fixtures from "./fixtures/image-conformance.json";
+import fixtures from "../fixtures/image-conformance.json" with { type: "json" };
 import {
   getSupportedMimeType,
   serveImage,
   unprovisionedImageOrigin,
   type ImageConfig,
-} from "../src/image";
+} from "../src/image.mjs";
 
 const ORIGIN_REJECTIONS = new Set([
   '"url" parameter is valid but image type is not allowed',
@@ -63,9 +63,10 @@ for (const { variant, config, cases } of variants) {
         const response = await serveImage(request, url, {
           config,
           basePath: "",
+          assetPrefix: "",
           slug: "fixture",
           app: "fixture",
-          buildId: "fixture",
+          deploymentId: "fixture",
           origin: unprovisionedImageOrigin,
         });
 

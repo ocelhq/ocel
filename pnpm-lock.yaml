@@ -859,6 +859,28 @@ importers:
         specifier: ^5.9.3
         version: 5.9.3
 
+  frameworks/next/router:
+    dependencies:
+      '@framework/next-cache':
+        specifier: workspace:*
+        version: link:../cache
+      '@framework/next-protocol':
+        specifier: workspace:*
+        version: link:../protocol
+      '@next/routing':
+        specifier: ^16.2.10
+        version: 16.2.10
+    devDependencies:
+      '@types/node':
+        specifier: ^24
+        version: 24.13.2
+      typescript:
+        specifier: ^5.9.3
+        version: 5.9.3
+      vitest:
+        specifier: ^3.2.7
+        version: 3.2.7(@types/node@24.13.2)(jiti@2.7.0)(lightningcss@1.32.0)(tsx@4.23.0)
+
   packages/native-lib/cli-darwin-arm64: {}
 
   packages/native-lib/cli-darwin-x64: {}
@@ -1146,6 +1168,9 @@ importers:
       '@framework/next-protocol':
         specifier: workspace:*
         version: link:../../../../../frameworks/next/protocol
+      '@framework/next-router':
+        specifier: workspace:*
+        version: link:../../../../../frameworks/next/router
       '@next/routing':
         specifier: ^16.2.10
         version: 16.2.10
