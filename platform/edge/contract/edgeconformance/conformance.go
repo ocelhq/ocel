@@ -11,6 +11,7 @@ import (
 type Suite struct {
 	New      func(t *testing.T) (edge.Edge, edge.StackSpec)
 	Hostname string
+	Previews func(t *testing.T) (edge.Edge, edge.StackSpec, edge.PreviewWildcardSpec)
 }
 
 func promote(t *testing.T, stack edge.EdgeStack, promotion edge.Promotion, pointer string) {
@@ -258,6 +259,8 @@ func Run(t *testing.T, suite Suite) {
 		}
 	})
 
+	runPreviews(t, suite)
+
 	t.Run("destroying a stack takes the domains it bound with it", func(t *testing.T) {
 		ctx := context.Background()
 		e, stack := reconciledOn(t, suite)
@@ -296,4 +299,75 @@ func reconciledOn(t *testing.T, suite Suite) (edge.Edge, edge.EdgeStack) {
 		t.Fatalf("Reconcile: %v", err)
 	}
 	return e, stack
+}
+
+func runPreviews(t *testing.T, suite Suite) {
+	t.Run("previews served on a shared wildcard", func(t *testing.T) {
+		if suite.Previews == nil {
+			t.Skip("this edge cannot raise a preview wildcard from the conformance suite alone")
+		}
+
+		t.Run("reconciling the wildcard twice publishes the same front", func(t *testing.T) {
+			ctx := context.Background()
+			e, _, wildcard := suite.Previews(t)
+
+			first, err := e.ReconcilePreviewWildcard(ctx, wildcard)
+			if err != nil {
+				t.Fatalf("ReconcilePreviewWildcard: %v", err)
+			}
+			second, err := e.ReconcilePreviewWildcard(ctx, wildcard)
+			if err != nil {
+				t.Fatalf("ReconcilePreviewWildcard again: %v", err)
+			}
+			if second != first {
+				t.Errorf("front = %q on the second reconcile, want the %q the first published; a resumed `ocel domain use` must not move where DNS points", second, first)
+			}
+		})
+
+		t.Run("a preview pointer on the wildcard leaves nothing behind when it is removed", func(t *testing.T) {
+			ctx := context.Background()
+			e, spec, wildcard := suite.Previews(t)
+			if _, err := e.ReconcilePreviewWildcard(ctx, wildcard); err != nil {
+				t.Fatalf("ReconcilePreviewWildcard: %v", err)
+			}
+			stack, err := e.Reconcile(ctx, spec, edge.StackState{edge.StackKeyGlobalPreview: wildcard.BaseDomain})
+			if err != nil {
+				t.Fatalf("Reconcile: %v", err)
+			}
+			if !edge.ServedOnGlobalPreview(stack.State(), wildcard.BaseDomain) {
+				t.Fatalf("state = %v, want the stack to carry the wildcard it is served on", stack.State())
+			}
+
+			const pointer = "conformance-preview"
+			promote(t, stack, edge.Promotion{PromotionID: "previewed", Ts: 1, Builds: map[string]string{"web": "b1"}}, pointer)
+
+			if _, err := stack.RemovePointer(ctx, pointer); err != nil {
+				t.Fatalf("RemovePointer: %v", err)
+			}
+			left, err := stack.Ledger().History(ctx, pointer)
+			if err != nil {
+				t.Fatalf("History(%s): %v", pointer, err)
+			}
+			if len(left) != 0 {
+				t.Errorf("history under %q = %v, want nothing once the preview is gone", pointer, left)
+			}
+			if _, err := stack.RemovePointer(ctx, pointer); err != nil {
+				t.Fatalf("RemovePointer again: %v", err)
+			}
+		})
+
+		t.Run("destroying the wildcard after reconciling it is clean and re-entrant", func(t *testing.T) {
+			ctx := context.Background()
+			e, _, wildcard := suite.Previews(t)
+			if _, err := e.ReconcilePreviewWildcard(ctx, wildcard); err != nil {
+				t.Fatalf("ReconcilePreviewWildcard: %v", err)
+			}
+			if err := e.DestroyPreviewWildcard(ctx, wildcard.BaseDomain); err != nil {
+				t.Fatalf("DestroyPreviewWildcard: %v", err)
+			}
+			if err := e.DestroyPreviewWildcard(ctx, wildcard.BaseDomain); err != nil {
+				t.Fatalf("DestroyPreviewWildcard again: %v", err)
+			}
+		})
+	})
 }

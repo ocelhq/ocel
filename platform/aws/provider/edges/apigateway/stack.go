@@ -169,6 +169,9 @@ func (s *stack) Promote(ctx context.Context, promotion edge.Promotion, pointer s
 	}); err != nil {
 		return fmt.Errorf("move the %s stage of REST API %s onto promotion %s: %w", stageName, id, promotion.PromotionID, err)
 	}
+	if err := s.routePreview(ctx, c, pointer, id); err != nil {
+		return err
+	}
 	return s.ledger(c).Promote(ctx, promotion, pointer)
 }
 
@@ -218,6 +221,9 @@ func (s *stack) RemovePointer(ctx context.Context, pointer string) (edge.PruneRe
 		return edge.PruneResult{}, err
 	}
 	if pointerOr(pointer) != edgeledger.DefaultPointer {
+		if err := s.unroutePreview(ctx, c, pointer); err != nil {
+			return edge.PruneResult{}, err
+		}
 		id, found, err := findAPI(ctx, c, apiName(s.slug(), s.class(), pointer))
 		if err != nil {
 			return edge.PruneResult{}, err
@@ -229,6 +235,45 @@ func (s *stack) RemovePointer(ctx context.Context, pointer string) (edge.PruneRe
 		}
 	}
 	return s.ledger(c).RemovePointer(ctx, pointer)
+}
+
+func (s *stack) previewHost(pointer string) (string, string) {
+	base := s.state[edge.StackKeyGlobalPreview]
+	if base == "" || s.class() != edge.ClassPreview {
+		return "", ""
+	}
+	if pointerOr(pointer) == edgeledger.DefaultPointer {
+		return "", ""
+	}
+	host := edge.PreviewHost(s.slug(), pointer, "", base)
+	if host == "" {
+		return "", ""
+	}
+	return edge.PreviewWildcard(base), host
+}
+
+func (s *stack) routePreview(ctx context.Context, c Clients, pointer, api string) error {
+	wildcard, host := s.previewHost(pointer)
+	if host == "" {
+		return nil
+	}
+	return putHostRule(ctx, c, wildcard, host, api, 0)
+}
+
+func (s *stack) unroutePreview(ctx context.Context, c Clients, pointer string) error {
+	wildcard, host := s.previewHost(pointer)
+	if host == "" {
+		return nil
+	}
+	return deleteHostRule(ctx, c, wildcard, host)
+}
+
+func (s *stack) unrouteProject(ctx context.Context, c Clients) error {
+	base := s.state[edge.StackKeyGlobalPreview]
+	if base == "" || s.class() != edge.ClassPreview || s.slug() == "" {
+		return nil
+	}
+	return deleteLabelledRules(ctx, c, edge.PreviewWildcard(base), s.slug()+edge.PreviewAppSeparator, "."+base)
 }
 
 func (s *stack) BindDomain(ctx context.Context, binding edge.DomainBinding) error {
@@ -325,6 +370,9 @@ func (s *stack) Destroy(ctx context.Context) error {
 	names := []string{apiName(s.slug(), s.class(), "")}
 	for _, pointer := range pointers {
 		names = append(names, apiName(s.slug(), s.class(), pointer))
+	}
+	if err := s.unrouteProject(ctx, c); err != nil {
+		errs = append(errs, err)
 	}
 	ids, err := findAPIs(ctx, c, names)
 	if err != nil {

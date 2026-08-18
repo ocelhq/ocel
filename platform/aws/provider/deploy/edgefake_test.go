@@ -23,10 +23,11 @@ type recordingEdge struct {
 	existing map[string]bool
 	asked    []string
 
-	reconciles []edge.StackSpec
-	redeploys  int
-	secret     string
-	version    string
+	reconciles   []edge.StackSpec
+	reconcileErr error
+	redeploys    int
+	secret       string
+	version      string
 
 	staged          []edge.DeploymentRecord
 	promotions      []edge.Promotion
@@ -103,8 +104,8 @@ func (f *recordingEdge) DomainOwner(_ context.Context, hostname string) (string,
 	return f.bound[hostname], nil
 }
 
-func (f *recordingEdge) ReconcilePreviewWildcard(context.Context, edge.PreviewWildcardSpec) error {
-	return nil
+func (f *recordingEdge) ReconcilePreviewWildcard(context.Context, edge.PreviewWildcardSpec) (string, error) {
+	return "", nil
 }
 
 func (f *recordingEdge) DestroyPreviewWildcard(context.Context, string) error { return nil }
@@ -115,6 +116,9 @@ func (f *recordingEdge) Open(state edge.StackState) (edge.EdgeStack, error) {
 
 func (f *recordingEdge) Reconcile(_ context.Context, spec edge.StackSpec, prior edge.StackState) (edge.EdgeStack, error) {
 	f.reconciles = append(f.reconciles, spec)
+	if f.reconcileErr != nil {
+		return nil, f.reconcileErr
+	}
 	if prior != nil && f.version == spec.Version {
 		return &recordingStack{edge: f, state: prior}, nil
 	}

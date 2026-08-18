@@ -43,6 +43,7 @@ require (
 )
 
 require (
+	github.com/aws/aws-sdk-go-v2/service/apigatewayv2 v1.37.6 // indirect
 	github.com/aws/aws-sdk-go-v2/service/cloudfront v1.67.6 // indirect
 	github.com/aws/aws-sdk-go-v2/service/cloudfrontkeyvaluestore v1.15.6 // indirect
 	github.com/cloudflare/cloudflare-go/v4 v4.6.0 // indirect

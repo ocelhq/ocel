@@ -10,6 +10,8 @@ import (
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/apigateway"
+	agtypes "github.com/aws/aws-sdk-go-v2/service/apigateway/types"
+	"github.com/aws/aws-sdk-go-v2/service/apigatewayv2"
 	"github.com/aws/aws-sdk-go-v2/service/cloudformation"
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb"
 	"github.com/aws/aws-sdk-go-v2/service/iam"
@@ -56,10 +58,18 @@ type APIGatewayAPI interface {
 	UpdateStage(context.Context, *apigateway.UpdateStageInput, ...func(*apigateway.Options)) (*apigateway.UpdateStageOutput, error)
 	GetDomainName(context.Context, *apigateway.GetDomainNameInput, ...func(*apigateway.Options)) (*apigateway.GetDomainNameOutput, error)
 	CreateDomainName(context.Context, *apigateway.CreateDomainNameInput, ...func(*apigateway.Options)) (*apigateway.CreateDomainNameOutput, error)
+	UpdateDomainName(context.Context, *apigateway.UpdateDomainNameInput, ...func(*apigateway.Options)) (*apigateway.UpdateDomainNameOutput, error)
 	DeleteDomainName(context.Context, *apigateway.DeleteDomainNameInput, ...func(*apigateway.Options)) (*apigateway.DeleteDomainNameOutput, error)
 	GetBasePathMappings(context.Context, *apigateway.GetBasePathMappingsInput, ...func(*apigateway.Options)) (*apigateway.GetBasePathMappingsOutput, error)
 	CreateBasePathMapping(context.Context, *apigateway.CreateBasePathMappingInput, ...func(*apigateway.Options)) (*apigateway.CreateBasePathMappingOutput, error)
 	DeleteBasePathMapping(context.Context, *apigateway.DeleteBasePathMappingInput, ...func(*apigateway.Options)) (*apigateway.DeleteBasePathMappingOutput, error)
+}
+
+type RoutingAPI interface {
+	ListRoutingRules(context.Context, *apigatewayv2.ListRoutingRulesInput, ...func(*apigatewayv2.Options)) (*apigatewayv2.ListRoutingRulesOutput, error)
+	CreateRoutingRule(context.Context, *apigatewayv2.CreateRoutingRuleInput, ...func(*apigatewayv2.Options)) (*apigatewayv2.CreateRoutingRuleOutput, error)
+	PutRoutingRule(context.Context, *apigatewayv2.PutRoutingRuleInput, ...func(*apigatewayv2.Options)) (*apigatewayv2.PutRoutingRuleOutput, error)
+	DeleteRoutingRule(context.Context, *apigatewayv2.DeleteRoutingRuleInput, ...func(*apigatewayv2.Options)) (*apigatewayv2.DeleteRoutingRuleOutput, error)
 }
 
 type IAMAPI interface {
@@ -72,6 +82,7 @@ type IAMAPI interface {
 
 type Clients struct {
 	APIGateway APIGatewayAPI
+	Routing    RoutingAPI
 	Dynamo     edgeledger.DynamoAPI
 	IAM        IAMAPI
 	CFN        bootstrap.CFNDescriber
@@ -102,6 +113,7 @@ func FromConfig(load func(context.Context) (aws.Config, error)) func(context.Con
 		}
 		return Clients{
 			APIGateway: apigateway.NewFromConfig(awscfg),
+			Routing:    apigatewayv2.NewFromConfig(awscfg),
 			Dynamo:     dynamodb.NewFromConfig(awscfg),
 			IAM:        iam.NewFromConfig(awscfg),
 			CFN:        cloudformation.NewFromConfig(awscfg),
@@ -255,11 +267,15 @@ func (p *provider) DomainOwner(ctx context.Context, hostname string) (string, er
 	if err != nil {
 		return "", err
 	}
-	if _, err := c.APIGateway.GetDomainName(ctx, &apigateway.GetDomainNameInput{DomainName: aws.String(hostname)}); err != nil {
+	held, err := c.APIGateway.GetDomainName(ctx, &apigateway.GetDomainNameInput{DomainName: aws.String(hostname)})
+	if err != nil {
 		if isNotFound(err) {
 			return "", nil
 		}
 		return "", fmt.Errorf("read the API Gateway domain name for %s: %w", hostname, err)
+	}
+	if held.RoutingMode == agtypes.RoutingModeRoutingRuleOnly {
+		return catchAllOwner(ctx, c, hostname)
 	}
 	mappings, err := basePathMappings(ctx, c, hostname)
 	if err != nil {
@@ -284,12 +300,6 @@ func (p *provider) DomainOwner(ctx context.Context, hostname string) (string, er
 	}
 	return "", nil
 }
-
-func (p *provider) ReconcilePreviewWildcard(context.Context, edge.PreviewWildcardSpec) error {
-	return nil
-}
-
-func (p *provider) DestroyPreviewWildcard(context.Context, string) error { return nil }
 
 func apiName(slug string, class edge.Class, pointer string) string {
 	fields := []string{apiNamespace, slug, string(class)}

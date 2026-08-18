@@ -294,11 +294,11 @@ func intendedPreviewHostnames(cfg *projectconfig.Config, slug, pointer, base str
 		return nil
 	}
 	if len(cfg.Apps) < 2 {
-		return []string{edge.PreviewLabel(slug, pointer, "") + "." + base}
+		return []string{edge.PreviewHost(slug, pointer, "", base)}
 	}
 	hosts := make([]string, 0, len(cfg.Apps))
 	for _, app := range cfg.Apps {
-		hosts = append(hosts, edge.PreviewLabel(slug, pointer, app.Name)+"."+base)
+		hosts = append(hosts, edge.PreviewHost(slug, pointer, app.Name, base))
 	}
 	return hosts
 }

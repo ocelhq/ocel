@@ -1728,6 +1728,23 @@ func TestReconcileStack(t *testing.T) {
 		}
 	})
 
+	t.Run("a stack that never reconciled escapes with no state", func(t *testing.T) {
+		fake := &recordingEdge{reconcileErr: errors.New("the preview substrate is not bootstrapped")}
+		cfg := Config{Class: deploymentsv1.Environment_CLASS_PREVIEW, Slug: "proj", GlobalPreviewDomain: "preview.acme.com"}
+		marked := MarkGlobalPreview(nil, cfg, &deploymentsv1.Manifest{Slug: "proj"})
+
+		stack, err := reconcileStack(context.Background(), fake, []edge.StackSpec{{Version: "v1", Slug: "proj"}}, marked)
+		if err == nil {
+			t.Fatal("reconcileStack err = nil, want the failure surfaced")
+		}
+		if stack != nil {
+			t.Errorf("stack = %+v, want none: its state is the mark and nothing else, and a project persisted with that state names no slug, class or state table, so no teardown can ever finish it", stack.State())
+		}
+		if state := reconciledState(stack, cfg); state != nil {
+			t.Errorf("state = %v, want nothing persisted for a stack that was never raised", state)
+		}
+	})
+
 	t.Run("no specs returns prior unchanged", func(t *testing.T) {
 		fake := &recordingEdge{}
 		ctx := context.Background()

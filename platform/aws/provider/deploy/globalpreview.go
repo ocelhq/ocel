@@ -31,6 +31,17 @@ func PreviewWildcardSpecFor(cfg Config, baseDomain string, warn func(string)) (e
 	if baseDomain == "" {
 		return edge.PreviewWildcardSpec{}, fmt.Errorf("a preview domain is required")
 	}
+	spec := edge.PreviewWildcardSpec{
+		Version:    stackVersion,
+		BaseDomain: baseDomain,
+		GrammarMin: edge.PreviewGrammarMin,
+		GrammarMax: edge.PreviewGrammarMax,
+		Values:     cfg.EdgeValues,
+		Warn:       warn,
+	}
+	if _, programmable := cfg.Edge.(edge.Programmable); !programmable {
+		return spec, nil
+	}
 	generic, err := sharedWorker(cfg)
 	if err != nil {
 		return edge.PreviewWildcardSpec{}, err
@@ -43,31 +54,29 @@ func PreviewWildcardSpecFor(cfg Config, baseDomain string, warn func(string)) (e
 	generic = withVar(generic, envPreviewGlobal, "1")
 	generic = withVar(generic, envPreviewBaseDomain, baseDomain)
 
-	return edge.PreviewWildcardSpec{
-		Version:    stackVersion,
-		BaseDomain: baseDomain,
-		GrammarMin: edge.PreviewGrammarMin,
-		GrammarMax: edge.PreviewGrammarMax,
-		Values:     cfg.EdgeValues,
-		Warn:       warn,
-		Program: &edge.ProgramSpec{
-			Worker:              generic,
-			StoreScriptName:     cfg.StoreScriptName,
-			ISRWriterScriptName: cfg.ISRWriterScriptName,
-		},
-	}, nil
+	spec.Program = &edge.ProgramSpec{
+		Worker:              generic,
+		StoreScriptName:     cfg.StoreScriptName,
+		ISRWriterScriptName: cfg.ISRWriterScriptName,
+	}
+	return spec, nil
 }
 
 func MarkGlobalPreview(state edge.StackState, cfg Config, manifest *deploymentsv1.Manifest) edge.StackState {
-	if len(state) == 0 || cfg.Class != deploymentsv1.Environment_CLASS_PREVIEW {
+	if cfg.Class != deploymentsv1.Environment_CLASS_PREVIEW {
 		return state
 	}
-	marked := maps.Clone(state)
-	if servesOnGlobalPreviewDomain(cfg, manifest) {
-		marked[edge.StackKeyGlobalPreview] = cfg.GlobalPreviewDomain
-	} else {
+	if !servesOnGlobalPreviewDomain(cfg, manifest) {
+		if len(state) == 0 {
+			return state
+		}
+		marked := maps.Clone(state)
 		delete(marked, edge.StackKeyGlobalPreview)
+		return marked
 	}
+	marked := edge.StackState{}
+	maps.Copy(marked, state)
+	marked[edge.StackKeyGlobalPreview] = cfg.GlobalPreviewDomain
 	return marked
 }
 
