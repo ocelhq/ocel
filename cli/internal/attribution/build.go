@@ -17,6 +17,7 @@ var unresolvableImportLogLevels = map[string]api.LogLevel{
 }
 
 var assetLoaders = map[string]api.Loader{
+	".js":    api.LoaderJSX,
 	".css":   api.LoaderEmpty,
 	".scss":  api.LoaderEmpty,
 	".sass":  api.LoaderEmpty,
