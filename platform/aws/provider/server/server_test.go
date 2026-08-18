@@ -563,11 +563,26 @@ func TestServerBootstrapForgetsDeployed(t *testing.T) {
 	})
 }
 
-func TestServerEdgeIsOneInstance(t *testing.T) {
+func TestServerEdge(t *testing.T) {
 	t.Parallel()
 
-	s := &Server{}
-	if s.edge() != s.edge() {
-		t.Error("edge() handed out two providers, want one so its zone lookups are remembered")
-	}
+	t.Run("it comes from the registry, once", func(t *testing.T) {
+		t.Parallel()
+
+		s := &Server{}
+		first, err := s.edge()
+		if err != nil {
+			t.Fatalf("edge() error = %v", err)
+		}
+		second, err := s.edge()
+		if err != nil {
+			t.Fatalf("second edge() error = %v", err)
+		}
+		if first != second {
+			t.Error("edge() handed out two edges, want one so its zone lookups are remembered")
+		}
+		if first.Kind() != edge.KindCloudflare {
+			t.Errorf("Kind() = %q, want the kind this origin constructs today", first.Kind())
+		}
+	})
 }

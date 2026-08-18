@@ -52,7 +52,31 @@ func TestDestroyPlanEmpty(t *testing.T) {
 		want bool
 	}{
 		{"an all-empty plan is empty", &deploymentsv1.PlanDestroyProjectResponse{}, true},
-		{"a plan with a root stack is not empty", &deploymentsv1.PlanDestroyProjectResponse{RootStack: true}, false},
+		{
+			"a plan with an edge-stack item to delete is not empty",
+			&deploymentsv1.PlanDestroyProjectResponse{EdgeStack: &deploymentsv1.EdgeStackPlan{
+				EdgeKind: "cloudflare",
+				Items: []*deploymentsv1.EdgeStackPlan_Item{
+					{Kind: "edge stack", Name: "shop", Action: deploymentsv1.EdgeStackPlan_Item_ACTION_DELETE},
+				},
+			}},
+			false,
+		},
+		{
+			"a plan whose only edge-stack item is kept still has an edge stack to tear down",
+			&deploymentsv1.PlanDestroyProjectResponse{EdgeStack: &deploymentsv1.EdgeStackPlan{
+				EdgeKind: "cloudflare",
+				Items: []*deploymentsv1.EdgeStackPlan_Item{
+					{Kind: "certificate", Name: "shop.example.com", Action: deploymentsv1.EdgeStackPlan_Item_ACTION_KEEP, Reason: "you pinned this certificate"},
+				},
+			}},
+			false,
+		},
+		{
+			"a plan carrying only the edge kind and no items is empty",
+			&deploymentsv1.PlanDestroyProjectResponse{EdgeStack: &deploymentsv1.EdgeStackPlan{EdgeKind: "cloudflare"}},
+			true,
+		},
 		{"a plan with an infra stack is not empty", &deploymentsv1.PlanDestroyProjectResponse{InfraStack: "shop--infra"}, false},
 		{"a plan with app stacks is not empty", &deploymentsv1.PlanDestroyProjectResponse{AppStacks: []string{"shop--web--b1"}}, false},
 	}
@@ -75,24 +99,51 @@ func TestPrintDestroyPlan(t *testing.T) {
 
 		var out bytes.Buffer
 		printDestroyPlan(&out, "proj_shop", &deploymentsv1.PlanDestroyProjectResponse{
-			RootStack:  true,
+			EdgeStack: &deploymentsv1.EdgeStackPlan{
+				EdgeKind: "cloudflare",
+				Items: []*deploymentsv1.EdgeStackPlan_Item{
+					{Kind: "edge stack", Name: "shop", Action: deploymentsv1.EdgeStackPlan_Item_ACTION_DELETE},
+					{Kind: "distribution", Name: "E1SHOP", Action: deploymentsv1.EdgeStackPlan_Item_ACTION_DISABLE_THEN_DELETE, Slow: true},
+					{Kind: "certificate", Name: "shop.example.com", Action: deploymentsv1.EdgeStackPlan_Item_ACTION_KEEP, Reason: "you pinned this certificate"},
+				},
+			},
 			InfraStack: "shop--infra",
 			AppStacks:  []string{"shop--web--b1", "shop--api--b2"},
 		})
 		got := out.String()
 		for _, want := range []string{
 			`production project "proj_shop"`,
-			"root stack",
+			"fronted by the cloudflare edge",
+			"delete edge stack shop",
+			"disable, then delete distribution E1SHOP (this one is slow)",
 			"infra stack shop--infra",
 			"INCLUDING ALL DATA",
 			"app stack shop--web--b1",
 			"app stack shop--api--b2",
 			"every production variable value",
 			"This cannot be undone.",
+			"Left in place:",
+			"keep certificate shop.example.com — you pinned this certificate",
 		} {
 			if !strings.Contains(got, want) {
 				t.Errorf("printDestroyPlan output missing %q; got:\n%s", want, got)
 			}
+		}
+		if strings.Index(got, "keep certificate") < strings.Index(got, "This cannot be undone.") {
+			t.Errorf("printDestroyPlan listed a kept item among the doomed ones; got:\n%s", got)
+		}
+	})
+
+	t.Run("an action this CLI does not know reads as a sentence", func(t *testing.T) {
+		t.Parallel()
+
+		got := destroyPlanItem(&deploymentsv1.EdgeStackPlan_Item{
+			Kind:   "certificate",
+			Name:   "shop.example.com",
+			Action: deploymentsv1.EdgeStackPlan_Item_Action(97),
+		})
+		if !strings.Contains(got, "an action this CLI does not know") || !strings.HasSuffix(got, "certificate shop.example.com") {
+			t.Errorf("destroyPlanItem() = %q, want the unknown action named before the resource", got)
 		}
 	})
 }
@@ -186,6 +237,36 @@ func TestRunDestroy(t *testing.T) {
 		}
 		if !strings.Contains(stderr.String(), destroyBypassEnv) {
 			t.Errorf("stderr = %q, want it to name %s so an unconfirmed destroy is never silent", stderr.String(), destroyBypassEnv)
+		}
+	})
+
+	t.Run("it renders the plan the provider sent, kept items included", func(t *testing.T) {
+		root, _ := setUpDeployFixture(t)
+		d := defaultDeps()
+		setLoggedIn(&d)
+		stubAppFunctions(&d, nil)
+		t.Setenv(fakeInfraClassEnvVar, "production")
+		t.Setenv(fakeInfraPresentEnvVar, "1")
+		t.Setenv(destroyBypassEnv, "test-app")
+
+		var stdout, stderr bytes.Buffer
+		if err := runDestroy(context.Background(), d, root, &stdout, &stderr, strings.NewReader("")); err != nil {
+			t.Fatalf("runDestroy err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
+		}
+
+		out := stdout.String()
+		for _, want := range []string{
+			"fronted by the cloudflare edge",
+			"delete edge stack test-app",
+			"disable, then delete distribution E1test-app (this one is slow)",
+			"keep certificate test-app.example.com — you pinned this certificate; Ocel never deletes one it did not request",
+			"infra stack test-app--infra",
+			"app stack test-app--web--b1",
+			"DESTROY PROJECT project=test-app",
+		} {
+			if !strings.Contains(out, want) {
+				t.Errorf("stdout missing %q; got:\n%s", want, out)
+			}
 		}
 	})
 

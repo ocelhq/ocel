@@ -214,7 +214,28 @@ message PlanDestroyProjectResponse {
 
   string infra_stack = 2;
 
-  bool root_stack = 3;
+  EdgeStackPlan edge_stack = 3;
+}
+
+message EdgeStackPlan {
+  message Item {
+    enum Action {
+      ACTION_UNSPECIFIED = 0;
+      ACTION_DELETE = 1;
+      ACTION_DISABLE_THEN_DELETE = 2;
+      ACTION_KEEP = 3;
+    }
+
+    string kind = 1;
+    string name = 2;
+    Action action = 3;
+    string reason = 4;
+    bool slow = 5;
+  }
+
+  string edge_kind = 1;
+
+  repeated Item items = 2;
 }
 
 message ListEnvironmentsRequest {

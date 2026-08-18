@@ -21,7 +21,7 @@ import (
 var destroyCmd = &cobra.Command{
 	Use:   "destroy",
 	Short: "Permanently destroy this project's entire production deployment",
-	Long: "Permanently destroy this project's entire production deployment: the root stack " +
+	Long: "Permanently destroy this project's entire production deployment: the edge stack " +
 		"(edge workers, custom-domain binding, deployments store), the infra stack (databases " +
 		"and buckets, including all their data), and every app-deploy stack.\n\n" +
 		"This is irreversible and requires typing the project name to confirm; it refuses to run " +
@@ -237,13 +237,25 @@ func runDestroyPreviewProject(ctx context.Context, d deps, cwd string, yes bool,
 }
 
 func destroyPlanEmpty(plan *deploymentsv1.PlanDestroyProjectResponse) bool {
-	return !plan.GetRootStack() && plan.GetInfraStack() == "" && len(plan.GetAppStacks()) == 0
+	return len(plan.GetEdgeStack().GetItems()) == 0 &&
+		plan.GetInfraStack() == "" &&
+		len(plan.GetAppStacks()) == 0
 }
 
 func printDestroyPlan(out io.Writer, slug string, plan *deploymentsv1.PlanDestroyProjectResponse) {
-	fmt.Fprintf(out, "This will permanently destroy everything below in production project %q:\n", slug)
-	if plan.GetRootStack() {
-		fmt.Fprintln(out, "  • root stack — edge workers, custom-domain binding, deployments store")
+	header := fmt.Sprintf("This will permanently destroy production project %q", slug)
+	if kind := plan.GetEdgeStack().GetEdgeKind(); kind != "" {
+		header += fmt.Sprintf(", fronted by the %s edge", kind)
+	}
+	fmt.Fprintf(out, "%s:\n", header)
+
+	var kept []*deploymentsv1.EdgeStackPlan_Item
+	for _, item := range plan.GetEdgeStack().GetItems() {
+		if item.GetAction() == deploymentsv1.EdgeStackPlan_Item_ACTION_KEEP {
+			kept = append(kept, item)
+			continue
+		}
+		fmt.Fprintf(out, "  • %s\n", destroyPlanItem(item))
 	}
 	if s := plan.GetInfraStack(); s != "" {
 		fmt.Fprintf(out, "  • infra stack %s — databases and buckets, INCLUDING ALL DATA\n", s)
@@ -254,6 +266,37 @@ func printDestroyPlan(out io.Writer, slug string, plan *deploymentsv1.PlanDestro
 	fmt.Fprintln(out, "  • all stored assets belonging to this project")
 	fmt.Fprintln(out, "  • every production variable value this project holds, and their history")
 	fmt.Fprintln(out, "This cannot be undone.")
+
+	if len(kept) > 0 {
+		fmt.Fprintln(out, "Left in place:")
+		for _, item := range kept {
+			fmt.Fprintf(out, "  • %s\n", destroyPlanItem(item))
+		}
+	}
+}
+
+func destroyPlanItem(item *deploymentsv1.EdgeStackPlan_Item) string {
+	line := fmt.Sprintf("%s %s %s", destroyPlanAction(item.GetAction()), item.GetKind(), item.GetName())
+	if reason := item.GetReason(); reason != "" {
+		line += " — " + reason
+	}
+	if item.GetSlow() {
+		line += " (this one is slow)"
+	}
+	return line
+}
+
+func destroyPlanAction(action deploymentsv1.EdgeStackPlan_Item_Action) string {
+	switch action {
+	case deploymentsv1.EdgeStackPlan_Item_ACTION_DELETE:
+		return "delete"
+	case deploymentsv1.EdgeStackPlan_Item_ACTION_DISABLE_THEN_DELETE:
+		return "disable, then delete"
+	case deploymentsv1.EdgeStackPlan_Item_ACTION_KEEP:
+		return "keep"
+	default:
+		return fmt.Sprintf("act on (%s, an action this CLI does not know)", action)
+	}
 }
 
 func confirmDestroyProject(ctx context.Context, slug string, stdout io.Writer, stdin io.Reader) (bool, error) {

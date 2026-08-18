@@ -38,7 +38,12 @@ func (a authHeaderInterceptor) WrapStreamingHandler(next connect.StreamingHandle
 
 func newTestClient(t *testing.T, token string) deploymentsv1connect.DeploymentServiceClient {
 	t.Helper()
-	srv := httptest.NewServer(NewMux(testToken))
+	return newTestClientFor(t, &Server{}, token)
+}
+
+func newTestClientFor(t *testing.T, deployments *Server, token string) deploymentsv1connect.DeploymentServiceClient {
+	t.Helper()
+	srv := httptest.NewServer(newMux(deployments, testToken))
 	t.Cleanup(srv.Close)
 
 	var opts []connect.ClientOption
