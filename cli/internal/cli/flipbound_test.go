@@ -1,0 +1,188 @@
+package cli
+
+import (
+	"bytes"
+	"context"
+	"strings"
+	"testing"
+
+	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
+)
+
+func TestFlipNote(t *testing.T) {
+	cases := []struct {
+		name  string
+		bound *deploymentsv1.FlipBound
+		want  string
+	}{
+		{name: "an unrecorded bound says nothing"},
+		{name: "an instant flip says nothing", bound: &deploymentsv1.FlipBound{}},
+		{
+			name:  "a published bound promises the duration",
+			bound: &deploymentsv1.FlipBound{TypicalMs: 5000, Published: true},
+			want:  "propagates within ~5 s",
+		},
+		{
+			name:  "an unpublished bound qualifies the duration",
+			bound: &deploymentsv1.FlipBound{TypicalMs: 5000},
+			want:  "propagates in ~5 s (typical, not guaranteed)",
+		},
+		{
+			name:  "the duration comes from the recorded milliseconds",
+			bound: &deploymentsv1.FlipBound{TypicalMs: 90000, Published: true},
+			want:  "propagates within ~90 s",
+		},
+		{
+			name:  "a fractional second keeps its fraction",
+			bound: &deploymentsv1.FlipBound{TypicalMs: 1500},
+			want:  "propagates in ~1.5 s (typical, not guaranteed)",
+		},
+		{
+			name:  "a sub-second bound stays in milliseconds",
+			bound: &deploymentsv1.FlipBound{TypicalMs: 250, Published: true},
+			want:  "propagates within ~250 ms",
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := flipNote(tc.bound); got != tc.want {
+				t.Errorf("flipNote(%v) = %q, want %q", tc.bound, got, tc.want)
+			}
+		})
+	}
+}
+
+var flipBoundCases = []struct {
+	name  string
+	spec  string
+	want  string
+	other []string
+}{
+	{
+		name:  "instant",
+		spec:  "0",
+		other: []string{"propagates"},
+	},
+	{
+		name:  "published",
+		spec:  "5000:published",
+		want:  "propagates within ~5 s",
+		other: []string{"typical, not guaranteed"},
+	},
+	{
+		name:  "unpublished",
+		spec:  "5000",
+		want:  "propagates in ~5 s (typical, not guaranteed)",
+		other: []string{"propagates within"},
+	},
+}
+
+func TestFlipBoundOnTheProductionDeployPromotionLine(t *testing.T) {
+	for _, tc := range flipBoundCases {
+		t.Run(tc.name, func(t *testing.T) {
+			root, sockPath := setUpDeployFixture(t)
+			d := defaultDeps()
+			setLoggedIn(&d)
+			stubAppFunctions(&d, nil)
+			t.Setenv(fakeFlipBoundEnvVar, tc.spec)
+
+			var stdout, stderr bytes.Buffer
+			if err := runDeploy(context.Background(), d, root, deployOptions{yes: true}, &stdout, &stderr, strings.NewReader("")); err != nil {
+				t.Fatalf("runDeploy err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
+			}
+
+			assertFlipNote(t, stdout.String(), tc.want, tc.other)
+			waitForNoStaleSocket(t, sockPath)
+		})
+	}
+}
+
+func TestFlipBoundOnThePreviewDeployPromotionLine(t *testing.T) {
+	for _, tc := range flipBoundCases {
+		t.Run(tc.name, func(t *testing.T) {
+			root, sockPath := setUpDeployFixture(t)
+			d := defaultDeps()
+			setLoggedIn(&d)
+			stubAppFunctions(&d, nil)
+			stubGit(&d, "feature/login", "")
+			t.Setenv(fakeInfraClassEnvVar, "preview")
+			t.Setenv(fakeInfraPresentEnvVar, "1")
+			t.Setenv(fakeFlipBoundEnvVar, tc.spec)
+
+			var stdout, stderr bytes.Buffer
+			if err := runPreviewUp(context.Background(), d, root, previewUpOptions{}, &stdout, &stderr, strings.NewReader("")); err != nil {
+				t.Fatalf("runPreviewUp err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
+			}
+
+			assertFlipNote(t, stdout.String(), tc.want, tc.other)
+			waitForNoStaleSocket(t, sockPath)
+		})
+	}
+}
+
+func TestFlipBoundOnTheRollbackPromotionLine(t *testing.T) {
+	for _, tc := range flipBoundCases {
+		t.Run(tc.name, func(t *testing.T) {
+			root, sockPath := setUpDeployFixture(t)
+			d := defaultDeps()
+			setLoggedIn(&d)
+			stubAppFunctions(&d, nil)
+			t.Setenv(fakeInfraClassEnvVar, "production")
+			t.Setenv(fakeInfraPresentEnvVar, "1")
+			t.Setenv(fakeFlipBoundEnvVar, tc.spec)
+
+			var stdout, stderr bytes.Buffer
+			if err := runRollback(context.Background(), d, root, rollbackOptions{}, &stdout, &stderr); err != nil {
+				t.Fatalf("runRollback err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
+			}
+
+			out := stdout.String()
+			line := ""
+			for _, l := range strings.Split(out, "\n") {
+				if strings.HasPrefix(l, "Rolled back to promotion") {
+					line = l
+				}
+			}
+			if line == "" {
+				t.Fatalf("stdout = %q, want a rolled-back line", out)
+			}
+			assertFlipNote(t, line, tc.want, tc.other)
+
+			waitForNoStaleSocket(t, sockPath)
+		})
+	}
+}
+
+func TestFlipBoundIsAbsentFromThePromotionList(t *testing.T) {
+	root, sockPath := setUpDeployFixture(t)
+	d := defaultDeps()
+	setLoggedIn(&d)
+	stubAppFunctions(&d, nil)
+	t.Setenv(fakeInfraClassEnvVar, "production")
+	t.Setenv(fakeInfraPresentEnvVar, "1")
+	t.Setenv(fakeFlipBoundEnvVar, "5000")
+
+	var stdout, stderr bytes.Buffer
+	if err := runDeploymentsLs(context.Background(), d, root, &stdout, &stderr); err != nil {
+		t.Fatalf("runDeploymentsLs err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
+	}
+
+	if strings.Contains(stdout.String(), "propagates") {
+		t.Errorf("stdout = %q, want the flip note only on a promotion line", stdout.String())
+	}
+
+	waitForNoStaleSocket(t, sockPath)
+}
+
+func assertFlipNote(t *testing.T, out, want string, absent []string) {
+	t.Helper()
+	if want != "" && !strings.Contains(out, want) {
+		t.Errorf("output = %q, want it to carry %q", out, want)
+	}
+	for _, unwanted := range absent {
+		if strings.Contains(out, unwanted) {
+			t.Errorf("output = %q, want no %q", out, unwanted)
+		}
+	}
+}

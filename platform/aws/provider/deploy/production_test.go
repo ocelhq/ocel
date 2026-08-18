@@ -1181,6 +1181,32 @@ func TestFinalizeProductionDeploy(t *testing.T) {
 		}
 	})
 
+	t.Run("stamps the chosen edge's flip bound onto the promotion it returns", func(t *testing.T) {
+		for _, kind := range []edge.Kind{edge.KindCloudflare, edge.KindNative, edge.KindNone} {
+			fake := &recordingEdge{kind: kind}
+			stack := fake.reconciled(t, edge.StackSpec{Version: "v1"})
+			results := []appDeployResult{
+				{App: "web", Identity: deployedAs("b1"), Record: edge.DeploymentRecord{App: "web", Identity: "b1"}},
+			}
+
+			promoted, err := stageAndPromote(context.Background(), withEdge(Config{}, fake), stack, "promo1", "", "", 100, results)
+			if err != nil {
+				t.Fatalf("stageAndPromote: %v", err)
+			}
+
+			want := edge.CapabilitiesOf(kind).FlipBound()
+			if len(fake.promotions) != 1 {
+				t.Fatalf("promotions = %d, want 1", len(fake.promotions))
+			}
+			if got := fake.promotions[0].Flip; got == nil || *got != want {
+				t.Errorf("%s promotion.Flip = %v, want %v", kind, got, want)
+			}
+			if got := promoted.Flip; got == nil || *got != want {
+				t.Errorf("%s returned promotion.Flip = %v, want the recorded %v", kind, got, want)
+			}
+		}
+	})
+
 	t.Run("stamps the tag onto the promotion", func(t *testing.T) {
 		fake := &recordingEdge{}
 		ctx := context.Background()

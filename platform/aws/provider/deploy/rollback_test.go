@@ -107,7 +107,7 @@ func TestRollback(t *testing.T) {
 		ctx := context.Background()
 		state := fake.reconciled(t, edge.StackSpec{Version: "v1"})
 
-		promoted, err := Rollback(ctx, state, "", "", 999)
+		promoted, err := Rollback(ctx, fake, state, "", "", 999)
 		if err != nil {
 			t.Fatalf("Rollback: %v", err)
 		}
@@ -138,7 +138,7 @@ func TestRollback(t *testing.T) {
 		ctx := context.Background()
 		state := fake.reconciled(t, edge.StackSpec{Version: "v1"})
 
-		promoted, err := Rollback(ctx, state, "", "", 999)
+		promoted, err := Rollback(ctx, fake, state, "", "", 999)
 		if err != nil {
 			t.Fatalf("Rollback: %v", err)
 		}
@@ -168,7 +168,7 @@ func TestRollback(t *testing.T) {
 		ctx := context.Background()
 		state := fake.reconciled(t, edge.StackSpec{Version: "v1"})
 
-		promoted, err := Rollback(ctx, state, "promo-1", "", 999)
+		promoted, err := Rollback(ctx, fake, state, "promo-1", "", 999)
 		if err != nil {
 			t.Fatalf("Rollback: %v", err)
 		}
@@ -188,7 +188,7 @@ func TestRollback(t *testing.T) {
 		ctx := context.Background()
 		state := fake.reconciled(t, edge.StackSpec{Version: "v1"})
 
-		promoted, err := Rollback(ctx, state, "", "v1.2.3", 999)
+		promoted, err := Rollback(ctx, fake, state, "", "v1.2.3", 999)
 		if err != nil {
 			t.Fatalf("Rollback: %v", err)
 		}
@@ -213,11 +213,37 @@ func TestRollback(t *testing.T) {
 		ctx := context.Background()
 		state := fake.reconciled(t, edge.StackSpec{Version: "v1"})
 
-		if _, err := Rollback(ctx, state, "no-such-promotion", "", 999); err == nil {
+		if _, err := Rollback(ctx, fake, state, "no-such-promotion", "", 999); err == nil {
 			t.Fatal("expected an error for an unknown promotion id")
 		}
 		if len(fake.promotions) != 0 {
 			t.Errorf("promotions = %v, want none: an unknown target must never promote", fake.promotions)
+		}
+	})
+
+	t.Run("records the promoting edge's own flip bound on the re-promotion", func(t *testing.T) {
+		t.Parallel()
+		for _, kind := range []edge.Kind{edge.KindCloudflare, edge.KindNative, edge.KindNone} {
+			fake := &recordingEdge{
+				kind: kind,
+				history: []edge.HistoryEntry{
+					{Promotion: edge.Promotion{PromotionID: "promo-2", Ts: 200}, Active: true},
+					{Promotion: edge.Promotion{PromotionID: "promo-1", Ts: 100}, Active: false},
+				},
+			}
+			state := fake.reconciled(t, edge.StackSpec{Version: "v1"})
+
+			promoted, err := Rollback(context.Background(), fake, state, "", "", 999)
+			if err != nil {
+				t.Fatalf("Rollback: %v", err)
+			}
+			want := edge.CapabilitiesOf(kind).FlipBound()
+			if promoted.Flip == nil || *promoted.Flip != want {
+				t.Errorf("%s promoted.Flip = %v, want %v", kind, promoted.Flip, want)
+			}
+			if len(fake.promotions) != 1 || fake.promotions[0].Flip == nil || *fake.promotions[0].Flip != want {
+				t.Errorf("%s promotions = %v, want the re-promotion to carry %v", kind, fake.promotions, want)
+			}
 		}
 	})
 }

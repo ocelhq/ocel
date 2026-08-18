@@ -42,7 +42,7 @@ func RollbackTarget(history []edge.HistoryEntry, to, tag string) (edge.Promotion
 	return history[activeIdx+1].Promotion, nil
 }
 
-func Rollback(ctx context.Context, stack edge.EdgeStack, to, tag string, now int64) (edge.Promotion, error) {
+func Rollback(ctx context.Context, e edge.Edge, stack edge.EdgeStack, to, tag string, now int64) (edge.Promotion, error) {
 	history, err := stack.Ledger().History(ctx, "")
 	if err != nil {
 		return edge.Promotion{}, fmt.Errorf("read promotion history: %w", err)
@@ -52,9 +52,5 @@ func Rollback(ctx context.Context, stack edge.EdgeStack, to, tag string, now int
 		return edge.Promotion{}, err
 	}
 
-	promoted := edge.Promotion{PromotionID: target.PromotionID, Ts: now, Builds: target.Builds, Tag: target.Tag}
-	if err := stack.Promote(ctx, promoted, ""); err != nil {
-		return edge.Promotion{}, fmt.Errorf("promote %s: %w", promoted.PromotionID, err)
-	}
-	return promoted, nil
+	return promote(ctx, e, stack, edge.Promotion{PromotionID: target.PromotionID, Ts: now, Builds: target.Builds, Tag: target.Tag}, "")
 }

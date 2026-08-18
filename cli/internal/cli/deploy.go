@@ -182,6 +182,7 @@ func runDeploy(ctx context.Context, d deps, cwd string, opts deployOptions, stdo
 		var functions []*deploymentsv1.FunctionOutput
 		var appURLs []string
 		var promotionID string
+		var flip deployui.Flip
 		onEvent := func(ev *deploymentsv1.DeployEvent) {
 			ui.Event(ev)
 			if res := ev.GetResult(); res != nil {
@@ -189,6 +190,7 @@ func runDeploy(ctx context.Context, d deps, cwd string, opts deployOptions, stdo
 				functions = res.GetFunctions()
 				appURLs = res.GetAppUrls()
 				promotionID = res.GetPromotionId()
+				flip = flipFor(res.GetFlipBound())
 			}
 		}
 		if err := runner.Deploy(ctx, req, onEvent); err != nil {
@@ -201,7 +203,7 @@ func runDeploy(ctx context.Context, d deps, cwd string, opts deployOptions, stdo
 		if err := publishServiceMap(cfg, manifest, env, opts.tag, promotionID, links); err != nil {
 			return err
 		}
-		ui.Deployed("Deployed", appURLs, links, functions)
+		ui.Deployed("Deployed", appURLs, flip, links, functions)
 		return nil
 	})
 	if err != nil {

@@ -347,18 +347,30 @@ func (r *Renderer) Resume() {
 	r.drawLiveLocked()
 }
 
-func (r *Renderer) Deployed(headline string, appURLs []string, logPath string) {
+type Flip struct {
+	Note  string
+	Bound *deploymentsv1.FlipBound
+}
+
+func (r *Renderer) Deployed(headline string, appURLs []string, flip Flip, logPath string) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	r.finishAllLocked(r.okColor(), okMark, "")
 
 	if r.format == FormatJSON {
-		r.emitJSONLocked("deployed", map[string]any{
+		fields := map[string]any{
 			"headline":   headline,
 			"appUrls":    appURLs,
 			"durationMs": time.Since(r.start).Milliseconds(),
 			"logPath":    logPath,
-		})
+		}
+		if flip.Bound != nil {
+			fields["flipBound"] = map[string]any{
+				"typicalMs": flip.Bound.GetTypicalMs(),
+				"published": flip.Bound.GetPublished(),
+			}
+		}
+		r.emitJSONLocked("deployed", fields)
 		return
 	}
 
@@ -370,6 +382,10 @@ func (r *Renderer) Deployed(headline string, appURLs []string, logPath string) {
 		for _, u := range appURLs {
 			url.Fprintf(r.w, "  %s\n", u)
 		}
+	}
+	if flip.Note != "" {
+		fmt.Fprintln(r.w)
+		r.colorFor(color.Faint).Fprintf(r.w, "  %s\n", flip.Note)
 	}
 	r.printLogPointerLocked("Details", logPath)
 }

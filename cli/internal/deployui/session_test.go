@@ -66,7 +66,7 @@ func TestSession(t *testing.T) {
 		s.Event(&deploymentsv1.DeployEvent{Event: &deploymentsv1.DeployEvent_Log{
 			Log: &deploymentsv1.LogEvent{Message: "pulumi engine line"},
 		}})
-		s.Deployed("Deployed", []string{"https://app.example.workers.dev"}, nil, nil)
+		s.Deployed("Deployed", []string{"https://app.example.workers.dev"}, Flip{}, nil, nil)
 
 		got := out.String()
 		for _, want := range []string{
@@ -605,7 +605,7 @@ func TestFormatAxis(t *testing.T) {
 
 		s.Building()
 		s.Event(progress(deploymentsv1.Phase_PHASE_UPLOADING, "Uploading function artifacts"))
-		s.Deployed("Deployed", []string{"https://app.example.workers.dev"}, nil, nil)
+		s.Deployed("Deployed", []string{"https://app.example.workers.dev"}, Flip{}, nil, nil)
 
 		lines := strings.Split(strings.TrimRight(out.String(), "\n"), "\n")
 		if len(lines) != 3 {

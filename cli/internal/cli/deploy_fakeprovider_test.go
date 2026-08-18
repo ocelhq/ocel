@@ -43,6 +43,8 @@ const (
 	fakeCredProblemEnvVar  = "OCEL_TEST_FAKE_CRED_PROBLEM"
 )
 
+const fakeFlipBoundEnvVar = "OCEL_TEST_FAKE_FLIP_BOUND"
+
 const fakeKnownSlugsEnvVar = "OCEL_TEST_FAKE_KNOWN_SLUGS"
 
 const fakePublishedLinksEnvVar = "OCEL_TEST_FAKE_PUBLISHED_LINKS"
@@ -223,9 +225,23 @@ func (s *deployFakeProviderServer) Deploy(ctx context.Context, req *deploymentsv
 			Success:     true,
 			AppUrls:     []string{fakeAppURL},
 			PromotionId: fakePromotionID,
+			FlipBound:   fakeFlipBound(),
 			Links:       fakeLinks(req.GetManifest()),
 		}},
 	})
+}
+
+func fakeFlipBound() *deploymentsv1.FlipBound {
+	spec := os.Getenv(fakeFlipBoundEnvVar)
+	if spec == "" {
+		return nil
+	}
+	typical, published, _ := strings.Cut(spec, ":")
+	ms, err := strconv.ParseInt(typical, 10, 64)
+	if err != nil {
+		return nil
+	}
+	return &deploymentsv1.FlipBound{TypicalMs: ms, Published: published == "published"}
 }
 
 func fakePublishedLinks() []string {
