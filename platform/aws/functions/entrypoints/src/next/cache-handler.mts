@@ -198,10 +198,9 @@ export default class OcelCacheHandler {
         }
       : { expired: now };
 
-    await this.store.writeTags(list, record);
-
-    recordTags(list, record);
     noteRevalidation();
+    recordTags(list, record);
+    await this.store.writeTags(list, record);
   }
 
   resetRequestCache(): void {}
