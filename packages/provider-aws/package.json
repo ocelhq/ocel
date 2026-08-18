@@ -6,12 +6,13 @@
   "description": "AWS provider descriptor for `ocel deploy`",
   "exports": {
     ".": "./src/index.ts",
+    "./dns": "./src/dns.ts",
     "./transform": "./src/transform/index.ts",
     "./transform/run": "./src/transform/run.ts"
   },
   "scripts": {
     "test": "vitest run",
-    "typecheck": "tsc --noEmit && tsc --noEmit -p tsconfig.typetests.json && tsc --noEmit -p tsconfig.typetests-empty.json && tsc --noEmit -p tsconfig.typetests-open.json"
+    "typecheck": "tsc --noEmit && tsc --noEmit -p tsconfig.typetests.json && tsc --noEmit -p tsconfig.typetests-empty.json && tsc --noEmit -p tsconfig.typetests-open.json && tsc --noEmit -p tsconfig.typetests-config.json"
   },
   "optionalDependencies": {
     "@ocel/provider-aws-darwin-arm64": "workspace:^",

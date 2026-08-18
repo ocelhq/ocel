@@ -16,6 +16,14 @@
       "types": "./dist/config.d.ts",
       "import": "./dist/config.js"
     },
+    "./edge": {
+      "types": "./dist/edge.d.ts",
+      "import": "./dist/edge.js"
+    },
+    "./dns": {
+      "types": "./dist/dns.d.ts",
+      "import": "./dist/dns.js"
+    },
     "./env": {
       "types": "./dist/env/index.d.ts",
       "edge-light": "./dist/env/edge.js",

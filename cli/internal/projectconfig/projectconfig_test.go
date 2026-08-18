@@ -448,6 +448,125 @@ export default {
 				}
 			},
 		},
+		{
+			name: "leaves the edge to the origin when none is declared",
+			config: `
+export default {
+  slug: "test-app",
+};
+`,
+			check: func(t *testing.T, root string, cfg *Config) {
+				if cfg.Edge != nil || cfg.EdgeDisabled {
+					t.Fatalf("Edge = %v, EdgeDisabled = %v, want an omitted edge to name nothing", cfg.Edge, cfg.EdgeDisabled)
+				}
+			},
+		},
+		{
+			name: "parses an edge turned off outright",
+			config: `
+export default {
+  slug: "test-app",
+  edge: false,
+};
+`,
+			check: func(t *testing.T, root string, cfg *Config) {
+				if cfg.Edge != nil || !cfg.EdgeDisabled {
+					t.Fatalf("Edge = %v, EdgeDisabled = %v, want `edge: false` to disable it", cfg.Edge, cfg.EdgeDisabled)
+				}
+			},
+		},
+		{
+			name: "parses a cloudflare edge marker carrying explicit options",
+			config: `
+export default {
+  slug: "test-app",
+  edge: { kind: "cloudflare", options: {} },
+};
+`,
+			check: func(t *testing.T, root string, cfg *Config) {
+				if cfg.Edge == nil || cfg.Edge.Kind != "cloudflare" {
+					t.Fatalf("Edge = %v, want kind cloudflare", cfg.Edge)
+				}
+				if string(cfg.Edge.Options) != "{}" {
+					t.Fatalf("Edge.Options = %s, want {}", cfg.Edge.Options)
+				}
+			},
+		},
+		{
+			name: "fills in empty options for an edge marker that carries none",
+			config: `
+export default {
+  slug: "test-app",
+  edge: { kind: "cloudflare" },
+};
+`,
+			check: func(t *testing.T, root string, cfg *Config) {
+				if cfg.Edge == nil || cfg.Edge.Kind != "cloudflare" {
+					t.Fatalf("Edge = %v, want kind cloudflare", cfg.Edge)
+				}
+				if string(cfg.Edge.Options) != "{}" {
+					t.Fatalf("Edge.Options = %s, want {}", cfg.Edge.Options)
+				}
+			},
+		},
+		{
+			name: "parses a dns marker and its zone",
+			config: `
+export default {
+  slug: "test-app",
+  dns: { kind: "route53", zone: "Z123" },
+};
+`,
+			check: func(t *testing.T, root string, cfg *Config) {
+				if cfg.DNS == nil || cfg.DNS.Kind != "route53" || cfg.DNS.Zone != "Z123" {
+					t.Fatalf("DNS = %v, want route53 in zone Z123", cfg.DNS)
+				}
+			},
+		},
+		{
+			name: "parses the needs a deploy may degrade",
+			config: `
+export default {
+  slug: "test-app",
+  allowDegraded: ["edge-middleware", "streaming"],
+};
+`,
+			check: func(t *testing.T, root string, cfg *Config) {
+				if !slices.Equal(cfg.AllowDegraded, []string{"edge-middleware", "streaming"}) {
+					t.Fatalf("AllowDegraded = %v, want [edge-middleware streaming]", cfg.AllowDegraded)
+				}
+			},
+		},
+		{
+			name: "accepts cloudflare dns alongside a cloudflare edge",
+			config: `
+export default {
+  slug: "test-app",
+  edge: { kind: "cloudflare" },
+  dns: { kind: "cloudflare" },
+};
+`,
+			check: func(t *testing.T, root string, cfg *Config) {
+				if cfg.DNS == nil || cfg.DNS.Kind != "cloudflare" {
+					t.Fatalf("DNS = %v, want cloudflare", cfg.DNS)
+				}
+			},
+		},
+		{
+			name: "accepts route53 alongside no edge at all",
+			config: `
+export default {
+  slug: "test-app",
+  edge: false,
+  dns: { kind: "route53" },
+};
+`,
+			check: func(t *testing.T, root string, cfg *Config) {
+				if cfg.DNS == nil || cfg.DNS.Kind != "route53" {
+					t.Fatalf("DNS = %v, want route53", cfg.DNS)
+				}
+			},
+		},
 	}
 
 	for _, tc := range accepted {
@@ -572,6 +691,57 @@ export default {
 };
 `,
 			wantErr: []string{"main#db"},
+		},
+		{
+			name: "names the three edge spellings when the edge is not a marker",
+			config: `
+export default {
+  slug: "test-app",
+  edge: true,
+};
+`,
+			wantErr: []string{`has an invalid "edge"`, "use `edge: cfEdge()` (from ocel/edge), `edge: false`, or omit it for the origin's own edge"},
+		},
+		{
+			name: "rejects an edge object carrying no kind",
+			config: `
+export default {
+  slug: "test-app",
+  edge: {},
+};
+`,
+			wantErr: []string{`has an invalid "edge"`, "cfEdge()"},
+		},
+		{
+			name: "names the two dns spellings when the dns is not a marker",
+			config: `
+export default {
+  slug: "test-app",
+  dns: "acme.com",
+};
+`,
+			wantErr: []string{`has an invalid "dns"`, "use `dns: cloudflareDns()` (from ocel/dns), `dns: route53()` (from @ocel/provider-aws/dns), or omit it"},
+		},
+		{
+			name: "lists the known needs when one is unknown",
+			config: `
+export default {
+  slug: "test-app",
+  allowDegraded: ["edge-middleware", "isr"],
+};
+`,
+			wantErr: []string{`has an invalid "allowDegraded"`, `"isr" is not a need`, "edge-middleware, edge-runtime, ppr-resume, edge-cache, streaming"},
+		},
+		{
+			name: "refuses route53 paired with a cloudflare edge",
+			config: `
+export default {
+  slug: "test-app",
+  edge: { kind: "cloudflare", options: {} },
+  dns: { kind: "route53" },
+};
+`,
+			wantErr: []string{`has an invalid "dns"`, "route53()", "cfEdge()", "cloudflareDns()"},
 		},
 	}
 

@@ -3,6 +3,34 @@ export interface ProviderDescriptor {
   options: unknown;
 }
 
+/**
+ * The edge a project's hostnames are served from. Cloudflare is the only
+ * edge you name: the origin's own edge is what you get by omitting `edge`.
+ */
+export interface EdgeDescriptor {
+  kind: "cloudflare";
+  options: unknown;
+}
+
+/** The DNS a project's records are written into. */
+export interface DnsDescriptor {
+  kind: string;
+  zone?: string;
+}
+
+/**
+ * Something an app needs of wherever it is served. A need listed in
+ * `allowDegraded` is waived, and the deploy proceeds without it; an unwaived
+ * need the deploy cannot meet refuses the deploy instead of silently serving
+ * less than the app asks for.
+ */
+export type Need =
+  | "edge-middleware"
+  | "edge-runtime"
+  | "ppr-resume"
+  | "edge-cache"
+  | "streaming";
+
 export interface AppDomainConfig {
   production?: string | string[];
 }
@@ -38,6 +66,15 @@ export interface OcelConfig {
     paths?: string[];
   };
   provider?: ProviderDescriptor;
+  /**
+   * The edge in front of the origin. Omit it and the origin serves from its
+   * own edge; `false` puts nothing in front of it at all.
+   */
+  edge?: EdgeDescriptor | false;
+  /** Where the project's hostname records are written. */
+  dns?: DnsDescriptor;
+  /** The needs this project waives rather than have a deploy refused over. */
+  allowDegraded?: Need[];
   apps?: AppConfig[];
   domains?: ProjectDomainConfig;
 }

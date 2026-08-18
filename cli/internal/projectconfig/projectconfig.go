@@ -4,11 +4,13 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"strings"
 
 	"github.com/evanw/esbuild/pkg/api"
@@ -35,6 +37,16 @@ type ProviderDescriptor struct {
 	Options json.RawMessage
 }
 
+type EdgeDescriptor struct {
+	Kind    string
+	Options json.RawMessage
+}
+
+type DNSDescriptor struct {
+	Kind string
+	Zone string
+}
+
 type App struct {
 	Name       string
 	Path       string
@@ -46,14 +58,18 @@ type App struct {
 }
 
 type Config struct {
-	Slug      string
-	Discovery Discovery
-	Provider  *ProviderDescriptor
-	Apps      []App
-	Links     []string
-	Domains   map[string][]string
-	Dir       string
-	Path      string
+	Slug          string
+	Discovery     Discovery
+	Provider      *ProviderDescriptor
+	Edge          *EdgeDescriptor
+	EdgeDisabled  bool
+	DNS           *DNSDescriptor
+	AllowDegraded []string
+	Apps          []App
+	Links         []string
+	Domains       map[string][]string
+	Dir           string
+	Path          string
 }
 
 func (c *Config) RequireProvider() (*ProviderDescriptor, error) {
@@ -80,8 +96,11 @@ type rawConfig struct {
 		Folder     string     `json:"folder"`
 		Domains    rawDomains `json:"domains"`
 	} `json:"apps"`
-	Links   []string   `json:"links"`
-	Domains rawDomains `json:"domains"`
+	Links         []string        `json:"links"`
+	Domains       rawDomains      `json:"domains"`
+	Edge          json.RawMessage `json:"edge"`
+	DNS           json.RawMessage `json:"dns"`
+	AllowDegraded []string        `json:"allowDegraded"`
 }
 
 type rawDomains struct {
@@ -92,11 +111,11 @@ type rawDomains struct {
 type stringOrList []string
 
 func (s *stringOrList) UnmarshalJSON(b []byte) error {
-	trimmed := bytes.TrimSpace(b)
-	if len(trimmed) == 0 || string(trimmed) == "null" {
+	if isAbsent(b) {
 		*s = nil
 		return nil
 	}
+	trimmed := bytes.TrimSpace(b)
 	if trimmed[0] == '[' {
 		var list []string
 		if err := json.Unmarshal(b, &list); err != nil {
@@ -273,6 +292,21 @@ func load(ctx context.Context, configPath string) (*Config, error) {
 		provider = &ProviderDescriptor{Package: raw.Provider.Package, Options: options}
 	}
 
+	edge, edgeDisabled, err := normalizeEdge(raw.Edge)
+	if err != nil {
+		return nil, fmt.Errorf("%s has an invalid \"edge\": %w", configPath, err)
+	}
+
+	dns, err := normalizeDNS(raw.DNS, edge)
+	if err != nil {
+		return nil, fmt.Errorf("%s has an invalid \"dns\": %w", configPath, err)
+	}
+
+	allowDegraded, err := normalizeAllowDegraded(raw.AllowDegraded)
+	if err != nil {
+		return nil, fmt.Errorf("%s has an invalid \"allowDegraded\": %w", configPath, err)
+	}
+
 	apps, err := normalizeApps(raw)
 	if err != nil {
 		return nil, fmt.Errorf("%s: %w", configPath, err)
@@ -289,14 +323,18 @@ func load(ctx context.Context, configPath string) (*Config, error) {
 	}
 
 	return &Config{
-		Slug:      raw.Slug,
-		Discovery: Discovery{Paths: paths},
-		Provider:  provider,
-		Apps:      apps,
-		Links:     links,
-		Domains:   domains,
-		Dir:       filepath.Dir(configPath),
-		Path:      configPath,
+		Slug:          raw.Slug,
+		Discovery:     Discovery{Paths: paths},
+		Provider:      provider,
+		Edge:          edge,
+		EdgeDisabled:  edgeDisabled,
+		DNS:           dns,
+		AllowDegraded: allowDegraded,
+		Apps:          apps,
+		Links:         links,
+		Domains:       domains,
+		Dir:           filepath.Dir(configPath),
+		Path:          configPath,
 	}, nil
 }
 
@@ -319,6 +357,74 @@ func normalizeLinks(raw []string) ([]string, error) {
 		}
 		seen[link] = true
 		out = append(out, link)
+	}
+	return out, nil
+}
+
+var knownNeeds = []string{"edge-middleware", "edge-runtime", "ppr-resume", "edge-cache", "streaming"}
+
+const edgeSpellings = "use `edge: cfEdge()` (from ocel/edge), `edge: false`, or omit it for the origin's own edge"
+
+const dnsSpellings = "use `dns: cloudflareDns()` (from ocel/dns), `dns: route53()` (from @ocel/provider-aws/dns), or omit it"
+
+const route53UnderCloudflare = "route53() cannot write the records a Cloudflare edge answers on — pair cfEdge() with cloudflareDns() (from ocel/dns), or drop the edge"
+
+func isAbsent(raw json.RawMessage) bool {
+	trimmed := bytes.TrimSpace(raw)
+	return len(trimmed) == 0 || string(trimmed) == "null"
+}
+
+func normalizeEdge(raw json.RawMessage) (*EdgeDescriptor, bool, error) {
+	if isAbsent(raw) {
+		return nil, false, nil
+	}
+	if string(bytes.TrimSpace(raw)) == "false" {
+		return nil, true, nil
+	}
+
+	var marker struct {
+		Kind    string          `json:"kind"`
+		Options json.RawMessage `json:"options"`
+	}
+	if err := json.Unmarshal(raw, &marker); err != nil || marker.Kind == "" {
+		return nil, false, errors.New(edgeSpellings)
+	}
+
+	options := marker.Options
+	if isAbsent(options) {
+		options = json.RawMessage("{}")
+	}
+	return &EdgeDescriptor{Kind: marker.Kind, Options: options}, false, nil
+}
+
+func normalizeDNS(raw json.RawMessage, edge *EdgeDescriptor) (*DNSDescriptor, error) {
+	if isAbsent(raw) {
+		return nil, nil
+	}
+
+	var marker struct {
+		Kind string `json:"kind"`
+		Zone string `json:"zone"`
+	}
+	if err := json.Unmarshal(raw, &marker); err != nil || marker.Kind == "" {
+		return nil, errors.New(dnsSpellings)
+	}
+	if marker.Kind == "route53" && edge != nil && edge.Kind == "cloudflare" {
+		return nil, errors.New(route53UnderCloudflare)
+	}
+	return &DNSDescriptor{Kind: marker.Kind, Zone: marker.Zone}, nil
+}
+
+func normalizeAllowDegraded(raw []string) ([]string, error) {
+	if len(raw) == 0 {
+		return nil, nil
+	}
+	out := make([]string, 0, len(raw))
+	for _, name := range raw {
+		if !slices.Contains(knownNeeds, name) {
+			return nil, fmt.Errorf("%q is not a need — the needs a deploy may degrade are %s", name, strings.Join(knownNeeds, ", "))
+		}
+		out = append(out, name)
 	}
 	return out, nil
 }
