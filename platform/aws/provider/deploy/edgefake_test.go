@@ -41,6 +41,7 @@ type recordingEdge struct {
 	storeSchemaVersion    *int
 	storeSchemaVersionErr error
 
+	bound       map[string]string
 	history     []edge.HistoryEntry
 	pruneResult edge.PruneResult
 
@@ -98,7 +99,9 @@ func (f *recordingEdge) FindApp(_ context.Context, name string) (bool, error) {
 
 func (f *recordingEdge) CodeRuntime() (string, []string) { return f.compatDate, f.compatFlags }
 
-func (f *recordingEdge) DomainOwner(context.Context, string) (string, error) { return "", nil }
+func (f *recordingEdge) DomainOwner(_ context.Context, hostname string) (string, error) {
+	return f.bound[hostname], nil
+}
 
 func (f *recordingEdge) ReconcilePreviewWildcard(context.Context, edge.PreviewWildcardSpec) error {
 	return nil
@@ -270,13 +273,29 @@ func (s *recordingStack) RemovePointer(_ context.Context, pointer string) (edge.
 	return edge.PruneResult{RemovedPromotionIDs: removed}, nil
 }
 
-func (s *recordingStack) BindDomain(context.Context, edge.DomainBinding) error { return nil }
+func (s *recordingStack) BindDomain(_ context.Context, binding edge.DomainBinding) error {
+	if s.edge.bound == nil {
+		s.edge.bound = map[string]string{}
+	}
+	s.edge.bound[binding.Hostname] = s.state[edge.StackKeySlug]
+	s.state = edge.RecordBoundDomain(s.state, binding.Hostname)
+	return nil
+}
 
-func (s *recordingStack) UnbindDomain(context.Context, string) error { return nil }
+func (s *recordingStack) UnbindDomain(_ context.Context, hostname string) error {
+	delete(s.edge.bound, hostname)
+	s.state = edge.ForgetBoundDomain(s.state, hostname)
+	return nil
+}
 
-func (s *recordingStack) Destroy(context.Context) error {
+func (s *recordingStack) Destroy(ctx context.Context) error {
 	if err := s.checkAuth(); err != nil {
 		return err
+	}
+	for _, hostname := range edge.BoundDomains(s.state) {
+		if err := s.UnbindDomain(ctx, hostname); err != nil {
+			return err
+		}
 	}
 	s.edge.destroyed++
 	return s.edge.destroyErr
@@ -303,6 +322,7 @@ func TestOriginFakeEdgeConformance(t *testing.T) {
 				Program: &edge.ProgramSpec{Name: "root", StoreEndpoint: fakeStoreEndpoint},
 			}
 		},
+		Hostname: "shop.example.com",
 	})
 }
 

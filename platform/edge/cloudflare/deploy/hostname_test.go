@@ -2,10 +2,12 @@ package cloudflare
 
 import (
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"slices"
 	"strings"
 	"testing"
 
@@ -21,6 +23,7 @@ type cfMock struct {
 	existingRoutes        []map[string]any
 	existingRecords       []map[string]any
 	existingCustomDomains []map[string]any
+	certificatePacks      []map[string]any
 	existingScripts       []string
 	refuseScriptDeletes   map[string]bool
 
@@ -89,7 +92,13 @@ func (m *cfMock) server(t *testing.T) *httptest.Server {
 			var body map[string]any
 			_ = json.NewDecoder(r.Body).Decode(&body)
 			m.createdRoutes = append(m.createdRoutes, body)
-			writeResult(w, map[string]any{"id": "route-new", "pattern": body["pattern"], "script": body["script"]})
+			created := map[string]any{
+				"id":      fmt.Sprintf("route-new-%d", len(m.createdRoutes)),
+				"pattern": body["pattern"],
+				"script":  body["script"],
+			}
+			m.existingRoutes = append(m.existingRoutes, created)
+			writeResult(w, created)
 		}
 	})
 
@@ -98,11 +107,19 @@ func (m *cfMock) server(t *testing.T) *httptest.Server {
 		switch r.Method {
 		case http.MethodDelete:
 			m.deletedRoutes = append(m.deletedRoutes, id)
+			m.existingRoutes = slices.DeleteFunc(m.existingRoutes, func(route map[string]any) bool {
+				return route["id"] == id
+			})
 			writeResult(w, map[string]any{"id": id})
 		case http.MethodPut:
 			var body map[string]any
 			_ = json.NewDecoder(r.Body).Decode(&body)
 			m.repointedRoutes = append(m.repointedRoutes, id)
+			for _, route := range m.existingRoutes {
+				if route["id"] == id {
+					route["script"] = body["script"]
+				}
+			}
 			writeResult(w, map[string]any{"id": id, "pattern": body["pattern"], "script": body["script"]})
 		}
 	})
@@ -171,14 +188,34 @@ func (m *cfMock) server(t *testing.T) *httptest.Server {
 			var body map[string]any
 			_ = json.NewDecoder(r.Body).Decode(&body)
 			m.createdRecords = append(m.createdRecords, body)
-			writeResult(w, map[string]any{"id": "record-new"})
+			id := fmt.Sprintf("record-new-%d", len(m.createdRecords))
+			m.existingRecords = append(m.existingRecords, map[string]any{
+				"id":      id,
+				"name":    body["name"],
+				"type":    body["type"],
+				"content": body["content"],
+				"proxied": body["proxied"],
+				"comment": body["comment"],
+			})
+			writeResult(w, map[string]any{"id": id})
 		}
+	})
+
+	mux.HandleFunc("GET /zones/"+m.zoneID+"/ssl/certificate_packs", func(w http.ResponseWriter, r *http.Request) {
+		if !firstPage(r) {
+			writeResult(w, []any{})
+			return
+		}
+		writeResult(w, m.certificatePacks)
 	})
 
 	mux.HandleFunc("/zones/"+m.zoneID+"/dns_records/", func(w http.ResponseWriter, r *http.Request) {
 		if r.Method == http.MethodDelete {
 			id := strings.TrimPrefix(r.URL.Path, "/zones/"+m.zoneID+"/dns_records/")
 			m.deletedRecords = append(m.deletedRecords, id)
+			m.existingRecords = slices.DeleteFunc(m.existingRecords, func(rec map[string]any) bool {
+				return rec["id"] == id
+			})
 			writeResult(w, map[string]any{"id": id})
 		}
 	})
@@ -366,7 +403,7 @@ func TestReconcileWorkerRoutes(t *testing.T) {
 					{"id": "route1", "pattern": "*.preview.app.com/*", "script": "ocel-preview"},
 				},
 				existingRecords: []map[string]any{
-					{"id": "record1", "name": "*.preview.app.com", "type": "AAAA", "content": "100::", "proxied": true},
+					{"id": "record1", "name": "*.preview.app.com", "type": "AAAA", "content": "100::", "comment": routeRecordComment, "proxied": true},
 				},
 			},
 			script:   "ocel-preview",
@@ -384,7 +421,7 @@ func TestReconcileWorkerRoutes(t *testing.T) {
 					{"id": "other", "pattern": "x.app.com/*", "script": "someone-else"},
 				},
 				existingRecords: []map[string]any{
-					{"id": "wwwrec", "name": "www.app.com", "type": "AAAA", "content": "100::", "proxied": true},
+					{"id": "wwwrec", "name": "www.app.com", "type": "AAAA", "content": "100::", "comment": routeRecordComment, "proxied": true},
 				},
 			},
 			script:         "ocel-prod",
@@ -402,7 +439,7 @@ func TestReconcileWorkerRoutes(t *testing.T) {
 					{"id": "perapp", "pattern": "pr-1.preview.app.com/*", "script": "ocel-shop-preview-web"},
 				},
 				existingRecords: []map[string]any{
-					{"id": "perapprec", "name": "pr-1.preview.app.com", "type": "AAAA", "content": "100::", "proxied": true},
+					{"id": "perapprec", "name": "pr-1.preview.app.com", "type": "AAAA", "content": "100::", "comment": routeRecordComment, "proxied": true},
 				},
 			},
 			script:         "ocel-shop-preview",
@@ -470,7 +507,7 @@ func TestReconcileWorkerRoutes(t *testing.T) {
 					{"id": "unnamed", "pattern": "pr-1-abc1234567.preview.app.com/*", "script": "ocel-preview"},
 				},
 				existingRecords: []map[string]any{
-					{"id": "wildcard", "name": "*.preview.app.com", "type": "AAAA", "content": "100::", "proxied": true},
+					{"id": "wildcard", "name": "*.preview.app.com", "type": "AAAA", "content": "100::", "comment": routeRecordComment, "proxied": true},
 				},
 			},
 			script:        "ocel-preview",
@@ -484,7 +521,7 @@ func TestReconcileWorkerRoutes(t *testing.T) {
 				zoneID:   "zone1",
 				zoneName: "app.com",
 				existingRecords: []map[string]any{
-					{"id": "wildcard", "name": "*.preview.app.com", "type": "AAAA", "content": "100::", "proxied": true},
+					{"id": "wildcard", "name": "*.preview.app.com", "type": "AAAA", "content": "100::", "comment": routeRecordComment, "proxied": true},
 				},
 			},
 			script:        "ocel-preview",
@@ -505,7 +542,7 @@ func TestReconcileWorkerRoutes(t *testing.T) {
 				zoneID:   "zone1",
 				zoneName: "app.com",
 				existingRecords: []map[string]any{
-					{"id": "wildcard", "name": "*.preview.app.com", "type": "AAAA", "content": "100::", "proxied": false},
+					{"id": "wildcard", "name": "*.preview.app.com", "type": "AAAA", "content": "100::", "comment": routeRecordComment, "proxied": false},
 				},
 			},
 			script:  "ocel-preview",
@@ -604,7 +641,7 @@ func TestReconcileWorkerRoutesRequestBudget(t *testing.T) {
 		},
 		{
 			name:       "a required record costs no extra list",
-			mock:       &cfMock{zoneID: "zone1", zoneName: "app.com", existingRecords: []map[string]any{{"id": "wildcard", "name": "*.preview.app.com", "type": "AAAA", "content": "100::", "proxied": true}}},
+			mock:       &cfMock{zoneID: "zone1", zoneName: "app.com", existingRecords: []map[string]any{{"id": "wildcard", "name": "*.preview.app.com", "type": "AAAA", "content": "100::", "comment": routeRecordComment, "proxied": true}}},
 			plan:       requiredRecordPlan("*.preview.app.com", "pr-1.preview.app.com", "pr-2.preview.app.com"),
 			zoneLists:  1,
 			routeLists: 1,
@@ -760,7 +797,7 @@ func TestDetachRouteRecords(t *testing.T) {
 					{"id": "route2", "pattern": "other.app.com/*", "script": "someone-else"},
 				},
 				existingRecords: []map[string]any{
-					{"id": "ours", "name": "*.preview.app.com", "type": "AAAA", "content": "100::", "proxied": true},
+					{"id": "ours", "name": "*.preview.app.com", "type": "AAAA", "content": "100::", "comment": routeRecordComment, "proxied": true},
 				},
 			},
 			want: []string{"ours"},
@@ -788,7 +825,7 @@ func TestDetachRouteRecords(t *testing.T) {
 					{"id": "route2", "pattern": "pr-2-abc1234567.preview.app.com/*", "script": "ocel-preview"},
 				},
 				existingRecords: []map[string]any{
-					{"id": "base", "name": "*.preview.app.com", "type": "AAAA", "content": "100::", "proxied": true},
+					{"id": "base", "name": "*.preview.app.com", "type": "AAAA", "content": "100::", "comment": routeRecordComment, "proxied": true},
 				},
 			},
 		},

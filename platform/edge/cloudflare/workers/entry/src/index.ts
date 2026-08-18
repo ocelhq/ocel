@@ -112,6 +112,17 @@ function withFlightVary(response: Response): Response {
 
 const ENTRY_HEADER = "x-ocel-entry";
 
+export const EDGE_HEADER = "x-ocel-edge";
+
+const EDGE_KIND = "cloudflare";
+
+export function withEdgeHeader(response: Response): Response {
+  if (response.headers.get(EDGE_HEADER) === EDGE_KIND) return response;
+  const marked = new Response(response.body, response);
+  marked.headers.set(EDGE_HEADER, EDGE_KIND);
+  return marked;
+}
+
 const PREFETCH_PURPOSE = "purpose";
 
 const CONTROL_PREFIX = "x-ocel-";
@@ -384,7 +395,8 @@ export async function resolveServe(
   const record = await resolveRecord(deployments);
   if (record instanceof Response) return record;
 
-  return runtimeFor(record).serve(record, deployments, base);
+  const serving = runtimeFor(record).serve(record, deployments, base);
+  return async (request) => withEdgeHeader(await serving(request));
 }
 
 export async function resolveRouteDeps(
@@ -459,21 +471,31 @@ const DEPLOYMENT_NOT_FOUND_HTML = `<!doctype html>
 function deploymentNotFoundResponse(): Response {
   return new Response(DEPLOYMENT_NOT_FOUND_HTML, {
     status: 404,
-    headers: { "content-type": "text/html; charset=utf-8" },
+    headers: {
+      "content-type": "text/html; charset=utf-8",
+      [EDGE_HEADER]: EDGE_KIND,
+    },
   });
 }
 
 function unroutedFrameworkResponse(framework: string): Response {
   return new Response(`"${framework}" is served without edge routing.`, {
     status: 501,
-    headers: { "content-type": "text/plain; charset=utf-8" },
+    headers: {
+      "content-type": "text/plain; charset=utf-8",
+      [EDGE_HEADER]: EDGE_KIND,
+    },
   });
 }
 
 function unavailableResponse(): Response {
   return new Response("Service temporarily unavailable — try again shortly.", {
     status: 503,
-    headers: { "content-type": "text/plain; charset=utf-8", "retry-after": "5" },
+    headers: {
+      "content-type": "text/plain; charset=utf-8",
+      "retry-after": "5",
+      [EDGE_HEADER]: EDGE_KIND,
+    },
   });
 }
 
@@ -583,9 +605,11 @@ export async function serve(
   request: Request,
   deps: RouteDeps,
 ): Promise<Response> {
-  return withVercelCacheAlias(
-    await serveRequest(request, deps),
-    deps.manifest.vercelCacheAlias,
+  return withEdgeHeader(
+    withVercelCacheAlias(
+      await serveRequest(request, deps),
+      deps.manifest.vercelCacheAlias,
+    ),
   );
 }
 

@@ -302,7 +302,7 @@ func previewZoneMock() *cfMock {
 		zoneID:   "zone1",
 		zoneName: "app.com",
 		existingRecords: []map[string]any{
-			{"id": "wildcard", "name": "*.preview.app.com", "type": "AAAA", "content": "100::", "proxied": true},
+			{"id": "wildcard", "name": "*.preview.app.com", "type": "AAAA", "content": "100::", "comment": routeRecordComment, "proxied": true},
 		},
 	}
 }
@@ -323,8 +323,13 @@ func TestReconcile(t *testing.T) {
 			t.Fatalf("Reconcile: %v", err)
 		}
 
-		if !reflect.DeepEqual(state, prior) {
-			t.Errorf("state = %v, want prior handed back unchanged (%v)", state, prior)
+		if !reflect.DeepEqual(prior, testState(store.URL, "s3cr3t")) {
+			t.Errorf("prior = %v, want the caller's own state left untouched", prior)
+		}
+		want := testState(store.URL, "s3cr3t")
+		want[stackKeyEntryWorker] = spec.Program.Name
+		if !reflect.DeepEqual(state, want) {
+			t.Errorf("state = %v, want prior plus the worker a domain binds to (%v)", state, want)
 		}
 		if len(m.createdRoutes) != 1 || m.createdRoutes[0]["pattern"] != "*.preview.app.com/*" {
 			t.Errorf("created routes = %v, want the project's wildcard route", m.createdRoutes)

@@ -14,5 +14,6 @@ func TestCloudflareEdgeConformance(t *testing.T) {
 			store := fakeStoreServer(t, "s3cr3t")
 			return previewZoneMock().provider(t), previewSpec(store.URL, "v1")
 		},
+		Hostname: "shop.app.com",
 	})
 }

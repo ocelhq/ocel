@@ -54,6 +54,9 @@ type provider struct {
 
 	zoneMu    sync.Mutex
 	zonesSeen map[string][]zoneRef
+
+	entryMu      sync.Mutex
+	entryWorkers map[string][]string
 }
 
 var (

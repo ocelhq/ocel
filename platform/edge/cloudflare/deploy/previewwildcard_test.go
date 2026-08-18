@@ -168,8 +168,8 @@ func TestDestroyPreviewWildcard(t *testing.T) {
 				{"id": "project", "pattern": "pr-1-abc1234567.preview.app.com/*", "script": "ocel-shop-preview"},
 			},
 			existingRecords: []map[string]any{
-				{"id": "wildcard", "name": "*.preview.app.com", "type": "AAAA", "content": "100::", "proxied": true},
-				{"id": "projectrec", "name": "pr-1-abc1234567.preview.app.com", "type": "AAAA", "content": "100::", "proxied": true},
+				{"id": "wildcard", "name": "*.preview.app.com", "type": "AAAA", "content": "100::", "comment": routeRecordComment, "proxied": true},
+				{"id": "projectrec", "name": "pr-1-abc1234567.preview.app.com", "type": "AAAA", "content": "100::", "comment": routeRecordComment, "proxied": true},
 			},
 			existingCustomDomains: []map[string]any{{"id": "cd1", "hostname": "preview.app.com", "service": previewEntryScript}},
 		}
@@ -192,7 +192,7 @@ func TestDestroyPreviewWildcard(t *testing.T) {
 				{"id": "someone-elses", "pattern": "*.preview.app.com/*", "script": "ocel-shop-preview"},
 			},
 			existingRecords: []map[string]any{
-				{"id": "wildcard", "name": "*.preview.app.com", "type": "AAAA", "content": "100::", "proxied": true},
+				{"id": "wildcard", "name": "*.preview.app.com", "type": "AAAA", "content": "100::", "comment": routeRecordComment, "proxied": true},
 			},
 		}
 
@@ -213,7 +213,7 @@ func TestDestroyPreviewWildcard(t *testing.T) {
 			zoneID:   "zone1",
 			zoneName: "app.com",
 			existingRecords: []map[string]any{
-				{"id": "wildcard", "name": "*.preview.app.com", "type": "AAAA", "content": "100::", "proxied": true},
+				{"id": "wildcard", "name": "*.preview.app.com", "type": "AAAA", "content": "100::", "comment": routeRecordComment, "proxied": true},
 			},
 		}
 
@@ -261,7 +261,7 @@ func TestPruneStaleRoutesSparesThePreviewEntry(t *testing.T) {
 					{"id": "entry", "pattern": "*.preview.app.com/*", "script": previewEntryScript},
 				},
 				existingRecords: []map[string]any{
-					{"id": "wildcard", "name": "*.preview.app.com", "type": "AAAA", "content": "100::", "proxied": true},
+					{"id": "wildcard", "name": "*.preview.app.com", "type": "AAAA", "content": "100::", "comment": routeRecordComment, "proxied": true},
 				},
 			}
 
