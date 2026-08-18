@@ -11,6 +11,12 @@ export interface AwsProviderOptions {
    * exactly as it does without transforms.
    */
   transforms?: readonly string[];
+  /**
+   * Certificates to serve a hostname with, keyed by hostname, valued by the
+   * ARN of an already-issued ACM certificate. A hostname left off this map is
+   * served with a certificate ocel issues itself.
+   */
+  certificates?: Record<string, string>;
 }
 
 /** Declares AWS as the provider `ocel deploy` provisions into. */

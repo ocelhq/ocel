@@ -35,6 +35,25 @@ describe("awsProvider", () => {
     ).toBe(false);
   });
 
+  it("carries already-issued certificate arns through, keyed by hostname", () => {
+    expect(
+      awsProvider({
+        certificates: {
+          "app.acme.com":
+            "arn:aws:acm:us-east-1:111122223333:certificate/abcd-1234",
+        },
+      }),
+    ).toEqual({
+      package: "@ocel/provider-aws",
+      options: {
+        certificates: {
+          "app.acme.com":
+            "arn:aws:acm:us-east-1:111122223333:certificate/abcd-1234",
+        },
+      },
+    });
+  });
+
   it("defaults options to an empty object when called with none", () => {
     expect(awsProvider()).toEqual({
       package: "@ocel/provider-aws",
