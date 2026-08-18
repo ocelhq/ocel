@@ -116,6 +116,7 @@ func Bundle(t Target) error {
 	return writeJSON(filepath.Join(t.AppDir, edge.ServeDescriptorFile), edge.ServeDescriptor{
 		Framework: t.Framework,
 		BuildID:   buildID,
+		Needs:     map[edge.Need]edge.NeedDetail{},
 	})
 }
 

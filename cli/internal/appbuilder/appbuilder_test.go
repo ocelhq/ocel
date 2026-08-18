@@ -712,17 +712,33 @@ func TestBuildID(t *testing.T) {
 func TestEdgeApps(t *testing.T) {
 	t.Parallel()
 
-	t.Run("names every built app carrying an edge bundle", func(t *testing.T) {
+	t.Run("names every built app needing edge-runtime or edge-middleware", func(t *testing.T) {
+		t.Parallel()
+
+		root := t.TempDir()
+		writeAppFile(t, root, "web/"+edge.ServeDescriptorFile,
+			[]byte(`{"framework":"next","needs":{"edge-runtime":{"count":1,"routes":["/edgy"]}}}`))
+		writeAppFile(t, root, "admin/"+edge.ServeDescriptorFile,
+			[]byte(`{"framework":"next","needs":{"edge-middleware":{"count":1,"matchers":[]}}}`))
+		writeAppFile(t, root, "docs/"+edge.ServeDescriptorFile,
+			[]byte(`{"framework":"next","needs":{"edge-cache":{"count":4},"streaming":{"count":2}}}`))
+		writeAppFile(t, root, "api/"+edge.ServeDescriptorFile, []byte(`{"framework":"express","needs":{}}`))
+
+		apps := EdgeApps(root)
+		if !slices.Equal(apps, []string{"admin", "web"}) {
+			t.Errorf("EdgeApps = %v, want only the apps needing edge code", apps)
+		}
+	})
+
+	t.Run("an edge bundle on disk names nothing on its own", func(t *testing.T) {
 		t.Parallel()
 
 		root := t.TempDir()
 		writeAppFile(t, root, "web/"+edge.AppBundleFile, []byte(`{"version":2}`))
-		writeAppFile(t, root, "admin/"+edge.AppBundleFile, []byte(`{"version":2}`))
-		writeAppFile(t, root, "api/"+edge.ServeDescriptorFile, []byte(`{"framework":"express"}`))
+		writeAppFile(t, root, "web/"+edge.ServeDescriptorFile, []byte(`{"framework":"next","needs":{}}`))
 
-		apps := EdgeApps(root)
-		if !slices.Equal(apps, []string{"admin", "web"}) {
-			t.Errorf("EdgeApps = %v, want only the apps with an edge bundle", apps)
+		if apps := EdgeApps(root); len(apps) != 0 {
+			t.Errorf("EdgeApps = %v, want the needs to decide, not the bundle", apps)
 		}
 	})
 

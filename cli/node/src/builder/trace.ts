@@ -3,6 +3,7 @@ import { existsSync, readFileSync, statSync } from "node:fs";
 import { copyFile, mkdir, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { nodeFileTrace } from "@vercel/nft";
+import type { ServeDescriptor } from "@platform/edge-contract/serve";
 import { init as lexerInit, parse as parseImports } from "es-module-lexer";
 import ts from "typescript";
 import { SERVE_DESCRIPTOR_FILE, appOutDir, functionRel } from "./layout.js";
@@ -229,7 +230,7 @@ export async function artifactHash(dir: string): Promise<string> {
 export async function writeServeDescriptor(
   outDir: string,
   app: string,
-  descriptor: { framework: string; buildId: string; edgeRouting: boolean },
+  descriptor: ServeDescriptor,
 ): Promise<void> {
   const appDir = appOutDir(outDir, app);
   await mkdir(appDir, { recursive: true });
@@ -282,6 +283,7 @@ export async function traceBuild(
     framework: fw.name,
     buildId: await artifactHash(funcDir),
     edgeRouting: false,
+    needs: {},
   });
 
   return {

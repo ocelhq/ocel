@@ -1,5 +1,6 @@
 import { boundCacheTags } from "@framework/next-cache/cache-tags";
 import { cacheKey, variantHeadersFile } from "@framework/next-cache/naming";
+import type { ServeDescriptor } from "@platform/edge-contract/serve";
 import type { AdapterOutput, NextAdapter } from "next";
 import { PHASE_PRODUCTION_BUILD } from "next/constants.js";
 import { createHash } from "node:crypto";
@@ -472,10 +473,49 @@ const adapter = {
       join(outputRoot, "routing-manifest.json"),
       JSON.stringify(routingManifest),
     );
-    writeFileSync(
-      join(outputRoot, "serve.json"),
-      JSON.stringify({ framework: "next", buildId, edgeRouting: true }),
+    const pprRoutes = outputs.prerenders
+      .filter((p) => p.pprChain && isUserFacingPathname(p.pathname))
+      .map((p) => p.pathname);
+    const cachedRoutes = outputs.prerenders.filter((p) =>
+      isUserFacingPathname(p.pathname),
     );
+    const streamedRoutes = outputs.appPages.filter((p) =>
+      isUserFacingPathname(p.pathname),
+    );
+    const edgeNeedRoutes = edgeRoutes.filter((r) =>
+      isUserFacingPathname(r.pathname),
+    );
+    const needs: ServeDescriptor["needs"] = {
+      ...(middleware?.runtime === "edge" && {
+        "edge-middleware": {
+          count: 1,
+          matchers: (middleware.config.matchers ?? []).map((m) => m.sourceRegex),
+        },
+      }),
+      ...(edgeNeedRoutes.length > 0 && {
+        "edge-runtime": {
+          count: edgeNeedRoutes.length,
+          routes: edgeNeedRoutes.map((r) => routeKeyOf(r, basePath)),
+        },
+      }),
+      ...(pprRoutes.length > 0 && {
+        "ppr-resume": { count: pprRoutes.length, routes: pprRoutes },
+      }),
+      ...(cachedRoutes.length > 0 && {
+        "edge-cache": { count: cachedRoutes.length },
+      }),
+      ...(streamedRoutes.length > 0 && {
+        streaming: { count: streamedRoutes.length },
+      }),
+    };
+
+    const serve: ServeDescriptor = {
+      framework: "next",
+      buildId,
+      edgeRouting: true,
+      needs,
+    };
+    writeFileSync(join(outputRoot, "serve.json"), JSON.stringify(serve));
 
     if (images) {
       await writeFile(
@@ -831,6 +871,14 @@ interface PrerenderGroup {
 
 const NEXT_DATA_PRERENDER = /\/_next\/data\/[^/]+\/.*\.json$/;
 
+function isUserFacingPathname(pathname: string): boolean {
+  return (
+    segmentPath(pathname) === null &&
+    !pathname.endsWith(".rsc") &&
+    !NEXT_DATA_PRERENDER.test(pathname)
+  );
+}
+
 function groupPrerenders(prerenders: readonly any[]): PrerenderGroup[] {
   const byGroup = new Map<number, any[]>();
   for (const p of prerenders) {
@@ -843,9 +891,7 @@ function groupPrerenders(prerenders: readonly any[]): PrerenderGroup[] {
   for (const members of byGroup.values()) {
     const segments = members.filter((m) => segmentPath(m.pathname) !== null);
     const pages = members.filter((m) => segmentPath(m.pathname) === null);
-    const html = pages.find(
-      (m) => !m.pathname.endsWith(".rsc") && !NEXT_DATA_PRERENDER.test(m.pathname),
-    );
+    const html = pages.find((m) => isUserFacingPathname(m.pathname));
     if (!html) continue;
     groups.push({
       entryKey: cacheKey(html.pathname),

@@ -27,6 +27,10 @@ func AllNeeds() []Need {
 	return []Need{NeedEdgeMiddleware, NeedEdgeRuntime, NeedPPRResume, NeedEdgeCache, NeedStreaming}
 }
 
+func CodeNeeds() []Need {
+	return []Need{NeedEdgeMiddleware, NeedEdgeRuntime}
+}
+
 func ValidNeed(need Need) bool {
 	for _, n := range AllNeeds() {
 		if n == need {
