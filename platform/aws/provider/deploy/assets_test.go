@@ -111,16 +111,25 @@ func TestUploadStaticAssets(t *testing.T) {
 		}
 	})
 
-	t.Run("stamps no content type", func(t *testing.T) {
+	t.Run("stamps content type and cache control per path class", func(t *testing.T) {
 		t.Parallel()
 		store, asset := &fakeUploader{exists: map[string]bool{}}, &fakeUploader{exists: map[string]bool{}}
 		root := writeTree(t, map[string]string{
-			"apps/web/routing-manifest.json":        `{"buildId":"WEB1"}`,
-			"apps/web/static/next.svg":              "<svg/>",
-			"apps/web/static/_next/static/chunk.js": "console.log(1)",
-			"apps/web/static/styles.css":            "body{}",
-			"apps/web/static/chunk.js.map":          `{"version":3}`,
-			"apps/web/static/favicon.ico":           "icon",
+			"apps/web/routing-manifest.json":                         `{"buildId":"WEB1"}`,
+			"apps/web/static/_next/static/chunk.js":                  "console.log(1)",
+			"apps/web/static/_next/static/css/app.css":               "body{}",
+			"apps/web/static/_next/static/service-worker/sw.js":      "self",
+			"apps/web/static/docs/_next/static/chunks/main.js":       "console.log(2)",
+			"apps/web/static/docs/_next/static/service-worker/sw.js": "self",
+			"apps/web/static/next.svg":                               "<svg/>",
+			"apps/web/static/styles.css":                             "body{}",
+			"apps/web/static/chunk.js.map":                           `{"version":3}`,
+			"apps/web/static/favicon.ico":                            "icon",
+			"apps/web/static/robots.txt":                             "User-agent: *",
+			"apps/web/static/manifest.json":                          `{"name":"web"}`,
+			"apps/web/static/index.html":                             "<html></html>",
+			"apps/web/static/font.woff2":                             "woff",
+			"apps/web/static/LICENSE":                                "MIT",
 		})
 		cfg := mirrorConfig(root, store, asset)
 
@@ -128,12 +137,51 @@ func TestUploadStaticAssets(t *testing.T) {
 			t.Fatalf("uploadStaticAssets: %v", err)
 		}
 
-		for name, up := range map[string]*fakeUploader{"cache store": store, "asset bucket": asset} {
-			if len(up.contentTypes) != 0 {
-				t.Errorf("%s content-types = %v, want none — the worker names the type", name, up.contentTypes)
+		for _, tc := range []struct{ rel, contentType, cacheControl string }{
+			{"_next/static/chunk.js", "text/javascript; charset=utf-8", immutableCacheControl},
+			{"_next/static/css/app.css", "text/css; charset=utf-8", immutableCacheControl},
+			{"_next/static/service-worker/sw.js", "text/javascript; charset=utf-8", revalidateCacheControl},
+			{"docs/_next/static/chunks/main.js", "text/javascript; charset=utf-8", immutableCacheControl},
+			{"docs/_next/static/service-worker/sw.js", "text/javascript; charset=utf-8", revalidateCacheControl},
+			{"next.svg", "image/svg+xml", revalidateCacheControl},
+			{"styles.css", "text/css; charset=utf-8", revalidateCacheControl},
+			{"chunk.js.map", "application/json; charset=utf-8", revalidateCacheControl},
+			{"favicon.ico", "image/x-icon", revalidateCacheControl},
+			{"robots.txt", "text/plain", revalidateCacheControl},
+			{"manifest.json", "application/manifest+json", revalidateCacheControl},
+			{"index.html", "text/html; charset=utf-8", revalidateCacheControl},
+			{"font.woff2", "font/woff2", revalidateCacheControl},
+			{"LICENSE", "application/octet-stream", revalidateCacheControl},
+		} {
+			key := assetKeyFor("web", testDeploymentID, tc.rel)
+			for name, up := range map[string]*fakeUploader{"cache store": store, "asset bucket": asset} {
+				if got := up.contentTypes[key]; got != tc.contentType {
+					t.Errorf("%s %s content-type = %q, want %q", name, tc.rel, got, tc.contentType)
+				}
+				if got := up.cacheControls[key]; got != tc.cacheControl {
+					t.Errorf("%s %s cache-control = %q, want %q", name, tc.rel, got, tc.cacheControl)
+				}
 			}
-			if len(sortedPuts(up)) == 0 {
-				t.Errorf("%s received no uploads, so it proves nothing", name)
+		}
+	})
+
+	t.Run("a present object is not re-put", func(t *testing.T) {
+		t.Parallel()
+		key := assetKeyFor("web", testDeploymentID, "_next/static/chunk.js")
+		store := &fakeUploader{exists: map[string]bool{key: true}}
+		asset := &fakeUploader{exists: map[string]bool{key: true}}
+		root := writeTree(t, map[string]string{
+			"apps/web/routing-manifest.json":        `{"buildId":"WEB1"}`,
+			"apps/web/static/_next/static/chunk.js": "console.log(1)",
+		})
+		cfg := mirrorConfig(root, store, asset)
+
+		if err := uploadStaticAssets(context.Background(), cfg, nextManifest(), appBuildsFor(t, cfg, nextManifest())); err != nil {
+			t.Fatalf("uploadStaticAssets: %v", err)
+		}
+		for name, up := range map[string]*fakeUploader{"cache store": store, "asset bucket": asset} {
+			if got := sortedPuts(up); len(got) != 0 {
+				t.Errorf("%s put %v, want the HEAD hit to skip the upload", name, got)
 			}
 		}
 	})

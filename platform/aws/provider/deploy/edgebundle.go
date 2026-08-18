@@ -72,13 +72,13 @@ func putEdgeBundles(ctx context.Context, cfg Config, manifest *deploymentsv1.Man
 		}
 		sealed := builds.baked[name]
 		coord := builds.coords[name]
-		if err := tracedPut(ctx, cfg.CacheStoreUploader, cfg.CacheStoreBucket, appEdgeBundleKey(coord), "application/json", bundle, stats); err != nil {
+		if err := tracedPut(ctx, cfg.CacheStoreUploader, cfg.CacheStoreBucket, appEdgeBundleKey(coord), objectHeaders{contentType: "application/json"}, bundle, stats); err != nil {
 			return err
 		}
 		if !edgeSealedDelivered(cfg, sealed) {
 			continue
 		}
-		if err := tracedPut(ctx, cfg.CacheStoreUploader, cfg.CacheStoreBucket, appEdgeSealedKey(coord), "application/octet-stream", sealed.Ciphertext, stats); err != nil {
+		if err := tracedPut(ctx, cfg.CacheStoreUploader, cfg.CacheStoreBucket, appEdgeSealedKey(coord), objectHeaders{contentType: "application/octet-stream"}, sealed.Ciphertext, stats); err != nil {
 			return err
 		}
 	}
