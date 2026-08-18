@@ -132,7 +132,16 @@ func (p *provider) Reconcile(ctx context.Context, spec edge.StackSpec, prior edg
 		return nil, err
 	}
 	opened := func(state edge.StackState) (edge.EdgeStack, error) {
-		return &stack{p: p, state: state}, nil
+		next := maps.Clone(state)
+		if next == nil {
+			next = edge.StackState{}
+		}
+		if spec.PruneOnly {
+			delete(next, stackKeyEntryWorker)
+		} else {
+			next[stackKeyEntryWorker] = joinEntryWorkers(p.recordEntryWorker(slug, program.Name))
+		}
+		return &stack{p: p, state: next}, nil
 	}
 	upToDate := stamps[program.Name] == stamp
 	if upToDate && skipEdgeReconcile() {
@@ -153,6 +162,7 @@ func (p *provider) Reconcile(ctx context.Context, spec edge.StackSpec, prior edg
 
 	if err := p.reconcileWorkerRoutes(ctx, genericUp, routePlan{
 		desired:        spec.Domains,
+		bound:          edge.BoundDomains(prior),
 		prune:          spec.PruneRoutes,
 		pruneStem:      program.PruneWorkerStem,
 		requiredRecord: program.RequiredRecord,
@@ -179,13 +189,29 @@ func (p *provider) Reconcile(ctx context.Context, spec edge.StackSpec, prior edg
 		return nil, fmt.Errorf("set stack version stamp: %w", err)
 	}
 
-	return opened(edge.StackState{
-		edge.StackKeySlug:       slug,
-		edge.StackKeyEndpoint:   endpoint,
-		edge.StackKeySecret:     id.secret,
-		edge.StackKeyOwnerToken: id.ownerToken,
-		edge.StackKeyClass:      string(spec.Class),
-	})
+	next := maps.Clone(prior)
+	if next == nil {
+		next = edge.StackState{}
+	}
+	next[edge.StackKeySlug] = slug
+	next[edge.StackKeyEndpoint] = endpoint
+	next[edge.StackKeySecret] = id.secret
+	next[edge.StackKeyOwnerToken] = id.ownerToken
+	next[edge.StackKeyClass] = string(spec.Class)
+	return opened(next)
+}
+
+func (p *provider) recordEntryWorker(slug, name string) []string {
+	p.entryMu.Lock()
+	defer p.entryMu.Unlock()
+	if p.entryWorkers == nil {
+		p.entryWorkers = map[string][]string{}
+	}
+	if !slices.Contains(p.entryWorkers[slug], name) {
+		p.entryWorkers[slug] = append(p.entryWorkers[slug], name)
+		slices.Sort(p.entryWorkers[slug])
+	}
+	return slices.Clone(p.entryWorkers[slug])
 }
 
 func (p *provider) putWorkerScript(ctx context.Context, up upload, what string) error {
@@ -238,26 +264,24 @@ func mintIdentity() (storeIdentity, error) {
 	return storeIdentity{secret: secret, ownerToken: ownerToken}, nil
 }
 
-func (s *stack) BindDomain(context.Context, edge.DomainBinding) error {
-	return errors.New("binding a domain to a Cloudflare stack is not implemented in this slice")
-}
-
-func (s *stack) UnbindDomain(context.Context, string) error {
-	return errors.New("unbinding a domain from a Cloudflare stack is not implemented in this slice")
-}
-
 func (s *stack) Destroy(ctx context.Context) error {
+	var errs []error
+	for _, hostname := range edge.BoundDomains(s.state) {
+		if err := s.UnbindDomain(ctx, hostname); err != nil {
+			errs = append(errs, fmt.Errorf("unbind %q before destroying the stack that serves it: %w", hostname, err))
+		}
+	}
 	names, err := s.p.stackWorkers(ctx, s.state)
 	if err != nil {
-		return err
+		return errors.Join(append(errs, err)...)
 	}
 	if err := s.p.destroyWorkers(ctx, names); err != nil {
-		return err
+		return errors.Join(append(errs, err)...)
 	}
 	if err := s.p.destroyInstance(ctx, s.state); err != nil {
-		return fmt.Errorf("destroy deployments-store instance: %w", err)
+		errs = append(errs, fmt.Errorf("destroy deployments-store instance: %w", err))
 	}
-	return nil
+	return errors.Join(errs...)
 }
 
 func (p *provider) stackWorkers(ctx context.Context, state edge.StackState) ([]string, error) {

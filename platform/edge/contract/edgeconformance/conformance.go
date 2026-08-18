@@ -9,11 +9,16 @@ import (
 )
 
 type Suite struct {
-	New func(t *testing.T) (edge.Edge, edge.StackSpec)
+	New      func(t *testing.T) (edge.Edge, edge.StackSpec)
+	Hostname string
 }
 
 func Run(t *testing.T, suite Suite) {
 	t.Helper()
+
+	if suite.Hostname == "" {
+		t.Fatal("the suite names no hostname, and every edge must be able to bind one")
+	}
 
 	t.Run("the programmable surface is exactly the declared code needs", func(t *testing.T) {
 		e, _ := suite.New(t)
@@ -194,14 +199,97 @@ func Run(t *testing.T, suite Suite) {
 			t.Errorf("history outside the pointer = %v, want the promotion the pointer never held", held)
 		}
 	})
+
+	t.Run("binding a domain twice binds it once and shows in state", func(t *testing.T) {
+		ctx := context.Background()
+		e, stack := reconciledOn(t, suite)
+		binding := edge.DomainBinding{Hostname: suite.Hostname}
+
+		if err := stack.BindDomain(ctx, binding); err != nil {
+			t.Fatalf("BindDomain: %v", err)
+		}
+		if err := stack.BindDomain(ctx, binding); err != nil {
+			t.Fatalf("BindDomain again: %v", err)
+		}
+
+		bound := edge.BoundDomains(stack.State())
+		if len(bound) != 1 || !slices.Contains(bound, suite.Hostname) {
+			t.Errorf("bound domains = %v, want exactly %q", bound, suite.Hostname)
+		}
+		owner, err := e.DomainOwner(ctx, suite.Hostname)
+		if err != nil {
+			t.Fatalf("DomainOwner: %v", err)
+		}
+		if owner == "" {
+			t.Errorf("DomainOwner(%q) = %q, want the surface the binding created", suite.Hostname, owner)
+		}
+	})
+
+	t.Run("unbinding a domain twice leaves nothing bound", func(t *testing.T) {
+		ctx := context.Background()
+		e, stack := reconciledOn(t, suite)
+
+		if err := stack.UnbindDomain(ctx, suite.Hostname); err != nil {
+			t.Fatalf("UnbindDomain before any binding: %v", err)
+		}
+		if err := stack.BindDomain(ctx, edge.DomainBinding{Hostname: suite.Hostname}); err != nil {
+			t.Fatalf("BindDomain: %v", err)
+		}
+		if err := stack.UnbindDomain(ctx, suite.Hostname); err != nil {
+			t.Fatalf("UnbindDomain: %v", err)
+		}
+		if err := stack.UnbindDomain(ctx, suite.Hostname); err != nil {
+			t.Fatalf("UnbindDomain again: %v", err)
+		}
+
+		if bound := edge.BoundDomains(stack.State()); len(bound) != 0 {
+			t.Errorf("bound domains = %v, want none once the host is unbound", bound)
+		}
+		owner, err := e.DomainOwner(ctx, suite.Hostname)
+		if err != nil {
+			t.Fatalf("DomainOwner: %v", err)
+		}
+		if owner != "" {
+			t.Errorf("DomainOwner(%q) = %q, want nothing serving an unbound host", suite.Hostname, owner)
+		}
+	})
+
+	t.Run("destroying a stack takes the domains it bound with it", func(t *testing.T) {
+		ctx := context.Background()
+		e, stack := reconciledOn(t, suite)
+		if err := stack.BindDomain(ctx, edge.DomainBinding{Hostname: suite.Hostname}); err != nil {
+			t.Fatalf("BindDomain: %v", err)
+		}
+
+		if err := stack.Destroy(ctx); err != nil {
+			t.Fatalf("Destroy: %v", err)
+		}
+
+		if bound := edge.BoundDomains(stack.State()); len(bound) != 0 {
+			t.Errorf("bound domains = %v, want none after the stack was destroyed", bound)
+		}
+		owner, err := e.DomainOwner(ctx, suite.Hostname)
+		if err != nil {
+			t.Fatalf("DomainOwner: %v", err)
+		}
+		if owner != "" {
+			t.Errorf("DomainOwner(%q) = %q, want no surface left after Destroy", suite.Hostname, owner)
+		}
+	})
 }
 
 func reconciled(t *testing.T, suite Suite) edge.EdgeStack {
+	t.Helper()
+	_, stack := reconciledOn(t, suite)
+	return stack
+}
+
+func reconciledOn(t *testing.T, suite Suite) (edge.Edge, edge.EdgeStack) {
 	t.Helper()
 	e, spec := suite.New(t)
 	stack, err := e.Reconcile(context.Background(), spec, nil)
 	if err != nil {
 		t.Fatalf("Reconcile: %v", err)
 	}
-	return stack
+	return e, stack
 }

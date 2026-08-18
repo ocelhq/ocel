@@ -23,6 +23,7 @@ const (
 
 type routePlan struct {
 	desired        []string
+	bound          []string
 	prune          bool
 	pruneStem      string
 	requiredRecord string
@@ -42,7 +43,10 @@ func (p *provider) reconcileWorkerRoutes(ctx context.Context, up upload, plan ro
 		}
 	}
 
-	wanted := make(map[string]bool, len(plan.desired))
+	wanted := make(map[string]bool, len(plan.desired)+len(plan.bound))
+	for _, host := range plan.bound {
+		wanted[host] = true
+	}
 	for _, host := range plan.desired {
 		zoneID, zoneName, err := p.resolveZone(ctx, up.accountID, routeBaseDomain(host))
 		if err != nil {
@@ -254,7 +258,10 @@ func (p *provider) ensureProxiedRecord(ctx context.Context, zoneID, hostname str
 		}
 		return nil
 	}
+	return p.plantProxiedRecord(ctx, zoneID, hostname)
+}
 
+func (p *provider) plantProxiedRecord(ctx context.Context, zoneID, hostname string) error {
 	if _, err := p.client.DNS.Records.New(ctx, dns.RecordNewParams{
 		ZoneID: cf.F(zoneID),
 		Body: dns.AAAARecordParam{
@@ -313,7 +320,7 @@ func (p *provider) deleteProxiedRecord(ctx context.Context, zoneID, hostname str
 	})
 	for records.Next() {
 		rec := records.Current()
-		if rec.Content != routeRecordContent {
+		if rec.Content != routeRecordContent || rec.Comment != routeRecordComment {
 			continue
 		}
 		if _, err := p.client.DNS.Records.Delete(ctx, rec.ID, dns.RecordDeleteParams{ZoneID: cf.F(zoneID)}); err != nil {
