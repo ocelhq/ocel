@@ -45,6 +45,8 @@ export interface CacheTarget {
   suppressed?: boolean;
 }
 
+export type OriginBlocking = (refreshing: number) => Promise<Response>;
+
 export interface CachePolicy {
   sMaxAge: number;
   swr: number;
@@ -258,7 +260,6 @@ interface ColoPolicy {
 
 function suppressedStaleServe(target: CacheTarget, response: Response): boolean {
   return (
-    SUPPRESS_SELF_REVALIDATION &&
     target.suppressed === true &&
     response.headers.get(NEXT_CACHE_STATUS) === "STALE" &&
     response.headers.get(CACHE_STATUS) !== "PRERENDER"
@@ -332,25 +333,18 @@ function fromStorage(response: Response, stale: boolean): Response {
   return respond(response, headers);
 }
 
-export type StoredFrom = "serve" | "refresh";
-
 async function store(
   keyRequest: Request,
   target: CacheTarget,
   deps: CacheDeps,
   policy: ColoPolicy,
   response: Response,
-  from: StoredFrom,
 ): Promise<void> {
   if (response.status !== 200) {
     response.body?.cancel();
     return;
   }
   if (!policy.storable(response)) {
-    response.body?.cancel();
-    return;
-  }
-  if (from === "serve" && suppressedStaleServe(target, response)) {
     response.body?.cancel();
     return;
   }
@@ -363,7 +357,7 @@ export async function storeInColo(
   deps: CacheDeps,
   response: Response,
 ): Promise<void> {
-  await store(new Request(target.key), target, deps, prerenderPolicy, response, "refresh");
+  await store(new Request(target.key), target, deps, prerenderPolicy, response);
 }
 
 const inFlight = new WeakMap<Cache, Map<string, Promise<unknown>>>();
@@ -501,7 +495,7 @@ async function serveOrAdmitRefresh(
   target: CacheTarget,
   deps: CacheDeps,
   policy: ColoPolicy,
-  originBlocking: () => Promise<Response>,
+  originBlocking: OriginBlocking,
   tagClock?: TagClock,
 ): Promise<Response | null> {
   const now = deps.now ?? Date.now;
@@ -538,9 +532,9 @@ async function serveOrAdmitRefresh(
       if (await enqueued(deps.enqueueRevalidation, target.revalidation, modified)) {
         return "landed";
       }
-      const response = await originBlocking();
+      const response = await originBlocking(modified);
       const outcome = refreshOutcome(response);
-      await store(keyRequest, target, deps, policy, response, "refresh");
+      await store(keyRequest, target, deps, policy, response);
       return outcome;
     };
     if (target.refreshKey) {
@@ -562,7 +556,7 @@ async function colo(
   deps: CacheDeps,
   policy: ColoPolicy,
   origin: () => Promise<Response>,
-  originBlocking: () => Promise<Response>,
+  originBlocking: OriginBlocking,
   tagClock?: TagClock,
 ): Promise<Response> {
   const keyRequest = new Request(target.key);
@@ -587,7 +581,9 @@ async function colo(
   const pending = origin();
   refreshOnce(deps, target.key, () =>
     pending.then((response) =>
-      store(keyRequest, target, deps, policy, response.clone(), "serve"),
+      suppressedStaleServe(target, response)
+        ? undefined
+        : store(keyRequest, target, deps, policy, response.clone()),
     ),
   );
   const response = await pending;
@@ -603,7 +599,7 @@ export async function serveCached(
   target: CacheTarget,
   deps: CacheDeps,
   origin: () => Promise<Response>,
-  originBlocking: () => Promise<Response>,
+  originBlocking: OriginBlocking,
   tagClock?: TagClock,
 ): Promise<Response> {
   if (request.method !== "GET" || hasDraftCookie(request)) {
@@ -624,7 +620,7 @@ export async function serveCachedImage(
   target: CacheTarget,
   deps: CacheDeps | undefined,
   origin: () => Promise<Response>,
-  originBlocking: () => Promise<Response>,
+  originBlocking: OriginBlocking,
   servedCacheControl?: string,
 ): Promise<Response> {
   const policy = imagePolicy(servedCacheControl);

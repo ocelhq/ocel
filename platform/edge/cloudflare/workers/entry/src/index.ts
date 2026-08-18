@@ -1,3 +1,5 @@
+import { refreshHeader } from "@framework/next-cache";
+
 import {
   resolveRoutes,
   responseToMiddlewareResult,
@@ -1344,10 +1346,13 @@ async function dispatchPrerender(
   }
   const origin = () => answer(forward(forwardUrl, request, originHeaders));
 
-  const refreshHeaders = new Headers(safeHeaders);
-  refreshHeaders.delete(PREFETCH_PURPOSE);
-  const originBlocking = () =>
-    answer(forward(forwardUrl, request, refreshHeaders));
+  const plainHeaders = new Headers(safeHeaders);
+  plainHeaders.delete(PREFETCH_PURPOSE);
+  const originBlocking = (refreshing: number) => {
+    const refreshHeaders = new Headers(plainHeaders);
+    refreshHeaders.set(refreshHeader, String(refreshing));
+    return answer(forward(forwardUrl, request, refreshHeaders));
+  };
 
   const revalidates = !edgeEntryKey;
 
@@ -1396,7 +1401,7 @@ async function dispatchPrerender(
   };
 
   if (onDemand) {
-    const onDemandHeaders = new Headers(refreshHeaders);
+    const onDemandHeaders = new Headers(plainHeaders);
     onDemandHeaders.set("x-prerender-revalidate", target.config.bypassToken ?? "");
     const rendered = await render(
       forward(
@@ -1475,7 +1480,7 @@ async function dispatchPrerender(
               if (await enqueued(cacheDeps.enqueueRevalidation, revalidation, hit.lastModified)) {
                 return "landed";
               }
-              const response = await originBlocking();
+              const response = await originBlocking(hit.lastModified);
               response.body?.cancel();
               return refreshOutcome(response);
             },
@@ -1508,7 +1513,7 @@ async function dispatchPrerender(
             if (await enqueued(cacheDeps.enqueueRevalidation, revalidation, hit.lastModified)) {
               return "landed";
             }
-            const response = await originBlocking();
+            const response = await originBlocking(hit.lastModified);
             const outcome = refreshOutcome(response);
             await storeInColo(cacheTarget, cache, response);
             return outcome;

@@ -1,3 +1,5 @@
+import { refreshHeader } from "@framework/next-cache";
+
 import { sqsFetch, sqsRegion } from "./signing";
 
 export interface RevalidationMessage {
@@ -21,7 +23,13 @@ export function revalidationMessage(
   lastModified: number,
   enqueuedAt: number = Date.now(),
 ): RevalidationMessage {
-  return { v: 1, ...route, lastModified, enqueuedAt };
+  return {
+    v: 1,
+    ...route,
+    headers: { ...route.headers, [refreshHeader]: String(lastModified) },
+    lastModified,
+    enqueuedAt,
+  };
 }
 
 export interface RevalidationIds {

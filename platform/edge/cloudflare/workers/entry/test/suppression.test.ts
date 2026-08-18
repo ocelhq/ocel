@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
 
+import { refreshHeader } from "@framework/next-cache";
+
 import { dispatchResult, type RouteDeps } from "../src/index";
 import { coloDeps } from "./cache-deps";
 
@@ -159,6 +161,31 @@ describe("self-revalidation suppression", () => {
     expect(origin.requests).toHaveLength(1);
     expect(origin.requests[0].headers.has("x-prerender-revalidate")).toBe(false);
     expect(origin.purposes()).toEqual([null]);
+  });
+
+  it("tells the blocking revalidation forward which generation the colo holds", async () => {
+    const pending: Promise<unknown>[] = [];
+    const origin = recorder();
+
+    await dispatchBlog(
+      blogDeps(origin, {
+        entry: storedEntry(1_000),
+        now: 1_000 + 61_000,
+        waitUntil: (p) => pending.push(p),
+      }),
+    );
+    await Promise.all(pending);
+
+    expect(origin.requests[0].headers.get(refreshHeader)).toBe("1000");
+  });
+
+  it("never declares a held generation on the serve-path forward", async () => {
+    const origin = recorder();
+
+    await dispatchBlog(blogDeps(origin));
+
+    expect(origin.requests).toHaveLength(1);
+    expect(origin.requests[0].headers.has(refreshHeader)).toBe(false);
   });
 
   it("never inherits a client-sent purpose on the blocking revalidation forward", async () => {

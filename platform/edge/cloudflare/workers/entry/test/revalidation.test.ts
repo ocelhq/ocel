@@ -1,4 +1,5 @@
 import contract from "@framework/next-cache/fixtures/edge-contract.json";
+import { refreshHeader } from "@framework/next-cache";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { OCEL_REVALIDATED } from "../src/index";
@@ -126,7 +127,7 @@ describe("revalidationMessage", () => {
   it("carries the route, the entry generation and the enqueue time", () => {
     expect(revalidationMessage(route, 1_000, 42)).toEqual({
       v: 1,
-      headers: route.headers,
+      headers: { ...route.headers, [refreshHeader]: "1000" },
       expect: null,
       isrPrefix: "prod/p1/web/build-1",
       routeId: "/blog",

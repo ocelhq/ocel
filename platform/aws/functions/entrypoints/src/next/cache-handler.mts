@@ -10,6 +10,7 @@ import {
 import {
   cacheKey,
   deserialize as deserializeBytes,
+  refreshHeader,
   tagsOf,
   variantHeadersFile,
 } from "@framework/next-cache";
@@ -129,6 +130,11 @@ export default class OcelCacheHandler {
     return this.requestHeaders[RSC_REQUEST] === true || this.requestHeaders.rsc === "1";
   }
 
+  private get refreshing(): number | undefined {
+    const held = Number(this.requestHeaders[refreshHeader]);
+    return Number.isFinite(held) ? held : undefined;
+  }
+
   private get store(): CacheStore {
     return (OcelCacheHandler.store ??= awsCacheStore());
   }
@@ -144,6 +150,9 @@ export default class OcelCacheHandler {
           ? await this.store.readFetch(key)
           : await this.store.readEntry(cacheKey(key));
       if (!entry) return null;
+      if (ctx?.kind !== "FETCH" && entry.lastModified <= (this.refreshing ?? -Infinity)) {
+        return null;
+      }
 
       const tags = tagsOf(entry.value, ctx);
       if (tags.length > 0 && (await tagsExpireEntry(tags, entry.lastModified))) {

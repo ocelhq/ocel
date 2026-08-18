@@ -1,7 +1,7 @@
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { variantHeadersFile, type TagRecord } from "@framework/next-cache";
+import { refreshHeader, variantHeadersFile, type TagRecord } from "@framework/next-cache";
 import { afterEach, beforeEach, expect, test } from "vitest";
 import OcelCacheHandler from "../src/next/cache-handler.mjs";
 import { runWithWaitUntil } from "../src/shared/background.mjs";
@@ -222,6 +222,37 @@ test("expires an entry whose tag was revalidated after it was written", async ()
   const entry = await new OcelCacheHandler().get("/", { kind: "APP_PAGE" });
 
   expect(entry).toBeNull();
+});
+
+test("misses on a refresh that already holds this generation, so Next regenerates", async () => {
+  const store = fakeStore();
+  seedPage(store, "index", { lastModified: 1_000 });
+  const handler = new OcelCacheHandler({ _requestHeaders: { [refreshHeader]: "1000" } });
+
+  expect(await handler.get("/", { kind: "APP_PAGE" })).toBeNull();
+});
+
+test("serves a refresh the generation newer than the one it holds", async () => {
+  const store = fakeStore();
+  seedPage(store, "index", { lastModified: 2_000 });
+  const handler = new OcelCacheHandler({ _requestHeaders: { [refreshHeader]: "1000" } });
+
+  const entry = await handler.get("/", { kind: "APP_PAGE" });
+
+  expect(entry?.lastModified).toBe(2_000);
+});
+
+test("a refresh leaves fetch entries to their own windows", async () => {
+  const store = fakeStore();
+  store.fetches.set("abc", {
+    lastModified: 500,
+    value: { kind: "FETCH", data: { body: "cached" }, revalidate: 900, tags: [] },
+  });
+  const handler = new OcelCacheHandler({ _requestHeaders: { [refreshHeader]: "1000" } });
+
+  const entry = await handler.get("abc", { kind: "FETCH", tags: [] });
+
+  expect(entry?.value.data.body).toBe("cached");
 });
 
 test("ticks the revalidation signal so the request can announce it", async () => {

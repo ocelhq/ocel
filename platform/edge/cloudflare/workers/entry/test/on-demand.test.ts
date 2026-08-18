@@ -1,3 +1,4 @@
+import { refreshHeader } from "@framework/next-cache";
 import { describe, expect, it } from "vitest";
 
 import { dispatchResult, type RouteDeps } from "../src/index";
@@ -105,6 +106,7 @@ describe("an on-demand revalidation arriving at the edge", () => {
     expect(served.requests).toHaveLength(1);
     expect(served.requests[0]!.method).toBe("GET");
     expect(served.requests[0]!.headers.get("x-prerender-revalidate")).toBe("TOKEN");
+    expect(served.requests[0]!.headers.has(refreshHeader)).toBe(false);
   });
 
   it("stores the on-demand render, so the next request serves it", async () => {
