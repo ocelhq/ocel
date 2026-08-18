@@ -21,6 +21,7 @@ import (
 	cf "github.com/cloudflare/cloudflare-go/v4"
 	"github.com/cloudflare/cloudflare-go/v4/accounts"
 	"github.com/cloudflare/cloudflare-go/v4/option"
+	"github.com/cloudflare/cloudflare-go/v4/shared"
 	"github.com/cloudflare/cloudflare-go/v4/workers"
 
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
@@ -289,7 +290,43 @@ func (p *provider) VerifyCredentials(ctx context.Context) (edge.CredentialIdenti
 	if _, err := p.client.Accounts.Get(ctx, accounts.AccountGetParams{AccountID: cf.F(accountID)}); err != nil {
 		return edge.CredentialIdentity{}, fmt.Errorf("%s was rejected by Cloudflare for account %s: %w", envAPIToken, accountID, err)
 	}
-	return edge.CredentialIdentity{Account: accountID}, nil
+	plan, entitlement := p.workersPlan(ctx, accountID)
+	return edge.CredentialIdentity{Account: accountID, Plan: plan, CodeEntitlement: entitlement}, nil
+}
+
+const workersPaidPlan = "Workers Paid"
+
+const workersFreePlan = "Workers Free"
+
+func (p *provider) workersPlan(ctx context.Context, accountID string) (string, edge.Entitlement) {
+	page, err := p.client.Accounts.Subscriptions.Get(ctx, accounts.SubscriptionGetParams{AccountID: cf.F(accountID)})
+	if err != nil {
+		fmt.Fprintf(os.Stderr,
+			"ocel cloudflare edge: could not read the subscriptions of account %s: %v\n"+
+				"%s must carry the \"Billing Read\" permission (Account scope) to tell whether the plan runs code at the edge. "+
+				"Without it this deploy proceeds, and an account on the Workers Free plan is rejected by Cloudflare when the "+
+				"worker is uploaded, after the deploy has begun changing your infrastructure\n",
+			accountID, err, envAPIToken)
+		return "", edge.EntitlementUnknown
+	}
+	for _, sub := range page.Result {
+		if runsWorkerCode(sub.RatePlan) {
+			name := sub.RatePlan.PublicName
+			if name == "" {
+				name = workersPaidPlan
+			}
+			return name, edge.EntitlementGranted
+		}
+	}
+	return workersFreePlan, edge.EntitlementWithheld
+}
+
+func runsWorkerCode(plan shared.RatePlan) bool {
+	if plan.IsContract || plan.ID == shared.RatePlanIDEnterprise || plan.ID == shared.RatePlanIDPartnersEnterprise {
+		return true
+	}
+	id := strings.ToLower(string(plan.ID))
+	return strings.Contains(id, "workers") && !strings.Contains(id, "free")
 }
 
 func (p *provider) DeployApp(ctx context.Context, app edge.AppDeployment) (edge.AppResult, error) {

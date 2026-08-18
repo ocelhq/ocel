@@ -96,6 +96,9 @@ type Config struct {
 	DNS      edge.DNSWriter
 	DNSAwait RecordWaiter
 
+	AllowDegraded []string
+	Degraded      func(need edge.Need, detail string)
+
 	Class                  deploymentsv1.Environment_Class
 	Lifecycle              deploymentsv1.Environment_Lifecycle
 	Identity               string
@@ -116,6 +119,7 @@ type Config struct {
 	Transform transform.Evaluator
 
 	transformed *transformedArgs
+	needs       needRecords
 	sessions    sessionScope
 }
 

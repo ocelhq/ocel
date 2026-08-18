@@ -31,6 +31,14 @@ func CodeNeeds() []Need {
 	return []Need{NeedEdgeMiddleware, NeedEdgeRuntime}
 }
 
+func NeedNames(needs []Need) []string {
+	names := make([]string, 0, len(needs))
+	for _, need := range needs {
+		names = append(names, string(need))
+	}
+	return names
+}
+
 func ValidNeed(need Need) bool {
 	for _, n := range AllNeeds() {
 		if n == need {
@@ -115,8 +123,18 @@ type CredentialVerifier interface {
 }
 
 type CredentialIdentity struct {
-	Account string
+	Account         string
+	Plan            string
+	CodeEntitlement Entitlement
 }
+
+type Entitlement string
+
+const (
+	EntitlementUnknown  Entitlement = "unknown"
+	EntitlementGranted  Entitlement = "granted"
+	EntitlementWithheld Entitlement = "withheld"
+)
 
 type AppDeployment struct {
 	Name    string

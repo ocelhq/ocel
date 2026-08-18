@@ -107,6 +107,11 @@ func (s *Session) Event(ev *deploymentsv1.DeployEvent) {
 		s.r.Log(l.GetMessage())
 		return
 	}
+	if d := ev.GetDegraded(); d != nil {
+		s.logf("[degraded] %s: %s", d.GetNeed(), d.GetDetail())
+		s.r.Degraded(d.GetNeed(), d.GetDetail())
+		return
+	}
 	if sp := ev.GetStagePlan(); sp != nil {
 		s.r.StagePlan(sp)
 		return

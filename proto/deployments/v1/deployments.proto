@@ -452,6 +452,7 @@ message DeployEvent {
     ResultEvent result = 3;
     StagePlanEvent stage_plan = 4;
     SpanEvent span = 5;
+    DegradedEvent degraded = 6;
   }
 }
 
@@ -541,6 +542,12 @@ message ProgressEvent {
 
 message LogEvent {
   string message = 1;
+}
+
+message DegradedEvent {
+  string need = 1;
+
+  string detail = 2;
 }
 
 message ResultEvent {

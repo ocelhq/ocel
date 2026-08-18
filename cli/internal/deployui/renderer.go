@@ -267,6 +267,23 @@ func (r *Renderer) Log(message string) {
 	fmt.Fprintln(r.w, message)
 }
 
+func (r *Renderer) Degraded(need, detail string) {
+	if r.format == FormatJSON {
+		r.emitJSON("degraded", map[string]any{"need": need, "detail": detail})
+		return
+	}
+	line := fmt.Sprintf("%s %s: %s", r.colorFor(color.FgYellow, color.Bold).Sprint(warnMark), need, detail)
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if r.live {
+		r.eraseLiveLocked()
+		fmt.Fprintln(r.w, line)
+		r.drawLiveLocked()
+		return
+	}
+	fmt.Fprintln(r.w, line)
+}
+
 func (r *Renderer) StageEnd(stageID []byte, failed bool, duration time.Duration) {
 	if r.format == FormatJSON {
 		return

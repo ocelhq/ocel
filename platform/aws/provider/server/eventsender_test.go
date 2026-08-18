@@ -30,7 +30,7 @@ func TestDeployReporterSerializesConcurrentSends(t *testing.T) {
 
 	stream := &recordingStream{}
 	sender := newEventSender(context.Background(), stream.send)
-	progress, _, logf := newDeployReporter(sender, newDeployStages())
+	progress, _, logf, _ := newDeployReporter(sender, newDeployStages())
 
 	var wg sync.WaitGroup
 	for i := 0; i < concurrentUploaders; i++ {
@@ -68,7 +68,7 @@ func TestDeployReporterParallelMultiAppDeploy(t *testing.T) {
 
 	stream := &recordingStream{}
 	sender := newEventSender(context.Background(), stream.send)
-	progress, _, logf := newDeployReporter(sender, newDeployStages())
+	progress, _, logf, _ := newDeployReporter(sender, newDeployStages())
 
 	var wg sync.WaitGroup
 	for a := 0; a < apps; a++ {
@@ -107,7 +107,7 @@ func TestNewDeployReporterTagsEveryPhaseWithItsDeclaredStage(t *testing.T) {
 	stream := &recordingStream{}
 	sender := newEventSender(context.Background(), stream.send)
 	stages := newDeployStages()
-	progress, stageReport, _ := newDeployReporter(sender, stages)
+	progress, stageReport, _, _ := newDeployReporter(sender, stages)
 
 	wantStage := map[deploymentsv1.Phase]deploy.StageID{
 		deploymentsv1.Phase_PHASE_UNSPECIFIED:  stages.preparing.ID,
