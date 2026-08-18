@@ -56,6 +56,10 @@ const fakeEdgeJournalEnvVar = "OCEL_TEST_FAKE_EDGE_JOURNAL"
 
 const fakeEdgeRefusalEnvVar = "OCEL_TEST_FAKE_EDGE_REFUSAL"
 
+const fakeNeedsRefusalEnvVar = "OCEL_TEST_FAKE_NEEDS_REFUSAL"
+
+const fakeDegradedEnvVar = "OCEL_TEST_FAKE_DEGRADED"
+
 const fakeDomainOwnerEnvVar = "OCEL_TEST_FAKE_DOMAIN_OWNER"
 
 const (
@@ -149,6 +153,17 @@ func (s *deployFakeProviderServer) Deploy(ctx context.Context, req *deploymentsv
 	if err := validateFixtureManifest(req.GetManifest()); err != nil {
 		return stream.Send(&deploymentsv1.DeployEvent{
 			Event: &deploymentsv1.DeployEvent_Result{Result: &deploymentsv1.ResultEvent{Success: false, Error: err.Error()}},
+		})
+	}
+
+	for _, ev := range fakeDegradedEvents() {
+		if err := stream.Send(ev); err != nil {
+			return err
+		}
+	}
+	if refusal := os.Getenv(fakeNeedsRefusalEnvVar); refusal != "" {
+		return stream.Send(&deploymentsv1.DeployEvent{
+			Event: &deploymentsv1.DeployEvent_Result{Result: &deploymentsv1.ResultEvent{Success: false, Error: refusal}},
 		})
 	}
 
@@ -450,6 +465,20 @@ func journalEdge(kind string, options []byte, dns *deploymentsv1.Dns, allowDegra
 	}
 	defer f.Close()
 	fmt.Fprintf(f, "kind=%s options=%s dns=%s/%s allowDegraded=%s\n", kind, options, dns.GetKind(), dns.GetZone(), strings.Join(allowDegraded, ","))
+}
+
+func fakeDegradedEvents() []*deploymentsv1.DeployEvent {
+	var events []*deploymentsv1.DeployEvent
+	for _, entry := range strings.Split(os.Getenv(fakeDegradedEnvVar), ";") {
+		need, detail, ok := strings.Cut(entry, "=")
+		if !ok || need == "" {
+			continue
+		}
+		events = append(events, &deploymentsv1.DeployEvent{
+			Event: &deploymentsv1.DeployEvent_Degraded{Degraded: &deploymentsv1.DegradedEvent{Need: need, Detail: detail}},
+		})
+	}
+	return events
 }
 
 func refuseEdge() error {

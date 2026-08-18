@@ -8,6 +8,7 @@ import (
 
 	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
 	"github.com/ocelhq/ocel/platform/aws/provider/deploy"
+	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
 type recordedDeclare struct {
@@ -51,7 +52,7 @@ func TestRunDeployDeclaresTheStagePlanBeforeAnyWork(t *testing.T) {
 
 	stages := newDeployStages()
 	appStages, appDeclared := deploy.AppStages(stages.provisioning, req.GetManifest())
-	_, err := s.runDeploy(context.Background(), req, req.GetManifest(), nil, stages, appStages, appDeclared, noopProgress, noopStageReport, noopLog, tracer)
+	_, err := s.runDeploy(context.Background(), req, req.GetManifest(), nil, stages, appStages, appDeclared, noopProgress, noopStageReport, noopLog, noopDegraded, tracer)
 	if err == nil {
 		t.Fatal("runDeploy() error = nil, want the parseOptions failure")
 	}
@@ -88,3 +89,4 @@ func TestRunDeployDeclaresTheStagePlanBeforeAnyWork(t *testing.T) {
 func noopProgress(deploymentsv1.Phase, string, uint32, uint32) {}
 func noopLog(string)                                           {}
 func noopStageReport(deploy.StageID) func(string)              { return func(string) {} }
+func noopDegraded(edge.Need, string)                           {}

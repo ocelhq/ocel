@@ -10,7 +10,6 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
-	"slices"
 	"strings"
 
 	"github.com/evanw/esbuild/pkg/api"
@@ -18,6 +17,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/envgate"
 	"github.com/ocelhq/ocel/cli/internal/procgroup"
 	"github.com/ocelhq/ocel/pkg/naming"
+	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
 const ConfigFileName = "ocel.config.ts"
@@ -361,7 +361,9 @@ func normalizeLinks(raw []string) ([]string, error) {
 	return out, nil
 }
 
-var knownNeeds = []string{"edge-middleware", "edge-runtime", "ppr-resume", "edge-cache", "streaming"}
+func knownNeeds() []string {
+	return edge.NeedNames(edge.AllNeeds())
+}
 
 const edgeSpellings = "use `edge: cfEdge()` (from ocel/edge), `edge: false`, or omit it for the origin's own edge"
 
@@ -421,8 +423,8 @@ func normalizeAllowDegraded(raw []string) ([]string, error) {
 	}
 	out := make([]string, 0, len(raw))
 	for _, name := range raw {
-		if !slices.Contains(knownNeeds, name) {
-			return nil, fmt.Errorf("%q is not a need — the needs a deploy may degrade are %s", name, strings.Join(knownNeeds, ", "))
+		if !edge.ValidNeed(edge.Need(name)) {
+			return nil, fmt.Errorf("%q is not a need — the needs a deploy may degrade are %s", name, strings.Join(knownNeeds(), ", "))
 		}
 		out = append(out, name)
 	}

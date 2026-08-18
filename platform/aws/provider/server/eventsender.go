@@ -6,6 +6,7 @@ import (
 
 	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
 	"github.com/ocelhq/ocel/platform/aws/provider/deploy"
+	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
 const eventSenderBuffer = 256
@@ -60,7 +61,7 @@ func (s *eventSender) close() error {
 	return s.err
 }
 
-func newDeployReporter(sender *eventSender, stages deployStages) (deploy.Progress, func(deploy.StageID) func(string), func(string)) {
+func newDeployReporter(sender *eventSender, stages deployStages) (deploy.Progress, func(deploy.StageID) func(string), func(string), func(edge.Need, string)) {
 	byPhase := map[deploymentsv1.Phase]deploy.StageID{
 		deploymentsv1.Phase_PHASE_UNSPECIFIED:  stages.preparing.ID,
 		deploymentsv1.Phase_PHASE_UPLOADING:    stages.uploading.ID,
@@ -78,7 +79,8 @@ func newDeployReporter(sender *eventSender, stages deployStages) (deploy.Progres
 		return func(m string) { sender.send(stageProgressEvent(id, deploymentsv1.Phase_PHASE_PROVISIONING, m)) }
 	}
 	logf := func(m string) { sender.send(logEvent(m)) }
-	return progress, stageReport, logf
+	degraded := func(need edge.Need, detail string) { sender.send(degradedEvent(need, detail)) }
+	return progress, stageReport, logf, degraded
 }
 
 func newTeardownReporter(sender *eventSender) (func(deploy.StageID) func(string), func(string)) {

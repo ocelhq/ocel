@@ -69,6 +69,11 @@ func realize(ctx context.Context, cfg Config, manifest *deploymentsv1.Manifest, 
 	if err := checkListenerCode(manifest, cfg.ListenerCodePath); err != nil {
 		return Result{}, finishUploading(err)
 	}
+	needs, err := checkNeeds(ctx, cfg, manifest)
+	if err != nil {
+		return Result{}, finishUploading(err)
+	}
+	cfg.needs = needs
 	consumed, err := consumeLinks(ctx, cfg, manifest, log)
 	if err != nil {
 		return Result{}, finishUploading(err)
@@ -807,6 +812,7 @@ func buildDeploymentRecord(cfg Config, manifest *deploymentsv1.Manifest, app *de
 		return edge.DeploymentRecord{}, fmt.Errorf("app %s declares edge routing but its build wrote no %s; rebuild the app", name, edge.RoutingManifestFile)
 	}
 	record.Entry = desc.Entry
+	record.Needs, record.SupportInEffect, record.Waived = cfg.needs.forApp(name)
 	if routed {
 		record.RoutingManifest = routing
 		record.AssetPrefix = appAssetPrefix(builds.coords[name])

@@ -167,10 +167,10 @@ func (s *Server) Deploy(ctx context.Context, req *deploymentsv1.DeployRequest, s
 
 	stages := newDeployStages()
 	appStages, appDeclared := deploy.AppStages(stages.provisioning, manifest)
-	progress, stageReport, logf := newDeployReporter(sender, stages)
+	progress, stageReport, logf, degraded := newDeployReporter(sender, stages)
 	tracer := newEventTracer(sender)
 
-	res, deployErr := s.runDeploy(ctx, req, manifest, edgeFront, stages, appStages, appDeclared, progress, stageReport, logf, tracer)
+	res, deployErr := s.runDeploy(ctx, req, manifest, edgeFront, stages, appStages, appDeclared, progress, stageReport, logf, degraded, tracer)
 	if deployErr != nil {
 		sender.send(failureResult(deployErr))
 	} else {
@@ -192,7 +192,7 @@ func newDeployStages() deployStages {
 	}
 }
 
-func (s *Server) runDeploy(ctx context.Context, req *deploymentsv1.DeployRequest, manifest *deploymentsv1.Manifest, edgeFront edge.Edge, stages deployStages, appStages map[string]deploy.Stage, appDeclared []deploy.Stage, progress deploy.Progress, stageReport func(deploy.StageID) func(string), logf func(string), tracer deploy.Tracer) (deploy.Result, error) {
+func (s *Server) runDeploy(ctx context.Context, req *deploymentsv1.DeployRequest, manifest *deploymentsv1.Manifest, edgeFront edge.Edge, stages deployStages, appStages map[string]deploy.Stage, appDeclared []deploy.Stage, progress deploy.Progress, stageReport func(deploy.StageID) func(string), logf func(string), degraded func(edge.Need, string), tracer deploy.Tracer) (deploy.Result, error) {
 	if tracer != nil {
 		all := append([]deploy.Stage{stages.preparing, stages.uploading, stages.provisioning, stages.finalizing}, appDeclared...)
 		tracer.DeclareStages(true, all...)
@@ -366,19 +366,21 @@ func (s *Server) runDeploy(ctx context.Context, req *deploymentsv1.DeployRequest
 		ISRWriterScriptName:    params.ISRWriter.ScriptName,
 		ISRWriterSeed:          params.ISRWriterSeed,
 
-		Uploader:    s3.NewFromConfig(awscfg),
-		Invoker:     lambda.NewFromConfig(awscfg),
-		Getter:      s3.NewFromConfig(awscfg),
-		CodeUpdater: lambda.NewFromConfig(awscfg),
-		Edge:        edgeFront,
-		DNS:         dnsWriter,
-		DNSAwait:    dns.NewPoller(),
-		Class:       env.GetClass(),
-		Lifecycle:   env.GetLifecycle(),
-		Identity:    env.GetIdentity(),
-		ExpiresAt:   previewExpiry(env.GetLifecycle(), time.Now()),
-		StackState:  priorStackState,
-		Tag:         req.GetTag(),
+		Uploader:      s3.NewFromConfig(awscfg),
+		Invoker:       lambda.NewFromConfig(awscfg),
+		Getter:        s3.NewFromConfig(awscfg),
+		CodeUpdater:   lambda.NewFromConfig(awscfg),
+		Edge:          edgeFront,
+		DNS:           dnsWriter,
+		DNSAwait:      dns.NewPoller(),
+		AllowDegraded: req.GetAllowDegraded(),
+		Degraded:      degraded,
+		Class:         env.GetClass(),
+		Lifecycle:     env.GetLifecycle(),
+		Identity:      env.GetIdentity(),
+		ExpiresAt:     previewExpiry(env.GetLifecycle(), time.Now()),
+		StackState:    priorStackState,
+		Tag:           req.GetTag(),
 
 		Stages: deploy.Stages{
 			Uploading:    stages.uploading,
@@ -611,6 +613,15 @@ func stageProgressEvent(id deploy.StageID, phase deploymentsv1.Phase, message st
 
 func closeStages(tracer deploy.Tracer) {
 	deploy.DeclareStages(tracer, true)
+}
+
+func degradedEvent(need edge.Need, detail string) *deploymentsv1.DeployEvent {
+	return &deploymentsv1.DeployEvent{
+		Event: &deploymentsv1.DeployEvent_Degraded{Degraded: &deploymentsv1.DegradedEvent{
+			Need:   string(need),
+			Detail: detail,
+		}},
+	}
 }
 
 func logEvent(message string) *deploymentsv1.DeployEvent {
