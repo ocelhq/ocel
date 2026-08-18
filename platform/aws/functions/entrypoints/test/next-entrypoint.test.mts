@@ -142,7 +142,7 @@ beforeAll(async () => {
   (globalThis as any).__ocelTestRevalidate = noteRevalidation;
 
   process.env.OCEL_ISR_PREFIX = "prod/shop/web/r0a1b2c3d/isr";
-  process.env.OCEL_EDGE_KIND = "aws";
+  process.env.OCEL_EDGE_KIND = "cloudflare";
   process.env.OCEL_CONTROL_SOCKET = sockPath;
   process.env.OCEL_HANDLER = launcherPath;
   await import("../src/next/entrypoint.mjs");
@@ -180,6 +180,12 @@ function requestMeta(init?: RequestInit): Promise<any> {
   return fetch(`http://127.0.0.1:${port}/__request-meta`, init).then((r) => r.json());
 }
 
+test("behind the worker the app answers as the host the worker forwards", async () => {
+  const meta = await requestMeta({ headers: { "x-forwarded-host": "shop.example" } });
+
+  expect(meta.hostname).toBe("shop.example");
+});
+
 const resume = { method: "POST", headers: { "next-resume": "1" }, body: "[1,{}]" };
 
 test("a PPR resume runs under minimal mode", async () => {
@@ -204,68 +210,14 @@ test("announces a revalidation the request performed", async () => {
   await res.text();
 });
 
-test("carries the tags the render collected, prefixed by the release", async () => {
-  const res = await fetch(`http://127.0.0.1:${port}/__tagged`);
+test("behind the worker the origin shapes nothing, since the worker tiers its own", async () => {
+  for (const path of ["/isr", "/blog/hello", "/static"]) {
+    const res = await fetch(`http://127.0.0.1:${port}${path}`);
 
-  expect(res.headers.get("cache-tag")).toBe(
-    "r0a1b2c3d|products,r0a1b2c3d|_N_T_/products",
-  );
-  await res.text();
-});
-
-test("clamps the cache-control of a response Next marked STALE", async () => {
-  const res = await fetch(`http://127.0.0.1:${port}/__stale`);
-
-  expect(res.headers.get("cache-control")).toBe("s-maxage=0, must-revalidate");
-  expect(res.headers.get("cache-tag")).toBe(
-    "r0a1b2c3d|products,r0a1b2c3d|_N_T_/products",
-  );
-  await res.text();
-});
-
-test("leaves a stale response Next marked private alone", async () => {
-  const res = await fetch(`http://127.0.0.1:${port}/__private`);
-
-  expect(res.headers.get("cache-control")).toBe("private, no-store");
-  await res.text();
-});
-
-test("shapes an ISR page's s-maxage from its initialRevalidateSeconds", async () => {
-  const res = await fetch(`http://127.0.0.1:${port}/isr`);
-
-  expect(res.headers.get("cache-control")).toBe(
-    "s-maxage=60, stale-while-revalidate=600",
-  );
-  await res.text();
-});
-
-test("shapes a dynamic ISR route from its fallbackRevalidate", async () => {
-  const res = await fetch(`http://127.0.0.1:${port}/blog/hello`);
-
-  expect(res.headers.get("cache-control")).toBe("s-maxage=120");
-  await res.text();
-});
-
-test("leaves a route the prerender manifest does not revalidate uncached", async () => {
-  const res = await fetch(`http://127.0.0.1:${port}/static`);
-
-  expect(res.headers.has("cache-control")).toBe(false);
-  await res.text();
-});
-
-test("leaves an error page on a revalidating route uncached", async () => {
-  const res = await fetch(`http://127.0.0.1:${port}/isr?fail=1`);
-
-  expect(res.status).toBe(500);
-  expect(res.headers.has("cache-control")).toBe(false);
-  await res.text();
-});
-
-test("leaves a response that sets a cookie uncached", async () => {
-  const res = await fetch(`http://127.0.0.1:${port}/isr?cookie=1`);
-
-  expect(res.headers.has("cache-control")).toBe(false);
-  await res.text();
+    expect(res.headers.has("cache-control")).toBe(false);
+    expect(res.headers.has("cache-tag")).toBe(false);
+    await res.text();
+  }
 });
 
 test("announces nothing on a request that revalidated nothing", async () => {

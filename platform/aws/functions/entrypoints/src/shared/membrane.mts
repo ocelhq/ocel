@@ -151,18 +151,33 @@ export async function drainWaitUntil(pending: Promise<unknown>[]): Promise<void>
   }
 }
 
-function normalizeLoopbackHeaders(headers: http.IncomingHttpHeaders): void {
-  const forwarded = String(headers["x-forwarded-host"] ?? "").split(",")[0]?.trim();
-  if (forwarded) headers.host = forwarded;
-  if (headers["x-ocel-request-id"] === undefined) delete headers["x-ocel-entry"];
+interface Trust {
+  entry?: boolean;
+  forwarded?: boolean;
+}
+
+function normalizeLoopbackHeaders(
+  headers: http.IncomingHttpHeaders,
+  trust: Trust,
+): void {
+  if (trust.forwarded) {
+    const forwarded = String(headers["x-forwarded-host"] ?? "").split(",")[0]?.trim();
+    if (forwarded) headers.host = forwarded;
+  } else {
+    delete headers["x-forwarded-host"];
+    delete headers["x-forwarded-proto"];
+  }
+  if (!trust.entry && headers["x-ocel-request-id"] === undefined) {
+    delete headers["x-ocel-entry"];
+  }
   delete headers["x-ocel-request-id"];
   delete headers["x-ocel-trace-id"];
 }
 
-function wrapWithOcelContext(invoke: Invoke): http.RequestListener {
+function wrapWithOcelContext(invoke: Invoke, trust: Trust): http.RequestListener {
   return (req, res) => {
     const requestId = req.headers["x-ocel-request-id"];
-    normalizeLoopbackHeaders(req.headers);
+    normalizeLoopbackHeaders(req.headers, trust);
     const start = performance.now();
 
     const pending: Promise<unknown>[] = [];
@@ -198,7 +213,19 @@ function wrapWithOcelContext(invoke: Invoke): http.RequestListener {
 }
 
 export function serveInvoke(invoke: Invoke, onListening?: OnListening): Promise<void> {
-  return startServer(http.createServer(wrapWithOcelContext(invoke)), onListening, true);
+  return startServer(
+    http.createServer(wrapWithOcelContext(invoke, { forwarded: true })),
+    onListening,
+    true,
+  );
+}
+
+export function serveEntry(invoke: Invoke): Promise<void> {
+  return startServer(http.createServer(wrapWithOcelContext(invoke, {})), undefined, true);
+}
+
+export function serveLocal(invoke: Invoke): Promise<number> {
+  return listen(http.createServer(wrapWithOcelContext(invoke, { entry: true, forwarded: true })));
 }
 
 export function serveServer(server: http.Server, onListening?: OnListening): Promise<void> {
@@ -208,7 +235,7 @@ export function serveServer(server: http.Server, onListening?: OnListening): Pro
   const invoke: Invoke = (req, res) => {
     for (const listener of [...lifted]) listener.call(server, req, res);
   };
-  server.on("request", wrapWithOcelContext(invoke));
+  server.on("request", wrapWithOcelContext(invoke, { forwarded: true }));
 
   type Lifted = http.RequestListener & { listener?: http.RequestListener };
 
@@ -282,11 +309,7 @@ export function serveServer(server: http.Server, onListening?: OnListening): Pro
 
 export type OnListening = (port: number) => void;
 
-export function startServer(
-  server: http.Server,
-  onListening?: OnListening,
-  lifecycle = false,
-): Promise<void> {
+function listen(server: http.Server): Promise<number> {
   server.keepAliveTimeout = 0;
   server.headersTimeout = 0;
   return new Promise((resolve, reject) => {
@@ -297,9 +320,17 @@ export function startServer(
         reject(new Error(`unexpected server.address(): ${JSON.stringify(addr)}`));
         return;
       }
-      onListening?.(addr.port);
-      sendControl("server-ready", { httpPort: addr.port, lifecycle });
-      resolve();
+      resolve(addr.port);
     });
   });
+}
+
+export async function startServer(
+  server: http.Server,
+  onListening?: OnListening,
+  lifecycle = false,
+): Promise<void> {
+  const port = await listen(server);
+  onListening?.(port);
+  sendControl("server-ready", { httpPort: port, lifecycle });
 }

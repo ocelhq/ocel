@@ -4,12 +4,15 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "build": "tsc && node scripts/bundle-cache-handler.mjs",
+    "build": "tsc && node scripts/bundle-modules.mjs",
     "typecheck": "tsc --noEmit",
     "test": "vitest run"
   },
   "dependencies": {
-    "@framework/next-cache": "workspace:*"
+    "@framework/next-cache": "workspace:*",
+    "@framework/next-protocol": "workspace:*",
+    "@framework/next-router": "workspace:*",
+    "aws4fetch": "^1.0.20"
   },
   "devDependencies": {
     "@aws-sdk/client-dynamodb": "^3.1086.0",

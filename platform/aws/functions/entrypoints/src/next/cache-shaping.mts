@@ -1,6 +1,7 @@
 import type http from "node:http";
 import { collectTags, notedTags } from "./origin-tags.mjs";
 import type { ProjectManifest } from "./project-manifest.mjs";
+import { routerMode } from "../shared/edge-kind.mjs";
 
 const cacheTagHeader = "cache-tag";
 const nextCacheHeader = "x-nextjs-cache";
@@ -21,10 +22,6 @@ export interface OriginShaping {
   dynamicRoutes: readonly { pattern: RegExp; window: Window }[];
 }
 
-export function shapingEnabled(edgeKind: string | undefined): boolean {
-  return edgeKind !== undefined && edgeKind !== "" && edgeKind !== "cloudflare";
-}
-
 export function releaseOf(isrPrefix: string | undefined): string | null {
   const segments = isrPrefix?.split("/") ?? [];
   if (segments.length !== 5 || segments[4] !== "isr") return null;
@@ -43,7 +40,7 @@ export function originShaping(
   manifest: ProjectManifest | null,
   env: NodeJS.ProcessEnv,
 ): OriginShaping | null {
-  if (!shapingEnabled(env.OCEL_EDGE_KIND)) return null;
+  if (!routerMode(env.OCEL_EDGE_KIND)) return null;
 
   const routes = new Map<string, Window>();
   for (const [route, entry] of Object.entries<any>(manifest?.prerender?.routes ?? {})) {

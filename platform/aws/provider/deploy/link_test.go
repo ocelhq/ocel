@@ -366,7 +366,7 @@ func TestDeliveryScopesToTheAppsThatUseTheResource(t *testing.T) {
 		t.Error("web packages the bucket's address; a compromise of web must expose no credential it never needed")
 	}
 
-	raw, err := varsReadPolicy(appExecutionRole(cfg, "web", nil, nil, bundles["web"], nil, nil, false))
+	raw, err := varsReadPolicy(appExecutionRole(cfg, "web", nil, nil, bundles["web"], nil, nil, false, nil))
 	if err != nil {
 		t.Fatalf("varsReadPolicy: %v", err)
 	}
@@ -377,7 +377,7 @@ func TestDeliveryScopesToTheAppsThatUseTheResource(t *testing.T) {
 		t.Errorf("web's role cannot reach the postgres it does use: %s", raw)
 	}
 
-	raw, err = varsReadPolicy(appExecutionRole(cfg, "api", nil, nil, bundles["api"], nil, nil, false))
+	raw, err = varsReadPolicy(appExecutionRole(cfg, "api", nil, nil, bundles["api"], nil, nil, false, nil))
 	if err != nil {
 		t.Fatalf("varsReadPolicy: %v", err)
 	}

@@ -886,9 +886,14 @@ func runAppStack(ctx context.Context, cfg Config, manifest *deploymentsv1.Manife
 	}
 
 	env := appEnv(manifest, app, baked, cfg)
+	router := builds.routers[name]
 
 	for _, fn := range functions {
-		if err = checkFunctionEnvBudget(fn.GetLogicalName(), functionEnv(env, cfg.transformed.forFunction(fn), caches[name], bytecode[name])); err != nil {
+		declared := env
+		if router.hosts(fn) {
+			declared = router.plannedEntryEnv(env, functions)
+		}
+		if err = checkFunctionEnvBudget(fn.GetLogicalName(), functionEnv(declared, cfg.transformed.forFunction(fn), caches[name], bytecode[name])); err != nil {
 			return nil, nil, err
 		}
 	}
@@ -913,17 +918,23 @@ func runAppStack(ctx context.Context, cfg Config, manifest *deploymentsv1.Manife
 	}
 
 	program := func(pctx *pulumi.Context) error {
-		role, err := newFunctionRole(pctx, roleCoordinate(project, stack), appExecutionRole(cfg, name, caches, bytecode, baked, roleTags, policies, vpcAccess))
+		role, err := newFunctionRole(pctx, roleCoordinate(project, stack), appExecutionRole(cfg, name, caches, bytecode, baked, roleTags, policies, vpcAccess, router))
 		if err != nil {
 			return err
 		}
-		for _, fn := range functions {
-			logical := fn.GetLogicalName()
-			if err := registerFunction(pctx, logical, functionCoordinate(project, stack, logical), fn.GetRouteId(), cfg.transformed.forFunction(fn), artifacts[logical], env, caches[name], bytecode[name], role.Arn); err != nil {
-				return fmt.Errorf("declare %s: %w", logical, err)
-			}
-		}
-		return nil
+		return appStackFunctions{
+			Project:   project,
+			Stack:     stack,
+			Functions: functions,
+			Args:      cfg.transformed.forFunction,
+			Artifacts: artifacts,
+			Env:       env,
+			ISR:       caches[name],
+			Bytecode:  bytecode[name],
+			Router:    router,
+			RoleArn:   role.Arn,
+			RoleName:  role.Name,
+		}.register(pctx)
 	}
 
 	res, upErr := upStack(ctx, cfg, stack, stackTags(cfg, stack, plan.Promotion.PromotionID, id.DeploymentID(), builds.ids[name]), program, log, stage.ID)
