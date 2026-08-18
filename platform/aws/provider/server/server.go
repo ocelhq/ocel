@@ -148,8 +148,9 @@ func (s *Server) callerIdentity(ctx context.Context, api STSAPI, region string) 
 }
 
 type options struct {
-	Region     string   `json:"region"`
-	Transforms []string `json:"transforms"`
+	Region       string            `json:"region"`
+	Transforms   []string          `json:"transforms"`
+	Certificates map[string]string `json:"certificates"`
 }
 
 func parseOptions(raw []byte) (options, error) {

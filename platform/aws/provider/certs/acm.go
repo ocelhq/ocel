@@ -4,7 +4,9 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"errors"
 	"fmt"
+	"slices"
 	"strings"
 	"time"
 
@@ -24,17 +26,52 @@ type ACMAPI interface {
 	RequestCertificate(ctx context.Context, in *acm.RequestCertificateInput, optFns ...func(*acm.Options)) (*acm.RequestCertificateOutput, error)
 	DescribeCertificate(ctx context.Context, in *acm.DescribeCertificateInput, optFns ...func(*acm.Options)) (*acm.DescribeCertificateOutput, error)
 	DeleteCertificate(ctx context.Context, in *acm.DeleteCertificateInput, optFns ...func(*acm.Options)) (*acm.DeleteCertificateOutput, error)
+	ListCertificates(ctx context.Context, in *acm.ListCertificatesInput, optFns ...func(*acm.Options)) (*acm.ListCertificatesOutput, error)
 }
 
 type Certificate struct {
 	ARN        string        `json:"arn,omitempty"`
 	Region     string        `json:"region,omitempty"`
 	Status     string        `json:"status,omitempty"`
+	Domains    []string      `json:"domains,omitempty"`
+	Adopted    bool          `json:"adopted,omitempty"`
 	Validation []edge.Record `json:"validation,omitempty"`
 }
 
 func (c Certificate) Issued() bool {
 	return c.ARN != "" && c.Status == StatusIssued
+}
+
+func (c Certificate) Covers(hostname string) bool {
+	return slices.ContainsFunc(c.Domains, func(covered string) bool { return nameCovers(covered, hostname) })
+}
+
+func (c Certificate) CoversAll(hostnames []string) bool {
+	for _, host := range hostnames {
+		if !c.Covers(host) {
+			return false
+		}
+	}
+	return true
+}
+
+func nameCovers(covered, hostname string) bool {
+	if strings.EqualFold(covered, hostname) {
+		return true
+	}
+	under, wildcard := strings.CutPrefix(covered, "*.")
+	if !wildcard {
+		return false
+	}
+	label, ok := cutSuffixFold(hostname, "."+under)
+	return ok && label != "" && !strings.Contains(label, ".")
+}
+
+func cutSuffixFold(s, suffix string) (string, bool) {
+	if len(s) < len(suffix) || !strings.EqualFold(s[len(s)-len(suffix):], suffix) {
+		return s, false
+	}
+	return s[:len(s)-len(suffix)], true
 }
 
 type Probe struct {
@@ -89,19 +126,24 @@ func waitFor(ctx context.Context, d time.Duration) error {
 	}
 }
 
-func (i Issuer) Request(ctx context.Context, hostname string) (Certificate, error) {
+func (i Issuer) Request(ctx context.Context, hostnames []string) (Certificate, error) {
+	if len(hostnames) == 0 {
+		return Certificate{}, errors.New("request a certificate: no hostname to request one for")
+	}
 	out, err := i.API.RequestCertificate(ctx, &acm.RequestCertificateInput{
-		DomainName:       aws.String(hostname),
-		ValidationMethod: acmtypes.ValidationMethodDns,
-		IdempotencyToken: aws.String(idempotencyToken(hostname)),
+		DomainName:              aws.String(hostnames[0]),
+		SubjectAlternativeNames: hostnames[1:],
+		ValidationMethod:        acmtypes.ValidationMethodDns,
+		IdempotencyToken:        aws.String(idempotencyToken(strings.Join(hostnames, ","))),
 	})
 	if err != nil {
-		return Certificate{}, fmt.Errorf("request a certificate for %s in %s: %w", hostname, i.Region, err)
+		return Certificate{}, fmt.Errorf("request a certificate for %s in %s: %w", strings.Join(hostnames, ", "), i.Region, err)
 	}
 	return Certificate{
-		ARN:    aws.ToString(out.CertificateArn),
-		Region: i.Region,
-		Status: StatusPendingValidation,
+		ARN:     aws.ToString(out.CertificateArn),
+		Region:  i.Region,
+		Status:  StatusPendingValidation,
+		Domains: slices.Clone(hostnames),
 	}, nil
 }
 
@@ -166,6 +208,7 @@ func (i Issuer) describe(ctx context.Context, cert Certificate) (Certificate, er
 		return cert, fmt.Errorf("read certificate %s: %w", cert.ARN, err)
 	}
 	cert.Status = string(out.Certificate.Status)
+	cert.Domains = certificateNames(aws.ToString(out.Certificate.DomainName), out.Certificate.SubjectAlternativeNames)
 	if records := validationRecords(out.Certificate.DomainValidationOptions); len(records) > 0 {
 		cert.Validation = records
 	}
@@ -187,6 +230,19 @@ func validationRecords(options []acmtypes.DomainValidation) []edge.Record {
 	return records
 }
 
+func certificateNames(domainName string, sans []string) []string {
+	names := make([]string, 0, len(sans)+1)
+	if domainName != "" {
+		names = append(names, domainName)
+	}
+	for _, san := range sans {
+		if san != "" && !slices.Contains(names, san) {
+			names = append(names, san)
+		}
+	}
+	return names
+}
+
 func trimRoot(name string) string {
 	return strings.TrimSuffix(name, ".")
 }
@@ -202,13 +258,24 @@ func outstanding(records []edge.Record) string {
 	return strings.Join(wanted, "; ")
 }
 
-func (i Issuer) Discard(ctx context.Context, cert Certificate, say func(string)) {
+func (i Issuer) Discard(ctx context.Context, cert Certificate, say func(string)) error {
 	if i.API == nil || cert.ARN == "" {
-		return
+		return nil
+	}
+	if cert.Adopted {
+		say(fmt.Sprintf("Leaving certificate %s standing: ocel did not request it, so it is not ocel's to delete", cert.ARN))
+		return nil
 	}
 	if _, err := i.API.DeleteCertificate(ctx, &acm.DeleteCertificateInput{
 		CertificateArn: aws.String(cert.ARN),
 	}); err != nil {
 		say(fmt.Sprintf("Leaving certificate %s standing: %v — delete it in ACM once nothing uses it", cert.ARN, err))
+		return fmt.Errorf("delete certificate %s: %w", cert.ARN, err)
 	}
+	return nil
+}
+
+func gone(err error) bool {
+	var missing *acmtypes.ResourceNotFoundException
+	return errors.As(err, &missing)
 }

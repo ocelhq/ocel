@@ -266,6 +266,10 @@ func (a *releaseACM) DescribeCertificate(context.Context, *acm.DescribeCertifica
 	return nil, errors.New("releasing a domain never describes a certificate")
 }
 
+func (a *releaseACM) ListCertificates(context.Context, *acm.ListCertificatesInput, ...func(*acm.Options)) (*acm.ListCertificatesOutput, error) {
+	return nil, errors.New("releasing a domain never lists certificates")
+}
+
 func (a *releaseACM) DeleteCertificate(_ context.Context, in *acm.DeleteCertificateInput, _ ...func(*acm.Options)) (*acm.DeleteCertificateOutput, error) {
 	a.deleted = append(a.deleted, aws.ToString(in.CertificateArn))
 	return &acm.DeleteCertificateOutput{}, nil

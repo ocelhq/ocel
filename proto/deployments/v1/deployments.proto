@@ -38,6 +38,10 @@ service DeploymentService {
 
     rpc ReleaseDomain(ReleaseDomainRequest) returns (stream DeployEvent);
 
+    rpc AddDomain(AddDomainRequest) returns (stream DeployEvent);
+
+    rpc RemoveDomain(RemoveDomainRequest) returns (stream DeployEvent);
+
     rpc SetLink(SetLinkRequest) returns (SetLinkResponse);
 
     rpc RemoveLink(RemoveLinkRequest) returns (RemoveLinkResponse);
@@ -67,6 +71,38 @@ message ReleaseDomainRequest {
   Environment.Class class = 1;
 
   Dns dns = 2;
+}
+
+message AddDomainRequest {
+  bytes options = 1;
+
+  string protocol_version = 2;
+
+  string slug = 3;
+
+  repeated string configured = 4;
+
+  string host = 5;
+
+  string edge_kind = 6;
+
+  Dns dns = 7;
+}
+
+message RemoveDomainRequest {
+  bytes options = 1;
+
+  string protocol_version = 2;
+
+  string slug = 3;
+
+  repeated string configured = 4;
+
+  string host = 5;
+
+  string edge_kind = 6;
+
+  Dns dns = 7;
 }
 
 message Environment {

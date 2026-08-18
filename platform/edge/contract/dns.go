@@ -35,10 +35,31 @@ func (r Record) Instruction() string {
 	return fmt.Sprintf("add a %s record at %s pointing to %s", r.Type, r.Name, r.Value)
 }
 
+func (r Record) ApexNote(zone string) string {
+	if r.Type != RecordTypeCNAME || !apexOf(r.Name, zone) {
+		return ""
+	}
+	return fmt.Sprintf(
+		"%s is an apex name, and a CNAME cannot sit beside the NS and SOA records already there: point it at %s with your DNS provider's ALIAS or ANAME record, or with CNAME flattening",
+		r.Name, r.Value,
+	)
+}
+
+func apexOf(name, zone string) bool {
+	if zone == "" {
+		return strings.Count(name, ".") == 1
+	}
+	return strings.EqualFold(strings.TrimSuffix(name, "."), strings.TrimSuffix(zone, "."))
+}
+
 type DNSWriter interface {
 	EnsureRecords(ctx context.Context, records []Record, say func(string)) ([]Record, error)
 
 	DeleteRecords(ctx context.Context, records []Record) error
+}
+
+type ZoneFinder interface {
+	ZoneOf(ctx context.Context, hostname string) (Zone, error)
 }
 
 type DNSTarget struct {

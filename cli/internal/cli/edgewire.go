@@ -39,6 +39,16 @@ func (e edgeWire) applyToReleaseDomain(req *deploymentsv1.ReleaseDomainRequest) 
 	return req
 }
 
+func (e edgeWire) applyToAddDomain(req *deploymentsv1.AddDomainRequest) *deploymentsv1.AddDomainRequest {
+	req.EdgeKind, req.Dns = string(e.kind), e.dns
+	return req
+}
+
+func (e edgeWire) applyToRemoveDomain(req *deploymentsv1.RemoveDomainRequest) *deploymentsv1.RemoveDomainRequest {
+	req.EdgeKind, req.Dns = string(e.kind), e.dns
+	return req
+}
+
 func (e edgeWire) applyToDestroyProject(req *deploymentsv1.DestroyProjectRequest) *deploymentsv1.DestroyProjectRequest {
 	req.Dns = e.dns
 	return req

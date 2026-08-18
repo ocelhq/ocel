@@ -134,3 +134,33 @@ func TestWrittenRecords(t *testing.T) {
 		t.Errorf("state = %v, want the key gone once nothing is written", empty)
 	}
 }
+
+func TestRecordApexNote(t *testing.T) {
+	t.Parallel()
+
+	for _, tc := range []struct {
+		name   string
+		record Record
+		zone   string
+		apex   bool
+	}{
+		{name: "the zone itself", record: Record{Name: "app.com", Type: RecordTypeCNAME}, zone: "app.com", apex: true},
+		{name: "a multi-label zone", record: Record{Name: "example.co.uk", Type: RecordTypeCNAME}, zone: "example.co.uk", apex: true},
+		{name: "a host under the zone", record: Record{Name: "shop.app.com", Type: RecordTypeCNAME}, zone: "app.com"},
+		{name: "a two-label host under a two-label zone", record: Record{Name: "foo.internal", Type: RecordTypeCNAME}, zone: "bar.internal"},
+		{name: "an address record at the zone", record: Record{Name: "app.com", Type: RecordTypeAAAA}, zone: "app.com"},
+		{name: "no zone in hand falls back to the label count", record: Record{Name: "app.com", Type: RecordTypeCNAME}, apex: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			note := tc.record.ApexNote(tc.zone)
+			if tc.apex && !strings.Contains(note, "ALIAS") {
+				t.Errorf("ApexNote(%q) = %q, want the alias-or-flattening note", tc.zone, note)
+			}
+			if !tc.apex && note != "" {
+				t.Errorf("ApexNote(%q) = %q, want nothing said", tc.zone, note)
+			}
+		})
+	}
+}

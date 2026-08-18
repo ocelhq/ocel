@@ -288,6 +288,192 @@ export default {
 		waitForNoStaleSocket(t, sockPath)
 	})
 
+	t.Run("add renders every step over the configured hosts", func(t *testing.T) {
+		root, sockPath := setUpDeployFixture(t)
+		writeFile(t, filepath.Join(root, "ocel.config.ts"), `
+export default {
+  slug: "test-app",
+  provider: { package: "@ocel/provider-aws", options: {} },
+  domains: { production: ["shop.app.com", "www.app.com"] },
+  dns: { kind: "cloudflare" },
+};
+`)
+		d := defaultDeps()
+		setLoggedIn(&d)
+		t.Setenv(fakeInfraClassEnvVar, "production")
+		t.Setenv(fakeInfraPresentEnvVar, "1")
+
+		var stdout, stderr bytes.Buffer
+		if err := runAddDomain(context.Background(), d, root, "", &stdout, &stderr); err != nil {
+			t.Fatalf("runAddDomain err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
+		}
+		out := stdout.String()
+		for _, want := range []string{
+			"DOMAIN ADD slug=test-app hosts=shop.app.com,www.app.com dns=cloudflare edge=native",
+			"Requesting a certificate for shop.app.com, www.app.com",
+			"Binding shop.app.com to the cloudflare edge",
+			"Writing shop.app.com AAAA 100::",
+			"shop.app.com is served by the cloudflare edge",
+			"Binding www.app.com to the cloudflare edge",
+			"Serving shop.app.com, www.app.com",
+		} {
+			if !strings.Contains(out, want) {
+				t.Errorf("stdout = %q, want it to contain %q", out, want)
+			}
+		}
+		waitForNoStaleSocket(t, sockPath)
+	})
+
+	t.Run("add with a host settles only that one", func(t *testing.T) {
+		root, sockPath := setUpDeployFixture(t)
+		writeFile(t, filepath.Join(root, "ocel.config.ts"), `
+export default {
+  slug: "test-app",
+  provider: { package: "@ocel/provider-aws", options: {} },
+  domains: { production: ["shop.app.com", "www.app.com"] },
+};
+`)
+		d := defaultDeps()
+		setLoggedIn(&d)
+		t.Setenv(fakeInfraClassEnvVar, "production")
+		t.Setenv(fakeInfraPresentEnvVar, "1")
+
+		var stdout, stderr bytes.Buffer
+		if err := runAddDomain(context.Background(), d, root, "www.app.com", &stdout, &stderr); err != nil {
+			t.Fatalf("runAddDomain err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
+		}
+		out := stdout.String()
+		for _, want := range []string{"hosts=www.app.com", "add a proxied (orange cloud) DNS record at www.app.com", "Serving www.app.com"} {
+			if !strings.Contains(out, want) {
+				t.Errorf("stdout = %q, want it to contain %q", out, want)
+			}
+		}
+		if strings.Contains(out, "shop.app.com") {
+			t.Errorf("stdout = %q, want the host that was not named left out", out)
+		}
+		waitForNoStaleSocket(t, sockPath)
+	})
+
+	t.Run("add exits non-zero when a wait times out, naming what is outstanding", func(t *testing.T) {
+		root, sockPath := setUpDeployFixture(t)
+		writeFile(t, filepath.Join(root, "ocel.config.ts"), `
+export default {
+  slug: "test-app",
+  provider: { package: "@ocel/provider-aws", options: {} },
+  domains: { production: "shop.app.com" },
+};
+`)
+		d := defaultDeps()
+		setLoggedIn(&d)
+		t.Setenv(fakeInfraClassEnvVar, "production")
+		t.Setenv(fakeInfraPresentEnvVar, "1")
+		t.Setenv(fakeDomainTimeoutEnvVar, "add a proxied (orange cloud) DNS record at shop.app.com")
+
+		var stdout, stderr bytes.Buffer
+		err := runAddDomain(context.Background(), d, root, "", &stdout, &stderr)
+		if err == nil {
+			t.Fatalf("runAddDomain err = nil, want the timeout surfaced; stdout=%s", stdout.String())
+		}
+		rendered := stdout.String() + stderr.String()
+		for _, want := range []string{"gave up after", "still outstanding", "shop.app.com"} {
+			if !strings.Contains(rendered, want) {
+				t.Errorf("rendered output = %q, want it to contain %q", rendered, want)
+			}
+		}
+		waitForNoStaleSocket(t, sockPath)
+	})
+
+	t.Run("add refuses a host the config does not declare", func(t *testing.T) {
+		root, _ := setUpDeployFixture(t)
+		writeFile(t, filepath.Join(root, "ocel.config.ts"), `
+export default {
+  slug: "test-app",
+  provider: { package: "@ocel/provider-aws", options: {} },
+  domains: { production: "shop.app.com" },
+};
+`)
+		d := defaultDeps()
+		setLoggedIn(&d)
+
+		var stdout, stderr bytes.Buffer
+		err := runAddDomain(context.Background(), d, root, "other.app.com", &stdout, &stderr)
+		if err == nil {
+			t.Fatal("runAddDomain err = nil, want a refusal: no command edits the config")
+		}
+		rendered := stdout.String() + stderr.String()
+		for _, want := range []string{"domains.production", "shop.app.com", "other.app.com"} {
+			if !strings.Contains(rendered, want) {
+				t.Errorf("rendered output = %q, want it to contain %q", rendered, want)
+			}
+		}
+	})
+
+	t.Run("add refuses a project that declares no production hostname", func(t *testing.T) {
+		root, _ := setUpDeployFixture(t)
+		d := defaultDeps()
+		setLoggedIn(&d)
+
+		var stdout, stderr bytes.Buffer
+		err := runAddDomain(context.Background(), d, root, "", &stdout, &stderr)
+		if err == nil {
+			t.Fatal("runAddDomain err = nil, want a refusal with nothing declared")
+		}
+		if !strings.Contains(err.Error(), "domains.production") {
+			t.Errorf("err = %v, want it to name what to declare", err)
+		}
+	})
+
+	t.Run("rm carries the configured set so the provider knows what was dropped", func(t *testing.T) {
+		root, sockPath := setUpDeployFixture(t)
+		writeFile(t, filepath.Join(root, "ocel.config.ts"), `
+export default {
+  slug: "test-app",
+  provider: { package: "@ocel/provider-aws", options: {} },
+  domains: { production: "shop.app.com" },
+  dns: { kind: "cloudflare" },
+};
+`)
+		d := defaultDeps()
+		setLoggedIn(&d)
+		t.Setenv(fakeInfraClassEnvVar, "production")
+		t.Setenv(fakeInfraPresentEnvVar, "1")
+
+		var stdout, stderr bytes.Buffer
+		if err := runDomainRm(context.Background(), d, root, "", &stdout, &stderr); err != nil {
+			t.Fatalf("runDomainRm err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
+		}
+		out := stdout.String()
+		for _, want := range []string{
+			"DOMAIN RM slug=test-app host= configured=shop.app.com dns=cloudflare edge=native",
+			"Removed every hostname this project no longer declares",
+		} {
+			if !strings.Contains(out, want) {
+				t.Errorf("stdout = %q, want it to contain %q", out, want)
+			}
+		}
+		waitForNoStaleSocket(t, sockPath)
+	})
+
+	t.Run("rm with a host unbinds it", func(t *testing.T) {
+		root, sockPath := setUpDeployFixture(t)
+		d := defaultDeps()
+		setLoggedIn(&d)
+		t.Setenv(fakeInfraClassEnvVar, "production")
+		t.Setenv(fakeInfraPresentEnvVar, "1")
+
+		var stdout, stderr bytes.Buffer
+		if err := runDomainRm(context.Background(), d, root, "old.app.com", &stdout, &stderr); err != nil {
+			t.Fatalf("runDomainRm err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
+		}
+		out := stdout.String()
+		for _, want := range []string{"Unbinding old.app.com from the cloudflare edge", "Removed old.app.com"} {
+			if !strings.Contains(out, want) {
+				t.Errorf("stdout = %q, want it to contain %q", out, want)
+			}
+		}
+		waitForNoStaleSocket(t, sockPath)
+	})
+
 	t.Run("release refuses non-interactively without --yes", func(t *testing.T) {
 		root, _ := setUpDeployFixture(t)
 		d := defaultDeps()
