@@ -2,11 +2,12 @@ import { copyFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
+import { runtimeFiles } from "./runtime-files.mjs";
+
 const pkgDir = join(dirname(fileURLToPath(import.meta.url)), "..");
-const names = ["edge-cache-handler.cjs", "next-dispatch.cjs"];
 
 await Promise.all(
-  names.map((name) =>
+  runtimeFiles.map((name) =>
     copyFile(join(pkgDir, "src", name), join(pkgDir, "dist", name)),
   ),
 );

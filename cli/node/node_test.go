@@ -20,6 +20,7 @@ func TestEnsure(t *testing.T) {
 			BuilderPath(dir),
 			AdapterPath(dir),
 			filepath.Join(filepath.Dir(AdapterPath(dir)), "edge-cache-handler.cjs"),
+			filepath.Join(filepath.Dir(AdapterPath(dir)), "edge-node-entry.cjs"),
 			filepath.Join(filepath.Dir(AdapterPath(dir)), "next-dispatch.cjs"),
 			WorkerBundles(dir)["cloudflare"],
 			StoreWorkerBundles(dir)["cloudflare"],

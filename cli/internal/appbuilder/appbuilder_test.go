@@ -656,6 +656,77 @@ func TestBuild(t *testing.T) {
 	})
 }
 
+func TestBuildLearnsTheEdge(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		name         string
+		cfg          func(root string) *projectconfig.Config
+		wantKind     string
+		wantDegraded []string
+	}{
+		{
+			name: "a project naming no edge builds for the origin's own",
+			cfg: func(root string) *projectconfig.Config {
+				return &projectconfig.Config{Dir: root, Apps: []projectconfig.App{{Name: "web", Path: "apps/web", Framework: "next"}}}
+			},
+			wantKind: "native",
+		},
+		{
+			name: "a project naming an edge builds for that edge, with its waivers",
+			cfg: func(root string) *projectconfig.Config {
+				return &projectconfig.Config{
+					Dir:           root,
+					Edge:          &projectconfig.EdgeDescriptor{Kind: "cloudflare"},
+					AllowDegraded: []string{"edge-middleware", "edge-runtime"},
+					Apps:          []projectconfig.App{{Name: "web", Path: "apps/web", Framework: "next"}},
+				}
+			},
+			wantKind:     "cloudflare",
+			wantDegraded: []string{"edge-middleware", "edge-runtime"},
+		},
+		{
+			name: "a project that turned its edge off builds for none",
+			cfg: func(root string) *projectconfig.Config {
+				return &projectconfig.Config{
+					Dir:           root,
+					EdgeDisabled:  true,
+					AllowDegraded: []string{"edge-middleware"},
+					Apps:          []projectconfig.App{{Name: "web", Path: "apps/web", Framework: "next"}},
+				}
+			},
+			wantKind:     "none",
+			wantDegraded: []string{"edge-middleware"},
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			root := t.TempDir()
+			writeBuilder(t, root)
+
+			var got builderRequest
+			builder := Builder{Exec: func(_ context.Context, _ string, _ []string, request []byte, _ io.Writer) error {
+				writePlan(t, filepath.Join(root, scratchDirName, outputDirName))
+				return json.Unmarshal(request, &got)
+			}}
+
+			if err := builder.Build(context.Background(), tc.cfg(root), nil, io.Discard); err != nil {
+				t.Fatalf("Build: %v", err)
+			}
+
+			if got.EdgeKind != tc.wantKind {
+				t.Errorf("edgeKind = %q, want %q", got.EdgeKind, tc.wantKind)
+			}
+			if !slices.Equal(got.AllowDegraded, tc.wantDegraded) {
+				t.Errorf("allowDegraded = %v, want %v", got.AllowDegraded, tc.wantDegraded)
+			}
+		})
+	}
+}
+
 func TestBuildID(t *testing.T) {
 	t.Parallel()
 

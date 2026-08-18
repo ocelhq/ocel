@@ -15,11 +15,29 @@ function middlewareRequestUrl(req) {
   return `${String(proto).split(",")[0].trim()}://${String(host).split(",")[0].trim()}${req.url || "/"}`;
 }
 
+const DROPPED_RESPONSE_HEADERS = new Set([
+  "connection",
+  "content-encoding",
+  "content-length",
+  "date",
+  "keep-alive",
+  "te",
+  "trailer",
+  "transfer-encoding",
+  "upgrade",
+]);
+
+function isDroppedResponseHeader(name) {
+  const lower = name.toLowerCase();
+  return DROPPED_RESPONSE_HEADERS.has(lower) || lower.startsWith("proxy-");
+}
+
 async function writeMiddlewareResponse(response, res) {
   res.statusCode = response.status;
   const names = [];
   for (const [name, value] of response.headers) {
     if (name.toLowerCase() === "set-cookie") continue;
+    if (isDroppedResponseHeader(name)) continue;
     names.push(name);
     res.setHeader(name, value);
   }

@@ -439,6 +439,14 @@ test("seedAssets opens bundle-0 itself when packing produced no bundles", () => 
   expect(bundles[0]!.members).toEqual([]);
 });
 
+test("an empty seedAssets still opens the bundle its seeded entries need", () => {
+  const { bundles } = pack([], {}, { seedAssets: {} });
+
+  expect(bundles).toHaveLength(1);
+  expect(bundles[0]!.name).toBe("bundle-0");
+  expect(bundles[0]!.assets).toEqual({});
+});
+
 test("a seedAssets source missing on disk is reported like any other missing asset", () => {
   const { missingAssets } = packBundles(
     [{ key: "a", assets: { "a.js": "/abs/a" } } satisfies Route],

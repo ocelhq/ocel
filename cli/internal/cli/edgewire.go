@@ -14,12 +14,9 @@ type edgeWire struct {
 }
 
 func edgeSettings(cfg *projectconfig.Config) edgeWire {
-	wire := edgeWire{kind: edge.KindNative, allowDegraded: cfg.AllowDegraded}
-	switch {
-	case cfg.EdgeDisabled:
-		wire.kind = edge.KindNone
-	case cfg.Edge != nil:
-		wire.kind, wire.options = edge.Kind(cfg.Edge.Kind), cfg.Edge.Options
+	wire := edgeWire{kind: cfg.EdgeKind(), allowDegraded: cfg.AllowDegraded}
+	if cfg.Edge != nil {
+		wire.options = cfg.Edge.Options
 	}
 	if cfg.DNS != nil {
 		wire.dns = &deploymentsv1.Dns{Kind: cfg.DNS.Kind, Zone: cfg.DNS.Zone}

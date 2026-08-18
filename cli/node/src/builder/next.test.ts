@@ -74,6 +74,31 @@ describe("buildNext", () => {
     expect(envs.admin?.OCEL_APP_FOLDER).toBe("/admin");
   });
 
+  it("passes the edge kind and the waived needs into the build", async () => {
+    const dir = nextApp({ scripts: { build: "next build" }, dependencies: { next: "16" } });
+    let env: Record<string, string> | undefined;
+    nextRunner.run = async (_command, _args, _cwd, e) => void (env = e);
+
+    await buildNext(
+      { name: "web", cwd: dir },
+      { outDir: "/out", edgeKind: "native", allowDegraded: ["edge-middleware", "edge-runtime"] },
+    );
+
+    expect(env?.OCEL_EDGE_KIND).toBe("native");
+    expect(env?.OCEL_ALLOW_DEGRADED).toBe("edge-middleware,edge-runtime");
+  });
+
+  it("waives nothing when the build request names no edge", async () => {
+    const dir = nextApp({ scripts: { build: "next build" }, dependencies: { next: "16" } });
+    let env: Record<string, string> | undefined;
+    nextRunner.run = async (_command, _args, _cwd, e) => void (env = e);
+
+    await buildNext({ name: "web", cwd: dir }, { outDir: "/out" });
+
+    expect(env?.OCEL_EDGE_KIND).toBe("");
+    expect(env?.OCEL_ALLOW_DEGRADED).toBe("");
+  });
+
   it("binds an app that declares no folder to the project root", async () => {
     const dir = nextApp({ scripts: { build: "next build" }, dependencies: { next: "16" } });
     let env: Record<string, string> | undefined;

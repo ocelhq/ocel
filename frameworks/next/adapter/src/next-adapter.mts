@@ -39,6 +39,21 @@ const dispatchName = "__ocel_dispatch.cjs";
 
 export const middlewareEntryKey = "/_middleware";
 
+const programmableEdgeKind = "cloudflare";
+
+function isProgrammableEdge(kind: string | undefined): boolean {
+  return !kind || kind === programmableEdgeKind;
+}
+
+function waivedNeeds(declared: string | undefined): Set<string> {
+  return new Set(
+    (declared ?? "")
+      .split(",")
+      .map((name) => name.trim())
+      .filter(Boolean),
+  );
+}
+
 function resolveOutputRoot(): string {
   return process.env.OCEL_OUTPUT_DIR || join(process.cwd(), ".ocel/output");
 }
@@ -96,6 +111,15 @@ const adapter = {
 
     const { middleware } = outputs;
     const nodeMiddleware = middleware?.runtime === "nodejs" ? middleware : undefined;
+    const programmableEdge = isProgrammableEdge(process.env.OCEL_EDGE_KIND);
+    const waived = waivedNeeds(process.env.OCEL_ALLOW_DEGRADED);
+    const compileEdgeOnOrigin = (need: string) =>
+      !programmableEdge && waived.has(need);
+    const edgeMiddleware = middleware?.runtime === "edge" ? middleware : undefined;
+    const originEdgeMiddleware = compileEdgeOnOrigin("edge-middleware")
+      ? edgeMiddleware
+      : undefined;
+    const originMiddleware = nodeMiddleware ?? originEdgeMiddleware;
 
     const nextDataStaticFiles = middleware
       ? outputs.staticFiles
@@ -113,16 +137,19 @@ const adapter = {
 
     const functionRoutes = allRoutes.filter((r) => r.runtime === "nodejs");
     const edgeRoutes = allRoutes.filter((r) => r.runtime === "edge");
+    const originEdgeRoutes = compileEdgeOnOrigin("edge-runtime") ? edgeRoutes : [];
+    const hostedEdgeRoutes = compileEdgeOnOrigin("edge-runtime") ? [] : edgeRoutes;
 
     const edgeEntryByOutputId = new Map(
-      edgeRoutes.map((r) => [r.id, edgeEntryOf(r).entryKey]),
+      hostedEdgeRoutes.map((r) => [r.id, edgeEntryOf(r).entryKey]),
     );
+    const edgeRouteIds = new Set(edgeRoutes.map((r) => r.id));
     const inertPrerenders = outputs.prerenders
-      .filter((p) => edgeEntryByOutputId.has(p.parentOutputId))
+      .filter((p) => edgeRouteIds.has(p.parentOutputId))
       .map((p) => p.pathname);
     if (inertPrerenders.length > 0) {
       console.warn(
-        `ocel: revalidate is inert for edge-rendered route(s) ${inertPrerenders.join(", ")} — edge ISR is not supported yet`,
+        `ocel: revalidate is inert for edge-rendered route(s) ${inertPrerenders.join(", ")} — edge ISR is not supported yet, and an edge route compiled into the origin function bypasses the cache handler just the same`,
       );
     }
 
@@ -163,13 +190,36 @@ const adapter = {
       [relative(repoRoot, route.filePath)]: route.filePath,
     });
 
+    const assetSuffix = clientAssetSuffix(config);
+
+    const originEdge = await planOriginEdgeEntries(
+      distDir,
+      [
+        ...originEdgeRoutes,
+        ...(originEdgeMiddleware ? [originEdgeMiddleware] : []),
+      ],
+      appRel,
+      assetSuffix,
+      (edgeEntryKey) =>
+        originEdgeMiddleware &&
+        edgeEntryKey === edgeEntryOf(originEdgeMiddleware).entryKey
+          ? middlewareEntryKey
+          : edgeEntryKey,
+    );
+
+    const seeded = nodeMiddleware !== undefined || originEdge !== null;
+    const seedAssets = {
+      ...(nodeMiddleware ? assetsOf(nodeMiddleware) : {}),
+      ...(originEdge ? originEdge.seedAssets : {}),
+    };
+
     const { bundles, missingAssets } = packBundles(entryRoutes, {
       entryKeyOf: (route) => route.id,
       assetsOf,
       partitionBy: configClass,
-      ...(nodeMiddleware && { seedAssets: assetsOf(nodeMiddleware) }),
+      ...(seeded && { seedAssets }),
     });
-    const nodeMiddlewareBundleId = nodeMiddleware ? bundles[0]!.name : undefined;
+    const seededBundleId = seeded ? bundles[0]!.name : undefined;
 
     const bundleNameByEntryKey = new Map(
       bundles.flatMap((b) =>
@@ -187,6 +237,13 @@ const adapter = {
       return name;
     };
 
+    for (const route of originEdgeRoutes) {
+      const entryKey = edgeEntryOf(route).entryKey;
+      bundleNameByEntryKey.set(entryKey, seededBundleId!);
+      entryKeyByPathname.set(routeKeyOf(route, basePath), entryKey);
+      entryKeyByRouteId.set(route.id, entryKey);
+    }
+
     const rootPathname = basePath || "/";
     const rootEntryKey = entryKeyByPathname.get(rootPathname);
     const entry =
@@ -201,8 +258,6 @@ const adapter = {
     );
 
     const routes = routeTable(entryKeyByPathname, routing.dynamicRoutes ?? []);
-
-    const assetSuffix = clientAssetSuffix(config);
 
     const nextConfigProjection = {
       basePath: config.basePath || "",
@@ -233,10 +288,22 @@ const adapter = {
             "./" + relative(projectDir, member.filePath).split(sep).join("/"),
           ]),
         );
-        if (nodeMiddleware && bundle.name === nodeMiddlewareBundleId) {
+        if (nodeMiddleware && bundle.name === seededBundleId) {
           entries[middlewareEntryKey] =
             "./" +
             relative(projectDir, nodeMiddleware.filePath).split(sep).join("/");
+        }
+        if (originEdge && bundle.name === seededBundleId) {
+          await copyFile(
+            new URL("edge-node-entry.cjs", import.meta.url),
+            join(funcDir, appRel, originEdgeRuntimeName),
+          );
+          for (const [name, body] of Object.entries(originEdge.files)) {
+            const dest = join(funcDir, appRel, name);
+            await mkdir(dirname(dest), { recursive: true });
+            await writeFile(dest, body);
+          }
+          Object.assign(entries, originEdge.entries);
         }
 
         const launcherRel = join(appRel, launcherName);
@@ -291,8 +358,8 @@ const adapter = {
       );
     }
 
-    if (nodeMiddleware) {
-      warnNodeMiddlewareBlastRadius(nodeMiddleware, [
+    if (originMiddleware) {
+      warnOriginMiddlewareBlastRadius(originMiddleware, [
         ...outputs.prerenders.map((p) => p.pathname),
         ...outputs.staticFiles.map((f) => f.pathname),
         ...publicFiles.map((f) => f.pathname),
@@ -302,7 +369,7 @@ const adapter = {
     await emitCacheEntries(outputRoot, prerenderGroups, routeKinds);
     await emitFetchEntries(outputRoot, distDir);
 
-    const functionDispatch = functionRoutes.map((o) => {
+    const functionDispatch = [...functionRoutes, ...originEdgeRoutes].map((o) => {
       const routeKey = routeKeyOf(o, basePath);
       const entryKey = entryKeyByPathname.get(routeKey);
       if (entryKey === undefined) {
@@ -324,7 +391,7 @@ const adapter = {
       };
     });
 
-    const edgeDispatch = edgeRoutes.map((o) => ({
+    const edgeDispatch = hostedEdgeRoutes.map((o) => ({
       key: routeKeyOf(o, basePath),
       original: o.pathname,
       value: { kind: "edge", entryKey: edgeEntryOf(o).entryKey },
@@ -440,12 +507,12 @@ const adapter = {
     const middlewareField: Partial<Pick<RoutingManifest, "middleware">> =
       middleware
         ? {
-            middleware: nodeMiddleware
+            middleware: originMiddleware
               ? {
                   runtime: "nodejs",
-                  id: nodeMiddlewareBundleId!,
+                  id: seededBundleId!,
                   entryKey: middlewareEntryKey,
-                  matchers: nodeMiddleware.config.matchers ?? [],
+                  matchers: originMiddleware.config.matchers ?? [],
                 }
               : {
                   runtime: "edge",
@@ -549,10 +616,14 @@ const adapter = {
       );
     }
 
-    await emitEdgeBundle(outputRoot, distDir, assetSuffix, [
-      ...edgeRoutes,
-      ...(middleware?.runtime === "edge" ? [middleware] : []),
-    ]);
+    await emitEdgeBundle(
+      outputRoot,
+      distDir,
+      assetSuffix,
+      programmableEdge
+        ? [...edgeRoutes, ...(edgeMiddleware ? [edgeMiddleware] : [])]
+        : [],
+    );
   },
 } satisfies NextAdapter;
 
@@ -575,7 +646,7 @@ function primaryEntryKey(
   return weighed[0]?.member.id ?? null;
 }
 
-function warnNodeMiddlewareBlastRadius(
+function warnOriginMiddlewareBlastRadius(
   middleware: { config: { matchers?: { sourceRegex: string }[] } },
   cachedPathnames: readonly string[],
 ): void {
@@ -588,7 +659,7 @@ function warnNodeMiddlewareBlastRadius(
 
   const sample = hit.slice(0, 5);
   console.warn(
-    `ocel: node middleware's matcher covers ${hit.length} cached route(s), including ${sample.join(", ")}${hit.length > sample.length ? ", …" : ""} — each will round-trip to the function region on every request instead of being answered at the edge`,
+    `ocel: the origin middleware's matcher covers ${hit.length} cached route(s), including ${sample.join(", ")}${hit.length > sample.length ? ", …" : ""} — each will round-trip to the function region on every request instead of being answered at the edge`,
   );
 }
 
@@ -736,14 +807,19 @@ async function edgeAssetNames(distDir: string): Promise<Set<string> | null> {
   return names;
 }
 
-async function emitEdgeBundle(
-  outputRoot: string,
-  distDir: string,
-  clientAssetSuffix: string,
-  sources: readonly EdgeOutput[],
-): Promise<void> {
-  if (sources.length === 0) return;
+interface EdgeParts {
+  chunkPathByKey: Map<string, string>;
+  wasmPathByName: Map<string, string>;
+  assetPathByName: Map<string, string>;
+  env: Record<string, string>;
+  entryAssets: Map<string, Set<string>>;
+  handlerExports: Map<string, string>;
+}
 
+async function classifyEdgeSources(
+  distDir: string,
+  sources: readonly EdgeOutput[],
+): Promise<EdgeParts> {
   const assetNames = await edgeAssetNames(distDir);
 
   const isMap = (key: string) => key.endsWith(".map");
@@ -789,6 +865,122 @@ async function emitEdgeBundle(
       env[key] = value;
     }
   }
+
+  return {
+    chunkPathByKey,
+    wasmPathByName,
+    assetPathByName,
+    env,
+    entryAssets,
+    handlerExports,
+  };
+}
+
+const originEdgeDirName = "__ocel_edge";
+
+const originEdgeRuntimeName = "__ocel_edge_entry.cjs";
+
+interface OriginEdgePlan {
+  seedAssets: Record<string, string>;
+  files: Record<string, string>;
+  entries: Record<string, string>;
+}
+
+async function planOriginEdgeEntries(
+  distDir: string,
+  sources: readonly EdgeOutput[],
+  appRel: string,
+  clientAssetSuffix: string,
+  launcherKeyOf: (edgeEntryKey: string) => string,
+): Promise<OriginEdgePlan | null> {
+  if (sources.length === 0) return null;
+
+  const parts = await classifyEdgeSources(distDir, sources);
+
+  const seedAssets: Record<string, string> = {};
+  const seed = (kind: string, name: string, abs: string): string => {
+    const rel = [originEdgeDirName, kind, name].join("/");
+    seedAssets[join(appRel, ...rel.split("/"))] = abs;
+    return `./${rel}`;
+  };
+
+  const chunkRelByKey = new Map<string, string>();
+  for (const [key, abs] of parts.chunkPathByKey) {
+    chunkRelByKey.set(key, seed("c", key, abs));
+  }
+  const assets: Record<string, string> = {};
+  for (const [name, abs] of parts.assetPathByName) {
+    assets[name] = seed("a", name, abs);
+  }
+  const wasm: Record<string, string> = {};
+  for (const [name, abs] of parts.wasmPathByName) {
+    wasm[name] = seed("w", `${name}.wasm`, abs);
+  }
+
+  const files: Record<string, string> = {
+    [`${originEdgeDirName}/package.json`]: JSON.stringify({
+      type: "commonjs",
+    }),
+  };
+  const entries: Record<string, string> = {};
+  let index = 0;
+  for (const edgeEntryKey of [...parts.entryAssets.keys()].sort()) {
+    const launcherKey = launcherKeyOf(edgeEntryKey);
+    const wrapper = `__ocel_edge_${index++}.cjs`;
+    files[wrapper] = renderOriginEdgeWrapper({
+      kind: launcherKey === middlewareEntryKey ? "middleware" : "route",
+      entryKey: edgeEntryKey,
+      handlerExport: parts.handlerExports.get(edgeEntryKey)!,
+      chunks: [...parts.entryAssets.get(edgeEntryKey)!].map(
+        (key) => chunkRelByKey.get(key)!,
+      ),
+      assets,
+      wasm,
+      env: parts.env,
+      clientAssetSuffix,
+    });
+    entries[launcherKey] = `./${wrapper}`;
+  }
+
+  return { seedAssets, files, entries };
+}
+
+function renderOriginEdgeWrapper(spec: {
+  kind: string;
+  entryKey: string;
+  handlerExport: string;
+  chunks: string[];
+  assets: Record<string, string>;
+  wasm: Record<string, string>;
+  env: Record<string, string>;
+  clientAssetSuffix: string;
+}): string {
+  return (
+    [
+      `module.exports = require(${JSON.stringify(`./${originEdgeRuntimeName}`)}).entry(`,
+      `  __dirname,`,
+      `  ${stableStringify(spec)},`,
+      `)`,
+    ].join("\n") + "\n"
+  );
+}
+
+async function emitEdgeBundle(
+  outputRoot: string,
+  distDir: string,
+  clientAssetSuffix: string,
+  sources: readonly EdgeOutput[],
+): Promise<void> {
+  if (sources.length === 0) return;
+
+  const {
+    chunkPathByKey,
+    wasmPathByName,
+    assetPathByName,
+    env,
+    entryAssets,
+    handlerExports,
+  } = await classifyEdgeSources(distDir, sources);
 
   const { idByKey: chunkIdByKey, modules: chunks } = await moduleIds(
     chunkPathByKey,
