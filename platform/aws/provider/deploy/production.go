@@ -198,7 +198,8 @@ func realize(ctx context.Context, cfg Config, manifest *deploymentsv1.Manifest, 
 
 	finalizeStart := time.Now()
 	progress.report(deploymentsv1.Phase_PHASE_FINALIZING, "Staging and promoting", 0, 0)
-	if err := stageAndPromote(ctx, cfg, edgeStack, promotionID, cfg.Tag, promotePointer(cfg), time.Now().Unix(), results); err != nil {
+	promoted, err := stageAndPromote(ctx, cfg, edgeStack, promotionID, cfg.Tag, promotePointer(cfg), time.Now().Unix(), results)
+	if err != nil {
 		spanForStage(cfg.Tracer, cfg.Stages.Finalizing, finalizeStart, time.Now(), err)
 		return Result{StackState: state}, err
 	}
@@ -214,6 +215,7 @@ func realize(ctx context.Context, cfg Config, manifest *deploymentsv1.Manifest, 
 		Functions:   functions,
 		AppURLs:     appURLs(manifest, functions),
 		PromotionID: promotionID,
+		Flip:        promoted.Flip,
 		StackState:  state,
 	}, nil
 }
@@ -306,9 +308,9 @@ func reconciledState(stack edge.EdgeStack, cfg Config) edge.StackState {
 	return stack.State()
 }
 
-func stageAndPromote(ctx context.Context, cfg Config, stack edge.EdgeStack, promotionID, tag, pointer string, now int64, results []appDeployResult) error {
+func stageAndPromote(ctx context.Context, cfg Config, stack edge.EdgeStack, promotionID, tag, pointer string, now int64, results []appDeployResult) (edge.Promotion, error) {
 	if err := writeOriginRecords(ctx, cfg, results); err != nil {
-		return err
+		return edge.Promotion{}, err
 	}
 
 	var failed []string
@@ -319,18 +321,24 @@ func stageAndPromote(ctx context.Context, cfg Config, stack edge.EdgeStack, prom
 			continue
 		}
 		if err := stack.Ledger().PutStaged(ctx, r.Record); err != nil {
-			return fmt.Errorf("stage deployment for %s: %w", r.App, err)
+			return edge.Promotion{}, fmt.Errorf("stage deployment for %s: %w", r.App, err)
 		}
 		builds[r.App] = r.Identity.String()
 	}
 	if len(failed) > 0 {
-		return fmt.Errorf("app-deploy failed for %s; promote aborted, the previous Deployment keeps serving", strings.Join(failed, "; "))
+		return edge.Promotion{}, fmt.Errorf("app-deploy failed for %s; promote aborted, the previous Deployment keeps serving", strings.Join(failed, "; "))
 	}
 
-	if err := stack.Promote(ctx, edge.Promotion{PromotionID: promotionID, Ts: now, Builds: builds, Tag: tag}, pointer); err != nil {
-		return fmt.Errorf("promote %s: %w", promotionID, err)
+	return promote(ctx, cfg.Edge, stack, edge.Promotion{PromotionID: promotionID, Ts: now, Builds: builds, Tag: tag}, pointer)
+}
+
+func promote(ctx context.Context, e edge.Edge, stack edge.EdgeStack, promotion edge.Promotion, pointer string) (edge.Promotion, error) {
+	flip := e.FlipBound()
+	promotion.Flip = &flip
+	if err := stack.Promote(ctx, promotion, pointer); err != nil {
+		return edge.Promotion{}, fmt.Errorf("promote %s: %w", promotion.PromotionID, err)
 	}
-	return nil
+	return promotion, nil
 }
 
 func planEnvironment(cfg Config) *deploymentsv1.Environment {
@@ -360,7 +368,7 @@ func finalizeDeploy(ctx context.Context, cfg Config, specs []edge.StackSpec, pri
 	if err != nil {
 		return prior, err
 	}
-	if err := stageAndPromote(ctx, cfg, stack, promotionID, tag, pointer, now, results); err != nil {
+	if _, err := stageAndPromote(ctx, cfg, stack, promotionID, tag, pointer, now, results); err != nil {
 		return stack.State(), err
 	}
 	return stack.State(), nil

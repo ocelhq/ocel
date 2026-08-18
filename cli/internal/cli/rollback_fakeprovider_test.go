@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	"connectrpc.com/connect"
+	"google.golang.org/protobuf/proto"
 
 	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
 )
@@ -18,7 +19,13 @@ func (s *deployFakeProviderServer) ListPromotions(ctx context.Context, req *depl
 	if err := s.checkToken(ctx); err != nil {
 		return nil, err
 	}
-	return &deploymentsv1.ListPromotionsResponse{Promotions: fakePromotions}, nil
+	history := make([]*deploymentsv1.PromotionHistoryEntry, 0, len(fakePromotions))
+	for _, entry := range fakePromotions {
+		p := proto.Clone(entry.GetPromotion()).(*deploymentsv1.Promotion)
+		p.FlipBound = fakeFlipBound()
+		history = append(history, &deploymentsv1.PromotionHistoryEntry{Promotion: p, Active: entry.GetActive()})
+	}
+	return &deploymentsv1.ListPromotionsResponse{Promotions: history}, nil
 }
 
 func (s *deployFakeProviderServer) Rollback(ctx context.Context, req *deploymentsv1.RollbackRequest) (*deploymentsv1.RollbackResponse, error) {
@@ -55,6 +62,7 @@ func rollbackResponseFor(entry *deploymentsv1.PromotionHistoryEntry) *deployment
 			Ts:          9999,
 			Builds:      p.GetBuilds(),
 			Tag:         p.GetTag(),
+			FlipBound:   fakeFlipBound(),
 		},
 	}
 }

@@ -65,12 +65,16 @@ func (s *Server) Rollback(ctx context.Context, req *deploymentsv1.RollbackReques
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInvalidArgument, err)
 	}
+	edgeFront, err := s.originEdge()
+	if err != nil {
+		return nil, err
+	}
 	stack, err := s.openStack(ctx, opts, req.GetSlug())
 	if err != nil {
 		return nil, err
 	}
 
-	promoted, err := deploy.Rollback(ctx, stack, req.GetTo(), req.GetTag(), time.Now().Unix())
+	promoted, err := deploy.Rollback(ctx, edgeFront, stack, req.GetTo(), req.GetTag(), time.Now().Unix())
 	if err != nil {
 		return nil, err
 	}
@@ -94,5 +98,16 @@ func toPromotionProto(p edge.Promotion) *deploymentsv1.Promotion {
 		Ts:          p.Ts,
 		Builds:      p.Builds,
 		Tag:         p.Tag,
+		FlipBound:   toFlipBoundProto(p.Flip),
+	}
+}
+
+func toFlipBoundProto(flip *edge.FlipBound) *deploymentsv1.FlipBound {
+	if flip == nil {
+		return nil
+	}
+	return &deploymentsv1.FlipBound{
+		TypicalMs: flip.Typical.Milliseconds(),
+		Published: flip.Published,
 	}
 }

@@ -2,7 +2,9 @@ package deployui
 
 import (
 	"bytes"
+	"encoding/json"
 	"fmt"
+	"slices"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -146,7 +148,7 @@ func TestColourIsDecidedFromTheTargetWriter(t *testing.T) {
 
 	r.Building()
 	r.Progress(nil, deploymentsv1.Phase_PHASE_UPLOADING, "uploading", 1, u32(2))
-	r.Deployed("Deployed", []string{"https://app.example.workers.dev"}, "")
+	r.Deployed("Deployed", []string{"https://app.example.workers.dev"}, Flip{}, "")
 
 	if got := out.String(); strings.Contains(got, "\x1b[") {
 		t.Errorf("output = %q, want no ANSI escape codes when the writer is not a terminal", got)
@@ -476,4 +478,94 @@ func TestParentSpanLeavesAStillRunningChildLive(t *testing.T) {
 	if got := out.String(); !strings.Contains(got, failMark+" next-test failed") {
 		t.Errorf("output = %q, want the child's late error span rendered as a failed row", got)
 	}
+}
+
+func TestDeployedFlip(t *testing.T) {
+	t.Run("the human render sets the note off from the urls, indented", func(t *testing.T) {
+		t.Parallel()
+		var out bytes.Buffer
+		r := NewRenderer(&out, FormatHuman, false)
+		t.Cleanup(func() { _ = r.Close() })
+
+		r.Deployed("Deployed", []string{"https://app.example.workers.dev"}, Flip{Note: "propagates within ~5 s"}, "")
+
+		lines := strings.Split(strings.TrimRight(out.String(), "\n"), "\n")
+		idx := slices.Index(lines, "  propagates within ~5 s")
+		if idx < 2 {
+			t.Fatalf("output = %q, want an indented flip note line below the urls", out.String())
+		}
+		if lines[idx-1] != "" {
+			t.Errorf("line before the note = %q, want a blank line separating it from the urls", lines[idx-1])
+		}
+		if lines[idx-2] != "  https://app.example.workers.dev" {
+			t.Errorf("line above the blank = %q, want the app url", lines[idx-2])
+		}
+	})
+
+	t.Run("a note-less bound renders nothing extra", func(t *testing.T) {
+		t.Parallel()
+		var withBound, without bytes.Buffer
+		for _, tc := range []struct {
+			out  *bytes.Buffer
+			flip Flip
+		}{
+			{&withBound, Flip{Bound: &deploymentsv1.FlipBound{}}},
+			{&without, Flip{}},
+		} {
+			r := NewRenderer(tc.out, FormatHuman, false)
+			r.Deployed("Deployed", []string{"https://app.example.workers.dev"}, tc.flip, "")
+			_ = r.Close()
+		}
+		if withBound.String() != without.String() {
+			t.Errorf("output for an instant bound = %q, want it identical to no bound at all (%q)", withBound.String(), without.String())
+		}
+	})
+
+	t.Run("json carries the bound as numbers, never as prose", func(t *testing.T) {
+		t.Parallel()
+		var out bytes.Buffer
+		r := NewRenderer(&out, FormatJSON, false)
+		t.Cleanup(func() { _ = r.Close() })
+
+		r.Deployed("Deployed", nil, Flip{
+			Note:  "propagates within ~5 s",
+			Bound: &deploymentsv1.FlipBound{TypicalMs: 5000, Published: true},
+		}, "")
+
+		if strings.Contains(out.String(), "propagates") {
+			t.Errorf("json = %q, want the machine surface free of rendered English", out.String())
+		}
+		var rec struct {
+			FlipBound *struct {
+				TypicalMs float64 `json:"typicalMs"`
+				Published bool    `json:"published"`
+			} `json:"flipBound"`
+		}
+		if err := json.Unmarshal(bytes.TrimSpace(out.Bytes()), &rec); err != nil {
+			t.Fatalf("stdout = %q is not JSON: %v", out.String(), err)
+		}
+		if rec.FlipBound == nil {
+			t.Fatalf("json = %q, want a structured flipBound", out.String())
+		}
+		if rec.FlipBound.TypicalMs != 5000 || !rec.FlipBound.Published {
+			t.Errorf("flipBound = %+v, want 5000 ms published", *rec.FlipBound)
+		}
+	})
+
+	t.Run("json omits the bound when none was recorded", func(t *testing.T) {
+		t.Parallel()
+		var out bytes.Buffer
+		r := NewRenderer(&out, FormatJSON, false)
+		t.Cleanup(func() { _ = r.Close() })
+
+		r.Deployed("Deployed", nil, Flip{}, "")
+
+		var rec map[string]any
+		if err := json.Unmarshal(bytes.TrimSpace(out.Bytes()), &rec); err != nil {
+			t.Fatalf("stdout = %q is not JSON: %v", out.String(), err)
+		}
+		if _, ok := rec["flipBound"]; ok {
+			t.Errorf("json = %q, want no flipBound key when the provider recorded none", out.String())
+		}
+	})
 }

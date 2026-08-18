@@ -147,6 +147,7 @@ type Result struct {
 	Functions   []*deploymentsv1.FunctionOutput
 	AppURLs     []string
 	PromotionID string
+	Flip        *edge.FlipBound
 	StackState  edge.StackState
 }
 

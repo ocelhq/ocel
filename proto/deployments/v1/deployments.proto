@@ -351,11 +351,17 @@ message CredentialProblem {
   string hint = 3;
 }
 
+message FlipBound {
+  int64 typical_ms = 1;
+  bool published = 2;
+}
+
 message Promotion {
   string promotion_id = 1;
   int64 ts = 2;
   map<string, string> builds = 3;
   string tag = 4;
+  FlipBound flip_bound = 5;
 }
 
 message PromotionHistoryEntry {
@@ -512,6 +518,8 @@ message ResultEvent {
   repeated string app_urls = 4;
 
   string promotion_id = 5;
+
+  FlipBound flip_bound = 8;
 
   reserved 3;
   reserved "outputs";

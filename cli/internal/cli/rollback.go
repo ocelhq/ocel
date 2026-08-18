@@ -94,7 +94,11 @@ func runRollback(ctx context.Context, d deps, cwd string, opts rollbackOptions, 
 		if promoted.GetTag() != "" {
 			tagSuffix = fmt.Sprintf(", tag %s", promoted.GetTag())
 		}
-		fmt.Fprintf(stdout, "Rolled back to promotion %s (created %s%s)\n", promoted.GetPromotionId(), epochOrDash(promoted.GetTs()), tagSuffix)
+		flipSuffix := ""
+		if note := flipNote(promoted.GetFlipBound()); note != "" {
+			flipSuffix = "; " + note
+		}
+		fmt.Fprintf(stdout, "Rolled back to promotion %s (created %s%s)%s\n", promoted.GetPromotionId(), epochOrDash(promoted.GetTs()), tagSuffix, flipSuffix)
 		return nil
 	})
 }

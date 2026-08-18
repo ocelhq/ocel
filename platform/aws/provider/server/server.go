@@ -634,6 +634,7 @@ func deployedResult(res deploy.Result) *deploymentsv1.DeployEvent {
 			Functions:   res.Functions,
 			AppUrls:     res.AppURLs,
 			PromotionId: res.PromotionID,
+			FlipBound:   toFlipBoundProto(res.Flip),
 		}},
 	}
 }
