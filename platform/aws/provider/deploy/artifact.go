@@ -198,7 +198,12 @@ func copyFileInto(w io.Writer, path string) error {
 	return err
 }
 
-func uploadArtifact(ctx context.Context, up ArtifactUploader, bucket, key, contentType string, body func() ([]byte, error)) (transferred bool, err error) {
+type objectHeaders struct {
+	contentType  string
+	cacheControl string
+}
+
+func uploadArtifact(ctx context.Context, up ArtifactUploader, bucket, key string, headers objectHeaders, body func() ([]byte, error)) (transferred bool, err error) {
 	_, err = up.HeadObject(ctx, &s3.HeadObjectInput{
 		Bucket: aws.String(bucket),
 		Key:    aws.String(key),
@@ -213,17 +218,20 @@ func uploadArtifact(ctx context.Context, up ArtifactUploader, bucket, key, conte
 	if err != nil {
 		return false, err
 	}
-	return true, putArtifact(ctx, up, bucket, key, contentType, data)
+	return true, putArtifact(ctx, up, bucket, key, headers, data)
 }
 
-func putArtifact(ctx context.Context, up ArtifactUploader, bucket, key, contentType string, data []byte) error {
+func putArtifact(ctx context.Context, up ArtifactUploader, bucket, key string, headers objectHeaders, data []byte) error {
 	in := &s3.PutObjectInput{
 		Bucket: aws.String(bucket),
 		Key:    aws.String(key),
 		Body:   bytes.NewReader(data),
 	}
-	if contentType != "" {
-		in.ContentType = aws.String(contentType)
+	if headers.contentType != "" {
+		in.ContentType = aws.String(headers.contentType)
+	}
+	if headers.cacheControl != "" {
+		in.CacheControl = aws.String(headers.cacheControl)
 	}
 	if _, err := up.PutObject(ctx, in); err != nil {
 		return fmt.Errorf("upload artifact %s/%s: %w", bucket, key, err)
@@ -231,10 +239,10 @@ func putArtifact(ctx context.Context, up ArtifactUploader, bucket, key, contentT
 	return nil
 }
 
-func tracedUpload(ctx context.Context, up ArtifactUploader, bucket, key, contentType string, body func() ([]byte, error), stats *uploadBatchStats) error {
+func tracedUpload(ctx context.Context, up ArtifactUploader, bucket, key string, headers objectHeaders, body func() ([]byte, error), stats *uploadBatchStats) error {
 	start := time.Now()
 	var size int64
-	transferred, err := uploadArtifact(ctx, up, bucket, key, contentType, func() ([]byte, error) {
+	transferred, err := uploadArtifact(ctx, up, bucket, key, headers, func() ([]byte, error) {
 		data, err := body()
 		if err == nil {
 			size = int64(len(data))
@@ -247,9 +255,9 @@ func tracedUpload(ctx context.Context, up ArtifactUploader, bucket, key, content
 	return err
 }
 
-func tracedPut(ctx context.Context, up ArtifactUploader, bucket, key, contentType string, data []byte, stats *uploadBatchStats) error {
+func tracedPut(ctx context.Context, up ArtifactUploader, bucket, key string, headers objectHeaders, data []byte, stats *uploadBatchStats) error {
 	start := time.Now()
-	err := putArtifact(ctx, up, bucket, key, contentType, data)
+	err := putArtifact(ctx, up, bucket, key, headers, data)
 	if stats != nil {
 		stats.record(uploadOutcome{Bytes: int64(len(data)), Start: start, End: time.Now(), Failed: err != nil, Err: err, Transferred: true})
 	}
@@ -303,7 +311,7 @@ func uploadFunctionArtifacts(ctx context.Context, cfg Config, manifest *deployme
 				return err
 			}
 			key := artifactKey(coord, fn.GetLogicalName(), hash)
-			if err := tracedUpload(ctx, cfg.Uploader, cfg.ArtifactBucket, key, "", func() ([]byte, error) {
+			if err := tracedUpload(ctx, cfg.Uploader, cfg.ArtifactBucket, key, objectHeaders{}, func() ([]byte, error) {
 				return zipDir(dir, overlay)
 			}, stats); err != nil {
 				return err

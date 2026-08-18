@@ -184,7 +184,7 @@ func uploadPrerenderAssets(ctx context.Context, cfg Config, builds appBuilds) er
 	stats := newUploadBatchStats()
 	for _, u := range uploads {
 		g.Go(func() error {
-			return tracedUpload(ctx, u.to.up, u.to.bucket, u.key, "", func() ([]byte, error) {
+			return tracedUpload(ctx, u.to.up, u.to.bucket, u.key, objectHeaders{}, func() ([]byte, error) {
 				return os.ReadFile(u.src)
 			}, stats)
 		})
