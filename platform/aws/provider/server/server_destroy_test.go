@@ -15,9 +15,9 @@ func TestEdgeStackPlan(t *testing.T) {
 	planFor := func(t *testing.T, state edge.StackState) *deploymentsv1.EdgeStackPlan {
 		t.Helper()
 		s := &Server{}
-		edgeFront, err := s.edge()
+		edgeFront, err := s.originEdge()
 		if err != nil {
-			t.Fatalf("edge() error = %v", err)
+			t.Fatalf("originEdge() error = %v", err)
 		}
 		plan, err := s.edgeStackPlan(edgeFront, state, "shop")
 		if err != nil {

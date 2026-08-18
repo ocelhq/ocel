@@ -55,9 +55,7 @@ type memo struct {
 	deployed map[string]*entry[bootstrap.Deployed]
 	identity map[string]*entry[callerIdentity]
 
-	edgeOnce sync.Once
-	edge     edge.Edge
-	edgeErr  error
+	edgeByKind map[string]*entry[edge.Edge]
 }
 
 type entry[T any] struct {
@@ -109,15 +107,21 @@ func (m *memo) forgetDeployed() {
 	m.deployed = nil
 }
 
-func (s *Server) edge() (edge.Edge, error) {
-	s.memo.edgeOnce.Do(func() {
-		kind := s.edgeKind
-		if kind == "" {
-			kind = edge.KindCloudflare
-		}
-		s.memo.edge, s.memo.edgeErr = edges.EdgeFor(kind, edges.Deps{})
+func (m *memo) edgeFor(kind edge.Kind) *entry[edge.Edge] {
+	return entryFor(m, &m.edgeByKind, string(kind))
+}
+
+func (s *Server) edge(kind edge.Kind) (edge.Edge, error) {
+	if kind == "" {
+		kind = edge.KindCloudflare
+	}
+	return s.memo.edgeFor(kind).resolve(func() (edge.Edge, error) {
+		return edges.EdgeFor(kind, edges.Deps{})
 	})
-	return s.memo.edge, s.memo.edgeErr
+}
+
+func (s *Server) originEdge() (edge.Edge, error) {
+	return s.edge(s.edgeKind)
 }
 
 func (s *Server) deployed(ctx context.Context, api bootstrap.CFNDescriber, region string, preview bool) (bootstrap.Deployed, error) {
@@ -153,6 +157,10 @@ func (s *Server) Deploy(ctx context.Context, req *deploymentsv1.DeployRequest, s
 	if err := validateManifest(manifest); err != nil {
 		return connect.NewError(connect.CodeInvalidArgument, err)
 	}
+	edgeFront, edgeErr := s.edge(edge.Kind(req.GetEdgeKind()))
+	if edgeErr != nil {
+		return connect.NewError(connect.CodeInvalidArgument, edgeErr)
+	}
 	sender := newEventSender(ctx, stream.Send)
 	defer func() { err = sender.close() }()
 
@@ -161,7 +169,7 @@ func (s *Server) Deploy(ctx context.Context, req *deploymentsv1.DeployRequest, s
 	progress, stageReport, logf := newDeployReporter(sender, stages)
 	tracer := newEventTracer(sender)
 
-	res, deployErr := s.runDeploy(ctx, req, manifest, stages, appStages, appDeclared, progress, stageReport, logf, tracer)
+	res, deployErr := s.runDeploy(ctx, req, manifest, edgeFront, stages, appStages, appDeclared, progress, stageReport, logf, tracer)
 	if deployErr != nil {
 		sender.send(failureResult(deployErr))
 	} else {
@@ -183,7 +191,7 @@ func newDeployStages() deployStages {
 	}
 }
 
-func (s *Server) runDeploy(ctx context.Context, req *deploymentsv1.DeployRequest, manifest *deploymentsv1.Manifest, stages deployStages, appStages map[string]deploy.Stage, appDeclared []deploy.Stage, progress deploy.Progress, stageReport func(deploy.StageID) func(string), logf func(string), tracer deploy.Tracer) (deploy.Result, error) {
+func (s *Server) runDeploy(ctx context.Context, req *deploymentsv1.DeployRequest, manifest *deploymentsv1.Manifest, edgeFront edge.Edge, stages deployStages, appStages map[string]deploy.Stage, appDeclared []deploy.Stage, progress deploy.Progress, stageReport func(deploy.StageID) func(string), logf func(string), tracer deploy.Tracer) (deploy.Result, error) {
 	if tracer != nil {
 		all := append([]deploy.Stage{stages.preparing, stages.uploading, stages.provisioning, stages.finalizing}, appDeclared...)
 		tracer.DeclareStages(true, all...)
@@ -300,11 +308,6 @@ func (s *Server) runDeploy(ctx context.Context, req *deploymentsv1.DeployRequest
 		return deploy.Result{}, finishPreparing(err)
 	}
 
-	edgeFront, err := s.edge()
-	if err != nil {
-		return deploy.Result{}, finishPreparing(err)
-	}
-
 	priorStackState := params.StackState
 	stateTableARN := fmt.Sprintf("arn:aws:dynamodb:%s:%s:table/%s", awscfg.Region, account, deployed.StateTable)
 
@@ -417,6 +420,11 @@ func previewExpiry(lifecycle deploymentsv1.Environment_Lifecycle, now time.Time)
 }
 
 func (s *Server) Bootstrap(ctx context.Context, req *deploymentsv1.BootstrapRequest, stream *connect.ServerStream[deploymentsv1.DeployEvent]) error {
+	edgeFront, err := s.edge(edge.Kind(req.GetEdgeKind()))
+	if err != nil {
+		return connect.NewError(connect.CodeInvalidArgument, err)
+	}
+
 	progress := func(m string) { _ = stream.Send(progressEvent(m)) }
 	logf := func(m string) { _ = stream.Send(logEvent(m)) }
 
@@ -446,7 +454,7 @@ func (s *Server) Bootstrap(ctx context.Context, req *deploymentsv1.BootstrapRequ
 		Source: bootstrap.ReleaseSource{},
 		Store:  s3.NewFromConfig(awscfg),
 	}
-	if err := s.runBootstrap(ctx, bootstrapRunner(preview), cfn, ssmClient, iamClient, artifact, progress, logf); err != nil {
+	if err := s.runBootstrap(ctx, bootstrapRunner(preview), cfn, ssmClient, iamClient, edgeFront, artifact, progress, logf); err != nil {
 		return stream.Send(failureResult(err))
 	}
 	return stream.Send(okResult())
@@ -461,11 +469,7 @@ func bootstrapRunner(preview bool) bootstrapRun {
 	return bootstrap.Run
 }
 
-func (s *Server) runBootstrap(ctx context.Context, run bootstrapRun, cfn bootstrap.CFNAPI, ssmClient bootstrap.SSMAPI, iamClient bootstrap.IAMAPI, artifact bootstrap.Artifacts, progress, logf func(string)) error {
-	edgeFront, err := s.edge()
-	if err != nil {
-		return err
-	}
+func (s *Server) runBootstrap(ctx context.Context, run bootstrapRun, cfn bootstrap.CFNAPI, ssmClient bootstrap.SSMAPI, iamClient bootstrap.IAMAPI, edgeFront edge.Edge, artifact bootstrap.Artifacts, progress, logf func(string)) error {
 	if err := run(ctx, cfn, ssmClient, iamClient, edgeFront, artifact, progress, logf); err != nil {
 		return err
 	}

@@ -345,6 +345,9 @@ func (r *Runner) driveStream(rpc string, stream *connect.ServerStreamForClient[d
 	}
 
 	if err := stream.Err(); err != nil {
+		if connect.CodeOf(err) == connect.CodeInvalidArgument {
+			return fmt.Errorf("providerrunner: call %s: %w", rpc, err)
+		}
 		return fmt.Errorf("providerrunner: provider connection lost: %w", err)
 	}
 	return fmt.Errorf("providerrunner: provider closed the %s stream without a result", rpc)

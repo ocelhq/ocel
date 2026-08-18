@@ -33,7 +33,7 @@ func (s *Server) openStackFor(state edge.StackState) (edge.EdgeStack, error) {
 	if len(state) == 0 {
 		return nil, errNoProductionDeploy
 	}
-	edgeFront, err := s.edge()
+	edgeFront, err := s.originEdge()
 	if err != nil {
 		return nil, err
 	}

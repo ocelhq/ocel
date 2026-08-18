@@ -51,7 +51,7 @@ func TestRunDeployDeclaresTheStagePlanBeforeAnyWork(t *testing.T) {
 
 	stages := newDeployStages()
 	appStages, appDeclared := deploy.AppStages(stages.provisioning, req.GetManifest())
-	_, err := s.runDeploy(context.Background(), req, req.GetManifest(), stages, appStages, appDeclared, noopProgress, noopStageReport, noopLog, tracer)
+	_, err := s.runDeploy(context.Background(), req, req.GetManifest(), nil, stages, appStages, appDeclared, noopProgress, noopStageReport, noopLog, tracer)
 	if err == nil {
 		t.Fatal("runDeploy() error = nil, want the parseOptions failure")
 	}

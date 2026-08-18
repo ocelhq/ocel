@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	connect "connectrpc.com/connect"
@@ -11,6 +12,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/channel"
 	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
 	"github.com/ocelhq/ocel/pkg/proto/deployments/v1/deploymentsv1connect"
+	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
 const testToken = "test-session-token"
@@ -107,6 +109,56 @@ func TestDeploy(t *testing.T) {
 			var connectErr *connect.Error
 			if !errors.As(err, &connectErr) || connectErr.Code() != tc.want {
 				t.Fatalf("Deploy() err = %v, want %v", err, tc.want)
+			}
+		})
+	}
+}
+
+func TestUnsupportedEdgeKind(t *testing.T) {
+	t.Parallel()
+
+	calls := []struct {
+		name string
+		call func(deploymentsv1connect.DeploymentServiceClient) error
+	}{
+		{"Deploy", func(client deploymentsv1connect.DeploymentServiceClient) error {
+			stream, err := client.Deploy(context.Background(), &deploymentsv1.DeployRequest{
+				Manifest: wellFormedManifest(),
+				EdgeKind: string(edge.KindNative),
+				Dns:      &deploymentsv1.Dns{Kind: "cloudflare", Zone: "acme.com"},
+			})
+			if err != nil {
+				return err
+			}
+			_, err = drainStream(stream)
+			return err
+		}},
+		{"Bootstrap", func(client deploymentsv1connect.DeploymentServiceClient) error {
+			stream, err := client.Bootstrap(context.Background(), &deploymentsv1.BootstrapRequest{
+				EdgeKind: string(edge.KindNative),
+				Dns:      &deploymentsv1.Dns{Kind: "cloudflare", Zone: "acme.com"},
+			})
+			if err != nil {
+				return err
+			}
+			_, err = drainStream(stream)
+			return err
+		}},
+	}
+	for _, tc := range calls {
+		t.Run(tc.name+" refuses an edge this origin cannot front, naming the ones it can", func(t *testing.T) {
+			t.Parallel()
+
+			err := tc.call(newTestClient(t, testToken))
+
+			var connectErr *connect.Error
+			if !errors.As(err, &connectErr) || connectErr.Code() != connect.CodeInvalidArgument {
+				t.Fatalf("%s() err = %v, want %v", tc.name, err, connect.CodeInvalidArgument)
+			}
+			for _, want := range []string{string(edge.KindNative), string(edge.KindCloudflare)} {
+				if !strings.Contains(err.Error(), want) {
+					t.Errorf("err = %v, want it to name %q", err, want)
+				}
 			}
 		})
 	}

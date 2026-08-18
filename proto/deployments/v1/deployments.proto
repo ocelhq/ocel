@@ -171,6 +171,14 @@ message DeployRequest {
   Environment environment = 4;
 
   string tag = 5;
+
+  string edge_kind = 6;
+
+  bytes edge_options = 7;
+
+  Dns dns = 8;
+
+  repeated string allow_degraded = 9;
 }
 
 message BootstrapRequest {
@@ -179,6 +187,20 @@ message BootstrapRequest {
   string protocol_version = 2;
 
   Environment.Class class = 3;
+
+  string edge_kind = 4;
+
+  bytes edge_options = 5;
+
+  Dns dns = 6;
+
+  repeated string allow_degraded = 7;
+}
+
+message Dns {
+  string kind = 1;
+
+  string zone = 2;
 }
 
 message DestroyPreviewRequest {

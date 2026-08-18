@@ -135,10 +135,12 @@ describe("previewLabelProblem", () => {
 });
 
 describe("renderOcelConfig", () => {
-  it("declares the AWS provider and every smoke app with its framework", () => {
+  it("declares the AWS provider, the cloudflare edge and every smoke app with its framework", () => {
     const config = renderOcelConfig({ slug: "e2en-7" });
     expect(config).toContain(`slug: "e2en-7"`);
     expect(config).toContain("awsProvider()");
+    expect(config).toContain(`import { cfEdge } from "ocel/edge";`);
+    expect(config).toContain("edge: cfEdge()");
     for (const app of SMOKE_APPS) {
       expect(config).toContain(`name: "${app.name}"`);
       expect(config).toContain(`framework: "${app.framework}"`);

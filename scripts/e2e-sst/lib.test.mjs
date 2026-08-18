@@ -139,6 +139,11 @@ describe("renderOcelConfig", () => {
     expect(config).not.toContain("mode:");
   });
 
+  it("names the cloudflare edge, the only one this origin fronts deployments with", () => {
+    expect(config).toContain(`import { cfEdge } from "ocel/edge";`);
+    expect(config).toContain("edge: cfEdge()");
+  });
+
   it("reads the custom record through a transform module, never through `links`", () => {
     expect(config).toContain(`transforms: ["${TRANSFORM_MODULE}"]`);
     expect(config).not.toContain(`"${CUSTOM_LINK_NAME}"`);
