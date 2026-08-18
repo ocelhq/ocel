@@ -1,4 +1,5 @@
 import { lookup as dnsLookup, type LookupAddress } from "node:dns";
+import { isIP } from "node:net";
 import { Agent, request } from "undici";
 import { isReachableAddress } from "./addresses.mjs";
 import type { CompiledImageConfig } from "./contract.mjs";
@@ -36,7 +37,10 @@ class BlockedAddressError extends Error {
   }
 }
 
-export function guardedLookup(deps: UpstreamDeps): typeof dnsLookup {
+export function guardedLookup(
+  deps: UpstreamDeps,
+  allowLocalIP = false,
+): typeof dnsLookup {
   const resolve = deps.lookup ?? dnsLookup;
   const isReachable = deps.isReachable ?? isReachableAddress;
 
@@ -46,7 +50,9 @@ export function guardedLookup(deps: UpstreamDeps): typeof dnsLookup {
     resolve(hostname, opts, (err: NodeJS.ErrnoException | null, addresses: unknown) => {
       if (err) return callback(err, "", 0);
       const list = (addresses as LookupAddress[]) ?? [];
-      const reachable = list.filter((entry) => isReachable(entry.address));
+      const reachable = allowLocalIP
+        ? list
+        : list.filter((entry) => isReachable(entry.address));
       if (reachable.length === 0) {
         return callback(new BlockedAddressError(hostname), "", 0);
       }
@@ -57,16 +63,18 @@ export function guardedLookup(deps: UpstreamDeps): typeof dnsLookup {
   }) as typeof dnsLookup;
 }
 
-function agentFor(deps: UpstreamDeps): Agent {
+function agentFor(deps: UpstreamDeps, allowLocalIP: boolean): Agent {
   return new Agent({
-    connect: { lookup: guardedLookup(deps) },
+    connect: { lookup: guardedLookup(deps, allowLocalIP) },
     connectTimeout: UPSTREAM_TIMEOUT_MS,
     headersTimeout: UPSTREAM_TIMEOUT_MS,
     bodyTimeout: UPSTREAM_TIMEOUT_MS,
   });
 }
 
-let defaultAgent: Agent | undefined;
+let guardedAgent: Agent | undefined;
+
+let localAgent: Agent | undefined;
 
 export async function fetchUpstream(
   href: string,
@@ -74,11 +82,35 @@ export async function fetchUpstream(
   deps: UpstreamDeps = {},
 ): Promise<UpstreamImage> {
   const injected = deps.lookup !== undefined || deps.isReachable !== undefined;
-  const agent = injected ? agentFor(deps) : (defaultAgent ??= agentFor(deps));
+  const allowLocalIP = config.dangerouslyAllowLocalIP;
+  const agent = injected
+    ? agentFor(deps, allowLocalIP)
+    : allowLocalIP
+      ? (localAgent ??= agentFor(deps, true))
+      : (guardedAgent ??= agentFor(deps, false));
   try {
-    return await follow(href, config, agent);
+    return await follow(
+      href,
+      config,
+      agent,
+      deps.isReachable ?? isReachableAddress,
+    );
   } finally {
     if (injected) await agent.close().catch(() => {});
+  }
+}
+
+function assertReachableLiteral(
+  href: string,
+  isReachable: (address: string) => boolean,
+): void {
+  const hostname = new URL(href).hostname;
+  const bare =
+    hostname.startsWith("[") && hostname.endsWith("]")
+      ? hostname.slice(1, -1)
+      : hostname;
+  if (isIP(bare) !== 0 && !isReachable(hostname)) {
+    throw upstreamFailure(`unreachable address ${hostname}`);
   }
 }
 
@@ -86,6 +118,7 @@ async function follow(
   href: string,
   config: CompiledImageConfig,
   agent: Agent,
+  isReachable: (address: string) => boolean,
 ): Promise<UpstreamImage> {
   const signal = AbortSignal.timeout(UPSTREAM_TIMEOUT_MS);
   const limit = config.maximumResponseBody;
@@ -93,6 +126,9 @@ async function follow(
 
   let current = href;
   for (let hop = 0; ; hop++) {
+    if (!config.dangerouslyAllowLocalIP) {
+      assertReachableLiteral(current, isReachable);
+    }
     let response;
     try {
       response = await request(current, {
