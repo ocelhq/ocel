@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { refreshHeader } from "@framework/next-cache";
 
 import {
   deltaSeconds,
@@ -384,6 +385,7 @@ describe("the R2 tier's admitted refresh", () => {
         "x-ocel-entry": "app/blog/page",
         "x-forwarded-host": "app.example",
         "x-forwarded-proto": "https",
+        [refreshHeader]: "1000",
       },
       expect: null,
       isrPrefix,

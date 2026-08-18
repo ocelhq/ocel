@@ -749,6 +749,27 @@ describe("serveCached", () => {
     expect(refresh.calls).toBe(1);
   });
 
+  it("hands the blocking origin the lastModified of the entry being refreshed", async () => {
+    const clock = { ms: 0 };
+    const deps = testDeps(clock);
+    const origin = countingOrigin("s-maxage=60");
+    const held: number[] = [];
+    const blocking = (async (refreshing: number) => {
+      held.push(refreshing);
+      return origin();
+    }) as unknown as CountingOrigin;
+    const t = target("held-generation", { revalidate: 1, expiration: 100 });
+
+    await serveCached(req(), t, deps, origin, blocking);
+    await deps.flush();
+
+    clock.ms = 61_000;
+    await serveCached(req(), t, deps, origin, blocking);
+    await deps.flush();
+
+    expect(held).toEqual([0]);
+  });
+
   it("hands the refresh the entry's remaining stale window, so the wait cannot outlive it", async () => {
     const clock = { ms: 0 };
     const bounds: number[] = [];
@@ -993,6 +1014,37 @@ describe("serveCached", () => {
       clock.ms = 5_000;
       const served = await serveCached(req(), t, deps, lambda, lambda);
       expect(served.headers.get("x-ocel-cache")).toBe("MISS");
+      expect(await served.text()).toBe("generation 2");
+    });
+
+    it("is stored when a refresh brings it back, because regeneration runs behind it", async () => {
+      const clock = { ms: 0 };
+      const deps = testDeps(clock);
+      let generation = 1;
+      const lambda = (async () =>
+        new Response(`generation ${generation}`, {
+          headers: {
+            "cache-control": "s-maxage=1",
+            "x-nextjs-cache": generation === 1 ? "HIT" : "STALE",
+          },
+        })) as unknown as CountingOrigin;
+      const t = target("json-refreshed", {
+        revalidate: 1,
+        expiration: 100,
+        suppressed: true,
+      });
+
+      await serveCached(req(), t, deps, lambda, lambda);
+      await deps.flush();
+
+      generation = 2;
+      clock.ms = 5_000;
+      await serveCached(req(), t, deps, lambda, lambda);
+      await deps.flush();
+
+      clock.ms = 5_100;
+      const served = await serveCached(req(), t, deps, lambda, lambda);
+      expect(served.headers.get("x-ocel-cache")).toBe("HIT");
       expect(await served.text()).toBe("generation 2");
     });
 

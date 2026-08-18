@@ -105,6 +105,8 @@ export function entryObjectKey(isrPrefix: string, key: string): string | null {
 
 export const entryMissHeader = "ocel-isr-entry-miss";
 
+export const refreshHeader = "x-ocel-refresh";
+
 export function tagsOf(value: Record<string, any>, ctx: any): string[] {
   if (value?.kind === "FETCH") {
     return [
