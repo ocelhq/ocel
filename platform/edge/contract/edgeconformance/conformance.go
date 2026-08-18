@@ -24,6 +24,7 @@ func promote(t *testing.T, stack edge.EdgeStack, promotion edge.Promotion, point
 			Identity:      identity,
 			Entry:         "/",
 			EntryFunction: "conformance-prod-" + app + "-r0a1b2c3d",
+			FunctionURLs:  map[string]string{"/": "https://conformance-" + app + ".example.com/"},
 		}
 		if err := stack.Ledger().PutStaged(ctx, staged); err != nil {
 			t.Fatalf("PutStaged(%s/%s): %v", app, identity, err)

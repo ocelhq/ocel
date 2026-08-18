@@ -50,6 +50,9 @@ func TestConformance(t *testing.T) {
 			return bootstrapped(t, newWorld()), testSpec()
 		},
 		Hostname: boundHost,
+		Previews: func(t *testing.T) (edge.Edge, edge.StackSpec, edge.PreviewWildcardSpec) {
+			return previewBootstrapped(t, newWorld()), previewStackSpec(), previewWildcardSpec()
+		},
 	})
 }
 

@@ -43,6 +43,7 @@ const (
 	stackKeyCachePolicy   = "cachePolicyId"
 	stackKeyHeadersPolicy = "responseHeadersPolicyId"
 	stackKeyOAC           = "originAccessControlId"
+	stackKeyPreviewBase   = "previewBase"
 )
 
 type CloudFrontAPI interface {
@@ -80,6 +81,7 @@ type CloudFrontAPI interface {
 type KeyValueStoreAPI interface {
 	DescribeKeyValueStore(context.Context, *cloudfrontkeyvaluestore.DescribeKeyValueStoreInput, ...func(*cloudfrontkeyvaluestore.Options)) (*cloudfrontkeyvaluestore.DescribeKeyValueStoreOutput, error)
 	GetKey(context.Context, *cloudfrontkeyvaluestore.GetKeyInput, ...func(*cloudfrontkeyvaluestore.Options)) (*cloudfrontkeyvaluestore.GetKeyOutput, error)
+	ListKeys(context.Context, *cloudfrontkeyvaluestore.ListKeysInput, ...func(*cloudfrontkeyvaluestore.Options)) (*cloudfrontkeyvaluestore.ListKeysOutput, error)
 	UpdateKeys(context.Context, *cloudfrontkeyvaluestore.UpdateKeysInput, ...func(*cloudfrontkeyvaluestore.Options)) (*cloudfrontkeyvaluestore.UpdateKeysOutput, error)
 }
 
@@ -252,6 +254,9 @@ func (p *provider) Reconcile(ctx context.Context, spec edge.StackSpec, prior edg
 	next[stackKeyCachePolicy] = set.cachePolicy
 	next[stackKeyHeadersPolicy] = set.headersPolicy
 	next[stackKeyOAC] = set.originAccessControl
+	if base := next[edge.StackKeyGlobalPreview]; base != "" {
+		next[stackKeyPreviewBase] = base
+	}
 
 	s := &stack{p: p, state: next}
 	if err := s.ledger(c).EnsureSchema(ctx); err != nil {
@@ -298,12 +303,6 @@ func (p *provider) DomainOwner(ctx context.Context, hostname string) (string, er
 	}
 	return "", nil
 }
-
-func (p *provider) ReconcilePreviewWildcard(context.Context, edge.PreviewWildcardSpec) (string, error) {
-	return "", nil
-}
-
-func (p *provider) DestroyPreviewWildcard(context.Context, string) error { return nil }
 
 func distributionName(slug string, class edge.Class) string {
 	return naming.Join(naming.FieldSeparator, namespace, slug, string(class))

@@ -2,6 +2,7 @@ package cloudfront
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"maps"
 	"slices"
@@ -588,8 +589,23 @@ func (f *fakeCloudFront) GetDistributionConfig(_ context.Context, in *cloudfront
 	}
 	return &cloudfront.GetDistributionConfigOutput{
 		ETag:               aws.String(held.etag),
-		DistributionConfig: held.config,
+		DistributionConfig: clonedConfig(held.config),
 	}, nil
+}
+
+func clonedConfig(config *cftypes.DistributionConfig) *cftypes.DistributionConfig {
+	if config == nil {
+		return nil
+	}
+	encoded, err := json.Marshal(config)
+	if err != nil {
+		panic(err)
+	}
+	var cloned cftypes.DistributionConfig
+	if err := json.Unmarshal(encoded, &cloned); err != nil {
+		panic(err)
+	}
+	return &cloned
 }
 
 func (f *fakeCloudFront) UpdateDistribution(_ context.Context, in *cloudfront.UpdateDistributionInput, _ ...func(*cloudfront.Options)) (*cloudfront.UpdateDistributionOutput, error) {
@@ -644,6 +660,8 @@ type fakeKeyValueStore struct {
 	items       map[string]map[string]string
 	conflicts   int
 	updateErr   error
+	listErr     error
+	listPage    int
 	throttles   int
 	describeErr error
 	calls       []string
@@ -738,6 +756,37 @@ func (f *fakeKeyValueStore) GetKey(_ context.Context, in *cloudfrontkeyvaluestor
 		return nil, &kvstypes.ResourceNotFoundException{Message: aws.String("no key " + key)}
 	}
 	return &cloudfrontkeyvaluestore.GetKeyOutput{Key: in.Key, Value: aws.String(value)}, nil
+}
+
+func (f *fakeKeyValueStore) ListKeys(_ context.Context, in *cloudfrontkeyvaluestore.ListKeysInput, _ ...func(*cloudfrontkeyvaluestore.Options)) (*cloudfrontkeyvaluestore.ListKeysOutput, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	arn := aws.ToString(in.KvsARN)
+	f.record("kvs.ListKeys")
+	if f.listErr != nil {
+		return nil, f.listErr
+	}
+	keys := slices.Sorted(maps.Keys(f.items[arn]))
+	from := 0
+	if token := aws.ToString(in.NextToken); token != "" {
+		from, _ = strconv.Atoi(token)
+	}
+	size := int(aws.ToInt32(in.MaxResults))
+	if f.listPage > 0 && f.listPage < size {
+		size = f.listPage
+	}
+	to := min(from+size, len(keys))
+	out := &cloudfrontkeyvaluestore.ListKeysOutput{}
+	for _, key := range keys[from:to] {
+		out.Items = append(out.Items, kvstypes.ListKeysResponseListItem{
+			Key:   aws.String(key),
+			Value: aws.String(f.items[arn][key]),
+		})
+	}
+	if to < len(keys) {
+		out.NextToken = aws.String(strconv.Itoa(to))
+	}
+	return out, nil
 }
 
 type throttle struct{ code string }

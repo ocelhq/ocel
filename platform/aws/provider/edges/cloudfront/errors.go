@@ -44,6 +44,11 @@ func missingRoute(err error) bool {
 	return errors.As(err, &missing)
 }
 
+func distributionTaken(err error) bool {
+	var exists *cftypes.DistributionAlreadyExists
+	return errors.As(err, &exists)
+}
+
 func stillEnabled(err error) bool {
 	var enabled *cftypes.DistributionNotDisabled
 	return errors.As(err, &enabled)
