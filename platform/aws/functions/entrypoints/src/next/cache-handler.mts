@@ -8,6 +8,7 @@ import {
   type TagRecord,
 } from "./cache-store.mjs";
 import {
+  boundCacheTags,
   cacheKey,
   deserialize as deserializeBytes,
   refreshHeader,
@@ -16,6 +17,7 @@ import {
 } from "@framework/next-cache";
 import { background } from "../shared/background.mjs";
 import { noteRevalidation } from "./revalidation-signal.mjs";
+import { noteTags, notedTags } from "./origin-tags.mjs";
 import { recordTags, tagsExpireEntry } from "./tag-clock.mjs";
 
 function unchunk(html: any): string {
@@ -158,6 +160,7 @@ export default class OcelCacheHandler {
       if (tags.length > 0 && (await tagsExpireEntry(tags, entry.lastModified))) {
         return null;
       }
+      if (ctx?.kind !== "FETCH") this.noteOriginTags(tags);
       const value = negotiateVariant(entry.value, this.isRscRequest);
       return { lastModified: entry.lastModified, value: deserialize(value) };
     } catch {
@@ -175,6 +178,7 @@ export default class OcelCacheHandler {
         Object.assign(value, this.variantHeaders[cacheKey(key)]);
       }
       const isFetch = ctx?.fetchCache || data.kind === "FETCH";
+      if (!isFetch) this.noteOriginTags(tagsOf(value, ctx));
       const cacheControl = !isFetch && cacheControlOf(ctx);
       const entry = {
         lastModified: Date.now(),
@@ -210,6 +214,12 @@ export default class OcelCacheHandler {
     noteRevalidation();
     recordTags(list, record);
     await this.store.writeTags(list, record);
+  }
+
+  private noteOriginTags(tags: string[]): void {
+    if (tags.length === 0) return;
+    const union = [...notedTags(this.requestHeaders), ...tags];
+    noteTags(this.requestHeaders, boundCacheTags(union).tags);
   }
 
   resetRequestCache(): void {}

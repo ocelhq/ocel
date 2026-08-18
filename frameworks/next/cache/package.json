@@ -6,6 +6,7 @@
   "exports": {
     ".": "./src/index.mts",
     "./naming": "./src/naming.mts",
+    "./cache-tags": "./src/cache-tags.mts",
     "./fixtures/*": "./fixtures/*"
   },
   "scripts": {

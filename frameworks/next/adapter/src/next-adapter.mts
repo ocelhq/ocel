@@ -1,3 +1,4 @@
+import { boundCacheTags } from "@framework/next-cache/cache-tags";
 import { cacheKey, variantHeadersFile } from "@framework/next-cache/naming";
 import type { AdapterOutput, NextAdapter } from "next";
 import { PHASE_PRODUCTION_BUILD } from "next/constants.js";
@@ -769,35 +770,15 @@ async function emitEdgeBundle(
   );
 }
 
-const maxTagBytes = 1024;
-const maxTags = 1000;
-const maxTagsBytes = 16 * 1024;
-
-function sanitizeCacheTag(tag: string): string {
-  return tag.replace(/[\t ]/g, (c) => encodeURIComponent(c));
-}
-
 function cacheTags(prerender: AdapterOutput["PRERENDER"]): string[] {
   const header = prerender.fallback?.initialHeaders?.["x-next-cache-tags"];
   const raw = Array.isArray(header) ? header.join(",") : header;
   if (!raw) return [];
 
-  const parts = raw.split(",");
-  const tags: string[] = [];
-  let bytes = 0;
-  for (const part of parts) {
-    const tag = sanitizeCacheTag(part);
-    const size = Buffer.byteLength(tag);
-    if (!tag || size > maxTagBytes) continue;
-    const cost = size + (tags.length > 0 ? 1 : 0);
-    if (tags.length >= maxTags || bytes + cost > maxTagsBytes) break;
-    bytes += cost;
-    tags.push(tag);
-  }
-
-  if (tags.length < parts.length) {
+  const { tags, dropped } = boundCacheTags(raw.split(","));
+  if (dropped > 0) {
     console.warn(
-      `ocel: dropped ${parts.length - tags.length} cache tag(s) over Cloudflare's limits for "${prerender.pathname}" — purges naming them will not hit this route`,
+      `ocel: dropped ${dropped} cache tag(s) over Cloudflare's limits for "${prerender.pathname}" — purges naming them will not hit this route`,
     );
   }
   return tags;

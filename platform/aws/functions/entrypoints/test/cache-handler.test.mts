@@ -7,6 +7,7 @@ import OcelCacheHandler from "../src/next/cache-handler.mjs";
 import { runWithWaitUntil } from "../src/shared/background.mjs";
 import { setTagClockStore } from "../src/next/tag-clock.mjs";
 import { revalidationTicks } from "../src/next/revalidation-signal.mjs";
+import { collectTags, notedTags } from "../src/next/origin-tags.mjs";
 import type { CacheEntryFile, CacheStore } from "../src/next/cache-store.mjs";
 
 function fakeStore() {
@@ -206,6 +207,64 @@ test("drops the html content-type when an entry predates variant capture", async
   const entry = await handler.get("/", { kind: "APP_PAGE" });
 
   expect(entry?.value.headers).toEqual({ "x-next-cache-tags": "products" });
+});
+
+test("hands the request the tags of the entry it served", async () => {
+  const store = fakeStore();
+  seedPage(store, "index", { tags: "products" });
+  const requestHeaders: any = {};
+  collectTags(requestHeaders);
+
+  await new OcelCacheHandler({ _requestHeaders: requestHeaders }).get("/", {
+    kind: "APP_PAGE",
+  });
+
+  expect(notedTags(requestHeaders)).toEqual(["products"]);
+});
+
+test("hands the request the tags of a render it stored, not just of a hit", async () => {
+  fakeStore();
+  const requestHeaders: any = {};
+  collectTags(requestHeaders);
+
+  await new OcelCacheHandler({ _requestHeaders: requestHeaders }).set(
+    "/",
+    {
+      kind: "APP_PAGE",
+      html: "<html>hi</html>",
+      status: 200,
+      headers: { "x-next-cache-tags": "products,_N_T_/products" },
+    },
+    { cacheControl: { revalidate: 60 } },
+  );
+
+  expect(notedTags(requestHeaders)).toEqual(["products", "_N_T_/products"]);
+});
+
+test("unions the tags of every entry a request composed", async () => {
+  const store = fakeStore();
+  seedPage(store, "index", { tags: "products,_N_T_/layout" });
+  seedPage(store, "cart", { tags: "cart,products" });
+  const requestHeaders: any = {};
+  collectTags(requestHeaders);
+  const handler = new OcelCacheHandler({ _requestHeaders: requestHeaders });
+
+  await handler.get("/", { kind: "APP_PAGE" });
+  await handler.get("/cart", { kind: "APP_PAGE" });
+
+  expect(notedTags(requestHeaders)).toEqual(["products", "_N_T_/layout", "cart"]);
+});
+
+test("notes nothing on a request the entrypoint never installed a collector on", async () => {
+  const store = fakeStore();
+  seedPage(store, "index", { tags: "products" });
+  const requestHeaders: any = {};
+
+  await new OcelCacheHandler({ _requestHeaders: requestHeaders }).get("/", {
+    kind: "APP_PAGE",
+  });
+
+  expect(notedTags(requestHeaders)).toEqual([]);
 });
 
 test("misses when no entry was seeded", async () => {
