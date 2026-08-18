@@ -117,8 +117,8 @@ func (f *fakeEdge) Open(edge.StackState) (edge.EdgeStack, error) {
 	return nil, errors.New("bootstrap never opens a project stack")
 }
 
-func (f *fakeEdge) ReconcilePreviewWildcard(context.Context, edge.PreviewWildcardSpec) error {
-	return errors.New("bootstrap never reconciles the preview wildcard")
+func (f *fakeEdge) ReconcilePreviewWildcard(context.Context, edge.PreviewWildcardSpec) (string, error) {
+	return "", errors.New("bootstrap never reconciles the preview wildcard")
 }
 
 func (f *fakeEdge) DestroyPreviewWildcard(context.Context, string) error {

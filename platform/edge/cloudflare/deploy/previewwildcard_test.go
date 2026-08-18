@@ -69,7 +69,7 @@ func TestReconcilePreviewWildcard(t *testing.T) {
 		var warnings []string
 		spec := previewWildcardSpec()
 		spec.Warn = func(s string) { warnings = append(warnings, s) }
-		if err := m.provider(t).ReconcilePreviewWildcard(t.Context(), spec); err != nil {
+		if _, err := m.provider(t).ReconcilePreviewWildcard(t.Context(), spec); err != nil {
 			t.Fatalf("ReconcilePreviewWildcard: %v", err)
 		}
 
@@ -97,7 +97,7 @@ func TestReconcilePreviewWildcard(t *testing.T) {
 		m := &cfMock{zoneID: "zone1", zoneName: "app.com"}
 		store := fakeStoreServer(t, "s3cr3t")
 
-		if err := m.provider(t).ReconcilePreviewWildcard(t.Context(), previewWildcardSpec()); err != nil {
+		if _, err := m.provider(t).ReconcilePreviewWildcard(t.Context(), previewWildcardSpec()); err != nil {
 			t.Fatalf("ReconcilePreviewWildcard: %v", err)
 		}
 
@@ -119,7 +119,7 @@ func TestReconcilePreviewWildcard(t *testing.T) {
 		spec.Values = map[string]string{valueKeyCacheBucket: "ocel-edge-cache-preview"}
 		spec.Program.ISRWriterScriptName = "ocel-isr-writer-preview"
 
-		if err := m.provider(t).ReconcilePreviewWildcard(t.Context(), spec); err != nil {
+		if _, err := m.provider(t).ReconcilePreviewWildcard(t.Context(), spec); err != nil {
 			t.Fatalf("ReconcilePreviewWildcard: %v", err)
 		}
 
@@ -142,7 +142,7 @@ func TestReconcilePreviewWildcard(t *testing.T) {
 		spec := previewWildcardSpec()
 		spec.BaseDomain = ""
 
-		if err := m.provider(t).ReconcilePreviewWildcard(t.Context(), spec); err == nil {
+		if _, err := m.provider(t).ReconcilePreviewWildcard(t.Context(), spec); err == nil {
 			t.Fatal("ReconcilePreviewWildcard without a base domain err = nil, want an error")
 		}
 	})
@@ -150,7 +150,7 @@ func TestReconcilePreviewWildcard(t *testing.T) {
 	t.Run("an unset account id is an error", func(t *testing.T) {
 		t.Setenv(envAccountID, "")
 
-		if err := (&provider{}).ReconcilePreviewWildcard(t.Context(), previewWildcardSpec()); err == nil {
+		if _, err := (&provider{}).ReconcilePreviewWildcard(t.Context(), previewWildcardSpec()); err == nil {
 			t.Fatal("ReconcilePreviewWildcard without an account id err = nil, want an error")
 		}
 	})

@@ -109,16 +109,31 @@ func (s *Server) runUseDomain(ctx context.Context, req *deploymentsv1.UseDomainR
 	if err != nil {
 		return err
 	}
-	records, err := edge.RecordsFor(edge.DNSTarget{Kind: edgeFront.Kind()}, []string{edge.PreviewWildcard(baseDomain)})
-	if err != nil {
-		return err
-	}
+	return useDomain(ctx, domainRun{
+		ssm:    ssmClient,
+		edge:   edgeFront,
+		writer: writer,
+		poller: dns.NewPoller(),
+		flow: certs.Flow{
+			Issuer: certs.IssuerFor(edgeFront.Kind(), certs.Deps{AWS: awscfg}),
+			Writer: writer,
+			Prober: certs.NewProber(),
+		},
+		spec: spec,
+	}, recorded, baseDomain, progress)
+}
 
+type domainRun struct {
+	ssm    bootstrap.SSMAPI
+	edge   edge.Edge
+	writer edge.DNSWriter
+	poller dns.Poller
+	flow   certs.Flow
+	spec   edge.PreviewWildcardSpec
+}
+
+func useDomain(ctx context.Context, run domainRun, recorded bootstrap.PreviewDomain, baseDomain string, progress func(string)) error {
 	wildcard := edge.PreviewWildcard(baseDomain)
-	progress(fmt.Sprintf("Reconciling the shared preview entry on %s", wildcard))
-	if err := edgeFront.ReconcilePreviewWildcard(ctx, spec); err != nil {
-		return err
-	}
 
 	domain := bootstrap.PreviewDomain{
 		BaseDomain:        baseDomain,
@@ -128,29 +143,51 @@ func (s *Server) runUseDomain(ctx context.Context, req *deploymentsv1.UseDomainR
 		Certificate:       recorded.Certificate,
 		Probe:             recorded.Probe,
 	}
+	validation := recorded.Certificate.Validation
+	certWritten, hostWritten := recordsAmong(recorded.Records, validation)
+	certOwed, hostOwed := recordsAmong(recorded.Owed, validation)
 	save := func() error {
-		return bootstrap.WritePreviewDomain(ctx, ssmClient, bootstrap.ClassPreview, domain)
+		domain.Records = append(slices.Clone(hostWritten), certWritten...)
+		domain.Owed = append(slices.Clone(hostOwed), certOwed...)
+		return bootstrap.WritePreviewDomain(ctx, run.ssm, bootstrap.ClassPreview, domain)
 	}
 
-	var hostWritten, hostOwed []edge.Record
-	if err := settleRecords(ctx, writer, dns.NewPoller(), records, progress, func(written, owed []edge.Record) error {
+	if run.writer == nil {
+		progress(fmt.Sprintf("Nothing writes DNS here, so this run asks you for the certificate's validation record first and names the record that points %s at the edge only once the certificate has issued: expect to run `ocel domain use --preview %s` again after you have written the first one", wildcard, baseDomain))
+	}
+	issued, err := run.flow.Certificate(ctx, []string{wildcard}, priorSettlement(recorded), progress, func(settled certs.Settlement) error {
+		domain.Certificate = settled.Certificate
+		certWritten, certOwed = settled.Written, settled.Owed
+		return save()
+	})
+	certWritten, certOwed = issued.Written, issued.Owed
+	if err != nil {
+		return err
+	}
+	spec := run.spec
+	spec.Certificate = issued.Certificate.ARN
+
+	progress(fmt.Sprintf("Reconciling the shared preview entry on %s", wildcard))
+	front, err := run.edge.ReconcilePreviewWildcard(ctx, spec)
+	if err != nil {
+		return err
+	}
+
+	records, err := edge.RecordsFor(edge.DNSTarget{Kind: run.edge.Kind(), Front: front}, []string{wildcard})
+	if err != nil {
+		return err
+	}
+	if err := settleRecords(ctx, run.writer, run.poller, records, progress, func(written, owed []edge.Record) error {
 		hostWritten, hostOwed = written, owed
-		domain.Records, domain.Owed = written, owed
 		return save()
 	}); err != nil {
 		return err
 	}
 
-	flow := certs.Flow{
-		Issuer: certs.IssuerFor(edgeFront.Kind(), certs.Deps{AWS: awscfg}),
-		Writer: writer,
-		Prober: certs.NewProber(),
-		Front:  hostOwed,
-	}
-	_, err = flow.Settle(ctx, wildcard, edgeFront.Kind(), priorSettlement(recorded), progress, func(settled certs.Settlement) error {
-		domain.Certificate, domain.Probe = settled.Certificate, settled.Probe
-		domain.Records = append(slices.Clone(hostWritten), settled.Written...)
-		domain.Owed = append(slices.Clone(hostOwed), settled.Owed...)
+	fronted := run.flow
+	fronted.Front = hostOwed
+	_, err = fronted.Probe(ctx, wildcard, run.edge.Kind(), issued, progress, func(settled certs.Settlement) error {
+		domain.Probe = settled.Probe
 		return save()
 	})
 	return err
@@ -158,24 +195,27 @@ func (s *Server) runUseDomain(ctx context.Context, req *deploymentsv1.UseDomainR
 
 func priorSettlement(recorded bootstrap.PreviewDomain) certs.Settlement {
 	validation := recorded.Certificate.Validation
+	written, _ := recordsAmong(recorded.Records, validation)
+	owed, _ := recordsAmong(recorded.Owed, validation)
 	return certs.Settlement{
 		Certificate: recorded.Certificate,
 		Probe:       recorded.Probe,
-		Written:     recordsAmong(recorded.Records, validation),
-		Owed:        recordsAmong(recorded.Owed, validation),
+		Written:     written,
+		Owed:        owed,
 	}
 }
 
-func recordsAmong(recorded, wanted []edge.Record) []edge.Record {
-	var kept []edge.Record
+func recordsAmong(recorded, wanted []edge.Record) (among, besides []edge.Record) {
 	for _, rec := range recorded {
 		if slices.ContainsFunc(wanted, func(want edge.Record) bool {
 			return want.Name == rec.Name && want.Type == rec.Type
 		}) {
-			kept = append(kept, rec)
+			among = append(among, rec)
+			continue
 		}
+		besides = append(besides, rec)
 	}
-	return kept
+	return among, besides
 }
 
 func settleRecords(ctx context.Context, writer edge.DNSWriter, poller dns.Poller, records []edge.Record, say func(string), record func(written, owed []edge.Record) error) error {

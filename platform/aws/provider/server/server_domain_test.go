@@ -3,12 +3,15 @@ package server
 import (
 	"context"
 	"errors"
+	"net/http"
+	"slices"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/acm"
+	acmtypes "github.com/aws/aws-sdk-go-v2/service/acm/types"
 	"github.com/aws/aws-sdk-go-v2/service/ssm"
 	ssmtypes "github.com/aws/aws-sdk-go-v2/service/ssm/types"
 
@@ -375,4 +378,107 @@ func TestGlobalPreviewAccountMismatch(t *testing.T) {
 			t.Fatalf("globalPreviewAccountMismatch: %v", err)
 		}
 	})
+}
+
+type wildcardEdge struct {
+	edge.Edge
+	front string
+	specs []edge.PreviewWildcardSpec
+}
+
+func (e *wildcardEdge) Kind() edge.Kind { return edge.KindNative }
+
+func (e *wildcardEdge) ReconcilePreviewWildcard(_ context.Context, spec edge.PreviewWildcardSpec) (string, error) {
+	e.specs = append(e.specs, spec)
+	return e.front, nil
+}
+
+type issuingACM struct {
+	arn        string
+	domain     string
+	validation edge.Record
+	requested  int
+}
+
+func (a *issuingACM) RequestCertificate(context.Context, *acm.RequestCertificateInput, ...func(*acm.Options)) (*acm.RequestCertificateOutput, error) {
+	a.requested++
+	return &acm.RequestCertificateOutput{CertificateArn: aws.String(a.arn)}, nil
+}
+
+func (a *issuingACM) DescribeCertificate(context.Context, *acm.DescribeCertificateInput, ...func(*acm.Options)) (*acm.DescribeCertificateOutput, error) {
+	return &acm.DescribeCertificateOutput{Certificate: &acmtypes.CertificateDetail{
+		CertificateArn: aws.String(a.arn),
+		DomainName:     aws.String(a.domain),
+		Status:         acmtypes.CertificateStatusIssued,
+		DomainValidationOptions: []acmtypes.DomainValidation{{
+			ResourceRecord: &acmtypes.ResourceRecord{
+				Name:  aws.String(a.validation.Name),
+				Type:  acmtypes.RecordType(a.validation.Type),
+				Value: aws.String(a.validation.Value),
+			},
+		}},
+	}}, nil
+}
+
+func (a *issuingACM) ListCertificates(context.Context, *acm.ListCertificatesInput, ...func(*acm.Options)) (*acm.ListCertificatesOutput, error) {
+	return &acm.ListCertificatesOutput{}, nil
+}
+
+func (a *issuingACM) DeleteCertificate(context.Context, *acm.DeleteCertificateInput, ...func(*acm.Options)) (*acm.DeleteCertificateOutput, error) {
+	return nil, errors.New("using a domain never discards a certificate")
+}
+
+func TestUseDomainResumed(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	const baseDomain = "preview.acme.com"
+	validation := edge.Record{Name: "_ocel.preview.acme.com", Type: edge.RecordTypeCNAME, Value: "_target.acm-validations.aws"}
+	api := &issuingACM{arn: "arn:aws:acm:us-east-1:111122223333:certificate/abcd-1234", domain: edge.PreviewWildcard(baseDomain), validation: validation}
+	front := &wildcardEdge{front: "d-wild.execute-api.us-east-1.amazonaws.com"}
+	writer := &releaseWriter{}
+	ssmc := &stateSSM{params: map[string]string{}}
+	run := domainRun{
+		ssm:    ssmc,
+		edge:   front,
+		writer: writer,
+		flow: certs.Flow{
+			Issuer: certs.Issuer{API: api, Region: "us-east-1", Attempts: 1},
+			Writer: writer,
+			Prober: certs.Prober{Attempts: 1, Now: time.Now, Get: func(context.Context, string) (http.Header, error) {
+				answer := http.Header{}
+				answer.Set(edge.HeaderEdge, string(edge.KindNative))
+				return answer, nil
+			}},
+		},
+		spec: edge.PreviewWildcardSpec{BaseDomain: baseDomain},
+	}
+
+	if err := useDomain(ctx, run, bootstrap.PreviewDomain{}, baseDomain, func(string) {}); err != nil {
+		t.Fatalf("useDomain: %v", err)
+	}
+	first, err := bootstrap.ReadPreviewDomain(ctx, ssmc, bootstrap.ClassPreview)
+	if err != nil {
+		t.Fatalf("ReadPreviewDomain: %v", err)
+	}
+	if !slices.Contains(first.Records, validation) {
+		t.Fatalf("records = %+v, want the validation record among them", first.Records)
+	}
+
+	if err := useDomain(ctx, run, first, baseDomain, func(string) {}); err != nil {
+		t.Fatalf("useDomain again: %v", err)
+	}
+	second, err := bootstrap.ReadPreviewDomain(ctx, ssmc, bootstrap.ClassPreview)
+	if err != nil {
+		t.Fatalf("ReadPreviewDomain again: %v", err)
+	}
+	if !slices.Contains(second.Records, validation) {
+		t.Errorf("records = %+v, want the validation record to survive a resumed run: `ocel domain release` deletes only what is recorded here, and ACM renews the certificate through it", second.Records)
+	}
+	if api.requested != 1 {
+		t.Errorf("requested = %d, want the certificate already issued to be reused", api.requested)
+	}
+	if len(front.specs) != 2 || front.specs[1].Certificate != api.arn {
+		t.Errorf("specs = %+v, want the wildcard reconciled onto the issued certificate on both runs", front.specs)
+	}
 }

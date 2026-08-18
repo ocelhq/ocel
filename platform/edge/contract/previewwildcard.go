@@ -14,13 +14,14 @@ func ServedOnGlobalPreview(state StackState, baseDomain string) bool {
 }
 
 type PreviewWildcardSpec struct {
-	Version    string
-	BaseDomain string
-	GrammarMin uint32
-	GrammarMax uint32
-	Values     map[string]string
-	Warn       func(string)
-	Program    *ProgramSpec
+	Version     string
+	BaseDomain  string
+	Certificate string
+	GrammarMin  uint32
+	GrammarMax  uint32
+	Values      map[string]string
+	Warn        func(string)
+	Program     *ProgramSpec
 }
 
 func PreviewWildcard(baseDomain string) string {
