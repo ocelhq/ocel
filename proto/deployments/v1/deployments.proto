@@ -356,6 +356,20 @@ message GlobalPreviewDomain {
   uint32 grammar_max = 4;
 
   bool route_installed = 5;
+
+  string certificate_id = 6;
+
+  string certificate_status = 7;
+
+  repeated string records_written = 8;
+
+  repeated string records_owed = 9;
+
+  int64 last_probe_at = 10;
+
+  bool last_probe_ok = 11;
+
+  string last_probe_edge = 12;
 }
 
 message DomainClaim {

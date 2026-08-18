@@ -13,6 +13,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/ssm"
 	ssmtypes "github.com/aws/aws-sdk-go-v2/service/ssm/types"
 
+	"github.com/ocelhq/ocel/platform/aws/provider/certs"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
@@ -36,11 +37,14 @@ const (
 )
 
 type PreviewDomain struct {
-	BaseDomain        string        `json:"baseDomain"`
-	CloudflareAccount string        `json:"cloudflareAccount"`
-	GrammarMin        uint32        `json:"grammarMin"`
-	GrammarMax        uint32        `json:"grammarMax"`
-	Records           []edge.Record `json:"records,omitempty"`
+	BaseDomain        string            `json:"baseDomain"`
+	CloudflareAccount string            `json:"cloudflareAccount"`
+	GrammarMin        uint32            `json:"grammarMin"`
+	GrammarMax        uint32            `json:"grammarMax"`
+	Records           []edge.Record     `json:"records,omitempty"`
+	Owed              []edge.Record     `json:"owed,omitempty"`
+	Certificate       certs.Certificate `json:"certificate,omitzero"`
+	Probe             certs.Probe       `json:"probe,omitzero"`
 }
 
 func previewDomainParamFor(class string) (string, error) {

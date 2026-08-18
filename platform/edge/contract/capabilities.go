@@ -6,16 +6,17 @@ import (
 )
 
 type declaration struct {
-	needs []Need
-	flip  FlipBound
+	needs      []Need
+	flip       FlipBound
+	originCert bool
 }
 
 const propagationBound = 5 * time.Second
 
 var declared = map[Kind]declaration{
 	KindCloudflare: {needs: AllNeeds(), flip: FlipBound{}},
-	KindNative:     {needs: []Need{NeedEdgeCache, NeedStreaming}, flip: FlipBound{Typical: propagationBound}},
-	KindNone:       {needs: []Need{NeedStreaming}, flip: FlipBound{Typical: propagationBound}},
+	KindNative:     {needs: []Need{NeedEdgeCache, NeedStreaming}, flip: FlipBound{Typical: propagationBound}, originCert: true},
+	KindNone:       {needs: []Need{NeedStreaming}, flip: FlipBound{Typical: propagationBound}, originCert: true},
 }
 
 type Capabilities struct {
@@ -36,4 +37,8 @@ func (c Capabilities) Supports(need Need) bool {
 
 func (c Capabilities) FlipBound() FlipBound {
 	return declared[c.kind].flip
+}
+
+func (c Capabilities) NeedsOriginCertificate() bool {
+	return declared[c.kind].originCert
 }

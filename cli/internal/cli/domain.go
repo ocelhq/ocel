@@ -7,6 +7,7 @@ import (
 	"io"
 	"os"
 	"strings"
+	"time"
 
 	"github.com/spf13/cobra"
 
@@ -283,7 +284,41 @@ func renderGlobalDomain(out io.Writer, resp *deploymentsv1.ListDomainResponse) {
 		route = "MISSING — run `ocel domain use '" + wildcardOf(domain.GetBaseDomain()) + "' --preview` to reinstall it"
 	}
 	fmt.Fprintf(out, "  Wildcard route       %s\n", route)
+	if id := domain.GetCertificateId(); id != "" {
+		fmt.Fprintf(out, "  Certificate          %s  %s\n", domain.GetCertificateStatus(), id)
+	}
+	renderDomainRecords(out, "Records ocel wrote", domain.GetRecordsWritten(), "none — nothing here writes DNS")
+	renderDomainRecords(out, "Records you own", domain.GetRecordsOwed(), "none outstanding")
+	fmt.Fprintf(out, "  Last probe           %s\n", lastProbe(domain))
 	renderGlobalDomainProjects(out, resp.GetProjects())
+}
+
+func renderDomainRecords(out io.Writer, name string, records []string, empty string) {
+	if len(records) == 0 {
+		fmt.Fprintf(out, "  %-20s %s\n", name, empty)
+		return
+	}
+	for i, rec := range records {
+		fmt.Fprintf(out, "  %-20s %s\n", label(i, name), rec)
+	}
+}
+
+func label(i int, name string) string {
+	if i == 0 {
+		return name
+	}
+	return ""
+}
+
+func lastProbe(domain *deploymentsv1.GlobalPreviewDomain) string {
+	if domain.GetLastProbeAt() == 0 {
+		return "never — run `ocel domain use '" + wildcardOf(domain.GetBaseDomain()) + "' --preview` to check the edge answers"
+	}
+	at := time.Unix(domain.GetLastProbeAt(), 0).UTC().Format(time.RFC3339)
+	if !domain.GetLastProbeOk() {
+		return fmt.Sprintf("%s  FAILED — nothing answered as the %s edge", at, domain.GetLastProbeEdge())
+	}
+	return fmt.Sprintf("%s  x-ocel-edge: %s", at, domain.GetLastProbeEdge())
 }
 
 func renderGlobalDomainProjects(out io.Writer, projects []string) {

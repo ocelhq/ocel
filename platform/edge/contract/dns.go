@@ -144,3 +144,13 @@ func sortedRecords(records []Record) []Record {
 	})
 	return records
 }
+
+func Unwritten(wanted, written []Record) []Record {
+	var owed []Record
+	for _, rec := range wanted {
+		if !slices.Contains(written, rec) {
+			owed = append(owed, rec)
+		}
+	}
+	return owed
+}

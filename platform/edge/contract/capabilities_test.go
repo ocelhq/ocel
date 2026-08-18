@@ -10,9 +10,10 @@ func TestDeclaredCapabilities(t *testing.T) {
 	t.Parallel()
 
 	for _, tc := range []struct {
-		kind  Kind
-		needs []Need
-		flip  FlipBound
+		kind       Kind
+		needs      []Need
+		flip       FlipBound
+		originCert bool
 	}{
 		{
 			kind:  KindCloudflare,
@@ -20,14 +21,16 @@ func TestDeclaredCapabilities(t *testing.T) {
 			flip:  FlipBound{},
 		},
 		{
-			kind:  KindNative,
-			needs: []Need{NeedEdgeCache, NeedStreaming},
-			flip:  FlipBound{Typical: 5 * time.Second},
+			kind:       KindNative,
+			needs:      []Need{NeedEdgeCache, NeedStreaming},
+			flip:       FlipBound{Typical: 5 * time.Second},
+			originCert: true,
 		},
 		{
-			kind:  KindNone,
-			needs: []Need{NeedStreaming},
-			flip:  FlipBound{Typical: 5 * time.Second},
+			kind:       KindNone,
+			needs:      []Need{NeedStreaming},
+			flip:       FlipBound{Typical: 5 * time.Second},
+			originCert: true,
 		},
 	} {
 		t.Run(string(tc.kind)+" answers from the declaration alone", func(t *testing.T) {
@@ -45,6 +48,9 @@ func TestDeclaredCapabilities(t *testing.T) {
 			if got := caps.FlipBound(); got != tc.flip {
 				t.Errorf("FlipBound() = %+v, want %+v", got, tc.flip)
 			}
+			if got := caps.NeedsOriginCertificate(); got != tc.originCert {
+				t.Errorf("NeedsOriginCertificate() = %v, want %v", got, tc.originCert)
+			}
 		})
 	}
 
@@ -57,6 +63,9 @@ func TestDeclaredCapabilities(t *testing.T) {
 		}
 		if got := caps.FlipBound(); got != (FlipBound{}) {
 			t.Errorf("FlipBound() = %+v, want the zero bound", got)
+		}
+		if caps.NeedsOriginCertificate() {
+			t.Error("NeedsOriginCertificate() = true, want false: nothing declares this edge needs one")
 		}
 	})
 }
