@@ -25,8 +25,8 @@ func TestRunBootstrapDestroy(t *testing.T) {
 
 		out := stdout.String()
 		for _, want := range []string{
-			"fronted by the native edge",
-			"delete edge bootstrap native",
+			"fronted by the cloudfront edge",
+			"delete edge bootstrap cloudfront",
 			"delete bucket ocel-state-preview",
 			"(this one is slow)",
 			"Left in place:",

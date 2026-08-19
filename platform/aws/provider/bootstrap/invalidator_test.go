@@ -177,19 +177,27 @@ func TestTagInvalidator(t *testing.T) {
 	})
 }
 
-func TestRunCreatesTheInvalidatorForTheNativeEdgeAlone(t *testing.T) {
+type invalidatingEdge struct{ *fakeEdge }
+
+func (invalidatingEdge) InvalidatesOnPromote() bool { return true }
+
+func invalidatingFake() edge.Edge {
+	return invalidatingEdge{&fakeEdge{out: edge.BootstrapOutput{Trust: edge.TrustInternal}}}
+}
+
+func TestRunCreatesTheInvalidatorForAnEdgeThatInvalidatesOnPromoteAlone(t *testing.T) {
 	for _, tc := range []struct {
 		name string
-		kind edge.Kind
+		edge edge.Edge
 		want bool
 	}{
-		{"native", edge.KindNative, true},
-		{"bought edge", "fake", false},
+		{"an edge that invalidates on promote", invalidatingFake(), true},
+		{"an edge that holds no cache of the origin's", &fakeEdge{out: edge.BootstrapOutput{Trust: edge.TrustInternal}}, false},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			cfn, ssmc, iamc := newFakeCFN(), newFakeSSM(), &fakeIAM{}
 			art, _, _ := fixtureArtifactDeps(fixtureArtifact)
-			ed := &fakeEdge{kind: tc.kind, out: edge.BootstrapOutput{Trust: edge.TrustInternal}}
+			ed := tc.edge
 
 			pins := stackPins{invalidator: fixtureInvalidatorPin()}
 			if err := run(context.Background(), cfn, ssmc, iamc, ed, art, pins, productionSubstrate(), nil, nil); err != nil {
@@ -206,7 +214,7 @@ func TestRunCreatesTheInvalidatorForTheNativeEdgeAlone(t *testing.T) {
 	t.Run("preview substrate gets one too", func(t *testing.T) {
 		cfn, ssmc, iamc := newFakeCFN(), newFakeSSM(), &fakeIAM{}
 		art, _, _ := fixtureArtifactDeps(fixtureArtifact)
-		ed := &fakeEdge{kind: edge.KindNative, out: edge.BootstrapOutput{Trust: edge.TrustInternal}}
+		ed := invalidatingFake()
 
 		pins := stackPins{invalidator: fixtureInvalidatorPin()}
 		if err := run(context.Background(), cfn, ssmc, iamc, ed, art, pins, previewSubstrate(), nil, nil); err != nil {
@@ -221,7 +229,7 @@ func TestRunCreatesTheInvalidatorForTheNativeEdgeAlone(t *testing.T) {
 
 	t.Run("unpinned says what stops reaching the fronts", func(t *testing.T) {
 		cfn, ssmc, iamc := newFakeCFN(), newFakeSSM(), &fakeIAM{}
-		ed := &fakeEdge{kind: edge.KindNative, out: edge.BootstrapOutput{Trust: edge.TrustInternal}}
+		ed := invalidatingFake()
 
 		var logged []string
 		logf := func(msg string) { logged = append(logged, msg) }

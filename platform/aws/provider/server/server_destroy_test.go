@@ -11,6 +11,10 @@ import (
 	"github.com/ocelhq/ocel/platform/aws/provider/bootstrap"
 	"github.com/ocelhq/ocel/platform/aws/provider/certs"
 	"github.com/ocelhq/ocel/platform/aws/provider/deploy"
+	"github.com/ocelhq/ocel/platform/aws/provider/edges"
+	"github.com/ocelhq/ocel/platform/aws/provider/edges/apigateway"
+	"github.com/ocelhq/ocel/platform/aws/provider/edges/cloudfront"
+	cloudflare "github.com/ocelhq/ocel/platform/edge/cloudflare/deploy"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
@@ -48,7 +52,7 @@ func TestEdgeStackPlan(t *testing.T) {
 	planFor := func(t *testing.T, state edge.StackState) *deploymentsv1.EdgeStackPlan {
 		t.Helper()
 		s := &Server{}
-		edgeFront, err := s.edge(edge.KindCloudflare, "eu-west-1")
+		edgeFront, err := s.edge(cloudflare.Kind, "eu-west-1")
 		if err != nil {
 			t.Fatalf("edge() error = %v", err)
 		}
@@ -70,7 +74,7 @@ func TestEdgeStackPlan(t *testing.T) {
 		t.Parallel()
 
 		plan := planFor(t, nil)
-		if plan.GetEdgeKind() != string(edge.KindCloudflare) {
+		if plan.GetEdgeKind() != string(cloudflare.Kind) {
 			t.Errorf("edge_kind = %q, want cloudflare", plan.GetEdgeKind())
 		}
 		if len(plan.GetItems()) != 0 {
@@ -82,7 +86,7 @@ func TestEdgeStackPlan(t *testing.T) {
 		t.Parallel()
 
 		plan := planFor(t, edge.StackState{})
-		if plan.GetEdgeKind() != string(edge.KindCloudflare) {
+		if plan.GetEdgeKind() != string(cloudflare.Kind) {
 			t.Errorf("edge_kind = %q, want cloudflare", plan.GetEdgeKind())
 		}
 		if len(plan.GetItems()) != 0 {
@@ -116,12 +120,12 @@ func TestEdgeStackPlan(t *testing.T) {
 func TestDestroyPlanItemsPerEdge(t *testing.T) {
 	t.Parallel()
 
-	t.Run("the native edge disables its distribution before deleting it", func(t *testing.T) {
+	t.Run("the CloudFront edge disables its distribution before deleting it", func(t *testing.T) {
 		t.Parallel()
 
 		state := edge.RecordBoundDomain(edge.StackState{edge.StackKeyFront: "d123.cloudfront.net"}, "shop.example.com")
 		items, err := destroyPlanItems(projectPlanScope{
-			kind: edge.KindNative, class: bootstrap.ClassProduction, slug: "shop", state: state,
+			kind: cloudfront.Kind, class: bootstrap.ClassProduction, slug: "shop", state: state,
 		})
 		if err != nil {
 			t.Fatalf("destroyPlanItems: %v", err)
@@ -143,7 +147,7 @@ func TestDestroyPlanItemsPerEdge(t *testing.T) {
 
 		state := edge.RecordBoundDomain(edge.StackState{}, "shop.example.com")
 		items, err := destroyPlanItems(projectPlanScope{
-			kind: edge.KindNone, class: bootstrap.ClassProduction, slug: "shop", state: state,
+			kind: apigateway.Kind, class: bootstrap.ClassProduction, slug: "shop", state: state,
 		})
 		if err != nil {
 			t.Fatalf("destroyPlanItems: %v", err)
@@ -179,7 +183,7 @@ func TestDestroyPlanItemsPerEdge(t *testing.T) {
 			}},
 		}
 		items, err := destroyPlanItems(projectPlanScope{
-			kind: edge.KindNative, class: bootstrap.ClassProduction, slug: "shop", state: productionState(t, recorded),
+			kind: cloudfront.Kind, class: bootstrap.ClassProduction, slug: "shop", state: productionState(t, recorded),
 		})
 		if err != nil {
 			t.Fatalf("destroyPlanItems: %v", err)
@@ -212,7 +216,7 @@ func TestDestroyPlanItemsPerEdge(t *testing.T) {
 
 		recorded := bootstrap.Production{Certificate: certs.Certificate{ARN: "arn:adopted", Adopted: true}}
 		items, err := destroyPlanItems(projectPlanScope{
-			kind: edge.KindNative, class: bootstrap.ClassProduction, slug: "shop", state: productionState(t, recorded),
+			kind: cloudfront.Kind, class: bootstrap.ClassProduction, slug: "shop", state: productionState(t, recorded),
 		})
 		if err != nil {
 			t.Fatalf("destroyPlanItems: %v", err)
@@ -230,7 +234,7 @@ func TestDestroyPlanItemsPerEdge(t *testing.T) {
 			t.Fatalf("marshal records: %v", err)
 		}
 		items, err := destroyPlanItems(projectPlanScope{
-			kind:  edge.KindNative,
+			kind:  cloudfront.Kind,
 			class: bootstrap.ClassProduction,
 			slug:  "shop",
 			state: edge.StackState{edge.StackKeyRecords: string(written)},
@@ -247,7 +251,7 @@ func TestDestroyPlanItemsPerEdge(t *testing.T) {
 		t.Parallel()
 
 		items, err := destroyPlanItems(projectPlanScope{
-			kind:  edge.KindNone,
+			kind:  apigateway.Kind,
 			class: bootstrap.ClassPreview,
 			slug:  "shop",
 			state: edge.StackState{edge.StackKeyGlobalPreview: "preview.acme.com"},
@@ -273,25 +277,21 @@ func TestPlanDestroyProjectUnsupportedEdge(t *testing.T) {
 	if err == nil {
 		t.Fatal("PlanDestroyProject error = nil, want the unsupported edge refused")
 	}
-	for _, want := range []string{"bogus", string(edge.KindCloudflare)} {
+	for _, want := range []string{"bogus", string(cloudflare.Kind)} {
 		if !strings.Contains(err.Error(), want) {
 			t.Errorf("err = %v, want it to name %q", err, want)
 		}
 	}
 }
 
-func TestPlanDestroyProjectWithoutAnEdgeKind(t *testing.T) {
+func TestRequestNamingNoEdgeTakesTheProviderDefault(t *testing.T) {
 	t.Parallel()
 
-	client := newTestClientFor(t, &Server{}, testToken)
-	_, err := client.PlanDestroyProject(context.Background(), &deploymentsv1.PlanDestroyProjectRequest{Slug: "shop"})
-	if err == nil {
-		t.Fatal("PlanDestroyProject error = nil, want a request that names no edge refused rather than defaulted to one")
+	if got := requestedEdge(&deploymentsv1.PlanDestroyProjectRequest{Slug: "shop"}); got != edges.DefaultKind {
+		t.Errorf("requestedEdge() = %q, want %q: a config that names no edge lets the provider choose", got, edges.DefaultKind)
 	}
-	for _, want := range edge.KindNames(edge.AllKinds()) {
-		if !strings.Contains(err.Error(), want) {
-			t.Errorf("err = %v, want it to name %q as an edge the CLI may send", err, want)
-		}
+	if got := requestedEdge(&deploymentsv1.PlanDestroyProjectRequest{Slug: "shop", EdgeKind: string(apigateway.Kind)}); got != apigateway.Kind {
+		t.Errorf("requestedEdge() = %q, want %q: a named edge is left alone", got, apigateway.Kind)
 	}
 }
 
@@ -324,9 +324,9 @@ func TestDestroyPlanFollowsTheEdgeTheRequestNames(t *testing.T) {
 	t.Run("a project that bought no edge plans its APIs, not Cloudflare workers", func(t *testing.T) {
 		t.Parallel()
 
-		plan := planFor(t, edge.KindNone)
-		if plan.GetEdgeKind() != string(edge.KindNone) {
-			t.Fatalf("edge_kind = %q, want none: an `edge: false` project must not be planned as a Cloudflare teardown", plan.GetEdgeKind())
+		plan := planFor(t, apigateway.Kind)
+		if plan.GetEdgeKind() != string(apigateway.Kind) {
+			t.Fatalf("edge_kind = %q, want apigateway: a project on the API Gateway edge must not be planned as a Cloudflare teardown", plan.GetEdgeKind())
 		}
 		if got := itemFor(t, plan.GetItems(), "REST APIs", "shop").GetAction(); got != deploymentsv1.TeardownItem_ACTION_DELETE {
 			t.Errorf("REST APIs action = %v, want DELETE", got)
@@ -341,8 +341,8 @@ func TestDestroyPlanFollowsTheEdgeTheRequestNames(t *testing.T) {
 	t.Run("a project fronted by Cloudflare plans its workers", func(t *testing.T) {
 		t.Parallel()
 
-		plan := planFor(t, edge.KindCloudflare)
-		if plan.GetEdgeKind() != string(edge.KindCloudflare) {
+		plan := planFor(t, cloudflare.Kind)
+		if plan.GetEdgeKind() != string(cloudflare.Kind) {
 			t.Fatalf("edge_kind = %q, want cloudflare", plan.GetEdgeKind())
 		}
 		if got := itemFor(t, plan.GetItems(), "edge workers", "shop").GetAction(); got != deploymentsv1.TeardownItem_ACTION_DELETE {

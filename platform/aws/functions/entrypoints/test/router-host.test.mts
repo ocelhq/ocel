@@ -17,7 +17,7 @@ import { isLoopback, siblingOriginFetch } from "../src/next/router-signing.mjs";
 const LOCAL_BUNDLE = "local-bundle";
 const SIBLING_BUNDLE = "other-bundle";
 const SIBLING_URL = "https://abc123.lambda-url.us-east-1.on.aws";
-const EDGE_KIND = "none";
+const EDGE_KIND = "api-gateway";
 
 const credentials = {
   AWS_ACCESS_KEY_ID: "AKIAEXAMPLE",
@@ -159,7 +159,7 @@ test("a sibling route is signed against its Function URL", async () => {
 
 test("withoutClientControl keeps everything the app is allowed to see", () => {
   const kept = withoutClientControl(
-    new Headers({ ...forged, cookie: "sid=1", "x-ocel-edge": "native" }),
+    new Headers({ ...forged, cookie: "sid=1", "x-ocel-edge": "cloudfront" }),
   );
 
   expect([...kept.keys()].sort()).toEqual(["cookie", "x-keep"]);
@@ -169,11 +169,11 @@ test("no edge kind and no cloudflare edge kind hosts no router", () => {
   expect(routerMode(undefined)).toBe(false);
   expect(routerMode("")).toBe(false);
   expect(routerMode("cloudflare")).toBe(false);
-  expect(routerMode("native")).toBe(true);
+  expect(routerMode("cloudfront")).toBe(true);
 });
 
 test("router mode without a routing manifest refuses to boot", () => {
-  expect(() => routerHostFromEnv({ OCEL_EDGE_KIND: "native" }, localOrigin)).toThrow(
+  expect(() => routerHostFromEnv({ OCEL_EDGE_KIND: "cloudfront" }, localOrigin)).toThrow(
     /OCEL_ROUTING_MANIFEST/,
   );
 });
@@ -209,7 +209,7 @@ test("the env names the entry function's own bundle as the loopback origin", asy
 
   const built = routerHostFromEnv(
     {
-      OCEL_EDGE_KIND: "native",
+      OCEL_EDGE_KIND: "cloudfront",
       OCEL_ROUTING_MANIFEST: path,
       OCEL_FUNCTION_URLS: JSON.stringify({ [SIBLING_BUNDLE]: SIBLING_URL }),
       OCEL_ASSET_PREFIX: "prod/shop/web/r0a1b2c3d/assets",
@@ -221,7 +221,7 @@ test("the env names the entry function's own bundle as the loopback origin", asy
   );
 
   expect(built.manifest.entry).toBe(LOCAL_BUNDLE);
-  expect(built.edgeKind).toBe("native");
+  expect(built.edgeKind).toBe("cloudfront");
   expect(built.functionUrls).toEqual({ [SIBLING_BUNDLE]: SIBLING_URL });
   expect(built.assetPrefix).toBe("prod/shop/web/r0a1b2c3d/assets");
   expect(built.assetBucket).toBeUndefined();
@@ -266,7 +266,7 @@ test("an asset bucket the function cannot read refuses to boot", async () => {
   await writeFile(path, JSON.stringify(manifest));
 
   const env = {
-    OCEL_EDGE_KIND: "native",
+    OCEL_EDGE_KIND: "cloudfront",
     OCEL_ROUTING_MANIFEST: path,
     OCEL_ASSET_BUCKET: "assets-bucket",
     AWS_REGION: "us-east-1",

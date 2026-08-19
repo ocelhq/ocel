@@ -666,11 +666,11 @@ func TestBuildLearnsTheEdge(t *testing.T) {
 		wantDegraded []string
 	}{
 		{
-			name: "a project naming no edge builds for the origin's own",
+			name: "a project naming no edge names none to the builder either",
 			cfg: func(root string) *projectconfig.Config {
 				return &projectconfig.Config{Dir: root, Apps: []projectconfig.App{{Name: "web", Path: "apps/web", Framework: "next"}}}
 			},
-			wantKind: "native",
+			wantKind: "",
 		},
 		{
 			name: "a project naming an edge builds for that edge, with its waivers",
@@ -686,16 +686,16 @@ func TestBuildLearnsTheEdge(t *testing.T) {
 			wantDegraded: []string{"edge-middleware", "edge-runtime"},
 		},
 		{
-			name: "a project that turned its edge off builds for none",
+			name: "a project on the API Gateway edge builds for that edge",
 			cfg: func(root string) *projectconfig.Config {
 				return &projectconfig.Config{
 					Dir:           root,
-					EdgeDisabled:  true,
+					Edge:          &projectconfig.EdgeDescriptor{Kind: "api-gateway"},
 					AllowDegraded: []string{"edge-middleware"},
 					Apps:          []projectconfig.App{{Name: "web", Path: "apps/web", Framework: "next"}},
 				}
 			},
-			wantKind:     "none",
+			wantKind:     "api-gateway",
 			wantDegraded: []string{"edge-middleware"},
 		},
 	}

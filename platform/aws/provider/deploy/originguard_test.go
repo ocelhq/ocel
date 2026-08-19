@@ -8,6 +8,9 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/naming"
 	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
+	"github.com/ocelhq/ocel/platform/aws/provider/edges/apigateway"
+	"github.com/ocelhq/ocel/platform/aws/provider/edges/cloudfront"
+	cloudflare "github.com/ocelhq/ocel/platform/edge/cloudflare/deploy"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
@@ -73,7 +76,7 @@ func registerGuarded(t *testing.T, cfg Config, functions []*deploymentsv1.Manife
 func TestNoOriginSecretIsMintedForAnAppBehindCloudflare(t *testing.T) {
 	t.Parallel()
 
-	guard, err := resolveOriginGuard(guardedConfig(t, edge.KindCloudflare), routedApp())
+	guard, err := resolveOriginGuard(guardedConfig(t, cloudflare.Kind), routedApp())
 	if err != nil {
 		t.Fatalf("resolveOriginGuard: %v", err)
 	}
@@ -85,7 +88,7 @@ func TestNoOriginSecretIsMintedForAnAppBehindCloudflare(t *testing.T) {
 func TestAnEntryFunctionTheInternetReachesRefusesToDeployWithoutASecret(t *testing.T) {
 	t.Parallel()
 
-	cfg := routedConfig(t, edge.KindNative)
+	cfg := routedConfig(t, cloudfront.Kind)
 	_, err := resolveOriginGuard(cfg, routedApp())
 	if err == nil {
 		t.Fatal("a public Function URL with no secret behind it was accepted, want the deploy refused")
@@ -99,7 +102,7 @@ func TestTheEntryFunctionAnswersWithoutSigV4AndDemandsTheSecret(t *testing.T) {
 	t.Parallel()
 
 	stack := testStack(t, "prod", "web")
-	rec := registerGuarded(t, guardedConfig(t, edge.KindNative), routedFunctions(), routedApp(), stack)
+	rec := registerGuarded(t, guardedConfig(t, cloudfront.Kind), routedFunctions(), routedApp(), stack)
 
 	if auth := functionURLAuthOf(t, rec, "fn--web--entry", stack); auth != functionURLAuthNone {
 		t.Errorf("entry Function URL auth = %q, want %q so a browser POST needs no signature", auth, functionURLAuthNone)
@@ -126,7 +129,7 @@ func TestASiblingKeepsItsSignedURLAndLearnsNoSecret(t *testing.T) {
 	t.Parallel()
 
 	stack := testStack(t, "prod", "web")
-	rec := registerGuarded(t, guardedConfig(t, edge.KindNative), routedFunctions(), routedApp(), stack)
+	rec := registerGuarded(t, guardedConfig(t, cloudfront.Kind), routedFunctions(), routedApp(), stack)
 
 	if auth := functionURLAuthOf(t, rec, "fn--web--admin", stack); auth != functionURLAuthIAM {
 		t.Errorf("sibling Function URL auth = %q, want %q; only the entry answers the internet", auth, functionURLAuthIAM)
@@ -148,7 +151,7 @@ func TestEveryFunctionURLBehindCloudflareStaysSigned(t *testing.T) {
 	t.Parallel()
 
 	stack := testStack(t, "prod", "web")
-	rec := registerGuarded(t, guardedConfig(t, edge.KindCloudflare), routedFunctions(), routedApp(), stack)
+	rec := registerGuarded(t, guardedConfig(t, cloudflare.Kind), routedFunctions(), routedApp(), stack)
 
 	for _, logical := range []string{"fn--web--entry", "fn--web--admin"} {
 		if auth := functionURLAuthOf(t, rec, logical, stack); auth != functionURLAuthIAM {
@@ -168,7 +171,7 @@ func TestEveryFunctionURLBehindCloudflareStaysSigned(t *testing.T) {
 func TestNoneModeReachesItsEntryOverASignedURL(t *testing.T) {
 	t.Parallel()
 
-	cfg := guardedConfig(t, edge.KindNone)
+	cfg := guardedConfig(t, apigateway.Kind)
 	guard, err := resolveOriginGuard(cfg, routedApp())
 	if err != nil {
 		t.Fatalf("resolveOriginGuard: %v", err)
@@ -200,7 +203,7 @@ func TestNoneModeReachesItsEntryOverASignedURL(t *testing.T) {
 func TestAnAppThatRoutesNothingStillGuardsItsEntry(t *testing.T) {
 	t.Parallel()
 
-	cfg := guardedConfig(t, edge.KindNative)
+	cfg := guardedConfig(t, cloudfront.Kind)
 	cfg.ArtifactRoot = writeTree(t, map[string]string{
 		"apps/api/serve.json": `{"framework":"express","buildId":"API1","entry":"/"}`,
 	})

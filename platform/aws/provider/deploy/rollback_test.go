@@ -5,6 +5,9 @@ import (
 	"reflect"
 	"testing"
 
+	"github.com/ocelhq/ocel/platform/aws/provider/edges/apigateway"
+	"github.com/ocelhq/ocel/platform/aws/provider/edges/cloudfront"
+	cloudflare "github.com/ocelhq/ocel/platform/edge/cloudflare/deploy"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
@@ -99,7 +102,7 @@ func TestRollback(t *testing.T) {
 	t.Run("promotes the target under a fresh timestamp", func(t *testing.T) {
 		t.Parallel()
 		fake := &recordingEdge{
-			kind: edge.KindCloudflare,
+			kind: cloudflare.Kind,
 			history: []edge.HistoryEntry{
 				{Promotion: edge.Promotion{PromotionID: "promo-2", Ts: 200, Builds: map[string]string{"web": "b2"}}, Active: true},
 				{Promotion: edge.Promotion{PromotionID: "promo-1", Ts: 100, Builds: map[string]string{"web": "b1"}}, Active: false},
@@ -130,7 +133,7 @@ func TestRollback(t *testing.T) {
 	t.Run("across a rotation re-points at the rotated identity", func(t *testing.T) {
 		t.Parallel()
 		fake := &recordingEdge{
-			kind: edge.KindCloudflare,
+			kind: cloudflare.Kind,
 			history: []edge.HistoryEntry{
 				{Promotion: edge.Promotion{PromotionID: "p3", Ts: 300, Builds: map[string]string{"web": "B2"}}, Active: true},
 				{Promotion: edge.Promotion{PromotionID: "p2", Ts: 200, Builds: map[string]string{"web": "B1~fp2"}}, Active: false},
@@ -161,7 +164,7 @@ func TestRollback(t *testing.T) {
 	t.Run("to a specific promotion", func(t *testing.T) {
 		t.Parallel()
 		fake := &recordingEdge{
-			kind: edge.KindCloudflare,
+			kind: cloudflare.Kind,
 			history: []edge.HistoryEntry{
 				{Promotion: edge.Promotion{PromotionID: "promo-3", Ts: 300}, Active: true},
 				{Promotion: edge.Promotion{PromotionID: "promo-2", Ts: 200}, Active: false},
@@ -183,7 +186,7 @@ func TestRollback(t *testing.T) {
 	t.Run("by tag carries the tag onto the re-promotion", func(t *testing.T) {
 		t.Parallel()
 		fake := &recordingEdge{
-			kind: edge.KindCloudflare,
+			kind: cloudflare.Kind,
 			history: []edge.HistoryEntry{
 				{Promotion: edge.Promotion{PromotionID: "promo-2", Ts: 200, Builds: map[string]string{"web": "b2"}}, Active: true},
 				{Promotion: edge.Promotion{PromotionID: "promo-1", Ts: 100, Tag: "v1.2.3", Builds: map[string]string{"web": "b1"}}, Active: false},
@@ -210,7 +213,7 @@ func TestRollback(t *testing.T) {
 	t.Run("unknown to errors and never promotes", func(t *testing.T) {
 		t.Parallel()
 		fake := &recordingEdge{
-			kind: edge.KindCloudflare,
+			kind: cloudflare.Kind,
 			history: []edge.HistoryEntry{
 				{Promotion: edge.Promotion{PromotionID: "promo-1"}, Active: true},
 			},
@@ -228,7 +231,7 @@ func TestRollback(t *testing.T) {
 
 	t.Run("records the promoting edge's own flip bound on the re-promotion", func(t *testing.T) {
 		t.Parallel()
-		for _, kind := range []edge.Kind{edge.KindCloudflare, edge.KindNative, edge.KindNone} {
+		for _, kind := range []edge.Kind{cloudflare.Kind, cloudfront.Kind, apigateway.Kind} {
 			fake := &recordingEdge{
 				kind: kind,
 				history: []edge.HistoryEntry{
@@ -242,7 +245,7 @@ func TestRollback(t *testing.T) {
 			if err != nil {
 				t.Fatalf("Rollback: %v", err)
 			}
-			want := edge.CapabilitiesOf(kind).FlipBound()
+			want := fake.FlipBound()
 			if promoted.Flip == nil || *promoted.Flip != want {
 				t.Errorf("%s promoted.Flip = %v, want %v", kind, promoted.Flip, want)
 			}

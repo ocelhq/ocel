@@ -11,13 +11,14 @@ import (
 	"github.com/pulumi/pulumi/sdk/v3/go/common/resource"
 	"github.com/pulumi/pulumi/sdk/v3/go/pulumi"
 
+	"google.golang.org/protobuf/types/known/structpb"
+
 	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
 	linksv1 "github.com/ocelhq/ocel/pkg/proto/links/v1"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/resources/v1"
 	"github.com/ocelhq/ocel/platform/aws/provider/transform"
 	"github.com/ocelhq/ocel/platform/aws/provider/transform/transformtest"
 	"github.com/ocelhq/ocel/platform/aws/provider/vars"
-	"google.golang.org/protobuf/types/known/structpb"
 )
 
 func outputManifest() *deploymentsv1.Manifest {

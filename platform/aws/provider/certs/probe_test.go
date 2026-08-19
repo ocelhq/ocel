@@ -39,12 +39,12 @@ func TestProberAwait(t *testing.T) {
 			if len(asked) < 2 {
 				return http.Header{}, nil
 			}
-			return headerNaming("cloudflare"), nil
-		}, 5).Await(t.Context(), "*.preview.acme.com", edge.KindCloudflare, nil, func(string) {})
+			return headerNaming(string(unboundEdgeKind)), nil
+		}, 5).Await(t.Context(), "*.preview.acme.com", unboundEdgeKind, nil, func(string) {})
 		if err != nil {
 			t.Fatalf("Await: %v", err)
 		}
-		if !probe.OK || probe.Edge != edge.KindCloudflare || probe.At.IsZero() {
+		if !probe.OK || probe.Edge != unboundEdgeKind || probe.At.IsZero() {
 			t.Fatalf("probe = %+v, want a passing probe stamped with the edge", probe)
 		}
 		want := "https://" + edge.LivenessProbeLabel + ".preview.acme.com/"
@@ -57,15 +57,15 @@ func TestProberAwait(t *testing.T) {
 		t.Parallel()
 
 		probe, err := testProber(func(context.Context, string) (http.Header, error) {
-			return headerNaming("native"), nil
-		}, 3).Await(t.Context(), "*.preview.acme.com", edge.KindCloudflare, nil, func(string) {})
+			return headerNaming(string(frontedEdgeKind)), nil
+		}, 3).Await(t.Context(), "*.preview.acme.com", unboundEdgeKind, nil, func(string) {})
 		if err == nil {
 			t.Fatal("Await err = nil, want a bounded refusal")
 		}
 		if probe.OK {
 			t.Error("probe recorded as passing after a refusal")
 		}
-		for _, want := range []string{edge.HeaderEdge, "native", "cloudflare"} {
+		for _, want := range []string{edge.HeaderEdge, string(frontedEdgeKind), string(unboundEdgeKind)} {
 			if !strings.Contains(err.Error(), want) {
 				t.Errorf("err = %v, want it to name %q", err, want)
 			}
@@ -77,7 +77,7 @@ func TestProberAwait(t *testing.T) {
 
 		_, err := testProber(func(context.Context, string) (http.Header, error) {
 			return http.Header{}, nil
-		}, 2).Await(t.Context(), "*.preview.acme.com", edge.KindCloudflare, nil, func(string) {})
+		}, 2).Await(t.Context(), "*.preview.acme.com", unboundEdgeKind, nil, func(string) {})
 		if err == nil || !strings.Contains(err.Error(), "other than ocel") {
 			t.Fatalf("err = %v, want it to say something else is serving the hostname", err)
 		}
@@ -90,7 +90,7 @@ func TestProberAwait(t *testing.T) {
 		_, err := testProber(func(context.Context, string) (http.Header, error) {
 			attempts++
 			return nil, errors.New("no such host")
-		}, 4).Await(t.Context(), "*.preview.acme.com", edge.KindCloudflare, nil, func(string) {})
+		}, 4).Await(t.Context(), "*.preview.acme.com", unboundEdgeKind, nil, func(string) {})
 		if err == nil || !strings.Contains(err.Error(), "no such host") {
 			t.Fatalf("err = %v, want the transport failure carried through", err)
 		}
@@ -106,7 +106,7 @@ func TestProberOutstandingRecords(t *testing.T) {
 	owed := edge.Record{Name: "*.preview.acme.com", Type: edge.RecordTypeCNAME, Value: "entry.ocel.dev"}
 	_, err := testProber(func(context.Context, string) (http.Header, error) {
 		return http.Header{}, nil
-	}, 2).Await(t.Context(), "*.preview.acme.com", edge.KindCloudflare, []edge.Record{owed}, func(string) {})
+	}, 2).Await(t.Context(), "*.preview.acme.com", unboundEdgeKind, []edge.Record{owed}, func(string) {})
 	if err == nil {
 		t.Fatal("Await err = nil, want a bounded refusal")
 	}
@@ -147,7 +147,7 @@ func TestHTTPGet(t *testing.T) {
 	var method string
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		method = r.Method
-		w.Header().Set(edge.HeaderEdge, "cloudflare")
+		w.Header().Set(edge.HeaderEdge, string(unboundEdgeKind))
 		w.WriteHeader(http.StatusNotFound)
 	}))
 	defer srv.Close()
@@ -156,7 +156,7 @@ func TestHTTPGet(t *testing.T) {
 	if err != nil {
 		t.Fatalf("httpGet: %v", err)
 	}
-	if !edge.ServedBy(header.Get(edge.HeaderEdge), edge.KindCloudflare) {
+	if !edge.ServedBy(header.Get(edge.HeaderEdge), unboundEdgeKind) {
 		t.Errorf("header = %q, want a 404 to count: the probe reads the header, not the status", header.Get(edge.HeaderEdge))
 	}
 	if method != http.MethodGet {

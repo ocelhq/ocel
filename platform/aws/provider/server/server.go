@@ -7,7 +7,6 @@ import (
 	"maps"
 	"os"
 	"path/filepath"
-	"strings"
 	"sync"
 	"time"
 
@@ -112,10 +111,16 @@ func (m *memo) edgeFor(kind edge.Kind, region string) *entry[edge.Edge] {
 	return entryFor(m, &m.edgeByOrigin, string(kind)+"|"+region)
 }
 
-func (s *Server) edge(kind edge.Kind, region string) (edge.Edge, error) {
-	if kind == "" {
-		return nil, fmt.Errorf("this request names no edge, so the provider cannot tell which edge fronts this project; the CLI names one of %s on every request — upgrade the CLI so it matches this provider", strings.Join(edge.KindNames(edge.AllKinds()), ", "))
+type edgeNamer interface{ GetEdgeKind() string }
+
+func requestedEdge(req edgeNamer) edge.Kind {
+	if kind := edge.Kind(req.GetEdgeKind()); kind != "" {
+		return kind
 	}
+	return edges.DefaultKind
+}
+
+func (s *Server) edge(kind edge.Kind, region string) (edge.Edge, error) {
 	return s.memo.edgeFor(kind, region).resolve(func() (edge.Edge, error) {
 		return edges.EdgeFor(kind, edges.Deps{
 			AWS: func(ctx context.Context) (aws.Config, error) { return loadAWS(ctx, region) },
@@ -165,7 +170,7 @@ func (s *Server) Deploy(ctx context.Context, req *deploymentsv1.DeployRequest, s
 	if err := validateManifest(manifest); err != nil {
 		return connect.NewError(connect.CodeInvalidArgument, err)
 	}
-	edgeFront, edgeErr := s.edge(edge.Kind(req.GetEdgeKind()), optionsRegion(req.GetOptions()))
+	edgeFront, edgeErr := s.edge(requestedEdge(req), optionsRegion(req.GetOptions()))
 	if edgeErr != nil {
 		return connect.NewError(connect.CodeInvalidArgument, edgeErr)
 	}
@@ -300,10 +305,12 @@ func (s *Server) runDeploy(ctx context.Context, req *deploymentsv1.DeployRequest
 		return deploy.Result{}, finishPreparing(err)
 	}
 	admitted, err := admitDomains(ctx, domainGate{
-		kind:      edgeFront.Kind(),
+		kind:          edgeFront.Kind(),
+		servesUnbound: edge.ServesUnbound(edgeFront),
+
 		state:     params.StackState,
 		recorded:  recordedDomains,
-		issuer:    certs.IssuerFor(edgeFront.Kind(), certs.Deps{AWS: awscfg}),
+		issuer:    certs.IssuerFor(edgeFront, certs.Deps{AWS: awscfg}),
 		prober:    certs.NewProber(),
 		pins:      normalizePins(opts.Certificates),
 		previewOn: params.PreviewDomain.BaseDomain,
@@ -460,7 +467,7 @@ func previewExpiry(lifecycle deploymentsv1.Environment_Lifecycle, now time.Time)
 }
 
 func (s *Server) Bootstrap(ctx context.Context, req *deploymentsv1.BootstrapRequest, stream *connect.ServerStream[deploymentsv1.DeployEvent]) error {
-	edgeFront, err := s.edge(edge.Kind(req.GetEdgeKind()), optionsRegion(req.GetOptions()))
+	edgeFront, err := s.edge(requestedEdge(req), optionsRegion(req.GetOptions()))
 	if err != nil {
 		return connect.NewError(connect.CodeInvalidArgument, err)
 	}

@@ -67,7 +67,9 @@ func (l *certLookup) of(ctx context.Context, host string) (certs.Certificate, er
 }
 
 type domainGate struct {
-	kind      edge.Kind
+	kind          edge.Kind
+	servesUnbound bool
+
 	state     edge.StackState
 	recorded  bootstrap.Production
 	issuer    certs.Issuer

@@ -222,7 +222,7 @@ func bucketItem(name, reason string) *deploymentsv1.TeardownItem {
 }
 
 func (s *Server) PlanTeardown(ctx context.Context, req *deploymentsv1.PlanTeardownRequest) (*deploymentsv1.PlanTeardownResponse, error) {
-	edgeFront, err := s.edge(edge.Kind(req.GetEdgeKind()), optionsRegion(req.GetOptions()))
+	edgeFront, err := s.edge(requestedEdge(req), optionsRegion(req.GetOptions()))
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInvalidArgument, err)
 	}
@@ -261,7 +261,7 @@ func planTeardown(ctx context.Context, deps teardownDeps, class string) (*deploy
 }
 
 func (s *Server) Teardown(ctx context.Context, req *deploymentsv1.TeardownRequest, stream *connect.ServerStream[deploymentsv1.DeployEvent]) error {
-	edgeFront, err := s.edge(edge.Kind(req.GetEdgeKind()), optionsRegion(req.GetOptions()))
+	edgeFront, err := s.edge(requestedEdge(req), optionsRegion(req.GetOptions()))
 	if err != nil {
 		return connect.NewError(connect.CodeInvalidArgument, err)
 	}

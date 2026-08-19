@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 
+	cloudflare "github.com/ocelhq/ocel/platform/edge/cloudflare/deploy"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
@@ -100,7 +101,7 @@ func TestFinalizeDeployOriginRecord(t *testing.T) {
 		t.Parallel()
 		up := &fakeUploader{}
 		cfg := Config{AssetBucket: "assets-xyz", Uploader: up}
-		fake := &recordingEdge{kind: edge.KindCloudflare}
+		fake := &recordingEdge{kind: cloudflare.Kind}
 
 		specs := []edge.StackSpec{{Version: "v1"}}
 		results := []appDeployResult{isrResult("web", "prod/proj/web/B1", map[string]string{"/": "https://web1.lambda-url.eu-west-1.on.aws/"})}
@@ -114,7 +115,7 @@ func TestFinalizeDeployOriginRecord(t *testing.T) {
 			t.Fatalf("staged %d over %d promotions, want 1 and 1", len(fake.staged), len(fake.promotions))
 		}
 
-		blocked := &recordingEdge{kind: edge.KindCloudflare}
+		blocked := &recordingEdge{kind: cloudflare.Kind}
 		failing := Config{AssetBucket: "assets-xyz", Uploader: &fakeUploader{putErr: errors.New("access denied")}}
 		if _, err := finalizeDeploy(context.Background(), withEdge(failing, blocked), specs, nil, "promo2", "", "", 100, results); err == nil {
 			t.Fatal("the deploy cut over despite having no origin record to revalidate against")

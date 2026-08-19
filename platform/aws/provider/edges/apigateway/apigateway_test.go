@@ -102,7 +102,7 @@ func TestNoneIsNotProgrammable(t *testing.T) {
 
 	var e edge.Edge = newWorld().edge()
 	if _, programmable := e.(edge.Programmable); programmable {
-		t.Error("the none edge is Programmable, but it declares only streaming; nothing of the app's code runs at this edge")
+		t.Error("the api-gateway edge is Programmable, but it declares only streaming; nothing of the app's code runs at this edge")
 	}
 }
 
@@ -178,14 +178,14 @@ func TestOnlyTheRoutesThatCanCarryTheEdgeHeaderDeclareIt(t *testing.T) {
 		}
 	}
 	static := methodOn(api, "/_next/static/{proxy+}", getMethod)
-	if got := static.integrationResponse["200"][edgeHeaderParameter]; got != "'none'" {
-		t.Errorf("static integration response sets %s = %q, want 'none'", EdgeHeader, got)
+	if got := static.integrationResponse["200"][edgeHeaderParameter]; got != "'"+string(Kind)+"'" {
+		t.Errorf("static integration response sets %s = %q, want 'api-gateway'", EdgeHeader, got)
 	}
 
 	notFound := w.gateway.named(notFoundAPIName(edge.ClassProduction))
 	answer := methodOn(notFound, "/{proxy+}", anyMethod)
-	if got := answer.integrationResponse["404"][edgeHeaderParameter]; got != "'none'" {
-		t.Errorf("the not-found integration response sets %s = %q, want 'none'", EdgeHeader, got)
+	if got := answer.integrationResponse["404"][edgeHeaderParameter]; got != "'"+string(Kind)+"'" {
+		t.Errorf("the not-found integration response sets %s = %q, want 'api-gateway'", EdgeHeader, got)
 	}
 }
 
@@ -637,7 +637,7 @@ func TestBootstrapRaisesTheNotFoundAPIAndTheRole(t *testing.T) {
 		t.Errorf("Trust = %q, want internal; this edge runs inside the account it serves", out.Trust)
 	}
 	if len(out.Offers) != 0 {
-		t.Errorf("Offers = %v, want none; the none edge hosts no store the substrate adopts", out.Offers)
+		t.Errorf("Offers = %v, want none; the api-gateway edge hosts no store the substrate adopts", out.Offers)
 	}
 
 	api := w.gateway.named(notFoundAPIName(edge.ClassProduction))
@@ -794,7 +794,7 @@ func TestBindDomainPublishesAFrontPerHost(t *testing.T) {
 		}
 	}
 
-	records, err := edge.RecordsFor(edge.TargetFor(e.Kind(), stack.State()), hosts)
+	records, err := edge.RecordsFor(edge.TargetFor(e, stack.State()), hosts)
 	if err != nil {
 		t.Fatalf("RecordsFor(%v): %v", hosts, err)
 	}
@@ -809,7 +809,7 @@ func TestBindDomainPublishesAFrontPerHost(t *testing.T) {
 	if err := stack.UnbindDomain(ctx, hosts[0]); err != nil {
 		t.Fatalf("UnbindDomain(%s): %v", hosts[0], err)
 	}
-	if _, err := edge.RecordsFor(edge.TargetFor(e.Kind(), stack.State()), hosts[:1]); err == nil {
+	if _, err := edge.RecordsFor(edge.TargetFor(e, stack.State()), hosts[:1]); err == nil {
 		t.Errorf("RecordsFor(%v) err = nil, want a refusal: the host is unbound and its front is gone", hosts[:1])
 	}
 }
@@ -836,7 +836,7 @@ func TestReconcileRecoversTheFrontOfADomainBoundBeforeItWasRecorded(t *testing.T
 		t.Fatalf("Reconcile again: %v", err)
 	}
 
-	records, err := edge.RecordsFor(edge.TargetFor(e.Kind(), settled.State()), []string{host})
+	records, err := edge.RecordsFor(edge.TargetFor(e, settled.State()), []string{host})
 	if err != nil {
 		t.Fatalf("RecordsFor after a reconcile of state predating the front: %v", err)
 	}

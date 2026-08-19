@@ -15,6 +15,7 @@ import (
 	"net/textproto"
 	"os"
 	"path"
+	"slices"
 	"strings"
 	"sync"
 
@@ -26,6 +27,8 @@ import (
 
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
+
+const Kind edge.Kind = "cloudflare"
 
 const (
 	envAccountID = "CLOUDFLARE_ACCOUNT_ID"
@@ -75,19 +78,21 @@ func NewAt(baseURL string) edge.Edge {
 
 const clientMaxRetries = 5
 
-func (p *provider) Kind() edge.Kind { return edge.KindCloudflare }
+func (p *provider) Kind() edge.Kind { return Kind }
 
 func (p *provider) Supports(need edge.Need) bool {
-	return edge.CapabilitiesOf(p.Kind()).Supports(need)
+	return slices.Contains(edge.AllNeeds(), need)
 }
 
 func (p *provider) Supported() []edge.Need {
-	return edge.CapabilitiesOf(p.Kind()).Supported()
+	return edge.AllNeeds()
 }
 
 func (p *provider) FlipBound() edge.FlipBound {
-	return edge.CapabilitiesOf(p.Kind()).FlipBound()
+	return edge.FlipBound{}
 }
+
+func (p *provider) ServesUnbound() bool { return true }
 
 func (p *provider) CodeRuntime() (string, []string) { return compatDate, compatFlags }
 
@@ -152,7 +157,7 @@ func (p *provider) bootstrapISRWriter(ctx context.Context, accountID string, cla
 	if err != nil {
 		return edge.Offer{}, err
 	}
-	path, err := bundles.Path(edge.KindCloudflare)
+	path, err := bundles.Path(Kind)
 	if err != nil {
 		return edge.Offer{}, err
 	}
@@ -195,7 +200,7 @@ func (p *provider) bootstrapStore(ctx context.Context, accountID, scriptName str
 	if err != nil {
 		return edge.Offer{}, err
 	}
-	path, err := bundles.Path(edge.KindCloudflare)
+	path, err := bundles.Path(Kind)
 	if err != nil {
 		return edge.Offer{}, err
 	}

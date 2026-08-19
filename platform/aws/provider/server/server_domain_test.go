@@ -18,6 +18,9 @@ import (
 	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
 	"github.com/ocelhq/ocel/platform/aws/provider/bootstrap"
 	"github.com/ocelhq/ocel/platform/aws/provider/certs"
+	"github.com/ocelhq/ocel/platform/aws/provider/edges/apigateway"
+	"github.com/ocelhq/ocel/platform/aws/provider/edges/cloudfront"
+	cloudflare "github.com/ocelhq/ocel/platform/edge/cloudflare/deploy"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
@@ -115,7 +118,7 @@ func TestGlobalPreviewDomain(t *testing.T) {
 		full.Records = []edge.Record{{Name: "*.preview.acme.com", Type: edge.RecordTypeAAAA, Value: edge.ProxyPlaceholder, Proxied: true}}
 		full.Owed = []edge.Record{{Name: "_ocel.preview.acme.com", Type: edge.RecordTypeCNAME, Value: "_target.acm-validations.aws"}}
 		full.Certificate = certs.Certificate{ARN: "arn:aws:acm:us-east-1:111122223333:certificate/abcd-1234", Status: certs.StatusIssued}
-		full.Probe = certs.Probe{At: time.Unix(1755500000, 0).UTC(), Edge: edge.KindCloudflare, OK: true}
+		full.Probe = certs.Probe{At: time.Unix(1755500000, 0).UTC(), Edge: cloudflare.Kind, OK: true}
 
 		got := globalPreviewDomain(context.Background(), owner, full)
 		if got.GetCertificateId() != full.Certificate.ARN || got.GetCertificateStatus() != certs.StatusIssued {
@@ -237,7 +240,7 @@ type releaseEdge struct {
 	destroyed []string
 }
 
-func (e *releaseEdge) Kind() edge.Kind { return edge.KindCloudflare }
+func (e *releaseEdge) Kind() edge.Kind { return cloudflare.Kind }
 
 func (e *releaseEdge) DestroyPreviewWildcard(_ context.Context, baseDomain string) error {
 	e.destroyed = append(e.destroyed, baseDomain)
@@ -357,19 +360,19 @@ func TestPreviewWildcardOwner(t *testing.T) {
 	t.Run("a project on another edge still sees the wildcard the recording edge holds", func(t *testing.T) {
 		t.Parallel()
 
-		recorded := bootstrap.PreviewDomain{BaseDomain: baseDomain, Edge: edge.KindCloudflare}
+		recorded := bootstrap.PreviewDomain{BaseDomain: baseDomain, Edge: cloudflare.Kind}
 		var asked []edge.Kind
 		owner := previewWildcardOwner(recorded, func(kind edge.Kind) routeOwnerFunc {
 			asked = append(asked, kind)
 			return func(context.Context, string) (string, error) {
-				if kind != edge.KindCloudflare {
+				if kind != cloudflare.Kind {
 					return "", nil
 				}
 				return edge.PreviewEntryOwner, nil
 			}
 		})
-		if !slices.Equal(asked, []edge.Kind{edge.KindCloudflare}) {
-			t.Errorf("edges asked = %v, want only the %s edge that stood the wildcard up", asked, edge.KindCloudflare)
+		if !slices.Equal(asked, []edge.Kind{cloudflare.Kind}) {
+			t.Errorf("edges asked = %v, want only the %s edge that stood the wildcard up", asked, cloudflare.Kind)
 		}
 		if !sharedEntryRouteInstalled(context.Background(), owner, baseDomain) {
 			t.Error("RouteInstalled = false, want true: the wildcard is account-global, and a sibling project on another edge must not be told it is gone")
@@ -385,8 +388,8 @@ func TestPreviewWildcardOwner(t *testing.T) {
 			asked = append(asked, kind)
 			return func(context.Context, string) (string, error) { return edge.PreviewEntryOwner, nil }
 		})
-		if !slices.Equal(asked, []edge.Kind{edge.KindCloudflare}) {
-			t.Errorf("edges asked = %v, want only %s: only a Cloudflare-held wildcard was ever recorded with an account", asked, edge.KindCloudflare)
+		if !slices.Equal(asked, []edge.Kind{cloudflare.Kind}) {
+			t.Errorf("edges asked = %v, want only %s: only a Cloudflare-held wildcard was ever recorded with an account", asked, cloudflare.Kind)
 		}
 		if !sharedEntryRouteInstalled(context.Background(), owner, baseDomain) {
 			t.Error("RouteInstalled = false, want true")
@@ -417,12 +420,12 @@ func TestPreviewWildcardHolder(t *testing.T) {
 	t.Run("the recorded edge holds it, whoever is asking", func(t *testing.T) {
 		t.Parallel()
 
-		got, err := previewWildcardHolder(bootstrap.PreviewDomain{BaseDomain: baseDomain, Edge: edge.KindCloudflare})
+		got, err := previewWildcardHolder(bootstrap.PreviewDomain{BaseDomain: baseDomain, Edge: cloudflare.Kind})
 		if err != nil {
 			t.Fatalf("previewWildcardHolder: %v", err)
 		}
-		if got != edge.KindCloudflare {
-			t.Errorf("holder = %q, want %q", got, edge.KindCloudflare)
+		if got != cloudflare.Kind {
+			t.Errorf("holder = %q, want %q", got, cloudflare.Kind)
 		}
 	})
 
@@ -433,8 +436,8 @@ func TestPreviewWildcardHolder(t *testing.T) {
 		if err != nil {
 			t.Fatalf("previewWildcardHolder: %v", err)
 		}
-		if got != edge.KindCloudflare {
-			t.Errorf("holder = %q, want %q", got, edge.KindCloudflare)
+		if got != cloudflare.Kind {
+			t.Errorf("holder = %q, want %q", got, cloudflare.Kind)
 		}
 	})
 
@@ -456,7 +459,7 @@ func TestPreviewWildcardHolder(t *testing.T) {
 func TestPreviewWildcardEdge(t *testing.T) {
 	t.Parallel()
 
-	recorded := bootstrap.PreviewDomain{BaseDomain: "preview.acme.com", Edge: edge.KindCloudflare}
+	recorded := bootstrap.PreviewDomain{BaseDomain: "preview.acme.com", Edge: cloudflare.Kind}
 	held := &releaseEdge{}
 	var asked []edge.Kind
 	got, err := previewWildcardEdge(recorded, func(kind edge.Kind) (edge.Edge, error) {
@@ -466,8 +469,8 @@ func TestPreviewWildcardEdge(t *testing.T) {
 	if err != nil {
 		t.Fatalf("previewWildcardEdge: %v", err)
 	}
-	if !slices.Equal(asked, []edge.Kind{edge.KindCloudflare}) {
-		t.Errorf("edges asked = %v, want only the recorded %s edge, never the requesting project's", asked, edge.KindCloudflare)
+	if !slices.Equal(asked, []edge.Kind{cloudflare.Kind}) {
+		t.Errorf("edges asked = %v, want only the recorded %s edge, never the requesting project's", asked, cloudflare.Kind)
 	}
 	if got != edge.Edge(held) {
 		t.Error("previewWildcardEdge returned an edge other than the one it resolved")
@@ -489,11 +492,11 @@ func TestRefuseRehomingPreviewWildcard(t *testing.T) {
 	t.Run("another edge's wildcard is not re-homed", func(t *testing.T) {
 		t.Parallel()
 
-		err := refuseRehomingPreviewWildcard(bootstrap.PreviewDomain{BaseDomain: baseDomain, Edge: edge.KindCloudflare}, edge.KindNone)
+		err := refuseRehomingPreviewWildcard(bootstrap.PreviewDomain{BaseDomain: baseDomain, Edge: cloudflare.Kind}, apigateway.Kind)
 		if err == nil {
-			t.Fatal("refuseRehomingPreviewWildcard = nil, want the Cloudflare entry protected from an edgeless project")
+			t.Fatal("refuseRehomingPreviewWildcard = nil, want the Cloudflare entry protected from a project on another edge")
 		}
-		for _, want := range []string{"*.preview.acme.com", "cloudflare", "none", "ocel domain release --preview"} {
+		for _, want := range []string{"*.preview.acme.com", "cloudflare", "api-gateway", "ocel domain release --preview"} {
 			if !strings.Contains(err.Error(), want) {
 				t.Errorf("err = %v, want it to name %q", err, want)
 			}
@@ -503,7 +506,7 @@ func TestRefuseRehomingPreviewWildcard(t *testing.T) {
 	t.Run("a legacy Cloudflare record is protected too", func(t *testing.T) {
 		t.Parallel()
 
-		if err := refuseRehomingPreviewWildcard(bootstrap.PreviewDomain{BaseDomain: baseDomain, CloudflareAccount: "cf-owner"}, edge.KindNative); err == nil {
+		if err := refuseRehomingPreviewWildcard(bootstrap.PreviewDomain{BaseDomain: baseDomain, CloudflareAccount: "cf-owner"}, cloudfront.Kind); err == nil {
 			t.Fatal("refuseRehomingPreviewWildcard = nil, want a record predating the edge field protected all the same")
 		}
 	})
@@ -511,7 +514,7 @@ func TestRefuseRehomingPreviewWildcard(t *testing.T) {
 	t.Run("the holding edge reconciles its own wildcard", func(t *testing.T) {
 		t.Parallel()
 
-		if err := refuseRehomingPreviewWildcard(bootstrap.PreviewDomain{BaseDomain: baseDomain, Edge: edge.KindCloudflare}, edge.KindCloudflare); err != nil {
+		if err := refuseRehomingPreviewWildcard(bootstrap.PreviewDomain{BaseDomain: baseDomain, Edge: cloudflare.Kind}, cloudflare.Kind); err != nil {
 			t.Fatalf("refuseRehomingPreviewWildcard = %v, want a rerun from the holding edge allowed", err)
 		}
 	})
@@ -519,7 +522,7 @@ func TestRefuseRehomingPreviewWildcard(t *testing.T) {
 	t.Run("an unknown holder is recorded rather than refused", func(t *testing.T) {
 		t.Parallel()
 
-		if err := refuseRehomingPreviewWildcard(bootstrap.PreviewDomain{BaseDomain: baseDomain}, edge.KindNone); err != nil {
+		if err := refuseRehomingPreviewWildcard(bootstrap.PreviewDomain{BaseDomain: baseDomain}, apigateway.Kind); err != nil {
 			t.Fatalf("refuseRehomingPreviewWildcard = %v, want the one command that can write the edge down allowed to run", err)
 		}
 	})
@@ -527,7 +530,7 @@ func TestRefuseRehomingPreviewWildcard(t *testing.T) {
 	t.Run("nothing recorded is nothing to re-home", func(t *testing.T) {
 		t.Parallel()
 
-		if err := refuseRehomingPreviewWildcard(bootstrap.PreviewDomain{}, edge.KindNone); err != nil {
+		if err := refuseRehomingPreviewWildcard(bootstrap.PreviewDomain{}, apigateway.Kind); err != nil {
 			t.Fatalf("refuseRehomingPreviewWildcard = %v, want a first use allowed", err)
 		}
 	})
@@ -551,7 +554,7 @@ func TestUseDomainRecordsTheEdgeHoldingTheWildcard(t *testing.T) {
 			Writer: writer,
 			Prober: certs.Prober{Attempts: 1, Now: time.Now, Get: func(context.Context, string) (http.Header, error) {
 				answer := http.Header{}
-				answer.Set(edge.HeaderEdge, string(edge.KindNative))
+				answer.Set(edge.HeaderEdge, string(cloudfront.Kind))
 				return answer, nil
 			}},
 		},
@@ -565,11 +568,11 @@ func TestUseDomainRecordsTheEdgeHoldingTheWildcard(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ReadPreviewDomain: %v", err)
 	}
-	if recorded.Edge != edge.KindNative {
-		t.Errorf("Edge = %q, want %q: every later lookup of this account-global wildcard asks the edge that raised it", recorded.Edge, edge.KindNative)
+	if recorded.Edge != cloudfront.Kind {
+		t.Errorf("Edge = %q, want %q: every later lookup of this account-global wildcard asks the edge that raised it", recorded.Edge, cloudfront.Kind)
 	}
 	if recorded.CloudflareAccount != "" {
-		t.Errorf("CloudflareAccount = %q, want nothing: no Cloudflare account holds a wildcard raised at the %s edge", recorded.CloudflareAccount, edge.KindNative)
+		t.Errorf("CloudflareAccount = %q, want nothing: no Cloudflare account holds a wildcard raised at the %s edge", recorded.CloudflareAccount, cloudfront.Kind)
 	}
 }
 
@@ -610,7 +613,7 @@ type wildcardEdge struct {
 	specs []edge.PreviewWildcardSpec
 }
 
-func (e *wildcardEdge) Kind() edge.Kind { return edge.KindNative }
+func (e *wildcardEdge) Kind() edge.Kind { return cloudfront.Kind }
 
 func (e *wildcardEdge) ReconcilePreviewWildcard(_ context.Context, spec edge.PreviewWildcardSpec) (string, error) {
 	e.specs = append(e.specs, spec)
@@ -671,7 +674,7 @@ func TestUseDomainResumed(t *testing.T) {
 			Writer: writer,
 			Prober: certs.Prober{Attempts: 1, Now: time.Now, Get: func(context.Context, string) (http.Header, error) {
 				answer := http.Header{}
-				answer.Set(edge.HeaderEdge, string(edge.KindNative))
+				answer.Set(edge.HeaderEdge, string(cloudfront.Kind))
 				return answer, nil
 			}},
 		},

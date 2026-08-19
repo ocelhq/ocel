@@ -18,13 +18,13 @@ func TestBundleManifest(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Run("loads and resolves a bundle path by edge", func(t *testing.T) {
-				t.Setenv(tc.env, `{"cloudflare":"`+tc.path+`"}`)
+				t.Setenv(tc.env, `{"sample":"`+tc.path+`"}`)
 
 				m, err := tc.load()
 				if err != nil {
 					t.Fatalf("load: %v", err)
 				}
-				got, err := m.Path(KindCloudflare)
+				got, err := m.Path(sampleKind)
 				if err != nil {
 					t.Fatalf("Path: %v", err)
 				}
@@ -34,7 +34,7 @@ func TestBundleManifest(t *testing.T) {
 			})
 
 			t.Run("an edge with no bundle is an error that names the edge", func(t *testing.T) {
-				t.Setenv(tc.env, `{"cloudflare":"`+tc.path+`"}`)
+				t.Setenv(tc.env, `{"sample":"`+tc.path+`"}`)
 
 				m, err := tc.load()
 				if err != nil {

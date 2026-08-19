@@ -10,6 +10,9 @@ import (
 	"testing"
 
 	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
+	"github.com/ocelhq/ocel/platform/aws/provider/edges/apigateway"
+	"github.com/ocelhq/ocel/platform/aws/provider/edges/cloudfront"
+	cloudflare "github.com/ocelhq/ocel/platform/edge/cloudflare/deploy"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
@@ -80,7 +83,7 @@ func TestCheckNeedsRefusesAnUnsupportedNeed(t *testing.T) {
 		edge.NeedEdgeMiddleware: {Count: 2, Routes: []string{"/dashboard", "/admin"}, Matchers: []string{"/dashboard/:path*"}},
 	})
 	seen, degraded := degradeCollector()
-	cfg := Config{Edge: &recordingEdge{kind: edge.KindNative}, ArtifactRoot: root, Degraded: degraded}
+	cfg := Config{Edge: &recordingEdge{kind: cloudfront.Kind}, ArtifactRoot: root, Degraded: degraded}
 
 	_, err := checkNeeds(context.Background(), cfg, needsManifest("web"))
 	if err == nil {
@@ -90,8 +93,8 @@ func TestCheckNeedsRefusesAnUnsupportedNeed(t *testing.T) {
 	if !errors.As(err, &refusal) {
 		t.Fatalf("checkNeeds err = %T, want *UnsupportedNeedError", err)
 	}
-	if refusal.Need != edge.NeedEdgeMiddleware || refusal.App != "web" || refusal.Edge != edge.KindNative {
-		t.Errorf("refusal = %+v, want it to name web, edge-middleware and the native edge", refusal)
+	if refusal.Need != edge.NeedEdgeMiddleware || refusal.App != "web" || refusal.Edge != cloudfront.Kind {
+		t.Errorf("refusal = %+v, want it to name web, edge-middleware and the CloudFront edge", refusal)
 	}
 	for _, want := range []string{
 		"edge-middleware",
@@ -116,7 +119,7 @@ func TestCheckNeedsRefusalNamesTheRoutesItHas(t *testing.T) {
 	writeNeeds(t, root, "web", map[edge.Need]edge.NeedDetail{
 		edge.NeedEdgeMiddleware: {Count: 3},
 	})
-	cfg := Config{Edge: &recordingEdge{kind: edge.KindNative}, ArtifactRoot: root}
+	cfg := Config{Edge: &recordingEdge{kind: cloudfront.Kind}, ArtifactRoot: root}
 
 	_, err := checkNeeds(context.Background(), cfg, needsManifest("web"))
 	if err == nil {
@@ -138,7 +141,7 @@ func TestCheckNeedsStreamsOneDegradedPerWaivedNeed(t *testing.T) {
 	})
 	seen, degraded := degradeCollector()
 	cfg := Config{
-		Edge:          &recordingEdge{kind: edge.KindNative},
+		Edge:          &recordingEdge{kind: cloudfront.Kind},
 		ArtifactRoot:  root,
 		AllowDegraded: []string{"edge-middleware", "ppr-resume"},
 		Degraded:      degraded,
@@ -163,7 +166,7 @@ func TestCheckNeedsRefusesANeedNoEdgeKnows(t *testing.T) {
 
 	root := t.TempDir()
 	writeRawNeeds(t, root, "web", `{"edge-telepathy":{"count":1}}`)
-	cfg := Config{Edge: &recordingEdge{kind: edge.KindCloudflare}, ArtifactRoot: root}
+	cfg := Config{Edge: &recordingEdge{kind: cloudflare.Kind}, ArtifactRoot: root}
 
 	_, err := checkNeeds(context.Background(), cfg, needsManifest("web"))
 	if err == nil {
@@ -183,7 +186,7 @@ func TestCheckNeedsWaivingAnUnknownNeedStillRefuses(t *testing.T) {
 
 	root := t.TempDir()
 	writeRawNeeds(t, root, "web", `{"edge-telepathy":{"count":1}}`)
-	cfg := Config{Edge: &recordingEdge{kind: edge.KindCloudflare}, ArtifactRoot: root, AllowDegraded: []string{"edge-telepathy"}}
+	cfg := Config{Edge: &recordingEdge{kind: cloudflare.Kind}, ArtifactRoot: root, AllowDegraded: []string{"edge-telepathy"}}
 
 	if _, err := checkNeeds(context.Background(), cfg, needsManifest("web")); err == nil {
 		t.Fatal("checkNeeds err = nil, want a waiver not to invent a need")
@@ -228,7 +231,7 @@ func TestCheckNeedsChecksEntitlementOnlyForAPresentCodeNeed(t *testing.T) {
 			root := t.TempDir()
 			writeNeeds(t, root, "web", tc.needs)
 			ed := &verifyingEdge{
-				recordingEdge: &recordingEdge{kind: edge.KindCloudflare},
+				recordingEdge: &recordingEdge{kind: cloudflare.Kind},
 				identity:      edge.CredentialIdentity{Account: "acct-1", Plan: "Workers Free", CodeEntitlement: edge.EntitlementWithheld},
 			}
 			cfg := Config{Edge: ed, ArtifactRoot: root}
@@ -260,7 +263,7 @@ func TestCheckNeedsPassesAGrantedEntitlement(t *testing.T) {
 	root := t.TempDir()
 	writeNeeds(t, root, "web", map[edge.Need]edge.NeedDetail{edge.NeedEdgeMiddleware: {Count: 1}})
 	ed := &verifyingEdge{
-		recordingEdge: &recordingEdge{kind: edge.KindCloudflare},
+		recordingEdge: &recordingEdge{kind: cloudflare.Kind},
 		identity:      edge.CredentialIdentity{Account: "acct-1", CodeEntitlement: edge.EntitlementGranted},
 	}
 	if _, err := checkNeeds(context.Background(), Config{Edge: ed, ArtifactRoot: root}, needsManifest("web")); err != nil {
@@ -273,7 +276,7 @@ func TestCheckNeedsSaysNothingForAnAppThatDeclaresNoNeeds(t *testing.T) {
 
 	root := t.TempDir()
 	seen, degraded := degradeCollector()
-	cfg := Config{Edge: &recordingEdge{kind: edge.KindNone}, ArtifactRoot: root, Degraded: degraded}
+	cfg := Config{Edge: &recordingEdge{kind: apigateway.Kind}, ArtifactRoot: root, Degraded: degraded}
 
 	if _, err := checkNeeds(context.Background(), cfg, needsManifest("api")); err != nil {
 		t.Fatalf("checkNeeds err = %v, want an app with no serve descriptor untouched", err)
@@ -291,7 +294,7 @@ func TestRealizeCompareRefusesBeforeItMutatesAnything(t *testing.T) {
 	writeNeeds(t, root, "web", map[edge.Need]edge.NeedDetail{
 		edge.NeedEdgeMiddleware: {Count: 1, Routes: []string{"/dashboard"}},
 	})
-	ed := &recordingEdge{kind: edge.KindNative, storeSchemaVersion: &current}
+	ed := &recordingEdge{kind: cloudfront.Kind, storeSchemaVersion: &current}
 	up := &fakeUploader{exists: map[string]bool{}}
 	cfg := Config{
 		Edge:           ed,
@@ -337,7 +340,7 @@ func TestBuildDeploymentRecordCarriesTheNeedsAndWhatBecameOfThem(t *testing.T) {
 	cfg := Config{
 		ArtifactRoot:  root,
 		Slug:          "proj",
-		Edge:          &recordingEdge{kind: edge.KindNative},
+		Edge:          &recordingEdge{kind: cloudfront.Kind},
 		OriginSecret:  testOriginSecret,
 		AllowDegraded: []string{"edge-middleware"},
 	}
@@ -357,7 +360,7 @@ func TestBuildDeploymentRecordCarriesTheNeedsAndWhatBecameOfThem(t *testing.T) {
 		t.Errorf("Needs = %v, want %v", record.Needs, wantNeeds)
 	}
 	if !slicesEqualNeeds(record.SupportInEffect, []edge.Need{edge.NeedEdgeCache, edge.NeedStreaming}) {
-		t.Errorf("SupportInEffect = %v, want the two the native edge serves", record.SupportInEffect)
+		t.Errorf("SupportInEffect = %v, want the two the CloudFront edge serves", record.SupportInEffect)
 	}
 	if !slicesEqualNeeds(record.Waived, []edge.Need{edge.NeedEdgeMiddleware}) {
 		t.Errorf("Waived = %v, want edge-middleware", record.Waived)
@@ -373,7 +376,7 @@ func TestBuildDeploymentRecordLeavesNeedsOutForAnAppWithNone(t *testing.T) {
 		Apps:      []*deploymentsv1.ManifestApp{{Name: "api", Framework: "express"}},
 		Functions: []*deploymentsv1.ManifestFunction{{LogicalName: "api_index", Framework: "express", App: "api", RouteId: "/"}},
 	}
-	cfg := Config{ArtifactRoot: root, Slug: "proj", Edge: &recordingEdge{kind: edge.KindCloudflare}}
+	cfg := Config{ArtifactRoot: root, Slug: "proj", Edge: &recordingEdge{kind: cloudflare.Kind}}
 
 	record, err := buildDeploymentRecord(cfg, manifest, manifest.GetApps()[0], deployedAs("API1"), nil, appBuildsFor(t, cfg, manifest), nil)
 	if err != nil {
@@ -415,7 +418,7 @@ func TestStagedRecordCarriesTheNeedsAndWhatBecameOfThem(t *testing.T) {
 		Apps:      []*deploymentsv1.ManifestApp{{Name: "web", Framework: frameworkNext, DeploymentId: testDeploymentID}},
 		Functions: []*deploymentsv1.ManifestFunction{{LogicalName: "web_index", Framework: frameworkNext, App: "web", RouteId: "/"}},
 	}
-	ed := &recordingEdge{kind: edge.KindNative}
+	ed := &recordingEdge{kind: cloudfront.Kind}
 	cfg := Config{
 		ArtifactRoot:  root,
 		Slug:          "proj",
@@ -482,7 +485,7 @@ func TestCheckNeedsRefusalNamesTheMatchersWhenItHasNoRoutes(t *testing.T) {
 	writeNeeds(t, root, "web", map[edge.Need]edge.NeedDetail{
 		edge.NeedEdgeMiddleware: {Count: 7, Matchers: []string{"/dashboard/:path*", "/admin/:path*"}},
 	})
-	cfg := Config{Edge: &recordingEdge{kind: edge.KindNative}, ArtifactRoot: root}
+	cfg := Config{Edge: &recordingEdge{kind: cloudfront.Kind}, ArtifactRoot: root}
 
 	_, err := checkNeeds(context.Background(), cfg, needsManifest("web"))
 	if err == nil {
@@ -498,7 +501,7 @@ func TestCheckNeedsRefusesWhenItCannotConfirmTheEntitlement(t *testing.T) {
 
 	root := t.TempDir()
 	writeNeeds(t, root, "web", map[edge.Need]edge.NeedDetail{edge.NeedEdgeMiddleware: {Count: 1, Routes: []string{"/x"}}})
-	ed := &verifyingEdge{recordingEdge: &recordingEdge{kind: edge.KindCloudflare}, err: errors.New("token was rejected")}
+	ed := &verifyingEdge{recordingEdge: &recordingEdge{kind: cloudflare.Kind}, err: errors.New("token was rejected")}
 	cfg := Config{Edge: ed, ArtifactRoot: root, AllowDegraded: []string{"edge-middleware"}}
 
 	_, err := checkNeeds(context.Background(), cfg, needsManifest("web"))
@@ -533,7 +536,7 @@ func TestCheckNeedsDegradesACodeNeedTheEntitlementWithholds(t *testing.T) {
 				edge.NeedEdgeMiddleware: {Count: 1, Routes: []string{"/dashboard"}},
 			})
 			ed := &verifyingEdge{
-				recordingEdge: &recordingEdge{kind: edge.KindCloudflare},
+				recordingEdge: &recordingEdge{kind: cloudflare.Kind},
 				identity:      edge.CredentialIdentity{Account: "acct-1", Plan: "Workers Free", CodeEntitlement: edge.EntitlementWithheld},
 			}
 			seen, degraded := degradeCollector()
@@ -584,7 +587,7 @@ func TestStagedRecordWaivesTheNeedThePlanWithholds(t *testing.T) {
 		Functions: []*deploymentsv1.ManifestFunction{{LogicalName: "web_index", Framework: frameworkNext, App: "web", RouteId: "/"}},
 	}
 	ed := &verifyingEdge{
-		recordingEdge: &recordingEdge{kind: edge.KindCloudflare},
+		recordingEdge: &recordingEdge{kind: cloudflare.Kind},
 		identity:      edge.CredentialIdentity{Account: "acct-1", Plan: "Workers Free", CodeEntitlement: edge.EntitlementWithheld},
 	}
 	cfg := Config{

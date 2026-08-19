@@ -317,7 +317,7 @@ func TestEncodePrelude(t *testing.T) {
 	t.Run("the edge header the router set reaches the prelude", func(t *testing.T) {
 		h := http.Header{}
 		h.Set("Content-Type", "text/html")
-		h.Set("X-Ocel-Edge", "none")
+		h.Set("X-Ocel-Edge", "cloudfront")
 
 		out, err := encodePrelude(200, h)
 		if err != nil {
@@ -329,7 +329,7 @@ func TestEncodePrelude(t *testing.T) {
 		if err := json.Unmarshal(out[:len(out)-preludeSeparatorLen], &p); err != nil {
 			t.Fatalf("prelude JSON invalid: %v", err)
 		}
-		if p.Headers["X-Ocel-Edge"] != "none" {
+		if p.Headers["X-Ocel-Edge"] != "cloudfront" {
 			t.Errorf("headers = %v, want the edge header the router set carried through; it is the only thing that marks a streamed response", p.Headers)
 		}
 	})

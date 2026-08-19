@@ -49,7 +49,7 @@ func (s *Server) ListPromotions(ctx context.Context, req *deploymentsv1.ListProm
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInvalidArgument, err)
 	}
-	stack, err := s.openStack(ctx, edge.Kind(req.GetEdgeKind()), opts, req.GetSlug())
+	stack, err := s.openStack(ctx, requestedEdge(req), opts, req.GetSlug())
 	if err != nil {
 		if errors.Is(err, errNoProductionDeploy) {
 			return &deploymentsv1.ListPromotionsResponse{}, nil
@@ -69,11 +69,11 @@ func (s *Server) Rollback(ctx context.Context, req *deploymentsv1.RollbackReques
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInvalidArgument, err)
 	}
-	edgeFront, err := s.edge(edge.Kind(req.GetEdgeKind()), opts.Region)
+	edgeFront, err := s.edge(requestedEdge(req), opts.Region)
 	if err != nil {
 		return nil, err
 	}
-	stack, err := s.openStack(ctx, edge.Kind(req.GetEdgeKind()), opts, req.GetSlug())
+	stack, err := s.openStack(ctx, requestedEdge(req), opts, req.GetSlug())
 	if err != nil {
 		return nil, err
 	}

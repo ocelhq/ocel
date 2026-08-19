@@ -30,6 +30,7 @@ import (
 	linksv1 "github.com/ocelhq/ocel/pkg/proto/links/v1"
 	"github.com/ocelhq/ocel/platform/aws/provider/dns"
 	"github.com/ocelhq/ocel/platform/aws/provider/membrane"
+	cloudflare "github.com/ocelhq/ocel/platform/edge/cloudflare/deploy"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
@@ -49,7 +50,7 @@ func realize(ctx context.Context, cfg Config, manifest *deploymentsv1.Manifest, 
 		return err
 	}
 
-	if cfg.Edge.Kind() == edge.KindCloudflare && cfg.StoreEndpoint == "" {
+	if cfg.Edge.Kind() == cloudflare.Kind && cfg.StoreEndpoint == "" {
 		return Result{}, finishUploading(fmt.Errorf("no deployments-store worker found for this account; re-run `%s` to provision it before deploying", bootstrapCommand(cfg)))
 	}
 
@@ -333,7 +334,7 @@ func settleStackRecords(ctx context.Context, cfg Config, specs []edge.StackSpec,
 	for _, spec := range specs {
 		hosts = append(hosts, spec.Domains...)
 	}
-	records, err := pointableRecords(edge.TargetFor(cfg.Edge.Kind(), state), state, hosts, say)
+	records, err := pointableRecords(edge.TargetFor(cfg.Edge, state), state, hosts, say)
 	if err != nil {
 		return state, err
 	}

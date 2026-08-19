@@ -7,6 +7,8 @@ import (
 	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
 	"github.com/ocelhq/ocel/platform/aws/provider/bootstrap"
 	"github.com/ocelhq/ocel/platform/aws/provider/certs"
+	"github.com/ocelhq/ocel/platform/aws/provider/edges/cloudfront"
+	cloudflare "github.com/ocelhq/ocel/platform/edge/cloudflare/deploy"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
@@ -39,7 +41,7 @@ func destroyPlanItems(scope projectPlanScope) ([]*deploymentsv1.TeardownItem, er
 func surfaceItems(scope projectPlanScope) []*deploymentsv1.TeardownItem {
 	hostnames := edge.BoundDomains(scope.state)
 	switch scope.kind {
-	case edge.KindCloudflare:
+	case cloudflare.Kind:
 		items := []*deploymentsv1.TeardownItem{{
 			Kind:   "edge workers",
 			Name:   scope.slug,
@@ -60,7 +62,7 @@ func surfaceItems(scope projectPlanScope) []*deploymentsv1.TeardownItem {
 			Action: deploymentsv1.TeardownItem_ACTION_DELETE,
 			Reason: "the store instance holding every deployment and pointer this project promoted",
 		})
-	case edge.KindNative:
+	case cloudfront.Kind:
 		var items []*deploymentsv1.TeardownItem
 		if front := edge.FrontOf(scope.state); front != "" {
 			items = append(items, &deploymentsv1.TeardownItem{
@@ -200,7 +202,7 @@ func containsRecord(records []edge.Record, wanted edge.Record) bool {
 
 func storeItems(scope projectPlanScope) []*deploymentsv1.TeardownItem {
 	var items []*deploymentsv1.TeardownItem
-	if scope.kind != edge.KindCloudflare {
+	if scope.kind != cloudflare.Kind {
 		items = append(items, &deploymentsv1.TeardownItem{
 			Kind:   "deployments ledger",
 			Name:   scope.class + "/" + scope.slug,
@@ -244,14 +246,14 @@ func substrateItems(scope projectPlanScope) []*deploymentsv1.TeardownItem {
 
 func sharedEdgeItem(kind edge.Kind) *deploymentsv1.TeardownItem {
 	switch kind {
-	case edge.KindCloudflare:
+	case cloudflare.Kind:
 		return &deploymentsv1.TeardownItem{
 			Kind:   "shared preview entry worker",
 			Name:   edge.PreviewEntryOwner,
 			Action: deploymentsv1.TeardownItem_ACTION_KEEP,
 			Reason: "substrate-scoped: it fronts every project's previews",
 		}
-	case edge.KindNative:
+	case cloudfront.Kind:
 		return &deploymentsv1.TeardownItem{
 			Kind:   "preview resolver",
 			Name:   "function and key-value store",

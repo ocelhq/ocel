@@ -1,7 +1,8 @@
 import { defineConfig, type Need } from "ocel/config";
 import { cloudflareDns } from "ocel/dns";
-import { cfEdge } from "ocel/edge";
+import { cloudflare } from "ocel/edge";
 import { route53 } from "@ocel/provider-aws/dns";
+import { apiGateway, cloudfront } from "@ocel/provider-aws/edge";
 import awsProvider from "@ocel/provider-aws";
 
 type Exactly<A, B> = [A] extends [B] ? ([B] extends [A] ? true : false) : false;
@@ -13,40 +14,52 @@ export const needsAreTheFive: Exactly<
 
 export const cloudflareEdge = defineConfig({
   slug: "test-app",
-  edge: cfEdge(),
+  edge: cloudflare(),
   dns: cloudflareDns({ zone: "acme.com" }),
 });
 
-export const noEdge = defineConfig({
+export const cloudfrontEdge = defineConfig({
   slug: "test-app",
-  edge: false,
+  edge: cloudfront(),
   dns: route53({ zone: "Z123456789ABCDEFGHIJK" }),
 });
 
-export const originEdge = defineConfig({ slug: "test-app" });
-
-export const namedNative = defineConfig({
+export const apiGatewayEdge = defineConfig({
   slug: "test-app",
-  // @ts-expect-error omit `edge` for the origin's own edge; there is no "native" spelling
-  edge: { kind: "native" },
+  edge: apiGateway(),
+  dns: route53({ zone: "Z123456789ABCDEFGHIJK" }),
+});
+
+export const providerDefaultEdge = defineConfig({ slug: "test-app" });
+
+export const namedByHand = defineConfig({
+  slug: "test-app",
+  // @ts-expect-error an edge comes from a factory, never a hand-written marker
+  edge: { kind: "cloudflare" },
 });
 
 export const edgeFromAString = defineConfig({
   slug: "test-app",
-  // @ts-expect-error cfEdge takes no options
-  edge: cfEdge("nonsense"),
+  // @ts-expect-error cloudflare takes no options
+  edge: cloudflare("nonsense"),
 });
 
 export const edgeWithAZone = defineConfig({
   slug: "test-app",
   // @ts-expect-error a zone belongs to dns, not to the edge
-  edge: cfEdge({ zone: "acme.com" }),
+  edge: cloudflare({ zone: "acme.com" }),
 });
 
 export const edgeTurnedOn = defineConfig({
   slug: "test-app",
   // @ts-expect-error true is not an edge
   edge: true,
+});
+
+export const edgeTurnedOff = defineConfig({
+  slug: "test-app",
+  // @ts-expect-error there is no off; omit `edge` for the provider's default
+  edge: false,
 });
 
 export const zoneAsDns = defineConfig({

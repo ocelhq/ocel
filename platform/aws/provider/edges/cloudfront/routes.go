@@ -63,7 +63,7 @@ func (w routeWriter) chance() float64 {
 
 func (w routeWriter) apply(ctx context.Context, puts map[string]route, deletes []string) error {
 	if w.arn == "" {
-		return fmt.Errorf("the native edge names no key value store to publish routes into; bootstrap the account first")
+		return fmt.Errorf("the %q edge names no key value store to publish routes into; bootstrap the account first", Kind)
 	}
 	if len(puts) == 0 && len(deletes) == 0 {
 		return nil
@@ -131,7 +131,7 @@ func routeOwner(ctx context.Context, c Clients, class edge.Class, hostname strin
 		if isNotFound(err) {
 			return "", false, nil
 		}
-		return "", false, fmt.Errorf("read the key value store the native edge routes %s with: %w", class, err)
+		return "", false, fmt.Errorf("read the key value store the %q edge routes %s with: %w", Kind, class, err)
 	}
 	out, err := c.KeyValueStore.GetKey(ctx, &cloudfrontkeyvaluestore.GetKeyInput{
 		KvsARN: store.KeyValueStore.ARN,
@@ -158,7 +158,7 @@ func (w routeWriter) etag(ctx context.Context) (string, error) {
 		KvsARN: aws.String(w.arn),
 	})
 	if err != nil {
-		return "", fmt.Errorf("read the version of the key value store the native edge routes with: %w", err)
+		return "", fmt.Errorf("read the version of the key value store the %q edge routes with: %w", Kind, err)
 	}
 	return aws.ToString(out.ETag), nil
 }

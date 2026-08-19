@@ -81,10 +81,10 @@ describe("buildNext", () => {
 
     await buildNext(
       { name: "web", cwd: dir },
-      { outDir: "/out", edgeKind: "native", allowDegraded: ["edge-middleware", "edge-runtime"] },
+      { outDir: "/out", edgeKind: "cloudfront", allowDegraded: ["edge-middleware", "edge-runtime"] },
     );
 
-    expect(env?.OCEL_EDGE_KIND).toBe("native");
+    expect(env?.OCEL_EDGE_KIND).toBe("cloudfront");
     expect(env?.OCEL_ALLOW_DEGRADED).toBe("edge-middleware,edge-runtime");
   });
 

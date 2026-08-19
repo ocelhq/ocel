@@ -62,7 +62,7 @@ const isrRoutes = {
 
 function shaping(env: Record<string, string> = {}, config: Record<string, unknown> = {}) {
   return originShaping(manifest(isrRoutes, config), {
-    OCEL_EDGE_KIND: "native",
+    OCEL_EDGE_KIND: "cloudfront",
     OCEL_ISR_PREFIX: prefix,
     ...env,
   } as NodeJS.ProcessEnv)!;
@@ -79,19 +79,19 @@ test("the gate stays shut behind cloudflare, which tiers its own responses", () 
 });
 
 test("the gate opens for an edge that does not tier its own responses", () => {
-  expect(routerMode("native")).toBe(true);
-  expect(originShaping(manifest(isrRoutes), { OCEL_EDGE_KIND: "native" } as any)).not.toBeNull();
+  expect(routerMode("cloudfront")).toBe(true);
+  expect(originShaping(manifest(isrRoutes), { OCEL_EDGE_KIND: "cloudfront" } as any)).not.toBeNull();
 });
 
-test("only the native front reads cache tags, so only it is given them", () => {
-  expect(invalidatesByCacheTag("native")).toBe(true);
-  for (const kind of [undefined, "", "none", "cloudflare"]) {
+test("only the cloudfront front reads cache tags, so only it is given them", () => {
+  expect(invalidatesByCacheTag("cloudfront")).toBe(true);
+  for (const kind of [undefined, "", "api-gateway", "cloudflare"]) {
     expect(invalidatesByCacheTag(kind)).toBe(false);
   }
 });
 
 test("leaves the tag header off a front that invalidates by nothing", () => {
-  const headers = serve(shaping({ OCEL_EDGE_KIND: "none" }), "/isr", fakeRes(), {
+  const headers = serve(shaping({ OCEL_EDGE_KIND: "api-gateway" }), "/isr", fakeRes(), {
     tags: ["products"],
   });
 

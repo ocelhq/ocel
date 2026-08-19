@@ -19,13 +19,13 @@ func TestProbeHostname(t *testing.T) {
 func TestServedBy(t *testing.T) {
 	t.Parallel()
 
-	if !ServedBy(" Cloudflare ", KindCloudflare) {
+	if !ServedBy(" Sample ", sampleKind) {
 		t.Error("a padded, differently cased header does not name the edge that sent it")
 	}
-	if ServedBy("native", KindCloudflare) {
-		t.Error("another edge's header passed for cloudflare")
+	if ServedBy("other", sampleKind) {
+		t.Error("another edge's header passed for the sample edge")
 	}
-	if ServedBy("", KindNone) {
+	if ServedBy("", frontedKind) {
 		t.Error("a missing header passed")
 	}
 }

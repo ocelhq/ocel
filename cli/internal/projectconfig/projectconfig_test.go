@@ -451,29 +451,35 @@ export default {
 			},
 		},
 		{
-			name: "leaves the edge to the origin when none is declared",
+			name: "leaves the edge to the provider when none is declared",
 			config: `
 export default {
   slug: "test-app",
 };
 `,
 			check: func(t *testing.T, root string, cfg *Config) {
-				if cfg.Edge != nil || cfg.EdgeDisabled {
-					t.Fatalf("Edge = %v, EdgeDisabled = %v, want an omitted edge to name nothing", cfg.Edge, cfg.EdgeDisabled)
+				if cfg.Edge != nil {
+					t.Fatalf("Edge = %v, want an omitted edge to name nothing", cfg.Edge)
+				}
+				if got := cfg.EdgeKind(); got != "" {
+					t.Fatalf("EdgeKind() = %q, want nothing: the provider chooses when the config names no edge", got)
 				}
 			},
 		},
 		{
-			name: "parses an edge turned off outright",
+			name: "forwards an edge this CLI has never heard of",
 			config: `
 export default {
   slug: "test-app",
-  edge: false,
+  edge: { kind: "fastly", options: { pop: "lhr" } },
 };
 `,
 			check: func(t *testing.T, root string, cfg *Config) {
-				if cfg.Edge != nil || !cfg.EdgeDisabled {
-					t.Fatalf("Edge = %v, EdgeDisabled = %v, want `edge: false` to disable it", cfg.Edge, cfg.EdgeDisabled)
+				if got := cfg.EdgeKind(); got != "fastly" {
+					t.Fatalf("EdgeKind() = %q, want fastly: the provider, not the CLI, says which edges exist", got)
+				}
+				if got := string(cfg.Edge.Options); got != `{"pop":"lhr"}` {
+					t.Fatalf("Options = %s, want them carried through untouched", got)
 				}
 			},
 		},
@@ -555,11 +561,11 @@ export default {
 			},
 		},
 		{
-			name: "accepts route53 alongside no edge at all",
+			name: "accepts route53 alongside an edge that is not cloudflare",
 			config: `
 export default {
   slug: "test-app",
-  edge: false,
+  edge: { kind: "api-gateway", options: {} },
   dns: { kind: "route53" },
 };
 `,
@@ -695,14 +701,14 @@ export default {
 			wantErr: []string{"main#db"},
 		},
 		{
-			name: "names the three edge spellings when the edge is not a marker",
+			name: "names the edge spellings when the edge is not a marker",
 			config: `
 export default {
   slug: "test-app",
   edge: true,
 };
 `,
-			wantErr: []string{`has an invalid "edge"`, "use `edge: cfEdge()` (from ocel/edge), `edge: false`, or omit it for the origin's own edge"},
+			wantErr: []string{`has an invalid "edge"`, "use `edge: cloudflare()` (from ocel/edge), name one of your provider's own edges, or omit it for the provider's default edge"},
 		},
 		{
 			name: "rejects an edge object carrying no kind",
@@ -712,17 +718,17 @@ export default {
   edge: {},
 };
 `,
-			wantErr: []string{`has an invalid "edge"`, "cfEdge()"},
+			wantErr: []string{`has an invalid "edge"`, "cloudflare()"},
 		},
 		{
-			name: "lists the known edges when the kind is unknown",
+			name: "refuses an edge turned off outright",
 			config: `
 export default {
   slug: "test-app",
-  edge: { kind: "fastly" },
+  edge: false,
 };
 `,
-			wantErr: []string{`has an invalid "edge"`, `"fastly" is not an edge`, "cloudflare, native, none"},
+			wantErr: []string{`has an invalid "edge"`, "`edge: false` is gone", "Omit `edge` for the provider's default edge", "one of your provider's own edges"},
 		},
 		{
 			name: "names the two dns spellings when the dns is not a marker",
@@ -753,7 +759,7 @@ export default {
   dns: { kind: "route53" },
 };
 `,
-			wantErr: []string{`has an invalid "dns"`, "route53()", "cfEdge()", "cloudflareDns()"},
+			wantErr: []string{`has an invalid "dns"`, "route53()", "cloudflare()", "cloudflareDns()"},
 		},
 	}
 
@@ -1398,9 +1404,9 @@ func TestEdgeKind(t *testing.T) {
 		config Config
 		want   edge.Kind
 	}{
-		{name: "a config that names no edge is fronted by the origin cloud's own", config: Config{}, want: edge.KindNative},
-		{name: "a config that names one is fronted by that one", config: Config{Edge: &EdgeDescriptor{Kind: "cloudflare"}}, want: edge.KindCloudflare},
-		{name: "a config that turns the edge off is fronted by nothing", config: Config{EdgeDisabled: true}, want: edge.KindNone},
+		{name: "a config that names no edge leaves the choice to the provider", config: Config{}, want: ""},
+		{name: "a config that names one is fronted by that one", config: Config{Edge: &EdgeDescriptor{Kind: "cloudflare"}}, want: edge.Kind("cloudflare")},
+		{name: "a config that names an edge this CLI does not know carries it anyway", config: Config{Edge: &EdgeDescriptor{Kind: "fastly"}}, want: "fastly"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()

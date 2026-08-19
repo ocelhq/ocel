@@ -221,7 +221,7 @@ export async function buildOriginEdgeApp(
 
   const outputDir = join(projectDir, ".ocel/output");
   vi.stubEnv("OCEL_OUTPUT_DIR", outputDir);
-  vi.stubEnv("OCEL_EDGE_KIND", options.edgeKind ?? "native");
+  vi.stubEnv("OCEL_EDGE_KIND", options.edgeKind ?? "cloudfront");
   vi.stubEnv("OCEL_ALLOW_DEGRADED", options.allowDegraded ?? "");
 
   await adapter.onBuildComplete!(args as never);

@@ -74,7 +74,7 @@ func findEdgeSet(ctx context.Context, c Clients, class edge.Class, held edgeSet)
 		if isNotFound(err) {
 			return edgeSet{}, unbootstrapped(class)
 		}
-		return edgeSet{}, fmt.Errorf("read the key value store the native edge routes with: %w", err)
+		return edgeSet{}, fmt.Errorf("read the key value store the %q edge routes with: %w", Kind, err)
 	}
 	set.keyValueStoreARN = aws.ToString(store.KeyValueStore.ARN)
 
@@ -86,7 +86,7 @@ func findEdgeSet(ctx context.Context, c Clients, class edge.Class, held edgeSet)
 		if isNotFound(err) {
 			return edgeSet{}, unbootstrapped(class)
 		}
-		return edgeSet{}, fmt.Errorf("read the resolver function the native edge routes with: %w", err)
+		return edgeSet{}, fmt.Errorf("read the resolver function the %q edge routes with: %w", Kind, err)
 	}
 	set.functionARN = aws.ToString(described.FunctionSummary.FunctionMetadata.FunctionARN)
 
@@ -112,7 +112,7 @@ func findEdgeSet(ctx context.Context, c Clients, class edge.Class, held edgeSet)
 }
 
 func unbootstrapped(class edge.Class) error {
-	return fmt.Errorf("the native edge has nothing to front %s deployments with in this account: its CloudFront function, key value store and cache policies are missing. Run `ocel bootstrap` against this account, then deploy again", class)
+	return fmt.Errorf("the %q edge has nothing to front %s deployments with in this account: its CloudFront function, key value store and cache policies are missing. Run `ocel bootstrap` against this account, then deploy again", Kind, class)
 }
 
 func ensureKeyValueStore(ctx context.Context, c Clients, class edge.Class) (string, error) {
@@ -250,7 +250,7 @@ func ensureHeadersPolicy(ctx context.Context, c Clients, class edge.Class) (stri
 	out, err := c.CloudFront.CreateResponseHeadersPolicy(ctx, &cloudfront.CreateResponseHeadersPolicyInput{
 		ResponseHeadersPolicyConfig: &cftypes.ResponseHeadersPolicyConfig{
 			Name:    aws.String(name),
-			Comment: aws.String("Ocel: marks every response the native edge served, so a liveness probe can tell which front answered, and keeps the origin's cache tags off the wire to the viewer."),
+			Comment: aws.String(fmt.Sprintf("Ocel: marks every response the %q edge served, so a liveness probe can tell which front answered, and keeps the origin's cache tags off the wire to the viewer.", Kind)),
 			CustomHeadersConfig: &cftypes.ResponseHeadersPolicyCustomHeadersConfig{
 				Quantity: ptr(int32(1)),
 				Items: []cftypes.ResponseHeadersPolicyCustomHeader{{
@@ -282,7 +282,7 @@ func ensureOriginAccessControl(ctx context.Context, c Clients, class edge.Class)
 	out, err := c.CloudFront.CreateOriginAccessControl(ctx, &cloudfront.CreateOriginAccessControlInput{
 		OriginAccessControlConfig: &cftypes.OriginAccessControlConfig{
 			Name:                          aws.String(name),
-			Description:                   aws.String("Ocel: signs the native edge's reads of the asset bucket, so the bucket stays closed to everyone else."),
+			Description:                   aws.String(fmt.Sprintf("Ocel: signs the %q edge's reads of the asset bucket, so the bucket stays closed to everyone else.", Kind)),
 			OriginAccessControlOriginType: cftypes.OriginAccessControlOriginTypesS3,
 			SigningBehavior:               cftypes.OriginAccessControlSigningBehaviorsAlways,
 			SigningProtocol:               cftypes.OriginAccessControlSigningProtocolsSigv4,

@@ -27,10 +27,10 @@ func previewWildcardName(baseDomain string) string {
 func (p *provider) ReconcilePreviewWildcard(ctx context.Context, spec edge.PreviewWildcardSpec) (string, error) {
 	wildcard := edge.PreviewWildcard(spec.BaseDomain)
 	if wildcard == "" {
-		return "", errors.New("the native edge serves every preview from one wildcard distribution; this reconcile names no base domain")
+		return "", fmt.Errorf("the %q edge serves every preview from one wildcard distribution; this reconcile names no base domain", Kind)
 	}
 	if spec.Certificate == "" {
-		return "", fmt.Errorf("the native edge terminates TLS for %s at CloudFront, so the distribution needs the wildcard certificate; this reconcile carries none", wildcard)
+		return "", fmt.Errorf("the %q edge terminates TLS for %s at CloudFront, so the distribution needs the wildcard certificate; this reconcile carries none", Kind, wildcard)
 	}
 	if err := cloudFrontCertificate(wildcard, spec.Certificate); err != nil {
 		return "", err
@@ -92,12 +92,12 @@ func substrateLedger(c Clients, class edge.Class, deployed bootstrap.Deployed) *
 func cloudFrontCertificate(wildcard, certificate string) error {
 	fields := strings.SplitN(certificate, ":", 6)
 	if len(fields) < 6 || fields[0] != "arn" {
-		return fmt.Errorf("the native edge terminates TLS for %s at CloudFront, which takes an ACM certificate ARN; this reconcile carries %q, which is not one", wildcard, certificate)
+		return fmt.Errorf("the %q edge terminates TLS for %s at CloudFront, which takes an ACM certificate ARN; this reconcile carries %q, which is not one", Kind, wildcard, certificate)
 	}
 	if fields[3] == certs.CloudFrontRegion {
 		return nil
 	}
-	return fmt.Errorf("the native edge terminates TLS for %s at CloudFront, and CloudFront reads certificates only from %s; this reconcile carries one issued in %s, which CloudFront will not attach. Run `ocel domain use --preview %s` against this account to issue the wildcard certificate where CloudFront can read it", wildcard, certs.CloudFrontRegion, fields[3], strings.TrimPrefix(wildcard, "*."))
+	return fmt.Errorf("the %q edge terminates TLS for %s at CloudFront, and CloudFront reads certificates only from %s; this reconcile carries one issued in %s, which CloudFront will not attach. Run `ocel domain use --preview %s` against this account to issue the wildcard certificate where CloudFront can read it", Kind, wildcard, certs.CloudFrontRegion, fields[3], strings.TrimPrefix(wildcard, "*."))
 }
 
 func convergeWildcard(ctx context.Context, c Clients, plan distributionPlan, id, wildcard, certificate string) error {
@@ -184,7 +184,7 @@ func sweepPreviewRoutes(ctx context.Context, c Clients, baseDomain string) error
 		if isNotFound(err) {
 			return nil
 		}
-		return fmt.Errorf("read the key value store the native edge routes previews with: %w", err)
+		return fmt.Errorf("read the key value store the %q edge routes previews with: %w", Kind, err)
 	}
 	arn := aws.ToString(store.KeyValueStore.ARN)
 	suffix := "." + routeKey(baseDomain)
@@ -200,7 +200,7 @@ func sweepPreviewRoutes(ctx context.Context, c Clients, baseDomain string) error
 			NextToken:  token,
 		})
 		if err != nil {
-			return fmt.Errorf("read the hostnames the native edge answers previews on: %w", err)
+			return fmt.Errorf("read the hostnames the %q edge answers previews on: %w", Kind, err)
 		}
 		for _, item := range out.Items {
 			if key := routeKey(aws.ToString(item.Key)); strings.HasSuffix(key, suffix) {

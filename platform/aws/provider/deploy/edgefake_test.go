@@ -7,6 +7,8 @@ import (
 	"slices"
 	"testing"
 
+	"github.com/ocelhq/ocel/platform/aws/provider/edges"
+	"github.com/ocelhq/ocel/platform/aws/provider/edges/apigateway"
 	cloudflare "github.com/ocelhq/ocel/platform/edge/cloudflare/deploy"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 	"github.com/ocelhq/ocel/platform/edge/contract/edgeconformance"
@@ -77,17 +79,21 @@ func (f *recordingEdge) Kind() edge.Kind {
 	return f.kind
 }
 
-func (f *recordingEdge) Supports(need edge.Need) bool {
-	return edge.CapabilitiesOf(f.Kind()).Supports(need)
+func (f *recordingEdge) declared() edge.Edge {
+	real, err := edges.EdgeFor(f.Kind(), edges.Deps{})
+	if err != nil {
+		panic("recordingEdge: " + err.Error())
+	}
+	return real
 }
 
-func (f *recordingEdge) Supported() []edge.Need {
-	return edge.CapabilitiesOf(f.Kind()).Supported()
-}
+func (f *recordingEdge) Supports(need edge.Need) bool { return f.declared().Supports(need) }
 
-func (f *recordingEdge) FlipBound() edge.FlipBound {
-	return edge.CapabilitiesOf(f.Kind()).FlipBound()
-}
+func (f *recordingEdge) Supported() []edge.Need { return f.declared().Supported() }
+
+func (f *recordingEdge) FlipBound() edge.FlipBound { return f.declared().FlipBound() }
+
+func (f *recordingEdge) ServesUnbound() bool { return edge.ServesUnbound(f.declared()) }
 
 func (f *recordingEdge) Bootstrap(context.Context, edge.Class) (edge.BootstrapOutput, error) {
 	return edge.BootstrapOutput{Trust: edge.TrustExternal}, nil
@@ -282,8 +288,8 @@ func (s *recordingStack) BindDomain(_ context.Context, binding edge.DomainBindin
 	s.edge.bound[binding.Hostname] = s.state[edge.StackKeySlug]
 	s.state = edge.RecordBoundDomain(s.state, binding.Hostname)
 	switch s.edge.Kind() {
-	case edge.KindCloudflare:
-	case edge.KindNone:
+	case cloudflare.Kind:
+	case apigateway.Kind:
 		s.state = edge.RecordHostFront(s.state, binding.Hostname, "front-"+binding.Hostname+".fake")
 	default:
 		s.state[edge.StackKeyFront] = "front-" + s.state[edge.StackKeySlug] + ".fake"
@@ -332,7 +338,7 @@ func fakeEdgeOf(kind edge.Kind) edge.Edge {
 }
 
 func TestOriginFakeEdgeConformance(t *testing.T) {
-	for _, kind := range edge.AllKinds() {
+	for _, kind := range edges.SupportedEdges() {
 		t.Run(string(kind), func(t *testing.T) {
 			edgeconformance.Run(t, edgeconformance.Suite{
 				New: func(*testing.T) (edge.Edge, edge.StackSpec) {
@@ -355,7 +361,7 @@ func TestRecordingEdge(t *testing.T) {
 	t.Run("reconcile is a no-op when the version is unchanged", func(t *testing.T) {
 		t.Parallel()
 
-		f := &recordingEdge{kind: edge.KindCloudflare}
+		f := &recordingEdge{kind: cloudflare.Kind}
 		ctx := context.Background()
 		spec := edge.StackSpec{Version: "v1"}
 
@@ -382,7 +388,7 @@ func TestRecordingEdge(t *testing.T) {
 	t.Run("reconcile redeploys on a version bump", func(t *testing.T) {
 		t.Parallel()
 
-		f := &recordingEdge{kind: edge.KindCloudflare}
+		f := &recordingEdge{kind: cloudflare.Kind}
 		ctx := context.Background()
 
 		stack := f.reconciled(t, edge.StackSpec{Version: "v1"})
@@ -397,7 +403,7 @@ func TestRecordingEdge(t *testing.T) {
 	t.Run("store ops reject an unreconciled state", func(t *testing.T) {
 		t.Parallel()
 
-		f := &recordingEdge{kind: edge.KindCloudflare}
+		f := &recordingEdge{kind: cloudflare.Kind}
 		stack := f.opened(t, edge.StackState{})
 
 		if err := stack.Ledger().PutStaged(context.Background(), edge.DeploymentRecord{App: "web", Identity: "b1"}); err == nil {
@@ -411,7 +417,7 @@ func TestRecordingEdge(t *testing.T) {
 	t.Run("store ops record calls after reconcile", func(t *testing.T) {
 		t.Parallel()
 
-		f := &recordingEdge{kind: edge.KindCloudflare, history: []edge.HistoryEntry{{Promotion: edge.Promotion{PromotionID: "p1"}, Active: true}}}
+		f := &recordingEdge{kind: cloudflare.Kind, history: []edge.HistoryEntry{{Promotion: edge.Promotion{PromotionID: "p1"}, Active: true}}}
 		ctx := context.Background()
 		stack := f.reconciled(t, edge.StackSpec{Version: "v1"})
 
@@ -448,7 +454,7 @@ func TestRecordingEdge(t *testing.T) {
 	t.Run("destroying an unreconciled stack is refused", func(t *testing.T) {
 		t.Parallel()
 
-		f := &recordingEdge{kind: edge.KindCloudflare, destroyErr: errors.New("boom")}
+		f := &recordingEdge{kind: cloudflare.Kind, destroyErr: errors.New("boom")}
 		if err := f.opened(t, edge.StackState{}).Destroy(context.Background()); err == nil {
 			t.Error("expected Destroy to reject a state no reconcile ever produced")
 		}

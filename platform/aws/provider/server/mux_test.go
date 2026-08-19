@@ -12,6 +12,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/channel"
 	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
 	"github.com/ocelhq/ocel/pkg/proto/deployments/v1/deploymentsv1connect"
+	cloudflare "github.com/ocelhq/ocel/platform/edge/cloudflare/deploy"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
@@ -173,7 +174,7 @@ func TestUnsupportedEdgeKind(t *testing.T) {
 			if !errors.As(err, &connectErr) || connectErr.Code() != connect.CodeInvalidArgument {
 				t.Fatalf("%s() err = %v, want %v", tc.name, err, connect.CodeInvalidArgument)
 			}
-			for _, want := range []string{string(unfrontedKind), string(edge.KindCloudflare)} {
+			for _, want := range []string{string(unfrontedKind), string(cloudflare.Kind)} {
 				if !strings.Contains(err.Error(), want) {
 					t.Errorf("err = %v, want it to name %q", err, want)
 				}

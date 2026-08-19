@@ -72,7 +72,7 @@ describe("the resolver", () => {
     const { answered, origins } = await resolve(request("/blog"), {});
 
     expect(answered.statusCode).toBe(404);
-    expect(answered.headers["x-ocel-edge"].value).toBe("native");
+    expect(answered.headers["x-ocel-edge"].value).toBe("cloudfront");
     expect(origins).toHaveLength(0);
   });
 
@@ -92,7 +92,7 @@ describe("the resolver", () => {
     });
 
     expect(answered.statusCode).toBe(503);
-    expect(answered.headers["x-ocel-edge"].value).toBe("native");
+    expect(answered.headers["x-ocel-edge"].value).toBe("cloudfront");
     expect(origins).toHaveLength(0);
   });
 

@@ -359,11 +359,11 @@ func (s *deployFakeProviderServer) PlanTeardown(ctx context.Context, req *deploy
 	}
 	class := strings.ToLower(strings.TrimPrefix(req.GetClass().String(), "CLASS_"))
 	return &deploymentsv1.PlanTeardownResponse{
-		EdgeKind: req.GetEdgeKind(),
+		EdgeKind: resolvedEdgeKind(req.GetEdgeKind()),
 		Items: []*deploymentsv1.TeardownItem{
 			{
 				Kind:   "edge bootstrap",
-				Name:   req.GetEdgeKind(),
+				Name:   resolvedEdgeKind(req.GetEdgeKind()),
 				Action: deploymentsv1.TeardownItem_ACTION_DELETE,
 				Reason: "every worker the edge stood up for the " + class + " substrate",
 			},
@@ -456,6 +456,13 @@ func journalPreflight(req *deploymentsv1.PreflightRequest) {
 	}
 	defer f.Close()
 	fmt.Fprintf(f, "slug=%s domains=%s class=%s\n", req.GetSlug(), strings.Join(req.GetDomains(), ","), req.GetRequiredClass())
+}
+
+func resolvedEdgeKind(kind string) string {
+	if kind == "" {
+		return "cloudfront"
+	}
+	return kind
 }
 
 func journalEdge(kind string, options []byte, dns *deploymentsv1.Dns, allowDegraded []string) {
@@ -561,7 +568,7 @@ func (s *deployFakeProviderServer) UseDomain(ctx context.Context, req *deploymen
 	}); err != nil {
 		return err
 	}
-	records, err := edge.RecordsFor(edge.DNSTarget{Kind: edge.KindCloudflare}, []string{"*." + req.GetBaseDomain()})
+	records, err := edge.RecordsFor(edge.DNSTarget{Kind: "cloudflare", ServesUnbound: true}, []string{"*." + req.GetBaseDomain()})
 	if err != nil {
 		return err
 	}
@@ -653,7 +660,7 @@ func (s *deployFakeProviderServer) AddDomain(ctx context.Context, req *deploymen
 		})
 	}
 	hosts := fakeDomainTargets(req.GetConfigured(), req.GetHost())
-	if err := say(fmt.Sprintf("DOMAIN ADD slug=%s hosts=%s dns=%s edge=%s", req.GetSlug(), strings.Join(hosts, ","), req.GetDns().GetKind(), req.GetEdgeKind())); err != nil {
+	if err := say(fmt.Sprintf("DOMAIN ADD slug=%s hosts=%s dns=%s edge=%s", req.GetSlug(), strings.Join(hosts, ","), req.GetDns().GetKind(), resolvedEdgeKind(req.GetEdgeKind()))); err != nil {
 		return err
 	}
 	if err := say(fmt.Sprintf("Requesting a certificate for %s in us-east-1", strings.Join(hosts, ", "))); err != nil {
@@ -663,7 +670,7 @@ func (s *deployFakeProviderServer) AddDomain(ctx context.Context, req *deploymen
 		if err := say(fmt.Sprintf("Binding %s to the cloudflare edge", host)); err != nil {
 			return err
 		}
-		records, err := edge.RecordsFor(edge.DNSTarget{Kind: edge.KindCloudflare}, []string{host})
+		records, err := edge.RecordsFor(edge.DNSTarget{Kind: "cloudflare", ServesUnbound: true}, []string{host})
 		if err != nil {
 			return err
 		}
@@ -702,7 +709,7 @@ func (s *deployFakeProviderServer) RemoveDomain(ctx context.Context, req *deploy
 			Event: &deploymentsv1.DeployEvent_Progress{Progress: &deploymentsv1.ProgressEvent{Message: message}},
 		})
 	}
-	if err := say(fmt.Sprintf("DOMAIN RM slug=%s host=%s configured=%s dns=%s edge=%s", req.GetSlug(), req.GetHost(), strings.Join(req.GetConfigured(), ","), req.GetDns().GetKind(), req.GetEdgeKind())); err != nil {
+	if err := say(fmt.Sprintf("DOMAIN RM slug=%s host=%s configured=%s dns=%s edge=%s", req.GetSlug(), req.GetHost(), strings.Join(req.GetConfigured(), ","), req.GetDns().GetKind(), resolvedEdgeKind(req.GetEdgeKind()))); err != nil {
 		return err
 	}
 	for _, host := range fakeDomainTargets(nil, req.GetHost()) {
@@ -761,12 +768,12 @@ func (s *deployFakeProviderServer) DomainStatus(ctx context.Context, req *deploy
 			RecordsOwed:       splitList(os.Getenv(fakeGlobalDomainOwedEnvVar)),
 			LastProbeAt:       1755500000,
 			LastProbeOk:       ready,
-			LastProbeEdge:     string(edge.KindCloudflare),
-			ServingPointer:    string(edge.KindCloudflare),
+			LastProbeEdge:     "cloudflare",
+			ServingPointer:    "cloudflare",
 			Ready:             ready,
 		}
 		if !ready {
-			row.Pending = fmt.Sprintf("%s does not answer as the %s edge yet", host, edge.KindCloudflare)
+			row.Pending = fmt.Sprintf("%s does not answer as the %s edge yet", host, edge.Kind("cloudflare"))
 		}
 		resp.Hosts = append(resp.Hosts, row)
 	}
@@ -809,7 +816,7 @@ func (s *deployFakeProviderServer) PlanDestroyProject(ctx context.Context, req *
 	if req.GetEnvironment().GetClass() == deploymentsv1.Environment_CLASS_PREVIEW {
 		return &deploymentsv1.PlanDestroyProjectResponse{
 			EdgeStack: &deploymentsv1.EdgeStackPlan{
-				EdgeKind: req.GetEdgeKind(),
+				EdgeKind: resolvedEdgeKind(req.GetEdgeKind()),
 				Items: []*deploymentsv1.TeardownItem{
 					{
 						Kind:   "edge workers",
@@ -830,7 +837,7 @@ func (s *deployFakeProviderServer) PlanDestroyProject(ctx context.Context, req *
 	}
 	return &deploymentsv1.PlanDestroyProjectResponse{
 		EdgeStack: &deploymentsv1.EdgeStackPlan{
-			EdgeKind: req.GetEdgeKind(),
+			EdgeKind: resolvedEdgeKind(req.GetEdgeKind()),
 			Items: []*deploymentsv1.TeardownItem{
 				{
 					Kind:   "edge stack",

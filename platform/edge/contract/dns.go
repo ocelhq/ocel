@@ -77,9 +77,10 @@ type ZoneFinder interface {
 }
 
 type DNSTarget struct {
-	Kind        Kind
-	Front       string
-	FrontByHost map[string]string
+	Kind          Kind
+	ServesUnbound bool
+	Front         string
+	FrontByHost   map[string]string
 }
 
 func (t DNSTarget) FrontFor(hostname string) string {
@@ -132,14 +133,25 @@ func ForgetHostFront(state StackState, hostname string) StackState {
 	return RecordHostFront(state, hostname, "")
 }
 
-func TargetFor(kind Kind, state StackState) DNSTarget {
-	return DNSTarget{Kind: kind, Front: FrontOf(state), FrontByHost: HostFronts(state)}
+type UnboundServer interface {
+	ServesUnbound() bool
 }
 
-func ServesUnbound(kind Kind) bool { return kind == KindCloudflare }
+func ServesUnbound(e Edge) bool {
+	server, ok := e.(UnboundServer)
+	return ok && server.ServesUnbound()
+}
+
+func TargetFor(e Edge, state StackState) DNSTarget {
+	return TargetOf(e.Kind(), ServesUnbound(e), state)
+}
+
+func TargetOf(kind Kind, servesUnbound bool, state StackState) DNSTarget {
+	return DNSTarget{Kind: kind, ServesUnbound: servesUnbound, Front: FrontOf(state), FrontByHost: HostFronts(state)}
+}
 
 func Pointable(target DNSTarget, bound []string, hostname string) bool {
-	return ServesUnbound(target.Kind) || slices.Contains(bound, hostname)
+	return target.ServesUnbound || slices.Contains(bound, hostname)
 }
 
 func RecordsFor(target DNSTarget, hostnames []string) ([]Record, error) {
@@ -148,7 +160,7 @@ func RecordsFor(target DNSTarget, hostnames []string) ([]Record, error) {
 		if host == "" {
 			continue
 		}
-		if target.Kind == KindCloudflare {
+		if target.ServesUnbound {
 			records = append(records, Record{Name: host, Type: RecordTypeAAAA, Value: ProxyPlaceholder, Proxied: true})
 			continue
 		}

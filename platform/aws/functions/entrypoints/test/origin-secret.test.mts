@@ -113,7 +113,7 @@ afterAll(async () => {
 
 describe.each(Object.keys(doors))("%s", (door) => {
   test("a request carrying no secret never reaches the app", async () => {
-    process.env.OCEL_EDGE_KIND = "native";
+    process.env.OCEL_EDGE_KIND = "cloudfront";
     process.env.OCEL_ORIGIN_SECRET = SECRET;
     const port = await start(door, echo);
 
@@ -122,7 +122,7 @@ describe.each(Object.keys(doors))("%s", (door) => {
   });
 
   test("a request carrying the wrong secret never reaches the app", async () => {
-    process.env.OCEL_EDGE_KIND = "native";
+    process.env.OCEL_EDGE_KIND = "cloudfront";
     process.env.OCEL_ORIGIN_SECRET = SECRET;
     const port = await start(door, echo);
 
@@ -132,7 +132,7 @@ describe.each(Object.keys(doors))("%s", (door) => {
   });
 
   test("a refused request still completes the invocation", async () => {
-    process.env.OCEL_EDGE_KIND = "native";
+    process.env.OCEL_EDGE_KIND = "cloudfront";
     process.env.OCEL_ORIGIN_SECRET = SECRET;
     const port = await start(door, echo);
     const before = messages.filter((m) => m.type === "invocation-complete").length;
@@ -143,7 +143,7 @@ describe.each(Object.keys(doors))("%s", (door) => {
   });
 
   test("a request carrying the secret is served, and the app never sees it", async () => {
-    process.env.OCEL_EDGE_KIND = "native";
+    process.env.OCEL_EDGE_KIND = "cloudfront";
     process.env.OCEL_ORIGIN_SECRET = SECRET;
     const port = await start(door, echo);
 
@@ -152,7 +152,7 @@ describe.each(Object.keys(doors))("%s", (door) => {
   });
 
   test("the secret leaves the environment the app can read", async () => {
-    process.env.OCEL_EDGE_KIND = "native";
+    process.env.OCEL_EDGE_KIND = "cloudfront";
     process.env.OCEL_ORIGIN_SECRET = SECRET;
     await start(door, echo);
 
@@ -169,7 +169,7 @@ describe.each(Object.keys(doors))("%s", (door) => {
   });
 
   test("a sibling the entry signs to is served without a secret", async () => {
-    process.env.OCEL_EDGE_KIND = "native";
+    process.env.OCEL_EDGE_KIND = "cloudfront";
     process.env.OCEL_ORIGIN_SIGNED = "1";
     const port = await start(door, echo);
 
@@ -178,7 +178,7 @@ describe.each(Object.keys(doors))("%s", (door) => {
   });
 
   test("an unsigned front door with no secret to demand refuses everything", async () => {
-    process.env.OCEL_EDGE_KIND = "native";
+    process.env.OCEL_EDGE_KIND = "cloudfront";
     const port = await start(door, echo);
 
     expect(await reach(port, {})).toBe(403);

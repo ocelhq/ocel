@@ -156,13 +156,13 @@ export function renderOcelConfig({
   const declared = host ? `  domains: { production: [${JSON.stringify(host)}] },\n` : "";
   return `import { defineConfig } from "ocel/config";
 import { cloudflareDns } from "ocel/dns";
-import { cfEdge } from "ocel/edge";
+import { cloudflare } from "ocel/edge";
 import awsProvider from "@ocel/provider-aws";
 
 export default defineConfig({
   slug: ${JSON.stringify(slug)},
   provider: awsProvider({ transforms: [${JSON.stringify(transform)}] }),
-  edge: cfEdge(),
+  edge: cloudflare(),
   dns: cloudflareDns(),
 ${declared}  links: ${JSON.stringify(links)},
   apps: [{ name: ${JSON.stringify(app)}, framework: "express", path: "." }],

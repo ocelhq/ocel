@@ -64,8 +64,9 @@ func TestDeploySendsTheEdgeTheProjectDeclared(t *testing.T) {
 		declaration string
 		want        string
 	}{
-		{"an omitted edge asks for the native edge", "", "kind=native"},
-		{"`edge: false` asks for no edge at all", "  edge: false,\n", "kind=none"},
+		{"an omitted edge names none, leaving the provider to choose", "", "kind= "},
+		{"a declared api-gateway edge names it", "  edge: { kind: \"api-gateway\", options: {} },\n", "kind=api-gateway"},
+		{"an edge this CLI has never heard of is forwarded whole", "  edge: { kind: \"fastly\", options: {} },\n", "kind=fastly"},
 		{"a declared cloudflare edge names it", "  edge: { kind: \"cloudflare\", options: {} },\n", "kind=cloudflare"},
 	}
 	for _, tc := range cases {
@@ -108,7 +109,7 @@ func TestDeployCarriesTheEdgeSettingsUnchanged(t *testing.T) {
 }
 
 func TestDeployRendersAnEdgeTheOriginRefuses(t *testing.T) {
-	const refusal = `this provider cannot front deployments with the "native" edge; it supports cloudflare`
+	const refusal = `this provider cannot front deployments with the "fastly" edge; it supports cloudflare`
 
 	root, _, d := setUpEdgeFixture(t, "")
 	t.Setenv(fakeEdgeRefusalEnvVar, refusal)
@@ -134,8 +135,9 @@ func TestBootstrapSendsTheEdgeTheProjectDeclared(t *testing.T) {
 		declaration string
 		want        string
 	}{
-		{"an omitted edge asks for the native edge", "", "kind=native"},
-		{"`edge: false` asks for no edge at all", "  edge: false,\n", "kind=none"},
+		{"an omitted edge names none, leaving the provider to choose", "", "kind= "},
+		{"a declared api-gateway edge names it", "  edge: { kind: \"api-gateway\", options: {} },\n", "kind=api-gateway"},
+		{"an edge this CLI has never heard of is forwarded whole", "  edge: { kind: \"fastly\", options: {} },\n", "kind=fastly"},
 		{"a declared cloudflare edge names it", "  edge: { kind: \"cloudflare\", options: {} },\n", "kind=cloudflare"},
 	}
 	for _, tc := range cases {
@@ -182,9 +184,11 @@ func TestBootstrapDestroySendsTheEdgeTheProjectDeclared(t *testing.T) {
 		name        string
 		declaration string
 		want        string
+		planned     string
 	}{
-		{"an omitted edge asks for the native edge", "", "kind=native"},
-		{"a declared cloudflare edge names it", "  edge: { kind: \"cloudflare\", options: {} },\n", "kind=cloudflare"},
+		{"an omitted edge names none, leaving the provider to choose", "", "kind= ", "cloudfront"},
+		{"a declared api-gateway edge names it", "  edge: { kind: \"api-gateway\", options: {} },\n", "kind=api-gateway", "api-gateway"},
+		{"a declared cloudflare edge names it", "  edge: { kind: \"cloudflare\", options: {} },\n", "kind=cloudflare", "cloudflare"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -205,7 +209,7 @@ func TestBootstrapDestroySendsTheEdgeTheProjectDeclared(t *testing.T) {
 					t.Errorf("provider saw %q, want %q", line, tc.want)
 				}
 			}
-			if !strings.Contains(stdout.String(), "fronted by the "+strings.TrimPrefix(tc.want, "kind=")+" edge") {
+			if !strings.Contains(stdout.String(), "fronted by the "+tc.planned+" edge") {
 				t.Errorf("stdout = %q, want the plan to name the edge it planned", stdout.String())
 			}
 		})
@@ -217,10 +221,12 @@ func TestDestroySendsTheEdgeTheProjectDeclared(t *testing.T) {
 		name        string
 		declaration string
 		want        string
+		planned     string
 	}{
-		{"an omitted edge asks for the native edge", "", "kind=native"},
-		{"`edge: false` asks for no edge at all", "  edge: false,\n", "kind=none"},
-		{"a declared cloudflare edge names it", "  edge: { kind: \"cloudflare\", options: {} },\n", "kind=cloudflare"},
+		{"an omitted edge names none, leaving the provider to choose", "", "kind= ", "cloudfront"},
+		{"a declared api-gateway edge names it", "  edge: { kind: \"api-gateway\", options: {} },\n", "kind=api-gateway", "api-gateway"},
+		{"an edge this CLI has never heard of is forwarded whole", "  edge: { kind: \"fastly\", options: {} },\n", "kind=fastly", "fastly"},
+		{"a declared cloudflare edge names it", "  edge: { kind: \"cloudflare\", options: {} },\n", "kind=cloudflare", "cloudflare"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -243,7 +249,7 @@ func TestDestroySendsTheEdgeTheProjectDeclared(t *testing.T) {
 					t.Errorf("provider saw %q, want %q", line, tc.want)
 				}
 			}
-			if !strings.Contains(stdout.String(), "fronted by the "+strings.TrimPrefix(tc.want, "kind=")+" edge") {
+			if !strings.Contains(stdout.String(), "fronted by the "+tc.planned+" edge") {
 				t.Errorf("stdout = %q, want the plan to name the edge it planned", stdout.String())
 			}
 		})

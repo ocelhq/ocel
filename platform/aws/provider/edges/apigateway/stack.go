@@ -181,7 +181,7 @@ func (s *stack) stagePatch(ctx context.Context, c Clients, promotion edge.Promot
 	case len(apps) == 0:
 		return nil, fmt.Errorf("promote %s: it names no app, and the %s stage serves one app's entry function; deploy an app before promoting", promotion.PromotionID, stageName)
 	case len(apps) > 1:
-		return nil, fmt.Errorf("promote %s: this project deploys %d apps (%s), and the none edge fronts a project with a single REST API whose %s stage names one entry function, so it cannot serve more than one of them. Split the apps into one project each, or put an edge that routes by hostname in front by deploying with `--edge cloudflare`", promotion.PromotionID, len(apps), strings.Join(apps, ", "), stageName)
+		return nil, fmt.Errorf("promote %s: this project deploys %d apps (%s), and the %q edge fronts a project with a single REST API whose %s stage names one entry function, so it cannot serve more than one of them. Split the apps into one project each, or put an edge that routes by hostname in front by naming one in ocel.config.ts, such as `edge: cloudflare()`", promotion.PromotionID, len(apps), strings.Join(apps, ", "), Kind, stageName)
 	}
 
 	app := apps[0]

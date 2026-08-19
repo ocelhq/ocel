@@ -14,7 +14,7 @@ import (
 
 const (
 	KindRoute53    = "route53"
-	KindCloudflare = string(edge.KindCloudflare)
+	KindCloudflare = string(cloudflare.Kind)
 )
 
 type Deps struct {

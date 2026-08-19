@@ -25,7 +25,7 @@ func (s *Server) AddDomain(ctx context.Context, req *deploymentsv1.AddDomainRequ
 	session, err := s.domainSession(ctx, domainRequest{
 		options:     req.GetOptions(),
 		slug:        req.GetSlug(),
-		edgeKind:    req.GetEdgeKind(),
+		edgeKind:    string(requestedEdge(req)),
 		dns:         req.GetDns(),
 		configured:  req.GetConfigured(),
 		host:        req.GetHost(),
@@ -49,7 +49,7 @@ func (s *Server) RemoveDomain(ctx context.Context, req *deploymentsv1.RemoveDoma
 	session, err := s.domainSession(ctx, domainRequest{
 		options:    req.GetOptions(),
 		slug:       req.GetSlug(),
-		edgeKind:   req.GetEdgeKind(),
+		edgeKind:   string(requestedEdge(req)),
 		dns:        req.GetDns(),
 		configured: req.GetConfigured(),
 		host:       req.GetHost(),
@@ -74,9 +74,11 @@ type domainRequest struct {
 }
 
 type domainSession struct {
-	ssm        bootstrap.SSMAPI
-	slug       string
-	kind       edge.Kind
+	ssm           bootstrap.SSMAPI
+	slug          string
+	kind          edge.Kind
+	servesUnbound bool
+
 	stack      edge.EdgeStack
 	writer     edge.DNSWriter
 	poller     dns.Poller
@@ -142,9 +144,11 @@ func (s *Server) domainSession(ctx context.Context, req domainRequest) (*domainS
 	}
 
 	session := &domainSession{
-		ssm:    ssmClient,
-		slug:   req.slug,
-		kind:   edgeFront.Kind(),
+		ssm:           ssmClient,
+		slug:          req.slug,
+		kind:          edgeFront.Kind(),
+		servesUnbound: edge.ServesUnbound(edgeFront),
+
 		stack:  stack,
 		writer: writer,
 		poller: dns.NewPoller(),
@@ -167,7 +171,7 @@ func (s *Server) domainSession(ctx context.Context, req domainRequest) (*domainS
 		recorded:   recorded,
 	}
 	if req.certificate {
-		session.issuer = certs.IssuerFor(edgeFront.Kind(), certs.Deps{AWS: awscfg})
+		session.issuer = certs.IssuerFor(edgeFront, certs.Deps{AWS: awscfg})
 	}
 	return session, nil
 }
@@ -306,7 +310,7 @@ func (d *domainSession) addHost(ctx context.Context, host string, progress func(
 		return err
 	}
 
-	records, err := edge.RecordsFor(edge.TargetFor(d.kind, d.stack.State()), []string{host})
+	records, err := edge.RecordsFor(edge.TargetOf(d.kind, d.servesUnbound, d.stack.State()), []string{host})
 	if err != nil {
 		return err
 	}

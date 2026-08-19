@@ -13,6 +13,7 @@ import (
 	ssmtypes "github.com/aws/aws-sdk-go-v2/service/ssm/types"
 
 	"github.com/ocelhq/ocel/platform/aws/provider/certs"
+	cloudflare "github.com/ocelhq/ocel/platform/edge/cloudflare/deploy"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
@@ -25,9 +26,9 @@ func TestPreviewDomainHolder(t *testing.T) {
 		want    edge.Kind
 		wantHas bool
 	}{
-		{"the recorded edge holds it", PreviewDomain{BaseDomain: "preview.acme.com", Edge: edge.KindNative}, edge.KindNative, true},
-		{"a recorded Cloudflare account names Cloudflare", PreviewDomain{BaseDomain: "preview.acme.com", CloudflareAccount: "cf-owner"}, edge.KindCloudflare, true},
-		{"the recorded edge outranks the account", PreviewDomain{BaseDomain: "preview.acme.com", Edge: edge.KindCloudflare, CloudflareAccount: "cf-owner"}, edge.KindCloudflare, true},
+		{"the recorded edge holds it", PreviewDomain{BaseDomain: "preview.acme.com", Edge: "fronted-edge"}, edge.Kind("fronted-edge"), true},
+		{"a recorded Cloudflare account names Cloudflare", PreviewDomain{BaseDomain: "preview.acme.com", CloudflareAccount: "cf-owner"}, cloudflare.Kind, true},
+		{"the recorded edge outranks the account", PreviewDomain{BaseDomain: "preview.acme.com", Edge: cloudflare.Kind, CloudflareAccount: "cf-owner"}, cloudflare.Kind, true},
 		{"nothing names a holder", PreviewDomain{BaseDomain: "preview.acme.com"}, "", false},
 	}
 	for _, tc := range cases {
@@ -59,7 +60,7 @@ func TestPreviewDomainParam(t *testing.T) {
 				Region: certs.CloudFrontRegion,
 				Status: certs.StatusIssued,
 			},
-			Probe: certs.Probe{At: time.Unix(1755500000, 0).UTC(), Edge: edge.KindCloudflare, OK: true},
+			Probe: certs.Probe{At: time.Unix(1755500000, 0).UTC(), Edge: cloudflare.Kind, OK: true},
 		}
 
 		if err := WritePreviewDomain(context.Background(), fake, ClassPreview, want); err != nil {

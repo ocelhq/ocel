@@ -18,6 +18,7 @@ import (
 	"github.com/ocelhq/ocel/platform/aws/provider/vars"
 	"github.com/ocelhq/ocel/platform/aws/provider/vars/baked"
 	"github.com/ocelhq/ocel/platform/aws/provider/vars/live"
+	cloudflare "github.com/ocelhq/ocel/platform/edge/cloudflare/deploy"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
@@ -79,7 +80,7 @@ func appEnv(manifest *deploymentsv1.Manifest, app *deploymentsv1.ManifestApp, bu
 	env := map[string]string{}
 	if cfg.Edge != nil {
 		env[edgeKindEnv] = string(cfg.Edge.Kind())
-		if cfg.Edge.Kind() != edge.KindCloudflare {
+		if cfg.Edge.Kind() != cloudflare.Kind {
 			env[edge.OriginSignedVar] = "1"
 		}
 	}

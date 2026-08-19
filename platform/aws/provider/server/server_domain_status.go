@@ -15,7 +15,7 @@ func (s *Server) DomainStatus(ctx context.Context, req *deploymentsv1.DomainStat
 	session, err := s.domainSession(ctx, domainRequest{
 		options:     req.GetOptions(),
 		slug:        req.GetSlug(),
-		edgeKind:    req.GetEdgeKind(),
+		edgeKind:    string(requestedEdge(req)),
 		dns:         req.GetDns(),
 		configured:  req.GetConfigured(),
 		certificate: true,
@@ -76,7 +76,7 @@ func (d *domainSession) statusOf(ctx context.Context, lookup *certLookup, host s
 	}
 
 	state := d.stack.State()
-	target := edge.TargetFor(d.kind, state)
+	target := edge.TargetOf(d.kind, d.servesUnbound, state)
 	boundHosts := edge.BoundDomains(state)
 	bound := slices.Contains(boundHosts, host)
 	row.RecordsWritten = recordList(provisioned.Written)

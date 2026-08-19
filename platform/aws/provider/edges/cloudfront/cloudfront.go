@@ -2,11 +2,12 @@ package cloudfront
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"maps"
+	"slices"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/cloudformation"
@@ -23,8 +24,12 @@ import (
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
+const Kind edge.Kind = "cloudfront"
+
+const propagationBound = 5 * time.Second
+
 const (
-	edgeHeaderValue = string(edge.KindNative)
+	edgeHeaderValue = string(Kind)
 
 	cacheKeyHeader = "x-ocel-cache-key"
 
@@ -118,7 +123,7 @@ func New(open func(context.Context) (Clients, error)) edge.Edge {
 func FromConfig(load func(context.Context) (aws.Config, error)) func(context.Context) (Clients, error) {
 	return func(ctx context.Context) (Clients, error) {
 		if load == nil {
-			return Clients{}, errors.New("the native edge was built without a way to load AWS configuration")
+			return Clients{}, fmt.Errorf("the %q edge was built without a way to load AWS configuration", Kind)
 		}
 		awscfg, err := load(ctx)
 		if err != nil {
@@ -139,19 +144,25 @@ func FromConfig(load func(context.Context) (aws.Config, error)) func(context.Con
 	}
 }
 
-func (p *provider) Kind() edge.Kind { return edge.KindNative }
+func (p *provider) Kind() edge.Kind { return Kind }
+
+var supported = []edge.Need{edge.NeedEdgeCache, edge.NeedStreaming}
 
 func (p *provider) Supports(need edge.Need) bool {
-	return edge.CapabilitiesOf(p.Kind()).Supports(need)
+	return slices.Contains(supported, need)
 }
 
 func (p *provider) Supported() []edge.Need {
-	return edge.CapabilitiesOf(p.Kind()).Supported()
+	return slices.Clone(supported)
 }
 
 func (p *provider) FlipBound() edge.FlipBound {
-	return edge.CapabilitiesOf(p.Kind()).FlipBound()
+	return edge.FlipBound{Typical: propagationBound}
 }
+
+func (p *provider) CertificateRegion(string) string { return certs.CloudFrontRegion }
+
+func (p *provider) InvalidatesOnPromote() bool { return true }
 
 func (p *provider) clientsFor(ctx context.Context) (Clients, error) {
 	p.mu.Lock()
@@ -160,11 +171,11 @@ func (p *provider) clientsFor(ctx context.Context) (Clients, error) {
 		return *p.clients, nil
 	}
 	if p.open == nil {
-		return Clients{}, errors.New("the native edge has no AWS clients; it must be built with the provider's AWS configuration")
+		return Clients{}, fmt.Errorf("the %q edge has no AWS clients; it must be built with the provider's AWS configuration", Kind)
 	}
 	c, err := p.open(ctx)
 	if err != nil {
-		return Clients{}, fmt.Errorf("open the AWS clients the native edge fronts deployments with: %w", err)
+		return Clients{}, fmt.Errorf("open the AWS clients the %q edge fronts deployments with: %w", Kind, err)
 	}
 	p.clients = &c
 	return c, nil
@@ -179,7 +190,7 @@ func (p *provider) settler() Settler {
 
 func knownClass(class edge.Class) error {
 	if class != edge.ClassProduction && class != edge.ClassPreview {
-		return fmt.Errorf("the native edge does not know the substrate class %q", class)
+		return fmt.Errorf("the %q edge does not know the substrate class %q", Kind, class)
 	}
 	return nil
 }
@@ -225,14 +236,14 @@ func (p *provider) Reconcile(ctx context.Context, spec edge.StackSpec, prior edg
 		return nil, err
 	}
 	if spec.Slug == "" {
-		return nil, errors.New("the native edge fronts a project by slug; this stack carries none")
+		return nil, fmt.Errorf("the %q edge fronts a project by slug; this stack carries none", Kind)
 	}
 	deployed, err := p.substrate(ctx, c, spec.Class)
 	if err != nil {
 		return nil, err
 	}
 	if !deployed.Present {
-		return nil, fmt.Errorf("the %s substrate is not bootstrapped, so the native edge has no state table to keep %s's deployments in", spec.Class, spec.Slug)
+		return nil, fmt.Errorf("the %s substrate is not bootstrapped, so the %q edge has no state table to keep %s's deployments in", spec.Class, Kind, spec.Slug)
 	}
 	set, err := findEdgeSet(ctx, c, spec.Class, edgeSet{
 		cachePolicy:         prior[stackKeyCachePolicy],

@@ -146,7 +146,7 @@ func TestNativeIsNotProgrammable(t *testing.T) {
 
 	var e edge.Edge = newWorld().edge()
 	if _, programmable := e.(edge.Programmable); programmable {
-		t.Error("the native edge is Programmable, but it declares only edge caching and streaming; nothing of the app's code runs at this edge")
+		t.Error("the cloudfront edge is Programmable, but it declares only edge caching and streaming; nothing of the app's code runs at this edge")
 	}
 }
 
@@ -204,13 +204,13 @@ func TestBootstrap(t *testing.T) {
 		var marked bool
 		for _, config := range w.front.headerPolicy {
 			for _, header := range config.CustomHeadersConfig.Items {
-				if aws.ToString(header.Header) == edge.HeaderEdge && aws.ToString(header.Value) == string(edge.KindNative) {
+				if aws.ToString(header.Header) == edge.HeaderEdge && aws.ToString(header.Value) == string(Kind) {
 					marked = true
 				}
 			}
 		}
 		if !marked {
-			t.Errorf("no response headers policy sets %s: %s, so a liveness probe cannot tell which front answered", edge.HeaderEdge, edge.KindNative)
+			t.Errorf("no response headers policy sets %s: %s, so a liveness probe cannot tell which front answered", edge.HeaderEdge, Kind)
 		}
 	})
 

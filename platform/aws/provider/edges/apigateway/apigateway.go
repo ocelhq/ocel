@@ -5,8 +5,10 @@ import (
 	"errors"
 	"fmt"
 	"maps"
+	"slices"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/apigateway"
@@ -22,10 +24,14 @@ import (
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
+const Kind edge.Kind = "api-gateway"
+
+const propagationBound = 5 * time.Second
+
 const (
 	EdgeHeader = "x-ocel-edge"
 
-	edgeHeaderValue = string(edge.KindNone)
+	edgeHeaderValue = string(Kind)
 
 	stageName = "live"
 
@@ -106,7 +112,7 @@ func New(open func(context.Context) (Clients, error)) edge.Edge {
 func FromConfig(load func(context.Context) (aws.Config, error)) func(context.Context) (Clients, error) {
 	return func(ctx context.Context) (Clients, error) {
 		if load == nil {
-			return Clients{}, errors.New("the none edge was built without a way to load AWS configuration")
+			return Clients{}, fmt.Errorf("the %q edge was built without a way to load AWS configuration", Kind)
 		}
 		awscfg, err := load(ctx)
 		if err != nil {
@@ -132,19 +138,23 @@ func (p *provider) deleter() *Deleter {
 	return p.delete
 }
 
-func (p *provider) Kind() edge.Kind { return edge.KindNone }
+func (p *provider) Kind() edge.Kind { return Kind }
+
+var supported = []edge.Need{edge.NeedStreaming}
 
 func (p *provider) Supports(need edge.Need) bool {
-	return edge.CapabilitiesOf(p.Kind()).Supports(need)
+	return slices.Contains(supported, need)
 }
 
 func (p *provider) Supported() []edge.Need {
-	return edge.CapabilitiesOf(p.Kind()).Supported()
+	return slices.Clone(supported)
 }
 
 func (p *provider) FlipBound() edge.FlipBound {
-	return edge.CapabilitiesOf(p.Kind()).FlipBound()
+	return edge.FlipBound{Typical: propagationBound}
 }
+
+func (p *provider) CertificateRegion(apiRegion string) string { return apiRegion }
 
 func (p *provider) clientsFor(ctx context.Context) (Clients, error) {
 	p.mu.Lock()
@@ -153,11 +163,11 @@ func (p *provider) clientsFor(ctx context.Context) (Clients, error) {
 		return *p.clients, nil
 	}
 	if p.open == nil {
-		return Clients{}, errors.New("the none edge has no AWS clients; it must be built with the provider's AWS configuration")
+		return Clients{}, fmt.Errorf("the %q edge has no AWS clients; it must be built with the provider's AWS configuration", Kind)
 	}
 	c, err := p.open(ctx)
 	if err != nil {
-		return Clients{}, fmt.Errorf("open the AWS clients the none edge fronts deployments with: %w", err)
+		return Clients{}, fmt.Errorf("open the AWS clients the %q edge fronts deployments with: %w", Kind, err)
 	}
 	p.clients = &c
 	return c, nil
@@ -165,7 +175,7 @@ func (p *provider) clientsFor(ctx context.Context) (Clients, error) {
 
 func knownClass(class edge.Class) error {
 	if class != edge.ClassProduction && class != edge.ClassPreview {
-		return fmt.Errorf("the none edge does not know the substrate class %q", class)
+		return fmt.Errorf("the %q edge does not know the substrate class %q", Kind, class)
 	}
 	return nil
 }
@@ -228,14 +238,14 @@ func (p *provider) Reconcile(ctx context.Context, spec edge.StackSpec, prior edg
 		return nil, err
 	}
 	if spec.Slug == "" {
-		return nil, errors.New("the none edge fronts a project by slug; this stack carries none")
+		return nil, fmt.Errorf("the %q edge fronts a project by slug; this stack carries none", Kind)
 	}
 	deployed, err := p.substrate(ctx, c, spec.Class)
 	if err != nil {
 		return nil, err
 	}
 	if !deployed.Present {
-		return nil, fmt.Errorf("the %s substrate is not bootstrapped, so the none edge has no state table to keep %s's deployments in", spec.Class, spec.Slug)
+		return nil, fmt.Errorf("the %s substrate is not bootstrapped, so the %q edge has no state table to keep %s's deployments in", spec.Class, Kind, spec.Slug)
 	}
 	role, err := requireInvokeRole(ctx, c, spec.Class)
 	if err != nil {

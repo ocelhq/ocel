@@ -1,9 +1,3 @@
-// The Cloudflare Workers edge. It lives in its own Go module so cloudflare-go
-// stays out of the edge contract's graph and out of any provider that ships a
-// native edge instead.
-//
-// The `replace` pins the edge contract to the local checkout (it has no
-// published tag yet); the root go.work wires this for dev.
 module github.com/ocelhq/ocel/platform/edge/cloudflare/deploy
 
 go 1.25.11

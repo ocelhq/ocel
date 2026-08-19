@@ -139,8 +139,8 @@ describe("renderOcelConfig", () => {
     const config = renderOcelConfig({ slug: "e2en-7" });
     expect(config).toContain(`slug: "e2en-7"`);
     expect(config).toContain("awsProvider()");
-    expect(config).toContain(`import { cfEdge } from "ocel/edge";`);
-    expect(config).toContain("edge: cfEdge()");
+    expect(config).toContain(`import { cloudflare } from "ocel/edge";`);
+    expect(config).toContain("edge: cloudflare()");
     for (const app of SMOKE_APPS) {
       expect(config).toContain(`name: "${app.name}"`);
       expect(config).toContain(`framework: "${app.framework}"`);
