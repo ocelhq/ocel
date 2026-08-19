@@ -231,6 +231,35 @@ func Run(t *testing.T, suite Suite) {
 		}
 	})
 
+	t.Run("a bound domain has a front to point DNS at", func(t *testing.T) {
+		ctx := context.Background()
+		e, stack := reconciledOn(t, suite)
+		if err := stack.BindDomain(ctx, edge.DomainBinding{Hostname: suite.Hostname}); err != nil {
+			t.Fatalf("BindDomain: %v", err)
+		}
+
+		bound := edge.BoundDomains(stack.State())
+		records, err := edge.RecordsFor(edge.TargetFor(e.Kind(), stack.State()), bound)
+		if err != nil {
+			t.Fatalf("RecordsFor(%v) on the stack that bound them: %v", bound, err)
+		}
+		if len(records) != 1 || records[0].Name != suite.Hostname {
+			t.Errorf("records = %v, want one record for %q", records, suite.Hostname)
+		}
+
+		reopened, err := e.Open(stack.State())
+		if err != nil {
+			t.Fatalf("Open: %v", err)
+		}
+		reread, err := edge.RecordsFor(edge.TargetFor(e.Kind(), reopened.State()), edge.BoundDomains(reopened.State()))
+		if err != nil {
+			t.Fatalf("RecordsFor through a reopened stack: %v", err)
+		}
+		if !slices.Equal(reread, records) {
+			t.Errorf("records through a reopened stack = %v, want the %v the binding published", reread, records)
+		}
+	})
+
 	t.Run("unbinding a domain twice leaves nothing bound", func(t *testing.T) {
 		ctx := context.Background()
 		e, stack := reconciledOn(t, suite)

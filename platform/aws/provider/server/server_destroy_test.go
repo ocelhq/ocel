@@ -48,9 +48,9 @@ func TestEdgeStackPlan(t *testing.T) {
 	planFor := func(t *testing.T, state edge.StackState) *deploymentsv1.EdgeStackPlan {
 		t.Helper()
 		s := &Server{}
-		edgeFront, err := s.originEdge("eu-west-1")
+		edgeFront, err := s.edge(edge.KindCloudflare, "eu-west-1")
 		if err != nil {
-			t.Fatalf("originEdge() error = %v", err)
+			t.Fatalf("edge() error = %v", err)
 		}
 		plan, err := s.edgeStackPlan(edgeFront, projectPlanScope{
 			kind:       edgeFront.Kind(),
@@ -268,8 +268,8 @@ func TestDestroyPlanItemsPerEdge(t *testing.T) {
 func TestPlanDestroyProjectUnsupportedEdge(t *testing.T) {
 	t.Parallel()
 
-	client := newTestClientFor(t, &Server{edgeKind: "bogus"}, testToken)
-	_, err := client.PlanDestroyProject(context.Background(), &deploymentsv1.PlanDestroyProjectRequest{Slug: "shop"})
+	client := newTestClientFor(t, &Server{}, testToken)
+	_, err := client.PlanDestroyProject(context.Background(), &deploymentsv1.PlanDestroyProjectRequest{Slug: "shop", EdgeKind: "bogus"})
 	if err == nil {
 		t.Fatal("PlanDestroyProject error = nil, want the unsupported edge refused")
 	}
@@ -278,6 +278,77 @@ func TestPlanDestroyProjectUnsupportedEdge(t *testing.T) {
 			t.Errorf("err = %v, want it to name %q", err, want)
 		}
 	}
+}
+
+func TestPlanDestroyProjectWithoutAnEdgeKind(t *testing.T) {
+	t.Parallel()
+
+	client := newTestClientFor(t, &Server{}, testToken)
+	_, err := client.PlanDestroyProject(context.Background(), &deploymentsv1.PlanDestroyProjectRequest{Slug: "shop"})
+	if err == nil {
+		t.Fatal("PlanDestroyProject error = nil, want a request that names no edge refused rather than defaulted to one")
+	}
+	for _, want := range edge.KindNames(edge.AllKinds()) {
+		if !strings.Contains(err.Error(), want) {
+			t.Errorf("err = %v, want it to name %q as an edge the CLI may send", err, want)
+		}
+	}
+}
+
+func TestDestroyPlanFollowsTheEdgeTheRequestNames(t *testing.T) {
+	t.Parallel()
+
+	state := edge.RecordBoundDomain(edge.StackState{}, "shop.example.com")
+
+	planFor := func(t *testing.T, kind edge.Kind) *deploymentsv1.EdgeStackPlan {
+		t.Helper()
+		s := &Server{}
+		edgeFront, err := s.edge(kind, "eu-west-1")
+		if err != nil {
+			t.Fatalf("edge(%q) error = %v", kind, err)
+		}
+		plan, err := s.edgeStackPlan(edgeFront, projectPlanScope{
+			kind:       edgeFront.Kind(),
+			class:      bootstrap.ClassProduction,
+			slug:       "shop",
+			stateTable: "ocel-state",
+			stacks:     1,
+			state:      state,
+		})
+		if err != nil {
+			t.Fatalf("edgeStackPlan() error = %v", err)
+		}
+		return plan
+	}
+
+	t.Run("a project that bought no edge plans its APIs, not Cloudflare workers", func(t *testing.T) {
+		t.Parallel()
+
+		plan := planFor(t, edge.KindNone)
+		if plan.GetEdgeKind() != string(edge.KindNone) {
+			t.Fatalf("edge_kind = %q, want none: an `edge: false` project must not be planned as a Cloudflare teardown", plan.GetEdgeKind())
+		}
+		if got := itemFor(t, plan.GetItems(), "REST APIs", "shop").GetAction(); got != deploymentsv1.TeardownItem_ACTION_DELETE {
+			t.Errorf("REST APIs action = %v, want DELETE", got)
+		}
+		for _, item := range plan.GetItems() {
+			if item.GetKind() == "edge workers" {
+				t.Errorf("plan = %v, want no Cloudflare workers in a no-edge teardown", itemLines(plan.GetItems()))
+			}
+		}
+	})
+
+	t.Run("a project fronted by Cloudflare plans its workers", func(t *testing.T) {
+		t.Parallel()
+
+		plan := planFor(t, edge.KindCloudflare)
+		if plan.GetEdgeKind() != string(edge.KindCloudflare) {
+			t.Fatalf("edge_kind = %q, want cloudflare", plan.GetEdgeKind())
+		}
+		if got := itemFor(t, plan.GetItems(), "edge workers", "shop").GetAction(); got != deploymentsv1.TeardownItem_ACTION_DELETE {
+			t.Errorf("edge workers action = %v, want DELETE", got)
+		}
+	})
 }
 
 func TestForgetStackStateOnlyOnceTheTeardownFinished(t *testing.T) {

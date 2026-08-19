@@ -81,7 +81,7 @@ func runDeploymentsLs(ctx context.Context, d deps, cwd string, stdout, stderr io
 	}
 
 	return runProviderSession(ctx, d, cfg, provider, stdout, stderr, func(runner *providerrunner.Runner) error {
-		if err := preflightClass(ctx, d, runner, provider, deploymentsv1.Environment_CLASS_PRODUCTION, "ocel bootstrap", stdout); err != nil {
+		if err := preflightClass(ctx, d, runner, provider, cfg, deploymentsv1.Environment_CLASS_PRODUCTION, "ocel bootstrap", stdout); err != nil {
 			return err
 		}
 
@@ -89,11 +89,11 @@ func runDeploymentsLs(ctx context.Context, d deps, cwd string, stdout, stderr io
 		if err != nil {
 			return err
 		}
-		resp, err := client.ListPromotions(ctx, &deploymentsv1.ListPromotionsRequest{
+		resp, err := client.ListPromotions(ctx, edgeSettings(cfg).applyToListPromotions(&deploymentsv1.ListPromotionsRequest{
 			Options:         []byte(provider.Options),
 			ProtocolVersion: manifestbuilder.SchemaVersion,
 			Slug:            cfg.Slug,
-		})
+		}))
 		if err != nil {
 			return err
 		}
@@ -127,16 +127,16 @@ func runDeploymentsPrune(ctx context.Context, d deps, cwd string, keepN int, std
 
 	provW := ui.BuildWriter()
 	err = runProviderSession(ctx, d, cfg, provider, provW, provW, func(runner *providerrunner.Runner) error {
-		if err := preflightClass(ctx, d, runner, provider, deploymentsv1.Environment_CLASS_PRODUCTION, "ocel bootstrap", stdout); err != nil {
+		if err := preflightClass(ctx, d, runner, provider, cfg, deploymentsv1.Environment_CLASS_PRODUCTION, "ocel bootstrap", stdout); err != nil {
 			return err
 		}
 
-		if err := runner.Prune(ctx, &deploymentsv1.PruneRequest{
+		if err := runner.Prune(ctx, edgeSettings(cfg).applyToPrune(&deploymentsv1.PruneRequest{
 			Options:         []byte(provider.Options),
 			ProtocolVersion: manifestbuilder.SchemaVersion,
 			Slug:            cfg.Slug,
 			KeepN:           int32(keepN),
-		}, ui.Event); err != nil {
+		}), ui.Event); err != nil {
 			return err
 		}
 		ui.Finish("Pruned")

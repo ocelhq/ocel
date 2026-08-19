@@ -25,7 +25,7 @@ func (s *Server) PlanDestroyProject(ctx context.Context, req *deploymentsv1.Plan
 		return nil, connect.NewError(connect.CodeInvalidArgument, err)
 	}
 
-	edgeFront, err := s.originEdge(opts.Region)
+	edgeFront, err := s.edge(edge.Kind(req.GetEdgeKind()), opts.Region)
 	if err != nil {
 		return nil, err
 	}
@@ -216,7 +216,7 @@ func (s *Server) runDestroyProject(ctx context.Context, req *deploymentsv1.Destr
 	if err != nil {
 		return finish(err)
 	}
-	stack, err := s.openStackFor(params.StackState, awscfg.Region)
+	stack, err := s.openStackFor(edge.Kind(req.GetEdgeKind()), params.StackState, awscfg.Region)
 	if err != nil && !errors.Is(err, errNoProductionDeploy) {
 		return finish(err)
 	}
@@ -273,7 +273,7 @@ func (s *Server) runDestroyPreviewProject(ctx context.Context, req *deploymentsv
 	if err != nil {
 		return finish(connect.NewError(connect.CodeInvalidArgument, err))
 	}
-	cfg, stack, err := s.previewTeardownContext(ctx, opts, slug, env)
+	cfg, stack, err := s.previewTeardownContext(ctx, edge.Kind(req.GetEdgeKind()), opts, slug, env)
 	if err != nil {
 		return finish(err)
 	}

@@ -715,6 +715,16 @@ export default {
 			wantErr: []string{`has an invalid "edge"`, "cfEdge()"},
 		},
 		{
+			name: "lists the known edges when the kind is unknown",
+			config: `
+export default {
+  slug: "test-app",
+  edge: { kind: "fastly" },
+};
+`,
+			wantErr: []string{`has an invalid "edge"`, `"fastly" is not an edge`, "cloudflare, native, none"},
+		},
+		{
 			name: "names the two dns spellings when the dns is not a marker",
 			config: `
 export default {

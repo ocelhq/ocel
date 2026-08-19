@@ -1,7 +1,6 @@
 package deploy
 
 import (
-	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -21,78 +20,6 @@ func workerOutputName(app string) string {
 	return naming.Join(naming.WordSeparator, app, string(naming.KindWorker))
 }
 
-func deployEdgeWorker(ctx context.Context, cfg Config, manifest *deploymentsv1.Manifest, functions []*deploymentsv1.FunctionOutput, progress func(string)) ([]*deploymentsv1.FunctionOutput, error) {
-	warnOrphanedWorker(ctx, cfg, progress)
-
-	apps := workerApps(cfg.ArtifactRoot, manifest)
-	if len(apps) == 0 {
-		return nil, nil
-	}
-	if cfg.Edge == nil {
-		return nil, fmt.Errorf("project has an edge-served %s app but no edge is configured", apps[0].GetFramework())
-	}
-	domains, err := workerDomains(cfg, manifest, apps)
-	if err != nil {
-		return nil, err
-	}
-	bundles, err := edge.LoadBundleManifest()
-	if err != nil {
-		return nil, err
-	}
-	urlByLogical := functionURLsByLogicalName(functions)
-
-	var workerOutputs []*deploymentsv1.FunctionOutput
-	bundlePath, err := bundles.Path(cfg.Edge.Kind())
-	if err != nil {
-		return nil, err
-	}
-	program, ok := cfg.Edge.(edge.Programmable)
-	if !ok {
-		return nil, fmt.Errorf("project has an edge-served %s app but %s runs no code", apps[0].GetFramework(), cfg.Edge.Kind())
-	}
-
-	for _, app := range apps {
-		name := app.GetName()
-		desc, _, err := readServeDescriptor(cfg.ArtifactRoot, name)
-		if err != nil {
-			return nil, err
-		}
-		worker, err := program.AssembleApp(
-			edge.WorkerSource{
-				ArtifactRoot: appArtifactRoot(cfg.ArtifactRoot, name),
-				BundlePath:   bundlePath,
-				Entry:        desc.Entry,
-				Routes:       appRoutes(manifest.GetFunctions(), app),
-			},
-			&deployResolver{
-				cfg:      cfg,
-				manifest: manifest,
-				app:      name,
-				urls:     appFunctionURLsByRoute(manifest.GetFunctions(), name, urlByLogical),
-			},
-		)
-		if err != nil {
-			return nil, err
-		}
-
-		if progress != nil {
-			progress(fmt.Sprintf("Deploying %s to the edge", name))
-		}
-		result, err := program.DeployApp(ctx, edge.AppDeployment{
-			Name:    workerScriptName(cfg.Slug, cfg.Env, name),
-			Domains: domains[name],
-			Worker:  worker,
-			Values:  cfg.EdgeValues,
-			Warn:    progress,
-		})
-		if err != nil {
-			return nil, fmt.Errorf("deploy edge worker for %s: %w", name, err)
-		}
-		workerOutputs = append(workerOutputs, collectFunctionOutput(workerOutputName(name), result.URL))
-	}
-	return workerOutputs, nil
-}
-
 func manifestApps(manifest *deploymentsv1.Manifest) []*deploymentsv1.ManifestApp {
 	if apps := manifest.GetApps(); len(apps) > 0 {
 		return apps
@@ -108,8 +35,6 @@ func manifestApps(manifest *deploymentsv1.Manifest) []*deploymentsv1.ManifestApp
 	return apps
 }
 
-// An app is served from the edge when its build emitted a serve descriptor —
-// a fact about the artifact, not a framework this package has to know by name.
 func workerApps(artifactRoot string, manifest *deploymentsv1.Manifest) []*deploymentsv1.ManifestApp {
 	var apps []*deploymentsv1.ManifestApp
 	for _, app := range manifestApps(manifest) {
@@ -184,31 +109,6 @@ func appFunctionURLsByRoute(functions []*deploymentsv1.ManifestFunction, app str
 		}
 	}
 	return result
-}
-
-type deployResolver struct {
-	cfg      Config
-	manifest *deploymentsv1.Manifest
-	app      string
-	urls     map[string]string
-}
-
-func (d *deployResolver) FunctionURL(routeID string) (string, error) {
-	url := d.urls[routeID]
-	if url == "" {
-		return "", fmt.Errorf("no Function URL was realized for route %q; the worker could not serve it", routeID)
-	}
-	return url, nil
-}
-
-func (d *deployResolver) EdgeCredentials() (edge.Credentials, bool) {
-	if d.cfg.EdgeAccessKeyID == "" || d.cfg.EdgeSecretKey == "" {
-		return edge.Credentials{}, false
-	}
-	return edge.Credentials{
-		AccessKeyID: d.cfg.EdgeAccessKeyID,
-		SecretKey:   d.cfg.EdgeSecretKey,
-	}, true
 }
 
 func DeclaredHostnames(manifest *deploymentsv1.Manifest, class deploymentsv1.Environment_Class) []string {
@@ -324,23 +224,4 @@ func ProjectOwnsWorker(slug, script string) bool {
 
 func retiredProjectWorkerStem(slug string) string {
 	return naming.Join(naming.WordSeparator, workerNamespace, slug) + naming.FieldSeparator
-}
-
-func legacyWorkerName(slug, env string) string {
-	return naming.Join(naming.WordSeparator, workerNamespace, slug, env)
-}
-
-func warnOrphanedWorker(ctx context.Context, cfg Config, progress func(string)) {
-	if cfg.Edge == nil || progress == nil {
-		return
-	}
-	program, ok := cfg.Edge.(edge.Programmable)
-	if !ok {
-		return
-	}
-	name := legacyWorkerName(cfg.Slug, cfg.Env)
-	if found, err := program.FindApp(ctx, name); err != nil || !found {
-		return
-	}
-	progress(fmt.Sprintf("Warning: an edge worker remains at %q, the name this project deployed under before workers were named per app. Deploys no longer update it; delete it once nothing points at it.", name))
 }

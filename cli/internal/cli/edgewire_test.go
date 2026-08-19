@@ -211,3 +211,41 @@ func TestBootstrapDestroySendsTheEdgeTheProjectDeclared(t *testing.T) {
 		})
 	}
 }
+
+func TestDestroySendsTheEdgeTheProjectDeclared(t *testing.T) {
+	cases := []struct {
+		name        string
+		declaration string
+		want        string
+	}{
+		{"an omitted edge asks for the native edge", "", "kind=native"},
+		{"`edge: false` asks for no edge at all", "  edge: false,\n", "kind=none"},
+		{"a declared cloudflare edge names it", "  edge: { kind: \"cloudflare\", options: {} },\n", "kind=cloudflare"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			root, journal, d := setUpEdgeFixture(t, tc.declaration)
+			t.Setenv(fakeInfraClassEnvVar, "production")
+			t.Setenv(fakeInfraPresentEnvVar, "1")
+			t.Setenv(destroyBypassEnv, "test-app")
+
+			var stdout, stderr bytes.Buffer
+			if err := runDestroy(context.Background(), d, root, &stdout, &stderr, strings.NewReader("")); err != nil {
+				t.Fatalf("runDestroy err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
+			}
+
+			got := readEdgeJournal(t, journal)
+			if len(got) != 2 {
+				t.Fatalf("destroy reached the provider %d times, want the plan and the teardown: %v", len(got), got)
+			}
+			for _, line := range got {
+				if !strings.Contains(line, tc.want) {
+					t.Errorf("provider saw %q, want %q", line, tc.want)
+				}
+			}
+			if !strings.Contains(stdout.String(), "fronted by the "+strings.TrimPrefix(tc.want, "kind=")+" edge") {
+				t.Errorf("stdout = %q, want the plan to name the edge it planned", stdout.String())
+			}
+		})
+	}
+}

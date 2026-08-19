@@ -804,11 +804,12 @@ func (s *deployFakeProviderServer) PlanDestroyProject(ctx context.Context, req *
 	if err := s.checkToken(ctx); err != nil {
 		return nil, err
 	}
+	journalEdge(req.GetEdgeKind(), nil, nil, nil)
 	slug := req.GetSlug()
 	if req.GetEnvironment().GetClass() == deploymentsv1.Environment_CLASS_PREVIEW {
 		return &deploymentsv1.PlanDestroyProjectResponse{
 			EdgeStack: &deploymentsv1.EdgeStackPlan{
-				EdgeKind: "cloudflare",
+				EdgeKind: req.GetEdgeKind(),
 				Items: []*deploymentsv1.TeardownItem{
 					{
 						Kind:   "edge workers",
@@ -829,7 +830,7 @@ func (s *deployFakeProviderServer) PlanDestroyProject(ctx context.Context, req *
 	}
 	return &deploymentsv1.PlanDestroyProjectResponse{
 		EdgeStack: &deploymentsv1.EdgeStackPlan{
-			EdgeKind: "cloudflare",
+			EdgeKind: req.GetEdgeKind(),
 			Items: []*deploymentsv1.TeardownItem{
 				{
 					Kind:   "edge stack",
@@ -859,6 +860,7 @@ func (s *deployFakeProviderServer) DestroyProject(ctx context.Context, req *depl
 	if err := s.checkToken(ctx); err != nil {
 		return err
 	}
+	journalEdge(req.GetEdgeKind(), nil, nil, nil)
 	if err := stream.Send(&deploymentsv1.DeployEvent{
 		Event: &deploymentsv1.DeployEvent_Progress{Progress: &deploymentsv1.ProgressEvent{Message: "DESTROY PROJECT project=" + req.GetSlug() + " dns=" + req.GetDns().GetKind() + " " + describeEnv(req.GetEnvironment())}},
 	}); err != nil {

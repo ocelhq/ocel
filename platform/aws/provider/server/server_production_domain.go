@@ -282,7 +282,7 @@ func (d *domainSession) addHost(ctx context.Context, host string, progress func(
 		return err
 	}
 
-	records, err := edge.RecordsFor(edge.DNSTarget{Kind: d.kind}, []string{host})
+	records, err := edge.RecordsFor(edge.TargetFor(d.kind, d.stack.State()), []string{host})
 	if err != nil {
 		return err
 	}

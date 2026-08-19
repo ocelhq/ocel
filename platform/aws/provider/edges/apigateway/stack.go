@@ -285,22 +285,9 @@ func (s *stack) BindDomain(ctx context.Context, binding edge.DomainBinding) erro
 	if err != nil {
 		return err
 	}
-	if _, err := c.APIGateway.GetDomainName(ctx, &apigateway.GetDomainNameInput{
-		DomainName: aws.String(binding.Hostname),
-	}); err != nil {
-		if !isNotFound(err) {
-			return fmt.Errorf("read the API Gateway domain name for %s: %w", binding.Hostname, err)
-		}
-		if _, err := c.APIGateway.CreateDomainName(ctx, &apigateway.CreateDomainNameInput{
-			DomainName:             aws.String(binding.Hostname),
-			RegionalCertificateArn: aws.String(binding.Certificate),
-			SecurityPolicy:         agtypes.SecurityPolicyTls12,
-			EndpointConfiguration: &agtypes.EndpointConfiguration{
-				Types: []agtypes.EndpointType{agtypes.EndpointTypeRegional},
-			},
-		}); err != nil {
-			return fmt.Errorf("create the API Gateway domain name for %s: %w", binding.Hostname, err)
-		}
+	front, err := ensureDomainName(ctx, c, binding)
+	if err != nil {
+		return err
 	}
 	mappings, err := basePathMappings(ctx, c, binding.Hostname)
 	if err != nil {
@@ -317,7 +304,61 @@ func (s *stack) BindDomain(ctx context.Context, binding edge.DomainBinding) erro
 			return fmt.Errorf("map %s onto REST API %s: %w", binding.Hostname, id, err)
 		}
 	}
-	s.state = edge.RecordBoundDomain(s.state, binding.Hostname)
+	s.state = edge.RecordHostFront(edge.RecordBoundDomain(s.state, binding.Hostname), binding.Hostname, front)
+	return nil
+}
+
+func ensureDomainName(ctx context.Context, c Clients, binding edge.DomainBinding) (string, error) {
+	held, err := c.APIGateway.GetDomainName(ctx, &apigateway.GetDomainNameInput{
+		DomainName: aws.String(binding.Hostname),
+	})
+	if err == nil {
+		return regionalFrontOf(binding.Hostname, aws.ToString(held.RegionalDomainName))
+	}
+	if !isNotFound(err) {
+		return "", fmt.Errorf("read the API Gateway domain name for %s: %w", binding.Hostname, err)
+	}
+	created, err := c.APIGateway.CreateDomainName(ctx, &apigateway.CreateDomainNameInput{
+		DomainName:             aws.String(binding.Hostname),
+		RegionalCertificateArn: aws.String(binding.Certificate),
+		SecurityPolicy:         agtypes.SecurityPolicyTls12,
+		EndpointConfiguration: &agtypes.EndpointConfiguration{
+			Types: []agtypes.EndpointType{agtypes.EndpointTypeRegional},
+		},
+	})
+	if err != nil {
+		return "", fmt.Errorf("create the API Gateway domain name for %s: %w", binding.Hostname, err)
+	}
+	return regionalFrontOf(binding.Hostname, aws.ToString(created.RegionalDomainName))
+}
+
+func regionalFrontOf(hostname, regional string) (string, error) {
+	if regional == "" {
+		return "", fmt.Errorf("API Gateway named no regional domain name for %s, so nothing says where its DNS record should point", hostname)
+	}
+	return regional, nil
+}
+
+func (s *stack) settleDomainFronts(ctx context.Context, c Clients) error {
+	for _, hostname := range edge.BoundDomains(s.state) {
+		if edge.HostFronts(s.state)[hostname] != "" {
+			continue
+		}
+		held, err := c.APIGateway.GetDomainName(ctx, &apigateway.GetDomainNameInput{
+			DomainName: aws.String(hostname),
+		})
+		if err != nil {
+			if isNotFound(err) {
+				continue
+			}
+			return fmt.Errorf("read the API Gateway domain name for %s: %w", hostname, err)
+		}
+		front, err := regionalFrontOf(hostname, aws.ToString(held.RegionalDomainName))
+		if err != nil {
+			return err
+		}
+		s.state = edge.RecordHostFront(s.state, hostname, front)
+	}
 	return nil
 }
 
@@ -347,7 +388,7 @@ func (s *stack) UnbindDomain(ctx context.Context, hostname string) error {
 	}); err != nil && !isNotFound(err) {
 		return fmt.Errorf("delete the API Gateway domain name for %s: %w", hostname, err)
 	}
-	s.state = edge.ForgetBoundDomain(s.state, hostname)
+	s.state = edge.ForgetHostFront(edge.ForgetBoundDomain(s.state, hostname), hostname)
 	return nil
 }
 

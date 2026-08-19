@@ -2008,6 +2008,154 @@ func TestStackTags(t *testing.T) {
 	})
 }
 
+func TestStackSpecsOnAnEdgeThatRunsNoCode(t *testing.T) {
+	t.Setenv(edge.EnvWorkerBundles, "")
+
+	codeless := func() Config {
+		return Config{
+			Edge:       unprogrammableEdge{&recordingEdge{kind: edge.KindNone}},
+			Slug:       "proj",
+			Env:        "prod",
+			EdgeValues: map[string]string{"cacheBucket": "ocel-proj-cache"},
+		}
+	}
+	twoApps := func() *deploymentsv1.Manifest {
+		return &deploymentsv1.Manifest{
+			Slug: "proj",
+			Apps: []*deploymentsv1.ManifestApp{{Name: "web", Framework: "next"}, {Name: "api", Framework: "next"}},
+			Functions: []*deploymentsv1.ManifestFunction{
+				{LogicalName: "web_index", Framework: "next", App: "web", RouteId: "/"},
+				{LogicalName: "api_index", Framework: "next", App: "api", RouteId: "/"},
+			},
+		}
+	}
+	assertProgramless := func(t *testing.T, specs []edge.StackSpec, wantSpecs int) {
+		t.Helper()
+		if len(specs) != wantSpecs {
+			t.Fatalf("specs = %d, want %d", len(specs), wantSpecs)
+		}
+		for _, spec := range specs {
+			if spec.Program != nil {
+				t.Errorf("Program = %+v, want none: an edge that runs no code has no worker bundle to carry", spec.Program)
+			}
+			if spec.Values["cacheBucket"] != "ocel-proj-cache" {
+				t.Errorf("Values = %v, want the edge values still threaded", spec.Values)
+			}
+		}
+	}
+
+	t.Run("production with no worker-fronted app", func(t *testing.T) {
+		specs, err := stackSpecs(codeless(), &deploymentsv1.Manifest{Slug: "proj"}, "v1", nil)
+		if err != nil {
+			t.Fatalf("stackSpecs: %v", err)
+		}
+		assertProgramless(t, specs, 1)
+	})
+
+	t.Run("production with worker-fronted apps", func(t *testing.T) {
+		manifest := twoApps()
+		manifest.Apps[0].Domains = classDomains("production", "web.acme.com")
+		manifest.Apps[1].Domains = classDomains("production", "api.acme.com")
+		cfg := codeless()
+		cfg.Class = deploymentsv1.Environment_CLASS_PRODUCTION
+		cfg.ArtifactRoot = specsArtifactRoot(t, manifest)
+
+		specs, err := stackSpecs(cfg, manifest, "v1", nil)
+		if err != nil {
+			t.Fatalf("stackSpecs: %v", err)
+		}
+		assertProgramless(t, specs, 2)
+		if !slicesEqual(specs[0].Domains, []string{"web.acme.com"}) {
+			t.Errorf("Domains = %v, want the app's declared hostnames", specs[0].Domains)
+		}
+	})
+
+	t.Run("preview on the project's own wildcard", func(t *testing.T) {
+		manifest := twoApps()
+		manifest.Domains = map[string]*deploymentsv1.DomainList{"preview": {Hostnames: []string{"*.preview.acme.com"}}}
+		cfg := codeless()
+		cfg.Class = deploymentsv1.Environment_CLASS_PREVIEW
+		cfg.Identity = "pr-42"
+		cfg.ArtifactRoot = specsArtifactRoot(t, manifest)
+
+		specs, err := stackSpecs(cfg, manifest, "v1", nil)
+		if err != nil {
+			t.Fatalf("stackSpecs: %v", err)
+		}
+		assertProgramless(t, specs, 1)
+		if !slicesEqual(specs[0].Domains, []string{"*.preview.acme.com"}) {
+			t.Errorf("Domains = %v, want the declared wildcard", specs[0].Domains)
+		}
+	})
+
+	t.Run("preview with no app to front", func(t *testing.T) {
+		cfg := codeless()
+		cfg.Class = deploymentsv1.Environment_CLASS_PREVIEW
+		cfg.Identity = "pr-42"
+
+		specs, err := stackSpecs(cfg, &deploymentsv1.Manifest{Slug: "proj"}, "v1", nil)
+		if err != nil {
+			t.Fatalf("stackSpecs: %v", err)
+		}
+		assertProgramless(t, specs, 1)
+		if !specs[0].PruneOnly {
+			t.Error("PruneOnly = false, want a preview with nothing to serve to only sweep")
+		}
+	})
+
+	t.Run("preview on the global preview domain", func(t *testing.T) {
+		manifest := twoApps()
+		cfg := codeless()
+		cfg.Class = deploymentsv1.Environment_CLASS_PREVIEW
+		cfg.Identity = "pr-42"
+		cfg.GlobalPreviewDomain = "preview.ocel.dev"
+		cfg.ArtifactRoot = specsArtifactRoot(t, manifest)
+
+		specs, err := stackSpecs(cfg, manifest, "v1", nil)
+		if err != nil {
+			t.Fatalf("stackSpecs: %v", err)
+		}
+		assertProgramless(t, specs, 1)
+		if !specs[0].PruneOnly {
+			t.Error("PruneOnly = false, want the global preview wildcard left to the substrate")
+		}
+	})
+}
+
+func TestCheckTagAvailableOnAnEdgeThatRecordsNoStoreEndpoint(t *testing.T) {
+	t.Parallel()
+
+	fake := &recordingEdge{
+		kind:   edge.KindNone,
+		secret: "fake-secret",
+		history: []edge.HistoryEntry{
+			{Promotion: edge.Promotion{PromotionID: "promo-1", Tag: "v1.2.3"}, Active: true},
+		},
+	}
+	cfg := Config{
+		Edge:       fake,
+		StackState: edge.StackState{"stateTable": "ocel-deployments", edge.StackKeySecret: "fake-secret"},
+	}
+
+	if err := checkTagAvailable(context.Background(), cfg, "v1.2.3"); err == nil {
+		t.Error("expected a duplicate tag to be rejected on an edge whose state names no store endpoint")
+	}
+	if err := checkTagAvailable(context.Background(), cfg, "v2.0.0"); err != nil {
+		t.Errorf("checkTagAvailable rejected a fresh tag: %v", err)
+	}
+}
+
+func TestCheckTagAvailableBeforeTheStoreExists(t *testing.T) {
+	t.Parallel()
+
+	fake := &recordingEdge{kind: edge.KindNone, historyErr: fmt.Errorf("%w: no state table", edge.ErrStoreAbsent)}
+	cfg := Config{Edge: fake, StackState: edge.StackState{"front": "d123.cloudfront.net"}}
+
+	if err := checkTagAvailable(context.Background(), cfg, "v1.2.3"); err != nil {
+		t.Errorf("checkTagAvailable = %v, want a store that does not exist yet to hold no tag", err)
+	}
+}
+
 func TestDefaultTagsReachTheWholeProgram(t *testing.T) {
 	t.Parallel()
 

@@ -197,7 +197,7 @@ func runDomainUse(ctx context.Context, d deps, cwd, wildcard string, opts domain
 
 	provW := ui.BuildWriter()
 	err = runProviderSession(ctx, d, cfg, provider, provW, provW, func(runner *providerrunner.Runner) error {
-		if err := preflightPreview(ctx, d, runner, provider, stdout); err != nil {
+		if err := preflightPreview(ctx, d, runner, provider, cfg, stdout); err != nil {
 			return err
 		}
 		req := edgeSettings(cfg).applyToUseDomain(&deploymentsv1.UseDomainRequest{
@@ -227,7 +227,7 @@ func runDomainLs(ctx context.Context, d deps, cwd string, opts domainOptions, st
 	}
 
 	return runProviderSession(ctx, d, cfg, provider, stdout, stderr, func(runner *providerrunner.Runner) error {
-		resp, err := listGlobalPreviewDomain(ctx, d, runner, provider, stdout)
+		resp, err := listGlobalPreviewDomain(ctx, d, runner, provider, cfg, stdout)
 		if err != nil {
 			return err
 		}
@@ -260,7 +260,7 @@ func runDomainRelease(ctx context.Context, d deps, cwd string, opts domainOption
 
 	provW := ui.BuildWriter()
 	err = runProviderSession(ctx, d, cfg, provider, provW, provW, func(runner *providerrunner.Runner) error {
-		if err := preflightPreview(ctx, d, runner, provider, stdout); err != nil {
+		if err := preflightPreview(ctx, d, runner, provider, cfg, stdout); err != nil {
 			return err
 		}
 		client, err := runner.Deployments()
@@ -269,9 +269,9 @@ func runDomainRelease(ctx context.Context, d deps, cwd string, opts domainOption
 		}
 
 		spinner := deployui.StartSpinner(stdout, "Enumerating what releasing the domain would remove")
-		plan, err := client.PlanReleaseDomain(ctx, &deploymentsv1.PlanReleaseDomainRequest{
+		plan, err := client.PlanReleaseDomain(ctx, edgeSettings(cfg).applyToPlanReleaseDomain(&deploymentsv1.PlanReleaseDomainRequest{
 			Class: deploymentsv1.Environment_CLASS_PREVIEW,
-		})
+		}))
 		spinner.Stop()
 		if err != nil {
 			return err
@@ -389,7 +389,7 @@ func runDomainStream(ctx context.Context, d deps, cfg *projectconfig.Config, pro
 
 	provW := ui.BuildWriter()
 	err = runProviderSession(ctx, d, cfg, provider, provW, provW, func(runner *providerrunner.Runner) error {
-		if err := preflightClass(ctx, d, runner, provider, deploymentsv1.Environment_CLASS_PRODUCTION, "ocel bootstrap", stdout); err != nil {
+		if err := preflightClass(ctx, d, runner, provider, cfg, deploymentsv1.Environment_CLASS_PRODUCTION, "ocel bootstrap", stdout); err != nil {
 			return err
 		}
 		return act(runner, ui)
@@ -415,8 +415,8 @@ func domainSession(ctx context.Context, cwd string) (*projectconfig.Config, *pro
 	return cfg, provider, nil
 }
 
-func listGlobalPreviewDomain(ctx context.Context, d deps, runner *providerrunner.Runner, provider *projectconfig.ProviderDescriptor, out io.Writer) (*deploymentsv1.ListDomainResponse, error) {
-	if err := preflightPreview(ctx, d, runner, provider, out); err != nil {
+func listGlobalPreviewDomain(ctx context.Context, d deps, runner *providerrunner.Runner, provider *projectconfig.ProviderDescriptor, cfg *projectconfig.Config, out io.Writer) (*deploymentsv1.ListDomainResponse, error) {
+	if err := preflightPreview(ctx, d, runner, provider, cfg, out); err != nil {
 		return nil, err
 	}
 	client, err := runner.Deployments()
@@ -424,7 +424,7 @@ func listGlobalPreviewDomain(ctx context.Context, d deps, runner *providerrunner
 		return nil, err
 	}
 	spinner := deployui.StartSpinner(out, "Reading the global preview domain")
-	resp, err := client.ListDomain(ctx, &deploymentsv1.ListDomainRequest{Class: deploymentsv1.Environment_CLASS_PREVIEW})
+	resp, err := client.ListDomain(ctx, edgeSettings(cfg).applyToListDomain(&deploymentsv1.ListDomainRequest{Class: deploymentsv1.Environment_CLASS_PREVIEW}))
 	spinner.Stop()
 	if err != nil {
 		return nil, err
@@ -516,7 +516,7 @@ func runDomainStatus(ctx context.Context, d deps, cwd string, opts domainOptions
 	configured := declaredHostnames(cfg, "production")
 
 	return runProviderSession(ctx, d, cfg, provider, stdout, stderr, func(runner *providerrunner.Runner) error {
-		if err := preflightClass(ctx, d, runner, provider, deploymentsv1.Environment_CLASS_PRODUCTION, "ocel bootstrap", stdout); err != nil {
+		if err := preflightClass(ctx, d, runner, provider, cfg, deploymentsv1.Environment_CLASS_PRODUCTION, "ocel bootstrap", stdout); err != nil {
 			return err
 		}
 		client, err := runner.Deployments()

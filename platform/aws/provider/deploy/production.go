@@ -279,7 +279,7 @@ func validateTag(tag string) error {
 }
 
 func checkTagAvailable(ctx context.Context, cfg Config, tag string) error {
-	if tag == "" || cfg.StackState[edge.StackKeyEndpoint] == "" {
+	if tag == "" || len(cfg.StackState) == 0 {
 		return nil
 	}
 	stack, err := cfg.Edge.Open(cfg.StackState)
@@ -287,6 +287,9 @@ func checkTagAvailable(ctx context.Context, cfg Config, tag string) error {
 		return err
 	}
 	history, err := stack.Ledger().History(ctx, "")
+	if errors.Is(err, edge.ErrStoreAbsent) {
+		return nil
+	}
 	if err != nil {
 		return fmt.Errorf("check tag availability: %w", err)
 	}
@@ -326,7 +329,7 @@ func settleStackRecords(ctx context.Context, cfg Config, specs []edge.StackSpec,
 	for _, spec := range specs {
 		hosts = append(hosts, spec.Domains...)
 	}
-	records, err := edge.RecordsFor(edge.DNSTarget{Kind: cfg.Edge.Kind(), Front: edge.FrontOf(state)}, hosts)
+	records, err := edge.RecordsFor(edge.TargetFor(cfg.Edge.Kind(), state), hosts)
 	if err != nil {
 		return state, err
 	}
@@ -455,9 +458,13 @@ func sharedWorker(cfg Config) (edge.Worker, error) {
 }
 
 func stackSpecs(cfg Config, manifest *deploymentsv1.Manifest, version string, warn func(string)) ([]edge.StackSpec, error) {
-	generic, err := sharedWorker(cfg)
-	if err != nil {
-		return nil, err
+	_, programmable := cfg.Edge.(edge.Programmable)
+	var generic edge.Worker
+	if programmable {
+		var err error
+		if generic, err = sharedWorker(cfg); err != nil {
+			return nil, err
+		}
 	}
 
 	base := edge.StackSpec{
@@ -469,6 +476,9 @@ func stackSpecs(cfg Config, manifest *deploymentsv1.Manifest, version string, wa
 		Warn:        warn,
 	}
 	program := func(name string, worker edge.Worker) *edge.ProgramSpec {
+		if !programmable {
+			return nil
+		}
 		return &edge.ProgramSpec{
 			Name:                name,
 			Worker:              worker,
@@ -478,23 +488,29 @@ func stackSpecs(cfg Config, manifest *deploymentsv1.Manifest, version string, wa
 			ISRWriterScriptName: cfg.ISRWriterScriptName,
 		}
 	}
+	previewProgram := func(baseDomain string, apps []*deploymentsv1.ManifestApp) *edge.ProgramSpec {
+		spec := program(previewWorkerName(cfg.Slug), withPreviewVars(generic, baseDomain, apps))
+		if spec == nil {
+			return nil
+		}
+		spec.PruneWorkerStem = previewWorkerStem(cfg.Slug)
+		return spec
+	}
 
 	apps := workerApps(cfg.ArtifactRoot, manifest)
 
 	if cfg.Class == deploymentsv1.Environment_CLASS_PREVIEW {
 		spec := base
-		spec.Program = program(previewWorkerName(cfg.Slug), generic)
-		spec.Program.PruneWorkerStem = previewWorkerStem(cfg.Slug)
 		if servesOnGlobalPreviewDomain(cfg, manifest) {
 			if _, err := resolveWorkerHostnames(cfg, manifest, apps); err != nil {
 				return nil, err
 			}
-			spec.Program.Worker = withPreviewVars(generic, "", apps)
+			spec.Program = previewProgram("", apps)
 			spec.PruneOnly = true
 			return []edge.StackSpec{spec}, nil
 		}
 		if len(apps) == 0 {
-			spec.Program.Worker = withPreviewVars(generic, "", apps)
+			spec.Program = previewProgram("", apps)
 			spec.PruneOnly = true
 			return []edge.StackSpec{spec}, nil
 		}
@@ -503,7 +519,7 @@ func stackSpecs(cfg Config, manifest *deploymentsv1.Manifest, version string, wa
 			return nil, err
 		}
 		spec.Domains = []string{previewWildcard(resolved.previewBase)}
-		spec.Program.Worker = withPreviewVars(generic, resolved.previewBase, apps)
+		spec.Program = previewProgram(resolved.previewBase, apps)
 		return []edge.StackSpec{spec}, nil
 	}
 

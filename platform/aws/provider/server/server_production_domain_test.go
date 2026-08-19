@@ -37,12 +37,13 @@ func (l *callLog) note(format string, args ...any) {
 }
 
 type boundStack struct {
-	name    string
-	log     *callLog
-	state   edge.StackState
-	bound   []edge.DomainBinding
-	unbound []string
-	bindErr error
+	name      string
+	log       *callLog
+	state     edge.StackState
+	bound     []edge.DomainBinding
+	unbound   []string
+	bindErr   error
+	hostFront func(hostname string) string
 }
 
 func (s *boundStack) State() edge.StackState { return s.state }
@@ -62,6 +63,9 @@ func (s *boundStack) BindDomain(_ context.Context, binding edge.DomainBinding) e
 	s.log.note("bind %s on %s", binding.Hostname, s.name)
 	s.bound = append(s.bound, binding)
 	s.state = edge.RecordBoundDomain(s.state, binding.Hostname)
+	if s.hostFront != nil {
+		s.state = edge.RecordHostFront(s.state, binding.Hostname, s.hostFront(binding.Hostname))
+	}
 	return nil
 }
 
@@ -988,4 +992,83 @@ func (c *cloudflareEdge) stack(t *testing.T) edge.EdgeStack {
 		t.Fatalf("Open: %v", err)
 	}
 	return stack
+}
+
+func frontRecords(written []edge.Record) []edge.Record {
+	return slices.DeleteFunc(slices.Clone(written), func(rec edge.Record) bool {
+		return strings.HasPrefix(rec.Name, "_")
+	})
+}
+
+func TestAddDomainOnAnEdgeThatIsNotCloudflare(t *testing.T) {
+	t.Parallel()
+
+	t.Run("the none edge points each host at the front its binding published", func(t *testing.T) {
+		t.Parallel()
+
+		stack := newBoundStack()
+		stack.hostFront = func(hostname string) string {
+			return "d-" + strings.ReplaceAll(hostname, ".", "-") + ".execute-api.eu-west-1.amazonaws.com"
+		}
+		writer := &domainWriter{}
+		f := newDomainFixture(domainFixtureOptions{
+			kind:       edge.KindNone,
+			stack:      stack,
+			configured: []string{"shop.app.com", "www.app.com"},
+			writer:     writer,
+		})
+
+		if err := f.session.add(t.Context(), f.say); err != nil {
+			t.Fatalf("add: %v", err)
+		}
+
+		want := []edge.Record{
+			{Name: "shop.app.com", Type: edge.RecordTypeCNAME, Value: "d-shop-app-com.execute-api.eu-west-1.amazonaws.com"},
+			{Name: "www.app.com", Type: edge.RecordTypeCNAME, Value: "d-www-app-com.execute-api.eu-west-1.amazonaws.com"},
+		}
+		if front := frontRecords(writer.written); !slices.Equal(front, want) {
+			t.Errorf("written = %v, want %v", front, want)
+		}
+	})
+
+	t.Run("the native edge points every host at the one distribution fronting them", func(t *testing.T) {
+		t.Parallel()
+
+		stack := newBoundStack()
+		stack.state[edge.StackKeyFront] = "d123.cloudfront.net"
+		writer := &domainWriter{}
+		f := newDomainFixture(domainFixtureOptions{
+			kind:       edge.KindNative,
+			stack:      stack,
+			configured: []string{"shop.app.com"},
+			writer:     writer,
+		})
+
+		if err := f.session.add(t.Context(), f.say); err != nil {
+			t.Fatalf("add: %v", err)
+		}
+
+		want := []edge.Record{{Name: "shop.app.com", Type: edge.RecordTypeCNAME, Value: "d123.cloudfront.net"}}
+		if front := frontRecords(writer.written); !slices.Equal(front, want) {
+			t.Errorf("written = %v, want %v", front, want)
+		}
+	})
+
+	t.Run("an edge that published no front for the host is refused by name", func(t *testing.T) {
+		t.Parallel()
+
+		f := newDomainFixture(domainFixtureOptions{
+			kind:       edge.KindNone,
+			configured: []string{"shop.app.com"},
+			writer:     &domainWriter{},
+		})
+
+		err := f.session.add(t.Context(), f.say)
+		if err == nil {
+			t.Fatal("add err = nil, want a refusal: the binding published nothing to point DNS at")
+		}
+		if !strings.Contains(err.Error(), "shop.app.com") {
+			t.Errorf("err = %v, want it to name the host with nothing to point at", err)
+		}
+	})
 }

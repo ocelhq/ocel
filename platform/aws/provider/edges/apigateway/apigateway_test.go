@@ -776,3 +776,71 @@ func TestCreateAPITellsAThrottleFromTheQuota(t *testing.T) {
 		})
 	}
 }
+
+func TestBindDomainPublishesAFrontPerHost(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	w := newWorld()
+	e := bootstrapped(t, w)
+	stack, err := e.Reconcile(ctx, testSpec(), nil)
+	if err != nil {
+		t.Fatalf("Reconcile: %v", err)
+	}
+	hosts := []string{"shop.example.com", "www.example.com"}
+	for _, host := range hosts {
+		if err := stack.BindDomain(ctx, edge.DomainBinding{Hostname: host, Certificate: "arn:aws:acm:eu-west-1:123456789012:certificate/abc"}); err != nil {
+			t.Fatalf("BindDomain(%s): %v", host, err)
+		}
+	}
+
+	records, err := edge.RecordsFor(edge.TargetFor(e.Kind(), stack.State()), hosts)
+	if err != nil {
+		t.Fatalf("RecordsFor(%v): %v", hosts, err)
+	}
+	want := []edge.Record{
+		{Name: hosts[0], Type: edge.RecordTypeCNAME, Value: regionalFront(hosts[0])},
+		{Name: hosts[1], Type: edge.RecordTypeCNAME, Value: regionalFront(hosts[1])},
+	}
+	if !slices.Equal(records, want) {
+		t.Errorf("records = %v, want %v: each API Gateway domain name has its own regional domain name", records, want)
+	}
+
+	if err := stack.UnbindDomain(ctx, hosts[0]); err != nil {
+		t.Fatalf("UnbindDomain(%s): %v", hosts[0], err)
+	}
+	if _, err := edge.RecordsFor(edge.TargetFor(e.Kind(), stack.State()), hosts[:1]); err == nil {
+		t.Errorf("RecordsFor(%v) err = nil, want a refusal: the host is unbound and its front is gone", hosts[:1])
+	}
+}
+
+func TestReconcileRecoversTheFrontOfADomainBoundBeforeItWasRecorded(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	w := newWorld()
+	e := bootstrapped(t, w)
+	stack, err := e.Reconcile(ctx, testSpec(), nil)
+	if err != nil {
+		t.Fatalf("Reconcile: %v", err)
+	}
+	const host = "shop.example.com"
+	if err := stack.BindDomain(ctx, edge.DomainBinding{Hostname: host, Certificate: "arn:aws:acm:eu-west-1:123456789012:certificate/abc"}); err != nil {
+		t.Fatalf("BindDomain: %v", err)
+	}
+	forgotten := maps.Clone(stack.State())
+	delete(forgotten, "front:"+host)
+
+	settled, err := e.Reconcile(ctx, testSpec(), forgotten)
+	if err != nil {
+		t.Fatalf("Reconcile again: %v", err)
+	}
+
+	records, err := edge.RecordsFor(edge.TargetFor(e.Kind(), settled.State()), []string{host})
+	if err != nil {
+		t.Fatalf("RecordsFor after a reconcile of state predating the front: %v", err)
+	}
+	if want := regionalFront(host); len(records) != 1 || records[0].Value != want {
+		t.Errorf("records = %v, want a CNAME to %q read back from the domain name API Gateway already holds", records, want)
+	}
+}

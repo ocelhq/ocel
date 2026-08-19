@@ -2,6 +2,7 @@ package cloudfront
 
 import (
 	"context"
+	"maps"
 	"slices"
 	"strings"
 	"testing"
@@ -191,5 +192,38 @@ func TestDestroyHoldsBeforeItFirstAsksHowTheRolloutIsGoing(t *testing.T) {
 	held := slices.Index(steps[disabled:], "hold")
 	if held < 0 || disabled+held > polled {
 		t.Errorf("the calls were %v, want a hold between disabling the distribution and asking whether it settled", steps)
+	}
+}
+
+func TestBindDomainRecordsTheFrontOfADistributionFoundByName(t *testing.T) {
+	t.Parallel()
+
+	w := newWorld()
+	e := bootstrapped(t, w)
+	settled, err := e.Reconcile(context.Background(), testSpec(), nil)
+	if err != nil {
+		t.Fatalf("Reconcile: %v", err)
+	}
+	held := w.front.named(productionDistributionName())
+	if held == nil {
+		t.Fatalf("no distribution for the stack; CloudFront holds %v", w.front.mutations())
+	}
+
+	forgotten := maps.Clone(settled.State())
+	delete(forgotten, stackKeyDistribution)
+	delete(forgotten, edge.StackKeyFront)
+	stack, err := e.Open(forgotten)
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	if err := stack.BindDomain(context.Background(), edge.DomainBinding{Hostname: boundHost}); err != nil {
+		t.Fatalf("BindDomain: %v", err)
+	}
+
+	if got := stack.State()[stackKeyDistribution]; got != held.id {
+		t.Errorf("state records distribution %q, want the one already serving the stack (%q)", got, held.id)
+	}
+	if got := edge.FrontOf(stack.State()); got != held.domain {
+		t.Errorf("state records front %q, want %q: a binding onto a distribution found by name still has to say where DNS points", got, held.domain)
 	}
 }

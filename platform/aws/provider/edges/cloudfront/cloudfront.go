@@ -268,12 +268,9 @@ func (p *provider) Reconcile(ctx context.Context, spec edge.StackSpec, prior edg
 	if spec.PruneOnly {
 		return s, nil
 	}
-	front, err := s.reconcileDistribution(ctx, c)
-	if err != nil {
+	if _, err := s.reconcileDistribution(ctx, c); err != nil {
 		return nil, err
 	}
-	next[stackKeyDistribution] = front.id
-	next[edge.StackKeyFront] = front.domainName
 	return s, nil
 }
 
