@@ -16,6 +16,31 @@ import (
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
+func TestPreviewDomainHolder(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		name    string
+		domain  PreviewDomain
+		want    edge.Kind
+		wantHas bool
+	}{
+		{"the recorded edge holds it", PreviewDomain{BaseDomain: "preview.acme.com", Edge: edge.KindNative}, edge.KindNative, true},
+		{"a recorded Cloudflare account names Cloudflare", PreviewDomain{BaseDomain: "preview.acme.com", CloudflareAccount: "cf-owner"}, edge.KindCloudflare, true},
+		{"the recorded edge outranks the account", PreviewDomain{BaseDomain: "preview.acme.com", Edge: edge.KindCloudflare, CloudflareAccount: "cf-owner"}, edge.KindCloudflare, true},
+		{"nothing names a holder", PreviewDomain{BaseDomain: "preview.acme.com"}, "", false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			got, ok := tc.domain.Holder()
+			if got != tc.want || ok != tc.wantHas {
+				t.Errorf("Holder() = %q %v, want %q %v", got, ok, tc.want, tc.wantHas)
+			}
+		})
+	}
+}
+
 func TestPreviewDomainParam(t *testing.T) {
 	t.Parallel()
 
