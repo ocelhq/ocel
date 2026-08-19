@@ -199,9 +199,13 @@ func TestIssuerAwaitValidation(t *testing.T) {
 			{status: StatusPendingValidation},
 			{status: StatusPendingValidation, validation: true},
 		}}
-		cert, err := testIssuer(api, 5).AwaitValidation(t.Context(), Certificate{ARN: testARN})
+		var said []string
+		cert, err := testIssuer(api, 5).AwaitValidation(t.Context(), Certificate{ARN: testARN}, func(m string) { said = append(said, m) })
 		if err != nil {
 			t.Fatalf("AwaitValidation: %v", err)
+		}
+		if len(said) != 1 || !strings.Contains(said[0], "Waiting") {
+			t.Errorf("said = %v, want the wait announced once, so the run does not look stuck", said)
 		}
 		if len(cert.Validation) != 1 || cert.Validation[0] != validationRecord {
 			t.Fatalf("validation = %+v, want the trailing dots trimmed off %+v", cert.Validation, validationRecord)
@@ -212,7 +216,7 @@ func TestIssuerAwaitValidation(t *testing.T) {
 		t.Parallel()
 
 		api := &fakeACM{steps: []acmStep{{status: StatusPendingValidation}}}
-		_, err := testIssuer(api, 3).AwaitValidation(t.Context(), Certificate{ARN: testARN})
+		_, err := testIssuer(api, 3).AwaitValidation(t.Context(), Certificate{ARN: testARN}, func(string) {})
 		if err == nil {
 			t.Fatal("AwaitValidation err = nil, want a bounded refusal")
 		}
@@ -237,12 +241,31 @@ func TestIssuerAwaitIssued(t *testing.T) {
 			{status: StatusPendingValidation, validation: true},
 			{status: StatusIssued, validation: true},
 		}}
-		got, err := testIssuer(api, 5).AwaitIssued(t.Context(), cert, func(string) {})
+		var said []string
+		got, err := testIssuer(api, 5).AwaitIssued(t.Context(), cert, func(m string) { said = append(said, m) })
 		if err != nil {
 			t.Fatalf("AwaitIssued: %v", err)
 		}
 		if !got.Issued() {
 			t.Fatalf("cert = %+v, want it issued", got)
+		}
+		if len(said) != 2 || !strings.Contains(said[0], "Waiting") {
+			t.Errorf("said = %v, want the wait announced before the issue, so the run does not look stuck", said)
+		}
+	})
+
+	t.Run("says nothing about waiting when ACM has already issued", func(t *testing.T) {
+		t.Parallel()
+
+		api := &fakeACM{steps: []acmStep{{status: StatusIssued, validation: true}}}
+		var said []string
+		if _, err := testIssuer(api, 5).AwaitIssued(t.Context(), cert, func(m string) { said = append(said, m) }); err != nil {
+			t.Fatalf("AwaitIssued: %v", err)
+		}
+		for _, line := range said {
+			if strings.Contains(line, "Waiting") {
+				t.Errorf("said = %v, want no wait announced: nothing was waited on", said)
+			}
 		}
 	})
 

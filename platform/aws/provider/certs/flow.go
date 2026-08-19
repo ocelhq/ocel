@@ -80,7 +80,7 @@ func (f Flow) Certificate(ctx context.Context, hostnames []string, prior Settlem
 	}
 
 	if len(state.Certificate.Validation) == 0 {
-		cert, err := f.Issuer.AwaitValidation(ctx, state.Certificate)
+		cert, err := f.Issuer.AwaitValidation(ctx, state.Certificate, say)
 		state.Certificate = cert
 		if err != nil {
 			return state, err

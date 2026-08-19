@@ -168,9 +168,12 @@ func idempotencyToken(hostname string) string {
 	return "ocel" + hex.EncodeToString(sum[:12])
 }
 
-func (i Issuer) AwaitValidation(ctx context.Context, cert Certificate) (Certificate, error) {
+func (i Issuer) AwaitValidation(ctx context.Context, cert Certificate, say func(string)) (Certificate, error) {
 	for attempt := range i.attempts() {
 		if attempt > 0 {
+			if attempt == 1 {
+				say(fmt.Sprintf("Waiting up to %s for ACM to name the record that proves you own this domain", i.window()))
+			}
 			if err := i.hold(ctx); err != nil {
 				return cert, err
 			}
@@ -193,6 +196,9 @@ func (i Issuer) AwaitValidation(ctx context.Context, cert Certificate) (Certific
 func (i Issuer) AwaitIssued(ctx context.Context, cert Certificate, say func(string)) (Certificate, error) {
 	for attempt := range i.attempts() {
 		if attempt > 0 {
+			if attempt == 1 {
+				say(fmt.Sprintf("Waiting up to %s for ACM to issue the certificate, which it does once the record resolves", i.window()))
+			}
 			if err := i.hold(ctx); err != nil {
 				return cert, err
 			}
