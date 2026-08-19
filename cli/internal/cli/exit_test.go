@@ -9,6 +9,7 @@ import (
 	"os/exec"
 	"strings"
 	"sync"
+	"syscall"
 	"testing"
 	"time"
 )
@@ -103,6 +104,38 @@ func TestInterruptHandlerSecondSignalForcesExit(t *testing.T) {
 	}
 	if got := forceKillCalls(); got != 1 {
 		t.Errorf("forceKill called %d times, want exactly 1 before the forced exit", got)
+	}
+}
+
+func TestInterruptHandlerTerminateDoesNotCutTheWindowShort(t *testing.T) {
+	t.Parallel()
+
+	var stderr bytes.Buffer
+	ch := make(chan os.Signal, 2)
+	exit, calls := fakeExit(t)
+	forceKill, forceKillCalls := fakeForceKill(t)
+
+	ctx, stop := interruptHandlerWithExit(context.Background(), &stderr, ch, time.Hour, forceKill, exit)
+	defer stop()
+
+	ch <- os.Interrupt
+	<-ctx.Done()
+
+	ch <- syscall.SIGTERM
+
+	if waitFor(func() bool { return len(calls()) > 0 }, 200*time.Millisecond) {
+		t.Fatalf("exit was called on a supervisor's SIGTERM; calls = %v", calls())
+	}
+	if got := forceKillCalls(); got != 0 {
+		t.Errorf("forceKill called %d times, want the graceful shutdown left to finish", got)
+	}
+	if strings.Contains(stderr.String(), "Interrupted again") {
+		t.Errorf("stderr = %q, want a SIGTERM not read as a second Ctrl-C", stderr.String())
+	}
+
+	ch <- os.Interrupt
+	if !waitFor(func() bool { return len(calls()) == 1 }, 2*time.Second) {
+		t.Fatalf("exit was not called after a real second interrupt; calls = %v", calls())
 	}
 }
 

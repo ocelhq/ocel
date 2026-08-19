@@ -68,16 +68,22 @@ func interruptHandlerWithExit(parent context.Context, stderr io.Writer, ch chan 
 		timer := time.NewTimer(window)
 		defer timer.Stop()
 
-		select {
-		case <-done:
+		for {
+			select {
+			case <-done:
+				return
+			case sig := <-ch:
+				if sig != os.Interrupt {
+					continue
+				}
+				fmt.Fprintln(stderr, "Interrupted again: exiting immediately, cloud resources may be mid-flight.")
+			case <-timer.C:
+				fmt.Fprintf(stderr, "Graceful shutdown did not finish in %s: exiting, cloud resources may be mid-flight.\n", window)
+			}
+			forceKill()
+			exit(interruptExitCode)
 			return
-		case <-ch:
-			fmt.Fprintln(stderr, "Interrupted again: exiting immediately, cloud resources may be mid-flight.")
-		case <-timer.C:
-			fmt.Fprintf(stderr, "Graceful shutdown did not finish in %s: exiting, cloud resources may be mid-flight.\n", window)
 		}
-		forceKill()
-		exit(interruptExitCode)
 	}()
 
 	var stopOnce sync.Once

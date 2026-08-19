@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 
 import { join } from "path";
+import { constants } from "node:os";
 import { createRequire } from "node:module";
 
 const { platform, arch } = process;
@@ -23,15 +24,27 @@ switch (platform) {
 }
 
 const binaryPkg = `@ocel/${packageName}`;
+const binary = platform === "win32" ? "ocel.exe" : "ocel";
 
+let binaryPath = "";
 try {
-  const binary = process.platform === "win32" ? "ocel.exe" : "ocel";
-  const binaryPath = require.resolve(join(binaryPkg, "bin", binary));
-
-  const { spawnSync } = require("child_process");
-  const result = spawnSync(binaryPath, process.argv.slice(2), { stdio: "inherit" });
-  process.exit(result.status);
-} catch (e) {
+  binaryPath = require.resolve(join(binaryPkg, "bin", binary));
+} catch {
   console.error(`Failed to locate binary for ${binaryPkg}.`);
   process.exit(1);
 }
+
+const { spawn } = require("child_process");
+const child = spawn(binaryPath, process.argv.slice(2), { stdio: "inherit" });
+
+process.on("SIGINT", () => {});
+process.on("SIGTERM", () => child.kill("SIGTERM"));
+
+child.on("error", (err) => {
+  console.error(`Failed to run ${binaryPath}: ${err.message}`);
+  process.exit(1);
+});
+
+child.on("exit", (code, signal) => {
+  process.exit(signal ? 128 + (constants.signals[signal] ?? 0) : (code ?? 0));
+});
