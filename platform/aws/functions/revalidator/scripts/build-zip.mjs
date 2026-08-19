@@ -17,6 +17,7 @@ execFileSync(
   { cwd: root, stdio: "inherit" },
 );
 
+execFileSync("chmod", ["-R", "u=rwX,go=rX", out], { stdio: "inherit" });
 execFileSync("find", [out, "-exec", "touch", "-t", "198001010000", "{}", "+"], {
   stdio: "inherit",
 });

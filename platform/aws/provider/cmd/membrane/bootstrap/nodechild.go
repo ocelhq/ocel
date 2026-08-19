@@ -407,7 +407,7 @@ func entrypointPath() string {
 }
 
 func startNode(extraEnv []string, budget time.Duration, onControl func(io.Writer), abandon <-chan struct{}) (*nodeChild, error) {
-	// TODO: randomize
+	// TODO: one path per process, so two membranes in one sandbox cannot take each other's socket
 	sockPath := "/tmp/ocel-control.sock"
 	_ = os.Remove(sockPath)
 

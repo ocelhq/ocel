@@ -1,14 +1,16 @@
 const TARGET = { os: ["linux"], cpu: ["arm64"], libc: ["glibc"] };
 
 import { execFileSync } from "node:child_process";
-import { mkdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { mkdirSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { esbuildArgs } from "./bundle.mjs";
 
 const root = dirname(dirname(fileURLToPath(import.meta.url)));
-const manifest = JSON.parse(readFileSync(join(root, "package.json"), "utf8"));
+const sharp = JSON.parse(
+  readFileSync(join(root, "node_modules", "sharp", "package.json"), "utf8"),
+).version;
 const out = join(root, "dist", "zip");
 const stage = join(root, "dist", "stage");
 
@@ -29,7 +31,7 @@ writeFileSync(
     {
       name: "ocel-image-optimizer-runtime",
       private: true,
-      dependencies: { sharp: manifest.dependencies.sharp },
+      dependencies: { sharp },
     },
     null,
     2,
@@ -78,6 +80,7 @@ for (const file of [
   rmSync(join(out, "node_modules", file), { recursive: true, force: true });
 }
 
+execFileSync("chmod", ["-R", "u=rwX,go=rX", out], { stdio: "inherit" });
 execFileSync("find", [out, "-exec", "touch", "-t", "198001010000", "{}", "+"], {
   stdio: "inherit",
 });
@@ -90,9 +93,20 @@ const zip = join(root, "dist", "image-optimizer.zip");
 rmSync(zip, { force: true });
 execFileSync("zip", ["-X", "-q", "-@", zip], { cwd: out, input: entries, stdio: ["pipe", "inherit", "inherit"] });
 
-const unzipped = Number(
-  execFileSync("du", ["-sb", out], { encoding: "utf8" }).split(/\s/)[0],
-);
+function unzippedSize(dir) {
+  let total = 0;
+  for (const entry of readdirSync(dir, { withFileTypes: true })) {
+    const full = join(dir, entry.name);
+    if (entry.isDirectory()) {
+      total += unzippedSize(full);
+    } else if (entry.isFile()) {
+      total += statSync(full).size;
+    }
+  }
+  return total;
+}
+
+const unzipped = unzippedSize(out);
 const CAP = 250 * 1024 * 1024;
 console.log(`unzipped ${unzipped} bytes (${(unzipped / 1e6).toFixed(1)} MB), cap ${CAP}`);
 console.log(`zip ${statSync(zip).size} bytes at ${zip}`);

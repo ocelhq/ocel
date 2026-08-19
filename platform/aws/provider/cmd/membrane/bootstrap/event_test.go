@@ -372,11 +372,6 @@ func TestEncodePrelude(t *testing.T) {
 	})
 }
 
-// unreadBodyServer answers the first request on each connection without
-// reading its body, then discards everything else it sees on that
-// connection without ever answering again — standing in for a Node
-// handler that never drains an unread request, and desyncs whatever
-// reuses the same socket next.
 func unreadBodyServer(t *testing.T) int {
 	t.Helper()
 	ln, err := net.Listen("tcp", "127.0.0.1:0")

@@ -86,11 +86,11 @@ const specs = [
     "description": "AWS IAM Function URL provisioning and the runtime entrypoints serving its invocations.",
     "noiseTier": "precise",
     "filePatterns": [
-      "platform/aws/functions/entrypoints/src/**/entrypoint.mts",
-      "platform/aws/functions/entrypoints/src/node/fetch-bridge.mts",
-      "platform/aws/functions/entrypoints/src/shared/membrane.mts",
+      "platform/aws/membrane/src/**/entrypoint.mts",
+      "platform/aws/membrane/src/node/fetch-bridge.mts",
+      "platform/aws/membrane/src/shared/membrane.mts",
       "platform/aws/functions/image-optimizer/src/*.mts",
-      "platform/aws/provider/cmd/lambdanode/bootstrap/*.go",
+      "platform/aws/provider/cmd/membrane/bootstrap/*.go",
       "platform/aws/provider/deploy/function.go"
     ],
     "patterns": [
@@ -207,7 +207,7 @@ const specs = [
       "platform/aws/provider/membrane/mux.go",
       "platform/aws/provider/membrane/bucket/service.go",
       "platform/aws/provider/cmd/deploy/main.go",
-      "platform/aws/provider/cmd/lambdanode/bootstrap/membraneserver.go",
+      "platform/aws/provider/cmd/membrane/bootstrap/membraneserver.go",
       "platform/aws/provider/channelauth/interceptor.go",
       "pkg/channel/channel.go"
     ],
@@ -393,11 +393,11 @@ const specs = [
     "description": "Ocel AWS Function URL event dispatch into Node and Next.js origin runtimes.",
     "noiseTier": "precise",
     "filePatterns": [
-      "platform/aws/functions/entrypoints/src/node/entrypoint.mts",
-      "platform/aws/functions/entrypoints/src/node/fetch-bridge.mts",
-      "platform/aws/functions/entrypoints/src/next/entrypoint.mts",
-      "platform/aws/functions/entrypoints/src/shared/membrane.mts",
-      "platform/aws/provider/cmd/lambdanode/bootstrap/*.go",
+      "platform/aws/membrane/src/node/entrypoint.mts",
+      "platform/aws/membrane/src/node/fetch-bridge.mts",
+      "platform/aws/membrane/src/next/entrypoint.mts",
+      "platform/aws/membrane/src/shared/membrane.mts",
+      "platform/aws/provider/cmd/membrane/bootstrap/*.go",
       "platform/aws/provider/deploy/function.go"
     ],
     "patterns": [
