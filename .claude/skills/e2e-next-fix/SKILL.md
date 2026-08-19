@@ -97,13 +97,10 @@ path:
   serves every preview on the substrate, so two worktrees cannot hold different edge
   bundles at once. Serialize edge verification, or stack the edge fixes and verify them
   together.
-- **Membrane** (`platform/aws/provider/cmd/lambdanode/**`,
-  `platform/aws/functions/entrypoints/**`) — `make publish-layer` prints the new ARN. Trial
-  it through `OCEL_MEMBRANE_LAYER_ARN`; land it by bumping `defaultMembraneLayerARN` in
-  `platform/aws/provider/deploy/function.go`.
-- **GitHub-released artifacts** (image optimizer, tag publisher, revalidator) — release the
-  asset under the tag `<name>-v<version>`, then bump the version and sha256 in
-  `platform/aws/provider/bootstrap/<name>version.go`. A stale sha refuses the deploy.
+- **Membrane** (`platform/aws/provider/cmd/membrane/**`, `platform/aws/membrane/**`) and
+  **substrate functions** (`platform/aws/functions/**`) — `make provider`, repack the
+  sidecar, then redeploy; for the substrate functions, `ocel bootstrap` after the repack.
+  There is nothing to publish or release by hand.
 - **Sidecar** — repack only for `ocel/config` resolution or the `@ocel/provider-aws*`
   binaries. Nothing else needs it.
 
