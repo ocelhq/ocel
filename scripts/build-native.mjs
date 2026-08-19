@@ -24,6 +24,7 @@ const TARGETS = {
     goModuleDir: join(REPO_ROOT, "platform", "aws", "provider"),
     pkgPrefix: "provider-aws",
     versionLdflagPkg: "main",
+    generate: true,
     binaries: [{ cmd: "./cmd/deploy", name: "deploy" }],
   },
 };

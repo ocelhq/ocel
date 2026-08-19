@@ -39,33 +39,36 @@ jobs:
           go-version-file: ${{ matrix.module }}/go.mod
           cache-dependency-path: ${{ matrix.module }}/go.sum
 
-      # cli embeds cli/node/dist, which is gitignored and built by `go generate`.
       - name: Setup pnpm
-        if: matrix.module == 'cli'
+        if: matrix.module == 'cli' || matrix.module == 'platform/aws/provider'
         uses: pnpm/action-setup@v4
         with:
           version: 11.10.0
 
       - name: Setup Node
-        if: matrix.module == 'cli'
+        if: matrix.module == 'cli' || matrix.module == 'platform/aws/provider'
         uses: actions/setup-node@v4
         with:
           node-version: 22
           cache: pnpm
 
       - name: Install dependencies
-        if: matrix.module == 'cli'
+        if: matrix.module == 'cli' || matrix.module == 'platform/aws/provider'
         working-directory: .
         run: pnpm install --frozen-lockfile
 
-      # internal/envwire drives the real SDK wire, so it needs packages/ocel built.
       - name: pnpm --filter ocel build
         if: matrix.module == 'cli'
         working-directory: .
         run: pnpm --filter ocel build
 
-      - name: go generate (embedded node dist)
+      - name: go generate (embedded dist)
+        if: matrix.module == 'cli' || matrix.module == 'platform/aws/provider'
+        run: go generate ./...
+
+      - name: go generate (provider payloads the cli tests build)
         if: matrix.module == 'cli'
+        working-directory: platform/aws/provider
         run: go generate ./...
 
       - name: gofmt

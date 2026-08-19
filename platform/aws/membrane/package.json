@@ -1,5 +1,5 @@
 {
-  "name": "@platform/aws-entrypoints",
+  "name": "@platform/aws-membrane",
   "version": "0.0.0",
   "private": true,
   "type": "module",
