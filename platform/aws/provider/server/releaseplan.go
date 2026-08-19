@@ -19,6 +19,17 @@ func refusePreviewRelease(baseDomain string, projects []string) error {
 	)
 }
 
+func releaseEdgeStackPlan(recorded bootstrap.PreviewDomain) (*deploymentsv1.EdgeStackPlan, error) {
+	kind, err := previewWildcardHolder(recorded)
+	if err != nil {
+		return nil, err
+	}
+	return &deploymentsv1.EdgeStackPlan{
+		EdgeKind: string(kind),
+		Items:    releasePlanItems(kind, recorded),
+	}, nil
+}
+
 func releasePlanItems(kind edge.Kind, recorded bootstrap.PreviewDomain) []*deploymentsv1.TeardownItem {
 	wildcard := edge.PreviewWildcard(recorded.BaseDomain)
 

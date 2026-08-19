@@ -100,11 +100,7 @@ func (s *Server) Preflight(ctx context.Context, req *deploymentsv1.PreflightRequ
 				return nil, connect.NewError(connect.CodeFailedPrecondition, err)
 			}
 			if recorded.BaseDomain != "" {
-				owner, err := s.globalPreviewOwner(recorded, awscfg.Region)
-				if err != nil {
-					return nil, connect.NewError(connect.CodeFailedPrecondition, err)
-				}
-				resp.GlobalPreviewDomain = globalPreviewDomain(ctx, owner, recorded)
+				resp.GlobalPreviewDomain = globalPreviewDomain(ctx, s.globalPreviewOwner(recorded, awscfg.Region), recorded)
 				resp.KnownSlugs = knownSlugs(ctx, awscfg, preview, req.GetSlug())
 			}
 		}
@@ -118,7 +114,21 @@ func globalPreviewProblem(recorded bootstrap.PreviewDomain, req *deploymentsv1.P
 	if !servesOnSharedWildcard {
 		return nil
 	}
+	if err := globalPreviewEdgeMismatch(recorded, edge.Kind(req.GetEdgeKind())); err != nil {
+		return err
+	}
 	return globalPreviewAccountMismatch(recorded)
+}
+
+func globalPreviewEdgeMismatch(recorded bootstrap.PreviewDomain, kind edge.Kind) error {
+	holder, ok := recorded.Holder()
+	if recorded.BaseDomain == "" || !ok || kind == "" || holder == kind {
+		return nil
+	}
+	return fmt.Errorf(
+		"%s is held by the %s edge, but this project is configured for the %s edge: its previews would publish %s routing while the hostname still resolves through %s, so every preview URL would answer 404 — front this project with the %s edge, or declare this project's own domains.preview",
+		edge.PreviewWildcard(recorded.BaseDomain), holder, kind, kind, holder, holder,
+	)
 }
 
 type routeOwnerFunc func(ctx context.Context, hostname string) (string, error)

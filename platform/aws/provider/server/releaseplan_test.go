@@ -59,6 +59,33 @@ func TestRefusePreviewReleaseWhileProjectsAreServed(t *testing.T) {
 	}
 }
 
+func TestReleaseEdgeStackPlan(t *testing.T) {
+	t.Parallel()
+
+	recorded := bootstrap.PreviewDomain{BaseDomain: "preview.acme.com", Edge: edge.KindCloudflare}
+
+	t.Run("describes the edge that holds the wildcard, not the project asking", func(t *testing.T) {
+		t.Parallel()
+
+		plan, err := releaseEdgeStackPlan(recorded)
+		if err != nil {
+			t.Fatalf("releaseEdgeStackPlan: %v", err)
+		}
+		if plan.GetEdgeKind() != string(edge.KindCloudflare) {
+			t.Errorf("edge kind = %q, want %q", plan.GetEdgeKind(), edge.KindCloudflare)
+		}
+		itemFor(t, plan.GetItems(), "preview entry worker", "*.preview.acme.com")
+	})
+
+	t.Run("a wildcard no edge is known to hold is not planned for", func(t *testing.T) {
+		t.Parallel()
+
+		if _, err := releaseEdgeStackPlan(bootstrap.PreviewDomain{BaseDomain: "preview.acme.com"}); err == nil {
+			t.Fatal("releaseEdgeStackPlan err = nil, want the plan refused rather than describing a guessed edge's teardown")
+		}
+	})
+}
+
 func TestReleasePlanItems(t *testing.T) {
 	t.Parallel()
 

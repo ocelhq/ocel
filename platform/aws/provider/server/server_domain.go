@@ -88,6 +88,9 @@ func (s *Server) runUseDomain(ctx context.Context, req *deploymentsv1.UseDomainR
 	if err != nil {
 		return err
 	}
+	if err := refuseRehomingPreviewWildcard(recorded, edgeFront.Kind()); err != nil {
+		return err
+	}
 
 	spec, err := deploy.PreviewWildcardSpecFor(deploy.Config{
 		Region:              awscfg.Region,
@@ -261,19 +264,16 @@ func (s *Server) PlanReleaseDomain(ctx context.Context, req *deploymentsv1.PlanR
 	if recorded.BaseDomain == "" {
 		return &deploymentsv1.PlanReleaseDomainResponse{}, nil
 	}
-	edgeFront, err := s.edge(edge.Kind(req.GetEdgeKind()), awscfg.Region)
+	plan, err := releaseEdgeStackPlan(recorded)
 	if err != nil {
-		return nil, err
+		return nil, connect.NewError(connect.CodeFailedPrecondition, err)
 	}
 	if err := refusePreviewReleaseWhileServed(ctx, ssmClient, recorded.BaseDomain, s.livePreviewStacks(awscfg)); err != nil {
 		return nil, connect.NewError(connect.CodeFailedPrecondition, err)
 	}
 	return &deploymentsv1.PlanReleaseDomainResponse{
 		BaseDomain: recorded.BaseDomain,
-		EdgeStack: &deploymentsv1.EdgeStackPlan{
-			EdgeKind: string(edgeFront.Kind()),
-			Items:    releasePlanItems(edgeFront.Kind(), recorded),
-		},
+		EdgeStack:  plan,
 	}, nil
 }
 
@@ -349,7 +349,9 @@ func (s *Server) runReleaseDomain(ctx context.Context, req *deploymentsv1.Releas
 		return err
 	}
 
-	edgeFront, err := s.edge(edge.Kind(req.GetEdgeKind()), awscfg.Region)
+	edgeFront, err := previewWildcardEdge(recorded, func(kind edge.Kind) (edge.Edge, error) {
+		return s.edge(kind, awscfg.Region)
+	})
 	if err != nil {
 		return err
 	}
@@ -413,12 +415,8 @@ func (s *Server) ListDomain(ctx context.Context, req *deploymentsv1.ListDomainRe
 	if err != nil {
 		return nil, err
 	}
-	owner, err := s.globalPreviewOwner(recorded, awscfg.Region)
-	if err != nil {
-		return nil, connect.NewError(connect.CodeFailedPrecondition, err)
-	}
 	return &deploymentsv1.ListDomainResponse{
-		Domain:   globalPreviewDomain(ctx, owner, recorded),
+		Domain:   globalPreviewDomain(ctx, s.globalPreviewOwner(recorded, awscfg.Region), recorded),
 		Projects: served,
 	}, nil
 }
@@ -494,6 +492,9 @@ func probeUnix(probe certs.Probe) int64 {
 }
 
 func sharedEntryRouteInstalled(ctx context.Context, owner routeOwnerFunc, baseDomain string) bool {
+	if owner == nil {
+		return false
+	}
 	script, err := owner(ctx, edge.PreviewWildcard(baseDomain))
 	if err != nil {
 		return false
@@ -508,20 +509,48 @@ func cloudflareAccountOf(kind edge.Kind) string {
 	return os.Getenv(cloudflareAccountEnvVar)
 }
 
-func previewWildcardOwner(recorded bootstrap.PreviewDomain, ownerFor func(edge.Kind) routeOwnerFunc) (routeOwnerFunc, error) {
-	if recorded.Edge == "" {
-		return nil, fmt.Errorf(
-			"the global preview domain %q was recorded before ocel wrote down which edge holds %s, and the edges in this account do not agree on who owns a hostname: run `ocel domain use --preview %s` from the project that stood it up to record the edge, or release it with `ocel domain release --preview`",
-			recorded.BaseDomain, edge.PreviewWildcard(recorded.BaseDomain), recorded.BaseDomain,
-		)
+func previewWildcardOwner(recorded bootstrap.PreviewDomain, ownerFor func(edge.Kind) routeOwnerFunc) routeOwnerFunc {
+	kind, ok := recorded.Holder()
+	if !ok {
+		return nil
 	}
-	return ownerFor(recorded.Edge), nil
+	return ownerFor(kind)
 }
 
-func (s *Server) globalPreviewOwner(recorded bootstrap.PreviewDomain, region string) (routeOwnerFunc, error) {
+func (s *Server) globalPreviewOwner(recorded bootstrap.PreviewDomain, region string) routeOwnerFunc {
 	return previewWildcardOwner(recorded, func(kind edge.Kind) routeOwnerFunc {
 		return s.edgeRouteOwner(kind, region)
 	})
+}
+
+func previewWildcardHolder(recorded bootstrap.PreviewDomain) (edge.Kind, error) {
+	kind, ok := recorded.Holder()
+	if !ok {
+		return "", fmt.Errorf(
+			"nothing in this account records which edge holds %s, and tearing it down through a guessed edge would delete its certificate, its DNS records and the record itself while leaving the real wildcard entry standing with nothing left to name it: run `ocel domain use '%s' --preview` from the project whose edge raised it — that writes the edge down and changes nothing else — then release it",
+			edge.PreviewWildcard(recorded.BaseDomain), edge.PreviewWildcard(recorded.BaseDomain),
+		)
+	}
+	return kind, nil
+}
+
+func previewWildcardEdge(recorded bootstrap.PreviewDomain, edgeFor func(edge.Kind) (edge.Edge, error)) (edge.Edge, error) {
+	kind, err := previewWildcardHolder(recorded)
+	if err != nil {
+		return nil, err
+	}
+	return edgeFor(kind)
+}
+
+func refuseRehomingPreviewWildcard(recorded bootstrap.PreviewDomain, kind edge.Kind) error {
+	holder, ok := recorded.Holder()
+	if !ok || kind == "" || holder == kind {
+		return nil
+	}
+	return fmt.Errorf(
+		"%s is already held by the %s edge, and this project's edge is %s: reconciling it here would raise a second wildcard at the %s edge and leave the %s one standing with nothing left to name it — release it with `ocel domain release --preview` from a project on the %s edge first, then use it again from here",
+		edge.PreviewWildcard(recorded.BaseDomain), holder, kind, kind, holder, holder,
+	)
 }
 
 func globalPreviewAccountMismatch(recorded bootstrap.PreviewDomain) error {

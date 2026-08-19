@@ -49,6 +49,17 @@ type PreviewDomain struct {
 	Probe             certs.Probe       `json:"probe,omitzero"`
 }
 
+func (d PreviewDomain) Holder() (edge.Kind, bool) {
+	switch {
+	case d.Edge != "":
+		return d.Edge, true
+	case d.CloudflareAccount != "":
+		return edge.KindCloudflare, true
+	default:
+		return "", false
+	}
+}
+
 func previewDomainParamFor(class string) (string, error) {
 	if class != ClassPreview {
 		return "", fmt.Errorf("preview domain: only the %s substrate class has one, not %q", ClassPreview, class)
