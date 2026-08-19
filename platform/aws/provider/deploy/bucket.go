@@ -13,6 +13,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/naming"
 	linksv1 "github.com/ocelhq/ocel/pkg/proto/links/v1"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/resources/v1"
+	"github.com/ocelhq/ocel/platform/aws/provider/payloads"
 )
 
 const (
@@ -24,13 +25,13 @@ const (
 
 	bucketNotificationEvent = "s3:ObjectCreated:*"
 
-	listenerRuntime        = "provided.al2023"
-	listenerHandler        = "bootstrap"
-	listenerTimeoutSeconds = 30
+	uploadCompleterRuntime        = "provided.al2023"
+	uploadCompleterHandler        = "bootstrap"
+	uploadCompleterTimeoutSeconds = 30
 
 	envStateTable     = "OCEL_RUNTIME_STATE_TABLE"
 	envSessionPrefix  = "OCEL_RUNTIME_SESSION_PREFIX"
-	envAllowedOrigins = "OCEL_LISTENER_ALLOWED_ORIGINS"
+	envAllowedOrigins = "OCEL_UPLOAD_COMPLETER_ALLOWED_ORIGINS"
 )
 
 type sessionScope struct {
@@ -53,12 +54,12 @@ type bucketArgs struct {
 
 	NotificationEvents []string
 
-	ListenerRuntime        string
-	ListenerHandler        string
-	ListenerTimeoutSeconds int
+	UploadCompleterRuntime        string
+	UploadCompleterHandler        string
+	UploadCompleterTimeoutSeconds int
 
-	ListenerS3Actions      []string
-	ListenerSessionActions []string
+	UploadCompleterS3Actions      []string
+	UploadCompleterSessionActions []string
 }
 
 type corsRule struct {
@@ -80,12 +81,12 @@ func translateBucket(cfg *resourcesv1.BucketConfig) bucketArgs {
 			ExposeHeaders:  []string{"ETag"},
 			MaxAgeSeconds:  bucketCORSMaxAgeSeconds,
 		},
-		NotificationEvents:     []string{bucketNotificationEvent},
-		ListenerRuntime:        listenerRuntime,
-		ListenerHandler:        listenerHandler,
-		ListenerTimeoutSeconds: listenerTimeoutSeconds,
-		ListenerS3Actions:      []string{"s3:GetObjectTagging"},
-		ListenerSessionActions: []string{"dynamodb:GetItem", "dynamodb:UpdateItem"},
+		NotificationEvents:            []string{bucketNotificationEvent},
+		UploadCompleterRuntime:        uploadCompleterRuntime,
+		UploadCompleterHandler:        uploadCompleterHandler,
+		UploadCompleterTimeoutSeconds: uploadCompleterTimeoutSeconds,
+		UploadCompleterS3Actions:      []string{"s3:GetObjectTagging"},
+		UploadCompleterSessionActions: []string{"dynamodb:GetItem", "dynamodb:UpdateItem"},
 	}
 }
 
@@ -97,7 +98,7 @@ func resourceCoordinate(project, env, logicalName string, kind naming.Kind) nami
 	return naming.Coordinate{Project: project, Env: env, App: naming.InfraApp, Kind: kind, Name: name}
 }
 
-func registerBucket(ctx *pulumi.Context, project, env, logicalName string, args bucketArgs, stateTableName string, sessions sessionScope, listenerCodePath string) error {
+func registerBucket(ctx *pulumi.Context, project, env, logicalName string, args bucketArgs, stateTableName string, sessions sessionScope, completerCode payloads.Placement) error {
 	at := resourceCoordinate(project, env, logicalName, naming.KindBucket)
 
 	bucket, err := s3.NewBucketV2(ctx, naming.ResourceID(at.Kind, at.Name), &s3.BucketV2Args{
@@ -134,33 +135,34 @@ func registerBucket(ctx *pulumi.Context, project, env, logicalName string, args 
 		return err
 	}
 
-	listenerRole, err := newServiceRole(ctx,
-		naming.ResourceID(at.Kind, at.Name, "event-listener-role"),
-		at.Description("execution role for the "+at.Name+" bucket's upload event listener"),
+	completerRole, err := newServiceRole(ctx,
+		naming.ResourceID(at.Kind, at.Name, "upload-completer-role"),
+		at.Description("execution role for the "+at.Name+" bucket's upload completer"),
 		"lambda.amazonaws.com",
 		args.Tags,
 		map[string]policyStatement{
-			"s3":       {Actions: args.ListenerS3Actions, Resources: []pulumi.StringInput{joinArn(bucket.Arn, "/*")}},
-			"sessions": sessionStatement(args.ListenerSessionActions, sessions),
+			"s3":       {Actions: args.UploadCompleterS3Actions, Resources: []pulumi.StringInput{joinArn(bucket.Arn, "/*")}},
+			"sessions": sessionStatement(args.UploadCompleterSessionActions, sessions),
 		})
 	if err != nil {
 		return err
 	}
-	if _, err := iam.NewRolePolicyAttachment(ctx, naming.ResourceID(at.Kind, at.Name, "event-listener-logs-policy"), &iam.RolePolicyAttachmentArgs{
-		Role:      listenerRole.Name,
+	if _, err := iam.NewRolePolicyAttachment(ctx, naming.ResourceID(at.Kind, at.Name, "upload-completer-logs-policy"), &iam.RolePolicyAttachmentArgs{
+		Role:      completerRole.Name,
 		PolicyArn: pulumi.String("arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"),
 	}); err != nil {
 		return err
 	}
 
-	listener, err := lambda.NewFunction(ctx, naming.ResourceID(at.Kind, at.Name, "event-listener"), &lambda.FunctionArgs{
-		Runtime:     pulumi.String(args.ListenerRuntime),
-		Handler:     pulumi.String(args.ListenerHandler),
-		Role:        listenerRole.Arn,
-		Timeout:     pulumi.Int(args.ListenerTimeoutSeconds),
-		Description: pulumi.String(at.Description("upload event listener for the " + at.Name + " bucket")),
-		Tags:        resourceTags(naming.KindListener, "", args.Tags),
-		Code:        pulumi.NewFileArchive(listenerCodePath),
+	completer, err := lambda.NewFunction(ctx, naming.ResourceID(at.Kind, at.Name, "upload-completer"), &lambda.FunctionArgs{
+		Runtime:     pulumi.String(args.UploadCompleterRuntime),
+		Handler:     pulumi.String(args.UploadCompleterHandler),
+		Role:        completerRole.Arn,
+		Timeout:     pulumi.Int(args.UploadCompleterTimeoutSeconds),
+		Description: pulumi.String(at.Description("upload completer for the " + at.Name + " bucket")),
+		Tags:        resourceTags(naming.KindUploadCompleter, "", args.Tags),
+		S3Bucket:    pulumi.String(completerCode.Bucket),
+		S3Key:       pulumi.String(completerCode.Key),
 		Environment: &lambda.FunctionEnvironmentArgs{
 			Variables: pulumi.StringMap{
 				envStateTable:     pulumi.String(stateTableName),
@@ -173,9 +175,9 @@ func registerBucket(ctx *pulumi.Context, project, env, logicalName string, args 
 		return err
 	}
 
-	perm, err := lambda.NewPermission(ctx, naming.ResourceID(at.Kind, at.Name, "event-listener-permission"), &lambda.PermissionArgs{
+	perm, err := lambda.NewPermission(ctx, naming.ResourceID(at.Kind, at.Name, "upload-completer-permission"), &lambda.PermissionArgs{
 		Action:    pulumi.String("lambda:InvokeFunction"),
-		Function:  listener.Name,
+		Function:  completer.Name,
 		Principal: pulumi.String("s3.amazonaws.com"),
 		SourceArn: bucket.Arn,
 	})
@@ -187,7 +189,7 @@ func registerBucket(ctx *pulumi.Context, project, env, logicalName string, args 
 		Bucket: bucket.ID(),
 		LambdaFunctions: s3.BucketNotificationLambdaFunctionArray{
 			&s3.BucketNotificationLambdaFunctionArgs{
-				LambdaFunctionArn: listener.Arn,
+				LambdaFunctionArn: completer.Arn,
 				Events:            pulumi.ToStringArray(args.NotificationEvents),
 			},
 		},

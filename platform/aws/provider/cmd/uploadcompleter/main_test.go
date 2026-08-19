@@ -11,18 +11,18 @@ func env(values map[string]string) func(string) string {
 	return func(key string) string { return values[key] }
 }
 
-func TestNewListener(t *testing.T) {
+func TestNewUploadCompleter(t *testing.T) {
 	t.Run("refuses to start without the state table", func(t *testing.T) {
-		_, err := newListener(context.Background(), env(map[string]string{sessionPrefixEnvVar: "PROJECT#shop#ENV#prod#SESSION#"}))
+		_, err := newUploadCompleter(context.Background(), env(map[string]string{sessionPrefixEnvVar: "PROJECT#shop#ENV#prod#SESSION#"}))
 		if err == nil || !strings.Contains(err.Error(), stateTableEnvVar) {
-			t.Fatalf("newListener = %v, want the missing table named", err)
+			t.Fatalf("newUploadCompleter = %v, want the missing table named", err)
 		}
 	})
 
 	t.Run("refuses to start without the session prefix", func(t *testing.T) {
-		_, err := newListener(context.Background(), env(map[string]string{stateTableEnvVar: "ocel-state"}))
+		_, err := newUploadCompleter(context.Background(), env(map[string]string{stateTableEnvVar: "ocel-state"}))
 		if err == nil || !strings.Contains(err.Error(), sessionPrefixEnvVar) {
-			t.Fatalf("newListener = %v, want the missing prefix named rather than a listener that reads the shared key space", err)
+			t.Fatalf("newUploadCompleter = %v, want the missing prefix named rather than an upload completer that reads the shared key space", err)
 		}
 	})
 }

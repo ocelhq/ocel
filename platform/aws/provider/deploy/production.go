@@ -68,9 +68,6 @@ func realize(ctx context.Context, cfg Config, manifest *deploymentsv1.Manifest, 
 	if err := checkMembraneServices(manifest, membrane.Serves); err != nil {
 		return Result{}, finishUploading(err)
 	}
-	if err := checkListenerCode(manifest, cfg.ListenerCodePath); err != nil {
-		return Result{}, finishUploading(err)
-	}
 	needs, err := checkNeeds(ctx, cfg, manifest)
 	if err != nil {
 		return Result{}, finishUploading(err)
@@ -111,6 +108,17 @@ func realize(ctx context.Context, cfg Config, manifest *deploymentsv1.Manifest, 
 	artifacts, err := uploadFunctionArtifacts(ctx, cfg, manifest, builds, progress)
 	if err != nil {
 		return Result{}, finishUploading(err)
+	}
+
+	if len(manifest.GetFunctions()) > 0 {
+		if cfg.layer, err = placeMembraneLayer(ctx, cfg); err != nil {
+			return Result{}, finishUploading(err)
+		}
+	}
+	if completesUploads(manifest) {
+		if cfg.completer, err = placeUploadCompleter(ctx, cfg); err != nil {
+			return Result{}, finishUploading(err)
+		}
 	}
 
 	progress.report(deploymentsv1.Phase_PHASE_UPLOADING, "Uploading prerender assets", 0, 0)
@@ -964,7 +972,7 @@ func runInfraStack(ctx context.Context, cfg Config, manifest *deploymentsv1.Mani
 			case r.GetPostgres() != nil:
 				err = registerPostgres(pctx, project, env, r.GetLogicalName(), cfg.transformed.forPostgres(r.GetLogicalName(), r.GetPostgres()), vpc.Id, vpc.CidrBlock, subnets.Ids)
 			case r.GetBucket() != nil:
-				err = registerBucket(pctx, project, env, r.GetLogicalName(), cfg.transformed.forBucket(r.GetLogicalName(), r.GetBucket()), cfg.StateTable, cfg.sessions, cfg.ListenerCodePath)
+				err = registerBucket(pctx, project, env, r.GetLogicalName(), cfg.transformed.forBucket(r.GetLogicalName(), r.GetBucket()), cfg.StateTable, cfg.sessions, cfg.completer)
 			default:
 				continue
 			}
@@ -1075,6 +1083,7 @@ func runAppStack(ctx context.Context, cfg Config, manifest *deploymentsv1.Manife
 			Guard:     guard,
 			RoleArn:   role.Arn,
 			RoleName:  role.Name,
+			Layer:     cfg.layer,
 		}.register(pctx)
 	}
 

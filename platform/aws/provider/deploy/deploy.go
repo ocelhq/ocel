@@ -11,6 +11,7 @@ import (
 
 	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
 	linksv1 "github.com/ocelhq/ocel/pkg/proto/links/v1"
+	"github.com/ocelhq/ocel/platform/aws/provider/payloads"
 	"github.com/ocelhq/ocel/platform/aws/provider/transform"
 	"github.com/ocelhq/ocel/platform/aws/provider/vars"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
@@ -52,8 +53,6 @@ type Config struct {
 	VarsReferenced     map[vars.Coordinate]string
 	Values             ValueStore
 	Links              LinkStore
-
-	ListenerCodePath string
 
 	ArtifactRoot   string
 	ArtifactBucket string
@@ -123,6 +122,8 @@ type Config struct {
 	transformed *transformedArgs
 	needs       needRecords
 	sessions    sessionScope
+	layer       payloads.Placement
+	completer   payloads.Placement
 }
 
 type RecordWaiter interface {

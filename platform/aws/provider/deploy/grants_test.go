@@ -383,11 +383,10 @@ func TestInlinePolicyBudgetPreflight(t *testing.T) {
 
 		fake := &recordingEdge{kind: cloudflare.Kind}
 		_, err := Run(context.Background(), Config{
-			Edge:             fake,
-			StoreEndpoint:    fakeStoreEndpoint,
-			Class:            deploymentsv1.Environment_CLASS_PRODUCTION,
-			StateTableARN:    stateTableARN,
-			ListenerCodePath: "dist/ocel-listener.zip",
+			Edge:          fake,
+			StoreEndpoint: fakeStoreEndpoint,
+			Class:         deploymentsv1.Environment_CLASS_PRODUCTION,
+			StateTableARN: stateTableARN,
 		}, deployedManifest(manifest), nil, func(string) {})
 
 		var budget *PolicyBudgetError

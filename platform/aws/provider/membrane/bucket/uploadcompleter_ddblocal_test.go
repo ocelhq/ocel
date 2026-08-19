@@ -31,7 +31,7 @@ func TestMarkSucceeded(t *testing.T) {
 		t.Skipf("dynamodb-local not reachable at %s (run `docker compose up -d dynamodb`): %v", endpoint, err)
 	}
 
-	table := "ocel-listener-ddblocal-" + strings.ReplaceAll(t.Name(), "/", "_")
+	table := "ocel-upload-completer-ddblocal-" + strings.ReplaceAll(t.Name(), "/", "_")
 	createTable(t, ctx, ddb, table)
 
 	store := &sessionStore{client: ddb, table: table, keyPrefix: testSessionKeyPrefix}

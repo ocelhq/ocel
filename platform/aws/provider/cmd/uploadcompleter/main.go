@@ -17,32 +17,32 @@ import (
 const (
 	stateTableEnvVar     = "OCEL_RUNTIME_STATE_TABLE"
 	sessionPrefixEnvVar  = "OCEL_RUNTIME_SESSION_PREFIX"
-	allowedOriginsEnvVar = "OCEL_LISTENER_ALLOWED_ORIGINS"
+	allowedOriginsEnvVar = "OCEL_UPLOAD_COMPLETER_ALLOWED_ORIGINS"
 )
 
 func main() {
-	listener, err := newListener(context.Background(), os.Getenv)
+	completer, err := newUploadCompleter(context.Background(), os.Getenv)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "ocel: %v\n", err)
 		os.Exit(1)
 	}
-	lambda.Start(listener.Handle)
+	lambda.Start(completer.Handle)
 }
 
-func newListener(ctx context.Context, getenv func(string) string) (*bucket.Listener, error) {
+func newUploadCompleter(ctx context.Context, getenv func(string) string) (*bucket.UploadCompleter, error) {
 	table := getenv(stateTableEnvVar)
 	if table == "" {
 		return nil, fmt.Errorf("%s is not set, so the sessions this bucket's uploads complete have nowhere to be read from", stateTableEnvVar)
 	}
 	prefix := getenv(sessionPrefixEnvVar)
 	if prefix == "" {
-		return nil, fmt.Errorf("%s is not set, so this listener would read a key space its role is not granted", sessionPrefixEnvVar)
+		return nil, fmt.Errorf("%s is not set, so this upload completer would read a key space its role is not granted", sessionPrefixEnvVar)
 	}
 	cfg, err := sdkconfig.Runtime(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("load aws config: %w", err)
 	}
-	return bucket.NewListener(bucket.ListenerConfig{
+	return bucket.NewUploadCompleter(bucket.UploadCompleterConfig{
 		DDB:              dynamodb.NewFromConfig(cfg),
 		Tagger:           s3.NewFromConfig(cfg),
 		Table:            table,

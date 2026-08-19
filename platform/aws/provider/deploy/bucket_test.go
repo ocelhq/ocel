@@ -1,10 +1,7 @@
 package deploy
 
 import (
-	"archive/zip"
 	"encoding/json"
-	"os"
-	"path/filepath"
 	"reflect"
 	"slices"
 	"strings"
@@ -16,6 +13,7 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/naming"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/resources/v1"
+	"github.com/ocelhq/ocel/platform/aws/provider/payloads"
 )
 
 type tagRecorder struct {
@@ -75,24 +73,17 @@ func recordTags(t *testing.T, program pulumi.RunFunc, outputs ...func(pulumi.Moc
 	return rec
 }
 
-func emptyArchive(t *testing.T) string {
-	t.Helper()
-	path := filepath.Join(t.TempDir(), "listener.zip")
-	f, err := os.Create(path)
-	if err != nil {
-		t.Fatalf("create archive: %v", err)
+func testUploadCompleter() payloads.Placement {
+	return payloads.Placement{
+		Bucket: "ocel-artifacts",
+		Key:    payloads.Key(uploadCompleterKeyPrefix, "d0d0"),
+		SHA256: "d0d0",
 	}
-	defer f.Close()
-	if err := zip.NewWriter(f).Close(); err != nil {
-		t.Fatalf("write archive: %v", err)
-	}
-	return path
 }
 
 func TestBucketComponentTags(t *testing.T) {
-	code := emptyArchive(t)
 	rec := recordTags(t, func(ctx *pulumi.Context) error {
-		err := registerBucket(ctx, "shop", "prod", "bucket--uploads", translateBucket(&resourcesv1.BucketConfig{}), "ocel-state", newSessionScope("shop", "prod", "arn:aws:dynamodb:eu-west-1:111122223333:table/ocel-state"), code)
+		err := registerBucket(ctx, "shop", "prod", "bucket--uploads", translateBucket(&resourcesv1.BucketConfig{}), "ocel-state", newSessionScope("shop", "prod", "arn:aws:dynamodb:eu-west-1:111122223333:table/ocel-state"), testUploadCompleter())
 		return err
 	})
 
@@ -102,8 +93,8 @@ func TestBucketComponentTags(t *testing.T) {
 		want      string
 	}{
 		{"aws:s3/bucketV2:BucketV2", "bucket-uploads", naming.KindBucket.Component()},
-		{"aws:iam/role:Role", "bucket-uploads-event-listener-role", naming.KindRole.Component()},
-		{"aws:lambda/function:Function", "bucket-uploads-event-listener", naming.KindListener.Component()},
+		{"aws:iam/role:Role", "bucket-uploads-upload-completer-role", naming.KindRole.Component()},
+		{"aws:lambda/function:Function", "bucket-uploads-upload-completer", naming.KindUploadCompleter.Component()},
 	}
 	for _, tc := range cases {
 		if got := rec.component(t, tc.typeToken, tc.name); got != tc.want {
@@ -118,13 +109,13 @@ func TestBucketResourceIDs(t *testing.T) {
 	at := resourceCoordinate("shop", "prod", "bucket--uploads", naming.KindBucket)
 
 	cases := map[string]string{
-		"bucket-uploads":                            naming.ResourceID(at.Kind, at.Name),
-		"bucket-uploads-public-access-block":        naming.ResourceID(at.Kind, at.Name, "public-access-block"),
-		"bucket-uploads-cors":                       naming.ResourceID(at.Kind, at.Name, "cors"),
-		"bucket-uploads-event-listener":             naming.ResourceID(at.Kind, at.Name, "event-listener"),
-		"bucket-uploads-event-listener-permission":  naming.ResourceID(at.Kind, at.Name, "event-listener-permission"),
-		"bucket-uploads-notification":               naming.ResourceID(at.Kind, at.Name, "notification"),
-		"bucket-uploads-event-listener-logs-policy": naming.ResourceID(at.Kind, at.Name, "event-listener-logs-policy"),
+		"bucket-uploads":                              naming.ResourceID(at.Kind, at.Name),
+		"bucket-uploads-public-access-block":          naming.ResourceID(at.Kind, at.Name, "public-access-block"),
+		"bucket-uploads-cors":                         naming.ResourceID(at.Kind, at.Name, "cors"),
+		"bucket-uploads-upload-completer":             naming.ResourceID(at.Kind, at.Name, "upload-completer"),
+		"bucket-uploads-upload-completer-permission":  naming.ResourceID(at.Kind, at.Name, "upload-completer-permission"),
+		"bucket-uploads-notification":                 naming.ResourceID(at.Kind, at.Name, "notification"),
+		"bucket-uploads-upload-completer-logs-policy": naming.ResourceID(at.Kind, at.Name, "upload-completer-logs-policy"),
 	}
 	for want, got := range cases {
 		if got != want {
@@ -210,7 +201,7 @@ func TestBucketDescriptions(t *testing.T) {
 	t.Parallel()
 
 	at := resourceCoordinate("shop", "prod", "bucket--uploads", naming.KindBucket)
-	got := at.Description("upload event listener for the " + at.Name + " bucket")
+	got := at.Description("upload completer for the " + at.Name + " bucket")
 	if !strings.HasPrefix(got, "shop / prod / infra") {
 		t.Errorf("Description() = %q, want it to open with the coordinate", got)
 	}
@@ -229,7 +220,7 @@ func TestTranslateBucket(t *testing.T) {
 		got := translateBucket(&resourcesv1.BucketConfig{AllowedOrigins: origins})
 
 		if !reflect.DeepEqual(got.AllowedOrigins, origins) {
-			t.Errorf("AllowedOrigins = %v, want %v (carried through for the listener allowlist)", got.AllowedOrigins, origins)
+			t.Errorf("AllowedOrigins = %v, want %v (carried through for the upload completer allowlist)", got.AllowedOrigins, origins)
 		}
 		if !reflect.DeepEqual(got.CORS.AllowedOrigins, origins) {
 			t.Errorf("CORS.AllowedOrigins = %v, want the app's declared origins %v", got.CORS.AllowedOrigins, origins)
@@ -253,14 +244,14 @@ func TestTranslateBucket(t *testing.T) {
 		if !reflect.DeepEqual(got.NotificationEvents, []string{"s3:ObjectCreated:*"}) {
 			t.Errorf("NotificationEvents = %v, want [s3:ObjectCreated:*]", got.NotificationEvents)
 		}
-		if got.ListenerRuntime != listenerRuntime {
-			t.Errorf("ListenerRuntime = %q, want %q (Go custom runtime)", got.ListenerRuntime, listenerRuntime)
+		if got.UploadCompleterRuntime != uploadCompleterRuntime {
+			t.Errorf("UploadCompleterRuntime = %q, want %q (Go custom runtime)", got.UploadCompleterRuntime, uploadCompleterRuntime)
 		}
-		if got.ListenerHandler != listenerHandler {
-			t.Errorf("ListenerHandler = %q, want %q", got.ListenerHandler, listenerHandler)
+		if got.UploadCompleterHandler != uploadCompleterHandler {
+			t.Errorf("UploadCompleterHandler = %q, want %q", got.UploadCompleterHandler, uploadCompleterHandler)
 		}
-		if got.ListenerTimeoutSeconds != listenerTimeoutSeconds {
-			t.Errorf("ListenerTimeoutSeconds = %d, want %d", got.ListenerTimeoutSeconds, listenerTimeoutSeconds)
+		if got.UploadCompleterTimeoutSeconds != uploadCompleterTimeoutSeconds {
+			t.Errorf("UploadCompleterTimeoutSeconds = %d, want %d", got.UploadCompleterTimeoutSeconds, uploadCompleterTimeoutSeconds)
 		}
 	})
 
@@ -269,14 +260,14 @@ func TestTranslateBucket(t *testing.T) {
 
 		got := translateBucket(&resourcesv1.BucketConfig{})
 
-		if !slices.Contains(got.ListenerS3Actions, "s3:GetObjectTagging") {
-			t.Errorf("ListenerS3Actions = %v, want it to include s3:GetObjectTagging", got.ListenerS3Actions)
+		if !slices.Contains(got.UploadCompleterS3Actions, "s3:GetObjectTagging") {
+			t.Errorf("UploadCompleterS3Actions = %v, want it to include s3:GetObjectTagging", got.UploadCompleterS3Actions)
 		}
-		if slices.Contains(got.ListenerS3Actions, "s3:PutObject") {
-			t.Errorf("ListenerS3Actions = %v, must not grant s3:PutObject (least privilege)", got.ListenerS3Actions)
+		if slices.Contains(got.UploadCompleterS3Actions, "s3:PutObject") {
+			t.Errorf("UploadCompleterS3Actions = %v, must not grant s3:PutObject (least privilege)", got.UploadCompleterS3Actions)
 		}
-		if !slices.Contains(got.ListenerSessionActions, "dynamodb:UpdateItem") {
-			t.Errorf("ListenerSessionActions = %v, want it to include dynamodb:UpdateItem (transition)", got.ListenerSessionActions)
+		if !slices.Contains(got.UploadCompleterSessionActions, "dynamodb:UpdateItem") {
+			t.Errorf("UploadCompleterSessionActions = %v, want it to include dynamodb:UpdateItem (transition)", got.UploadCompleterSessionActions)
 		}
 	})
 
