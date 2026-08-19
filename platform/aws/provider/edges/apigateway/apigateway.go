@@ -265,7 +265,7 @@ func (p *provider) Reconcile(ctx context.Context, spec edge.StackSpec, prior edg
 		return nil, err
 	}
 	next[stackKeyAPI] = id
-	if err := s.settleDomainFronts(ctx, c); err != nil {
+	if err := s.settleDomainFronts(ctx, c, spec.Warn); err != nil {
 		return nil, err
 	}
 	return s, nil

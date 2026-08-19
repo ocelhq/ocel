@@ -2,6 +2,7 @@ package edgeconformance
 
 import (
 	"context"
+	"maps"
 	"slices"
 	"testing"
 
@@ -238,26 +239,30 @@ func Run(t *testing.T, suite Suite) {
 			t.Fatalf("BindDomain: %v", err)
 		}
 
-		bound := edge.BoundDomains(stack.State())
-		records, err := edge.RecordsFor(edge.TargetFor(e.Kind(), stack.State()), bound)
-		if err != nil {
-			t.Fatalf("RecordsFor(%v) on the stack that bound them: %v", bound, err)
-		}
-		if len(records) != 1 || records[0].Name != suite.Hostname {
-			t.Errorf("records = %v, want one record for %q", records, suite.Hostname)
-		}
+		records := frontedRecords(t, e, stack.State(), suite.Hostname)
 
 		reopened, err := e.Open(stack.State())
 		if err != nil {
 			t.Fatalf("Open: %v", err)
 		}
-		reread, err := edge.RecordsFor(edge.TargetFor(e.Kind(), reopened.State()), edge.BoundDomains(reopened.State()))
-		if err != nil {
-			t.Fatalf("RecordsFor through a reopened stack: %v", err)
-		}
+		reread := frontedRecords(t, e, reopened.State(), suite.Hostname)
 		if !slices.Equal(reread, records) {
 			t.Errorf("records through a reopened stack = %v, want the %v the binding published", reread, records)
 		}
+	})
+
+	t.Run("the binding publishes the front, not some reconcile before it", func(t *testing.T) {
+		ctx := context.Background()
+		e, reconciled := reconciledOn(t, suite)
+		stack, err := e.Open(withoutFronts(reconciled.State()))
+		if err != nil {
+			t.Fatalf("Open a state carrying no front: %v", err)
+		}
+		if err := stack.BindDomain(ctx, edge.DomainBinding{Hostname: suite.Hostname}); err != nil {
+			t.Fatalf("BindDomain: %v", err)
+		}
+
+		frontedRecords(t, e, stack.State(), suite.Hostname)
 	})
 
 	t.Run("unbinding a domain twice leaves nothing bound", func(t *testing.T) {
@@ -313,6 +318,44 @@ func Run(t *testing.T, suite Suite) {
 			t.Errorf("DomainOwner(%q) = %q, want no surface left after Destroy", suite.Hostname, owner)
 		}
 	})
+}
+
+func frontedRecords(t *testing.T, e edge.Edge, state edge.StackState, hostname string) []edge.Record {
+	t.Helper()
+
+	bound := edge.BoundDomains(state)
+	if !slices.Contains(bound, hostname) {
+		t.Fatalf("bound domains = %v, want %q among them", bound, hostname)
+	}
+	target := edge.TargetFor(e.Kind(), state)
+	front := target.FrontFor(hostname)
+	want := edge.Record{Name: hostname, Type: edge.RecordTypeCNAME, Value: front}
+	if e.Kind() == edge.KindCloudflare {
+		if front != "" {
+			t.Errorf("the front for %q is %q, but a cloudflare edge answers on the zone itself and publishes none", hostname, front)
+		}
+		want = edge.Record{Name: hostname, Type: edge.RecordTypeAAAA, Value: edge.ProxyPlaceholder, Proxied: true}
+	} else if front == "" {
+		t.Fatalf("state = %v, want a front for %q on it: a %s edge answers on a hostname of its own, and DNS has nothing to point at until the state carries it", state, hostname, e.Kind())
+	}
+
+	records, err := edge.RecordsFor(target, bound)
+	if err != nil {
+		t.Fatalf("RecordsFor(%v): %v", bound, err)
+	}
+	if len(records) != 1 || records[0] != want {
+		t.Fatalf("records = %v, want [%v]", records, want)
+	}
+	return records
+}
+
+func withoutFronts(state edge.StackState) edge.StackState {
+	stripped := maps.Clone(state)
+	delete(stripped, edge.StackKeyFront)
+	for host := range edge.HostFronts(state) {
+		stripped = edge.ForgetHostFront(stripped, host)
+	}
+	return stripped
 }
 
 func reconciled(t *testing.T, suite Suite) edge.EdgeStack {

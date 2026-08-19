@@ -316,7 +316,25 @@ func TestDomainStatus(t *testing.T) {
 		}
 	})
 
-	t.Run("an edge that published no front to point the host at is surfaced", func(t *testing.T) {
+	t.Run("an edge that published no front for a host it bound is surfaced", func(t *testing.T) {
+		t.Parallel()
+
+		api := newDomainACM()
+		api.issue(certARNFor(edge.KindNone), "shop.app.com")
+		f := newDomainFixture(domainFixtureOptions{
+			kind:       edge.KindNone,
+			configured: []string{"shop.app.com"},
+			stack:      &boundStack{name: string(edge.KindNone), state: edge.RecordBoundDomain(edge.StackState{edge.StackKeySlug: domainSlug}, "shop.app.com")},
+			acm:        api,
+			prior:      issuedProduction(certARNFor(edge.KindNone), "shop.app.com"),
+		})
+
+		if _, err := f.session.status(t.Context()); err == nil || !strings.Contains(err.Error(), "published no hostname") {
+			t.Fatalf("status err = %v, want the missing front surfaced rather than an empty record list", err)
+		}
+	})
+
+	t.Run("a declared host the deploy left pending is listed, not refused", func(t *testing.T) {
 		t.Parallel()
 
 		api := newDomainACM()
@@ -329,8 +347,42 @@ func TestDomainStatus(t *testing.T) {
 			prior:      issuedProduction(certARNFor(edge.KindNone), "shop.app.com"),
 		})
 
-		if _, err := f.session.status(t.Context()); err == nil || !strings.Contains(err.Error(), "published no hostname") {
-			t.Fatalf("status err = %v, want the missing front surfaced rather than an empty record list", err)
+		resp, err := f.session.status(t.Context())
+		if err != nil {
+			t.Fatalf("status: %v", err)
+		}
+		if resp.GetReady() || len(resp.GetHosts()) != 1 {
+			t.Fatalf("status = %+v, want the declared host listed and the project pending", resp)
+		}
+		host := resp.GetHosts()[0]
+		if host.GetHostname() != "shop.app.com" || !host.GetDeclared() || host.GetReady() {
+			t.Errorf("host = %+v, want the declared host reported pending", host)
+		}
+		if !strings.Contains(host.GetPending(), "not bound") || !strings.Contains(host.GetPending(), "ocel domain add") {
+			t.Errorf("pending = %q, want it to name the command that binds the host", host.GetPending())
+		}
+		if len(host.GetRecordsOwed()) != 0 {
+			t.Errorf("recordsOwed = %v, want no record owed for a host nothing serves yet", host.GetRecordsOwed())
+		}
+	})
+
+	t.Run("a host the cloudflare edge has not bound still owes its proxied record", func(t *testing.T) {
+		t.Parallel()
+
+		f := newDomainFixture(domainFixtureOptions{
+			kind:       edge.KindCloudflare,
+			configured: []string{"shop.app.com"},
+			stack:      &boundStack{name: string(edge.KindCloudflare), state: edge.StackState{edge.StackKeySlug: domainSlug}},
+			prior:      bootstrap.Production{},
+		})
+
+		resp, err := f.session.status(t.Context())
+		if err != nil {
+			t.Fatalf("status: %v", err)
+		}
+		host := resp.GetHosts()[0]
+		if !slices.Equal(host.GetRecordsOwed(), []string{"shop.app.com AAAA 100::"}) {
+			t.Errorf("recordsOwed = %v, want the proxied record that binds the host on cloudflare", host.GetRecordsOwed())
 		}
 	})
 }

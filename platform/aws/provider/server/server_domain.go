@@ -138,7 +138,8 @@ func useDomain(ctx context.Context, run domainRun, recorded bootstrap.PreviewDom
 
 	domain := bootstrap.PreviewDomain{
 		BaseDomain:        baseDomain,
-		CloudflareAccount: os.Getenv(cloudflareAccountEnvVar),
+		Edge:              run.edge.Kind(),
+		CloudflareAccount: cloudflareAccountOf(run.edge.Kind()),
 		GrammarMin:        edge.PreviewGrammarMin,
 		GrammarMax:        edge.PreviewGrammarMax,
 		Certificate:       recorded.Certificate,
@@ -412,8 +413,12 @@ func (s *Server) ListDomain(ctx context.Context, req *deploymentsv1.ListDomainRe
 	if err != nil {
 		return nil, err
 	}
+	owner, err := s.globalPreviewOwner(recorded, awscfg.Region)
+	if err != nil {
+		return nil, connect.NewError(connect.CodeFailedPrecondition, err)
+	}
 	return &deploymentsv1.ListDomainResponse{
-		Domain:   globalPreviewDomain(ctx, s.edgeRouteOwner(edge.Kind(req.GetEdgeKind()), awscfg.Region), recorded),
+		Domain:   globalPreviewDomain(ctx, owner, recorded),
 		Projects: served,
 	}, nil
 }
@@ -494,6 +499,29 @@ func sharedEntryRouteInstalled(ctx context.Context, owner routeOwnerFunc, baseDo
 		return false
 	}
 	return script == edge.PreviewEntryOwner
+}
+
+func cloudflareAccountOf(kind edge.Kind) string {
+	if kind != edge.KindCloudflare {
+		return ""
+	}
+	return os.Getenv(cloudflareAccountEnvVar)
+}
+
+func previewWildcardOwner(recorded bootstrap.PreviewDomain, ownerFor func(edge.Kind) routeOwnerFunc) (routeOwnerFunc, error) {
+	if recorded.Edge == "" {
+		return nil, fmt.Errorf(
+			"the global preview domain %q was recorded before ocel wrote down which edge holds %s, and the edges in this account do not agree on who owns a hostname: run `ocel domain use --preview %s` from the project that stood it up to record the edge, or release it with `ocel domain release --preview`",
+			recorded.BaseDomain, edge.PreviewWildcard(recorded.BaseDomain), recorded.BaseDomain,
+		)
+	}
+	return ownerFor(recorded.Edge), nil
+}
+
+func (s *Server) globalPreviewOwner(recorded bootstrap.PreviewDomain, region string) (routeOwnerFunc, error) {
+	return previewWildcardOwner(recorded, func(kind edge.Kind) routeOwnerFunc {
+		return s.edgeRouteOwner(kind, region)
+	})
 }
 
 func globalPreviewAccountMismatch(recorded bootstrap.PreviewDomain) error {

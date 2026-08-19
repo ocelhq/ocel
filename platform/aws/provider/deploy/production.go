@@ -231,7 +231,7 @@ func realize(ctx context.Context, cfg Config, manifest *deploymentsv1.Manifest, 
 	}, nil
 }
 
-func checkStoreSchema(ctx context.Context, cfg Config) error {
+func openStoreStack(cfg Config) (edge.EdgeStack, error) {
 	state := maps.Clone(cfg.StackState)
 	if state == nil {
 		state = edge.StackState{}
@@ -241,7 +241,11 @@ func checkStoreSchema(ctx context.Context, cfg Config) error {
 	if cfg.StoreEndpoint != "" {
 		state[edge.StackKeyEndpoint] = cfg.StoreEndpoint
 	}
-	stack, err := cfg.Edge.Open(state)
+	return cfg.Edge.Open(state)
+}
+
+func checkStoreSchema(ctx context.Context, cfg Config) error {
+	stack, err := openStoreStack(cfg)
 	if err != nil {
 		return err
 	}
@@ -282,7 +286,7 @@ func checkTagAvailable(ctx context.Context, cfg Config, tag string) error {
 	if tag == "" || len(cfg.StackState) == 0 {
 		return nil
 	}
-	stack, err := cfg.Edge.Open(cfg.StackState)
+	stack, err := openStoreStack(cfg)
 	if err != nil {
 		return err
 	}
@@ -329,7 +333,7 @@ func settleStackRecords(ctx context.Context, cfg Config, specs []edge.StackSpec,
 	for _, spec := range specs {
 		hosts = append(hosts, spec.Domains...)
 	}
-	records, err := edge.RecordsFor(edge.TargetFor(cfg.Edge.Kind(), state), hosts)
+	records, err := pointableRecords(edge.TargetFor(cfg.Edge.Kind(), state), state, hosts, say)
 	if err != nil {
 		return state, err
 	}
@@ -356,6 +360,35 @@ func settleStackRecords(ctx context.Context, cfg Config, specs []edge.StackSpec,
 		}
 	}
 	return edge.WithWrittenRecords(state, written)
+}
+
+func pointableRecords(target edge.DNSTarget, state edge.StackState, hosts []string, say func(string)) ([]edge.Record, error) {
+	bound := edge.BoundDomains(state)
+	records := make([]edge.Record, 0, len(hosts))
+	for _, host := range hosts {
+		if host == "" {
+			continue
+		}
+		if edge.Pointable(target, bound, host) {
+			pointed, err := edge.RecordsFor(target, []string{host})
+			if err != nil {
+				return nil, err
+			}
+			records = append(records, pointed...)
+			continue
+		}
+		if strings.HasPrefix(host, "*.") {
+			return nil, fmt.Errorf(
+				"nothing to point %s at, and no command binds a wildcard to it: serve this project's previews on the substrate-wide wildcard with `ocel domain use '%s' --preview` and drop domains.preview from its config, or deploy onto an edge that fronts the wildcard the config declares",
+				host, host,
+			)
+		}
+		say(fmt.Sprintf(
+			"Leaving %s unpointed: the %s edge serves nothing there yet — run `ocel domain add` to settle its certificate and surface, then deploy again",
+			host, target.Kind,
+		))
+	}
+	return records, nil
 }
 
 func releaseRecords(ctx context.Context, cfg Config, state edge.StackState, say func(string)) error {

@@ -211,7 +211,7 @@ func TestDestroyProject(t *testing.T) {
 func TestRemovePreviewPurge(t *testing.T) {
 	t.Run("never purges the project's artifacts", func(t *testing.T) {
 		rec := &sweepRecorder{}
-		fake := &recordingEdge{}
+		fake := &recordingEdge{kind: edge.KindCloudflare}
 		ctx := context.Background()
 		state := fake.reconciled(t, edge.StackSpec{Version: "v1", Slug: "shop"})
 		cfg := Config{ArtifactBucket: "artifact-bucket", Uploader: rec}
@@ -227,7 +227,7 @@ func TestRemovePreviewPurge(t *testing.T) {
 
 	t.Run("leaves artifacts when the pointer removal failed", func(t *testing.T) {
 		rec := &sweepRecorder{}
-		fake := &recordingEdge{}
+		fake := &recordingEdge{kind: edge.KindCloudflare}
 		cfg := Config{ArtifactBucket: "artifact-bucket", Uploader: rec}
 		stale := fake.opened(t, edge.StackState{edge.StackKeySlug: "shop", edge.StackKeySecret: "stale"})
 
@@ -242,7 +242,7 @@ func TestRemovePreviewPurge(t *testing.T) {
 
 	t.Run("keeps the environment's overrides", func(t *testing.T) {
 		values := &valueRecorder{}
-		fake := &recordingEdge{}
+		fake := &recordingEdge{kind: edge.KindCloudflare}
 		ctx := context.Background()
 		state := fake.reconciled(t, edge.StackSpec{Version: "v1", Slug: "shop"})
 

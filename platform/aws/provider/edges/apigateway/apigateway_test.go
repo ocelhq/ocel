@@ -844,3 +844,37 @@ func TestReconcileRecoversTheFrontOfADomainBoundBeforeItWasRecorded(t *testing.T
 		t.Errorf("records = %v, want a CNAME to %q read back from the domain name API Gateway already holds", records, want)
 	}
 }
+
+func TestReconcileForgetsABindingWhoseDomainNameIsGone(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	w := newWorld()
+	e := bootstrapped(t, w)
+	stack, err := e.Reconcile(ctx, testSpec(), nil)
+	if err != nil {
+		t.Fatalf("Reconcile: %v", err)
+	}
+	const host = "shop.example.com"
+	if err := stack.BindDomain(ctx, edge.DomainBinding{Hostname: host, Certificate: "arn:aws:acm:eu-west-1:123456789012:certificate/abc"}); err != nil {
+		t.Fatalf("BindDomain: %v", err)
+	}
+	bound := maps.Clone(stack.State())
+	delete(bound, "front:"+host)
+	delete(w.gateway.domains, host)
+
+	spec := testSpec()
+	var warned []string
+	spec.Warn = func(m string) { warned = append(warned, m) }
+	settled, err := e.Reconcile(ctx, spec, bound)
+	if err != nil {
+		t.Fatalf("Reconcile again: %v", err)
+	}
+
+	if hosts := edge.BoundDomains(settled.State()); slices.Contains(hosts, host) {
+		t.Errorf("bound domains = %v, want %s forgotten: API Gateway holds no domain name for it any more", hosts, host)
+	}
+	if len(warned) != 1 || !strings.Contains(warned[0], host) {
+		t.Errorf("warned = %v, want the vanished domain name named", warned)
+	}
+}

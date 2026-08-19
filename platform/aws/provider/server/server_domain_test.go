@@ -349,6 +349,92 @@ func TestGlobalPreviewProjects(t *testing.T) {
 	}
 }
 
+func TestPreviewWildcardOwner(t *testing.T) {
+	t.Parallel()
+
+	const baseDomain = "preview.acme.com"
+
+	t.Run("a project on another edge still sees the wildcard the recording edge holds", func(t *testing.T) {
+		t.Parallel()
+
+		recorded := bootstrap.PreviewDomain{BaseDomain: baseDomain, Edge: edge.KindCloudflare}
+		var asked []edge.Kind
+		owner, err := previewWildcardOwner(recorded, func(kind edge.Kind) routeOwnerFunc {
+			asked = append(asked, kind)
+			return func(context.Context, string) (string, error) {
+				if kind != edge.KindCloudflare {
+					return "", nil
+				}
+				return edge.PreviewEntryOwner, nil
+			}
+		})
+		if err != nil {
+			t.Fatalf("previewWildcardOwner: %v", err)
+		}
+		if !slices.Equal(asked, []edge.Kind{edge.KindCloudflare}) {
+			t.Errorf("edges asked = %v, want only the %s edge that stood the wildcard up", asked, edge.KindCloudflare)
+		}
+		if !sharedEntryRouteInstalled(context.Background(), owner, baseDomain) {
+			t.Error("RouteInstalled = false, want true: the wildcard is account-global, and a sibling project on another edge must not be told it is gone")
+		}
+	})
+
+	t.Run("a record that names no edge is refused rather than answered", func(t *testing.T) {
+		t.Parallel()
+
+		_, err := previewWildcardOwner(bootstrap.PreviewDomain{BaseDomain: baseDomain}, func(edge.Kind) routeOwnerFunc {
+			t.Error("an edge was probed for a wildcard whose owner is unknown")
+			return nil
+		})
+		if err == nil {
+			t.Fatal("previewWildcardOwner = nil, want a refusal naming the ambiguity")
+		}
+		if !strings.Contains(err.Error(), baseDomain) {
+			t.Errorf("err = %v, want it to name the domain nothing can vouch for", err)
+		}
+	})
+}
+
+func TestUseDomainRecordsTheEdgeHoldingTheWildcard(t *testing.T) {
+	const baseDomain = "preview.acme.com"
+	t.Setenv(cloudflareAccountEnvVar, "cf-ambient")
+
+	ctx := context.Background()
+	validation := edge.Record{Name: "_ocel.preview.acme.com", Type: edge.RecordTypeCNAME, Value: "_target.acm-validations.aws"}
+	api := &issuingACM{arn: "arn:aws:acm:us-east-1:111122223333:certificate/abcd-1234", domain: edge.PreviewWildcard(baseDomain), validation: validation}
+	writer := &releaseWriter{}
+	ssmc := &stateSSM{params: map[string]string{}}
+	run := domainRun{
+		ssm:    ssmc,
+		edge:   &wildcardEdge{front: "d-wild.execute-api.us-east-1.amazonaws.com"},
+		writer: writer,
+		flow: certs.Flow{
+			Issuer: certs.Issuer{API: api, Region: "us-east-1", Attempts: 1},
+			Writer: writer,
+			Prober: certs.Prober{Attempts: 1, Now: time.Now, Get: func(context.Context, string) (http.Header, error) {
+				answer := http.Header{}
+				answer.Set(edge.HeaderEdge, string(edge.KindNative))
+				return answer, nil
+			}},
+		},
+		spec: edge.PreviewWildcardSpec{BaseDomain: baseDomain},
+	}
+
+	if err := useDomain(ctx, run, bootstrap.PreviewDomain{}, baseDomain, func(string) {}); err != nil {
+		t.Fatalf("useDomain: %v", err)
+	}
+	recorded, err := bootstrap.ReadPreviewDomain(ctx, ssmc, bootstrap.ClassPreview)
+	if err != nil {
+		t.Fatalf("ReadPreviewDomain: %v", err)
+	}
+	if recorded.Edge != edge.KindNative {
+		t.Errorf("Edge = %q, want %q: every later lookup of this account-global wildcard asks the edge that raised it", recorded.Edge, edge.KindNative)
+	}
+	if recorded.CloudflareAccount != "" {
+		t.Errorf("CloudflareAccount = %q, want nothing: no Cloudflare account holds a wildcard raised at the %s edge", recorded.CloudflareAccount, edge.KindNative)
+	}
+}
+
 func TestGlobalPreviewAccountMismatch(t *testing.T) {
 	recorded := bootstrap.PreviewDomain{BaseDomain: "preview.acme.com", CloudflareAccount: "recorded-acct"}
 

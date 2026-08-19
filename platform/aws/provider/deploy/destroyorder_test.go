@@ -96,7 +96,7 @@ func TestDestroyProjectStopsRoutingBeforeItDeletesTheOrigin(t *testing.T) {
 	infra := naming.InfraStack(ProductionEnv)
 
 	calls := &teardownCalls{}
-	fake := &recordingEdge{record: calls.record}
+	fake := &recordingEdge{kind: edge.KindCloudflare, record: calls.record}
 	stack := servingStack(t, fake, "shop.example.com")
 	tracer := &fakeTracer{}
 	stages := newProjectTeardownStages()
@@ -139,7 +139,7 @@ func TestDestroyProjectResumesAfterAFailedEdgeDestroy(t *testing.T) {
 
 	web := naming.AppStack(ProductionEnv, "web", testRelease(t, "b1"))
 	calls := &teardownCalls{}
-	fake := &recordingEdge{destroyErr: errors.New("the front is on fire"), record: calls.record}
+	fake := &recordingEdge{kind: edge.KindCloudflare, destroyErr: errors.New("the front is on fire"), record: calls.record}
 	stack := servingStack(t, fake, "shop.example.com")
 	cfg := servedProject(t, calls, web)
 
@@ -173,7 +173,7 @@ func TestDestroyProjectResumesAfterAFailedEdgeDestroy(t *testing.T) {
 func TestUnbindRoutingDropsEveryHostnameAndPointer(t *testing.T) {
 	t.Parallel()
 
-	fake := &recordingEdge{}
+	fake := &recordingEdge{kind: edge.KindCloudflare}
 	stack := servingStack(t, fake, "shop.example.com")
 
 	if err := unbindRouting(context.Background(), stack, Config{}, Stage{}, []string{"pr-1", "pr-2"}); err != nil {

@@ -56,7 +56,7 @@ func TestPreviewWildcardSpecFor(t *testing.T) {
 	setWorkerBundle(t)
 
 	cfg := Config{
-		Edge:                &recordingEdge{},
+		Edge:                &recordingEdge{kind: edge.KindCloudflare},
 		Region:              "eu-west-1",
 		StateTable:          "ocel-state",
 		AssetBucket:         "ocel-assets",
@@ -233,7 +233,7 @@ func TestEdgeStackSpecsGlobalPreview(t *testing.T) {
 	t.Run("an ambient project claims no hostname of its own", func(t *testing.T) {
 		m := manifest()
 		cfg := Config{
-			Edge:                &recordingEdge{},
+			Edge:                &recordingEdge{kind: edge.KindCloudflare},
 			Slug:                "proj",
 			Class:               deploymentsv1.Environment_CLASS_PREVIEW,
 			Identity:            "pr-42",
@@ -260,7 +260,7 @@ func TestEdgeStackSpecsGlobalPreview(t *testing.T) {
 		m := manifest()
 		m.Domains = map[string]*deploymentsv1.DomainList{"preview": {Hostnames: []string{"*.preview.proj.com"}}}
 		cfg := Config{
-			Edge:                &recordingEdge{},
+			Edge:                &recordingEdge{kind: edge.KindCloudflare},
 			Slug:                "proj",
 			Class:               deploymentsv1.Environment_CLASS_PREVIEW,
 			Identity:            "pr-42",
@@ -284,7 +284,7 @@ func TestEdgeStackSpecsGlobalPreview(t *testing.T) {
 		m := manifest()
 		m.Apps[0].Domains = map[string]*deploymentsv1.DomainList{"preview": {Hostnames: []string{"*.preview.proj.com"}}}
 		cfg := Config{
-			Edge:                &recordingEdge{},
+			Edge:                &recordingEdge{kind: edge.KindCloudflare},
 			Slug:                "proj",
 			Class:               deploymentsv1.Environment_CLASS_PREVIEW,
 			Identity:            "pr-42",
@@ -304,7 +304,7 @@ func TestEdgeStackSpecsGlobalPreview(t *testing.T) {
 	t.Run("no recorded domain keeps the refusal", func(t *testing.T) {
 		m := manifest()
 		cfg := Config{
-			Edge:         &recordingEdge{},
+			Edge:         &recordingEdge{kind: edge.KindCloudflare},
 			Slug:         "proj",
 			Class:        deploymentsv1.Environment_CLASS_PREVIEW,
 			Identity:     "pr-42",

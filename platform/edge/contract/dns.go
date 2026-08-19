@@ -136,6 +136,12 @@ func TargetFor(kind Kind, state StackState) DNSTarget {
 	return DNSTarget{Kind: kind, Front: FrontOf(state), FrontByHost: HostFronts(state)}
 }
 
+func ServesUnbound(kind Kind) bool { return kind == KindCloudflare }
+
+func Pointable(target DNSTarget, bound []string, hostname string) bool {
+	return ServesUnbound(target.Kind) || slices.Contains(bound, hostname)
+}
+
 func RecordsFor(target DNSTarget, hostnames []string) ([]Record, error) {
 	records := make([]Record, 0, len(hostnames))
 	for _, host := range hostnames {

@@ -339,7 +339,7 @@ func regionalFrontOf(hostname, regional string) (string, error) {
 	return regional, nil
 }
 
-func (s *stack) settleDomainFronts(ctx context.Context, c Clients) error {
+func (s *stack) settleDomainFronts(ctx context.Context, c Clients, warn func(string)) error {
 	for _, hostname := range edge.BoundDomains(s.state) {
 		if edge.HostFronts(s.state)[hostname] != "" {
 			continue
@@ -349,6 +349,10 @@ func (s *stack) settleDomainFronts(ctx context.Context, c Clients) error {
 		})
 		if err != nil {
 			if isNotFound(err) {
+				s.state = edge.ForgetHostFront(edge.ForgetBoundDomain(s.state, hostname), hostname)
+				if warn != nil {
+					warn(fmt.Sprintf("%s is no longer bound: the API Gateway domain name it was served on is gone, so nothing answers it and no record can point at it — run `ocel domain add` to bind it again", hostname))
+				}
 				continue
 			}
 			return fmt.Errorf("read the API Gateway domain name for %s: %w", hostname, err)

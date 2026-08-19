@@ -163,7 +163,7 @@ func TestCheckNeedsRefusesANeedNoEdgeKnows(t *testing.T) {
 
 	root := t.TempDir()
 	writeRawNeeds(t, root, "web", `{"edge-telepathy":{"count":1}}`)
-	cfg := Config{Edge: &recordingEdge{}, ArtifactRoot: root}
+	cfg := Config{Edge: &recordingEdge{kind: edge.KindCloudflare}, ArtifactRoot: root}
 
 	_, err := checkNeeds(context.Background(), cfg, needsManifest("web"))
 	if err == nil {
@@ -183,7 +183,7 @@ func TestCheckNeedsWaivingAnUnknownNeedStillRefuses(t *testing.T) {
 
 	root := t.TempDir()
 	writeRawNeeds(t, root, "web", `{"edge-telepathy":{"count":1}}`)
-	cfg := Config{Edge: &recordingEdge{}, ArtifactRoot: root, AllowDegraded: []string{"edge-telepathy"}}
+	cfg := Config{Edge: &recordingEdge{kind: edge.KindCloudflare}, ArtifactRoot: root, AllowDegraded: []string{"edge-telepathy"}}
 
 	if _, err := checkNeeds(context.Background(), cfg, needsManifest("web")); err == nil {
 		t.Fatal("checkNeeds err = nil, want a waiver not to invent a need")
@@ -228,7 +228,7 @@ func TestCheckNeedsChecksEntitlementOnlyForAPresentCodeNeed(t *testing.T) {
 			root := t.TempDir()
 			writeNeeds(t, root, "web", tc.needs)
 			ed := &verifyingEdge{
-				recordingEdge: &recordingEdge{},
+				recordingEdge: &recordingEdge{kind: edge.KindCloudflare},
 				identity:      edge.CredentialIdentity{Account: "acct-1", Plan: "Workers Free", CodeEntitlement: edge.EntitlementWithheld},
 			}
 			cfg := Config{Edge: ed, ArtifactRoot: root}
@@ -260,7 +260,7 @@ func TestCheckNeedsPassesAGrantedEntitlement(t *testing.T) {
 	root := t.TempDir()
 	writeNeeds(t, root, "web", map[edge.Need]edge.NeedDetail{edge.NeedEdgeMiddleware: {Count: 1}})
 	ed := &verifyingEdge{
-		recordingEdge: &recordingEdge{},
+		recordingEdge: &recordingEdge{kind: edge.KindCloudflare},
 		identity:      edge.CredentialIdentity{Account: "acct-1", CodeEntitlement: edge.EntitlementGranted},
 	}
 	if _, err := checkNeeds(context.Background(), Config{Edge: ed, ArtifactRoot: root}, needsManifest("web")); err != nil {
@@ -373,7 +373,7 @@ func TestBuildDeploymentRecordLeavesNeedsOutForAnAppWithNone(t *testing.T) {
 		Apps:      []*deploymentsv1.ManifestApp{{Name: "api", Framework: "express"}},
 		Functions: []*deploymentsv1.ManifestFunction{{LogicalName: "api_index", Framework: "express", App: "api", RouteId: "/"}},
 	}
-	cfg := Config{ArtifactRoot: root, Slug: "proj", Edge: &recordingEdge{}}
+	cfg := Config{ArtifactRoot: root, Slug: "proj", Edge: &recordingEdge{kind: edge.KindCloudflare}}
 
 	record, err := buildDeploymentRecord(cfg, manifest, manifest.GetApps()[0], deployedAs("API1"), nil, appBuildsFor(t, cfg, manifest), nil)
 	if err != nil {
@@ -498,7 +498,7 @@ func TestCheckNeedsRefusesWhenItCannotConfirmTheEntitlement(t *testing.T) {
 
 	root := t.TempDir()
 	writeNeeds(t, root, "web", map[edge.Need]edge.NeedDetail{edge.NeedEdgeMiddleware: {Count: 1, Routes: []string{"/x"}}})
-	ed := &verifyingEdge{recordingEdge: &recordingEdge{}, err: errors.New("token was rejected")}
+	ed := &verifyingEdge{recordingEdge: &recordingEdge{kind: edge.KindCloudflare}, err: errors.New("token was rejected")}
 	cfg := Config{Edge: ed, ArtifactRoot: root, AllowDegraded: []string{"edge-middleware"}}
 
 	_, err := checkNeeds(context.Background(), cfg, needsManifest("web"))
@@ -533,7 +533,7 @@ func TestCheckNeedsDegradesACodeNeedTheEntitlementWithholds(t *testing.T) {
 				edge.NeedEdgeMiddleware: {Count: 1, Routes: []string{"/dashboard"}},
 			})
 			ed := &verifyingEdge{
-				recordingEdge: &recordingEdge{},
+				recordingEdge: &recordingEdge{kind: edge.KindCloudflare},
 				identity:      edge.CredentialIdentity{Account: "acct-1", Plan: "Workers Free", CodeEntitlement: edge.EntitlementWithheld},
 			}
 			seen, degraded := degradeCollector()
@@ -584,7 +584,7 @@ func TestStagedRecordWaivesTheNeedThePlanWithholds(t *testing.T) {
 		Functions: []*deploymentsv1.ManifestFunction{{LogicalName: "web_index", Framework: frameworkNext, App: "web", RouteId: "/"}},
 	}
 	ed := &verifyingEdge{
-		recordingEdge: &recordingEdge{},
+		recordingEdge: &recordingEdge{kind: edge.KindCloudflare},
 		identity:      edge.CredentialIdentity{Account: "acct-1", Plan: "Workers Free", CodeEntitlement: edge.EntitlementWithheld},
 	}
 	cfg := Config{

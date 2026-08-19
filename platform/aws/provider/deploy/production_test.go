@@ -20,6 +20,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/naming"
 	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/resources/v1"
+	cloudflare "github.com/ocelhq/ocel/platform/edge/cloudflare/deploy"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
@@ -49,7 +50,7 @@ func TestEdgeStackSpecs(t *testing.T) {
 	}
 
 	t.Run("threads edge values with no worker-fronted apps", func(t *testing.T) {
-		cfg := Config{Edge: &recordingEdge{}, EdgeValues: map[string]string{"cacheBucket": "ocel-proj-cache"}}
+		cfg := Config{Edge: &recordingEdge{kind: edge.KindCloudflare}, EdgeValues: map[string]string{"cacheBucket": "ocel-proj-cache"}}
 		manifest := &deploymentsv1.Manifest{Slug: "proj"}
 		specs, err := stackSpecs(cfg, manifest, "v1", nil)
 		if err != nil {
@@ -64,7 +65,7 @@ func TestEdgeStackSpecs(t *testing.T) {
 	})
 
 	t.Run("threads edge values with a worker-fronted app", func(t *testing.T) {
-		cfg := Config{Edge: &recordingEdge{}, EdgeValues: map[string]string{"cacheBucket": "ocel-proj-cache"}}
+		cfg := Config{Edge: &recordingEdge{kind: edge.KindCloudflare}, EdgeValues: map[string]string{"cacheBucket": "ocel-proj-cache"}}
 		specs, err := stackSpecs(cfg, webManifest(), "v1", nil)
 		if err != nil {
 			t.Fatalf("stackSpecs: %v", err)
@@ -78,7 +79,7 @@ func TestEdgeStackSpecs(t *testing.T) {
 	})
 
 	t.Run("production prunes stale routes", func(t *testing.T) {
-		cfg := Config{Edge: &recordingEdge{}, Class: deploymentsv1.Environment_CLASS_PRODUCTION, ArtifactRoot: t.TempDir()}
+		cfg := Config{Edge: &recordingEdge{kind: edge.KindCloudflare}, Class: deploymentsv1.Environment_CLASS_PRODUCTION, ArtifactRoot: t.TempDir()}
 
 		specs, err := stackSpecs(cfg, &deploymentsv1.Manifest{Slug: "proj"}, "v1", nil)
 		if err != nil {
@@ -97,7 +98,7 @@ func TestEdgeStackSpecs(t *testing.T) {
 
 	t.Run("preview with no declared domain is refused", func(t *testing.T) {
 		manifest := webManifest()
-		cfg := Config{Edge: &recordingEdge{}, Slug: "proj", Class: deploymentsv1.Environment_CLASS_PREVIEW, Identity: "pr-42", ArtifactRoot: specsArtifactRoot(t, manifest)}
+		cfg := Config{Edge: &recordingEdge{kind: edge.KindCloudflare}, Slug: "proj", Class: deploymentsv1.Environment_CLASS_PREVIEW, Identity: "pr-42", ArtifactRoot: specsArtifactRoot(t, manifest)}
 
 		_, err := stackSpecs(cfg, manifest, "v1", nil)
 		if err == nil {
@@ -111,7 +112,7 @@ func TestEdgeStackSpecs(t *testing.T) {
 	t.Run("preview without a wildcard fails the deploy", func(t *testing.T) {
 		manifest := webManifest()
 		manifest.Domains = map[string]*deploymentsv1.DomainList{"preview": {Hostnames: []string{"app.acme.com"}}}
-		cfg := Config{Edge: &recordingEdge{}, Slug: "proj", Class: deploymentsv1.Environment_CLASS_PREVIEW, Identity: "pr-42", ArtifactRoot: specsArtifactRoot(t, manifest)}
+		cfg := Config{Edge: &recordingEdge{kind: edge.KindCloudflare}, Slug: "proj", Class: deploymentsv1.Environment_CLASS_PREVIEW, Identity: "pr-42", ArtifactRoot: specsArtifactRoot(t, manifest)}
 
 		_, err := stackSpecs(cfg, manifest, "v1", nil)
 		if err == nil {
@@ -133,7 +134,7 @@ func TestEdgeStackSpecs(t *testing.T) {
 			Domains: map[string]*deploymentsv1.DomainList{"preview": {Hostnames: []string{"*.preview.acme.com"}}},
 		}
 		cfg := Config{
-			Edge:         &recordingEdge{},
+			Edge:         &recordingEdge{kind: edge.KindCloudflare},
 			Slug:         "proj",
 			Class:        deploymentsv1.Environment_CLASS_PREVIEW,
 			Identity:     "pr-42",
@@ -179,7 +180,7 @@ func TestEdgeStackSpecs(t *testing.T) {
 
 	t.Run("preview always binds the app list", func(t *testing.T) {
 		manifest := &deploymentsv1.Manifest{Slug: "proj"}
-		cfg := Config{Edge: &recordingEdge{}, Slug: "proj", Class: deploymentsv1.Environment_CLASS_PREVIEW, Identity: "pr-42", ArtifactRoot: specsArtifactRoot(t, manifest)}
+		cfg := Config{Edge: &recordingEdge{kind: edge.KindCloudflare}, Slug: "proj", Class: deploymentsv1.Environment_CLASS_PREVIEW, Identity: "pr-42", ArtifactRoot: specsArtifactRoot(t, manifest)}
 
 		specs, err := stackSpecs(cfg, manifest, "v1", nil)
 		if err != nil {
@@ -192,7 +193,7 @@ func TestEdgeStackSpecs(t *testing.T) {
 
 	t.Run("every worker declares Lambda's invoke-payload budget to the edge", func(t *testing.T) {
 		manifest := webManifest()
-		cfg := Config{Edge: &recordingEdge{}, Slug: "proj", Class: deploymentsv1.Environment_CLASS_PRODUCTION, ArtifactRoot: specsArtifactRoot(t, manifest)}
+		cfg := Config{Edge: &recordingEdge{kind: edge.KindCloudflare}, Slug: "proj", Class: deploymentsv1.Environment_CLASS_PRODUCTION, ArtifactRoot: specsArtifactRoot(t, manifest)}
 
 		specs, err := stackSpecs(cfg, manifest, "v1", nil)
 		if err != nil {
@@ -211,7 +212,7 @@ func TestEdgeStackSpecs(t *testing.T) {
 	t.Run("production keeps declarative hostnames", func(t *testing.T) {
 		manifest := webManifest()
 		manifest.Domains = map[string]*deploymentsv1.DomainList{"production": {Hostnames: []string{"acme.com", "www.acme.com"}}}
-		cfg := Config{Edge: &recordingEdge{}, Slug: "proj", Class: deploymentsv1.Environment_CLASS_PRODUCTION, ArtifactRoot: specsArtifactRoot(t, manifest)}
+		cfg := Config{Edge: &recordingEdge{kind: edge.KindCloudflare}, Slug: "proj", Class: deploymentsv1.Environment_CLASS_PRODUCTION, ArtifactRoot: specsArtifactRoot(t, manifest)}
 
 		specs, err := stackSpecs(cfg, manifest, "v1", nil)
 		if err != nil {
@@ -230,7 +231,7 @@ func TestEdgeStackSpecs(t *testing.T) {
 	})
 
 	t.Run("binds edge signing credentials when the substrate has them", func(t *testing.T) {
-		cfg := Config{Edge: &recordingEdge{}, EdgeAccessKeyID: "AKIAEDGE", EdgeSecretKey: "secret-edge"}
+		cfg := Config{Edge: &recordingEdge{kind: edge.KindCloudflare}, EdgeAccessKeyID: "AKIAEDGE", EdgeSecretKey: "secret-edge"}
 		specs, err := stackSpecs(cfg, webManifest(), "v1", nil)
 		if err != nil {
 			t.Fatalf("stackSpecs: %v", err)
@@ -248,7 +249,7 @@ func TestEdgeStackSpecs(t *testing.T) {
 	})
 
 	t.Run("edge signing credentials are absent on a substrate predating them", func(t *testing.T) {
-		cfg := Config{Edge: &recordingEdge{}}
+		cfg := Config{Edge: &recordingEdge{kind: edge.KindCloudflare}}
 		specs, err := stackSpecs(cfg, webManifest(), "v1", nil)
 		if err != nil {
 			t.Fatalf("stackSpecs: %v", err)
@@ -263,7 +264,7 @@ func TestEdgeStackSpecs(t *testing.T) {
 	})
 
 	t.Run("binds cache coordinates from the substrate's stores", func(t *testing.T) {
-		cfg := Config{Edge: &recordingEdge{}, Region: "eu-west-1", StateTable: "state-abc", AssetBucket: "assets-xyz"}
+		cfg := Config{Edge: &recordingEdge{kind: edge.KindCloudflare}, Region: "eu-west-1", StateTable: "state-abc", AssetBucket: "assets-xyz"}
 		specs, err := stackSpecs(cfg, webManifest(), "v1", nil)
 		if err != nil {
 			t.Fatalf("stackSpecs: %v", err)
@@ -281,7 +282,7 @@ func TestEdgeStackSpecs(t *testing.T) {
 	})
 
 	t.Run("cache coordinates are absent on a substrate predating a store", func(t *testing.T) {
-		cfg := Config{Edge: &recordingEdge{}, Region: "eu-west-1"}
+		cfg := Config{Edge: &recordingEdge{kind: edge.KindCloudflare}, Region: "eu-west-1"}
 		specs, err := stackSpecs(cfg, webManifest(), "v1", nil)
 		if err != nil {
 			t.Fatalf("stackSpecs: %v", err)
@@ -296,7 +297,7 @@ func TestEdgeStackSpecs(t *testing.T) {
 
 	t.Run("binds the image optimizer URL from the substrate's optimizer", func(t *testing.T) {
 		url := "https://opt123.lambda-url.eu-west-1.on.aws/"
-		cfg := Config{Edge: &recordingEdge{}, Region: "eu-west-1", ImageOptimizerURL: url}
+		cfg := Config{Edge: &recordingEdge{kind: edge.KindCloudflare}, Region: "eu-west-1", ImageOptimizerURL: url}
 		specs, err := stackSpecs(cfg, webManifest(), "v1", nil)
 		if err != nil {
 			t.Fatalf("stackSpecs: %v", err)
@@ -307,7 +308,7 @@ func TestEdgeStackSpecs(t *testing.T) {
 	})
 
 	t.Run("the image optimizer URL is absent on a substrate with no optimizer", func(t *testing.T) {
-		cfg := Config{Edge: &recordingEdge{}, Region: "eu-west-1"}
+		cfg := Config{Edge: &recordingEdge{kind: edge.KindCloudflare}, Region: "eu-west-1"}
 		specs, err := stackSpecs(cfg, webManifest(), "v1", nil)
 		if err != nil {
 			t.Fatalf("stackSpecs: %v", err)
@@ -319,7 +320,7 @@ func TestEdgeStackSpecs(t *testing.T) {
 
 	t.Run("binds the revalidate queue URL when the substrate published one", func(t *testing.T) {
 		url := "https://sqs.eu-west-1.amazonaws.com/1234/ocel-revalidate.fifo"
-		cfg := Config{Edge: &recordingEdge{}, Region: "eu-west-1", RevalidateQueueURL: url}
+		cfg := Config{Edge: &recordingEdge{kind: edge.KindCloudflare}, Region: "eu-west-1", RevalidateQueueURL: url}
 		specs, err := stackSpecs(cfg, webManifest(), "v1", nil)
 		if err != nil {
 			t.Fatalf("stackSpecs: %v", err)
@@ -330,7 +331,7 @@ func TestEdgeStackSpecs(t *testing.T) {
 	})
 
 	t.Run("the revalidate queue URL is absent where nothing drains the queue", func(t *testing.T) {
-		cfg := Config{Edge: &recordingEdge{}, Region: "eu-west-1"}
+		cfg := Config{Edge: &recordingEdge{kind: edge.KindCloudflare}, Region: "eu-west-1"}
 		specs, err := stackSpecs(cfg, webManifest(), "v1", nil)
 		if err != nil {
 			t.Fatalf("stackSpecs: %v", err)
@@ -491,7 +492,7 @@ func TestAmbientPreview(t *testing.T) {
 	}
 	ambient := func(t *testing.T, m *deploymentsv1.Manifest) Config {
 		return Config{
-			Edge:                &recordingEdge{},
+			Edge:                &recordingEdge{kind: edge.KindCloudflare},
 			Slug:                "proj",
 			Class:               deploymentsv1.Environment_CLASS_PREVIEW,
 			Identity:            "pr-42",
@@ -507,7 +508,7 @@ func TestAmbientPreview(t *testing.T) {
 			t.Fatalf("stackSpecs: %v", err)
 		}
 
-		fake := &recordingEdge{}
+		fake := &recordingEdge{kind: edge.KindCloudflare}
 		stack, err := reconcileStack(context.Background(), fake, specs, nil)
 		if err != nil {
 			t.Fatalf("reconcileStack: %v", err)
@@ -622,7 +623,7 @@ func TestAmbientPreview(t *testing.T) {
 			t.Fatalf("stackSpecs: %v", err)
 		}
 
-		fake := &recordingEdge{}
+		fake := &recordingEdge{kind: edge.KindCloudflare}
 		stack, err := reconcileStack(context.Background(), fake, specs, edge.StackState{
 			edge.StackKeyGlobalPreview: cfg.GlobalPreviewDomain,
 		})
@@ -649,7 +650,7 @@ func TestAmbientPreview(t *testing.T) {
 			t.Fatalf("stackSpecs: %v", err)
 		}
 
-		fake := &recordingEdge{version: "v1", secret: "fake-secret"}
+		fake := &recordingEdge{kind: edge.KindCloudflare, version: "v1", secret: "fake-secret"}
 		prior := edge.StackState{
 			edge.StackKeySlug:          "proj",
 			edge.StackKeyEndpoint:      fakeStoreEndpoint,
@@ -1142,7 +1143,7 @@ func TestBuildDeploymentRecord(t *testing.T) {
 
 func TestFinalizeProductionDeploy(t *testing.T) {
 	t.Run("reconcile then stage then promote in order", func(t *testing.T) {
-		fake := &recordingEdge{}
+		fake := &recordingEdge{kind: edge.KindCloudflare}
 		ctx := context.Background()
 		specs := []edge.StackSpec{{Version: "v1", Program: &edge.ProgramSpec{Name: "web-generic"}}}
 		results := []appDeployResult{
@@ -1208,7 +1209,7 @@ func TestFinalizeProductionDeploy(t *testing.T) {
 	})
 
 	t.Run("stamps the tag onto the promotion", func(t *testing.T) {
-		fake := &recordingEdge{}
+		fake := &recordingEdge{kind: edge.KindCloudflare}
 		ctx := context.Background()
 		results := []appDeployResult{
 			{App: "web", Identity: deployedAs("b1"), Record: edge.DeploymentRecord{App: "web", Identity: "b1"}},
@@ -1224,7 +1225,7 @@ func TestFinalizeProductionDeploy(t *testing.T) {
 	})
 
 	t.Run("stages before any promote", func(t *testing.T) {
-		fake := &orderTrackingEdge{recordingEdge: &recordingEdge{}}
+		fake := &orderTrackingEdge{recordingEdge: &recordingEdge{kind: edge.KindCloudflare}}
 		ctx := context.Background()
 		results := []appDeployResult{
 			{App: "web", Identity: deployedAs("b1"), Record: edge.DeploymentRecord{App: "web", Identity: "b1"}},
@@ -1246,7 +1247,7 @@ func TestFinalizeProductionDeploy(t *testing.T) {
 	})
 
 	t.Run("an app failure aborts the promote", func(t *testing.T) {
-		fake := &recordingEdge{}
+		fake := &recordingEdge{kind: edge.KindCloudflare}
 		ctx := context.Background()
 		results := []appDeployResult{
 			{App: "web", Identity: deployedAs("b1"), Record: edge.DeploymentRecord{App: "web", Identity: "b1"}},
@@ -1267,7 +1268,7 @@ func TestFinalizeProductionDeploy(t *testing.T) {
 	})
 
 	t.Run("a second deploy produces a new promotion retaining the prior one", func(t *testing.T) {
-		fake := &recordingEdge{}
+		fake := &recordingEdge{kind: edge.KindCloudflare}
 		ctx := context.Background()
 		specs := []edge.StackSpec{{Version: "v1"}}
 		results := []appDeployResult{{App: "web", Identity: deployedAs("b1"), Record: edge.DeploymentRecord{App: "web", Identity: "b1"}}}
@@ -1298,7 +1299,7 @@ func TestFinalizeDeploy(t *testing.T) {
 			{App: "web", Identity: deployedAs("b1"), Record: edge.DeploymentRecord{App: "web", Identity: "b1"}},
 		}
 
-		prod := &recordingEdge{}
+		prod := &recordingEdge{kind: edge.KindCloudflare}
 		if _, err := finalizeDeploy(ctx, withEdge(Config{}, prod), []edge.StackSpec{{Version: "v1"}}, nil, "promo1", "", "", 100, results); err != nil {
 			t.Fatalf("finalizeDeploy(production): %v", err)
 		}
@@ -1313,7 +1314,7 @@ func TestFinalizeDeploy(t *testing.T) {
 			{App: "web", Identity: deployedAs("b1"), Record: edge.DeploymentRecord{App: "web", Identity: "b1"}},
 		}
 
-		preview := &recordingEdge{}
+		preview := &recordingEdge{kind: edge.KindCloudflare}
 		if _, err := finalizeDeploy(ctx, withEdge(Config{}, preview), []edge.StackSpec{{Version: "v1"}}, nil, "promo1", "", "pr-42", 100, results); err != nil {
 			t.Fatalf("finalizeDeploy(preview): %v", err)
 		}
@@ -1323,7 +1324,7 @@ func TestFinalizeDeploy(t *testing.T) {
 	})
 
 	t.Run("a rotation of one build is a new deployment and promotion", func(t *testing.T) {
-		fake := &recordingEdge{}
+		fake := &recordingEdge{kind: edge.KindCloudflare}
 		ctx := context.Background()
 		specs := []edge.StackSpec{{Version: "v1"}}
 		before, after := deployedAs("B1"), fingerprinted("B1", "fp2")
@@ -1372,7 +1373,7 @@ func TestFinalizeDeploy(t *testing.T) {
 		ids := make([]Identity, len(fingerprints))
 		prefixes := map[string]bool{}
 
-		fake := &recordingEdge{}
+		fake := &recordingEdge{kind: edge.KindCloudflare}
 		ctx := context.Background()
 		specs := []edge.StackSpec{{Version: "v1"}}
 		var state edge.StackState
@@ -1428,7 +1429,7 @@ func TestFinalizeDeploy(t *testing.T) {
 	})
 
 	t.Run("the promotion carries rendered identities", func(t *testing.T) {
-		fake := &recordingEdge{}
+		fake := &recordingEdge{kind: edge.KindCloudflare}
 		id := fingerprinted("b1", "fp1")
 		results := []appDeployResult{
 			{App: "web", Identity: id, Record: edge.DeploymentRecord{App: "web", Identity: id.String()}},
@@ -1534,7 +1535,7 @@ func TestRealizeRequiresADeploymentIDPerApp(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 
-			cfg := Config{Edge: &recordingEdge{}, StoreEndpoint: "https://store.example.com"}
+			cfg := Config{Edge: &recordingEdge{kind: edge.KindCloudflare}, StoreEndpoint: "https://store.example.com"}
 			manifest := &deploymentsv1.Manifest{Slug: "shop", Apps: tc.apps}
 			_, err := realize(context.Background(), cfg, manifest, nil, nil)
 			if err == nil {
@@ -1552,7 +1553,7 @@ func TestRealizeRefusesAStaleStore(t *testing.T) {
 
 	stale := edge.StoreSchemaVersion - 1
 	cfg := Config{
-		Edge:          &recordingEdge{storeSchemaVersion: &stale},
+		Edge:          &recordingEdge{kind: edge.KindCloudflare, storeSchemaVersion: &stale},
 		StoreEndpoint: fakeStoreEndpoint,
 		Slug:          "shop",
 	}
@@ -1569,7 +1570,7 @@ func TestRealizeRefusesAStoreThatCannotReportItsSchema(t *testing.T) {
 	t.Parallel()
 
 	cfg := Config{
-		Edge:          &recordingEdge{storeSchemaVersionErr: edge.ErrStoreSchemaUnreadable},
+		Edge:          &recordingEdge{kind: edge.KindCloudflare, storeSchemaVersionErr: edge.ErrStoreSchemaUnreadable},
 		StoreEndpoint: fakeStoreEndpoint,
 		Slug:          "shop",
 	}
@@ -1588,7 +1589,7 @@ func TestRealizeRefusesAStoreThatCannotReportItsSchema(t *testing.T) {
 func TestRealizeChecksTheSchemaAgainstTheRecordedStackState(t *testing.T) {
 	t.Parallel()
 
-	fake := &recordingEdge{}
+	fake := &recordingEdge{kind: edge.KindCloudflare}
 	cfg := Config{
 		Edge:          fake,
 		StoreEndpoint: fakeStoreEndpoint,
@@ -1662,6 +1663,7 @@ func TestValidateTag(t *testing.T) {
 func TestCheckTagAvailable(t *testing.T) {
 	taggedHistory := func() *recordingEdge {
 		return &recordingEdge{
+			kind: edge.KindCloudflare,
 			history: []edge.HistoryEntry{
 				{Promotion: edge.Promotion{PromotionID: "promo-1", Tag: "v1.2.3"}, Active: true},
 			},
@@ -1755,7 +1757,7 @@ func (l *orderTrackingLedger) PutStaged(ctx context.Context, record edge.Deploym
 
 func TestReconcileStack(t *testing.T) {
 	t.Run("threads state across multiple specs", func(t *testing.T) {
-		fake := &recordingEdge{}
+		fake := &recordingEdge{kind: edge.KindCloudflare}
 		ctx := context.Background()
 		specs := []edge.StackSpec{
 			{Version: "v1", Program: &edge.ProgramSpec{Name: "web-generic"}},
@@ -1776,7 +1778,7 @@ func TestReconcileStack(t *testing.T) {
 	})
 
 	t.Run("a stack that never reconciled escapes with no state", func(t *testing.T) {
-		fake := &recordingEdge{reconcileErr: errors.New("the preview substrate is not bootstrapped")}
+		fake := &recordingEdge{kind: edge.KindCloudflare, reconcileErr: errors.New("the preview substrate is not bootstrapped")}
 		cfg := Config{Class: deploymentsv1.Environment_CLASS_PREVIEW, Slug: "proj", GlobalPreviewDomain: "preview.acme.com"}
 		marked := MarkGlobalPreview(nil, cfg, &deploymentsv1.Manifest{Slug: "proj"})
 
@@ -1793,7 +1795,7 @@ func TestReconcileStack(t *testing.T) {
 	})
 
 	t.Run("no specs returns prior unchanged", func(t *testing.T) {
-		fake := &recordingEdge{}
+		fake := &recordingEdge{kind: edge.KindCloudflare}
 		ctx := context.Background()
 		prior := edge.StackState{edge.StackKeyEndpoint: "https://prior"}
 
@@ -2142,6 +2144,43 @@ func TestCheckTagAvailableOnAnEdgeThatRecordsNoStoreEndpoint(t *testing.T) {
 	}
 	if err := checkTagAvailable(context.Background(), cfg, "v2.0.0"); err != nil {
 		t.Errorf("checkTagAvailable rejected a fresh tag: %v", err)
+	}
+}
+
+func TestCheckTagAvailableCarriesTheStoreThisDeployNames(t *testing.T) {
+	t.Parallel()
+
+	fake := &recordingEdge{kind: edge.KindCloudflare, secret: "fake-secret"}
+	cfg := Config{
+		Edge:          fake,
+		Slug:          "shop",
+		StoreEndpoint: fakeStoreEndpoint,
+		StackState:    edge.StackState{edge.StackKeySecret: "fake-secret"},
+	}
+
+	if err := checkTagAvailable(context.Background(), cfg, "v1.2.3"); err != nil {
+		t.Fatalf("checkTagAvailable: %v", err)
+	}
+	if len(fake.opens) == 0 {
+		t.Fatal("no stack opened, want the tag check to open one")
+	}
+	opened := fake.opens[0]
+	if opened[edge.StackKeyEndpoint] != fakeStoreEndpoint || opened[edge.StackKeySlug] != "shop" {
+		t.Errorf("opened state = %v, want it to name this deploy's store and slug, as the schema check does", opened)
+	}
+}
+
+func TestCheckTagAvailableOnACloudflareStackWithNoStoreEndpoint(t *testing.T) {
+	t.Parallel()
+
+	cfg := Config{
+		Edge:       cloudflare.New(),
+		Slug:       "shop",
+		StackState: edge.StackState{edge.StackKeySlug: "shop", edge.StackKeySecret: "fake-secret"},
+	}
+
+	if err := checkTagAvailable(context.Background(), cfg, "v1.2.3"); err != nil {
+		t.Errorf("checkTagAvailable = %v, want a stack whose store was never bootstrapped to hold no tag", err)
 	}
 }
 
