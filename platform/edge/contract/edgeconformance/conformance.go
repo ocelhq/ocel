@@ -52,9 +52,8 @@ func Run(t *testing.T, suite Suite) {
 		}
 	})
 
-	t.Run("support is the kind's declared support", func(t *testing.T) {
+	t.Run("Supports and Supported answer alike", func(t *testing.T) {
 		e, _ := suite.New(t)
-		declared := edge.CapabilitiesOf(e.Kind()).Supported()
 		supported := e.Supported()
 		for _, need := range supported {
 			if !edge.ValidNeed(need) {
@@ -65,21 +64,15 @@ func Run(t *testing.T, suite Suite) {
 			}
 		}
 		for _, need := range edge.AllNeeds() {
-			if want := slices.Contains(declared, need); e.Supports(need) != want {
-				t.Errorf("Supports(%q) = %v, but %s declares %v", need, e.Supports(need), e.Kind(), want)
-			}
 			if e.Supports(need) && !slices.Contains(supported, need) {
 				t.Errorf("Supports(%q) is true but Supported() omits it", need)
 			}
 		}
 	})
 
-	t.Run("the flip bound is the kind's declared bound", func(t *testing.T) {
+	t.Run("the flip bound is one a caller can wait out", func(t *testing.T) {
 		e, _ := suite.New(t)
 		bound := e.FlipBound()
-		if want := edge.CapabilitiesOf(e.Kind()).FlipBound(); bound != want {
-			t.Errorf("FlipBound() = %+v, want %s's declared bound %+v", bound, e.Kind(), want)
-		}
 		if bound.Typical < 0 {
 			t.Errorf("FlipBound().Typical = %v, want a duration a caller can wait out", bound.Typical)
 		}
@@ -327,12 +320,12 @@ func frontedRecords(t *testing.T, e edge.Edge, state edge.StackState, hostname s
 	if !slices.Contains(bound, hostname) {
 		t.Fatalf("bound domains = %v, want %q among them", bound, hostname)
 	}
-	target := edge.TargetFor(e.Kind(), state)
+	target := edge.TargetFor(e, state)
 	front := target.FrontFor(hostname)
 	want := edge.Record{Name: hostname, Type: edge.RecordTypeCNAME, Value: front}
-	if e.Kind() == edge.KindCloudflare {
+	if target.ServesUnbound {
 		if front != "" {
-			t.Errorf("the front for %q is %q, but a cloudflare edge answers on the zone itself and publishes none", hostname, front)
+			t.Errorf("the front for %q is %q, but a %s edge answers on the zone itself and publishes none", hostname, front, e.Kind())
 		}
 		want = edge.Record{Name: hostname, Type: edge.RecordTypeAAAA, Value: edge.ProxyPlaceholder, Proxied: true}
 	} else if front == "" {

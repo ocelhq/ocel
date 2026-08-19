@@ -12,6 +12,7 @@ import (
 	ssmtypes "github.com/aws/aws-sdk-go-v2/service/ssm/types"
 
 	"github.com/ocelhq/ocel/platform/aws/provider/certs"
+	cloudflare "github.com/ocelhq/ocel/platform/edge/cloudflare/deploy"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
@@ -54,7 +55,7 @@ func (d PreviewDomain) Holder() (edge.Kind, bool) {
 	case d.Edge != "":
 		return d.Edge, true
 	case d.CloudflareAccount != "":
-		return edge.KindCloudflare, true
+		return cloudflare.Kind, true
 	default:
 		return "", false
 	}

@@ -3,7 +3,18 @@ package bootstrap
 import (
 	"context"
 	"fmt"
+
+	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
+
+type PromoteInvalidator interface {
+	InvalidatesOnPromote() bool
+}
+
+func invalidatesOnPromote(front edge.Edge) bool {
+	invalidator, ok := front.(PromoteInvalidator)
+	return ok && invalidator.InvalidatesOnPromote()
+}
 
 const (
 	tagInvalidatorAssetName = "tag-invalidator.zip"

@@ -19,6 +19,7 @@ import (
 	"github.com/ocelhq/ocel/platform/aws/provider/certs"
 	"github.com/ocelhq/ocel/platform/aws/provider/deploy"
 	"github.com/ocelhq/ocel/platform/aws/provider/dns"
+	cloudflare "github.com/ocelhq/ocel/platform/edge/cloudflare/deploy"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
@@ -87,7 +88,7 @@ func (s *Server) runUseDomain(ctx context.Context, req *deploymentsv1.UseDomainR
 		return err
 	}
 
-	edgeFront, err := s.edge(edge.Kind(req.GetEdgeKind()), awscfg.Region)
+	edgeFront, err := s.edge(requestedEdge(req), awscfg.Region)
 	if err != nil {
 		return err
 	}
@@ -122,7 +123,7 @@ func (s *Server) runUseDomain(ctx context.Context, req *deploymentsv1.UseDomainR
 		writer: writer,
 		poller: dns.NewPoller(),
 		flow: certs.Flow{
-			Issuer: certs.IssuerFor(edgeFront.Kind(), certs.Deps{AWS: awscfg}),
+			Issuer: certs.IssuerFor(edgeFront, certs.Deps{AWS: awscfg}),
 			Writer: writer,
 			Prober: certs.NewProber(),
 		},
@@ -519,7 +520,7 @@ func sharedEntryRouteInstalled(ctx context.Context, owner routeOwnerFunc, baseDo
 }
 
 func cloudflareAccountOf(kind edge.Kind) string {
-	if kind != edge.KindCloudflare {
+	if kind != cloudflare.Kind {
 		return ""
 	}
 	return os.Getenv(cloudflareAccountEnvVar)

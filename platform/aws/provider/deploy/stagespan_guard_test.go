@@ -5,6 +5,7 @@ import (
 	"errors"
 	"testing"
 
+	cloudflare "github.com/ocelhq/ocel/platform/edge/cloudflare/deploy"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
@@ -92,7 +93,7 @@ func TestRemovePreviewSpansEveryDeclaredRootStage(t *testing.T) {
 
 		ft := &fakeTracer{}
 		stages := newPreviewRemovalStagesForTest(false)
-		fake := &recordingEdge{kind: edge.KindCloudflare}
+		fake := &recordingEdge{kind: cloudflare.Kind}
 		ctx := context.Background()
 		state := fake.reconciled(t, edge.StackSpec{Version: "v1", Slug: "shop"})
 
@@ -107,7 +108,7 @@ func TestRemovePreviewSpansEveryDeclaredRootStage(t *testing.T) {
 
 		ft := &fakeTracer{}
 		stages := newPreviewRemovalStagesForTest(false)
-		fake := &recordingEdge{kind: edge.KindCloudflare}
+		fake := &recordingEdge{kind: cloudflare.Kind}
 		stale := edge.StackState{edge.StackKeySlug: "shop", edge.StackKeySecret: "stale"}
 
 		if err := RemovePreview(context.Background(), fake.opened(t, stale), Config{Tracer: ft}, "shop", "pr-1", false, stages, nil); err == nil {
@@ -121,7 +122,7 @@ func TestRemovePreviewSpansEveryDeclaredRootStage(t *testing.T) {
 
 		ft := &fakeTracer{}
 		stages := newPreviewRemovalStagesForTest(true)
-		fake := &recordingEdge{kind: edge.KindCloudflare}
+		fake := &recordingEdge{kind: cloudflare.Kind}
 		ctx := context.Background()
 		state := fake.reconciled(t, edge.StackSpec{Version: "v1", Slug: "shop"})
 
@@ -140,7 +141,7 @@ func TestPruneSpansTheStagesItActuallyRuns(t *testing.T) {
 
 		ft := &fakeTracer{}
 		stages := PruneStages{Diff: NewRootStage("Diff"), Reclaim: NewRootStage("Reclaim")}
-		fake := &recordingEdge{kind: edge.KindCloudflare}
+		fake := &recordingEdge{kind: cloudflare.Kind}
 		ctx := context.Background()
 		state := fake.reconciled(t, edge.StackSpec{Version: "v1", Slug: "shop"})
 
@@ -155,7 +156,7 @@ func TestPruneSpansTheStagesItActuallyRuns(t *testing.T) {
 
 		ft := &fakeTracer{}
 		stages := PruneStages{Diff: NewRootStage("Diff"), Reclaim: NewRootStage("Reclaim")}
-		fake := &recordingEdge{kind: edge.KindCloudflare}
+		fake := &recordingEdge{kind: cloudflare.Kind}
 		stale := edge.StackState{edge.StackKeySlug: "shop", edge.StackKeySecret: "stale"}
 
 		if _, err := Prune(context.Background(), fake.opened(t, stale), Config{Tracer: ft}, "shop", 3, "", stages, nil); err == nil {

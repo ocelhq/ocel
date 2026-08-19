@@ -6,6 +6,8 @@ import (
 
 	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
 	"github.com/ocelhq/ocel/platform/aws/provider/bootstrap"
+	"github.com/ocelhq/ocel/platform/aws/provider/edges/cloudfront"
+	cloudflare "github.com/ocelhq/ocel/platform/edge/cloudflare/deploy"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
@@ -57,7 +59,7 @@ func releasePlanItems(kind edge.Kind, recorded bootstrap.PreviewDomain) []*deplo
 }
 
 func releaseKeptItem(kind edge.Kind) *deploymentsv1.TeardownItem {
-	if kind == edge.KindCloudflare {
+	if kind == cloudflare.Kind {
 		return &deploymentsv1.TeardownItem{
 			Kind:   "preview substrate",
 			Name:   bootstrap.ClassPreview,
@@ -70,14 +72,14 @@ func releaseKeptItem(kind edge.Kind) *deploymentsv1.TeardownItem {
 
 func wildcardItem(kind edge.Kind, wildcard string) *deploymentsv1.TeardownItem {
 	switch kind {
-	case edge.KindCloudflare:
+	case cloudflare.Kind:
 		return &deploymentsv1.TeardownItem{
 			Kind:   "preview entry worker",
 			Name:   wildcard,
 			Action: deploymentsv1.TeardownItem_ACTION_DELETE,
 			Reason: "the shared entry worker holding this wildcard, and the route that reaches it",
 		}
-	case edge.KindNative:
+	case cloudfront.Kind:
 		return &deploymentsv1.TeardownItem{
 			Kind:   "wildcard distribution",
 			Name:   wildcard,

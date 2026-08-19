@@ -10,17 +10,39 @@ import (
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
+const (
+	unboundEdgeKind      edge.Kind = "unbound-edge"
+	frontedEdgeKind      edge.Kind = "fronted-edge"
+	otherFrontedEdgeKind edge.Kind = "other-fronted-edge"
+)
+
+type uncertifiedEdge struct{ edge.Edge }
+
+type certifyingEdge struct {
+	edge.Edge
+	region string
+}
+
+func (c certifyingEdge) CertificateRegion(apiRegion string) string {
+	if c.region == "" {
+		return apiRegion
+	}
+	return c.region
+}
+
 func TestRegionFor(t *testing.T) {
 	t.Parallel()
 
-	for kind, want := range map[edge.Kind]string{
-		edge.KindCloudflare: "",
-		edge.KindNative:     CloudFrontRegion,
-		edge.KindNone:       "eu-west-2",
-		"fastly":            "",
+	for name, tc := range map[string]struct {
+		front edge.Edge
+		want  string
+	}{
+		"an edge that certifies nothing is handed no region": {uncertifiedEdge{}, ""},
+		"an edge that pins a region takes it":                {certifyingEdge{region: CloudFrontRegion}, CloudFrontRegion},
+		"an edge that certifies where the API lives":         {certifyingEdge{}, "eu-west-2"},
 	} {
-		if got := RegionFor(kind, "eu-west-2"); got != want {
-			t.Errorf("RegionFor(%s) = %q, want %q", kind, got, want)
+		if got := RegionFor(tc.front, "eu-west-2"); got != tc.want {
+			t.Errorf("%s: RegionFor = %q, want %q", name, got, tc.want)
 		}
 	}
 }
@@ -28,14 +50,14 @@ func TestRegionFor(t *testing.T) {
 func TestIssuerFor(t *testing.T) {
 	t.Parallel()
 
-	cloudflare := IssuerFor(edge.KindCloudflare, Deps{AWS: aws.Config{Region: "eu-west-2"}})
-	if cloudflare.API != nil {
-		t.Error("cloudflare was handed an ACM client; it terminates TLS itself")
+	uncertified := IssuerFor(uncertifiedEdge{}, Deps{AWS: aws.Config{Region: "eu-west-2"}})
+	if uncertified.API != nil {
+		t.Error("an edge that certifies nothing was handed an ACM client; it terminates TLS itself")
 	}
 
-	native := IssuerFor(edge.KindNative, Deps{AWS: aws.Config{Region: "eu-west-2"}})
-	if native.API == nil || native.Region != CloudFrontRegion {
-		t.Errorf("issuer = %+v, want an ACM client in %s", native, CloudFrontRegion)
+	pinned := IssuerFor(certifyingEdge{region: CloudFrontRegion}, Deps{AWS: aws.Config{Region: "eu-west-2"}})
+	if pinned.API == nil || pinned.Region != CloudFrontRegion {
+		t.Errorf("issuer = %+v, want an ACM client in %s", pinned, CloudFrontRegion)
 	}
 }
 

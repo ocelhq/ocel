@@ -412,7 +412,7 @@ export default {
 		}
 		out := stdout.String()
 		for _, want := range []string{
-			"DOMAIN ADD slug=test-app hosts=shop.app.com,www.app.com dns=cloudflare edge=native",
+			"DOMAIN ADD slug=test-app hosts=shop.app.com,www.app.com dns=cloudflare edge=cloudfront",
 			"Requesting a certificate for shop.app.com, www.app.com",
 			"Binding shop.app.com to the cloudflare edge",
 			"Writing shop.app.com AAAA 100::",
@@ -547,7 +547,7 @@ export default {
 		}
 		out := stdout.String()
 		for _, want := range []string{
-			"DOMAIN RM slug=test-app host= configured=shop.app.com dns=cloudflare edge=native",
+			"DOMAIN RM slug=test-app host= configured=shop.app.com dns=cloudflare edge=cloudfront",
 			"Removed every hostname this project no longer declares",
 		} {
 			if !strings.Contains(out, want) {

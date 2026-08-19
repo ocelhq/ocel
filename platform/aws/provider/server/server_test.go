@@ -18,6 +18,7 @@ import (
 	linksv1 "github.com/ocelhq/ocel/pkg/proto/links/v1"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/resources/v1"
 	"github.com/ocelhq/ocel/platform/aws/provider/bootstrap"
+	cloudflare "github.com/ocelhq/ocel/platform/edge/cloudflare/deploy"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
@@ -570,41 +571,26 @@ func TestServerEdge(t *testing.T) {
 		t.Parallel()
 
 		s := &Server{}
-		first, err := s.edge(edge.KindCloudflare, "eu-west-1")
+		first, err := s.edge(cloudflare.Kind, "eu-west-1")
 		if err != nil {
 			t.Fatalf("edge() error = %v", err)
 		}
-		second, err := s.edge(edge.KindCloudflare, "eu-west-1")
+		second, err := s.edge(cloudflare.Kind, "eu-west-1")
 		if err != nil {
 			t.Fatalf("second edge() error = %v", err)
 		}
 		if first != second {
 			t.Error("edge() handed out two edges, want one so its zone lookups are remembered")
 		}
-		if first.Kind() != edge.KindCloudflare {
+		if first.Kind() != cloudflare.Kind {
 			t.Errorf("Kind() = %q, want the kind this origin constructs today", first.Kind())
 		}
-		elsewhere, err := s.edge(edge.KindCloudflare, "us-east-1")
+		elsewhere, err := s.edge(cloudflare.Kind, "us-east-1")
 		if err != nil {
 			t.Fatalf("edge() in another region: %v", err)
 		}
 		if first == elsewhere {
 			t.Error("edge() handed one region's edge to another; an edge holds the clients of the region it was opened for")
-		}
-	})
-
-	t.Run("an unnamed kind is refused rather than defaulted to one", func(t *testing.T) {
-		t.Parallel()
-
-		s := &Server{}
-		_, err := s.edge("", "eu-west-1")
-		if err == nil {
-			t.Fatal("edge(\"\") error = nil, want a request that names no edge refused: an omitted kind is a stale CLI, not a default")
-		}
-		for _, want := range edge.KindNames(edge.AllKinds()) {
-			if !strings.Contains(err.Error(), want) {
-				t.Errorf("err = %v, want it to name %q as an edge the CLI may send", err, want)
-			}
 		}
 	})
 
@@ -615,11 +601,11 @@ func TestServerEdge(t *testing.T) {
 		if _, err := s.edge(unfrontedKind, "eu-west-1"); err == nil {
 			t.Fatalf("edge(%s) error = nil, want it refused: this origin fronts nothing with it", unfrontedKind)
 		}
-		got, err := s.edge(edge.KindCloudflare, "eu-west-1")
+		got, err := s.edge(cloudflare.Kind, "eu-west-1")
 		if err != nil {
 			t.Fatalf("edge(cloudflare) after the refusal: %v", err)
 		}
-		if got.Kind() != edge.KindCloudflare {
+		if got.Kind() != cloudflare.Kind {
 			t.Errorf("Kind() = %q, want the refusal to have left this kind alone", got.Kind())
 		}
 	})

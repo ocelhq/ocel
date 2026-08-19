@@ -19,10 +19,12 @@ type Deps struct {
 }
 
 var constructors = map[edge.Kind]func(Deps) edge.Edge{
-	edge.KindCloudflare: func(Deps) edge.Edge { return cloudflare.New() },
-	edge.KindNative:     func(deps Deps) edge.Edge { return cloudfront.New(cloudfront.FromConfig(deps.AWS)) },
-	edge.KindNone:       func(deps Deps) edge.Edge { return apigateway.New(apigateway.FromConfig(deps.AWS)) },
+	cloudflare.Kind: func(Deps) edge.Edge { return cloudflare.New() },
+	cloudfront.Kind: func(deps Deps) edge.Edge { return cloudfront.New(cloudfront.FromConfig(deps.AWS)) },
+	apigateway.Kind: func(deps Deps) edge.Edge { return apigateway.New(apigateway.FromConfig(deps.AWS)) },
 }
+
+const DefaultKind = cloudfront.Kind
 
 func SupportedEdges() []edge.Kind {
 	kinds := make([]edge.Kind, 0, len(constructors))

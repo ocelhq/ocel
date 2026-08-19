@@ -61,7 +61,7 @@ func createError(what, name string, err error) error {
 	)
 	switch {
 	case errors.As(err, &tooManyDistributions):
-		return fmt.Errorf("create the %s %q: this account is at its CloudFront limit, so there is no room for another distribution. Every project the native edge fronts gets one distribution, and the account-wide ceiling is the \"Distributions per account\" quota for Amazon CloudFront. Open the Service Quotas console, find Amazon CloudFront, request an increase on that quota, and deploy again once AWS grants it. If you would rather not raise it, run `ocel destroy` on a project you no longer serve and the next deploy will fit: %w", what, name, err)
+		return fmt.Errorf("create the %s %q: this account is at its CloudFront limit, so there is no room for another distribution. Every project the %q edge fronts gets one distribution, and the account-wide ceiling is the \"Distributions per account\" quota for Amazon CloudFront. Open the Service Quotas console, find Amazon CloudFront, request an increase on that quota, and deploy again once AWS grants it. If you would rather not raise it, run `ocel destroy` on a project you no longer serve and the next deploy will fit: %w", what, name, Kind, err)
 	case errors.As(err, &tooManyAliases):
 		return fmt.Errorf("create the %s %q: this distribution already carries as many alternate domain names as CloudFront allows. Unbind a hostname this project no longer serves, or request an increase on the \"Alternate domain names (CNAMEs) per distribution\" quota for Amazon CloudFront: %w", what, name, err)
 	case throttled(err):

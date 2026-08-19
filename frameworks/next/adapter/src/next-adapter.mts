@@ -42,7 +42,7 @@ export const middlewareEntryKey = "/_middleware";
 const programmableEdgeKind = "cloudflare";
 
 function isProgrammableEdge(kind: string | undefined): boolean {
-  return !kind || kind === programmableEdgeKind;
+  return kind === programmableEdgeKind;
 }
 
 function waivedNeeds(declared: string | undefined): Set<string> {

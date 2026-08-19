@@ -5,12 +5,24 @@ import (
 	"time"
 
 	"github.com/ocelhq/ocel/platform/aws/provider/deploy"
+	"github.com/ocelhq/ocel/platform/aws/provider/edges"
+	"github.com/ocelhq/ocel/platform/aws/provider/edges/apigateway"
+	"github.com/ocelhq/ocel/platform/aws/provider/edges/cloudfront"
+	cloudflare "github.com/ocelhq/ocel/platform/edge/cloudflare/deploy"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
+func registeredEdge(kind edge.Kind) edge.Edge {
+	front, err := edges.EdgeFor(kind, edges.Deps{})
+	if err != nil {
+		panic("no edge for " + string(kind) + ": " + err.Error())
+	}
+	return front
+}
+
 func TestPromotionCarriesTheRecordedFlipBound(t *testing.T) {
-	for _, kind := range []edge.Kind{edge.KindCloudflare, edge.KindNative, edge.KindNone} {
-		bound := edge.CapabilitiesOf(kind).FlipBound()
+	for _, kind := range []edge.Kind{cloudflare.Kind, cloudfront.Kind, apigateway.Kind} {
+		bound := registeredEdge(kind).FlipBound()
 		got := toPromotionProto(edge.Promotion{PromotionID: "promo-1", Flip: &bound}).GetFlipBound()
 		if got == nil {
 			t.Fatalf("%s promotion carries no flip bound, want the edge's declared %v", kind, bound)

@@ -72,7 +72,7 @@ func requireInvokeRole(ctx context.Context, c Clients, class edge.Class) (string
 		return "", err
 	}
 	if !found {
-		return "", fmt.Errorf("the %s role API Gateway invokes this project's functions through does not exist in this account, so the none edge has nothing to front the deployment with. It is created once per account when you bootstrap, and this deploy will not create it: run `%s` and deploy again", name, bootstrapCommandFor(class))
+		return "", fmt.Errorf("the %s role API Gateway invokes this project's functions through does not exist in this account, so the %q edge has nothing to front the deployment with. It is created once per account when you bootstrap, and this deploy will not create it: run `%s` and deploy again", name, Kind, bootstrapCommandFor(class))
 	}
 	return arn, nil
 }

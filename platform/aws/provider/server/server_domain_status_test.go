@@ -16,6 +16,9 @@ import (
 	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
 	"github.com/ocelhq/ocel/platform/aws/provider/bootstrap"
 	"github.com/ocelhq/ocel/platform/aws/provider/certs"
+	"github.com/ocelhq/ocel/platform/aws/provider/edges/apigateway"
+	"github.com/ocelhq/ocel/platform/aws/provider/edges/cloudfront"
+	cloudflare "github.com/ocelhq/ocel/platform/edge/cloudflare/deploy"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
@@ -28,7 +31,7 @@ const (
 )
 
 func fakeIssuer(kind edge.Kind, api certs.ACMAPI) certs.Issuer {
-	issuer := certs.IssuerFor(kind, certs.Deps{AWS: aws.Config{Region: domainAPIRegion}})
+	issuer := certs.IssuerFor(registeredEdge(kind), certs.Deps{AWS: aws.Config{Region: domainAPIRegion}})
 	if issuer.API == nil {
 		return certs.Issuer{}
 	}
@@ -39,7 +42,7 @@ func fakeIssuer(kind edge.Kind, api certs.ACMAPI) certs.Issuer {
 }
 
 func certARNFor(kind edge.Kind) string {
-	region := certs.RegionFor(kind, domainAPIRegion)
+	region := certs.RegionFor(registeredEdge(kind), domainAPIRegion)
 	if region == "" {
 		return ""
 	}
@@ -58,7 +61,7 @@ func issuedProduction(arn string, hosts ...string) bootstrap.Production {
 			Hostname:    host,
 			Certificate: arn,
 			Written:     []edge.Record{{Name: host, Type: edge.RecordTypeAAAA, Value: edge.ProxyPlaceholder, Proxied: true}},
-			Probe:       certs.Probe{At: time.Unix(1755500000, 0).UTC(), Edge: edge.KindCloudflare, OK: true},
+			Probe:       certs.Probe{At: time.Unix(1755500000, 0).UTC(), Edge: cloudflare.Kind, OK: true},
 		})
 	}
 	return recorded
@@ -66,7 +69,7 @@ func issuedProduction(arn string, hosts ...string) bootstrap.Production {
 
 func servingStack(kind edge.Kind, hosts ...string) *boundStack {
 	state := edge.StackState{edge.StackKeySlug: domainSlug}
-	if kind != edge.KindCloudflare {
+	if kind != cloudflare.Kind {
 		state[edge.StackKeyFront] = domainFront
 	}
 	for _, host := range hosts {
@@ -76,7 +79,7 @@ func servingStack(kind edge.Kind, hosts ...string) *boundStack {
 }
 
 func certifiedKinds() []edge.Kind {
-	return []edge.Kind{edge.KindNative, edge.KindNone}
+	return []edge.Kind{cloudfront.Kind, apigateway.Kind}
 }
 
 func TestDomainStatus(t *testing.T) {
@@ -112,7 +115,7 @@ func TestDomainStatus(t *testing.T) {
 				t.Errorf("host = %+v, want the declared host ready with nothing outstanding", host)
 			}
 			if host.GetCertificateId() != arn || host.GetCertificateStatus() != certs.StatusIssued {
-				t.Errorf("host certificate = %q %q, want the issued one in %s", host.GetCertificateId(), host.GetCertificateStatus(), certs.RegionFor(kind, domainAPIRegion))
+				t.Errorf("host certificate = %q %q, want the issued one in %s", host.GetCertificateId(), host.GetCertificateStatus(), certs.RegionFor(registeredEdge(kind), domainAPIRegion))
 			}
 			if host.GetRenewalStatus() != string(acmtypes.RenewalStatusSuccess) || host.GetExpiresAt() == 0 || host.GetExpiringSoon() {
 				t.Errorf("host renewal = %q, expires %d, soon %t; want a renewed certificate with a reported expiry", host.GetRenewalStatus(), host.GetExpiresAt(), host.GetExpiringSoon())
@@ -158,9 +161,9 @@ func TestDomainStatus(t *testing.T) {
 		t.Parallel()
 
 		f := newDomainFixture(domainFixtureOptions{
-			kind:       edge.KindCloudflare,
+			kind:       cloudflare.Kind,
 			configured: []string{"shop.app.com"},
-			stack:      servingStack(edge.KindCloudflare, "shop.app.com"),
+			stack:      servingStack(cloudflare.Kind, "shop.app.com"),
 			prior:      issuedProduction(domainCertARN, "shop.app.com"),
 		})
 
@@ -172,7 +175,7 @@ func TestDomainStatus(t *testing.T) {
 		if host.GetCertificateId() != "" || host.GetCertificateStatus() != "" || host.GetExpiresAt() != 0 {
 			t.Errorf("host = %+v, want no certificate reported for an edge that terminates TLS with its own", host)
 		}
-		if !host.GetReady() || host.GetServingPointer() != string(edge.KindCloudflare) {
+		if !host.GetReady() || host.GetServingPointer() != string(cloudflare.Kind) {
 			t.Errorf("host = %+v, want the bound, answering host ready and served by the cloudflare role", host)
 		}
 	})
@@ -181,9 +184,9 @@ func TestDomainStatus(t *testing.T) {
 		t.Parallel()
 
 		f := newDomainFixture(domainFixtureOptions{
-			kind:       edge.KindCloudflare,
+			kind:       cloudflare.Kind,
 			configured: []string{"shop.app.com"},
-			stack:      servingStack(edge.KindCloudflare, "shop.app.com"),
+			stack:      servingStack(cloudflare.Kind, "shop.app.com"),
 			prior:      issuedProduction(domainCertARN, "shop.app.com"),
 		})
 
@@ -199,9 +202,9 @@ func TestDomainStatus(t *testing.T) {
 		t.Parallel()
 
 		f := newDomainFixture(domainFixtureOptions{
-			kind:       edge.KindCloudflare,
+			kind:       cloudflare.Kind,
 			configured: []string{"shop.app.com"},
-			stack:      servingStack(edge.KindCloudflare, "shop.app.com"),
+			stack:      servingStack(cloudflare.Kind, "shop.app.com"),
 			prior:      issuedProduction(domainCertARN, "shop.app.com"),
 			probe:      "someone-else",
 		})
@@ -228,11 +231,11 @@ func TestDomainStatus(t *testing.T) {
 		api := newDomainACM()
 		api.describeErr = errDescribeRefused
 		f := newDomainFixture(domainFixtureOptions{
-			kind:       edge.KindNative,
+			kind:       cloudfront.Kind,
 			configured: []string{"shop.app.com"},
-			stack:      servingStack(edge.KindNative, "shop.app.com"),
+			stack:      servingStack(cloudfront.Kind, "shop.app.com"),
 			acm:        api,
-			prior:      issuedProduction(certARNFor(edge.KindNative), "shop.app.com"),
+			prior:      issuedProduction(certARNFor(cloudfront.Kind), "shop.app.com"),
 		})
 
 		if _, err := f.session.status(t.Context()); err == nil || !strings.Contains(err.Error(), "AccessDenied") {
@@ -248,9 +251,9 @@ func TestDomainStatus(t *testing.T) {
 		prior.Owed = []edge.Record{{Name: "_acme2.app.com", Type: edge.RecordTypeCNAME, Value: "validate2.acm-validations.aws"}}
 
 		f := newDomainFixture(domainFixtureOptions{
-			kind:       edge.KindCloudflare,
+			kind:       cloudflare.Kind,
 			configured: []string{"shop.app.com", "www.app.com"},
-			stack:      servingStack(edge.KindCloudflare, "shop.app.com", "www.app.com"),
+			stack:      servingStack(cloudflare.Kind, "shop.app.com", "www.app.com"),
 			prior:      prior,
 		})
 
@@ -278,7 +281,7 @@ func TestDomainStatus(t *testing.T) {
 		t.Parallel()
 
 		f := newDomainFixture(domainFixtureOptions{
-			kind:       edge.KindCloudflare,
+			kind:       cloudflare.Kind,
 			configured: []string{"shop.app.com"},
 			prior:      issuedProduction(domainCertARN, "shop.app.com"),
 		})
@@ -302,7 +305,7 @@ func TestDomainStatus(t *testing.T) {
 	t.Run("a host the config dropped is listed and points at rm", func(t *testing.T) {
 		t.Parallel()
 
-		f := newDomainFixture(domainFixtureOptions{kind: edge.KindCloudflare, prior: issuedProduction(domainCertARN, "old.app.com")})
+		f := newDomainFixture(domainFixtureOptions{kind: cloudflare.Kind, prior: issuedProduction(domainCertARN, "old.app.com")})
 
 		resp, err := f.session.status(t.Context())
 		if err != nil {
@@ -320,13 +323,13 @@ func TestDomainStatus(t *testing.T) {
 		t.Parallel()
 
 		api := newDomainACM()
-		api.issue(certARNFor(edge.KindNone), "shop.app.com")
+		api.issue(certARNFor(apigateway.Kind), "shop.app.com")
 		f := newDomainFixture(domainFixtureOptions{
-			kind:       edge.KindNone,
+			kind:       apigateway.Kind,
 			configured: []string{"shop.app.com"},
-			stack:      &boundStack{name: string(edge.KindNone), state: edge.RecordBoundDomain(edge.StackState{edge.StackKeySlug: domainSlug}, "shop.app.com")},
+			stack:      &boundStack{name: string(apigateway.Kind), state: edge.RecordBoundDomain(edge.StackState{edge.StackKeySlug: domainSlug}, "shop.app.com")},
 			acm:        api,
-			prior:      issuedProduction(certARNFor(edge.KindNone), "shop.app.com"),
+			prior:      issuedProduction(certARNFor(apigateway.Kind), "shop.app.com"),
 		})
 
 		if _, err := f.session.status(t.Context()); err == nil || !strings.Contains(err.Error(), "published no hostname") {
@@ -338,13 +341,13 @@ func TestDomainStatus(t *testing.T) {
 		t.Parallel()
 
 		api := newDomainACM()
-		api.issue(certARNFor(edge.KindNone), "shop.app.com")
+		api.issue(certARNFor(apigateway.Kind), "shop.app.com")
 		f := newDomainFixture(domainFixtureOptions{
-			kind:       edge.KindNone,
+			kind:       apigateway.Kind,
 			configured: []string{"shop.app.com"},
-			stack:      &boundStack{name: string(edge.KindNone), state: edge.StackState{edge.StackKeySlug: domainSlug}},
+			stack:      &boundStack{name: string(apigateway.Kind), state: edge.StackState{edge.StackKeySlug: domainSlug}},
 			acm:        api,
-			prior:      issuedProduction(certARNFor(edge.KindNone), "shop.app.com"),
+			prior:      issuedProduction(certARNFor(apigateway.Kind), "shop.app.com"),
 		})
 
 		resp, err := f.session.status(t.Context())
@@ -370,9 +373,9 @@ func TestDomainStatus(t *testing.T) {
 		t.Parallel()
 
 		f := newDomainFixture(domainFixtureOptions{
-			kind:       edge.KindCloudflare,
+			kind:       cloudflare.Kind,
 			configured: []string{"shop.app.com"},
-			stack:      &boundStack{name: string(edge.KindCloudflare), state: edge.StackState{edge.StackKeySlug: domainSlug}},
+			stack:      &boundStack{name: string(cloudflare.Kind), state: edge.StackState{edge.StackKeySlug: domainSlug}},
 			prior:      bootstrap.Production{},
 		})
 
@@ -394,11 +397,11 @@ func TestAddDomainAcrossEdgeModes(t *testing.T) {
 	prior = prior.WithHost(bootstrap.Provisioned{
 		Hostname:    "shop.app.com",
 		Certificate: domainCertARN,
-		Probe:       certs.Probe{At: time.Unix(1, 0), Edge: edge.KindNative, OK: true},
+		Probe:       certs.Probe{At: time.Unix(1, 0), Edge: cloudfront.Kind, OK: true},
 	})
 	prior.Certificate = certs.Certificate{}
 
-	native := &boundStack{name: string(edge.KindNative), state: edge.RecordBoundDomain(edge.StackState{}, "shop.app.com")}
+	native := &boundStack{name: string(cloudfront.Kind), state: edge.RecordBoundDomain(edge.StackState{}, "shop.app.com")}
 	writer := &domainWriter{}
 	f := newDomainFixture(domainFixtureOptions{
 		configured: []string{"shop.app.com"},
@@ -417,7 +420,7 @@ func TestAddDomainAcrossEdgeModes(t *testing.T) {
 		"bind shop.app.com on cloudflare",
 		"write shop.app.com AAAA 100::",
 		"probe https://shop.app.com/",
-		"unbind shop.app.com from native",
+		"unbind shop.app.com from cloudfront",
 	}
 	at := -1
 	for _, want := range wanted {
@@ -449,7 +452,9 @@ func liveGate(t *testing.T, kind edge.Kind, api *domainACM, answering bool, prio
 		seen = "someone-else"
 	}
 	return domainGate{
-		kind:     kind,
+		kind:          kind,
+		servesUnbound: edge.ServesUnbound(registeredEdge(kind)),
+
 		state:    state,
 		recorded: prior,
 		issuer:   fakeIssuer(kind, api),
@@ -481,7 +486,7 @@ func TestAdmitDomains(t *testing.T) {
 	t.Run("a production deploy without a declared hostname is refused", func(t *testing.T) {
 		t.Parallel()
 
-		_, err := admitDomains(t.Context(), domainGate{kind: edge.KindCloudflare}, deploymentsv1.Environment_CLASS_PRODUCTION, &deploymentsv1.Manifest{}, func(string) {})
+		_, err := admitDomains(t.Context(), domainGate{kind: cloudflare.Kind, servesUnbound: true}, deploymentsv1.Environment_CLASS_PRODUCTION, &deploymentsv1.Manifest{}, func(string) {})
 		if err == nil {
 			t.Fatal("admitDomains err = nil, want a refusal with nothing declared")
 		}
@@ -495,7 +500,7 @@ func TestAdmitDomains(t *testing.T) {
 	t.Run("a preview deploy without a wildcard is refused", func(t *testing.T) {
 		t.Parallel()
 
-		_, err := admitDomains(t.Context(), domainGate{kind: edge.KindCloudflare}, deploymentsv1.Environment_CLASS_PREVIEW, &deploymentsv1.Manifest{}, func(string) {})
+		_, err := admitDomains(t.Context(), domainGate{kind: cloudflare.Kind, servesUnbound: true}, deploymentsv1.Environment_CLASS_PREVIEW, &deploymentsv1.Manifest{}, func(string) {})
 		if err == nil {
 			t.Fatal("admitDomains err = nil, want a refusal with no preview wildcard")
 		}
@@ -509,7 +514,7 @@ func TestAdmitDomains(t *testing.T) {
 	t.Run("a preview deploy on the global wildcard is admitted", func(t *testing.T) {
 		t.Parallel()
 
-		gate := domainGate{kind: edge.KindCloudflare, previewOn: "preview.acme.com"}
+		gate := domainGate{kind: cloudflare.Kind, servesUnbound: true, previewOn: "preview.acme.com"}
 		if _, err := admitDomains(t.Context(), gate, deploymentsv1.Environment_CLASS_PREVIEW, &deploymentsv1.Manifest{}, func(string) {}); err != nil {
 			t.Fatalf("admitDomains err = %v, want the global wildcard to be enough", err)
 		}
@@ -522,7 +527,7 @@ func TestAdmitDomains(t *testing.T) {
 			Name:    "web",
 			Domains: map[string]*deploymentsv1.DomainList{"preview": {Hostnames: []string{"*.preview.acme.com"}}},
 		}}}
-		if _, err := admitDomains(t.Context(), domainGate{kind: edge.KindCloudflare}, deploymentsv1.Environment_CLASS_PREVIEW, manifest, func(string) {}); err != nil {
+		if _, err := admitDomains(t.Context(), domainGate{kind: cloudflare.Kind, servesUnbound: true}, deploymentsv1.Environment_CLASS_PREVIEW, manifest, func(string) {}); err != nil {
 			t.Fatalf("admitDomains err = %v, want an app-declared wildcard to be enough", err)
 		}
 	})
@@ -530,7 +535,7 @@ func TestAdmitDomains(t *testing.T) {
 	t.Run("the first production deploy is admitted, and withholds the vendor hostnames it would otherwise print", func(t *testing.T) {
 		t.Parallel()
 
-		gate := liveGate(t, edge.KindNative, newDomainACM(), false, bootstrap.Production{})
+		gate := liveGate(t, cloudfront.Kind, newDomainACM(), false, bootstrap.Production{})
 		gate.state = nil
 		admitted, err := admitDomains(t.Context(), gate, deploymentsv1.Environment_CLASS_PRODUCTION, productionManifest("shop.app.com"), func(string) {})
 		if err != nil {
@@ -547,8 +552,8 @@ func TestAdmitDomains(t *testing.T) {
 		t.Parallel()
 
 		api := newDomainACM()
-		api.issue(certARNFor(edge.KindNative), "shop.app.com")
-		gate := liveGate(t, edge.KindNative, api, true, issuedProduction(certARNFor(edge.KindNative), "shop.app.com"), "shop.app.com")
+		api.issue(certARNFor(cloudfront.Kind), "shop.app.com")
+		gate := liveGate(t, cloudfront.Kind, api, true, issuedProduction(certARNFor(cloudfront.Kind), "shop.app.com"), "shop.app.com")
 		admitted, err := admitDomains(t.Context(), gate, deploymentsv1.Environment_CLASS_PRODUCTION, productionManifest("shop.app.com"), func(string) {})
 		if err != nil {
 			t.Fatalf("admitDomains err = %v", err)
@@ -612,7 +617,7 @@ func TestAdmitDomains(t *testing.T) {
 			if err == nil {
 				t.Fatal("admitDomains err = nil, want a refusal for a certificate in another region")
 			}
-			for _, want := range []string{"ap-south-1", certs.RegionFor(kind, domainAPIRegion)} {
+			for _, want := range []string{"ap-south-1", certs.RegionFor(registeredEdge(kind), domainAPIRegion)} {
 				if !strings.Contains(err.Error(), want) {
 					t.Errorf("err = %v, want it to name %q", err, want)
 				}
@@ -663,10 +668,10 @@ func TestAdmitDomains(t *testing.T) {
 	t.Run("hosts sharing one certificate are described once", func(t *testing.T) {
 		t.Parallel()
 
-		arn := certARNFor(edge.KindNative)
+		arn := certARNFor(cloudfront.Kind)
 		api := newDomainACM()
 		api.issue(arn, "shop.app.com", "www.app.com")
-		gate := liveGate(t, edge.KindNative, api, true, issuedProduction(arn, "shop.app.com", "www.app.com"), "shop.app.com", "www.app.com")
+		gate := liveGate(t, cloudfront.Kind, api, true, issuedProduction(arn, "shop.app.com", "www.app.com"), "shop.app.com", "www.app.com")
 
 		if _, err := admitDomains(t.Context(), gate, deploymentsv1.Environment_CLASS_PRODUCTION, productionManifest("shop.app.com", "www.app.com"), func(string) {}); err != nil {
 			t.Fatalf("admitDomains err = %v", err)
@@ -680,7 +685,7 @@ func TestAdmitDomains(t *testing.T) {
 		t.Parallel()
 
 		api := newDomainACM()
-		gate := liveGate(t, edge.KindCloudflare, api, true, bootstrap.Production{}, "shop.app.com")
+		gate := liveGate(t, cloudflare.Kind, api, true, bootstrap.Production{}, "shop.app.com")
 		if _, err := admitDomains(t.Context(), gate, deploymentsv1.Environment_CLASS_PRODUCTION, productionManifest("shop.app.com"), func(string) {}); err != nil {
 			t.Fatalf("admitDomains err = %v, want a bound, answering host admitted without a certificate of ocel's own", err)
 		}
@@ -688,17 +693,17 @@ func TestAdmitDomains(t *testing.T) {
 			t.Errorf("described = %v, want no ACM call for an edge that terminates TLS with its own certificate", api.described)
 		}
 
-		unbound := liveGate(t, edge.KindCloudflare, api, true, bootstrap.Production{})
+		unbound := liveGate(t, cloudflare.Kind, api, true, bootstrap.Production{})
 		if _, err := admitDomains(t.Context(), unbound, deploymentsv1.Environment_CLASS_PRODUCTION, productionManifest("shop.app.com"), func(string) {}); err == nil {
 			t.Error("admitDomains err = nil, want the surface still demanded on cloudflare")
 		}
 
-		silent := liveGate(t, edge.KindCloudflare, api, false, bootstrap.Production{}, "shop.app.com")
+		silent := liveGate(t, cloudflare.Kind, api, false, bootstrap.Production{}, "shop.app.com")
 		if _, err := admitDomains(t.Context(), silent, deploymentsv1.Environment_CLASS_PRODUCTION, productionManifest("shop.app.com"), func(string) {}); err == nil {
 			t.Error("admitDomains err = nil, want a fresh probe still demanded on cloudflare")
 		}
 
-		pinned := liveGate(t, edge.KindCloudflare, api, true, bootstrap.Production{}, "shop.app.com")
+		pinned := liveGate(t, cloudflare.Kind, api, true, bootstrap.Production{}, "shop.app.com")
 		pinned.pins = map[string]string{"shop.app.com": domainCertARN}
 		var warned []string
 		if _, err := admitDomains(t.Context(), pinned, deploymentsv1.Environment_CLASS_PRODUCTION, productionManifest("shop.app.com"), func(m string) { warned = append(warned, m) }); err != nil {
@@ -712,15 +717,15 @@ func TestAdmitDomains(t *testing.T) {
 	t.Run("a hostname with no edge surface is refused, naming the surface", func(t *testing.T) {
 		t.Parallel()
 
-		arn := certARNFor(edge.KindNative)
+		arn := certARNFor(cloudfront.Kind)
 		api := newDomainACM()
 		api.issue(arn, "shop.app.com")
-		gate := liveGate(t, edge.KindNative, api, true, issuedProduction(arn, "shop.app.com"))
+		gate := liveGate(t, cloudfront.Kind, api, true, issuedProduction(arn, "shop.app.com"))
 		_, err := admitDomains(t.Context(), gate, deploymentsv1.Environment_CLASS_PRODUCTION, productionManifest("shop.app.com"), func(string) {})
 		if err == nil {
 			t.Fatal("admitDomains err = nil, want a refusal without an edge surface")
 		}
-		for _, want := range []string{"not bound to the native edge", "ocel domain add"} {
+		for _, want := range []string{"not bound to the cloudfront edge", "ocel domain add"} {
 			if !strings.Contains(err.Error(), want) {
 				t.Errorf("err = %v, want it to contain %q", err, want)
 			}
@@ -730,10 +735,10 @@ func TestAdmitDomains(t *testing.T) {
 	t.Run("a hostname nothing answers for is refused, naming the record", func(t *testing.T) {
 		t.Parallel()
 
-		arn := certARNFor(edge.KindNative)
+		arn := certARNFor(cloudfront.Kind)
 		api := newDomainACM()
 		api.issue(arn, "shop.app.com")
-		gate := liveGate(t, edge.KindNative, api, false, issuedProduction(arn, "shop.app.com"), "shop.app.com")
+		gate := liveGate(t, cloudfront.Kind, api, false, issuedProduction(arn, "shop.app.com"), "shop.app.com")
 		_, err := admitDomains(t.Context(), gate, deploymentsv1.Environment_CLASS_PRODUCTION, productionManifest("shop.app.com"), func(string) {})
 		if err == nil {
 			t.Fatal("admitDomains err = nil, want a refusal while nothing answers")
@@ -748,10 +753,10 @@ func TestAdmitDomains(t *testing.T) {
 	t.Run("every declared hostname is probed, and the first that fails names itself", func(t *testing.T) {
 		t.Parallel()
 
-		arn := certARNFor(edge.KindNative)
+		arn := certARNFor(cloudfront.Kind)
 		api := newDomainACM()
 		api.issue(arn, "shop.app.com", "www.app.com")
-		gate := liveGate(t, edge.KindNative, api, false, issuedProduction(arn, "shop.app.com", "www.app.com"), "shop.app.com", "www.app.com")
+		gate := liveGate(t, cloudfront.Kind, api, false, issuedProduction(arn, "shop.app.com", "www.app.com"), "shop.app.com", "www.app.com")
 
 		var probed sync.Map
 		gate.prober.Get = func(_ context.Context, target string) (http.Header, error) {

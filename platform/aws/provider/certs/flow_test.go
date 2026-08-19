@@ -64,9 +64,9 @@ func TestFlowSettle(t *testing.T) {
 		api := &fakeACM{steps: issuing}
 		writer := &fakeWriter{}
 		rec := &recorder{}
-		flow := Flow{Issuer: testIssuer(api, 5), Writer: writer, Prober: passingProber(t, "native")}
+		flow := Flow{Issuer: testIssuer(api, 5), Writer: writer, Prober: passingProber(t, string(frontedEdgeKind))}
 
-		got, err := flow.Settle(t.Context(), wildcard, edge.KindNative, Settlement{}, func(string) {}, rec.record)
+		got, err := flow.Settle(t.Context(), wildcard, frontedEdgeKind, Settlement{}, func(string) {}, rec.record)
 		if err != nil {
 			t.Fatalf("Settle: %v", err)
 		}
@@ -79,8 +79,8 @@ func TestFlowSettle(t *testing.T) {
 		if len(got.Owed) != 0 {
 			t.Errorf("owed = %+v, want nothing owed: ocel wrote the record", got.Owed)
 		}
-		if !got.Probe.OK || got.Probe.Edge != edge.KindNative {
-			t.Errorf("probe = %+v, want it passing against the native edge", got.Probe)
+		if !got.Probe.OK || got.Probe.Edge != frontedEdgeKind {
+			t.Errorf("probe = %+v, want it passing against the CloudFront edge", got.Probe)
 		}
 		if rec.steps[0].Certificate.ARN != testARN || rec.steps[0].Certificate.Issued() {
 			t.Errorf("first checkpoint = %+v, want the ARN recorded before the wait", rec.steps[0])
@@ -96,11 +96,11 @@ func TestFlowSettle(t *testing.T) {
 		api := &fakeACM{steps: issuing}
 		var said []string
 		var asked [][]edge.Record
-		flow := Flow{Issuer: testIssuer(api, 5), Prober: passingProber(t, "native"), Ask: func(records []edge.Record) {
+		flow := Flow{Issuer: testIssuer(api, 5), Prober: passingProber(t, string(frontedEdgeKind)), Ask: func(records []edge.Record) {
 			asked = append(asked, records)
 		}}
 
-		got, err := flow.Settle(t.Context(), wildcard, edge.KindNative, Settlement{}, func(m string) { said = append(said, m) }, func(Settlement) error { return nil })
+		got, err := flow.Settle(t.Context(), wildcard, frontedEdgeKind, Settlement{}, func(m string) { said = append(said, m) }, func(Settlement) error { return nil })
 		if err != nil {
 			t.Fatalf("Settle: %v", err)
 		}
@@ -116,10 +116,10 @@ func TestFlowSettle(t *testing.T) {
 		t.Parallel()
 
 		api := &fakeACM{steps: []acmStep{{status: StatusPendingValidation, validation: true}, {status: StatusIssued, validation: true}}}
-		flow := Flow{Issuer: testIssuer(api, 5), Writer: &fakeWriter{}, Prober: passingProber(t, "native")}
+		flow := Flow{Issuer: testIssuer(api, 5), Writer: &fakeWriter{}, Prober: passingProber(t, string(frontedEdgeKind))}
 		prior := Settlement{Certificate: Certificate{ARN: testARN, Region: CloudFrontRegion, Status: StatusPendingValidation}}
 
-		got, err := flow.Settle(t.Context(), wildcard, edge.KindNative, prior, func(string) {}, func(Settlement) error { return nil })
+		got, err := flow.Settle(t.Context(), wildcard, frontedEdgeKind, prior, func(string) {}, func(Settlement) error { return nil })
 		if err != nil {
 			t.Fatalf("Settle: %v", err)
 		}
@@ -136,10 +136,10 @@ func TestFlowSettle(t *testing.T) {
 
 		api := &fakeACM{steps: []acmStep{{status: StatusIssued}}}
 		writer := &fakeWriter{}
-		flow := Flow{Issuer: testIssuer(api, 5), Writer: writer, Prober: passingProber(t, "native")}
+		flow := Flow{Issuer: testIssuer(api, 5), Writer: writer, Prober: passingProber(t, string(frontedEdgeKind))}
 		prior := Settlement{Certificate: Certificate{ARN: testARN, Region: CloudFrontRegion, Status: StatusIssued, Domains: []string{wildcard}}}
 
-		got, err := flow.Settle(t.Context(), wildcard, edge.KindNative, prior, func(string) {}, func(Settlement) error { return nil })
+		got, err := flow.Settle(t.Context(), wildcard, frontedEdgeKind, prior, func(string) {}, func(Settlement) error { return nil })
 		if err != nil {
 			t.Fatalf("Settle: %v", err)
 		}
@@ -155,10 +155,10 @@ func TestFlowSettle(t *testing.T) {
 		t.Parallel()
 
 		api := &fakeACM{steps: issuing, describeErr: &acmtypes.ResourceNotFoundException{}}
-		flow := Flow{Issuer: testIssuer(api, 5), Writer: &fakeWriter{}, Prober: passingProber(t, "native")}
+		flow := Flow{Issuer: testIssuer(api, 5), Writer: &fakeWriter{}, Prober: passingProber(t, string(frontedEdgeKind))}
 		prior := Settlement{Certificate: Certificate{ARN: testARN, Region: CloudFrontRegion, Status: StatusIssued, Domains: []string{wildcard}}}
 
-		got, err := flow.Settle(t.Context(), wildcard, edge.KindNative, prior, func(string) {}, func(Settlement) error { return nil })
+		got, err := flow.Settle(t.Context(), wildcard, frontedEdgeKind, prior, func(string) {}, func(Settlement) error { return nil })
 		if err != nil {
 			t.Fatalf("Settle: %v", err)
 		}
@@ -177,9 +177,9 @@ func TestFlowSettle(t *testing.T) {
 			t.Error("probed again after a probe already passed for this edge")
 			return nil, nil
 		}, 1)}
-		prior := Settlement{Probe: Probe{OK: true, Edge: edge.KindCloudflare}}
+		prior := Settlement{Probe: Probe{OK: true, Edge: unboundEdgeKind}}
 
-		if _, err := flow.Settle(t.Context(), wildcard, edge.KindCloudflare, prior, func(string) {}, func(Settlement) error { return nil }); err != nil {
+		if _, err := flow.Settle(t.Context(), wildcard, unboundEdgeKind, prior, func(string) {}, func(Settlement) error { return nil }); err != nil {
 			t.Fatalf("Settle: %v", err)
 		}
 	})
@@ -190,11 +190,11 @@ func TestFlowSettle(t *testing.T) {
 		probed := false
 		flow := Flow{Prober: testProber(func(context.Context, string) (http.Header, error) {
 			probed = true
-			return headerNaming("cloudflare"), nil
+			return headerNaming(string(unboundEdgeKind)), nil
 		}, 2)}
-		prior := Settlement{Probe: Probe{OK: true, Edge: edge.KindNative}}
+		prior := Settlement{Probe: Probe{OK: true, Edge: frontedEdgeKind}}
 
-		if _, err := flow.Settle(t.Context(), wildcard, edge.KindCloudflare, prior, func(string) {}, func(Settlement) error { return nil }); err != nil {
+		if _, err := flow.Settle(t.Context(), wildcard, unboundEdgeKind, prior, func(string) {}, func(Settlement) error { return nil }); err != nil {
 			t.Fatalf("Settle: %v", err)
 		}
 		if !probed {
@@ -207,14 +207,14 @@ func TestFlowSettle(t *testing.T) {
 
 		api := &fakeACM{steps: issuing}
 		rec := &recorder{}
-		flow := Flow{Issuer: testIssuer(api, 5), Writer: &fakeWriter{}, Prober: passingProber(t, "native")}
+		flow := Flow{Issuer: testIssuer(api, 5), Writer: &fakeWriter{}, Prober: passingProber(t, string(frontedEdgeKind))}
 		prior := Settlement{
 			Certificate: Certificate{ARN: testARN, Region: CloudFrontRegion, Status: StatusIssued, Validation: []edge.Record{validationRecord}},
 			Written:     []edge.Record{validationRecord},
-			Probe:       Probe{OK: true, Edge: edge.KindNative},
+			Probe:       Probe{OK: true, Edge: frontedEdgeKind},
 		}
 
-		got, err := flow.Settle(t.Context(), wildcard, edge.KindNative, prior, func(string) {}, rec.record)
+		got, err := flow.Settle(t.Context(), wildcard, frontedEdgeKind, prior, func(string) {}, rec.record)
 		if err != nil {
 			t.Fatalf("Settle: %v", err)
 		}
@@ -227,10 +227,10 @@ func TestFlowSettle(t *testing.T) {
 		t.Parallel()
 
 		api := &fakeACM{steps: issuing}
-		flow := Flow{Issuer: testIssuer(api, 5), Writer: &fakeWriter{}, Prober: passingProber(t, "native")}
+		flow := Flow{Issuer: testIssuer(api, 5), Writer: &fakeWriter{}, Prober: passingProber(t, string(frontedEdgeKind))}
 		prior := Settlement{Certificate: Certificate{ARN: testARN, Region: "eu-west-2", Status: StatusIssued, Validation: []edge.Record{validationRecord}}}
 
-		got, err := flow.Settle(t.Context(), wildcard, edge.KindNative, prior, func(string) {}, func(Settlement) error { return nil })
+		got, err := flow.Settle(t.Context(), wildcard, frontedEdgeKind, prior, func(string) {}, func(Settlement) error { return nil })
 		if err != nil {
 			t.Fatalf("Settle: %v", err)
 		}
@@ -250,27 +250,27 @@ func TestFlowSettle(t *testing.T) {
 			return http.Header{}, nil
 		}, 2)}
 
-		_, err := flow.Settle(t.Context(), wildcard, edge.KindCloudflare, Settlement{}, func(string) {}, func(Settlement) error { return nil })
+		_, err := flow.Settle(t.Context(), wildcard, unboundEdgeKind, Settlement{}, func(string) {}, func(Settlement) error { return nil })
 		if err == nil || !strings.Contains(err.Error(), front.Value) {
 			t.Fatalf("err = %v, want the outstanding front record named", err)
 		}
 	})
 
-	t.Run("cloudflare asks for no certificate but is still probed", func(t *testing.T) {
+	t.Run("an edge that certifies nothing asks for no certificate but is still probed", func(t *testing.T) {
 		t.Parallel()
 
 		rec := &recorder{}
-		flow := Flow{Prober: passingProber(t, "cloudflare")}
+		flow := Flow{Prober: passingProber(t, string(unboundEdgeKind))}
 
-		got, err := flow.Settle(t.Context(), wildcard, edge.KindCloudflare, Settlement{}, func(string) {}, rec.record)
+		got, err := flow.Settle(t.Context(), wildcard, unboundEdgeKind, Settlement{}, func(string) {}, rec.record)
 		if err != nil {
 			t.Fatalf("Settle: %v", err)
 		}
 		if got.Certificate.ARN != "" {
-			t.Errorf("certificate = %+v, want none: cloudflare terminates TLS itself", got.Certificate)
+			t.Errorf("certificate = %+v, want none: this edge terminates TLS itself", got.Certificate)
 		}
-		if !got.Probe.OK || got.Probe.Edge != edge.KindCloudflare {
-			t.Errorf("probe = %+v, want it passing against x-ocel-edge: cloudflare", got.Probe)
+		if !got.Probe.OK || got.Probe.Edge != unboundEdgeKind {
+			t.Errorf("probe = %+v, want it passing against the edge header it answers with", got.Probe)
 		}
 		if !rec.last().Probe.OK {
 			t.Error("the passing probe was never recorded")
@@ -282,9 +282,9 @@ func TestFlowSettle(t *testing.T) {
 
 		api := &fakeACM{steps: []acmStep{{status: StatusPendingValidation, validation: true}}}
 		rec := &recorder{}
-		flow := Flow{Issuer: testIssuer(api, 2), Prober: passingProber(t, "native")}
+		flow := Flow{Issuer: testIssuer(api, 2), Prober: passingProber(t, string(frontedEdgeKind))}
 
-		_, err := flow.Settle(t.Context(), wildcard, edge.KindNative, Settlement{}, func(string) {}, rec.record)
+		_, err := flow.Settle(t.Context(), wildcard, frontedEdgeKind, Settlement{}, func(string) {}, rec.record)
 		if err == nil {
 			t.Fatal("Settle err = nil, want the bounded wait to refuse")
 		}
@@ -304,7 +304,7 @@ func TestFlowSettle(t *testing.T) {
 			return http.Header{}, nil
 		}, 2)}
 
-		_, err := flow.Settle(t.Context(), wildcard, edge.KindCloudflare, Settlement{}, func(string) {}, rec.record)
+		_, err := flow.Settle(t.Context(), wildcard, unboundEdgeKind, Settlement{}, func(string) {}, rec.record)
 		if err == nil {
 			t.Fatal("Settle err = nil, want the probe to refuse")
 		}
@@ -318,9 +318,9 @@ func TestFlowSettle(t *testing.T) {
 
 		api := &fakeACM{steps: issuing}
 		rec := &recorder{}
-		flow := Flow{Issuer: testIssuer(api, 5), Writer: &fakeWriter{err: errors.New("zone is read-only")}, Prober: passingProber(t, "native")}
+		flow := Flow{Issuer: testIssuer(api, 5), Writer: &fakeWriter{err: errors.New("zone is read-only")}, Prober: passingProber(t, string(frontedEdgeKind))}
 
-		_, err := flow.Settle(t.Context(), wildcard, edge.KindNative, Settlement{}, func(string) {}, rec.record)
+		_, err := flow.Settle(t.Context(), wildcard, frontedEdgeKind, Settlement{}, func(string) {}, rec.record)
 		if err == nil || !strings.Contains(err.Error(), "zone is read-only") {
 			t.Fatalf("err = %v, want the write failure surfaced", err)
 		}

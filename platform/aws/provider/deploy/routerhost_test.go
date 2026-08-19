@@ -13,6 +13,9 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/naming"
 	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
+	"github.com/ocelhq/ocel/platform/aws/provider/edges/apigateway"
+	"github.com/ocelhq/ocel/platform/aws/provider/edges/cloudfront"
+	cloudflare "github.com/ocelhq/ocel/platform/edge/cloudflare/deploy"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
@@ -49,7 +52,7 @@ func routedApp() *deploymentsv1.ManifestApp {
 func TestRouterHostStaysUnbuiltBehindCloudflare(t *testing.T) {
 	t.Parallel()
 
-	host, err := resolveRouterHost(routedConfig(t, edge.KindCloudflare), routedApp(), routedCoordinate(t), "d1")
+	host, err := resolveRouterHost(routedConfig(t, cloudflare.Kind), routedApp(), routedCoordinate(t), "d1")
 	if err != nil {
 		t.Fatalf("resolveRouterHost: %v", err)
 	}
@@ -61,7 +64,7 @@ func TestRouterHostStaysUnbuiltBehindCloudflare(t *testing.T) {
 func TestRouterHostStaysUnbuiltForAnAppThatRoutesNothing(t *testing.T) {
 	t.Parallel()
 
-	cfg := routedConfig(t, edge.KindNative)
+	cfg := routedConfig(t, cloudfront.Kind)
 	cfg.ArtifactRoot = writeTree(t, map[string]string{
 		"apps/api/serve.json": `{"framework":"express","buildId":"API1"}`,
 	})
@@ -79,7 +82,7 @@ func TestRouterHostNamesTheEntryAndWhatTheRouterReads(t *testing.T) {
 	t.Parallel()
 
 	coord := routedCoordinate(t)
-	host, err := resolveRouterHost(routedConfig(t, edge.KindNative), routedApp(), coord, "d1")
+	host, err := resolveRouterHost(routedConfig(t, cloudfront.Kind), routedApp(), coord, "d1")
 	if err != nil {
 		t.Fatalf("resolveRouterHost: %v", err)
 	}
@@ -113,7 +116,7 @@ func TestRouterHostNamesTheEntryAndWhatTheRouterReads(t *testing.T) {
 func TestRouterHostRefusesARoutedBuildThatNamesNoEntry(t *testing.T) {
 	t.Parallel()
 
-	cfg := routedConfig(t, edge.KindNative)
+	cfg := routedConfig(t, cloudfront.Kind)
 	cfg.ArtifactRoot = writeTree(t, map[string]string{
 		"apps/web/routing-manifest.json": routedManifest,
 		"apps/web/serve.json":            `{"framework":"next","buildId":"WEB1","edgeRouting":true}`,
@@ -149,7 +152,7 @@ func functionEnvOf(t *testing.T, rec *inputRecorder, name string) map[string]str
 func TestEntryFunctionCarriesTheEdgeKindAndItsSiblingURLs(t *testing.T) {
 	t.Parallel()
 
-	cfg := routedConfig(t, edge.KindNative)
+	cfg := routedConfig(t, cloudfront.Kind)
 	coord := routedCoordinate(t)
 	host, err := resolveRouterHost(cfg, routedApp(), coord, "d1")
 	if err != nil {
@@ -172,7 +175,7 @@ func TestEntryFunctionCarriesTheEdgeKindAndItsSiblingURLs(t *testing.T) {
 				"fn--web--entry": {Bucket: "artifacts", Key: "entry.zip"},
 				"fn--web--admin": {Bucket: "artifacts", Key: "admin.zip"},
 			},
-			Env:      map[string]string{edgeKindEnv: string(edge.KindNative)},
+			Env:      map[string]string{edgeKindEnv: string(cloudfront.Kind)},
 			Router:   host,
 			RoleArn:  role.Arn,
 			RoleName: role.Name,
@@ -183,7 +186,7 @@ func TestEntryFunctionCarriesTheEdgeKindAndItsSiblingURLs(t *testing.T) {
 	}
 
 	entry := functionEnvOf(t, rec, functionCoordinate("shop", stack, "fn--web--entry").PhysicalName(maxLambdaBaseNameLen))
-	if entry[edgeKindEnv] != string(edge.KindNative) {
+	if entry[edgeKindEnv] != string(cloudfront.Kind) {
 		t.Errorf("%s = %q, want the edge kind the deploy chose", edgeKindEnv, entry[edgeKindEnv])
 	}
 	if entry[routingManifestEnv] != routingManifestInTask {
@@ -201,7 +204,7 @@ func TestEntryFunctionCarriesTheEdgeKindAndItsSiblingURLs(t *testing.T) {
 func TestASiblingFunctionHostsNoRouter(t *testing.T) {
 	t.Parallel()
 
-	cfg := routedConfig(t, edge.KindNative)
+	cfg := routedConfig(t, cloudfront.Kind)
 	host, err := resolveRouterHost(cfg, routedApp(), routedCoordinate(t), "d1")
 	if err != nil {
 		t.Fatalf("resolveRouterHost: %v", err)
@@ -216,7 +219,7 @@ func TestASiblingFunctionHostsNoRouter(t *testing.T) {
 			Functions: routedFunctions(),
 			Args:      translateFunction,
 			Artifacts: map[string]artifactRef{},
-			Env:       map[string]string{edgeKindEnv: string(edge.KindNative)},
+			Env:       map[string]string{edgeKindEnv: string(cloudfront.Kind)},
 			Router:    host,
 			RoleArn:   pulumi.String("arn:aws:iam::123456789012:role/app"),
 			RoleName:  pulumi.String("app"),
@@ -227,7 +230,7 @@ func TestASiblingFunctionHostsNoRouter(t *testing.T) {
 	}
 
 	sibling := functionEnvOf(t, rec, functionCoordinate("shop", stack, "fn--web--admin").PhysicalName(maxLambdaBaseNameLen))
-	if sibling[edgeKindEnv] != string(edge.KindNative) {
+	if sibling[edgeKindEnv] != string(cloudfront.Kind) {
 		t.Errorf("%s = %q, want every function to learn the edge kind", edgeKindEnv, sibling[edgeKindEnv])
 	}
 	for _, key := range []string{routingManifestEnv, functionURLsEnv} {
@@ -240,7 +243,7 @@ func TestASiblingFunctionHostsNoRouter(t *testing.T) {
 func TestOnlyTheEntryFunctionPacksTheRoutingManifest(t *testing.T) {
 	t.Parallel()
 
-	cfg := routedConfig(t, edge.KindNative)
+	cfg := routedConfig(t, cloudfront.Kind)
 	host, err := resolveRouterHost(cfg, routedApp(), routedCoordinate(t), "d1")
 	if err != nil {
 		t.Fatalf("resolveRouterHost: %v", err)
@@ -288,7 +291,7 @@ func zipEntry(t *testing.T, archive []byte, name string) string {
 func TestRouterHostRefusesARoutedBuildThatWroteNoManifest(t *testing.T) {
 	t.Parallel()
 
-	cfg := routedConfig(t, edge.KindNative)
+	cfg := routedConfig(t, cloudfront.Kind)
 	cfg.ArtifactRoot = writeTree(t, map[string]string{
 		"apps/web/serve.json": `{"framework":"next","buildId":"WEB1","edgeRouting":true,"entry":"/"}`,
 	})
@@ -303,13 +306,13 @@ func TestAppEnvNamesTheEdgeKind(t *testing.T) {
 
 	manifest := &deploymentsv1.Manifest{Slug: "shop", Apps: []*deploymentsv1.ManifestApp{routedApp()}}
 
-	env := appEnv(manifest, routedApp(), appBundle{}, routedConfig(t, edge.KindNative))
-	if env[edgeKindEnv] != string(edge.KindNative) {
+	env := appEnv(manifest, routedApp(), appBundle{}, routedConfig(t, cloudfront.Kind))
+	if env[edgeKindEnv] != string(cloudfront.Kind) {
 		t.Errorf("%s = %q, want the kind of edge the deploy chose", edgeKindEnv, env[edgeKindEnv])
 	}
 
-	behind := appEnv(manifest, routedApp(), appBundle{}, routedConfig(t, edge.KindCloudflare))
-	if behind[edgeKindEnv] != string(edge.KindCloudflare) {
+	behind := appEnv(manifest, routedApp(), appBundle{}, routedConfig(t, cloudflare.Kind))
+	if behind[edgeKindEnv] != string(cloudflare.Kind) {
 		t.Errorf("%s = %q, want the Cloudflare kind named too", edgeKindEnv, behind[edgeKindEnv])
 	}
 
@@ -322,12 +325,12 @@ func TestAppEnvNamesTheEdgeKind(t *testing.T) {
 func TestTheEnvBudgetChargesForSiblingURLsStillToResolve(t *testing.T) {
 	t.Parallel()
 
-	host, err := resolveRouterHost(routedConfig(t, edge.KindNative), routedApp(), routedCoordinate(t), "d1")
+	host, err := resolveRouterHost(routedConfig(t, cloudfront.Kind), routedApp(), routedCoordinate(t), "d1")
 	if err != nil {
 		t.Fatalf("resolveRouterHost: %v", err)
 	}
 
-	base := map[string]string{edgeKindEnv: string(edge.KindNative)}
+	base := map[string]string{edgeKindEnv: string(cloudfront.Kind)}
 	planned := host.plannedEntryEnv(base, routedFunctions())
 	if charged := len(planned[functionURLsEnv]); charged < len("/admin")+functionURLBudgetBytes {
 		t.Errorf("%s charges %d bytes, want an upper bound on the URL Pulumi resolves later", functionURLsEnv, charged)
@@ -361,7 +364,7 @@ func routerInvokeGrant(t *testing.T, rec *inputRecorder) []invokeStatement {
 func TestTheEntryRoleMayInvokeItsSiblingsAndTheOptimizer(t *testing.T) {
 	t.Parallel()
 
-	host, err := resolveRouterHost(routedConfig(t, edge.KindNative), routedApp(), routedCoordinate(t), "d1")
+	host, err := resolveRouterHost(routedConfig(t, cloudfront.Kind), routedApp(), routedCoordinate(t), "d1")
 	if err != nil {
 		t.Fatalf("resolveRouterHost: %v", err)
 	}
@@ -379,7 +382,7 @@ func TestTheEntryRoleMayInvokeItsSiblingsAndTheOptimizer(t *testing.T) {
 			Functions: routedFunctions(),
 			Args:      translateFunction,
 			Artifacts: map[string]artifactRef{},
-			Env:       map[string]string{edgeKindEnv: string(edge.KindNative)},
+			Env:       map[string]string{edgeKindEnv: string(cloudfront.Kind)},
 			Router:    host,
 			RoleArn:   role.Arn,
 			RoleName:  role.Name,
@@ -448,7 +451,7 @@ func TestAnAppBehindCloudflareGrantsNoInvoke(t *testing.T) {
 func TestDeploymentRecordNamesTheEntryFunctionTheDeployCreated(t *testing.T) {
 	t.Parallel()
 
-	cfg := routedConfig(t, edge.KindNone)
+	cfg := routedConfig(t, apigateway.Kind)
 	cfg.Env = "prod"
 	manifest := &deploymentsv1.Manifest{
 		Slug:      "shop",

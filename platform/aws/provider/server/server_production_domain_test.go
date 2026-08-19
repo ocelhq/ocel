@@ -19,6 +19,8 @@ import (
 	"github.com/ocelhq/ocel/platform/aws/provider/bootstrap"
 	"github.com/ocelhq/ocel/platform/aws/provider/certs"
 	"github.com/ocelhq/ocel/platform/aws/provider/dns"
+	"github.com/ocelhq/ocel/platform/aws/provider/edges/apigateway"
+	"github.com/ocelhq/ocel/platform/aws/provider/edges/cloudfront"
 	cloudflare "github.com/ocelhq/ocel/platform/edge/cloudflare/deploy"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
@@ -242,7 +244,7 @@ func newDomainFixture(opts domainFixtureOptions) *domainFixture {
 	}
 	kind := opts.kind
 	if kind == "" {
-		kind = edge.KindCloudflare
+		kind = cloudflare.Kind
 	}
 	probe := opts.probe
 	if probe == "" {
@@ -270,9 +272,11 @@ func newDomainFixture(opts domainFixtureOptions) *domainFixture {
 		writer = opts.writer
 	}
 	session := &domainSession{
-		ssm:    f.ssm,
-		slug:   domainSlug,
-		kind:   kind,
+		ssm:           f.ssm,
+		slug:          domainSlug,
+		kind:          kind,
+		servesUnbound: edge.ServesUnbound(registeredEdge(kind)),
+
 		stack:  front,
 		writer: writer,
 		poller: dns.Poller{
@@ -354,7 +358,7 @@ func TestAddDomain(t *testing.T) {
 		if !slices.Equal(recorded.Hostnames(), []string{"shop.app.com", "www.app.com"}) {
 			t.Errorf("recorded hosts = %v", recorded.Hostnames())
 		}
-		if !recorded.Ready("shop.app.com", edge.KindCloudflare) || !recorded.Ready("www.app.com", edge.KindCloudflare) {
+		if !recorded.Ready("shop.app.com", cloudflare.Kind) || !recorded.Ready("www.app.com", cloudflare.Kind) {
 			t.Errorf("recorded = %+v, want both hosts probed live", recorded.Hosts)
 		}
 		if len(recorded.Host("shop.app.com").Written) != 1 {
@@ -425,7 +429,7 @@ func TestAddDomain(t *testing.T) {
 			Hosts: []bootstrap.Provisioned{{
 				Hostname:    "shop.app.com",
 				Certificate: "arn:aws:acm:us-east-1:111122223333:certificate/old",
-				Probe:       certs.Probe{At: time.Unix(1, 0), Edge: edge.KindCloudflare, OK: true},
+				Probe:       certs.Probe{At: time.Unix(1, 0), Edge: cloudflare.Kind, OK: true},
 			}},
 		}
 		f := newDomainFixture(domainFixtureOptions{
@@ -477,7 +481,7 @@ func TestAddDomain(t *testing.T) {
 			Hosts: []bootstrap.Provisioned{{
 				Hostname:    "shop.app.com",
 				Certificate: "arn:aws:acm:us-east-1:111122223333:certificate/old",
-				Probe:       certs.Probe{At: time.Unix(1, 0), Edge: edge.KindCloudflare, OK: true},
+				Probe:       certs.Probe{At: time.Unix(1, 0), Edge: cloudflare.Kind, OK: true},
 			}},
 		}
 		f := newDomainFixture(domainFixtureOptions{
@@ -642,7 +646,7 @@ func TestAddDomain(t *testing.T) {
 		if len(api.requested) != 0 {
 			t.Errorf("requested = %v, want the half-finished certificate picked up, not a second one", api.requested)
 		}
-		if !f.recorded(t).Ready("shop.app.com", edge.KindCloudflare) {
+		if !f.recorded(t).Ready("shop.app.com", cloudflare.Kind) {
 			t.Error("the resumed run did not finish the host")
 		}
 	})
@@ -652,7 +656,7 @@ func TestAddDomain(t *testing.T) {
 
 		prior := bootstrap.Production{Hosts: []bootstrap.Provisioned{{
 			Hostname: "shop.app.com",
-			Probe:    certs.Probe{At: time.Unix(1, 0), Edge: edge.KindCloudflare, OK: true},
+			Probe:    certs.Probe{At: time.Unix(1, 0), Edge: cloudflare.Kind, OK: true},
 		}}}
 		f := newDomainFixture(domainFixtureOptions{configured: []string{"shop.app.com"}, prior: prior})
 		if err := f.session.add(t.Context(), f.say); err != nil {
@@ -697,7 +701,7 @@ func TestAddDomain(t *testing.T) {
 				t.Errorf("err = %v, want it to name %q", err, want)
 			}
 		}
-		if f.recorded(t).Ready("shop.app.com", edge.KindCloudflare) {
+		if f.recorded(t).Ready("shop.app.com", cloudflare.Kind) {
 			t.Error("a failed probe was recorded as live")
 		}
 	})
@@ -1011,7 +1015,7 @@ func frontRecords(written []edge.Record) []edge.Record {
 func TestAddDomainOnAnEdgeThatIsNotCloudflare(t *testing.T) {
 	t.Parallel()
 
-	t.Run("the none edge points each host at the front its binding published", func(t *testing.T) {
+	t.Run("the API Gateway edge points each host at the front its binding published", func(t *testing.T) {
 		t.Parallel()
 
 		stack := newBoundStack()
@@ -1020,7 +1024,7 @@ func TestAddDomainOnAnEdgeThatIsNotCloudflare(t *testing.T) {
 		}
 		writer := &domainWriter{}
 		f := newDomainFixture(domainFixtureOptions{
-			kind:       edge.KindNone,
+			kind:       apigateway.Kind,
 			stack:      stack,
 			configured: []string{"shop.app.com", "www.app.com"},
 			writer:     writer,
@@ -1039,14 +1043,14 @@ func TestAddDomainOnAnEdgeThatIsNotCloudflare(t *testing.T) {
 		}
 	})
 
-	t.Run("the native edge points every host at the one distribution fronting them", func(t *testing.T) {
+	t.Run("the CloudFront edge points every host at the one distribution fronting them", func(t *testing.T) {
 		t.Parallel()
 
 		stack := newBoundStack()
 		stack.state[edge.StackKeyFront] = "d123.cloudfront.net"
 		writer := &domainWriter{}
 		f := newDomainFixture(domainFixtureOptions{
-			kind:       edge.KindNative,
+			kind:       cloudfront.Kind,
 			stack:      stack,
 			configured: []string{"shop.app.com"},
 			writer:     writer,
@@ -1066,7 +1070,7 @@ func TestAddDomainOnAnEdgeThatIsNotCloudflare(t *testing.T) {
 		t.Parallel()
 
 		f := newDomainFixture(domainFixtureOptions{
-			kind:       edge.KindNone,
+			kind:       apigateway.Kind,
 			configured: []string{"shop.app.com"},
 			writer:     &domainWriter{},
 		})

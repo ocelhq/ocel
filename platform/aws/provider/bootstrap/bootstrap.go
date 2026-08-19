@@ -264,7 +264,7 @@ func run(ctx context.Context, cfn CFNAPI, ssmClient SSMAPI, iamClient IAMAPI, ed
 			return err
 		}
 	}
-	invalidates := edgeProvider.Kind() == edge.KindNative
+	invalidates := invalidatesOnPromote(edgeProvider)
 	if invalidates {
 		if code.invalidator, err = ensureTagInvalidatorArtifact(ctx, artifact, deployed.ArtifactBucket, pins.invalidator); err != nil {
 			return err

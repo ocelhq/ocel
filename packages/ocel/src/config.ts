@@ -3,13 +3,16 @@ export interface ProviderDescriptor {
   options: unknown;
 }
 
+declare const edgeDescriptor: unique symbol;
+
 /**
- * The edge a project's hostnames are served from. Cloudflare is the only
- * edge you name: the origin's own edge is what you get by omitting `edge`.
+ * The edge a project's hostnames are served from. An edge is never written out
+ * by hand: call a factory that names one — `cloudflare()` from `ocel/edge`, or
+ * one your provider ships, such as `cloudfront()` and `apiGateway()` from
+ * `@ocel/provider-aws/edge`.
  */
 export interface EdgeDescriptor {
-  kind: "cloudflare";
-  options: unknown;
+  readonly [edgeDescriptor]: true;
 }
 
 /** The DNS a project's records are written into. */
@@ -67,10 +70,10 @@ export interface OcelConfig {
   };
   provider?: ProviderDescriptor;
   /**
-   * The edge in front of the origin. Omit it and the origin serves from its
-   * own edge; `false` puts nothing in front of it at all.
+   * The edge in front of the origin. Omit it and the provider fronts the
+   * deployment with its own default edge; name one to choose instead.
    */
-  edge?: EdgeDescriptor | false;
+  edge?: EdgeDescriptor;
   /** Where the project's hostname records are written. */
   dns?: DnsDescriptor;
   /** The needs this project waives rather than have a deploy refused over. */

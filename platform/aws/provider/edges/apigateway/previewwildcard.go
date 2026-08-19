@@ -15,10 +15,10 @@ import (
 func (p *provider) ReconcilePreviewWildcard(ctx context.Context, spec edge.PreviewWildcardSpec) (string, error) {
 	wildcard := edge.PreviewWildcard(spec.BaseDomain)
 	if wildcard == "" {
-		return "", errors.New("the none edge serves previews on a wildcard domain name; this reconcile names no base domain")
+		return "", fmt.Errorf("the %q edge serves previews on a wildcard domain name; this reconcile names no base domain", Kind)
 	}
 	if spec.Certificate == "" {
-		return "", fmt.Errorf("the none edge terminates TLS for %s at API Gateway, so the domain name needs the wildcard certificate; this reconcile carries none", wildcard)
+		return "", fmt.Errorf("the %q edge terminates TLS for %s at API Gateway, so the domain name needs the wildcard certificate; this reconcile carries none", Kind, wildcard)
 	}
 	c, err := p.clientsFor(ctx)
 	if err != nil {

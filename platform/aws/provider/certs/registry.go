@@ -27,18 +27,20 @@ func (d Deps) http() *http.Client {
 	return &http.Client{Timeout: acmCallTimeout}
 }
 
-func RegionFor(kind edge.Kind, apiRegion string) string {
-	if !edge.CapabilitiesOf(kind).NeedsOriginCertificate() {
-		return ""
-	}
-	if kind == edge.KindNone {
-		return apiRegion
-	}
-	return CloudFrontRegion
+type OriginCertifier interface {
+	CertificateRegion(apiRegion string) string
 }
 
-func IssuerFor(kind edge.Kind, deps Deps) Issuer {
-	region := RegionFor(kind, deps.AWS.Region)
+func RegionFor(front edge.Edge, apiRegion string) string {
+	certifier, ok := front.(OriginCertifier)
+	if !ok {
+		return ""
+	}
+	return certifier.CertificateRegion(apiRegion)
+}
+
+func IssuerFor(front edge.Edge, deps Deps) Issuer {
+	region := RegionFor(front, deps.AWS.Region)
 	if region == "" {
 		return Issuer{}
 	}

@@ -62,7 +62,6 @@ type Config struct {
 	Discovery     Discovery
 	Provider      *ProviderDescriptor
 	Edge          *EdgeDescriptor
-	EdgeDisabled  bool
 	DNS           *DNSDescriptor
 	AllowDegraded []string
 	Apps          []App
@@ -73,14 +72,10 @@ type Config struct {
 }
 
 func (c *Config) EdgeKind() edge.Kind {
-	switch {
-	case c.EdgeDisabled:
-		return edge.KindNone
-	case c.Edge != nil:
-		return edge.Kind(c.Edge.Kind)
-	default:
-		return edge.KindNative
+	if c.Edge == nil {
+		return ""
 	}
+	return edge.Kind(c.Edge.Kind)
 }
 
 func (c *Config) RequireProvider() (*ProviderDescriptor, error) {
@@ -303,7 +298,7 @@ func load(ctx context.Context, configPath string) (*Config, error) {
 		provider = &ProviderDescriptor{Package: raw.Provider.Package, Options: options}
 	}
 
-	edge, edgeDisabled, err := normalizeEdge(raw.Edge)
+	edge, err := normalizeEdge(raw.Edge)
 	if err != nil {
 		return nil, fmt.Errorf("%s has an invalid \"edge\": %w", configPath, err)
 	}
@@ -338,7 +333,6 @@ func load(ctx context.Context, configPath string) (*Config, error) {
 		Discovery:     Discovery{Paths: paths},
 		Provider:      provider,
 		Edge:          edge,
-		EdgeDisabled:  edgeDisabled,
 		DNS:           dns,
 		AllowDegraded: allowDegraded,
 		Apps:          apps,
@@ -376,27 +370,23 @@ func knownNeeds() []string {
 	return edge.NeedNames(edge.AllNeeds())
 }
 
-func knownEdgeKinds() []string {
-	return edge.KindNames(edge.AllKinds())
-}
-
-const edgeSpellings = "use `edge: cfEdge()` (from ocel/edge), `edge: false`, or omit it for the origin's own edge"
+const edgeSpellings = "use `edge: cloudflare()` (from ocel/edge), name one of your provider's own edges, or omit it for the provider's default edge"
 
 const dnsSpellings = "use `dns: cloudflareDns()` (from ocel/dns), `dns: route53()` (from @ocel/provider-aws/dns), or omit it"
 
-const route53UnderCloudflare = "route53() cannot write the records a Cloudflare edge answers on — pair cfEdge() with cloudflareDns() (from ocel/dns), or drop the edge"
+const route53UnderCloudflare = "route53() cannot write the records a Cloudflare edge answers on — pair cloudflare() with cloudflareDns() (from ocel/dns), or drop the edge"
 
 func isAbsent(raw json.RawMessage) bool {
 	trimmed := bytes.TrimSpace(raw)
 	return len(trimmed) == 0 || string(trimmed) == "null"
 }
 
-func normalizeEdge(raw json.RawMessage) (*EdgeDescriptor, bool, error) {
+func normalizeEdge(raw json.RawMessage) (*EdgeDescriptor, error) {
 	if isAbsent(raw) {
-		return nil, false, nil
+		return nil, nil
 	}
 	if string(bytes.TrimSpace(raw)) == "false" {
-		return nil, true, nil
+		return nil, errors.New("`edge: false` is gone — every deployment is fronted by some edge. Omit `edge` for the provider's default edge, or name one of your provider's own edges")
 	}
 
 	var marker struct {
@@ -404,18 +394,14 @@ func normalizeEdge(raw json.RawMessage) (*EdgeDescriptor, bool, error) {
 		Options json.RawMessage `json:"options"`
 	}
 	if err := json.Unmarshal(raw, &marker); err != nil || marker.Kind == "" {
-		return nil, false, errors.New(edgeSpellings)
-	}
-
-	if !edge.ValidKind(edge.Kind(marker.Kind)) {
-		return nil, false, fmt.Errorf("%q is not an edge — the edges this CLI knows are %s; %s", marker.Kind, strings.Join(knownEdgeKinds(), ", "), edgeSpellings)
+		return nil, errors.New(edgeSpellings)
 	}
 
 	options := marker.Options
 	if isAbsent(options) {
 		options = json.RawMessage("{}")
 	}
-	return &EdgeDescriptor{Kind: marker.Kind, Options: options}, false, nil
+	return &EdgeDescriptor{Kind: marker.Kind, Options: options}, nil
 }
 
 func normalizeDNS(raw json.RawMessage, edge *EdgeDescriptor) (*DNSDescriptor, error) {

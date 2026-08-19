@@ -8,6 +8,13 @@ import (
 	"time"
 )
 
+const (
+	sampleKind       Kind = "sample"
+	unboundKind      Kind = "serves-unbound"
+	frontedKind      Kind = "fronted"
+	otherFrontedKind Kind = "other-fronted"
+)
+
 func TestSelectZone(t *testing.T) {
 	t.Parallel()
 
@@ -61,10 +68,10 @@ func TestSelectZone(t *testing.T) {
 func TestRecordsFor(t *testing.T) {
 	t.Parallel()
 
-	t.Run("a cloudflare edge takes the proxied placeholder", func(t *testing.T) {
+	t.Run("an edge that serves unbound takes the proxied placeholder", func(t *testing.T) {
 		t.Parallel()
 
-		got, err := RecordsFor(DNSTarget{Kind: KindCloudflare}, []string{"*.preview.app.com"})
+		got, err := RecordsFor(DNSTarget{Kind: unboundKind, ServesUnbound: true}, []string{"*.preview.app.com"})
 		if err != nil {
 			t.Fatalf("RecordsFor error = %v", err)
 		}
@@ -74,15 +81,15 @@ func TestRecordsFor(t *testing.T) {
 		}
 	})
 
-	for _, kind := range []Kind{KindNative, KindNone} {
+	for _, kind := range []Kind{frontedKind, otherFrontedKind} {
 		t.Run("a "+string(kind)+" edge takes a grey-cloud CNAME to the front", func(t *testing.T) {
 			t.Parallel()
 
-			got, err := RecordsFor(DNSTarget{Kind: kind, Front: "d123.cloudfront.net"}, []string{"shop.app.com"})
+			got, err := RecordsFor(DNSTarget{Kind: kind, Front: "front.example.net"}, []string{"shop.app.com"})
 			if err != nil {
 				t.Fatalf("RecordsFor error = %v", err)
 			}
-			want := Record{Name: "shop.app.com", Type: RecordTypeCNAME, Value: "d123.cloudfront.net"}
+			want := Record{Name: "shop.app.com", Type: RecordTypeCNAME, Value: "front.example.net"}
 			if len(got) != 1 || got[0] != want {
 				t.Errorf("RecordsFor = %v, want %v", got, want)
 			}
@@ -92,10 +99,10 @@ func TestRecordsFor(t *testing.T) {
 		})
 	}
 
-	t.Run("a front-less non-cloudflare edge names what is missing", func(t *testing.T) {
+	t.Run("a front-less edge that binds names what is missing", func(t *testing.T) {
 		t.Parallel()
 
-		if _, err := RecordsFor(DNSTarget{Kind: KindNative}, []string{"shop.app.com"}); err == nil {
+		if _, err := RecordsFor(DNSTarget{Kind: frontedKind}, []string{"shop.app.com"}); err == nil {
 			t.Fatal("RecordsFor err = nil, want a refusal: nothing to point the hostname at")
 		}
 	})
@@ -204,7 +211,7 @@ func TestRecordsForPerHostFronts(t *testing.T) {
 		t.Parallel()
 
 		state := RecordHostFront(RecordHostFront(StackState{}, "shop.app.com", "d-shop.execute-api.eu-west-1.amazonaws.com"), "www.app.com", "d-www.execute-api.eu-west-1.amazonaws.com")
-		got, err := RecordsFor(TargetFor(KindNone, state), []string{"shop.app.com", "www.app.com"})
+		got, err := RecordsFor(TargetOf(otherFrontedKind, false, state), []string{"shop.app.com", "www.app.com"})
 		if err != nil {
 			t.Fatalf("RecordsFor error = %v", err)
 		}
@@ -221,7 +228,7 @@ func TestRecordsForPerHostFronts(t *testing.T) {
 		t.Parallel()
 
 		state := RecordHostFront(StackState{StackKeyFront: "d123.cloudfront.net"}, "shop.app.com", "d-shop.execute-api.eu-west-1.amazonaws.com")
-		got, err := RecordsFor(TargetFor(KindNative, state), []string{"shop.app.com", "www.app.com"})
+		got, err := RecordsFor(TargetOf(frontedKind, false, state), []string{"shop.app.com", "www.app.com"})
 		if err != nil {
 			t.Fatalf("RecordsFor error = %v", err)
 		}
@@ -238,7 +245,7 @@ func TestRecordsForPerHostFronts(t *testing.T) {
 		t.Parallel()
 
 		state := RecordHostFront(StackState{}, "shop.app.com", "d-shop.execute-api.eu-west-1.amazonaws.com")
-		_, err := RecordsFor(TargetFor(KindNone, state), []string{"shop.app.com", "www.app.com"})
+		_, err := RecordsFor(TargetOf(otherFrontedKind, false, state), []string{"shop.app.com", "www.app.com"})
 		if err == nil {
 			t.Fatal("RecordsFor err = nil, want a refusal: nothing to point www.app.com at")
 		}
@@ -247,10 +254,10 @@ func TestRecordsForPerHostFronts(t *testing.T) {
 		}
 	})
 
-	t.Run("cloudflare needs no front at all", func(t *testing.T) {
+	t.Run("an edge that serves unbound needs no front at all", func(t *testing.T) {
 		t.Parallel()
 
-		got, err := RecordsFor(TargetFor(KindCloudflare, StackState{}), []string{"shop.app.com"})
+		got, err := RecordsFor(TargetOf(unboundKind, true, StackState{}), []string{"shop.app.com"})
 		if err != nil {
 			t.Fatalf("RecordsFor error = %v", err)
 		}
@@ -282,8 +289,8 @@ func TestPointable(t *testing.T) {
 	t.Run("an edge that binds a host before serving it points only what it bound", func(t *testing.T) {
 		t.Parallel()
 
-		for _, kind := range []Kind{KindNative, KindNone} {
-			target := TargetFor(kind, front)
+		for _, kind := range []Kind{frontedKind, otherFrontedKind} {
+			target := TargetOf(kind, false, front)
 			if Pointable(target, nil, "shop.app.com") {
 				t.Errorf("Pointable(%s, unbound) = true, want the host left for the command that binds it", kind)
 			}
@@ -293,11 +300,11 @@ func TestPointable(t *testing.T) {
 		}
 	})
 
-	t.Run("cloudflare points a host it has not bound, because the record is what binds it", func(t *testing.T) {
+	t.Run("an edge that serves unbound points a host it has not bound, because the record is what binds it", func(t *testing.T) {
 		t.Parallel()
 
-		if !Pointable(TargetFor(KindCloudflare, StackState{}), nil, "shop.app.com") {
-			t.Error("Pointable(cloudflare, unbound) = false, want the proxied record that puts the host in service")
+		if !Pointable(TargetOf(unboundKind, true, StackState{}), nil, "shop.app.com") {
+			t.Error("Pointable(serves-unbound, unbound) = false, want the proxied record that puts the host in service")
 		}
 	})
 }

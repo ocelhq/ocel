@@ -250,9 +250,9 @@ func (s *stack) routeFor(ctx context.Context, c Clients, promotion edge.Promotio
 	apps := slices.Sorted(maps.Keys(promotion.Builds))
 	switch {
 	case len(apps) == 0:
-		return route{}, fmt.Errorf("promote %s: it names no app, and every hostname the native edge answers on points at one app's entry function; deploy an app before promoting", promotion.PromotionID)
+		return route{}, fmt.Errorf("promote %s: it names no app, and every hostname the %q edge answers on points at one app's entry function; deploy an app before promoting", promotion.PromotionID, Kind)
 	case len(apps) > 1:
-		return route{}, fmt.Errorf("promote %s: this project deploys %d apps (%s), and the native edge points a hostname at one release's entry function, so it cannot serve more than one of them. Split the apps into one project each, or give each app its own project domain", promotion.PromotionID, len(apps), strings.Join(apps, ", "))
+		return route{}, fmt.Errorf("promote %s: this project deploys %d apps (%s), and the %q edge points a hostname at one release's entry function, so it cannot serve more than one of them. Split the apps into one project each, or give each app its own project domain", promotion.PromotionID, len(apps), strings.Join(apps, ", "), Kind)
 	}
 
 	app := apps[0]
@@ -269,7 +269,7 @@ func (s *stack) routeFor(ctx context.Context, c Clients, promotion edge.Promotio
 	}
 	origin := originHost(record.FunctionURLs[record.Entry])
 	if origin == "" {
-		return route{}, fmt.Errorf("promote %s: the deployment record for %s/%s names entry function %s but no URL the edge can reach it on, and the native edge fronts a release over its entry function's URL; re-run the deploy to write the record again", promotion.PromotionID, app, identity, record.EntryFunction)
+		return route{}, fmt.Errorf("promote %s: the deployment record for %s/%s names entry function %s but no URL the edge can reach it on, and the %q edge fronts a release over its entry function's URL; re-run the deploy to write the record again", promotion.PromotionID, app, identity, record.EntryFunction, Kind)
 	}
 	secret, err := s.originSecret(ctx, c)
 	if err != nil {

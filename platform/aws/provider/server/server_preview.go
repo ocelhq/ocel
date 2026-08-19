@@ -58,9 +58,9 @@ func (s *Server) Preflight(ctx context.Context, req *deploymentsv1.PreflightRequ
 		resp.Identity.AwsProfile = os.Getenv("AWS_PROFILE")
 	}
 
-	resp.DomainClaims = domainClaims(ctx, s.edgeRouteOwner(edge.Kind(req.GetEdgeKind()), awscfg.Region), req.GetSlug(), req.GetDomains())
+	resp.DomainClaims = domainClaims(ctx, s.edgeRouteOwner(requestedEdge(req), awscfg.Region), req.GetSlug(), req.GetDomains())
 
-	edgeFront, err := s.edge(edge.Kind(req.GetEdgeKind()), awscfg.Region)
+	edgeFront, err := s.edge(requestedEdge(req), awscfg.Region)
 	if err != nil {
 		return nil, err
 	}
@@ -114,7 +114,7 @@ func globalPreviewProblem(recorded bootstrap.PreviewDomain, req *deploymentsv1.P
 	if !servesOnSharedWildcard {
 		return nil
 	}
-	if err := globalPreviewEdgeMismatch(recorded, edge.Kind(req.GetEdgeKind())); err != nil {
+	if err := globalPreviewEdgeMismatch(recorded, requestedEdge(req)); err != nil {
 		return err
 	}
 	return globalPreviewAccountMismatch(recorded)
@@ -122,7 +122,7 @@ func globalPreviewProblem(recorded bootstrap.PreviewDomain, req *deploymentsv1.P
 
 func globalPreviewEdgeMismatch(recorded bootstrap.PreviewDomain, kind edge.Kind) error {
 	holder, ok := recorded.Holder()
-	if recorded.BaseDomain == "" || !ok || kind == "" || holder == kind {
+	if recorded.BaseDomain == "" || !ok || holder == kind {
 		return nil
 	}
 	return fmt.Errorf(
@@ -275,7 +275,7 @@ func (s *Server) runDestroyPreview(ctx context.Context, req *deploymentsv1.Destr
 	if err != nil {
 		return finish(connect.NewError(connect.CodeInvalidArgument, err))
 	}
-	cfg, stack, err := s.previewTeardownContext(ctx, edge.Kind(req.GetEdgeKind()), opts, req.GetSlug(), env)
+	cfg, stack, err := s.previewTeardownContext(ctx, requestedEdge(req), opts, req.GetSlug(), env)
 	if err != nil {
 		return finish(err)
 	}

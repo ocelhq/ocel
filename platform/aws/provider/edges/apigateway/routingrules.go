@@ -27,7 +27,7 @@ const (
 
 func routingRules(ctx context.Context, c Clients, domain string) ([]agv2types.RoutingRule, bool, error) {
 	if c.Routing == nil {
-		return nil, false, fmt.Errorf("the none edge routes %s by rule, and it was built without an API Gateway v2 client to write those rules with", domain)
+		return nil, false, fmt.Errorf("the %q edge routes %s by rule, and it was built without an API Gateway v2 client to write those rules with", Kind, domain)
 	}
 	var (
 		out   []agv2types.RoutingRule

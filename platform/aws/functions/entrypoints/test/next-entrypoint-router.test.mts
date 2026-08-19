@@ -137,7 +137,7 @@ beforeAll(async () => {
   await writeFile(manifestPath, JSON.stringify(routingManifest));
 
   process.env.OCEL_ISR_PREFIX = "prod/shop/web/r0a1b2c3d/isr";
-  process.env.OCEL_EDGE_KIND = "native";
+  process.env.OCEL_EDGE_KIND = "cloudfront";
   process.env.OCEL_ORIGIN_SECRET = originSecret;
   process.env.OCEL_ROUTING_MANIFEST = manifestPath;
   process.env.OCEL_CONTROL_SOCKET = sockPath;

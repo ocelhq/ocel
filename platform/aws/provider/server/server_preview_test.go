@@ -13,7 +13,8 @@ import (
 	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
 	"github.com/ocelhq/ocel/platform/aws/provider/bootstrap"
 	"github.com/ocelhq/ocel/platform/aws/provider/deploy"
-	edge "github.com/ocelhq/ocel/platform/edge/contract"
+	"github.com/ocelhq/ocel/platform/aws/provider/edges/apigateway"
+	cloudflare "github.com/ocelhq/ocel/platform/edge/cloudflare/deploy"
 )
 
 func TestGlobalPreviewProblem(t *testing.T) {
@@ -53,25 +54,25 @@ func TestGlobalPreviewProblem(t *testing.T) {
 }
 
 func TestGlobalPreviewProblemRefusesAProjectOnAnotherEdge(t *testing.T) {
-	recorded := bootstrap.PreviewDomain{BaseDomain: "previews.ocel.dev", Edge: edge.KindCloudflare}
+	recorded := bootstrap.PreviewDomain{BaseDomain: "previews.ocel.dev", Edge: cloudflare.Kind}
 	t.Setenv(cloudflareAccountEnvVar, "")
 
-	err := globalPreviewProblem(recorded, &deploymentsv1.PreflightRequest{Slug: "acme", EdgeKind: string(edge.KindNone)})
+	err := globalPreviewProblem(recorded, &deploymentsv1.PreflightRequest{Slug: "acme", EdgeKind: string(apigateway.Kind)})
 	if err == nil {
 		t.Fatal("globalPreviewProblem = nil, want a deploy that would write routing no one reads refused")
 	}
-	for _, want := range []string{"*.previews.ocel.dev", "cloudflare", "none"} {
+	for _, want := range []string{"*.previews.ocel.dev", "cloudflare", "api-gateway"} {
 		if !strings.Contains(err.Error(), want) {
 			t.Errorf("err = %v, want it to name %q", err, want)
 		}
 	}
 
-	if err := globalPreviewProblem(recorded, &deploymentsv1.PreflightRequest{Slug: "acme", EdgeKind: string(edge.KindCloudflare)}); err != nil {
+	if err := globalPreviewProblem(recorded, &deploymentsv1.PreflightRequest{Slug: "acme", EdgeKind: string(cloudflare.Kind)}); err != nil {
 		t.Fatalf("globalPreviewProblem = %v, want a project on the holding edge admitted", err)
 	}
 
 	legacy := bootstrap.PreviewDomain{BaseDomain: "previews.ocel.dev"}
-	if err := globalPreviewProblem(legacy, &deploymentsv1.PreflightRequest{Slug: "acme", EdgeKind: string(edge.KindNone)}); err != nil {
+	if err := globalPreviewProblem(legacy, &deploymentsv1.PreflightRequest{Slug: "acme", EdgeKind: string(apigateway.Kind)}); err != nil {
 		t.Fatalf("globalPreviewProblem = %v, want a record naming no edge to accuse nobody", err)
 	}
 }

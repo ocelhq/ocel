@@ -16,7 +16,7 @@ import (
 	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
 	linksv1 "github.com/ocelhq/ocel/pkg/proto/links/v1"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/resources/v1"
-	edge "github.com/ocelhq/ocel/platform/edge/contract"
+	cloudflare "github.com/ocelhq/ocel/platform/edge/cloudflare/deploy"
 )
 
 const rolePolicyToken = "aws:iam/rolePolicy:RolePolicy"
@@ -381,7 +381,7 @@ func TestInlinePolicyBudgetPreflight(t *testing.T) {
 			manifest.Usages = append(manifest.Usages, &deploymentsv1.ManifestUsage{App: "web", Resource: name})
 		}
 
-		fake := &recordingEdge{kind: edge.KindCloudflare}
+		fake := &recordingEdge{kind: cloudflare.Kind}
 		_, err := Run(context.Background(), Config{
 			Edge:             fake,
 			StoreEndpoint:    fakeStoreEndpoint,

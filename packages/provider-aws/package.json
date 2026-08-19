@@ -7,6 +7,7 @@
   "exports": {
     ".": "./src/index.ts",
     "./dns": "./src/dns.ts",
+    "./edge": "./src/edge.ts",
     "./transform": "./src/transform/index.ts",
     "./transform/run": "./src/transform/run.ts"
   },

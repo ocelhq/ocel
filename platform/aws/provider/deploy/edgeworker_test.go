@@ -11,6 +11,7 @@ import (
 	"testing"
 
 	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
+	cloudflare "github.com/ocelhq/ocel/platform/edge/cloudflare/deploy"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
@@ -188,7 +189,7 @@ func setWorkerBundle(t *testing.T) {
 	if err := os.WriteFile(bundle, []byte("export default {}"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	raw, err := json.Marshal(edge.KindBundleManifest{edge.KindCloudflare: bundle})
+	raw, err := json.Marshal(edge.KindBundleManifest{cloudflare.Kind: bundle})
 	if err != nil {
 		t.Fatal(err)
 	}

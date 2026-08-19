@@ -11,11 +11,12 @@ import (
 	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/resources/v1"
 	"github.com/ocelhq/ocel/platform/aws/provider/vars/baked"
+	cloudflare "github.com/ocelhq/ocel/platform/edge/cloudflare/deploy"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
 func testLoaderEdge() *recordingEdge {
-	return &recordingEdge{kind: edge.KindCloudflare, compatDate: "2026-07-13", compatFlags: []string{"nodejs_compat"}}
+	return &recordingEdge{kind: cloudflare.Kind, compatDate: "2026-07-13", compatFlags: []string{"nodejs_compat"}}
 }
 
 func edgeAppTree(t *testing.T) string {

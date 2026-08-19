@@ -64,7 +64,7 @@ func (s *Server) runPrune(ctx context.Context, req *deploymentsv1.PruneRequest, 
 		if err != nil {
 			return finish(connect.NewError(connect.CodeInvalidArgument, err))
 		}
-		cfg, stack, err := s.previewTeardownContext(ctx, edge.Kind(req.GetEdgeKind()), opts, req.GetSlug(), env)
+		cfg, stack, err := s.previewTeardownContext(ctx, requestedEdge(req), opts, req.GetSlug(), env)
 		if err != nil {
 			return finish(err)
 		}
@@ -80,7 +80,7 @@ func (s *Server) runPrune(ctx context.Context, req *deploymentsv1.PruneRequest, 
 	if err != nil {
 		return finish(err)
 	}
-	stack, err := s.openStackFor(edge.Kind(req.GetEdgeKind()), params.StackState, awscfg.Region)
+	stack, err := s.openStackFor(requestedEdge(req), params.StackState, awscfg.Region)
 	if err != nil {
 		if errors.Is(err, errNoProductionDeploy) {
 			return finish(nil)

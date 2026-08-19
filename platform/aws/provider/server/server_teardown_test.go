@@ -17,6 +17,7 @@ import (
 
 	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
 	"github.com/ocelhq/ocel/platform/aws/provider/bootstrap"
+	cloudflare "github.com/ocelhq/ocel/platform/edge/cloudflare/deploy"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
@@ -161,7 +162,7 @@ func TestTeardownPlanItems(t *testing.T) {
 	t.Run("it lists every item the teardown touches", func(t *testing.T) {
 		t.Parallel()
 
-		items, err := teardownPlanItems(bootstrap.ClassProduction, edge.KindCloudflare, deployed, false)
+		items, err := teardownPlanItems(bootstrap.ClassProduction, cloudflare.Kind, deployed, false)
 		if err != nil {
 			t.Fatalf("teardownPlanItems: %v", err)
 		}
@@ -205,7 +206,7 @@ func TestTeardownPlanItems(t *testing.T) {
 	t.Run("a bootstrapped sibling keeps the passphrase, with the reason", func(t *testing.T) {
 		t.Parallel()
 
-		items, err := teardownPlanItems(bootstrap.ClassPreview, edge.KindCloudflare, deployed, true)
+		items, err := teardownPlanItems(bootstrap.ClassPreview, cloudflare.Kind, deployed, true)
 		if err != nil {
 			t.Fatalf("teardownPlanItems: %v", err)
 		}
@@ -226,7 +227,7 @@ func TestTeardownPlanItems(t *testing.T) {
 
 		partial := deployed
 		partial.ArtifactBucket = ""
-		items, err := teardownPlanItems(bootstrap.ClassProduction, edge.KindCloudflare, partial, false)
+		items, err := teardownPlanItems(bootstrap.ClassProduction, cloudflare.Kind, partial, false)
 		if err != nil {
 			t.Fatalf("teardownPlanItems: %v", err)
 		}
@@ -240,7 +241,7 @@ func TestTeardownPlanItems(t *testing.T) {
 	t.Run("an unbootstrapped substrate still plans its leftovers", func(t *testing.T) {
 		t.Parallel()
 
-		items, err := teardownPlanItems(bootstrap.ClassProduction, edge.KindCloudflare, bootstrap.Deployed{}, false)
+		items, err := teardownPlanItems(bootstrap.ClassProduction, cloudflare.Kind, bootstrap.Deployed{}, false)
 		if err != nil {
 			t.Fatalf("teardownPlanItems: %v", err)
 		}
@@ -315,7 +316,7 @@ func TestPlanTeardown(t *testing.T) {
 		if err != nil {
 			t.Fatalf("planTeardown: %v", err)
 		}
-		if plan.GetEdgeKind() != string(edge.KindCloudflare) {
+		if plan.GetEdgeKind() != string(cloudflare.Kind) {
 			t.Errorf("edge kind = %q, want cloudflare", plan.GetEdgeKind())
 		}
 		if findPlanItem(plan.GetItems(), bootstrap.StackName) == nil {
@@ -489,7 +490,7 @@ type teardownEdge struct {
 	torndown []edge.Class
 }
 
-func (e *teardownEdge) Kind() edge.Kind { return edge.KindCloudflare }
+func (e *teardownEdge) Kind() edge.Kind { return cloudflare.Kind }
 
 func (e *teardownEdge) Teardown(_ context.Context, class edge.Class) error {
 	e.torndown = append(e.torndown, class)
