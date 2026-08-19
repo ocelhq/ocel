@@ -171,11 +171,12 @@ func runDeploy(ctx context.Context, d deps, cwd string, opts deployOptions, stdo
 			Lifecycle: deploymentsv1.Environment_LIFECYCLE_UNSPECIFIED,
 		}
 		req := edgeSettings(cfg).applyToDeploy(&deploymentsv1.DeployRequest{
-			Manifest:        manifest,
-			Options:         []byte(provider.Options),
-			ProtocolVersion: manifestbuilder.SchemaVersion,
-			Environment:     env,
-			Tag:             opts.tag,
+			Manifest:         manifest,
+			Options:          []byte(provider.Options),
+			ProtocolVersion:  manifestbuilder.SchemaVersion,
+			Environment:      env,
+			Tag:              opts.tag,
+			RequiredFeatures: requiredFeatures(cfg, manifest),
 		})
 
 		var links []*linksv1.Link

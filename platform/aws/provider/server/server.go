@@ -7,6 +7,8 @@ import (
 	"maps"
 	"os"
 	"path/filepath"
+	"slices"
+	"strings"
 	"sync"
 	"time"
 
@@ -246,6 +248,9 @@ func (s *Server) runDeploy(ctx context.Context, req *deploymentsv1.DeployRequest
 	if err := compat.Explain(deployed.Version, bootstrap.RequiredBootstrapVersion, bootstrapCmd); err != nil {
 		return deploy.Result{}, finishPreparing(err)
 	}
+	if err := missingFeatures(deployed, req.GetRequiredFeatures(), preview); err != nil {
+		return deploy.Result{}, finishPreparing(err)
+	}
 	if deployed.StateBucket == "" {
 		return deploy.Result{}, finishPreparing(fmt.Errorf("account bootstrap is present but its state bucket is missing (a partial rollback?); re-run `%s`", bootstrapCmd))
 	}
@@ -351,15 +356,16 @@ func (s *Server) runDeploy(ctx context.Context, req *deploymentsv1.DeployRequest
 	finishPreparing(nil)
 
 	res, err := deploy.Run(ctx, deploy.Config{
-		Region:        awscfg.Region,
-		BackendURL:    naming.StateBackendURL(deployed.StateBucket, manifest.GetSlug()),
-		Passphrase:    params.Passphrase,
-		PulumiProject: naming.PulumiProject(manifest.GetSlug()),
-		Pulumi:        pulumiCmd,
-		Secrets:       secretsmanager.NewFromConfig(awscfg),
-		Stacks:        stacks,
-		StateTable:    deployed.StateTable,
-		StateTableARN: stateTableARN,
+		Region:           awscfg.Region,
+		BackendURL:       naming.StateBackendURL(deployed.StateBucket, manifest.GetSlug()),
+		Passphrase:       params.Passphrase,
+		PulumiProject:    naming.PulumiProject(manifest.GetSlug()),
+		Pulumi:           pulumiCmd,
+		Secrets:          secretsmanager.NewFromConfig(awscfg),
+		Stacks:           stacks,
+		RequiredFeatures: req.GetRequiredFeatures(),
+		StateTable:       deployed.StateTable,
+		StateTableARN:    stateTableARN,
 
 		VarsKeyARN:         deployed.VarsKeyARN,
 		VarsTable:          deployed.VarsTable,
@@ -466,11 +472,6 @@ func previewExpiry(lifecycle deploymentsv1.Environment_Lifecycle, now time.Time)
 }
 
 func (s *Server) Bootstrap(ctx context.Context, req *deploymentsv1.BootstrapRequest, stream *connect.ServerStream[deploymentsv1.DeployEvent]) error {
-	edgeFront, err := s.edge(requestedEdge(req), optionsRegion(req.GetOptions()))
-	if err != nil {
-		return connect.NewError(connect.CodeInvalidArgument, err)
-	}
-
 	progress := func(m string) { _ = stream.Send(progressEvent(m)) }
 	logf := func(m string) { _ = stream.Send(logEvent(m)) }
 
@@ -483,8 +484,6 @@ func (s *Server) Bootstrap(ctx context.Context, req *deploymentsv1.BootstrapRequ
 		return stream.Send(failureResult(err))
 	}
 	cfn := cloudformation.NewFromConfig(awscfg)
-	ssmClient := ssm.NewFromConfig(awscfg)
-	iamClient := iam.NewFromConfig(awscfg)
 
 	preview := req.GetClass() == deploymentsv1.Environment_CLASS_PREVIEW
 
@@ -496,13 +495,28 @@ func (s *Server) Bootstrap(ctx context.Context, req *deploymentsv1.BootstrapRequ
 		return stream.Send(failureResult(compat.Explain(deployed.Version, bootstrap.RequiredBootstrapVersion, bootstrapCommand(preview))))
 	}
 
-	if err := s.runBootstrap(ctx, bootstrapRunner(preview), cfn, ssmClient, iamClient, edgeFront, s3.NewFromConfig(awscfg), progress, logf); err != nil {
+	defaultEdge, err := s.edge(edges.DefaultKind, optionsRegion(req.GetOptions()))
+	if err != nil {
+		return connect.NewError(connect.CodeInvalidArgument, err)
+	}
+	apis := bootstrap.APIs{
+		CFN:   cfn,
+		SSM:   ssm.NewFromConfig(awscfg),
+		IAM:   iam.NewFromConfig(awscfg),
+		Store: s3.NewFromConfig(awscfg),
+		Edge:  defaultEdge,
+	}
+	if deployed.StateTable != "" {
+		apis.Users = &stackindex.Index{Dynamo: dynamodb.NewFromConfig(awscfg), Table: deployed.StateTable}
+	}
+	request := bootstrap.Request{Features: req.GetFeatures(), Force: req.GetForce()}
+	if err := s.runBootstrap(ctx, bootstrapRunner(preview), apis, request, progress, logf); err != nil {
 		return stream.Send(failureResult(err))
 	}
 	return stream.Send(okResult())
 }
 
-type bootstrapRun func(ctx context.Context, cfn bootstrap.CFNAPI, ssmClient bootstrap.SSMAPI, iamClient bootstrap.IAMAPI, edgeProvider edge.Edge, store bootstrap.ObjectStore, progress, log func(string)) error
+type bootstrapRun func(ctx context.Context, apis bootstrap.APIs, req bootstrap.Request, progress, log func(string)) error
 
 func bootstrapRunner(preview bool) bootstrapRun {
 	if preview {
@@ -511,12 +525,50 @@ func bootstrapRunner(preview bool) bootstrapRun {
 	return bootstrap.Run
 }
 
-func (s *Server) runBootstrap(ctx context.Context, run bootstrapRun, cfn bootstrap.CFNAPI, ssmClient bootstrap.SSMAPI, iamClient bootstrap.IAMAPI, edgeFront edge.Edge, store bootstrap.ObjectStore, progress, logf func(string)) error {
-	if err := run(ctx, cfn, ssmClient, iamClient, edgeFront, store, progress, logf); err != nil {
+func (s *Server) runBootstrap(ctx context.Context, run bootstrapRun, apis bootstrap.APIs, req bootstrap.Request, progress, logf func(string)) error {
+	if err := run(ctx, apis, req, progress, logf); err != nil {
 		return err
 	}
 	s.memo.forgetDeployed()
 	return nil
+}
+
+func (s *Server) DescribeBootstrap(ctx context.Context, req *deploymentsv1.DescribeBootstrapRequest) (*deploymentsv1.DescribeBootstrapResponse, error) {
+	opts, err := parseOptions(req.GetOptions())
+	if err != nil {
+		return nil, connect.NewError(connect.CodeInvalidArgument, err)
+	}
+	awscfg, err := loadAWS(ctx, opts.Region)
+	if err != nil {
+		return nil, err
+	}
+	deployed, err := s.deployed(ctx, cloudformation.NewFromConfig(awscfg), opts.Region, req.GetClass() == deploymentsv1.Environment_CLASS_PREVIEW)
+	if err != nil {
+		return nil, err
+	}
+	recorded := map[string][]string{}
+	if deployed.StateTable != "" {
+		index := &stackindex.Index{Dynamo: dynamodb.NewFromConfig(awscfg), Table: deployed.StateTable}
+		if recorded, err = index.ProjectFeatures(ctx); err != nil {
+			return nil, err
+		}
+	}
+
+	return describedBootstrap(deployed, recorded), nil
+}
+
+func describedBootstrap(deployed bootstrap.Deployed, recorded map[string][]string) *deploymentsv1.DescribeBootstrapResponse {
+	resp := &deploymentsv1.DescribeBootstrapResponse{Present: deployed.Present}
+	for _, f := range bootstrap.Catalogue() {
+		resp.Features = append(resp.Features, &deploymentsv1.Feature{
+			Name:       f.Name,
+			Summary:    f.Summary,
+			DependsOn:  f.DependsOn,
+			Enabled:    deployed.Features.Has(f.Name),
+			Dependents: bootstrap.ProjectsNeeding(recorded, f.Name),
+		})
+	}
+	return resp
 }
 
 func bootstrapCommand(preview bool) string {
@@ -524,6 +576,19 @@ func bootstrapCommand(preview bool) string {
 		return "ocel bootstrap --preview"
 	}
 	return "ocel bootstrap"
+}
+
+func missingFeatures(deployed bootstrap.Deployed, required []string, preview bool) error {
+	missing := deployed.Features.Missing(required)
+	if len(missing) == 0 {
+		return nil
+	}
+	full := append(deployed.Features.Names(), missing...)
+	slices.Sort(full)
+	return fmt.Errorf(
+		"this AWS account's Ocel bootstrap lacks the features this project needs: %s.\nRun `%s --features %s` and try again",
+		strings.Join(missing, ", "), bootstrapCommand(preview), strings.Join(slices.Compact(full), ","),
+	)
 }
 
 func checkBootstrap(ctx context.Context, api bootstrap.CFNDescriber, preview bool) (bootstrap.Deployed, error) {

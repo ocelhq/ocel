@@ -136,17 +136,6 @@ func TestUnsupportedEdgeKind(t *testing.T) {
 			_, err = drainStream(stream)
 			return err
 		}},
-		{"Bootstrap", func(client deploymentsv1connect.DeploymentServiceClient) error {
-			stream, err := client.Bootstrap(context.Background(), &deploymentsv1.BootstrapRequest{
-				EdgeKind: string(unfrontedKind),
-				Dns:      &deploymentsv1.Dns{Kind: "cloudflare", Zone: "acme.com"},
-			})
-			if err != nil {
-				return err
-			}
-			_, err = drainStream(stream)
-			return err
-		}},
 		{"PlanTeardown", func(client deploymentsv1connect.DeploymentServiceClient) error {
 			_, err := client.PlanTeardown(context.Background(), &deploymentsv1.PlanTeardownRequest{
 				EdgeKind: string(unfrontedKind),

@@ -74,15 +74,7 @@ func ClassParamNames(class string) ([]string, error) {
 	if err != nil {
 		return nil, err
 	}
-	params := []string{
-		names.credentialsParam,
-		names.valuesParam,
-		names.cacheStoreParam,
-		names.deploymentsStoreParam,
-		names.isrWriterParam,
-		names.isrWriterSeedParam,
-		names.originSecretParam,
-	}
+	params := append(names.edgeParams(), names.originSecretParam)
 	if class == ClassPreview {
 		params = append(params, PreviewDomainParamName)
 	}
@@ -98,11 +90,55 @@ func PassphraseHeldBySibling(ctx context.Context, api CFNDescriber, class string
 	if err != nil {
 		return false, err
 	}
-	deployed, err := checkStack(ctx, api, stackName)
+	out, err := stackOutputs(ctx, api, stackName)
 	if err != nil {
 		return false, err
 	}
-	return deployed.Present, nil
+	return out != nil, nil
+}
+
+func featureStackNames(names []string, class string) []string {
+	out := make([]string, 0, len(names))
+	for _, name := range names {
+		out = append(out, FeatureStackName(name, class))
+	}
+	return out
+}
+
+func FeatureDeleteOrder(names []string) ([]string, error) {
+	levels, err := featureLevels(names)
+	if err != nil {
+		return nil, err
+	}
+	var out []string
+	for i := len(levels) - 1; i >= 0; i-- {
+		out = append(out, levels[i]...)
+	}
+	return out, nil
+}
+
+func deleteFeatureStacks(ctx context.Context, cfn CFNTeardownAPI, class string, names []string, log func(string)) error {
+	order, err := FeatureDeleteOrder(names)
+	if err != nil {
+		return err
+	}
+	for _, name := range order {
+		stackName := FeatureStackName(name, class)
+		out, err := stackOutputs(ctx, cfn, stackName)
+		if err != nil {
+			return err
+		}
+		if out == nil {
+			continue
+		}
+		if err := deleteCFNStack(ctx, cfn, stackName); err != nil {
+			return err
+		}
+		if log != nil {
+			log(fmt.Sprintf("removed %s", stackName))
+		}
+	}
+	return nil
 }
 
 func Teardown(ctx context.Context, apis TeardownAPIs, class string, progress, log func(string)) error {
@@ -125,7 +161,7 @@ func Teardown(ctx context.Context, apis TeardownAPIs, class string, progress, lo
 		return err
 	}
 
-	deployed, err := checkStack(ctx, apis.CFN, stackName)
+	deployed, _, err := readSubstrate(ctx, apis.CFN, class)
 	if err != nil {
 		return err
 	}
@@ -142,6 +178,18 @@ func Teardown(ctx context.Context, apis TeardownAPIs, class string, progress, lo
 			}
 			report(progress, fmt.Sprintf("Emptying %s", bucket))
 			if err := emptyBucket(ctx, apis.Buckets, bucket); err != nil {
+				return err
+			}
+		}
+
+		standing, err := standingFeatures(ctx, apis.CFN, class)
+		if err != nil {
+			return err
+		}
+		present := standing.Names()
+		if len(present) > 0 {
+			report(progress, fmt.Sprintf("Deleting %s (CloudFormation)", strings.Join(featureStackNames(present, class), ", ")))
+			if err := deleteFeatureStacks(ctx, apis.CFN, class, present, func(msg string) { report(log, msg) }); err != nil {
 				return err
 			}
 		}

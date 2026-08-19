@@ -54,6 +54,8 @@ const fakePreflightJournalEnvVar = "OCEL_TEST_FAKE_PREFLIGHT_JOURNAL"
 
 const fakeEdgeJournalEnvVar = "OCEL_TEST_FAKE_EDGE_JOURNAL"
 
+const fakeEnabledFeaturesEnvVar = "OCEL_TEST_FAKE_ENABLED_FEATURES"
+
 const fakeEdgeRefusalEnvVar = "OCEL_TEST_FAKE_EDGE_REFUSAL"
 
 const fakeNeedsRefusalEnvVar = "OCEL_TEST_FAKE_NEEDS_REFUSAL"
@@ -336,14 +338,34 @@ func fakeLinks(m *deploymentsv1.Manifest) []*linksv1.Link {
 	return out
 }
 
+func (s *deployFakeProviderServer) DescribeBootstrap(ctx context.Context, _ *deploymentsv1.DescribeBootstrapRequest) (*deploymentsv1.DescribeBootstrapResponse, error) {
+	if err := s.checkToken(ctx); err != nil {
+		return nil, err
+	}
+	enabled := strings.Split(os.Getenv(fakeEnabledFeaturesEnvVar), ",")
+	feature := func(name, summary string, dependsOn ...string) *deploymentsv1.Feature {
+		return &deploymentsv1.Feature{
+			Name:      name,
+			Summary:   summary,
+			DependsOn: dependsOn,
+			Enabled:   slices.Contains(enabled, name),
+		}
+	}
+	return &deploymentsv1.DescribeBootstrapResponse{
+		Present: true,
+		Features: []*deploymentsv1.Feature{
+			feature("isr", "incremental static regeneration"),
+			feature("image-optimization", "on-demand image optimization"),
+			feature("cloudflare-edge", "a Cloudflare front", "isr"),
+		},
+	}, nil
+}
+
 func (s *deployFakeProviderServer) Bootstrap(ctx context.Context, req *deploymentsv1.BootstrapRequest, stream *connect.ServerStream[deploymentsv1.DeployEvent]) error {
 	if err := s.checkToken(ctx); err != nil {
 		return err
 	}
-	journalEdge(req.GetEdgeKind(), req.GetEdgeOptions(), req.GetDns(), req.GetAllowDegraded())
-	if err := refuseEdge(); err != nil {
-		return err
-	}
+	journalBootstrap(req.GetFeatures(), req.GetForce())
 	return stream.Send(&deploymentsv1.DeployEvent{
 		Event: &deploymentsv1.DeployEvent_Result{Result: &deploymentsv1.ResultEvent{Success: true}},
 	})
@@ -477,6 +499,20 @@ func journalEdge(kind string, options []byte, dns *deploymentsv1.Dns, allowDegra
 	}
 	defer f.Close()
 	fmt.Fprintf(f, "kind=%s options=%s dns=%s/%s allowDegraded=%s\n", kind, options, dns.GetKind(), dns.GetZone(), strings.Join(allowDegraded, ","))
+}
+
+func journalBootstrap(features []string, force bool) {
+	path := os.Getenv(fakeEdgeJournalEnvVar)
+	if path == "" {
+		return
+	}
+	f, err := os.OpenFile(path, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o600)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "fake provider: edge journal:", err)
+		return
+	}
+	defer f.Close()
+	fmt.Fprintf(f, "features=%s force=%t\n", strings.Join(features, ","), force)
 }
 
 func fakeDegradedEvents() []*deploymentsv1.DeployEvent {

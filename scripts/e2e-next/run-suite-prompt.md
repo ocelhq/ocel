@@ -65,7 +65,7 @@ Hard-stop on any of these; a bad preflight makes the result meaningless.
    `ocel domain ls --preview`; `unimplemented: 404` there is a stale sidecar
    (item 5), not a missing domain. `ocel domain use` writes the wildcard to the
    SSM parameter `/ocel/edge/preview-domain`, which reads it without the CLI.
-4. **`ocel bootstrap --preview` and `ocel domain use '<wildcard>' --preview`
+4. **`ocel bootstrap --preview --features all` and `ocel domain use '<wildcard>' --preview`
    have been run** once on the account. Without the domain, a preview deploy has
    nowhere to serve: no project declares one of its own.
 5. **The sidecar carries `ocel`, and carries it fresh:**
@@ -206,7 +206,7 @@ the directory first makes the preview unreclaimable from anywhere.
 
 Separate **infrastructure** from **adapter**. Infra is not a bug to debug — it
 means the run is broken. Likely causes: missing or grey-clouded wildcard record,
-`ocel bootstrap --preview` not run, a `guard-accounts.sh` refusal, the deploy
+`ocel bootstrap --preview --features all` not run, a `guard-accounts.sh` refusal, the deploy
 deadline exceeded, or a build failure. A suite that produced no test results at
 all is always infra.
 

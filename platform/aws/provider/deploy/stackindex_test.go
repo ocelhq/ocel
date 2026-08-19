@@ -20,7 +20,7 @@ type fakeStackIndex struct {
 	err           error
 }
 
-func (f *fakeStackIndex) AddProject(_ context.Context, project string) error {
+func (f *fakeStackIndex) AddProject(_ context.Context, project string, features []string) error {
 	if f.err != nil {
 		return f.err
 	}

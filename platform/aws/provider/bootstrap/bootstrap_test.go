@@ -4,6 +4,7 @@ import (
 	"context"
 	"maps"
 	"path"
+	"reflect"
 	"slices"
 	"strconv"
 	"strings"
@@ -15,7 +16,6 @@ import (
 	"gopkg.in/yaml.v3"
 
 	"github.com/ocelhq/ocel/pkg/naming"
-	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
 type parsedTemplate struct {
@@ -95,7 +95,7 @@ type parsedTemplate struct {
 
 func parseTemplate(t *testing.T) parsedTemplate {
 	t.Helper()
-	return parseTemplateStr(t, stackTemplate(edge.TrustExternal, fixturePayloads(), RequiredBootstrapVersion))
+	return parseTemplateStr(t, stackTemplate(RequiredBootstrapVersion))
 }
 
 func parseTemplateStr(t *testing.T, template string) parsedTemplate {
@@ -113,8 +113,8 @@ func TestStackTemplate(t *testing.T) {
 			name     string
 			template string
 		}{
-			{"production", stackTemplate(edge.TrustExternal, fixturePayloads(), RequiredBootstrapVersion)},
-			{"preview", previewStackTemplate(edge.TrustExternal, fixturePayloads(), RequiredBootstrapVersion)},
+			{"production", stackTemplate(RequiredBootstrapVersion)},
+			{"preview", previewStackTemplate(RequiredBootstrapVersion)},
 		} {
 			t.Run(tc.name, func(t *testing.T) {
 				tmpl := parseTemplateStr(t, tc.template)
@@ -197,8 +197,8 @@ func TestStateBucket(t *testing.T) {
 		name     string
 		template string
 	}{
-		{"production", stackTemplate(edge.TrustExternal, fixturePayloads(), RequiredBootstrapVersion)},
-		{"preview", previewStackTemplate(edge.TrustExternal, fixturePayloads(), RequiredBootstrapVersion)},
+		{"production", stackTemplate(RequiredBootstrapVersion)},
+		{"preview", previewStackTemplate(RequiredBootstrapVersion)},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			tmpl := parseTemplateStr(t, tc.template)
@@ -254,8 +254,8 @@ func TestArtifactBucket(t *testing.T) {
 		name     string
 		template string
 	}{
-		{"production", stackTemplate(edge.TrustExternal, fixturePayloads(), RequiredBootstrapVersion)},
-		{"preview", previewStackTemplate(edge.TrustExternal, fixturePayloads(), RequiredBootstrapVersion)},
+		{"production", stackTemplate(RequiredBootstrapVersion)},
+		{"preview", previewStackTemplate(RequiredBootstrapVersion)},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			tmpl := parseTemplateStr(t, tc.template)
@@ -300,8 +300,8 @@ func TestAssetBucket(t *testing.T) {
 		name     string
 		template string
 	}{
-		{"production", stackTemplate(edge.TrustExternal, fixturePayloads(), RequiredBootstrapVersion)},
-		{"preview", previewStackTemplate(edge.TrustExternal, fixturePayloads(), RequiredBootstrapVersion)},
+		{"production", stackTemplate(RequiredBootstrapVersion)},
+		{"preview", previewStackTemplate(RequiredBootstrapVersion)},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			tmpl := parseTemplateStr(t, tc.template)
@@ -341,47 +341,47 @@ func TestAssetBucket(t *testing.T) {
 	}
 }
 
-type stubDescriber struct {
-	out *cloudformation.DescribeStacksOutput
+type stubDescriber map[string][]cfntypes.Output
+
+func (s stubDescriber) DescribeStacks(_ context.Context, in *cloudformation.DescribeStacksInput, _ ...func(*cloudformation.Options)) (*cloudformation.DescribeStacksOutput, error) {
+	outputs, ok := s[aws.ToString(in.StackName)]
+	if !ok {
+		return nil, validationError{msg: "Stack with id " + aws.ToString(in.StackName) + " does not exist"}
+	}
+	return &cloudformation.DescribeStacksOutput{Stacks: []cfntypes.Stack{{Outputs: outputs}}}, nil
 }
 
-func (s stubDescriber) DescribeStacks(context.Context, *cloudformation.DescribeStacksInput, ...func(*cloudformation.Options)) (*cloudformation.DescribeStacksOutput, error) {
-	return s.out, nil
+func outputs(pairs map[string]string) []cfntypes.Output {
+	var out []cfntypes.Output
+	for k, v := range pairs {
+		out = append(out, cfntypes.Output{OutputKey: aws.String(k), OutputValue: aws.String(v)})
+	}
+	return out
 }
 
 func TestCheckDeployed(t *testing.T) {
 	t.Run("parses outputs", func(t *testing.T) {
-		api := stubDescriber{out: &cloudformation.DescribeStacksOutput{
-			Stacks: []cfntypes.Stack{{
-				Outputs: []cfntypes.Output{
-					{OutputKey: aws.String(outputStateBucket), OutputValue: aws.String("bucket-123")},
-					{OutputKey: aws.String(outputStateTable), OutputValue: aws.String("state-abc")},
-					{OutputKey: aws.String(outputArtifactBucket), OutputValue: aws.String("artifacts-xyz")},
-					{OutputKey: aws.String(outputAssetBucket), OutputValue: aws.String("assets-xyz")},
-					{OutputKey: aws.String(outputVersion), OutputValue: aws.String("3")},
-					{OutputKey: aws.String(outputInfraClass), OutputValue: aws.String(ClassProduction)},
-				},
-			}},
-		}}
+		api := stubDescriber{StackName: outputs(map[string]string{
+			outputStateBucket:    "bucket-123",
+			outputStateTable:     "state-abc",
+			outputArtifactBucket: "artifacts-xyz",
+			outputAssetBucket:    "assets-xyz",
+			outputVersion:        "3",
+			outputInfraClass:     ClassProduction,
+		})}
 
 		got, err := CheckDeployed(context.Background(), api)
 		if err != nil {
 			t.Fatalf("CheckDeployed: %v", err)
 		}
-		want := Deployed{Present: true, Version: 3, StateBucket: "bucket-123", StateTable: "state-abc", ArtifactBucket: "artifacts-xyz", AssetBucket: "assets-xyz", Class: ClassProduction}
-		if got != want {
+		want := Deployed{Present: true, Version: 3, Features: FeatureSet{}, StateBucket: "bucket-123", StateTable: "state-abc", ArtifactBucket: "artifacts-xyz", AssetBucket: "assets-xyz", Class: ClassProduction}
+		if !reflect.DeepEqual(got, want) {
 			t.Errorf("CheckDeployed = %+v, want %+v", got, want)
 		}
 	})
 
 	t.Run("reads preview class marker", func(t *testing.T) {
-		api := stubDescriber{out: &cloudformation.DescribeStacksOutput{
-			Stacks: []cfntypes.Stack{{
-				Outputs: []cfntypes.Output{
-					{OutputKey: aws.String(outputInfraClass), OutputValue: aws.String(ClassPreview)},
-				},
-			}},
-		}}
+		api := stubDescriber{StackName: outputs(map[string]string{outputInfraClass: ClassPreview})}
 
 		got, err := CheckDeployed(context.Background(), api)
 		if err != nil {
@@ -391,119 +391,57 @@ func TestCheckDeployed(t *testing.T) {
 			t.Errorf("CheckDeployed = %+v, want Present with Class %q", got, ClassPreview)
 		}
 	})
+
+	t.Run("a feature stack is what says the feature is on", func(t *testing.T) {
+		api := stubDescriber{
+			StackName: outputs(map[string]string{outputInfraClass: ClassProduction, outputVersion: strconv.Itoa(RequiredBootstrapVersion)}),
+			StackName + "-" + FeatureImageOptimization: outputs(map[string]string{
+				outputVersion:           strconv.Itoa(RequiredBootstrapVersion),
+				outputImageOptimizerURL: "https://optimizer.lambda-url.test/",
+			}),
+		}
+
+		got, err := CheckDeployed(context.Background(), api)
+		if err != nil {
+			t.Fatalf("CheckDeployed: %v", err)
+		}
+		if want := []string{FeatureImageOptimization}; !reflect.DeepEqual(got.Features.Names(), want) {
+			t.Errorf("Features = %v, want %v", got.Features.Names(), want)
+		}
+		if got.ImageOptimizerURL == "" {
+			t.Error("the optimizer URL its own stack outputs did not reach the flat field a deploy reads")
+		}
+		if got.RevalidateQueueURL != "" {
+			t.Errorf("RevalidateQueueURL = %q with no %s stack deployed, want empty", got.RevalidateQueueURL, FeatureISR)
+		}
+	})
+
+	t.Run("the oldest stack decides the version", func(t *testing.T) {
+		api := stubDescriber{
+			StackName:                    outputs(map[string]string{outputVersion: strconv.Itoa(RequiredBootstrapVersion)}),
+			StackName + "-" + FeatureISR: outputs(map[string]string{outputVersion: strconv.Itoa(RequiredBootstrapVersion - 1)}),
+		}
+
+		got, err := CheckDeployed(context.Background(), api)
+		if err != nil {
+			t.Fatalf("CheckDeployed: %v", err)
+		}
+		if got.Version != RequiredBootstrapVersion-1 {
+			t.Errorf("Version = %d, want %d: a feature stack left behind by a half-finished bootstrap must read as out of date", got.Version, RequiredBootstrapVersion-1)
+		}
+	})
 }
 
 func TestPreviewStackTemplate(t *testing.T) {
 	t.Run("stamps preview class", func(t *testing.T) {
 		var tmpl parsedTemplate
-		if err := yaml.Unmarshal([]byte(previewStackTemplate(edge.TrustExternal, fixturePayloads(), RequiredBootstrapVersion)), &tmpl); err != nil {
+		if err := yaml.Unmarshal([]byte(previewStackTemplate(RequiredBootstrapVersion)), &tmpl); err != nil {
 			t.Fatalf("preview template is not valid YAML: %v", err)
 		}
 		if got := tmpl.Outputs[outputInfraClass].Value; got != ClassPreview {
 			t.Errorf("%s output = %q, want %q", outputInfraClass, got, ClassPreview)
 		}
 	})
-}
-
-type edgeUserTemplate struct {
-	Resources map[string]struct {
-		Type       string `yaml:"Type"`
-		Properties struct {
-			UserName string `yaml:"UserName"`
-			Policies []struct {
-				PolicyName     string `yaml:"PolicyName"`
-				PolicyDocument struct {
-					Statement []struct {
-						Effect    string         `yaml:"Effect"`
-						Action    any            `yaml:"Action"`
-						Resource  any            `yaml:"Resource"`
-						Condition map[string]any `yaml:"Condition"`
-					} `yaml:"Statement"`
-				} `yaml:"PolicyDocument"`
-			} `yaml:"Policies"`
-		} `yaml:"Properties"`
-	} `yaml:"Resources"`
-}
-
-func TestEdgeUser(t *testing.T) {
-	for _, tc := range []struct {
-		name     string
-		template string
-		userName string
-	}{
-		{"production", stackTemplate(edge.TrustExternal, fixturePayloads(), RequiredBootstrapVersion), EdgeUserName},
-		{"preview", previewStackTemplate(edge.TrustExternal, fixturePayloads(), RequiredBootstrapVersion), EdgePreviewUserName},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			var tmpl edgeUserTemplate
-			if err := yaml.Unmarshal([]byte(tc.template), &tmpl); err != nil {
-				t.Fatalf("template is not valid YAML: %v", err)
-			}
-			user, ok := tmpl.Resources["EdgeUser"]
-			if !ok {
-				t.Fatal("template is missing the EdgeUser resource")
-			}
-			if user.Type != "AWS::IAM::User" {
-				t.Errorf("EdgeUser Type = %q, want AWS::IAM::User", user.Type)
-			}
-			if user.Properties.UserName != tc.userName {
-				t.Errorf("UserName = %q, want %q", user.Properties.UserName, tc.userName)
-			}
-			if len(user.Properties.Policies) != 1 {
-				t.Fatalf("want exactly one inline policy, got %d", len(user.Properties.Policies))
-			}
-
-			if name := user.Properties.Policies[0].PolicyName; name != "ocel-edge-cache" {
-				t.Errorf("PolicyName = %q, want ocel-edge-cache", name)
-			}
-
-			stmts := user.Properties.Policies[0].PolicyDocument.Statement
-			var s3Read, s3Write, ddbTable, ddbIndex, invoke, invokeTagged bool
-			for _, st := range stmts {
-				if st.Resource == "${AssetBucket.Arn}/*" {
-					s3Read = hasAction(st.Action, "s3:GetObject")
-					if hasAction(st.Action, "s3:PutObject") {
-						t.Error("s3:PutObject must not be granted bucket-wide")
-					}
-				}
-				if st.Resource == "${AssetBucket.Arn}/*/fetch-cache/*.cache.json" {
-					s3Write = hasAction(st.Action, "s3:PutObject")
-				}
-				if st.Resource == "StateTable.Arn" && boundToTagKeys(st.Condition) {
-					ddbTable = hasAction(st.Action, "dynamodb:BatchGetItem") && hasAction(st.Action, "dynamodb:UpdateItem")
-				}
-				if st.Resource == "${StateTable.Arn}/index/"+StateTableIndexName && boundToTagKeys(st.Condition) {
-					ddbIndex = hasAction(st.Action, "dynamodb:Query")
-				}
-				if hasAction(st.Action, "lambda:InvokeFunctionUrl") {
-					invoke = true
-					if equals, ok := st.Condition["StringEquals"].(map[string]any); ok {
-						if equals["aws:ResourceTag/ocel:component"] == "function" {
-							invokeTagged = true
-						}
-					}
-				}
-			}
-			if !s3Read {
-				t.Error("missing s3:GetObject on the asset bucket")
-			}
-			if !s3Write {
-				t.Error("missing s3:PutObject scoped to a .cache.json object under the fetch-cache prefix")
-			}
-			if !ddbTable {
-				t.Error("missing dynamodb:BatchGetItem + UpdateItem bounded to the TAG# LeadingKeys")
-			}
-			if !ddbIndex {
-				t.Error("missing dynamodb:Query on the table's index bounded to the TAG# LeadingKeys")
-			}
-			if !invoke {
-				t.Error("missing the lambda:Invoke* grant")
-			}
-			if !invokeTagged {
-				t.Error("lambda:Invoke* grant must be gated on ocel:component being function, so it reaches no listener or other Ocel-run function")
-			}
-		})
-	}
 }
 
 func hasAction(action any, want string) bool {
@@ -581,8 +519,8 @@ func TestAssetBucketGrantsCloudFrontRead(t *testing.T) {
 		name     string
 		template string
 	}{
-		{"production", stackTemplate(edge.TrustExternal, fixturePayloads(), RequiredBootstrapVersion)},
-		{"preview", previewStackTemplate(edge.TrustExternal, fixturePayloads(), RequiredBootstrapVersion)},
+		{"production", stackTemplate(RequiredBootstrapVersion)},
+		{"preview", previewStackTemplate(RequiredBootstrapVersion)},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			tmpl := parseTemplateStr(t, tc.template)

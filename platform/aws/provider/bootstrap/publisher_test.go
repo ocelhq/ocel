@@ -10,7 +10,6 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/platform/aws/provider/payloads"
-	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
 func fixturePayloads() stackPayloads {
@@ -18,6 +17,7 @@ func fixturePayloads() stackPayloads {
 		optimizer:   fixtureOptimizerCode(),
 		publisher:   fixturePublisherCode(),
 		revalidator: fixtureRevalidatorCode(),
+		invalidator: fixtureInvalidatorCode(),
 	}
 }
 
@@ -88,8 +88,8 @@ func TestTagPublisher(t *testing.T) {
 			name     string
 			template string
 		}{
-			{"production", stackTemplate(edge.TrustExternal, fixturePayloads(), RequiredBootstrapVersion)},
-			{"preview", previewStackTemplate(edge.TrustExternal, fixturePayloads(), RequiredBootstrapVersion)},
+			{"production", featureTemplate(FeatureCloudflareEdge, ClassProduction)},
+			{"preview", featureTemplate(FeatureCloudflareEdge, ClassPreview)},
 		} {
 			t.Run(tc.name, func(t *testing.T) {
 				tmpl := parsePublisherTemplate(t, tc.template)
@@ -141,7 +141,7 @@ func TestTagPublisher(t *testing.T) {
 	})
 
 	t.Run("filter confines it to tag records", func(t *testing.T) {
-		tmpl := parsePublisherTemplate(t, stackTemplate(edge.TrustExternal, fixturePayloads(), RequiredBootstrapVersion))
+		tmpl := parsePublisherTemplate(t, featureTemplate(FeatureCloudflareEdge, ClassProduction))
 		filters := tmpl.Resources["TagPublisherStream"].Properties.FilterCriteria.Filters
 		if len(filters) != 1 {
 			t.Fatalf("FilterCriteria.Filters = %+v, want exactly one pattern", filters)
@@ -178,8 +178,8 @@ func TestTagPublisher(t *testing.T) {
 			name     string
 			template string
 		}{
-			{"production", stackTemplate(edge.TrustExternal, fixturePayloads(), RequiredBootstrapVersion)},
-			{"preview", previewStackTemplate(edge.TrustExternal, fixturePayloads(), RequiredBootstrapVersion)},
+			{"production", featureTemplate(FeatureCloudflareEdge, ClassProduction)},
+			{"preview", featureTemplate(FeatureCloudflareEdge, ClassPreview)},
 		} {
 			t.Run(tc.name, func(t *testing.T) {
 				for name, res := range parsePublisherTemplate(t, tc.template).Resources {
@@ -201,8 +201,8 @@ func TestTagPublisher(t *testing.T) {
 			seedParam  string
 			otherParam string
 		}{
-			{"production", stackTemplate(edge.TrustExternal, fixturePayloads(), RequiredBootstrapVersion), ISRWriterSeedParamName, ISRWriterSeedPreviewParamName},
-			{"preview", previewStackTemplate(edge.TrustExternal, fixturePayloads(), RequiredBootstrapVersion), ISRWriterSeedPreviewParamName, ISRWriterSeedParamName},
+			{"production", featureTemplate(FeatureCloudflareEdge, ClassProduction), ISRWriterSeedParamName, ISRWriterSeedPreviewParamName},
+			{"preview", featureTemplate(FeatureCloudflareEdge, ClassPreview), ISRWriterSeedPreviewParamName, ISRWriterSeedParamName},
 		} {
 			t.Run(tc.name, func(t *testing.T) {
 				tmpl := parsePublisherTemplate(t, tc.template)
@@ -248,18 +248,4 @@ func TestTagPublisher(t *testing.T) {
 		}
 	})
 
-	t.Run("no publisher payload renders nothing", func(t *testing.T) {
-		tmpl := stackTemplate(edge.TrustExternal, stackPayloads{optimizer: fixtureOptimizerCode()}, RequiredBootstrapVersion)
-		for _, name := range []string{
-			"TagPublisher", "TagPublisherStream", "TagPublisherRole",
-			"TagPublisherDeadLetterQueue",
-		} {
-			if strings.Contains(tmpl, name+":") {
-				t.Errorf("a build with no publisher payload still rendered %s", name)
-			}
-		}
-		if _, err := yaml.Marshal(parsePublisherTemplate(t, tmpl)); err != nil {
-			t.Fatalf("template without a publisher is not valid: %v", err)
-		}
-	})
 }

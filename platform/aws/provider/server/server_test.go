@@ -292,7 +292,17 @@ func (p *presenceCFN) DescribeStacks(_ context.Context, in *cloudformation.Descr
 func (p *presenceCFN) questions() []string {
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	return slices.Clone(p.asked)
+	return substrateDescribes(p.asked)
+}
+
+func substrateDescribes(asked []string) []string {
+	var out []string
+	for _, name := range asked {
+		if name == bootstrap.StackName || name == bootstrap.PreviewStackName {
+			out = append(out, name)
+		}
+	}
+	return out
 }
 
 type countingSTS struct {
@@ -525,10 +535,10 @@ func TestServerBootstrapForgetsDeployed(t *testing.T) {
 		}
 
 		cfn.present[bootstrap.StackName] = true
-		run := func(context.Context, bootstrap.CFNAPI, bootstrap.SSMAPI, bootstrap.IAMAPI, edge.Edge, bootstrap.ObjectStore, func(string), func(string)) error {
+		run := func(context.Context, bootstrap.APIs, bootstrap.Request, func(string), func(string)) error {
 			return nil
 		}
-		if err := s.runBootstrap(context.Background(), run, nil, nil, nil, nil, nil, func(string) {}, func(string) {}); err != nil {
+		if err := s.runBootstrap(context.Background(), run, bootstrap.APIs{}, bootstrap.Request{}, func(string) {}, func(string) {}); err != nil {
 			t.Fatalf("runBootstrap: %v", err)
 		}
 
@@ -549,10 +559,10 @@ func TestServerBootstrapForgetsDeployed(t *testing.T) {
 		if _, err := s.deployed(context.Background(), cfn, "eu-west-1", false); err != nil {
 			t.Fatalf("deployed: %v", err)
 		}
-		run := func(context.Context, bootstrap.CFNAPI, bootstrap.SSMAPI, bootstrap.IAMAPI, edge.Edge, bootstrap.ObjectStore, func(string), func(string)) error {
+		run := func(context.Context, bootstrap.APIs, bootstrap.Request, func(string), func(string)) error {
 			return errors.New("stack rolled back")
 		}
-		if err := s.runBootstrap(context.Background(), run, nil, nil, nil, nil, nil, func(string) {}, func(string) {}); err == nil {
+		if err := s.runBootstrap(context.Background(), run, bootstrap.APIs{}, bootstrap.Request{}, func(string) {}, func(string) {}); err == nil {
 			t.Fatal("runBootstrap = nil error, want the failure")
 		}
 		if _, err := s.deployed(context.Background(), cfn, "eu-west-1", false); err != nil {

@@ -157,6 +157,7 @@ func TestTeardownPlanItems(t *testing.T) {
 		AssetBucket:    "ocel-assets",
 		StateTable:     "ocel-state-table",
 		VarsTable:      "ocel-vars",
+		Features:       bootstrap.FeatureSet{bootstrap.FeatureISR: true, bootstrap.FeatureCloudflareEdge: true},
 	}
 
 	t.Run("it lists every item the teardown touches", func(t *testing.T) {
@@ -219,6 +220,23 @@ func TestTeardownPlanItems(t *testing.T) {
 		}
 		if findPlanItem(items, bootstrap.PreviewDomainParamName) == nil {
 			t.Error("the preview plan must name the preview domain parameter")
+		}
+	})
+
+	t.Run("no cloudflare edge is no edge reader to delete", func(t *testing.T) {
+		t.Parallel()
+
+		bare := deployed
+		bare.Features = bootstrap.FeatureSet{bootstrap.FeatureISR: true}
+		items, err := teardownPlanItems(bootstrap.ClassProduction, cloudflare.Kind, bare, false)
+		if err != nil {
+			t.Fatalf("teardownPlanItems: %v", err)
+		}
+		if findPlanItem(items, bootstrap.EdgeUserName) != nil {
+			t.Errorf("plan names an edge reader this substrate never stood up; got %s", planNames(items))
+		}
+		if findPlanItem(items, bootstrap.FeatureStackName(bootstrap.FeatureCloudflareEdge, bootstrap.ClassProduction)) != nil {
+			t.Errorf("plan names a feature stack this substrate does not carry; got %s", planNames(items))
 		}
 	})
 

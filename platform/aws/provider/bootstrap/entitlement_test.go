@@ -20,15 +20,16 @@ func (f *freePlanEdge) VerifyCredentials(context.Context) (edge.CredentialIdenti
 func TestRunNeverAsksWhatThePlanEntitles(t *testing.T) {
 	for _, tc := range []struct {
 		name string
-		run  func(context.Context, CFNAPI, SSMAPI, IAMAPI, edge.Edge, ObjectStore, func(string), func(string)) error
+		run  func(context.Context, APIs, Request, func(string), func(string)) error
 	}{
 		{"production", Run},
 		{"preview", RunPreview},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			ed := &freePlanEdge{fakeEdge: &fakeEdge{out: edge.BootstrapOutput{Trust: edge.TrustExternal}}}
+			ed := &freePlanEdge{fakeEdge: &fakeEdge{kind: "cloudflare"}}
+			standInCloudflare(t, ed)
 
-			if err := tc.run(context.Background(), newFakeCFN(), newFakeSSM(), &fakeIAM{}, ed, preloadedStore(), nil, nil); err != nil {
+			if err := tc.run(context.Background(), apisOf(newFakeCFN(), newFakeSSM(), &fakeIAM{}, preloadedStore()), everything(), nil, nil); err != nil {
 				t.Fatalf("run: %v", err)
 			}
 			if ed.verifications != 0 {

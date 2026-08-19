@@ -6,12 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/aws/aws-sdk-go-v2/aws"
-	"github.com/aws/aws-sdk-go-v2/service/cloudformation"
-	cfntypes "github.com/aws/aws-sdk-go-v2/service/cloudformation/types"
 	"gopkg.in/yaml.v3"
-
-	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
 type varsTemplate struct {
@@ -83,8 +78,8 @@ func varsSubstrates() []struct {
 		class    string
 		template string
 	}{
-		{"production", ClassProduction, stackTemplate(edge.TrustExternal, fixturePayloads(), RequiredBootstrapVersion)},
-		{"preview", ClassPreview, previewStackTemplate(edge.TrustExternal, fixturePayloads(), RequiredBootstrapVersion)},
+		{"production", ClassProduction, stackTemplate(RequiredBootstrapVersion)},
+		{"preview", ClassPreview, previewStackTemplate(RequiredBootstrapVersion)},
 	}
 }
 
@@ -260,18 +255,18 @@ func TestVarsDescriptions(t *testing.T) {
 func TestRunVars(t *testing.T) {
 	t.Run("provisions the variable store idempotently", func(t *testing.T) {
 		cfn, ssmc, iamc := newFakeCFN(), newFakeSSM(), &fakeIAM{}
-		ed := &fakeEdge{out: edge.BootstrapOutput{Trust: edge.TrustExternal}}
+		standInCloudflare(t, &fakeEdge{kind: "cloudflare"})
 
 		for i := range 2 {
-			if err := Run(context.Background(), cfn, ssmc, iamc, ed, preloadedStore(), nil, nil); err != nil {
+			if err := Run(context.Background(), apisOf(cfn, ssmc, iamc, preloadedStore()), everything(), nil, nil); err != nil {
 				t.Fatalf("Run %d: %v", i+1, err)
 			}
 		}
-		if cfn.creates != 1 {
-			t.Errorf("stack was created %d times across two bootstraps, want 1", cfn.creates)
+		if cfn.creates != 4 {
+			t.Errorf("stacks were created %d times across two bootstraps, want one create each for core and its three features", cfn.creates)
 		}
 
-		tmpl := parseVarsTemplate(t, cfn.templates[StackName])
+		tmpl := parseVarsTemplate(t, cfn.template(StackName))
 		for _, name := range []string{"VarsTable", "VarsKey", "VarsKeyAlias"} {
 			if _, ok := tmpl.Resources[name]; !ok {
 				t.Errorf("the account's stack no longer declares %s after a re-run", name)
@@ -282,8 +277,7 @@ func TestRunVars(t *testing.T) {
 	t.Run("upgrades a pre store account to the variable store", func(t *testing.T) {
 		cfn, ssmc, iamc := newFakeCFN(), newFakeSSM(), &fakeIAM{}
 		seed := preStoreTemplate(t)
-		cfn.templates[StackName] = seed
-		cfn.statuses[StackName] = cfntypes.StackStatusCreateComplete
+		cfn.seed(StackName, seed)
 
 		before := parseVarsTemplate(t, seed)
 		for _, name := range []string{"VarsTable", "VarsKey", "VarsKeyAlias"} {
@@ -297,8 +291,8 @@ func TestRunVars(t *testing.T) {
 			}
 		}
 
-		ed := &fakeEdge{out: edge.BootstrapOutput{Trust: edge.TrustExternal}}
-		if err := Run(context.Background(), cfn, ssmc, iamc, ed, preloadedStore(), nil, nil); err != nil {
+		standInCloudflare(t, &fakeEdge{kind: "cloudflare"})
+		if err := Run(context.Background(), apisOf(cfn, ssmc, iamc, preloadedStore()), Request{}, nil, nil); err != nil {
 			t.Fatalf("Run: %v", err)
 		}
 
@@ -309,7 +303,7 @@ func TestRunVars(t *testing.T) {
 			t.Errorf("the account's stack was updated %d times, want 1", cfn.updates)
 		}
 
-		after := parseVarsTemplate(t, cfn.templates[StackName])
+		after := parseVarsTemplate(t, cfn.template(StackName))
 		for _, name := range []string{"VarsTable", "VarsKey", "VarsKeyAlias"} {
 			if _, ok := after.Resources[name]; !ok {
 				t.Errorf("the upgrade did not add %s", name)
@@ -332,7 +326,7 @@ func TestRunVars(t *testing.T) {
 
 func preStoreTemplate(t *testing.T) string {
 	t.Helper()
-	tmpl := stackTemplate(edge.TrustExternal, fixturePayloads(), RequiredBootstrapVersion)
+	tmpl := stackTemplate(RequiredBootstrapVersion)
 	for _, block := range []string{varsResources(ClassProduction), varsOutputs()} {
 		if block == "" || !strings.Contains(tmpl, block) {
 			t.Fatalf("cannot derive a pre-store template: the current one has no\n%s", block)
@@ -344,14 +338,10 @@ func preStoreTemplate(t *testing.T) string {
 
 func TestCheckDeployedVars(t *testing.T) {
 	t.Run("parses vars outputs", func(t *testing.T) {
-		api := stubDescriber{out: &cloudformation.DescribeStacksOutput{
-			Stacks: []cfntypes.Stack{{
-				Outputs: []cfntypes.Output{
-					{OutputKey: aws.String(outputVarsTable), OutputValue: aws.String("vars-abc")},
-					{OutputKey: aws.String(outputVarsKeyARN), OutputValue: aws.String("arn:aws:kms:eu-west-1:123456789012:key/abcd")},
-				},
-			}},
-		}}
+		api := stubDescriber{StackName: outputs(map[string]string{
+			outputVarsTable:  "vars-abc",
+			outputVarsKeyARN: "arn:aws:kms:eu-west-1:123456789012:key/abcd",
+		})}
 
 		got, err := CheckDeployed(context.Background(), api)
 		if err != nil {

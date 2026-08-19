@@ -9,6 +9,7 @@ import (
 
 const (
 	outputImageOptimizerURL = "ImageOptimizerFunctionUrl"
+	outputImageOptimizerARN = "ImageOptimizerArn"
 
 	optimizerKeyPrefix = "ocel-image-optimizer"
 
@@ -34,9 +35,6 @@ func ensureOptimizerPayload(ctx context.Context, store ObjectStore, bucket strin
 }
 
 func imageOptimizerResources(code payloads.Placement) string {
-	if !code.Present() {
-		return ""
-	}
 	return fmt.Sprintf(`  ImageOptimizerRole:
     Type: AWS::IAM::Role
     Properties:
@@ -58,8 +56,8 @@ func imageOptimizerResources(code payloads.Placement) string {
               - Effect: Allow
                 Action: s3:GetObject
                 Resource:
-                  - !Sub '${AssetBucket.Arn}/*/assets/*'
-                  - !Sub '${AssetBucket.Arn}/*/image-config.json'
+                  - !Sub '${AssetBucketArn}/*/assets/*'
+                  - !Sub '${AssetBucketArn}/*/image-config.json'
   ImageOptimizer:
     Type: AWS::Lambda::Function
     Properties:
@@ -76,7 +74,7 @@ func imageOptimizerResources(code payloads.Placement) string {
         S3Key: %s
       Environment:
         Variables:
-          %s: !Ref AssetBucket
+          %s: !Ref AssetBucketName
           UV_THREADPOOL_SIZE: '%d'
       Tags:
         - Key: %s
@@ -94,24 +92,21 @@ func imageOptimizerResources(code payloads.Placement) string {
 		optimizerComponentTagKey, optimizerComponentTagValue)
 }
 
-func imageOptimizerOutput(code payloads.Placement) string {
-	if !code.Present() {
-		return ""
-	}
+func imageOptimizerOutputs() string {
 	return fmt.Sprintf(`  %s:
     Description: "Function URL of this substrate's shared image optimizer. The edge calls it with requests signed by the edge user."
     Value: !GetAtt ImageOptimizerUrl.FunctionUrl
-`, outputImageOptimizerURL)
+  %s:
+    Description: "ARN of this substrate's shared image optimizer, handed to whichever feature stack has to grant invoke on it."
+    Value: !GetAtt ImageOptimizer.Arn
+`, outputImageOptimizerURL, outputImageOptimizerARN)
 }
 
-func imageOptimizerInvokeStatement(code payloads.Placement) string {
-	if !code.Present() {
-		return ""
-	}
+func imageOptimizerInvokeStatement() string {
 	return `              - Effect: Allow
                 Action:
                   - lambda:InvokeFunctionUrl
                   - lambda:InvokeFunction
-                Resource: !GetAtt ImageOptimizer.Arn
+                Resource: !Ref ImageOptimizerArn
 `
 }

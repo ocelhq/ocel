@@ -130,7 +130,7 @@ func DeletePreviewDomain(ctx context.Context, ssmClient SSMAPI, class string) er
 }
 
 type IAMAPI interface {
-	ListAccessKeys(ctx context.Context, in *iam.ListAccessKeysInput, optFns ...func(*iam.Options)) (*iam.ListAccessKeysOutput, error)
+	IAMKeyAPI
 	CreateAccessKey(ctx context.Context, in *iam.CreateAccessKeyInput, optFns ...func(*iam.Options)) (*iam.CreateAccessKeyOutput, error)
 }
 
@@ -153,6 +153,17 @@ type edgeNames struct {
 var edgeNamesByClass = map[string]edgeNames{
 	ClassProduction: {EdgeUserName, EdgeCredentialsParamName, EdgeValuesParamName, CacheStoreParamName, DeploymentsStoreParamName, ISRWriterParamName, ISRWriterSeedParamName, OriginSecretParamName},
 	ClassPreview:    {EdgePreviewUserName, EdgeCredentialsPreviewParamName, EdgeValuesPreviewParamName, CacheStorePreviewParamName, DeploymentsStorePreviewParamName, ISRWriterPreviewParamName, ISRWriterSeedPreviewParamName, OriginSecretPreviewParamName},
+}
+
+func (n edgeNames) edgeParams() []string {
+	return []string{
+		n.credentialsParam,
+		n.valuesParam,
+		n.cacheStoreParam,
+		n.deploymentsStoreParam,
+		n.isrWriterParam,
+		n.isrWriterSeedParam,
+	}
 }
 
 func edgeNamesFor(class string) (edgeNames, error) {

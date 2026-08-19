@@ -5,17 +5,7 @@ import (
 	"fmt"
 
 	"github.com/ocelhq/ocel/platform/aws/provider/payloads"
-	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
-
-type PromoteInvalidator interface {
-	InvalidatesOnPromote() bool
-}
-
-func invalidatesOnPromote(front edge.Edge) bool {
-	invalidator, ok := front.(PromoteInvalidator)
-	return ok && invalidator.InvalidatesOnPromote()
-}
 
 const (
 	tagInvalidatorKeyPrefix = "ocel-tag-invalidator"
@@ -43,9 +33,6 @@ func ensureTagInvalidatorPayload(ctx context.Context, store ObjectStore, bucket 
 }
 
 func tagInvalidatorResources(code payloads.Placement, class string) string {
-	if !code.Present() {
-		return ""
-	}
 	return fmt.Sprintf(`  TagInvalidatorDeadLetterQueue:
     Type: AWS::SQS::Queue
     Metadata:
@@ -76,13 +63,13 @@ func tagInvalidatorResources(code payloads.Placement, class string) string {
                   - dynamodb:DescribeStream
                   - dynamodb:GetRecords
                   - dynamodb:GetShardIterator
-                Resource: !GetAtt StateTable.StreamArn
+                Resource: !Ref StateTableStreamArn
               - Effect: Allow
                 Action: dynamodb:ListStreams
                 Resource: '*'
               - Effect: Allow
                 Action: dynamodb:GetItem
-                Resource: !GetAtt StateTable.Arn
+                Resource: !Ref StateTableArn
               - Effect: Allow
                 Action: cloudfront:CreateInvalidation
                 Resource: !Sub 'arn:aws:cloudfront::${AWS::AccountId}:distribution/*'
@@ -105,14 +92,14 @@ func tagInvalidatorResources(code payloads.Placement, class string) string {
         S3Key: %s
       Environment:
         Variables:
-          %s: !Ref StateTable
+          %s: !Ref StateTableName
           %s: '%s'
   TagInvalidatorStream:
     Type: AWS::Lambda::EventSourceMapping
     Metadata:
       Description: "Binds the invalidator to the state table's stream, filtered to tag metadata items so unrelated writes cost nothing. This is the only trigger it has: delete it and invalidation goes quiet rather than failing - the table keeps accepting raises and no front hears about them."
     Properties:
-      EventSourceArn: !GetAtt StateTable.StreamArn
+      EventSourceArn: !Ref StateTableStreamArn
       FunctionName: !GetAtt TagInvalidator.Arn
       StartingPosition: LATEST
       BatchSize: %d

@@ -129,23 +129,24 @@ func TestDeployRendersAnEdgeTheOriginRefuses(t *testing.T) {
 	}
 }
 
-func TestBootstrapSendsTheEdgeTheProjectDeclared(t *testing.T) {
+func TestBootstrapCarriesTheFeatureSetAndNoEdge(t *testing.T) {
 	cases := []struct {
 		name        string
 		declaration string
+		features    string
 		want        string
 	}{
-		{"an omitted edge names none, leaving the provider to choose", "", "kind= "},
-		{"a declared api-gateway edge names it", "  edge: { kind: \"api-gateway\", options: {} },\n", "kind=api-gateway"},
-		{"an edge this CLI has never heard of is forwarded whole", "  edge: { kind: \"fastly\", options: {} },\n", "kind=fastly"},
-		{"a declared cloudflare edge names it", "  edge: { kind: \"cloudflare\", options: {} },\n", "kind=cloudflare"},
+		{"a named set reaches the provider whole", "  edge: { kind: \"cloudflare\", options: {} },\n", "isr,image-optimization", "features=isr,image-optimization force=false"},
+		{"all names every feature the provider offers", "", "all", "features=isr,image-optimization,cloudflare-edge force=false"},
+		{"none leaves the core alone", "", "none", "features= force=false"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			root, journal, d := setUpEdgeFixture(t, tc.declaration)
 
 			var stdout, stderr bytes.Buffer
-			if err := runBootstrap(context.Background(), d, root, bootstrapOptions{yes: true}, &stdout, &stderr, strings.NewReader("")); err != nil {
+			opts := bootstrapOptions{yes: true, features: tc.features, declared: true}
+			if err := runBootstrap(context.Background(), d, root, opts, &stdout, &stderr, strings.NewReader("")); err != nil {
 				t.Fatalf("runBootstrap err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 			}
 
@@ -153,15 +154,19 @@ func TestBootstrapSendsTheEdgeTheProjectDeclared(t *testing.T) {
 			if len(got) != 1 {
 				t.Fatalf("bootstrap reached the provider %d times, want exactly 1: %v", len(got), got)
 			}
-			if !strings.Contains(got[0], tc.want) {
+			if got[0] != tc.want {
 				t.Errorf("provider saw %q, want %q", got[0], tc.want)
+			}
+			if strings.Contains(got[0], "kind=") {
+				t.Errorf("provider saw %q; bootstrap no longer carries an edge, the cloudflare-edge feature does", got[0])
 			}
 		})
 	}
 }
 
-func TestBootstrapCarriesTheEdgeSettingsUnchanged(t *testing.T) {
-	root, journal, d := setUpEdgeFixture(t, "  edge: { kind: \"cloudflare\", options: {} },\n  dns: { kind: \"cloudflare\", zone: \"acme.com\" },\n  allowDegraded: [\"streaming\"],\n")
+func TestBootstrapWithoutTheFlagKeepsWhatIsThere(t *testing.T) {
+	root, journal, d := setUpEdgeFixture(t, "")
+	t.Setenv(fakeEnabledFeaturesEnvVar, "isr")
 
 	var stdout, stderr bytes.Buffer
 	if err := runBootstrap(context.Background(), d, root, bootstrapOptions{yes: true}, &stdout, &stderr, strings.NewReader("")); err != nil {
@@ -169,13 +174,43 @@ func TestBootstrapCarriesTheEdgeSettingsUnchanged(t *testing.T) {
 	}
 
 	got := readEdgeJournal(t, journal)
-	if len(got) != 1 {
-		t.Fatalf("bootstrap reached the provider %d times, want exactly 1: %v", len(got), got)
+	if len(got) != 1 || got[0] != "features=isr force=false" {
+		t.Errorf("provider saw %v, want the set the account already carries", got)
 	}
-	for _, want := range []string{"kind=cloudflare", "dns=cloudflare/acme.com", "allowDegraded=streaming"} {
-		if !strings.Contains(got[0], want) {
-			t.Errorf("provider saw %q, want it to carry %q", got[0], want)
+}
+
+func TestBootstrapRefusesADropItCannotAskAbout(t *testing.T) {
+	root, journal, d := setUpEdgeFixture(t, "")
+	t.Setenv(fakeEnabledFeaturesEnvVar, "isr,image-optimization")
+
+	var stdout, stderr bytes.Buffer
+	opts := bootstrapOptions{yes: true, features: "isr", declared: true}
+	err := runBootstrap(context.Background(), d, root, opts, &stdout, &stderr, strings.NewReader(""))
+	if err == nil {
+		t.Fatalf("runBootstrap err = nil, want the unattended drop refused; stdout=%s", stdout.String())
+	}
+	for _, want := range []string{"image-optimization", "--force"} {
+		if !strings.Contains(stdout.String(), want) {
+			t.Errorf("stdout = %q, want the refusal to name %q", stdout.String(), want)
 		}
+	}
+	if _, statErr := os.Stat(journal); statErr == nil {
+		t.Errorf("the provider was reached despite the refusal: %v", readEdgeJournal(t, journal))
+	}
+}
+
+func TestBootstrapForcesADropWhenTold(t *testing.T) {
+	root, journal, d := setUpEdgeFixture(t, "")
+	t.Setenv(fakeEnabledFeaturesEnvVar, "isr,image-optimization")
+
+	var stdout, stderr bytes.Buffer
+	opts := bootstrapOptions{yes: true, features: "isr", declared: true, force: true}
+	if err := runBootstrap(context.Background(), d, root, opts, &stdout, &stderr, strings.NewReader("")); err != nil {
+		t.Fatalf("runBootstrap err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
+	}
+	got := readEdgeJournal(t, journal)
+	if len(got) != 1 || got[0] != "features=isr force=true" {
+		t.Errorf("provider saw %v, want the forced drop carried through", got)
 	}
 }
 

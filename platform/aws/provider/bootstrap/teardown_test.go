@@ -343,3 +343,78 @@ func TestTeardownDropsThePassphraseWithNoSibling(t *testing.T) {
 		t.Error("nothing else is bootstrapped, so the passphrase must go with the substrate")
 	}
 }
+
+func TestTeardownRemovesEachFeatureStackBeforeCore(t *testing.T) {
+	t.Parallel()
+
+	stacks := map[string]teardownStack{StackName: {}}
+	for _, name := range featureNames() {
+		stacks[FeatureStackName(name, ClassProduction)] = teardownStack{}
+	}
+	cfn := &teardownCFN{stacks: stacks}
+	apis := TeardownAPIs{
+		CFN:     cfn,
+		SSM:     newFakeSSM(),
+		IAM:     &teardownIAM{keys: map[string][]string{EdgeUserName: {"AKIAOLD"}}},
+		Buckets: &teardownS3{pages: map[string][]objectPage{}},
+	}
+
+	if err := Teardown(context.Background(), apis, ClassProduction, nil, nil); err != nil {
+		t.Fatalf("Teardown: %v", err)
+	}
+	want := []string{
+		FeatureStackName(FeatureCloudflareEdge, ClassProduction),
+		FeatureStackName(FeatureISR, ClassProduction),
+		FeatureStackName(FeatureImageOptimization, ClassProduction),
+		StackName,
+	}
+	if !slices.Equal(cfn.deleted, want) {
+		t.Errorf("deleted %v, want %v: a dependent goes first and core goes last", cfn.deleted, want)
+	}
+}
+
+func TestTeardownLeavesAFeatureStackThatWasNeverThere(t *testing.T) {
+	t.Parallel()
+
+	cfn := &teardownCFN{stacks: map[string]teardownStack{
+		StackName: {},
+		FeatureStackName(FeatureISR, ClassProduction): {},
+	}}
+	apis := TeardownAPIs{
+		CFN:     cfn,
+		SSM:     newFakeSSM(),
+		IAM:     &teardownIAM{keys: map[string][]string{EdgeUserName: {"AKIAOLD"}}},
+		Buckets: &teardownS3{pages: map[string][]objectPage{}},
+	}
+
+	if err := Teardown(context.Background(), apis, ClassProduction, nil, nil); err != nil {
+		t.Fatalf("Teardown: %v", err)
+	}
+	want := []string{FeatureStackName(FeatureISR, ClassProduction), StackName}
+	if !slices.Equal(cfn.deleted, want) {
+		t.Errorf("deleted %v, want %v", cfn.deleted, want)
+	}
+}
+
+func TestTeardownRemovesAWedgedFeatureStack(t *testing.T) {
+	t.Parallel()
+
+	cfn := &teardownCFN{stacks: map[string]teardownStack{
+		StackName: {},
+		FeatureStackName(FeatureISR, ClassProduction): {status: cfntypes.StackStatusRollbackComplete},
+	}}
+	apis := TeardownAPIs{
+		CFN:     cfn,
+		SSM:     newFakeSSM(),
+		IAM:     &teardownIAM{keys: map[string][]string{EdgeUserName: {"AKIAOLD"}}},
+		Buckets: &teardownS3{pages: map[string][]objectPage{}},
+	}
+
+	if err := Teardown(context.Background(), apis, ClassProduction, nil, nil); err != nil {
+		t.Fatalf("Teardown: %v", err)
+	}
+	want := []string{FeatureStackName(FeatureISR, ClassProduction), StackName}
+	if !slices.Equal(cfn.deleted, want) {
+		t.Errorf("deleted %v, want %v: a stack that rolled back still has to go", cfn.deleted, want)
+	}
+}

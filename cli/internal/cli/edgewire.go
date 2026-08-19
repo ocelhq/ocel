@@ -99,11 +99,6 @@ func (e edgeWire) applyToPrune(req *deploymentsv1.PruneRequest) *deploymentsv1.P
 	return req
 }
 
-func (e edgeWire) applyToBootstrap(req *deploymentsv1.BootstrapRequest) *deploymentsv1.BootstrapRequest {
-	req.EdgeKind, req.EdgeOptions, req.Dns, req.AllowDegraded = string(e.kind), e.options, e.dns, e.allowDegraded
-	return req
-}
-
 func (e edgeWire) applyToPlanTeardown(req *deploymentsv1.PlanTeardownRequest) *deploymentsv1.PlanTeardownRequest {
 	req.EdgeKind = string(e.kind)
 	return req
