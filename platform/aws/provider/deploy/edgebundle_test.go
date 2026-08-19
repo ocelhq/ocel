@@ -15,7 +15,7 @@ import (
 )
 
 func testLoaderEdge() *recordingEdge {
-	return &recordingEdge{compatDate: "2026-07-13", compatFlags: []string{"nodejs_compat"}}
+	return &recordingEdge{kind: edge.KindCloudflare, compatDate: "2026-07-13", compatFlags: []string{"nodejs_compat"}}
 }
 
 func edgeAppTree(t *testing.T) string {

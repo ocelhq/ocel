@@ -43,7 +43,7 @@ func TestSettleStackRecords(t *testing.T) {
 		t.Parallel()
 
 		writer := &recordingDNS{}
-		cfg := Config{Edge: &recordingEdge{}, DNS: writer}
+		cfg := Config{Edge: &recordingEdge{kind: edge.KindCloudflare}, DNS: writer}
 
 		state, err := settleStackRecords(t.Context(), cfg, specs, edge.StackState{edge.StackKeySlug: "shop"}, func(string) {})
 		if err != nil {
@@ -67,6 +67,7 @@ func TestSettleStackRecords(t *testing.T) {
 		writer := &recordingDNS{}
 		cfg := Config{Edge: &recordingEdge{kind: edge.KindNone}, DNS: writer}
 		state := edge.RecordHostFront(edge.RecordHostFront(edge.StackState{}, "shop.app.com", "d-shop.execute-api.eu-west-1.amazonaws.com"), "www.app.com", "d-www.execute-api.eu-west-1.amazonaws.com")
+		state = edge.RecordBoundDomain(edge.RecordBoundDomain(state, "shop.app.com"), "www.app.com")
 
 		if _, err := settleStackRecords(t.Context(), cfg, []edge.StackSpec{{Domains: []string{"shop.app.com", "www.app.com"}}}, state, func(string) {}); err != nil {
 			t.Fatalf("settleStackRecords: %v", err)
@@ -80,12 +81,12 @@ func TestSettleStackRecords(t *testing.T) {
 		}
 	})
 
-	t.Run("a host the edge published no front for is refused by name", func(t *testing.T) {
+	t.Run("a bound host the edge published no front for is refused by name", func(t *testing.T) {
 		t.Parallel()
 
 		cfg := Config{Edge: &recordingEdge{kind: edge.KindNone}, DNS: &recordingDNS{}}
 
-		_, err := settleStackRecords(t.Context(), cfg, specs, edge.StackState{}, func(string) {})
+		_, err := settleStackRecords(t.Context(), cfg, specs, edge.RecordBoundDomain(edge.StackState{}, "shop.app.com"), func(string) {})
 		if err == nil {
 			t.Fatal("settleStackRecords err = nil, want a refusal: nothing to point the host at")
 		}
@@ -94,11 +95,49 @@ func TestSettleStackRecords(t *testing.T) {
 		}
 	})
 
+	t.Run("a declared host no edge has bound yet is left for the command that binds it", func(t *testing.T) {
+		t.Parallel()
+
+		writer := &recordingDNS{}
+		cfg := Config{Edge: &recordingEdge{kind: edge.KindNone}, DNS: writer}
+
+		var said []string
+		state, err := settleStackRecords(t.Context(), cfg, specs, edge.StackState{}, func(m string) { said = append(said, m) })
+		if err != nil {
+			t.Fatalf("settleStackRecords: %v", err)
+		}
+		if len(writer.written) != 0 {
+			t.Errorf("written = %v, want none: nothing serves the host yet", writer.written)
+		}
+		if len(said) != 1 || !strings.Contains(said[0], "shop.app.com") || !strings.Contains(said[0], "ocel domain add") {
+			t.Errorf("said = %v, want the pending host and the command that binds it named", said)
+		}
+		if _, ok := state[edge.StackKeyRecords]; ok {
+			t.Errorf("state = %v, want no records recorded", state)
+		}
+	})
+
+	t.Run("a preview wildcard no command can bind is refused with the remedy that serves it", func(t *testing.T) {
+		t.Parallel()
+
+		cfg := Config{Edge: &recordingEdge{kind: edge.KindNone}, DNS: &recordingDNS{}}
+
+		_, err := settleStackRecords(t.Context(), cfg, []edge.StackSpec{{Domains: []string{"*.preview.app.com"}}}, edge.StackState{}, func(string) {
+			t.Error("said something about a wildcard the deploy refuses")
+		})
+		if err == nil {
+			t.Fatal("settleStackRecords err = nil, want a refusal: no command binds a wildcard here")
+		}
+		if !strings.Contains(err.Error(), "*.preview.app.com") || !strings.Contains(err.Error(), "ocel domain use") {
+			t.Errorf("err = %v, want the wildcard and the command that serves previews named", err)
+		}
+	})
+
 	t.Run("without a writer the record is waited on and nothing is recorded", func(t *testing.T) {
 		t.Parallel()
 
 		waiter := &recordingWaiter{}
-		cfg := Config{Edge: &recordingEdge{}, DNSAwait: waiter}
+		cfg := Config{Edge: &recordingEdge{kind: edge.KindCloudflare}, DNSAwait: waiter}
 
 		state, err := settleStackRecords(t.Context(), cfg, specs, edge.StackState{}, func(string) {})
 		if err != nil {
@@ -116,7 +155,7 @@ func TestSettleStackRecords(t *testing.T) {
 		t.Parallel()
 
 		writer := &recordingDNS{}
-		cfg := Config{Edge: &recordingEdge{}, DNS: writer}
+		cfg := Config{Edge: &recordingEdge{kind: edge.KindCloudflare}, DNS: writer}
 
 		if _, err := settleStackRecords(t.Context(), cfg, []edge.StackSpec{{}}, edge.StackState{}, func(string) {}); err != nil {
 			t.Fatalf("settleStackRecords: %v", err)
@@ -131,17 +170,17 @@ func TestSettleStackRecords(t *testing.T) {
 
 		cfg := Config{Edge: &recordingEdge{kind: edge.KindNative}, DNS: &recordingDNS{}}
 
-		if _, err := settleStackRecords(t.Context(), cfg, specs, edge.StackState{}, func(string) {}); err == nil {
+		if _, err := settleStackRecords(t.Context(), cfg, specs, edge.RecordBoundDomain(edge.StackState{}, "shop.app.com"), func(string) {}); err == nil {
 			t.Fatal("settleStackRecords err = nil, want a refusal: nothing to point the hostname at")
 		}
 	})
 
-	t.Run("a non-cloudflare edge points the hostname at the front its stack published", func(t *testing.T) {
+	t.Run("a non-cloudflare edge points a bound hostname at the front its stack published", func(t *testing.T) {
 		t.Parallel()
 
 		writer := &recordingDNS{}
 		cfg := Config{Edge: &recordingEdge{kind: edge.KindNative}, DNS: writer}
-		state := edge.StackState{edge.StackKeyFront: "d111111abcdef8.cloudfront.net"}
+		state := edge.RecordBoundDomain(edge.StackState{edge.StackKeyFront: "d111111abcdef8.cloudfront.net"}, "shop.app.com")
 
 		if _, err := settleStackRecords(t.Context(), cfg, specs, state, func(string) {}); err != nil {
 			t.Fatalf("settleStackRecords: %v", err)
@@ -149,6 +188,45 @@ func TestSettleStackRecords(t *testing.T) {
 		want := edge.Record{Name: "shop.app.com", Type: edge.RecordTypeCNAME, Value: "d111111abcdef8.cloudfront.net"}
 		if len(writer.written) != 1 || writer.written[0] != want {
 			t.Errorf("written = %v, want %v", writer.written, want)
+		}
+	})
+
+	t.Run("a declared host the shared front cannot serve yet is left unpointed", func(t *testing.T) {
+		t.Parallel()
+
+		writer := &recordingDNS{}
+		cfg := Config{Edge: &recordingEdge{kind: edge.KindNative}, DNS: writer}
+		state := edge.StackState{edge.StackKeyFront: "d111111abcdef8.cloudfront.net"}
+
+		var said []string
+		settled, err := settleStackRecords(t.Context(), cfg, specs, state, func(m string) { said = append(said, m) })
+		if err != nil {
+			t.Fatalf("settleStackRecords: %v", err)
+		}
+		if len(writer.written) != 0 {
+			t.Errorf("written = %v, want none: the distribution answers for no such hostname yet", writer.written)
+		}
+		if len(said) != 1 || !strings.Contains(said[0], "shop.app.com") || !strings.Contains(said[0], "ocel domain add") {
+			t.Errorf("said = %v, want the pending host and the command that binds it named", said)
+		}
+		if _, ok := settled[edge.StackKeyRecords]; ok {
+			t.Errorf("state = %v, want no records recorded", settled)
+		}
+	})
+
+	t.Run("cloudflare points a host no command has bound, because the record is what binds it", func(t *testing.T) {
+		t.Parallel()
+
+		writer := &recordingDNS{}
+		cfg := Config{Edge: &recordingEdge{kind: edge.KindCloudflare}, DNS: writer}
+
+		if _, err := settleStackRecords(t.Context(), cfg, specs, edge.StackState{}, func(m string) {
+			t.Errorf("said %q about a host cloudflare serves from the record alone", m)
+		}); err != nil {
+			t.Fatalf("settleStackRecords: %v", err)
+		}
+		if len(writer.written) != 1 || writer.written[0] != wildcard {
+			t.Errorf("written = %v, want %v", writer.written, wildcard)
 		}
 	})
 
@@ -161,7 +239,7 @@ func TestSettleStackRecords(t *testing.T) {
 			t.Fatalf("WithWrittenRecords: %v", err)
 		}
 		writer := &recordingDNS{}
-		cfg := Config{Edge: &recordingEdge{}, DNS: writer, StackState: prior}
+		cfg := Config{Edge: &recordingEdge{kind: edge.KindCloudflare}, DNS: writer, StackState: prior}
 
 		state, err := settleStackRecords(t.Context(), cfg, specs, prior, func(string) {})
 		if err != nil {
@@ -187,7 +265,7 @@ func TestSettleStackRecords(t *testing.T) {
 			t.Fatalf("WithWrittenRecords: %v", err)
 		}
 		writer := &recordingDNS{}
-		cfg := Config{Edge: &recordingEdge{}, DNS: writer, StackState: prior}
+		cfg := Config{Edge: &recordingEdge{kind: edge.KindCloudflare}, DNS: writer, StackState: prior}
 
 		state, err := settleStackRecords(t.Context(), cfg, []edge.StackSpec{{}}, prior, func(string) {})
 		if err != nil {

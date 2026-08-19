@@ -99,8 +99,12 @@ func (s *Server) Preflight(ctx context.Context, req *deploymentsv1.PreflightRequ
 			if err := globalPreviewProblem(recorded, req); err != nil {
 				return nil, connect.NewError(connect.CodeFailedPrecondition, err)
 			}
-			resp.GlobalPreviewDomain = globalPreviewDomain(ctx, s.edgeRouteOwner(edge.Kind(req.GetEdgeKind()), awscfg.Region), recorded)
 			if recorded.BaseDomain != "" {
+				owner, err := s.globalPreviewOwner(recorded, awscfg.Region)
+				if err != nil {
+					return nil, connect.NewError(connect.CodeFailedPrecondition, err)
+				}
+				resp.GlobalPreviewDomain = globalPreviewDomain(ctx, owner, recorded)
 				resp.KnownSlugs = knownSlugs(ctx, awscfg, preview, req.GetSlug())
 			}
 		}

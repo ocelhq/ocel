@@ -39,6 +39,7 @@ const (
 
 type PreviewDomain struct {
 	BaseDomain        string            `json:"baseDomain"`
+	Edge              edge.Kind         `json:"edge"`
 	CloudflareAccount string            `json:"cloudflareAccount"`
 	GrammarMin        uint32            `json:"grammarMin"`
 	GrammarMax        uint32            `json:"grammarMax"`

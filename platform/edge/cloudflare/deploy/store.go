@@ -141,7 +141,7 @@ func (p *provider) storeRequest(ctx context.Context, state edge.StackState, meth
 
 func (p *provider) storeRequestTo(ctx context.Context, endpoint, slug, secret, method, subpath string, body, out any) (*http.Response, error) {
 	if endpoint == "" {
-		return nil, fmt.Errorf("deployments store: no endpoint; bootstrap the edge first")
+		return nil, fmt.Errorf("%w: it has no endpoint; bootstrap the edge first", edge.ErrStoreAbsent)
 	}
 	if slug == "" {
 		return nil, fmt.Errorf("deployments store: no project slug")

@@ -146,7 +146,7 @@ func TestPreviewPurgeEnvs(t *testing.T) {
 
 func TestRemovePreview(t *testing.T) {
 	t.Run("touches no project-level edge state", func(t *testing.T) {
-		fake := &recordingEdge{}
+		fake := &recordingEdge{kind: edge.KindCloudflare}
 		ctx := context.Background()
 		state := fake.reconciled(t, edge.StackSpec{Version: "v1", Slug: "shop"})
 
@@ -163,7 +163,7 @@ func TestRemovePreview(t *testing.T) {
 	})
 
 	t.Run("no root-stack state touches nothing", func(t *testing.T) {
-		fake := &recordingEdge{}
+		fake := &recordingEdge{kind: edge.KindCloudflare}
 
 		if err := RemovePreview(context.Background(), fake.opened(t, nil), Config{}, "shop", "pr-1", false, PreviewRemovalStages{}, nil); err != nil {
 			t.Fatalf("RemovePreview: %v", err)
@@ -174,7 +174,7 @@ func TestRemovePreview(t *testing.T) {
 	})
 
 	t.Run("reports a failed pointer removal", func(t *testing.T) {
-		fake := &recordingEdge{}
+		fake := &recordingEdge{kind: edge.KindCloudflare}
 		stale := edge.StackState{edge.StackKeySlug: "shop", edge.StackKeySecret: "stale"}
 
 		err := RemovePreview(context.Background(), fake.opened(t, stale), Config{}, "shop", "pr-1", false, PreviewRemovalStages{}, nil)

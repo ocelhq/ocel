@@ -273,3 +273,31 @@ func TestRecordsForPerHostFronts(t *testing.T) {
 		}
 	})
 }
+
+func TestPointable(t *testing.T) {
+	t.Parallel()
+
+	front := StackState{StackKeyFront: "d111111abcdef8.cloudfront.net"}
+
+	t.Run("an edge that binds a host before serving it points only what it bound", func(t *testing.T) {
+		t.Parallel()
+
+		for _, kind := range []Kind{KindNative, KindNone} {
+			target := TargetFor(kind, front)
+			if Pointable(target, nil, "shop.app.com") {
+				t.Errorf("Pointable(%s, unbound) = true, want the host left for the command that binds it", kind)
+			}
+			if !Pointable(target, []string{"shop.app.com"}, "shop.app.com") {
+				t.Errorf("Pointable(%s, bound) = false, want the bound host pointed", kind)
+			}
+		}
+	})
+
+	t.Run("cloudflare points a host it has not bound, because the record is what binds it", func(t *testing.T) {
+		t.Parallel()
+
+		if !Pointable(TargetFor(KindCloudflare, StackState{}), nil, "shop.app.com") {
+			t.Error("Pointable(cloudflare, unbound) = false, want the proxied record that puts the host in service")
+		}
+	})
+}

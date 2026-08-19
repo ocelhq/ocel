@@ -92,7 +92,7 @@ func TestRemovePreviewSpansEveryDeclaredRootStage(t *testing.T) {
 
 		ft := &fakeTracer{}
 		stages := newPreviewRemovalStagesForTest(false)
-		fake := &recordingEdge{}
+		fake := &recordingEdge{kind: edge.KindCloudflare}
 		ctx := context.Background()
 		state := fake.reconciled(t, edge.StackSpec{Version: "v1", Slug: "shop"})
 
@@ -107,7 +107,7 @@ func TestRemovePreviewSpansEveryDeclaredRootStage(t *testing.T) {
 
 		ft := &fakeTracer{}
 		stages := newPreviewRemovalStagesForTest(false)
-		fake := &recordingEdge{}
+		fake := &recordingEdge{kind: edge.KindCloudflare}
 		stale := edge.StackState{edge.StackKeySlug: "shop", edge.StackKeySecret: "stale"}
 
 		if err := RemovePreview(context.Background(), fake.opened(t, stale), Config{Tracer: ft}, "shop", "pr-1", false, stages, nil); err == nil {
@@ -121,7 +121,7 @@ func TestRemovePreviewSpansEveryDeclaredRootStage(t *testing.T) {
 
 		ft := &fakeTracer{}
 		stages := newPreviewRemovalStagesForTest(true)
-		fake := &recordingEdge{}
+		fake := &recordingEdge{kind: edge.KindCloudflare}
 		ctx := context.Background()
 		state := fake.reconciled(t, edge.StackSpec{Version: "v1", Slug: "shop"})
 
@@ -140,7 +140,7 @@ func TestPruneSpansTheStagesItActuallyRuns(t *testing.T) {
 
 		ft := &fakeTracer{}
 		stages := PruneStages{Diff: NewRootStage("Diff"), Reclaim: NewRootStage("Reclaim")}
-		fake := &recordingEdge{}
+		fake := &recordingEdge{kind: edge.KindCloudflare}
 		ctx := context.Background()
 		state := fake.reconciled(t, edge.StackSpec{Version: "v1", Slug: "shop"})
 
@@ -155,7 +155,7 @@ func TestPruneSpansTheStagesItActuallyRuns(t *testing.T) {
 
 		ft := &fakeTracer{}
 		stages := PruneStages{Diff: NewRootStage("Diff"), Reclaim: NewRootStage("Reclaim")}
-		fake := &recordingEdge{}
+		fake := &recordingEdge{kind: edge.KindCloudflare}
 		stale := edge.StackState{edge.StackKeySlug: "shop", edge.StackKeySecret: "stale"}
 
 		if _, err := Prune(context.Background(), fake.opened(t, stale), Config{Tracer: ft}, "shop", 3, "", stages, nil); err == nil {

@@ -75,14 +75,19 @@ func (d *domainSession) statusOf(ctx context.Context, lookup *certLookup, host s
 		row.ExpiringSoon = cert.ExpiringSoon(d.prober.Clock())
 	}
 
-	wanted, err := edge.RecordsFor(edge.TargetFor(d.kind, d.stack.State()), []string{host})
-	if err != nil {
-		return nil, err
-	}
+	state := d.stack.State()
+	target := edge.TargetFor(d.kind, state)
+	boundHosts := edge.BoundDomains(state)
+	bound := slices.Contains(boundHosts, host)
 	row.RecordsWritten = recordList(provisioned.Written)
-	row.RecordsOwed = recordList(edge.Unwritten(wanted, provisioned.Written))
+	if edge.Pointable(target, boundHosts, host) {
+		wanted, err := edge.RecordsFor(target, []string{host})
+		if err != nil {
+			return nil, err
+		}
+		row.RecordsOwed = recordList(edge.Unwritten(wanted, provisioned.Written))
+	}
 
-	bound := slices.Contains(edge.BoundDomains(d.stack.State()), host)
 	var probe certs.Probe
 	if bound {
 		probe = d.refreshProbe(ctx, host)
