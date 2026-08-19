@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/ocelhq/ocel/platform/aws/provider/payloads"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
@@ -17,8 +18,6 @@ func invalidatesOnPromote(front edge.Edge) bool {
 }
 
 const (
-	tagInvalidatorAssetName = "tag-invalidator.zip"
-
 	tagInvalidatorKeyPrefix = "ocel-tag-invalidator"
 
 	tagInvalidatorLabel = "tag invalidator"
@@ -39,24 +38,12 @@ const (
 	tagInvalidatorClassEnvVar      = "OCEL_INFRA_CLASS"
 )
 
-func pinnedTagInvalidator() artifactPin {
-	return artifactPin{version: TagInvalidatorArtifactVersion, sha256: TagInvalidatorArtifactSHA256}
+func ensureTagInvalidatorPayload(ctx context.Context, store ObjectStore, bucket string) (payloads.Placement, error) {
+	return payloads.Place(ctx, store, bucket, tagInvalidatorKeyPrefix, tagInvalidatorLabel, payloads.TagInvalidator())
 }
 
-func tagInvalidatorReleaseURL(version string) string {
-	return fmt.Sprintf("https://github.com/ocelhq/ocel/releases/download/tag-invalidator-v%s/%s", version, tagInvalidatorAssetName)
-}
-
-func tagInvalidatorArtifactKey(p artifactPin) string {
-	return fmt.Sprintf("%s/%s-%s.zip", tagInvalidatorKeyPrefix, p.version, p.digest())
-}
-
-func ensureTagInvalidatorArtifact(ctx context.Context, art Artifacts, bucket string, p artifactPin) (artifactCode, error) {
-	return ensureArtifact(ctx, art, bucket, tagInvalidatorArtifactKey(p), tagInvalidatorReleaseURL(p.version), tagInvalidatorLabel, p)
-}
-
-func tagInvalidatorResources(code artifactCode, class string) string {
-	if !code.present() {
+func tagInvalidatorResources(code payloads.Placement, class string) string {
+	if !code.Present() {
 		return ""
 	}
 	return fmt.Sprintf(`  TagInvalidatorDeadLetterQueue:
@@ -141,7 +128,7 @@ func tagInvalidatorResources(code artifactCode, class string) string {
           - Pattern: '%s'
 `, tagInvalidatorDLQRetentionSeconds,
 		tagInvalidatorRuntime, tagInvalidatorArchitecture, tagInvalidatorHandler, tagInvalidatorMemoryMB, tagInvalidatorTimeoutSeconds,
-		code.bucket, code.key,
+		code.Bucket, code.Key,
 		tagInvalidatorStateTableEnvVar, tagInvalidatorClassEnvVar, class,
 		tagInvalidatorBatchSize, tagInvalidatorRetries, tagRecordStreamFilter)
 }

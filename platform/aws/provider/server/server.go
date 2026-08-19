@@ -496,17 +496,13 @@ func (s *Server) Bootstrap(ctx context.Context, req *deploymentsv1.BootstrapRequ
 		return stream.Send(failureResult(compat.Explain(deployed.Version, bootstrap.RequiredBootstrapVersion, bootstrapCommand(preview))))
 	}
 
-	artifact := bootstrap.Artifacts{
-		Source: bootstrap.ReleaseSource{},
-		Store:  s3.NewFromConfig(awscfg),
-	}
-	if err := s.runBootstrap(ctx, bootstrapRunner(preview), cfn, ssmClient, iamClient, edgeFront, artifact, progress, logf); err != nil {
+	if err := s.runBootstrap(ctx, bootstrapRunner(preview), cfn, ssmClient, iamClient, edgeFront, s3.NewFromConfig(awscfg), progress, logf); err != nil {
 		return stream.Send(failureResult(err))
 	}
 	return stream.Send(okResult())
 }
 
-type bootstrapRun func(ctx context.Context, cfn bootstrap.CFNAPI, ssmClient bootstrap.SSMAPI, iamClient bootstrap.IAMAPI, edgeProvider edge.Edge, artifact bootstrap.Artifacts, progress, log func(string)) error
+type bootstrapRun func(ctx context.Context, cfn bootstrap.CFNAPI, ssmClient bootstrap.SSMAPI, iamClient bootstrap.IAMAPI, edgeProvider edge.Edge, store bootstrap.ObjectStore, progress, log func(string)) error
 
 func bootstrapRunner(preview bool) bootstrapRun {
 	if preview {
@@ -515,8 +511,8 @@ func bootstrapRunner(preview bool) bootstrapRun {
 	return bootstrap.Run
 }
 
-func (s *Server) runBootstrap(ctx context.Context, run bootstrapRun, cfn bootstrap.CFNAPI, ssmClient bootstrap.SSMAPI, iamClient bootstrap.IAMAPI, edgeFront edge.Edge, artifact bootstrap.Artifacts, progress, logf func(string)) error {
-	if err := run(ctx, cfn, ssmClient, iamClient, edgeFront, artifact, progress, logf); err != nil {
+func (s *Server) runBootstrap(ctx context.Context, run bootstrapRun, cfn bootstrap.CFNAPI, ssmClient bootstrap.SSMAPI, iamClient bootstrap.IAMAPI, edgeFront edge.Edge, store bootstrap.ObjectStore, progress, logf func(string)) error {
+	if err := run(ctx, cfn, ssmClient, iamClient, edgeFront, store, progress, logf); err != nil {
 		return err
 	}
 	s.memo.forgetDeployed()

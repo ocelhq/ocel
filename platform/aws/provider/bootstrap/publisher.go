@@ -3,11 +3,11 @@ package bootstrap
 import (
 	"context"
 	"fmt"
+
+	"github.com/ocelhq/ocel/platform/aws/provider/payloads"
 )
 
 const (
-	tagPublisherAssetName = "tag-publisher.zip"
-
 	tagPublisherKeyPrefix = "ocel-tag-publisher"
 
 	tagPublisherLabel = "tag publisher"
@@ -31,24 +31,12 @@ const (
 
 const tagRecordStreamFilter = `{"dynamodb":{"Keys":{"pk":{"S":[{"prefix":"PROJECT#"}]},"sk":{"S":["#META"]}}}}`
 
-func pinnedTagPublisher() artifactPin {
-	return artifactPin{version: TagPublisherArtifactVersion, sha256: TagPublisherArtifactSHA256}
+func ensureTagPublisherPayload(ctx context.Context, store ObjectStore, bucket string) (payloads.Placement, error) {
+	return payloads.Place(ctx, store, bucket, tagPublisherKeyPrefix, tagPublisherLabel, payloads.TagPublisher())
 }
 
-func tagPublisherReleaseURL(version string) string {
-	return fmt.Sprintf("https://github.com/ocelhq/ocel/releases/download/tag-publisher-v%s/%s", version, tagPublisherAssetName)
-}
-
-func tagPublisherArtifactKey(p artifactPin) string {
-	return fmt.Sprintf("%s/%s-%s.zip", tagPublisherKeyPrefix, p.version, p.digest())
-}
-
-func ensureTagPublisherArtifact(ctx context.Context, art Artifacts, bucket string, p artifactPin) (artifactCode, error) {
-	return ensureArtifact(ctx, art, bucket, tagPublisherArtifactKey(p), tagPublisherReleaseURL(p.version), tagPublisherLabel, p)
-}
-
-func tagPublisherResources(code artifactCode, class string) string {
-	if !code.present() {
+func tagPublisherResources(code payloads.Placement, class string) string {
+	if !code.Present() {
 		return ""
 	}
 	writerParam, seedParam := isrWriterParamNames(class)
@@ -148,7 +136,7 @@ func tagPublisherResources(code artifactCode, class string) string {
 `, tagPublisherDLQRetentionSeconds,
 		writerParam, seedParam, writerParam, seedParam,
 		tagPublisherRuntime, tagPublisherArchitecture, tagPublisherHandler, tagPublisherMemoryMB, tagPublisherTimeoutSeconds,
-		code.bucket, code.key,
+		code.Bucket, code.Key,
 		tagPublisherAssetBucketEnvVar, tagPublisherWriterParamEnvVar, writerParam, tagPublisherSeedParamEnvVar, seedParam,
 		tagPublisherBatchSize, tagPublisherRetries, tagRecordStreamFilter)
 }

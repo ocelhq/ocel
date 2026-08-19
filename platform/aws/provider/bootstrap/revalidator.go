@@ -3,12 +3,12 @@ package bootstrap
 import (
 	"context"
 	"fmt"
+
+	"github.com/ocelhq/ocel/platform/aws/provider/payloads"
 )
 
 const (
 	outputRevalidateQueueURL = "RevalidateQueueUrl"
-
-	revalidatorAssetName = "revalidator.zip"
 
 	revalidatorKeyPrefix = "ocel-revalidator"
 
@@ -43,20 +43,8 @@ func revalidateQueueNames(class string) (queue, dlq string) {
 	return "ocel-revalidate.fifo", "ocel-revalidate-dlq.fifo"
 }
 
-func pinnedRevalidator() artifactPin {
-	return artifactPin{version: RevalidatorArtifactVersion, sha256: RevalidatorArtifactSHA256}
-}
-
-func revalidatorReleaseURL(version string) string {
-	return fmt.Sprintf("https://github.com/ocelhq/ocel/releases/download/revalidator-v%s/%s", version, revalidatorAssetName)
-}
-
-func revalidatorArtifactKey(p artifactPin) string {
-	return fmt.Sprintf("%s/%s-%s.zip", revalidatorKeyPrefix, p.version, p.digest())
-}
-
-func ensureRevalidatorArtifact(ctx context.Context, art Artifacts, bucket string, p artifactPin) (artifactCode, error) {
-	return ensureArtifact(ctx, art, bucket, revalidatorArtifactKey(p), revalidatorReleaseURL(p.version), revalidatorLabel, p)
+func ensureRevalidatorPayload(ctx context.Context, store ObjectStore, bucket string) (payloads.Placement, error) {
+	return payloads.Place(ctx, store, bucket, revalidatorKeyPrefix, revalidatorLabel, payloads.Revalidator())
 }
 
 func revalidateQueueResources(class string) string {
@@ -88,8 +76,8 @@ func revalidateQueueResources(class string) string {
 		revalidateVisibilityTimeoutSeconds, revalidateRetentionSeconds, revalidateMaxReceiveCount)
 }
 
-func revalidatorResources(code artifactCode) string {
-	if !code.present() {
+func revalidatorResources(code payloads.Placement) string {
+	if !code.Present() {
 		return ""
 	}
 	return fmt.Sprintf(`  RevalidatorRole:
@@ -163,13 +151,13 @@ func revalidatorResources(code artifactCode) string {
       ScalingConfig:
         MaximumConcurrency: %d
 `, revalidatorRuntime, revalidatorArchitecture, revalidatorHandler, revalidatorMemoryMB, revalidatorTimeoutSeconds,
-		code.bucket, code.key,
+		code.Bucket, code.Key,
 		revalidatorAssetBucketEnvVar,
 		revalidatorBatchSize, revalidatorMaxConcurrency)
 }
 
-func revalidateQueueOutput(code artifactCode) string {
-	if !code.present() {
+func revalidateQueueOutput(code payloads.Placement) string {
+	if !code.Present() {
 		return ""
 	}
 	return fmt.Sprintf(`  %s:

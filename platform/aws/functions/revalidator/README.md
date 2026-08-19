@@ -194,11 +194,3 @@ Logs carry the dedup ingredients (`isrPrefix`, `routePath`, `lastModified`,
 `enqueuedAt`) plus the message id and an outcome code. They never carry the
 record, its headers, or an error's own text — the emitter has no field that
 could hold them.
-
-## Release
-
-`pnpm --filter @platform/aws-revalidator zip` builds a reproducible
-`dist/revalidator.zip` (fixed timestamps, sorted entries). It is published as a
-GitHub release asset `revalidator-v<version>` and pinned by version + sha256 in
-`platform/aws/provider/bootstrap/revalidatorversion.go`, which bootstrap verifies
-fail-closed. Unpinned, bootstrap renders no consumer at all.

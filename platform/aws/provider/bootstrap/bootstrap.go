@@ -17,6 +17,7 @@ import (
 	ssmtypes "github.com/aws/aws-sdk-go-v2/service/ssm/types"
 	smithy "github.com/aws/smithy-go"
 
+	"github.com/ocelhq/ocel/platform/aws/provider/payloads"
 	"github.com/ocelhq/ocel/platform/aws/provider/stackindex"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
@@ -135,38 +136,18 @@ func checkStack(ctx context.Context, api CFNDescriber, stackName string) (Deploy
 	return d, nil
 }
 
-type stackArtifacts struct {
-	optimizer   artifactCode
-	publisher   artifactCode
-	invalidator artifactCode
-	revalidator artifactCode
-}
-
-type stackPins struct {
-	optimizer   artifactPin
-	publisher   artifactPin
-	invalidator artifactPin
-	revalidator artifactPin
-}
-
-func (p stackPins) pinned() bool {
-	return p.optimizer.pinned() || p.publisher.pinned() || p.invalidator.pinned() || p.revalidator.pinned()
-}
-
-func pinnedArtifacts() stackPins {
-	return stackPins{
-		optimizer:   pinnedOptimizer(),
-		publisher:   pinnedTagPublisher(),
-		invalidator: pinnedTagInvalidator(),
-		revalidator: pinnedRevalidator(),
-	}
+type stackPayloads struct {
+	optimizer   payloads.Placement
+	publisher   payloads.Placement
+	invalidator payloads.Placement
+	revalidator payloads.Placement
 }
 
 type substrate struct {
 	class     string
 	stackName string
 	stackStep string
-	template  func(edge.TrustBoundary, stackArtifacts, int) string
+	template  func(edge.TrustBoundary, stackPayloads, int) string
 }
 
 func productionSubstrate() substrate {
@@ -187,15 +168,15 @@ func previewSubstrate() substrate {
 	}
 }
 
-func Run(ctx context.Context, cfn CFNAPI, ssmClient SSMAPI, iamClient IAMAPI, edgeProvider edge.Edge, artifact Artifacts, progress, log func(string)) error {
-	return run(ctx, cfn, ssmClient, iamClient, edgeProvider, artifact, pinnedArtifacts(), productionSubstrate(), progress, log)
+func Run(ctx context.Context, cfn CFNAPI, ssmClient SSMAPI, iamClient IAMAPI, edgeProvider edge.Edge, store ObjectStore, progress, log func(string)) error {
+	return run(ctx, cfn, ssmClient, iamClient, edgeProvider, store, productionSubstrate(), progress, log)
 }
 
-func RunPreview(ctx context.Context, cfn CFNAPI, ssmClient SSMAPI, iamClient IAMAPI, edgeProvider edge.Edge, artifact Artifacts, progress, log func(string)) error {
-	return run(ctx, cfn, ssmClient, iamClient, edgeProvider, artifact, pinnedArtifacts(), previewSubstrate(), progress, log)
+func RunPreview(ctx context.Context, cfn CFNAPI, ssmClient SSMAPI, iamClient IAMAPI, edgeProvider edge.Edge, store ObjectStore, progress, log func(string)) error {
+	return run(ctx, cfn, ssmClient, iamClient, edgeProvider, store, previewSubstrate(), progress, log)
 }
 
-func run(ctx context.Context, cfn CFNAPI, ssmClient SSMAPI, iamClient IAMAPI, edgeProvider edge.Edge, artifact Artifacts, pins stackPins, sub substrate, progress, log func(string)) error {
+func run(ctx context.Context, cfn CFNAPI, ssmClient SSMAPI, iamClient IAMAPI, edgeProvider edge.Edge, store ObjectStore, sub substrate, progress, log func(string)) error {
 	report := func(f func(string), msg string) {
 		if f != nil {
 			f(msg)
@@ -246,8 +227,8 @@ func run(ctx context.Context, cfn CFNAPI, ssmClient SSMAPI, iamClient IAMAPI, ed
 	if err != nil {
 		return err
 	}
-	if pins.pinned() && deployed.ArtifactBucket == "" {
-		if err := upsertCFNStack(ctx, cfn, sub.stackName, sub.template(edgeOut.Trust, stackArtifacts{}, seedingBootstrapVersion), namedIAM); err != nil {
+	if deployed.ArtifactBucket == "" {
+		if err := upsertCFNStack(ctx, cfn, sub.stackName, sub.template(edgeOut.Trust, stackPayloads{}, seedingBootstrapVersion), namedIAM); err != nil {
 			return err
 		}
 		if deployed, err = checkStack(ctx, cfn, sub.stackName); err != nil {
@@ -255,37 +236,25 @@ func run(ctx context.Context, cfn CFNAPI, ssmClient SSMAPI, iamClient IAMAPI, ed
 		}
 	}
 
-	var code stackArtifacts
-	if code.optimizer, err = ensureOptimizerArtifact(ctx, artifact, deployed.ArtifactBucket, pins.optimizer); err != nil {
+	var code stackPayloads
+	if code.optimizer, err = ensureOptimizerPayload(ctx, store, deployed.ArtifactBucket); err != nil {
 		return err
 	}
 	if isrWriterAdopted {
-		if code.publisher, err = ensureTagPublisherArtifact(ctx, artifact, deployed.ArtifactBucket, pins.publisher); err != nil {
+		if code.publisher, err = ensureTagPublisherPayload(ctx, store, deployed.ArtifactBucket); err != nil {
 			return err
 		}
 	}
-	invalidates := invalidatesOnPromote(edgeProvider)
-	if invalidates {
-		if code.invalidator, err = ensureTagInvalidatorArtifact(ctx, artifact, deployed.ArtifactBucket, pins.invalidator); err != nil {
+	if invalidatesOnPromote(edgeProvider) {
+		if code.invalidator, err = ensureTagInvalidatorPayload(ctx, store, deployed.ArtifactBucket); err != nil {
 			return err
 		}
 	}
-	if code.revalidator, err = ensureRevalidatorArtifact(ctx, artifact, deployed.ArtifactBucket, pins.revalidator); err != nil {
+	if code.revalidator, err = ensureRevalidatorPayload(ctx, store, deployed.ArtifactBucket); err != nil {
 		return err
-	}
-	if !code.optimizer.present() {
-		report(log, "no image optimizer artifact is pinned in this provider build; none is created, and /_next/image answers 502 as it did before")
-	}
-	if !code.revalidator.present() {
-		report(log, "no revalidator artifact is pinned in this provider build; the revalidation queue is created but nothing drains it, so the edge is not told its URL and every admitted refresh renders through the origin as it does today")
-	}
-	if invalidates && !code.invalidator.present() {
-		report(log, "no tag invalidator artifact is pinned in this provider build; none is created, so a page the origin re-renders keeps being served from the fronts until its cache-control window ends")
 	}
 	if !isrWriterAdopted {
 		report(log, "this substrate adopted no ISR writer, so no tag publisher is created; there is no edge replica for it to publish into")
-	} else if !code.publisher.present() {
-		report(log, "no tag publisher artifact is pinned in this provider build; none is created, so no origin-raised invalidation reaches a build's edge replica — only the ones raised at the edge itself do. The origin's own tag state is authoritative and unaffected")
 	}
 
 	if err := upsertCFNStack(ctx, cfn, sub.stackName, sub.template(edgeOut.Trust, code, RequiredBootstrapVersion), namedIAM); err != nil {
@@ -415,7 +384,7 @@ func generatePassphrase() (string, error) {
 	return base64.RawURLEncoding.EncodeToString(buf), nil
 }
 
-func stackTemplate(trust edge.TrustBoundary, code stackArtifacts, version int) string {
+func stackTemplate(trust edge.TrustBoundary, code stackPayloads, version int) string {
 	return fmt.Sprintf(`AWSTemplateFormatVersion: '2010-09-09'
 Description: "Ocel bootstrap (production) - the account-global substrate every production app Ocel deploys into this AWS account is built on: the Pulumi state bucket and state table, the artifact and asset buckets, the variable store, and the image optimizer, tag publisher, tag invalidator and ISR revalidator all apps share. Created and updated by ocel bootstrap; it holds no app of its own. Deleting this stack orphans every app deployed from it: the Pulumi state describing them goes with its bucket, and no deploy or teardown can run until it is recreated."
 Resources:
@@ -432,7 +401,7 @@ Resources:
 `, stateBucketResource(ClassProduction), stateTableResource(), artifactBucketResource(), assetBucketResource(), assetBucketPolicyResource(), varsResources(ClassProduction), imageOptimizerResources(code.optimizer), tagPublisherResources(code.publisher, ClassProduction), tagInvalidatorResources(code.invalidator, ClassProduction), revalidateQueueResources(ClassProduction), revalidatorResources(code.revalidator), edgeUserResource(EdgeUserName, ClassProduction, trust, code.optimizer), outputStateBucket, stateTableOutput(), artifactBucketOutput(), assetBucketOutput(), varsOutputs(), imageOptimizerOutput(code.optimizer), revalidateQueueOutput(code.revalidator), outputVersion, version, outputInfraClass, ClassProduction)
 }
 
-func previewStackTemplate(trust edge.TrustBoundary, code stackArtifacts, version int) string {
+func previewStackTemplate(trust edge.TrustBoundary, code stackPayloads, version int) string {
 	return fmt.Sprintf(`AWSTemplateFormatVersion: '2010-09-09'
 Description: "Ocel bootstrap (preview) - the account-global substrate every preview environment Ocel deploys into this AWS account is carved from, deliberately separate from the production bootstrap so a per-PR preview can never reach production state, variables or caches. Created and updated by ocel bootstrap --preview. Deleting this stack orphans every live preview: the Pulumi state describing them goes with its bucket, and no preview deploy or teardown can run until it is recreated."
 Resources:
@@ -618,7 +587,7 @@ func assetBucketOutput() string {
 `, outputAssetBucket)
 }
 
-func edgeUserResource(userName, class string, trust edge.TrustBoundary, optimizer artifactCode) string {
+func edgeUserResource(userName, class string, trust edge.TrustBoundary, optimizer payloads.Placement) string {
 	if trust != edge.TrustExternal {
 		return ""
 	}

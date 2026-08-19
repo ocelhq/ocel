@@ -3,12 +3,12 @@ package bootstrap
 import (
 	"context"
 	"fmt"
+
+	"github.com/ocelhq/ocel/platform/aws/provider/payloads"
 )
 
 const (
 	outputImageOptimizerURL = "ImageOptimizerFunctionUrl"
-
-	optimizerAssetName = "image-optimizer.zip"
 
 	optimizerKeyPrefix = "ocel-image-optimizer"
 
@@ -29,24 +29,12 @@ const (
 
 const optimizerLabel = "image optimizer"
 
-func pinnedOptimizer() artifactPin {
-	return artifactPin{version: ImageOptimizerArtifactVersion, sha256: ImageOptimizerArtifactSHA256}
+func ensureOptimizerPayload(ctx context.Context, store ObjectStore, bucket string) (payloads.Placement, error) {
+	return payloads.Place(ctx, store, bucket, optimizerKeyPrefix, optimizerLabel, payloads.ImageOptimizer())
 }
 
-func optimizerReleaseURL(version string) string {
-	return fmt.Sprintf("https://github.com/ocelhq/ocel/releases/download/image-optimizer-v%s/%s", version, optimizerAssetName)
-}
-
-func optimizerArtifactKey(p artifactPin) string {
-	return fmt.Sprintf("%s/%s-%s.zip", optimizerKeyPrefix, p.version, p.digest())
-}
-
-func ensureOptimizerArtifact(ctx context.Context, art Artifacts, bucket string, p artifactPin) (artifactCode, error) {
-	return ensureArtifact(ctx, art, bucket, optimizerArtifactKey(p), optimizerReleaseURL(p.version), optimizerLabel, p)
-}
-
-func imageOptimizerResources(code artifactCode) string {
-	if !code.present() {
+func imageOptimizerResources(code payloads.Placement) string {
+	if !code.Present() {
 		return ""
 	}
 	return fmt.Sprintf(`  ImageOptimizerRole:
@@ -102,12 +90,12 @@ func imageOptimizerResources(code artifactCode) string {
       AuthType: AWS_IAM
       InvokeMode: RESPONSE_STREAM
 `, optimizerRuntime, optimizerArchitecture, optimizerHandler, optimizerMemoryMB, optimizerTimeoutSeconds,
-		code.bucket, code.key, optimizerBucketEnvVar, optimizerThreadpoolSize,
+		code.Bucket, code.Key, optimizerBucketEnvVar, optimizerThreadpoolSize,
 		optimizerComponentTagKey, optimizerComponentTagValue)
 }
 
-func imageOptimizerOutput(code artifactCode) string {
-	if !code.present() {
+func imageOptimizerOutput(code payloads.Placement) string {
+	if !code.Present() {
 		return ""
 	}
 	return fmt.Sprintf(`  %s:
@@ -116,8 +104,8 @@ func imageOptimizerOutput(code artifactCode) string {
 `, outputImageOptimizerURL)
 }
 
-func imageOptimizerInvokeStatement(code artifactCode) string {
-	if !code.present() {
+func imageOptimizerInvokeStatement(code payloads.Placement) string {
+	if !code.Present() {
 		return ""
 	}
 	return `              - Effect: Allow

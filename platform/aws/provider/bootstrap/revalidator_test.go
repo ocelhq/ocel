@@ -1,6 +1,7 @@
 package bootstrap
 
 import (
+	"bytes"
 	"context"
 	"regexp"
 	"slices"
@@ -9,15 +10,12 @@ import (
 
 	"gopkg.in/yaml.v3"
 
+	"github.com/ocelhq/ocel/platform/aws/provider/payloads"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
-func fixtureRevalidatorPin() artifactPin {
-	return artifactPin{version: "7.8.9", sha256: fixtureDigest()}
-}
-
-func fixtureRevalidatorCode() artifactCode {
-	return artifactCode{bucket: "ocel-artifacts-test", key: revalidatorArtifactKey(fixtureRevalidatorPin())}
+func fixtureRevalidatorCode() payloads.Placement {
+	return payloads.Placement{Bucket: fixtureBucket, Key: payloads.Key(revalidatorKeyPrefix, payloads.Revalidator().SHA256)}
 }
 
 type parsedRevalidator struct {
@@ -115,8 +113,8 @@ func revalidatorTemplates() []struct {
 		class    string
 		template string
 	}{
-		{"production", ClassProduction, stackTemplate(edge.TrustExternal, fixtureArtifacts(), RequiredBootstrapVersion)},
-		{"preview", ClassPreview, previewStackTemplate(edge.TrustExternal, fixtureArtifacts(), RequiredBootstrapVersion)},
+		{"production", ClassProduction, stackTemplate(edge.TrustExternal, fixturePayloads(), RequiredBootstrapVersion)},
+		{"preview", ClassPreview, previewStackTemplate(edge.TrustExternal, fixturePayloads(), RequiredBootstrapVersion)},
 	}
 }
 
@@ -187,18 +185,18 @@ func TestRevalidateQueue(t *testing.T) {
 	})
 
 	t.Run("renders without a consumer", func(t *testing.T) {
-		unpinned := stackArtifacts{optimizer: fixtureOptimizerCode()}
+		withoutRevalidator := stackPayloads{optimizer: fixtureOptimizerCode()}
 		for _, tc := range []struct {
 			name     string
 			template string
 		}{
-			{"production", stackTemplate(edge.TrustExternal, unpinned, RequiredBootstrapVersion)},
-			{"preview", previewStackTemplate(edge.TrustExternal, unpinned, RequiredBootstrapVersion)},
+			{"production", stackTemplate(edge.TrustExternal, withoutRevalidator, RequiredBootstrapVersion)},
+			{"preview", previewStackTemplate(edge.TrustExternal, withoutRevalidator, RequiredBootstrapVersion)},
 		} {
 			t.Run(tc.name, func(t *testing.T) {
 				for _, name := range []string{"RevalidateQueue", "RevalidateDeadLetterQueue"} {
 					if !strings.Contains(tc.template, "  "+name+":") {
-						t.Errorf("an unpinned build rendered no %s", name)
+						t.Errorf("a build with no revalidator payload rendered no %s", name)
 					}
 				}
 			})
@@ -382,30 +380,30 @@ func TestRevalidator(t *testing.T) {
 		}
 	})
 
-	t.Run("unpinned renders no consumer and no queue URL", func(t *testing.T) {
+	t.Run("no revalidator payload renders no consumer and no queue URL", func(t *testing.T) {
 		for _, tc := range []struct {
 			name     string
 			template string
 		}{
-			{"production", stackTemplate(edge.TrustExternal, stackArtifacts{optimizer: fixtureOptimizerCode(), publisher: fixturePublisherCode()}, RequiredBootstrapVersion)},
-			{"preview", previewStackTemplate(edge.TrustExternal, stackArtifacts{optimizer: fixtureOptimizerCode(), publisher: fixturePublisherCode()}, RequiredBootstrapVersion)},
+			{"production", stackTemplate(edge.TrustExternal, stackPayloads{optimizer: fixtureOptimizerCode(), publisher: fixturePublisherCode()}, RequiredBootstrapVersion)},
+			{"preview", previewStackTemplate(edge.TrustExternal, stackPayloads{optimizer: fixtureOptimizerCode(), publisher: fixturePublisherCode()}, RequiredBootstrapVersion)},
 		} {
 			t.Run(tc.name, func(t *testing.T) {
 				for _, name := range []string{
 					"Revalidator", "RevalidatorRole", "RevalidatorQueueConsumer",
 				} {
 					if strings.Contains(tc.template, "  "+name+":") {
-						t.Errorf("an unpinned build still rendered %s", name)
+						t.Errorf("a build with no revalidator payload still rendered %s", name)
 					}
 				}
 				if _, ok := parseRevalidatorTemplate(t, tc.template).Outputs[outputRevalidateQueueURL]; ok {
-					t.Errorf("an unpinned build published %s; the edge would enqueue into a queue nothing drains and report the refresh landed", outputRevalidateQueueURL)
+					t.Errorf("a build with no revalidator payload published %s; the edge would enqueue into a queue nothing drains and report the refresh landed", outputRevalidateQueueURL)
 				}
 			})
 		}
 	})
 
-	t.Run("pinned publishes the queue URL", func(t *testing.T) {
+	t.Run("a placed revalidator publishes the queue URL", func(t *testing.T) {
 		for _, tc := range revalidatorTemplates() {
 			t.Run(tc.name, func(t *testing.T) {
 				out, ok := parseRevalidatorTemplate(t, tc.template).Outputs[outputRevalidateQueueURL]
@@ -488,12 +486,9 @@ func soleResource(t *testing.T, statements []policyStatement, action string) str
 
 func TestRunRevalidator(t *testing.T) {
 	t.Run("this build bootstraps a consumer", func(t *testing.T) {
-		if !pinnedRevalidator().pinned() {
-			t.Fatal("this build pins no revalidator; the queue it provisions has nothing to drain")
-		}
 		for _, tc := range []struct {
 			name      string
-			run       func(context.Context, CFNAPI, SSMAPI, IAMAPI, edge.Edge, Artifacts, func(string), func(string)) error
+			run       func(context.Context, CFNAPI, SSMAPI, IAMAPI, edge.Edge, ObjectStore, func(string), func(string)) error
 			stackName string
 		}{
 			{"production", Run, StackName},
@@ -503,7 +498,7 @@ func TestRunRevalidator(t *testing.T) {
 				cfn, ssmc, iamc := newFakeCFN(), newFakeSSM(), &fakeIAM{}
 				ed := &fakeEdge{out: edge.BootstrapOutput{Trust: edge.TrustExternal}}
 
-				if err := tc.run(context.Background(), cfn, ssmc, iamc, ed, preloadedArtifact(), nil, nil); err != nil {
+				if err := tc.run(context.Background(), cfn, ssmc, iamc, ed, preloadedStore(), nil, nil); err != nil {
 					t.Fatalf("run: %v", err)
 				}
 				template := cfn.templates[tc.stackName]
@@ -514,7 +509,7 @@ func TestRunRevalidator(t *testing.T) {
 						t.Errorf("this build's bootstrap rendered no %s", name)
 					}
 				}
-				if want := revalidatorArtifactKey(pinnedRevalidator()); !strings.Contains(template, want) {
+				if want := payloads.Key(revalidatorKeyPrefix, payloads.Revalidator().SHA256); !strings.Contains(template, want) {
 					t.Errorf("the consumer does not read its code from %s", want)
 				}
 				if _, ok := parseRevalidatorTemplate(t, template).Outputs[outputRevalidateQueueURL]; !ok {
@@ -571,49 +566,21 @@ func TestEdgeUserRevalidator(t *testing.T) {
 	})
 }
 
-func TestEnsureRevalidatorArtifact(t *testing.T) {
-	t.Run("refuses a digest mismatch", func(t *testing.T) {
-		art, store, source := fixtureArtifactDeps([]byte("not the revalidator anyone reviewed"))
+func TestEnsureRevalidatorPayload(t *testing.T) {
+	t.Run("uploads the embedded revalidator", func(t *testing.T) {
+		store := newFakeObjectStore()
 
-		code, err := ensureRevalidatorArtifact(context.Background(), art, "ocel-artifacts-test", fixtureRevalidatorPin())
-		if err == nil {
-			t.Fatal("a mismatched revalidator was accepted; it must refuse to deploy")
-		}
-		if code.present() {
-			t.Errorf("a refused revalidator still produced code %+v", code)
-		}
-		if store.puts != 0 {
-			t.Errorf("a refused revalidator was uploaded anyway (%d puts)", store.puts)
-		}
-		if want := revalidatorReleaseURL(fixtureRevalidatorPin().version); len(source.urls) != 1 || source.urls[0] != want {
-			t.Errorf("fetched %v, want exactly [%s]", source.urls, want)
-		}
-		if !strings.Contains(err.Error(), fixtureRevalidatorPin().sha256) {
-			t.Errorf("error does not name the required digest: %v", err)
-		}
-		if !strings.Contains(err.Error(), revalidatorLabel) {
-			t.Errorf("error does not name which artifact refused: %v", err)
-		}
-	})
-
-	t.Run("uploads a verified artifact", func(t *testing.T) {
-		art, store, _ := fixtureArtifactDeps(fixtureArtifact)
-
-		code, err := ensureRevalidatorArtifact(context.Background(), art, "ocel-artifacts-test", fixtureRevalidatorPin())
+		code, err := ensureRevalidatorPayload(context.Background(), store, fixtureBucket)
 		if err != nil {
-			t.Fatalf("ensureRevalidatorArtifact: %v", err)
+			t.Fatalf("ensureRevalidatorPayload: %v", err)
 		}
-		if !strings.Contains(code.key, fixtureDigest()) {
-			t.Errorf("key %q is not content-addressed on the pinned digest", code.key)
+		if want := payloads.Key(revalidatorKeyPrefix, payloads.Revalidator().SHA256); code.Key != want {
+			t.Errorf("key = %q, want %q", code.Key, want)
 		}
-		if got := string(store.objects[code.key]); got != string(fixtureArtifact) {
-			t.Errorf("uploaded %q, want the verified bytes verbatim", got)
+		if !bytes.Equal(store.objects[code.Key], payloads.Revalidator().Bytes) {
+			t.Error("the account holds bytes other than the embedded revalidator")
 		}
-		want, err := fixtureRevalidatorPin().checksum(revalidatorLabel)
-		if err != nil {
-			t.Fatalf("checksum: %v", err)
-		}
-		if len(store.putChecksums) != 1 || store.putChecksums[0] != want {
+		if want := payloads.Revalidator().ChecksumSHA256; len(store.putChecksums) != 1 || store.putChecksums[0] != want {
 			t.Errorf("uploaded with checksums %v, want [%s]", store.putChecksums, want)
 		}
 	})

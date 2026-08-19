@@ -95,7 +95,7 @@ type parsedTemplate struct {
 
 func parseTemplate(t *testing.T) parsedTemplate {
 	t.Helper()
-	return parseTemplateStr(t, stackTemplate(edge.TrustExternal, fixtureArtifacts(), RequiredBootstrapVersion))
+	return parseTemplateStr(t, stackTemplate(edge.TrustExternal, fixturePayloads(), RequiredBootstrapVersion))
 }
 
 func parseTemplateStr(t *testing.T, template string) parsedTemplate {
@@ -113,8 +113,8 @@ func TestStackTemplate(t *testing.T) {
 			name     string
 			template string
 		}{
-			{"production", stackTemplate(edge.TrustExternal, fixtureArtifacts(), RequiredBootstrapVersion)},
-			{"preview", previewStackTemplate(edge.TrustExternal, fixtureArtifacts(), RequiredBootstrapVersion)},
+			{"production", stackTemplate(edge.TrustExternal, fixturePayloads(), RequiredBootstrapVersion)},
+			{"preview", previewStackTemplate(edge.TrustExternal, fixturePayloads(), RequiredBootstrapVersion)},
 		} {
 			t.Run(tc.name, func(t *testing.T) {
 				tmpl := parseTemplateStr(t, tc.template)
@@ -197,8 +197,8 @@ func TestStateBucket(t *testing.T) {
 		name     string
 		template string
 	}{
-		{"production", stackTemplate(edge.TrustExternal, fixtureArtifacts(), RequiredBootstrapVersion)},
-		{"preview", previewStackTemplate(edge.TrustExternal, fixtureArtifacts(), RequiredBootstrapVersion)},
+		{"production", stackTemplate(edge.TrustExternal, fixturePayloads(), RequiredBootstrapVersion)},
+		{"preview", previewStackTemplate(edge.TrustExternal, fixturePayloads(), RequiredBootstrapVersion)},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			tmpl := parseTemplateStr(t, tc.template)
@@ -254,8 +254,8 @@ func TestArtifactBucket(t *testing.T) {
 		name     string
 		template string
 	}{
-		{"production", stackTemplate(edge.TrustExternal, fixtureArtifacts(), RequiredBootstrapVersion)},
-		{"preview", previewStackTemplate(edge.TrustExternal, fixtureArtifacts(), RequiredBootstrapVersion)},
+		{"production", stackTemplate(edge.TrustExternal, fixturePayloads(), RequiredBootstrapVersion)},
+		{"preview", previewStackTemplate(edge.TrustExternal, fixturePayloads(), RequiredBootstrapVersion)},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			tmpl := parseTemplateStr(t, tc.template)
@@ -300,8 +300,8 @@ func TestAssetBucket(t *testing.T) {
 		name     string
 		template string
 	}{
-		{"production", stackTemplate(edge.TrustExternal, fixtureArtifacts(), RequiredBootstrapVersion)},
-		{"preview", previewStackTemplate(edge.TrustExternal, fixtureArtifacts(), RequiredBootstrapVersion)},
+		{"production", stackTemplate(edge.TrustExternal, fixturePayloads(), RequiredBootstrapVersion)},
+		{"preview", previewStackTemplate(edge.TrustExternal, fixturePayloads(), RequiredBootstrapVersion)},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			tmpl := parseTemplateStr(t, tc.template)
@@ -396,7 +396,7 @@ func TestCheckDeployed(t *testing.T) {
 func TestPreviewStackTemplate(t *testing.T) {
 	t.Run("stamps preview class", func(t *testing.T) {
 		var tmpl parsedTemplate
-		if err := yaml.Unmarshal([]byte(previewStackTemplate(edge.TrustExternal, fixtureArtifacts(), RequiredBootstrapVersion)), &tmpl); err != nil {
+		if err := yaml.Unmarshal([]byte(previewStackTemplate(edge.TrustExternal, fixturePayloads(), RequiredBootstrapVersion)), &tmpl); err != nil {
 			t.Fatalf("preview template is not valid YAML: %v", err)
 		}
 		if got := tmpl.Outputs[outputInfraClass].Value; got != ClassPreview {
@@ -431,8 +431,8 @@ func TestEdgeUser(t *testing.T) {
 		template string
 		userName string
 	}{
-		{"production", stackTemplate(edge.TrustExternal, fixtureArtifacts(), RequiredBootstrapVersion), EdgeUserName},
-		{"preview", previewStackTemplate(edge.TrustExternal, fixtureArtifacts(), RequiredBootstrapVersion), EdgePreviewUserName},
+		{"production", stackTemplate(edge.TrustExternal, fixturePayloads(), RequiredBootstrapVersion), EdgeUserName},
+		{"preview", previewStackTemplate(edge.TrustExternal, fixturePayloads(), RequiredBootstrapVersion), EdgePreviewUserName},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			var tmpl edgeUserTemplate
@@ -581,8 +581,8 @@ func TestAssetBucketGrantsCloudFrontRead(t *testing.T) {
 		name     string
 		template string
 	}{
-		{"production", stackTemplate(edge.TrustExternal, fixtureArtifacts(), RequiredBootstrapVersion)},
-		{"preview", previewStackTemplate(edge.TrustExternal, fixtureArtifacts(), RequiredBootstrapVersion)},
+		{"production", stackTemplate(edge.TrustExternal, fixturePayloads(), RequiredBootstrapVersion)},
+		{"preview", previewStackTemplate(edge.TrustExternal, fixturePayloads(), RequiredBootstrapVersion)},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			tmpl := parseTemplateStr(t, tc.template)
