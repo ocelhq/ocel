@@ -576,6 +576,37 @@ func TestUseDomainRecordsTheEdgeHoldingTheWildcard(t *testing.T) {
 	}
 }
 
+func TestUseDomainPointsAnUnboundEdgeAtItsProxy(t *testing.T) {
+	const baseDomain = "preview.acme.com"
+	t.Setenv(cloudflareAccountEnvVar, "cf-ambient")
+
+	ctx := context.Background()
+	writer := &fakeDNSWriter{}
+	ssmc := &stateSSM{params: map[string]string{}}
+	run := domainRun{
+		ssm:    ssmc,
+		edge:   &unboundWildcardEdge{},
+		writer: writer,
+		flow: certs.Flow{
+			Writer: writer,
+			Prober: certs.Prober{Attempts: 1, Now: time.Now, Get: func(context.Context, string) (http.Header, error) {
+				answer := http.Header{}
+				answer.Set(edge.HeaderEdge, string(cloudflare.Kind))
+				return answer, nil
+			}},
+		},
+		spec: edge.PreviewWildcardSpec{BaseDomain: baseDomain},
+	}
+
+	if err := useDomain(ctx, run, bootstrap.PreviewDomain{}, baseDomain, func(string) {}, nil); err != nil {
+		t.Fatalf("useDomain: %v", err)
+	}
+	want := edge.Record{Name: edge.PreviewWildcard(baseDomain), Type: edge.RecordTypeAAAA, Value: edge.ProxyPlaceholder, Proxied: true}
+	if len(writer.written) != 1 || writer.written[0] != want {
+		t.Fatalf("written = %v, want %v: an edge that serves every hostname publishes no front to CNAME to", writer.written, want)
+	}
+}
+
 func TestGlobalPreviewAccountMismatch(t *testing.T) {
 	recorded := bootstrap.PreviewDomain{BaseDomain: "preview.acme.com", CloudflareAccount: "recorded-acct"}
 
@@ -618,6 +649,18 @@ func (e *wildcardEdge) Kind() edge.Kind { return cloudfront.Kind }
 func (e *wildcardEdge) ReconcilePreviewWildcard(_ context.Context, spec edge.PreviewWildcardSpec) (string, error) {
 	e.specs = append(e.specs, spec)
 	return e.front, nil
+}
+
+type unboundWildcardEdge struct {
+	edge.Edge
+}
+
+func (e *unboundWildcardEdge) Kind() edge.Kind { return cloudflare.Kind }
+
+func (e *unboundWildcardEdge) ServesUnbound() bool { return true }
+
+func (e *unboundWildcardEdge) ReconcilePreviewWildcard(context.Context, edge.PreviewWildcardSpec) (string, error) {
+	return "", nil
 }
 
 type issuingACM struct {

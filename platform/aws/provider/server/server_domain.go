@@ -189,7 +189,8 @@ func useDomain(ctx context.Context, run domainRun, recorded bootstrap.PreviewDom
 		return err
 	}
 
-	records, err := edge.RecordsFor(edge.DNSTarget{Kind: run.edge.Kind(), Front: front}, []string{wildcard})
+	target := edge.DNSTarget{Kind: run.edge.Kind(), ServesUnbound: edge.ServesUnbound(run.edge), Front: front}
+	records, err := edge.RecordsFor(target, []string{wildcard})
 	if err != nil {
 		return err
 	}
