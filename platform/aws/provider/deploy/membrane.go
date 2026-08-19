@@ -10,30 +10,13 @@ import (
 
 const providerName = "aws"
 
-const listenerCodePathEnvVar = "OCEL_LISTENER_CODE_PATH"
-
-type MissingListenerCodeError struct {
-	Resource string
-}
-
-func (e *MissingListenerCodeError) Error() string {
-	return fmt.Sprintf(
-		"%s is a bucket, whose uploads complete through an event listener function, and this deploy has no listener code to ship: "+
-			"set %s to the listener zip (`make listener` builds it)",
-		e.Resource, listenerCodePathEnvVar,
-	)
-}
-
-func checkListenerCode(manifest *deploymentsv1.Manifest, codePath string) error {
-	if codePath != "" {
-		return nil
-	}
+func completesUploads(manifest *deploymentsv1.Manifest) bool {
 	for _, r := range manifest.GetResources() {
 		if r.GetBucket() != nil && !r.GetLinked() {
-			return &MissingListenerCodeError{Resource: r.GetLogicalName()}
+			return true
 		}
 	}
-	return nil
+	return false
 }
 
 type MissingMembraneError struct {

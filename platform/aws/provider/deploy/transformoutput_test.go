@@ -263,10 +263,10 @@ func TestResolveOutputs(t *testing.T) {
 		store := customNetworkStore(t, map[string]any{"subnetIds": []any{"subnet-a"}})
 		fake := &fakeEvaluator{out: []transform.Surfaces{
 			{
-				"bucket":       {"forceDestroy": false},
-				"cors":         {"allowedOrigins": []any{}, "allowedMethods": []any{}, "allowedHeaders": []any{}, "exposeHeaders": []any{}, "maxAgeSeconds": float64(0)},
-				"listener":     {"timeoutSeconds": float64(30)},
-				"notification": {"events": []any{}},
+				"bucket":          {"forceDestroy": false},
+				"cors":            {"allowedOrigins": []any{}, "allowedMethods": []any{}, "allowedHeaders": []any{}, "exposeHeaders": []any{}, "maxAgeSeconds": float64(0)},
+				"uploadCompleter": {"timeoutSeconds": float64(30)},
+				"notification":    {"events": []any{}},
 			},
 			placedFunction(vpcPlaceholder("network", "subnetIds"), []any{"sg-1"})[0],
 		}}
@@ -299,10 +299,10 @@ func TestResolveOutputs(t *testing.T) {
 		store := customNetworkStore(t, map[string]any{"subnetIds": []any{"subnet-a"}})
 		fake := &fakeEvaluator{out: []transform.Surfaces{
 			{
-				"bucket":       {"forceDestroy": false},
-				"cors":         {"allowedOrigins": []any{}, "allowedMethods": []any{}, "allowedHeaders": []any{}, "exposeHeaders": []any{}, "maxAgeSeconds": float64(0)},
-				"listener":     {"timeoutSeconds": float64(30)},
-				"notification": {"events": []any{}},
+				"bucket":          {"forceDestroy": false},
+				"cors":            {"allowedOrigins": []any{}, "allowedMethods": []any{}, "allowedHeaders": []any{}, "exposeHeaders": []any{}, "maxAgeSeconds": float64(0)},
+				"uploadCompleter": {"timeoutSeconds": float64(30)},
+				"notification":    {"events": []any{}},
 			},
 			placedFunction(vpcPlaceholder("network", "subnetIds"), []any{"sg-1"})[0],
 		}}
@@ -453,7 +453,7 @@ func TestVPCPlacementFromLinkOutput(t *testing.T) {
 			return err
 		}
 		_, err = registerFunction(pctx, "fn--api--users", functionCoordinate("shop", testStack(t, "prod", "api"), "fn--api--users"),
-			"/users", args, artifactRef{Bucket: "artifacts", Key: "fn.zip"}, nil, nil, nil, nil, role.Arn, functionURLAuthIAM)
+			"/users", args, artifactRef{Bucket: "artifacts", Key: "fn.zip"}, nil, nil, nil, nil, role.Arn, pulumi.String("arn:aws:lambda:us-east-1:123456789012:layer:membrane:1"), functionURLAuthIAM)
 		return err
 	}
 	if err := pulumi.RunErr(program, pulumi.WithMocks("shop", "prod--api", rec)); err != nil {
@@ -511,7 +511,7 @@ func TestFunctionOutsideAVPCRendersNoVPCConfig(t *testing.T) {
 			return err
 		}
 		_, err = registerFunction(pctx, "fn--api--users", functionCoordinate("shop", testStack(t, "prod", "api"), "fn--api--users"),
-			"/users", args, artifactRef{Bucket: "artifacts", Key: "fn.zip"}, nil, nil, nil, nil, role.Arn, functionURLAuthIAM)
+			"/users", args, artifactRef{Bucket: "artifacts", Key: "fn.zip"}, nil, nil, nil, nil, role.Arn, pulumi.String("arn:aws:lambda:us-east-1:123456789012:layer:membrane:1"), functionURLAuthIAM)
 		return err
 	}
 	if err := pulumi.RunErr(program, pulumi.WithMocks("shop", "prod--api", rec)); err != nil {
@@ -568,6 +568,11 @@ func (r *inputRecorder) NewResource(args pulumi.MockResourceArgs) (string, resou
 	if args.TypeToken == "aws:lambda/function:Function" {
 		state := args.Inputs.Copy()
 		state["arn"] = resource.NewStringProperty(mockAccountARN("lambda", "function:"+args.Name))
+		return args.Name + "-id", state, nil
+	}
+	if args.TypeToken == "aws:lambda/layerVersion:LayerVersion" {
+		state := args.Inputs.Copy()
+		state["arn"] = resource.NewStringProperty(mockAccountARN("lambda", "layer:"+args.Name+":1"))
 		return args.Name + "-id", state, nil
 	}
 	if args.TypeToken == "aws:iam/role:Role" {

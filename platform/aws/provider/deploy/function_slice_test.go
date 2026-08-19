@@ -8,9 +8,13 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/pulumi/pulumi/sdk/v3/go/common/resource"
+	"github.com/pulumi/pulumi/sdk/v3/go/pulumi"
+
 	"github.com/ocelhq/ocel/pkg/naming"
 	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
 	linksv1 "github.com/ocelhq/ocel/pkg/proto/links/v1"
+	"github.com/ocelhq/ocel/platform/aws/provider/payloads"
 )
 
 func TestTranslateFunction(t *testing.T) {
@@ -84,20 +88,64 @@ func TestFunctionDefaults(t *testing.T) {
 	})
 }
 
-func TestMembraneLayerARN(t *testing.T) {
-	t.Run("defaults to the pinned layer", func(t *testing.T) {
-		t.Setenv(membraneLayerARNEnv, "")
-		if got := membraneLayerARN(); got != defaultMembraneLayerARN {
-			t.Errorf("membraneLayerARN() = %q, want default %q", got, defaultMembraneLayerARN)
-		}
-	})
+func testMembraneLayerPayload() payloads.Placement {
+	return payloads.Placement{
+		Bucket: "ocel-artifacts",
+		Key:    payloads.Key(membraneLayerKeyPrefix, "beef"),
+		SHA256: "beef",
+	}
+}
 
-	t.Run("the env override wins", func(t *testing.T) {
-		t.Setenv(membraneLayerARNEnv, "arn:aws:lambda:us-east-1:123:layer:ocel-membrane:9")
-		if got := membraneLayerARN(); got != "arn:aws:lambda:us-east-1:123:layer:ocel-membrane:9" {
-			t.Errorf("membraneLayerARN() = %q, want the env override", got)
+func TestMembraneLayer(t *testing.T) {
+	t.Parallel()
+
+	code := testMembraneLayerPayload()
+	rec := &inputRecorder{}
+	program := func(pctx *pulumi.Context) error {
+		stack := testStack(t, "prod", "api")
+		layer, err := newMembraneLayer(pctx, membraneLayerCoordinate("shop", stack), code)
+		if err != nil {
+			return err
 		}
-	})
+		role, err := newFunctionRole(pctx, roleCoordinate("shop", stack), executionRole{App: "api"})
+		if err != nil {
+			return err
+		}
+		_, err = registerFunction(pctx, "fn--api--users", functionCoordinate("shop", stack, "fn--api--users"),
+			"/users", translateFunction(&deploymentsv1.ManifestFunction{}), artifactRef{Bucket: "artifacts", Key: "fn.zip"},
+			nil, nil, nil, nil, role.Arn, layer.Arn, functionURLAuthIAM)
+		return err
+	}
+	if err := pulumi.RunErr(program, pulumi.WithMocks("shop", "prod--api", rec)); err != nil {
+		t.Fatalf("run program: %v", err)
+	}
+
+	inputs := rec.inputs("aws:lambda/layerVersion:LayerVersion", "layer-membrane")
+	if len(inputs) == 0 {
+		t.Fatal("no layer version was registered")
+	}
+	for key, want := range map[string]string{
+		"s3Bucket":       code.Bucket,
+		"s3Key":          code.Key,
+		"sourceCodeHash": code.SHA256,
+		"layerName":      "shop-prod-api-membrane-r3f8a1c90",
+	} {
+		got, ok := inputs[resource.PropertyKey(key)]
+		if !ok || !got.IsString() || got.StringValue() != want {
+			t.Errorf("%s on the layer = %v, want %q", key, got, want)
+		}
+	}
+	if got := stringsAt(inputs, "compatibleRuntimes"); !slices.Equal(got, []string{membraneLayerRuntime}) {
+		t.Errorf("compatibleRuntimes = %v, want %v", got, []string{membraneLayerRuntime})
+	}
+	if got := stringsAt(inputs, "compatibleArchitectures"); !slices.Equal(got, []string{membraneLayerArchitecture}) {
+		t.Errorf("compatibleArchitectures = %v, want %v", got, []string{membraneLayerArchitecture})
+	}
+
+	layers := stringsAt(rec.inputs("aws:lambda/function:Function", "shop-prod-api-users-r3f8a1c90"), "layers")
+	if len(layers) != 1 || !strings.Contains(layers[0], "layer-membrane") {
+		t.Errorf("the function's layers = %v, want the stack's own layer version", layers)
+	}
 }
 
 func TestBytecodeCacheEnabled(t *testing.T) {

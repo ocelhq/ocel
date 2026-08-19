@@ -16,7 +16,7 @@ const conformanceModule = `
 	const identity = (args) => args
 	export default defineTransform({
 		function: { lambda: identity, url: identity, vpc: identity },
-		bucket: { bucket: identity, cors: identity, listener: identity, notification: identity },
+		bucket: { bucket: identity, cors: identity, uploadCompleter: identity, notification: identity },
 		postgres: { cluster: identity, instance: identity },
 	})
 `
@@ -26,7 +26,7 @@ func TestSurfaceConformance(t *testing.T) {
 
 	targeted := map[string][]string{
 		"function": {"lambda", "url", "vpc"},
-		"bucket":   {"bucket", "cors", "listener", "notification"},
+		"bucket":   {"bucket", "cors", "uploadCompleter", "notification"},
 		"postgres": {"cluster", "instance"},
 	}
 

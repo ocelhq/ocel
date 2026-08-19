@@ -52,7 +52,7 @@ describe("defineTransform", () => {
     expect(Object.keys(surfaceFields.bucket)).toEqual([
       "bucket",
       "cors",
-      "listener",
+      "uploadCompleter",
       "notification",
     ]);
     expect(Object.keys(surfaceFields.postgres)).toEqual(["cluster", "instance"]);

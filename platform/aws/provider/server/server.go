@@ -374,7 +374,6 @@ func (s *Server) runDeploy(ctx context.Context, req *deploymentsv1.DeployRequest
 
 		Transform: transformPass(opts),
 
-		ListenerCodePath:   listenerCodePath,
 		ArtifactRoot:       artifactRoot(),
 		ArtifactBucket:     deployed.ArtifactBucket,
 		AssetBucket:        deployed.AssetBucket,
@@ -537,8 +536,6 @@ func checkBootstrap(ctx context.Context, api bootstrap.CFNDescriber, preview boo
 	}
 	return bootstrap.CheckDeployed(ctx, api)
 }
-
-var listenerCodePath = os.Getenv("OCEL_LISTENER_CODE_PATH")
 
 const artifactRootDirName = ".ocel/output"
 

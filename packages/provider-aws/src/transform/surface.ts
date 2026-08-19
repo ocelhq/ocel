@@ -67,8 +67,8 @@ export interface BucketCorsSurface {
   maxAgeSeconds: number;
 }
 
-/** The tunable args of the Lambda that handles the bucket's object events. */
-export interface BucketListenerSurface {
+/** The tunable args of the Lambda that completes the bucket's upload sessions. */
+export interface BucketUploadCompleterSurface {
   timeoutSeconds: number;
 }
 
@@ -106,7 +106,7 @@ export interface AwsSurfaces {
   bucket: {
     bucket: BucketBucketSurface;
     cors: BucketCorsSurface;
-    listener: BucketListenerSurface;
+    uploadCompleter: BucketUploadCompleterSurface;
     notification: BucketNotificationSurface;
   };
   postgres: {
@@ -150,7 +150,7 @@ export const surfaceFields = {
       "exposeHeaders",
       "maxAgeSeconds",
     ),
-    listener: allFields<BucketListenerSurface>()("timeoutSeconds"),
+    uploadCompleter: allFields<BucketUploadCompleterSurface>()("timeoutSeconds"),
     notification: allFields<BucketNotificationSurface>()("events"),
   },
   postgres: {

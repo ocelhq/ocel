@@ -128,8 +128,8 @@ func TestResolveTransforms(t *testing.T) {
 		if got := byName["db"]; got.Type != "postgres" || got.Surfaces["cluster"]["engineVersion"] != defaultPostgresEngineVersion {
 			t.Errorf("postgres candidate = %+v, want the defaulted cluster args", got)
 		}
-		if got := byName["uploads"]; got.Type != "bucket" || got.Surfaces["listener"]["timeoutSeconds"] != listenerTimeoutSeconds {
-			t.Errorf("bucket candidate = %+v, want the defaulted listener args", got)
+		if got := byName["uploads"]; got.Type != "bucket" || got.Surfaces["uploadCompleter"]["timeoutSeconds"] != uploadCompleterTimeoutSeconds {
+			t.Errorf("bucket candidate = %+v, want the defaulted upload completer args", got)
 		}
 	})
 
@@ -172,8 +172,8 @@ func TestResolveTransforms(t *testing.T) {
 					"exposeHeaders":  []any{"ETag"},
 					"maxAgeSeconds":  float64(60),
 				},
-				"listener":     {"timeoutSeconds": float64(90)},
-				"notification": {"events": []any{"s3:ObjectCreated:Put"}},
+				"uploadCompleter": {"timeoutSeconds": float64(90)},
+				"notification":    {"events": []any{"s3:ObjectCreated:Put"}},
 			},
 			{
 				"lambda": {"memorySizeMb": float64(2048), "timeoutSeconds": float64(60), "runtime": "nodejs22.x"},
@@ -204,14 +204,14 @@ func TestResolveTransforms(t *testing.T) {
 		}
 
 		bucket := resolved.forBucket("uploads", manifest.GetResources()[1].GetBucket())
-		if !bucket.ForceDestroy || bucket.ListenerTimeoutSeconds != 90 {
-			t.Errorf("bucket args = %+v, want the transformed bucket and listener args", bucket)
+		if !bucket.ForceDestroy || bucket.UploadCompleterTimeoutSeconds != 90 {
+			t.Errorf("bucket args = %+v, want the transformed bucket and upload completer args", bucket)
 		}
 		if !reflect.DeepEqual(bucket.CORS.AllowedOrigins, []string{"https://shop.example"}) {
 			t.Errorf("cors.allowedOrigins = %v, want the transformed origins", bucket.CORS.AllowedOrigins)
 		}
 		if !reflect.DeepEqual(bucket.AllowedOrigins, bucket.CORS.AllowedOrigins) {
-			t.Errorf("the listener advertises %v while CORS allows %v", bucket.AllowedOrigins, bucket.CORS.AllowedOrigins)
+			t.Errorf("the upload completer advertises %v while CORS allows %v", bucket.AllowedOrigins, bucket.CORS.AllowedOrigins)
 		}
 		if !reflect.DeepEqual(bucket.NotificationEvents, []string{"s3:ObjectCreated:Put"}) {
 			t.Errorf("notification.events = %v, want the transformed events", bucket.NotificationEvents)

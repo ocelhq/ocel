@@ -218,7 +218,7 @@ describe("evaluate", () => {
                 exposeHeaders: ["ETag"],
                 maxAgeSeconds: 3600,
               },
-              listener: { timeoutSeconds: 30 },
+              uploadCompleter: { timeoutSeconds: 30 },
               notification: { events: ["s3:ObjectCreated:*"] },
             },
           },

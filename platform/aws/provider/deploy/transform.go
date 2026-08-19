@@ -189,8 +189,8 @@ func bucketSurfaces(a bucketArgs) transform.Surfaces {
 			"exposeHeaders":  surfaceList(a.CORS.ExposeHeaders),
 			"maxAgeSeconds":  a.CORS.MaxAgeSeconds,
 		},
-		"listener":     {"timeoutSeconds": a.ListenerTimeoutSeconds},
-		"notification": {"events": surfaceList(a.NotificationEvents)},
+		"uploadCompleter": {"timeoutSeconds": a.UploadCompleterTimeoutSeconds},
+		"notification":    {"events": surfaceList(a.NotificationEvents)},
 	}
 }
 
@@ -226,11 +226,11 @@ func applyBucketSurfaces(a bucketArgs, result transform.Result) (bucketArgs, err
 	}
 	a.AllowedOrigins = a.CORS.AllowedOrigins
 
-	listener, err := surfaceAt(s, "listener")
+	completer, err := surfaceAt(s, "uploadCompleter")
 	if err != nil {
 		return a, err
 	}
-	if a.ListenerTimeoutSeconds, err = surfaceInt(listener, "listener", "timeoutSeconds"); err != nil {
+	if a.UploadCompleterTimeoutSeconds, err = surfaceInt(completer, "uploadCompleter", "timeoutSeconds"); err != nil {
 		return a, err
 	}
 

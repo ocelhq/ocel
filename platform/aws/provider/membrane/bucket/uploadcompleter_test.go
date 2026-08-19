@@ -92,8 +92,8 @@ func objectCreatedEvent(bucket, key string) S3Event {
 	}}}}
 }
 
-func newListener(ddb *fakeDDB, tagger objectTagger, doer httpDoer, origins []string) *Listener {
-	return NewListener(ListenerConfig{
+func newUploadCompleter(ddb *fakeDDB, tagger objectTagger, doer httpDoer, origins []string) *UploadCompleter {
+	return NewUploadCompleter(UploadCompleterConfig{
 		DDB:              ddb,
 		Tagger:           tagger,
 		HTTP:             doer,
@@ -103,7 +103,7 @@ func newListener(ddb *fakeDDB, tagger objectTagger, doer httpDoer, origins []str
 	})
 }
 
-func TestListener(t *testing.T) {
+func TestUploadCompleter(t *testing.T) {
 	t.Parallel()
 
 	t.Run("transitions once and signs the accepted callback", func(t *testing.T) {
@@ -112,7 +112,7 @@ func TestListener(t *testing.T) {
 		id, secret := seedPendingSession(t, ddb, testCallback)
 		doer := &recordingDoer{}
 
-		l := newListener(ddb, &fakeTagger{tags: map[string]string{sessionTagKey: id}}, doer, []string{testOrigin})
+		l := newUploadCompleter(ddb, &fakeTagger{tags: map[string]string{sessionTagKey: id}}, doer, []string{testOrigin})
 		if err := l.Handle(context.Background(), objectCreatedEvent(testBucket, testKey)); err != nil {
 			t.Fatalf("Handle: %v", err)
 		}
@@ -131,7 +131,7 @@ func TestListener(t *testing.T) {
 			t.Fatalf("VerifyUploadSignature: %v", err)
 		}
 		if !resp.GetValid() {
-			t.Fatal("genuine listener signature was rejected by VerifyUploadSignature")
+			t.Fatal("genuine upload-completer signature was rejected by VerifyUploadSignature")
 		}
 
 		want := mustSign(t, secret, id, SignedFile{Key: testKey, Name: "u1.png", Size: 2048, MimeType: "image/png"})
@@ -146,7 +146,7 @@ func TestListener(t *testing.T) {
 		id, _ := seedPendingSession(t, ddb, testCallback)
 		doer := &recordingDoer{}
 
-		l := newListener(ddb, &fakeTagger{tags: map[string]string{sessionTagKey: id}}, doer, []string{testOrigin})
+		l := newUploadCompleter(ddb, &fakeTagger{tags: map[string]string{sessionTagKey: id}}, doer, []string{testOrigin})
 		if err := l.Handle(context.Background(), objectCreatedEvent(testBucket, testKey)); err != nil {
 			t.Fatalf("Handle: %v", err)
 		}
@@ -170,7 +170,7 @@ func TestListener(t *testing.T) {
 		id, _ := seedPendingSession(t, ddb, testCallback)
 		doer := &recordingDoer{}
 
-		l := newListener(ddb, &fakeTagger{tags: map[string]string{sessionTagKey: id}}, doer, []string{testOrigin})
+		l := newUploadCompleter(ddb, &fakeTagger{tags: map[string]string{sessionTagKey: id}}, doer, []string{testOrigin})
 		evt := objectCreatedEvent(testBucket, testKey)
 		if err := l.Handle(context.Background(), evt); err != nil {
 			t.Fatalf("first Handle: %v", err)
@@ -190,7 +190,7 @@ func TestListener(t *testing.T) {
 		id, _ := seedPendingSession(t, ddb, "https://evil.example.com/api/upload")
 		doer := &recordingDoer{}
 
-		l := newListener(ddb, &fakeTagger{tags: map[string]string{sessionTagKey: id}}, doer, []string{testOrigin})
+		l := newUploadCompleter(ddb, &fakeTagger{tags: map[string]string{sessionTagKey: id}}, doer, []string{testOrigin})
 		if err := l.Handle(context.Background(), objectCreatedEvent(testBucket, testKey)); err != nil {
 			t.Fatalf("Handle: %v", err)
 		}
@@ -206,7 +206,7 @@ func TestListener(t *testing.T) {
 		seedPendingSession(t, ddb, testCallback)
 		doer := &recordingDoer{}
 
-		l := newListener(ddb, &fakeTagger{tags: map[string]string{}}, doer, []string{testOrigin})
+		l := newUploadCompleter(ddb, &fakeTagger{tags: map[string]string{}}, doer, []string{testOrigin})
 		if err := l.Handle(context.Background(), objectCreatedEvent(testBucket, testKey)); err != nil {
 			t.Fatalf("Handle: %v", err)
 		}

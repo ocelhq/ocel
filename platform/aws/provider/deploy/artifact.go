@@ -25,14 +25,12 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/naming"
 	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
+	"github.com/ocelhq/ocel/platform/aws/provider/payloads"
 )
 
 const uploadConcurrency = 64
 
-type ArtifactUploader interface {
-	HeadObject(ctx context.Context, in *s3.HeadObjectInput, optFns ...func(*s3.Options)) (*s3.HeadObjectOutput, error)
-	PutObject(ctx context.Context, in *s3.PutObjectInput, optFns ...func(*s3.Options)) (*s3.PutObjectOutput, error)
-}
+type ArtifactUploader = payloads.ObjectStore
 
 func walkRegularFiles(dir string) ([]string, error) {
 	var rels []string

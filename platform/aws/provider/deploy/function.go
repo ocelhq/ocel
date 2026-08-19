@@ -15,6 +15,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/naming"
 	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
 	linksv1 "github.com/ocelhq/ocel/pkg/proto/links/v1"
+	"github.com/ocelhq/ocel/platform/aws/provider/payloads"
 )
 
 const (
@@ -31,8 +32,12 @@ const (
 
 	execWrapper = "/opt/ocel/bootstrap"
 
-	defaultMembraneLayerARN = "arn:aws:lambda:us-east-1:363236815301:layer:ocel-membrane:38"
-	membraneLayerARNEnv     = "OCEL_MEMBRANE_LAYER_ARN"
+	membraneLayerLocalName = "membrane"
+
+	membraneLayerRuntime      = "nodejs24.x"
+	membraneLayerArchitecture = "x86_64"
+
+	maxLayerNameLen = 64
 
 	bytecodeCacheEnv = "OCEL_BYTECODE_CACHE"
 
@@ -72,13 +77,6 @@ const (
 
 	lambdaOriginBodyLimitBytes = lambdaSyncInvokePayloadLimitBytes - lambdaEventEnvelopeMarginBytes
 )
-
-func membraneLayerARN() string {
-	if arn := os.Getenv(membraneLayerARNEnv); arn != "" {
-		return arn
-	}
-	return defaultMembraneLayerARN
-}
 
 func bytecodeCacheEnabled() bool {
 	return os.Getenv(bytecodeCacheEnv) == "1"
@@ -311,6 +309,33 @@ func roleCoordinate(project string, stack naming.StackName) naming.Coordinate {
 	}
 }
 
+func membraneLayerCoordinate(project string, stack naming.StackName) naming.Coordinate {
+	return naming.Coordinate{
+		Project: project,
+		Env:     stack.Env,
+		App:     stack.App,
+		Kind:    naming.KindLayer,
+		Name:    membraneLayerLocalName,
+		Release: stack.Release,
+	}
+}
+
+func newMembraneLayer(ctx *pulumi.Context, coord naming.Coordinate, code payloads.Placement) (*lambda.LayerVersion, error) {
+	return lambda.NewLayerVersion(ctx, naming.ResourceID(naming.KindLayer, membraneLayerLocalName), &lambda.LayerVersionArgs{
+		LayerName:      pulumi.String(coord.PhysicalName(maxLayerNameLen)),
+		Description:    describe(coord, "membrane the app's functions boot through"),
+		S3Bucket:       pulumi.String(code.Bucket),
+		S3Key:          pulumi.String(code.Key),
+		SourceCodeHash: pulumi.String(code.SHA256),
+		CompatibleRuntimes: pulumi.StringArray{
+			pulumi.String(membraneLayerRuntime),
+		},
+		CompatibleArchitectures: pulumi.StringArray{
+			pulumi.String(membraneLayerArchitecture),
+		},
+	})
+}
+
 func logicalLocalName(logicalName string) string {
 	fields := strings.Split(logicalName, naming.FieldSeparator)
 	return fields[len(fields)-1]
@@ -494,7 +519,7 @@ func functionVPCConfig(logicalName string, v functionVPC) (lambda.FunctionVpcCon
 	}, nil
 }
 
-func registerFunction(ctx *pulumi.Context, logicalName string, coord naming.Coordinate, route string, args functionArgs, artifact artifactRef, base map[string]string, resolved map[string]pulumi.StringInput, isr *isrConfig, bytecode *bytecodeConfig, roleArn pulumi.StringInput, urlAuth string) (functionRef, error) {
+func registerFunction(ctx *pulumi.Context, logicalName string, coord naming.Coordinate, route string, args functionArgs, artifact artifactRef, base map[string]string, resolved map[string]pulumi.StringInput, isr *isrConfig, bytecode *bytecodeConfig, roleArn, layerARN pulumi.StringInput, urlAuth string) (functionRef, error) {
 	var none functionRef
 
 	env := pulumi.StringMap{}
@@ -531,9 +556,7 @@ func registerFunction(ctx *pulumi.Context, logicalName string, coord naming.Coor
 
 		Tags: resourceTags(coord.Kind, route, args.Tags),
 
-		Layers: pulumi.StringArray{
-			pulumi.String(membraneLayerARN()),
-		},
+		Layers: pulumi.StringArray{layerARN},
 	})
 	if err != nil {
 		return none, err

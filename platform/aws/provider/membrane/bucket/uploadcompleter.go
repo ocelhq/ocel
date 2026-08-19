@@ -43,14 +43,14 @@ type httpDoer interface {
 	Do(*http.Request) (*http.Response, error)
 }
 
-type Listener struct {
+type UploadCompleter struct {
 	store          *sessionStore
 	tagger         objectTagger
 	http           httpDoer
 	allowedOrigins []string
 }
 
-type ListenerConfig struct {
+type UploadCompleterConfig struct {
 	DDB              ddbAPI
 	Tagger           objectTagger
 	HTTP             httpDoer
@@ -59,12 +59,12 @@ type ListenerConfig struct {
 	AllowedOrigins   []string
 }
 
-func NewListener(cfg ListenerConfig) *Listener {
+func NewUploadCompleter(cfg UploadCompleterConfig) *UploadCompleter {
 	h := cfg.HTTP
 	if h == nil {
 		h = http.DefaultClient
 	}
-	return &Listener{
+	return &UploadCompleter{
 		store:          &sessionStore{client: cfg.DDB, table: cfg.Table, keyPrefix: cfg.SessionKeyPrefix},
 		tagger:         cfg.Tagger,
 		http:           h,
@@ -85,7 +85,7 @@ type completedFile struct {
 	MimeType string `json:"mimeType"`
 }
 
-func (l *Listener) Handle(ctx context.Context, event S3Event) error {
+func (l *UploadCompleter) Handle(ctx context.Context, event S3Event) error {
 	for _, rec := range event.Records {
 		if err := l.handleRecord(ctx, rec); err != nil {
 			return err
@@ -94,7 +94,7 @@ func (l *Listener) Handle(ctx context.Context, event S3Event) error {
 	return nil
 }
 
-func (l *Listener) handleRecord(ctx context.Context, rec S3EventRecord) error {
+func (l *UploadCompleter) handleRecord(ctx context.Context, rec S3EventRecord) error {
 	bucket := rec.S3.Bucket.Name
 	key, err := url.QueryUnescape(rec.S3.Object.Key)
 	if err != nil {
@@ -133,7 +133,7 @@ func (l *Listener) handleRecord(ctx context.Context, rec S3EventRecord) error {
 	return l.postCallback(ctx, sess, sess.Files[idx])
 }
 
-func (l *Listener) sessionIDForObject(ctx context.Context, bucket, key string) (string, error) {
+func (l *UploadCompleter) sessionIDForObject(ctx context.Context, bucket, key string) (string, error) {
 	out, err := l.tagger.GetObjectTagging(ctx, &s3.GetObjectTaggingInput{
 		Bucket: aws.String(bucket),
 		Key:    aws.String(key),
@@ -149,7 +149,7 @@ func (l *Listener) sessionIDForObject(ctx context.Context, bucket, key string) (
 	return "", nil
 }
 
-func (l *Listener) postCallback(ctx context.Context, sess session, f sessionFile) error {
+func (l *UploadCompleter) postCallback(ctx context.Context, sess session, f sessionFile) error {
 	if !originAllowed(sess.CallbackBaseURL, l.allowedOrigins) {
 		return nil
 	}

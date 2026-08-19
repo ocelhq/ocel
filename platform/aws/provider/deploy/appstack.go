@@ -8,6 +8,7 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/naming"
 	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
+	"github.com/ocelhq/ocel/platform/aws/provider/payloads"
 )
 
 type appStackFunctions struct {
@@ -23,9 +24,14 @@ type appStackFunctions struct {
 	Guard     *originGuard
 	RoleArn   pulumi.StringInput
 	RoleName  pulumi.StringInput
+	Layer     payloads.Placement
 }
 
 func (a appStackFunctions) register(ctx *pulumi.Context) error {
+	layer, err := newMembraneLayer(ctx, membraneLayerCoordinate(a.Project, a.Stack), a.Layer)
+	if err != nil {
+		return err
+	}
 	siblings := pulumi.StringMap{}
 	var arns []pulumi.StringInput
 	var entry *deploymentsv1.ManifestFunction
@@ -34,7 +40,7 @@ func (a appStackFunctions) register(ctx *pulumi.Context) error {
 			entry = fn
 			continue
 		}
-		ref, err := a.declare(ctx, fn, a.Env, nil, functionURLAuthIAM)
+		ref, err := a.declare(ctx, fn, layer.Arn, a.Env, nil, functionURLAuthIAM)
 		if err != nil {
 			return err
 		}
@@ -51,7 +57,7 @@ func (a appStackFunctions) register(ctx *pulumi.Context) error {
 		}
 		resolved = map[string]pulumi.StringInput{functionURLsEnv: siblingFunctionURLs(siblings)}
 	}
-	_, err := a.declare(ctx, entry, a.Guard.entryEnv(a.Router.entryEnv(a.Env)), resolved, a.Guard.entryURLAuth())
+	_, err = a.declare(ctx, entry, layer.Arn, a.Guard.entryEnv(a.Router.entryEnv(a.Env)), resolved, a.Guard.entryURLAuth())
 	return err
 }
 
@@ -89,13 +95,14 @@ func (a appStackFunctions) grantInvoke(ctx *pulumi.Context, arns []pulumi.String
 func (a appStackFunctions) declare(
 	ctx *pulumi.Context,
 	fn *deploymentsv1.ManifestFunction,
+	layerARN pulumi.StringInput,
 	env map[string]string,
 	resolved map[string]pulumi.StringInput,
 	urlAuth string,
 ) (functionRef, error) {
 	logical := fn.GetLogicalName()
 	ref, err := registerFunction(ctx, logical, functionCoordinate(a.Project, a.Stack, logical),
-		fn.GetRouteId(), a.Args(fn), a.Artifacts[logical], env, resolved, a.ISR, a.Bytecode, a.RoleArn, urlAuth)
+		fn.GetRouteId(), a.Args(fn), a.Artifacts[logical], env, resolved, a.ISR, a.Bytecode, a.RoleArn, layerARN, urlAuth)
 	if err != nil {
 		return ref, fmt.Errorf("declare %s: %w", logical, err)
 	}

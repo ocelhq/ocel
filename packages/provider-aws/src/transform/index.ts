@@ -48,7 +48,7 @@ export type {
   AwsSurfaces,
   BucketBucketSurface,
   BucketCorsSurface,
-  BucketListenerSurface,
+  BucketUploadCompleterSurface,
   BucketNotificationSurface,
   EnvClass,
   FunctionLambdaSurface,
