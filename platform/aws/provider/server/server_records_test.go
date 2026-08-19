@@ -45,7 +45,9 @@ func TestSettleRecords(t *testing.T) {
 		}}
 
 		var owedBack []edge.Record
-		err := settleRecords(t.Context(), writer, poller, []edge.Record{wildcard}, func(string) {}, func(written, owed []edge.Record) error {
+		err := settleRecords(t.Context(), writer, poller, []edge.Record{wildcard}, func(string) {}, func([]edge.Record) {
+			t.Error("asked the user for a record with a writer in hand")
+		}, func(written, owed []edge.Record) error {
 			recorded, owedBack = written, owed
 			return nil
 		})
@@ -63,7 +65,7 @@ func TestSettleRecords(t *testing.T) {
 		}
 	})
 
-	t.Run("no writer prints the record, records nothing and polls", func(t *testing.T) {
+	t.Run("no writer asks the user for the record, records nothing and polls", func(t *testing.T) {
 		t.Parallel()
 
 		lookups := 0
@@ -76,9 +78,12 @@ func TestSettleRecords(t *testing.T) {
 		}
 
 		var said []string
+		var asked []edge.Record
 		var owed []edge.Record
 		recorded := []edge.Record{wildcard}
-		err := settleRecords(t.Context(), nil, poller, []edge.Record{wildcard}, func(m string) { said = append(said, m) }, func(written, missing []edge.Record) error {
+		err := settleRecords(t.Context(), nil, poller, []edge.Record{wildcard}, func(m string) { said = append(said, m) }, func(records []edge.Record) {
+			asked = records
+		}, func(written, missing []edge.Record) error {
 			recorded, owed = written, missing
 			return nil
 		})
@@ -94,8 +99,11 @@ func TestSettleRecords(t *testing.T) {
 		if len(owed) != 1 || owed[0] != wildcard {
 			t.Errorf("owed = %v, want the record the user still owes", owed)
 		}
+		if len(asked) != 1 || asked[0] != wildcard {
+			t.Errorf("asked = %v, want the record handed to the user to add", asked)
+		}
 		if len(said) == 0 || !strings.Contains(said[0], "*.preview.acme.com") {
-			t.Errorf("said = %v, want the record to add printed", said)
+			t.Errorf("said = %v, want the record waited on named", said)
 		}
 	})
 
@@ -105,7 +113,7 @@ func TestSettleRecords(t *testing.T) {
 		writer := &fakeDNSWriter{err: errors.New("zone is read-only")}
 		recorded := []edge.Record{wildcard}
 		wrote := false
-		err := settleRecords(t.Context(), writer, dns.Poller{}, []edge.Record{wildcard}, func(string) {}, func(written, _ []edge.Record) error {
+		err := settleRecords(t.Context(), writer, dns.Poller{}, []edge.Record{wildcard}, func(string) {}, nil, func(written, _ []edge.Record) error {
 			wrote, recorded = true, written
 			return nil
 		})

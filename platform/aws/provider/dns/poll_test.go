@@ -43,10 +43,7 @@ func TestPollerAwait(t *testing.T) {
 			t.Fatalf("Await: %v", err)
 		}
 		if len(said) == 0 || !strings.Contains(said[0], "*.preview.app.com") {
-			t.Errorf("said = %v, want the record to add named first", said)
-		}
-		if !strings.Contains(said[0], "proxied") {
-			t.Errorf("said = %q, want the proxied record spelled out", said[0])
+			t.Errorf("said = %v, want the record waited on named first", said)
 		}
 		if strings.Contains(probed, "*") {
 			t.Errorf("probed %q, want a wildcard probed at a real label", probed)

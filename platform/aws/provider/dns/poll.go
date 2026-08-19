@@ -50,12 +50,7 @@ func (p Poller) Await(ctx context.Context, records []edge.Record, say func(strin
 	if len(records) == 0 {
 		return nil
 	}
-	for _, rec := range records {
-		say(fmt.Sprintf(
-			"Nothing writes DNS for this project — %s, and this waits up to %s for it to resolve",
-			rec.Instruction(), p.window(),
-		))
-	}
+	say(fmt.Sprintf("Waiting up to %s for %s to resolve", p.window(), names(records)))
 
 	pending := records
 	for attempt := 0; attempt < max(p.Attempts, 1); attempt++ {
@@ -87,6 +82,14 @@ func (p Poller) Await(ctx context.Context, records []edge.Record, say func(strin
 		"gave up after %s waiting for DNS: %s, then re-run — or declare `dns` (`route53()` or `cloudflareDns()`) and ocel writes the record itself",
 		p.window(), strings.Join(wanted, "; "),
 	)
+}
+
+func names(records []edge.Record) string {
+	wanted := make([]string, 0, len(records))
+	for _, rec := range records {
+		wanted = append(wanted, rec.Name)
+	}
+	return strings.Join(wanted, ", ")
 }
 
 func (p Poller) window() time.Duration {

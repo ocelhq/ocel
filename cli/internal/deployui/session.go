@@ -112,6 +112,11 @@ func (s *Session) Event(ev *deploymentsv1.DeployEvent) {
 		s.r.Degraded(d.GetNeed(), d.GetDetail())
 		return
 	}
+	if owed := ev.GetDnsOwed(); owed != nil {
+		s.logf("[dns] %s: %s", owed.GetHeadline(), dnsLogLine(owed.GetRecords()))
+		s.r.DNSOwed(owed.GetHeadline(), owed.GetRecords(), owed.GetNotes())
+		return
+	}
 	if sp := ev.GetStagePlan(); sp != nil {
 		s.r.StagePlan(sp)
 		return
@@ -120,6 +125,14 @@ func (s *Session) Event(ev *deploymentsv1.DeployEvent) {
 		s.ingestSpan(span)
 		return
 	}
+}
+
+func dnsLogLine(records []*deploymentsv1.DnsRecord) string {
+	lines := make([]string, 0, len(records))
+	for _, rec := range records {
+		lines = append(lines, fmt.Sprintf("%s %s %s", rec.GetName(), rec.GetType(), rec.GetValue()))
+	}
+	return strings.Join(lines, "; ")
 }
 
 func (s *Session) ingestSpan(span *deploymentsv1.SpanEvent) {

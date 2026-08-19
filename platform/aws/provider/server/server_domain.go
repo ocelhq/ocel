@@ -27,14 +27,17 @@ const cloudflareAccountEnvVar = "CLOUDFLARE_ACCOUNT_ID"
 func (s *Server) UseDomain(ctx context.Context, req *deploymentsv1.UseDomainRequest, stream *connect.ServerStream[deploymentsv1.DeployEvent]) error {
 	progress := func(m string) { _ = stream.Send(progressEvent(m)) }
 	logf := func(m string) { _ = stream.Send(logEvent(m)) }
+	ask := func(headline string, records []edge.Record, notes ...string) {
+		_ = stream.Send(dnsOwedEvent(headline, records, notes...))
+	}
 
-	if err := s.runUseDomain(ctx, req, progress, logf); err != nil {
+	if err := s.runUseDomain(ctx, req, progress, ask, logf); err != nil {
 		return stream.Send(failureResult(err))
 	}
 	return stream.Send(okResult())
 }
 
-func (s *Server) runUseDomain(ctx context.Context, req *deploymentsv1.UseDomainRequest, progress, logf func(string)) error {
+func (s *Server) runUseDomain(ctx context.Context, req *deploymentsv1.UseDomainRequest, progress func(string), ask askDNS, logf func(string)) error {
 	if err := requirePreviewClass(req.GetClass()); err != nil {
 		return err
 	}
@@ -124,8 +127,10 @@ func (s *Server) runUseDomain(ctx context.Context, req *deploymentsv1.UseDomainR
 			Prober: certs.NewProber(),
 		},
 		spec: spec,
-	}, recorded, baseDomain, progress)
+	}, recorded, baseDomain, progress, ask)
 }
+
+type askDNS func(headline string, records []edge.Record, notes ...string)
 
 type domainRun struct {
 	ssm    bootstrap.SSMAPI
@@ -136,7 +141,7 @@ type domainRun struct {
 	spec   edge.PreviewWildcardSpec
 }
 
-func useDomain(ctx context.Context, run domainRun, recorded bootstrap.PreviewDomain, baseDomain string, progress func(string)) error {
+func useDomain(ctx context.Context, run domainRun, recorded bootstrap.PreviewDomain, baseDomain string, progress func(string), ask askDNS) error {
 	wildcard := edge.PreviewWildcard(baseDomain)
 
 	domain := bootstrap.PreviewDomain{
@@ -157,8 +162,13 @@ func useDomain(ctx context.Context, run domainRun, recorded bootstrap.PreviewDom
 		return bootstrap.WritePreviewDomain(ctx, run.ssm, bootstrap.ClassPreview, domain)
 	}
 
-	if run.writer == nil {
-		progress(fmt.Sprintf("Nothing writes DNS here, so this run asks you for the certificate's validation record first and names the record that points %s at the edge only once the certificate has issued: expect to run `ocel domain use --preview %s` again after you have written the first one", wildcard, baseDomain))
+	run.flow.Ask = func(records []edge.Record) {
+		ask(
+			fmt.Sprintf("Prove you own %s", baseDomain),
+			records,
+			"Leave it in place: ACM renews the certificate through it.",
+			fmt.Sprintf("If this run gives up waiting, re-run `ocel domain use '%s' --preview`.", wildcard),
+		)
 	}
 	issued, err := run.flow.Certificate(ctx, []string{wildcard}, priorSettlement(recorded), progress, func(settled certs.Settlement) error {
 		domain.Certificate = settled.Certificate
@@ -182,7 +192,10 @@ func useDomain(ctx context.Context, run domainRun, recorded bootstrap.PreviewDom
 	if err != nil {
 		return err
 	}
-	if err := settleRecords(ctx, run.writer, run.poller, records, progress, func(written, owed []edge.Record) error {
+	pointAtEdge := func(records []edge.Record) {
+		ask(fmt.Sprintf("Point %s at the %s edge", wildcard, run.edge.Kind()), records)
+	}
+	if err := settleRecords(ctx, run.writer, run.poller, records, progress, pointAtEdge, func(written, owed []edge.Record) error {
 		hostWritten, hostOwed = written, owed
 		return save()
 	}); err != nil {
@@ -223,7 +236,7 @@ func recordsAmong(recorded, wanted []edge.Record) (among, besides []edge.Record)
 	return among, besides
 }
 
-func settleRecords(ctx context.Context, writer edge.DNSWriter, poller dns.Poller, records []edge.Record, say func(string), record func(written, owed []edge.Record) error) error {
+func settleRecords(ctx context.Context, writer edge.DNSWriter, poller dns.Poller, records []edge.Record, say func(string), ask func([]edge.Record), record func(written, owed []edge.Record) error) error {
 	var written, owed []edge.Record
 	var writeErr error
 	if writer != nil {
@@ -234,6 +247,9 @@ func settleRecords(ctx context.Context, writer edge.DNSWriter, poller dns.Poller
 		owed = edge.Unwritten(records, written)
 	} else {
 		owed = records
+		if ask != nil {
+			ask(records)
+		}
 	}
 	if err := record(written, owed); err != nil {
 		return errors.Join(writeErr, err)

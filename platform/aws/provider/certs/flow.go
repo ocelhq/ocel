@@ -22,6 +22,7 @@ type Flow struct {
 	Writer edge.DNSWriter
 	Prober Prober
 	Front  []edge.Record
+	Ask    func([]edge.Record)
 }
 
 func (f Flow) Settle(ctx context.Context, hostname string, kind edge.Kind, prior Settlement, say func(string), record func(Settlement) error) (Settlement, error) {
@@ -125,8 +126,8 @@ func (f Flow) settleValidation(ctx context.Context, records []edge.Record, say f
 		return nil, nil, nil
 	}
 	if f.Writer == nil {
-		for _, rec := range records {
-			say(fmt.Sprintf("Nothing writes DNS here — %s, and keep it there: ACM renews this certificate through it, so deleting it lets the certificate lapse", rec.Instruction()))
+		if f.Ask != nil {
+			f.Ask(records)
 		}
 		return nil, records, nil
 	}

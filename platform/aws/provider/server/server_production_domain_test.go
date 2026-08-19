@@ -183,9 +183,14 @@ type domainFixture struct {
 	ssm     *stateSSM
 	log     *callLog
 	said    []string
+	asked   []edge.Record
 }
 
 func (f *domainFixture) say(message string) { f.said = append(f.said, message) }
+
+func (f *domainFixture) askedFor(want edge.Record) bool {
+	return slices.Contains(f.asked, want)
+}
 
 func (f *domainFixture) spoke(want string) bool {
 	return slices.ContainsFunc(f.said, func(line string) bool { return strings.Contains(line, want) })
@@ -297,6 +302,9 @@ func newDomainFixture(opts domainFixtureOptions) *domainFixture {
 		host:       opts.host,
 		recorded:   opts.prior,
 		ttl:        edge.WriteTTL(writer),
+		ask: func(_ string, records []edge.Record, _ ...string) {
+			f.asked = append(f.asked, records...)
+		},
 	}
 	if opts.priorEdge != nil {
 		session.open = func(edge.Kind) (edge.EdgeStack, error) { return opts.priorEdge, nil }
@@ -658,15 +666,15 @@ func TestAddDomain(t *testing.T) {
 		}
 	})
 
-	t.Run("without a dns writer the record is printed and waited on", func(t *testing.T) {
+	t.Run("without a dns writer the record is handed to the user and waited on", func(t *testing.T) {
 		t.Parallel()
 
 		f := newDomainFixture(domainFixtureOptions{configured: []string{"shop.app.com"}})
 		if err := f.session.add(t.Context(), f.say); err != nil {
 			t.Fatalf("add: %v", err)
 		}
-		if !f.spoke("add a proxied (orange cloud) DNS record at shop.app.com") {
-			t.Errorf("said = %v, want the record the user has to add", f.said)
+		if !f.askedFor(edge.Record{Name: "shop.app.com", Type: edge.RecordTypeAAAA, Value: edge.ProxyPlaceholder, Proxied: true}) {
+			t.Errorf("asked = %+v, want the record the user has to add", f.asked)
 		}
 		if f.spoke("Writing ") {
 			t.Errorf("said = %v, want nothing claimed as written with no writer in hand", f.said)

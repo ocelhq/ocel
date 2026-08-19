@@ -558,7 +558,7 @@ func TestUseDomainRecordsTheEdgeHoldingTheWildcard(t *testing.T) {
 		spec: edge.PreviewWildcardSpec{BaseDomain: baseDomain},
 	}
 
-	if err := useDomain(ctx, run, bootstrap.PreviewDomain{}, baseDomain, func(string) {}); err != nil {
+	if err := useDomain(ctx, run, bootstrap.PreviewDomain{}, baseDomain, func(string) {}, nil); err != nil {
 		t.Fatalf("useDomain: %v", err)
 	}
 	recorded, err := bootstrap.ReadPreviewDomain(ctx, ssmc, bootstrap.ClassPreview)
@@ -678,7 +678,7 @@ func TestUseDomainResumed(t *testing.T) {
 		spec: edge.PreviewWildcardSpec{BaseDomain: baseDomain},
 	}
 
-	if err := useDomain(ctx, run, bootstrap.PreviewDomain{}, baseDomain, func(string) {}); err != nil {
+	if err := useDomain(ctx, run, bootstrap.PreviewDomain{}, baseDomain, func(string) {}, nil); err != nil {
 		t.Fatalf("useDomain: %v", err)
 	}
 	first, err := bootstrap.ReadPreviewDomain(ctx, ssmc, bootstrap.ClassPreview)
@@ -689,7 +689,7 @@ func TestUseDomainResumed(t *testing.T) {
 		t.Fatalf("records = %+v, want the validation record among them", first.Records)
 	}
 
-	if err := useDomain(ctx, run, first, baseDomain, func(string) {}); err != nil {
+	if err := useDomain(ctx, run, first, baseDomain, func(string) {}, nil); err != nil {
 		t.Fatalf("useDomain again: %v", err)
 	}
 	second, err := bootstrap.ReadPreviewDomain(ctx, ssmc, bootstrap.ClassPreview)

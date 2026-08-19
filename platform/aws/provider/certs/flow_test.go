@@ -95,7 +95,10 @@ func TestFlowSettle(t *testing.T) {
 
 		api := &fakeACM{steps: issuing}
 		var said []string
-		flow := Flow{Issuer: testIssuer(api, 5), Prober: passingProber(t, "native")}
+		var asked [][]edge.Record
+		flow := Flow{Issuer: testIssuer(api, 5), Prober: passingProber(t, "native"), Ask: func(records []edge.Record) {
+			asked = append(asked, records)
+		}}
 
 		got, err := flow.Settle(t.Context(), wildcard, edge.KindNative, Settlement{}, func(m string) { said = append(said, m) }, func(Settlement) error { return nil })
 		if err != nil {
@@ -104,9 +107,8 @@ func TestFlowSettle(t *testing.T) {
 		if len(got.Written) != 0 || len(got.Owed) != 1 || got.Owed[0] != validationRecord {
 			t.Fatalf("written = %+v owed = %+v, want the record owed by the user", got.Written, got.Owed)
 		}
-		notice := strings.Join(said, "\n")
-		if !strings.Contains(notice, "renews") || !strings.Contains(notice, validationRecord.Name) {
-			t.Errorf("said = %v, want the keep-the-record notice naming ACM renewal", said)
+		if len(asked) != 1 || len(asked[0]) != 1 || asked[0][0] != validationRecord {
+			t.Errorf("asked = %+v, want the validation record handed over once for the user to add", asked)
 		}
 	})
 

@@ -654,6 +654,25 @@ func degradedEvent(need edge.Need, detail string) *deploymentsv1.DeployEvent {
 	}
 }
 
+func dnsOwedEvent(headline string, records []edge.Record, notes ...string) *deploymentsv1.DeployEvent {
+	owed := make([]*deploymentsv1.DnsRecord, 0, len(records))
+	for _, rec := range records {
+		owed = append(owed, &deploymentsv1.DnsRecord{
+			Name:    rec.Name,
+			Type:    string(rec.Type),
+			Value:   rec.Value,
+			Proxied: rec.Proxied,
+		})
+	}
+	return &deploymentsv1.DeployEvent{
+		Event: &deploymentsv1.DeployEvent_DnsOwed{DnsOwed: &deploymentsv1.DnsOwedEvent{
+			Headline: headline,
+			Records:  owed,
+			Notes:    notes,
+		}},
+	}
+}
+
 func logEvent(message string) *deploymentsv1.DeployEvent {
 	return &deploymentsv1.DeployEvent{
 		Event: &deploymentsv1.DeployEvent_Log{Log: &deploymentsv1.LogEvent{Message: message}},

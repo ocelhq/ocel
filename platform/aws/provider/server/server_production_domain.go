@@ -34,6 +34,9 @@ func (s *Server) AddDomain(ctx context.Context, req *deploymentsv1.AddDomainRequ
 	if err != nil {
 		return stream.Send(failureResult(err))
 	}
+	session.ask = func(headline string, records []edge.Record, notes ...string) {
+		_ = stream.Send(dnsOwedEvent(headline, records, notes...))
+	}
 	if err := session.add(ctx, progress); err != nil {
 		return stream.Send(failureResult(err))
 	}
@@ -88,6 +91,7 @@ type domainSession struct {
 	host       string
 	recorded   bootstrap.Production
 	superseded certs.Settlement
+	ask        askDNS
 }
 
 func (s *Server) domainSession(ctx context.Context, req domainRequest) (*domainSession, error) {
@@ -177,7 +181,27 @@ func (d *domainSession) save(ctx context.Context) error {
 }
 
 func (d *domainSession) flow(front []edge.Record) certs.Flow {
-	return certs.Flow{Issuer: d.issuer, Writer: d.writer, Prober: d.prober, Front: front}
+	return certs.Flow{Issuer: d.issuer, Writer: d.writer, Prober: d.prober, Front: front, Ask: d.proveOwnership}
+}
+
+func (d *domainSession) proveOwnership(records []edge.Record) {
+	if d.ask == nil {
+		return
+	}
+	d.ask(
+		fmt.Sprintf("Prove you own %s", strings.Join(d.unpinned(), ", ")),
+		records,
+		"Leave it in place: ACM renews the certificate through it.",
+	)
+}
+
+func (d *domainSession) pointAtEdge(host string) func([]edge.Record) {
+	return func(records []edge.Record) {
+		if d.ask == nil {
+			return
+		}
+		d.ask(fmt.Sprintf("Point %s at the %s edge", host, d.kind), records)
+	}
 }
 
 func (d *domainSession) add(ctx context.Context, progress func(string)) error {
@@ -291,7 +315,7 @@ func (d *domainSession) addHost(ctx context.Context, host string, progress func(
 			progress(note)
 		}
 	}
-	if err := settleRecords(ctx, d.writer, d.poller, records, progress, func(written, owed []edge.Record) error {
+	if err := settleRecords(ctx, d.writer, d.poller, records, progress, d.pointAtEdge(host), func(written, owed []edge.Record) error {
 		provisioned.Written, provisioned.Owed = written, owed
 		d.recorded = d.recorded.WithHost(provisioned)
 		return d.save(ctx)

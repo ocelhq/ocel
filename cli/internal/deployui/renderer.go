@@ -284,6 +284,71 @@ func (r *Renderer) Degraded(need, detail string) {
 	fmt.Fprintln(r.w, line)
 }
 
+func (r *Renderer) DNSOwed(headline string, records []*deploymentsv1.DnsRecord, notes []string) {
+	if len(records) == 0 {
+		return
+	}
+	if r.format == FormatJSON {
+		r.emitJSON("dnsOwed", map[string]any{
+			"headline": headline,
+			"records":  dnsJSON(records),
+			"notes":    notes,
+		})
+		return
+	}
+	block := r.dnsBlock(headline, records, notes)
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if r.live {
+		r.eraseLiveLocked()
+		fmt.Fprint(r.w, block)
+		r.drawLiveLocked()
+		return
+	}
+	fmt.Fprint(r.w, block)
+}
+
+func (r *Renderer) dnsBlock(headline string, records []*deploymentsv1.DnsRecord, notes []string) string {
+	var b strings.Builder
+	b.WriteString("\n")
+	fmt.Fprintf(&b, "%s %s\n\n",
+		r.colorFor(color.FgYellow, color.Bold).Sprint(warnMark),
+		r.colorFor(color.Bold).Sprint(dnsHeadline(headline, records)),
+	)
+	head, rows := dnsRows(records, termWidth(r.w))
+	if head == "" {
+		for _, line := range dnsStack(records) {
+			b.WriteString(line + "\n")
+		}
+	} else {
+		b.WriteString(r.colorFor(color.Faint).Sprint(head) + "\n")
+		for _, row := range rows {
+			b.WriteString(row + "\n")
+		}
+	}
+	for i, note := range dnsNotes(records, notes) {
+		if i == 0 {
+			b.WriteString("\n")
+		}
+		b.WriteString(r.colorFor(color.Faint).Sprintf("%s%s\n", dnsIndent, note))
+	}
+	b.WriteString("\n")
+	return b.String()
+}
+
+func dnsJSON(records []*deploymentsv1.DnsRecord) []map[string]any {
+	out := make([]map[string]any, 0, len(records))
+	for _, rec := range records {
+		out = append(out, map[string]any{
+			"name":    rec.GetName(),
+			"type":    rec.GetType(),
+			"value":   rec.GetValue(),
+			"proxied": rec.GetProxied(),
+		})
+	}
+	return out
+}
+
 func (r *Renderer) StageEnd(stageID []byte, failed bool, duration time.Duration) {
 	if r.format == FormatJSON {
 		return

@@ -599,6 +599,7 @@ message DeployEvent {
     StagePlanEvent stage_plan = 4;
     SpanEvent span = 5;
     DegradedEvent degraded = 6;
+    DnsOwedEvent dns_owed = 7;
   }
 }
 
@@ -688,6 +689,24 @@ message ProgressEvent {
 
 message LogEvent {
   string message = 1;
+}
+
+message DnsRecord {
+  string name = 1;
+
+  string type = 2;
+
+  string value = 3;
+
+  bool proxied = 4;
+}
+
+message DnsOwedEvent {
+  string headline = 1;
+
+  repeated DnsRecord records = 2;
+
+  repeated string notes = 3;
 }
 
 message DegradedEvent {
