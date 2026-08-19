@@ -7,6 +7,7 @@ import (
 	"maps"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"time"
 
@@ -46,8 +47,6 @@ const deployEnv = deploy.ProductionEnv
 
 type Server struct {
 	stores
-
-	edgeKind edge.Kind
 
 	memo memo
 }
@@ -115,17 +114,13 @@ func (m *memo) edgeFor(kind edge.Kind, region string) *entry[edge.Edge] {
 
 func (s *Server) edge(kind edge.Kind, region string) (edge.Edge, error) {
 	if kind == "" {
-		kind = edge.KindCloudflare
+		return nil, fmt.Errorf("this request names no edge, so the provider cannot tell which edge fronts this project; the CLI names one of %s on every request — upgrade the CLI so it matches this provider", strings.Join(edge.KindNames(edge.AllKinds()), ", "))
 	}
 	return s.memo.edgeFor(kind, region).resolve(func() (edge.Edge, error) {
 		return edges.EdgeFor(kind, edges.Deps{
 			AWS: func(ctx context.Context) (aws.Config, error) { return loadAWS(ctx, region) },
 		})
 	})
-}
-
-func (s *Server) originEdge(region string) (edge.Edge, error) {
-	return s.edge(s.edgeKind, region)
 }
 
 func optionsRegion(raw []byte) string {

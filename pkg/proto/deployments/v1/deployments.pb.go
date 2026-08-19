@@ -465,6 +465,7 @@ type UseDomainRequest struct {
 	Class         Environment_Class      `protobuf:"varint,1,opt,name=class,proto3,enum=deployments.v1.Environment_Class" json:"class,omitempty"`
 	BaseDomain    string                 `protobuf:"bytes,2,opt,name=base_domain,json=baseDomain,proto3" json:"base_domain,omitempty"`
 	Dns           *Dns                   `protobuf:"bytes,3,opt,name=dns,proto3" json:"dns,omitempty"`
+	EdgeKind      string                 `protobuf:"bytes,4,opt,name=edge_kind,json=edgeKind,proto3" json:"edge_kind,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -520,9 +521,17 @@ func (x *UseDomainRequest) GetDns() *Dns {
 	return nil
 }
 
+func (x *UseDomainRequest) GetEdgeKind() string {
+	if x != nil {
+		return x.EdgeKind
+	}
+	return ""
+}
+
 type ListDomainRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Class         Environment_Class      `protobuf:"varint,1,opt,name=class,proto3,enum=deployments.v1.Environment_Class" json:"class,omitempty"`
+	EdgeKind      string                 `protobuf:"bytes,2,opt,name=edge_kind,json=edgeKind,proto3" json:"edge_kind,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -562,6 +571,13 @@ func (x *ListDomainRequest) GetClass() Environment_Class {
 		return x.Class
 	}
 	return Environment_CLASS_UNSPECIFIED
+}
+
+func (x *ListDomainRequest) GetEdgeKind() string {
+	if x != nil {
+		return x.EdgeKind
+	}
+	return ""
 }
 
 type ListDomainResponse struct {
@@ -620,6 +636,7 @@ type ReleaseDomainRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Class         Environment_Class      `protobuf:"varint,1,opt,name=class,proto3,enum=deployments.v1.Environment_Class" json:"class,omitempty"`
 	Dns           *Dns                   `protobuf:"bytes,2,opt,name=dns,proto3" json:"dns,omitempty"`
+	EdgeKind      string                 `protobuf:"bytes,3,opt,name=edge_kind,json=edgeKind,proto3" json:"edge_kind,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -666,6 +683,13 @@ func (x *ReleaseDomainRequest) GetDns() *Dns {
 		return x.Dns
 	}
 	return nil
+}
+
+func (x *ReleaseDomainRequest) GetEdgeKind() string {
+	if x != nil {
+		return x.EdgeKind
+	}
+	return ""
 }
 
 type AddDomainRequest struct {
@@ -2236,6 +2260,7 @@ type DestroyPreviewRequest struct {
 	Options         []byte                 `protobuf:"bytes,2,opt,name=options,proto3" json:"options,omitempty"`
 	ProtocolVersion string                 `protobuf:"bytes,3,opt,name=protocol_version,json=protocolVersion,proto3" json:"protocol_version,omitempty"`
 	Slug            string                 `protobuf:"bytes,4,opt,name=slug,proto3" json:"slug,omitempty"`
+	EdgeKind        string                 `protobuf:"bytes,5,opt,name=edge_kind,json=edgeKind,proto3" json:"edge_kind,omitempty"`
 	unknownFields   protoimpl.UnknownFields
 	sizeCache       protoimpl.SizeCache
 }
@@ -2298,6 +2323,13 @@ func (x *DestroyPreviewRequest) GetSlug() string {
 	return ""
 }
 
+func (x *DestroyPreviewRequest) GetEdgeKind() string {
+	if x != nil {
+		return x.EdgeKind
+	}
+	return ""
+}
+
 type DestroyProjectRequest struct {
 	state           protoimpl.MessageState `protogen:"open.v1"`
 	Options         []byte                 `protobuf:"bytes,1,opt,name=options,proto3" json:"options,omitempty"`
@@ -2305,6 +2337,7 @@ type DestroyProjectRequest struct {
 	Slug            string                 `protobuf:"bytes,3,opt,name=slug,proto3" json:"slug,omitempty"`
 	Environment     *Environment           `protobuf:"bytes,4,opt,name=environment,proto3" json:"environment,omitempty"`
 	Dns             *Dns                   `protobuf:"bytes,5,opt,name=dns,proto3" json:"dns,omitempty"`
+	EdgeKind        string                 `protobuf:"bytes,6,opt,name=edge_kind,json=edgeKind,proto3" json:"edge_kind,omitempty"`
 	unknownFields   protoimpl.UnknownFields
 	sizeCache       protoimpl.SizeCache
 }
@@ -2374,12 +2407,20 @@ func (x *DestroyProjectRequest) GetDns() *Dns {
 	return nil
 }
 
+func (x *DestroyProjectRequest) GetEdgeKind() string {
+	if x != nil {
+		return x.EdgeKind
+	}
+	return ""
+}
+
 type PlanDestroyProjectRequest struct {
 	state           protoimpl.MessageState `protogen:"open.v1"`
 	Options         []byte                 `protobuf:"bytes,1,opt,name=options,proto3" json:"options,omitempty"`
 	ProtocolVersion string                 `protobuf:"bytes,2,opt,name=protocol_version,json=protocolVersion,proto3" json:"protocol_version,omitempty"`
 	Slug            string                 `protobuf:"bytes,3,opt,name=slug,proto3" json:"slug,omitempty"`
 	Environment     *Environment           `protobuf:"bytes,4,opt,name=environment,proto3" json:"environment,omitempty"`
+	EdgeKind        string                 `protobuf:"bytes,5,opt,name=edge_kind,json=edgeKind,proto3" json:"edge_kind,omitempty"`
 	unknownFields   protoimpl.UnknownFields
 	sizeCache       protoimpl.SizeCache
 }
@@ -2440,6 +2481,13 @@ func (x *PlanDestroyProjectRequest) GetEnvironment() *Environment {
 		return x.Environment
 	}
 	return nil
+}
+
+func (x *PlanDestroyProjectRequest) GetEdgeKind() string {
+	if x != nil {
+		return x.EdgeKind
+	}
+	return ""
 }
 
 type PlanDestroyProjectResponse struct {
@@ -2513,6 +2561,7 @@ func (x *PlanDestroyProjectResponse) GetNothingToDestroy() bool {
 type PlanReleaseDomainRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Class         Environment_Class      `protobuf:"varint,1,opt,name=class,proto3,enum=deployments.v1.Environment_Class" json:"class,omitempty"`
+	EdgeKind      string                 `protobuf:"bytes,2,opt,name=edge_kind,json=edgeKind,proto3" json:"edge_kind,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -2552,6 +2601,13 @@ func (x *PlanReleaseDomainRequest) GetClass() Environment_Class {
 		return x.Class
 	}
 	return Environment_CLASS_UNSPECIFIED
+}
+
+func (x *PlanReleaseDomainRequest) GetEdgeKind() string {
+	if x != nil {
+		return x.EdgeKind
+	}
+	return ""
 }
 
 type PlanReleaseDomainResponse struct {
@@ -2921,6 +2977,7 @@ type PreflightRequest struct {
 	RequiredClass   Environment_Class      `protobuf:"varint,3,opt,name=required_class,json=requiredClass,proto3,enum=deployments.v1.Environment_Class" json:"required_class,omitempty"`
 	Slug            string                 `protobuf:"bytes,4,opt,name=slug,proto3" json:"slug,omitempty"`
 	Domains         []string               `protobuf:"bytes,5,rep,name=domains,proto3" json:"domains,omitempty"`
+	EdgeKind        string                 `protobuf:"bytes,6,opt,name=edge_kind,json=edgeKind,proto3" json:"edge_kind,omitempty"`
 	unknownFields   protoimpl.UnknownFields
 	sizeCache       protoimpl.SizeCache
 }
@@ -2988,6 +3045,13 @@ func (x *PreflightRequest) GetDomains() []string {
 		return x.Domains
 	}
 	return nil
+}
+
+func (x *PreflightRequest) GetEdgeKind() string {
+	if x != nil {
+		return x.EdgeKind
+	}
+	return ""
 }
 
 type PreflightResponse struct {
@@ -3595,6 +3659,7 @@ type ListPromotionsRequest struct {
 	Options         []byte                 `protobuf:"bytes,1,opt,name=options,proto3" json:"options,omitempty"`
 	ProtocolVersion string                 `protobuf:"bytes,2,opt,name=protocol_version,json=protocolVersion,proto3" json:"protocol_version,omitempty"`
 	Slug            string                 `protobuf:"bytes,3,opt,name=slug,proto3" json:"slug,omitempty"`
+	EdgeKind        string                 `protobuf:"bytes,4,opt,name=edge_kind,json=edgeKind,proto3" json:"edge_kind,omitempty"`
 	unknownFields   protoimpl.UnknownFields
 	sizeCache       protoimpl.SizeCache
 }
@@ -3650,6 +3715,13 @@ func (x *ListPromotionsRequest) GetSlug() string {
 	return ""
 }
 
+func (x *ListPromotionsRequest) GetEdgeKind() string {
+	if x != nil {
+		return x.EdgeKind
+	}
+	return ""
+}
+
 type ListPromotionsResponse struct {
 	state         protoimpl.MessageState   `protogen:"open.v1"`
 	Promotions    []*PromotionHistoryEntry `protobuf:"bytes,1,rep,name=promotions,proto3" json:"promotions,omitempty"`
@@ -3701,6 +3773,7 @@ type RollbackRequest struct {
 	Slug            string                 `protobuf:"bytes,3,opt,name=slug,proto3" json:"slug,omitempty"`
 	To              string                 `protobuf:"bytes,4,opt,name=to,proto3" json:"to,omitempty"`
 	Tag             string                 `protobuf:"bytes,5,opt,name=tag,proto3" json:"tag,omitempty"`
+	EdgeKind        string                 `protobuf:"bytes,6,opt,name=edge_kind,json=edgeKind,proto3" json:"edge_kind,omitempty"`
 	unknownFields   protoimpl.UnknownFields
 	sizeCache       protoimpl.SizeCache
 }
@@ -3770,6 +3843,13 @@ func (x *RollbackRequest) GetTag() string {
 	return ""
 }
 
+func (x *RollbackRequest) GetEdgeKind() string {
+	if x != nil {
+		return x.EdgeKind
+	}
+	return ""
+}
+
 type RollbackResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Promoted      *Promotion             `protobuf:"bytes,1,opt,name=promoted,proto3" json:"promoted,omitempty"`
@@ -3821,6 +3901,7 @@ type PruneRequest struct {
 	Slug            string                 `protobuf:"bytes,3,opt,name=slug,proto3" json:"slug,omitempty"`
 	KeepN           int32                  `protobuf:"varint,4,opt,name=keep_n,json=keepN,proto3" json:"keep_n,omitempty"`
 	Environment     *Environment           `protobuf:"bytes,5,opt,name=environment,proto3" json:"environment,omitempty"`
+	EdgeKind        string                 `protobuf:"bytes,6,opt,name=edge_kind,json=edgeKind,proto3" json:"edge_kind,omitempty"`
 	unknownFields   protoimpl.UnknownFields
 	sizeCache       protoimpl.SizeCache
 }
@@ -3888,6 +3969,13 @@ func (x *PruneRequest) GetEnvironment() *Environment {
 		return x.Environment
 	}
 	return nil
+}
+
+func (x *PruneRequest) GetEdgeKind() string {
+	if x != nil {
+		return x.EdgeKind
+	}
+	return ""
 }
 
 type DeployEvent struct {
@@ -5148,20 +5236,23 @@ var File_deployments_v1_deployments_proto protoreflect.FileDescriptor
 
 const file_deployments_v1_deployments_proto_rawDesc = "" +
 	"\n" +
-	" deployments/v1/deployments.proto\x12\x0edeployments.v1\x1a\x14links/v1/links.proto\x1a\x16resources/v1/env.proto\x1a\x1cresources/v1/resources.proto\"\x93\x01\n" +
+	" deployments/v1/deployments.proto\x12\x0edeployments.v1\x1a\x14links/v1/links.proto\x1a\x16resources/v1/env.proto\x1a\x1cresources/v1/resources.proto\"\xb0\x01\n" +
 	"\x10UseDomainRequest\x127\n" +
 	"\x05class\x18\x01 \x01(\x0e2!.deployments.v1.Environment.ClassR\x05class\x12\x1f\n" +
 	"\vbase_domain\x18\x02 \x01(\tR\n" +
 	"baseDomain\x12%\n" +
-	"\x03dns\x18\x03 \x01(\v2\x13.deployments.v1.DnsR\x03dns\"L\n" +
+	"\x03dns\x18\x03 \x01(\v2\x13.deployments.v1.DnsR\x03dns\x12\x1b\n" +
+	"\tedge_kind\x18\x04 \x01(\tR\bedgeKind\"i\n" +
 	"\x11ListDomainRequest\x127\n" +
-	"\x05class\x18\x01 \x01(\x0e2!.deployments.v1.Environment.ClassR\x05class\"m\n" +
+	"\x05class\x18\x01 \x01(\x0e2!.deployments.v1.Environment.ClassR\x05class\x12\x1b\n" +
+	"\tedge_kind\x18\x02 \x01(\tR\bedgeKind\"m\n" +
 	"\x12ListDomainResponse\x12;\n" +
 	"\x06domain\x18\x01 \x01(\v2#.deployments.v1.GlobalPreviewDomainR\x06domain\x12\x1a\n" +
-	"\bprojects\x18\x02 \x03(\tR\bprojects\"v\n" +
+	"\bprojects\x18\x02 \x03(\tR\bprojects\"\x93\x01\n" +
 	"\x14ReleaseDomainRequest\x127\n" +
 	"\x05class\x18\x01 \x01(\x0e2!.deployments.v1.Environment.ClassR\x05class\x12%\n" +
-	"\x03dns\x18\x02 \x01(\v2\x13.deployments.v1.DnsR\x03dns\"\xe3\x01\n" +
+	"\x03dns\x18\x02 \x01(\v2\x13.deployments.v1.DnsR\x03dns\x12\x1b\n" +
+	"\tedge_kind\x18\x03 \x01(\tR\bedgeKind\"\xe3\x01\n" +
 	"\x10AddDomainRequest\x12\x18\n" +
 	"\aoptions\x18\x01 \x01(\fR\aoptions\x12)\n" +
 	"\x10protocol_version\x18\x02 \x01(\tR\x0fprotocolVersion\x12\x12\n" +
@@ -5316,32 +5407,36 @@ const file_deployments_v1_deployments_proto_rawDesc = "" +
 	"\tedge_kind\x18\x04 \x01(\tR\bedgeKind\"g\n" +
 	"\x14PlanTeardownResponse\x12\x1b\n" +
 	"\tedge_kind\x18\x01 \x01(\tR\bedgeKind\x122\n" +
-	"\x05items\x18\x02 \x03(\v2\x1c.deployments.v1.TeardownItemR\x05items\"\xaf\x01\n" +
+	"\x05items\x18\x02 \x03(\v2\x1c.deployments.v1.TeardownItemR\x05items\"\xcc\x01\n" +
 	"\x15DestroyPreviewRequest\x12=\n" +
 	"\venvironment\x18\x01 \x01(\v2\x1b.deployments.v1.EnvironmentR\venvironment\x12\x18\n" +
 	"\aoptions\x18\x02 \x01(\fR\aoptions\x12)\n" +
 	"\x10protocol_version\x18\x03 \x01(\tR\x0fprotocolVersion\x12\x12\n" +
-	"\x04slug\x18\x04 \x01(\tR\x04slug\"\xd6\x01\n" +
+	"\x04slug\x18\x04 \x01(\tR\x04slug\x12\x1b\n" +
+	"\tedge_kind\x18\x05 \x01(\tR\bedgeKind\"\xf3\x01\n" +
 	"\x15DestroyProjectRequest\x12\x18\n" +
 	"\aoptions\x18\x01 \x01(\fR\aoptions\x12)\n" +
 	"\x10protocol_version\x18\x02 \x01(\tR\x0fprotocolVersion\x12\x12\n" +
 	"\x04slug\x18\x03 \x01(\tR\x04slug\x12=\n" +
 	"\venvironment\x18\x04 \x01(\v2\x1b.deployments.v1.EnvironmentR\venvironment\x12%\n" +
-	"\x03dns\x18\x05 \x01(\v2\x13.deployments.v1.DnsR\x03dns\"\xb3\x01\n" +
+	"\x03dns\x18\x05 \x01(\v2\x13.deployments.v1.DnsR\x03dns\x12\x1b\n" +
+	"\tedge_kind\x18\x06 \x01(\tR\bedgeKind\"\xd0\x01\n" +
 	"\x19PlanDestroyProjectRequest\x12\x18\n" +
 	"\aoptions\x18\x01 \x01(\fR\aoptions\x12)\n" +
 	"\x10protocol_version\x18\x02 \x01(\tR\x0fprotocolVersion\x12\x12\n" +
 	"\x04slug\x18\x03 \x01(\tR\x04slug\x12=\n" +
-	"\venvironment\x18\x04 \x01(\v2\x1b.deployments.v1.EnvironmentR\venvironment\"\xca\x01\n" +
+	"\venvironment\x18\x04 \x01(\v2\x1b.deployments.v1.EnvironmentR\venvironment\x12\x1b\n" +
+	"\tedge_kind\x18\x05 \x01(\tR\bedgeKind\"\xca\x01\n" +
 	"\x1aPlanDestroyProjectResponse\x12\x1d\n" +
 	"\n" +
 	"app_stacks\x18\x01 \x03(\tR\tappStacks\x12!\n" +
 	"\finfra_stacks\x18\x02 \x03(\tR\vinfraStacks\x12<\n" +
 	"\n" +
 	"edge_stack\x18\x03 \x01(\v2\x1d.deployments.v1.EdgeStackPlanR\tedgeStack\x12,\n" +
-	"\x12nothing_to_destroy\x18\x04 \x01(\bR\x10nothingToDestroy\"S\n" +
+	"\x12nothing_to_destroy\x18\x04 \x01(\bR\x10nothingToDestroy\"p\n" +
 	"\x18PlanReleaseDomainRequest\x127\n" +
-	"\x05class\x18\x01 \x01(\x0e2!.deployments.v1.Environment.ClassR\x05class\"z\n" +
+	"\x05class\x18\x01 \x01(\x0e2!.deployments.v1.Environment.ClassR\x05class\x12\x1b\n" +
+	"\tedge_kind\x18\x02 \x01(\tR\bedgeKind\"z\n" +
 	"\x19PlanReleaseDomainResponse\x12\x1f\n" +
 	"\vbase_domain\x18\x01 \x01(\tR\n" +
 	"baseDomain\x12<\n" +
@@ -5374,13 +5469,14 @@ const file_deployments_v1_deployments_proto_rawDesc = "" +
 	"\n" +
 	"created_at\x18\x04 \x01(\x03R\tcreatedAt\x12\x1d\n" +
 	"\n" +
-	"expires_at\x18\x05 \x01(\x03R\texpiresAt\"\xcf\x01\n" +
+	"expires_at\x18\x05 \x01(\x03R\texpiresAt\"\xec\x01\n" +
 	"\x10PreflightRequest\x12\x18\n" +
 	"\aoptions\x18\x01 \x01(\fR\aoptions\x12)\n" +
 	"\x10protocol_version\x18\x02 \x01(\tR\x0fprotocolVersion\x12H\n" +
 	"\x0erequired_class\x18\x03 \x01(\x0e2!.deployments.v1.Environment.ClassR\rrequiredClass\x12\x12\n" +
 	"\x04slug\x18\x04 \x01(\tR\x04slug\x12\x18\n" +
-	"\adomains\x18\x05 \x03(\tR\adomains\"\xd4\x03\n" +
+	"\adomains\x18\x05 \x03(\tR\adomains\x12\x1b\n" +
+	"\tedge_kind\x18\x06 \x01(\tR\bedgeKind\"\xd4\x03\n" +
 	"\x11PreflightResponse\x12B\n" +
 	"\vinfra_class\x18\x01 \x01(\x0e2!.deployments.v1.Environment.ClassR\n" +
 	"infraClass\x125\n" +
@@ -5445,29 +5541,32 @@ const file_deployments_v1_deployments_proto_rawDesc = "" +
 	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"h\n" +
 	"\x15PromotionHistoryEntry\x127\n" +
 	"\tpromotion\x18\x01 \x01(\v2\x19.deployments.v1.PromotionR\tpromotion\x12\x16\n" +
-	"\x06active\x18\x02 \x01(\bR\x06active\"p\n" +
+	"\x06active\x18\x02 \x01(\bR\x06active\"\x8d\x01\n" +
 	"\x15ListPromotionsRequest\x12\x18\n" +
 	"\aoptions\x18\x01 \x01(\fR\aoptions\x12)\n" +
 	"\x10protocol_version\x18\x02 \x01(\tR\x0fprotocolVersion\x12\x12\n" +
-	"\x04slug\x18\x03 \x01(\tR\x04slug\"_\n" +
+	"\x04slug\x18\x03 \x01(\tR\x04slug\x12\x1b\n" +
+	"\tedge_kind\x18\x04 \x01(\tR\bedgeKind\"_\n" +
 	"\x16ListPromotionsResponse\x12E\n" +
 	"\n" +
 	"promotions\x18\x01 \x03(\v2%.deployments.v1.PromotionHistoryEntryR\n" +
-	"promotions\"\x8c\x01\n" +
+	"promotions\"\xa9\x01\n" +
 	"\x0fRollbackRequest\x12\x18\n" +
 	"\aoptions\x18\x01 \x01(\fR\aoptions\x12)\n" +
 	"\x10protocol_version\x18\x02 \x01(\tR\x0fprotocolVersion\x12\x12\n" +
 	"\x04slug\x18\x03 \x01(\tR\x04slug\x12\x0e\n" +
 	"\x02to\x18\x04 \x01(\tR\x02to\x12\x10\n" +
-	"\x03tag\x18\x05 \x01(\tR\x03tag\"I\n" +
+	"\x03tag\x18\x05 \x01(\tR\x03tag\x12\x1b\n" +
+	"\tedge_kind\x18\x06 \x01(\tR\bedgeKind\"I\n" +
 	"\x10RollbackResponse\x125\n" +
-	"\bpromoted\x18\x01 \x01(\v2\x19.deployments.v1.PromotionR\bpromoted\"\xbd\x01\n" +
+	"\bpromoted\x18\x01 \x01(\v2\x19.deployments.v1.PromotionR\bpromoted\"\xda\x01\n" +
 	"\fPruneRequest\x12\x18\n" +
 	"\aoptions\x18\x01 \x01(\fR\aoptions\x12)\n" +
 	"\x10protocol_version\x18\x02 \x01(\tR\x0fprotocolVersion\x12\x12\n" +
 	"\x04slug\x18\x03 \x01(\tR\x04slug\x12\x15\n" +
 	"\x06keep_n\x18\x04 \x01(\x05R\x05keepN\x12=\n" +
-	"\venvironment\x18\x05 \x01(\v2\x1b.deployments.v1.EnvironmentR\venvironment\"\xe7\x02\n" +
+	"\venvironment\x18\x05 \x01(\v2\x1b.deployments.v1.EnvironmentR\venvironment\x12\x1b\n" +
+	"\tedge_kind\x18\x06 \x01(\tR\bedgeKind\"\xe7\x02\n" +
 	"\vDeployEvent\x12;\n" +
 	"\bprogress\x18\x01 \x01(\v2\x1d.deployments.v1.ProgressEventH\x00R\bprogress\x12,\n" +
 	"\x03log\x18\x02 \x01(\v2\x18.deployments.v1.LogEventH\x00R\x03log\x125\n" +

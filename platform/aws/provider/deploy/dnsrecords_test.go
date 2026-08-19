@@ -2,6 +2,7 @@ package deploy
 
 import (
 	"context"
+	"slices"
 	"strings"
 	"testing"
 
@@ -57,6 +58,39 @@ func TestSettleStackRecords(t *testing.T) {
 		}
 		if len(got) != 1 || got[0] != wildcard {
 			t.Errorf("recorded records = %v, want %v", got, wildcard)
+		}
+	})
+
+	t.Run("an edge with a front per host writes each host its own record", func(t *testing.T) {
+		t.Parallel()
+
+		writer := &recordingDNS{}
+		cfg := Config{Edge: &recordingEdge{kind: edge.KindNone}, DNS: writer}
+		state := edge.RecordHostFront(edge.RecordHostFront(edge.StackState{}, "shop.app.com", "d-shop.execute-api.eu-west-1.amazonaws.com"), "www.app.com", "d-www.execute-api.eu-west-1.amazonaws.com")
+
+		if _, err := settleStackRecords(t.Context(), cfg, []edge.StackSpec{{Domains: []string{"shop.app.com", "www.app.com"}}}, state, func(string) {}); err != nil {
+			t.Fatalf("settleStackRecords: %v", err)
+		}
+		want := []edge.Record{
+			{Name: "shop.app.com", Type: edge.RecordTypeCNAME, Value: "d-shop.execute-api.eu-west-1.amazonaws.com"},
+			{Name: "www.app.com", Type: edge.RecordTypeCNAME, Value: "d-www.execute-api.eu-west-1.amazonaws.com"},
+		}
+		if !slices.Equal(writer.written, want) {
+			t.Errorf("written = %v, want %v", writer.written, want)
+		}
+	})
+
+	t.Run("a host the edge published no front for is refused by name", func(t *testing.T) {
+		t.Parallel()
+
+		cfg := Config{Edge: &recordingEdge{kind: edge.KindNone}, DNS: &recordingDNS{}}
+
+		_, err := settleStackRecords(t.Context(), cfg, specs, edge.StackState{}, func(string) {})
+		if err == nil {
+			t.Fatal("settleStackRecords err = nil, want a refusal: nothing to point the host at")
+		}
+		if !strings.Contains(err.Error(), "shop.app.com") {
+			t.Errorf("err = %v, want it to name the host with no front", err)
 		}
 	})
 

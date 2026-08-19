@@ -376,6 +376,10 @@ func knownNeeds() []string {
 	return edge.NeedNames(edge.AllNeeds())
 }
 
+func knownEdgeKinds() []string {
+	return edge.KindNames(edge.AllKinds())
+}
+
 const edgeSpellings = "use `edge: cfEdge()` (from ocel/edge), `edge: false`, or omit it for the origin's own edge"
 
 const dnsSpellings = "use `dns: cloudflareDns()` (from ocel/dns), `dns: route53()` (from @ocel/provider-aws/dns), or omit it"
@@ -401,6 +405,10 @@ func normalizeEdge(raw json.RawMessage) (*EdgeDescriptor, bool, error) {
 	}
 	if err := json.Unmarshal(raw, &marker); err != nil || marker.Kind == "" {
 		return nil, false, errors.New(edgeSpellings)
+	}
+
+	if !edge.ValidKind(edge.Kind(marker.Kind)) {
+		return nil, false, fmt.Errorf("%q is not an edge — the edges this CLI knows are %s; %s", marker.Kind, strings.Join(knownEdgeKinds(), ", "), edgeSpellings)
 	}
 
 	options := marker.Options

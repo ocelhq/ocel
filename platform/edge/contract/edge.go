@@ -13,6 +13,27 @@ const (
 	KindNone       Kind = "none"
 )
 
+func AllKinds() []Kind {
+	return []Kind{KindCloudflare, KindNative, KindNone}
+}
+
+func KindNames(kinds []Kind) []string {
+	names := make([]string, 0, len(kinds))
+	for _, kind := range kinds {
+		names = append(names, string(kind))
+	}
+	return names
+}
+
+func ValidKind(kind Kind) bool {
+	for _, k := range AllKinds() {
+		if k == kind {
+			return true
+		}
+	}
+	return false
+}
+
 type Need string
 
 const (

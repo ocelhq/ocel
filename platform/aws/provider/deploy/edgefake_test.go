@@ -47,6 +47,7 @@ type recordingEdge struct {
 
 	bound       map[string]string
 	history     []edge.HistoryEntry
+	historyErr  error
 	pruneResult edge.PruneResult
 
 	promoted []pointedPromotion
@@ -145,24 +146,6 @@ func (f *recordingEdge) Reconcile(_ context.Context, spec edge.StackSpec, prior 
 	}}, nil
 }
 
-func (f *recordingEdge) called() bool { return len(f.deployed) > 0 }
-
-func (f *recordingEdge) only(t *testing.T) edge.AppDeployment {
-	t.Helper()
-	if len(f.deployed) != 1 {
-		t.Fatalf("expected exactly one deployment, got %d", len(f.deployed))
-	}
-	return f.deployed[0]
-}
-
-func (f *recordingEdge) names() []string {
-	var names []string
-	for _, d := range f.deployed {
-		names = append(names, d.Name)
-	}
-	return names
-}
-
 func (f *recordingEdge) opened(t *testing.T, state edge.StackState) edge.EdgeStack {
 	t.Helper()
 	stack, err := f.Open(state)
@@ -226,6 +209,9 @@ func (s *recordingStack) Promote(_ context.Context, promotion edge.Promotion, po
 }
 
 func (s *recordingStack) History(_ context.Context, pointer string) ([]edge.HistoryEntry, error) {
+	if s.edge.historyErr != nil {
+		return nil, s.edge.historyErr
+	}
 	if err := s.checkAuth(); err != nil {
 		return nil, err
 	}

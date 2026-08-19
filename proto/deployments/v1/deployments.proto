@@ -59,10 +59,14 @@ message UseDomainRequest {
   string base_domain = 2;
 
   Dns dns = 3;
+
+  string edge_kind = 4;
 }
 
 message ListDomainRequest {
   Environment.Class class = 1;
+
+  string edge_kind = 2;
 }
 
 message ListDomainResponse {
@@ -75,6 +79,8 @@ message ReleaseDomainRequest {
   Environment.Class class = 1;
 
   Dns dns = 2;
+
+  string edge_kind = 3;
 }
 
 message AddDomainRequest {
@@ -341,6 +347,8 @@ message DestroyPreviewRequest {
   string protocol_version = 3;
 
   string slug = 4;
+
+  string edge_kind = 5;
 }
 
 message DestroyProjectRequest {
@@ -353,6 +361,8 @@ message DestroyProjectRequest {
   Environment environment = 4;
 
   Dns dns = 5;
+
+  string edge_kind = 6;
 }
 
 message PlanDestroyProjectRequest {
@@ -363,6 +373,8 @@ message PlanDestroyProjectRequest {
   string slug = 3;
 
   Environment environment = 4;
+
+  string edge_kind = 5;
 }
 
 message PlanDestroyProjectResponse {
@@ -377,6 +389,8 @@ message PlanDestroyProjectResponse {
 
 message PlanReleaseDomainRequest {
   Environment.Class class = 1;
+
+  string edge_kind = 2;
 }
 
 message PlanReleaseDomainResponse {
@@ -438,6 +452,8 @@ message PreflightRequest {
   string slug = 4;
 
   repeated string domains = 5;
+
+  string edge_kind = 6;
 }
 
 message PreflightResponse {
@@ -535,6 +551,8 @@ message ListPromotionsRequest {
   string protocol_version = 2;
 
   string slug = 3;
+
+  string edge_kind = 4;
 }
 
 message ListPromotionsResponse {
@@ -551,6 +569,8 @@ message RollbackRequest {
   string to = 4;
 
   string tag = 5;
+
+  string edge_kind = 6;
 }
 
 message RollbackResponse {
@@ -567,6 +587,8 @@ message PruneRequest {
   int32 keep_n = 4;
 
   Environment environment = 5;
+
+  string edge_kind = 6;
 }
 
 message DeployEvent {

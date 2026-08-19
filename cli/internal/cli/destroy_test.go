@@ -172,7 +172,7 @@ func TestRunDestroyPreviewProject(t *testing.T) {
 		out := stdout.String()
 		for _, want := range []string{
 			`ENTIRE preview footprint of project "test-app"`,
-			"fronted by the cloudflare edge",
+			"fronted by the native edge",
 			"delete edge workers test-app",
 			"infra stack test-app--pr-1--infra — databases and buckets, INCLUDING ALL DATA",
 			"infra stack test-app--pr-2--infra",
@@ -280,7 +280,7 @@ func TestRunDestroy(t *testing.T) {
 
 		out := stdout.String()
 		for _, want := range []string{
-			"fronted by the cloudflare edge",
+			"fronted by the native edge",
 			"delete edge stack test-app",
 			"disable, then delete distribution E1test-app (this one is slow)",
 			"keep certificate test-app.example.com — you pinned this certificate; Ocel never deletes one it did not request",

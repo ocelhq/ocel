@@ -593,16 +593,18 @@ func TestServerEdge(t *testing.T) {
 		}
 	})
 
-	t.Run("an unnamed kind falls back to the one this origin carries", func(t *testing.T) {
+	t.Run("an unnamed kind is refused rather than defaulted to one", func(t *testing.T) {
 		t.Parallel()
 
 		s := &Server{}
-		got, err := s.edge("", "eu-west-1")
-		if err != nil {
-			t.Fatalf("edge() error = %v", err)
+		_, err := s.edge("", "eu-west-1")
+		if err == nil {
+			t.Fatal("edge(\"\") error = nil, want a request that names no edge refused: an omitted kind is a stale CLI, not a default")
 		}
-		if got.Kind() != edge.KindCloudflare {
-			t.Errorf("Kind() = %q, want the origin's own edge", got.Kind())
+		for _, want := range edge.KindNames(edge.AllKinds()) {
+			if !strings.Contains(err.Error(), want) {
+				t.Errorf("err = %v, want it to name %q as an edge the CLI may send", err, want)
+			}
 		}
 	})
 

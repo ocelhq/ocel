@@ -116,6 +116,7 @@ func (s *stack) reconcileDistribution(ctx context.Context, c Clients) (front, er
 	if err := s.ledger(c).NoteInvalidationTarget(ctx, held.id); err != nil {
 		return front{}, err
 	}
+	s.recordFront(held)
 	return held, nil
 }
 
@@ -125,19 +126,26 @@ func (s *stack) ensureDistribution(ctx context.Context, c Clients) (front, error
 	if err != nil {
 		return front{}, err
 	}
-	if found {
-		return held, nil
+	if !found {
+		created, err := createDistribution(ctx, c, plan, nil, "")
+		if err != nil {
+			return front{}, err
+		}
+		if err := s.ledger(c).NoteInvalidationTarget(ctx, created.id); err != nil {
+			return front{}, err
+		}
+		held = created
 	}
-	created, err := createDistribution(ctx, c, plan, nil, "")
-	if err != nil {
-		return front{}, err
+	s.recordFront(held)
+	return held, nil
+}
+
+func (s *stack) recordFront(held front) {
+	if s.state == nil {
+		s.state = edge.StackState{}
 	}
-	if err := s.ledger(c).NoteInvalidationTarget(ctx, created.id); err != nil {
-		return front{}, err
-	}
-	s.state[stackKeyDistribution] = created.id
-	s.state[edge.StackKeyFront] = created.domainName
-	return created, nil
+	s.state[stackKeyDistribution] = held.id
+	s.state[edge.StackKeyFront] = held.domainName
 }
 
 func (s *stack) findDistributionFor(ctx context.Context, c Clients, name string) (front, bool, error) {

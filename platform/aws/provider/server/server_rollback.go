@@ -17,7 +17,7 @@ import (
 
 var errNoProductionDeploy = errors.New("this project has no production deploys yet; run `ocel deploy` first")
 
-func (s *Server) openStack(ctx context.Context, opts options, slug string) (edge.EdgeStack, error) {
+func (s *Server) openStack(ctx context.Context, kind edge.Kind, opts options, slug string) (edge.EdgeStack, error) {
 	awscfg, err := loadAWS(ctx, opts.Region)
 	if err != nil {
 		return nil, err
@@ -26,11 +26,11 @@ func (s *Server) openStack(ctx context.Context, opts options, slug string) (edge
 	if err != nil {
 		return nil, err
 	}
-	return s.openStackFor(state, awscfg.Region)
+	return s.openStackFor(kind, state, awscfg.Region)
 }
 
-func (s *Server) openStackFor(state edge.StackState, region string) (edge.EdgeStack, error) {
-	edgeFront, err := s.originEdge(region)
+func (s *Server) openStackFor(kind edge.Kind, state edge.StackState, region string) (edge.EdgeStack, error) {
+	edgeFront, err := s.edge(kind, region)
 	if err != nil {
 		return nil, err
 	}
@@ -49,7 +49,7 @@ func (s *Server) ListPromotions(ctx context.Context, req *deploymentsv1.ListProm
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInvalidArgument, err)
 	}
-	stack, err := s.openStack(ctx, opts, req.GetSlug())
+	stack, err := s.openStack(ctx, edge.Kind(req.GetEdgeKind()), opts, req.GetSlug())
 	if err != nil {
 		if errors.Is(err, errNoProductionDeploy) {
 			return &deploymentsv1.ListPromotionsResponse{}, nil
@@ -69,11 +69,11 @@ func (s *Server) Rollback(ctx context.Context, req *deploymentsv1.RollbackReques
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInvalidArgument, err)
 	}
-	edgeFront, err := s.originEdge(opts.Region)
+	edgeFront, err := s.edge(edge.Kind(req.GetEdgeKind()), opts.Region)
 	if err != nil {
 		return nil, err
 	}
-	stack, err := s.openStack(ctx, opts, req.GetSlug())
+	stack, err := s.openStack(ctx, edge.Kind(req.GetEdgeKind()), opts, req.GetSlug())
 	if err != nil {
 		return nil, err
 	}

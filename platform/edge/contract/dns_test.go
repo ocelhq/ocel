@@ -2,6 +2,7 @@ package edge
 
 import (
 	"context"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -194,4 +195,81 @@ func TestWriteTTL(t *testing.T) {
 	if got := WriteTTL(nil); got != 0 {
 		t.Errorf("WriteTTL = %s, want nothing claimed when no writer writes", got)
 	}
+}
+
+func TestRecordsForPerHostFronts(t *testing.T) {
+	t.Parallel()
+
+	t.Run("each host takes its own front where the stack published one", func(t *testing.T) {
+		t.Parallel()
+
+		state := RecordHostFront(RecordHostFront(StackState{}, "shop.app.com", "d-shop.execute-api.eu-west-1.amazonaws.com"), "www.app.com", "d-www.execute-api.eu-west-1.amazonaws.com")
+		got, err := RecordsFor(TargetFor(KindNone, state), []string{"shop.app.com", "www.app.com"})
+		if err != nil {
+			t.Fatalf("RecordsFor error = %v", err)
+		}
+		want := []Record{
+			{Name: "shop.app.com", Type: RecordTypeCNAME, Value: "d-shop.execute-api.eu-west-1.amazonaws.com"},
+			{Name: "www.app.com", Type: RecordTypeCNAME, Value: "d-www.execute-api.eu-west-1.amazonaws.com"},
+		}
+		if !slices.Equal(got, want) {
+			t.Errorf("RecordsFor = %v, want %v", got, want)
+		}
+	})
+
+	t.Run("one front stands for every host that has none of its own", func(t *testing.T) {
+		t.Parallel()
+
+		state := RecordHostFront(StackState{StackKeyFront: "d123.cloudfront.net"}, "shop.app.com", "d-shop.execute-api.eu-west-1.amazonaws.com")
+		got, err := RecordsFor(TargetFor(KindNative, state), []string{"shop.app.com", "www.app.com"})
+		if err != nil {
+			t.Fatalf("RecordsFor error = %v", err)
+		}
+		want := []Record{
+			{Name: "shop.app.com", Type: RecordTypeCNAME, Value: "d-shop.execute-api.eu-west-1.amazonaws.com"},
+			{Name: "www.app.com", Type: RecordTypeCNAME, Value: "d123.cloudfront.net"},
+		}
+		if !slices.Equal(got, want) {
+			t.Errorf("RecordsFor = %v, want %v", got, want)
+		}
+	})
+
+	t.Run("a host with no front of its own and no shared front is named", func(t *testing.T) {
+		t.Parallel()
+
+		state := RecordHostFront(StackState{}, "shop.app.com", "d-shop.execute-api.eu-west-1.amazonaws.com")
+		_, err := RecordsFor(TargetFor(KindNone, state), []string{"shop.app.com", "www.app.com"})
+		if err == nil {
+			t.Fatal("RecordsFor err = nil, want a refusal: nothing to point www.app.com at")
+		}
+		if !strings.Contains(err.Error(), "www.app.com") {
+			t.Errorf("err = %q, want it to name the host with no front", err)
+		}
+	})
+
+	t.Run("cloudflare needs no front at all", func(t *testing.T) {
+		t.Parallel()
+
+		got, err := RecordsFor(TargetFor(KindCloudflare, StackState{}), []string{"shop.app.com"})
+		if err != nil {
+			t.Fatalf("RecordsFor error = %v", err)
+		}
+		want := Record{Name: "shop.app.com", Type: RecordTypeAAAA, Value: ProxyPlaceholder, Proxied: true}
+		if len(got) != 1 || got[0] != want {
+			t.Errorf("RecordsFor = %v, want %v", got, want)
+		}
+	})
+
+	t.Run("forgetting a host front leaves the others standing", func(t *testing.T) {
+		t.Parallel()
+
+		state := RecordHostFront(RecordHostFront(StackState{}, "shop.app.com", "d-shop"), "www.app.com", "d-www")
+		left := ForgetHostFront(state, "shop.app.com")
+		if fronts := HostFronts(left); len(fronts) != 1 || fronts["www.app.com"] != "d-www" {
+			t.Errorf("host fronts = %v, want only www.app.com", fronts)
+		}
+		if fronts := HostFronts(state); len(fronts) != 2 {
+			t.Errorf("host fronts on the state handed in = %v, want both: forgetting one must not reach back", fronts)
+		}
+	})
 }

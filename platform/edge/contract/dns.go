@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"maps"
 	"slices"
 	"strings"
 	"time"
@@ -76,13 +77,64 @@ type ZoneFinder interface {
 }
 
 type DNSTarget struct {
-	Kind  Kind
-	Front string
+	Kind        Kind
+	Front       string
+	FrontByHost map[string]string
 }
 
-const StackKeyFront = "front"
+func (t DNSTarget) FrontFor(hostname string) string {
+	if front := t.FrontByHost[hostname]; front != "" {
+		return front
+	}
+	return t.Front
+}
+
+const (
+	StackKeyFront = "front"
+
+	stackKeyHostFrontPrefix = "front:"
+)
 
 func FrontOf(state StackState) string { return state[StackKeyFront] }
+
+func HostFronts(state StackState) map[string]string {
+	var fronts map[string]string
+	for key, front := range state {
+		host, ok := strings.CutPrefix(key, stackKeyHostFrontPrefix)
+		if !ok || host == "" || front == "" {
+			continue
+		}
+		if fronts == nil {
+			fronts = map[string]string{}
+		}
+		fronts[host] = front
+	}
+	return fronts
+}
+
+func RecordHostFront(state StackState, hostname, front string) StackState {
+	next := maps.Clone(state)
+	if next == nil {
+		next = StackState{}
+	}
+	if hostname == "" {
+		return next
+	}
+	if front == "" {
+		delete(next, stackKeyHostFrontPrefix+hostname)
+		return next
+	}
+	next[stackKeyHostFrontPrefix+hostname] = front
+	return next
+}
+
+func ForgetHostFront(state StackState, hostname string) StackState {
+	return RecordHostFront(state, hostname, "")
+}
+
+func TargetFor(kind Kind, state StackState) DNSTarget {
+	return DNSTarget{Kind: kind, Front: FrontOf(state), FrontByHost: HostFronts(state)}
+}
 
 func RecordsFor(target DNSTarget, hostnames []string) ([]Record, error) {
 	records := make([]Record, 0, len(hostnames))
@@ -94,10 +146,11 @@ func RecordsFor(target DNSTarget, hostnames []string) ([]Record, error) {
 			records = append(records, Record{Name: host, Type: RecordTypeAAAA, Value: ProxyPlaceholder, Proxied: true})
 			continue
 		}
-		if target.Front == "" {
+		front := target.FrontFor(host)
+		if front == "" {
 			return nil, fmt.Errorf("nothing to point %s at: the %s edge published no hostname for this deployment", host, target.Kind)
 		}
-		records = append(records, Record{Name: host, Type: RecordTypeCNAME, Value: target.Front})
+		records = append(records, Record{Name: host, Type: RecordTypeCNAME, Value: front})
 	}
 	return records, nil
 }

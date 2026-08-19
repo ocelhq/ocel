@@ -75,7 +75,7 @@ func (d *domainSession) statusOf(ctx context.Context, lookup *certLookup, host s
 		row.ExpiringSoon = cert.ExpiringSoon(d.prober.Clock())
 	}
 
-	wanted, err := edge.RecordsFor(edge.DNSTarget{Kind: d.kind, Front: edge.FrontOf(d.stack.State())}, []string{host})
+	wanted, err := edge.RecordsFor(edge.TargetFor(d.kind, d.stack.State()), []string{host})
 	if err != nil {
 		return nil, err
 	}

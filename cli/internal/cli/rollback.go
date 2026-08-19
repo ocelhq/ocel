@@ -70,7 +70,7 @@ func runRollback(ctx context.Context, d deps, cwd string, opts rollbackOptions, 
 	defer run.Close()
 
 	return runProviderSession(ctx, d, cfg, provider, stdout, stderr, func(runner *providerrunner.Runner) error {
-		if err := preflightClass(ctx, d, runner, provider, deploymentsv1.Environment_CLASS_PRODUCTION, "ocel bootstrap", stdout); err != nil {
+		if err := preflightClass(ctx, d, runner, provider, cfg, deploymentsv1.Environment_CLASS_PRODUCTION, "ocel bootstrap", stdout); err != nil {
 			return err
 		}
 
@@ -78,13 +78,13 @@ func runRollback(ctx context.Context, d deps, cwd string, opts rollbackOptions, 
 		if err != nil {
 			return err
 		}
-		resp, err := client.Rollback(ctx, &deploymentsv1.RollbackRequest{
+		resp, err := client.Rollback(ctx, edgeSettings(cfg).applyToRollback(&deploymentsv1.RollbackRequest{
 			Options:         []byte(provider.Options),
 			ProtocolVersion: manifestbuilder.SchemaVersion,
 			Slug:            cfg.Slug,
 			To:              opts.to,
 			Tag:             opts.tag,
-		})
+		}))
 		if err != nil {
 			return err
 		}
