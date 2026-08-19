@@ -3,6 +3,7 @@ package bootstrap
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"strings"
 	"testing"
 
@@ -49,22 +50,27 @@ func (f *fakeSSM) DeleteParameter(_ context.Context, in *ssm.DeleteParameterInpu
 }
 
 type fakeIAM struct {
-	created      []string
-	existingKeys int
+	created []string
+	keys    []string
 }
 
 func (f *fakeIAM) ListAccessKeys(_ context.Context, in *iam.ListAccessKeysInput, _ ...func(*iam.Options)) (*iam.ListAccessKeysOutput, error) {
-	meta := make([]iamtypes.AccessKeyMetadata, f.existingKeys)
-	for i := range meta {
-		meta[i] = iamtypes.AccessKeyMetadata{UserName: in.UserName}
+	meta := make([]iamtypes.AccessKeyMetadata, 0, len(f.keys))
+	for _, id := range f.keys {
+		meta = append(meta, iamtypes.AccessKeyMetadata{UserName: in.UserName, AccessKeyId: aws.String(id)})
 	}
 	return &iam.ListAccessKeysOutput{AccessKeyMetadata: meta}, nil
 }
 
 func (f *fakeIAM) CreateAccessKey(_ context.Context, in *iam.CreateAccessKeyInput, _ ...func(*iam.Options)) (*iam.CreateAccessKeyOutput, error) {
 	f.created = append(f.created, aws.ToString(in.UserName))
+	id := "AKIAEDGE"
+	if len(f.created) > 1 {
+		id = fmt.Sprintf("AKIAEDGE%d", len(f.created))
+	}
+	f.keys = append(f.keys, id)
 	return &iam.CreateAccessKeyOutput{AccessKey: &iamtypes.AccessKey{
-		AccessKeyId:     aws.String("AKIAEDGE"),
+		AccessKeyId:     aws.String(id),
 		SecretAccessKey: aws.String("secret-edge"),
 	}}, nil
 }
@@ -98,29 +104,64 @@ func TestEnsureEdgeCredentials(t *testing.T) {
 		}
 	})
 
-	t.Run("reuses when present", func(t *testing.T) {
+	t.Run("reuses a recorded key the user still has", func(t *testing.T) {
 		ssmc := newFakeSSM()
 		ssmc.params[EdgeCredentialsParamName] = `{"accessKeyId":"AKOLD","secretAccessKey":"old"}`
-		iamc := &fakeIAM{}
+		iamc := &fakeIAM{keys: []string{"AKOLD"}}
 
 		created, err := ensureEdgeCredentials(context.Background(), iamc, ssmc, ClassProduction)
 		if err != nil {
 			t.Fatalf("ensureEdgeCredentials: %v", err)
 		}
 		if created {
-			t.Error("expected created=false when the parameter already exists")
+			t.Error("expected created=false when the recorded key is still live")
 		}
 		if len(iamc.created) != 0 {
-			t.Errorf("minted a key despite an existing parameter: %v", iamc.created)
+			t.Errorf("minted a key despite a live recorded one: %v", iamc.created)
 		}
 		if ssmc.puts != 0 {
 			t.Errorf("overwrote the existing parameter (%d puts)", ssmc.puts)
 		}
 	})
 
+	t.Run("re-mints when the recorded key is gone from the user", func(t *testing.T) {
+		ssmc := newFakeSSM()
+		ssmc.params[EdgeCredentialsParamName] = `{"accessKeyId":"AKGONE","secretAccessKey":"gone"}`
+		iamc := &fakeIAM{}
+
+		created, err := ensureEdgeCredentials(context.Background(), iamc, ssmc, ClassProduction)
+		if err != nil {
+			t.Fatalf("ensureEdgeCredentials: %v", err)
+		}
+		if !created {
+			t.Error("expected created=true: a CloudFormation replacement of the user takes its key, and the parameter outlives it")
+		}
+		var creds EdgeCredentials
+		if err := json.Unmarshal([]byte(ssmc.params[EdgeCredentialsParamName]), &creds); err != nil {
+			t.Fatalf("stored value is not EdgeCredentials JSON: %v", err)
+		}
+		if creds.AccessKeyID != "AKIAEDGE" {
+			t.Errorf("stored key = %q, want the freshly minted AKIAEDGE: the edge signs with a key AWS no longer knows otherwise", creds.AccessKeyID)
+		}
+	})
+
+	t.Run("names the dead key when the cap blocks a re-mint", func(t *testing.T) {
+		ssmc := newFakeSSM()
+		ssmc.params[EdgeCredentialsParamName] = `{"accessKeyId":"AKGONE","secretAccessKey":"gone"}`
+		iamc := &fakeIAM{keys: []string{"AK1", "AK2"}}
+
+		_, err := ensureEdgeCredentials(context.Background(), iamc, ssmc, ClassProduction)
+		if err == nil {
+			t.Fatal("expected an error when the user is already at the 2-key cap")
+		}
+		if !strings.Contains(err.Error(), "AKGONE") {
+			t.Errorf("err = %v, want it to name the key the parameter still claims", err)
+		}
+	})
+
 	t.Run("fails when key cap reached", func(t *testing.T) {
 		ssmc := newFakeSSM()
-		iamc := &fakeIAM{existingKeys: 2}
+		iamc := &fakeIAM{keys: []string{"AK1", "AK2"}}
 
 		_, err := ensureEdgeCredentials(context.Background(), iamc, ssmc, ClassProduction)
 		if err == nil {

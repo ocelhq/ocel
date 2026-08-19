@@ -5,9 +5,11 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"slices"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/iam"
+	iamtypes "github.com/aws/aws-sdk-go-v2/service/iam/types"
 	"github.com/aws/aws-sdk-go-v2/service/ssm"
 	ssmtypes "github.com/aws/aws-sdk-go-v2/service/ssm/types"
 
@@ -228,16 +230,9 @@ func ensureEdgeCredentials(ctx context.Context, iamClient IAMAPI, ssmClient SSMA
 	}
 	paramName, userName := names.credentialsParam, names.user
 
-	_, err = ssmClient.GetParameter(ctx, &ssm.GetParameterInput{
-		Name:           aws.String(paramName),
-		WithDecryption: aws.Bool(true),
-	})
-	if err == nil {
-		return false, nil
-	}
-	var notFound *ssmtypes.ParameterNotFound
-	if !errors.As(err, &notFound) {
-		return false, fmt.Errorf("read edge credentials parameter: %w", err)
+	recorded, err := recordedEdgeKeyID(ctx, ssmClient, paramName)
+	if err != nil {
+		return false, err
 	}
 
 	keys, err := iamClient.ListAccessKeys(ctx, &iam.ListAccessKeysInput{
@@ -246,12 +241,16 @@ func ensureEdgeCredentials(ctx context.Context, iamClient IAMAPI, ssmClient SSMA
 	if err != nil {
 		return false, fmt.Errorf("list edge access keys for %s: %w", userName, err)
 	}
+	if recorded != "" && slices.ContainsFunc(keys.AccessKeyMetadata, func(key iamtypes.AccessKeyMetadata) bool {
+		return aws.ToString(key.AccessKeyId) == recorded
+	}) {
+		return false, nil
+	}
 	if len(keys.AccessKeyMetadata) >= 2 {
 		return false, fmt.Errorf(
-			"edge reader %s already has %d access keys but none is stored in %s: "+
-				"a prior mint likely failed before its PutParameter; delete a stale "+
-				"key with iam.DeleteAccessKey, then re-run bootstrap",
-			userName, len(keys.AccessKeyMetadata), paramName,
+			"edge reader %s already has %d access keys but %s: delete a stale key with "+
+				"iam.DeleteAccessKey, then re-run bootstrap",
+			userName, len(keys.AccessKeyMetadata), strandedKeys(recorded, paramName),
 		)
 	}
 
@@ -270,14 +269,40 @@ func ensureEdgeCredentials(ctx context.Context, iamClient IAMAPI, ssmClient SSMA
 	}
 	if _, err := ssmClient.PutParameter(ctx, &ssm.PutParameterInput{
 		Name:        aws.String(paramName),
-		Description: aws.String(fmt.Sprintf("Ocel: the access key for IAM user %s, the identity the %s edge signs its calls into this account with. This is the only copy of the secret - AWS will not show it again - and bootstrap treats the parameter's absence as permission to mint a fresh key, so deleting it leaves an orphaned key on the user that must be removed by hand.", userName, class)),
+		Description: aws.String(fmt.Sprintf("Ocel: the access key for IAM user %s, the identity the %s edge signs its calls into this account with. This is the only copy of the secret - AWS will not show it again - and bootstrap mints a fresh key whenever the one named here is no longer on the user, so deleting this parameter leaves an orphaned key that must be removed by hand.", userName, class)),
 		Value:       aws.String(string(payload)),
 		Type:        ssmtypes.ParameterTypeSecureString,
-		Overwrite:   aws.Bool(false),
+		Overwrite:   aws.Bool(true),
 	}); err != nil {
 		return false, fmt.Errorf("write edge credentials parameter: %w", err)
 	}
 	return true, nil
+}
+
+func recordedEdgeKeyID(ctx context.Context, ssmClient SSMAPI, paramName string) (string, error) {
+	out, err := ssmClient.GetParameter(ctx, &ssm.GetParameterInput{
+		Name:           aws.String(paramName),
+		WithDecryption: aws.Bool(true),
+	})
+	if err != nil {
+		var notFound *ssmtypes.ParameterNotFound
+		if errors.As(err, &notFound) {
+			return "", nil
+		}
+		return "", fmt.Errorf("read edge credentials parameter: %w", err)
+	}
+	var creds EdgeCredentials
+	if err := json.Unmarshal([]byte(aws.ToString(out.Parameter.Value)), &creds); err != nil {
+		return "", fmt.Errorf("parse edge credentials in %s: %w", paramName, err)
+	}
+	return creds.AccessKeyID, nil
+}
+
+func strandedKeys(recorded, paramName string) string {
+	if recorded == "" {
+		return fmt.Sprintf("none is recorded in %s, so a prior mint likely failed before its PutParameter", paramName)
+	}
+	return fmt.Sprintf("%s, the one %s records, is not among them", recorded, paramName)
 }
 
 func ReadEdgeCredentials(ctx context.Context, ssmClient SSMAPI, class string) (EdgeCredentials, error) {
