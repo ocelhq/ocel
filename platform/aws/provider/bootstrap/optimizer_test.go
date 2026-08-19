@@ -6,6 +6,7 @@ import (
 	"encoding/base64"
 	"errors"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
@@ -23,6 +24,7 @@ func fixtureOptimizerCode() payloads.Placement {
 }
 
 type fakeObjectStore struct {
+	mu           sync.Mutex
 	objects      map[string][]byte
 	checksums    map[string]string
 	headModes    []s3types.ChecksumMode
@@ -35,12 +37,16 @@ func newFakeObjectStore() *fakeObjectStore {
 }
 
 func (f *fakeObjectStore) putVerified(key string, body []byte) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
 	sum := sha256.Sum256(body)
 	f.objects[key] = body
 	f.checksums[key] = base64.StdEncoding.EncodeToString(sum[:])
 }
 
 func (f *fakeObjectStore) HeadObject(_ context.Context, in *s3.HeadObjectInput, _ ...func(*s3.Options)) (*s3.HeadObjectOutput, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
 	f.headModes = append(f.headModes, in.ChecksumMode)
 	if _, ok := f.objects[aws.ToString(in.Key)]; !ok {
 		return nil, &s3types.NotFound{}
@@ -55,6 +61,8 @@ func (f *fakeObjectStore) HeadObject(_ context.Context, in *s3.HeadObjectInput, 
 }
 
 func (f *fakeObjectStore) PutObject(_ context.Context, in *s3.PutObjectInput, _ ...func(*s3.Options)) (*s3.PutObjectOutput, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
 	f.puts++
 	f.putChecksums = append(f.putChecksums, aws.ToString(in.ChecksumSHA256))
 	body := make([]byte, 0)
