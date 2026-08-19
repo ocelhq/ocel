@@ -161,6 +161,18 @@ func TestIssuerRequest(t *testing.T) {
 		}
 	})
 
+	t.Run("leaves the alternate names unset when there is only one hostname", func(t *testing.T) {
+		t.Parallel()
+
+		api := &fakeACM{}
+		if _, err := testIssuer(api, 1).Request(t.Context(), []string{"*.preview.acme.com"}); err != nil {
+			t.Fatalf("Request: %v", err)
+		}
+		if api.requested[0].SubjectAlternativeNames != nil {
+			t.Errorf("alternate names = %#v, want nil; ACM refuses an empty list", api.requested[0].SubjectAlternativeNames)
+		}
+	})
+
 	t.Run("a refusal names the hostname and the region", func(t *testing.T) {
 		t.Parallel()
 

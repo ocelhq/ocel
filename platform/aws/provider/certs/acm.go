@@ -142,9 +142,13 @@ func (i Issuer) Request(ctx context.Context, hostnames []string) (Certificate, e
 	if len(hostnames) == 0 {
 		return Certificate{}, errors.New("request a certificate: no hostname to request one for")
 	}
+	var alternates []string
+	if len(hostnames) > 1 {
+		alternates = hostnames[1:]
+	}
 	out, err := i.API.RequestCertificate(ctx, &acm.RequestCertificateInput{
 		DomainName:              aws.String(hostnames[0]),
-		SubjectAlternativeNames: hostnames[1:],
+		SubjectAlternativeNames: alternates,
 		ValidationMethod:        acmtypes.ValidationMethodDns,
 		IdempotencyToken:        aws.String(idempotencyToken(strings.Join(hostnames, ","))),
 	})
