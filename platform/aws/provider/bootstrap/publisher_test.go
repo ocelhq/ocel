@@ -9,23 +9,20 @@ import (
 	"gopkg.in/yaml.v3"
 
 	"github.com/ocelhq/ocel/pkg/naming"
+	"github.com/ocelhq/ocel/platform/aws/provider/payloads"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
-func fixturePublisherPin() artifactPin {
-	return artifactPin{version: "4.5.6", sha256: fixtureDigest()}
-}
-
-func fixtureArtifacts() stackArtifacts {
-	return stackArtifacts{
+func fixturePayloads() stackPayloads {
+	return stackPayloads{
 		optimizer:   fixtureOptimizerCode(),
 		publisher:   fixturePublisherCode(),
 		revalidator: fixtureRevalidatorCode(),
 	}
 }
 
-func fixturePublisherCode() artifactCode {
-	return artifactCode{bucket: "ocel-artifacts-test", key: tagPublisherArtifactKey(fixturePublisherPin())}
+func fixturePublisherCode() payloads.Placement {
+	return payloads.Placement{Bucket: fixtureBucket, Key: payloads.Key(tagPublisherKeyPrefix, payloads.TagPublisher().SHA256)}
 }
 
 type parsedPublisher struct {
@@ -91,8 +88,8 @@ func TestTagPublisher(t *testing.T) {
 			name     string
 			template string
 		}{
-			{"production", stackTemplate(edge.TrustExternal, fixtureArtifacts(), RequiredBootstrapVersion)},
-			{"preview", previewStackTemplate(edge.TrustExternal, fixtureArtifacts(), RequiredBootstrapVersion)},
+			{"production", stackTemplate(edge.TrustExternal, fixturePayloads(), RequiredBootstrapVersion)},
+			{"preview", previewStackTemplate(edge.TrustExternal, fixturePayloads(), RequiredBootstrapVersion)},
 		} {
 			t.Run(tc.name, func(t *testing.T) {
 				tmpl := parsePublisherTemplate(t, tc.template)
@@ -104,9 +101,9 @@ func TestTagPublisher(t *testing.T) {
 				if fn.Type != "AWS::Lambda::Function" {
 					t.Errorf("TagPublisher Type = %q, want AWS::Lambda::Function", fn.Type)
 				}
-				if fn.Properties.Code.S3Bucket != fixturePublisherCode().bucket ||
-					fn.Properties.Code.S3Key != fixturePublisherCode().key {
-					t.Errorf("TagPublisher Code = %+v, want the placed artifact", fn.Properties.Code)
+				if fn.Properties.Code.S3Bucket != fixturePublisherCode().Bucket ||
+					fn.Properties.Code.S3Key != fixturePublisherCode().Key {
+					t.Errorf("TagPublisher Code = %+v, want the placed payload", fn.Properties.Code)
 				}
 
 				esm, ok := tmpl.Resources["TagPublisherStream"]
@@ -144,7 +141,7 @@ func TestTagPublisher(t *testing.T) {
 	})
 
 	t.Run("filter confines it to tag records", func(t *testing.T) {
-		tmpl := parsePublisherTemplate(t, stackTemplate(edge.TrustExternal, fixtureArtifacts(), RequiredBootstrapVersion))
+		tmpl := parsePublisherTemplate(t, stackTemplate(edge.TrustExternal, fixturePayloads(), RequiredBootstrapVersion))
 		filters := tmpl.Resources["TagPublisherStream"].Properties.FilterCriteria.Filters
 		if len(filters) != 1 {
 			t.Fatalf("FilterCriteria.Filters = %+v, want exactly one pattern", filters)
@@ -181,8 +178,8 @@ func TestTagPublisher(t *testing.T) {
 			name     string
 			template string
 		}{
-			{"production", stackTemplate(edge.TrustExternal, fixtureArtifacts(), RequiredBootstrapVersion)},
-			{"preview", previewStackTemplate(edge.TrustExternal, fixtureArtifacts(), RequiredBootstrapVersion)},
+			{"production", stackTemplate(edge.TrustExternal, fixturePayloads(), RequiredBootstrapVersion)},
+			{"preview", previewStackTemplate(edge.TrustExternal, fixturePayloads(), RequiredBootstrapVersion)},
 		} {
 			t.Run(tc.name, func(t *testing.T) {
 				for name, res := range parsePublisherTemplate(t, tc.template).Resources {
@@ -204,8 +201,8 @@ func TestTagPublisher(t *testing.T) {
 			seedParam  string
 			otherParam string
 		}{
-			{"production", stackTemplate(edge.TrustExternal, fixtureArtifacts(), RequiredBootstrapVersion), ISRWriterSeedParamName, ISRWriterSeedPreviewParamName},
-			{"preview", previewStackTemplate(edge.TrustExternal, fixtureArtifacts(), RequiredBootstrapVersion), ISRWriterSeedPreviewParamName, ISRWriterSeedParamName},
+			{"production", stackTemplate(edge.TrustExternal, fixturePayloads(), RequiredBootstrapVersion), ISRWriterSeedParamName, ISRWriterSeedPreviewParamName},
+			{"preview", previewStackTemplate(edge.TrustExternal, fixturePayloads(), RequiredBootstrapVersion), ISRWriterSeedPreviewParamName, ISRWriterSeedParamName},
 		} {
 			t.Run(tc.name, func(t *testing.T) {
 				tmpl := parsePublisherTemplate(t, tc.template)
@@ -251,14 +248,14 @@ func TestTagPublisher(t *testing.T) {
 		}
 	})
 
-	t.Run("unpinned renders nothing", func(t *testing.T) {
-		tmpl := stackTemplate(edge.TrustExternal, stackArtifacts{optimizer: fixtureOptimizerCode()}, RequiredBootstrapVersion)
+	t.Run("no publisher payload renders nothing", func(t *testing.T) {
+		tmpl := stackTemplate(edge.TrustExternal, stackPayloads{optimizer: fixtureOptimizerCode()}, RequiredBootstrapVersion)
 		for _, name := range []string{
 			"TagPublisher", "TagPublisherStream", "TagPublisherRole",
 			"TagPublisherDeadLetterQueue",
 		} {
 			if strings.Contains(tmpl, name+":") {
-				t.Errorf("an unpinned build still rendered %s", name)
+				t.Errorf("a build with no publisher payload still rendered %s", name)
 			}
 		}
 		if _, err := yaml.Marshal(parsePublisherTemplate(t, tmpl)); err != nil {

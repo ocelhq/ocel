@@ -8,19 +8,16 @@ import (
 
 	"gopkg.in/yaml.v3"
 
+	"github.com/ocelhq/ocel/platform/aws/provider/payloads"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
-func fixtureInvalidatorPin() artifactPin {
-	return artifactPin{version: "2.3.4", sha256: fixtureDigest()}
+func fixtureInvalidatorCode() payloads.Placement {
+	return payloads.Placement{Bucket: fixtureBucket, Key: payloads.Key(tagInvalidatorKeyPrefix, payloads.TagInvalidator().SHA256)}
 }
 
-func fixtureInvalidatorCode() artifactCode {
-	return artifactCode{bucket: "ocel-artifacts-test", key: tagInvalidatorArtifactKey(fixtureInvalidatorPin())}
-}
-
-func invalidatingArtifacts() stackArtifacts {
-	code := fixtureArtifacts()
+func invalidatingPayloads() stackPayloads {
+	code := fixturePayloads()
 	code.invalidator = fixtureInvalidatorCode()
 	return code
 }
@@ -36,8 +33,8 @@ func TestTagInvalidator(t *testing.T) {
 			name     string
 			template string
 		}{
-			{"production", stackTemplate(edge.TrustInternal, invalidatingArtifacts(), RequiredBootstrapVersion)},
-			{"preview", previewStackTemplate(edge.TrustInternal, invalidatingArtifacts(), RequiredBootstrapVersion)},
+			{"production", stackTemplate(edge.TrustInternal, invalidatingPayloads(), RequiredBootstrapVersion)},
+			{"preview", previewStackTemplate(edge.TrustInternal, invalidatingPayloads(), RequiredBootstrapVersion)},
 		} {
 			t.Run(tc.name, func(t *testing.T) {
 				tmpl := parsePublisherTemplate(t, tc.template)
@@ -49,9 +46,9 @@ func TestTagInvalidator(t *testing.T) {
 				if fn.Type != "AWS::Lambda::Function" {
 					t.Errorf("TagInvalidator Type = %q, want AWS::Lambda::Function", fn.Type)
 				}
-				if fn.Properties.Code.S3Bucket != fixtureInvalidatorCode().bucket ||
-					fn.Properties.Code.S3Key != fixtureInvalidatorCode().key {
-					t.Errorf("TagInvalidator Code = %+v, want the placed artifact", fn.Properties.Code)
+				if fn.Properties.Code.S3Bucket != fixtureInvalidatorCode().Bucket ||
+					fn.Properties.Code.S3Key != fixtureInvalidatorCode().Key {
+					t.Errorf("TagInvalidator Code = %+v, want the placed payload", fn.Properties.Code)
 				}
 
 				esm, ok := tmpl.Resources["TagInvalidatorStream"]
@@ -100,8 +97,8 @@ func TestTagInvalidator(t *testing.T) {
 			template string
 			class    string
 		}{
-			{"production", stackTemplate(edge.TrustInternal, invalidatingArtifacts(), RequiredBootstrapVersion), ClassProduction},
-			{"preview", previewStackTemplate(edge.TrustInternal, invalidatingArtifacts(), RequiredBootstrapVersion), ClassPreview},
+			{"production", stackTemplate(edge.TrustInternal, invalidatingPayloads(), RequiredBootstrapVersion), ClassProduction},
+			{"preview", previewStackTemplate(edge.TrustInternal, invalidatingPayloads(), RequiredBootstrapVersion), ClassPreview},
 		} {
 			t.Run(tc.name, func(t *testing.T) {
 				env := parsePublisherTemplate(t, tc.template).Resources["TagInvalidator"].Properties.Environment.Variables
@@ -116,7 +113,7 @@ func TestTagInvalidator(t *testing.T) {
 	})
 
 	t.Run("role reaches only the stream, the ledger and invalidation", func(t *testing.T) {
-		tmpl := parsePublisherTemplate(t, stackTemplate(edge.TrustInternal, invalidatingArtifacts(), RequiredBootstrapVersion))
+		tmpl := parsePublisherTemplate(t, stackTemplate(edge.TrustInternal, invalidatingPayloads(), RequiredBootstrapVersion))
 		role, ok := tmpl.Resources["TagInvalidatorRole"]
 		if !ok {
 			t.Fatal("template is missing the TagInvalidatorRole")
@@ -157,18 +154,18 @@ func TestTagInvalidator(t *testing.T) {
 	})
 
 	t.Run("renders no alarms", func(t *testing.T) {
-		for name, res := range parsePublisherTemplate(t, stackTemplate(edge.TrustInternal, invalidatingArtifacts(), RequiredBootstrapVersion)).Resources {
+		for name, res := range parsePublisherTemplate(t, stackTemplate(edge.TrustInternal, invalidatingPayloads(), RequiredBootstrapVersion)).Resources {
 			if res.Type == "AWS::CloudWatch::Alarm" {
 				t.Errorf("%s is a billed standing alarm in a stack that must be free to leave idle", name)
 			}
 		}
 	})
 
-	t.Run("unpinned renders nothing", func(t *testing.T) {
-		tmpl := stackTemplate(edge.TrustInternal, fixtureArtifacts(), RequiredBootstrapVersion)
+	t.Run("no invalidator payload renders nothing", func(t *testing.T) {
+		tmpl := stackTemplate(edge.TrustInternal, fixturePayloads(), RequiredBootstrapVersion)
 		for _, name := range invalidatorResourceNames {
 			if strings.Contains(tmpl, name+":") {
-				t.Errorf("a build with no invalidator artifact still rendered %s", name)
+				t.Errorf("a build with no invalidator payload still rendered %s", name)
 			}
 		}
 		if _, err := yaml.Marshal(parsePublisherTemplate(t, tmpl)); err != nil {
@@ -196,11 +193,9 @@ func TestRunCreatesTheInvalidatorForAnEdgeThatInvalidatesOnPromoteAlone(t *testi
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			cfn, ssmc, iamc := newFakeCFN(), newFakeSSM(), &fakeIAM{}
-			art, _, _ := fixtureArtifactDeps(fixtureArtifact)
 			ed := tc.edge
 
-			pins := stackPins{invalidator: fixtureInvalidatorPin()}
-			if err := run(context.Background(), cfn, ssmc, iamc, ed, art, pins, productionSubstrate(), nil, nil); err != nil {
+			if err := run(context.Background(), cfn, ssmc, iamc, ed, newFakeObjectStore(), productionSubstrate(), nil, nil); err != nil {
 				t.Fatalf("run: %v", err)
 			}
 			for _, name := range invalidatorResourceNames {
@@ -213,11 +208,9 @@ func TestRunCreatesTheInvalidatorForAnEdgeThatInvalidatesOnPromoteAlone(t *testi
 
 	t.Run("preview substrate gets one too", func(t *testing.T) {
 		cfn, ssmc, iamc := newFakeCFN(), newFakeSSM(), &fakeIAM{}
-		art, _, _ := fixtureArtifactDeps(fixtureArtifact)
 		ed := invalidatingFake()
 
-		pins := stackPins{invalidator: fixtureInvalidatorPin()}
-		if err := run(context.Background(), cfn, ssmc, iamc, ed, art, pins, previewSubstrate(), nil, nil); err != nil {
+		if err := run(context.Background(), cfn, ssmc, iamc, ed, newFakeObjectStore(), previewSubstrate(), nil, nil); err != nil {
 			t.Fatalf("run: %v", err)
 		}
 		for _, name := range invalidatorResourceNames {
@@ -227,17 +220,4 @@ func TestRunCreatesTheInvalidatorForAnEdgeThatInvalidatesOnPromoteAlone(t *testi
 		}
 	})
 
-	t.Run("unpinned says what stops reaching the fronts", func(t *testing.T) {
-		cfn, ssmc, iamc := newFakeCFN(), newFakeSSM(), &fakeIAM{}
-		ed := invalidatingFake()
-
-		var logged []string
-		logf := func(msg string) { logged = append(logged, msg) }
-		if err := run(context.Background(), cfn, ssmc, iamc, ed, preloadedArtifact(), stackPins{}, productionSubstrate(), nil, logf); err != nil {
-			t.Fatalf("run: %v", err)
-		}
-		if all := strings.Join(logged, "\n"); !strings.Contains(all, "no tag invalidator artifact is pinned") {
-			t.Errorf("an unpinned invalidator says nothing about what stops reaching the fronts:\n%s", all)
-		}
-	})
 }

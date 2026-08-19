@@ -525,10 +525,10 @@ func TestServerBootstrapForgetsDeployed(t *testing.T) {
 		}
 
 		cfn.present[bootstrap.StackName] = true
-		run := func(context.Context, bootstrap.CFNAPI, bootstrap.SSMAPI, bootstrap.IAMAPI, edge.Edge, bootstrap.Artifacts, func(string), func(string)) error {
+		run := func(context.Context, bootstrap.CFNAPI, bootstrap.SSMAPI, bootstrap.IAMAPI, edge.Edge, bootstrap.ObjectStore, func(string), func(string)) error {
 			return nil
 		}
-		if err := s.runBootstrap(context.Background(), run, nil, nil, nil, nil, bootstrap.Artifacts{}, func(string) {}, func(string) {}); err != nil {
+		if err := s.runBootstrap(context.Background(), run, nil, nil, nil, nil, nil, func(string) {}, func(string) {}); err != nil {
 			t.Fatalf("runBootstrap: %v", err)
 		}
 
@@ -549,10 +549,10 @@ func TestServerBootstrapForgetsDeployed(t *testing.T) {
 		if _, err := s.deployed(context.Background(), cfn, "eu-west-1", false); err != nil {
 			t.Fatalf("deployed: %v", err)
 		}
-		run := func(context.Context, bootstrap.CFNAPI, bootstrap.SSMAPI, bootstrap.IAMAPI, edge.Edge, bootstrap.Artifacts, func(string), func(string)) error {
+		run := func(context.Context, bootstrap.CFNAPI, bootstrap.SSMAPI, bootstrap.IAMAPI, edge.Edge, bootstrap.ObjectStore, func(string), func(string)) error {
 			return errors.New("stack rolled back")
 		}
-		if err := s.runBootstrap(context.Background(), run, nil, nil, nil, nil, bootstrap.Artifacts{}, func(string) {}, func(string) {}); err == nil {
+		if err := s.runBootstrap(context.Background(), run, nil, nil, nil, nil, nil, func(string) {}, func(string) {}); err == nil {
 			t.Fatal("runBootstrap = nil error, want the failure")
 		}
 		if _, err := s.deployed(context.Background(), cfn, "eu-west-1", false); err != nil {

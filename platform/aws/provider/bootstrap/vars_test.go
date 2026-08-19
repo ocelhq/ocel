@@ -83,8 +83,8 @@ func varsSubstrates() []struct {
 		class    string
 		template string
 	}{
-		{"production", ClassProduction, stackTemplate(edge.TrustExternal, fixtureArtifacts(), RequiredBootstrapVersion)},
-		{"preview", ClassPreview, previewStackTemplate(edge.TrustExternal, fixtureArtifacts(), RequiredBootstrapVersion)},
+		{"production", ClassProduction, stackTemplate(edge.TrustExternal, fixturePayloads(), RequiredBootstrapVersion)},
+		{"preview", ClassPreview, previewStackTemplate(edge.TrustExternal, fixturePayloads(), RequiredBootstrapVersion)},
 	}
 }
 
@@ -263,7 +263,7 @@ func TestRunVars(t *testing.T) {
 		ed := &fakeEdge{out: edge.BootstrapOutput{Trust: edge.TrustExternal}}
 
 		for i := range 2 {
-			if err := Run(context.Background(), cfn, ssmc, iamc, ed, preloadedArtifact(), nil, nil); err != nil {
+			if err := Run(context.Background(), cfn, ssmc, iamc, ed, preloadedStore(), nil, nil); err != nil {
 				t.Fatalf("Run %d: %v", i+1, err)
 			}
 		}
@@ -298,7 +298,7 @@ func TestRunVars(t *testing.T) {
 		}
 
 		ed := &fakeEdge{out: edge.BootstrapOutput{Trust: edge.TrustExternal}}
-		if err := Run(context.Background(), cfn, ssmc, iamc, ed, preloadedArtifact(), nil, nil); err != nil {
+		if err := Run(context.Background(), cfn, ssmc, iamc, ed, preloadedStore(), nil, nil); err != nil {
 			t.Fatalf("Run: %v", err)
 		}
 
@@ -332,7 +332,7 @@ func TestRunVars(t *testing.T) {
 
 func preStoreTemplate(t *testing.T) string {
 	t.Helper()
-	tmpl := stackTemplate(edge.TrustExternal, fixtureArtifacts(), RequiredBootstrapVersion)
+	tmpl := stackTemplate(edge.TrustExternal, fixturePayloads(), RequiredBootstrapVersion)
 	for _, block := range []string{varsResources(ClassProduction), varsOutputs()} {
 		if block == "" || !strings.Contains(tmpl, block) {
 			t.Fatalf("cannot derive a pre-store template: the current one has no\n%s", block)
