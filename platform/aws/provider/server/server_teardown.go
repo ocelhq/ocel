@@ -169,20 +169,32 @@ func teardownPlanItems(class string, edgeKind edge.Kind, deployed bootstrap.Depl
 				Reason: fmt.Sprintf("every %s variable value in this account, and the key they are encrypted under", class),
 			})
 		}
-		items = append(items,
-			&deploymentsv1.TeardownItem{
+		if deployed.Features.Has(bootstrap.FeatureCloudflareEdge) {
+			items = append(items, &deploymentsv1.TeardownItem{
 				Kind:   "edge reader",
 				Name:   userName,
 				Action: deploymentsv1.TeardownItem_ACTION_DELETE,
 				Reason: "the IAM user the edge signs its calls into this account with, and its access key",
-			},
-			&deploymentsv1.TeardownItem{
-				Kind:   "bootstrap stack",
-				Name:   stackName,
+			})
+		}
+		order, err := bootstrap.FeatureDeleteOrder(deployed.Features.Names())
+		if err != nil {
+			return nil, err
+		}
+		for _, feature := range order {
+			items = append(items, &deploymentsv1.TeardownItem{
+				Kind:   "feature stack",
+				Name:   bootstrap.FeatureStackName(feature, class),
 				Action: deploymentsv1.TeardownItem_ACTION_DELETE,
-				Reason: "the CloudFormation stack holding everything above",
-			},
-		)
+				Reason: fmt.Sprintf("the CloudFormation stack carrying the %s feature of this substrate", feature),
+			})
+		}
+		items = append(items, &deploymentsv1.TeardownItem{
+			Kind:   "bootstrap stack",
+			Name:   stackName,
+			Action: deploymentsv1.TeardownItem_ACTION_DELETE,
+			Reason: "the CloudFormation stack holding the core every feature above was built on",
+		})
 	}
 
 	for _, name := range params {

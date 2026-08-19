@@ -41,6 +41,8 @@ type Config struct {
 
 	Stacks StackIndex
 
+	RequiredFeatures []string
+
 	realized *realizedStacks
 
 	StateTable         string

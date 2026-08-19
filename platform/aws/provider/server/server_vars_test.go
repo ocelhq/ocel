@@ -110,8 +110,8 @@ func TestVarsServerStoreLookup(t *testing.T) {
 			}
 		}
 
-		if got := cfn.count(); got != 1 {
-			t.Errorf("six reads cost %d bootstrap describes, want 1", got)
+		if got := cfn.substrates(); len(got) != 1 {
+			t.Errorf("six reads cost %d bootstrap describes, want 1", len(got))
 		}
 	})
 
@@ -132,12 +132,13 @@ func TestVarsServerStoreLookup(t *testing.T) {
 			}
 		}
 
-		if got := cfn.count(); got != 2 {
-			t.Errorf("reads across both substrates cost %d bootstrap describes, want 2 (one each)", got)
+		got := cfn.substrates()
+		if len(got) != 2 {
+			t.Errorf("reads across both substrates cost %d bootstrap describes, want 2 (one each)", len(got))
 		}
 		want := []string{bootstrap.StackName, bootstrap.PreviewStackName}
-		if !slices.Equal(cfn.stacks, want) {
-			t.Errorf("described %v, want %v", cfn.stacks, want)
+		if !slices.Equal(got, want) {
+			t.Errorf("described %v, want %v", got, want)
 		}
 	})
 }

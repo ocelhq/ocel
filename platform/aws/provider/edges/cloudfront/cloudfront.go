@@ -162,8 +162,6 @@ func (p *provider) FlipBound() edge.FlipBound {
 
 func (p *provider) CertificateRegion(string) string { return certs.CloudFrontRegion }
 
-func (p *provider) InvalidatesOnPromote() bool { return true }
-
 func (p *provider) clientsFor(ctx context.Context) (Clients, error) {
 	p.mu.Lock()
 	defer p.mu.Unlock()

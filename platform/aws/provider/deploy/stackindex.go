@@ -10,7 +10,7 @@ import (
 )
 
 type StackIndex interface {
-	AddProject(ctx context.Context, project string) error
+	AddProject(ctx context.Context, project string, features []string) error
 	AddStack(ctx context.Context, project string, stack naming.StackName) error
 	RemoveStack(ctx context.Context, project string, stack naming.StackName) error
 	RemoveProject(ctx context.Context, project string) error

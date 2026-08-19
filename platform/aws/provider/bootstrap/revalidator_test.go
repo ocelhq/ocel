@@ -11,7 +11,6 @@ import (
 	"gopkg.in/yaml.v3"
 
 	"github.com/ocelhq/ocel/platform/aws/provider/payloads"
-	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
 func fixtureRevalidatorCode() payloads.Placement {
@@ -104,17 +103,19 @@ func parseRevalidatorTemplate(t *testing.T, template string) parsedRevalidator {
 }
 
 func revalidatorTemplates() []struct {
-	name     string
-	class    string
-	template string
+	name         string
+	class        string
+	template     string
+	edgeTemplate string
 } {
 	return []struct {
-		name     string
-		class    string
-		template string
+		name         string
+		class        string
+		template     string
+		edgeTemplate string
 	}{
-		{"production", ClassProduction, stackTemplate(edge.TrustExternal, fixturePayloads(), RequiredBootstrapVersion)},
-		{"preview", ClassPreview, previewStackTemplate(edge.TrustExternal, fixturePayloads(), RequiredBootstrapVersion)},
+		{"production", ClassProduction, featureTemplate(FeatureISR, ClassProduction), featureTemplate(FeatureCloudflareEdge, ClassProduction)},
+		{"preview", ClassPreview, featureTemplate(FeatureISR, ClassPreview), featureTemplate(FeatureCloudflareEdge, ClassPreview)},
 	}
 }
 
@@ -184,29 +185,10 @@ func TestRevalidateQueue(t *testing.T) {
 		}
 	})
 
-	t.Run("renders without a consumer", func(t *testing.T) {
-		withoutRevalidator := stackPayloads{optimizer: fixtureOptimizerCode()}
-		for _, tc := range []struct {
-			name     string
-			template string
-		}{
-			{"production", stackTemplate(edge.TrustExternal, withoutRevalidator, RequiredBootstrapVersion)},
-			{"preview", previewStackTemplate(edge.TrustExternal, withoutRevalidator, RequiredBootstrapVersion)},
-		} {
-			t.Run(tc.name, func(t *testing.T) {
-				for _, name := range []string{"RevalidateQueue", "RevalidateDeadLetterQueue"} {
-					if !strings.Contains(tc.template, "  "+name+":") {
-						t.Errorf("a build with no revalidator payload rendered no %s", name)
-					}
-				}
-			})
-		}
-	})
-
 	t.Run("both ends can use the envelope", func(t *testing.T) {
 		for _, tc := range revalidatorTemplates() {
 			t.Run(tc.name, func(t *testing.T) {
-				user, ok := parseRevalidatorTemplate(t, tc.template).Resources["EdgeUser"]
+				user, ok := parseRevalidatorTemplate(t, tc.edgeTemplate).Resources["EdgeUser"]
 				if !ok {
 					t.Fatal("template is missing the EdgeUser")
 				}
@@ -306,7 +288,7 @@ func TestRevalidator(t *testing.T) {
 					if !slices.Contains(st.actions(), "s3:GetObject") {
 						continue
 					}
-					if want := []string{"${AssetBucket.Arn}/*/origin.json"}; !slices.Equal(st.resources(), want) {
+					if want := []string{"${AssetBucketArn}/*/origin.json"}; !slices.Equal(st.resources(), want) {
 						t.Fatalf("s3:GetObject is granted on %v, want %v", st.resources(), want)
 					}
 					return
@@ -333,7 +315,7 @@ func TestRevalidator(t *testing.T) {
 				}
 
 				env := parseRevalidatorTemplate(t, tc.template).Resources["Revalidator"].Properties.Environment.Variables
-				if got := env[revalidatorAssetBucketEnvVar]; got != "AssetBucket" {
+				if got := env[revalidatorAssetBucketEnvVar]; got != paramAssetBucketName {
 					t.Errorf("%s = %q, want a !Ref of this substrate's own asset bucket; unset, the consumer resolves nothing and triggers nothing", revalidatorAssetBucketEnvVar, got)
 				}
 			})
@@ -380,29 +362,6 @@ func TestRevalidator(t *testing.T) {
 		}
 	})
 
-	t.Run("no revalidator payload renders no consumer and no queue URL", func(t *testing.T) {
-		for _, tc := range []struct {
-			name     string
-			template string
-		}{
-			{"production", stackTemplate(edge.TrustExternal, stackPayloads{optimizer: fixtureOptimizerCode(), publisher: fixturePublisherCode()}, RequiredBootstrapVersion)},
-			{"preview", previewStackTemplate(edge.TrustExternal, stackPayloads{optimizer: fixtureOptimizerCode(), publisher: fixturePublisherCode()}, RequiredBootstrapVersion)},
-		} {
-			t.Run(tc.name, func(t *testing.T) {
-				for _, name := range []string{
-					"Revalidator", "RevalidatorRole", "RevalidatorQueueConsumer",
-				} {
-					if strings.Contains(tc.template, "  "+name+":") {
-						t.Errorf("a build with no revalidator payload still rendered %s", name)
-					}
-				}
-				if _, ok := parseRevalidatorTemplate(t, tc.template).Outputs[outputRevalidateQueueURL]; ok {
-					t.Errorf("a build with no revalidator payload published %s; the edge would enqueue into a queue nothing drains and report the refresh landed", outputRevalidateQueueURL)
-				}
-			})
-		}
-	})
-
 	t.Run("a placed revalidator publishes the queue URL", func(t *testing.T) {
 		for _, tc := range revalidatorTemplates() {
 			t.Run(tc.name, func(t *testing.T) {
@@ -430,13 +389,13 @@ func TestAssetBucketRevalidator(t *testing.T) {
 	t.Run("no key satisfies both the edge write and the origin read", func(t *testing.T) {
 		for _, tc := range revalidatorTemplates() {
 			t.Run(tc.name, func(t *testing.T) {
-				write := edgeGrant(t, tc.template, "s3:PutObject")
+				write := edgeGrant(t, tc.edgeTemplate, "s3:PutObject")
 				read := revalidatorGrant(t, tc.template, "s3:GetObject")
 
 				for _, key := range []string{
-					"${AssetBucket.Arn}/prod/proj/web/B1/fetch-cache/origin.json",
-					"${AssetBucket.Arn}/prod/proj/web/B1/origin.json",
-					"${AssetBucket.Arn}/prod/proj/web/B1/fetch-cache/a/origin.json",
+					"${AssetBucketArn}/prod/proj/web/B1/fetch-cache/origin.json",
+					"${AssetBucketArn}/prod/proj/web/B1/origin.json",
+					"${AssetBucketArn}/prod/proj/web/B1/fetch-cache/a/origin.json",
 				} {
 					if iamResourceMatches(write, key) && iamResourceMatches(read, key) {
 						t.Errorf("%s is both edge-writable under %q and consumer-readable under %q: a stolen edge key plants an origin record and the consumer delivers the app's bypass token to it", key, write, read)
@@ -488,20 +447,20 @@ func TestRunRevalidator(t *testing.T) {
 	t.Run("this build bootstraps a consumer", func(t *testing.T) {
 		for _, tc := range []struct {
 			name      string
-			run       func(context.Context, CFNAPI, SSMAPI, IAMAPI, edge.Edge, ObjectStore, func(string), func(string)) error
+			run       func(context.Context, APIs, Request, func(string), func(string)) error
 			stackName string
 		}{
-			{"production", Run, StackName},
-			{"preview", RunPreview, PreviewStackName},
+			{"production", Run, isrStack(ClassProduction)},
+			{"preview", RunPreview, isrStack(ClassPreview)},
 		} {
 			t.Run(tc.name, func(t *testing.T) {
 				cfn, ssmc, iamc := newFakeCFN(), newFakeSSM(), &fakeIAM{}
-				ed := &fakeEdge{out: edge.BootstrapOutput{Trust: edge.TrustExternal}}
+				standInCloudflare(t, &fakeEdge{kind: "cloudflare"})
 
-				if err := tc.run(context.Background(), cfn, ssmc, iamc, ed, preloadedStore(), nil, nil); err != nil {
+				if err := tc.run(context.Background(), apisOf(cfn, ssmc, iamc, preloadedStore()), everything(), nil, nil); err != nil {
 					t.Fatalf("run: %v", err)
 				}
-				template := cfn.templates[tc.stackName]
+				template := cfn.template(tc.stackName)
 				for _, name := range []string{
 					"Revalidator", "RevalidatorRole", "RevalidatorQueueConsumer",
 				} {
@@ -536,7 +495,7 @@ func TestEdgeUserRevalidator(t *testing.T) {
 	t.Run("sends to the queue and nothing else", func(t *testing.T) {
 		for _, tc := range revalidatorTemplates() {
 			t.Run(tc.name, func(t *testing.T) {
-				tmpl := parseRevalidatorTemplate(t, tc.template)
+				tmpl := parseRevalidatorTemplate(t, tc.edgeTemplate)
 				user, ok := tmpl.Resources["EdgeUser"]
 				if !ok {
 					t.Fatal("template is missing the EdgeUser")
@@ -558,7 +517,7 @@ func TestEdgeUserRevalidator(t *testing.T) {
 				if want := []string{"sqs:SendMessage"}; !slices.Equal(sqsActions, want) {
 					t.Errorf("edge user SQS actions = %v, want exactly %v", sqsActions, want)
 				}
-				if want := []string{"RevalidateQueue.Arn"}; !slices.Equal(sendResources, want) {
+				if want := []string{paramRevalidateQueueARN}; !slices.Equal(sendResources, want) {
 					t.Errorf("edge user sends to %v, want only the revalidation queue's own ARN", sendResources)
 				}
 			})

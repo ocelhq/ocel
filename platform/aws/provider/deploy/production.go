@@ -159,7 +159,7 @@ func realize(ctx context.Context, cfg Config, manifest *deploymentsv1.Manifest, 
 	if err != nil {
 		return Result{}, finishProvisioning(err)
 	}
-	if err := index.AddProject(ctx, naming.Sanitize(manifest.GetSlug())); err != nil {
+	if err := index.AddProject(ctx, naming.Sanitize(manifest.GetSlug()), cfg.RequiredFeatures); err != nil {
 		return Result{}, finishProvisioning(err)
 	}
 

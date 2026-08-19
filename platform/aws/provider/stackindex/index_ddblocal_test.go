@@ -48,7 +48,7 @@ func TestIndexAgainstDynamoDBLocal(t *testing.T) {
 			wg.Add(1)
 			go func() {
 				defer wg.Done()
-				if err := ix.AddProject(ctx, "shop"); err != nil {
+				if err := ix.AddProject(ctx, "shop", nil); err != nil {
 					errs[i] = err
 					return
 				}
@@ -80,7 +80,7 @@ func TestIndexAgainstDynamoDBLocal(t *testing.T) {
 	})
 
 	t.Run("another project's stacks stay out of the answer", func(t *testing.T) {
-		if err := ix.AddProject(ctx, "billing"); err != nil {
+		if err := ix.AddProject(ctx, "billing", nil); err != nil {
 			t.Fatalf("AddProject: %v", err)
 		}
 		if err := ix.AddStack(ctx, "billing", naming.InfraStack("prod")); err != nil {

@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"slices"
 	"strings"
 	"testing"
 
@@ -52,6 +53,16 @@ func (f *fakeSSM) DeleteParameter(_ context.Context, in *ssm.DeleteParameterInpu
 type fakeIAM struct {
 	created []string
 	keys    []string
+	deleted []string
+}
+
+func (f *fakeIAM) DeleteAccessKey(_ context.Context, in *iam.DeleteAccessKeyInput, _ ...func(*iam.Options)) (*iam.DeleteAccessKeyOutput, error) {
+	id := aws.ToString(in.AccessKeyId)
+	if at := slices.Index(f.keys, id); at >= 0 {
+		f.keys = slices.Delete(f.keys, at, at+1)
+	}
+	f.deleted = append(f.deleted, id)
+	return &iam.DeleteAccessKeyOutput{}, nil
 }
 
 func (f *fakeIAM) ListAccessKeys(_ context.Context, in *iam.ListAccessKeysInput, _ ...func(*iam.Options)) (*iam.ListAccessKeysOutput, error) {

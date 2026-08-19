@@ -28,7 +28,7 @@ prepared:
    account-global, not per-project. From a scratch directory holding an
    `ocel.config.ts` that declares the AWS provider:
    ```bash
-   ocel bootstrap --preview
+   ocel bootstrap --preview --features all
    ocel domain use '*.ocel.site' --preview
    ```
    No project declares a preview domain of its own; every run's previews serve

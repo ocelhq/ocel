@@ -14,7 +14,6 @@ import (
 	"gopkg.in/yaml.v3"
 
 	"github.com/ocelhq/ocel/platform/aws/provider/payloads"
-	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
 const fixtureBucket = "ocel-artifacts-test"
@@ -147,8 +146,8 @@ func TestStackTemplateOptimizer(t *testing.T) {
 			name     string
 			template string
 		}{
-			{"production", stackTemplate(edge.TrustExternal, fixturePayloads(), RequiredBootstrapVersion)},
-			{"preview", previewStackTemplate(edge.TrustExternal, fixturePayloads(), RequiredBootstrapVersion)},
+			{"production", featureTemplate(FeatureImageOptimization, ClassProduction)},
+			{"preview", featureTemplate(FeatureImageOptimization, ClassPreview)},
 		} {
 			t.Run(tc.name, func(t *testing.T) {
 				tmpl := parseOptimizerTemplate(t, tc.template)
@@ -178,11 +177,11 @@ func TestStackTemplateOptimizer(t *testing.T) {
 				if p.Code.S3Bucket != fixtureOptimizerCode().Bucket || p.Code.S3Key != fixtureOptimizerCode().Key {
 					t.Errorf("Code = %s/%s, want the payload placed in this account", p.Code.S3Bucket, p.Code.S3Key)
 				}
-				if got := p.Environment.Variables[optimizerBucketEnvVar]; got != "AssetBucket" {
+				if got := p.Environment.Variables[optimizerBucketEnvVar]; got != paramAssetBucketName {
 					t.Errorf("%s = %q, want this substrate's own asset bucket", optimizerBucketEnvVar, got)
 				}
-				if !strings.Contains(tc.template, optimizerBucketEnvVar+": !Ref AssetBucket") {
-					t.Errorf("%s is not a reference to this stack's own AssetBucket", optimizerBucketEnvVar)
+				if !strings.Contains(tc.template, optimizerBucketEnvVar+": !Ref "+paramAssetBucketName) {
+					t.Errorf("%s is not a reference to the asset bucket the core stack handed over", optimizerBucketEnvVar)
 				}
 				if got := p.Environment.Variables["UV_THREADPOOL_SIZE"]; got != "4" {
 					t.Errorf("UV_THREADPOOL_SIZE = %q, want 4", got)
@@ -214,7 +213,7 @@ func TestStackTemplateOptimizer(t *testing.T) {
 	})
 
 	t.Run("optimizer reads only its own substrate asset", func(t *testing.T) {
-		tmpl := parseOptimizerTemplate(t, stackTemplate(edge.TrustExternal, fixturePayloads(), RequiredBootstrapVersion))
+		tmpl := parseOptimizerTemplate(t, featureTemplate(FeatureImageOptimization, ClassProduction))
 		role, ok := tmpl.Resources["ImageOptimizerRole"]
 		if !ok {
 			t.Fatal("no execution role for the optimizer")
@@ -236,7 +235,7 @@ func TestStackTemplateOptimizer(t *testing.T) {
 		if !ok || len(resources) != 2 {
 			t.Fatalf("Resource = %v, want exactly the two prefixes it reads", statements[0].Resource)
 		}
-		for _, want := range []string{"${AssetBucket.Arn}/*/assets/*", "${AssetBucket.Arn}/*/image-config.json"} {
+		for _, want := range []string{"${AssetBucketArn}/*/assets/*", "${AssetBucketArn}/*/image-config.json"} {
 			found := false
 			for _, r := range resources {
 				if s, ok := r.(string); ok && strings.Contains(s, want) {
@@ -258,38 +257,11 @@ func TestStackTemplateOptimizer(t *testing.T) {
 		}
 	})
 
-	t.Run("no payload renders no optimizer", func(t *testing.T) {
-		for _, tc := range []struct {
-			name     string
-			template string
-		}{
-			{"production", stackTemplate(edge.TrustExternal, stackPayloads{}, RequiredBootstrapVersion)},
-			{"preview", previewStackTemplate(edge.TrustExternal, stackPayloads{}, RequiredBootstrapVersion)},
-		} {
-			t.Run(tc.name, func(t *testing.T) {
-				if strings.Contains(tc.template, "ImageOptimizer") {
-					t.Errorf("a template with no payload still names the optimizer:\n%s", tc.template)
-				}
-				tmpl := parseOptimizerTemplate(t, tc.template)
-				for name, r := range tmpl.Resources {
-					if r.Type == "AWS::Lambda::Function" || r.Type == "AWS::Lambda::Url" {
-						t.Errorf("resource %s (%s) was rendered without a payload", name, r.Type)
-					}
-				}
-				if _, ok := tmpl.Outputs[outputImageOptimizerURL]; ok {
-					t.Errorf("a template with no payload still publishes %s", outputImageOptimizerURL)
-				}
-				if !strings.Contains(tc.template, "aws:ResourceTag/ocel:component") {
-					t.Error("the edge user lost its tag-conditioned Lambda grant")
-				}
-			})
-		}
-	})
 }
 
 func TestEdgeUserOptimizer(t *testing.T) {
 	t.Run("optimizer invoke is its own named statement", func(t *testing.T) {
-		template := stackTemplate(edge.TrustExternal, fixturePayloads(), RequiredBootstrapVersion)
+		template := featureTemplate(FeatureCloudflareEdge, ClassProduction)
 		tmpl := parseOptimizerTemplate(t, template)
 		user, ok := tmpl.Resources["EdgeUser"]
 		if !ok {
@@ -312,8 +284,8 @@ func TestEdgeUserOptimizer(t *testing.T) {
 				}
 			default:
 				named++
-				if res != "ImageOptimizer.Arn" {
-					t.Errorf("the optimizer's invoke grant names %q, want the function's own ARN", res)
+				if res != paramImageOptimizerARN {
+					t.Errorf("the optimizer's invoke grant names %q, want the ARN the optimizer stack handed over", res)
 				}
 			}
 		}
@@ -323,25 +295,29 @@ func TestEdgeUserOptimizer(t *testing.T) {
 		if named != 1 {
 			t.Errorf("found %d unconditioned Lambda statements, want exactly 1 naming the optimizer", named)
 		}
-		if !strings.Contains(template, "Resource: !GetAtt ImageOptimizer.Arn") {
-			t.Error("the optimizer's invoke grant is not a reference to the function's own ARN")
+	})
+
+	t.Run("no optimizer alongside is no invoke grant", func(t *testing.T) {
+		template := featureTemplateWith(FeatureCloudflareEdge, ClassProduction, FeatureSet{FeatureISR: true, FeatureCloudflareEdge: true})
+		if strings.Contains(template, paramImageOptimizerARN) {
+			t.Errorf("the edge reader is granted an optimizer this substrate does not carry:\n%s", template)
 		}
 	})
 }
 
 func TestRunOptimizer(t *testing.T) {
-	t.Run("first bootstrap seeds the bucket then places the payload", func(t *testing.T) {
+	t.Run("first bootstrap places the payload before the stack that names it", func(t *testing.T) {
 		cfn, ssmc, iamc := newFakeCFN(), newFakeSSM(), &fakeIAM{}
 		store := newFakeObjectStore()
-		ed := &fakeEdge{out: edge.BootstrapOutput{Trust: edge.TrustExternal}}
+		standInCloudflare(t, &fakeEdge{kind: "cloudflare"})
 
-		if err := run(context.Background(), cfn, ssmc, iamc, ed, store, productionSubstrate(), nil, nil); err != nil {
+		if err := runAll(context.Background(), apisOf(cfn, ssmc, iamc, store), productionSubstrate()); err != nil {
 			t.Fatalf("run: %v", err)
 		}
-		if cfn.creates != 1 || cfn.updates != 1 {
-			t.Errorf("settled the stack %d creates + %d updates, want one seeding create then one update", cfn.creates, cfn.updates)
+		if cfn.creates != 4 || cfn.updates != 0 {
+			t.Errorf("settled the substrate in %d creates + %d updates, want one create each for core and its three features", cfn.creates, cfn.updates)
 		}
-		final := cfn.templates[StackName]
+		final := cfn.template(optStack(ClassProduction))
 		if !strings.Contains(final, "AWS::Lambda::Url") {
 			t.Errorf("the settled template carries no optimizer:\n%s", final)
 		}
@@ -352,12 +328,10 @@ func TestRunOptimizer(t *testing.T) {
 
 	t.Run("an account already holding the payloads uploads nothing", func(t *testing.T) {
 		cfn, ssmc, iamc := newFakeCFN(), newFakeSSM(), &fakeIAM{}
-		cfn.outputs = map[string]string{outputArtifactBucket: fixtureBucket}
-		cfn.templates[StackName] = "existing"
 		store := preloadedStore()
-		ed := &fakeEdge{out: edge.BootstrapOutput{Trust: edge.TrustExternal}}
+		standInCloudflare(t, &fakeEdge{kind: "cloudflare"})
 
-		if err := run(context.Background(), cfn, ssmc, iamc, ed, store, productionSubstrate(), nil, nil); err != nil {
+		if err := runAll(context.Background(), apisOf(cfn, ssmc, iamc, store), productionSubstrate()); err != nil {
 			t.Fatalf("run: %v", err)
 		}
 		if store.puts != 0 {
@@ -369,19 +343,19 @@ func TestRunOptimizer(t *testing.T) {
 func TestCheckDeployedOptimizer(t *testing.T) {
 	t.Run("reads the optimizer URL", func(t *testing.T) {
 		cfn := newFakeCFN()
-		cfn.templates[StackName] = "existing"
-		cfn.outputs = map[string]string{outputImageOptimizerURL: "https://abc.lambda-url.us-east-1.on.aws/"}
+		cfn.seed(StackName, "Outputs:\n")
+		cfn.seed(optStack(ClassProduction), "Outputs:\n  "+outputImageOptimizerURL+":\n    Value: 'https://abc.lambda-url.us-east-1.on.aws/'\n")
 
 		deployed, err := CheckDeployed(context.Background(), cfn)
 		if err != nil {
 			t.Fatalf("CheckDeployed: %v", err)
 		}
-		if deployed.ImageOptimizerURL != "https://abc.lambda-url.us-east-1.on.aws/" {
-			t.Errorf("ImageOptimizerURL = %q", deployed.ImageOptimizerURL)
+		if want := cfn.output(optStack(ClassProduction), outputImageOptimizerURL); deployed.ImageOptimizerURL != want {
+			t.Errorf("ImageOptimizerURL = %q, want %q", deployed.ImageOptimizerURL, want)
 		}
 
 		bare := newFakeCFN()
-		bare.templates[StackName] = "existing"
+		bare.seed(StackName, "Outputs:\n")
 		deployed, err = CheckDeployed(context.Background(), bare)
 		if err != nil {
 			t.Fatalf("CheckDeployed: %v", err)

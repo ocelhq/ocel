@@ -87,6 +87,13 @@ func (s *Server) Preflight(ctx context.Context, req *deploymentsv1.PreflightRequ
 		resp.InfraClass = pf.GetInfraClass()
 		resp.InfrastructurePresent = pf.GetInfrastructurePresent()
 
+		wanted, _ := requiredSubstrate(req.GetRequiredClass(), preview, production)
+		if wanted.Present {
+			if err := missingFeatures(wanted, req.GetRequiredFeatures(), previewClass); err != nil {
+				return nil, connect.NewError(connect.CodeFailedPrecondition, err)
+			}
+		}
+
 		if req.GetRequiredClass() == deploymentsv1.Environment_CLASS_PRODUCTION {
 			resp.KnownSlugs = knownSlugs(ctx, awscfg, production, req.GetSlug())
 		}

@@ -283,7 +283,7 @@ func TestEveryWrittenKeyCarriesItsProject(t *testing.T) {
 	ix := &Index{Dynamo: ddb, Table: "state"}
 	ctx := context.Background()
 
-	if err := ix.AddProject(ctx, "shop"); err != nil {
+	if err := ix.AddProject(ctx, "shop", nil); err != nil {
 		t.Fatalf("AddProject: %v", err)
 	}
 	if err := ix.AddStack(ctx, "shop", stack); err != nil {
@@ -340,7 +340,7 @@ func TestUnreadableNamesAreRefused(t *testing.T) {
 	ix := &Index{Dynamo: &recordingDynamo{}, Table: "state"}
 	ctx := context.Background()
 
-	if err := ix.AddProject(ctx, ""); err == nil {
+	if err := ix.AddProject(ctx, "", nil); err == nil {
 		t.Error("AddProject with no project err = nil, want it refused")
 	}
 	if err := ix.AddStack(ctx, "", naming.InfraStack("prod")); err == nil {
@@ -369,4 +369,90 @@ func TestAStoredNameThatCannotBeReadStopsTheListing(t *testing.T) {
 	if _, err := (&Index{Dynamo: ddb, Table: "state"}).Stacks(context.Background(), "shop"); err == nil {
 		t.Fatal("Stacks over an unparseable entry err = nil, want the teardown told rather than silently short")
 	}
+}
+
+func featuredRow(project string, features ...string) map[string]ddbtypes.AttributeValue {
+	row := projectRow(project)
+	row[featuresAttribute] = &ddbtypes.AttributeValueMemberSS{Value: features}
+	return row
+}
+
+func TestProjectFeatures(t *testing.T) {
+	t.Parallel()
+
+	t.Run("what a deploy recorded is what comes back", func(t *testing.T) {
+		t.Parallel()
+
+		ddb := &recordingDynamo{}
+		ix := &Index{Dynamo: ddb, Table: "state"}
+		if err := ix.AddProject(context.Background(), "shop", []string{"isr", "image-optimization"}); err != nil {
+			t.Fatalf("AddProject: %v", err)
+		}
+		ddb.rows = ddb.written
+
+		got, err := ix.ProjectFeatures(context.Background())
+		if err != nil {
+			t.Fatalf("ProjectFeatures: %v", err)
+		}
+		want := map[string][]string{"shop": {"isr", "image-optimization"}}
+		if !reflect.DeepEqual(got, want) {
+			t.Errorf("ProjectFeatures = %v, want %v", got, want)
+		}
+	})
+
+	t.Run("a project that recorded none is still known", func(t *testing.T) {
+		t.Parallel()
+
+		ddb := &recordingDynamo{rows: projectRows("billing")}
+		got, err := (&Index{Dynamo: ddb, Table: "state"}).ProjectFeatures(context.Background())
+		if err != nil {
+			t.Fatalf("ProjectFeatures: %v", err)
+		}
+		features, listed := got["billing"]
+		if !listed {
+			t.Fatalf("ProjectFeatures = %v, want billing among them", got)
+		}
+		if len(features) != 0 {
+			t.Errorf("billing needs %v, want nothing", features)
+		}
+	})
+
+	t.Run("every page is read", func(t *testing.T) {
+		t.Parallel()
+
+		ddb := &recordingDynamo{pageSize: 1, rows: []map[string]ddbtypes.AttributeValue{
+			featuredRow("billing", "isr"),
+			featuredRow("shop", "cloudflare-edge"),
+			projectRow("wiki"),
+		}}
+		got, err := (&Index{Dynamo: ddb, Table: "state"}).ProjectFeatures(context.Background())
+		if err != nil {
+			t.Fatalf("ProjectFeatures: %v", err)
+		}
+		if len(got) != 3 {
+			t.Fatalf("ProjectFeatures = %v, want all three projects: a page boundary must not hide a dependent", got)
+		}
+		if len(ddb.queries) < 3 {
+			t.Errorf("read %d pages, want one per row", len(ddb.queries))
+		}
+		for i, q := range ddb.queries {
+			if pk := partitionOf(t, q); pk != projectsPartition {
+				t.Errorf("query %d partition = %q, want %q", i, pk, projectsPartition)
+			}
+			if !aws.ToBool(q.ConsistentRead) {
+				t.Errorf("query %d read eventually; a drop decides on what the last deploy wrote", i)
+			}
+		}
+	})
+
+	t.Run("a key nothing can name is refused, not skipped", func(t *testing.T) {
+		t.Parallel()
+
+		ddb := &recordingDynamo{rows: []map[string]ddbtypes.AttributeValue{
+			{"pk": &ddbtypes.AttributeValueMemberS{Value: projectsPartition}, sortAttribute: &ddbtypes.AttributeValueMemberS{Value: "nonsense"}},
+		}}
+		if _, err := (&Index{Dynamo: ddb, Table: "state"}).ProjectFeatures(context.Background()); err == nil {
+			t.Fatal("read a sort key that names no project as though it did")
+		}
+	})
 }

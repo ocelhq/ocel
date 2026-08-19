@@ -215,10 +215,11 @@ func runPreviewUp(ctx context.Context, d deps, cwd string, opts previewUpOptions
 		ui.BuildOK()
 
 		req := edgeSettings(cfg).applyToDeploy(&deploymentsv1.DeployRequest{
-			Manifest:        manifest,
-			Options:         []byte(provider.Options),
-			ProtocolVersion: manifestbuilder.SchemaVersion,
-			Environment:     env,
+			Manifest:         manifest,
+			Options:          []byte(provider.Options),
+			ProtocolVersion:  manifestbuilder.SchemaVersion,
+			Environment:      env,
+			RequiredFeatures: requiredFeatures(cfg, manifest),
 		})
 
 		var links []*linksv1.Link
@@ -638,11 +639,12 @@ func preflight(ctx context.Context, d deps, runner *providerrunner.Runner, provi
 
 	spinner := deployui.StartSpinner(out, "Checking credentials")
 	resp, err := client.Preflight(ctx, edgeSettings(cfg).applyToPreflight(&deploymentsv1.PreflightRequest{
-		Options:         []byte(provider.Options),
-		ProtocolVersion: manifestbuilder.SchemaVersion,
-		RequiredClass:   required,
-		Slug:            slug,
-		Domains:         domains,
+		Options:          []byte(provider.Options),
+		ProtocolVersion:  manifestbuilder.SchemaVersion,
+		RequiredClass:    required,
+		Slug:             slug,
+		Domains:          domains,
+		RequiredFeatures: configuredFeatures(cfg),
 	}))
 	spinner.Stop()
 	if err != nil {

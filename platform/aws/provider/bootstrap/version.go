@@ -2,9 +2,7 @@ package bootstrap
 
 import "fmt"
 
-const RequiredBootstrapVersion = 11
-
-const seedingBootstrapVersion = RequiredBootstrapVersion - 1
+const RequiredBootstrapVersion = 12
 
 type Compatibility int
 

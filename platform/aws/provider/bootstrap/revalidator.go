@@ -9,6 +9,7 @@ import (
 
 const (
 	outputRevalidateQueueURL = "RevalidateQueueUrl"
+	outputRevalidateQueueARN = "RevalidateQueueArn"
 
 	revalidatorKeyPrefix = "ocel-revalidator"
 
@@ -77,9 +78,6 @@ func revalidateQueueResources(class string) string {
 }
 
 func revalidatorResources(code payloads.Placement) string {
-	if !code.Present() {
-		return ""
-	}
 	return fmt.Sprintf(`  RevalidatorRole:
     Type: AWS::IAM::Role
     Properties:
@@ -112,7 +110,7 @@ func revalidatorResources(code payloads.Placement) string {
                     kms:ViaService: !Sub 'sqs.${AWS::Region}.amazonaws.com'
               - Effect: Allow
                 Action: s3:GetObject
-                Resource: !Sub '${AssetBucket.Arn}/*/origin.json'
+                Resource: !Sub '${AssetBucketArn}/*/origin.json'
               - Effect: Allow
                 Action:
                   - lambda:InvokeFunctionUrl
@@ -137,7 +135,7 @@ func revalidatorResources(code payloads.Placement) string {
         S3Key: %s
       Environment:
         Variables:
-          %s: !Ref AssetBucket
+          %s: !Ref AssetBucketName
   RevalidatorQueueConsumer:
     Type: AWS::Lambda::EventSourceMapping
     Metadata:
@@ -156,12 +154,12 @@ func revalidatorResources(code payloads.Placement) string {
 		revalidatorBatchSize, revalidatorMaxConcurrency)
 }
 
-func revalidateQueueOutput(code payloads.Placement) string {
-	if !code.Present() {
-		return ""
-	}
+func revalidateQueueOutputs() string {
 	return fmt.Sprintf(`  %s:
     Description: "URL of this substrate's ISR revalidation queue. The edge sends admitted refreshes to it and the revalidator drains it."
     Value: !Ref RevalidateQueue
-`, outputRevalidateQueueURL)
+  %s:
+    Description: "ARN of this substrate's ISR revalidation queue, handed to whichever feature stack has to grant send on it."
+    Value: !GetAtt RevalidateQueue.Arn
+`, outputRevalidateQueueURL, outputRevalidateQueueARN)
 }

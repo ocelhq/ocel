@@ -39,6 +39,9 @@ const (
 	// DeploymentServiceBootstrapProcedure is the fully-qualified name of the DeploymentService's
 	// Bootstrap RPC.
 	DeploymentServiceBootstrapProcedure = "/deployments.v1.DeploymentService/Bootstrap"
+	// DeploymentServiceDescribeBootstrapProcedure is the fully-qualified name of the
+	// DeploymentService's DescribeBootstrap RPC.
+	DeploymentServiceDescribeBootstrapProcedure = "/deployments.v1.DeploymentService/DescribeBootstrap"
 	// DeploymentServiceTeardownProcedure is the fully-qualified name of the DeploymentService's
 	// Teardown RPC.
 	DeploymentServiceTeardownProcedure = "/deployments.v1.DeploymentService/Teardown"
@@ -104,6 +107,7 @@ const (
 type DeploymentServiceClient interface {
 	Deploy(context.Context, *v1.DeployRequest) (*connect.ServerStreamForClient[v1.DeployEvent], error)
 	Bootstrap(context.Context, *v1.BootstrapRequest) (*connect.ServerStreamForClient[v1.DeployEvent], error)
+	DescribeBootstrap(context.Context, *v1.DescribeBootstrapRequest) (*v1.DescribeBootstrapResponse, error)
 	Teardown(context.Context, *v1.TeardownRequest) (*connect.ServerStreamForClient[v1.DeployEvent], error)
 	PlanTeardown(context.Context, *v1.PlanTeardownRequest) (*v1.PlanTeardownResponse, error)
 	DestroyPreview(context.Context, *v1.DestroyPreviewRequest) (*connect.ServerStreamForClient[v1.DeployEvent], error)
@@ -147,6 +151,12 @@ func NewDeploymentServiceClient(httpClient connect.HTTPClient, baseURL string, o
 			httpClient,
 			baseURL+DeploymentServiceBootstrapProcedure,
 			connect.WithSchema(deploymentServiceMethods.ByName("Bootstrap")),
+			connect.WithClientOptions(opts...),
+		),
+		describeBootstrap: connect.NewClient[v1.DescribeBootstrapRequest, v1.DescribeBootstrapResponse](
+			httpClient,
+			baseURL+DeploymentServiceDescribeBootstrapProcedure,
+			connect.WithSchema(deploymentServiceMethods.ByName("DescribeBootstrap")),
 			connect.WithClientOptions(opts...),
 		),
 		teardown: connect.NewClient[v1.TeardownRequest, v1.DeployEvent](
@@ -276,6 +286,7 @@ func NewDeploymentServiceClient(httpClient connect.HTTPClient, baseURL string, o
 type deploymentServiceClient struct {
 	deploy             *connect.Client[v1.DeployRequest, v1.DeployEvent]
 	bootstrap          *connect.Client[v1.BootstrapRequest, v1.DeployEvent]
+	describeBootstrap  *connect.Client[v1.DescribeBootstrapRequest, v1.DescribeBootstrapResponse]
 	teardown           *connect.Client[v1.TeardownRequest, v1.DeployEvent]
 	planTeardown       *connect.Client[v1.PlanTeardownRequest, v1.PlanTeardownResponse]
 	destroyPreview     *connect.Client[v1.DestroyPreviewRequest, v1.DeployEvent]
@@ -306,6 +317,15 @@ func (c *deploymentServiceClient) Deploy(ctx context.Context, req *v1.DeployRequ
 // Bootstrap calls deployments.v1.DeploymentService.Bootstrap.
 func (c *deploymentServiceClient) Bootstrap(ctx context.Context, req *v1.BootstrapRequest) (*connect.ServerStreamForClient[v1.DeployEvent], error) {
 	return c.bootstrap.CallServerStream(ctx, connect.NewRequest(req))
+}
+
+// DescribeBootstrap calls deployments.v1.DeploymentService.DescribeBootstrap.
+func (c *deploymentServiceClient) DescribeBootstrap(ctx context.Context, req *v1.DescribeBootstrapRequest) (*v1.DescribeBootstrapResponse, error) {
+	response, err := c.describeBootstrap.CallUnary(ctx, connect.NewRequest(req))
+	if response != nil {
+		return response.Msg, err
+	}
+	return nil, err
 }
 
 // Teardown calls deployments.v1.DeploymentService.Teardown.
@@ -460,6 +480,7 @@ func (c *deploymentServiceClient) ListLinks(ctx context.Context, req *v1.ListLin
 type DeploymentServiceHandler interface {
 	Deploy(context.Context, *v1.DeployRequest, *connect.ServerStream[v1.DeployEvent]) error
 	Bootstrap(context.Context, *v1.BootstrapRequest, *connect.ServerStream[v1.DeployEvent]) error
+	DescribeBootstrap(context.Context, *v1.DescribeBootstrapRequest) (*v1.DescribeBootstrapResponse, error)
 	Teardown(context.Context, *v1.TeardownRequest, *connect.ServerStream[v1.DeployEvent]) error
 	PlanTeardown(context.Context, *v1.PlanTeardownRequest) (*v1.PlanTeardownResponse, error)
 	DestroyPreview(context.Context, *v1.DestroyPreviewRequest, *connect.ServerStream[v1.DeployEvent]) error
@@ -499,6 +520,12 @@ func NewDeploymentServiceHandler(svc DeploymentServiceHandler, opts ...connect.H
 		DeploymentServiceBootstrapProcedure,
 		svc.Bootstrap,
 		connect.WithSchema(deploymentServiceMethods.ByName("Bootstrap")),
+		connect.WithHandlerOptions(opts...),
+	)
+	deploymentServiceDescribeBootstrapHandler := connect.NewUnaryHandlerSimple(
+		DeploymentServiceDescribeBootstrapProcedure,
+		svc.DescribeBootstrap,
+		connect.WithSchema(deploymentServiceMethods.ByName("DescribeBootstrap")),
 		connect.WithHandlerOptions(opts...),
 	)
 	deploymentServiceTeardownHandler := connect.NewServerStreamHandlerSimple(
@@ -627,6 +654,8 @@ func NewDeploymentServiceHandler(svc DeploymentServiceHandler, opts ...connect.H
 			deploymentServiceDeployHandler.ServeHTTP(w, r)
 		case DeploymentServiceBootstrapProcedure:
 			deploymentServiceBootstrapHandler.ServeHTTP(w, r)
+		case DeploymentServiceDescribeBootstrapProcedure:
+			deploymentServiceDescribeBootstrapHandler.ServeHTTP(w, r)
 		case DeploymentServiceTeardownProcedure:
 			deploymentServiceTeardownHandler.ServeHTTP(w, r)
 		case DeploymentServicePlanTeardownProcedure:
@@ -682,6 +711,10 @@ func (UnimplementedDeploymentServiceHandler) Deploy(context.Context, *v1.DeployR
 
 func (UnimplementedDeploymentServiceHandler) Bootstrap(context.Context, *v1.BootstrapRequest, *connect.ServerStream[v1.DeployEvent]) error {
 	return connect.NewError(connect.CodeUnimplemented, errors.New("deployments.v1.DeploymentService.Bootstrap is not implemented"))
+}
+
+func (UnimplementedDeploymentServiceHandler) DescribeBootstrap(context.Context, *v1.DescribeBootstrapRequest) (*v1.DescribeBootstrapResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("deployments.v1.DeploymentService.DescribeBootstrap is not implemented"))
 }
 
 func (UnimplementedDeploymentServiceHandler) Teardown(context.Context, *v1.TeardownRequest, *connect.ServerStream[v1.DeployEvent]) error {

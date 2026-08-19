@@ -36,9 +36,6 @@ func ensureTagPublisherPayload(ctx context.Context, store ObjectStore, bucket st
 }
 
 func tagPublisherResources(code payloads.Placement, class string) string {
-	if !code.Present() {
-		return ""
-	}
 	writerParam, seedParam := isrWriterParamNames(class)
 	return fmt.Sprintf(`  TagPublisherDeadLetterQueue:
     Type: AWS::SQS::Queue
@@ -70,7 +67,7 @@ func tagPublisherResources(code payloads.Placement, class string) string {
                   - dynamodb:DescribeStream
                   - dynamodb:GetRecords
                   - dynamodb:GetShardIterator
-                Resource: !GetAtt StateTable.StreamArn
+                Resource: !Ref StateTableStreamArn
               - Effect: Allow
                 Action: dynamodb:ListStreams
                 Resource: '*'
@@ -78,7 +75,7 @@ func tagPublisherResources(code payloads.Placement, class string) string {
                 Action:
                   - s3:GetObject
                   - s3:PutObject
-                Resource: !Sub '${AssetBucket.Arn}/*'
+                Resource: !Sub '${AssetBucketArn}/*'
               - Effect: Allow
                 Action: sqs:SendMessage
                 Resource: !GetAtt TagPublisherDeadLetterQueue.Arn
@@ -111,7 +108,7 @@ func tagPublisherResources(code payloads.Placement, class string) string {
         S3Key: %s
       Environment:
         Variables:
-          %s: !Ref AssetBucket
+          %s: !Ref AssetBucketName
           %s: '%s'
           %s: '%s'
   TagPublisherStream:
@@ -119,7 +116,7 @@ func tagPublisherResources(code payloads.Placement, class string) string {
     Metadata:
       Description: "Binds the publisher to the state table's stream, filtered to tag metadata items so unrelated writes cost nothing. This is the only trigger the publisher has: delete it and invalidation goes quiet rather than failing - the table keeps accepting writes and nothing publishes them onward."
     Properties:
-      EventSourceArn: !GetAtt StateTable.StreamArn
+      EventSourceArn: !Ref StateTableStreamArn
       FunctionName: !GetAtt TagPublisher.Arn
       StartingPosition: LATEST
       BatchSize: %d

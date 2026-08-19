@@ -3,6 +3,8 @@ package stackindex
 import (
 	"context"
 	"fmt"
+	"maps"
+	"slices"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb"
@@ -19,6 +21,8 @@ const (
 
 	tagNamespaceAttribute = "gsi1pk"
 	tagSortKey            = "#META"
+
+	featuresAttribute = "features"
 )
 
 type DynamoAPI interface {
@@ -32,14 +36,45 @@ type Index struct {
 	Table  string
 }
 
-func (ix *Index) AddProject(ctx context.Context, project string) error {
+func (ix *Index) AddProject(ctx context.Context, project string, features []string) error {
 	if err := naming.Validate("project", project); err != nil {
 		return fmt.Errorf("index a project: %w", err)
 	}
-	if err := ix.put(ctx, item(projectsPartition, naming.ProjectKey(project))); err != nil {
+	entry := item(projectsPartition, naming.ProjectKey(project))
+	if len(features) > 0 {
+		entry[featuresAttribute] = &ddbtypes.AttributeValueMemberSS{Value: slices.Clone(features)}
+	}
+	if err := ix.put(ctx, entry); err != nil {
 		return fmt.Errorf("index project %s: %w", project, err)
 	}
 	return nil
+}
+
+func (ix *Index) ProjectFeatures(ctx context.Context) (map[string][]string, error) {
+	out := map[string][]string{}
+	err := ix.eachItem(ctx, projectsPartition, "#sk, #features", map[string]string{
+		"#sk":       sortAttribute,
+		"#features": featuresAttribute,
+	}, func(entry map[string]ddbtypes.AttributeValue) error {
+		key, ok := entry[sortAttribute].(*ddbtypes.AttributeValueMemberS)
+		if !ok || key.Value == "" {
+			return nil
+		}
+		project, err := naming.ProjectOf(key.Value)
+		if err != nil {
+			return err
+		}
+		if features, ok := entry[featuresAttribute].(*ddbtypes.AttributeValueMemberSS); ok {
+			out[project] = slices.Clone(features.Value)
+		} else {
+			out[project] = nil
+		}
+		return nil
+	})
+	if err != nil {
+		return nil, fmt.Errorf("read the features indexed projects need: %w", err)
+	}
+	return out, nil
 }
 
 func (ix *Index) RemoveProject(ctx context.Context, project string) error {
@@ -188,41 +223,44 @@ func (ix *Index) delete(ctx context.Context, entry map[string]ddbtypes.Attribute
 	return err
 }
 
-func (ix *Index) values(ctx context.Context, pk, attribute string) ([]string, error) {
-	var (
-		out   []string
-		start map[string]ddbtypes.AttributeValue
-	)
+func (ix *Index) eachItem(ctx context.Context, pk, projection string, names map[string]string, visit func(map[string]ddbtypes.AttributeValue) error) error {
+	attributes := map[string]string{"#pk": "pk"}
+	maps.Copy(attributes, names)
+	var start map[string]ddbtypes.AttributeValue
 	for {
 		page, err := ix.Dynamo.Query(ctx, &dynamodb.QueryInput{
-			TableName:              aws.String(ix.Table),
-			ConsistentRead:         aws.Bool(true),
-			KeyConditionExpression: aws.String("#pk = :pk"),
-			ProjectionExpression:   aws.String("#value"),
-			ExpressionAttributeNames: map[string]string{
-				"#pk":    "pk",
-				"#value": attribute,
-			},
-			ExpressionAttributeValues: map[string]ddbtypes.AttributeValue{
-				":pk": &ddbtypes.AttributeValueMemberS{Value: pk},
-			},
-			ExclusiveStartKey: start,
+			TableName:                 aws.String(ix.Table),
+			ConsistentRead:            aws.Bool(true),
+			KeyConditionExpression:    aws.String("#pk = :pk"),
+			ProjectionExpression:      aws.String(projection),
+			ExpressionAttributeNames:  attributes,
+			ExpressionAttributeValues: map[string]ddbtypes.AttributeValue{":pk": &ddbtypes.AttributeValueMemberS{Value: pk}},
+			ExclusiveStartKey:         start,
 		})
 		if err != nil {
-			return nil, err
+			return err
 		}
 		for _, entry := range page.Items {
-			value, ok := entry[attribute].(*ddbtypes.AttributeValueMemberS)
-			if !ok || value.Value == "" {
-				continue
+			if err := visit(entry); err != nil {
+				return err
 			}
-			out = append(out, value.Value)
 		}
 		if len(page.LastEvaluatedKey) == 0 {
-			return out, nil
+			return nil
 		}
 		start = page.LastEvaluatedKey
 	}
+}
+
+func (ix *Index) values(ctx context.Context, pk, attribute string) ([]string, error) {
+	var out []string
+	err := ix.eachItem(ctx, pk, "#value", map[string]string{"#value": attribute}, func(entry map[string]ddbtypes.AttributeValue) error {
+		if value, ok := entry[attribute].(*ddbtypes.AttributeValueMemberS); ok && value.Value != "" {
+			out = append(out, value.Value)
+		}
+		return nil
+	})
+	return out, err
 }
 
 func item(pk, sk string) map[string]ddbtypes.AttributeValue {
