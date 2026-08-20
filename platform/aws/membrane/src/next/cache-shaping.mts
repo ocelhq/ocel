@@ -44,7 +44,7 @@ export function originShaping(
   manifest: ProjectManifest | null,
   env: NodeJS.ProcessEnv,
 ): OriginShaping | null {
-  if (!routerMode(env.OCEL_EDGE_KIND)) return null;
+  if (!routerMode(env)) return null;
 
   const routes = new Map<string, Window>();
   for (const [route, entry] of Object.entries<any>(manifest?.prerender?.routes ?? {})) {
@@ -62,7 +62,7 @@ export function originShaping(
   }
 
   return {
-    release: invalidatesByCacheTag(env.OCEL_EDGE_KIND) ? releaseOf(env.OCEL_ISR_PREFIX) : null,
+    release: invalidatesByCacheTag(env) ? releaseOf(env.OCEL_ISR_PREFIX) : null,
     basePath: typeof manifest?.config?.basePath === "string" ? manifest.config.basePath : "",
     routes,
     dynamicRoutes,

@@ -33,6 +33,8 @@ const (
 const (
 	OriginSecretVar    = "OCEL_ORIGIN_SECRET"
 	OriginSignedVar    = "OCEL_ORIGIN_SIGNED"
+	OriginRouterVar    = "OCEL_ORIGIN_ROUTER"
+	CacheTagPurgeVar   = "OCEL_CACHE_TAG_PURGE"
 	OriginSecretHeader = "x-ocel-origin-secret"
 )
 

@@ -41,6 +41,7 @@ export function withoutClientControl(headers: Headers): Headers {
 export interface RouterHost {
   manifest: RoutingManifest;
   edgeKind: string;
+  keepCacheTags: boolean;
   localOrigin: string;
   functionUrls: Record<string, string>;
   slug: string;
@@ -68,7 +69,7 @@ function routerDeps(
     app: host.app,
     deploymentId: host.deploymentId,
     originFetch: host.originFetch,
-    keepCacheTags: invalidatesByCacheTag(host.edgeKind),
+    keepCacheTags: host.keepCacheTags,
     originBodyBudget: originBodyBudget(
       host.originBodyLimit,
       host.originBodyEncoding,
@@ -152,6 +153,7 @@ export function routerHostFromEnv(
   return {
     manifest,
     edgeKind: env.OCEL_EDGE_KIND ?? "",
+    keepCacheTags: invalidatesByCacheTag(env),
     localOrigin,
     functionUrls: siblingFunctionUrls(env[functionUrlsVar]),
     slug: env.OCEL_SLUG ?? "",

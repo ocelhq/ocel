@@ -164,6 +164,15 @@ func SignsOriginForwards(e Edge) bool {
 	return ok && signer.SignsOriginForwards()
 }
 
+type CacheTagInvalidator interface {
+	InvalidatesByCacheTag() bool
+}
+
+func InvalidatesByCacheTag(e Edge) bool {
+	invalidator, ok := e.(CacheTagInvalidator)
+	return ok && invalidator.InvalidatesByCacheTag()
+}
+
 type ScopeBound interface {
 	CredentialScope() string
 }

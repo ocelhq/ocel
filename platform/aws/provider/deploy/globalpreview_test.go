@@ -151,6 +151,8 @@ type unprogrammableEdge struct{ edge.Edge }
 
 func (u unprogrammableEdge) SignsOriginForwards() bool { return edge.SignsOriginForwards(u.Edge) }
 
+func (u unprogrammableEdge) InvalidatesByCacheTag() bool { return edge.InvalidatesByCacheTag(u.Edge) }
+
 func TestMarkGlobalPreview(t *testing.T) {
 	t.Parallel()
 

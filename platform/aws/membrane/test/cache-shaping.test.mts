@@ -62,36 +62,34 @@ const isrRoutes = {
 
 function shaping(env: Record<string, string> = {}, config: Record<string, unknown> = {}) {
   return originShaping(manifest(isrRoutes, config), {
-    OCEL_EDGE_KIND: "cloudfront",
+    OCEL_ORIGIN_ROUTER: "1",
+    OCEL_CACHE_TAG_PURGE: "1",
     OCEL_ISR_PREFIX: prefix,
     ...env,
   } as NodeJS.ProcessEnv)!;
 }
 
-test("the gate stays shut when no edge kind is declared", () => {
-  expect(routerMode(undefined)).toBe(false);
-  expect(routerMode("")).toBe(false);
+test("the gate stays shut when the deploy declared no origin router", () => {
+  expect(routerMode({} as NodeJS.ProcessEnv)).toBe(false);
+  expect(routerMode({ OCEL_ORIGIN_ROUTER: "" } as NodeJS.ProcessEnv)).toBe(false);
+  expect(originShaping(manifest(isrRoutes), {} as any)).toBeNull();
 });
 
-test("the gate stays shut behind cloudflare, which tiers its own responses", () => {
-  expect(routerMode("cloudflare")).toBe(false);
-  expect(originShaping(manifest(isrRoutes), { OCEL_EDGE_KIND: "cloudflare" } as any)).toBeNull();
+test("the gate opens when the deploy declared the origin hosts the router", () => {
+  expect(routerMode({ OCEL_ORIGIN_ROUTER: "1" } as NodeJS.ProcessEnv)).toBe(true);
+  expect(
+    originShaping(manifest(isrRoutes), { OCEL_ORIGIN_ROUTER: "1" } as any),
+  ).not.toBeNull();
 });
 
-test("the gate opens for an edge that does not tier its own responses", () => {
-  expect(routerMode("cloudfront")).toBe(true);
-  expect(originShaping(manifest(isrRoutes), { OCEL_EDGE_KIND: "cloudfront" } as any)).not.toBeNull();
-});
-
-test("only the cloudfront front reads cache tags, so only it is given them", () => {
-  expect(invalidatesByCacheTag("cloudfront")).toBe(true);
-  for (const kind of [undefined, "", "api-gateway", "cloudflare"]) {
-    expect(invalidatesByCacheTag(kind)).toBe(false);
-  }
+test("only a front the deploy declared tag-purging is given cache tags", () => {
+  expect(invalidatesByCacheTag({ OCEL_CACHE_TAG_PURGE: "1" } as NodeJS.ProcessEnv)).toBe(true);
+  expect(invalidatesByCacheTag({} as NodeJS.ProcessEnv)).toBe(false);
+  expect(invalidatesByCacheTag({ OCEL_CACHE_TAG_PURGE: "" } as NodeJS.ProcessEnv)).toBe(false);
 });
 
 test("leaves the tag header off a front that invalidates by nothing", () => {
-  const headers = serve(shaping({ OCEL_EDGE_KIND: "api-gateway" }), "/isr", fakeRes(), {
+  const headers = serve(shaping({ OCEL_CACHE_TAG_PURGE: "" }), "/isr", fakeRes(), {
     tags: ["products"],
   });
 
