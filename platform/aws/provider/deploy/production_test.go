@@ -468,9 +468,10 @@ func TestResolveWorkerHostnames(t *testing.T) {
 		writeRoutingManifest(t, artifactRoot, "web", `{"buildId":"b1"}`)
 		cfg := Config{Class: deploymentsv1.Environment_CLASS_PRODUCTION, Slug: "proj", ArtifactRoot: artifactRoot}
 
-		resolved, err := resolveWorkerHostnames(cfg, manifest, workerApps(artifactRoot, manifest))
+		apps := workerApps(artifactRoot, manifest)
+		resolved, err := hostingWorldFor(cfg, manifest).hostnames(cfg, manifest, apps)
 		if err != nil {
-			t.Fatalf("resolveWorkerHostnames: %v", err)
+			t.Fatalf("hostnames: %v", err)
 		}
 		if want := []string{"acme.com", "www.acme.com"}; !slicesEqual(resolved.hosts["web"], want) {
 			t.Errorf("hostnames = %v, want the declared hostnames %v", resolved.hosts["web"], want)

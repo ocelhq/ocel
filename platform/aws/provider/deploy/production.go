@@ -371,23 +371,25 @@ func stackSpecs(cfg Config, manifest *deploymentsv1.Manifest, version string, wa
 	}
 
 	apps := workerApps(cfg.ArtifactRoot, manifest)
+	world := hostingWorldFor(cfg, manifest)
 
-	if cfg.Class == deploymentsv1.Environment_CLASS_PREVIEW {
-		spec := base
-		if servesOnGlobalPreviewDomain(cfg, manifest) {
-			if _, err := resolveWorkerHostnames(cfg, manifest, apps); err != nil {
-				return nil, err
-			}
-			spec.Program = previewProgram("", apps)
-			spec.PruneOnly = true
-			return []edge.StackSpec{spec}, nil
+	switch world {
+	case hostingGlobalPreview:
+		if _, err := world.hostnames(cfg, manifest, apps); err != nil {
+			return nil, err
 		}
+		spec := base
+		spec.Program = previewProgram("", apps)
+		spec.PruneOnly = true
+		return []edge.StackSpec{spec}, nil
+	case hostingProjectPreview:
+		spec := base
 		if len(apps) == 0 {
 			spec.Program = previewProgram("", apps)
 			spec.PruneOnly = true
 			return []edge.StackSpec{spec}, nil
 		}
-		resolved, err := resolveWorkerHostnames(cfg, manifest, apps)
+		resolved, err := world.hostnames(cfg, manifest, apps)
 		if err != nil {
 			return nil, err
 		}
@@ -402,7 +404,7 @@ func stackSpecs(cfg Config, manifest *deploymentsv1.Manifest, version string, wa
 		return []edge.StackSpec{spec}, nil
 	}
 
-	resolved, err := resolveWorkerHostnames(cfg, manifest, apps)
+	resolved, err := world.hostnames(cfg, manifest, apps)
 	if err != nil {
 		return nil, err
 	}
@@ -475,15 +477,31 @@ type workerHostnames struct {
 	previewBase string
 }
 
-func resolveWorkerHostnames(cfg Config, manifest *deploymentsv1.Manifest, apps []*deploymentsv1.ManifestApp) (workerHostnames, error) {
+type hostingWorld int
+
+const (
+	hostingProduction hostingWorld = iota
+	hostingGlobalPreview
+	hostingProjectPreview
+)
+
+func hostingWorldFor(cfg Config, manifest *deploymentsv1.Manifest) hostingWorld {
+	if cfg.Class != deploymentsv1.Environment_CLASS_PREVIEW {
+		return hostingProduction
+	}
+	if cfg.GlobalPreviewDomain != "" && !declaresPreviewDomain(manifest) {
+		return hostingGlobalPreview
+	}
+	return hostingProjectPreview
+}
+
+func (w hostingWorld) hostnames(cfg Config, manifest *deploymentsv1.Manifest, apps []*deploymentsv1.ManifestApp) (workerHostnames, error) {
 	declared, err := workerDomains(cfg, manifest, apps)
 	if err != nil {
 		return workerHostnames{}, err
 	}
-	if cfg.Class != deploymentsv1.Environment_CLASS_PREVIEW {
-		return workerHostnames{hosts: declared}, nil
-	}
-	if servesOnGlobalPreviewDomain(cfg, manifest) {
+	switch w {
+	case hostingGlobalPreview:
 		resolved, err := globalPreviewHostnames(cfg, apps)
 		if err != nil {
 			return workerHostnames{}, err
@@ -492,15 +510,17 @@ func resolveWorkerHostnames(cfg Config, manifest *deploymentsv1.Manifest, apps [
 			return workerHostnames{}, err
 		}
 		return resolved, nil
+	case hostingProjectPreview:
+		resolved, err := previewHostnames(cfg, apps, declared)
+		if err != nil {
+			return workerHostnames{}, err
+		}
+		if err := checkPreviewLabels("", apps, resolved); err != nil {
+			return workerHostnames{}, err
+		}
+		return resolved, nil
 	}
-	resolved, err := previewHostnames(cfg, apps, declared)
-	if err != nil {
-		return workerHostnames{}, err
-	}
-	if err := checkPreviewLabels("", apps, resolved); err != nil {
-		return workerHostnames{}, err
-	}
-	return resolved, nil
+	return workerHostnames{hosts: declared}, nil
 }
 
 func checkPreviewLabels(slug string, apps []*deploymentsv1.ManifestApp, resolved workerHostnames) error {
@@ -513,8 +533,7 @@ func checkPreviewLabels(slug string, apps []*deploymentsv1.ManifestApp, resolved
 }
 
 func servesOnGlobalPreviewDomain(cfg Config, manifest *deploymentsv1.Manifest) bool {
-	return cfg.Class == deploymentsv1.Environment_CLASS_PREVIEW &&
-		cfg.GlobalPreviewDomain != "" && !declaresPreviewDomain(manifest)
+	return hostingWorldFor(cfg, manifest) == hostingGlobalPreview
 }
 
 func globalPreviewHostnames(cfg Config, apps []*deploymentsv1.ManifestApp) (workerHostnames, error) {
@@ -710,7 +729,7 @@ func workerURLOutputs(cfg Config, manifest *deploymentsv1.Manifest) []*deploymen
 	if len(apps) == 0 {
 		return nil
 	}
-	resolved, err := resolveWorkerHostnames(cfg, manifest, apps)
+	resolved, err := hostingWorldFor(cfg, manifest).hostnames(cfg, manifest, apps)
 	if err != nil {
 		return nil
 	}
