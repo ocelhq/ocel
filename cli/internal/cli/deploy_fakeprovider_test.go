@@ -434,10 +434,10 @@ func (s *deployFakeProviderServer) Preflight(ctx context.Context, req *deploymen
 		InfraClass:            parseInfraClass(os.Getenv(fakeInfraClassEnvVar)),
 		InfrastructurePresent: os.Getenv(fakeInfraPresentEnvVar) != "0",
 		Identity: &deploymentsv1.Identity{
-			AwsAccount:        os.Getenv(fakeIDAwsAccountEnvVar),
-			AwsProfile:        os.Getenv(fakeIDAwsProfileEnvVar),
-			AwsRegion:         os.Getenv(fakeIDAwsRegionEnvVar),
-			CloudflareAccount: os.Getenv(fakeIDCfAccountEnvVar),
+			AwsAccount: os.Getenv(fakeIDAwsAccountEnvVar),
+			AwsProfile: os.Getenv(fakeIDAwsProfileEnvVar),
+			AwsRegion:  os.Getenv(fakeIDAwsRegionEnvVar),
+			EdgeScope:  os.Getenv(fakeIDCfAccountEnvVar),
 		},
 	}
 	if req.GetSlug() != "" && req.GetRequiredClass() == deploymentsv1.Environment_CLASS_PRODUCTION {
@@ -551,7 +551,7 @@ func fakeGlobalDomain() *deploymentsv1.GlobalPreviewDomain {
 	probeAt, probeEdge, probeOK := fakeGlobalDomainProbe()
 	return &deploymentsv1.GlobalPreviewDomain{
 		BaseDomain:        base,
-		CloudflareAccount: os.Getenv(fakeGlobalDomainAccountEnvVar),
+		EdgeScope:         os.Getenv(fakeGlobalDomainAccountEnvVar),
 		GrammarMin:        grammarMin,
 		GrammarMax:        grammarMax,
 		RouteInstalled:    os.Getenv(fakeGlobalDomainRouteEnvVar) != "0",

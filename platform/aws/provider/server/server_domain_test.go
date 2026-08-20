@@ -82,7 +82,7 @@ func TestPreviewBaseDomainArg(t *testing.T) {
 func TestGlobalPreviewDomain(t *testing.T) {
 	t.Parallel()
 
-	recorded := bootstrap.PreviewDomain{BaseDomain: "preview.acme.com", CloudflareAccount: "acct", GrammarMin: 1, GrammarMax: 1}
+	recorded := bootstrap.PreviewDomain{BaseDomain: "preview.acme.com", Scope: "acct", GrammarMin: 1, GrammarMax: 1}
 
 	t.Run("is nil when nothing is recorded", func(t *testing.T) {
 		t.Parallel()
@@ -106,7 +106,7 @@ func TestGlobalPreviewDomain(t *testing.T) {
 		if !got.GetRouteInstalled() {
 			t.Error("RouteInstalled = false, want true")
 		}
-		if got.GetBaseDomain() != "preview.acme.com" || got.GetCloudflareAccount() != "acct" {
+		if got.GetBaseDomain() != "preview.acme.com" || got.GetEdgeScope() != "acct" {
 			t.Errorf("got %+v", got)
 		}
 	})
@@ -379,23 +379,6 @@ func TestPreviewWildcardOwner(t *testing.T) {
 		}
 	})
 
-	t.Run("a record predating the edge field but naming a Cloudflare account asks Cloudflare", func(t *testing.T) {
-		t.Parallel()
-
-		recorded := bootstrap.PreviewDomain{BaseDomain: baseDomain, CloudflareAccount: "cf-owner"}
-		var asked []edge.Kind
-		owner := previewWildcardOwner(recorded, func(kind edge.Kind) routeOwnerFunc {
-			asked = append(asked, kind)
-			return func(context.Context, string) (string, error) { return edge.PreviewEntryOwner, nil }
-		})
-		if !slices.Equal(asked, []edge.Kind{cloudflare.Kind}) {
-			t.Errorf("edges asked = %v, want only %s: only a Cloudflare-held wildcard was ever recorded with an account", asked, cloudflare.Kind)
-		}
-		if !sharedEntryRouteInstalled(context.Background(), owner, baseDomain) {
-			t.Error("RouteInstalled = false, want true")
-		}
-	})
-
 	t.Run("a record nothing names an edge for probes no edge and reads as not installed", func(t *testing.T) {
 		t.Parallel()
 
@@ -421,18 +404,6 @@ func TestPreviewWildcardHolder(t *testing.T) {
 		t.Parallel()
 
 		got, err := previewWildcardHolder(bootstrap.PreviewDomain{BaseDomain: baseDomain, Edge: cloudflare.Kind})
-		if err != nil {
-			t.Fatalf("previewWildcardHolder: %v", err)
-		}
-		if got != cloudflare.Kind {
-			t.Errorf("holder = %q, want %q", got, cloudflare.Kind)
-		}
-	})
-
-	t.Run("a recorded Cloudflare account names the holder of a record predating the edge field", func(t *testing.T) {
-		t.Parallel()
-
-		got, err := previewWildcardHolder(bootstrap.PreviewDomain{BaseDomain: baseDomain, CloudflareAccount: "cf-owner"})
 		if err != nil {
 			t.Fatalf("previewWildcardHolder: %v", err)
 		}
@@ -503,14 +474,6 @@ func TestRefuseRehomingPreviewWildcard(t *testing.T) {
 		}
 	})
 
-	t.Run("a legacy Cloudflare record is protected too", func(t *testing.T) {
-		t.Parallel()
-
-		if err := refuseRehomingPreviewWildcard(bootstrap.PreviewDomain{BaseDomain: baseDomain, CloudflareAccount: "cf-owner"}, cloudfront.Kind); err == nil {
-			t.Fatal("refuseRehomingPreviewWildcard = nil, want a record predating the edge field protected all the same")
-		}
-	})
-
 	t.Run("the holding edge reconciles its own wildcard", func(t *testing.T) {
 		t.Parallel()
 
@@ -537,8 +500,9 @@ func TestRefuseRehomingPreviewWildcard(t *testing.T) {
 }
 
 func TestUseDomainRecordsTheEdgeHoldingTheWildcard(t *testing.T) {
+	t.Parallel()
+
 	const baseDomain = "preview.acme.com"
-	t.Setenv(cloudflareAccountEnvVar, "cf-ambient")
 
 	ctx := context.Background()
 	validation := edge.Record{Name: "_ocel.preview.acme.com", Type: edge.RecordTypeCNAME, Value: "_target.acm-validations.aws"}
@@ -571,14 +535,15 @@ func TestUseDomainRecordsTheEdgeHoldingTheWildcard(t *testing.T) {
 	if recorded.Edge != cloudfront.Kind {
 		t.Errorf("Edge = %q, want %q: every later lookup of this account-global wildcard asks the edge that raised it", recorded.Edge, cloudfront.Kind)
 	}
-	if recorded.CloudflareAccount != "" {
-		t.Errorf("CloudflareAccount = %q, want nothing: no Cloudflare account holds a wildcard raised at the %s edge", recorded.CloudflareAccount, cloudfront.Kind)
+	if recorded.Scope != "" {
+		t.Errorf("Scope = %q, want nothing: the %s edge is not bound to a credential scope", recorded.Scope, cloudfront.Kind)
 	}
 }
 
 func TestUseDomainPointsAnUnboundEdgeAtItsProxy(t *testing.T) {
+	t.Parallel()
+
 	const baseDomain = "preview.acme.com"
-	t.Setenv(cloudflareAccountEnvVar, "cf-ambient")
 
 	ctx := context.Background()
 	writer := &fakeDNSWriter{}
@@ -605,38 +570,63 @@ func TestUseDomainPointsAnUnboundEdgeAtItsProxy(t *testing.T) {
 	if len(writer.written) != 1 || writer.written[0] != want {
 		t.Fatalf("written = %v, want %v: an edge that serves every hostname publishes no front to CNAME to", writer.written, want)
 	}
+	recorded, err := bootstrap.ReadPreviewDomain(ctx, ssmc, bootstrap.ClassPreview)
+	if err != nil {
+		t.Fatalf("ReadPreviewDomain: %v", err)
+	}
+	if recorded.Scope != "cf-ambient" {
+		t.Errorf("Scope = %q, want the scope the holding edge answered for itself", recorded.Scope)
+	}
 }
 
-func TestGlobalPreviewAccountMismatch(t *testing.T) {
-	recorded := bootstrap.PreviewDomain{BaseDomain: "preview.acme.com", CloudflareAccount: "recorded-acct"}
+func TestGlobalPreviewScopeMismatch(t *testing.T) {
+	t.Parallel()
+
+	recorded := bootstrap.PreviewDomain{BaseDomain: "preview.acme.com", Edge: cloudflare.Kind, Scope: "recorded-acct"}
 
 	t.Run("a match passes", func(t *testing.T) {
-		t.Setenv(cloudflareAccountEnvVar, "recorded-acct")
-		if err := globalPreviewAccountMismatch(recorded); err != nil {
-			t.Fatalf("globalPreviewAccountMismatch: %v", err)
+		t.Parallel()
+		if err := globalPreviewScopeMismatch(recorded, &scopedEdge{scope: "recorded-acct"}); err != nil {
+			t.Fatalf("globalPreviewScopeMismatch: %v", err)
 		}
 	})
 
 	t.Run("a mismatch refuses and names both accounts", func(t *testing.T) {
-		t.Setenv(cloudflareAccountEnvVar, "ambient-acct")
-		err := globalPreviewAccountMismatch(recorded)
+		t.Parallel()
+		err := globalPreviewScopeMismatch(recorded, &scopedEdge{scope: "ambient-acct"})
 		if err == nil {
-			t.Fatal("expected a mismatched account to be refused")
+			t.Fatal("expected a mismatched scope to be refused")
 		}
-		for _, want := range []string{"recorded-acct", "ambient-acct", "preview.acme.com", "ocel domain release"} {
+		for _, want := range []string{"recorded-acct", "ambient-acct", "preview.acme.com", "cloudflare", "ocel domain release"} {
 			if !strings.Contains(err.Error(), want) {
 				t.Errorf("error must name %q, got %q", want, err)
 			}
 		}
 	})
 
+	t.Run("an edge bound to no scope is nothing to compare", func(t *testing.T) {
+		t.Parallel()
+		if err := globalPreviewScopeMismatch(recorded, &scopedEdge{}); err != nil {
+			t.Fatalf("globalPreviewScopeMismatch: %v", err)
+		}
+	})
+
 	t.Run("nothing recorded is nothing to compare", func(t *testing.T) {
-		t.Setenv(cloudflareAccountEnvVar, "ambient-acct")
-		if err := globalPreviewAccountMismatch(bootstrap.PreviewDomain{}); err != nil {
-			t.Fatalf("globalPreviewAccountMismatch: %v", err)
+		t.Parallel()
+		if err := globalPreviewScopeMismatch(bootstrap.PreviewDomain{}, &scopedEdge{scope: "ambient-acct"}); err != nil {
+			t.Fatalf("globalPreviewScopeMismatch: %v", err)
 		}
 	})
 }
+
+type scopedEdge struct {
+	edge.Edge
+	scope string
+}
+
+func (e *scopedEdge) Kind() edge.Kind { return cloudflare.Kind }
+
+func (e *scopedEdge) CredentialScope() string { return e.scope }
 
 type wildcardEdge struct {
 	edge.Edge
@@ -654,6 +644,8 @@ func (e *wildcardEdge) ReconcilePreviewWildcard(_ context.Context, spec edge.Pre
 type unboundWildcardEdge struct {
 	edge.Edge
 }
+
+func (e *unboundWildcardEdge) CredentialScope() string { return "cf-ambient" }
 
 func (e *unboundWildcardEdge) Kind() edge.Kind { return cloudflare.Kind }
 

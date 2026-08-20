@@ -8,11 +8,21 @@ import (
 	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
 	"github.com/ocelhq/ocel/platform/aws/provider/bootstrap"
 	"github.com/ocelhq/ocel/platform/aws/provider/certs"
+	"github.com/ocelhq/ocel/platform/aws/provider/edges"
 	"github.com/ocelhq/ocel/platform/aws/provider/edges/apigateway"
 	"github.com/ocelhq/ocel/platform/aws/provider/edges/cloudfront"
 	cloudflare "github.com/ocelhq/ocel/platform/edge/cloudflare/deploy"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
+
+func planEdge(t *testing.T, kind edge.Kind) edge.Edge {
+	t.Helper()
+	edgeFront, err := edges.EdgeFor(kind, edges.Deps{})
+	if err != nil {
+		t.Fatalf("EdgeFor(%s): %v", kind, err)
+	}
+	return edgeFront
+}
 
 func TestRefusePreviewReleaseWhileProjectsAreServed(t *testing.T) {
 	t.Parallel()
@@ -70,10 +80,7 @@ func TestReleaseEdgeStackPlan(t *testing.T) {
 	t.Run("describes the edge that holds the wildcard, not the project asking", func(t *testing.T) {
 		t.Parallel()
 
-		plan, err := releaseEdgeStackPlan(recorded)
-		if err != nil {
-			t.Fatalf("releaseEdgeStackPlan: %v", err)
-		}
+		plan := releaseEdgeStackPlan(planEdge(t, cloudflare.Kind), recorded)
 		if plan.GetEdgeKind() != string(cloudflare.Kind) {
 			t.Errorf("edge kind = %q, want %q", plan.GetEdgeKind(), cloudflare.Kind)
 		}
@@ -83,8 +90,11 @@ func TestReleaseEdgeStackPlan(t *testing.T) {
 	t.Run("a wildcard no edge is known to hold is not planned for", func(t *testing.T) {
 		t.Parallel()
 
-		if _, err := releaseEdgeStackPlan(bootstrap.PreviewDomain{BaseDomain: "preview.acme.com"}); err == nil {
-			t.Fatal("releaseEdgeStackPlan err = nil, want the plan refused rather than describing a guessed edge's teardown")
+		_, err := previewWildcardEdge(bootstrap.PreviewDomain{BaseDomain: "preview.acme.com"}, func(kind edge.Kind) (edge.Edge, error) {
+			return planEdge(t, kind), nil
+		})
+		if err == nil {
+			t.Fatal("previewWildcardEdge err = nil, want the plan refused rather than describing a guessed edge's teardown")
 		}
 	})
 }
@@ -104,7 +114,7 @@ func TestReleasePlanItems(t *testing.T) {
 	t.Run("the CloudFront edge disables the wildcard distribution before deleting it", func(t *testing.T) {
 		t.Parallel()
 
-		items := releasePlanItems(cloudfront.Kind, recorded)
+		items := releasePlanItems(planEdge(t, cloudfront.Kind), recorded)
 		dist := itemFor(t, items, "wildcard distribution", "*.preview.acme.com")
 		if dist.GetAction() != deploymentsv1.TeardownItem_ACTION_DISABLE_THEN_DELETE || !dist.GetSlow() {
 			t.Errorf("wildcard distribution = %v (slow=%v), want DISABLE_THEN_DELETE and slow", dist.GetAction(), dist.GetSlow())
@@ -127,7 +137,7 @@ func TestReleasePlanItems(t *testing.T) {
 	t.Run("with no edge bought the wildcard domain name goes and the fallback stays", func(t *testing.T) {
 		t.Parallel()
 
-		items := releasePlanItems(apigateway.Kind, recorded)
+		items := releasePlanItems(planEdge(t, apigateway.Kind), recorded)
 		if got := itemFor(t, items, "wildcard domain name", "*.preview.acme.com").GetAction(); got != deploymentsv1.TeardownItem_ACTION_DELETE {
 			t.Errorf("wildcard domain name action = %v, want DELETE", got)
 		}
@@ -141,7 +151,7 @@ func TestReleasePlanItems(t *testing.T) {
 
 		adopted := recorded
 		adopted.Certificate = certs.Certificate{ARN: "arn:yours", Adopted: true}
-		if got := itemFor(t, releasePlanItems(cloudflare.Kind, adopted), "certificate", "arn:yours").GetAction(); got != deploymentsv1.TeardownItem_ACTION_KEEP {
+		if got := itemFor(t, releasePlanItems(planEdge(t, cloudflare.Kind), adopted), "certificate", "arn:yours").GetAction(); got != deploymentsv1.TeardownItem_ACTION_KEEP {
 			t.Errorf("adopted certificate action = %v, want KEEP", got)
 		}
 	})

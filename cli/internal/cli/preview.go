@@ -308,10 +308,10 @@ func intendedPreviewHostnames(cfg *projectconfig.Config, slug, pointer, base str
 
 func checkGlobalPreviewDomain(global *deploymentsv1.GlobalPreviewDomain, id *deploymentsv1.Identity, configName string) error {
 	base := global.GetBaseDomain()
-	if want, have := global.GetCloudflareAccount(), id.GetCloudflareAccount(); want != "" && have != "" && want != have {
-		return fmt.Errorf("the global preview domain *.%s lives in Cloudflare account %s, but this deploy is authenticated to account %s: "+
-			"a worker route can only be attached from the account that holds the zone — "+
-			"point CLOUDFLARE_ACCOUNT_ID (and CLOUDFLARE_API_TOKEN) at %s, or declare this project's own domains.preview in %s",
+	if want, have := global.GetEdgeScope(), id.GetEdgeScope(); want != "" && have != "" && want != have {
+		return fmt.Errorf("the global preview domain *.%s lives in edge account %s, but this deploy is authenticated to account %s: "+
+			"the wildcard can only be served from the account that holds it — "+
+			"re-scope this run's edge credentials to %s, or declare this project's own domains.preview in %s",
 			base, want, have, want, configName)
 	}
 	if !global.GetRouteInstalled() {
@@ -676,8 +676,8 @@ func formatIdentityBanner(id *deploymentsv1.Identity) string {
 		fmt.Fprintf(&b, "  AWS         %s\n", line)
 		wrote = true
 	}
-	if acct := id.GetCloudflareAccount(); acct != "" {
-		fmt.Fprintf(&b, "  Cloudflare  account=%s\n", acct)
+	if scope := id.GetEdgeScope(); scope != "" {
+		fmt.Fprintf(&b, "  Edge        account=%s\n", scope)
 		wrote = true
 	}
 	if !wrote {

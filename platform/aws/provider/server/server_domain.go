@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"os"
 	"slices"
 	"strings"
 
@@ -19,11 +18,8 @@ import (
 	"github.com/ocelhq/ocel/platform/aws/provider/certs"
 	"github.com/ocelhq/ocel/platform/aws/provider/deploy"
 	"github.com/ocelhq/ocel/platform/aws/provider/dns"
-	cloudflare "github.com/ocelhq/ocel/platform/edge/cloudflare/deploy"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
-
-const cloudflareAccountEnvVar = "CLOUDFLARE_ACCOUNT_ID"
 
 func (s *Server) UseDomain(ctx context.Context, req *deploymentsv1.UseDomainRequest, stream *connect.ServerStream[deploymentsv1.DeployEvent]) error {
 	progress := func(m string) { _ = stream.Send(progressEvent(m)) }
@@ -146,13 +142,13 @@ func useDomain(ctx context.Context, run domainRun, recorded bootstrap.PreviewDom
 	wildcard := edge.PreviewWildcard(baseDomain)
 
 	domain := bootstrap.PreviewDomain{
-		BaseDomain:        baseDomain,
-		Edge:              run.edge.Kind(),
-		CloudflareAccount: cloudflareAccountOf(run.edge.Kind()),
-		GrammarMin:        edge.PreviewGrammarMin,
-		GrammarMax:        edge.PreviewGrammarMax,
-		Certificate:       recorded.Certificate,
-		Probe:             recorded.Probe,
+		BaseDomain:  baseDomain,
+		Edge:        run.edge.Kind(),
+		Scope:       edge.CredentialScope(run.edge),
+		GrammarMin:  edge.PreviewGrammarMin,
+		GrammarMax:  edge.PreviewGrammarMax,
+		Certificate: recorded.Certificate,
+		Probe:       recorded.Probe,
 	}
 	validation := recorded.Certificate.Validation
 	certWritten, hostWritten := recordsAmong(recorded.Records, validation)
@@ -282,10 +278,13 @@ func (s *Server) PlanReleaseDomain(ctx context.Context, req *deploymentsv1.PlanR
 	if recorded.BaseDomain == "" {
 		return &deploymentsv1.PlanReleaseDomainResponse{}, nil
 	}
-	plan, err := releaseEdgeStackPlan(recorded)
+	edgeFront, err := previewWildcardEdge(recorded, func(kind edge.Kind) (edge.Edge, error) {
+		return s.edge(kind, awscfg.Region)
+	})
 	if err != nil {
 		return nil, connect.NewError(connect.CodeFailedPrecondition, err)
 	}
+	plan := releaseEdgeStackPlan(edgeFront, recorded)
 	if err := refusePreviewReleaseWhileServed(ctx, ssmClient, recorded.BaseDomain, s.livePreviewStacks(awscfg)); err != nil {
 		return nil, connect.NewError(connect.CodeFailedPrecondition, err)
 	}
@@ -480,7 +479,7 @@ func globalPreviewDomain(ctx context.Context, owner routeOwnerFunc, recorded boo
 	}
 	return &deploymentsv1.GlobalPreviewDomain{
 		BaseDomain:        recorded.BaseDomain,
-		CloudflareAccount: recorded.CloudflareAccount,
+		EdgeScope:         recorded.Scope,
 		GrammarMin:        recorded.GrammarMin,
 		GrammarMax:        recorded.GrammarMax,
 		RouteInstalled:    sharedEntryRouteInstalled(ctx, owner, recorded.BaseDomain),
@@ -518,13 +517,6 @@ func sharedEntryRouteInstalled(ctx context.Context, owner routeOwnerFunc, baseDo
 		return false
 	}
 	return script == edge.PreviewEntryOwner
-}
-
-func cloudflareAccountOf(kind edge.Kind) string {
-	if kind != cloudflare.Kind {
-		return ""
-	}
-	return os.Getenv(cloudflareAccountEnvVar)
 }
 
 func previewWildcardOwner(recorded bootstrap.PreviewDomain, ownerFor func(edge.Kind) routeOwnerFunc) routeOwnerFunc {
@@ -571,14 +563,14 @@ func refuseRehomingPreviewWildcard(recorded bootstrap.PreviewDomain, kind edge.K
 	)
 }
 
-func globalPreviewAccountMismatch(recorded bootstrap.PreviewDomain) error {
-	ambient := os.Getenv(cloudflareAccountEnvVar)
-	if recorded.BaseDomain == "" || recorded.CloudflareAccount == "" || ambient == "" || recorded.CloudflareAccount == ambient {
+func globalPreviewScopeMismatch(recorded bootstrap.PreviewDomain, edgeFront edge.Edge) error {
+	ambient := edge.CredentialScope(edgeFront)
+	if recorded.BaseDomain == "" || recorded.Scope == "" || ambient == "" || recorded.Scope == ambient {
 		return nil
 	}
 	return fmt.Errorf(
-		"the global preview domain %q was claimed in Cloudflare account %s, but %s is %s: this deploy would publish previews the entry worker on %q cannot serve — point %s at %s, or release the domain with `ocel domain release --preview` and use it again from this account",
-		recorded.BaseDomain, recorded.CloudflareAccount, cloudflareAccountEnvVar, ambient,
-		edge.PreviewWildcard(recorded.BaseDomain), cloudflareAccountEnvVar, recorded.CloudflareAccount,
+		"the global preview domain %q was claimed under %s account %s, but this run's %s credentials are scoped to account %s: this deploy would publish previews the entry worker on %q cannot serve — re-scope the %s credentials to account %s, or release the domain with `ocel domain release --preview` and use it again from this account",
+		recorded.BaseDomain, edgeFront.Kind(), recorded.Scope, edgeFront.Kind(), ambient,
+		edge.PreviewWildcard(recorded.BaseDomain), edgeFront.Kind(), recorded.Scope,
 	)
 }

@@ -156,6 +156,54 @@ func (p *provider) FlipBound() edge.FlipBound {
 
 func (p *provider) CertificateRegion(apiRegion string) string { return apiRegion }
 
+func (p *provider) SignsOriginForwards() bool { return true }
+
+func (p *provider) ProjectSurfaces(scope edge.ProjectScope) []edge.Surface {
+	surfaces := []edge.Surface{{
+		Kind:   "REST APIs",
+		Name:   scope.Slug,
+		Action: edge.SurfaceDelete,
+		Reason: restAPIsReason(scope.Class),
+		Slow:   true,
+	}}
+	if len(scope.Hostnames) > 0 {
+		surfaces = append(surfaces, edge.Surface{
+			Kind:   "domain names",
+			Name:   strings.Join(scope.Hostnames, ", "),
+			Action: edge.SurfaceDelete,
+			Reason: "the API Gateway domain name each hostname is mapped onto",
+		})
+	}
+	return surfaces
+}
+
+func restAPIsReason(class edge.Class) string {
+	const paced = "; API Gateway deletes at most one REST API every 30 seconds per account, so a project with many previews takes a while"
+	if class == edge.ClassPreview {
+		return "every preview API this project is served through, and the host rules routing to them" + paced
+	}
+	return "the production API and every preview API this project is served through, and the host rules routing to them" + paced
+}
+
+func (p *provider) PreviewWildcardSurfaces(wildcard string) (edge.Surface, edge.Surface) {
+	removed := edge.Surface{
+		Kind:   "wildcard domain name",
+		Name:   wildcard,
+		Action: edge.SurfaceDelete,
+		Reason: "the API Gateway domain name every project's previews are routed through, and the rules under it",
+	}
+	return removed, p.SharedPreviewSurface()
+}
+
+func (p *provider) SharedPreviewSurface() edge.Surface {
+	return edge.Surface{
+		Kind:   "preview fallback API",
+		Name:   "404 responder",
+		Action: edge.SurfaceKeep,
+		Reason: "substrate-scoped: it answers every preview hostname no project claims",
+	}
+}
+
 func (p *provider) clientsFor(ctx context.Context) (Clients, error) {
 	p.mu.Lock()
 	defer p.mu.Unlock()

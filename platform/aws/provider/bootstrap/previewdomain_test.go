@@ -27,8 +27,8 @@ func TestPreviewDomainHolder(t *testing.T) {
 		wantHas bool
 	}{
 		{"the recorded edge holds it", PreviewDomain{BaseDomain: "preview.acme.com", Edge: "fronted-edge"}, edge.Kind("fronted-edge"), true},
-		{"a recorded Cloudflare account names Cloudflare", PreviewDomain{BaseDomain: "preview.acme.com", CloudflareAccount: "cf-owner"}, cloudflare.Kind, true},
-		{"the recorded edge outranks the account", PreviewDomain{BaseDomain: "preview.acme.com", Edge: cloudflare.Kind, CloudflareAccount: "cf-owner"}, cloudflare.Kind, true},
+		{"a scope alone names no holder", PreviewDomain{BaseDomain: "preview.acme.com", Scope: "cf-owner"}, "", false},
+		{"the recorded edge carries its scope", PreviewDomain{BaseDomain: "preview.acme.com", Edge: cloudflare.Kind, Scope: "cf-owner"}, cloudflare.Kind, true},
 		{"nothing names a holder", PreviewDomain{BaseDomain: "preview.acme.com"}, "", false},
 	}
 	for _, tc := range cases {
@@ -49,12 +49,12 @@ func TestPreviewDomainParam(t *testing.T) {
 		t.Parallel()
 		fake := newFakeSSM()
 		want := PreviewDomain{
-			BaseDomain:        "preview.acme.com",
-			CloudflareAccount: "acct",
-			GrammarMin:        1,
-			GrammarMax:        1,
-			Records:           []edge.Record{{Name: "*.preview.acme.com", Type: edge.RecordTypeAAAA, Value: edge.ProxyPlaceholder, Proxied: true}},
-			Owed:              []edge.Record{{Name: "_ocel.preview.acme.com", Type: edge.RecordTypeCNAME, Value: "_target.acm-validations.aws"}},
+			BaseDomain: "preview.acme.com",
+			Scope:      "acct",
+			GrammarMin: 1,
+			GrammarMax: 1,
+			Records:    []edge.Record{{Name: "*.preview.acme.com", Type: edge.RecordTypeAAAA, Value: edge.ProxyPlaceholder, Proxied: true}},
+			Owed:       []edge.Record{{Name: "_ocel.preview.acme.com", Type: edge.RecordTypeCNAME, Value: "_target.acm-validations.aws"}},
 			Certificate: certs.Certificate{
 				ARN:    "arn:aws:acm:us-east-1:111122223333:certificate/abcd-1234",
 				Region: certs.CloudFrontRegion,
@@ -123,14 +123,14 @@ func TestReadClassParamsPreviewDomain(t *testing.T) {
 		t.Parallel()
 		fake := &fakeBatchSSM{params: map[string]string{
 			PassphraseParamName:    "pass",
-			PreviewDomainParamName: `{"baseDomain":"preview.acme.com","cloudflareAccount":"acct","grammarMin":1,"grammarMax":1}`,
+			PreviewDomainParamName: `{"baseDomain":"preview.acme.com","scope":"acct","grammarMin":1,"grammarMax":1}`,
 		}}
 
 		params, err := ReadClassParams(context.Background(), fake, ClassPreview, "proj")
 		if err != nil {
 			t.Fatalf("ReadClassParams: %v", err)
 		}
-		if params.PreviewDomain.BaseDomain != "preview.acme.com" || params.PreviewDomain.CloudflareAccount != "acct" {
+		if params.PreviewDomain.BaseDomain != "preview.acme.com" || params.PreviewDomain.Scope != "acct" {
 			t.Errorf("PreviewDomain = %+v", params.PreviewDomain)
 		}
 		if fake.calls != 1 {

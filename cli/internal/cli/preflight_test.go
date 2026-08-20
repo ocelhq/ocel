@@ -14,13 +14,13 @@ func TestFormatIdentityBanner(t *testing.T) {
 		t.Parallel()
 
 		got := formatIdentityBanner(&deploymentsv1.Identity{
-			AwsProfile:        "default",
-			AwsAccount:        "123456789012",
-			AwsRegion:         "us-east-1",
-			AwsArn:            "arn:aws:iam::123456789012:user/deploy",
-			CloudflareAccount: "abcd1234",
+			AwsProfile: "default",
+			AwsAccount: "123456789012",
+			AwsRegion:  "us-east-1",
+			AwsArn:     "arn:aws:iam::123456789012:user/deploy",
+			EdgeScope:  "abcd1234",
 		})
-		for _, want := range []string{"Running with:", "profile=default", "account=123456789012", "region=us-east-1", "Cloudflare", "abcd1234"} {
+		for _, want := range []string{"Running with:", "profile=default", "account=123456789012", "region=us-east-1", "Edge", "abcd1234"} {
 			if !strings.Contains(got, want) {
 				t.Errorf("banner missing %q:\n%s", want, got)
 			}

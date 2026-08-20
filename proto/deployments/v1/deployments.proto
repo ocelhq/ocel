@@ -506,7 +506,7 @@ message PreflightResponse {
 message GlobalPreviewDomain {
   string base_domain = 1;
 
-  string cloudflare_account = 2;
+  string edge_scope = 2;
 
   uint32 grammar_min = 3;
 
@@ -549,7 +549,7 @@ message Identity {
   string aws_region = 3;
   string aws_arn = 4;
 
-  string cloudflare_account = 5;
+  string edge_scope = 5;
 }
 
 message CredentialProblem {

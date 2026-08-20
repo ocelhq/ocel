@@ -14,7 +14,6 @@ import (
 	ssmtypes "github.com/aws/aws-sdk-go-v2/service/ssm/types"
 
 	"github.com/ocelhq/ocel/platform/aws/provider/certs"
-	cloudflare "github.com/ocelhq/ocel/platform/edge/cloudflare/deploy"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
@@ -41,26 +40,22 @@ const (
 )
 
 type PreviewDomain struct {
-	BaseDomain        string            `json:"baseDomain"`
-	Edge              edge.Kind         `json:"edge"`
-	CloudflareAccount string            `json:"cloudflareAccount"`
-	GrammarMin        uint32            `json:"grammarMin"`
-	GrammarMax        uint32            `json:"grammarMax"`
-	Records           []edge.Record     `json:"records,omitempty"`
-	Owed              []edge.Record     `json:"owed,omitempty"`
-	Certificate       certs.Certificate `json:"certificate,omitzero"`
-	Probe             certs.Probe       `json:"probe,omitzero"`
+	BaseDomain  string            `json:"baseDomain"`
+	Edge        edge.Kind         `json:"edge"`
+	Scope       string            `json:"scope"`
+	GrammarMin  uint32            `json:"grammarMin"`
+	GrammarMax  uint32            `json:"grammarMax"`
+	Records     []edge.Record     `json:"records,omitempty"`
+	Owed        []edge.Record     `json:"owed,omitempty"`
+	Certificate certs.Certificate `json:"certificate,omitzero"`
+	Probe       certs.Probe       `json:"probe,omitzero"`
 }
 
 func (d PreviewDomain) Holder() (edge.Kind, bool) {
-	switch {
-	case d.Edge != "":
+	if d.Edge != "" {
 		return d.Edge, true
-	case d.CloudflareAccount != "":
-		return cloudflare.Kind, true
-	default:
-		return "", false
 	}
+	return "", false
 }
 
 func previewDomainParamFor(class string) (string, error) {
@@ -81,7 +76,7 @@ func WritePreviewDomain(ctx context.Context, ssmClient SSMAPI, class string, dom
 	}
 	if _, err := ssmClient.PutParameter(ctx, &ssm.PutParameterInput{
 		Name:        aws.String(paramName),
-		Description: aws.String("Ocel: the domain every project without a preview domain of its own serves its previews on, and the Cloudflare account the shared entry worker holding its wildcard lives in. Written by `ocel domain use --preview` and read on every preview deploy. Delete it and those projects lose their preview hostnames until the domain is used again."),
+		Description: aws.String("Ocel: the domain every project without a preview domain of its own serves its previews on, and the edge account scope the shared entry holding its wildcard lives in. Written by `ocel domain use --preview` and read on every preview deploy. Delete it and those projects lose their preview hostnames until the domain is used again."),
 		Value:       aws.String(string(payload)),
 		Type:        ssmtypes.ParameterTypeSecureString,
 		Overwrite:   aws.Bool(true),

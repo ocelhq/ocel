@@ -36,7 +36,7 @@ func routedConfig(t *testing.T, kind edge.Kind) Config {
 		AssetBucket:       "assets-bucket",
 		ImageOptimizerURL: "https://optimizer.lambda-url.us-east-1.on.aws/",
 		Slug:              "shop",
-		Edge:              &recordingEdge{kind: kind},
+		Edge:              fakeEdgeOf(kind),
 	}
 }
 

@@ -15,7 +15,6 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/naming"
 	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
-	cloudflare "github.com/ocelhq/ocel/platform/edge/cloudflare/deploy"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
@@ -58,7 +57,10 @@ func withOverlay(base, extra map[string][]byte) map[string][]byte {
 }
 
 func resolveRouterHost(cfg Config, app *deploymentsv1.ManifestApp, coord naming.Coordinate, deploymentID string) (*routerHost, error) {
-	if cfg.Edge == nil || cfg.Edge.Kind() == cloudflare.Kind {
+	if cfg.Edge == nil {
+		return nil, nil
+	}
+	if _, programmable := cfg.Edge.(edge.Programmable); programmable {
 		return nil, nil
 	}
 	name := app.GetName()

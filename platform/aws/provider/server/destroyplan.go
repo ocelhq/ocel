@@ -2,18 +2,14 @@ package server
 
 import (
 	"fmt"
-	"strings"
 
 	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
 	"github.com/ocelhq/ocel/platform/aws/provider/bootstrap"
 	"github.com/ocelhq/ocel/platform/aws/provider/certs"
-	"github.com/ocelhq/ocel/platform/aws/provider/edges/cloudfront"
-	cloudflare "github.com/ocelhq/ocel/platform/edge/cloudflare/deploy"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
 type projectPlanScope struct {
-	kind       edge.Kind
 	class      string
 	slug       string
 	stateTable string
@@ -21,7 +17,7 @@ type projectPlanScope struct {
 	state      edge.StackState
 }
 
-func destroyPlanItems(scope projectPlanScope) ([]*deploymentsv1.TeardownItem, error) {
+func destroyPlanItems(edgeFront edge.Edge, scope projectPlanScope) ([]*deploymentsv1.TeardownItem, error) {
 	recorded, err := bootstrap.ReadProduction(scope.state)
 	if err != nil {
 		return nil, err
@@ -31,83 +27,46 @@ func destroyPlanItems(scope projectPlanScope) ([]*deploymentsv1.TeardownItem, er
 		return nil, err
 	}
 
-	items := surfaceItems(scope)
+	items := surfaceItems(edgeFront, scope)
 	items = append(items, certificateItems(recorded)...)
 	items = append(items, recordItems(written, recorded)...)
-	items = append(items, storeItems(scope)...)
-	return append(items, substrateItems(scope)...), nil
+	items = append(items, storeItems(edgeFront, scope)...)
+	return append(items, substrateItems(edgeFront, scope)...), nil
 }
 
-func surfaceItems(scope projectPlanScope) []*deploymentsv1.TeardownItem {
-	hostnames := edge.BoundDomains(scope.state)
-	switch scope.kind {
-	case cloudflare.Kind:
-		items := []*deploymentsv1.TeardownItem{{
-			Kind:   "edge workers",
-			Name:   scope.slug,
-			Action: deploymentsv1.TeardownItem_ACTION_DELETE,
-			Reason: "every per-app worker this project deployed, and the routes that reach them",
-		}}
-		if len(hostnames) > 0 {
-			items = append(items, &deploymentsv1.TeardownItem{
-				Kind:   "worker routes",
-				Name:   strings.Join(hostnames, ", "),
-				Action: deploymentsv1.TeardownItem_ACTION_DELETE,
-				Reason: "the hostnames this project is served on stop resolving to a worker",
-			})
-		}
-		return append(items, &deploymentsv1.TeardownItem{
-			Kind:   "deployments store",
-			Name:   scope.slug,
-			Action: deploymentsv1.TeardownItem_ACTION_DELETE,
-			Reason: "the store instance holding every deployment and pointer this project promoted",
-		})
-	case cloudfront.Kind:
-		var items []*deploymentsv1.TeardownItem
-		if front := edge.FrontOf(scope.state); front != "" {
-			items = append(items, &deploymentsv1.TeardownItem{
-				Kind:   "distribution",
-				Name:   front,
-				Action: deploymentsv1.TeardownItem_ACTION_DISABLE_THEN_DELETE,
-				Reason: "the CloudFront distribution fronting this project; CloudFront only deletes a disabled distribution once the disable has reached every edge",
-				Slow:   true,
-			})
-		}
-		if len(hostnames) > 0 {
-			items = append(items, &deploymentsv1.TeardownItem{
-				Kind:   "edge routes",
-				Name:   strings.Join(hostnames, ", "),
-				Action: deploymentsv1.TeardownItem_ACTION_DELETE,
-				Reason: "the key-value store entry the resolver reads for each of this project's hostnames",
-			})
-		}
-		return items
+func surfaceItems(edgeFront edge.Edge, scope projectPlanScope) []*deploymentsv1.TeardownItem {
+	surfaces := edgeFront.ProjectSurfaces(edge.ProjectScope{
+		Slug:      scope.slug,
+		Class:     edge.Class(scope.class),
+		Hostnames: edge.BoundDomains(scope.state),
+		Front:     edge.FrontOf(scope.state),
+	})
+	items := make([]*deploymentsv1.TeardownItem, 0, len(surfaces))
+	for _, surface := range surfaces {
+		items = append(items, surfaceItem(surface))
+	}
+	return items
+}
+
+func surfaceItem(surface edge.Surface) *deploymentsv1.TeardownItem {
+	return &deploymentsv1.TeardownItem{
+		Kind:   surface.Kind,
+		Name:   surface.Name,
+		Action: surfaceAction(surface.Action),
+		Reason: surface.Reason,
+		Slow:   surface.Slow,
+	}
+}
+
+func surfaceAction(action edge.SurfaceAction) deploymentsv1.TeardownItem_Action {
+	switch action {
+	case edge.SurfaceKeep:
+		return deploymentsv1.TeardownItem_ACTION_KEEP
+	case edge.SurfaceDisableThenDelete:
+		return deploymentsv1.TeardownItem_ACTION_DISABLE_THEN_DELETE
 	default:
-		items := []*deploymentsv1.TeardownItem{{
-			Kind:   "REST APIs",
-			Name:   scope.slug,
-			Action: deploymentsv1.TeardownItem_ACTION_DELETE,
-			Reason: restAPIsReason(scope.class),
-			Slow:   true,
-		}}
-		if len(hostnames) > 0 {
-			items = append(items, &deploymentsv1.TeardownItem{
-				Kind:   "domain names",
-				Name:   strings.Join(hostnames, ", "),
-				Action: deploymentsv1.TeardownItem_ACTION_DELETE,
-				Reason: "the API Gateway domain name each hostname is mapped onto",
-			})
-		}
-		return items
+		return deploymentsv1.TeardownItem_ACTION_DELETE
 	}
-}
-
-func restAPIsReason(class string) string {
-	const paced = "; API Gateway deletes at most one REST API every 30 seconds per account, so a project with many previews takes a while"
-	if class == bootstrap.ClassPreview {
-		return "every preview API this project is served through, and the host rules routing to them" + paced
-	}
-	return "the production API and every preview API this project is served through, and the host rules routing to them" + paced
 }
 
 func certificateItems(recorded bootstrap.Production) []*deploymentsv1.TeardownItem {
@@ -200,9 +159,9 @@ func containsRecord(records []edge.Record, wanted edge.Record) bool {
 	return false
 }
 
-func storeItems(scope projectPlanScope) []*deploymentsv1.TeardownItem {
+func storeItems(edgeFront edge.Edge, scope projectPlanScope) []*deploymentsv1.TeardownItem {
 	var items []*deploymentsv1.TeardownItem
-	if scope.kind != cloudflare.Kind {
+	if _, programmable := edgeFront.(edge.Programmable); !programmable {
 		items = append(items, &deploymentsv1.TeardownItem{
 			Kind:   "deployments ledger",
 			Name:   scope.class + "/" + scope.slug,
@@ -221,7 +180,7 @@ func storeItems(scope projectPlanScope) []*deploymentsv1.TeardownItem {
 	})
 }
 
-func substrateItems(scope projectPlanScope) []*deploymentsv1.TeardownItem {
+func substrateItems(edgeFront edge.Edge, scope projectPlanScope) []*deploymentsv1.TeardownItem {
 	keep := &deploymentsv1.TeardownItem{
 		Kind:   "state table",
 		Name:   scope.stateTable,
@@ -241,31 +200,5 @@ func substrateItems(scope projectPlanScope) []*deploymentsv1.TeardownItem {
 			Reason: "substrate-scoped: every project's previews are served on it — `ocel domain release --preview` releases it",
 		})
 	}
-	return append(items, sharedEdgeItem(scope.kind))
-}
-
-func sharedEdgeItem(kind edge.Kind) *deploymentsv1.TeardownItem {
-	switch kind {
-	case cloudflare.Kind:
-		return &deploymentsv1.TeardownItem{
-			Kind:   "shared preview entry worker",
-			Name:   edge.PreviewEntryOwner,
-			Action: deploymentsv1.TeardownItem_ACTION_KEEP,
-			Reason: "substrate-scoped: it fronts every project's previews",
-		}
-	case cloudfront.Kind:
-		return &deploymentsv1.TeardownItem{
-			Kind:   "preview resolver",
-			Name:   "function and key-value store",
-			Action: deploymentsv1.TeardownItem_ACTION_KEEP,
-			Reason: "substrate-scoped: every project's routes are read from it",
-		}
-	default:
-		return &deploymentsv1.TeardownItem{
-			Kind:   "preview fallback API",
-			Name:   "404 responder",
-			Action: deploymentsv1.TeardownItem_ACTION_KEEP,
-			Reason: "substrate-scoped: it answers every preview hostname no project claims",
-		}
-	}
+	return append(items, surfaceItem(edgeFront.SharedPreviewSurface()))
 }

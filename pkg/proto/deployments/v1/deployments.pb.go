@@ -3337,7 +3337,7 @@ func (x *PreflightResponse) GetGlobalPreviewDomain() *GlobalPreviewDomain {
 type GlobalPreviewDomain struct {
 	state             protoimpl.MessageState `protogen:"open.v1"`
 	BaseDomain        string                 `protobuf:"bytes,1,opt,name=base_domain,json=baseDomain,proto3" json:"base_domain,omitempty"`
-	CloudflareAccount string                 `protobuf:"bytes,2,opt,name=cloudflare_account,json=cloudflareAccount,proto3" json:"cloudflare_account,omitempty"`
+	EdgeScope         string                 `protobuf:"bytes,2,opt,name=edge_scope,json=edgeScope,proto3" json:"edge_scope,omitempty"`
 	GrammarMin        uint32                 `protobuf:"varint,3,opt,name=grammar_min,json=grammarMin,proto3" json:"grammar_min,omitempty"`
 	GrammarMax        uint32                 `protobuf:"varint,4,opt,name=grammar_max,json=grammarMax,proto3" json:"grammar_max,omitempty"`
 	RouteInstalled    bool                   `protobuf:"varint,5,opt,name=route_installed,json=routeInstalled,proto3" json:"route_installed,omitempty"`
@@ -3389,9 +3389,9 @@ func (x *GlobalPreviewDomain) GetBaseDomain() string {
 	return ""
 }
 
-func (x *GlobalPreviewDomain) GetCloudflareAccount() string {
+func (x *GlobalPreviewDomain) GetEdgeScope() string {
 	if x != nil {
-		return x.CloudflareAccount
+		return x.EdgeScope
 	}
 	return ""
 }
@@ -3527,14 +3527,14 @@ func (x *DomainClaim) GetOwner() string {
 }
 
 type Identity struct {
-	state             protoimpl.MessageState `protogen:"open.v1"`
-	AwsAccount        string                 `protobuf:"bytes,1,opt,name=aws_account,json=awsAccount,proto3" json:"aws_account,omitempty"`
-	AwsProfile        string                 `protobuf:"bytes,2,opt,name=aws_profile,json=awsProfile,proto3" json:"aws_profile,omitempty"`
-	AwsRegion         string                 `protobuf:"bytes,3,opt,name=aws_region,json=awsRegion,proto3" json:"aws_region,omitempty"`
-	AwsArn            string                 `protobuf:"bytes,4,opt,name=aws_arn,json=awsArn,proto3" json:"aws_arn,omitempty"`
-	CloudflareAccount string                 `protobuf:"bytes,5,opt,name=cloudflare_account,json=cloudflareAccount,proto3" json:"cloudflare_account,omitempty"`
-	unknownFields     protoimpl.UnknownFields
-	sizeCache         protoimpl.SizeCache
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	AwsAccount    string                 `protobuf:"bytes,1,opt,name=aws_account,json=awsAccount,proto3" json:"aws_account,omitempty"`
+	AwsProfile    string                 `protobuf:"bytes,2,opt,name=aws_profile,json=awsProfile,proto3" json:"aws_profile,omitempty"`
+	AwsRegion     string                 `protobuf:"bytes,3,opt,name=aws_region,json=awsRegion,proto3" json:"aws_region,omitempty"`
+	AwsArn        string                 `protobuf:"bytes,4,opt,name=aws_arn,json=awsArn,proto3" json:"aws_arn,omitempty"`
+	EdgeScope     string                 `protobuf:"bytes,5,opt,name=edge_scope,json=edgeScope,proto3" json:"edge_scope,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *Identity) Reset() {
@@ -3595,9 +3595,9 @@ func (x *Identity) GetAwsArn() string {
 	return ""
 }
 
-func (x *Identity) GetCloudflareAccount() string {
+func (x *Identity) GetEdgeScope() string {
 	if x != nil {
-		return x.CloudflareAccount
+		return x.EdgeScope
 	}
 	return ""
 }
@@ -5835,11 +5835,12 @@ const file_deployments_v1_deployments_proto_rawDesc = "" +
 	"\vknown_slugs\x18\x05 \x03(\tR\n" +
 	"knownSlugs\x12@\n" +
 	"\rdomain_claims\x18\x06 \x03(\v2\x1b.deployments.v1.DomainClaimR\fdomainClaims\x12W\n" +
-	"\x15global_preview_domain\x18\a \x01(\v2#.deployments.v1.GlobalPreviewDomainR\x13globalPreviewDomain\"\xe2\x03\n" +
+	"\x15global_preview_domain\x18\a \x01(\v2#.deployments.v1.GlobalPreviewDomainR\x13globalPreviewDomain\"\xd2\x03\n" +
 	"\x13GlobalPreviewDomain\x12\x1f\n" +
 	"\vbase_domain\x18\x01 \x01(\tR\n" +
-	"baseDomain\x12-\n" +
-	"\x12cloudflare_account\x18\x02 \x01(\tR\x11cloudflareAccount\x12\x1f\n" +
+	"baseDomain\x12\x1d\n" +
+	"\n" +
+	"edge_scope\x18\x02 \x01(\tR\tedgeScope\x12\x1f\n" +
 	"\vgrammar_min\x18\x03 \x01(\rR\n" +
 	"grammarMin\x12\x1f\n" +
 	"\vgrammar_max\x18\x04 \x01(\rR\n" +
@@ -5860,7 +5861,7 @@ const file_deployments_v1_deployments_proto_rawDesc = "" +
 	"\x06Status\x12\x16\n" +
 	"\x12STATUS_UNSPECIFIED\x10\x00\x12\x14\n" +
 	"\x10STATUS_UNCLAIMED\x10\x01\x12\x12\n" +
-	"\x0eSTATUS_CLAIMED\x10\x02\"\xb3\x01\n" +
+	"\x0eSTATUS_CLAIMED\x10\x02\"\xa3\x01\n" +
 	"\bIdentity\x12\x1f\n" +
 	"\vaws_account\x18\x01 \x01(\tR\n" +
 	"awsAccount\x12\x1f\n" +
@@ -5868,8 +5869,9 @@ const file_deployments_v1_deployments_proto_rawDesc = "" +
 	"awsProfile\x12\x1d\n" +
 	"\n" +
 	"aws_region\x18\x03 \x01(\tR\tawsRegion\x12\x17\n" +
-	"\aaws_arn\x18\x04 \x01(\tR\x06awsArn\x12-\n" +
-	"\x12cloudflare_account\x18\x05 \x01(\tR\x11cloudflareAccount\"]\n" +
+	"\aaws_arn\x18\x04 \x01(\tR\x06awsArn\x12\x1d\n" +
+	"\n" +
+	"edge_scope\x18\x05 \x01(\tR\tedgeScope\"]\n" +
 	"\x11CredentialProblem\x12\x1a\n" +
 	"\bprovider\x18\x01 \x01(\tR\bprovider\x12\x18\n" +
 	"\amessage\x18\x02 \x01(\tR\amessage\x12\x12\n" +

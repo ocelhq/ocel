@@ -340,7 +340,7 @@ func (p *provider) resolveZone(ctx context.Context, accountID, hostname string) 
 		return "", "", err
 	}
 	for _, z := range owned {
-		if zoneOwns(hostname, z.name) && len(z.name) > len(name) {
+		if edge.ZoneOwns(hostname, z.name) && len(z.name) > len(name) {
 			id, name = z.id, z.name
 		}
 	}
@@ -348,8 +348,4 @@ func (p *provider) resolveZone(ctx context.Context, accountID, hostname string) 
 		return "", "", fmt.Errorf("no Cloudflare zone in this account owns %q — add its zone to the account whose CLOUDFLARE_API_TOKEN you provided", hostname)
 	}
 	return id, name, nil
-}
-
-func zoneOwns(hostname, zone string) bool {
-	return hostname == zone || strings.HasSuffix(hostname, "."+zone)
 }

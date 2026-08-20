@@ -67,12 +67,12 @@ func (s *Server) Preflight(ctx context.Context, req *deploymentsv1.PreflightRequ
 	if v, ok := edgeFront.(edge.CredentialVerifier); ok {
 		if id, err := v.VerifyCredentials(ctx); err != nil {
 			resp.CredentialProblems = append(resp.CredentialProblems, &deploymentsv1.CredentialProblem{
-				Provider: "Cloudflare",
+				Provider: string(edgeFront.Kind()),
 				Message:  err.Error(),
-				Hint:     "set CLOUDFLARE_API_TOKEN and CLOUDFLARE_ACCOUNT_ID to a token with access to that account",
+				Hint:     fmt.Sprintf("give this run credentials the %s edge accepts", edgeFront.Kind()),
 			})
 		} else {
-			resp.Identity.CloudflareAccount = id.Account
+			resp.Identity.EdgeScope = id.Account
 		}
 	}
 
@@ -103,7 +103,7 @@ func (s *Server) Preflight(ctx context.Context, req *deploymentsv1.PreflightRequ
 			if err != nil {
 				return nil, err
 			}
-			if err := globalPreviewProblem(recorded, req); err != nil {
+			if err := globalPreviewProblem(recorded, req, edgeFront); err != nil {
 				return nil, connect.NewError(connect.CodeFailedPrecondition, err)
 			}
 			if recorded.BaseDomain != "" {
@@ -116,7 +116,7 @@ func (s *Server) Preflight(ctx context.Context, req *deploymentsv1.PreflightRequ
 	return resp, nil
 }
 
-func globalPreviewProblem(recorded bootstrap.PreviewDomain, req *deploymentsv1.PreflightRequest) error {
+func globalPreviewProblem(recorded bootstrap.PreviewDomain, req *deploymentsv1.PreflightRequest, edgeFront edge.Edge) error {
 	servesOnSharedWildcard := req.GetSlug() != "" && len(req.GetDomains()) == 0
 	if !servesOnSharedWildcard {
 		return nil
@@ -124,7 +124,7 @@ func globalPreviewProblem(recorded bootstrap.PreviewDomain, req *deploymentsv1.P
 	if err := globalPreviewEdgeMismatch(recorded, requestedEdge(req)); err != nil {
 		return err
 	}
-	return globalPreviewAccountMismatch(recorded)
+	return globalPreviewScopeMismatch(recorded, edgeFront)
 }
 
 func globalPreviewEdgeMismatch(recorded bootstrap.PreviewDomain, kind edge.Kind) error {

@@ -5,7 +5,6 @@ import (
 	"maps"
 
 	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
-	"github.com/ocelhq/ocel/platform/aws/provider/edges/cloudfront"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
@@ -15,7 +14,13 @@ type originGuard struct {
 }
 
 func resolveOriginGuard(cfg Config, app *deploymentsv1.ManifestApp) (*originGuard, error) {
-	if cfg.Edge == nil || cfg.Edge.Kind() != cloudfront.Kind {
+	if cfg.Edge == nil {
+		return nil, nil
+	}
+	if _, programmable := cfg.Edge.(edge.Programmable); programmable {
+		return nil, nil
+	}
+	if edge.SignsOriginForwards(cfg.Edge) {
 		return nil, nil
 	}
 	name := app.GetName()

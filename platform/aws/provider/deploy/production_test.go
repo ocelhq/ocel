@@ -1616,7 +1616,7 @@ func TestRealizeChecksNoSchemaBeforeTheStoreExists(t *testing.T) {
 	t.Parallel()
 
 	cfg := Config{
-		Edge: &recordingEdge{kind: apigateway.Kind, storeSchemaVersionErr: edge.ErrStoreAbsent},
+		Edge: unprogrammableEdge{&recordingEdge{kind: apigateway.Kind, storeSchemaVersionErr: edge.ErrStoreAbsent}},
 		Slug: "shop",
 	}
 	_, err := realize(context.Background(), cfg, &deploymentsv1.Manifest{Slug: "shop"}, nil, nil)

@@ -824,16 +824,16 @@ func TestRequirePreviewDomain(t *testing.T) {
 		}
 	})
 
-	t.Run("a Cloudflare account mismatch refuses with the account to point at", func(t *testing.T) {
+	t.Run("an edge account mismatch refuses with the account to point at", func(t *testing.T) {
 		t.Parallel()
 
-		elsewhere := &deploymentsv1.GlobalPreviewDomain{BaseDomain: "previews.ocel.dev", CloudflareAccount: "cf-owner", GrammarMin: 1, GrammarMax: 1, RouteInstalled: true}
+		elsewhere := &deploymentsv1.GlobalPreviewDomain{BaseDomain: "previews.ocel.dev", EdgeScope: "cf-owner", GrammarMin: 1, GrammarMax: 1, RouteInstalled: true}
 		var out bytes.Buffer
-		err := requirePreviewDomain(bare, elsewhere, &deploymentsv1.Identity{CloudflareAccount: "cf-other"}, "pr-1", &out)
+		err := requirePreviewDomain(bare, elsewhere, &deploymentsv1.Identity{EdgeScope: "cf-other"}, "pr-1", &out)
 		if err == nil {
 			t.Fatal("requirePreviewDomain err = nil, want an account refusal")
 		}
-		for _, want := range []string{"cf-owner", "cf-other", "CLOUDFLARE_ACCOUNT_ID"} {
+		for _, want := range []string{"cf-owner", "cf-other", "edge account"} {
 			if !strings.Contains(err.Error(), want) {
 				t.Errorf("err = %v, want it to contain %q", err, want)
 			}

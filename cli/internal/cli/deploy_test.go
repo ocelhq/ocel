@@ -540,7 +540,7 @@ export default {
 		}
 
 		out := stdout.String()
-		for _, want := range []string{"Running with:", "profile=default", "account=123456789012", "region=us-east-1", "Cloudflare  account=abcd1234"} {
+		for _, want := range []string{"Running with:", "profile=default", "account=123456789012", "region=us-east-1", "Edge        account=abcd1234"} {
 			if !strings.Contains(out, want) {
 				t.Errorf("stdout missing %q:\n%s", want, out)
 			}
