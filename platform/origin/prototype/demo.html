@@ -56,8 +56,9 @@ tr.changed td{background:var(--soft)}
 .verdict{display:flex;align-items:center;gap:10px;padding:10px 12px;border-radius:4px;margin-bottom:14px;font-weight:600}
 .verdict.ok{background:var(--good-bg);color:var(--good)}
 .verdict.no{background:var(--bad-bg);color:var(--bad)}
-.refusal{border-left:3px solid var(--bad);background:var(--bad-bg);padding:10px 12px;border-radius:0 4px 4px 0;margin-top:10px}
+.refusal{background:var(--bad-bg);padding:10px 12px;border-radius:4px;margin-top:10px}
 .refusal b{color:var(--bad)}
+.refusal b::before{content:"✕ "}
 .refusal .fix{margin-top:8px;display:flex;gap:6px;align-items:center;flex-wrap:wrap;font-size:0.9rem}
 .env{background:var(--soft);border-radius:4px;padding:10px 12px;margin-top:14px;font-size:0.8rem;white-space:pre-wrap;word-break:break-all}
 .env .sealed{color:var(--warn)}
