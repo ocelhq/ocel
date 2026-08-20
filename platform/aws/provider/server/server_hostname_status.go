@@ -11,8 +11,8 @@ import (
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
-func (s *Server) DomainStatus(ctx context.Context, req *deploymentsv1.DomainStatusRequest) (*deploymentsv1.DomainStatusResponse, error) {
-	session, err := s.domainSession(ctx, domainRequest{
+func (s *Server) GetHostnameStatus(ctx context.Context, req *deploymentsv1.GetHostnameStatusRequest) (*deploymentsv1.GetHostnameStatusResponse, error) {
+	session, err := s.hostnameSession(ctx, hostnameRequest{
 		slug:        req.GetSlug(),
 		edgeKind:    string(requestedEdge(req)),
 		dns:         requestedDNS(req),
@@ -25,9 +25,9 @@ func (s *Server) DomainStatus(ctx context.Context, req *deploymentsv1.DomainStat
 	return session.status(ctx)
 }
 
-func (d *domainSession) status(ctx context.Context) (*deploymentsv1.DomainStatusResponse, error) {
+func (d *hostnameSession) status(ctx context.Context) (*deploymentsv1.GetHostnameStatusResponse, error) {
 	lookup := newCertLookup(d.engine.Issuer, d.recorded, d.pins)
-	resp := &deploymentsv1.DomainStatusResponse{
+	resp := &deploymentsv1.GetHostnameStatusResponse{
 		Ready:          len(d.configured) > 0,
 		RecordsWritten: recordList(d.recorded.Validation.Written),
 		RecordsOwed:    recordList(d.recorded.Validation.Owed),
@@ -37,7 +37,7 @@ func (d *domainSession) status(ctx context.Context) (*deploymentsv1.DomainStatus
 		if err != nil {
 			return nil, err
 		}
-		resp.Hosts = append(resp.Hosts, row)
+		resp.Hostnames = append(resp.Hostnames, row)
 		if row.GetDeclared() && !row.GetReady() {
 			resp.Ready = false
 		}
@@ -45,7 +45,7 @@ func (d *domainSession) status(ctx context.Context) (*deploymentsv1.DomainStatus
 	return resp, nil
 }
 
-func (d *domainSession) statusHosts() []string {
+func (d *hostnameSession) statusHosts() []string {
 	hosts := slices.Clone(d.configured)
 	for _, host := range d.recorded.Hostnames() {
 		if !slices.Contains(hosts, host) {
@@ -56,9 +56,9 @@ func (d *domainSession) statusHosts() []string {
 	return hosts
 }
 
-func (d *domainSession) statusOf(ctx context.Context, lookup *certLookup, host string) (*deploymentsv1.DomainHost, error) {
+func (d *hostnameSession) statusOf(ctx context.Context, lookup *certLookup, host string) (*deploymentsv1.ProductionHostname, error) {
 	provisioned := d.recorded.Host(host)
-	row := &deploymentsv1.DomainHost{
+	row := &deploymentsv1.ProductionHostname{
 		Hostname: host,
 		Declared: slices.Contains(d.configured, host),
 	}
@@ -67,7 +67,6 @@ func (d *domainSession) statusOf(ctx context.Context, lookup *certLookup, host s
 	if err != nil {
 		return nil, err
 	}
-	row.CertificateId, row.CertificateStatus = cert.ARN, cert.Status
 	row.RenewalStatus = cert.Renewal
 	if !cert.NotAfter.IsZero() {
 		row.ExpiresAt = cert.NotAfter.Unix()
@@ -78,31 +77,27 @@ func (d *domainSession) statusOf(ctx context.Context, lookup *certLookup, host s
 	target := edge.TargetOf(d.engine.Kind, d.engine.ServesUnbound, state)
 	boundHosts := state.Bound
 	bound := slices.Contains(boundHosts, host)
-	row.RecordsWritten = recordList(provisioned.Records.Written)
+	var owed []string
 	if edge.Pointable(target, boundHosts, host) {
 		wanted, err := edge.RecordsFor(target, []string{host})
 		if err != nil {
 			return nil, err
 		}
-		row.RecordsOwed = recordList(edge.Unwritten(wanted, provisioned.Records.Written))
+		owed = recordList(edge.Unwritten(wanted, provisioned.Records.Written))
 	}
 
 	var probe certs.Probe
 	if bound {
 		probe = d.refreshProbe(ctx, host)
-		if !probe.At.IsZero() {
-			row.LastProbeAt = probe.At.Unix()
-			row.LastProbeOk = probe.OK
-			row.LastProbeEdge = string(probe.Edge)
-		}
 	}
+	row.Certificate = certificateState(cert, probe, recordList(provisioned.Records.Written), owed)
 	row.ServingPointer = d.pointer(probe)
 	row.Pending = d.pendingOn(host, cert, bound, probe)
 	row.Ready = row.GetPending() == ""
 	return row, nil
 }
 
-func (d *domainSession) refreshProbe(ctx context.Context, host string) certs.Probe {
+func (d *hostnameSession) refreshProbe(ctx context.Context, host string) certs.Probe {
 	once := d.engine.Prober
 	once.Attempts = 1
 	probe, err := once.Await(ctx, host, d.engine.Kind, nil, func(string) {})
@@ -112,14 +107,14 @@ func (d *domainSession) refreshProbe(ctx context.Context, host string) certs.Pro
 	return probe
 }
 
-func (d *domainSession) pointer(probe certs.Probe) string {
+func (d *hostnameSession) pointer(probe certs.Probe) string {
 	if probe.OK && probe.Edge != "" {
 		return string(probe.Edge)
 	}
 	return string(d.engine.Kind)
 }
 
-func (d *domainSession) pendingOn(host string, cert certs.Certificate, bound bool, probe certs.Probe) string {
+func (d *hostnameSession) pendingOn(host string, cert certs.Certificate, bound bool, probe certs.Probe) string {
 	if !slices.Contains(d.configured, host) {
 		return fmt.Sprintf("this project no longer declares %s; `ocel domain rm` gives it back", host)
 	}

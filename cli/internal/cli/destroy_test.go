@@ -58,13 +58,13 @@ func TestPrintDestroyPlan(t *testing.T) {
 		t.Parallel()
 
 		var out bytes.Buffer
-		printDestroyPlan(&out, "proj_shop", false, &deploymentsv1.PlanDestroyProjectResponse{
+		printDestroyPlan(&out, "proj_shop", false, &deploymentsv1.PlanRemoveProjectResponse{
 			EdgeStack: &deploymentsv1.EdgeStackPlan{
 				EdgeKind: "cloudflare",
-				Items: []*deploymentsv1.TeardownItem{
-					{Kind: "edge stack", Name: "shop", Action: deploymentsv1.TeardownItem_ACTION_DELETE},
-					{Kind: "distribution", Name: "E1SHOP", Action: deploymentsv1.TeardownItem_ACTION_DISABLE_THEN_DELETE, Slow: true},
-					{Kind: "certificate", Name: "shop.example.com", Action: deploymentsv1.TeardownItem_ACTION_KEEP, Reason: "you pinned this certificate"},
+				Items: []*deploymentsv1.RemovalItem{
+					{Kind: "edge stack", Name: "shop", Action: deploymentsv1.RemovalItem_ACTION_DELETE},
+					{Kind: "distribution", Name: "E1SHOP", Action: deploymentsv1.RemovalItem_ACTION_DISABLE_THEN_DELETE, Slow: true},
+					{Kind: "certificate", Name: "shop.example.com", Action: deploymentsv1.RemovalItem_ACTION_KEEP, Reason: "you pinned this certificate"},
 				},
 			},
 			InfraStacks: []string{"shop--infra"},
@@ -98,12 +98,12 @@ func TestPrintDestroyPlan(t *testing.T) {
 		t.Parallel()
 
 		var out bytes.Buffer
-		printDestroyPlan(&out, "proj_shop", false, &deploymentsv1.PlanDestroyProjectResponse{
+		printDestroyPlan(&out, "proj_shop", false, &deploymentsv1.PlanRemoveProjectResponse{
 			EdgeStack: &deploymentsv1.EdgeStackPlan{
 				EdgeKind: "api-gateway",
-				Items: []*deploymentsv1.TeardownItem{
-					{Kind: "REST APIs", Name: "shop", Action: deploymentsv1.TeardownItem_ACTION_DELETE, Slow: true},
-					{Kind: "domain names", Name: "shop.example.com", Action: deploymentsv1.TeardownItem_ACTION_DELETE},
+				Items: []*deploymentsv1.RemovalItem{
+					{Kind: "REST APIs", Name: "shop", Action: deploymentsv1.RemovalItem_ACTION_DELETE, Slow: true},
+					{Kind: "domain names", Name: "shop.example.com", Action: deploymentsv1.RemovalItem_ACTION_DELETE},
 				},
 			},
 		})
@@ -119,10 +119,10 @@ func TestPrintDestroyPlan(t *testing.T) {
 	t.Run("an action this CLI does not know reads as a sentence", func(t *testing.T) {
 		t.Parallel()
 
-		got := teardownItemLine(&deploymentsv1.TeardownItem{
+		got := teardownItemLine(&deploymentsv1.RemovalItem{
 			Kind:   "certificate",
 			Name:   "shop.example.com",
-			Action: deploymentsv1.TeardownItem_Action(97),
+			Action: deploymentsv1.RemovalItem_Action(97),
 		})
 		if !strings.Contains(got, "an action this CLI does not know") || !strings.HasSuffix(got, "certificate shop.example.com") {
 			t.Errorf("teardownItemLine() = %q, want the unknown action named before the resource", got)

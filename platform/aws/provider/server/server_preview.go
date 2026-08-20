@@ -105,7 +105,7 @@ func (s *Server) Preflight(ctx context.Context, req *deploymentsv1.PreflightRequ
 				return nil, connect.NewError(connect.CodeFailedPrecondition, err)
 			}
 			if recorded.BaseDomain != "" {
-				resp.GlobalPreviewDomain = globalPreviewDomain(ctx, s.globalPreviewOwner(recorded, awscfg.Region), recorded)
+				resp.PreviewWildcard = previewWildcard(ctx, s.globalPreviewOwner(recorded, awscfg.Region), recorded)
 				resp.KnownSlugs = knownSlugs(ctx, awscfg, preview, req.GetSlug())
 			}
 		}
@@ -234,7 +234,7 @@ func classToEnum(class string) deploymentsv1.Environment_Class {
 	}
 }
 
-func (s *Server) DestroyPreview(ctx context.Context, req *deploymentsv1.DestroyPreviewRequest, stream *connect.ServerStream[progressv1.OperationEvent]) (err error) {
+func (s *Server) RemovePreview(ctx context.Context, req *deploymentsv1.RemovePreviewRequest, stream *connect.ServerStream[progressv1.OperationEvent]) (err error) {
 	sender := newEventSender(ctx, stream.Send)
 	defer func() { err = sender.close() }()
 	tracer := newEventTracer(sender)
@@ -259,7 +259,7 @@ func newPreviewRemovalStages(persistent bool) deploy.PreviewRemovalStages {
 	return stages
 }
 
-func (s *Server) runDestroyPreview(ctx context.Context, req *deploymentsv1.DestroyPreviewRequest, tracer deploy.Tracer, stageReport func(deploy.StageID) func(string), logf func(string)) error {
+func (s *Server) runDestroyPreview(ctx context.Context, req *deploymentsv1.RemovePreviewRequest, tracer deploy.Tracer, stageReport func(deploy.StageID) func(string), logf func(string)) error {
 	env := req.GetEnvironment()
 	persistent := env.GetLifecycle() == deploymentsv1.Environment_LIFECYCLE_PERSISTENT
 

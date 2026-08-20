@@ -187,7 +187,7 @@ func TestTeardownPlanItems(t *testing.T) {
 			if item.GetKind() == "" || item.GetReason() == "" {
 				t.Errorf("item %+v carries no kind or reason", item)
 			}
-			if item.GetAction() == deploymentsv1.TeardownItem_ACTION_UNSPECIFIED {
+			if item.GetAction() == deploymentsv1.RemovalItem_ACTION_UNSPECIFIED {
 				t.Errorf("item %q carries no action", item.GetName())
 			}
 		}
@@ -196,7 +196,7 @@ func TestTeardownPlanItems(t *testing.T) {
 				t.Errorf("bucket %s must be flagged slow: it is emptied object by object", bucket)
 			}
 		}
-		if got := findPlanItem(items, bootstrap.PassphraseParamName); got.GetAction() != deploymentsv1.TeardownItem_ACTION_DELETE {
+		if got := findPlanItem(items, bootstrap.PassphraseParamName); got.GetAction() != deploymentsv1.RemovalItem_ACTION_DELETE {
 			t.Errorf("passphrase action = %v, want it deleted when no sibling substrate holds it", got.GetAction())
 		}
 		if findPlanItem(items, bootstrap.PreviewDomainParamName) != nil {
@@ -212,7 +212,7 @@ func TestTeardownPlanItems(t *testing.T) {
 			t.Fatalf("teardownPlanItems: %v", err)
 		}
 		kept := findPlanItem(items, bootstrap.PassphraseParamName)
-		if kept.GetAction() != deploymentsv1.TeardownItem_ACTION_KEEP {
+		if kept.GetAction() != deploymentsv1.RemovalItem_ACTION_KEEP {
 			t.Fatalf("passphrase action = %v, want it kept", kept.GetAction())
 		}
 		if !strings.Contains(kept.GetReason(), bootstrap.ClassProduction) {
@@ -272,7 +272,7 @@ func TestTeardownPlanItems(t *testing.T) {
 	})
 }
 
-func findPlanItem(items []*deploymentsv1.TeardownItem, name string) *deploymentsv1.TeardownItem {
+func findPlanItem(items []*deploymentsv1.RemovalItem, name string) *deploymentsv1.RemovalItem {
 	for _, item := range items {
 		if item.GetName() == name {
 			return item
@@ -281,7 +281,7 @@ func findPlanItem(items []*deploymentsv1.TeardownItem, name string) *deployments
 	return nil
 }
 
-func planNames(items []*deploymentsv1.TeardownItem) []string {
+func planNames(items []*deploymentsv1.RemovalItem) []string {
 	names := make([]string, 0, len(items))
 	for _, item := range items {
 		names = append(names, item.GetName())

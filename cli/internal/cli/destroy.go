@@ -123,7 +123,7 @@ func runDestroy(ctx context.Context, d deps, cwd string, stdout, stderr io.Write
 		}
 
 		spinner := deployui.StartSpinner(stdout, "Enumerating what would be destroyed")
-		plan, err := client.PlanDestroyProject(ctx, &deploymentsv1.PlanDestroyProjectRequest{
+		plan, err := client.PlanRemoveProject(ctx, &deploymentsv1.PlanRemoveProjectRequest{
 			Slug: cfg.Slug,
 			Edge: edgeSelection(cfg),
 		})
@@ -131,7 +131,7 @@ func runDestroy(ctx context.Context, d deps, cwd string, stdout, stderr io.Write
 		if err != nil {
 			return err
 		}
-		if plan.GetNothingToDestroy() {
+		if plan.GetNothingToRemove() {
 			ui.Finish("Nothing to destroy")
 			return nil
 		}
@@ -148,11 +148,11 @@ func runDestroy(ctx context.Context, d deps, cwd string, stdout, stderr io.Write
 			}
 		}
 
-		req := &deploymentsv1.DestroyProjectRequest{
+		req := &deploymentsv1.RemoveProjectRequest{
 			Slug: cfg.Slug,
 			Edge: edgeSelection(cfg),
 		}
-		if err := runner.DestroyProject(ctx, req, ui.Event); err != nil {
+		if err := runner.RemoveProject(ctx, req, ui.Event); err != nil {
 			return err
 		}
 		ui.Finish(fmt.Sprintf("Destroyed project %s", cfg.Slug))
@@ -203,7 +203,7 @@ func runDestroyPreviewProject(ctx context.Context, d deps, cwd string, yes bool,
 		}
 
 		spinner := deployui.StartSpinner(stdout, "Enumerating what would be destroyed")
-		plan, err := client.PlanDestroyProject(ctx, &deploymentsv1.PlanDestroyProjectRequest{
+		plan, err := client.PlanRemoveProject(ctx, &deploymentsv1.PlanRemoveProjectRequest{
 			Slug:        cfg.Slug,
 			Environment: &deploymentsv1.Environment{Class: deploymentsv1.Environment_CLASS_PREVIEW},
 			Edge:        edgeSelection(cfg),
@@ -212,7 +212,7 @@ func runDestroyPreviewProject(ctx context.Context, d deps, cwd string, yes bool,
 		if err != nil {
 			return err
 		}
-		if plan.GetNothingToDestroy() {
+		if plan.GetNothingToRemove() {
 			ui.Finish("Nothing to destroy")
 			return nil
 		}
@@ -230,12 +230,12 @@ func runDestroyPreviewProject(ctx context.Context, d deps, cwd string, yes bool,
 			}
 		}
 
-		req := &deploymentsv1.DestroyProjectRequest{
+		req := &deploymentsv1.RemoveProjectRequest{
 			Slug:        cfg.Slug,
 			Environment: &deploymentsv1.Environment{Class: deploymentsv1.Environment_CLASS_PREVIEW},
 			Edge:        edgeSelection(cfg),
 		}
-		if err := runner.DestroyProject(ctx, req, ui.Event); err != nil {
+		if err := runner.RemoveProject(ctx, req, ui.Event); err != nil {
 			return err
 		}
 		ui.Finish(fmt.Sprintf("Destroyed preview footprint of project %s", cfg.Slug))
@@ -247,7 +247,7 @@ func runDestroyPreviewProject(ctx context.Context, d deps, cwd string, yes bool,
 	return nil
 }
 
-func printDestroyPlan(out io.Writer, slug string, preview bool, plan *deploymentsv1.PlanDestroyProjectResponse) {
+func printDestroyPlan(out io.Writer, slug string, preview bool, plan *deploymentsv1.PlanRemoveProjectResponse) {
 	header := fmt.Sprintf("This will permanently destroy production project %q", slug)
 	if preview {
 		header = fmt.Sprintf("This will permanently destroy the ENTIRE preview footprint of project %q", slug)
@@ -276,10 +276,10 @@ func printDestroyPlan(out io.Writer, slug string, preview bool, plan *deployment
 	printKeptItems(out, kept)
 }
 
-func printPlanItems(out io.Writer, items []*deploymentsv1.TeardownItem) []*deploymentsv1.TeardownItem {
-	var kept []*deploymentsv1.TeardownItem
+func printPlanItems(out io.Writer, items []*deploymentsv1.RemovalItem) []*deploymentsv1.RemovalItem {
+	var kept []*deploymentsv1.RemovalItem
 	for _, item := range items {
-		if item.GetAction() == deploymentsv1.TeardownItem_ACTION_KEEP {
+		if item.GetAction() == deploymentsv1.RemovalItem_ACTION_KEEP {
 			kept = append(kept, item)
 			continue
 		}
@@ -288,7 +288,7 @@ func printPlanItems(out io.Writer, items []*deploymentsv1.TeardownItem) []*deplo
 	return kept
 }
 
-func printKeptItems(out io.Writer, kept []*deploymentsv1.TeardownItem) {
+func printKeptItems(out io.Writer, kept []*deploymentsv1.RemovalItem) {
 	if len(kept) == 0 {
 		return
 	}
@@ -298,7 +298,7 @@ func printKeptItems(out io.Writer, kept []*deploymentsv1.TeardownItem) {
 	}
 }
 
-func teardownItemLine(item *deploymentsv1.TeardownItem) string {
+func teardownItemLine(item *deploymentsv1.RemovalItem) string {
 	line := fmt.Sprintf("%s %s %s", teardownItemAction(item.GetAction()), item.GetKind(), item.GetName())
 	if reason := item.GetReason(); reason != "" {
 		line += " — " + reason
@@ -309,13 +309,13 @@ func teardownItemLine(item *deploymentsv1.TeardownItem) string {
 	return line
 }
 
-func teardownItemAction(action deploymentsv1.TeardownItem_Action) string {
+func teardownItemAction(action deploymentsv1.RemovalItem_Action) string {
 	switch action {
-	case deploymentsv1.TeardownItem_ACTION_DELETE:
+	case deploymentsv1.RemovalItem_ACTION_DELETE:
 		return "delete"
-	case deploymentsv1.TeardownItem_ACTION_DISABLE_THEN_DELETE:
+	case deploymentsv1.RemovalItem_ACTION_DISABLE_THEN_DELETE:
 		return "disable, then delete"
-	case deploymentsv1.TeardownItem_ACTION_KEEP:
+	case deploymentsv1.RemovalItem_ACTION_KEEP:
 		return "keep"
 	default:
 		return fmt.Sprintf("act on (%s, an action this CLI does not know)", action)

@@ -51,7 +51,7 @@ func TestContractRefusesMalformedRequests(t *testing.T) {
 			return err
 		}},
 		{"a prune keeping a negative number of promotions", func(c deploymentsv1connect.ProviderServiceClient) error {
-			stream, err := c.Prune(context.Background(), &deploymentsv1.PruneRequest{Slug: "acme", KeepN: -1})
+			stream, err := c.RemoveStalePromotions(context.Background(), &deploymentsv1.RemoveStalePromotionsRequest{Slug: "acme", KeepN: -1})
 			if err != nil {
 				return err
 			}
@@ -59,7 +59,7 @@ func TestContractRefusesMalformedRequests(t *testing.T) {
 			return err
 		}},
 		{"a global preview domain asked for under the production class", func(c deploymentsv1connect.ProviderServiceClient) error {
-			_, err := c.ListDomain(context.Background(), &deploymentsv1.ListDomainRequest{
+			_, err := c.GetPreviewWildcard(context.Background(), &deploymentsv1.PreviewWildcardRequest{
 				Class: deploymentsv1.Environment_CLASS_PRODUCTION,
 			})
 			return err

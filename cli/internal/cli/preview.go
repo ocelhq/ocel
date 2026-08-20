@@ -237,7 +237,7 @@ func runPreviewUp(ctx context.Context, d deps, cwd string, opts previewUpOptions
 	return nil
 }
 
-func requirePreviewDomain(cfg *projectconfig.Config, global *deploymentsv1.GlobalPreviewDomain, id *deploymentsv1.Identity, pointer string, out io.Writer) error {
+func requirePreviewDomain(cfg *projectconfig.Config, global *deploymentsv1.PreviewWildcard, id *deploymentsv1.Identity, pointer string, out io.Writer) error {
 	declared := ""
 	if hosts := declaredHostnames(cfg, "preview"); len(hosts) > 0 {
 		declared = hosts[0]
@@ -285,7 +285,7 @@ func intendedPreviewHostnames(cfg *projectconfig.Config, slug, pointer, base str
 	return hosts
 }
 
-func checkGlobalPreviewDomain(global *deploymentsv1.GlobalPreviewDomain, id *deploymentsv1.Identity, configName string) error {
+func checkGlobalPreviewDomain(global *deploymentsv1.PreviewWildcard, id *deploymentsv1.Identity, configName string) error {
 	base := global.GetBaseDomain()
 	if want, have := global.GetEdgeScope(), id.GetEdgeScope(); want != "" && have != "" && want != have {
 		return fmt.Errorf("the global preview domain *.%s lives in edge account %s, but this deploy is authenticated to account %s: "+
@@ -356,12 +356,12 @@ func runPreviewRm(ctx context.Context, d deps, cwd string, opts previewRmOptions
 			return err
 		}
 
-		req := &deploymentsv1.DestroyPreviewRequest{
+		req := &deploymentsv1.RemovePreviewRequest{
 			Environment: env,
 			Slug:        cfg.Slug,
 			Edge:        edgeSelection(cfg),
 		}
-		if err := runner.DestroyPreview(ctx, req, ui.Event); err != nil {
+		if err := runner.RemovePreview(ctx, req, ui.Event); err != nil {
 			return err
 		}
 		ui.Finish(fmt.Sprintf("Preview %s torn down", env.GetIdentity()))
@@ -439,7 +439,7 @@ func runPreviewPrune(ctx context.Context, d deps, cwd string, opts previewPruneO
 		if err := preflightPreview(ctx, d, runner, cfg, stdout); err != nil {
 			return err
 		}
-		if err := runner.Prune(ctx, &deploymentsv1.PruneRequest{
+		if err := runner.RemoveStalePromotions(ctx, &deploymentsv1.RemoveStalePromotionsRequest{
 			Slug:        cfg.Slug,
 			KeepN:       int32(opts.keep),
 			Environment: env,
@@ -537,7 +537,7 @@ func preflightPreviewUp(ctx context.Context, d deps, runner *providerrunner.Runn
 	if err := refuseClaimedDomains(resp.GetDomainClaims(), filepath.Base(cfg.Path)); err != nil {
 		return err
 	}
-	return requirePreviewDomain(cfg, resp.GetGlobalPreviewDomain(), resp.GetIdentity(), pointer, out)
+	return requirePreviewDomain(cfg, resp.GetPreviewWildcard(), resp.GetIdentity(), pointer, out)
 }
 
 func preflightDeploy(ctx context.Context, d deps, runner *providerrunner.Runner, cfg *projectconfig.Config, wantKnownSlugs bool, out io.Writer) ([]string, error) {

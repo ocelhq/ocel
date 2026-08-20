@@ -20,20 +20,20 @@ import (
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
-func (s *Server) UseDomain(ctx context.Context, req *deploymentsv1.UseDomainRequest, stream *connect.ServerStream[progressv1.OperationEvent]) error {
+func (s *Server) UsePreviewWildcard(ctx context.Context, req *deploymentsv1.UsePreviewWildcardRequest, stream *connect.ServerStream[progressv1.OperationEvent]) error {
 	progress := func(m string) { _ = stream.Send(progressEvent(m)) }
 	logf := func(m string) { _ = stream.Send(logEvent(m)) }
 	ask := func(headline string, records []edge.Record, notes ...string) {
 		_ = stream.Send(dnsOwedEvent(headline, records, notes...))
 	}
 
-	if err := s.runUseDomain(ctx, req, progress, ask, logf); err != nil {
+	if err := s.runUsePreviewWildcard(ctx, req, progress, ask, logf); err != nil {
 		return stream.Send(failureResult(err))
 	}
 	return stream.Send(okResult())
 }
 
-func (s *Server) runUseDomain(ctx context.Context, req *deploymentsv1.UseDomainRequest, progress func(string), ask askDNS, logf func(string)) error {
+func (s *Server) runUsePreviewWildcard(ctx context.Context, req *deploymentsv1.UsePreviewWildcardRequest, progress func(string), ask askDNS, logf func(string)) error {
 	baseDomain, err := previewBaseDomainArg(req.GetBaseDomain())
 	if err != nil {
 		return err
@@ -132,7 +132,7 @@ func (s *Server) runUseDomain(ctx context.Context, req *deploymentsv1.UseDomainR
 		ProveNotes: []string{fmt.Sprintf("If this run gives up waiting, re-run `ocel domain use '%s' --preview`.", wildcard)},
 		Ask:        domains.Ask(ask),
 	}
-	return useDomain(ctx, engine, edgeFront, spec, recorded.Settlement, wildcard, progress)
+	return usePreviewWildcard(ctx, engine, edgeFront, spec, recorded.Settlement, wildcard, progress)
 }
 
 type askDNS func(headline string, records []edge.Record, notes ...string)
@@ -148,7 +148,7 @@ func (s previewStore) Save(ctx context.Context, settled domains.Settlement) erro
 	return bootstrap.WritePreviewDomain(ctx, s.ssm, bootstrap.ClassPreview, next)
 }
 
-func useDomain(ctx context.Context, engine domains.Engine, edgeFront edge.Edge, spec edge.PreviewWildcardSpec, recorded domains.Settlement, wildcard string, progress func(string)) error {
+func usePreviewWildcard(ctx context.Context, engine domains.Engine, edgeFront edge.Edge, spec edge.PreviewWildcardSpec, recorded domains.Settlement, wildcard string, progress func(string)) error {
 	target := domains.Target{
 		Hostname: wildcard,
 		Surface: func(ctx context.Context, certificate string, say func(string)) (edge.DNSTarget, error) {
@@ -168,7 +168,7 @@ func useDomain(ctx context.Context, engine domains.Engine, edgeFront edge.Edge, 
 	return err
 }
 
-func (s *Server) PlanReleaseDomain(ctx context.Context, req *deploymentsv1.PlanReleaseDomainRequest) (*deploymentsv1.PlanReleaseDomainResponse, error) {
+func (s *Server) PlanRemovePreviewWildcard(ctx context.Context, req *deploymentsv1.PreviewWildcardRequest) (*deploymentsv1.PlanRemovePreviewWildcardResponse, error) {
 	awscfg, err := loadAWS(ctx, "")
 	if err != nil {
 		return nil, err
@@ -184,7 +184,7 @@ func (s *Server) PlanReleaseDomain(ctx context.Context, req *deploymentsv1.PlanR
 		return nil, err
 	}
 	if recorded.BaseDomain == "" {
-		return &deploymentsv1.PlanReleaseDomainResponse{}, nil
+		return &deploymentsv1.PlanRemovePreviewWildcardResponse{}, nil
 	}
 	edgeFront, err := previewWildcardEdge(recorded, func(kind edge.Kind) (edge.Edge, error) {
 		return s.edge(kind, clients.region)
@@ -196,7 +196,7 @@ func (s *Server) PlanReleaseDomain(ctx context.Context, req *deploymentsv1.PlanR
 	if err := refusePreviewReleaseWhileServed(ctx, ssmClient, recorded.BaseDomain, s.livePreviewStacks(awscfg)); err != nil {
 		return nil, connect.NewError(connect.CodeFailedPrecondition, err)
 	}
-	return &deploymentsv1.PlanReleaseDomainResponse{
+	return &deploymentsv1.PlanRemovePreviewWildcardResponse{
 		BaseDomain: recorded.BaseDomain,
 		EdgeStack:  plan,
 	}, nil
@@ -242,16 +242,16 @@ func refusePreviewReleaseWhileServed(ctx context.Context, ssmClient substrateSSM
 	return refusePreviewRelease(baseDomain, served)
 }
 
-func (s *Server) ReleaseDomain(ctx context.Context, req *deploymentsv1.ReleaseDomainRequest, stream *connect.ServerStream[progressv1.OperationEvent]) error {
+func (s *Server) RemovePreviewWildcard(ctx context.Context, req *deploymentsv1.RemovePreviewWildcardRequest, stream *connect.ServerStream[progressv1.OperationEvent]) error {
 	progress := func(m string) { _ = stream.Send(progressEvent(m)) }
 
-	if err := s.runReleaseDomain(ctx, req, progress); err != nil {
+	if err := s.runRemovePreviewWildcard(ctx, req, progress); err != nil {
 		return stream.Send(failureResult(err))
 	}
 	return stream.Send(okResult())
 }
 
-func (s *Server) runReleaseDomain(ctx context.Context, req *deploymentsv1.ReleaseDomainRequest, progress func(string)) error {
+func (s *Server) runRemovePreviewWildcard(ctx context.Context, req *deploymentsv1.RemovePreviewWildcardRequest, progress func(string)) error {
 	awscfg, err := loadAWS(ctx, "")
 	if err != nil {
 		return err
@@ -287,7 +287,7 @@ func (s *Server) runReleaseDomain(ctx context.Context, req *deploymentsv1.Releas
 		return err
 	}
 
-	return releaseDomain(ctx, releaseDeps{
+	return removePreviewWildcard(ctx, removalDeps{
 		ssm:    ssmClient,
 		edge:   edgeFront,
 		writer: writer,
@@ -295,14 +295,14 @@ func (s *Server) runReleaseDomain(ctx context.Context, req *deploymentsv1.Releas
 	}, recorded, progress)
 }
 
-type releaseDeps struct {
+type removalDeps struct {
 	ssm    bootstrap.SSMAPI
 	edge   edge.Edge
 	writer edge.DNSWriter
 	issuer certs.Issuer
 }
 
-func releaseDomain(ctx context.Context, deps releaseDeps, recorded bootstrap.PreviewDomain, progress func(string)) error {
+func removePreviewWildcard(ctx context.Context, deps removalDeps, recorded bootstrap.PreviewDomain, progress func(string)) error {
 	progress(fmt.Sprintf("Removing the shared preview entry on %s", edge.PreviewWildcard(recorded.BaseDomain)))
 	if err := deps.edge.DestroyPreviewWildcard(ctx, recorded.BaseDomain); err != nil {
 		return err
@@ -316,7 +316,7 @@ func releaseDomain(ctx context.Context, deps releaseDeps, recorded bootstrap.Pre
 	return bootstrap.DeletePreviewDomain(ctx, deps.ssm, bootstrap.ClassPreview)
 }
 
-func (s *Server) ListDomain(ctx context.Context, req *deploymentsv1.ListDomainRequest) (*deploymentsv1.ListDomainResponse, error) {
+func (s *Server) GetPreviewWildcard(ctx context.Context, req *deploymentsv1.PreviewWildcardRequest) (*deploymentsv1.GetPreviewWildcardResponse, error) {
 	clients, err := s.domainClients(ctx, "")
 	if err != nil {
 		return nil, err
@@ -328,7 +328,7 @@ func (s *Server) ListDomain(ctx context.Context, req *deploymentsv1.ListDomainRe
 		return nil, err
 	}
 	if recorded.BaseDomain == "" {
-		return &deploymentsv1.ListDomainResponse{}, nil
+		return &deploymentsv1.GetPreviewWildcardResponse{}, nil
 	}
 	slugs, err := bootstrap.StackSlugsFor(ctx, ssmClient, bootstrap.ClassPreview)
 	if err != nil {
@@ -338,8 +338,8 @@ func (s *Server) ListDomain(ctx context.Context, req *deploymentsv1.ListDomainRe
 	if err != nil {
 		return nil, err
 	}
-	return &deploymentsv1.ListDomainResponse{
-		Domain:   globalPreviewDomain(ctx, s.globalPreviewOwner(recorded, clients.region), recorded),
+	return &deploymentsv1.GetPreviewWildcardResponse{
+		Wildcard: previewWildcard(ctx, s.globalPreviewOwner(recorded, clients.region), recorded),
 		Projects: served,
 	}, nil
 }
@@ -372,24 +372,32 @@ func previewBaseDomainArg(domain string) (string, error) {
 	return base, nil
 }
 
-func globalPreviewDomain(ctx context.Context, owner routeOwnerFunc, recorded bootstrap.PreviewDomain) *deploymentsv1.GlobalPreviewDomain {
+func previewWildcard(ctx context.Context, owner routeOwnerFunc, recorded bootstrap.PreviewDomain) *deploymentsv1.PreviewWildcard {
 	if recorded.BaseDomain == "" {
 		return nil
 	}
 	wildcard := recorded.Wildcard()
-	return &deploymentsv1.GlobalPreviewDomain{
-		BaseDomain:        recorded.BaseDomain,
-		EdgeScope:         recorded.Scope,
-		GrammarMin:        recorded.GrammarMin,
-		GrammarMax:        recorded.GrammarMax,
-		RouteInstalled:    sharedEntryRouteInstalled(ctx, owner, recorded.BaseDomain),
-		CertificateId:     recorded.Settlement.Certificate.ARN,
-		CertificateStatus: recorded.Settlement.Certificate.Status,
-		RecordsWritten:    recordLines(recorded.Settlement.WrittenRecords()),
-		RecordsOwed:       recordLines(recorded.Settlement.OwedRecords()),
-		LastProbeAt:       probeUnix(wildcard.Probe),
-		LastProbeOk:       wildcard.Probe.OK,
-		LastProbeEdge:     string(wildcard.Probe.Edge),
+	return &deploymentsv1.PreviewWildcard{
+		BaseDomain:     recorded.BaseDomain,
+		EdgeScope:      recorded.Scope,
+		GrammarMin:     recorded.GrammarMin,
+		GrammarMax:     recorded.GrammarMax,
+		RouteInstalled: sharedEntryRouteInstalled(ctx, owner, recorded.BaseDomain),
+		Certificate: certificateState(recorded.Settlement.Certificate, wildcard.Probe,
+			recordLines(recorded.Settlement.WrittenRecords()),
+			recordLines(recorded.Settlement.OwedRecords())),
+	}
+}
+
+func certificateState(cert certs.Certificate, probe certs.Probe, written, owed []string) *deploymentsv1.CertificateState {
+	return &deploymentsv1.CertificateState{
+		CertificateId:     cert.ARN,
+		CertificateStatus: cert.Status,
+		RecordsWritten:    written,
+		RecordsOwed:       owed,
+		LastProbeAt:       probeUnix(probe),
+		LastProbeOk:       probe.OK,
+		LastProbeEdge:     string(probe.Edge),
 	}
 }
 

@@ -9,7 +9,7 @@ import (
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/progress/v1"
 )
 
-func (s *deployFakeProviderServer) Prune(ctx context.Context, req *deploymentsv1.PruneRequest, stream *connect.ServerStream[progressv1.OperationEvent]) error {
+func (s *deployFakeProviderServer) RemoveStalePromotions(ctx context.Context, req *deploymentsv1.RemoveStalePromotionsRequest, stream *connect.ServerStream[progressv1.OperationEvent]) error {
 	if err := s.checkToken(ctx); err != nil {
 		return err
 	}

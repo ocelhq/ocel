@@ -26,26 +26,26 @@ func releaseEdgeStackPlan(edgeFront edge.Edge, recorded bootstrap.PreviewDomain)
 	}
 }
 
-func releasePlanItems(edgeFront edge.Edge, recorded bootstrap.PreviewDomain) []*deploymentsv1.TeardownItem {
+func releasePlanItems(edgeFront edge.Edge, recorded bootstrap.PreviewDomain) []*deploymentsv1.RemovalItem {
 	removed, kept := edgeFront.PreviewWildcardSurfaces(edge.PreviewWildcard(recorded.BaseDomain))
 
-	items := []*deploymentsv1.TeardownItem{surfaceItem(removed)}
+	items := []*deploymentsv1.RemovalItem{surfaceItem(removed)}
 	if arn := recorded.Settlement.Certificate.ARN; arn != "" {
 		items = append(items, certificateItem(recorded.Settlement.Certificate))
 	}
 	for _, rec := range recorded.Settlement.WrittenRecords() {
-		items = append(items, &deploymentsv1.TeardownItem{
+		items = append(items, &deploymentsv1.RemovalItem{
 			Kind:   "DNS record",
 			Name:   rec.String(),
-			Action: deploymentsv1.TeardownItem_ACTION_DELETE,
+			Action: deploymentsv1.RemovalItem_ACTION_DELETE,
 			Reason: "ocel wrote it; it is removed only while its live value is still the one ocel wrote",
 		})
 	}
 	for _, rec := range recorded.Settlement.OwedRecords() {
-		items = append(items, &deploymentsv1.TeardownItem{
+		items = append(items, &deploymentsv1.RemovalItem{
 			Kind:   "DNS record",
 			Name:   rec.String(),
-			Action: deploymentsv1.TeardownItem_ACTION_KEEP,
+			Action: deploymentsv1.RemovalItem_ACTION_KEEP,
 			Reason: "you created it yourself; ocel never wrote it, so it is yours to remove",
 		})
 	}

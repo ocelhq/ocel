@@ -179,7 +179,7 @@ func (a *domainACM) ListCertificates(context.Context, *acm.ListCertificatesInput
 }
 
 type domainFixture struct {
-	session *domainSession
+	session *hostnameSession
 	stack   *boundStack
 	writer  *domainWriter
 	acm     *domainACM
@@ -319,7 +319,7 @@ func newDomainFixture(opts domainFixtureOptions) *domainFixture {
 			Every:    time.Millisecond,
 		}
 	}
-	f.session = &domainSession{
+	f.session = &hostnameSession{
 		engine:     engine,
 		stack:      front,
 		recorded:   opts.prior,
@@ -330,7 +330,7 @@ func newDomainFixture(opts domainFixtureOptions) *domainFixture {
 	return f
 }
 
-func TestAddDomain(t *testing.T) {
+func TestAddHostname(t *testing.T) {
 	t.Parallel()
 
 	t.Run("with no argument it settles every configured host", func(t *testing.T) {
@@ -708,7 +708,7 @@ func TestAddDomain(t *testing.T) {
 	})
 }
 
-func TestAddDomainOnCloudflare(t *testing.T) {
+func TestAddHostnameOnCloudflare(t *testing.T) {
 	t.Run("the cloudflare edge binds the worker route the host is served by", func(t *testing.T) {
 		front := cloudflareFront(t)
 		f := newDomainFixture(domainFixtureOptions{
@@ -748,7 +748,7 @@ func TestAddDomainOnCloudflare(t *testing.T) {
 
 }
 
-func TestRemoveDomain(t *testing.T) {
+func TestRemoveHostname(t *testing.T) {
 	t.Parallel()
 
 	written := edge.Record{Name: "www.app.com", Type: edge.RecordTypeAAAA, Value: edge.ProxyPlaceholder, Proxied: true}
@@ -1009,7 +1009,7 @@ func frontRecords(written []edge.Record) []edge.Record {
 	})
 }
 
-func TestAddDomainOnAnEdgeThatIsNotCloudflare(t *testing.T) {
+func TestAddHostnameOnAnEdgeThatIsNotCloudflare(t *testing.T) {
 	t.Parallel()
 
 	t.Run("the API Gateway edge points each host at the front its binding published", func(t *testing.T) {

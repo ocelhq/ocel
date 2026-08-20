@@ -312,51 +312,51 @@ func (r *Runner) Bootstrap(ctx context.Context, req *deploymentsv1.BootstrapRequ
 	})
 }
 
-func (r *Runner) Teardown(ctx context.Context, req *deploymentsv1.TeardownRequest, onEvent func(*progressv1.OperationEvent)) error {
-	return r.stream(ctx, "Teardown", onEvent, func(client deploymentsv1connect.ProviderServiceClient) (*connect.ServerStreamForClient[progressv1.OperationEvent], error) {
-		return client.Teardown(ctx, req)
+func (r *Runner) RemoveSubstrate(ctx context.Context, req *deploymentsv1.RemoveSubstrateRequest, onEvent func(*progressv1.OperationEvent)) error {
+	return r.stream(ctx, "RemoveSubstrate", onEvent, func(client deploymentsv1connect.ProviderServiceClient) (*connect.ServerStreamForClient[progressv1.OperationEvent], error) {
+		return client.RemoveSubstrate(ctx, req)
 	})
 }
 
-func (r *Runner) DestroyPreview(ctx context.Context, req *deploymentsv1.DestroyPreviewRequest, onEvent func(*progressv1.OperationEvent)) error {
-	return r.stream(ctx, "DestroyPreview", onEvent, func(client deploymentsv1connect.ProviderServiceClient) (*connect.ServerStreamForClient[progressv1.OperationEvent], error) {
-		return client.DestroyPreview(ctx, req)
+func (r *Runner) RemovePreview(ctx context.Context, req *deploymentsv1.RemovePreviewRequest, onEvent func(*progressv1.OperationEvent)) error {
+	return r.stream(ctx, "RemovePreview", onEvent, func(client deploymentsv1connect.ProviderServiceClient) (*connect.ServerStreamForClient[progressv1.OperationEvent], error) {
+		return client.RemovePreview(ctx, req)
 	})
 }
 
-func (r *Runner) DestroyProject(ctx context.Context, req *deploymentsv1.DestroyProjectRequest, onEvent func(*progressv1.OperationEvent)) error {
-	return r.stream(ctx, "DestroyProject", onEvent, func(client deploymentsv1connect.ProviderServiceClient) (*connect.ServerStreamForClient[progressv1.OperationEvent], error) {
-		return client.DestroyProject(ctx, req)
+func (r *Runner) RemoveProject(ctx context.Context, req *deploymentsv1.RemoveProjectRequest, onEvent func(*progressv1.OperationEvent)) error {
+	return r.stream(ctx, "RemoveProject", onEvent, func(client deploymentsv1connect.ProviderServiceClient) (*connect.ServerStreamForClient[progressv1.OperationEvent], error) {
+		return client.RemoveProject(ctx, req)
 	})
 }
 
-func (r *Runner) UseDomain(ctx context.Context, req *deploymentsv1.UseDomainRequest, onEvent func(*progressv1.OperationEvent)) error {
-	return r.stream(ctx, "UseDomain", onEvent, func(client deploymentsv1connect.ProviderServiceClient) (*connect.ServerStreamForClient[progressv1.OperationEvent], error) {
-		return client.UseDomain(ctx, req)
+func (r *Runner) UsePreviewWildcard(ctx context.Context, req *deploymentsv1.UsePreviewWildcardRequest, onEvent func(*progressv1.OperationEvent)) error {
+	return r.stream(ctx, "UsePreviewWildcard", onEvent, func(client deploymentsv1connect.ProviderServiceClient) (*connect.ServerStreamForClient[progressv1.OperationEvent], error) {
+		return client.UsePreviewWildcard(ctx, req)
 	})
 }
 
-func (r *Runner) ReleaseDomain(ctx context.Context, req *deploymentsv1.ReleaseDomainRequest, onEvent func(*progressv1.OperationEvent)) error {
-	return r.stream(ctx, "ReleaseDomain", onEvent, func(client deploymentsv1connect.ProviderServiceClient) (*connect.ServerStreamForClient[progressv1.OperationEvent], error) {
-		return client.ReleaseDomain(ctx, req)
+func (r *Runner) RemovePreviewWildcard(ctx context.Context, req *deploymentsv1.RemovePreviewWildcardRequest, onEvent func(*progressv1.OperationEvent)) error {
+	return r.stream(ctx, "RemovePreviewWildcard", onEvent, func(client deploymentsv1connect.ProviderServiceClient) (*connect.ServerStreamForClient[progressv1.OperationEvent], error) {
+		return client.RemovePreviewWildcard(ctx, req)
 	})
 }
 
-func (r *Runner) AddDomain(ctx context.Context, req *deploymentsv1.AddDomainRequest, onEvent func(*progressv1.OperationEvent)) error {
-	return r.stream(ctx, "AddDomain", onEvent, func(client deploymentsv1connect.ProviderServiceClient) (*connect.ServerStreamForClient[progressv1.OperationEvent], error) {
-		return client.AddDomain(ctx, req)
+func (r *Runner) AddHostname(ctx context.Context, req *deploymentsv1.AddHostnameRequest, onEvent func(*progressv1.OperationEvent)) error {
+	return r.stream(ctx, "AddHostname", onEvent, func(client deploymentsv1connect.ProviderServiceClient) (*connect.ServerStreamForClient[progressv1.OperationEvent], error) {
+		return client.AddHostname(ctx, req)
 	})
 }
 
-func (r *Runner) RemoveDomain(ctx context.Context, req *deploymentsv1.RemoveDomainRequest, onEvent func(*progressv1.OperationEvent)) error {
-	return r.stream(ctx, "RemoveDomain", onEvent, func(client deploymentsv1connect.ProviderServiceClient) (*connect.ServerStreamForClient[progressv1.OperationEvent], error) {
-		return client.RemoveDomain(ctx, req)
+func (r *Runner) RemoveHostname(ctx context.Context, req *deploymentsv1.RemoveHostnameRequest, onEvent func(*progressv1.OperationEvent)) error {
+	return r.stream(ctx, "RemoveHostname", onEvent, func(client deploymentsv1connect.ProviderServiceClient) (*connect.ServerStreamForClient[progressv1.OperationEvent], error) {
+		return client.RemoveHostname(ctx, req)
 	})
 }
 
-func (r *Runner) Prune(ctx context.Context, req *deploymentsv1.PruneRequest, onEvent func(*progressv1.OperationEvent)) error {
-	return r.stream(ctx, "Prune", onEvent, func(client deploymentsv1connect.ProviderServiceClient) (*connect.ServerStreamForClient[progressv1.OperationEvent], error) {
-		return client.Prune(ctx, req)
+func (r *Runner) RemoveStalePromotions(ctx context.Context, req *deploymentsv1.RemoveStalePromotionsRequest, onEvent func(*progressv1.OperationEvent)) error {
+	return r.stream(ctx, "RemoveStalePromotions", onEvent, func(client deploymentsv1connect.ProviderServiceClient) (*connect.ServerStreamForClient[progressv1.OperationEvent], error) {
+		return client.RemoveStalePromotions(ctx, req)
 	})
 }
 

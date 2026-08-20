@@ -82,7 +82,7 @@ func certifiedKinds() []edge.Kind {
 	return []edge.Kind{cloudfront.Kind, apigateway.Kind}
 }
 
-func TestDomainStatus(t *testing.T) {
+func TestGetHostnameStatus(t *testing.T) {
 	t.Parallel()
 
 	for _, kind := range certifiedKinds() {
@@ -107,20 +107,20 @@ func TestDomainStatus(t *testing.T) {
 			if err != nil {
 				t.Fatalf("status: %v", err)
 			}
-			if !resp.GetReady() || len(resp.GetHosts()) != 1 {
+			if !resp.GetReady() || len(resp.GetHostnames()) != 1 {
 				t.Fatalf("status = %+v, want one ready host", resp)
 			}
-			host := resp.GetHosts()[0]
+			host := resp.GetHostnames()[0]
 			if host.GetHostname() != "shop.app.com" || !host.GetDeclared() || !host.GetReady() || host.GetPending() != "" {
 				t.Errorf("host = %+v, want the declared host ready with nothing outstanding", host)
 			}
-			if host.GetCertificateId() != arn || host.GetCertificateStatus() != certs.StatusIssued {
-				t.Errorf("host certificate = %q %q, want the issued one in %s", host.GetCertificateId(), host.GetCertificateStatus(), certs.RegionFor(registeredEdge(kind), domainAPIRegion))
+			if host.GetCertificate().GetCertificateId() != arn || host.GetCertificate().GetCertificateStatus() != certs.StatusIssued {
+				t.Errorf("host certificate = %q %q, want the issued one in %s", host.GetCertificate().GetCertificateId(), host.GetCertificate().GetCertificateStatus(), certs.RegionFor(registeredEdge(kind), domainAPIRegion))
 			}
 			if host.GetRenewalStatus() != string(acmtypes.RenewalStatusSuccess) || host.GetExpiresAt() == 0 || host.GetExpiringSoon() {
 				t.Errorf("host renewal = %q, expires %d, soon %t; want a renewed certificate with a reported expiry", host.GetRenewalStatus(), host.GetExpiresAt(), host.GetExpiringSoon())
 			}
-			if !host.GetLastProbeOk() || host.GetLastProbeEdge() != string(kind) {
+			if !host.GetCertificate().GetLastProbeOk() || host.GetCertificate().GetLastProbeEdge() != string(kind) {
 				t.Errorf("probe = %+v, want a fresh live probe against the edge that serves it", host)
 			}
 			if host.GetServingPointer() != string(kind) {
@@ -151,8 +151,8 @@ func TestDomainStatus(t *testing.T) {
 			if err != nil {
 				t.Fatalf("status: %v", err)
 			}
-			if !resp.GetHosts()[0].GetExpiringSoon() {
-				t.Errorf("host = %+v, want a certificate inside the renewal window flagged", resp.GetHosts()[0])
+			if !resp.GetHostnames()[0].GetExpiringSoon() {
+				t.Errorf("host = %+v, want a certificate inside the renewal window flagged", resp.GetHostnames()[0])
 			}
 		})
 	}
@@ -171,8 +171,8 @@ func TestDomainStatus(t *testing.T) {
 		if err != nil {
 			t.Fatalf("status: %v", err)
 		}
-		host := resp.GetHosts()[0]
-		if host.GetCertificateId() != "" || host.GetCertificateStatus() != "" || host.GetExpiresAt() != 0 {
+		host := resp.GetHostnames()[0]
+		if host.GetCertificate().GetCertificateId() != "" || host.GetCertificate().GetCertificateStatus() != "" || host.GetExpiresAt() != 0 {
 			t.Errorf("host = %+v, want no certificate reported for an edge that terminates TLS with its own", host)
 		}
 		if !host.GetReady() || host.GetServingPointer() != string(cloudflare.Kind) {
@@ -213,8 +213,8 @@ func TestDomainStatus(t *testing.T) {
 		if err != nil {
 			t.Fatalf("status: %v", err)
 		}
-		host := resp.GetHosts()[0]
-		if resp.GetReady() || host.GetReady() || host.GetLastProbeOk() {
+		host := resp.GetHostnames()[0]
+		if resp.GetReady() || host.GetReady() || host.GetCertificate().GetLastProbeOk() {
 			t.Errorf("status = %+v, want the host pending while nothing answers as this edge", resp)
 		}
 		if !strings.Contains(host.GetPending(), "does not answer") {
@@ -269,12 +269,12 @@ func TestDomainStatus(t *testing.T) {
 		if !slices.Equal(resp.GetRecordsOwed(), []string{"_acme2.app.com CNAME validate2.acm-validations.aws"}) {
 			t.Errorf("project recordsOwed = %v, want the outstanding validation record attributed once", resp.GetRecordsOwed())
 		}
-		for _, host := range resp.GetHosts() {
-			if !slices.Equal(host.GetRecordsWritten(), []string{host.GetHostname() + " AAAA 100::"}) {
-				t.Errorf("%s recordsWritten = %v, want only its own record", host.GetHostname(), host.GetRecordsWritten())
+		for _, host := range resp.GetHostnames() {
+			if !slices.Equal(host.GetCertificate().GetRecordsWritten(), []string{host.GetHostname() + " AAAA 100::"}) {
+				t.Errorf("%s recordsWritten = %v, want only its own record", host.GetHostname(), host.GetCertificate().GetRecordsWritten())
 			}
-			if len(host.GetRecordsOwed()) != 0 {
-				t.Errorf("%s recordsOwed = %v, want no project-scope record repeated per host", host.GetHostname(), host.GetRecordsOwed())
+			if len(host.GetCertificate().GetRecordsOwed()) != 0 {
+				t.Errorf("%s recordsOwed = %v, want no project-scope record repeated per host", host.GetHostname(), host.GetCertificate().GetRecordsOwed())
 			}
 		}
 	})
@@ -295,11 +295,11 @@ func TestDomainStatus(t *testing.T) {
 		if resp.GetReady() {
 			t.Error("status ready = true, want the project pending while a declared host is unbound")
 		}
-		host := resp.GetHosts()[0]
+		host := resp.GetHostnames()[0]
 		if !strings.Contains(host.GetPending(), "not bound") {
 			t.Errorf("pending = %q, want it to name the missing surface", host.GetPending())
 		}
-		if host.GetLastProbeAt() != 0 || host.GetLastProbeOk() {
+		if host.GetCertificate().GetLastProbeAt() != 0 || host.GetCertificate().GetLastProbeOk() {
 			t.Errorf("host = %+v, want no probe reported when this run took none", host)
 		}
 	})
@@ -313,11 +313,11 @@ func TestDomainStatus(t *testing.T) {
 		if err != nil {
 			t.Fatalf("status: %v", err)
 		}
-		if len(resp.GetHosts()) != 1 || resp.GetHosts()[0].GetDeclared() {
-			t.Fatalf("hosts = %+v, want the undeclared host still listed", resp.GetHosts())
+		if len(resp.GetHostnames()) != 1 || resp.GetHostnames()[0].GetDeclared() {
+			t.Fatalf("hosts = %+v, want the undeclared host still listed", resp.GetHostnames())
 		}
-		if !strings.Contains(resp.GetHosts()[0].GetPending(), "ocel domain rm") {
-			t.Errorf("pending = %q, want it to point at rm", resp.GetHosts()[0].GetPending())
+		if !strings.Contains(resp.GetHostnames()[0].GetPending(), "ocel domain rm") {
+			t.Errorf("pending = %q, want it to point at rm", resp.GetHostnames()[0].GetPending())
 		}
 	})
 
@@ -356,18 +356,18 @@ func TestDomainStatus(t *testing.T) {
 		if err != nil {
 			t.Fatalf("status: %v", err)
 		}
-		if resp.GetReady() || len(resp.GetHosts()) != 1 {
+		if resp.GetReady() || len(resp.GetHostnames()) != 1 {
 			t.Fatalf("status = %+v, want the declared host listed and the project pending", resp)
 		}
-		host := resp.GetHosts()[0]
+		host := resp.GetHostnames()[0]
 		if host.GetHostname() != "shop.app.com" || !host.GetDeclared() || host.GetReady() {
 			t.Errorf("host = %+v, want the declared host reported pending", host)
 		}
 		if !strings.Contains(host.GetPending(), "not bound") || !strings.Contains(host.GetPending(), "ocel domain add") {
 			t.Errorf("pending = %q, want it to name the command that binds the host", host.GetPending())
 		}
-		if len(host.GetRecordsOwed()) != 0 {
-			t.Errorf("recordsOwed = %v, want no record owed for a host nothing serves yet", host.GetRecordsOwed())
+		if len(host.GetCertificate().GetRecordsOwed()) != 0 {
+			t.Errorf("recordsOwed = %v, want no record owed for a host nothing serves yet", host.GetCertificate().GetRecordsOwed())
 		}
 	})
 
@@ -385,14 +385,14 @@ func TestDomainStatus(t *testing.T) {
 		if err != nil {
 			t.Fatalf("status: %v", err)
 		}
-		host := resp.GetHosts()[0]
-		if !slices.Equal(host.GetRecordsOwed(), []string{"shop.app.com AAAA 100::"}) {
-			t.Errorf("recordsOwed = %v, want the proxied record that binds the host on cloudflare", host.GetRecordsOwed())
+		host := resp.GetHostnames()[0]
+		if !slices.Equal(host.GetCertificate().GetRecordsOwed(), []string{"shop.app.com AAAA 100::"}) {
+			t.Errorf("recordsOwed = %v, want the proxied record that binds the host on cloudflare", host.GetCertificate().GetRecordsOwed())
 		}
 	})
 }
 
-func TestAddDomainAcrossEdgeModes(t *testing.T) {
+func TestAddHostnameAcrossEdgeModes(t *testing.T) {
 	t.Parallel()
 
 	prior := issuedProduction(domainCertARN, "shop.app.com")

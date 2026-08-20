@@ -31,7 +31,7 @@ func TestRunPruneRefusesAPreviewWithoutAPointer(t *testing.T) {
 			stageReport := func(deploy.StageID) func(string) { return note }
 
 			_, err := (&Server{}).runPrune(context.Background(),
-				&deploymentsv1.PruneRequest{Slug: "shop", KeepN: 3, Environment: tc.env}, tracer, stageReport, note)
+				&deploymentsv1.RemoveStalePromotionsRequest{Slug: "shop", KeepN: 3, Environment: tc.env}, tracer, stageReport, note)
 
 			var connectErr *connect.Error
 			if !errors.As(err, &connectErr) || connectErr.Code() != connect.CodeInvalidArgument {

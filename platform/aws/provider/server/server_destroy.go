@@ -20,7 +20,7 @@ import (
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
-func (s *Server) PlanDestroyProject(ctx context.Context, req *deploymentsv1.PlanDestroyProjectRequest) (*deploymentsv1.PlanDestroyProjectResponse, error) {
+func (s *Server) PlanRemoveProject(ctx context.Context, req *deploymentsv1.PlanRemoveProjectRequest) (*deploymentsv1.PlanRemoveProjectResponse, error) {
 	opts := s.config.get()
 
 	edgeFront, err := s.edge(requestedEdge(req), opts.Region)
@@ -67,19 +67,19 @@ func (s *Server) PlanDestroyProject(ctx context.Context, req *deploymentsv1.Plan
 		return nil, err
 	}
 	appStacks := stackNames(plan.AppStacks)
-	return &deploymentsv1.PlanDestroyProjectResponse{
-		AppStacks:        appStacks,
-		InfraStacks:      infraStacks,
-		EdgeStack:        edgeStack,
-		NothingToDestroy: nothingToDestroy(indexed, edgeStack, appStacks, infraStacks),
+	return &deploymentsv1.PlanRemoveProjectResponse{
+		AppStacks:       appStacks,
+		InfraStacks:     infraStacks,
+		EdgeStack:       edgeStack,
+		NothingToRemove: nothingToRemove(indexed, edgeStack, appStacks, infraStacks),
 	}, nil
 }
 
-func nothingToDestroy(indexed bool, edgeStack *deploymentsv1.EdgeStackPlan, appStacks, infraStacks []string) bool {
+func nothingToRemove(indexed bool, edgeStack *deploymentsv1.EdgeStackPlan, appStacks, infraStacks []string) bool {
 	return !indexed && len(edgeStack.GetItems()) == 0 && len(appStacks) == 0 && len(infraStacks) == 0
 }
 
-func (s *Server) planDestroyPreviewProject(ctx context.Context, opts providerConfig, edgeFront edge.Edge, slug string) (*deploymentsv1.PlanDestroyProjectResponse, error) {
+func (s *Server) planDestroyPreviewProject(ctx context.Context, opts providerConfig, edgeFront edge.Edge, slug string) (*deploymentsv1.PlanRemoveProjectResponse, error) {
 	awscfg, err := loadAWS(ctx, opts.Region)
 	if err != nil {
 		return nil, err
@@ -116,11 +116,11 @@ func (s *Server) planDestroyPreviewProject(ctx context.Context, opts providerCon
 		return nil, err
 	}
 	appStacks, infraStacks := stackNames(plan.AppStacks), stackNames(plan.InfraStacks)
-	return &deploymentsv1.PlanDestroyProjectResponse{
-		AppStacks:        appStacks,
-		InfraStacks:      infraStacks,
-		EdgeStack:        edgeStack,
-		NothingToDestroy: nothingToDestroy(indexed, edgeStack, appStacks, infraStacks),
+	return &deploymentsv1.PlanRemoveProjectResponse{
+		AppStacks:       appStacks,
+		InfraStacks:     infraStacks,
+		EdgeStack:       edgeStack,
+		NothingToRemove: nothingToRemove(indexed, edgeStack, appStacks, infraStacks),
 	}, nil
 }
 
@@ -146,7 +146,7 @@ func (s *Server) edgeStackPlan(edgeFront edge.Edge, scope projectPlanScope) (*de
 	return plan, nil
 }
 
-func (s *Server) DestroyProject(ctx context.Context, req *deploymentsv1.DestroyProjectRequest, stream *connect.ServerStream[progressv1.OperationEvent]) (err error) {
+func (s *Server) RemoveProject(ctx context.Context, req *deploymentsv1.RemoveProjectRequest, stream *connect.ServerStream[progressv1.OperationEvent]) (err error) {
 	sender := newEventSender(ctx, stream.Send)
 	defer func() { err = sender.close() }()
 	tracer := newEventTracer(sender)
@@ -186,7 +186,7 @@ func newDestroyPreviewProjectStages() deploy.ProjectTeardownStages {
 	}
 }
 
-func (s *Server) runDestroyProject(ctx context.Context, req *deploymentsv1.DestroyProjectRequest, tracer deploy.Tracer, stageReport func(deploy.StageID) func(string), logf func(string)) error {
+func (s *Server) runDestroyProject(ctx context.Context, req *deploymentsv1.RemoveProjectRequest, tracer deploy.Tracer, stageReport func(deploy.StageID) func(string), logf func(string)) error {
 	if env := req.GetEnvironment(); env.GetClass() == deploymentsv1.Environment_CLASS_PREVIEW {
 		return s.runDestroyPreviewProject(ctx, req, env, tracer, stageReport, logf)
 	}
@@ -245,7 +245,7 @@ func forgetStackRecord(ctx context.Context, ssmClient bootstrap.SSMAPI, class, s
 	return bootstrap.DeleteStackRecordFor(ctx, ssmClient, class, slug)
 }
 
-func (s *Server) runDestroyPreviewProject(ctx context.Context, req *deploymentsv1.DestroyProjectRequest, env *deploymentsv1.Environment, tracer deploy.Tracer, stageReport func(deploy.StageID) func(string), logf func(string)) error {
+func (s *Server) runDestroyPreviewProject(ctx context.Context, req *deploymentsv1.RemoveProjectRequest, env *deploymentsv1.Environment, tracer deploy.Tracer, stageReport func(deploy.StageID) func(string), logf func(string)) error {
 	slug := req.GetSlug()
 
 	stages := newDestroyPreviewProjectStages()

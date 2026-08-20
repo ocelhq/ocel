@@ -17,15 +17,15 @@ service ProviderService {
 
     rpc DescribeBootstrap(DescribeBootstrapRequest) returns (DescribeBootstrapResponse);
 
-    rpc Teardown(TeardownRequest) returns (stream progress.v1.OperationEvent);
+    rpc RemoveSubstrate(RemoveSubstrateRequest) returns (stream progress.v1.OperationEvent);
 
-    rpc PlanTeardown(PlanTeardownRequest) returns (PlanTeardownResponse);
+    rpc PlanRemoveSubstrate(PlanRemoveSubstrateRequest) returns (PlanRemoveSubstrateResponse);
 
-    rpc DestroyPreview(DestroyPreviewRequest) returns (stream progress.v1.OperationEvent);
+    rpc RemovePreview(RemovePreviewRequest) returns (stream progress.v1.OperationEvent);
 
-    rpc DestroyProject(DestroyProjectRequest) returns (stream progress.v1.OperationEvent);
+    rpc RemoveProject(RemoveProjectRequest) returns (stream progress.v1.OperationEvent);
 
-    rpc PlanDestroyProject(PlanDestroyProjectRequest) returns (PlanDestroyProjectResponse);
+    rpc PlanRemoveProject(PlanRemoveProjectRequest) returns (PlanRemoveProjectResponse);
 
     rpc ListEnvironments(ListEnvironmentsRequest) returns (ListEnvironmentsResponse);
 
@@ -35,21 +35,21 @@ service ProviderService {
 
     rpc Rollback(RollbackRequest) returns (RollbackResponse);
 
-    rpc Prune(PruneRequest) returns (stream progress.v1.OperationEvent);
+    rpc RemoveStalePromotions(RemoveStalePromotionsRequest) returns (stream progress.v1.OperationEvent);
 
-    rpc UseDomain(UseDomainRequest) returns (stream progress.v1.OperationEvent);
+    rpc UsePreviewWildcard(UsePreviewWildcardRequest) returns (stream progress.v1.OperationEvent);
 
-    rpc ListDomain(ListDomainRequest) returns (ListDomainResponse);
+    rpc GetPreviewWildcard(PreviewWildcardRequest) returns (GetPreviewWildcardResponse);
 
-    rpc PlanReleaseDomain(PlanReleaseDomainRequest) returns (PlanReleaseDomainResponse);
+    rpc PlanRemovePreviewWildcard(PreviewWildcardRequest) returns (PlanRemovePreviewWildcardResponse);
 
-    rpc ReleaseDomain(ReleaseDomainRequest) returns (stream progress.v1.OperationEvent);
+    rpc RemovePreviewWildcard(RemovePreviewWildcardRequest) returns (stream progress.v1.OperationEvent);
 
-    rpc AddDomain(AddDomainRequest) returns (stream progress.v1.OperationEvent);
+    rpc AddHostname(AddHostnameRequest) returns (stream progress.v1.OperationEvent);
 
-    rpc RemoveDomain(RemoveDomainRequest) returns (stream progress.v1.OperationEvent);
+    rpc RemoveHostname(RemoveHostnameRequest) returns (stream progress.v1.OperationEvent);
 
-    rpc DomainStatus(DomainStatusRequest) returns (DomainStatusResponse);
+    rpc GetHostnameStatus(GetHostnameStatusRequest) returns (GetHostnameStatusResponse);
 }
 
 message AwsProviderConfig {
@@ -72,7 +72,7 @@ message ConfigureRequest {
 
 message ConfigureResponse {}
 
-message UseDomainRequest {
+message UsePreviewWildcardRequest {
   Environment.Class class = 1 [(buf.validate.field).enum.const = 1];
 
   string base_domain = 2;
@@ -80,23 +80,23 @@ message UseDomainRequest {
   EdgeSelection edge = 3;
 }
 
-message ListDomainRequest {
+message PreviewWildcardRequest {
   Environment.Class class = 1 [(buf.validate.field).enum.const = 1];
 }
 
-message ListDomainResponse {
-  GlobalPreviewDomain domain = 1;
+message GetPreviewWildcardResponse {
+  PreviewWildcard wildcard = 1;
 
   repeated string projects = 2;
 }
 
-message ReleaseDomainRequest {
+message RemovePreviewWildcardRequest {
   Environment.Class class = 1 [(buf.validate.field).enum.const = 1];
 
   EdgeSelection edge = 2;
 }
 
-message AddDomainRequest {
+message AddHostnameRequest {
   string slug = 1 [(buf.validate.field).string = {pattern: "^[a-z0-9]+(-[a-z0-9]+)*$", max_len: 63}];
 
   repeated string configured = 2;
@@ -106,7 +106,7 @@ message AddDomainRequest {
   EdgeSelection edge = 4;
 }
 
-message RemoveDomainRequest {
+message RemoveHostnameRequest {
   string slug = 1 [(buf.validate.field).string = {pattern: "^[a-z0-9]+(-[a-z0-9]+)*$", max_len: 63}];
 
   repeated string configured = 2;
@@ -116,7 +116,7 @@ message RemoveDomainRequest {
   EdgeSelection edge = 4;
 }
 
-message DomainStatusRequest {
+message GetHostnameStatusRequest {
   string slug = 1 [(buf.validate.field).string = {pattern: "^[a-z0-9]+(-[a-z0-9]+)*$", max_len: 63}];
 
   repeated string configured = 2;
@@ -124,8 +124,8 @@ message DomainStatusRequest {
   EdgeSelection edge = 3;
 }
 
-message DomainStatusResponse {
-  repeated DomainHost hosts = 1;
+message GetHostnameStatusResponse {
+  repeated ProductionHostname hostnames = 1;
 
   bool ready = 2;
 
@@ -134,36 +134,40 @@ message DomainStatusResponse {
   repeated string records_owed = 4;
 }
 
-message DomainHost {
+message CertificateState {
+  string certificate_id = 1;
+
+  string certificate_status = 2;
+
+  repeated string records_written = 3;
+
+  repeated string records_owed = 4;
+
+  int64 last_probe_at = 5;
+
+  bool last_probe_ok = 6;
+
+  string last_probe_edge = 7;
+}
+
+message ProductionHostname {
   string hostname = 1;
 
   bool declared = 2;
 
-  string certificate_id = 3;
+  CertificateState certificate = 3;
 
-  string certificate_status = 4;
+  string renewal_status = 4;
 
-  string renewal_status = 5;
+  int64 expires_at = 5;
 
-  int64 expires_at = 6;
+  bool expiring_soon = 6;
 
-  bool expiring_soon = 7;
+  string serving_pointer = 7;
 
-  repeated string records_written = 8;
+  bool ready = 8;
 
-  repeated string records_owed = 9;
-
-  int64 last_probe_at = 10;
-
-  bool last_probe_ok = 11;
-
-  string last_probe_edge = 12;
-
-  string serving_pointer = 13;
-
-  bool ready = 14;
-
-  string pending = 15;
+  string pending = 9;
 }
 
 message Environment {
@@ -308,25 +312,25 @@ message EdgeSelection {
   repeated string allow_degraded = 3;
 }
 
-message TeardownRequest {
+message RemoveSubstrateRequest {
   Environment.Class class = 1 [(buf.validate.field).enum.defined_only = true];
 
   EdgeSelection edge = 2;
 }
 
-message PlanTeardownRequest {
+message PlanRemoveSubstrateRequest {
   Environment.Class class = 1 [(buf.validate.field).enum.defined_only = true];
 
   EdgeSelection edge = 2;
 }
 
-message PlanTeardownResponse {
+message PlanRemoveSubstrateResponse {
   string edge_kind = 1;
 
-  repeated TeardownItem items = 2;
+  repeated RemovalItem items = 2;
 }
 
-message DestroyPreviewRequest {
+message RemovePreviewRequest {
   Environment environment = 1;
 
   string slug = 2 [(buf.validate.field).string = {pattern: "^[a-z0-9]+(-[a-z0-9]+)*$", max_len: 63}];
@@ -334,7 +338,7 @@ message DestroyPreviewRequest {
   EdgeSelection edge = 3;
 }
 
-message DestroyProjectRequest {
+message RemoveProjectRequest {
   string slug = 1 [(buf.validate.field).string = {pattern: "^[a-z0-9]+(-[a-z0-9]+)*$", max_len: 63}];
 
   Environment environment = 2;
@@ -342,7 +346,7 @@ message DestroyProjectRequest {
   EdgeSelection edge = 3;
 }
 
-message PlanDestroyProjectRequest {
+message PlanRemoveProjectRequest {
   string slug = 1 [(buf.validate.field).string = {pattern: "^[a-z0-9]+(-[a-z0-9]+)*$", max_len: 63}];
 
   Environment environment = 2;
@@ -350,27 +354,23 @@ message PlanDestroyProjectRequest {
   EdgeSelection edge = 3;
 }
 
-message PlanDestroyProjectResponse {
+message PlanRemoveProjectResponse {
   repeated string app_stacks = 1;
 
   repeated string infra_stacks = 2;
 
   EdgeStackPlan edge_stack = 3;
 
-  bool nothing_to_destroy = 4;
+  bool nothing_to_remove = 4;
 }
 
-message PlanReleaseDomainRequest {
-  Environment.Class class = 1 [(buf.validate.field).enum.const = 1];
-}
-
-message PlanReleaseDomainResponse {
+message PlanRemovePreviewWildcardResponse {
   string base_domain = 1;
 
   EdgeStackPlan edge_stack = 2;
 }
 
-message TeardownItem {
+message RemovalItem {
   enum Action {
     ACTION_UNSPECIFIED = 0;
     ACTION_DELETE = 1;
@@ -388,7 +388,7 @@ message TeardownItem {
 message EdgeStackPlan {
   string edge_kind = 1;
 
-  repeated TeardownItem items = 2;
+  repeated RemovalItem items = 2;
 }
 
 message ListEnvironmentsRequest {
@@ -434,10 +434,10 @@ message PreflightResponse {
 
   repeated DomainClaim domain_claims = 6;
 
-  GlobalPreviewDomain global_preview_domain = 7;
+  PreviewWildcard preview_wildcard = 7;
 }
 
-message GlobalPreviewDomain {
+message PreviewWildcard {
   string base_domain = 1;
 
   string edge_scope = 2;
@@ -448,19 +448,7 @@ message GlobalPreviewDomain {
 
   bool route_installed = 5;
 
-  string certificate_id = 6;
-
-  string certificate_status = 7;
-
-  repeated string records_written = 8;
-
-  repeated string records_owed = 9;
-
-  int64 last_probe_at = 10;
-
-  bool last_probe_ok = 11;
-
-  string last_probe_edge = 12;
+  CertificateState certificate = 6;
 }
 
 message DomainClaim {
@@ -529,7 +517,7 @@ message RollbackResponse {
   Promotion promoted = 1;
 }
 
-message PruneRequest {
+message RemoveStalePromotionsRequest {
   string slug = 1 [(buf.validate.field).string = {pattern: "^[a-z0-9]+(-[a-z0-9]+)*$", max_len: 63}];
 
   int32 keep_n = 2 [(buf.validate.field).int32.gte = 0];

@@ -18,10 +18,10 @@ import (
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
-func (s *Server) AddDomain(ctx context.Context, req *deploymentsv1.AddDomainRequest, stream *connect.ServerStream[progressv1.OperationEvent]) error {
+func (s *Server) AddHostname(ctx context.Context, req *deploymentsv1.AddHostnameRequest, stream *connect.ServerStream[progressv1.OperationEvent]) error {
 	progress := func(m string) { _ = stream.Send(progressEvent(m)) }
 
-	session, err := s.domainSession(ctx, domainRequest{
+	session, err := s.hostnameSession(ctx, hostnameRequest{
 		slug:        req.GetSlug(),
 		edgeKind:    string(requestedEdge(req)),
 		dns:         requestedDNS(req),
@@ -41,10 +41,10 @@ func (s *Server) AddDomain(ctx context.Context, req *deploymentsv1.AddDomainRequ
 	return stream.Send(okResult())
 }
 
-func (s *Server) RemoveDomain(ctx context.Context, req *deploymentsv1.RemoveDomainRequest, stream *connect.ServerStream[progressv1.OperationEvent]) error {
+func (s *Server) RemoveHostname(ctx context.Context, req *deploymentsv1.RemoveHostnameRequest, stream *connect.ServerStream[progressv1.OperationEvent]) error {
 	progress := func(m string) { _ = stream.Send(progressEvent(m)) }
 
-	session, err := s.domainSession(ctx, domainRequest{
+	session, err := s.hostnameSession(ctx, hostnameRequest{
 		slug:       req.GetSlug(),
 		edgeKind:   string(requestedEdge(req)),
 		dns:        requestedDNS(req),
@@ -60,7 +60,7 @@ func (s *Server) RemoveDomain(ctx context.Context, req *deploymentsv1.RemoveDoma
 	return stream.Send(okResult())
 }
 
-type domainRequest struct {
+type hostnameRequest struct {
 	slug        string
 	edgeKind    string
 	dns         *deploymentsv1.Dns
@@ -69,7 +69,7 @@ type domainRequest struct {
 	certificate bool
 }
 
-type domainSession struct {
+type hostnameSession struct {
 	engine     domains.Engine
 	stack      edge.EdgeStack
 	recorded   domains.Settlement
@@ -124,7 +124,7 @@ func (p *persistingStack) persist(ctx context.Context, err error) error {
 	return errors.Join(err, p.save(ctx))
 }
 
-func (s *Server) domainSession(ctx context.Context, req domainRequest) (*domainSession, error) {
+func (s *Server) hostnameSession(ctx context.Context, req hostnameRequest) (*hostnameSession, error) {
 	opts := s.config.get()
 	if req.slug == "" {
 		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("a production domain belongs to one project; this request names none"))
@@ -189,7 +189,7 @@ func (s *Server) domainSession(ctx context.Context, req domainRequest) (*domainS
 	if req.certificate {
 		engine.Issuer = clients.issuerFor(edgeFront)
 	}
-	return &domainSession{
+	return &hostnameSession{
 		engine:     engine,
 		stack:      stack,
 		recorded:   recorded,
@@ -199,7 +199,7 @@ func (s *Server) domainSession(ctx context.Context, req domainRequest) (*domainS
 	}, nil
 }
 
-func (d *domainSession) add(ctx context.Context, progress func(string)) error {
+func (d *hostnameSession) add(ctx context.Context, progress func(string)) error {
 	if len(d.configured) == 0 {
 		return fmt.Errorf("this project declares no domains.production, so there is no production hostname to add; declare one in the config and run this again — no command edits the config")
 	}
@@ -218,7 +218,7 @@ func (d *domainSession) add(ctx context.Context, progress func(string)) error {
 	return err
 }
 
-func (d *domainSession) addTargets(settled domains.Settlement) []domains.Target {
+func (d *hostnameSession) addTargets(settled domains.Settlement) []domains.Target {
 	var hosts []string
 	if d.host != "" {
 		hosts = []string{d.host}
@@ -236,7 +236,7 @@ func (d *domainSession) addTargets(settled domains.Settlement) []domains.Target 
 	return targets
 }
 
-func (d *domainSession) target(host string) domains.Target {
+func (d *hostnameSession) target(host string) domains.Target {
 	return domains.Target{
 		Hostname: host,
 		Pinned:   d.pins[host],
@@ -247,21 +247,21 @@ func (d *domainSession) target(host string) domains.Target {
 	}
 }
 
-func (d *domainSession) bind(ctx context.Context, host, certificate string) (edge.DNSTarget, error) {
+func (d *hostnameSession) bind(ctx context.Context, host, certificate string) (edge.DNSTarget, error) {
 	if err := d.stack.BindDomain(ctx, edge.DomainBinding{Hostname: host, Certificate: certificate}); err != nil {
 		return edge.DNSTarget{}, err
 	}
 	return edge.TargetOf(d.engine.Kind, d.engine.ServesUnbound, d.stack.State()), nil
 }
 
-func (d *domainSession) wantedARN(settled domains.Settlement, host string) string {
+func (d *hostnameSession) wantedARN(settled domains.Settlement, host string) string {
 	if pinned := d.pins[host]; pinned != "" {
 		return pinned
 	}
 	return settled.Certificate.ARN
 }
 
-func (d *domainSession) unpinned() []string {
+func (d *hostnameSession) unpinned() []string {
 	var wanted []string
 	for _, host := range d.configured {
 		if d.pins[host] == "" {
@@ -271,7 +271,7 @@ func (d *domainSession) unpinned() []string {
 	return wanted
 }
 
-func (d *domainSession) remove(ctx context.Context, progress func(string)) error {
+func (d *hostnameSession) remove(ctx context.Context, progress func(string)) error {
 	targets, err := d.removeTargets()
 	if err != nil {
 		return err
@@ -289,7 +289,7 @@ func (d *domainSession) remove(ctx context.Context, progress func(string)) error
 	return err
 }
 
-func (d *domainSession) removeTargets() ([]string, error) {
+func (d *hostnameSession) removeTargets() ([]string, error) {
 	provisioned := d.recorded.Hostnames()
 	if d.host != "" {
 		if !slices.Contains(provisioned, d.host) {

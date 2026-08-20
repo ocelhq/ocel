@@ -45,21 +45,21 @@ const (
 	// ProviderServiceDescribeBootstrapProcedure is the fully-qualified name of the ProviderService's
 	// DescribeBootstrap RPC.
 	ProviderServiceDescribeBootstrapProcedure = "/deployments.v1.ProviderService/DescribeBootstrap"
-	// ProviderServiceTeardownProcedure is the fully-qualified name of the ProviderService's Teardown
-	// RPC.
-	ProviderServiceTeardownProcedure = "/deployments.v1.ProviderService/Teardown"
-	// ProviderServicePlanTeardownProcedure is the fully-qualified name of the ProviderService's
-	// PlanTeardown RPC.
-	ProviderServicePlanTeardownProcedure = "/deployments.v1.ProviderService/PlanTeardown"
-	// ProviderServiceDestroyPreviewProcedure is the fully-qualified name of the ProviderService's
-	// DestroyPreview RPC.
-	ProviderServiceDestroyPreviewProcedure = "/deployments.v1.ProviderService/DestroyPreview"
-	// ProviderServiceDestroyProjectProcedure is the fully-qualified name of the ProviderService's
-	// DestroyProject RPC.
-	ProviderServiceDestroyProjectProcedure = "/deployments.v1.ProviderService/DestroyProject"
-	// ProviderServicePlanDestroyProjectProcedure is the fully-qualified name of the ProviderService's
-	// PlanDestroyProject RPC.
-	ProviderServicePlanDestroyProjectProcedure = "/deployments.v1.ProviderService/PlanDestroyProject"
+	// ProviderServiceRemoveSubstrateProcedure is the fully-qualified name of the ProviderService's
+	// RemoveSubstrate RPC.
+	ProviderServiceRemoveSubstrateProcedure = "/deployments.v1.ProviderService/RemoveSubstrate"
+	// ProviderServicePlanRemoveSubstrateProcedure is the fully-qualified name of the ProviderService's
+	// PlanRemoveSubstrate RPC.
+	ProviderServicePlanRemoveSubstrateProcedure = "/deployments.v1.ProviderService/PlanRemoveSubstrate"
+	// ProviderServiceRemovePreviewProcedure is the fully-qualified name of the ProviderService's
+	// RemovePreview RPC.
+	ProviderServiceRemovePreviewProcedure = "/deployments.v1.ProviderService/RemovePreview"
+	// ProviderServiceRemoveProjectProcedure is the fully-qualified name of the ProviderService's
+	// RemoveProject RPC.
+	ProviderServiceRemoveProjectProcedure = "/deployments.v1.ProviderService/RemoveProject"
+	// ProviderServicePlanRemoveProjectProcedure is the fully-qualified name of the ProviderService's
+	// PlanRemoveProject RPC.
+	ProviderServicePlanRemoveProjectProcedure = "/deployments.v1.ProviderService/PlanRemoveProject"
 	// ProviderServiceListEnvironmentsProcedure is the fully-qualified name of the ProviderService's
 	// ListEnvironments RPC.
 	ProviderServiceListEnvironmentsProcedure = "/deployments.v1.ProviderService/ListEnvironments"
@@ -72,29 +72,30 @@ const (
 	// ProviderServiceRollbackProcedure is the fully-qualified name of the ProviderService's Rollback
 	// RPC.
 	ProviderServiceRollbackProcedure = "/deployments.v1.ProviderService/Rollback"
-	// ProviderServicePruneProcedure is the fully-qualified name of the ProviderService's Prune RPC.
-	ProviderServicePruneProcedure = "/deployments.v1.ProviderService/Prune"
-	// ProviderServiceUseDomainProcedure is the fully-qualified name of the ProviderService's UseDomain
-	// RPC.
-	ProviderServiceUseDomainProcedure = "/deployments.v1.ProviderService/UseDomain"
-	// ProviderServiceListDomainProcedure is the fully-qualified name of the ProviderService's
-	// ListDomain RPC.
-	ProviderServiceListDomainProcedure = "/deployments.v1.ProviderService/ListDomain"
-	// ProviderServicePlanReleaseDomainProcedure is the fully-qualified name of the ProviderService's
-	// PlanReleaseDomain RPC.
-	ProviderServicePlanReleaseDomainProcedure = "/deployments.v1.ProviderService/PlanReleaseDomain"
-	// ProviderServiceReleaseDomainProcedure is the fully-qualified name of the ProviderService's
-	// ReleaseDomain RPC.
-	ProviderServiceReleaseDomainProcedure = "/deployments.v1.ProviderService/ReleaseDomain"
-	// ProviderServiceAddDomainProcedure is the fully-qualified name of the ProviderService's AddDomain
-	// RPC.
-	ProviderServiceAddDomainProcedure = "/deployments.v1.ProviderService/AddDomain"
-	// ProviderServiceRemoveDomainProcedure is the fully-qualified name of the ProviderService's
-	// RemoveDomain RPC.
-	ProviderServiceRemoveDomainProcedure = "/deployments.v1.ProviderService/RemoveDomain"
-	// ProviderServiceDomainStatusProcedure is the fully-qualified name of the ProviderService's
-	// DomainStatus RPC.
-	ProviderServiceDomainStatusProcedure = "/deployments.v1.ProviderService/DomainStatus"
+	// ProviderServiceRemoveStalePromotionsProcedure is the fully-qualified name of the
+	// ProviderService's RemoveStalePromotions RPC.
+	ProviderServiceRemoveStalePromotionsProcedure = "/deployments.v1.ProviderService/RemoveStalePromotions"
+	// ProviderServiceUsePreviewWildcardProcedure is the fully-qualified name of the ProviderService's
+	// UsePreviewWildcard RPC.
+	ProviderServiceUsePreviewWildcardProcedure = "/deployments.v1.ProviderService/UsePreviewWildcard"
+	// ProviderServiceGetPreviewWildcardProcedure is the fully-qualified name of the ProviderService's
+	// GetPreviewWildcard RPC.
+	ProviderServiceGetPreviewWildcardProcedure = "/deployments.v1.ProviderService/GetPreviewWildcard"
+	// ProviderServicePlanRemovePreviewWildcardProcedure is the fully-qualified name of the
+	// ProviderService's PlanRemovePreviewWildcard RPC.
+	ProviderServicePlanRemovePreviewWildcardProcedure = "/deployments.v1.ProviderService/PlanRemovePreviewWildcard"
+	// ProviderServiceRemovePreviewWildcardProcedure is the fully-qualified name of the
+	// ProviderService's RemovePreviewWildcard RPC.
+	ProviderServiceRemovePreviewWildcardProcedure = "/deployments.v1.ProviderService/RemovePreviewWildcard"
+	// ProviderServiceAddHostnameProcedure is the fully-qualified name of the ProviderService's
+	// AddHostname RPC.
+	ProviderServiceAddHostnameProcedure = "/deployments.v1.ProviderService/AddHostname"
+	// ProviderServiceRemoveHostnameProcedure is the fully-qualified name of the ProviderService's
+	// RemoveHostname RPC.
+	ProviderServiceRemoveHostnameProcedure = "/deployments.v1.ProviderService/RemoveHostname"
+	// ProviderServiceGetHostnameStatusProcedure is the fully-qualified name of the ProviderService's
+	// GetHostnameStatus RPC.
+	ProviderServiceGetHostnameStatusProcedure = "/deployments.v1.ProviderService/GetHostnameStatus"
 )
 
 // ProviderServiceClient is a client for the deployments.v1.ProviderService service.
@@ -103,23 +104,23 @@ type ProviderServiceClient interface {
 	Deploy(context.Context, *v1.DeployRequest) (*connect.ServerStreamForClient[v11.OperationEvent], error)
 	Bootstrap(context.Context, *v1.BootstrapRequest) (*connect.ServerStreamForClient[v11.OperationEvent], error)
 	DescribeBootstrap(context.Context, *v1.DescribeBootstrapRequest) (*v1.DescribeBootstrapResponse, error)
-	Teardown(context.Context, *v1.TeardownRequest) (*connect.ServerStreamForClient[v11.OperationEvent], error)
-	PlanTeardown(context.Context, *v1.PlanTeardownRequest) (*v1.PlanTeardownResponse, error)
-	DestroyPreview(context.Context, *v1.DestroyPreviewRequest) (*connect.ServerStreamForClient[v11.OperationEvent], error)
-	DestroyProject(context.Context, *v1.DestroyProjectRequest) (*connect.ServerStreamForClient[v11.OperationEvent], error)
-	PlanDestroyProject(context.Context, *v1.PlanDestroyProjectRequest) (*v1.PlanDestroyProjectResponse, error)
+	RemoveSubstrate(context.Context, *v1.RemoveSubstrateRequest) (*connect.ServerStreamForClient[v11.OperationEvent], error)
+	PlanRemoveSubstrate(context.Context, *v1.PlanRemoveSubstrateRequest) (*v1.PlanRemoveSubstrateResponse, error)
+	RemovePreview(context.Context, *v1.RemovePreviewRequest) (*connect.ServerStreamForClient[v11.OperationEvent], error)
+	RemoveProject(context.Context, *v1.RemoveProjectRequest) (*connect.ServerStreamForClient[v11.OperationEvent], error)
+	PlanRemoveProject(context.Context, *v1.PlanRemoveProjectRequest) (*v1.PlanRemoveProjectResponse, error)
 	ListEnvironments(context.Context, *v1.ListEnvironmentsRequest) (*v1.ListEnvironmentsResponse, error)
 	Preflight(context.Context, *v1.PreflightRequest) (*v1.PreflightResponse, error)
 	ListPromotions(context.Context, *v1.ListPromotionsRequest) (*v1.ListPromotionsResponse, error)
 	Rollback(context.Context, *v1.RollbackRequest) (*v1.RollbackResponse, error)
-	Prune(context.Context, *v1.PruneRequest) (*connect.ServerStreamForClient[v11.OperationEvent], error)
-	UseDomain(context.Context, *v1.UseDomainRequest) (*connect.ServerStreamForClient[v11.OperationEvent], error)
-	ListDomain(context.Context, *v1.ListDomainRequest) (*v1.ListDomainResponse, error)
-	PlanReleaseDomain(context.Context, *v1.PlanReleaseDomainRequest) (*v1.PlanReleaseDomainResponse, error)
-	ReleaseDomain(context.Context, *v1.ReleaseDomainRequest) (*connect.ServerStreamForClient[v11.OperationEvent], error)
-	AddDomain(context.Context, *v1.AddDomainRequest) (*connect.ServerStreamForClient[v11.OperationEvent], error)
-	RemoveDomain(context.Context, *v1.RemoveDomainRequest) (*connect.ServerStreamForClient[v11.OperationEvent], error)
-	DomainStatus(context.Context, *v1.DomainStatusRequest) (*v1.DomainStatusResponse, error)
+	RemoveStalePromotions(context.Context, *v1.RemoveStalePromotionsRequest) (*connect.ServerStreamForClient[v11.OperationEvent], error)
+	UsePreviewWildcard(context.Context, *v1.UsePreviewWildcardRequest) (*connect.ServerStreamForClient[v11.OperationEvent], error)
+	GetPreviewWildcard(context.Context, *v1.PreviewWildcardRequest) (*v1.GetPreviewWildcardResponse, error)
+	PlanRemovePreviewWildcard(context.Context, *v1.PreviewWildcardRequest) (*v1.PlanRemovePreviewWildcardResponse, error)
+	RemovePreviewWildcard(context.Context, *v1.RemovePreviewWildcardRequest) (*connect.ServerStreamForClient[v11.OperationEvent], error)
+	AddHostname(context.Context, *v1.AddHostnameRequest) (*connect.ServerStreamForClient[v11.OperationEvent], error)
+	RemoveHostname(context.Context, *v1.RemoveHostnameRequest) (*connect.ServerStreamForClient[v11.OperationEvent], error)
+	GetHostnameStatus(context.Context, *v1.GetHostnameStatusRequest) (*v1.GetHostnameStatusResponse, error)
 }
 
 // NewProviderServiceClient constructs a client for the deployments.v1.ProviderService service. By
@@ -157,34 +158,34 @@ func NewProviderServiceClient(httpClient connect.HTTPClient, baseURL string, opt
 			connect.WithSchema(providerServiceMethods.ByName("DescribeBootstrap")),
 			connect.WithClientOptions(opts...),
 		),
-		teardown: connect.NewClient[v1.TeardownRequest, v11.OperationEvent](
+		removeSubstrate: connect.NewClient[v1.RemoveSubstrateRequest, v11.OperationEvent](
 			httpClient,
-			baseURL+ProviderServiceTeardownProcedure,
-			connect.WithSchema(providerServiceMethods.ByName("Teardown")),
+			baseURL+ProviderServiceRemoveSubstrateProcedure,
+			connect.WithSchema(providerServiceMethods.ByName("RemoveSubstrate")),
 			connect.WithClientOptions(opts...),
 		),
-		planTeardown: connect.NewClient[v1.PlanTeardownRequest, v1.PlanTeardownResponse](
+		planRemoveSubstrate: connect.NewClient[v1.PlanRemoveSubstrateRequest, v1.PlanRemoveSubstrateResponse](
 			httpClient,
-			baseURL+ProviderServicePlanTeardownProcedure,
-			connect.WithSchema(providerServiceMethods.ByName("PlanTeardown")),
+			baseURL+ProviderServicePlanRemoveSubstrateProcedure,
+			connect.WithSchema(providerServiceMethods.ByName("PlanRemoveSubstrate")),
 			connect.WithClientOptions(opts...),
 		),
-		destroyPreview: connect.NewClient[v1.DestroyPreviewRequest, v11.OperationEvent](
+		removePreview: connect.NewClient[v1.RemovePreviewRequest, v11.OperationEvent](
 			httpClient,
-			baseURL+ProviderServiceDestroyPreviewProcedure,
-			connect.WithSchema(providerServiceMethods.ByName("DestroyPreview")),
+			baseURL+ProviderServiceRemovePreviewProcedure,
+			connect.WithSchema(providerServiceMethods.ByName("RemovePreview")),
 			connect.WithClientOptions(opts...),
 		),
-		destroyProject: connect.NewClient[v1.DestroyProjectRequest, v11.OperationEvent](
+		removeProject: connect.NewClient[v1.RemoveProjectRequest, v11.OperationEvent](
 			httpClient,
-			baseURL+ProviderServiceDestroyProjectProcedure,
-			connect.WithSchema(providerServiceMethods.ByName("DestroyProject")),
+			baseURL+ProviderServiceRemoveProjectProcedure,
+			connect.WithSchema(providerServiceMethods.ByName("RemoveProject")),
 			connect.WithClientOptions(opts...),
 		),
-		planDestroyProject: connect.NewClient[v1.PlanDestroyProjectRequest, v1.PlanDestroyProjectResponse](
+		planRemoveProject: connect.NewClient[v1.PlanRemoveProjectRequest, v1.PlanRemoveProjectResponse](
 			httpClient,
-			baseURL+ProviderServicePlanDestroyProjectProcedure,
-			connect.WithSchema(providerServiceMethods.ByName("PlanDestroyProject")),
+			baseURL+ProviderServicePlanRemoveProjectProcedure,
+			connect.WithSchema(providerServiceMethods.ByName("PlanRemoveProject")),
 			connect.WithClientOptions(opts...),
 		),
 		listEnvironments: connect.NewClient[v1.ListEnvironmentsRequest, v1.ListEnvironmentsResponse](
@@ -211,52 +212,52 @@ func NewProviderServiceClient(httpClient connect.HTTPClient, baseURL string, opt
 			connect.WithSchema(providerServiceMethods.ByName("Rollback")),
 			connect.WithClientOptions(opts...),
 		),
-		prune: connect.NewClient[v1.PruneRequest, v11.OperationEvent](
+		removeStalePromotions: connect.NewClient[v1.RemoveStalePromotionsRequest, v11.OperationEvent](
 			httpClient,
-			baseURL+ProviderServicePruneProcedure,
-			connect.WithSchema(providerServiceMethods.ByName("Prune")),
+			baseURL+ProviderServiceRemoveStalePromotionsProcedure,
+			connect.WithSchema(providerServiceMethods.ByName("RemoveStalePromotions")),
 			connect.WithClientOptions(opts...),
 		),
-		useDomain: connect.NewClient[v1.UseDomainRequest, v11.OperationEvent](
+		usePreviewWildcard: connect.NewClient[v1.UsePreviewWildcardRequest, v11.OperationEvent](
 			httpClient,
-			baseURL+ProviderServiceUseDomainProcedure,
-			connect.WithSchema(providerServiceMethods.ByName("UseDomain")),
+			baseURL+ProviderServiceUsePreviewWildcardProcedure,
+			connect.WithSchema(providerServiceMethods.ByName("UsePreviewWildcard")),
 			connect.WithClientOptions(opts...),
 		),
-		listDomain: connect.NewClient[v1.ListDomainRequest, v1.ListDomainResponse](
+		getPreviewWildcard: connect.NewClient[v1.PreviewWildcardRequest, v1.GetPreviewWildcardResponse](
 			httpClient,
-			baseURL+ProviderServiceListDomainProcedure,
-			connect.WithSchema(providerServiceMethods.ByName("ListDomain")),
+			baseURL+ProviderServiceGetPreviewWildcardProcedure,
+			connect.WithSchema(providerServiceMethods.ByName("GetPreviewWildcard")),
 			connect.WithClientOptions(opts...),
 		),
-		planReleaseDomain: connect.NewClient[v1.PlanReleaseDomainRequest, v1.PlanReleaseDomainResponse](
+		planRemovePreviewWildcard: connect.NewClient[v1.PreviewWildcardRequest, v1.PlanRemovePreviewWildcardResponse](
 			httpClient,
-			baseURL+ProviderServicePlanReleaseDomainProcedure,
-			connect.WithSchema(providerServiceMethods.ByName("PlanReleaseDomain")),
+			baseURL+ProviderServicePlanRemovePreviewWildcardProcedure,
+			connect.WithSchema(providerServiceMethods.ByName("PlanRemovePreviewWildcard")),
 			connect.WithClientOptions(opts...),
 		),
-		releaseDomain: connect.NewClient[v1.ReleaseDomainRequest, v11.OperationEvent](
+		removePreviewWildcard: connect.NewClient[v1.RemovePreviewWildcardRequest, v11.OperationEvent](
 			httpClient,
-			baseURL+ProviderServiceReleaseDomainProcedure,
-			connect.WithSchema(providerServiceMethods.ByName("ReleaseDomain")),
+			baseURL+ProviderServiceRemovePreviewWildcardProcedure,
+			connect.WithSchema(providerServiceMethods.ByName("RemovePreviewWildcard")),
 			connect.WithClientOptions(opts...),
 		),
-		addDomain: connect.NewClient[v1.AddDomainRequest, v11.OperationEvent](
+		addHostname: connect.NewClient[v1.AddHostnameRequest, v11.OperationEvent](
 			httpClient,
-			baseURL+ProviderServiceAddDomainProcedure,
-			connect.WithSchema(providerServiceMethods.ByName("AddDomain")),
+			baseURL+ProviderServiceAddHostnameProcedure,
+			connect.WithSchema(providerServiceMethods.ByName("AddHostname")),
 			connect.WithClientOptions(opts...),
 		),
-		removeDomain: connect.NewClient[v1.RemoveDomainRequest, v11.OperationEvent](
+		removeHostname: connect.NewClient[v1.RemoveHostnameRequest, v11.OperationEvent](
 			httpClient,
-			baseURL+ProviderServiceRemoveDomainProcedure,
-			connect.WithSchema(providerServiceMethods.ByName("RemoveDomain")),
+			baseURL+ProviderServiceRemoveHostnameProcedure,
+			connect.WithSchema(providerServiceMethods.ByName("RemoveHostname")),
 			connect.WithClientOptions(opts...),
 		),
-		domainStatus: connect.NewClient[v1.DomainStatusRequest, v1.DomainStatusResponse](
+		getHostnameStatus: connect.NewClient[v1.GetHostnameStatusRequest, v1.GetHostnameStatusResponse](
 			httpClient,
-			baseURL+ProviderServiceDomainStatusProcedure,
-			connect.WithSchema(providerServiceMethods.ByName("DomainStatus")),
+			baseURL+ProviderServiceGetHostnameStatusProcedure,
+			connect.WithSchema(providerServiceMethods.ByName("GetHostnameStatus")),
 			connect.WithClientOptions(opts...),
 		),
 	}
@@ -264,27 +265,27 @@ func NewProviderServiceClient(httpClient connect.HTTPClient, baseURL string, opt
 
 // providerServiceClient implements ProviderServiceClient.
 type providerServiceClient struct {
-	configure          *connect.Client[v1.ConfigureRequest, v1.ConfigureResponse]
-	deploy             *connect.Client[v1.DeployRequest, v11.OperationEvent]
-	bootstrap          *connect.Client[v1.BootstrapRequest, v11.OperationEvent]
-	describeBootstrap  *connect.Client[v1.DescribeBootstrapRequest, v1.DescribeBootstrapResponse]
-	teardown           *connect.Client[v1.TeardownRequest, v11.OperationEvent]
-	planTeardown       *connect.Client[v1.PlanTeardownRequest, v1.PlanTeardownResponse]
-	destroyPreview     *connect.Client[v1.DestroyPreviewRequest, v11.OperationEvent]
-	destroyProject     *connect.Client[v1.DestroyProjectRequest, v11.OperationEvent]
-	planDestroyProject *connect.Client[v1.PlanDestroyProjectRequest, v1.PlanDestroyProjectResponse]
-	listEnvironments   *connect.Client[v1.ListEnvironmentsRequest, v1.ListEnvironmentsResponse]
-	preflight          *connect.Client[v1.PreflightRequest, v1.PreflightResponse]
-	listPromotions     *connect.Client[v1.ListPromotionsRequest, v1.ListPromotionsResponse]
-	rollback           *connect.Client[v1.RollbackRequest, v1.RollbackResponse]
-	prune              *connect.Client[v1.PruneRequest, v11.OperationEvent]
-	useDomain          *connect.Client[v1.UseDomainRequest, v11.OperationEvent]
-	listDomain         *connect.Client[v1.ListDomainRequest, v1.ListDomainResponse]
-	planReleaseDomain  *connect.Client[v1.PlanReleaseDomainRequest, v1.PlanReleaseDomainResponse]
-	releaseDomain      *connect.Client[v1.ReleaseDomainRequest, v11.OperationEvent]
-	addDomain          *connect.Client[v1.AddDomainRequest, v11.OperationEvent]
-	removeDomain       *connect.Client[v1.RemoveDomainRequest, v11.OperationEvent]
-	domainStatus       *connect.Client[v1.DomainStatusRequest, v1.DomainStatusResponse]
+	configure                 *connect.Client[v1.ConfigureRequest, v1.ConfigureResponse]
+	deploy                    *connect.Client[v1.DeployRequest, v11.OperationEvent]
+	bootstrap                 *connect.Client[v1.BootstrapRequest, v11.OperationEvent]
+	describeBootstrap         *connect.Client[v1.DescribeBootstrapRequest, v1.DescribeBootstrapResponse]
+	removeSubstrate           *connect.Client[v1.RemoveSubstrateRequest, v11.OperationEvent]
+	planRemoveSubstrate       *connect.Client[v1.PlanRemoveSubstrateRequest, v1.PlanRemoveSubstrateResponse]
+	removePreview             *connect.Client[v1.RemovePreviewRequest, v11.OperationEvent]
+	removeProject             *connect.Client[v1.RemoveProjectRequest, v11.OperationEvent]
+	planRemoveProject         *connect.Client[v1.PlanRemoveProjectRequest, v1.PlanRemoveProjectResponse]
+	listEnvironments          *connect.Client[v1.ListEnvironmentsRequest, v1.ListEnvironmentsResponse]
+	preflight                 *connect.Client[v1.PreflightRequest, v1.PreflightResponse]
+	listPromotions            *connect.Client[v1.ListPromotionsRequest, v1.ListPromotionsResponse]
+	rollback                  *connect.Client[v1.RollbackRequest, v1.RollbackResponse]
+	removeStalePromotions     *connect.Client[v1.RemoveStalePromotionsRequest, v11.OperationEvent]
+	usePreviewWildcard        *connect.Client[v1.UsePreviewWildcardRequest, v11.OperationEvent]
+	getPreviewWildcard        *connect.Client[v1.PreviewWildcardRequest, v1.GetPreviewWildcardResponse]
+	planRemovePreviewWildcard *connect.Client[v1.PreviewWildcardRequest, v1.PlanRemovePreviewWildcardResponse]
+	removePreviewWildcard     *connect.Client[v1.RemovePreviewWildcardRequest, v11.OperationEvent]
+	addHostname               *connect.Client[v1.AddHostnameRequest, v11.OperationEvent]
+	removeHostname            *connect.Client[v1.RemoveHostnameRequest, v11.OperationEvent]
+	getHostnameStatus         *connect.Client[v1.GetHostnameStatusRequest, v1.GetHostnameStatusResponse]
 }
 
 // Configure calls deployments.v1.ProviderService.Configure.
@@ -315,33 +316,33 @@ func (c *providerServiceClient) DescribeBootstrap(ctx context.Context, req *v1.D
 	return nil, err
 }
 
-// Teardown calls deployments.v1.ProviderService.Teardown.
-func (c *providerServiceClient) Teardown(ctx context.Context, req *v1.TeardownRequest) (*connect.ServerStreamForClient[v11.OperationEvent], error) {
-	return c.teardown.CallServerStream(ctx, connect.NewRequest(req))
+// RemoveSubstrate calls deployments.v1.ProviderService.RemoveSubstrate.
+func (c *providerServiceClient) RemoveSubstrate(ctx context.Context, req *v1.RemoveSubstrateRequest) (*connect.ServerStreamForClient[v11.OperationEvent], error) {
+	return c.removeSubstrate.CallServerStream(ctx, connect.NewRequest(req))
 }
 
-// PlanTeardown calls deployments.v1.ProviderService.PlanTeardown.
-func (c *providerServiceClient) PlanTeardown(ctx context.Context, req *v1.PlanTeardownRequest) (*v1.PlanTeardownResponse, error) {
-	response, err := c.planTeardown.CallUnary(ctx, connect.NewRequest(req))
+// PlanRemoveSubstrate calls deployments.v1.ProviderService.PlanRemoveSubstrate.
+func (c *providerServiceClient) PlanRemoveSubstrate(ctx context.Context, req *v1.PlanRemoveSubstrateRequest) (*v1.PlanRemoveSubstrateResponse, error) {
+	response, err := c.planRemoveSubstrate.CallUnary(ctx, connect.NewRequest(req))
 	if response != nil {
 		return response.Msg, err
 	}
 	return nil, err
 }
 
-// DestroyPreview calls deployments.v1.ProviderService.DestroyPreview.
-func (c *providerServiceClient) DestroyPreview(ctx context.Context, req *v1.DestroyPreviewRequest) (*connect.ServerStreamForClient[v11.OperationEvent], error) {
-	return c.destroyPreview.CallServerStream(ctx, connect.NewRequest(req))
+// RemovePreview calls deployments.v1.ProviderService.RemovePreview.
+func (c *providerServiceClient) RemovePreview(ctx context.Context, req *v1.RemovePreviewRequest) (*connect.ServerStreamForClient[v11.OperationEvent], error) {
+	return c.removePreview.CallServerStream(ctx, connect.NewRequest(req))
 }
 
-// DestroyProject calls deployments.v1.ProviderService.DestroyProject.
-func (c *providerServiceClient) DestroyProject(ctx context.Context, req *v1.DestroyProjectRequest) (*connect.ServerStreamForClient[v11.OperationEvent], error) {
-	return c.destroyProject.CallServerStream(ctx, connect.NewRequest(req))
+// RemoveProject calls deployments.v1.ProviderService.RemoveProject.
+func (c *providerServiceClient) RemoveProject(ctx context.Context, req *v1.RemoveProjectRequest) (*connect.ServerStreamForClient[v11.OperationEvent], error) {
+	return c.removeProject.CallServerStream(ctx, connect.NewRequest(req))
 }
 
-// PlanDestroyProject calls deployments.v1.ProviderService.PlanDestroyProject.
-func (c *providerServiceClient) PlanDestroyProject(ctx context.Context, req *v1.PlanDestroyProjectRequest) (*v1.PlanDestroyProjectResponse, error) {
-	response, err := c.planDestroyProject.CallUnary(ctx, connect.NewRequest(req))
+// PlanRemoveProject calls deployments.v1.ProviderService.PlanRemoveProject.
+func (c *providerServiceClient) PlanRemoveProject(ctx context.Context, req *v1.PlanRemoveProjectRequest) (*v1.PlanRemoveProjectResponse, error) {
+	response, err := c.planRemoveProject.CallUnary(ctx, connect.NewRequest(req))
 	if response != nil {
 		return response.Msg, err
 	}
@@ -384,52 +385,52 @@ func (c *providerServiceClient) Rollback(ctx context.Context, req *v1.RollbackRe
 	return nil, err
 }
 
-// Prune calls deployments.v1.ProviderService.Prune.
-func (c *providerServiceClient) Prune(ctx context.Context, req *v1.PruneRequest) (*connect.ServerStreamForClient[v11.OperationEvent], error) {
-	return c.prune.CallServerStream(ctx, connect.NewRequest(req))
+// RemoveStalePromotions calls deployments.v1.ProviderService.RemoveStalePromotions.
+func (c *providerServiceClient) RemoveStalePromotions(ctx context.Context, req *v1.RemoveStalePromotionsRequest) (*connect.ServerStreamForClient[v11.OperationEvent], error) {
+	return c.removeStalePromotions.CallServerStream(ctx, connect.NewRequest(req))
 }
 
-// UseDomain calls deployments.v1.ProviderService.UseDomain.
-func (c *providerServiceClient) UseDomain(ctx context.Context, req *v1.UseDomainRequest) (*connect.ServerStreamForClient[v11.OperationEvent], error) {
-	return c.useDomain.CallServerStream(ctx, connect.NewRequest(req))
+// UsePreviewWildcard calls deployments.v1.ProviderService.UsePreviewWildcard.
+func (c *providerServiceClient) UsePreviewWildcard(ctx context.Context, req *v1.UsePreviewWildcardRequest) (*connect.ServerStreamForClient[v11.OperationEvent], error) {
+	return c.usePreviewWildcard.CallServerStream(ctx, connect.NewRequest(req))
 }
 
-// ListDomain calls deployments.v1.ProviderService.ListDomain.
-func (c *providerServiceClient) ListDomain(ctx context.Context, req *v1.ListDomainRequest) (*v1.ListDomainResponse, error) {
-	response, err := c.listDomain.CallUnary(ctx, connect.NewRequest(req))
+// GetPreviewWildcard calls deployments.v1.ProviderService.GetPreviewWildcard.
+func (c *providerServiceClient) GetPreviewWildcard(ctx context.Context, req *v1.PreviewWildcardRequest) (*v1.GetPreviewWildcardResponse, error) {
+	response, err := c.getPreviewWildcard.CallUnary(ctx, connect.NewRequest(req))
 	if response != nil {
 		return response.Msg, err
 	}
 	return nil, err
 }
 
-// PlanReleaseDomain calls deployments.v1.ProviderService.PlanReleaseDomain.
-func (c *providerServiceClient) PlanReleaseDomain(ctx context.Context, req *v1.PlanReleaseDomainRequest) (*v1.PlanReleaseDomainResponse, error) {
-	response, err := c.planReleaseDomain.CallUnary(ctx, connect.NewRequest(req))
+// PlanRemovePreviewWildcard calls deployments.v1.ProviderService.PlanRemovePreviewWildcard.
+func (c *providerServiceClient) PlanRemovePreviewWildcard(ctx context.Context, req *v1.PreviewWildcardRequest) (*v1.PlanRemovePreviewWildcardResponse, error) {
+	response, err := c.planRemovePreviewWildcard.CallUnary(ctx, connect.NewRequest(req))
 	if response != nil {
 		return response.Msg, err
 	}
 	return nil, err
 }
 
-// ReleaseDomain calls deployments.v1.ProviderService.ReleaseDomain.
-func (c *providerServiceClient) ReleaseDomain(ctx context.Context, req *v1.ReleaseDomainRequest) (*connect.ServerStreamForClient[v11.OperationEvent], error) {
-	return c.releaseDomain.CallServerStream(ctx, connect.NewRequest(req))
+// RemovePreviewWildcard calls deployments.v1.ProviderService.RemovePreviewWildcard.
+func (c *providerServiceClient) RemovePreviewWildcard(ctx context.Context, req *v1.RemovePreviewWildcardRequest) (*connect.ServerStreamForClient[v11.OperationEvent], error) {
+	return c.removePreviewWildcard.CallServerStream(ctx, connect.NewRequest(req))
 }
 
-// AddDomain calls deployments.v1.ProviderService.AddDomain.
-func (c *providerServiceClient) AddDomain(ctx context.Context, req *v1.AddDomainRequest) (*connect.ServerStreamForClient[v11.OperationEvent], error) {
-	return c.addDomain.CallServerStream(ctx, connect.NewRequest(req))
+// AddHostname calls deployments.v1.ProviderService.AddHostname.
+func (c *providerServiceClient) AddHostname(ctx context.Context, req *v1.AddHostnameRequest) (*connect.ServerStreamForClient[v11.OperationEvent], error) {
+	return c.addHostname.CallServerStream(ctx, connect.NewRequest(req))
 }
 
-// RemoveDomain calls deployments.v1.ProviderService.RemoveDomain.
-func (c *providerServiceClient) RemoveDomain(ctx context.Context, req *v1.RemoveDomainRequest) (*connect.ServerStreamForClient[v11.OperationEvent], error) {
-	return c.removeDomain.CallServerStream(ctx, connect.NewRequest(req))
+// RemoveHostname calls deployments.v1.ProviderService.RemoveHostname.
+func (c *providerServiceClient) RemoveHostname(ctx context.Context, req *v1.RemoveHostnameRequest) (*connect.ServerStreamForClient[v11.OperationEvent], error) {
+	return c.removeHostname.CallServerStream(ctx, connect.NewRequest(req))
 }
 
-// DomainStatus calls deployments.v1.ProviderService.DomainStatus.
-func (c *providerServiceClient) DomainStatus(ctx context.Context, req *v1.DomainStatusRequest) (*v1.DomainStatusResponse, error) {
-	response, err := c.domainStatus.CallUnary(ctx, connect.NewRequest(req))
+// GetHostnameStatus calls deployments.v1.ProviderService.GetHostnameStatus.
+func (c *providerServiceClient) GetHostnameStatus(ctx context.Context, req *v1.GetHostnameStatusRequest) (*v1.GetHostnameStatusResponse, error) {
+	response, err := c.getHostnameStatus.CallUnary(ctx, connect.NewRequest(req))
 	if response != nil {
 		return response.Msg, err
 	}
@@ -442,23 +443,23 @@ type ProviderServiceHandler interface {
 	Deploy(context.Context, *v1.DeployRequest, *connect.ServerStream[v11.OperationEvent]) error
 	Bootstrap(context.Context, *v1.BootstrapRequest, *connect.ServerStream[v11.OperationEvent]) error
 	DescribeBootstrap(context.Context, *v1.DescribeBootstrapRequest) (*v1.DescribeBootstrapResponse, error)
-	Teardown(context.Context, *v1.TeardownRequest, *connect.ServerStream[v11.OperationEvent]) error
-	PlanTeardown(context.Context, *v1.PlanTeardownRequest) (*v1.PlanTeardownResponse, error)
-	DestroyPreview(context.Context, *v1.DestroyPreviewRequest, *connect.ServerStream[v11.OperationEvent]) error
-	DestroyProject(context.Context, *v1.DestroyProjectRequest, *connect.ServerStream[v11.OperationEvent]) error
-	PlanDestroyProject(context.Context, *v1.PlanDestroyProjectRequest) (*v1.PlanDestroyProjectResponse, error)
+	RemoveSubstrate(context.Context, *v1.RemoveSubstrateRequest, *connect.ServerStream[v11.OperationEvent]) error
+	PlanRemoveSubstrate(context.Context, *v1.PlanRemoveSubstrateRequest) (*v1.PlanRemoveSubstrateResponse, error)
+	RemovePreview(context.Context, *v1.RemovePreviewRequest, *connect.ServerStream[v11.OperationEvent]) error
+	RemoveProject(context.Context, *v1.RemoveProjectRequest, *connect.ServerStream[v11.OperationEvent]) error
+	PlanRemoveProject(context.Context, *v1.PlanRemoveProjectRequest) (*v1.PlanRemoveProjectResponse, error)
 	ListEnvironments(context.Context, *v1.ListEnvironmentsRequest) (*v1.ListEnvironmentsResponse, error)
 	Preflight(context.Context, *v1.PreflightRequest) (*v1.PreflightResponse, error)
 	ListPromotions(context.Context, *v1.ListPromotionsRequest) (*v1.ListPromotionsResponse, error)
 	Rollback(context.Context, *v1.RollbackRequest) (*v1.RollbackResponse, error)
-	Prune(context.Context, *v1.PruneRequest, *connect.ServerStream[v11.OperationEvent]) error
-	UseDomain(context.Context, *v1.UseDomainRequest, *connect.ServerStream[v11.OperationEvent]) error
-	ListDomain(context.Context, *v1.ListDomainRequest) (*v1.ListDomainResponse, error)
-	PlanReleaseDomain(context.Context, *v1.PlanReleaseDomainRequest) (*v1.PlanReleaseDomainResponse, error)
-	ReleaseDomain(context.Context, *v1.ReleaseDomainRequest, *connect.ServerStream[v11.OperationEvent]) error
-	AddDomain(context.Context, *v1.AddDomainRequest, *connect.ServerStream[v11.OperationEvent]) error
-	RemoveDomain(context.Context, *v1.RemoveDomainRequest, *connect.ServerStream[v11.OperationEvent]) error
-	DomainStatus(context.Context, *v1.DomainStatusRequest) (*v1.DomainStatusResponse, error)
+	RemoveStalePromotions(context.Context, *v1.RemoveStalePromotionsRequest, *connect.ServerStream[v11.OperationEvent]) error
+	UsePreviewWildcard(context.Context, *v1.UsePreviewWildcardRequest, *connect.ServerStream[v11.OperationEvent]) error
+	GetPreviewWildcard(context.Context, *v1.PreviewWildcardRequest) (*v1.GetPreviewWildcardResponse, error)
+	PlanRemovePreviewWildcard(context.Context, *v1.PreviewWildcardRequest) (*v1.PlanRemovePreviewWildcardResponse, error)
+	RemovePreviewWildcard(context.Context, *v1.RemovePreviewWildcardRequest, *connect.ServerStream[v11.OperationEvent]) error
+	AddHostname(context.Context, *v1.AddHostnameRequest, *connect.ServerStream[v11.OperationEvent]) error
+	RemoveHostname(context.Context, *v1.RemoveHostnameRequest, *connect.ServerStream[v11.OperationEvent]) error
+	GetHostnameStatus(context.Context, *v1.GetHostnameStatusRequest) (*v1.GetHostnameStatusResponse, error)
 }
 
 // NewProviderServiceHandler builds an HTTP handler from the service implementation. It returns the
@@ -492,34 +493,34 @@ func NewProviderServiceHandler(svc ProviderServiceHandler, opts ...connect.Handl
 		connect.WithSchema(providerServiceMethods.ByName("DescribeBootstrap")),
 		connect.WithHandlerOptions(opts...),
 	)
-	providerServiceTeardownHandler := connect.NewServerStreamHandlerSimple(
-		ProviderServiceTeardownProcedure,
-		svc.Teardown,
-		connect.WithSchema(providerServiceMethods.ByName("Teardown")),
+	providerServiceRemoveSubstrateHandler := connect.NewServerStreamHandlerSimple(
+		ProviderServiceRemoveSubstrateProcedure,
+		svc.RemoveSubstrate,
+		connect.WithSchema(providerServiceMethods.ByName("RemoveSubstrate")),
 		connect.WithHandlerOptions(opts...),
 	)
-	providerServicePlanTeardownHandler := connect.NewUnaryHandlerSimple(
-		ProviderServicePlanTeardownProcedure,
-		svc.PlanTeardown,
-		connect.WithSchema(providerServiceMethods.ByName("PlanTeardown")),
+	providerServicePlanRemoveSubstrateHandler := connect.NewUnaryHandlerSimple(
+		ProviderServicePlanRemoveSubstrateProcedure,
+		svc.PlanRemoveSubstrate,
+		connect.WithSchema(providerServiceMethods.ByName("PlanRemoveSubstrate")),
 		connect.WithHandlerOptions(opts...),
 	)
-	providerServiceDestroyPreviewHandler := connect.NewServerStreamHandlerSimple(
-		ProviderServiceDestroyPreviewProcedure,
-		svc.DestroyPreview,
-		connect.WithSchema(providerServiceMethods.ByName("DestroyPreview")),
+	providerServiceRemovePreviewHandler := connect.NewServerStreamHandlerSimple(
+		ProviderServiceRemovePreviewProcedure,
+		svc.RemovePreview,
+		connect.WithSchema(providerServiceMethods.ByName("RemovePreview")),
 		connect.WithHandlerOptions(opts...),
 	)
-	providerServiceDestroyProjectHandler := connect.NewServerStreamHandlerSimple(
-		ProviderServiceDestroyProjectProcedure,
-		svc.DestroyProject,
-		connect.WithSchema(providerServiceMethods.ByName("DestroyProject")),
+	providerServiceRemoveProjectHandler := connect.NewServerStreamHandlerSimple(
+		ProviderServiceRemoveProjectProcedure,
+		svc.RemoveProject,
+		connect.WithSchema(providerServiceMethods.ByName("RemoveProject")),
 		connect.WithHandlerOptions(opts...),
 	)
-	providerServicePlanDestroyProjectHandler := connect.NewUnaryHandlerSimple(
-		ProviderServicePlanDestroyProjectProcedure,
-		svc.PlanDestroyProject,
-		connect.WithSchema(providerServiceMethods.ByName("PlanDestroyProject")),
+	providerServicePlanRemoveProjectHandler := connect.NewUnaryHandlerSimple(
+		ProviderServicePlanRemoveProjectProcedure,
+		svc.PlanRemoveProject,
+		connect.WithSchema(providerServiceMethods.ByName("PlanRemoveProject")),
 		connect.WithHandlerOptions(opts...),
 	)
 	providerServiceListEnvironmentsHandler := connect.NewUnaryHandlerSimple(
@@ -546,52 +547,52 @@ func NewProviderServiceHandler(svc ProviderServiceHandler, opts ...connect.Handl
 		connect.WithSchema(providerServiceMethods.ByName("Rollback")),
 		connect.WithHandlerOptions(opts...),
 	)
-	providerServicePruneHandler := connect.NewServerStreamHandlerSimple(
-		ProviderServicePruneProcedure,
-		svc.Prune,
-		connect.WithSchema(providerServiceMethods.ByName("Prune")),
+	providerServiceRemoveStalePromotionsHandler := connect.NewServerStreamHandlerSimple(
+		ProviderServiceRemoveStalePromotionsProcedure,
+		svc.RemoveStalePromotions,
+		connect.WithSchema(providerServiceMethods.ByName("RemoveStalePromotions")),
 		connect.WithHandlerOptions(opts...),
 	)
-	providerServiceUseDomainHandler := connect.NewServerStreamHandlerSimple(
-		ProviderServiceUseDomainProcedure,
-		svc.UseDomain,
-		connect.WithSchema(providerServiceMethods.ByName("UseDomain")),
+	providerServiceUsePreviewWildcardHandler := connect.NewServerStreamHandlerSimple(
+		ProviderServiceUsePreviewWildcardProcedure,
+		svc.UsePreviewWildcard,
+		connect.WithSchema(providerServiceMethods.ByName("UsePreviewWildcard")),
 		connect.WithHandlerOptions(opts...),
 	)
-	providerServiceListDomainHandler := connect.NewUnaryHandlerSimple(
-		ProviderServiceListDomainProcedure,
-		svc.ListDomain,
-		connect.WithSchema(providerServiceMethods.ByName("ListDomain")),
+	providerServiceGetPreviewWildcardHandler := connect.NewUnaryHandlerSimple(
+		ProviderServiceGetPreviewWildcardProcedure,
+		svc.GetPreviewWildcard,
+		connect.WithSchema(providerServiceMethods.ByName("GetPreviewWildcard")),
 		connect.WithHandlerOptions(opts...),
 	)
-	providerServicePlanReleaseDomainHandler := connect.NewUnaryHandlerSimple(
-		ProviderServicePlanReleaseDomainProcedure,
-		svc.PlanReleaseDomain,
-		connect.WithSchema(providerServiceMethods.ByName("PlanReleaseDomain")),
+	providerServicePlanRemovePreviewWildcardHandler := connect.NewUnaryHandlerSimple(
+		ProviderServicePlanRemovePreviewWildcardProcedure,
+		svc.PlanRemovePreviewWildcard,
+		connect.WithSchema(providerServiceMethods.ByName("PlanRemovePreviewWildcard")),
 		connect.WithHandlerOptions(opts...),
 	)
-	providerServiceReleaseDomainHandler := connect.NewServerStreamHandlerSimple(
-		ProviderServiceReleaseDomainProcedure,
-		svc.ReleaseDomain,
-		connect.WithSchema(providerServiceMethods.ByName("ReleaseDomain")),
+	providerServiceRemovePreviewWildcardHandler := connect.NewServerStreamHandlerSimple(
+		ProviderServiceRemovePreviewWildcardProcedure,
+		svc.RemovePreviewWildcard,
+		connect.WithSchema(providerServiceMethods.ByName("RemovePreviewWildcard")),
 		connect.WithHandlerOptions(opts...),
 	)
-	providerServiceAddDomainHandler := connect.NewServerStreamHandlerSimple(
-		ProviderServiceAddDomainProcedure,
-		svc.AddDomain,
-		connect.WithSchema(providerServiceMethods.ByName("AddDomain")),
+	providerServiceAddHostnameHandler := connect.NewServerStreamHandlerSimple(
+		ProviderServiceAddHostnameProcedure,
+		svc.AddHostname,
+		connect.WithSchema(providerServiceMethods.ByName("AddHostname")),
 		connect.WithHandlerOptions(opts...),
 	)
-	providerServiceRemoveDomainHandler := connect.NewServerStreamHandlerSimple(
-		ProviderServiceRemoveDomainProcedure,
-		svc.RemoveDomain,
-		connect.WithSchema(providerServiceMethods.ByName("RemoveDomain")),
+	providerServiceRemoveHostnameHandler := connect.NewServerStreamHandlerSimple(
+		ProviderServiceRemoveHostnameProcedure,
+		svc.RemoveHostname,
+		connect.WithSchema(providerServiceMethods.ByName("RemoveHostname")),
 		connect.WithHandlerOptions(opts...),
 	)
-	providerServiceDomainStatusHandler := connect.NewUnaryHandlerSimple(
-		ProviderServiceDomainStatusProcedure,
-		svc.DomainStatus,
-		connect.WithSchema(providerServiceMethods.ByName("DomainStatus")),
+	providerServiceGetHostnameStatusHandler := connect.NewUnaryHandlerSimple(
+		ProviderServiceGetHostnameStatusProcedure,
+		svc.GetHostnameStatus,
+		connect.WithSchema(providerServiceMethods.ByName("GetHostnameStatus")),
 		connect.WithHandlerOptions(opts...),
 	)
 	return "/deployments.v1.ProviderService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -604,16 +605,16 @@ func NewProviderServiceHandler(svc ProviderServiceHandler, opts ...connect.Handl
 			providerServiceBootstrapHandler.ServeHTTP(w, r)
 		case ProviderServiceDescribeBootstrapProcedure:
 			providerServiceDescribeBootstrapHandler.ServeHTTP(w, r)
-		case ProviderServiceTeardownProcedure:
-			providerServiceTeardownHandler.ServeHTTP(w, r)
-		case ProviderServicePlanTeardownProcedure:
-			providerServicePlanTeardownHandler.ServeHTTP(w, r)
-		case ProviderServiceDestroyPreviewProcedure:
-			providerServiceDestroyPreviewHandler.ServeHTTP(w, r)
-		case ProviderServiceDestroyProjectProcedure:
-			providerServiceDestroyProjectHandler.ServeHTTP(w, r)
-		case ProviderServicePlanDestroyProjectProcedure:
-			providerServicePlanDestroyProjectHandler.ServeHTTP(w, r)
+		case ProviderServiceRemoveSubstrateProcedure:
+			providerServiceRemoveSubstrateHandler.ServeHTTP(w, r)
+		case ProviderServicePlanRemoveSubstrateProcedure:
+			providerServicePlanRemoveSubstrateHandler.ServeHTTP(w, r)
+		case ProviderServiceRemovePreviewProcedure:
+			providerServiceRemovePreviewHandler.ServeHTTP(w, r)
+		case ProviderServiceRemoveProjectProcedure:
+			providerServiceRemoveProjectHandler.ServeHTTP(w, r)
+		case ProviderServicePlanRemoveProjectProcedure:
+			providerServicePlanRemoveProjectHandler.ServeHTTP(w, r)
 		case ProviderServiceListEnvironmentsProcedure:
 			providerServiceListEnvironmentsHandler.ServeHTTP(w, r)
 		case ProviderServicePreflightProcedure:
@@ -622,22 +623,22 @@ func NewProviderServiceHandler(svc ProviderServiceHandler, opts ...connect.Handl
 			providerServiceListPromotionsHandler.ServeHTTP(w, r)
 		case ProviderServiceRollbackProcedure:
 			providerServiceRollbackHandler.ServeHTTP(w, r)
-		case ProviderServicePruneProcedure:
-			providerServicePruneHandler.ServeHTTP(w, r)
-		case ProviderServiceUseDomainProcedure:
-			providerServiceUseDomainHandler.ServeHTTP(w, r)
-		case ProviderServiceListDomainProcedure:
-			providerServiceListDomainHandler.ServeHTTP(w, r)
-		case ProviderServicePlanReleaseDomainProcedure:
-			providerServicePlanReleaseDomainHandler.ServeHTTP(w, r)
-		case ProviderServiceReleaseDomainProcedure:
-			providerServiceReleaseDomainHandler.ServeHTTP(w, r)
-		case ProviderServiceAddDomainProcedure:
-			providerServiceAddDomainHandler.ServeHTTP(w, r)
-		case ProviderServiceRemoveDomainProcedure:
-			providerServiceRemoveDomainHandler.ServeHTTP(w, r)
-		case ProviderServiceDomainStatusProcedure:
-			providerServiceDomainStatusHandler.ServeHTTP(w, r)
+		case ProviderServiceRemoveStalePromotionsProcedure:
+			providerServiceRemoveStalePromotionsHandler.ServeHTTP(w, r)
+		case ProviderServiceUsePreviewWildcardProcedure:
+			providerServiceUsePreviewWildcardHandler.ServeHTTP(w, r)
+		case ProviderServiceGetPreviewWildcardProcedure:
+			providerServiceGetPreviewWildcardHandler.ServeHTTP(w, r)
+		case ProviderServicePlanRemovePreviewWildcardProcedure:
+			providerServicePlanRemovePreviewWildcardHandler.ServeHTTP(w, r)
+		case ProviderServiceRemovePreviewWildcardProcedure:
+			providerServiceRemovePreviewWildcardHandler.ServeHTTP(w, r)
+		case ProviderServiceAddHostnameProcedure:
+			providerServiceAddHostnameHandler.ServeHTTP(w, r)
+		case ProviderServiceRemoveHostnameProcedure:
+			providerServiceRemoveHostnameHandler.ServeHTTP(w, r)
+		case ProviderServiceGetHostnameStatusProcedure:
+			providerServiceGetHostnameStatusHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -663,24 +664,24 @@ func (UnimplementedProviderServiceHandler) DescribeBootstrap(context.Context, *v
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("deployments.v1.ProviderService.DescribeBootstrap is not implemented"))
 }
 
-func (UnimplementedProviderServiceHandler) Teardown(context.Context, *v1.TeardownRequest, *connect.ServerStream[v11.OperationEvent]) error {
-	return connect.NewError(connect.CodeUnimplemented, errors.New("deployments.v1.ProviderService.Teardown is not implemented"))
+func (UnimplementedProviderServiceHandler) RemoveSubstrate(context.Context, *v1.RemoveSubstrateRequest, *connect.ServerStream[v11.OperationEvent]) error {
+	return connect.NewError(connect.CodeUnimplemented, errors.New("deployments.v1.ProviderService.RemoveSubstrate is not implemented"))
 }
 
-func (UnimplementedProviderServiceHandler) PlanTeardown(context.Context, *v1.PlanTeardownRequest) (*v1.PlanTeardownResponse, error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("deployments.v1.ProviderService.PlanTeardown is not implemented"))
+func (UnimplementedProviderServiceHandler) PlanRemoveSubstrate(context.Context, *v1.PlanRemoveSubstrateRequest) (*v1.PlanRemoveSubstrateResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("deployments.v1.ProviderService.PlanRemoveSubstrate is not implemented"))
 }
 
-func (UnimplementedProviderServiceHandler) DestroyPreview(context.Context, *v1.DestroyPreviewRequest, *connect.ServerStream[v11.OperationEvent]) error {
-	return connect.NewError(connect.CodeUnimplemented, errors.New("deployments.v1.ProviderService.DestroyPreview is not implemented"))
+func (UnimplementedProviderServiceHandler) RemovePreview(context.Context, *v1.RemovePreviewRequest, *connect.ServerStream[v11.OperationEvent]) error {
+	return connect.NewError(connect.CodeUnimplemented, errors.New("deployments.v1.ProviderService.RemovePreview is not implemented"))
 }
 
-func (UnimplementedProviderServiceHandler) DestroyProject(context.Context, *v1.DestroyProjectRequest, *connect.ServerStream[v11.OperationEvent]) error {
-	return connect.NewError(connect.CodeUnimplemented, errors.New("deployments.v1.ProviderService.DestroyProject is not implemented"))
+func (UnimplementedProviderServiceHandler) RemoveProject(context.Context, *v1.RemoveProjectRequest, *connect.ServerStream[v11.OperationEvent]) error {
+	return connect.NewError(connect.CodeUnimplemented, errors.New("deployments.v1.ProviderService.RemoveProject is not implemented"))
 }
 
-func (UnimplementedProviderServiceHandler) PlanDestroyProject(context.Context, *v1.PlanDestroyProjectRequest) (*v1.PlanDestroyProjectResponse, error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("deployments.v1.ProviderService.PlanDestroyProject is not implemented"))
+func (UnimplementedProviderServiceHandler) PlanRemoveProject(context.Context, *v1.PlanRemoveProjectRequest) (*v1.PlanRemoveProjectResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("deployments.v1.ProviderService.PlanRemoveProject is not implemented"))
 }
 
 func (UnimplementedProviderServiceHandler) ListEnvironments(context.Context, *v1.ListEnvironmentsRequest) (*v1.ListEnvironmentsResponse, error) {
@@ -699,34 +700,34 @@ func (UnimplementedProviderServiceHandler) Rollback(context.Context, *v1.Rollbac
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("deployments.v1.ProviderService.Rollback is not implemented"))
 }
 
-func (UnimplementedProviderServiceHandler) Prune(context.Context, *v1.PruneRequest, *connect.ServerStream[v11.OperationEvent]) error {
-	return connect.NewError(connect.CodeUnimplemented, errors.New("deployments.v1.ProviderService.Prune is not implemented"))
+func (UnimplementedProviderServiceHandler) RemoveStalePromotions(context.Context, *v1.RemoveStalePromotionsRequest, *connect.ServerStream[v11.OperationEvent]) error {
+	return connect.NewError(connect.CodeUnimplemented, errors.New("deployments.v1.ProviderService.RemoveStalePromotions is not implemented"))
 }
 
-func (UnimplementedProviderServiceHandler) UseDomain(context.Context, *v1.UseDomainRequest, *connect.ServerStream[v11.OperationEvent]) error {
-	return connect.NewError(connect.CodeUnimplemented, errors.New("deployments.v1.ProviderService.UseDomain is not implemented"))
+func (UnimplementedProviderServiceHandler) UsePreviewWildcard(context.Context, *v1.UsePreviewWildcardRequest, *connect.ServerStream[v11.OperationEvent]) error {
+	return connect.NewError(connect.CodeUnimplemented, errors.New("deployments.v1.ProviderService.UsePreviewWildcard is not implemented"))
 }
 
-func (UnimplementedProviderServiceHandler) ListDomain(context.Context, *v1.ListDomainRequest) (*v1.ListDomainResponse, error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("deployments.v1.ProviderService.ListDomain is not implemented"))
+func (UnimplementedProviderServiceHandler) GetPreviewWildcard(context.Context, *v1.PreviewWildcardRequest) (*v1.GetPreviewWildcardResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("deployments.v1.ProviderService.GetPreviewWildcard is not implemented"))
 }
 
-func (UnimplementedProviderServiceHandler) PlanReleaseDomain(context.Context, *v1.PlanReleaseDomainRequest) (*v1.PlanReleaseDomainResponse, error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("deployments.v1.ProviderService.PlanReleaseDomain is not implemented"))
+func (UnimplementedProviderServiceHandler) PlanRemovePreviewWildcard(context.Context, *v1.PreviewWildcardRequest) (*v1.PlanRemovePreviewWildcardResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("deployments.v1.ProviderService.PlanRemovePreviewWildcard is not implemented"))
 }
 
-func (UnimplementedProviderServiceHandler) ReleaseDomain(context.Context, *v1.ReleaseDomainRequest, *connect.ServerStream[v11.OperationEvent]) error {
-	return connect.NewError(connect.CodeUnimplemented, errors.New("deployments.v1.ProviderService.ReleaseDomain is not implemented"))
+func (UnimplementedProviderServiceHandler) RemovePreviewWildcard(context.Context, *v1.RemovePreviewWildcardRequest, *connect.ServerStream[v11.OperationEvent]) error {
+	return connect.NewError(connect.CodeUnimplemented, errors.New("deployments.v1.ProviderService.RemovePreviewWildcard is not implemented"))
 }
 
-func (UnimplementedProviderServiceHandler) AddDomain(context.Context, *v1.AddDomainRequest, *connect.ServerStream[v11.OperationEvent]) error {
-	return connect.NewError(connect.CodeUnimplemented, errors.New("deployments.v1.ProviderService.AddDomain is not implemented"))
+func (UnimplementedProviderServiceHandler) AddHostname(context.Context, *v1.AddHostnameRequest, *connect.ServerStream[v11.OperationEvent]) error {
+	return connect.NewError(connect.CodeUnimplemented, errors.New("deployments.v1.ProviderService.AddHostname is not implemented"))
 }
 
-func (UnimplementedProviderServiceHandler) RemoveDomain(context.Context, *v1.RemoveDomainRequest, *connect.ServerStream[v11.OperationEvent]) error {
-	return connect.NewError(connect.CodeUnimplemented, errors.New("deployments.v1.ProviderService.RemoveDomain is not implemented"))
+func (UnimplementedProviderServiceHandler) RemoveHostname(context.Context, *v1.RemoveHostnameRequest, *connect.ServerStream[v11.OperationEvent]) error {
+	return connect.NewError(connect.CodeUnimplemented, errors.New("deployments.v1.ProviderService.RemoveHostname is not implemented"))
 }
 
-func (UnimplementedProviderServiceHandler) DomainStatus(context.Context, *v1.DomainStatusRequest) (*v1.DomainStatusResponse, error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("deployments.v1.ProviderService.DomainStatus is not implemented"))
+func (UnimplementedProviderServiceHandler) GetHostnameStatus(context.Context, *v1.GetHostnameStatusRequest) (*v1.GetHostnameStatusResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("deployments.v1.ProviderService.GetHostnameStatus is not implemented"))
 }
