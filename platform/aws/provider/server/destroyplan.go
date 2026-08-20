@@ -3,7 +3,7 @@ package server
 import (
 	"fmt"
 
-	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
+	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/platform/aws/provider/bootstrap"
 	"github.com/ocelhq/ocel/platform/aws/provider/certs"
 	"github.com/ocelhq/ocel/platform/aws/provider/domains"
@@ -18,7 +18,7 @@ type projectPlanScope struct {
 	record     bootstrap.StackRecord
 }
 
-func destroyPlanItems(edgeFront edge.Edge, scope projectPlanScope) []*deploymentsv1.RemovalItem {
+func destroyPlanItems(edgeFront edge.Edge, scope projectPlanScope) []*contractv1.RemovalItem {
 	recorded := scope.record.Production
 
 	items := surfaceItems(edgeFront, scope)
@@ -28,22 +28,22 @@ func destroyPlanItems(edgeFront edge.Edge, scope projectPlanScope) []*deployment
 	return append(items, substrateItems(edgeFront, scope)...)
 }
 
-func surfaceItems(edgeFront edge.Edge, scope projectPlanScope) []*deploymentsv1.RemovalItem {
+func surfaceItems(edgeFront edge.Edge, scope projectPlanScope) []*contractv1.RemovalItem {
 	surfaces := edgeFront.ProjectSurfaces(edge.ProjectScope{
 		Slug:      scope.slug,
 		Class:     edge.Class(scope.class),
 		Hostnames: scope.record.Edge.Bound,
 		Front:     scope.record.Edge.Front,
 	})
-	items := make([]*deploymentsv1.RemovalItem, 0, len(surfaces))
+	items := make([]*contractv1.RemovalItem, 0, len(surfaces))
 	for _, surface := range surfaces {
 		items = append(items, surfaceItem(surface))
 	}
 	return items
 }
 
-func surfaceItem(surface edge.Surface) *deploymentsv1.RemovalItem {
-	return &deploymentsv1.RemovalItem{
+func surfaceItem(surface edge.Surface) *contractv1.RemovalItem {
+	return &contractv1.RemovalItem{
 		Kind:   surface.Kind,
 		Name:   surface.Name,
 		Action: surfaceAction(surface.Action),
@@ -52,19 +52,19 @@ func surfaceItem(surface edge.Surface) *deploymentsv1.RemovalItem {
 	}
 }
 
-func surfaceAction(action edge.SurfaceAction) deploymentsv1.RemovalItem_Action {
+func surfaceAction(action edge.SurfaceAction) contractv1.RemovalItem_Action {
 	switch action {
 	case edge.SurfaceKeep:
-		return deploymentsv1.RemovalItem_ACTION_KEEP
+		return contractv1.RemovalItem_ACTION_KEEP
 	case edge.SurfaceDisableThenDelete:
-		return deploymentsv1.RemovalItem_ACTION_DISABLE_THEN_DELETE
+		return contractv1.RemovalItem_ACTION_DISABLE_THEN_DELETE
 	default:
-		return deploymentsv1.RemovalItem_ACTION_DELETE
+		return contractv1.RemovalItem_ACTION_DELETE
 	}
 }
 
-func certificateItems(recorded domains.Settlement) []*deploymentsv1.RemovalItem {
-	var items []*deploymentsv1.RemovalItem
+func certificateItems(recorded domains.Settlement) []*contractv1.RemovalItem {
+	var items []*contractv1.RemovalItem
 	if arn := recorded.Certificate.ARN; arn != "" {
 		items = append(items, certificateItem(recorded.Certificate))
 	}
@@ -72,48 +72,48 @@ func certificateItems(recorded domains.Settlement) []*deploymentsv1.RemovalItem 
 		if host.Certificate == "" || host.Certificate == recorded.Certificate.ARN {
 			continue
 		}
-		items = append(items, &deploymentsv1.RemovalItem{
+		items = append(items, &contractv1.RemovalItem{
 			Kind:   "certificate",
 			Name:   host.Certificate,
-			Action: deploymentsv1.RemovalItem_ACTION_KEEP,
+			Action: contractv1.RemovalItem_ACTION_KEEP,
 			Reason: fmt.Sprintf("pinned for %s in `certificates`: ocel never requested it, so it is not ocel's to delete", host.Hostname),
 		})
 	}
 	return items
 }
 
-func certificateItem(cert certs.Certificate) *deploymentsv1.RemovalItem {
+func certificateItem(cert certs.Certificate) *contractv1.RemovalItem {
 	if cert.Adopted {
-		return &deploymentsv1.RemovalItem{
+		return &contractv1.RemovalItem{
 			Kind:   "certificate",
 			Name:   cert.ARN,
-			Action: deploymentsv1.RemovalItem_ACTION_KEEP,
+			Action: contractv1.RemovalItem_ACTION_KEEP,
 			Reason: "ocel adopted it rather than requesting it, so it is not ocel's to delete",
 		}
 	}
-	return &deploymentsv1.RemovalItem{
+	return &contractv1.RemovalItem{
 		Kind:   "certificate",
 		Name:   cert.ARN,
-		Action: deploymentsv1.RemovalItem_ACTION_DELETE,
+		Action: contractv1.RemovalItem_ACTION_DELETE,
 		Reason: "ocel requested it for this project's hostnames and nothing else is served by it",
 	}
 }
 
-func recordItems(written []edge.Record, recorded domains.Settlement) []*deploymentsv1.RemovalItem {
-	var items []*deploymentsv1.RemovalItem
+func recordItems(written []edge.Record, recorded domains.Settlement) []*contractv1.RemovalItem {
+	var items []*contractv1.RemovalItem
 	for _, rec := range mergeRecords(written, recorded.Validation.Written, hostRecords(recorded, false)) {
-		items = append(items, &deploymentsv1.RemovalItem{
+		items = append(items, &contractv1.RemovalItem{
 			Kind:   "DNS record",
 			Name:   rec.String(),
-			Action: deploymentsv1.RemovalItem_ACTION_DELETE,
+			Action: contractv1.RemovalItem_ACTION_DELETE,
 			Reason: "ocel wrote it; it is removed only while its live value is still the one ocel wrote",
 		})
 	}
 	for _, rec := range mergeRecords(recorded.Validation.Owed, hostRecords(recorded, true)) {
-		items = append(items, &deploymentsv1.RemovalItem{
+		items = append(items, &contractv1.RemovalItem{
 			Kind:   "DNS record",
 			Name:   rec.String(),
-			Action: deploymentsv1.RemovalItem_ACTION_KEEP,
+			Action: contractv1.RemovalItem_ACTION_KEEP,
 			Reason: "you created it yourself; ocel never wrote it, so it is yours to remove",
 		})
 	}
@@ -153,44 +153,44 @@ func containsRecord(records []edge.Record, wanted edge.Record) bool {
 	return false
 }
 
-func storeItems(edgeFront edge.Edge, scope projectPlanScope) []*deploymentsv1.RemovalItem {
-	var items []*deploymentsv1.RemovalItem
+func storeItems(edgeFront edge.Edge, scope projectPlanScope) []*contractv1.RemovalItem {
+	var items []*contractv1.RemovalItem
 	if !edgeFront.Facts().RunsCode {
-		items = append(items, &deploymentsv1.RemovalItem{
+		items = append(items, &contractv1.RemovalItem{
 			Kind:   "deployments ledger",
 			Name:   scope.class + "/" + scope.slug,
-			Action: deploymentsv1.RemovalItem_ACTION_DELETE,
+			Action: contractv1.RemovalItem_ACTION_DELETE,
 			Reason: "every promotion, pointer and deployment record this project holds",
 		})
 	}
 	if scope.stacks == 0 {
 		return items
 	}
-	return append(items, &deploymentsv1.RemovalItem{
+	return append(items, &contractv1.RemovalItem{
 		Kind:   "tag clock rows",
 		Name:   scope.slug,
-		Action: deploymentsv1.RemovalItem_ACTION_DELETE,
+		Action: contractv1.RemovalItem_ACTION_DELETE,
 		Reason: "the revalidation timestamps every stack of this project wrote while it served",
 	})
 }
 
-func substrateItems(edgeFront edge.Edge, scope projectPlanScope) []*deploymentsv1.RemovalItem {
-	keep := &deploymentsv1.RemovalItem{
+func substrateItems(edgeFront edge.Edge, scope projectPlanScope) []*contractv1.RemovalItem {
+	keep := &contractv1.RemovalItem{
 		Kind:   "state table",
 		Name:   scope.stateTable,
-		Action: deploymentsv1.RemovalItem_ACTION_KEEP,
+		Action: contractv1.RemovalItem_ACTION_KEEP,
 		Reason: fmt.Sprintf("substrate-scoped: every %s project shares it — `%s` removes it", scope.class, teardownCommand(scope.class)),
 	}
 	if scope.stateTable == "" {
 		keep.Name = scope.class + " substrate"
 	}
-	items := []*deploymentsv1.RemovalItem{keep}
+	items := []*contractv1.RemovalItem{keep}
 
 	if base := scope.record.Edge.GlobalPreview; base != "" {
-		items = append(items, &deploymentsv1.RemovalItem{
+		items = append(items, &contractv1.RemovalItem{
 			Kind:   "preview wildcard",
 			Name:   edge.PreviewWildcard(base),
-			Action: deploymentsv1.RemovalItem_ACTION_KEEP,
+			Action: contractv1.RemovalItem_ACTION_KEEP,
 			Reason: "substrate-scoped: every project's previews are served on it — `ocel domain release --preview` releases it",
 		})
 	}

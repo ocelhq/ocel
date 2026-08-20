@@ -5,24 +5,24 @@ import (
 	"strings"
 	"testing"
 
-	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
-	linksv1 "github.com/ocelhq/ocel/pkg/proto/links/v1"
-	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/resources/v1"
+	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
+	linksv1 "github.com/ocelhq/ocel/pkg/proto/common/links/v1"
+	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/platform/aws/provider/membrane"
 )
 
-func membraneManifest() *deploymentsv1.Manifest {
-	return &deploymentsv1.Manifest{
-		Resources: []*deploymentsv1.ManifestResource{
+func membraneManifest() *contractv1.Manifest {
+	return &contractv1.Manifest{
+		Resources: []*contractv1.ManifestResource{
 			{
 				LogicalName: "database--main",
 				Resource:    &resourcesv1.ResourceIdentifier{Type: linksv1.LinkType_LINK_TYPE_POSTGRES, Name: "main"},
-				Config:      &deploymentsv1.ManifestResource_Postgres{Postgres: &resourcesv1.PostgresConfig{}},
+				Config:      &contractv1.ManifestResource_Postgres{Postgres: &resourcesv1.PostgresConfig{}},
 			},
 			{
 				LogicalName: "bucket--uploads",
 				Resource:    &resourcesv1.ResourceIdentifier{Type: linksv1.LinkType_LINK_TYPE_BUCKET, Name: "uploads"},
-				Config:      &deploymentsv1.ManifestResource_Bucket{Bucket: &resourcesv1.BucketConfig{}},
+				Config:      &contractv1.ManifestResource_Bucket{Bucket: &resourcesv1.BucketConfig{}},
 			},
 		},
 	}
@@ -32,7 +32,7 @@ func TestAppCrossesMembrane(t *testing.T) {
 	t.Parallel()
 
 	manifest := membraneManifest()
-	manifest.Usages = []*deploymentsv1.ManifestUsage{
+	manifest.Usages = []*contractv1.ManifestUsage{
 		{App: "web", Resource: "bucket--uploads"},
 		{App: "web", Resource: "database--main"},
 		{App: "worker", Resource: "database--main"},
@@ -79,7 +79,7 @@ func TestCheckMembraneServices(t *testing.T) {
 	t.Run("postgres goes direct, so no membrane is asked for it", func(t *testing.T) {
 		t.Parallel()
 
-		manifest := &deploymentsv1.Manifest{Resources: membraneManifest().GetResources()[:1]}
+		manifest := &contractv1.Manifest{Resources: membraneManifest().GetResources()[:1]}
 
 		if err := checkMembraneServices(manifest, func(linksv1.LinkType) bool { return false }); err != nil {
 			t.Fatalf("checkMembraneServices = %v, want postgres to need no membrane service", err)
@@ -101,7 +101,7 @@ func TestCompletesUploads(t *testing.T) {
 	t.Run("postgres alone completes nothing", func(t *testing.T) {
 		t.Parallel()
 
-		manifest := &deploymentsv1.Manifest{Resources: membraneManifest().GetResources()[:1]}
+		manifest := &contractv1.Manifest{Resources: membraneManifest().GetResources()[:1]}
 
 		if completesUploads(manifest) {
 			t.Error("completesUploads = true, want false where no bucket is ours")

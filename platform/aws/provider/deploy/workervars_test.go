@@ -3,7 +3,7 @@ package deploy
 import (
 	"testing"
 
-	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
+	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 )
 
 func TestPreviewAppNames(t *testing.T) {
@@ -11,7 +11,7 @@ func TestPreviewAppNames(t *testing.T) {
 
 	t.Run("is a lowercased comma separated list", func(t *testing.T) {
 		t.Parallel()
-		got := previewAppNames([]*deploymentsv1.ManifestApp{{Name: "Web"}, {Name: " admin "}, {Name: ""}})
+		got := previewAppNames([]*contractv1.ManifestApp{{Name: "Web"}, {Name: " admin "}, {Name: ""}})
 		if got != "web,admin" {
 			t.Errorf("previewAppNames = %q, want web,admin", got)
 		}

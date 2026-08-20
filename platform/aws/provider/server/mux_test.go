@@ -10,9 +10,9 @@ import (
 	connect "connectrpc.com/connect"
 
 	"github.com/ocelhq/ocel/pkg/channel"
-	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
-	"github.com/ocelhq/ocel/pkg/proto/deployments/v1/deploymentsv1connect"
-	progressv1 "github.com/ocelhq/ocel/pkg/proto/progress/v1"
+	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
+	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
+	"github.com/ocelhq/ocel/pkg/proto/provider/contract/v1/contractv1connect"
 	cloudflare "github.com/ocelhq/ocel/platform/edge/cloudflare/deploy"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
@@ -40,12 +40,12 @@ func (a authHeaderInterceptor) WrapStreamingHandler(next connect.StreamingHandle
 	return next
 }
 
-func newTestClient(t *testing.T, token string) deploymentsv1connect.ProviderServiceClient {
+func newTestClient(t *testing.T, token string) contractv1connect.ProviderServiceClient {
 	t.Helper()
 	return newTestClientFor(t, &Server{}, token)
 }
 
-func newTestClientFor(t *testing.T, deployments *Server, token string) deploymentsv1connect.ProviderServiceClient {
+func newTestClientFor(t *testing.T, deployments *Server, token string) contractv1connect.ProviderServiceClient {
 	t.Helper()
 	srv := httptest.NewServer(newMux(deployments, testToken))
 	t.Cleanup(srv.Close)
@@ -54,7 +54,7 @@ func newTestClientFor(t *testing.T, deployments *Server, token string) deploymen
 	if token != "" {
 		opts = append(opts, connect.WithInterceptors(authHeaderInterceptor{token: token}))
 	}
-	return deploymentsv1connect.NewProviderServiceClient(srv.Client(), srv.URL, opts...)
+	return contractv1connect.NewProviderServiceClient(srv.Client(), srv.URL, opts...)
 }
 
 func drainStream(stream *connect.ServerStreamForClient[progressv1.OperationEvent]) ([]*progressv1.OperationEvent, error) {
@@ -71,7 +71,7 @@ func TestDeploy(t *testing.T) {
 	cases := []struct {
 		name     string
 		token    string
-		manifest *deploymentsv1.Manifest
+		manifest *contractv1.Manifest
 		want     connect.Code
 	}{
 		{
@@ -88,7 +88,7 @@ func TestDeploy(t *testing.T) {
 		{
 			name:     "a malformed manifest fails before any streaming",
 			token:    testToken,
-			manifest: &deploymentsv1.Manifest{SchemaVersion: "", Slug: "proj-123"},
+			manifest: &contractv1.Manifest{SchemaVersion: "", Slug: "proj-123"},
 			want:     connect.CodeInvalidArgument,
 		},
 		{
@@ -102,7 +102,7 @@ func TestDeploy(t *testing.T) {
 			t.Parallel()
 			client := newTestClient(t, tc.token)
 
-			stream, err := client.Deploy(context.Background(), &deploymentsv1.DeployRequest{Manifest: tc.manifest})
+			stream, err := client.Deploy(context.Background(), &contractv1.DeployRequest{Manifest: tc.manifest})
 			if err != nil {
 				t.Fatalf("Deploy() error = %v, want nil (error surfaces on Receive)", err)
 			}
@@ -123,14 +123,14 @@ func TestUnsupportedEdgeKind(t *testing.T) {
 
 	calls := []struct {
 		name string
-		call func(deploymentsv1connect.ProviderServiceClient) error
+		call func(contractv1connect.ProviderServiceClient) error
 	}{
-		{"Deploy", func(client deploymentsv1connect.ProviderServiceClient) error {
-			stream, err := client.Deploy(context.Background(), &deploymentsv1.DeployRequest{
+		{"Deploy", func(client contractv1connect.ProviderServiceClient) error {
+			stream, err := client.Deploy(context.Background(), &contractv1.DeployRequest{
 				Manifest: wellFormedManifest(),
-				Edge: &deploymentsv1.EdgeSelection{
+				Edge: &contractv1.EdgeSelection{
 					Kind: string(unfrontedKind),
-					Dns:  &deploymentsv1.Dns{Kind: "cloudflare", Zone: "acme.com"},
+					Dns:  &contractv1.Dns{Kind: "cloudflare", Zone: "acme.com"},
 				},
 			})
 			if err != nil {
@@ -139,15 +139,15 @@ func TestUnsupportedEdgeKind(t *testing.T) {
 			_, err = drainStream(stream)
 			return err
 		}},
-		{"PlanRemoveSubstrate", func(client deploymentsv1connect.ProviderServiceClient) error {
-			_, err := client.PlanRemoveSubstrate(context.Background(), &deploymentsv1.PlanRemoveSubstrateRequest{
-				Edge: &deploymentsv1.EdgeSelection{Kind: string(unfrontedKind)},
+		{"PlanRemoveSubstrate", func(client contractv1connect.ProviderServiceClient) error {
+			_, err := client.PlanRemoveSubstrate(context.Background(), &contractv1.PlanRemoveSubstrateRequest{
+				Edge: &contractv1.EdgeSelection{Kind: string(unfrontedKind)},
 			})
 			return err
 		}},
-		{"RemoveSubstrate", func(client deploymentsv1connect.ProviderServiceClient) error {
-			stream, err := client.RemoveSubstrate(context.Background(), &deploymentsv1.RemoveSubstrateRequest{
-				Edge: &deploymentsv1.EdgeSelection{Kind: string(unfrontedKind)},
+		{"RemoveSubstrate", func(client contractv1connect.ProviderServiceClient) error {
+			stream, err := client.RemoveSubstrate(context.Background(), &contractv1.RemoveSubstrateRequest{
+				Edge: &contractv1.EdgeSelection{Kind: string(unfrontedKind)},
 			})
 			if err != nil {
 				return err

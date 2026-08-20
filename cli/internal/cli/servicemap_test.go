@@ -13,7 +13,7 @@ import (
 
 	"github.com/ocelhq/ocel/cli/internal/manifestbuilder"
 	"github.com/ocelhq/ocel/cli/internal/servicemap"
-	linksv1 "github.com/ocelhq/ocel/pkg/proto/links/v1"
+	linksv1 "github.com/ocelhq/ocel/pkg/proto/common/links/v1"
 )
 
 func TestServiceMap(t *testing.T) {

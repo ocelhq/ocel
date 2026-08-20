@@ -4,8 +4,8 @@ import (
 	"context"
 	"fmt"
 
-	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
-	linksv1 "github.com/ocelhq/ocel/pkg/proto/links/v1"
+	linksv1 "github.com/ocelhq/ocel/pkg/proto/common/links/v1"
+	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/platform/aws/provider/vars"
 	"github.com/ocelhq/ocel/platform/aws/provider/vars/live"
 )
@@ -16,14 +16,14 @@ type LinkStore interface {
 	PublishedNames(ctx context.Context, slug, class, environment string) ([]string, error)
 }
 
-func linkName(r *deploymentsv1.ManifestResource) string {
+func linkName(r *contractv1.ManifestResource) string {
 	if r.GetLinked() {
 		return r.GetResource().GetName()
 	}
 	return r.GetLogicalName()
 }
 
-func appLinks(manifest *deploymentsv1.Manifest, app string, consumed map[string]Consumed) []live.Link {
+func appLinks(manifest *contractv1.Manifest, app string, consumed map[string]Consumed) []live.Link {
 	used := usedResources(manifest, app)
 	resources := manifest.GetResources()
 	out := make([]live.Link, 0, len(resources))
@@ -44,7 +44,7 @@ func appLinks(manifest *deploymentsv1.Manifest, app string, consumed map[string]
 	return out
 }
 
-func linkRecords(manifest *deploymentsv1.Manifest, links []*linksv1.Link) []*linksv1.Link {
+func linkRecords(manifest *contractv1.Manifest, links []*linksv1.Link) []*linksv1.Link {
 	byName := make(map[string]*linksv1.Link, len(links))
 	for _, l := range links {
 		byName[l.GetName()] = l
@@ -61,7 +61,7 @@ func linkRecords(manifest *deploymentsv1.Manifest, links []*linksv1.Link) []*lin
 	return out
 }
 
-func publishLinkRecords(ctx context.Context, cfg Config, manifest *deploymentsv1.Manifest, links []*linksv1.Link) error {
+func publishLinkRecords(ctx context.Context, cfg Config, manifest *contractv1.Manifest, links []*linksv1.Link) error {
 	records := linkRecords(manifest, links)
 	if cfg.Links == nil {
 		if len(records) == 0 {

@@ -3,7 +3,7 @@ package cli
 import (
 	"fmt"
 
-	environmentv1 "github.com/ocelhq/ocel/pkg/proto/environment/v1"
+	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 )
 
 func checkTier(infra, required environmentv1.Tier) error {

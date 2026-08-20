@@ -3,8 +3,8 @@ package deploy
 import (
 	"fmt"
 
-	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
-	environmentv1 "github.com/ocelhq/ocel/pkg/proto/environment/v1"
+	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
+	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
@@ -14,7 +14,7 @@ const (
 	storeServiceBinding = "DEPLOYMENTS"
 )
 
-func declaresPreviewDomain(manifest *deploymentsv1.Manifest) bool {
+func declaresPreviewDomain(manifest *contractv1.Manifest) bool {
 	return len(DeclaredHostnames(manifest, environmentv1.Tier_TIER_PREVIEW)) > 0
 }
 
@@ -61,7 +61,7 @@ func PreviewWildcardSpecFor(w PreviewWildcard, baseDomain string, warn func(stri
 	return spec, nil
 }
 
-func MarkGlobalPreview(state edge.StackState, cfg Config, manifest *deploymentsv1.Manifest) edge.StackState {
+func MarkGlobalPreview(state edge.StackState, cfg Config, manifest *contractv1.Manifest) edge.StackState {
 	if cfg.Tier != environmentv1.Tier_TIER_PREVIEW {
 		return state
 	}

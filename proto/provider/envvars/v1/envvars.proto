@@ -1,0 +1,265 @@
+syntax = "proto3";
+package provider.envvars.v1;
+
+option go_package = "github.com/ocelhq/ocel/pkg/proto/provider/envvars/v1;envvarsv1";
+
+import "buf/validate/validate.proto";
+import "common/environment/v1/environment.proto";
+import "common/links/v1/links.proto";
+
+service EnvVarsService {
+    rpc SetValue(SetValueRequest) returns (SetValueResponse);
+
+    rpc ListValues(ListValuesRequest) returns (ListValuesResponse);
+
+    rpc GetValue(GetValueRequest) returns (GetValueResponse);
+
+    rpc RevealValues(RevealValuesRequest) returns (RevealValuesResponse);
+
+    rpc DeleteValue(DeleteValueRequest) returns (DeleteValueResponse);
+
+    rpc SetReference(SetReferenceRequest) returns (SetReferenceResponse);
+
+    rpc ListReferences(ListReferencesRequest) returns (ListReferencesResponse);
+
+    rpc ListVersions(ListVersionsRequest) returns (ListVersionsResponse);
+
+    rpc SetLink(SetLinkRequest) returns (SetLinkResponse);
+
+    rpc RemoveLink(RemoveLinkRequest) returns (RemoveLinkResponse);
+
+    rpc ListLinks(ListLinksRequest) returns (ListLinksResponse);
+}
+
+message Coordinate {
+  string slug = 1 [(buf.validate.field).string = {pattern: "^[a-z0-9]+(-[a-z0-9]+)*$", max_len: 63}];
+
+  string folder = 2 [
+    (buf.validate.field).string.pattern = "^(/[^/#[:cntrl:]]+)*$",
+    (buf.validate.field).cel = {
+      id: "envvars.coordinate.folder.root"
+      message: "\"/\" is the project root, which is what an unbound app already reads; leave the folder off instead"
+      expression: "this != '/'"
+    }
+  ];
+
+  string key = 3 [(buf.validate.field).string = {min_len: 1, pattern: "^[^#[:cntrl:]]*$"}];
+
+  string environment = 4 [
+    (buf.validate.field).string.pattern = "^[^#[:cntrl:]]*$",
+    (buf.validate.field).cel = {
+      id: "envvars.environment.class_wide"
+      message: "\"*\" is reserved: it names the value that binds class-wide"
+      expression: "!this.contains('*')"
+    }
+  ];
+}
+
+message ValueMetadata {
+  Coordinate coordinate = 1;
+
+  int64 version = 2;
+
+  int64 updated_at = 3;
+
+  int64 size = 4;
+
+  optional Coordinate target = 5;
+}
+
+message VersionEntry {
+  int64 version = 1;
+  int64 created_at = 2;
+  int64 size = 3;
+}
+
+message SetValueRequest {
+  common.environment.v1.Tier tier = 1 [(buf.validate.field).enum.defined_only = true];
+
+  Coordinate coordinate = 2 [(buf.validate.field).required = true];
+  string value = 3;
+
+  optional int64 expected_version = 4;
+}
+
+message SetValueResponse {
+  ValueMetadata metadata = 1;
+}
+
+message ListValuesRequest {
+  common.environment.v1.Tier tier = 1 [(buf.validate.field).enum.defined_only = true];
+
+  string slug = 2 [(buf.validate.field).string = {pattern: "^[a-z0-9]+(-[a-z0-9]+)*$", max_len: 63}];
+}
+
+message ListValuesResponse {
+  repeated ValueMetadata values = 1;
+}
+
+message GetValueRequest {
+  common.environment.v1.Tier tier = 1 [(buf.validate.field).enum.defined_only = true];
+  Coordinate coordinate = 2 [(buf.validate.field).required = true];
+
+  bool reveal = 3;
+}
+
+message GetValueResponse {
+  bool found = 1;
+  ValueMetadata metadata = 2;
+
+  string value = 3;
+}
+
+message RevealValuesRequest {
+  common.environment.v1.Tier tier = 1 [(buf.validate.field).enum.defined_only = true];
+
+  string slug = 2 [(buf.validate.field).string = {pattern: "^[a-z0-9]+(-[a-z0-9]+)*$", max_len: 63}];
+  repeated Coordinate cells = 3;
+}
+
+message RevealValuesResponse {
+  repeated RevealedValue values = 1;
+}
+
+message RevealedValue {
+  ValueMetadata metadata = 1;
+  string value = 2;
+}
+
+message DeleteValueRequest {
+  common.environment.v1.Tier tier = 1 [(buf.validate.field).enum.defined_only = true];
+  Coordinate coordinate = 2 [(buf.validate.field).required = true];
+
+  optional int64 expected_version = 3;
+}
+
+message DeleteValueResponse {
+  bool deleted = 1;
+}
+
+message SetReferenceRequest {
+  common.environment.v1.Tier tier = 1 [(buf.validate.field).enum.defined_only = true];
+
+  Coordinate coordinate = 2 [(buf.validate.field).required = true];
+  Coordinate target = 3 [(buf.validate.field).required = true];
+}
+
+message SetReferenceResponse {
+  ValueMetadata metadata = 1;
+}
+
+message ListReferencesRequest {
+  common.environment.v1.Tier tier = 1 [(buf.validate.field).enum.defined_only = true];
+
+  Coordinate coordinate = 2 [(buf.validate.field).required = true];
+}
+
+message ListReferencesResponse {
+  repeated Coordinate references = 1;
+}
+
+message ListVersionsRequest {
+  common.environment.v1.Tier tier = 1 [(buf.validate.field).enum.defined_only = true];
+  Coordinate coordinate = 2 [(buf.validate.field).required = true];
+}
+
+message ListVersionsResponse {
+  repeated VersionEntry versions = 1;
+}
+
+message SetLinkRequest {
+  string slug = 1 [(buf.validate.field).string = {pattern: "^[a-z0-9]+(-[a-z0-9]+)*$", max_len: 63}];
+
+  common.environment.v1.Tier tier = 2 [(buf.validate.field).cel = {
+    id: "envvars.link.tier"
+    message: "a link is published to an ocel coordinate, never to a stage or a stack name: name the preview or the production tier"
+    expression: "this in [1, 2]"
+  }];
+
+  string environment = 3 [
+    (buf.validate.field).string.pattern = "^[^#[:cntrl:]]*$",
+    (buf.validate.field).cel = {
+      id: "envvars.environment.class_wide"
+      message: "\"*\" is reserved: it names the value that binds class-wide"
+      expression: "!this.contains('*')"
+    }
+  ];
+
+  common.links.v1.Link link = 4 [(buf.validate.field).required = true];
+
+  string owner = 5;
+}
+
+message SetLinkResponse {
+  uint64 version = 1;
+}
+
+message RemoveLinkRequest {
+  string slug = 1 [(buf.validate.field).string = {pattern: "^[a-z0-9]+(-[a-z0-9]+)*$", max_len: 63}];
+
+  common.environment.v1.Tier tier = 2 [(buf.validate.field).cel = {
+    id: "envvars.link.tier"
+    message: "a link is published to an ocel coordinate, never to a stage or a stack name: name the preview or the production tier"
+    expression: "this in [1, 2]"
+  }];
+
+  string environment = 3 [
+    (buf.validate.field).string.pattern = "^[^#[:cntrl:]]*$",
+    (buf.validate.field).cel = {
+      id: "envvars.environment.class_wide"
+      message: "\"*\" is reserved: it names the value that binds class-wide"
+      expression: "!this.contains('*')"
+    }
+  ];
+
+  string name = 4 [(buf.validate.field).string = {min_len: 1, pattern: "^[^#[:cntrl:]]*$"}];
+}
+
+message RemoveLinkResponse {
+  bool removed = 1;
+}
+
+message ListLinksRequest {
+  string slug = 1 [(buf.validate.field).string = {pattern: "^[a-z0-9]+(-[a-z0-9]+)*$", max_len: 63}];
+
+  common.environment.v1.Tier tier = 2 [(buf.validate.field).cel = {
+    id: "envvars.link.tier"
+    message: "a link is published to an ocel coordinate, never to a stage or a stack name: name the preview or the production tier"
+    expression: "this in [1, 2]"
+  }];
+
+  string environment = 3 [
+    (buf.validate.field).string.pattern = "^[^#[:cntrl:]]*$",
+    (buf.validate.field).cel = {
+      id: "envvars.environment.class_wide"
+      message: "\"*\" is reserved: it names the value that binds class-wide"
+      expression: "!this.contains('*')"
+    }
+  ];
+}
+
+message ListLinksResponse {
+  repeated LinkSummary links = 1;
+}
+
+message LinkSummary {
+  string name = 1;
+
+  common.links.v1.LinkType type = 2;
+
+  string source = 3;
+
+  string owner = 4;
+
+  uint64 version = 5;
+
+  repeated PropertyShape properties = 6;
+}
+
+message PropertyShape {
+  string name = 1;
+
+  string json_type = 2;
+
+  bool list = 3;
+}

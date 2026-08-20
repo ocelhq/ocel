@@ -4,11 +4,11 @@ import (
 	"context"
 	"time"
 
-	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
-	progressv1 "github.com/ocelhq/ocel/pkg/proto/progress/v1"
+	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
+	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 )
 
-func promoteDeploy(ctx context.Context, cfg Config, manifest *deploymentsv1.Manifest, prov provisionedDeploy, progress Progress) (Result, error) {
+func promoteDeploy(ctx context.Context, cfg Config, manifest *contractv1.Manifest, prov provisionedDeploy, progress Progress) (Result, error) {
 	if !prov.ready {
 		return Result{StackState: prov.state}, &PhaseError{Phase: "promote", After: "provision"}
 	}

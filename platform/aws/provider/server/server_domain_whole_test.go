@@ -6,8 +6,8 @@ import (
 	"testing"
 	"time"
 
-	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
-	environmentv1 "github.com/ocelhq/ocel/pkg/proto/environment/v1"
+	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
+	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/platform/aws/provider/bootstrap"
 	"github.com/ocelhq/ocel/platform/aws/provider/certs"
 	"github.com/ocelhq/ocel/platform/aws/provider/dns"
@@ -147,10 +147,10 @@ func TestUsePreviewWildcardWhole(t *testing.T) {
 		t.Fatalf("seed deployed: %v", err)
 	}
 
-	req := &deploymentsv1.UsePreviewWildcardRequest{
+	req := &contractv1.UsePreviewWildcardRequest{
 		Tier:       environmentv1.Tier_TIER_PREVIEW,
 		BaseDomain: "preview.acme.com",
-		Edge:       &deploymentsv1.EdgeSelection{Kind: string(wholeEdgeKind)},
+		Edge:       &contractv1.EdgeSelection{Kind: string(wholeEdgeKind)},
 	}
 	if err := s.runUsePreviewWildcard(ctx, req, func(string) {}, func(string, []edge.Record, ...string) {}, func(string) {}); err != nil {
 		t.Fatalf("runUsePreviewWildcard: %v", err)

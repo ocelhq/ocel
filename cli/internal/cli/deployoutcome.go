@@ -2,8 +2,8 @@ package cli
 
 import (
 	"github.com/ocelhq/ocel/cli/internal/deployui"
-	linksv1 "github.com/ocelhq/ocel/pkg/proto/links/v1"
-	progressv1 "github.com/ocelhq/ocel/pkg/proto/progress/v1"
+	linksv1 "github.com/ocelhq/ocel/pkg/proto/common/links/v1"
+	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
 )
 
 type deployOutcome struct {

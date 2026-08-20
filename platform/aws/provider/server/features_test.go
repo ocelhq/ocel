@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
+	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/platform/aws/provider/bootstrap"
 )
 
@@ -77,7 +77,7 @@ func TestMissingFeatures(t *testing.T) {
 func TestDescribedBootstrap(t *testing.T) {
 	t.Parallel()
 
-	find := func(t *testing.T, resp *deploymentsv1.DescribeBootstrapResponse, name string) *deploymentsv1.Feature {
+	find := func(t *testing.T, resp *contractv1.DescribeBootstrapResponse, name string) *contractv1.Feature {
 		t.Helper()
 		for _, f := range resp.GetFeatures() {
 			if f.GetName() == name {

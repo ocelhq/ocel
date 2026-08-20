@@ -9,7 +9,7 @@ import (
 	"strings"
 
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
-	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
+	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 )
 
 const (
@@ -35,7 +35,7 @@ func configuredFeatures(cfg *projectconfig.Config) []string {
 	return slices.Compact(required)
 }
 
-func requiredFeatures(cfg *projectconfig.Config, manifest *deploymentsv1.Manifest) []string {
+func requiredFeatures(cfg *projectconfig.Config, manifest *contractv1.Manifest) []string {
 	required := configuredFeatures(cfg)
 	for _, app := range manifest.GetApps() {
 		required = append(required, frameworkFeatures(app.GetFramework())...)
@@ -54,7 +54,7 @@ func frameworkFeatures(framework string) []string {
 	return []string{featureISR, featureImageOptimization}
 }
 
-func catalogueNames(catalogue []*deploymentsv1.Feature) []string {
+func catalogueNames(catalogue []*contractv1.Feature) []string {
 	names := make([]string, 0, len(catalogue))
 	for _, f := range catalogue {
 		names = append(names, f.GetName())
@@ -62,7 +62,7 @@ func catalogueNames(catalogue []*deploymentsv1.Feature) []string {
 	return names
 }
 
-func enabledFeatures(catalogue []*deploymentsv1.Feature) []string {
+func enabledFeatures(catalogue []*contractv1.Feature) []string {
 	var enabled []string
 	for _, f := range catalogue {
 		if f.GetEnabled() {
@@ -72,7 +72,7 @@ func enabledFeatures(catalogue []*deploymentsv1.Feature) []string {
 	return enabled
 }
 
-func inCatalogueOrder(catalogue []*deploymentsv1.Feature, chosen []string) []string {
+func inCatalogueOrder(catalogue []*contractv1.Feature, chosen []string) []string {
 	var ordered []string
 	for _, f := range catalogue {
 		if slices.Contains(chosen, f.GetName()) {
@@ -82,7 +82,7 @@ func inCatalogueOrder(catalogue []*deploymentsv1.Feature, chosen []string) []str
 	return ordered
 }
 
-func withDependencies(catalogue []*deploymentsv1.Feature, chosen []string) []string {
+func withDependencies(catalogue []*contractv1.Feature, chosen []string) []string {
 	pulled := slices.Clone(chosen)
 	for grew := true; grew; {
 		grew = false
@@ -100,7 +100,7 @@ func withDependencies(catalogue []*deploymentsv1.Feature, chosen []string) []str
 	return inCatalogueOrder(catalogue, pulled)
 }
 
-func parseFeatureFlag(raw string, catalogue []*deploymentsv1.Feature) ([]string, error) {
+func parseFeatureFlag(raw string, catalogue []*contractv1.Feature) ([]string, error) {
 	switch strings.TrimSpace(raw) {
 	case allFeatures:
 		return catalogueNames(catalogue), nil
@@ -128,7 +128,7 @@ func parseFeatureFlag(raw string, catalogue []*deploymentsv1.Feature) ([]string,
 	return inCatalogueOrder(catalogue, chosen), nil
 }
 
-func unmetDependency(catalogue []*deploymentsv1.Feature, chosen []string) error {
+func unmetDependency(catalogue []*contractv1.Feature, chosen []string) error {
 	for _, f := range catalogue {
 		if !slices.Contains(chosen, f.GetName()) {
 			continue
@@ -154,7 +154,7 @@ func droppedFeatures(enabled, requested []string) []string {
 	return dropped
 }
 
-func dependentProjects(catalogue []*deploymentsv1.Feature, dropped []string) []string {
+func dependentProjects(catalogue []*contractv1.Feature, dropped []string) []string {
 	var projects []string
 	for _, f := range catalogue {
 		if !slices.Contains(dropped, f.GetName()) {
@@ -170,7 +170,7 @@ func dependentProjects(catalogue []*deploymentsv1.Feature, dropped []string) []s
 	return projects
 }
 
-func pickFeatures(ctx context.Context, catalogue []*deploymentsv1.Feature, stdout io.Writer, stdin io.Reader) ([]string, bool, error) {
+func pickFeatures(ctx context.Context, catalogue []*contractv1.Feature, stdout io.Writer, stdin io.Reader) ([]string, bool, error) {
 	chosen := enabledFeatures(catalogue)
 	for {
 		fmt.Fprintln(stdout, "Features this bootstrap carries:")
@@ -206,7 +206,7 @@ func pickFeatures(ctx context.Context, catalogue []*deploymentsv1.Feature, stdou
 	}
 }
 
-func toggleFeatures(catalogue []*deploymentsv1.Feature, chosen []string, line string) ([]string, error) {
+func toggleFeatures(catalogue []*contractv1.Feature, chosen []string, line string) ([]string, error) {
 	next := slices.Clone(chosen)
 	for _, field := range strings.Split(line, ",") {
 		field = strings.TrimSpace(field)

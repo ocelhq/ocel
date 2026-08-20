@@ -1,0 +1,510 @@
+syntax = "proto3";
+package provider.contract.v1;
+
+option go_package = "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1;contractv1";
+
+import "app/resources/v1/resources.proto";
+import "app/resources/v1/variables.proto";
+import "buf/validate/validate.proto";
+import "common/environment/v1/environment.proto";
+import "common/progress/v1/progress.proto";
+
+service ProviderService {
+    rpc Configure(ConfigureRequest) returns (ConfigureResponse);
+
+    rpc Deploy(DeployRequest) returns (stream common.progress.v1.OperationEvent);
+
+    rpc Bootstrap(BootstrapRequest) returns (stream common.progress.v1.OperationEvent);
+
+    rpc DescribeBootstrap(DescribeBootstrapRequest) returns (DescribeBootstrapResponse);
+
+    rpc RemoveSubstrate(RemoveSubstrateRequest) returns (stream common.progress.v1.OperationEvent);
+
+    rpc PlanRemoveSubstrate(PlanRemoveSubstrateRequest) returns (PlanRemoveSubstrateResponse);
+
+    rpc RemovePreview(RemovePreviewRequest) returns (stream common.progress.v1.OperationEvent);
+
+    rpc RemoveProject(RemoveProjectRequest) returns (stream common.progress.v1.OperationEvent);
+
+    rpc PlanRemoveProject(PlanRemoveProjectRequest) returns (PlanRemoveProjectResponse);
+
+    rpc ListEnvironments(ListEnvironmentsRequest) returns (ListEnvironmentsResponse);
+
+    rpc Preflight(PreflightRequest) returns (PreflightResponse);
+
+    rpc ListPromotions(ListPromotionsRequest) returns (ListPromotionsResponse);
+
+    rpc Rollback(RollbackRequest) returns (RollbackResponse);
+
+    rpc RemoveStalePromotions(RemoveStalePromotionsRequest) returns (stream common.progress.v1.OperationEvent);
+
+    rpc UsePreviewWildcard(UsePreviewWildcardRequest) returns (stream common.progress.v1.OperationEvent);
+
+    rpc GetPreviewWildcard(PreviewWildcardRequest) returns (GetPreviewWildcardResponse);
+
+    rpc PlanRemovePreviewWildcard(PreviewWildcardRequest) returns (PlanRemovePreviewWildcardResponse);
+
+    rpc RemovePreviewWildcard(RemovePreviewWildcardRequest) returns (stream common.progress.v1.OperationEvent);
+
+    rpc AddHostname(AddHostnameRequest) returns (stream common.progress.v1.OperationEvent);
+
+    rpc RemoveHostname(RemoveHostnameRequest) returns (stream common.progress.v1.OperationEvent);
+
+    rpc GetHostnameStatus(GetHostnameStatusRequest) returns (GetHostnameStatusResponse);
+}
+
+message AwsProviderConfig {
+  string region = 1;
+
+  repeated string transforms = 2;
+
+  map<string, string> certificates = 3;
+}
+
+message ProviderConfig {
+  oneof provider {
+    AwsProviderConfig aws = 1;
+  }
+}
+
+message ConfigureRequest {
+  ProviderConfig config = 1;
+}
+
+message ConfigureResponse {}
+
+message UsePreviewWildcardRequest {
+  common.environment.v1.Tier tier = 1 [(buf.validate.field).enum.const = 1];
+
+  string base_domain = 2;
+
+  EdgeSelection edge = 3;
+}
+
+message PreviewWildcardRequest {
+  common.environment.v1.Tier tier = 1 [(buf.validate.field).enum.const = 1];
+}
+
+message GetPreviewWildcardResponse {
+  PreviewWildcard wildcard = 1;
+
+  repeated string projects = 2;
+}
+
+message RemovePreviewWildcardRequest {
+  common.environment.v1.Tier tier = 1 [(buf.validate.field).enum.const = 1];
+
+  EdgeSelection edge = 2;
+}
+
+message AddHostnameRequest {
+  string slug = 1 [(buf.validate.field).string = {pattern: "^[a-z0-9]+(-[a-z0-9]+)*$", max_len: 63}];
+
+  repeated string configured = 2;
+
+  string host = 3;
+
+  EdgeSelection edge = 4;
+}
+
+message RemoveHostnameRequest {
+  string slug = 1 [(buf.validate.field).string = {pattern: "^[a-z0-9]+(-[a-z0-9]+)*$", max_len: 63}];
+
+  repeated string configured = 2;
+
+  string host = 3;
+
+  EdgeSelection edge = 4;
+}
+
+message GetHostnameStatusRequest {
+  string slug = 1 [(buf.validate.field).string = {pattern: "^[a-z0-9]+(-[a-z0-9]+)*$", max_len: 63}];
+
+  repeated string configured = 2;
+
+  EdgeSelection edge = 3;
+}
+
+message GetHostnameStatusResponse {
+  repeated ProductionHostname hostnames = 1;
+
+  bool ready = 2;
+
+  repeated string records_written = 3;
+
+  repeated string records_owed = 4;
+}
+
+message CertificateState {
+  string certificate_id = 1;
+
+  string certificate_status = 2;
+
+  repeated string records_written = 3;
+
+  repeated string records_owed = 4;
+
+  int64 last_probe_at = 5;
+
+  bool last_probe_ok = 6;
+
+  string last_probe_edge = 7;
+}
+
+message ProductionHostname {
+  string hostname = 1;
+
+  bool declared = 2;
+
+  CertificateState certificate = 3;
+
+  string renewal_status = 4;
+
+  int64 expires_at = 5;
+
+  bool expiring_soon = 6;
+
+  string serving_pointer = 7;
+
+  bool ready = 8;
+
+  string pending = 9;
+}
+
+message Manifest {
+  string schema_version = 1 [(buf.validate.field).string.min_len = 1];
+  repeated ManifestResource resources = 2;
+  repeated ManifestFunction functions = 3;
+
+  string slug = 4 [(buf.validate.field).string = {pattern: "^[a-z0-9]+(-[a-z0-9]+)*$", max_len: 63}];
+
+  map<string, DomainList> domains = 5;
+
+  repeated ManifestApp apps = 6;
+
+  repeated ManifestUsage usages = 7;
+}
+
+message ManifestUsage {
+  string app = 1;
+  string resource = 2;
+  repeated string files = 3;
+}
+
+message DomainList {
+  repeated string hostnames = 1;
+}
+
+message ManifestApp {
+  string name = 1;
+  string framework = 2;
+  map<string, DomainList> domains = 3;
+
+  repeated ManifestVariable variables = 4;
+
+  string folder = 5 [(buf.validate.field).string.pattern = "^(/[^/#[:cntrl:]]+)*$"];
+
+  string deployment_id = 6;
+}
+
+message ManifestVariable {
+  string key = 1 [(buf.validate.field).string = {min_len: 1, pattern: "^[^#[:cntrl:]]*$"}];
+  app.resources.v1.VariableClass class = 2 [(buf.validate.field).enum.defined_only = true];
+
+  string value = 3;
+
+  string folder = 4 [(buf.validate.field).string.pattern = "^(/[^/#[:cntrl:]]+)*$"];
+
+  int64 version = 5;
+}
+
+message ManifestFunction {
+  string logical_name = 1;
+  string runtime = 2;
+  string handler = 3;
+  string artifact_path = 4;
+  string framework = 5;
+  string route_id = 6;
+  string app = 7;
+}
+
+message ManifestResource {
+  string logical_name = 1;
+  app.resources.v1.ResourceIdentifier resource = 2;
+
+  oneof config {
+    app.resources.v1.PostgresConfig postgres = 3;
+    app.resources.v1.BucketConfig bucket = 4;
+  }
+
+  bool linked = 5;
+}
+
+message DeployRequest {
+  Manifest manifest = 1 [(buf.validate.field).required = true];
+
+  common.environment.v1.Environment environment = 2;
+
+  string tag = 3 [(buf.validate.field).string = {pattern: "^[A-Za-z0-9._-]*$", max_len: 64}];
+
+  EdgeSelection edge = 4;
+
+  repeated string required_features = 5;
+}
+
+message BootstrapRequest {
+  common.environment.v1.Tier tier = 1 [(buf.validate.field).enum.defined_only = true];
+
+  repeated string features = 2;
+
+  bool force = 3;
+}
+
+message DescribeBootstrapRequest {
+  common.environment.v1.Tier tier = 1 [(buf.validate.field).enum.defined_only = true];
+}
+
+message DescribeBootstrapResponse {
+  repeated Feature features = 1;
+}
+
+message Feature {
+  string name = 1;
+
+  string summary = 2;
+
+  repeated string depends_on = 3;
+
+  bool enabled = 4;
+
+  repeated string dependents = 5;
+}
+
+message Dns {
+  string kind = 1;
+
+  string zone = 2;
+}
+
+message EdgeSelection {
+  string kind = 1;
+
+  Dns dns = 2;
+
+  repeated string allow_degraded = 3;
+}
+
+message RemoveSubstrateRequest {
+  common.environment.v1.Tier tier = 1 [(buf.validate.field).enum.defined_only = true];
+
+  EdgeSelection edge = 2;
+}
+
+message PlanRemoveSubstrateRequest {
+  common.environment.v1.Tier tier = 1 [(buf.validate.field).enum.defined_only = true];
+
+  EdgeSelection edge = 2;
+}
+
+message PlanRemoveSubstrateResponse {
+  string edge_kind = 1;
+
+  repeated RemovalItem items = 2;
+}
+
+message RemovePreviewRequest {
+  common.environment.v1.Environment environment = 1;
+
+  string slug = 2 [(buf.validate.field).string = {pattern: "^[a-z0-9]+(-[a-z0-9]+)*$", max_len: 63}];
+
+  EdgeSelection edge = 3;
+}
+
+message RemoveProjectRequest {
+  string slug = 1 [(buf.validate.field).string = {pattern: "^[a-z0-9]+(-[a-z0-9]+)*$", max_len: 63}];
+
+  common.environment.v1.Environment environment = 2;
+
+  EdgeSelection edge = 3;
+}
+
+message PlanRemoveProjectRequest {
+  string slug = 1 [(buf.validate.field).string = {pattern: "^[a-z0-9]+(-[a-z0-9]+)*$", max_len: 63}];
+
+  common.environment.v1.Environment environment = 2;
+
+  EdgeSelection edge = 3;
+}
+
+message PlanRemoveProjectResponse {
+  repeated string app_stacks = 1;
+
+  repeated string infra_stacks = 2;
+
+  EdgeStackPlan edge_stack = 3;
+
+  bool nothing_to_remove = 4;
+}
+
+message PlanRemovePreviewWildcardResponse {
+  string base_domain = 1;
+
+  EdgeStackPlan edge_stack = 2;
+}
+
+message RemovalItem {
+  enum Action {
+    ACTION_UNSPECIFIED = 0;
+    ACTION_DELETE = 1;
+    ACTION_DISABLE_THEN_DELETE = 2;
+    ACTION_KEEP = 3;
+  }
+
+  string kind = 1;
+  string name = 2;
+  Action action = 3;
+  string reason = 4;
+  bool slow = 5;
+}
+
+message EdgeStackPlan {
+  string edge_kind = 1;
+
+  repeated RemovalItem items = 2;
+}
+
+message ListEnvironmentsRequest {
+  string slug = 1 [(buf.validate.field).string = {pattern: "^[a-z0-9]+(-[a-z0-9]+)*$", max_len: 63}];
+}
+
+message ListEnvironmentsResponse {
+  repeated PreviewEnvironment environments = 1;
+}
+
+message PreviewEnvironment {
+  string identity = 1;
+  common.environment.v1.Lifecycle lifecycle = 2;
+
+  string label = 3;
+
+  int64 created_at = 4;
+  int64 expires_at = 5;
+}
+
+message PreflightRequest {
+  common.environment.v1.Tier required_tier = 1 [(buf.validate.field).enum.defined_only = true];
+
+  string slug = 2 [(buf.validate.field).string = {pattern: "^[a-z0-9]+(-[a-z0-9]+)*$", max_len: 63}, (buf.validate.field).ignore = IGNORE_IF_ZERO_VALUE];
+
+  repeated string domains = 3;
+
+  EdgeSelection edge = 4;
+
+  repeated string required_features = 5;
+}
+
+message PreflightResponse {
+  common.environment.v1.Tier infra_tier = 1;
+
+  bool infrastructure_present = 2;
+
+  Identity identity = 3;
+
+  repeated CredentialProblem credential_problems = 4;
+
+  repeated string known_slugs = 5;
+
+  repeated DomainClaim domain_claims = 6;
+
+  PreviewWildcard preview_wildcard = 7;
+}
+
+message PreviewWildcard {
+  string base_domain = 1;
+
+  string edge_scope = 2;
+
+  uint32 grammar_min = 3;
+
+  uint32 grammar_max = 4;
+
+  bool route_installed = 5;
+
+  CertificateState certificate = 6;
+}
+
+message DomainClaim {
+  enum Status {
+    STATUS_UNSPECIFIED = 0;
+    STATUS_UNCLAIMED = 1;
+    STATUS_CLAIMED = 2;
+  }
+
+  string hostname = 1;
+
+  Status status = 2;
+
+  string owner = 3;
+}
+
+message Identity {
+  string aws_account = 1;
+  string aws_profile = 2;
+  string aws_region = 3;
+  string aws_arn = 4;
+
+  string edge_scope = 5;
+}
+
+message CredentialProblem {
+  string provider = 1;
+  string message = 2;
+  string hint = 3;
+}
+
+message Promotion {
+  string promotion_id = 1;
+  int64 ts = 2;
+  map<string, string> builds = 3;
+  string tag = 4;
+  common.progress.v1.FlipBound flip_bound = 5;
+}
+
+message PromotionHistoryEntry {
+  Promotion promotion = 1;
+  bool active = 2;
+}
+
+message ListPromotionsRequest {
+  string slug = 1 [(buf.validate.field).string = {pattern: "^[a-z0-9]+(-[a-z0-9]+)*$", max_len: 63}];
+
+  EdgeSelection edge = 2;
+}
+
+message ListPromotionsResponse {
+  repeated PromotionHistoryEntry promotions = 1;
+}
+
+message RollbackRequest {
+  string slug = 1 [(buf.validate.field).string = {pattern: "^[a-z0-9]+(-[a-z0-9]+)*$", max_len: 63}];
+
+  string to = 2;
+
+  string tag = 3 [(buf.validate.field).string = {pattern: "^[A-Za-z0-9._-]*$", max_len: 64}];
+
+  EdgeSelection edge = 4;
+}
+
+message RollbackResponse {
+  Promotion promoted = 1;
+}
+
+message RemoveStalePromotionsRequest {
+  string slug = 1 [(buf.validate.field).string = {pattern: "^[a-z0-9]+(-[a-z0-9]+)*$", max_len: 63}];
+
+  int32 keep_n = 2 [(buf.validate.field).int32.gte = 0];
+
+  common.environment.v1.Environment environment = 3;
+
+  EdgeSelection edge = 4;
+}

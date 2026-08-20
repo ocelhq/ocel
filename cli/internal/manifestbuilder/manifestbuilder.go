@@ -6,9 +6,9 @@ import (
 	"strings"
 
 	"github.com/ocelhq/ocel/pkg/naming"
-	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
-	linksv1 "github.com/ocelhq/ocel/pkg/proto/links/v1"
-	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/resources/v1"
+	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
+	linksv1 "github.com/ocelhq/ocel/pkg/proto/common/links/v1"
+	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 )
 
 const SchemaVersion = "provider.v1"
@@ -154,11 +154,11 @@ func (e *AmbiguousLinkError) Error() string {
 	)
 }
 
-func Build(slug string, domains map[string][]string, apps []App, declarations []Declaration, links []string, functions []Function, variables map[string][]Variable) (*deploymentsv1.Manifest, error) {
+func Build(slug string, domains map[string][]string, apps []App, declarations []Declaration, links []string, functions []Function, variables map[string][]Variable) (*contractv1.Manifest, error) {
 	seen := make(map[identity]Declaration, len(declarations))
 	named := make(map[string]string, len(declarations)+len(functions))
 
-	resources := make([]*deploymentsv1.ManifestResource, 0, len(declarations))
+	resources := make([]*contractv1.ManifestResource, 0, len(declarations))
 	for _, d := range declarations {
 		if d.ID == "" {
 			return nil, fmt.Errorf("manifestbuilder: declaration has empty resource id")
@@ -187,7 +187,7 @@ func Build(slug string, domains map[string][]string, apps []App, declarations []
 		}
 		named[logical] = described
 
-		resource := &deploymentsv1.ManifestResource{
+		resource := &contractv1.ManifestResource{
 			LogicalName: logical,
 			Resource: &resourcesv1.ResourceIdentifier{
 				Type: d.Type,
@@ -195,15 +195,15 @@ func Build(slug string, domains map[string][]string, apps []App, declarations []
 			},
 		}
 		if d.Postgres != nil {
-			resource.Config = &deploymentsv1.ManifestResource_Postgres{Postgres: d.Postgres}
+			resource.Config = &contractv1.ManifestResource_Postgres{Postgres: d.Postgres}
 		}
 		if d.Bucket != nil {
-			resource.Config = &deploymentsv1.ManifestResource_Bucket{Bucket: d.Bucket}
+			resource.Config = &contractv1.ManifestResource_Bucket{Bucket: d.Bucket}
 		}
 		resources = append(resources, resource)
 	}
 
-	slices.SortFunc(resources, func(a, b *deploymentsv1.ManifestResource) int {
+	slices.SortFunc(resources, func(a, b *contractv1.ManifestResource) int {
 		return strings.Compare(a.LogicalName, b.LogicalName)
 	})
 
@@ -211,7 +211,7 @@ func Build(slug string, domains map[string][]string, apps []App, declarations []
 		return nil, err
 	}
 
-	manifestFunctions := make([]*deploymentsv1.ManifestFunction, 0, len(functions))
+	manifestFunctions := make([]*contractv1.ManifestFunction, 0, len(functions))
 	for _, f := range functions {
 		if f.App == "" || f.Name == "" {
 			return nil, fmt.Errorf("manifestbuilder: function %q of app %q needs both an app and a route name", f.Name, f.App)
@@ -224,7 +224,7 @@ func Build(slug string, domains map[string][]string, apps []App, declarations []
 		}
 		named[logical] = described
 
-		manifestFunctions = append(manifestFunctions, &deploymentsv1.ManifestFunction{
+		manifestFunctions = append(manifestFunctions, &contractv1.ManifestFunction{
 			LogicalName:  logical,
 			Runtime:      f.Runtime,
 			Handler:      f.Handler,
@@ -234,7 +234,7 @@ func Build(slug string, domains map[string][]string, apps []App, declarations []
 			App:          f.App,
 		})
 	}
-	slices.SortFunc(manifestFunctions, func(a, b *deploymentsv1.ManifestFunction) int {
+	slices.SortFunc(manifestFunctions, func(a, b *contractv1.ManifestFunction) int {
 		return strings.Compare(a.LogicalName, b.LogicalName)
 	})
 
@@ -243,7 +243,7 @@ func Build(slug string, domains map[string][]string, apps []App, declarations []
 		return nil, err
 	}
 
-	return &deploymentsv1.Manifest{
+	return &contractv1.Manifest{
 		SchemaVersion: SchemaVersion,
 		Slug:          slug,
 		Resources:     resources,
@@ -254,8 +254,8 @@ func Build(slug string, domains map[string][]string, apps []App, declarations []
 	}, nil
 }
 
-func bindLinks(resources []*deploymentsv1.ManifestResource, links []string) error {
-	byID := make(map[string][]*deploymentsv1.ManifestResource, len(resources))
+func bindLinks(resources []*contractv1.ManifestResource, links []string) error {
+	byID := make(map[string][]*contractv1.ManifestResource, len(resources))
 	for _, r := range resources {
 		id := r.GetResource().GetName()
 		byID[id] = append(byID[id], r)
@@ -275,8 +275,8 @@ func bindLinks(resources []*deploymentsv1.ManifestResource, links []string) erro
 	return nil
 }
 
-func buildUsages(apps []App, declared map[identity]Declaration) ([]*deploymentsv1.ManifestUsage, error) {
-	merged := map[string]*deploymentsv1.ManifestUsage{}
+func buildUsages(apps []App, declared map[identity]Declaration) ([]*contractv1.ManifestUsage, error) {
+	merged := map[string]*contractv1.ManifestUsage{}
 	for _, a := range apps {
 		for _, u := range a.Usages {
 			if _, ok := declared[identity{u.Type, u.ID}]; !ok {
@@ -290,7 +290,7 @@ func buildUsages(apps []App, declared map[identity]Declaration) ([]*deploymentsv
 			logical := resourceLogicalName(kind, u.ID)
 			edge, ok := merged[a.Name+naming.KeySeparator+logical]
 			if !ok {
-				edge = &deploymentsv1.ManifestUsage{App: a.Name, Resource: logical}
+				edge = &contractv1.ManifestUsage{App: a.Name, Resource: logical}
 				merged[a.Name+naming.KeySeparator+logical] = edge
 			}
 			for _, f := range u.Files {
@@ -304,12 +304,12 @@ func buildUsages(apps []App, declared map[identity]Declaration) ([]*deploymentsv
 		return nil, nil
 	}
 
-	out := make([]*deploymentsv1.ManifestUsage, 0, len(merged))
+	out := make([]*contractv1.ManifestUsage, 0, len(merged))
 	for _, edge := range merged {
 		slices.Sort(edge.Files)
 		out = append(out, edge)
 	}
-	slices.SortFunc(out, func(a, b *deploymentsv1.ManifestUsage) int {
+	slices.SortFunc(out, func(a, b *contractv1.ManifestUsage) int {
 		if c := strings.Compare(a.App, b.App); c != 0 {
 			return c
 		}
@@ -318,16 +318,16 @@ func buildUsages(apps []App, declared map[identity]Declaration) ([]*deploymentsv
 	return out, nil
 }
 
-func domainLists(domains map[string][]string) map[string]*deploymentsv1.DomainList {
+func domainLists(domains map[string][]string) map[string]*contractv1.DomainList {
 	if len(domains) == 0 {
 		return nil
 	}
-	out := make(map[string]*deploymentsv1.DomainList, len(domains))
+	out := make(map[string]*contractv1.DomainList, len(domains))
 	for class, hostnames := range domains {
 		if len(hostnames) == 0 {
 			continue
 		}
-		out[class] = &deploymentsv1.DomainList{Hostnames: hostnames}
+		out[class] = &contractv1.DomainList{Hostnames: hostnames}
 	}
 	if len(out) == 0 {
 		return nil
@@ -335,7 +335,7 @@ func domainLists(domains map[string][]string) map[string]*deploymentsv1.DomainLi
 	return out
 }
 
-func buildApps(apps []App, functions []Function, variables map[string][]Variable) []*deploymentsv1.ManifestApp {
+func buildApps(apps []App, functions []Function, variables map[string][]Variable) []*contractv1.ManifestApp {
 	frameworkByApp := make(map[string]string, len(functions))
 	for _, f := range functions {
 		if f.App != "" && f.Framework != "" {
@@ -345,7 +345,7 @@ func buildApps(apps []App, functions []Function, variables map[string][]Variable
 		}
 	}
 
-	manifestApps := make([]*deploymentsv1.ManifestApp, 0, len(apps))
+	manifestApps := make([]*contractv1.ManifestApp, 0, len(apps))
 	configured := make(map[string]bool, len(apps))
 	for _, a := range apps {
 		configured[a.Name] = true
@@ -353,7 +353,7 @@ func buildApps(apps []App, functions []Function, variables map[string][]Variable
 		if framework == "" {
 			framework = frameworkByApp[a.Name]
 		}
-		manifestApps = append(manifestApps, &deploymentsv1.ManifestApp{
+		manifestApps = append(manifestApps, &contractv1.ManifestApp{
 			Name:      a.Name,
 			Framework: framework,
 			Domains:   domainLists(a.Domains),
@@ -367,25 +367,25 @@ func buildApps(apps []App, functions []Function, variables map[string][]Variable
 			continue
 		}
 		configured[f.App] = true
-		manifestApps = append(manifestApps, &deploymentsv1.ManifestApp{
+		manifestApps = append(manifestApps, &contractv1.ManifestApp{
 			Name:      f.App,
 			Framework: frameworkByApp[f.App],
 			Variables: manifestVariables(variables[f.App]),
 		})
 	}
 
-	slices.SortFunc(manifestApps, func(a, b *deploymentsv1.ManifestApp) int { return strings.Compare(a.Name, b.Name) })
+	slices.SortFunc(manifestApps, func(a, b *contractv1.ManifestApp) int { return strings.Compare(a.Name, b.Name) })
 	return manifestApps
 }
 
-func manifestVariables(variables []Variable) []*deploymentsv1.ManifestVariable {
+func manifestVariables(variables []Variable) []*contractv1.ManifestVariable {
 	if len(variables) == 0 {
 		return nil
 	}
-	out := make([]*deploymentsv1.ManifestVariable, 0, len(variables))
+	out := make([]*contractv1.ManifestVariable, 0, len(variables))
 	for _, v := range variables {
-		out = append(out, &deploymentsv1.ManifestVariable{Key: v.Key, Class: v.Class, Value: v.Value, Folder: v.Folder, Version: v.Version})
+		out = append(out, &contractv1.ManifestVariable{Key: v.Key, Class: v.Class, Value: v.Value, Folder: v.Folder, Version: v.Version})
 	}
-	slices.SortFunc(out, func(a, b *deploymentsv1.ManifestVariable) int { return strings.Compare(a.Key, b.Key) })
+	slices.SortFunc(out, func(a, b *contractv1.ManifestVariable) int { return strings.Compare(a.Key, b.Key) })
 	return out
 }

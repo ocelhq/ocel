@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	environmentv1 "github.com/ocelhq/ocel/pkg/proto/environment/v1"
+	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 )
 
 func TestCheckTier_Matches(t *testing.T) {

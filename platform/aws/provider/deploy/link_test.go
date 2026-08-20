@@ -13,9 +13,9 @@ import (
 	"google.golang.org/protobuf/proto"
 
 	"github.com/ocelhq/ocel/pkg/naming"
-	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
-	linksv1 "github.com/ocelhq/ocel/pkg/proto/links/v1"
-	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/resources/v1"
+	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
+	linksv1 "github.com/ocelhq/ocel/pkg/proto/common/links/v1"
+	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/platform/aws/provider/vars"
 	"github.com/ocelhq/ocel/platform/aws/provider/vars/live"
 )
@@ -92,23 +92,23 @@ func sessionConfig() Config {
 	return cfg
 }
 
-func linkedManifest() *deploymentsv1.Manifest {
-	return &deploymentsv1.Manifest{
+func linkedManifest() *contractv1.Manifest {
+	return &contractv1.Manifest{
 		Slug: "shop",
-		Resources: []*deploymentsv1.ManifestResource{
+		Resources: []*contractv1.ManifestResource{
 			{
 				LogicalName: "db--main",
 				Resource:    &resourcesv1.ResourceIdentifier{Type: linksv1.LinkType_LINK_TYPE_POSTGRES, Name: "main"},
-				Config:      &deploymentsv1.ManifestResource_Postgres{Postgres: &resourcesv1.PostgresConfig{}},
+				Config:      &contractv1.ManifestResource_Postgres{Postgres: &resourcesv1.PostgresConfig{}},
 			},
 			{
 				LogicalName: "bucket--uploads",
 				Resource:    &resourcesv1.ResourceIdentifier{Type: linksv1.LinkType_LINK_TYPE_BUCKET, Name: "uploads"},
-				Config:      &deploymentsv1.ManifestResource_Bucket{Bucket: &resourcesv1.BucketConfig{}},
+				Config:      &contractv1.ManifestResource_Bucket{Bucket: &resourcesv1.BucketConfig{}},
 			},
 		},
-		Apps: []*deploymentsv1.ManifestApp{{Name: "api"}, {Name: "web"}},
-		Usages: []*deploymentsv1.ManifestUsage{
+		Apps: []*contractv1.ManifestApp{{Name: "api"}, {Name: "web"}},
+		Usages: []*contractv1.ManifestUsage{
 			{App: "api", Resource: "bucket--uploads", Files: []string{"apps/api/src/upload.ts"}},
 			{App: "api", Resource: "db--main", Files: []string{"apps/api/src/server.ts"}},
 			{App: "web", Resource: "db--main", Files: []string{"apps/web/src/page.ts"}},
@@ -213,7 +213,7 @@ func TestPublishLinkRecords(t *testing.T) {
 
 	t.Run("a project with no links needs no store", func(t *testing.T) {
 		t.Parallel()
-		if err := publishLinkRecords(context.Background(), liveConfig(), &deploymentsv1.Manifest{Slug: "shop"}, nil); err != nil {
+		if err := publishLinkRecords(context.Background(), liveConfig(), &contractv1.Manifest{Slug: "shop"}, nil); err != nil {
 			t.Fatalf("publishLinkRecords: %v", err)
 		}
 	})
@@ -272,7 +272,7 @@ func TestPublishedRecordsMeetWhatTheManifestDeclares(t *testing.T) {
 
 func TestLinkedAppRendersNoCredential(t *testing.T) {
 	t.Parallel()
-	app := &deploymentsv1.ManifestApp{Name: "api"}
+	app := &contractv1.ManifestApp{Name: "api"}
 	bundle, err := renderAppBundle(liveConfig(), "shop", app, appLinks(linkedManifest(), "api", nil))
 	if err != nil {
 		t.Fatalf("renderAppBundle: %v", err)

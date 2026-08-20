@@ -7,11 +7,11 @@ import (
 
 	connect "connectrpc.com/connect"
 
-	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
-	deploymentsv1connect "github.com/ocelhq/ocel/pkg/proto/deployments/v1/deploymentsv1connect"
-	environmentv1 "github.com/ocelhq/ocel/pkg/proto/environment/v1"
-	envvarsv1 "github.com/ocelhq/ocel/pkg/proto/envvars/v1"
-	"github.com/ocelhq/ocel/pkg/proto/envvars/v1/envvarsv1connect"
+	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
+	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
+	contractv1connect "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1/contractv1connect"
+	envvarsv1 "github.com/ocelhq/ocel/pkg/proto/provider/envvars/v1"
+	"github.com/ocelhq/ocel/pkg/proto/provider/envvars/v1/envvarsv1connect"
 )
 
 func refusedCode(t *testing.T, err error) connect.Code {
@@ -28,10 +28,10 @@ func TestContractRefusesMalformedRequests(t *testing.T) {
 
 	cases := []struct {
 		name string
-		call func(deploymentsv1connect.ProviderServiceClient) error
+		call func(contractv1connect.ProviderServiceClient) error
 	}{
-		{"a tag carrying a path separator", func(c deploymentsv1connect.ProviderServiceClient) error {
-			stream, err := c.Deploy(context.Background(), &deploymentsv1.DeployRequest{
+		{"a tag carrying a path separator", func(c contractv1connect.ProviderServiceClient) error {
+			stream, err := c.Deploy(context.Background(), &contractv1.DeployRequest{
 				Manifest: wellFormedManifest(),
 				Tag:      "feature/x",
 			})
@@ -41,26 +41,26 @@ func TestContractRefusesMalformedRequests(t *testing.T) {
 			_, err = drainStream(stream)
 			return err
 		}},
-		{"a slug that would open a second segment of the parameter path", func(c deploymentsv1connect.ProviderServiceClient) error {
+		{"a slug that would open a second segment of the parameter path", func(c contractv1connect.ProviderServiceClient) error {
 			manifest := wellFormedManifest()
 			manifest.Slug = "acme/../root"
-			stream, err := c.Deploy(context.Background(), &deploymentsv1.DeployRequest{Manifest: manifest})
+			stream, err := c.Deploy(context.Background(), &contractv1.DeployRequest{Manifest: manifest})
 			if err != nil {
 				return err
 			}
 			_, err = drainStream(stream)
 			return err
 		}},
-		{"a prune keeping a negative number of promotions", func(c deploymentsv1connect.ProviderServiceClient) error {
-			stream, err := c.RemoveStalePromotions(context.Background(), &deploymentsv1.RemoveStalePromotionsRequest{Slug: "acme", KeepN: -1})
+		{"a prune keeping a negative number of promotions", func(c contractv1connect.ProviderServiceClient) error {
+			stream, err := c.RemoveStalePromotions(context.Background(), &contractv1.RemoveStalePromotionsRequest{Slug: "acme", KeepN: -1})
 			if err != nil {
 				return err
 			}
 			_, err = drainStream(stream)
 			return err
 		}},
-		{"a global preview domain asked for under the production class", func(c deploymentsv1connect.ProviderServiceClient) error {
-			_, err := c.GetPreviewWildcard(context.Background(), &deploymentsv1.PreviewWildcardRequest{
+		{"a global preview domain asked for under the production class", func(c contractv1connect.ProviderServiceClient) error {
+			_, err := c.GetPreviewWildcard(context.Background(), &contractv1.PreviewWildcardRequest{
 				Tier: environmentv1.Tier_TIER_PRODUCTION,
 			})
 			return err

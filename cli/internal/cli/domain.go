@@ -18,9 +18,9 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
 	"github.com/ocelhq/ocel/cli/internal/providerrunner"
 	"github.com/ocelhq/ocel/cli/node"
-	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
-	"github.com/ocelhq/ocel/pkg/proto/deployments/v1/deploymentsv1connect"
-	environmentv1 "github.com/ocelhq/ocel/pkg/proto/environment/v1"
+	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
+	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
+	"github.com/ocelhq/ocel/pkg/proto/provider/contract/v1/contractv1connect"
 )
 
 type domainOptions struct {
@@ -200,7 +200,7 @@ func runDomainUse(ctx context.Context, d deps, cwd, wildcard string, opts domain
 		if err := preflightPreview(ctx, d, runner, cfg, stdout); err != nil {
 			return err
 		}
-		req := &deploymentsv1.UsePreviewWildcardRequest{
+		req := &contractv1.UsePreviewWildcardRequest{
 			Tier:       environmentv1.Tier_TIER_PREVIEW,
 			BaseDomain: base,
 			Edge:       edgeSelection(cfg),
@@ -270,7 +270,7 @@ func runDomainRelease(ctx context.Context, d deps, cwd string, opts domainOption
 		}
 
 		spinner := deployui.StartSpinner(stdout, "Enumerating what releasing the domain would remove")
-		plan, err := client.PlanRemovePreviewWildcard(ctx, &deploymentsv1.PreviewWildcardRequest{
+		plan, err := client.PlanRemovePreviewWildcard(ctx, &contractv1.PreviewWildcardRequest{
 			Tier: environmentv1.Tier_TIER_PREVIEW,
 		})
 		spinner.Stop()
@@ -296,7 +296,7 @@ func runDomainRelease(ctx context.Context, d deps, cwd string, opts domainOption
 			}
 		}
 
-		req := &deploymentsv1.RemovePreviewWildcardRequest{Tier: environmentv1.Tier_TIER_PREVIEW, Edge: edgeSelection(cfg)}
+		req := &contractv1.RemovePreviewWildcardRequest{Tier: environmentv1.Tier_TIER_PREVIEW, Edge: edgeSelection(cfg)}
 		if err := runner.RemovePreviewWildcard(ctx, req, ui.Event); err != nil {
 			return err
 		}
@@ -309,7 +309,7 @@ func runDomainRelease(ctx context.Context, d deps, cwd string, opts domainOption
 	return nil
 }
 
-func printReleasePlan(out io.Writer, base string, plan *deploymentsv1.PlanRemovePreviewWildcardResponse) {
+func printReleasePlan(out io.Writer, base string, plan *contractv1.PlanRemovePreviewWildcardResponse) {
 	header := fmt.Sprintf("This will release %s and stop serving every project's previews on it", wildcardOf(base))
 	if kind := plan.GetEdgeStack().GetEdgeKind(); kind != "" {
 		header += fmt.Sprintf(", fronted by the %s edge", kind)
@@ -330,7 +330,7 @@ func runAddDomain(ctx context.Context, d deps, cwd, host string, stdout, stderr 
 		return fmt.Errorf("this project declares no domains.production in %s, so there is no production hostname to add: declare one and run `ocel domain add` again — no command edits the config", filepath.Base(cfg.Path))
 	}
 	return runDomainStream(ctx, d, cfg, provider, "ocel domain add", stdout, stderr, func(runner *providerrunner.Runner, ui *deployui.Session) error {
-		req := &deploymentsv1.AddHostnameRequest{
+		req := &contractv1.AddHostnameRequest{
 			Slug:       cfg.Slug,
 			Configured: configured,
 			Host:       host,
@@ -358,7 +358,7 @@ func runDomainRm(ctx context.Context, d deps, cwd, host string, stdout, stderr i
 	}
 
 	return runDomainStream(ctx, d, cfg, provider, "ocel domain rm", stdout, stderr, func(runner *providerrunner.Runner, ui *deployui.Session) error {
-		req := &deploymentsv1.RemoveHostnameRequest{
+		req := &contractv1.RemoveHostnameRequest{
 			Slug:       cfg.Slug,
 			Configured: declaredHostnames(cfg, "production"),
 			Host:       host,
@@ -414,7 +414,7 @@ func domainSession(ctx context.Context, cwd string) (*projectconfig.Config, *pro
 	return cfg, provider, nil
 }
 
-func listGlobalPreviewDomain(ctx context.Context, d deps, runner *providerrunner.Runner, cfg *projectconfig.Config, out io.Writer) (*deploymentsv1.GetPreviewWildcardResponse, error) {
+func listGlobalPreviewDomain(ctx context.Context, d deps, runner *providerrunner.Runner, cfg *projectconfig.Config, out io.Writer) (*contractv1.GetPreviewWildcardResponse, error) {
 	if err := preflightPreview(ctx, d, runner, cfg, out); err != nil {
 		return nil, err
 	}
@@ -423,7 +423,7 @@ func listGlobalPreviewDomain(ctx context.Context, d deps, runner *providerrunner
 		return nil, err
 	}
 	spinner := deployui.StartSpinner(out, "Reading the global preview domain")
-	resp, err := client.GetPreviewWildcard(ctx, &deploymentsv1.PreviewWildcardRequest{Tier: environmentv1.Tier_TIER_PREVIEW})
+	resp, err := client.GetPreviewWildcard(ctx, &contractv1.PreviewWildcardRequest{Tier: environmentv1.Tier_TIER_PREVIEW})
 	spinner.Stop()
 	if err != nil {
 		return nil, err
@@ -431,7 +431,7 @@ func listGlobalPreviewDomain(ctx context.Context, d deps, runner *providerrunner
 	return resp, nil
 }
 
-func renderGlobalDomain(out io.Writer, resp *deploymentsv1.GetPreviewWildcardResponse) {
+func renderGlobalDomain(out io.Writer, resp *contractv1.GetPreviewWildcardResponse) {
 	domain := resp.GetWildcard()
 	if domain.GetBaseDomain() == "" {
 		fmt.Fprintln(out, "No global preview domain is configured.")
@@ -475,7 +475,7 @@ func label(i int, name string) string {
 	return ""
 }
 
-func lastProbe(cert *deploymentsv1.CertificateState, never string) string {
+func lastProbe(cert *contractv1.CertificateState, never string) string {
 	if cert.GetLastProbeAt() == 0 {
 		return never
 	}
@@ -486,7 +486,7 @@ func lastProbe(cert *deploymentsv1.CertificateState, never string) string {
 	return fmt.Sprintf("%s  x-ocel-edge: %s", at, cert.GetLastProbeEdge())
 }
 
-func renderCertificateRecords(out io.Writer, cert *deploymentsv1.CertificateState) {
+func renderCertificateRecords(out io.Writer, cert *contractv1.CertificateState) {
 	renderDomainRecords(out, "Records ocel wrote", cert.GetRecordsWritten(), "none — nothing here writes DNS")
 	renderDomainRecords(out, "Records you own", cert.GetRecordsOwed(), "none outstanding")
 }
@@ -527,7 +527,7 @@ func runDomainStatus(ctx context.Context, d deps, cwd string, opts domainOptions
 		if err != nil {
 			return err
 		}
-		req := &deploymentsv1.GetHostnameStatusRequest{
+		req := &contractv1.GetHostnameStatusRequest{
 			Slug:       cfg.Slug,
 			Configured: configured,
 			Edge:       edgeSelection(cfg),
@@ -546,7 +546,7 @@ func runDomainStatus(ctx context.Context, d deps, cwd string, opts domainOptions
 
 const domainWaitFailures = 4
 
-func awaitDomainStatus(ctx context.Context, client deploymentsv1connect.ProviderServiceClient, req *deploymentsv1.GetHostnameStatusRequest, wait bool, out io.Writer) (*deploymentsv1.GetHostnameStatusResponse, error) {
+func awaitDomainStatus(ctx context.Context, client contractv1connect.ProviderServiceClient, req *contractv1.GetHostnameStatusRequest, wait bool, out io.Writer) (*contractv1.GetHostnameStatusResponse, error) {
 	resp, err := client.GetHostnameStatus(ctx, req)
 	if err != nil || !wait || resp.GetReady() {
 		return resp, err
@@ -589,7 +589,7 @@ func awaitDomainStatus(ctx context.Context, client deploymentsv1connect.Provider
 	}
 }
 
-func declaredHosts(resp *deploymentsv1.GetHostnameStatusResponse) int {
+func declaredHosts(resp *contractv1.GetHostnameStatusResponse) int {
 	var declared int
 	for _, host := range resp.GetHostnames() {
 		if host.GetDeclared() {
@@ -614,7 +614,7 @@ func holdFor(ctx context.Context, d time.Duration) error {
 	}
 }
 
-func outstandingHosts(resp *deploymentsv1.GetHostnameStatusResponse) string {
+func outstandingHosts(resp *contractv1.GetHostnameStatusResponse) string {
 	var pending []string
 	for _, host := range resp.GetHostnames() {
 		if !host.GetReady() {
@@ -652,7 +652,7 @@ type domainHostReport struct {
 	ServingPointer string   `json:"servingPointer,omitempty"`
 }
 
-func writeDomainStatusJSON(out io.Writer, resp *deploymentsv1.GetHostnameStatusResponse) error {
+func writeDomainStatusJSON(out io.Writer, resp *contractv1.GetHostnameStatusResponse) error {
 	report := domainStatusReport{
 		Ready:          resp.GetReady(),
 		RecordsWritten: resp.GetRecordsWritten(),
@@ -691,7 +691,7 @@ func stamp(unix int64) string {
 	return time.Unix(unix, 0).UTC().Format(time.RFC3339)
 }
 
-func renderDomainStatus(out io.Writer, resp *deploymentsv1.GetHostnameStatusResponse, configName string) {
+func renderDomainStatus(out io.Writer, resp *contractv1.GetHostnameStatusResponse, configName string) {
 	if len(resp.GetHostnames()) == 0 {
 		fmt.Fprintf(out, "This project declares no domains.production in %s, so nothing is served under a hostname of its own.\n", configName)
 		return
@@ -726,14 +726,14 @@ func renderDomainStatus(out io.Writer, resp *deploymentsv1.GetHostnameStatusResp
 	}
 }
 
-func domainHostState(host *deploymentsv1.ProductionHostname) string {
+func domainHostState(host *contractv1.ProductionHostname) string {
 	if host.GetReady() {
 		return "READY"
 	}
 	return "PENDING"
 }
 
-func domainRenewal(host *deploymentsv1.ProductionHostname) string {
+func domainRenewal(host *contractv1.ProductionHostname) string {
 	expiry := "no expiry reported"
 	if at := host.GetExpiresAt(); at != 0 {
 		expiry = "expires " + stamp(at)

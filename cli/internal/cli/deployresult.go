@@ -6,11 +6,11 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/appbuilder"
 	"github.com/ocelhq/ocel/cli/internal/deployresult"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
-	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
-	environmentv1 "github.com/ocelhq/ocel/pkg/proto/environment/v1"
+	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
+	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 )
 
-func recordDeployResult(cfg *projectconfig.Config, manifest *deploymentsv1.Manifest, env *environmentv1.Environment, tag, promotionID string, appURLs []string) error {
+func recordDeployResult(cfg *projectconfig.Config, manifest *contractv1.Manifest, env *environmentv1.Environment, tag, promotionID string, appURLs []string) error {
 	apps := make([]deployresult.App, 0, len(manifest.GetApps()))
 	for _, a := range manifest.GetApps() {
 		apps = append(apps, deployresult.App{

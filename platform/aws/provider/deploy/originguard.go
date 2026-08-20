@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"maps"
 
-	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
+	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
@@ -13,7 +13,7 @@ type originGuard struct {
 	Secret string
 }
 
-func resolveOriginGuard(cfg Config, app *deploymentsv1.ManifestApp) (*originGuard, error) {
+func resolveOriginGuard(cfg Config, app *contractv1.ManifestApp) (*originGuard, error) {
 	if cfg.Edge == nil {
 		return nil, nil
 	}
@@ -41,7 +41,7 @@ func resolveOriginGuard(cfg Config, app *deploymentsv1.ManifestApp) (*originGuar
 	return &originGuard{Entry: desc.Entry, Secret: cfg.OriginSecret}, nil
 }
 
-func (f *originGuard) hosts(fn *deploymentsv1.ManifestFunction) bool {
+func (f *originGuard) hosts(fn *contractv1.ManifestFunction) bool {
 	return f != nil && routeID(fn) == f.Entry
 }
 

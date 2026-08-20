@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"math"
 
-	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
-	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/resources/v1"
+	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
+	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/platform/aws/provider/transform"
 )
 
@@ -21,7 +21,7 @@ type transformCandidate struct {
 	apply func(*transformedArgs, transform.Result) error
 }
 
-func resolveTransforms(ctx context.Context, cfg Config, manifest *deploymentsv1.Manifest) (*transformedArgs, error) {
+func resolveTransforms(ctx context.Context, cfg Config, manifest *contractv1.Manifest) (*transformedArgs, error) {
 	if cfg.Transform == nil {
 		return nil, nil
 	}
@@ -99,7 +99,7 @@ func resolveTransforms(ctx context.Context, cfg Config, manifest *deploymentsv1.
 	return out, nil
 }
 
-func (t *transformedArgs) forFunction(fn *deploymentsv1.ManifestFunction) functionArgs {
+func (t *transformedArgs) forFunction(fn *contractv1.ManifestFunction) functionArgs {
 	if t != nil {
 		if args, ok := t.functions[fn.GetLogicalName()]; ok {
 			return args

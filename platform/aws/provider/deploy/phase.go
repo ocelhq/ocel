@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"time"
 
-	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
+	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 )
 
 type PhaseError struct {
@@ -17,7 +17,7 @@ func (e *PhaseError) Error() string {
 	return fmt.Sprintf("deploy phase %q ran before %q handed it anything", e.Phase, e.After)
 }
 
-func realize(ctx context.Context, cfg Config, realized *Realized, manifest *deploymentsv1.Manifest, progress Progress, log func(string)) (Result, error) {
+func realize(ctx context.Context, cfg Config, realized *Realized, manifest *contractv1.Manifest, progress Progress, log func(string)) (Result, error) {
 	uploadStart := time.Now()
 	plan, err := planDeploy(ctx, cfg, manifest, log)
 	if err != nil {

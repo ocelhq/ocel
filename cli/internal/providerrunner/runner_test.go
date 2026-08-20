@@ -14,8 +14,8 @@ import (
 	"time"
 
 	"github.com/ocelhq/ocel/cli/internal/procgroup"
-	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
-	progressv1 "github.com/ocelhq/ocel/pkg/proto/progress/v1"
+	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
+	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 )
 
 func spawnFake(t *testing.T, ctx context.Context, mode string, cfg Config) (*Runner, string) {
@@ -144,8 +144,8 @@ func TestDeploy(t *testing.T) {
 		}
 
 		var events []*progressv1.OperationEvent
-		err := r.Deploy(ctx, &deploymentsv1.DeployRequest{
-			Manifest: &deploymentsv1.Manifest{SchemaVersion: "provider.v1", Slug: "acme"},
+		err := r.Deploy(ctx, &contractv1.DeployRequest{
+			Manifest: &contractv1.Manifest{SchemaVersion: "provider.v1", Slug: "acme"},
 		}, func(ev *progressv1.OperationEvent) { events = append(events, ev) })
 		if err != nil {
 			t.Fatalf("Deploy() error = %v, want nil", err)
@@ -180,8 +180,8 @@ func TestDeploy(t *testing.T) {
 		var gotFirstEvent atomic.Bool
 		deployErrCh := make(chan error, 1)
 		go func() {
-			deployErrCh <- r.Deploy(ctx, &deploymentsv1.DeployRequest{
-				Manifest: &deploymentsv1.Manifest{SchemaVersion: "provider.v1", Slug: "acme"},
+			deployErrCh <- r.Deploy(ctx, &contractv1.DeployRequest{
+				Manifest: &contractv1.Manifest{SchemaVersion: "provider.v1", Slug: "acme"},
 			}, func(ev *progressv1.OperationEvent) { gotFirstEvent.Store(true) })
 		}()
 
@@ -219,7 +219,7 @@ func TestDeploy(t *testing.T) {
 			t.Fatalf("Ready() error = %v, want nil", err)
 		}
 
-		err := r.Deploy(ctx, &deploymentsv1.DeployRequest{Manifest: &deploymentsv1.Manifest{SchemaVersion: "provider.v1", Slug: "acme"}}, nil)
+		err := r.Deploy(ctx, &contractv1.DeployRequest{Manifest: &contractv1.Manifest{SchemaVersion: "provider.v1", Slug: "acme"}}, nil)
 
 		var deployErr *DeployFailedError
 		if !errors.As(err, &deployErr) {
@@ -239,7 +239,7 @@ func TestDeploy(t *testing.T) {
 		ctx := context.Background()
 		r, _ := spawnFake(t, ctx, "never-ready", Config{ReadyTimeout: 50 * time.Millisecond})
 
-		err := r.Deploy(ctx, &deploymentsv1.DeployRequest{Manifest: &deploymentsv1.Manifest{SchemaVersion: "provider.v1", Slug: "acme"}}, nil)
+		err := r.Deploy(ctx, &contractv1.DeployRequest{Manifest: &contractv1.Manifest{SchemaVersion: "provider.v1", Slug: "acme"}}, nil)
 		if !errors.Is(err, ErrDeploymentsUnavailable) {
 			t.Fatalf("Deploy() error = %v, want ErrDeploymentsUnavailable", err)
 		}
@@ -273,7 +273,7 @@ func TestBootstrap(t *testing.T) {
 		}
 
 		var events []*progressv1.OperationEvent
-		err := r.Bootstrap(ctx, &deploymentsv1.BootstrapRequest{}, func(ev *progressv1.OperationEvent) { events = append(events, ev) })
+		err := r.Bootstrap(ctx, &contractv1.BootstrapRequest{}, func(ev *progressv1.OperationEvent) { events = append(events, ev) })
 		if err != nil {
 			t.Fatalf("Bootstrap() error = %v, want nil", err)
 		}
@@ -299,7 +299,7 @@ func TestBootstrap(t *testing.T) {
 			t.Fatalf("Ready() error = %v, want nil", err)
 		}
 
-		err := r.Bootstrap(ctx, &deploymentsv1.BootstrapRequest{}, nil)
+		err := r.Bootstrap(ctx, &contractv1.BootstrapRequest{}, nil)
 
 		var failErr *DeployFailedError
 		if !errors.As(err, &failErr) {

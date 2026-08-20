@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
+	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 )
 
 func TestFormatIdentityBanner(t *testing.T) {
@@ -13,7 +13,7 @@ func TestFormatIdentityBanner(t *testing.T) {
 	t.Run("names the aws profile, account and region alongside cloudflare", func(t *testing.T) {
 		t.Parallel()
 
-		got := formatIdentityBanner(&deploymentsv1.Identity{
+		got := formatIdentityBanner(&contractv1.Identity{
 			AwsProfile: "default",
 			AwsAccount: "123456789012",
 			AwsRegion:  "us-east-1",
@@ -30,7 +30,7 @@ func TestFormatIdentityBanner(t *testing.T) {
 	t.Run("profile falls back to the arn principal", func(t *testing.T) {
 		t.Parallel()
 
-		got := formatIdentityBanner(&deploymentsv1.Identity{
+		got := formatIdentityBanner(&contractv1.Identity{
 			AwsAccount: "123456789012",
 			AwsRegion:  "eu-west-1",
 			AwsArn:     "arn:aws:sts::123456789012:assumed-role/Deployer/session",
@@ -46,7 +46,7 @@ func TestFormatIdentityBanner(t *testing.T) {
 	t.Run("an empty identity is blank", func(t *testing.T) {
 		t.Parallel()
 
-		if got := formatIdentityBanner(&deploymentsv1.Identity{}); got != "" {
+		if got := formatIdentityBanner(&contractv1.Identity{}); got != "" {
 			t.Errorf("expected blank banner for empty identity, got %q", got)
 		}
 		if got := formatIdentityBanner(nil); got != "" {
@@ -69,7 +69,7 @@ func TestCredentialProblems(t *testing.T) {
 	t.Run("aggregates all of them", func(t *testing.T) {
 		t.Parallel()
 
-		err := credentialProblems([]*deploymentsv1.CredentialProblem{
+		err := credentialProblems([]*contractv1.CredentialProblem{
 			{Provider: "AWS", Message: "could not authenticate", Hint: "run aws sso login"},
 			{Provider: "Cloudflare", Message: "CLOUDFLARE_API_TOKEN is not set", Hint: "export it"},
 		})

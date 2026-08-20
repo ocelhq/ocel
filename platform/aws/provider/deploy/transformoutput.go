@@ -10,8 +10,8 @@ import (
 	"strings"
 
 	"github.com/ocelhq/ocel/pkg/naming"
-	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
-	linksv1 "github.com/ocelhq/ocel/pkg/proto/links/v1"
+	linksv1 "github.com/ocelhq/ocel/pkg/proto/common/links/v1"
+	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/platform/aws/provider/transform"
 )
 
@@ -113,7 +113,7 @@ func (e *EmptyOutputError) Error() string {
 		e.At, e.Ref.Link, e.Ref.Property, e.Ref.Link, e.Ref.Property)
 }
 
-func resolveOutputs(ctx context.Context, cfg Config, manifest *deploymentsv1.Manifest, candidates []transformCandidate, results []transform.Result) ([]placedOutput, error) {
+func resolveOutputs(ctx context.Context, cfg Config, manifest *contractv1.Manifest, candidates []transformCandidate, results []transform.Result) ([]placedOutput, error) {
 	var placed []placedOutput
 	if err := walkOutputs(candidates, results, func(ref outputRef, at outputSite, authored any) (any, error) {
 		placed = append(placed, placedOutput{Ref: ref, At: at})
@@ -167,7 +167,7 @@ func nameOutputBehind(placed []placedOutput, resource string, err error) error {
 	return nil
 }
 
-func refuseProvisionedOutputs(manifest *deploymentsv1.Manifest, placed []placedOutput) error {
+func refuseProvisionedOutputs(manifest *contractv1.Manifest, placed []placedOutput) error {
 	provisioned := map[string]bool{}
 	for _, r := range manifest.GetResources() {
 		if !r.GetLinked() {

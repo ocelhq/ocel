@@ -12,7 +12,7 @@ import (
 	ddbtypes "github.com/aws/aws-sdk-go-v2/service/dynamodb/types"
 
 	"github.com/ocelhq/ocel/pkg/naming"
-	linksv1 "github.com/ocelhq/ocel/pkg/proto/links/v1"
+	linksv1 "github.com/ocelhq/ocel/pkg/proto/common/links/v1"
 )
 
 type LinkSummary struct {

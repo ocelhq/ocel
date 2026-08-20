@@ -6,11 +6,11 @@ import (
 	"google.golang.org/protobuf/encoding/protojson"
 
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
-	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
+	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 )
 
-func providerConfig(provider *projectconfig.ProviderDescriptor) (*deploymentsv1.ProviderConfig, error) {
-	config := &deploymentsv1.ProviderConfig{}
+func providerConfig(provider *projectconfig.ProviderDescriptor) (*contractv1.ProviderConfig, error) {
+	config := &contractv1.ProviderConfig{}
 	if provider == nil || len(provider.Options) == 0 {
 		return config, nil
 	}

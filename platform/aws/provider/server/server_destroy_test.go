@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
+	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/platform/aws/provider/bootstrap"
 	"github.com/ocelhq/ocel/platform/aws/provider/certs"
 	"github.com/ocelhq/ocel/platform/aws/provider/deploy"
@@ -18,7 +18,7 @@ import (
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
-func itemFor(t *testing.T, items []*deploymentsv1.RemovalItem, kind, name string) *deploymentsv1.RemovalItem {
+func itemFor(t *testing.T, items []*contractv1.RemovalItem, kind, name string) *contractv1.RemovalItem {
 	t.Helper()
 	for _, item := range items {
 		if item.GetKind() == kind && (name == "" || item.GetName() == name) {
@@ -29,7 +29,7 @@ func itemFor(t *testing.T, items []*deploymentsv1.RemovalItem, kind, name string
 	return nil
 }
 
-func itemLines(items []*deploymentsv1.RemovalItem) []string {
+func itemLines(items []*contractv1.RemovalItem) []string {
 	lines := make([]string, 0, len(items))
 	for _, item := range items {
 		lines = append(lines, item.GetAction().String()+" "+item.GetKind()+" "+item.GetName())
@@ -44,7 +44,7 @@ func productionRecord(recorded domains.Settlement) bootstrap.StackRecord {
 func TestEdgeStackPlan(t *testing.T) {
 	t.Parallel()
 
-	planFor := func(t *testing.T, state edge.StackState) *deploymentsv1.EdgeStackPlan {
+	planFor := func(t *testing.T, state edge.StackState) *contractv1.EdgeStackPlan {
 		t.Helper()
 		s := &Server{}
 		edgeFront, err := s.edge(cloudflare.Kind, "eu-west-1")
@@ -92,17 +92,17 @@ func TestEdgeStackPlan(t *testing.T) {
 		t.Parallel()
 
 		items := planFor(t, edge.StackState{Adapter: edge.Own(map[string]string{"instance": "shop-abc"})}).GetItems()
-		if got := itemFor(t, items, "edge workers", "shop").GetAction(); got != deploymentsv1.RemovalItem_ACTION_DELETE {
+		if got := itemFor(t, items, "edge workers", "shop").GetAction(); got != contractv1.RemovalItem_ACTION_DELETE {
 			t.Errorf("edge workers action = %v, want DELETE", got)
 		}
-		if got := itemFor(t, items, "deployments store", "shop").GetAction(); got != deploymentsv1.RemovalItem_ACTION_DELETE {
+		if got := itemFor(t, items, "deployments store", "shop").GetAction(); got != contractv1.RemovalItem_ACTION_DELETE {
 			t.Errorf("deployments store action = %v, want DELETE", got)
 		}
-		if got := itemFor(t, items, "tag clock rows", "shop").GetAction(); got != deploymentsv1.RemovalItem_ACTION_DELETE {
+		if got := itemFor(t, items, "tag clock rows", "shop").GetAction(); got != contractv1.RemovalItem_ACTION_DELETE {
 			t.Errorf("tag clock rows action = %v, want DELETE", got)
 		}
 		table := itemFor(t, items, "state table", "ocel-state")
-		if table.GetAction() != deploymentsv1.RemovalItem_ACTION_KEEP {
+		if table.GetAction() != contractv1.RemovalItem_ACTION_KEEP {
 			t.Errorf("state table action = %v, want KEEP", table.GetAction())
 		}
 		if !strings.Contains(table.GetReason(), "ocel bootstrap --destroy") {
@@ -122,13 +122,13 @@ func TestDestroyPlanItemsPerEdge(t *testing.T) {
 			class: bootstrap.ClassProduction, slug: "shop", record: bootstrap.StackRecord{Edge: state},
 		})
 		dist := itemFor(t, items, "distribution", "d123.cloudfront.net")
-		if dist.GetAction() != deploymentsv1.RemovalItem_ACTION_DISABLE_THEN_DELETE || !dist.GetSlow() {
+		if dist.GetAction() != contractv1.RemovalItem_ACTION_DISABLE_THEN_DELETE || !dist.GetSlow() {
 			t.Errorf("distribution = %v (slow=%v), want DISABLE_THEN_DELETE and slow", dist.GetAction(), dist.GetSlow())
 		}
-		if got := itemFor(t, items, "edge routes", "shop.example.com").GetAction(); got != deploymentsv1.RemovalItem_ACTION_DELETE {
+		if got := itemFor(t, items, "edge routes", "shop.example.com").GetAction(); got != contractv1.RemovalItem_ACTION_DELETE {
 			t.Errorf("edge routes action = %v, want DELETE", got)
 		}
-		if got := itemFor(t, items, "deployments ledger", "production/shop").GetAction(); got != deploymentsv1.RemovalItem_ACTION_DELETE {
+		if got := itemFor(t, items, "deployments ledger", "production/shop").GetAction(); got != contractv1.RemovalItem_ACTION_DELETE {
 			t.Errorf("deployments ledger action = %v, want DELETE", got)
 		}
 	})
@@ -141,7 +141,7 @@ func TestDestroyPlanItemsPerEdge(t *testing.T) {
 			class: bootstrap.ClassProduction, slug: "shop", record: bootstrap.StackRecord{Edge: state},
 		})
 		apis := itemFor(t, items, "REST APIs", "shop")
-		if apis.GetAction() != deploymentsv1.RemovalItem_ACTION_DELETE {
+		if apis.GetAction() != contractv1.RemovalItem_ACTION_DELETE {
 			t.Errorf("REST APIs action = %v, want DELETE", apis.GetAction())
 		}
 		if !apis.GetSlow() {
@@ -150,10 +150,10 @@ func TestDestroyPlanItemsPerEdge(t *testing.T) {
 		if got := itemFor(t, items, "domain names", "shop.example.com").GetSlow(); got {
 			t.Error("domain names slow = true, want only the quota-paced items marked slow")
 		}
-		if got := itemFor(t, items, "domain names", "shop.example.com").GetAction(); got != deploymentsv1.RemovalItem_ACTION_DELETE {
+		if got := itemFor(t, items, "domain names", "shop.example.com").GetAction(); got != contractv1.RemovalItem_ACTION_DELETE {
 			t.Errorf("domain names action = %v, want DELETE", got)
 		}
-		if got := itemFor(t, items, "preview fallback API", "").GetAction(); got != deploymentsv1.RemovalItem_ACTION_KEEP {
+		if got := itemFor(t, items, "preview fallback API", "").GetAction(); got != contractv1.RemovalItem_ACTION_KEEP {
 			t.Errorf("preview fallback API action = %v, want KEEP", got)
 		}
 	})
@@ -176,24 +176,24 @@ func TestDestroyPlanItemsPerEdge(t *testing.T) {
 			class: bootstrap.ClassProduction, slug: "shop", record: productionRecord(recorded),
 		})
 
-		if got := itemFor(t, items, "certificate", "arn:aws:acm:eu-west-1:1:certificate/ocel").GetAction(); got != deploymentsv1.RemovalItem_ACTION_DELETE {
+		if got := itemFor(t, items, "certificate", "arn:aws:acm:eu-west-1:1:certificate/ocel").GetAction(); got != contractv1.RemovalItem_ACTION_DELETE {
 			t.Errorf("ocel-requested certificate action = %v, want DELETE", got)
 		}
 		pinned := itemFor(t, items, "certificate", "arn:aws:acm:eu-west-1:1:certificate/pinned")
-		if pinned.GetAction() != deploymentsv1.RemovalItem_ACTION_KEEP {
+		if pinned.GetAction() != contractv1.RemovalItem_ACTION_KEEP {
 			t.Errorf("pinned certificate action = %v, want KEEP", pinned.GetAction())
 		}
 		if !strings.Contains(pinned.GetReason(), "pinned for pinned.example.com") {
 			t.Errorf("pinned certificate reason = %q, want it to say whose pin it is", pinned.GetReason())
 		}
 		owed := itemFor(t, items, "DNS record", "shop.example.com CNAME d123.cloudfront.net")
-		if owed.GetAction() != deploymentsv1.RemovalItem_ACTION_KEEP {
+		if owed.GetAction() != contractv1.RemovalItem_ACTION_KEEP {
 			t.Errorf("owed record action = %v, want KEEP", owed.GetAction())
 		}
 		if !strings.Contains(owed.GetReason(), "ocel never wrote it") {
 			t.Errorf("owed record reason = %q, want it to say why it stays", owed.GetReason())
 		}
-		if got := itemFor(t, items, "DNS record", "_acme.shop.example.com CNAME validate.acm-validations.aws").GetAction(); got != deploymentsv1.RemovalItem_ACTION_DELETE {
+		if got := itemFor(t, items, "DNS record", "_acme.shop.example.com CNAME validate.acm-validations.aws").GetAction(); got != contractv1.RemovalItem_ACTION_DELETE {
 			t.Errorf("written record action = %v, want DELETE", got)
 		}
 	})
@@ -205,7 +205,7 @@ func TestDestroyPlanItemsPerEdge(t *testing.T) {
 		items := destroyPlanItems(planEdge(t, cloudfront.Kind), projectPlanScope{
 			class: bootstrap.ClassProduction, slug: "shop", record: productionRecord(recorded),
 		})
-		if got := itemFor(t, items, "certificate", "arn:adopted").GetAction(); got != deploymentsv1.RemovalItem_ACTION_KEEP {
+		if got := itemFor(t, items, "certificate", "arn:adopted").GetAction(); got != contractv1.RemovalItem_ACTION_KEEP {
 			t.Errorf("adopted certificate action = %v, want KEEP", got)
 		}
 	})
@@ -220,7 +220,7 @@ func TestDestroyPlanItemsPerEdge(t *testing.T) {
 			slug:   "shop",
 			record: bootstrap.StackRecord{Edge: written},
 		})
-		if got := itemFor(t, items, "DNS record", "shop.example.com CNAME d123.cloudfront.net").GetAction(); got != deploymentsv1.RemovalItem_ACTION_DELETE {
+		if got := itemFor(t, items, "DNS record", "shop.example.com CNAME d123.cloudfront.net").GetAction(); got != contractv1.RemovalItem_ACTION_DELETE {
 			t.Errorf("written record action = %v, want DELETE", got)
 		}
 	})
@@ -234,7 +234,7 @@ func TestDestroyPlanItemsPerEdge(t *testing.T) {
 			record: bootstrap.StackRecord{Edge: edge.StackState{GlobalPreview: "preview.acme.com"}},
 		})
 		wildcard := itemFor(t, items, "preview wildcard", "*.preview.acme.com")
-		if wildcard.GetAction() != deploymentsv1.RemovalItem_ACTION_KEEP {
+		if wildcard.GetAction() != contractv1.RemovalItem_ACTION_KEEP {
 			t.Errorf("preview wildcard action = %v, want KEEP", wildcard.GetAction())
 		}
 		if !strings.Contains(wildcard.GetReason(), "ocel domain release --preview") {
@@ -247,7 +247,7 @@ func TestPlanRemoveProjectUnsupportedEdge(t *testing.T) {
 	t.Parallel()
 
 	client := newTestClientFor(t, &Server{}, testToken)
-	_, err := client.PlanRemoveProject(context.Background(), &deploymentsv1.PlanRemoveProjectRequest{Slug: "shop", Edge: &deploymentsv1.EdgeSelection{Kind: "bogus"}})
+	_, err := client.PlanRemoveProject(context.Background(), &contractv1.PlanRemoveProjectRequest{Slug: "shop", Edge: &contractv1.EdgeSelection{Kind: "bogus"}})
 	if err == nil {
 		t.Fatal("PlanDestroyProject error = nil, want the unsupported edge refused")
 	}
@@ -261,10 +261,10 @@ func TestPlanRemoveProjectUnsupportedEdge(t *testing.T) {
 func TestRequestNamingNoEdgeTakesTheProviderDefault(t *testing.T) {
 	t.Parallel()
 
-	if got := requestedEdge(&deploymentsv1.PlanRemoveProjectRequest{Slug: "shop"}); got != edges.DefaultKind {
+	if got := requestedEdge(&contractv1.PlanRemoveProjectRequest{Slug: "shop"}); got != edges.DefaultKind {
 		t.Errorf("requestedEdge() = %q, want %q: a config that names no edge lets the provider choose", got, edges.DefaultKind)
 	}
-	if got := requestedEdge(&deploymentsv1.PlanRemoveProjectRequest{Slug: "shop", Edge: &deploymentsv1.EdgeSelection{Kind: string(apigateway.Kind)}}); got != apigateway.Kind {
+	if got := requestedEdge(&contractv1.PlanRemoveProjectRequest{Slug: "shop", Edge: &contractv1.EdgeSelection{Kind: string(apigateway.Kind)}}); got != apigateway.Kind {
 		t.Errorf("requestedEdge() = %q, want %q: a named edge is left alone", got, apigateway.Kind)
 	}
 }
@@ -274,7 +274,7 @@ func TestDestroyPlanFollowsTheEdgeTheRequestNames(t *testing.T) {
 
 	state := boundTo(edge.StackState{}, "shop.example.com")
 
-	planFor := func(t *testing.T, kind edge.Kind) *deploymentsv1.EdgeStackPlan {
+	planFor := func(t *testing.T, kind edge.Kind) *contractv1.EdgeStackPlan {
 		t.Helper()
 		s := &Server{}
 		edgeFront, err := s.edge(kind, "eu-west-1")
@@ -301,7 +301,7 @@ func TestDestroyPlanFollowsTheEdgeTheRequestNames(t *testing.T) {
 		if plan.GetEdgeKind() != string(apigateway.Kind) {
 			t.Fatalf("edge_kind = %q, want apigateway: a project on the API Gateway edge must not be planned as a Cloudflare teardown", plan.GetEdgeKind())
 		}
-		if got := itemFor(t, plan.GetItems(), "REST APIs", "shop").GetAction(); got != deploymentsv1.RemovalItem_ACTION_DELETE {
+		if got := itemFor(t, plan.GetItems(), "REST APIs", "shop").GetAction(); got != contractv1.RemovalItem_ACTION_DELETE {
 			t.Errorf("REST APIs action = %v, want DELETE", got)
 		}
 		for _, item := range plan.GetItems() {
@@ -318,7 +318,7 @@ func TestDestroyPlanFollowsTheEdgeTheRequestNames(t *testing.T) {
 		if plan.GetEdgeKind() != string(cloudflare.Kind) {
 			t.Fatalf("edge_kind = %q, want cloudflare", plan.GetEdgeKind())
 		}
-		if got := itemFor(t, plan.GetItems(), "edge workers", "shop").GetAction(); got != deploymentsv1.RemovalItem_ACTION_DELETE {
+		if got := itemFor(t, plan.GetItems(), "edge workers", "shop").GetAction(); got != contractv1.RemovalItem_ACTION_DELETE {
 			t.Errorf("edge workers action = %v, want DELETE", got)
 		}
 	})

@@ -17,9 +17,9 @@ import (
 
 	"github.com/ocelhq/ocel/cli/internal/procgroup"
 	"github.com/ocelhq/ocel/pkg/channel"
-	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
-	"github.com/ocelhq/ocel/pkg/proto/deployments/v1/deploymentsv1connect"
-	progressv1 "github.com/ocelhq/ocel/pkg/proto/progress/v1"
+	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
+	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
+	"github.com/ocelhq/ocel/pkg/proto/provider/contract/v1/contractv1connect"
 )
 
 const fakeProviderModeEnvVar = "OCEL_TEST_FAKE_PROVIDER_MODE"
@@ -79,7 +79,7 @@ func runFakeProvider() int {
 	defer ln.Close()
 
 	mux := http.NewServeMux()
-	path, handler := deploymentsv1connect.NewProviderServiceHandler(&fakeProviderServer{
+	path, handler := contractv1connect.NewProviderServiceHandler(&fakeProviderServer{
 		mode:  mode,
 		token: os.Getenv(channel.SessionTokenEnvVar),
 	})
@@ -95,12 +95,12 @@ func runFakeProvider() int {
 }
 
 type fakeProviderServer struct {
-	deploymentsv1connect.UnimplementedProviderServiceHandler
+	contractv1connect.UnimplementedProviderServiceHandler
 	mode  string
 	token string
 }
 
-func (s *fakeProviderServer) Deploy(ctx context.Context, req *deploymentsv1.DeployRequest, stream *connect.ServerStream[progressv1.OperationEvent]) error {
+func (s *fakeProviderServer) Deploy(ctx context.Context, req *contractv1.DeployRequest, stream *connect.ServerStream[progressv1.OperationEvent]) error {
 	info, _ := connect.CallInfoForHandlerContext(ctx)
 	var authHeader string
 	if info != nil {
@@ -131,7 +131,7 @@ func (s *fakeProviderServer) Deploy(ctx context.Context, req *deploymentsv1.Depl
 	}
 }
 
-func (s *fakeProviderServer) Bootstrap(ctx context.Context, req *deploymentsv1.BootstrapRequest, stream *connect.ServerStream[progressv1.OperationEvent]) error {
+func (s *fakeProviderServer) Bootstrap(ctx context.Context, req *contractv1.BootstrapRequest, stream *connect.ServerStream[progressv1.OperationEvent]) error {
 	info, _ := connect.CallInfoForHandlerContext(ctx)
 	var authHeader string
 	if info != nil {

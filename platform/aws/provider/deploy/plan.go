@@ -4,8 +4,8 @@ import (
 	"fmt"
 
 	"github.com/ocelhq/ocel/pkg/naming"
-	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
-	environmentv1 "github.com/ocelhq/ocel/pkg/proto/environment/v1"
+	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
+	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 )
 
 const (
@@ -59,7 +59,7 @@ func releaseOf(id Identity) naming.Release {
 	return naming.NewRelease(id.DeploymentID(), id.Fingerprint())
 }
 
-func BuildPlan(manifest *deploymentsv1.Manifest, env *environmentv1.Environment, promotionID string, identities Identities) (Plan, error) {
+func BuildPlan(manifest *contractv1.Manifest, env *environmentv1.Environment, promotionID string, identities Identities) (Plan, error) {
 	envName, err := EnvName(env)
 	if err != nil {
 		return Plan{}, err

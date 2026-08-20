@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
+	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/platform/aws/provider/bootstrap"
 	"github.com/ocelhq/ocel/platform/aws/provider/certs"
 	"github.com/ocelhq/ocel/platform/aws/provider/domains"
@@ -118,17 +118,17 @@ func TestReleasePlanItems(t *testing.T) {
 
 		items := releasePlanItems(planEdge(t, cloudfront.Kind), recorded)
 		dist := itemFor(t, items, "wildcard distribution", "*.preview.acme.com")
-		if dist.GetAction() != deploymentsv1.RemovalItem_ACTION_DISABLE_THEN_DELETE || !dist.GetSlow() {
+		if dist.GetAction() != contractv1.RemovalItem_ACTION_DISABLE_THEN_DELETE || !dist.GetSlow() {
 			t.Errorf("wildcard distribution = %v (slow=%v), want DISABLE_THEN_DELETE and slow", dist.GetAction(), dist.GetSlow())
 		}
-		if got := itemFor(t, items, "certificate", "arn:ocel").GetAction(); got != deploymentsv1.RemovalItem_ACTION_DELETE {
+		if got := itemFor(t, items, "certificate", "arn:ocel").GetAction(); got != contractv1.RemovalItem_ACTION_DELETE {
 			t.Errorf("certificate action = %v, want DELETE", got)
 		}
-		if got := itemFor(t, items, "DNS record", written.String()).GetAction(); got != deploymentsv1.RemovalItem_ACTION_DELETE {
+		if got := itemFor(t, items, "DNS record", written.String()).GetAction(); got != contractv1.RemovalItem_ACTION_DELETE {
 			t.Errorf("written record action = %v, want DELETE", got)
 		}
 		kept := itemFor(t, items, "DNS record", owed.String())
-		if kept.GetAction() != deploymentsv1.RemovalItem_ACTION_KEEP {
+		if kept.GetAction() != contractv1.RemovalItem_ACTION_KEEP {
 			t.Errorf("owed record action = %v, want KEEP", kept.GetAction())
 		}
 		if !strings.Contains(kept.GetReason(), "ocel never wrote it") {
@@ -140,10 +140,10 @@ func TestReleasePlanItems(t *testing.T) {
 		t.Parallel()
 
 		items := releasePlanItems(planEdge(t, apigateway.Kind), recorded)
-		if got := itemFor(t, items, "wildcard domain name", "*.preview.acme.com").GetAction(); got != deploymentsv1.RemovalItem_ACTION_DELETE {
+		if got := itemFor(t, items, "wildcard domain name", "*.preview.acme.com").GetAction(); got != contractv1.RemovalItem_ACTION_DELETE {
 			t.Errorf("wildcard domain name action = %v, want DELETE", got)
 		}
-		if got := itemFor(t, items, "preview fallback API", "").GetAction(); got != deploymentsv1.RemovalItem_ACTION_KEEP {
+		if got := itemFor(t, items, "preview fallback API", "").GetAction(); got != contractv1.RemovalItem_ACTION_KEEP {
 			t.Errorf("preview fallback API action = %v, want KEEP", got)
 		}
 	})
@@ -153,7 +153,7 @@ func TestReleasePlanItems(t *testing.T) {
 
 		adopted := recorded
 		adopted.Settlement.Certificate = certs.Certificate{ARN: "arn:yours", Adopted: true}
-		if got := itemFor(t, releasePlanItems(planEdge(t, cloudflare.Kind), adopted), "certificate", "arn:yours").GetAction(); got != deploymentsv1.RemovalItem_ACTION_KEEP {
+		if got := itemFor(t, releasePlanItems(planEdge(t, cloudflare.Kind), adopted), "certificate", "arn:yours").GetAction(); got != contractv1.RemovalItem_ACTION_KEEP {
 			t.Errorf("adopted certificate action = %v, want KEEP", got)
 		}
 	})

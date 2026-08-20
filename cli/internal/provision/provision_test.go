@@ -9,7 +9,7 @@ import (
 	"time"
 
 	"github.com/ocelhq/ocel/cli/internal/manifest"
-	linksv1 "github.com/ocelhq/ocel/pkg/proto/links/v1"
+	linksv1 "github.com/ocelhq/ocel/pkg/proto/common/links/v1"
 	"google.golang.org/protobuf/encoding/protojson"
 )
 

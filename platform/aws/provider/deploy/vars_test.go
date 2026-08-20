@@ -11,8 +11,8 @@ import (
 	"strings"
 	"testing"
 
-	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
-	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/resources/v1"
+	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
+	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/platform/aws/provider/vars/baked"
 )
 
@@ -87,8 +87,8 @@ func TestAppExecutionRole(t *testing.T) {
 	})
 }
 
-func variable(key, value string, class resourcesv1.VariableClass) *deploymentsv1.ManifestVariable {
-	return &deploymentsv1.ManifestVariable{Key: key, Class: class, Value: value}
+func variable(key, value string, class resourcesv1.VariableClass) *contractv1.ManifestVariable {
+	return &contractv1.ManifestVariable{Key: key, Class: class, Value: value}
 }
 
 func TestVariableEnv(t *testing.T) {
@@ -97,9 +97,9 @@ func TestVariableEnv(t *testing.T) {
 	t.Run("only plain and under its bare key", func(t *testing.T) {
 		t.Parallel()
 
-		app := &deploymentsv1.ManifestApp{
+		app := &contractv1.ManifestApp{
 			Name: "web",
-			Variables: []*deploymentsv1.ManifestVariable{
+			Variables: []*contractv1.ManifestVariable{
 				variable("POSTHOG_ID", "ph-123", resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN),
 				variable("STRIPE_API_KEY", "sk-live", resourcesv1.VariableClass_VARIABLE_CLASS_SENSITIVE),
 				variable("WEBHOOK_SECRET", "", resourcesv1.VariableClass_VARIABLE_CLASS_SECRET),
@@ -123,12 +123,12 @@ func TestVariableEnv(t *testing.T) {
 	t.Run("carries the app's folder binding", func(t *testing.T) {
 		t.Parallel()
 
-		bound := variableEnv(&deploymentsv1.ManifestApp{Name: "admin", Folder: "/admin"})
+		bound := variableEnv(&contractv1.ManifestApp{Name: "admin", Folder: "/admin"})
 		if got, want := bound["OCEL_APP_FOLDER"], "/admin"; got != want {
 			t.Errorf("OCEL_APP_FOLDER = %q, want %q", got, want)
 		}
 
-		root := variableEnv(&deploymentsv1.ManifestApp{Name: "web"})
+		root := variableEnv(&contractv1.ManifestApp{Name: "web"})
 		if _, ok := root["OCEL_APP_FOLDER"]; ok {
 			t.Errorf("env = %v, want no binding at all: the root is the absence of one", root)
 		}
@@ -161,9 +161,9 @@ func TestCheckRuntimeOwnedNames(t *testing.T) {
 	t.Run("refuses what Lambda would inject", func(t *testing.T) {
 		t.Parallel()
 
-		app := &deploymentsv1.ManifestApp{
+		app := &contractv1.ManifestApp{
 			Name: "web",
-			Variables: []*deploymentsv1.ManifestVariable{
+			Variables: []*contractv1.ManifestVariable{
 				variable("AWS_REGION", "us-west-2", resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN),
 			},
 		}
@@ -182,9 +182,9 @@ func TestCheckRuntimeOwnedNames(t *testing.T) {
 	t.Run("leaves every other name alone", func(t *testing.T) {
 		t.Parallel()
 
-		app := &deploymentsv1.ManifestApp{
+		app := &contractv1.ManifestApp{
 			Name: "web",
-			Variables: []*deploymentsv1.ManifestVariable{
+			Variables: []*contractv1.ManifestVariable{
 				variable("NEXT_PUBLIC_APP_ID", "app_1", resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN),
 				variable("VITE_APP_ID", "app_2", resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN),
 				variable("POSTHOG_ID", "ph-123", resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN),
@@ -205,9 +205,9 @@ func TestCheckEdgeOwnedNames(t *testing.T) {
 		t.Run("refuses "+key, func(t *testing.T) {
 			t.Parallel()
 
-			app := &deploymentsv1.ManifestApp{
+			app := &contractv1.ManifestApp{
 				Name:      "web",
-				Variables: []*deploymentsv1.ManifestVariable{variable(key, "mine", resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN)},
+				Variables: []*contractv1.ManifestVariable{variable(key, "mine", resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN)},
 			}
 
 			err := checkEdgeOwnedNames(app)
@@ -225,9 +225,9 @@ func TestCheckEdgeOwnedNames(t *testing.T) {
 	t.Run("leaves every other name alone", func(t *testing.T) {
 		t.Parallel()
 
-		app := &deploymentsv1.ManifestApp{
+		app := &contractv1.ManifestApp{
 			Name: "web",
-			Variables: []*deploymentsv1.ManifestVariable{
+			Variables: []*contractv1.ManifestVariable{
 				variable("OCEL_CACHE_TTL", "60", resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN),
 				variable("POSTHOG_ID", "ph-123", resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN),
 				variable("OCEL_CACHE_RPC", "sk-live", resourcesv1.VariableClass_VARIABLE_CLASS_SENSITIVE),
@@ -267,9 +267,9 @@ func TestCheckEdgeEnvBudget(t *testing.T) {
 	t.Run("refuses what an app declares, not what it seals alone", func(t *testing.T) {
 		t.Parallel()
 
-		app := &deploymentsv1.ManifestApp{
+		app := &contractv1.ManifestApp{
 			Name: "web",
-			Variables: []*deploymentsv1.ManifestVariable{
+			Variables: []*contractv1.ManifestVariable{
 				variable("BIG_ONE", strings.Repeat("a", functionEnvBudgetBytes), resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN),
 			},
 		}
@@ -277,7 +277,7 @@ func TestCheckEdgeEnvBudget(t *testing.T) {
 		if err := checkEdgeVariables(app, appBundle{}); err == nil {
 			t.Fatal("checkEdgeVariables = nil, want the app's own environment charged")
 		}
-		if err := checkEdgeVariables(&deploymentsv1.ManifestApp{Name: "web"}, appBundle{}); err != nil {
+		if err := checkEdgeVariables(&contractv1.ManifestApp{Name: "web"}, appBundle{}); err != nil {
 			t.Errorf("checkEdgeVariables on an app that declares nothing: %v", err)
 		}
 	})
@@ -346,9 +346,9 @@ func TestRenderBakedBundle(t *testing.T) {
 	t.Run("the envelope is the data key and the values are only ciphertext", func(t *testing.T) {
 		t.Parallel()
 
-		app := &deploymentsv1.ManifestApp{
+		app := &contractv1.ManifestApp{
 			Name: "web",
-			Variables: []*deploymentsv1.ManifestVariable{
+			Variables: []*contractv1.ManifestVariable{
 				variable("STRIPE_API_KEY", "sk-live", resourcesv1.VariableClass_VARIABLE_CLASS_SENSITIVE),
 				variable("POSTHOG_ID", "ph-123", resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN),
 			},
@@ -393,9 +393,9 @@ func TestRenderBakedBundle(t *testing.T) {
 	t.Run("every render gets a fresh data key", func(t *testing.T) {
 		t.Parallel()
 
-		app := &deploymentsv1.ManifestApp{
+		app := &contractv1.ManifestApp{
 			Name:      "web",
-			Variables: []*deploymentsv1.ManifestVariable{variable("STRIPE_API_KEY", "sk-live", resourcesv1.VariableClass_VARIABLE_CLASS_SENSITIVE)},
+			Variables: []*contractv1.ManifestVariable{variable("STRIPE_API_KEY", "sk-live", resourcesv1.VariableClass_VARIABLE_CLASS_SENSITIVE)},
 		}
 
 		first, err := renderAppBundle(liveConfig(), "shop", app, nil)
@@ -425,9 +425,9 @@ func TestRenderBakedBundle(t *testing.T) {
 	t.Run("an app with no baked values costs nothing", func(t *testing.T) {
 		t.Parallel()
 
-		app := &deploymentsv1.ManifestApp{
+		app := &contractv1.ManifestApp{
 			Name:      "web",
-			Variables: []*deploymentsv1.ManifestVariable{variable("POSTHOG_ID", "ph", resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN)},
+			Variables: []*contractv1.ManifestVariable{variable("POSTHOG_ID", "ph", resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN)},
 		}
 
 		bundle, err := renderAppBundle(liveConfig(), "shop", app, nil)
@@ -442,9 +442,9 @@ func TestRenderBakedBundle(t *testing.T) {
 	t.Run("the fingerprint tracks the plaintext, not the ciphertext", func(t *testing.T) {
 		t.Parallel()
 
-		app := &deploymentsv1.ManifestApp{
+		app := &contractv1.ManifestApp{
 			Name:      "web",
-			Variables: []*deploymentsv1.ManifestVariable{variable("STRIPE_API_KEY", "sk-live", resourcesv1.VariableClass_VARIABLE_CLASS_SENSITIVE)},
+			Variables: []*contractv1.ManifestVariable{variable("STRIPE_API_KEY", "sk-live", resourcesv1.VariableClass_VARIABLE_CLASS_SENSITIVE)},
 		}
 
 		first, err := renderAppBundle(liveConfig(), "shop", app, nil)
@@ -465,7 +465,7 @@ func TestRenderBakedBundle(t *testing.T) {
 			t.Errorf("Fingerprint = %q then %q for unchanged values; every deploy would mint a new Deployment", first.Fingerprint, second.Fingerprint)
 		}
 
-		app.Variables = []*deploymentsv1.ManifestVariable{variable("STRIPE_API_KEY", "sk-live-2", resourcesv1.VariableClass_VARIABLE_CLASS_SENSITIVE)}
+		app.Variables = []*contractv1.ManifestVariable{variable("STRIPE_API_KEY", "sk-live-2", resourcesv1.VariableClass_VARIABLE_CLASS_SENSITIVE)}
 		rotated, err := renderAppBundle(liveConfig(), "shop", app, nil)
 		if err != nil {
 			t.Fatalf("renderAppBundle: %v", err)
@@ -478,9 +478,9 @@ func TestRenderBakedBundle(t *testing.T) {
 	t.Run("no baked values have no fingerprint", func(t *testing.T) {
 		t.Parallel()
 
-		app := &deploymentsv1.ManifestApp{
+		app := &contractv1.ManifestApp{
 			Name: "web",
-			Variables: []*deploymentsv1.ManifestVariable{
+			Variables: []*contractv1.ManifestVariable{
 				variable("POSTHOG_ID", "ph", resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN),
 				variable("WEBHOOK_SECRET", "", resourcesv1.VariableClass_VARIABLE_CLASS_SECRET),
 			},
@@ -508,9 +508,9 @@ func TestRenderBakedBundle(t *testing.T) {
 			t.Run(tc.name, func(t *testing.T) {
 				t.Parallel()
 
-				app := &deploymentsv1.ManifestApp{
+				app := &contractv1.ManifestApp{
 					Name: "web",
-					Variables: []*deploymentsv1.ManifestVariable{
+					Variables: []*contractv1.ManifestVariable{
 						variable("POSTHOG_ID", "ph", resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN),
 						variable("WEBHOOK_SECRET", "whsec", tc.class),
 					},
@@ -606,18 +606,18 @@ func TestRenderBakedBundles(t *testing.T) {
 	t.Run("seals each app under its own key", func(t *testing.T) {
 		t.Parallel()
 
-		manifest := &deploymentsv1.Manifest{Apps: []*deploymentsv1.ManifestApp{
+		manifest := &contractv1.Manifest{Apps: []*contractv1.ManifestApp{
 			{
 				Name:      "web",
-				Variables: []*deploymentsv1.ManifestVariable{variable("STRIPE_API_KEY", "sk-web", resourcesv1.VariableClass_VARIABLE_CLASS_SENSITIVE)},
+				Variables: []*contractv1.ManifestVariable{variable("STRIPE_API_KEY", "sk-web", resourcesv1.VariableClass_VARIABLE_CLASS_SENSITIVE)},
 			},
 			{
 				Name:      "admin",
-				Variables: []*deploymentsv1.ManifestVariable{variable("STRIPE_API_KEY", "sk-admin", resourcesv1.VariableClass_VARIABLE_CLASS_SENSITIVE)},
+				Variables: []*contractv1.ManifestVariable{variable("STRIPE_API_KEY", "sk-admin", resourcesv1.VariableClass_VARIABLE_CLASS_SENSITIVE)},
 			},
 			{
 				Name:      "docs",
-				Variables: []*deploymentsv1.ManifestVariable{variable("POSTHOG_ID", "ph", resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN)},
+				Variables: []*contractv1.ManifestVariable{variable("POSTHOG_ID", "ph", resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN)},
 			},
 		}}
 
@@ -680,16 +680,16 @@ func TestBakedDelivery(t *testing.T) {
 		t.Parallel()
 
 		dir := writeTree(t, map[string]string{"src/server.js": "handler"})
-		manifest := &deploymentsv1.Manifest{
+		manifest := &contractv1.Manifest{
 			Slug: "proj-1",
-			Apps: []*deploymentsv1.ManifestApp{{
+			Apps: []*contractv1.ManifestApp{{
 				Name: "web",
-				Variables: []*deploymentsv1.ManifestVariable{
+				Variables: []*contractv1.ManifestVariable{
 					variable("STRIPE_API_KEY", "sk-live", resourcesv1.VariableClass_VARIABLE_CLASS_SENSITIVE),
 					variable("POSTHOG_ID", "ph-123", resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN),
 				},
 			}},
-			Functions: []*deploymentsv1.ManifestFunction{
+			Functions: []*contractv1.ManifestFunction{
 				{LogicalName: "web_index", ArtifactPath: "web.func", App: "web"},
 			},
 		}

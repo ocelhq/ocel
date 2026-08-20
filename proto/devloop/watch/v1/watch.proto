@@ -1,0 +1,15 @@
+syntax = "proto3";
+package devloop.watch.v1;
+
+option go_package = "github.com/ocelhq/ocel/pkg/proto/devloop/watch/v1;watchv1";
+
+service DevService {
+    rpc Subscribe(SubscribeRequest) returns (stream EnvUpdate);
+}
+
+message SubscribeRequest {
+}
+
+message EnvUpdate {
+  map<string, string> env = 1;
+}

@@ -10,21 +10,21 @@ import (
 	"strings"
 	"testing"
 
-	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
-	linksv1 "github.com/ocelhq/ocel/pkg/proto/links/v1"
-	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/resources/v1"
+	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
+	linksv1 "github.com/ocelhq/ocel/pkg/proto/common/links/v1"
+	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 )
 
 const fixtureSecret = "hunter2-do-not-publish"
 
-func fixtureManifest() *deploymentsv1.Manifest {
-	return &deploymentsv1.Manifest{
+func fixtureManifest() *contractv1.Manifest {
+	return &contractv1.Manifest{
 		Slug: "proj-123",
-		Resources: []*deploymentsv1.ManifestResource{
+		Resources: []*contractv1.ManifestResource{
 			{LogicalName: "db--main", Resource: &resourcesv1.ResourceIdentifier{Type: linksv1.LinkType_LINK_TYPE_POSTGRES, Name: "main"}},
 			{LogicalName: "bucket--uploads", Resource: &resourcesv1.ResourceIdentifier{Type: linksv1.LinkType_LINK_TYPE_BUCKET, Name: "uploads"}},
 		},
-		Usages: []*deploymentsv1.ManifestUsage{
+		Usages: []*contractv1.ManifestUsage{
 			{App: "api", Resource: "db--main", Files: []string{"apps/api/src/server.ts", "shared/db.ts"}},
 			{App: "web", Resource: "db--main", Files: []string{"apps/web/app/page.tsx"}},
 		},

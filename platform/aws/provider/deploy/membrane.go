@@ -4,13 +4,13 @@ import (
 	"fmt"
 
 	"github.com/ocelhq/ocel/pkg/naming"
-	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
-	linksv1 "github.com/ocelhq/ocel/pkg/proto/links/v1"
+	linksv1 "github.com/ocelhq/ocel/pkg/proto/common/links/v1"
+	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 )
 
 const providerName = "aws"
 
-func completesUploads(manifest *deploymentsv1.Manifest) bool {
+func completesUploads(manifest *contractv1.Manifest) bool {
 	for _, r := range manifest.GetResources() {
 		if r.GetBucket() != nil && !r.GetLinked() {
 			return true
@@ -33,7 +33,7 @@ func (e *MissingMembraneError) Error() string {
 	)
 }
 
-func appCrossesMembrane(manifest *deploymentsv1.Manifest, app string) bool {
+func appCrossesMembrane(manifest *contractv1.Manifest, app string) bool {
 	used := usedResources(manifest, app)
 	for _, r := range manifest.GetResources() {
 		if used[r.GetLogicalName()] && naming.CrossesMembrane(r.GetResource().GetType()) {
@@ -43,7 +43,7 @@ func appCrossesMembrane(manifest *deploymentsv1.Manifest, app string) bool {
 	return false
 }
 
-func checkMembraneServices(manifest *deploymentsv1.Manifest, serves func(linksv1.LinkType) bool) error {
+func checkMembraneServices(manifest *contractv1.Manifest, serves func(linksv1.LinkType) bool) error {
 	for _, r := range manifest.GetResources() {
 		typ := r.GetResource().GetType()
 		if !naming.CrossesMembrane(typ) || serves(typ) {

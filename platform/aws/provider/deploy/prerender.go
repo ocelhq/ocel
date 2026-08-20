@@ -21,7 +21,7 @@ import (
 	"golang.org/x/sync/errgroup"
 
 	"github.com/ocelhq/ocel/pkg/naming"
-	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
+	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 )
 
 func storageCoordinate(env, slug, app string, release naming.Release) naming.Coordinate {
@@ -52,7 +52,7 @@ type appBuilds struct {
 	guards     map[string]*originGuard
 }
 
-func resolveAppBuilds(cfg Config, manifest *deploymentsv1.Manifest, baked map[string]appBundle) (appBuilds, error) {
+func resolveAppBuilds(cfg Config, manifest *contractv1.Manifest, baked map[string]appBundle) (appBuilds, error) {
 	builds := appBuilds{
 		ids:        map[string]string{},
 		identities: Identities{},
@@ -121,7 +121,7 @@ func resolveAppBuilds(cfg Config, manifest *deploymentsv1.Manifest, baked map[st
 	return builds, nil
 }
 
-func (b appBuilds) recordBuildID(cfg Config, app *deploymentsv1.ManifestApp) error {
+func (b appBuilds) recordBuildID(cfg Config, app *contractv1.ManifestApp) error {
 	name := app.GetName()
 	if b.ids[name] != "" {
 		return nil
@@ -134,7 +134,7 @@ func (b appBuilds) recordBuildID(cfg Config, app *deploymentsv1.ManifestApp) err
 	return nil
 }
 
-func appBuildID(cfg Config, app *deploymentsv1.ManifestApp) (string, error) {
+func appBuildID(cfg Config, app *contractv1.ManifestApp) (string, error) {
 	name := app.GetName()
 	desc, ok, err := readServeDescriptor(cfg.ArtifactRoot, name)
 	switch {

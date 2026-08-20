@@ -12,7 +12,7 @@ import (
 	"github.com/pulumi/pulumi/sdk/v3/go/pulumi"
 
 	"github.com/ocelhq/ocel/pkg/naming"
-	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
+	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/platform/aws/provider/edges/apigateway"
 	"github.com/ocelhq/ocel/platform/aws/provider/edges/cloudfront"
 	cloudflare "github.com/ocelhq/ocel/platform/edge/cloudflare/deploy"
@@ -45,8 +45,8 @@ func routedCoordinate(t *testing.T) naming.Coordinate {
 	return storageCoordinate("prod", "shop", "web", fixedRelease(t))
 }
 
-func routedApp() *deploymentsv1.ManifestApp {
-	return &deploymentsv1.ManifestApp{Name: "web", Framework: frameworkNext}
+func routedApp() *contractv1.ManifestApp {
+	return &contractv1.ManifestApp{Name: "web", Framework: frameworkNext}
 }
 
 func TestRouterHostStaysUnbuiltBehindCloudflare(t *testing.T) {
@@ -69,7 +69,7 @@ func TestRouterHostStaysUnbuiltForAnAppThatRoutesNothing(t *testing.T) {
 		"apps/api/serve.json": `{"framework":"express","buildId":"API1"}`,
 	})
 
-	host, err := resolveRouterHost(cfg, &deploymentsv1.ManifestApp{Name: "api", Framework: "express"}, routedCoordinate(t), "d1")
+	host, err := resolveRouterHost(cfg, &contractv1.ManifestApp{Name: "api", Framework: "express"}, routedCoordinate(t), "d1")
 	if err != nil {
 		t.Fatalf("resolveRouterHost: %v", err)
 	}
@@ -127,8 +127,8 @@ func TestRouterHostRefusesARoutedBuildThatNamesNoEntry(t *testing.T) {
 	}
 }
 
-func routedFunctions() []*deploymentsv1.ManifestFunction {
-	return []*deploymentsv1.ManifestFunction{
+func routedFunctions() []*contractv1.ManifestFunction {
+	return []*contractv1.ManifestFunction{
 		{LogicalName: "fn--web--entry", App: "web", Framework: frameworkNext, RouteId: "/"},
 		{LogicalName: "fn--web--admin", App: "web", Framework: frameworkNext, RouteId: "/admin"},
 	}
@@ -304,7 +304,7 @@ func TestRouterHostRefusesARoutedBuildThatWroteNoManifest(t *testing.T) {
 func TestAppEnvNamesTheEdgeKind(t *testing.T) {
 	t.Parallel()
 
-	manifest := &deploymentsv1.Manifest{Slug: "shop", Apps: []*deploymentsv1.ManifestApp{routedApp()}}
+	manifest := &contractv1.Manifest{Slug: "shop", Apps: []*contractv1.ManifestApp{routedApp()}}
 
 	env := appEnv(manifest, routedApp(), appBundle{}, routedConfig(t, cloudfront.Kind), sessionScope{})
 	if env[edgeKindEnv] != string(cloudfront.Kind) {
@@ -453,9 +453,9 @@ func TestDeploymentRecordNamesTheEntryFunctionTheDeployCreated(t *testing.T) {
 
 	cfg := routedConfig(t, apigateway.Kind)
 	cfg.Env = "prod"
-	manifest := &deploymentsv1.Manifest{
+	manifest := &contractv1.Manifest{
 		Slug:      "shop",
-		Apps:      []*deploymentsv1.ManifestApp{routedApp()},
+		Apps:      []*contractv1.ManifestApp{routedApp()},
 		Functions: routedFunctions(),
 	}
 	builds := appBuildsFor(t, cfg, manifest)

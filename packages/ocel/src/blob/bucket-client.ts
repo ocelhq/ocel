@@ -1,5 +1,5 @@
 import { type Client, createClient, type Transport } from "@connectrpc/connect";
-import { BucketService } from "../gen/proto/buckets/v1/buckets_pb.js";
+import { BucketService } from "../gen/proto/app/blob/v1/blob_pb.js";
 
 export type BucketServiceClient = Client<typeof BucketService>;
 

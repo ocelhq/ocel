@@ -13,9 +13,9 @@ import (
 	"strconv"
 	"strings"
 
-	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
-	environmentv1 "github.com/ocelhq/ocel/pkg/proto/environment/v1"
-	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/resources/v1"
+	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
+	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
+	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/platform/aws/provider/vars"
 	"github.com/ocelhq/ocel/platform/aws/provider/vars/baked"
 	"github.com/ocelhq/ocel/platform/aws/provider/vars/live"
@@ -62,7 +62,7 @@ func varsReadPolicy(r executionRole) (string, error) {
 
 const appFolderEnv = "OCEL_APP_FOLDER"
 
-func variableEnv(app *deploymentsv1.ManifestApp) map[string]string {
+func variableEnv(app *contractv1.ManifestApp) map[string]string {
 	env := make(map[string]string)
 	for _, v := range app.GetVariables() {
 		if v.GetClass() != resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN {
@@ -76,7 +76,7 @@ func variableEnv(app *deploymentsv1.ManifestApp) map[string]string {
 	return env
 }
 
-func appEnv(manifest *deploymentsv1.Manifest, app *deploymentsv1.ManifestApp, bundle appBundle, cfg Config, sessions sessionScope) map[string]string {
+func appEnv(manifest *contractv1.Manifest, app *contractv1.ManifestApp, bundle appBundle, cfg Config, sessions sessionScope) map[string]string {
 	env := map[string]string{}
 	if cfg.Edge != nil {
 		env[edgeKindEnv] = string(cfg.Edge.Kind())
@@ -130,7 +130,7 @@ func (b appBundle) overlay() map[string][]byte {
 
 func (b appBundle) hasLive() bool { return len(b.Live) > 0 }
 
-func renderAppBundles(cfg Config, manifest *deploymentsv1.Manifest, consumed map[string]Consumed) (map[string]appBundle, error) {
+func renderAppBundles(cfg Config, manifest *contractv1.Manifest, consumed map[string]Consumed) (map[string]appBundle, error) {
 	bundles := make(map[string]appBundle, len(manifest.GetApps()))
 	for _, app := range manifest.GetApps() {
 		bundle, err := renderAppBundle(cfg, manifest.GetSlug(), app, appLinks(manifest, app.GetName(), consumed))
@@ -144,7 +144,7 @@ func renderAppBundles(cfg Config, manifest *deploymentsv1.Manifest, consumed map
 	return bundles, nil
 }
 
-func renderAppBundle(cfg Config, slug string, app *deploymentsv1.ManifestApp, links []live.Link) (appBundle, error) {
+func renderAppBundle(cfg Config, slug string, app *contractv1.ManifestApp, links []live.Link) (appBundle, error) {
 	values := make(map[string]string)
 	var keys []live.Key
 	for _, v := range app.GetVariables() {
@@ -236,7 +236,7 @@ func overrideEnvironment(cfg Config) string {
 	return cfg.Identity
 }
 
-func recordedAudit(cfg Config, app *deploymentsv1.ManifestApp) (string, []edge.VariableRecord) {
+func recordedAudit(cfg Config, app *contractv1.ManifestApp) (string, []edge.VariableRecord) {
 	if cfg.Tier != environmentv1.Tier_TIER_PRODUCTION {
 		return "", nil
 	}
@@ -300,7 +300,7 @@ func fingerprintValues(values map[string]string) string {
 
 var runtimeOwnedPrefixes = []string{"AWS_", "LAMBDA_"}
 
-func plainNamesTaken(app *deploymentsv1.ManifestApp, owned func(string) bool) []string {
+func plainNamesTaken(app *contractv1.ManifestApp, owned func(string) bool) []string {
 	var taken []string
 	for _, v := range app.GetVariables() {
 		if v.GetClass() != resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN {
@@ -314,7 +314,7 @@ func plainNamesTaken(app *deploymentsv1.ManifestApp, owned func(string) bool) []
 	return taken
 }
 
-func checkRuntimeOwnedNames(app *deploymentsv1.ManifestApp) error {
+func checkRuntimeOwnedNames(app *contractv1.ManifestApp) error {
 	taken := plainNamesTaken(app, func(key string) bool {
 		for _, prefix := range runtimeOwnedPrefixes {
 			if strings.HasPrefix(key, prefix) {
@@ -335,7 +335,7 @@ func checkRuntimeOwnedNames(app *deploymentsv1.ManifestApp) error {
 	)
 }
 
-func checkEdgeOwnedNames(app *deploymentsv1.ManifestApp) error {
+func checkEdgeOwnedNames(app *contractv1.ManifestApp) error {
 	taken := plainNamesTaken(app, func(key string) bool {
 		return slices.Contains(edge.OwnedVariableNames, key) || strings.HasPrefix(key, baked.Prefix)
 	})
@@ -351,7 +351,7 @@ func checkEdgeOwnedNames(app *deploymentsv1.ManifestApp) error {
 	)
 }
 
-func checkEdgeVariables(app *deploymentsv1.ManifestApp, bundle appBundle) error {
+func checkEdgeVariables(app *contractv1.ManifestApp, bundle appBundle) error {
 	if err := checkEdgeOwnedNames(app); err != nil {
 		return err
 	}

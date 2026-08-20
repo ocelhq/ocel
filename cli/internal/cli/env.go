@@ -15,10 +15,10 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/envgate"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
 	"github.com/ocelhq/ocel/cli/internal/providerrunner"
-	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
-	environmentv1 "github.com/ocelhq/ocel/pkg/proto/environment/v1"
-	envvarsv1 "github.com/ocelhq/ocel/pkg/proto/envvars/v1"
-	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/resources/v1"
+	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
+	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
+	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
+	envvarsv1 "github.com/ocelhq/ocel/pkg/proto/provider/envvars/v1"
 )
 
 type envOptions struct {
@@ -217,7 +217,7 @@ func namedEnvironments(ctx context.Context, runner *providerrunner.Runner, slug 
 	if err != nil {
 		return nil, err
 	}
-	resp, err := client.ListEnvironments(ctx, &deploymentsv1.ListEnvironmentsRequest{
+	resp, err := client.ListEnvironments(ctx, &contractv1.ListEnvironmentsRequest{
 		Slug: slug,
 	})
 	if err != nil {

@@ -2,7 +2,7 @@ import {
   VariableClass as WireClass,
   VariableProblem_Kind,
   type VariableCell,
-} from "../gen/proto/resources/v1/variables_pb.js";
+} from "../gen/proto/app/resources/v1/variables_pb.js";
 import { rpc } from "../utils/rpc.js";
 import {
   complaint,

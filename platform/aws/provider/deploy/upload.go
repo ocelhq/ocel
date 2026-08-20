@@ -3,8 +3,8 @@ package deploy
 import (
 	"context"
 
-	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
-	progressv1 "github.com/ocelhq/ocel/pkg/proto/progress/v1"
+	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
+	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/platform/aws/provider/payloads"
 )
 
@@ -15,7 +15,7 @@ type uploadedArtifacts struct {
 	completer payloads.Placement
 }
 
-func uploadArtifacts(ctx context.Context, cfg Config, manifest *deploymentsv1.Manifest, plan deployPlan, progress Progress) (uploadedArtifacts, error) {
+func uploadArtifacts(ctx context.Context, cfg Config, manifest *contractv1.Manifest, plan deployPlan, progress Progress) (uploadedArtifacts, error) {
 	if !plan.ready {
 		return uploadedArtifacts{}, &PhaseError{Phase: "upload", After: "plan"}
 	}

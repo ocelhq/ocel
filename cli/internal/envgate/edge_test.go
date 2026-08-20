@@ -5,7 +5,7 @@ import (
 	"testing"
 
 	"github.com/ocelhq/ocel/cli/internal/envgate"
-	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/resources/v1"
+	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
 )
 
 func secret(key string, folders ...string) *resourcesv1.VariableDefinition {

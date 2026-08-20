@@ -16,8 +16,8 @@ import (
 	"github.com/pulumi/pulumi/sdk/v3/go/common/workspace"
 
 	"github.com/ocelhq/ocel/pkg/naming"
-	environmentv1 "github.com/ocelhq/ocel/pkg/proto/environment/v1"
-	progressv1 "github.com/ocelhq/ocel/pkg/proto/progress/v1"
+	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
+	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
 )
 
 func TestStackTags(t *testing.T) {

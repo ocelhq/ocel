@@ -2,11 +2,10 @@ version: v2
 inputs:
   - directory: proto
     exclude_paths:
-      - proto/dev
-      - proto/deployments
-      - proto/environment
-      - proto/envvars
-      - proto/progress
+      - proto/common/environment
+      - proto/common/progress
+      - proto/devloop
+      - proto/provider
 plugins:
   - local: protoc-gen-es
     out: packages/ocel/src/gen/proto

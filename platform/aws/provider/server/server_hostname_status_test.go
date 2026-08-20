@@ -13,8 +13,8 @@ import (
 	"github.com/aws/aws-sdk-go-v2/aws"
 	acmtypes "github.com/aws/aws-sdk-go-v2/service/acm/types"
 
-	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
-	environmentv1 "github.com/ocelhq/ocel/pkg/proto/environment/v1"
+	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
+	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/platform/aws/provider/certs"
 	"github.com/ocelhq/ocel/platform/aws/provider/domains"
 	"github.com/ocelhq/ocel/platform/aws/provider/edges/apigateway"
@@ -477,8 +477,8 @@ func liveGate(t *testing.T, kind edge.Kind, api *domainACM, answering bool, prio
 	}
 }
 
-func productionManifest(hosts ...string) *deploymentsv1.Manifest {
-	return &deploymentsv1.Manifest{Domains: map[string]*deploymentsv1.DomainList{
+func productionManifest(hosts ...string) *contractv1.Manifest {
+	return &contractv1.Manifest{Domains: map[string]*contractv1.DomainList{
 		"production": {Hostnames: hosts},
 	}}
 }
@@ -489,7 +489,7 @@ func TestAdmitDomains(t *testing.T) {
 	t.Run("a production deploy without a declared hostname is refused", func(t *testing.T) {
 		t.Parallel()
 
-		_, err := admitDomains(t.Context(), domainGate{kind: cloudflare.Kind, servesUnbound: true}, environmentv1.Tier_TIER_PRODUCTION, &deploymentsv1.Manifest{}, func(string) {})
+		_, err := admitDomains(t.Context(), domainGate{kind: cloudflare.Kind, servesUnbound: true}, environmentv1.Tier_TIER_PRODUCTION, &contractv1.Manifest{}, func(string) {})
 		if err == nil {
 			t.Fatal("admitDomains err = nil, want a refusal with nothing declared")
 		}
@@ -503,7 +503,7 @@ func TestAdmitDomains(t *testing.T) {
 	t.Run("a preview deploy without a wildcard is refused", func(t *testing.T) {
 		t.Parallel()
 
-		_, err := admitDomains(t.Context(), domainGate{kind: cloudflare.Kind, servesUnbound: true}, environmentv1.Tier_TIER_PREVIEW, &deploymentsv1.Manifest{}, func(string) {})
+		_, err := admitDomains(t.Context(), domainGate{kind: cloudflare.Kind, servesUnbound: true}, environmentv1.Tier_TIER_PREVIEW, &contractv1.Manifest{}, func(string) {})
 		if err == nil {
 			t.Fatal("admitDomains err = nil, want a refusal with no preview wildcard")
 		}
@@ -518,7 +518,7 @@ func TestAdmitDomains(t *testing.T) {
 		t.Parallel()
 
 		gate := domainGate{kind: cloudflare.Kind, servesUnbound: true, previewOn: "preview.acme.com"}
-		if _, err := admitDomains(t.Context(), gate, environmentv1.Tier_TIER_PREVIEW, &deploymentsv1.Manifest{}, func(string) {}); err != nil {
+		if _, err := admitDomains(t.Context(), gate, environmentv1.Tier_TIER_PREVIEW, &contractv1.Manifest{}, func(string) {}); err != nil {
 			t.Fatalf("admitDomains err = %v, want the global wildcard to be enough", err)
 		}
 	})
@@ -526,9 +526,9 @@ func TestAdmitDomains(t *testing.T) {
 	t.Run("a preview deploy that declares its own wildcard is admitted", func(t *testing.T) {
 		t.Parallel()
 
-		manifest := &deploymentsv1.Manifest{Apps: []*deploymentsv1.ManifestApp{{
+		manifest := &contractv1.Manifest{Apps: []*contractv1.ManifestApp{{
 			Name:    "web",
-			Domains: map[string]*deploymentsv1.DomainList{"preview": {Hostnames: []string{"*.preview.acme.com"}}},
+			Domains: map[string]*contractv1.DomainList{"preview": {Hostnames: []string{"*.preview.acme.com"}}},
 		}}}
 		if _, err := admitDomains(t.Context(), domainGate{kind: cloudflare.Kind, servesUnbound: true}, environmentv1.Tier_TIER_PREVIEW, manifest, func(string) {}); err != nil {
 			t.Fatalf("admitDomains err = %v, want an app-declared wildcard to be enough", err)

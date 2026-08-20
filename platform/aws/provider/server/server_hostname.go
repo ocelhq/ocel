@@ -9,8 +9,8 @@ import (
 
 	connect "connectrpc.com/connect"
 
-	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
-	progressv1 "github.com/ocelhq/ocel/pkg/proto/progress/v1"
+	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
+	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/platform/aws/provider/bootstrap"
 	"github.com/ocelhq/ocel/platform/aws/provider/certs"
 	"github.com/ocelhq/ocel/platform/aws/provider/dns"
@@ -18,7 +18,7 @@ import (
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
-func (s *Server) AddHostname(ctx context.Context, req *deploymentsv1.AddHostnameRequest, stream *connect.ServerStream[progressv1.OperationEvent]) error {
+func (s *Server) AddHostname(ctx context.Context, req *contractv1.AddHostnameRequest, stream *connect.ServerStream[progressv1.OperationEvent]) error {
 	progress := func(m string) { _ = stream.Send(progressEvent(m)) }
 
 	session, err := s.hostnameSession(ctx, hostnameRequest{
@@ -41,7 +41,7 @@ func (s *Server) AddHostname(ctx context.Context, req *deploymentsv1.AddHostname
 	return stream.Send(okResult())
 }
 
-func (s *Server) RemoveHostname(ctx context.Context, req *deploymentsv1.RemoveHostnameRequest, stream *connect.ServerStream[progressv1.OperationEvent]) error {
+func (s *Server) RemoveHostname(ctx context.Context, req *contractv1.RemoveHostnameRequest, stream *connect.ServerStream[progressv1.OperationEvent]) error {
 	progress := func(m string) { _ = stream.Send(progressEvent(m)) }
 
 	session, err := s.hostnameSession(ctx, hostnameRequest{
@@ -63,7 +63,7 @@ func (s *Server) RemoveHostname(ctx context.Context, req *deploymentsv1.RemoveHo
 type hostnameRequest struct {
 	slug        string
 	edgeKind    string
-	dns         *deploymentsv1.Dns
+	dns         *contractv1.Dns
 	configured  []string
 	host        string
 	certificate bool

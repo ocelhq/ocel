@@ -13,10 +13,10 @@ import (
 	"github.com/pulumi/pulumi/sdk/v3/go/pulumi"
 
 	"github.com/ocelhq/ocel/pkg/naming"
-	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
-	environmentv1 "github.com/ocelhq/ocel/pkg/proto/environment/v1"
-	linksv1 "github.com/ocelhq/ocel/pkg/proto/links/v1"
-	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/resources/v1"
+	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
+	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
+	linksv1 "github.com/ocelhq/ocel/pkg/proto/common/links/v1"
+	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	cloudflare "github.com/ocelhq/ocel/platform/edge/cloudflare/deploy"
 )
 
@@ -73,23 +73,23 @@ func renderAppRole(t *testing.T, app string, policies []linkPolicy) *policyRecor
 	return rec
 }
 
-func grantsManifest() *deploymentsv1.Manifest {
-	return &deploymentsv1.Manifest{
+func grantsManifest() *contractv1.Manifest {
+	return &contractv1.Manifest{
 		Slug: "shop",
-		Apps: []*deploymentsv1.ManifestApp{{Name: "web"}, {Name: "admin"}},
-		Resources: []*deploymentsv1.ManifestResource{
+		Apps: []*contractv1.ManifestApp{{Name: "web"}, {Name: "admin"}},
+		Resources: []*contractv1.ManifestResource{
 			{
 				LogicalName: "bucket--uploads",
 				Resource:    &resourcesv1.ResourceIdentifier{Type: linksv1.LinkType_LINK_TYPE_BUCKET, Name: "uploads"},
-				Config:      &deploymentsv1.ManifestResource_Bucket{Bucket: &resourcesv1.BucketConfig{}},
+				Config:      &contractv1.ManifestResource_Bucket{Bucket: &resourcesv1.BucketConfig{}},
 			},
 			{
 				LogicalName: "database--main",
 				Resource:    &resourcesv1.ResourceIdentifier{Type: linksv1.LinkType_LINK_TYPE_POSTGRES, Name: "main"},
-				Config:      &deploymentsv1.ManifestResource_Postgres{Postgres: &resourcesv1.PostgresConfig{}},
+				Config:      &contractv1.ManifestResource_Postgres{Postgres: &resourcesv1.PostgresConfig{}},
 			},
 		},
-		Usages: []*deploymentsv1.ManifestUsage{
+		Usages: []*contractv1.ManifestUsage{
 			{App: "web", Resource: "bucket--uploads"},
 			{App: "admin", Resource: "database--main"},
 		},
@@ -250,12 +250,12 @@ func TestInlinePolicyBudgetPreflight(t *testing.T) {
 		manifest := grantsManifest()
 		for i := range 500 {
 			name := "database--" + strings.Repeat("d", 40) + string(rune('a'+i%26)) + string(rune('a'+i/26))
-			manifest.Resources = append(manifest.Resources, &deploymentsv1.ManifestResource{
+			manifest.Resources = append(manifest.Resources, &contractv1.ManifestResource{
 				LogicalName: name,
 				Resource:    &resourcesv1.ResourceIdentifier{Type: linksv1.LinkType_LINK_TYPE_POSTGRES, Name: name},
-				Config:      &deploymentsv1.ManifestResource_Postgres{Postgres: &resourcesv1.PostgresConfig{}},
+				Config:      &contractv1.ManifestResource_Postgres{Postgres: &resourcesv1.PostgresConfig{}},
 			})
-			manifest.Usages = append(manifest.Usages, &deploymentsv1.ManifestUsage{App: "web", Resource: name})
+			manifest.Usages = append(manifest.Usages, &contractv1.ManifestUsage{App: "web", Resource: name})
 		}
 		if err := checkInlinePolicyBudget(manifest, nil, testSessions); err != nil {
 			t.Fatalf("checkInlinePolicyBudget = %v, want nil for grant-free links", err)
@@ -268,12 +268,12 @@ func TestInlinePolicyBudgetPreflight(t *testing.T) {
 		manifest := grantsManifest()
 		for i := range 60 {
 			name := "bucket--" + string(rune('a'+i%26)) + string(rune('a'+i/26))
-			manifest.Resources = append(manifest.Resources, &deploymentsv1.ManifestResource{
+			manifest.Resources = append(manifest.Resources, &contractv1.ManifestResource{
 				LogicalName: name,
 				Resource:    &resourcesv1.ResourceIdentifier{Type: linksv1.LinkType_LINK_TYPE_BUCKET, Name: name},
-				Config:      &deploymentsv1.ManifestResource_Bucket{Bucket: &resourcesv1.BucketConfig{}},
+				Config:      &contractv1.ManifestResource_Bucket{Bucket: &resourcesv1.BucketConfig{}},
 			})
-			manifest.Usages = append(manifest.Usages, &deploymentsv1.ManifestUsage{App: "web", Resource: name})
+			manifest.Usages = append(manifest.Usages, &contractv1.ManifestUsage{App: "web", Resource: name})
 		}
 
 		var budget *PolicyBudgetError
@@ -312,14 +312,14 @@ func TestInlinePolicyBudgetPreflight(t *testing.T) {
 		manifest := grantsManifest()
 		for i := range 60 {
 			name := "bucket--" + string(rune('a'+i%26)) + string(rune('a'+i/26))
-			manifest.Resources = append(manifest.Resources, &deploymentsv1.ManifestResource{
+			manifest.Resources = append(manifest.Resources, &contractv1.ManifestResource{
 				LogicalName: name,
 				Resource:    &resourcesv1.ResourceIdentifier{Type: linksv1.LinkType_LINK_TYPE_BUCKET, Name: name},
-				Config:      &deploymentsv1.ManifestResource_Bucket{Bucket: &resourcesv1.BucketConfig{}},
+				Config:      &contractv1.ManifestResource_Bucket{Bucket: &resourcesv1.BucketConfig{}},
 			})
 			manifest.Usages = append(manifest.Usages,
-				&deploymentsv1.ManifestUsage{App: "web", Resource: name},
-				&deploymentsv1.ManifestUsage{App: "admin", Resource: name},
+				&contractv1.ManifestUsage{App: "web", Resource: name},
+				&contractv1.ManifestUsage{App: "admin", Resource: name},
 			)
 		}
 
@@ -342,17 +342,17 @@ func TestInlinePolicyBudgetPreflight(t *testing.T) {
 		t.Parallel()
 
 		manifest := grantsManifest()
-		manifest.Usages = append(manifest.Usages, &deploymentsv1.ManifestUsage{App: "web", Resource: "bucket--uploads"})
+		manifest.Usages = append(manifest.Usages, &contractv1.ManifestUsage{App: "web", Resource: "bucket--uploads"})
 		for i := range 8 {
 			name := "bucket--" + string(rune('a'+i%26)) + string(rune('a'+i/26))
-			manifest.Resources = append(manifest.Resources, &deploymentsv1.ManifestResource{
+			manifest.Resources = append(manifest.Resources, &contractv1.ManifestResource{
 				LogicalName: name,
 				Resource:    &resourcesv1.ResourceIdentifier{Type: linksv1.LinkType_LINK_TYPE_BUCKET, Name: name},
-				Config:      &deploymentsv1.ManifestResource_Bucket{Bucket: &resourcesv1.BucketConfig{}},
+				Config:      &contractv1.ManifestResource_Bucket{Bucket: &resourcesv1.BucketConfig{}},
 			})
 			manifest.Usages = append(manifest.Usages,
-				&deploymentsv1.ManifestUsage{App: "web", Resource: name},
-				&deploymentsv1.ManifestUsage{App: "web", Resource: name},
+				&contractv1.ManifestUsage{App: "web", Resource: name},
+				&contractv1.ManifestUsage{App: "web", Resource: name},
 			)
 		}
 
@@ -374,12 +374,12 @@ func TestInlinePolicyBudgetPreflight(t *testing.T) {
 		manifest := grantsManifest()
 		for i := range 60 {
 			name := "bucket--" + string(rune('a'+i%26)) + string(rune('a'+i/26))
-			manifest.Resources = append(manifest.Resources, &deploymentsv1.ManifestResource{
+			manifest.Resources = append(manifest.Resources, &contractv1.ManifestResource{
 				LogicalName: name,
 				Resource:    &resourcesv1.ResourceIdentifier{Type: linksv1.LinkType_LINK_TYPE_BUCKET, Name: name},
-				Config:      &deploymentsv1.ManifestResource_Bucket{Bucket: &resourcesv1.BucketConfig{}},
+				Config:      &contractv1.ManifestResource_Bucket{Bucket: &resourcesv1.BucketConfig{}},
 			})
-			manifest.Usages = append(manifest.Usages, &deploymentsv1.ManifestUsage{App: "web", Resource: name})
+			manifest.Usages = append(manifest.Usages, &contractv1.ManifestUsage{App: "web", Resource: name})
 		}
 
 		fake := &recordingEdge{kind: cloudflare.Kind}

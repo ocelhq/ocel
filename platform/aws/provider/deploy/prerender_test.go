@@ -8,23 +8,23 @@ import (
 	"testing"
 	"time"
 
-	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
+	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 )
 
-func nextManifest() *deploymentsv1.Manifest {
-	return &deploymentsv1.Manifest{
+func nextManifest() *contractv1.Manifest {
+	return &contractv1.Manifest{
 		Slug: "proj",
-		Functions: []*deploymentsv1.ManifestFunction{
+		Functions: []*contractv1.ManifestFunction{
 			{LogicalName: "web_index", Framework: "next", App: "web"},
 		},
 	}
 }
 
-func nodeManifest() *deploymentsv1.Manifest {
-	return &deploymentsv1.Manifest{
+func nodeManifest() *contractv1.Manifest {
+	return &contractv1.Manifest{
 		Slug: "proj",
-		Apps: []*deploymentsv1.ManifestApp{{Name: "api", Framework: "express"}},
-		Functions: []*deploymentsv1.ManifestFunction{
+		Apps: []*contractv1.ManifestApp{{Name: "api", Framework: "express"}},
+		Functions: []*contractv1.ManifestFunction{
 			{LogicalName: "api_handler", Framework: "express", App: "api", RouteId: "/"},
 		},
 	}
@@ -39,10 +39,10 @@ func nodeAppTree(t *testing.T) string {
 	})
 }
 
-func twoAppManifest() *deploymentsv1.Manifest {
-	return &deploymentsv1.Manifest{
+func twoAppManifest() *contractv1.Manifest {
+	return &contractv1.Manifest{
 		Slug: "proj",
-		Functions: []*deploymentsv1.ManifestFunction{
+		Functions: []*contractv1.ManifestFunction{
 			{LogicalName: "web_index", Framework: "next", App: "web"},
 			{LogicalName: "admin_index", Framework: "next", App: "admin"},
 		},
@@ -67,7 +67,7 @@ func deployedConfig(cfg Config) Config {
 	return cfg
 }
 
-func deployedManifest(manifest *deploymentsv1.Manifest) *deploymentsv1.Manifest {
+func deployedManifest(manifest *contractv1.Manifest) *contractv1.Manifest {
 	apps := manifestApps(manifest)
 	for _, app := range apps {
 		if app.GetDeploymentId() == "" {
@@ -78,12 +78,12 @@ func deployedManifest(manifest *deploymentsv1.Manifest) *deploymentsv1.Manifest 
 	return manifest
 }
 
-func appBuildsFor(t *testing.T, cfg Config, manifest *deploymentsv1.Manifest) appBuilds {
+func appBuildsFor(t *testing.T, cfg Config, manifest *contractv1.Manifest) appBuilds {
 	t.Helper()
 	return bakedBuilds(t, cfg, manifest, nil)
 }
 
-func bakedBuilds(t *testing.T, cfg Config, manifest *deploymentsv1.Manifest, baked map[string]appBundle) appBuilds {
+func bakedBuilds(t *testing.T, cfg Config, manifest *contractv1.Manifest, baked map[string]appBundle) appBuilds {
 	t.Helper()
 	builds, err := resolveAppBuilds(deployedConfig(cfg), deployedManifest(manifest), baked)
 	if err != nil {
@@ -92,7 +92,7 @@ func bakedBuilds(t *testing.T, cfg Config, manifest *deploymentsv1.Manifest, bak
 	return builds
 }
 
-func releaseBuilds(t *testing.T, cfg Config, manifest *deploymentsv1.Manifest, fingerprint string) appBuilds {
+func releaseBuilds(t *testing.T, cfg Config, manifest *contractv1.Manifest, fingerprint string) appBuilds {
 	t.Helper()
 	bundles := map[string]appBundle{}
 	for _, app := range manifestApps(manifest) {
@@ -159,7 +159,7 @@ func TestResolveAppBuilds(t *testing.T) {
 		webID := "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
 		adminID := "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
 		manifest := twoAppManifest()
-		manifest.Apps = []*deploymentsv1.ManifestApp{
+		manifest.Apps = []*contractv1.ManifestApp{
 			{Name: "web", Framework: "next", DeploymentId: webID},
 			{Name: "admin", Framework: "next", DeploymentId: adminID},
 		}
@@ -186,7 +186,7 @@ func TestResolveAppBuilds(t *testing.T) {
 		t.Parallel()
 		cfg := Config{ArtifactRoot: twoAppTree(t), AssetBucket: "assets", StateTable: "state", Env: "prod"}
 		manifest := twoAppManifest()
-		manifest.Apps = []*deploymentsv1.ManifestApp{
+		manifest.Apps = []*contractv1.ManifestApp{
 			{Name: "web", Framework: "next", DeploymentId: testDeploymentID},
 			{Name: "admin", Framework: "next"},
 		}
@@ -203,9 +203,9 @@ func TestResolveAppBuilds(t *testing.T) {
 			"apps/web/routing-manifest.json": `{"buildId":"WEB1"}`,
 		})
 		cfg := Config{ArtifactRoot: root, AssetBucket: "assets", StateTable: "state", Env: "prod"}
-		manifest := &deploymentsv1.Manifest{
+		manifest := &contractv1.Manifest{
 			Slug: "proj",
-			Functions: []*deploymentsv1.ManifestFunction{
+			Functions: []*contractv1.ManifestFunction{
 				{LogicalName: "web_index", Framework: "next", App: "web"},
 				{LogicalName: "api_index", Framework: "express", App: "api"},
 			},
@@ -503,7 +503,7 @@ func TestUploadPrerenderAssets(t *testing.T) {
 		t.Parallel()
 		f := &fakeUploader{exists: map[string]bool{}}
 		cfg := Config{ArtifactRoot: t.TempDir(), AssetBucket: "assets", Env: "prod", Uploader: f}
-		manifest := &deploymentsv1.Manifest{Slug: "proj"}
+		manifest := &contractv1.Manifest{Slug: "proj"}
 
 		if err := uploadPrerenderAssets(context.Background(), cfg, appBuildsFor(t, cfg, manifest)); err != nil {
 			t.Fatalf("uploadPrerenderAssets: %v", err)

@@ -19,12 +19,12 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
 	"github.com/ocelhq/ocel/cli/internal/provision"
 	"github.com/ocelhq/ocel/pkg/naming"
-	"github.com/ocelhq/ocel/pkg/proto/buckets/v1/bucketsv1connect"
-	devv1 "github.com/ocelhq/ocel/pkg/proto/dev/v1"
-	"github.com/ocelhq/ocel/pkg/proto/dev/v1/devv1connect"
-	linksv1 "github.com/ocelhq/ocel/pkg/proto/links/v1"
-	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/resources/v1"
-	"github.com/ocelhq/ocel/pkg/proto/resources/v1/resourcesv1connect"
+	"github.com/ocelhq/ocel/pkg/proto/app/blob/v1/blobv1connect"
+	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
+	"github.com/ocelhq/ocel/pkg/proto/app/resources/v1/resourcesv1connect"
+	linksv1 "github.com/ocelhq/ocel/pkg/proto/common/links/v1"
+	watchv1 "github.com/ocelhq/ocel/pkg/proto/devloop/watch/v1"
+	"github.com/ocelhq/ocel/pkg/proto/devloop/watch/v1/watchv1connect"
 	"google.golang.org/protobuf/encoding/protojson"
 )
 
@@ -164,19 +164,19 @@ func (s *Server) Mux() *http.ServeMux {
 	interceptors := connect.WithInterceptors(validate.NewInterceptor())
 	resourcePath, resourceHandler := resourcesv1connect.NewResourceServiceHandler(s, interceptors)
 	mux.Handle(resourcePath, resourceHandler)
-	devPath, devHandler := devv1connect.NewDevServiceHandler(s, interceptors)
+	devPath, devHandler := watchv1connect.NewDevServiceHandler(s, interceptors)
 	mux.Handle(devPath, devHandler)
-	runtimePath, runtimeHandler := bucketsv1connect.NewBucketServiceHandler(s.runtime, interceptors)
+	runtimePath, runtimeHandler := blobv1connect.NewBucketServiceHandler(s.runtime, interceptors)
 	mux.Handle(runtimePath, runtimeHandler)
 	mux.HandleFunc("/sync", s.handleSync)
 	return mux
 }
 
 func (s *Server) PushEnv(env map[string]string) {
-	s.fanout.push(&devv1.EnvUpdate{Env: env})
+	s.fanout.push(&watchv1.EnvUpdate{Env: env})
 }
 
-func (s *Server) Subscribe(ctx context.Context, _ *devv1.SubscribeRequest, stream *connect.ServerStream[devv1.EnvUpdate]) error {
+func (s *Server) Subscribe(ctx context.Context, _ *watchv1.SubscribeRequest, stream *connect.ServerStream[watchv1.EnvUpdate]) error {
 	ch := s.fanout.subscribe()
 	defer s.fanout.unsubscribe(ch)
 

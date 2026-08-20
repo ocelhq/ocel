@@ -9,10 +9,10 @@ import (
 
 	"github.com/aws/aws-sdk-go-v2/service/secretsmanager"
 
-	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
-	environmentv1 "github.com/ocelhq/ocel/pkg/proto/environment/v1"
-	linksv1 "github.com/ocelhq/ocel/pkg/proto/links/v1"
-	progressv1 "github.com/ocelhq/ocel/pkg/proto/progress/v1"
+	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
+	linksv1 "github.com/ocelhq/ocel/pkg/proto/common/links/v1"
+	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
+	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/platform/aws/provider/transform"
 	"github.com/ocelhq/ocel/platform/aws/provider/vars"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
@@ -130,7 +130,7 @@ type Stages struct {
 	Finalizing   Stage
 }
 
-func AppStages(provisioning Stage, manifest *deploymentsv1.Manifest) (map[string]Stage, []Stage) {
+func AppStages(provisioning Stage, manifest *contractv1.Manifest) (map[string]Stage, []Stage) {
 	apps := manifestApps(manifest)
 	byApp := make(map[string]Stage, len(apps))
 	declared := make([]Stage, 0, len(apps))
@@ -160,11 +160,11 @@ type Result struct {
 	StackState  edge.StackState
 }
 
-func Run(ctx context.Context, cfg Config, manifest *deploymentsv1.Manifest, progress Progress, log func(string)) (Result, error) {
+func Run(ctx context.Context, cfg Config, manifest *contractv1.Manifest, progress Progress, log func(string)) (Result, error) {
 	return realize(ctx, cfg, &Realized{}, manifest, progress, log)
 }
 
-func appURLs(manifest *deploymentsv1.Manifest, functions []*progressv1.FunctionOutput) []string {
+func appURLs(manifest *contractv1.Manifest, functions []*progressv1.FunctionOutput) []string {
 	urlByLogical := make(map[string]string, len(functions))
 	for _, f := range functions {
 		if f.GetUrl() != "" {

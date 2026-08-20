@@ -4,8 +4,8 @@ import (
 	"strings"
 	"testing"
 
-	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
-	environmentv1 "github.com/ocelhq/ocel/pkg/proto/environment/v1"
+	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
+	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 )
 
 func TestPreviewHost(t *testing.T) {
@@ -105,7 +105,7 @@ func TestPreviewHostnames(t *testing.T) {
 	t.Run("resolves the wildcard to the pointer hosts, a single app elides the app label", func(t *testing.T) {
 		t.Parallel()
 		cfg := Config{Tier: environmentv1.Tier_TIER_PREVIEW, Slug: "proj", Identity: "pr-42"}
-		apps := []*deploymentsv1.ManifestApp{{Name: "web"}}
+		apps := []*contractv1.ManifestApp{{Name: "web"}}
 		got, err := previewHostnames(cfg, apps, map[string][]string{"web": {"*.preview.acme.com"}})
 		if err != nil {
 			t.Fatalf("previewHostnames: %v", err)
@@ -121,7 +121,7 @@ func TestPreviewHostnames(t *testing.T) {
 	t.Run("resolves the wildcard to the pointer hosts, two apps qualify the label", func(t *testing.T) {
 		t.Parallel()
 		cfg := Config{Tier: environmentv1.Tier_TIER_PREVIEW, Slug: "proj", Identity: "pr-42"}
-		apps := []*deploymentsv1.ManifestApp{{Name: "web"}, {Name: "api"}}
+		apps := []*contractv1.ManifestApp{{Name: "web"}, {Name: "api"}}
 		declared := map[string][]string{"web": {"*.preview.acme.com"}, "api": {"*.preview.acme.com"}}
 		got, err := previewHostnames(cfg, apps, declared)
 		if err != nil {
@@ -138,7 +138,7 @@ func TestPreviewHostnames(t *testing.T) {
 	t.Run("serves an app that declares nothing under the project wildcard", func(t *testing.T) {
 		t.Parallel()
 		cfg := Config{Tier: environmentv1.Tier_TIER_PREVIEW, Slug: "proj", Identity: "pr-42"}
-		apps := []*deploymentsv1.ManifestApp{{Name: "web"}, {Name: "api"}}
+		apps := []*contractv1.ManifestApp{{Name: "web"}, {Name: "api"}}
 
 		got, err := previewHostnames(cfg, apps, map[string][]string{"web": {"*.preview.acme.com"}})
 		if err != nil {
@@ -152,7 +152,7 @@ func TestPreviewHostnames(t *testing.T) {
 	t.Run("two preview domains in one project are refused", func(t *testing.T) {
 		t.Parallel()
 		cfg := Config{Tier: environmentv1.Tier_TIER_PREVIEW, Slug: "proj", Identity: "pr-42"}
-		apps := []*deploymentsv1.ManifestApp{{Name: "web"}, {Name: "api"}}
+		apps := []*contractv1.ManifestApp{{Name: "web"}, {Name: "api"}}
 		declared := map[string][]string{"web": {"*.preview.acme.com"}, "api": {"*.preview.other.com"}}
 
 		_, err := previewHostnames(cfg, apps, declared)
@@ -171,11 +171,11 @@ func TestResolveWorkerHostnames(t *testing.T) {
 
 	t.Run("production serves its declared hostnames", func(t *testing.T) {
 		t.Parallel()
-		manifest := &deploymentsv1.Manifest{
+		manifest := &contractv1.Manifest{
 			Slug:      "proj",
-			Apps:      []*deploymentsv1.ManifestApp{{Name: "web", Framework: "next"}},
-			Functions: []*deploymentsv1.ManifestFunction{{LogicalName: "web_index", Framework: "next", App: "web", RouteId: "/"}},
-			Domains:   map[string]*deploymentsv1.DomainList{"production": {Hostnames: []string{"acme.com", "www.acme.com"}}},
+			Apps:      []*contractv1.ManifestApp{{Name: "web", Framework: "next"}},
+			Functions: []*contractv1.ManifestFunction{{LogicalName: "web_index", Framework: "next", App: "web", RouteId: "/"}},
+			Domains:   map[string]*contractv1.DomainList{"production": {Hostnames: []string{"acme.com", "www.acme.com"}}},
 		}
 		artifactRoot := t.TempDir()
 		writeRoutingManifest(t, artifactRoot, "web", `{"buildId":"b1"}`)

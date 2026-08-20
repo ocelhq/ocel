@@ -11,9 +11,9 @@ import (
 	connect "connectrpc.com/connect"
 
 	"github.com/ocelhq/ocel/pkg/naming"
-	environmentv1 "github.com/ocelhq/ocel/pkg/proto/environment/v1"
-	envvarsv1 "github.com/ocelhq/ocel/pkg/proto/envvars/v1"
-	linksv1 "github.com/ocelhq/ocel/pkg/proto/links/v1"
+	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
+	linksv1 "github.com/ocelhq/ocel/pkg/proto/common/links/v1"
+	envvarsv1 "github.com/ocelhq/ocel/pkg/proto/provider/envvars/v1"
 )
 
 const linkFakeStoreEnvVar = "OCEL_TEST_FAKE_LINKS_STORE"

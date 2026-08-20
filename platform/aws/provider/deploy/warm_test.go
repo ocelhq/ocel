@@ -13,7 +13,7 @@ import (
 	lambdatypes "github.com/aws/aws-sdk-go-v2/service/lambda/types"
 	"github.com/pulumi/pulumi/sdk/v3/go/auto"
 
-	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
+	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 )
 
 type fakeInvoker struct {
@@ -101,9 +101,9 @@ func (c *capturingInvoker) Invoke(ctx context.Context, in *lambda.InvokeInput, o
 func TestWarmTargets(t *testing.T) {
 	t.Run("only bytecode gated functions", func(t *testing.T) {
 		t.Setenv(bytecodeCacheEnv, "1")
-		manifest := &deploymentsv1.Manifest{
+		manifest := &contractv1.Manifest{
 			Slug: "proj",
-			Functions: []*deploymentsv1.ManifestFunction{
+			Functions: []*contractv1.ManifestFunction{
 				{LogicalName: "web_index", Framework: "next", App: "web"},
 				{LogicalName: "web_api", Framework: "next", App: "web"},
 				{LogicalName: "api_handler", App: "api"},
@@ -127,9 +127,9 @@ func TestWarmTargets(t *testing.T) {
 
 	t.Run("takes a node framework function", func(t *testing.T) {
 		t.Setenv(bytecodeCacheEnv, "1")
-		manifest := &deploymentsv1.Manifest{
+		manifest := &contractv1.Manifest{
 			Slug:      "proj",
-			Functions: []*deploymentsv1.ManifestFunction{{LogicalName: "api_handler", Framework: "express", App: "api"}},
+			Functions: []*contractv1.ManifestFunction{{LogicalName: "api_handler", Framework: "express", App: "api"}},
 		}
 		bytecode := map[string]*bytecodeConfig{"api": {Prefix: "prod/proj/api/API1/bytecode"}}
 
@@ -416,7 +416,7 @@ func TestCollectAppFunctionOutputs(t *testing.T) {
 	t.Run("reads physical names", func(t *testing.T) {
 		t.Parallel()
 
-		functions := []*deploymentsv1.ManifestFunction{
+		functions := []*contractv1.ManifestFunction{
 			{LogicalName: "web_index"},
 			{LogicalName: "web_api"},
 		}

@@ -10,13 +10,13 @@ import (
 
 	"google.golang.org/protobuf/types/known/structpb"
 
-	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
-	linksv1 "github.com/ocelhq/ocel/pkg/proto/links/v1"
+	linksv1 "github.com/ocelhq/ocel/pkg/proto/common/links/v1"
+	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/platform/aws/provider/vars"
 	"github.com/ocelhq/ocel/platform/aws/provider/vars/live"
 )
 
-func consumingManifest() *deploymentsv1.Manifest {
+func consumingManifest() *contractv1.Manifest {
 	manifest := linkedManifest()
 	manifest.GetResources()[0].Linked = true
 	return manifest
@@ -29,7 +29,7 @@ func consumingConfig(published ...string) Config {
 	return cfg
 }
 
-func mustConsume(t *testing.T, cfg Config, manifest *deploymentsv1.Manifest) map[string]Consumed {
+func mustConsume(t *testing.T, cfg Config, manifest *contractv1.Manifest) map[string]Consumed {
 	t.Helper()
 	consumed, err := consumeLinks(context.Background(), cfg, manifest, func(string) {})
 	if err != nil {

@@ -10,11 +10,11 @@ import (
 
 	connect "connectrpc.com/connect"
 
-	bucketsv1 "github.com/ocelhq/ocel/pkg/proto/buckets/v1"
-	"github.com/ocelhq/ocel/pkg/proto/buckets/v1/bucketsv1connect"
+	blobv1 "github.com/ocelhq/ocel/pkg/proto/app/blob/v1"
+	"github.com/ocelhq/ocel/pkg/proto/app/blob/v1/blobv1connect"
 )
 
-func serveRuntime(t *testing.T, handler http.HandlerFunc) bucketsv1connect.BucketServiceClient {
+func serveRuntime(t *testing.T, handler http.HandlerFunc) blobv1connect.BucketServiceClient {
 	t.Helper()
 	api := httptest.NewServer(handler)
 	t.Cleanup(api.Close)
@@ -23,7 +23,7 @@ func serveRuntime(t *testing.T, handler http.HandlerFunc) bucketsv1connect.Bucke
 	ts := httptest.NewServer(s.Mux())
 	t.Cleanup(ts.Close)
 
-	return bucketsv1connect.NewBucketServiceClient(http.DefaultClient, ts.URL)
+	return blobv1connect.NewBucketServiceClient(http.DefaultClient, ts.URL)
 }
 
 func TestPresignUpload(t *testing.T) {
@@ -37,9 +37,9 @@ func TestPresignUpload(t *testing.T) {
 			json.NewEncoder(w).Encode(presignResponseBody{SessionID: "sess_123"})
 		})
 
-		_, err := client.PresignUpload(context.Background(), &bucketsv1.PresignUploadRequest{
+		_, err := client.PresignUpload(context.Background(), &blobv1.PresignUploadRequest{
 			Bucket: "storage",
-			Files: []*bucketsv1.PresignFile{
+			Files: []*blobv1.PresignFile{
 				{Key: "../../etc/passwd", Name: "passwd", Size: 1, MimeType: "text/plain"},
 			},
 		})
@@ -73,9 +73,9 @@ func TestPresignUpload(t *testing.T) {
 			})
 		})
 
-		resp, err := client.PresignUpload(context.Background(), &bucketsv1.PresignUploadRequest{
+		resp, err := client.PresignUpload(context.Background(), &blobv1.PresignUploadRequest{
 			Bucket: "storage",
-			Files: []*bucketsv1.PresignFile{
+			Files: []*blobv1.PresignFile{
 				{Key: "a.png", Name: "a.png", Size: 2048, MimeType: "image/png"},
 			},
 			Metadata:           []byte(`{"uploader":"avatar"}`),
@@ -125,9 +125,9 @@ func TestPresignUpload(t *testing.T) {
 			http.Error(w, "unauthorized", http.StatusUnauthorized)
 		})
 
-		_, err := client.PresignUpload(context.Background(), &bucketsv1.PresignUploadRequest{
+		_, err := client.PresignUpload(context.Background(), &blobv1.PresignUploadRequest{
 			Bucket: "storage",
-			Files:  []*bucketsv1.PresignFile{{Key: "a.png", Name: "a.png", Size: 1, MimeType: "image/png"}},
+			Files:  []*blobv1.PresignFile{{Key: "a.png", Name: "a.png", Size: 1, MimeType: "image/png"}},
 		})
 		if err == nil {
 			t.Fatal("PresignUpload: expected error on API 401, got nil")
@@ -150,10 +150,10 @@ func TestVerifyUploadSignature(t *testing.T) {
 			json.NewEncoder(w).Encode(verifyResponseBody{Valid: true, Metadata: rawMetadata})
 		})
 
-		resp, err := client.VerifyUploadSignature(context.Background(), &bucketsv1.VerifyUploadSignatureRequest{
+		resp, err := client.VerifyUploadSignature(context.Background(), &blobv1.VerifyUploadSignatureRequest{
 			SessionId: "sess_1",
 			Signature: "sig",
-			File:      &bucketsv1.CompletedFile{Key: "org/proj/user/a.png", Name: "a.png", Size: 3, MimeType: "image/png"},
+			File:      &blobv1.CompletedFile{Key: "org/proj/user/a.png", Name: "a.png", Size: 3, MimeType: "image/png"},
 		})
 		if err != nil {
 			t.Fatalf("VerifyUploadSignature: %v", err)
@@ -175,8 +175,8 @@ func TestVerifyUploadSignature(t *testing.T) {
 			http.Error(w, "boom", http.StatusInternalServerError)
 		})
 
-		_, err := client.VerifyUploadSignature(context.Background(), &bucketsv1.VerifyUploadSignatureRequest{
-			SessionId: "s", File: &bucketsv1.CompletedFile{Key: "k"},
+		_, err := client.VerifyUploadSignature(context.Background(), &blobv1.VerifyUploadSignatureRequest{
+			SessionId: "s", File: &blobv1.CompletedFile{Key: "k"},
 		})
 		if err == nil {
 			t.Fatal("expected error on API 500, got nil")
@@ -198,14 +198,14 @@ func TestGetUploadStatus(t *testing.T) {
 			json.NewEncoder(w).Encode(statusResponseBody{State: "succeeded"})
 		})
 
-		resp, err := client.GetUploadStatus(context.Background(), &bucketsv1.GetUploadStatusRequest{SessionId: "sess_9"})
+		resp, err := client.GetUploadStatus(context.Background(), &blobv1.GetUploadStatusRequest{SessionId: "sess_9"})
 		if err != nil {
 			t.Fatalf("GetUploadStatus: %v", err)
 		}
 		if gotPath != "/api/blob/status" || gotQuery != "sess_9" {
 			t.Fatalf("forwarded path/query = %q/%q", gotPath, gotQuery)
 		}
-		if resp.GetState() != bucketsv1.UploadState_UPLOAD_STATE_SUCCEEDED {
+		if resp.GetState() != blobv1.UploadState_UPLOAD_STATE_SUCCEEDED {
 			t.Fatalf("state = %v, want SUCCEEDED", resp.GetState())
 		}
 	})

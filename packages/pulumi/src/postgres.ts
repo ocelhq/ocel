@@ -1,7 +1,7 @@
 import { source } from "./cli.js";
 import { scoped, type Grant } from "./grants.js";
 
-/** The typed properties a postgres link carries, as `links.v1.PostgresProperties`. */
+/** The typed properties a postgres link carries, as `common.links.v1.PostgresProperties`. */
 export interface PostgresProperties {
   host: string;
   port: number;
@@ -10,7 +10,7 @@ export interface PostgresProperties {
   password: string;
 }
 
-/** One `links.v1.Link` holding postgres properties, ready for protobuf JSON. */
+/** One `common.links.v1.Link` holding postgres properties, ready for protobuf JSON. */
 export interface PostgresLink {
   name: string;
   postgres: PostgresProperties;

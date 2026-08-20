@@ -4,7 +4,7 @@ import (
 	"context"
 	"sync"
 
-	progressv1 "github.com/ocelhq/ocel/pkg/proto/progress/v1"
+	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
 	"github.com/ocelhq/ocel/platform/aws/provider/deploy"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )

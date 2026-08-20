@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"strings"
 
-	progressv1 "github.com/ocelhq/ocel/pkg/proto/progress/v1"
+	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
 )
 
 const (

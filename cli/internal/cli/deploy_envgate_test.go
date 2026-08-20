@@ -21,7 +21,7 @@ declare global {
 globalThis.__ocelRegister ??= [];
 
 const call = async (method: string, body: unknown) => {
-  const res = await fetch(new URL("/resources.v1.ResourceService/" + method, process.env.OCEL_DEV_SERVER), {
+  const res = await fetch(new URL("/app.resources.v1.ResourceService/" + method, process.env.OCEL_DEV_SERVER), {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),
@@ -61,7 +61,7 @@ globalThis.__ocelRegister ??= [];
 
 globalThis.__ocelRegister.push(
   (async () => {
-    const res = await fetch(new URL("/resources.v1.ResourceService/DeclareEnv", process.env.OCEL_DEV_SERVER), {
+    const res = await fetch(new URL("/app.resources.v1.ResourceService/DeclareEnv", process.env.OCEL_DEV_SERVER), {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ definitions: JSON.parse(process.env.OCEL_TEST_ENV_DEFINITIONS!) }),

@@ -11,7 +11,7 @@ import (
 	"testing"
 	"time"
 
-	progressv1 "github.com/ocelhq/ocel/pkg/proto/progress/v1"
+	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
 )
 
 func u32(n uint32) *uint32 { return &n }

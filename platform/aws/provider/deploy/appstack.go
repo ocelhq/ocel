@@ -7,15 +7,15 @@ import (
 	"github.com/pulumi/pulumi/sdk/v3/go/pulumi"
 
 	"github.com/ocelhq/ocel/pkg/naming"
-	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
+	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/platform/aws/provider/payloads"
 )
 
 type appStackFunctions struct {
 	Project   string
 	Stack     naming.StackName
-	Functions []*deploymentsv1.ManifestFunction
-	Args      func(*deploymentsv1.ManifestFunction) functionArgs
+	Functions []*contractv1.ManifestFunction
+	Args      func(*contractv1.ManifestFunction) functionArgs
 	Artifacts map[string]artifactRef
 	Env       map[string]string
 	ISR       *isrConfig
@@ -34,7 +34,7 @@ func (a appStackFunctions) register(ctx *pulumi.Context) error {
 	}
 	siblings := pulumi.StringMap{}
 	var arns []pulumi.StringInput
-	var entry *deploymentsv1.ManifestFunction
+	var entry *contractv1.ManifestFunction
 	for _, fn := range a.Functions {
 		if a.Router.hosts(fn) || a.Guard.hosts(fn) {
 			entry = fn
@@ -94,7 +94,7 @@ func (a appStackFunctions) grantInvoke(ctx *pulumi.Context, arns []pulumi.String
 
 func (a appStackFunctions) declare(
 	ctx *pulumi.Context,
-	fn *deploymentsv1.ManifestFunction,
+	fn *contractv1.ManifestFunction,
 	layerARN pulumi.StringInput,
 	env map[string]string,
 	resolved map[string]pulumi.StringInput,

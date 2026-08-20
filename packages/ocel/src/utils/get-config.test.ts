@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from "vitest";
-import { LinkType } from "../gen/proto/links/v1/links_pb.js";
+import { LinkType } from "../gen/proto/common/links/v1/links_pb.js";
 import {
   getConfig,
   getRuntimeAddress,

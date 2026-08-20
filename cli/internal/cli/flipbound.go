@@ -5,7 +5,7 @@ import (
 	"strconv"
 
 	"github.com/ocelhq/ocel/cli/internal/deployui"
-	progressv1 "github.com/ocelhq/ocel/pkg/proto/progress/v1"
+	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
 )
 
 func flipFor(bound *progressv1.FlipBound) deployui.Flip {

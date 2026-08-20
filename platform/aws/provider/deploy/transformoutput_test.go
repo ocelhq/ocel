@@ -13,19 +13,19 @@ import (
 
 	"google.golang.org/protobuf/types/known/structpb"
 
-	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
-	environmentv1 "github.com/ocelhq/ocel/pkg/proto/environment/v1"
-	linksv1 "github.com/ocelhq/ocel/pkg/proto/links/v1"
-	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/resources/v1"
+	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
+	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
+	linksv1 "github.com/ocelhq/ocel/pkg/proto/common/links/v1"
+	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/platform/aws/provider/transform"
 	"github.com/ocelhq/ocel/platform/aws/provider/transform/transformtest"
 	"github.com/ocelhq/ocel/platform/aws/provider/vars"
 )
 
-func outputManifest() *deploymentsv1.Manifest {
-	return &deploymentsv1.Manifest{
+func outputManifest() *contractv1.Manifest {
+	return &contractv1.Manifest{
 		Slug:      "shop",
-		Functions: []*deploymentsv1.ManifestFunction{{LogicalName: "fn--api--users", App: "api"}},
+		Functions: []*contractv1.ManifestFunction{{LogicalName: "fn--api--users", App: "api"}},
 	}
 }
 
@@ -256,10 +256,10 @@ func TestResolveOutputs(t *testing.T) {
 		t.Parallel()
 
 		manifest := outputManifest()
-		manifest.Resources = []*deploymentsv1.ManifestResource{{
+		manifest.Resources = []*contractv1.ManifestResource{{
 			LogicalName: "network",
 			Resource:    &resourcesv1.ResourceIdentifier{Type: linksv1.LinkType_LINK_TYPE_BUCKET, Name: "network"},
-			Config:      &deploymentsv1.ManifestResource_Bucket{Bucket: &resourcesv1.BucketConfig{}},
+			Config:      &contractv1.ManifestResource_Bucket{Bucket: &resourcesv1.BucketConfig{}},
 		}}
 		store := customNetworkStore(t, map[string]any{"subnetIds": []any{"subnet-a"}})
 		fake := &fakeEvaluator{out: []transform.Surfaces{
@@ -291,11 +291,11 @@ func TestResolveOutputs(t *testing.T) {
 		t.Parallel()
 
 		manifest := outputManifest()
-		manifest.Resources = []*deploymentsv1.ManifestResource{{
+		manifest.Resources = []*contractv1.ManifestResource{{
 			LogicalName: "network",
 			Linked:      true,
 			Resource:    &resourcesv1.ResourceIdentifier{Type: linksv1.LinkType_LINK_TYPE_BUCKET, Name: "network"},
-			Config:      &deploymentsv1.ManifestResource_Bucket{Bucket: &resourcesv1.BucketConfig{}},
+			Config:      &contractv1.ManifestResource_Bucket{Bucket: &resourcesv1.BucketConfig{}},
 		}}
 		store := customNetworkStore(t, map[string]any{"subnetIds": []any{"subnet-a"}})
 		fake := &fakeEvaluator{out: []transform.Surfaces{
@@ -504,7 +504,7 @@ func TestVPCPlacementCannotBeSmuggledThroughPostgresProperties(t *testing.T) {
 func TestFunctionOutsideAVPCRendersNoVPCConfig(t *testing.T) {
 	t.Parallel()
 
-	args := translateFunction(&deploymentsv1.ManifestFunction{})
+	args := translateFunction(&contractv1.ManifestFunction{})
 	rec := &inputRecorder{}
 	program := func(pctx *pulumi.Context) error {
 		role, err := newFunctionRole(pctx, roleCoordinate("shop", testStack(t, "prod", "api")), executionRole{App: "api", VPCAccess: args.VPC.placed()})

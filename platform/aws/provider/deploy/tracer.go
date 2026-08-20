@@ -8,7 +8,7 @@ import (
 	"strings"
 	"time"
 
-	progressv1 "github.com/ocelhq/ocel/pkg/proto/progress/v1"
+	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
 )
 
 type StageID [8]byte

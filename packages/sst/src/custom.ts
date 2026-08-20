@@ -1,6 +1,6 @@
 import { source } from "./cli.js";
 
-/** One `links.v1.Link` holding a custom record's open properties, ready for protobuf JSON. */
+/** One `common.links.v1.Link` holding a custom record's open properties, ready for protobuf JSON. */
 export interface CustomLink {
   name: string;
   custom: Record<string, unknown>;

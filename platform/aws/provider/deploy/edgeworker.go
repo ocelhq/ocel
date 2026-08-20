@@ -12,9 +12,9 @@ import (
 	"strings"
 
 	"github.com/ocelhq/ocel/pkg/naming"
-	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
-	environmentv1 "github.com/ocelhq/ocel/pkg/proto/environment/v1"
-	progressv1 "github.com/ocelhq/ocel/pkg/proto/progress/v1"
+	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
+	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
+	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
@@ -22,23 +22,23 @@ func workerOutputName(app string) string {
 	return naming.Join(naming.WordSeparator, app, string(naming.KindWorker))
 }
 
-func manifestApps(manifest *deploymentsv1.Manifest) []*deploymentsv1.ManifestApp {
+func manifestApps(manifest *contractv1.Manifest) []*contractv1.ManifestApp {
 	if apps := manifest.GetApps(); len(apps) > 0 {
 		return apps
 	}
-	var apps []*deploymentsv1.ManifestApp
+	var apps []*contractv1.ManifestApp
 	seen := map[string]bool{}
 	for _, fn := range manifest.GetFunctions() {
 		if name := fn.GetApp(); !seen[name] {
 			seen[name] = true
-			apps = append(apps, &deploymentsv1.ManifestApp{Name: name, Framework: fn.GetFramework()})
+			apps = append(apps, &contractv1.ManifestApp{Name: name, Framework: fn.GetFramework()})
 		}
 	}
 	return apps
 }
 
-func workerApps(artifactRoot string, manifest *deploymentsv1.Manifest) []*deploymentsv1.ManifestApp {
-	var apps []*deploymentsv1.ManifestApp
+func workerApps(artifactRoot string, manifest *contractv1.Manifest) []*contractv1.ManifestApp {
+	var apps []*contractv1.ManifestApp
 	for _, app := range manifestApps(manifest) {
 		if isEdgeServed(artifactRoot, app.GetName()) && len(appRoutes(manifest.GetFunctions(), app)) > 0 {
 			apps = append(apps, app)
@@ -67,7 +67,7 @@ func readServeDescriptor(artifactRoot, app string) (edge.ServeDescriptor, bool, 
 	return desc, true, nil
 }
 
-func appRoutes(functions []*deploymentsv1.ManifestFunction, app *deploymentsv1.ManifestApp) []string {
+func appRoutes(functions []*contractv1.ManifestFunction, app *contractv1.ManifestApp) []string {
 	var routes []string
 	for _, fn := range functions {
 		if fn.GetApp() == app.GetName() && fn.GetFramework() == app.GetFramework() {
@@ -85,7 +85,7 @@ func appArtifactRoot(artifactRoot, app string) string {
 	return filepath.Join(artifactRoot, appsDirName, app)
 }
 
-func routeID(fn *deploymentsv1.ManifestFunction) string {
+func routeID(fn *contractv1.ManifestFunction) string {
 	if id := fn.GetRouteId(); id != "" {
 		return id
 	}
@@ -100,7 +100,7 @@ func functionURLsByLogicalName(functions []*progressv1.FunctionOutput) map[strin
 	return urls
 }
 
-func appFunctionURLsByRoute(functions []*deploymentsv1.ManifestFunction, app string, urlByLogical map[string]string) map[string]string {
+func appFunctionURLsByRoute(functions []*contractv1.ManifestFunction, app string, urlByLogical map[string]string) map[string]string {
 	result := make(map[string]string)
 	for _, fn := range functions {
 		if fn.GetApp() != app {
@@ -113,7 +113,7 @@ func appFunctionURLsByRoute(functions []*deploymentsv1.ManifestFunction, app str
 	return result
 }
 
-func DeclaredHostnames(manifest *deploymentsv1.Manifest, tier environmentv1.Tier) []string {
+func DeclaredHostnames(manifest *contractv1.Manifest, tier environmentv1.Tier) []string {
 	key := domainClassKeyFor(tier)
 	var hosts []string
 	add := func(names []string) {
@@ -137,7 +137,7 @@ func domainClassKeyFor(tier environmentv1.Tier) string {
 	return "production"
 }
 
-func workerDomains(cfg Config, manifest *deploymentsv1.Manifest, apps []*deploymentsv1.ManifestApp) (map[string][]string, error) {
+func workerDomains(cfg Config, manifest *contractv1.Manifest, apps []*contractv1.ManifestApp) (map[string][]string, error) {
 	if cfg.Tier != environmentv1.Tier_TIER_PRODUCTION &&
 		cfg.Tier != environmentv1.Tier_TIER_PREVIEW {
 		return nil, nil

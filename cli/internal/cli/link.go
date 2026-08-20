@@ -18,8 +18,8 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
 	"github.com/ocelhq/ocel/cli/internal/providerrunner"
 	"github.com/ocelhq/ocel/pkg/naming"
-	envvarsv1 "github.com/ocelhq/ocel/pkg/proto/envvars/v1"
-	linksv1 "github.com/ocelhq/ocel/pkg/proto/links/v1"
+	linksv1 "github.com/ocelhq/ocel/pkg/proto/common/links/v1"
+	envvarsv1 "github.com/ocelhq/ocel/pkg/proto/provider/envvars/v1"
 )
 
 const defaultLinkOwner = "cli"
@@ -56,7 +56,7 @@ var linkSetCmd = &cobra.Command{
 	Use:   "set",
 	Short: "Publish one link, read as JSON on stdin",
 	Long: "Publish one link, read as JSON on stdin.\n\n" +
-		"The link is a links.v1.Link in protobuf JSON, and it carries its own name, so " +
+		"The link is a common.links.v1.Link in protobuf JSON, and it carries its own name, so " +
 		"there is nothing to name on the command line:\n\n" +
 		"  ocel link set < link.json\n\n" +
 		"A name belongs to whoever published it. Publishing over a name another publisher " +

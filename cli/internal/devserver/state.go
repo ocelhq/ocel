@@ -7,8 +7,8 @@ import (
 
 	"github.com/ocelhq/ocel/cli/internal/envgate"
 	"github.com/ocelhq/ocel/cli/internal/provision"
-	devv1 "github.com/ocelhq/ocel/pkg/proto/dev/v1"
-	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/resources/v1"
+	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
+	watchv1 "github.com/ocelhq/ocel/pkg/proto/devloop/watch/v1"
 )
 
 type envState struct {
@@ -127,15 +127,15 @@ func (c *configCache) held() (provision.ProjectConfig, bool) {
 
 type envFanout struct {
 	mu          sync.Mutex
-	latest      *devv1.EnvUpdate
-	subscribers map[chan *devv1.EnvUpdate]struct{}
+	latest      *watchv1.EnvUpdate
+	subscribers map[chan *watchv1.EnvUpdate]struct{}
 }
 
 func newEnvFanout() *envFanout {
-	return &envFanout{subscribers: make(map[chan *devv1.EnvUpdate]struct{})}
+	return &envFanout{subscribers: make(map[chan *watchv1.EnvUpdate]struct{})}
 }
 
-func (f *envFanout) push(update *devv1.EnvUpdate) {
+func (f *envFanout) push(update *watchv1.EnvUpdate) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.latest = update
@@ -147,8 +147,8 @@ func (f *envFanout) push(update *devv1.EnvUpdate) {
 	}
 }
 
-func (f *envFanout) subscribe() chan *devv1.EnvUpdate {
-	ch := make(chan *devv1.EnvUpdate, 1)
+func (f *envFanout) subscribe() chan *watchv1.EnvUpdate {
+	ch := make(chan *watchv1.EnvUpdate, 1)
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	if f.latest != nil {
@@ -158,7 +158,7 @@ func (f *envFanout) subscribe() chan *devv1.EnvUpdate {
 	return ch
 }
 
-func (f *envFanout) unsubscribe(ch chan *devv1.EnvUpdate) {
+func (f *envFanout) unsubscribe(ch chan *watchv1.EnvUpdate) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	delete(f.subscribers, ch)

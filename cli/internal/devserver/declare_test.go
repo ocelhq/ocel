@@ -9,8 +9,8 @@ import (
 
 	connect "connectrpc.com/connect"
 
-	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/resources/v1"
-	"github.com/ocelhq/ocel/pkg/proto/resources/v1/resourcesv1connect"
+	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
+	"github.com/ocelhq/ocel/pkg/proto/app/resources/v1/resourcesv1connect"
 )
 
 func serveResources(t *testing.T) resourcesv1connect.ResourceServiceClient {

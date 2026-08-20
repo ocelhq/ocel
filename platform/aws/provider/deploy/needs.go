@@ -6,7 +6,7 @@ import (
 	"slices"
 	"strings"
 
-	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
+	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
@@ -129,7 +129,7 @@ func (r needRecords) forApp(app string) (needs, inEffect, waived []edge.Need) {
 	return rec.needs, rec.inEffect, rec.waived
 }
 
-func checkNeeds(ctx context.Context, cfg Config, manifest *deploymentsv1.Manifest) (needRecords, error) {
+func checkNeeds(ctx context.Context, cfg Config, manifest *contractv1.Manifest) (needRecords, error) {
 	if cfg.Edge == nil {
 		return nil, nil
 	}

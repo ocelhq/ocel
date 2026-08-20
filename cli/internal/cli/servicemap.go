@@ -5,12 +5,12 @@ import (
 
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
 	"github.com/ocelhq/ocel/cli/internal/servicemap"
-	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
-	environmentv1 "github.com/ocelhq/ocel/pkg/proto/environment/v1"
-	linksv1 "github.com/ocelhq/ocel/pkg/proto/links/v1"
+	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
+	linksv1 "github.com/ocelhq/ocel/pkg/proto/common/links/v1"
+	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 )
 
-func publishServiceMap(cfg *projectconfig.Config, manifest *deploymentsv1.Manifest, env *environmentv1.Environment, tag, promotionID string, links []*linksv1.Link) error {
+func publishServiceMap(cfg *projectconfig.Config, manifest *contractv1.Manifest, env *environmentv1.Environment, tag, promotionID string, links []*linksv1.Link) error {
 	record := servicemap.Derive(servicemap.Deploy{
 		Slug: cfg.Slug,
 		Environment: servicemap.Environment{

@@ -15,7 +15,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
 	"github.com/ocelhq/ocel/cli/internal/providerrunner"
 	"github.com/ocelhq/ocel/cli/internal/varsui"
-	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
+	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 )
 
 type gateRecovery struct {
@@ -32,7 +32,7 @@ type gateRecovery struct {
 	enabled bool
 }
 
-func (r gateRecovery) buildManifest(ctx context.Context, prebuilt bool) (*deploymentsv1.Manifest, error) {
+func (r gateRecovery) buildManifest(ctx context.Context, prebuilt bool) (*contractv1.Manifest, error) {
 	run := obs.FromContext(ctx)
 	for attempt := 0; ; attempt++ {
 		gate := r.newGate()

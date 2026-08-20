@@ -15,8 +15,8 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
 	"github.com/ocelhq/ocel/cli/internal/providerrunner"
 	"github.com/ocelhq/ocel/cli/node"
-	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
-	environmentv1 "github.com/ocelhq/ocel/pkg/proto/environment/v1"
+	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
+	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 )
 
 type bootstrapOptions struct {
@@ -112,7 +112,7 @@ func runBootstrap(ctx context.Context, d deps, cwd string, opts bootstrapOptions
 		if err != nil {
 			return err
 		}
-		described, err := client.DescribeBootstrap(ctx, &deploymentsv1.DescribeBootstrapRequest{
+		described, err := client.DescribeBootstrap(ctx, &contractv1.DescribeBootstrapRequest{
 			Tier: tier,
 		})
 		if err != nil {
@@ -162,7 +162,7 @@ func runBootstrap(ctx context.Context, d deps, cwd string, opts bootstrapOptions
 			}
 		}
 
-		req := &deploymentsv1.BootstrapRequest{
+		req := &contractv1.BootstrapRequest{
 			Tier:     tier,
 			Features: requested,
 			Force:    force,
@@ -179,7 +179,7 @@ func runBootstrap(ctx context.Context, d deps, cwd string, opts bootstrapOptions
 	return nil
 }
 
-func chooseFeatures(ctx context.Context, opts bootstrapOptions, catalogue []*deploymentsv1.Feature, interactive bool, stdout io.Writer, stdin io.Reader) ([]string, bool, error) {
+func chooseFeatures(ctx context.Context, opts bootstrapOptions, catalogue []*contractv1.Feature, interactive bool, stdout io.Writer, stdin io.Reader) ([]string, bool, error) {
 	if opts.declared {
 		requested, err := parseFeatureFlag(opts.features, catalogue)
 		return requested, err == nil, err
@@ -248,7 +248,7 @@ func runBootstrapDestroy(ctx context.Context, d deps, cfg *projectconfig.Config,
 		}
 
 		spinner := deployui.StartSpinner(stdout, "Enumerating what would be removed")
-		plan, err := client.PlanRemoveSubstrate(ctx, &deploymentsv1.PlanRemoveSubstrateRequest{
+		plan, err := client.PlanRemoveSubstrate(ctx, &contractv1.PlanRemoveSubstrateRequest{
 			Tier: tier,
 			Edge: edgeSelection(cfg),
 		})
@@ -268,7 +268,7 @@ func runBootstrapDestroy(ctx context.Context, d deps, cfg *projectconfig.Config,
 			}
 		}
 
-		req := &deploymentsv1.RemoveSubstrateRequest{
+		req := &contractv1.RemoveSubstrateRequest{
 			Tier: tier,
 			Edge: edgeSelection(cfg),
 		}
@@ -291,16 +291,16 @@ func bootstrapDestroyCommand(preview bool) string {
 	return "ocel bootstrap --destroy"
 }
 
-func printTeardownPlan(out io.Writer, substrate string, plan *deploymentsv1.PlanRemoveSubstrateResponse) {
+func printTeardownPlan(out io.Writer, substrate string, plan *contractv1.PlanRemoveSubstrateResponse) {
 	header := fmt.Sprintf("This will permanently remove the %s substrate of this account", substrate)
 	if kind := plan.GetEdgeKind(); kind != "" {
 		header += fmt.Sprintf(", fronted by the %s edge", kind)
 	}
 	fmt.Fprintf(out, "%s:\n", header)
 
-	var kept []*deploymentsv1.RemovalItem
+	var kept []*contractv1.RemovalItem
 	for _, item := range plan.GetItems() {
-		if item.GetAction() == deploymentsv1.RemovalItem_ACTION_KEEP {
+		if item.GetAction() == contractv1.RemovalItem_ACTION_KEEP {
 			kept = append(kept, item)
 			continue
 		}

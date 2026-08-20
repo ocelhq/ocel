@@ -15,7 +15,7 @@ import (
 	"google.golang.org/protobuf/proto"
 
 	"github.com/ocelhq/ocel/pkg/naming"
-	linksv1 "github.com/ocelhq/ocel/pkg/proto/links/v1"
+	linksv1 "github.com/ocelhq/ocel/pkg/proto/common/links/v1"
 	"github.com/ocelhq/ocel/platform/aws/provider/vars"
 )
 
@@ -28,7 +28,7 @@ func (s stubSecrets) GetSecretValue(_ context.Context, in *secretsmanager.GetSec
 
 func fixtureDir(t *testing.T) string {
 	t.Helper()
-	return filepath.Join(repoRoot(t), "proto", "links", "v1", "fixtures")
+	return filepath.Join(repoRoot(t), "proto", "common", "links", "v1", "fixtures")
 }
 
 func fixtureFile(typ linksv1.LinkType) string {
@@ -49,7 +49,7 @@ func linkFixture(t *testing.T, typ linksv1.LinkType) *linksv1.Link {
 	t.Helper()
 	link := &linksv1.Link{}
 	if err := protojson.Unmarshal(fixtureBytes(t, typ), link); err != nil {
-		t.Fatalf("link fixture %s is not a links.v1.Link: %v", fixtureFile(typ), err)
+		t.Fatalf("link fixture %s is not a common.links.v1.Link: %v", fixtureFile(typ), err)
 	}
 	return link
 }

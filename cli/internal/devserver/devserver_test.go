@@ -14,11 +14,11 @@ import (
 
 	"github.com/ocelhq/ocel/cli/internal/manifest"
 	"github.com/ocelhq/ocel/cli/internal/provision"
-	devv1 "github.com/ocelhq/ocel/pkg/proto/dev/v1"
-	"github.com/ocelhq/ocel/pkg/proto/dev/v1/devv1connect"
-	linksv1 "github.com/ocelhq/ocel/pkg/proto/links/v1"
-	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/resources/v1"
-	"github.com/ocelhq/ocel/pkg/proto/resources/v1/resourcesv1connect"
+	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
+	"github.com/ocelhq/ocel/pkg/proto/app/resources/v1/resourcesv1connect"
+	linksv1 "github.com/ocelhq/ocel/pkg/proto/common/links/v1"
+	watchv1 "github.com/ocelhq/ocel/pkg/proto/devloop/watch/v1"
+	"github.com/ocelhq/ocel/pkg/proto/devloop/watch/v1/watchv1connect"
 	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/proto"
 )
@@ -396,10 +396,10 @@ func TestSubscribe(t *testing.T) {
 		s.PushEnv(map[string]string{"INITIAL": "1"})
 		url := serve(t, s)
 
-		client := devv1connect.NewDevServiceClient(http.DefaultClient, url)
+		client := watchv1connect.NewDevServiceClient(http.DefaultClient, url)
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
-		stream, err := client.Subscribe(ctx, &devv1.SubscribeRequest{})
+		stream, err := client.Subscribe(ctx, &watchv1.SubscribeRequest{})
 		if err != nil {
 			t.Fatalf("Subscribe: %v", err)
 		}
@@ -426,10 +426,10 @@ func TestSubscribe(t *testing.T) {
 		s.PushEnv(map[string]string{"FOO": "bar"})
 		url := serve(t, s)
 
-		client := devv1connect.NewDevServiceClient(http.DefaultClient, url)
+		client := watchv1connect.NewDevServiceClient(http.DefaultClient, url)
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
-		stream, err := client.Subscribe(ctx, &devv1.SubscribeRequest{})
+		stream, err := client.Subscribe(ctx, &watchv1.SubscribeRequest{})
 		if err != nil {
 			t.Fatalf("Subscribe: %v", err)
 		}

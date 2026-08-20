@@ -6,7 +6,7 @@ import (
 	"sync"
 
 	"github.com/ocelhq/ocel/cli/internal/envgate"
-	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/resources/v1"
+	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
 )
 
 type flatValues struct {

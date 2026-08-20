@@ -14,7 +14,7 @@ import (
 	"github.com/pulumi/pulumi/sdk/v3/go/pulumi"
 
 	"github.com/ocelhq/ocel/pkg/naming"
-	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
+	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
@@ -41,7 +41,7 @@ type routerHost struct {
 	Env               map[string]string
 }
 
-func (h *routerHost) hosts(fn *deploymentsv1.ManifestFunction) bool {
+func (h *routerHost) hosts(fn *contractv1.ManifestFunction) bool {
 	return h != nil && routeID(fn) == h.Entry
 }
 
@@ -56,7 +56,7 @@ func withOverlay(base, extra map[string][]byte) map[string][]byte {
 	return merged
 }
 
-func resolveRouterHost(cfg Config, app *deploymentsv1.ManifestApp, coord naming.Coordinate, deploymentID string) (*routerHost, error) {
+func resolveRouterHost(cfg Config, app *contractv1.ManifestApp, coord naming.Coordinate, deploymentID string) (*routerHost, error) {
 	if cfg.Edge == nil {
 		return nil, nil
 	}
@@ -117,7 +117,7 @@ func (h *routerHost) entryEnv(base map[string]string) map[string]string {
 	return env
 }
 
-func (h *routerHost) plannedEntryEnv(base map[string]string, functions []*deploymentsv1.ManifestFunction) map[string]string {
+func (h *routerHost) plannedEntryEnv(base map[string]string, functions []*contractv1.ManifestFunction) map[string]string {
 	env := h.entryEnv(base)
 	size := len("{}")
 	for _, fn := range functions {

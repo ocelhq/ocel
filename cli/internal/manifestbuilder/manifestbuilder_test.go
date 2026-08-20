@@ -9,9 +9,9 @@ import (
 	"testing"
 
 	"github.com/ocelhq/ocel/pkg/naming"
-	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
-	linksv1 "github.com/ocelhq/ocel/pkg/proto/links/v1"
-	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/resources/v1"
+	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
+	linksv1 "github.com/ocelhq/ocel/pkg/proto/common/links/v1"
+	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 )
 
 const goldenPath = "testdata/golden_manifest.json"
@@ -44,7 +44,7 @@ type goldenPostgres struct {
 	Version string `json:"version"`
 }
 
-func toGolden(m *deploymentsv1.Manifest) goldenManifest {
+func toGolden(m *contractv1.Manifest) goldenManifest {
 	g := goldenManifest{SchemaVersion: m.GetSchemaVersion(), Slug: m.GetSlug()}
 	for _, r := range m.GetResources() {
 		gr := goldenResource{
@@ -70,7 +70,7 @@ func toGolden(m *deploymentsv1.Manifest) goldenManifest {
 	return g
 }
 
-func marshal(t *testing.T, m *deploymentsv1.Manifest) []byte {
+func marshal(t *testing.T, m *contractv1.Manifest) []byte {
 	t.Helper()
 	out, err := json.MarshalIndent(toGolden(m), "", "  ")
 	if err != nil {
@@ -575,7 +575,7 @@ func TestBuild(t *testing.T) {
 			t.Fatalf("Build: %v", err)
 		}
 
-		byName := map[string][]*deploymentsv1.ManifestVariable{}
+		byName := map[string][]*contractv1.ManifestVariable{}
 		for _, app := range manifest.GetApps() {
 			byName[app.GetName()] = app.GetVariables()
 		}

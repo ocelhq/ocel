@@ -11,9 +11,9 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/naming"
 
-	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
-	environmentv1 "github.com/ocelhq/ocel/pkg/proto/environment/v1"
-	progressv1 "github.com/ocelhq/ocel/pkg/proto/progress/v1"
+	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
+	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
+	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/platform/aws/provider/bootstrap"
 	"github.com/ocelhq/ocel/platform/aws/provider/certs"
 	"github.com/ocelhq/ocel/platform/aws/provider/deploy"
@@ -21,7 +21,7 @@ import (
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
-func (s *Server) PlanRemoveProject(ctx context.Context, req *deploymentsv1.PlanRemoveProjectRequest) (*deploymentsv1.PlanRemoveProjectResponse, error) {
+func (s *Server) PlanRemoveProject(ctx context.Context, req *contractv1.PlanRemoveProjectRequest) (*contractv1.PlanRemoveProjectResponse, error) {
 	opts := s.config.get()
 
 	edgeFront, err := s.edge(requestedEdge(req), opts.Region)
@@ -68,7 +68,7 @@ func (s *Server) PlanRemoveProject(ctx context.Context, req *deploymentsv1.PlanR
 		return nil, err
 	}
 	appStacks := stackNames(plan.AppStacks)
-	return &deploymentsv1.PlanRemoveProjectResponse{
+	return &contractv1.PlanRemoveProjectResponse{
 		AppStacks:       appStacks,
 		InfraStacks:     infraStacks,
 		EdgeStack:       edgeStack,
@@ -76,11 +76,11 @@ func (s *Server) PlanRemoveProject(ctx context.Context, req *deploymentsv1.PlanR
 	}, nil
 }
 
-func nothingToRemove(indexed bool, edgeStack *deploymentsv1.EdgeStackPlan, appStacks, infraStacks []string) bool {
+func nothingToRemove(indexed bool, edgeStack *contractv1.EdgeStackPlan, appStacks, infraStacks []string) bool {
 	return !indexed && len(edgeStack.GetItems()) == 0 && len(appStacks) == 0 && len(infraStacks) == 0
 }
 
-func (s *Server) planDestroyPreviewProject(ctx context.Context, opts providerConfig, edgeFront edge.Edge, slug string) (*deploymentsv1.PlanRemoveProjectResponse, error) {
+func (s *Server) planDestroyPreviewProject(ctx context.Context, opts providerConfig, edgeFront edge.Edge, slug string) (*contractv1.PlanRemoveProjectResponse, error) {
 	awscfg, err := loadAWS(ctx, opts.Region)
 	if err != nil {
 		return nil, err
@@ -117,7 +117,7 @@ func (s *Server) planDestroyPreviewProject(ctx context.Context, opts providerCon
 		return nil, err
 	}
 	appStacks, infraStacks := stackNames(plan.AppStacks), stackNames(plan.InfraStacks)
-	return &deploymentsv1.PlanRemoveProjectResponse{
+	return &contractv1.PlanRemoveProjectResponse{
 		AppStacks:       appStacks,
 		InfraStacks:     infraStacks,
 		EdgeStack:       edgeStack,
@@ -133,8 +133,8 @@ func stackNames(stacks []naming.StackName) []string {
 	return names
 }
 
-func (s *Server) edgeStackPlan(edgeFront edge.Edge, scope projectPlanScope) (*deploymentsv1.EdgeStackPlan, error) {
-	plan := &deploymentsv1.EdgeStackPlan{EdgeKind: string(edgeFront.Kind())}
+func (s *Server) edgeStackPlan(edgeFront edge.Edge, scope projectPlanScope) (*contractv1.EdgeStackPlan, error) {
+	plan := &contractv1.EdgeStackPlan{EdgeKind: string(edgeFront.Kind())}
 
 	if _, err := openStackOn(edgeFront, scope.record); err != nil {
 		if errors.Is(err, errNoProductionDeploy) {
@@ -147,7 +147,7 @@ func (s *Server) edgeStackPlan(edgeFront edge.Edge, scope projectPlanScope) (*de
 	return plan, nil
 }
 
-func (s *Server) RemoveProject(ctx context.Context, req *deploymentsv1.RemoveProjectRequest, stream *connect.ServerStream[progressv1.OperationEvent]) (err error) {
+func (s *Server) RemoveProject(ctx context.Context, req *contractv1.RemoveProjectRequest, stream *connect.ServerStream[progressv1.OperationEvent]) (err error) {
 	sender := newEventSender(ctx, stream.Send)
 	defer func() { err = sender.close() }()
 	tracer := newEventTracer(sender)
@@ -187,7 +187,7 @@ func newDestroyPreviewProjectStages() deploy.ProjectTeardownStages {
 	}
 }
 
-func (s *Server) runDestroyProject(ctx context.Context, req *deploymentsv1.RemoveProjectRequest, tracer deploy.Tracer, stageReport func(deploy.StageID) func(string), logf func(string)) error {
+func (s *Server) runDestroyProject(ctx context.Context, req *contractv1.RemoveProjectRequest, tracer deploy.Tracer, stageReport func(deploy.StageID) func(string), logf func(string)) error {
 	if env := req.GetEnvironment(); env.GetTier() == environmentv1.Tier_TIER_PREVIEW {
 		return s.runDestroyPreviewProject(ctx, req, env, tracer, stageReport, logf)
 	}
@@ -246,7 +246,7 @@ func forgetStackRecord(ctx context.Context, ssmClient bootstrap.SSMAPI, class, s
 	return bootstrap.DeleteStackRecordFor(ctx, ssmClient, class, slug)
 }
 
-func (s *Server) runDestroyPreviewProject(ctx context.Context, req *deploymentsv1.RemoveProjectRequest, env *environmentv1.Environment, tracer deploy.Tracer, stageReport func(deploy.StageID) func(string), logf func(string)) error {
+func (s *Server) runDestroyPreviewProject(ctx context.Context, req *contractv1.RemoveProjectRequest, env *environmentv1.Environment, tracer deploy.Tracer, stageReport func(deploy.StageID) func(string), logf func(string)) error {
 	slug := req.GetSlug()
 
 	stages := newDestroyPreviewProjectStages()

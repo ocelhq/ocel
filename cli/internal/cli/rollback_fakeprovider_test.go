@@ -7,28 +7,28 @@ import (
 	"connectrpc.com/connect"
 	"google.golang.org/protobuf/proto"
 
-	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
+	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 )
 
-var fakePromotions = []*deploymentsv1.PromotionHistoryEntry{
-	{Promotion: &deploymentsv1.Promotion{PromotionId: "promo-2", Ts: 2000, Builds: map[string]string{"web": "build-2~fp2", "admin": "build-2"}}, Active: true},
-	{Promotion: &deploymentsv1.Promotion{PromotionId: "promo-1", Ts: 1000, Tag: "v1.0.0", Builds: map[string]string{"web": "build-1"}}, Active: false},
+var fakePromotions = []*contractv1.PromotionHistoryEntry{
+	{Promotion: &contractv1.Promotion{PromotionId: "promo-2", Ts: 2000, Builds: map[string]string{"web": "build-2~fp2", "admin": "build-2"}}, Active: true},
+	{Promotion: &contractv1.Promotion{PromotionId: "promo-1", Ts: 1000, Tag: "v1.0.0", Builds: map[string]string{"web": "build-1"}}, Active: false},
 }
 
-func (s *deployFakeProviderServer) ListPromotions(ctx context.Context, req *deploymentsv1.ListPromotionsRequest) (*deploymentsv1.ListPromotionsResponse, error) {
+func (s *deployFakeProviderServer) ListPromotions(ctx context.Context, req *contractv1.ListPromotionsRequest) (*contractv1.ListPromotionsResponse, error) {
 	if err := s.checkToken(ctx); err != nil {
 		return nil, err
 	}
-	history := make([]*deploymentsv1.PromotionHistoryEntry, 0, len(fakePromotions))
+	history := make([]*contractv1.PromotionHistoryEntry, 0, len(fakePromotions))
 	for _, entry := range fakePromotions {
-		p := proto.Clone(entry.GetPromotion()).(*deploymentsv1.Promotion)
+		p := proto.Clone(entry.GetPromotion()).(*contractv1.Promotion)
 		p.FlipBound = fakeFlipBound()
-		history = append(history, &deploymentsv1.PromotionHistoryEntry{Promotion: p, Active: entry.GetActive()})
+		history = append(history, &contractv1.PromotionHistoryEntry{Promotion: p, Active: entry.GetActive()})
 	}
-	return &deploymentsv1.ListPromotionsResponse{Promotions: history}, nil
+	return &contractv1.ListPromotionsResponse{Promotions: history}, nil
 }
 
-func (s *deployFakeProviderServer) Rollback(ctx context.Context, req *deploymentsv1.RollbackRequest) (*deploymentsv1.RollbackResponse, error) {
+func (s *deployFakeProviderServer) Rollback(ctx context.Context, req *contractv1.RollbackRequest) (*contractv1.RollbackResponse, error) {
 	if err := s.checkToken(ctx); err != nil {
 		return nil, err
 	}
@@ -54,10 +54,10 @@ func (s *deployFakeProviderServer) Rollback(ctx context.Context, req *deployment
 	return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("no promotion %q in this project's history", to))
 }
 
-func rollbackResponseFor(entry *deploymentsv1.PromotionHistoryEntry) *deploymentsv1.RollbackResponse {
+func rollbackResponseFor(entry *contractv1.PromotionHistoryEntry) *contractv1.RollbackResponse {
 	p := entry.GetPromotion()
-	return &deploymentsv1.RollbackResponse{
-		Promoted: &deploymentsv1.Promotion{
+	return &contractv1.RollbackResponse{
+		Promoted: &contractv1.Promotion{
 			PromotionId: p.GetPromotionId(),
 			Ts:          9999,
 			Builds:      p.GetBuilds(),

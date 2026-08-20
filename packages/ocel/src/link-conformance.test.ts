@@ -1,6 +1,6 @@
 import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { LinkType } from "./gen/proto/links/v1/links_pb.js";
+import { LinkType } from "./gen/proto/common/links/v1/links_pb.js";
 import { linkKey } from "./utils/get-config.js";
 
 vi.mock("./utils/rpc", () => ({
@@ -22,7 +22,7 @@ function repoRoot() {
   }
 }
 
-const fixtures = new URL("proto/links/v1/fixtures/", repoRoot());
+const fixtures = new URL("proto/common/links/v1/fixtures/", repoRoot());
 
 const types = Object.values(LinkType).filter(
   (value): value is LinkType =>

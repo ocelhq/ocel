@@ -27,10 +27,10 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/sts"
 
 	"github.com/ocelhq/ocel/pkg/naming"
-	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
-	environmentv1 "github.com/ocelhq/ocel/pkg/proto/environment/v1"
-	linksv1 "github.com/ocelhq/ocel/pkg/proto/links/v1"
-	progressv1 "github.com/ocelhq/ocel/pkg/proto/progress/v1"
+	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
+	linksv1 "github.com/ocelhq/ocel/pkg/proto/common/links/v1"
+	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
+	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/platform/aws/provider/bootstrap"
 	"github.com/ocelhq/ocel/platform/aws/provider/certs"
 	"github.com/ocelhq/ocel/platform/aws/provider/deploy"
@@ -116,7 +116,7 @@ func (m *memo) edgeFor(kind edge.Kind, region string) *entry[edge.Edge] {
 }
 
 type edgeSelector interface {
-	GetEdge() *deploymentsv1.EdgeSelection
+	GetEdge() *contractv1.EdgeSelection
 }
 
 func requestedEdge(req edgeSelector) edge.Kind {
@@ -126,7 +126,7 @@ func requestedEdge(req edgeSelector) edge.Kind {
 	return edges.DefaultKind
 }
 
-func requestedDNS(req edgeSelector) *deploymentsv1.Dns {
+func requestedDNS(req edgeSelector) *contractv1.Dns {
 	return req.GetEdge().GetDns()
 }
 
@@ -150,7 +150,7 @@ func (s *Server) callerIdentity(ctx context.Context, api STSAPI, region string) 
 	})
 }
 
-func (s *Server) Deploy(ctx context.Context, req *deploymentsv1.DeployRequest, stream *connect.ServerStream[progressv1.OperationEvent]) (err error) {
+func (s *Server) Deploy(ctx context.Context, req *contractv1.DeployRequest, stream *connect.ServerStream[progressv1.OperationEvent]) (err error) {
 	manifest := req.GetManifest()
 	if err := validateManifest(manifest); err != nil {
 		return connect.NewError(connect.CodeInvalidArgument, err)
@@ -189,7 +189,7 @@ func newDeployStages() deployStages {
 	}
 }
 
-func (s *Server) runDeploy(ctx context.Context, req *deploymentsv1.DeployRequest, manifest *deploymentsv1.Manifest, edgeFront edge.Edge, stages deployStages, appStages map[string]deploy.Stage, appDeclared []deploy.Stage, progress deploy.Progress, stageReport func(deploy.StageID) func(string), logf func(string), degraded func(edge.Need, string), tracer deploy.Tracer) (deploy.Result, error) {
+func (s *Server) runDeploy(ctx context.Context, req *contractv1.DeployRequest, manifest *contractv1.Manifest, edgeFront edge.Edge, stages deployStages, appStages map[string]deploy.Stage, appDeclared []deploy.Stage, progress deploy.Progress, stageReport func(deploy.StageID) func(string), logf func(string), degraded func(edge.Need, string), tracer deploy.Tracer) (deploy.Result, error) {
 	if tracer != nil {
 		all := append([]deploy.Stage{stages.preparing, stages.uploading, stages.provisioning, stages.finalizing}, appDeclared...)
 		tracer.DeclareStages(true, all...)
@@ -448,7 +448,7 @@ func previewExpiry(lifecycle environmentv1.Lifecycle, now time.Time) int64 {
 	return now.Add(previewTTL).Unix()
 }
 
-func (s *Server) Bootstrap(ctx context.Context, req *deploymentsv1.BootstrapRequest, stream *connect.ServerStream[progressv1.OperationEvent]) error {
+func (s *Server) Bootstrap(ctx context.Context, req *contractv1.BootstrapRequest, stream *connect.ServerStream[progressv1.OperationEvent]) error {
 	progress := func(m string) { _ = stream.Send(progressEvent(m)) }
 	logf := func(m string) { _ = stream.Send(logEvent(m)) }
 
@@ -507,7 +507,7 @@ func (s *Server) runBootstrap(ctx context.Context, run bootstrapRun, apis bootst
 	return nil
 }
 
-func (s *Server) DescribeBootstrap(ctx context.Context, req *deploymentsv1.DescribeBootstrapRequest) (*deploymentsv1.DescribeBootstrapResponse, error) {
+func (s *Server) DescribeBootstrap(ctx context.Context, req *contractv1.DescribeBootstrapRequest) (*contractv1.DescribeBootstrapResponse, error) {
 	opts := s.config.get()
 	awscfg, err := loadAWS(ctx, opts.Region)
 	if err != nil {
@@ -528,10 +528,10 @@ func (s *Server) DescribeBootstrap(ctx context.Context, req *deploymentsv1.Descr
 	return describedBootstrap(deployed, recorded), nil
 }
 
-func describedBootstrap(deployed bootstrap.Deployed, recorded map[string][]string) *deploymentsv1.DescribeBootstrapResponse {
-	resp := &deploymentsv1.DescribeBootstrapResponse{}
+func describedBootstrap(deployed bootstrap.Deployed, recorded map[string][]string) *contractv1.DescribeBootstrapResponse {
+	resp := &contractv1.DescribeBootstrapResponse{}
 	for _, f := range bootstrap.Catalogue() {
-		resp.Features = append(resp.Features, &deploymentsv1.Feature{
+		resp.Features = append(resp.Features, &contractv1.Feature{
 			Name:       f.Name,
 			Summary:    f.Summary,
 			DependsOn:  f.DependsOn,
@@ -629,18 +629,18 @@ func stackIndexFor(awscfg aws.Config, deployed bootstrap.Deployed, bootstrapCmd 
 	}, nil
 }
 
-func resourceSummary(r *deploymentsv1.ManifestResource) string {
+func resourceSummary(r *contractv1.ManifestResource) string {
 	switch cfg := r.GetConfig().(type) {
-	case *deploymentsv1.ManifestResource_Postgres:
+	case *contractv1.ManifestResource_Postgres:
 		return fmt.Sprintf("%s: postgres version=%s", r.GetLogicalName(), cfg.Postgres.GetVersion())
-	case *deploymentsv1.ManifestResource_Bucket:
+	case *contractv1.ManifestResource_Bucket:
 		return fmt.Sprintf("%s: bucket allowed_origins=%v", r.GetLogicalName(), cfg.Bucket.GetAllowedOrigins())
 	default:
 		return fmt.Sprintf("%s: received config", r.GetLogicalName())
 	}
 }
 
-func configMatchesType(r *deploymentsv1.ManifestResource, t linksv1.LinkType) bool {
+func configMatchesType(r *contractv1.ManifestResource, t linksv1.LinkType) bool {
 	switch t {
 	case linksv1.LinkType_LINK_TYPE_POSTGRES:
 		return r.GetPostgres() != nil
@@ -744,7 +744,7 @@ func deployedResult(res deploy.Result) *progressv1.OperationEvent {
 	}
 }
 
-func validateManifest(m *deploymentsv1.Manifest) error {
+func validateManifest(m *contractv1.Manifest) error {
 	for i, r := range m.GetResources() {
 		if r.GetLogicalName() == "" {
 			return fmt.Errorf("manifest.resources[%d]: logical_name is required", i)

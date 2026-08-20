@@ -12,15 +12,15 @@ import (
 	"github.com/pulumi/pulumi/sdk/v3/go/pulumi"
 
 	"github.com/ocelhq/ocel/pkg/naming"
-	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
-	linksv1 "github.com/ocelhq/ocel/pkg/proto/links/v1"
+	linksv1 "github.com/ocelhq/ocel/pkg/proto/common/links/v1"
+	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/platform/aws/provider/payloads"
 )
 
 func TestTranslateFunction(t *testing.T) {
 	t.Run("passes runtime and entrypoint", func(t *testing.T) {
 		t.Parallel()
-		got := translateFunction(&deploymentsv1.ManifestFunction{
+		got := translateFunction(&contractv1.ManifestFunction{
 			Runtime: "nodejs24.x",
 			Handler: "src/server.js",
 		})
@@ -34,7 +34,7 @@ func TestTranslateFunction(t *testing.T) {
 
 	t.Run("empty falls back to pinned defaults", func(t *testing.T) {
 		t.Parallel()
-		got := translateFunction(&deploymentsv1.ManifestFunction{})
+		got := translateFunction(&contractv1.ManifestFunction{})
 		if got.Runtime != defaultFunctionRuntime {
 			t.Errorf("Runtime = %q, want default %q", got.Runtime, defaultFunctionRuntime)
 		}
@@ -45,7 +45,7 @@ func TestTranslateFunction(t *testing.T) {
 
 	t.Run("defaults size the function for SSR", func(t *testing.T) {
 		t.Parallel()
-		got := translateFunction(&deploymentsv1.ManifestFunction{})
+		got := translateFunction(&contractv1.ManifestFunction{})
 		if got.MemorySizeMB != defaultFunctionMemoryMB {
 			t.Errorf("MemorySizeMB = %d, want default %d", got.MemorySizeMB, defaultFunctionMemoryMB)
 		}
@@ -56,7 +56,7 @@ func TestTranslateFunction(t *testing.T) {
 
 	t.Run("Next gets the bundle memory default", func(t *testing.T) {
 		t.Parallel()
-		got := translateFunction(&deploymentsv1.ManifestFunction{Framework: frameworkNext})
+		got := translateFunction(&contractv1.ManifestFunction{Framework: frameworkNext})
 		if got.MemorySizeMB != nextBundleFunctionMemoryMB {
 			t.Errorf("MemorySizeMB = %d, want the Next default %d", got.MemorySizeMB, nextBundleFunctionMemoryMB)
 		}
@@ -64,7 +64,7 @@ func TestTranslateFunction(t *testing.T) {
 
 	t.Run("non-Next keeps the flat default", func(t *testing.T) {
 		t.Parallel()
-		got := translateFunction(&deploymentsv1.ManifestFunction{Framework: "express"})
+		got := translateFunction(&contractv1.ManifestFunction{Framework: "express"})
 		if got.MemorySizeMB != defaultFunctionMemoryMB {
 			t.Errorf("MemorySizeMB = %d, want default %d", got.MemorySizeMB, defaultFunctionMemoryMB)
 		}
@@ -112,7 +112,7 @@ func TestMembraneLayer(t *testing.T) {
 			return err
 		}
 		_, err = registerFunction(pctx, "fn--api--users", functionCoordinate("shop", stack, "fn--api--users"),
-			"/users", translateFunction(&deploymentsv1.ManifestFunction{}), artifactRef{Bucket: "artifacts", Key: "fn.zip"},
+			"/users", translateFunction(&contractv1.ManifestFunction{}), artifactRef{Bucket: "artifacts", Key: "fn.zip"},
 			nil, nil, nil, nil, role.Arn, layer.Arn, functionURLAuthIAM)
 		return err
 	}

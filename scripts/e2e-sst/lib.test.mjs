@@ -367,7 +367,7 @@ describe("parsePublishedRecord", () => {
     version: { N: version },
   });
 
-  it("reads the redacted links.v1.Link the store keeps beside the sealed value", () => {
+  it("reads the redacted common.links.v1.Link the store keeps beside the sealed value", () => {
     const parsed = parsePublishedRecord(
       row({
         name: "orders",

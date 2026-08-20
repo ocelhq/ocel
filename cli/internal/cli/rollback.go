@@ -11,8 +11,8 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
 	"github.com/ocelhq/ocel/cli/internal/providerrunner"
 	"github.com/ocelhq/ocel/cli/node"
-	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
-	environmentv1 "github.com/ocelhq/ocel/pkg/proto/environment/v1"
+	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
+	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 )
 
 type rollbackOptions struct {
@@ -74,7 +74,7 @@ func runRollback(ctx context.Context, d deps, cwd string, opts rollbackOptions, 
 		if err != nil {
 			return err
 		}
-		resp, err := client.Rollback(ctx, &deploymentsv1.RollbackRequest{
+		resp, err := client.Rollback(ctx, &contractv1.RollbackRequest{
 			Slug: cfg.Slug,
 			To:   opts.to,
 			Tag:  opts.tag,

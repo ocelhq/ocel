@@ -15,7 +15,7 @@ import (
 	lambdatypes "github.com/aws/aws-sdk-go-v2/service/lambda/types"
 	"golang.org/x/sync/errgroup"
 
-	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
+	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 )
 
 const warmPayload = `{"ocel":{"warm":1}}`
@@ -28,7 +28,7 @@ type FunctionInvoker interface {
 	Invoke(ctx context.Context, in *lambda.InvokeInput, optFns ...func(*lambda.Options)) (*lambda.InvokeOutput, error)
 }
 
-func warmDeployedFunctions(ctx context.Context, cfg Config, manifest *deploymentsv1.Manifest, appFunctionNames []map[string]string, builds appBuilds, log func(string)) []warmResult {
+func warmDeployedFunctions(ctx context.Context, cfg Config, manifest *contractv1.Manifest, appFunctionNames []map[string]string, builds appBuilds, log func(string)) []warmResult {
 	if cfg.Invoker == nil {
 		return nil
 	}
@@ -55,7 +55,7 @@ type warmTarget struct {
 	FunctionName string
 }
 
-func warmTargets(manifest *deploymentsv1.Manifest, bytecode map[string]*bytecodeConfig, names map[string]string) []warmTarget {
+func warmTargets(manifest *contractv1.Manifest, bytecode map[string]*bytecodeConfig, names map[string]string) []warmTarget {
 	if !bytecodeCacheEnabled() {
 		return nil
 	}

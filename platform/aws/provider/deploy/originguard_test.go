@@ -7,7 +7,7 @@ import (
 	"github.com/pulumi/pulumi/sdk/v3/go/pulumi"
 
 	"github.com/ocelhq/ocel/pkg/naming"
-	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
+	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/platform/aws/provider/edges/apigateway"
 	"github.com/ocelhq/ocel/platform/aws/provider/edges/cloudfront"
 	cloudflare "github.com/ocelhq/ocel/platform/edge/cloudflare/deploy"
@@ -37,7 +37,7 @@ func functionURLAuthOf(t *testing.T, rec *inputRecorder, logicalName string, sta
 	return value.StringValue()
 }
 
-func registerGuarded(t *testing.T, cfg Config, functions []*deploymentsv1.ManifestFunction, app *deploymentsv1.ManifestApp, stack naming.StackName) *inputRecorder {
+func registerGuarded(t *testing.T, cfg Config, functions []*contractv1.ManifestFunction, app *contractv1.ManifestApp, stack naming.StackName) *inputRecorder {
 	t.Helper()
 	host, err := resolveRouterHost(cfg, app, routedCoordinate(t), "d1")
 	if err != nil {
@@ -60,7 +60,7 @@ func registerGuarded(t *testing.T, cfg Config, functions []*deploymentsv1.Manife
 			Functions: functions,
 			Args:      translateFunction,
 			Artifacts: map[string]artifactRef{},
-			Env:       appEnv(&deploymentsv1.Manifest{}, app, appBundle{}, cfg, sessionScope{}),
+			Env:       appEnv(&contractv1.Manifest{}, app, appBundle{}, cfg, sessionScope{}),
 			Router:    host,
 			Guard:     guard,
 			RoleArn:   role.Arn,
@@ -207,8 +207,8 @@ func TestAnAppThatRoutesNothingStillGuardsItsEntry(t *testing.T) {
 	cfg.ArtifactRoot = writeTree(t, map[string]string{
 		"apps/api/serve.json": `{"framework":"express","buildId":"API1","entry":"/"}`,
 	})
-	app := &deploymentsv1.ManifestApp{Name: "api", Framework: "express"}
-	functions := []*deploymentsv1.ManifestFunction{
+	app := &contractv1.ManifestApp{Name: "api", Framework: "express"}
+	functions := []*contractv1.ManifestFunction{
 		{LogicalName: "fn--api--entry", App: "api", RouteId: "/"},
 	}
 
@@ -225,7 +225,7 @@ func TestAnAppThatRoutesNothingStillGuardsItsEntry(t *testing.T) {
 			Functions: functions,
 			Args:      translateFunction,
 			Artifacts: map[string]artifactRef{},
-			Env:       appEnv(&deploymentsv1.Manifest{}, app, appBundle{}, cfg, sessionScope{}),
+			Env:       appEnv(&contractv1.Manifest{}, app, appBundle{}, cfg, sessionScope{}),
 			Guard:     guard,
 			RoleArn:   pulumi.String("arn:aws:iam::123456789012:role/app"),
 			RoleName:  pulumi.String("app"),

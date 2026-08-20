@@ -3,12 +3,12 @@ package deploy
 import (
 	"sync"
 
-	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
+	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 )
 
 const appConcurrency = 4
 
-func runAppStacks(apps []*deploymentsv1.ManifestApp, run func(i int, app *deploymentsv1.ManifestApp)) {
+func runAppStacks(apps []*contractv1.ManifestApp, run func(i int, app *contractv1.ManifestApp)) {
 	var wg sync.WaitGroup
 	slots := make(chan struct{}, appConcurrency)
 	for i, app := range apps {

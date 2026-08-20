@@ -12,10 +12,10 @@ import (
 	"testing"
 
 	"github.com/ocelhq/ocel/pkg/naming"
-	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
-	environmentv1 "github.com/ocelhq/ocel/pkg/proto/environment/v1"
-	progressv1 "github.com/ocelhq/ocel/pkg/proto/progress/v1"
-	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/resources/v1"
+	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
+	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
+	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
+	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/platform/aws/provider/edges/apigateway"
 	"github.com/ocelhq/ocel/platform/aws/provider/edges/cloudfront"
 	cloudflare "github.com/ocelhq/ocel/platform/edge/cloudflare/deploy"
@@ -39,17 +39,17 @@ func TestEdgeStackSpecs(t *testing.T) {
 	setWorkerBundle(t)
 	setStoreWorkerBundle(t)
 
-	webManifest := func() *deploymentsv1.Manifest {
-		return &deploymentsv1.Manifest{
+	webManifest := func() *contractv1.Manifest {
+		return &contractv1.Manifest{
 			Slug:      "proj",
-			Apps:      []*deploymentsv1.ManifestApp{{Name: "web", Framework: "next"}},
-			Functions: []*deploymentsv1.ManifestFunction{{LogicalName: "web_index", Framework: "next", App: "web", RouteId: "/"}},
+			Apps:      []*contractv1.ManifestApp{{Name: "web", Framework: "next"}},
+			Functions: []*contractv1.ManifestFunction{{LogicalName: "web_index", Framework: "next", App: "web", RouteId: "/"}},
 		}
 	}
 
 	t.Run("threads edge values with no worker-fronted apps", func(t *testing.T) {
 		cfg := Config{Edge: &recordingEdge{kind: cloudflare.Kind}, EdgeValues: map[string]string{"cacheBucket": "ocel-proj-cache"}}
-		manifest := &deploymentsv1.Manifest{Slug: "proj"}
+		manifest := &contractv1.Manifest{Slug: "proj"}
 		specs, err := stackSpecs(cfg, manifest, "v1", nil)
 		if err != nil {
 			t.Fatalf("stackSpecs: %v", err)
@@ -79,7 +79,7 @@ func TestEdgeStackSpecs(t *testing.T) {
 	t.Run("production prunes stale routes", func(t *testing.T) {
 		cfg := Config{Edge: &recordingEdge{kind: cloudflare.Kind}, Tier: environmentv1.Tier_TIER_PRODUCTION, ArtifactRoot: t.TempDir()}
 
-		specs, err := stackSpecs(cfg, &deploymentsv1.Manifest{Slug: "proj"}, "v1", nil)
+		specs, err := stackSpecs(cfg, &contractv1.Manifest{Slug: "proj"}, "v1", nil)
 		if err != nil {
 			t.Fatalf("stackSpecs: %v", err)
 		}
@@ -109,7 +109,7 @@ func TestEdgeStackSpecs(t *testing.T) {
 
 	t.Run("preview without a wildcard fails the deploy", func(t *testing.T) {
 		manifest := webManifest()
-		manifest.Domains = map[string]*deploymentsv1.DomainList{"preview": {Hostnames: []string{"app.acme.com"}}}
+		manifest.Domains = map[string]*contractv1.DomainList{"preview": {Hostnames: []string{"app.acme.com"}}}
 		cfg := Config{Edge: &recordingEdge{kind: cloudflare.Kind}, Slug: "proj", Tier: environmentv1.Tier_TIER_PREVIEW, Identity: "pr-42", ArtifactRoot: specsArtifactRoot(t, manifest)}
 
 		_, err := stackSpecs(cfg, manifest, "v1", nil)
@@ -122,14 +122,14 @@ func TestEdgeStackSpecs(t *testing.T) {
 	})
 
 	t.Run("preview is one project-scoped spec", func(t *testing.T) {
-		manifest := &deploymentsv1.Manifest{
+		manifest := &contractv1.Manifest{
 			Slug: "proj",
-			Apps: []*deploymentsv1.ManifestApp{{Name: "web", Framework: "next"}, {Name: "api", Framework: "next"}},
-			Functions: []*deploymentsv1.ManifestFunction{
+			Apps: []*contractv1.ManifestApp{{Name: "web", Framework: "next"}, {Name: "api", Framework: "next"}},
+			Functions: []*contractv1.ManifestFunction{
 				{LogicalName: "web_index", Framework: "next", App: "web", RouteId: "/"},
 				{LogicalName: "api_index", Framework: "next", App: "api", RouteId: "/"},
 			},
-			Domains: map[string]*deploymentsv1.DomainList{"preview": {Hostnames: []string{"*.preview.acme.com"}}},
+			Domains: map[string]*contractv1.DomainList{"preview": {Hostnames: []string{"*.preview.acme.com"}}},
 		}
 		cfg := Config{
 			Edge:         &recordingEdge{kind: cloudflare.Kind},
@@ -177,7 +177,7 @@ func TestEdgeStackSpecs(t *testing.T) {
 	})
 
 	t.Run("preview always binds the app list", func(t *testing.T) {
-		manifest := &deploymentsv1.Manifest{Slug: "proj"}
+		manifest := &contractv1.Manifest{Slug: "proj"}
 		cfg := Config{Edge: &recordingEdge{kind: cloudflare.Kind}, Slug: "proj", Tier: environmentv1.Tier_TIER_PREVIEW, Identity: "pr-42", ArtifactRoot: specsArtifactRoot(t, manifest)}
 
 		specs, err := stackSpecs(cfg, manifest, "v1", nil)
@@ -209,7 +209,7 @@ func TestEdgeStackSpecs(t *testing.T) {
 
 	t.Run("production keeps declarative hostnames", func(t *testing.T) {
 		manifest := webManifest()
-		manifest.Domains = map[string]*deploymentsv1.DomainList{"production": {Hostnames: []string{"acme.com", "www.acme.com"}}}
+		manifest.Domains = map[string]*contractv1.DomainList{"production": {Hostnames: []string{"acme.com", "www.acme.com"}}}
 		cfg := Config{Edge: &recordingEdge{kind: cloudflare.Kind}, Slug: "proj", Tier: environmentv1.Tier_TIER_PRODUCTION, ArtifactRoot: specsArtifactRoot(t, manifest)}
 
 		specs, err := stackSpecs(cfg, manifest, "v1", nil)
@@ -344,17 +344,17 @@ func TestAmbientPreview(t *testing.T) {
 	setWorkerBundle(t)
 	setStoreWorkerBundle(t)
 
-	manifest := func(apps ...string) *deploymentsv1.Manifest {
-		m := &deploymentsv1.Manifest{Slug: "proj"}
+	manifest := func(apps ...string) *contractv1.Manifest {
+		m := &contractv1.Manifest{Slug: "proj"}
 		for _, app := range apps {
-			m.Apps = append(m.Apps, &deploymentsv1.ManifestApp{Name: app, Framework: "next"})
-			m.Functions = append(m.Functions, &deploymentsv1.ManifestFunction{
+			m.Apps = append(m.Apps, &contractv1.ManifestApp{Name: app, Framework: "next"})
+			m.Functions = append(m.Functions, &contractv1.ManifestFunction{
 				LogicalName: app + "_index", Framework: "next", App: app, RouteId: "/",
 			})
 		}
 		return m
 	}
-	ambient := func(t *testing.T, m *deploymentsv1.Manifest) Config {
+	ambient := func(t *testing.T, m *contractv1.Manifest) Config {
 		return Config{
 			Edge:                &recordingEdge{kind: cloudflare.Kind},
 			Slug:                "proj",
@@ -427,7 +427,7 @@ func TestAmbientPreview(t *testing.T) {
 
 	t.Run("a preview on its own domain still ships a worker", func(t *testing.T) {
 		m := manifest("web")
-		m.Domains = map[string]*deploymentsv1.DomainList{"preview": {Hostnames: []string{"*.preview.proj.com"}}}
+		m.Domains = map[string]*contractv1.DomainList{"preview": {Hostnames: []string{"*.preview.proj.com"}}}
 		specs, err := stackSpecs(ambient(t, m), m, "v1", nil)
 		if err != nil {
 			t.Fatalf("stackSpecs: %v", err)
@@ -440,7 +440,7 @@ func TestAmbientPreview(t *testing.T) {
 	t.Run("a preview with no apps exposes nothing, on any domain", func(t *testing.T) {
 		for _, base := range []string{"preview.acme.com", ""} {
 			m := manifest()
-			m.Domains = map[string]*deploymentsv1.DomainList{"preview": {Hostnames: []string{"*.preview.proj.com"}}}
+			m.Domains = map[string]*contractv1.DomainList{"preview": {Hostnames: []string{"*.preview.proj.com"}}}
 			cfg := ambient(t, m)
 			cfg.GlobalPreviewDomain = base
 			specs, err := stackSpecs(cfg, m, "v1", nil)
@@ -508,7 +508,7 @@ func TestAmbientPreview(t *testing.T) {
 	t.Run("declaring its own preview domain clears the mark", func(t *testing.T) {
 		m := manifest("web")
 		cfg := ambient(t, m)
-		m.Domains = map[string]*deploymentsv1.DomainList{"preview": {Hostnames: []string{"*.preview.proj.com"}}}
+		m.Domains = map[string]*contractv1.DomainList{"preview": {Hostnames: []string{"*.preview.proj.com"}}}
 		specs, err := stackSpecs(cfg, m, "v1", nil)
 		if err != nil {
 			t.Fatalf("stackSpecs: %v", err)
@@ -555,7 +555,7 @@ func TestAmbientPreview(t *testing.T) {
 
 		t.Run("on the project's own wildcard", func(t *testing.T) {
 			m := manifest("web")
-			m.Domains = map[string]*deploymentsv1.DomainList{"preview": {Hostnames: []string{"*.preview.proj.com"}}}
+			m.Domains = map[string]*contractv1.DomainList{"preview": {Hostnames: []string{"*.preview.proj.com"}}}
 			cfg := ambient(t, m)
 			cfg.Identity = pointer + "pppppp"
 
@@ -573,7 +573,7 @@ func TestAmbientPreview(t *testing.T) {
 
 	t.Run("a project that declares its own preview domain ignores the global one", func(t *testing.T) {
 		m := manifest("web")
-		m.Domains = map[string]*deploymentsv1.DomainList{"preview": {Hostnames: []string{"*.preview.proj.com"}}}
+		m.Domains = map[string]*contractv1.DomainList{"preview": {Hostnames: []string{"*.preview.proj.com"}}}
 		cfg := ambient(t, m)
 
 		specs, err := stackSpecs(cfg, m, "v1", nil)
@@ -612,11 +612,11 @@ func TestWorkerAppURL(t *testing.T) {
 	}
 }
 
-func varsManifest(variables ...*deploymentsv1.ManifestVariable) *deploymentsv1.Manifest {
-	return &deploymentsv1.Manifest{
+func varsManifest(variables ...*contractv1.ManifestVariable) *contractv1.Manifest {
+	return &contractv1.Manifest{
 		Slug:      "proj",
-		Apps:      []*deploymentsv1.ManifestApp{{Name: "web", Framework: "next", Variables: variables}},
-		Functions: []*deploymentsv1.ManifestFunction{{LogicalName: "web_index", Framework: "next", App: "web", RouteId: "/"}},
+		Apps:      []*contractv1.ManifestApp{{Name: "web", Framework: "next", Variables: variables}},
+		Functions: []*contractv1.ManifestFunction{{LogicalName: "web_index", Framework: "next", App: "web", RouteId: "/"}},
 	}
 }
 
@@ -629,7 +629,7 @@ func varsConfig(t *testing.T, tier environmentv1.Tier) Config {
 	}
 }
 
-func recordVariables(t *testing.T, variables ...*deploymentsv1.ManifestVariable) edge.DeploymentRecord {
+func recordVariables(t *testing.T, variables ...*contractv1.ManifestVariable) edge.DeploymentRecord {
 	t.Helper()
 	manifest := varsManifest(variables...)
 	cfg := varsConfig(t, environmentv1.Tier_TIER_PRODUCTION)
@@ -645,11 +645,11 @@ func TestBuildDeploymentRecord(t *testing.T) {
 
 	t.Run("carries no route hostnames", func(t *testing.T) {
 		t.Parallel()
-		manifest := &deploymentsv1.Manifest{
+		manifest := &contractv1.Manifest{
 			Slug:      "proj",
-			Apps:      []*deploymentsv1.ManifestApp{{Name: "web", Framework: "next"}},
-			Functions: []*deploymentsv1.ManifestFunction{{LogicalName: "web_index", Framework: "next", App: "web", RouteId: "/"}},
-			Domains:   map[string]*deploymentsv1.DomainList{"preview": {Hostnames: []string{"*.preview.acme.com"}}},
+			Apps:      []*contractv1.ManifestApp{{Name: "web", Framework: "next"}},
+			Functions: []*contractv1.ManifestFunction{{LogicalName: "web_index", Framework: "next", App: "web", RouteId: "/"}},
+			Domains:   map[string]*contractv1.DomainList{"preview": {Hostnames: []string{"*.preview.acme.com"}}},
 		}
 		cfg := Config{
 			ArtifactRoot: writeTree(t, map[string]string{"apps/web/routing-manifest.json": `{"buildId":"WEB1"}`}),
@@ -673,10 +673,10 @@ func TestBuildDeploymentRecord(t *testing.T) {
 
 	t.Run("carries the framework", func(t *testing.T) {
 		t.Parallel()
-		manifest := &deploymentsv1.Manifest{
+		manifest := &contractv1.Manifest{
 			Slug:      "proj",
-			Apps:      []*deploymentsv1.ManifestApp{{Name: "web", Framework: "next"}, {Name: "docs"}},
-			Functions: []*deploymentsv1.ManifestFunction{{LogicalName: "web_index", Framework: "next", App: "web", RouteId: "/"}},
+			Apps:      []*contractv1.ManifestApp{{Name: "web", Framework: "next"}, {Name: "docs"}},
+			Functions: []*contractv1.ManifestFunction{{LogicalName: "web_index", Framework: "next", App: "web", RouteId: "/"}},
 		}
 		cfg := Config{
 			ArtifactRoot: writeTree(t, map[string]string{"apps/web/routing-manifest.json": `{"buildId":"WEB1"}`}),
@@ -694,10 +694,10 @@ func TestBuildDeploymentRecord(t *testing.T) {
 
 	t.Run("carries an empty framework for an app that declares none", func(t *testing.T) {
 		t.Parallel()
-		manifest := &deploymentsv1.Manifest{
+		manifest := &contractv1.Manifest{
 			Slug:      "proj",
-			Apps:      []*deploymentsv1.ManifestApp{{Name: "web", Framework: "next"}, {Name: "docs"}},
-			Functions: []*deploymentsv1.ManifestFunction{{LogicalName: "web_index", Framework: "next", App: "web", RouteId: "/"}},
+			Apps:      []*contractv1.ManifestApp{{Name: "web", Framework: "next"}, {Name: "docs"}},
+			Functions: []*contractv1.ManifestFunction{{LogicalName: "web_index", Framework: "next", App: "web", RouteId: "/"}},
 		}
 		cfg := Config{
 			ArtifactRoot: writeTree(t, map[string]string{"apps/web/routing-manifest.json": `{"buildId":"WEB1"}`}),
@@ -720,8 +720,8 @@ func TestBuildDeploymentRecord(t *testing.T) {
 	t.Run("production carries the fingerprint of what it shipped", func(t *testing.T) {
 		t.Parallel()
 		record := recordVariables(t,
-			&deploymentsv1.ManifestVariable{Key: "POSTHOG_ID", Class: resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN, Version: 2},
-			&deploymentsv1.ManifestVariable{Key: "API_KEY", Class: resourcesv1.VariableClass_VARIABLE_CLASS_SENSITIVE, Folder: "/admin", Version: 5},
+			&contractv1.ManifestVariable{Key: "POSTHOG_ID", Class: resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN, Version: 2},
+			&contractv1.ManifestVariable{Key: "API_KEY", Class: resourcesv1.VariableClass_VARIABLE_CLASS_SENSITIVE, Folder: "/admin", Version: 5},
 		)
 
 		if record.ValueFingerprint == "" {
@@ -732,8 +732,8 @@ func TestBuildDeploymentRecord(t *testing.T) {
 	t.Run("production carries per key versions", func(t *testing.T) {
 		t.Parallel()
 		record := recordVariables(t,
-			&deploymentsv1.ManifestVariable{Key: "POSTHOG_ID", Class: resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN, Version: 2},
-			&deploymentsv1.ManifestVariable{Key: "API_KEY", Class: resourcesv1.VariableClass_VARIABLE_CLASS_SENSITIVE, Folder: "/admin", Version: 5},
+			&contractv1.ManifestVariable{Key: "POSTHOG_ID", Class: resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN, Version: 2},
+			&contractv1.ManifestVariable{Key: "API_KEY", Class: resourcesv1.VariableClass_VARIABLE_CLASS_SENSITIVE, Folder: "/admin", Version: 5},
 		)
 
 		want := []edge.VariableRecord{
@@ -748,7 +748,7 @@ func TestBuildDeploymentRecord(t *testing.T) {
 	t.Run("an all live app still fingerprints what it shipped", func(t *testing.T) {
 		t.Parallel()
 		record := recordVariables(t,
-			&deploymentsv1.ManifestVariable{Key: "SESSION_SECRET", Class: resourcesv1.VariableClass_VARIABLE_CLASS_SECRET, Version: 7},
+			&contractv1.ManifestVariable{Key: "SESSION_SECRET", Class: resourcesv1.VariableClass_VARIABLE_CLASS_SECRET, Version: 7},
 		)
 
 		if record.ValueFingerprint == "" {
@@ -759,10 +759,10 @@ func TestBuildDeploymentRecord(t *testing.T) {
 	t.Run("a version change changes the fingerprint", func(t *testing.T) {
 		t.Parallel()
 		before := recordVariables(t,
-			&deploymentsv1.ManifestVariable{Key: "API_KEY", Class: resourcesv1.VariableClass_VARIABLE_CLASS_SENSITIVE, Version: 5},
+			&contractv1.ManifestVariable{Key: "API_KEY", Class: resourcesv1.VariableClass_VARIABLE_CLASS_SENSITIVE, Version: 5},
 		)
 		after := recordVariables(t,
-			&deploymentsv1.ManifestVariable{Key: "API_KEY", Class: resourcesv1.VariableClass_VARIABLE_CLASS_SENSITIVE, Version: 6},
+			&contractv1.ManifestVariable{Key: "API_KEY", Class: resourcesv1.VariableClass_VARIABLE_CLASS_SENSITIVE, Version: 6},
 		)
 
 		if before.ValueFingerprint == after.ValueFingerprint {
@@ -772,8 +772,8 @@ func TestBuildDeploymentRecord(t *testing.T) {
 
 	t.Run("the fingerprint is independent of manifest order", func(t *testing.T) {
 		t.Parallel()
-		plain := &deploymentsv1.ManifestVariable{Key: "POSTHOG_ID", Class: resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN, Version: 2}
-		live := &deploymentsv1.ManifestVariable{Key: "SESSION_SECRET", Class: resourcesv1.VariableClass_VARIABLE_CLASS_SECRET, Folder: "/api", Version: 7}
+		plain := &contractv1.ManifestVariable{Key: "POSTHOG_ID", Class: resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN, Version: 2}
+		live := &contractv1.ManifestVariable{Key: "SESSION_SECRET", Class: resourcesv1.VariableClass_VARIABLE_CLASS_SECRET, Folder: "/api", Version: 7}
 
 		first := recordVariables(t, plain, live)
 		second := recordVariables(t, live, plain)
@@ -786,7 +786,7 @@ func TestBuildDeploymentRecord(t *testing.T) {
 	t.Run("live keys are recorded as latest at runtime", func(t *testing.T) {
 		t.Parallel()
 		record := recordVariables(t,
-			&deploymentsv1.ManifestVariable{Key: "SESSION_SECRET", Class: resourcesv1.VariableClass_VARIABLE_CLASS_SECRET, Folder: "/api", Version: 7},
+			&contractv1.ManifestVariable{Key: "SESSION_SECRET", Class: resourcesv1.VariableClass_VARIABLE_CLASS_SECRET, Folder: "/api", Version: 7},
 		)
 
 		want := []edge.VariableRecord{{Key: "SESSION_SECRET", Folder: "/api", Live: true}}
@@ -798,7 +798,7 @@ func TestBuildDeploymentRecord(t *testing.T) {
 	t.Run("preview records no variables and is not an error", func(t *testing.T) {
 		t.Parallel()
 		manifest := varsManifest(
-			&deploymentsv1.ManifestVariable{Key: "POSTHOG_ID", Class: resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN, Version: 2},
+			&contractv1.ManifestVariable{Key: "POSTHOG_ID", Class: resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN, Version: 2},
 		)
 		id := fingerprinted("WEB1", "abc123")
 		build := func(tier environmentv1.Tier) edge.DeploymentRecord {
@@ -840,7 +840,7 @@ func TestBuildDeploymentRecord(t *testing.T) {
 		t.Parallel()
 		cfg := Config{ArtifactRoot: edgeAppTree(t), Env: "prod", Edge: testLoaderEdge()}
 		manifest := nextManifest()
-		app := &deploymentsv1.ManifestApp{Name: "web", Framework: frameworkNext}
+		app := &contractv1.ManifestApp{Name: "web", Framework: frameworkNext}
 		id := fingerprinted("WEB1", "fp1")
 
 		record, err := buildDeploymentRecord(cfg, nil, manifest, app, id, nil, appBuildsFor(t, cfg, manifest), nil)
@@ -856,7 +856,7 @@ func TestBuildDeploymentRecord(t *testing.T) {
 		t.Parallel()
 		cfg := Config{ArtifactRoot: edgeAppTree(t), Env: "prod", Edge: testLoaderEdge()}
 		manifest := nextManifest()
-		app := &deploymentsv1.ManifestApp{Name: "web", Framework: frameworkNext}
+		app := &contractv1.ManifestApp{Name: "web", Framework: frameworkNext}
 		builds := releaseBuilds(t, cfg, manifest, "fp1")
 		id := builds.identities["web"]
 
@@ -930,7 +930,7 @@ func TestBuildDeploymentRecord(t *testing.T) {
 		})
 		cfg := Config{ArtifactRoot: root, Env: "prod", Edge: testLoaderEdge()}
 		manifest := nextManifest()
-		app := &deploymentsv1.ManifestApp{Name: "web", Framework: frameworkNext}
+		app := &contractv1.ManifestApp{Name: "web", Framework: frameworkNext}
 		builds := releaseBuilds(t, cfg, manifest, "fp1")
 
 		record, err := buildDeploymentRecord(cfg, nil, manifest, app, builds.identities["web"], nil, builds, nil)
@@ -959,7 +959,7 @@ func TestBuildDeploymentRecord(t *testing.T) {
 	t.Run("the identity keys the record, the deployment and the build ride along", func(t *testing.T) {
 		t.Parallel()
 		cfg := Config{ArtifactRoot: edgeAppTree(t), Env: "prod", Edge: testLoaderEdge()}
-		app := &deploymentsv1.ManifestApp{Name: "web", Framework: frameworkNext}
+		app := &contractv1.ManifestApp{Name: "web", Framework: frameworkNext}
 		id := fingerprinted("dep1", "fp1")
 
 		record, err := buildDeploymentRecord(cfg, nil, nextManifest(), app, id, nil, appBuildsFor(t, cfg, nextManifest()), nil)
@@ -1213,7 +1213,7 @@ func TestFinalizeDeploy(t *testing.T) {
 	t.Run("two rotations of one build are three distinct deployments", func(t *testing.T) {
 		cfg := Config{ArtifactRoot: edgeAppTree(t), Env: "prod", Edge: testLoaderEdge()}
 		manifest := nextManifest()
-		app := &deploymentsv1.ManifestApp{Name: "web", Framework: frameworkNext}
+		app := &contractv1.ManifestApp{Name: "web", Framework: frameworkNext}
 		fingerprints := []string{"", "fp2", "fp3"}
 		ids := make([]Identity, len(fingerprints))
 		prefixes := map[string]bool{}
@@ -1358,22 +1358,22 @@ func TestRealizeRequiresADeploymentIDPerApp(t *testing.T) {
 
 	for _, tc := range []struct {
 		name  string
-		apps  []*deploymentsv1.ManifestApp
+		apps  []*contractv1.ManifestApp
 		wants string
 	}{
 		{
 			name:  "an app carrying none",
-			apps:  []*deploymentsv1.ManifestApp{{Name: "web"}},
+			apps:  []*contractv1.ManifestApp{{Name: "web"}},
 			wants: "web",
 		},
 		{
 			name:  "one app of two carrying none",
-			apps:  []*deploymentsv1.ManifestApp{{Name: "web", DeploymentId: testDeploymentID}, {Name: "admin"}},
+			apps:  []*contractv1.ManifestApp{{Name: "web", DeploymentId: testDeploymentID}, {Name: "admin"}},
 			wants: "admin",
 		},
 		{
 			name:  "an app carrying something no mint produces",
-			apps:  []*deploymentsv1.ManifestApp{{Name: "web", DeploymentId: "build-TfctsWXpff2fKS"}},
+			apps:  []*contractv1.ManifestApp{{Name: "web", DeploymentId: "build-TfctsWXpff2fKS"}},
 			wants: "web",
 		},
 	} {
@@ -1381,7 +1381,7 @@ func TestRealizeRequiresADeploymentIDPerApp(t *testing.T) {
 			t.Parallel()
 
 			cfg := Config{Edge: &recordingEdge{kind: cloudflare.Kind}, StoreEndpoint: "https://store.example.com"}
-			manifest := &deploymentsv1.Manifest{Slug: "shop", Apps: tc.apps}
+			manifest := &contractv1.Manifest{Slug: "shop", Apps: tc.apps}
 			_, err := realize(context.Background(), cfg, &Realized{}, manifest, nil, nil)
 			if err == nil {
 				t.Fatal("realize err = nil, want the app without a deployment id refused")
@@ -1402,7 +1402,7 @@ func TestRealizeRefusesAStaleStore(t *testing.T) {
 		StoreEndpoint: fakeStoreEndpoint,
 		Slug:          "shop",
 	}
-	_, err := realize(context.Background(), cfg, &Realized{}, &deploymentsv1.Manifest{Slug: "shop"}, nil, nil)
+	_, err := realize(context.Background(), cfg, &Realized{}, &contractv1.Manifest{Slug: "shop"}, nil, nil)
 	if err == nil {
 		t.Fatal("realize err = nil, want the superseded store refused")
 	}
@@ -1419,7 +1419,7 @@ func TestRealizeRefusesAStoreThatCannotReportItsSchema(t *testing.T) {
 		StoreEndpoint: fakeStoreEndpoint,
 		Slug:          "shop",
 	}
-	_, err := realize(context.Background(), cfg, &Realized{}, &deploymentsv1.Manifest{Slug: "shop"}, nil, nil)
+	_, err := realize(context.Background(), cfg, &Realized{}, &contractv1.Manifest{Slug: "shop"}, nil, nil)
 	if err == nil {
 		t.Fatal("realize err = nil, want the unreadable store refused")
 	}
@@ -1441,7 +1441,7 @@ func TestRealizeChecksTheSchemaAgainstTheRecordedStackState(t *testing.T) {
 		Slug:          "shop",
 		StackState:    edge.StackState{Secret: "fake-secret", Adapter: edge.Own(map[string]string{"stateTable": "ocel-deployments"})},
 	}
-	realize(context.Background(), cfg, &Realized{}, &deploymentsv1.Manifest{Slug: "shop"}, nil, nil)
+	realize(context.Background(), cfg, &Realized{}, &contractv1.Manifest{Slug: "shop"}, nil, nil)
 
 	if len(fake.opens) == 0 {
 		t.Fatal("no stack opened, want the schema check to open one")
@@ -1466,7 +1466,7 @@ func TestRealizeChecksNoSchemaBeforeTheStoreExists(t *testing.T) {
 		Edge: unprogrammableEdge{&recordingEdge{kind: apigateway.Kind, storeSchemaVersionErr: edge.ErrStoreAbsent}},
 		Slug: "shop",
 	}
-	_, err := realize(context.Background(), cfg, &Realized{}, &deploymentsv1.Manifest{Slug: "shop"}, nil, nil)
+	_, err := realize(context.Background(), cfg, &Realized{}, &contractv1.Manifest{Slug: "shop"}, nil, nil)
 	if err != nil && strings.Contains(err.Error(), "ocel bootstrap") {
 		t.Errorf("realize err = %v, want the deploy past the store prechecks that its own reconcile satisfies", err)
 	}
@@ -1476,7 +1476,7 @@ func TestRealizeRefusesAnEdgeWhoseStoreWorkerIsMissing(t *testing.T) {
 	t.Parallel()
 
 	cfg := Config{Edge: &recordingEdge{kind: cloudflare.Kind}, Slug: "shop"}
-	_, err := realize(context.Background(), cfg, &Realized{}, &deploymentsv1.Manifest{Slug: "shop"}, nil, nil)
+	_, err := realize(context.Background(), cfg, &Realized{}, &contractv1.Manifest{Slug: "shop"}, nil, nil)
 	if err == nil || !strings.Contains(err.Error(), "deployments-store worker") {
 		t.Errorf("realize err = %v, want the missing store worker refused", err)
 	}
@@ -1602,7 +1602,7 @@ func TestReconcileStack(t *testing.T) {
 	t.Run("a stack that never reconciled escapes with no state", func(t *testing.T) {
 		fake := &recordingEdge{kind: cloudflare.Kind, reconcileErr: errors.New("the preview substrate is not bootstrapped")}
 		cfg := Config{Tier: environmentv1.Tier_TIER_PREVIEW, Slug: "proj", GlobalPreviewDomain: "preview.acme.com"}
-		marked := MarkGlobalPreview(edge.StackState{}, cfg, &deploymentsv1.Manifest{Slug: "proj"})
+		marked := MarkGlobalPreview(edge.StackState{}, cfg, &contractv1.Manifest{Slug: "proj"})
 
 		stack, err := reconcileStack(context.Background(), fake, []edge.StackSpec{{Version: "v1", Slug: "proj"}}, marked)
 		if err == nil {
@@ -1638,13 +1638,13 @@ func TestReconcileStack(t *testing.T) {
 func TestResolvedIdentities(t *testing.T) {
 	t.Parallel()
 
-	nextApp := func(t *testing.T) (Config, *deploymentsv1.Manifest) {
+	nextApp := func(t *testing.T) (Config, *contractv1.Manifest) {
 		t.Helper()
 		return Config{ArtifactRoot: writeTree(t, map[string]string{
 				"apps/web/routing-manifest.json": `{"buildId":"WEB1"}`,
-			})}, &deploymentsv1.Manifest{
+			})}, &contractv1.Manifest{
 				Slug: "proj",
-				Apps: []*deploymentsv1.ManifestApp{{Name: "web", Framework: frameworkNext}},
+				Apps: []*contractv1.ManifestApp{{Name: "web", Framework: frameworkNext}},
 			}
 	}
 
@@ -1699,9 +1699,9 @@ func TestResolvedIdentities(t *testing.T) {
 
 	t.Run("a framework with no buildID gets a minted one", func(t *testing.T) {
 		t.Parallel()
-		manifest := &deploymentsv1.Manifest{
+		manifest := &contractv1.Manifest{
 			Slug: "proj",
-			Apps: []*deploymentsv1.ManifestApp{{Name: "api", Framework: "express"}},
+			Apps: []*contractv1.ManifestApp{{Name: "api", Framework: "express"}},
 		}
 
 		cfg := Config{ArtifactRoot: t.TempDir()}
@@ -1718,7 +1718,7 @@ func TestResolvedIdentities(t *testing.T) {
 	})
 }
 
-func specsArtifactRoot(t *testing.T, manifest *deploymentsv1.Manifest) string {
+func specsArtifactRoot(t *testing.T, manifest *contractv1.Manifest) string {
 	t.Helper()
 	root := t.TempDir()
 	for _, app := range manifestApps(manifest) {
@@ -1738,11 +1738,11 @@ func TestStackSpecsOnAnEdgeThatRunsNoCode(t *testing.T) {
 			EdgeValues: map[string]string{"cacheBucket": "ocel-proj-cache"},
 		}
 	}
-	twoApps := func() *deploymentsv1.Manifest {
-		return &deploymentsv1.Manifest{
+	twoApps := func() *contractv1.Manifest {
+		return &contractv1.Manifest{
 			Slug: "proj",
-			Apps: []*deploymentsv1.ManifestApp{{Name: "web", Framework: "next"}, {Name: "api", Framework: "next"}},
-			Functions: []*deploymentsv1.ManifestFunction{
+			Apps: []*contractv1.ManifestApp{{Name: "web", Framework: "next"}, {Name: "api", Framework: "next"}},
+			Functions: []*contractv1.ManifestFunction{
 				{LogicalName: "web_index", Framework: "next", App: "web", RouteId: "/"},
 				{LogicalName: "api_index", Framework: "next", App: "api", RouteId: "/"},
 			},
@@ -1764,7 +1764,7 @@ func TestStackSpecsOnAnEdgeThatRunsNoCode(t *testing.T) {
 	}
 
 	t.Run("production with no worker-fronted app", func(t *testing.T) {
-		specs, err := stackSpecs(codeless(), &deploymentsv1.Manifest{Slug: "proj"}, "v1", nil)
+		specs, err := stackSpecs(codeless(), &contractv1.Manifest{Slug: "proj"}, "v1", nil)
 		if err != nil {
 			t.Fatalf("stackSpecs: %v", err)
 		}
@@ -1791,7 +1791,7 @@ func TestStackSpecsOnAnEdgeThatRunsNoCode(t *testing.T) {
 
 	t.Run("preview on the project's own wildcard", func(t *testing.T) {
 		manifest := twoApps()
-		manifest.Domains = map[string]*deploymentsv1.DomainList{"preview": {Hostnames: []string{"*.preview.acme.com"}}}
+		manifest.Domains = map[string]*contractv1.DomainList{"preview": {Hostnames: []string{"*.preview.acme.com"}}}
 		cfg := codeless()
 		cfg.Tier = environmentv1.Tier_TIER_PREVIEW
 		cfg.Identity = "pr-42"
@@ -1812,7 +1812,7 @@ func TestStackSpecsOnAnEdgeThatRunsNoCode(t *testing.T) {
 		cfg.Tier = environmentv1.Tier_TIER_PREVIEW
 		cfg.Identity = "pr-42"
 
-		specs, err := stackSpecs(cfg, &deploymentsv1.Manifest{Slug: "proj"}, "v1", nil)
+		specs, err := stackSpecs(cfg, &contractv1.Manifest{Slug: "proj"}, "v1", nil)
 		if err != nil {
 			t.Fatalf("stackSpecs: %v", err)
 		}

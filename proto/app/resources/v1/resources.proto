@@ -1,0 +1,42 @@
+syntax = "proto3";
+package app.resources.v1;
+
+option go_package = "github.com/ocelhq/ocel/pkg/proto/app/resources/v1;resourcesv1";
+
+import "app/resources/v1/variables.proto";
+import "common/links/v1/links.proto";
+
+service ResourceService {
+    rpc Declare(DeclareRequest) returns (DeclareResponse);
+
+    rpc DeclareEnv(DeclareEnvRequest) returns (DeclareEnvResponse);
+
+    rpc ReportEnvProblems(ReportEnvProblemsRequest) returns (ReportEnvProblemsResponse);
+}
+
+message ResourceIdentifier {
+  common.links.v1.LinkType type = 1;
+  string name = 2;
+}
+
+message DeclareResponse {
+}
+
+message DeclareRequest {
+  ResourceIdentifier resource = 1;
+
+  oneof config {
+    PostgresConfig postgres = 2;
+    BucketConfig bucket = 3;
+  }
+
+  string stack = 4;
+}
+
+message PostgresConfig {
+  string version = 1;
+}
+
+message BucketConfig {
+  repeated string allowed_origins = 1;
+}
