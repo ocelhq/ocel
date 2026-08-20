@@ -47,11 +47,11 @@ func TestSubstrateClassOf(t *testing.T) {
 		})
 	}
 
-	t.Run("development is not a substrate", func(t *testing.T) {
+	t.Run("a class this build does not know is not a substrate", func(t *testing.T) {
 		t.Parallel()
 
-		if _, err := substrateClassOf(deploymentsv1.Environment_CLASS_DEVELOPMENT); err == nil {
-			t.Error("a development substrate is not a thing to tear down, want a refusal")
+		if _, err := substrateClassOf(deploymentsv1.Environment_Class(99)); err == nil {
+			t.Error("a class naming no substrate, want a refusal")
 		}
 	})
 }

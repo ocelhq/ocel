@@ -5,8 +5,6 @@ import (
 	"errors"
 	"time"
 
-	connect "connectrpc.com/connect"
-
 	"github.com/aws/aws-sdk-go-v2/service/ssm"
 
 	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
@@ -17,7 +15,7 @@ import (
 
 var errNoProductionDeploy = errors.New("this project has no production deploys yet; run `ocel deploy` first")
 
-func (s *Server) openStack(ctx context.Context, kind edge.Kind, opts options, slug string) (edge.EdgeStack, error) {
+func (s *Server) openStack(ctx context.Context, kind edge.Kind, opts providerConfig, slug string) (edge.EdgeStack, error) {
 	awscfg, err := loadAWS(ctx, opts.Region)
 	if err != nil {
 		return nil, err
@@ -45,10 +43,7 @@ func openStackOn(edgeFront edge.Edge, record bootstrap.StackRecord) (edge.EdgeSt
 }
 
 func (s *Server) ListPromotions(ctx context.Context, req *deploymentsv1.ListPromotionsRequest) (*deploymentsv1.ListPromotionsResponse, error) {
-	opts, err := parseOptions(req.GetOptions())
-	if err != nil {
-		return nil, connect.NewError(connect.CodeInvalidArgument, err)
-	}
+	opts := s.config.get()
 	stack, err := s.openStack(ctx, requestedEdge(req), opts, req.GetSlug())
 	if err != nil {
 		if errors.Is(err, errNoProductionDeploy) {
@@ -65,10 +60,7 @@ func (s *Server) ListPromotions(ctx context.Context, req *deploymentsv1.ListProm
 }
 
 func (s *Server) Rollback(ctx context.Context, req *deploymentsv1.RollbackRequest) (*deploymentsv1.RollbackResponse, error) {
-	opts, err := parseOptions(req.GetOptions())
-	if err != nil {
-		return nil, connect.NewError(connect.CodeInvalidArgument, err)
-	}
+	opts := s.config.get()
 	edgeFront, err := s.edge(requestedEdge(req), opts.Region)
 	if err != nil {
 		return nil, err

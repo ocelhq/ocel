@@ -10,6 +10,8 @@ lint:
 breaking:
   use:
     - FILE
-  ignore_only:
-    ENUM_VALUE_NO_DELETE:
-      - proto/deployments/v1/deployments.proto
+  ignore:
+    - proto/deployments
+    - proto/dev
+    - proto/env
+    - proto/resources

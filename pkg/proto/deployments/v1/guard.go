@@ -32,12 +32,8 @@ func CheckClass(infra, required Environment_Class) error {
 	}
 }
 
-// infraLabel renders an infrastructure class as concrete, user-facing prose,
-// naming an unstamped account plainly rather than as an enum token.
 func infraLabel(class Environment_Class) string {
 	switch class {
-	case Environment_CLASS_DEVELOPMENT:
-		return "development infrastructure"
 	case Environment_CLASS_PREVIEW:
 		return "preview infrastructure"
 	case Environment_CLASS_PRODUCTION:

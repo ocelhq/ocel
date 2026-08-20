@@ -337,7 +337,7 @@ func TestSetValueAtAnEnvironmentOverride(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 			s := testAccount(&countingCFN{}, newFakeDynamo(), &fakeKMS{})
-			s.listEnvironments = func(context.Context, []byte, string) ([]string, error) { return tc.exists, nil }
+			s.listEnvironments = func(context.Context, string, string) ([]string, error) { return tc.exists, nil }
 
 			_, err := s.SetValue(context.Background(), &envv1.SetValueRequest{
 				Class:      tc.class,

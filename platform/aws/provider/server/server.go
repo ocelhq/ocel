@@ -2,7 +2,6 @@ package server
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -47,6 +46,8 @@ const deployEnv = deploy.ProductionEnv
 
 type Server struct {
 	stores
+
+	config sessionConfig
 
 	memo memo
 }
@@ -135,14 +136,6 @@ func (s *Server) edge(kind edge.Kind, region string) (edge.Edge, error) {
 	})
 }
 
-func optionsRegion(raw []byte) string {
-	opts, err := parseOptions(raw)
-	if err != nil {
-		return ""
-	}
-	return opts.Region
-}
-
 func (s *Server) deployed(ctx context.Context, api bootstrap.CFNDescriber, region string, preview bool) (bootstrap.Deployed, error) {
 	return s.memo.deployedFor(region, preview).resolve(func() (bootstrap.Deployed, error) {
 		return checkBootstrap(ctx, api, preview)
@@ -155,29 +148,12 @@ func (s *Server) callerIdentity(ctx context.Context, api STSAPI, region string) 
 	})
 }
 
-type options struct {
-	Region       string            `json:"region"`
-	Transforms   []string          `json:"transforms"`
-	Certificates map[string]string `json:"certificates"`
-}
-
-func parseOptions(raw []byte) (options, error) {
-	var o options
-	if len(raw) == 0 {
-		return o, nil
-	}
-	if err := json.Unmarshal(raw, &o); err != nil {
-		return o, fmt.Errorf("parse provider options: %w", err)
-	}
-	return o, nil
-}
-
 func (s *Server) Deploy(ctx context.Context, req *deploymentsv1.DeployRequest, stream *connect.ServerStream[deploymentsv1.DeployEvent]) (err error) {
 	manifest := req.GetManifest()
 	if err := validateManifest(manifest); err != nil {
 		return connect.NewError(connect.CodeInvalidArgument, err)
 	}
-	edgeFront, edgeErr := s.edge(requestedEdge(req), optionsRegion(req.GetOptions()))
+	edgeFront, edgeErr := s.edge(requestedEdge(req), s.config.get().Region)
 	if edgeErr != nil {
 		return connect.NewError(connect.CodeInvalidArgument, edgeErr)
 	}
@@ -225,10 +201,7 @@ func (s *Server) runDeploy(ctx context.Context, req *deploymentsv1.DeployRequest
 		return err
 	}
 
-	opts, err := parseOptions(req.GetOptions())
-	if err != nil {
-		return deploy.Result{}, finishPreparing(err)
-	}
+	opts := s.config.get()
 	awscfg, err := loadAWS(ctx, opts.Region)
 	if err != nil {
 		return deploy.Result{}, finishPreparing(err)
@@ -477,10 +450,7 @@ func (s *Server) Bootstrap(ctx context.Context, req *deploymentsv1.BootstrapRequ
 	progress := func(m string) { _ = stream.Send(progressEvent(m)) }
 	logf := func(m string) { _ = stream.Send(logEvent(m)) }
 
-	opts, err := parseOptions(req.GetOptions())
-	if err != nil {
-		return stream.Send(failureResult(err))
-	}
+	opts := s.config.get()
 	awscfg, err := loadAWS(ctx, opts.Region)
 	if err != nil {
 		return stream.Send(failureResult(err))
@@ -497,7 +467,7 @@ func (s *Server) Bootstrap(ctx context.Context, req *deploymentsv1.BootstrapRequ
 		return stream.Send(failureResult(compat.Explain(deployed.Version, bootstrap.RequiredBootstrapVersion, bootstrapCommand(preview))))
 	}
 
-	defaultEdge, err := s.edge(edges.DefaultKind, optionsRegion(req.GetOptions()))
+	defaultEdge, err := s.edge(edges.DefaultKind, opts.Region)
 	if err != nil {
 		return connect.NewError(connect.CodeInvalidArgument, err)
 	}
@@ -536,10 +506,7 @@ func (s *Server) runBootstrap(ctx context.Context, run bootstrapRun, apis bootst
 }
 
 func (s *Server) DescribeBootstrap(ctx context.Context, req *deploymentsv1.DescribeBootstrapRequest) (*deploymentsv1.DescribeBootstrapResponse, error) {
-	opts, err := parseOptions(req.GetOptions())
-	if err != nil {
-		return nil, connect.NewError(connect.CodeInvalidArgument, err)
-	}
+	opts := s.config.get()
 	awscfg, err := loadAWS(ctx, opts.Region)
 	if err != nil {
 		return nil, err
@@ -560,7 +527,7 @@ func (s *Server) DescribeBootstrap(ctx context.Context, req *deploymentsv1.Descr
 }
 
 func describedBootstrap(deployed bootstrap.Deployed, recorded map[string][]string) *deploymentsv1.DescribeBootstrapResponse {
-	resp := &deploymentsv1.DescribeBootstrapResponse{Present: deployed.Present}
+	resp := &deploymentsv1.DescribeBootstrapResponse{}
 	for _, f := range bootstrap.Catalogue() {
 		resp.Features = append(resp.Features, &deploymentsv1.Feature{
 			Name:       f.Name,
@@ -602,7 +569,7 @@ func checkBootstrap(ctx context.Context, api bootstrap.CFNDescriber, preview boo
 
 const artifactRootDirName = ".ocel/output"
 
-func transformPass(opts options) transform.Evaluator {
+func transformPass(opts providerConfig) transform.Evaluator {
 	if len(opts.Transforms) == 0 {
 		return nil
 	}

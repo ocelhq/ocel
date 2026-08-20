@@ -8,6 +8,8 @@ import "resources/v1/env.proto";
 import "resources/v1/resources.proto";
 
 service DeploymentService {
+    rpc Configure(ConfigureRequest) returns (ConfigureResponse);
+
     rpc Deploy(DeployRequest) returns (stream DeployEvent);
 
     rpc Bootstrap(BootstrapRequest) returns (stream DeployEvent);
@@ -55,6 +57,26 @@ service DeploymentService {
     rpc ListLinks(ListLinksRequest) returns (ListLinksResponse);
 }
 
+message AwsProviderConfig {
+  string region = 1;
+
+  repeated string transforms = 2;
+
+  map<string, string> certificates = 3;
+}
+
+message ProviderConfig {
+  oneof provider {
+    AwsProviderConfig aws = 1;
+  }
+}
+
+message ConfigureRequest {
+  ProviderConfig config = 1;
+}
+
+message ConfigureResponse {}
+
 message UseDomainRequest {
   Environment.Class class = 1;
 
@@ -65,8 +87,6 @@ message UseDomainRequest {
 
 message ListDomainRequest {
   Environment.Class class = 1;
-
-  EdgeSelection edge = 2;
 }
 
 message ListDomainResponse {
@@ -82,43 +102,31 @@ message ReleaseDomainRequest {
 }
 
 message AddDomainRequest {
-  bytes options = 1;
+  string slug = 1;
 
-  string protocol_version = 2;
+  repeated string configured = 2;
 
-  string slug = 3;
+  string host = 3;
 
-  repeated string configured = 4;
-
-  string host = 5;
-
-  EdgeSelection edge = 6;
+  EdgeSelection edge = 4;
 }
 
 message RemoveDomainRequest {
-  bytes options = 1;
+  string slug = 1;
 
-  string protocol_version = 2;
+  repeated string configured = 2;
 
-  string slug = 3;
+  string host = 3;
 
-  repeated string configured = 4;
-
-  string host = 5;
-
-  EdgeSelection edge = 6;
+  EdgeSelection edge = 4;
 }
 
 message DomainStatusRequest {
-  bytes options = 1;
+  string slug = 1;
 
-  string protocol_version = 2;
+  repeated string configured = 2;
 
-  string slug = 3;
-
-  repeated string configured = 4;
-
-  EdgeSelection edge = 5;
+  EdgeSelection edge = 3;
 }
 
 message DomainStatusResponse {
@@ -166,9 +174,8 @@ message DomainHost {
 message Environment {
   enum Class {
     CLASS_UNSPECIFIED = 0;
-    CLASS_DEVELOPMENT = 1;
-    CLASS_PREVIEW = 2;
-    CLASS_PRODUCTION = 3;
+    CLASS_PREVIEW = 1;
+    CLASS_PRODUCTION = 2;
   }
 
   enum Lifecycle {
@@ -177,35 +184,24 @@ message Environment {
     LIFECYCLE_PERSISTENT = 2;
   }
 
-  enum IdentitySource {
-    IDENTITY_SOURCE_UNSPECIFIED = 0;
-    IDENTITY_SOURCE_GIT = 1;
-    IDENTITY_SOURCE_DECLARED = 2;
-  }
-
   Class class = 1;
   Lifecycle lifecycle = 2;
 
   string identity = 3;
-  IdentitySource identity_source = 4;
-
-  string label = 5;
 }
 
 message Manifest {
   string schema_version = 1;
-  repeated ManifestResource resources = 3;
-  repeated ManifestFunction functions = 4;
+  repeated ManifestResource resources = 2;
+  repeated ManifestFunction functions = 3;
 
-  reserved 2;
-
-  string slug = 7;
+  string slug = 4;
 
   map<string, DomainList> domains = 5;
 
   repeated ManifestApp apps = 6;
 
-  repeated ManifestUsage usages = 8;
+  repeated ManifestUsage usages = 7;
 }
 
 message ManifestUsage {
@@ -266,46 +262,29 @@ message ManifestResource {
 message DeployRequest {
   Manifest manifest = 1;
 
-  bytes options = 2;
+  Environment environment = 2;
 
-  string protocol_version = 3;
+  string tag = 3;
 
-  Environment environment = 4;
+  EdgeSelection edge = 4;
 
-  string tag = 5;
-
-  EdgeSelection edge = 6;
-
-  repeated string required_features = 10;
+  repeated string required_features = 5;
 }
 
 message BootstrapRequest {
-  reserved 4, 5, 6, 7;
-  reserved "edge_kind", "edge_options", "dns", "allow_degraded";
+  Environment.Class class = 1;
 
-  bytes options = 1;
+  repeated string features = 2;
 
-  string protocol_version = 2;
-
-  Environment.Class class = 3;
-
-  repeated string features = 8;
-
-  bool force = 9;
+  bool force = 3;
 }
 
 message DescribeBootstrapRequest {
-  bytes options = 1;
-
-  string protocol_version = 2;
-
-  Environment.Class class = 3;
+  Environment.Class class = 1;
 }
 
 message DescribeBootstrapResponse {
-  bool present = 1;
-
-  repeated Feature features = 2;
+  repeated Feature features = 1;
 }
 
 message Feature {
@@ -329,31 +308,21 @@ message Dns {
 message EdgeSelection {
   string kind = 1;
 
-  bytes options = 2;
+  Dns dns = 2;
 
-  Dns dns = 3;
-
-  repeated string allow_degraded = 4;
+  repeated string allow_degraded = 3;
 }
 
 message TeardownRequest {
-  bytes options = 1;
+  Environment.Class class = 1;
 
-  string protocol_version = 2;
-
-  Environment.Class class = 3;
-
-  EdgeSelection edge = 4;
+  EdgeSelection edge = 2;
 }
 
 message PlanTeardownRequest {
-  bytes options = 1;
+  Environment.Class class = 1;
 
-  string protocol_version = 2;
-
-  Environment.Class class = 3;
-
-  EdgeSelection edge = 4;
+  EdgeSelection edge = 2;
 }
 
 message PlanTeardownResponse {
@@ -365,37 +334,25 @@ message PlanTeardownResponse {
 message DestroyPreviewRequest {
   Environment environment = 1;
 
-  bytes options = 2;
+  string slug = 2;
 
-  string protocol_version = 3;
-
-  string slug = 4;
-
-  EdgeSelection edge = 5;
+  EdgeSelection edge = 3;
 }
 
 message DestroyProjectRequest {
-  bytes options = 1;
+  string slug = 1;
 
-  string protocol_version = 2;
+  Environment environment = 2;
 
-  string slug = 3;
-
-  Environment environment = 4;
-
-  EdgeSelection edge = 5;
+  EdgeSelection edge = 3;
 }
 
 message PlanDestroyProjectRequest {
-  bytes options = 1;
+  string slug = 1;
 
-  string protocol_version = 2;
+  Environment environment = 2;
 
-  string slug = 3;
-
-  Environment environment = 4;
-
-  EdgeSelection edge = 5;
+  EdgeSelection edge = 3;
 }
 
 message PlanDestroyProjectResponse {
@@ -410,8 +367,6 @@ message PlanDestroyProjectResponse {
 
 message PlanReleaseDomainRequest {
   Environment.Class class = 1;
-
-  EdgeSelection edge = 2;
 }
 
 message PlanReleaseDomainResponse {
@@ -442,11 +397,7 @@ message EdgeStackPlan {
 }
 
 message ListEnvironmentsRequest {
-  bytes options = 1;
-
-  string protocol_version = 2;
-
-  string slug = 3;
+  string slug = 1;
 }
 
 message ListEnvironmentsResponse {
@@ -464,19 +415,15 @@ message PreviewEnvironment {
 }
 
 message PreflightRequest {
-  bytes options = 1;
+  Environment.Class required_class = 1;
 
-  string protocol_version = 2;
+  string slug = 2;
 
-  Environment.Class required_class = 3;
+  repeated string domains = 3;
 
-  string slug = 4;
+  EdgeSelection edge = 4;
 
-  repeated string domains = 5;
-
-  EdgeSelection edge = 6;
-
-  repeated string required_features = 7;
+  repeated string required_features = 5;
 }
 
 message PreflightResponse {
@@ -569,13 +516,9 @@ message PromotionHistoryEntry {
 }
 
 message ListPromotionsRequest {
-  bytes options = 1;
+  string slug = 1;
 
-  string protocol_version = 2;
-
-  string slug = 3;
-
-  EdgeSelection edge = 4;
+  EdgeSelection edge = 2;
 }
 
 message ListPromotionsResponse {
@@ -583,17 +526,13 @@ message ListPromotionsResponse {
 }
 
 message RollbackRequest {
-  bytes options = 1;
+  string slug = 1;
 
-  string protocol_version = 2;
+  string to = 2;
 
-  string slug = 3;
+  string tag = 3;
 
-  string to = 4;
-
-  string tag = 5;
-
-  EdgeSelection edge = 6;
+  EdgeSelection edge = 4;
 }
 
 message RollbackResponse {
@@ -601,17 +540,13 @@ message RollbackResponse {
 }
 
 message PruneRequest {
-  bytes options = 1;
+  string slug = 1;
 
-  string protocol_version = 2;
+  int32 keep_n = 2;
 
-  string slug = 3;
+  Environment environment = 3;
 
-  int32 keep_n = 4;
-
-  Environment environment = 5;
-
-  EdgeSelection edge = 6;
+  EdgeSelection edge = 4;
 }
 
 message DeployEvent {
@@ -628,13 +563,10 @@ message DeployEvent {
 
 enum Phase {
   PHASE_UNSPECIFIED = 0;
-  PHASE_UPLOADING = 2;
-  PHASE_PROVISIONING = 3;
-  PHASE_FINALIZING = 4;
-  PHASE_DELETING = 5;
-
-  reserved 1;
-  reserved "PHASE_BUILDING";
+  PHASE_UPLOADING = 1;
+  PHASE_PROVISIONING = 2;
+  PHASE_FINALIZING = 3;
+  PHASE_DELETING = 4;
 }
 
 message Stage {
@@ -642,10 +574,7 @@ message Stage {
 
   bytes parent_id = 2;
 
-  string title = 4;
-
-  reserved 3;
-  reserved "position";
+  string title = 3;
 }
 
 message StagePlanEvent {
@@ -683,20 +612,17 @@ message SpanAttribute {
 }
 
 message SpanEvent {
-  bytes span_id = 2;
-  bytes parent_span_id = 3;
+  bytes span_id = 1;
+  bytes parent_span_id = 2;
 
-  string name = 4;
+  string name = 3;
 
-  int64 start_time_unix_nano = 5;
-  int64 end_time_unix_nano = 6;
+  int64 start_time_unix_nano = 4;
+  int64 end_time_unix_nano = 5;
 
-  SpanStatus status = 7;
+  SpanStatus status = 6;
 
-  repeated SpanAttribute attributes = 9;
-
-  reserved 1, 8;
-  reserved "trace_id", "error";
+  repeated SpanAttribute attributes = 7;
 }
 
 message ProgressEvent {
@@ -742,20 +668,17 @@ message ResultEvent {
   bool success = 1;
   string error = 2;
 
-  repeated links.v1.Link links = 6;
+  repeated links.v1.Link links = 3;
 
-  repeated FunctionOutput functions = 7;
+  repeated FunctionOutput functions = 4;
 
-  repeated string app_urls = 4;
+  repeated string app_urls = 5;
 
-  string promotion_id = 5;
+  string promotion_id = 6;
 
-  FlipBound flip_bound = 8;
+  FlipBound flip_bound = 7;
 
-  string url_note = 9;
-
-  reserved 3;
-  reserved "outputs";
+  string url_note = 8;
 }
 
 message FunctionOutput {
@@ -764,19 +687,15 @@ message FunctionOutput {
 }
 
 message SetLinkRequest {
-  bytes options = 1;
+  string slug = 1;
 
-  string protocol_version = 2;
+  Environment.Class class = 2;
 
-  string slug = 3;
+  string environment = 3;
 
-  Environment.Class class = 4;
+  links.v1.Link link = 4;
 
-  string environment = 5;
-
-  links.v1.Link link = 6;
-
-  string owner = 7;
+  string owner = 5;
 }
 
 message SetLinkResponse {
@@ -784,17 +703,13 @@ message SetLinkResponse {
 }
 
 message RemoveLinkRequest {
-  bytes options = 1;
+  string slug = 1;
 
-  string protocol_version = 2;
+  Environment.Class class = 2;
 
-  string slug = 3;
+  string environment = 3;
 
-  Environment.Class class = 4;
-
-  string environment = 5;
-
-  string name = 6;
+  string name = 4;
 }
 
 message RemoveLinkResponse {
@@ -802,15 +717,11 @@ message RemoveLinkResponse {
 }
 
 message ListLinksRequest {
-  bytes options = 1;
+  string slug = 1;
 
-  string protocol_version = 2;
+  Environment.Class class = 2;
 
-  string slug = 3;
-
-  Environment.Class class = 4;
-
-  string environment = 5;
+  string environment = 3;
 }
 
 message ListLinksResponse {

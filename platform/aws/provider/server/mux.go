@@ -22,7 +22,7 @@ func newMux(deployments *Server, token string) *http.ServeMux {
 	path, handler := deploymentsv1connect.NewDeploymentServiceHandler(deployments, interceptors)
 	mux.Handle(path, handler)
 
-	path, handler = envv1connect.NewEnvVarsServiceHandler(&VarsServer{}, interceptors)
+	path, handler = envv1connect.NewEnvVarsServiceHandler(&VarsServer{config: &deployments.config}, interceptors)
 	mux.Handle(path, handler)
 	return mux
 }

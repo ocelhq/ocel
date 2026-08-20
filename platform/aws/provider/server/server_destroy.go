@@ -20,10 +20,7 @@ import (
 )
 
 func (s *Server) PlanDestroyProject(ctx context.Context, req *deploymentsv1.PlanDestroyProjectRequest) (*deploymentsv1.PlanDestroyProjectResponse, error) {
-	opts, err := parseOptions(req.GetOptions())
-	if err != nil {
-		return nil, connect.NewError(connect.CodeInvalidArgument, err)
-	}
+	opts := s.config.get()
 
 	edgeFront, err := s.edge(requestedEdge(req), opts.Region)
 	if err != nil {
@@ -81,7 +78,7 @@ func nothingToDestroy(indexed bool, edgeStack *deploymentsv1.EdgeStackPlan, appS
 	return !indexed && len(edgeStack.GetItems()) == 0 && len(appStacks) == 0 && len(infraStacks) == 0
 }
 
-func (s *Server) planDestroyPreviewProject(ctx context.Context, opts options, edgeFront edge.Edge, slug string) (*deploymentsv1.PlanDestroyProjectResponse, error) {
+func (s *Server) planDestroyPreviewProject(ctx context.Context, opts providerConfig, edgeFront edge.Edge, slug string) (*deploymentsv1.PlanDestroyProjectResponse, error) {
 	awscfg, err := loadAWS(ctx, opts.Region)
 	if err != nil {
 		return nil, err
@@ -202,10 +199,7 @@ func (s *Server) runDestroyProject(ctx context.Context, req *deploymentsv1.Destr
 		return err
 	}
 
-	opts, err := parseOptions(req.GetOptions())
-	if err != nil {
-		return finish(connect.NewError(connect.CodeInvalidArgument, err))
-	}
+	opts := s.config.get()
 	awscfg, params, err := productionTeardownParams(ctx, opts, req.GetSlug())
 	if err != nil {
 		return finish(err)
@@ -262,10 +256,7 @@ func (s *Server) runDestroyPreviewProject(ctx context.Context, req *deploymentsv
 		return err
 	}
 
-	opts, err := parseOptions(req.GetOptions())
-	if err != nil {
-		return finish(connect.NewError(connect.CodeInvalidArgument, err))
-	}
+	opts := s.config.get()
 	deps, stack, err := s.previewTeardownDeps(ctx, requestedEdge(req), opts, slug, env)
 	if err != nil {
 		return finish(err)

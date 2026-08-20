@@ -15,7 +15,6 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/ocelhq/ocel/cli/internal/deployui"
-	"github.com/ocelhq/ocel/cli/internal/manifestbuilder"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
 	"github.com/ocelhq/ocel/cli/internal/providerrunner"
 	"github.com/ocelhq/ocel/cli/node"
@@ -197,7 +196,7 @@ func runDomainUse(ctx context.Context, d deps, cwd, wildcard string, opts domain
 
 	provW := ui.BuildWriter()
 	err = runProviderSession(ctx, d, cfg, provider, provW, provW, func(runner *providerrunner.Runner) error {
-		if err := preflightPreview(ctx, d, runner, provider, cfg, stdout); err != nil {
+		if err := preflightPreview(ctx, d, runner, cfg, stdout); err != nil {
 			return err
 		}
 		req := &deploymentsv1.UseDomainRequest{
@@ -228,7 +227,7 @@ func runDomainLs(ctx context.Context, d deps, cwd string, opts domainOptions, st
 	}
 
 	return runProviderSession(ctx, d, cfg, provider, stdout, stderr, func(runner *providerrunner.Runner) error {
-		resp, err := listGlobalPreviewDomain(ctx, d, runner, provider, cfg, stdout)
+		resp, err := listGlobalPreviewDomain(ctx, d, runner, cfg, stdout)
 		if err != nil {
 			return err
 		}
@@ -261,7 +260,7 @@ func runDomainRelease(ctx context.Context, d deps, cwd string, opts domainOption
 
 	provW := ui.BuildWriter()
 	err = runProviderSession(ctx, d, cfg, provider, provW, provW, func(runner *providerrunner.Runner) error {
-		if err := preflightPreview(ctx, d, runner, provider, cfg, stdout); err != nil {
+		if err := preflightPreview(ctx, d, runner, cfg, stdout); err != nil {
 			return err
 		}
 		client, err := runner.Deployments()
@@ -272,7 +271,6 @@ func runDomainRelease(ctx context.Context, d deps, cwd string, opts domainOption
 		spinner := deployui.StartSpinner(stdout, "Enumerating what releasing the domain would remove")
 		plan, err := client.PlanReleaseDomain(ctx, &deploymentsv1.PlanReleaseDomainRequest{
 			Class: deploymentsv1.Environment_CLASS_PREVIEW,
-			Edge:  edgeSelection(cfg),
 		})
 		spinner.Stop()
 		if err != nil {
@@ -332,12 +330,10 @@ func runAddDomain(ctx context.Context, d deps, cwd, host string, stdout, stderr 
 	}
 	return runDomainStream(ctx, d, cfg, provider, "ocel domain add", stdout, stderr, func(runner *providerrunner.Runner, ui *deployui.Session) error {
 		req := &deploymentsv1.AddDomainRequest{
-			Options:         []byte(provider.Options),
-			ProtocolVersion: manifestbuilder.SchemaVersion,
-			Slug:            cfg.Slug,
-			Configured:      configured,
-			Host:            host,
-			Edge:            edgeSelection(cfg),
+			Slug:       cfg.Slug,
+			Configured: configured,
+			Host:       host,
+			Edge:       edgeSelection(cfg),
 		}
 		if err := runner.AddDomain(ctx, req, ui.Event); err != nil {
 			return err
@@ -362,12 +358,10 @@ func runDomainRm(ctx context.Context, d deps, cwd, host string, stdout, stderr i
 
 	return runDomainStream(ctx, d, cfg, provider, "ocel domain rm", stdout, stderr, func(runner *providerrunner.Runner, ui *deployui.Session) error {
 		req := &deploymentsv1.RemoveDomainRequest{
-			Options:         []byte(provider.Options),
-			ProtocolVersion: manifestbuilder.SchemaVersion,
-			Slug:            cfg.Slug,
-			Configured:      declaredHostnames(cfg, "production"),
-			Host:            host,
-			Edge:            edgeSelection(cfg),
+			Slug:       cfg.Slug,
+			Configured: declaredHostnames(cfg, "production"),
+			Host:       host,
+			Edge:       edgeSelection(cfg),
 		}
 		if err := runner.RemoveDomain(ctx, req, ui.Event); err != nil {
 			return err
@@ -393,7 +387,7 @@ func runDomainStream(ctx context.Context, d deps, cfg *projectconfig.Config, pro
 
 	provW := ui.BuildWriter()
 	err = runProviderSession(ctx, d, cfg, provider, provW, provW, func(runner *providerrunner.Runner) error {
-		if err := preflightClass(ctx, d, runner, provider, cfg, deploymentsv1.Environment_CLASS_PRODUCTION, "ocel bootstrap", stdout); err != nil {
+		if err := preflightClass(ctx, d, runner, cfg, deploymentsv1.Environment_CLASS_PRODUCTION, "ocel bootstrap", stdout); err != nil {
 			return err
 		}
 		return act(runner, ui)
@@ -419,8 +413,8 @@ func domainSession(ctx context.Context, cwd string) (*projectconfig.Config, *pro
 	return cfg, provider, nil
 }
 
-func listGlobalPreviewDomain(ctx context.Context, d deps, runner *providerrunner.Runner, provider *projectconfig.ProviderDescriptor, cfg *projectconfig.Config, out io.Writer) (*deploymentsv1.ListDomainResponse, error) {
-	if err := preflightPreview(ctx, d, runner, provider, cfg, out); err != nil {
+func listGlobalPreviewDomain(ctx context.Context, d deps, runner *providerrunner.Runner, cfg *projectconfig.Config, out io.Writer) (*deploymentsv1.ListDomainResponse, error) {
+	if err := preflightPreview(ctx, d, runner, cfg, out); err != nil {
 		return nil, err
 	}
 	client, err := runner.Deployments()
@@ -428,7 +422,7 @@ func listGlobalPreviewDomain(ctx context.Context, d deps, runner *providerrunner
 		return nil, err
 	}
 	spinner := deployui.StartSpinner(out, "Reading the global preview domain")
-	resp, err := client.ListDomain(ctx, &deploymentsv1.ListDomainRequest{Class: deploymentsv1.Environment_CLASS_PREVIEW, Edge: edgeSelection(cfg)})
+	resp, err := client.ListDomain(ctx, &deploymentsv1.ListDomainRequest{Class: deploymentsv1.Environment_CLASS_PREVIEW})
 	spinner.Stop()
 	if err != nil {
 		return nil, err
@@ -520,7 +514,7 @@ func runDomainStatus(ctx context.Context, d deps, cwd string, opts domainOptions
 	configured := declaredHostnames(cfg, "production")
 
 	return runProviderSession(ctx, d, cfg, provider, stdout, stderr, func(runner *providerrunner.Runner) error {
-		if err := preflightClass(ctx, d, runner, provider, cfg, deploymentsv1.Environment_CLASS_PRODUCTION, "ocel bootstrap", stdout); err != nil {
+		if err := preflightClass(ctx, d, runner, cfg, deploymentsv1.Environment_CLASS_PRODUCTION, "ocel bootstrap", stdout); err != nil {
 			return err
 		}
 		client, err := runner.Deployments()
@@ -528,11 +522,9 @@ func runDomainStatus(ctx context.Context, d deps, cwd string, opts domainOptions
 			return err
 		}
 		req := &deploymentsv1.DomainStatusRequest{
-			Options:         []byte(provider.Options),
-			ProtocolVersion: manifestbuilder.SchemaVersion,
-			Slug:            cfg.Slug,
-			Configured:      configured,
-			Edge:            edgeSelection(cfg),
+			Slug:       cfg.Slug,
+			Configured: configured,
+			Edge:       edgeSelection(cfg),
 		}
 		resp, err := awaitDomainStatus(ctx, client, req, opts.wait, stdout)
 		if err != nil {

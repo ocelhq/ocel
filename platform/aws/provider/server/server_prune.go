@@ -54,10 +54,7 @@ func (s *Server) runPrune(ctx context.Context, req *deploymentsv1.PruneRequest, 
 		return edge.PruneResult{}, err
 	}
 
-	opts, err := parseOptions(req.GetOptions())
-	if err != nil {
-		return finish(connect.NewError(connect.CodeInvalidArgument, err))
-	}
+	opts := s.config.get()
 
 	if env := req.GetEnvironment(); env.GetClass() == deploymentsv1.Environment_CLASS_PREVIEW {
 		pointer, err := deploy.EnvName(env)
@@ -108,7 +105,7 @@ func pruneSummaryLines(result edge.PruneResult) []string {
 	}
 }
 
-func productionTeardownParams(ctx context.Context, opts options, slug string) (aws.Config, bootstrap.TeardownParams, error) {
+func productionTeardownParams(ctx context.Context, opts providerConfig, slug string) (aws.Config, bootstrap.TeardownParams, error) {
 	awscfg, err := loadAWS(ctx, opts.Region)
 	if err != nil {
 		return aws.Config{}, bootstrap.TeardownParams{}, err
@@ -136,7 +133,7 @@ func (d teardownContext) projectTeardown(rep deploy.Reporting, writer edge.DNSWr
 	return deploy.ProjectTeardown{Teardown: d.teardown, Values: d.values, DNS: writer}
 }
 
-func (s *Server) productionTeardownDeps(ctx context.Context, opts options, awscfg aws.Config, params bootstrap.TeardownParams, slug string) (teardownContext, error) {
+func (s *Server) productionTeardownDeps(ctx context.Context, opts providerConfig, awscfg aws.Config, params bootstrap.TeardownParams, slug string) (teardownContext, error) {
 	cfn := cloudformation.NewFromConfig(awscfg)
 
 	deployed, err := s.deployed(ctx, cfn, opts.Region, false)

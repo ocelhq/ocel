@@ -43,8 +43,8 @@ type varsUISessions struct {
 func captureVarsUI(d *deps) *varsUISessions {
 	sessions := &varsUISessions{}
 	prev := d.serveVarsUI
-	d.serveVarsUI = func(ctx context.Context, cfg *projectconfig.Config, provider *projectconfig.ProviderDescriptor, runner *providerrunner.Runner, preview bool, gate *envgate.Gate) (*varsui.Session, error) {
-		session, err := prev(ctx, cfg, provider, runner, preview, gate)
+	d.serveVarsUI = func(ctx context.Context, cfg *projectconfig.Config, runner *providerrunner.Runner, preview bool, gate *envgate.Gate) (*varsui.Session, error) {
+		session, err := prev(ctx, cfg, runner, preview, gate)
 		if err == nil {
 			sessions.mu.Lock()
 			sessions.all = append(sessions.all, session)

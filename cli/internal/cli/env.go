@@ -13,7 +13,6 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/declcache"
 	"github.com/ocelhq/ocel/cli/internal/deploycollector"
 	"github.com/ocelhq/ocel/cli/internal/envgate"
-	"github.com/ocelhq/ocel/cli/internal/manifestbuilder"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
 	"github.com/ocelhq/ocel/cli/internal/providerrunner"
 	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
@@ -194,7 +193,7 @@ func envSession(ctx context.Context, d deps, cwd string, opts envOptions, stdout
 	}
 
 	return runProviderSession(ctx, d, cfg, provider, stderr, stderr, func(runner *providerrunner.Runner) error {
-		if err := preflightClass(ctx, d, runner, provider, cfg, class, hint, stderr); err != nil {
+		if err := preflightClass(ctx, d, runner, cfg, class, hint, stderr); err != nil {
 			return err
 		}
 		return drive(runner, cfg, provider)
@@ -212,15 +211,13 @@ func envCoordinate(slug, key string, opts envOptions) *envv1.Coordinate {
 	return &envv1.Coordinate{Slug: slug, Folder: opts.folder, Key: key, Environment: opts.environment}
 }
 
-func namedEnvironments(ctx context.Context, runner *providerrunner.Runner, provider *projectconfig.ProviderDescriptor, slug string) ([]string, error) {
+func namedEnvironments(ctx context.Context, runner *providerrunner.Runner, slug string) ([]string, error) {
 	client, err := runner.Deployments()
 	if err != nil {
 		return nil, err
 	}
 	resp, err := client.ListEnvironments(ctx, &deploymentsv1.ListEnvironmentsRequest{
-		Options:         []byte(provider.Options),
-		ProtocolVersion: manifestbuilder.SchemaVersion,
-		Slug:            slug,
+		Slug: slug,
 	})
 	if err != nil {
 		return nil, err
@@ -238,8 +235,8 @@ func runEnvSet(ctx context.Context, d deps, cwd, key, value string, opts envOpti
 			return err
 		}
 	}
-	return envSession(ctx, d, cwd, opts, stdout, stderr, func(runner *providerrunner.Runner, cfg *projectconfig.Config, provider *projectconfig.ProviderDescriptor) error {
-		definitions, err := declaredVariables(ctx, d, cfg, runner, provider, key, opts, stderr)
+	return envSession(ctx, d, cwd, opts, stdout, stderr, func(runner *providerrunner.Runner, cfg *projectconfig.Config, _ *projectconfig.ProviderDescriptor) error {
+		definitions, err := declaredVariables(ctx, d, cfg, runner, key, opts, stderr)
 		if err != nil {
 			return err
 		}
@@ -251,11 +248,9 @@ func runEnvSet(ctx context.Context, d deps, cwd, key, value string, opts envOpti
 			return err
 		}
 		resp, err := vars.SetValue(ctx, &envv1.SetValueRequest{
-			Options:         []byte(provider.Options),
-			ProtocolVersion: manifestbuilder.SchemaVersion,
-			Class:           envClass(opts),
-			Coordinate:      envCoordinate(cfg.Slug, key, opts),
-			Value:           value,
+			Class:      envClass(opts),
+			Coordinate: envCoordinate(cfg.Slug, key, opts),
+			Value:      value,
 		})
 		if err != nil {
 			return err
@@ -265,7 +260,7 @@ func runEnvSet(ctx context.Context, d deps, cwd, key, value string, opts envOpti
 	})
 }
 
-func declaredVariables(ctx context.Context, d deps, cfg *projectconfig.Config, runner *providerrunner.Runner, provider *projectconfig.ProviderDescriptor, key string, opts envOptions, stderr io.Writer) ([]*resourcesv1.VariableDefinition, error) {
+func declaredVariables(ctx context.Context, d deps, cfg *projectconfig.Config, runner *providerrunner.Runner, key string, opts envOptions, stderr io.Writer) ([]*resourcesv1.VariableDefinition, error) {
 	entry, err := deploycollector.Bundle(cfg)
 	if err != nil {
 		return nil, err
@@ -282,7 +277,7 @@ func declaredVariables(ctx context.Context, d deps, cfg *projectconfig.Config, r
 		}
 	}
 
-	gate := envGate(cfg, runner, provider, opts)
+	gate := envGate(cfg, runner, opts)
 	if _, err := deploycollector.CollectBundled(ctx, cfg, gate, entry, io.Discard, stderr); err != nil {
 		return nil, err
 	}
@@ -295,23 +290,21 @@ func declaredVariables(ctx context.Context, d deps, cfg *projectconfig.Config, r
 }
 
 func runEnvLs(ctx context.Context, d deps, cwd string, opts envOptions, stdout, stderr io.Writer) error {
-	return envSession(ctx, d, cwd, opts, stdout, stderr, func(runner *providerrunner.Runner, cfg *projectconfig.Config, provider *projectconfig.ProviderDescriptor) error {
+	return envSession(ctx, d, cwd, opts, stdout, stderr, func(runner *providerrunner.Runner, cfg *projectconfig.Config, _ *projectconfig.ProviderDescriptor) error {
 		vars, err := runner.Vars()
 		if err != nil {
 			return err
 		}
 		resp, err := vars.ListValues(ctx, &envv1.ListValuesRequest{
-			Options:         []byte(provider.Options),
-			ProtocolVersion: manifestbuilder.SchemaVersion,
-			Class:           envClass(opts),
-			Slug:            cfg.Slug,
+			Class: envClass(opts),
+			Slug:  cfg.Slug,
 		})
 		if err != nil {
 			return err
 		}
 		var environments []string
 		if opts.preview && overridden(resp.GetValues()) {
-			if environments, err = namedEnvironments(ctx, runner, provider, cfg.Slug); err != nil {
+			if environments, err = namedEnvironments(ctx, runner, cfg.Slug); err != nil {
 				return err
 			}
 		}
@@ -327,17 +320,15 @@ func overridden(values []*envv1.ValueMetadata) bool {
 }
 
 func runEnvGet(ctx context.Context, d deps, cwd, key string, opts envOptions, stdout, stderr io.Writer) error {
-	return envSession(ctx, d, cwd, opts, stdout, stderr, func(runner *providerrunner.Runner, cfg *projectconfig.Config, provider *projectconfig.ProviderDescriptor) error {
+	return envSession(ctx, d, cwd, opts, stdout, stderr, func(runner *providerrunner.Runner, cfg *projectconfig.Config, _ *projectconfig.ProviderDescriptor) error {
 		vars, err := runner.Vars()
 		if err != nil {
 			return err
 		}
 		resp, err := vars.GetValue(ctx, &envv1.GetValueRequest{
-			Options:         []byte(provider.Options),
-			ProtocolVersion: manifestbuilder.SchemaVersion,
-			Class:           envClass(opts),
-			Coordinate:      envCoordinate(cfg.Slug, key, opts),
-			Reveal:          opts.reveal,
+			Class:      envClass(opts),
+			Coordinate: envCoordinate(cfg.Slug, key, opts),
+			Reveal:     opts.reveal,
 		})
 		if err != nil {
 			return err
@@ -363,16 +354,14 @@ func runEnvGet(ctx context.Context, d deps, cwd, key string, opts envOptions, st
 }
 
 func runEnvRm(ctx context.Context, d deps, cwd, key string, opts envOptions, stdout, stderr io.Writer) error {
-	return envSession(ctx, d, cwd, opts, stdout, stderr, func(runner *providerrunner.Runner, cfg *projectconfig.Config, provider *projectconfig.ProviderDescriptor) error {
+	return envSession(ctx, d, cwd, opts, stdout, stderr, func(runner *providerrunner.Runner, cfg *projectconfig.Config, _ *projectconfig.ProviderDescriptor) error {
 		vars, err := runner.Vars()
 		if err != nil {
 			return err
 		}
 		resp, err := vars.DeleteValue(ctx, &envv1.DeleteValueRequest{
-			Options:         []byte(provider.Options),
-			ProtocolVersion: manifestbuilder.SchemaVersion,
-			Class:           envClass(opts),
-			Coordinate:      envCoordinate(cfg.Slug, key, opts),
+			Class:      envClass(opts),
+			Coordinate: envCoordinate(cfg.Slug, key, opts),
 		})
 		if err != nil {
 			return err
@@ -395,8 +384,8 @@ func runEnvRef(ctx context.Context, d deps, cwd, key string, opts envOptions, re
 			return err
 		}
 	}
-	return envSession(ctx, d, cwd, opts, stdout, stderr, func(runner *providerrunner.Runner, cfg *projectconfig.Config, provider *projectconfig.ProviderDescriptor) error {
-		definitions, err := declaredVariables(ctx, d, cfg, runner, provider, key, opts, stderr)
+	return envSession(ctx, d, cwd, opts, stdout, stderr, func(runner *providerrunner.Runner, cfg *projectconfig.Config, _ *projectconfig.ProviderDescriptor) error {
+		definitions, err := declaredVariables(ctx, d, cfg, runner, key, opts, stderr)
 		if err != nil {
 			return err
 		}
@@ -409,11 +398,9 @@ func runEnvRef(ctx context.Context, d deps, cwd, key string, opts envOptions, re
 			return err
 		}
 		resp, err := vars.SetReference(ctx, &envv1.SetReferenceRequest{
-			Options:         []byte(provider.Options),
-			ProtocolVersion: manifestbuilder.SchemaVersion,
-			Class:           envClass(opts),
-			Coordinate:      envCoordinate(cfg.Slug, key, opts),
-			Target:          target,
+			Class:      envClass(opts),
+			Coordinate: envCoordinate(cfg.Slug, key, opts),
+			Target:     target,
 		})
 		if err != nil {
 			return err
@@ -424,16 +411,14 @@ func runEnvRef(ctx context.Context, d deps, cwd, key string, opts envOptions, re
 }
 
 func runEnvRefs(ctx context.Context, d deps, cwd, key string, opts envOptions, stdout, stderr io.Writer) error {
-	return envSession(ctx, d, cwd, opts, stdout, stderr, func(runner *providerrunner.Runner, cfg *projectconfig.Config, provider *projectconfig.ProviderDescriptor) error {
+	return envSession(ctx, d, cwd, opts, stdout, stderr, func(runner *providerrunner.Runner, cfg *projectconfig.Config, _ *projectconfig.ProviderDescriptor) error {
 		vars, err := runner.Vars()
 		if err != nil {
 			return err
 		}
 		resp, err := vars.ListReferences(ctx, &envv1.ListReferencesRequest{
-			Options:         []byte(provider.Options),
-			ProtocolVersion: manifestbuilder.SchemaVersion,
-			Class:           envClass(opts),
-			Coordinate:      envCoordinate(cfg.Slug, key, opts),
+			Class:      envClass(opts),
+			Coordinate: envCoordinate(cfg.Slug, key, opts),
 		})
 		if err != nil {
 			return err
@@ -444,16 +429,14 @@ func runEnvRefs(ctx context.Context, d deps, cwd, key string, opts envOptions, s
 }
 
 func runEnvHistory(ctx context.Context, d deps, cwd, key string, opts envOptions, stdout, stderr io.Writer) error {
-	return envSession(ctx, d, cwd, opts, stdout, stderr, func(runner *providerrunner.Runner, cfg *projectconfig.Config, provider *projectconfig.ProviderDescriptor) error {
+	return envSession(ctx, d, cwd, opts, stdout, stderr, func(runner *providerrunner.Runner, cfg *projectconfig.Config, _ *projectconfig.ProviderDescriptor) error {
 		vars, err := runner.Vars()
 		if err != nil {
 			return err
 		}
 		resp, err := vars.ListVersions(ctx, &envv1.ListVersionsRequest{
-			Options:         []byte(provider.Options),
-			ProtocolVersion: manifestbuilder.SchemaVersion,
-			Class:           envClass(opts),
-			Coordinate:      envCoordinate(cfg.Slug, key, opts),
+			Class:      envClass(opts),
+			Coordinate: envCoordinate(cfg.Slug, key, opts),
 		})
 		if err != nil {
 			return err

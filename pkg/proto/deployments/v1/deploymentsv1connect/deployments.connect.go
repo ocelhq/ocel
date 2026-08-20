@@ -33,6 +33,9 @@ const (
 // reflection-formatted method names, remove the leading slash and convert the remaining slash to a
 // period.
 const (
+	// DeploymentServiceConfigureProcedure is the fully-qualified name of the DeploymentService's
+	// Configure RPC.
+	DeploymentServiceConfigureProcedure = "/deployments.v1.DeploymentService/Configure"
 	// DeploymentServiceDeployProcedure is the fully-qualified name of the DeploymentService's Deploy
 	// RPC.
 	DeploymentServiceDeployProcedure = "/deployments.v1.DeploymentService/Deploy"
@@ -105,6 +108,7 @@ const (
 
 // DeploymentServiceClient is a client for the deployments.v1.DeploymentService service.
 type DeploymentServiceClient interface {
+	Configure(context.Context, *v1.ConfigureRequest) (*v1.ConfigureResponse, error)
 	Deploy(context.Context, *v1.DeployRequest) (*connect.ServerStreamForClient[v1.DeployEvent], error)
 	Bootstrap(context.Context, *v1.BootstrapRequest) (*connect.ServerStreamForClient[v1.DeployEvent], error)
 	DescribeBootstrap(context.Context, *v1.DescribeBootstrapRequest) (*v1.DescribeBootstrapResponse, error)
@@ -141,6 +145,12 @@ func NewDeploymentServiceClient(httpClient connect.HTTPClient, baseURL string, o
 	baseURL = strings.TrimRight(baseURL, "/")
 	deploymentServiceMethods := v1.File_deployments_v1_deployments_proto.Services().ByName("DeploymentService").Methods()
 	return &deploymentServiceClient{
+		configure: connect.NewClient[v1.ConfigureRequest, v1.ConfigureResponse](
+			httpClient,
+			baseURL+DeploymentServiceConfigureProcedure,
+			connect.WithSchema(deploymentServiceMethods.ByName("Configure")),
+			connect.WithClientOptions(opts...),
+		),
 		deploy: connect.NewClient[v1.DeployRequest, v1.DeployEvent](
 			httpClient,
 			baseURL+DeploymentServiceDeployProcedure,
@@ -284,6 +294,7 @@ func NewDeploymentServiceClient(httpClient connect.HTTPClient, baseURL string, o
 
 // deploymentServiceClient implements DeploymentServiceClient.
 type deploymentServiceClient struct {
+	configure          *connect.Client[v1.ConfigureRequest, v1.ConfigureResponse]
 	deploy             *connect.Client[v1.DeployRequest, v1.DeployEvent]
 	bootstrap          *connect.Client[v1.BootstrapRequest, v1.DeployEvent]
 	describeBootstrap  *connect.Client[v1.DescribeBootstrapRequest, v1.DescribeBootstrapResponse]
@@ -307,6 +318,15 @@ type deploymentServiceClient struct {
 	setLink            *connect.Client[v1.SetLinkRequest, v1.SetLinkResponse]
 	removeLink         *connect.Client[v1.RemoveLinkRequest, v1.RemoveLinkResponse]
 	listLinks          *connect.Client[v1.ListLinksRequest, v1.ListLinksResponse]
+}
+
+// Configure calls deployments.v1.DeploymentService.Configure.
+func (c *deploymentServiceClient) Configure(ctx context.Context, req *v1.ConfigureRequest) (*v1.ConfigureResponse, error) {
+	response, err := c.configure.CallUnary(ctx, connect.NewRequest(req))
+	if response != nil {
+		return response.Msg, err
+	}
+	return nil, err
 }
 
 // Deploy calls deployments.v1.DeploymentService.Deploy.
@@ -478,6 +498,7 @@ func (c *deploymentServiceClient) ListLinks(ctx context.Context, req *v1.ListLin
 
 // DeploymentServiceHandler is an implementation of the deployments.v1.DeploymentService service.
 type DeploymentServiceHandler interface {
+	Configure(context.Context, *v1.ConfigureRequest) (*v1.ConfigureResponse, error)
 	Deploy(context.Context, *v1.DeployRequest, *connect.ServerStream[v1.DeployEvent]) error
 	Bootstrap(context.Context, *v1.BootstrapRequest, *connect.ServerStream[v1.DeployEvent]) error
 	DescribeBootstrap(context.Context, *v1.DescribeBootstrapRequest) (*v1.DescribeBootstrapResponse, error)
@@ -510,6 +531,12 @@ type DeploymentServiceHandler interface {
 // and JSON codecs. They also support gzip compression.
 func NewDeploymentServiceHandler(svc DeploymentServiceHandler, opts ...connect.HandlerOption) (string, http.Handler) {
 	deploymentServiceMethods := v1.File_deployments_v1_deployments_proto.Services().ByName("DeploymentService").Methods()
+	deploymentServiceConfigureHandler := connect.NewUnaryHandlerSimple(
+		DeploymentServiceConfigureProcedure,
+		svc.Configure,
+		connect.WithSchema(deploymentServiceMethods.ByName("Configure")),
+		connect.WithHandlerOptions(opts...),
+	)
 	deploymentServiceDeployHandler := connect.NewServerStreamHandlerSimple(
 		DeploymentServiceDeployProcedure,
 		svc.Deploy,
@@ -650,6 +677,8 @@ func NewDeploymentServiceHandler(svc DeploymentServiceHandler, opts ...connect.H
 	)
 	return "/deployments.v1.DeploymentService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
+		case DeploymentServiceConfigureProcedure:
+			deploymentServiceConfigureHandler.ServeHTTP(w, r)
 		case DeploymentServiceDeployProcedure:
 			deploymentServiceDeployHandler.ServeHTTP(w, r)
 		case DeploymentServiceBootstrapProcedure:
@@ -704,6 +733,10 @@ func NewDeploymentServiceHandler(svc DeploymentServiceHandler, opts ...connect.H
 
 // UnimplementedDeploymentServiceHandler returns CodeUnimplemented from all methods.
 type UnimplementedDeploymentServiceHandler struct{}
+
+func (UnimplementedDeploymentServiceHandler) Configure(context.Context, *v1.ConfigureRequest) (*v1.ConfigureResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("deployments.v1.DeploymentService.Configure is not implemented"))
+}
 
 func (UnimplementedDeploymentServiceHandler) Deploy(context.Context, *v1.DeployRequest, *connect.ServerStream[v1.DeployEvent]) error {
 	return connect.NewError(connect.CodeUnimplemented, errors.New("deployments.v1.DeploymentService.Deploy is not implemented"))

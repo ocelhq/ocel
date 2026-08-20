@@ -21,8 +21,6 @@ func TestCheckClass_Mismatches(t *testing.T) {
 	cases := []struct{ infra, required Environment_Class }{
 		{Environment_CLASS_PRODUCTION, Environment_CLASS_PREVIEW},
 		{Environment_CLASS_PREVIEW, Environment_CLASS_PRODUCTION},
-		{Environment_CLASS_DEVELOPMENT, Environment_CLASS_PREVIEW},
-		{Environment_CLASS_DEVELOPMENT, Environment_CLASS_PRODUCTION},
 		{Environment_CLASS_UNSPECIFIED, Environment_CLASS_PREVIEW},
 		{Environment_CLASS_UNSPECIFIED, Environment_CLASS_PRODUCTION},
 	}

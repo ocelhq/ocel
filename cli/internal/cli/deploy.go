@@ -122,7 +122,7 @@ func runDeploy(ctx context.Context, d deps, cwd string, opts deployOptions, stdo
 	provW := ui.BuildWriter()
 	err = runProviderSession(ctx, d, cfg, provider, provW, provW, func(runner *providerrunner.Runner) error {
 		willConfirm := !opts.yes && d.stdinIsTerminal(stdin)
-		knownSlugs, err := preflightDeploy(ctx, d, runner, provider, cfg, willConfirm, stdout)
+		knownSlugs, err := preflightDeploy(ctx, d, runner, cfg, willConfirm, stdout)
 		if err != nil {
 			return err
 		}
@@ -140,16 +140,14 @@ func runDeploy(ctx context.Context, d deps, cwd string, opts deployOptions, stdo
 
 		ui.Building()
 		recovery := gateRecovery{
-			deps:     d,
-			cfg:      cfg,
-			provider: provider,
-			runner:   runner,
+			deps:   d,
+			cfg:    cfg,
+			runner: runner,
 			newGate: func() *envgate.Gate {
 				return envgate.New(runnerValues{
-					runner:  runner,
-					options: []byte(provider.Options),
-					slug:    cfg.Slug,
-					class:   deploymentsv1.Environment_CLASS_PRODUCTION,
+					runner: runner,
+					slug:   cfg.Slug,
+					class:  deploymentsv1.Environment_CLASS_PRODUCTION,
 				}, envScope(cfg, false, ""))
 			},
 			ui:      ui,
@@ -172,8 +170,6 @@ func runDeploy(ctx context.Context, d deps, cwd string, opts deployOptions, stdo
 		}
 		req := &deploymentsv1.DeployRequest{
 			Manifest:         manifest,
-			Options:          []byte(provider.Options),
-			ProtocolVersion:  manifestbuilder.SchemaVersion,
 			Environment:      env,
 			Tag:              opts.tag,
 			RequiredFeatures: requiredFeatures(cfg, manifest),
@@ -450,10 +446,9 @@ func envApps(cfg *projectconfig.Config) []envgate.App {
 }
 
 type runnerValues struct {
-	runner  *providerrunner.Runner
-	options []byte
-	slug    string
-	class   deploymentsv1.Environment_Class
+	runner *providerrunner.Runner
+	slug   string
+	class  deploymentsv1.Environment_Class
 }
 
 func (v runnerValues) List(ctx context.Context) ([]envgate.Stored, error) {
@@ -462,10 +457,8 @@ func (v runnerValues) List(ctx context.Context) ([]envgate.Stored, error) {
 		return nil, err
 	}
 	resp, err := vars.ListValues(ctx, &envv1.ListValuesRequest{
-		Options:         v.options,
-		ProtocolVersion: manifestbuilder.SchemaVersion,
-		Class:           v.class,
-		Slug:            v.slug,
+		Class: v.class,
+		Slug:  v.slug,
 	})
 	if err != nil {
 		return nil, err
@@ -495,11 +488,9 @@ func (v runnerValues) Reveal(ctx context.Context, rows []envgate.Address) (map[e
 		return nil, err
 	}
 	resp, err := vars.RevealValues(ctx, &envv1.RevealValuesRequest{
-		Options:         v.options,
-		ProtocolVersion: manifestbuilder.SchemaVersion,
-		Class:           v.class,
-		Slug:            v.slug,
-		Cells:           named,
+		Class: v.class,
+		Slug:  v.slug,
+		Cells: named,
 	})
 	if err != nil {
 		return nil, errors.New(err.Error())
@@ -617,11 +608,17 @@ func runProviderSession(ctx context.Context, d deps, cfg *projectconfig.Config, 
 		return err
 	}
 
+	sessionConfig, err := providerConfig(provider)
+	if err != nil {
+		return err
+	}
+
 	runner, err := providerrunner.Spawn(ctx, providerrunner.Config{
 		BinaryPath:   binPath,
 		Stdout:       stdout,
 		Stderr:       stderr,
 		Env:          env,
+		Provider:     sessionConfig,
 		ReadyTimeout: deployReadyTimeout,
 	})
 	if err != nil {

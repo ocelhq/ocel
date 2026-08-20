@@ -23,11 +23,14 @@ func TestRunDestroyProjectDeclaresTheStagePlanBeforeAnyWork(t *testing.T) {
 
 	s := &Server{}
 	tracer := &fakeTracer{}
-	req := &deploymentsv1.DestroyProjectRequest{Slug: "shop", Options: []byte("not json")}
+	req := &deploymentsv1.DestroyProjectRequest{Slug: "shop"}
 
-	err := s.runDestroyProject(context.Background(), req, tracer, noopStageReport, noopLog)
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	err := s.runDestroyProject(ctx, req, tracer, noopStageReport, noopLog)
 	if err == nil {
-		t.Fatal("runDestroyProject() error = nil, want the parseOptions failure")
+		t.Fatal("runDestroyProject() error = nil, want the first reach for AWS to fail")
 	}
 
 	if len(tracer.declared) == 0 {
@@ -76,12 +79,14 @@ func TestRunDestroyPreviewDeclaresTheStagePlanBeforeAnyWork(t *testing.T) {
 		tracer := &fakeTracer{}
 		req := &deploymentsv1.DestroyPreviewRequest{
 			Slug:        "shop",
-			Options:     []byte("not json"),
 			Environment: &deploymentsv1.Environment{Class: deploymentsv1.Environment_CLASS_PREVIEW, Identity: "pr-1"},
 		}
 
-		if err := s.runDestroyPreview(context.Background(), req, tracer, noopStageReport, noopLog); err == nil {
-			t.Fatal("runDestroyPreview() error = nil, want the parseOptions failure")
+		ctx, cancel := context.WithCancel(context.Background())
+		cancel()
+
+		if err := s.runDestroyPreview(ctx, req, tracer, noopStageReport, noopLog); err == nil {
+			t.Fatal("runDestroyPreview() error = nil, want the first reach for AWS to fail")
 		}
 
 		if len(tracer.declared) == 0 {
@@ -100,8 +105,7 @@ func TestRunDestroyPreviewDeclaresTheStagePlanBeforeAnyWork(t *testing.T) {
 		s := &Server{}
 		tracer := &fakeTracer{}
 		req := &deploymentsv1.DestroyPreviewRequest{
-			Slug:    "shop",
-			Options: []byte("not json"),
+			Slug: "shop",
 			Environment: &deploymentsv1.Environment{
 				Class:     deploymentsv1.Environment_CLASS_PREVIEW,
 				Identity:  "staging",
@@ -109,8 +113,11 @@ func TestRunDestroyPreviewDeclaresTheStagePlanBeforeAnyWork(t *testing.T) {
 			},
 		}
 
-		if err := s.runDestroyPreview(context.Background(), req, tracer, noopStageReport, noopLog); err == nil {
-			t.Fatal("runDestroyPreview() error = nil, want the parseOptions failure")
+		ctx, cancel := context.WithCancel(context.Background())
+		cancel()
+
+		if err := s.runDestroyPreview(ctx, req, tracer, noopStageReport, noopLog); err == nil {
+			t.Fatal("runDestroyPreview() error = nil, want the first reach for AWS to fail")
 		}
 
 		first := tracer.declared[0]
@@ -125,10 +132,13 @@ func TestRunPruneDeclaresTheStagePlanBeforeAnyWork(t *testing.T) {
 
 	s := &Server{}
 	tracer := &fakeTracer{}
-	req := &deploymentsv1.PruneRequest{Slug: "shop", Options: []byte("not json")}
+	req := &deploymentsv1.PruneRequest{Slug: "shop"}
 
-	if _, err := s.runPrune(context.Background(), req, tracer, noopStageReport, noopLog); err == nil {
-		t.Fatal("runPrune() error = nil, want the parseOptions failure")
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	if _, err := s.runPrune(ctx, req, tracer, noopStageReport, noopLog); err == nil {
+		t.Fatal("runPrune() error = nil, want the first reach for AWS to fail")
 	}
 
 	if len(tracer.declared) == 0 {

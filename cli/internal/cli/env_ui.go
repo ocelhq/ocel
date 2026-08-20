@@ -10,7 +10,6 @@ import (
 
 	"github.com/ocelhq/ocel/cli/internal/deploycollector"
 	"github.com/ocelhq/ocel/cli/internal/envgate"
-	"github.com/ocelhq/ocel/cli/internal/manifestbuilder"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
 	"github.com/ocelhq/ocel/cli/internal/providerrunner"
 	"github.com/ocelhq/ocel/cli/internal/varsui"
@@ -40,13 +39,13 @@ func init() {
 }
 
 func runEnvUI(ctx context.Context, d deps, cwd string, opts envOptions, stdout, stderr io.Writer) error {
-	return envSession(ctx, d, cwd, opts, stdout, stderr, func(runner *providerrunner.Runner, cfg *projectconfig.Config, provider *projectconfig.ProviderDescriptor) error {
-		gate, err := discoverVariables(ctx, cfg, runner, provider, opts, stderr)
+	return envSession(ctx, d, cwd, opts, stdout, stderr, func(runner *providerrunner.Runner, cfg *projectconfig.Config, _ *projectconfig.ProviderDescriptor) error {
+		gate, err := discoverVariables(ctx, cfg, runner, opts, stderr)
 		if err != nil {
 			return err
 		}
 
-		session, err := d.openVarsUI(ctx, cfg, provider, runner, opts.preview, gate, stdout)
+		session, err := d.openVarsUI(ctx, cfg, runner, opts.preview, gate, stdout)
 		if err != nil {
 			return err
 		}
@@ -58,13 +57,12 @@ func runEnvUI(ctx context.Context, d deps, cwd string, opts envOptions, stdout, 
 func (d deps) openVarsUI(
 	ctx context.Context,
 	cfg *projectconfig.Config,
-	provider *projectconfig.ProviderDescriptor,
 	runner *providerrunner.Runner,
 	preview bool,
 	gate *envgate.Gate,
 	stdout io.Writer,
 ) (*varsui.Session, error) {
-	session, err := d.serveVarsUI(ctx, cfg, provider, runner, preview, gate)
+	session, err := d.serveVarsUI(ctx, cfg, runner, preview, gate)
 	if err != nil {
 		return nil, err
 	}
@@ -79,7 +77,6 @@ func (d deps) openVarsUI(
 func startVarsUI(
 	ctx context.Context,
 	cfg *projectconfig.Config,
-	provider *projectconfig.ProviderDescriptor,
 	runner *providerrunner.Runner,
 	preview bool,
 	gate *envgate.Gate,
@@ -90,16 +87,15 @@ func startVarsUI(
 	}
 
 	store := runnerValues{
-		runner:  runner,
-		options: []byte(provider.Options),
-		slug:    cfg.Slug,
-		class:   envClass(envOptions{preview: preview}),
+		runner: runner,
+		slug:   cfg.Slug,
+		class:  envClass(envOptions{preview: preview}),
 	}
 
 	var environments []string
 	if preview {
 		var err error
-		if environments, err = namedEnvironments(ctx, runner, provider, cfg.Slug); err != nil {
+		if environments, err = namedEnvironments(ctx, runner, cfg.Slug); err != nil {
 			return nil, err
 		}
 	}
@@ -114,20 +110,19 @@ func startVarsUI(
 	})
 }
 
-func discoverVariables(ctx context.Context, cfg *projectconfig.Config, runner *providerrunner.Runner, provider *projectconfig.ProviderDescriptor, opts envOptions, stderr io.Writer) (*envgate.Gate, error) {
-	gate := envGate(cfg, runner, provider, opts)
+func discoverVariables(ctx context.Context, cfg *projectconfig.Config, runner *providerrunner.Runner, opts envOptions, stderr io.Writer) (*envgate.Gate, error) {
+	gate := envGate(cfg, runner, opts)
 	if _, err := deploycollector.Collect(ctx, cfg, gate, io.Discard, stderr); err != nil {
 		return nil, err
 	}
 	return gate, nil
 }
 
-func envGate(cfg *projectconfig.Config, runner *providerrunner.Runner, provider *projectconfig.ProviderDescriptor, opts envOptions) *envgate.Gate {
+func envGate(cfg *projectconfig.Config, runner *providerrunner.Runner, opts envOptions) *envgate.Gate {
 	return envgate.New(runnerValues{
-		runner:  runner,
-		options: []byte(provider.Options),
-		slug:    cfg.Slug,
-		class:   envClass(opts),
+		runner: runner,
+		slug:   cfg.Slug,
+		class:  envClass(opts),
 	}, envScope(cfg, opts.preview, ""))
 }
 
@@ -141,8 +136,6 @@ func (v runnerValues) Set(ctx context.Context, at envgate.Address, value string,
 		return err
 	}
 	_, err = vars.SetValue(ctx, &envv1.SetValueRequest{
-		Options:         v.options,
-		ProtocolVersion: manifestbuilder.SchemaVersion,
 		Class:           v.class,
 		Coordinate:      v.coordinate(at),
 		Value:           value,
@@ -157,8 +150,6 @@ func (v runnerValues) Delete(ctx context.Context, at envgate.Address, expected *
 		return err
 	}
 	_, err = vars.DeleteValue(ctx, &envv1.DeleteValueRequest{
-		Options:         v.options,
-		ProtocolVersion: manifestbuilder.SchemaVersion,
 		Class:           v.class,
 		Coordinate:      v.coordinate(at),
 		ExpectedVersion: expected,
@@ -179,10 +170,8 @@ func (v runnerValues) History(ctx context.Context, at envgate.Address) ([]varsui
 		return nil, err
 	}
 	resp, err := vars.ListVersions(ctx, &envv1.ListVersionsRequest{
-		Options:         v.options,
-		ProtocolVersion: manifestbuilder.SchemaVersion,
-		Class:           v.class,
-		Coordinate:      v.coordinate(at),
+		Class:      v.class,
+		Coordinate: v.coordinate(at),
 	})
 	if err != nil {
 		return nil, err

@@ -21,7 +21,6 @@ func (s *Server) AddDomain(ctx context.Context, req *deploymentsv1.AddDomainRequ
 	progress := func(m string) { _ = stream.Send(progressEvent(m)) }
 
 	session, err := s.domainSession(ctx, domainRequest{
-		options:     req.GetOptions(),
 		slug:        req.GetSlug(),
 		edgeKind:    string(requestedEdge(req)),
 		dns:         requestedDNS(req),
@@ -45,7 +44,6 @@ func (s *Server) RemoveDomain(ctx context.Context, req *deploymentsv1.RemoveDoma
 	progress := func(m string) { _ = stream.Send(progressEvent(m)) }
 
 	session, err := s.domainSession(ctx, domainRequest{
-		options:    req.GetOptions(),
 		slug:       req.GetSlug(),
 		edgeKind:   string(requestedEdge(req)),
 		dns:        requestedDNS(req),
@@ -62,7 +60,6 @@ func (s *Server) RemoveDomain(ctx context.Context, req *deploymentsv1.RemoveDoma
 }
 
 type domainRequest struct {
-	options     []byte
 	slug        string
 	edgeKind    string
 	dns         *deploymentsv1.Dns
@@ -127,10 +124,7 @@ func (p *persistingStack) persist(ctx context.Context, err error) error {
 }
 
 func (s *Server) domainSession(ctx context.Context, req domainRequest) (*domainSession, error) {
-	opts, err := parseOptions(req.options)
-	if err != nil {
-		return nil, connect.NewError(connect.CodeInvalidArgument, err)
-	}
+	opts := s.config.get()
 	if req.slug == "" {
 		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("a production domain belongs to one project; this request names none"))
 	}

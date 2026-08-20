@@ -12,7 +12,6 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/ocelhq/ocel/cli/internal/deployui"
-	"github.com/ocelhq/ocel/cli/internal/manifestbuilder"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
 	"github.com/ocelhq/ocel/cli/internal/providerrunner"
 	"github.com/ocelhq/ocel/cli/node"
@@ -113,9 +112,7 @@ func runBootstrap(ctx context.Context, d deps, cwd string, opts bootstrapOptions
 			return err
 		}
 		described, err := client.DescribeBootstrap(ctx, &deploymentsv1.DescribeBootstrapRequest{
-			Options:         []byte(provider.Options),
-			ProtocolVersion: manifestbuilder.SchemaVersion,
-			Class:           class,
+			Class: class,
 		})
 		if err != nil {
 			if connect.CodeOf(err) == connect.CodeUnimplemented {
@@ -165,11 +162,9 @@ func runBootstrap(ctx context.Context, d deps, cwd string, opts bootstrapOptions
 		}
 
 		req := &deploymentsv1.BootstrapRequest{
-			Options:         []byte(provider.Options),
-			ProtocolVersion: manifestbuilder.SchemaVersion,
-			Class:           class,
-			Features:        requested,
-			Force:           force,
+			Class:    class,
+			Features: requested,
+			Force:    force,
 		}
 		if err := runner.Bootstrap(ctx, req, ui.Event); err != nil {
 			return err
@@ -253,10 +248,8 @@ func runBootstrapDestroy(ctx context.Context, d deps, cfg *projectconfig.Config,
 
 		spinner := deployui.StartSpinner(stdout, "Enumerating what would be removed")
 		plan, err := client.PlanTeardown(ctx, &deploymentsv1.PlanTeardownRequest{
-			Options:         []byte(provider.Options),
-			ProtocolVersion: manifestbuilder.SchemaVersion,
-			Class:           class,
-			Edge:            edgeSelection(cfg),
+			Class: class,
+			Edge:  edgeSelection(cfg),
 		})
 		spinner.Stop()
 		if err != nil {
@@ -275,10 +268,8 @@ func runBootstrapDestroy(ctx context.Context, d deps, cfg *projectconfig.Config,
 		}
 
 		req := &deploymentsv1.TeardownRequest{
-			Options:         []byte(provider.Options),
-			ProtocolVersion: manifestbuilder.SchemaVersion,
-			Class:           class,
-			Edge:            edgeSelection(cfg),
+			Class: class,
+			Edge:  edgeSelection(cfg),
 		}
 		if err := runner.Teardown(ctx, req, ui.Event); err != nil {
 			return err

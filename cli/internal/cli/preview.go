@@ -15,7 +15,6 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/deployresult"
 	"github.com/ocelhq/ocel/cli/internal/deployui"
 	"github.com/ocelhq/ocel/cli/internal/envgate"
-	"github.com/ocelhq/ocel/cli/internal/manifestbuilder"
 	"github.com/ocelhq/ocel/cli/internal/previewid"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
 	"github.com/ocelhq/ocel/cli/internal/providerrunner"
@@ -181,23 +180,21 @@ func runPreviewUp(ctx context.Context, d deps, cwd string, opts previewUpOptions
 
 	provW := ui.BuildWriter()
 	err = runProviderSession(ctx, d, cfg, provider, provW, provW, func(runner *providerrunner.Runner) error {
-		if err := preflightPreviewUp(ctx, d, runner, provider, cfg, env.GetIdentity(), stdout); err != nil {
+		if err := preflightPreviewUp(ctx, d, runner, cfg, env.GetIdentity(), stdout); err != nil {
 			return err
 		}
 
 		ui.Building()
 		recovery := gateRecovery{
-			deps:     d,
-			cfg:      cfg,
-			provider: provider,
-			runner:   runner,
-			preview:  true,
+			deps:    d,
+			cfg:     cfg,
+			runner:  runner,
+			preview: true,
 			newGate: func() *envgate.Gate {
 				return envgate.New(runnerValues{
-					runner:  runner,
-					options: []byte(provider.Options),
-					slug:    cfg.Slug,
-					class:   deploymentsv1.Environment_CLASS_PREVIEW,
+					runner: runner,
+					slug:   cfg.Slug,
+					class:  deploymentsv1.Environment_CLASS_PREVIEW,
 				}, envScope(cfg, true, env.GetIdentity()))
 			},
 			ui:      ui,
@@ -216,8 +213,6 @@ func runPreviewUp(ctx context.Context, d deps, cwd string, opts previewUpOptions
 
 		req := &deploymentsv1.DeployRequest{
 			Manifest:         manifest,
-			Options:          []byte(provider.Options),
-			ProtocolVersion:  manifestbuilder.SchemaVersion,
 			Environment:      env,
 			RequiredFeatures: requiredFeatures(cfg, manifest),
 			Edge:             edgeSelection(cfg),
@@ -374,16 +369,14 @@ func runPreviewRm(ctx context.Context, d deps, cwd string, opts previewRmOptions
 
 	provW := ui.BuildWriter()
 	err = runProviderSession(ctx, d, cfg, provider, provW, provW, func(runner *providerrunner.Runner) error {
-		if err := preflightPreview(ctx, d, runner, provider, cfg, stdout); err != nil {
+		if err := preflightPreview(ctx, d, runner, cfg, stdout); err != nil {
 			return err
 		}
 
 		req := &deploymentsv1.DestroyPreviewRequest{
-			Environment:     env,
-			Options:         []byte(provider.Options),
-			ProtocolVersion: manifestbuilder.SchemaVersion,
-			Slug:            cfg.Slug,
-			Edge:            edgeSelection(cfg),
+			Environment: env,
+			Slug:        cfg.Slug,
+			Edge:        edgeSelection(cfg),
 		}
 		if err := runner.DestroyPreview(ctx, req, ui.Event); err != nil {
 			return err
@@ -417,9 +410,7 @@ func runPreviewLs(ctx context.Context, d deps, cwd string, stdout, stderr io.Wri
 			return err
 		}
 		resp, err := client.ListEnvironments(ctx, &deploymentsv1.ListEnvironmentsRequest{
-			Options:         []byte(provider.Options),
-			ProtocolVersion: manifestbuilder.SchemaVersion,
-			Slug:            cfg.Slug,
+			Slug: cfg.Slug,
 		})
 		if err != nil {
 			return err
@@ -462,16 +453,14 @@ func runPreviewPrune(ctx context.Context, d deps, cwd string, opts previewPruneO
 
 	provW := ui.BuildWriter()
 	err = runProviderSession(ctx, d, cfg, provider, provW, provW, func(runner *providerrunner.Runner) error {
-		if err := preflightPreview(ctx, d, runner, provider, cfg, stdout); err != nil {
+		if err := preflightPreview(ctx, d, runner, cfg, stdout); err != nil {
 			return err
 		}
 		if err := runner.Prune(ctx, &deploymentsv1.PruneRequest{
-			Options:         []byte(provider.Options),
-			ProtocolVersion: manifestbuilder.SchemaVersion,
-			Slug:            cfg.Slug,
-			KeepN:           int32(opts.keep),
-			Environment:     env,
-			Edge:            edgeSelection(cfg),
+			Slug:        cfg.Slug,
+			KeepN:       int32(opts.keep),
+			Environment: env,
+			Edge:        edgeSelection(cfg),
 		}, ui.Event); err != nil {
 			return err
 		}
@@ -489,10 +478,9 @@ func persistentPreviewEnvironment(name string) (*deploymentsv1.Environment, erro
 		return nil, err
 	}
 	return &deploymentsv1.Environment{
-		Class:          deploymentsv1.Environment_CLASS_PREVIEW,
-		Lifecycle:      deploymentsv1.Environment_LIFECYCLE_PERSISTENT,
-		Identity:       name,
-		IdentitySource: deploymentsv1.Environment_IDENTITY_SOURCE_DECLARED,
+		Class:     deploymentsv1.Environment_CLASS_PREVIEW,
+		Lifecycle: deploymentsv1.Environment_LIFECYCLE_PERSISTENT,
+		Identity:  name,
 	}, nil
 }
 
@@ -517,11 +505,9 @@ func resolveUpEnvironment(d deps, cwd string, opts previewUpOptions) (*deploymen
 		return nil, err
 	}
 	return &deploymentsv1.Environment{
-		Class:          deploymentsv1.Environment_CLASS_PREVIEW,
-		Lifecycle:      deploymentsv1.Environment_LIFECYCLE_EPHEMERAL,
-		Identity:       id.Key,
-		IdentitySource: deploymentsv1.Environment_IDENTITY_SOURCE_GIT,
-		Label:          id.Label,
+		Class:     deploymentsv1.Environment_CLASS_PREVIEW,
+		Lifecycle: deploymentsv1.Environment_LIFECYCLE_EPHEMERAL,
+		Identity:  id.Key,
 	}, nil
 }
 
@@ -546,10 +532,9 @@ func resolveRmEnvironment(d deps, cwd string, opts previewRmOptions) (*deploymen
 		return nil, err
 	}
 	return &deploymentsv1.Environment{
-		Class:          deploymentsv1.Environment_CLASS_PREVIEW,
-		Lifecycle:      deploymentsv1.Environment_LIFECYCLE_EPHEMERAL,
-		Identity:       id.Key,
-		IdentitySource: deploymentsv1.Environment_IDENTITY_SOURCE_GIT,
+		Class:     deploymentsv1.Environment_CLASS_PREVIEW,
+		Lifecycle: deploymentsv1.Environment_LIFECYCLE_EPHEMERAL,
+		Identity:  id.Key,
 	}, nil
 }
 
@@ -557,12 +542,12 @@ func confirmDestroyPreview(ctx context.Context, name string, stdout io.Writer, s
 	return confirmYN(ctx, fmt.Sprintf("Destroy persistent preview %q?", name), stdout, stdin)
 }
 
-func preflightPreview(ctx context.Context, d deps, runner *providerrunner.Runner, provider *projectconfig.ProviderDescriptor, cfg *projectconfig.Config, out io.Writer) error {
-	return preflightClass(ctx, d, runner, provider, cfg, deploymentsv1.Environment_CLASS_PREVIEW, "ocel bootstrap --preview", out)
+func preflightPreview(ctx context.Context, d deps, runner *providerrunner.Runner, cfg *projectconfig.Config, out io.Writer) error {
+	return preflightClass(ctx, d, runner, cfg, deploymentsv1.Environment_CLASS_PREVIEW, "ocel bootstrap --preview", out)
 }
 
-func preflightPreviewUp(ctx context.Context, d deps, runner *providerrunner.Runner, provider *projectconfig.ProviderDescriptor, cfg *projectconfig.Config, pointer string, out io.Writer) error {
-	resp, err := preflight(ctx, d, runner, provider, cfg, deploymentsv1.Environment_CLASS_PREVIEW, cfg.Slug, declaredHostnames(cfg, "preview"), "ocel bootstrap --preview", out)
+func preflightPreviewUp(ctx context.Context, d deps, runner *providerrunner.Runner, cfg *projectconfig.Config, pointer string, out io.Writer) error {
+	resp, err := preflight(ctx, d, runner, cfg, deploymentsv1.Environment_CLASS_PREVIEW, cfg.Slug, declaredHostnames(cfg, "preview"), "ocel bootstrap --preview", out)
 	if err != nil {
 		return err
 	}
@@ -572,13 +557,13 @@ func preflightPreviewUp(ctx context.Context, d deps, runner *providerrunner.Runn
 	return requirePreviewDomain(cfg, resp.GetGlobalPreviewDomain(), resp.GetIdentity(), pointer, out)
 }
 
-func preflightDeploy(ctx context.Context, d deps, runner *providerrunner.Runner, provider *projectconfig.ProviderDescriptor, cfg *projectconfig.Config, wantKnownSlugs bool, out io.Writer) ([]string, error) {
+func preflightDeploy(ctx context.Context, d deps, runner *providerrunner.Runner, cfg *projectconfig.Config, wantKnownSlugs bool, out io.Writer) ([]string, error) {
 	domains := declaredHostnames(cfg, "production")
 	var slug string
 	if wantKnownSlugs || len(domains) > 0 {
 		slug = cfg.Slug
 	}
-	resp, err := preflight(ctx, d, runner, provider, cfg, deploymentsv1.Environment_CLASS_PRODUCTION, slug, domains, "ocel bootstrap", out)
+	resp, err := preflight(ctx, d, runner, cfg, deploymentsv1.Environment_CLASS_PRODUCTION, slug, domains, "ocel bootstrap", out)
 	if err != nil {
 		return nil, err
 	}
@@ -629,12 +614,12 @@ func refuseClaimedDomains(claims []*deploymentsv1.DomainClaim, configName string
 	return errors.New(b.String())
 }
 
-func preflightClass(ctx context.Context, d deps, runner *providerrunner.Runner, provider *projectconfig.ProviderDescriptor, cfg *projectconfig.Config, required deploymentsv1.Environment_Class, bootstrapHint string, out io.Writer) error {
-	_, err := preflight(ctx, d, runner, provider, cfg, required, "", nil, bootstrapHint, out)
+func preflightClass(ctx context.Context, d deps, runner *providerrunner.Runner, cfg *projectconfig.Config, required deploymentsv1.Environment_Class, bootstrapHint string, out io.Writer) error {
+	_, err := preflight(ctx, d, runner, cfg, required, "", nil, bootstrapHint, out)
 	return err
 }
 
-func preflight(ctx context.Context, d deps, runner *providerrunner.Runner, provider *projectconfig.ProviderDescriptor, cfg *projectconfig.Config, required deploymentsv1.Environment_Class, slug string, domains []string, bootstrapHint string, out io.Writer) (*deploymentsv1.PreflightResponse, error) {
+func preflight(ctx context.Context, d deps, runner *providerrunner.Runner, cfg *projectconfig.Config, required deploymentsv1.Environment_Class, slug string, domains []string, bootstrapHint string, out io.Writer) (*deploymentsv1.PreflightResponse, error) {
 	client, err := runner.Deployments()
 	if err != nil {
 		return nil, err
@@ -642,8 +627,6 @@ func preflight(ctx context.Context, d deps, runner *providerrunner.Runner, provi
 
 	spinner := deployui.StartSpinner(out, "Checking credentials")
 	resp, err := client.Preflight(ctx, &deploymentsv1.PreflightRequest{
-		Options:          []byte(provider.Options),
-		ProtocolVersion:  manifestbuilder.SchemaVersion,
 		RequiredClass:    required,
 		Slug:             slug,
 		Domains:          domains,

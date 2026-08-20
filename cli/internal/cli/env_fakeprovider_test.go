@@ -257,10 +257,6 @@ func (s *deployFakeProviderServer) SetReference(ctx context.Context, req *envv1.
 		return nil, deepens(describeCoordinate(at) + " is referenced by " + describeCoordinate(consumers[0]))
 	}
 
-	cell := store[fakeCoordinateID(req.GetClass(), at)]
-	if err := checkExpectation(cell, req.ExpectedVersion); err != nil {
-		return nil, err
-	}
 	pointer := coordinateOf(target)
 	if err := store.write(req.GetClass(), at, fakeCellData{Target: &pointer}); err != nil {
 		return nil, err

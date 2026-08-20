@@ -93,9 +93,6 @@ func TestDescribedBootstrap(t *testing.T) {
 		deployed := bootstrap.Deployed{Present: true, Features: bootstrap.FeatureSet{bootstrap.FeatureISR: true}}
 		resp := describedBootstrap(deployed, nil)
 
-		if !resp.GetPresent() {
-			t.Error("present = false for a bootstrapped substrate")
-		}
 		if len(resp.GetFeatures()) != len(bootstrap.Catalogue()) {
 			t.Fatalf("described %d features, want the whole catalogue", len(resp.GetFeatures()))
 		}
@@ -136,9 +133,6 @@ func TestDescribedBootstrap(t *testing.T) {
 	t.Run("an unbootstrapped account still offers the catalogue", func(t *testing.T) {
 		t.Parallel()
 		resp := describedBootstrap(bootstrap.Deployed{Features: bootstrap.FeatureSet{}}, nil)
-		if resp.GetPresent() {
-			t.Error("present = true for an account with no bootstrap")
-		}
 		if len(resp.GetFeatures()) != len(bootstrap.Catalogue()) {
 			t.Errorf("described %d features, want the whole catalogue: the picker has to show them", len(resp.GetFeatures()))
 		}
