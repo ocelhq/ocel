@@ -3,6 +3,7 @@ package env.v1;
 
 option go_package = "github.com/ocelhq/ocel/pkg/proto/env/v1;envv1";
 
+import "buf/validate/validate.proto";
 import "deployments/v1/deployments.proto";
 
 service EnvVarsService {
@@ -24,13 +25,13 @@ service EnvVarsService {
 }
 
 message Coordinate {
-  string slug = 1;
+  string slug = 1 [(buf.validate.field).string = {pattern: "^[a-z0-9]+(-[a-z0-9]+)*$", max_len: 63}];
 
-  string folder = 2;
+  string folder = 2 [(buf.validate.field).string.pattern = "^(/[^/#[:cntrl:]]+)*$"];
 
-  string key = 3;
+  string key = 3 [(buf.validate.field).string = {min_len: 1, pattern: "^[^#[:cntrl:]]*$"}];
 
-  string environment = 4;
+  string environment = 4 [(buf.validate.field).string.pattern = "^[^#*[:cntrl:]]*$"];
 }
 
 message ValueMetadata {
@@ -52,9 +53,9 @@ message VersionEntry {
 }
 
 message SetValueRequest {
-  deployments.v1.Environment.Class class = 1;
+  deployments.v1.Environment.Class class = 1 [(buf.validate.field).enum.defined_only = true];
 
-  Coordinate coordinate = 2;
+  Coordinate coordinate = 2 [(buf.validate.field).required = true];
   string value = 3;
 
   optional int64 expected_version = 4;
@@ -65,9 +66,9 @@ message SetValueResponse {
 }
 
 message ListValuesRequest {
-  deployments.v1.Environment.Class class = 1;
+  deployments.v1.Environment.Class class = 1 [(buf.validate.field).enum.defined_only = true];
 
-  string slug = 2;
+  string slug = 2 [(buf.validate.field).string = {pattern: "^[a-z0-9]+(-[a-z0-9]+)*$", max_len: 63}];
 }
 
 message ListValuesResponse {
@@ -75,8 +76,8 @@ message ListValuesResponse {
 }
 
 message GetValueRequest {
-  deployments.v1.Environment.Class class = 1;
-  Coordinate coordinate = 2;
+  deployments.v1.Environment.Class class = 1 [(buf.validate.field).enum.defined_only = true];
+  Coordinate coordinate = 2 [(buf.validate.field).required = true];
 
   bool reveal = 3;
 }
@@ -89,16 +90,16 @@ message GetValueResponse {
 }
 
 message RevealValuesRequest {
-  deployments.v1.Environment.Class class = 1;
+  deployments.v1.Environment.Class class = 1 [(buf.validate.field).enum.defined_only = true];
 
-  string slug = 2;
+  string slug = 2 [(buf.validate.field).string = {pattern: "^[a-z0-9]+(-[a-z0-9]+)*$", max_len: 63}];
   repeated Cell cells = 3;
 }
 
 message Cell {
-  string folder = 1;
-  string key = 2;
-  string environment = 3;
+  string folder = 1 [(buf.validate.field).string.pattern = "^(/[^/#[:cntrl:]]+)*$"];
+  string key = 2 [(buf.validate.field).string = {min_len: 1, pattern: "^[^#[:cntrl:]]*$"}];
+  string environment = 3 [(buf.validate.field).string.pattern = "^[^#*[:cntrl:]]*$"];
 }
 
 message RevealValuesResponse {
@@ -111,8 +112,8 @@ message RevealedValue {
 }
 
 message DeleteValueRequest {
-  deployments.v1.Environment.Class class = 1;
-  Coordinate coordinate = 2;
+  deployments.v1.Environment.Class class = 1 [(buf.validate.field).enum.defined_only = true];
+  Coordinate coordinate = 2 [(buf.validate.field).required = true];
 
   optional int64 expected_version = 3;
 }
@@ -122,10 +123,10 @@ message DeleteValueResponse {
 }
 
 message SetReferenceRequest {
-  deployments.v1.Environment.Class class = 1;
+  deployments.v1.Environment.Class class = 1 [(buf.validate.field).enum.defined_only = true];
 
-  Coordinate coordinate = 2;
-  Coordinate target = 3;
+  Coordinate coordinate = 2 [(buf.validate.field).required = true];
+  Coordinate target = 3 [(buf.validate.field).required = true];
 }
 
 message SetReferenceResponse {
@@ -133,9 +134,9 @@ message SetReferenceResponse {
 }
 
 message ListReferencesRequest {
-  deployments.v1.Environment.Class class = 1;
+  deployments.v1.Environment.Class class = 1 [(buf.validate.field).enum.defined_only = true];
 
-  Coordinate coordinate = 2;
+  Coordinate coordinate = 2 [(buf.validate.field).required = true];
 }
 
 message ListReferencesResponse {
@@ -143,8 +144,8 @@ message ListReferencesResponse {
 }
 
 message ListVersionsRequest {
-  deployments.v1.Environment.Class class = 1;
-  Coordinate coordinate = 2;
+  deployments.v1.Environment.Class class = 1 [(buf.validate.field).enum.defined_only = true];
+  Coordinate coordinate = 2 [(buf.validate.field).required = true];
 }
 
 message ListVersionsResponse {

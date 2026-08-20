@@ -33,9 +33,6 @@ func (s *Server) UseDomain(ctx context.Context, req *deploymentsv1.UseDomainRequ
 }
 
 func (s *Server) runUseDomain(ctx context.Context, req *deploymentsv1.UseDomainRequest, progress func(string), ask askDNS, logf func(string)) error {
-	if err := requirePreviewClass(req.GetClass()); err != nil {
-		return err
-	}
 	baseDomain, err := previewBaseDomainArg(req.GetBaseDomain())
 	if err != nil {
 		return err
@@ -171,9 +168,6 @@ func useDomain(ctx context.Context, engine domains.Engine, edgeFront edge.Edge, 
 }
 
 func (s *Server) PlanReleaseDomain(ctx context.Context, req *deploymentsv1.PlanReleaseDomainRequest) (*deploymentsv1.PlanReleaseDomainResponse, error) {
-	if err := requirePreviewClass(req.GetClass()); err != nil {
-		return nil, connect.NewError(connect.CodeInvalidArgument, err)
-	}
 	awscfg, err := loadAWS(ctx, "")
 	if err != nil {
 		return nil, err
@@ -257,9 +251,6 @@ func (s *Server) ReleaseDomain(ctx context.Context, req *deploymentsv1.ReleaseDo
 }
 
 func (s *Server) runReleaseDomain(ctx context.Context, req *deploymentsv1.ReleaseDomainRequest, progress func(string)) error {
-	if err := requirePreviewClass(req.GetClass()); err != nil {
-		return err
-	}
 	awscfg, err := loadAWS(ctx, "")
 	if err != nil {
 		return err
@@ -325,9 +316,6 @@ func releaseDomain(ctx context.Context, deps releaseDeps, recorded bootstrap.Pre
 }
 
 func (s *Server) ListDomain(ctx context.Context, req *deploymentsv1.ListDomainRequest) (*deploymentsv1.ListDomainResponse, error) {
-	if err := requirePreviewClass(req.GetClass()); err != nil {
-		return nil, connect.NewError(connect.CodeInvalidArgument, err)
-	}
 	clients, err := s.domainClients(ctx, "")
 	if err != nil {
 		return nil, err
@@ -367,13 +355,6 @@ func globalPreviewProjects(ctx context.Context, ssmClient bootstrap.SSMAPI, slug
 		}
 	}
 	return served, nil
-}
-
-func requirePreviewClass(class deploymentsv1.Environment_Class) error {
-	if class == deploymentsv1.Environment_CLASS_PREVIEW {
-		return nil
-	}
-	return fmt.Errorf("a global preview domain belongs to the preview substrate; pass --preview")
 }
 
 func previewBaseDomainArg(domain string) (string, error) {

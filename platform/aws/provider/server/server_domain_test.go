@@ -15,7 +15,6 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/ssm"
 	ssmtypes "github.com/aws/aws-sdk-go-v2/service/ssm/types"
 
-	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
 	"github.com/ocelhq/ocel/platform/aws/provider/bootstrap"
 	"github.com/ocelhq/ocel/platform/aws/provider/certs"
 	"github.com/ocelhq/ocel/platform/aws/provider/domains"
@@ -24,26 +23,6 @@ import (
 	cloudflare "github.com/ocelhq/ocel/platform/edge/cloudflare/deploy"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
-
-func TestRequirePreviewClass(t *testing.T) {
-	t.Parallel()
-
-	if err := requirePreviewClass(deploymentsv1.Environment_CLASS_PREVIEW); err != nil {
-		t.Fatalf("requirePreviewClass: %v", err)
-	}
-	for _, class := range []deploymentsv1.Environment_Class{
-		deploymentsv1.Environment_CLASS_PRODUCTION,
-		deploymentsv1.Environment_CLASS_UNSPECIFIED,
-	} {
-		err := requirePreviewClass(class)
-		if err == nil {
-			t.Fatalf("expected %v to be refused", class)
-		}
-		if !strings.Contains(err.Error(), "--preview") {
-			t.Errorf("error must name the flag, got %q", err)
-		}
-	}
-}
 
 func TestPreviewBaseDomainArg(t *testing.T) {
 	t.Parallel()

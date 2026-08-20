@@ -125,9 +125,6 @@ func Lint(definitions []*resourcesv1.VariableDefinition, apps []App, configPath 
 
 		var unbound []string
 		for _, folder := range scope {
-			if err := ValidateFolder(folder); err != nil {
-				return nil, fmt.Errorf("%s is scoped to an unusable folder: %w", definition.GetKey(), err)
-			}
 			if _, ok := bound[folder]; !ok {
 				unbound = append(unbound, folder)
 			}

@@ -43,11 +43,18 @@ require (
 )
 
 require (
+	buf.build/gen/go/bufbuild/protovalidate/protocolbuffers/go v1.36.12-20260709200747-435963d16310.1 // indirect
+	buf.build/go/protovalidate v1.0.0 // indirect
+	cel.dev/expr v0.25.1 // indirect
+	connectrpc.com/validate v0.6.0 // indirect
+	github.com/antlr4-go/antlr/v4 v4.13.1 // indirect
 	github.com/aws/aws-sdk-go-v2/service/apigatewayv2 v1.37.6 // indirect
 	github.com/aws/aws-sdk-go-v2/service/cloudfront v1.67.6 // indirect
 	github.com/aws/aws-sdk-go-v2/service/cloudfrontkeyvaluestore v1.15.6 // indirect
 	github.com/cloudflare/cloudflare-go/v4 v4.6.0 // indirect
+	github.com/google/cel-go v0.26.1 // indirect
 	github.com/jmespath/go-jmespath v0.4.0 // indirect
+	github.com/stoewer/go-strcase v1.3.1 // indirect
 	github.com/tidwall/gjson v1.14.4 // indirect
 	github.com/tidwall/match v1.1.1 // indirect
 	github.com/tidwall/pretty v1.2.1 // indirect
@@ -176,7 +183,7 @@ require (
 	google.golang.org/genproto/googleapis/api v0.0.0-20260401024825-9d38bb4040a9 // indirect
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20260401024825-9d38bb4040a9 // indirect
 	google.golang.org/grpc v1.80.0 // indirect
-	google.golang.org/protobuf v1.36.11
+	google.golang.org/protobuf v1.36.12
 	gopkg.in/tomb.v1 v1.0.0-20141024135613-dd632973f1e7 // indirect
 	lukechampine.com/frand v1.4.2 // indirect
 )

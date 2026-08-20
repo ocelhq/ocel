@@ -50,16 +50,6 @@ func TestRetention(t *testing.T) {
 			wantCollect: []string{"p2"},
 		},
 		{
-			name: "a negative keepN behaves like zero",
-			history: []HistoryEntry{
-				{Promotion: Promotion{PromotionID: "p2"}},
-				{Promotion: Promotion{PromotionID: "p1"}, Active: true},
-			},
-			keepN:       -5,
-			wantKeep:    []string{"p1"},
-			wantCollect: []string{"p2"},
-		},
-		{
 			name:        "empty history",
 			history:     nil,
 			keepN:       5,

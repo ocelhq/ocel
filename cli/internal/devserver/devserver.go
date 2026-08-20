@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	connect "connectrpc.com/connect"
+	"connectrpc.com/validate"
 
 	"github.com/ocelhq/ocel/cli/internal/clientenv"
 	"github.com/ocelhq/ocel/cli/internal/declare"
@@ -160,11 +161,12 @@ func (s *Server) ResetManifest() {
 
 func (s *Server) Mux() *http.ServeMux {
 	mux := http.NewServeMux()
-	resourcePath, resourceHandler := resourcesv1connect.NewResourceServiceHandler(s)
+	interceptors := connect.WithInterceptors(validate.NewInterceptor())
+	resourcePath, resourceHandler := resourcesv1connect.NewResourceServiceHandler(s, interceptors)
 	mux.Handle(resourcePath, resourceHandler)
-	devPath, devHandler := devv1connect.NewDevServiceHandler(s)
+	devPath, devHandler := devv1connect.NewDevServiceHandler(s, interceptors)
 	mux.Handle(devPath, devHandler)
-	runtimePath, runtimeHandler := bucketsv1connect.NewBucketServiceHandler(s.runtime)
+	runtimePath, runtimeHandler := bucketsv1connect.NewBucketServiceHandler(s.runtime, interceptors)
 	mux.Handle(runtimePath, runtimeHandler)
 	mux.HandleFunc("/sync", s.handleSync)
 	return mux

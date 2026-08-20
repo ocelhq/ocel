@@ -170,17 +170,6 @@ func TestToDeclarations(t *testing.T) {
 }
 
 func TestRunDeploy(t *testing.T) {
-	t.Run("an invalid tag errors before anything", func(t *testing.T) {
-		var stderr bytes.Buffer
-		err := runDeploy(context.Background(), defaultDeps(), t.TempDir(), deployOptions{tag: "feature/x"}, &bytes.Buffer{}, &stderr, strings.NewReader(""))
-		if err == nil {
-			t.Fatal("runDeploy err = nil, want an error for an invalid tag")
-		}
-		if !strings.Contains(err.Error(), "invalid character") {
-			t.Errorf("err = %v, want it to explain the invalid character", err)
-		}
-	})
-
 	t.Run("a missing config errors before any spawn", func(t *testing.T) {
 		err := runDeploy(context.Background(), defaultDeps(), t.TempDir(), deployOptions{yes: true}, &bytes.Buffer{}, &bytes.Buffer{}, strings.NewReader(""))
 		if err == nil {

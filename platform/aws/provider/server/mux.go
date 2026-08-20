@@ -4,6 +4,7 @@ import (
 	"net/http"
 
 	connect "connectrpc.com/connect"
+	"connectrpc.com/validate"
 
 	"github.com/ocelhq/ocel/pkg/proto/deployments/v1/deploymentsv1connect"
 	"github.com/ocelhq/ocel/pkg/proto/env/v1/envv1connect"
@@ -17,7 +18,7 @@ func NewMux(token string) *http.ServeMux {
 
 func newMux(deployments *Server, token string) *http.ServeMux {
 	mux := http.NewServeMux()
-	interceptors := connect.WithInterceptors(channelauth.Interceptor(token), tracecontext.Interceptor())
+	interceptors := connect.WithInterceptors(channelauth.Interceptor(token), tracecontext.Interceptor(), validate.NewInterceptor())
 
 	path, handler := deploymentsv1connect.NewDeploymentServiceHandler(deployments, interceptors)
 	mux.Handle(path, handler)

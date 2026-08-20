@@ -646,7 +646,7 @@ func preflight(ctx context.Context, d deps, runner *providerrunner.Runner, cfg *
 	if !resp.GetInfrastructurePresent() {
 		return nil, fmt.Errorf("no infrastructure is set up yet; run `%s` to create it", bootstrapHint)
 	}
-	if err := deploymentsv1.CheckClass(resp.GetInfraClass(), required); err != nil {
+	if err := checkClass(resp.GetInfraClass(), required); err != nil {
 		return nil, err
 	}
 	return resp, nil

@@ -131,9 +131,6 @@ func TestLinkHandlersRefuseACoordinateNothingBindsTo(t *testing.T) {
 
 	for name, req := range map[string]*deploymentsv1.SetLinkRequest{
 		"no slug": {Class: deploymentsv1.Environment_CLASS_PRODUCTION, Owner: "sst", Link: ordersLink()},
-		"an unknown class": {
-			Slug: "shop", Class: deploymentsv1.Environment_CLASS_UNSPECIFIED, Owner: "sst", Link: ordersLink(),
-		},
 		"the class-wide marker": {
 			Slug: "shop", Class: deploymentsv1.Environment_CLASS_PREVIEW, Environment: "*", Owner: "sst", Link: ordersLink(),
 		},

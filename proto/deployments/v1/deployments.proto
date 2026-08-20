@@ -3,6 +3,7 @@ package deployments.v1;
 
 option go_package = "github.com/ocelhq/ocel/pkg/proto/deployments/v1;deploymentsv1";
 
+import "buf/validate/validate.proto";
 import "links/v1/links.proto";
 import "resources/v1/env.proto";
 import "resources/v1/resources.proto";
@@ -78,7 +79,7 @@ message ConfigureRequest {
 message ConfigureResponse {}
 
 message UseDomainRequest {
-  Environment.Class class = 1;
+  Environment.Class class = 1 [(buf.validate.field).enum.const = 1];
 
   string base_domain = 2;
 
@@ -86,7 +87,7 @@ message UseDomainRequest {
 }
 
 message ListDomainRequest {
-  Environment.Class class = 1;
+  Environment.Class class = 1 [(buf.validate.field).enum.const = 1];
 }
 
 message ListDomainResponse {
@@ -96,13 +97,13 @@ message ListDomainResponse {
 }
 
 message ReleaseDomainRequest {
-  Environment.Class class = 1;
+  Environment.Class class = 1 [(buf.validate.field).enum.const = 1];
 
   EdgeSelection edge = 2;
 }
 
 message AddDomainRequest {
-  string slug = 1;
+  string slug = 1 [(buf.validate.field).string = {pattern: "^[a-z0-9]+(-[a-z0-9]+)*$", max_len: 63}];
 
   repeated string configured = 2;
 
@@ -112,7 +113,7 @@ message AddDomainRequest {
 }
 
 message RemoveDomainRequest {
-  string slug = 1;
+  string slug = 1 [(buf.validate.field).string = {pattern: "^[a-z0-9]+(-[a-z0-9]+)*$", max_len: 63}];
 
   repeated string configured = 2;
 
@@ -122,7 +123,7 @@ message RemoveDomainRequest {
 }
 
 message DomainStatusRequest {
-  string slug = 1;
+  string slug = 1 [(buf.validate.field).string = {pattern: "^[a-z0-9]+(-[a-z0-9]+)*$", max_len: 63}];
 
   repeated string configured = 2;
 
@@ -184,18 +185,18 @@ message Environment {
     LIFECYCLE_PERSISTENT = 2;
   }
 
-  Class class = 1;
-  Lifecycle lifecycle = 2;
+  Class class = 1 [(buf.validate.field).enum.defined_only = true];
+  Lifecycle lifecycle = 2 [(buf.validate.field).enum.defined_only = true];
 
   string identity = 3;
 }
 
 message Manifest {
-  string schema_version = 1;
+  string schema_version = 1 [(buf.validate.field).string.min_len = 1];
   repeated ManifestResource resources = 2;
   repeated ManifestFunction functions = 3;
 
-  string slug = 4;
+  string slug = 4 [(buf.validate.field).string = {pattern: "^[a-z0-9]+(-[a-z0-9]+)*$", max_len: 63}];
 
   map<string, DomainList> domains = 5;
 
@@ -221,18 +222,18 @@ message ManifestApp {
 
   repeated ManifestVariable variables = 4;
 
-  string folder = 5;
+  string folder = 5 [(buf.validate.field).string.pattern = "^(/[^/#[:cntrl:]]+)*$"];
 
   string deployment_id = 6;
 }
 
 message ManifestVariable {
   string key = 1;
-  resources.v1.VariableClass class = 2;
+  resources.v1.VariableClass class = 2 [(buf.validate.field).enum.defined_only = true];
 
   string value = 3;
 
-  string folder = 4;
+  string folder = 4 [(buf.validate.field).string.pattern = "^(/[^/#[:cntrl:]]+)*$"];
 
   int64 version = 5;
 }
@@ -260,11 +261,11 @@ message ManifestResource {
 }
 
 message DeployRequest {
-  Manifest manifest = 1;
+  Manifest manifest = 1 [(buf.validate.field).required = true];
 
   Environment environment = 2;
 
-  string tag = 3;
+  string tag = 3 [(buf.validate.field).string = {pattern: "^[A-Za-z0-9._-]*$", max_len: 64}];
 
   EdgeSelection edge = 4;
 
@@ -272,7 +273,7 @@ message DeployRequest {
 }
 
 message BootstrapRequest {
-  Environment.Class class = 1;
+  Environment.Class class = 1 [(buf.validate.field).enum.defined_only = true];
 
   repeated string features = 2;
 
@@ -280,7 +281,7 @@ message BootstrapRequest {
 }
 
 message DescribeBootstrapRequest {
-  Environment.Class class = 1;
+  Environment.Class class = 1 [(buf.validate.field).enum.defined_only = true];
 }
 
 message DescribeBootstrapResponse {
@@ -314,13 +315,13 @@ message EdgeSelection {
 }
 
 message TeardownRequest {
-  Environment.Class class = 1;
+  Environment.Class class = 1 [(buf.validate.field).enum.defined_only = true];
 
   EdgeSelection edge = 2;
 }
 
 message PlanTeardownRequest {
-  Environment.Class class = 1;
+  Environment.Class class = 1 [(buf.validate.field).enum.defined_only = true];
 
   EdgeSelection edge = 2;
 }
@@ -334,13 +335,13 @@ message PlanTeardownResponse {
 message DestroyPreviewRequest {
   Environment environment = 1;
 
-  string slug = 2;
+  string slug = 2 [(buf.validate.field).string = {pattern: "^[a-z0-9]+(-[a-z0-9]+)*$", max_len: 63}];
 
   EdgeSelection edge = 3;
 }
 
 message DestroyProjectRequest {
-  string slug = 1;
+  string slug = 1 [(buf.validate.field).string = {pattern: "^[a-z0-9]+(-[a-z0-9]+)*$", max_len: 63}];
 
   Environment environment = 2;
 
@@ -348,7 +349,7 @@ message DestroyProjectRequest {
 }
 
 message PlanDestroyProjectRequest {
-  string slug = 1;
+  string slug = 1 [(buf.validate.field).string = {pattern: "^[a-z0-9]+(-[a-z0-9]+)*$", max_len: 63}];
 
   Environment environment = 2;
 
@@ -366,7 +367,7 @@ message PlanDestroyProjectResponse {
 }
 
 message PlanReleaseDomainRequest {
-  Environment.Class class = 1;
+  Environment.Class class = 1 [(buf.validate.field).enum.const = 1];
 }
 
 message PlanReleaseDomainResponse {
@@ -397,7 +398,7 @@ message EdgeStackPlan {
 }
 
 message ListEnvironmentsRequest {
-  string slug = 1;
+  string slug = 1 [(buf.validate.field).string = {pattern: "^[a-z0-9]+(-[a-z0-9]+)*$", max_len: 63}];
 }
 
 message ListEnvironmentsResponse {
@@ -415,9 +416,9 @@ message PreviewEnvironment {
 }
 
 message PreflightRequest {
-  Environment.Class required_class = 1;
+  Environment.Class required_class = 1 [(buf.validate.field).enum.defined_only = true];
 
-  string slug = 2;
+  string slug = 2 [(buf.validate.field).string = {pattern: "^[a-z0-9]+(-[a-z0-9]+)*$", max_len: 63}, (buf.validate.field).ignore = IGNORE_IF_ZERO_VALUE];
 
   repeated string domains = 3;
 
@@ -516,7 +517,7 @@ message PromotionHistoryEntry {
 }
 
 message ListPromotionsRequest {
-  string slug = 1;
+  string slug = 1 [(buf.validate.field).string = {pattern: "^[a-z0-9]+(-[a-z0-9]+)*$", max_len: 63}];
 
   EdgeSelection edge = 2;
 }
@@ -526,11 +527,11 @@ message ListPromotionsResponse {
 }
 
 message RollbackRequest {
-  string slug = 1;
+  string slug = 1 [(buf.validate.field).string = {pattern: "^[a-z0-9]+(-[a-z0-9]+)*$", max_len: 63}];
 
   string to = 2;
 
-  string tag = 3;
+  string tag = 3 [(buf.validate.field).string = {pattern: "^[A-Za-z0-9._-]*$", max_len: 64}];
 
   EdgeSelection edge = 4;
 }
@@ -540,9 +541,9 @@ message RollbackResponse {
 }
 
 message PruneRequest {
-  string slug = 1;
+  string slug = 1 [(buf.validate.field).string = {pattern: "^[a-z0-9]+(-[a-z0-9]+)*$", max_len: 63}];
 
-  int32 keep_n = 2;
+  int32 keep_n = 2 [(buf.validate.field).int32.gte = 0];
 
   Environment environment = 3;
 
@@ -551,6 +552,8 @@ message PruneRequest {
 
 message DeployEvent {
   oneof event {
+    option (buf.validate.oneof).required = true;
+
     ProgressEvent progress = 1;
     LogEvent log = 2;
     ResultEvent result = 3;
@@ -612,8 +615,8 @@ message SpanAttribute {
 }
 
 message SpanEvent {
-  bytes span_id = 1;
-  bytes parent_span_id = 2;
+  bytes span_id = 1 [(buf.validate.field).bytes.len = 8];
+  bytes parent_span_id = 2 [(buf.validate.field).bytes.len = 8, (buf.validate.field).ignore = IGNORE_IF_ZERO_VALUE];
 
   string name = 3;
 
@@ -687,13 +690,13 @@ message FunctionOutput {
 }
 
 message SetLinkRequest {
-  string slug = 1;
+  string slug = 1 [(buf.validate.field).string = {pattern: "^[a-z0-9]+(-[a-z0-9]+)*$", max_len: 63}];
 
-  Environment.Class class = 2;
+  Environment.Class class = 2 [(buf.validate.field).enum = {in: [1, 2]}];
 
-  string environment = 3;
+  string environment = 3 [(buf.validate.field).string.pattern = "^[^#*[:cntrl:]]*$"];
 
-  links.v1.Link link = 4;
+  links.v1.Link link = 4 [(buf.validate.field).required = true];
 
   string owner = 5;
 }
@@ -703,13 +706,13 @@ message SetLinkResponse {
 }
 
 message RemoveLinkRequest {
-  string slug = 1;
+  string slug = 1 [(buf.validate.field).string = {pattern: "^[a-z0-9]+(-[a-z0-9]+)*$", max_len: 63}];
 
-  Environment.Class class = 2;
+  Environment.Class class = 2 [(buf.validate.field).enum = {in: [1, 2]}];
 
-  string environment = 3;
+  string environment = 3 [(buf.validate.field).string.pattern = "^[^#*[:cntrl:]]*$"];
 
-  string name = 4;
+  string name = 4 [(buf.validate.field).string = {min_len: 1, pattern: "^[^#[:cntrl:]]*$"}];
 }
 
 message RemoveLinkResponse {
@@ -717,11 +720,11 @@ message RemoveLinkResponse {
 }
 
 message ListLinksRequest {
-  string slug = 1;
+  string slug = 1 [(buf.validate.field).string = {pattern: "^[a-z0-9]+(-[a-z0-9]+)*$", max_len: 63}];
 
-  Environment.Class class = 2;
+  Environment.Class class = 2 [(buf.validate.field).enum = {in: [1, 2]}];
 
-  string environment = 3;
+  string environment = 3 [(buf.validate.field).string.pattern = "^[^#*[:cntrl:]]*$"];
 }
 
 message ListLinksResponse {

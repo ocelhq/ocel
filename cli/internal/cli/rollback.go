@@ -45,10 +45,6 @@ func runRollback(ctx context.Context, d deps, cwd string, opts rollbackOptions, 
 	if opts.to != "" && opts.tag != "" {
 		return fmt.Errorf("--to and --tag are mutually exclusive; pass just one")
 	}
-	if err := validateTag(opts.tag); err != nil {
-		return err
-	}
-
 	cfg, err := projectconfig.Resolve(ctx, cwd, explicitConfigPath())
 	if err != nil {
 		return err

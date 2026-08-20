@@ -3,6 +3,8 @@ package buckets.v1;
 
 option go_package = "github.com/ocelhq/ocel/pkg/proto/buckets/v1;bucketsv1";
 
+import "buf/validate/validate.proto";
+
 service BucketService {
   rpc PresignUpload(PresignUploadRequest) returns (PresignUploadResponse);
 
@@ -19,7 +21,11 @@ enum UploadState {
 }
 
 message PresignFile {
-  string key = 1;
+  string key = 1 [(buf.validate.field).string = {
+    min_len: 1
+    max_len: 1024
+    pattern: "^[A-Za-z0-9._-]*[A-Za-z0-9_-][A-Za-z0-9._-]*(/[A-Za-z0-9._-]*[A-Za-z0-9_-][A-Za-z0-9._-]*)*$"
+  }];
   string name = 2;
   int64 size = 3;
   string mime_type = 4;
@@ -41,8 +47,8 @@ message CompletedFile {
 }
 
 message PresignUploadRequest {
-  string bucket = 1;
-  repeated PresignFile files = 2;
+  string bucket = 1 [(buf.validate.field).string.min_len = 1];
+  repeated PresignFile files = 2 [(buf.validate.field).repeated.min_items = 1];
 
   bytes metadata = 3;
 
@@ -62,7 +68,7 @@ message VerifyUploadSignatureRequest {
 
   string signature = 2;
 
-  CompletedFile file = 3;
+  CompletedFile file = 3 [(buf.validate.field).required = true];
 }
 
 message VerifyUploadSignatureResponse {
