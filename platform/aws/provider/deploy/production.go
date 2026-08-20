@@ -303,11 +303,31 @@ type WorkerFacts struct {
 }
 
 func sharedWorker(e edge.Edge, f WorkerFacts) (edge.Worker, error) {
-	generic, err := genericWorkerBundle(e)
+	worker, err := genericWorkerBundle(e)
 	if err != nil {
 		return edge.Worker{}, err
 	}
-	return withOriginBodyBudget(withRevalidateQueue(withImageOptimizer(withCacheCoordinates(withEdgeSigningCreds(generic, f), f), f), f)), nil
+	vars := map[string]string{
+		edge.OriginBodyLimitVar:    strconv.Itoa(lambdaOriginBodyLimitBytes),
+		edge.OriginBodyEncodingVar: edge.OriginBodyEncodingBase64,
+	}
+	for name, value := range map[string]string{
+		edge.AWSRegionVar:          f.Region,
+		edge.StateTableVar:         f.StateTable,
+		edge.AssetBucketVar:        f.AssetBucket,
+		edge.ImageOptimizerURLVar:  f.ImageOptimizerURL,
+		edge.RevalidateQueueURLVar: f.RevalidateQueueURL,
+	} {
+		if value != "" {
+			vars[name] = value
+		}
+	}
+	if f.EdgeAccessKeyID != "" && f.EdgeSecretKey != "" {
+		vars[edge.EdgeAccessKeyIDVar] = f.EdgeAccessKeyID
+		worker.Secrets = map[string]string{edge.EdgeSecretKeyVar: f.EdgeSecretKey}
+	}
+	worker.Vars = vars
+	return worker, nil
 }
 
 func stackSpecs(cfg Config, manifest *deploymentsv1.Manifest, version string, warn func(string)) ([]edge.StackSpec, error) {
@@ -569,52 +589,6 @@ func withVar(worker edge.Worker, name, value string) edge.Worker {
 	vars[name] = value
 	worker.Vars = vars
 	return worker
-}
-
-func withEdgeSigningCreds(worker edge.Worker, f WorkerFacts) edge.Worker {
-	if f.EdgeAccessKeyID == "" || f.EdgeSecretKey == "" {
-		return worker
-	}
-	worker = withVar(worker, edge.EdgeAccessKeyIDVar, f.EdgeAccessKeyID)
-	secrets := make(map[string]string, len(worker.Secrets)+1)
-	for k, v := range worker.Secrets {
-		secrets[k] = v
-	}
-	secrets[edge.EdgeSecretKeyVar] = f.EdgeSecretKey
-	worker.Secrets = secrets
-	return worker
-}
-
-func withCacheCoordinates(worker edge.Worker, f WorkerFacts) edge.Worker {
-	for name, value := range map[string]string{
-		edge.AWSRegionVar:   f.Region,
-		edge.StateTableVar:  f.StateTable,
-		edge.AssetBucketVar: f.AssetBucket,
-	} {
-		if value != "" {
-			worker = withVar(worker, name, value)
-		}
-	}
-	return worker
-}
-
-func withImageOptimizer(worker edge.Worker, f WorkerFacts) edge.Worker {
-	if f.ImageOptimizerURL == "" {
-		return worker
-	}
-	return withVar(worker, edge.ImageOptimizerURLVar, f.ImageOptimizerURL)
-}
-
-func withOriginBodyBudget(worker edge.Worker) edge.Worker {
-	worker = withVar(worker, edge.OriginBodyLimitVar, strconv.Itoa(lambdaOriginBodyLimitBytes))
-	return withVar(worker, edge.OriginBodyEncodingVar, edge.OriginBodyEncodingBase64)
-}
-
-func withRevalidateQueue(worker edge.Worker, f WorkerFacts) edge.Worker {
-	if f.RevalidateQueueURL == "" {
-		return worker
-	}
-	return withVar(worker, edge.RevalidateQueueURLVar, f.RevalidateQueueURL)
 }
 
 func genericWorkerBundle(e edge.Edge) (edge.Worker, error) {
