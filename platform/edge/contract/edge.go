@@ -69,6 +69,43 @@ type Edge interface {
 	DestroyPreviewWildcard(ctx context.Context, baseDomain string) error
 
 	DomainOwner(ctx context.Context, hostname string) (string, error)
+
+	ProjectSurfaces(scope ProjectScope) []Surface
+
+	PreviewWildcardSurfaces(wildcard string) (removed, kept Surface)
+
+	SharedPreviewSurface() Surface
+}
+
+type ProjectScope struct {
+	Slug      string
+	Class     Class
+	Hostnames []string
+	Front     string
+}
+
+type Surface struct {
+	Kind   string
+	Name   string
+	Action SurfaceAction
+	Reason string
+	Slow   bool
+}
+
+type SurfaceAction string
+
+const (
+	SurfaceKeep              SurfaceAction = "keep"
+	SurfaceDelete            SurfaceAction = "delete"
+	SurfaceDisableThenDelete SurfaceAction = "disable-then-delete"
+)
+
+func ValidSurfaceAction(action SurfaceAction) bool {
+	switch action {
+	case SurfaceKeep, SurfaceDelete, SurfaceDisableThenDelete:
+		return true
+	}
+	return false
 }
 
 const DefaultPointer = "@production"
@@ -116,6 +153,26 @@ type Programmable interface {
 
 type CredentialVerifier interface {
 	VerifyCredentials(ctx context.Context) (CredentialIdentity, error)
+}
+
+type OriginSigner interface {
+	SignsOriginForwards() bool
+}
+
+func SignsOriginForwards(e Edge) bool {
+	signer, ok := e.(OriginSigner)
+	return ok && signer.SignsOriginForwards()
+}
+
+type ScopeBound interface {
+	CredentialScope() string
+}
+
+func CredentialScope(e Edge) string {
+	if bound, ok := e.(ScopeBound); ok {
+		return bound.CredentialScope()
+	}
+	return ""
 }
 
 type CredentialIdentity struct {

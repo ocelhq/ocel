@@ -441,8 +441,8 @@ func renderGlobalDomain(out io.Writer, resp *deploymentsv1.ListDomainResponse) {
 	}
 
 	fmt.Fprintf(out, "Global preview domain  %s\n", wildcardOf(domain.GetBaseDomain()))
-	if acct := domain.GetCloudflareAccount(); acct != "" {
-		fmt.Fprintf(out, "  Cloudflare account   %s\n", acct)
+	if scope := domain.GetEdgeScope(); scope != "" {
+		fmt.Fprintf(out, "  Edge account         %s\n", scope)
 	}
 	fmt.Fprintf(out, "  Hostname grammar     %d–%d\n", domain.GetGrammarMin(), domain.GetGrammarMax())
 	route := "installed"

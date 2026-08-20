@@ -70,6 +70,46 @@ func Run(t *testing.T, suite Suite) {
 		}
 	})
 
+	t.Run("teardown surfaces are named, reasoned and honestly actioned", func(t *testing.T) {
+		e, spec := suite.New(t)
+
+		surfaces := e.ProjectSurfaces(edge.ProjectScope{
+			Slug:      spec.Slug,
+			Class:     spec.Class,
+			Hostnames: []string{suite.Hostname},
+			Front:     "front.example.net",
+		})
+		if len(surfaces) == 0 {
+			t.Fatal("ProjectSurfaces = none, want the surfaces a project with a bound hostname stands on")
+		}
+		for _, surface := range surfaces {
+			checkSurface(t, "ProjectSurfaces", surface)
+		}
+
+		removed, kept := e.PreviewWildcardSurfaces("*.preview.example.com")
+		checkSurface(t, "PreviewWildcardSurfaces removed", removed)
+		checkSurface(t, "PreviewWildcardSurfaces kept", kept)
+		if removed.Action == edge.SurfaceKeep {
+			t.Error("PreviewWildcardSurfaces' removed surface is kept; releasing the wildcard must take down what holds it")
+		}
+		if kept.Action != edge.SurfaceKeep {
+			t.Errorf("PreviewWildcardSurfaces' kept surface has action %q, want %q", kept.Action, edge.SurfaceKeep)
+		}
+
+		shared := e.SharedPreviewSurface()
+		checkSurface(t, "SharedPreviewSurface", shared)
+		if shared.Action != edge.SurfaceKeep {
+			t.Errorf("SharedPreviewSurface action = %q, want %q: it is substrate-scoped", shared.Action, edge.SurfaceKeep)
+		}
+	})
+
+	t.Run("a programmable edge signs its origin forwards", func(t *testing.T) {
+		e, _ := suite.New(t)
+		if _, programmable := e.(edge.Programmable); programmable && !edge.SignsOriginForwards(e) {
+			t.Error("SignsOriginForwards = false on a programmable edge; the code it runs at the edge reaches the origin with the credentials it was bootstrapped, so it must sign")
+		}
+	})
+
 	t.Run("the flip bound is one a caller can wait out", func(t *testing.T) {
 		e, _ := suite.New(t)
 		bound := e.FlipBound()
@@ -311,6 +351,17 @@ func Run(t *testing.T, suite Suite) {
 			t.Errorf("DomainOwner(%q) = %q, want no surface left after Destroy", suite.Hostname, owner)
 		}
 	})
+}
+
+func checkSurface(t *testing.T, what string, surface edge.Surface) {
+	t.Helper()
+
+	if surface.Kind == "" || surface.Name == "" || surface.Reason == "" {
+		t.Errorf("%s: surface %+v must carry a kind, a name and a reason", what, surface)
+	}
+	if !edge.ValidSurfaceAction(surface.Action) {
+		t.Errorf("%s: surface %+v names no valid action", what, surface)
+	}
 }
 
 func frontedRecords(t *testing.T, e edge.Edge, state edge.StackState, hostname string) []edge.Record {

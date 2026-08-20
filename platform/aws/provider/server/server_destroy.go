@@ -55,7 +55,6 @@ func (s *Server) PlanDestroyProject(ctx context.Context, req *deploymentsv1.Plan
 		infraStacks = []string{plan.InfraStack.String()}
 	}
 	edgeStack, err := s.edgeStackPlan(edgeFront, projectPlanScope{
-		kind:       edgeFront.Kind(),
 		class:      bootstrap.ClassProduction,
 		slug:       req.GetSlug(),
 		stateTable: deployed.StateTable,
@@ -105,7 +104,6 @@ func (s *Server) planDestroyPreviewProject(ctx context.Context, opts options, ed
 	}
 
 	edgeStack, err := s.edgeStackPlan(edgeFront, projectPlanScope{
-		kind:       edgeFront.Kind(),
 		class:      bootstrap.ClassPreview,
 		slug:       slug,
 		stateTable: deployed.StateTable,
@@ -146,7 +144,7 @@ func (s *Server) edgeStackPlan(edgeFront edge.Edge, scope projectPlanScope) (*de
 		return nil, err
 	}
 
-	items, err := destroyPlanItems(scope)
+	items, err := destroyPlanItems(edgeFront, scope)
 	if err != nil {
 		return nil, err
 	}

@@ -30,7 +30,6 @@ import (
 	linksv1 "github.com/ocelhq/ocel/pkg/proto/links/v1"
 	"github.com/ocelhq/ocel/platform/aws/provider/dns"
 	"github.com/ocelhq/ocel/platform/aws/provider/membrane"
-	cloudflare "github.com/ocelhq/ocel/platform/edge/cloudflare/deploy"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
@@ -50,7 +49,7 @@ func realize(ctx context.Context, cfg Config, manifest *deploymentsv1.Manifest, 
 		return err
 	}
 
-	if cfg.Edge.Kind() == cloudflare.Kind && cfg.StoreEndpoint == "" {
+	if _, programmable := cfg.Edge.(edge.Programmable); programmable && cfg.StoreEndpoint == "" {
 		return Result{}, finishUploading(fmt.Errorf("no deployments-store worker found for this account; re-run `%s` to provision it before deploying", bootstrapCommand(cfg)))
 	}
 

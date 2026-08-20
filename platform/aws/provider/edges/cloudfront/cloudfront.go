@@ -162,6 +162,52 @@ func (p *provider) FlipBound() edge.FlipBound {
 
 func (p *provider) CertificateRegion(string) string { return certs.CloudFrontRegion }
 
+func (p *provider) SignsOriginForwards() bool { return false }
+
+const distributionDeleteReason = "CloudFront only deletes a disabled distribution once the disable has reached every edge"
+
+func (p *provider) ProjectSurfaces(scope edge.ProjectScope) []edge.Surface {
+	var surfaces []edge.Surface
+	if scope.Front != "" {
+		surfaces = append(surfaces, edge.Surface{
+			Kind:   "distribution",
+			Name:   scope.Front,
+			Action: edge.SurfaceDisableThenDelete,
+			Reason: "the CloudFront distribution fronting this project; " + distributionDeleteReason,
+			Slow:   true,
+		})
+	}
+	if len(scope.Hostnames) > 0 {
+		surfaces = append(surfaces, edge.Surface{
+			Kind:   "edge routes",
+			Name:   strings.Join(scope.Hostnames, ", "),
+			Action: edge.SurfaceDelete,
+			Reason: "the key-value store entry the resolver reads for each of this project's hostnames",
+		})
+	}
+	return surfaces
+}
+
+func (p *provider) PreviewWildcardSurfaces(wildcard string) (edge.Surface, edge.Surface) {
+	removed := edge.Surface{
+		Kind:   "wildcard distribution",
+		Name:   wildcard,
+		Action: edge.SurfaceDisableThenDelete,
+		Reason: "the CloudFront distribution every project's previews are served through; " + distributionDeleteReason,
+		Slow:   true,
+	}
+	return removed, p.SharedPreviewSurface()
+}
+
+func (p *provider) SharedPreviewSurface() edge.Surface {
+	return edge.Surface{
+		Kind:   "preview resolver",
+		Name:   "function and key-value store",
+		Action: edge.SurfaceKeep,
+		Reason: "substrate-scoped: every project's routes are read from it",
+	}
+}
+
 func (p *provider) clientsFor(ctx context.Context) (Clients, error) {
 	p.mu.Lock()
 	defer p.mu.Unlock()

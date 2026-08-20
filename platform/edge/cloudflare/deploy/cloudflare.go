@@ -94,6 +94,58 @@ func (p *provider) FlipBound() edge.FlipBound {
 
 func (p *provider) ServesUnbound() bool { return true }
 
+func (p *provider) SignsOriginForwards() bool { return true }
+
+func (p *provider) CredentialScope() string { return os.Getenv(envAccountID) }
+
+func (p *provider) ProjectSurfaces(scope edge.ProjectScope) []edge.Surface {
+	surfaces := []edge.Surface{{
+		Kind:   "edge workers",
+		Name:   scope.Slug,
+		Action: edge.SurfaceDelete,
+		Reason: "every per-app worker this project deployed, and the routes that reach them",
+	}}
+	if len(scope.Hostnames) > 0 {
+		surfaces = append(surfaces, edge.Surface{
+			Kind:   "worker routes",
+			Name:   strings.Join(scope.Hostnames, ", "),
+			Action: edge.SurfaceDelete,
+			Reason: "the hostnames this project is served on stop resolving to a worker",
+		})
+	}
+	return append(surfaces, edge.Surface{
+		Kind:   "deployments store",
+		Name:   scope.Slug,
+		Action: edge.SurfaceDelete,
+		Reason: "the store instance holding every deployment and pointer this project promoted",
+	})
+}
+
+func (p *provider) PreviewWildcardSurfaces(wildcard string) (edge.Surface, edge.Surface) {
+	removed := edge.Surface{
+		Kind:   "preview entry worker",
+		Name:   wildcard,
+		Action: edge.SurfaceDelete,
+		Reason: "the shared entry worker holding this wildcard, and the route that reaches it",
+	}
+	kept := edge.Surface{
+		Kind:   "preview substrate",
+		Name:   string(edge.ClassPreview),
+		Action: edge.SurfaceKeep,
+		Reason: "substrate-scoped: `ocel bootstrap --destroy --preview` removes what it stood up",
+	}
+	return removed, kept
+}
+
+func (p *provider) SharedPreviewSurface() edge.Surface {
+	return edge.Surface{
+		Kind:   "shared preview entry worker",
+		Name:   edge.PreviewEntryOwner,
+		Action: edge.SurfaceKeep,
+		Reason: "substrate-scoped: it fronts every project's previews",
+	}
+}
+
 func (p *provider) CodeRuntime() (string, []string) { return compatDate, compatFlags }
 
 func (p *provider) Bootstrap(ctx context.Context, class edge.Class) (edge.BootstrapOutput, error) {

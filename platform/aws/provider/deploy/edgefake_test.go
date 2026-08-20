@@ -95,6 +95,20 @@ func (f *recordingEdge) FlipBound() edge.FlipBound { return f.declared().FlipBou
 
 func (f *recordingEdge) ServesUnbound() bool { return edge.ServesUnbound(f.declared()) }
 
+func (f *recordingEdge) SignsOriginForwards() bool { return edge.SignsOriginForwards(f.declared()) }
+
+func (f *recordingEdge) ProjectSurfaces(scope edge.ProjectScope) []edge.Surface {
+	return f.declared().ProjectSurfaces(scope)
+}
+
+func (f *recordingEdge) PreviewWildcardSurfaces(wildcard string) (edge.Surface, edge.Surface) {
+	return f.declared().PreviewWildcardSurfaces(wildcard)
+}
+
+func (f *recordingEdge) SharedPreviewSurface() edge.Surface {
+	return f.declared().SharedPreviewSurface()
+}
+
 func (f *recordingEdge) Bootstrap(context.Context, edge.Class) (edge.BootstrapOutput, error) {
 	return edge.BootstrapOutput{Trust: edge.TrustExternal}, nil
 }

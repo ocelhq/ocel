@@ -57,7 +57,6 @@ func TestEdgeStackPlan(t *testing.T) {
 			t.Fatalf("edge() error = %v", err)
 		}
 		plan, err := s.edgeStackPlan(edgeFront, projectPlanScope{
-			kind:       edgeFront.Kind(),
 			class:      bootstrap.ClassProduction,
 			slug:       "shop",
 			stateTable: "ocel-state",
@@ -124,8 +123,8 @@ func TestDestroyPlanItemsPerEdge(t *testing.T) {
 		t.Parallel()
 
 		state := edge.RecordBoundDomain(edge.StackState{edge.StackKeyFront: "d123.cloudfront.net"}, "shop.example.com")
-		items, err := destroyPlanItems(projectPlanScope{
-			kind: cloudfront.Kind, class: bootstrap.ClassProduction, slug: "shop", state: state,
+		items, err := destroyPlanItems(planEdge(t, cloudfront.Kind), projectPlanScope{
+			class: bootstrap.ClassProduction, slug: "shop", state: state,
 		})
 		if err != nil {
 			t.Fatalf("destroyPlanItems: %v", err)
@@ -146,8 +145,8 @@ func TestDestroyPlanItemsPerEdge(t *testing.T) {
 		t.Parallel()
 
 		state := edge.RecordBoundDomain(edge.StackState{}, "shop.example.com")
-		items, err := destroyPlanItems(projectPlanScope{
-			kind: apigateway.Kind, class: bootstrap.ClassProduction, slug: "shop", state: state,
+		items, err := destroyPlanItems(planEdge(t, apigateway.Kind), projectPlanScope{
+			class: bootstrap.ClassProduction, slug: "shop", state: state,
 		})
 		if err != nil {
 			t.Fatalf("destroyPlanItems: %v", err)
@@ -182,8 +181,8 @@ func TestDestroyPlanItemsPerEdge(t *testing.T) {
 				Certificate: "arn:aws:acm:eu-west-1:1:certificate/pinned",
 			}},
 		}
-		items, err := destroyPlanItems(projectPlanScope{
-			kind: cloudfront.Kind, class: bootstrap.ClassProduction, slug: "shop", state: productionState(t, recorded),
+		items, err := destroyPlanItems(planEdge(t, cloudfront.Kind), projectPlanScope{
+			class: bootstrap.ClassProduction, slug: "shop", state: productionState(t, recorded),
 		})
 		if err != nil {
 			t.Fatalf("destroyPlanItems: %v", err)
@@ -215,8 +214,8 @@ func TestDestroyPlanItemsPerEdge(t *testing.T) {
 		t.Parallel()
 
 		recorded := bootstrap.Production{Certificate: certs.Certificate{ARN: "arn:adopted", Adopted: true}}
-		items, err := destroyPlanItems(projectPlanScope{
-			kind: cloudfront.Kind, class: bootstrap.ClassProduction, slug: "shop", state: productionState(t, recorded),
+		items, err := destroyPlanItems(planEdge(t, cloudfront.Kind), projectPlanScope{
+			class: bootstrap.ClassProduction, slug: "shop", state: productionState(t, recorded),
 		})
 		if err != nil {
 			t.Fatalf("destroyPlanItems: %v", err)
@@ -233,8 +232,7 @@ func TestDestroyPlanItemsPerEdge(t *testing.T) {
 		if err != nil {
 			t.Fatalf("marshal records: %v", err)
 		}
-		items, err := destroyPlanItems(projectPlanScope{
-			kind:  cloudfront.Kind,
+		items, err := destroyPlanItems(planEdge(t, cloudfront.Kind), projectPlanScope{
 			class: bootstrap.ClassProduction,
 			slug:  "shop",
 			state: edge.StackState{edge.StackKeyRecords: string(written)},
@@ -250,8 +248,7 @@ func TestDestroyPlanItemsPerEdge(t *testing.T) {
 	t.Run("a project served on the shared preview wildcard keeps it", func(t *testing.T) {
 		t.Parallel()
 
-		items, err := destroyPlanItems(projectPlanScope{
-			kind:  apigateway.Kind,
+		items, err := destroyPlanItems(planEdge(t, apigateway.Kind), projectPlanScope{
 			class: bootstrap.ClassPreview,
 			slug:  "shop",
 			state: edge.StackState{edge.StackKeyGlobalPreview: "preview.acme.com"},
@@ -308,7 +305,6 @@ func TestDestroyPlanFollowsTheEdgeTheRequestNames(t *testing.T) {
 			t.Fatalf("edge(%q) error = %v", kind, err)
 		}
 		plan, err := s.edgeStackPlan(edgeFront, projectPlanScope{
-			kind:       edgeFront.Kind(),
 			class:      bootstrap.ClassProduction,
 			slug:       "shop",
 			stateTable: "ocel-state",

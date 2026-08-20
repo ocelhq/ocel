@@ -149,6 +149,8 @@ func TestPreviewWildcardSpecFor(t *testing.T) {
 
 type unprogrammableEdge struct{ edge.Edge }
 
+func (u unprogrammableEdge) SignsOriginForwards() bool { return edge.SignsOriginForwards(u.Edge) }
+
 func TestMarkGlobalPreview(t *testing.T) {
 	t.Parallel()
 

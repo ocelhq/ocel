@@ -308,3 +308,30 @@ func TestPointable(t *testing.T) {
 		}
 	})
 }
+
+func TestZoneOwns(t *testing.T) {
+	t.Parallel()
+
+	for _, tc := range []struct {
+		name           string
+		hostname, zone string
+		want           bool
+	}{
+		{"a subdomain of the zone", "app.acme.com", "acme.com", true},
+		{"the zone apex itself", "acme.com", "acme.com", true},
+		{"a zone delegated at the subdomain", "app.acme.com", "app.acme.com", true},
+		{"a zone recorded in another case", "app.ACME.com", "acme.COM", true},
+		{"an unrelated zone", "app.acme.com", "other.com", false},
+		{"a zone that is only a suffix of the label", "app.acme.com", "me.com", false},
+		{"a hostname that merely ends in the zone name", "notacme.com", "acme.com", false},
+		{"a zone sharing the tail of a label", "app.acme.com", "cme.com", false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			if got := ZoneOwns(tc.hostname, tc.zone); got != tc.want {
+				t.Errorf("ZoneOwns(%q, %q) = %v, want %v", tc.hostname, tc.zone, got, tc.want)
+			}
+		})
+	}
+}
