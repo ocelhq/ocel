@@ -60,7 +60,7 @@ func TestGlobalPreviewProblemRefusesAProjectOnAnotherEdge(t *testing.T) {
 
 	recorded := bootstrap.PreviewDomain{BaseDomain: "previews.ocel.dev", Edge: cloudflare.Kind}
 
-	err := globalPreviewProblem(recorded, &deploymentsv1.PreflightRequest{Slug: "acme", EdgeKind: string(apigateway.Kind)}, &scopedEdge{})
+	err := globalPreviewProblem(recorded, &deploymentsv1.PreflightRequest{Slug: "acme", Edge: &deploymentsv1.EdgeSelection{Kind: string(apigateway.Kind)}}, &scopedEdge{})
 	if err == nil {
 		t.Fatal("globalPreviewProblem = nil, want a deploy that would write routing no one reads refused")
 	}
@@ -70,12 +70,12 @@ func TestGlobalPreviewProblemRefusesAProjectOnAnotherEdge(t *testing.T) {
 		}
 	}
 
-	if err := globalPreviewProblem(recorded, &deploymentsv1.PreflightRequest{Slug: "acme", EdgeKind: string(cloudflare.Kind)}, &scopedEdge{}); err != nil {
+	if err := globalPreviewProblem(recorded, &deploymentsv1.PreflightRequest{Slug: "acme", Edge: &deploymentsv1.EdgeSelection{Kind: string(cloudflare.Kind)}}, &scopedEdge{}); err != nil {
 		t.Fatalf("globalPreviewProblem = %v, want a project on the holding edge admitted", err)
 	}
 
 	legacy := bootstrap.PreviewDomain{BaseDomain: "previews.ocel.dev"}
-	if err := globalPreviewProblem(legacy, &deploymentsv1.PreflightRequest{Slug: "acme", EdgeKind: string(apigateway.Kind)}, &scopedEdge{}); err != nil {
+	if err := globalPreviewProblem(legacy, &deploymentsv1.PreflightRequest{Slug: "acme", Edge: &deploymentsv1.EdgeSelection{Kind: string(apigateway.Kind)}}, &scopedEdge{}); err != nil {
 		t.Fatalf("globalPreviewProblem = %v, want a record naming no edge to accuse nobody", err)
 	}
 }

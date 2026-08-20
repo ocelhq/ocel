@@ -16,7 +16,7 @@ func (s *Server) DomainStatus(ctx context.Context, req *deploymentsv1.DomainStat
 		options:     req.GetOptions(),
 		slug:        req.GetSlug(),
 		edgeKind:    string(requestedEdge(req)),
-		dns:         req.GetDns(),
+		dns:         requestedDNS(req),
 		configured:  req.GetConfigured(),
 		certificate: true,
 	})

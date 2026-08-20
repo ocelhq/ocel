@@ -152,7 +152,7 @@ func (s *deployFakeProviderServer) Deploy(ctx context.Context, req *deploymentsv
 		return err
 	}
 
-	journalEdge(req.GetEdgeKind(), req.GetEdgeOptions(), req.GetDns(), req.GetAllowDegraded())
+	journalEdge(req.GetEdge().GetKind(), req.GetEdge().GetOptions(), req.GetEdge().GetDns(), req.GetEdge().GetAllowDegraded())
 	if err := refuseEdge(); err != nil {
 		return err
 	}
@@ -375,17 +375,17 @@ func (s *deployFakeProviderServer) PlanTeardown(ctx context.Context, req *deploy
 	if err := s.checkToken(ctx); err != nil {
 		return nil, err
 	}
-	journalEdge(req.GetEdgeKind(), nil, nil, nil)
+	journalEdge(req.GetEdge().GetKind(), nil, nil, nil)
 	if err := refuseEdge(); err != nil {
 		return nil, err
 	}
 	class := strings.ToLower(strings.TrimPrefix(req.GetClass().String(), "CLASS_"))
 	return &deploymentsv1.PlanTeardownResponse{
-		EdgeKind: resolvedEdgeKind(req.GetEdgeKind()),
+		EdgeKind: resolvedEdgeKind(req.GetEdge().GetKind()),
 		Items: []*deploymentsv1.TeardownItem{
 			{
 				Kind:   "edge bootstrap",
-				Name:   resolvedEdgeKind(req.GetEdgeKind()),
+				Name:   resolvedEdgeKind(req.GetEdge().GetKind()),
 				Action: deploymentsv1.TeardownItem_ACTION_DELETE,
 				Reason: "every worker the edge stood up for the " + class + " substrate",
 			},
@@ -410,7 +410,7 @@ func (s *deployFakeProviderServer) Teardown(ctx context.Context, req *deployment
 	if err := s.checkToken(ctx); err != nil {
 		return err
 	}
-	journalEdge(req.GetEdgeKind(), nil, nil, nil)
+	journalEdge(req.GetEdge().GetKind(), nil, nil, nil)
 	if err := refuseEdge(); err != nil {
 		return err
 	}
@@ -600,7 +600,7 @@ func (s *deployFakeProviderServer) UseDomain(ctx context.Context, req *deploymen
 		return err
 	}
 	if err := stream.Send(&deploymentsv1.DeployEvent{
-		Event: &deploymentsv1.DeployEvent_Progress{Progress: &deploymentsv1.ProgressEvent{Message: "USE DOMAIN class=" + req.GetClass().String() + " base=" + req.GetBaseDomain() + " dns=" + req.GetDns().GetKind()}},
+		Event: &deploymentsv1.DeployEvent_Progress{Progress: &deploymentsv1.ProgressEvent{Message: "USE DOMAIN class=" + req.GetClass().String() + " base=" + req.GetBaseDomain() + " dns=" + req.GetEdge().GetDns().GetKind()}},
 	}); err != nil {
 		return err
 	}
@@ -610,7 +610,7 @@ func (s *deployFakeProviderServer) UseDomain(ctx context.Context, req *deploymen
 	}
 	for _, rec := range records {
 		message := "Writing " + rec.String()
-		if req.GetDns() == nil {
+		if req.GetEdge().GetDns() == nil {
 			message = rec.Instruction()
 		}
 		if err := stream.Send(&deploymentsv1.DeployEvent{
@@ -667,7 +667,7 @@ func (s *deployFakeProviderServer) ReleaseDomain(ctx context.Context, req *deplo
 		return err
 	}
 	if err := stream.Send(&deploymentsv1.DeployEvent{
-		Event: &deploymentsv1.DeployEvent_Progress{Progress: &deploymentsv1.ProgressEvent{Message: "RELEASE DOMAIN class=" + req.GetClass().String() + " dns=" + req.GetDns().GetKind()}},
+		Event: &deploymentsv1.DeployEvent_Progress{Progress: &deploymentsv1.ProgressEvent{Message: "RELEASE DOMAIN class=" + req.GetClass().String() + " dns=" + req.GetEdge().GetDns().GetKind()}},
 	}); err != nil {
 		return err
 	}
@@ -696,7 +696,7 @@ func (s *deployFakeProviderServer) AddDomain(ctx context.Context, req *deploymen
 		})
 	}
 	hosts := fakeDomainTargets(req.GetConfigured(), req.GetHost())
-	if err := say(fmt.Sprintf("DOMAIN ADD slug=%s hosts=%s dns=%s edge=%s", req.GetSlug(), strings.Join(hosts, ","), req.GetDns().GetKind(), resolvedEdgeKind(req.GetEdgeKind()))); err != nil {
+	if err := say(fmt.Sprintf("DOMAIN ADD slug=%s hosts=%s dns=%s edge=%s", req.GetSlug(), strings.Join(hosts, ","), req.GetEdge().GetDns().GetKind(), resolvedEdgeKind(req.GetEdge().GetKind()))); err != nil {
 		return err
 	}
 	if err := say(fmt.Sprintf("Requesting a certificate for %s in us-east-1", strings.Join(hosts, ", "))); err != nil {
@@ -712,7 +712,7 @@ func (s *deployFakeProviderServer) AddDomain(ctx context.Context, req *deploymen
 		}
 		for _, rec := range records {
 			message := "Writing " + rec.String()
-			if req.GetDns() == nil {
+			if req.GetEdge().GetDns() == nil {
 				message = rec.Instruction()
 			}
 			if err := say(message); err != nil {
@@ -745,7 +745,7 @@ func (s *deployFakeProviderServer) RemoveDomain(ctx context.Context, req *deploy
 			Event: &deploymentsv1.DeployEvent_Progress{Progress: &deploymentsv1.ProgressEvent{Message: message}},
 		})
 	}
-	if err := say(fmt.Sprintf("DOMAIN RM slug=%s host=%s configured=%s dns=%s edge=%s", req.GetSlug(), req.GetHost(), strings.Join(req.GetConfigured(), ","), req.GetDns().GetKind(), resolvedEdgeKind(req.GetEdgeKind()))); err != nil {
+	if err := say(fmt.Sprintf("DOMAIN RM slug=%s host=%s configured=%s dns=%s edge=%s", req.GetSlug(), req.GetHost(), strings.Join(req.GetConfigured(), ","), req.GetEdge().GetDns().GetKind(), resolvedEdgeKind(req.GetEdge().GetKind()))); err != nil {
 		return err
 	}
 	for _, host := range fakeDomainTargets(nil, req.GetHost()) {
@@ -847,12 +847,12 @@ func (s *deployFakeProviderServer) PlanDestroyProject(ctx context.Context, req *
 	if err := s.checkToken(ctx); err != nil {
 		return nil, err
 	}
-	journalEdge(req.GetEdgeKind(), nil, nil, nil)
+	journalEdge(req.GetEdge().GetKind(), nil, nil, nil)
 	slug := req.GetSlug()
 	if req.GetEnvironment().GetClass() == deploymentsv1.Environment_CLASS_PREVIEW {
 		return &deploymentsv1.PlanDestroyProjectResponse{
 			EdgeStack: &deploymentsv1.EdgeStackPlan{
-				EdgeKind: resolvedEdgeKind(req.GetEdgeKind()),
+				EdgeKind: resolvedEdgeKind(req.GetEdge().GetKind()),
 				Items: []*deploymentsv1.TeardownItem{
 					{
 						Kind:   "edge workers",
@@ -873,7 +873,7 @@ func (s *deployFakeProviderServer) PlanDestroyProject(ctx context.Context, req *
 	}
 	return &deploymentsv1.PlanDestroyProjectResponse{
 		EdgeStack: &deploymentsv1.EdgeStackPlan{
-			EdgeKind: resolvedEdgeKind(req.GetEdgeKind()),
+			EdgeKind: resolvedEdgeKind(req.GetEdge().GetKind()),
 			Items: []*deploymentsv1.TeardownItem{
 				{
 					Kind:   "edge stack",
@@ -903,9 +903,9 @@ func (s *deployFakeProviderServer) DestroyProject(ctx context.Context, req *depl
 	if err := s.checkToken(ctx); err != nil {
 		return err
 	}
-	journalEdge(req.GetEdgeKind(), nil, nil, nil)
+	journalEdge(req.GetEdge().GetKind(), nil, nil, nil)
 	if err := stream.Send(&deploymentsv1.DeployEvent{
-		Event: &deploymentsv1.DeployEvent_Progress{Progress: &deploymentsv1.ProgressEvent{Message: "DESTROY PROJECT project=" + req.GetSlug() + " dns=" + req.GetDns().GetKind() + " " + describeEnv(req.GetEnvironment())}},
+		Event: &deploymentsv1.DeployEvent_Progress{Progress: &deploymentsv1.ProgressEvent{Message: "DESTROY PROJECT project=" + req.GetSlug() + " dns=" + req.GetEdge().GetDns().GetKind() + " " + describeEnv(req.GetEnvironment())}},
 	}); err != nil {
 		return err
 	}

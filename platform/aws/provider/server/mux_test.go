@@ -127,8 +127,10 @@ func TestUnsupportedEdgeKind(t *testing.T) {
 		{"Deploy", func(client deploymentsv1connect.DeploymentServiceClient) error {
 			stream, err := client.Deploy(context.Background(), &deploymentsv1.DeployRequest{
 				Manifest: wellFormedManifest(),
-				EdgeKind: string(unfrontedKind),
-				Dns:      &deploymentsv1.Dns{Kind: "cloudflare", Zone: "acme.com"},
+				Edge: &deploymentsv1.EdgeSelection{
+					Kind: string(unfrontedKind),
+					Dns:  &deploymentsv1.Dns{Kind: "cloudflare", Zone: "acme.com"},
+				},
 			})
 			if err != nil {
 				return err
@@ -138,13 +140,13 @@ func TestUnsupportedEdgeKind(t *testing.T) {
 		}},
 		{"PlanTeardown", func(client deploymentsv1connect.DeploymentServiceClient) error {
 			_, err := client.PlanTeardown(context.Background(), &deploymentsv1.PlanTeardownRequest{
-				EdgeKind: string(unfrontedKind),
+				Edge: &deploymentsv1.EdgeSelection{Kind: string(unfrontedKind)},
 			})
 			return err
 		}},
 		{"Teardown", func(client deploymentsv1connect.DeploymentServiceClient) error {
 			stream, err := client.Teardown(context.Background(), &deploymentsv1.TeardownRequest{
-				EdgeKind: string(unfrontedKind),
+				Edge: &deploymentsv1.EdgeSelection{Kind: string(unfrontedKind)},
 			})
 			if err != nil {
 				return err

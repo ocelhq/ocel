@@ -124,11 +124,12 @@ func runDestroy(ctx context.Context, d deps, cwd string, stdout, stderr io.Write
 		}
 
 		spinner := deployui.StartSpinner(stdout, "Enumerating what would be destroyed")
-		plan, err := client.PlanDestroyProject(ctx, edgeSettings(cfg).applyToPlanDestroyProject(&deploymentsv1.PlanDestroyProjectRequest{
+		plan, err := client.PlanDestroyProject(ctx, &deploymentsv1.PlanDestroyProjectRequest{
 			Options:         []byte(provider.Options),
 			ProtocolVersion: manifestbuilder.SchemaVersion,
 			Slug:            cfg.Slug,
-		}))
+			Edge:            edgeSelection(cfg),
+		})
 		spinner.Stop()
 		if err != nil {
 			return err
@@ -150,11 +151,12 @@ func runDestroy(ctx context.Context, d deps, cwd string, stdout, stderr io.Write
 			}
 		}
 
-		req := edgeSettings(cfg).applyToDestroyProject(&deploymentsv1.DestroyProjectRequest{
+		req := &deploymentsv1.DestroyProjectRequest{
 			Options:         []byte(provider.Options),
 			ProtocolVersion: manifestbuilder.SchemaVersion,
 			Slug:            cfg.Slug,
-		})
+			Edge:            edgeSelection(cfg),
+		}
 		if err := runner.DestroyProject(ctx, req, ui.Event); err != nil {
 			return err
 		}
@@ -206,12 +208,13 @@ func runDestroyPreviewProject(ctx context.Context, d deps, cwd string, yes bool,
 		}
 
 		spinner := deployui.StartSpinner(stdout, "Enumerating what would be destroyed")
-		plan, err := client.PlanDestroyProject(ctx, edgeSettings(cfg).applyToPlanDestroyProject(&deploymentsv1.PlanDestroyProjectRequest{
+		plan, err := client.PlanDestroyProject(ctx, &deploymentsv1.PlanDestroyProjectRequest{
 			Options:         []byte(provider.Options),
 			ProtocolVersion: manifestbuilder.SchemaVersion,
 			Slug:            cfg.Slug,
 			Environment:     &deploymentsv1.Environment{Class: deploymentsv1.Environment_CLASS_PREVIEW},
-		}))
+			Edge:            edgeSelection(cfg),
+		})
 		spinner.Stop()
 		if err != nil {
 			return err
@@ -234,12 +237,13 @@ func runDestroyPreviewProject(ctx context.Context, d deps, cwd string, yes bool,
 			}
 		}
 
-		req := edgeSettings(cfg).applyToDestroyProject(&deploymentsv1.DestroyProjectRequest{
+		req := &deploymentsv1.DestroyProjectRequest{
 			Options:         []byte(provider.Options),
 			ProtocolVersion: manifestbuilder.SchemaVersion,
 			Slug:            cfg.Slug,
 			Environment:     &deploymentsv1.Environment{Class: deploymentsv1.Environment_CLASS_PREVIEW},
-		})
+			Edge:            edgeSelection(cfg),
+		}
 		if err := runner.DestroyProject(ctx, req, ui.Event); err != nil {
 			return err
 		}

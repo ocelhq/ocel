@@ -26,7 +26,7 @@ func (s *Server) AddDomain(ctx context.Context, req *deploymentsv1.AddDomainRequ
 		options:     req.GetOptions(),
 		slug:        req.GetSlug(),
 		edgeKind:    string(requestedEdge(req)),
-		dns:         req.GetDns(),
+		dns:         requestedDNS(req),
 		configured:  req.GetConfigured(),
 		host:        req.GetHost(),
 		certificate: true,
@@ -50,7 +50,7 @@ func (s *Server) RemoveDomain(ctx context.Context, req *deploymentsv1.RemoveDoma
 		options:    req.GetOptions(),
 		slug:       req.GetSlug(),
 		edgeKind:   string(requestedEdge(req)),
-		dns:        req.GetDns(),
+		dns:        requestedDNS(req),
 		configured: req.GetConfigured(),
 		host:       req.GetHost(),
 	})

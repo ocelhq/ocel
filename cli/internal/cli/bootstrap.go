@@ -252,11 +252,12 @@ func runBootstrapDestroy(ctx context.Context, d deps, cfg *projectconfig.Config,
 		}
 
 		spinner := deployui.StartSpinner(stdout, "Enumerating what would be removed")
-		plan, err := client.PlanTeardown(ctx, edgeSettings(cfg).applyToPlanTeardown(&deploymentsv1.PlanTeardownRequest{
+		plan, err := client.PlanTeardown(ctx, &deploymentsv1.PlanTeardownRequest{
 			Options:         []byte(provider.Options),
 			ProtocolVersion: manifestbuilder.SchemaVersion,
 			Class:           class,
-		}))
+			Edge:            edgeSelection(cfg),
+		})
 		spinner.Stop()
 		if err != nil {
 			return err
@@ -273,11 +274,12 @@ func runBootstrapDestroy(ctx context.Context, d deps, cfg *projectconfig.Config,
 			}
 		}
 
-		req := edgeSettings(cfg).applyToTeardown(&deploymentsv1.TeardownRequest{
+		req := &deploymentsv1.TeardownRequest{
 			Options:         []byte(provider.Options),
 			ProtocolVersion: manifestbuilder.SchemaVersion,
 			Class:           class,
-		})
+			Edge:            edgeSelection(cfg),
+		}
 		if err := runner.Teardown(ctx, req, ui.Event); err != nil {
 			return err
 		}

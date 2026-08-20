@@ -270,7 +270,7 @@ func TestPlanDestroyProjectUnsupportedEdge(t *testing.T) {
 	t.Parallel()
 
 	client := newTestClientFor(t, &Server{}, testToken)
-	_, err := client.PlanDestroyProject(context.Background(), &deploymentsv1.PlanDestroyProjectRequest{Slug: "shop", EdgeKind: "bogus"})
+	_, err := client.PlanDestroyProject(context.Background(), &deploymentsv1.PlanDestroyProjectRequest{Slug: "shop", Edge: &deploymentsv1.EdgeSelection{Kind: "bogus"}})
 	if err == nil {
 		t.Fatal("PlanDestroyProject error = nil, want the unsupported edge refused")
 	}
@@ -287,7 +287,7 @@ func TestRequestNamingNoEdgeTakesTheProviderDefault(t *testing.T) {
 	if got := requestedEdge(&deploymentsv1.PlanDestroyProjectRequest{Slug: "shop"}); got != edges.DefaultKind {
 		t.Errorf("requestedEdge() = %q, want %q: a config that names no edge lets the provider choose", got, edges.DefaultKind)
 	}
-	if got := requestedEdge(&deploymentsv1.PlanDestroyProjectRequest{Slug: "shop", EdgeKind: string(apigateway.Kind)}); got != apigateway.Kind {
+	if got := requestedEdge(&deploymentsv1.PlanDestroyProjectRequest{Slug: "shop", Edge: &deploymentsv1.EdgeSelection{Kind: string(apigateway.Kind)}}); got != apigateway.Kind {
 		t.Errorf("requestedEdge() = %q, want %q: a named edge is left alone", got, apigateway.Kind)
 	}
 }

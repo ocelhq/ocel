@@ -60,15 +60,13 @@ message UseDomainRequest {
 
   string base_domain = 2;
 
-  Dns dns = 3;
-
-  string edge_kind = 4;
+  EdgeSelection edge = 3;
 }
 
 message ListDomainRequest {
   Environment.Class class = 1;
 
-  string edge_kind = 2;
+  EdgeSelection edge = 2;
 }
 
 message ListDomainResponse {
@@ -80,9 +78,7 @@ message ListDomainResponse {
 message ReleaseDomainRequest {
   Environment.Class class = 1;
 
-  Dns dns = 2;
-
-  string edge_kind = 3;
+  EdgeSelection edge = 2;
 }
 
 message AddDomainRequest {
@@ -96,9 +92,7 @@ message AddDomainRequest {
 
   string host = 5;
 
-  string edge_kind = 6;
-
-  Dns dns = 7;
+  EdgeSelection edge = 6;
 }
 
 message RemoveDomainRequest {
@@ -112,9 +106,7 @@ message RemoveDomainRequest {
 
   string host = 5;
 
-  string edge_kind = 6;
-
-  Dns dns = 7;
+  EdgeSelection edge = 6;
 }
 
 message DomainStatusRequest {
@@ -126,9 +118,7 @@ message DomainStatusRequest {
 
   repeated string configured = 4;
 
-  string edge_kind = 5;
-
-  Dns dns = 6;
+  EdgeSelection edge = 5;
 }
 
 message DomainStatusResponse {
@@ -284,13 +274,7 @@ message DeployRequest {
 
   string tag = 5;
 
-  string edge_kind = 6;
-
-  bytes edge_options = 7;
-
-  Dns dns = 8;
-
-  repeated string allow_degraded = 9;
+  EdgeSelection edge = 6;
 
   repeated string required_features = 10;
 }
@@ -342,6 +326,16 @@ message Dns {
   string zone = 2;
 }
 
+message EdgeSelection {
+  string kind = 1;
+
+  bytes options = 2;
+
+  Dns dns = 3;
+
+  repeated string allow_degraded = 4;
+}
+
 message TeardownRequest {
   bytes options = 1;
 
@@ -349,7 +343,7 @@ message TeardownRequest {
 
   Environment.Class class = 3;
 
-  string edge_kind = 4;
+  EdgeSelection edge = 4;
 }
 
 message PlanTeardownRequest {
@@ -359,7 +353,7 @@ message PlanTeardownRequest {
 
   Environment.Class class = 3;
 
-  string edge_kind = 4;
+  EdgeSelection edge = 4;
 }
 
 message PlanTeardownResponse {
@@ -377,7 +371,7 @@ message DestroyPreviewRequest {
 
   string slug = 4;
 
-  string edge_kind = 5;
+  EdgeSelection edge = 5;
 }
 
 message DestroyProjectRequest {
@@ -389,9 +383,7 @@ message DestroyProjectRequest {
 
   Environment environment = 4;
 
-  Dns dns = 5;
-
-  string edge_kind = 6;
+  EdgeSelection edge = 5;
 }
 
 message PlanDestroyProjectRequest {
@@ -403,7 +395,7 @@ message PlanDestroyProjectRequest {
 
   Environment environment = 4;
 
-  string edge_kind = 5;
+  EdgeSelection edge = 5;
 }
 
 message PlanDestroyProjectResponse {
@@ -419,7 +411,7 @@ message PlanDestroyProjectResponse {
 message PlanReleaseDomainRequest {
   Environment.Class class = 1;
 
-  string edge_kind = 2;
+  EdgeSelection edge = 2;
 }
 
 message PlanReleaseDomainResponse {
@@ -482,7 +474,7 @@ message PreflightRequest {
 
   repeated string domains = 5;
 
-  string edge_kind = 6;
+  EdgeSelection edge = 6;
 
   repeated string required_features = 7;
 }
@@ -583,7 +575,7 @@ message ListPromotionsRequest {
 
   string slug = 3;
 
-  string edge_kind = 4;
+  EdgeSelection edge = 4;
 }
 
 message ListPromotionsResponse {
@@ -601,7 +593,7 @@ message RollbackRequest {
 
   string tag = 5;
 
-  string edge_kind = 6;
+  EdgeSelection edge = 6;
 }
 
 message RollbackResponse {
@@ -619,7 +611,7 @@ message PruneRequest {
 
   Environment environment = 5;
 
-  string edge_kind = 6;
+  EdgeSelection edge = 6;
 }
 
 message DeployEvent {
