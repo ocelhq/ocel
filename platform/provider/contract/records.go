@@ -1,6 +1,25 @@
-package origin
+package provider
 
-import "encoding/json"
+import (
+	"context"
+	"encoding/json"
+
+	edge "github.com/ocelhq/ocel/platform/edge/contract"
+)
+
+type Record struct {
+	Deploy   State           `json:"deploy"`
+	EdgeKind edge.Kind       `json:"edgeKind"`
+	Edge     edge.StackState `json:"edge"`
+	Hosts    Private         `json:"hosts,omitzero"`
+}
+
+type RecordStore interface {
+	Read(ctx context.Context, slug string, class edge.Class) (Record, bool, error)
+	Write(ctx context.Context, slug string, class edge.Class, record Record) error
+	Delete(ctx context.Context, slug string, class edge.Class) error
+	Slugs(ctx context.Context, class edge.Class) ([]string, error)
+}
 
 type Private struct {
 	value any
