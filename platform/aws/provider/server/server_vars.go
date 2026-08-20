@@ -15,8 +15,8 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb"
 	"github.com/aws/aws-sdk-go-v2/service/kms"
 
-	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
-	envv1 "github.com/ocelhq/ocel/pkg/proto/env/v1"
+	environmentv1 "github.com/ocelhq/ocel/pkg/proto/environment/v1"
+	envvarsv1 "github.com/ocelhq/ocel/pkg/proto/envvars/v1"
 	"github.com/ocelhq/ocel/platform/aws/provider/bootstrap"
 	"github.com/ocelhq/ocel/platform/aws/provider/deploy"
 	"github.com/ocelhq/ocel/platform/aws/provider/vars"
@@ -61,8 +61,8 @@ func awsAccount(ctx context.Context, region string) (account, error) {
 	}, nil
 }
 
-func (s *stores) store(ctx context.Context, region string, class deploymentsv1.Environment_Class) (*vars.Store, error) {
-	key := storeKey{region: region, preview: class == deploymentsv1.Environment_CLASS_PREVIEW}
+func (s *stores) store(ctx context.Context, region string, tier environmentv1.Tier) (*vars.Store, error) {
+	key := storeKey{region: region, preview: tier == environmentv1.Tier_TIER_PREVIEW}
 
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -153,12 +153,12 @@ func referenceOwners(ctx context.Context, awscfg aws.Config, deployed bootstrap.
 	return store.ReferenceOwners(ctx, slug)
 }
 
-func (s *VarsServer) addressable(ctx context.Context, region string, class deploymentsv1.Environment_Class, at *envv1.Coordinate) error {
+func (s *VarsServer) addressable(ctx context.Context, region string, tier environmentv1.Tier, at *envvarsv1.Coordinate) error {
 	environment := at.GetEnvironment()
 	if environment == "" {
 		return nil
 	}
-	if class != deploymentsv1.Environment_CLASS_PREVIEW {
+	if tier != environmentv1.Tier_TIER_PREVIEW {
 		return connect.NewError(connect.CodeInvalidArgument, fmt.Errorf(
 			"production has a single environment, so %q addresses no value a production function could read", environment))
 	}
@@ -200,11 +200,11 @@ func previewEnvironments(ctx context.Context, region, slug string) ([]string, er
 	return names, nil
 }
 
-func (s *VarsServer) SetValue(ctx context.Context, req *envv1.SetValueRequest) (*envv1.SetValueResponse, error) {
-	if err := s.addressable(ctx, s.config.get().Region, req.GetClass(), req.GetCoordinate()); err != nil {
+func (s *VarsServer) SetValue(ctx context.Context, req *envvarsv1.SetValueRequest) (*envvarsv1.SetValueResponse, error) {
+	if err := s.addressable(ctx, s.config.get().Region, req.GetTier(), req.GetCoordinate()); err != nil {
 		return nil, err
 	}
-	store, err := s.store(ctx, s.config.get().Region, req.GetClass())
+	store, err := s.store(ctx, s.config.get().Region, req.GetTier())
 	if err != nil {
 		return nil, err
 	}
@@ -212,14 +212,14 @@ func (s *VarsServer) SetValue(ctx context.Context, req *envv1.SetValueRequest) (
 	if err != nil {
 		return nil, varsError(err)
 	}
-	return &envv1.SetValueResponse{Metadata: toMetadataProto(metadata)}, nil
+	return &envvarsv1.SetValueResponse{Metadata: toMetadataProto(metadata)}, nil
 }
 
-func (s *VarsServer) SetReference(ctx context.Context, req *envv1.SetReferenceRequest) (*envv1.SetReferenceResponse, error) {
-	if err := s.addressable(ctx, s.config.get().Region, req.GetClass(), req.GetCoordinate()); err != nil {
+func (s *VarsServer) SetReference(ctx context.Context, req *envvarsv1.SetReferenceRequest) (*envvarsv1.SetReferenceResponse, error) {
+	if err := s.addressable(ctx, s.config.get().Region, req.GetTier(), req.GetCoordinate()); err != nil {
 		return nil, err
 	}
-	store, err := s.store(ctx, s.config.get().Region, req.GetClass())
+	store, err := s.store(ctx, s.config.get().Region, req.GetTier())
 	if err != nil {
 		return nil, err
 	}
@@ -227,11 +227,11 @@ func (s *VarsServer) SetReference(ctx context.Context, req *envv1.SetReferenceRe
 	if err != nil {
 		return nil, varsError(err)
 	}
-	return &envv1.SetReferenceResponse{Metadata: toMetadataProto(metadata)}, nil
+	return &envvarsv1.SetReferenceResponse{Metadata: toMetadataProto(metadata)}, nil
 }
 
-func (s *VarsServer) ListReferences(ctx context.Context, req *envv1.ListReferencesRequest) (*envv1.ListReferencesResponse, error) {
-	store, err := s.store(ctx, s.config.get().Region, req.GetClass())
+func (s *VarsServer) ListReferences(ctx context.Context, req *envvarsv1.ListReferencesRequest) (*envvarsv1.ListReferencesResponse, error) {
+	store, err := s.store(ctx, s.config.get().Region, req.GetTier())
 	if err != nil {
 		return nil, err
 	}
@@ -239,15 +239,15 @@ func (s *VarsServer) ListReferences(ctx context.Context, req *envv1.ListReferenc
 	if err != nil {
 		return nil, varsError(err)
 	}
-	resp := &envv1.ListReferencesResponse{References: make([]*envv1.Coordinate, 0, len(found))}
+	resp := &envvarsv1.ListReferencesResponse{References: make([]*envvarsv1.Coordinate, 0, len(found))}
 	for _, c := range found {
 		resp.References = append(resp.References, toCoordinateProto(c))
 	}
 	return resp, nil
 }
 
-func (s *VarsServer) ListValues(ctx context.Context, req *envv1.ListValuesRequest) (*envv1.ListValuesResponse, error) {
-	store, err := s.store(ctx, s.config.get().Region, req.GetClass())
+func (s *VarsServer) ListValues(ctx context.Context, req *envvarsv1.ListValuesRequest) (*envvarsv1.ListValuesResponse, error) {
+	store, err := s.store(ctx, s.config.get().Region, req.GetTier())
 	if err != nil {
 		return nil, err
 	}
@@ -255,34 +255,34 @@ func (s *VarsServer) ListValues(ctx context.Context, req *envv1.ListValuesReques
 	if err != nil {
 		return nil, varsError(err)
 	}
-	resp := &envv1.ListValuesResponse{Values: make([]*envv1.ValueMetadata, 0, len(found))}
+	resp := &envvarsv1.ListValuesResponse{Values: make([]*envvarsv1.ValueMetadata, 0, len(found))}
 	for _, m := range found {
 		resp.Values = append(resp.Values, toMetadataProto(m))
 	}
 	return resp, nil
 }
 
-func (s *VarsServer) GetValue(ctx context.Context, req *envv1.GetValueRequest) (*envv1.GetValueResponse, error) {
-	store, err := s.store(ctx, s.config.get().Region, req.GetClass())
+func (s *VarsServer) GetValue(ctx context.Context, req *envvarsv1.GetValueRequest) (*envvarsv1.GetValueResponse, error) {
+	store, err := s.store(ctx, s.config.get().Region, req.GetTier())
 	if err != nil {
 		return nil, err
 	}
 	value, err := store.Get(ctx, toCoordinate(req.GetCoordinate()), req.GetReveal())
 	if errors.Is(err, vars.ErrNotFound) {
-		return &envv1.GetValueResponse{}, nil
+		return &envvarsv1.GetValueResponse{}, nil
 	}
 	if err != nil {
 		return nil, varsError(err)
 	}
-	return &envv1.GetValueResponse{
+	return &envvarsv1.GetValueResponse{
 		Found:    true,
 		Metadata: toMetadataProto(value.Metadata),
 		Value:    value.Plaintext,
 	}, nil
 }
 
-func (s *VarsServer) RevealValues(ctx context.Context, req *envv1.RevealValuesRequest) (*envv1.RevealValuesResponse, error) {
-	store, err := s.store(ctx, s.config.get().Region, req.GetClass())
+func (s *VarsServer) RevealValues(ctx context.Context, req *envvarsv1.RevealValuesRequest) (*envvarsv1.RevealValuesResponse, error) {
+	store, err := s.store(ctx, s.config.get().Region, req.GetTier())
 	if err != nil {
 		return nil, err
 	}
@@ -299,9 +299,9 @@ func (s *VarsServer) RevealValues(ctx context.Context, req *envv1.RevealValuesRe
 	if err != nil {
 		return nil, varsError(err)
 	}
-	resp := &envv1.RevealValuesResponse{Values: make([]*envv1.RevealedValue, 0, len(values))}
+	resp := &envvarsv1.RevealValuesResponse{Values: make([]*envvarsv1.RevealedValue, 0, len(values))}
 	for _, v := range values {
-		resp.Values = append(resp.Values, &envv1.RevealedValue{
+		resp.Values = append(resp.Values, &envvarsv1.RevealedValue{
 			Metadata: toMetadataProto(v.Metadata),
 			Value:    v.Plaintext,
 		})
@@ -309,8 +309,8 @@ func (s *VarsServer) RevealValues(ctx context.Context, req *envv1.RevealValuesRe
 	return resp, nil
 }
 
-func (s *VarsServer) DeleteValue(ctx context.Context, req *envv1.DeleteValueRequest) (*envv1.DeleteValueResponse, error) {
-	store, err := s.store(ctx, s.config.get().Region, req.GetClass())
+func (s *VarsServer) DeleteValue(ctx context.Context, req *envvarsv1.DeleteValueRequest) (*envvarsv1.DeleteValueResponse, error) {
+	store, err := s.store(ctx, s.config.get().Region, req.GetTier())
 	if err != nil {
 		return nil, err
 	}
@@ -318,11 +318,11 @@ func (s *VarsServer) DeleteValue(ctx context.Context, req *envv1.DeleteValueRequ
 	if err != nil {
 		return nil, varsError(err)
 	}
-	return &envv1.DeleteValueResponse{Deleted: deleted}, nil
+	return &envvarsv1.DeleteValueResponse{Deleted: deleted}, nil
 }
 
-func (s *VarsServer) ListVersions(ctx context.Context, req *envv1.ListVersionsRequest) (*envv1.ListVersionsResponse, error) {
-	store, err := s.store(ctx, s.config.get().Region, req.GetClass())
+func (s *VarsServer) ListVersions(ctx context.Context, req *envvarsv1.ListVersionsRequest) (*envvarsv1.ListVersionsResponse, error) {
+	store, err := s.store(ctx, s.config.get().Region, req.GetTier())
 	if err != nil {
 		return nil, err
 	}
@@ -330,9 +330,9 @@ func (s *VarsServer) ListVersions(ctx context.Context, req *envv1.ListVersionsRe
 	if err != nil {
 		return nil, varsError(err)
 	}
-	resp := &envv1.ListVersionsResponse{Versions: make([]*envv1.VersionEntry, 0, len(history))}
+	resp := &envvarsv1.ListVersionsResponse{Versions: make([]*envvarsv1.VersionEntry, 0, len(history))}
 	for _, v := range history {
-		resp.Versions = append(resp.Versions, &envv1.VersionEntry{
+		resp.Versions = append(resp.Versions, &envvarsv1.VersionEntry{
 			Version:   v.Version,
 			CreatedAt: v.CreatedAt,
 			Size:      v.Size,
@@ -341,7 +341,7 @@ func (s *VarsServer) ListVersions(ctx context.Context, req *envv1.ListVersionsRe
 	return resp, nil
 }
 
-func toCoordinate(c *envv1.Coordinate) vars.Coordinate {
+func toCoordinate(c *envvarsv1.Coordinate) vars.Coordinate {
 	return vars.Coordinate{
 		Slug:        c.GetSlug(),
 		Folder:      c.GetFolder(),
@@ -350,8 +350,8 @@ func toCoordinate(c *envv1.Coordinate) vars.Coordinate {
 	}
 }
 
-func toCoordinateProto(c vars.Coordinate) *envv1.Coordinate {
-	return &envv1.Coordinate{
+func toCoordinateProto(c vars.Coordinate) *envvarsv1.Coordinate {
+	return &envvarsv1.Coordinate{
 		Slug:        c.Slug,
 		Folder:      c.Folder,
 		Key:         c.Key,
@@ -359,8 +359,8 @@ func toCoordinateProto(c vars.Coordinate) *envv1.Coordinate {
 	}
 }
 
-func toMetadataProto(m vars.Metadata) *envv1.ValueMetadata {
-	out := &envv1.ValueMetadata{
+func toMetadataProto(m vars.Metadata) *envvarsv1.ValueMetadata {
+	out := &envvarsv1.ValueMetadata{
 		Coordinate: toCoordinateProto(m.Coordinate),
 		Version:    m.Version,
 		UpdatedAt:  m.UpdatedAt,

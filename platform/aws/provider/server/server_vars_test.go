@@ -13,14 +13,14 @@ import (
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 
-	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
-	envv1 "github.com/ocelhq/ocel/pkg/proto/env/v1"
-	"github.com/ocelhq/ocel/pkg/proto/env/v1/envv1connect"
+	environmentv1 "github.com/ocelhq/ocel/pkg/proto/environment/v1"
+	envvarsv1 "github.com/ocelhq/ocel/pkg/proto/envvars/v1"
+	"github.com/ocelhq/ocel/pkg/proto/envvars/v1/envvarsv1connect"
 	"github.com/ocelhq/ocel/platform/aws/provider/bootstrap"
 	"github.com/ocelhq/ocel/platform/aws/provider/vars"
 )
 
-func newTestVarsClient(t *testing.T, token string) envv1connect.EnvVarsServiceClient {
+func newTestVarsClient(t *testing.T, token string) envvarsv1connect.EnvVarsServiceClient {
 	t.Helper()
 	srv := httptest.NewServer(NewMux(testToken))
 	t.Cleanup(srv.Close)
@@ -29,7 +29,7 @@ func newTestVarsClient(t *testing.T, token string) envv1connect.EnvVarsServiceCl
 	if token != "" {
 		opts = append(opts, connect.WithInterceptors(authHeaderInterceptor{token: token}))
 	}
-	return envv1connect.NewEnvVarsServiceClient(srv.Client(), srv.URL, opts...)
+	return envvarsv1connect.NewEnvVarsServiceClient(srv.Client(), srv.URL, opts...)
 }
 
 func TestListValues(t *testing.T) {
@@ -44,7 +44,7 @@ func TestListValues(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			_, err := newTestVarsClient(t, tc.token).ListValues(context.Background(), &envv1.ListValuesRequest{Slug: "shop"})
+			_, err := newTestVarsClient(t, tc.token).ListValues(context.Background(), &envvarsv1.ListValuesRequest{Slug: "shop"})
 
 			var connectErr *connect.Error
 			if !errors.As(err, &connectErr) || connectErr.Code() != connect.CodeUnauthenticated {
@@ -99,11 +99,11 @@ func TestVarsServerStoreLookup(t *testing.T) {
 		ctx := context.Background()
 
 		for range 3 {
-			if _, err := s.ListValues(ctx, &envv1.ListValuesRequest{Slug: "shop"}); err != nil {
+			if _, err := s.ListValues(ctx, &envvarsv1.ListValuesRequest{Slug: "shop"}); err != nil {
 				t.Fatalf("ListValues: %v", err)
 			}
-			if _, err := s.GetValue(ctx, &envv1.GetValueRequest{
-				Coordinate: &envv1.Coordinate{Slug: "shop", Key: "STRIPE_API_KEY"},
+			if _, err := s.GetValue(ctx, &envvarsv1.GetValueRequest{
+				Coordinate: &envvarsv1.Coordinate{Slug: "shop", Key: "STRIPE_API_KEY"},
 				Reveal:     true,
 			}); err != nil {
 				t.Fatalf("GetValue: %v", err)
@@ -121,14 +121,14 @@ func TestVarsServerStoreLookup(t *testing.T) {
 		s := testAccount(cfn, newFakeDynamo(), &fakeKMS{})
 		ctx := context.Background()
 
-		for _, class := range []deploymentsv1.Environment_Class{
-			deploymentsv1.Environment_CLASS_PRODUCTION,
-			deploymentsv1.Environment_CLASS_PREVIEW,
-			deploymentsv1.Environment_CLASS_PRODUCTION,
-			deploymentsv1.Environment_CLASS_PREVIEW,
+		for _, tier := range []environmentv1.Tier{
+			environmentv1.Tier_TIER_PRODUCTION,
+			environmentv1.Tier_TIER_PREVIEW,
+			environmentv1.Tier_TIER_PRODUCTION,
+			environmentv1.Tier_TIER_PREVIEW,
 		} {
-			if _, err := s.ListValues(ctx, &envv1.ListValuesRequest{Slug: "shop", Class: class}); err != nil {
-				t.Fatalf("ListValues(%v): %v", class, err)
+			if _, err := s.ListValues(ctx, &envvarsv1.ListValuesRequest{Slug: "shop", Tier: tier}); err != nil {
+				t.Fatalf("ListValues(%v): %v", tier, err)
 			}
 		}
 
@@ -152,8 +152,8 @@ func TestRevealValues(t *testing.T) {
 
 		want := map[string]string{"STRIPE_API_KEY": "sk-live", "WEBHOOK_URL": "https://hooks.example", "SESSION_KEY": "sess"}
 		for key, value := range want {
-			if _, err := s.SetValue(ctx, &envv1.SetValueRequest{
-				Coordinate: &envv1.Coordinate{Slug: "shop", Key: key},
+			if _, err := s.SetValue(ctx, &envvarsv1.SetValueRequest{
+				Coordinate: &envvarsv1.Coordinate{Slug: "shop", Key: key},
 				Value:      value,
 			}); err != nil {
 				t.Fatalf("SetValue %s: %v", key, err)
@@ -163,13 +163,13 @@ func TestRevealValues(t *testing.T) {
 		queriesBefore, _ := ddb.counts()
 		decryptsBefore := crypto.count()
 
-		resp, err := s.RevealValues(ctx, &envv1.RevealValuesRequest{
+		resp, err := s.RevealValues(ctx, &envvarsv1.RevealValuesRequest{
 			Slug: "shop",
-			Cells: []*envv1.Cell{
-				{Key: "STRIPE_API_KEY"},
-				{Key: "WEBHOOK_URL"},
-				{Key: "SESSION_KEY"},
-				{Key: "NEVER_SET"},
+			Cells: []*envvarsv1.Coordinate{
+				{Slug: "shop", Key: "STRIPE_API_KEY"},
+				{Slug: "shop", Key: "WEBHOOK_URL"},
+				{Slug: "shop", Key: "SESSION_KEY"},
+				{Slug: "shop", Key: "NEVER_SET"},
 			},
 		})
 		if err != nil {
@@ -196,12 +196,12 @@ func TestRevealValues(t *testing.T) {
 
 func atVersion(n int64) *int64 { return &n }
 
-func guardedCell(t *testing.T, seeded bool) (*VarsServer, *envv1.Coordinate) {
+func guardedCell(t *testing.T, seeded bool) (*VarsServer, *envvarsv1.Coordinate) {
 	t.Helper()
 	s := testAccount(&countingCFN{}, newFakeDynamo(), &fakeKMS{})
-	coordinate := &envv1.Coordinate{Slug: "shop", Key: "STRIPE_API_KEY"}
+	coordinate := &envvarsv1.Coordinate{Slug: "shop", Key: "STRIPE_API_KEY"}
 	if seeded {
-		if _, err := s.SetValue(context.Background(), &envv1.SetValueRequest{
+		if _, err := s.SetValue(context.Background(), &envvarsv1.SetValueRequest{
 			Coordinate: coordinate,
 			Value:      "sk-seed",
 		}); err != nil {
@@ -240,7 +240,7 @@ func TestSetValue(t *testing.T) {
 			t.Parallel()
 			s, coordinate := guardedCell(t, tc.seeded)
 
-			resp, err := s.SetValue(context.Background(), &envv1.SetValueRequest{
+			resp, err := s.SetValue(context.Background(), &envvarsv1.SetValueRequest{
 				Coordinate:      coordinate,
 				Value:           "sk-live",
 				ExpectedVersion: tc.expected,
@@ -281,7 +281,7 @@ func TestDeleteValue(t *testing.T) {
 			t.Parallel()
 			s, coordinate := guardedCell(t, tc.seeded)
 
-			resp, err := s.DeleteValue(context.Background(), &envv1.DeleteValueRequest{
+			resp, err := s.DeleteValue(context.Background(), &envvarsv1.DeleteValueRequest{
 				Coordinate:      coordinate,
 				ExpectedVersion: tc.expected,
 			})
@@ -305,33 +305,33 @@ func TestSetValueAtAnEnvironmentOverride(t *testing.T) {
 
 	for _, tc := range []struct {
 		name        string
-		class       deploymentsv1.Environment_Class
+		tier        environmentv1.Tier
 		environment string
 		exists      []string
 		wantCode    connect.Code
 		wantIn      string
 	}{
 		{
-			name: "an environment that exists", class: deploymentsv1.Environment_CLASS_PREVIEW,
+			name: "an environment that exists", tier: environmentv1.Tier_TIER_PREVIEW,
 			environment: "staging", exists: []string{"pr-7", "staging"},
 		},
 		{
-			name: "a misspelt environment", class: deploymentsv1.Environment_CLASS_PREVIEW,
+			name: "a misspelt environment", tier: environmentv1.Tier_TIER_PREVIEW,
 			environment: "stagng", exists: []string{"pr-7", "staging"},
 			wantCode: connect.CodeFailedPrecondition, wantIn: "staging",
 		},
 		{
-			name: "a project with no environments at all", class: deploymentsv1.Environment_CLASS_PREVIEW,
+			name: "a project with no environments at all", tier: environmentv1.Tier_TIER_PREVIEW,
 			environment: "staging",
 			wantCode:    connect.CodeFailedPrecondition, wantIn: "ocel preview",
 		},
 		{
-			name: "any environment on production", class: deploymentsv1.Environment_CLASS_PRODUCTION,
+			name: "any environment on production", tier: environmentv1.Tier_TIER_PRODUCTION,
 			environment: "staging", exists: []string{"staging"},
 			wantCode: connect.CodeInvalidArgument, wantIn: "single environment",
 		},
 		{
-			name: "the class-wide value, which names no environment", class: deploymentsv1.Environment_CLASS_PRODUCTION,
+			name: "the class-wide value, which names no environment", tier: environmentv1.Tier_TIER_PRODUCTION,
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -339,9 +339,9 @@ func TestSetValueAtAnEnvironmentOverride(t *testing.T) {
 			s := testAccount(&countingCFN{}, newFakeDynamo(), &fakeKMS{})
 			s.listEnvironments = func(context.Context, string, string) ([]string, error) { return tc.exists, nil }
 
-			_, err := s.SetValue(context.Background(), &envv1.SetValueRequest{
-				Class:      tc.class,
-				Coordinate: &envv1.Coordinate{Slug: "shop", Key: "STRIPE_API_KEY", Environment: tc.environment},
+			_, err := s.SetValue(context.Background(), &envvarsv1.SetValueRequest{
+				Tier:       tc.tier,
+				Coordinate: &envvarsv1.Coordinate{Slug: "shop", Key: "STRIPE_API_KEY", Environment: tc.environment},
 				Value:      "sk-live",
 			})
 
@@ -358,9 +358,9 @@ func TestSetValueAtAnEnvironmentOverride(t *testing.T) {
 			if !strings.Contains(err.Error(), tc.wantIn) {
 				t.Errorf("err = %v, want it to name %q", err, tc.wantIn)
 			}
-			got, getErr := s.GetValue(context.Background(), &envv1.GetValueRequest{
-				Class:      tc.class,
-				Coordinate: &envv1.Coordinate{Slug: "shop", Key: "STRIPE_API_KEY", Environment: tc.environment},
+			got, getErr := s.GetValue(context.Background(), &envvarsv1.GetValueRequest{
+				Tier:       tc.tier,
+				Coordinate: &envvarsv1.Coordinate{Slug: "shop", Key: "STRIPE_API_KEY", Environment: tc.environment},
 				Reveal:     true,
 			})
 			if getErr != nil {
@@ -381,16 +381,16 @@ func TestSetReference(t *testing.T) {
 		s := testAccount(&countingCFN{}, newFakeDynamo(), &fakeKMS{})
 		ctx := context.Background()
 
-		if _, err := s.SetValue(ctx, &envv1.SetValueRequest{
-			Coordinate: &envv1.Coordinate{Slug: "platform", Key: "STRIPE_API_KEY"},
+		if _, err := s.SetValue(ctx, &envvarsv1.SetValueRequest{
+			Coordinate: &envvarsv1.Coordinate{Slug: "platform", Key: "STRIPE_API_KEY"},
 			Value:      "sk-shared",
 		}); err != nil {
 			t.Fatalf("SetValue: %v", err)
 		}
 
-		at := &envv1.Coordinate{Slug: "shop", Folder: "/checkout", Key: "STRIPE_API_KEY"}
-		target := &envv1.Coordinate{Slug: "platform", Key: "STRIPE_API_KEY"}
-		written, err := s.SetReference(ctx, &envv1.SetReferenceRequest{Coordinate: at, Target: target})
+		at := &envvarsv1.Coordinate{Slug: "shop", Folder: "/checkout", Key: "STRIPE_API_KEY"}
+		target := &envvarsv1.Coordinate{Slug: "platform", Key: "STRIPE_API_KEY"}
+		written, err := s.SetReference(ctx, &envvarsv1.SetReferenceRequest{Coordinate: at, Target: target})
 		if err != nil {
 			t.Fatalf("SetReference: %v", err)
 		}
@@ -398,7 +398,7 @@ func TestSetReference(t *testing.T) {
 			t.Errorf("written target = %v, want the cell the reference points at", got)
 		}
 
-		got, err := s.GetValue(ctx, &envv1.GetValueRequest{Coordinate: at, Reveal: true})
+		got, err := s.GetValue(ctx, &envvarsv1.GetValueRequest{Coordinate: at, Reveal: true})
 		if err != nil {
 			t.Fatalf("GetValue: %v", err)
 		}
@@ -409,7 +409,7 @@ func TestSetReference(t *testing.T) {
 			t.Errorf("read target = %v, want the wire to say the cell is a reference", got.GetMetadata().GetTarget())
 		}
 
-		found, err := s.ListReferences(ctx, &envv1.ListReferencesRequest{Coordinate: target})
+		found, err := s.ListReferences(ctx, &envvarsv1.ListReferencesRequest{Coordinate: target})
 		if err != nil {
 			t.Fatalf("ListReferences: %v", err)
 		}
@@ -422,10 +422,10 @@ func TestSetReference(t *testing.T) {
 		t.Parallel()
 		s := testAccount(&countingCFN{}, newFakeDynamo(), &fakeKMS{})
 
-		_, err := s.SetReference(context.Background(), &envv1.SetReferenceRequest{
-			Class:      deploymentsv1.Environment_CLASS_PRODUCTION,
-			Coordinate: &envv1.Coordinate{Slug: "shop", Key: "STRIPE_API_KEY", Environment: "staging"},
-			Target:     &envv1.Coordinate{Slug: "platform", Key: "STRIPE_API_KEY"},
+		_, err := s.SetReference(context.Background(), &envvarsv1.SetReferenceRequest{
+			Tier:       environmentv1.Tier_TIER_PRODUCTION,
+			Coordinate: &envvarsv1.Coordinate{Slug: "shop", Key: "STRIPE_API_KEY", Environment: "staging"},
+			Target:     &envvarsv1.Coordinate{Slug: "platform", Key: "STRIPE_API_KEY"},
 		})
 
 		var connectErr *connect.Error

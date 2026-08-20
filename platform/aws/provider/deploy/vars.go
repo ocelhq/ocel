@@ -14,6 +14,7 @@ import (
 	"strings"
 
 	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
+	environmentv1 "github.com/ocelhq/ocel/pkg/proto/environment/v1"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/resources/v1"
 	"github.com/ocelhq/ocel/platform/aws/provider/vars"
 	"github.com/ocelhq/ocel/platform/aws/provider/vars/baked"
@@ -229,14 +230,14 @@ func referencedOwners(cfg Config, slug string, keys []live.Key) []string {
 }
 
 func overrideEnvironment(cfg Config) string {
-	if cfg.Class != deploymentsv1.Environment_CLASS_PREVIEW {
+	if cfg.Tier != environmentv1.Tier_TIER_PREVIEW {
 		return ""
 	}
 	return cfg.Identity
 }
 
 func recordedAudit(cfg Config, app *deploymentsv1.ManifestApp) (string, []edge.VariableRecord) {
-	if cfg.Class != deploymentsv1.Environment_CLASS_PRODUCTION {
+	if cfg.Tier != environmentv1.Tier_TIER_PRODUCTION {
 		return "", nil
 	}
 	var records []edge.VariableRecord

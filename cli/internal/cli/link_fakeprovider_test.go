@@ -11,8 +11,8 @@ import (
 	connect "connectrpc.com/connect"
 
 	"github.com/ocelhq/ocel/pkg/naming"
-	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
-	envv1 "github.com/ocelhq/ocel/pkg/proto/env/v1"
+	environmentv1 "github.com/ocelhq/ocel/pkg/proto/environment/v1"
+	envvarsv1 "github.com/ocelhq/ocel/pkg/proto/envvars/v1"
 	linksv1 "github.com/ocelhq/ocel/pkg/proto/links/v1"
 )
 
@@ -21,21 +21,21 @@ const linkFakeStoreEnvVar = "OCEL_TEST_FAKE_LINKS_STORE"
 const fakeLinkOwnerOcel = "OCEL"
 
 type fakeLink struct {
-	Class       deploymentsv1.Environment_Class `json:"class"`
-	Slug        string                          `json:"slug"`
-	Environment string                          `json:"environment"`
-	Name        string                          `json:"name"`
-	Type        linksv1.LinkType                `json:"type"`
-	Source      string                          `json:"source"`
-	Owner       string                          `json:"owner"`
-	Version     uint64                          `json:"version"`
-	Properties  []naming.PropertyShape          `json:"properties"`
+	Tier        environmentv1.Tier     `json:"tier"`
+	Slug        string                 `json:"slug"`
+	Environment string                 `json:"environment"`
+	Name        string                 `json:"name"`
+	Type        linksv1.LinkType       `json:"type"`
+	Source      string                 `json:"source"`
+	Owner       string                 `json:"owner"`
+	Version     uint64                 `json:"version"`
+	Properties  []naming.PropertyShape `json:"properties"`
 }
 
 type fakeLinkStore map[string]*fakeLink
 
-func fakeLinkID(class deploymentsv1.Environment_Class, slug, environment, name string) string {
-	return fmt.Sprintf("%s %q %q %q", class, slug, environment, name)
+func fakeLinkID(tier environmentv1.Tier, slug, environment, name string) string {
+	return fmt.Sprintf("%s %q %q %q", tier, slug, environment, name)
 }
 
 func loadFakeLinkStore() (fakeLinkStore, error) {
@@ -58,7 +58,7 @@ func saveFakeLinkStore(store fakeLinkStore) error {
 	return os.WriteFile(os.Getenv(linkFakeStoreEnvVar), raw, 0o600)
 }
 
-func (s *deployFakeProviderServer) SetLink(ctx context.Context, req *envv1.SetLinkRequest) (*envv1.SetLinkResponse, error) {
+func (s *deployFakeProviderServer) SetLink(ctx context.Context, req *envvarsv1.SetLinkRequest) (*envvarsv1.SetLinkResponse, error) {
 	if err := s.checkToken(ctx); err != nil {
 		return nil, err
 	}
@@ -85,7 +85,7 @@ func (s *deployFakeProviderServer) SetLink(ctx context.Context, req *envv1.SetLi
 	if err != nil {
 		return nil, err
 	}
-	id := fakeLinkID(req.GetClass(), req.GetSlug(), req.GetEnvironment(), link.GetName())
+	id := fakeLinkID(req.GetTier(), req.GetSlug(), req.GetEnvironment(), link.GetName())
 	held := store[id]
 	if held != nil && held.Owner != req.GetOwner() {
 		return nil, connect.NewError(connect.CodeFailedPrecondition, fmt.Errorf(
@@ -98,7 +98,7 @@ func (s *deployFakeProviderServer) SetLink(ctx context.Context, req *envv1.SetLi
 		version = held.Version + 1
 	}
 	store[id] = &fakeLink{
-		Class:       req.GetClass(),
+		Tier:        req.GetTier(),
 		Slug:        req.GetSlug(),
 		Environment: req.GetEnvironment(),
 		Name:        link.GetName(),
@@ -111,10 +111,10 @@ func (s *deployFakeProviderServer) SetLink(ctx context.Context, req *envv1.SetLi
 	if err := saveFakeLinkStore(store); err != nil {
 		return nil, err
 	}
-	return &envv1.SetLinkResponse{Version: version}, nil
+	return &envvarsv1.SetLinkResponse{Version: version}, nil
 }
 
-func (s *deployFakeProviderServer) RemoveLink(ctx context.Context, req *envv1.RemoveLinkRequest) (*envv1.RemoveLinkResponse, error) {
+func (s *deployFakeProviderServer) RemoveLink(ctx context.Context, req *envvarsv1.RemoveLinkRequest) (*envvarsv1.RemoveLinkResponse, error) {
 	if err := s.checkToken(ctx); err != nil {
 		return nil, err
 	}
@@ -122,18 +122,18 @@ func (s *deployFakeProviderServer) RemoveLink(ctx context.Context, req *envv1.Re
 	if err != nil {
 		return nil, err
 	}
-	id := fakeLinkID(req.GetClass(), req.GetSlug(), req.GetEnvironment(), req.GetName())
+	id := fakeLinkID(req.GetTier(), req.GetSlug(), req.GetEnvironment(), req.GetName())
 	if store[id] == nil {
-		return &envv1.RemoveLinkResponse{}, nil
+		return &envvarsv1.RemoveLinkResponse{}, nil
 	}
 	delete(store, id)
 	if err := saveFakeLinkStore(store); err != nil {
 		return nil, err
 	}
-	return &envv1.RemoveLinkResponse{Removed: true}, nil
+	return &envvarsv1.RemoveLinkResponse{Removed: true}, nil
 }
 
-func (s *deployFakeProviderServer) ListLinks(ctx context.Context, req *envv1.ListLinksRequest) (*envv1.ListLinksResponse, error) {
+func (s *deployFakeProviderServer) ListLinks(ctx context.Context, req *envvarsv1.ListLinksRequest) (*envvarsv1.ListLinksResponse, error) {
 	if err := s.checkToken(ctx); err != nil {
 		return nil, err
 	}
@@ -148,16 +148,16 @@ func (s *deployFakeProviderServer) ListLinks(ctx context.Context, req *envv1.Lis
 	}
 	slices.Sort(ids)
 
-	resp := &envv1.ListLinksResponse{}
+	resp := &envvarsv1.ListLinksResponse{}
 	for _, id := range ids {
 		held := store[id]
-		if held.Class != req.GetClass() || held.Slug != req.GetSlug() {
+		if held.Tier != req.GetTier() || held.Slug != req.GetSlug() {
 			continue
 		}
 		if held.Environment != req.GetEnvironment() && held.Environment != "" {
 			continue
 		}
-		resp.Links = append(resp.Links, &envv1.LinkSummary{
+		resp.Links = append(resp.Links, &envvarsv1.LinkSummary{
 			Name:       held.Name,
 			Type:       held.Type,
 			Source:     held.Source,

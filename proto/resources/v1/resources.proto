@@ -4,7 +4,7 @@ package resources.v1;
 option go_package = "github.com/ocelhq/ocel/pkg/proto/resources/v1;resourcesv1";
 
 import "links/v1/links.proto";
-import "resources/v1/env.proto";
+import "resources/v1/variables.proto";
 
 service ResourceService {
     rpc Declare(DeclareRequest) returns (DeclareResponse);

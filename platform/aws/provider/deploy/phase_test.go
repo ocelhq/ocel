@@ -6,7 +6,7 @@ import (
 	"testing"
 
 	"github.com/ocelhq/ocel/pkg/naming"
-	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
+	environmentv1 "github.com/ocelhq/ocel/pkg/proto/environment/v1"
 	cloudflare "github.com/ocelhq/ocel/platform/edge/cloudflare/deploy"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
@@ -18,7 +18,7 @@ func phaseConfig(t *testing.T, ed *recordingEdge, up *fakeUploader) Config {
 		StoreEndpoint:  fakeStoreEndpoint,
 		Slug:           "shop",
 		Env:            ProductionEnv,
-		Class:          deploymentsv1.Environment_CLASS_PRODUCTION,
+		Tier:           environmentv1.Tier_TIER_PRODUCTION,
 		ArtifactRoot:   twoAppTree(t),
 		ArtifactBucket: "artifacts",
 		AssetBucket:    "assets",

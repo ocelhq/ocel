@@ -18,6 +18,7 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/naming"
 	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
+	environmentv1 "github.com/ocelhq/ocel/pkg/proto/environment/v1"
 	linksv1 "github.com/ocelhq/ocel/pkg/proto/links/v1"
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/progress/v1"
 )
@@ -191,7 +192,7 @@ func stackTags(cfg Config, name naming.StackName, promotionID, deploymentID, bui
 	}
 	return coord.Tags(naming.Facts{
 		ManagedBy:  managedBy(),
-		EnvClass:   envClass(cfg.Class),
+		EnvClass:   envClass(cfg.Tier),
 		BuildID:    buildID,
 		Deployment: deploymentID,
 		Promotion:  promotionID,
@@ -207,8 +208,8 @@ func managedBy() string {
 	return "ocel-cli/" + version
 }
 
-func envClass(class deploymentsv1.Environment_Class) string {
-	if class == deploymentsv1.Environment_CLASS_PREVIEW {
+func envClass(tier environmentv1.Tier) string {
+	if tier == environmentv1.Tier_TIER_PREVIEW {
 		return "preview"
 	}
 	return "production"

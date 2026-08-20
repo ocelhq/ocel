@@ -10,6 +10,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/secretsmanager"
 
 	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
+	environmentv1 "github.com/ocelhq/ocel/pkg/proto/environment/v1"
 	linksv1 "github.com/ocelhq/ocel/pkg/proto/links/v1"
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/progress/v1"
 	"github.com/ocelhq/ocel/platform/aws/provider/transform"
@@ -99,8 +100,8 @@ type Config struct {
 	AllowDegraded []string
 	Degraded      func(need edge.Need, detail string)
 
-	Class                  deploymentsv1.Environment_Class
-	Lifecycle              deploymentsv1.Environment_Lifecycle
+	Tier                   environmentv1.Tier
+	Lifecycle              environmentv1.Lifecycle
 	Identity               string
 	SharedClusterEndpoint  string
 	SharedClusterSecretARN string

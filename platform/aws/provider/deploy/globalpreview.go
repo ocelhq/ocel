@@ -4,6 +4,7 @@ import (
 	"fmt"
 
 	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
+	environmentv1 "github.com/ocelhq/ocel/pkg/proto/environment/v1"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
@@ -14,7 +15,7 @@ const (
 )
 
 func declaresPreviewDomain(manifest *deploymentsv1.Manifest) bool {
-	return len(DeclaredHostnames(manifest, deploymentsv1.Environment_CLASS_PREVIEW)) > 0
+	return len(DeclaredHostnames(manifest, environmentv1.Tier_TIER_PREVIEW)) > 0
 }
 
 type PreviewWildcard struct {
@@ -61,7 +62,7 @@ func PreviewWildcardSpecFor(w PreviewWildcard, baseDomain string, warn func(stri
 }
 
 func MarkGlobalPreview(state edge.StackState, cfg Config, manifest *deploymentsv1.Manifest) edge.StackState {
-	if cfg.Class != deploymentsv1.Environment_CLASS_PREVIEW {
+	if cfg.Tier != environmentv1.Tier_TIER_PREVIEW {
 		return state
 	}
 	if !servesOnGlobalPreviewDomain(cfg, manifest) {

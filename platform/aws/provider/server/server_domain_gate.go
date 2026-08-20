@@ -11,6 +11,7 @@ import (
 	connect "connectrpc.com/connect"
 
 	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
+	environmentv1 "github.com/ocelhq/ocel/pkg/proto/environment/v1"
 	"github.com/ocelhq/ocel/platform/aws/provider/certs"
 	"github.com/ocelhq/ocel/platform/aws/provider/deploy"
 	"github.com/ocelhq/ocel/platform/aws/provider/domains"
@@ -91,7 +92,7 @@ func (g domainGate) clock() time.Time {
 }
 
 func (g domainGate) admitPreview(manifest *deploymentsv1.Manifest) error {
-	if len(deploy.DeclaredHostnames(manifest, deploymentsv1.Environment_CLASS_PREVIEW)) > 0 || g.previewOn != "" {
+	if len(deploy.DeclaredHostnames(manifest, environmentv1.Tier_TIER_PREVIEW)) > 0 || g.previewOn != "" {
 		return nil
 	}
 	return fmt.Errorf(
@@ -100,7 +101,7 @@ func (g domainGate) admitPreview(manifest *deploymentsv1.Manifest) error {
 }
 
 func (g domainGate) admitProduction(ctx context.Context, manifest *deploymentsv1.Manifest, warn func(string)) (admission, error) {
-	hosts := deploy.DeclaredHostnames(manifest, deploymentsv1.Environment_CLASS_PRODUCTION)
+	hosts := deploy.DeclaredHostnames(manifest, environmentv1.Tier_TIER_PRODUCTION)
 	if len(hosts) == 0 {
 		return admission{}, fmt.Errorf(
 			"this project declares no domains.production, so a production deploy has no hostname to serve: declare one in your ocel config and run `ocel domain add` to provision the certificate, the edge surface and the DNS for it",
@@ -195,14 +196,14 @@ func renewalWord(status string) string {
 	return strings.ToLower(status)
 }
 
-func admitDomains(ctx context.Context, gate domainGate, class deploymentsv1.Environment_Class, manifest *deploymentsv1.Manifest, warn func(string)) (admission, error) {
-	switch class {
-	case deploymentsv1.Environment_CLASS_PREVIEW:
+func admitDomains(ctx context.Context, gate domainGate, tier environmentv1.Tier, manifest *deploymentsv1.Manifest, warn func(string)) (admission, error) {
+	switch tier {
+	case environmentv1.Tier_TIER_PREVIEW:
 		if err := gate.admitPreview(manifest); err != nil {
 			return admission{}, connect.NewError(connect.CodeFailedPrecondition, err)
 		}
 		return admission{}, nil
-	case deploymentsv1.Environment_CLASS_PRODUCTION:
+	case environmentv1.Tier_TIER_PRODUCTION:
 		admitted, err := gate.admitProduction(ctx, manifest, warn)
 		if err != nil {
 			return admission{}, connect.NewError(connect.CodeFailedPrecondition, err)

@@ -12,7 +12,8 @@ import (
 	connect "connectrpc.com/connect"
 
 	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
-	envv1 "github.com/ocelhq/ocel/pkg/proto/env/v1"
+	environmentv1 "github.com/ocelhq/ocel/pkg/proto/environment/v1"
+	envvarsv1 "github.com/ocelhq/ocel/pkg/proto/envvars/v1"
 )
 
 const envFakeStoreEnvVar = "OCEL_TEST_FAKE_VARS_STORE"
@@ -20,10 +21,10 @@ const envFakeStoreEnvVar = "OCEL_TEST_FAKE_VARS_STORE"
 const fakeRevealFailureEnvVar = "OCEL_TEST_FAKE_REVEAL_FAILURE"
 
 type fakeCell struct {
-	Class      deploymentsv1.Environment_Class `json:"class"`
-	Coordinate fakeCoordinate                  `json:"coordinate"`
-	Deleted    bool                            `json:"deleted"`
-	Versions   []fakeCellData                  `json:"versions"`
+	Tier       environmentv1.Tier `json:"tier"`
+	Coordinate fakeCoordinate     `json:"coordinate"`
+	Deleted    bool               `json:"deleted"`
+	Versions   []fakeCellData     `json:"versions"`
 }
 
 type fakeCoordinate struct {
@@ -33,8 +34,8 @@ type fakeCoordinate struct {
 	Environment string `json:"environment"`
 }
 
-func (c fakeCoordinate) proto() *envv1.Coordinate {
-	return &envv1.Coordinate{Slug: c.Slug, Folder: c.Folder, Key: c.Key, Environment: c.Environment}
+func (c fakeCoordinate) proto() *envvarsv1.Coordinate {
+	return &envvarsv1.Coordinate{Slug: c.Slug, Folder: c.Folder, Key: c.Key, Environment: c.Environment}
 }
 
 type fakeCellData struct {
@@ -47,8 +48,8 @@ type fakeStore map[string]*fakeCell
 
 const fakeHistoryWindow = 50
 
-func fakeCoordinateID(class deploymentsv1.Environment_Class, c *envv1.Coordinate) string {
-	return fmt.Sprintf("%s %q %q %q %q", class, c.GetSlug(), c.GetFolder(), c.GetKey(), c.GetEnvironment())
+func fakeCoordinateID(tier environmentv1.Tier, c *envvarsv1.Coordinate) string {
+	return fmt.Sprintf("%s %q %q %q %q", tier, c.GetSlug(), c.GetFolder(), c.GetKey(), c.GetEnvironment())
 }
 
 func loadFakeStore() (fakeStore, error) {
@@ -71,16 +72,16 @@ func saveFakeStore(store fakeStore) error {
 	return os.WriteFile(os.Getenv(envFakeStoreEnvVar), raw, 0o600)
 }
 
-func (s fakeStore) metadata(class deploymentsv1.Environment_Class, c *envv1.Coordinate) *envv1.ValueMetadata {
-	return s[fakeCoordinateID(class, c)].metadata()
+func (s fakeStore) metadata(tier environmentv1.Tier, c *envvarsv1.Coordinate) *envvarsv1.ValueMetadata {
+	return s[fakeCoordinateID(tier, c)].metadata()
 }
 
-func (cell *fakeCell) metadata() *envv1.ValueMetadata {
+func (cell *fakeCell) metadata() *envvarsv1.ValueMetadata {
 	if cell == nil || cell.Deleted || len(cell.Versions) == 0 {
 		return nil
 	}
 	latest := cell.Versions[len(cell.Versions)-1]
-	m := &envv1.ValueMetadata{
+	m := &envvarsv1.ValueMetadata{
 		Coordinate: cell.Coordinate.proto(),
 		Version:    int64(len(cell.Versions)),
 		UpdatedAt:  latest.Ts,
@@ -99,9 +100,9 @@ func (cell *fakeCell) target() *fakeCoordinate {
 	return cell.Versions[len(cell.Versions)-1].Target
 }
 
-func (s fakeStore) resolve(class deploymentsv1.Environment_Class, cell *fakeCell) (string, error) {
+func (s fakeStore) resolve(tier environmentv1.Tier, cell *fakeCell) (string, error) {
 	if target := cell.target(); target != nil {
-		held := s[fakeCoordinateID(class, target.proto())]
+		held := s[fakeCoordinateID(tier, target.proto())]
 		if held.liveVersion() == 0 {
 			return "", connect.NewError(connect.CodeNotFound, fmt.Errorf(
 				"%s/%s holds no value: vars: not found", target.Slug, target.Key))
@@ -111,12 +112,12 @@ func (s fakeStore) resolve(class deploymentsv1.Environment_Class, cell *fakeCell
 	return cell.Versions[len(cell.Versions)-1].Value, nil
 }
 
-func (s fakeStore) referencesTo(class deploymentsv1.Environment_Class, at *envv1.Coordinate) []*envv1.Coordinate {
+func (s fakeStore) referencesTo(tier environmentv1.Tier, at *envvarsv1.Coordinate) []*envvarsv1.Coordinate {
 	want := coordinateOf(at)
-	var found []*envv1.Coordinate
+	var found []*envvarsv1.Coordinate
 	for _, id := range sortedIDs(s) {
 		cell := s[id]
-		if target := cell.target(); cell.Class == class && target != nil && *target == want {
+		if target := cell.target(); cell.Tier == tier && target != nil && *target == want {
 			found = append(found, cell.Coordinate.proto())
 		}
 	}
@@ -147,12 +148,12 @@ func checkExpectation(cell *fakeCell, expected *int64) error {
 		errors.New("vars: stale version"))
 }
 
-func (s *deployFakeProviderServer) addressable(ctx context.Context, at *envv1.Coordinate, class deploymentsv1.Environment_Class) error {
+func (s *deployFakeProviderServer) addressable(ctx context.Context, at *envvarsv1.Coordinate, tier environmentv1.Tier) error {
 	environment := at.GetEnvironment()
 	if environment == "" {
 		return nil
 	}
-	if class != deploymentsv1.Environment_CLASS_PREVIEW {
+	if tier != environmentv1.Tier_TIER_PREVIEW {
 		return connect.NewError(connect.CodeInvalidArgument, fmt.Errorf(
 			"production has a single environment, so %q addresses no value a production function could read", environment))
 	}
@@ -177,11 +178,11 @@ func (s *deployFakeProviderServer) addressable(ctx context.Context, at *envv1.Co
 		environment, strings.Join(names, ", ")))
 }
 
-func (s *deployFakeProviderServer) SetValue(ctx context.Context, req *envv1.SetValueRequest) (*envv1.SetValueResponse, error) {
+func (s *deployFakeProviderServer) SetValue(ctx context.Context, req *envvarsv1.SetValueRequest) (*envvarsv1.SetValueResponse, error) {
 	if err := s.checkToken(ctx); err != nil {
 		return nil, err
 	}
-	if err := s.addressable(ctx, req.GetCoordinate(), req.GetClass()); err != nil {
+	if err := s.addressable(ctx, req.GetCoordinate(), req.GetTier()); err != nil {
 		return nil, err
 	}
 	store, err := loadFakeStore()
@@ -189,7 +190,7 @@ func (s *deployFakeProviderServer) SetValue(ctx context.Context, req *envv1.SetV
 		return nil, err
 	}
 
-	cell := store[fakeCoordinateID(req.GetClass(), req.GetCoordinate())]
+	cell := store[fakeCoordinateID(req.GetTier(), req.GetCoordinate())]
 	if err := checkExpectation(cell, req.ExpectedVersion); err != nil {
 		return nil, err
 	}
@@ -198,17 +199,17 @@ func (s *deployFakeProviderServer) SetValue(ctx context.Context, req *envv1.SetV
 			"%s/%s is a reference to %s/%s, which is where that value is edited: vars: cell is a reference",
 			cell.Coordinate.Slug, cell.Coordinate.Key, target.Slug, target.Key))
 	}
-	if err := store.write(req.GetClass(), req.GetCoordinate(), fakeCellData{Value: req.GetValue()}); err != nil {
+	if err := store.write(req.GetTier(), req.GetCoordinate(), fakeCellData{Value: req.GetValue()}); err != nil {
 		return nil, err
 	}
-	return &envv1.SetValueResponse{Metadata: store.metadata(req.GetClass(), req.GetCoordinate())}, nil
+	return &envvarsv1.SetValueResponse{Metadata: store.metadata(req.GetTier(), req.GetCoordinate())}, nil
 }
 
-func (s fakeStore) write(class deploymentsv1.Environment_Class, at *envv1.Coordinate, data fakeCellData) error {
-	id := fakeCoordinateID(class, at)
+func (s fakeStore) write(tier environmentv1.Tier, at *envvarsv1.Coordinate, data fakeCellData) error {
+	id := fakeCoordinateID(tier, at)
 	cell := s[id]
 	if cell == nil {
-		cell = &fakeCell{Class: class, Coordinate: coordinateOf(at)}
+		cell = &fakeCell{Tier: tier, Coordinate: coordinateOf(at)}
 		s[id] = cell
 	}
 	data.Ts = 1_700_000_000 + int64(len(cell.Versions))
@@ -220,15 +221,15 @@ func (s fakeStore) write(class deploymentsv1.Environment_Class, at *envv1.Coordi
 	return saveFakeStore(s)
 }
 
-func coordinateOf(c *envv1.Coordinate) fakeCoordinate {
+func coordinateOf(c *envvarsv1.Coordinate) fakeCoordinate {
 	return fakeCoordinate{Slug: c.GetSlug(), Folder: c.GetFolder(), Key: c.GetKey(), Environment: c.GetEnvironment()}
 }
 
-func (s *deployFakeProviderServer) SetReference(ctx context.Context, req *envv1.SetReferenceRequest) (*envv1.SetReferenceResponse, error) {
+func (s *deployFakeProviderServer) SetReference(ctx context.Context, req *envvarsv1.SetReferenceRequest) (*envvarsv1.SetReferenceResponse, error) {
 	if err := s.checkToken(ctx); err != nil {
 		return nil, err
 	}
-	if err := s.addressable(ctx, req.GetCoordinate(), req.GetClass()); err != nil {
+	if err := s.addressable(ctx, req.GetCoordinate(), req.GetTier()); err != nil {
 		return nil, err
 	}
 	store, err := loadFakeStore()
@@ -249,22 +250,22 @@ func (s *deployFakeProviderServer) SetReference(ctx context.Context, req *envv1.
 		return nil, deepens(describeCoordinate(at) + " would reference itself")
 	}
 
-	pointedAt := store[fakeCoordinateID(req.GetClass(), target)]
+	pointedAt := store[fakeCoordinateID(req.GetTier(), target)]
 	if pointedAt.target() != nil {
 		return nil, deepens(describeCoordinate(target) + " is itself a reference")
 	}
-	if consumers := store.referencesTo(req.GetClass(), at); len(consumers) > 0 {
+	if consumers := store.referencesTo(req.GetTier(), at); len(consumers) > 0 {
 		return nil, deepens(describeCoordinate(at) + " is referenced by " + describeCoordinate(consumers[0]))
 	}
 
 	pointer := coordinateOf(target)
-	if err := store.write(req.GetClass(), at, fakeCellData{Target: &pointer}); err != nil {
+	if err := store.write(req.GetTier(), at, fakeCellData{Target: &pointer}); err != nil {
 		return nil, err
 	}
-	return &envv1.SetReferenceResponse{Metadata: store.metadata(req.GetClass(), at)}, nil
+	return &envvarsv1.SetReferenceResponse{Metadata: store.metadata(req.GetTier(), at)}, nil
 }
 
-func (s *deployFakeProviderServer) ListReferences(ctx context.Context, req *envv1.ListReferencesRequest) (*envv1.ListReferencesResponse, error) {
+func (s *deployFakeProviderServer) ListReferences(ctx context.Context, req *envvarsv1.ListReferencesRequest) (*envvarsv1.ListReferencesResponse, error) {
 	if err := s.checkToken(ctx); err != nil {
 		return nil, err
 	}
@@ -272,10 +273,10 @@ func (s *deployFakeProviderServer) ListReferences(ctx context.Context, req *envv
 	if err != nil {
 		return nil, err
 	}
-	return &envv1.ListReferencesResponse{References: store.referencesTo(req.GetClass(), req.GetCoordinate())}, nil
+	return &envvarsv1.ListReferencesResponse{References: store.referencesTo(req.GetTier(), req.GetCoordinate())}, nil
 }
 
-func (s *deployFakeProviderServer) ListValues(ctx context.Context, req *envv1.ListValuesRequest) (*envv1.ListValuesResponse, error) {
+func (s *deployFakeProviderServer) ListValues(ctx context.Context, req *envvarsv1.ListValuesRequest) (*envvarsv1.ListValuesResponse, error) {
 	if err := s.checkToken(ctx); err != nil {
 		return nil, err
 	}
@@ -284,10 +285,10 @@ func (s *deployFakeProviderServer) ListValues(ctx context.Context, req *envv1.Li
 		return nil, err
 	}
 
-	resp := &envv1.ListValuesResponse{}
+	resp := &envvarsv1.ListValuesResponse{}
 	for _, id := range sortedIDs(store) {
 		cell := store[id]
-		if cell.Class != req.GetClass() || cell.Coordinate.Slug != req.GetSlug() {
+		if cell.Tier != req.GetTier() || cell.Coordinate.Slug != req.GetSlug() {
 			continue
 		}
 		if m := cell.metadata(); m != nil {
@@ -297,7 +298,7 @@ func (s *deployFakeProviderServer) ListValues(ctx context.Context, req *envv1.Li
 	return resp, nil
 }
 
-func (s *deployFakeProviderServer) GetValue(ctx context.Context, req *envv1.GetValueRequest) (*envv1.GetValueResponse, error) {
+func (s *deployFakeProviderServer) GetValue(ctx context.Context, req *envvarsv1.GetValueRequest) (*envvarsv1.GetValueResponse, error) {
 	if err := s.checkToken(ctx); err != nil {
 		return nil, err
 	}
@@ -306,20 +307,20 @@ func (s *deployFakeProviderServer) GetValue(ctx context.Context, req *envv1.GetV
 		return nil, err
 	}
 
-	metadata := store.metadata(req.GetClass(), req.GetCoordinate())
+	metadata := store.metadata(req.GetTier(), req.GetCoordinate())
 	if metadata == nil {
-		return &envv1.GetValueResponse{}, nil
+		return &envvarsv1.GetValueResponse{}, nil
 	}
-	resp := &envv1.GetValueResponse{Found: true, Metadata: metadata}
+	resp := &envvarsv1.GetValueResponse{Found: true, Metadata: metadata}
 	if req.GetReveal() {
-		if resp.Value, err = store.resolve(req.GetClass(), store[fakeCoordinateID(req.GetClass(), req.GetCoordinate())]); err != nil {
+		if resp.Value, err = store.resolve(req.GetTier(), store[fakeCoordinateID(req.GetTier(), req.GetCoordinate())]); err != nil {
 			return nil, err
 		}
 	}
 	return resp, nil
 }
 
-func (s *deployFakeProviderServer) RevealValues(ctx context.Context, req *envv1.RevealValuesRequest) (*envv1.RevealValuesResponse, error) {
+func (s *deployFakeProviderServer) RevealValues(ctx context.Context, req *envvarsv1.RevealValuesRequest) (*envvarsv1.RevealValuesResponse, error) {
 	if err := s.checkToken(ctx); err != nil {
 		return nil, err
 	}
@@ -331,23 +332,23 @@ func (s *deployFakeProviderServer) RevealValues(ctx context.Context, req *envv1.
 		return nil, err
 	}
 
-	resp := &envv1.RevealValuesResponse{}
+	resp := &envvarsv1.RevealValuesResponse{}
 	for _, cell := range req.GetCells() {
-		c := &envv1.Coordinate{Slug: req.GetSlug(), Folder: cell.GetFolder(), Key: cell.GetKey(), Environment: cell.GetEnvironment()}
-		metadata := store.metadata(req.GetClass(), c)
+		c := &envvarsv1.Coordinate{Slug: req.GetSlug(), Folder: cell.GetFolder(), Key: cell.GetKey(), Environment: cell.GetEnvironment()}
+		metadata := store.metadata(req.GetTier(), c)
 		if metadata == nil {
 			continue
 		}
-		value, err := store.resolve(req.GetClass(), store[fakeCoordinateID(req.GetClass(), c)])
+		value, err := store.resolve(req.GetTier(), store[fakeCoordinateID(req.GetTier(), c)])
 		if err != nil {
 			return nil, err
 		}
-		resp.Values = append(resp.Values, &envv1.RevealedValue{Metadata: metadata, Value: value})
+		resp.Values = append(resp.Values, &envvarsv1.RevealedValue{Metadata: metadata, Value: value})
 	}
 	return resp, nil
 }
 
-func (s *deployFakeProviderServer) DeleteValue(ctx context.Context, req *envv1.DeleteValueRequest) (*envv1.DeleteValueResponse, error) {
+func (s *deployFakeProviderServer) DeleteValue(ctx context.Context, req *envvarsv1.DeleteValueRequest) (*envvarsv1.DeleteValueResponse, error) {
 	if err := s.checkToken(ctx); err != nil {
 		return nil, err
 	}
@@ -356,21 +357,21 @@ func (s *deployFakeProviderServer) DeleteValue(ctx context.Context, req *envv1.D
 		return nil, err
 	}
 
-	cell := store[fakeCoordinateID(req.GetClass(), req.GetCoordinate())]
+	cell := store[fakeCoordinateID(req.GetTier(), req.GetCoordinate())]
 	if err := checkExpectation(cell, req.ExpectedVersion); err != nil {
 		return nil, err
 	}
 	if cell.liveVersion() == 0 {
-		return &envv1.DeleteValueResponse{}, nil
+		return &envvarsv1.DeleteValueResponse{}, nil
 	}
 	cell.Deleted = true
 	if err := saveFakeStore(store); err != nil {
 		return nil, err
 	}
-	return &envv1.DeleteValueResponse{Deleted: true}, nil
+	return &envvarsv1.DeleteValueResponse{Deleted: true}, nil
 }
 
-func (s *deployFakeProviderServer) ListVersions(ctx context.Context, req *envv1.ListVersionsRequest) (*envv1.ListVersionsResponse, error) {
+func (s *deployFakeProviderServer) ListVersions(ctx context.Context, req *envvarsv1.ListVersionsRequest) (*envvarsv1.ListVersionsResponse, error) {
 	if err := s.checkToken(ctx); err != nil {
 		return nil, err
 	}
@@ -379,13 +380,13 @@ func (s *deployFakeProviderServer) ListVersions(ctx context.Context, req *envv1.
 		return nil, err
 	}
 
-	cell := store[fakeCoordinateID(req.GetClass(), req.GetCoordinate())]
+	cell := store[fakeCoordinateID(req.GetTier(), req.GetCoordinate())]
 	if cell == nil {
-		return &envv1.ListVersionsResponse{}, nil
+		return &envvarsv1.ListVersionsResponse{}, nil
 	}
-	resp := &envv1.ListVersionsResponse{}
+	resp := &envvarsv1.ListVersionsResponse{}
 	for i := len(cell.Versions) - 1; i >= 0; i-- {
-		resp.Versions = append(resp.Versions, &envv1.VersionEntry{
+		resp.Versions = append(resp.Versions, &envvarsv1.VersionEntry{
 			Version:   int64(i + 1),
 			CreatedAt: cell.Versions[i].Ts,
 			Size:      int64(len(cell.Versions[i].Value)),

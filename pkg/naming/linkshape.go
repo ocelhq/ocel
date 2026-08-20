@@ -7,7 +7,7 @@ import (
 	"google.golang.org/protobuf/reflect/protoreflect"
 	"google.golang.org/protobuf/types/known/structpb"
 
-	envv1 "github.com/ocelhq/ocel/pkg/proto/env/v1"
+	envvarsv1 "github.com/ocelhq/ocel/pkg/proto/envvars/v1"
 	linksv1 "github.com/ocelhq/ocel/pkg/proto/links/v1"
 )
 
@@ -25,10 +25,10 @@ type PropertyShape struct {
 	List     bool   `json:"list,omitempty"`
 }
 
-func PropertyShapeMessages(shapes []PropertyShape) []*envv1.PropertyShape {
-	out := make([]*envv1.PropertyShape, 0, len(shapes))
+func PropertyShapeMessages(shapes []PropertyShape) []*envvarsv1.PropertyShape {
+	out := make([]*envvarsv1.PropertyShape, 0, len(shapes))
 	for _, s := range shapes {
-		out = append(out, &envv1.PropertyShape{Name: s.Name, JsonType: s.JSONType, List: s.List})
+		out = append(out, &envvarsv1.PropertyShape{Name: s.Name, JsonType: s.JSONType, List: s.List})
 	}
 	return out
 }

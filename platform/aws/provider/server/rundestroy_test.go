@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
+	environmentv1 "github.com/ocelhq/ocel/pkg/proto/environment/v1"
 )
 
 func wantNoProvisioningStage(t *testing.T, declared []recordedDeclare) {
@@ -79,7 +80,7 @@ func TestRunDestroyPreviewDeclaresTheStagePlanBeforeAnyWork(t *testing.T) {
 		tracer := &fakeTracer{}
 		req := &deploymentsv1.RemovePreviewRequest{
 			Slug:        "shop",
-			Environment: &deploymentsv1.Environment{Class: deploymentsv1.Environment_CLASS_PREVIEW, Identity: "pr-1"},
+			Environment: &environmentv1.Environment{Tier: environmentv1.Tier_TIER_PREVIEW, Identity: "pr-1"},
 		}
 
 		ctx, cancel := context.WithCancel(context.Background())
@@ -106,10 +107,10 @@ func TestRunDestroyPreviewDeclaresTheStagePlanBeforeAnyWork(t *testing.T) {
 		tracer := &fakeTracer{}
 		req := &deploymentsv1.RemovePreviewRequest{
 			Slug: "shop",
-			Environment: &deploymentsv1.Environment{
-				Class:     deploymentsv1.Environment_CLASS_PREVIEW,
+			Environment: &environmentv1.Environment{
+				Tier:      environmentv1.Tier_TIER_PREVIEW,
 				Identity:  "staging",
-				Lifecycle: deploymentsv1.Environment_LIFECYCLE_PERSISTENT,
+				Lifecycle: environmentv1.Lifecycle_LIFECYCLE_PERSISTENT,
 			},
 		}
 

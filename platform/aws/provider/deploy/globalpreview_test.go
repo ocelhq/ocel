@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
+	environmentv1 "github.com/ocelhq/ocel/pkg/proto/environment/v1"
 	"github.com/ocelhq/ocel/platform/aws/provider/edges/apigateway"
 	cloudflare "github.com/ocelhq/ocel/platform/edge/cloudflare/deploy"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
@@ -164,7 +165,7 @@ func TestMarkGlobalPreview(t *testing.T) {
 	manifest := func() *deploymentsv1.Manifest {
 		return &deploymentsv1.Manifest{Slug: "proj"}
 	}
-	preview := Config{Slug: "proj", Class: deploymentsv1.Environment_CLASS_PREVIEW, GlobalPreviewDomain: "preview.acme.com"}
+	preview := Config{Slug: "proj", Tier: environmentv1.Tier_TIER_PREVIEW, GlobalPreviewDomain: "preview.acme.com"}
 	state := func() edge.StackState {
 		return edge.StackState{Slug: "proj"}
 	}
@@ -204,7 +205,7 @@ func TestMarkGlobalPreview(t *testing.T) {
 	t.Run("production is never marked", func(t *testing.T) {
 		t.Parallel()
 		cfg := preview
-		cfg.Class = deploymentsv1.Environment_CLASS_PRODUCTION
+		cfg.Tier = environmentv1.Tier_TIER_PRODUCTION
 
 		if marked := MarkGlobalPreview(state(), cfg, manifest()); marked.ServedOnGlobalPreview("preview.acme.com") {
 			t.Errorf("state = %v, want no mark on a production deploy", marked)
@@ -245,7 +246,7 @@ func TestEdgeStackSpecsGlobalPreview(t *testing.T) {
 		cfg := Config{
 			Edge:                &recordingEdge{kind: cloudflare.Kind},
 			Slug:                "proj",
-			Class:               deploymentsv1.Environment_CLASS_PREVIEW,
+			Tier:                environmentv1.Tier_TIER_PREVIEW,
 			Identity:            "pr-42",
 			GlobalPreviewDomain: "preview.acme.com",
 			ArtifactRoot:        specsArtifactRoot(t, m),
@@ -272,7 +273,7 @@ func TestEdgeStackSpecsGlobalPreview(t *testing.T) {
 		cfg := Config{
 			Edge:                &recordingEdge{kind: cloudflare.Kind},
 			Slug:                "proj",
-			Class:               deploymentsv1.Environment_CLASS_PREVIEW,
+			Tier:                environmentv1.Tier_TIER_PREVIEW,
 			Identity:            "pr-42",
 			GlobalPreviewDomain: "preview.acme.com",
 			ArtifactRoot:        specsArtifactRoot(t, m),
@@ -296,7 +297,7 @@ func TestEdgeStackSpecsGlobalPreview(t *testing.T) {
 		cfg := Config{
 			Edge:                &recordingEdge{kind: cloudflare.Kind},
 			Slug:                "proj",
-			Class:               deploymentsv1.Environment_CLASS_PREVIEW,
+			Tier:                environmentv1.Tier_TIER_PREVIEW,
 			Identity:            "pr-42",
 			GlobalPreviewDomain: "preview.acme.com",
 			ArtifactRoot:        specsArtifactRoot(t, m),
@@ -316,7 +317,7 @@ func TestEdgeStackSpecsGlobalPreview(t *testing.T) {
 		cfg := Config{
 			Edge:         &recordingEdge{kind: cloudflare.Kind},
 			Slug:         "proj",
-			Class:        deploymentsv1.Environment_CLASS_PREVIEW,
+			Tier:         environmentv1.Tier_TIER_PREVIEW,
 			Identity:     "pr-42",
 			ArtifactRoot: specsArtifactRoot(t, m),
 		}

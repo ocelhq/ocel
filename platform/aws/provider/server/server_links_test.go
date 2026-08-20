@@ -15,8 +15,8 @@ import (
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/structpb"
 
-	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
-	envv1 "github.com/ocelhq/ocel/pkg/proto/env/v1"
+	environmentv1 "github.com/ocelhq/ocel/pkg/proto/environment/v1"
+	envvarsv1 "github.com/ocelhq/ocel/pkg/proto/envvars/v1"
 	linksv1 "github.com/ocelhq/ocel/pkg/proto/links/v1"
 )
 
@@ -81,9 +81,9 @@ func TestSetLinkRoundTripsThroughTheStore(t *testing.T) {
 	s := linksServer(t)
 	ctx := context.Background()
 
-	set, err := s.SetLink(ctx, &envv1.SetLinkRequest{
+	set, err := s.SetLink(ctx, &envvarsv1.SetLinkRequest{
 		Slug:  "shop",
-		Class: deploymentsv1.Environment_CLASS_PRODUCTION,
+		Tier:  environmentv1.Tier_TIER_PRODUCTION,
 		Owner: "sst",
 		Link:  ordersLink(),
 	})
@@ -94,7 +94,7 @@ func TestSetLinkRoundTripsThroughTheStore(t *testing.T) {
 		t.Error("SetLink reported version 0, want the record row's own")
 	}
 
-	listed, err := s.ListLinks(ctx, &envv1.ListLinksRequest{Slug: "shop", Class: deploymentsv1.Environment_CLASS_PRODUCTION})
+	listed, err := s.ListLinks(ctx, &envvarsv1.ListLinksRequest{Slug: "shop", Tier: environmentv1.Tier_TIER_PRODUCTION})
 	if err != nil {
 		t.Fatalf("ListLinks: %v", err)
 	}
@@ -106,8 +106,8 @@ func TestSetLinkRoundTripsThroughTheStore(t *testing.T) {
 		t.Errorf("ListLinks = %+v", got)
 	}
 
-	removed, err := s.RemoveLink(ctx, &envv1.RemoveLinkRequest{
-		Slug: "shop", Class: deploymentsv1.Environment_CLASS_PRODUCTION, Name: "orders",
+	removed, err := s.RemoveLink(ctx, &envvarsv1.RemoveLinkRequest{
+		Slug: "shop", Tier: environmentv1.Tier_TIER_PRODUCTION, Name: "orders",
 	})
 	if err != nil {
 		t.Fatalf("RemoveLink: %v", err)
@@ -116,8 +116,8 @@ func TestSetLinkRoundTripsThroughTheStore(t *testing.T) {
 		t.Error("RemoveLink = false for a link it had just published")
 	}
 
-	gone, err := s.RemoveLink(ctx, &envv1.RemoveLinkRequest{
-		Slug: "shop", Class: deploymentsv1.Environment_CLASS_PRODUCTION, Name: "orders",
+	gone, err := s.RemoveLink(ctx, &envvarsv1.RemoveLinkRequest{
+		Slug: "shop", Tier: environmentv1.Tier_TIER_PRODUCTION, Name: "orders",
 	})
 	if err != nil {
 		t.Fatalf("RemoveLink: %v", err)
@@ -130,29 +130,29 @@ func TestSetLinkRoundTripsThroughTheStore(t *testing.T) {
 func TestLinkHandlersRefuseACoordinateNothingBindsTo(t *testing.T) {
 	ctx := context.Background()
 
-	for name, req := range map[string]*envv1.SetLinkRequest{
-		"no slug": {Class: deploymentsv1.Environment_CLASS_PRODUCTION, Owner: "sst", Link: ordersLink()},
+	for name, req := range map[string]*envvarsv1.SetLinkRequest{
+		"no slug": {Tier: environmentv1.Tier_TIER_PRODUCTION, Owner: "sst", Link: ordersLink()},
 		"the class-wide marker": {
-			Slug: "shop", Class: deploymentsv1.Environment_CLASS_PREVIEW, Environment: "*", Owner: "sst", Link: ordersLink(),
+			Slug: "shop", Tier: environmentv1.Tier_TIER_PREVIEW, Environment: "*", Owner: "sst", Link: ordersLink(),
 		},
 		"an environment outside preview": {
-			Slug: "shop", Class: deploymentsv1.Environment_CLASS_PRODUCTION, Environment: "pr-9", Owner: "sst", Link: ordersLink(),
+			Slug: "shop", Tier: environmentv1.Tier_TIER_PRODUCTION, Environment: "pr-9", Owner: "sst", Link: ordersLink(),
 		},
 		"a delimiter in the environment": {
-			Slug: "shop", Class: deploymentsv1.Environment_CLASS_PREVIEW, Environment: "pr#9", Owner: "sst", Link: ordersLink(),
+			Slug: "shop", Tier: environmentv1.Tier_TIER_PREVIEW, Environment: "pr#9", Owner: "sst", Link: ordersLink(),
 		},
 		"a newline in the environment": {
-			Slug: "shop", Class: deploymentsv1.Environment_CLASS_PREVIEW, Environment: "pr-9\ndeclare const x: string", Owner: "sst", Link: ordersLink(),
+			Slug: "shop", Tier: environmentv1.Tier_TIER_PREVIEW, Environment: "pr-9\ndeclare const x: string", Owner: "sst", Link: ordersLink(),
 		},
 		"a control character in the slug": {
-			Slug: "sh\x00op", Class: deploymentsv1.Environment_CLASS_PRODUCTION, Owner: "sst", Link: ordersLink(),
+			Slug: "sh\x00op", Tier: environmentv1.Tier_TIER_PRODUCTION, Owner: "sst", Link: ordersLink(),
 		},
 		"a delimiter in the link name": {
-			Slug: "shop", Class: deploymentsv1.Environment_CLASS_PRODUCTION, Owner: "sst",
+			Slug: "shop", Tier: environmentv1.Tier_TIER_PRODUCTION, Owner: "sst",
 			Link: &linksv1.Link{Name: "or#ders", Source: "sst", Properties: ordersLink().GetProperties()},
 		},
 		"no link name": {
-			Slug: "shop", Class: deploymentsv1.Environment_CLASS_PRODUCTION, Owner: "sst",
+			Slug: "shop", Tier: environmentv1.Tier_TIER_PRODUCTION, Owner: "sst",
 			Link: &linksv1.Link{Source: "sst", Properties: ordersLink().GetProperties()},
 		},
 	} {
@@ -165,8 +165,8 @@ func TestLinkHandlersRefuseACoordinateNothingBindsTo(t *testing.T) {
 	}
 
 	t.Run("a preview environment is legal in the preview class", func(t *testing.T) {
-		if _, err := linksServer(t).SetLink(ctx, &envv1.SetLinkRequest{
-			Slug: "shop", Class: deploymentsv1.Environment_CLASS_PREVIEW, Environment: "pr-9", Owner: "sst", Link: ordersLink(),
+		if _, err := linksServer(t).SetLink(ctx, &envvarsv1.SetLinkRequest{
+			Slug: "shop", Tier: environmentv1.Tier_TIER_PREVIEW, Environment: "pr-9", Owner: "sst", Link: ordersLink(),
 		}); err != nil {
 			t.Fatalf("SetLink: %v", err)
 		}
@@ -205,8 +205,8 @@ func TestSetLinkRefusesARecordNoConsumerCouldResolve(t *testing.T) {
 		},
 	} {
 		t.Run(name, func(t *testing.T) {
-			_, err := linksServer(t).SetLink(ctx, &envv1.SetLinkRequest{
-				Slug: "shop", Class: deploymentsv1.Environment_CLASS_PRODUCTION, Owner: tc.owner, Link: tc.link,
+			_, err := linksServer(t).SetLink(ctx, &envvarsv1.SetLinkRequest{
+				Slug: "shop", Tier: environmentv1.Tier_TIER_PRODUCTION, Owner: tc.owner, Link: tc.link,
 			})
 			if got := codeOf(t, err); got != connect.CodeInvalidArgument {
 				t.Errorf("SetLink %s = %v (%v), want CodeInvalidArgument", name, got, err)
@@ -222,14 +222,14 @@ func TestSetLinkPublishesASourcedCustomRecord(t *testing.T) {
 	s := linksServer(t)
 	ctx := context.Background()
 
-	if _, err := s.SetLink(ctx, &envv1.SetLinkRequest{
-		Slug: "shop", Class: deploymentsv1.Environment_CLASS_PRODUCTION, Owner: "sst",
+	if _, err := s.SetLink(ctx, &envvarsv1.SetLinkRequest{
+		Slug: "shop", Tier: environmentv1.Tier_TIER_PRODUCTION, Owner: "sst",
 		Link: &linksv1.Link{Name: "network", Source: "sst", Properties: networkProperties(t)},
 	}); err != nil {
 		t.Fatalf("SetLink: %v", err)
 	}
 
-	listed, err := s.ListLinks(ctx, &envv1.ListLinksRequest{Slug: "shop", Class: deploymentsv1.Environment_CLASS_PRODUCTION})
+	listed, err := s.ListLinks(ctx, &envvarsv1.ListLinksRequest{Slug: "shop", Tier: environmentv1.Tier_TIER_PRODUCTION})
 	if err != nil {
 		t.Fatalf("ListLinks: %v", err)
 	}
@@ -244,8 +244,8 @@ func TestSetLinkPublishesASourcedCustomRecord(t *testing.T) {
 func TestSetLinkRefusesANameAnotherPublisherHolds(t *testing.T) {
 	s := linksServer(t)
 	ctx := context.Background()
-	req := &envv1.SetLinkRequest{
-		Slug: "shop", Class: deploymentsv1.Environment_CLASS_PRODUCTION, Owner: "sst", Link: ordersLink(),
+	req := &envvarsv1.SetLinkRequest{
+		Slug: "shop", Tier: environmentv1.Tier_TIER_PRODUCTION, Owner: "sst", Link: ordersLink(),
 	}
 	if _, err := s.SetLink(ctx, req); err != nil {
 		t.Fatalf("SetLink: %v", err)
@@ -268,8 +268,8 @@ func TestLinkHandlersNameAnAbsentSubstrate(t *testing.T) {
 	ctx := context.Background()
 
 	t.Run("no bootstrap stack at all", func(t *testing.T) {
-		_, err := serverOn(&outputCFN{}).ListLinks(ctx, &envv1.ListLinksRequest{
-			Slug: "shop", Class: deploymentsv1.Environment_CLASS_PRODUCTION,
+		_, err := serverOn(&outputCFN{}).ListLinks(ctx, &envvarsv1.ListLinksRequest{
+			Slug: "shop", Tier: environmentv1.Tier_TIER_PRODUCTION,
 		})
 		if err == nil {
 			t.Fatal("ListLinks read an account holding no ocel substrate")
@@ -280,8 +280,8 @@ func TestLinkHandlersNameAnAbsentSubstrate(t *testing.T) {
 	})
 
 	t.Run("a removal against no bootstrap stack at all", func(t *testing.T) {
-		_, err := serverOn(&outputCFN{}).RemoveLink(ctx, &envv1.RemoveLinkRequest{
-			Slug: "shop", Class: deploymentsv1.Environment_CLASS_PRODUCTION, Name: "orders",
+		_, err := serverOn(&outputCFN{}).RemoveLink(ctx, &envvarsv1.RemoveLinkRequest{
+			Slug: "shop", Tier: environmentv1.Tier_TIER_PRODUCTION, Name: "orders",
 		})
 		if err == nil {
 			t.Fatal("RemoveLink reported an account holding no ocel substrate as a store with nothing to remove")
@@ -295,8 +295,8 @@ func TestLinkHandlersNameAnAbsentSubstrate(t *testing.T) {
 		_, err := serverOn(&outputCFN{outputs: map[string]string{
 			"BootstrapVersion": bootstrapVersionOutput,
 			"VarsKeyArn":       "arn:aws:kms:eu-west-1:123456789012:key/abcd",
-		}}).SetLink(ctx, &envv1.SetLinkRequest{
-			Slug: "shop", Class: deploymentsv1.Environment_CLASS_PRODUCTION, Owner: "sst", Link: ordersLink(),
+		}}).SetLink(ctx, &envvarsv1.SetLinkRequest{
+			Slug: "shop", Tier: environmentv1.Tier_TIER_PRODUCTION, Owner: "sst", Link: ordersLink(),
 		})
 		if err == nil {
 			t.Fatal("SetLink published into a substrate carrying no variable store")
@@ -315,19 +315,19 @@ func TestListLinksDescribesEachRecordWithoutItsValues(t *testing.T) {
 		ordersLink(),
 		{Name: "network", Source: "sst", Properties: networkProperties(t)},
 	} {
-		if _, err := s.SetLink(ctx, &envv1.SetLinkRequest{
-			Slug: "shop", Class: deploymentsv1.Environment_CLASS_PRODUCTION, Owner: "sst", Link: link,
+		if _, err := s.SetLink(ctx, &envvarsv1.SetLinkRequest{
+			Slug: "shop", Tier: environmentv1.Tier_TIER_PRODUCTION, Owner: "sst", Link: link,
 		}); err != nil {
 			t.Fatalf("SetLink %s: %v", link.GetName(), err)
 		}
 	}
 
-	listed, err := s.ListLinks(ctx, &envv1.ListLinksRequest{Slug: "shop", Class: deploymentsv1.Environment_CLASS_PRODUCTION})
+	listed, err := s.ListLinks(ctx, &envvarsv1.ListLinksRequest{Slug: "shop", Tier: environmentv1.Tier_TIER_PRODUCTION})
 	if err != nil {
 		t.Fatalf("ListLinks: %v", err)
 	}
 
-	want := map[string][]*envv1.PropertyShape{
+	want := map[string][]*envvarsv1.PropertyShape{
 		"network": {
 			{Name: "securityGroupIds", JsonType: "string", List: true},
 			{Name: "subnetIds", JsonType: "string", List: true},
@@ -358,7 +358,7 @@ func TestListLinksDescribesEachRecordWithoutItsValues(t *testing.T) {
 		}
 	}
 
-	fields := (&envv1.PropertyShape{}).ProtoReflect().Descriptor().Fields()
+	fields := (&envvarsv1.PropertyShape{}).ProtoReflect().Descriptor().Fields()
 	described := make([]string, 0, fields.Len())
 	for i := range fields.Len() {
 		described = append(described, string(fields.Get(i).Name()))

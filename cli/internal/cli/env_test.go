@@ -11,8 +11,8 @@ import (
 
 	"github.com/spf13/cobra"
 
-	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
-	envv1 "github.com/ocelhq/ocel/pkg/proto/env/v1"
+	environmentv1 "github.com/ocelhq/ocel/pkg/proto/environment/v1"
+	envvarsv1 "github.com/ocelhq/ocel/pkg/proto/envvars/v1"
 )
 
 func setUpEnvFixture(t *testing.T) string {
@@ -31,14 +31,14 @@ func envSet(t *testing.T, root, key, value string, opts envOptions) string {
 	return stdout.String()
 }
 
-func seedFakeValue(t *testing.T, class deploymentsv1.Environment_Class, c *envv1.Coordinate, value string) {
+func seedFakeValue(t *testing.T, tier environmentv1.Tier, c *envvarsv1.Coordinate, value string) {
 	t.Helper()
 	store, err := loadFakeStore()
 	if err != nil {
 		t.Fatalf("load the fake store: %v", err)
 	}
-	store[fakeCoordinateID(class, c)] = &fakeCell{
-		Class:      class,
+	store[fakeCoordinateID(tier, c)] = &fakeCell{
+		Tier:       tier,
 		Coordinate: fakeCoordinate{Slug: c.GetSlug(), Folder: c.GetFolder(), Key: c.GetKey(), Environment: c.GetEnvironment()},
 		Versions:   []fakeCellData{{Value: value, Ts: 1_700_000_000}},
 	}
@@ -402,8 +402,8 @@ func TestRunEnvLs(t *testing.T) {
 
 	t.Run("a production override is orphaned though a preview shares its name", func(t *testing.T) {
 		root := setUpEnvFixture(t)
-		seedFakeValue(t, deploymentsv1.Environment_CLASS_PRODUCTION,
-			&envv1.Coordinate{Slug: "test-app", Key: "STRIPE_API_KEY", Environment: "staging"}, "sk_stray")
+		seedFakeValue(t, environmentv1.Tier_TIER_PRODUCTION,
+			&envvarsv1.Coordinate{Slug: "test-app", Key: "STRIPE_API_KEY", Environment: "staging"}, "sk_stray")
 		t.Setenv(fakeEnvironmentsEnvVar, "staging")
 
 		var ls bytes.Buffer
@@ -532,8 +532,8 @@ func TestRenderValues(t *testing.T) {
 		t.Parallel()
 
 		var stdout bytes.Buffer
-		renderValues(&stdout, []*envv1.ValueMetadata{
-			{Coordinate: &envv1.Coordinate{Key: "STRIPE_API_KEY", Folder: ""}},
+		renderValues(&stdout, []*envvarsv1.ValueMetadata{
+			{Coordinate: &envvarsv1.Coordinate{Key: "STRIPE_API_KEY", Folder: ""}},
 		}, nil)
 
 		out := stdout.String()
@@ -555,10 +555,10 @@ func TestRenderValues(t *testing.T) {
 		const note = "orphaned"
 
 		var withOrphan bytes.Buffer
-		renderValues(&withOrphan, []*envv1.ValueMetadata{
-			{Coordinate: &envv1.Coordinate{Key: "STRIPE_API_KEY"}},
-			{Coordinate: &envv1.Coordinate{Key: "STRIPE_API_KEY", Environment: "pr-42"}},
-			{Coordinate: &envv1.Coordinate{Key: "STRIPE_API_KEY", Environment: "staging"}},
+		renderValues(&withOrphan, []*envvarsv1.ValueMetadata{
+			{Coordinate: &envvarsv1.Coordinate{Key: "STRIPE_API_KEY"}},
+			{Coordinate: &envvarsv1.Coordinate{Key: "STRIPE_API_KEY", Environment: "pr-42"}},
+			{Coordinate: &envvarsv1.Coordinate{Key: "STRIPE_API_KEY", Environment: "staging"}},
 		}, []string{"staging"})
 
 		out := withOrphan.String()
@@ -575,8 +575,8 @@ func TestRenderValues(t *testing.T) {
 		}
 
 		var live bytes.Buffer
-		renderValues(&live, []*envv1.ValueMetadata{
-			{Coordinate: &envv1.Coordinate{Key: "STRIPE_API_KEY", Environment: "staging"}},
+		renderValues(&live, []*envvarsv1.ValueMetadata{
+			{Coordinate: &envvarsv1.Coordinate{Key: "STRIPE_API_KEY", Environment: "staging"}},
 		}, []string{"staging"})
 		if out := live.String(); strings.Contains(out, note) {
 			t.Errorf("ls stdout = %q, want no orphan note when every override has its environment", out)

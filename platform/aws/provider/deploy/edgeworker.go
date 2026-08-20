@@ -13,6 +13,7 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/naming"
 	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
+	environmentv1 "github.com/ocelhq/ocel/pkg/proto/environment/v1"
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/progress/v1"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
@@ -112,8 +113,8 @@ func appFunctionURLsByRoute(functions []*deploymentsv1.ManifestFunction, app str
 	return result
 }
 
-func DeclaredHostnames(manifest *deploymentsv1.Manifest, class deploymentsv1.Environment_Class) []string {
-	key := domainClassKeyFor(class)
+func DeclaredHostnames(manifest *deploymentsv1.Manifest, tier environmentv1.Tier) []string {
+	key := domainClassKeyFor(tier)
 	var hosts []string
 	add := func(names []string) {
 		for _, host := range names {
@@ -129,19 +130,19 @@ func DeclaredHostnames(manifest *deploymentsv1.Manifest, class deploymentsv1.Env
 	return hosts
 }
 
-func domainClassKeyFor(class deploymentsv1.Environment_Class) string {
-	if class == deploymentsv1.Environment_CLASS_PREVIEW {
+func domainClassKeyFor(tier environmentv1.Tier) string {
+	if tier == environmentv1.Tier_TIER_PREVIEW {
 		return "preview"
 	}
 	return "production"
 }
 
 func workerDomains(cfg Config, manifest *deploymentsv1.Manifest, apps []*deploymentsv1.ManifestApp) (map[string][]string, error) {
-	if cfg.Class != deploymentsv1.Environment_CLASS_PRODUCTION &&
-		cfg.Class != deploymentsv1.Environment_CLASS_PREVIEW {
+	if cfg.Tier != environmentv1.Tier_TIER_PRODUCTION &&
+		cfg.Tier != environmentv1.Tier_TIER_PREVIEW {
 		return nil, nil
 	}
-	domainClassKey := domainClassKeyFor(cfg.Class)
+	domainClassKey := domainClassKeyFor(cfg.Tier)
 
 	domains := map[string][]string{}
 	var undeclared []string
@@ -157,7 +158,7 @@ func workerDomains(cfg Config, manifest *deploymentsv1.Manifest, apps []*deploym
 	switch {
 	case len(project) == 0 || len(undeclared) == 0:
 		return domains, nil
-	case cfg.Class == deploymentsv1.Environment_CLASS_PREVIEW:
+	case cfg.Tier == environmentv1.Tier_TIER_PREVIEW:
 		for _, app := range undeclared {
 			domains[app] = project
 		}

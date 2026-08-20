@@ -21,6 +21,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/servicemap"
 	"github.com/ocelhq/ocel/cli/node"
 	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
+	environmentv1 "github.com/ocelhq/ocel/pkg/proto/environment/v1"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
@@ -193,7 +194,7 @@ func runPreviewUp(ctx context.Context, d deps, cwd string, opts previewUpOptions
 				return envgate.New(runnerValues{
 					runner: runner,
 					slug:   cfg.Slug,
-					class:  deploymentsv1.Environment_CLASS_PREVIEW,
+					tier:   environmentv1.Tier_TIER_PREVIEW,
 				}, envScope(cfg, true, env.GetIdentity()))
 			},
 			ui:      ui,
@@ -325,7 +326,7 @@ func runPreviewRm(ctx context.Context, d deps, cwd string, opts previewRmOptions
 		return err
 	}
 
-	persistent := env.GetLifecycle() == deploymentsv1.Environment_LIFECYCLE_PERSISTENT
+	persistent := env.GetLifecycle() == environmentv1.Lifecycle_LIFECYCLE_PERSISTENT
 	if persistent && !opts.yes && isReaderTTY(stdin) {
 		proceed, err := confirmDestroyPreview(ctx, env.GetIdentity(), stdout, stdin)
 		if err != nil {
@@ -456,18 +457,18 @@ func runPreviewPrune(ctx context.Context, d deps, cwd string, opts previewPruneO
 	return nil
 }
 
-func persistentPreviewEnvironment(name string) (*deploymentsv1.Environment, error) {
+func persistentPreviewEnvironment(name string) (*environmentv1.Environment, error) {
 	if err := previewid.ValidateLabel(name); err != nil {
 		return nil, err
 	}
-	return &deploymentsv1.Environment{
-		Class:     deploymentsv1.Environment_CLASS_PREVIEW,
-		Lifecycle: deploymentsv1.Environment_LIFECYCLE_PERSISTENT,
+	return &environmentv1.Environment{
+		Tier:      environmentv1.Tier_TIER_PREVIEW,
+		Lifecycle: environmentv1.Lifecycle_LIFECYCLE_PERSISTENT,
 		Identity:  name,
 	}, nil
 }
 
-func resolveUpEnvironment(d deps, cwd string, opts previewUpOptions) (*deploymentsv1.Environment, error) {
+func resolveUpEnvironment(d deps, cwd string, opts previewUpOptions) (*environmentv1.Environment, error) {
 	if opts.name != "" && opts.ref != "" {
 		return nil, fmt.Errorf("--name and --ref are mutually exclusive; use one to stand up a persistent or ephemeral preview")
 	}
@@ -487,14 +488,14 @@ func resolveUpEnvironment(d deps, cwd string, opts previewUpOptions) (*deploymen
 	if err != nil {
 		return nil, err
 	}
-	return &deploymentsv1.Environment{
-		Class:     deploymentsv1.Environment_CLASS_PREVIEW,
-		Lifecycle: deploymentsv1.Environment_LIFECYCLE_EPHEMERAL,
+	return &environmentv1.Environment{
+		Tier:      environmentv1.Tier_TIER_PREVIEW,
+		Lifecycle: environmentv1.Lifecycle_LIFECYCLE_EPHEMERAL,
 		Identity:  id.Key,
 	}, nil
 }
 
-func resolveRmEnvironment(d deps, cwd string, opts previewRmOptions) (*deploymentsv1.Environment, error) {
+func resolveRmEnvironment(d deps, cwd string, opts previewRmOptions) (*environmentv1.Environment, error) {
 	if opts.name != "" && opts.ref != "" {
 		return nil, fmt.Errorf("--name and --ref are mutually exclusive; use one to address a persistent or ephemeral preview")
 	}
@@ -514,9 +515,9 @@ func resolveRmEnvironment(d deps, cwd string, opts previewRmOptions) (*deploymen
 	if err != nil {
 		return nil, err
 	}
-	return &deploymentsv1.Environment{
-		Class:     deploymentsv1.Environment_CLASS_PREVIEW,
-		Lifecycle: deploymentsv1.Environment_LIFECYCLE_EPHEMERAL,
+	return &environmentv1.Environment{
+		Tier:      environmentv1.Tier_TIER_PREVIEW,
+		Lifecycle: environmentv1.Lifecycle_LIFECYCLE_EPHEMERAL,
 		Identity:  id.Key,
 	}, nil
 }
@@ -526,11 +527,11 @@ func confirmDestroyPreview(ctx context.Context, name string, stdout io.Writer, s
 }
 
 func preflightPreview(ctx context.Context, d deps, runner *providerrunner.Runner, cfg *projectconfig.Config, out io.Writer) error {
-	return preflightClass(ctx, d, runner, cfg, deploymentsv1.Environment_CLASS_PREVIEW, "ocel bootstrap --preview", out)
+	return preflightTier(ctx, d, runner, cfg, environmentv1.Tier_TIER_PREVIEW, "ocel bootstrap --preview", out)
 }
 
 func preflightPreviewUp(ctx context.Context, d deps, runner *providerrunner.Runner, cfg *projectconfig.Config, pointer string, out io.Writer) error {
-	resp, err := preflight(ctx, d, runner, cfg, deploymentsv1.Environment_CLASS_PREVIEW, cfg.Slug, declaredHostnames(cfg, "preview"), "ocel bootstrap --preview", out)
+	resp, err := preflight(ctx, d, runner, cfg, environmentv1.Tier_TIER_PREVIEW, cfg.Slug, declaredHostnames(cfg, "preview"), "ocel bootstrap --preview", out)
 	if err != nil {
 		return err
 	}
@@ -546,7 +547,7 @@ func preflightDeploy(ctx context.Context, d deps, runner *providerrunner.Runner,
 	if wantKnownSlugs || len(domains) > 0 {
 		slug = cfg.Slug
 	}
-	resp, err := preflight(ctx, d, runner, cfg, deploymentsv1.Environment_CLASS_PRODUCTION, slug, domains, "ocel bootstrap", out)
+	resp, err := preflight(ctx, d, runner, cfg, environmentv1.Tier_TIER_PRODUCTION, slug, domains, "ocel bootstrap", out)
 	if err != nil {
 		return nil, err
 	}
@@ -597,12 +598,12 @@ func refuseClaimedDomains(claims []*deploymentsv1.DomainClaim, configName string
 	return errors.New(b.String())
 }
 
-func preflightClass(ctx context.Context, d deps, runner *providerrunner.Runner, cfg *projectconfig.Config, required deploymentsv1.Environment_Class, bootstrapHint string, out io.Writer) error {
+func preflightTier(ctx context.Context, d deps, runner *providerrunner.Runner, cfg *projectconfig.Config, required environmentv1.Tier, bootstrapHint string, out io.Writer) error {
 	_, err := preflight(ctx, d, runner, cfg, required, "", nil, bootstrapHint, out)
 	return err
 }
 
-func preflight(ctx context.Context, d deps, runner *providerrunner.Runner, cfg *projectconfig.Config, required deploymentsv1.Environment_Class, slug string, domains []string, bootstrapHint string, out io.Writer) (*deploymentsv1.PreflightResponse, error) {
+func preflight(ctx context.Context, d deps, runner *providerrunner.Runner, cfg *projectconfig.Config, required environmentv1.Tier, slug string, domains []string, bootstrapHint string, out io.Writer) (*deploymentsv1.PreflightResponse, error) {
 	client, err := runner.Deployments()
 	if err != nil {
 		return nil, err
@@ -610,7 +611,7 @@ func preflight(ctx context.Context, d deps, runner *providerrunner.Runner, cfg *
 
 	spinner := deployui.StartSpinner(out, "Checking credentials")
 	resp, err := client.Preflight(ctx, &deploymentsv1.PreflightRequest{
-		RequiredClass:    required,
+		RequiredTier:     required,
 		Slug:             slug,
 		Domains:          domains,
 		RequiredFeatures: configuredFeatures(cfg),
@@ -629,7 +630,7 @@ func preflight(ctx context.Context, d deps, runner *providerrunner.Runner, cfg *
 	if !resp.GetInfrastructurePresent() {
 		return nil, fmt.Errorf("no infrastructure is set up yet; run `%s` to create it", bootstrapHint)
 	}
-	if err := checkClass(resp.GetInfraClass(), required); err != nil {
+	if err := checkTier(resp.GetInfraTier(), required); err != nil {
 		return nil, err
 	}
 	return resp, nil
@@ -714,11 +715,11 @@ func renderEnvironments(stdout io.Writer, envs []*deploymentsv1.PreviewEnvironme
 	}
 }
 
-func lifecycleTag(l deploymentsv1.Environment_Lifecycle) string {
+func lifecycleTag(l environmentv1.Lifecycle) string {
 	switch l {
-	case deploymentsv1.Environment_LIFECYCLE_EPHEMERAL:
+	case environmentv1.Lifecycle_LIFECYCLE_EPHEMERAL:
 		return "ephemeral"
-	case deploymentsv1.Environment_LIFECYCLE_PERSISTENT:
+	case environmentv1.Lifecycle_LIFECYCLE_PERSISTENT:
 		return "persistent"
 	default:
 		return "unknown"

@@ -14,6 +14,7 @@ import (
 	"google.golang.org/protobuf/types/known/structpb"
 
 	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
+	environmentv1 "github.com/ocelhq/ocel/pkg/proto/environment/v1"
 	linksv1 "github.com/ocelhq/ocel/pkg/proto/links/v1"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/resources/v1"
 	"github.com/ocelhq/ocel/platform/aws/provider/transform"
@@ -154,7 +155,7 @@ func TestResolveOutputs(t *testing.T) {
 		store := customNetworkStore(t, map[string]any{"subnetIds": []any{"subnet-a"}})
 		fake := &fakeEvaluator{out: placedFunction(vpcPlaceholder("network", "subnetIds"), []any{"sg-1"})}
 		cfg := outputConfig(store, fake)
-		cfg.Class = deploymentsv1.Environment_CLASS_PREVIEW
+		cfg.Tier = environmentv1.Tier_TIER_PREVIEW
 		cfg.Identity = "pr-4"
 		store.published = map[string][]string{"production": {"network"}}
 

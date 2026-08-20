@@ -12,6 +12,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/naming"
 
 	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
+	environmentv1 "github.com/ocelhq/ocel/pkg/proto/environment/v1"
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/progress/v1"
 	"github.com/ocelhq/ocel/platform/aws/provider/bootstrap"
 	"github.com/ocelhq/ocel/platform/aws/provider/certs"
@@ -27,7 +28,7 @@ func (s *Server) PlanRemoveProject(ctx context.Context, req *deploymentsv1.PlanR
 	if err != nil {
 		return nil, err
 	}
-	if req.GetEnvironment().GetClass() == deploymentsv1.Environment_CLASS_PREVIEW {
+	if req.GetEnvironment().GetTier() == environmentv1.Tier_TIER_PREVIEW {
 		return s.planDestroyPreviewProject(ctx, opts, edgeFront, req.GetSlug())
 	}
 
@@ -187,7 +188,7 @@ func newDestroyPreviewProjectStages() deploy.ProjectTeardownStages {
 }
 
 func (s *Server) runDestroyProject(ctx context.Context, req *deploymentsv1.RemoveProjectRequest, tracer deploy.Tracer, stageReport func(deploy.StageID) func(string), logf func(string)) error {
-	if env := req.GetEnvironment(); env.GetClass() == deploymentsv1.Environment_CLASS_PREVIEW {
+	if env := req.GetEnvironment(); env.GetTier() == environmentv1.Tier_TIER_PREVIEW {
 		return s.runDestroyPreviewProject(ctx, req, env, tracer, stageReport, logf)
 	}
 
@@ -245,7 +246,7 @@ func forgetStackRecord(ctx context.Context, ssmClient bootstrap.SSMAPI, class, s
 	return bootstrap.DeleteStackRecordFor(ctx, ssmClient, class, slug)
 }
 
-func (s *Server) runDestroyPreviewProject(ctx context.Context, req *deploymentsv1.RemoveProjectRequest, env *deploymentsv1.Environment, tracer deploy.Tracer, stageReport func(deploy.StageID) func(string), logf func(string)) error {
+func (s *Server) runDestroyPreviewProject(ctx context.Context, req *deploymentsv1.RemoveProjectRequest, env *environmentv1.Environment, tracer deploy.Tracer, stageReport func(deploy.StageID) func(string), logf func(string)) error {
 	slug := req.GetSlug()
 
 	stages := newDestroyPreviewProjectStages()

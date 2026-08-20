@@ -15,6 +15,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
 	"github.com/ocelhq/ocel/cli/internal/servicemap"
 	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
+	environmentv1 "github.com/ocelhq/ocel/pkg/proto/environment/v1"
 )
 
 func stubGit(d *deps, branch, pr string) {
@@ -46,7 +47,7 @@ func TestRunPreviewUp(t *testing.T) {
 
 		out := stdout.String()
 		for _, sub := range []string{
-			"DEPLOY class=CLASS_PREVIEW lifecycle=LIFECYCLE_EPHEMERAL",
+			"DEPLOY tier=TIER_PREVIEW lifecycle=LIFECYCLE_EPHEMERAL",
 			"identity=" + want.Key,
 			"Preview " + want.Key + " is up",
 		} {
@@ -138,7 +139,7 @@ func TestRunPreviewUp(t *testing.T) {
 		}
 
 		out := stdout.String()
-		if !strings.Contains(out, "DEPLOY class=CLASS_PREVIEW lifecycle=LIFECYCLE_EPHEMERAL identity="+want.Key) {
+		if !strings.Contains(out, "DEPLOY tier=TIER_PREVIEW lifecycle=LIFECYCLE_EPHEMERAL identity="+want.Key) {
 			t.Errorf("stdout = %q, want the ephemeral Deploy echo for the explicit ref", out)
 		}
 	})
@@ -158,7 +159,7 @@ func TestRunPreviewUp(t *testing.T) {
 		if env.GetIdentity() != want.Key {
 			t.Errorf("identity = %q, want %q", env.GetIdentity(), want.Key)
 		}
-		if env.GetLifecycle() != deploymentsv1.Environment_LIFECYCLE_EPHEMERAL {
+		if env.GetLifecycle() != environmentv1.Lifecycle_LIFECYCLE_EPHEMERAL {
 			t.Errorf("lifecycle = %v, want ephemeral", env.GetLifecycle())
 		}
 	})
@@ -178,7 +179,7 @@ func TestRunPreviewUp(t *testing.T) {
 		}
 
 		out := stdout.String()
-		if !strings.Contains(out, "DEPLOY class=CLASS_PREVIEW lifecycle=LIFECYCLE_PERSISTENT identity=staging") {
+		if !strings.Contains(out, "DEPLOY tier=TIER_PREVIEW lifecycle=LIFECYCLE_PERSISTENT identity=staging") {
 			t.Errorf("stdout = %q, want the persistent/declared Environment echo", out)
 		}
 
@@ -198,7 +199,7 @@ func TestRunPreviewUp(t *testing.T) {
 		if err := runPreviewUp(context.Background(), d, root, previewUpOptions{}, &stdout, &stderr, strings.NewReader("")); err != nil {
 			t.Fatalf("runPreviewUp err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 		}
-		if !strings.Contains(stdout.String(), "PREFLIGHT slug=test-app domains=*.preview.acme.com class=CLASS_PREVIEW") {
+		if !strings.Contains(stdout.String(), "PREFLIGHT slug=test-app domains=*.preview.acme.com tier=TIER_PREVIEW") {
 			t.Errorf("stdout = %q, want the slug and preview wildcard to have reached Preflight under the preview class", stdout.String())
 		}
 	})
@@ -260,7 +261,7 @@ export default {
 		}
 
 		out := stdout.String()
-		for _, want := range []string{"global preview domain *.previews.ocel.dev", "DEPLOY class=CLASS_PREVIEW"} {
+		for _, want := range []string{"global preview domain *.previews.ocel.dev", "DEPLOY tier=TIER_PREVIEW"} {
 			if !strings.Contains(out, want) {
 				t.Errorf("stdout = %q, want it to contain %q", out, want)
 			}
@@ -373,7 +374,7 @@ func TestRunPreviewRm(t *testing.T) {
 		}
 
 		out := stdout.String()
-		if !strings.Contains(out, "DESTROY project=test-app class=CLASS_PREVIEW lifecycle=LIFECYCLE_EPHEMERAL identity="+want.Key) {
+		if !strings.Contains(out, "DESTROY project=test-app tier=TIER_PREVIEW lifecycle=LIFECYCLE_EPHEMERAL identity="+want.Key) {
 			t.Errorf("stdout = %q, want the ephemeral Destroy echo for the current branch", out)
 		}
 		if strings.Contains(out, "[y/N]") {
@@ -402,7 +403,7 @@ func TestRunPreviewRm(t *testing.T) {
 			t.Fatalf("runPreviewRm err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 		}
 
-		if !strings.Contains(stdout.String(), "DESTROY project=test-app class=CLASS_PREVIEW lifecycle=LIFECYCLE_EPHEMERAL identity="+want.Key) {
+		if !strings.Contains(stdout.String(), "DESTROY project=test-app tier=TIER_PREVIEW lifecycle=LIFECYCLE_EPHEMERAL identity="+want.Key) {
 			t.Errorf("stdout = %q, want the Destroy echo for the explicit ref", stdout.String())
 		}
 	})
@@ -422,7 +423,7 @@ func TestRunPreviewRm(t *testing.T) {
 		}
 
 		out := stdout.String()
-		if !strings.Contains(out, "DESTROY project=test-app class=CLASS_PREVIEW lifecycle=LIFECYCLE_PERSISTENT identity=staging") {
+		if !strings.Contains(out, "DESTROY project=test-app tier=TIER_PREVIEW lifecycle=LIFECYCLE_PERSISTENT identity=staging") {
 			t.Errorf("stdout = %q, want the persistent Destroy echo", out)
 		}
 		if strings.Contains(out, "[y/N]") {

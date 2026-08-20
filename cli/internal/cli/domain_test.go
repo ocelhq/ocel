@@ -159,7 +159,7 @@ func TestRunDomain(t *testing.T) {
 			t.Fatalf("runDomainUse err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 		}
 		out := stdout.String()
-		for _, want := range []string{"USE DOMAIN class=CLASS_PREVIEW base=preview.acme.com", "Previews are served on *.preview.acme.com"} {
+		for _, want := range []string{"USE DOMAIN tier=TIER_PREVIEW base=preview.acme.com", "Previews are served on *.preview.acme.com"} {
 			if !strings.Contains(out, want) {
 				t.Errorf("stdout = %q, want it to contain %q", out, want)
 			}
@@ -378,7 +378,7 @@ export default {
 			"This cannot be undone.",
 			"Left in place:",
 			"keep DNS record *.preview.acme.com CNAME you.example.com — you created it yourself; ocel never wrote it",
-			"RELEASE DOMAIN class=CLASS_PREVIEW",
+			"RELEASE DOMAIN tier=TIER_PREVIEW",
 			"Released *.preview.acme.com",
 		} {
 			if !strings.Contains(out, want) {

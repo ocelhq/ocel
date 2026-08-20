@@ -31,7 +31,8 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/servicemap"
 	"github.com/ocelhq/ocel/cli/node"
 	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
-	envv1 "github.com/ocelhq/ocel/pkg/proto/env/v1"
+	environmentv1 "github.com/ocelhq/ocel/pkg/proto/environment/v1"
+	envvarsv1 "github.com/ocelhq/ocel/pkg/proto/envvars/v1"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/resources/v1"
 )
 
@@ -142,7 +143,7 @@ func runDeploy(ctx context.Context, d deps, cwd string, opts deployOptions, stdo
 				return envgate.New(runnerValues{
 					runner: runner,
 					slug:   cfg.Slug,
-					class:  deploymentsv1.Environment_CLASS_PRODUCTION,
+					tier:   environmentv1.Tier_TIER_PRODUCTION,
 				}, envScope(cfg, false, ""))
 			},
 			ui:      ui,
@@ -159,9 +160,9 @@ func runDeploy(ctx context.Context, d deps, cwd string, opts deployOptions, stdo
 		}
 		ui.BuildOK()
 
-		env := &deploymentsv1.Environment{
-			Class:     deploymentsv1.Environment_CLASS_PRODUCTION,
-			Lifecycle: deploymentsv1.Environment_LIFECYCLE_UNSPECIFIED,
+		env := &environmentv1.Environment{
+			Tier:      environmentv1.Tier_TIER_PRODUCTION,
+			Lifecycle: environmentv1.Lifecycle_LIFECYCLE_UNSPECIFIED,
 		}
 		req := &deploymentsv1.DeployRequest{
 			Manifest:         manifest,
@@ -427,7 +428,7 @@ func envApps(cfg *projectconfig.Config) []envgate.App {
 type runnerValues struct {
 	runner *providerrunner.Runner
 	slug   string
-	class  deploymentsv1.Environment_Class
+	tier   environmentv1.Tier
 }
 
 func (v runnerValues) List(ctx context.Context) ([]envgate.Stored, error) {
@@ -435,9 +436,9 @@ func (v runnerValues) List(ctx context.Context) ([]envgate.Stored, error) {
 	if err != nil {
 		return nil, err
 	}
-	resp, err := vars.ListValues(ctx, &envv1.ListValuesRequest{
-		Class: v.class,
-		Slug:  v.slug,
+	resp, err := vars.ListValues(ctx, &envvarsv1.ListValuesRequest{
+		Tier: v.tier,
+		Slug: v.slug,
 	})
 	if err != nil {
 		return nil, err
@@ -458,16 +459,16 @@ func (v runnerValues) List(ctx context.Context) ([]envgate.Stored, error) {
 }
 
 func (v runnerValues) Reveal(ctx context.Context, rows []envgate.Address) (map[envgate.Cell]string, error) {
-	named := make([]*envv1.Cell, 0, len(rows))
+	named := make([]*envvarsv1.Coordinate, 0, len(rows))
 	for _, row := range rows {
-		named = append(named, &envv1.Cell{Folder: row.Cell.Folder, Key: row.Cell.Key, Environment: row.Environment})
+		named = append(named, &envvarsv1.Coordinate{Slug: v.slug, Folder: row.Cell.Folder, Key: row.Cell.Key, Environment: row.Environment})
 	}
 	vars, err := v.runner.Vars()
 	if err != nil {
 		return nil, err
 	}
-	resp, err := vars.RevealValues(ctx, &envv1.RevealValuesRequest{
-		Class: v.class,
+	resp, err := vars.RevealValues(ctx, &envvarsv1.RevealValuesRequest{
+		Tier:  v.tier,
 		Slug:  v.slug,
 		Cells: named,
 	})

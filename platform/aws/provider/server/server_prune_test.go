@@ -8,6 +8,7 @@ import (
 	connect "connectrpc.com/connect"
 
 	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
+	environmentv1 "github.com/ocelhq/ocel/pkg/proto/environment/v1"
 	"github.com/ocelhq/ocel/platform/aws/provider/deploy"
 )
 
@@ -16,11 +17,11 @@ func TestRunPruneRefusesAPreviewWithoutAPointer(t *testing.T) {
 
 	cases := []struct {
 		name string
-		env  *deploymentsv1.Environment
+		env  *environmentv1.Environment
 	}{
-		{"no identity at all", &deploymentsv1.Environment{Class: deploymentsv1.Environment_CLASS_PREVIEW}},
-		{"a name the stack grammar cannot carry", &deploymentsv1.Environment{Class: deploymentsv1.Environment_CLASS_PREVIEW, Identity: "feature_login_ab12"}},
-		{"production's own name", &deploymentsv1.Environment{Class: deploymentsv1.Environment_CLASS_PREVIEW, Identity: deployEnv}},
+		{"no identity at all", &environmentv1.Environment{Tier: environmentv1.Tier_TIER_PREVIEW}},
+		{"a name the stack grammar cannot carry", &environmentv1.Environment{Tier: environmentv1.Tier_TIER_PREVIEW, Identity: "feature_login_ab12"}},
+		{"production's own name", &environmentv1.Environment{Tier: environmentv1.Tier_TIER_PREVIEW, Identity: deployEnv}},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {

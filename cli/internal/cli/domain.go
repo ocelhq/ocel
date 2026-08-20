@@ -20,6 +20,7 @@ import (
 	"github.com/ocelhq/ocel/cli/node"
 	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
 	"github.com/ocelhq/ocel/pkg/proto/deployments/v1/deploymentsv1connect"
+	environmentv1 "github.com/ocelhq/ocel/pkg/proto/environment/v1"
 )
 
 type domainOptions struct {
@@ -200,7 +201,7 @@ func runDomainUse(ctx context.Context, d deps, cwd, wildcard string, opts domain
 			return err
 		}
 		req := &deploymentsv1.UsePreviewWildcardRequest{
-			Class:      deploymentsv1.Environment_CLASS_PREVIEW,
+			Tier:       environmentv1.Tier_TIER_PREVIEW,
 			BaseDomain: base,
 			Edge:       edgeSelection(cfg),
 		}
@@ -270,7 +271,7 @@ func runDomainRelease(ctx context.Context, d deps, cwd string, opts domainOption
 
 		spinner := deployui.StartSpinner(stdout, "Enumerating what releasing the domain would remove")
 		plan, err := client.PlanRemovePreviewWildcard(ctx, &deploymentsv1.PreviewWildcardRequest{
-			Class: deploymentsv1.Environment_CLASS_PREVIEW,
+			Tier: environmentv1.Tier_TIER_PREVIEW,
 		})
 		spinner.Stop()
 		if err != nil {
@@ -295,7 +296,7 @@ func runDomainRelease(ctx context.Context, d deps, cwd string, opts domainOption
 			}
 		}
 
-		req := &deploymentsv1.RemovePreviewWildcardRequest{Class: deploymentsv1.Environment_CLASS_PREVIEW, Edge: edgeSelection(cfg)}
+		req := &deploymentsv1.RemovePreviewWildcardRequest{Tier: environmentv1.Tier_TIER_PREVIEW, Edge: edgeSelection(cfg)}
 		if err := runner.RemovePreviewWildcard(ctx, req, ui.Event); err != nil {
 			return err
 		}
@@ -387,7 +388,7 @@ func runDomainStream(ctx context.Context, d deps, cfg *projectconfig.Config, pro
 
 	provW := ui.BuildWriter()
 	err = runProviderSession(ctx, d, cfg, provider, provW, provW, func(runner *providerrunner.Runner) error {
-		if err := preflightClass(ctx, d, runner, cfg, deploymentsv1.Environment_CLASS_PRODUCTION, "ocel bootstrap", stdout); err != nil {
+		if err := preflightTier(ctx, d, runner, cfg, environmentv1.Tier_TIER_PRODUCTION, "ocel bootstrap", stdout); err != nil {
 			return err
 		}
 		return act(runner, ui)
@@ -422,7 +423,7 @@ func listGlobalPreviewDomain(ctx context.Context, d deps, runner *providerrunner
 		return nil, err
 	}
 	spinner := deployui.StartSpinner(out, "Reading the global preview domain")
-	resp, err := client.GetPreviewWildcard(ctx, &deploymentsv1.PreviewWildcardRequest{Class: deploymentsv1.Environment_CLASS_PREVIEW})
+	resp, err := client.GetPreviewWildcard(ctx, &deploymentsv1.PreviewWildcardRequest{Tier: environmentv1.Tier_TIER_PREVIEW})
 	spinner.Stop()
 	if err != nil {
 		return nil, err
@@ -519,7 +520,7 @@ func runDomainStatus(ctx context.Context, d deps, cwd string, opts domainOptions
 	configured := declaredHostnames(cfg, "production")
 
 	return runProviderSession(ctx, d, cfg, provider, stdout, stderr, func(runner *providerrunner.Runner) error {
-		if err := preflightClass(ctx, d, runner, cfg, deploymentsv1.Environment_CLASS_PRODUCTION, "ocel bootstrap", stdout); err != nil {
+		if err := preflightTier(ctx, d, runner, cfg, environmentv1.Tier_TIER_PRODUCTION, "ocel bootstrap", stdout); err != nil {
 			return err
 		}
 		client, err := runner.Deployments()

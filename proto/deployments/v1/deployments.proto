@@ -4,9 +4,10 @@ package deployments.v1;
 option go_package = "github.com/ocelhq/ocel/pkg/proto/deployments/v1;deploymentsv1";
 
 import "buf/validate/validate.proto";
+import "environment/v1/environment.proto";
 import "progress/v1/progress.proto";
-import "resources/v1/env.proto";
 import "resources/v1/resources.proto";
+import "resources/v1/variables.proto";
 
 service ProviderService {
     rpc Configure(ConfigureRequest) returns (ConfigureResponse);
@@ -73,7 +74,7 @@ message ConfigureRequest {
 message ConfigureResponse {}
 
 message UsePreviewWildcardRequest {
-  Environment.Class class = 1 [(buf.validate.field).enum.const = 1];
+  environment.v1.Tier tier = 1 [(buf.validate.field).enum.const = 1];
 
   string base_domain = 2;
 
@@ -81,7 +82,7 @@ message UsePreviewWildcardRequest {
 }
 
 message PreviewWildcardRequest {
-  Environment.Class class = 1 [(buf.validate.field).enum.const = 1];
+  environment.v1.Tier tier = 1 [(buf.validate.field).enum.const = 1];
 }
 
 message GetPreviewWildcardResponse {
@@ -91,7 +92,7 @@ message GetPreviewWildcardResponse {
 }
 
 message RemovePreviewWildcardRequest {
-  Environment.Class class = 1 [(buf.validate.field).enum.const = 1];
+  environment.v1.Tier tier = 1 [(buf.validate.field).enum.const = 1];
 
   EdgeSelection edge = 2;
 }
@@ -170,25 +171,6 @@ message ProductionHostname {
   string pending = 9;
 }
 
-message Environment {
-  enum Class {
-    CLASS_UNSPECIFIED = 0;
-    CLASS_PREVIEW = 1;
-    CLASS_PRODUCTION = 2;
-  }
-
-  enum Lifecycle {
-    LIFECYCLE_UNSPECIFIED = 0;
-    LIFECYCLE_EPHEMERAL = 1;
-    LIFECYCLE_PERSISTENT = 2;
-  }
-
-  Class class = 1 [(buf.validate.field).enum.defined_only = true];
-  Lifecycle lifecycle = 2 [(buf.validate.field).enum.defined_only = true];
-
-  string identity = 3;
-}
-
 message Manifest {
   string schema_version = 1 [(buf.validate.field).string.min_len = 1];
   repeated ManifestResource resources = 2;
@@ -261,7 +243,7 @@ message ManifestResource {
 message DeployRequest {
   Manifest manifest = 1 [(buf.validate.field).required = true];
 
-  Environment environment = 2;
+  environment.v1.Environment environment = 2;
 
   string tag = 3 [(buf.validate.field).string = {pattern: "^[A-Za-z0-9._-]*$", max_len: 64}];
 
@@ -271,7 +253,7 @@ message DeployRequest {
 }
 
 message BootstrapRequest {
-  Environment.Class class = 1 [(buf.validate.field).enum.defined_only = true];
+  environment.v1.Tier tier = 1 [(buf.validate.field).enum.defined_only = true];
 
   repeated string features = 2;
 
@@ -279,7 +261,7 @@ message BootstrapRequest {
 }
 
 message DescribeBootstrapRequest {
-  Environment.Class class = 1 [(buf.validate.field).enum.defined_only = true];
+  environment.v1.Tier tier = 1 [(buf.validate.field).enum.defined_only = true];
 }
 
 message DescribeBootstrapResponse {
@@ -313,13 +295,13 @@ message EdgeSelection {
 }
 
 message RemoveSubstrateRequest {
-  Environment.Class class = 1 [(buf.validate.field).enum.defined_only = true];
+  environment.v1.Tier tier = 1 [(buf.validate.field).enum.defined_only = true];
 
   EdgeSelection edge = 2;
 }
 
 message PlanRemoveSubstrateRequest {
-  Environment.Class class = 1 [(buf.validate.field).enum.defined_only = true];
+  environment.v1.Tier tier = 1 [(buf.validate.field).enum.defined_only = true];
 
   EdgeSelection edge = 2;
 }
@@ -331,7 +313,7 @@ message PlanRemoveSubstrateResponse {
 }
 
 message RemovePreviewRequest {
-  Environment environment = 1;
+  environment.v1.Environment environment = 1;
 
   string slug = 2 [(buf.validate.field).string = {pattern: "^[a-z0-9]+(-[a-z0-9]+)*$", max_len: 63}];
 
@@ -341,7 +323,7 @@ message RemovePreviewRequest {
 message RemoveProjectRequest {
   string slug = 1 [(buf.validate.field).string = {pattern: "^[a-z0-9]+(-[a-z0-9]+)*$", max_len: 63}];
 
-  Environment environment = 2;
+  environment.v1.Environment environment = 2;
 
   EdgeSelection edge = 3;
 }
@@ -349,7 +331,7 @@ message RemoveProjectRequest {
 message PlanRemoveProjectRequest {
   string slug = 1 [(buf.validate.field).string = {pattern: "^[a-z0-9]+(-[a-z0-9]+)*$", max_len: 63}];
 
-  Environment environment = 2;
+  environment.v1.Environment environment = 2;
 
   EdgeSelection edge = 3;
 }
@@ -401,7 +383,7 @@ message ListEnvironmentsResponse {
 
 message PreviewEnvironment {
   string identity = 1;
-  Environment.Lifecycle lifecycle = 2;
+  environment.v1.Lifecycle lifecycle = 2;
 
   string label = 3;
 
@@ -410,7 +392,7 @@ message PreviewEnvironment {
 }
 
 message PreflightRequest {
-  Environment.Class required_class = 1 [(buf.validate.field).enum.defined_only = true];
+  environment.v1.Tier required_tier = 1 [(buf.validate.field).enum.defined_only = true];
 
   string slug = 2 [(buf.validate.field).string = {pattern: "^[a-z0-9]+(-[a-z0-9]+)*$", max_len: 63}, (buf.validate.field).ignore = IGNORE_IF_ZERO_VALUE];
 
@@ -422,7 +404,7 @@ message PreflightRequest {
 }
 
 message PreflightResponse {
-  Environment.Class infra_class = 1;
+  environment.v1.Tier infra_tier = 1;
 
   bool infrastructure_present = 2;
 
@@ -522,7 +504,7 @@ message RemoveStalePromotionsRequest {
 
   int32 keep_n = 2 [(buf.validate.field).int32.gte = 0];
 
-  Environment environment = 3;
+  environment.v1.Environment environment = 3;
 
   EdgeSelection edge = 4;
 }

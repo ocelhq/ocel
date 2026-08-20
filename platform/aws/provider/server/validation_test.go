@@ -9,8 +9,9 @@ import (
 
 	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
 	deploymentsv1connect "github.com/ocelhq/ocel/pkg/proto/deployments/v1/deploymentsv1connect"
-	envv1 "github.com/ocelhq/ocel/pkg/proto/env/v1"
-	"github.com/ocelhq/ocel/pkg/proto/env/v1/envv1connect"
+	environmentv1 "github.com/ocelhq/ocel/pkg/proto/environment/v1"
+	envvarsv1 "github.com/ocelhq/ocel/pkg/proto/envvars/v1"
+	"github.com/ocelhq/ocel/pkg/proto/envvars/v1/envvarsv1connect"
 )
 
 func refusedCode(t *testing.T, err error) connect.Code {
@@ -60,7 +61,7 @@ func TestContractRefusesMalformedRequests(t *testing.T) {
 		}},
 		{"a global preview domain asked for under the production class", func(c deploymentsv1connect.ProviderServiceClient) error {
 			_, err := c.GetPreviewWildcard(context.Background(), &deploymentsv1.PreviewWildcardRequest{
-				Class: deploymentsv1.Environment_CLASS_PRODUCTION,
+				Tier: environmentv1.Tier_TIER_PRODUCTION,
 			})
 			return err
 		}},
@@ -80,16 +81,16 @@ func TestVarStoreRefusesMalformedRequests(t *testing.T) {
 
 	cases := []struct {
 		name string
-		call func(envv1connect.EnvVarsServiceClient) error
+		call func(envvarsv1connect.EnvVarsServiceClient) error
 	}{
-		{"a link published to no class at all", func(c envv1connect.EnvVarsServiceClient) error {
-			_, err := c.ListLinks(context.Background(), &envv1.ListLinksRequest{Slug: "acme"})
+		{"a link published to no class at all", func(c envvarsv1connect.EnvVarsServiceClient) error {
+			_, err := c.ListLinks(context.Background(), &envvarsv1.ListLinksRequest{Slug: "acme"})
 			return err
 		}},
-		{"a link set request carrying no link", func(c envv1connect.EnvVarsServiceClient) error {
-			_, err := c.SetLink(context.Background(), &envv1.SetLinkRequest{
-				Slug:  "acme",
-				Class: deploymentsv1.Environment_CLASS_PRODUCTION,
+		{"a link set request carrying no link", func(c envvarsv1connect.EnvVarsServiceClient) error {
+			_, err := c.SetLink(context.Background(), &envvarsv1.SetLinkRequest{
+				Slug: "acme",
+				Tier: environmentv1.Tier_TIER_PRODUCTION,
 			})
 			return err
 		}},
@@ -107,7 +108,7 @@ func TestVarStoreRefusesMalformedRequests(t *testing.T) {
 func TestCoordinateRefusesUnusableComponents(t *testing.T) {
 	t.Parallel()
 
-	cases := map[string]*envv1.Coordinate{
+	cases := map[string]*envvarsv1.Coordinate{
 		"a slug carrying the store key delimiter":           {Slug: "sh#op", Key: "STRIPE_KEY"},
 		"a variable name carrying the store delimiter":      {Slug: "shop", Key: "STRIPE#KEY"},
 		"a folder carrying the store key delimiter":         {Slug: "shop", Key: "K", Folder: "/we#b"},
@@ -124,8 +125,8 @@ func TestCoordinateRefusesUnusableComponents(t *testing.T) {
 	for name, coordinate := range cases {
 		t.Run(name+" is refused", func(t *testing.T) {
 			t.Parallel()
-			_, err := client.ListVersions(context.Background(), &envv1.ListVersionsRequest{
-				Class:      deploymentsv1.Environment_CLASS_PRODUCTION,
+			_, err := client.ListVersions(context.Background(), &envvarsv1.ListVersionsRequest{
+				Tier:       environmentv1.Tier_TIER_PRODUCTION,
 				Coordinate: coordinate,
 			})
 			if got := refusedCode(t, err); got != connect.CodeInvalidArgument {
@@ -138,9 +139,9 @@ func TestCoordinateRefusesUnusableComponents(t *testing.T) {
 func TestCoordinateAcceptsAFolderedCell(t *testing.T) {
 	t.Parallel()
 
-	_, err := newTestVarsClient(t, testToken).ListVersions(context.Background(), &envv1.ListVersionsRequest{
-		Class:      deploymentsv1.Environment_CLASS_PRODUCTION,
-		Coordinate: &envv1.Coordinate{Slug: "shop", Key: "STRIPE_KEY", Folder: "/web/admin", Environment: "staging"},
+	_, err := newTestVarsClient(t, testToken).ListVersions(context.Background(), &envvarsv1.ListVersionsRequest{
+		Tier:       environmentv1.Tier_TIER_PRODUCTION,
+		Coordinate: &envvarsv1.Coordinate{Slug: "shop", Key: "STRIPE_KEY", Folder: "/web/admin", Environment: "staging"},
 	})
 	var connectErr *connect.Error
 	if errors.As(err, &connectErr) && connectErr.Code() == connect.CodeInvalidArgument {

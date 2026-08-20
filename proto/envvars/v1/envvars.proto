@@ -1,10 +1,10 @@
 syntax = "proto3";
-package env.v1;
+package envvars.v1;
 
-option go_package = "github.com/ocelhq/ocel/pkg/proto/env/v1;envv1";
+option go_package = "github.com/ocelhq/ocel/pkg/proto/envvars/v1;envvarsv1";
 
 import "buf/validate/validate.proto";
-import "deployments/v1/deployments.proto";
+import "environment/v1/environment.proto";
 import "links/v1/links.proto";
 
 service EnvVarsService {
@@ -60,7 +60,7 @@ message VersionEntry {
 }
 
 message SetValueRequest {
-  deployments.v1.Environment.Class class = 1 [(buf.validate.field).enum.defined_only = true];
+  environment.v1.Tier tier = 1 [(buf.validate.field).enum.defined_only = true];
 
   Coordinate coordinate = 2 [(buf.validate.field).required = true];
   string value = 3;
@@ -73,7 +73,7 @@ message SetValueResponse {
 }
 
 message ListValuesRequest {
-  deployments.v1.Environment.Class class = 1 [(buf.validate.field).enum.defined_only = true];
+  environment.v1.Tier tier = 1 [(buf.validate.field).enum.defined_only = true];
 
   string slug = 2 [(buf.validate.field).string = {pattern: "^[a-z0-9]+(-[a-z0-9]+)*$", max_len: 63}];
 }
@@ -83,7 +83,7 @@ message ListValuesResponse {
 }
 
 message GetValueRequest {
-  deployments.v1.Environment.Class class = 1 [(buf.validate.field).enum.defined_only = true];
+  environment.v1.Tier tier = 1 [(buf.validate.field).enum.defined_only = true];
   Coordinate coordinate = 2 [(buf.validate.field).required = true];
 
   bool reveal = 3;
@@ -97,16 +97,10 @@ message GetValueResponse {
 }
 
 message RevealValuesRequest {
-  deployments.v1.Environment.Class class = 1 [(buf.validate.field).enum.defined_only = true];
+  environment.v1.Tier tier = 1 [(buf.validate.field).enum.defined_only = true];
 
   string slug = 2 [(buf.validate.field).string = {pattern: "^[a-z0-9]+(-[a-z0-9]+)*$", max_len: 63}];
-  repeated Cell cells = 3;
-}
-
-message Cell {
-  string folder = 1 [(buf.validate.field).string.pattern = "^(/[^/#[:cntrl:]]+)*$"];
-  string key = 2 [(buf.validate.field).string = {min_len: 1, pattern: "^[^#[:cntrl:]]*$"}];
-  string environment = 3 [(buf.validate.field).string.pattern = "^[^#*[:cntrl:]]*$"];
+  repeated Coordinate cells = 3;
 }
 
 message RevealValuesResponse {
@@ -119,7 +113,7 @@ message RevealedValue {
 }
 
 message DeleteValueRequest {
-  deployments.v1.Environment.Class class = 1 [(buf.validate.field).enum.defined_only = true];
+  environment.v1.Tier tier = 1 [(buf.validate.field).enum.defined_only = true];
   Coordinate coordinate = 2 [(buf.validate.field).required = true];
 
   optional int64 expected_version = 3;
@@ -130,7 +124,7 @@ message DeleteValueResponse {
 }
 
 message SetReferenceRequest {
-  deployments.v1.Environment.Class class = 1 [(buf.validate.field).enum.defined_only = true];
+  environment.v1.Tier tier = 1 [(buf.validate.field).enum.defined_only = true];
 
   Coordinate coordinate = 2 [(buf.validate.field).required = true];
   Coordinate target = 3 [(buf.validate.field).required = true];
@@ -141,7 +135,7 @@ message SetReferenceResponse {
 }
 
 message ListReferencesRequest {
-  deployments.v1.Environment.Class class = 1 [(buf.validate.field).enum.defined_only = true];
+  environment.v1.Tier tier = 1 [(buf.validate.field).enum.defined_only = true];
 
   Coordinate coordinate = 2 [(buf.validate.field).required = true];
 }
@@ -151,7 +145,7 @@ message ListReferencesResponse {
 }
 
 message ListVersionsRequest {
-  deployments.v1.Environment.Class class = 1 [(buf.validate.field).enum.defined_only = true];
+  environment.v1.Tier tier = 1 [(buf.validate.field).enum.defined_only = true];
   Coordinate coordinate = 2 [(buf.validate.field).required = true];
 }
 
@@ -162,7 +156,7 @@ message ListVersionsResponse {
 message SetLinkRequest {
   string slug = 1 [(buf.validate.field).string = {pattern: "^[a-z0-9]+(-[a-z0-9]+)*$", max_len: 63}];
 
-  deployments.v1.Environment.Class class = 2 [(buf.validate.field).enum = {in: [1, 2]}];
+  environment.v1.Tier tier = 2 [(buf.validate.field).enum = {in: [1, 2]}];
 
   string environment = 3 [(buf.validate.field).string.pattern = "^[^#*[:cntrl:]]*$"];
 
@@ -178,7 +172,7 @@ message SetLinkResponse {
 message RemoveLinkRequest {
   string slug = 1 [(buf.validate.field).string = {pattern: "^[a-z0-9]+(-[a-z0-9]+)*$", max_len: 63}];
 
-  deployments.v1.Environment.Class class = 2 [(buf.validate.field).enum = {in: [1, 2]}];
+  environment.v1.Tier tier = 2 [(buf.validate.field).enum = {in: [1, 2]}];
 
   string environment = 3 [(buf.validate.field).string.pattern = "^[^#*[:cntrl:]]*$"];
 
@@ -192,7 +186,7 @@ message RemoveLinkResponse {
 message ListLinksRequest {
   string slug = 1 [(buf.validate.field).string = {pattern: "^[a-z0-9]+(-[a-z0-9]+)*$", max_len: 63}];
 
-  deployments.v1.Environment.Class class = 2 [(buf.validate.field).enum = {in: [1, 2]}];
+  environment.v1.Tier tier = 2 [(buf.validate.field).enum = {in: [1, 2]}];
 
   string environment = 3 [(buf.validate.field).string.pattern = "^[^#*[:cntrl:]]*$"];
 }

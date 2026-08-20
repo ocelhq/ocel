@@ -16,6 +16,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/providerrunner"
 	"github.com/ocelhq/ocel/cli/node"
 	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
+	environmentv1 "github.com/ocelhq/ocel/pkg/proto/environment/v1"
 )
 
 type bootstrapOptions struct {
@@ -87,13 +88,13 @@ func runBootstrap(ctx context.Context, d deps, cwd string, opts bootstrapOptions
 		return err
 	}
 
-	class := deploymentsv1.Environment_CLASS_PRODUCTION
+	tier := environmentv1.Tier_TIER_PRODUCTION
 	if opts.preview {
-		class = deploymentsv1.Environment_CLASS_PREVIEW
+		tier = environmentv1.Tier_TIER_PREVIEW
 	}
 
 	if opts.destroy {
-		return runBootstrapDestroy(ctx, d, cfg, provider, class, opts, stdout, stderr, stdin)
+		return runBootstrapDestroy(ctx, d, cfg, provider, tier, opts, stdout, stderr, stdin)
 	}
 
 	ctx, run, err := startRun(ctx, cfg, "ocel bootstrap")
@@ -112,7 +113,7 @@ func runBootstrap(ctx context.Context, d deps, cwd string, opts bootstrapOptions
 			return err
 		}
 		described, err := client.DescribeBootstrap(ctx, &deploymentsv1.DescribeBootstrapRequest{
-			Class: class,
+			Tier: tier,
 		})
 		if err != nil {
 			if connect.CodeOf(err) == connect.CodeUnimplemented {
@@ -137,9 +138,9 @@ func runBootstrap(ctx context.Context, d deps, cwd string, opts bootstrapOptions
 		if len(dropped) > 0 && !force {
 			if !interactive {
 				return fmt.Errorf("this would remove %s from the %s bootstrap; projects deployed against it break when it goes, so re-run with --force to remove it anyway",
-					strings.Join(dropped, ", "), substrateName(class))
+					strings.Join(dropped, ", "), substrateName(tier))
 			}
-			confirmed, err := confirmDrop(ctx, class, dropped, dependentProjects(catalogue, dropped), stdout, stdin)
+			confirmed, err := confirmDrop(ctx, tier, dropped, dependentProjects(catalogue, dropped), stdout, stdin)
 			if err != nil {
 				return err
 			}
@@ -151,7 +152,7 @@ func runBootstrap(ctx context.Context, d deps, cwd string, opts bootstrapOptions
 		}
 
 		if interactive {
-			proceed, err := confirmBootstrap(ctx, class, provider.Package, stdout, stdin)
+			proceed, err := confirmBootstrap(ctx, tier, provider.Package, stdout, stdin)
 			if err != nil {
 				return err
 			}
@@ -162,7 +163,7 @@ func runBootstrap(ctx context.Context, d deps, cwd string, opts bootstrapOptions
 		}
 
 		req := &deploymentsv1.BootstrapRequest{
-			Class:    class,
+			Tier:     tier,
 			Features: requested,
 			Force:    force,
 		}
@@ -189,8 +190,8 @@ func chooseFeatures(ctx context.Context, opts bootstrapOptions, catalogue []*dep
 	return pickFeatures(ctx, catalogue, stdout, stdin)
 }
 
-func confirmDrop(ctx context.Context, class deploymentsv1.Environment_Class, dropped, dependents []string, stdout io.Writer, stdin io.Reader) (bool, error) {
-	fmt.Fprintf(stdout, "Removing %s from the %s bootstrap tears down what it stood up.\n", strings.Join(dropped, ", "), substrateName(class))
+func confirmDrop(ctx context.Context, tier environmentv1.Tier, dropped, dependents []string, stdout io.Writer, stdin io.Reader) (bool, error) {
+	fmt.Fprintf(stdout, "Removing %s from the %s bootstrap tears down what it stood up.\n", strings.Join(dropped, ", "), substrateName(tier))
 	if len(dependents) > 0 {
 		fmt.Fprintf(stdout, "These projects were deployed against it and break when it goes: %s\n", strings.Join(dependents, ", "))
 	} else {
@@ -199,19 +200,19 @@ func confirmDrop(ctx context.Context, class deploymentsv1.Environment_Class, dro
 	return confirmYN(ctx, "Remove it anyway?", stdout, stdin)
 }
 
-func confirmBootstrap(ctx context.Context, class deploymentsv1.Environment_Class, providerPackage string, stdout io.Writer, stdin io.Reader) (bool, error) {
-	return confirmYN(ctx, fmt.Sprintf("Bootstrap %s infrastructure with %s?", substrateName(class), providerPackage), stdout, stdin)
+func confirmBootstrap(ctx context.Context, tier environmentv1.Tier, providerPackage string, stdout io.Writer, stdin io.Reader) (bool, error) {
+	return confirmYN(ctx, fmt.Sprintf("Bootstrap %s infrastructure with %s?", substrateName(tier), providerPackage), stdout, stdin)
 }
 
-func substrateName(class deploymentsv1.Environment_Class) string {
-	if class == deploymentsv1.Environment_CLASS_PREVIEW {
+func substrateName(tier environmentv1.Tier) string {
+	if tier == environmentv1.Tier_TIER_PREVIEW {
 		return "preview"
 	}
 	return "production"
 }
 
-func runBootstrapDestroy(ctx context.Context, d deps, cfg *projectconfig.Config, provider *projectconfig.ProviderDescriptor, class deploymentsv1.Environment_Class, opts bootstrapOptions, stdout, stderr io.Writer, stdin io.Reader) error {
-	substrate := substrateName(class)
+func runBootstrapDestroy(ctx context.Context, d deps, cfg *projectconfig.Config, provider *projectconfig.ProviderDescriptor, tier environmentv1.Tier, opts bootstrapOptions, stdout, stderr io.Writer, stdin io.Reader) error {
+	substrate := substrateName(tier)
 	requested := destroyBypassRequest()
 	bypass := requested == substrate
 	tty := d.stdinIsTerminal(stdin)
@@ -248,8 +249,8 @@ func runBootstrapDestroy(ctx context.Context, d deps, cfg *projectconfig.Config,
 
 		spinner := deployui.StartSpinner(stdout, "Enumerating what would be removed")
 		plan, err := client.PlanRemoveSubstrate(ctx, &deploymentsv1.PlanRemoveSubstrateRequest{
-			Class: class,
-			Edge:  edgeSelection(cfg),
+			Tier: tier,
+			Edge: edgeSelection(cfg),
 		})
 		spinner.Stop()
 		if err != nil {
@@ -268,8 +269,8 @@ func runBootstrapDestroy(ctx context.Context, d deps, cfg *projectconfig.Config,
 		}
 
 		req := &deploymentsv1.RemoveSubstrateRequest{
-			Class: class,
-			Edge:  edgeSelection(cfg),
+			Tier: tier,
+			Edge: edgeSelection(cfg),
 		}
 		if err := runner.RemoveSubstrate(ctx, req, ui.Event); err != nil {
 			return err

@@ -11,6 +11,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/aws"
 
 	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
+	environmentv1 "github.com/ocelhq/ocel/pkg/proto/environment/v1"
 	"github.com/ocelhq/ocel/platform/aws/provider/bootstrap"
 	"github.com/ocelhq/ocel/platform/aws/provider/deploy"
 	"github.com/ocelhq/ocel/platform/aws/provider/edges/apigateway"
@@ -86,12 +87,12 @@ func TestPreviewExpiry(t *testing.T) {
 	now := time.Unix(1_700_000_000, 0)
 	cases := []struct {
 		name      string
-		lifecycle deploymentsv1.Environment_Lifecycle
+		lifecycle environmentv1.Lifecycle
 		want      int64
 	}{
-		{"ephemeral gets now+ttl", deploymentsv1.Environment_LIFECYCLE_EPHEMERAL, now.Add(previewTTL).Unix()},
-		{"persistent has no expiry", deploymentsv1.Environment_LIFECYCLE_PERSISTENT, 0},
-		{"unspecified (production) has no expiry", deploymentsv1.Environment_LIFECYCLE_UNSPECIFIED, 0},
+		{"ephemeral gets now+ttl", environmentv1.Lifecycle_LIFECYCLE_EPHEMERAL, now.Add(previewTTL).Unix()},
+		{"persistent has no expiry", environmentv1.Lifecycle_LIFECYCLE_PERSISTENT, 0},
+		{"unspecified (production) has no expiry", environmentv1.Lifecycle_LIFECYCLE_UNSPECIFIED, 0},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -108,26 +109,26 @@ func TestEnvironmentNameAtIngest(t *testing.T) {
 
 	cases := []struct {
 		name    string
-		env     *deploymentsv1.Environment
+		env     *environmentv1.Environment
 		want    string
 		wantErr bool
 	}{
-		{"production is named prod", &deploymentsv1.Environment{Class: deploymentsv1.Environment_CLASS_PRODUCTION}, deployEnv, false},
+		{"production is named prod", &environmentv1.Environment{Tier: environmentv1.Tier_TIER_PRODUCTION}, deployEnv, false},
 		{
 			"a preview is named by its pointer",
-			&deploymentsv1.Environment{Class: deploymentsv1.Environment_CLASS_PREVIEW, Lifecycle: deploymentsv1.Environment_LIFECYCLE_EPHEMERAL, Identity: "pr-7"},
+			&environmentv1.Environment{Tier: environmentv1.Tier_TIER_PREVIEW, Lifecycle: environmentv1.Lifecycle_LIFECYCLE_EPHEMERAL, Identity: "pr-7"},
 			"pr-7",
 			false,
 		},
 		{
 			"a preview named prod is refused",
-			&deploymentsv1.Environment{Class: deploymentsv1.Environment_CLASS_PREVIEW, Lifecycle: deploymentsv1.Environment_LIFECYCLE_PERSISTENT, Identity: deployEnv},
+			&environmentv1.Environment{Tier: environmentv1.Tier_TIER_PREVIEW, Lifecycle: environmentv1.Lifecycle_LIFECYCLE_PERSISTENT, Identity: deployEnv},
 			"",
 			true,
 		},
 		{
 			"a preview name the stack grammar cannot carry is refused",
-			&deploymentsv1.Environment{Class: deploymentsv1.Environment_CLASS_PREVIEW, Identity: "feature_login_ab12"},
+			&environmentv1.Environment{Tier: environmentv1.Tier_TIER_PREVIEW, Identity: "feature_login_ab12"},
 			"",
 			true,
 		},
@@ -162,26 +163,26 @@ func TestPreflightResponse(t *testing.T) {
 
 	cases := []struct {
 		name          string
-		required      deploymentsv1.Environment_Class
+		required      environmentv1.Tier
 		preview, prod bootstrap.Deployed
-		wantClass     deploymentsv1.Environment_Class
+		wantTier      environmentv1.Tier
 		wantPresent   bool
 	}{
-		{"deploy with both reports production", deploymentsv1.Environment_CLASS_PRODUCTION, preview, production, deploymentsv1.Environment_CLASS_PRODUCTION, true},
-		{"preview with both reports preview", deploymentsv1.Environment_CLASS_PREVIEW, preview, production, deploymentsv1.Environment_CLASS_PREVIEW, true},
-		{"preview required, preview present", deploymentsv1.Environment_CLASS_PREVIEW, preview, absent, deploymentsv1.Environment_CLASS_PREVIEW, true},
-		{"production required, production present", deploymentsv1.Environment_CLASS_PRODUCTION, absent, production, deploymentsv1.Environment_CLASS_PRODUCTION, true},
-		{"deploy in a preview-only account reports preview", deploymentsv1.Environment_CLASS_PRODUCTION, preview, absent, deploymentsv1.Environment_CLASS_PREVIEW, true},
-		{"preview in a production-only account reports production", deploymentsv1.Environment_CLASS_PREVIEW, absent, production, deploymentsv1.Environment_CLASS_PRODUCTION, true},
-		{"empty account reports absent", deploymentsv1.Environment_CLASS_PREVIEW, absent, absent, deploymentsv1.Environment_CLASS_UNSPECIFIED, false},
+		{"deploy with both reports production", environmentv1.Tier_TIER_PRODUCTION, preview, production, environmentv1.Tier_TIER_PRODUCTION, true},
+		{"preview with both reports preview", environmentv1.Tier_TIER_PREVIEW, preview, production, environmentv1.Tier_TIER_PREVIEW, true},
+		{"preview required, preview present", environmentv1.Tier_TIER_PREVIEW, preview, absent, environmentv1.Tier_TIER_PREVIEW, true},
+		{"production required, production present", environmentv1.Tier_TIER_PRODUCTION, absent, production, environmentv1.Tier_TIER_PRODUCTION, true},
+		{"deploy in a preview-only account reports preview", environmentv1.Tier_TIER_PRODUCTION, preview, absent, environmentv1.Tier_TIER_PREVIEW, true},
+		{"preview in a production-only account reports production", environmentv1.Tier_TIER_PREVIEW, absent, production, environmentv1.Tier_TIER_PRODUCTION, true},
+		{"empty account reports absent", environmentv1.Tier_TIER_PREVIEW, absent, absent, environmentv1.Tier_TIER_UNSPECIFIED, false},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 			got := preflightResponse(tc.required, tc.preview, tc.prod)
-			if got.GetInfraClass() != tc.wantClass || got.GetInfrastructurePresent() != tc.wantPresent {
+			if got.GetInfraTier() != tc.wantTier || got.GetInfrastructurePresent() != tc.wantPresent {
 				t.Errorf("preflightResponse() = {class=%v present=%v}, want {class=%v present=%v}",
-					got.GetInfraClass(), got.GetInfrastructurePresent(), tc.wantClass, tc.wantPresent)
+					got.GetInfraTier(), got.GetInfrastructurePresent(), tc.wantTier, tc.wantPresent)
 			}
 		})
 	}
@@ -286,19 +287,19 @@ func TestToPreviewEnvironments(t *testing.T) {
 	t.Run("maps every stack through", func(t *testing.T) {
 		t.Parallel()
 		stacks := []deploy.PreviewStack{
-			{Identity: "feature_login_ab12", Lifecycle: deploymentsv1.Environment_LIFECYCLE_EPHEMERAL, Label: "pr-7", CreatedAt: 100, ExpiresAt: 200},
-			{Identity: "staging", Lifecycle: deploymentsv1.Environment_LIFECYCLE_PERSISTENT},
+			{Identity: "feature_login_ab12", Lifecycle: environmentv1.Lifecycle_LIFECYCLE_EPHEMERAL, Label: "pr-7", CreatedAt: 100, ExpiresAt: 200},
+			{Identity: "staging", Lifecycle: environmentv1.Lifecycle_LIFECYCLE_PERSISTENT},
 		}
 
 		got := toPreviewEnvironments(stacks)
 		if len(got) != 2 {
 			t.Fatalf("len = %d, want 2", len(got))
 		}
-		if got[0].GetIdentity() != "feature_login_ab12" || got[0].GetLifecycle() != deploymentsv1.Environment_LIFECYCLE_EPHEMERAL ||
+		if got[0].GetIdentity() != "feature_login_ab12" || got[0].GetLifecycle() != environmentv1.Lifecycle_LIFECYCLE_EPHEMERAL ||
 			got[0].GetLabel() != "pr-7" || got[0].GetCreatedAt() != 100 || got[0].GetExpiresAt() != 200 {
 			t.Errorf("first env = %+v, want the ephemeral entry mapped through", got[0])
 		}
-		if got[1].GetIdentity() != "staging" || got[1].GetLifecycle() != deploymentsv1.Environment_LIFECYCLE_PERSISTENT {
+		if got[1].GetIdentity() != "staging" || got[1].GetLifecycle() != environmentv1.Lifecycle_LIFECYCLE_PERSISTENT {
 			t.Errorf("second env = %+v, want the persistent entry mapped through", got[1])
 		}
 	})
@@ -316,7 +317,7 @@ func TestPreflightSubstrates(t *testing.T) {
 
 	cases := []struct {
 		name        string
-		required    deploymentsv1.Environment_Class
+		required    environmentv1.Tier
 		present     map[string]bool
 		wantAsked   []string
 		wantPreview bool
@@ -324,35 +325,35 @@ func TestPreflightSubstrates(t *testing.T) {
 	}{
 		{
 			"a preview that is there asks about nothing else",
-			deploymentsv1.Environment_CLASS_PREVIEW,
+			environmentv1.Tier_TIER_PREVIEW,
 			map[string]bool{bootstrap.PreviewStackName: true, bootstrap.StackName: true},
 			[]string{bootstrap.PreviewStackName},
 			true, false,
 		},
 		{
 			"a production that is there asks about nothing else",
-			deploymentsv1.Environment_CLASS_PRODUCTION,
+			environmentv1.Tier_TIER_PRODUCTION,
 			map[string]bool{bootstrap.PreviewStackName: true, bootstrap.StackName: true},
 			[]string{bootstrap.StackName},
 			false, true,
 		},
 		{
 			"a missing preview falls back to asking about production",
-			deploymentsv1.Environment_CLASS_PREVIEW,
+			environmentv1.Tier_TIER_PREVIEW,
 			map[string]bool{bootstrap.StackName: true},
 			[]string{bootstrap.PreviewStackName, bootstrap.StackName},
 			false, true,
 		},
 		{
 			"a missing production falls back to asking about preview",
-			deploymentsv1.Environment_CLASS_PRODUCTION,
+			environmentv1.Tier_TIER_PRODUCTION,
 			map[string]bool{bootstrap.PreviewStackName: true},
 			[]string{bootstrap.StackName, bootstrap.PreviewStackName},
 			true, false,
 		},
 		{
 			"an empty account is asked about both",
-			deploymentsv1.Environment_CLASS_PREVIEW,
+			environmentv1.Tier_TIER_PREVIEW,
 			nil,
 			[]string{bootstrap.PreviewStackName, bootstrap.StackName},
 			false, false,
@@ -382,14 +383,14 @@ func TestPreflightSubstratesFallbackMessage(t *testing.T) {
 	t.Parallel()
 
 	cfn := &presenceCFN{present: map[string]bool{bootstrap.StackName: true}}
-	preview, production, err := (&Server{}).preflightSubstrates(context.Background(), cfn, "eu-west-1", deploymentsv1.Environment_CLASS_PREVIEW)
+	preview, production, err := (&Server{}).preflightSubstrates(context.Background(), cfn, "eu-west-1", environmentv1.Tier_TIER_PREVIEW)
 	if err != nil {
 		t.Fatalf("preflightSubstrates: %v", err)
 	}
 
-	got := preflightResponse(deploymentsv1.Environment_CLASS_PREVIEW, preview, production)
-	if !got.GetInfrastructurePresent() || got.GetInfraClass() != deploymentsv1.Environment_CLASS_PRODUCTION {
+	got := preflightResponse(environmentv1.Tier_TIER_PREVIEW, preview, production)
+	if !got.GetInfrastructurePresent() || got.GetInfraTier() != environmentv1.Tier_TIER_PRODUCTION {
 		t.Errorf("preflightResponse() = {class=%v present=%v}, want the production infra still reported",
-			got.GetInfraClass(), got.GetInfrastructurePresent())
+			got.GetInfraTier(), got.GetInfrastructurePresent())
 	}
 }

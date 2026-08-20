@@ -300,7 +300,7 @@ var File_resources_v1_resources_proto protoreflect.FileDescriptor
 
 const file_resources_v1_resources_proto_rawDesc = "" +
 	"\n" +
-	"\x1cresources/v1/resources.proto\x12\fresources.v1\x1a\x14links/v1/links.proto\x1a\x16resources/v1/env.proto\"P\n" +
+	"\x1cresources/v1/resources.proto\x12\fresources.v1\x1a\x14links/v1/links.proto\x1a\x1cresources/v1/variables.proto\"P\n" +
 	"\x12ResourceIdentifier\x12&\n" +
 	"\x04type\x18\x01 \x01(\x0e2\x12.links.v1.LinkTypeR\x04type\x12\x12\n" +
 	"\x04name\x18\x02 \x01(\tR\x04name\"\x11\n" +
@@ -369,7 +369,7 @@ func file_resources_v1_resources_proto_init() {
 	if File_resources_v1_resources_proto != nil {
 		return
 	}
-	file_resources_v1_env_proto_init()
+	file_resources_v1_variables_proto_init()
 	file_resources_v1_resources_proto_msgTypes[2].OneofWrappers = []any{
 		(*DeclareRequest_Postgres)(nil),
 		(*DeclareRequest_Bucket)(nil),

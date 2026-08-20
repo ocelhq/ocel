@@ -16,6 +16,7 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/naming"
 	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
+	environmentv1 "github.com/ocelhq/ocel/pkg/proto/environment/v1"
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/progress/v1"
 	"github.com/ocelhq/ocel/platform/aws/provider/bootstrap"
 	"github.com/ocelhq/ocel/platform/aws/provider/deploy"
@@ -32,8 +33,8 @@ func (s *Server) Preflight(ctx context.Context, req *deploymentsv1.PreflightRequ
 		return nil, err
 	}
 
-	previewClass := req.GetRequiredClass() == deploymentsv1.Environment_CLASS_PREVIEW
-	if previewClass {
+	previewTier := req.GetRequiredTier() == environmentv1.Tier_TIER_PREVIEW
+	if previewTier {
 		if err := deploy.PreviewLabelProblem(req.GetSlug(), req.GetDomains()); err != nil {
 			return nil, connect.NewError(connect.CodeInvalidArgument, err)
 		}
@@ -76,27 +77,27 @@ func (s *Server) Preflight(ctx context.Context, req *deploymentsv1.PreflightRequ
 
 	if awsOK {
 		cfn := cloudformation.NewFromConfig(awscfg)
-		preview, production, err := s.preflightSubstrates(ctx, cfn, opts.Region, req.GetRequiredClass())
+		preview, production, err := s.preflightSubstrates(ctx, cfn, opts.Region, req.GetRequiredTier())
 		if err != nil {
 			return nil, err
 		}
 
-		pf := preflightResponse(req.GetRequiredClass(), preview, production)
-		resp.InfraClass = pf.GetInfraClass()
+		pf := preflightResponse(req.GetRequiredTier(), preview, production)
+		resp.InfraTier = pf.GetInfraTier()
 		resp.InfrastructurePresent = pf.GetInfrastructurePresent()
 
-		wanted, _ := requiredSubstrate(req.GetRequiredClass(), preview, production)
+		wanted, _ := requiredSubstrate(req.GetRequiredTier(), preview, production)
 		if wanted.Present {
-			if err := missingFeatures(wanted, req.GetRequiredFeatures(), previewClass); err != nil {
+			if err := missingFeatures(wanted, req.GetRequiredFeatures(), previewTier); err != nil {
 				return nil, connect.NewError(connect.CodeFailedPrecondition, err)
 			}
 		}
 
-		if req.GetRequiredClass() == deploymentsv1.Environment_CLASS_PRODUCTION {
+		if req.GetRequiredTier() == environmentv1.Tier_TIER_PRODUCTION {
 			resp.KnownSlugs = knownSlugs(ctx, awscfg, production, req.GetSlug())
 		}
 
-		if previewClass && preview.Present {
+		if previewTier && preview.Present {
 			recorded, err := bootstrap.ReadPreviewDomain(ctx, ssm.NewFromConfig(awscfg), bootstrap.ClassPreview)
 			if err != nil {
 				return nil, err
@@ -185,8 +186,8 @@ func knownSlugs(ctx context.Context, awscfg aws.Config, substrate bootstrap.Depl
 	return slugs
 }
 
-func (s *Server) preflightSubstrates(ctx context.Context, cfn bootstrap.CFNDescriber, region string, required deploymentsv1.Environment_Class) (preview, production bootstrap.Deployed, err error) {
-	previewRequired := required == deploymentsv1.Environment_CLASS_PREVIEW
+func (s *Server) preflightSubstrates(ctx context.Context, cfn bootstrap.CFNDescriber, region string, required environmentv1.Tier) (preview, production bootstrap.Deployed, err error) {
+	previewRequired := required == environmentv1.Tier_TIER_PREVIEW
 
 	wanted, err := s.deployed(ctx, cfn, region, previewRequired)
 	if err != nil {
@@ -204,33 +205,33 @@ func (s *Server) preflightSubstrates(ctx context.Context, cfn bootstrap.CFNDescr
 	return other, wanted, nil
 }
 
-func preflightResponse(required deploymentsv1.Environment_Class, preview, production bootstrap.Deployed) *deploymentsv1.PreflightResponse {
+func preflightResponse(required environmentv1.Tier, preview, production bootstrap.Deployed) *deploymentsv1.PreflightResponse {
 	wanted, other := requiredSubstrate(required, preview, production)
 	switch {
 	case wanted.Present:
-		return &deploymentsv1.PreflightResponse{InfraClass: classToEnum(wanted.Class), InfrastructurePresent: true}
+		return &deploymentsv1.PreflightResponse{InfraTier: classToTier(wanted.Class), InfrastructurePresent: true}
 	case other.Present:
-		return &deploymentsv1.PreflightResponse{InfraClass: classToEnum(other.Class), InfrastructurePresent: true}
+		return &deploymentsv1.PreflightResponse{InfraTier: classToTier(other.Class), InfrastructurePresent: true}
 	default:
-		return &deploymentsv1.PreflightResponse{InfraClass: deploymentsv1.Environment_CLASS_UNSPECIFIED, InfrastructurePresent: false}
+		return &deploymentsv1.PreflightResponse{InfraTier: environmentv1.Tier_TIER_UNSPECIFIED, InfrastructurePresent: false}
 	}
 }
 
-func requiredSubstrate(required deploymentsv1.Environment_Class, preview, production bootstrap.Deployed) (wanted, other bootstrap.Deployed) {
-	if required == deploymentsv1.Environment_CLASS_PREVIEW {
+func requiredSubstrate(required environmentv1.Tier, preview, production bootstrap.Deployed) (wanted, other bootstrap.Deployed) {
+	if required == environmentv1.Tier_TIER_PREVIEW {
 		return preview, production
 	}
 	return production, preview
 }
 
-func classToEnum(class string) deploymentsv1.Environment_Class {
+func classToTier(class string) environmentv1.Tier {
 	switch class {
 	case bootstrap.ClassProduction:
-		return deploymentsv1.Environment_CLASS_PRODUCTION
+		return environmentv1.Tier_TIER_PRODUCTION
 	case bootstrap.ClassPreview:
-		return deploymentsv1.Environment_CLASS_PREVIEW
+		return environmentv1.Tier_TIER_PREVIEW
 	default:
-		return deploymentsv1.Environment_CLASS_UNSPECIFIED
+		return environmentv1.Tier_TIER_UNSPECIFIED
 	}
 }
 
@@ -261,7 +262,7 @@ func newPreviewRemovalStages(persistent bool) deploy.PreviewRemovalStages {
 
 func (s *Server) runDestroyPreview(ctx context.Context, req *deploymentsv1.RemovePreviewRequest, tracer deploy.Tracer, stageReport func(deploy.StageID) func(string), logf func(string)) error {
 	env := req.GetEnvironment()
-	persistent := env.GetLifecycle() == deploymentsv1.Environment_LIFECYCLE_PERSISTENT
+	persistent := env.GetLifecycle() == environmentv1.Lifecycle_LIFECYCLE_PERSISTENT
 
 	stages := newPreviewRemovalStages(persistent)
 	deploy.DeclareStages(tracer, false, stages.Roots()...)
@@ -285,7 +286,7 @@ func (s *Server) runDestroyPreview(ctx context.Context, req *deploymentsv1.Remov
 	return deploy.RemovePreview(ctx, stack, deps.reclamation(reportingWith(tracer, stageReport)), pointer, persistent, stages, logf)
 }
 
-func (s *Server) previewTeardownDeps(ctx context.Context, kind edge.Kind, opts providerConfig, slug string, env *deploymentsv1.Environment) (teardownContext, edge.EdgeStack, error) {
+func (s *Server) previewTeardownDeps(ctx context.Context, kind edge.Kind, opts providerConfig, slug string, env *environmentv1.Environment) (teardownContext, edge.EdgeStack, error) {
 	awscfg, err := loadAWS(ctx, opts.Region)
 	if err != nil {
 		return teardownContext{}, nil, err

@@ -32,7 +32,7 @@ func TestRunBootstrapDestroy(t *testing.T) {
 			"Left in place:",
 			"keep parameter /ocel/pulumi/passphrase — the production substrate is still bootstrapped",
 			"Type the class name (preview) to confirm:",
-			"TEARDOWN class=CLASS_PREVIEW",
+			"TEARDOWN tier=TIER_PREVIEW",
 		} {
 			if !strings.Contains(out, want) {
 				t.Errorf("stdout missing %q; got:\n%s", want, out)
@@ -79,7 +79,7 @@ func TestRunBootstrapDestroy(t *testing.T) {
 		if strings.Contains(out, "Type the class name") {
 			t.Errorf("stdout = %q, want --yes to skip the typed phrase", out)
 		}
-		if !strings.Contains(out, "TEARDOWN class=CLASS_PRODUCTION") {
+		if !strings.Contains(out, "TEARDOWN tier=TIER_PRODUCTION") {
 			t.Errorf("stdout = %q, want the production teardown", out)
 		}
 	})
