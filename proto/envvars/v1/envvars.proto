@@ -34,11 +34,25 @@ service EnvVarsService {
 message Coordinate {
   string slug = 1 [(buf.validate.field).string = {pattern: "^[a-z0-9]+(-[a-z0-9]+)*$", max_len: 63}];
 
-  string folder = 2 [(buf.validate.field).string.pattern = "^(/[^/#[:cntrl:]]+)*$"];
+  string folder = 2 [
+    (buf.validate.field).string.pattern = "^(/[^/#[:cntrl:]]+)*$",
+    (buf.validate.field).cel = {
+      id: "envvars.coordinate.folder.root"
+      message: "\"/\" is the project root, which is what an unbound app already reads; leave the folder off instead"
+      expression: "this != '/'"
+    }
+  ];
 
   string key = 3 [(buf.validate.field).string = {min_len: 1, pattern: "^[^#[:cntrl:]]*$"}];
 
-  string environment = 4 [(buf.validate.field).string.pattern = "^[^#*[:cntrl:]]*$"];
+  string environment = 4 [
+    (buf.validate.field).string.pattern = "^[^#[:cntrl:]]*$",
+    (buf.validate.field).cel = {
+      id: "envvars.environment.class_wide"
+      message: "\"*\" is reserved: it names the value that binds class-wide"
+      expression: "!this.contains('*')"
+    }
+  ];
 }
 
 message ValueMetadata {
@@ -156,9 +170,20 @@ message ListVersionsResponse {
 message SetLinkRequest {
   string slug = 1 [(buf.validate.field).string = {pattern: "^[a-z0-9]+(-[a-z0-9]+)*$", max_len: 63}];
 
-  environment.v1.Tier tier = 2 [(buf.validate.field).enum = {in: [1, 2]}];
+  environment.v1.Tier tier = 2 [(buf.validate.field).cel = {
+    id: "envvars.link.tier"
+    message: "a link is published to an ocel coordinate, never to a stage or a stack name: name the preview or the production tier"
+    expression: "this in [1, 2]"
+  }];
 
-  string environment = 3 [(buf.validate.field).string.pattern = "^[^#*[:cntrl:]]*$"];
+  string environment = 3 [
+    (buf.validate.field).string.pattern = "^[^#[:cntrl:]]*$",
+    (buf.validate.field).cel = {
+      id: "envvars.environment.class_wide"
+      message: "\"*\" is reserved: it names the value that binds class-wide"
+      expression: "!this.contains('*')"
+    }
+  ];
 
   links.v1.Link link = 4 [(buf.validate.field).required = true];
 
@@ -172,9 +197,20 @@ message SetLinkResponse {
 message RemoveLinkRequest {
   string slug = 1 [(buf.validate.field).string = {pattern: "^[a-z0-9]+(-[a-z0-9]+)*$", max_len: 63}];
 
-  environment.v1.Tier tier = 2 [(buf.validate.field).enum = {in: [1, 2]}];
+  environment.v1.Tier tier = 2 [(buf.validate.field).cel = {
+    id: "envvars.link.tier"
+    message: "a link is published to an ocel coordinate, never to a stage or a stack name: name the preview or the production tier"
+    expression: "this in [1, 2]"
+  }];
 
-  string environment = 3 [(buf.validate.field).string.pattern = "^[^#*[:cntrl:]]*$"];
+  string environment = 3 [
+    (buf.validate.field).string.pattern = "^[^#[:cntrl:]]*$",
+    (buf.validate.field).cel = {
+      id: "envvars.environment.class_wide"
+      message: "\"*\" is reserved: it names the value that binds class-wide"
+      expression: "!this.contains('*')"
+    }
+  ];
 
   string name = 4 [(buf.validate.field).string = {min_len: 1, pattern: "^[^#[:cntrl:]]*$"}];
 }
@@ -186,9 +222,20 @@ message RemoveLinkResponse {
 message ListLinksRequest {
   string slug = 1 [(buf.validate.field).string = {pattern: "^[a-z0-9]+(-[a-z0-9]+)*$", max_len: 63}];
 
-  environment.v1.Tier tier = 2 [(buf.validate.field).enum = {in: [1, 2]}];
+  environment.v1.Tier tier = 2 [(buf.validate.field).cel = {
+    id: "envvars.link.tier"
+    message: "a link is published to an ocel coordinate, never to a stage or a stack name: name the preview or the production tier"
+    expression: "this in [1, 2]"
+  }];
 
-  string environment = 3 [(buf.validate.field).string.pattern = "^[^#*[:cntrl:]]*$"];
+  string environment = 3 [
+    (buf.validate.field).string.pattern = "^[^#[:cntrl:]]*$",
+    (buf.validate.field).cel = {
+      id: "envvars.environment.class_wide"
+      message: "\"*\" is reserved: it names the value that binds class-wide"
+      expression: "!this.contains('*')"
+    }
+  ];
 }
 
 message ListLinksResponse {

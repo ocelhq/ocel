@@ -1597,13 +1597,15 @@ var File_envvars_v1_envvars_proto protoreflect.FileDescriptor
 const file_envvars_v1_envvars_proto_rawDesc = "" +
 	"\n" +
 	"\x18envvars/v1/envvars.proto\x12\n" +
-	"envvars.v1\x1a\x1bbuf/validate/validate.proto\x1a environment/v1/environment.proto\x1a\x14links/v1/links.proto\"\xe2\x01\n" +
+	"envvars.v1\x1a\x1bbuf/validate/validate.proto\x1a environment/v1/environment.proto\x1a\x14links/v1/links.proto\"\xee\x03\n" +
 	"\n" +
 	"Coordinate\x125\n" +
-	"\x04slug\x18\x01 \x01(\tB!\xbaH\x1er\x1c\x18?2\x18^[a-z0-9]+(-[a-z0-9]+)*$R\x04slug\x124\n" +
-	"\x06folder\x18\x02 \x01(\tB\x1c\xbaH\x19r\x172\x15^(/[^/#[:cntrl:]]+)*$R\x06folder\x12+\n" +
-	"\x03key\x18\x03 \x01(\tB\x19\xbaH\x16r\x14\x10\x012\x10^[^#[:cntrl:]]*$R\x03key\x12:\n" +
-	"\venvironment\x18\x04 \x01(\tB\x18\xbaH\x15r\x132\x11^[^#*[:cntrl:]]*$R\venvironment\"\xd4\x01\n" +
+	"\x04slug\x18\x01 \x01(\tB!\xbaH\x1er\x1c\x18?2\x18^[a-z0-9]+(-[a-z0-9]+)*$R\x04slug\x12\xca\x01\n" +
+	"\x06folder\x18\x02 \x01(\tB\xb1\x01\xbaH\xad\x01\xba\x01\x90\x01\n" +
+	"\x1eenvvars.coordinate.folder.root\x12a\"/\" is the project root, which is what an unbound app already reads; leave the folder off instead\x1a\vthis != '/'r\x172\x15^(/[^/#[:cntrl:]]+)*$R\x06folder\x12+\n" +
+	"\x03key\x18\x03 \x01(\tB\x19\xbaH\x16r\x14\x10\x012\x10^[^#[:cntrl:]]*$R\x03key\x12\xae\x01\n" +
+	"\venvironment\x18\x04 \x01(\tB\x8b\x01\xbaH\x87\x01\xba\x01p\n" +
+	"\x1eenvvars.environment.class_wide\x129\"*\" is reserved: it names the value that binds class-wide\x1a\x13!this.contains('*')r\x122\x10^[^#[:cntrl:]]*$R\venvironment\"\xd4\x01\n" +
 	"\rValueMetadata\x126\n" +
 	"\n" +
 	"coordinate\x18\x01 \x01(\v2\x16.envvars.v1.CoordinateR\n" +
@@ -1685,29 +1687,32 @@ const file_envvars_v1_envvars_proto_rawDesc = "" +
 	"coordinate\x18\x02 \x01(\v2\x16.envvars.v1.CoordinateB\x06\xbaH\x03\xc8\x01\x01R\n" +
 	"coordinate\"L\n" +
 	"\x14ListVersionsResponse\x124\n" +
-	"\bversions\x18\x01 \x03(\v2\x18.envvars.v1.VersionEntryR\bversions\"\xfb\x01\n" +
+	"\bversions\x18\x01 \x03(\v2\x18.envvars.v1.VersionEntryR\bversions\"\x89\x04\n" +
 	"\x0eSetLinkRequest\x125\n" +
-	"\x04slug\x18\x01 \x01(\tB!\xbaH\x1er\x1c\x18?2\x18^[a-z0-9]+(-[a-z0-9]+)*$R\x04slug\x124\n" +
-	"\x04tier\x18\x02 \x01(\x0e2\x14.environment.v1.TierB\n" +
-	"\xbaH\a\x82\x01\x04\x18\x01\x18\x02R\x04tier\x12:\n" +
-	"\venvironment\x18\x03 \x01(\tB\x18\xbaH\x15r\x132\x11^[^#*[:cntrl:]]*$R\venvironment\x12*\n" +
+	"\x04slug\x18\x01 \x01(\tB!\xbaH\x1er\x1c\x18?2\x18^[a-z0-9]+(-[a-z0-9]+)*$R\x04slug\x12\xcc\x01\n" +
+	"\x04tier\x18\x02 \x01(\x0e2\x14.environment.v1.TierB\xa1\x01\xbaH\x9d\x01\xba\x01\x99\x01\n" +
+	"\x11envvars.link.tier\x12ta link is published to an ocel coordinate, never to a stage or a stack name: name the preview or the production tier\x1a\x0ethis in [1, 2]R\x04tier\x12\xae\x01\n" +
+	"\venvironment\x18\x03 \x01(\tB\x8b\x01\xbaH\x87\x01\xba\x01p\n" +
+	"\x1eenvvars.environment.class_wide\x129\"*\" is reserved: it names the value that binds class-wide\x1a\x13!this.contains('*')r\x122\x10^[^#[:cntrl:]]*$R\venvironment\x12*\n" +
 	"\x04link\x18\x04 \x01(\v2\x0e.links.v1.LinkB\x06\xbaH\x03\xc8\x01\x01R\x04link\x12\x14\n" +
 	"\x05owner\x18\x05 \x01(\tR\x05owner\"+\n" +
 	"\x0fSetLinkResponse\x12\x18\n" +
-	"\aversion\x18\x01 \x01(\x04R\aversion\"\xeb\x01\n" +
+	"\aversion\x18\x01 \x01(\x04R\aversion\"\xf9\x03\n" +
 	"\x11RemoveLinkRequest\x125\n" +
-	"\x04slug\x18\x01 \x01(\tB!\xbaH\x1er\x1c\x18?2\x18^[a-z0-9]+(-[a-z0-9]+)*$R\x04slug\x124\n" +
-	"\x04tier\x18\x02 \x01(\x0e2\x14.environment.v1.TierB\n" +
-	"\xbaH\a\x82\x01\x04\x18\x01\x18\x02R\x04tier\x12:\n" +
-	"\venvironment\x18\x03 \x01(\tB\x18\xbaH\x15r\x132\x11^[^#*[:cntrl:]]*$R\venvironment\x12-\n" +
+	"\x04slug\x18\x01 \x01(\tB!\xbaH\x1er\x1c\x18?2\x18^[a-z0-9]+(-[a-z0-9]+)*$R\x04slug\x12\xcc\x01\n" +
+	"\x04tier\x18\x02 \x01(\x0e2\x14.environment.v1.TierB\xa1\x01\xbaH\x9d\x01\xba\x01\x99\x01\n" +
+	"\x11envvars.link.tier\x12ta link is published to an ocel coordinate, never to a stage or a stack name: name the preview or the production tier\x1a\x0ethis in [1, 2]R\x04tier\x12\xae\x01\n" +
+	"\venvironment\x18\x03 \x01(\tB\x8b\x01\xbaH\x87\x01\xba\x01p\n" +
+	"\x1eenvvars.environment.class_wide\x129\"*\" is reserved: it names the value that binds class-wide\x1a\x13!this.contains('*')r\x122\x10^[^#[:cntrl:]]*$R\venvironment\x12-\n" +
 	"\x04name\x18\x04 \x01(\tB\x19\xbaH\x16r\x14\x10\x012\x10^[^#[:cntrl:]]*$R\x04name\".\n" +
 	"\x12RemoveLinkResponse\x12\x18\n" +
-	"\aremoved\x18\x01 \x01(\bR\aremoved\"\xbb\x01\n" +
+	"\aremoved\x18\x01 \x01(\bR\aremoved\"\xc9\x03\n" +
 	"\x10ListLinksRequest\x125\n" +
-	"\x04slug\x18\x01 \x01(\tB!\xbaH\x1er\x1c\x18?2\x18^[a-z0-9]+(-[a-z0-9]+)*$R\x04slug\x124\n" +
-	"\x04tier\x18\x02 \x01(\x0e2\x14.environment.v1.TierB\n" +
-	"\xbaH\a\x82\x01\x04\x18\x01\x18\x02R\x04tier\x12:\n" +
-	"\venvironment\x18\x03 \x01(\tB\x18\xbaH\x15r\x132\x11^[^#*[:cntrl:]]*$R\venvironment\"B\n" +
+	"\x04slug\x18\x01 \x01(\tB!\xbaH\x1er\x1c\x18?2\x18^[a-z0-9]+(-[a-z0-9]+)*$R\x04slug\x12\xcc\x01\n" +
+	"\x04tier\x18\x02 \x01(\x0e2\x14.environment.v1.TierB\xa1\x01\xbaH\x9d\x01\xba\x01\x99\x01\n" +
+	"\x11envvars.link.tier\x12ta link is published to an ocel coordinate, never to a stage or a stack name: name the preview or the production tier\x1a\x0ethis in [1, 2]R\x04tier\x12\xae\x01\n" +
+	"\venvironment\x18\x03 \x01(\tB\x8b\x01\xbaH\x87\x01\xba\x01p\n" +
+	"\x1eenvvars.environment.class_wide\x129\"*\" is reserved: it names the value that binds class-wide\x1a\x13!this.contains('*')r\x122\x10^[^#[:cntrl:]]*$R\venvironment\"B\n" +
 	"\x11ListLinksResponse\x12-\n" +
 	"\x05links\x18\x01 \x03(\v2\x17.envvars.v1.LinkSummaryR\x05links\"\xcc\x01\n" +
 	"\vLinkSummary\x12\x12\n" +

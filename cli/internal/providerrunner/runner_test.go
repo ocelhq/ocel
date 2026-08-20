@@ -190,7 +190,7 @@ func TestDeploy(t *testing.T) {
 			time.Sleep(5 * time.Millisecond)
 		}
 		if !gotFirstEvent.Load() {
-			t.Fatal("never received the first DeployEvent before the kill deadline")
+			t.Fatal("never received the first OperationEvent before the kill deadline")
 		}
 		if err := r.cmd.Process.Kill(); err != nil {
 			t.Fatalf("kill provider process: %v", err)

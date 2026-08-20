@@ -20,4 +20,5 @@ breaking:
     - proto/dev
     - proto/environment
     - proto/envvars
+    - proto/progress
     - proto/resources

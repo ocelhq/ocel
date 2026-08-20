@@ -14,13 +14,17 @@ go 1.25.11
 
 require (
 	connectrpc.com/connect v1.20.0
+	connectrpc.com/validate v0.6.0
 	github.com/aws/aws-sdk-go-v2 v1.43.6
 	github.com/aws/aws-sdk-go-v2/config v1.32.29
 	github.com/aws/aws-sdk-go-v2/credentials v1.19.28
 	github.com/aws/aws-sdk-go-v2/feature/dynamodb/attributevalue v1.20.51
 	github.com/aws/aws-sdk-go-v2/service/acm v1.42.1
 	github.com/aws/aws-sdk-go-v2/service/apigateway v1.41.0
+	github.com/aws/aws-sdk-go-v2/service/apigatewayv2 v1.37.6
 	github.com/aws/aws-sdk-go-v2/service/cloudformation v1.74.0
+	github.com/aws/aws-sdk-go-v2/service/cloudfront v1.67.6
+	github.com/aws/aws-sdk-go-v2/service/cloudfrontkeyvaluestore v1.15.6
 	github.com/aws/aws-sdk-go-v2/service/dynamodb v1.60.0
 	github.com/aws/aws-sdk-go-v2/service/iam v1.55.1
 	github.com/aws/aws-sdk-go-v2/service/kms v1.30.1
@@ -46,11 +50,7 @@ require (
 	buf.build/gen/go/bufbuild/protovalidate/protocolbuffers/go v1.36.12-20260709200747-435963d16310.1 // indirect
 	buf.build/go/protovalidate v1.0.0 // indirect
 	cel.dev/expr v0.25.1 // indirect
-	connectrpc.com/validate v0.6.0 // indirect
 	github.com/antlr4-go/antlr/v4 v4.13.1 // indirect
-	github.com/aws/aws-sdk-go-v2/service/apigatewayv2 v1.37.6 // indirect
-	github.com/aws/aws-sdk-go-v2/service/cloudfront v1.67.6 // indirect
-	github.com/aws/aws-sdk-go-v2/service/cloudfrontkeyvaluestore v1.15.6 // indirect
 	github.com/cloudflare/cloudflare-go/v4 v4.6.0 // indirect
 	github.com/google/cel-go v0.26.1 // indirect
 	github.com/jmespath/go-jmespath v0.4.0 // indirect

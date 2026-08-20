@@ -284,7 +284,7 @@ func printPlanItems(out io.Writer, items []*deploymentsv1.RemovalItem) []*deploy
 			kept = append(kept, item)
 			continue
 		}
-		fmt.Fprintf(out, "  • %s\n", teardownItemLine(item))
+		fmt.Fprintf(out, "  • %s\n", removalItemLine(item))
 	}
 	return kept
 }
@@ -295,12 +295,12 @@ func printKeptItems(out io.Writer, kept []*deploymentsv1.RemovalItem) {
 	}
 	fmt.Fprintln(out, "Left in place:")
 	for _, item := range kept {
-		fmt.Fprintf(out, "  • %s\n", teardownItemLine(item))
+		fmt.Fprintf(out, "  • %s\n", removalItemLine(item))
 	}
 }
 
-func teardownItemLine(item *deploymentsv1.RemovalItem) string {
-	line := fmt.Sprintf("%s %s %s", teardownItemAction(item.GetAction()), item.GetKind(), item.GetName())
+func removalItemLine(item *deploymentsv1.RemovalItem) string {
+	line := fmt.Sprintf("%s %s %s", removalItemAction(item.GetAction()), item.GetKind(), item.GetName())
 	if reason := item.GetReason(); reason != "" {
 		line += " — " + reason
 	}
@@ -310,7 +310,7 @@ func teardownItemLine(item *deploymentsv1.RemovalItem) string {
 	return line
 }
 
-func teardownItemAction(action deploymentsv1.RemovalItem_Action) string {
+func removalItemAction(action deploymentsv1.RemovalItem_Action) string {
 	switch action {
 	case deploymentsv1.RemovalItem_ACTION_DELETE:
 		return "delete"

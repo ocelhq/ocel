@@ -18,7 +18,7 @@ enum VariableClass {
 }
 
 message VariableDefinition {
-  string key = 1;
+  string key = 1 [(buf.validate.field).string = {min_len: 1, pattern: "^[^#[:cntrl:]]*$"}];
   VariableClass class = 2 [(buf.validate.field).enum.defined_only = true];
 
   bool client_accessible = 3;
@@ -38,7 +38,7 @@ message DeclareEnvRequest {
 }
 
 message VariableCell {
-  string key = 1;
+  string key = 1 [(buf.validate.field).string = {min_len: 1, pattern: "^[^#[:cntrl:]]*$"}];
 
   string folder = 2 [(buf.validate.field).string.pattern = "^(/[^/#[:cntrl:]]+)*$"];
 

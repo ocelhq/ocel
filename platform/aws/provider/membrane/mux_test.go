@@ -69,6 +69,7 @@ func TestPresignUploadKeys(t *testing.T) {
 		"a/./b",
 		"a//b",
 		`a\b`,
+		"a\nb",
 		".",
 		"..",
 		"",
@@ -100,6 +101,9 @@ func TestPresignUploadKeys(t *testing.T) {
 		"u/42/photo.jpg",
 		"readme-ab12cd34",
 		"x/c-.png",
+		"my photo.jpg",
+		"uploads/Ünïcødé résumé.pdf",
+		"写真/猫.jpg",
 	}
 	for _, key := range legitimate {
 		t.Run("a key inside the prefix is signed: "+key, func(t *testing.T) {

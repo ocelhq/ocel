@@ -238,12 +238,12 @@ func runPreviewUp(ctx context.Context, d deps, cwd string, opts previewUpOptions
 	return nil
 }
 
-func requirePreviewDomain(cfg *projectconfig.Config, global *deploymentsv1.PreviewWildcard, id *deploymentsv1.Identity, pointer string, out io.Writer) error {
+func requirePreviewDomain(cfg *projectconfig.Config, wildcard *deploymentsv1.PreviewWildcard, id *deploymentsv1.Identity, pointer string, out io.Writer) error {
 	declared := ""
 	if hosts := declaredHostnames(cfg, "preview"); len(hosts) > 0 {
 		declared = hosts[0]
 	}
-	base := global.GetBaseDomain()
+	base := wildcard.GetBaseDomain()
 	configName := filepath.Base(cfg.Path)
 
 	switch {
@@ -255,7 +255,7 @@ func requirePreviewDomain(cfg *projectconfig.Config, global *deploymentsv1.Previ
 			configName)
 
 	case declared == "":
-		if err := checkGlobalPreviewDomain(global, id, configName); err != nil {
+		if err := checkGlobalPreviewDomain(wildcard, id, configName); err != nil {
 			return err
 		}
 		fmt.Fprintf(out, "Serving previews on the global preview domain *.%s — this project declares no domains.preview of its own\n", base)
@@ -286,23 +286,23 @@ func intendedPreviewHostnames(cfg *projectconfig.Config, slug, pointer, base str
 	return hosts
 }
 
-func checkGlobalPreviewDomain(global *deploymentsv1.PreviewWildcard, id *deploymentsv1.Identity, configName string) error {
-	base := global.GetBaseDomain()
-	if want, have := global.GetEdgeScope(), id.GetEdgeScope(); want != "" && have != "" && want != have {
+func checkGlobalPreviewDomain(wildcard *deploymentsv1.PreviewWildcard, id *deploymentsv1.Identity, configName string) error {
+	base := wildcard.GetBaseDomain()
+	if want, have := wildcard.GetEdgeScope(), id.GetEdgeScope(); want != "" && have != "" && want != have {
 		return fmt.Errorf("the global preview domain *.%s lives in edge account %s, but this deploy is authenticated to account %s: "+
 			"the wildcard can only be served from the account that holds it — "+
 			"re-scope this run's edge credentials to %s, or declare this project's own domains.preview in %s",
 			base, want, have, want, configName)
 	}
-	if !global.GetRouteInstalled() {
+	if !wildcard.GetRouteInstalled() {
 		return fmt.Errorf("the global preview domain *.%s is recorded, but its wildcard route is not installed, so nothing would answer a preview hostname: "+
 			"run `ocel domain use '*.%s' --preview` to reinstall the shared entry worker and reclaim the wildcard",
 			base, base)
 	}
-	if g := edge.PreviewGrammarMax; g < global.GetGrammarMin() || g > global.GetGrammarMax() {
+	if g := edge.PreviewGrammarMax; g < wildcard.GetGrammarMin() || g > wildcard.GetGrammarMax() {
 		return fmt.Errorf("this CLI names preview hostnames with grammar %d, but the shared entry worker on *.%s speaks %d–%d, so it would not route what this deploy creates: "+
 			"run `ocel domain use '*.%s' --preview` to upgrade the worker, or upgrade the CLI if it is the older half",
-			g, base, global.GetGrammarMin(), global.GetGrammarMax(), base)
+			g, base, wildcard.GetGrammarMin(), wildcard.GetGrammarMax(), base)
 	}
 	return nil
 }
