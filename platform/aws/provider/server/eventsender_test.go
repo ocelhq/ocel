@@ -7,15 +7,15 @@ import (
 	"testing"
 	"time"
 
-	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
+	progressv1 "github.com/ocelhq/ocel/pkg/proto/progress/v1"
 	"github.com/ocelhq/ocel/platform/aws/provider/deploy"
 )
 
 type recordingStream struct {
-	events []*deploymentsv1.DeployEvent
+	events []*progressv1.OperationEvent
 }
 
-func (r *recordingStream) send(ev *deploymentsv1.DeployEvent) error {
+func (r *recordingStream) send(ev *progressv1.OperationEvent) error {
 	r.events = append(r.events, ev)
 	return nil
 }
@@ -37,7 +37,7 @@ func TestDeployReporterSerializesConcurrentSends(t *testing.T) {
 		wg.Add(1)
 		go func(i int) {
 			defer wg.Done()
-			progress(deploymentsv1.Phase_PHASE_UPLOADING, "uploading function artifacts", uint32(i), concurrentUploaders)
+			progress(progressv1.Phase_PHASE_UPLOADING, "uploading function artifacts", uint32(i), concurrentUploaders)
 		}(i)
 	}
 	for i := 0; i < concurrentAppStacks; i++ {
@@ -80,7 +80,7 @@ func TestDeployReporterParallelMultiAppDeploy(t *testing.T) {
 				uploads.Add(1)
 				go func(f int) {
 					defer uploads.Done()
-					progress(deploymentsv1.Phase_PHASE_UPLOADING, "uploading function artifacts", uint32(f), functionsPerApp)
+					progress(progressv1.Phase_PHASE_UPLOADING, "uploading function artifacts", uint32(f), functionsPerApp)
 				}(f)
 			}
 			uploads.Wait()
@@ -109,17 +109,17 @@ func TestNewDeployReporterTagsEveryPhaseWithItsDeclaredStage(t *testing.T) {
 	stages := newDeployStages()
 	progress, stageReport, _, _ := newDeployReporter(sender, stages)
 
-	wantStage := map[deploymentsv1.Phase]deploy.StageID{
-		deploymentsv1.Phase_PHASE_UNSPECIFIED:  stages.preparing.ID,
-		deploymentsv1.Phase_PHASE_UPLOADING:    stages.uploading.ID,
-		deploymentsv1.Phase_PHASE_PROVISIONING: stages.provisioning.ID,
-		deploymentsv1.Phase_PHASE_FINALIZING:   stages.finalizing.ID,
+	wantStage := map[progressv1.Phase]deploy.StageID{
+		progressv1.Phase_PHASE_UNSPECIFIED:  stages.preparing.ID,
+		progressv1.Phase_PHASE_UPLOADING:    stages.uploading.ID,
+		progressv1.Phase_PHASE_PROVISIONING: stages.provisioning.ID,
+		progressv1.Phase_PHASE_FINALIZING:   stages.finalizing.ID,
 	}
-	phases := []deploymentsv1.Phase{
-		deploymentsv1.Phase_PHASE_UNSPECIFIED,
-		deploymentsv1.Phase_PHASE_UPLOADING,
-		deploymentsv1.Phase_PHASE_PROVISIONING,
-		deploymentsv1.Phase_PHASE_FINALIZING,
+	phases := []progressv1.Phase{
+		progressv1.Phase_PHASE_UNSPECIFIED,
+		progressv1.Phase_PHASE_UPLOADING,
+		progressv1.Phase_PHASE_PROVISIONING,
+		progressv1.Phase_PHASE_FINALIZING,
 	}
 	for _, phase := range phases {
 		progress(phase, "message", 0, 0)
@@ -162,7 +162,7 @@ func TestEventSenderPropagatesSendError(t *testing.T) {
 
 	wantErr := errors.New("boom")
 	var calls int
-	sender := newEventSender(context.Background(), func(*deploymentsv1.DeployEvent) error {
+	sender := newEventSender(context.Background(), func(*progressv1.OperationEvent) error {
 		calls++
 		if calls == 2 {
 			return wantErr
@@ -244,7 +244,7 @@ func TestEventSenderSendUnblocksOnContextCancellation(t *testing.T) {
 	blockDrain := make(chan struct{})
 	ctx, cancel := context.WithCancel(context.Background())
 
-	sender := newEventSender(ctx, func(*deploymentsv1.DeployEvent) error {
+	sender := newEventSender(ctx, func(*progressv1.OperationEvent) error {
 		<-blockDrain
 		return nil
 	})

@@ -6,16 +6,16 @@ import (
 	"strings"
 	"testing"
 
-	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
+	progressv1 "github.com/ocelhq/ocel/pkg/proto/progress/v1"
 )
 
-var validation = &deploymentsv1.DnsRecord{
+var validation = &progressv1.DnsRecord{
 	Name:  "_b833967e837b1a20c09460dc97096c55.prev.ocel.site",
 	Type:  "CNAME",
 	Value: "_5e03e7236ee0371f573dc3210d17afd9.jkddzztszm.acm-validations.aws",
 }
 
-var wildcard = &deploymentsv1.DnsRecord{
+var wildcard = &progressv1.DnsRecord{
 	Name:  "*.prev.ocel.site",
 	Type:  "CNAME",
 	Value: "d1234.cloudfront.net",
@@ -27,7 +27,7 @@ func TestDNSRows(t *testing.T) {
 	t.Run("columns line up under their headers", func(t *testing.T) {
 		t.Parallel()
 
-		head, rows := dnsRows([]*deploymentsv1.DnsRecord{wildcard, validation}, 200)
+		head, rows := dnsRows([]*progressv1.DnsRecord{wildcard, validation}, 200)
 		if head == "" {
 			t.Fatal("head = empty, want a header row at a width both records fit in")
 		}
@@ -49,7 +49,7 @@ func TestDNSRows(t *testing.T) {
 	t.Run("a record too wide for the terminal gets no table", func(t *testing.T) {
 		t.Parallel()
 
-		if head, rows := dnsRows([]*deploymentsv1.DnsRecord{validation}, 80); head != "" || rows != nil {
+		if head, rows := dnsRows([]*progressv1.DnsRecord{validation}, 80); head != "" || rows != nil {
 			t.Errorf("head = %q rows = %v, want no table: the row does not fit 80 columns", head, rows)
 		}
 	})
@@ -57,8 +57,8 @@ func TestDNSRows(t *testing.T) {
 	t.Run("proxied records carry a column of their own", func(t *testing.T) {
 		t.Parallel()
 
-		proxied := &deploymentsv1.DnsRecord{Name: "shop.app.com", Type: "AAAA", Value: "100::", Proxied: true}
-		head, rows := dnsRows([]*deploymentsv1.DnsRecord{proxied}, 200)
+		proxied := &progressv1.DnsRecord{Name: "shop.app.com", Type: "AAAA", Value: "100::", Proxied: true}
+		head, rows := dnsRows([]*progressv1.DnsRecord{proxied}, 200)
 		if !strings.Contains(head, "PROXY") {
 			t.Errorf("head = %q, want the proxy column named", head)
 		}
@@ -71,7 +71,7 @@ func TestDNSRows(t *testing.T) {
 func TestDNSStack(t *testing.T) {
 	t.Parallel()
 
-	lines := dnsStack([]*deploymentsv1.DnsRecord{wildcard, validation})
+	lines := dnsStack([]*progressv1.DnsRecord{wildcard, validation})
 	if len(lines) != 7 {
 		t.Fatalf("lines = %d (%v), want three per record and a blank between them", len(lines), lines)
 	}
@@ -97,7 +97,7 @@ func TestRendererDNSOwed(t *testing.T) {
 		r := newRendererForTest(&out, FormatHuman, false, false)
 		t.Cleanup(func() { _ = r.Close() })
 
-		r.DNSOwed("Prove you own prev.ocel.site", []*deploymentsv1.DnsRecord{validation}, []string{"Leave it in place."})
+		r.DNSOwed("Prove you own prev.ocel.site", []*progressv1.DnsRecord{validation}, []string{"Leave it in place."})
 
 		got := out.String()
 		for _, want := range []string{
@@ -120,7 +120,7 @@ func TestRendererDNSOwed(t *testing.T) {
 		r := newRendererForTest(&out, FormatHuman, false, false)
 		t.Cleanup(func() { _ = r.Close() })
 
-		r.DNSOwed("Point *.prev.ocel.site at the edge", []*deploymentsv1.DnsRecord{validation, wildcard}, nil)
+		r.DNSOwed("Point *.prev.ocel.site at the edge", []*progressv1.DnsRecord{validation, wildcard}, nil)
 
 		if got := out.String(); !strings.Contains(got, "add these 2 records") {
 			t.Errorf("output = %q, want the count named", got)
@@ -133,8 +133,8 @@ func TestRendererDNSOwed(t *testing.T) {
 		r := newRendererForTest(&out, FormatHuman, false, false)
 		t.Cleanup(func() { _ = r.Close() })
 
-		proxied := &deploymentsv1.DnsRecord{Name: "shop.app.com", Type: "AAAA", Value: "100::", Proxied: true}
-		r.DNSOwed("Point shop.app.com at the edge", []*deploymentsv1.DnsRecord{proxied}, nil)
+		proxied := &progressv1.DnsRecord{Name: "shop.app.com", Type: "AAAA", Value: "100::", Proxied: true}
+		r.DNSOwed("Point shop.app.com at the edge", []*progressv1.DnsRecord{proxied}, nil)
 
 		if got := out.String(); !strings.Contains(got, "orange cloud") {
 			t.Errorf("output = %q, want the proxy toggle spelled out", got)
@@ -160,7 +160,7 @@ func TestRendererDNSOwed(t *testing.T) {
 		r := newRendererForTest(&out, FormatJSON, false, false)
 		t.Cleanup(func() { _ = r.Close() })
 
-		r.DNSOwed("Prove you own prev.ocel.site", []*deploymentsv1.DnsRecord{validation}, nil)
+		r.DNSOwed("Prove you own prev.ocel.site", []*progressv1.DnsRecord{validation}, nil)
 
 		var event struct {
 			Kind     string `json:"type"`

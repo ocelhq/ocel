@@ -7,6 +7,7 @@ import (
 	"time"
 
 	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
+	progressv1 "github.com/ocelhq/ocel/pkg/proto/progress/v1"
 	"github.com/ocelhq/ocel/platform/aws/provider/deploy"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
@@ -86,7 +87,7 @@ func TestRunDeployDeclaresTheStagePlanBeforeAnyWork(t *testing.T) {
 	}
 }
 
-func noopProgress(deploymentsv1.Phase, string, uint32, uint32) {}
-func noopLog(string)                                           {}
-func noopStageReport(deploy.StageID) func(string)              { return func(string) {} }
-func noopDegraded(edge.Need, string)                           {}
+func noopProgress(progressv1.Phase, string, uint32, uint32) {}
+func noopLog(string)                                        {}
+func noopStageReport(deploy.StageID) func(string)           { return func(string) {} }
+func noopDegraded(edge.Need, string)                        {}

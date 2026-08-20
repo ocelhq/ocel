@@ -4,7 +4,7 @@ import (
 	"testing"
 	"time"
 
-	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
+	progressv1 "github.com/ocelhq/ocel/pkg/proto/progress/v1"
 )
 
 func activate(p *stagePlan, ids ...[]byte) {
@@ -28,7 +28,7 @@ func TestCyclicDeclarationsStayVisible(t *testing.T) {
 
 	selfy, left, right := appStage(1), appStage(2), appStage(3)
 	p := newStagePlan()
-	p.apply(&deploymentsv1.StagePlanEvent{Stages: []*deploymentsv1.Stage{
+	p.apply(&progressv1.StagePlanEvent{Stages: []*progressv1.Stage{
 		{Id: selfy, ParentId: selfy, Title: "selfy"},
 		{Id: left, ParentId: right, Title: "left"},
 		{Id: right, ParentId: left, Title: "right"},
@@ -96,7 +96,7 @@ func TestSubtreeOrderFollowsDeclaration(t *testing.T) {
 	parent := appStage(1)
 	first, second, third := appStage(2), appStage(3), appStage(4)
 	p := newStagePlan()
-	p.apply(&deploymentsv1.StagePlanEvent{Stages: []*deploymentsv1.Stage{
+	p.apply(&progressv1.StagePlanEvent{Stages: []*progressv1.Stage{
 		{Id: parent, Title: "parent"},
 		{Id: first, ParentId: parent, Title: "first"},
 		{Id: second, ParentId: parent, Title: "second"},

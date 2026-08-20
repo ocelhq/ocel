@@ -12,6 +12,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/channel"
 	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
 	"github.com/ocelhq/ocel/pkg/proto/deployments/v1/deploymentsv1connect"
+	progressv1 "github.com/ocelhq/ocel/pkg/proto/progress/v1"
 	cloudflare "github.com/ocelhq/ocel/platform/edge/cloudflare/deploy"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
@@ -56,8 +57,8 @@ func newTestClientFor(t *testing.T, deployments *Server, token string) deploymen
 	return deploymentsv1connect.NewProviderServiceClient(srv.Client(), srv.URL, opts...)
 }
 
-func drainStream(stream *connect.ServerStreamForClient[deploymentsv1.DeployEvent]) ([]*deploymentsv1.DeployEvent, error) {
-	var events []*deploymentsv1.DeployEvent
+func drainStream(stream *connect.ServerStreamForClient[progressv1.OperationEvent]) ([]*progressv1.OperationEvent, error) {
+	var events []*progressv1.OperationEvent
 	for stream.Receive() {
 		events = append(events, stream.Msg())
 	}

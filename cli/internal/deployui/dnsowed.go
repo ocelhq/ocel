@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"strings"
 
-	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
+	progressv1 "github.com/ocelhq/ocel/pkg/proto/progress/v1"
 )
 
 const (
@@ -16,17 +16,17 @@ const (
 
 type dnsColumn struct {
 	head string
-	cell func(*deploymentsv1.DnsRecord) string
+	cell func(*progressv1.DnsRecord) string
 }
 
-func dnsColumns(records []*deploymentsv1.DnsRecord) []dnsColumn {
+func dnsColumns(records []*progressv1.DnsRecord) []dnsColumn {
 	cols := []dnsColumn{
-		{"TYPE", func(r *deploymentsv1.DnsRecord) string { return r.GetType() }},
-		{"NAME", func(r *deploymentsv1.DnsRecord) string { return r.GetName() }},
-		{"VALUE", func(r *deploymentsv1.DnsRecord) string { return r.GetValue() }},
+		{"TYPE", func(r *progressv1.DnsRecord) string { return r.GetType() }},
+		{"NAME", func(r *progressv1.DnsRecord) string { return r.GetName() }},
+		{"VALUE", func(r *progressv1.DnsRecord) string { return r.GetValue() }},
 	}
 	if anyProxied(records) {
-		cols = append(cols, dnsColumn{"PROXY", func(r *deploymentsv1.DnsRecord) string {
+		cols = append(cols, dnsColumn{"PROXY", func(r *progressv1.DnsRecord) string {
 			if r.GetProxied() {
 				return proxiedOn
 			}
@@ -36,7 +36,7 @@ func dnsColumns(records []*deploymentsv1.DnsRecord) []dnsColumn {
 	return cols
 }
 
-func anyProxied(records []*deploymentsv1.DnsRecord) bool {
+func anyProxied(records []*progressv1.DnsRecord) bool {
 	for _, rec := range records {
 		if rec.GetProxied() {
 			return true
@@ -45,14 +45,14 @@ func anyProxied(records []*deploymentsv1.DnsRecord) bool {
 	return false
 }
 
-func dnsHeadline(headline string, records []*deploymentsv1.DnsRecord) string {
+func dnsHeadline(headline string, records []*progressv1.DnsRecord) string {
 	if len(records) == 1 {
 		return fmt.Sprintf("%s — add this record at your DNS provider", headline)
 	}
 	return fmt.Sprintf("%s — add these %d records at your DNS provider", headline, len(records))
 }
 
-func dnsRows(records []*deploymentsv1.DnsRecord, width int) (string, []string) {
+func dnsRows(records []*progressv1.DnsRecord, width int) (string, []string) {
 	cols := dnsColumns(records)
 	widths := make([]int, len(cols))
 	for i, col := range cols {
@@ -95,7 +95,7 @@ func dnsLine(cells []string, widths []int) string {
 	return b.String()
 }
 
-func dnsStack(records []*deploymentsv1.DnsRecord) []string {
+func dnsStack(records []*progressv1.DnsRecord) []string {
 	cols := dnsColumns(records)
 	var lines []string
 	for i, rec := range records {
@@ -109,7 +109,7 @@ func dnsStack(records []*deploymentsv1.DnsRecord) []string {
 	return lines
 }
 
-func dnsNotes(records []*deploymentsv1.DnsRecord, notes []string) []string {
+func dnsNotes(records []*progressv1.DnsRecord, notes []string) []string {
 	if !anyProxied(records) {
 		return notes
 	}

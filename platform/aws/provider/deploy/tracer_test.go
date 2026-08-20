@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
+	progressv1 "github.com/ocelhq/ocel/pkg/proto/progress/v1"
 )
 
 type spanCall struct {
@@ -194,19 +194,19 @@ func TestSanitizeMessageStripsControlCharactersWithoutTruncatingOrFallingBack(t 
 func TestAttrHelpersUseTheBoundedAttributeKeys(t *testing.T) {
 	t.Parallel()
 
-	if got := AttrApp("web"); got.Key != deploymentsv1.AttributeKey_ATTRIBUTE_KEY_APP || got.Value != "web" {
+	if got := AttrApp("web"); got.Key != progressv1.AttributeKey_ATTRIBUTE_KEY_APP || got.Value != "web" {
 		t.Errorf("AttrApp() = %+v", got)
 	}
-	if got := AttrResourceCount(3); got.Key != deploymentsv1.AttributeKey_ATTRIBUTE_KEY_RESOURCE_COUNT || got.Value != "3" {
+	if got := AttrResourceCount(3); got.Key != progressv1.AttributeKey_ATTRIBUTE_KEY_RESOURCE_COUNT || got.Value != "3" {
 		t.Errorf("AttrResourceCount() = %+v", got)
 	}
-	if got := AttrDurationMS(1500 * time.Millisecond); got.Key != deploymentsv1.AttributeKey_ATTRIBUTE_KEY_DURATION_MS || got.Value != "1500" {
+	if got := AttrDurationMS(1500 * time.Millisecond); got.Key != progressv1.AttributeKey_ATTRIBUTE_KEY_DURATION_MS || got.Value != "1500" {
 		t.Errorf("AttrDurationMS() = %+v", got)
 	}
-	if got := AttrResourceType("aws:s3/bucket:Bucket"); got.Key != deploymentsv1.AttributeKey_ATTRIBUTE_KEY_RESOURCE_TYPE || got.Value != "aws:s3/bucket:Bucket" {
+	if got := AttrResourceType("aws:s3/bucket:Bucket"); got.Key != progressv1.AttributeKey_ATTRIBUTE_KEY_RESOURCE_TYPE || got.Value != "aws:s3/bucket:Bucket" {
 		t.Errorf("AttrResourceType() = %+v", got)
 	}
-	if got := AttrResourceName("my-bucket"); got.Key != deploymentsv1.AttributeKey_ATTRIBUTE_KEY_RESOURCE_NAME || got.Value != "my-bucket" {
+	if got := AttrResourceName("my-bucket"); got.Key != progressv1.AttributeKey_ATTRIBUTE_KEY_RESOURCE_NAME || got.Value != "my-bucket" {
 		t.Errorf("AttrResourceName() = %+v", got)
 	}
 }

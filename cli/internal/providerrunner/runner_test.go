@@ -15,6 +15,7 @@ import (
 
 	"github.com/ocelhq/ocel/cli/internal/procgroup"
 	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
+	progressv1 "github.com/ocelhq/ocel/pkg/proto/progress/v1"
 )
 
 func spawnFake(t *testing.T, ctx context.Context, mode string, cfg Config) (*Runner, string) {
@@ -142,10 +143,10 @@ func TestDeploy(t *testing.T) {
 			t.Fatalf("Ready() error = %v, want nil", err)
 		}
 
-		var events []*deploymentsv1.DeployEvent
+		var events []*progressv1.OperationEvent
 		err := r.Deploy(ctx, &deploymentsv1.DeployRequest{
 			Manifest: &deploymentsv1.Manifest{SchemaVersion: "provider.v1", Slug: "acme"},
-		}, func(ev *deploymentsv1.DeployEvent) { events = append(events, ev) })
+		}, func(ev *progressv1.OperationEvent) { events = append(events, ev) })
 		if err != nil {
 			t.Fatalf("Deploy() error = %v, want nil", err)
 		}
@@ -181,7 +182,7 @@ func TestDeploy(t *testing.T) {
 		go func() {
 			deployErrCh <- r.Deploy(ctx, &deploymentsv1.DeployRequest{
 				Manifest: &deploymentsv1.Manifest{SchemaVersion: "provider.v1", Slug: "acme"},
-			}, func(ev *deploymentsv1.DeployEvent) { gotFirstEvent.Store(true) })
+			}, func(ev *progressv1.OperationEvent) { gotFirstEvent.Store(true) })
 		}()
 
 		deadline := time.Now().Add(2 * time.Second)
@@ -271,8 +272,8 @@ func TestBootstrap(t *testing.T) {
 			t.Fatalf("Ready() error = %v, want nil", err)
 		}
 
-		var events []*deploymentsv1.DeployEvent
-		err := r.Bootstrap(ctx, &deploymentsv1.BootstrapRequest{}, func(ev *deploymentsv1.DeployEvent) { events = append(events, ev) })
+		var events []*progressv1.OperationEvent
+		err := r.Bootstrap(ctx, &deploymentsv1.BootstrapRequest{}, func(ev *progressv1.OperationEvent) { events = append(events, ev) })
 		if err != nil {
 			t.Fatalf("Bootstrap() error = %v, want nil", err)
 		}

@@ -5,14 +5,14 @@ import (
 	"strconv"
 
 	"github.com/ocelhq/ocel/cli/internal/deployui"
-	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
+	progressv1 "github.com/ocelhq/ocel/pkg/proto/progress/v1"
 )
 
-func flipFor(bound *deploymentsv1.FlipBound) deployui.Flip {
+func flipFor(bound *progressv1.FlipBound) deployui.Flip {
 	return deployui.Flip{Note: flipNote(bound), Bound: bound}
 }
 
-func flipNote(bound *deploymentsv1.FlipBound) string {
+func flipNote(bound *progressv1.FlipBound) string {
 	typical := bound.GetTypicalMs()
 	if typical <= 0 {
 		return ""

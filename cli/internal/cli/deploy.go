@@ -32,7 +32,6 @@ import (
 	"github.com/ocelhq/ocel/cli/node"
 	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
 	envv1 "github.com/ocelhq/ocel/pkg/proto/env/v1"
-	linksv1 "github.com/ocelhq/ocel/pkg/proto/links/v1"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/resources/v1"
 )
 
@@ -172,34 +171,18 @@ func runDeploy(ctx context.Context, d deps, cwd string, opts deployOptions, stdo
 			Edge:             edgeSelection(cfg),
 		}
 
-		var links []*linksv1.Link
-		var functions []*deploymentsv1.FunctionOutput
-		var appURLs []string
-		var urlNote string
-		var promotionID string
-		var flip deployui.Flip
-		onEvent := func(ev *deploymentsv1.DeployEvent) {
-			ui.Event(ev)
-			if res := ev.GetResult(); res != nil {
-				links = res.GetLinks()
-				functions = res.GetFunctions()
-				appURLs = res.GetAppUrls()
-				urlNote = res.GetUrlNote()
-				promotionID = res.GetPromotionId()
-				flip = flipFor(res.GetFlipBound())
-			}
-		}
-		if err := runner.Deploy(ctx, req, onEvent); err != nil {
+		var out deployOutcome
+		if err := runner.Deploy(ctx, req, out.render(ui)); err != nil {
 			return err
 		}
 
-		if err := recordDeployResult(cfg, manifest, env, opts.tag, promotionID, appURLs); err != nil {
+		if err := recordDeployResult(cfg, manifest, env, opts.tag, out.promotionID, out.appURLs); err != nil {
 			return err
 		}
-		if err := publishServiceMap(cfg, manifest, env, opts.tag, promotionID, links); err != nil {
+		if err := publishServiceMap(cfg, manifest, env, opts.tag, out.promotionID, out.links); err != nil {
 			return err
 		}
-		ui.Deployed("Deployed", appURLs, urlNote, flip, links, functions)
+		ui.Deployed("Deployed", out.appURLs, out.urlNote, out.flip, out.links, out.functions)
 		return nil
 	})
 	if err != nil {

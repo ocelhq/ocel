@@ -10,7 +10,7 @@ import (
 
 	"github.com/fatih/color"
 
-	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
+	progressv1 "github.com/ocelhq/ocel/pkg/proto/progress/v1"
 )
 
 const (
@@ -179,7 +179,7 @@ func (r *Renderer) Spin(msg string) func() {
 	}
 }
 
-func (r *Renderer) Progress(stageID []byte, phase deploymentsv1.Phase, message string, current uint32, total *uint32) {
+func (r *Renderer) Progress(stageID []byte, phase progressv1.Phase, message string, current uint32, total *uint32) {
 	if r.format == FormatJSON {
 		fields := map[string]any{"phase": phaseTag(phase), "message": message}
 		if id := stageKey(stageID); id != "" {
@@ -213,7 +213,7 @@ func (r *Renderer) Progress(stageID []byte, phase deploymentsv1.Phase, message s
 	r.drawLiveLocked()
 }
 
-func (r *Renderer) progressStageLocked(id string, phase deploymentsv1.Phase, message string, current uint32, total *uint32) {
+func (r *Renderer) progressStageLocked(id string, phase progressv1.Phase, message string, current uint32, total *uint32) {
 	if n, ok := r.plan.nodes[id]; ok && n.state == stageDone {
 		return
 	}
@@ -227,7 +227,7 @@ func (r *Renderer) progressStageLocked(id string, phase deploymentsv1.Phase, mes
 	r.plan.ensureActive(id)
 }
 
-func (r *Renderer) progressUntaggedLocked(phase deploymentsv1.Phase, message string, current uint32, total *uint32) {
+func (r *Renderer) progressUntaggedLocked(phase progressv1.Phase, message string, current uint32, total *uint32) {
 	if n := r.plan.nodes[untaggedStageID]; n != nil && n.message != message && r.plan.isActive(untaggedStageID) {
 		r.commitRowLocked(displayRow{n: n}, r.okColor(), okMark, "")
 	}
@@ -238,7 +238,7 @@ func (r *Renderer) progressUntaggedLocked(phase deploymentsv1.Phase, message str
 	}
 }
 
-func (r *Renderer) StagePlan(ev *deploymentsv1.StagePlanEvent) {
+func (r *Renderer) StagePlan(ev *progressv1.StagePlanEvent) {
 	if r.format == FormatJSON {
 		r.emitJSON("stagePlan", map[string]any{"final": ev.GetFinal(), "count": len(ev.GetStages())})
 		return
@@ -284,7 +284,7 @@ func (r *Renderer) Degraded(need, detail string) {
 	fmt.Fprintln(r.w, line)
 }
 
-func (r *Renderer) DNSOwed(headline string, records []*deploymentsv1.DnsRecord, notes []string) {
+func (r *Renderer) DNSOwed(headline string, records []*progressv1.DnsRecord, notes []string) {
 	if len(records) == 0 {
 		return
 	}
@@ -308,7 +308,7 @@ func (r *Renderer) DNSOwed(headline string, records []*deploymentsv1.DnsRecord, 
 	fmt.Fprint(r.w, block)
 }
 
-func (r *Renderer) dnsBlock(headline string, records []*deploymentsv1.DnsRecord, notes []string) string {
+func (r *Renderer) dnsBlock(headline string, records []*progressv1.DnsRecord, notes []string) string {
 	var b strings.Builder
 	b.WriteString("\n")
 	fmt.Fprintf(&b, "%s %s\n\n",
@@ -336,7 +336,7 @@ func (r *Renderer) dnsBlock(headline string, records []*deploymentsv1.DnsRecord,
 	return b.String()
 }
 
-func dnsJSON(records []*deploymentsv1.DnsRecord) []map[string]any {
+func dnsJSON(records []*progressv1.DnsRecord) []map[string]any {
 	out := make([]map[string]any, 0, len(records))
 	for _, rec := range records {
 		out = append(out, map[string]any{
@@ -393,7 +393,7 @@ func (r *Renderer) Building() {
 	if r.format == FormatJSON {
 		id = nil
 	}
-	r.Progress(id, deploymentsv1.Phase_PHASE_UNSPECIFIED, "Building project", 0, nil)
+	r.Progress(id, progressv1.Phase_PHASE_UNSPECIFIED, "Building project", 0, nil)
 }
 
 func (r *Renderer) BuildOK() {
@@ -431,7 +431,7 @@ func (r *Renderer) Resume() {
 
 type Flip struct {
 	Note  string
-	Bound *deploymentsv1.FlipBound
+	Bound *progressv1.FlipBound
 }
 
 func (r *Renderer) Deployed(headline string, appURLs []string, note string, flip Flip, logPath string) {
@@ -701,30 +701,30 @@ func (r *Renderer) emitJSONLocked(kind string, fields map[string]any) {
 	fmt.Fprintln(r.w, string(raw))
 }
 
-func fallbackTitle(phase deploymentsv1.Phase, message string) string {
-	if phase == deploymentsv1.Phase_PHASE_UNSPECIFIED {
+func fallbackTitle(phase progressv1.Phase, message string) string {
+	if phase == progressv1.Phase_PHASE_UNSPECIFIED {
 		return message
 	}
 	return phaseLabel(phase)
 }
 
-func phaseLabel(p deploymentsv1.Phase) string {
+func phaseLabel(p progressv1.Phase) string {
 	switch p {
-	case deploymentsv1.Phase_PHASE_UPLOADING:
+	case progressv1.Phase_PHASE_UPLOADING:
 		return "Uploading"
-	case deploymentsv1.Phase_PHASE_PROVISIONING:
+	case progressv1.Phase_PHASE_PROVISIONING:
 		return "Provisioning"
-	case deploymentsv1.Phase_PHASE_FINALIZING:
+	case progressv1.Phase_PHASE_FINALIZING:
 		return "Finalizing"
-	case deploymentsv1.Phase_PHASE_DELETING:
+	case progressv1.Phase_PHASE_DELETING:
 		return "Deleting"
 	default:
 		return "Working"
 	}
 }
 
-func phaseTag(p deploymentsv1.Phase) string {
-	if p == deploymentsv1.Phase_PHASE_UNSPECIFIED {
+func phaseTag(p progressv1.Phase) string {
+	if p == progressv1.Phase_PHASE_UNSPECIFIED {
 		return "progress"
 	}
 	return strings.ToLower(phaseLabel(p))

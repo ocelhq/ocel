@@ -19,6 +19,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/naming"
 	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
 	linksv1 "github.com/ocelhq/ocel/pkg/proto/links/v1"
+	progressv1 "github.com/ocelhq/ocel/pkg/proto/progress/v1"
 )
 
 func runInfraStack(ctx context.Context, cfg Config, in stackInputs, manifest *deploymentsv1.Manifest, plan Plan, log func(string)) ([]*linksv1.Link, error) {
@@ -84,7 +85,7 @@ func refuseHandover(ctx context.Context, stack auto.Stack, manifest *deployments
 	return handedOver(manifest, provisioned, name.String())
 }
 
-func runAppStack(ctx context.Context, cfg Config, in stackInputs, manifest *deploymentsv1.Manifest, plan Plan, app *deploymentsv1.ManifestApp, id Identity, baked appBundle, builds appBuilds, links []*linksv1.Link, stage Stage, log func(string)) (outs []*deploymentsv1.FunctionOutput, names map[string]string, err error) {
+func runAppStack(ctx context.Context, cfg Config, in stackInputs, manifest *deploymentsv1.Manifest, plan Plan, app *deploymentsv1.ManifestApp, id Identity, baked appBundle, builds appBuilds, links []*linksv1.Link, stage Stage, log func(string)) (outs []*progressv1.FunctionOutput, names map[string]string, err error) {
 	start := time.Now()
 	defer func() { spanForStage(cfg.Tracer, stage, start, time.Now(), err) }()
 
@@ -384,8 +385,8 @@ func collectLinks(ctx context.Context, secrets SecretsReader, sessions sessionSc
 	return result, nil
 }
 
-func collectAppFunctionOutputs(functions []*deploymentsv1.ManifestFunction, outputs auto.OutputMap) ([]*deploymentsv1.FunctionOutput, map[string]string, error) {
-	var result []*deploymentsv1.FunctionOutput
+func collectAppFunctionOutputs(functions []*deploymentsv1.ManifestFunction, outputs auto.OutputMap) ([]*progressv1.FunctionOutput, map[string]string, error) {
+	var result []*progressv1.FunctionOutput
 	names := make(map[string]string, len(functions))
 	for _, fn := range functions {
 		name := fn.GetLogicalName()

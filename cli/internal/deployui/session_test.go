@@ -12,7 +12,7 @@ import (
 	"time"
 
 	"github.com/ocelhq/ocel/cli/internal/obs"
-	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
+	progressv1 "github.com/ocelhq/ocel/pkg/proto/progress/v1"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
@@ -36,15 +36,15 @@ func newTestSession(t *testing.T, command string) (*Session, *bytes.Buffer, stri
 	return s, &out, s.LogPath()
 }
 
-func progress(phase deploymentsv1.Phase, msg string) *deploymentsv1.DeployEvent {
-	return &deploymentsv1.DeployEvent{Event: &deploymentsv1.DeployEvent_Progress{
-		Progress: &deploymentsv1.ProgressEvent{Phase: phase, Message: msg},
+func progress(phase progressv1.Phase, msg string) *progressv1.OperationEvent {
+	return &progressv1.OperationEvent{Event: &progressv1.OperationEvent_Progress{
+		Progress: &progressv1.ProgressEvent{Phase: phase, Message: msg},
 	}}
 }
 
-func progressN(phase deploymentsv1.Phase, msg string, current, total uint32) *deploymentsv1.DeployEvent {
-	return &deploymentsv1.DeployEvent{Event: &deploymentsv1.DeployEvent_Progress{
-		Progress: &deploymentsv1.ProgressEvent{Phase: phase, Message: msg, Current: &current, Total: &total},
+func progressN(phase progressv1.Phase, msg string, current, total uint32) *progressv1.OperationEvent {
+	return &progressv1.OperationEvent{Event: &progressv1.OperationEvent_Progress{
+		Progress: &progressv1.ProgressEvent{Phase: phase, Message: msg, Current: &current, Total: &total},
 	}}
 }
 
@@ -63,9 +63,9 @@ func TestSession(t *testing.T) {
 		s, out, logPath := newTestSession(t, "ocel deploy")
 
 		s.Building()
-		s.Event(progress(deploymentsv1.Phase_PHASE_UPLOADING, "Uploading function artifacts"))
-		s.Event(&deploymentsv1.DeployEvent{Event: &deploymentsv1.DeployEvent_Log{
-			Log: &deploymentsv1.LogEvent{Message: "pulumi engine line"},
+		s.Event(progress(progressv1.Phase_PHASE_UPLOADING, "Uploading function artifacts"))
+		s.Event(&progressv1.OperationEvent{Event: &progressv1.OperationEvent_Log{
+			Log: &progressv1.LogEvent{Message: "pulumi engine line"},
 		}})
 		s.Deployed("Deployed", []string{"https://app.example.workers.dev"}, "", Flip{}, nil, nil)
 
@@ -102,8 +102,8 @@ func TestSession(t *testing.T) {
 		s := New(&out, run, FormatHuman, true)
 		t.Cleanup(func() { _ = s.Close() })
 
-		s.Event(&deploymentsv1.DeployEvent{Event: &deploymentsv1.DeployEvent_Log{
-			Log: &deploymentsv1.LogEvent{Message: "pulumi engine line"},
+		s.Event(&progressv1.OperationEvent{Event: &progressv1.OperationEvent_Log{
+			Log: &progressv1.LogEvent{Message: "pulumi engine line"},
 		}})
 
 		if !strings.Contains(out.String(), "pulumi engine line") {
@@ -114,7 +114,7 @@ func TestSession(t *testing.T) {
 	t.Run("determinate progress is logged with counts", func(t *testing.T) {
 		t.Parallel()
 		s, _, logPath := newTestSession(t, "ocel deploy")
-		s.Event(progressN(deploymentsv1.Phase_PHASE_UPLOADING, "Uploading function artifacts", 3, 5))
+		s.Event(progressN(progressv1.Phase_PHASE_UPLOADING, "Uploading function artifacts", 3, 5))
 		if err := s.Close(); err != nil {
 			t.Fatalf("Close() = %v", err)
 		}
@@ -175,7 +175,7 @@ func TestSession(t *testing.T) {
 	t.Run("cancel warns about partial state and hints at reconciling", func(t *testing.T) {
 		t.Parallel()
 		s, out, _ := newTestSession(t, "ocel deploy")
-		s.Event(progress(deploymentsv1.Phase_PHASE_PROVISIONING, "Provisioning resources"))
+		s.Event(progress(progressv1.Phase_PHASE_PROVISIONING, "Provisioning resources"))
 		s.Cancel()
 
 		got := out.String()
@@ -256,9 +256,9 @@ func TestSession(t *testing.T) {
 		s, _, _ := newTestSession(t, "ocel deploy")
 
 		build := []byte{1, 0, 0, 0, 0, 0, 0, 0}
-		s.Event(&deploymentsv1.DeployEvent{Event: &deploymentsv1.DeployEvent_StagePlan{
-			StagePlan: &deploymentsv1.StagePlanEvent{
-				Stages: []*deploymentsv1.Stage{{Id: build, Title: "Building"}},
+		s.Event(&progressv1.OperationEvent{Event: &progressv1.OperationEvent_StagePlan{
+			StagePlan: &progressv1.StagePlanEvent{
+				Stages: []*progressv1.Stage{{Id: build, Title: "Building"}},
 				Final:  true,
 			},
 		}})
@@ -277,7 +277,7 @@ func TestSession(t *testing.T) {
 		parent := []byte{9, 0, 0, 0, 0, 0, 0, 0}
 		child := []byte{10, 0, 0, 0, 0, 0, 0, 0}
 
-		plan.apply(&deploymentsv1.StagePlanEvent{Stages: []*deploymentsv1.Stage{
+		plan.apply(&progressv1.StagePlanEvent{Stages: []*progressv1.Stage{
 			{Id: child, ParentId: parent, Title: "app-a"},
 		}})
 		if _, ok := plan.nodes[stageKey(child)]; !ok {
@@ -287,7 +287,7 @@ func TestSession(t *testing.T) {
 			t.Error("orphan child linked before its parent arrived")
 		}
 
-		plan.apply(&deploymentsv1.StagePlanEvent{Stages: []*deploymentsv1.Stage{
+		plan.apply(&progressv1.StagePlanEvent{Stages: []*progressv1.Stage{
 			{Id: parent, Title: "apps"},
 		}})
 
@@ -343,9 +343,9 @@ func TestSession(t *testing.T) {
 
 func TestAttributeKeyCoversEveryWireValue(t *testing.T) {
 	t.Parallel()
-	for raw, name := range deploymentsv1.AttributeKey_name {
-		k := deploymentsv1.AttributeKey(raw)
-		if k == deploymentsv1.AttributeKey_ATTRIBUTE_KEY_UNSPECIFIED {
+	for raw, name := range progressv1.AttributeKey_name {
+		k := progressv1.AttributeKey(raw)
+		if k == progressv1.AttributeKey_ATTRIBUTE_KEY_UNSPECIFIED {
 			continue
 		}
 		t.Run(name, func(t *testing.T) {
@@ -365,14 +365,14 @@ func TestIngestedSpanResourceIdentityReachesTheTraceFile(t *testing.T) {
 	s := New(&out, run, FormatHuman, false)
 	t.Cleanup(func() { _ = s.Close() })
 
-	s.Event(&deploymentsv1.DeployEvent{Event: &deploymentsv1.DeployEvent_Span{
-		Span: &deploymentsv1.SpanEvent{
+	s.Event(&progressv1.OperationEvent{Event: &progressv1.OperationEvent_Span{
+		Span: &progressv1.SpanEvent{
 			SpanId: []byte{1, 2, 3, 4, 5, 6, 7, 8},
 			Name:   "resource operation failed",
-			Status: deploymentsv1.SpanStatus_SPAN_STATUS_ERROR,
-			Attributes: []*deploymentsv1.SpanAttribute{
-				{Key: deploymentsv1.AttributeKey_ATTRIBUTE_KEY_RESOURCE_TYPE, Value: "aws:s3:Bucket"},
-				{Key: deploymentsv1.AttributeKey_ATTRIBUTE_KEY_RESOURCE_NAME, Value: "uploads"},
+			Status: progressv1.SpanStatus_SPAN_STATUS_ERROR,
+			Attributes: []*progressv1.SpanAttribute{
+				{Key: progressv1.AttributeKey_ATTRIBUTE_KEY_RESOURCE_TYPE, Value: "aws:s3:Bucket"},
+				{Key: progressv1.AttributeKey_ATTRIBUTE_KEY_RESOURCE_NAME, Value: "uploads"},
 			},
 		},
 	}})
@@ -402,17 +402,17 @@ func TestNumericSpanAttributesLandAsIntValueInTheTraceFile(t *testing.T) {
 	s := New(&out, run, FormatHuman, false)
 	t.Cleanup(func() { _ = s.Close() })
 
-	s.Event(&deploymentsv1.DeployEvent{Event: &deploymentsv1.DeployEvent_Span{
-		Span: &deploymentsv1.SpanEvent{
+	s.Event(&progressv1.OperationEvent{Event: &progressv1.OperationEvent_Span{
+		Span: &progressv1.SpanEvent{
 			SpanId: []byte{1, 2, 3, 4, 5, 6, 7, 8},
 			Name:   "upload batch",
-			Status: deploymentsv1.SpanStatus_SPAN_STATUS_OK,
-			Attributes: []*deploymentsv1.SpanAttribute{
-				{Key: deploymentsv1.AttributeKey_ATTRIBUTE_KEY_BYTES, Value: "1048576"},
-				{Key: deploymentsv1.AttributeKey_ATTRIBUTE_KEY_RESOURCE_COUNT, Value: "42"},
-				{Key: deploymentsv1.AttributeKey_ATTRIBUTE_KEY_DURATION_MS, Value: "150"},
-				{Key: deploymentsv1.AttributeKey_ATTRIBUTE_KEY_RETRY_COUNT, Value: "2"},
-				{Key: deploymentsv1.AttributeKey_ATTRIBUTE_KEY_EXIT_CODE, Value: "1"},
+			Status: progressv1.SpanStatus_SPAN_STATUS_OK,
+			Attributes: []*progressv1.SpanAttribute{
+				{Key: progressv1.AttributeKey_ATTRIBUTE_KEY_BYTES, Value: "1048576"},
+				{Key: progressv1.AttributeKey_ATTRIBUTE_KEY_RESOURCE_COUNT, Value: "42"},
+				{Key: progressv1.AttributeKey_ATTRIBUTE_KEY_DURATION_MS, Value: "150"},
+				{Key: progressv1.AttributeKey_ATTRIBUTE_KEY_RETRY_COUNT, Value: "2"},
+				{Key: progressv1.AttributeKey_ATTRIBUTE_KEY_EXIT_CODE, Value: "1"},
 			},
 		},
 	}})
@@ -457,12 +457,12 @@ func TestNonNumericValueForANumericKeyDegradesToStringValue(t *testing.T) {
 	s := New(&out, run, FormatHuman, false)
 	t.Cleanup(func() { _ = s.Close() })
 
-	s.Event(&deploymentsv1.DeployEvent{Event: &deploymentsv1.DeployEvent_Span{
-		Span: &deploymentsv1.SpanEvent{
+	s.Event(&progressv1.OperationEvent{Event: &progressv1.OperationEvent_Span{
+		Span: &progressv1.SpanEvent{
 			SpanId: []byte{1, 2, 3, 4, 5, 6, 7, 8},
 			Name:   "malformed byte count",
-			Attributes: []*deploymentsv1.SpanAttribute{
-				{Key: deploymentsv1.AttributeKey_ATTRIBUTE_KEY_BYTES, Value: "not-a-number"},
+			Attributes: []*progressv1.SpanAttribute{
+				{Key: progressv1.AttributeKey_ATTRIBUTE_KEY_BYTES, Value: "not-a-number"},
 			},
 		},
 	}})
@@ -628,7 +628,7 @@ func TestFormatAxis(t *testing.T) {
 		t.Cleanup(func() { _ = s.Close() })
 
 		s.Building()
-		s.Event(progress(deploymentsv1.Phase_PHASE_UPLOADING, "Uploading function artifacts"))
+		s.Event(progress(progressv1.Phase_PHASE_UPLOADING, "Uploading function artifacts"))
 		s.Deployed("Deployed", []string{"https://app.example.workers.dev"}, "", Flip{}, nil, nil)
 
 		lines := strings.Split(strings.TrimRight(out.String(), "\n"), "\n")
@@ -657,7 +657,7 @@ func TestFormatAxis(t *testing.T) {
 		s := New(&out, run, FormatJSON, true)
 		t.Cleanup(func() { _ = s.Close() })
 
-		s.Event(progress(deploymentsv1.Phase_PHASE_UPLOADING, "Building"))
+		s.Event(progress(progressv1.Phase_PHASE_UPLOADING, "Building"))
 
 		var rec map[string]any
 		if err := json.Unmarshal(bytes.TrimSpace(out.Bytes()), &rec); err != nil {
@@ -684,7 +684,7 @@ func TestFormatAxis(t *testing.T) {
 		s := New(&out, run, FormatHuman, true)
 		t.Cleanup(func() { _ = s.Close() })
 
-		s.Event(progress(deploymentsv1.Phase_PHASE_UPLOADING, "Building project"))
+		s.Event(progress(progressv1.Phase_PHASE_UPLOADING, "Building project"))
 
 		if !strings.Contains(out.String(), "Building project") {
 			t.Errorf("stdout = %q, want the human-readable line", out.String())
@@ -719,19 +719,19 @@ func TestSpanWithoutAUsableEndFallsBackToElapsedWallClock(t *testing.T) {
 			t.Cleanup(func() { _ = s.Close() })
 			s.r.useClock(func() time.Time { return now })
 
-			s.Event(&deploymentsv1.DeployEvent{Event: &deploymentsv1.DeployEvent_StagePlan{
-				StagePlan: &deploymentsv1.StagePlanEvent{
-					Stages: []*deploymentsv1.Stage{{Id: stage, Title: "Provisioning"}},
+			s.Event(&progressv1.OperationEvent{Event: &progressv1.OperationEvent_StagePlan{
+				StagePlan: &progressv1.StagePlanEvent{
+					Stages: []*progressv1.Stage{{Id: stage, Title: "Provisioning"}},
 					Final:  true,
 				},
 			}})
-			s.Event(&deploymentsv1.DeployEvent{Event: &deploymentsv1.DeployEvent_Span{
-				Span: &deploymentsv1.SpanEvent{
+			s.Event(&progressv1.OperationEvent{Event: &progressv1.OperationEvent_Span{
+				Span: &progressv1.SpanEvent{
 					SpanId:            stage,
 					Name:              "provision",
 					StartTimeUnixNano: start.UnixNano(),
 					EndTimeUnixNano:   tc.end,
-					Status:            deploymentsv1.SpanStatus_SPAN_STATUS_OK,
+					Status:            progressv1.SpanStatus_SPAN_STATUS_OK,
 				},
 			}})
 
@@ -767,10 +767,10 @@ func TestBar(t *testing.T) {
 func TestFallbackTitle(t *testing.T) {
 	t.Parallel()
 
-	if got := fallbackTitle(deploymentsv1.Phase_PHASE_PROVISIONING, "Preparing deployment stack"); got != "Provisioning" {
+	if got := fallbackTitle(progressv1.Phase_PHASE_PROVISIONING, "Preparing deployment stack"); got != "Provisioning" {
 		t.Errorf("fallbackTitle(PROVISIONING, ...) = %q, want the phase label", got)
 	}
-	if got := fallbackTitle(deploymentsv1.Phase_PHASE_UNSPECIFIED, "Ensuring passphrase"); got != "Ensuring passphrase" {
+	if got := fallbackTitle(progressv1.Phase_PHASE_UNSPECIFIED, "Ensuring passphrase"); got != "Ensuring passphrase" {
 		t.Errorf("fallbackTitle(UNSPECIFIED, ...) = %q, want the message itself", got)
 	}
 }

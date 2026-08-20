@@ -13,6 +13,7 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/naming"
 	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
+	progressv1 "github.com/ocelhq/ocel/pkg/proto/progress/v1"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
@@ -90,7 +91,7 @@ func routeID(fn *deploymentsv1.ManifestFunction) string {
 	return fn.GetLogicalName()
 }
 
-func functionURLsByLogicalName(functions []*deploymentsv1.FunctionOutput) map[string]string {
+func functionURLsByLogicalName(functions []*progressv1.FunctionOutput) map[string]string {
 	urls := make(map[string]string)
 	for _, fn := range functions {
 		urls[fn.GetLogicalName()] = fn.GetUrl()

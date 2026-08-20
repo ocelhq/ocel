@@ -7,6 +7,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/naming"
 	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
 	linksv1 "github.com/ocelhq/ocel/pkg/proto/links/v1"
+	progressv1 "github.com/ocelhq/ocel/pkg/proto/progress/v1"
 	"github.com/ocelhq/ocel/platform/aws/provider/payloads"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
@@ -27,7 +28,7 @@ type provisionedDeploy struct {
 	promotionID string
 	links       []*linksv1.Link
 	results     []appDeployResult
-	outputs     [][]*deploymentsv1.FunctionOutput
+	outputs     [][]*progressv1.FunctionOutput
 }
 
 func provisionDeploy(ctx context.Context, cfg Config, realized *Realized, manifest *deploymentsv1.Manifest, plan deployPlan, up uploadedArtifacts, progress Progress, log func(string)) (provisionedDeploy, error) {
@@ -69,7 +70,7 @@ func provisionDeploy(ctx context.Context, cfg Config, realized *Realized, manife
 		return provisionedDeploy{}, err
 	}
 
-	progress.report(deploymentsv1.Phase_PHASE_PROVISIONING, "Reconciling the edge stack", 0, 0)
+	progress.report(progressv1.Phase_PHASE_PROVISIONING, "Reconciling the edge stack", 0, 0)
 	specs, err := stackSpecs(cfg, manifest, stackVersion, log)
 	if err != nil {
 		return provisionedDeploy{}, err
@@ -86,7 +87,7 @@ func provisionDeploy(ctx context.Context, cfg Config, realized *Realized, manife
 
 	var links []*linksv1.Link
 	if !stacks.InfraStack.IsZero() {
-		progress.report(deploymentsv1.Phase_PHASE_PROVISIONING, "Provisioning infra stack", 0, 0)
+		progress.report(progressv1.Phase_PHASE_PROVISIONING, "Provisioning infra stack", 0, 0)
 		links, err = runInfraStack(ctx, cfg, in, manifest, stacks, log)
 		if err != nil {
 			return provisionedDeploy{state: state}, err
@@ -101,10 +102,10 @@ func provisionDeploy(ctx context.Context, cfg Config, realized *Realized, manife
 	reportGrantVersions(plan.consumed, log)
 	granting := append(slices.Clone(links), consumedLinks(plan.consumed)...)
 
-	progress.report(deploymentsv1.Phase_PHASE_PROVISIONING, "Provisioning app-deploy stacks", 0, 0)
+	progress.report(progressv1.Phase_PHASE_PROVISIONING, "Provisioning app-deploy stacks", 0, 0)
 	apps := plan.apps
 	results := make([]appDeployResult, len(apps))
-	appOutputs := make([][]*deploymentsv1.FunctionOutput, len(apps))
+	appOutputs := make([][]*progressv1.FunctionOutput, len(apps))
 	appFunctionNames := make([]map[string]string, len(apps))
 	runAppStacks(apps, func(i int, app *deploymentsv1.ManifestApp) {
 		id := identities[app.GetName()]

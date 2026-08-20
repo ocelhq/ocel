@@ -5,6 +5,7 @@ inputs:
       - proto/dev
       - proto/deployments
       - proto/env/v1/vars.proto
+      - proto/progress
 plugins:
   - local: protoc-gen-es
     out: packages/ocel/src/gen/proto

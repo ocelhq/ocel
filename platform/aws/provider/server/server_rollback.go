@@ -8,6 +8,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/ssm"
 
 	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
+	progressv1 "github.com/ocelhq/ocel/pkg/proto/progress/v1"
 	"github.com/ocelhq/ocel/platform/aws/provider/bootstrap"
 	"github.com/ocelhq/ocel/platform/aws/provider/deploy"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
@@ -98,11 +99,11 @@ func toPromotionProto(p edge.Promotion) *deploymentsv1.Promotion {
 	}
 }
 
-func toFlipBoundProto(flip *edge.FlipBound) *deploymentsv1.FlipBound {
+func toFlipBoundProto(flip *edge.FlipBound) *progressv1.FlipBound {
 	if flip == nil {
 		return nil
 	}
-	return &deploymentsv1.FlipBound{
+	return &progressv1.FlipBound{
 		TypicalMs: flip.Typical.Milliseconds(),
 		Published: flip.Published,
 	}

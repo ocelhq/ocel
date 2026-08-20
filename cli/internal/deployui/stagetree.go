@@ -4,7 +4,7 @@ import (
 	"encoding/hex"
 	"time"
 
-	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
+	progressv1 "github.com/ocelhq/ocel/pkg/proto/progress/v1"
 )
 
 type stageState int
@@ -78,7 +78,7 @@ func stageKey(id []byte) string {
 	return hex.EncodeToString(id)
 }
 
-func (p *stagePlan) apply(ev *deploymentsv1.StagePlanEvent) {
+func (p *stagePlan) apply(ev *progressv1.StagePlanEvent) {
 	for _, s := range ev.GetStages() {
 		p.declare(s)
 	}
@@ -87,7 +87,7 @@ func (p *stagePlan) apply(ev *deploymentsv1.StagePlanEvent) {
 	}
 }
 
-func (p *stagePlan) declare(s *deploymentsv1.Stage) {
+func (p *stagePlan) declare(s *progressv1.Stage) {
 	id := stageKey(s.GetId())
 	if id == "" {
 		return

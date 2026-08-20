@@ -5,6 +5,7 @@ import (
 	"time"
 
 	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
+	progressv1 "github.com/ocelhq/ocel/pkg/proto/progress/v1"
 )
 
 func promoteDeploy(ctx context.Context, cfg Config, manifest *deploymentsv1.Manifest, prov provisionedDeploy, progress Progress) (Result, error) {
@@ -13,14 +14,14 @@ func promoteDeploy(ctx context.Context, cfg Config, manifest *deploymentsv1.Mani
 	}
 
 	finalizeStart := time.Now()
-	progress.report(deploymentsv1.Phase_PHASE_FINALIZING, "Staging and promoting", 0, 0)
+	progress.report(progressv1.Phase_PHASE_FINALIZING, "Staging and promoting", 0, 0)
 	promoted, err := stageAndPromote(ctx, cfg, prov.stack, prov.promotionID, cfg.Tag, promotePointer(cfg), time.Now().Unix(), prov.results)
 	spanForStage(cfg.Tracer, cfg.Stages.Finalizing, finalizeStart, time.Now(), err)
 	if err != nil {
 		return Result{StackState: prov.state}, err
 	}
 
-	var functions []*deploymentsv1.FunctionOutput
+	var functions []*progressv1.FunctionOutput
 	for _, outs := range prov.outputs {
 		functions = append(functions, outs...)
 	}
