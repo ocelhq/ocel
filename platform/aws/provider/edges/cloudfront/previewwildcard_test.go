@@ -57,7 +57,7 @@ func previewing(t *testing.T, w *world) (*provider, edge.EdgeStack) {
 	if _, err := e.ReconcilePreviewWildcard(ctx, previewWildcardSpec()); err != nil {
 		t.Fatalf("ReconcilePreviewWildcard: %v", err)
 	}
-	stack, err := e.Reconcile(ctx, previewStackSpec(), edge.StackState{edge.StackKeyGlobalPreview: previewBase})
+	stack, err := e.Reconcile(ctx, previewStackSpec(), edge.StackState{GlobalPreview: previewBase})
 	if err != nil {
 		t.Fatalf("Reconcile(preview): %v", err)
 	}
@@ -454,14 +454,15 @@ func TestPreviewPromoteWritesTheHostnameKey(t *testing.T) {
 
 	t.Run("a stack that moved onto its own preview domain still withdraws what it published", func(t *testing.T) {
 		w := newWorld()
-		e, stack := previewing(t, w)
-		promotePreview(t, stack, previewPointer)
+		e, previewed := previewing(t, w)
+		promotePreview(t, previewed, previewPointer)
 
-		moved, err := e.Reconcile(context.Background(), previewStackSpec(), stack.State())
+		reconciled, err := e.Reconcile(context.Background(), previewStackSpec(), previewed.State())
 		if err != nil {
 			t.Fatalf("Reconcile once the project declares its own preview domain: %v", err)
 		}
-		delete(moved.State(), edge.StackKeyGlobalPreview)
+		moved := reconciled.(*stack)
+		moved.state.GlobalPreview = ""
 
 		if err := moved.Destroy(context.Background()); err != nil {
 			t.Fatalf("Destroy: %v", err)

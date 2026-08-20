@@ -16,8 +16,6 @@ import (
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
-const stackKeyEntryWorker = "entryWorker"
-
 func (s *stack) BindDomain(ctx context.Context, binding edge.DomainBinding) error {
 	if binding.Hostname == "" {
 		return errors.New("binding a domain to a Cloudflare stack needs a hostname")
@@ -39,7 +37,7 @@ func (s *stack) BindDomain(ctx context.Context, binding edge.DomainBinding) erro
 	if err := s.p.refuseGreyCloud(ctx, zoneID, binding.Hostname); err != nil {
 		return err
 	}
-	s.state = edge.RecordBoundDomain(s.state, binding.Hostname)
+	s.state.Bind(binding.Hostname)
 	return nil
 }
 
@@ -58,19 +56,8 @@ func (s *stack) UnbindDomain(ctx context.Context, hostname string) error {
 	if err := s.p.detachRoute(ctx, zoneID, routePattern(hostname), scripts); err != nil {
 		return err
 	}
-	s.state = edge.ForgetBoundDomain(s.state, hostname)
+	s.state.Release(hostname)
 	return nil
-}
-
-func joinEntryWorkers(names []string) string {
-	return strings.Join(names, ",")
-}
-
-func splitEntryWorkers(recorded string) []string {
-	if recorded == "" {
-		return nil
-	}
-	return strings.Split(recorded, ",")
 }
 
 func (s *stack) entryWorkers(verb string) (accountID string, scriptNames []string, err error) {
@@ -78,9 +65,9 @@ func (s *stack) entryWorkers(verb string) (accountID string, scriptNames []strin
 	if accountID == "" {
 		return "", nil, fmt.Errorf("%s is not set; it is required to %s a domain on the Cloudflare edge", envAccountID, verb)
 	}
-	scriptNames = splitEntryWorkers(s.state[stackKeyEntryWorker])
+	scriptNames = s.own.EntryWorkers
 	if len(scriptNames) == 0 {
-		return "", nil, fmt.Errorf("stack %q records no entry worker to %s a domain on — deploy it first", s.state[edge.StackKeySlug], verb)
+		return "", nil, fmt.Errorf("stack %q records no entry worker to %s a domain on — deploy it first", s.state.Slug, verb)
 	}
 	return accountID, scriptNames, nil
 }
@@ -91,10 +78,10 @@ func (s *stack) soleEntryWorker(verb string) (accountID, scriptName string, err 
 		return "", "", err
 	}
 	if len(scriptNames) > 1 {
-		return "", "", fmt.Errorf("stack %q serves %d apps (%s), and a domain binding names no app, so nothing tells which worker should answer for it — %s a domain on a single-app stack", s.state[edge.StackKeySlug], len(scriptNames), strings.Join(scriptNames, ", "), verb)
+		return "", "", fmt.Errorf("stack %q serves %d apps (%s), and a domain binding names no app, so nothing tells which worker should answer for it — %s a domain on a single-app stack", s.state.Slug, len(scriptNames), strings.Join(scriptNames, ", "), verb)
 	}
 	if scriptNames[0] == previewEntryScript {
-		return "", "", fmt.Errorf("stack %q is served by the shared preview entry worker %q, which answers for every project, so no single project's domain may be bound to it", s.state[edge.StackKeySlug], previewEntryScript)
+		return "", "", fmt.Errorf("stack %q is served by the shared preview entry worker %q, which answers for every project, so no single project's domain may be bound to it", s.state.Slug, previewEntryScript)
 	}
 	return accountID, scriptNames[0], nil
 }

@@ -358,11 +358,11 @@ func (s *Server) ListDomain(ctx context.Context, req *deploymentsv1.ListDomainRe
 func globalPreviewProjects(ctx context.Context, ssmClient bootstrap.SSMAPI, slugs []string, baseDomain string) ([]string, error) {
 	var served []string
 	for _, slug := range slugs {
-		state, err := bootstrap.ReadStackStateFor(ctx, ssmClient, bootstrap.ClassPreview, slug)
+		record, err := bootstrap.ReadStackRecordFor(ctx, ssmClient, bootstrap.ClassPreview, slug)
 		if err != nil {
 			return nil, err
 		}
-		if edge.ServedOnGlobalPreview(state, baseDomain) {
+		if record.Edge.ServedOnGlobalPreview(baseDomain) {
 			served = append(served, slug)
 		}
 	}

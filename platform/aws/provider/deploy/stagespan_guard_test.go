@@ -120,7 +120,7 @@ func TestRemovePreviewSpansEveryDeclaredRootStage(t *testing.T) {
 		ft := &fakeTracer{}
 		stages := newPreviewRemovalStagesForTest(false)
 		fake := &recordingEdge{kind: cloudflare.Kind}
-		stale := edge.StackState{edge.StackKeySlug: "shop", edge.StackKeySecret: "stale"}
+		stale := edge.StackState{Slug: "shop", Secret: "stale"}
 
 		if err := RemovePreview(context.Background(), fake.opened(t, stale), tracedReclamation(ft), "pr-1", false, stages, nil); err == nil {
 			t.Fatal("RemovePreview err = nil, want the refused pointer removal reported")
@@ -168,7 +168,7 @@ func TestPruneSpansTheStagesItActuallyRuns(t *testing.T) {
 		ft := &fakeTracer{}
 		stages := PruneStages{Diff: NewRootStage("Diff"), Reclaim: NewRootStage("Reclaim")}
 		fake := &recordingEdge{kind: cloudflare.Kind}
-		stale := edge.StackState{edge.StackKeySlug: "shop", edge.StackKeySecret: "stale"}
+		stale := edge.StackState{Slug: "shop", Secret: "stale"}
 
 		if _, err := Prune(context.Background(), fake.opened(t, stale), tracedReclamation(ft), 3, "", stages, nil); err == nil {
 			t.Fatal("Prune err = nil, want the refused diff reported")

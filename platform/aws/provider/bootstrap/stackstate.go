@@ -12,8 +12,18 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/ssm"
 	ssmtypes "github.com/aws/aws-sdk-go-v2/service/ssm/types"
 
+	"github.com/ocelhq/ocel/platform/aws/provider/domains"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
+
+type StackRecord struct {
+	Edge       edge.StackState    `json:"edge"`
+	Production domains.Settlement `json:"production,omitzero"`
+}
+
+func (r StackRecord) Empty() bool {
+	return r.Edge.Empty() && r.Production.Empty()
+}
 
 const (
 	StackStateParamPrefix        = "/ocel/rootstack/"
@@ -42,12 +52,12 @@ func stackStateParamDescription(class, slug string) string {
 	)
 }
 
-func WriteStackStateFor(ctx context.Context, ssmClient SSMAPI, class, slug string, state edge.StackState) error {
+func WriteStackRecordFor(ctx context.Context, ssmClient SSMAPI, class, slug string, record StackRecord) error {
 	prefix, err := stackStateParamPrefixFor(class)
 	if err != nil {
 		return err
 	}
-	payload, err := json.Marshal(state)
+	payload, err := json.Marshal(record)
 	if err != nil {
 		return fmt.Errorf("marshal edge-stack state: %w", err)
 	}
@@ -63,14 +73,14 @@ func WriteStackStateFor(ctx context.Context, ssmClient SSMAPI, class, slug strin
 	return nil
 }
 
-func ReadStackState(ctx context.Context, ssmClient SSMAPI, slug string) (edge.StackState, error) {
-	return ReadStackStateFor(ctx, ssmClient, ClassProduction, slug)
+func ReadStackRecord(ctx context.Context, ssmClient SSMAPI, slug string) (StackRecord, error) {
+	return ReadStackRecordFor(ctx, ssmClient, ClassProduction, slug)
 }
 
-func ReadStackStateFor(ctx context.Context, ssmClient SSMAPI, class, slug string) (edge.StackState, error) {
+func ReadStackRecordFor(ctx context.Context, ssmClient SSMAPI, class, slug string) (StackRecord, error) {
 	prefix, err := stackStateParamPrefixFor(class)
 	if err != nil {
-		return nil, err
+		return StackRecord{}, err
 	}
 	out, err := ssmClient.GetParameter(ctx, &ssm.GetParameterInput{
 		Name:           aws.String(stackStateParamName(prefix, slug)),
@@ -79,15 +89,15 @@ func ReadStackStateFor(ctx context.Context, ssmClient SSMAPI, class, slug string
 	if err != nil {
 		var notFound *ssmtypes.ParameterNotFound
 		if errors.As(err, &notFound) {
-			return nil, nil
+			return StackRecord{}, nil
 		}
-		return nil, fmt.Errorf("read edge-stack state parameter: %w", err)
+		return StackRecord{}, fmt.Errorf("read edge-stack state parameter: %w", err)
 	}
-	var state edge.StackState
-	if err := json.Unmarshal([]byte(aws.ToString(out.Parameter.Value)), &state); err != nil {
-		return nil, fmt.Errorf("parse edge-stack state: %w", err)
+	var record StackRecord
+	if err := json.Unmarshal([]byte(aws.ToString(out.Parameter.Value)), &record); err != nil {
+		return StackRecord{}, fmt.Errorf("parse edge-stack state: %w", err)
 	}
-	return state, nil
+	return record, nil
 }
 
 type SSMPathAPI interface {
@@ -123,11 +133,11 @@ func StackSlugsFor(ctx context.Context, api SSMPathAPI, class string) ([]string,
 	return slugs, nil
 }
 
-func DeleteStackState(ctx context.Context, ssmClient SSMAPI, slug string) error {
-	return DeleteStackStateFor(ctx, ssmClient, ClassProduction, slug)
+func DeleteStackRecord(ctx context.Context, ssmClient SSMAPI, slug string) error {
+	return DeleteStackRecordFor(ctx, ssmClient, ClassProduction, slug)
 }
 
-func DeleteStackStateFor(ctx context.Context, ssmClient SSMAPI, class, slug string) error {
+func DeleteStackRecordFor(ctx context.Context, ssmClient SSMAPI, class, slug string) error {
 	prefix, err := stackStateParamPrefixFor(class)
 	if err != nil {
 		return err

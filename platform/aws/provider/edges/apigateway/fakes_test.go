@@ -8,6 +8,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"testing"
 	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
@@ -21,6 +22,8 @@ import (
 	ddbtypes "github.com/aws/aws-sdk-go-v2/service/dynamodb/types"
 	"github.com/aws/aws-sdk-go-v2/service/iam"
 	iamtypes "github.com/aws/aws-sdk-go-v2/service/iam/types"
+
+	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
 const (
@@ -928,4 +931,14 @@ func (f *fakeDynamo) Query(_ context.Context, in *dynamodb.QueryInput, _ ...func
 
 func lastKey(item map[string]ddbtypes.AttributeValue) map[string]ddbtypes.AttributeValue {
 	return map[string]ddbtypes.AttributeValue{"pk": item["pk"], "sk": item["sk"]}
+}
+
+func ownState(t *testing.T, stack edge.EdgeStack) private {
+	t.Helper()
+
+	var own private
+	if err := stack.State().Adapter.Into(&own); err != nil {
+		t.Fatalf("read the state the edge keeps to itself: %v", err)
+	}
+	return own
 }

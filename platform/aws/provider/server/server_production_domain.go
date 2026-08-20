@@ -80,18 +80,50 @@ type domainSession struct {
 	pins       map[string]string
 }
 
-type productionStore struct {
-	ssm   bootstrap.SSMAPI
-	slug  string
-	stack edge.EdgeStack
+type stackWriter struct {
+	ssm     bootstrap.SSMAPI
+	slug    string
+	stack   edge.EdgeStack
+	settled domains.Settlement
 }
 
-func (s productionStore) Save(ctx context.Context, settled domains.Settlement) error {
-	next, err := bootstrap.WithProduction(s.stack.State(), settled)
-	if err != nil {
+func (w *stackWriter) Save(ctx context.Context, settled domains.Settlement) error {
+	w.settled = settled
+	return w.write(ctx)
+}
+
+func (w *stackWriter) write(ctx context.Context) error {
+	return bootstrap.WriteStackRecordFor(ctx, w.ssm, bootstrap.ClassProduction, w.slug, bootstrap.StackRecord{
+		Edge:       w.stack.State(),
+		Production: w.settled,
+	})
+}
+
+type persistingStack struct {
+	edge.EdgeStack
+	written edge.StackState
+	save    func(context.Context) error
+}
+
+func persisting(stack edge.EdgeStack, save func(context.Context) error) *persistingStack {
+	return &persistingStack{EdgeStack: stack, written: stack.State(), save: save}
+}
+
+func (p *persistingStack) BindDomain(ctx context.Context, binding edge.DomainBinding) error {
+	return p.persist(ctx, p.EdgeStack.BindDomain(ctx, binding))
+}
+
+func (p *persistingStack) UnbindDomain(ctx context.Context, hostname string) error {
+	return p.persist(ctx, p.EdgeStack.UnbindDomain(ctx, hostname))
+}
+
+func (p *persistingStack) persist(ctx context.Context, err error) error {
+	held := p.EdgeStack.State()
+	if held.Equal(p.written) {
 		return err
 	}
-	return bootstrap.WriteStackStateFor(ctx, s.ssm, bootstrap.ClassProduction, s.slug, next)
+	p.written = held
+	return errors.Join(err, p.save(ctx))
 }
 
 func (s *Server) domainSession(ctx context.Context, req domainRequest) (*domainSession, error) {
@@ -120,26 +152,25 @@ func (s *Server) domainSession(ctx context.Context, req domainRequest) (*domainS
 		return nil, connect.NewError(connect.CodeInvalidArgument, err)
 	}
 
-	state, err := bootstrap.ReadStackState(ctx, clients.ssm, req.slug)
+	record, err := bootstrap.ReadStackRecord(ctx, clients.ssm, req.slug)
 	if err != nil {
 		return nil, err
 	}
-	if len(state) == 0 {
+	if record.Empty() {
 		return nil, errNoProductionDeploy
 	}
-	stack, err := edgeFront.Open(state)
+	opened, err := edgeFront.Open(record.Edge)
 	if err != nil {
 		return nil, err
 	}
-	recorded, err := bootstrap.ReadProduction(state)
-	if err != nil {
-		return nil, err
-	}
+	recorded := record.Production
 	writer, err := clients.writerFor(req.dns.GetKind(), req.dns.GetZone())
 	if err != nil {
 		return nil, err
 	}
 
+	held := &stackWriter{ssm: clients.ssm, slug: req.slug, stack: opened, settled: recorded}
+	stack := persisting(opened, held.write)
 	engine := domains.Engine{
 		Kind:          edgeFront.Kind(),
 		ServesUnbound: edgeFront.Facts().ServesUnbound,
@@ -147,14 +178,14 @@ func (s *Server) domainSession(ctx context.Context, req domainRequest) (*domainS
 		Writer:        writer,
 		Poller:        clients.poller,
 		Prober:        clients.prober,
-		Store:         productionStore{ssm: clients.ssm, slug: req.slug, stack: stack},
+		Store:         held,
 		Zone:          req.dns.GetZone(),
 		Open: func(kind edge.Kind) (edge.EdgeStack, error) {
 			front, err := s.edge(kind, clients.region)
 			if err != nil {
 				return nil, err
 			}
-			return front.Open(state)
+			return front.Open(record.Edge)
 		},
 		Unbind: func(ctx context.Context, hostname string) error {
 			return stack.UnbindDomain(ctx, hostname)
@@ -287,11 +318,7 @@ func provisionedList(hosts []string) string {
 	return strings.Join(hosts, ", ")
 }
 
-func releaseProductionDomains(ctx context.Context, state edge.StackState, writer edge.DNSWriter, discarder func(certs.Certificate) certs.Issuer, progress func(string)) error {
-	recorded, err := bootstrap.ReadProduction(state)
-	if err != nil {
-		return err
-	}
+func releaseProductionDomains(ctx context.Context, recorded domains.Settlement, writer edge.DNSWriter, discarder func(certs.Certificate) certs.Issuer, progress func(string)) error {
 	var errs []error
 	for _, host := range recorded.Hosts {
 		if err := dns.Release(ctx, writer, host.Records.Written, progress); err != nil {

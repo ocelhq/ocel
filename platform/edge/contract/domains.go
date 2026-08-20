@@ -1,45 +1,28 @@
 package edge
 
 import (
-	"maps"
 	"slices"
-	"strings"
 )
 
-const StackKeyDomains = "domains"
-
-func BoundDomains(state StackState) []string {
-	raw := state[StackKeyDomains]
-	if raw == "" {
-		return nil
-	}
-	return strings.Split(raw, ",")
+func (s StackState) BoundTo(hostname string) bool {
+	return slices.Contains(s.Bound, hostname)
 }
 
-func RecordBoundDomain(state StackState, hostname string) StackState {
-	hosts := BoundDomains(state)
-	if hostname != "" && !slices.Contains(hosts, hostname) {
-		hosts = append(hosts, hostname)
+func (s *StackState) Bind(hostname string) {
+	if hostname == "" || slices.Contains(s.Bound, hostname) {
+		return
 	}
-	return withBoundDomains(state, hosts)
+	bound := append(slices.Clone(s.Bound), hostname)
+	slices.Sort(bound)
+	s.Bound = bound
 }
 
-func ForgetBoundDomain(state StackState, hostname string) StackState {
-	return withBoundDomains(state, slices.DeleteFunc(BoundDomains(state), func(host string) bool {
+func (s *StackState) Release(hostname string) {
+	bound := slices.DeleteFunc(slices.Clone(s.Bound), func(host string) bool {
 		return host == hostname
-	}))
-}
-
-func withBoundDomains(state StackState, hosts []string) StackState {
-	next := maps.Clone(state)
-	if next == nil {
-		next = StackState{}
+	})
+	if len(bound) == 0 {
+		bound = nil
 	}
-	if len(hosts) == 0 {
-		delete(next, StackKeyDomains)
-		return next
-	}
-	slices.Sort(hosts)
-	next[StackKeyDomains] = strings.Join(hosts, ",")
-	return next
+	s.Bound = bound
 }

@@ -231,7 +231,7 @@ func TestRemovePreviewPurge(t *testing.T) {
 		rec := &sweepRecorder{}
 		fake := &recordingEdge{kind: cloudflare.Kind}
 		rec2 := Reclamation{Teardown: Teardown{Slug: "shop", Stores: ObjectStores{ArtifactBucket: "artifact-bucket", Uploader: rec}}}
-		stale := fake.opened(t, edge.StackState{edge.StackKeySlug: "shop", edge.StackKeySecret: "stale"})
+		stale := fake.opened(t, edge.StackState{Slug: "shop", Secret: "stale"})
 
 		err := RemovePreview(context.Background(), stale, rec2, "pr-1", false, PreviewRemovalStages{}, nil)
 		if err == nil {

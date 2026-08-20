@@ -56,7 +56,7 @@ func TestConformance(t *testing.T) {
 
 func reconciled(t *testing.T, w *world) edge.EdgeStack {
 	t.Helper()
-	stack, err := bootstrapped(t, w).Reconcile(context.Background(), testSpec(), nil)
+	stack, err := bootstrapped(t, w).Reconcile(context.Background(), testSpec(), edge.StackState{})
 	if err != nil {
 		t.Fatalf("Reconcile: %v", err)
 	}
@@ -116,8 +116,8 @@ func TestReconcileShapesTheProductionAPI(t *testing.T) {
 	if api == nil {
 		t.Fatalf("no REST API named for the stack; gateway holds %v", w.gateway.mutations())
 	}
-	if stack.State()[stackKeyAPI] != api.id {
-		t.Errorf("state records API %q, want the one reconcile created (%q)", stack.State()[stackKeyAPI], api.id)
+	if ownState(t, stack).API != api.id {
+		t.Errorf("state records API %q, want the one reconcile created (%q)", ownState(t, stack).API, api.id)
 	}
 	assertSet(t, "resources", slices.Collect(maps.Values(api.resources)), []string{
 		"/", "/{proxy+}", "/_next", "/_next/static", "/_next/static/{proxy+}",
@@ -423,7 +423,7 @@ func TestReconcileRepairsAnAPIThatWasNeverFinished(t *testing.T) {
 	e := bootstrapped(t, w)
 	w.gateway.resourceErr = errors.New("Too Many Requests")
 
-	if _, err := e.Reconcile(ctx, testSpec(), nil); err == nil {
+	if _, err := e.Reconcile(ctx, testSpec(), edge.StackState{}); err == nil {
 		t.Fatal("Reconcile succeeded while API Gateway refused to add a resource")
 	}
 	half := w.gateway.named(productionAPIName())
@@ -435,7 +435,7 @@ func TestReconcileRepairsAnAPIThatWasNeverFinished(t *testing.T) {
 	}
 
 	w.gateway.resourceErr = nil
-	stack, err := e.Reconcile(ctx, testSpec(), nil)
+	stack, err := e.Reconcile(ctx, testSpec(), edge.StackState{})
 	if err != nil {
 		t.Fatalf("second Reconcile: %v", err)
 	}
@@ -443,8 +443,8 @@ func TestReconcileRepairsAnAPIThatWasNeverFinished(t *testing.T) {
 		t.Errorf("CreateRestApi calls = %d, want one for the not-found API and one for this project's; the second reconcile must re-shape what it found", got)
 	}
 	api := w.gateway.named(productionAPIName())
-	if stack.State()[stackKeyAPI] != api.id {
-		t.Errorf("state records API %q, want the one left behind (%q)", stack.State()[stackKeyAPI], api.id)
+	if ownState(t, stack).API != api.id {
+		t.Errorf("state records API %q, want the one left behind (%q)", ownState(t, stack).API, api.id)
 	}
 	assertSet(t, "resources", slices.Collect(maps.Values(api.resources)), []string{
 		"/", "/{proxy+}", "/_next", "/_next/static", "/_next/static/{proxy+}",
@@ -463,7 +463,7 @@ func TestReconcileKeepsTheReleaseTheStageIsServing(t *testing.T) {
 	ctx := context.Background()
 	w := newWorld()
 	e := bootstrapped(t, w)
-	stack, err := e.Reconcile(ctx, testSpec(), nil)
+	stack, err := e.Reconcile(ctx, testSpec(), edge.StackState{})
 	if err != nil {
 		t.Fatalf("Reconcile: %v", err)
 	}
@@ -504,7 +504,7 @@ func TestDomainOwnerNamesTheProjectThatHoldsTheHost(t *testing.T) {
 	ctx := context.Background()
 	w := newWorld()
 	e := bootstrapped(t, w)
-	stack, err := e.Reconcile(ctx, testSpec(), nil)
+	stack, err := e.Reconcile(ctx, testSpec(), edge.StackState{})
 	if err != nil {
 		t.Fatalf("Reconcile: %v", err)
 	}
@@ -548,7 +548,7 @@ func TestDestroyTakesTheAPIAndItsDomains(t *testing.T) {
 	if w.gateway.named(productionAPIName()) != nil {
 		t.Error("the project's REST API survived its destroy")
 	}
-	if bound := edge.BoundDomains(stack.State()); len(bound) != 0 {
+	if bound := stack.State().Bound; len(bound) != 0 {
 		t.Errorf("bound domains = %v, want none", bound)
 	}
 }
@@ -690,7 +690,7 @@ func TestReconcileLeavesTheSharedRoleAlone(t *testing.T) {
 	e := bootstrapped(t, w)
 	w.iam.calls = nil
 
-	if _, err := e.Reconcile(ctx, testSpec(), nil); err != nil {
+	if _, err := e.Reconcile(ctx, testSpec(), edge.StackState{}); err != nil {
 		t.Fatalf("Reconcile: %v", err)
 	}
 
@@ -710,7 +710,7 @@ func TestReconcileRefusesAnAccountThatWasNeverBootstrapped(t *testing.T) {
 		w := newWorld()
 		w.cfn.absent = true
 
-		if _, err := w.edge().Reconcile(context.Background(), testSpec(), nil); err == nil {
+		if _, err := w.edge().Reconcile(context.Background(), testSpec(), edge.StackState{}); err == nil {
 			t.Fatal("Reconcile succeeded against a substrate that was never bootstrapped")
 		}
 	})
@@ -719,7 +719,7 @@ func TestReconcileRefusesAnAccountThatWasNeverBootstrapped(t *testing.T) {
 		t.Parallel()
 
 		w := newWorld()
-		_, err := w.edge().Reconcile(context.Background(), testSpec(), nil)
+		_, err := w.edge().Reconcile(context.Background(), testSpec(), edge.StackState{})
 		if err == nil {
 			t.Fatal("Reconcile succeeded without the role API Gateway invokes through")
 		}
@@ -738,7 +738,7 @@ func TestCreateAPINamesTheQuota(t *testing.T) {
 		Message: aws.String("Maximum number of Regional APIs has been reached"),
 	}
 
-	_, err := e.Reconcile(context.Background(), testSpec(), nil)
+	_, err := e.Reconcile(context.Background(), testSpec(), edge.StackState{})
 	if err == nil {
 		t.Fatal("Reconcile succeeded, want the quota surfaced")
 	}
@@ -763,7 +763,7 @@ func TestCreateAPITellsAThrottleFromTheQuota(t *testing.T) {
 			e := bootstrapped(t, w)
 			w.gateway.createErr = refusal
 
-			_, err := e.Reconcile(context.Background(), testSpec(), nil)
+			_, err := e.Reconcile(context.Background(), testSpec(), edge.StackState{})
 			if err == nil {
 				t.Fatal("Reconcile succeeded, want the throttle surfaced")
 			}
@@ -783,7 +783,7 @@ func TestBindDomainPublishesAFrontPerHost(t *testing.T) {
 	ctx := context.Background()
 	w := newWorld()
 	e := bootstrapped(t, w)
-	stack, err := e.Reconcile(ctx, testSpec(), nil)
+	stack, err := e.Reconcile(ctx, testSpec(), edge.StackState{})
 	if err != nil {
 		t.Fatalf("Reconcile: %v", err)
 	}
@@ -820,7 +820,7 @@ func TestReconcileRecoversTheFrontOfADomainBoundBeforeItWasRecorded(t *testing.T
 	ctx := context.Background()
 	w := newWorld()
 	e := bootstrapped(t, w)
-	stack, err := e.Reconcile(ctx, testSpec(), nil)
+	stack, err := e.Reconcile(ctx, testSpec(), edge.StackState{})
 	if err != nil {
 		t.Fatalf("Reconcile: %v", err)
 	}
@@ -828,8 +828,8 @@ func TestReconcileRecoversTheFrontOfADomainBoundBeforeItWasRecorded(t *testing.T
 	if err := stack.BindDomain(ctx, edge.DomainBinding{Hostname: host, Certificate: "arn:aws:acm:eu-west-1:123456789012:certificate/abc"}); err != nil {
 		t.Fatalf("BindDomain: %v", err)
 	}
-	forgotten := maps.Clone(stack.State())
-	delete(forgotten, "front:"+host)
+	forgotten := stack.State()
+	forgotten.PublishFront(host, "")
 
 	settled, err := e.Reconcile(ctx, testSpec(), forgotten)
 	if err != nil {
@@ -851,7 +851,7 @@ func TestReconcileForgetsABindingWhoseDomainNameIsGone(t *testing.T) {
 	ctx := context.Background()
 	w := newWorld()
 	e := bootstrapped(t, w)
-	stack, err := e.Reconcile(ctx, testSpec(), nil)
+	stack, err := e.Reconcile(ctx, testSpec(), edge.StackState{})
 	if err != nil {
 		t.Fatalf("Reconcile: %v", err)
 	}
@@ -859,8 +859,8 @@ func TestReconcileForgetsABindingWhoseDomainNameIsGone(t *testing.T) {
 	if err := stack.BindDomain(ctx, edge.DomainBinding{Hostname: host, Certificate: "arn:aws:acm:eu-west-1:123456789012:certificate/abc"}); err != nil {
 		t.Fatalf("BindDomain: %v", err)
 	}
-	bound := maps.Clone(stack.State())
-	delete(bound, "front:"+host)
+	bound := stack.State()
+	bound.PublishFront(host, "")
 	delete(w.gateway.domains, host)
 
 	spec := testSpec()
@@ -871,7 +871,7 @@ func TestReconcileForgetsABindingWhoseDomainNameIsGone(t *testing.T) {
 		t.Fatalf("Reconcile again: %v", err)
 	}
 
-	if hosts := edge.BoundDomains(settled.State()); slices.Contains(hosts, host) {
+	if hosts := settled.State().Bound; slices.Contains(hosts, host) {
 		t.Errorf("bound domains = %v, want %s forgotten: API Gateway holds no domain name for it any more", hosts, host)
 	}
 	if len(warned) != 1 || !strings.Contains(warned[0], host) {

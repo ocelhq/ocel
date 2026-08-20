@@ -7,8 +7,6 @@ import (
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/ssm"
-
-	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
 const getParametersLimit = 10
@@ -31,7 +29,7 @@ type ClassParams struct {
 	ISRWriter        ISRWriter
 	ISRWriterSeed    string
 	OriginSecret     string
-	StackState       edge.StackState
+	Stack            StackRecord
 	PreviewDomain    PreviewDomain
 }
 
@@ -113,7 +111,7 @@ func ReadClassParams(ctx context.Context, api SSMBatchAPI, class, slug string) (
 		}
 	}
 	if raw, ok := found[stackParam]; ok {
-		if err := json.Unmarshal([]byte(raw), &p.StackState); err != nil {
+		if err := json.Unmarshal([]byte(raw), &p.Stack); err != nil {
 			return ClassParams{}, fmt.Errorf("parse edge-stack state: %w", err)
 		}
 	}
@@ -126,7 +124,7 @@ type TeardownParams struct {
 
 	CacheStore CacheStore
 	ISRWriter  ISRWriter
-	StackState edge.StackState
+	Stack      StackRecord
 }
 
 func ReadTeardownParams(ctx context.Context, api SSMBatchAPI, class, slug string) (TeardownParams, error) {
@@ -169,7 +167,7 @@ func ReadTeardownParams(ctx context.Context, api SSMBatchAPI, class, slug string
 		}
 	}
 	if raw, ok := found[stackParam]; ok {
-		if err := json.Unmarshal([]byte(raw), &p.StackState); err != nil {
+		if err := json.Unmarshal([]byte(raw), &p.Stack); err != nil {
 			return TeardownParams{}, fmt.Errorf("parse edge-stack state: %w", err)
 		}
 	}

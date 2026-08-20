@@ -31,11 +31,11 @@ func TestRefusePreviewReleaseWhileProjectsAreServed(t *testing.T) {
 	ctx := context.Background()
 	ssmc := &stateSSM{params: map[string]string{}}
 	for slug, state := range map[string]edge.StackState{
-		"shop": {edge.StackKeySlug: "shop", edge.StackKeyGlobalPreview: "preview.acme.com"},
-		"blog": {edge.StackKeySlug: "blog", edge.StackKeyGlobalPreview: "preview.acme.com"},
+		"shop": {Slug: "shop", GlobalPreview: "preview.acme.com"},
+		"blog": {Slug: "blog", GlobalPreview: "preview.acme.com"},
 	} {
-		if err := bootstrap.WriteStackStateFor(ctx, ssmc, bootstrap.ClassPreview, slug, state); err != nil {
-			t.Fatalf("WriteStackStateFor(%s): %v", slug, err)
+		if err := bootstrap.WriteStackRecordFor(ctx, ssmc, bootstrap.ClassPreview, slug, bootstrap.StackRecord{Edge: state}); err != nil {
+			t.Fatalf("WriteStackRecordFor(%s): %v", slug, err)
 		}
 	}
 
@@ -64,8 +64,8 @@ func TestRefusePreviewReleaseWhileProjectsAreServed(t *testing.T) {
 	}
 
 	for _, slug := range []string{"shop", "blog"} {
-		if err := bootstrap.DeleteStackStateFor(ctx, ssmc, bootstrap.ClassPreview, slug); err != nil {
-			t.Fatalf("DeleteStackStateFor(%s): %v", slug, err)
+		if err := bootstrap.DeleteStackRecordFor(ctx, ssmc, bootstrap.ClassPreview, slug); err != nil {
+			t.Fatalf("DeleteStackRecordFor(%s): %v", slug, err)
 		}
 	}
 	if err := refusePreviewReleaseWhileServed(ctx, ssmc, "preview.acme.com", previews); err != nil {

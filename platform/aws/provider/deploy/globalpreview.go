@@ -2,7 +2,6 @@ package deploy
 
 import (
 	"fmt"
-	"maps"
 
 	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
@@ -66,17 +65,11 @@ func MarkGlobalPreview(state edge.StackState, cfg Config, manifest *deploymentsv
 		return state
 	}
 	if !servesOnGlobalPreviewDomain(cfg, manifest) {
-		if len(state) == 0 {
-			return state
-		}
-		marked := maps.Clone(state)
-		delete(marked, edge.StackKeyGlobalPreview)
-		return marked
+		state.GlobalPreview = ""
+		return state
 	}
-	marked := edge.StackState{}
-	maps.Copy(marked, state)
-	marked[edge.StackKeyGlobalPreview] = cfg.GlobalPreviewDomain
-	return marked
+	state.GlobalPreview = cfg.GlobalPreviewDomain
+	return state
 }
 
 func withService(worker edge.Worker, name, service string) edge.Worker {

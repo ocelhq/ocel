@@ -65,9 +65,9 @@ func (s *boundStack) BindDomain(_ context.Context, binding edge.DomainBinding) e
 	}
 	s.log.note("bind %s on %s", binding.Hostname, s.name)
 	s.bound = append(s.bound, binding)
-	s.state = edge.RecordBoundDomain(s.state, binding.Hostname)
+	s.state.Bind(binding.Hostname)
 	if s.hostFront != nil {
-		s.state = edge.RecordHostFront(s.state, binding.Hostname, s.hostFront(binding.Hostname))
+		s.state.PublishFront(binding.Hostname, s.hostFront(binding.Hostname))
 	}
 	return nil
 }
@@ -75,14 +75,14 @@ func (s *boundStack) BindDomain(_ context.Context, binding edge.DomainBinding) e
 func (s *boundStack) UnbindDomain(_ context.Context, hostname string) error {
 	s.log.note("unbind %s from %s", hostname, s.name)
 	s.unbound = append(s.unbound, hostname)
-	s.state = edge.ForgetBoundDomain(s.state, hostname)
+	s.state.Release(hostname)
 	return nil
 }
 
 func (s *boundStack) Destroy(context.Context) error { return nil }
 
 func newBoundStack() *boundStack {
-	return &boundStack{state: edge.StackState{edge.StackKeySlug: domainSlug}}
+	return &boundStack{state: edge.StackState{Slug: domainSlug}}
 }
 
 type domainWriter struct {
@@ -201,24 +201,20 @@ func (f *domainFixture) spoke(want string) bool {
 
 func (f *domainFixture) recorded(t *testing.T) domains.Settlement {
 	t.Helper()
-	state, err := bootstrap.ReadStackStateFor(t.Context(), f.ssm, bootstrap.ClassProduction, domainSlug)
+	record, err := bootstrap.ReadStackRecordFor(t.Context(), f.ssm, bootstrap.ClassProduction, domainSlug)
 	if err != nil {
-		t.Fatalf("ReadStackStateFor: %v", err)
+		t.Fatalf("ReadStackRecordFor: %v", err)
 	}
-	recorded, err := bootstrap.ReadProduction(state)
-	if err != nil {
-		t.Fatalf("ReadProduction: %v", err)
-	}
-	return recorded
+	return record.Production
 }
 
 func (f *domainFixture) surfaces(t *testing.T) []string {
 	t.Helper()
-	state, err := bootstrap.ReadStackStateFor(t.Context(), f.ssm, bootstrap.ClassProduction, domainSlug)
+	record, err := bootstrap.ReadStackRecordFor(t.Context(), f.ssm, bootstrap.ClassProduction, domainSlug)
 	if err != nil {
-		t.Fatalf("ReadStackStateFor: %v", err)
+		t.Fatalf("ReadStackRecordFor: %v", err)
 	}
-	return edge.BoundDomains(state)
+	return record.Edge.Bound
 }
 
 type domainFixtureOptions struct {
@@ -263,10 +259,12 @@ func newDomainFixture(opts domainFixtureOptions) *domainFixture {
 		opts.priorEdge.log = log
 	}
 	f := &domainFixture{stack: opts.stack, writer: opts.writer, acm: opts.acm, ssm: &stateSSM{params: map[string]string{}}, log: log}
-	front := edge.EdgeStack(opts.stack)
+	opened := edge.EdgeStack(opts.stack)
 	if opts.edge != nil {
-		front = opts.edge
+		opened = opts.edge
 	}
+	held := &stackWriter{ssm: f.ssm, slug: domainSlug, stack: opened, settled: opts.prior}
+	front := edge.EdgeStack(persisting(opened, held.write))
 
 	var writer edge.DNSWriter
 	if opts.writer != nil {
@@ -298,7 +296,7 @@ func newDomainFixture(opts domainFixtureOptions) *domainFixture {
 		Discarder: func(certs.Certificate) certs.Issuer {
 			return certs.Issuer{API: opts.acm, Region: certs.CloudFrontRegion}
 		},
-		Store: productionStore{ssm: f.ssm, slug: domainSlug, stack: front},
+		Store: held,
 		Unbind: func(ctx context.Context, hostname string) error {
 			return front.UnbindDomain(ctx, hostname)
 		},
@@ -779,7 +777,8 @@ func TestRemoveDomain(t *testing.T) {
 			writer:     &domainWriter{},
 			prior:      prior(),
 		})
-		f.stack.state = edge.RecordBoundDomain(edge.RecordBoundDomain(f.stack.state, "shop.app.com"), "www.app.com")
+		f.stack.state.Bind("shop.app.com")
+		f.stack.state.Bind("www.app.com")
 
 		if err := f.session.remove(t.Context(), f.say); err != nil {
 			t.Fatalf("remove: %v", err)
@@ -905,17 +904,12 @@ func TestReleaseProductionDomains(t *testing.T) {
 		Validation:  domains.Records{Written: []edge.Record{validation}},
 		Hosts:       []domains.Host{{Hostname: "shop.app.com", Records: domains.Records{Written: []edge.Record{front}}}},
 	}
-	state, err := bootstrap.WithProduction(edge.StackState{edge.StackKeySlug: domainSlug}, recorded)
-	if err != nil {
-		t.Fatalf("WithProduction: %v", err)
-	}
-
 	writer := &domainWriter{}
 	api := newDomainACM()
 	discarder := func(certs.Certificate) certs.Issuer {
 		return certs.Issuer{API: api, Region: certs.CloudFrontRegion}
 	}
-	if err := releaseProductionDomains(t.Context(), state, writer, discarder, func(string) {}); err != nil {
+	if err := releaseProductionDomains(t.Context(), recorded, writer, discarder, func(string) {}); err != nil {
 		t.Fatalf("releaseProductionDomains: %v", err)
 	}
 	if !slices.Equal(writer.deleted, []edge.Record{front, validation}) {
@@ -1000,8 +994,8 @@ func (c *cloudflareEdge) stack(t *testing.T) edge.EdgeStack {
 	t.Cleanup(srv.Close)
 
 	stack, err := cloudflare.NewAt(srv.URL + "/").Open(edge.StackState{
-		edge.StackKeySlug: domainSlug,
-		"entryWorker":     cloudflareEntryScript,
+		Slug:    domainSlug,
+		Adapter: edge.Own(map[string][]string{"entryWorkers": {cloudflareEntryScript}}),
 	})
 	if err != nil {
 		t.Fatalf("Open: %v", err)
@@ -1050,7 +1044,7 @@ func TestAddDomainOnAnEdgeThatIsNotCloudflare(t *testing.T) {
 		t.Parallel()
 
 		stack := newBoundStack()
-		stack.state[edge.StackKeyFront] = "d123.cloudfront.net"
+		stack.state.Front = "d123.cloudfront.net"
 		writer := &domainWriter{}
 		f := newDomainFixture(domainFixtureOptions{
 			kind:       cloudfront.Kind,
@@ -1086,4 +1080,45 @@ func TestAddDomainOnAnEdgeThatIsNotCloudflare(t *testing.T) {
 			t.Errorf("err = %v, want it to name the host with nothing to point at", err)
 		}
 	})
+}
+
+func TestPersistingStackWritesWhatACallReports(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	ssmc := &stateSSM{params: map[string]string{}}
+	front := newBoundStack()
+	front.log = &callLog{}
+	held := &stackWriter{ssm: ssmc, slug: domainSlug, stack: front}
+	stack := persisting(front, held.write)
+
+	if err := stack.BindDomain(ctx, edge.DomainBinding{Hostname: "shop.app.com"}); err != nil {
+		t.Fatalf("BindDomain: %v", err)
+	}
+	recorded, err := bootstrap.ReadStackRecordFor(ctx, ssmc, bootstrap.ClassProduction, domainSlug)
+	if err != nil {
+		t.Fatalf("ReadStackRecordFor: %v", err)
+	}
+	if !recorded.Edge.BoundTo("shop.app.com") {
+		t.Fatalf("recorded = %+v, want the binding persisted without a checkpoint of its own at the call site", recorded.Edge)
+	}
+
+	writes := ssmc.puts
+	if err := stack.BindDomain(ctx, edge.DomainBinding{Hostname: "shop.app.com"}); err != nil {
+		t.Fatalf("BindDomain again: %v", err)
+	}
+	if ssmc.puts != writes {
+		t.Errorf("writes = %d, want the %d already made: a call that changed nothing reports nothing to persist", ssmc.puts, writes)
+	}
+
+	if err := stack.UnbindDomain(ctx, "shop.app.com"); err != nil {
+		t.Fatalf("UnbindDomain: %v", err)
+	}
+	recorded, err = bootstrap.ReadStackRecordFor(ctx, ssmc, bootstrap.ClassProduction, domainSlug)
+	if err != nil {
+		t.Fatalf("ReadStackRecordFor after unbind: %v", err)
+	}
+	if recorded.Edge.BoundTo("shop.app.com") {
+		t.Errorf("recorded = %+v, want the host released", recorded.Edge)
+	}
 }

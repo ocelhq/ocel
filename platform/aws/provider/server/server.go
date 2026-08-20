@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"maps"
 	"os"
 	"path/filepath"
 	"slices"
@@ -311,16 +310,12 @@ func (s *Server) runDeploy(ctx context.Context, req *deploymentsv1.DeployRequest
 		return deploy.Result{}, finishPreparing(err)
 	}
 
-	recordedDomains, err := bootstrap.ReadProduction(params.StackState)
-	if err != nil {
-		return deploy.Result{}, finishPreparing(err)
-	}
 	admitted, err := admitDomains(ctx, domainGate{
 		kind:          edgeFront.Kind(),
 		servesUnbound: edgeFront.Facts().ServesUnbound,
 
-		state:     params.StackState,
-		recorded:  recordedDomains,
+		state:     params.Stack.Edge,
+		recorded:  params.Stack.Production,
 		issuer:    certs.IssuerFor(edgeFront, certs.Deps{AWS: awscfg}),
 		prober:    certs.NewProber(),
 		pins:      normalizePins(opts.Certificates),
@@ -356,7 +351,7 @@ func (s *Server) runDeploy(ctx context.Context, req *deploymentsv1.DeployRequest
 		return deploy.Result{}, finishPreparing(err)
 	}
 
-	priorStackState := params.StackState
+	priorStackState := params.Stack.Edge
 	stateTableARN := fmt.Sprintf("arn:aws:dynamodb:%s:%s:table/%s", awscfg.Region, account, deployed.StateTable)
 
 	finishPreparing(nil)
@@ -441,7 +436,8 @@ func (s *Server) runDeploy(ctx context.Context, req *deploymentsv1.DeployRequest
 	}
 
 	if stackStateChanged(priorStackState, res.StackState) {
-		if writeErr := bootstrap.WriteStackStateFor(ctx, ssmClient, substrateClass, manifest.GetSlug(), res.StackState); writeErr != nil {
+		record := bootstrap.StackRecord{Edge: res.StackState, Production: params.Stack.Production}
+		if writeErr := bootstrap.WriteStackRecordFor(ctx, ssmClient, substrateClass, manifest.GetSlug(), record); writeErr != nil {
 			if err != nil {
 				return res, fmt.Errorf("%w (additionally failed to persist edge-stack state: %v)", err, writeErr)
 			}
@@ -452,7 +448,7 @@ func (s *Server) runDeploy(ctx context.Context, req *deploymentsv1.DeployRequest
 }
 
 func stackStateChanged(prior, reconciled edge.StackState) bool {
-	return reconciled != nil && !maps.Equal(reconciled, prior)
+	return !reconciled.Empty() && !reconciled.Equal(prior)
 }
 
 const previewTTL = 7 * 24 * time.Hour

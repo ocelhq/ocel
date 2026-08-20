@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"maps"
 	"slices"
 	"strings"
 	"sync"
@@ -41,12 +40,6 @@ const (
 	unsetVariable = "unset"
 
 	apiNamespace = "ocel"
-
-	stackKeyAPI         = "restApiId"
-	stackKeyStateTable  = "stateTable"
-	stackKeyAssetBucket = "assetBucket"
-	stackKeyRole        = "invokeRole"
-	stackKeyRegion      = "region"
 )
 
 type APIGatewayAPI interface {
@@ -298,18 +291,19 @@ func (p *provider) Reconcile(ctx context.Context, spec edge.StackSpec, prior edg
 		return nil, err
 	}
 
-	next := maps.Clone(prior)
-	if next == nil {
-		next = edge.StackState{}
+	var own private
+	if err := prior.Adapter.Into(&own); err != nil {
+		return nil, err
 	}
-	next[edge.StackKeySlug] = spec.Slug
-	next[edge.StackKeyClass] = string(spec.Class)
-	next[stackKeyStateTable] = deployed.StateTable
-	next[stackKeyAssetBucket] = deployed.AssetBucket
-	next[stackKeyRole] = role
-	next[stackKeyRegion] = c.Region
+	next := prior
+	next.Slug = spec.Slug
+	next.Class = spec.Class
+	own.StateTable = deployed.StateTable
+	own.AssetBucket = deployed.AssetBucket
+	own.Role = role
+	own.Region = c.Region
 
-	s := &stack{p: p, state: next}
+	s := &stack{p: p, state: next, own: own}
 	if err := s.ledger(c).EnsureSchema(ctx); err != nil {
 		return nil, err
 	}
@@ -320,7 +314,7 @@ func (p *provider) Reconcile(ctx context.Context, spec edge.StackSpec, prior edg
 	if err != nil {
 		return nil, err
 	}
-	next[stackKeyAPI] = id
+	s.own.API = id
 	if err := s.settleDomainFronts(ctx, c, spec.Warn); err != nil {
 		return nil, err
 	}
@@ -328,7 +322,11 @@ func (p *provider) Reconcile(ctx context.Context, spec edge.StackSpec, prior edg
 }
 
 func (p *provider) Open(state edge.StackState) (edge.EdgeStack, error) {
-	return &stack{p: p, state: maps.Clone(state)}, nil
+	s := &stack{p: p, state: state}
+	if err := state.Adapter.Into(&s.own); err != nil {
+		return nil, err
+	}
+	return s, nil
 }
 
 func (p *provider) DomainOwner(ctx context.Context, hostname string) (string, error) {

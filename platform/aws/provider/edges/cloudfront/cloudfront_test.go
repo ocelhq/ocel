@@ -61,7 +61,7 @@ func TestConformance(t *testing.T) {
 
 func reconciled(t *testing.T, w *world) edge.EdgeStack {
 	t.Helper()
-	stack, err := bootstrapped(t, w).Reconcile(context.Background(), testSpec(), nil)
+	stack, err := bootstrapped(t, w).Reconcile(context.Background(), testSpec(), edge.StackState{})
 	if err != nil {
 		t.Fatalf("Reconcile: %v", err)
 	}
@@ -100,7 +100,7 @@ func promotion() edge.Promotion {
 
 func routeOn(t *testing.T, w *world, stack edge.EdgeStack, hostname string) route {
 	t.Helper()
-	held := w.store.held(stack.State()[stackKeyKeyValueStore])
+	held := w.store.held(ownState(t, stack).KeyValueStore)
 	raw, ok := held[hostname]
 	if !ok {
 		t.Fatalf("the key value store holds %v, want an entry for %q", slices.Sorted(keysOf(held)), hostname)
@@ -263,7 +263,7 @@ func TestReconcile(t *testing.T) {
 	t.Run("an account that was never bootstrapped is refused by name", func(t *testing.T) {
 		t.Parallel()
 
-		_, err := newWorld().edge().Reconcile(context.Background(), testSpec(), nil)
+		_, err := newWorld().edge().Reconcile(context.Background(), testSpec(), edge.StackState{})
 		if err == nil {
 			t.Fatal("Reconcile error = nil, want a refusal: nothing fronts this account yet")
 		}
@@ -282,10 +282,10 @@ func TestReconcile(t *testing.T) {
 		if held == nil {
 			t.Fatalf("no distribution for the stack; CloudFront holds %v", w.front.mutations())
 		}
-		if got := stack.State()[stackKeyDistribution]; got != held.id {
+		if got := ownState(t, stack).Distribution; got != held.id {
 			t.Errorf("state records distribution %q, want the one reconcile created (%q)", got, held.id)
 		}
-		if got := stack.State()[edge.StackKeyFront]; got != held.domain {
+		if got := stack.State().Front; got != held.domain {
 			t.Errorf("state records front %q, want the distribution's domain name (%q), which is what a CNAME points at", got, held.domain)
 		}
 
@@ -296,8 +296,8 @@ func TestReconcile(t *testing.T) {
 		if len(behavior.FunctionAssociations.Items) != 1 || behavior.FunctionAssociations.Items[0].EventType != cftypes.EventTypeViewerRequest {
 			t.Errorf("function associations = %+v, want the resolver on viewer-request", behavior.FunctionAssociations.Items)
 		}
-		if aws.ToString(behavior.CachePolicyId) != stack.State()[stackKeyCachePolicy] {
-			t.Errorf("cache policy = %q, want the one bootstrap made (%q)", aws.ToString(behavior.CachePolicyId), stack.State()[stackKeyCachePolicy])
+		if aws.ToString(behavior.CachePolicyId) != ownState(t, stack).CachePolicy {
+			t.Errorf("cache policy = %q, want the one bootstrap made (%q)", aws.ToString(behavior.CachePolicyId), ownState(t, stack).CachePolicy)
 		}
 		if got := aws.ToString(held.config.CacheTagConfig.HeaderName); got != cacheTagHeader {
 			t.Errorf("cache tag header = %q, want %q", got, cacheTagHeader)
@@ -306,7 +306,7 @@ func TestReconcile(t *testing.T) {
 		if aws.ToString(origin.DomainName) != assetOriginDomain(fakeAssetBucket, fakeRegion) {
 			t.Errorf("origin = %q, want the account's asset bucket", aws.ToString(origin.DomainName))
 		}
-		if aws.ToString(origin.OriginAccessControlId) != stack.State()[stackKeyOAC] {
+		if aws.ToString(origin.OriginAccessControlId) != ownState(t, stack).OriginAccessControl {
 			t.Errorf("origin access control = %q, want the one bootstrap made", aws.ToString(origin.OriginAccessControlId))
 		}
 	})
@@ -316,7 +316,7 @@ func TestReconcile(t *testing.T) {
 
 		w := newWorld()
 		e := bootstrapped(t, w)
-		first, err := e.Reconcile(context.Background(), testSpec(), nil)
+		first, err := e.Reconcile(context.Background(), testSpec(), edge.StackState{})
 		if err != nil {
 			t.Fatalf("Reconcile: %v", err)
 		}
@@ -339,7 +339,7 @@ func TestReconcile(t *testing.T) {
 		w := newWorld()
 		spec := testSpec()
 		spec.PruneOnly = true
-		if _, err := bootstrapped(t, w).Reconcile(context.Background(), spec, nil); err != nil {
+		if _, err := bootstrapped(t, w).Reconcile(context.Background(), spec, edge.StackState{}); err != nil {
 			t.Fatalf("Reconcile: %v", err)
 		}
 		if got := w.front.count("CreateDistribution"); got != 0 {
@@ -498,7 +498,7 @@ func TestUnbindDomainTakesTheRouteAndTheAlias(t *testing.T) {
 		t.Fatalf("UnbindDomain: %v", err)
 	}
 
-	if held := w.store.held(stack.State()[stackKeyKeyValueStore]); len(held) != 0 {
+	if held := w.store.held(ownState(t, stack).KeyValueStore); len(held) != 0 {
 		t.Errorf("the key value store holds %v, want nothing once the host is unbound", held)
 	}
 	distribution := w.front.named(productionDistributionName())
@@ -513,7 +513,7 @@ func TestDestroyDisablesTheDistributionBeforeDeletingIt(t *testing.T) {
 	w := newWorld()
 	stack := reconciled(t, w)
 	bound(t, stack)
-	id := stack.State()[stackKeyDistribution]
+	id := ownState(t, stack).Distribution
 
 	if err := stack.Destroy(context.Background()); err != nil {
 		t.Fatalf("Destroy: %v", err)
@@ -532,7 +532,7 @@ func TestDestroyDisablesTheDistributionBeforeDeletingIt(t *testing.T) {
 	if len(w.dynamo.items) != 0 {
 		t.Errorf("the ledger left %d items behind, want none", len(w.dynamo.items))
 	}
-	if got := stack.State()[stackKeyDistribution]; got != "" {
+	if got := ownState(t, stack).Distribution; got != "" {
 		t.Errorf("state still records distribution %q after destroy", got)
 	}
 }
@@ -546,7 +546,7 @@ func TestDestroyGivesUpOnADistributionStillRollingOut(t *testing.T) {
 		if _, err := e.Bootstrap(context.Background(), edge.ClassProduction); err != nil {
 			return nil, err
 		}
-		return e.Reconcile(context.Background(), testSpec(), nil)
+		return e.Reconcile(context.Background(), testSpec(), edge.StackState{})
 	}()
 	if err != nil {
 		t.Fatalf("prepare the stack: %v", err)
@@ -571,7 +571,7 @@ func TestDestroyKeepsTheLedgerUntilTheDistributionIsActuallyGone(t *testing.T) {
 
 	w := newWorld()
 	stack := reconciled(t, w)
-	id := stack.State()[stackKeyDistribution]
+	id := ownState(t, stack).Distribution
 	w.front.rollout = 99
 
 	err := stack.Destroy(context.Background())
@@ -611,7 +611,7 @@ func TestReconcileLeavesTheTagInvalidatorAFrontToReach(t *testing.T) {
 	if held == nil {
 		t.Fatalf("the ledger names no front for the tag invalidator to reach; it holds %v", slices.Sorted(maps.Keys(w.dynamo.items)))
 	}
-	if want := stack.State()[stackKeyDistribution]; !slices.Equal(held, []string{want}) {
+	if want := ownState(t, stack).Distribution; !slices.Equal(held, []string{want}) {
 		t.Errorf("invalidation targets = %v, want the distribution this reconcile fronts the project with (%q)", held, want)
 	}
 }

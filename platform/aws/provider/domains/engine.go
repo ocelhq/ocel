@@ -148,9 +148,6 @@ func (e Engine) settleHost(ctx context.Context, prior Settlement, target Target,
 	if err != nil {
 		return state, err
 	}
-	if err := e.Store.Save(ctx, state); err != nil {
-		return state, err
-	}
 
 	records, err := edge.RecordsFor(front, []string{target.Hostname})
 	if err != nil {

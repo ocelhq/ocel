@@ -95,17 +95,30 @@ const genericISRWriterBinding = "ISR_WRITER"
 
 const genericSlugBinding = "OCEL_SLUG"
 
+type private struct {
+	EntryWorkers []string `json:"entryWorkers,omitempty"`
+}
+
 type stack struct {
 	p     *provider
 	state edge.StackState
+	own   private
 }
 
-func (s *stack) State() edge.StackState { return s.state }
+func (s *stack) State() edge.StackState {
+	held := s.state
+	held.Adapter = edge.Own(s.own)
+	return held
+}
 
 func (s *stack) Ledger() edge.Ledger { return s }
 
 func (p *provider) Open(state edge.StackState) (edge.EdgeStack, error) {
-	return &stack{p: p, state: state}, nil
+	s := &stack{p: p, state: state}
+	if err := state.Adapter.Into(&s.own); err != nil {
+		return nil, err
+	}
+	return s, nil
 }
 
 func (p *provider) Reconcile(ctx context.Context, spec edge.StackSpec, prior edge.StackState) (edge.EdgeStack, error) {
@@ -132,16 +145,11 @@ func (p *provider) Reconcile(ctx context.Context, spec edge.StackSpec, prior edg
 		return nil, err
 	}
 	opened := func(state edge.StackState) (edge.EdgeStack, error) {
-		next := maps.Clone(state)
-		if next == nil {
-			next = edge.StackState{}
+		var own private
+		if !spec.PruneOnly {
+			own.EntryWorkers = p.recordEntryWorker(slug, program.Name)
 		}
-		if spec.PruneOnly {
-			delete(next, stackKeyEntryWorker)
-		} else {
-			next[stackKeyEntryWorker] = joinEntryWorkers(p.recordEntryWorker(slug, program.Name))
-		}
-		return &stack{p: p, state: next}, nil
+		return &stack{p: p, state: state, own: own}, nil
 	}
 	upToDate := stamps[program.Name] == stamp
 	if upToDate && skipEdgeReconcile() {
@@ -162,7 +170,7 @@ func (p *provider) Reconcile(ctx context.Context, spec edge.StackSpec, prior edg
 
 	if err := p.reconcileWorkerRoutes(ctx, genericUp, routePlan{
 		desired:        spec.Domains,
-		bound:          edge.BoundDomains(prior),
+		bound:          prior.Bound,
 		prune:          spec.PruneRoutes,
 		pruneStem:      program.PruneWorkerStem,
 		requiredRecord: program.RequiredRecord,
@@ -189,15 +197,12 @@ func (p *provider) Reconcile(ctx context.Context, spec edge.StackSpec, prior edg
 		return nil, fmt.Errorf("set stack version stamp: %w", err)
 	}
 
-	next := maps.Clone(prior)
-	if next == nil {
-		next = edge.StackState{}
-	}
-	next[edge.StackKeySlug] = slug
-	next[edge.StackKeyEndpoint] = endpoint
-	next[edge.StackKeySecret] = id.secret
-	next[edge.StackKeyOwnerToken] = id.ownerToken
-	next[edge.StackKeyClass] = string(spec.Class)
+	next := prior
+	next.Slug = slug
+	next.Endpoint = endpoint
+	next.Secret = id.secret
+	next.OwnerToken = id.ownerToken
+	next.Class = spec.Class
 	return opened(next)
 }
 
@@ -231,11 +236,11 @@ type storeIdentity struct {
 }
 
 func (p *provider) ensureInstance(ctx context.Context, spec edge.StackSpec, prior edge.StackState) (storeIdentity, stampSet, error) {
-	if secret := prior[edge.StackKeySecret]; secret != "" && prior[edge.StackKeySlug] == spec.Slug {
+	if secret := prior.Secret; secret != "" && prior.Slug == spec.Slug {
 		current, res, err := p.getVersionStamp(ctx, spec.Program.StoreEndpoint, spec.Slug, secret)
 		switch {
 		case err == nil:
-			return storeIdentity{secret: secret, ownerToken: prior[edge.StackKeyOwnerToken]}, decodeStampSet(current), nil
+			return storeIdentity{secret: secret, ownerToken: prior.OwnerToken}, decodeStampSet(current), nil
 		case !unauthorized(res):
 			return storeIdentity{}, nil, fmt.Errorf("read stack version stamp: %w", err)
 		}
@@ -266,7 +271,7 @@ func mintIdentity() (storeIdentity, error) {
 
 func (s *stack) Destroy(ctx context.Context) error {
 	var errs []error
-	for _, hostname := range edge.BoundDomains(s.state) {
+	for _, hostname := range s.state.Bound {
 		if err := s.UnbindDomain(ctx, hostname); err != nil {
 			errs = append(errs, fmt.Errorf("unbind %q before destroying the stack that serves it: %w", hostname, err))
 		}
@@ -287,11 +292,11 @@ func (s *stack) Destroy(ctx context.Context) error {
 func (p *provider) stackWorkers(ctx context.Context, state edge.StackState) ([]string, error) {
 	named := map[string]bool{}
 	var apps []string
-	if secret := state[edge.StackKeySecret]; secret != "" {
-		stamped, res, err := p.getVersionStamp(ctx, state[edge.StackKeyEndpoint], state[edge.StackKeySlug], secret)
+	if secret := state.Secret; secret != "" {
+		stamped, res, err := p.getVersionStamp(ctx, state.Endpoint, state.Slug, secret)
 		if err != nil {
 			if unauthorized(res) {
-				return nil, fmt.Errorf("read stack version stamp: the deployments store rejected project %q's secret, so the workers it deployed cannot be named: %w", state[edge.StackKeySlug], err)
+				return nil, fmt.Errorf("read stack version stamp: the deployments store rejected project %q's secret, so the workers it deployed cannot be named: %w", state.Slug, err)
 			}
 			return nil, fmt.Errorf("read stack version stamp: %w", err)
 		}
@@ -305,7 +310,7 @@ func (p *provider) stackWorkers(ctx context.Context, state edge.StackState) ([]s
 		apps = deployed
 	}
 
-	conventional, err := conventionWorkerNames(state[edge.StackKeySlug], edge.Class(state[edge.StackKeyClass]), apps)
+	conventional, err := conventionWorkerNames(state.Slug, state.Class, apps)
 	if err != nil {
 		return nil, err
 	}

@@ -160,6 +160,7 @@ func TestGlobalPreviewDomain(t *testing.T) {
 
 type stateSSM struct {
 	params map[string]string
+	puts   int
 }
 
 func (s *stateSSM) GetParameter(_ context.Context, in *ssm.GetParameterInput, _ ...func(*ssm.Options)) (*ssm.GetParameterOutput, error) {
@@ -171,6 +172,7 @@ func (s *stateSSM) GetParameter(_ context.Context, in *ssm.GetParameterInput, _ 
 }
 
 func (s *stateSSM) PutParameter(_ context.Context, in *ssm.PutParameterInput, _ ...func(*ssm.Options)) (*ssm.PutParameterOutput, error) {
+	s.puts++
 	s.params[aws.ToString(in.Name)] = aws.ToString(in.Value)
 	return &ssm.PutParameterOutput{}, nil
 }
@@ -292,12 +294,12 @@ func TestGlobalPreviewProjects(t *testing.T) {
 	ctx := context.Background()
 	ssmc := &stateSSM{params: map[string]string{}}
 	for slug, state := range map[string]edge.StackState{
-		"ambient":     {edge.StackKeySlug: "ambient", edge.StackKeyGlobalPreview: "preview.acme.com"},
-		"own-domain":  {edge.StackKeySlug: "own-domain"},
-		"other-usage": {edge.StackKeySlug: "other-usage", edge.StackKeyGlobalPreview: "preview.old.com"},
+		"ambient":     {Slug: "ambient", GlobalPreview: "preview.acme.com"},
+		"own-domain":  {Slug: "own-domain"},
+		"other-usage": {Slug: "other-usage", GlobalPreview: "preview.old.com"},
 	} {
-		if err := bootstrap.WriteStackStateFor(ctx, ssmc, bootstrap.ClassPreview, slug, state); err != nil {
-			t.Fatalf("WriteStackStateFor(%s): %v", slug, err)
+		if err := bootstrap.WriteStackRecordFor(ctx, ssmc, bootstrap.ClassPreview, slug, bootstrap.StackRecord{Edge: state}); err != nil {
+			t.Fatalf("WriteStackRecordFor(%s): %v", slug, err)
 		}
 	}
 

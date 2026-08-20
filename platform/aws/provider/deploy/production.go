@@ -8,7 +8,6 @@ import (
 	"errors"
 	"fmt"
 	"io/fs"
-	"maps"
 	"os"
 	"path/filepath"
 	"slices"
@@ -30,14 +29,11 @@ type appDeployResult struct {
 }
 
 func openStoreStack(cfg Config) (edge.EdgeStack, error) {
-	state := maps.Clone(cfg.StackState)
-	if state == nil {
-		state = edge.StackState{}
-	}
-	state[edge.StackKeySlug] = cfg.Slug
-	state[edge.StackKeyClass] = string(edgeClass(cfg.Class))
+	state := cfg.StackState
+	state.Slug = cfg.Slug
+	state.Class = edgeClass(cfg.Class)
 	if cfg.StoreEndpoint != "" {
-		state[edge.StackKeyEndpoint] = cfg.StoreEndpoint
+		state.Endpoint = cfg.StoreEndpoint
 	}
 	return cfg.Edge.Open(state)
 }
@@ -81,7 +77,7 @@ func validateTag(tag string) error {
 }
 
 func checkTagAvailable(ctx context.Context, cfg Config, tag string) error {
-	if tag == "" || len(cfg.StackState) == 0 {
+	if tag == "" || cfg.StackState.Empty() {
 		return nil
 	}
 	stack, err := openStoreStack(cfg)
@@ -141,10 +137,7 @@ func settleStackRecords(ctx context.Context, cfg Config, specs []edge.StackSpec,
 		}
 		return state, cfg.DNSAwait.Await(ctx, records, say)
 	}
-	prior, err := edge.WrittenRecords(cfg.StackState)
-	if err != nil {
-		return state, err
-	}
+	prior := cfg.StackState.Records
 	written, err := cfg.DNS.EnsureRecords(ctx, records, say)
 	if err != nil {
 		return state, err
@@ -157,11 +150,12 @@ func settleStackRecords(ctx context.Context, cfg Config, specs []edge.StackSpec,
 			return state, err
 		}
 	}
-	return edge.WithWrittenRecords(state, written)
+	state.RecordWrites(written)
+	return state, nil
 }
 
 func pointableRecords(target edge.DNSTarget, state edge.StackState, hosts []string, say func(string)) ([]edge.Record, error) {
-	bound := edge.BoundDomains(state)
+	bound := state.Bound
 	records := make([]edge.Record, 0, len(hosts))
 	for _, host := range hosts {
 		if host == "" {
@@ -190,11 +184,7 @@ func pointableRecords(target edge.DNSTarget, state edge.StackState, hosts []stri
 }
 
 func releaseRecords(ctx context.Context, writer edge.DNSWriter, state edge.StackState, say func(string)) error {
-	records, err := edge.WrittenRecords(state)
-	if err != nil {
-		return err
-	}
-	return dns.Release(ctx, writer, records, say)
+	return dns.Release(ctx, writer, state.Records, say)
 }
 
 func recordsDropped(prior, kept []edge.Record) []edge.Record {

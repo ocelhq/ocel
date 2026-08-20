@@ -105,7 +105,7 @@ func TestFinalizeDeployOriginRecord(t *testing.T) {
 
 		specs := []edge.StackSpec{{Version: "v1"}}
 		results := []appDeployResult{isrResult("web", "prod/proj/web/B1", map[string]string{"/": "https://web1.lambda-url.eu-west-1.on.aws/"})}
-		if _, err := finalizeDeploy(context.Background(), withEdge(cfg, fake), specs, nil, "promo1", "", "", 100, results); err != nil {
+		if _, err := finalizeDeploy(context.Background(), withEdge(cfg, fake), specs, edge.StackState{}, "promo1", "", "", 100, results); err != nil {
 			t.Fatalf("finalizeDeploy: %v", err)
 		}
 		if len(up.puts) != 1 {
@@ -117,7 +117,7 @@ func TestFinalizeDeployOriginRecord(t *testing.T) {
 
 		blocked := &recordingEdge{kind: cloudflare.Kind}
 		failing := Config{AssetBucket: "assets-xyz", Uploader: &fakeUploader{putErr: errors.New("access denied")}}
-		if _, err := finalizeDeploy(context.Background(), withEdge(failing, blocked), specs, nil, "promo2", "", "", 100, results); err == nil {
+		if _, err := finalizeDeploy(context.Background(), withEdge(failing, blocked), specs, edge.StackState{}, "promo2", "", "", 100, results); err == nil {
 			t.Fatal("the deploy cut over despite having no origin record to revalidate against")
 		}
 		if len(blocked.staged) != 0 || len(blocked.promotions) != 0 {

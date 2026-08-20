@@ -3,7 +3,6 @@ package cloudfront
 import (
 	"context"
 	"fmt"
-	"maps"
 	"slices"
 	"strings"
 	"sync"
@@ -38,17 +37,6 @@ const (
 	namespace = "ocel"
 
 	allViewerExceptHostPolicyID = "b689b0a8-53d0-40ab-baf2-68738e2966ac"
-
-	stackKeyDistribution  = "distributionId"
-	stackKeyStateTable    = "stateTable"
-	stackKeyAssetBucket   = "assetBucket"
-	stackKeyRegion        = "region"
-	stackKeyFunction      = "functionArn"
-	stackKeyKeyValueStore = "keyValueStoreArn"
-	stackKeyCachePolicy   = "cachePolicyId"
-	stackKeyHeadersPolicy = "responseHeadersPolicyId"
-	stackKeyOAC           = "originAccessControlId"
-	stackKeyPreviewBase   = "previewBase"
 
 	kindDistribution         = "distribution"
 	kindWildcardDistribution = "wildcard distribution"
@@ -287,34 +275,35 @@ func (p *provider) Reconcile(ctx context.Context, spec edge.StackSpec, prior edg
 	if !deployed.Present {
 		return nil, fmt.Errorf("the %s substrate is not bootstrapped, so the %q edge has no state table to keep %s's deployments in", spec.Class, Kind, spec.Slug)
 	}
+	var own private
+	if err := prior.Adapter.Into(&own); err != nil {
+		return nil, err
+	}
 	set, err := findEdgeSet(ctx, c, spec.Class, edgeSet{
-		cachePolicy:         prior[stackKeyCachePolicy],
-		headersPolicy:       prior[stackKeyHeadersPolicy],
-		originAccessControl: prior[stackKeyOAC],
+		cachePolicy:         own.CachePolicy,
+		headersPolicy:       own.HeadersPolicy,
+		originAccessControl: own.OriginAccessControl,
 	})
 	if err != nil {
 		return nil, err
 	}
 
-	next := maps.Clone(prior)
-	if next == nil {
-		next = edge.StackState{}
-	}
-	next[edge.StackKeySlug] = spec.Slug
-	next[edge.StackKeyClass] = string(spec.Class)
-	next[stackKeyStateTable] = deployed.StateTable
-	next[stackKeyAssetBucket] = deployed.AssetBucket
-	next[stackKeyRegion] = c.Region
-	next[stackKeyFunction] = set.functionARN
-	next[stackKeyKeyValueStore] = set.keyValueStoreARN
-	next[stackKeyCachePolicy] = set.cachePolicy
-	next[stackKeyHeadersPolicy] = set.headersPolicy
-	next[stackKeyOAC] = set.originAccessControl
-	if base := next[edge.StackKeyGlobalPreview]; base != "" {
-		next[stackKeyPreviewBase] = base
+	next := prior
+	next.Slug = spec.Slug
+	next.Class = spec.Class
+	own.StateTable = deployed.StateTable
+	own.AssetBucket = deployed.AssetBucket
+	own.Region = c.Region
+	own.Function = set.functionARN
+	own.KeyValueStore = set.keyValueStoreARN
+	own.CachePolicy = set.cachePolicy
+	own.HeadersPolicy = set.headersPolicy
+	own.OriginAccessControl = set.originAccessControl
+	if base := next.GlobalPreview; base != "" {
+		own.PreviewBase = base
 	}
 
-	s := &stack{p: p, state: next}
+	s := &stack{p: p, state: next, own: own}
 	if err := s.ledger(c).EnsureSchema(ctx); err != nil {
 		return nil, err
 	}
@@ -328,7 +317,11 @@ func (p *provider) Reconcile(ctx context.Context, spec edge.StackSpec, prior edg
 }
 
 func (p *provider) Open(state edge.StackState) (edge.EdgeStack, error) {
-	return &stack{p: p, state: maps.Clone(state)}, nil
+	s := &stack{p: p, state: state}
+	if err := state.Adapter.Into(&s.own); err != nil {
+		return nil, err
+	}
+	return s, nil
 }
 
 func (p *provider) DomainOwner(ctx context.Context, hostname string) (string, error) {
