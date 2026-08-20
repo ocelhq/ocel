@@ -8,5 +8,6 @@ use (
 	./platform/aws/provider
 	./platform/edge/cloudflare/deploy
 	./platform/edge/contract
+	./platform/origin
 	./sdk
 )
