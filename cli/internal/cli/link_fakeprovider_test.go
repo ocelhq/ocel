@@ -12,6 +12,7 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/naming"
 	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
+	envv1 "github.com/ocelhq/ocel/pkg/proto/env/v1"
 	linksv1 "github.com/ocelhq/ocel/pkg/proto/links/v1"
 )
 
@@ -57,7 +58,7 @@ func saveFakeLinkStore(store fakeLinkStore) error {
 	return os.WriteFile(os.Getenv(linkFakeStoreEnvVar), raw, 0o600)
 }
 
-func (s *deployFakeProviderServer) SetLink(ctx context.Context, req *deploymentsv1.SetLinkRequest) (*deploymentsv1.SetLinkResponse, error) {
+func (s *deployFakeProviderServer) SetLink(ctx context.Context, req *envv1.SetLinkRequest) (*envv1.SetLinkResponse, error) {
 	if err := s.checkToken(ctx); err != nil {
 		return nil, err
 	}
@@ -110,10 +111,10 @@ func (s *deployFakeProviderServer) SetLink(ctx context.Context, req *deployments
 	if err := saveFakeLinkStore(store); err != nil {
 		return nil, err
 	}
-	return &deploymentsv1.SetLinkResponse{Version: version}, nil
+	return &envv1.SetLinkResponse{Version: version}, nil
 }
 
-func (s *deployFakeProviderServer) RemoveLink(ctx context.Context, req *deploymentsv1.RemoveLinkRequest) (*deploymentsv1.RemoveLinkResponse, error) {
+func (s *deployFakeProviderServer) RemoveLink(ctx context.Context, req *envv1.RemoveLinkRequest) (*envv1.RemoveLinkResponse, error) {
 	if err := s.checkToken(ctx); err != nil {
 		return nil, err
 	}
@@ -123,16 +124,16 @@ func (s *deployFakeProviderServer) RemoveLink(ctx context.Context, req *deployme
 	}
 	id := fakeLinkID(req.GetClass(), req.GetSlug(), req.GetEnvironment(), req.GetName())
 	if store[id] == nil {
-		return &deploymentsv1.RemoveLinkResponse{}, nil
+		return &envv1.RemoveLinkResponse{}, nil
 	}
 	delete(store, id)
 	if err := saveFakeLinkStore(store); err != nil {
 		return nil, err
 	}
-	return &deploymentsv1.RemoveLinkResponse{Removed: true}, nil
+	return &envv1.RemoveLinkResponse{Removed: true}, nil
 }
 
-func (s *deployFakeProviderServer) ListLinks(ctx context.Context, req *deploymentsv1.ListLinksRequest) (*deploymentsv1.ListLinksResponse, error) {
+func (s *deployFakeProviderServer) ListLinks(ctx context.Context, req *envv1.ListLinksRequest) (*envv1.ListLinksResponse, error) {
 	if err := s.checkToken(ctx); err != nil {
 		return nil, err
 	}
@@ -147,7 +148,7 @@ func (s *deployFakeProviderServer) ListLinks(ctx context.Context, req *deploymen
 	}
 	slices.Sort(ids)
 
-	resp := &deploymentsv1.ListLinksResponse{}
+	resp := &envv1.ListLinksResponse{}
 	for _, id := range ids {
 		held := store[id]
 		if held.Class != req.GetClass() || held.Slug != req.GetSlug() {
@@ -156,7 +157,7 @@ func (s *deployFakeProviderServer) ListLinks(ctx context.Context, req *deploymen
 		if held.Environment != req.GetEnvironment() && held.Environment != "" {
 			continue
 		}
-		resp.Links = append(resp.Links, &deploymentsv1.LinkSummary{
+		resp.Links = append(resp.Links, &envv1.LinkSummary{
 			Name:       held.Name,
 			Type:       held.Type,
 			Source:     held.Source,

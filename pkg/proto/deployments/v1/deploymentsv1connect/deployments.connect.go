@@ -21,8 +21,8 @@ import (
 const _ = connect.IsAtLeastVersion1_13_0
 
 const (
-	// DeploymentServiceName is the fully-qualified name of the DeploymentService service.
-	DeploymentServiceName = "deployments.v1.DeploymentService"
+	// ProviderServiceName is the fully-qualified name of the ProviderService service.
+	ProviderServiceName = "deployments.v1.ProviderService"
 )
 
 // These constants are the fully-qualified names of the RPCs defined in this package. They're
@@ -33,81 +33,71 @@ const (
 // reflection-formatted method names, remove the leading slash and convert the remaining slash to a
 // period.
 const (
-	// DeploymentServiceConfigureProcedure is the fully-qualified name of the DeploymentService's
-	// Configure RPC.
-	DeploymentServiceConfigureProcedure = "/deployments.v1.DeploymentService/Configure"
-	// DeploymentServiceDeployProcedure is the fully-qualified name of the DeploymentService's Deploy
+	// ProviderServiceConfigureProcedure is the fully-qualified name of the ProviderService's Configure
 	// RPC.
-	DeploymentServiceDeployProcedure = "/deployments.v1.DeploymentService/Deploy"
-	// DeploymentServiceBootstrapProcedure is the fully-qualified name of the DeploymentService's
-	// Bootstrap RPC.
-	DeploymentServiceBootstrapProcedure = "/deployments.v1.DeploymentService/Bootstrap"
-	// DeploymentServiceDescribeBootstrapProcedure is the fully-qualified name of the
-	// DeploymentService's DescribeBootstrap RPC.
-	DeploymentServiceDescribeBootstrapProcedure = "/deployments.v1.DeploymentService/DescribeBootstrap"
-	// DeploymentServiceTeardownProcedure is the fully-qualified name of the DeploymentService's
-	// Teardown RPC.
-	DeploymentServiceTeardownProcedure = "/deployments.v1.DeploymentService/Teardown"
-	// DeploymentServicePlanTeardownProcedure is the fully-qualified name of the DeploymentService's
+	ProviderServiceConfigureProcedure = "/deployments.v1.ProviderService/Configure"
+	// ProviderServiceDeployProcedure is the fully-qualified name of the ProviderService's Deploy RPC.
+	ProviderServiceDeployProcedure = "/deployments.v1.ProviderService/Deploy"
+	// ProviderServiceBootstrapProcedure is the fully-qualified name of the ProviderService's Bootstrap
+	// RPC.
+	ProviderServiceBootstrapProcedure = "/deployments.v1.ProviderService/Bootstrap"
+	// ProviderServiceDescribeBootstrapProcedure is the fully-qualified name of the ProviderService's
+	// DescribeBootstrap RPC.
+	ProviderServiceDescribeBootstrapProcedure = "/deployments.v1.ProviderService/DescribeBootstrap"
+	// ProviderServiceTeardownProcedure is the fully-qualified name of the ProviderService's Teardown
+	// RPC.
+	ProviderServiceTeardownProcedure = "/deployments.v1.ProviderService/Teardown"
+	// ProviderServicePlanTeardownProcedure is the fully-qualified name of the ProviderService's
 	// PlanTeardown RPC.
-	DeploymentServicePlanTeardownProcedure = "/deployments.v1.DeploymentService/PlanTeardown"
-	// DeploymentServiceDestroyPreviewProcedure is the fully-qualified name of the DeploymentService's
+	ProviderServicePlanTeardownProcedure = "/deployments.v1.ProviderService/PlanTeardown"
+	// ProviderServiceDestroyPreviewProcedure is the fully-qualified name of the ProviderService's
 	// DestroyPreview RPC.
-	DeploymentServiceDestroyPreviewProcedure = "/deployments.v1.DeploymentService/DestroyPreview"
-	// DeploymentServiceDestroyProjectProcedure is the fully-qualified name of the DeploymentService's
+	ProviderServiceDestroyPreviewProcedure = "/deployments.v1.ProviderService/DestroyPreview"
+	// ProviderServiceDestroyProjectProcedure is the fully-qualified name of the ProviderService's
 	// DestroyProject RPC.
-	DeploymentServiceDestroyProjectProcedure = "/deployments.v1.DeploymentService/DestroyProject"
-	// DeploymentServicePlanDestroyProjectProcedure is the fully-qualified name of the
-	// DeploymentService's PlanDestroyProject RPC.
-	DeploymentServicePlanDestroyProjectProcedure = "/deployments.v1.DeploymentService/PlanDestroyProject"
-	// DeploymentServiceListEnvironmentsProcedure is the fully-qualified name of the DeploymentService's
+	ProviderServiceDestroyProjectProcedure = "/deployments.v1.ProviderService/DestroyProject"
+	// ProviderServicePlanDestroyProjectProcedure is the fully-qualified name of the ProviderService's
+	// PlanDestroyProject RPC.
+	ProviderServicePlanDestroyProjectProcedure = "/deployments.v1.ProviderService/PlanDestroyProject"
+	// ProviderServiceListEnvironmentsProcedure is the fully-qualified name of the ProviderService's
 	// ListEnvironments RPC.
-	DeploymentServiceListEnvironmentsProcedure = "/deployments.v1.DeploymentService/ListEnvironments"
-	// DeploymentServicePreflightProcedure is the fully-qualified name of the DeploymentService's
-	// Preflight RPC.
-	DeploymentServicePreflightProcedure = "/deployments.v1.DeploymentService/Preflight"
-	// DeploymentServiceListPromotionsProcedure is the fully-qualified name of the DeploymentService's
-	// ListPromotions RPC.
-	DeploymentServiceListPromotionsProcedure = "/deployments.v1.DeploymentService/ListPromotions"
-	// DeploymentServiceRollbackProcedure is the fully-qualified name of the DeploymentService's
-	// Rollback RPC.
-	DeploymentServiceRollbackProcedure = "/deployments.v1.DeploymentService/Rollback"
-	// DeploymentServicePruneProcedure is the fully-qualified name of the DeploymentService's Prune RPC.
-	DeploymentServicePruneProcedure = "/deployments.v1.DeploymentService/Prune"
-	// DeploymentServiceUseDomainProcedure is the fully-qualified name of the DeploymentService's
-	// UseDomain RPC.
-	DeploymentServiceUseDomainProcedure = "/deployments.v1.DeploymentService/UseDomain"
-	// DeploymentServiceListDomainProcedure is the fully-qualified name of the DeploymentService's
-	// ListDomain RPC.
-	DeploymentServiceListDomainProcedure = "/deployments.v1.DeploymentService/ListDomain"
-	// DeploymentServicePlanReleaseDomainProcedure is the fully-qualified name of the
-	// DeploymentService's PlanReleaseDomain RPC.
-	DeploymentServicePlanReleaseDomainProcedure = "/deployments.v1.DeploymentService/PlanReleaseDomain"
-	// DeploymentServiceReleaseDomainProcedure is the fully-qualified name of the DeploymentService's
-	// ReleaseDomain RPC.
-	DeploymentServiceReleaseDomainProcedure = "/deployments.v1.DeploymentService/ReleaseDomain"
-	// DeploymentServiceAddDomainProcedure is the fully-qualified name of the DeploymentService's
-	// AddDomain RPC.
-	DeploymentServiceAddDomainProcedure = "/deployments.v1.DeploymentService/AddDomain"
-	// DeploymentServiceRemoveDomainProcedure is the fully-qualified name of the DeploymentService's
-	// RemoveDomain RPC.
-	DeploymentServiceRemoveDomainProcedure = "/deployments.v1.DeploymentService/RemoveDomain"
-	// DeploymentServiceDomainStatusProcedure is the fully-qualified name of the DeploymentService's
-	// DomainStatus RPC.
-	DeploymentServiceDomainStatusProcedure = "/deployments.v1.DeploymentService/DomainStatus"
-	// DeploymentServiceSetLinkProcedure is the fully-qualified name of the DeploymentService's SetLink
+	ProviderServiceListEnvironmentsProcedure = "/deployments.v1.ProviderService/ListEnvironments"
+	// ProviderServicePreflightProcedure is the fully-qualified name of the ProviderService's Preflight
 	// RPC.
-	DeploymentServiceSetLinkProcedure = "/deployments.v1.DeploymentService/SetLink"
-	// DeploymentServiceRemoveLinkProcedure is the fully-qualified name of the DeploymentService's
-	// RemoveLink RPC.
-	DeploymentServiceRemoveLinkProcedure = "/deployments.v1.DeploymentService/RemoveLink"
-	// DeploymentServiceListLinksProcedure is the fully-qualified name of the DeploymentService's
-	// ListLinks RPC.
-	DeploymentServiceListLinksProcedure = "/deployments.v1.DeploymentService/ListLinks"
+	ProviderServicePreflightProcedure = "/deployments.v1.ProviderService/Preflight"
+	// ProviderServiceListPromotionsProcedure is the fully-qualified name of the ProviderService's
+	// ListPromotions RPC.
+	ProviderServiceListPromotionsProcedure = "/deployments.v1.ProviderService/ListPromotions"
+	// ProviderServiceRollbackProcedure is the fully-qualified name of the ProviderService's Rollback
+	// RPC.
+	ProviderServiceRollbackProcedure = "/deployments.v1.ProviderService/Rollback"
+	// ProviderServicePruneProcedure is the fully-qualified name of the ProviderService's Prune RPC.
+	ProviderServicePruneProcedure = "/deployments.v1.ProviderService/Prune"
+	// ProviderServiceUseDomainProcedure is the fully-qualified name of the ProviderService's UseDomain
+	// RPC.
+	ProviderServiceUseDomainProcedure = "/deployments.v1.ProviderService/UseDomain"
+	// ProviderServiceListDomainProcedure is the fully-qualified name of the ProviderService's
+	// ListDomain RPC.
+	ProviderServiceListDomainProcedure = "/deployments.v1.ProviderService/ListDomain"
+	// ProviderServicePlanReleaseDomainProcedure is the fully-qualified name of the ProviderService's
+	// PlanReleaseDomain RPC.
+	ProviderServicePlanReleaseDomainProcedure = "/deployments.v1.ProviderService/PlanReleaseDomain"
+	// ProviderServiceReleaseDomainProcedure is the fully-qualified name of the ProviderService's
+	// ReleaseDomain RPC.
+	ProviderServiceReleaseDomainProcedure = "/deployments.v1.ProviderService/ReleaseDomain"
+	// ProviderServiceAddDomainProcedure is the fully-qualified name of the ProviderService's AddDomain
+	// RPC.
+	ProviderServiceAddDomainProcedure = "/deployments.v1.ProviderService/AddDomain"
+	// ProviderServiceRemoveDomainProcedure is the fully-qualified name of the ProviderService's
+	// RemoveDomain RPC.
+	ProviderServiceRemoveDomainProcedure = "/deployments.v1.ProviderService/RemoveDomain"
+	// ProviderServiceDomainStatusProcedure is the fully-qualified name of the ProviderService's
+	// DomainStatus RPC.
+	ProviderServiceDomainStatusProcedure = "/deployments.v1.ProviderService/DomainStatus"
 )
 
-// DeploymentServiceClient is a client for the deployments.v1.DeploymentService service.
-type DeploymentServiceClient interface {
+// ProviderServiceClient is a client for the deployments.v1.ProviderService service.
+type ProviderServiceClient interface {
 	Configure(context.Context, *v1.ConfigureRequest) (*v1.ConfigureResponse, error)
 	Deploy(context.Context, *v1.DeployRequest) (*connect.ServerStreamForClient[v1.DeployEvent], error)
 	Bootstrap(context.Context, *v1.BootstrapRequest) (*connect.ServerStreamForClient[v1.DeployEvent], error)
@@ -129,171 +119,150 @@ type DeploymentServiceClient interface {
 	AddDomain(context.Context, *v1.AddDomainRequest) (*connect.ServerStreamForClient[v1.DeployEvent], error)
 	RemoveDomain(context.Context, *v1.RemoveDomainRequest) (*connect.ServerStreamForClient[v1.DeployEvent], error)
 	DomainStatus(context.Context, *v1.DomainStatusRequest) (*v1.DomainStatusResponse, error)
-	SetLink(context.Context, *v1.SetLinkRequest) (*v1.SetLinkResponse, error)
-	RemoveLink(context.Context, *v1.RemoveLinkRequest) (*v1.RemoveLinkResponse, error)
-	ListLinks(context.Context, *v1.ListLinksRequest) (*v1.ListLinksResponse, error)
 }
 
-// NewDeploymentServiceClient constructs a client for the deployments.v1.DeploymentService service.
-// By default, it uses the Connect protocol with the binary Protobuf Codec, asks for gzipped
-// responses, and sends uncompressed requests. To use the gRPC or gRPC-Web protocols, supply the
+// NewProviderServiceClient constructs a client for the deployments.v1.ProviderService service. By
+// default, it uses the Connect protocol with the binary Protobuf Codec, asks for gzipped responses,
+// and sends uncompressed requests. To use the gRPC or gRPC-Web protocols, supply the
 // connect.WithGRPC() or connect.WithGRPCWeb() options.
 //
 // The URL supplied here should be the base URL for the Connect or gRPC server (for example,
 // http://api.acme.com or https://acme.com/grpc).
-func NewDeploymentServiceClient(httpClient connect.HTTPClient, baseURL string, opts ...connect.ClientOption) DeploymentServiceClient {
+func NewProviderServiceClient(httpClient connect.HTTPClient, baseURL string, opts ...connect.ClientOption) ProviderServiceClient {
 	baseURL = strings.TrimRight(baseURL, "/")
-	deploymentServiceMethods := v1.File_deployments_v1_deployments_proto.Services().ByName("DeploymentService").Methods()
-	return &deploymentServiceClient{
+	providerServiceMethods := v1.File_deployments_v1_deployments_proto.Services().ByName("ProviderService").Methods()
+	return &providerServiceClient{
 		configure: connect.NewClient[v1.ConfigureRequest, v1.ConfigureResponse](
 			httpClient,
-			baseURL+DeploymentServiceConfigureProcedure,
-			connect.WithSchema(deploymentServiceMethods.ByName("Configure")),
+			baseURL+ProviderServiceConfigureProcedure,
+			connect.WithSchema(providerServiceMethods.ByName("Configure")),
 			connect.WithClientOptions(opts...),
 		),
 		deploy: connect.NewClient[v1.DeployRequest, v1.DeployEvent](
 			httpClient,
-			baseURL+DeploymentServiceDeployProcedure,
-			connect.WithSchema(deploymentServiceMethods.ByName("Deploy")),
+			baseURL+ProviderServiceDeployProcedure,
+			connect.WithSchema(providerServiceMethods.ByName("Deploy")),
 			connect.WithClientOptions(opts...),
 		),
 		bootstrap: connect.NewClient[v1.BootstrapRequest, v1.DeployEvent](
 			httpClient,
-			baseURL+DeploymentServiceBootstrapProcedure,
-			connect.WithSchema(deploymentServiceMethods.ByName("Bootstrap")),
+			baseURL+ProviderServiceBootstrapProcedure,
+			connect.WithSchema(providerServiceMethods.ByName("Bootstrap")),
 			connect.WithClientOptions(opts...),
 		),
 		describeBootstrap: connect.NewClient[v1.DescribeBootstrapRequest, v1.DescribeBootstrapResponse](
 			httpClient,
-			baseURL+DeploymentServiceDescribeBootstrapProcedure,
-			connect.WithSchema(deploymentServiceMethods.ByName("DescribeBootstrap")),
+			baseURL+ProviderServiceDescribeBootstrapProcedure,
+			connect.WithSchema(providerServiceMethods.ByName("DescribeBootstrap")),
 			connect.WithClientOptions(opts...),
 		),
 		teardown: connect.NewClient[v1.TeardownRequest, v1.DeployEvent](
 			httpClient,
-			baseURL+DeploymentServiceTeardownProcedure,
-			connect.WithSchema(deploymentServiceMethods.ByName("Teardown")),
+			baseURL+ProviderServiceTeardownProcedure,
+			connect.WithSchema(providerServiceMethods.ByName("Teardown")),
 			connect.WithClientOptions(opts...),
 		),
 		planTeardown: connect.NewClient[v1.PlanTeardownRequest, v1.PlanTeardownResponse](
 			httpClient,
-			baseURL+DeploymentServicePlanTeardownProcedure,
-			connect.WithSchema(deploymentServiceMethods.ByName("PlanTeardown")),
+			baseURL+ProviderServicePlanTeardownProcedure,
+			connect.WithSchema(providerServiceMethods.ByName("PlanTeardown")),
 			connect.WithClientOptions(opts...),
 		),
 		destroyPreview: connect.NewClient[v1.DestroyPreviewRequest, v1.DeployEvent](
 			httpClient,
-			baseURL+DeploymentServiceDestroyPreviewProcedure,
-			connect.WithSchema(deploymentServiceMethods.ByName("DestroyPreview")),
+			baseURL+ProviderServiceDestroyPreviewProcedure,
+			connect.WithSchema(providerServiceMethods.ByName("DestroyPreview")),
 			connect.WithClientOptions(opts...),
 		),
 		destroyProject: connect.NewClient[v1.DestroyProjectRequest, v1.DeployEvent](
 			httpClient,
-			baseURL+DeploymentServiceDestroyProjectProcedure,
-			connect.WithSchema(deploymentServiceMethods.ByName("DestroyProject")),
+			baseURL+ProviderServiceDestroyProjectProcedure,
+			connect.WithSchema(providerServiceMethods.ByName("DestroyProject")),
 			connect.WithClientOptions(opts...),
 		),
 		planDestroyProject: connect.NewClient[v1.PlanDestroyProjectRequest, v1.PlanDestroyProjectResponse](
 			httpClient,
-			baseURL+DeploymentServicePlanDestroyProjectProcedure,
-			connect.WithSchema(deploymentServiceMethods.ByName("PlanDestroyProject")),
+			baseURL+ProviderServicePlanDestroyProjectProcedure,
+			connect.WithSchema(providerServiceMethods.ByName("PlanDestroyProject")),
 			connect.WithClientOptions(opts...),
 		),
 		listEnvironments: connect.NewClient[v1.ListEnvironmentsRequest, v1.ListEnvironmentsResponse](
 			httpClient,
-			baseURL+DeploymentServiceListEnvironmentsProcedure,
-			connect.WithSchema(deploymentServiceMethods.ByName("ListEnvironments")),
+			baseURL+ProviderServiceListEnvironmentsProcedure,
+			connect.WithSchema(providerServiceMethods.ByName("ListEnvironments")),
 			connect.WithClientOptions(opts...),
 		),
 		preflight: connect.NewClient[v1.PreflightRequest, v1.PreflightResponse](
 			httpClient,
-			baseURL+DeploymentServicePreflightProcedure,
-			connect.WithSchema(deploymentServiceMethods.ByName("Preflight")),
+			baseURL+ProviderServicePreflightProcedure,
+			connect.WithSchema(providerServiceMethods.ByName("Preflight")),
 			connect.WithClientOptions(opts...),
 		),
 		listPromotions: connect.NewClient[v1.ListPromotionsRequest, v1.ListPromotionsResponse](
 			httpClient,
-			baseURL+DeploymentServiceListPromotionsProcedure,
-			connect.WithSchema(deploymentServiceMethods.ByName("ListPromotions")),
+			baseURL+ProviderServiceListPromotionsProcedure,
+			connect.WithSchema(providerServiceMethods.ByName("ListPromotions")),
 			connect.WithClientOptions(opts...),
 		),
 		rollback: connect.NewClient[v1.RollbackRequest, v1.RollbackResponse](
 			httpClient,
-			baseURL+DeploymentServiceRollbackProcedure,
-			connect.WithSchema(deploymentServiceMethods.ByName("Rollback")),
+			baseURL+ProviderServiceRollbackProcedure,
+			connect.WithSchema(providerServiceMethods.ByName("Rollback")),
 			connect.WithClientOptions(opts...),
 		),
 		prune: connect.NewClient[v1.PruneRequest, v1.DeployEvent](
 			httpClient,
-			baseURL+DeploymentServicePruneProcedure,
-			connect.WithSchema(deploymentServiceMethods.ByName("Prune")),
+			baseURL+ProviderServicePruneProcedure,
+			connect.WithSchema(providerServiceMethods.ByName("Prune")),
 			connect.WithClientOptions(opts...),
 		),
 		useDomain: connect.NewClient[v1.UseDomainRequest, v1.DeployEvent](
 			httpClient,
-			baseURL+DeploymentServiceUseDomainProcedure,
-			connect.WithSchema(deploymentServiceMethods.ByName("UseDomain")),
+			baseURL+ProviderServiceUseDomainProcedure,
+			connect.WithSchema(providerServiceMethods.ByName("UseDomain")),
 			connect.WithClientOptions(opts...),
 		),
 		listDomain: connect.NewClient[v1.ListDomainRequest, v1.ListDomainResponse](
 			httpClient,
-			baseURL+DeploymentServiceListDomainProcedure,
-			connect.WithSchema(deploymentServiceMethods.ByName("ListDomain")),
+			baseURL+ProviderServiceListDomainProcedure,
+			connect.WithSchema(providerServiceMethods.ByName("ListDomain")),
 			connect.WithClientOptions(opts...),
 		),
 		planReleaseDomain: connect.NewClient[v1.PlanReleaseDomainRequest, v1.PlanReleaseDomainResponse](
 			httpClient,
-			baseURL+DeploymentServicePlanReleaseDomainProcedure,
-			connect.WithSchema(deploymentServiceMethods.ByName("PlanReleaseDomain")),
+			baseURL+ProviderServicePlanReleaseDomainProcedure,
+			connect.WithSchema(providerServiceMethods.ByName("PlanReleaseDomain")),
 			connect.WithClientOptions(opts...),
 		),
 		releaseDomain: connect.NewClient[v1.ReleaseDomainRequest, v1.DeployEvent](
 			httpClient,
-			baseURL+DeploymentServiceReleaseDomainProcedure,
-			connect.WithSchema(deploymentServiceMethods.ByName("ReleaseDomain")),
+			baseURL+ProviderServiceReleaseDomainProcedure,
+			connect.WithSchema(providerServiceMethods.ByName("ReleaseDomain")),
 			connect.WithClientOptions(opts...),
 		),
 		addDomain: connect.NewClient[v1.AddDomainRequest, v1.DeployEvent](
 			httpClient,
-			baseURL+DeploymentServiceAddDomainProcedure,
-			connect.WithSchema(deploymentServiceMethods.ByName("AddDomain")),
+			baseURL+ProviderServiceAddDomainProcedure,
+			connect.WithSchema(providerServiceMethods.ByName("AddDomain")),
 			connect.WithClientOptions(opts...),
 		),
 		removeDomain: connect.NewClient[v1.RemoveDomainRequest, v1.DeployEvent](
 			httpClient,
-			baseURL+DeploymentServiceRemoveDomainProcedure,
-			connect.WithSchema(deploymentServiceMethods.ByName("RemoveDomain")),
+			baseURL+ProviderServiceRemoveDomainProcedure,
+			connect.WithSchema(providerServiceMethods.ByName("RemoveDomain")),
 			connect.WithClientOptions(opts...),
 		),
 		domainStatus: connect.NewClient[v1.DomainStatusRequest, v1.DomainStatusResponse](
 			httpClient,
-			baseURL+DeploymentServiceDomainStatusProcedure,
-			connect.WithSchema(deploymentServiceMethods.ByName("DomainStatus")),
-			connect.WithClientOptions(opts...),
-		),
-		setLink: connect.NewClient[v1.SetLinkRequest, v1.SetLinkResponse](
-			httpClient,
-			baseURL+DeploymentServiceSetLinkProcedure,
-			connect.WithSchema(deploymentServiceMethods.ByName("SetLink")),
-			connect.WithClientOptions(opts...),
-		),
-		removeLink: connect.NewClient[v1.RemoveLinkRequest, v1.RemoveLinkResponse](
-			httpClient,
-			baseURL+DeploymentServiceRemoveLinkProcedure,
-			connect.WithSchema(deploymentServiceMethods.ByName("RemoveLink")),
-			connect.WithClientOptions(opts...),
-		),
-		listLinks: connect.NewClient[v1.ListLinksRequest, v1.ListLinksResponse](
-			httpClient,
-			baseURL+DeploymentServiceListLinksProcedure,
-			connect.WithSchema(deploymentServiceMethods.ByName("ListLinks")),
+			baseURL+ProviderServiceDomainStatusProcedure,
+			connect.WithSchema(providerServiceMethods.ByName("DomainStatus")),
 			connect.WithClientOptions(opts...),
 		),
 	}
 }
 
-// deploymentServiceClient implements DeploymentServiceClient.
-type deploymentServiceClient struct {
+// providerServiceClient implements ProviderServiceClient.
+type providerServiceClient struct {
 	configure          *connect.Client[v1.ConfigureRequest, v1.ConfigureResponse]
 	deploy             *connect.Client[v1.DeployRequest, v1.DeployEvent]
 	bootstrap          *connect.Client[v1.BootstrapRequest, v1.DeployEvent]
@@ -315,13 +284,10 @@ type deploymentServiceClient struct {
 	addDomain          *connect.Client[v1.AddDomainRequest, v1.DeployEvent]
 	removeDomain       *connect.Client[v1.RemoveDomainRequest, v1.DeployEvent]
 	domainStatus       *connect.Client[v1.DomainStatusRequest, v1.DomainStatusResponse]
-	setLink            *connect.Client[v1.SetLinkRequest, v1.SetLinkResponse]
-	removeLink         *connect.Client[v1.RemoveLinkRequest, v1.RemoveLinkResponse]
-	listLinks          *connect.Client[v1.ListLinksRequest, v1.ListLinksResponse]
 }
 
-// Configure calls deployments.v1.DeploymentService.Configure.
-func (c *deploymentServiceClient) Configure(ctx context.Context, req *v1.ConfigureRequest) (*v1.ConfigureResponse, error) {
+// Configure calls deployments.v1.ProviderService.Configure.
+func (c *providerServiceClient) Configure(ctx context.Context, req *v1.ConfigureRequest) (*v1.ConfigureResponse, error) {
 	response, err := c.configure.CallUnary(ctx, connect.NewRequest(req))
 	if response != nil {
 		return response.Msg, err
@@ -329,18 +295,18 @@ func (c *deploymentServiceClient) Configure(ctx context.Context, req *v1.Configu
 	return nil, err
 }
 
-// Deploy calls deployments.v1.DeploymentService.Deploy.
-func (c *deploymentServiceClient) Deploy(ctx context.Context, req *v1.DeployRequest) (*connect.ServerStreamForClient[v1.DeployEvent], error) {
+// Deploy calls deployments.v1.ProviderService.Deploy.
+func (c *providerServiceClient) Deploy(ctx context.Context, req *v1.DeployRequest) (*connect.ServerStreamForClient[v1.DeployEvent], error) {
 	return c.deploy.CallServerStream(ctx, connect.NewRequest(req))
 }
 
-// Bootstrap calls deployments.v1.DeploymentService.Bootstrap.
-func (c *deploymentServiceClient) Bootstrap(ctx context.Context, req *v1.BootstrapRequest) (*connect.ServerStreamForClient[v1.DeployEvent], error) {
+// Bootstrap calls deployments.v1.ProviderService.Bootstrap.
+func (c *providerServiceClient) Bootstrap(ctx context.Context, req *v1.BootstrapRequest) (*connect.ServerStreamForClient[v1.DeployEvent], error) {
 	return c.bootstrap.CallServerStream(ctx, connect.NewRequest(req))
 }
 
-// DescribeBootstrap calls deployments.v1.DeploymentService.DescribeBootstrap.
-func (c *deploymentServiceClient) DescribeBootstrap(ctx context.Context, req *v1.DescribeBootstrapRequest) (*v1.DescribeBootstrapResponse, error) {
+// DescribeBootstrap calls deployments.v1.ProviderService.DescribeBootstrap.
+func (c *providerServiceClient) DescribeBootstrap(ctx context.Context, req *v1.DescribeBootstrapRequest) (*v1.DescribeBootstrapResponse, error) {
 	response, err := c.describeBootstrap.CallUnary(ctx, connect.NewRequest(req))
 	if response != nil {
 		return response.Msg, err
@@ -348,13 +314,13 @@ func (c *deploymentServiceClient) DescribeBootstrap(ctx context.Context, req *v1
 	return nil, err
 }
 
-// Teardown calls deployments.v1.DeploymentService.Teardown.
-func (c *deploymentServiceClient) Teardown(ctx context.Context, req *v1.TeardownRequest) (*connect.ServerStreamForClient[v1.DeployEvent], error) {
+// Teardown calls deployments.v1.ProviderService.Teardown.
+func (c *providerServiceClient) Teardown(ctx context.Context, req *v1.TeardownRequest) (*connect.ServerStreamForClient[v1.DeployEvent], error) {
 	return c.teardown.CallServerStream(ctx, connect.NewRequest(req))
 }
 
-// PlanTeardown calls deployments.v1.DeploymentService.PlanTeardown.
-func (c *deploymentServiceClient) PlanTeardown(ctx context.Context, req *v1.PlanTeardownRequest) (*v1.PlanTeardownResponse, error) {
+// PlanTeardown calls deployments.v1.ProviderService.PlanTeardown.
+func (c *providerServiceClient) PlanTeardown(ctx context.Context, req *v1.PlanTeardownRequest) (*v1.PlanTeardownResponse, error) {
 	response, err := c.planTeardown.CallUnary(ctx, connect.NewRequest(req))
 	if response != nil {
 		return response.Msg, err
@@ -362,18 +328,18 @@ func (c *deploymentServiceClient) PlanTeardown(ctx context.Context, req *v1.Plan
 	return nil, err
 }
 
-// DestroyPreview calls deployments.v1.DeploymentService.DestroyPreview.
-func (c *deploymentServiceClient) DestroyPreview(ctx context.Context, req *v1.DestroyPreviewRequest) (*connect.ServerStreamForClient[v1.DeployEvent], error) {
+// DestroyPreview calls deployments.v1.ProviderService.DestroyPreview.
+func (c *providerServiceClient) DestroyPreview(ctx context.Context, req *v1.DestroyPreviewRequest) (*connect.ServerStreamForClient[v1.DeployEvent], error) {
 	return c.destroyPreview.CallServerStream(ctx, connect.NewRequest(req))
 }
 
-// DestroyProject calls deployments.v1.DeploymentService.DestroyProject.
-func (c *deploymentServiceClient) DestroyProject(ctx context.Context, req *v1.DestroyProjectRequest) (*connect.ServerStreamForClient[v1.DeployEvent], error) {
+// DestroyProject calls deployments.v1.ProviderService.DestroyProject.
+func (c *providerServiceClient) DestroyProject(ctx context.Context, req *v1.DestroyProjectRequest) (*connect.ServerStreamForClient[v1.DeployEvent], error) {
 	return c.destroyProject.CallServerStream(ctx, connect.NewRequest(req))
 }
 
-// PlanDestroyProject calls deployments.v1.DeploymentService.PlanDestroyProject.
-func (c *deploymentServiceClient) PlanDestroyProject(ctx context.Context, req *v1.PlanDestroyProjectRequest) (*v1.PlanDestroyProjectResponse, error) {
+// PlanDestroyProject calls deployments.v1.ProviderService.PlanDestroyProject.
+func (c *providerServiceClient) PlanDestroyProject(ctx context.Context, req *v1.PlanDestroyProjectRequest) (*v1.PlanDestroyProjectResponse, error) {
 	response, err := c.planDestroyProject.CallUnary(ctx, connect.NewRequest(req))
 	if response != nil {
 		return response.Msg, err
@@ -381,8 +347,8 @@ func (c *deploymentServiceClient) PlanDestroyProject(ctx context.Context, req *v
 	return nil, err
 }
 
-// ListEnvironments calls deployments.v1.DeploymentService.ListEnvironments.
-func (c *deploymentServiceClient) ListEnvironments(ctx context.Context, req *v1.ListEnvironmentsRequest) (*v1.ListEnvironmentsResponse, error) {
+// ListEnvironments calls deployments.v1.ProviderService.ListEnvironments.
+func (c *providerServiceClient) ListEnvironments(ctx context.Context, req *v1.ListEnvironmentsRequest) (*v1.ListEnvironmentsResponse, error) {
 	response, err := c.listEnvironments.CallUnary(ctx, connect.NewRequest(req))
 	if response != nil {
 		return response.Msg, err
@@ -390,8 +356,8 @@ func (c *deploymentServiceClient) ListEnvironments(ctx context.Context, req *v1.
 	return nil, err
 }
 
-// Preflight calls deployments.v1.DeploymentService.Preflight.
-func (c *deploymentServiceClient) Preflight(ctx context.Context, req *v1.PreflightRequest) (*v1.PreflightResponse, error) {
+// Preflight calls deployments.v1.ProviderService.Preflight.
+func (c *providerServiceClient) Preflight(ctx context.Context, req *v1.PreflightRequest) (*v1.PreflightResponse, error) {
 	response, err := c.preflight.CallUnary(ctx, connect.NewRequest(req))
 	if response != nil {
 		return response.Msg, err
@@ -399,8 +365,8 @@ func (c *deploymentServiceClient) Preflight(ctx context.Context, req *v1.Preflig
 	return nil, err
 }
 
-// ListPromotions calls deployments.v1.DeploymentService.ListPromotions.
-func (c *deploymentServiceClient) ListPromotions(ctx context.Context, req *v1.ListPromotionsRequest) (*v1.ListPromotionsResponse, error) {
+// ListPromotions calls deployments.v1.ProviderService.ListPromotions.
+func (c *providerServiceClient) ListPromotions(ctx context.Context, req *v1.ListPromotionsRequest) (*v1.ListPromotionsResponse, error) {
 	response, err := c.listPromotions.CallUnary(ctx, connect.NewRequest(req))
 	if response != nil {
 		return response.Msg, err
@@ -408,8 +374,8 @@ func (c *deploymentServiceClient) ListPromotions(ctx context.Context, req *v1.Li
 	return nil, err
 }
 
-// Rollback calls deployments.v1.DeploymentService.Rollback.
-func (c *deploymentServiceClient) Rollback(ctx context.Context, req *v1.RollbackRequest) (*v1.RollbackResponse, error) {
+// Rollback calls deployments.v1.ProviderService.Rollback.
+func (c *providerServiceClient) Rollback(ctx context.Context, req *v1.RollbackRequest) (*v1.RollbackResponse, error) {
 	response, err := c.rollback.CallUnary(ctx, connect.NewRequest(req))
 	if response != nil {
 		return response.Msg, err
@@ -417,18 +383,18 @@ func (c *deploymentServiceClient) Rollback(ctx context.Context, req *v1.Rollback
 	return nil, err
 }
 
-// Prune calls deployments.v1.DeploymentService.Prune.
-func (c *deploymentServiceClient) Prune(ctx context.Context, req *v1.PruneRequest) (*connect.ServerStreamForClient[v1.DeployEvent], error) {
+// Prune calls deployments.v1.ProviderService.Prune.
+func (c *providerServiceClient) Prune(ctx context.Context, req *v1.PruneRequest) (*connect.ServerStreamForClient[v1.DeployEvent], error) {
 	return c.prune.CallServerStream(ctx, connect.NewRequest(req))
 }
 
-// UseDomain calls deployments.v1.DeploymentService.UseDomain.
-func (c *deploymentServiceClient) UseDomain(ctx context.Context, req *v1.UseDomainRequest) (*connect.ServerStreamForClient[v1.DeployEvent], error) {
+// UseDomain calls deployments.v1.ProviderService.UseDomain.
+func (c *providerServiceClient) UseDomain(ctx context.Context, req *v1.UseDomainRequest) (*connect.ServerStreamForClient[v1.DeployEvent], error) {
 	return c.useDomain.CallServerStream(ctx, connect.NewRequest(req))
 }
 
-// ListDomain calls deployments.v1.DeploymentService.ListDomain.
-func (c *deploymentServiceClient) ListDomain(ctx context.Context, req *v1.ListDomainRequest) (*v1.ListDomainResponse, error) {
+// ListDomain calls deployments.v1.ProviderService.ListDomain.
+func (c *providerServiceClient) ListDomain(ctx context.Context, req *v1.ListDomainRequest) (*v1.ListDomainResponse, error) {
 	response, err := c.listDomain.CallUnary(ctx, connect.NewRequest(req))
 	if response != nil {
 		return response.Msg, err
@@ -436,8 +402,8 @@ func (c *deploymentServiceClient) ListDomain(ctx context.Context, req *v1.ListDo
 	return nil, err
 }
 
-// PlanReleaseDomain calls deployments.v1.DeploymentService.PlanReleaseDomain.
-func (c *deploymentServiceClient) PlanReleaseDomain(ctx context.Context, req *v1.PlanReleaseDomainRequest) (*v1.PlanReleaseDomainResponse, error) {
+// PlanReleaseDomain calls deployments.v1.ProviderService.PlanReleaseDomain.
+func (c *providerServiceClient) PlanReleaseDomain(ctx context.Context, req *v1.PlanReleaseDomainRequest) (*v1.PlanReleaseDomainResponse, error) {
 	response, err := c.planReleaseDomain.CallUnary(ctx, connect.NewRequest(req))
 	if response != nil {
 		return response.Msg, err
@@ -445,23 +411,23 @@ func (c *deploymentServiceClient) PlanReleaseDomain(ctx context.Context, req *v1
 	return nil, err
 }
 
-// ReleaseDomain calls deployments.v1.DeploymentService.ReleaseDomain.
-func (c *deploymentServiceClient) ReleaseDomain(ctx context.Context, req *v1.ReleaseDomainRequest) (*connect.ServerStreamForClient[v1.DeployEvent], error) {
+// ReleaseDomain calls deployments.v1.ProviderService.ReleaseDomain.
+func (c *providerServiceClient) ReleaseDomain(ctx context.Context, req *v1.ReleaseDomainRequest) (*connect.ServerStreamForClient[v1.DeployEvent], error) {
 	return c.releaseDomain.CallServerStream(ctx, connect.NewRequest(req))
 }
 
-// AddDomain calls deployments.v1.DeploymentService.AddDomain.
-func (c *deploymentServiceClient) AddDomain(ctx context.Context, req *v1.AddDomainRequest) (*connect.ServerStreamForClient[v1.DeployEvent], error) {
+// AddDomain calls deployments.v1.ProviderService.AddDomain.
+func (c *providerServiceClient) AddDomain(ctx context.Context, req *v1.AddDomainRequest) (*connect.ServerStreamForClient[v1.DeployEvent], error) {
 	return c.addDomain.CallServerStream(ctx, connect.NewRequest(req))
 }
 
-// RemoveDomain calls deployments.v1.DeploymentService.RemoveDomain.
-func (c *deploymentServiceClient) RemoveDomain(ctx context.Context, req *v1.RemoveDomainRequest) (*connect.ServerStreamForClient[v1.DeployEvent], error) {
+// RemoveDomain calls deployments.v1.ProviderService.RemoveDomain.
+func (c *providerServiceClient) RemoveDomain(ctx context.Context, req *v1.RemoveDomainRequest) (*connect.ServerStreamForClient[v1.DeployEvent], error) {
 	return c.removeDomain.CallServerStream(ctx, connect.NewRequest(req))
 }
 
-// DomainStatus calls deployments.v1.DeploymentService.DomainStatus.
-func (c *deploymentServiceClient) DomainStatus(ctx context.Context, req *v1.DomainStatusRequest) (*v1.DomainStatusResponse, error) {
+// DomainStatus calls deployments.v1.ProviderService.DomainStatus.
+func (c *providerServiceClient) DomainStatus(ctx context.Context, req *v1.DomainStatusRequest) (*v1.DomainStatusResponse, error) {
 	response, err := c.domainStatus.CallUnary(ctx, connect.NewRequest(req))
 	if response != nil {
 		return response.Msg, err
@@ -469,35 +435,8 @@ func (c *deploymentServiceClient) DomainStatus(ctx context.Context, req *v1.Doma
 	return nil, err
 }
 
-// SetLink calls deployments.v1.DeploymentService.SetLink.
-func (c *deploymentServiceClient) SetLink(ctx context.Context, req *v1.SetLinkRequest) (*v1.SetLinkResponse, error) {
-	response, err := c.setLink.CallUnary(ctx, connect.NewRequest(req))
-	if response != nil {
-		return response.Msg, err
-	}
-	return nil, err
-}
-
-// RemoveLink calls deployments.v1.DeploymentService.RemoveLink.
-func (c *deploymentServiceClient) RemoveLink(ctx context.Context, req *v1.RemoveLinkRequest) (*v1.RemoveLinkResponse, error) {
-	response, err := c.removeLink.CallUnary(ctx, connect.NewRequest(req))
-	if response != nil {
-		return response.Msg, err
-	}
-	return nil, err
-}
-
-// ListLinks calls deployments.v1.DeploymentService.ListLinks.
-func (c *deploymentServiceClient) ListLinks(ctx context.Context, req *v1.ListLinksRequest) (*v1.ListLinksResponse, error) {
-	response, err := c.listLinks.CallUnary(ctx, connect.NewRequest(req))
-	if response != nil {
-		return response.Msg, err
-	}
-	return nil, err
-}
-
-// DeploymentServiceHandler is an implementation of the deployments.v1.DeploymentService service.
-type DeploymentServiceHandler interface {
+// ProviderServiceHandler is an implementation of the deployments.v1.ProviderService service.
+type ProviderServiceHandler interface {
 	Configure(context.Context, *v1.ConfigureRequest) (*v1.ConfigureResponse, error)
 	Deploy(context.Context, *v1.DeployRequest, *connect.ServerStream[v1.DeployEvent]) error
 	Bootstrap(context.Context, *v1.BootstrapRequest, *connect.ServerStream[v1.DeployEvent]) error
@@ -519,313 +458,274 @@ type DeploymentServiceHandler interface {
 	AddDomain(context.Context, *v1.AddDomainRequest, *connect.ServerStream[v1.DeployEvent]) error
 	RemoveDomain(context.Context, *v1.RemoveDomainRequest, *connect.ServerStream[v1.DeployEvent]) error
 	DomainStatus(context.Context, *v1.DomainStatusRequest) (*v1.DomainStatusResponse, error)
-	SetLink(context.Context, *v1.SetLinkRequest) (*v1.SetLinkResponse, error)
-	RemoveLink(context.Context, *v1.RemoveLinkRequest) (*v1.RemoveLinkResponse, error)
-	ListLinks(context.Context, *v1.ListLinksRequest) (*v1.ListLinksResponse, error)
 }
 
-// NewDeploymentServiceHandler builds an HTTP handler from the service implementation. It returns
-// the path on which to mount the handler and the handler itself.
+// NewProviderServiceHandler builds an HTTP handler from the service implementation. It returns the
+// path on which to mount the handler and the handler itself.
 //
 // By default, handlers support the Connect, gRPC, and gRPC-Web protocols with the binary Protobuf
 // and JSON codecs. They also support gzip compression.
-func NewDeploymentServiceHandler(svc DeploymentServiceHandler, opts ...connect.HandlerOption) (string, http.Handler) {
-	deploymentServiceMethods := v1.File_deployments_v1_deployments_proto.Services().ByName("DeploymentService").Methods()
-	deploymentServiceConfigureHandler := connect.NewUnaryHandlerSimple(
-		DeploymentServiceConfigureProcedure,
+func NewProviderServiceHandler(svc ProviderServiceHandler, opts ...connect.HandlerOption) (string, http.Handler) {
+	providerServiceMethods := v1.File_deployments_v1_deployments_proto.Services().ByName("ProviderService").Methods()
+	providerServiceConfigureHandler := connect.NewUnaryHandlerSimple(
+		ProviderServiceConfigureProcedure,
 		svc.Configure,
-		connect.WithSchema(deploymentServiceMethods.ByName("Configure")),
+		connect.WithSchema(providerServiceMethods.ByName("Configure")),
 		connect.WithHandlerOptions(opts...),
 	)
-	deploymentServiceDeployHandler := connect.NewServerStreamHandlerSimple(
-		DeploymentServiceDeployProcedure,
+	providerServiceDeployHandler := connect.NewServerStreamHandlerSimple(
+		ProviderServiceDeployProcedure,
 		svc.Deploy,
-		connect.WithSchema(deploymentServiceMethods.ByName("Deploy")),
+		connect.WithSchema(providerServiceMethods.ByName("Deploy")),
 		connect.WithHandlerOptions(opts...),
 	)
-	deploymentServiceBootstrapHandler := connect.NewServerStreamHandlerSimple(
-		DeploymentServiceBootstrapProcedure,
+	providerServiceBootstrapHandler := connect.NewServerStreamHandlerSimple(
+		ProviderServiceBootstrapProcedure,
 		svc.Bootstrap,
-		connect.WithSchema(deploymentServiceMethods.ByName("Bootstrap")),
+		connect.WithSchema(providerServiceMethods.ByName("Bootstrap")),
 		connect.WithHandlerOptions(opts...),
 	)
-	deploymentServiceDescribeBootstrapHandler := connect.NewUnaryHandlerSimple(
-		DeploymentServiceDescribeBootstrapProcedure,
+	providerServiceDescribeBootstrapHandler := connect.NewUnaryHandlerSimple(
+		ProviderServiceDescribeBootstrapProcedure,
 		svc.DescribeBootstrap,
-		connect.WithSchema(deploymentServiceMethods.ByName("DescribeBootstrap")),
+		connect.WithSchema(providerServiceMethods.ByName("DescribeBootstrap")),
 		connect.WithHandlerOptions(opts...),
 	)
-	deploymentServiceTeardownHandler := connect.NewServerStreamHandlerSimple(
-		DeploymentServiceTeardownProcedure,
+	providerServiceTeardownHandler := connect.NewServerStreamHandlerSimple(
+		ProviderServiceTeardownProcedure,
 		svc.Teardown,
-		connect.WithSchema(deploymentServiceMethods.ByName("Teardown")),
+		connect.WithSchema(providerServiceMethods.ByName("Teardown")),
 		connect.WithHandlerOptions(opts...),
 	)
-	deploymentServicePlanTeardownHandler := connect.NewUnaryHandlerSimple(
-		DeploymentServicePlanTeardownProcedure,
+	providerServicePlanTeardownHandler := connect.NewUnaryHandlerSimple(
+		ProviderServicePlanTeardownProcedure,
 		svc.PlanTeardown,
-		connect.WithSchema(deploymentServiceMethods.ByName("PlanTeardown")),
+		connect.WithSchema(providerServiceMethods.ByName("PlanTeardown")),
 		connect.WithHandlerOptions(opts...),
 	)
-	deploymentServiceDestroyPreviewHandler := connect.NewServerStreamHandlerSimple(
-		DeploymentServiceDestroyPreviewProcedure,
+	providerServiceDestroyPreviewHandler := connect.NewServerStreamHandlerSimple(
+		ProviderServiceDestroyPreviewProcedure,
 		svc.DestroyPreview,
-		connect.WithSchema(deploymentServiceMethods.ByName("DestroyPreview")),
+		connect.WithSchema(providerServiceMethods.ByName("DestroyPreview")),
 		connect.WithHandlerOptions(opts...),
 	)
-	deploymentServiceDestroyProjectHandler := connect.NewServerStreamHandlerSimple(
-		DeploymentServiceDestroyProjectProcedure,
+	providerServiceDestroyProjectHandler := connect.NewServerStreamHandlerSimple(
+		ProviderServiceDestroyProjectProcedure,
 		svc.DestroyProject,
-		connect.WithSchema(deploymentServiceMethods.ByName("DestroyProject")),
+		connect.WithSchema(providerServiceMethods.ByName("DestroyProject")),
 		connect.WithHandlerOptions(opts...),
 	)
-	deploymentServicePlanDestroyProjectHandler := connect.NewUnaryHandlerSimple(
-		DeploymentServicePlanDestroyProjectProcedure,
+	providerServicePlanDestroyProjectHandler := connect.NewUnaryHandlerSimple(
+		ProviderServicePlanDestroyProjectProcedure,
 		svc.PlanDestroyProject,
-		connect.WithSchema(deploymentServiceMethods.ByName("PlanDestroyProject")),
+		connect.WithSchema(providerServiceMethods.ByName("PlanDestroyProject")),
 		connect.WithHandlerOptions(opts...),
 	)
-	deploymentServiceListEnvironmentsHandler := connect.NewUnaryHandlerSimple(
-		DeploymentServiceListEnvironmentsProcedure,
+	providerServiceListEnvironmentsHandler := connect.NewUnaryHandlerSimple(
+		ProviderServiceListEnvironmentsProcedure,
 		svc.ListEnvironments,
-		connect.WithSchema(deploymentServiceMethods.ByName("ListEnvironments")),
+		connect.WithSchema(providerServiceMethods.ByName("ListEnvironments")),
 		connect.WithHandlerOptions(opts...),
 	)
-	deploymentServicePreflightHandler := connect.NewUnaryHandlerSimple(
-		DeploymentServicePreflightProcedure,
+	providerServicePreflightHandler := connect.NewUnaryHandlerSimple(
+		ProviderServicePreflightProcedure,
 		svc.Preflight,
-		connect.WithSchema(deploymentServiceMethods.ByName("Preflight")),
+		connect.WithSchema(providerServiceMethods.ByName("Preflight")),
 		connect.WithHandlerOptions(opts...),
 	)
-	deploymentServiceListPromotionsHandler := connect.NewUnaryHandlerSimple(
-		DeploymentServiceListPromotionsProcedure,
+	providerServiceListPromotionsHandler := connect.NewUnaryHandlerSimple(
+		ProviderServiceListPromotionsProcedure,
 		svc.ListPromotions,
-		connect.WithSchema(deploymentServiceMethods.ByName("ListPromotions")),
+		connect.WithSchema(providerServiceMethods.ByName("ListPromotions")),
 		connect.WithHandlerOptions(opts...),
 	)
-	deploymentServiceRollbackHandler := connect.NewUnaryHandlerSimple(
-		DeploymentServiceRollbackProcedure,
+	providerServiceRollbackHandler := connect.NewUnaryHandlerSimple(
+		ProviderServiceRollbackProcedure,
 		svc.Rollback,
-		connect.WithSchema(deploymentServiceMethods.ByName("Rollback")),
+		connect.WithSchema(providerServiceMethods.ByName("Rollback")),
 		connect.WithHandlerOptions(opts...),
 	)
-	deploymentServicePruneHandler := connect.NewServerStreamHandlerSimple(
-		DeploymentServicePruneProcedure,
+	providerServicePruneHandler := connect.NewServerStreamHandlerSimple(
+		ProviderServicePruneProcedure,
 		svc.Prune,
-		connect.WithSchema(deploymentServiceMethods.ByName("Prune")),
+		connect.WithSchema(providerServiceMethods.ByName("Prune")),
 		connect.WithHandlerOptions(opts...),
 	)
-	deploymentServiceUseDomainHandler := connect.NewServerStreamHandlerSimple(
-		DeploymentServiceUseDomainProcedure,
+	providerServiceUseDomainHandler := connect.NewServerStreamHandlerSimple(
+		ProviderServiceUseDomainProcedure,
 		svc.UseDomain,
-		connect.WithSchema(deploymentServiceMethods.ByName("UseDomain")),
+		connect.WithSchema(providerServiceMethods.ByName("UseDomain")),
 		connect.WithHandlerOptions(opts...),
 	)
-	deploymentServiceListDomainHandler := connect.NewUnaryHandlerSimple(
-		DeploymentServiceListDomainProcedure,
+	providerServiceListDomainHandler := connect.NewUnaryHandlerSimple(
+		ProviderServiceListDomainProcedure,
 		svc.ListDomain,
-		connect.WithSchema(deploymentServiceMethods.ByName("ListDomain")),
+		connect.WithSchema(providerServiceMethods.ByName("ListDomain")),
 		connect.WithHandlerOptions(opts...),
 	)
-	deploymentServicePlanReleaseDomainHandler := connect.NewUnaryHandlerSimple(
-		DeploymentServicePlanReleaseDomainProcedure,
+	providerServicePlanReleaseDomainHandler := connect.NewUnaryHandlerSimple(
+		ProviderServicePlanReleaseDomainProcedure,
 		svc.PlanReleaseDomain,
-		connect.WithSchema(deploymentServiceMethods.ByName("PlanReleaseDomain")),
+		connect.WithSchema(providerServiceMethods.ByName("PlanReleaseDomain")),
 		connect.WithHandlerOptions(opts...),
 	)
-	deploymentServiceReleaseDomainHandler := connect.NewServerStreamHandlerSimple(
-		DeploymentServiceReleaseDomainProcedure,
+	providerServiceReleaseDomainHandler := connect.NewServerStreamHandlerSimple(
+		ProviderServiceReleaseDomainProcedure,
 		svc.ReleaseDomain,
-		connect.WithSchema(deploymentServiceMethods.ByName("ReleaseDomain")),
+		connect.WithSchema(providerServiceMethods.ByName("ReleaseDomain")),
 		connect.WithHandlerOptions(opts...),
 	)
-	deploymentServiceAddDomainHandler := connect.NewServerStreamHandlerSimple(
-		DeploymentServiceAddDomainProcedure,
+	providerServiceAddDomainHandler := connect.NewServerStreamHandlerSimple(
+		ProviderServiceAddDomainProcedure,
 		svc.AddDomain,
-		connect.WithSchema(deploymentServiceMethods.ByName("AddDomain")),
+		connect.WithSchema(providerServiceMethods.ByName("AddDomain")),
 		connect.WithHandlerOptions(opts...),
 	)
-	deploymentServiceRemoveDomainHandler := connect.NewServerStreamHandlerSimple(
-		DeploymentServiceRemoveDomainProcedure,
+	providerServiceRemoveDomainHandler := connect.NewServerStreamHandlerSimple(
+		ProviderServiceRemoveDomainProcedure,
 		svc.RemoveDomain,
-		connect.WithSchema(deploymentServiceMethods.ByName("RemoveDomain")),
+		connect.WithSchema(providerServiceMethods.ByName("RemoveDomain")),
 		connect.WithHandlerOptions(opts...),
 	)
-	deploymentServiceDomainStatusHandler := connect.NewUnaryHandlerSimple(
-		DeploymentServiceDomainStatusProcedure,
+	providerServiceDomainStatusHandler := connect.NewUnaryHandlerSimple(
+		ProviderServiceDomainStatusProcedure,
 		svc.DomainStatus,
-		connect.WithSchema(deploymentServiceMethods.ByName("DomainStatus")),
+		connect.WithSchema(providerServiceMethods.ByName("DomainStatus")),
 		connect.WithHandlerOptions(opts...),
 	)
-	deploymentServiceSetLinkHandler := connect.NewUnaryHandlerSimple(
-		DeploymentServiceSetLinkProcedure,
-		svc.SetLink,
-		connect.WithSchema(deploymentServiceMethods.ByName("SetLink")),
-		connect.WithHandlerOptions(opts...),
-	)
-	deploymentServiceRemoveLinkHandler := connect.NewUnaryHandlerSimple(
-		DeploymentServiceRemoveLinkProcedure,
-		svc.RemoveLink,
-		connect.WithSchema(deploymentServiceMethods.ByName("RemoveLink")),
-		connect.WithHandlerOptions(opts...),
-	)
-	deploymentServiceListLinksHandler := connect.NewUnaryHandlerSimple(
-		DeploymentServiceListLinksProcedure,
-		svc.ListLinks,
-		connect.WithSchema(deploymentServiceMethods.ByName("ListLinks")),
-		connect.WithHandlerOptions(opts...),
-	)
-	return "/deployments.v1.DeploymentService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	return "/deployments.v1.ProviderService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
-		case DeploymentServiceConfigureProcedure:
-			deploymentServiceConfigureHandler.ServeHTTP(w, r)
-		case DeploymentServiceDeployProcedure:
-			deploymentServiceDeployHandler.ServeHTTP(w, r)
-		case DeploymentServiceBootstrapProcedure:
-			deploymentServiceBootstrapHandler.ServeHTTP(w, r)
-		case DeploymentServiceDescribeBootstrapProcedure:
-			deploymentServiceDescribeBootstrapHandler.ServeHTTP(w, r)
-		case DeploymentServiceTeardownProcedure:
-			deploymentServiceTeardownHandler.ServeHTTP(w, r)
-		case DeploymentServicePlanTeardownProcedure:
-			deploymentServicePlanTeardownHandler.ServeHTTP(w, r)
-		case DeploymentServiceDestroyPreviewProcedure:
-			deploymentServiceDestroyPreviewHandler.ServeHTTP(w, r)
-		case DeploymentServiceDestroyProjectProcedure:
-			deploymentServiceDestroyProjectHandler.ServeHTTP(w, r)
-		case DeploymentServicePlanDestroyProjectProcedure:
-			deploymentServicePlanDestroyProjectHandler.ServeHTTP(w, r)
-		case DeploymentServiceListEnvironmentsProcedure:
-			deploymentServiceListEnvironmentsHandler.ServeHTTP(w, r)
-		case DeploymentServicePreflightProcedure:
-			deploymentServicePreflightHandler.ServeHTTP(w, r)
-		case DeploymentServiceListPromotionsProcedure:
-			deploymentServiceListPromotionsHandler.ServeHTTP(w, r)
-		case DeploymentServiceRollbackProcedure:
-			deploymentServiceRollbackHandler.ServeHTTP(w, r)
-		case DeploymentServicePruneProcedure:
-			deploymentServicePruneHandler.ServeHTTP(w, r)
-		case DeploymentServiceUseDomainProcedure:
-			deploymentServiceUseDomainHandler.ServeHTTP(w, r)
-		case DeploymentServiceListDomainProcedure:
-			deploymentServiceListDomainHandler.ServeHTTP(w, r)
-		case DeploymentServicePlanReleaseDomainProcedure:
-			deploymentServicePlanReleaseDomainHandler.ServeHTTP(w, r)
-		case DeploymentServiceReleaseDomainProcedure:
-			deploymentServiceReleaseDomainHandler.ServeHTTP(w, r)
-		case DeploymentServiceAddDomainProcedure:
-			deploymentServiceAddDomainHandler.ServeHTTP(w, r)
-		case DeploymentServiceRemoveDomainProcedure:
-			deploymentServiceRemoveDomainHandler.ServeHTTP(w, r)
-		case DeploymentServiceDomainStatusProcedure:
-			deploymentServiceDomainStatusHandler.ServeHTTP(w, r)
-		case DeploymentServiceSetLinkProcedure:
-			deploymentServiceSetLinkHandler.ServeHTTP(w, r)
-		case DeploymentServiceRemoveLinkProcedure:
-			deploymentServiceRemoveLinkHandler.ServeHTTP(w, r)
-		case DeploymentServiceListLinksProcedure:
-			deploymentServiceListLinksHandler.ServeHTTP(w, r)
+		case ProviderServiceConfigureProcedure:
+			providerServiceConfigureHandler.ServeHTTP(w, r)
+		case ProviderServiceDeployProcedure:
+			providerServiceDeployHandler.ServeHTTP(w, r)
+		case ProviderServiceBootstrapProcedure:
+			providerServiceBootstrapHandler.ServeHTTP(w, r)
+		case ProviderServiceDescribeBootstrapProcedure:
+			providerServiceDescribeBootstrapHandler.ServeHTTP(w, r)
+		case ProviderServiceTeardownProcedure:
+			providerServiceTeardownHandler.ServeHTTP(w, r)
+		case ProviderServicePlanTeardownProcedure:
+			providerServicePlanTeardownHandler.ServeHTTP(w, r)
+		case ProviderServiceDestroyPreviewProcedure:
+			providerServiceDestroyPreviewHandler.ServeHTTP(w, r)
+		case ProviderServiceDestroyProjectProcedure:
+			providerServiceDestroyProjectHandler.ServeHTTP(w, r)
+		case ProviderServicePlanDestroyProjectProcedure:
+			providerServicePlanDestroyProjectHandler.ServeHTTP(w, r)
+		case ProviderServiceListEnvironmentsProcedure:
+			providerServiceListEnvironmentsHandler.ServeHTTP(w, r)
+		case ProviderServicePreflightProcedure:
+			providerServicePreflightHandler.ServeHTTP(w, r)
+		case ProviderServiceListPromotionsProcedure:
+			providerServiceListPromotionsHandler.ServeHTTP(w, r)
+		case ProviderServiceRollbackProcedure:
+			providerServiceRollbackHandler.ServeHTTP(w, r)
+		case ProviderServicePruneProcedure:
+			providerServicePruneHandler.ServeHTTP(w, r)
+		case ProviderServiceUseDomainProcedure:
+			providerServiceUseDomainHandler.ServeHTTP(w, r)
+		case ProviderServiceListDomainProcedure:
+			providerServiceListDomainHandler.ServeHTTP(w, r)
+		case ProviderServicePlanReleaseDomainProcedure:
+			providerServicePlanReleaseDomainHandler.ServeHTTP(w, r)
+		case ProviderServiceReleaseDomainProcedure:
+			providerServiceReleaseDomainHandler.ServeHTTP(w, r)
+		case ProviderServiceAddDomainProcedure:
+			providerServiceAddDomainHandler.ServeHTTP(w, r)
+		case ProviderServiceRemoveDomainProcedure:
+			providerServiceRemoveDomainHandler.ServeHTTP(w, r)
+		case ProviderServiceDomainStatusProcedure:
+			providerServiceDomainStatusHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
 	})
 }
 
-// UnimplementedDeploymentServiceHandler returns CodeUnimplemented from all methods.
-type UnimplementedDeploymentServiceHandler struct{}
+// UnimplementedProviderServiceHandler returns CodeUnimplemented from all methods.
+type UnimplementedProviderServiceHandler struct{}
 
-func (UnimplementedDeploymentServiceHandler) Configure(context.Context, *v1.ConfigureRequest) (*v1.ConfigureResponse, error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("deployments.v1.DeploymentService.Configure is not implemented"))
+func (UnimplementedProviderServiceHandler) Configure(context.Context, *v1.ConfigureRequest) (*v1.ConfigureResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("deployments.v1.ProviderService.Configure is not implemented"))
 }
 
-func (UnimplementedDeploymentServiceHandler) Deploy(context.Context, *v1.DeployRequest, *connect.ServerStream[v1.DeployEvent]) error {
-	return connect.NewError(connect.CodeUnimplemented, errors.New("deployments.v1.DeploymentService.Deploy is not implemented"))
+func (UnimplementedProviderServiceHandler) Deploy(context.Context, *v1.DeployRequest, *connect.ServerStream[v1.DeployEvent]) error {
+	return connect.NewError(connect.CodeUnimplemented, errors.New("deployments.v1.ProviderService.Deploy is not implemented"))
 }
 
-func (UnimplementedDeploymentServiceHandler) Bootstrap(context.Context, *v1.BootstrapRequest, *connect.ServerStream[v1.DeployEvent]) error {
-	return connect.NewError(connect.CodeUnimplemented, errors.New("deployments.v1.DeploymentService.Bootstrap is not implemented"))
+func (UnimplementedProviderServiceHandler) Bootstrap(context.Context, *v1.BootstrapRequest, *connect.ServerStream[v1.DeployEvent]) error {
+	return connect.NewError(connect.CodeUnimplemented, errors.New("deployments.v1.ProviderService.Bootstrap is not implemented"))
 }
 
-func (UnimplementedDeploymentServiceHandler) DescribeBootstrap(context.Context, *v1.DescribeBootstrapRequest) (*v1.DescribeBootstrapResponse, error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("deployments.v1.DeploymentService.DescribeBootstrap is not implemented"))
+func (UnimplementedProviderServiceHandler) DescribeBootstrap(context.Context, *v1.DescribeBootstrapRequest) (*v1.DescribeBootstrapResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("deployments.v1.ProviderService.DescribeBootstrap is not implemented"))
 }
 
-func (UnimplementedDeploymentServiceHandler) Teardown(context.Context, *v1.TeardownRequest, *connect.ServerStream[v1.DeployEvent]) error {
-	return connect.NewError(connect.CodeUnimplemented, errors.New("deployments.v1.DeploymentService.Teardown is not implemented"))
+func (UnimplementedProviderServiceHandler) Teardown(context.Context, *v1.TeardownRequest, *connect.ServerStream[v1.DeployEvent]) error {
+	return connect.NewError(connect.CodeUnimplemented, errors.New("deployments.v1.ProviderService.Teardown is not implemented"))
 }
 
-func (UnimplementedDeploymentServiceHandler) PlanTeardown(context.Context, *v1.PlanTeardownRequest) (*v1.PlanTeardownResponse, error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("deployments.v1.DeploymentService.PlanTeardown is not implemented"))
+func (UnimplementedProviderServiceHandler) PlanTeardown(context.Context, *v1.PlanTeardownRequest) (*v1.PlanTeardownResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("deployments.v1.ProviderService.PlanTeardown is not implemented"))
 }
 
-func (UnimplementedDeploymentServiceHandler) DestroyPreview(context.Context, *v1.DestroyPreviewRequest, *connect.ServerStream[v1.DeployEvent]) error {
-	return connect.NewError(connect.CodeUnimplemented, errors.New("deployments.v1.DeploymentService.DestroyPreview is not implemented"))
+func (UnimplementedProviderServiceHandler) DestroyPreview(context.Context, *v1.DestroyPreviewRequest, *connect.ServerStream[v1.DeployEvent]) error {
+	return connect.NewError(connect.CodeUnimplemented, errors.New("deployments.v1.ProviderService.DestroyPreview is not implemented"))
 }
 
-func (UnimplementedDeploymentServiceHandler) DestroyProject(context.Context, *v1.DestroyProjectRequest, *connect.ServerStream[v1.DeployEvent]) error {
-	return connect.NewError(connect.CodeUnimplemented, errors.New("deployments.v1.DeploymentService.DestroyProject is not implemented"))
+func (UnimplementedProviderServiceHandler) DestroyProject(context.Context, *v1.DestroyProjectRequest, *connect.ServerStream[v1.DeployEvent]) error {
+	return connect.NewError(connect.CodeUnimplemented, errors.New("deployments.v1.ProviderService.DestroyProject is not implemented"))
 }
 
-func (UnimplementedDeploymentServiceHandler) PlanDestroyProject(context.Context, *v1.PlanDestroyProjectRequest) (*v1.PlanDestroyProjectResponse, error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("deployments.v1.DeploymentService.PlanDestroyProject is not implemented"))
+func (UnimplementedProviderServiceHandler) PlanDestroyProject(context.Context, *v1.PlanDestroyProjectRequest) (*v1.PlanDestroyProjectResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("deployments.v1.ProviderService.PlanDestroyProject is not implemented"))
 }
 
-func (UnimplementedDeploymentServiceHandler) ListEnvironments(context.Context, *v1.ListEnvironmentsRequest) (*v1.ListEnvironmentsResponse, error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("deployments.v1.DeploymentService.ListEnvironments is not implemented"))
+func (UnimplementedProviderServiceHandler) ListEnvironments(context.Context, *v1.ListEnvironmentsRequest) (*v1.ListEnvironmentsResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("deployments.v1.ProviderService.ListEnvironments is not implemented"))
 }
 
-func (UnimplementedDeploymentServiceHandler) Preflight(context.Context, *v1.PreflightRequest) (*v1.PreflightResponse, error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("deployments.v1.DeploymentService.Preflight is not implemented"))
+func (UnimplementedProviderServiceHandler) Preflight(context.Context, *v1.PreflightRequest) (*v1.PreflightResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("deployments.v1.ProviderService.Preflight is not implemented"))
 }
 
-func (UnimplementedDeploymentServiceHandler) ListPromotions(context.Context, *v1.ListPromotionsRequest) (*v1.ListPromotionsResponse, error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("deployments.v1.DeploymentService.ListPromotions is not implemented"))
+func (UnimplementedProviderServiceHandler) ListPromotions(context.Context, *v1.ListPromotionsRequest) (*v1.ListPromotionsResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("deployments.v1.ProviderService.ListPromotions is not implemented"))
 }
 
-func (UnimplementedDeploymentServiceHandler) Rollback(context.Context, *v1.RollbackRequest) (*v1.RollbackResponse, error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("deployments.v1.DeploymentService.Rollback is not implemented"))
+func (UnimplementedProviderServiceHandler) Rollback(context.Context, *v1.RollbackRequest) (*v1.RollbackResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("deployments.v1.ProviderService.Rollback is not implemented"))
 }
 
-func (UnimplementedDeploymentServiceHandler) Prune(context.Context, *v1.PruneRequest, *connect.ServerStream[v1.DeployEvent]) error {
-	return connect.NewError(connect.CodeUnimplemented, errors.New("deployments.v1.DeploymentService.Prune is not implemented"))
+func (UnimplementedProviderServiceHandler) Prune(context.Context, *v1.PruneRequest, *connect.ServerStream[v1.DeployEvent]) error {
+	return connect.NewError(connect.CodeUnimplemented, errors.New("deployments.v1.ProviderService.Prune is not implemented"))
 }
 
-func (UnimplementedDeploymentServiceHandler) UseDomain(context.Context, *v1.UseDomainRequest, *connect.ServerStream[v1.DeployEvent]) error {
-	return connect.NewError(connect.CodeUnimplemented, errors.New("deployments.v1.DeploymentService.UseDomain is not implemented"))
+func (UnimplementedProviderServiceHandler) UseDomain(context.Context, *v1.UseDomainRequest, *connect.ServerStream[v1.DeployEvent]) error {
+	return connect.NewError(connect.CodeUnimplemented, errors.New("deployments.v1.ProviderService.UseDomain is not implemented"))
 }
 
-func (UnimplementedDeploymentServiceHandler) ListDomain(context.Context, *v1.ListDomainRequest) (*v1.ListDomainResponse, error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("deployments.v1.DeploymentService.ListDomain is not implemented"))
+func (UnimplementedProviderServiceHandler) ListDomain(context.Context, *v1.ListDomainRequest) (*v1.ListDomainResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("deployments.v1.ProviderService.ListDomain is not implemented"))
 }
 
-func (UnimplementedDeploymentServiceHandler) PlanReleaseDomain(context.Context, *v1.PlanReleaseDomainRequest) (*v1.PlanReleaseDomainResponse, error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("deployments.v1.DeploymentService.PlanReleaseDomain is not implemented"))
+func (UnimplementedProviderServiceHandler) PlanReleaseDomain(context.Context, *v1.PlanReleaseDomainRequest) (*v1.PlanReleaseDomainResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("deployments.v1.ProviderService.PlanReleaseDomain is not implemented"))
 }
 
-func (UnimplementedDeploymentServiceHandler) ReleaseDomain(context.Context, *v1.ReleaseDomainRequest, *connect.ServerStream[v1.DeployEvent]) error {
-	return connect.NewError(connect.CodeUnimplemented, errors.New("deployments.v1.DeploymentService.ReleaseDomain is not implemented"))
+func (UnimplementedProviderServiceHandler) ReleaseDomain(context.Context, *v1.ReleaseDomainRequest, *connect.ServerStream[v1.DeployEvent]) error {
+	return connect.NewError(connect.CodeUnimplemented, errors.New("deployments.v1.ProviderService.ReleaseDomain is not implemented"))
 }
 
-func (UnimplementedDeploymentServiceHandler) AddDomain(context.Context, *v1.AddDomainRequest, *connect.ServerStream[v1.DeployEvent]) error {
-	return connect.NewError(connect.CodeUnimplemented, errors.New("deployments.v1.DeploymentService.AddDomain is not implemented"))
+func (UnimplementedProviderServiceHandler) AddDomain(context.Context, *v1.AddDomainRequest, *connect.ServerStream[v1.DeployEvent]) error {
+	return connect.NewError(connect.CodeUnimplemented, errors.New("deployments.v1.ProviderService.AddDomain is not implemented"))
 }
 
-func (UnimplementedDeploymentServiceHandler) RemoveDomain(context.Context, *v1.RemoveDomainRequest, *connect.ServerStream[v1.DeployEvent]) error {
-	return connect.NewError(connect.CodeUnimplemented, errors.New("deployments.v1.DeploymentService.RemoveDomain is not implemented"))
+func (UnimplementedProviderServiceHandler) RemoveDomain(context.Context, *v1.RemoveDomainRequest, *connect.ServerStream[v1.DeployEvent]) error {
+	return connect.NewError(connect.CodeUnimplemented, errors.New("deployments.v1.ProviderService.RemoveDomain is not implemented"))
 }
 
-func (UnimplementedDeploymentServiceHandler) DomainStatus(context.Context, *v1.DomainStatusRequest) (*v1.DomainStatusResponse, error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("deployments.v1.DeploymentService.DomainStatus is not implemented"))
-}
-
-func (UnimplementedDeploymentServiceHandler) SetLink(context.Context, *v1.SetLinkRequest) (*v1.SetLinkResponse, error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("deployments.v1.DeploymentService.SetLink is not implemented"))
-}
-
-func (UnimplementedDeploymentServiceHandler) RemoveLink(context.Context, *v1.RemoveLinkRequest) (*v1.RemoveLinkResponse, error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("deployments.v1.DeploymentService.RemoveLink is not implemented"))
-}
-
-func (UnimplementedDeploymentServiceHandler) ListLinks(context.Context, *v1.ListLinksRequest) (*v1.ListLinksResponse, error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("deployments.v1.DeploymentService.ListLinks is not implemented"))
+func (UnimplementedProviderServiceHandler) DomainStatus(context.Context, *v1.DomainStatusRequest) (*v1.DomainStatusResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("deployments.v1.ProviderService.DomainStatus is not implemented"))
 }

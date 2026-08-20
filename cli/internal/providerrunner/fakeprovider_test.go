@@ -78,7 +78,7 @@ func runFakeProvider() int {
 	defer ln.Close()
 
 	mux := http.NewServeMux()
-	path, handler := deploymentsv1connect.NewDeploymentServiceHandler(&fakeProviderServer{
+	path, handler := deploymentsv1connect.NewProviderServiceHandler(&fakeProviderServer{
 		mode:  mode,
 		token: os.Getenv(channel.SessionTokenEnvVar),
 	})
@@ -94,7 +94,7 @@ func runFakeProvider() int {
 }
 
 type fakeProviderServer struct {
-	deploymentsv1connect.UnimplementedDeploymentServiceHandler
+	deploymentsv1connect.UnimplementedProviderServiceHandler
 	mode  string
 	token string
 }

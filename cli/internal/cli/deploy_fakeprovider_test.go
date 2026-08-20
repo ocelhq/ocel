@@ -110,7 +110,7 @@ func runDeployFakeProvider() int {
 	}
 
 	mux := http.NewServeMux()
-	path, handler := deploymentsv1connect.NewDeploymentServiceHandler(fake)
+	path, handler := deploymentsv1connect.NewProviderServiceHandler(fake)
 	mux.Handle(path, handler)
 
 	path, handler = envv1connect.NewEnvVarsServiceHandler(fake)
@@ -126,7 +126,7 @@ func runDeployFakeProvider() int {
 }
 
 type deployFakeProviderServer struct {
-	deploymentsv1connect.UnimplementedDeploymentServiceHandler
+	deploymentsv1connect.UnimplementedProviderServiceHandler
 	token string
 	mode  string
 

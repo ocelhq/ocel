@@ -9,11 +9,12 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/naming"
 	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
+	envv1 "github.com/ocelhq/ocel/pkg/proto/env/v1"
 	"github.com/ocelhq/ocel/platform/aws/provider/bootstrap"
 	"github.com/ocelhq/ocel/platform/aws/provider/vars"
 )
 
-func (s *Server) SetLink(ctx context.Context, req *deploymentsv1.SetLinkRequest) (*deploymentsv1.SetLinkResponse, error) {
+func (s *VarsServer) SetLink(ctx context.Context, req *envv1.SetLinkRequest) (*envv1.SetLinkResponse, error) {
 	if err := linkTarget(req.GetClass(), req.GetEnvironment()); err != nil {
 		return nil, err
 	}
@@ -29,10 +30,10 @@ func (s *Server) SetLink(ctx context.Context, req *deploymentsv1.SetLinkRequest)
 	if err != nil {
 		return nil, linksError(err)
 	}
-	return &deploymentsv1.SetLinkResponse{Version: uint64(version)}, nil
+	return &envv1.SetLinkResponse{Version: uint64(version)}, nil
 }
 
-func (s *Server) RemoveLink(ctx context.Context, req *deploymentsv1.RemoveLinkRequest) (*deploymentsv1.RemoveLinkResponse, error) {
+func (s *VarsServer) RemoveLink(ctx context.Context, req *envv1.RemoveLinkRequest) (*envv1.RemoveLinkResponse, error) {
 	if err := linkTarget(req.GetClass(), req.GetEnvironment()); err != nil {
 		return nil, err
 	}
@@ -48,10 +49,10 @@ func (s *Server) RemoveLink(ctx context.Context, req *deploymentsv1.RemoveLinkRe
 	if err != nil {
 		return nil, linksError(err)
 	}
-	return &deploymentsv1.RemoveLinkResponse{Removed: removed}, nil
+	return &envv1.RemoveLinkResponse{Removed: removed}, nil
 }
 
-func (s *Server) ListLinks(ctx context.Context, req *deploymentsv1.ListLinksRequest) (*deploymentsv1.ListLinksResponse, error) {
+func (s *VarsServer) ListLinks(ctx context.Context, req *envv1.ListLinksRequest) (*envv1.ListLinksResponse, error) {
 	if err := linkTarget(req.GetClass(), req.GetEnvironment()); err != nil {
 		return nil, err
 	}
@@ -64,9 +65,9 @@ func (s *Server) ListLinks(ctx context.Context, req *deploymentsv1.ListLinksRequ
 	if err != nil {
 		return nil, linksError(err)
 	}
-	resp := &deploymentsv1.ListLinksResponse{Links: make([]*deploymentsv1.LinkSummary, 0, len(found))}
+	resp := &envv1.ListLinksResponse{Links: make([]*envv1.LinkSummary, 0, len(found))}
 	for _, l := range found {
-		resp.Links = append(resp.Links, &deploymentsv1.LinkSummary{
+		resp.Links = append(resp.Links, &envv1.LinkSummary{
 			Name:       l.Name,
 			Type:       l.Type,
 			Source:     l.Source,

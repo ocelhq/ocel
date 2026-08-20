@@ -16,6 +16,7 @@ import (
 	"google.golang.org/protobuf/types/known/structpb"
 
 	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
+	envv1 "github.com/ocelhq/ocel/pkg/proto/env/v1"
 	linksv1 "github.com/ocelhq/ocel/pkg/proto/links/v1"
 )
 
@@ -34,14 +35,14 @@ func (c outputCFN) DescribeStacks(context.Context, *cloudformation.DescribeStack
 	return &cloudformation.DescribeStacksOutput{Stacks: []cfntypes.Stack{{Outputs: out}}}, nil
 }
 
-func linksServer(t *testing.T) *Server {
+func linksServer(t *testing.T) *VarsServer {
 	t.Helper()
-	return &Server{stores: testStores(&countingCFN{}, newFakeDynamo(), &fakeKMS{})}
+	return &VarsServer{stores: testStores(&countingCFN{}, newFakeDynamo(), &fakeKMS{}), config: &sessionConfig{}}
 }
 
-func serverOn(cfn *outputCFN) *Server {
+func serverOn(cfn *outputCFN) *VarsServer {
 	ddb, crypto := newFakeDynamo(), &fakeKMS{}
-	return &Server{stores: stores{openAccount: func(context.Context, string) (account, error) {
+	return &VarsServer{config: &sessionConfig{}, stores: &stores{openAccount: func(context.Context, string) (account, error) {
 		return account{CFN: cfn, Dynamo: ddb, KMS: crypto}, nil
 	}}}
 }
@@ -80,7 +81,7 @@ func TestSetLinkRoundTripsThroughTheStore(t *testing.T) {
 	s := linksServer(t)
 	ctx := context.Background()
 
-	set, err := s.SetLink(ctx, &deploymentsv1.SetLinkRequest{
+	set, err := s.SetLink(ctx, &envv1.SetLinkRequest{
 		Slug:  "shop",
 		Class: deploymentsv1.Environment_CLASS_PRODUCTION,
 		Owner: "sst",
@@ -93,7 +94,7 @@ func TestSetLinkRoundTripsThroughTheStore(t *testing.T) {
 		t.Error("SetLink reported version 0, want the record row's own")
 	}
 
-	listed, err := s.ListLinks(ctx, &deploymentsv1.ListLinksRequest{Slug: "shop", Class: deploymentsv1.Environment_CLASS_PRODUCTION})
+	listed, err := s.ListLinks(ctx, &envv1.ListLinksRequest{Slug: "shop", Class: deploymentsv1.Environment_CLASS_PRODUCTION})
 	if err != nil {
 		t.Fatalf("ListLinks: %v", err)
 	}
@@ -105,7 +106,7 @@ func TestSetLinkRoundTripsThroughTheStore(t *testing.T) {
 		t.Errorf("ListLinks = %+v", got)
 	}
 
-	removed, err := s.RemoveLink(ctx, &deploymentsv1.RemoveLinkRequest{
+	removed, err := s.RemoveLink(ctx, &envv1.RemoveLinkRequest{
 		Slug: "shop", Class: deploymentsv1.Environment_CLASS_PRODUCTION, Name: "orders",
 	})
 	if err != nil {
@@ -115,7 +116,7 @@ func TestSetLinkRoundTripsThroughTheStore(t *testing.T) {
 		t.Error("RemoveLink = false for a link it had just published")
 	}
 
-	gone, err := s.RemoveLink(ctx, &deploymentsv1.RemoveLinkRequest{
+	gone, err := s.RemoveLink(ctx, &envv1.RemoveLinkRequest{
 		Slug: "shop", Class: deploymentsv1.Environment_CLASS_PRODUCTION, Name: "orders",
 	})
 	if err != nil {
@@ -129,7 +130,7 @@ func TestSetLinkRoundTripsThroughTheStore(t *testing.T) {
 func TestLinkHandlersRefuseACoordinateNothingBindsTo(t *testing.T) {
 	ctx := context.Background()
 
-	for name, req := range map[string]*deploymentsv1.SetLinkRequest{
+	for name, req := range map[string]*envv1.SetLinkRequest{
 		"no slug": {Class: deploymentsv1.Environment_CLASS_PRODUCTION, Owner: "sst", Link: ordersLink()},
 		"the class-wide marker": {
 			Slug: "shop", Class: deploymentsv1.Environment_CLASS_PREVIEW, Environment: "*", Owner: "sst", Link: ordersLink(),
@@ -164,7 +165,7 @@ func TestLinkHandlersRefuseACoordinateNothingBindsTo(t *testing.T) {
 	}
 
 	t.Run("a preview environment is legal in the preview class", func(t *testing.T) {
-		if _, err := linksServer(t).SetLink(ctx, &deploymentsv1.SetLinkRequest{
+		if _, err := linksServer(t).SetLink(ctx, &envv1.SetLinkRequest{
 			Slug: "shop", Class: deploymentsv1.Environment_CLASS_PREVIEW, Environment: "pr-9", Owner: "sst", Link: ordersLink(),
 		}); err != nil {
 			t.Fatalf("SetLink: %v", err)
@@ -204,7 +205,7 @@ func TestSetLinkRefusesARecordNoConsumerCouldResolve(t *testing.T) {
 		},
 	} {
 		t.Run(name, func(t *testing.T) {
-			_, err := linksServer(t).SetLink(ctx, &deploymentsv1.SetLinkRequest{
+			_, err := linksServer(t).SetLink(ctx, &envv1.SetLinkRequest{
 				Slug: "shop", Class: deploymentsv1.Environment_CLASS_PRODUCTION, Owner: tc.owner, Link: tc.link,
 			})
 			if got := codeOf(t, err); got != connect.CodeInvalidArgument {
@@ -221,14 +222,14 @@ func TestSetLinkPublishesASourcedCustomRecord(t *testing.T) {
 	s := linksServer(t)
 	ctx := context.Background()
 
-	if _, err := s.SetLink(ctx, &deploymentsv1.SetLinkRequest{
+	if _, err := s.SetLink(ctx, &envv1.SetLinkRequest{
 		Slug: "shop", Class: deploymentsv1.Environment_CLASS_PRODUCTION, Owner: "sst",
 		Link: &linksv1.Link{Name: "network", Source: "sst", Properties: networkProperties(t)},
 	}); err != nil {
 		t.Fatalf("SetLink: %v", err)
 	}
 
-	listed, err := s.ListLinks(ctx, &deploymentsv1.ListLinksRequest{Slug: "shop", Class: deploymentsv1.Environment_CLASS_PRODUCTION})
+	listed, err := s.ListLinks(ctx, &envv1.ListLinksRequest{Slug: "shop", Class: deploymentsv1.Environment_CLASS_PRODUCTION})
 	if err != nil {
 		t.Fatalf("ListLinks: %v", err)
 	}
@@ -243,7 +244,7 @@ func TestSetLinkPublishesASourcedCustomRecord(t *testing.T) {
 func TestSetLinkRefusesANameAnotherPublisherHolds(t *testing.T) {
 	s := linksServer(t)
 	ctx := context.Background()
-	req := &deploymentsv1.SetLinkRequest{
+	req := &envv1.SetLinkRequest{
 		Slug: "shop", Class: deploymentsv1.Environment_CLASS_PRODUCTION, Owner: "sst", Link: ordersLink(),
 	}
 	if _, err := s.SetLink(ctx, req); err != nil {
@@ -267,7 +268,7 @@ func TestLinkHandlersNameAnAbsentSubstrate(t *testing.T) {
 	ctx := context.Background()
 
 	t.Run("no bootstrap stack at all", func(t *testing.T) {
-		_, err := serverOn(&outputCFN{}).ListLinks(ctx, &deploymentsv1.ListLinksRequest{
+		_, err := serverOn(&outputCFN{}).ListLinks(ctx, &envv1.ListLinksRequest{
 			Slug: "shop", Class: deploymentsv1.Environment_CLASS_PRODUCTION,
 		})
 		if err == nil {
@@ -279,7 +280,7 @@ func TestLinkHandlersNameAnAbsentSubstrate(t *testing.T) {
 	})
 
 	t.Run("a removal against no bootstrap stack at all", func(t *testing.T) {
-		_, err := serverOn(&outputCFN{}).RemoveLink(ctx, &deploymentsv1.RemoveLinkRequest{
+		_, err := serverOn(&outputCFN{}).RemoveLink(ctx, &envv1.RemoveLinkRequest{
 			Slug: "shop", Class: deploymentsv1.Environment_CLASS_PRODUCTION, Name: "orders",
 		})
 		if err == nil {
@@ -294,7 +295,7 @@ func TestLinkHandlersNameAnAbsentSubstrate(t *testing.T) {
 		_, err := serverOn(&outputCFN{outputs: map[string]string{
 			"BootstrapVersion": bootstrapVersionOutput,
 			"VarsKeyArn":       "arn:aws:kms:eu-west-1:123456789012:key/abcd",
-		}}).SetLink(ctx, &deploymentsv1.SetLinkRequest{
+		}}).SetLink(ctx, &envv1.SetLinkRequest{
 			Slug: "shop", Class: deploymentsv1.Environment_CLASS_PRODUCTION, Owner: "sst", Link: ordersLink(),
 		})
 		if err == nil {
@@ -314,19 +315,19 @@ func TestListLinksDescribesEachRecordWithoutItsValues(t *testing.T) {
 		ordersLink(),
 		{Name: "network", Source: "sst", Properties: networkProperties(t)},
 	} {
-		if _, err := s.SetLink(ctx, &deploymentsv1.SetLinkRequest{
+		if _, err := s.SetLink(ctx, &envv1.SetLinkRequest{
 			Slug: "shop", Class: deploymentsv1.Environment_CLASS_PRODUCTION, Owner: "sst", Link: link,
 		}); err != nil {
 			t.Fatalf("SetLink %s: %v", link.GetName(), err)
 		}
 	}
 
-	listed, err := s.ListLinks(ctx, &deploymentsv1.ListLinksRequest{Slug: "shop", Class: deploymentsv1.Environment_CLASS_PRODUCTION})
+	listed, err := s.ListLinks(ctx, &envv1.ListLinksRequest{Slug: "shop", Class: deploymentsv1.Environment_CLASS_PRODUCTION})
 	if err != nil {
 		t.Fatalf("ListLinks: %v", err)
 	}
 
-	want := map[string][]*deploymentsv1.PropertyShape{
+	want := map[string][]*envv1.PropertyShape{
 		"network": {
 			{Name: "securityGroupIds", JsonType: "string", List: true},
 			{Name: "subnetIds", JsonType: "string", List: true},
@@ -357,7 +358,7 @@ func TestListLinksDescribesEachRecordWithoutItsValues(t *testing.T) {
 		}
 	}
 
-	fields := (&deploymentsv1.PropertyShape{}).ProtoReflect().Descriptor().Fields()
+	fields := (&envv1.PropertyShape{}).ProtoReflect().Descriptor().Fields()
 	described := make([]string, 0, fields.Len())
 	for i := range fields.Len() {
 		described = append(described, string(fields.Get(i).Name()))

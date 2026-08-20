@@ -55,6 +55,14 @@ const (
 	// EnvVarsServiceListVersionsProcedure is the fully-qualified name of the EnvVarsService's
 	// ListVersions RPC.
 	EnvVarsServiceListVersionsProcedure = "/env.v1.EnvVarsService/ListVersions"
+	// EnvVarsServiceSetLinkProcedure is the fully-qualified name of the EnvVarsService's SetLink RPC.
+	EnvVarsServiceSetLinkProcedure = "/env.v1.EnvVarsService/SetLink"
+	// EnvVarsServiceRemoveLinkProcedure is the fully-qualified name of the EnvVarsService's RemoveLink
+	// RPC.
+	EnvVarsServiceRemoveLinkProcedure = "/env.v1.EnvVarsService/RemoveLink"
+	// EnvVarsServiceListLinksProcedure is the fully-qualified name of the EnvVarsService's ListLinks
+	// RPC.
+	EnvVarsServiceListLinksProcedure = "/env.v1.EnvVarsService/ListLinks"
 )
 
 // EnvVarsServiceClient is a client for the env.v1.EnvVarsService service.
@@ -67,6 +75,9 @@ type EnvVarsServiceClient interface {
 	SetReference(context.Context, *v1.SetReferenceRequest) (*v1.SetReferenceResponse, error)
 	ListReferences(context.Context, *v1.ListReferencesRequest) (*v1.ListReferencesResponse, error)
 	ListVersions(context.Context, *v1.ListVersionsRequest) (*v1.ListVersionsResponse, error)
+	SetLink(context.Context, *v1.SetLinkRequest) (*v1.SetLinkResponse, error)
+	RemoveLink(context.Context, *v1.RemoveLinkRequest) (*v1.RemoveLinkResponse, error)
+	ListLinks(context.Context, *v1.ListLinksRequest) (*v1.ListLinksResponse, error)
 }
 
 // NewEnvVarsServiceClient constructs a client for the env.v1.EnvVarsService service. By default, it
@@ -128,6 +139,24 @@ func NewEnvVarsServiceClient(httpClient connect.HTTPClient, baseURL string, opts
 			connect.WithSchema(envVarsServiceMethods.ByName("ListVersions")),
 			connect.WithClientOptions(opts...),
 		),
+		setLink: connect.NewClient[v1.SetLinkRequest, v1.SetLinkResponse](
+			httpClient,
+			baseURL+EnvVarsServiceSetLinkProcedure,
+			connect.WithSchema(envVarsServiceMethods.ByName("SetLink")),
+			connect.WithClientOptions(opts...),
+		),
+		removeLink: connect.NewClient[v1.RemoveLinkRequest, v1.RemoveLinkResponse](
+			httpClient,
+			baseURL+EnvVarsServiceRemoveLinkProcedure,
+			connect.WithSchema(envVarsServiceMethods.ByName("RemoveLink")),
+			connect.WithClientOptions(opts...),
+		),
+		listLinks: connect.NewClient[v1.ListLinksRequest, v1.ListLinksResponse](
+			httpClient,
+			baseURL+EnvVarsServiceListLinksProcedure,
+			connect.WithSchema(envVarsServiceMethods.ByName("ListLinks")),
+			connect.WithClientOptions(opts...),
+		),
 	}
 }
 
@@ -141,6 +170,9 @@ type envVarsServiceClient struct {
 	setReference   *connect.Client[v1.SetReferenceRequest, v1.SetReferenceResponse]
 	listReferences *connect.Client[v1.ListReferencesRequest, v1.ListReferencesResponse]
 	listVersions   *connect.Client[v1.ListVersionsRequest, v1.ListVersionsResponse]
+	setLink        *connect.Client[v1.SetLinkRequest, v1.SetLinkResponse]
+	removeLink     *connect.Client[v1.RemoveLinkRequest, v1.RemoveLinkResponse]
+	listLinks      *connect.Client[v1.ListLinksRequest, v1.ListLinksResponse]
 }
 
 // SetValue calls env.v1.EnvVarsService.SetValue.
@@ -215,6 +247,33 @@ func (c *envVarsServiceClient) ListVersions(ctx context.Context, req *v1.ListVer
 	return nil, err
 }
 
+// SetLink calls env.v1.EnvVarsService.SetLink.
+func (c *envVarsServiceClient) SetLink(ctx context.Context, req *v1.SetLinkRequest) (*v1.SetLinkResponse, error) {
+	response, err := c.setLink.CallUnary(ctx, connect.NewRequest(req))
+	if response != nil {
+		return response.Msg, err
+	}
+	return nil, err
+}
+
+// RemoveLink calls env.v1.EnvVarsService.RemoveLink.
+func (c *envVarsServiceClient) RemoveLink(ctx context.Context, req *v1.RemoveLinkRequest) (*v1.RemoveLinkResponse, error) {
+	response, err := c.removeLink.CallUnary(ctx, connect.NewRequest(req))
+	if response != nil {
+		return response.Msg, err
+	}
+	return nil, err
+}
+
+// ListLinks calls env.v1.EnvVarsService.ListLinks.
+func (c *envVarsServiceClient) ListLinks(ctx context.Context, req *v1.ListLinksRequest) (*v1.ListLinksResponse, error) {
+	response, err := c.listLinks.CallUnary(ctx, connect.NewRequest(req))
+	if response != nil {
+		return response.Msg, err
+	}
+	return nil, err
+}
+
 // EnvVarsServiceHandler is an implementation of the env.v1.EnvVarsService service.
 type EnvVarsServiceHandler interface {
 	SetValue(context.Context, *v1.SetValueRequest) (*v1.SetValueResponse, error)
@@ -225,6 +284,9 @@ type EnvVarsServiceHandler interface {
 	SetReference(context.Context, *v1.SetReferenceRequest) (*v1.SetReferenceResponse, error)
 	ListReferences(context.Context, *v1.ListReferencesRequest) (*v1.ListReferencesResponse, error)
 	ListVersions(context.Context, *v1.ListVersionsRequest) (*v1.ListVersionsResponse, error)
+	SetLink(context.Context, *v1.SetLinkRequest) (*v1.SetLinkResponse, error)
+	RemoveLink(context.Context, *v1.RemoveLinkRequest) (*v1.RemoveLinkResponse, error)
+	ListLinks(context.Context, *v1.ListLinksRequest) (*v1.ListLinksResponse, error)
 }
 
 // NewEnvVarsServiceHandler builds an HTTP handler from the service implementation. It returns the
@@ -282,6 +344,24 @@ func NewEnvVarsServiceHandler(svc EnvVarsServiceHandler, opts ...connect.Handler
 		connect.WithSchema(envVarsServiceMethods.ByName("ListVersions")),
 		connect.WithHandlerOptions(opts...),
 	)
+	envVarsServiceSetLinkHandler := connect.NewUnaryHandlerSimple(
+		EnvVarsServiceSetLinkProcedure,
+		svc.SetLink,
+		connect.WithSchema(envVarsServiceMethods.ByName("SetLink")),
+		connect.WithHandlerOptions(opts...),
+	)
+	envVarsServiceRemoveLinkHandler := connect.NewUnaryHandlerSimple(
+		EnvVarsServiceRemoveLinkProcedure,
+		svc.RemoveLink,
+		connect.WithSchema(envVarsServiceMethods.ByName("RemoveLink")),
+		connect.WithHandlerOptions(opts...),
+	)
+	envVarsServiceListLinksHandler := connect.NewUnaryHandlerSimple(
+		EnvVarsServiceListLinksProcedure,
+		svc.ListLinks,
+		connect.WithSchema(envVarsServiceMethods.ByName("ListLinks")),
+		connect.WithHandlerOptions(opts...),
+	)
 	return "/env.v1.EnvVarsService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case EnvVarsServiceSetValueProcedure:
@@ -300,6 +380,12 @@ func NewEnvVarsServiceHandler(svc EnvVarsServiceHandler, opts ...connect.Handler
 			envVarsServiceListReferencesHandler.ServeHTTP(w, r)
 		case EnvVarsServiceListVersionsProcedure:
 			envVarsServiceListVersionsHandler.ServeHTTP(w, r)
+		case EnvVarsServiceSetLinkProcedure:
+			envVarsServiceSetLinkHandler.ServeHTTP(w, r)
+		case EnvVarsServiceRemoveLinkProcedure:
+			envVarsServiceRemoveLinkHandler.ServeHTTP(w, r)
+		case EnvVarsServiceListLinksProcedure:
+			envVarsServiceListLinksHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -339,4 +425,16 @@ func (UnimplementedEnvVarsServiceHandler) ListReferences(context.Context, *v1.Li
 
 func (UnimplementedEnvVarsServiceHandler) ListVersions(context.Context, *v1.ListVersionsRequest) (*v1.ListVersionsResponse, error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("env.v1.EnvVarsService.ListVersions is not implemented"))
+}
+
+func (UnimplementedEnvVarsServiceHandler) SetLink(context.Context, *v1.SetLinkRequest) (*v1.SetLinkResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("env.v1.EnvVarsService.SetLink is not implemented"))
+}
+
+func (UnimplementedEnvVarsServiceHandler) RemoveLink(context.Context, *v1.RemoveLinkRequest) (*v1.RemoveLinkResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("env.v1.EnvVarsService.RemoveLink is not implemented"))
+}
+
+func (UnimplementedEnvVarsServiceHandler) ListLinks(context.Context, *v1.ListLinksRequest) (*v1.ListLinksResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("env.v1.EnvVarsService.ListLinks is not implemented"))
 }

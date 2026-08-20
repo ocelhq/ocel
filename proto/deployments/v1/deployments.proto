@@ -8,7 +8,7 @@ import "links/v1/links.proto";
 import "resources/v1/env.proto";
 import "resources/v1/resources.proto";
 
-service DeploymentService {
+service ProviderService {
     rpc Configure(ConfigureRequest) returns (ConfigureResponse);
 
     rpc Deploy(DeployRequest) returns (stream DeployEvent);
@@ -50,12 +50,6 @@ service DeploymentService {
     rpc RemoveDomain(RemoveDomainRequest) returns (stream DeployEvent);
 
     rpc DomainStatus(DomainStatusRequest) returns (DomainStatusResponse);
-
-    rpc SetLink(SetLinkRequest) returns (SetLinkResponse);
-
-    rpc RemoveLink(RemoveLinkRequest) returns (RemoveLinkResponse);
-
-    rpc ListLinks(ListLinksRequest) returns (ListLinksResponse);
 }
 
 message AwsProviderConfig {
@@ -687,68 +681,4 @@ message ResultEvent {
 message FunctionOutput {
   string logical_name = 2;
   string url = 1;
-}
-
-message SetLinkRequest {
-  string slug = 1 [(buf.validate.field).string = {pattern: "^[a-z0-9]+(-[a-z0-9]+)*$", max_len: 63}];
-
-  Environment.Class class = 2 [(buf.validate.field).enum = {in: [1, 2]}];
-
-  string environment = 3 [(buf.validate.field).string.pattern = "^[^#*[:cntrl:]]*$"];
-
-  links.v1.Link link = 4 [(buf.validate.field).required = true];
-
-  string owner = 5;
-}
-
-message SetLinkResponse {
-  uint64 version = 1;
-}
-
-message RemoveLinkRequest {
-  string slug = 1 [(buf.validate.field).string = {pattern: "^[a-z0-9]+(-[a-z0-9]+)*$", max_len: 63}];
-
-  Environment.Class class = 2 [(buf.validate.field).enum = {in: [1, 2]}];
-
-  string environment = 3 [(buf.validate.field).string.pattern = "^[^#*[:cntrl:]]*$"];
-
-  string name = 4 [(buf.validate.field).string = {min_len: 1, pattern: "^[^#[:cntrl:]]*$"}];
-}
-
-message RemoveLinkResponse {
-  bool removed = 1;
-}
-
-message ListLinksRequest {
-  string slug = 1 [(buf.validate.field).string = {pattern: "^[a-z0-9]+(-[a-z0-9]+)*$", max_len: 63}];
-
-  Environment.Class class = 2 [(buf.validate.field).enum = {in: [1, 2]}];
-
-  string environment = 3 [(buf.validate.field).string.pattern = "^[^#*[:cntrl:]]*$"];
-}
-
-message ListLinksResponse {
-  repeated LinkSummary links = 1;
-}
-
-message LinkSummary {
-  string name = 1;
-
-  links.v1.LinkType type = 2;
-
-  string source = 3;
-
-  string owner = 4;
-
-  uint64 version = 5;
-
-  repeated PropertyShape properties = 6;
-}
-
-message PropertyShape {
-  string name = 1;
-
-  string json_type = 2;
-
-  bool list = 3;
 }

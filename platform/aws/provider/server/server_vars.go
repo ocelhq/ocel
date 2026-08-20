@@ -23,7 +23,7 @@ import (
 )
 
 type VarsServer struct {
-	stores
+	*stores
 
 	config *sessionConfig
 
