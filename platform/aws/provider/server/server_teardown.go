@@ -234,15 +234,12 @@ func bucketItem(name, reason string) *deploymentsv1.TeardownItem {
 }
 
 func (s *Server) PlanTeardown(ctx context.Context, req *deploymentsv1.PlanTeardownRequest) (*deploymentsv1.PlanTeardownResponse, error) {
-	edgeFront, err := s.edge(requestedEdge(req), optionsRegion(req.GetOptions()))
+	opts := s.config.get()
+	edgeFront, err := s.edge(requestedEdge(req), opts.Region)
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInvalidArgument, err)
 	}
 	class, err := substrateClassOf(req.GetClass())
-	if err != nil {
-		return nil, connect.NewError(connect.CodeInvalidArgument, err)
-	}
-	opts, err := parseOptions(req.GetOptions())
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInvalidArgument, err)
 	}
@@ -273,7 +270,8 @@ func planTeardown(ctx context.Context, deps teardownDeps, class string) (*deploy
 }
 
 func (s *Server) Teardown(ctx context.Context, req *deploymentsv1.TeardownRequest, stream *connect.ServerStream[deploymentsv1.DeployEvent]) error {
-	edgeFront, err := s.edge(requestedEdge(req), optionsRegion(req.GetOptions()))
+	opts := s.config.get()
+	edgeFront, err := s.edge(requestedEdge(req), opts.Region)
 	if err != nil {
 		return connect.NewError(connect.CodeInvalidArgument, err)
 	}
@@ -282,10 +280,6 @@ func (s *Server) Teardown(ctx context.Context, req *deploymentsv1.TeardownReques
 	logf := func(m string) { _ = stream.Send(logEvent(m)) }
 
 	class, err := substrateClassOf(req.GetClass())
-	if err != nil {
-		return stream.Send(failureResult(err))
-	}
-	opts, err := parseOptions(req.GetOptions())
 	if err != nil {
 		return stream.Send(failureResult(err))
 	}
@@ -322,7 +316,7 @@ func runTeardown(ctx context.Context, deps teardownDeps, class string, progress,
 	}, class, progress, logf)
 }
 
-func newTeardownDeps(ctx context.Context, opts options, class string, edgeFront edge.Edge) (teardownDeps, error) {
+func newTeardownDeps(ctx context.Context, opts providerConfig, class string, edgeFront edge.Edge) (teardownDeps, error) {
 	awscfg, err := loadAWS(ctx, opts.Region)
 	if err != nil {
 		return teardownDeps{}, err

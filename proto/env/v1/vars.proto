@@ -49,22 +49,15 @@ message VersionEntry {
   int64 version = 1;
   int64 created_at = 2;
   int64 size = 3;
-
-  reserved 4;
-  reserved "value";
 }
 
 message SetValueRequest {
-  bytes options = 1;
+  deployments.v1.Environment.Class class = 1;
 
-  string protocol_version = 2;
+  Coordinate coordinate = 2;
+  string value = 3;
 
-  deployments.v1.Environment.Class class = 3;
-
-  Coordinate coordinate = 4;
-  string value = 5;
-
-  optional int64 expected_version = 6;
+  optional int64 expected_version = 4;
 }
 
 message SetValueResponse {
@@ -72,11 +65,9 @@ message SetValueResponse {
 }
 
 message ListValuesRequest {
-  bytes options = 1;
-  string protocol_version = 2;
-  deployments.v1.Environment.Class class = 3;
+  deployments.v1.Environment.Class class = 1;
 
-  string slug = 4;
+  string slug = 2;
 }
 
 message ListValuesResponse {
@@ -84,12 +75,10 @@ message ListValuesResponse {
 }
 
 message GetValueRequest {
-  bytes options = 1;
-  string protocol_version = 2;
-  deployments.v1.Environment.Class class = 3;
-  Coordinate coordinate = 4;
+  deployments.v1.Environment.Class class = 1;
+  Coordinate coordinate = 2;
 
-  bool reveal = 5;
+  bool reveal = 3;
 }
 
 message GetValueResponse {
@@ -100,12 +89,10 @@ message GetValueResponse {
 }
 
 message RevealValuesRequest {
-  bytes options = 1;
-  string protocol_version = 2;
-  deployments.v1.Environment.Class class = 3;
+  deployments.v1.Environment.Class class = 1;
 
-  string slug = 4;
-  repeated Cell cells = 5;
+  string slug = 2;
+  repeated Cell cells = 3;
 }
 
 message Cell {
@@ -124,12 +111,10 @@ message RevealedValue {
 }
 
 message DeleteValueRequest {
-  bytes options = 1;
-  string protocol_version = 2;
-  deployments.v1.Environment.Class class = 3;
-  Coordinate coordinate = 4;
+  deployments.v1.Environment.Class class = 1;
+  Coordinate coordinate = 2;
 
-  optional int64 expected_version = 5;
+  optional int64 expected_version = 3;
 }
 
 message DeleteValueResponse {
@@ -137,14 +122,10 @@ message DeleteValueResponse {
 }
 
 message SetReferenceRequest {
-  bytes options = 1;
-  string protocol_version = 2;
-  deployments.v1.Environment.Class class = 3;
+  deployments.v1.Environment.Class class = 1;
 
-  Coordinate coordinate = 4;
-  Coordinate target = 5;
-
-  optional int64 expected_version = 6;
+  Coordinate coordinate = 2;
+  Coordinate target = 3;
 }
 
 message SetReferenceResponse {
@@ -152,11 +133,9 @@ message SetReferenceResponse {
 }
 
 message ListReferencesRequest {
-  bytes options = 1;
-  string protocol_version = 2;
-  deployments.v1.Environment.Class class = 3;
+  deployments.v1.Environment.Class class = 1;
 
-  Coordinate coordinate = 4;
+  Coordinate coordinate = 2;
 }
 
 message ListReferencesResponse {
@@ -164,13 +143,8 @@ message ListReferencesResponse {
 }
 
 message ListVersionsRequest {
-  bytes options = 1;
-  string protocol_version = 2;
-  deployments.v1.Environment.Class class = 3;
-  Coordinate coordinate = 4;
-
-  reserved 5;
-  reserved "reveal";
+  deployments.v1.Environment.Class class = 1;
+  Coordinate coordinate = 2;
 }
 
 message ListVersionsResponse {

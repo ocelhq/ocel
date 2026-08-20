@@ -20,7 +20,7 @@ func (s *Server) SetLink(ctx context.Context, req *deploymentsv1.SetLinkRequest)
 	if err := invalidArgument(vars.ValidateLinkName(req.GetSlug(), req.GetEnvironment(), req.GetLink().GetName())); err != nil {
 		return nil, err
 	}
-	store, err := s.store(ctx, req.GetOptions(), req.GetClass())
+	store, err := s.store(ctx, s.config.get().Region, req.GetClass())
 	if err != nil {
 		return nil, err
 	}
@@ -39,7 +39,7 @@ func (s *Server) RemoveLink(ctx context.Context, req *deploymentsv1.RemoveLinkRe
 	if err := invalidArgument(vars.ValidateLinkName(req.GetSlug(), req.GetEnvironment(), req.GetName())); err != nil {
 		return nil, err
 	}
-	store, err := s.store(ctx, req.GetOptions(), req.GetClass())
+	store, err := s.store(ctx, s.config.get().Region, req.GetClass())
 	if err != nil {
 		return nil, err
 	}
@@ -55,7 +55,7 @@ func (s *Server) ListLinks(ctx context.Context, req *deploymentsv1.ListLinksRequ
 	if err := linkTarget(req.GetClass(), req.GetSlug(), req.GetEnvironment()); err != nil {
 		return nil, err
 	}
-	store, err := s.store(ctx, req.GetOptions(), req.GetClass())
+	store, err := s.store(ctx, s.config.get().Region, req.GetClass())
 	if err != nil {
 		return nil, err
 	}

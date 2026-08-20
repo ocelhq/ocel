@@ -10,9 +10,6 @@ func edgeSelection(cfg *projectconfig.Config) *deploymentsv1.EdgeSelection {
 		Kind:          string(cfg.EdgeKind()),
 		AllowDegraded: cfg.AllowDegraded,
 	}
-	if cfg.Edge != nil {
-		selection.Options = cfg.Edge.Options
-	}
 	if cfg.DNS != nil {
 		selection.Dns = &deploymentsv1.Dns{Kind: cfg.DNS.Kind, Zone: cfg.DNS.Zone}
 	}

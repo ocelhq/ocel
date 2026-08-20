@@ -6,7 +6,7 @@ describe("awsProvider", () => {
   it("returns a descriptor naming this package, carrying the given options", () => {
     expect(awsProvider({ region: "us-east-1" })).toEqual({
       package: "@ocel/provider-aws",
-      options: { region: "us-east-1" },
+      options: { aws: { region: "us-east-1" } },
     });
   });
 
@@ -21,7 +21,12 @@ describe("awsProvider", () => {
     expect(JSON.parse(JSON.stringify(config.provider))).toEqual({
       package: "@ocel/provider-aws",
       options: {
-        transforms: ["./infra/defaults.transform.ts", "./infra/vpc.transform.ts"],
+        aws: {
+          transforms: [
+            "./infra/defaults.transform.ts",
+            "./infra/vpc.transform.ts",
+          ],
+        },
       },
     });
   });
@@ -29,7 +34,7 @@ describe("awsProvider", () => {
   it("leaves the options bag without a transforms key when none is authored", () => {
     expect(
       Object.hasOwn(
-        awsProvider({ region: "us-east-1" }).options as object,
+        (awsProvider({ region: "us-east-1" }).options as { aws: object }).aws,
         "transforms",
       ),
     ).toBe(false);
@@ -46,9 +51,11 @@ describe("awsProvider", () => {
     ).toEqual({
       package: "@ocel/provider-aws",
       options: {
-        certificates: {
-          "app.acme.com":
-            "arn:aws:acm:us-east-1:111122223333:certificate/abcd-1234",
+        aws: {
+          certificates: {
+            "app.acme.com":
+              "arn:aws:acm:us-east-1:111122223333:certificate/abcd-1234",
+          },
         },
       },
     });
@@ -57,7 +64,7 @@ describe("awsProvider", () => {
   it("defaults options to an empty object when called with none", () => {
     expect(awsProvider()).toEqual({
       package: "@ocel/provider-aws",
-      options: {},
+      options: { aws: {} },
     });
   });
 
@@ -69,7 +76,7 @@ describe("awsProvider", () => {
 
     expect(JSON.parse(JSON.stringify(config.provider))).toEqual({
       package: "@ocel/provider-aws",
-      options: { region: "us-east-1" },
+      options: { aws: { region: "us-east-1" } },
     });
   });
 });

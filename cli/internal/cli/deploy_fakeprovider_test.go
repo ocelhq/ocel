@@ -54,6 +54,8 @@ const fakePreflightJournalEnvVar = "OCEL_TEST_FAKE_PREFLIGHT_JOURNAL"
 
 const fakeEdgeJournalEnvVar = "OCEL_TEST_FAKE_EDGE_JOURNAL"
 
+const fakeConfigureJournalEnvVar = "OCEL_TEST_FAKE_CONFIGURE_JOURNAL"
+
 const fakeEnabledFeaturesEnvVar = "OCEL_TEST_FAKE_ENABLED_FEATURES"
 
 const fakeEdgeRefusalEnvVar = "OCEL_TEST_FAKE_EDGE_REFUSAL"
@@ -152,7 +154,7 @@ func (s *deployFakeProviderServer) Deploy(ctx context.Context, req *deploymentsv
 		return err
 	}
 
-	journalEdge(req.GetEdge().GetKind(), req.GetEdge().GetOptions(), req.GetEdge().GetDns(), req.GetEdge().GetAllowDegraded())
+	journalEdge(req.GetEdge().GetKind(), req.GetEdge().GetDns(), req.GetEdge().GetAllowDegraded())
 	if err := refuseEdge(); err != nil {
 		return err
 	}
@@ -352,7 +354,6 @@ func (s *deployFakeProviderServer) DescribeBootstrap(ctx context.Context, _ *dep
 		}
 	}
 	return &deploymentsv1.DescribeBootstrapResponse{
-		Present: true,
 		Features: []*deploymentsv1.Feature{
 			feature("isr", "incremental static regeneration"),
 			feature("image-optimization", "on-demand image optimization"),
@@ -375,7 +376,7 @@ func (s *deployFakeProviderServer) PlanTeardown(ctx context.Context, req *deploy
 	if err := s.checkToken(ctx); err != nil {
 		return nil, err
 	}
-	journalEdge(req.GetEdge().GetKind(), nil, nil, nil)
+	journalEdge(req.GetEdge().GetKind(), nil, nil)
 	if err := refuseEdge(); err != nil {
 		return nil, err
 	}
@@ -410,7 +411,7 @@ func (s *deployFakeProviderServer) Teardown(ctx context.Context, req *deployment
 	if err := s.checkToken(ctx); err != nil {
 		return err
 	}
-	journalEdge(req.GetEdge().GetKind(), nil, nil, nil)
+	journalEdge(req.GetEdge().GetKind(), nil, nil)
 	if err := refuseEdge(); err != nil {
 		return err
 	}
@@ -487,7 +488,7 @@ func resolvedEdgeKind(kind string) string {
 	return kind
 }
 
-func journalEdge(kind string, options []byte, dns *deploymentsv1.Dns, allowDegraded []string) {
+func journalEdge(kind string, dns *deploymentsv1.Dns, allowDegraded []string) {
 	path := os.Getenv(fakeEdgeJournalEnvVar)
 	if path == "" {
 		return
@@ -498,7 +499,25 @@ func journalEdge(kind string, options []byte, dns *deploymentsv1.Dns, allowDegra
 		return
 	}
 	defer f.Close()
-	fmt.Fprintf(f, "kind=%s options=%s dns=%s/%s allowDegraded=%s\n", kind, options, dns.GetKind(), dns.GetZone(), strings.Join(allowDegraded, ","))
+	fmt.Fprintf(f, "kind=%s dns=%s/%s allowDegraded=%s\n", kind, dns.GetKind(), dns.GetZone(), strings.Join(allowDegraded, ","))
+}
+
+func (s *deployFakeProviderServer) Configure(ctx context.Context, req *deploymentsv1.ConfigureRequest) (*deploymentsv1.ConfigureResponse, error) {
+	if err := s.checkToken(ctx); err != nil {
+		return nil, err
+	}
+	path := os.Getenv(fakeConfigureJournalEnvVar)
+	if path == "" {
+		return &deploymentsv1.ConfigureResponse{}, nil
+	}
+	f, err := os.OpenFile(path, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o600)
+	if err != nil {
+		return nil, err
+	}
+	defer f.Close()
+	aws := req.GetConfig().GetAws()
+	fmt.Fprintf(f, "region=%s transforms=%s certificates=%v\n", aws.GetRegion(), strings.Join(aws.GetTransforms(), ","), aws.GetCertificates())
+	return &deploymentsv1.ConfigureResponse{}, nil
 }
 
 func journalBootstrap(features []string, force bool) {
@@ -847,7 +866,7 @@ func (s *deployFakeProviderServer) PlanDestroyProject(ctx context.Context, req *
 	if err := s.checkToken(ctx); err != nil {
 		return nil, err
 	}
-	journalEdge(req.GetEdge().GetKind(), nil, nil, nil)
+	journalEdge(req.GetEdge().GetKind(), nil, nil)
 	slug := req.GetSlug()
 	if req.GetEnvironment().GetClass() == deploymentsv1.Environment_CLASS_PREVIEW {
 		return &deploymentsv1.PlanDestroyProjectResponse{
@@ -903,7 +922,7 @@ func (s *deployFakeProviderServer) DestroyProject(ctx context.Context, req *depl
 	if err := s.checkToken(ctx); err != nil {
 		return err
 	}
-	journalEdge(req.GetEdge().GetKind(), nil, nil, nil)
+	journalEdge(req.GetEdge().GetKind(), nil, nil)
 	if err := stream.Send(&deploymentsv1.DeployEvent{
 		Event: &deploymentsv1.DeployEvent_Progress{Progress: &deploymentsv1.ProgressEvent{Message: "DESTROY PROJECT project=" + req.GetSlug() + " dns=" + req.GetEdge().GetDns().GetKind() + " " + describeEnv(req.GetEnvironment())}},
 	}); err != nil {
@@ -966,8 +985,8 @@ func (s *deployFakeProviderServer) checkToken(ctx context.Context) error {
 }
 
 func describeEnv(env *deploymentsv1.Environment) string {
-	return fmt.Sprintf("class=%s lifecycle=%s identity=%s source=%s label=%s",
-		env.GetClass(), env.GetLifecycle(), env.GetIdentity(), env.GetIdentitySource(), env.GetLabel())
+	return fmt.Sprintf("class=%s lifecycle=%s identity=%s",
+		env.GetClass(), env.GetLifecycle(), env.GetIdentity())
 }
 
 func describeFunction(f *deploymentsv1.ManifestFunction) string {
@@ -1011,8 +1030,6 @@ func parseInfraClass(s string) deploymentsv1.Environment_Class {
 		return deploymentsv1.Environment_CLASS_PREVIEW
 	case "production":
 		return deploymentsv1.Environment_CLASS_PRODUCTION
-	case "development":
-		return deploymentsv1.Environment_CLASS_DEVELOPMENT
 	default:
 		return deploymentsv1.Environment_CLASS_UNSPECIFIED
 	}

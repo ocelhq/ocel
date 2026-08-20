@@ -7,7 +7,6 @@ import (
 	"testing"
 
 	"github.com/ocelhq/ocel/cli/internal/envgate"
-	"github.com/ocelhq/ocel/cli/internal/manifestbuilder"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
 	"github.com/ocelhq/ocel/cli/internal/providerrunner"
 	"github.com/ocelhq/ocel/cli/internal/varsui"
@@ -18,12 +17,11 @@ import (
 func withRunnerValues(t *testing.T, root string, opts envOptions, drive func(ctx context.Context, slug string, runner *providerrunner.Runner, values runnerValues) error) {
 	t.Helper()
 	ctx := context.Background()
-	err := envSession(ctx, defaultDeps(), root, opts, io.Discard, io.Discard, func(runner *providerrunner.Runner, cfg *projectconfig.Config, provider *projectconfig.ProviderDescriptor) error {
+	err := envSession(ctx, defaultDeps(), root, opts, io.Discard, io.Discard, func(runner *providerrunner.Runner, cfg *projectconfig.Config, _ *projectconfig.ProviderDescriptor) error {
 		return drive(ctx, cfg.Slug, runner, runnerValues{
-			runner:  runner,
-			options: []byte(provider.Options),
-			slug:    cfg.Slug,
-			class:   envClass(opts),
+			runner: runner,
+			slug:   cfg.Slug,
+			class:  envClass(opts),
 		})
 	})
 	if err != nil {
@@ -38,10 +36,9 @@ func storeValue(t *testing.T, ctx context.Context, runner *providerrunner.Runner
 		t.Fatalf("reach the provider's variable store: %v", err)
 	}
 	if _, err := vars.SetValue(ctx, &envv1.SetValueRequest{
-		ProtocolVersion: manifestbuilder.SchemaVersion,
-		Class:           class,
-		Coordinate:      coordinate,
-		Value:           value,
+		Class:      class,
+		Coordinate: coordinate,
+		Value:      value,
 	}); err != nil {
 		t.Fatalf("SetValue %v: %v", coordinate, err)
 	}

@@ -23,5 +23,5 @@ export interface AwsProviderOptions {
 export default function awsProvider(
   options: AwsProviderOptions = {},
 ): ProviderDescriptor {
-  return { package: "@ocel/provider-aws", options };
+  return { package: "@ocel/provider-aws", options: { aws: options } };
 }

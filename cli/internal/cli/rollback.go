@@ -8,7 +8,6 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/ocelhq/ocel/cli/internal/manifestbuilder"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
 	"github.com/ocelhq/ocel/cli/internal/providerrunner"
 	"github.com/ocelhq/ocel/cli/node"
@@ -70,7 +69,7 @@ func runRollback(ctx context.Context, d deps, cwd string, opts rollbackOptions, 
 	defer run.Close()
 
 	return runProviderSession(ctx, d, cfg, provider, stdout, stderr, func(runner *providerrunner.Runner) error {
-		if err := preflightClass(ctx, d, runner, provider, cfg, deploymentsv1.Environment_CLASS_PRODUCTION, "ocel bootstrap", stdout); err != nil {
+		if err := preflightClass(ctx, d, runner, cfg, deploymentsv1.Environment_CLASS_PRODUCTION, "ocel bootstrap", stdout); err != nil {
 			return err
 		}
 
@@ -79,12 +78,10 @@ func runRollback(ctx context.Context, d deps, cwd string, opts rollbackOptions, 
 			return err
 		}
 		resp, err := client.Rollback(ctx, &deploymentsv1.RollbackRequest{
-			Options:         []byte(provider.Options),
-			ProtocolVersion: manifestbuilder.SchemaVersion,
-			Slug:            cfg.Slug,
-			To:              opts.to,
-			Tag:             opts.tag,
-			Edge:            edgeSelection(cfg),
+			Slug: cfg.Slug,
+			To:   opts.to,
+			Tag:  opts.tag,
+			Edge: edgeSelection(cfg),
 		})
 		if err != nil {
 			return err

@@ -14,7 +14,6 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/ocelhq/ocel/cli/internal/deployui"
-	"github.com/ocelhq/ocel/cli/internal/manifestbuilder"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
 	"github.com/ocelhq/ocel/cli/internal/providerrunner"
 	"github.com/ocelhq/ocel/cli/node"
@@ -81,7 +80,7 @@ func runDeploymentsLs(ctx context.Context, d deps, cwd string, stdout, stderr io
 	}
 
 	return runProviderSession(ctx, d, cfg, provider, stdout, stderr, func(runner *providerrunner.Runner) error {
-		if err := preflightClass(ctx, d, runner, provider, cfg, deploymentsv1.Environment_CLASS_PRODUCTION, "ocel bootstrap", stdout); err != nil {
+		if err := preflightClass(ctx, d, runner, cfg, deploymentsv1.Environment_CLASS_PRODUCTION, "ocel bootstrap", stdout); err != nil {
 			return err
 		}
 
@@ -90,10 +89,8 @@ func runDeploymentsLs(ctx context.Context, d deps, cwd string, stdout, stderr io
 			return err
 		}
 		resp, err := client.ListPromotions(ctx, &deploymentsv1.ListPromotionsRequest{
-			Options:         []byte(provider.Options),
-			ProtocolVersion: manifestbuilder.SchemaVersion,
-			Slug:            cfg.Slug,
-			Edge:            edgeSelection(cfg),
+			Slug: cfg.Slug,
+			Edge: edgeSelection(cfg),
 		})
 		if err != nil {
 			return err
@@ -128,16 +125,14 @@ func runDeploymentsPrune(ctx context.Context, d deps, cwd string, keepN int, std
 
 	provW := ui.BuildWriter()
 	err = runProviderSession(ctx, d, cfg, provider, provW, provW, func(runner *providerrunner.Runner) error {
-		if err := preflightClass(ctx, d, runner, provider, cfg, deploymentsv1.Environment_CLASS_PRODUCTION, "ocel bootstrap", stdout); err != nil {
+		if err := preflightClass(ctx, d, runner, cfg, deploymentsv1.Environment_CLASS_PRODUCTION, "ocel bootstrap", stdout); err != nil {
 			return err
 		}
 
 		if err := runner.Prune(ctx, &deploymentsv1.PruneRequest{
-			Options:         []byte(provider.Options),
-			ProtocolVersion: manifestbuilder.SchemaVersion,
-			Slug:            cfg.Slug,
-			KeepN:           int32(keepN),
-			Edge:            edgeSelection(cfg),
+			Slug:  cfg.Slug,
+			KeepN: int32(keepN),
+			Edge:  edgeSelection(cfg),
 		}, ui.Event); err != nil {
 			return err
 		}

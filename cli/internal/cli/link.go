@@ -15,7 +15,6 @@ import (
 	"github.com/spf13/cobra"
 	"google.golang.org/protobuf/encoding/protojson"
 
-	"github.com/ocelhq/ocel/cli/internal/manifestbuilder"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
 	"github.com/ocelhq/ocel/cli/internal/providerrunner"
 	"github.com/ocelhq/ocel/pkg/naming"
@@ -127,19 +126,17 @@ func runLinkSet(ctx context.Context, d deps, cwd string, stdin io.Reader, opts l
 		return err
 	}
 	owner := opts.publisher()
-	return envSession(ctx, d, cwd, opts.substrate(), stdout, stderr, func(runner *providerrunner.Runner, cfg *projectconfig.Config, provider *projectconfig.ProviderDescriptor) error {
+	return envSession(ctx, d, cwd, opts.substrate(), stdout, stderr, func(runner *providerrunner.Runner, cfg *projectconfig.Config, _ *projectconfig.ProviderDescriptor) error {
 		client, err := runner.Deployments()
 		if err != nil {
 			return err
 		}
 		resp, err := client.SetLink(ctx, &deploymentsv1.SetLinkRequest{
-			Options:         []byte(provider.Options),
-			ProtocolVersion: manifestbuilder.SchemaVersion,
-			Slug:            cfg.Slug,
-			Class:           envClass(opts.substrate()),
-			Environment:     opts.environment,
-			Link:            link,
-			Owner:           owner,
+			Slug:        cfg.Slug,
+			Class:       envClass(opts.substrate()),
+			Environment: opts.environment,
+			Link:        link,
+			Owner:       owner,
 		})
 		if err != nil {
 			return err
@@ -168,18 +165,16 @@ func decodeLink(stdin io.Reader) (*linksv1.Link, error) {
 }
 
 func runLinkRm(ctx context.Context, d deps, cwd, name string, opts linkOptions, stdout, stderr io.Writer) error {
-	return envSession(ctx, d, cwd, opts.substrate(), stdout, stderr, func(runner *providerrunner.Runner, cfg *projectconfig.Config, provider *projectconfig.ProviderDescriptor) error {
+	return envSession(ctx, d, cwd, opts.substrate(), stdout, stderr, func(runner *providerrunner.Runner, cfg *projectconfig.Config, _ *projectconfig.ProviderDescriptor) error {
 		client, err := runner.Deployments()
 		if err != nil {
 			return err
 		}
 		resp, err := client.RemoveLink(ctx, &deploymentsv1.RemoveLinkRequest{
-			Options:         []byte(provider.Options),
-			ProtocolVersion: manifestbuilder.SchemaVersion,
-			Slug:            cfg.Slug,
-			Class:           envClass(opts.substrate()),
-			Environment:     opts.environment,
-			Name:            name,
+			Slug:        cfg.Slug,
+			Class:       envClass(opts.substrate()),
+			Environment: opts.environment,
+			Name:        name,
 		})
 		if err != nil {
 			return err
@@ -197,17 +192,15 @@ func runLinkRm(ctx context.Context, d deps, cwd, name string, opts linkOptions, 
 }
 
 func runLinkLs(ctx context.Context, d deps, cwd string, opts linkOptions, stdout, stderr io.Writer) error {
-	return envSession(ctx, d, cwd, opts.substrate(), stdout, stderr, func(runner *providerrunner.Runner, cfg *projectconfig.Config, provider *projectconfig.ProviderDescriptor) error {
+	return envSession(ctx, d, cwd, opts.substrate(), stdout, stderr, func(runner *providerrunner.Runner, cfg *projectconfig.Config, _ *projectconfig.ProviderDescriptor) error {
 		client, err := runner.Deployments()
 		if err != nil {
 			return err
 		}
 		resp, err := client.ListLinks(ctx, &deploymentsv1.ListLinksRequest{
-			Options:         []byte(provider.Options),
-			ProtocolVersion: manifestbuilder.SchemaVersion,
-			Slug:            cfg.Slug,
-			Class:           envClass(opts.substrate()),
-			Environment:     opts.environment,
+			Slug:        cfg.Slug,
+			Class:       envClass(opts.substrate()),
+			Environment: opts.environment,
 		})
 		if err != nil {
 			return err
@@ -227,11 +220,9 @@ func runLinkGenerate(ctx context.Context, d deps, cwd string, opts linkOptions, 
 			return err
 		}
 		resp, err := client.ListLinks(ctx, &deploymentsv1.ListLinksRequest{
-			Options:         []byte(provider.Options),
-			ProtocolVersion: manifestbuilder.SchemaVersion,
-			Slug:            cfg.Slug,
-			Class:           envClass(opts.substrate()),
-			Environment:     opts.environment,
+			Slug:        cfg.Slug,
+			Class:       envClass(opts.substrate()),
+			Environment: opts.environment,
 		})
 		if err != nil {
 			return err

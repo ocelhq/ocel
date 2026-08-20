@@ -25,7 +25,9 @@ import (
 type VarsServer struct {
 	stores
 
-	listEnvironments func(ctx context.Context, options []byte, slug string) ([]string, error)
+	config *sessionConfig
+
+	listEnvironments func(ctx context.Context, region, slug string) ([]string, error)
 }
 
 type stores struct {
@@ -59,12 +61,8 @@ func awsAccount(ctx context.Context, region string) (account, error) {
 	}, nil
 }
 
-func (s *stores) store(ctx context.Context, raw []byte, class deploymentsv1.Environment_Class) (*vars.Store, error) {
-	opts, err := parseOptions(raw)
-	if err != nil {
-		return nil, connect.NewError(connect.CodeInvalidArgument, err)
-	}
-	key := storeKey{region: opts.Region, preview: class == deploymentsv1.Environment_CLASS_PREVIEW}
+func (s *stores) store(ctx context.Context, region string, class deploymentsv1.Environment_Class) (*vars.Store, error) {
+	key := storeKey{region: region, preview: class == deploymentsv1.Environment_CLASS_PREVIEW}
 
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -155,7 +153,7 @@ func referenceOwners(ctx context.Context, awscfg aws.Config, deployed bootstrap.
 	return store.ReferenceOwners(ctx, slug)
 }
 
-func (s *VarsServer) addressable(ctx context.Context, options []byte, class deploymentsv1.Environment_Class, at *envv1.Coordinate) error {
+func (s *VarsServer) addressable(ctx context.Context, region string, class deploymentsv1.Environment_Class, at *envv1.Coordinate) error {
 	environment := at.GetEnvironment()
 	if environment == "" {
 		return nil
@@ -165,7 +163,7 @@ func (s *VarsServer) addressable(ctx context.Context, options []byte, class depl
 			"production has a single environment, so %q addresses no value a production function could read", environment))
 	}
 
-	names, err := s.namedEnvironments(ctx, options, at.GetSlug())
+	names, err := s.namedEnvironments(ctx, region, at.GetSlug())
 	if err != nil {
 		return err
 	}
@@ -182,16 +180,16 @@ func (s *VarsServer) addressable(ctx context.Context, options []byte, class depl
 		environment, strings.Join(names, ", ")))
 }
 
-func (s *VarsServer) namedEnvironments(ctx context.Context, options []byte, slug string) ([]string, error) {
+func (s *VarsServer) namedEnvironments(ctx context.Context, region, slug string) ([]string, error) {
 	list := s.listEnvironments
 	if list == nil {
 		list = previewEnvironments
 	}
-	return list(ctx, options, slug)
+	return list(ctx, region, slug)
 }
 
-func previewEnvironments(ctx context.Context, options []byte, slug string) ([]string, error) {
-	resp, err := (&Server{}).ListEnvironments(ctx, &deploymentsv1.ListEnvironmentsRequest{Options: options, Slug: slug})
+func previewEnvironments(ctx context.Context, region, slug string) ([]string, error) {
+	resp, err := (&Server{}).listEnvironments(ctx, region, slug)
 	if err != nil {
 		return nil, err
 	}
@@ -203,10 +201,10 @@ func previewEnvironments(ctx context.Context, options []byte, slug string) ([]st
 }
 
 func (s *VarsServer) SetValue(ctx context.Context, req *envv1.SetValueRequest) (*envv1.SetValueResponse, error) {
-	if err := s.addressable(ctx, req.GetOptions(), req.GetClass(), req.GetCoordinate()); err != nil {
+	if err := s.addressable(ctx, s.config.get().Region, req.GetClass(), req.GetCoordinate()); err != nil {
 		return nil, err
 	}
-	store, err := s.store(ctx, req.GetOptions(), req.GetClass())
+	store, err := s.store(ctx, s.config.get().Region, req.GetClass())
 	if err != nil {
 		return nil, err
 	}
@@ -218,14 +216,14 @@ func (s *VarsServer) SetValue(ctx context.Context, req *envv1.SetValueRequest) (
 }
 
 func (s *VarsServer) SetReference(ctx context.Context, req *envv1.SetReferenceRequest) (*envv1.SetReferenceResponse, error) {
-	if err := s.addressable(ctx, req.GetOptions(), req.GetClass(), req.GetCoordinate()); err != nil {
+	if err := s.addressable(ctx, s.config.get().Region, req.GetClass(), req.GetCoordinate()); err != nil {
 		return nil, err
 	}
-	store, err := s.store(ctx, req.GetOptions(), req.GetClass())
+	store, err := s.store(ctx, s.config.get().Region, req.GetClass())
 	if err != nil {
 		return nil, err
 	}
-	metadata, err := store.SetReference(ctx, toCoordinate(req.GetCoordinate()), toCoordinate(req.GetTarget()), req.ExpectedVersion)
+	metadata, err := store.SetReference(ctx, toCoordinate(req.GetCoordinate()), toCoordinate(req.GetTarget()), nil)
 	if err != nil {
 		return nil, varsError(err)
 	}
@@ -233,7 +231,7 @@ func (s *VarsServer) SetReference(ctx context.Context, req *envv1.SetReferenceRe
 }
 
 func (s *VarsServer) ListReferences(ctx context.Context, req *envv1.ListReferencesRequest) (*envv1.ListReferencesResponse, error) {
-	store, err := s.store(ctx, req.GetOptions(), req.GetClass())
+	store, err := s.store(ctx, s.config.get().Region, req.GetClass())
 	if err != nil {
 		return nil, err
 	}
@@ -249,7 +247,7 @@ func (s *VarsServer) ListReferences(ctx context.Context, req *envv1.ListReferenc
 }
 
 func (s *VarsServer) ListValues(ctx context.Context, req *envv1.ListValuesRequest) (*envv1.ListValuesResponse, error) {
-	store, err := s.store(ctx, req.GetOptions(), req.GetClass())
+	store, err := s.store(ctx, s.config.get().Region, req.GetClass())
 	if err != nil {
 		return nil, err
 	}
@@ -265,7 +263,7 @@ func (s *VarsServer) ListValues(ctx context.Context, req *envv1.ListValuesReques
 }
 
 func (s *VarsServer) GetValue(ctx context.Context, req *envv1.GetValueRequest) (*envv1.GetValueResponse, error) {
-	store, err := s.store(ctx, req.GetOptions(), req.GetClass())
+	store, err := s.store(ctx, s.config.get().Region, req.GetClass())
 	if err != nil {
 		return nil, err
 	}
@@ -284,7 +282,7 @@ func (s *VarsServer) GetValue(ctx context.Context, req *envv1.GetValueRequest) (
 }
 
 func (s *VarsServer) RevealValues(ctx context.Context, req *envv1.RevealValuesRequest) (*envv1.RevealValuesResponse, error) {
-	store, err := s.store(ctx, req.GetOptions(), req.GetClass())
+	store, err := s.store(ctx, s.config.get().Region, req.GetClass())
 	if err != nil {
 		return nil, err
 	}
@@ -312,7 +310,7 @@ func (s *VarsServer) RevealValues(ctx context.Context, req *envv1.RevealValuesRe
 }
 
 func (s *VarsServer) DeleteValue(ctx context.Context, req *envv1.DeleteValueRequest) (*envv1.DeleteValueResponse, error) {
-	store, err := s.store(ctx, req.GetOptions(), req.GetClass())
+	store, err := s.store(ctx, s.config.get().Region, req.GetClass())
 	if err != nil {
 		return nil, err
 	}
@@ -324,7 +322,7 @@ func (s *VarsServer) DeleteValue(ctx context.Context, req *envv1.DeleteValueRequ
 }
 
 func (s *VarsServer) ListVersions(ctx context.Context, req *envv1.ListVersionsRequest) (*envv1.ListVersionsResponse, error) {
-	store, err := s.store(ctx, req.GetOptions(), req.GetClass())
+	store, err := s.store(ctx, s.config.get().Region, req.GetClass())
 	if err != nil {
 		return nil, err
 	}

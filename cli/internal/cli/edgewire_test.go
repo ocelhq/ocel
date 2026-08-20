@@ -24,7 +24,7 @@ export default {
 `)
 }
 
-func readEdgeJournal(t *testing.T, path string) []string {
+func readJournal(t *testing.T, path string) []string {
 	t.Helper()
 
 	raw, err := os.ReadFile(path)
@@ -78,7 +78,7 @@ func TestDeploySendsTheEdgeTheProjectDeclared(t *testing.T) {
 				t.Fatalf("runDeploy err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 			}
 
-			got := readEdgeJournal(t, journal)
+			got := readJournal(t, journal)
 			if len(got) != 1 {
 				t.Fatalf("deploy reached the provider %d times, want exactly 1: %v", len(got), got)
 			}
@@ -97,11 +97,11 @@ func TestDeployCarriesTheEdgeSettingsUnchanged(t *testing.T) {
 		t.Fatalf("runDeploy err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 	}
 
-	got := readEdgeJournal(t, journal)
+	got := readJournal(t, journal)
 	if len(got) != 1 {
 		t.Fatalf("deploy reached the provider %d times, want exactly 1: %v", len(got), got)
 	}
-	for _, want := range []string{`options={"zone":"acme.com"}`, "dns=cloudflare/acme.com", "allowDegraded=streaming,edge-cache"} {
+	for _, want := range []string{"dns=cloudflare/acme.com", "allowDegraded=streaming,edge-cache"} {
 		if !strings.Contains(got[0], want) {
 			t.Errorf("provider saw %q, want it to carry %q", got[0], want)
 		}
@@ -150,7 +150,7 @@ func TestBootstrapCarriesTheFeatureSetAndNoEdge(t *testing.T) {
 				t.Fatalf("runBootstrap err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 			}
 
-			got := readEdgeJournal(t, journal)
+			got := readJournal(t, journal)
 			if len(got) != 1 {
 				t.Fatalf("bootstrap reached the provider %d times, want exactly 1: %v", len(got), got)
 			}
@@ -173,7 +173,7 @@ func TestBootstrapWithoutTheFlagKeepsWhatIsThere(t *testing.T) {
 		t.Fatalf("runBootstrap err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 	}
 
-	got := readEdgeJournal(t, journal)
+	got := readJournal(t, journal)
 	if len(got) != 1 || got[0] != "features=isr force=false" {
 		t.Errorf("provider saw %v, want the set the account already carries", got)
 	}
@@ -195,7 +195,7 @@ func TestBootstrapRefusesADropItCannotAskAbout(t *testing.T) {
 		}
 	}
 	if _, statErr := os.Stat(journal); statErr == nil {
-		t.Errorf("the provider was reached despite the refusal: %v", readEdgeJournal(t, journal))
+		t.Errorf("the provider was reached despite the refusal: %v", readJournal(t, journal))
 	}
 }
 
@@ -208,7 +208,7 @@ func TestBootstrapForcesADropWhenTold(t *testing.T) {
 	if err := runBootstrap(context.Background(), d, root, opts, &stdout, &stderr, strings.NewReader("")); err != nil {
 		t.Fatalf("runBootstrap err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 	}
-	got := readEdgeJournal(t, journal)
+	got := readJournal(t, journal)
 	if len(got) != 1 || got[0] != "features=isr force=true" {
 		t.Errorf("provider saw %v, want the forced drop carried through", got)
 	}
@@ -235,7 +235,7 @@ func TestBootstrapDestroySendsTheEdgeTheProjectDeclared(t *testing.T) {
 				t.Fatalf("runBootstrap err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 			}
 
-			got := readEdgeJournal(t, journal)
+			got := readJournal(t, journal)
 			if len(got) != 2 {
 				t.Fatalf("destroy reached the provider %d times, want the plan and the teardown: %v", len(got), got)
 			}
@@ -275,7 +275,7 @@ func TestDestroySendsTheEdgeTheProjectDeclared(t *testing.T) {
 				t.Fatalf("runDestroy err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 			}
 
-			got := readEdgeJournal(t, journal)
+			got := readJournal(t, journal)
 			if len(got) != 2 {
 				t.Fatalf("destroy reached the provider %d times, want the plan and the teardown: %v", len(got), got)
 			}

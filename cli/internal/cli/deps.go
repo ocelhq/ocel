@@ -34,7 +34,7 @@ type deps struct {
 	deploymentID         func(projectDir, app string) (string, error)
 	collectDeclarations  func(ctx context.Context, cfg *projectconfig.Config, gate *envgate.Gate, stdout, stderr io.Writer) ([]declare.Resource, error)
 	openBrowser          func(url string) error
-	serveVarsUI          func(ctx context.Context, cfg *projectconfig.Config, provider *projectconfig.ProviderDescriptor, runner *providerrunner.Runner, preview bool, gate *envgate.Gate) (*varsui.Session, error)
+	serveVarsUI          func(ctx context.Context, cfg *projectconfig.Config, runner *providerrunner.Runner, preview bool, gate *envgate.Gate) (*varsui.Session, error)
 	currentGitBranch     func(dir string) (string, error)
 	discoverPRNumber     func() string
 	runPackageManager    func(ctx context.Context, dir string, argv []string, output io.Writer) error

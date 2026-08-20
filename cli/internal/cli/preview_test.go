@@ -48,7 +48,6 @@ func TestRunPreviewUp(t *testing.T) {
 		for _, sub := range []string{
 			"DEPLOY class=CLASS_PREVIEW lifecycle=LIFECYCLE_EPHEMERAL",
 			"identity=" + want.Key,
-			"source=IDENTITY_SOURCE_GIT",
 			"Preview " + want.Key + " is up",
 		} {
 			if !strings.Contains(out, sub) {
@@ -139,7 +138,7 @@ func TestRunPreviewUp(t *testing.T) {
 		}
 
 		out := stdout.String()
-		if !strings.Contains(out, "DEPLOY class=CLASS_PREVIEW lifecycle=LIFECYCLE_EPHEMERAL identity="+want.Key+" source=IDENTITY_SOURCE_GIT") {
+		if !strings.Contains(out, "DEPLOY class=CLASS_PREVIEW lifecycle=LIFECYCLE_EPHEMERAL identity="+want.Key) {
 			t.Errorf("stdout = %q, want the ephemeral Deploy echo for the explicit ref", out)
 		}
 	})
@@ -162,9 +161,6 @@ func TestRunPreviewUp(t *testing.T) {
 		if env.GetLifecycle() != deploymentsv1.Environment_LIFECYCLE_EPHEMERAL {
 			t.Errorf("lifecycle = %v, want ephemeral", env.GetLifecycle())
 		}
-		if env.GetIdentitySource() != deploymentsv1.Environment_IDENTITY_SOURCE_GIT {
-			t.Errorf("identity source = %v, want git", env.GetIdentitySource())
-		}
 	})
 
 	t.Run("a persistent --name sends a persistent, declared environment", func(t *testing.T) {
@@ -182,7 +178,7 @@ func TestRunPreviewUp(t *testing.T) {
 		}
 
 		out := stdout.String()
-		if !strings.Contains(out, "DEPLOY class=CLASS_PREVIEW lifecycle=LIFECYCLE_PERSISTENT identity=staging source=IDENTITY_SOURCE_DECLARED") {
+		if !strings.Contains(out, "DEPLOY class=CLASS_PREVIEW lifecycle=LIFECYCLE_PERSISTENT identity=staging") {
 			t.Errorf("stdout = %q, want the persistent/declared Environment echo", out)
 		}
 
@@ -426,7 +422,7 @@ func TestRunPreviewRm(t *testing.T) {
 		}
 
 		out := stdout.String()
-		if !strings.Contains(out, "DESTROY project=test-app class=CLASS_PREVIEW lifecycle=LIFECYCLE_PERSISTENT identity=staging source=IDENTITY_SOURCE_DECLARED") {
+		if !strings.Contains(out, "DESTROY project=test-app class=CLASS_PREVIEW lifecycle=LIFECYCLE_PERSISTENT identity=staging") {
 			t.Errorf("stdout = %q, want the persistent Destroy echo", out)
 		}
 		if strings.Contains(out, "[y/N]") {

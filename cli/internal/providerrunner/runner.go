@@ -38,6 +38,7 @@ type Config struct {
 	BinaryPath   string
 	Args         []string
 	Env          []string
+	Provider     *deploymentsv1.ProviderConfig
 	Stdout       io.Writer
 	Stderr       io.Writer
 	ReadyTimeout time.Duration
@@ -85,6 +86,7 @@ func (e *DeployFailedError) Error() string {
 type Runner struct {
 	cmd          *exec.Cmd
 	token        string
+	provider     *deploymentsv1.ProviderConfig
 	stdout       io.Writer
 	stderr       io.Writer
 	readyTimeout time.Duration
@@ -147,6 +149,7 @@ func Spawn(ctx context.Context, cfg Config) (*Runner, error) {
 	r := &Runner{
 		cmd:          cmd,
 		token:        token,
+		provider:     cfg.Provider,
 		stdout:       cfg.Stdout,
 		stderr:       cfg.Stderr,
 		readyTimeout: resolveReadyTimeout(cfg.ReadyTimeout),
@@ -207,13 +210,13 @@ func (r *Runner) Ready(ctx context.Context) error {
 
 	select {
 	case addr := <-r.readyCh:
-		return r.dial(addr)
+		return r.open(ctx, addr)
 	case err := <-r.scanErr:
 		return err
 	case <-r.done:
 		select {
 		case addr := <-r.readyCh:
-			return r.dial(addr)
+			return r.open(ctx, addr)
 		default:
 		}
 		r.stderrMu.Lock()
@@ -225,6 +228,27 @@ func (r *Runner) Ready(ctx context.Context) error {
 	case <-ctx.Done():
 		return ctx.Err()
 	}
+}
+
+func (r *Runner) open(ctx context.Context, addr string) error {
+	if err := r.dial(addr); err != nil {
+		return err
+	}
+	return r.configure(ctx)
+}
+
+func (r *Runner) configure(ctx context.Context) error {
+	if r.provider == nil {
+		return nil
+	}
+	client, err := r.Deployments()
+	if err != nil {
+		return err
+	}
+	if _, err := client.Configure(ctx, &deploymentsv1.ConfigureRequest{Config: r.provider}); err != nil {
+		return fmt.Errorf("providerrunner: configure the provider session: %w", err)
+	}
+	return nil
 }
 
 func (r *Runner) dial(addr string) error {

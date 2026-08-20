@@ -19,11 +19,10 @@ import (
 )
 
 type gateRecovery struct {
-	deps     deps
-	cfg      *projectconfig.Config
-	provider *projectconfig.ProviderDescriptor
-	runner   *providerrunner.Runner
-	preview  bool
+	deps    deps
+	cfg     *projectconfig.Config
+	runner  *providerrunner.Runner
+	preview bool
 
 	newGate func() *envgate.Gate
 
@@ -57,7 +56,7 @@ func (r gateRecovery) buildManifest(ctx context.Context, prebuilt bool) (*deploy
 }
 
 func (r gateRecovery) fill(ctx context.Context, gate *envgate.Gate, refusal *envgate.Refusal) error {
-	session, err := r.deps.serveVarsUI(ctx, r.cfg, r.provider, r.runner, r.preview, gate)
+	session, err := r.deps.serveVarsUI(ctx, r.cfg, r.runner, r.preview, gate)
 	if err != nil {
 		return err
 	}

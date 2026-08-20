@@ -25,10 +25,7 @@ import (
 var errPreviewInfraMissing = errors.New("preview infrastructure is not set up; run `ocel bootstrap --preview` first")
 
 func (s *Server) Preflight(ctx context.Context, req *deploymentsv1.PreflightRequest) (*deploymentsv1.PreflightResponse, error) {
-	opts, err := parseOptions(req.GetOptions())
-	if err != nil {
-		return nil, connect.NewError(connect.CodeInvalidArgument, err)
-	}
+	opts := s.config.get()
 	awscfg, err := loadAWS(ctx, opts.Region)
 	if err != nil {
 		return nil, err
@@ -274,10 +271,7 @@ func (s *Server) runDestroyPreview(ctx context.Context, req *deploymentsv1.Destr
 		return err
 	}
 
-	opts, err := parseOptions(req.GetOptions())
-	if err != nil {
-		return finish(err)
-	}
+	opts := s.config.get()
 	pointer, err := deploy.EnvName(env)
 	if err != nil {
 		return finish(connect.NewError(connect.CodeInvalidArgument, err))
@@ -290,7 +284,7 @@ func (s *Server) runDestroyPreview(ctx context.Context, req *deploymentsv1.Destr
 	return deploy.RemovePreview(ctx, stack, deps.reclamation(reportingWith(tracer, stageReport)), pointer, persistent, stages, logf)
 }
 
-func (s *Server) previewTeardownDeps(ctx context.Context, kind edge.Kind, opts options, slug string, env *deploymentsv1.Environment) (teardownContext, edge.EdgeStack, error) {
+func (s *Server) previewTeardownDeps(ctx context.Context, kind edge.Kind, opts providerConfig, slug string, env *deploymentsv1.Environment) (teardownContext, edge.EdgeStack, error) {
 	awscfg, err := loadAWS(ctx, opts.Region)
 	if err != nil {
 		return teardownContext{}, nil, err
@@ -365,17 +359,17 @@ func (s *Server) previewTeardownDeps(ctx context.Context, kind edge.Kind, opts o
 }
 
 func (s *Server) ListEnvironments(ctx context.Context, req *deploymentsv1.ListEnvironmentsRequest) (*deploymentsv1.ListEnvironmentsResponse, error) {
-	opts, err := parseOptions(req.GetOptions())
-	if err != nil {
-		return nil, connect.NewError(connect.CodeInvalidArgument, err)
-	}
-	awscfg, err := loadAWS(ctx, opts.Region)
+	return s.listEnvironments(ctx, s.config.get().Region, req.GetSlug())
+}
+
+func (s *Server) listEnvironments(ctx context.Context, region, slug string) (*deploymentsv1.ListEnvironmentsResponse, error) {
+	awscfg, err := loadAWS(ctx, region)
 	if err != nil {
 		return nil, err
 	}
 	cfn := cloudformation.NewFromConfig(awscfg)
 
-	deployed, err := s.deployed(ctx, cfn, opts.Region, true)
+	deployed, err := s.deployed(ctx, cfn, region, true)
 	if err != nil {
 		return nil, err
 	}
@@ -387,7 +381,7 @@ func (s *Server) ListEnvironments(ctx context.Context, req *deploymentsv1.ListEn
 		return nil, err
 	}
 
-	stacks, err := deploy.ListPreviewStacks(ctx, index, req.GetSlug())
+	stacks, err := deploy.ListPreviewStacks(ctx, index, slug)
 	if err != nil {
 		return nil, err
 	}

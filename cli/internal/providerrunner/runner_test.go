@@ -144,9 +144,7 @@ func TestDeploy(t *testing.T) {
 
 		var events []*deploymentsv1.DeployEvent
 		err := r.Deploy(ctx, &deploymentsv1.DeployRequest{
-			Manifest:        &deploymentsv1.Manifest{SchemaVersion: "provider.v1"},
-			Options:         []byte("{}"),
-			ProtocolVersion: "provider.v1",
+			Manifest: &deploymentsv1.Manifest{SchemaVersion: "provider.v1"},
 		}, func(ev *deploymentsv1.DeployEvent) { events = append(events, ev) })
 		if err != nil {
 			t.Fatalf("Deploy() error = %v, want nil", err)
@@ -183,7 +181,6 @@ func TestDeploy(t *testing.T) {
 		go func() {
 			deployErrCh <- r.Deploy(ctx, &deploymentsv1.DeployRequest{
 				Manifest: &deploymentsv1.Manifest{SchemaVersion: "provider.v1"},
-				Options:  []byte("{}"),
 			}, func(ev *deploymentsv1.DeployEvent) { gotFirstEvent.Store(true) })
 		}()
 
@@ -221,7 +218,7 @@ func TestDeploy(t *testing.T) {
 			t.Fatalf("Ready() error = %v, want nil", err)
 		}
 
-		err := r.Deploy(ctx, &deploymentsv1.DeployRequest{Manifest: &deploymentsv1.Manifest{}, Options: []byte("{}")}, nil)
+		err := r.Deploy(ctx, &deploymentsv1.DeployRequest{Manifest: &deploymentsv1.Manifest{}}, nil)
 
 		var deployErr *DeployFailedError
 		if !errors.As(err, &deployErr) {
@@ -275,10 +272,7 @@ func TestBootstrap(t *testing.T) {
 		}
 
 		var events []*deploymentsv1.DeployEvent
-		err := r.Bootstrap(ctx, &deploymentsv1.BootstrapRequest{
-			Options:         []byte("{}"),
-			ProtocolVersion: "provider.v1",
-		}, func(ev *deploymentsv1.DeployEvent) { events = append(events, ev) })
+		err := r.Bootstrap(ctx, &deploymentsv1.BootstrapRequest{}, func(ev *deploymentsv1.DeployEvent) { events = append(events, ev) })
 		if err != nil {
 			t.Fatalf("Bootstrap() error = %v, want nil", err)
 		}
@@ -304,7 +298,7 @@ func TestBootstrap(t *testing.T) {
 			t.Fatalf("Ready() error = %v, want nil", err)
 		}
 
-		err := r.Bootstrap(ctx, &deploymentsv1.BootstrapRequest{Options: []byte("{}")}, nil)
+		err := r.Bootstrap(ctx, &deploymentsv1.BootstrapRequest{}, nil)
 
 		var failErr *DeployFailedError
 		if !errors.As(err, &failErr) {

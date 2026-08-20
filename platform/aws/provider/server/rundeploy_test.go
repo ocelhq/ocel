@@ -45,16 +45,16 @@ func TestRunDeployDeclaresTheStagePlanBeforeAnyWork(t *testing.T) {
 
 	s := &Server{}
 	tracer := &fakeTracer{}
-	req := &deploymentsv1.DeployRequest{
-		Manifest: wellFormedManifest(),
-		Options:  []byte("not json"),
-	}
+	req := &deploymentsv1.DeployRequest{Manifest: wellFormedManifest()}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
 
 	stages := newDeployStages()
 	appStages, appDeclared := deploy.AppStages(stages.provisioning, req.GetManifest())
-	_, err := s.runDeploy(context.Background(), req, req.GetManifest(), nil, stages, appStages, appDeclared, noopProgress, noopStageReport, noopLog, noopDegraded, tracer)
+	_, err := s.runDeploy(ctx, req, req.GetManifest(), nil, stages, appStages, appDeclared, noopProgress, noopStageReport, noopLog, noopDegraded, tracer)
 	if err == nil {
-		t.Fatal("runDeploy() error = nil, want the parseOptions failure")
+		t.Fatal("runDeploy() error = nil, want the first reach for AWS to fail")
 	}
 
 	if len(tracer.declared) == 0 {

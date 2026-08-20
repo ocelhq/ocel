@@ -13,7 +13,6 @@ import (
 
 func (s *Server) DomainStatus(ctx context.Context, req *deploymentsv1.DomainStatusRequest) (*deploymentsv1.DomainStatusResponse, error) {
 	session, err := s.domainSession(ctx, domainRequest{
-		options:     req.GetOptions(),
 		slug:        req.GetSlug(),
 		edgeKind:    string(requestedEdge(req)),
 		dns:         requestedDNS(req),

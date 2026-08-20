@@ -41,8 +41,6 @@ func environmentClassKey(class deploymentsv1.Environment_Class) string {
 		return "production"
 	case deploymentsv1.Environment_CLASS_PREVIEW:
 		return "preview"
-	case deploymentsv1.Environment_CLASS_DEVELOPMENT:
-		return "development"
 	default:
 		return "unspecified"
 	}
