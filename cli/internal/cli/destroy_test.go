@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
+	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 )
 
 func TestConfirmPhrase(t *testing.T) {
@@ -58,13 +58,13 @@ func TestPrintDestroyPlan(t *testing.T) {
 		t.Parallel()
 
 		var out bytes.Buffer
-		printDestroyPlan(&out, "proj_shop", false, &deploymentsv1.PlanRemoveProjectResponse{
-			EdgeStack: &deploymentsv1.EdgeStackPlan{
+		printDestroyPlan(&out, "proj_shop", false, &contractv1.PlanRemoveProjectResponse{
+			EdgeStack: &contractv1.EdgeStackPlan{
 				EdgeKind: "cloudflare",
-				Items: []*deploymentsv1.RemovalItem{
-					{Kind: "edge stack", Name: "shop", Action: deploymentsv1.RemovalItem_ACTION_DELETE},
-					{Kind: "distribution", Name: "E1SHOP", Action: deploymentsv1.RemovalItem_ACTION_DISABLE_THEN_DELETE, Slow: true},
-					{Kind: "certificate", Name: "shop.example.com", Action: deploymentsv1.RemovalItem_ACTION_KEEP, Reason: "you pinned this certificate"},
+				Items: []*contractv1.RemovalItem{
+					{Kind: "edge stack", Name: "shop", Action: contractv1.RemovalItem_ACTION_DELETE},
+					{Kind: "distribution", Name: "E1SHOP", Action: contractv1.RemovalItem_ACTION_DISABLE_THEN_DELETE, Slow: true},
+					{Kind: "certificate", Name: "shop.example.com", Action: contractv1.RemovalItem_ACTION_KEEP, Reason: "you pinned this certificate"},
 				},
 			},
 			InfraStacks: []string{"shop--infra"},
@@ -98,12 +98,12 @@ func TestPrintDestroyPlan(t *testing.T) {
 		t.Parallel()
 
 		var out bytes.Buffer
-		printDestroyPlan(&out, "proj_shop", false, &deploymentsv1.PlanRemoveProjectResponse{
-			EdgeStack: &deploymentsv1.EdgeStackPlan{
+		printDestroyPlan(&out, "proj_shop", false, &contractv1.PlanRemoveProjectResponse{
+			EdgeStack: &contractv1.EdgeStackPlan{
 				EdgeKind: "api-gateway",
-				Items: []*deploymentsv1.RemovalItem{
-					{Kind: "REST APIs", Name: "shop", Action: deploymentsv1.RemovalItem_ACTION_DELETE, Slow: true},
-					{Kind: "domain names", Name: "shop.example.com", Action: deploymentsv1.RemovalItem_ACTION_DELETE},
+				Items: []*contractv1.RemovalItem{
+					{Kind: "REST APIs", Name: "shop", Action: contractv1.RemovalItem_ACTION_DELETE, Slow: true},
+					{Kind: "domain names", Name: "shop.example.com", Action: contractv1.RemovalItem_ACTION_DELETE},
 				},
 			},
 		})
@@ -119,10 +119,10 @@ func TestPrintDestroyPlan(t *testing.T) {
 	t.Run("an action this CLI does not know reads as a sentence", func(t *testing.T) {
 		t.Parallel()
 
-		got := removalItemLine(&deploymentsv1.RemovalItem{
+		got := removalItemLine(&contractv1.RemovalItem{
 			Kind:   "certificate",
 			Name:   "shop.example.com",
-			Action: deploymentsv1.RemovalItem_Action(97),
+			Action: contractv1.RemovalItem_Action(97),
 		})
 		if !strings.Contains(got, "an action this CLI does not know") || !strings.HasSuffix(got, "certificate shop.example.com") {
 			t.Errorf("removalItemLine() = %q, want the unknown action named before the resource", got)

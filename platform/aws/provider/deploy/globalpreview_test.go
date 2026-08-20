@@ -4,8 +4,8 @@ import (
 	"strings"
 	"testing"
 
-	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
-	environmentv1 "github.com/ocelhq/ocel/pkg/proto/environment/v1"
+	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
+	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/platform/aws/provider/edges/apigateway"
 	cloudflare "github.com/ocelhq/ocel/platform/edge/cloudflare/deploy"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
@@ -162,8 +162,8 @@ func (u unprogrammableEdge) Facts() edge.Facts {
 func TestMarkGlobalPreview(t *testing.T) {
 	t.Parallel()
 
-	manifest := func() *deploymentsv1.Manifest {
-		return &deploymentsv1.Manifest{Slug: "proj"}
+	manifest := func() *contractv1.Manifest {
+		return &contractv1.Manifest{Slug: "proj"}
 	}
 	preview := Config{Slug: "proj", Tier: environmentv1.Tier_TIER_PREVIEW, GlobalPreviewDomain: "preview.acme.com"}
 	state := func() edge.StackState {
@@ -181,7 +181,7 @@ func TestMarkGlobalPreview(t *testing.T) {
 	t.Run("a project on its own preview domain records nothing", func(t *testing.T) {
 		t.Parallel()
 		m := manifest()
-		m.Domains = map[string]*deploymentsv1.DomainList{"preview": {Hostnames: []string{"*.preview.proj.com"}}}
+		m.Domains = map[string]*contractv1.DomainList{"preview": {Hostnames: []string{"*.preview.proj.com"}}}
 
 		marked := MarkGlobalPreview(state(), preview, m)
 		if marked.ServedOnGlobalPreview("preview.acme.com") {
@@ -192,7 +192,7 @@ func TestMarkGlobalPreview(t *testing.T) {
 	t.Run("declaring a domain later clears the mark", func(t *testing.T) {
 		t.Parallel()
 		m := manifest()
-		m.Domains = map[string]*deploymentsv1.DomainList{"preview": {Hostnames: []string{"*.preview.proj.com"}}}
+		m.Domains = map[string]*contractv1.DomainList{"preview": {Hostnames: []string{"*.preview.proj.com"}}}
 		prior := state()
 		prior.GlobalPreview = "preview.acme.com"
 
@@ -233,11 +233,11 @@ func TestEdgeStackSpecsGlobalPreview(t *testing.T) {
 	setWorkerBundle(t)
 	setStoreWorkerBundle(t)
 
-	manifest := func() *deploymentsv1.Manifest {
-		return &deploymentsv1.Manifest{
+	manifest := func() *contractv1.Manifest {
+		return &contractv1.Manifest{
 			Slug:      "proj",
-			Apps:      []*deploymentsv1.ManifestApp{{Name: "web", Framework: "next"}},
-			Functions: []*deploymentsv1.ManifestFunction{{LogicalName: "web_index", Framework: "next", App: "web", RouteId: "/"}},
+			Apps:      []*contractv1.ManifestApp{{Name: "web", Framework: "next"}},
+			Functions: []*contractv1.ManifestFunction{{LogicalName: "web_index", Framework: "next", App: "web", RouteId: "/"}},
 		}
 	}
 
@@ -269,7 +269,7 @@ func TestEdgeStackSpecsGlobalPreview(t *testing.T) {
 
 	t.Run("a declared preview domain beats the substrate's", func(t *testing.T) {
 		m := manifest()
-		m.Domains = map[string]*deploymentsv1.DomainList{"preview": {Hostnames: []string{"*.preview.proj.com"}}}
+		m.Domains = map[string]*contractv1.DomainList{"preview": {Hostnames: []string{"*.preview.proj.com"}}}
 		cfg := Config{
 			Edge:                &recordingEdge{kind: cloudflare.Kind},
 			Slug:                "proj",
@@ -293,7 +293,7 @@ func TestEdgeStackSpecsGlobalPreview(t *testing.T) {
 
 	t.Run("an app-level preview domain beats the substrate's", func(t *testing.T) {
 		m := manifest()
-		m.Apps[0].Domains = map[string]*deploymentsv1.DomainList{"preview": {Hostnames: []string{"*.preview.proj.com"}}}
+		m.Apps[0].Domains = map[string]*contractv1.DomainList{"preview": {Hostnames: []string{"*.preview.proj.com"}}}
 		cfg := Config{
 			Edge:                &recordingEdge{kind: cloudflare.Kind},
 			Slug:                "proj",

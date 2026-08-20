@@ -10,7 +10,7 @@ import (
 
 	"github.com/ocelhq/ocel/cli/internal/envgate"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
-	linksv1 "github.com/ocelhq/ocel/pkg/proto/links/v1"
+	linksv1 "github.com/ocelhq/ocel/pkg/proto/common/links/v1"
 )
 
 func TestCollect(t *testing.T) {
@@ -28,7 +28,7 @@ globalThis.__ocelRegister ??= [];
 
 function declareResource(body: unknown) {
   globalThis.__ocelRegister.push(
-    fetch(new URL("/resources.v1.ResourceService/Declare", process.env.OCEL_DEV_SERVER), {
+    fetch(new URL("/app.resources.v1.ResourceService/Declare", process.env.OCEL_DEV_SERVER), {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(body),

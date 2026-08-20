@@ -8,7 +8,7 @@ import { postgresLink, type DescribedPostgres } from "./postgres.js";
 /**
  * A postgres resource described from what a Pulumi resource exposes.
  *
- * The fields are the ones `links.v1.PostgresProperties` declares, each of them
+ * The fields are the ones `common.links.v1.PostgresProperties` declares, each of them
  * an `Input`, so a resource's outputs are handed over as they are and resolved
  * before the record is published. The grants are explicit: nothing is inferred
  * about what an app may do with the resource.

@@ -5,9 +5,9 @@ import (
 	"slices"
 
 	"github.com/ocelhq/ocel/pkg/naming"
-	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
-	linksv1 "github.com/ocelhq/ocel/pkg/proto/links/v1"
-	progressv1 "github.com/ocelhq/ocel/pkg/proto/progress/v1"
+	linksv1 "github.com/ocelhq/ocel/pkg/proto/common/links/v1"
+	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
+	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/platform/aws/provider/payloads"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
@@ -31,7 +31,7 @@ type provisionedDeploy struct {
 	outputs     [][]*progressv1.FunctionOutput
 }
 
-func provisionDeploy(ctx context.Context, cfg Config, realized *Realized, manifest *deploymentsv1.Manifest, plan deployPlan, up uploadedArtifacts, progress Progress, log func(string)) (provisionedDeploy, error) {
+func provisionDeploy(ctx context.Context, cfg Config, realized *Realized, manifest *contractv1.Manifest, plan deployPlan, up uploadedArtifacts, progress Progress, log func(string)) (provisionedDeploy, error) {
 	if !plan.ready {
 		return provisionedDeploy{}, &PhaseError{Phase: "provision", After: "plan"}
 	}
@@ -107,7 +107,7 @@ func provisionDeploy(ctx context.Context, cfg Config, realized *Realized, manife
 	results := make([]appDeployResult, len(apps))
 	appOutputs := make([][]*progressv1.FunctionOutput, len(apps))
 	appFunctionNames := make([]map[string]string, len(apps))
-	runAppStacks(apps, func(i int, app *deploymentsv1.ManifestApp) {
+	runAppStacks(apps, func(i int, app *contractv1.ManifestApp) {
 		id := identities[app.GetName()]
 		outs, names, err := runAppStack(ctx, cfg, in, manifest, stacks, app, id, plan.baked[app.GetName()], plan.builds, granting, cfg.AppStages[app.GetName()], log)
 		appOutputs[i] = outs

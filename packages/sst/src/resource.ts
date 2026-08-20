@@ -17,7 +17,7 @@ type Input<T> = T | Promise<T> | { apply(f: (value: T) => unknown): unknown };
 /**
  * A postgres resource described by hand, for anything SST does not describe.
  *
- * The fields are the ones `links.v1.PostgresProperties` declares, and the grants
+ * The fields are the ones `common.links.v1.PostgresProperties` declares, and the grants
  * are explicit: nothing is inferred about what an app may do with the resource.
  */
 export interface DescribedPostgresResource {

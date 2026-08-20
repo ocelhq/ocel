@@ -18,12 +18,12 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/channel"
 	"github.com/ocelhq/ocel/pkg/naming"
-	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
-	"github.com/ocelhq/ocel/pkg/proto/deployments/v1/deploymentsv1connect"
-	environmentv1 "github.com/ocelhq/ocel/pkg/proto/environment/v1"
-	"github.com/ocelhq/ocel/pkg/proto/envvars/v1/envvarsv1connect"
-	linksv1 "github.com/ocelhq/ocel/pkg/proto/links/v1"
-	progressv1 "github.com/ocelhq/ocel/pkg/proto/progress/v1"
+	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
+	linksv1 "github.com/ocelhq/ocel/pkg/proto/common/links/v1"
+	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
+	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
+	"github.com/ocelhq/ocel/pkg/proto/provider/contract/v1/contractv1connect"
+	"github.com/ocelhq/ocel/pkg/proto/provider/envvars/v1/envvarsv1connect"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
@@ -112,7 +112,7 @@ func runDeployFakeProvider() int {
 	}
 
 	mux := http.NewServeMux()
-	path, handler := deploymentsv1connect.NewProviderServiceHandler(fake)
+	path, handler := contractv1connect.NewProviderServiceHandler(fake)
 	mux.Handle(path, handler)
 
 	path, handler = envvarsv1connect.NewEnvVarsServiceHandler(fake)
@@ -128,7 +128,7 @@ func runDeployFakeProvider() int {
 }
 
 type deployFakeProviderServer struct {
-	deploymentsv1connect.UnimplementedProviderServiceHandler
+	contractv1connect.UnimplementedProviderServiceHandler
 	token string
 	mode  string
 
@@ -151,7 +151,7 @@ func (s *deployFakeProviderServer) lastPreflight() (string, []string, environmen
 	return s.preflightSlug, s.preflightDomains, s.preflightTier
 }
 
-func (s *deployFakeProviderServer) Deploy(ctx context.Context, req *deploymentsv1.DeployRequest, stream *connect.ServerStream[progressv1.OperationEvent]) error {
+func (s *deployFakeProviderServer) Deploy(ctx context.Context, req *contractv1.DeployRequest, stream *connect.ServerStream[progressv1.OperationEvent]) error {
 	if err := s.checkToken(ctx); err != nil {
 		return err
 	}
@@ -281,7 +281,7 @@ func fakePublishedLinks() []string {
 	return out
 }
 
-func consumeFakeLinks(m *deploymentsv1.Manifest) []string {
+func consumeFakeLinks(m *contractv1.Manifest) []string {
 	published := fakePublishedLinks()
 	var out []string
 	for _, r := range m.GetResources() {
@@ -297,7 +297,7 @@ func consumeFakeLinks(m *deploymentsv1.Manifest) []string {
 	return out
 }
 
-func refuseUnpublishedFakeLinks(m *deploymentsv1.Manifest) string {
+func refuseUnpublishedFakeLinks(m *contractv1.Manifest) string {
 	published := fakePublishedLinks()
 	var missing []string
 	for _, r := range m.GetResources() {
@@ -311,7 +311,7 @@ func refuseUnpublishedFakeLinks(m *deploymentsv1.Manifest) string {
 	return "nothing has published a link named " + strings.Join(missing, ", ") + " to production"
 }
 
-func fakeLinks(m *deploymentsv1.Manifest) []*linksv1.Link {
+func fakeLinks(m *contractv1.Manifest) []*linksv1.Link {
 	out := make([]*linksv1.Link, 0, len(m.GetResources()))
 	for _, r := range m.GetResources() {
 		if r.GetLinked() {
@@ -342,21 +342,21 @@ func fakeLinks(m *deploymentsv1.Manifest) []*linksv1.Link {
 	return out
 }
 
-func (s *deployFakeProviderServer) DescribeBootstrap(ctx context.Context, _ *deploymentsv1.DescribeBootstrapRequest) (*deploymentsv1.DescribeBootstrapResponse, error) {
+func (s *deployFakeProviderServer) DescribeBootstrap(ctx context.Context, _ *contractv1.DescribeBootstrapRequest) (*contractv1.DescribeBootstrapResponse, error) {
 	if err := s.checkToken(ctx); err != nil {
 		return nil, err
 	}
 	enabled := strings.Split(os.Getenv(fakeEnabledFeaturesEnvVar), ",")
-	feature := func(name, summary string, dependsOn ...string) *deploymentsv1.Feature {
-		return &deploymentsv1.Feature{
+	feature := func(name, summary string, dependsOn ...string) *contractv1.Feature {
+		return &contractv1.Feature{
 			Name:      name,
 			Summary:   summary,
 			DependsOn: dependsOn,
 			Enabled:   slices.Contains(enabled, name),
 		}
 	}
-	return &deploymentsv1.DescribeBootstrapResponse{
-		Features: []*deploymentsv1.Feature{
+	return &contractv1.DescribeBootstrapResponse{
+		Features: []*contractv1.Feature{
 			feature("isr", "incremental static regeneration"),
 			feature("image-optimization", "on-demand image optimization"),
 			feature("cloudflare-edge", "a Cloudflare front", "isr"),
@@ -364,7 +364,7 @@ func (s *deployFakeProviderServer) DescribeBootstrap(ctx context.Context, _ *dep
 	}, nil
 }
 
-func (s *deployFakeProviderServer) Bootstrap(ctx context.Context, req *deploymentsv1.BootstrapRequest, stream *connect.ServerStream[progressv1.OperationEvent]) error {
+func (s *deployFakeProviderServer) Bootstrap(ctx context.Context, req *contractv1.BootstrapRequest, stream *connect.ServerStream[progressv1.OperationEvent]) error {
 	if err := s.checkToken(ctx); err != nil {
 		return err
 	}
@@ -374,7 +374,7 @@ func (s *deployFakeProviderServer) Bootstrap(ctx context.Context, req *deploymen
 	})
 }
 
-func (s *deployFakeProviderServer) PlanRemoveSubstrate(ctx context.Context, req *deploymentsv1.PlanRemoveSubstrateRequest) (*deploymentsv1.PlanRemoveSubstrateResponse, error) {
+func (s *deployFakeProviderServer) PlanRemoveSubstrate(ctx context.Context, req *contractv1.PlanRemoveSubstrateRequest) (*contractv1.PlanRemoveSubstrateResponse, error) {
 	if err := s.checkToken(ctx); err != nil {
 		return nil, err
 	}
@@ -383,33 +383,33 @@ func (s *deployFakeProviderServer) PlanRemoveSubstrate(ctx context.Context, req 
 		return nil, err
 	}
 	class := strings.ToLower(strings.TrimPrefix(req.GetTier().String(), "TIER_"))
-	return &deploymentsv1.PlanRemoveSubstrateResponse{
+	return &contractv1.PlanRemoveSubstrateResponse{
 		EdgeKind: resolvedEdgeKind(req.GetEdge().GetKind()),
-		Items: []*deploymentsv1.RemovalItem{
+		Items: []*contractv1.RemovalItem{
 			{
 				Kind:   "edge bootstrap",
 				Name:   resolvedEdgeKind(req.GetEdge().GetKind()),
-				Action: deploymentsv1.RemovalItem_ACTION_DELETE,
+				Action: contractv1.RemovalItem_ACTION_DELETE,
 				Reason: "every worker the edge stood up for the " + class + " substrate",
 			},
 			{
 				Kind:   "bucket",
 				Name:   "ocel-state-" + class,
-				Action: deploymentsv1.RemovalItem_ACTION_DELETE,
+				Action: contractv1.RemovalItem_ACTION_DELETE,
 				Reason: "the Pulumi state of every stack this substrate deployed",
 				Slow:   true,
 			},
 			{
 				Kind:   "parameter",
 				Name:   "/ocel/pulumi/passphrase",
-				Action: deploymentsv1.RemovalItem_ACTION_KEEP,
+				Action: contractv1.RemovalItem_ACTION_KEEP,
 				Reason: "the production substrate is still bootstrapped and its Pulumi state is encrypted under it",
 			},
 		},
 	}, nil
 }
 
-func (s *deployFakeProviderServer) RemoveSubstrate(ctx context.Context, req *deploymentsv1.RemoveSubstrateRequest, stream *connect.ServerStream[progressv1.OperationEvent]) error {
+func (s *deployFakeProviderServer) RemoveSubstrate(ctx context.Context, req *contractv1.RemoveSubstrateRequest, stream *connect.ServerStream[progressv1.OperationEvent]) error {
 	if err := s.checkToken(ctx); err != nil {
 		return err
 	}
@@ -427,16 +427,16 @@ func (s *deployFakeProviderServer) RemoveSubstrate(ctx context.Context, req *dep
 	})
 }
 
-func (s *deployFakeProviderServer) Preflight(ctx context.Context, req *deploymentsv1.PreflightRequest) (*deploymentsv1.PreflightResponse, error) {
+func (s *deployFakeProviderServer) Preflight(ctx context.Context, req *contractv1.PreflightRequest) (*contractv1.PreflightResponse, error) {
 	if err := s.checkToken(ctx); err != nil {
 		return nil, err
 	}
 	s.recordPreflight(req.GetSlug(), req.GetDomains(), req.GetRequiredTier())
 	journalPreflight(req)
-	resp := &deploymentsv1.PreflightResponse{
+	resp := &contractv1.PreflightResponse{
 		InfraTier:             parseInfraTier(os.Getenv(fakeInfraClassEnvVar)),
 		InfrastructurePresent: os.Getenv(fakeInfraPresentEnvVar) != "0",
-		Identity: &deploymentsv1.Identity{
+		Identity: &contractv1.Identity{
 			AwsAccount: os.Getenv(fakeIDAwsAccountEnvVar),
 			AwsProfile: os.Getenv(fakeIDAwsProfileEnvVar),
 			AwsRegion:  os.Getenv(fakeIDAwsRegionEnvVar),
@@ -452,15 +452,15 @@ func (s *deployFakeProviderServer) Preflight(ctx context.Context, req *deploymen
 	}
 	owner := os.Getenv(fakeDomainOwnerEnvVar)
 	for _, host := range req.GetDomains() {
-		claim := &deploymentsv1.DomainClaim{Hostname: host, Status: deploymentsv1.DomainClaim_STATUS_UNCLAIMED}
+		claim := &contractv1.DomainClaim{Hostname: host, Status: contractv1.DomainClaim_STATUS_UNCLAIMED}
 		if owner != "" {
-			claim.Status, claim.Owner = deploymentsv1.DomainClaim_STATUS_CLAIMED, owner
+			claim.Status, claim.Owner = contractv1.DomainClaim_STATUS_CLAIMED, owner
 		}
 		resp.DomainClaims = append(resp.DomainClaims, claim)
 	}
 	resp.PreviewWildcard = fakeGlobalDomain()
 	if p := os.Getenv(fakeCredProblemEnvVar); p != "" {
-		resp.CredentialProblems = append(resp.CredentialProblems, &deploymentsv1.CredentialProblem{
+		resp.CredentialProblems = append(resp.CredentialProblems, &contractv1.CredentialProblem{
 			Provider: p,
 			Message:  "could not authenticate",
 			Hint:     "configure the credential and re-run",
@@ -469,7 +469,7 @@ func (s *deployFakeProviderServer) Preflight(ctx context.Context, req *deploymen
 	return resp, nil
 }
 
-func journalPreflight(req *deploymentsv1.PreflightRequest) {
+func journalPreflight(req *contractv1.PreflightRequest) {
 	path := os.Getenv(fakePreflightJournalEnvVar)
 	if path == "" {
 		return
@@ -490,7 +490,7 @@ func resolvedEdgeKind(kind string) string {
 	return kind
 }
 
-func journalEdge(kind string, dns *deploymentsv1.Dns, allowDegraded []string) {
+func journalEdge(kind string, dns *contractv1.Dns, allowDegraded []string) {
 	path := os.Getenv(fakeEdgeJournalEnvVar)
 	if path == "" {
 		return
@@ -504,13 +504,13 @@ func journalEdge(kind string, dns *deploymentsv1.Dns, allowDegraded []string) {
 	fmt.Fprintf(f, "kind=%s dns=%s/%s allowDegraded=%s\n", kind, dns.GetKind(), dns.GetZone(), strings.Join(allowDegraded, ","))
 }
 
-func (s *deployFakeProviderServer) Configure(ctx context.Context, req *deploymentsv1.ConfigureRequest) (*deploymentsv1.ConfigureResponse, error) {
+func (s *deployFakeProviderServer) Configure(ctx context.Context, req *contractv1.ConfigureRequest) (*contractv1.ConfigureResponse, error) {
 	if err := s.checkToken(ctx); err != nil {
 		return nil, err
 	}
 	path := os.Getenv(fakeConfigureJournalEnvVar)
 	if path == "" {
-		return &deploymentsv1.ConfigureResponse{}, nil
+		return &contractv1.ConfigureResponse{}, nil
 	}
 	f, err := os.OpenFile(path, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o600)
 	if err != nil {
@@ -519,7 +519,7 @@ func (s *deployFakeProviderServer) Configure(ctx context.Context, req *deploymen
 	defer f.Close()
 	aws := req.GetConfig().GetAws()
 	fmt.Fprintf(f, "region=%s transforms=%s certificates=%v\n", aws.GetRegion(), strings.Join(aws.GetTransforms(), ","), aws.GetCertificates())
-	return &deploymentsv1.ConfigureResponse{}, nil
+	return &contractv1.ConfigureResponse{}, nil
 }
 
 func journalBootstrap(features []string, force bool) {
@@ -558,7 +558,7 @@ func refuseEdge() error {
 	return connect.NewError(connect.CodeInvalidArgument, errors.New(msg))
 }
 
-func fakeGlobalDomain() *deploymentsv1.PreviewWildcard {
+func fakeGlobalDomain() *contractv1.PreviewWildcard {
 	base := os.Getenv(fakeGlobalDomainEnvVar)
 	if base == "" {
 		return nil
@@ -570,13 +570,13 @@ func fakeGlobalDomain() *deploymentsv1.PreviewWildcard {
 	}
 	status, certID, _ := strings.Cut(os.Getenv(fakeGlobalDomainCertEnvVar), " ")
 	probeAt, probeEdge, probeOK := fakeGlobalDomainProbe()
-	return &deploymentsv1.PreviewWildcard{
+	return &contractv1.PreviewWildcard{
 		BaseDomain:     base,
 		EdgeScope:      os.Getenv(fakeGlobalDomainAccountEnvVar),
 		GrammarMin:     grammarMin,
 		GrammarMax:     grammarMax,
 		RouteInstalled: os.Getenv(fakeGlobalDomainRouteEnvVar) != "0",
-		Certificate: &deploymentsv1.CertificateState{
+		Certificate: &contractv1.CertificateState{
 			CertificateId:     certID,
 			CertificateStatus: status,
 			RecordsWritten:    splitList(os.Getenv(fakeGlobalDomainRecordsEnvVar)),
@@ -618,7 +618,7 @@ func parseGrammar(s string) uint32 {
 	return uint32(n)
 }
 
-func (s *deployFakeProviderServer) UsePreviewWildcard(ctx context.Context, req *deploymentsv1.UsePreviewWildcardRequest, stream *connect.ServerStream[progressv1.OperationEvent]) error {
+func (s *deployFakeProviderServer) UsePreviewWildcard(ctx context.Context, req *contractv1.UsePreviewWildcardRequest, stream *connect.ServerStream[progressv1.OperationEvent]) error {
 	if err := s.checkToken(ctx); err != nil {
 		return err
 	}
@@ -649,13 +649,13 @@ func (s *deployFakeProviderServer) UsePreviewWildcard(ctx context.Context, req *
 
 const fakeServedPreviewsEnvVar = "OCEL_TEST_FAKE_SERVED_PREVIEWS"
 
-func (s *deployFakeProviderServer) PlanRemovePreviewWildcard(ctx context.Context, req *deploymentsv1.PreviewWildcardRequest) (*deploymentsv1.PlanRemovePreviewWildcardResponse, error) {
+func (s *deployFakeProviderServer) PlanRemovePreviewWildcard(ctx context.Context, req *contractv1.PreviewWildcardRequest) (*contractv1.PlanRemovePreviewWildcardResponse, error) {
 	if err := s.checkToken(ctx); err != nil {
 		return nil, err
 	}
 	base := os.Getenv(fakeGlobalDomainEnvVar)
 	if base == "" {
-		return &deploymentsv1.PlanRemovePreviewWildcardResponse{}, nil
+		return &contractv1.PlanRemovePreviewWildcardResponse{}, nil
 	}
 	if served := os.Getenv(fakeServedPreviewsEnvVar); served != "" {
 		return nil, connect.NewError(connect.CodeFailedPrecondition, fmt.Errorf(
@@ -663,21 +663,21 @@ func (s *deployFakeProviderServer) PlanRemovePreviewWildcard(ctx context.Context
 			base, served,
 		))
 	}
-	return &deploymentsv1.PlanRemovePreviewWildcardResponse{
+	return &contractv1.PlanRemovePreviewWildcardResponse{
 		BaseDomain: base,
-		EdgeStack: &deploymentsv1.EdgeStackPlan{
+		EdgeStack: &contractv1.EdgeStackPlan{
 			EdgeKind: "cloudflare",
-			Items: []*deploymentsv1.RemovalItem{
+			Items: []*contractv1.RemovalItem{
 				{
 					Kind:   "preview entry worker",
 					Name:   "*." + base,
-					Action: deploymentsv1.RemovalItem_ACTION_DELETE,
+					Action: contractv1.RemovalItem_ACTION_DELETE,
 					Reason: "the shared entry worker holding this wildcard",
 				},
 				{
 					Kind:   "DNS record",
 					Name:   "*." + base + " CNAME you.example.com",
-					Action: deploymentsv1.RemovalItem_ACTION_KEEP,
+					Action: contractv1.RemovalItem_ACTION_KEEP,
 					Reason: "you created it yourself; ocel never wrote it",
 				},
 			},
@@ -685,7 +685,7 @@ func (s *deployFakeProviderServer) PlanRemovePreviewWildcard(ctx context.Context
 	}, nil
 }
 
-func (s *deployFakeProviderServer) RemovePreviewWildcard(ctx context.Context, req *deploymentsv1.RemovePreviewWildcardRequest, stream *connect.ServerStream[progressv1.OperationEvent]) error {
+func (s *deployFakeProviderServer) RemovePreviewWildcard(ctx context.Context, req *contractv1.RemovePreviewWildcardRequest, stream *connect.ServerStream[progressv1.OperationEvent]) error {
 	if err := s.checkToken(ctx); err != nil {
 		return err
 	}
@@ -701,7 +701,7 @@ func (s *deployFakeProviderServer) RemovePreviewWildcard(ctx context.Context, re
 
 const fakeDomainTimeoutEnvVar = "OCEL_TEST_FAKE_DOMAIN_TIMEOUT"
 
-func (s *deployFakeProviderServer) AddHostname(ctx context.Context, req *deploymentsv1.AddHostnameRequest, stream *connect.ServerStream[progressv1.OperationEvent]) error {
+func (s *deployFakeProviderServer) AddHostname(ctx context.Context, req *contractv1.AddHostnameRequest, stream *connect.ServerStream[progressv1.OperationEvent]) error {
 	if err := s.checkToken(ctx); err != nil {
 		return err
 	}
@@ -759,7 +759,7 @@ func (s *deployFakeProviderServer) AddHostname(ctx context.Context, req *deploym
 	})
 }
 
-func (s *deployFakeProviderServer) RemoveHostname(ctx context.Context, req *deploymentsv1.RemoveHostnameRequest, stream *connect.ServerStream[progressv1.OperationEvent]) error {
+func (s *deployFakeProviderServer) RemoveHostname(ctx context.Context, req *contractv1.RemoveHostnameRequest, stream *connect.ServerStream[progressv1.OperationEvent]) error {
 	if err := s.checkToken(ctx); err != nil {
 		return err
 	}
@@ -796,7 +796,7 @@ const (
 	fakeDomainFailUntilEnvVar  = "OCEL_TEST_FAKE_DOMAIN_FAIL_UNTIL"
 )
 
-func (s *deployFakeProviderServer) GetHostnameStatus(ctx context.Context, req *deploymentsv1.GetHostnameStatusRequest) (*deploymentsv1.GetHostnameStatusResponse, error) {
+func (s *deployFakeProviderServer) GetHostnameStatus(ctx context.Context, req *contractv1.GetHostnameStatusRequest) (*contractv1.GetHostnameStatusResponse, error) {
 	if err := s.checkToken(ctx); err != nil {
 		return nil, err
 	}
@@ -813,12 +813,12 @@ func (s *deployFakeProviderServer) GetHostnameStatus(ctx context.Context, req *d
 	status, certID, _ := strings.Cut(os.Getenv(fakeDomainCertEnvVar), " ")
 	expires, _ := strconv.ParseInt(os.Getenv(fakeDomainExpiresEnvVar), 10, 64)
 
-	resp := &deploymentsv1.GetHostnameStatusResponse{Ready: ready && len(req.GetConfigured()) > 0}
+	resp := &contractv1.GetHostnameStatusResponse{Ready: ready && len(req.GetConfigured()) > 0}
 	for _, host := range req.GetConfigured() {
-		row := &deploymentsv1.ProductionHostname{
+		row := &contractv1.ProductionHostname{
 			Hostname: host,
 			Declared: true,
-			Certificate: &deploymentsv1.CertificateState{
+			Certificate: &contractv1.CertificateState{
 				CertificateId:     certID,
 				CertificateStatus: status,
 				RecordsWritten:    []string{host + " AAAA 100::"},
@@ -841,11 +841,11 @@ func (s *deployFakeProviderServer) GetHostnameStatus(ctx context.Context, req *d
 	return resp, nil
 }
 
-func (s *deployFakeProviderServer) GetPreviewWildcard(ctx context.Context, req *deploymentsv1.PreviewWildcardRequest) (*deploymentsv1.GetPreviewWildcardResponse, error) {
+func (s *deployFakeProviderServer) GetPreviewWildcard(ctx context.Context, req *contractv1.PreviewWildcardRequest) (*contractv1.GetPreviewWildcardResponse, error) {
 	if err := s.checkToken(ctx); err != nil {
 		return nil, err
 	}
-	resp := &deploymentsv1.GetPreviewWildcardResponse{Wildcard: fakeGlobalDomain()}
+	resp := &contractv1.GetPreviewWildcardResponse{Wildcard: fakeGlobalDomain()}
 	for _, p := range strings.Split(os.Getenv(fakeGlobalDomainProjectsEnvVar), ",") {
 		if p = strings.TrimSpace(p); p != "" {
 			resp.Projects = append(resp.Projects, p)
@@ -854,7 +854,7 @@ func (s *deployFakeProviderServer) GetPreviewWildcard(ctx context.Context, req *
 	return resp, nil
 }
 
-func (s *deployFakeProviderServer) RemovePreview(ctx context.Context, req *deploymentsv1.RemovePreviewRequest, stream *connect.ServerStream[progressv1.OperationEvent]) error {
+func (s *deployFakeProviderServer) RemovePreview(ctx context.Context, req *contractv1.RemovePreviewRequest, stream *connect.ServerStream[progressv1.OperationEvent]) error {
 	if err := s.checkToken(ctx); err != nil {
 		return err
 	}
@@ -868,26 +868,26 @@ func (s *deployFakeProviderServer) RemovePreview(ctx context.Context, req *deplo
 	})
 }
 
-func (s *deployFakeProviderServer) PlanRemoveProject(ctx context.Context, req *deploymentsv1.PlanRemoveProjectRequest) (*deploymentsv1.PlanRemoveProjectResponse, error) {
+func (s *deployFakeProviderServer) PlanRemoveProject(ctx context.Context, req *contractv1.PlanRemoveProjectRequest) (*contractv1.PlanRemoveProjectResponse, error) {
 	if err := s.checkToken(ctx); err != nil {
 		return nil, err
 	}
 	journalEdge(req.GetEdge().GetKind(), nil, nil)
 	slug := req.GetSlug()
 	if req.GetEnvironment().GetTier() == environmentv1.Tier_TIER_PREVIEW {
-		return &deploymentsv1.PlanRemoveProjectResponse{
-			EdgeStack: &deploymentsv1.EdgeStackPlan{
+		return &contractv1.PlanRemoveProjectResponse{
+			EdgeStack: &contractv1.EdgeStackPlan{
 				EdgeKind: resolvedEdgeKind(req.GetEdge().GetKind()),
-				Items: []*deploymentsv1.RemovalItem{
+				Items: []*contractv1.RemovalItem{
 					{
 						Kind:   "edge workers",
 						Name:   slug,
-						Action: deploymentsv1.RemovalItem_ACTION_DELETE,
+						Action: contractv1.RemovalItem_ACTION_DELETE,
 					},
 					{
 						Kind:   "preview wildcard",
 						Name:   "*.preview.acme.com",
-						Action: deploymentsv1.RemovalItem_ACTION_KEEP,
+						Action: contractv1.RemovalItem_ACTION_KEEP,
 						Reason: "substrate-scoped: every project's previews are served on it",
 					},
 				},
@@ -896,25 +896,25 @@ func (s *deployFakeProviderServer) PlanRemoveProject(ctx context.Context, req *d
 			AppStacks:   []string{slug + "--pr-1--web--b1"},
 		}, nil
 	}
-	return &deploymentsv1.PlanRemoveProjectResponse{
-		EdgeStack: &deploymentsv1.EdgeStackPlan{
+	return &contractv1.PlanRemoveProjectResponse{
+		EdgeStack: &contractv1.EdgeStackPlan{
 			EdgeKind: resolvedEdgeKind(req.GetEdge().GetKind()),
-			Items: []*deploymentsv1.RemovalItem{
+			Items: []*contractv1.RemovalItem{
 				{
 					Kind:   "edge stack",
 					Name:   slug,
-					Action: deploymentsv1.RemovalItem_ACTION_DELETE,
+					Action: contractv1.RemovalItem_ACTION_DELETE,
 				},
 				{
 					Kind:   "distribution",
 					Name:   "E1" + slug,
-					Action: deploymentsv1.RemovalItem_ACTION_DISABLE_THEN_DELETE,
+					Action: contractv1.RemovalItem_ACTION_DISABLE_THEN_DELETE,
 					Slow:   true,
 				},
 				{
 					Kind:   "certificate",
 					Name:   slug + ".example.com",
-					Action: deploymentsv1.RemovalItem_ACTION_KEEP,
+					Action: contractv1.RemovalItem_ACTION_KEEP,
 					Reason: "you pinned this certificate; Ocel never deletes one it did not request",
 				},
 			},
@@ -924,7 +924,7 @@ func (s *deployFakeProviderServer) PlanRemoveProject(ctx context.Context, req *d
 	}, nil
 }
 
-func (s *deployFakeProviderServer) RemoveProject(ctx context.Context, req *deploymentsv1.RemoveProjectRequest, stream *connect.ServerStream[progressv1.OperationEvent]) error {
+func (s *deployFakeProviderServer) RemoveProject(ctx context.Context, req *contractv1.RemoveProjectRequest, stream *connect.ServerStream[progressv1.OperationEvent]) error {
 	if err := s.checkToken(ctx); err != nil {
 		return err
 	}
@@ -941,25 +941,25 @@ func (s *deployFakeProviderServer) RemoveProject(ctx context.Context, req *deplo
 
 const fakeEnvironmentsEnvVar = "OCEL_TEST_FAKE_ENVIRONMENTS"
 
-func (s *deployFakeProviderServer) ListEnvironments(ctx context.Context, req *deploymentsv1.ListEnvironmentsRequest) (*deploymentsv1.ListEnvironmentsResponse, error) {
+func (s *deployFakeProviderServer) ListEnvironments(ctx context.Context, req *contractv1.ListEnvironmentsRequest) (*contractv1.ListEnvironmentsResponse, error) {
 	if err := s.checkToken(ctx); err != nil {
 		return nil, err
 	}
 	if scripted := os.Getenv(fakeEnvironmentsEnvVar); scripted != "" {
-		resp := &deploymentsv1.ListEnvironmentsResponse{}
+		resp := &contractv1.ListEnvironmentsResponse{}
 		if scripted == "none" {
 			return resp, nil
 		}
 		for _, identity := range strings.Split(scripted, ",") {
-			resp.Environments = append(resp.Environments, &deploymentsv1.PreviewEnvironment{
+			resp.Environments = append(resp.Environments, &contractv1.PreviewEnvironment{
 				Identity:  identity,
 				Lifecycle: environmentv1.Lifecycle_LIFECYCLE_PERSISTENT,
 			})
 		}
 		return resp, nil
 	}
-	return &deploymentsv1.ListEnvironmentsResponse{
-		Environments: []*deploymentsv1.PreviewEnvironment{
+	return &contractv1.ListEnvironmentsResponse{
+		Environments: []*contractv1.PreviewEnvironment{
 			{
 				Identity:  "project:" + req.GetSlug(),
 				Lifecycle: environmentv1.Lifecycle_LIFECYCLE_EPHEMERAL,
@@ -995,16 +995,16 @@ func describeEnv(env *environmentv1.Environment) string {
 		env.GetTier(), env.GetLifecycle(), env.GetIdentity())
 }
 
-func describeFunction(f *deploymentsv1.ManifestFunction) string {
+func describeFunction(f *contractv1.ManifestFunction) string {
 	return fmt.Sprintf("logical_name=%s runtime=%s handler=%s artifact_path=%s framework=%s app=%s",
 		f.GetLogicalName(), f.GetRuntime(), f.GetHandler(), f.GetArtifactPath(), f.GetFramework(), f.GetApp())
 }
 
-func describeUsage(u *deploymentsv1.ManifestUsage) string {
+func describeUsage(u *contractv1.ManifestUsage) string {
 	return fmt.Sprintf("app=%s resource=%s files=%s", u.GetApp(), u.GetResource(), strings.Join(u.GetFiles(), ","))
 }
 
-func describeDelivery(m *deploymentsv1.Manifest, app string) string {
+func describeDelivery(m *contractv1.Manifest, app string) string {
 	used := map[string]bool{}
 	for _, u := range m.GetUsages() {
 		if u.GetApp() == app {
@@ -1021,7 +1021,7 @@ func describeDelivery(m *deploymentsv1.Manifest, app string) string {
 	return fmt.Sprintf("app=%s resources=%s", app, strings.Join(delivered, ","))
 }
 
-func describeApp(a *deploymentsv1.ManifestApp) string {
+func describeApp(a *contractv1.ManifestApp) string {
 	keys := make([]string, 0, len(a.GetVariables()))
 	for _, v := range a.GetVariables() {
 		keys = append(keys, v.GetKey())
@@ -1041,7 +1041,7 @@ func parseInfraTier(s string) environmentv1.Tier {
 	}
 }
 
-func validateFixtureManifest(m *deploymentsv1.Manifest) error {
+func validateFixtureManifest(m *contractv1.Manifest) error {
 	if m.GetSchemaVersion() == "" {
 		return errors.New("manifest missing schema_version")
 	}

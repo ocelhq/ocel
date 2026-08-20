@@ -1,6 +1,6 @@
 import { createClient } from "@connectrpc/connect";
 import { createConnectTransport } from "@connectrpc/connect-node";
-import { ResourceService } from "../gen/proto/resources/v1/resources_pb.js";
+import { ResourceService } from "../gen/proto/app/resources/v1/resources_pb.js";
 import { OCEL_DEV_SERVER } from "./constants.js";
 
 const _rpc = () => {

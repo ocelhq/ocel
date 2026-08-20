@@ -11,9 +11,9 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/channel"
 	"github.com/ocelhq/ocel/pkg/naming"
-	bucketsv1 "github.com/ocelhq/ocel/pkg/proto/buckets/v1"
-	"github.com/ocelhq/ocel/pkg/proto/buckets/v1/bucketsv1connect"
-	linksv1 "github.com/ocelhq/ocel/pkg/proto/links/v1"
+	blobv1 "github.com/ocelhq/ocel/pkg/proto/app/blob/v1"
+	"github.com/ocelhq/ocel/pkg/proto/app/blob/v1/blobv1connect"
+	linksv1 "github.com/ocelhq/ocel/pkg/proto/common/links/v1"
 	"github.com/ocelhq/ocel/platform/aws/provider/vars/live"
 )
 
@@ -77,15 +77,15 @@ func TestServeMembrane(t *testing.T) {
 			t.Fatalf("%s is empty, so the membrane is open to anything in the sandbox", channel.SessionTokenEnvVar)
 		}
 
-		client := bucketsv1connect.NewBucketServiceClient(http.DefaultClient, addr)
-		_, err = client.PresignUpload(context.Background(), &bucketsv1.PresignUploadRequest{Bucket: "uploads"})
+		client := blobv1connect.NewBucketServiceClient(http.DefaultClient, addr)
+		_, err = client.PresignUpload(context.Background(), &blobv1.PresignUploadRequest{Bucket: "uploads"})
 		var connectErr *connect.Error
 		if !errors.As(err, &connectErr) || connectErr.Code() != connect.CodeUnauthenticated {
 			t.Fatalf("unauthenticated PresignUpload err = %v, want CodeUnauthenticated", err)
 		}
 
-		bearer := bucketsv1connect.NewBucketServiceClient(&http.Client{Transport: bearerToken(token)}, addr)
-		_, err = bearer.PresignUpload(context.Background(), &bucketsv1.PresignUploadRequest{Bucket: "uploads"})
+		bearer := blobv1connect.NewBucketServiceClient(&http.Client{Transport: bearerToken(token)}, addr)
+		_, err = bearer.PresignUpload(context.Background(), &blobv1.PresignUploadRequest{Bucket: "uploads"})
 		if errors.As(err, &connectErr) && connectErr.Code() == connect.CodeUnauthenticated {
 			t.Fatalf("PresignUpload with the token exported into the child's environment = %v, want the membrane to answer it", err)
 		}

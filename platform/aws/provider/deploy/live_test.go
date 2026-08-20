@@ -10,9 +10,9 @@ import (
 	"strings"
 	"testing"
 
-	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
-	environmentv1 "github.com/ocelhq/ocel/pkg/proto/environment/v1"
-	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/resources/v1"
+	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
+	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
+	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/platform/aws/provider/vars"
 	"github.com/ocelhq/ocel/platform/aws/provider/vars/baked"
 	"github.com/ocelhq/ocel/platform/aws/provider/vars/live"
@@ -33,8 +33,8 @@ func liveConfig() Config {
 	}
 }
 
-func scopedVariable(key, folder string, class resourcesv1.VariableClass) *deploymentsv1.ManifestVariable {
-	return &deploymentsv1.ManifestVariable{Key: key, Class: class, Folder: folder}
+func scopedVariable(key, folder string, class resourcesv1.VariableClass) *contractv1.ManifestVariable {
+	return &contractv1.ManifestVariable{Key: key, Class: class, Folder: folder}
 }
 
 func previewOf(cfg Config, identity string) Config {
@@ -54,9 +54,9 @@ func decodeEnvelope(t *testing.T, envelope string) []byte {
 func TestRenderAppBundle(t *testing.T) {
 	t.Run("live values are pinned by coordinate and never baked", func(t *testing.T) {
 		t.Parallel()
-		app := &deploymentsv1.ManifestApp{
+		app := &contractv1.ManifestApp{
 			Name: "web",
-			Variables: []*deploymentsv1.ManifestVariable{
+			Variables: []*contractv1.ManifestVariable{
 				variable("POSTHOG_ID", "ph-123", resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN),
 				variable("STRIPE_API_KEY", "sk-live", resourcesv1.VariableClass_VARIABLE_CLASS_SENSITIVE),
 				scopedVariable("SESSION_SECRET", "/web", resourcesv1.VariableClass_VARIABLE_CLASS_SECRET),
@@ -98,9 +98,9 @@ func TestRenderAppBundle(t *testing.T) {
 
 	t.Run("a preview pins its own environment and production pins none", func(t *testing.T) {
 		t.Parallel()
-		app := &deploymentsv1.ManifestApp{
+		app := &contractv1.ManifestApp{
 			Name:      "web",
-			Variables: []*deploymentsv1.ManifestVariable{scopedVariable("DB_PASSWORD", "", resourcesv1.VariableClass_VARIABLE_CLASS_SECRET)},
+			Variables: []*contractv1.ManifestVariable{scopedVariable("DB_PASSWORD", "", resourcesv1.VariableClass_VARIABLE_CLASS_SECRET)},
 		}
 
 		production := liveConfig()
@@ -132,9 +132,9 @@ func TestRenderAppBundle(t *testing.T) {
 
 	t.Run("a live value needs the substrate's store", func(t *testing.T) {
 		t.Parallel()
-		app := &deploymentsv1.ManifestApp{
+		app := &contractv1.ManifestApp{
 			Name:      "web",
-			Variables: []*deploymentsv1.ManifestVariable{scopedVariable("DB_PASSWORD", "", resourcesv1.VariableClass_VARIABLE_CLASS_SECRET)},
+			Variables: []*contractv1.ManifestVariable{scopedVariable("DB_PASSWORD", "", resourcesv1.VariableClass_VARIABLE_CLASS_SECRET)},
 		}
 
 		if _, err := renderAppBundle(Config{VarsKeyARN: productionVarsKeyARN}, "shop", app, nil); err == nil {
@@ -144,9 +144,9 @@ func TestRenderAppBundle(t *testing.T) {
 
 	t.Run("an app with no live values ships no manifest", func(t *testing.T) {
 		t.Parallel()
-		app := &deploymentsv1.ManifestApp{
+		app := &contractv1.ManifestApp{
 			Name:      "web",
-			Variables: []*deploymentsv1.ManifestVariable{variable("POSTHOG_ID", "ph", resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN)},
+			Variables: []*contractv1.ManifestVariable{variable("POSTHOG_ID", "ph", resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN)},
 		}
 
 		bundle, err := renderAppBundle(liveConfig(), "shop", app, nil)
@@ -171,9 +171,9 @@ func TestRenderAppBundle(t *testing.T) {
 			{Slug: "shop", Key: "POSTHOG_ID"}:                                           "analytics",
 		}
 
-		app := &deploymentsv1.ManifestApp{
+		app := &contractv1.ManifestApp{
 			Name: "web",
-			Variables: []*deploymentsv1.ManifestVariable{
+			Variables: []*contractv1.ManifestVariable{
 				variable("POSTHOG_ID", "ph-123", resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN),
 				scopedVariable("SESSION_SECRET", "/web", resourcesv1.VariableClass_VARIABLE_CLASS_SECRET),
 				scopedVariable("DB_PASSWORD", "", resourcesv1.VariableClass_VARIABLE_CLASS_SECRET),
@@ -217,11 +217,11 @@ func TestAppBundle(t *testing.T) {
 
 	t.Run("a live-only app still packages its manifest", func(t *testing.T) {
 		t.Parallel()
-		manifest := &deploymentsv1.Manifest{
+		manifest := &contractv1.Manifest{
 			Slug: "shop",
-			Apps: []*deploymentsv1.ManifestApp{{
+			Apps: []*contractv1.ManifestApp{{
 				Name:      "web",
-				Variables: []*deploymentsv1.ManifestVariable{scopedVariable("DB_PASSWORD", "", resourcesv1.VariableClass_VARIABLE_CLASS_SECRET)},
+				Variables: []*contractv1.ManifestVariable{scopedVariable("DB_PASSWORD", "", resourcesv1.VariableClass_VARIABLE_CLASS_SECRET)},
 			}},
 		}
 
@@ -352,17 +352,17 @@ func TestLiveDelivery(t *testing.T) {
 	t.Run("the artifact carries the address and never the value", func(t *testing.T) {
 		t.Parallel()
 		dir := writeTree(t, map[string]string{"src/server.js": "handler"})
-		manifest := &deploymentsv1.Manifest{
+		manifest := &contractv1.Manifest{
 			Slug: "shop",
-			Apps: []*deploymentsv1.ManifestApp{{
+			Apps: []*contractv1.ManifestApp{{
 				Name:   "web",
 				Folder: "/web",
-				Variables: []*deploymentsv1.ManifestVariable{
+				Variables: []*contractv1.ManifestVariable{
 					scopedVariable("DB_PASSWORD", "/web", resourcesv1.VariableClass_VARIABLE_CLASS_SECRET),
 					variable("POSTHOG_ID", "ph-123", resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN),
 				},
 			}},
-			Functions: []*deploymentsv1.ManifestFunction{
+			Functions: []*contractv1.ManifestFunction{
 				{LogicalName: "web_index", ArtifactPath: filepath.Base(dir), App: "web"},
 			},
 		}

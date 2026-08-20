@@ -17,8 +17,8 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
 	"github.com/ocelhq/ocel/cli/internal/providerrunner"
 	"github.com/ocelhq/ocel/cli/node"
-	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
-	environmentv1 "github.com/ocelhq/ocel/pkg/proto/environment/v1"
+	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
+	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 )
 
 var deploymentsCmd = &cobra.Command{
@@ -89,7 +89,7 @@ func runDeploymentsLs(ctx context.Context, d deps, cwd string, stdout, stderr io
 		if err != nil {
 			return err
 		}
-		resp, err := client.ListPromotions(ctx, &deploymentsv1.ListPromotionsRequest{
+		resp, err := client.ListPromotions(ctx, &contractv1.ListPromotionsRequest{
 			Slug: cfg.Slug,
 			Edge: edgeSelection(cfg),
 		})
@@ -130,7 +130,7 @@ func runDeploymentsPrune(ctx context.Context, d deps, cwd string, keepN int, std
 			return err
 		}
 
-		if err := runner.RemoveStalePromotions(ctx, &deploymentsv1.RemoveStalePromotionsRequest{
+		if err := runner.RemoveStalePromotions(ctx, &contractv1.RemoveStalePromotionsRequest{
 			Slug:  cfg.Slug,
 			KeepN: int32(keepN),
 			Edge:  edgeSelection(cfg),
@@ -146,7 +146,7 @@ func runDeploymentsPrune(ctx context.Context, d deps, cwd string, keepN int, std
 	return nil
 }
 
-func renderPromotions(stdout io.Writer, promotions []*deploymentsv1.PromotionHistoryEntry) {
+func renderPromotions(stdout io.Writer, promotions []*contractv1.PromotionHistoryEntry) {
 	if len(promotions) == 0 {
 		fmt.Fprintln(stdout, "No promotions yet. Run `ocel deploy` first.")
 		return

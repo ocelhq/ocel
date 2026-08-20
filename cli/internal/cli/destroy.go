@@ -14,8 +14,8 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
 	"github.com/ocelhq/ocel/cli/internal/providerrunner"
 	"github.com/ocelhq/ocel/cli/node"
-	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
-	environmentv1 "github.com/ocelhq/ocel/pkg/proto/environment/v1"
+	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
+	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 )
 
 var destroyCmd = &cobra.Command{
@@ -124,7 +124,7 @@ func runDestroy(ctx context.Context, d deps, cwd string, stdout, stderr io.Write
 		}
 
 		spinner := deployui.StartSpinner(stdout, "Enumerating what would be destroyed")
-		plan, err := client.PlanRemoveProject(ctx, &deploymentsv1.PlanRemoveProjectRequest{
+		plan, err := client.PlanRemoveProject(ctx, &contractv1.PlanRemoveProjectRequest{
 			Slug: cfg.Slug,
 			Edge: edgeSelection(cfg),
 		})
@@ -149,7 +149,7 @@ func runDestroy(ctx context.Context, d deps, cwd string, stdout, stderr io.Write
 			}
 		}
 
-		req := &deploymentsv1.RemoveProjectRequest{
+		req := &contractv1.RemoveProjectRequest{
 			Slug: cfg.Slug,
 			Edge: edgeSelection(cfg),
 		}
@@ -204,7 +204,7 @@ func runDestroyPreviewProject(ctx context.Context, d deps, cwd string, yes bool,
 		}
 
 		spinner := deployui.StartSpinner(stdout, "Enumerating what would be destroyed")
-		plan, err := client.PlanRemoveProject(ctx, &deploymentsv1.PlanRemoveProjectRequest{
+		plan, err := client.PlanRemoveProject(ctx, &contractv1.PlanRemoveProjectRequest{
 			Slug:        cfg.Slug,
 			Environment: &environmentv1.Environment{Tier: environmentv1.Tier_TIER_PREVIEW},
 			Edge:        edgeSelection(cfg),
@@ -231,7 +231,7 @@ func runDestroyPreviewProject(ctx context.Context, d deps, cwd string, yes bool,
 			}
 		}
 
-		req := &deploymentsv1.RemoveProjectRequest{
+		req := &contractv1.RemoveProjectRequest{
 			Slug:        cfg.Slug,
 			Environment: &environmentv1.Environment{Tier: environmentv1.Tier_TIER_PREVIEW},
 			Edge:        edgeSelection(cfg),
@@ -248,7 +248,7 @@ func runDestroyPreviewProject(ctx context.Context, d deps, cwd string, yes bool,
 	return nil
 }
 
-func printDestroyPlan(out io.Writer, slug string, preview bool, plan *deploymentsv1.PlanRemoveProjectResponse) {
+func printDestroyPlan(out io.Writer, slug string, preview bool, plan *contractv1.PlanRemoveProjectResponse) {
 	header := fmt.Sprintf("This will permanently destroy production project %q", slug)
 	if preview {
 		header = fmt.Sprintf("This will permanently destroy the ENTIRE preview footprint of project %q", slug)
@@ -277,10 +277,10 @@ func printDestroyPlan(out io.Writer, slug string, preview bool, plan *deployment
 	printKeptItems(out, kept)
 }
 
-func printPlanItems(out io.Writer, items []*deploymentsv1.RemovalItem) []*deploymentsv1.RemovalItem {
-	var kept []*deploymentsv1.RemovalItem
+func printPlanItems(out io.Writer, items []*contractv1.RemovalItem) []*contractv1.RemovalItem {
+	var kept []*contractv1.RemovalItem
 	for _, item := range items {
-		if item.GetAction() == deploymentsv1.RemovalItem_ACTION_KEEP {
+		if item.GetAction() == contractv1.RemovalItem_ACTION_KEEP {
 			kept = append(kept, item)
 			continue
 		}
@@ -289,7 +289,7 @@ func printPlanItems(out io.Writer, items []*deploymentsv1.RemovalItem) []*deploy
 	return kept
 }
 
-func printKeptItems(out io.Writer, kept []*deploymentsv1.RemovalItem) {
+func printKeptItems(out io.Writer, kept []*contractv1.RemovalItem) {
 	if len(kept) == 0 {
 		return
 	}
@@ -299,7 +299,7 @@ func printKeptItems(out io.Writer, kept []*deploymentsv1.RemovalItem) {
 	}
 }
 
-func removalItemLine(item *deploymentsv1.RemovalItem) string {
+func removalItemLine(item *contractv1.RemovalItem) string {
 	line := fmt.Sprintf("%s %s %s", removalItemAction(item.GetAction()), item.GetKind(), item.GetName())
 	if reason := item.GetReason(); reason != "" {
 		line += " — " + reason
@@ -310,13 +310,13 @@ func removalItemLine(item *deploymentsv1.RemovalItem) string {
 	return line
 }
 
-func removalItemAction(action deploymentsv1.RemovalItem_Action) string {
+func removalItemAction(action contractv1.RemovalItem_Action) string {
 	switch action {
-	case deploymentsv1.RemovalItem_ACTION_DELETE:
+	case contractv1.RemovalItem_ACTION_DELETE:
 		return "delete"
-	case deploymentsv1.RemovalItem_ACTION_DISABLE_THEN_DELETE:
+	case contractv1.RemovalItem_ACTION_DISABLE_THEN_DELETE:
 		return "disable, then delete"
-	case deploymentsv1.RemovalItem_ACTION_KEEP:
+	case contractv1.RemovalItem_ACTION_KEEP:
 		return "keep"
 	default:
 		return fmt.Sprintf("act on (%s, an action this CLI does not know)", action)

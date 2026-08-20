@@ -8,8 +8,8 @@ import (
 	"slices"
 	"strings"
 
-	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
-	linksv1 "github.com/ocelhq/ocel/pkg/proto/links/v1"
+	linksv1 "github.com/ocelhq/ocel/pkg/proto/common/links/v1"
+	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/platform/aws/provider/vars"
 )
 
@@ -137,7 +137,7 @@ func grantCondition(grant *linksv1.Grant) map[string]any {
 	return out
 }
 
-func appLinkPolicies(manifest *deploymentsv1.Manifest, app string, links []*linksv1.Link) ([]linkPolicy, error) {
+func appLinkPolicies(manifest *contractv1.Manifest, app string, links []*linksv1.Link) ([]linkPolicy, error) {
 	used := usedResources(manifest, app)
 	out := make([]linkPolicy, 0, len(used))
 	for _, link := range links {
@@ -157,7 +157,7 @@ func appLinkPolicies(manifest *deploymentsv1.Manifest, app string, links []*link
 	return out, nil
 }
 
-func usedResources(manifest *deploymentsv1.Manifest, app string) map[string]bool {
+func usedResources(manifest *contractv1.Manifest, app string) map[string]bool {
 	used := map[string]bool{}
 	for _, usage := range manifest.GetUsages() {
 		if usage.GetApp() == app {
@@ -167,7 +167,7 @@ func usedResources(manifest *deploymentsv1.Manifest, app string) map[string]bool
 	return used
 }
 
-func billedResourcePolicy(r *deploymentsv1.ManifestResource, consumed map[string]Consumed, sessions sessionScope) (string, error) {
+func billedResourcePolicy(r *contractv1.ManifestResource, consumed map[string]Consumed, sessions sessionScope) (string, error) {
 	if r.GetLinked() {
 		return linkPolicyDocument(r.GetLogicalName(), publishedGrants(consumed[r.GetLogicalName()]))
 	}
@@ -217,7 +217,7 @@ func (e *PolicyBudgetError) Error() string {
 	return b.String()
 }
 
-func checkInlinePolicyBudget(manifest *deploymentsv1.Manifest, consumed map[string]Consumed, sessions sessionScope) error {
+func checkInlinePolicyBudget(manifest *contractv1.Manifest, consumed map[string]Consumed, sessions sessionScope) error {
 	costs := make(map[string]PolicyBillItem, len(manifest.GetResources()))
 	for _, r := range manifest.GetResources() {
 		policy, err := billedResourcePolicy(r, consumed, sessions)

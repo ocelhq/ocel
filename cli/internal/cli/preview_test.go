@@ -14,8 +14,8 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/previewid"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
 	"github.com/ocelhq/ocel/cli/internal/servicemap"
-	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
-	environmentv1 "github.com/ocelhq/ocel/pkg/proto/environment/v1"
+	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
+	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 )
 
 func stubGit(d *deps, branch, pr string) {
@@ -695,7 +695,7 @@ func TestRequirePreviewDomain(t *testing.T) {
 
 	declared := &projectconfig.Config{Domains: map[string][]string{"preview": {"*.preview.acme.com"}}}
 	bare := &projectconfig.Config{}
-	global := &deploymentsv1.PreviewWildcard{
+	global := &contractv1.PreviewWildcard{
 		BaseDomain:     "previews.ocel.dev",
 		GrammarMin:     1,
 		GrammarMax:     1,
@@ -771,7 +771,7 @@ func TestRequirePreviewDomain(t *testing.T) {
 			Slug: "acme",
 			Apps: []projectconfig.App{{Name: "web", Domains: map[string][]string{"preview": {"*.preview.acme.com"}}}},
 		}
-		broken := &deploymentsv1.PreviewWildcard{BaseDomain: "previews.ocel.dev", GrammarMin: 1, GrammarMax: 1}
+		broken := &contractv1.PreviewWildcard{BaseDomain: "previews.ocel.dev", GrammarMin: 1, GrammarMax: 1}
 		var out bytes.Buffer
 		if err := requirePreviewDomain(cfg, broken, nil, "pr-1", &out); err != nil {
 			t.Fatalf("requirePreviewDomain err = %v, want nil", err)
@@ -824,9 +824,9 @@ func TestRequirePreviewDomain(t *testing.T) {
 	t.Run("an edge account mismatch refuses with the account to point at", func(t *testing.T) {
 		t.Parallel()
 
-		elsewhere := &deploymentsv1.PreviewWildcard{BaseDomain: "previews.ocel.dev", EdgeScope: "cf-owner", GrammarMin: 1, GrammarMax: 1, RouteInstalled: true}
+		elsewhere := &contractv1.PreviewWildcard{BaseDomain: "previews.ocel.dev", EdgeScope: "cf-owner", GrammarMin: 1, GrammarMax: 1, RouteInstalled: true}
 		var out bytes.Buffer
-		err := requirePreviewDomain(bare, elsewhere, &deploymentsv1.Identity{EdgeScope: "cf-other"}, "pr-1", &out)
+		err := requirePreviewDomain(bare, elsewhere, &contractv1.Identity{EdgeScope: "cf-other"}, "pr-1", &out)
 		if err == nil {
 			t.Fatal("requirePreviewDomain err = nil, want an account refusal")
 		}
@@ -840,7 +840,7 @@ func TestRequirePreviewDomain(t *testing.T) {
 	t.Run("a missing wildcard route refuses, pointing at ocel domain use", func(t *testing.T) {
 		t.Parallel()
 
-		uninstalled := &deploymentsv1.PreviewWildcard{BaseDomain: "previews.ocel.dev", GrammarMin: 1, GrammarMax: 1}
+		uninstalled := &contractv1.PreviewWildcard{BaseDomain: "previews.ocel.dev", GrammarMin: 1, GrammarMax: 1}
 		var out bytes.Buffer
 		err := requirePreviewDomain(bare, uninstalled, nil, "pr-1", &out)
 		if err == nil {
@@ -856,7 +856,7 @@ func TestRequirePreviewDomain(t *testing.T) {
 	t.Run("a grammar outside the installed worker's range refuses", func(t *testing.T) {
 		t.Parallel()
 
-		for _, g := range []*deploymentsv1.PreviewWildcard{
+		for _, g := range []*contractv1.PreviewWildcard{
 			{BaseDomain: "previews.ocel.dev", GrammarMin: 2, GrammarMax: 3, RouteInstalled: true},
 			{BaseDomain: "previews.ocel.dev", GrammarMin: 0, GrammarMax: 0, RouteInstalled: true},
 		} {

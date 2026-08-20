@@ -5,7 +5,7 @@ import (
 	"slices"
 	"strings"
 
-	linksv1 "github.com/ocelhq/ocel/pkg/proto/links/v1"
+	linksv1 "github.com/ocelhq/ocel/pkg/proto/common/links/v1"
 	"google.golang.org/protobuf/reflect/protoreflect"
 )
 

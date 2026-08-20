@@ -13,26 +13,26 @@ import (
 	cfntypes "github.com/aws/aws-sdk-go-v2/service/cloudformation/types"
 	"github.com/aws/aws-sdk-go-v2/service/sts"
 
-	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
-	linksv1 "github.com/ocelhq/ocel/pkg/proto/links/v1"
-	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/resources/v1"
+	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
+	linksv1 "github.com/ocelhq/ocel/pkg/proto/common/links/v1"
+	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/platform/aws/provider/bootstrap"
 	cloudflare "github.com/ocelhq/ocel/platform/edge/cloudflare/deploy"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
-func wellFormedManifest() *deploymentsv1.Manifest {
-	return &deploymentsv1.Manifest{
+func wellFormedManifest() *contractv1.Manifest {
+	return &contractv1.Manifest{
 		SchemaVersion: "provider.v1",
 		Slug:          "proj-123",
-		Resources: []*deploymentsv1.ManifestResource{
+		Resources: []*contractv1.ManifestResource{
 			{
 				LogicalName: "postgres_main",
 				Resource: &resourcesv1.ResourceIdentifier{
 					Type: linksv1.LinkType_LINK_TYPE_POSTGRES,
 					Name: "main",
 				},
-				Config: &deploymentsv1.ManifestResource_Postgres{
+				Config: &contractv1.ManifestResource_Postgres{
 					Postgres: &resourcesv1.PostgresConfig{Version: "17"},
 				},
 			},
@@ -45,28 +45,28 @@ func TestValidateManifest(t *testing.T) {
 
 	cases := []struct {
 		name    string
-		mutate  func(*deploymentsv1.Manifest)
+		mutate  func(*contractv1.Manifest)
 		wantErr bool
 	}{
 		{name: "a well-formed manifest"},
-		{name: "a resource with no logical_name", mutate: func(m *deploymentsv1.Manifest) { m.Resources[0].LogicalName = "" }, wantErr: true},
+		{name: "a resource with no logical_name", mutate: func(m *contractv1.Manifest) { m.Resources[0].LogicalName = "" }, wantErr: true},
 		{
 			name: "a resource of an unspecified type",
-			mutate: func(m *deploymentsv1.Manifest) {
+			mutate: func(m *contractv1.Manifest) {
 				m.Resources[0].Resource.Type = linksv1.LinkType_LINK_TYPE_UNSPECIFIED
 			},
 			wantErr: true,
 		},
 		{
 			name: "a resource whose config contradicts its type",
-			mutate: func(m *deploymentsv1.Manifest) {
+			mutate: func(m *contractv1.Manifest) {
 				m.Resources[0].Resource.Type = linksv1.LinkType_LINK_TYPE_BUCKET
 			},
 			wantErr: true,
 		},
-		{name: "a resource with no identifier", mutate: func(m *deploymentsv1.Manifest) { m.Resources[0].Resource = nil }, wantErr: true},
-		{name: "a resource with no typed config", mutate: func(m *deploymentsv1.Manifest) { m.Resources[0].Config = nil }, wantErr: true},
-		{name: "a manifest declaring no resources", mutate: func(m *deploymentsv1.Manifest) { m.Resources = nil }},
+		{name: "a resource with no identifier", mutate: func(m *contractv1.Manifest) { m.Resources[0].Resource = nil }, wantErr: true},
+		{name: "a resource with no typed config", mutate: func(m *contractv1.Manifest) { m.Resources[0].Config = nil }, wantErr: true},
+		{name: "a manifest declaring no resources", mutate: func(m *contractv1.Manifest) { m.Resources = nil }},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -98,7 +98,7 @@ func TestResourceSummary(t *testing.T) {
 	t.Parallel()
 
 	m := wellFormedManifest()
-	m.Resources[0].Config = &deploymentsv1.ManifestResource_Postgres{
+	m.Resources[0].Config = &contractv1.ManifestResource_Postgres{
 		Postgres: &resourcesv1.PostgresConfig{Version: "15"},
 	}
 

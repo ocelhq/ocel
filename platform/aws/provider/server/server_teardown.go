@@ -14,9 +14,9 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/aws/aws-sdk-go-v2/service/ssm"
 
-	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
-	environmentv1 "github.com/ocelhq/ocel/pkg/proto/environment/v1"
-	progressv1 "github.com/ocelhq/ocel/pkg/proto/progress/v1"
+	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
+	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
+	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/platform/aws/provider/bootstrap"
 	"github.com/ocelhq/ocel/platform/aws/provider/stackindex"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
@@ -122,7 +122,7 @@ func (o substrateOccupancy) refuse(class string) error {
 		class, teardownCommand(class), strings.Join(reasons, "; "))
 }
 
-func teardownPlanItems(class string, edgeKind edge.Kind, deployed bootstrap.Deployed, sharedPassphrase bool) ([]*deploymentsv1.RemovalItem, error) {
+func teardownPlanItems(class string, edgeKind edge.Kind, deployed bootstrap.Deployed, sharedPassphrase bool) ([]*contractv1.RemovalItem, error) {
 	stackName, err := bootstrap.StackNameFor(class)
 	if err != nil {
 		return nil, err
@@ -136,10 +136,10 @@ func teardownPlanItems(class string, edgeKind edge.Kind, deployed bootstrap.Depl
 		return nil, err
 	}
 
-	items := []*deploymentsv1.RemovalItem{{
+	items := []*contractv1.RemovalItem{{
 		Kind:   "edge bootstrap",
 		Name:   string(edgeKind),
-		Action: deploymentsv1.RemovalItem_ACTION_DELETE,
+		Action: contractv1.RemovalItem_ACTION_DELETE,
 		Reason: fmt.Sprintf("every worker, cache store and credential the %s edge stood up for the %s substrate", edgeKind, class),
 		Slow:   true,
 	}}
@@ -156,26 +156,26 @@ func teardownPlanItems(class string, edgeKind edge.Kind, deployed bootstrap.Depl
 			items = append(items, bucketItem(bucket.name, bucket.reason))
 		}
 		if deployed.StateTable != "" {
-			items = append(items, &deploymentsv1.RemovalItem{
+			items = append(items, &contractv1.RemovalItem{
 				Kind:   "state table",
 				Name:   deployed.StateTable,
-				Action: deploymentsv1.RemovalItem_ACTION_DELETE,
+				Action: contractv1.RemovalItem_ACTION_DELETE,
 				Reason: "the stack index teardown walks and the ISR tag clock the edge reads",
 			})
 		}
 		if deployed.VarsTable != "" {
-			items = append(items, &deploymentsv1.RemovalItem{
+			items = append(items, &contractv1.RemovalItem{
 				Kind:   "variable store",
 				Name:   deployed.VarsTable,
-				Action: deploymentsv1.RemovalItem_ACTION_DELETE,
+				Action: contractv1.RemovalItem_ACTION_DELETE,
 				Reason: fmt.Sprintf("every %s variable value in this account, and the key they are encrypted under", class),
 			})
 		}
 		if deployed.Features.Has(bootstrap.FeatureCloudflareEdge) {
-			items = append(items, &deploymentsv1.RemovalItem{
+			items = append(items, &contractv1.RemovalItem{
 				Kind:   "edge reader",
 				Name:   userName,
-				Action: deploymentsv1.RemovalItem_ACTION_DELETE,
+				Action: contractv1.RemovalItem_ACTION_DELETE,
 				Reason: "the IAM user the edge signs its calls into this account with, and its access key",
 			})
 		}
@@ -184,34 +184,34 @@ func teardownPlanItems(class string, edgeKind edge.Kind, deployed bootstrap.Depl
 			return nil, err
 		}
 		for _, feature := range order {
-			items = append(items, &deploymentsv1.RemovalItem{
+			items = append(items, &contractv1.RemovalItem{
 				Kind:   "feature stack",
 				Name:   bootstrap.FeatureStackName(feature, class),
-				Action: deploymentsv1.RemovalItem_ACTION_DELETE,
+				Action: contractv1.RemovalItem_ACTION_DELETE,
 				Reason: fmt.Sprintf("the CloudFormation stack carrying the %s feature of this substrate", feature),
 			})
 		}
-		items = append(items, &deploymentsv1.RemovalItem{
+		items = append(items, &contractv1.RemovalItem{
 			Kind:   "bootstrap stack",
 			Name:   stackName,
-			Action: deploymentsv1.RemovalItem_ACTION_DELETE,
+			Action: contractv1.RemovalItem_ACTION_DELETE,
 			Reason: "the CloudFormation stack holding the core every feature above was built on",
 		})
 	}
 
 	for _, name := range params {
-		items = append(items, &deploymentsv1.RemovalItem{
+		items = append(items, &contractv1.RemovalItem{
 			Kind:   "parameter",
 			Name:   name,
-			Action: deploymentsv1.RemovalItem_ACTION_DELETE,
+			Action: contractv1.RemovalItem_ACTION_DELETE,
 			Reason: "a handle this substrate stored; nothing reads it once the substrate is gone",
 		})
 	}
 
-	passphrase := &deploymentsv1.RemovalItem{
+	passphrase := &contractv1.RemovalItem{
 		Kind:   "parameter",
 		Name:   bootstrap.PassphraseParamName,
-		Action: deploymentsv1.RemovalItem_ACTION_DELETE,
+		Action: contractv1.RemovalItem_ACTION_DELETE,
 		Reason: "the only copy of the passphrase every Pulumi stack in this account is encrypted under",
 	}
 	if sharedPassphrase {
@@ -219,23 +219,23 @@ func teardownPlanItems(class string, edgeKind edge.Kind, deployed bootstrap.Depl
 		if err != nil {
 			return nil, err
 		}
-		passphrase.Action = deploymentsv1.RemovalItem_ACTION_KEEP
+		passphrase.Action = contractv1.RemovalItem_ACTION_KEEP
 		passphrase.Reason = fmt.Sprintf("the %s substrate is still bootstrapped and its Pulumi state is encrypted under it", sibling)
 	}
 	return append(items, passphrase), nil
 }
 
-func bucketItem(name, reason string) *deploymentsv1.RemovalItem {
-	return &deploymentsv1.RemovalItem{
+func bucketItem(name, reason string) *contractv1.RemovalItem {
+	return &contractv1.RemovalItem{
 		Kind:   "bucket",
 		Name:   name,
-		Action: deploymentsv1.RemovalItem_ACTION_DELETE,
+		Action: contractv1.RemovalItem_ACTION_DELETE,
 		Reason: reason + "; emptied object by object first",
 		Slow:   true,
 	}
 }
 
-func (s *Server) PlanRemoveSubstrate(ctx context.Context, req *deploymentsv1.PlanRemoveSubstrateRequest) (*deploymentsv1.PlanRemoveSubstrateResponse, error) {
+func (s *Server) PlanRemoveSubstrate(ctx context.Context, req *contractv1.PlanRemoveSubstrateRequest) (*contractv1.PlanRemoveSubstrateResponse, error) {
 	opts := s.config.get()
 	edgeFront, err := s.edge(requestedEdge(req), opts.Region)
 	if err != nil {
@@ -252,7 +252,7 @@ func (s *Server) PlanRemoveSubstrate(ctx context.Context, req *deploymentsv1.Pla
 	return planTeardown(ctx, deps, class)
 }
 
-func planTeardown(ctx context.Context, deps teardownDeps, class string) (*deploymentsv1.PlanRemoveSubstrateResponse, error) {
+func planTeardown(ctx context.Context, deps teardownDeps, class string) (*contractv1.PlanRemoveSubstrateResponse, error) {
 	occupancy, err := readSubstrateOccupancy(ctx, deps, class)
 	if err != nil {
 		return nil, err
@@ -268,10 +268,10 @@ func planTeardown(ctx context.Context, deps teardownDeps, class string) (*deploy
 	if err != nil {
 		return nil, err
 	}
-	return &deploymentsv1.PlanRemoveSubstrateResponse{EdgeKind: string(deps.edge.Kind()), Items: items}, nil
+	return &contractv1.PlanRemoveSubstrateResponse{EdgeKind: string(deps.edge.Kind()), Items: items}, nil
 }
 
-func (s *Server) RemoveSubstrate(ctx context.Context, req *deploymentsv1.RemoveSubstrateRequest, stream *connect.ServerStream[progressv1.OperationEvent]) error {
+func (s *Server) RemoveSubstrate(ctx context.Context, req *contractv1.RemoveSubstrateRequest, stream *connect.ServerStream[progressv1.OperationEvent]) error {
 	opts := s.config.get()
 	edgeFront, err := s.edge(requestedEdge(req), opts.Region)
 	if err != nil {

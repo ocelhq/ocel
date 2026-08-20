@@ -12,7 +12,7 @@ import (
 
 	connect "connectrpc.com/connect"
 
-	bucketsv1 "github.com/ocelhq/ocel/pkg/proto/buckets/v1"
+	blobv1 "github.com/ocelhq/ocel/pkg/proto/app/blob/v1"
 )
 
 type runtimeShim struct {
@@ -59,7 +59,7 @@ type presignResponseBody struct {
 	Files     []presignedTarget `json:"files"`
 }
 
-func (s *runtimeShim) PresignUpload(ctx context.Context, req *bucketsv1.PresignUploadRequest) (*bucketsv1.PresignUploadResponse, error) {
+func (s *runtimeShim) PresignUpload(ctx context.Context, req *blobv1.PresignUploadRequest) (*blobv1.PresignUploadResponse, error) {
 	files := make([]presignFile, 0, len(req.GetFiles()))
 	for _, f := range req.GetFiles() {
 		files = append(files, presignFile{
@@ -103,12 +103,12 @@ func (s *runtimeShim) PresignUpload(ctx context.Context, req *bucketsv1.PresignU
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("decode presign response: %w", err))
 	}
 
-	targets := make([]*bucketsv1.PresignedTarget, 0, len(decoded.Files))
+	targets := make([]*blobv1.PresignedTarget, 0, len(decoded.Files))
 	for _, t := range decoded.Files {
-		targets = append(targets, &bucketsv1.PresignedTarget{Url: t.URL, Key: t.Key, Name: t.Name, ContentDisposition: t.ContentDisposition})
+		targets = append(targets, &blobv1.PresignedTarget{Url: t.URL, Key: t.Key, Name: t.Name, ContentDisposition: t.ContentDisposition})
 	}
 
-	return &bucketsv1.PresignUploadResponse{SessionId: decoded.SessionID, Files: targets}, nil
+	return &blobv1.PresignUploadResponse{SessionId: decoded.SessionID, Files: targets}, nil
 }
 
 type signedCompletion struct {
@@ -129,7 +129,7 @@ type verifyResponseBody struct {
 	Metadata []byte `json:"metadata"`
 }
 
-func (s *runtimeShim) VerifyUploadSignature(ctx context.Context, req *bucketsv1.VerifyUploadSignatureRequest) (*bucketsv1.VerifyUploadSignatureResponse, error) {
+func (s *runtimeShim) VerifyUploadSignature(ctx context.Context, req *blobv1.VerifyUploadSignatureRequest) (*blobv1.VerifyUploadSignatureResponse, error) {
 	f := req.GetFile()
 	body, err := json.Marshal(signedCompletion{
 		SessionID: req.GetSessionId(),
@@ -164,7 +164,7 @@ func (s *runtimeShim) VerifyUploadSignature(ctx context.Context, req *bucketsv1.
 	if err := json.NewDecoder(resp.Body).Decode(&decoded); err != nil {
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("decode verify response: %w", err))
 	}
-	return &bucketsv1.VerifyUploadSignatureResponse{Valid: decoded.Valid, Metadata: decoded.Metadata}, nil
+	return &blobv1.VerifyUploadSignatureResponse{Valid: decoded.Valid, Metadata: decoded.Metadata}, nil
 }
 
 type statusResponseBody struct {
@@ -172,7 +172,7 @@ type statusResponseBody struct {
 	Error string `json:"error"`
 }
 
-func (s *runtimeShim) GetUploadStatus(ctx context.Context, req *bucketsv1.GetUploadStatusRequest) (*bucketsv1.GetUploadStatusResponse, error) {
+func (s *runtimeShim) GetUploadStatus(ctx context.Context, req *blobv1.GetUploadStatusRequest) (*blobv1.GetUploadStatusResponse, error) {
 	httpReq, err := http.NewRequestWithContext(ctx, http.MethodGet, s.apiEndpoint("/api/blob/status")+"?sessionId="+url.QueryEscape(req.GetSessionId()), nil)
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("build status request: %w", err))
@@ -192,19 +192,19 @@ func (s *runtimeShim) GetUploadStatus(ctx context.Context, req *bucketsv1.GetUpl
 	if err := json.NewDecoder(resp.Body).Decode(&decoded); err != nil {
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("decode status response: %w", err))
 	}
-	return &bucketsv1.GetUploadStatusResponse{State: uploadStateFromString(decoded.State), Error: decoded.Error}, nil
+	return &blobv1.GetUploadStatusResponse{State: uploadStateFromString(decoded.State), Error: decoded.Error}, nil
 }
 
-func uploadStateFromString(s string) bucketsv1.UploadState {
+func uploadStateFromString(s string) blobv1.UploadState {
 	switch s {
 	case "succeeded":
-		return bucketsv1.UploadState_UPLOAD_STATE_SUCCEEDED
+		return blobv1.UploadState_UPLOAD_STATE_SUCCEEDED
 	case "expired":
-		return bucketsv1.UploadState_UPLOAD_STATE_EXPIRED
+		return blobv1.UploadState_UPLOAD_STATE_EXPIRED
 	case "pending":
-		return bucketsv1.UploadState_UPLOAD_STATE_PENDING
+		return blobv1.UploadState_UPLOAD_STATE_PENDING
 	default:
-		return bucketsv1.UploadState_UPLOAD_STATE_UNSPECIFIED
+		return blobv1.UploadState_UPLOAD_STATE_UNSPECIFIED
 	}
 }
 

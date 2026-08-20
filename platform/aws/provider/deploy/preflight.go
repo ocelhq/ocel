@@ -5,13 +5,13 @@ import (
 	"fmt"
 
 	"github.com/ocelhq/ocel/pkg/naming"
-	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
+	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/platform/aws/provider/membrane"
 )
 
 type deployPlan struct {
 	ready    bool
-	apps     []*deploymentsv1.ManifestApp
+	apps     []*contractv1.ManifestApp
 	consumed map[string]Consumed
 	needs    needRecords
 	sessions sessionScope
@@ -19,7 +19,7 @@ type deployPlan struct {
 	builds   appBuilds
 }
 
-func planDeploy(ctx context.Context, cfg Config, manifest *deploymentsv1.Manifest, log func(string)) (deployPlan, error) {
+func planDeploy(ctx context.Context, cfg Config, manifest *contractv1.Manifest, log func(string)) (deployPlan, error) {
 	if cfg.Edge.Facts().RunsCode && cfg.StoreEndpoint == "" {
 		return deployPlan{}, fmt.Errorf("no deployments-store worker found for this account; re-run `%s` to provision it before deploying", bootstrapCommand(cfg))
 	}

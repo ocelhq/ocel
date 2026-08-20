@@ -6,8 +6,8 @@ import (
 	"strings"
 	"testing"
 
-	environmentv1 "github.com/ocelhq/ocel/pkg/proto/environment/v1"
-	envvarsv1 "github.com/ocelhq/ocel/pkg/proto/envvars/v1"
+	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
+	envvarsv1 "github.com/ocelhq/ocel/pkg/proto/provider/envvars/v1"
 )
 
 func ownedElsewhere(t *testing.T, key, value string) {

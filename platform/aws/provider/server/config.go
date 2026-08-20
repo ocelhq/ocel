@@ -7,7 +7,7 @@ import (
 
 	connect "connectrpc.com/connect"
 
-	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
+	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 )
 
 type providerConfig struct {
@@ -38,11 +38,11 @@ func (c *sessionConfig) set(value providerConfig) {
 
 var errForeignProvider = errors.New("this provider deploys into AWS, and the session was configured for another")
 
-func (s *Server) Configure(_ context.Context, req *deploymentsv1.ConfigureRequest) (*deploymentsv1.ConfigureResponse, error) {
+func (s *Server) Configure(_ context.Context, req *contractv1.ConfigureRequest) (*contractv1.ConfigureResponse, error) {
 	switch provider := req.GetConfig().GetProvider().(type) {
 	case nil:
 		s.config.set(providerConfig{})
-	case *deploymentsv1.ProviderConfig_Aws:
+	case *contractv1.ProviderConfig_Aws:
 		s.config.set(providerConfig{
 			Region:       provider.Aws.GetRegion(),
 			Transforms:   provider.Aws.GetTransforms(),
@@ -51,5 +51,5 @@ func (s *Server) Configure(_ context.Context, req *deploymentsv1.ConfigureReques
 	default:
 		return nil, connect.NewError(connect.CodeInvalidArgument, errForeignProvider)
 	}
-	return &deploymentsv1.ConfigureResponse{}, nil
+	return &contractv1.ConfigureResponse{}, nil
 }

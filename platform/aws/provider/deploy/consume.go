@@ -9,8 +9,8 @@ import (
 
 	"google.golang.org/protobuf/proto"
 
-	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
-	linksv1 "github.com/ocelhq/ocel/pkg/proto/links/v1"
+	linksv1 "github.com/ocelhq/ocel/pkg/proto/common/links/v1"
+	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/platform/aws/provider/vars"
 )
 
@@ -62,7 +62,7 @@ func (e *HandoverError) Error() string {
 	)
 }
 
-func handedOver(manifest *deploymentsv1.Manifest, provisioned map[string]bool, stack string) error {
+func handedOver(manifest *contractv1.Manifest, provisioned map[string]bool, stack string) error {
 	var handed []string
 	for _, r := range linkedResources(manifest) {
 		if provisioned[r.GetLogicalName()] {
@@ -156,8 +156,8 @@ func describeCoordinate(class, environment string) string {
 	return class + "/" + environment
 }
 
-func linkedResources(manifest *deploymentsv1.Manifest) []*deploymentsv1.ManifestResource {
-	var out []*deploymentsv1.ManifestResource
+func linkedResources(manifest *contractv1.Manifest) []*contractv1.ManifestResource {
+	var out []*contractv1.ManifestResource
 	for _, r := range manifest.GetResources() {
 		if r.GetLinked() {
 			out = append(out, r)
@@ -166,7 +166,7 @@ func linkedResources(manifest *deploymentsv1.Manifest) []*deploymentsv1.Manifest
 	return out
 }
 
-func consumeLinks(ctx context.Context, cfg Config, manifest *deploymentsv1.Manifest, warn func(string)) (map[string]Consumed, error) {
+func consumeLinks(ctx context.Context, cfg Config, manifest *contractv1.Manifest, warn func(string)) (map[string]Consumed, error) {
 	linked := linkedResources(manifest)
 	if cfg.Links == nil {
 		if len(linked) == 0 {
@@ -252,7 +252,7 @@ func (cfg Config) publishedOrNothing(ctx context.Context, slug, class, environme
 	return names
 }
 
-func warnShadowedProvisioning(cfg Config, manifest *deploymentsv1.Manifest, published []string, warn func(string)) {
+func warnShadowedProvisioning(cfg Config, manifest *contractv1.Manifest, published []string, warn func(string)) {
 	for _, r := range manifest.GetResources() {
 		name := r.GetResource().GetName()
 		if r.GetLinked() || !slices.Contains(published, name) {

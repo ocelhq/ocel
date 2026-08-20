@@ -16,8 +16,8 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/dotenv"
 	"github.com/ocelhq/ocel/cli/internal/election"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
-	devv1 "github.com/ocelhq/ocel/pkg/proto/dev/v1"
-	"github.com/ocelhq/ocel/pkg/proto/dev/v1/devv1connect"
+	watchv1 "github.com/ocelhq/ocel/pkg/proto/devloop/watch/v1"
+	"github.com/ocelhq/ocel/pkg/proto/devloop/watch/v1/watchv1connect"
 )
 
 var runCmd = &cobra.Command{
@@ -77,9 +77,9 @@ func runningDevServer(root string) (string, bool, error) {
 }
 
 func runOnceAsFollower(ctx context.Context, d deps, leaderAddr string, appArgs []string, stdout, stderr io.Writer, stdin io.Reader) error {
-	client := devv1connect.NewDevServiceClient(http.DefaultClient, "http://"+leaderAddr)
+	client := watchv1connect.NewDevServiceClient(http.DefaultClient, "http://"+leaderAddr)
 
-	stream, err := client.Subscribe(ctx, &devv1.SubscribeRequest{})
+	stream, err := client.Subscribe(ctx, &watchv1.SubscribeRequest{})
 	if err != nil {
 		return fmt.Errorf("connect to leader: %w", err)
 	}

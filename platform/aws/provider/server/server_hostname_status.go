@@ -6,12 +6,12 @@ import (
 	"slices"
 	"strings"
 
-	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
+	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/platform/aws/provider/certs"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
-func (s *Server) GetHostnameStatus(ctx context.Context, req *deploymentsv1.GetHostnameStatusRequest) (*deploymentsv1.GetHostnameStatusResponse, error) {
+func (s *Server) GetHostnameStatus(ctx context.Context, req *contractv1.GetHostnameStatusRequest) (*contractv1.GetHostnameStatusResponse, error) {
 	session, err := s.hostnameSession(ctx, hostnameRequest{
 		slug:        req.GetSlug(),
 		edgeKind:    string(requestedEdge(req)),
@@ -25,9 +25,9 @@ func (s *Server) GetHostnameStatus(ctx context.Context, req *deploymentsv1.GetHo
 	return session.status(ctx)
 }
 
-func (d *hostnameSession) status(ctx context.Context) (*deploymentsv1.GetHostnameStatusResponse, error) {
+func (d *hostnameSession) status(ctx context.Context) (*contractv1.GetHostnameStatusResponse, error) {
 	lookup := newCertLookup(d.engine.Issuer, d.recorded, d.pins)
-	resp := &deploymentsv1.GetHostnameStatusResponse{
+	resp := &contractv1.GetHostnameStatusResponse{
 		Ready:          len(d.configured) > 0,
 		RecordsWritten: recordList(d.recorded.Validation.Written),
 		RecordsOwed:    recordList(d.recorded.Validation.Owed),
@@ -56,9 +56,9 @@ func (d *hostnameSession) statusHosts() []string {
 	return hosts
 }
 
-func (d *hostnameSession) statusOf(ctx context.Context, lookup *certLookup, host string) (*deploymentsv1.ProductionHostname, error) {
+func (d *hostnameSession) statusOf(ctx context.Context, lookup *certLookup, host string) (*contractv1.ProductionHostname, error) {
 	provisioned := d.recorded.Host(host)
-	row := &deploymentsv1.ProductionHostname{
+	row := &contractv1.ProductionHostname{
 		Hostname: host,
 		Declared: slices.Contains(d.configured, host),
 	}

@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"strings"
 
-	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
-	environmentv1 "github.com/ocelhq/ocel/pkg/proto/environment/v1"
+	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
+	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
@@ -59,7 +59,7 @@ const (
 	hostingProjectPreview
 )
 
-func hostingWorldFor(cfg Config, manifest *deploymentsv1.Manifest) hostingWorld {
+func hostingWorldFor(cfg Config, manifest *contractv1.Manifest) hostingWorld {
 	if cfg.Tier != environmentv1.Tier_TIER_PREVIEW {
 		return hostingProduction
 	}
@@ -69,7 +69,7 @@ func hostingWorldFor(cfg Config, manifest *deploymentsv1.Manifest) hostingWorld 
 	return hostingProjectPreview
 }
 
-func (w hostingWorld) hostnames(cfg Config, manifest *deploymentsv1.Manifest, apps []*deploymentsv1.ManifestApp) (workerHostnames, error) {
+func (w hostingWorld) hostnames(cfg Config, manifest *contractv1.Manifest, apps []*contractv1.ManifestApp) (workerHostnames, error) {
 	declared, err := workerDomains(cfg, manifest, apps)
 	if err != nil {
 		return workerHostnames{}, err
@@ -97,7 +97,7 @@ func (w hostingWorld) hostnames(cfg Config, manifest *deploymentsv1.Manifest, ap
 	return workerHostnames{hosts: declared}, nil
 }
 
-func checkPreviewLabels(slug string, apps []*deploymentsv1.ManifestApp, resolved workerHostnames) error {
+func checkPreviewLabels(slug string, apps []*contractv1.ManifestApp, resolved workerHostnames) error {
 	for _, app := range apps {
 		if err := PreviewLabelProblem(slug, resolved.hosts[app.GetName()]); err != nil {
 			return err
@@ -106,11 +106,11 @@ func checkPreviewLabels(slug string, apps []*deploymentsv1.ManifestApp, resolved
 	return nil
 }
 
-func servesOnGlobalPreviewDomain(cfg Config, manifest *deploymentsv1.Manifest) bool {
+func servesOnGlobalPreviewDomain(cfg Config, manifest *contractv1.Manifest) bool {
 	return hostingWorldFor(cfg, manifest) == hostingGlobalPreview
 }
 
-func globalPreviewHostnames(cfg Config, apps []*deploymentsv1.ManifestApp) (workerHostnames, error) {
+func globalPreviewHostnames(cfg Config, apps []*contractv1.ManifestApp) (workerHostnames, error) {
 	if err := checkPreviewPointer(cfg.Identity); err != nil {
 		return workerHostnames{}, err
 	}
@@ -137,7 +137,7 @@ func checkPreviewPointer(pointer string) error {
 	return nil
 }
 
-func previewHostnames(cfg Config, apps []*deploymentsv1.ManifestApp, declared map[string][]string) (workerHostnames, error) {
+func previewHostnames(cfg Config, apps []*contractv1.ManifestApp, declared map[string][]string) (workerHostnames, error) {
 	base := ""
 	for _, app := range apps {
 		name := app.GetName()

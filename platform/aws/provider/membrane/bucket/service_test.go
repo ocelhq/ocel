@@ -18,7 +18,7 @@ import (
 	ddbtypes "github.com/aws/aws-sdk-go-v2/service/dynamodb/types"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 
-	bucketsv1 "github.com/ocelhq/ocel/pkg/proto/buckets/v1"
+	blobv1 "github.com/ocelhq/ocel/pkg/proto/app/blob/v1"
 )
 
 type fakeDDB struct {
@@ -105,11 +105,11 @@ func TestPresignUpload(t *testing.T) {
 		ps := &fakePresigner{}
 		svc := newTestService(ddb, ps)
 
-		resp, err := svc.PresignUpload(context.Background(), &bucketsv1.PresignUploadRequest{
+		resp, err := svc.PresignUpload(context.Background(), &blobv1.PresignUploadRequest{
 			Bucket:          "storage",
 			CallbackBaseUrl: "https://app.example/api/blob",
 			Metadata:        []byte(`{"user":"u1"}`),
-			Files: []*bucketsv1.PresignFile{
+			Files: []*blobv1.PresignFile{
 				{Key: "avatar.png", Name: "avatar.png", Size: 1024, MimeType: "image/png"},
 			},
 		})
@@ -169,16 +169,16 @@ func TestVerifyUploadSignature(t *testing.T) {
 
 	const key = "k.png"
 	file := SignedFile{Key: key, Name: key, Size: 10, MimeType: "image/png"}
-	completed := func() *bucketsv1.CompletedFile {
-		return &bucketsv1.CompletedFile{Key: key, Name: key, Size: 10, MimeType: "image/png"}
+	completed := func() *blobv1.CompletedFile {
+		return &blobv1.CompletedFile{Key: key, Name: key, Size: 10, MimeType: "image/png"}
 	}
 	seeded := func(t *testing.T) *Service {
 		t.Helper()
 		svc := newTestService(newFakeDDB(), &fakePresigner{})
-		if _, err := svc.PresignUpload(context.Background(), &bucketsv1.PresignUploadRequest{
+		if _, err := svc.PresignUpload(context.Background(), &blobv1.PresignUploadRequest{
 			Bucket:   "storage",
 			Metadata: []byte("meta"),
-			Files:    []*bucketsv1.PresignFile{{Key: key, Name: key, Size: 10, MimeType: "image/png"}},
+			Files:    []*blobv1.PresignFile{{Key: key, Name: key, Size: 10, MimeType: "image/png"}},
 		}); err != nil {
 			t.Fatalf("PresignUpload: %v", err)
 		}
@@ -189,7 +189,7 @@ func TestVerifyUploadSignature(t *testing.T) {
 		t.Parallel()
 		svc := seeded(t)
 
-		got, err := svc.VerifyUploadSignature(context.Background(), &bucketsv1.VerifyUploadSignatureRequest{
+		got, err := svc.VerifyUploadSignature(context.Background(), &blobv1.VerifyUploadSignatureRequest{
 			SessionId: "sess_fixed",
 			Signature: mustSign(t, "test-secret", "sess_fixed", file),
 			File:      completed(),
@@ -206,7 +206,7 @@ func TestVerifyUploadSignature(t *testing.T) {
 		t.Parallel()
 		svc := seeded(t)
 
-		got, err := svc.VerifyUploadSignature(context.Background(), &bucketsv1.VerifyUploadSignatureRequest{
+		got, err := svc.VerifyUploadSignature(context.Background(), &blobv1.VerifyUploadSignatureRequest{
 			SessionId: "sess_fixed",
 			Signature: "deadbeef",
 			File:      completed(),
@@ -223,10 +223,10 @@ func TestVerifyUploadSignature(t *testing.T) {
 		t.Parallel()
 		svc := seeded(t)
 
-		got, err := svc.VerifyUploadSignature(context.Background(), &bucketsv1.VerifyUploadSignatureRequest{
+		got, err := svc.VerifyUploadSignature(context.Background(), &blobv1.VerifyUploadSignatureRequest{
 			SessionId: "nope",
 			Signature: mustSign(t, "test-secret", "sess_fixed", file),
-			File:      &bucketsv1.CompletedFile{Key: key},
+			File:      &blobv1.CompletedFile{Key: key},
 		})
 		if err != nil {
 			t.Fatalf("VerifyUploadSignature: %v", err)
@@ -241,19 +241,19 @@ func TestGetUploadStatus(t *testing.T) {
 	t.Parallel()
 
 	svc := newTestService(newFakeDDB(), &fakePresigner{})
-	if _, err := svc.PresignUpload(context.Background(), &bucketsv1.PresignUploadRequest{
+	if _, err := svc.PresignUpload(context.Background(), &blobv1.PresignUploadRequest{
 		Bucket: "storage",
-		Files:  []*bucketsv1.PresignFile{{Key: "k", Name: "k", Size: 1, MimeType: "text/plain"}},
+		Files:  []*blobv1.PresignFile{{Key: "k", Name: "k", Size: 1, MimeType: "text/plain"}},
 	}); err != nil {
 		t.Fatalf("PresignUpload: %v", err)
 	}
 
 	t.Run("an upload nobody has finished is pending", func(t *testing.T) {
-		st, err := svc.GetUploadStatus(context.Background(), &bucketsv1.GetUploadStatusRequest{SessionId: "sess_fixed"})
+		st, err := svc.GetUploadStatus(context.Background(), &blobv1.GetUploadStatusRequest{SessionId: "sess_fixed"})
 		if err != nil {
 			t.Fatalf("GetUploadStatus: %v", err)
 		}
-		if st.GetState() != bucketsv1.UploadState_UPLOAD_STATE_PENDING {
+		if st.GetState() != blobv1.UploadState_UPLOAD_STATE_PENDING {
 			t.Fatalf("state = %v, want PENDING", st.GetState())
 		}
 	})
@@ -261,17 +261,17 @@ func TestGetUploadStatus(t *testing.T) {
 	t.Run("a session read after its ttl is expired, with a reason", func(t *testing.T) {
 		svc.now = func() time.Time { return time.Unix(1_000_000, 0).Add(3 * time.Hour) }
 
-		st, err := svc.GetUploadStatus(context.Background(), &bucketsv1.GetUploadStatusRequest{SessionId: "sess_fixed"})
+		st, err := svc.GetUploadStatus(context.Background(), &blobv1.GetUploadStatusRequest{SessionId: "sess_fixed"})
 		if err != nil {
 			t.Fatalf("GetUploadStatus: %v", err)
 		}
-		if st.GetState() != bucketsv1.UploadState_UPLOAD_STATE_EXPIRED || st.GetError() == "" {
+		if st.GetState() != blobv1.UploadState_UPLOAD_STATE_EXPIRED || st.GetError() == "" {
 			t.Fatalf("expired session should report EXPIRED with error: %+v", st)
 		}
 	})
 
 	t.Run("an unknown session is not found", func(t *testing.T) {
-		_, err := svc.GetUploadStatus(context.Background(), &bucketsv1.GetUploadStatusRequest{SessionId: "nope"})
+		_, err := svc.GetUploadStatus(context.Background(), &blobv1.GetUploadStatusRequest{SessionId: "nope"})
 
 		var connectErr *connect.Error
 		if !errors.As(err, &connectErr) || connectErr.Code() != connect.CodeNotFound {

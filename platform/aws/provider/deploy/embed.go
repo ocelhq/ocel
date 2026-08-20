@@ -22,7 +22,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"golang.org/x/sync/errgroup"
 
-	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
+	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 )
 
 const embedCacheCeiling = 32 << 20
@@ -57,7 +57,7 @@ type embedTarget struct {
 	TreeBytes   int64
 }
 
-func embedBytecodeCaches(ctx context.Context, cfg Config, manifest *deploymentsv1.Manifest, artifacts map[string]artifactRef, warmed []warmResult, builds appBuilds, log func(string)) {
+func embedBytecodeCaches(ctx context.Context, cfg Config, manifest *contractv1.Manifest, artifacts map[string]artifactRef, warmed []warmResult, builds appBuilds, log func(string)) {
 	if log == nil {
 		log = func(string) {}
 	}
@@ -102,7 +102,7 @@ func missingEmbedClients(cfg Config) string {
 	return strings.Join(missing, ", ")
 }
 
-func embedTargets(cfg Config, manifest *deploymentsv1.Manifest, bytecode map[string]*bytecodeConfig, artifacts map[string]artifactRef, warmed []warmResult, log func(string)) []embedTarget {
+func embedTargets(cfg Config, manifest *contractv1.Manifest, bytecode map[string]*bytecodeConfig, artifacts map[string]artifactRef, warmed []warmResult, log func(string)) []embedTarget {
 	dirs := map[string]string{}
 	for _, fn := range manifest.GetFunctions() {
 		dirs[fn.GetLogicalName()] = artifactArchivePath(cfg.ArtifactRoot, fn.GetArtifactPath())

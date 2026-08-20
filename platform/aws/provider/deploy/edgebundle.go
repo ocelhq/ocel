@@ -14,7 +14,7 @@ import (
 	"time"
 
 	"github.com/ocelhq/ocel/pkg/naming"
-	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
+	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
@@ -49,7 +49,7 @@ func edgeSealedDelivered(cfg Config, bundle appBundle) bool {
 	return cfg.CacheStoreBucket != "" && cfg.CacheStoreUploader != nil && len(bundle.Ciphertext) > 0
 }
 
-func uploadEdgeBundles(ctx context.Context, cfg Config, manifest *deploymentsv1.Manifest, builds appBuilds) error {
+func uploadEdgeBundles(ctx context.Context, cfg Config, manifest *contractv1.Manifest, builds appBuilds) error {
 	if cfg.CacheStoreBucket == "" || cfg.CacheStoreUploader == nil {
 		return nil
 	}
@@ -60,7 +60,7 @@ func uploadEdgeBundles(ctx context.Context, cfg Config, manifest *deploymentsv1.
 	return err
 }
 
-func putEdgeBundles(ctx context.Context, cfg Config, manifest *deploymentsv1.Manifest, builds appBuilds, stats *uploadBatchStats) error {
+func putEdgeBundles(ctx context.Context, cfg Config, manifest *contractv1.Manifest, builds appBuilds, stats *uploadBatchStats) error {
 	for _, app := range manifestApps(manifest) {
 		name := app.GetName()
 		bundle, ok, err := readEdgeBundle(cfg, name)
@@ -85,7 +85,7 @@ func putEdgeBundles(ctx context.Context, cfg Config, manifest *deploymentsv1.Man
 	return nil
 }
 
-func checkAppEdgeVariables(cfg Config, app *deploymentsv1.ManifestApp, bundle appBundle) error {
+func checkAppEdgeVariables(cfg Config, app *contractv1.ManifestApp, bundle appBundle) error {
 	_, ok, err := readEdgeBundle(cfg, app.GetName())
 	if err != nil || !ok {
 		return err

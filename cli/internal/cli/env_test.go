@@ -11,8 +11,8 @@ import (
 
 	"github.com/spf13/cobra"
 
-	environmentv1 "github.com/ocelhq/ocel/pkg/proto/environment/v1"
-	envvarsv1 "github.com/ocelhq/ocel/pkg/proto/envvars/v1"
+	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
+	envvarsv1 "github.com/ocelhq/ocel/pkg/proto/provider/envvars/v1"
 )
 
 func setUpEnvFixture(t *testing.T) string {
@@ -59,7 +59,7 @@ globalThis.__ocelRegister.push(
     const log = process.env.OCEL_TEST_DISCOVERY_LOG;
     if (log) await (await import("node:fs/promises")).appendFile(log, "ran\n");
 
-    const res = await fetch(new URL("/resources.v1.ResourceService/DeclareEnv", process.env.OCEL_DEV_SERVER), {
+    const res = await fetch(new URL("/app.resources.v1.ResourceService/DeclareEnv", process.env.OCEL_DEV_SERVER), {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ definitions: %s }),

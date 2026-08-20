@@ -7,8 +7,8 @@ import (
 
 	"github.com/ocelhq/ocel/cli/internal/declare"
 	"github.com/ocelhq/ocel/cli/internal/envgate"
-	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/resources/v1"
-	"github.com/ocelhq/ocel/pkg/proto/resources/v1/resourcesv1connect"
+	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
+	"github.com/ocelhq/ocel/pkg/proto/app/resources/v1/resourcesv1connect"
 )
 
 type Collector struct {

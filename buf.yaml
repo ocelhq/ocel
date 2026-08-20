@@ -11,14 +11,12 @@ lint:
     - RPC_REQUEST_RESPONSE_UNIQUE
   ignore_only:
     RPC_REQUEST_STANDARD_NAME:
-      - proto/deployments/v1/deployments.proto
+      - proto/provider/contract/v1/contract.proto
 breaking:
   use:
     - FILE
   ignore:
-    - proto/deployments
-    - proto/dev
-    - proto/environment
-    - proto/envvars
-    - proto/progress
-    - proto/resources
+    - proto/common/environment
+    - proto/common/progress
+    - proto/devloop
+    - proto/provider

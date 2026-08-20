@@ -14,16 +14,16 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/ssm"
 
 	"github.com/ocelhq/ocel/pkg/naming"
-	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
-	environmentv1 "github.com/ocelhq/ocel/pkg/proto/environment/v1"
-	progressv1 "github.com/ocelhq/ocel/pkg/proto/progress/v1"
+	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
+	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
+	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/platform/aws/provider/bootstrap"
 	"github.com/ocelhq/ocel/platform/aws/provider/deploy"
 	"github.com/ocelhq/ocel/platform/aws/provider/pulumiruntime"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
-func (s *Server) RemoveStalePromotions(ctx context.Context, req *deploymentsv1.RemoveStalePromotionsRequest, stream *connect.ServerStream[progressv1.OperationEvent]) (err error) {
+func (s *Server) RemoveStalePromotions(ctx context.Context, req *contractv1.RemoveStalePromotionsRequest, stream *connect.ServerStream[progressv1.OperationEvent]) (err error) {
 	sender := newEventSender(ctx, stream.Send)
 	defer func() { err = sender.close() }()
 	tracer := newEventTracer(sender)
@@ -48,7 +48,7 @@ func newPruneStages() deploy.PruneStages {
 	}
 }
 
-func (s *Server) runPrune(ctx context.Context, req *deploymentsv1.RemoveStalePromotionsRequest, tracer deploy.Tracer, stageReport func(deploy.StageID) func(string), logf func(string)) (edge.PruneResult, error) {
+func (s *Server) runPrune(ctx context.Context, req *contractv1.RemoveStalePromotionsRequest, tracer deploy.Tracer, stageReport func(deploy.StageID) func(string), logf func(string)) (edge.PruneResult, error) {
 	stages := newPruneStages()
 	deploy.DeclareStages(tracer, false, stages.Diff, stages.Reclaim)
 	finish := func(err error) (edge.PruneResult, error) {

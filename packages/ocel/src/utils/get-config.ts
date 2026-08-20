@@ -4,7 +4,7 @@ import {
   LinkSchema,
   LinkType,
   type Link,
-} from "../gen/proto/links/v1/links_pb.js";
+} from "../gen/proto/common/links/v1/links_pb.js";
 
 /** The link types an app resolves; a custom record is read by transforms alone. */
 export type LinkCase = Exclude<

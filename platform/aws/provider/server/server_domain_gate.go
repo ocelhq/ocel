@@ -10,8 +10,8 @@ import (
 
 	connect "connectrpc.com/connect"
 
-	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
-	environmentv1 "github.com/ocelhq/ocel/pkg/proto/environment/v1"
+	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
+	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/platform/aws/provider/certs"
 	"github.com/ocelhq/ocel/platform/aws/provider/deploy"
 	"github.com/ocelhq/ocel/platform/aws/provider/domains"
@@ -91,7 +91,7 @@ func (g domainGate) clock() time.Time {
 	return g.now()
 }
 
-func (g domainGate) admitPreview(manifest *deploymentsv1.Manifest) error {
+func (g domainGate) admitPreview(manifest *contractv1.Manifest) error {
 	if len(deploy.DeclaredHostnames(manifest, environmentv1.Tier_TIER_PREVIEW)) > 0 || g.previewOn != "" {
 		return nil
 	}
@@ -100,7 +100,7 @@ func (g domainGate) admitPreview(manifest *deploymentsv1.Manifest) error {
 	)
 }
 
-func (g domainGate) admitProduction(ctx context.Context, manifest *deploymentsv1.Manifest, warn func(string)) (admission, error) {
+func (g domainGate) admitProduction(ctx context.Context, manifest *contractv1.Manifest, warn func(string)) (admission, error) {
 	hosts := deploy.DeclaredHostnames(manifest, environmentv1.Tier_TIER_PRODUCTION)
 	if len(hosts) == 0 {
 		return admission{}, fmt.Errorf(
@@ -196,7 +196,7 @@ func renewalWord(status string) string {
 	return strings.ToLower(status)
 }
 
-func admitDomains(ctx context.Context, gate domainGate, tier environmentv1.Tier, manifest *deploymentsv1.Manifest, warn func(string)) (admission, error) {
+func admitDomains(ctx context.Context, gate domainGate, tier environmentv1.Tier, manifest *contractv1.Manifest, warn func(string)) (admission, error) {
 	switch tier {
 	case environmentv1.Tier_TIER_PREVIEW:
 		if err := gate.admitPreview(manifest); err != nil {

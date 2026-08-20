@@ -17,7 +17,7 @@ function repoRoot() {
 
 const fixture = JSON.parse(
   readFileSync(
-    new URL("proto/links/v1/fixtures/postgres.json", repoRoot()),
+    new URL("proto/common/links/v1/fixtures/postgres.json", repoRoot()),
     "utf8",
   ),
 );

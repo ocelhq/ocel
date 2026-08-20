@@ -6,7 +6,7 @@ import (
 	"strconv"
 	"strings"
 
-	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
+	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
@@ -54,7 +54,7 @@ const (
 	envPreviewApps       = "OCEL_PREVIEW_APPS"
 )
 
-func withPreviewVars(worker edge.Worker, baseDomain string, apps []*deploymentsv1.ManifestApp) edge.Worker {
+func withPreviewVars(worker edge.Worker, baseDomain string, apps []*contractv1.ManifestApp) edge.Worker {
 	worker = withVar(worker, envPreview, "1")
 	worker = withVar(worker, envPreviewApps, previewAppNames(apps))
 	if baseDomain != "" {
@@ -63,7 +63,7 @@ func withPreviewVars(worker edge.Worker, baseDomain string, apps []*deploymentsv
 	return worker
 }
 
-func previewAppNames(apps []*deploymentsv1.ManifestApp) string {
+func previewAppNames(apps []*contractv1.ManifestApp) string {
 	names := make([]string, 0, len(apps))
 	for _, app := range apps {
 		if name := strings.ToLower(strings.TrimSpace(app.GetName())); name != "" {

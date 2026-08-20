@@ -11,8 +11,8 @@ import (
 	"time"
 
 	"github.com/ocelhq/ocel/pkg/naming"
-	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
-	linksv1 "github.com/ocelhq/ocel/pkg/proto/links/v1"
+	linksv1 "github.com/ocelhq/ocel/pkg/proto/common/links/v1"
+	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 )
 
 const SchemaVersion = 1
@@ -63,7 +63,7 @@ type Deploy struct {
 	Tag         string
 }
 
-func Derive(d Deploy, manifest *deploymentsv1.Manifest, links []*linksv1.Link) Record {
+func Derive(d Deploy, manifest *contractv1.Manifest, links []*linksv1.Link) Record {
 	return Record{
 		Slug:        d.Slug,
 		Environment: d.Environment,
@@ -93,7 +93,7 @@ func deriveLinks(links []*linksv1.Link) []Link {
 	return out
 }
 
-func deriveUsages(manifest *deploymentsv1.Manifest) []Usage {
+func deriveUsages(manifest *contractv1.Manifest) []Usage {
 	out := make([]Usage, 0, len(manifest.GetUsages()))
 	for _, u := range manifest.GetUsages() {
 		out = append(out, Usage{

@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
+	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 )
 
 func staticAppTree(t *testing.T) string {
@@ -433,7 +433,7 @@ func TestBuildDeploymentRecordAssets(t *testing.T) {
 		})
 		cfg := Config{ArtifactRoot: root, Env: "prod"}
 		manifest := nextManifest()
-		app := &deploymentsv1.ManifestApp{Name: "web", Framework: frameworkNext}
+		app := &contractv1.ManifestApp{Name: "web", Framework: frameworkNext}
 
 		record, err := buildDeploymentRecord(cfg, nil, manifest, app, deployedAs("WEB1"), nil, appBuildsFor(t, cfg, manifest), nil)
 		if err != nil {
@@ -450,7 +450,7 @@ func TestBuildDeploymentRecordAssets(t *testing.T) {
 		})
 		cfg := Config{ArtifactRoot: root, Env: "prod"}
 		manifest := nextManifest()
-		app := &deploymentsv1.ManifestApp{Name: "web", Framework: frameworkNext}
+		app := &contractv1.ManifestApp{Name: "web", Framework: frameworkNext}
 
 		record, err := buildDeploymentRecord(cfg, nil, manifest, app, deployedAs("WEB1"), nil, appBuildsFor(t, cfg, manifest), nil)
 		if err != nil {
@@ -463,8 +463,8 @@ func TestBuildDeploymentRecordAssets(t *testing.T) {
 
 	t.Run("non-Next app has no asset prefix", func(t *testing.T) {
 		cfg := Config{ArtifactRoot: t.TempDir()}
-		manifest := &deploymentsv1.Manifest{Slug: "proj"}
-		app := &deploymentsv1.ManifestApp{Name: "api", Framework: "express"}
+		manifest := &contractv1.Manifest{Slug: "proj"}
+		app := &contractv1.ManifestApp{Name: "api", Framework: "express"}
 
 		record, err := buildDeploymentRecord(cfg, nil, manifest, app, deployedAs("API1"), nil, appBuildsFor(t, cfg, manifest), nil)
 		if err != nil {
@@ -489,7 +489,7 @@ func TestBuildDeploymentRecordAssets(t *testing.T) {
 			ISRWriterSeed:          "seed-1",
 		}
 		manifest := nextManifest()
-		app := &deploymentsv1.ManifestApp{Name: "web", Framework: frameworkNext}
+		app := &contractv1.ManifestApp{Name: "web", Framework: frameworkNext}
 
 		record, err := buildDeploymentRecord(cfg, nil, manifest, app, deployedAs("WEB1"), nil, appBuildsFor(t, cfg, manifest), nil)
 		if err != nil {
@@ -505,7 +505,7 @@ func TestBuildDeploymentRecordAssets(t *testing.T) {
 			"apps/web/routing-manifest.json": `{"buildId":"WEB1"}`,
 		})
 		cfg := Config{ArtifactRoot: root, Env: "prod"}
-		record, err := buildDeploymentRecord(cfg, nil, nextManifest(), &deploymentsv1.ManifestApp{Name: "web", Framework: frameworkNext}, deployedAs("WEB1"), nil, appBuildsFor(t, cfg, nextManifest()), nil)
+		record, err := buildDeploymentRecord(cfg, nil, nextManifest(), &contractv1.ManifestApp{Name: "web", Framework: frameworkNext}, deployedAs("WEB1"), nil, appBuildsFor(t, cfg, nextManifest()), nil)
 		if err != nil {
 			t.Fatalf("buildDeploymentRecord: %v", err)
 		}

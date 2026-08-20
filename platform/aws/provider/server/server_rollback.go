@@ -7,8 +7,8 @@ import (
 
 	"github.com/aws/aws-sdk-go-v2/service/ssm"
 
-	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
-	progressv1 "github.com/ocelhq/ocel/pkg/proto/progress/v1"
+	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
+	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/platform/aws/provider/bootstrap"
 	"github.com/ocelhq/ocel/platform/aws/provider/deploy"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
@@ -43,12 +43,12 @@ func openStackOn(edgeFront edge.Edge, record bootstrap.StackRecord) (edge.EdgeSt
 	return edgeFront.Open(record.Edge)
 }
 
-func (s *Server) ListPromotions(ctx context.Context, req *deploymentsv1.ListPromotionsRequest) (*deploymentsv1.ListPromotionsResponse, error) {
+func (s *Server) ListPromotions(ctx context.Context, req *contractv1.ListPromotionsRequest) (*contractv1.ListPromotionsResponse, error) {
 	opts := s.config.get()
 	stack, err := s.openStack(ctx, requestedEdge(req), opts, req.GetSlug())
 	if err != nil {
 		if errors.Is(err, errNoProductionDeploy) {
-			return &deploymentsv1.ListPromotionsResponse{}, nil
+			return &contractv1.ListPromotionsResponse{}, nil
 		}
 		return nil, err
 	}
@@ -57,10 +57,10 @@ func (s *Server) ListPromotions(ctx context.Context, req *deploymentsv1.ListProm
 	if err != nil {
 		return nil, err
 	}
-	return &deploymentsv1.ListPromotionsResponse{Promotions: toPromotionHistory(history)}, nil
+	return &contractv1.ListPromotionsResponse{Promotions: toPromotionHistory(history)}, nil
 }
 
-func (s *Server) Rollback(ctx context.Context, req *deploymentsv1.RollbackRequest) (*deploymentsv1.RollbackResponse, error) {
+func (s *Server) Rollback(ctx context.Context, req *contractv1.RollbackRequest) (*contractv1.RollbackResponse, error) {
 	opts := s.config.get()
 	edgeFront, err := s.edge(requestedEdge(req), opts.Region)
 	if err != nil {
@@ -75,13 +75,13 @@ func (s *Server) Rollback(ctx context.Context, req *deploymentsv1.RollbackReques
 	if err != nil {
 		return nil, err
 	}
-	return &deploymentsv1.RollbackResponse{Promoted: toPromotionProto(promoted)}, nil
+	return &contractv1.RollbackResponse{Promoted: toPromotionProto(promoted)}, nil
 }
 
-func toPromotionHistory(history []edge.HistoryEntry) []*deploymentsv1.PromotionHistoryEntry {
-	out := make([]*deploymentsv1.PromotionHistoryEntry, 0, len(history))
+func toPromotionHistory(history []edge.HistoryEntry) []*contractv1.PromotionHistoryEntry {
+	out := make([]*contractv1.PromotionHistoryEntry, 0, len(history))
 	for _, h := range history {
-		out = append(out, &deploymentsv1.PromotionHistoryEntry{
+		out = append(out, &contractv1.PromotionHistoryEntry{
 			Promotion: toPromotionProto(h.Promotion),
 			Active:    h.Active,
 		})
@@ -89,8 +89,8 @@ func toPromotionHistory(history []edge.HistoryEntry) []*deploymentsv1.PromotionH
 	return out
 }
 
-func toPromotionProto(p edge.Promotion) *deploymentsv1.Promotion {
-	return &deploymentsv1.Promotion{
+func toPromotionProto(p edge.Promotion) *contractv1.Promotion {
+	return &contractv1.Promotion{
 		PromotionId: p.PromotionID,
 		Ts:          p.Ts,
 		Builds:      p.Builds,

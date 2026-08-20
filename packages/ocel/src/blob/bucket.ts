@@ -1,7 +1,7 @@
 import {
   LinkType,
   type BucketProperties,
-} from "../gen/proto/links/v1/links_pb.js";
+} from "../gen/proto/common/links/v1/links_pb.js";
 import { defer } from "../utils/defer.js";
 import { getConfig } from "../utils/get-config.js";
 import { rpc } from "../utils/rpc.js";

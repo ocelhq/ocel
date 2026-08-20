@@ -8,7 +8,7 @@ import (
 	"testing"
 
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
-	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
+	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
@@ -59,7 +59,7 @@ func TestRefuseClaimedDomains(t *testing.T) {
 
 	cases := []struct {
 		name   string
-		claims []*deploymentsv1.DomainClaim
+		claims []*contractv1.DomainClaim
 		refuse bool
 	}{
 		{
@@ -68,15 +68,15 @@ func TestRefuseClaimedDomains(t *testing.T) {
 		},
 		{
 			name:   "unclaimed passes",
-			claims: []*deploymentsv1.DomainClaim{{Hostname: "acme.com", Status: deploymentsv1.DomainClaim_STATUS_UNCLAIMED}},
+			claims: []*contractv1.DomainClaim{{Hostname: "acme.com", Status: contractv1.DomainClaim_STATUS_UNCLAIMED}},
 		},
 		{
 			name:   "unanswerable is skipped, never refused",
-			claims: []*deploymentsv1.DomainClaim{{Hostname: "acme.com", Status: deploymentsv1.DomainClaim_STATUS_UNSPECIFIED}},
+			claims: []*contractv1.DomainClaim{{Hostname: "acme.com", Status: contractv1.DomainClaim_STATUS_UNSPECIFIED}},
 		},
 		{
 			name:   "claimed refuses",
-			claims: []*deploymentsv1.DomainClaim{{Hostname: "acme.com", Status: deploymentsv1.DomainClaim_STATUS_CLAIMED, Owner: "ocel-other-preview"}},
+			claims: []*contractv1.DomainClaim{{Hostname: "acme.com", Status: contractv1.DomainClaim_STATUS_CLAIMED, Owner: "ocel-other-preview"}},
 			refuse: true,
 		},
 	}
@@ -105,8 +105,8 @@ func TestRefuseClaimedDomains(t *testing.T) {
 	t.Run("the shared preview entry worker is not a rival project", func(t *testing.T) {
 		t.Parallel()
 
-		err := refuseClaimedDomains([]*deploymentsv1.DomainClaim{
-			{Hostname: "*.previews.ocel.dev", Status: deploymentsv1.DomainClaim_STATUS_CLAIMED, Owner: edge.PreviewEntryOwner},
+		err := refuseClaimedDomains([]*contractv1.DomainClaim{
+			{Hostname: "*.previews.ocel.dev", Status: contractv1.DomainClaim_STATUS_CLAIMED, Owner: edge.PreviewEntryOwner},
 		}, projectconfig.ConfigFileName)
 		if err != nil {
 			t.Fatalf("refuseClaimedDomains err = %v, want the shared entry worker to pass", err)
@@ -116,10 +116,10 @@ func TestRefuseClaimedDomains(t *testing.T) {
 	t.Run("every claimed hostname is named, and no unclaimed one", func(t *testing.T) {
 		t.Parallel()
 
-		err := refuseClaimedDomains([]*deploymentsv1.DomainClaim{
-			{Hostname: "acme.com", Status: deploymentsv1.DomainClaim_STATUS_CLAIMED, Owner: "ocel-other-production-web"},
-			{Hostname: "www.acme.com", Status: deploymentsv1.DomainClaim_STATUS_UNCLAIMED},
-			{Hostname: "shop.acme.com", Status: deploymentsv1.DomainClaim_STATUS_CLAIMED, Owner: "ocel-third-production-web"},
+		err := refuseClaimedDomains([]*contractv1.DomainClaim{
+			{Hostname: "acme.com", Status: contractv1.DomainClaim_STATUS_CLAIMED, Owner: "ocel-other-production-web"},
+			{Hostname: "www.acme.com", Status: contractv1.DomainClaim_STATUS_UNCLAIMED},
+			{Hostname: "shop.acme.com", Status: contractv1.DomainClaim_STATUS_CLAIMED, Owner: "ocel-third-production-web"},
 		}, projectconfig.ConfigFileName)
 		if err == nil {
 			t.Fatal("refuseClaimedDomains err = nil, want a refusal")

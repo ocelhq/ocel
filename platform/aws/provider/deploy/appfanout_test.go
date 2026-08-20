@@ -7,13 +7,13 @@ import (
 	"testing"
 	"time"
 
-	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
+	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 )
 
-func namedApps(n int) []*deploymentsv1.ManifestApp {
-	apps := make([]*deploymentsv1.ManifestApp, n)
+func namedApps(n int) []*contractv1.ManifestApp {
+	apps := make([]*contractv1.ManifestApp, n)
 	for i := range apps {
-		apps[i] = &deploymentsv1.ManifestApp{Name: fmt.Sprintf("app-%d", i)}
+		apps[i] = &contractv1.ManifestApp{Name: fmt.Sprintf("app-%d", i)}
 	}
 	return apps
 }
@@ -35,7 +35,7 @@ func TestRunAppStacks(t *testing.T) {
 		done := make(chan struct{})
 		go func() {
 			defer close(done)
-			runAppStacks(namedApps(n), func(i int, _ *deploymentsv1.ManifestApp) {
+			runAppStacks(namedApps(n), func(i int, _ *contractv1.ManifestApp) {
 				atomic.AddInt32(&ran[i], 1)
 
 				mu.Lock()
@@ -107,7 +107,7 @@ func TestRunAppStacks(t *testing.T) {
 		done := make(chan struct{})
 		go func() {
 			defer close(done)
-			runAppStacks(namedApps(n), func(int, *deploymentsv1.ManifestApp) {
+			runAppStacks(namedApps(n), func(int, *contractv1.ManifestApp) {
 				all.Done()
 				all.Wait()
 			})
@@ -124,9 +124,9 @@ func TestRunAppStacks(t *testing.T) {
 		n := 5*appConcurrency + 1
 		apps := namedApps(n)
 		ran := make([]int32, n)
-		got := make([]*deploymentsv1.ManifestApp, n)
+		got := make([]*contractv1.ManifestApp, n)
 
-		runAppStacks(apps, func(i int, app *deploymentsv1.ManifestApp) {
+		runAppStacks(apps, func(i int, app *contractv1.ManifestApp) {
 			atomic.AddInt32(&ran[i], 1)
 			got[i] = app
 		})

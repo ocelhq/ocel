@@ -25,8 +25,8 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
 	"github.com/ocelhq/ocel/cli/internal/provision"
 	"github.com/ocelhq/ocel/cli/internal/watcher"
-	devv1 "github.com/ocelhq/ocel/pkg/proto/dev/v1"
-	"github.com/ocelhq/ocel/pkg/proto/dev/v1/devv1connect"
+	watchv1 "github.com/ocelhq/ocel/pkg/proto/devloop/watch/v1"
+	"github.com/ocelhq/ocel/pkg/proto/devloop/watch/v1/watchv1connect"
 )
 
 var watchDebounce = 300 * time.Millisecond
@@ -210,9 +210,9 @@ func watchAndReResolve(ctx context.Context, srv *devserver.Server, cfg *projectc
 }
 
 func runFollower(ctx context.Context, d deps, leaderAddr string, appArgs []string, stdout, stderr io.Writer, stdin io.Reader) error {
-	client := devv1connect.NewDevServiceClient(http.DefaultClient, "http://"+leaderAddr)
+	client := watchv1connect.NewDevServiceClient(http.DefaultClient, "http://"+leaderAddr)
 
-	stream, err := client.Subscribe(ctx, &devv1.SubscribeRequest{})
+	stream, err := client.Subscribe(ctx, &watchv1.SubscribeRequest{})
 	if err != nil {
 		return fmt.Errorf("connect to leader: %w", err)
 	}

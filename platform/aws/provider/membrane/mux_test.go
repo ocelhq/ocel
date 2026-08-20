@@ -10,27 +10,27 @@ import (
 	connect "connectrpc.com/connect"
 
 	"github.com/ocelhq/ocel/pkg/channel"
-	bucketsv1 "github.com/ocelhq/ocel/pkg/proto/buckets/v1"
-	"github.com/ocelhq/ocel/pkg/proto/buckets/v1/bucketsv1connect"
+	blobv1 "github.com/ocelhq/ocel/pkg/proto/app/blob/v1"
+	"github.com/ocelhq/ocel/pkg/proto/app/blob/v1/blobv1connect"
 )
 
 const testToken = "membrane-session-token"
 
 type recordingBuckets struct {
-	presigned []*bucketsv1.PresignFile
+	presigned []*blobv1.PresignFile
 }
 
-func (r *recordingBuckets) PresignUpload(_ context.Context, req *bucketsv1.PresignUploadRequest) (*bucketsv1.PresignUploadResponse, error) {
+func (r *recordingBuckets) PresignUpload(_ context.Context, req *blobv1.PresignUploadRequest) (*blobv1.PresignUploadResponse, error) {
 	r.presigned = append(r.presigned, req.GetFiles()...)
-	return &bucketsv1.PresignUploadResponse{SessionId: "sess_1"}, nil
+	return &blobv1.PresignUploadResponse{SessionId: "sess_1"}, nil
 }
 
-func (r *recordingBuckets) VerifyUploadSignature(context.Context, *bucketsv1.VerifyUploadSignatureRequest) (*bucketsv1.VerifyUploadSignatureResponse, error) {
-	return &bucketsv1.VerifyUploadSignatureResponse{Valid: true}, nil
+func (r *recordingBuckets) VerifyUploadSignature(context.Context, *blobv1.VerifyUploadSignatureRequest) (*blobv1.VerifyUploadSignatureResponse, error) {
+	return &blobv1.VerifyUploadSignatureResponse{Valid: true}, nil
 }
 
-func (r *recordingBuckets) GetUploadStatus(context.Context, *bucketsv1.GetUploadStatusRequest) (*bucketsv1.GetUploadStatusResponse, error) {
-	return &bucketsv1.GetUploadStatusResponse{}, nil
+func (r *recordingBuckets) GetUploadStatus(context.Context, *blobv1.GetUploadStatusRequest) (*blobv1.GetUploadStatusResponse, error) {
+	return &blobv1.GetUploadStatusResponse{}, nil
 }
 
 type bearer struct{ token string }
@@ -50,12 +50,12 @@ func (b bearer) WrapStreamingHandler(next connect.StreamingHandlerFunc) connect.
 	return next
 }
 
-func serveBuckets(t *testing.T) (bucketsv1connect.BucketServiceClient, *recordingBuckets) {
+func serveBuckets(t *testing.T) (blobv1connect.BucketServiceClient, *recordingBuckets) {
 	t.Helper()
 	svc := &recordingBuckets{}
 	ts := httptest.NewServer(NewMux(testToken, svc))
 	t.Cleanup(ts.Close)
-	return bucketsv1connect.NewBucketServiceClient(http.DefaultClient, ts.URL,
+	return blobv1connect.NewBucketServiceClient(http.DefaultClient, ts.URL,
 		connect.WithInterceptors(bearer{token: testToken})), svc
 }
 
@@ -79,9 +79,9 @@ func TestPresignUploadKeys(t *testing.T) {
 			t.Parallel()
 			client, svc := serveBuckets(t)
 
-			_, err := client.PresignUpload(context.Background(), &bucketsv1.PresignUploadRequest{
+			_, err := client.PresignUpload(context.Background(), &blobv1.PresignUploadRequest{
 				Bucket: "storage",
-				Files:  []*bucketsv1.PresignFile{{Key: key, Name: "photo.jpg", Size: 1, MimeType: "image/jpeg"}},
+				Files:  []*blobv1.PresignFile{{Key: key, Name: "photo.jpg", Size: 1, MimeType: "image/jpeg"}},
 			})
 
 			var connectErr *connect.Error
@@ -110,9 +110,9 @@ func TestPresignUploadKeys(t *testing.T) {
 			t.Parallel()
 			client, svc := serveBuckets(t)
 
-			if _, err := client.PresignUpload(context.Background(), &bucketsv1.PresignUploadRequest{
+			if _, err := client.PresignUpload(context.Background(), &blobv1.PresignUploadRequest{
 				Bucket: "storage",
-				Files:  []*bucketsv1.PresignFile{{Key: key, Name: "photo.jpg", Size: 1, MimeType: "image/jpeg"}},
+				Files:  []*blobv1.PresignFile{{Key: key, Name: "photo.jpg", Size: 1, MimeType: "image/jpeg"}},
 			}); err != nil {
 				t.Fatalf("PresignUpload(%q) = %v, want it signed", key, err)
 			}
@@ -126,8 +126,8 @@ func TestPresignUploadKeys(t *testing.T) {
 func TestPresignUploadRequiresABucketAndAFile(t *testing.T) {
 	t.Parallel()
 
-	cases := map[string]*bucketsv1.PresignUploadRequest{
-		"no bucket": {Files: []*bucketsv1.PresignFile{{Key: "a.png"}}},
+	cases := map[string]*blobv1.PresignUploadRequest{
+		"no bucket": {Files: []*blobv1.PresignFile{{Key: "a.png"}}},
 		"no files":  {Bucket: "storage"},
 	}
 	for name, req := range cases {

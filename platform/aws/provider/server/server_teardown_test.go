@@ -15,8 +15,8 @@ import (
 	s3types "github.com/aws/aws-sdk-go-v2/service/s3/types"
 	smithy "github.com/aws/smithy-go"
 
-	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
-	environmentv1 "github.com/ocelhq/ocel/pkg/proto/environment/v1"
+	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
+	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/platform/aws/provider/bootstrap"
 	cloudflare "github.com/ocelhq/ocel/platform/edge/cloudflare/deploy"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
@@ -188,7 +188,7 @@ func TestTeardownPlanItems(t *testing.T) {
 			if item.GetKind() == "" || item.GetReason() == "" {
 				t.Errorf("item %+v carries no kind or reason", item)
 			}
-			if item.GetAction() == deploymentsv1.RemovalItem_ACTION_UNSPECIFIED {
+			if item.GetAction() == contractv1.RemovalItem_ACTION_UNSPECIFIED {
 				t.Errorf("item %q carries no action", item.GetName())
 			}
 		}
@@ -197,7 +197,7 @@ func TestTeardownPlanItems(t *testing.T) {
 				t.Errorf("bucket %s must be flagged slow: it is emptied object by object", bucket)
 			}
 		}
-		if got := findPlanItem(items, bootstrap.PassphraseParamName); got.GetAction() != deploymentsv1.RemovalItem_ACTION_DELETE {
+		if got := findPlanItem(items, bootstrap.PassphraseParamName); got.GetAction() != contractv1.RemovalItem_ACTION_DELETE {
 			t.Errorf("passphrase action = %v, want it deleted when no sibling substrate holds it", got.GetAction())
 		}
 		if findPlanItem(items, bootstrap.PreviewDomainParamName) != nil {
@@ -213,7 +213,7 @@ func TestTeardownPlanItems(t *testing.T) {
 			t.Fatalf("teardownPlanItems: %v", err)
 		}
 		kept := findPlanItem(items, bootstrap.PassphraseParamName)
-		if kept.GetAction() != deploymentsv1.RemovalItem_ACTION_KEEP {
+		if kept.GetAction() != contractv1.RemovalItem_ACTION_KEEP {
 			t.Fatalf("passphrase action = %v, want it kept", kept.GetAction())
 		}
 		if !strings.Contains(kept.GetReason(), bootstrap.ClassProduction) {
@@ -273,7 +273,7 @@ func TestTeardownPlanItems(t *testing.T) {
 	})
 }
 
-func findPlanItem(items []*deploymentsv1.RemovalItem, name string) *deploymentsv1.RemovalItem {
+func findPlanItem(items []*contractv1.RemovalItem, name string) *contractv1.RemovalItem {
 	for _, item := range items {
 		if item.GetName() == name {
 			return item
@@ -282,7 +282,7 @@ func findPlanItem(items []*deploymentsv1.RemovalItem, name string) *deploymentsv
 	return nil
 }
 
-func planNames(items []*deploymentsv1.RemovalItem) []string {
+func planNames(items []*contractv1.RemovalItem) []string {
 	names := make([]string, 0, len(items))
 	for _, item := range items {
 		names = append(names, item.GetName())

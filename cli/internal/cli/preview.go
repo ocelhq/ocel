@@ -20,8 +20,8 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/providerrunner"
 	"github.com/ocelhq/ocel/cli/internal/servicemap"
 	"github.com/ocelhq/ocel/cli/node"
-	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
-	environmentv1 "github.com/ocelhq/ocel/pkg/proto/environment/v1"
+	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
+	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
@@ -211,7 +211,7 @@ func runPreviewUp(ctx context.Context, d deps, cwd string, opts previewUpOptions
 		}
 		ui.BuildOK()
 
-		req := &deploymentsv1.DeployRequest{
+		req := &contractv1.DeployRequest{
 			Manifest:         manifest,
 			Environment:      env,
 			RequiredFeatures: requiredFeatures(cfg, manifest),
@@ -238,7 +238,7 @@ func runPreviewUp(ctx context.Context, d deps, cwd string, opts previewUpOptions
 	return nil
 }
 
-func requirePreviewDomain(cfg *projectconfig.Config, wildcard *deploymentsv1.PreviewWildcard, id *deploymentsv1.Identity, pointer string, out io.Writer) error {
+func requirePreviewDomain(cfg *projectconfig.Config, wildcard *contractv1.PreviewWildcard, id *contractv1.Identity, pointer string, out io.Writer) error {
 	declared := ""
 	if hosts := declaredHostnames(cfg, "preview"); len(hosts) > 0 {
 		declared = hosts[0]
@@ -286,7 +286,7 @@ func intendedPreviewHostnames(cfg *projectconfig.Config, slug, pointer, base str
 	return hosts
 }
 
-func checkGlobalPreviewDomain(wildcard *deploymentsv1.PreviewWildcard, id *deploymentsv1.Identity, configName string) error {
+func checkGlobalPreviewDomain(wildcard *contractv1.PreviewWildcard, id *contractv1.Identity, configName string) error {
 	base := wildcard.GetBaseDomain()
 	if want, have := wildcard.GetEdgeScope(), id.GetEdgeScope(); want != "" && have != "" && want != have {
 		return fmt.Errorf("the global preview domain *.%s lives in edge account %s, but this deploy is authenticated to account %s: "+
@@ -357,7 +357,7 @@ func runPreviewRm(ctx context.Context, d deps, cwd string, opts previewRmOptions
 			return err
 		}
 
-		req := &deploymentsv1.RemovePreviewRequest{
+		req := &contractv1.RemovePreviewRequest{
 			Environment: env,
 			Slug:        cfg.Slug,
 			Edge:        edgeSelection(cfg),
@@ -393,7 +393,7 @@ func runPreviewLs(ctx context.Context, d deps, cwd string, stdout, stderr io.Wri
 		if err != nil {
 			return err
 		}
-		resp, err := client.ListEnvironments(ctx, &deploymentsv1.ListEnvironmentsRequest{
+		resp, err := client.ListEnvironments(ctx, &contractv1.ListEnvironmentsRequest{
 			Slug: cfg.Slug,
 		})
 		if err != nil {
@@ -440,7 +440,7 @@ func runPreviewPrune(ctx context.Context, d deps, cwd string, opts previewPruneO
 		if err := preflightPreview(ctx, d, runner, cfg, stdout); err != nil {
 			return err
 		}
-		if err := runner.RemoveStalePromotions(ctx, &deploymentsv1.RemoveStalePromotionsRequest{
+		if err := runner.RemoveStalePromotions(ctx, &contractv1.RemoveStalePromotionsRequest{
 			Slug:        cfg.Slug,
 			KeepN:       int32(opts.keep),
 			Environment: env,
@@ -576,10 +576,10 @@ func declaredHostnames(cfg *projectconfig.Config, class string) []string {
 	return hosts
 }
 
-func refuseClaimedDomains(claims []*deploymentsv1.DomainClaim, configName string) error {
+func refuseClaimedDomains(claims []*contractv1.DomainClaim, configName string) error {
 	var b strings.Builder
 	for _, claim := range claims {
-		if claim.GetStatus() != deploymentsv1.DomainClaim_STATUS_CLAIMED {
+		if claim.GetStatus() != contractv1.DomainClaim_STATUS_CLAIMED {
 			continue
 		}
 		if claim.GetOwner() == edge.PreviewEntryOwner {
@@ -603,14 +603,14 @@ func preflightTier(ctx context.Context, d deps, runner *providerrunner.Runner, c
 	return err
 }
 
-func preflight(ctx context.Context, d deps, runner *providerrunner.Runner, cfg *projectconfig.Config, required environmentv1.Tier, slug string, domains []string, bootstrapHint string, out io.Writer) (*deploymentsv1.PreflightResponse, error) {
+func preflight(ctx context.Context, d deps, runner *providerrunner.Runner, cfg *projectconfig.Config, required environmentv1.Tier, slug string, domains []string, bootstrapHint string, out io.Writer) (*contractv1.PreflightResponse, error) {
 	client, err := runner.Deployments()
 	if err != nil {
 		return nil, err
 	}
 
 	spinner := deployui.StartSpinner(out, "Checking credentials")
-	resp, err := client.Preflight(ctx, &deploymentsv1.PreflightRequest{
+	resp, err := client.Preflight(ctx, &contractv1.PreflightRequest{
 		RequiredTier:     required,
 		Slug:             slug,
 		Domains:          domains,
@@ -636,7 +636,7 @@ func preflight(ctx context.Context, d deps, runner *providerrunner.Runner, cfg *
 	return resp, nil
 }
 
-func formatIdentityBanner(id *deploymentsv1.Identity) string {
+func formatIdentityBanner(id *contractv1.Identity) string {
 	if id == nil {
 		return ""
 	}
@@ -657,7 +657,7 @@ func formatIdentityBanner(id *deploymentsv1.Identity) string {
 	return b.String()
 }
 
-func awsIdentityLine(id *deploymentsv1.Identity) string {
+func awsIdentityLine(id *contractv1.Identity) string {
 	if id.GetAwsAccount() == "" {
 		return ""
 	}
@@ -684,7 +684,7 @@ func arnPrincipal(arn string) string {
 	return arn
 }
 
-func credentialProblems(problems []*deploymentsv1.CredentialProblem) error {
+func credentialProblems(problems []*contractv1.CredentialProblem) error {
 	if len(problems) == 0 {
 		return nil
 	}
@@ -699,7 +699,7 @@ func credentialProblems(problems []*deploymentsv1.CredentialProblem) error {
 	return errors.New(b.String())
 }
 
-func renderEnvironments(stdout io.Writer, envs []*deploymentsv1.PreviewEnvironment) {
+func renderEnvironments(stdout io.Writer, envs []*contractv1.PreviewEnvironment) {
 	if len(envs) == 0 {
 		fmt.Fprintln(stdout, "No preview environments.")
 		return

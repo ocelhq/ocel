@@ -3,7 +3,7 @@ package server
 import (
 	"time"
 
-	progressv1 "github.com/ocelhq/ocel/pkg/proto/progress/v1"
+	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
 	"github.com/ocelhq/ocel/platform/aws/provider/deploy"
 )
 

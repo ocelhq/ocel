@@ -9,7 +9,7 @@ import (
 	"strings"
 	"testing"
 
-	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
+	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/platform/aws/provider/edges/apigateway"
 	"github.com/ocelhq/ocel/platform/aws/provider/edges/cloudfront"
 	cloudflare "github.com/ocelhq/ocel/platform/edge/cloudflare/deploy"
@@ -55,10 +55,10 @@ func writeRawNeeds(t *testing.T, artifactRoot, app, needs string) {
 	}
 }
 
-func needsManifest(apps ...string) *deploymentsv1.Manifest {
-	m := &deploymentsv1.Manifest{Slug: "shop"}
+func needsManifest(apps ...string) *contractv1.Manifest {
+	m := &contractv1.Manifest{Slug: "shop"}
 	for _, a := range apps {
-		m.Apps = append(m.Apps, &deploymentsv1.ManifestApp{Name: a, Framework: frameworkNext, DeploymentId: testDeploymentID})
+		m.Apps = append(m.Apps, &contractv1.ManifestApp{Name: a, Framework: frameworkNext, DeploymentId: testDeploymentID})
 	}
 	return m
 }
@@ -332,10 +332,10 @@ func TestBuildDeploymentRecordCarriesTheNeedsAndWhatBecameOfThem(t *testing.T) {
 		edge.NeedEdgeCache:      {Count: 2},
 		edge.NeedStreaming:      {Count: 3},
 	})
-	manifest := &deploymentsv1.Manifest{
+	manifest := &contractv1.Manifest{
 		Slug:      "proj",
-		Apps:      []*deploymentsv1.ManifestApp{{Name: "web", Framework: frameworkNext}},
-		Functions: []*deploymentsv1.ManifestFunction{{LogicalName: "web_index", Framework: frameworkNext, App: "web", RouteId: "/"}},
+		Apps:      []*contractv1.ManifestApp{{Name: "web", Framework: frameworkNext}},
+		Functions: []*contractv1.ManifestFunction{{LogicalName: "web_index", Framework: frameworkNext, App: "web", RouteId: "/"}},
 	}
 	cfg := Config{
 		ArtifactRoot:  root,
@@ -370,10 +370,10 @@ func TestBuildDeploymentRecordLeavesNeedsOutForAnAppWithNone(t *testing.T) {
 	t.Parallel()
 
 	root := writeTree(t, map[string]string{"apps/api/routing-manifest.json": `{"buildId":"API1"}`})
-	manifest := &deploymentsv1.Manifest{
+	manifest := &contractv1.Manifest{
 		Slug:      "proj",
-		Apps:      []*deploymentsv1.ManifestApp{{Name: "api", Framework: "express"}},
-		Functions: []*deploymentsv1.ManifestFunction{{LogicalName: "api_index", Framework: "express", App: "api", RouteId: "/"}},
+		Apps:      []*contractv1.ManifestApp{{Name: "api", Framework: "express"}},
+		Functions: []*contractv1.ManifestFunction{{LogicalName: "api_index", Framework: "express", App: "api", RouteId: "/"}},
 	}
 	cfg := Config{ArtifactRoot: root, Slug: "proj", Edge: &recordingEdge{kind: cloudflare.Kind}}
 
@@ -412,10 +412,10 @@ func TestStagedRecordCarriesTheNeedsAndWhatBecameOfThem(t *testing.T) {
 		edge.NeedEdgeMiddleware: {Count: 1, Routes: []string{"/dashboard"}},
 		edge.NeedEdgeCache:      {Count: 2},
 	})
-	manifest := &deploymentsv1.Manifest{
+	manifest := &contractv1.Manifest{
 		Slug:      "proj",
-		Apps:      []*deploymentsv1.ManifestApp{{Name: "web", Framework: frameworkNext, DeploymentId: testDeploymentID}},
-		Functions: []*deploymentsv1.ManifestFunction{{LogicalName: "web_index", Framework: frameworkNext, App: "web", RouteId: "/"}},
+		Apps:      []*contractv1.ManifestApp{{Name: "web", Framework: frameworkNext, DeploymentId: testDeploymentID}},
+		Functions: []*contractv1.ManifestFunction{{LogicalName: "web_index", Framework: frameworkNext, App: "web", RouteId: "/"}},
 	}
 	ed := &recordingEdge{kind: cloudfront.Kind}
 	cfg := Config{
@@ -579,10 +579,10 @@ func TestStagedRecordWaivesTheNeedThePlanWithholds(t *testing.T) {
 		edge.NeedEdgeMiddleware: {Count: 1, Routes: []string{"/dashboard"}},
 		edge.NeedEdgeCache:      {Count: 2},
 	})
-	manifest := &deploymentsv1.Manifest{
+	manifest := &contractv1.Manifest{
 		Slug:      "proj",
-		Apps:      []*deploymentsv1.ManifestApp{{Name: "web", Framework: frameworkNext, DeploymentId: testDeploymentID}},
-		Functions: []*deploymentsv1.ManifestFunction{{LogicalName: "web_index", Framework: frameworkNext, App: "web", RouteId: "/"}},
+		Apps:      []*contractv1.ManifestApp{{Name: "web", Framework: frameworkNext, DeploymentId: testDeploymentID}},
+		Functions: []*contractv1.ManifestFunction{{LogicalName: "web_index", Framework: frameworkNext, App: "web", RouteId: "/"}},
 	}
 	ed := &verifyingEdge{
 		recordingEdge: &recordingEdge{kind: cloudflare.Kind},

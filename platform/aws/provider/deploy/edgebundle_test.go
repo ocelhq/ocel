@@ -8,8 +8,8 @@ import (
 	"strings"
 	"testing"
 
-	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
-	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/resources/v1"
+	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
+	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/platform/aws/provider/vars/baked"
 	cloudflare "github.com/ocelhq/ocel/platform/edge/cloudflare/deploy"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
@@ -173,7 +173,7 @@ func TestBuildDeploymentRecordEdgeWorkers(t *testing.T) {
 		t.Parallel()
 		cfg := Config{ArtifactRoot: edgeAppTree(t), Env: "prod", Edge: testLoaderEdge()}
 		manifest := nextManifest()
-		app := &deploymentsv1.ManifestApp{Name: "web", Framework: frameworkNext}
+		app := &contractv1.ManifestApp{Name: "web", Framework: frameworkNext}
 
 		record, err := buildDeploymentRecord(cfg, nil, manifest, app, deployedAs("WEB1"), nil, appBuildsFor(t, cfg, manifest), nil)
 		if err != nil {
@@ -217,7 +217,7 @@ func TestBuildDeploymentRecordEdgeWorkers(t *testing.T) {
 		t.Parallel()
 		cfg := Config{ArtifactRoot: edgeAppTree(t), Env: "prod", Edge: testLoaderEdge()}
 		manifest := twoAppManifest()
-		app := &deploymentsv1.ManifestApp{Name: "admin", Framework: frameworkNext}
+		app := &contractv1.ManifestApp{Name: "admin", Framework: frameworkNext}
 
 		record, err := buildDeploymentRecord(cfg, nil, manifest, app, deployedAs("ADM1"), nil, appBuildsFor(t, cfg, manifest), nil)
 		if err != nil {
@@ -236,19 +236,19 @@ func TestBuildDeploymentRecordEdgeWorkers(t *testing.T) {
 	})
 }
 
-func edgeVarsManifest(variables ...*deploymentsv1.ManifestVariable) *deploymentsv1.Manifest {
-	return &deploymentsv1.Manifest{
+func edgeVarsManifest(variables ...*contractv1.ManifestVariable) *contractv1.Manifest {
+	return &contractv1.Manifest{
 		Slug: "proj",
-		Apps: []*deploymentsv1.ManifestApp{
+		Apps: []*contractv1.ManifestApp{
 			{Name: "web", Framework: frameworkNext, Folder: "/shop", Variables: variables},
 		},
-		Functions: []*deploymentsv1.ManifestFunction{
+		Functions: []*contractv1.ManifestFunction{
 			{LogicalName: "web_index", Framework: "next", App: "web"},
 		},
 	}
 }
 
-func edgeBuilds(t *testing.T, cfg Config, manifest *deploymentsv1.Manifest) appBuilds {
+func edgeBuilds(t *testing.T, cfg Config, manifest *contractv1.Manifest) appBuilds {
 	t.Helper()
 	bundles, err := renderAppBundles(liveConfig(), manifest, nil)
 	if err != nil {
@@ -467,16 +467,16 @@ func TestBuildDeploymentRecordEdgeDelivery(t *testing.T) {
 	t.Run("no edge output carries no delivery", func(t *testing.T) {
 		t.Parallel()
 		cfg := Config{ArtifactRoot: edgeAppTree(t), Env: "prod", Edge: testLoaderEdge()}
-		manifest := &deploymentsv1.Manifest{
+		manifest := &contractv1.Manifest{
 			Slug: "proj",
-			Apps: []*deploymentsv1.ManifestApp{{
+			Apps: []*contractv1.ManifestApp{{
 				Name: "admin", Framework: frameworkNext,
-				Variables: []*deploymentsv1.ManifestVariable{
+				Variables: []*contractv1.ManifestVariable{
 					variable("POSTHOG_ID", "ph-123", resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN),
 					variable("STRIPE_API_KEY", "sk-live", resourcesv1.VariableClass_VARIABLE_CLASS_SENSITIVE),
 				},
 			}},
-			Functions: []*deploymentsv1.ManifestFunction{{LogicalName: "admin_index", Framework: "next", App: "admin"}},
+			Functions: []*contractv1.ManifestFunction{{LogicalName: "admin_index", Framework: "next", App: "admin"}},
 		}
 
 		record, err := buildDeploymentRecord(cfg, nil, manifest, manifest.GetApps()[0], deployedAs("ADM1"), nil, edgeBuilds(t, cfg, manifest), nil)

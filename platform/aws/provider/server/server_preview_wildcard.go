@@ -10,8 +10,8 @@ import (
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/cloudformation"
 
-	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
-	progressv1 "github.com/ocelhq/ocel/pkg/proto/progress/v1"
+	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
+	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/platform/aws/provider/bootstrap"
 	"github.com/ocelhq/ocel/platform/aws/provider/certs"
 	"github.com/ocelhq/ocel/platform/aws/provider/deploy"
@@ -20,7 +20,7 @@ import (
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
-func (s *Server) UsePreviewWildcard(ctx context.Context, req *deploymentsv1.UsePreviewWildcardRequest, stream *connect.ServerStream[progressv1.OperationEvent]) error {
+func (s *Server) UsePreviewWildcard(ctx context.Context, req *contractv1.UsePreviewWildcardRequest, stream *connect.ServerStream[progressv1.OperationEvent]) error {
 	progress := func(m string) { _ = stream.Send(progressEvent(m)) }
 	logf := func(m string) { _ = stream.Send(logEvent(m)) }
 	ask := func(headline string, records []edge.Record, notes ...string) {
@@ -33,7 +33,7 @@ func (s *Server) UsePreviewWildcard(ctx context.Context, req *deploymentsv1.UseP
 	return stream.Send(okResult())
 }
 
-func (s *Server) runUsePreviewWildcard(ctx context.Context, req *deploymentsv1.UsePreviewWildcardRequest, progress func(string), ask askDNS, logf func(string)) error {
+func (s *Server) runUsePreviewWildcard(ctx context.Context, req *contractv1.UsePreviewWildcardRequest, progress func(string), ask askDNS, logf func(string)) error {
 	opts := s.config.get()
 	baseDomain, err := previewBaseDomainArg(req.GetBaseDomain())
 	if err != nil {
@@ -169,7 +169,7 @@ func usePreviewWildcard(ctx context.Context, engine domains.Engine, edgeFront ed
 	return err
 }
 
-func (s *Server) PlanRemovePreviewWildcard(ctx context.Context, req *deploymentsv1.PreviewWildcardRequest) (*deploymentsv1.PlanRemovePreviewWildcardResponse, error) {
+func (s *Server) PlanRemovePreviewWildcard(ctx context.Context, req *contractv1.PreviewWildcardRequest) (*contractv1.PlanRemovePreviewWildcardResponse, error) {
 	opts := s.config.get()
 	awscfg, err := loadAWS(ctx, opts.Region)
 	if err != nil {
@@ -186,7 +186,7 @@ func (s *Server) PlanRemovePreviewWildcard(ctx context.Context, req *deployments
 		return nil, err
 	}
 	if recorded.BaseDomain == "" {
-		return &deploymentsv1.PlanRemovePreviewWildcardResponse{}, nil
+		return &contractv1.PlanRemovePreviewWildcardResponse{}, nil
 	}
 	edgeFront, err := previewWildcardEdge(recorded, func(kind edge.Kind) (edge.Edge, error) {
 		return s.edge(kind, clients.region)
@@ -198,7 +198,7 @@ func (s *Server) PlanRemovePreviewWildcard(ctx context.Context, req *deployments
 	if err := refusePreviewReleaseWhileServed(ctx, ssmClient, recorded.BaseDomain, s.livePreviewStacks(awscfg)); err != nil {
 		return nil, connect.NewError(connect.CodeFailedPrecondition, err)
 	}
-	return &deploymentsv1.PlanRemovePreviewWildcardResponse{
+	return &contractv1.PlanRemovePreviewWildcardResponse{
 		BaseDomain: recorded.BaseDomain,
 		EdgeStack:  plan,
 	}, nil
@@ -244,7 +244,7 @@ func refusePreviewReleaseWhileServed(ctx context.Context, ssmClient substrateSSM
 	return refusePreviewRelease(baseDomain, served)
 }
 
-func (s *Server) RemovePreviewWildcard(ctx context.Context, req *deploymentsv1.RemovePreviewWildcardRequest, stream *connect.ServerStream[progressv1.OperationEvent]) error {
+func (s *Server) RemovePreviewWildcard(ctx context.Context, req *contractv1.RemovePreviewWildcardRequest, stream *connect.ServerStream[progressv1.OperationEvent]) error {
 	progress := func(m string) { _ = stream.Send(progressEvent(m)) }
 
 	if err := s.runRemovePreviewWildcard(ctx, req, progress); err != nil {
@@ -253,7 +253,7 @@ func (s *Server) RemovePreviewWildcard(ctx context.Context, req *deploymentsv1.R
 	return stream.Send(okResult())
 }
 
-func (s *Server) runRemovePreviewWildcard(ctx context.Context, req *deploymentsv1.RemovePreviewWildcardRequest, progress func(string)) error {
+func (s *Server) runRemovePreviewWildcard(ctx context.Context, req *contractv1.RemovePreviewWildcardRequest, progress func(string)) error {
 	opts := s.config.get()
 	awscfg, err := loadAWS(ctx, opts.Region)
 	if err != nil {
@@ -319,7 +319,7 @@ func removePreviewWildcard(ctx context.Context, deps removalDeps, recorded boots
 	return bootstrap.DeletePreviewDomain(ctx, deps.ssm, bootstrap.ClassPreview)
 }
 
-func (s *Server) GetPreviewWildcard(ctx context.Context, req *deploymentsv1.PreviewWildcardRequest) (*deploymentsv1.GetPreviewWildcardResponse, error) {
+func (s *Server) GetPreviewWildcard(ctx context.Context, req *contractv1.PreviewWildcardRequest) (*contractv1.GetPreviewWildcardResponse, error) {
 	opts := s.config.get()
 	clients, err := s.domainClients(ctx, opts.Region)
 	if err != nil {
@@ -332,7 +332,7 @@ func (s *Server) GetPreviewWildcard(ctx context.Context, req *deploymentsv1.Prev
 		return nil, err
 	}
 	if recorded.BaseDomain == "" {
-		return &deploymentsv1.GetPreviewWildcardResponse{}, nil
+		return &contractv1.GetPreviewWildcardResponse{}, nil
 	}
 	slugs, err := bootstrap.StackSlugsFor(ctx, ssmClient, bootstrap.ClassPreview)
 	if err != nil {
@@ -342,7 +342,7 @@ func (s *Server) GetPreviewWildcard(ctx context.Context, req *deploymentsv1.Prev
 	if err != nil {
 		return nil, err
 	}
-	return &deploymentsv1.GetPreviewWildcardResponse{
+	return &contractv1.GetPreviewWildcardResponse{
 		Wildcard: previewWildcard(ctx, s.globalPreviewOwner(recorded, clients.region), recorded),
 		Projects: served,
 	}, nil
@@ -376,12 +376,12 @@ func previewBaseDomainArg(domain string) (string, error) {
 	return base, nil
 }
 
-func previewWildcard(ctx context.Context, owner routeOwnerFunc, recorded bootstrap.PreviewDomain) *deploymentsv1.PreviewWildcard {
+func previewWildcard(ctx context.Context, owner routeOwnerFunc, recorded bootstrap.PreviewDomain) *contractv1.PreviewWildcard {
 	if recorded.BaseDomain == "" {
 		return nil
 	}
 	wildcard := recorded.Wildcard()
-	return &deploymentsv1.PreviewWildcard{
+	return &contractv1.PreviewWildcard{
 		BaseDomain:     recorded.BaseDomain,
 		EdgeScope:      recorded.Scope,
 		GrammarMin:     recorded.GrammarMin,
@@ -393,8 +393,8 @@ func previewWildcard(ctx context.Context, owner routeOwnerFunc, recorded bootstr
 	}
 }
 
-func certificateState(cert certs.Certificate, probe certs.Probe, written, owed []string) *deploymentsv1.CertificateState {
-	return &deploymentsv1.CertificateState{
+func certificateState(cert certs.Certificate, probe certs.Probe, written, owed []string) *contractv1.CertificateState {
+	return &contractv1.CertificateState{
 		CertificateId:     cert.ARN,
 		CertificateStatus: cert.Status,
 		RecordsWritten:    written,

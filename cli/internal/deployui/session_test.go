@@ -12,7 +12,7 @@ import (
 	"time"
 
 	"github.com/ocelhq/ocel/cli/internal/obs"
-	progressv1 "github.com/ocelhq/ocel/pkg/proto/progress/v1"
+	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 

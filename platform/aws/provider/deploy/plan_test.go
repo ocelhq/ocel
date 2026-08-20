@@ -7,8 +7,8 @@ import (
 	"testing"
 
 	"github.com/ocelhq/ocel/pkg/naming"
-	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
-	environmentv1 "github.com/ocelhq/ocel/pkg/proto/environment/v1"
+	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
+	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 )
 
 func prodEnv() *environmentv1.Environment {
@@ -212,9 +212,9 @@ func TestBuildPlan(t *testing.T) {
 
 	t.Run("happy path", func(t *testing.T) {
 		t.Parallel()
-		manifest := &deploymentsv1.Manifest{
+		manifest := &contractv1.Manifest{
 			Slug: "proj",
-			Apps: []*deploymentsv1.ManifestApp{
+			Apps: []*contractv1.ManifestApp{
 				{Name: "web"},
 				{Name: "api"},
 			},
@@ -258,7 +258,7 @@ func TestBuildPlan(t *testing.T) {
 
 	t.Run("the stack names read as env, app and release", func(t *testing.T) {
 		t.Parallel()
-		manifest := &deploymentsv1.Manifest{Slug: "shop", Apps: []*deploymentsv1.ManifestApp{{Name: "web"}}}
+		manifest := &contractv1.Manifest{Slug: "shop", Apps: []*contractv1.ManifestApp{{Name: "web"}}}
 
 		plan, err := BuildPlan(manifest, prodEnv(), "promo1", Identities{"web": deployedAs("b")})
 		if err != nil {
@@ -275,9 +275,9 @@ func TestBuildPlan(t *testing.T) {
 
 	t.Run("the promotion record keeps the build id recoverable", func(t *testing.T) {
 		t.Parallel()
-		manifest := &deploymentsv1.Manifest{
+		manifest := &contractv1.Manifest{
 			Slug: "proj",
-			Apps: []*deploymentsv1.ManifestApp{{Name: "web"}},
+			Apps: []*contractv1.ManifestApp{{Name: "web"}},
 		}
 		id := fingerprinted("buildW", "fp1")
 
@@ -299,9 +299,9 @@ func TestBuildPlan(t *testing.T) {
 
 	t.Run("missing buildID errors", func(t *testing.T) {
 		t.Parallel()
-		manifest := &deploymentsv1.Manifest{
+		manifest := &contractv1.Manifest{
 			Slug: "proj",
-			Apps: []*deploymentsv1.ManifestApp{{Name: "web"}, {Name: "api"}},
+			Apps: []*contractv1.ManifestApp{{Name: "web"}, {Name: "api"}},
 		}
 		identities := Identities{"web": deployedAs("buildW")}
 
@@ -312,9 +312,9 @@ func TestBuildPlan(t *testing.T) {
 
 	t.Run("an app named infra is refused", func(t *testing.T) {
 		t.Parallel()
-		manifest := &deploymentsv1.Manifest{
+		manifest := &contractv1.Manifest{
 			Slug: "proj",
-			Apps: []*deploymentsv1.ManifestApp{{Name: naming.InfraApp}},
+			Apps: []*contractv1.ManifestApp{{Name: naming.InfraApp}},
 		}
 
 		if _, err := BuildPlan(manifest, prodEnv(), "promo1", Identities{naming.InfraApp: deployedAs("b")}); err == nil {
@@ -324,9 +324,9 @@ func TestBuildPlan(t *testing.T) {
 
 	t.Run("rejects unspecified class", func(t *testing.T) {
 		t.Parallel()
-		manifest := &deploymentsv1.Manifest{
+		manifest := &contractv1.Manifest{
 			Slug: "proj",
-			Apps: []*deploymentsv1.ManifestApp{{Name: "web"}},
+			Apps: []*contractv1.ManifestApp{{Name: "web"}},
 		}
 
 		if _, err := BuildPlan(manifest, &environmentv1.Environment{}, "promo1", Identities{"web": deployedAs("b")}); err == nil {
@@ -336,9 +336,9 @@ func TestBuildPlan(t *testing.T) {
 
 	t.Run("persistent preview has per-name infra stack", func(t *testing.T) {
 		t.Parallel()
-		manifest := &deploymentsv1.Manifest{
+		manifest := &contractv1.Manifest{
 			Slug: "proj",
-			Apps: []*deploymentsv1.ManifestApp{{Name: "web"}},
+			Apps: []*contractv1.ManifestApp{{Name: "web"}},
 		}
 
 		plan, err := BuildPlan(manifest, previewEnv(environmentv1.Lifecycle_LIFECYCLE_PERSISTENT), "promo1", Identities{"web": deployedAs("b")})
@@ -358,9 +358,9 @@ func TestBuildPlan(t *testing.T) {
 
 	t.Run("ephemeral preview has no infra stack", func(t *testing.T) {
 		t.Parallel()
-		manifest := &deploymentsv1.Manifest{
+		manifest := &contractv1.Manifest{
 			Slug: "proj",
-			Apps: []*deploymentsv1.ManifestApp{{Name: "web"}},
+			Apps: []*contractv1.ManifestApp{{Name: "web"}},
 		}
 
 		plan, err := BuildPlan(manifest, previewEnv(environmentv1.Lifecycle_LIFECYCLE_EPHEMERAL), "promo1", Identities{"web": deployedAs("b")})
@@ -377,9 +377,9 @@ func TestBuildPlan(t *testing.T) {
 
 	t.Run("preview requires identity", func(t *testing.T) {
 		t.Parallel()
-		manifest := &deploymentsv1.Manifest{
+		manifest := &contractv1.Manifest{
 			Slug: "proj",
-			Apps: []*deploymentsv1.ManifestApp{{Name: "web"}},
+			Apps: []*contractv1.ManifestApp{{Name: "web"}},
 		}
 		env := &environmentv1.Environment{Tier: environmentv1.Tier_TIER_PREVIEW}
 
@@ -390,7 +390,7 @@ func TestBuildPlan(t *testing.T) {
 
 	t.Run("two persistent previews do not collide", func(t *testing.T) {
 		t.Parallel()
-		manifest := &deploymentsv1.Manifest{Slug: "proj", Apps: []*deploymentsv1.ManifestApp{{Name: "web"}}}
+		manifest := &contractv1.Manifest{Slug: "proj", Apps: []*contractv1.ManifestApp{{Name: "web"}}}
 		staging := &environmentv1.Environment{Tier: environmentv1.Tier_TIER_PREVIEW, Lifecycle: environmentv1.Lifecycle_LIFECYCLE_PERSISTENT, Identity: "staging"}
 		demo := &environmentv1.Environment{Tier: environmentv1.Tier_TIER_PREVIEW, Lifecycle: environmentv1.Lifecycle_LIFECYCLE_PERSISTENT, Identity: "demo"}
 
@@ -406,7 +406,7 @@ func TestBuildPlan(t *testing.T) {
 
 	t.Run("no apps yields empty plan", func(t *testing.T) {
 		t.Parallel()
-		manifest := &deploymentsv1.Manifest{Slug: "proj"}
+		manifest := &contractv1.Manifest{Slug: "proj"}
 
 		plan, err := BuildPlan(manifest, prodEnv(), "promo1", Identities{})
 		if err != nil {
@@ -419,7 +419,7 @@ func TestBuildPlan(t *testing.T) {
 
 	t.Run("every planned stack re-parses", func(t *testing.T) {
 		t.Parallel()
-		manifest := &deploymentsv1.Manifest{Slug: "proj", Apps: []*deploymentsv1.ManifestApp{{Name: "web"}, {Name: "api"}}}
+		manifest := &contractv1.Manifest{Slug: "proj", Apps: []*contractv1.ManifestApp{{Name: "web"}, {Name: "api"}}}
 
 		plan, err := BuildPlan(manifest, previewEnv(environmentv1.Lifecycle_LIFECYCLE_PERSISTENT), "p", Identities{
 			"web": deployedAs("b1"),

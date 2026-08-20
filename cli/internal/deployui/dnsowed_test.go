@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	progressv1 "github.com/ocelhq/ocel/pkg/proto/progress/v1"
+	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
 )
 
 var validation = &progressv1.DnsRecord{

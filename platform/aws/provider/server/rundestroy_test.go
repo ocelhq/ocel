@@ -4,8 +4,8 @@ import (
 	"context"
 	"testing"
 
-	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
-	environmentv1 "github.com/ocelhq/ocel/pkg/proto/environment/v1"
+	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
+	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 )
 
 func wantNoProvisioningStage(t *testing.T, declared []recordedDeclare) {
@@ -24,7 +24,7 @@ func TestRunDestroyProjectDeclaresTheStagePlanBeforeAnyWork(t *testing.T) {
 
 	s := &Server{}
 	tracer := &fakeTracer{}
-	req := &deploymentsv1.RemoveProjectRequest{Slug: "shop"}
+	req := &contractv1.RemoveProjectRequest{Slug: "shop"}
 
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
@@ -78,7 +78,7 @@ func TestRunDestroyPreviewDeclaresTheStagePlanBeforeAnyWork(t *testing.T) {
 		t.Parallel()
 		s := &Server{}
 		tracer := &fakeTracer{}
-		req := &deploymentsv1.RemovePreviewRequest{
+		req := &contractv1.RemovePreviewRequest{
 			Slug:        "shop",
 			Environment: &environmentv1.Environment{Tier: environmentv1.Tier_TIER_PREVIEW, Identity: "pr-1"},
 		}
@@ -105,7 +105,7 @@ func TestRunDestroyPreviewDeclaresTheStagePlanBeforeAnyWork(t *testing.T) {
 		t.Parallel()
 		s := &Server{}
 		tracer := &fakeTracer{}
-		req := &deploymentsv1.RemovePreviewRequest{
+		req := &contractv1.RemovePreviewRequest{
 			Slug: "shop",
 			Environment: &environmentv1.Environment{
 				Tier:      environmentv1.Tier_TIER_PREVIEW,
@@ -133,7 +133,7 @@ func TestRunPruneDeclaresTheStagePlanBeforeAnyWork(t *testing.T) {
 
 	s := &Server{}
 	tracer := &fakeTracer{}
-	req := &deploymentsv1.RemoveStalePromotionsRequest{Slug: "shop"}
+	req := &contractv1.RemoveStalePromotionsRequest{Slug: "shop"}
 
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()

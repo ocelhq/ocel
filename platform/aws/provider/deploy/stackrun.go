@@ -17,13 +17,13 @@ import (
 	"github.com/pulumi/pulumi/sdk/v3/go/pulumi"
 
 	"github.com/ocelhq/ocel/pkg/naming"
-	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
-	environmentv1 "github.com/ocelhq/ocel/pkg/proto/environment/v1"
-	linksv1 "github.com/ocelhq/ocel/pkg/proto/links/v1"
-	progressv1 "github.com/ocelhq/ocel/pkg/proto/progress/v1"
+	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
+	linksv1 "github.com/ocelhq/ocel/pkg/proto/common/links/v1"
+	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
+	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 )
 
-func runInfraStack(ctx context.Context, cfg Config, in stackInputs, manifest *deploymentsv1.Manifest, plan Plan, log func(string)) ([]*linksv1.Link, error) {
+func runInfraStack(ctx context.Context, cfg Config, in stackInputs, manifest *contractv1.Manifest, plan Plan, log func(string)) ([]*linksv1.Link, error) {
 	program := func(pctx *pulumi.Context) error {
 		vpc, err := ec2.LookupVpc(pctx, &ec2.LookupVpcArgs{Default: pulumi.BoolRef(true)})
 		if err != nil {
@@ -71,7 +71,7 @@ func runInfraStack(ctx context.Context, cfg Config, in stackInputs, manifest *de
 	return collectLinks(ctx, cfg.Secrets, in.sessions, manifest, res.Outputs)
 }
 
-func refuseHandover(ctx context.Context, stack auto.Stack, manifest *deploymentsv1.Manifest, name naming.StackName) error {
+func refuseHandover(ctx context.Context, stack auto.Stack, manifest *contractv1.Manifest, name naming.StackName) error {
 	if len(linkedResources(manifest)) == 0 {
 		return nil
 	}
@@ -86,7 +86,7 @@ func refuseHandover(ctx context.Context, stack auto.Stack, manifest *deployments
 	return handedOver(manifest, provisioned, name.String())
 }
 
-func runAppStack(ctx context.Context, cfg Config, in stackInputs, manifest *deploymentsv1.Manifest, plan Plan, app *deploymentsv1.ManifestApp, id Identity, baked appBundle, builds appBuilds, links []*linksv1.Link, stage Stage, log func(string)) (outs []*progressv1.FunctionOutput, names map[string]string, err error) {
+func runAppStack(ctx context.Context, cfg Config, in stackInputs, manifest *contractv1.Manifest, plan Plan, app *contractv1.ManifestApp, id Identity, baked appBundle, builds appBuilds, links []*linksv1.Link, stage Stage, log func(string)) (outs []*progressv1.FunctionOutput, names map[string]string, err error) {
 	start := time.Now()
 	defer func() { spanForStage(cfg.Tracer, stage, start, time.Now(), err) }()
 
@@ -169,8 +169,8 @@ func runAppStack(ctx context.Context, cfg Config, in stackInputs, manifest *depl
 	return outs, names, err
 }
 
-func appFunctions(manifest *deploymentsv1.Manifest, app string) []*deploymentsv1.ManifestFunction {
-	var fns []*deploymentsv1.ManifestFunction
+func appFunctions(manifest *contractv1.Manifest, app string) []*contractv1.ManifestFunction {
+	var fns []*contractv1.ManifestFunction
 	for _, fn := range manifest.GetFunctions() {
 		if fn.GetApp() == app {
 			fns = append(fns, fn)
@@ -353,7 +353,7 @@ func emitEngineTrace(t Tracer, parentStage StageID, trace EngineTrace, upErr err
 	}
 }
 
-func collectLinks(ctx context.Context, secrets SecretsReader, sessions sessionScope, manifest *deploymentsv1.Manifest, outputs auto.OutputMap) ([]*linksv1.Link, error) {
+func collectLinks(ctx context.Context, secrets SecretsReader, sessions sessionScope, manifest *contractv1.Manifest, outputs auto.OutputMap) ([]*linksv1.Link, error) {
 	var result []*linksv1.Link
 	for _, r := range manifest.GetResources() {
 		if r.GetLinked() || (r.GetPostgres() == nil && r.GetBucket() == nil) {
@@ -386,7 +386,7 @@ func collectLinks(ctx context.Context, secrets SecretsReader, sessions sessionSc
 	return result, nil
 }
 
-func collectAppFunctionOutputs(functions []*deploymentsv1.ManifestFunction, outputs auto.OutputMap) ([]*progressv1.FunctionOutput, map[string]string, error) {
+func collectAppFunctionOutputs(functions []*contractv1.ManifestFunction, outputs auto.OutputMap) ([]*progressv1.FunctionOutput, map[string]string, error) {
 	var result []*progressv1.FunctionOutput
 	names := make(map[string]string, len(functions))
 	for _, fn := range functions {

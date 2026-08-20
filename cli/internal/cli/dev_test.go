@@ -743,7 +743,7 @@ declare global {
 }
 globalThis.__ocelRegister ??= [];
 globalThis.__ocelRegister.push(
-  fetch(new URL("/resources.v1.ResourceService/Declare", process.env.OCEL_DEV_SERVER), {
+  fetch(new URL("/app.resources.v1.ResourceService/Declare", process.env.OCEL_DEV_SERVER), {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({

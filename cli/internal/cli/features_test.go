@@ -8,10 +8,10 @@ import (
 	"testing"
 
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
-	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
+	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 )
 
-func testCatalogue(enabled ...string) []*deploymentsv1.Feature {
+func testCatalogue(enabled ...string) []*contractv1.Feature {
 	on := func(name string) bool {
 		for _, e := range enabled {
 			if e == name {
@@ -20,7 +20,7 @@ func testCatalogue(enabled ...string) []*deploymentsv1.Feature {
 		}
 		return false
 	}
-	return []*deploymentsv1.Feature{
+	return []*contractv1.Feature{
 		{Name: featureISR, Summary: "incremental static regeneration", Enabled: on(featureISR)},
 		{Name: featureImageOptimization, Summary: "on-demand image optimization", Enabled: on(featureImageOptimization)},
 		{Name: featureCloudflareEdge, Summary: "a Cloudflare front", DependsOn: []string{featureISR}, Enabled: on(featureCloudflareEdge)},
@@ -170,36 +170,36 @@ func TestRequiredFeatures(t *testing.T) {
 	for _, tc := range []struct {
 		name     string
 		cfg      *projectconfig.Config
-		manifest *deploymentsv1.Manifest
+		manifest *contractv1.Manifest
 		want     []string
 	}{
 		{
 			name:     "a root app the config never declares is read off the build",
 			cfg:      &projectconfig.Config{},
-			manifest: &deploymentsv1.Manifest{Apps: []*deploymentsv1.ManifestApp{{Name: "web", Framework: "next"}}},
+			manifest: &contractv1.Manifest{Apps: []*contractv1.ManifestApp{{Name: "web", Framework: "next"}}},
 			want:     []string{featureImageOptimization, featureISR},
 		},
 		{
 			name:     "a function carrying the framework counts too",
 			cfg:      &projectconfig.Config{},
-			manifest: &deploymentsv1.Manifest{Functions: []*deploymentsv1.ManifestFunction{{LogicalName: "server", Framework: "next"}}},
+			manifest: &contractv1.Manifest{Functions: []*contractv1.ManifestFunction{{LogicalName: "server", Framework: "next"}}},
 			want:     []string{featureImageOptimization, featureISR},
 		},
 		{
 			name:     "a build with no framework at all needs nothing",
 			cfg:      &projectconfig.Config{},
-			manifest: &deploymentsv1.Manifest{Apps: []*deploymentsv1.ManifestApp{{Name: "api", Framework: "express"}}},
+			manifest: &contractv1.Manifest{Apps: []*contractv1.ManifestApp{{Name: "api", Framework: "express"}}},
 		},
 		{
 			name:     "what the config asks for and what the build found are both carried",
 			cfg:      &projectconfig.Config{Edge: &projectconfig.EdgeDescriptor{Kind: "cloudflare"}},
-			manifest: &deploymentsv1.Manifest{Apps: []*deploymentsv1.ManifestApp{{Name: "web", Framework: "next"}}},
+			manifest: &contractv1.Manifest{Apps: []*contractv1.ManifestApp{{Name: "web", Framework: "next"}}},
 			want:     []string{featureCloudflareEdge, featureImageOptimization, featureISR},
 		},
 		{
 			name:     "a name both sides derive is named once",
 			cfg:      &projectconfig.Config{Apps: []projectconfig.App{{Framework: "next"}}},
-			manifest: &deploymentsv1.Manifest{Apps: []*deploymentsv1.ManifestApp{{Name: "web", Framework: "next"}}},
+			manifest: &contractv1.Manifest{Apps: []*contractv1.ManifestApp{{Name: "web", Framework: "next"}}},
 			want:     []string{featureImageOptimization, featureISR},
 		},
 	} {

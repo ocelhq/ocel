@@ -13,9 +13,9 @@ import (
 	"github.com/pulumi/pulumi/sdk/v3/go/pulumi"
 
 	"github.com/ocelhq/ocel/pkg/naming"
-	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
-	linksv1 "github.com/ocelhq/ocel/pkg/proto/links/v1"
-	progressv1 "github.com/ocelhq/ocel/pkg/proto/progress/v1"
+	linksv1 "github.com/ocelhq/ocel/pkg/proto/common/links/v1"
+	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
+	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/platform/aws/provider/payloads"
 )
 
@@ -266,7 +266,7 @@ func isrPolicy(c isrConfig) (string, error) {
 	return string(out), nil
 }
 
-func translateFunction(fn *deploymentsv1.ManifestFunction) functionArgs {
+func translateFunction(fn *contractv1.ManifestFunction) functionArgs {
 	runtime := defaultFunctionRuntime
 	if r := fn.GetRuntime(); r != "" {
 		runtime = r

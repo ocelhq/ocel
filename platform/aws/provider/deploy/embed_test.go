@@ -21,7 +21,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 	s3types "github.com/aws/aws-sdk-go-v2/service/s3/types"
 
-	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
+	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 )
 
 func TestBytecodeEmbedEnabled(t *testing.T) {
@@ -554,9 +554,9 @@ func TestEmbedTargets(t *testing.T) {
 		if err := os.WriteFile(filepath.Join(root, "web.func", "index.js"), []byte("x"), 0o644); err != nil {
 			t.Fatal(err)
 		}
-		manifest := &deploymentsv1.Manifest{
+		manifest := &contractv1.Manifest{
 			Slug:      "proj",
-			Functions: []*deploymentsv1.ManifestFunction{{LogicalName: "web_index", Framework: "next", App: "web", ArtifactPath: "web.func"}},
+			Functions: []*contractv1.ManifestFunction{{LogicalName: "web_index", Framework: "next", App: "web", ArtifactPath: "web.func"}},
 		}
 		warmed := []warmResult{{
 			Target: warmTarget{App: "web", LogicalName: "web_index", FunctionName: "ocel-web-index"},
@@ -589,9 +589,9 @@ func TestEmbedTargets(t *testing.T) {
 		if err := os.WriteFile(filepath.Join(root, "api.func", "index.mjs"), []byte("x"), 0o644); err != nil {
 			t.Fatal(err)
 		}
-		manifest := &deploymentsv1.Manifest{
+		manifest := &contractv1.Manifest{
 			Slug:      "proj",
-			Functions: []*deploymentsv1.ManifestFunction{{LogicalName: "api_handler", Framework: "express", App: "api", ArtifactPath: "api.func"}},
+			Functions: []*contractv1.ManifestFunction{{LogicalName: "api_handler", Framework: "express", App: "api", ArtifactPath: "api.func"}},
 		}
 		warmed := []warmResult{{
 			Target: warmTarget{App: "api", LogicalName: "api_handler", FunctionName: "ocel-api-handler"},

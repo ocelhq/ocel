@@ -14,9 +14,9 @@ import (
 	"strings"
 	"time"
 
-	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
-	environmentv1 "github.com/ocelhq/ocel/pkg/proto/environment/v1"
-	progressv1 "github.com/ocelhq/ocel/pkg/proto/progress/v1"
+	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
+	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
+	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/platform/aws/provider/dns"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
@@ -253,7 +253,7 @@ func finalizeDeploy(ctx context.Context, cfg Config, specs []edge.StackSpec, pri
 	return stack.State(), nil
 }
 
-func stackSpecs(cfg Config, manifest *deploymentsv1.Manifest, version string, warn func(string)) ([]edge.StackSpec, error) {
+func stackSpecs(cfg Config, manifest *contractv1.Manifest, version string, warn func(string)) ([]edge.StackSpec, error) {
 	programmable := cfg.Edge.Facts().RunsCode
 	var generic edge.Worker
 	if programmable {
@@ -284,7 +284,7 @@ func stackSpecs(cfg Config, manifest *deploymentsv1.Manifest, version string, wa
 			ISRWriterScriptName: cfg.ISRWriterScriptName,
 		}
 	}
-	previewProgram := func(baseDomain string, apps []*deploymentsv1.ManifestApp) *edge.ProgramSpec {
+	previewProgram := func(baseDomain string, apps []*contractv1.ManifestApp) *edge.ProgramSpec {
 		spec := program(previewWorkerName(cfg.Slug), withPreviewVars(generic, baseDomain, apps))
 		if spec == nil {
 			return nil
@@ -372,7 +372,7 @@ func readRoutingManifest(cfg Config, app string) (any, bool, error) {
 	return routing, true, nil
 }
 
-func buildDeploymentRecord(cfg Config, needs needRecords, manifest *deploymentsv1.Manifest, app *deploymentsv1.ManifestApp, id Identity, outs []*progressv1.FunctionOutput, builds appBuilds, functionNames map[string]string) (edge.DeploymentRecord, error) {
+func buildDeploymentRecord(cfg Config, needs needRecords, manifest *contractv1.Manifest, app *contractv1.ManifestApp, id Identity, outs []*progressv1.FunctionOutput, builds appBuilds, functionNames map[string]string) (edge.DeploymentRecord, error) {
 	name := app.GetName()
 	urlByLogical := functionURLsByLogicalName(outs)
 	fingerprint, variables := recordedAudit(cfg, app)
@@ -427,7 +427,7 @@ func buildDeploymentRecord(cfg Config, needs needRecords, manifest *deploymentsv
 	return record, nil
 }
 
-func entryLogicalName(manifest *deploymentsv1.Manifest, app, entry string) string {
+func entryLogicalName(manifest *contractv1.Manifest, app, entry string) string {
 	if entry == "" {
 		return ""
 	}
@@ -439,7 +439,7 @@ func entryLogicalName(manifest *deploymentsv1.Manifest, app, entry string) strin
 	return ""
 }
 
-func workerURLOutputs(cfg Config, manifest *deploymentsv1.Manifest) []*progressv1.FunctionOutput {
+func workerURLOutputs(cfg Config, manifest *contractv1.Manifest) []*progressv1.FunctionOutput {
 	apps := workerApps(cfg.ArtifactRoot, manifest)
 	if len(apps) == 0 {
 		return nil

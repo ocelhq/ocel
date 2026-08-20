@@ -11,9 +11,9 @@ import (
 
 	connect "connectrpc.com/connect"
 
-	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
-	environmentv1 "github.com/ocelhq/ocel/pkg/proto/environment/v1"
-	envvarsv1 "github.com/ocelhq/ocel/pkg/proto/envvars/v1"
+	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
+	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
+	envvarsv1 "github.com/ocelhq/ocel/pkg/proto/provider/envvars/v1"
 )
 
 const envFakeStoreEnvVar = "OCEL_TEST_FAKE_VARS_STORE"
@@ -157,7 +157,7 @@ func (s *deployFakeProviderServer) addressable(ctx context.Context, at *envvarsv
 		return connect.NewError(connect.CodeInvalidArgument, fmt.Errorf(
 			"production has a single environment, so %q addresses no value a production function could read", environment))
 	}
-	resp, err := s.ListEnvironments(ctx, &deploymentsv1.ListEnvironmentsRequest{Slug: at.GetSlug()})
+	resp, err := s.ListEnvironments(ctx, &contractv1.ListEnvironmentsRequest{Slug: at.GetSlug()})
 	if err != nil {
 		return err
 	}

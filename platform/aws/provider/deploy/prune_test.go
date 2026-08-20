@@ -11,7 +11,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 	s3types "github.com/aws/aws-sdk-go-v2/service/s3/types"
 
-	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
+	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 )
 
 func TestReclaimDeclaresOneChildStagePerTarget(t *testing.T) {
@@ -432,10 +432,10 @@ func TestReclaimCoversEveryKeyTheDeployWrote(t *testing.T) {
 		CacheStoreUploader: store,
 		Edge:               testLoaderEdge(),
 	}
-	manifest := &deploymentsv1.Manifest{
+	manifest := &contractv1.Manifest{
 		Slug: "proj",
-		Apps: []*deploymentsv1.ManifestApp{{Name: "web", Framework: frameworkNext}},
-		Functions: []*deploymentsv1.ManifestFunction{
+		Apps: []*contractv1.ManifestApp{{Name: "web", Framework: frameworkNext}},
+		Functions: []*contractv1.ManifestFunction{
 			{LogicalName: "web_index", Framework: frameworkNext, App: "web", ArtifactPath: "web.func"},
 		},
 	}

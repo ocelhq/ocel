@@ -14,7 +14,7 @@ import (
 	"golang.org/x/sync/errgroup"
 
 	"github.com/ocelhq/ocel/pkg/naming"
-	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
+	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 )
 
 const staticAssetsDir = "static"
@@ -104,7 +104,7 @@ func assetPlaneTargets(cfg Config) []uploadTarget {
 	}
 }
 
-func uploadStaticAssets(ctx context.Context, cfg Config, manifest *deploymentsv1.Manifest, builds appBuilds) error {
+func uploadStaticAssets(ctx context.Context, cfg Config, manifest *contractv1.Manifest, builds appBuilds) error {
 	if cfg.CacheStoreBucket == "" || cfg.CacheStoreUploader == nil {
 		return nil
 	}

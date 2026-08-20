@@ -6,8 +6,8 @@ import (
 	"testing"
 	"time"
 
-	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
-	progressv1 "github.com/ocelhq/ocel/pkg/proto/progress/v1"
+	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
+	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/platform/aws/provider/deploy"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
@@ -46,7 +46,7 @@ func TestRunDeployDeclaresTheStagePlanBeforeAnyWork(t *testing.T) {
 
 	s := &Server{}
 	tracer := &fakeTracer{}
-	req := &deploymentsv1.DeployRequest{Manifest: wellFormedManifest()}
+	req := &contractv1.DeployRequest{Manifest: wellFormedManifest()}
 
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()

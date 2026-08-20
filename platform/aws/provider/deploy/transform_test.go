@@ -7,8 +7,8 @@ import (
 	"strings"
 	"testing"
 
-	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
-	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/resources/v1"
+	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
+	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/platform/aws/provider/transform"
 )
 
@@ -50,20 +50,20 @@ func overTheWire(surfaces []transform.Surfaces) []transform.Surfaces {
 	return decoded
 }
 
-func transformManifest() *deploymentsv1.Manifest {
-	return &deploymentsv1.Manifest{
+func transformManifest() *contractv1.Manifest {
+	return &contractv1.Manifest{
 		Slug: "shop",
-		Resources: []*deploymentsv1.ManifestResource{
+		Resources: []*contractv1.ManifestResource{
 			{
 				LogicalName: "db",
-				Config:      &deploymentsv1.ManifestResource_Postgres{Postgres: &resourcesv1.PostgresConfig{}},
+				Config:      &contractv1.ManifestResource_Postgres{Postgres: &resourcesv1.PostgresConfig{}},
 			},
 			{
 				LogicalName: "uploads",
-				Config:      &deploymentsv1.ManifestResource_Bucket{Bucket: &resourcesv1.BucketConfig{}},
+				Config:      &contractv1.ManifestResource_Bucket{Bucket: &resourcesv1.BucketConfig{}},
 			},
 		},
-		Functions: []*deploymentsv1.ManifestFunction{
+		Functions: []*contractv1.ManifestFunction{
 			{LogicalName: "fn--api--users", App: "api"},
 		},
 	}
@@ -243,8 +243,8 @@ func TestResolveTransforms(t *testing.T) {
 	t.Run("a surface returned with the wrong shape fails the deploy by name", func(t *testing.T) {
 		t.Parallel()
 
-		manifest := &deploymentsv1.Manifest{
-			Functions: []*deploymentsv1.ManifestFunction{{LogicalName: "fn--api--users", App: "api"}},
+		manifest := &contractv1.Manifest{
+			Functions: []*contractv1.ManifestFunction{{LogicalName: "fn--api--users", App: "api"}},
 		}
 		fake := &fakeEvaluator{out: []transform.Surfaces{{
 			"lambda": {"memorySizeMb": "plenty", "timeoutSeconds": float64(30), "runtime": "nodejs24.x"},

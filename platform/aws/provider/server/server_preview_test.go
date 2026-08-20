@@ -10,8 +10,8 @@ import (
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 
-	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
-	environmentv1 "github.com/ocelhq/ocel/pkg/proto/environment/v1"
+	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
+	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/platform/aws/provider/bootstrap"
 	"github.com/ocelhq/ocel/platform/aws/provider/deploy"
 	"github.com/ocelhq/ocel/platform/aws/provider/edges/apigateway"
@@ -25,21 +25,21 @@ func TestGlobalPreviewProblem(t *testing.T) {
 
 	cases := []struct {
 		name    string
-		req     *deploymentsv1.PreflightRequest
+		req     *contractv1.PreflightRequest
 		wantErr bool
 	}{
 		{
 			name:    "a preview deploy that would serve on the shared wildcard refuses",
-			req:     &deploymentsv1.PreflightRequest{Slug: "acme"},
+			req:     &contractv1.PreflightRequest{Slug: "acme"},
 			wantErr: true,
 		},
 		{
 			name: "a preview deploy of a project with its own preview domain proceeds",
-			req:  &deploymentsv1.PreflightRequest{Slug: "acme", Domains: []string{"*.preview.acme.com"}},
+			req:  &contractv1.PreflightRequest{Slug: "acme", Domains: []string{"*.preview.acme.com"}},
 		},
 		{
 			name: "`ocel preview rm`, which names no project and serves nothing, proceeds",
-			req:  &deploymentsv1.PreflightRequest{},
+			req:  &contractv1.PreflightRequest{},
 		},
 	}
 	for _, tc := range cases {
@@ -61,7 +61,7 @@ func TestGlobalPreviewProblemRefusesAProjectOnAnotherEdge(t *testing.T) {
 
 	recorded := bootstrap.PreviewDomain{BaseDomain: "previews.ocel.dev", Edge: cloudflare.Kind}
 
-	err := globalPreviewProblem(recorded, &deploymentsv1.PreflightRequest{Slug: "acme", Edge: &deploymentsv1.EdgeSelection{Kind: string(apigateway.Kind)}}, &scopedEdge{})
+	err := globalPreviewProblem(recorded, &contractv1.PreflightRequest{Slug: "acme", Edge: &contractv1.EdgeSelection{Kind: string(apigateway.Kind)}}, &scopedEdge{})
 	if err == nil {
 		t.Fatal("globalPreviewProblem = nil, want a deploy that would write routing no one reads refused")
 	}
@@ -71,12 +71,12 @@ func TestGlobalPreviewProblemRefusesAProjectOnAnotherEdge(t *testing.T) {
 		}
 	}
 
-	if err := globalPreviewProblem(recorded, &deploymentsv1.PreflightRequest{Slug: "acme", Edge: &deploymentsv1.EdgeSelection{Kind: string(cloudflare.Kind)}}, &scopedEdge{}); err != nil {
+	if err := globalPreviewProblem(recorded, &contractv1.PreflightRequest{Slug: "acme", Edge: &contractv1.EdgeSelection{Kind: string(cloudflare.Kind)}}, &scopedEdge{}); err != nil {
 		t.Fatalf("globalPreviewProblem = %v, want a project on the holding edge admitted", err)
 	}
 
 	legacy := bootstrap.PreviewDomain{BaseDomain: "previews.ocel.dev"}
-	if err := globalPreviewProblem(legacy, &deploymentsv1.PreflightRequest{Slug: "acme", Edge: &deploymentsv1.EdgeSelection{Kind: string(apigateway.Kind)}}, &scopedEdge{}); err != nil {
+	if err := globalPreviewProblem(legacy, &contractv1.PreflightRequest{Slug: "acme", Edge: &contractv1.EdgeSelection{Kind: string(apigateway.Kind)}}, &scopedEdge{}); err != nil {
 		t.Fatalf("globalPreviewProblem = %v, want a record naming no edge to accuse nobody", err)
 	}
 }
@@ -212,13 +212,13 @@ func TestDomainClaims(t *testing.T) {
 		if len(got) != 3 {
 			t.Fatalf("claims = %d, want one per requested hostname", len(got))
 		}
-		if got[0].GetHostname() != "*.preview.app.com" || got[0].GetStatus() != deploymentsv1.DomainClaim_STATUS_CLAIMED || got[0].GetOwner() != "ocel--other--preview--root" {
+		if got[0].GetHostname() != "*.preview.app.com" || got[0].GetStatus() != contractv1.DomainClaim_STATUS_CLAIMED || got[0].GetOwner() != "ocel--other--preview--root" {
 			t.Errorf("claim[0] = %+v, want another project's worker reported as the owner", got[0])
 		}
-		if got[1].GetHostname() != "free.com" || got[1].GetStatus() != deploymentsv1.DomainClaim_STATUS_UNCLAIMED || got[1].GetOwner() != "" {
+		if got[1].GetHostname() != "free.com" || got[1].GetStatus() != contractv1.DomainClaim_STATUS_UNCLAIMED || got[1].GetOwner() != "" {
 			t.Errorf("claim[1] = %+v, want an unheld hostname reported unclaimed", got[1])
 		}
-		if got[2].GetStatus() != deploymentsv1.DomainClaim_STATUS_UNCLAIMED || got[2].GetOwner() != "" {
+		if got[2].GetStatus() != contractv1.DomainClaim_STATUS_UNCLAIMED || got[2].GetOwner() != "" {
 			t.Errorf("claim[2] = %+v, want this project's own hold to read as free to take", got[2])
 		}
 	})
@@ -228,7 +228,7 @@ func TestDomainClaims(t *testing.T) {
 		owner := routeOwners(map[string]string{"shop.com": "ocel-shop--prod-web"}, nil)
 
 		got := domainClaims(context.Background(), owner, "shop", []string{"shop.com"})
-		if len(got) != 1 || got[0].GetStatus() != deploymentsv1.DomainClaim_STATUS_UNCLAIMED {
+		if len(got) != 1 || got[0].GetStatus() != contractv1.DomainClaim_STATUS_UNCLAIMED {
 			t.Errorf("claims = %+v, want the pre-cutover hold to read as free to take", got)
 		}
 	})
@@ -236,7 +236,7 @@ func TestDomainClaims(t *testing.T) {
 	t.Run("an edge that cannot answer leaves the claim unspecified", func(t *testing.T) {
 		t.Parallel()
 		failing := domainClaims(context.Background(), routeOwners(nil, map[string]bool{"app.com": true}), "shop", []string{"app.com"})
-		if len(failing) != 1 || failing[0].GetHostname() != "app.com" || failing[0].GetStatus() != deploymentsv1.DomainClaim_STATUS_UNSPECIFIED {
+		if len(failing) != 1 || failing[0].GetHostname() != "app.com" || failing[0].GetStatus() != contractv1.DomainClaim_STATUS_UNSPECIFIED {
 			t.Errorf("claims = %+v, want a failed lookup reported as unanswerable", failing)
 		}
 	})

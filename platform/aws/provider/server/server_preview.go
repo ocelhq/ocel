@@ -15,9 +15,9 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/sts"
 
 	"github.com/ocelhq/ocel/pkg/naming"
-	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
-	environmentv1 "github.com/ocelhq/ocel/pkg/proto/environment/v1"
-	progressv1 "github.com/ocelhq/ocel/pkg/proto/progress/v1"
+	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
+	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
+	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/platform/aws/provider/bootstrap"
 	"github.com/ocelhq/ocel/platform/aws/provider/deploy"
 	"github.com/ocelhq/ocel/platform/aws/provider/pulumiruntime"
@@ -26,7 +26,7 @@ import (
 
 var errPreviewInfraMissing = errors.New("preview infrastructure is not set up; run `ocel bootstrap --preview` first")
 
-func (s *Server) Preflight(ctx context.Context, req *deploymentsv1.PreflightRequest) (*deploymentsv1.PreflightResponse, error) {
+func (s *Server) Preflight(ctx context.Context, req *contractv1.PreflightRequest) (*contractv1.PreflightResponse, error) {
 	opts := s.config.get()
 	awscfg, err := loadAWS(ctx, opts.Region)
 	if err != nil {
@@ -40,12 +40,12 @@ func (s *Server) Preflight(ctx context.Context, req *deploymentsv1.PreflightRequ
 		}
 	}
 
-	resp := &deploymentsv1.PreflightResponse{Identity: &deploymentsv1.Identity{}}
+	resp := &contractv1.PreflightResponse{Identity: &contractv1.Identity{}}
 
 	awsOK := true
 	if id, err := s.callerIdentity(ctx, sts.NewFromConfig(awscfg), opts.Region); err != nil {
 		awsOK = false
-		resp.CredentialProblems = append(resp.CredentialProblems, &deploymentsv1.CredentialProblem{
+		resp.CredentialProblems = append(resp.CredentialProblems, &contractv1.CredentialProblem{
 			Provider: "AWS",
 			Message:  fmt.Sprintf("could not authenticate: %v", err),
 			Hint:     "configure AWS credentials (set AWS_PROFILE, run `aws sso login`, or export access keys)",
@@ -65,7 +65,7 @@ func (s *Server) Preflight(ctx context.Context, req *deploymentsv1.PreflightRequ
 	}
 	if v, ok := edgeFront.(edge.CredentialVerifier); ok {
 		if id, err := v.VerifyCredentials(ctx); err != nil {
-			resp.CredentialProblems = append(resp.CredentialProblems, &deploymentsv1.CredentialProblem{
+			resp.CredentialProblems = append(resp.CredentialProblems, &contractv1.CredentialProblem{
 				Provider: string(edgeFront.Kind()),
 				Message:  err.Error(),
 				Hint:     fmt.Sprintf("give this run credentials the %s edge accepts", edgeFront.Kind()),
@@ -115,7 +115,7 @@ func (s *Server) Preflight(ctx context.Context, req *deploymentsv1.PreflightRequ
 	return resp, nil
 }
 
-func globalPreviewProblem(recorded bootstrap.PreviewDomain, req *deploymentsv1.PreflightRequest, edgeFront edge.Edge) error {
+func globalPreviewProblem(recorded bootstrap.PreviewDomain, req *contractv1.PreflightRequest, edgeFront edge.Edge) error {
 	servesOnSharedWildcard := req.GetSlug() != "" && len(req.GetDomains()) == 0
 	if !servesOnSharedWildcard {
 		return nil
@@ -149,22 +149,22 @@ func (s *Server) edgeRouteOwner(kind edge.Kind, region string) routeOwnerFunc {
 	}
 }
 
-func domainClaims(ctx context.Context, owner routeOwnerFunc, slug string, domains []string) []*deploymentsv1.DomainClaim {
+func domainClaims(ctx context.Context, owner routeOwnerFunc, slug string, domains []string) []*contractv1.DomainClaim {
 	if len(domains) == 0 {
 		return nil
 	}
-	claims := make([]*deploymentsv1.DomainClaim, 0, len(domains))
+	claims := make([]*contractv1.DomainClaim, 0, len(domains))
 	for _, hostname := range domains {
-		claim := &deploymentsv1.DomainClaim{Hostname: hostname}
+		claim := &contractv1.DomainClaim{Hostname: hostname}
 		claims = append(claims, claim)
 		script, err := owner(ctx, hostname)
 		switch {
 		case err != nil:
 			continue
 		case script == "" || deploy.ProjectOwnsWorker(slug, script):
-			claim.Status = deploymentsv1.DomainClaim_STATUS_UNCLAIMED
+			claim.Status = contractv1.DomainClaim_STATUS_UNCLAIMED
 		default:
-			claim.Status = deploymentsv1.DomainClaim_STATUS_CLAIMED
+			claim.Status = contractv1.DomainClaim_STATUS_CLAIMED
 			claim.Owner = script
 		}
 	}
@@ -205,15 +205,15 @@ func (s *Server) preflightSubstrates(ctx context.Context, cfn bootstrap.CFNDescr
 	return other, wanted, nil
 }
 
-func preflightResponse(required environmentv1.Tier, preview, production bootstrap.Deployed) *deploymentsv1.PreflightResponse {
+func preflightResponse(required environmentv1.Tier, preview, production bootstrap.Deployed) *contractv1.PreflightResponse {
 	wanted, other := requiredSubstrate(required, preview, production)
 	switch {
 	case wanted.Present:
-		return &deploymentsv1.PreflightResponse{InfraTier: classToTier(wanted.Class), InfrastructurePresent: true}
+		return &contractv1.PreflightResponse{InfraTier: classToTier(wanted.Class), InfrastructurePresent: true}
 	case other.Present:
-		return &deploymentsv1.PreflightResponse{InfraTier: classToTier(other.Class), InfrastructurePresent: true}
+		return &contractv1.PreflightResponse{InfraTier: classToTier(other.Class), InfrastructurePresent: true}
 	default:
-		return &deploymentsv1.PreflightResponse{InfraTier: environmentv1.Tier_TIER_UNSPECIFIED, InfrastructurePresent: false}
+		return &contractv1.PreflightResponse{InfraTier: environmentv1.Tier_TIER_UNSPECIFIED, InfrastructurePresent: false}
 	}
 }
 
@@ -235,7 +235,7 @@ func classToTier(class string) environmentv1.Tier {
 	}
 }
 
-func (s *Server) RemovePreview(ctx context.Context, req *deploymentsv1.RemovePreviewRequest, stream *connect.ServerStream[progressv1.OperationEvent]) (err error) {
+func (s *Server) RemovePreview(ctx context.Context, req *contractv1.RemovePreviewRequest, stream *connect.ServerStream[progressv1.OperationEvent]) (err error) {
 	sender := newEventSender(ctx, stream.Send)
 	defer func() { err = sender.close() }()
 	tracer := newEventTracer(sender)
@@ -260,7 +260,7 @@ func newPreviewRemovalStages(persistent bool) deploy.PreviewRemovalStages {
 	return stages
 }
 
-func (s *Server) runDestroyPreview(ctx context.Context, req *deploymentsv1.RemovePreviewRequest, tracer deploy.Tracer, stageReport func(deploy.StageID) func(string), logf func(string)) error {
+func (s *Server) runDestroyPreview(ctx context.Context, req *contractv1.RemovePreviewRequest, tracer deploy.Tracer, stageReport func(deploy.StageID) func(string), logf func(string)) error {
 	env := req.GetEnvironment()
 	persistent := env.GetLifecycle() == environmentv1.Lifecycle_LIFECYCLE_PERSISTENT
 
@@ -360,11 +360,11 @@ func (s *Server) previewTeardownDeps(ctx context.Context, kind edge.Kind, opts p
 	return deps, stack, nil
 }
 
-func (s *Server) ListEnvironments(ctx context.Context, req *deploymentsv1.ListEnvironmentsRequest) (*deploymentsv1.ListEnvironmentsResponse, error) {
+func (s *Server) ListEnvironments(ctx context.Context, req *contractv1.ListEnvironmentsRequest) (*contractv1.ListEnvironmentsResponse, error) {
 	return s.listEnvironments(ctx, s.config.get().Region, req.GetSlug())
 }
 
-func (s *Server) listEnvironments(ctx context.Context, region, slug string) (*deploymentsv1.ListEnvironmentsResponse, error) {
+func (s *Server) listEnvironments(ctx context.Context, region, slug string) (*contractv1.ListEnvironmentsResponse, error) {
 	awscfg, err := loadAWS(ctx, region)
 	if err != nil {
 		return nil, err
@@ -376,7 +376,7 @@ func (s *Server) listEnvironments(ctx context.Context, region, slug string) (*de
 		return nil, err
 	}
 	if !deployed.Present || deployed.StateTable == "" {
-		return &deploymentsv1.ListEnvironmentsResponse{}, nil
+		return &contractv1.ListEnvironmentsResponse{}, nil
 	}
 	index, err := stackIndexFor(awscfg, deployed, bootstrapCommand(true))
 	if err != nil {
@@ -387,13 +387,13 @@ func (s *Server) listEnvironments(ctx context.Context, region, slug string) (*de
 	if err != nil {
 		return nil, err
 	}
-	return &deploymentsv1.ListEnvironmentsResponse{Environments: toPreviewEnvironments(stacks)}, nil
+	return &contractv1.ListEnvironmentsResponse{Environments: toPreviewEnvironments(stacks)}, nil
 }
 
-func toPreviewEnvironments(stacks []deploy.PreviewStack) []*deploymentsv1.PreviewEnvironment {
-	out := make([]*deploymentsv1.PreviewEnvironment, 0, len(stacks))
+func toPreviewEnvironments(stacks []deploy.PreviewStack) []*contractv1.PreviewEnvironment {
+	out := make([]*contractv1.PreviewEnvironment, 0, len(stacks))
 	for _, s := range stacks {
-		out = append(out, &deploymentsv1.PreviewEnvironment{
+		out = append(out, &contractv1.PreviewEnvironment{
 			Identity:  s.Identity,
 			Lifecycle: s.Lifecycle,
 			Label:     s.Label,

@@ -7,7 +7,7 @@ import (
 	"strings"
 
 	"github.com/ocelhq/ocel/pkg/naming"
-	envvarsv1 "github.com/ocelhq/ocel/pkg/proto/envvars/v1"
+	envvarsv1 "github.com/ocelhq/ocel/pkg/proto/provider/envvars/v1"
 )
 
 const linkTypesFileName = "ocel-links.d.ts"
