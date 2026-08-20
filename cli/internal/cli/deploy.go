@@ -170,14 +170,15 @@ func runDeploy(ctx context.Context, d deps, cwd string, opts deployOptions, stdo
 			Class:     deploymentsv1.Environment_CLASS_PRODUCTION,
 			Lifecycle: deploymentsv1.Environment_LIFECYCLE_UNSPECIFIED,
 		}
-		req := edgeSettings(cfg).applyToDeploy(&deploymentsv1.DeployRequest{
+		req := &deploymentsv1.DeployRequest{
 			Manifest:         manifest,
 			Options:          []byte(provider.Options),
 			ProtocolVersion:  manifestbuilder.SchemaVersion,
 			Environment:      env,
 			Tag:              opts.tag,
 			RequiredFeatures: requiredFeatures(cfg, manifest),
-		})
+			Edge:             edgeSelection(cfg),
+		}
 
 		var links []*linksv1.Link
 		var functions []*deploymentsv1.FunctionOutput

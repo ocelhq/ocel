@@ -113,13 +113,19 @@ func (m *memo) edgeFor(kind edge.Kind, region string) *entry[edge.Edge] {
 	return entryFor(m, &m.edgeByOrigin, string(kind)+"|"+region)
 }
 
-type edgeNamer interface{ GetEdgeKind() string }
+type edgeSelector interface {
+	GetEdge() *deploymentsv1.EdgeSelection
+}
 
-func requestedEdge(req edgeNamer) edge.Kind {
-	if kind := edge.Kind(req.GetEdgeKind()); kind != "" {
+func requestedEdge(req edgeSelector) edge.Kind {
+	if kind := edge.Kind(req.GetEdge().GetKind()); kind != "" {
 		return kind
 	}
 	return edges.DefaultKind
+}
+
+func requestedDNS(req edgeSelector) *deploymentsv1.Dns {
+	return req.GetEdge().GetDns()
 }
 
 func (s *Server) edge(kind edge.Kind, region string) (edge.Edge, error) {
@@ -345,7 +351,7 @@ func (s *Server) runDeploy(ctx context.Context, req *deploymentsv1.DeployRequest
 		return deploy.Result{}, finishPreparing(err)
 	}
 
-	dnsWriter, err := dns.WriterFor(req.GetDns().GetKind(), req.GetDns().GetZone(), dns.Deps{AWS: awscfg})
+	dnsWriter, err := dns.WriterFor(requestedDNS(req).GetKind(), requestedDNS(req).GetZone(), dns.Deps{AWS: awscfg})
 	if err != nil {
 		return deploy.Result{}, finishPreparing(err)
 	}
@@ -411,7 +417,7 @@ func (s *Server) runDeploy(ctx context.Context, req *deploymentsv1.DeployRequest
 		Edge:          edgeFront,
 		DNS:           dnsWriter,
 		DNSAwait:      dns.NewPoller(),
-		AllowDegraded: req.GetAllowDegraded(),
+		AllowDegraded: req.GetEdge().GetAllowDegraded(),
 		Degraded:      degraded,
 		Class:         env.GetClass(),
 		Lifecycle:     env.GetLifecycle(),

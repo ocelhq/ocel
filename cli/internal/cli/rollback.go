@@ -78,13 +78,14 @@ func runRollback(ctx context.Context, d deps, cwd string, opts rollbackOptions, 
 		if err != nil {
 			return err
 		}
-		resp, err := client.Rollback(ctx, edgeSettings(cfg).applyToRollback(&deploymentsv1.RollbackRequest{
+		resp, err := client.Rollback(ctx, &deploymentsv1.RollbackRequest{
 			Options:         []byte(provider.Options),
 			ProtocolVersion: manifestbuilder.SchemaVersion,
 			Slug:            cfg.Slug,
 			To:              opts.to,
 			Tag:             opts.tag,
-		}))
+			Edge:            edgeSelection(cfg),
+		})
 		if err != nil {
 			return err
 		}

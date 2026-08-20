@@ -224,7 +224,7 @@ func (s *Server) runDestroyProject(ctx context.Context, req *deploymentsv1.Destr
 	}
 	cfg.Tracer = tracer
 	cfg.StageReport = stageReport
-	if cfg.DNS, err = dns.WriterFor(req.GetDns().GetKind(), req.GetDns().GetZone(), dns.Deps{AWS: awscfg}); err != nil {
+	if cfg.DNS, err = dns.WriterFor(requestedDNS(req).GetKind(), requestedDNS(req).GetZone(), dns.Deps{AWS: awscfg}); err != nil {
 		return finish(err)
 	}
 
@@ -281,7 +281,7 @@ func (s *Server) runDestroyPreviewProject(ctx context.Context, req *deploymentsv
 	}
 	cfg.Tracer = tracer
 	cfg.StageReport = stageReport
-	if cfg.DNS, err = dns.WriterFor(req.GetDns().GetKind(), req.GetDns().GetZone(), dns.Deps{AWS: awscfg}); err != nil {
+	if cfg.DNS, err = dns.WriterFor(requestedDNS(req).GetKind(), requestedDNS(req).GetZone(), dns.Deps{AWS: awscfg}); err != nil {
 		return finish(err)
 	}
 

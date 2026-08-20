@@ -214,13 +214,14 @@ func runPreviewUp(ctx context.Context, d deps, cwd string, opts previewUpOptions
 		}
 		ui.BuildOK()
 
-		req := edgeSettings(cfg).applyToDeploy(&deploymentsv1.DeployRequest{
+		req := &deploymentsv1.DeployRequest{
 			Manifest:         manifest,
 			Options:          []byte(provider.Options),
 			ProtocolVersion:  manifestbuilder.SchemaVersion,
 			Environment:      env,
 			RequiredFeatures: requiredFeatures(cfg, manifest),
-		})
+			Edge:             edgeSelection(cfg),
+		}
 
 		var links []*linksv1.Link
 		var functions []*deploymentsv1.FunctionOutput
@@ -377,12 +378,13 @@ func runPreviewRm(ctx context.Context, d deps, cwd string, opts previewRmOptions
 			return err
 		}
 
-		req := edgeSettings(cfg).applyToDestroyPreview(&deploymentsv1.DestroyPreviewRequest{
+		req := &deploymentsv1.DestroyPreviewRequest{
 			Environment:     env,
 			Options:         []byte(provider.Options),
 			ProtocolVersion: manifestbuilder.SchemaVersion,
 			Slug:            cfg.Slug,
-		})
+			Edge:            edgeSelection(cfg),
+		}
 		if err := runner.DestroyPreview(ctx, req, ui.Event); err != nil {
 			return err
 		}
@@ -463,13 +465,14 @@ func runPreviewPrune(ctx context.Context, d deps, cwd string, opts previewPruneO
 		if err := preflightPreview(ctx, d, runner, provider, cfg, stdout); err != nil {
 			return err
 		}
-		if err := runner.Prune(ctx, edgeSettings(cfg).applyToPrune(&deploymentsv1.PruneRequest{
+		if err := runner.Prune(ctx, &deploymentsv1.PruneRequest{
 			Options:         []byte(provider.Options),
 			ProtocolVersion: manifestbuilder.SchemaVersion,
 			Slug:            cfg.Slug,
 			KeepN:           int32(opts.keep),
 			Environment:     env,
-		}), ui.Event); err != nil {
+			Edge:            edgeSelection(cfg),
+		}, ui.Event); err != nil {
 			return err
 		}
 		ui.Finish(fmt.Sprintf("Pruned preview %q", opts.name))
@@ -638,14 +641,15 @@ func preflight(ctx context.Context, d deps, runner *providerrunner.Runner, provi
 	}
 
 	spinner := deployui.StartSpinner(out, "Checking credentials")
-	resp, err := client.Preflight(ctx, edgeSettings(cfg).applyToPreflight(&deploymentsv1.PreflightRequest{
+	resp, err := client.Preflight(ctx, &deploymentsv1.PreflightRequest{
 		Options:          []byte(provider.Options),
 		ProtocolVersion:  manifestbuilder.SchemaVersion,
 		RequiredClass:    required,
 		Slug:             slug,
 		Domains:          domains,
 		RequiredFeatures: configuredFeatures(cfg),
-	}))
+		Edge:             edgeSelection(cfg),
+	})
 	spinner.Stop()
 	if err != nil {
 		return nil, err
