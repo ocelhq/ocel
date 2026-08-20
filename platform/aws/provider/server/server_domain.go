@@ -2,22 +2,20 @@ package server
 
 import (
 	"context"
-	"errors"
 	"fmt"
-	"slices"
 	"strings"
 
 	connect "connectrpc.com/connect"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/cloudformation"
-	"github.com/aws/aws-sdk-go-v2/service/ssm"
 
 	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
 	"github.com/ocelhq/ocel/platform/aws/provider/bootstrap"
 	"github.com/ocelhq/ocel/platform/aws/provider/certs"
 	"github.com/ocelhq/ocel/platform/aws/provider/deploy"
 	"github.com/ocelhq/ocel/platform/aws/provider/dns"
+	"github.com/ocelhq/ocel/platform/aws/provider/domains"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
@@ -42,13 +40,13 @@ func (s *Server) runUseDomain(ctx context.Context, req *deploymentsv1.UseDomainR
 	if err != nil {
 		return err
 	}
-	awscfg, err := loadAWS(ctx, "")
+	clients, err := s.domainClients(ctx, "")
 	if err != nil {
 		return err
 	}
-	ssmClient := ssm.NewFromConfig(awscfg)
+	ssmClient := clients.ssm
 
-	deployed, err := s.deployed(ctx, cloudformation.NewFromConfig(awscfg), "", true)
+	deployed, err := s.deployed(ctx, clients.cfn, "", true)
 	if err != nil {
 		return err
 	}
@@ -84,7 +82,7 @@ func (s *Server) runUseDomain(ctx context.Context, req *deploymentsv1.UseDomainR
 		return err
 	}
 
-	edgeFront, err := s.edge(requestedEdge(req), awscfg.Region)
+	edgeFront, err := s.edge(requestedEdge(req), clients.region)
 	if err != nil {
 		return err
 	}
@@ -96,7 +94,7 @@ func (s *Server) runUseDomain(ctx context.Context, req *deploymentsv1.UseDomainR
 		Edge:   edgeFront,
 		Values: edgeValues,
 		Worker: deploy.WorkerFacts{
-			Region:             awscfg.Region,
+			Region:             clients.region,
 			StateTable:         deployed.StateTable,
 			AssetBucket:        deployed.AssetBucket,
 			ImageOptimizerURL:  deployed.ImageOptimizerURL,
@@ -111,156 +109,65 @@ func (s *Server) runUseDomain(ctx context.Context, req *deploymentsv1.UseDomainR
 		return err
 	}
 
-	writer, err := dns.WriterFor(requestedDNS(req).GetKind(), requestedDNS(req).GetZone(), dns.Deps{AWS: awscfg})
+	writer, err := clients.writerFor(requestedDNS(req).GetKind(), requestedDNS(req).GetZone())
 	if err != nil {
 		return err
 	}
-	return useDomain(ctx, domainRun{
-		ssm:    ssmClient,
-		edge:   edgeFront,
-		writer: writer,
-		poller: dns.NewPoller(),
-		flow: certs.Flow{
-			Issuer: certs.IssuerFor(edgeFront, certs.Deps{AWS: awscfg}),
-			Writer: writer,
-			Prober: certs.NewProber(),
+	wildcard := string(edge.PreviewWildcard(baseDomain))
+	engine := domains.Engine{
+		Kind:          edgeFront.Kind(),
+		ServesUnbound: edgeFront.Facts().ServesUnbound,
+		Issuer:        clients.issuerFor(edgeFront),
+		Writer:        writer,
+		Poller:        clients.poller,
+		Prober:        clients.prober,
+		Store: previewStore{
+			ssm: ssmClient,
+			domain: bootstrap.PreviewDomain{
+				BaseDomain: baseDomain,
+				Edge:       edgeFront.Kind(),
+				Scope:      edgeFront.Facts().CredentialScope,
+				GrammarMin: edge.PreviewGrammarMin,
+				GrammarMax: edge.PreviewGrammarMax,
+			},
 		},
-		spec: spec,
-	}, recorded, baseDomain, progress, ask)
+		ProveNotes: []string{fmt.Sprintf("If this run gives up waiting, re-run `ocel domain use '%s' --preview`.", wildcard)},
+		Ask:        domains.Ask(ask),
+	}
+	return useDomain(ctx, engine, edgeFront, spec, recorded.Settlement, wildcard, progress)
 }
 
 type askDNS func(headline string, records []edge.Record, notes ...string)
 
-type domainRun struct {
+type previewStore struct {
 	ssm    bootstrap.SSMAPI
-	edge   edge.Edge
-	writer edge.DNSWriter
-	poller dns.Poller
-	flow   certs.Flow
-	spec   edge.PreviewWildcardSpec
+	domain bootstrap.PreviewDomain
 }
 
-func useDomain(ctx context.Context, run domainRun, recorded bootstrap.PreviewDomain, baseDomain string, progress func(string), ask askDNS) error {
-	wildcard := edge.PreviewWildcard(baseDomain)
+func (s previewStore) Save(ctx context.Context, settled domains.Settlement) error {
+	next := s.domain
+	next.Settlement = settled
+	return bootstrap.WritePreviewDomain(ctx, s.ssm, bootstrap.ClassPreview, next)
+}
 
-	domain := bootstrap.PreviewDomain{
-		BaseDomain:  baseDomain,
-		Edge:        run.edge.Kind(),
-		Scope:       run.edge.Facts().CredentialScope,
-		GrammarMin:  edge.PreviewGrammarMin,
-		GrammarMax:  edge.PreviewGrammarMax,
-		Certificate: recorded.Certificate,
-		Probe:       recorded.Probe,
+func useDomain(ctx context.Context, engine domains.Engine, edgeFront edge.Edge, spec edge.PreviewWildcardSpec, recorded domains.Settlement, wildcard string, progress func(string)) error {
+	target := domains.Target{
+		Hostname: wildcard,
+		Surface: func(ctx context.Context, certificate string, say func(string)) (edge.DNSTarget, error) {
+			withCert := spec
+			withCert.Certificate = certificate
+			say(fmt.Sprintf("Reconciling the shared preview entry on %s", wildcard))
+			front, err := edgeFront.ReconcilePreviewWildcard(ctx, withCert)
+			if err != nil {
+				return edge.DNSTarget{}, err
+			}
+			return edge.DNSTarget{Kind: edgeFront.Kind(), ServesUnbound: edgeFront.Facts().ServesUnbound, Front: front}, nil
+		},
 	}
-	validation := recorded.Certificate.Validation
-	certWritten, hostWritten := recordsAmong(recorded.Records, validation)
-	certOwed, hostOwed := recordsAmong(recorded.Owed, validation)
-	save := func() error {
-		domain.Records = append(slices.Clone(hostWritten), certWritten...)
-		domain.Owed = append(slices.Clone(hostOwed), certOwed...)
-		return bootstrap.WritePreviewDomain(ctx, run.ssm, bootstrap.ClassPreview, domain)
-	}
-
-	run.flow.Ask = func(records []edge.Record) {
-		ask(
-			fmt.Sprintf("Prove you own %s", baseDomain),
-			records,
-			"Leave it in place: ACM renews the certificate through it.",
-			fmt.Sprintf("If this run gives up waiting, re-run `ocel domain use '%s' --preview`.", wildcard),
-		)
-	}
-	issued, err := run.flow.Certificate(ctx, []string{wildcard}, priorSettlement(recorded), progress, func(settled certs.Settlement) error {
-		domain.Certificate = settled.Certificate
-		certWritten, certOwed = settled.Written, settled.Owed
-		return save()
-	})
-	certWritten, certOwed = issued.Written, issued.Owed
-	if err != nil {
-		return err
-	}
-	spec := run.spec
-	spec.Certificate = issued.Certificate.ARN
-
-	progress(fmt.Sprintf("Reconciling the shared preview entry on %s", wildcard))
-	front, err := run.edge.ReconcilePreviewWildcard(ctx, spec)
-	if err != nil {
-		return err
-	}
-
-	target := edge.DNSTarget{Kind: run.edge.Kind(), ServesUnbound: run.edge.Facts().ServesUnbound, Front: front}
-	records, err := edge.RecordsFor(target, []string{wildcard})
-	if err != nil {
-		return err
-	}
-	pointAtEdge := func(records []edge.Record) {
-		ask(fmt.Sprintf("Point %s at the %s edge", wildcard, run.edge.Kind()), records)
-	}
-	if err := settleRecords(ctx, run.writer, run.poller, records, progress, pointAtEdge, func(written, owed []edge.Record) error {
-		hostWritten, hostOwed = written, owed
-		return save()
-	}); err != nil {
-		return err
-	}
-
-	fronted := run.flow
-	fronted.Front = hostOwed
-	_, err = fronted.Probe(ctx, wildcard, run.edge.Kind(), issued, progress, func(settled certs.Settlement) error {
-		domain.Probe = settled.Probe
-		return save()
-	})
+	_, err := engine.Settle(ctx, recorded, []string{wildcard}, func(domains.Settlement) []domains.Target {
+		return []domains.Target{target}
+	}, progress)
 	return err
-}
-
-func priorSettlement(recorded bootstrap.PreviewDomain) certs.Settlement {
-	validation := recorded.Certificate.Validation
-	written, _ := recordsAmong(recorded.Records, validation)
-	owed, _ := recordsAmong(recorded.Owed, validation)
-	return certs.Settlement{
-		Certificate: recorded.Certificate,
-		Probe:       recorded.Probe,
-		Written:     written,
-		Owed:        owed,
-	}
-}
-
-func recordsAmong(recorded, wanted []edge.Record) (among, besides []edge.Record) {
-	for _, rec := range recorded {
-		if slices.ContainsFunc(wanted, func(want edge.Record) bool {
-			return want.Name == rec.Name && want.Type == rec.Type
-		}) {
-			among = append(among, rec)
-			continue
-		}
-		besides = append(besides, rec)
-	}
-	return among, besides
-}
-
-func settleRecords(ctx context.Context, writer edge.DNSWriter, poller dns.Poller, records []edge.Record, say func(string), ask func([]edge.Record), record func(written, owed []edge.Record) error) error {
-	var written, owed []edge.Record
-	var writeErr error
-	if writer != nil {
-		for _, rec := range records {
-			say(fmt.Sprintf("Writing %s", rec))
-		}
-		written, writeErr = writer.EnsureRecords(ctx, records, say)
-		owed = edge.Unwritten(records, written)
-	} else {
-		owed = records
-		if ask != nil {
-			ask(records)
-		}
-	}
-	if err := record(written, owed); err != nil {
-		return errors.Join(writeErr, err)
-	}
-	if writeErr != nil {
-		return writeErr
-	}
-	if writer != nil {
-		return nil
-	}
-	return poller.Await(ctx, records, say)
 }
 
 func (s *Server) PlanReleaseDomain(ctx context.Context, req *deploymentsv1.PlanReleaseDomainRequest) (*deploymentsv1.PlanReleaseDomainResponse, error) {
@@ -271,7 +178,11 @@ func (s *Server) PlanReleaseDomain(ctx context.Context, req *deploymentsv1.PlanR
 	if err != nil {
 		return nil, err
 	}
-	ssmClient := ssm.NewFromConfig(awscfg)
+	clients, err := s.domainClients(ctx, "")
+	if err != nil {
+		return nil, err
+	}
+	ssmClient := clients.ssm
 
 	recorded, err := bootstrap.ReadPreviewDomain(ctx, ssmClient, bootstrap.ClassPreview)
 	if err != nil {
@@ -281,7 +192,7 @@ func (s *Server) PlanReleaseDomain(ctx context.Context, req *deploymentsv1.PlanR
 		return &deploymentsv1.PlanReleaseDomainResponse{}, nil
 	}
 	edgeFront, err := previewWildcardEdge(recorded, func(kind edge.Kind) (edge.Edge, error) {
-		return s.edge(kind, awscfg.Region)
+		return s.edge(kind, clients.region)
 	})
 	if err != nil {
 		return nil, connect.NewError(connect.CodeFailedPrecondition, err)
@@ -353,7 +264,11 @@ func (s *Server) runReleaseDomain(ctx context.Context, req *deploymentsv1.Releas
 	if err != nil {
 		return err
 	}
-	ssmClient := ssm.NewFromConfig(awscfg)
+	clients, err := s.domainClients(ctx, "")
+	if err != nil {
+		return err
+	}
+	ssmClient := clients.ssm
 
 	recorded, err := bootstrap.ReadPreviewDomain(ctx, ssmClient, bootstrap.ClassPreview)
 	if err != nil {
@@ -369,13 +284,13 @@ func (s *Server) runReleaseDomain(ctx context.Context, req *deploymentsv1.Releas
 	}
 
 	edgeFront, err := previewWildcardEdge(recorded, func(kind edge.Kind) (edge.Edge, error) {
-		return s.edge(kind, awscfg.Region)
+		return s.edge(kind, clients.region)
 	})
 	if err != nil {
 		return err
 	}
 
-	writer, err := dns.WriterFor(requestedDNS(req).GetKind(), requestedDNS(req).GetZone(), dns.Deps{AWS: awscfg})
+	writer, err := clients.writerFor(requestedDNS(req).GetKind(), requestedDNS(req).GetZone())
 	if err != nil {
 		return err
 	}
@@ -384,7 +299,7 @@ func (s *Server) runReleaseDomain(ctx context.Context, req *deploymentsv1.Releas
 		ssm:    ssmClient,
 		edge:   edgeFront,
 		writer: writer,
-		issuer: certs.DiscardIssuerFor(recorded.Certificate, certs.Deps{AWS: awscfg}),
+		issuer: clients.discarderFor(recorded.Settlement.Certificate),
 	}, recorded, progress)
 }
 
@@ -400,10 +315,10 @@ func releaseDomain(ctx context.Context, deps releaseDeps, recorded bootstrap.Pre
 	if err := deps.edge.DestroyPreviewWildcard(ctx, recorded.BaseDomain); err != nil {
 		return err
 	}
-	if err := dns.Release(ctx, deps.writer, recorded.Records, progress); err != nil {
+	if err := dns.Release(ctx, deps.writer, recorded.Settlement.WrittenRecords(), progress); err != nil {
 		return err
 	}
-	if err := deps.issuer.Discard(ctx, recorded.Certificate, progress); err != nil {
+	if err := deps.issuer.Discard(ctx, recorded.Settlement.Certificate, progress); err != nil {
 		return err
 	}
 	return bootstrap.DeletePreviewDomain(ctx, deps.ssm, bootstrap.ClassPreview)
@@ -413,11 +328,11 @@ func (s *Server) ListDomain(ctx context.Context, req *deploymentsv1.ListDomainRe
 	if err := requirePreviewClass(req.GetClass()); err != nil {
 		return nil, connect.NewError(connect.CodeInvalidArgument, err)
 	}
-	awscfg, err := loadAWS(ctx, "")
+	clients, err := s.domainClients(ctx, "")
 	if err != nil {
 		return nil, err
 	}
-	ssmClient := ssm.NewFromConfig(awscfg)
+	ssmClient := clients.ssm
 
 	recorded, err := bootstrap.ReadPreviewDomain(ctx, ssmClient, bootstrap.ClassPreview)
 	if err != nil {
@@ -435,7 +350,7 @@ func (s *Server) ListDomain(ctx context.Context, req *deploymentsv1.ListDomainRe
 		return nil, err
 	}
 	return &deploymentsv1.ListDomainResponse{
-		Domain:   globalPreviewDomain(ctx, s.globalPreviewOwner(recorded, awscfg.Region), recorded),
+		Domain:   globalPreviewDomain(ctx, s.globalPreviewOwner(recorded, clients.region), recorded),
 		Projects: served,
 	}, nil
 }
@@ -479,19 +394,20 @@ func globalPreviewDomain(ctx context.Context, owner routeOwnerFunc, recorded boo
 	if recorded.BaseDomain == "" {
 		return nil
 	}
+	wildcard := recorded.Wildcard()
 	return &deploymentsv1.GlobalPreviewDomain{
 		BaseDomain:        recorded.BaseDomain,
 		EdgeScope:         recorded.Scope,
 		GrammarMin:        recorded.GrammarMin,
 		GrammarMax:        recorded.GrammarMax,
 		RouteInstalled:    sharedEntryRouteInstalled(ctx, owner, recorded.BaseDomain),
-		CertificateId:     recorded.Certificate.ARN,
-		CertificateStatus: recorded.Certificate.Status,
-		RecordsWritten:    recordLines(recorded.Records),
-		RecordsOwed:       recordLines(recorded.Owed),
-		LastProbeAt:       probeUnix(recorded.Probe),
-		LastProbeOk:       recorded.Probe.OK,
-		LastProbeEdge:     string(recorded.Probe.Edge),
+		CertificateId:     recorded.Settlement.Certificate.ARN,
+		CertificateStatus: recorded.Settlement.Certificate.Status,
+		RecordsWritten:    recordLines(recorded.Settlement.WrittenRecords()),
+		RecordsOwed:       recordLines(recorded.Settlement.OwedRecords()),
+		LastProbeAt:       probeUnix(wildcard.Probe),
+		LastProbeOk:       wildcard.Probe.OK,
+		LastProbeEdge:     string(wildcard.Probe.Edge),
 	}
 }
 

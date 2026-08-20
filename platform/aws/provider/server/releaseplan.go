@@ -30,10 +30,10 @@ func releasePlanItems(edgeFront edge.Edge, recorded bootstrap.PreviewDomain) []*
 	removed, kept := edgeFront.PreviewWildcardSurfaces(edge.PreviewWildcard(recorded.BaseDomain))
 
 	items := []*deploymentsv1.TeardownItem{surfaceItem(removed)}
-	if arn := recorded.Certificate.ARN; arn != "" {
-		items = append(items, certificateItem(recorded.Certificate))
+	if arn := recorded.Settlement.Certificate.ARN; arn != "" {
+		items = append(items, certificateItem(recorded.Settlement.Certificate))
 	}
-	for _, rec := range recorded.Records {
+	for _, rec := range recorded.Settlement.WrittenRecords() {
 		items = append(items, &deploymentsv1.TeardownItem{
 			Kind:   "DNS record",
 			Name:   rec.String(),
@@ -41,7 +41,7 @@ func releasePlanItems(edgeFront edge.Edge, recorded bootstrap.PreviewDomain) []*
 			Reason: "ocel wrote it; it is removed only while its live value is still the one ocel wrote",
 		})
 	}
-	for _, rec := range recorded.Owed {
+	for _, rec := range recorded.Settlement.OwedRecords() {
 		items = append(items, &deploymentsv1.TeardownItem{
 			Kind:   "DNS record",
 			Name:   rec.String(),

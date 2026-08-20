@@ -19,6 +19,7 @@ import (
 	"github.com/ocelhq/ocel/platform/aws/provider/bootstrap"
 	"github.com/ocelhq/ocel/platform/aws/provider/certs"
 	"github.com/ocelhq/ocel/platform/aws/provider/dns"
+	"github.com/ocelhq/ocel/platform/aws/provider/domains"
 	"github.com/ocelhq/ocel/platform/aws/provider/edges/apigateway"
 	"github.com/ocelhq/ocel/platform/aws/provider/edges/cloudfront"
 	cloudflare "github.com/ocelhq/ocel/platform/edge/cloudflare/deploy"
@@ -198,7 +199,7 @@ func (f *domainFixture) spoke(want string) bool {
 	return slices.ContainsFunc(f.said, func(line string) bool { return strings.Contains(line, want) })
 }
 
-func (f *domainFixture) recorded(t *testing.T) bootstrap.Production {
+func (f *domainFixture) recorded(t *testing.T) domains.Settlement {
 	t.Helper()
 	state, err := bootstrap.ReadStackStateFor(t.Context(), f.ssm, bootstrap.ClassProduction, domainSlug)
 	if err != nil {
@@ -225,7 +226,7 @@ type domainFixtureOptions struct {
 	configured []string
 	host       string
 	pins       map[string]string
-	prior      bootstrap.Production
+	prior      domains.Settlement
 	certified  bool
 	kind       edge.Kind
 	priorEdge  *boundStack
@@ -271,21 +272,17 @@ func newDomainFixture(opts domainFixtureOptions) *domainFixture {
 	if opts.writer != nil {
 		writer = opts.writer
 	}
-	session := &domainSession{
-		ssm:           f.ssm,
-		slug:          domainSlug,
-		kind:          kind,
-		servesUnbound: registeredEdge(kind).Facts().ServesUnbound,
-
-		stack:  front,
-		writer: writer,
-		poller: dns.Poller{
+	engine := domains.Engine{
+		Kind:          kind,
+		ServesUnbound: registeredEdge(kind).Facts().ServesUnbound,
+		Writer:        writer,
+		Poller: dns.Poller{
 			Lookup:   func(context.Context, string) ([]string, error) { return []string{"192.0.2.1"}, nil },
 			Wait:     func(context.Context, time.Duration) error { return nil },
 			Attempts: 1,
 			Every:    time.Millisecond,
 		},
-		prober: certs.Prober{
+		Prober: certs.Prober{
 			Get: func(_ context.Context, target string) (http.Header, error) {
 				log.note("probe %s", target)
 				header := http.Header{}
@@ -298,26 +295,25 @@ func newDomainFixture(opts domainFixtureOptions) *domainFixture {
 			Now:      func() time.Time { return time.Unix(1755500000, 0).UTC() },
 			Jitter:   func() float64 { return 0.5 },
 		},
-		discarder: func(certs.Certificate) certs.Issuer {
+		Discarder: func(certs.Certificate) certs.Issuer {
 			return certs.Issuer{API: opts.acm, Region: certs.CloudFrontRegion}
 		},
-		pins:       opts.pins,
-		configured: opts.configured,
-		host:       opts.host,
-		recorded:   opts.prior,
-		ttl:        edge.WriteTTL(writer),
-		ask: func(_ string, records []edge.Record, _ ...string) {
+		Store: productionStore{ssm: f.ssm, slug: domainSlug, stack: front},
+		Unbind: func(ctx context.Context, hostname string) error {
+			return front.UnbindDomain(ctx, hostname)
+		},
+		Ask: func(_ string, records []edge.Record, _ ...string) {
 			f.asked = append(f.asked, records...)
 		},
 	}
 	if opts.priorEdge != nil {
-		session.open = func(edge.Kind) (edge.EdgeStack, error) { return opts.priorEdge, nil }
+		engine.Open = func(edge.Kind) (edge.EdgeStack, error) { return opts.priorEdge, nil }
 	}
 	switch {
 	case opts.kind != "":
-		session.issuer = fakeIssuer(opts.kind, opts.acm)
+		engine.Issuer = fakeIssuer(opts.kind, opts.acm)
 	case opts.certified:
-		session.issuer = certs.Issuer{
+		engine.Issuer = certs.Issuer{
 			API:      opts.acm,
 			Region:   certs.CloudFrontRegion,
 			Wait:     func(context.Context, time.Duration) error { return nil },
@@ -325,7 +321,14 @@ func newDomainFixture(opts domainFixtureOptions) *domainFixture {
 			Every:    time.Millisecond,
 		}
 	}
-	f.session = session
+	f.session = &domainSession{
+		engine:     engine,
+		stack:      front,
+		recorded:   opts.prior,
+		configured: opts.configured,
+		host:       opts.host,
+		pins:       opts.pins,
+	}
 	return f
 }
 
@@ -361,8 +364,8 @@ func TestAddDomain(t *testing.T) {
 		if !recorded.Ready("shop.app.com", cloudflare.Kind) || !recorded.Ready("www.app.com", cloudflare.Kind) {
 			t.Errorf("recorded = %+v, want both hosts probed live", recorded.Hosts)
 		}
-		if len(recorded.Host("shop.app.com").Written) != 1 {
-			t.Errorf("recorded records = %+v, want the front record ocel wrote", recorded.Host("shop.app.com").Written)
+		if len(recorded.Host("shop.app.com").Records.Written) != 1 {
+			t.Errorf("recorded records = %+v, want the front record ocel wrote", recorded.Host("shop.app.com").Records.Written)
 		}
 		if recorded.Certificate.ARN == "" || recorded.Certificate.Adopted {
 			t.Errorf("recorded certificate = %+v, want the one ocel requested", recorded.Certificate)
@@ -419,14 +422,14 @@ func TestAddDomain(t *testing.T) {
 
 		api := newDomainACM()
 		api.issue("arn:aws:acm:us-east-1:111122223333:certificate/old", "shop.app.com")
-		prior := bootstrap.Production{
+		prior := domains.Settlement{
 			Certificate: certs.Certificate{
 				ARN:     "arn:aws:acm:us-east-1:111122223333:certificate/old",
 				Region:  certs.CloudFrontRegion,
 				Status:  certs.StatusIssued,
 				Domains: []string{"shop.app.com"},
 			},
-			Hosts: []bootstrap.Provisioned{{
+			Hosts: []domains.Host{{
 				Hostname:    "shop.app.com",
 				Certificate: "arn:aws:acm:us-east-1:111122223333:certificate/old",
 				Probe:       certs.Probe{At: time.Unix(1, 0), Edge: cloudflare.Kind, OK: true},
@@ -470,15 +473,15 @@ func TestAddDomain(t *testing.T) {
 		shopValidation := edge.Record{Name: "_ocel.shop.app.com", Type: edge.RecordTypeCNAME, Value: "_target.acm-validations.aws"}
 		api := newDomainACM()
 		api.issue("arn:aws:acm:us-east-1:111122223333:certificate/old", "shop.app.com")
-		prior := bootstrap.Production{
+		prior := domains.Settlement{
 			Certificate: certs.Certificate{
 				ARN:     "arn:aws:acm:us-east-1:111122223333:certificate/old",
 				Region:  certs.CloudFrontRegion,
 				Status:  certs.StatusIssued,
 				Domains: []string{"shop.app.com"},
 			},
-			Written: []edge.Record{shopValidation},
-			Hosts: []bootstrap.Provisioned{{
+			Validation: domains.Records{Written: []edge.Record{shopValidation}},
+			Hosts: []domains.Host{{
 				Hostname:    "shop.app.com",
 				Certificate: "arn:aws:acm:us-east-1:111122223333:certificate/old",
 				Probe:       certs.Probe{At: time.Unix(1, 0), Edge: cloudflare.Kind, OK: true},
@@ -497,8 +500,8 @@ func TestAddDomain(t *testing.T) {
 		if slices.Contains(f.writer.deleted, shopValidation) {
 			t.Errorf("deleted = %+v, want the validation record the new certificate renews through left standing", f.writer.deleted)
 		}
-		if !slices.Contains(f.recorded(t).Written, shopValidation) {
-			t.Errorf("recorded validation = %+v, want it still written for the new certificate", f.recorded(t).Written)
+		if !slices.Contains(f.recorded(t).Validation.Written, shopValidation) {
+			t.Errorf("recorded validation = %+v, want it still written for the new certificate", f.recorded(t).Validation.Written)
 		}
 	})
 
@@ -625,7 +628,7 @@ func TestAddDomain(t *testing.T) {
 
 		api := newDomainACM()
 		api.issue("arn:aws:acm:us-east-1:111122223333:certificate/half", "shop.app.com")
-		prior := bootstrap.Production{
+		prior := domains.Settlement{
 			Certificate: certs.Certificate{
 				ARN:     "arn:aws:acm:us-east-1:111122223333:certificate/half",
 				Region:  certs.CloudFrontRegion,
@@ -654,7 +657,7 @@ func TestAddDomain(t *testing.T) {
 	t.Run("an already-served host is left alone", func(t *testing.T) {
 		t.Parallel()
 
-		prior := bootstrap.Production{Hosts: []bootstrap.Provisioned{{
+		prior := domains.Settlement{Hosts: []domains.Host{{
 			Hostname: "shop.app.com",
 			Probe:    certs.Probe{At: time.Unix(1, 0), Edge: cloudflare.Kind, OK: true},
 		}}}
@@ -683,7 +686,7 @@ func TestAddDomain(t *testing.T) {
 		if f.spoke("Writing ") {
 			t.Errorf("said = %v, want nothing claimed as written with no writer in hand", f.said)
 		}
-		if owed := f.recorded(t).Host("shop.app.com").Owed; len(owed) != 1 {
+		if owed := f.recorded(t).Host("shop.app.com").Records.Owed; len(owed) != 1 {
 			t.Errorf("owed = %+v, want the record recorded as the user's", owed)
 		}
 	})
@@ -753,17 +756,17 @@ func TestRemoveDomain(t *testing.T) {
 	written := edge.Record{Name: "www.app.com", Type: edge.RecordTypeAAAA, Value: edge.ProxyPlaceholder, Proxied: true}
 	owed := edge.Record{Name: "shop.app.com", Type: edge.RecordTypeAAAA, Value: edge.ProxyPlaceholder, Proxied: true}
 
-	prior := func() bootstrap.Production {
-		return bootstrap.Production{
+	prior := func() domains.Settlement {
+		return domains.Settlement{
 			Certificate: certs.Certificate{
 				ARN:     "arn:aws:acm:us-east-1:111122223333:certificate/ours",
 				Region:  certs.CloudFrontRegion,
 				Status:  certs.StatusIssued,
 				Domains: []string{"shop.app.com", "www.app.com"},
 			},
-			Hosts: []bootstrap.Provisioned{
-				{Hostname: "shop.app.com", Certificate: "arn:aws:acm:us-east-1:111122223333:certificate/ours", Owed: []edge.Record{owed}},
-				{Hostname: "www.app.com", Certificate: "arn:aws:acm:us-east-1:111122223333:certificate/ours", Written: []edge.Record{written}},
+			Hosts: []domains.Host{
+				{Hostname: "shop.app.com", Certificate: "arn:aws:acm:us-east-1:111122223333:certificate/ours", Records: domains.Records{Owed: []edge.Record{owed}}},
+				{Hostname: "www.app.com", Certificate: "arn:aws:acm:us-east-1:111122223333:certificate/ours", Records: domains.Records{Written: []edge.Record{written}}},
 			},
 		}
 	}
@@ -897,10 +900,10 @@ func TestReleaseProductionDomains(t *testing.T) {
 
 	front := edge.Record{Name: "shop.app.com", Type: edge.RecordTypeAAAA, Value: edge.ProxyPlaceholder, Proxied: true}
 	validation := edge.Record{Name: "_ocel.shop.app.com", Type: edge.RecordTypeCNAME, Value: "_target.acm-validations.aws"}
-	recorded := bootstrap.Production{
+	recorded := domains.Settlement{
 		Certificate: certs.Certificate{ARN: "arn:aws:acm:us-east-1:111122223333:certificate/ours", Region: certs.CloudFrontRegion, Status: certs.StatusIssued},
-		Written:     []edge.Record{validation},
-		Hosts:       []bootstrap.Provisioned{{Hostname: "shop.app.com", Written: []edge.Record{front}}},
+		Validation:  domains.Records{Written: []edge.Record{validation}},
+		Hosts:       []domains.Host{{Hostname: "shop.app.com", Records: domains.Records{Written: []edge.Record{front}}}},
 	}
 	state, err := bootstrap.WithProduction(edge.StackState{edge.StackKeySlug: domainSlug}, recorded)
 	if err != nil {

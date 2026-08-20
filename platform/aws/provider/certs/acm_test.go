@@ -15,7 +15,10 @@ import (
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
-const testARN = "arn:aws:acm:us-east-1:111122223333:certificate/abcd-1234"
+const (
+	testARN  = "arn:aws:acm:us-east-1:111122223333:certificate/abcd-1234"
+	wildcard = "*.preview.acme.com"
+)
 
 var validationRecord = edge.Record{
 	Name:  "_ocel.preview.acme.com",

@@ -11,6 +11,7 @@ import (
 	"github.com/ocelhq/ocel/platform/aws/provider/bootstrap"
 	"github.com/ocelhq/ocel/platform/aws/provider/certs"
 	"github.com/ocelhq/ocel/platform/aws/provider/deploy"
+	"github.com/ocelhq/ocel/platform/aws/provider/domains"
 	"github.com/ocelhq/ocel/platform/aws/provider/edges"
 	"github.com/ocelhq/ocel/platform/aws/provider/edges/apigateway"
 	"github.com/ocelhq/ocel/platform/aws/provider/edges/cloudfront"
@@ -37,7 +38,7 @@ func itemLines(items []*deploymentsv1.TeardownItem) []string {
 	return lines
 }
 
-func productionState(t *testing.T, recorded bootstrap.Production) edge.StackState {
+func productionState(t *testing.T, recorded domains.Settlement) edge.StackState {
 	t.Helper()
 	state, err := bootstrap.WithProduction(edge.StackState{edge.StackKeySlug: "shop"}, recorded)
 	if err != nil {
@@ -172,11 +173,13 @@ func TestDestroyPlanItemsPerEdge(t *testing.T) {
 	t.Run("a pinned certificate and a record ocel never wrote are kept with a reason", func(t *testing.T) {
 		t.Parallel()
 
-		recorded := bootstrap.Production{
+		recorded := domains.Settlement{
 			Certificate: certs.Certificate{ARN: "arn:aws:acm:eu-west-1:1:certificate/ocel"},
-			Written:     []edge.Record{{Name: "_acme.shop.example.com", Type: edge.RecordTypeCNAME, Value: "validate.acm-validations.aws"}},
-			Owed:        []edge.Record{{Name: "shop.example.com", Type: edge.RecordTypeCNAME, Value: "d123.cloudfront.net"}},
-			Hosts: []bootstrap.Provisioned{{
+			Validation: domains.Records{
+				Written: []edge.Record{{Name: "_acme.shop.example.com", Type: edge.RecordTypeCNAME, Value: "validate.acm-validations.aws"}},
+				Owed:    []edge.Record{{Name: "shop.example.com", Type: edge.RecordTypeCNAME, Value: "d123.cloudfront.net"}},
+			},
+			Hosts: []domains.Host{{
 				Hostname:    "pinned.example.com",
 				Certificate: "arn:aws:acm:eu-west-1:1:certificate/pinned",
 			}},
@@ -213,7 +216,7 @@ func TestDestroyPlanItemsPerEdge(t *testing.T) {
 	t.Run("an adopted certificate is never ocel's to delete", func(t *testing.T) {
 		t.Parallel()
 
-		recorded := bootstrap.Production{Certificate: certs.Certificate{ARN: "arn:adopted", Adopted: true}}
+		recorded := domains.Settlement{Certificate: certs.Certificate{ARN: "arn:adopted", Adopted: true}}
 		items, err := destroyPlanItems(planEdge(t, cloudfront.Kind), projectPlanScope{
 			class: bootstrap.ClassProduction, slug: "shop", state: productionState(t, recorded),
 		})

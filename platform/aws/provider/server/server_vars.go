@@ -30,6 +30,7 @@ type VarsServer struct {
 
 type stores struct {
 	openAccount func(ctx context.Context, region string) (account, error)
+	openDomain  func(ctx context.Context, region string) (domainClients, error)
 
 	mu     sync.Mutex
 	cached map[storeKey]*vars.Store

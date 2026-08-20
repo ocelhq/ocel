@@ -13,6 +13,7 @@ import (
 	ssmtypes "github.com/aws/aws-sdk-go-v2/service/ssm/types"
 
 	"github.com/ocelhq/ocel/platform/aws/provider/certs"
+	"github.com/ocelhq/ocel/platform/aws/provider/domains"
 	cloudflare "github.com/ocelhq/ocel/platform/edge/cloudflare/deploy"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
@@ -53,20 +54,25 @@ func TestPreviewDomainParam(t *testing.T) {
 			Scope:      "acct",
 			GrammarMin: 1,
 			GrammarMax: 1,
-			Records:    []edge.Record{{Name: "*.preview.acme.com", Type: edge.RecordTypeAAAA, Value: edge.ProxyPlaceholder, Proxied: true}},
-			Owed:       []edge.Record{{Name: "_ocel.preview.acme.com", Type: edge.RecordTypeCNAME, Value: "_target.acm-validations.aws"}},
-			Certificate: certs.Certificate{
-				ARN:    "arn:aws:acm:us-east-1:111122223333:certificate/abcd-1234",
-				Region: certs.CloudFrontRegion,
-				Status: certs.StatusIssued,
+			Settlement: domains.Settlement{
+				Certificate: certs.Certificate{
+					ARN:    "arn:aws:acm:us-east-1:111122223333:certificate/abcd-1234",
+					Region: certs.CloudFrontRegion,
+					Status: certs.StatusIssued,
+				},
+				Validation: domains.Records{Owed: []edge.Record{{Name: "_ocel.preview.acme.com", Type: edge.RecordTypeCNAME, Value: "_target.acm-validations.aws"}}},
+				Hosts: []domains.Host{{
+					Hostname: "*.preview.acme.com",
+					Records:  domains.Records{Written: []edge.Record{{Name: "*.preview.acme.com", Type: edge.RecordTypeAAAA, Value: edge.ProxyPlaceholder, Proxied: true}}},
+					Probe:    certs.Probe{At: time.Unix(1755500000, 0).UTC(), Edge: cloudflare.Kind, OK: true},
+				}},
 			},
-			Probe: certs.Probe{At: time.Unix(1755500000, 0).UTC(), Edge: cloudflare.Kind, OK: true},
 		}
 
 		if err := WritePreviewDomain(context.Background(), fake, ClassPreview, want); err != nil {
 			t.Fatalf("WritePreviewDomain: %v", err)
 		}
-		if !strings.Contains(fake.params[PreviewDomainParamName], want.Certificate.ARN) {
+		if !strings.Contains(fake.params[PreviewDomainParamName], want.Settlement.Certificate.ARN) {
 			t.Fatalf("param = %q, want the certificate ARN on the substrate's state", fake.params[PreviewDomainParamName])
 		}
 		if !strings.Contains(fake.params[PreviewDomainParamName], "preview.acme.com") {

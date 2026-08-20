@@ -6,16 +6,14 @@ import (
 	"fmt"
 	"slices"
 	"strings"
-	"time"
 
 	connect "connectrpc.com/connect"
-
-	"github.com/aws/aws-sdk-go-v2/service/ssm"
 
 	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
 	"github.com/ocelhq/ocel/platform/aws/provider/bootstrap"
 	"github.com/ocelhq/ocel/platform/aws/provider/certs"
 	"github.com/ocelhq/ocel/platform/aws/provider/dns"
+	"github.com/ocelhq/ocel/platform/aws/provider/domains"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
@@ -34,7 +32,7 @@ func (s *Server) AddDomain(ctx context.Context, req *deploymentsv1.AddDomainRequ
 	if err != nil {
 		return stream.Send(failureResult(err))
 	}
-	session.ask = func(headline string, records []edge.Record, notes ...string) {
+	session.engine.Ask = func(headline string, records []edge.Record, notes ...string) {
 		_ = stream.Send(dnsOwedEvent(headline, records, notes...))
 	}
 	if err := session.add(ctx, progress); err != nil {
@@ -74,26 +72,26 @@ type domainRequest struct {
 }
 
 type domainSession struct {
-	ssm           bootstrap.SSMAPI
-	slug          string
-	kind          edge.Kind
-	servesUnbound bool
-
+	engine     domains.Engine
 	stack      edge.EdgeStack
-	writer     edge.DNSWriter
-	poller     dns.Poller
-	prober     certs.Prober
-	issuer     certs.Issuer
-	discarder  func(certs.Certificate) certs.Issuer
-	open       func(edge.Kind) (edge.EdgeStack, error)
-	ttl        time.Duration
-	pins       map[string]string
-	zone       string
+	recorded   domains.Settlement
 	configured []string
 	host       string
-	recorded   bootstrap.Production
-	superseded certs.Settlement
-	ask        askDNS
+	pins       map[string]string
+}
+
+type productionStore struct {
+	ssm   bootstrap.SSMAPI
+	slug  string
+	stack edge.EdgeStack
+}
+
+func (s productionStore) Save(ctx context.Context, settled domains.Settlement) error {
+	next, err := bootstrap.WithProduction(s.stack.State(), settled)
+	if err != nil {
+		return err
+	}
+	return bootstrap.WriteStackStateFor(ctx, s.ssm, bootstrap.ClassProduction, s.slug, next)
 }
 
 func (s *Server) domainSession(ctx context.Context, req domainRequest) (*domainSession, error) {
@@ -113,17 +111,16 @@ func (s *Server) domainSession(ctx context.Context, req domainRequest) (*domainS
 		return nil, connect.NewError(connect.CodeInvalidArgument, err)
 	}
 
-	awscfg, err := loadAWS(ctx, opts.Region)
+	clients, err := s.domainClients(ctx, opts.Region)
 	if err != nil {
 		return nil, err
 	}
-	edgeFront, err := s.edge(edge.Kind(req.edgeKind), awscfg.Region)
+	edgeFront, err := s.edge(edge.Kind(req.edgeKind), clients.region)
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInvalidArgument, err)
 	}
-	ssmClient := ssm.NewFromConfig(awscfg)
 
-	state, err := bootstrap.ReadStackState(ctx, ssmClient, req.slug)
+	state, err := bootstrap.ReadStackState(ctx, clients.ssm, req.slug)
 	if err != nil {
 		return nil, err
 	}
@@ -138,74 +135,42 @@ func (s *Server) domainSession(ctx context.Context, req domainRequest) (*domainS
 	if err != nil {
 		return nil, err
 	}
-	writer, err := dns.WriterFor(req.dns.GetKind(), req.dns.GetZone(), dns.Deps{AWS: awscfg})
+	writer, err := clients.writerFor(req.dns.GetKind(), req.dns.GetZone())
 	if err != nil {
 		return nil, err
 	}
 
-	session := &domainSession{
-		ssm:           ssmClient,
-		slug:          req.slug,
-		kind:          edgeFront.Kind(),
-		servesUnbound: edgeFront.Facts().ServesUnbound,
-
-		stack:  stack,
-		writer: writer,
-		poller: dns.NewPoller(),
-		prober: certs.NewProber(),
-		discarder: func(cert certs.Certificate) certs.Issuer {
-			return certs.DiscardIssuerFor(cert, certs.Deps{AWS: awscfg})
-		},
-		open: func(kind edge.Kind) (edge.EdgeStack, error) {
-			front, err := s.edge(kind, awscfg.Region)
+	engine := domains.Engine{
+		Kind:          edgeFront.Kind(),
+		ServesUnbound: edgeFront.Facts().ServesUnbound,
+		Discarder:     clients.discarderFor,
+		Writer:        writer,
+		Poller:        clients.poller,
+		Prober:        clients.prober,
+		Store:         productionStore{ssm: clients.ssm, slug: req.slug, stack: stack},
+		Zone:          req.dns.GetZone(),
+		Open: func(kind edge.Kind) (edge.EdgeStack, error) {
+			front, err := s.edge(kind, clients.region)
 			if err != nil {
 				return nil, err
 			}
 			return front.Open(state)
 		},
-		ttl:        edge.WriteTTL(writer),
-		pins:       normalizePins(opts.Certificates),
-		zone:       req.dns.GetZone(),
-		configured: configured,
-		host:       host,
-		recorded:   recorded,
+		Unbind: func(ctx context.Context, hostname string) error {
+			return stack.UnbindDomain(ctx, hostname)
+		},
 	}
 	if req.certificate {
-		session.issuer = certs.IssuerFor(edgeFront, certs.Deps{AWS: awscfg})
+		engine.Issuer = clients.issuerFor(edgeFront)
 	}
-	return session, nil
-}
-
-func (d *domainSession) save(ctx context.Context) error {
-	next, err := bootstrap.WithProduction(d.stack.State(), d.recorded)
-	if err != nil {
-		return err
-	}
-	return bootstrap.WriteStackStateFor(ctx, d.ssm, bootstrap.ClassProduction, d.slug, next)
-}
-
-func (d *domainSession) flow(front []edge.Record) certs.Flow {
-	return certs.Flow{Issuer: d.issuer, Writer: d.writer, Prober: d.prober, Front: front, Ask: d.proveOwnership}
-}
-
-func (d *domainSession) proveOwnership(records []edge.Record) {
-	if d.ask == nil {
-		return
-	}
-	d.ask(
-		fmt.Sprintf("Prove you own %s", strings.Join(d.unpinned(), ", ")),
-		records,
-		"Leave it in place: ACM renews the certificate through it.",
-	)
-}
-
-func (d *domainSession) pointAtEdge(host string) func([]edge.Record) {
-	return func(records []edge.Record) {
-		if d.ask == nil {
-			return
-		}
-		d.ask(fmt.Sprintf("Point %s at the %s edge", host, d.kind), records)
-	}
+	return &domainSession{
+		engine:     engine,
+		stack:      stack,
+		recorded:   recorded,
+		configured: configured,
+		host:       host,
+		pins:       normalizePins(opts.Certificates),
+	}, nil
 }
 
 func (d *domainSession) add(ctx context.Context, progress func(string)) error {
@@ -215,40 +180,59 @@ func (d *domainSession) add(ctx context.Context, progress func(string)) error {
 	if d.host != "" && !slices.Contains(d.configured, d.host) {
 		return fmt.Errorf("this project does not declare %q: add it to domains.production and run this again — no command edits the config, which declares %s", d.host, strings.Join(d.configured, ", "))
 	}
-	if err := d.settleCertificate(ctx, progress); err != nil {
-		return err
-	}
-	targets := d.addTargets()
-	if len(targets) == 0 {
-		progress(fmt.Sprintf("Every hostname this project declares is already served: %s", strings.Join(d.configured, ", ")))
-		return d.discardSuperseded(ctx, progress)
-	}
-	for _, host := range targets {
-		if err := d.addHost(ctx, host, progress); err != nil {
-			return err
+	choose := func(settled domains.Settlement) []domains.Target {
+		targets := d.addTargets(settled)
+		if len(targets) == 0 {
+			progress(fmt.Sprintf("Every hostname this project declares is already served: %s", strings.Join(d.configured, ", ")))
 		}
+		return targets
 	}
-	return d.discardSuperseded(ctx, progress)
+	settled, err := d.engine.Settle(ctx, d.recorded, d.unpinned(), choose, progress)
+	d.recorded = settled
+	return err
 }
 
-func (d *domainSession) addTargets() []string {
+func (d *domainSession) addTargets(settled domains.Settlement) []domains.Target {
+	var hosts []string
 	if d.host != "" {
-		return []string{d.host}
-	}
-	var targets []string
-	for _, host := range d.configured {
-		if !d.recorded.Ready(host, d.kind) || d.recorded.Host(host).Certificate != d.wantedARN(host) {
-			targets = append(targets, host)
+		hosts = []string{d.host}
+	} else {
+		for _, host := range d.configured {
+			if !settled.Ready(host, d.engine.Kind) || settled.Host(host).Certificate != d.wantedARN(settled, host) {
+				hosts = append(hosts, host)
+			}
 		}
+	}
+	targets := make([]domains.Target, 0, len(hosts))
+	for _, host := range hosts {
+		targets = append(targets, d.target(host))
 	}
 	return targets
 }
 
-func (d *domainSession) wantedARN(host string) string {
+func (d *domainSession) target(host string) domains.Target {
+	return domains.Target{
+		Hostname: host,
+		Pinned:   d.pins[host],
+		Surface: func(ctx context.Context, certificate string, say func(string)) (edge.DNSTarget, error) {
+			say(fmt.Sprintf("Binding %s to the %s edge", host, d.engine.Kind))
+			return d.bind(ctx, host, certificate)
+		},
+	}
+}
+
+func (d *domainSession) bind(ctx context.Context, host, certificate string) (edge.DNSTarget, error) {
+	if err := d.stack.BindDomain(ctx, edge.DomainBinding{Hostname: host, Certificate: certificate}); err != nil {
+		return edge.DNSTarget{}, err
+	}
+	return edge.TargetOf(d.engine.Kind, d.engine.ServesUnbound, d.stack.State()), nil
+}
+
+func (d *domainSession) wantedARN(settled domains.Settlement, host string) string {
 	if pinned := d.pins[host]; pinned != "" {
 		return pinned
 	}
-	return d.recorded.Certificate.ARN
+	return settled.Certificate.ARN
 }
 
 func (d *domainSession) unpinned() []string {
@@ -259,116 +243,6 @@ func (d *domainSession) unpinned() []string {
 		}
 	}
 	return wanted
-}
-
-func (d *domainSession) settleCertificate(ctx context.Context, progress func(string)) error {
-	wanted := d.unpinned()
-	if d.issuer.API == nil || len(wanted) == 0 {
-		return nil
-	}
-	d.superseded = d.recorded.Settlement()
-	settled, err := d.flow(nil).Certificate(ctx, wanted, d.recorded.Settlement(), progress, func(settled certs.Settlement) error {
-		d.recorded = d.recorded.WithSettlement(settled)
-		return d.save(ctx)
-	})
-	d.recorded = d.recorded.WithSettlement(settled)
-	return err
-}
-
-func (d *domainSession) certificateFor(ctx context.Context, host string) (string, error) {
-	if pinned := d.pins[host]; pinned != "" {
-		if d.issuer.API == nil {
-			return "", nil
-		}
-		cert, err := d.issuer.Pinned(ctx, host, pinned)
-		if err != nil {
-			return "", err
-		}
-		return cert.ARN, nil
-	}
-	return d.recorded.Certificate.ARN, nil
-}
-
-func (d *domainSession) addHost(ctx context.Context, host string, progress func(string)) error {
-	certificate, err := d.certificateFor(ctx, host)
-	if err != nil {
-		return err
-	}
-	provisioned := d.recorded.Host(host)
-	serving := servingEdge(provisioned)
-	provisioned.Certificate = certificate
-	d.recorded = d.recorded.WithHost(provisioned)
-	if err := d.save(ctx); err != nil {
-		return err
-	}
-
-	progress(fmt.Sprintf("Binding %s to the %s edge", host, d.kind))
-	if err := d.stack.BindDomain(ctx, edge.DomainBinding{Hostname: host, Certificate: certificate}); err != nil {
-		return err
-	}
-	if err := d.save(ctx); err != nil {
-		return err
-	}
-
-	records, err := edge.RecordsFor(edge.TargetOf(d.kind, d.servesUnbound, d.stack.State()), []string{host})
-	if err != nil {
-		return err
-	}
-	for _, rec := range records {
-		if note := rec.ApexNote(d.zoneOf(ctx, rec.Name)); note != "" {
-			progress(note)
-		}
-	}
-	if err := settleRecords(ctx, d.writer, d.poller, records, progress, d.pointAtEdge(host), func(written, owed []edge.Record) error {
-		provisioned.Written, provisioned.Owed = written, owed
-		d.recorded = d.recorded.WithHost(provisioned)
-		return d.save(ctx)
-	}); err != nil {
-		return err
-	}
-
-	settled, err := d.flow(provisioned.Owed).Probe(ctx, host, d.kind, certs.Settlement{Owed: d.recorded.Owed, Probe: provisioned.Probe}, progress, func(settled certs.Settlement) error {
-		provisioned.Probe = settled.Probe
-		d.recorded = d.recorded.WithHost(provisioned)
-		return d.save(ctx)
-	})
-	provisioned.Probe = settled.Probe
-	d.recorded = d.recorded.WithHost(provisioned)
-	if err != nil {
-		return err
-	}
-	progress(fmt.Sprintf("%s is served by the %s edge", host, d.kind))
-	return d.retire(ctx, host, serving, progress)
-}
-
-func servingEdge(provisioned bootstrap.Provisioned) edge.Kind {
-	if !provisioned.Probe.OK {
-		return ""
-	}
-	return provisioned.Probe.Edge
-}
-
-func (d *domainSession) retire(ctx context.Context, host string, serving edge.Kind, progress func(string)) error {
-	if serving == "" || serving == d.kind || d.open == nil {
-		return nil
-	}
-	stack, err := d.open(serving)
-	if err != nil {
-		return err
-	}
-	progress(fmt.Sprintf("Unbinding %s from the %s edge it moved off", host, serving))
-	if err := stack.UnbindDomain(ctx, host); err != nil {
-		return err
-	}
-	progress(fmt.Sprintf("%s answers on both edges until resolvers drop the record they hold: %s", host, d.flipWindow()))
-	return nil
-}
-
-func (d *domainSession) flipWindow() string {
-	if d.ttl <= 0 {
-		return "whatever TTL your DNS provider serves that record with"
-	}
-	return d.ttl.String()
 }
 
 func (d *domainSession) remove(ctx context.Context, progress func(string)) error {
@@ -384,12 +258,9 @@ func (d *domainSession) remove(ctx context.Context, progress func(string)) error
 		progress("Nothing to remove: every hostname this project serves is still declared in its config")
 		return nil
 	}
-	for _, host := range targets {
-		if err := d.removeHost(ctx, host, progress); err != nil {
-			return err
-		}
-	}
-	return d.discardUnused(ctx, progress)
+	settled, err := d.engine.Withdraw(ctx, d.recorded, targets, progress)
+	d.recorded = settled
+	return err
 }
 
 func (d *domainSession) removeTargets() ([]string, error) {
@@ -416,62 +287,6 @@ func provisionedList(hosts []string) string {
 	return strings.Join(hosts, ", ")
 }
 
-func (d *domainSession) removeHost(ctx context.Context, host string, progress func(string)) error {
-	recorded := d.recorded.Host(host)
-
-	progress(fmt.Sprintf("Unbinding %s from the %s edge", host, d.kind))
-	if err := d.stack.UnbindDomain(ctx, host); err != nil {
-		return err
-	}
-	if err := dns.Release(ctx, d.writer, recorded.Written, progress); err != nil {
-		return err
-	}
-	d.recorded = d.recorded.WithoutHost(host)
-	return d.save(ctx)
-}
-
-func (d *domainSession) discardUnused(ctx context.Context, progress func(string)) error {
-	if d.recorded.Certificate.ARN == "" || len(d.recorded.Hosts) > 0 {
-		return nil
-	}
-	return d.discard(ctx, d.recorded.Settlement(), progress, func() {
-		d.recorded = d.recorded.WithSettlement(certs.Settlement{})
-	})
-}
-
-func (d *domainSession) discardSuperseded(ctx context.Context, progress func(string)) error {
-	cert := d.superseded.Certificate
-	if cert.ARN == "" || cert.ARN == d.recorded.Certificate.ARN || d.recorded.Uses(cert.ARN) {
-		return nil
-	}
-	settled := d.superseded
-	settled.Written = edge.Unwritten(settled.Written, d.recorded.Written)
-	return d.discard(ctx, settled, progress, func() { d.superseded = certs.Settlement{} })
-}
-
-func (d *domainSession) discard(ctx context.Context, settled certs.Settlement, progress func(string), forget func()) error {
-	if err := d.discarder(settled.Certificate).Discard(ctx, settled.Certificate, progress); err != nil {
-		return err
-	}
-	if err := dns.Release(ctx, d.writer, settled.Written, progress); err != nil {
-		return err
-	}
-	forget()
-	return d.save(ctx)
-}
-
-func (d *domainSession) zoneOf(ctx context.Context, hostname string) string {
-	finder, ok := d.writer.(edge.ZoneFinder)
-	if !ok {
-		return d.zone
-	}
-	zone, err := finder.ZoneOf(ctx, hostname)
-	if err != nil {
-		return d.zone
-	}
-	return zone.Name
-}
-
 func releaseProductionDomains(ctx context.Context, state edge.StackState, writer edge.DNSWriter, discarder func(certs.Certificate) certs.Issuer, progress func(string)) error {
 	recorded, err := bootstrap.ReadProduction(state)
 	if err != nil {
@@ -479,11 +294,11 @@ func releaseProductionDomains(ctx context.Context, state edge.StackState, writer
 	}
 	var errs []error
 	for _, host := range recorded.Hosts {
-		if err := dns.Release(ctx, writer, host.Written, progress); err != nil {
+		if err := dns.Release(ctx, writer, host.Records.Written, progress); err != nil {
 			errs = append(errs, err)
 		}
 	}
-	if err := dns.Release(ctx, writer, recorded.Written, progress); err != nil {
+	if err := dns.Release(ctx, writer, recorded.Validation.Written, progress); err != nil {
 		errs = append(errs, err)
 	}
 	if recorded.Certificate.ARN != "" {

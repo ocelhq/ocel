@@ -18,6 +18,7 @@ import (
 	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
 	"github.com/ocelhq/ocel/platform/aws/provider/bootstrap"
 	"github.com/ocelhq/ocel/platform/aws/provider/certs"
+	"github.com/ocelhq/ocel/platform/aws/provider/domains"
 	"github.com/ocelhq/ocel/platform/aws/provider/edges/apigateway"
 	"github.com/ocelhq/ocel/platform/aws/provider/edges/cloudfront"
 	cloudflare "github.com/ocelhq/ocel/platform/edge/cloudflare/deploy"
@@ -115,13 +116,18 @@ func TestGlobalPreviewDomain(t *testing.T) {
 		t.Parallel()
 		owner := func(context.Context, string) (string, error) { return edge.PreviewEntryOwner, nil }
 		full := recorded
-		full.Records = []edge.Record{{Name: "*.preview.acme.com", Type: edge.RecordTypeAAAA, Value: edge.ProxyPlaceholder, Proxied: true}}
-		full.Owed = []edge.Record{{Name: "_ocel.preview.acme.com", Type: edge.RecordTypeCNAME, Value: "_target.acm-validations.aws"}}
-		full.Certificate = certs.Certificate{ARN: "arn:aws:acm:us-east-1:111122223333:certificate/abcd-1234", Status: certs.StatusIssued}
-		full.Probe = certs.Probe{At: time.Unix(1755500000, 0).UTC(), Edge: cloudflare.Kind, OK: true}
+		full.Settlement = domains.Settlement{
+			Certificate: certs.Certificate{ARN: "arn:aws:acm:us-east-1:111122223333:certificate/abcd-1234", Status: certs.StatusIssued},
+			Validation:  domains.Records{Owed: []edge.Record{{Name: "_ocel.preview.acme.com", Type: edge.RecordTypeCNAME, Value: "_target.acm-validations.aws"}}},
+			Hosts: []domains.Host{{
+				Hostname: "*.preview.acme.com",
+				Records:  domains.Records{Written: []edge.Record{{Name: "*.preview.acme.com", Type: edge.RecordTypeAAAA, Value: edge.ProxyPlaceholder, Proxied: true}}},
+				Probe:    certs.Probe{At: time.Unix(1755500000, 0).UTC(), Edge: cloudflare.Kind, OK: true},
+			}},
+		}
 
 		got := globalPreviewDomain(context.Background(), owner, full)
-		if got.GetCertificateId() != full.Certificate.ARN || got.GetCertificateStatus() != certs.StatusIssued {
+		if got.GetCertificateId() != full.Settlement.Certificate.ARN || got.GetCertificateStatus() != certs.StatusIssued {
 			t.Errorf("certificate = %q %q", got.GetCertificateId(), got.GetCertificateStatus())
 		}
 		if len(got.GetRecordsWritten()) != 1 || !strings.Contains(got.GetRecordsWritten()[0], "*.preview.acme.com") {
@@ -184,57 +190,6 @@ func (s *stateSSM) DeleteParameter(_ context.Context, in *ssm.DeleteParameterInp
 	return &ssm.DeleteParameterOutput{}, nil
 }
 
-func TestPriorSettlement(t *testing.T) {
-	t.Parallel()
-
-	validation := edge.Record{Name: "_ocel.preview.acme.com", Type: edge.RecordTypeCNAME, Value: "_target.acm-validations.aws"}
-	front := edge.Record{Name: "*.preview.acme.com", Type: edge.RecordTypeAAAA, Value: edge.ProxyPlaceholder, Proxied: true}
-
-	t.Run("carries the validation record ocel wrote into a rerun", func(t *testing.T) {
-		t.Parallel()
-
-		recorded := bootstrap.PreviewDomain{
-			BaseDomain:  "preview.acme.com",
-			Records:     []edge.Record{front, validation},
-			Certificate: certs.Certificate{ARN: "arn", Region: "us-east-1", Status: certs.StatusIssued, Validation: []edge.Record{validation}},
-		}
-		prior := priorSettlement(recorded)
-		if len(prior.Written) != 1 || prior.Written[0] != validation {
-			t.Errorf("written = %+v, want only the validation record: the front records are settled on their own", prior.Written)
-		}
-		if len(prior.Owed) != 0 {
-			t.Errorf("owed = %+v, want nothing owed", prior.Owed)
-		}
-	})
-
-	t.Run("carries a validation record the user owns", func(t *testing.T) {
-		t.Parallel()
-
-		recorded := bootstrap.PreviewDomain{
-			BaseDomain:  "preview.acme.com",
-			Records:     []edge.Record{front},
-			Owed:        []edge.Record{validation},
-			Certificate: certs.Certificate{ARN: "arn", Region: "us-east-1", Status: certs.StatusIssued, Validation: []edge.Record{validation}},
-		}
-		prior := priorSettlement(recorded)
-		if len(prior.Owed) != 1 || prior.Owed[0] != validation {
-			t.Errorf("owed = %+v, want the record the user still owns", prior.Owed)
-		}
-		if len(prior.Written) != 0 {
-			t.Errorf("written = %+v, want nothing claimed as written", prior.Written)
-		}
-	})
-
-	t.Run("nothing issued carries no records", func(t *testing.T) {
-		t.Parallel()
-
-		prior := priorSettlement(bootstrap.PreviewDomain{BaseDomain: "preview.acme.com", Records: []edge.Record{front}})
-		if len(prior.Written) != 0 || len(prior.Owed) != 0 {
-			t.Errorf("written = %+v owed = %+v, want the front records left out", prior.Written, prior.Owed)
-		}
-	})
-}
-
 type releaseEdge struct {
 	edge.Edge
 	destroyed []string
@@ -288,9 +243,12 @@ func TestReleaseDomain(t *testing.T) {
 	validation := edge.Record{Name: "_ocel.preview.acme.com", Type: edge.RecordTypeCNAME, Value: "_target.acm-validations.aws"}
 	front := edge.Record{Name: "*.preview.acme.com", Type: edge.RecordTypeAAAA, Value: edge.ProxyPlaceholder, Proxied: true}
 	recorded := bootstrap.PreviewDomain{
-		BaseDomain:  "preview.acme.com",
-		Records:     []edge.Record{front, validation},
-		Certificate: certs.Certificate{ARN: "arn:aws:acm:us-east-1:111122223333:certificate/abcd-1234", Region: "us-east-1", Status: certs.StatusIssued, Validation: []edge.Record{validation}},
+		BaseDomain: "preview.acme.com",
+		Settlement: domains.Settlement{
+			Certificate: certs.Certificate{ARN: "arn:aws:acm:us-east-1:111122223333:certificate/abcd-1234", Region: "us-east-1", Status: certs.StatusIssued, Validation: []edge.Record{validation}},
+			Validation:  domains.Records{Written: []edge.Record{validation}},
+			Hosts:       []domains.Host{{Hostname: "*.preview.acme.com", Records: domains.Records{Written: []edge.Record{front}}}},
+		},
 	}
 
 	ssmc := &stateSSM{params: map[string]string{}}
@@ -305,7 +263,7 @@ func TestReleaseDomain(t *testing.T) {
 		ssm:    ssmc,
 		edge:   front1,
 		writer: writer,
-		issuer: certs.Issuer{API: api, Region: recorded.Certificate.Region},
+		issuer: certs.Issuer{API: api, Region: recorded.Settlement.Certificate.Region},
 	}, recorded, func(string) {}); err != nil {
 		t.Fatalf("releaseDomain: %v", err)
 	}
@@ -316,8 +274,8 @@ func TestReleaseDomain(t *testing.T) {
 	if len(writer.deleted) != 2 {
 		t.Errorf("deleted = %+v, want every record ocel wrote removed, the validation record included", writer.deleted)
 	}
-	if len(api.deleted) != 1 || api.deleted[0] != recorded.Certificate.ARN {
-		t.Errorf("deleted certificates = %v, want %q discarded in the region it was issued in", api.deleted, recorded.Certificate.ARN)
+	if len(api.deleted) != 1 || api.deleted[0] != recorded.Settlement.Certificate.ARN {
+		t.Errorf("deleted certificates = %v, want %q discarded in the region it was issued in", api.deleted, recorded.Settlement.Certificate.ARN)
 	}
 	got, err := bootstrap.ReadPreviewDomain(ctx, ssmc, bootstrap.ClassPreview)
 	if err != nil {
@@ -499,6 +457,26 @@ func TestRefuseRehomingPreviewWildcard(t *testing.T) {
 	})
 }
 
+func previewTestEngine(edgeFront edge.Edge, issuer certs.Issuer, writer edge.DNSWriter, prober certs.Prober, ssmc *stateSSM, baseDomain string) domains.Engine {
+	return domains.Engine{
+		Kind:          edgeFront.Kind(),
+		ServesUnbound: edgeFront.Facts().ServesUnbound,
+		Issuer:        issuer,
+		Writer:        writer,
+		Prober:        prober,
+		Store: previewStore{
+			ssm: ssmc,
+			domain: bootstrap.PreviewDomain{
+				BaseDomain: baseDomain,
+				Edge:       edgeFront.Kind(),
+				Scope:      edgeFront.Facts().CredentialScope,
+				GrammarMin: edge.PreviewGrammarMin,
+				GrammarMax: edge.PreviewGrammarMax,
+			},
+		},
+	}
+}
+
 func TestUseDomainRecordsTheEdgeHoldingTheWildcard(t *testing.T) {
 	t.Parallel()
 
@@ -509,23 +487,15 @@ func TestUseDomainRecordsTheEdgeHoldingTheWildcard(t *testing.T) {
 	api := &issuingACM{arn: "arn:aws:acm:us-east-1:111122223333:certificate/abcd-1234", domain: edge.PreviewWildcard(baseDomain), validation: validation}
 	writer := &releaseWriter{}
 	ssmc := &stateSSM{params: map[string]string{}}
-	run := domainRun{
-		ssm:    ssmc,
-		edge:   &wildcardEdge{front: "d-wild.execute-api.us-east-1.amazonaws.com"},
-		writer: writer,
-		flow: certs.Flow{
-			Issuer: certs.Issuer{API: api, Region: "us-east-1", Attempts: 1},
-			Writer: writer,
-			Prober: certs.Prober{Attempts: 1, Now: time.Now, Get: func(context.Context, string) (http.Header, error) {
-				answer := http.Header{}
-				answer.Set(edge.HeaderEdge, string(cloudfront.Kind))
-				return answer, nil
-			}},
-		},
-		spec: edge.PreviewWildcardSpec{BaseDomain: baseDomain},
-	}
+	front := &wildcardEdge{front: "d-wild.execute-api.us-east-1.amazonaws.com"}
+	prober := certs.Prober{Attempts: 1, Now: time.Now, Get: func(context.Context, string) (http.Header, error) {
+		answer := http.Header{}
+		answer.Set(edge.HeaderEdge, string(cloudfront.Kind))
+		return answer, nil
+	}}
+	engine := previewTestEngine(front, certs.Issuer{API: api, Region: "us-east-1", Attempts: 1}, writer, prober, ssmc, baseDomain)
 
-	if err := useDomain(ctx, run, bootstrap.PreviewDomain{}, baseDomain, func(string) {}, nil); err != nil {
+	if err := useDomain(ctx, engine, front, edge.PreviewWildcardSpec{BaseDomain: baseDomain}, domains.Settlement{}, string(edge.PreviewWildcard(baseDomain)), func(string) {}); err != nil {
 		t.Fatalf("useDomain: %v", err)
 	}
 	recorded, err := bootstrap.ReadPreviewDomain(ctx, ssmc, bootstrap.ClassPreview)
@@ -548,22 +518,15 @@ func TestUseDomainPointsAnUnboundEdgeAtItsProxy(t *testing.T) {
 	ctx := context.Background()
 	writer := &fakeDNSWriter{}
 	ssmc := &stateSSM{params: map[string]string{}}
-	run := domainRun{
-		ssm:    ssmc,
-		edge:   &unboundWildcardEdge{},
-		writer: writer,
-		flow: certs.Flow{
-			Writer: writer,
-			Prober: certs.Prober{Attempts: 1, Now: time.Now, Get: func(context.Context, string) (http.Header, error) {
-				answer := http.Header{}
-				answer.Set(edge.HeaderEdge, string(cloudflare.Kind))
-				return answer, nil
-			}},
-		},
-		spec: edge.PreviewWildcardSpec{BaseDomain: baseDomain},
-	}
+	front := &unboundWildcardEdge{}
+	prober := certs.Prober{Attempts: 1, Now: time.Now, Get: func(context.Context, string) (http.Header, error) {
+		answer := http.Header{}
+		answer.Set(edge.HeaderEdge, string(cloudflare.Kind))
+		return answer, nil
+	}}
+	engine := previewTestEngine(front, certs.Issuer{}, writer, prober, ssmc, baseDomain)
 
-	if err := useDomain(ctx, run, bootstrap.PreviewDomain{}, baseDomain, func(string) {}, nil); err != nil {
+	if err := useDomain(ctx, engine, front, edge.PreviewWildcardSpec{BaseDomain: baseDomain}, domains.Settlement{}, string(edge.PreviewWildcard(baseDomain)), func(string) {}); err != nil {
 		t.Fatalf("useDomain: %v", err)
 	}
 	want := edge.Record{Name: edge.PreviewWildcard(baseDomain), Type: edge.RecordTypeAAAA, Value: edge.ProxyPlaceholder, Proxied: true}
@@ -702,42 +665,33 @@ func TestUseDomainResumed(t *testing.T) {
 	front := &wildcardEdge{front: "d-wild.execute-api.us-east-1.amazonaws.com"}
 	writer := &releaseWriter{}
 	ssmc := &stateSSM{params: map[string]string{}}
-	run := domainRun{
-		ssm:    ssmc,
-		edge:   front,
-		writer: writer,
-		flow: certs.Flow{
-			Issuer: certs.Issuer{API: api, Region: "us-east-1", Attempts: 1},
-			Writer: writer,
-			Prober: certs.Prober{Attempts: 1, Now: time.Now, Get: func(context.Context, string) (http.Header, error) {
-				answer := http.Header{}
-				answer.Set(edge.HeaderEdge, string(cloudfront.Kind))
-				return answer, nil
-			}},
-		},
-		spec: edge.PreviewWildcardSpec{BaseDomain: baseDomain},
-	}
+	prober := certs.Prober{Attempts: 1, Now: time.Now, Get: func(context.Context, string) (http.Header, error) {
+		answer := http.Header{}
+		answer.Set(edge.HeaderEdge, string(cloudfront.Kind))
+		return answer, nil
+	}}
+	engine := previewTestEngine(front, certs.Issuer{API: api, Region: "us-east-1", Attempts: 1}, writer, prober, ssmc, baseDomain)
 
-	if err := useDomain(ctx, run, bootstrap.PreviewDomain{}, baseDomain, func(string) {}, nil); err != nil {
+	if err := useDomain(ctx, engine, front, edge.PreviewWildcardSpec{BaseDomain: baseDomain}, domains.Settlement{}, string(edge.PreviewWildcard(baseDomain)), func(string) {}); err != nil {
 		t.Fatalf("useDomain: %v", err)
 	}
 	first, err := bootstrap.ReadPreviewDomain(ctx, ssmc, bootstrap.ClassPreview)
 	if err != nil {
 		t.Fatalf("ReadPreviewDomain: %v", err)
 	}
-	if !slices.Contains(first.Records, validation) {
-		t.Fatalf("records = %+v, want the validation record among them", first.Records)
+	if !slices.Contains(first.Settlement.WrittenRecords(), validation) {
+		t.Fatalf("records = %+v, want the validation record among them", first.Settlement.WrittenRecords())
 	}
 
-	if err := useDomain(ctx, run, first, baseDomain, func(string) {}, nil); err != nil {
+	if err := useDomain(ctx, engine, front, edge.PreviewWildcardSpec{BaseDomain: baseDomain}, first.Settlement, string(edge.PreviewWildcard(baseDomain)), func(string) {}); err != nil {
 		t.Fatalf("useDomain again: %v", err)
 	}
 	second, err := bootstrap.ReadPreviewDomain(ctx, ssmc, bootstrap.ClassPreview)
 	if err != nil {
 		t.Fatalf("ReadPreviewDomain again: %v", err)
 	}
-	if !slices.Contains(second.Records, validation) {
-		t.Errorf("records = %+v, want the validation record to survive a resumed run: `ocel domain release` deletes only what is recorded here, and ACM renews the certificate through it", second.Records)
+	if !slices.Contains(second.Settlement.WrittenRecords(), validation) {
+		t.Errorf("records = %+v, want the validation record to survive a resumed run: `ocel domain release` deletes only what is recorded here, and ACM renews the certificate through it", second.Settlement.WrittenRecords())
 	}
 	if api.requested != 1 {
 		t.Errorf("requested = %d, want the certificate already issued to be reused", api.requested)

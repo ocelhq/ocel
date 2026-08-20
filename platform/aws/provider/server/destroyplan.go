@@ -6,6 +6,7 @@ import (
 	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
 	"github.com/ocelhq/ocel/platform/aws/provider/bootstrap"
 	"github.com/ocelhq/ocel/platform/aws/provider/certs"
+	"github.com/ocelhq/ocel/platform/aws/provider/domains"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
@@ -69,7 +70,7 @@ func surfaceAction(action edge.SurfaceAction) deploymentsv1.TeardownItem_Action 
 	}
 }
 
-func certificateItems(recorded bootstrap.Production) []*deploymentsv1.TeardownItem {
+func certificateItems(recorded domains.Settlement) []*deploymentsv1.TeardownItem {
 	var items []*deploymentsv1.TeardownItem
 	if arn := recorded.Certificate.ARN; arn != "" {
 		items = append(items, certificateItem(recorded.Certificate))
@@ -105,9 +106,9 @@ func certificateItem(cert certs.Certificate) *deploymentsv1.TeardownItem {
 	}
 }
 
-func recordItems(written []edge.Record, recorded bootstrap.Production) []*deploymentsv1.TeardownItem {
+func recordItems(written []edge.Record, recorded domains.Settlement) []*deploymentsv1.TeardownItem {
 	var items []*deploymentsv1.TeardownItem
-	for _, rec := range mergeRecords(written, recorded.Written, hostRecords(recorded, false)) {
+	for _, rec := range mergeRecords(written, recorded.Validation.Written, hostRecords(recorded, false)) {
 		items = append(items, &deploymentsv1.TeardownItem{
 			Kind:   "DNS record",
 			Name:   rec.String(),
@@ -115,7 +116,7 @@ func recordItems(written []edge.Record, recorded bootstrap.Production) []*deploy
 			Reason: "ocel wrote it; it is removed only while its live value is still the one ocel wrote",
 		})
 	}
-	for _, rec := range mergeRecords(recorded.Owed, hostRecords(recorded, true)) {
+	for _, rec := range mergeRecords(recorded.Validation.Owed, hostRecords(recorded, true)) {
 		items = append(items, &deploymentsv1.TeardownItem{
 			Kind:   "DNS record",
 			Name:   rec.String(),
@@ -126,14 +127,14 @@ func recordItems(written []edge.Record, recorded bootstrap.Production) []*deploy
 	return items
 }
 
-func hostRecords(recorded bootstrap.Production, owed bool) []edge.Record {
+func hostRecords(recorded domains.Settlement, owed bool) []edge.Record {
 	var records []edge.Record
 	for _, host := range recorded.Hosts {
 		if owed {
-			records = append(records, host.Owed...)
+			records = append(records, host.Records.Owed...)
 			continue
 		}
-		records = append(records, host.Written...)
+		records = append(records, host.Records.Written...)
 	}
 	return records
 }

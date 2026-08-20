@@ -13,7 +13,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/ssm"
 	ssmtypes "github.com/aws/aws-sdk-go-v2/service/ssm/types"
 
-	"github.com/ocelhq/ocel/platform/aws/provider/certs"
+	"github.com/ocelhq/ocel/platform/aws/provider/domains"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
@@ -40,15 +40,16 @@ const (
 )
 
 type PreviewDomain struct {
-	BaseDomain  string            `json:"baseDomain"`
-	Edge        edge.Kind         `json:"edge"`
-	Scope       string            `json:"scope"`
-	GrammarMin  uint32            `json:"grammarMin"`
-	GrammarMax  uint32            `json:"grammarMax"`
-	Records     []edge.Record     `json:"records,omitempty"`
-	Owed        []edge.Record     `json:"owed,omitempty"`
-	Certificate certs.Certificate `json:"certificate,omitzero"`
-	Probe       certs.Probe       `json:"probe,omitzero"`
+	BaseDomain string             `json:"baseDomain"`
+	Edge       edge.Kind          `json:"edge"`
+	Scope      string             `json:"scope"`
+	GrammarMin uint32             `json:"grammarMin"`
+	GrammarMax uint32             `json:"grammarMax"`
+	Settlement domains.Settlement `json:"settlement,omitzero"`
+}
+
+func (d PreviewDomain) Wildcard() domains.Host {
+	return d.Settlement.Host(string(edge.PreviewWildcard(d.BaseDomain)))
 }
 
 func (d PreviewDomain) Holder() (edge.Kind, bool) {
