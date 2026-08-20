@@ -68,7 +68,7 @@ func (s *Server) runPrune(ctx context.Context, req *deploymentsv1.PruneRequest, 
 		if err != nil {
 			return finish(err)
 		}
-		if len(stack.State()) == 0 {
+		if stack.State().Empty() {
 			return finish(nil)
 		}
 		return deploy.Prune(ctx, stack, deps.reclamation(reportingWith(tracer, stageReport)), int(req.GetKeepN()), pointer, stages, logf)
@@ -78,7 +78,7 @@ func (s *Server) runPrune(ctx context.Context, req *deploymentsv1.PruneRequest, 
 	if err != nil {
 		return finish(err)
 	}
-	stack, err := s.openStackFor(requestedEdge(req), params.StackState, awscfg.Region)
+	stack, err := s.openStackFor(requestedEdge(req), params.Stack, awscfg.Region)
 	if err != nil {
 		if errors.Is(err, errNoProductionDeploy) {
 			return finish(nil)

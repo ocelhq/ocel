@@ -5,12 +5,10 @@ const PreviewEntryOwner = "ocel-preview-entry"
 const (
 	PreviewGrammarMin uint32 = 1
 	PreviewGrammarMax uint32 = 1
-
-	StackKeyGlobalPreview = "globalPreviewDomain"
 )
 
-func ServedOnGlobalPreview(state StackState, baseDomain string) bool {
-	return baseDomain != "" && state[StackKeyGlobalPreview] == baseDomain
+func (s StackState) ServedOnGlobalPreview(baseDomain string) bool {
+	return baseDomain != "" && s.GlobalPreview == baseDomain
 }
 
 type PreviewWildcardSpec struct {

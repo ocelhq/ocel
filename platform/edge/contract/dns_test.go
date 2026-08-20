@@ -117,31 +117,28 @@ func TestWrittenRecords(t *testing.T) {
 		{Name: "shop.app.com", Type: RecordTypeCNAME, Value: "front"},
 	}
 
-	state, err := WithWrittenRecords(StackState{StackKeySlug: "shop"}, records)
-	if err != nil {
-		t.Fatalf("WithWrittenRecords error = %v", err)
+	state := StackState{Slug: "shop"}
+	state.RecordWrites(records)
+	if state.Slug != "shop" {
+		t.Errorf("slug = %q, want the rest of the state carried over", state.Slug)
 	}
-	if state[StackKeySlug] != "shop" {
-		t.Errorf("slug = %q, want the rest of the state carried over", state[StackKeySlug])
+	if len(state.Records) != 2 {
+		t.Fatalf("written records = %v, want the two distinct records", state.Records)
+	}
+	if state.Records[0].Name != "a.app.com" || state.Records[1].Name != "shop.app.com" {
+		t.Errorf("written records = %v, want them sorted by name", state.Records)
+	}
+	if !slices.Equal(records, []Record{
+		{Name: "shop.app.com", Type: RecordTypeCNAME, Value: "front"},
+		{Name: "a.app.com", Type: RecordTypeAAAA, Value: ProxyPlaceholder, Proxied: true},
+		{Name: "shop.app.com", Type: RecordTypeCNAME, Value: "front"},
+	}) {
+		t.Errorf("records handed in = %v, want them left in the order they came", records)
 	}
 
-	got, err := WrittenRecords(state)
-	if err != nil {
-		t.Fatalf("WrittenRecords error = %v", err)
-	}
-	if len(got) != 2 {
-		t.Fatalf("WrittenRecords = %v, want the two distinct records", got)
-	}
-	if got[0].Name != "a.app.com" || got[1].Name != "shop.app.com" {
-		t.Errorf("WrittenRecords = %v, want them sorted by name", got)
-	}
-
-	empty, err := WithWrittenRecords(state, nil)
-	if err != nil {
-		t.Fatalf("WithWrittenRecords(nil) error = %v", err)
-	}
-	if _, ok := empty[StackKeyRecords]; ok {
-		t.Errorf("state = %v, want the key gone once nothing is written", empty)
+	state.RecordWrites(nil)
+	if state.Records != nil {
+		t.Errorf("written records = %v, want none once nothing is written", state.Records)
 	}
 }
 
@@ -210,7 +207,9 @@ func TestRecordsForPerHostFronts(t *testing.T) {
 	t.Run("each host takes its own front where the stack published one", func(t *testing.T) {
 		t.Parallel()
 
-		state := RecordHostFront(RecordHostFront(StackState{}, "shop.app.com", "d-shop.execute-api.eu-west-1.amazonaws.com"), "www.app.com", "d-www.execute-api.eu-west-1.amazonaws.com")
+		var state StackState
+		state.PublishFront("shop.app.com", "d-shop.execute-api.eu-west-1.amazonaws.com")
+		state.PublishFront("www.app.com", "d-www.execute-api.eu-west-1.amazonaws.com")
 		got, err := RecordsFor(TargetOf(otherFrontedKind, false, state), []string{"shop.app.com", "www.app.com"})
 		if err != nil {
 			t.Fatalf("RecordsFor error = %v", err)
@@ -227,7 +226,8 @@ func TestRecordsForPerHostFronts(t *testing.T) {
 	t.Run("one front stands for every host that has none of its own", func(t *testing.T) {
 		t.Parallel()
 
-		state := RecordHostFront(StackState{StackKeyFront: "d123.cloudfront.net"}, "shop.app.com", "d-shop.execute-api.eu-west-1.amazonaws.com")
+		state := StackState{Front: "d123.cloudfront.net"}
+		state.PublishFront("shop.app.com", "d-shop.execute-api.eu-west-1.amazonaws.com")
 		got, err := RecordsFor(TargetOf(frontedKind, false, state), []string{"shop.app.com", "www.app.com"})
 		if err != nil {
 			t.Fatalf("RecordsFor error = %v", err)
@@ -244,7 +244,8 @@ func TestRecordsForPerHostFronts(t *testing.T) {
 	t.Run("a host with no front of its own and no shared front is named", func(t *testing.T) {
 		t.Parallel()
 
-		state := RecordHostFront(StackState{}, "shop.app.com", "d-shop.execute-api.eu-west-1.amazonaws.com")
+		var state StackState
+		state.PublishFront("shop.app.com", "d-shop.execute-api.eu-west-1.amazonaws.com")
 		_, err := RecordsFor(TargetOf(otherFrontedKind, false, state), []string{"shop.app.com", "www.app.com"})
 		if err == nil {
 			t.Fatal("RecordsFor err = nil, want a refusal: nothing to point www.app.com at")
@@ -270,13 +271,16 @@ func TestRecordsForPerHostFronts(t *testing.T) {
 	t.Run("forgetting a host front leaves the others standing", func(t *testing.T) {
 		t.Parallel()
 
-		state := RecordHostFront(RecordHostFront(StackState{}, "shop.app.com", "d-shop"), "www.app.com", "d-www")
-		left := ForgetHostFront(state, "shop.app.com")
-		if fronts := HostFronts(left); len(fronts) != 1 || fronts["www.app.com"] != "d-www" {
-			t.Errorf("host fronts = %v, want only www.app.com", fronts)
+		var state StackState
+		state.PublishFront("shop.app.com", "d-shop")
+		state.PublishFront("www.app.com", "d-www")
+		left := state
+		left.PublishFront("shop.app.com", "")
+		if len(left.Fronts) != 1 || left.Fronts["www.app.com"] != "d-www" {
+			t.Errorf("host fronts = %v, want only www.app.com", left.Fronts)
 		}
-		if fronts := HostFronts(state); len(fronts) != 2 {
-			t.Errorf("host fronts on the state handed in = %v, want both: forgetting one must not reach back", fronts)
+		if len(state.Fronts) != 2 {
+			t.Errorf("host fronts on the state copied off = %v, want both: forgetting one must not reach back", state.Fronts)
 		}
 	})
 }
@@ -284,7 +288,7 @@ func TestRecordsForPerHostFronts(t *testing.T) {
 func TestPointable(t *testing.T) {
 	t.Parallel()
 
-	front := StackState{StackKeyFront: "d111111abcdef8.cloudfront.net"}
+	front := StackState{Front: "d111111abcdef8.cloudfront.net"}
 
 	t.Run("an edge that binds a host before serving it points only what it bound", func(t *testing.T) {
 		t.Parallel()

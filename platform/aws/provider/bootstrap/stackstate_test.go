@@ -10,90 +10,84 @@ import (
 func TestStackState(t *testing.T) {
 	t.Run("write then read round trips", func(t *testing.T) {
 		ssmc := newFakeSSM()
-		state := edge.StackState{
-			edge.StackKeyEndpoint: "https://store.example",
-			edge.StackKeySecret:   "s3cr3t",
+		record := StackRecord{Edge: edge.StackState{Endpoint: "https://store.example", Secret: "s3cr3t"}}
+
+		if err := WriteStackRecordFor(context.Background(), ssmc, ClassProduction, "proj-1", record); err != nil {
+			t.Fatalf("WriteStackRecordFor: %v", err)
 		}
 
-		if err := WriteStackStateFor(context.Background(), ssmc, ClassProduction, "proj-1", state); err != nil {
-			t.Fatalf("WriteStackStateFor: %v", err)
-		}
-
-		got, err := ReadStackState(context.Background(), ssmc, "proj-1")
+		got, err := ReadStackRecord(context.Background(), ssmc, "proj-1")
 		if err != nil {
-			t.Fatalf("ReadStackState: %v", err)
+			t.Fatalf("ReadStackRecord: %v", err)
 		}
-		if got[edge.StackKeyEndpoint] != state[edge.StackKeyEndpoint] {
-			t.Errorf("endpoint = %q, want %q", got[edge.StackKeyEndpoint], state[edge.StackKeyEndpoint])
-		}
-		if got[edge.StackKeySecret] != state[edge.StackKeySecret] {
-			t.Errorf("secret = %q, want %q", got[edge.StackKeySecret], state[edge.StackKeySecret])
+		if !got.Edge.Equal(record.Edge) {
+			t.Errorf("state = %+v, want %+v", got.Edge, record.Edge)
 		}
 	})
 
 	t.Run("read absent returns nil not error", func(t *testing.T) {
 		ssmc := newFakeSSM()
 
-		got, err := ReadStackState(context.Background(), ssmc, "proj-never-deployed")
+		got, err := ReadStackRecord(context.Background(), ssmc, "proj-never-deployed")
 		if err != nil {
-			t.Fatalf("ReadStackState on an absent parameter: %v", err)
+			t.Fatalf("ReadStackRecord on an absent parameter: %v", err)
 		}
-		if len(got) != 0 {
-			t.Errorf("ReadStackState = %v, want nil/empty", got)
+		if !got.Empty() {
+			t.Errorf("ReadStackRecord = %+v, want nothing recorded", got)
 		}
 	})
 
 	t.Run("scoped per project", func(t *testing.T) {
 		ssmc := newFakeSSM()
-		if err := WriteStackStateFor(context.Background(), ssmc, ClassProduction, "proj-a", edge.StackState{edge.StackKeyEndpoint: "https://a"}); err != nil {
-			t.Fatalf("WriteStackStateFor(proj-a): %v", err)
+		if err := WriteStackRecordFor(context.Background(), ssmc, ClassProduction, "proj-a", StackRecord{Edge: edge.StackState{Endpoint: "https://a"}}); err != nil {
+			t.Fatalf("WriteStackRecordFor(proj-a): %v", err)
 		}
 
-		got, err := ReadStackState(context.Background(), ssmc, "proj-b")
+		got, err := ReadStackRecord(context.Background(), ssmc, "proj-b")
 		if err != nil {
-			t.Fatalf("ReadStackState(proj-b): %v", err)
+			t.Fatalf("ReadStackRecord(proj-b): %v", err)
 		}
-		if len(got) != 0 {
-			t.Errorf("proj-b state = %v, want empty: state must not leak across projects", got)
+		if !got.Empty() {
+			t.Errorf("proj-b state = %+v, want empty: state must not leak across projects", got)
 		}
 	})
 
 	t.Run("production and preview are separate", func(t *testing.T) {
 		ssmc := newFakeSSM()
 		ctx := context.Background()
-		if err := WriteStackStateFor(ctx, ssmc, ClassProduction, "proj-1", edge.StackState{edge.StackKeySecret: "prod-secret"}); err != nil {
-			t.Fatalf("WriteStackStateFor(production): %v", err)
+		if err := WriteStackRecordFor(ctx, ssmc, ClassProduction, "proj-1", StackRecord{Edge: edge.StackState{Secret: "prod-secret"}}); err != nil {
+			t.Fatalf("WriteStackRecordFor(production): %v", err)
 		}
-		if err := WriteStackStateFor(ctx, ssmc, ClassPreview, "proj-1", edge.StackState{edge.StackKeySecret: "preview-secret"}); err != nil {
-			t.Fatalf("WriteStackStateFor(preview): %v", err)
+		if err := WriteStackRecordFor(ctx, ssmc, ClassPreview, "proj-1", StackRecord{Edge: edge.StackState{Secret: "preview-secret"}}); err != nil {
+			t.Fatalf("WriteStackRecordFor(preview): %v", err)
 		}
 
-		prod, err := ReadStackStateFor(ctx, ssmc, ClassProduction, "proj-1")
+		prod, err := ReadStackRecordFor(ctx, ssmc, ClassProduction, "proj-1")
 		if err != nil {
-			t.Fatalf("ReadStackStateFor(production): %v", err)
+			t.Fatalf("ReadStackRecordFor(production): %v", err)
 		}
-		preview, err := ReadStackStateFor(ctx, ssmc, ClassPreview, "proj-1")
+		preview, err := ReadStackRecordFor(ctx, ssmc, ClassPreview, "proj-1")
 		if err != nil {
-			t.Fatalf("ReadStackStateFor(preview): %v", err)
+			t.Fatalf("ReadStackRecordFor(preview): %v", err)
 		}
-		if prod[edge.StackKeySecret] != "prod-secret" {
-			t.Errorf("production secret = %q, want prod-secret", prod[edge.StackKeySecret])
+		if prod.Edge.Secret != "prod-secret" {
+			t.Errorf("production secret = %q, want prod-secret", prod.Edge.Secret)
 		}
-		if preview[edge.StackKeySecret] != "preview-secret" {
-			t.Errorf("preview secret = %q, want preview-secret: the two substrates must not share state", preview[edge.StackKeySecret])
+		if preview.Edge.Secret != "preview-secret" {
+			t.Errorf("preview secret = %q, want preview-secret: the two substrates must not share state", preview.Edge.Secret)
 		}
 		if StackStateParamPrefix == PreviewStackStateParamPrefix {
 			t.Error("production and preview root-stack state prefixes must differ")
 		}
 
-		if err := DeleteStackStateFor(ctx, ssmc, ClassPreview, "proj-1"); err != nil {
-			t.Fatalf("DeleteStackStateFor(preview): %v", err)
+		if err := DeleteStackRecordFor(ctx, ssmc, ClassPreview, "proj-1"); err != nil {
+			t.Fatalf("DeleteStackRecordFor(preview): %v", err)
 		}
-		stillProd, err := ReadStackStateFor(ctx, ssmc, ClassProduction, "proj-1")
+		stillProd, err := ReadStackRecordFor(ctx, ssmc, ClassProduction, "proj-1")
 		if err != nil {
-			t.Fatalf("ReadStackStateFor(production) after preview delete: %v", err)
+			t.Fatalf("ReadStackRecordFor(production) after preview delete: %v", err)
 		}
-		if stillProd[edge.StackKeySecret] != "prod-secret" {
+		if stillProd.Edge.Secret != "prod-secret" {
 			t.Errorf("production state was disturbed by a preview delete: %v", stillProd)
 		}
 	})
@@ -101,55 +95,55 @@ func TestStackState(t *testing.T) {
 	t.Run("overwrites on rewrite", func(t *testing.T) {
 		ssmc := newFakeSSM()
 		ctx := context.Background()
-		if err := WriteStackStateFor(ctx, ssmc, ClassProduction, "proj-1", edge.StackState{edge.StackKeyEndpoint: "https://old"}); err != nil {
-			t.Fatalf("first WriteStackStateFor: %v", err)
+		if err := WriteStackRecordFor(ctx, ssmc, ClassProduction, "proj-1", StackRecord{Edge: edge.StackState{Endpoint: "https://old"}}); err != nil {
+			t.Fatalf("first WriteStackRecordFor: %v", err)
 		}
-		if err := WriteStackStateFor(ctx, ssmc, ClassProduction, "proj-1", edge.StackState{edge.StackKeyEndpoint: "https://new"}); err != nil {
-			t.Fatalf("second WriteStackStateFor: %v", err)
+		if err := WriteStackRecordFor(ctx, ssmc, ClassProduction, "proj-1", StackRecord{Edge: edge.StackState{Endpoint: "https://new"}}); err != nil {
+			t.Fatalf("second WriteStackRecordFor: %v", err)
 		}
 
-		got, err := ReadStackState(ctx, ssmc, "proj-1")
+		got, err := ReadStackRecord(ctx, ssmc, "proj-1")
 		if err != nil {
-			t.Fatalf("ReadStackState: %v", err)
+			t.Fatalf("ReadStackRecord: %v", err)
 		}
-		if got[edge.StackKeyEndpoint] != "https://new" {
-			t.Errorf("endpoint = %q, want the overwritten value %q", got[edge.StackKeyEndpoint], "https://new")
+		if got.Edge.Endpoint != "https://new" {
+			t.Errorf("endpoint = %q, want the overwritten value %q", got.Edge.Endpoint, "https://new")
 		}
 	})
 }
 
-func TestDeleteStackState(t *testing.T) {
+func TestDeleteStackRecord(t *testing.T) {
 	t.Run("removes then reads absent", func(t *testing.T) {
 		ssmc := newFakeSSM()
-		if err := WriteStackStateFor(context.Background(), ssmc, ClassProduction, "proj-1", edge.StackState{edge.StackKeyEndpoint: "https://store"}); err != nil {
-			t.Fatalf("WriteStackStateFor: %v", err)
+		if err := WriteStackRecordFor(context.Background(), ssmc, ClassProduction, "proj-1", StackRecord{Edge: edge.StackState{Endpoint: "https://store"}}); err != nil {
+			t.Fatalf("WriteStackRecordFor: %v", err)
 		}
 
-		if err := DeleteStackState(context.Background(), ssmc, "proj-1"); err != nil {
+		if err := DeleteStackRecord(context.Background(), ssmc, "proj-1"); err != nil {
 			t.Fatalf("DeleteStackState: %v", err)
 		}
 
-		got, err := ReadStackState(context.Background(), ssmc, "proj-1")
+		got, err := ReadStackRecord(context.Background(), ssmc, "proj-1")
 		if err != nil {
-			t.Fatalf("ReadStackState after delete: %v", err)
+			t.Fatalf("ReadStackRecord after delete: %v", err)
 		}
-		if len(got) != 0 {
-			t.Errorf("state after delete = %v, want empty", got)
+		if !got.Empty() {
+			t.Errorf("state after delete = %+v, want empty", got)
 		}
 	})
 
 	t.Run("absent is idempotent success", func(t *testing.T) {
 		ssmc := newFakeSSM()
-		if err := DeleteStackState(context.Background(), ssmc, "proj-never-deployed"); err != nil {
+		if err := DeleteStackRecord(context.Background(), ssmc, "proj-never-deployed"); err != nil {
 			t.Fatalf("DeleteStackState on an absent parameter: %v, want nil (idempotent)", err)
 		}
 	})
 }
 
-func TestStackStateFor(t *testing.T) {
+func TestStackRecordFor(t *testing.T) {
 	t.Run("unknown class errors", func(t *testing.T) {
-		if _, err := ReadStackStateFor(context.Background(), newFakeSSM(), "nonsense", "proj-1"); err == nil {
-			t.Error("ReadStackStateFor(unknown class) = nil error, want an error")
+		if _, err := ReadStackRecordFor(context.Background(), newFakeSSM(), "nonsense", "proj-1"); err == nil {
+			t.Error("ReadStackRecordFor(unknown class) = nil error, want an error")
 		}
 	})
 }

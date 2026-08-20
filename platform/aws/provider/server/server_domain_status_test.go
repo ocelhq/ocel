@@ -68,12 +68,12 @@ func issuedProduction(arn string, hosts ...string) domains.Settlement {
 }
 
 func servingStack(kind edge.Kind, hosts ...string) *boundStack {
-	state := edge.StackState{edge.StackKeySlug: domainSlug}
+	state := edge.StackState{Slug: domainSlug}
 	if kind != cloudflare.Kind {
-		state[edge.StackKeyFront] = domainFront
+		state.Front = domainFront
 	}
 	for _, host := range hosts {
-		state = edge.RecordBoundDomain(state, host)
+		state.Bind(host)
 	}
 	return &boundStack{name: string(kind), state: state}
 }
@@ -329,7 +329,7 @@ func TestDomainStatus(t *testing.T) {
 		f := newDomainFixture(domainFixtureOptions{
 			kind:       apigateway.Kind,
 			configured: []string{"shop.app.com"},
-			stack:      &boundStack{name: string(apigateway.Kind), state: edge.RecordBoundDomain(edge.StackState{edge.StackKeySlug: domainSlug}, "shop.app.com")},
+			stack:      &boundStack{name: string(apigateway.Kind), state: boundTo(edge.StackState{Slug: domainSlug}, "shop.app.com")},
 			acm:        api,
 			prior:      issuedProduction(certARNFor(apigateway.Kind), "shop.app.com"),
 		})
@@ -347,7 +347,7 @@ func TestDomainStatus(t *testing.T) {
 		f := newDomainFixture(domainFixtureOptions{
 			kind:       apigateway.Kind,
 			configured: []string{"shop.app.com"},
-			stack:      &boundStack{name: string(apigateway.Kind), state: edge.StackState{edge.StackKeySlug: domainSlug}},
+			stack:      &boundStack{name: string(apigateway.Kind), state: edge.StackState{Slug: domainSlug}},
 			acm:        api,
 			prior:      issuedProduction(certARNFor(apigateway.Kind), "shop.app.com"),
 		})
@@ -377,7 +377,7 @@ func TestDomainStatus(t *testing.T) {
 		f := newDomainFixture(domainFixtureOptions{
 			kind:       cloudflare.Kind,
 			configured: []string{"shop.app.com"},
-			stack:      &boundStack{name: string(cloudflare.Kind), state: edge.StackState{edge.StackKeySlug: domainSlug}},
+			stack:      &boundStack{name: string(cloudflare.Kind), state: edge.StackState{Slug: domainSlug}},
 			prior:      domains.Settlement{},
 		})
 
@@ -403,7 +403,7 @@ func TestAddDomainAcrossEdgeModes(t *testing.T) {
 	})
 	prior.Certificate = certs.Certificate{}
 
-	native := &boundStack{name: string(cloudfront.Kind), state: edge.RecordBoundDomain(edge.StackState{}, "shop.app.com")}
+	native := &boundStack{name: string(cloudfront.Kind), state: boundTo(edge.StackState{}, "shop.app.com")}
 	writer := &domainWriter{}
 	f := newDomainFixture(domainFixtureOptions{
 		configured: []string{"shop.app.com"},
@@ -445,9 +445,9 @@ func TestAddDomainAcrossEdgeModes(t *testing.T) {
 
 func liveGate(t *testing.T, kind edge.Kind, api *domainACM, answering bool, prior domains.Settlement, bound ...string) domainGate {
 	t.Helper()
-	state := edge.StackState{edge.StackKeySlug: domainSlug}
+	state := edge.StackState{Slug: domainSlug}
 	for _, host := range bound {
-		state = edge.RecordBoundDomain(state, host)
+		state.Bind(host)
 	}
 	seen := string(kind)
 	if !answering {
@@ -538,7 +538,7 @@ func TestAdmitDomains(t *testing.T) {
 		t.Parallel()
 
 		gate := liveGate(t, cloudfront.Kind, newDomainACM(), false, domains.Settlement{})
-		gate.state = nil
+		gate.state = edge.StackState{}
 		admitted, err := admitDomains(t.Context(), gate, deploymentsv1.Environment_CLASS_PRODUCTION, productionManifest("shop.app.com"), func(string) {})
 		if err != nil {
 			t.Fatalf("admitDomains err = %v, want the deploy that creates the stack admitted", err)

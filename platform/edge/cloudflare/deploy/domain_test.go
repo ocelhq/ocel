@@ -14,8 +14,8 @@ func domainStack(t *testing.T, m *cfMock) *stack {
 	t.Helper()
 	t.Setenv(envAccountID, "acct")
 	return stackOn(m.provider(t), edge.StackState{
-		edge.StackKeySlug:   "acme-web",
-		stackKeyEntryWorker: domainEntryScript,
+		Slug:    "acme-web",
+		Adapter: edge.Own(private{EntryWorkers: []string{domainEntryScript}}),
 	})
 }
 
@@ -41,7 +41,7 @@ func TestBindDomain(t *testing.T) {
 		if len(m.createdRecords) != 0 {
 			t.Errorf("created records = %v, want none: binding a domain plants nothing", m.createdRecords)
 		}
-		if got := edge.BoundDomains(s.State()); len(got) != 1 || got[0] != "shop.app.com" {
+		if got := s.State().Bound; len(got) != 1 || got[0] != "shop.app.com" {
 			t.Errorf("bound domains = %v, want [shop.app.com]", got)
 		}
 	})
@@ -60,7 +60,7 @@ func TestBindDomain(t *testing.T) {
 		if len(m.createdRoutes) != 0 || len(m.createdRecords) != 0 {
 			t.Errorf("created routes = %v and records = %v, want a refusal to leave nothing behind", m.createdRoutes, m.createdRecords)
 		}
-		if got := edge.BoundDomains(s.State()); len(got) != 0 {
+		if got := s.State().Bound; len(got) != 0 {
 			t.Errorf("bound domains = %v, want none after a refusal", got)
 		}
 	})
@@ -119,7 +119,7 @@ func TestBindDomain(t *testing.T) {
 
 	t.Run("a stack that reports no entry worker refuses to bind", func(t *testing.T) {
 		t.Setenv(envAccountID, "acct")
-		s := stackOn(zoneMock().provider(t), edge.StackState{edge.StackKeySlug: "acme-web"})
+		s := stackOn(zoneMock().provider(t), edge.StackState{Slug: "acme-web"})
 
 		if err := s.BindDomain(t.Context(), edge.DomainBinding{Hostname: "shop.app.com"}); err == nil {
 			t.Fatal("BindDomain err = nil, want a refusal while no worker serves the stack")
@@ -130,8 +130,8 @@ func TestBindDomain(t *testing.T) {
 		t.Setenv(envAccountID, "acct")
 		m := zoneMock()
 		s := stackOn(m.provider(t), edge.StackState{
-			edge.StackKeySlug:   "acme-web",
-			stackKeyEntryWorker: previewEntryScript,
+			Slug:    "acme-web",
+			Adapter: edge.Own(private{EntryWorkers: []string{previewEntryScript}}),
 		})
 
 		err := s.BindDomain(t.Context(), edge.DomainBinding{Hostname: "shop.app.com"})
@@ -194,7 +194,7 @@ func TestUnbindDomain(t *testing.T) {
 			{"id": "placeholder", "name": "shop.app.com", "type": "AAAA", "content": edge.ProxyPlaceholder, "comment": recordComment, "proxied": true},
 		}
 		s := domainStack(t, m)
-		s.state = edge.RecordBoundDomain(s.state, "shop.app.com")
+		s.state.Bind("shop.app.com")
 
 		if err := s.UnbindDomain(t.Context(), "shop.app.com"); err != nil {
 			t.Fatalf("UnbindDomain: %v", err)
@@ -202,7 +202,7 @@ func TestUnbindDomain(t *testing.T) {
 
 		assertSet(t, "deleted routes", m.deletedRoutes, []string{"bound"})
 		assertSet(t, "deleted records", m.deletedRecords, nil)
-		if got := edge.BoundDomains(s.State()); len(got) != 0 {
+		if got := s.State().Bound; len(got) != 0 {
 			t.Errorf("bound domains = %v, want none", got)
 		}
 	})
@@ -234,8 +234,12 @@ func TestReconcileRecordsItsEntryWorker(t *testing.T) {
 		t.Fatalf("Reconcile: %v", err)
 	}
 
-	if state[stackKeyEntryWorker] != spec.Program.Name {
-		t.Errorf("recorded entry worker = %q, want the worker a bound domain routes to (%q)", state[stackKeyEntryWorker], spec.Program.Name)
+	var own private
+	if err := state.Adapter.Into(&own); err != nil {
+		t.Fatalf("read the state the edge keeps to itself: %v", err)
+	}
+	if !slices.Equal(own.EntryWorkers, []string{spec.Program.Name}) {
+		t.Errorf("recorded entry workers = %v, want the worker a bound domain routes to (%q)", own.EntryWorkers, spec.Program.Name)
 	}
 }
 
@@ -262,7 +266,7 @@ func TestReconcileKeepsWhatABindingPut(t *testing.T) {
 	if !hasRoute(m, "shop.app.com/*") {
 		t.Errorf("routes = %v, want the bound host's route to survive the next deploy", m.existingRoutes)
 	}
-	if got := edge.BoundDomains(redeployed.State()); len(got) != 1 || got[0] != "shop.app.com" {
+	if got := redeployed.State().Bound; len(got) != 1 || got[0] != "shop.app.com" {
 		t.Errorf("bound domains = %v, want the deploy to carry [shop.app.com] forward", got)
 	}
 
@@ -282,8 +286,8 @@ func TestDestroyOutlivesAnUnbindThatCannotRun(t *testing.T) {
 	putStampSet(t, p, store.URL, "s3cr3t", stampSet{"ocel-preview": "v1"})
 
 	state := testState(store.URL, "s3cr3t")
-	state[stackKeyEntryWorker] = "ocel-preview"
-	state = edge.RecordBoundDomain(state, "shop.elsewhere.com")
+	state.Adapter = edge.Own(private{EntryWorkers: []string{"ocel-preview"}})
+	state.Bind("shop.elsewhere.com")
 
 	err := stackOn(p, state).Destroy(t.Context())
 	if err == nil {
@@ -303,14 +307,18 @@ func TestPruneOnlyRecordsNoEntryWorker(t *testing.T) {
 	spec := pruneOnlySpec(store.URL, "v2")
 
 	prior := testState(store.URL, "s3cr3t")
-	prior[stackKeyEntryWorker] = spec.Program.Name
+	prior.Adapter = edge.Own(private{EntryWorkers: []string{spec.Program.Name}})
 
 	state, err := reconcileState(t, previewZoneMock().provider(t), spec, prior)
 	if err != nil {
 		t.Fatalf("Reconcile: %v", err)
 	}
-	if state[stackKeyEntryWorker] != "" {
-		t.Errorf("recorded entry worker = %q, want none: the script it names was just deleted", state[stackKeyEntryWorker])
+	var own private
+	if err := state.Adapter.Into(&own); err != nil {
+		t.Fatalf("read the state the edge keeps to itself: %v", err)
+	}
+	if len(own.EntryWorkers) != 0 {
+		t.Errorf("recorded entry workers = %v, want none: the script they name was just deleted", own.EntryWorkers)
 	}
 }
 

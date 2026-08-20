@@ -2,7 +2,6 @@ package server
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"strings"
 	"testing"
@@ -38,13 +37,8 @@ func itemLines(items []*deploymentsv1.TeardownItem) []string {
 	return lines
 }
 
-func productionState(t *testing.T, recorded domains.Settlement) edge.StackState {
-	t.Helper()
-	state, err := bootstrap.WithProduction(edge.StackState{edge.StackKeySlug: "shop"}, recorded)
-	if err != nil {
-		t.Fatalf("WithProduction: %v", err)
-	}
-	return state
+func productionRecord(recorded domains.Settlement) bootstrap.StackRecord {
+	return bootstrap.StackRecord{Edge: edge.StackState{Slug: "shop"}, Production: recorded}
 }
 
 func TestEdgeStackPlan(t *testing.T) {
@@ -62,7 +56,7 @@ func TestEdgeStackPlan(t *testing.T) {
 			slug:       "shop",
 			stateTable: "ocel-state",
 			stacks:     1,
-			state:      state,
+			record:     bootstrap.StackRecord{Edge: state},
 		})
 		if err != nil {
 			t.Fatalf("edgeStackPlan() error = %v", err)
@@ -73,7 +67,7 @@ func TestEdgeStackPlan(t *testing.T) {
 	t.Run("a project with no production deploy is stamped with the edge and plans nothing", func(t *testing.T) {
 		t.Parallel()
 
-		plan := planFor(t, nil)
+		plan := planFor(t, edge.StackState{})
 		if plan.GetEdgeKind() != string(cloudflare.Kind) {
 			t.Errorf("edge_kind = %q, want cloudflare", plan.GetEdgeKind())
 		}
@@ -97,7 +91,7 @@ func TestEdgeStackPlan(t *testing.T) {
 	t.Run("a deployed stack plans the workers, the store and the shared substrate it leaves", func(t *testing.T) {
 		t.Parallel()
 
-		items := planFor(t, edge.StackState{"instance": "shop-abc"}).GetItems()
+		items := planFor(t, edge.StackState{Adapter: edge.Own(map[string]string{"instance": "shop-abc"})}).GetItems()
 		if got := itemFor(t, items, "edge workers", "shop").GetAction(); got != deploymentsv1.TeardownItem_ACTION_DELETE {
 			t.Errorf("edge workers action = %v, want DELETE", got)
 		}
@@ -123,13 +117,10 @@ func TestDestroyPlanItemsPerEdge(t *testing.T) {
 	t.Run("the CloudFront edge disables its distribution before deleting it", func(t *testing.T) {
 		t.Parallel()
 
-		state := edge.RecordBoundDomain(edge.StackState{edge.StackKeyFront: "d123.cloudfront.net"}, "shop.example.com")
-		items, err := destroyPlanItems(planEdge(t, cloudfront.Kind), projectPlanScope{
-			class: bootstrap.ClassProduction, slug: "shop", state: state,
+		state := boundTo(edge.StackState{Front: "d123.cloudfront.net"}, "shop.example.com")
+		items := destroyPlanItems(planEdge(t, cloudfront.Kind), projectPlanScope{
+			class: bootstrap.ClassProduction, slug: "shop", record: bootstrap.StackRecord{Edge: state},
 		})
-		if err != nil {
-			t.Fatalf("destroyPlanItems: %v", err)
-		}
 		dist := itemFor(t, items, "distribution", "d123.cloudfront.net")
 		if dist.GetAction() != deploymentsv1.TeardownItem_ACTION_DISABLE_THEN_DELETE || !dist.GetSlow() {
 			t.Errorf("distribution = %v (slow=%v), want DISABLE_THEN_DELETE and slow", dist.GetAction(), dist.GetSlow())
@@ -145,13 +136,10 @@ func TestDestroyPlanItemsPerEdge(t *testing.T) {
 	t.Run("with no edge bought the APIs and their domain names go", func(t *testing.T) {
 		t.Parallel()
 
-		state := edge.RecordBoundDomain(edge.StackState{}, "shop.example.com")
-		items, err := destroyPlanItems(planEdge(t, apigateway.Kind), projectPlanScope{
-			class: bootstrap.ClassProduction, slug: "shop", state: state,
+		state := boundTo(edge.StackState{}, "shop.example.com")
+		items := destroyPlanItems(planEdge(t, apigateway.Kind), projectPlanScope{
+			class: bootstrap.ClassProduction, slug: "shop", record: bootstrap.StackRecord{Edge: state},
 		})
-		if err != nil {
-			t.Fatalf("destroyPlanItems: %v", err)
-		}
 		apis := itemFor(t, items, "REST APIs", "shop")
 		if apis.GetAction() != deploymentsv1.TeardownItem_ACTION_DELETE {
 			t.Errorf("REST APIs action = %v, want DELETE", apis.GetAction())
@@ -184,12 +172,9 @@ func TestDestroyPlanItemsPerEdge(t *testing.T) {
 				Certificate: "arn:aws:acm:eu-west-1:1:certificate/pinned",
 			}},
 		}
-		items, err := destroyPlanItems(planEdge(t, cloudfront.Kind), projectPlanScope{
-			class: bootstrap.ClassProduction, slug: "shop", state: productionState(t, recorded),
+		items := destroyPlanItems(planEdge(t, cloudfront.Kind), projectPlanScope{
+			class: bootstrap.ClassProduction, slug: "shop", record: productionRecord(recorded),
 		})
-		if err != nil {
-			t.Fatalf("destroyPlanItems: %v", err)
-		}
 
 		if got := itemFor(t, items, "certificate", "arn:aws:acm:eu-west-1:1:certificate/ocel").GetAction(); got != deploymentsv1.TeardownItem_ACTION_DELETE {
 			t.Errorf("ocel-requested certificate action = %v, want DELETE", got)
@@ -217,12 +202,9 @@ func TestDestroyPlanItemsPerEdge(t *testing.T) {
 		t.Parallel()
 
 		recorded := domains.Settlement{Certificate: certs.Certificate{ARN: "arn:adopted", Adopted: true}}
-		items, err := destroyPlanItems(planEdge(t, cloudfront.Kind), projectPlanScope{
-			class: bootstrap.ClassProduction, slug: "shop", state: productionState(t, recorded),
+		items := destroyPlanItems(planEdge(t, cloudfront.Kind), projectPlanScope{
+			class: bootstrap.ClassProduction, slug: "shop", record: productionRecord(recorded),
 		})
-		if err != nil {
-			t.Fatalf("destroyPlanItems: %v", err)
-		}
 		if got := itemFor(t, items, "certificate", "arn:adopted").GetAction(); got != deploymentsv1.TeardownItem_ACTION_KEEP {
 			t.Errorf("adopted certificate action = %v, want KEEP", got)
 		}
@@ -231,18 +213,13 @@ func TestDestroyPlanItemsPerEdge(t *testing.T) {
 	t.Run("the records ocel wrote for the stack itself are planned too", func(t *testing.T) {
 		t.Parallel()
 
-		written, err := json.Marshal([]edge.Record{{Name: "shop.example.com", Type: edge.RecordTypeCNAME, Value: "d123.cloudfront.net"}})
-		if err != nil {
-			t.Fatalf("marshal records: %v", err)
-		}
-		items, err := destroyPlanItems(planEdge(t, cloudfront.Kind), projectPlanScope{
-			class: bootstrap.ClassProduction,
-			slug:  "shop",
-			state: edge.StackState{edge.StackKeyRecords: string(written)},
+		var written edge.StackState
+		written.RecordWrites([]edge.Record{{Name: "shop.example.com", Type: edge.RecordTypeCNAME, Value: "d123.cloudfront.net"}})
+		items := destroyPlanItems(planEdge(t, cloudfront.Kind), projectPlanScope{
+			class:  bootstrap.ClassProduction,
+			slug:   "shop",
+			record: bootstrap.StackRecord{Edge: written},
 		})
-		if err != nil {
-			t.Fatalf("destroyPlanItems: %v", err)
-		}
 		if got := itemFor(t, items, "DNS record", "shop.example.com CNAME d123.cloudfront.net").GetAction(); got != deploymentsv1.TeardownItem_ACTION_DELETE {
 			t.Errorf("written record action = %v, want DELETE", got)
 		}
@@ -251,14 +228,11 @@ func TestDestroyPlanItemsPerEdge(t *testing.T) {
 	t.Run("a project served on the shared preview wildcard keeps it", func(t *testing.T) {
 		t.Parallel()
 
-		items, err := destroyPlanItems(planEdge(t, apigateway.Kind), projectPlanScope{
-			class: bootstrap.ClassPreview,
-			slug:  "shop",
-			state: edge.StackState{edge.StackKeyGlobalPreview: "preview.acme.com"},
+		items := destroyPlanItems(planEdge(t, apigateway.Kind), projectPlanScope{
+			class:  bootstrap.ClassPreview,
+			slug:   "shop",
+			record: bootstrap.StackRecord{Edge: edge.StackState{GlobalPreview: "preview.acme.com"}},
 		})
-		if err != nil {
-			t.Fatalf("destroyPlanItems: %v", err)
-		}
 		wildcard := itemFor(t, items, "preview wildcard", "*.preview.acme.com")
 		if wildcard.GetAction() != deploymentsv1.TeardownItem_ACTION_KEEP {
 			t.Errorf("preview wildcard action = %v, want KEEP", wildcard.GetAction())
@@ -298,7 +272,7 @@ func TestRequestNamingNoEdgeTakesTheProviderDefault(t *testing.T) {
 func TestDestroyPlanFollowsTheEdgeTheRequestNames(t *testing.T) {
 	t.Parallel()
 
-	state := edge.RecordBoundDomain(edge.StackState{}, "shop.example.com")
+	state := boundTo(edge.StackState{}, "shop.example.com")
 
 	planFor := func(t *testing.T, kind edge.Kind) *deploymentsv1.EdgeStackPlan {
 		t.Helper()
@@ -312,7 +286,7 @@ func TestDestroyPlanFollowsTheEdgeTheRequestNames(t *testing.T) {
 			slug:       "shop",
 			stateTable: "ocel-state",
 			stacks:     1,
-			state:      state,
+			record:     bootstrap.StackRecord{Edge: state},
 		})
 		if err != nil {
 			t.Fatalf("edgeStackPlan() error = %v", err)
@@ -350,25 +324,25 @@ func TestDestroyPlanFollowsTheEdgeTheRequestNames(t *testing.T) {
 	})
 }
 
-func TestForgetStackStateOnlyOnceTheTeardownFinished(t *testing.T) {
+func TestForgetStackRecordOnlyOnceTheTeardownFinished(t *testing.T) {
 	t.Parallel()
 
 	ctx := context.Background()
-	recorded := edge.StackState{edge.StackKeySlug: "shop", edge.StackKeyEndpoint: "https://store.example"}
+	recorded := bootstrap.StackRecord{Edge: edge.StackState{Slug: "shop", Endpoint: "https://store.example"}}
 
-	standing := func(t *testing.T, ssmc *stateSSM) edge.StackState {
+	standing := func(t *testing.T, ssmc *stateSSM) bootstrap.StackRecord {
 		t.Helper()
-		state, err := bootstrap.ReadStackStateFor(ctx, ssmc, bootstrap.ClassProduction, "shop")
+		record, err := bootstrap.ReadStackRecordFor(ctx, ssmc, bootstrap.ClassProduction, "shop")
 		if err != nil {
-			t.Fatalf("ReadStackStateFor: %v", err)
+			t.Fatalf("ReadStackRecordFor: %v", err)
 		}
-		return state
+		return record
 	}
 	written := func(t *testing.T) *stateSSM {
 		t.Helper()
 		ssmc := &stateSSM{params: map[string]string{}}
-		if err := bootstrap.WriteStackStateFor(ctx, ssmc, bootstrap.ClassProduction, "shop", recorded); err != nil {
-			t.Fatalf("WriteStackStateFor: %v", err)
+		if err := bootstrap.WriteStackRecordFor(ctx, ssmc, bootstrap.ClassProduction, "shop", recorded); err != nil {
+			t.Fatalf("WriteStackRecordFor: %v", err)
 		}
 		return ssmc
 	}
@@ -378,10 +352,10 @@ func TestForgetStackStateOnlyOnceTheTeardownFinished(t *testing.T) {
 
 		ssmc := written(t)
 		result := deploy.DestroyProjectResult{EdgeTornDown: false}
-		if err := forgetStackState(ctx, ssmc, bootstrap.ClassProduction, "shop", result, recorded, errors.New("the front is on fire")); err != nil {
-			t.Fatalf("forgetStackState: %v", err)
+		if err := forgetStackRecord(ctx, ssmc, bootstrap.ClassProduction, "shop", result, recorded, errors.New("the front is on fire")); err != nil {
+			t.Fatalf("forgetStackRecord: %v", err)
 		}
-		if got := standing(t, ssmc); len(got) == 0 {
+		if got := standing(t, ssmc); got.Empty() {
 			t.Fatal("the stack state was forgotten after a failed teardown: the rerun has nothing to resume from")
 		}
 	})
@@ -391,10 +365,10 @@ func TestForgetStackStateOnlyOnceTheTeardownFinished(t *testing.T) {
 
 		ssmc := written(t)
 		result := deploy.DestroyProjectResult{EdgeTornDown: true}
-		if err := forgetStackState(ctx, ssmc, bootstrap.ClassProduction, "shop", result, recorded, errors.New("the asset bucket is gone")); err != nil {
-			t.Fatalf("forgetStackState: %v", err)
+		if err := forgetStackRecord(ctx, ssmc, bootstrap.ClassProduction, "shop", result, recorded, errors.New("the asset bucket is gone")); err != nil {
+			t.Fatalf("forgetStackRecord: %v", err)
 		}
-		if got := standing(t, ssmc); len(got) == 0 {
+		if got := standing(t, ssmc); got.Empty() {
 			t.Fatal("the stack state was forgotten while the purge that failed still has work left")
 		}
 	})
@@ -404,10 +378,10 @@ func TestForgetStackStateOnlyOnceTheTeardownFinished(t *testing.T) {
 
 		ssmc := written(t)
 		result := deploy.DestroyProjectResult{EdgeTornDown: true}
-		if err := forgetStackState(ctx, ssmc, bootstrap.ClassProduction, "shop", result, recorded, nil); err != nil {
-			t.Fatalf("forgetStackState: %v", err)
+		if err := forgetStackRecord(ctx, ssmc, bootstrap.ClassProduction, "shop", result, recorded, nil); err != nil {
+			t.Fatalf("forgetStackRecord: %v", err)
 		}
-		if got := standing(t, ssmc); len(got) != 0 {
+		if got := standing(t, ssmc); !got.Empty() {
 			t.Fatalf("stack state = %v after a finished teardown, want nothing left to resume", got)
 		}
 	})

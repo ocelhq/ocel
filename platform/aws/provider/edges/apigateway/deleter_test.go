@@ -181,11 +181,11 @@ func TestDeleter(t *testing.T) {
 
 		w := newWorld()
 		e := bootstrapped(t, w)
-		stack, err := e.Reconcile(context.Background(), testSpec(), nil)
+		stack, err := e.Reconcile(context.Background(), testSpec(), edge.StackState{})
 		if err != nil {
 			t.Fatalf("Reconcile: %v", err)
 		}
-		id := stack.State()[stackKeyAPI]
+		id := ownState(t, stack).API
 		w.gateway.deleteErr = &agtypes.TooManyRequestsException{Message: aws.String("Too Many Requests")}
 		w.gateway.deleteRefused = 2
 
@@ -229,11 +229,11 @@ func TestDeleter(t *testing.T) {
 
 		w := newWorld()
 		e := bootstrapped(t, w)
-		stack, err := e.Reconcile(context.Background(), testSpec(), nil)
+		stack, err := e.Reconcile(context.Background(), testSpec(), edge.StackState{})
 		if err != nil {
 			t.Fatalf("Reconcile: %v", err)
 		}
-		id := stack.State()[stackKeyAPI]
+		id := ownState(t, stack).API
 		w.gateway.deleteErr = errors.New("the account holds a mapping onto it")
 		w.gateway.deleteRefused = 1
 

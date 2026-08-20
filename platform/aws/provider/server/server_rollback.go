@@ -22,26 +22,26 @@ func (s *Server) openStack(ctx context.Context, kind edge.Kind, opts options, sl
 	if err != nil {
 		return nil, err
 	}
-	state, err := bootstrap.ReadStackState(ctx, ssm.NewFromConfig(awscfg), slug)
+	record, err := bootstrap.ReadStackRecord(ctx, ssm.NewFromConfig(awscfg), slug)
 	if err != nil {
 		return nil, err
 	}
-	return s.openStackFor(kind, state, awscfg.Region)
+	return s.openStackFor(kind, record, awscfg.Region)
 }
 
-func (s *Server) openStackFor(kind edge.Kind, state edge.StackState, region string) (edge.EdgeStack, error) {
+func (s *Server) openStackFor(kind edge.Kind, record bootstrap.StackRecord, region string) (edge.EdgeStack, error) {
 	edgeFront, err := s.edge(kind, region)
 	if err != nil {
 		return nil, err
 	}
-	return openStackOn(edgeFront, state)
+	return openStackOn(edgeFront, record)
 }
 
-func openStackOn(edgeFront edge.Edge, state edge.StackState) (edge.EdgeStack, error) {
-	if len(state) == 0 {
+func openStackOn(edgeFront edge.Edge, record bootstrap.StackRecord) (edge.EdgeStack, error) {
+	if record.Empty() {
 		return nil, errNoProductionDeploy
 	}
-	return edgeFront.Open(state)
+	return edgeFront.Open(record.Edge)
 }
 
 func (s *Server) ListPromotions(ctx context.Context, req *deploymentsv1.ListPromotionsRequest) (*deploymentsv1.ListPromotionsResponse, error) {

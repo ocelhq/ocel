@@ -19,7 +19,7 @@ func unauthorized(res *http.Response) bool {
 }
 
 func (p *provider) destroyInstance(ctx context.Context, state edge.StackState) error {
-	if state[edge.StackKeySecret] == "" {
+	if state.Secret == "" {
 		return nil
 	}
 	res, err := p.storeRequest(ctx, state, http.MethodPost, "/destroy", nil, nil)
@@ -106,7 +106,7 @@ func (s *stack) SchemaVersion(ctx context.Context) (int, error) {
 	var out struct {
 		SchemaVersion int `json:"schemaVersion"`
 	}
-	res, err := s.p.storeRequestTo(ctx, s.state[edge.StackKeyEndpoint], s.state[edge.StackKeySlug], "", http.MethodGet, "/schema-version", nil, &out)
+	res, err := s.p.storeRequestTo(ctx, s.state.Endpoint, s.state.Slug, "", http.MethodGet, "/schema-version", nil, &out)
 	if err != nil {
 		if unauthorized(res) {
 			return 0, edge.ErrStoreSchemaUnreadable
@@ -136,7 +136,7 @@ func (p *provider) putVersionStamp(ctx context.Context, endpoint, slug, secret, 
 }
 
 func (p *provider) storeRequest(ctx context.Context, state edge.StackState, method, subpath string, body, out any) (*http.Response, error) {
-	return p.storeRequestTo(ctx, state[edge.StackKeyEndpoint], state[edge.StackKeySlug], state[edge.StackKeySecret], method, subpath, body, out)
+	return p.storeRequestTo(ctx, state.Endpoint, state.Slug, state.Secret, method, subpath, body, out)
 }
 
 func (p *provider) storeRequestTo(ctx context.Context, endpoint, slug, secret, method, subpath string, body, out any) (*http.Response, error) {

@@ -63,12 +63,12 @@ func unbindRouting(ctx context.Context, stack edge.EdgeStack, rep Reporting, sta
 	start := time.Now()
 	defer func() { spanForStage(rep.Tracer, stage, start, time.Now(), err) }()
 
-	if stack == nil || len(stack.State()) == 0 {
+	if stack == nil || stack.State().Empty() {
 		return nil
 	}
 	report := rep.stage(stage)
 	var errs []error
-	for _, hostname := range edge.BoundDomains(stack.State()) {
+	for _, hostname := range stack.State().Bound {
 		report(sanitizeMessage(fmt.Sprintf("Unbinding %s from the edge", hostname)))
 		if err := stack.UnbindDomain(ctx, hostname); err != nil {
 			errs = append(errs, fmt.Errorf("unbind %q before the origin it fronts is destroyed: %w", hostname, err))
@@ -178,7 +178,7 @@ func destroyEdgeStack(ctx context.Context, stack edge.EdgeStack, t ProjectTeardo
 	start := time.Now()
 	defer func() { spanForStage(t.Report.Tracer, stage, start, time.Now(), err) }()
 
-	if stack == nil || len(stack.State()) == 0 {
+	if stack == nil || stack.State().Empty() {
 		return nil
 	}
 	report := t.Report.stage(stage)

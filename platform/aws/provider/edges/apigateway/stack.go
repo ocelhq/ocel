@@ -16,35 +16,48 @@ import (
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
+type private struct {
+	API         string `json:"api,omitempty"`
+	StateTable  string `json:"stateTable,omitempty"`
+	AssetBucket string `json:"assetBucket,omitempty"`
+	Role        string `json:"invokeRole,omitempty"`
+	Region      string `json:"region,omitempty"`
+}
+
 type stack struct {
 	p     *provider
 	state edge.StackState
+	own   private
 }
 
 var _ edge.EdgeStack = (*stack)(nil)
 
-func (s *stack) State() edge.StackState { return s.state }
+func (s *stack) State() edge.StackState {
+	held := s.state
+	held.Adapter = edge.Own(s.own)
+	return held
+}
 
 func (s *stack) Ledger() edge.Ledger { return &lazyLedger{s: s} }
 
-func (s *stack) slug() string { return s.state[edge.StackKeySlug] }
+func (s *stack) slug() string { return s.state.Slug }
 
-func (s *stack) class() edge.Class { return edge.Class(s.state[edge.StackKeyClass]) }
+func (s *stack) class() edge.Class { return s.state.Class }
 
 func (s *stack) plan(pointer string) apiPlan {
 	return apiPlan{
 		name:        apiName(s.slug(), s.class(), pointer),
-		region:      s.state[stackKeyRegion],
-		account:     accountOf(s.state[stackKeyRole]),
-		role:        s.state[stackKeyRole],
-		assetBucket: s.state[stackKeyAssetBucket],
+		region:      s.own.Region,
+		account:     accountOf(s.own.Role),
+		role:        s.own.Role,
+		assetBucket: s.own.AssetBucket,
 	}
 }
 
 func (s *stack) ledger(c Clients) *edgeledger.Ledger {
 	return &edgeledger.Ledger{
 		Dynamo: c.Dynamo,
-		Table:  s.state[stackKeyStateTable],
+		Table:  s.own.StateTable,
 		Scope:  edgeledger.Scope(s.class(), s.slug()),
 	}
 }
@@ -142,7 +155,7 @@ func (s *stack) apiFor(ctx context.Context, c Clients, pointer string) (apiPlan,
 
 func (s *stack) findAPIFor(ctx context.Context, c Clients, pointer, name string) (string, bool, error) {
 	if pointerOr(pointer) == edge.DefaultPointer {
-		if id := s.state[stackKeyAPI]; id != "" {
+		if id := s.own.API; id != "" {
 			return id, true, nil
 		}
 	}
@@ -238,7 +251,7 @@ func (s *stack) RemovePointer(ctx context.Context, pointer string) (edge.PruneRe
 }
 
 func (s *stack) previewHost(pointer string) (string, string) {
-	base := s.state[edge.StackKeyGlobalPreview]
+	base := s.state.GlobalPreview
 	if base == "" || s.class() != edge.ClassPreview {
 		return "", ""
 	}
@@ -269,7 +282,7 @@ func (s *stack) unroutePreview(ctx context.Context, c Clients, pointer string) e
 }
 
 func (s *stack) unrouteProject(ctx context.Context, c Clients) error {
-	base := s.state[edge.StackKeyGlobalPreview]
+	base := s.state.GlobalPreview
 	if base == "" || s.class() != edge.ClassPreview || s.slug() == "" {
 		return nil
 	}
@@ -304,7 +317,8 @@ func (s *stack) BindDomain(ctx context.Context, binding edge.DomainBinding) erro
 			return fmt.Errorf("map %s onto REST API %s: %w", binding.Hostname, id, err)
 		}
 	}
-	s.state = edge.RecordHostFront(edge.RecordBoundDomain(s.state, binding.Hostname), binding.Hostname, front)
+	s.state.Bind(binding.Hostname)
+	s.state.PublishFront(binding.Hostname, front)
 	return nil
 }
 
@@ -340,8 +354,8 @@ func regionalFrontOf(hostname, regional string) (string, error) {
 }
 
 func (s *stack) settleDomainFronts(ctx context.Context, c Clients, warn func(string)) error {
-	for _, hostname := range edge.BoundDomains(s.state) {
-		if edge.HostFronts(s.state)[hostname] != "" {
+	for _, hostname := range s.state.Bound {
+		if s.state.Fronts[hostname] != "" {
 			continue
 		}
 		held, err := c.APIGateway.GetDomainName(ctx, &apigateway.GetDomainNameInput{
@@ -349,7 +363,8 @@ func (s *stack) settleDomainFronts(ctx context.Context, c Clients, warn func(str
 		})
 		if err != nil {
 			if isNotFound(err) {
-				s.state = edge.ForgetHostFront(edge.ForgetBoundDomain(s.state, hostname), hostname)
+				s.state.Release(hostname)
+				s.state.PublishFront(hostname, "")
 				if warn != nil {
 					warn(fmt.Sprintf("%s is no longer bound: the API Gateway domain name it was served on is gone, so nothing answers it and no record can point at it — run `ocel domain add` to bind it again", hostname))
 				}
@@ -361,7 +376,7 @@ func (s *stack) settleDomainFronts(ctx context.Context, c Clients, warn func(str
 		if err != nil {
 			return err
 		}
-		s.state = edge.RecordHostFront(s.state, hostname, front)
+		s.state.PublishFront(hostname, front)
 	}
 	return nil
 }
@@ -392,7 +407,8 @@ func (s *stack) UnbindDomain(ctx context.Context, hostname string) error {
 	}); err != nil && !isNotFound(err) {
 		return fmt.Errorf("delete the API Gateway domain name for %s: %w", hostname, err)
 	}
-	s.state = edge.ForgetHostFront(edge.ForgetBoundDomain(s.state, hostname), hostname)
+	s.state.Release(hostname)
+	s.state.PublishFront(hostname, "")
 	return nil
 }
 
@@ -402,7 +418,7 @@ func (s *stack) Destroy(ctx context.Context) error {
 		return err
 	}
 	var errs []error
-	for _, hostname := range edge.BoundDomains(s.state) {
+	for _, hostname := range s.state.Bound {
 		if err := s.UnbindDomain(ctx, hostname); err != nil {
 			errs = append(errs, fmt.Errorf("unbind %q before destroying the stack that serves it: %w", hostname, err))
 		}
@@ -427,7 +443,7 @@ func (s *stack) Destroy(ctx context.Context) error {
 	if drained != nil {
 		return errors.Join(append(errs, drained)...)
 	}
-	delete(s.state, stackKeyAPI)
+	s.own.API = ""
 	if err := ledger.Destroy(ctx); err != nil {
 		errs = append(errs, err)
 	}

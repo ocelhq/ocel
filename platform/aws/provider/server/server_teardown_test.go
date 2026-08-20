@@ -119,7 +119,7 @@ func TestReadSubstrateOccupancy(t *testing.T) {
 
 	ctx := context.Background()
 	ssmc := &stateSSM{params: map[string]string{}}
-	if err := bootstrap.WriteStackStateFor(ctx, ssmc, bootstrap.ClassPreview, "shop", edge.StackState{edge.StackKeySlug: "shop"}); err != nil {
+	if err := bootstrap.WriteStackRecordFor(ctx, ssmc, bootstrap.ClassPreview, "shop", bootstrap.StackRecord{Edge: edge.StackState{Slug: "shop"}}); err != nil {
 		t.Fatalf("WriteStackStateFor: %v", err)
 	}
 	if err := bootstrap.WritePreviewDomain(ctx, ssmc, bootstrap.ClassPreview, bootstrap.PreviewDomain{BaseDomain: "preview.acme.com"}); err != nil {
@@ -296,7 +296,7 @@ func TestPlanTeardown(t *testing.T) {
 		t.Parallel()
 
 		deps := newTeardownFakes(t, bootstrap.ClassProduction)
-		if err := bootstrap.WriteStackStateFor(context.Background(), deps.ssm, bootstrap.ClassProduction, "shop", edge.StackState{}); err != nil {
+		if err := bootstrap.WriteStackRecordFor(context.Background(), deps.ssm, bootstrap.ClassProduction, "shop", bootstrap.StackRecord{}); err != nil {
 			t.Fatalf("WriteStackStateFor: %v", err)
 		}
 

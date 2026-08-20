@@ -371,16 +371,16 @@ func TestAmbientPreview(t *testing.T) {
 		}
 
 		fake := &recordingEdge{kind: cloudflare.Kind}
-		stack, err := reconcileStack(context.Background(), fake, specs, nil)
+		stack, err := reconcileStack(context.Background(), fake, specs, edge.StackState{})
 		if err != nil {
 			t.Fatalf("reconcileStack: %v", err)
 		}
 		state := stack.State()
-		if state[edge.StackKeyEndpoint] == "" {
+		if state.Endpoint == "" {
 			t.Fatalf("state = %v, want a store endpoint: staging a deployment reads it", state)
 		}
-		if state[edge.StackKeySlug] != "proj" {
-			t.Errorf("state[%s] = %q, want proj: `ocel domain ls` and preview pruning find the project by it", edge.StackKeySlug, state[edge.StackKeySlug])
+		if state.Slug != "proj" {
+			t.Errorf("slug = %q, want proj: `ocel domain ls` and preview pruning find the project by it", state.Slug)
 		}
 	})
 
@@ -487,18 +487,18 @@ func TestAmbientPreview(t *testing.T) {
 
 		fake := &recordingEdge{kind: cloudflare.Kind}
 		stack, err := reconcileStack(context.Background(), fake, specs, edge.StackState{
-			edge.StackKeyGlobalPreview: cfg.GlobalPreviewDomain,
+			GlobalPreview: cfg.GlobalPreviewDomain,
 		})
 		if err != nil {
 			t.Fatalf("reconcileStack: %v", err)
 		}
 		state := stack.State()
-		if edge.ServedOnGlobalPreview(state, cfg.GlobalPreviewDomain) {
+		if state.ServedOnGlobalPreview(cfg.GlobalPreviewDomain) {
 			t.Fatal("the reconciled state kept the prior mark; stamping it before the reconcile would then be enough, and this test proves nothing")
 		}
 
 		state = MarkGlobalPreview(state, cfg, m)
-		if !edge.ServedOnGlobalPreview(state, cfg.GlobalPreviewDomain) {
+		if !state.ServedOnGlobalPreview(cfg.GlobalPreviewDomain) {
 			t.Errorf("state = %v, want the global preview domain stamped: `ocel domain ls` lists the projects by it", state)
 		}
 	})
@@ -514,10 +514,10 @@ func TestAmbientPreview(t *testing.T) {
 
 		fake := &recordingEdge{kind: cloudflare.Kind, version: "v1", secret: "fake-secret"}
 		prior := edge.StackState{
-			edge.StackKeySlug:          "proj",
-			edge.StackKeyEndpoint:      fakeStoreEndpoint,
-			edge.StackKeySecret:        "fake-secret",
-			edge.StackKeyGlobalPreview: cfg.GlobalPreviewDomain,
+			Slug:          "proj",
+			Endpoint:      fakeStoreEndpoint,
+			Secret:        "fake-secret",
+			GlobalPreview: cfg.GlobalPreviewDomain,
 		}
 		stack, err := reconcileStack(context.Background(), fake, specs, prior)
 		if err != nil {
@@ -526,7 +526,7 @@ func TestAmbientPreview(t *testing.T) {
 		state := stack.State()
 
 		state = MarkGlobalPreview(state, cfg, m)
-		if edge.ServedOnGlobalPreview(state, cfg.GlobalPreviewDomain) {
+		if state.ServedOnGlobalPreview(cfg.GlobalPreviewDomain) {
 			t.Errorf("state = %v, want the mark cleared: this project serves its own wildcard now", state)
 		}
 	})
@@ -994,7 +994,7 @@ func TestFinalizeProductionDeploy(t *testing.T) {
 			{App: "api", Identity: deployedAs("b2"), Record: edge.DeploymentRecord{App: "api", Identity: "b2"}},
 		}
 
-		state, err := finalizeDeploy(ctx, withEdge(Config{}, fake), specs, nil, "promo1", "", "", 100, results)
+		state, err := finalizeDeploy(ctx, withEdge(Config{}, fake), specs, edge.StackState{}, "promo1", "", "", 100, results)
 		if err != nil {
 			t.Fatalf("finalizeDeploy: %v", err)
 		}
@@ -1020,7 +1020,7 @@ func TestFinalizeProductionDeploy(t *testing.T) {
 				t.Errorf("promotion.Builds[%q] = %q, want %q", app, got, identity)
 			}
 		}
-		if state[edge.StackKeyEndpoint] == "" {
+		if state.Endpoint == "" {
 			t.Error("expected a reconciled state to be returned")
 		}
 	})
@@ -1058,7 +1058,7 @@ func TestFinalizeProductionDeploy(t *testing.T) {
 			{App: "web", Identity: deployedAs("b1"), Record: edge.DeploymentRecord{App: "web", Identity: "b1"}},
 		}
 
-		if _, err := finalizeDeploy(ctx, withEdge(Config{}, fake), []edge.StackSpec{{Version: "v1"}}, nil, "promo1", "v1.2.3", "", 100, results); err != nil {
+		if _, err := finalizeDeploy(ctx, withEdge(Config{}, fake), []edge.StackSpec{{Version: "v1"}}, edge.StackState{}, "promo1", "v1.2.3", "", 100, results); err != nil {
 			t.Fatalf("finalizeDeploy: %v", err)
 		}
 
@@ -1074,7 +1074,7 @@ func TestFinalizeProductionDeploy(t *testing.T) {
 			{App: "web", Identity: deployedAs("b1"), Record: edge.DeploymentRecord{App: "web", Identity: "b1"}},
 		}
 
-		if _, err := finalizeDeploy(ctx, withEdge(Config{}, fake), []edge.StackSpec{{Version: "v1"}}, nil, "promo1", "", "", 100, results); err != nil {
+		if _, err := finalizeDeploy(ctx, withEdge(Config{}, fake), []edge.StackSpec{{Version: "v1"}}, edge.StackState{}, "promo1", "", "", 100, results); err != nil {
 			t.Fatalf("finalizeDeploy: %v", err)
 		}
 
@@ -1097,7 +1097,7 @@ func TestFinalizeProductionDeploy(t *testing.T) {
 			{App: "api", Err: errors.New("app-deploy stack failed")},
 		}
 
-		_, err := finalizeDeploy(ctx, withEdge(Config{}, fake), []edge.StackSpec{{Version: "v1"}}, nil, "promo1", "", "", 100, results)
+		_, err := finalizeDeploy(ctx, withEdge(Config{}, fake), []edge.StackSpec{{Version: "v1"}}, edge.StackState{}, "promo1", "", "", 100, results)
 		if err == nil {
 			t.Fatal("expected an error when one app's deploy failed")
 		}
@@ -1116,7 +1116,7 @@ func TestFinalizeProductionDeploy(t *testing.T) {
 		specs := []edge.StackSpec{{Version: "v1"}}
 		results := []appDeployResult{{App: "web", Identity: deployedAs("b1"), Record: edge.DeploymentRecord{App: "web", Identity: "b1"}}}
 
-		state, err := finalizeDeploy(ctx, withEdge(Config{}, fake), specs, nil, "promo1", "", "", 100, results)
+		state, err := finalizeDeploy(ctx, withEdge(Config{}, fake), specs, edge.StackState{}, "promo1", "", "", 100, results)
 		if err != nil {
 			t.Fatalf("first finalizeDeploy: %v", err)
 		}
@@ -1143,7 +1143,7 @@ func TestFinalizeDeploy(t *testing.T) {
 		}
 
 		prod := &recordingEdge{kind: cloudflare.Kind}
-		if _, err := finalizeDeploy(ctx, withEdge(Config{}, prod), []edge.StackSpec{{Version: "v1"}}, nil, "promo1", "", "", 100, results); err != nil {
+		if _, err := finalizeDeploy(ctx, withEdge(Config{}, prod), []edge.StackSpec{{Version: "v1"}}, edge.StackState{}, "promo1", "", "", 100, results); err != nil {
 			t.Fatalf("finalizeDeploy(production): %v", err)
 		}
 		if len(prod.promotePointers) != 1 || prod.promotePointers[0] != "" {
@@ -1158,7 +1158,7 @@ func TestFinalizeDeploy(t *testing.T) {
 		}
 
 		preview := &recordingEdge{kind: cloudflare.Kind}
-		if _, err := finalizeDeploy(ctx, withEdge(Config{}, preview), []edge.StackSpec{{Version: "v1"}}, nil, "promo1", "", "pr-42", 100, results); err != nil {
+		if _, err := finalizeDeploy(ctx, withEdge(Config{}, preview), []edge.StackSpec{{Version: "v1"}}, edge.StackState{}, "promo1", "", "pr-42", 100, results); err != nil {
 			t.Fatalf("finalizeDeploy(preview): %v", err)
 		}
 		if len(preview.promotePointers) != 1 || preview.promotePointers[0] != "pr-42" {
@@ -1180,7 +1180,7 @@ func TestFinalizeDeploy(t *testing.T) {
 			}}
 		}
 
-		state, err := finalizeDeploy(ctx, withEdge(Config{}, fake), specs, nil, "promo1", "", "", 100, result(before))
+		state, err := finalizeDeploy(ctx, withEdge(Config{}, fake), specs, edge.StackState{}, "promo1", "", "", 100, result(before))
 		if err != nil {
 			t.Fatalf("first finalizeDeploy: %v", err)
 		}
@@ -1278,7 +1278,7 @@ func TestFinalizeDeploy(t *testing.T) {
 			{App: "web", Identity: id, Record: edge.DeploymentRecord{App: "web", Identity: id.String()}},
 		}
 
-		if _, err := finalizeDeploy(context.Background(), withEdge(Config{}, fake), []edge.StackSpec{{Version: "v1"}}, nil, "promo1", "", "", 100, results); err != nil {
+		if _, err := finalizeDeploy(context.Background(), withEdge(Config{}, fake), []edge.StackSpec{{Version: "v1"}}, edge.StackState{}, "promo1", "", "", 100, results); err != nil {
 			t.Fatalf("finalizeDeploy: %v", err)
 		}
 		if len(fake.promotions) != 1 {
@@ -1437,7 +1437,7 @@ func TestRealizeChecksTheSchemaAgainstTheRecordedStackState(t *testing.T) {
 		Edge:          fake,
 		StoreEndpoint: fakeStoreEndpoint,
 		Slug:          "shop",
-		StackState:    edge.StackState{"stateTable": "ocel-deployments", edge.StackKeySecret: "fake-secret"},
+		StackState:    edge.StackState{Secret: "fake-secret", Adapter: edge.Own(map[string]string{"stateTable": "ocel-deployments"})},
 	}
 	realize(context.Background(), cfg, &Realized{}, &deploymentsv1.Manifest{Slug: "shop"}, nil, nil)
 
@@ -1445,10 +1445,14 @@ func TestRealizeChecksTheSchemaAgainstTheRecordedStackState(t *testing.T) {
 		t.Fatal("no stack opened, want the schema check to open one")
 	}
 	opened := fake.opens[0]
-	if opened["stateTable"] != "ocel-deployments" {
-		t.Errorf("opened stateTable = %q, want the recorded state carried into the schema check", opened["stateTable"])
+	var own map[string]string
+	if err := opened.Adapter.Into(&own); err != nil {
+		t.Fatalf("read the state the edge keeps to itself: %v", err)
 	}
-	if opened[edge.StackKeyEndpoint] != fakeStoreEndpoint || opened[edge.StackKeySlug] != "shop" {
+	if own["stateTable"] != "ocel-deployments" {
+		t.Errorf("opened stateTable = %q, want the recorded state carried into the schema check", own["stateTable"])
+	}
+	if opened.Endpoint != fakeStoreEndpoint || opened.Slug != "shop" {
 		t.Errorf("opened state = %v, want it to name this deploy's store and slug", opened)
 	}
 }
@@ -1539,7 +1543,7 @@ func TestCheckTagAvailable(t *testing.T) {
 
 	t.Run("no op for an untagged deploy", func(t *testing.T) {
 		fake := taggedHistory()
-		if err := checkTagAvailable(context.Background(), Config{Edge: fake, StackState: edge.StackState{edge.StackKeyEndpoint: "http://store"}}, ""); err != nil {
+		if err := checkTagAvailable(context.Background(), Config{Edge: fake, StackState: edge.StackState{Endpoint: "http://store"}}, ""); err != nil {
 			t.Errorf("untagged deploy should never fail the tag check: %v", err)
 		}
 	})
@@ -1607,7 +1611,7 @@ func TestReconcileStack(t *testing.T) {
 			{Version: "v1", Program: &edge.ProgramSpec{Name: "admin-generic"}},
 		}
 
-		stack, err := reconcileStack(ctx, fake, specs, nil)
+		stack, err := reconcileStack(ctx, fake, specs, edge.StackState{})
 		if err != nil {
 			t.Fatalf("reconcileStack: %v", err)
 		}
@@ -1615,7 +1619,7 @@ func TestReconcileStack(t *testing.T) {
 		if len(fake.reconciles) != 2 {
 			t.Fatalf("reconciles = %d, want 2 (one per spec)", len(fake.reconciles))
 		}
-		if state[edge.StackKeyEndpoint] == "" {
+		if state.Endpoint == "" {
 			t.Error("expected a non-empty reconciled state")
 		}
 	})
@@ -1623,7 +1627,7 @@ func TestReconcileStack(t *testing.T) {
 	t.Run("a stack that never reconciled escapes with no state", func(t *testing.T) {
 		fake := &recordingEdge{kind: cloudflare.Kind, reconcileErr: errors.New("the preview substrate is not bootstrapped")}
 		cfg := Config{Class: deploymentsv1.Environment_CLASS_PREVIEW, Slug: "proj", GlobalPreviewDomain: "preview.acme.com"}
-		marked := MarkGlobalPreview(nil, cfg, &deploymentsv1.Manifest{Slug: "proj"})
+		marked := MarkGlobalPreview(edge.StackState{}, cfg, &deploymentsv1.Manifest{Slug: "proj"})
 
 		stack, err := reconcileStack(context.Background(), fake, []edge.StackSpec{{Version: "v1", Slug: "proj"}}, marked)
 		if err == nil {
@@ -1632,15 +1636,15 @@ func TestReconcileStack(t *testing.T) {
 		if stack != nil {
 			t.Errorf("stack = %+v, want none: its state is the mark and nothing else, and a project persisted with that state names no slug, class or state table, so no teardown can ever finish it", stack.State())
 		}
-		if state := reconciledState(stack, cfg); state != nil {
-			t.Errorf("state = %v, want nothing persisted for a stack that was never raised", state)
+		if state := reconciledState(stack, cfg); !state.Empty() {
+			t.Errorf("state = %+v, want nothing persisted for a stack that was never raised", state)
 		}
 	})
 
 	t.Run("no specs returns prior unchanged", func(t *testing.T) {
 		fake := &recordingEdge{kind: cloudflare.Kind}
 		ctx := context.Background()
-		prior := edge.StackState{edge.StackKeyEndpoint: "https://prior"}
+		prior := edge.StackState{Endpoint: "https://prior"}
 
 		stack, err := reconcileStack(ctx, fake, nil, prior)
 		if err != nil {
@@ -1650,7 +1654,7 @@ func TestReconcileStack(t *testing.T) {
 		if len(fake.reconciles) != 0 {
 			t.Errorf("reconciles = %d, want 0", len(fake.reconciles))
 		}
-		if state[edge.StackKeyEndpoint] != "https://prior" {
+		if state.Endpoint != "https://prior" {
 			t.Errorf("state = %v, want prior unchanged", state)
 		}
 	})
@@ -1874,7 +1878,7 @@ func TestCheckTagAvailableOnAnEdgeThatRecordsNoStoreEndpoint(t *testing.T) {
 	}
 	cfg := Config{
 		Edge:       fake,
-		StackState: edge.StackState{"stateTable": "ocel-deployments", edge.StackKeySecret: "fake-secret"},
+		StackState: edge.StackState{Secret: "fake-secret", Adapter: edge.Own(map[string]string{"stateTable": "ocel-deployments"})},
 	}
 
 	if err := checkTagAvailable(context.Background(), cfg, "v1.2.3"); err == nil {
@@ -1893,7 +1897,7 @@ func TestCheckTagAvailableCarriesTheStoreThisDeployNames(t *testing.T) {
 		Edge:          fake,
 		Slug:          "shop",
 		StoreEndpoint: fakeStoreEndpoint,
-		StackState:    edge.StackState{edge.StackKeySecret: "fake-secret"},
+		StackState:    edge.StackState{Secret: "fake-secret"},
 	}
 
 	if err := checkTagAvailable(context.Background(), cfg, "v1.2.3"); err != nil {
@@ -1903,7 +1907,7 @@ func TestCheckTagAvailableCarriesTheStoreThisDeployNames(t *testing.T) {
 		t.Fatal("no stack opened, want the tag check to open one")
 	}
 	opened := fake.opens[0]
-	if opened[edge.StackKeyEndpoint] != fakeStoreEndpoint || opened[edge.StackKeySlug] != "shop" {
+	if opened.Endpoint != fakeStoreEndpoint || opened.Slug != "shop" {
 		t.Errorf("opened state = %v, want it to name this deploy's store and slug, as the schema check does", opened)
 	}
 }
@@ -1914,7 +1918,7 @@ func TestCheckTagAvailableOnACloudflareStackWithNoStoreEndpoint(t *testing.T) {
 	cfg := Config{
 		Edge:       cloudflare.New(),
 		Slug:       "shop",
-		StackState: edge.StackState{edge.StackKeySlug: "shop", edge.StackKeySecret: "fake-secret"},
+		StackState: edge.StackState{Slug: "shop", Secret: "fake-secret"},
 	}
 
 	if err := checkTagAvailable(context.Background(), cfg, "v1.2.3"); err != nil {
@@ -1926,7 +1930,7 @@ func TestCheckTagAvailableBeforeTheStoreExists(t *testing.T) {
 	t.Parallel()
 
 	fake := &recordingEdge{kind: apigateway.Kind, historyErr: fmt.Errorf("%w: no state table", edge.ErrStoreAbsent)}
-	cfg := Config{Edge: fake, StackState: edge.StackState{"front": "d123.cloudfront.net"}}
+	cfg := Config{Edge: fake, StackState: edge.StackState{Front: "d123.cloudfront.net"}}
 
 	if err := checkTagAvailable(context.Background(), cfg, "v1.2.3"); err != nil {
 		t.Errorf("checkTagAvailable = %v, want a store that does not exist yet to hold no tag", err)

@@ -2,7 +2,6 @@ package edge
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"maps"
 	"slices"
@@ -90,47 +89,28 @@ func (t DNSTarget) FrontFor(hostname string) string {
 	return t.Front
 }
 
-const (
-	StackKeyFront = "front"
-
-	stackKeyHostFrontPrefix = "front:"
-)
-
-func FrontOf(state StackState) string { return state[StackKeyFront] }
-
-func HostFronts(state StackState) map[string]string {
-	var fronts map[string]string
-	for key, front := range state {
-		host, ok := strings.CutPrefix(key, stackKeyHostFrontPrefix)
-		if !ok || host == "" || front == "" {
-			continue
-		}
-		if fronts == nil {
-			fronts = map[string]string{}
-		}
-		fronts[host] = front
-	}
-	return fronts
-}
-
-func RecordHostFront(state StackState, hostname, front string) StackState {
-	next := maps.Clone(state)
-	if next == nil {
-		next = StackState{}
-	}
+func (s *StackState) PublishFront(hostname, front string) {
 	if hostname == "" {
-		return next
+		return
 	}
 	if front == "" {
-		delete(next, stackKeyHostFrontPrefix+hostname)
-		return next
+		if _, held := s.Fronts[hostname]; !held {
+			return
+		}
+		fronts := maps.Clone(s.Fronts)
+		delete(fronts, hostname)
+		if len(fronts) == 0 {
+			fronts = nil
+		}
+		s.Fronts = fronts
+		return
 	}
-	next[stackKeyHostFrontPrefix+hostname] = front
-	return next
-}
-
-func ForgetHostFront(state StackState, hostname string) StackState {
-	return RecordHostFront(state, hostname, "")
+	fronts := maps.Clone(s.Fronts)
+	if fronts == nil {
+		fronts = map[string]string{}
+	}
+	fronts[hostname] = front
+	s.Fronts = fronts
 }
 
 func TargetFor(e Edge, state StackState) DNSTarget {
@@ -138,7 +118,7 @@ func TargetFor(e Edge, state StackState) DNSTarget {
 }
 
 func TargetOf(kind Kind, servesUnbound bool, state StackState) DNSTarget {
-	return DNSTarget{Kind: kind, ServesUnbound: servesUnbound, Front: FrontOf(state), FrontByHost: HostFronts(state)}
+	return DNSTarget{Kind: kind, ServesUnbound: servesUnbound, Front: state.Front, FrontByHost: state.Fronts}
 }
 
 func Pointable(target DNSTarget, bound []string, hostname string) bool {
@@ -199,37 +179,12 @@ func ZoneOwns(hostname, zone string) bool {
 	return host == owner || strings.HasSuffix(host, "."+owner)
 }
 
-const StackKeyRecords = "records"
-
-func WrittenRecords(state StackState) ([]Record, error) {
-	raw := state[StackKeyRecords]
-	if raw == "" {
-		return nil, nil
-	}
-	var records []Record
-	if err := json.Unmarshal([]byte(raw), &records); err != nil {
-		return nil, fmt.Errorf("parse the DNS records recorded on this stack: %w", err)
-	}
-	return records, nil
-}
-
-func WithWrittenRecords(state StackState, records []Record) (StackState, error) {
-	next := StackState{}
-	for k, v := range state {
-		next[k] = v
-	}
-	kept := slices.Clone(records)
-	kept = slices.CompactFunc(sortedRecords(kept), func(a, b Record) bool { return a == b })
+func (s *StackState) RecordWrites(records []Record) {
+	kept := slices.CompactFunc(sortedRecords(slices.Clone(records)), func(a, b Record) bool { return a == b })
 	if len(kept) == 0 {
-		delete(next, StackKeyRecords)
-		return next, nil
+		kept = nil
 	}
-	payload, err := json.Marshal(kept)
-	if err != nil {
-		return nil, fmt.Errorf("record the DNS records this stack wrote: %w", err)
-	}
-	next[StackKeyRecords] = string(payload)
-	return next, nil
+	s.Records = kept
 }
 
 func sortedRecords(records []Record) []Record {

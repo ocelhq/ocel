@@ -16,42 +16,60 @@ import (
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
+type private struct {
+	Distribution        string `json:"distribution,omitempty"`
+	StateTable          string `json:"stateTable,omitempty"`
+	AssetBucket         string `json:"assetBucket,omitempty"`
+	Region              string `json:"region,omitempty"`
+	Function            string `json:"function,omitempty"`
+	KeyValueStore       string `json:"keyValueStore,omitempty"`
+	CachePolicy         string `json:"cachePolicy,omitempty"`
+	HeadersPolicy       string `json:"headersPolicy,omitempty"`
+	OriginAccessControl string `json:"originAccessControl,omitempty"`
+	PreviewBase         string `json:"previewBase,omitempty"`
+}
+
 type stack struct {
 	p     *provider
 	state edge.StackState
+	own   private
 }
 
 var _ edge.EdgeStack = (*stack)(nil)
 
-func (s *stack) State() edge.StackState { return s.state }
+func (s *stack) State() edge.StackState {
+	held := s.state
+	held.Adapter = edge.Own(s.own)
+	return held
+}
 
 func (s *stack) Ledger() edge.Ledger { return &lazyLedger{s: s} }
 
-func (s *stack) slug() string { return s.state[edge.StackKeySlug] }
+func (s *stack) slug() string { return s.state.Slug }
 
-func (s *stack) class() edge.Class { return edge.Class(s.state[edge.StackKeyClass]) }
+func (s *stack) class() edge.Class { return s.state.Class }
 
 func (s *stack) plan() distributionPlan {
 	return distributionPlan{
 		name:          distributionName(s.slug(), s.class()),
-		assetOrigin:   assetOriginDomain(s.state[stackKeyAssetBucket], s.state[stackKeyRegion]),
-		function:      s.state[stackKeyFunction],
-		cachePolicy:   s.state[stackKeyCachePolicy],
-		headersPolicy: s.state[stackKeyHeadersPolicy],
-		oac:           s.state[stackKeyOAC],
+		assetOrigin:   assetOriginDomain(s.own.AssetBucket, s.own.Region),
+		function:      s.own.Function,
+		cachePolicy:   s.own.CachePolicy,
+		headersPolicy: s.own.HeadersPolicy,
+		oac:           s.own.OriginAccessControl,
 	}
 }
 
 func (s *stack) ledger(c Clients) *edgeledger.Ledger {
 	return &edgeledger.Ledger{
 		Dynamo: c.Dynamo,
-		Table:  s.state[stackKeyStateTable],
+		Table:  s.own.StateTable,
 		Scope:  edgeledger.Scope(s.class(), s.slug()),
 	}
 }
 
 func (s *stack) routes(c Clients) routeWriter {
-	return routeWriter{clients: c, arn: s.state[stackKeyKeyValueStore]}
+	return routeWriter{clients: c, arn: s.own.KeyValueStore}
 }
 
 type lazyLedger struct{ s *stack }
@@ -141,18 +159,13 @@ func (s *stack) ensureDistribution(ctx context.Context, c Clients) (front, error
 }
 
 func (s *stack) recordFront(held front) {
-	if s.state == nil {
-		s.state = edge.StackState{}
-	}
-	s.state[stackKeyDistribution] = held.id
-	s.state[edge.StackKeyFront] = held.domainName
+	s.own.Distribution = held.id
+	s.state.Front = held.domainName
 }
 
 func (s *stack) findDistributionFor(ctx context.Context, c Clients, name string) (front, bool, error) {
-	if id := s.state[stackKeyDistribution]; id != "" {
-		if domain := s.state[edge.StackKeyFront]; domain != "" {
-			return front{id: id, domainName: domain}, true, nil
-		}
+	if s.own.Distribution != "" && s.state.Front != "" {
+		return front{id: s.own.Distribution, domainName: s.state.Front}, true, nil
 	}
 	return findDistribution(ctx, c, name)
 }
@@ -201,21 +214,21 @@ func (s *stack) servedHostnames(pointer string) []string {
 	if pointerOr(pointer) != edge.DefaultPointer {
 		return nil
 	}
-	return edge.BoundDomains(s.state)
+	return s.state.Bound
 }
 
 func (s *stack) previewBase() string {
 	if s.class() != edge.ClassPreview {
 		return ""
 	}
-	if base := s.state[edge.StackKeyGlobalPreview]; base != "" {
+	if base := s.state.GlobalPreview; base != "" {
 		return base
 	}
-	return s.state[stackKeyPreviewBase]
+	return s.own.PreviewBase
 }
 
 func (s *stack) onPreviewWildcard() bool {
-	return s.state[stackKeyDistribution] == "" && s.previewBase() != ""
+	return s.own.Distribution == "" && s.previewBase() != ""
 }
 
 func (s *stack) previewHost(pointer string) string {
@@ -279,7 +292,7 @@ func (s *stack) routeFor(ctx context.Context, c Clients, promotion edge.Promotio
 		Stack:       s.plan().name,
 		Origin:      origin,
 		Release:     identity,
-		Assets:      assetOriginDomain(s.state[stackKeyAssetBucket], s.state[stackKeyRegion]),
+		Assets:      assetOriginDomain(s.own.AssetBucket, s.own.Region),
 		AssetPrefix: assetOriginPath(record.AssetPrefix),
 		Secret:      secret,
 	}, nil
@@ -329,7 +342,7 @@ func (s *stack) BindDomain(ctx context.Context, binding edge.DomainBinding) erro
 	if err := serveAlias(ctx, c, s.plan(), held.id, binding.Hostname, binding.Certificate); err != nil {
 		return err
 	}
-	s.state = edge.RecordBoundDomain(s.state, binding.Hostname)
+	s.state.Bind(binding.Hostname)
 	return nil
 }
 
@@ -341,12 +354,12 @@ func (s *stack) UnbindDomain(ctx context.Context, hostname string) error {
 	if err := s.routes(c).apply(ctx, nil, []string{hostname}); err != nil {
 		return err
 	}
-	if id := s.state[stackKeyDistribution]; id != "" {
+	if id := s.own.Distribution; id != "" {
 		if err := dropAlias(ctx, c, s.plan(), id, hostname); err != nil {
 			return err
 		}
 	}
-	s.state = edge.ForgetBoundDomain(s.state, hostname)
+	s.state.Release(hostname)
 	return nil
 }
 
@@ -356,7 +369,7 @@ func (s *stack) Destroy(ctx context.Context) error {
 		return err
 	}
 	var errs []error
-	for _, hostname := range edge.BoundDomains(s.state) {
+	for _, hostname := range s.state.Bound {
 		if err := s.UnbindDomain(ctx, hostname); err != nil {
 			errs = append(errs, fmt.Errorf("unbind %q before destroying the stack that serves it: %w", hostname, err))
 		}
@@ -381,8 +394,7 @@ func (s *stack) Destroy(ctx context.Context) error {
 			}
 		}
 	}
-	delete(s.state, stackKeyDistribution)
-	delete(s.state, edge.StackKeyFront)
+	s.own.Distribution, s.state.Front = "", ""
 	if unrouted == nil && gone {
 		if err := s.ledger(c).Destroy(ctx); err != nil {
 			errs = append(errs, err)

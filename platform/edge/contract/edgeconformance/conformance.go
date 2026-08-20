@@ -2,7 +2,7 @@ package edgeconformance
 
 import (
 	"context"
-	"maps"
+	"encoding/json"
 	"slices"
 	"testing"
 
@@ -124,7 +124,7 @@ func Run(t *testing.T, suite Suite) {
 	t.Run("a reconciled stack reopens onto the same ledger", func(t *testing.T) {
 		ctx := context.Background()
 		e, spec := suite.New(t)
-		stack, err := e.Reconcile(ctx, spec, nil)
+		stack, err := e.Reconcile(ctx, spec, edge.StackState{})
 		if err != nil {
 			t.Fatalf("Reconcile: %v", err)
 		}
@@ -252,7 +252,7 @@ func Run(t *testing.T, suite Suite) {
 			t.Fatalf("BindDomain again: %v", err)
 		}
 
-		bound := edge.BoundDomains(stack.State())
+		bound := stack.State().Bound
 		if len(bound) != 1 || !slices.Contains(bound, suite.Hostname) {
 			t.Errorf("bound domains = %v, want exactly %q", bound, suite.Hostname)
 		}
@@ -298,6 +298,48 @@ func Run(t *testing.T, suite Suite) {
 		frontedRecords(t, e, stack.State(), suite.Hostname)
 	})
 
+	t.Run("a binding reports the state change the origin persists on", func(t *testing.T) {
+		ctx := context.Background()
+		_, stack := reconciledOn(t, suite)
+
+		before := stack.State()
+		if err := stack.BindDomain(ctx, edge.DomainBinding{Hostname: suite.Hostname}); err != nil {
+			t.Fatalf("BindDomain: %v", err)
+		}
+		if after := stack.State(); after.Equal(before) {
+			t.Errorf("state = %+v both before and after %q was bound; the origin writes what a call reports as changed, so a binding that reports nothing is lost the moment the process ends", after, suite.Hostname)
+		}
+	})
+
+	t.Run("state survives the seam it is persisted through", func(t *testing.T) {
+		ctx := context.Background()
+		e, stack := reconciledOn(t, suite)
+		if err := stack.BindDomain(ctx, edge.DomainBinding{Hostname: suite.Hostname}); err != nil {
+			t.Fatalf("BindDomain: %v", err)
+		}
+		promotion := edge.Promotion{PromotionID: "conformance-persisted", Ts: 1, Builds: map[string]string{"web": "b1"}}
+		promote(t, stack, promotion, "")
+
+		held := stack.State()
+		persisted := roundTrip(t, held)
+		if !persisted.Equal(held) {
+			t.Errorf("state read back = %+v, want the %+v it was written from; everything a stack keeps travels through this one encoding, including what the edge keeps to itself", persisted, held)
+		}
+
+		reopened, err := e.Open(persisted)
+		if err != nil {
+			t.Fatalf("Open a persisted state: %v", err)
+		}
+		frontedRecords(t, e, reopened.State(), suite.Hostname)
+		history, err := reopened.Ledger().History(ctx, "")
+		if err != nil {
+			t.Fatalf("History through a persisted state: %v", err)
+		}
+		if !slices.ContainsFunc(history, func(h edge.HistoryEntry) bool { return h.PromotionID == promotion.PromotionID }) {
+			t.Errorf("history through a persisted state = %v, want the promotion made before it was written", history)
+		}
+	})
+
 	t.Run("unbinding a domain twice leaves nothing bound", func(t *testing.T) {
 		ctx := context.Background()
 		e, stack := reconciledOn(t, suite)
@@ -315,7 +357,7 @@ func Run(t *testing.T, suite Suite) {
 			t.Fatalf("UnbindDomain again: %v", err)
 		}
 
-		if bound := edge.BoundDomains(stack.State()); len(bound) != 0 {
+		if bound := stack.State().Bound; len(bound) != 0 {
 			t.Errorf("bound domains = %v, want none once the host is unbound", bound)
 		}
 		owner, err := e.DomainOwner(ctx, suite.Hostname)
@@ -340,7 +382,7 @@ func Run(t *testing.T, suite Suite) {
 			t.Fatalf("Destroy: %v", err)
 		}
 
-		if bound := edge.BoundDomains(stack.State()); len(bound) != 0 {
+		if bound := stack.State().Bound; len(bound) != 0 {
 			t.Errorf("bound domains = %v, want none after the stack was destroyed", bound)
 		}
 		owner, err := e.DomainOwner(ctx, suite.Hostname)
@@ -367,7 +409,7 @@ func checkSurface(t *testing.T, what string, surface edge.Surface) {
 func frontedRecords(t *testing.T, e edge.Edge, state edge.StackState, hostname string) []edge.Record {
 	t.Helper()
 
-	bound := edge.BoundDomains(state)
+	bound := state.Bound
 	if !slices.Contains(bound, hostname) {
 		t.Fatalf("bound domains = %v, want %q among them", bound, hostname)
 	}
@@ -393,13 +435,23 @@ func frontedRecords(t *testing.T, e edge.Edge, state edge.StackState, hostname s
 	return records
 }
 
-func withoutFronts(state edge.StackState) edge.StackState {
-	stripped := maps.Clone(state)
-	delete(stripped, edge.StackKeyFront)
-	for host := range edge.HostFronts(state) {
-		stripped = edge.ForgetHostFront(stripped, host)
+func roundTrip(t *testing.T, state edge.StackState) edge.StackState {
+	t.Helper()
+
+	payload, err := json.Marshal(state)
+	if err != nil {
+		t.Fatalf("marshal %+v: %v", state, err)
 	}
-	return stripped
+	var read edge.StackState
+	if err := json.Unmarshal(payload, &read); err != nil {
+		t.Fatalf("unmarshal %s: %v", payload, err)
+	}
+	return read
+}
+
+func withoutFronts(state edge.StackState) edge.StackState {
+	state.Front, state.Fronts = "", nil
+	return state
 }
 
 func reconciled(t *testing.T, suite Suite) edge.EdgeStack {
@@ -411,7 +463,7 @@ func reconciled(t *testing.T, suite Suite) edge.EdgeStack {
 func reconciledOn(t *testing.T, suite Suite) (edge.Edge, edge.EdgeStack) {
 	t.Helper()
 	e, spec := suite.New(t)
-	stack, err := e.Reconcile(context.Background(), spec, nil)
+	stack, err := e.Reconcile(context.Background(), spec, edge.StackState{})
 	if err != nil {
 		t.Fatalf("Reconcile: %v", err)
 	}
@@ -447,11 +499,11 @@ func runPreviews(t *testing.T, suite Suite) {
 			if _, err := e.ReconcilePreviewWildcard(ctx, wildcard); err != nil {
 				t.Fatalf("ReconcilePreviewWildcard: %v", err)
 			}
-			stack, err := e.Reconcile(ctx, spec, edge.StackState{edge.StackKeyGlobalPreview: wildcard.BaseDomain})
+			stack, err := e.Reconcile(ctx, spec, edge.StackState{GlobalPreview: wildcard.BaseDomain})
 			if err != nil {
 				t.Fatalf("Reconcile: %v", err)
 			}
-			if !edge.ServedOnGlobalPreview(stack.State(), wildcard.BaseDomain) {
+			if !stack.State().ServedOnGlobalPreview(wildcard.BaseDomain) {
 				t.Fatalf("state = %v, want the stack to carry the wildcard it is served on", stack.State())
 			}
 

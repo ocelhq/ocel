@@ -38,7 +38,7 @@ func RemovePreview(ctx context.Context, stack edge.EdgeStack, r Reclamation, poi
 
 	pointerStart := time.Now()
 	var pointerErr error
-	if stack != nil && len(stack.State()) > 0 {
+	if stack != nil && !stack.State().Empty() {
 		report := r.Report.stage(stages.Pointer)
 		report(sanitizeMessage(fmt.Sprintf("Removing preview pointer %q from the store", pointer)))
 		result, err := stack.RemovePointer(ctx, pointer)

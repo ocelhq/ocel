@@ -171,16 +171,20 @@ func fakeStoreServer(t *testing.T, secret string) *httptest.Server {
 }
 
 func stackOn(p *provider, state edge.StackState) *stack {
-	return &stack{p: p, state: state}
+	s := &stack{p: p, state: state}
+	if err := state.Adapter.Into(&s.own); err != nil {
+		panic(err)
+	}
+	return s
 }
 
 func testState(endpoint, secret string) edge.StackState {
 	return edge.StackState{
-		edge.StackKeySlug:       "acme-web",
-		edge.StackKeyEndpoint:   endpoint,
-		edge.StackKeySecret:     secret,
-		edge.StackKeyOwnerToken: storeOwnerToken,
-		edge.StackKeyClass:      string(edge.ClassProduction),
+		Slug:       "acme-web",
+		Endpoint:   endpoint,
+		Secret:     secret,
+		OwnerToken: storeOwnerToken,
+		Class:      edge.ClassProduction,
 	}
 }
 

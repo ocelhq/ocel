@@ -155,7 +155,7 @@ func (f *recordingEdge) Reconcile(_ context.Context, spec edge.StackSpec, prior 
 	if f.reconcileErr != nil {
 		return nil, f.reconcileErr
 	}
-	if prior != nil && f.version == spec.Version {
+	if !prior.Empty() && f.version == spec.Version {
 		return &recordingStack{edge: f, state: prior}, nil
 	}
 	f.redeploys++
@@ -164,9 +164,9 @@ func (f *recordingEdge) Reconcile(_ context.Context, spec edge.StackSpec, prior 
 		f.secret = "fake-secret"
 	}
 	return &recordingStack{edge: f, state: edge.StackState{
-		edge.StackKeySlug:     spec.Slug,
-		edge.StackKeyEndpoint: fakeStoreEndpoint,
-		edge.StackKeySecret:   f.secret,
+		Slug:     spec.Slug,
+		Endpoint: fakeStoreEndpoint,
+		Secret:   f.secret,
 	}}, nil
 }
 
@@ -181,7 +181,7 @@ func (f *recordingEdge) opened(t *testing.T, state edge.StackState) edge.EdgeSta
 
 func (f *recordingEdge) reconciled(t *testing.T, spec edge.StackSpec) edge.EdgeStack {
 	t.Helper()
-	stack, err := f.Reconcile(context.Background(), spec, nil)
+	stack, err := f.Reconcile(context.Background(), spec, edge.StackState{})
 	if err != nil {
 		t.Fatalf("Reconcile: %v", err)
 	}
@@ -198,7 +198,7 @@ func (s *recordingStack) State() edge.StackState { return s.state }
 func (s *recordingStack) Ledger() edge.Ledger { return s }
 
 func (s *recordingStack) checkAuth() error {
-	if s.edge.secret == "" || s.state[edge.StackKeySecret] != s.edge.secret {
+	if s.edge.secret == "" || s.state.Secret != s.edge.secret {
 		return fmt.Errorf("recordingEdge: unauthenticated store call; reconcile the stack first")
 	}
 	return nil
@@ -303,14 +303,14 @@ func (s *recordingStack) BindDomain(_ context.Context, binding edge.DomainBindin
 	if s.edge.bound == nil {
 		s.edge.bound = map[string]string{}
 	}
-	s.edge.bound[binding.Hostname] = s.state[edge.StackKeySlug]
-	s.state = edge.RecordBoundDomain(s.state, binding.Hostname)
+	s.edge.bound[binding.Hostname] = s.state.Slug
+	s.state.Bind(binding.Hostname)
 	switch s.edge.Kind() {
 	case cloudflare.Kind:
 	case apigateway.Kind:
-		s.state = edge.RecordHostFront(s.state, binding.Hostname, "front-"+binding.Hostname+".fake")
+		s.state.PublishFront(binding.Hostname, "front-"+binding.Hostname+".fake")
 	default:
-		s.state[edge.StackKeyFront] = "front-" + s.state[edge.StackKeySlug] + ".fake"
+		s.state.Front = "front-" + s.state.Slug + ".fake"
 	}
 	return nil
 }
@@ -318,7 +318,8 @@ func (s *recordingStack) BindDomain(_ context.Context, binding edge.DomainBindin
 func (s *recordingStack) UnbindDomain(_ context.Context, hostname string) error {
 	s.edge.recordCall("unbind " + hostname)
 	delete(s.edge.bound, hostname)
-	s.state = edge.ForgetHostFront(edge.ForgetBoundDomain(s.state, hostname), hostname)
+	s.state.Release(hostname)
+	s.state.PublishFront(hostname, "")
 	return nil
 }
 
@@ -326,7 +327,7 @@ func (s *recordingStack) Destroy(ctx context.Context) error {
 	if err := s.checkAuth(); err != nil {
 		return err
 	}
-	for _, hostname := range edge.BoundDomains(s.state) {
+	for _, hostname := range s.state.Bound {
 		if err := s.UnbindDomain(ctx, hostname); err != nil {
 			return err
 		}
@@ -395,7 +396,7 @@ func TestRecordingEdge(t *testing.T) {
 		if f.redeploys != 1 {
 			t.Errorf("redeploys = %d, want 1: an unchanged version must be a no-op", f.redeploys)
 		}
-		if again.State()[edge.StackKeySecret] != stack.State()[edge.StackKeySecret] {
+		if again.State().Secret != stack.State().Secret {
 			t.Errorf("a no-op reconcile must hand back the same state unchanged")
 		}
 		if len(f.reconciles) != 2 {

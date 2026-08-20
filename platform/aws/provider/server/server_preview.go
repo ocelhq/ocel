@@ -357,7 +357,7 @@ func (s *Server) previewTeardownDeps(ctx context.Context, kind edge.Kind, opts o
 	if err != nil {
 		return teardownContext{}, nil, err
 	}
-	stack, err := edgeFront.Open(params.StackState)
+	stack, err := edgeFront.Open(params.Stack.Edge)
 	if err != nil {
 		return teardownContext{}, nil, err
 	}

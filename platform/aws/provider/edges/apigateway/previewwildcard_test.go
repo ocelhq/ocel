@@ -51,7 +51,7 @@ func previewing(t *testing.T, w *world) (*provider, edge.EdgeStack) {
 	if _, err := e.ReconcilePreviewWildcard(ctx, previewWildcardSpec()); err != nil {
 		t.Fatalf("ReconcilePreviewWildcard: %v", err)
 	}
-	stack, err := e.Reconcile(ctx, previewStackSpec(), edge.StackState{edge.StackKeyGlobalPreview: previewBase})
+	stack, err := e.Reconcile(ctx, previewStackSpec(), edge.StackState{GlobalPreview: previewBase})
 	if err != nil {
 		t.Fatalf("Reconcile(preview): %v", err)
 	}
@@ -328,7 +328,7 @@ func TestPromoteOffTheGlobalPreviewDomainRoutesNothing(t *testing.T) {
 	if _, err := e.ReconcilePreviewWildcard(ctx, previewWildcardSpec()); err != nil {
 		t.Fatalf("ReconcilePreviewWildcard: %v", err)
 	}
-	stack, err := e.Reconcile(ctx, previewStackSpec(), nil)
+	stack, err := e.Reconcile(ctx, previewStackSpec(), edge.StackState{})
 	if err != nil {
 		t.Fatalf("Reconcile(preview): %v", err)
 	}

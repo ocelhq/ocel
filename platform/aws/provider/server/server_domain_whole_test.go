@@ -87,11 +87,11 @@ func TestAddDomainWhole(t *testing.T) {
 	ssmc := &stateSSM{params: map[string]string{}}
 	stack := &boundStack{
 		name:      string(wholeEdgeKind),
-		state:     edge.StackState{edge.StackKeySlug: domainSlug},
+		state:     edge.StackState{Slug: domainSlug},
 		log:       &callLog{},
 		hostFront: func(hostname string) string { return "front-of-" + hostname + ".example.net" },
 	}
-	if err := bootstrap.WriteStackStateFor(ctx, ssmc, bootstrap.ClassProduction, domainSlug, stack.state); err != nil {
+	if err := bootstrap.WriteStackRecordFor(ctx, ssmc, bootstrap.ClassProduction, domainSlug, bootstrap.StackRecord{Edge: stack.state}); err != nil {
 		t.Fatalf("WriteStackStateFor: %v", err)
 	}
 	acmAPI := newDomainACM()
@@ -112,14 +112,11 @@ func TestAddDomainWhole(t *testing.T) {
 		t.Fatalf("add: %v", err)
 	}
 
-	state, err := bootstrap.ReadStackStateFor(ctx, ssmc, bootstrap.ClassProduction, domainSlug)
+	record, err := bootstrap.ReadStackRecordFor(ctx, ssmc, bootstrap.ClassProduction, domainSlug)
 	if err != nil {
-		t.Fatalf("ReadStackStateFor: %v", err)
+		t.Fatalf("ReadStackRecordFor: %v", err)
 	}
-	recorded, err := bootstrap.ReadProduction(state)
-	if err != nil {
-		t.Fatalf("ReadProduction: %v", err)
-	}
+	recorded := record.Production
 	if !recorded.Ready("shop.app.com", wholeEdgeKind) {
 		t.Errorf("recorded = %+v, want the host settled through the RPC-built session", recorded)
 	}

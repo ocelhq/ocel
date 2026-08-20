@@ -115,12 +115,12 @@ func TestPromoteRefusesAProvisionThatNeverFinished(t *testing.T) {
 
 	ed := &recordingEdge{kind: cloudflare.Kind}
 	cfg := phaseConfig(t, ed, &fakeUploader{exists: map[string]bool{}})
-	state := edge.StackState{edge.StackKeySlug: "shop"}
+	state := edge.StackState{Slug: "shop"}
 
 	res, err := promoteDeploy(context.Background(), cfg, deployedManifest(twoAppManifest()), provisionedDeploy{state: state}, nil)
 
 	requirePhaseError(t, err, "promote", "provision")
-	if res.StackState[edge.StackKeySlug] != "shop" {
+	if res.StackState.Slug != "shop" {
 		t.Errorf("StackState = %v, want the state the provision got to before it stopped", res.StackState)
 	}
 	if len(ed.staged) != 0 {

@@ -3,7 +3,6 @@ package server
 import (
 	"context"
 	"errors"
-	"maps"
 	"slices"
 	"strings"
 	"sync"
@@ -172,19 +171,18 @@ func TestCacheStoreUploader(t *testing.T) {
 }
 
 func markedGlobalPreview(state edge.StackState, baseDomain string) edge.StackState {
-	marked := maps.Clone(state)
-	marked[edge.StackKeyGlobalPreview] = baseDomain
-	return marked
+	state.GlobalPreview = baseDomain
+	return state
 }
 
 func TestStackStateChanged(t *testing.T) {
 	t.Parallel()
 
 	reconciled := edge.StackState{
-		edge.StackKeySlug:       "proj-123",
-		edge.StackKeyEndpoint:   "https://store.workers.dev",
-		edge.StackKeySecret:     "s3cret",
-		edge.StackKeyOwnerToken: "owner",
+		Slug:       "proj-123",
+		Endpoint:   "https://store.workers.dev",
+		Secret:     "s3cret",
+		OwnerToken: "owner",
 	}
 
 	tests := []struct {
@@ -195,54 +193,54 @@ func TestStackStateChanged(t *testing.T) {
 	}{
 		{
 			name:       "a first reconcile has nothing stored yet",
-			prior:      nil,
+			prior:      edge.StackState{},
 			reconciled: reconciled,
 			want:       true,
 		},
 		{
 			name:       "a redeploy that changed nothing writes nothing",
-			prior:      maps.Clone(reconciled),
+			prior:      reconciled,
 			reconciled: reconciled,
 			want:       false,
 		},
 		{
 			name:  "an adopted instance answering with a different secret is persisted",
-			prior: maps.Clone(reconciled),
+			prior: reconciled,
 			reconciled: edge.StackState{
-				edge.StackKeySlug:       "proj-123",
-				edge.StackKeyEndpoint:   "https://store.workers.dev",
-				edge.StackKeySecret:     "rotated",
-				edge.StackKeyOwnerToken: "owner",
+				Slug:       "proj-123",
+				Endpoint:   "https://store.workers.dev",
+				Secret:     "rotated",
+				OwnerToken: "owner",
 			},
 			want: true,
 		},
 		{
 			name:  "a renamed project names a different instance",
-			prior: maps.Clone(reconciled),
+			prior: reconciled,
 			reconciled: edge.StackState{
-				edge.StackKeySlug:       "proj-456",
-				edge.StackKeyEndpoint:   "https://store.workers.dev",
-				edge.StackKeySecret:     "s3cret",
-				edge.StackKeyOwnerToken: "owner",
+				Slug:       "proj-456",
+				Endpoint:   "https://store.workers.dev",
+				Secret:     "s3cret",
+				OwnerToken: "owner",
 			},
 			want: true,
 		},
 		{
 			name:       "a deploy that failed before reconcile leaves the stored state alone",
-			prior:      maps.Clone(reconciled),
-			reconciled: nil,
+			prior:      reconciled,
+			reconciled: edge.StackState{},
 			want:       false,
 		},
 		{
 			name:       "a project moving onto the global preview domain persists the mark",
-			prior:      maps.Clone(reconciled),
+			prior:      reconciled,
 			reconciled: markedGlobalPreview(reconciled, "preview.acme.com"),
 			want:       true,
 		},
 		{
 			name:       "a project declaring its own preview domain persists the cleared mark",
 			prior:      markedGlobalPreview(reconciled, "preview.acme.com"),
-			reconciled: maps.Clone(reconciled),
+			reconciled: reconciled,
 			want:       true,
 		},
 	}
@@ -619,4 +617,11 @@ func TestServerEdge(t *testing.T) {
 			t.Errorf("Kind() = %q, want the refusal to have left this kind alone", got.Kind())
 		}
 	})
+}
+
+func boundTo(state edge.StackState, hostnames ...string) edge.StackState {
+	for _, hostname := range hostnames {
+		state.Bind(hostname)
+	}
+	return state
 }

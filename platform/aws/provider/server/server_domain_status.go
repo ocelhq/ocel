@@ -77,7 +77,7 @@ func (d *domainSession) statusOf(ctx context.Context, lookup *certLookup, host s
 
 	state := d.stack.State()
 	target := edge.TargetOf(d.engine.Kind, d.engine.ServesUnbound, state)
-	boundHosts := edge.BoundDomains(state)
+	boundHosts := state.Bound
 	bound := slices.Contains(boundHosts, host)
 	row.RecordsWritten = recordList(provisioned.Records.Written)
 	if edge.Pointable(target, boundHosts, host) {

@@ -323,13 +323,13 @@ func TestReconcile(t *testing.T) {
 			t.Fatalf("Reconcile: %v", err)
 		}
 
-		if !reflect.DeepEqual(prior, testState(store.URL, "s3cr3t")) {
-			t.Errorf("prior = %v, want the caller's own state left untouched", prior)
+		if !prior.Equal(testState(store.URL, "s3cr3t")) {
+			t.Errorf("prior = %+v, want the caller's own state left untouched", prior)
 		}
 		want := testState(store.URL, "s3cr3t")
-		want[stackKeyEntryWorker] = spec.Program.Name
-		if !reflect.DeepEqual(state, want) {
-			t.Errorf("state = %v, want prior plus the worker a domain binds to (%v)", state, want)
+		want.Adapter = edge.Own(private{EntryWorkers: []string{spec.Program.Name}})
+		if !state.Equal(want) {
+			t.Errorf("state = %+v, want prior plus the worker a domain binds to (%+v)", state, want)
 		}
 		if len(m.createdRoutes) != 1 || m.createdRoutes[0]["pattern"] != "*.preview.app.com/*" {
 			t.Errorf("created routes = %v, want the project's wildcard route", m.createdRoutes)
@@ -387,7 +387,7 @@ func TestReconcile(t *testing.T) {
 		if len(m.createdRoutes) != 1 {
 			t.Errorf("created routes = %v, want the project's wildcard route", m.createdRoutes)
 		}
-		stamps := readStampSet(t, p, store.URL, state[edge.StackKeySecret])
+		stamps := readStampSet(t, p, store.URL, state.Secret)
 		if want := specStampFor(t, spec); stamps[spec.Program.Name] != want {
 			t.Errorf("version stamps = %v, want %q under %q", stamps, want, spec.Program.Name)
 		}
@@ -492,7 +492,7 @@ func TestReconcile(t *testing.T) {
 		if len(m.putScripts) != 2 {
 			t.Errorf("uploaded scripts = %v, want each app's worker uploaded once: on the second pass every app must find its own stamp, not the app reconciled after it", m.putScripts)
 		}
-		stamps := readStampSet(t, p, store.URL, state[edge.StackKeySecret])
+		stamps := readStampSet(t, p, store.URL, state.Secret)
 		for _, spec := range specs {
 			if want := specStampFor(t, spec); stamps[spec.Program.Name] != want {
 				t.Errorf("version stamps = %v, want %q under %q", stamps, want, spec.Program.Name)
@@ -504,15 +504,15 @@ func TestReconcile(t *testing.T) {
 		store := fakeStoreServer(t, "s3cr3t")
 		m := previewZoneMock()
 
-		state, err := reconcileState(t, m.provider(t), previewSpec(store.URL, "v3"), nil)
+		state, err := reconcileState(t, m.provider(t), previewSpec(store.URL, "v3"), edge.StackState{})
 		if err != nil {
 			t.Fatalf("Reconcile: %v", err)
 		}
-		if state[edge.StackKeySecret] != "s3cr3t" {
-			t.Errorf("persisted secret = %q, want the instance's own", state[edge.StackKeySecret])
+		if state.Secret != "s3cr3t" {
+			t.Errorf("persisted secret = %q, want the instance's own", state.Secret)
 		}
-		if state[edge.StackKeyOwnerToken] != storeOwnerToken {
-			t.Errorf("persisted owner token = %q, want the instance's own", state[edge.StackKeyOwnerToken])
+		if state.OwnerToken != storeOwnerToken {
+			t.Errorf("persisted owner token = %q, want the instance's own", state.OwnerToken)
 		}
 	})
 
@@ -546,10 +546,10 @@ func TestReconcile(t *testing.T) {
 			t.Errorf("created routes = %v, want none", m.createdRoutes)
 		}
 		assertSet(t, "deleted routes", m.deletedRoutes, []string{"stale", "sibling"})
-		if state[edge.StackKeySecret] != "s3cr3t" || state[edge.StackKeyEndpoint] != store.URL {
+		if state.Secret != "s3cr3t" || state.Endpoint != store.URL {
 			t.Errorf("state = %v, want the store instance's identity", state)
 		}
-		stamps := readStampSet(t, p, store.URL, state[edge.StackKeySecret])
+		stamps := readStampSet(t, p, store.URL, state.Secret)
 		if want := specStampFor(t, spec); stamps[spec.Program.Name] != want {
 			t.Errorf("version stamps = %v, want %q under %q", stamps, want, spec.Program.Name)
 		}
@@ -676,7 +676,7 @@ func reconcileState(t *testing.T, p *provider, spec edge.StackSpec, prior edge.S
 	t.Helper()
 	stack, err := p.Reconcile(t.Context(), spec, prior)
 	if err != nil {
-		return nil, err
+		return edge.StackState{}, err
 	}
 	return stack.State(), nil
 }
@@ -716,7 +716,7 @@ func TestEnsureInstance(t *testing.T) {
 		srv := fakeStoreServer(t, "s3cr3t")
 		p := &provider{}
 
-		id, stamps, err := p.ensureInstance(t.Context(), testSpec(srv.URL, "v2"), nil)
+		id, stamps, err := p.ensureInstance(t.Context(), testSpec(srv.URL, "v2"), edge.StackState{})
 		if err != nil {
 			t.Fatalf("ensureInstance: %v", err)
 		}
@@ -755,7 +755,7 @@ func TestEnsureInstance(t *testing.T) {
 		srv := fakeStoreServer(t, "")
 		p := &provider{}
 
-		id, stamps, err := p.ensureInstance(t.Context(), testSpec(srv.URL, "v1"), nil)
+		id, stamps, err := p.ensureInstance(t.Context(), testSpec(srv.URL, "v1"), edge.StackState{})
 		if err != nil {
 			t.Fatalf("ensureInstance with no prior state: %v", err)
 		}

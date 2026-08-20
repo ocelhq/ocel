@@ -106,13 +106,13 @@ func (g domainGate) admitProduction(ctx context.Context, manifest *deploymentsv1
 			"this project declares no domains.production, so a production deploy has no hostname to serve: declare one in your ocel config and run `ocel domain add` to provision the certificate, the edge surface and the DNS for it",
 		)
 	}
-	if len(g.state) == 0 {
+	if g.state.Empty() {
 		return admission{withheldURLs: fmt.Sprintf(
 			"this deploy is the one that creates the edge surface, so nothing is bound to %s yet: run `ocel domain add` to settle the certificate, the surface and the DNS, then deploy again — until then there is no address of yours to print",
 			strings.Join(hosts, ", "),
 		)}, nil
 	}
-	bound := edge.BoundDomains(g.state)
+	bound := g.state.Bound
 	lookup := newCertLookup(g.issuer, g.recorded, g.pins)
 	for _, host := range hosts {
 		cert, err := lookup.of(ctx, host)

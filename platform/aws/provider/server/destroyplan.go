@@ -15,32 +15,25 @@ type projectPlanScope struct {
 	slug       string
 	stateTable string
 	stacks     int
-	state      edge.StackState
+	record     bootstrap.StackRecord
 }
 
-func destroyPlanItems(edgeFront edge.Edge, scope projectPlanScope) ([]*deploymentsv1.TeardownItem, error) {
-	recorded, err := bootstrap.ReadProduction(scope.state)
-	if err != nil {
-		return nil, err
-	}
-	written, err := edge.WrittenRecords(scope.state)
-	if err != nil {
-		return nil, err
-	}
+func destroyPlanItems(edgeFront edge.Edge, scope projectPlanScope) []*deploymentsv1.TeardownItem {
+	recorded := scope.record.Production
 
 	items := surfaceItems(edgeFront, scope)
 	items = append(items, certificateItems(recorded)...)
-	items = append(items, recordItems(written, recorded)...)
+	items = append(items, recordItems(scope.record.Edge.Records, recorded)...)
 	items = append(items, storeItems(edgeFront, scope)...)
-	return append(items, substrateItems(edgeFront, scope)...), nil
+	return append(items, substrateItems(edgeFront, scope)...)
 }
 
 func surfaceItems(edgeFront edge.Edge, scope projectPlanScope) []*deploymentsv1.TeardownItem {
 	surfaces := edgeFront.ProjectSurfaces(edge.ProjectScope{
 		Slug:      scope.slug,
 		Class:     edge.Class(scope.class),
-		Hostnames: edge.BoundDomains(scope.state),
-		Front:     edge.FrontOf(scope.state),
+		Hostnames: scope.record.Edge.Bound,
+		Front:     scope.record.Edge.Front,
 	})
 	items := make([]*deploymentsv1.TeardownItem, 0, len(surfaces))
 	for _, surface := range surfaces {
@@ -193,7 +186,7 @@ func substrateItems(edgeFront edge.Edge, scope projectPlanScope) []*deploymentsv
 	}
 	items := []*deploymentsv1.TeardownItem{keep}
 
-	if base := scope.state[edge.StackKeyGlobalPreview]; base != "" {
+	if base := scope.record.Edge.GlobalPreview; base != "" {
 		items = append(items, &deploymentsv1.TeardownItem{
 			Kind:   "preview wildcard",
 			Name:   edge.PreviewWildcard(base),

@@ -166,13 +166,13 @@ func TestMarkGlobalPreview(t *testing.T) {
 	}
 	preview := Config{Slug: "proj", Class: deploymentsv1.Environment_CLASS_PREVIEW, GlobalPreviewDomain: "preview.acme.com"}
 	state := func() edge.StackState {
-		return edge.StackState{edge.StackKeySlug: "proj"}
+		return edge.StackState{Slug: "proj"}
 	}
 
 	t.Run("an ambient project records the domain serving it", func(t *testing.T) {
 		t.Parallel()
 		marked := MarkGlobalPreview(state(), preview, manifest())
-		if !edge.ServedOnGlobalPreview(marked, "preview.acme.com") {
+		if !marked.ServedOnGlobalPreview("preview.acme.com") {
 			t.Errorf("state = %v, want it served on preview.acme.com", marked)
 		}
 	})
@@ -183,7 +183,7 @@ func TestMarkGlobalPreview(t *testing.T) {
 		m.Domains = map[string]*deploymentsv1.DomainList{"preview": {Hostnames: []string{"*.preview.proj.com"}}}
 
 		marked := MarkGlobalPreview(state(), preview, m)
-		if edge.ServedOnGlobalPreview(marked, "preview.acme.com") {
+		if marked.ServedOnGlobalPreview("preview.acme.com") {
 			t.Errorf("state = %v, want no global-preview mark", marked)
 		}
 	})
@@ -193,11 +193,11 @@ func TestMarkGlobalPreview(t *testing.T) {
 		m := manifest()
 		m.Domains = map[string]*deploymentsv1.DomainList{"preview": {Hostnames: []string{"*.preview.proj.com"}}}
 		prior := state()
-		prior[edge.StackKeyGlobalPreview] = "preview.acme.com"
+		prior.GlobalPreview = "preview.acme.com"
 
 		marked := MarkGlobalPreview(prior, preview, m)
-		if _, ok := marked[edge.StackKeyGlobalPreview]; ok {
-			t.Errorf("state = %v, want the stale mark gone", marked)
+		if marked.GlobalPreview != "" {
+			t.Errorf("state = %+v, want the stale mark gone", marked)
 		}
 	})
 
@@ -206,14 +206,14 @@ func TestMarkGlobalPreview(t *testing.T) {
 		cfg := preview
 		cfg.Class = deploymentsv1.Environment_CLASS_PRODUCTION
 
-		if marked := MarkGlobalPreview(state(), cfg, manifest()); edge.ServedOnGlobalPreview(marked, "preview.acme.com") {
+		if marked := MarkGlobalPreview(state(), cfg, manifest()); marked.ServedOnGlobalPreview("preview.acme.com") {
 			t.Errorf("state = %v, want no mark on a production deploy", marked)
 		}
 	})
 
 	t.Run("a project deployed for the first time is marked before it has any state", func(t *testing.T) {
 		t.Parallel()
-		if marked := MarkGlobalPreview(nil, preview, manifest()); !edge.ServedOnGlobalPreview(marked, "preview.acme.com") {
+		if marked := MarkGlobalPreview(edge.StackState{}, preview, manifest()); !marked.ServedOnGlobalPreview("preview.acme.com") {
 			t.Errorf("state = %v, want the mark the stack reads when it routes the preview's hostname", marked)
 		}
 	})
@@ -222,8 +222,8 @@ func TestMarkGlobalPreview(t *testing.T) {
 		t.Parallel()
 		cfg := preview
 		cfg.GlobalPreviewDomain = ""
-		if marked := MarkGlobalPreview(nil, cfg, manifest()); marked != nil {
-			t.Errorf("state = %v, want nil", marked)
+		if marked := MarkGlobalPreview(edge.StackState{}, cfg, manifest()); !marked.Empty() {
+			t.Errorf("state = %+v, want nothing recorded", marked)
 		}
 	})
 }

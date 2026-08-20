@@ -2,7 +2,6 @@ package cloudfront
 
 import (
 	"context"
-	"maps"
 	"slices"
 	"strings"
 	"testing"
@@ -76,7 +75,7 @@ func TestDomainOwnerAsksTheRouteStoreBeforeListingTheAccount(t *testing.T) {
 
 	w := newWorld()
 	e := bootstrapped(t, w)
-	stack, err := e.Reconcile(context.Background(), testSpec(), nil)
+	stack, err := e.Reconcile(context.Background(), testSpec(), edge.StackState{})
 	if err != nil {
 		t.Fatalf("Reconcile: %v", err)
 	}
@@ -105,7 +104,7 @@ func TestASecondReconcileRereadsNothingImmutable(t *testing.T) {
 
 	w := newWorld()
 	e := bootstrapped(t, w)
-	first, err := e.Reconcile(context.Background(), testSpec(), nil)
+	first, err := e.Reconcile(context.Background(), testSpec(), edge.StackState{})
 	if err != nil {
 		t.Fatalf("Reconcile: %v", err)
 	}
@@ -124,10 +123,9 @@ func TestASecondReconcileRereadsNothingImmutable(t *testing.T) {
 			t.Errorf("%s calls = %d, want %d: the stack already names an id CloudFront never changes", call, got, before[call])
 		}
 	}
-	for _, key := range []string{stackKeyCachePolicy, stackKeyHeadersPolicy, stackKeyOAC} {
-		if got, want := second.State()[key], first.State()[key]; got != want {
-			t.Errorf("state[%s] = %q, want the id the first reconcile recorded (%q)", key, got, want)
-		}
+	held, want := ownState(t, second), ownState(t, first)
+	if held.CachePolicy != want.CachePolicy || held.HeadersPolicy != want.HeadersPolicy || held.OriginAccessControl != want.OriginAccessControl {
+		t.Errorf("state = %+v, want the ids the first reconcile recorded (%+v)", held, want)
 	}
 }
 
@@ -176,11 +174,11 @@ func TestDestroyHoldsBeforeItFirstAsksHowTheRolloutIsGoing(t *testing.T) {
 	if _, err := e.Bootstrap(context.Background(), edge.ClassProduction); err != nil {
 		t.Fatalf("Bootstrap: %v", err)
 	}
-	stack, err := e.Reconcile(context.Background(), testSpec(), nil)
+	stack, err := e.Reconcile(context.Background(), testSpec(), edge.StackState{})
 	if err != nil {
 		t.Fatalf("Reconcile: %v", err)
 	}
-	id := stack.State()[stackKeyDistribution]
+	id := ownState(t, stack).Distribution
 
 	if err := stack.Destroy(context.Background()); err != nil {
 		t.Fatalf("Destroy: %v", err)
@@ -200,7 +198,7 @@ func TestBindDomainRecordsTheFrontOfADistributionFoundByName(t *testing.T) {
 
 	w := newWorld()
 	e := bootstrapped(t, w)
-	settled, err := e.Reconcile(context.Background(), testSpec(), nil)
+	settled, err := e.Reconcile(context.Background(), testSpec(), edge.StackState{})
 	if err != nil {
 		t.Fatalf("Reconcile: %v", err)
 	}
@@ -209,21 +207,22 @@ func TestBindDomainRecordsTheFrontOfADistributionFoundByName(t *testing.T) {
 		t.Fatalf("no distribution for the stack; CloudFront holds %v", w.front.mutations())
 	}
 
-	forgotten := maps.Clone(settled.State())
-	delete(forgotten, stackKeyDistribution)
-	delete(forgotten, edge.StackKeyFront)
-	stack, err := e.Open(forgotten)
+	forgotten := settled.State()
+	forgotten.Front = ""
+	forgotten.Adapter = edge.Own(private{})
+	opened, err := e.Open(forgotten)
 	if err != nil {
 		t.Fatalf("Open: %v", err)
 	}
+	stack := opened.(*stack)
 	if err := stack.BindDomain(context.Background(), edge.DomainBinding{Hostname: boundHost}); err != nil {
 		t.Fatalf("BindDomain: %v", err)
 	}
 
-	if got := stack.State()[stackKeyDistribution]; got != held.id {
+	if got := stack.own.Distribution; got != held.id {
 		t.Errorf("state records distribution %q, want the one already serving the stack (%q)", got, held.id)
 	}
-	if got := edge.FrontOf(stack.State()); got != held.domain {
+	if got := stack.State().Front; got != held.domain {
 		t.Errorf("state records front %q, want %q: a binding onto a distribution found by name still has to say where DNS points", got, held.domain)
 	}
 }
