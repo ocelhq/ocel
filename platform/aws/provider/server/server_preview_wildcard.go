@@ -34,17 +34,18 @@ func (s *Server) UsePreviewWildcard(ctx context.Context, req *deploymentsv1.UseP
 }
 
 func (s *Server) runUsePreviewWildcard(ctx context.Context, req *deploymentsv1.UsePreviewWildcardRequest, progress func(string), ask askDNS, logf func(string)) error {
+	opts := s.config.get()
 	baseDomain, err := previewBaseDomainArg(req.GetBaseDomain())
 	if err != nil {
 		return err
 	}
-	clients, err := s.domainClients(ctx, "")
+	clients, err := s.domainClients(ctx, opts.Region)
 	if err != nil {
 		return err
 	}
 	ssmClient := clients.ssm
 
-	deployed, err := s.deployed(ctx, clients.cfn, "", true)
+	deployed, err := s.deployed(ctx, clients.cfn, opts.Region, true)
 	if err != nil {
 		return err
 	}
@@ -169,11 +170,12 @@ func usePreviewWildcard(ctx context.Context, engine domains.Engine, edgeFront ed
 }
 
 func (s *Server) PlanRemovePreviewWildcard(ctx context.Context, req *deploymentsv1.PreviewWildcardRequest) (*deploymentsv1.PlanRemovePreviewWildcardResponse, error) {
-	awscfg, err := loadAWS(ctx, "")
+	opts := s.config.get()
+	awscfg, err := loadAWS(ctx, opts.Region)
 	if err != nil {
 		return nil, err
 	}
-	clients, err := s.domainClients(ctx, "")
+	clients, err := s.domainClients(ctx, opts.Region)
 	if err != nil {
 		return nil, err
 	}
@@ -252,11 +254,12 @@ func (s *Server) RemovePreviewWildcard(ctx context.Context, req *deploymentsv1.R
 }
 
 func (s *Server) runRemovePreviewWildcard(ctx context.Context, req *deploymentsv1.RemovePreviewWildcardRequest, progress func(string)) error {
-	awscfg, err := loadAWS(ctx, "")
+	opts := s.config.get()
+	awscfg, err := loadAWS(ctx, opts.Region)
 	if err != nil {
 		return err
 	}
-	clients, err := s.domainClients(ctx, "")
+	clients, err := s.domainClients(ctx, opts.Region)
 	if err != nil {
 		return err
 	}
@@ -317,7 +320,8 @@ func removePreviewWildcard(ctx context.Context, deps removalDeps, recorded boots
 }
 
 func (s *Server) GetPreviewWildcard(ctx context.Context, req *deploymentsv1.PreviewWildcardRequest) (*deploymentsv1.GetPreviewWildcardResponse, error) {
-	clients, err := s.domainClients(ctx, "")
+	opts := s.config.get()
+	clients, err := s.domainClients(ctx, opts.Region)
 	if err != nil {
 		return nil, err
 	}
