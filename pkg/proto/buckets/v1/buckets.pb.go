@@ -619,9 +619,10 @@ var File_buckets_v1_buckets_proto protoreflect.FileDescriptor
 const file_buckets_v1_buckets_proto_rawDesc = "" +
 	"\n" +
 	"\x18buckets/v1/buckets.proto\x12\n" +
-	"buckets.v1\x1a\x1bbuf/validate/validate.proto\"\xce\x01\n" +
-	"\vPresignFile\x12z\n" +
-	"\x03key\x18\x01 \x01(\tBh\xbaHerc\x10\x01\x18\x80\b2\\^[A-Za-z0-9._-]*[A-Za-z0-9_-][A-Za-z0-9._-]*(/[A-Za-z0-9._-]*[A-Za-z0-9_-][A-Za-z0-9._-]*)*$R\x03key\x12\x12\n" +
+	"buckets.v1\x1a\x1bbuf/validate/validate.proto\"\xc0\x03\n" +
+	"\vPresignFile\x12\xeb\x02\n" +
+	"\x03key\x18\x01 \x01(\tB\xd8\x02\xbaH\xd4\x02\xba\x01\xcb\x02\n" +
+	"\x18buckets.presign_file.key\x12\xa3\x01a key names a file under the bucket's prefix: every segment must be non-empty and neither \".\" nor \"..\", and the key may carry no backslash and no control character\x1a\x88\x01this.split('/').all(segment, segment != '' && segment != '.' && segment != '..') && !this.contains('\\\\') && !this.matches('[[:cntrl:]]')r\x03\x18\x80\bR\x03key\x12\x12\n" +
 	"\x04name\x18\x02 \x01(\tR\x04name\x12\x12\n" +
 	"\x04size\x18\x03 \x01(\x03R\x04size\x12\x1b\n" +
 	"\tmime_type\x18\x04 \x01(\tR\bmimeType\"z\n" +

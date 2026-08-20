@@ -304,14 +304,14 @@ func printTeardownPlan(out io.Writer, substrate string, plan *deploymentsv1.Plan
 			kept = append(kept, item)
 			continue
 		}
-		fmt.Fprintf(out, "  • %s\n", teardownItemLine(item))
+		fmt.Fprintf(out, "  • %s\n", removalItemLine(item))
 	}
 	fmt.Fprintln(out, "Every app already deployed from it keeps running and nothing can describe, update or remove it again. This cannot be undone.")
 
 	if len(kept) > 0 {
 		fmt.Fprintln(out, "Left in place:")
 		for _, item := range kept {
-			fmt.Fprintf(out, "  • %s\n", teardownItemLine(item))
+			fmt.Fprintf(out, "  • %s\n", removalItemLine(item))
 		}
 	}
 }

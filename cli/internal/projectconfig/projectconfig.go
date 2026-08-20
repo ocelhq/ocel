@@ -38,8 +38,7 @@ type ProviderDescriptor struct {
 }
 
 type EdgeDescriptor struct {
-	Kind    string
-	Options json.RawMessage
+	Kind string
 }
 
 type DNSDescriptor struct {
@@ -390,18 +389,12 @@ func normalizeEdge(raw json.RawMessage) (*EdgeDescriptor, error) {
 	}
 
 	var marker struct {
-		Kind    string          `json:"kind"`
-		Options json.RawMessage `json:"options"`
+		Kind string `json:"kind"`
 	}
 	if err := json.Unmarshal(raw, &marker); err != nil || marker.Kind == "" {
 		return nil, errors.New(edgeSpellings)
 	}
-
-	options := marker.Options
-	if isAbsent(options) {
-		options = json.RawMessage("{}")
-	}
-	return &EdgeDescriptor{Kind: marker.Kind, Options: options}, nil
+	return &EdgeDescriptor{Kind: marker.Kind}, nil
 }
 
 func normalizeDNS(raw json.RawMessage, edge *EdgeDescriptor) (*DNSDescriptor, error) {

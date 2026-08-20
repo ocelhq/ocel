@@ -208,7 +208,7 @@ message ManifestApp {
 }
 
 message ManifestVariable {
-  string key = 1;
+  string key = 1 [(buf.validate.field).string = {min_len: 1, pattern: "^[^#[:cntrl:]]*$"}];
   resources.v1.VariableClass class = 2 [(buf.validate.field).enum.defined_only = true];
 
   string value = 3;

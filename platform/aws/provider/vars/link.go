@@ -99,7 +99,7 @@ func (c Coordinate) partition(class string) string {
 	return PartitionKey(c.Slug, class)
 }
 
-func ValidateLinkTarget(slug, environment string) error {
+func validateLinkTarget(slug, environment string) error {
 	if slug == "" {
 		return fmt.Errorf("a project slug is required")
 	}
@@ -124,7 +124,7 @@ func ValidateLinkTarget(slug, environment string) error {
 }
 
 func ValidateLinkName(slug, environment, name string) error {
-	if err := ValidateLinkTarget(slug, environment); err != nil {
+	if err := validateLinkTarget(slug, environment); err != nil {
 		return err
 	}
 	if name == "" {
@@ -223,7 +223,7 @@ func (s *Store) publish(ctx context.Context, slug, owner, environment string, re
 }
 
 func publishedNames(slug, environment string, records []*linksv1.Link) ([]string, error) {
-	if err := ValidateLinkTarget(slug, environment); err != nil {
+	if err := validateLinkTarget(slug, environment); err != nil {
 		return nil, err
 	}
 

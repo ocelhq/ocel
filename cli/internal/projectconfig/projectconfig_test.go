@@ -478,13 +478,10 @@ export default {
 				if got := cfg.EdgeKind(); got != "fastly" {
 					t.Fatalf("EdgeKind() = %q, want fastly: the provider, not the CLI, says which edges exist", got)
 				}
-				if got := string(cfg.Edge.Options); got != `{"pop":"lhr"}` {
-					t.Fatalf("Options = %s, want them carried through untouched", got)
-				}
 			},
 		},
 		{
-			name: "parses a cloudflare edge marker carrying explicit options",
+			name: "parses a cloudflare edge marker that carries options",
 			config: `
 export default {
   slug: "test-app",
@@ -495,13 +492,10 @@ export default {
 				if cfg.Edge == nil || cfg.Edge.Kind != "cloudflare" {
 					t.Fatalf("Edge = %v, want kind cloudflare", cfg.Edge)
 				}
-				if string(cfg.Edge.Options) != "{}" {
-					t.Fatalf("Edge.Options = %s, want {}", cfg.Edge.Options)
-				}
 			},
 		},
 		{
-			name: "fills in empty options for an edge marker that carries none",
+			name: "parses a cloudflare edge marker that names only its kind",
 			config: `
 export default {
   slug: "test-app",
@@ -511,9 +505,6 @@ export default {
 			check: func(t *testing.T, root string, cfg *Config) {
 				if cfg.Edge == nil || cfg.Edge.Kind != "cloudflare" {
 					t.Fatalf("Edge = %v, want kind cloudflare", cfg.Edge)
-				}
-				if string(cfg.Edge.Options) != "{}" {
-					t.Fatalf("Edge.Options = %s, want {}", cfg.Edge.Options)
 				}
 			},
 		},

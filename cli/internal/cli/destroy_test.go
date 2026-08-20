@@ -119,13 +119,13 @@ func TestPrintDestroyPlan(t *testing.T) {
 	t.Run("an action this CLI does not know reads as a sentence", func(t *testing.T) {
 		t.Parallel()
 
-		got := teardownItemLine(&deploymentsv1.RemovalItem{
+		got := removalItemLine(&deploymentsv1.RemovalItem{
 			Kind:   "certificate",
 			Name:   "shop.example.com",
 			Action: deploymentsv1.RemovalItem_Action(97),
 		})
 		if !strings.Contains(got, "an action this CLI does not know") || !strings.HasSuffix(got, "certificate shop.example.com") {
-			t.Errorf("teardownItemLine() = %q, want the unknown action named before the resource", got)
+			t.Errorf("removalItemLine() = %q, want the unknown action named before the resource", got)
 		}
 	})
 }
