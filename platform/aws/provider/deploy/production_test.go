@@ -1480,33 +1480,6 @@ func TestRealizeRefusesAnEdgeWhoseStoreWorkerIsMissing(t *testing.T) {
 	}
 }
 
-func TestValidateTag(t *testing.T) {
-	t.Parallel()
-	cases := []struct {
-		name    string
-		tag     string
-		wantErr bool
-	}{
-		{"the untagged default", "", false},
-		{"a well formed tag", "v1.2.3", false},
-		{"rejects a slash host side", "feature/x", true},
-		{"rejects a space host side", "has space", true},
-		{"rejects a non-ASCII character host side", "über", true},
-	}
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			t.Parallel()
-			err := validateTag(tc.tag)
-			if tc.wantErr && err == nil {
-				t.Errorf("validateTag(%q) = nil, want an error", tc.tag)
-			}
-			if !tc.wantErr && err != nil {
-				t.Errorf("validateTag(%q) = %v, want nil", tc.tag, err)
-			}
-		})
-	}
-}
-
 func TestCheckTagAvailable(t *testing.T) {
 	taggedHistory := func() *recordingEdge {
 		return &recordingEdge{

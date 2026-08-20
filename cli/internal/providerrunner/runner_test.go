@@ -144,7 +144,7 @@ func TestDeploy(t *testing.T) {
 
 		var events []*deploymentsv1.DeployEvent
 		err := r.Deploy(ctx, &deploymentsv1.DeployRequest{
-			Manifest: &deploymentsv1.Manifest{SchemaVersion: "provider.v1"},
+			Manifest: &deploymentsv1.Manifest{SchemaVersion: "provider.v1", Slug: "acme"},
 		}, func(ev *deploymentsv1.DeployEvent) { events = append(events, ev) })
 		if err != nil {
 			t.Fatalf("Deploy() error = %v, want nil", err)
@@ -180,7 +180,7 @@ func TestDeploy(t *testing.T) {
 		deployErrCh := make(chan error, 1)
 		go func() {
 			deployErrCh <- r.Deploy(ctx, &deploymentsv1.DeployRequest{
-				Manifest: &deploymentsv1.Manifest{SchemaVersion: "provider.v1"},
+				Manifest: &deploymentsv1.Manifest{SchemaVersion: "provider.v1", Slug: "acme"},
 			}, func(ev *deploymentsv1.DeployEvent) { gotFirstEvent.Store(true) })
 		}()
 
@@ -218,7 +218,7 @@ func TestDeploy(t *testing.T) {
 			t.Fatalf("Ready() error = %v, want nil", err)
 		}
 
-		err := r.Deploy(ctx, &deploymentsv1.DeployRequest{Manifest: &deploymentsv1.Manifest{}}, nil)
+		err := r.Deploy(ctx, &deploymentsv1.DeployRequest{Manifest: &deploymentsv1.Manifest{SchemaVersion: "provider.v1", Slug: "acme"}}, nil)
 
 		var deployErr *DeployFailedError
 		if !errors.As(err, &deployErr) {
@@ -238,7 +238,7 @@ func TestDeploy(t *testing.T) {
 		ctx := context.Background()
 		r, _ := spawnFake(t, ctx, "never-ready", Config{ReadyTimeout: 50 * time.Millisecond})
 
-		err := r.Deploy(ctx, &deploymentsv1.DeployRequest{Manifest: &deploymentsv1.Manifest{}}, nil)
+		err := r.Deploy(ctx, &deploymentsv1.DeployRequest{Manifest: &deploymentsv1.Manifest{SchemaVersion: "provider.v1", Slug: "acme"}}, nil)
 		if !errors.Is(err, ErrDeploymentsUnavailable) {
 			t.Fatalf("Deploy() error = %v, want ErrDeploymentsUnavailable", err)
 		}

@@ -141,67 +141,15 @@ func TestKeysCarryTheProject(t *testing.T) {
 func TestValidate(t *testing.T) {
 	t.Parallel()
 
-	t.Run("rejects the delimiter in user chosen names", func(t *testing.T) {
+	t.Run("refuses a cell ocel derives from a link", func(t *testing.T) {
 		t.Parallel()
 
-		for name, c := range map[string]Coordinate{
-			"slug":        {Slug: "sh#op", Key: "K"},
-			"key":         {Slug: "shop", Key: "STRIPE#KEY"},
-			"folder":      {Slug: "shop", Key: "K", Folder: "/we#b"},
-			"environment": {Slug: "shop", Key: "K", Environment: "sta#ging"},
-		} {
-			if err := c.validate(); err == nil {
-				t.Errorf("validate() accepted %s containing the key delimiter", name)
-			}
-		}
-	})
-
-	t.Run("rejects malformed folders", func(t *testing.T) {
-		t.Parallel()
-
-		for _, folder := range []string{"web", "/web/", "//web"} {
-			c := Coordinate{Slug: "shop", Key: "K", Folder: folder}
-			if err := c.validate(); err == nil {
-				t.Errorf("validate() accepted folder %q", folder)
-			}
-		}
-		for _, folder := range []string{"", "/web", "/web/admin"} {
-			c := Coordinate{Slug: "shop", Key: "K", Folder: folder}
-			if err := c.validate(); err != nil {
-				t.Errorf("validate() rejected folder %q: %v", folder, err)
-			}
-		}
-	})
-
-	t.Run("rejects the root folder as a second spelling of root", func(t *testing.T) {
-		t.Parallel()
-
-		err := Coordinate{Slug: "shop", Key: "K", Folder: rootFolder}.validate()
+		err := Coordinate{Slug: "shop", Key: linkValueKey, Link: "db"}.validate()
 		if err == nil {
-			t.Fatalf("validate() accepted folder %q, want it rejected as a second spelling of root", rootFolder)
+			t.Fatal("validate() accepted a link-derived cell, want it refused as nothing to edit")
 		}
-		if !strings.Contains(err.Error(), "leave the folder off") {
-			t.Errorf("validate() err = %v, want it to say to leave the folder off instead", err)
-		}
-	})
-
-	t.Run("requires slug and key", func(t *testing.T) {
-		t.Parallel()
-
-		if err := (Coordinate{Key: "K"}).validate(); err == nil {
-			t.Error("validate() accepted a coordinate with no slug")
-		}
-		if err := (Coordinate{Slug: "shop"}).validate(); err == nil {
-			t.Error("validate() accepted a coordinate with no key")
-		}
-	})
-
-	t.Run("rejects the class wide sentinel as an environment", func(t *testing.T) {
-		t.Parallel()
-
-		c := Coordinate{Slug: "shop", Key: "K", Environment: ClassWideEnvironment}
-		if err := c.validate(); err == nil {
-			t.Errorf("validate() accepted %q as an environment name; it is the class-wide sentinel", ClassWideEnvironment)
+		if !strings.Contains(err.Error(), "db") {
+			t.Errorf("validate() err = %v, want it to name the link", err)
 		}
 	})
 }

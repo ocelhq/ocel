@@ -14,7 +14,7 @@ import (
 )
 
 func (s *Server) SetLink(ctx context.Context, req *deploymentsv1.SetLinkRequest) (*deploymentsv1.SetLinkResponse, error) {
-	if err := linkTarget(req.GetClass(), req.GetSlug(), req.GetEnvironment()); err != nil {
+	if err := linkTarget(req.GetClass(), req.GetEnvironment()); err != nil {
 		return nil, err
 	}
 	if err := invalidArgument(vars.ValidateLinkName(req.GetSlug(), req.GetEnvironment(), req.GetLink().GetName())); err != nil {
@@ -33,7 +33,7 @@ func (s *Server) SetLink(ctx context.Context, req *deploymentsv1.SetLinkRequest)
 }
 
 func (s *Server) RemoveLink(ctx context.Context, req *deploymentsv1.RemoveLinkRequest) (*deploymentsv1.RemoveLinkResponse, error) {
-	if err := linkTarget(req.GetClass(), req.GetSlug(), req.GetEnvironment()); err != nil {
+	if err := linkTarget(req.GetClass(), req.GetEnvironment()); err != nil {
 		return nil, err
 	}
 	if err := invalidArgument(vars.ValidateLinkName(req.GetSlug(), req.GetEnvironment(), req.GetName())); err != nil {
@@ -52,7 +52,7 @@ func (s *Server) RemoveLink(ctx context.Context, req *deploymentsv1.RemoveLinkRe
 }
 
 func (s *Server) ListLinks(ctx context.Context, req *deploymentsv1.ListLinksRequest) (*deploymentsv1.ListLinksResponse, error) {
-	if err := linkTarget(req.GetClass(), req.GetSlug(), req.GetEnvironment()); err != nil {
+	if err := linkTarget(req.GetClass(), req.GetEnvironment()); err != nil {
 		return nil, err
 	}
 	store, err := s.store(ctx, s.config.get().Region, req.GetClass())
@@ -78,17 +78,8 @@ func (s *Server) ListLinks(ctx context.Context, req *deploymentsv1.ListLinksRequ
 	return resp, nil
 }
 
-func linkTarget(class deploymentsv1.Environment_Class, slug, environment string) error {
-	preview := class == deploymentsv1.Environment_CLASS_PREVIEW
-	if !preview && class != deploymentsv1.Environment_CLASS_PRODUCTION {
-		return connect.NewError(connect.CodeInvalidArgument, fmt.Errorf(
-			"class %s is neither %q nor %q; a link is published to an ocel coordinate, never to a stage or a stack name",
-			class, bootstrap.ClassProduction, bootstrap.ClassPreview))
-	}
-	if err := invalidArgument(vars.ValidateLinkTarget(slug, environment)); err != nil {
-		return err
-	}
-	if environment != "" && !preview {
+func linkTarget(class deploymentsv1.Environment_Class, environment string) error {
+	if environment != "" && class != deploymentsv1.Environment_CLASS_PREVIEW {
 		return connect.NewError(connect.CodeInvalidArgument, fmt.Errorf(
 			"environment %q is named alongside class %q: an ocel coordinate is a class and, in %s, one preview environment; leave the environment off",
 			environment, bootstrap.ClassProduction, bootstrap.ClassPreview))

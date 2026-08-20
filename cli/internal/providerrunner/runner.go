@@ -18,6 +18,7 @@ import (
 	"time"
 
 	"connectrpc.com/connect"
+	"connectrpc.com/validate"
 
 	"github.com/ocelhq/ocel/cli/internal/procgroup"
 	"github.com/ocelhq/ocel/pkg/channel"
@@ -266,7 +267,7 @@ func (r *Runner) dial(addr string) error {
 		},
 	}
 
-	auth := connect.WithInterceptors(authInterceptor{token: r.token}, traceParentInterceptor{})
+	auth := connect.WithInterceptors(authInterceptor{token: r.token}, traceParentInterceptor{}, validate.NewInterceptor())
 
 	r.mu.Lock()
 	defer r.mu.Unlock()

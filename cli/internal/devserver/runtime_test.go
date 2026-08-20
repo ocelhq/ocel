@@ -3,6 +3,7 @@ package devserver
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -27,6 +28,30 @@ func serveRuntime(t *testing.T, handler http.HandlerFunc) bucketsv1connect.Bucke
 
 func TestPresignUpload(t *testing.T) {
 	t.Parallel()
+
+	t.Run("refuses a key that climbs out of the tenant prefix", func(t *testing.T) {
+		t.Parallel()
+		reached := false
+		client := serveRuntime(t, func(w http.ResponseWriter, r *http.Request) {
+			reached = true
+			json.NewEncoder(w).Encode(presignResponseBody{SessionID: "sess_123"})
+		})
+
+		_, err := client.PresignUpload(context.Background(), &bucketsv1.PresignUploadRequest{
+			Bucket: "storage",
+			Files: []*bucketsv1.PresignFile{
+				{Key: "../../etc/passwd", Name: "passwd", Size: 1, MimeType: "text/plain"},
+			},
+		})
+
+		var connectErr *connect.Error
+		if !errors.As(err, &connectErr) || connectErr.Code() != connect.CodeInvalidArgument {
+			t.Fatalf("PresignUpload err = %v, want %v", err, connect.CodeInvalidArgument)
+		}
+		if reached {
+			t.Fatal("a traversal key was forwarded to the API")
+		}
+	})
 
 	t.Run("forwards to the Ocel API", func(t *testing.T) {
 		t.Parallel()

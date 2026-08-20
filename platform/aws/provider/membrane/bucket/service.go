@@ -63,13 +63,6 @@ func randomHex(n int) string {
 }
 
 func (s *Service) PresignUpload(ctx context.Context, req *bucketsv1.PresignUploadRequest) (*bucketsv1.PresignUploadResponse, error) {
-	if req.GetBucket() == "" {
-		return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("presign requires the bucket the upload lands in"))
-	}
-	if len(req.GetFiles()) == 0 {
-		return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("presign requires at least one file"))
-	}
-
 	sessionID := s.newID()
 	secret := s.newSecret()
 	now := s.now()

@@ -1,25 +1,23 @@
-package deploymentsv1
+package cli
 
-import "fmt"
+import (
+	"fmt"
 
-// CheckClass returns nil when infra, the class the pointed-at infrastructure is
-// stamped with, matches required, the class the running command demands (`ocel
-// preview` requires CLASS_PREVIEW; `ocel deploy` requires CLASS_PRODUCTION).
-// Otherwise it returns a concrete, directive error naming the real command and
-// infrastructure at fault. It is shared by the CLI preflight and the provider
-// so both refuse a class mismatch identically.
-func CheckClass(infra, required Environment_Class) error {
+	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
+)
+
+func checkClass(infra, required deploymentsv1.Environment_Class) error {
 	if infra == required {
 		return nil
 	}
 
 	switch required {
-	case Environment_CLASS_PREVIEW:
+	case deploymentsv1.Environment_CLASS_PREVIEW:
 		return fmt.Errorf(
 			"ocel preview can only run against preview infrastructure, but the account points at %s; run `ocel bootstrap --preview` to stand up preview infrastructure",
 			infraLabel(infra),
 		)
-	case Environment_CLASS_PRODUCTION:
+	case deploymentsv1.Environment_CLASS_PRODUCTION:
 		return fmt.Errorf(
 			"ocel deploy can only run against production infrastructure, but the account points at %s; run `ocel bootstrap` to stand up production infrastructure",
 			infraLabel(infra),
@@ -32,11 +30,11 @@ func CheckClass(infra, required Environment_Class) error {
 	}
 }
 
-func infraLabel(class Environment_Class) string {
+func infraLabel(class deploymentsv1.Environment_Class) string {
 	switch class {
-	case Environment_CLASS_PREVIEW:
+	case deploymentsv1.Environment_CLASS_PREVIEW:
 		return "preview infrastructure"
-	case Environment_CLASS_PRODUCTION:
+	case deploymentsv1.Environment_CLASS_PRODUCTION:
 		return "production infrastructure"
 	default:
 		return "no Ocel infrastructure"

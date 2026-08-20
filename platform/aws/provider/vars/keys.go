@@ -76,41 +76,8 @@ func canonicalEnvironment(environment string) string {
 }
 
 func (c Coordinate) validate() error {
-	if c.Slug == "" {
-		return fmt.Errorf("a project slug is required")
-	}
 	if c.Link != "" {
 		return fmt.Errorf("that value belongs to link %s: ocel derives it from the resource and prunes it, so there is nothing here to edit", c.Link)
-	}
-	if c.Key == "" {
-		return fmt.Errorf("a variable name is required")
-	}
-	if c.Environment == ClassWideEnvironment {
-		return fmt.Errorf("%q is reserved: it names the value that binds class-wide", ClassWideEnvironment)
-	}
-	for name, component := range map[string]string{
-		"project slug":     c.Slug,
-		"variable name":    c.Key,
-		"folder":           c.Folder,
-		"environment name": c.Environment,
-	} {
-		if strings.Contains(component, delimiter) {
-			return fmt.Errorf("%s %q may not contain %q", name, component, delimiter)
-		}
-	}
-	if c.Folder != "" {
-		if !strings.HasPrefix(c.Folder, "/") {
-			return fmt.Errorf("folder %q must start with %q", c.Folder, "/")
-		}
-		if c.Folder == rootFolder {
-			return fmt.Errorf("folder %q is the project root, which is what an unbound app already reads; leave the folder off instead", c.Folder)
-		}
-		if strings.HasSuffix(c.Folder, "/") {
-			return fmt.Errorf("folder %q must not end with %q", c.Folder, "/")
-		}
-		if strings.Contains(c.Folder, "//") {
-			return fmt.Errorf("folder %q has an empty path segment", c.Folder)
-		}
 	}
 	return nil
 }

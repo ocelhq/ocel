@@ -85,10 +85,6 @@ func init() {
 const prebuiltFlagUsage = "Deploy the existing .ocel/output instead of building the apps first (produce it with ocel build)"
 
 func runDeploy(ctx context.Context, d deps, cwd string, opts deployOptions, stdout, stderr io.Writer, stdin io.Reader) error {
-	if err := validateTag(opts.tag); err != nil {
-		return err
-	}
-
 	cfg, err := projectconfig.Resolve(ctx, cwd, explicitConfigPath())
 	if err != nil {
 		return err

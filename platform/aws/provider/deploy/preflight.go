@@ -32,9 +32,6 @@ func planDeploy(ctx context.Context, cfg Config, manifest *deploymentsv1.Manifes
 	if err := checkStoreSchema(ctx, cfg); err != nil {
 		return deployPlan{}, err
 	}
-	if err := validateTag(cfg.Tag); err != nil {
-		return deployPlan{}, err
-	}
 	if err := checkMembraneServices(manifest, membrane.Serves); err != nil {
 		return deployPlan{}, err
 	}

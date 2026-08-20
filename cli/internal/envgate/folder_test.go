@@ -232,15 +232,4 @@ func TestLint(t *testing.T) {
 		}
 	})
 
-	t.Run("rejects a malformed declared folder", func(t *testing.T) {
-		t.Parallel()
-		_, err := envgate.Lint(
-			[]*resourcesv1.VariableDefinition{scoped("POSTHOG_ID", "web#1")},
-			[]envgate.App{{Name: "web", Folder: "/web"}},
-			"ocel.config.ts",
-		)
-		if err == nil || !strings.Contains(err.Error(), "web#1") {
-			t.Errorf("Lint err = %v, want the malformed folder named", err)
-		}
-	})
 }

@@ -99,8 +99,8 @@ func TestRunRollback(t *testing.T) {
 		if err == nil {
 			t.Fatal("runRollback err = nil, want an error for an invalid tag")
 		}
-		if !strings.Contains(err.Error(), "invalid character") {
-			t.Errorf("err = %v, want it to explain the invalid character", err)
+		if !strings.Contains(err.Error(), "tag") {
+			t.Errorf("err = %v, want the contract to name the tag it refused", err)
 		}
 	})
 

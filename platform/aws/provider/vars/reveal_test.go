@@ -226,21 +226,6 @@ func TestReveal(t *testing.T) {
 		}
 	})
 
-	t.Run("rejects the class wide sentinel", func(t *testing.T) {
-		store, ddb, _ := newTestStore(t)
-
-		_, err := store.Reveal(context.Background(), "shop", []Coordinate{
-			{Slug: "shop", Key: "OK"},
-			{Slug: "shop", Key: "BAD", Environment: ClassWideEnvironment},
-		})
-		if err == nil {
-			t.Fatal("Reveal accepted the class-wide sentinel as an environment name")
-		}
-		if len(ddb.queries) != 0 {
-			t.Errorf("Reveal queried the table %d times before rejecting a bad coordinate, want 0", len(ddb.queries))
-		}
-	})
-
 	t.Run("naming no cells makes no call", func(t *testing.T) {
 		store, ddb, crypto := newTestStore(t)
 

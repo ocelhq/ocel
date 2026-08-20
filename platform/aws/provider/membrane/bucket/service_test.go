@@ -162,32 +162,6 @@ func TestPresignUpload(t *testing.T) {
 				sess.PK, testSessionKeyPrefix+"sess_fixed")
 		}
 	})
-
-	t.Run("refuses a request naming no bucket", func(t *testing.T) {
-		t.Parallel()
-		svc := newTestService(newFakeDDB(), &fakePresigner{})
-
-		_, err := svc.PresignUpload(context.Background(), &bucketsv1.PresignUploadRequest{
-			Files: []*bucketsv1.PresignFile{{Key: "a.png", Name: "a.png", Size: 1, MimeType: "image/png"}},
-		})
-
-		var connectErr *connect.Error
-		if !errors.As(err, &connectErr) || connectErr.Code() != connect.CodeInvalidArgument {
-			t.Fatalf("PresignUpload with no bucket err = %v, want CodeInvalidArgument", err)
-		}
-	})
-
-	t.Run("refuses a request naming no files", func(t *testing.T) {
-		t.Parallel()
-		svc := newTestService(newFakeDDB(), &fakePresigner{})
-
-		_, err := svc.PresignUpload(context.Background(), &bucketsv1.PresignUploadRequest{Bucket: "storage"})
-
-		var connectErr *connect.Error
-		if !errors.As(err, &connectErr) || connectErr.Code() != connect.CodeInvalidArgument {
-			t.Fatalf("PresignUpload with no files err = %v, want CodeInvalidArgument", err)
-		}
-	})
 }
 
 func TestVerifyUploadSignature(t *testing.T) {

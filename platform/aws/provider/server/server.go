@@ -743,15 +743,6 @@ func deployedResult(res deploy.Result) *deploymentsv1.DeployEvent {
 }
 
 func validateManifest(m *deploymentsv1.Manifest) error {
-	if m == nil {
-		return fmt.Errorf("manifest is required")
-	}
-	if m.GetSchemaVersion() == "" {
-		return fmt.Errorf("manifest.schema_version is required")
-	}
-	if m.GetSlug() == "" {
-		return fmt.Errorf("manifest.slug is required")
-	}
 	for i, r := range m.GetResources() {
 		if r.GetLogicalName() == "" {
 			return fmt.Errorf("manifest.resources[%d]: logical_name is required", i)

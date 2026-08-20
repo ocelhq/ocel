@@ -49,8 +49,6 @@ func TestValidateManifest(t *testing.T) {
 		wantErr bool
 	}{
 		{name: "a well-formed manifest"},
-		{name: "a missing schema_version", mutate: func(m *deploymentsv1.Manifest) { m.SchemaVersion = "" }, wantErr: true},
-		{name: "a missing slug", mutate: func(m *deploymentsv1.Manifest) { m.Slug = "" }, wantErr: true},
 		{name: "a resource with no logical_name", mutate: func(m *deploymentsv1.Manifest) { m.Resources[0].LogicalName = "" }, wantErr: true},
 		{
 			name: "a resource of an unspecified type",
@@ -94,12 +92,6 @@ func TestValidateManifest(t *testing.T) {
 		}
 	})
 
-	t.Run("a nil manifest", func(t *testing.T) {
-		t.Parallel()
-		if err := validateManifest(nil); err == nil {
-			t.Fatal("validateManifest(nil) error = nil, want error")
-		}
-	})
 }
 
 func TestResourceSummary(t *testing.T) {
