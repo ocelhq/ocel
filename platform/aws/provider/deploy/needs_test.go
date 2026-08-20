@@ -306,7 +306,7 @@ func TestRealizeCompareRefusesBeforeItMutatesAnything(t *testing.T) {
 		Uploader:       up,
 	}
 
-	_, err := realize(context.Background(), cfg, needsManifest("web"), nil, nil)
+	_, err := realize(context.Background(), cfg, &Realized{}, needsManifest("web"), nil, nil)
 	if err == nil {
 		t.Fatal("realize err = nil, want the unsupported need refused")
 	}
@@ -349,9 +349,8 @@ func TestBuildDeploymentRecordCarriesTheNeedsAndWhatBecameOfThem(t *testing.T) {
 	if err != nil {
 		t.Fatalf("checkNeeds err = %v, want the waived need through", err)
 	}
-	cfg.needs = records
 
-	record, err := buildDeploymentRecord(cfg, manifest, manifest.GetApps()[0], deployedAs("WEB1"), nil, appBuildsFor(t, cfg, manifest), nil)
+	record, err := buildDeploymentRecord(cfg, records, manifest, manifest.GetApps()[0], deployedAs("WEB1"), nil, appBuildsFor(t, cfg, manifest), nil)
 	if err != nil {
 		t.Fatalf("buildDeploymentRecord: %v", err)
 	}
@@ -378,7 +377,7 @@ func TestBuildDeploymentRecordLeavesNeedsOutForAnAppWithNone(t *testing.T) {
 	}
 	cfg := Config{ArtifactRoot: root, Slug: "proj", Edge: &recordingEdge{kind: cloudflare.Kind}}
 
-	record, err := buildDeploymentRecord(cfg, manifest, manifest.GetApps()[0], deployedAs("API1"), nil, appBuildsFor(t, cfg, manifest), nil)
+	record, err := buildDeploymentRecord(cfg, nil, manifest, manifest.GetApps()[0], deployedAs("API1"), nil, appBuildsFor(t, cfg, manifest), nil)
 	if err != nil {
 		t.Fatalf("buildDeploymentRecord: %v", err)
 	}
@@ -433,8 +432,7 @@ func TestStagedRecordCarriesTheNeedsAndWhatBecameOfThem(t *testing.T) {
 	if err != nil {
 		t.Fatalf("checkNeeds err = %v, want the waived need through", err)
 	}
-	cfg.needs = records
-	record, err := buildDeploymentRecord(cfg, manifest, manifest.GetApps()[0], deployedAs("WEB1"), nil, appBuildsFor(t, cfg, manifest), nil)
+	record, err := buildDeploymentRecord(cfg, records, manifest, manifest.GetApps()[0], deployedAs("WEB1"), nil, appBuildsFor(t, cfg, manifest), nil)
 	if err != nil {
 		t.Fatalf("buildDeploymentRecord: %v", err)
 	}
@@ -603,8 +601,7 @@ func TestStagedRecordWaivesTheNeedThePlanWithholds(t *testing.T) {
 	if err != nil {
 		t.Fatalf("checkNeeds err = %v, want the waived need through", err)
 	}
-	cfg.needs = records
-	record, err := buildDeploymentRecord(cfg, manifest, manifest.GetApps()[0], deployedAs("WEB1"), nil, appBuildsFor(t, cfg, manifest), nil)
+	record, err := buildDeploymentRecord(cfg, records, manifest, manifest.GetApps()[0], deployedAs("WEB1"), nil, appBuildsFor(t, cfg, manifest), nil)
 	if err != nil {
 		t.Fatalf("buildDeploymentRecord: %v", err)
 	}

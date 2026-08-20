@@ -435,7 +435,7 @@ func TestBuildDeploymentRecordAssets(t *testing.T) {
 		manifest := nextManifest()
 		app := &deploymentsv1.ManifestApp{Name: "web", Framework: frameworkNext}
 
-		record, err := buildDeploymentRecord(cfg, manifest, app, deployedAs("WEB1"), nil, appBuildsFor(t, cfg, manifest), nil)
+		record, err := buildDeploymentRecord(cfg, nil, manifest, app, deployedAs("WEB1"), nil, appBuildsFor(t, cfg, manifest), nil)
 		if err != nil {
 			t.Fatalf("buildDeploymentRecord: %v", err)
 		}
@@ -452,7 +452,7 @@ func TestBuildDeploymentRecordAssets(t *testing.T) {
 		manifest := nextManifest()
 		app := &deploymentsv1.ManifestApp{Name: "web", Framework: frameworkNext}
 
-		record, err := buildDeploymentRecord(cfg, manifest, app, deployedAs("WEB1"), nil, appBuildsFor(t, cfg, manifest), nil)
+		record, err := buildDeploymentRecord(cfg, nil, manifest, app, deployedAs("WEB1"), nil, appBuildsFor(t, cfg, manifest), nil)
 		if err != nil {
 			t.Fatalf("buildDeploymentRecord: %v", err)
 		}
@@ -466,7 +466,7 @@ func TestBuildDeploymentRecordAssets(t *testing.T) {
 		manifest := &deploymentsv1.Manifest{Slug: "proj"}
 		app := &deploymentsv1.ManifestApp{Name: "api", Framework: "express"}
 
-		record, err := buildDeploymentRecord(cfg, manifest, app, deployedAs("API1"), nil, appBuildsFor(t, cfg, manifest), nil)
+		record, err := buildDeploymentRecord(cfg, nil, manifest, app, deployedAs("API1"), nil, appBuildsFor(t, cfg, manifest), nil)
 		if err != nil {
 			t.Fatalf("buildDeploymentRecord: %v", err)
 		}
@@ -491,7 +491,7 @@ func TestBuildDeploymentRecordAssets(t *testing.T) {
 		manifest := nextManifest()
 		app := &deploymentsv1.ManifestApp{Name: "web", Framework: frameworkNext}
 
-		record, err := buildDeploymentRecord(cfg, manifest, app, deployedAs("WEB1"), nil, appBuildsFor(t, cfg, manifest), nil)
+		record, err := buildDeploymentRecord(cfg, nil, manifest, app, deployedAs("WEB1"), nil, appBuildsFor(t, cfg, manifest), nil)
 		if err != nil {
 			t.Fatalf("buildDeploymentRecord: %v", err)
 		}
@@ -505,7 +505,7 @@ func TestBuildDeploymentRecordAssets(t *testing.T) {
 			"apps/web/routing-manifest.json": `{"buildId":"WEB1"}`,
 		})
 		cfg := Config{ArtifactRoot: root, Env: "prod"}
-		record, err := buildDeploymentRecord(cfg, nextManifest(), &deploymentsv1.ManifestApp{Name: "web", Framework: frameworkNext}, deployedAs("WEB1"), nil, appBuildsFor(t, cfg, nextManifest()), nil)
+		record, err := buildDeploymentRecord(cfg, nil, nextManifest(), &deploymentsv1.ManifestApp{Name: "web", Framework: frameworkNext}, deployedAs("WEB1"), nil, appBuildsFor(t, cfg, nextManifest()), nil)
 		if err != nil {
 			t.Fatalf("buildDeploymentRecord: %v", err)
 		}

@@ -24,7 +24,7 @@ func TestReclaimDeclaresOneChildStagePerTarget(t *testing.T) {
 	ft := &fakeTracer{}
 	parent := NewRootStage("Reclaiming deployments")
 
-	if err := Reclaim(context.Background(), Config{Tracer: ft}, targets, parent, nil); err == nil {
+	if err := Reclaim(context.Background(), Reclamation{Teardown: Teardown{Report: Reporting{Tracer: ft}}}, targets, parent, nil); err == nil {
 		t.Fatal("Reclaim err = nil, want the stack-less Destroy to fail fast")
 	}
 
@@ -454,7 +454,7 @@ func TestReclaimCoversEveryKeyTheDeployWrote(t *testing.T) {
 	if err := uploadEdgeBundles(ctx, cfg, manifest, builds); err != nil {
 		t.Fatalf("uploadEdgeBundles: %v", err)
 	}
-	record, err := buildDeploymentRecord(cfg, manifest, manifest.GetApps()[0], builds.identities["web"], nil, builds, nil)
+	record, err := buildDeploymentRecord(cfg, nil, manifest, manifest.GetApps()[0], builds.identities["web"], nil, builds, nil)
 	if err != nil {
 		t.Fatalf("buildDeploymentRecord: %v", err)
 	}

@@ -11,7 +11,6 @@ import (
 
 	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
 	linksv1 "github.com/ocelhq/ocel/pkg/proto/links/v1"
-	"github.com/ocelhq/ocel/platform/aws/provider/payloads"
 	"github.com/ocelhq/ocel/platform/aws/provider/transform"
 	"github.com/ocelhq/ocel/platform/aws/provider/vars"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
@@ -43,8 +42,6 @@ type Config struct {
 
 	RequiredFeatures []string
 
-	realized *realizedStacks
-
 	StateTable         string
 	StateTableARN      string
 	VarsKeyARN         string
@@ -53,7 +50,6 @@ type Config struct {
 	VarsClass          string
 	VarsSiblingClasses []string
 	VarsReferenced     map[vars.Coordinate]string
-	Values             ValueStore
 	Links              LinkStore
 
 	ArtifactRoot   string
@@ -120,12 +116,6 @@ type Config struct {
 	StageReport func(StageID) func(string)
 
 	Transform transform.Evaluator
-
-	transformed *transformedArgs
-	needs       needRecords
-	sessions    sessionScope
-	layer       payloads.Placement
-	completer   payloads.Placement
 }
 
 type RecordWaiter interface {
@@ -169,8 +159,7 @@ type Result struct {
 }
 
 func Run(ctx context.Context, cfg Config, manifest *deploymentsv1.Manifest, progress Progress, log func(string)) (Result, error) {
-	cfg.realized = &realizedStacks{}
-	return realize(ctx, cfg, manifest, progress, log)
+	return realize(ctx, cfg, &Realized{}, manifest, progress, log)
 }
 
 func appURLs(manifest *deploymentsv1.Manifest, functions []*deploymentsv1.FunctionOutput) []string {

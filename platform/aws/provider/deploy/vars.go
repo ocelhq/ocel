@@ -75,7 +75,7 @@ func variableEnv(app *deploymentsv1.ManifestApp) map[string]string {
 	return env
 }
 
-func appEnv(manifest *deploymentsv1.Manifest, app *deploymentsv1.ManifestApp, bundle appBundle, cfg Config) map[string]string {
+func appEnv(manifest *deploymentsv1.Manifest, app *deploymentsv1.ManifestApp, bundle appBundle, cfg Config, sessions sessionScope) map[string]string {
 	env := map[string]string{}
 	if cfg.Edge != nil {
 		env[edgeKindEnv] = string(cfg.Edge.Kind())
@@ -89,7 +89,7 @@ func appEnv(manifest *deploymentsv1.Manifest, app *deploymentsv1.ManifestApp, bu
 	}
 	if appCrossesMembrane(manifest, app.GetName()) {
 		env[envStateTable] = cfg.StateTable
-		env[envSessionPrefix] = cfg.sessions.KeyPrefix
+		env[envSessionPrefix] = sessions.KeyPrefix
 	}
 	maps.Copy(env, variableEnv(app))
 	maps.Copy(env, bundle.env())

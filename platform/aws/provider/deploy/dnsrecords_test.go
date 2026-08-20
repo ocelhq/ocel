@@ -296,7 +296,7 @@ func TestReleaseRecords(t *testing.T) {
 		t.Parallel()
 
 		writer := &recordingDNS{}
-		if err := releaseRecords(t.Context(), Config{DNS: writer}, state, func(string) {}); err != nil {
+		if err := releaseRecords(t.Context(), writer, state, func(string) {}); err != nil {
 			t.Fatalf("releaseRecords: %v", err)
 		}
 		if len(writer.deleted) != 1 || writer.deleted[0] != wildcard {
@@ -308,7 +308,7 @@ func TestReleaseRecords(t *testing.T) {
 		t.Parallel()
 
 		var said []string
-		if err := releaseRecords(t.Context(), Config{}, state, func(m string) { said = append(said, m) }); err != nil {
+		if err := releaseRecords(t.Context(), nil, state, func(m string) { said = append(said, m) }); err != nil {
 			t.Fatalf("releaseRecords: %v", err)
 		}
 		if len(said) != 1 || !strings.Contains(said[0], "shop.app.com") {
@@ -320,7 +320,7 @@ func TestReleaseRecords(t *testing.T) {
 		t.Parallel()
 
 		writer := &recordingDNS{}
-		if err := releaseRecords(t.Context(), Config{DNS: writer}, edge.StackState{}, func(string) {
+		if err := releaseRecords(t.Context(), writer, edge.StackState{}, func(string) {
 			t.Error("said something about a stack that wrote no records")
 		}); err != nil {
 			t.Fatalf("releaseRecords: %v", err)

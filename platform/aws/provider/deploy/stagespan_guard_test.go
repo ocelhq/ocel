@@ -48,9 +48,13 @@ func TestDestroyProjectSpansEveryDeclaredRootStage(t *testing.T) {
 
 		ft := &fakeTracer{}
 		stages := newProjectTeardownStages()
-		cfg := Config{Stacks: &fakeStackIndex{projects: []string{"shop"}}, Tracer: ft}
+		cfg := ProjectTeardown{Teardown: Teardown{
+			Slug:   "shop",
+			Stacks: &fakeStackIndex{projects: []string{"shop"}},
+			Report: Reporting{Tracer: ft},
+		}}
 
-		if _, err := DestroyProject(context.Background(), nil, cfg, "shop", stages, nil); err != nil {
+		if _, err := DestroyProject(context.Background(), nil, cfg, stages, nil); err != nil {
 			t.Fatalf("DestroyProject: %v", err)
 		}
 		requireExactlyOneSpanEach(t, ft.spans, stages.Roots())
@@ -61,17 +65,24 @@ func TestDestroyProjectSpansEveryDeclaredRootStage(t *testing.T) {
 
 		ft := &fakeTracer{}
 		stages := newProjectTeardownStages()
-		cfg := Config{
-			Stacks: &fakeStackIndex{projects: []string{"shop"}},
-			Tracer: ft,
+		cfg := ProjectTeardown{
+			Teardown: Teardown{
+				Slug:   "shop",
+				Stacks: &fakeStackIndex{projects: []string{"shop"}},
+				Report: Reporting{Tracer: ft},
+			},
 			Values: &valueRecorder{err: errors.New("table is on fire")},
 		}
 
-		if _, err := DestroyProject(context.Background(), nil, cfg, "shop", stages, nil); err == nil {
+		if _, err := DestroyProject(context.Background(), nil, cfg, stages, nil); err == nil {
 			t.Fatal("DestroyProject err = nil, want the failed value removal reported")
 		}
 		requireExactlyOneSpanEach(t, ft.spans, stages.Roots())
 	})
+}
+
+func tracedReclamation(ft *fakeTracer) Reclamation {
+	return Reclamation{Teardown: Teardown{Slug: "shop", Report: Reporting{Tracer: ft}}}
 }
 
 func newPreviewRemovalStagesForTest(persistent bool) PreviewRemovalStages {
@@ -97,7 +108,7 @@ func TestRemovePreviewSpansEveryDeclaredRootStage(t *testing.T) {
 		ctx := context.Background()
 		state := fake.reconciled(t, edge.StackSpec{Version: "v1", Slug: "shop"})
 
-		if err := RemovePreview(ctx, state, Config{Tracer: ft}, "shop", "pr-1", false, stages, nil); err != nil {
+		if err := RemovePreview(ctx, state, tracedReclamation(ft), "pr-1", false, stages, nil); err != nil {
 			t.Fatalf("RemovePreview: %v", err)
 		}
 		requireExactlyOneSpanEach(t, ft.spans, stages.Roots())
@@ -111,7 +122,7 @@ func TestRemovePreviewSpansEveryDeclaredRootStage(t *testing.T) {
 		fake := &recordingEdge{kind: cloudflare.Kind}
 		stale := edge.StackState{edge.StackKeySlug: "shop", edge.StackKeySecret: "stale"}
 
-		if err := RemovePreview(context.Background(), fake.opened(t, stale), Config{Tracer: ft}, "shop", "pr-1", false, stages, nil); err == nil {
+		if err := RemovePreview(context.Background(), fake.opened(t, stale), tracedReclamation(ft), "pr-1", false, stages, nil); err == nil {
 			t.Fatal("RemovePreview err = nil, want the refused pointer removal reported")
 		}
 		requireExactlyOneSpanEach(t, ft.spans, stages.Roots())
@@ -126,7 +137,7 @@ func TestRemovePreviewSpansEveryDeclaredRootStage(t *testing.T) {
 		ctx := context.Background()
 		state := fake.reconciled(t, edge.StackSpec{Version: "v1", Slug: "shop"})
 
-		if err := RemovePreview(ctx, state, Config{Tracer: ft}, "shop", "staging", true, stages, nil); err == nil {
+		if err := RemovePreview(ctx, state, tracedReclamation(ft), "staging", true, stages, nil); err == nil {
 			t.Fatal("RemovePreview err = nil, want the infra stack's stack-less Destroy to fail fast")
 		}
 		requireExactlyOneSpanEach(t, ft.spans, stages.Roots())
@@ -145,7 +156,7 @@ func TestPruneSpansTheStagesItActuallyRuns(t *testing.T) {
 		ctx := context.Background()
 		state := fake.reconciled(t, edge.StackSpec{Version: "v1", Slug: "shop"})
 
-		if _, err := Prune(ctx, state, Config{Tracer: ft}, "shop", 3, "", stages, nil); err != nil {
+		if _, err := Prune(ctx, state, tracedReclamation(ft), 3, "", stages, nil); err != nil {
 			t.Fatalf("Prune: %v", err)
 		}
 		requireExactlyOneSpanEach(t, ft.spans, []Stage{stages.Diff, stages.Reclaim})
@@ -159,7 +170,7 @@ func TestPruneSpansTheStagesItActuallyRuns(t *testing.T) {
 		fake := &recordingEdge{kind: cloudflare.Kind}
 		stale := edge.StackState{edge.StackKeySlug: "shop", edge.StackKeySecret: "stale"}
 
-		if _, err := Prune(context.Background(), fake.opened(t, stale), Config{Tracer: ft}, "shop", 3, "", stages, nil); err == nil {
+		if _, err := Prune(context.Background(), fake.opened(t, stale), tracedReclamation(ft), 3, "", stages, nil); err == nil {
 			t.Fatal("Prune err = nil, want the refused diff reported")
 		}
 		counts := spanCounts(ft.spans)

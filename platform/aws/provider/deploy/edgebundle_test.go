@@ -175,7 +175,7 @@ func TestBuildDeploymentRecordEdgeWorkers(t *testing.T) {
 		manifest := nextManifest()
 		app := &deploymentsv1.ManifestApp{Name: "web", Framework: frameworkNext}
 
-		record, err := buildDeploymentRecord(cfg, manifest, app, deployedAs("WEB1"), nil, appBuildsFor(t, cfg, manifest), nil)
+		record, err := buildDeploymentRecord(cfg, nil, manifest, app, deployedAs("WEB1"), nil, appBuildsFor(t, cfg, manifest), nil)
 		if err != nil {
 			t.Fatalf("buildDeploymentRecord: %v", err)
 		}
@@ -219,7 +219,7 @@ func TestBuildDeploymentRecordEdgeWorkers(t *testing.T) {
 		manifest := twoAppManifest()
 		app := &deploymentsv1.ManifestApp{Name: "admin", Framework: frameworkNext}
 
-		record, err := buildDeploymentRecord(cfg, manifest, app, deployedAs("ADM1"), nil, appBuildsFor(t, cfg, manifest), nil)
+		record, err := buildDeploymentRecord(cfg, nil, manifest, app, deployedAs("ADM1"), nil, appBuildsFor(t, cfg, manifest), nil)
 		if err != nil {
 			t.Fatalf("buildDeploymentRecord: %v", err)
 		}
@@ -389,7 +389,7 @@ func TestBuildDeploymentRecordEdgeDelivery(t *testing.T) {
 		)
 		builds := edgeBuilds(t, cfg, manifest)
 
-		record, err := buildDeploymentRecord(cfg, manifest, manifest.GetApps()[0], deployedAs("WEB1"), nil, builds, nil)
+		record, err := buildDeploymentRecord(cfg, nil, manifest, manifest.GetApps()[0], deployedAs("WEB1"), nil, builds, nil)
 		if err != nil {
 			t.Fatalf("buildDeploymentRecord: %v", err)
 		}
@@ -429,7 +429,7 @@ func TestBuildDeploymentRecordEdgeDelivery(t *testing.T) {
 		cfg := edgeRecordConfig(t)
 		manifest := edgeVarsManifest(variable("POSTHOG_ID", "ph-123", resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN))
 
-		record, err := buildDeploymentRecord(cfg, manifest, manifest.GetApps()[0], deployedAs("WEB1"), nil, edgeBuilds(t, cfg, manifest), nil)
+		record, err := buildDeploymentRecord(cfg, nil, manifest, manifest.GetApps()[0], deployedAs("WEB1"), nil, edgeBuilds(t, cfg, manifest), nil)
 		if err != nil {
 			t.Fatalf("buildDeploymentRecord: %v", err)
 		}
@@ -449,7 +449,7 @@ func TestBuildDeploymentRecordEdgeDelivery(t *testing.T) {
 			variable("STRIPE_API_KEY", "sk-live", resourcesv1.VariableClass_VARIABLE_CLASS_SENSITIVE),
 		)
 
-		record, err := buildDeploymentRecord(cfg, manifest, manifest.GetApps()[0], deployedAs("WEB1"), nil, edgeBuilds(t, cfg, manifest), nil)
+		record, err := buildDeploymentRecord(cfg, nil, manifest, manifest.GetApps()[0], deployedAs("WEB1"), nil, edgeBuilds(t, cfg, manifest), nil)
 		if err != nil {
 			t.Fatalf("buildDeploymentRecord: %v", err)
 		}
@@ -479,7 +479,7 @@ func TestBuildDeploymentRecordEdgeDelivery(t *testing.T) {
 			Functions: []*deploymentsv1.ManifestFunction{{LogicalName: "admin_index", Framework: "next", App: "admin"}},
 		}
 
-		record, err := buildDeploymentRecord(cfg, manifest, manifest.GetApps()[0], deployedAs("ADM1"), nil, edgeBuilds(t, cfg, manifest), nil)
+		record, err := buildDeploymentRecord(cfg, nil, manifest, manifest.GetApps()[0], deployedAs("ADM1"), nil, edgeBuilds(t, cfg, manifest), nil)
 		if err != nil {
 			t.Fatalf("buildDeploymentRecord: %v", err)
 		}

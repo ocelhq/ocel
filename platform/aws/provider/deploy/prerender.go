@@ -111,7 +111,7 @@ func resolveAppBuilds(cfg Config, manifest *deploymentsv1.Manifest, baked map[st
 			Table:    cfg.StateTable,
 			TableARN: cfg.StateTableARN,
 		}
-		if isrEntriesAdopted(cfg) {
+		if isrEntriesAdopted(cfg.objectStores()) {
 			cache.CacheStoreBucket = cfg.CacheStoreBucket
 			cache.WriterURL = cfg.ISRWriterEndpoint + "/" + prefix + "/entry"
 			cache.WriterSecret = isrWriteSecret(cfg.ISRWriterSeed, prefix)
@@ -183,7 +183,7 @@ func uploadPrerenderAssets(ctx context.Context, cfg Config, builds appBuilds) er
 	if err := seedTagSnapshots(ctx, cfg, caches, time.Now()); err != nil {
 		return err
 	}
-	if err := seedISRWriters(ctx, cfg, caches); err != nil {
+	if err := seedISRWriters(ctx, cfg.isrWriter(), caches); err != nil {
 		return err
 	}
 	if len(uploads) == 0 {
@@ -302,14 +302,14 @@ func isPreconditionFailed(err error) bool {
 }
 
 func entryTarget(cfg Config) uploadTarget {
-	if isrEntriesAdopted(cfg) {
+	if isrEntriesAdopted(cfg.objectStores()) {
 		return uploadTarget{up: cfg.CacheStoreUploader, bucket: cfg.CacheStoreBucket}
 	}
 	return uploadTarget{up: cfg.Uploader, bucket: cfg.AssetBucket}
 }
 
-func isrEntriesAdopted(cfg Config) bool {
-	return cfg.CacheStoreBucket != "" && cfg.CacheStoreUploader != nil
+func isrEntriesAdopted(stores ObjectStores) bool {
+	return stores.CacheStoreBucket != "" && stores.CacheStoreUploader != nil
 }
 
 func collectFiles(dir string) ([]string, error) {

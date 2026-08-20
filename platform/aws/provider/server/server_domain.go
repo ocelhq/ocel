@@ -92,18 +92,20 @@ func (s *Server) runUseDomain(ctx context.Context, req *deploymentsv1.UseDomainR
 		return err
 	}
 
-	spec, err := deploy.PreviewWildcardSpecFor(deploy.Config{
-		Region:              awscfg.Region,
-		StateTable:          deployed.StateTable,
-		AssetBucket:         deployed.AssetBucket,
-		ImageOptimizerURL:   deployed.ImageOptimizerURL,
-		RevalidateQueueURL:  deployed.RevalidateQueueURL,
-		EdgeAccessKeyID:     creds.AccessKeyID,
-		EdgeSecretKey:       creds.SecretAccessKey,
+	spec, err := deploy.PreviewWildcardSpecFor(deploy.PreviewWildcard{
+		Edge:   edgeFront,
+		Values: edgeValues,
+		Worker: deploy.WorkerFacts{
+			Region:             awscfg.Region,
+			StateTable:         deployed.StateTable,
+			AssetBucket:        deployed.AssetBucket,
+			ImageOptimizerURL:  deployed.ImageOptimizerURL,
+			RevalidateQueueURL: deployed.RevalidateQueueURL,
+			EdgeAccessKeyID:    creds.AccessKeyID,
+			EdgeSecretKey:      creds.SecretAccessKey,
+		},
 		StoreScriptName:     store.ScriptName,
 		ISRWriterScriptName: isrWriter.ScriptName,
-		EdgeValues:          edgeValues,
-		Edge:                edgeFront,
 	}, baseDomain, logf)
 	if err != nil {
 		return err

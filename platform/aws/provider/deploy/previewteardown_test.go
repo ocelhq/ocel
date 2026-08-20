@@ -151,7 +151,7 @@ func TestRemovePreview(t *testing.T) {
 		ctx := context.Background()
 		state := fake.reconciled(t, edge.StackSpec{Version: "v1", Slug: "shop"})
 
-		if err := RemovePreview(ctx, state, Config{}, "shop", "pr-1", false, PreviewRemovalStages{}, nil); err != nil {
+		if err := RemovePreview(ctx, state, Reclamation{Teardown: Teardown{Slug: "shop"}}, "pr-1", false, PreviewRemovalStages{}, nil); err != nil {
 			t.Fatalf("RemovePreview: %v", err)
 		}
 
@@ -166,7 +166,7 @@ func TestRemovePreview(t *testing.T) {
 	t.Run("no root-stack state touches nothing", func(t *testing.T) {
 		fake := &recordingEdge{kind: cloudflare.Kind}
 
-		if err := RemovePreview(context.Background(), fake.opened(t, nil), Config{}, "shop", "pr-1", false, PreviewRemovalStages{}, nil); err != nil {
+		if err := RemovePreview(context.Background(), fake.opened(t, nil), Reclamation{Teardown: Teardown{Slug: "shop"}}, "pr-1", false, PreviewRemovalStages{}, nil); err != nil {
 			t.Fatalf("RemovePreview: %v", err)
 		}
 		if fake.destroyed != 0 || len(fake.removedPointers) != 0 {
@@ -178,7 +178,7 @@ func TestRemovePreview(t *testing.T) {
 		fake := &recordingEdge{kind: cloudflare.Kind}
 		stale := edge.StackState{edge.StackKeySlug: "shop", edge.StackKeySecret: "stale"}
 
-		err := RemovePreview(context.Background(), fake.opened(t, stale), Config{}, "shop", "pr-1", false, PreviewRemovalStages{}, nil)
+		err := RemovePreview(context.Background(), fake.opened(t, stale), Reclamation{Teardown: Teardown{Slug: "shop"}}, "pr-1", false, PreviewRemovalStages{}, nil)
 		if err == nil {
 			t.Fatal("RemovePreview err = nil, want the refused removal reported")
 		}

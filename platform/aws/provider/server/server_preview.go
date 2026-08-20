@@ -282,82 +282,86 @@ func (s *Server) runDestroyPreview(ctx context.Context, req *deploymentsv1.Destr
 	if err != nil {
 		return finish(connect.NewError(connect.CodeInvalidArgument, err))
 	}
-	cfg, stack, err := s.previewTeardownContext(ctx, requestedEdge(req), opts, req.GetSlug(), env)
+	deps, stack, err := s.previewTeardownDeps(ctx, requestedEdge(req), opts, req.GetSlug(), env)
 	if err != nil {
 		return finish(err)
 	}
-	cfg.Tracer = tracer
-	cfg.StageReport = stageReport
 
-	return deploy.RemovePreview(ctx, stack, cfg, req.GetSlug(), pointer, persistent, stages, logf)
+	return deploy.RemovePreview(ctx, stack, deps.reclamation(reportingWith(tracer, stageReport)), pointer, persistent, stages, logf)
 }
 
-func (s *Server) previewTeardownContext(ctx context.Context, kind edge.Kind, opts options, slug string, env *deploymentsv1.Environment) (deploy.Config, edge.EdgeStack, error) {
+func (s *Server) previewTeardownDeps(ctx context.Context, kind edge.Kind, opts options, slug string, env *deploymentsv1.Environment) (teardownContext, edge.EdgeStack, error) {
 	awscfg, err := loadAWS(ctx, opts.Region)
 	if err != nil {
-		return deploy.Config{}, nil, err
+		return teardownContext{}, nil, err
 	}
 	cfn := cloudformation.NewFromConfig(awscfg)
 	ssmClient := ssm.NewFromConfig(awscfg)
 
 	deployed, err := s.deployed(ctx, cfn, opts.Region, true)
 	if err != nil {
-		return deploy.Config{}, nil, err
+		return teardownContext{}, nil, err
 	}
 	if !deployed.Present || deployed.StateBucket == "" {
-		return deploy.Config{}, nil, errPreviewInfraMissing
+		return teardownContext{}, nil, errPreviewInfraMissing
 	}
 	stacks, err := stackIndexFor(awscfg, deployed, bootstrapCommand(true))
 	if err != nil {
-		return deploy.Config{}, nil, err
+		return teardownContext{}, nil, err
 	}
 
 	params, err := bootstrap.ReadTeardownParams(ctx, ssmClient, bootstrap.ClassPreview, slug)
 	if err != nil {
-		return deploy.Config{}, nil, err
+		return teardownContext{}, nil, err
 	}
 	if params.PassphraseErr != nil {
-		return deploy.Config{}, nil, params.PassphraseErr
+		return teardownContext{}, nil, params.PassphraseErr
 	}
 	pulumiCmd, err := pulumiruntime.Ensure(ctx, nil)
 	if err != nil {
-		return deploy.Config{}, nil, err
+		return teardownContext{}, nil, err
 	}
 
 	envName, err := deploy.EnvScope(env)
 	if err != nil {
-		return deploy.Config{}, nil, connect.NewError(connect.CodeInvalidArgument, err)
+		return teardownContext{}, nil, connect.NewError(connect.CodeInvalidArgument, err)
 	}
 
-	cfg := deploy.Config{
-		Region:             awscfg.Region,
-		BackendURL:         naming.StateBackendURL(deployed.StateBucket, slug),
-		Passphrase:         params.Passphrase,
-		PulumiProject:      naming.PulumiProject(slug),
-		Pulumi:             pulumiCmd,
-		AssetBucket:        deployed.AssetBucket,
-		ArtifactBucket:     deployed.ArtifactBucket,
-		Uploader:           s3.NewFromConfig(awscfg),
-		CacheStoreBucket:   params.CacheStore.Bucket,
-		CacheStoreUploader: cacheStoreUploader(params.CacheStore),
-		Stacks:             stacks,
-		Env:                envName,
-		Slug:               slug,
-
-		ISRWriterEndpoint:      params.ISRWriter.Endpoint,
-		ISRWriterBootstrapCred: params.ISRWriter.BootstrapCred,
-
-		Values: teardownValues(awscfg, deployed, bootstrap.ClassPreview),
+	deps := teardownContext{
+		teardown: deploy.Teardown{
+			Pulumi: deploy.PulumiAccess{
+				Region:        awscfg.Region,
+				BackendURL:    naming.StateBackendURL(deployed.StateBucket, slug),
+				Passphrase:    params.Passphrase,
+				PulumiProject: naming.PulumiProject(slug),
+				Command:       pulumiCmd,
+			},
+			Slug:   slug,
+			Env:    envName,
+			Stacks: stacks,
+			Stores: deploy.ObjectStores{
+				Uploader:           s3.NewFromConfig(awscfg),
+				ArtifactBucket:     deployed.ArtifactBucket,
+				AssetBucket:        deployed.AssetBucket,
+				CacheStoreBucket:   params.CacheStore.Bucket,
+				CacheStoreUploader: cacheStoreUploader(params.CacheStore),
+			},
+		},
+		isrWriter: deploy.ISRWriterAccess{
+			Endpoint:      params.ISRWriter.Endpoint,
+			BootstrapCred: params.ISRWriter.BootstrapCred,
+		},
+		values: teardownValues(awscfg, deployed, bootstrap.ClassPreview),
 	}
 	edgeFront, err := s.edge(kind, awscfg.Region)
 	if err != nil {
-		return deploy.Config{}, nil, err
+		return teardownContext{}, nil, err
 	}
 	stack, err := edgeFront.Open(params.StackState)
 	if err != nil {
-		return deploy.Config{}, nil, err
+		return teardownContext{}, nil, err
 	}
-	return cfg, stack, nil
+	return deps, stack, nil
 }
 
 func (s *Server) ListEnvironments(ctx context.Context, req *deploymentsv1.ListEnvironmentsRequest) (*deploymentsv1.ListEnvironmentsResponse, error) {

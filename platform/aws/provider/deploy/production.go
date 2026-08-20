@@ -29,7 +29,6 @@ import (
 	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
 	linksv1 "github.com/ocelhq/ocel/pkg/proto/links/v1"
 	"github.com/ocelhq/ocel/platform/aws/provider/dns"
-	"github.com/ocelhq/ocel/platform/aws/provider/membrane"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
@@ -40,203 +39,6 @@ type appDeployResult struct {
 	Identity Identity
 	Record   edge.DeploymentRecord
 	Err      error
-}
-
-func realize(ctx context.Context, cfg Config, manifest *deploymentsv1.Manifest, progress Progress, log func(string)) (Result, error) {
-	uploadStart := time.Now()
-	finishUploading := func(err error) error {
-		spanForStage(cfg.Tracer, cfg.Stages.Uploading, uploadStart, time.Now(), err)
-		return err
-	}
-
-	if _, programmable := cfg.Edge.(edge.Programmable); programmable && cfg.StoreEndpoint == "" {
-		return Result{}, finishUploading(fmt.Errorf("no deployments-store worker found for this account; re-run `%s` to provision it before deploying", bootstrapCommand(cfg)))
-	}
-
-	for _, app := range manifestApps(manifest) {
-		if err := naming.ValidateDeploymentID(app.GetDeploymentId()); err != nil {
-			return Result{}, finishUploading(fmt.Errorf("app %q: %w; upgrade the CLI so every app is built under one", app.GetName(), err))
-		}
-	}
-	if err := checkStoreSchema(ctx, cfg); err != nil {
-		return Result{}, finishUploading(err)
-	}
-	if err := validateTag(cfg.Tag); err != nil {
-		return Result{}, finishUploading(err)
-	}
-	if err := checkMembraneServices(manifest, membrane.Serves); err != nil {
-		return Result{}, finishUploading(err)
-	}
-	needs, err := checkNeeds(ctx, cfg, manifest)
-	if err != nil {
-		return Result{}, finishUploading(err)
-	}
-	cfg.needs = needs
-	consumed, err := consumeLinks(ctx, cfg, manifest, log)
-	if err != nil {
-		return Result{}, finishUploading(err)
-	}
-	envName, err := EnvName(planEnvironment(cfg))
-	if err != nil {
-		return Result{}, finishUploading(err)
-	}
-	cfg.sessions = newSessionScope(naming.Sanitize(manifest.GetSlug()), envName, cfg.StateTableARN)
-	if err := checkInlinePolicyBudget(manifest, consumed, cfg.sessions); err != nil {
-		return Result{}, finishUploading(err)
-	}
-	if err := checkTagAvailable(ctx, cfg, cfg.Tag); err != nil {
-		return Result{}, finishUploading(err)
-	}
-
-	apps := manifestApps(manifest)
-	appStages := cfg.AppStages
-
-	baked, err := renderAppBundles(cfg, manifest, consumed)
-	if err != nil {
-		return Result{}, finishUploading(err)
-	}
-
-	if err := checkISRWriterAgrees(cfg); err != nil {
-		return Result{}, finishUploading(err)
-	}
-	builds, err := resolveAppBuilds(cfg, manifest, baked)
-	if err != nil {
-		return Result{}, finishUploading(err)
-	}
-
-	artifacts, err := uploadFunctionArtifacts(ctx, cfg, manifest, builds, progress)
-	if err != nil {
-		return Result{}, finishUploading(err)
-	}
-
-	if len(manifest.GetFunctions()) > 0 {
-		if cfg.layer, err = placeMembraneLayer(ctx, cfg); err != nil {
-			return Result{}, finishUploading(err)
-		}
-	}
-	if completesUploads(manifest) {
-		if cfg.completer, err = placeUploadCompleter(ctx, cfg); err != nil {
-			return Result{}, finishUploading(err)
-		}
-	}
-
-	progress.report(deploymentsv1.Phase_PHASE_UPLOADING, "Uploading prerender assets", 0, 0)
-	if err := uploadPrerenderAssets(ctx, cfg, builds); err != nil {
-		return Result{}, finishUploading(err)
-	}
-	progress.report(deploymentsv1.Phase_PHASE_UPLOADING, "Uploading static assets", 0, 0)
-	if err := uploadStaticAssets(ctx, cfg, manifest, builds); err != nil {
-		return Result{}, finishUploading(err)
-	}
-	progress.report(deploymentsv1.Phase_PHASE_UPLOADING, "Uploading edge bundles", 0, 0)
-	if err := uploadEdgeBundles(ctx, cfg, manifest, builds); err != nil {
-		return Result{}, finishUploading(err)
-	}
-	finishUploading(nil)
-
-	provisionStart := time.Now()
-	finishProvisioning := func(err error) error {
-		spanForStage(cfg.Tracer, cfg.Stages.Provisioning, provisionStart, time.Now(), err)
-		return err
-	}
-
-	identities := builds.identities
-	promotionID, err := newRandomID()
-	if err != nil {
-		return Result{}, finishProvisioning(err)
-	}
-	plan, err := BuildPlan(manifest, planEnvironment(cfg), promotionID, identities)
-	if err != nil {
-		return Result{}, finishProvisioning(err)
-	}
-
-	if cfg.transformed, err = resolveTransforms(ctx, cfg, manifest); err != nil {
-		return Result{}, finishProvisioning(err)
-	}
-
-	index, err := stackIndex(cfg.Stacks)
-	if err != nil {
-		return Result{}, finishProvisioning(err)
-	}
-	if err := index.AddProject(ctx, naming.Sanitize(manifest.GetSlug()), cfg.RequiredFeatures); err != nil {
-		return Result{}, finishProvisioning(err)
-	}
-
-	progress.report(deploymentsv1.Phase_PHASE_PROVISIONING, "Reconciling the edge stack", 0, 0)
-	specs, err := stackSpecs(cfg, manifest, stackVersion, log)
-	if err != nil {
-		return Result{}, finishProvisioning(err)
-	}
-	edgeStack, err := reconcileStack(ctx, cfg.Edge, specs, MarkGlobalPreview(cfg.StackState, cfg, manifest))
-	if err != nil {
-		return Result{StackState: reconciledState(edgeStack, cfg)}, finishProvisioning(err)
-	}
-	state := MarkGlobalPreview(edgeStack.State(), cfg, manifest)
-	state, err = settleStackRecords(ctx, cfg, specs, state, log)
-	if err != nil {
-		return Result{StackState: state}, finishProvisioning(err)
-	}
-
-	var links []*linksv1.Link
-	if !plan.InfraStack.IsZero() {
-		progress.report(deploymentsv1.Phase_PHASE_PROVISIONING, "Provisioning infra stack", 0, 0)
-		links, err = runInfraStack(ctx, cfg, manifest, plan, log)
-		if err != nil {
-			return Result{StackState: state}, finishProvisioning(err)
-		}
-	}
-	if err := checkLinkGrants(links); err != nil {
-		return Result{StackState: state}, finishProvisioning(err)
-	}
-	if err := publishLinkRecords(ctx, cfg, manifest, links); err != nil {
-		return Result{StackState: state}, finishProvisioning(err)
-	}
-	reportGrantVersions(consumed, log)
-	granting := append(slices.Clone(links), consumedLinks(consumed)...)
-
-	progress.report(deploymentsv1.Phase_PHASE_PROVISIONING, "Provisioning app-deploy stacks", 0, 0)
-	results := make([]appDeployResult, len(apps))
-	appOutputs := make([][]*deploymentsv1.FunctionOutput, len(apps))
-	appFunctionNames := make([]map[string]string, len(apps))
-	runAppStacks(apps, func(i int, app *deploymentsv1.ManifestApp) {
-		id := identities[app.GetName()]
-		outs, names, err := runAppStack(ctx, cfg, manifest, plan, app, id, artifacts, baked[app.GetName()], builds, granting, appStages[app.GetName()], log)
-		appOutputs[i] = outs
-		appFunctionNames[i] = names
-		record, recErr := buildDeploymentRecord(cfg, manifest, app, id, outs, builds, names)
-		if err == nil {
-			err = recErr
-		}
-		results[i] = appDeployResult{App: app.GetName(), Identity: id, Record: record, Err: err}
-	})
-
-	warmed := warmDeployedFunctions(ctx, cfg, manifest, appFunctionNames, builds, log)
-
-	embedBytecodeCaches(ctx, cfg, manifest, artifacts, warmed, builds, log)
-	finishProvisioning(nil)
-
-	finalizeStart := time.Now()
-	progress.report(deploymentsv1.Phase_PHASE_FINALIZING, "Staging and promoting", 0, 0)
-	promoted, err := stageAndPromote(ctx, cfg, edgeStack, promotionID, cfg.Tag, promotePointer(cfg), time.Now().Unix(), results)
-	if err != nil {
-		spanForStage(cfg.Tracer, cfg.Stages.Finalizing, finalizeStart, time.Now(), err)
-		return Result{StackState: state}, err
-	}
-	spanForStage(cfg.Tracer, cfg.Stages.Finalizing, finalizeStart, time.Now(), nil)
-
-	var functions []*deploymentsv1.FunctionOutput
-	for _, outs := range appOutputs {
-		functions = append(functions, outs...)
-	}
-	functions = append(functions, workerURLOutputs(cfg, manifest)...)
-	return Result{
-		Links:       links,
-		Functions:   functions,
-		AppURLs:     appURLs(manifest, functions),
-		PromotionID: promotionID,
-		Flip:        promoted.Flip,
-		StackState:  state,
-	}, nil
 }
 
 func openStoreStack(cfg Config) (edge.EdgeStack, error) {
@@ -399,12 +201,12 @@ func pointableRecords(target edge.DNSTarget, state edge.StackState, hosts []stri
 	return records, nil
 }
 
-func releaseRecords(ctx context.Context, cfg Config, state edge.StackState, say func(string)) error {
+func releaseRecords(ctx context.Context, writer edge.DNSWriter, state edge.StackState, say func(string)) error {
 	records, err := edge.WrittenRecords(state)
 	if err != nil {
 		return err
 	}
-	return dns.Release(ctx, cfg.DNS, records, say)
+	return dns.Release(ctx, writer, records, say)
 }
 
 func recordsDropped(prior, kept []edge.Record) []edge.Record {
@@ -490,12 +292,22 @@ func finalizeDeploy(ctx context.Context, cfg Config, specs []edge.StackSpec, pri
 	return stack.State(), nil
 }
 
-func sharedWorker(cfg Config) (edge.Worker, error) {
-	generic, err := genericWorkerBundle(cfg)
+type WorkerFacts struct {
+	Region             string
+	StateTable         string
+	AssetBucket        string
+	ImageOptimizerURL  string
+	RevalidateQueueURL string
+	EdgeAccessKeyID    string
+	EdgeSecretKey      string
+}
+
+func sharedWorker(e edge.Edge, f WorkerFacts) (edge.Worker, error) {
+	generic, err := genericWorkerBundle(e)
 	if err != nil {
 		return edge.Worker{}, err
 	}
-	return withOriginBodyBudget(withRevalidateQueue(withImageOptimizer(withCacheCoordinates(withEdgeSigningCreds(generic, cfg), cfg), cfg), cfg)), nil
+	return withOriginBodyBudget(withRevalidateQueue(withImageOptimizer(withCacheCoordinates(withEdgeSigningCreds(generic, f), f), f), f)), nil
 }
 
 func stackSpecs(cfg Config, manifest *deploymentsv1.Manifest, version string, warn func(string)) ([]edge.StackSpec, error) {
@@ -503,7 +315,7 @@ func stackSpecs(cfg Config, manifest *deploymentsv1.Manifest, version string, wa
 	var generic edge.Worker
 	if programmable {
 		var err error
-		if generic, err = sharedWorker(cfg); err != nil {
+		if generic, err = sharedWorker(cfg.Edge, cfg.workerFacts()); err != nil {
 			return nil, err
 		}
 	}
@@ -759,25 +571,25 @@ func withVar(worker edge.Worker, name, value string) edge.Worker {
 	return worker
 }
 
-func withEdgeSigningCreds(worker edge.Worker, cfg Config) edge.Worker {
-	if cfg.EdgeAccessKeyID == "" || cfg.EdgeSecretKey == "" {
+func withEdgeSigningCreds(worker edge.Worker, f WorkerFacts) edge.Worker {
+	if f.EdgeAccessKeyID == "" || f.EdgeSecretKey == "" {
 		return worker
 	}
-	worker = withVar(worker, edge.EdgeAccessKeyIDVar, cfg.EdgeAccessKeyID)
+	worker = withVar(worker, edge.EdgeAccessKeyIDVar, f.EdgeAccessKeyID)
 	secrets := make(map[string]string, len(worker.Secrets)+1)
 	for k, v := range worker.Secrets {
 		secrets[k] = v
 	}
-	secrets[edge.EdgeSecretKeyVar] = cfg.EdgeSecretKey
+	secrets[edge.EdgeSecretKeyVar] = f.EdgeSecretKey
 	worker.Secrets = secrets
 	return worker
 }
 
-func withCacheCoordinates(worker edge.Worker, cfg Config) edge.Worker {
+func withCacheCoordinates(worker edge.Worker, f WorkerFacts) edge.Worker {
 	for name, value := range map[string]string{
-		edge.AWSRegionVar:   cfg.Region,
-		edge.StateTableVar:  cfg.StateTable,
-		edge.AssetBucketVar: cfg.AssetBucket,
+		edge.AWSRegionVar:   f.Region,
+		edge.StateTableVar:  f.StateTable,
+		edge.AssetBucketVar: f.AssetBucket,
 	} {
 		if value != "" {
 			worker = withVar(worker, name, value)
@@ -786,11 +598,11 @@ func withCacheCoordinates(worker edge.Worker, cfg Config) edge.Worker {
 	return worker
 }
 
-func withImageOptimizer(worker edge.Worker, cfg Config) edge.Worker {
-	if cfg.ImageOptimizerURL == "" {
+func withImageOptimizer(worker edge.Worker, f WorkerFacts) edge.Worker {
+	if f.ImageOptimizerURL == "" {
 		return worker
 	}
-	return withVar(worker, edge.ImageOptimizerURLVar, cfg.ImageOptimizerURL)
+	return withVar(worker, edge.ImageOptimizerURLVar, f.ImageOptimizerURL)
 }
 
 func withOriginBodyBudget(worker edge.Worker) edge.Worker {
@@ -798,19 +610,19 @@ func withOriginBodyBudget(worker edge.Worker) edge.Worker {
 	return withVar(worker, edge.OriginBodyEncodingVar, edge.OriginBodyEncodingBase64)
 }
 
-func withRevalidateQueue(worker edge.Worker, cfg Config) edge.Worker {
-	if cfg.RevalidateQueueURL == "" {
+func withRevalidateQueue(worker edge.Worker, f WorkerFacts) edge.Worker {
+	if f.RevalidateQueueURL == "" {
 		return worker
 	}
-	return withVar(worker, edge.RevalidateQueueURLVar, cfg.RevalidateQueueURL)
+	return withVar(worker, edge.RevalidateQueueURLVar, f.RevalidateQueueURL)
 }
 
-func genericWorkerBundle(cfg Config) (edge.Worker, error) {
+func genericWorkerBundle(e edge.Edge) (edge.Worker, error) {
 	bundles, err := edge.LoadBundleManifest()
 	if err != nil {
 		return edge.Worker{}, err
 	}
-	path, err := bundles.Path(cfg.Edge.Kind())
+	path, err := bundles.Path(e.Kind())
 	if err != nil {
 		return edge.Worker{}, err
 	}
@@ -852,7 +664,7 @@ func readRoutingManifest(cfg Config, app string) (any, bool, error) {
 	return routing, true, nil
 }
 
-func buildDeploymentRecord(cfg Config, manifest *deploymentsv1.Manifest, app *deploymentsv1.ManifestApp, id Identity, outs []*deploymentsv1.FunctionOutput, builds appBuilds, functionNames map[string]string) (edge.DeploymentRecord, error) {
+func buildDeploymentRecord(cfg Config, needs needRecords, manifest *deploymentsv1.Manifest, app *deploymentsv1.ManifestApp, id Identity, outs []*deploymentsv1.FunctionOutput, builds appBuilds, functionNames map[string]string) (edge.DeploymentRecord, error) {
 	name := app.GetName()
 	urlByLogical := functionURLsByLogicalName(outs)
 	fingerprint, variables := recordedAudit(cfg, app)
@@ -880,7 +692,7 @@ func buildDeploymentRecord(cfg Config, manifest *deploymentsv1.Manifest, app *de
 	}
 	record.Entry = desc.Entry
 	record.EntryFunction = functionNames[entryLogicalName(manifest, name, desc.Entry)]
-	record.Needs, record.SupportInEffect, record.Waived = cfg.needs.forApp(name)
+	record.Needs, record.SupportInEffect, record.Waived = needs.forApp(name)
 	if routed {
 		record.RoutingManifest = routing
 		record.AssetPrefix = appAssetPrefix(builds.coords[name])
@@ -949,7 +761,7 @@ func workerAppURL(domains []string) string {
 	return "https://" + domains[0]
 }
 
-func runInfraStack(ctx context.Context, cfg Config, manifest *deploymentsv1.Manifest, plan Plan, log func(string)) ([]*linksv1.Link, error) {
+func runInfraStack(ctx context.Context, cfg Config, in stackInputs, manifest *deploymentsv1.Manifest, plan Plan, log func(string)) ([]*linksv1.Link, error) {
 	program := func(pctx *pulumi.Context) error {
 		vpc, err := ec2.LookupVpc(pctx, &ec2.LookupVpcArgs{Default: pulumi.BoolRef(true)})
 		if err != nil {
@@ -969,9 +781,9 @@ func runInfraStack(ctx context.Context, cfg Config, manifest *deploymentsv1.Mani
 			var err error
 			switch {
 			case r.GetPostgres() != nil:
-				err = registerPostgres(pctx, project, env, r.GetLogicalName(), cfg.transformed.forPostgres(r.GetLogicalName(), r.GetPostgres()), vpc.Id, vpc.CidrBlock, subnets.Ids)
+				err = registerPostgres(pctx, project, env, r.GetLogicalName(), in.transformed.forPostgres(r.GetLogicalName(), r.GetPostgres()), vpc.Id, vpc.CidrBlock, subnets.Ids)
 			case r.GetBucket() != nil:
-				err = registerBucket(pctx, project, env, r.GetLogicalName(), cfg.transformed.forBucket(r.GetLogicalName(), r.GetBucket()), cfg.StateTable, cfg.sessions, cfg.completer)
+				err = registerBucket(pctx, project, env, r.GetLogicalName(), in.transformed.forBucket(r.GetLogicalName(), r.GetBucket()), cfg.StateTable, in.sessions, in.completer)
 			default:
 				continue
 			}
@@ -982,7 +794,7 @@ func runInfraStack(ctx context.Context, cfg Config, manifest *deploymentsv1.Mani
 		return nil
 	}
 
-	stack, err := prepareStack(ctx, cfg, plan.InfraStack, infraStackTags(cfg, plan.InfraStack), program)
+	stack, err := prepareStack(ctx, cfg, in.realized, plan.InfraStack, infraStackTags(cfg, plan.InfraStack), program)
 	if err != nil {
 		return nil, fmt.Errorf("provision infra stack %s: %w", plan.InfraStack, err)
 	}
@@ -994,7 +806,7 @@ func runInfraStack(ctx context.Context, cfg Config, manifest *deploymentsv1.Mani
 	if err != nil {
 		return nil, fmt.Errorf("provision infra stack %s: %w", plan.InfraStack, err)
 	}
-	return collectLinks(ctx, cfg.Secrets, cfg.sessions, manifest, res.Outputs)
+	return collectLinks(ctx, cfg.Secrets, in.sessions, manifest, res.Outputs)
 }
 
 func refuseHandover(ctx context.Context, stack auto.Stack, manifest *deploymentsv1.Manifest, name naming.StackName) error {
@@ -1012,7 +824,7 @@ func refuseHandover(ctx context.Context, stack auto.Stack, manifest *deployments
 	return handedOver(manifest, provisioned, name.String())
 }
 
-func runAppStack(ctx context.Context, cfg Config, manifest *deploymentsv1.Manifest, plan Plan, app *deploymentsv1.ManifestApp, id Identity, artifacts map[string]artifactRef, baked appBundle, builds appBuilds, links []*linksv1.Link, stage Stage, log func(string)) (outs []*deploymentsv1.FunctionOutput, names map[string]string, err error) {
+func runAppStack(ctx context.Context, cfg Config, in stackInputs, manifest *deploymentsv1.Manifest, plan Plan, app *deploymentsv1.ManifestApp, id Identity, baked appBundle, builds appBuilds, links []*linksv1.Link, stage Stage, log func(string)) (outs []*deploymentsv1.FunctionOutput, names map[string]string, err error) {
 	start := time.Now()
 	defer func() { spanForStage(cfg.Tracer, stage, start, time.Now(), err) }()
 
@@ -1028,7 +840,7 @@ func runAppStack(ctx context.Context, cfg Config, manifest *deploymentsv1.Manife
 		return nil, nil, err
 	}
 
-	env := appEnv(manifest, app, baked, cfg)
+	env := appEnv(manifest, app, baked, cfg, in.sessions)
 	router := builds.routers[name]
 	guard := builds.guards[name]
 
@@ -1040,7 +852,7 @@ func runAppStack(ctx context.Context, cfg Config, manifest *deploymentsv1.Manife
 		if guard.hosts(fn) {
 			declared = guard.entryEnv(declared)
 		}
-		if err = checkFunctionEnvBudget(fn.GetLogicalName(), functionEnv(declared, cfg.transformed.forFunction(fn), caches[name], bytecode[name])); err != nil {
+		if err = checkFunctionEnvBudget(fn.GetLogicalName(), functionEnv(declared, in.transformed.forFunction(fn), caches[name], bytecode[name])); err != nil {
 			return nil, nil, err
 		}
 	}
@@ -1057,11 +869,11 @@ func runAppStack(ctx context.Context, cfg Config, manifest *deploymentsv1.Manife
 
 	var roleTags map[string]string
 	if len(functions) > 0 {
-		roleTags = cfg.transformed.forFunction(functions[0]).Tags
+		roleTags = in.transformed.forFunction(functions[0]).Tags
 	}
 	vpcAccess := false
 	for _, fn := range functions {
-		vpcAccess = vpcAccess || cfg.transformed.forFunction(fn).VPC.placed()
+		vpcAccess = vpcAccess || in.transformed.forFunction(fn).VPC.placed()
 	}
 
 	program := func(pctx *pulumi.Context) error {
@@ -1073,8 +885,8 @@ func runAppStack(ctx context.Context, cfg Config, manifest *deploymentsv1.Manife
 			Project:   project,
 			Stack:     stack,
 			Functions: functions,
-			Args:      cfg.transformed.forFunction,
-			Artifacts: artifacts,
+			Args:      in.transformed.forFunction,
+			Artifacts: in.artifacts,
 			Env:       env,
 			ISR:       caches[name],
 			Bytecode:  bytecode[name],
@@ -1082,11 +894,11 @@ func runAppStack(ctx context.Context, cfg Config, manifest *deploymentsv1.Manife
 			Guard:     guard,
 			RoleArn:   role.Arn,
 			RoleName:  role.Name,
-			Layer:     cfg.layer,
+			Layer:     in.layer,
 		}.register(pctx)
 	}
 
-	res, upErr := upStack(ctx, cfg, stack, stackTags(cfg, stack, plan.Promotion.PromotionID, id.DeploymentID(), builds.ids[name]), program, log, stage.ID)
+	res, upErr := upStack(ctx, cfg, in.realized, stack, stackTags(cfg, stack, plan.Promotion.PromotionID, id.DeploymentID(), builds.ids[name]), program, log, stage.ID)
 	if upErr != nil {
 		err = fmt.Errorf("provision app-deploy stack %s: %w", stack, upErr)
 		return nil, nil, err
@@ -1196,20 +1008,17 @@ func awaitEngineTrace(result <-chan EngineTrace, grace time.Duration) EngineTrac
 	}
 }
 
-func upStack(ctx context.Context, cfg Config, name naming.StackName, tags map[string]string, program pulumi.RunFunc, log func(string), parentStage StageID) (auto.UpResult, error) {
-	stack, err := prepareStack(ctx, cfg, name, tags, program)
+func upStack(ctx context.Context, cfg Config, realized *Realized, name naming.StackName, tags map[string]string, program pulumi.RunFunc, log func(string), parentStage StageID) (auto.UpResult, error) {
+	stack, err := prepareStack(ctx, cfg, realized, name, tags, program)
 	if err != nil {
 		return auto.UpResult{}, err
 	}
 	return runStack(ctx, cfg, stack, log, parentStage)
 }
 
-func prepareStack(ctx context.Context, cfg Config, name naming.StackName, tags map[string]string, program pulumi.RunFunc) (auto.Stack, error) {
-	stack, err := auto.UpsertStackInlineSource(ctx, name.String(), cfg.PulumiProject, program,
-		auto.Pulumi(cfg.Pulumi),
-		auto.SecretsProvider("passphrase"),
-		auto.EnvVars(pulumiEnv(cfg.Region, cfg.BackendURL, cfg.Passphrase)),
-	)
+func prepareStack(ctx context.Context, cfg Config, realized *Realized, name naming.StackName, tags map[string]string, program pulumi.RunFunc) (auto.Stack, error) {
+	access := cfg.pulumiAccess()
+	stack, err := auto.UpsertStackInlineSource(ctx, name.String(), access.PulumiProject, program, access.workspace()...)
 	if err != nil {
 		return auto.Stack{}, fmt.Errorf("prepare stack %s: %w", name, err)
 	}
@@ -1222,7 +1031,7 @@ func prepareStack(ctx context.Context, cfg Config, name naming.StackName, tags m
 	if err != nil {
 		return auto.Stack{}, err
 	}
-	if err := cfg.realized.realize(ctx, index, naming.Sanitize(cfg.Slug), name); err != nil {
+	if err := realized.realize(ctx, index, naming.Sanitize(cfg.Slug), name); err != nil {
 		return auto.Stack{}, err
 	}
 

@@ -306,17 +306,17 @@ func TestAppEnvNamesTheEdgeKind(t *testing.T) {
 
 	manifest := &deploymentsv1.Manifest{Slug: "shop", Apps: []*deploymentsv1.ManifestApp{routedApp()}}
 
-	env := appEnv(manifest, routedApp(), appBundle{}, routedConfig(t, cloudfront.Kind))
+	env := appEnv(manifest, routedApp(), appBundle{}, routedConfig(t, cloudfront.Kind), sessionScope{})
 	if env[edgeKindEnv] != string(cloudfront.Kind) {
 		t.Errorf("%s = %q, want the kind of edge the deploy chose", edgeKindEnv, env[edgeKindEnv])
 	}
 
-	behind := appEnv(manifest, routedApp(), appBundle{}, routedConfig(t, cloudflare.Kind))
+	behind := appEnv(manifest, routedApp(), appBundle{}, routedConfig(t, cloudflare.Kind), sessionScope{})
 	if behind[edgeKindEnv] != string(cloudflare.Kind) {
 		t.Errorf("%s = %q, want the Cloudflare kind named too", edgeKindEnv, behind[edgeKindEnv])
 	}
 
-	none := appEnv(manifest, routedApp(), appBundle{}, Config{})
+	none := appEnv(manifest, routedApp(), appBundle{}, Config{}, sessionScope{})
 	if _, named := none[edgeKindEnv]; named {
 		t.Errorf("%s = %q, want no kind where the deploy binds no edge", edgeKindEnv, none[edgeKindEnv])
 	}
@@ -465,7 +465,7 @@ func TestDeploymentRecordNamesTheEntryFunctionTheDeployCreated(t *testing.T) {
 		"fn--web--admin": functionCoordinate("shop", stack, "fn--web--admin").PhysicalName(maxLambdaBaseNameLen),
 	}
 
-	record, err := buildDeploymentRecord(cfg, manifest, manifest.GetApps()[0], builds.identities["web"], nil, builds, names)
+	record, err := buildDeploymentRecord(cfg, nil, manifest, manifest.GetApps()[0], builds.identities["web"], nil, builds, names)
 	if err != nil {
 		t.Fatalf("buildDeploymentRecord: %v", err)
 	}

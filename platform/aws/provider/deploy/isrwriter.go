@@ -23,8 +23,8 @@ func isrWriteSecretHash(secret string) string {
 	return hex.EncodeToString(sum[:])
 }
 
-func checkISRWriterAgrees(cfg Config) error {
-	adopted, writer := isrEntriesAdopted(cfg), isrWriterConfigured(cfg)
+func checkISRWriterAgrees(stores ObjectStores, w ISRWriterAccess) error {
+	adopted, writer := isrEntriesAdopted(stores), isrWriterConfigured(w)
 	switch {
 	case adopted && !writer:
 		return fmt.Errorf("this substrate adopted an edge cache store but no ISR writer to write into it, so this build could not revalidate anything it cached; re-run `ocel bootstrap`")
@@ -34,38 +34,38 @@ func checkISRWriterAgrees(cfg Config) error {
 	return nil
 }
 
-func seedISRWriters(ctx context.Context, cfg Config, caches map[string]*isrConfig) error {
-	if !isrWriterConfigured(cfg) {
+func seedISRWriters(ctx context.Context, w ISRWriterAccess, caches map[string]*isrConfig) error {
+	if !isrWriterConfigured(w) {
 		return nil
 	}
 	for app, cache := range caches {
-		secret := isrWriteSecret(cfg.ISRWriterSeed, cache.Prefix)
-		if err := initializeISRWriter(ctx, cfg, cache.Prefix, secret); err != nil {
+		secret := isrWriteSecret(w.Seed, cache.Prefix)
+		if err := initializeISRWriter(ctx, w, cache.Prefix, secret); err != nil {
 			return fmt.Errorf("seed the isr writer for %s: %w", app, err)
 		}
 	}
 	return nil
 }
 
-func initializeISRWriter(ctx context.Context, cfg Config, isrPrefix, secret string) error {
+func initializeISRWriter(ctx context.Context, w ISRWriterAccess, isrPrefix, secret string) error {
 	body := map[string]string{"secretHash": isrWriteSecretHash(secret)}
-	return isrWriterRequest(ctx, cfg, isrPrefix, "initialize", body)
+	return isrWriterRequest(ctx, w, isrPrefix, "initialize", body)
 }
 
-func retireISRWriter(ctx context.Context, cfg Config, isrPrefix string) error {
-	return isrWriterRequest(ctx, cfg, isrPrefix, "destroy", nil)
+func retireISRWriter(ctx context.Context, w ISRWriterAccess, isrPrefix string) error {
+	return isrWriterRequest(ctx, w, isrPrefix, "destroy", nil)
 }
 
-func isrWriterReachable(cfg Config) bool {
-	return cfg.ISRWriterEndpoint != "" && cfg.ISRWriterBootstrapCred != ""
+func isrWriterReachable(w ISRWriterAccess) bool {
+	return w.Endpoint != "" && w.BootstrapCred != ""
 }
 
-func isrWriterConfigured(cfg Config) bool {
-	return isrWriterReachable(cfg) && cfg.ISRWriterSeed != ""
+func isrWriterConfigured(w ISRWriterAccess) bool {
+	return isrWriterReachable(w) && w.Seed != ""
 }
 
-func isrWriterRequest(ctx context.Context, cfg Config, isrPrefix, op string, body any) error {
-	if !isrWriterReachable(cfg) {
+func isrWriterRequest(ctx context.Context, w ISRWriterAccess, isrPrefix, op string, body any) error {
+	if !isrWriterReachable(w) {
 		return nil
 	}
 	var reader io.Reader
@@ -77,12 +77,12 @@ func isrWriterRequest(ctx context.Context, cfg Config, isrPrefix, op string, bod
 		reader = bytes.NewReader(encoded)
 	}
 
-	url := cfg.ISRWriterEndpoint + "/" + isrPrefix + "/" + op
+	url := w.Endpoint + "/" + isrPrefix + "/" + op
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, reader)
 	if err != nil {
 		return fmt.Errorf("build isr writer %s request: %w", op, err)
 	}
-	req.Header.Set("Authorization", "Bearer "+cfg.ISRWriterBootstrapCred)
+	req.Header.Set("Authorization", "Bearer "+w.BootstrapCred)
 	if body != nil {
 		req.Header.Set("Content-Type", "application/json")
 	}

@@ -90,7 +90,7 @@ func TestPlanProjectTeardown(t *testing.T) {
 			"othr": {naming.InfraStack("prod")},
 		}}
 
-		plan, err := PlanProjectTeardown(context.Background(), Config{Stacks: index}, "shop")
+		plan, err := PlanProjectTeardown(context.Background(), index, "shop")
 		if err != nil {
 			t.Fatalf("PlanProjectTeardown: %v", err)
 		}
@@ -109,7 +109,7 @@ func TestPlanProjectTeardown(t *testing.T) {
 	t.Run("without an index the plan is refused", func(t *testing.T) {
 		t.Parallel()
 
-		if _, err := PlanProjectTeardown(context.Background(), Config{}, "shop"); !errors.Is(err, errNoStackIndex) {
+		if _, err := PlanProjectTeardown(context.Background(), nil, "shop"); !errors.Is(err, errNoStackIndex) {
 			t.Fatalf("PlanProjectTeardown err = %v, want %v", err, errNoStackIndex)
 		}
 	})
@@ -127,7 +127,7 @@ func TestPlanPreviewProjectTeardown(t *testing.T) {
 		},
 	}}
 
-	plan, err := PlanPreviewProjectTeardown(context.Background(), Config{Stacks: index}, "shop")
+	plan, err := PlanPreviewProjectTeardown(context.Background(), index, "shop")
 	if err != nil {
 		t.Fatalf("PlanPreviewProjectTeardown: %v", err)
 	}
