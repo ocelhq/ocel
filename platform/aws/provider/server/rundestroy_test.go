@@ -23,7 +23,7 @@ func TestRunDestroyProjectDeclaresTheStagePlanBeforeAnyWork(t *testing.T) {
 
 	s := &Server{}
 	tracer := &fakeTracer{}
-	req := &deploymentsv1.DestroyProjectRequest{Slug: "shop"}
+	req := &deploymentsv1.RemoveProjectRequest{Slug: "shop"}
 
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
@@ -77,7 +77,7 @@ func TestRunDestroyPreviewDeclaresTheStagePlanBeforeAnyWork(t *testing.T) {
 		t.Parallel()
 		s := &Server{}
 		tracer := &fakeTracer{}
-		req := &deploymentsv1.DestroyPreviewRequest{
+		req := &deploymentsv1.RemovePreviewRequest{
 			Slug:        "shop",
 			Environment: &deploymentsv1.Environment{Class: deploymentsv1.Environment_CLASS_PREVIEW, Identity: "pr-1"},
 		}
@@ -104,7 +104,7 @@ func TestRunDestroyPreviewDeclaresTheStagePlanBeforeAnyWork(t *testing.T) {
 		t.Parallel()
 		s := &Server{}
 		tracer := &fakeTracer{}
-		req := &deploymentsv1.DestroyPreviewRequest{
+		req := &deploymentsv1.RemovePreviewRequest{
 			Slug: "shop",
 			Environment: &deploymentsv1.Environment{
 				Class:     deploymentsv1.Environment_CLASS_PREVIEW,
@@ -132,7 +132,7 @@ func TestRunPruneDeclaresTheStagePlanBeforeAnyWork(t *testing.T) {
 
 	s := &Server{}
 	tracer := &fakeTracer{}
-	req := &deploymentsv1.PruneRequest{Slug: "shop"}
+	req := &deploymentsv1.RemoveStalePromotionsRequest{Slug: "shop"}
 
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()

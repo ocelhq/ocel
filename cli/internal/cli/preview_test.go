@@ -694,7 +694,7 @@ func TestRequirePreviewDomain(t *testing.T) {
 
 	declared := &projectconfig.Config{Domains: map[string][]string{"preview": {"*.preview.acme.com"}}}
 	bare := &projectconfig.Config{}
-	global := &deploymentsv1.GlobalPreviewDomain{
+	global := &deploymentsv1.PreviewWildcard{
 		BaseDomain:     "previews.ocel.dev",
 		GrammarMin:     1,
 		GrammarMax:     1,
@@ -770,7 +770,7 @@ func TestRequirePreviewDomain(t *testing.T) {
 			Slug: "acme",
 			Apps: []projectconfig.App{{Name: "web", Domains: map[string][]string{"preview": {"*.preview.acme.com"}}}},
 		}
-		broken := &deploymentsv1.GlobalPreviewDomain{BaseDomain: "previews.ocel.dev", GrammarMin: 1, GrammarMax: 1}
+		broken := &deploymentsv1.PreviewWildcard{BaseDomain: "previews.ocel.dev", GrammarMin: 1, GrammarMax: 1}
 		var out bytes.Buffer
 		if err := requirePreviewDomain(cfg, broken, nil, "pr-1", &out); err != nil {
 			t.Fatalf("requirePreviewDomain err = %v, want nil", err)
@@ -823,7 +823,7 @@ func TestRequirePreviewDomain(t *testing.T) {
 	t.Run("an edge account mismatch refuses with the account to point at", func(t *testing.T) {
 		t.Parallel()
 
-		elsewhere := &deploymentsv1.GlobalPreviewDomain{BaseDomain: "previews.ocel.dev", EdgeScope: "cf-owner", GrammarMin: 1, GrammarMax: 1, RouteInstalled: true}
+		elsewhere := &deploymentsv1.PreviewWildcard{BaseDomain: "previews.ocel.dev", EdgeScope: "cf-owner", GrammarMin: 1, GrammarMax: 1, RouteInstalled: true}
 		var out bytes.Buffer
 		err := requirePreviewDomain(bare, elsewhere, &deploymentsv1.Identity{EdgeScope: "cf-other"}, "pr-1", &out)
 		if err == nil {
@@ -839,7 +839,7 @@ func TestRequirePreviewDomain(t *testing.T) {
 	t.Run("a missing wildcard route refuses, pointing at ocel domain use", func(t *testing.T) {
 		t.Parallel()
 
-		uninstalled := &deploymentsv1.GlobalPreviewDomain{BaseDomain: "previews.ocel.dev", GrammarMin: 1, GrammarMax: 1}
+		uninstalled := &deploymentsv1.PreviewWildcard{BaseDomain: "previews.ocel.dev", GrammarMin: 1, GrammarMax: 1}
 		var out bytes.Buffer
 		err := requirePreviewDomain(bare, uninstalled, nil, "pr-1", &out)
 		if err == nil {
@@ -855,7 +855,7 @@ func TestRequirePreviewDomain(t *testing.T) {
 	t.Run("a grammar outside the installed worker's range refuses", func(t *testing.T) {
 		t.Parallel()
 
-		for _, g := range []*deploymentsv1.GlobalPreviewDomain{
+		for _, g := range []*deploymentsv1.PreviewWildcard{
 			{BaseDomain: "previews.ocel.dev", GrammarMin: 2, GrammarMax: 3, RouteInstalled: true},
 			{BaseDomain: "previews.ocel.dev", GrammarMin: 0, GrammarMax: 0, RouteInstalled: true},
 		} {

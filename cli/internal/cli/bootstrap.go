@@ -247,7 +247,7 @@ func runBootstrapDestroy(ctx context.Context, d deps, cfg *projectconfig.Config,
 		}
 
 		spinner := deployui.StartSpinner(stdout, "Enumerating what would be removed")
-		plan, err := client.PlanTeardown(ctx, &deploymentsv1.PlanTeardownRequest{
+		plan, err := client.PlanRemoveSubstrate(ctx, &deploymentsv1.PlanRemoveSubstrateRequest{
 			Class: class,
 			Edge:  edgeSelection(cfg),
 		})
@@ -267,11 +267,11 @@ func runBootstrapDestroy(ctx context.Context, d deps, cfg *projectconfig.Config,
 			}
 		}
 
-		req := &deploymentsv1.TeardownRequest{
+		req := &deploymentsv1.RemoveSubstrateRequest{
 			Class: class,
 			Edge:  edgeSelection(cfg),
 		}
-		if err := runner.Teardown(ctx, req, ui.Event); err != nil {
+		if err := runner.RemoveSubstrate(ctx, req, ui.Event); err != nil {
 			return err
 		}
 		ui.Finish(fmt.Sprintf("Removed the %s substrate", substrate))
@@ -290,16 +290,16 @@ func bootstrapDestroyCommand(preview bool) string {
 	return "ocel bootstrap --destroy"
 }
 
-func printTeardownPlan(out io.Writer, substrate string, plan *deploymentsv1.PlanTeardownResponse) {
+func printTeardownPlan(out io.Writer, substrate string, plan *deploymentsv1.PlanRemoveSubstrateResponse) {
 	header := fmt.Sprintf("This will permanently remove the %s substrate of this account", substrate)
 	if kind := plan.GetEdgeKind(); kind != "" {
 		header += fmt.Sprintf(", fronted by the %s edge", kind)
 	}
 	fmt.Fprintf(out, "%s:\n", header)
 
-	var kept []*deploymentsv1.TeardownItem
+	var kept []*deploymentsv1.RemovalItem
 	for _, item := range plan.GetItems() {
-		if item.GetAction() == deploymentsv1.TeardownItem_ACTION_KEEP {
+		if item.GetAction() == deploymentsv1.RemovalItem_ACTION_KEEP {
 			kept = append(kept, item)
 			continue
 		}

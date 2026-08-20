@@ -80,7 +80,7 @@ func wholeServer(clients domainClients, front edge.Edge) *Server {
 	return s
 }
 
-func TestAddDomainWhole(t *testing.T) {
+func TestAddHostnameWhole(t *testing.T) {
 	t.Parallel()
 
 	ctx := t.Context()
@@ -99,14 +99,14 @@ func TestAddDomainWhole(t *testing.T) {
 	writer := &domainWriter{log: &callLog{}}
 	s := wholeServer(fakeDomainClients(ssmc, acmAPI, writer), &wholeEdge{stack: stack})
 
-	session, err := s.domainSession(ctx, domainRequest{
+	session, err := s.hostnameSession(ctx, hostnameRequest{
 		slug:        domainSlug,
 		edgeKind:    string(wholeEdgeKind),
 		configured:  []string{"shop.app.com"},
 		certificate: true,
 	})
 	if err != nil {
-		t.Fatalf("domainSession: %v", err)
+		t.Fatalf("hostnameSession: %v", err)
 	}
 	if err := session.add(ctx, func(string) {}); err != nil {
 		t.Fatalf("add: %v", err)
@@ -128,7 +128,7 @@ func TestAddDomainWhole(t *testing.T) {
 	}
 }
 
-func TestUseDomainWhole(t *testing.T) {
+func TestUsePreviewWildcardWhole(t *testing.T) {
 	t.Parallel()
 
 	ctx := t.Context()
@@ -146,13 +146,13 @@ func TestUseDomainWhole(t *testing.T) {
 		t.Fatalf("seed deployed: %v", err)
 	}
 
-	req := &deploymentsv1.UseDomainRequest{
+	req := &deploymentsv1.UsePreviewWildcardRequest{
 		Class:      deploymentsv1.Environment_CLASS_PREVIEW,
 		BaseDomain: "preview.acme.com",
 		Edge:       &deploymentsv1.EdgeSelection{Kind: string(wholeEdgeKind)},
 	}
-	if err := s.runUseDomain(ctx, req, func(string) {}, func(string, []edge.Record, ...string) {}, func(string) {}); err != nil {
-		t.Fatalf("runUseDomain: %v", err)
+	if err := s.runUsePreviewWildcard(ctx, req, func(string) {}, func(string, []edge.Record, ...string) {}, func(string) {}); err != nil {
+		t.Fatalf("runUsePreviewWildcard: %v", err)
 	}
 
 	recorded, err := bootstrap.ReadPreviewDomain(ctx, ssmc, bootstrap.ClassPreview)

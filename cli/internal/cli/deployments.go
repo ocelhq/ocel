@@ -129,7 +129,7 @@ func runDeploymentsPrune(ctx context.Context, d deps, cwd string, keepN int, std
 			return err
 		}
 
-		if err := runner.Prune(ctx, &deploymentsv1.PruneRequest{
+		if err := runner.RemoveStalePromotions(ctx, &deploymentsv1.RemoveStalePromotionsRequest{
 			Slug:  cfg.Slug,
 			KeepN: int32(keepN),
 			Edge:  edgeSelection(cfg),
