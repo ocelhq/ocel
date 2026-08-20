@@ -101,10 +101,7 @@ type Tracer interface {
 }
 
 func (cfg Config) reportStage(stage Stage) func(string) {
-	if cfg.StageReport == nil {
-		return func(string) {}
-	}
-	return nilSafe(cfg.StageReport(stage.ID))
+	return cfg.reporting().stage(stage)
 }
 
 func declareStages(t Tracer, final bool, stages ...Stage) {

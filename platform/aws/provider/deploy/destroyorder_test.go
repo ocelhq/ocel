@@ -79,15 +79,18 @@ func servingStack(t *testing.T, fake *recordingEdge, hostname string) edge.EdgeS
 	return stack
 }
 
-func servedProject(t *testing.T, calls *teardownCalls, stacks ...naming.StackName) Config {
+func servedProject(t *testing.T, calls *teardownCalls, stacks ...naming.StackName) ProjectTeardown {
 	t.Helper()
-	return Config{
-		Stacks:        &fakeStackIndex{projects: []string{"shop"}, stacks: map[string][]naming.StackName{"shop": stacks}},
-		Pulumi:        &fakePulumi{record: calls.record},
-		PulumiProject: "ocel",
-		Passphrase:    "teardown",
-		BackendURL:    "file://" + t.TempDir(),
-	}
+	return ProjectTeardown{Teardown: Teardown{
+		Slug:   "shop",
+		Stacks: &fakeStackIndex{projects: []string{"shop"}, stacks: map[string][]naming.StackName{"shop": stacks}},
+		Pulumi: PulumiAccess{
+			Command:       &fakePulumi{record: calls.record},
+			PulumiProject: "ocel",
+			Passphrase:    "teardown",
+			BackendURL:    "file://" + t.TempDir(),
+		},
+	}}
 }
 
 func TestDestroyProjectStopsRoutingBeforeItDeletesTheOrigin(t *testing.T) {
@@ -102,9 +105,9 @@ func TestDestroyProjectStopsRoutingBeforeItDeletesTheOrigin(t *testing.T) {
 	tracer := &fakeTracer{}
 	stages := newProjectTeardownStages()
 	cfg := servedProject(t, calls, web, infra)
-	cfg.Tracer = tracer
+	cfg.Report.Tracer = tracer
 
-	result, err := DestroyProject(context.Background(), stack, cfg, "shop", stages, nil)
+	result, err := DestroyProject(context.Background(), stack, cfg, stages, nil)
 	if err != nil {
 		t.Fatalf("DestroyProject: %v", err)
 	}
@@ -144,7 +147,7 @@ func TestDestroyProjectResumesAfterAFailedEdgeDestroy(t *testing.T) {
 	stack := servingStack(t, fake, "shop.example.com")
 	cfg := servedProject(t, calls, web)
 
-	result, err := DestroyProject(context.Background(), stack, cfg, "shop", ProjectTeardownStages{}, nil)
+	result, err := DestroyProject(context.Background(), stack, cfg, ProjectTeardownStages{}, nil)
 	if err == nil {
 		t.Fatal("DestroyProject err = nil, want the failed edge destroy reported")
 	}
@@ -156,7 +159,7 @@ func TestDestroyProjectResumesAfterAFailedEdgeDestroy(t *testing.T) {
 	}
 
 	fake.destroyErr = nil
-	result, err = DestroyProject(context.Background(), stack, cfg, "shop", ProjectTeardownStages{}, nil)
+	result, err = DestroyProject(context.Background(), stack, cfg, ProjectTeardownStages{}, nil)
 	if err != nil {
 		t.Fatalf("rerun: %v", err)
 	}
@@ -177,7 +180,7 @@ func TestUnbindRoutingDropsEveryHostnameAndPointer(t *testing.T) {
 	fake := &recordingEdge{kind: cloudflare.Kind}
 	stack := servingStack(t, fake, "shop.example.com")
 
-	if err := unbindRouting(context.Background(), stack, Config{}, Stage{}, []string{"pr-1", "pr-2"}); err != nil {
+	if err := unbindRouting(context.Background(), stack, Reporting{}, Stage{}, []string{"pr-1", "pr-2"}); err != nil {
 		t.Fatalf("unbindRouting: %v", err)
 	}
 

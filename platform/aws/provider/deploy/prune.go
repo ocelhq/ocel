@@ -139,9 +139,9 @@ type reclaimJob struct {
 	stage  Stage
 }
 
-func Reclaim(ctx context.Context, cfg Config, targets []PruneTarget, parent Stage, log func(string)) (err error) {
+func Reclaim(ctx context.Context, r Reclamation, targets []PruneTarget, parent Stage, log func(string)) (err error) {
 	start := time.Now()
-	defer func() { spanForStage(cfg.Tracer, parent, start, time.Now(), err) }()
+	defer func() { spanForStage(r.Report.Tracer, parent, start, time.Now(), err) }()
 
 	jobs := make([]reclaimJob, len(targets))
 	declared := make([]Stage, len(targets))
@@ -150,15 +150,15 @@ func Reclaim(ctx context.Context, cfg Config, targets []PruneTarget, parent Stag
 		jobs[i] = reclaimJob{target: t, stage: stage}
 		declared[i] = stage
 	}
-	declareStages(cfg.Tracer, true, declared...)
+	declareStages(r.Report.Tracer, true, declared...)
 
 	err = errors.Join(runBounded(teardownConcurrency, jobs, func(j reclaimJob) (err error) {
 		start := time.Now()
-		defer func() { spanForStage(cfg.Tracer, j.stage, start, time.Now(), err) }()
+		defer func() { spanForStage(r.Report.Tracer, j.stage, start, time.Now(), err) }()
 
-		report := cfg.reportStage(j.stage)
+		report := r.Report.stage(j.stage)
 		report(sanitizeMessage("Reclaiming " + reclaimTitle(j.target)))
-		if err = reclaimTarget(ctx, cfg, j.target, report, log); err != nil {
+		if err = reclaimTarget(ctx, r, j.target, report, log); err != nil {
 			return err
 		}
 		return nil
@@ -172,26 +172,27 @@ type prefixTarget struct {
 	prefix  string
 }
 
-func reclaimTarget(ctx context.Context, cfg Config, t PruneTarget, progress, log func(string)) error {
-	if err := Destroy(ctx, teardownConfig(cfg, t.Stack), progress, log); err != nil {
+func reclaimTarget(ctx context.Context, r Reclamation, t PruneTarget, progress, log func(string)) error {
+	if err := Destroy(ctx, r.forStack(t.Stack), progress, log); err != nil {
 		return fmt.Errorf("destroy app-deploy stack %s: %w", t.Stack, err)
 	}
 
-	cacheStore, account := asPrefixDeleter(cfg.CacheStoreUploader), asPrefixDeleter(cfg.Uploader)
+	stores := r.Stores
+	cacheStore, account := asPrefixDeleter(stores.CacheStoreUploader), asPrefixDeleter(stores.Uploader)
 	reclaims := make([]func() error, 0, 8)
 	for _, d := range []prefixTarget{
-		{cacheStore, cfg.CacheStoreBucket, t.AssetPrefix},
-		{cacheStore, cfg.CacheStoreBucket, t.CachePrefix},
-		{cacheStore, cfg.CacheStoreBucket, t.EdgePrefix},
-		{account, cfg.AssetBucket, t.AssetPrefix},
-		{account, cfg.AssetBucket, t.ImageConfigKey},
-		{account, cfg.AssetBucket, t.CachePrefix},
-		{account, cfg.ArtifactBucket, t.FunctionPrefix},
+		{cacheStore, stores.CacheStoreBucket, t.AssetPrefix},
+		{cacheStore, stores.CacheStoreBucket, t.CachePrefix},
+		{cacheStore, stores.CacheStoreBucket, t.EdgePrefix},
+		{account, stores.AssetBucket, t.AssetPrefix},
+		{account, stores.AssetBucket, t.ImageConfigKey},
+		{account, stores.AssetBucket, t.CachePrefix},
+		{account, stores.ArtifactBucket, t.FunctionPrefix},
 	} {
 		reclaims = append(reclaims, func() error { return deletePrefix(ctx, d.deleter, d.bucket, d.prefix) })
 	}
 	if t.CachePrefix != "" {
-		reclaims = append(reclaims, func() error { return retireISRWriter(ctx, cfg, t.CachePrefix) })
+		reclaims = append(reclaims, func() error { return retireISRWriter(ctx, r.ISRWriter, t.CachePrefix) })
 	}
 	return errors.Join(runBounded(len(reclaims), reclaims, func(run func() error) error { return run() })...)
 }
@@ -201,25 +202,25 @@ type PruneStages struct {
 	Reclaim Stage
 }
 
-func Prune(ctx context.Context, stack edge.EdgeStack, cfg Config, slug string, keepN int, pointer string, stages PruneStages, log func(string)) (edge.PruneResult, error) {
+func Prune(ctx context.Context, stack edge.EdgeStack, r Reclamation, keepN int, pointer string, stages PruneStages, log func(string)) (edge.PruneResult, error) {
 	diffStart := time.Now()
-	report := cfg.reportStage(stages.Diff)
+	report := r.Report.stage(stages.Diff)
 	report("Diffing deployments to reclaim")
 	result, err := stack.Ledger().Prune(ctx, keepN, pointer)
 	if err != nil {
-		spanForStage(cfg.Tracer, stages.Diff, diffStart, time.Now(), err)
-		declareStages(cfg.Tracer, true)
+		spanForStage(r.Report.Tracer, stages.Diff, diffStart, time.Now(), err)
+		declareStages(r.Report.Tracer, true)
 		return edge.PruneResult{}, fmt.Errorf("delete promotion artifacts: %w", err)
 	}
 
-	targets, terr := ReclaimTargets(slug, cfg.Env, result.RemovedRecordKeys, result.SurvivingRecordKeys, result.SurvivingPointerRecordKeys)
-	spanForStage(cfg.Tracer, stages.Diff, diffStart, time.Now(), terr)
+	targets, terr := ReclaimTargets(r.Slug, r.Env, result.RemovedRecordKeys, result.SurvivingRecordKeys, result.SurvivingPointerRecordKeys)
+	spanForStage(r.Report.Tracer, stages.Diff, diffStart, time.Now(), terr)
 	if terr != nil {
-		declareStages(cfg.Tracer, true)
+		declareStages(r.Report.Tracer, true)
 		return result, terr
 	}
 
-	if err := Reclaim(ctx, cfg, targets, stages.Reclaim, log); err != nil {
+	if err := Reclaim(ctx, r, targets, stages.Reclaim, log); err != nil {
 		return result, err
 	}
 	return result, nil

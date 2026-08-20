@@ -37,11 +37,11 @@ func (s *Server) PlanDestroyProject(ctx context.Context, req *deploymentsv1.Plan
 	if err != nil {
 		return nil, err
 	}
-	cfg, err := s.pruneConfig(ctx, opts, awscfg, params, req.GetSlug())
+	deps, err := s.productionTeardownDeps(ctx, opts, awscfg, params, req.GetSlug())
 	if err != nil {
 		return nil, err
 	}
-	plan, err := deploy.PlanProjectTeardown(ctx, cfg, req.GetSlug())
+	plan, err := deploy.PlanProjectTeardown(ctx, deps.teardown.Stacks, req.GetSlug())
 	if err != nil {
 		return nil, err
 	}
@@ -64,7 +64,7 @@ func (s *Server) PlanDestroyProject(ctx context.Context, req *deploymentsv1.Plan
 	if err != nil {
 		return nil, err
 	}
-	indexed, err := deploy.ProjectIndexed(ctx, cfg.Stacks, req.GetSlug())
+	indexed, err := deploy.ProjectIndexed(ctx, deps.teardown.Stacks, req.GetSlug())
 	if err != nil {
 		return nil, err
 	}
@@ -94,7 +94,7 @@ func (s *Server) planDestroyPreviewProject(ctx context.Context, opts options, ed
 	if err != nil {
 		return nil, err
 	}
-	plan, err := deploy.PlanPreviewProjectTeardown(ctx, deploy.Config{Stacks: stacks}, slug)
+	plan, err := deploy.PlanPreviewProjectTeardown(ctx, stacks, slug)
 	if err != nil {
 		return nil, err
 	}
@@ -218,23 +218,22 @@ func (s *Server) runDestroyProject(ctx context.Context, req *deploymentsv1.Destr
 	if err != nil && !errors.Is(err, errNoProductionDeploy) {
 		return finish(err)
 	}
-	cfg, err := s.pruneConfig(ctx, opts, awscfg, params, req.GetSlug())
+	deps, err := s.productionTeardownDeps(ctx, opts, awscfg, params, req.GetSlug())
 	if err != nil {
 		return finish(err)
 	}
-	cfg.Tracer = tracer
-	cfg.StageReport = stageReport
-	if cfg.DNS, err = dns.WriterFor(requestedDNS(req).GetKind(), requestedDNS(req).GetZone(), dns.Deps{AWS: awscfg}); err != nil {
+	writer, err := dns.WriterFor(requestedDNS(req).GetKind(), requestedDNS(req).GetZone(), dns.Deps{AWS: awscfg})
+	if err != nil {
 		return finish(err)
 	}
 
-	result, derr := deploy.DestroyProject(ctx, stack, cfg, req.GetSlug(), stages, logf)
+	result, derr := deploy.DestroyProject(ctx, stack, deps.projectTeardown(reportingWith(tracer, stageReport), writer), stages, logf)
 
 	if teardownFinished(result, params.StackState) {
 		discarder := func(cert certs.Certificate) certs.Issuer {
 			return certs.DiscardIssuerFor(cert, certs.Deps{AWS: awscfg})
 		}
-		if err := releaseProductionDomains(ctx, params.StackState, cfg.DNS, discarder, logf); err != nil {
+		if err := releaseProductionDomains(ctx, params.StackState, writer, discarder, logf); err != nil {
 			derr = errors.Join(derr, err)
 		}
 	}
@@ -271,7 +270,7 @@ func (s *Server) runDestroyPreviewProject(ctx context.Context, req *deploymentsv
 	if err != nil {
 		return finish(connect.NewError(connect.CodeInvalidArgument, err))
 	}
-	cfg, stack, err := s.previewTeardownContext(ctx, requestedEdge(req), opts, slug, env)
+	deps, stack, err := s.previewTeardownDeps(ctx, requestedEdge(req), opts, slug, env)
 	if err != nil {
 		return finish(err)
 	}
@@ -279,13 +278,12 @@ func (s *Server) runDestroyPreviewProject(ctx context.Context, req *deploymentsv
 	if err != nil {
 		return finish(err)
 	}
-	cfg.Tracer = tracer
-	cfg.StageReport = stageReport
-	if cfg.DNS, err = dns.WriterFor(requestedDNS(req).GetKind(), requestedDNS(req).GetZone(), dns.Deps{AWS: awscfg}); err != nil {
+	writer, err := dns.WriterFor(requestedDNS(req).GetKind(), requestedDNS(req).GetZone(), dns.Deps{AWS: awscfg})
+	if err != nil {
 		return finish(err)
 	}
 
-	result, derr := deploy.DestroyPreviewProject(ctx, stack, cfg, slug, stages, logf)
+	result, derr := deploy.DestroyPreviewProject(ctx, stack, deps.projectTeardown(reportingWith(tracer, stageReport), writer), stages, logf)
 
 	if err := forgetStackState(ctx, ssm.NewFromConfig(awscfg), bootstrap.ClassPreview, slug, result, stack.State(), derr); err != nil {
 		derr = errors.Join(derr, err)

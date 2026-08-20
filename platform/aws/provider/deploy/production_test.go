@@ -790,7 +790,7 @@ func recordVariables(t *testing.T, variables ...*deploymentsv1.ManifestVariable)
 	t.Helper()
 	manifest := varsManifest(variables...)
 	cfg := varsConfig(t, deploymentsv1.Environment_CLASS_PRODUCTION)
-	record, err := buildDeploymentRecord(cfg, manifest, manifest.GetApps()[0], deployedAs("WEB1"), nil, appBuildsFor(t, cfg, manifest), nil)
+	record, err := buildDeploymentRecord(cfg, nil, manifest, manifest.GetApps()[0], deployedAs("WEB1"), nil, appBuildsFor(t, cfg, manifest), nil)
 	if err != nil {
 		t.Fatalf("buildDeploymentRecord: %v", err)
 	}
@@ -815,7 +815,7 @@ func TestBuildDeploymentRecord(t *testing.T) {
 			Identity:     "pr-42",
 		}
 
-		record, err := buildDeploymentRecord(cfg, manifest, manifest.GetApps()[0], deployedAs("WEB1"), nil, appBuildsFor(t, cfg, manifest), nil)
+		record, err := buildDeploymentRecord(cfg, nil, manifest, manifest.GetApps()[0], deployedAs("WEB1"), nil, appBuildsFor(t, cfg, manifest), nil)
 		if err != nil {
 			t.Fatalf("buildDeploymentRecord: %v", err)
 		}
@@ -840,7 +840,7 @@ func TestBuildDeploymentRecord(t *testing.T) {
 			Slug:         "proj",
 		}
 
-		record, err := buildDeploymentRecord(cfg, manifest, manifest.GetApps()[0], deployedAs("WEB1"), nil, appBuildsFor(t, cfg, manifest), nil)
+		record, err := buildDeploymentRecord(cfg, nil, manifest, manifest.GetApps()[0], deployedAs("WEB1"), nil, appBuildsFor(t, cfg, manifest), nil)
 		if err != nil {
 			t.Fatalf("buildDeploymentRecord: %v", err)
 		}
@@ -861,7 +861,7 @@ func TestBuildDeploymentRecord(t *testing.T) {
 			Slug:         "proj",
 		}
 
-		bare, err := buildDeploymentRecord(cfg, manifest, manifest.GetApps()[1], deployedAs("DOCS1"), nil, appBuildsFor(t, cfg, manifest), nil)
+		bare, err := buildDeploymentRecord(cfg, nil, manifest, manifest.GetApps()[1], deployedAs("DOCS1"), nil, appBuildsFor(t, cfg, manifest), nil)
 		if err != nil {
 			t.Fatalf("buildDeploymentRecord: %v", err)
 		}
@@ -961,7 +961,7 @@ func TestBuildDeploymentRecord(t *testing.T) {
 		build := func(class deploymentsv1.Environment_Class) edge.DeploymentRecord {
 			t.Helper()
 			cfg := varsConfig(t, class)
-			record, err := buildDeploymentRecord(cfg, manifest, manifest.GetApps()[0], id, nil, appBuildsFor(t, cfg, manifest), nil)
+			record, err := buildDeploymentRecord(cfg, nil, manifest, manifest.GetApps()[0], id, nil, appBuildsFor(t, cfg, manifest), nil)
 			if err != nil {
 				t.Fatalf("buildDeploymentRecord under %s: %v", class, err)
 			}
@@ -1000,7 +1000,7 @@ func TestBuildDeploymentRecord(t *testing.T) {
 		app := &deploymentsv1.ManifestApp{Name: "web", Framework: frameworkNext}
 		id := fingerprinted("WEB1", "fp1")
 
-		record, err := buildDeploymentRecord(cfg, manifest, app, id, nil, appBuildsFor(t, cfg, manifest), nil)
+		record, err := buildDeploymentRecord(cfg, nil, manifest, app, id, nil, appBuildsFor(t, cfg, manifest), nil)
 		if err != nil {
 			t.Fatalf("buildDeploymentRecord: %v", err)
 		}
@@ -1017,7 +1017,7 @@ func TestBuildDeploymentRecord(t *testing.T) {
 		builds := releaseBuilds(t, cfg, manifest, "fp1")
 		id := builds.identities["web"]
 
-		record, err := buildDeploymentRecord(cfg, manifest, app, id, nil, builds, nil)
+		record, err := buildDeploymentRecord(cfg, nil, manifest, app, id, nil, builds, nil)
 		if err != nil {
 			t.Fatalf("buildDeploymentRecord: %v", err)
 		}
@@ -1041,7 +1041,7 @@ func TestBuildDeploymentRecord(t *testing.T) {
 		id := builds.identities["api"]
 		outs := []*deploymentsv1.FunctionOutput{fnOutput("api_handler", "https://api-fn.lambda-url.aws/")}
 
-		record, err := buildDeploymentRecord(cfg, manifest, manifest.GetApps()[0], id, outs, builds, nil)
+		record, err := buildDeploymentRecord(cfg, nil, manifest, manifest.GetApps()[0], id, outs, builds, nil)
 		if err != nil {
 			t.Fatalf("buildDeploymentRecord: %v", err)
 		}
@@ -1090,7 +1090,7 @@ func TestBuildDeploymentRecord(t *testing.T) {
 		app := &deploymentsv1.ManifestApp{Name: "web", Framework: frameworkNext}
 		builds := releaseBuilds(t, cfg, manifest, "fp1")
 
-		record, err := buildDeploymentRecord(cfg, manifest, app, builds.identities["web"], nil, builds, nil)
+		record, err := buildDeploymentRecord(cfg, nil, manifest, app, builds.identities["web"], nil, builds, nil)
 		if err != nil {
 			t.Fatalf("buildDeploymentRecord: %v", err)
 		}
@@ -1119,7 +1119,7 @@ func TestBuildDeploymentRecord(t *testing.T) {
 		app := &deploymentsv1.ManifestApp{Name: "web", Framework: frameworkNext}
 		id := fingerprinted("dep1", "fp1")
 
-		record, err := buildDeploymentRecord(cfg, nextManifest(), app, id, nil, appBuildsFor(t, cfg, nextManifest()), nil)
+		record, err := buildDeploymentRecord(cfg, nil, nextManifest(), app, id, nil, appBuildsFor(t, cfg, nextManifest()), nil)
 		if err != nil {
 			t.Fatalf("buildDeploymentRecord: %v", err)
 		}
@@ -1383,7 +1383,7 @@ func TestFinalizeDeploy(t *testing.T) {
 			builds := releaseBuilds(t, cfg, manifest, fingerprint)
 			id := builds.identities["web"]
 			ids[i] = id
-			record, err := buildDeploymentRecord(cfg, manifest, app, id, nil, builds, nil)
+			record, err := buildDeploymentRecord(cfg, nil, manifest, app, id, nil, builds, nil)
 			if err != nil {
 				t.Fatalf("buildDeploymentRecord: %v", err)
 			}
@@ -1539,7 +1539,7 @@ func TestRealizeRequiresADeploymentIDPerApp(t *testing.T) {
 
 			cfg := Config{Edge: &recordingEdge{kind: cloudflare.Kind}, StoreEndpoint: "https://store.example.com"}
 			manifest := &deploymentsv1.Manifest{Slug: "shop", Apps: tc.apps}
-			_, err := realize(context.Background(), cfg, manifest, nil, nil)
+			_, err := realize(context.Background(), cfg, &Realized{}, manifest, nil, nil)
 			if err == nil {
 				t.Fatal("realize err = nil, want the app without a deployment id refused")
 			}
@@ -1559,7 +1559,7 @@ func TestRealizeRefusesAStaleStore(t *testing.T) {
 		StoreEndpoint: fakeStoreEndpoint,
 		Slug:          "shop",
 	}
-	_, err := realize(context.Background(), cfg, &deploymentsv1.Manifest{Slug: "shop"}, nil, nil)
+	_, err := realize(context.Background(), cfg, &Realized{}, &deploymentsv1.Manifest{Slug: "shop"}, nil, nil)
 	if err == nil {
 		t.Fatal("realize err = nil, want the superseded store refused")
 	}
@@ -1576,7 +1576,7 @@ func TestRealizeRefusesAStoreThatCannotReportItsSchema(t *testing.T) {
 		StoreEndpoint: fakeStoreEndpoint,
 		Slug:          "shop",
 	}
-	_, err := realize(context.Background(), cfg, &deploymentsv1.Manifest{Slug: "shop"}, nil, nil)
+	_, err := realize(context.Background(), cfg, &Realized{}, &deploymentsv1.Manifest{Slug: "shop"}, nil, nil)
 	if err == nil {
 		t.Fatal("realize err = nil, want the unreadable store refused")
 	}
@@ -1598,7 +1598,7 @@ func TestRealizeChecksTheSchemaAgainstTheRecordedStackState(t *testing.T) {
 		Slug:          "shop",
 		StackState:    edge.StackState{"stateTable": "ocel-deployments", edge.StackKeySecret: "fake-secret"},
 	}
-	realize(context.Background(), cfg, &deploymentsv1.Manifest{Slug: "shop"}, nil, nil)
+	realize(context.Background(), cfg, &Realized{}, &deploymentsv1.Manifest{Slug: "shop"}, nil, nil)
 
 	if len(fake.opens) == 0 {
 		t.Fatal("no stack opened, want the schema check to open one")
@@ -1619,7 +1619,7 @@ func TestRealizeChecksNoSchemaBeforeTheStoreExists(t *testing.T) {
 		Edge: unprogrammableEdge{&recordingEdge{kind: apigateway.Kind, storeSchemaVersionErr: edge.ErrStoreAbsent}},
 		Slug: "shop",
 	}
-	_, err := realize(context.Background(), cfg, &deploymentsv1.Manifest{Slug: "shop"}, nil, nil)
+	_, err := realize(context.Background(), cfg, &Realized{}, &deploymentsv1.Manifest{Slug: "shop"}, nil, nil)
 	if err != nil && strings.Contains(err.Error(), "ocel bootstrap") {
 		t.Errorf("realize err = %v, want the deploy past the store prechecks that its own reconcile satisfies", err)
 	}
@@ -1629,7 +1629,7 @@ func TestRealizeRefusesAnEdgeWhoseStoreWorkerIsMissing(t *testing.T) {
 	t.Parallel()
 
 	cfg := Config{Edge: &recordingEdge{kind: cloudflare.Kind}, Slug: "shop"}
-	_, err := realize(context.Background(), cfg, &deploymentsv1.Manifest{Slug: "shop"}, nil, nil)
+	_, err := realize(context.Background(), cfg, &Realized{}, &deploymentsv1.Manifest{Slug: "shop"}, nil, nil)
 	if err == nil || !strings.Contains(err.Error(), "deployments-store worker") {
 		t.Errorf("realize err = %v, want the missing store worker refused", err)
 	}

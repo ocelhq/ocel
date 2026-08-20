@@ -20,12 +20,12 @@ type StackIndex interface {
 
 var errNoStackIndex = fmt.Errorf("this deploy has no stack index; re-run `ocel bootstrap`")
 
-type realizedStacks struct {
+type Realized struct {
 	mu   sync.Mutex
 	keys map[string]struct{}
 }
 
-func (r *realizedStacks) realize(ctx context.Context, index StackIndex, project string, stack naming.StackName) error {
+func (r *Realized) realize(ctx context.Context, index StackIndex, project string, stack naming.StackName) error {
 	if err := index.AddStack(ctx, project, stack); err != nil {
 		return err
 	}
@@ -41,7 +41,7 @@ func (r *realizedStacks) realize(ctx context.Context, index StackIndex, project 
 	return nil
 }
 
-func (r *realizedStacks) realizedHere(project string, stack naming.StackName) bool {
+func (r *Realized) realizedHere(project string, stack naming.StackName) bool {
 	if r == nil {
 		return false
 	}

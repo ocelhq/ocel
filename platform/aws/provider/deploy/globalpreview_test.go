@@ -56,18 +56,20 @@ func TestPreviewLabelProblem(t *testing.T) {
 func TestPreviewWildcardSpecFor(t *testing.T) {
 	setWorkerBundle(t)
 
-	cfg := Config{
-		Edge:                &recordingEdge{kind: cloudflare.Kind},
-		Region:              "eu-west-1",
-		StateTable:          "ocel-state",
-		AssetBucket:         "ocel-assets",
-		ImageOptimizerURL:   "https://optimizer.example",
-		RevalidateQueueURL:  "https://queue.example",
-		EdgeAccessKeyID:     "AKIA",
-		EdgeSecretKey:       "secret",
+	cfg := PreviewWildcard{
+		Edge: &recordingEdge{kind: cloudflare.Kind},
+		Worker: WorkerFacts{
+			Region:             "eu-west-1",
+			StateTable:         "ocel-state",
+			AssetBucket:        "ocel-assets",
+			ImageOptimizerURL:  "https://optimizer.example",
+			RevalidateQueueURL: "https://queue.example",
+			EdgeAccessKeyID:    "AKIA",
+			EdgeSecretKey:      "secret",
+		},
 		StoreScriptName:     "ocel-deployments-store-preview",
 		ISRWriterScriptName: "ocel-isr-writer-preview",
-		EdgeValues:          map[string]string{"cacheBucket": "ocel-edge-cache-preview"},
+		Values:              map[string]string{"cacheBucket": "ocel-edge-cache-preview"},
 	}
 
 	spec, err := PreviewWildcardSpecFor(cfg, "preview.acme.com", nil)

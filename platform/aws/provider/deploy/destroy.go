@@ -14,18 +14,13 @@ import (
 	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
 )
 
-type TeardownConfig struct {
-	Region        string
-	BackendURL    string
-	Passphrase    string
-	PulumiProject string
-	Project       string
-	Stack         naming.StackName
-	Pulumi        auto.PulumiCommand
-	Stacks        StackIndex
-	SkipRefresh   bool
-
-	realized *realizedStacks
+type StackTeardown struct {
+	Pulumi      PulumiAccess
+	Project     string
+	Stack       naming.StackName
+	Stacks      StackIndex
+	SkipRefresh bool
+	Realized    *Realized
 }
 
 func nilSafe(progress func(string)) func(string) {
@@ -55,7 +50,7 @@ func runBounded[T any](limit int, items []T, run func(T) error) []error {
 	return errs
 }
 
-func Destroy(ctx context.Context, cfg TeardownConfig, progress, log func(string)) error {
+func Destroy(ctx context.Context, cfg StackTeardown, progress, log func(string)) error {
 	report := func(f func(string), msg string) {
 		if f != nil {
 			f(msg)
@@ -70,11 +65,7 @@ func Destroy(ctx context.Context, cfg TeardownConfig, progress, log func(string)
 	name := cfg.Stack.String()
 
 	report(progress, "Selecting stack")
-	stack, err := auto.SelectStackInlineSource(ctx, name, cfg.PulumiProject, nil,
-		auto.Pulumi(cfg.Pulumi),
-		auto.SecretsProvider("passphrase"),
-		auto.EnvVars(pulumiEnv(cfg.Region, cfg.BackendURL, cfg.Passphrase)),
-	)
+	stack, err := auto.SelectStackInlineSource(ctx, name, cfg.Pulumi.PulumiProject, nil, cfg.Pulumi.workspace()...)
 	if auto.IsSelectStack404Error(err) {
 		report(progress, "No stack "+name+" to destroy")
 		return index.RemoveStack(ctx, cfg.Project, cfg.Stack)
@@ -98,22 +89,22 @@ func Destroy(ctx context.Context, cfg TeardownConfig, progress, log func(string)
 	return index.RemoveStack(ctx, cfg.Project, cfg.Stack)
 }
 
-func destroyStackStage(ctx context.Context, cfg Config, stack naming.StackName, stage Stage, kind string, log func(string)) (err error) {
+func destroyStackStage(ctx context.Context, t Teardown, stack naming.StackName, stage Stage, kind string, log func(string)) (err error) {
 	start := time.Now()
-	defer func() { spanForStage(cfg.Tracer, stage, start, time.Now(), err) }()
+	defer func() { spanForStage(t.Report.Tracer, stage, start, time.Now(), err) }()
 
-	report := cfg.reportStage(stage)
+	report := t.Report.stage(stage)
 	report(sanitizeMessage("Destroying " + kind + " stack " + stack.String()))
-	if derr := Destroy(ctx, teardownConfig(cfg, stack), report, log); derr != nil {
+	if derr := Destroy(ctx, t.forStack(stack), report, log); derr != nil {
 		err = fmt.Errorf("destroy %s stack %s: %w", kind, stack, derr)
 		return err
 	}
 	return nil
 }
 
-func destroyOptions(cfg TeardownConfig, logWriter *lineForwarder) []optdestroy.Option {
+func destroyOptions(cfg StackTeardown, logWriter *lineForwarder) []optdestroy.Option {
 	var opts []optdestroy.Option
-	if !cfg.SkipRefresh && !cfg.realized.realizedHere(cfg.Project, cfg.Stack) {
+	if !cfg.SkipRefresh && !cfg.Realized.realizedHere(cfg.Project, cfg.Stack) {
 		opts = append(opts, optdestroy.Refresh())
 	}
 	if logWriter != nil {
@@ -122,14 +113,14 @@ func destroyOptions(cfg TeardownConfig, logWriter *lineForwarder) []optdestroy.O
 	return opts
 }
 
-func lockRecoveryHint(err error, cfg TeardownConfig) string {
+func lockRecoveryHint(err error, cfg StackTeardown) string {
 	if err == nil || !strings.Contains(err.Error(), "the stack is currently locked") {
 		return ""
 	}
 	return fmt.Sprintf("\n\nthis lock outlives a run that was killed rather than one still working."+
 		"\nconfirm no deploy or teardown is running against this stack, then release it with:"+
 		"\n  PULUMI_BACKEND_URL=%s PULUMI_CONFIG_PASSPHRASE=<the account passphrase> pulumi cancel --stack %s"+
-		"\nand re-run the teardown", cfg.BackendURL, cfg.Stack)
+		"\nand re-run the teardown", cfg.Pulumi.BackendURL, cfg.Stack)
 }
 
 type PreviewStack struct {

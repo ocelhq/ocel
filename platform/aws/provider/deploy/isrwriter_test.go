@@ -11,12 +11,8 @@ import (
 
 const testPrefix = "prod/acme/web/BUILD1"
 
-func writerConfig(endpoint string) Config {
-	return Config{
-		ISRWriterEndpoint:      endpoint,
-		ISRWriterBootstrapCred: "cred-1",
-		ISRWriterSeed:          "seed-1",
-	}
+func writerAccess(endpoint string) ISRWriterAccess {
+	return ISRWriterAccess{Endpoint: endpoint, BootstrapCred: "cred-1", Seed: "seed-1"}
 }
 
 type writerCall struct {
@@ -57,12 +53,12 @@ func TestResolveAppBuildsISRWriter(t *testing.T) {
 		storeOnly := base
 		storeOnly.CacheStoreBucket = "isr"
 		storeOnly.CacheStoreUploader = &fakeUploader{exists: map[string]bool{}}
-		if err := checkISRWriterAgrees(storeOnly); err == nil {
+		if err := checkISRWriterAgrees(storeOnly.objectStores(), storeOnly.isrWriter()); err == nil {
 			t.Error("a cache store with no writer to write into it must fail the deploy")
 		}
 
 		writerOnly := adoptISRWriter(t, base)
-		if err := checkISRWriterAgrees(writerOnly); err == nil {
+		if err := checkISRWriterAgrees(writerOnly.objectStores(), writerOnly.isrWriter()); err == nil {
 			t.Error("a writer with no adopted cache store must fail the deploy")
 		}
 	})
@@ -171,10 +167,10 @@ func TestISRWriteSecretHash(t *testing.T) {
 func TestInitializeISRWriter(t *testing.T) {
 	t.Run("seeds only the hash under the bootstrap credential", func(t *testing.T) {
 		srv, calls := fakeWriter(t, http.StatusNoContent)
-		cfg := writerConfig(srv.URL)
-		secret := isrWriteSecret(cfg.ISRWriterSeed, testPrefix)
+		w := writerAccess(srv.URL)
+		secret := isrWriteSecret(w.Seed, testPrefix)
 
-		if err := initializeISRWriter(context.Background(), cfg, testPrefix, secret); err != nil {
+		if err := initializeISRWriter(context.Background(), w, testPrefix, secret); err != nil {
 			t.Fatalf("initializeISRWriter: %v", err)
 		}
 		if len(*calls) != 1 {
@@ -200,7 +196,7 @@ func TestRetireISRWriter(t *testing.T) {
 	t.Run("destroys the build's instance", func(t *testing.T) {
 		srv, calls := fakeWriter(t, http.StatusNoContent)
 
-		if err := retireISRWriter(context.Background(), writerConfig(srv.URL), testPrefix); err != nil {
+		if err := retireISRWriter(context.Background(), writerAccess(srv.URL), testPrefix); err != nil {
 			t.Fatalf("retireISRWriter: %v", err)
 		}
 		if len(*calls) != 1 || (*calls)[0].path != "/"+testPrefix+"/destroy" {
@@ -210,9 +206,9 @@ func TestRetireISRWriter(t *testing.T) {
 
 	t.Run("reaches the worker without a deploy seed", func(t *testing.T) {
 		srv, calls := fakeWriter(t, http.StatusNoContent)
-		cfg := Config{ISRWriterEndpoint: srv.URL, ISRWriterBootstrapCred: "cred-1"}
+		w := ISRWriterAccess{Endpoint: srv.URL, BootstrapCred: "cred-1"}
 
-		if err := retireISRWriter(context.Background(), cfg, testPrefix); err != nil {
+		if err := retireISRWriter(context.Background(), w, testPrefix); err != nil {
 			t.Fatalf("retireISRWriter: %v", err)
 		}
 		if len(*calls) != 1 || (*calls)[0].path != "/"+testPrefix+"/destroy" {
@@ -225,7 +221,7 @@ func TestISRWriterRequest(t *testing.T) {
 	t.Run("rejected call is an error", func(t *testing.T) {
 		srv, _ := fakeWriter(t, http.StatusUnauthorized)
 
-		err := initializeISRWriter(context.Background(), writerConfig(srv.URL), testPrefix, "s")
+		err := initializeISRWriter(context.Background(), writerAccess(srv.URL), testPrefix, "s")
 		if err == nil {
 			t.Fatal("a 401 from the writer must not be swallowed")
 		}
@@ -235,16 +231,16 @@ func TestISRWriterRequest(t *testing.T) {
 func TestISRWriterCalls(t *testing.T) {
 	t.Run("are no-ops when no writer was adopted", func(t *testing.T) {
 		srv, calls := fakeWriter(t, http.StatusNoContent)
-		for _, cfg := range []Config{
+		for _, w := range []ISRWriterAccess{
 			{},
-			{ISRWriterEndpoint: srv.URL},
-			{ISRWriterBootstrapCred: "cred-1"},
+			{Endpoint: srv.URL},
+			{BootstrapCred: "cred-1"},
 		} {
-			if err := initializeISRWriter(context.Background(), cfg, testPrefix, "s"); err != nil {
-				t.Fatalf("initializeISRWriter with %+v: %v", cfg, err)
+			if err := initializeISRWriter(context.Background(), w, testPrefix, "s"); err != nil {
+				t.Fatalf("initializeISRWriter with %+v: %v", w, err)
 			}
-			if err := retireISRWriter(context.Background(), cfg, testPrefix); err != nil {
-				t.Fatalf("retireISRWriter with %+v: %v", cfg, err)
+			if err := retireISRWriter(context.Background(), w, testPrefix); err != nil {
+				t.Fatalf("retireISRWriter with %+v: %v", w, err)
 			}
 		}
 		if len(*calls) != 0 {

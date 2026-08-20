@@ -89,7 +89,6 @@ func sessionConfig() Config {
 	cfg := liveConfig()
 	cfg.StateTable = "ocel-state"
 	cfg.StateTableARN = fixtureStateTableARN
-	cfg.sessions = newSessionScope("shop", "prod", fixtureStateTableARN)
 	return cfg
 }
 
@@ -298,7 +297,7 @@ func TestLinkedAppRendersNoCredential(t *testing.T) {
 		t.Errorf("bundle.Links = %v, want %v so the role can be scoped to them", bundle.Links, want)
 	}
 
-	env := appEnv(linkedManifest(), app, bundle, sessionConfig())
+	env := appEnv(linkedManifest(), app, bundle, sessionConfig(), fixtureSessions)
 	for _, published := range publishedProperties(t) {
 		for key, value := range env {
 			if strings.Contains(value, published) {
@@ -325,7 +324,7 @@ func TestDeliveryScopesToTheAppsThatUseTheResource(t *testing.T) {
 	addresses := map[string][]string{}
 	for _, app := range manifest.GetApps() {
 		bundle := bundles[app.GetName()]
-		envs[app.GetName()] = appEnv(manifest, app, bundle, cfg)
+		envs[app.GetName()] = appEnv(manifest, app, bundle, cfg, fixtureSessions)
 		parsed, err := live.Parse(bundle.Live)
 		if err != nil {
 			t.Fatalf("parse %s's live manifest: %v", app.GetName(), err)
@@ -351,8 +350,8 @@ func TestDeliveryScopesToTheAppsThatUseTheResource(t *testing.T) {
 	if got := envs["api"][envStateTable]; got != cfg.StateTable {
 		t.Errorf("api's env carries %s=%q, want %q so the membrane it brings up can keep the bucket's sessions", envStateTable, got, cfg.StateTable)
 	}
-	if got := envs["api"][envSessionPrefix]; got != cfg.sessions.KeyPrefix {
-		t.Errorf("api's env carries %s=%q, want %q so the membrane writes only under this deployment's scope", envSessionPrefix, got, cfg.sessions.KeyPrefix)
+	if got := envs["api"][envSessionPrefix]; got != fixtureSessions.KeyPrefix {
+		t.Errorf("api's env carries %s=%q, want %q so the membrane writes only under this deployment's scope", envSessionPrefix, got, fixtureSessions.KeyPrefix)
 	}
 	if _, ok := envs["web"][envStateTable]; ok {
 		t.Errorf("web's env names the state table for a membrane it never brings up")

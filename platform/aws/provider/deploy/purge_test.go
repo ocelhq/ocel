@@ -51,9 +51,8 @@ func (r *valueRecorder) Purge(_ context.Context, slug string) (int, error) {
 
 var _ ValueStore = (*valueRecorder)(nil)
 
-func purgeConfig(env string, account, cache *sweepRecorder) Config {
-	return Config{
-		Env:                env,
+func purgeStores(account, cache *sweepRecorder) ObjectStores {
+	return ObjectStores{
 		AssetBucket:        "asset-bucket",
 		ArtifactBucket:     "artifact-bucket",
 		Uploader:           account,
@@ -62,11 +61,15 @@ func purgeConfig(env string, account, cache *sweepRecorder) Config {
 	}
 }
 
+func purgeTeardown(env string, account, cache *sweepRecorder) Teardown {
+	return Teardown{Slug: "shop", Env: env, Stores: purgeStores(account, cache)}
+}
+
 func TestPurgeProjectAssets(t *testing.T) {
 	t.Run("one prefix per environment reaches every bucket the deploy wrote to", func(t *testing.T) {
 		awsSide, cacheSide := &sweepRecorder{}, &sweepRecorder{}
 
-		if err := purgeProjectAssets(context.Background(), purgeConfig("prod", awsSide, cacheSide), "shop", []string{"prod"}); err != nil {
+		if err := purgeProjectAssets(context.Background(), purgeStores(awsSide, cacheSide), "shop", []string{"prod"}); err != nil {
 			t.Fatalf("purgeProjectAssets: %v", err)
 		}
 
@@ -86,7 +89,7 @@ func TestPurgeProjectAssets(t *testing.T) {
 	t.Run("a preview teardown leaves production's bytes alone", func(t *testing.T) {
 		awsSide, cacheSide := &sweepRecorder{}, &sweepRecorder{}
 
-		if err := purgePreviewAssets(context.Background(), purgeConfig("prod", awsSide, cacheSide), "shop", []string{"pr-7"}); err != nil {
+		if err := purgePreviewAssets(context.Background(), purgeStores(awsSide, cacheSide), "shop", []string{"pr-7"}); err != nil {
 			t.Fatalf("purgePreviewAssets: %v", err)
 		}
 
@@ -102,7 +105,7 @@ func TestPurgePreviewAssets(t *testing.T) {
 	t.Run("sweeps every pointer it is given and nothing else", func(t *testing.T) {
 		awsSide, cacheSide := &sweepRecorder{}, &sweepRecorder{}
 
-		err := purgePreviewAssets(context.Background(), purgeConfig("pr-1", awsSide, cacheSide), "shop", []string{"pr-1", "staging"})
+		err := purgePreviewAssets(context.Background(), purgeStores(awsSide, cacheSide), "shop", []string{"pr-1", "staging"})
 		if err != nil {
 			t.Fatalf("purgePreviewAssets: %v", err)
 		}
@@ -128,7 +131,7 @@ func TestPurgePreviewAssets(t *testing.T) {
 	t.Run("missing bucket is a no-op", func(t *testing.T) {
 		rec := &sweepRecorder{}
 
-		if err := purgeProjectAssets(context.Background(), Config{Uploader: rec}, "shop", []string{"prod"}); err != nil {
+		if err := purgeProjectAssets(context.Background(), ObjectStores{Uploader: rec}, "shop", []string{"prod"}); err != nil {
 			t.Fatalf("purgeProjectAssets: %v", err)
 		}
 		if rec.swept != nil {
@@ -141,9 +144,8 @@ func TestPurgeProjectValues(t *testing.T) {
 	t.Run("empties the project's partition and reports the step", func(t *testing.T) {
 		values := &valueRecorder{}
 		var steps []string
-		cfg := Config{Values: values}
 
-		if err := purgeProjectValues(context.Background(), cfg, "shop", func(m string) { steps = append(steps, m) }); err != nil {
+		if err := purgeProjectValues(context.Background(), values, "shop", func(m string) { steps = append(steps, m) }); err != nil {
 			t.Fatalf("purgeProjectValues: %v", err)
 		}
 
@@ -158,7 +160,7 @@ func TestPurgeProjectValues(t *testing.T) {
 	t.Run("no store is nothing to remove", func(t *testing.T) {
 		var steps []string
 
-		if err := purgeProjectValues(context.Background(), Config{}, "shop", func(m string) { steps = append(steps, m) }); err != nil {
+		if err := purgeProjectValues(context.Background(), nil, "shop", func(m string) { steps = append(steps, m) }); err != nil {
 			t.Fatalf("purgeProjectValues: %v", err)
 		}
 		if steps != nil {
@@ -169,7 +171,7 @@ func TestPurgeProjectValues(t *testing.T) {
 	t.Run("reports a failed removal", func(t *testing.T) {
 		values := &valueRecorder{err: errors.New("table is on fire")}
 
-		err := purgeProjectValues(context.Background(), Config{Values: values}, "shop", nil)
+		err := purgeProjectValues(context.Background(), values, "shop", nil)
 		if err == nil {
 			t.Fatal("purgeProjectValues err = nil, want the failure reported")
 		}
@@ -183,12 +185,11 @@ func TestDestroyProject(t *testing.T) {
 	t.Run("a failed value removal does not stop the steps after it", func(t *testing.T) {
 		values := &valueRecorder{err: errors.New("table is on fire")}
 		awsSide, cacheSide := &sweepRecorder{}, &sweepRecorder{}
-		cfg := purgeConfig("prod", awsSide, cacheSide)
-		cfg.Values = values
 		index := &fakeStackIndex{projects: []string{"shop"}}
-		cfg.Stacks = index
+		td := purgeTeardown("prod", awsSide, cacheSide)
+		td.Stacks = index
 
-		_, err := DestroyProject(context.Background(), nil, cfg, "shop", ProjectTeardownStages{}, nil)
+		_, err := DestroyProject(context.Background(), nil, ProjectTeardown{Teardown: td, Values: values}, ProjectTeardownStages{}, nil)
 
 		if err == nil || !strings.Contains(err.Error(), "table is on fire") {
 			t.Fatalf("DestroyProject err = %v, want the failed value removal reported", err)
@@ -215,9 +216,9 @@ func TestRemovePreviewPurge(t *testing.T) {
 		fake := &recordingEdge{kind: cloudflare.Kind}
 		ctx := context.Background()
 		state := fake.reconciled(t, edge.StackSpec{Version: "v1", Slug: "shop"})
-		cfg := Config{ArtifactBucket: "artifact-bucket", Uploader: rec}
+		rec2 := Reclamation{Teardown: Teardown{Slug: "shop", Stores: ObjectStores{ArtifactBucket: "artifact-bucket", Uploader: rec}}}
 
-		if err := RemovePreview(ctx, state, cfg, "shop", "pr-1", false, PreviewRemovalStages{}, nil); err != nil {
+		if err := RemovePreview(ctx, state, rec2, "pr-1", false, PreviewRemovalStages{}, nil); err != nil {
 			t.Fatalf("RemovePreview: %v", err)
 		}
 
@@ -229,10 +230,10 @@ func TestRemovePreviewPurge(t *testing.T) {
 	t.Run("leaves artifacts when the pointer removal failed", func(t *testing.T) {
 		rec := &sweepRecorder{}
 		fake := &recordingEdge{kind: cloudflare.Kind}
-		cfg := Config{ArtifactBucket: "artifact-bucket", Uploader: rec}
+		rec2 := Reclamation{Teardown: Teardown{Slug: "shop", Stores: ObjectStores{ArtifactBucket: "artifact-bucket", Uploader: rec}}}
 		stale := fake.opened(t, edge.StackState{edge.StackKeySlug: "shop", edge.StackKeySecret: "stale"})
 
-		err := RemovePreview(context.Background(), stale, cfg, "shop", "pr-1", false, PreviewRemovalStages{}, nil)
+		err := RemovePreview(context.Background(), stale, rec2, "pr-1", false, PreviewRemovalStages{}, nil)
 		if err == nil {
 			t.Fatal("RemovePreview err = nil, want the failed pointer removal reported")
 		}
@@ -247,7 +248,7 @@ func TestRemovePreviewPurge(t *testing.T) {
 		ctx := context.Background()
 		state := fake.reconciled(t, edge.StackSpec{Version: "v1", Slug: "shop"})
 
-		if err := RemovePreview(ctx, state, Config{Values: values}, "shop", "pr-1", false, PreviewRemovalStages{}, nil); err != nil {
+		if err := RemovePreview(ctx, state, Reclamation{Teardown: Teardown{Slug: "shop"}}, "pr-1", false, PreviewRemovalStages{}, nil); err != nil {
 			t.Fatalf("RemovePreview: %v", err)
 		}
 

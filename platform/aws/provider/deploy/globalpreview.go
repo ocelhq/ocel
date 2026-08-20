@@ -18,7 +18,15 @@ func declaresPreviewDomain(manifest *deploymentsv1.Manifest) bool {
 	return len(DeclaredHostnames(manifest, deploymentsv1.Environment_CLASS_PREVIEW)) > 0
 }
 
-func PreviewWildcardSpecFor(cfg Config, baseDomain string, warn func(string)) (edge.PreviewWildcardSpec, error) {
+type PreviewWildcard struct {
+	Edge                edge.Edge
+	Values              map[string]string
+	Worker              WorkerFacts
+	StoreScriptName     string
+	ISRWriterScriptName string
+}
+
+func PreviewWildcardSpecFor(w PreviewWildcard, baseDomain string, warn func(string)) (edge.PreviewWildcardSpec, error) {
 	if baseDomain == "" {
 		return edge.PreviewWildcardSpec{}, fmt.Errorf("a preview domain is required")
 	}
@@ -27,28 +35,28 @@ func PreviewWildcardSpecFor(cfg Config, baseDomain string, warn func(string)) (e
 		BaseDomain: baseDomain,
 		GrammarMin: edge.PreviewGrammarMin,
 		GrammarMax: edge.PreviewGrammarMax,
-		Values:     cfg.EdgeValues,
+		Values:     w.Values,
 		Warn:       warn,
 	}
-	if _, programmable := cfg.Edge.(edge.Programmable); !programmable {
+	if _, programmable := w.Edge.(edge.Programmable); !programmable {
 		return spec, nil
 	}
-	generic, err := sharedWorker(cfg)
+	generic, err := sharedWorker(w.Edge, w.Worker)
 	if err != nil {
 		return edge.PreviewWildcardSpec{}, err
 	}
-	if cfg.StoreScriptName == "" {
+	if w.StoreScriptName == "" {
 		return edge.PreviewWildcardSpec{}, fmt.Errorf("no deployments-store worker found for the preview substrate; re-run `ocel bootstrap --preview` to provision it")
 	}
-	generic = withService(generic, storeServiceBinding, cfg.StoreScriptName)
+	generic = withService(generic, storeServiceBinding, w.StoreScriptName)
 	generic = withVar(generic, envPreview, "1")
 	generic = withVar(generic, envPreviewGlobal, "1")
 	generic = withVar(generic, envPreviewBaseDomain, baseDomain)
 
 	spec.Program = &edge.ProgramSpec{
 		Worker:              generic,
-		StoreScriptName:     cfg.StoreScriptName,
-		ISRWriterScriptName: cfg.ISRWriterScriptName,
+		StoreScriptName:     w.StoreScriptName,
+		ISRWriterScriptName: w.ISRWriterScriptName,
 	}
 	return spec, nil
 }

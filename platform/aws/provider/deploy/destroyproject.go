@@ -59,14 +59,14 @@ func (s ProjectTeardownStages) Roots() []Stage {
 	return []Stage{s.Planning, s.Unbind, s.AppStacks, s.InfraStacks, s.Edge, s.Values, s.Assets, s.Forget}
 }
 
-func unbindRouting(ctx context.Context, stack edge.EdgeStack, cfg Config, stage Stage, pointers []string) (err error) {
+func unbindRouting(ctx context.Context, stack edge.EdgeStack, rep Reporting, stage Stage, pointers []string) (err error) {
 	start := time.Now()
-	defer func() { spanForStage(cfg.Tracer, stage, start, time.Now(), err) }()
+	defer func() { spanForStage(rep.Tracer, stage, start, time.Now(), err) }()
 
 	if stack == nil || len(stack.State()) == 0 {
 		return nil
 	}
-	report := cfg.reportStage(stage)
+	report := rep.stage(stage)
 	var errs []error
 	for _, hostname := range edge.BoundDomains(stack.State()) {
 		report(sanitizeMessage(fmt.Sprintf("Unbinding %s from the edge", hostname)))
@@ -95,18 +95,18 @@ func childStagesFor(parent Stage, stacks []naming.StackName) (map[naming.StackNa
 	return byStack, ordered
 }
 
-func DestroyProject(ctx context.Context, stack edge.EdgeStack, cfg Config, slug string, stages ProjectTeardownStages, log func(string)) (DestroyProjectResult, error) {
+func DestroyProject(ctx context.Context, stack edge.EdgeStack, t ProjectTeardown, stages ProjectTeardownStages, log func(string)) (DestroyProjectResult, error) {
 	var errs []error
 	result := DestroyProjectResult{EdgeTornDown: true}
 
 	planStart := time.Now()
-	indexed, err := indexedStacks(ctx, cfg.Stacks, slug)
+	indexed, err := indexedStacks(ctx, t.Stacks, t.Slug)
 	if err != nil {
 		errs = append(errs, err)
 	}
 	plan := classifyProjectStacks(indexed)
-	envs := purgeEnvs(indexed, cfg.Env)
-	spanForStage(cfg.Tracer, stages.Planning, planStart, time.Now(), err)
+	envs := purgeEnvs(indexed, t.Env)
+	spanForStage(t.Report.Tracer, stages.Planning, planStart, time.Now(), err)
 
 	var infraStacks []naming.StackName
 	if !plan.InfraStack.IsZero() {
@@ -114,49 +114,49 @@ func DestroyProject(ctx context.Context, stack edge.EdgeStack, cfg Config, slug 
 	}
 	appChildren, appDeclared := childStagesFor(stages.AppStacks, plan.AppStacks)
 	infraChildren, infraDeclared := childStagesFor(stages.InfraStacks, infraStacks)
-	declareStages(cfg.Tracer, true, append(appDeclared, infraDeclared...)...)
+	declareStages(t.Report.Tracer, true, append(appDeclared, infraDeclared...)...)
 
-	if err := unbindRouting(ctx, stack, cfg, stages.Unbind, []string{edge.DefaultPointer}); err != nil {
+	if err := unbindRouting(ctx, stack, t.Report, stages.Unbind, []string{edge.DefaultPointer}); err != nil {
 		errs = append(errs, err)
 	}
 
 	stacksStart := time.Now()
 	appErrs, infraErrs := destroyPhased(plan.AppStacks, infraStacks,
 		func(stack naming.StackName) error {
-			return destroyStackStage(ctx, cfg, stack, appChildren[stack], "app", log)
+			return destroyStackStage(ctx, t.Teardown, stack, appChildren[stack], "app", log)
 		},
 		func(stack naming.StackName) error {
-			return destroyStackStage(ctx, cfg, stack, infraChildren[stack], "infra", log)
+			return destroyStackStage(ctx, t.Teardown, stack, infraChildren[stack], "infra", log)
 		})
-	spanForStage(cfg.Tracer, stages.AppStacks, stacksStart, time.Now(), errors.Join(appErrs...))
-	spanForStage(cfg.Tracer, stages.InfraStacks, stacksStart, time.Now(), errors.Join(infraErrs...))
+	spanForStage(t.Report.Tracer, stages.AppStacks, stacksStart, time.Now(), errors.Join(appErrs...))
+	spanForStage(t.Report.Tracer, stages.InfraStacks, stacksStart, time.Now(), errors.Join(infraErrs...))
 	errs = append(errs, appErrs...)
 	errs = append(errs, infraErrs...)
 
-	edgeErr := destroyEdgeStack(ctx, stack, cfg, stages.Edge, "Destroying what the edge stack owns (surfaces, routes, deployments ledger)")
+	edgeErr := destroyEdgeStack(ctx, stack, t, stages.Edge, "Destroying what the edge stack owns (surfaces, routes, deployments ledger)")
 	if edgeErr != nil {
 		result.EdgeTornDown = false
 		errs = append(errs, edgeErr)
 	}
 
 	valuesStart := time.Now()
-	verr := purgeProjectValues(ctx, cfg, slug, cfg.reportStage(stages.Values))
-	spanForStage(cfg.Tracer, stages.Values, valuesStart, time.Now(), verr)
+	verr := purgeProjectValues(ctx, t.Values, t.Slug, t.Report.stage(stages.Values))
+	spanForStage(t.Report.Tracer, stages.Values, valuesStart, time.Now(), verr)
 	if verr != nil {
 		errs = append(errs, verr)
 	}
 
 	assetsStart := time.Now()
-	cfg.reportStage(stages.Assets)("Purging project assets")
-	aerr := purgeProjectAssets(ctx, cfg, slug, envs)
-	spanForStage(cfg.Tracer, stages.Assets, assetsStart, time.Now(), aerr)
+	t.Report.stage(stages.Assets)("Purging project assets")
+	aerr := purgeProjectAssets(ctx, t.Stores, t.Slug, envs)
+	spanForStage(t.Report.Tracer, stages.Assets, assetsStart, time.Now(), aerr)
 	if aerr != nil {
 		errs = append(errs, aerr)
 	}
 
 	forgetStart := time.Now()
-	ferr := forgetProject(ctx, cfg, slug, stages.Forget, errors.Join(errs...))
-	spanForStage(cfg.Tracer, stages.Forget, forgetStart, time.Now(), ferr)
+	ferr := forgetProject(ctx, t.Teardown, stages.Forget, errors.Join(errs...))
+	spanForStage(t.Report.Tracer, stages.Forget, forgetStart, time.Now(), ferr)
 	if ferr != nil {
 		errs = append(errs, ferr)
 	}
@@ -164,31 +164,31 @@ func DestroyProject(ctx context.Context, stack edge.EdgeStack, cfg Config, slug 
 	return result, errors.Join(errs...)
 }
 
-func forgetProject(ctx context.Context, cfg Config, slug string, stage Stage, unfinished error) error {
-	report := cfg.reportStage(stage)
+func forgetProject(ctx context.Context, t Teardown, stage Stage, unfinished error) error {
+	report := t.Report.stage(stage)
 	if unfinished != nil {
 		report("Leaving the project indexed: the rerun reads its progress from what is still here")
 		return nil
 	}
 	report("Forgetting the project")
-	return forgetProjectIfEmpty(ctx, cfg.Stacks, slug)
+	return forgetProjectIfEmpty(ctx, t.Stacks, t.Slug)
 }
 
-func destroyEdgeStack(ctx context.Context, stack edge.EdgeStack, cfg Config, stage Stage, what string) (err error) {
+func destroyEdgeStack(ctx context.Context, stack edge.EdgeStack, t ProjectTeardown, stage Stage, what string) (err error) {
 	start := time.Now()
-	defer func() { spanForStage(cfg.Tracer, stage, start, time.Now(), err) }()
+	defer func() { spanForStage(t.Report.Tracer, stage, start, time.Now(), err) }()
 
 	if stack == nil || len(stack.State()) == 0 {
 		return nil
 	}
-	report := cfg.reportStage(stage)
+	report := t.Report.stage(stage)
 	report(what)
 	prior := stack.State()
 	if derr := stack.Destroy(ctx); derr != nil {
 		err = fmt.Errorf("destroy the edge stack: %w", derr)
 		return err
 	}
-	if rerr := releaseRecords(ctx, cfg, prior, report); rerr != nil {
+	if rerr := releaseRecords(ctx, t.DNS, prior, report); rerr != nil {
 		err = rerr
 	}
 	return err
@@ -198,19 +198,19 @@ type ValueStore interface {
 	Purge(ctx context.Context, slug string) (int, error)
 }
 
-func purgeProjectValues(ctx context.Context, cfg Config, slug string, report func(string)) error {
-	if cfg.Values == nil {
+func purgeProjectValues(ctx context.Context, values ValueStore, slug string, report func(string)) error {
+	if values == nil {
 		return nil
 	}
 	nilSafe(report)("Removing the project's stored variable values")
-	if _, err := cfg.Values.Purge(ctx, slug); err != nil {
+	if _, err := values.Purge(ctx, slug); err != nil {
 		return fmt.Errorf("remove %s's stored variable values: %w", slug, err)
 	}
 	return nil
 }
 
-func PlanProjectTeardown(ctx context.Context, cfg Config, slug string) (ProjectTeardownPlan, error) {
-	stacks, err := indexedStacks(ctx, cfg.Stacks, slug)
+func PlanProjectTeardown(ctx context.Context, index StackIndex, slug string) (ProjectTeardownPlan, error) {
+	stacks, err := indexedStacks(ctx, index, slug)
 	if err != nil {
 		return ProjectTeardownPlan{}, err
 	}
@@ -228,14 +228,14 @@ func purgeEnvs(stacks []naming.StackName, env string) []string {
 	return envs
 }
 
-func purgeProjectAssets(ctx context.Context, cfg Config, slug string, envs []string) error {
+func purgeProjectAssets(ctx context.Context, stores ObjectStores, slug string, envs []string) error {
 	var errs []error
 	for _, env := range envs {
 		prefix := projectEnvPrefix(env, slug)
 		for _, t := range []prefixTarget{
-			{asPrefixDeleter(cfg.CacheStoreUploader), cfg.CacheStoreBucket, prefix},
-			{asPrefixDeleter(cfg.Uploader), cfg.AssetBucket, prefix},
-			{asPrefixDeleter(cfg.Uploader), cfg.ArtifactBucket, prefix},
+			{asPrefixDeleter(stores.CacheStoreUploader), stores.CacheStoreBucket, prefix},
+			{asPrefixDeleter(stores.Uploader), stores.AssetBucket, prefix},
+			{asPrefixDeleter(stores.Uploader), stores.ArtifactBucket, prefix},
 		} {
 			if err := deletePrefix(ctx, t.deleter, t.bucket, t.prefix); err != nil {
 				errs = append(errs, err)
@@ -257,19 +257,4 @@ func skipTeardownRefresh() bool {
 		return true
 	}
 	return false
-}
-
-func teardownConfig(cfg Config, stack naming.StackName) TeardownConfig {
-	return TeardownConfig{
-		Region:        cfg.Region,
-		BackendURL:    cfg.BackendURL,
-		Passphrase:    cfg.Passphrase,
-		PulumiProject: cfg.PulumiProject,
-		Project:       naming.Sanitize(cfg.Slug),
-		Stack:         stack,
-		Pulumi:        cfg.Pulumi,
-		Stacks:        cfg.Stacks,
-		SkipRefresh:   skipTeardownRefresh(),
-		realized:      cfg.realized,
-	}
 }
