@@ -155,7 +155,7 @@ func checkNeeds(ctx context.Context, cfg Config, manifest *deploymentsv1.Manifes
 			}
 			detail := desc.Needs[need]
 			waived := slices.Contains(cfg.AllowDegraded, string(need))
-			serves := cfg.Edge.Supports(need)
+			serves := edge.Supports(cfg.Edge, need)
 
 			if serves && verifies && slices.Contains(edge.CodeNeeds(), need) {
 				identity, err := entitlement()

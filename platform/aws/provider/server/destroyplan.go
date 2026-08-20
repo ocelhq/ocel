@@ -161,7 +161,7 @@ func containsRecord(records []edge.Record, wanted edge.Record) bool {
 
 func storeItems(edgeFront edge.Edge, scope projectPlanScope) []*deploymentsv1.TeardownItem {
 	var items []*deploymentsv1.TeardownItem
-	if _, programmable := edgeFront.(edge.Programmable); !programmable {
+	if !edgeFront.Facts().RunsCode {
 		items = append(items, &deploymentsv1.TeardownItem{
 			Kind:   "deployments ledger",
 			Name:   scope.class + "/" + scope.slug,

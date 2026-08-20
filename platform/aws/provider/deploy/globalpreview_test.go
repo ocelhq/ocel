@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
+	"github.com/ocelhq/ocel/platform/aws/provider/edges/apigateway"
 	cloudflare "github.com/ocelhq/ocel/platform/edge/cloudflare/deploy"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
@@ -124,7 +125,7 @@ func TestPreviewWildcardSpecFor(t *testing.T) {
 
 	t.Run("an edge that runs no code of ours carries no program", func(t *testing.T) {
 		bare := cfg
-		bare.Edge = unprogrammableEdge{}
+		bare.Edge = unprogrammableEdge{&recordingEdge{kind: apigateway.Kind}}
 		bare.StoreScriptName = ""
 		bare.ISRWriterScriptName = ""
 
@@ -151,9 +152,11 @@ func TestPreviewWildcardSpecFor(t *testing.T) {
 
 type unprogrammableEdge struct{ edge.Edge }
 
-func (u unprogrammableEdge) SignsOriginForwards() bool { return edge.SignsOriginForwards(u.Edge) }
-
-func (u unprogrammableEdge) InvalidatesByCacheTag() bool { return edge.InvalidatesByCacheTag(u.Edge) }
+func (u unprogrammableEdge) Facts() edge.Facts {
+	facts := u.Edge.Facts()
+	facts.RunsCode = false
+	return facts
+}
 
 func TestMarkGlobalPreview(t *testing.T) {
 	t.Parallel()

@@ -60,7 +60,7 @@ func resolveRouterHost(cfg Config, app *deploymentsv1.ManifestApp, coord naming.
 	if cfg.Edge == nil {
 		return nil, nil
 	}
-	if _, programmable := cfg.Edge.(edge.Programmable); programmable {
+	if cfg.Edge.Facts().RunsCode {
 		return nil, nil
 	}
 	name := app.GetName()

@@ -7,7 +7,6 @@ import (
 	"github.com/ocelhq/ocel/pkg/naming"
 	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
 	"github.com/ocelhq/ocel/platform/aws/provider/membrane"
-	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
 type deployPlan struct {
@@ -21,7 +20,7 @@ type deployPlan struct {
 }
 
 func planDeploy(ctx context.Context, cfg Config, manifest *deploymentsv1.Manifest, log func(string)) (deployPlan, error) {
-	if _, programmable := cfg.Edge.(edge.Programmable); programmable && cfg.StoreEndpoint == "" {
+	if cfg.Edge.Facts().RunsCode && cfg.StoreEndpoint == "" {
 		return deployPlan{}, fmt.Errorf("no deployments-store worker found for this account; re-run `%s` to provision it before deploying", bootstrapCommand(cfg))
 	}
 

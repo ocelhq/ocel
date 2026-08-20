@@ -15,7 +15,6 @@ import (
 	"net/textproto"
 	"os"
 	"path"
-	"slices"
 	"strings"
 	"sync"
 
@@ -80,8 +79,13 @@ const clientMaxRetries = 5
 
 func (p *provider) Kind() edge.Kind { return Kind }
 
-func (p *provider) Supports(need edge.Need) bool {
-	return slices.Contains(edge.AllNeeds(), need)
+func (p *provider) Facts() edge.Facts {
+	return edge.Facts{
+		RunsCode:            true,
+		ServesUnbound:       true,
+		SignsOriginForwards: true,
+		CredentialScope:     os.Getenv(envAccountID),
+	}
 }
 
 func (p *provider) Supported() []edge.Need {
@@ -91,12 +95,6 @@ func (p *provider) Supported() []edge.Need {
 func (p *provider) FlipBound() edge.FlipBound {
 	return edge.FlipBound{}
 }
-
-func (p *provider) ServesUnbound() bool { return true }
-
-func (p *provider) SignsOriginForwards() bool { return true }
-
-func (p *provider) CredentialScope() string { return os.Getenv(envAccountID) }
 
 func (p *provider) ProjectSurfaces(scope edge.ProjectScope) []edge.Surface {
 	surfaces := []edge.Surface{{

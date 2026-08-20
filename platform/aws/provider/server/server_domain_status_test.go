@@ -453,7 +453,7 @@ func liveGate(t *testing.T, kind edge.Kind, api *domainACM, answering bool, prio
 	}
 	return domainGate{
 		kind:          kind,
-		servesUnbound: edge.ServesUnbound(registeredEdge(kind)),
+		servesUnbound: registeredEdge(kind).Facts().ServesUnbound,
 
 		state:    state,
 		recorded: prior,

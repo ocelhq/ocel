@@ -43,29 +43,29 @@ func Run(t *testing.T, suite Suite) {
 		t.Fatal("the suite names no hostname, and every edge must be able to bind one")
 	}
 
-	t.Run("the programmable surface is exactly the declared code needs", func(t *testing.T) {
+	t.Run("the code fact and the programmable surface are one answer", func(t *testing.T) {
 		e, _ := suite.New(t)
-		_, programmable := e.(edge.Programmable)
-		wants := slices.ContainsFunc(edge.CodeNeeds(), e.Supports)
-		if programmable != wants {
-			t.Errorf("Programmable = %v, but Supports(edge-middleware|edge-runtime) = %v; an edge that runs code must be programmable and one that does not must not be", programmable, wants)
+		runsCode := e.Facts().RunsCode
+		if _, programmable := e.(edge.Programmable); runsCode != programmable {
+			t.Errorf("Facts().RunsCode = %v, but Programmable = %v; the fact and the interface are the same claim and an edge cannot answer them differently", runsCode, programmable)
+		}
+		wants := slices.ContainsFunc(edge.CodeNeeds(), func(need edge.Need) bool {
+			return edge.Supports(e, need)
+		})
+		if runsCode != wants {
+			t.Errorf("Facts().RunsCode = %v, but Supported() names a code need = %v; an edge that runs code must declare one and one that does not must declare neither", runsCode, wants)
 		}
 	})
 
-	t.Run("Supports and Supported answer alike", func(t *testing.T) {
+	t.Run("every declared need is a need, and declared once", func(t *testing.T) {
 		e, _ := suite.New(t)
 		supported := e.Supported()
-		for _, need := range supported {
+		for i, need := range supported {
 			if !edge.ValidNeed(need) {
 				t.Errorf("Supported() names %q, which is not a need", need)
 			}
-			if !e.Supports(need) {
-				t.Errorf("Supported() names %q but Supports(%q) is false", need, need)
-			}
-		}
-		for _, need := range edge.AllNeeds() {
-			if e.Supports(need) && !slices.Contains(supported, need) {
-				t.Errorf("Supports(%q) is true but Supported() omits it", need)
+			if slices.Contains(supported[:i], need) {
+				t.Errorf("Supported() names %q twice", need)
 			}
 		}
 	})
@@ -103,10 +103,10 @@ func Run(t *testing.T, suite Suite) {
 		}
 	})
 
-	t.Run("a programmable edge signs its origin forwards", func(t *testing.T) {
+	t.Run("an edge that runs code signs its origin forwards", func(t *testing.T) {
 		e, _ := suite.New(t)
-		if _, programmable := e.(edge.Programmable); programmable && !edge.SignsOriginForwards(e) {
-			t.Error("SignsOriginForwards = false on a programmable edge; the code it runs at the edge reaches the origin with the credentials it was bootstrapped, so it must sign")
+		if facts := e.Facts(); facts.RunsCode && !facts.SignsOriginForwards {
+			t.Error("Facts().SignsOriginForwards = false on an edge that runs code; the code it runs at the edge reaches the origin with the credentials it was bootstrapped, so it must sign")
 		}
 	})
 

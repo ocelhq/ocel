@@ -140,11 +140,11 @@ func (p *provider) deleter() *Deleter {
 
 func (p *provider) Kind() edge.Kind { return Kind }
 
-var supported = []edge.Need{edge.NeedStreaming}
-
-func (p *provider) Supports(need edge.Need) bool {
-	return slices.Contains(supported, need)
+func (p *provider) Facts() edge.Facts {
+	return edge.Facts{SignsOriginForwards: true}
 }
+
+var supported = []edge.Need{edge.NeedStreaming}
 
 func (p *provider) Supported() []edge.Need {
 	return slices.Clone(supported)
@@ -155,8 +155,6 @@ func (p *provider) FlipBound() edge.FlipBound {
 }
 
 func (p *provider) CertificateRegion(apiRegion string) string { return apiRegion }
-
-func (p *provider) SignsOriginForwards() bool { return true }
 
 func (p *provider) ProjectSurfaces(scope edge.ProjectScope) []edge.Surface {
 	surfaces := []edge.Surface{{

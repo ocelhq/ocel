@@ -79,11 +79,12 @@ func appEnv(manifest *deploymentsv1.Manifest, app *deploymentsv1.ManifestApp, bu
 	env := map[string]string{}
 	if cfg.Edge != nil {
 		env[edgeKindEnv] = string(cfg.Edge.Kind())
-		if _, programmable := cfg.Edge.(edge.Programmable); !programmable {
+		facts := cfg.Edge.Facts()
+		if !facts.RunsCode {
 			env[edge.OriginRouterVar] = "1"
 			env[edge.OriginSignedVar] = "1"
 		}
-		if edge.InvalidatesByCacheTag(cfg.Edge) {
+		if facts.InvalidatesByCacheTag {
 			env[edge.CacheTagPurgeVar] = "1"
 		}
 	}
