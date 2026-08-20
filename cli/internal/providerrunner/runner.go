@@ -25,6 +25,7 @@ import (
 	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
 	"github.com/ocelhq/ocel/pkg/proto/deployments/v1/deploymentsv1connect"
 	"github.com/ocelhq/ocel/pkg/proto/env/v1/envv1connect"
+	progressv1 "github.com/ocelhq/ocel/pkg/proto/progress/v1"
 )
 
 const DefaultReadyTimeout = 10 * time.Second
@@ -299,67 +300,67 @@ var ErrVarsUnavailable = errors.New("providerrunner: the variable store was reac
 
 var ErrDeploymentsUnavailable = errors.New("providerrunner: the provider was reached before a successful Ready")
 
-func (r *Runner) Deploy(ctx context.Context, req *deploymentsv1.DeployRequest, onEvent func(*deploymentsv1.DeployEvent)) error {
-	return r.stream(ctx, "Deploy", onEvent, func(client deploymentsv1connect.ProviderServiceClient) (*connect.ServerStreamForClient[deploymentsv1.DeployEvent], error) {
+func (r *Runner) Deploy(ctx context.Context, req *deploymentsv1.DeployRequest, onEvent func(*progressv1.OperationEvent)) error {
+	return r.stream(ctx, "Deploy", onEvent, func(client deploymentsv1connect.ProviderServiceClient) (*connect.ServerStreamForClient[progressv1.OperationEvent], error) {
 		return client.Deploy(ctx, req)
 	})
 }
 
-func (r *Runner) Bootstrap(ctx context.Context, req *deploymentsv1.BootstrapRequest, onEvent func(*deploymentsv1.DeployEvent)) error {
-	return r.stream(ctx, "Bootstrap", onEvent, func(client deploymentsv1connect.ProviderServiceClient) (*connect.ServerStreamForClient[deploymentsv1.DeployEvent], error) {
+func (r *Runner) Bootstrap(ctx context.Context, req *deploymentsv1.BootstrapRequest, onEvent func(*progressv1.OperationEvent)) error {
+	return r.stream(ctx, "Bootstrap", onEvent, func(client deploymentsv1connect.ProviderServiceClient) (*connect.ServerStreamForClient[progressv1.OperationEvent], error) {
 		return client.Bootstrap(ctx, req)
 	})
 }
 
-func (r *Runner) Teardown(ctx context.Context, req *deploymentsv1.TeardownRequest, onEvent func(*deploymentsv1.DeployEvent)) error {
-	return r.stream(ctx, "Teardown", onEvent, func(client deploymentsv1connect.ProviderServiceClient) (*connect.ServerStreamForClient[deploymentsv1.DeployEvent], error) {
+func (r *Runner) Teardown(ctx context.Context, req *deploymentsv1.TeardownRequest, onEvent func(*progressv1.OperationEvent)) error {
+	return r.stream(ctx, "Teardown", onEvent, func(client deploymentsv1connect.ProviderServiceClient) (*connect.ServerStreamForClient[progressv1.OperationEvent], error) {
 		return client.Teardown(ctx, req)
 	})
 }
 
-func (r *Runner) DestroyPreview(ctx context.Context, req *deploymentsv1.DestroyPreviewRequest, onEvent func(*deploymentsv1.DeployEvent)) error {
-	return r.stream(ctx, "DestroyPreview", onEvent, func(client deploymentsv1connect.ProviderServiceClient) (*connect.ServerStreamForClient[deploymentsv1.DeployEvent], error) {
+func (r *Runner) DestroyPreview(ctx context.Context, req *deploymentsv1.DestroyPreviewRequest, onEvent func(*progressv1.OperationEvent)) error {
+	return r.stream(ctx, "DestroyPreview", onEvent, func(client deploymentsv1connect.ProviderServiceClient) (*connect.ServerStreamForClient[progressv1.OperationEvent], error) {
 		return client.DestroyPreview(ctx, req)
 	})
 }
 
-func (r *Runner) DestroyProject(ctx context.Context, req *deploymentsv1.DestroyProjectRequest, onEvent func(*deploymentsv1.DeployEvent)) error {
-	return r.stream(ctx, "DestroyProject", onEvent, func(client deploymentsv1connect.ProviderServiceClient) (*connect.ServerStreamForClient[deploymentsv1.DeployEvent], error) {
+func (r *Runner) DestroyProject(ctx context.Context, req *deploymentsv1.DestroyProjectRequest, onEvent func(*progressv1.OperationEvent)) error {
+	return r.stream(ctx, "DestroyProject", onEvent, func(client deploymentsv1connect.ProviderServiceClient) (*connect.ServerStreamForClient[progressv1.OperationEvent], error) {
 		return client.DestroyProject(ctx, req)
 	})
 }
 
-func (r *Runner) UseDomain(ctx context.Context, req *deploymentsv1.UseDomainRequest, onEvent func(*deploymentsv1.DeployEvent)) error {
-	return r.stream(ctx, "UseDomain", onEvent, func(client deploymentsv1connect.ProviderServiceClient) (*connect.ServerStreamForClient[deploymentsv1.DeployEvent], error) {
+func (r *Runner) UseDomain(ctx context.Context, req *deploymentsv1.UseDomainRequest, onEvent func(*progressv1.OperationEvent)) error {
+	return r.stream(ctx, "UseDomain", onEvent, func(client deploymentsv1connect.ProviderServiceClient) (*connect.ServerStreamForClient[progressv1.OperationEvent], error) {
 		return client.UseDomain(ctx, req)
 	})
 }
 
-func (r *Runner) ReleaseDomain(ctx context.Context, req *deploymentsv1.ReleaseDomainRequest, onEvent func(*deploymentsv1.DeployEvent)) error {
-	return r.stream(ctx, "ReleaseDomain", onEvent, func(client deploymentsv1connect.ProviderServiceClient) (*connect.ServerStreamForClient[deploymentsv1.DeployEvent], error) {
+func (r *Runner) ReleaseDomain(ctx context.Context, req *deploymentsv1.ReleaseDomainRequest, onEvent func(*progressv1.OperationEvent)) error {
+	return r.stream(ctx, "ReleaseDomain", onEvent, func(client deploymentsv1connect.ProviderServiceClient) (*connect.ServerStreamForClient[progressv1.OperationEvent], error) {
 		return client.ReleaseDomain(ctx, req)
 	})
 }
 
-func (r *Runner) AddDomain(ctx context.Context, req *deploymentsv1.AddDomainRequest, onEvent func(*deploymentsv1.DeployEvent)) error {
-	return r.stream(ctx, "AddDomain", onEvent, func(client deploymentsv1connect.ProviderServiceClient) (*connect.ServerStreamForClient[deploymentsv1.DeployEvent], error) {
+func (r *Runner) AddDomain(ctx context.Context, req *deploymentsv1.AddDomainRequest, onEvent func(*progressv1.OperationEvent)) error {
+	return r.stream(ctx, "AddDomain", onEvent, func(client deploymentsv1connect.ProviderServiceClient) (*connect.ServerStreamForClient[progressv1.OperationEvent], error) {
 		return client.AddDomain(ctx, req)
 	})
 }
 
-func (r *Runner) RemoveDomain(ctx context.Context, req *deploymentsv1.RemoveDomainRequest, onEvent func(*deploymentsv1.DeployEvent)) error {
-	return r.stream(ctx, "RemoveDomain", onEvent, func(client deploymentsv1connect.ProviderServiceClient) (*connect.ServerStreamForClient[deploymentsv1.DeployEvent], error) {
+func (r *Runner) RemoveDomain(ctx context.Context, req *deploymentsv1.RemoveDomainRequest, onEvent func(*progressv1.OperationEvent)) error {
+	return r.stream(ctx, "RemoveDomain", onEvent, func(client deploymentsv1connect.ProviderServiceClient) (*connect.ServerStreamForClient[progressv1.OperationEvent], error) {
 		return client.RemoveDomain(ctx, req)
 	})
 }
 
-func (r *Runner) Prune(ctx context.Context, req *deploymentsv1.PruneRequest, onEvent func(*deploymentsv1.DeployEvent)) error {
-	return r.stream(ctx, "Prune", onEvent, func(client deploymentsv1connect.ProviderServiceClient) (*connect.ServerStreamForClient[deploymentsv1.DeployEvent], error) {
+func (r *Runner) Prune(ctx context.Context, req *deploymentsv1.PruneRequest, onEvent func(*progressv1.OperationEvent)) error {
+	return r.stream(ctx, "Prune", onEvent, func(client deploymentsv1connect.ProviderServiceClient) (*connect.ServerStreamForClient[progressv1.OperationEvent], error) {
 		return client.Prune(ctx, req)
 	})
 }
 
-func (r *Runner) stream(ctx context.Context, rpc string, onEvent func(*deploymentsv1.DeployEvent), call func(deploymentsv1connect.ProviderServiceClient) (*connect.ServerStreamForClient[deploymentsv1.DeployEvent], error)) error {
+func (r *Runner) stream(ctx context.Context, rpc string, onEvent func(*progressv1.OperationEvent), call func(deploymentsv1connect.ProviderServiceClient) (*connect.ServerStreamForClient[progressv1.OperationEvent], error)) error {
 	client, err := r.Deployments()
 	if err != nil {
 		return err
@@ -368,7 +369,7 @@ func (r *Runner) stream(ctx context.Context, rpc string, onEvent func(*deploymen
 	return r.driveStream(rpc, stream, callErr, onEvent)
 }
 
-func (r *Runner) driveStream(rpc string, stream *connect.ServerStreamForClient[deploymentsv1.DeployEvent], callErr error, onEvent func(*deploymentsv1.DeployEvent)) error {
+func (r *Runner) driveStream(rpc string, stream *connect.ServerStreamForClient[progressv1.OperationEvent], callErr error, onEvent func(*progressv1.OperationEvent)) error {
 	if callErr != nil {
 		return fmt.Errorf("providerrunner: call %s: %w", rpc, callErr)
 	}

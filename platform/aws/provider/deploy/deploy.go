@@ -11,6 +11,7 @@ import (
 
 	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
 	linksv1 "github.com/ocelhq/ocel/pkg/proto/links/v1"
+	progressv1 "github.com/ocelhq/ocel/pkg/proto/progress/v1"
 	"github.com/ocelhq/ocel/platform/aws/provider/transform"
 	"github.com/ocelhq/ocel/platform/aws/provider/vars"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
@@ -140,9 +141,9 @@ func AppStages(provisioning Stage, manifest *deploymentsv1.Manifest) (map[string
 	return byApp, declared
 }
 
-type Progress func(phase deploymentsv1.Phase, message string, current, total uint32)
+type Progress func(phase progressv1.Phase, message string, current, total uint32)
 
-func (p Progress) report(phase deploymentsv1.Phase, message string, current, total uint32) {
+func (p Progress) report(phase progressv1.Phase, message string, current, total uint32) {
 	if p != nil {
 		p(phase, message, current, total)
 	}
@@ -150,7 +151,7 @@ func (p Progress) report(phase deploymentsv1.Phase, message string, current, tot
 
 type Result struct {
 	Links       []*linksv1.Link
-	Functions   []*deploymentsv1.FunctionOutput
+	Functions   []*progressv1.FunctionOutput
 	AppURLs     []string
 	URLNote     string
 	PromotionID string
@@ -162,7 +163,7 @@ func Run(ctx context.Context, cfg Config, manifest *deploymentsv1.Manifest, prog
 	return realize(ctx, cfg, &Realized{}, manifest, progress, log)
 }
 
-func appURLs(manifest *deploymentsv1.Manifest, functions []*deploymentsv1.FunctionOutput) []string {
+func appURLs(manifest *deploymentsv1.Manifest, functions []*progressv1.FunctionOutput) []string {
 	urlByLogical := make(map[string]string, len(functions))
 	for _, f := range functions {
 		if f.GetUrl() != "" {

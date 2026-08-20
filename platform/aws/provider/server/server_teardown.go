@@ -15,6 +15,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/ssm"
 
 	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
+	progressv1 "github.com/ocelhq/ocel/pkg/proto/progress/v1"
 	"github.com/ocelhq/ocel/platform/aws/provider/bootstrap"
 	"github.com/ocelhq/ocel/platform/aws/provider/stackindex"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
@@ -269,7 +270,7 @@ func planTeardown(ctx context.Context, deps teardownDeps, class string) (*deploy
 	return &deploymentsv1.PlanTeardownResponse{EdgeKind: string(deps.edge.Kind()), Items: items}, nil
 }
 
-func (s *Server) Teardown(ctx context.Context, req *deploymentsv1.TeardownRequest, stream *connect.ServerStream[deploymentsv1.DeployEvent]) error {
+func (s *Server) Teardown(ctx context.Context, req *deploymentsv1.TeardownRequest, stream *connect.ServerStream[progressv1.OperationEvent]) error {
 	opts := s.config.get()
 	edgeFront, err := s.edge(requestedEdge(req), opts.Region)
 	if err != nil {

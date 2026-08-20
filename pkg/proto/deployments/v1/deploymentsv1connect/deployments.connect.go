@@ -9,6 +9,7 @@ import (
 	context "context"
 	errors "errors"
 	v1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
+	v11 "github.com/ocelhq/ocel/pkg/proto/progress/v1"
 	http "net/http"
 	strings "strings"
 )
@@ -99,25 +100,25 @@ const (
 // ProviderServiceClient is a client for the deployments.v1.ProviderService service.
 type ProviderServiceClient interface {
 	Configure(context.Context, *v1.ConfigureRequest) (*v1.ConfigureResponse, error)
-	Deploy(context.Context, *v1.DeployRequest) (*connect.ServerStreamForClient[v1.DeployEvent], error)
-	Bootstrap(context.Context, *v1.BootstrapRequest) (*connect.ServerStreamForClient[v1.DeployEvent], error)
+	Deploy(context.Context, *v1.DeployRequest) (*connect.ServerStreamForClient[v11.OperationEvent], error)
+	Bootstrap(context.Context, *v1.BootstrapRequest) (*connect.ServerStreamForClient[v11.OperationEvent], error)
 	DescribeBootstrap(context.Context, *v1.DescribeBootstrapRequest) (*v1.DescribeBootstrapResponse, error)
-	Teardown(context.Context, *v1.TeardownRequest) (*connect.ServerStreamForClient[v1.DeployEvent], error)
+	Teardown(context.Context, *v1.TeardownRequest) (*connect.ServerStreamForClient[v11.OperationEvent], error)
 	PlanTeardown(context.Context, *v1.PlanTeardownRequest) (*v1.PlanTeardownResponse, error)
-	DestroyPreview(context.Context, *v1.DestroyPreviewRequest) (*connect.ServerStreamForClient[v1.DeployEvent], error)
-	DestroyProject(context.Context, *v1.DestroyProjectRequest) (*connect.ServerStreamForClient[v1.DeployEvent], error)
+	DestroyPreview(context.Context, *v1.DestroyPreviewRequest) (*connect.ServerStreamForClient[v11.OperationEvent], error)
+	DestroyProject(context.Context, *v1.DestroyProjectRequest) (*connect.ServerStreamForClient[v11.OperationEvent], error)
 	PlanDestroyProject(context.Context, *v1.PlanDestroyProjectRequest) (*v1.PlanDestroyProjectResponse, error)
 	ListEnvironments(context.Context, *v1.ListEnvironmentsRequest) (*v1.ListEnvironmentsResponse, error)
 	Preflight(context.Context, *v1.PreflightRequest) (*v1.PreflightResponse, error)
 	ListPromotions(context.Context, *v1.ListPromotionsRequest) (*v1.ListPromotionsResponse, error)
 	Rollback(context.Context, *v1.RollbackRequest) (*v1.RollbackResponse, error)
-	Prune(context.Context, *v1.PruneRequest) (*connect.ServerStreamForClient[v1.DeployEvent], error)
-	UseDomain(context.Context, *v1.UseDomainRequest) (*connect.ServerStreamForClient[v1.DeployEvent], error)
+	Prune(context.Context, *v1.PruneRequest) (*connect.ServerStreamForClient[v11.OperationEvent], error)
+	UseDomain(context.Context, *v1.UseDomainRequest) (*connect.ServerStreamForClient[v11.OperationEvent], error)
 	ListDomain(context.Context, *v1.ListDomainRequest) (*v1.ListDomainResponse, error)
 	PlanReleaseDomain(context.Context, *v1.PlanReleaseDomainRequest) (*v1.PlanReleaseDomainResponse, error)
-	ReleaseDomain(context.Context, *v1.ReleaseDomainRequest) (*connect.ServerStreamForClient[v1.DeployEvent], error)
-	AddDomain(context.Context, *v1.AddDomainRequest) (*connect.ServerStreamForClient[v1.DeployEvent], error)
-	RemoveDomain(context.Context, *v1.RemoveDomainRequest) (*connect.ServerStreamForClient[v1.DeployEvent], error)
+	ReleaseDomain(context.Context, *v1.ReleaseDomainRequest) (*connect.ServerStreamForClient[v11.OperationEvent], error)
+	AddDomain(context.Context, *v1.AddDomainRequest) (*connect.ServerStreamForClient[v11.OperationEvent], error)
+	RemoveDomain(context.Context, *v1.RemoveDomainRequest) (*connect.ServerStreamForClient[v11.OperationEvent], error)
 	DomainStatus(context.Context, *v1.DomainStatusRequest) (*v1.DomainStatusResponse, error)
 }
 
@@ -138,13 +139,13 @@ func NewProviderServiceClient(httpClient connect.HTTPClient, baseURL string, opt
 			connect.WithSchema(providerServiceMethods.ByName("Configure")),
 			connect.WithClientOptions(opts...),
 		),
-		deploy: connect.NewClient[v1.DeployRequest, v1.DeployEvent](
+		deploy: connect.NewClient[v1.DeployRequest, v11.OperationEvent](
 			httpClient,
 			baseURL+ProviderServiceDeployProcedure,
 			connect.WithSchema(providerServiceMethods.ByName("Deploy")),
 			connect.WithClientOptions(opts...),
 		),
-		bootstrap: connect.NewClient[v1.BootstrapRequest, v1.DeployEvent](
+		bootstrap: connect.NewClient[v1.BootstrapRequest, v11.OperationEvent](
 			httpClient,
 			baseURL+ProviderServiceBootstrapProcedure,
 			connect.WithSchema(providerServiceMethods.ByName("Bootstrap")),
@@ -156,7 +157,7 @@ func NewProviderServiceClient(httpClient connect.HTTPClient, baseURL string, opt
 			connect.WithSchema(providerServiceMethods.ByName("DescribeBootstrap")),
 			connect.WithClientOptions(opts...),
 		),
-		teardown: connect.NewClient[v1.TeardownRequest, v1.DeployEvent](
+		teardown: connect.NewClient[v1.TeardownRequest, v11.OperationEvent](
 			httpClient,
 			baseURL+ProviderServiceTeardownProcedure,
 			connect.WithSchema(providerServiceMethods.ByName("Teardown")),
@@ -168,13 +169,13 @@ func NewProviderServiceClient(httpClient connect.HTTPClient, baseURL string, opt
 			connect.WithSchema(providerServiceMethods.ByName("PlanTeardown")),
 			connect.WithClientOptions(opts...),
 		),
-		destroyPreview: connect.NewClient[v1.DestroyPreviewRequest, v1.DeployEvent](
+		destroyPreview: connect.NewClient[v1.DestroyPreviewRequest, v11.OperationEvent](
 			httpClient,
 			baseURL+ProviderServiceDestroyPreviewProcedure,
 			connect.WithSchema(providerServiceMethods.ByName("DestroyPreview")),
 			connect.WithClientOptions(opts...),
 		),
-		destroyProject: connect.NewClient[v1.DestroyProjectRequest, v1.DeployEvent](
+		destroyProject: connect.NewClient[v1.DestroyProjectRequest, v11.OperationEvent](
 			httpClient,
 			baseURL+ProviderServiceDestroyProjectProcedure,
 			connect.WithSchema(providerServiceMethods.ByName("DestroyProject")),
@@ -210,13 +211,13 @@ func NewProviderServiceClient(httpClient connect.HTTPClient, baseURL string, opt
 			connect.WithSchema(providerServiceMethods.ByName("Rollback")),
 			connect.WithClientOptions(opts...),
 		),
-		prune: connect.NewClient[v1.PruneRequest, v1.DeployEvent](
+		prune: connect.NewClient[v1.PruneRequest, v11.OperationEvent](
 			httpClient,
 			baseURL+ProviderServicePruneProcedure,
 			connect.WithSchema(providerServiceMethods.ByName("Prune")),
 			connect.WithClientOptions(opts...),
 		),
-		useDomain: connect.NewClient[v1.UseDomainRequest, v1.DeployEvent](
+		useDomain: connect.NewClient[v1.UseDomainRequest, v11.OperationEvent](
 			httpClient,
 			baseURL+ProviderServiceUseDomainProcedure,
 			connect.WithSchema(providerServiceMethods.ByName("UseDomain")),
@@ -234,19 +235,19 @@ func NewProviderServiceClient(httpClient connect.HTTPClient, baseURL string, opt
 			connect.WithSchema(providerServiceMethods.ByName("PlanReleaseDomain")),
 			connect.WithClientOptions(opts...),
 		),
-		releaseDomain: connect.NewClient[v1.ReleaseDomainRequest, v1.DeployEvent](
+		releaseDomain: connect.NewClient[v1.ReleaseDomainRequest, v11.OperationEvent](
 			httpClient,
 			baseURL+ProviderServiceReleaseDomainProcedure,
 			connect.WithSchema(providerServiceMethods.ByName("ReleaseDomain")),
 			connect.WithClientOptions(opts...),
 		),
-		addDomain: connect.NewClient[v1.AddDomainRequest, v1.DeployEvent](
+		addDomain: connect.NewClient[v1.AddDomainRequest, v11.OperationEvent](
 			httpClient,
 			baseURL+ProviderServiceAddDomainProcedure,
 			connect.WithSchema(providerServiceMethods.ByName("AddDomain")),
 			connect.WithClientOptions(opts...),
 		),
-		removeDomain: connect.NewClient[v1.RemoveDomainRequest, v1.DeployEvent](
+		removeDomain: connect.NewClient[v1.RemoveDomainRequest, v11.OperationEvent](
 			httpClient,
 			baseURL+ProviderServiceRemoveDomainProcedure,
 			connect.WithSchema(providerServiceMethods.ByName("RemoveDomain")),
@@ -264,25 +265,25 @@ func NewProviderServiceClient(httpClient connect.HTTPClient, baseURL string, opt
 // providerServiceClient implements ProviderServiceClient.
 type providerServiceClient struct {
 	configure          *connect.Client[v1.ConfigureRequest, v1.ConfigureResponse]
-	deploy             *connect.Client[v1.DeployRequest, v1.DeployEvent]
-	bootstrap          *connect.Client[v1.BootstrapRequest, v1.DeployEvent]
+	deploy             *connect.Client[v1.DeployRequest, v11.OperationEvent]
+	bootstrap          *connect.Client[v1.BootstrapRequest, v11.OperationEvent]
 	describeBootstrap  *connect.Client[v1.DescribeBootstrapRequest, v1.DescribeBootstrapResponse]
-	teardown           *connect.Client[v1.TeardownRequest, v1.DeployEvent]
+	teardown           *connect.Client[v1.TeardownRequest, v11.OperationEvent]
 	planTeardown       *connect.Client[v1.PlanTeardownRequest, v1.PlanTeardownResponse]
-	destroyPreview     *connect.Client[v1.DestroyPreviewRequest, v1.DeployEvent]
-	destroyProject     *connect.Client[v1.DestroyProjectRequest, v1.DeployEvent]
+	destroyPreview     *connect.Client[v1.DestroyPreviewRequest, v11.OperationEvent]
+	destroyProject     *connect.Client[v1.DestroyProjectRequest, v11.OperationEvent]
 	planDestroyProject *connect.Client[v1.PlanDestroyProjectRequest, v1.PlanDestroyProjectResponse]
 	listEnvironments   *connect.Client[v1.ListEnvironmentsRequest, v1.ListEnvironmentsResponse]
 	preflight          *connect.Client[v1.PreflightRequest, v1.PreflightResponse]
 	listPromotions     *connect.Client[v1.ListPromotionsRequest, v1.ListPromotionsResponse]
 	rollback           *connect.Client[v1.RollbackRequest, v1.RollbackResponse]
-	prune              *connect.Client[v1.PruneRequest, v1.DeployEvent]
-	useDomain          *connect.Client[v1.UseDomainRequest, v1.DeployEvent]
+	prune              *connect.Client[v1.PruneRequest, v11.OperationEvent]
+	useDomain          *connect.Client[v1.UseDomainRequest, v11.OperationEvent]
 	listDomain         *connect.Client[v1.ListDomainRequest, v1.ListDomainResponse]
 	planReleaseDomain  *connect.Client[v1.PlanReleaseDomainRequest, v1.PlanReleaseDomainResponse]
-	releaseDomain      *connect.Client[v1.ReleaseDomainRequest, v1.DeployEvent]
-	addDomain          *connect.Client[v1.AddDomainRequest, v1.DeployEvent]
-	removeDomain       *connect.Client[v1.RemoveDomainRequest, v1.DeployEvent]
+	releaseDomain      *connect.Client[v1.ReleaseDomainRequest, v11.OperationEvent]
+	addDomain          *connect.Client[v1.AddDomainRequest, v11.OperationEvent]
+	removeDomain       *connect.Client[v1.RemoveDomainRequest, v11.OperationEvent]
 	domainStatus       *connect.Client[v1.DomainStatusRequest, v1.DomainStatusResponse]
 }
 
@@ -296,12 +297,12 @@ func (c *providerServiceClient) Configure(ctx context.Context, req *v1.Configure
 }
 
 // Deploy calls deployments.v1.ProviderService.Deploy.
-func (c *providerServiceClient) Deploy(ctx context.Context, req *v1.DeployRequest) (*connect.ServerStreamForClient[v1.DeployEvent], error) {
+func (c *providerServiceClient) Deploy(ctx context.Context, req *v1.DeployRequest) (*connect.ServerStreamForClient[v11.OperationEvent], error) {
 	return c.deploy.CallServerStream(ctx, connect.NewRequest(req))
 }
 
 // Bootstrap calls deployments.v1.ProviderService.Bootstrap.
-func (c *providerServiceClient) Bootstrap(ctx context.Context, req *v1.BootstrapRequest) (*connect.ServerStreamForClient[v1.DeployEvent], error) {
+func (c *providerServiceClient) Bootstrap(ctx context.Context, req *v1.BootstrapRequest) (*connect.ServerStreamForClient[v11.OperationEvent], error) {
 	return c.bootstrap.CallServerStream(ctx, connect.NewRequest(req))
 }
 
@@ -315,7 +316,7 @@ func (c *providerServiceClient) DescribeBootstrap(ctx context.Context, req *v1.D
 }
 
 // Teardown calls deployments.v1.ProviderService.Teardown.
-func (c *providerServiceClient) Teardown(ctx context.Context, req *v1.TeardownRequest) (*connect.ServerStreamForClient[v1.DeployEvent], error) {
+func (c *providerServiceClient) Teardown(ctx context.Context, req *v1.TeardownRequest) (*connect.ServerStreamForClient[v11.OperationEvent], error) {
 	return c.teardown.CallServerStream(ctx, connect.NewRequest(req))
 }
 
@@ -329,12 +330,12 @@ func (c *providerServiceClient) PlanTeardown(ctx context.Context, req *v1.PlanTe
 }
 
 // DestroyPreview calls deployments.v1.ProviderService.DestroyPreview.
-func (c *providerServiceClient) DestroyPreview(ctx context.Context, req *v1.DestroyPreviewRequest) (*connect.ServerStreamForClient[v1.DeployEvent], error) {
+func (c *providerServiceClient) DestroyPreview(ctx context.Context, req *v1.DestroyPreviewRequest) (*connect.ServerStreamForClient[v11.OperationEvent], error) {
 	return c.destroyPreview.CallServerStream(ctx, connect.NewRequest(req))
 }
 
 // DestroyProject calls deployments.v1.ProviderService.DestroyProject.
-func (c *providerServiceClient) DestroyProject(ctx context.Context, req *v1.DestroyProjectRequest) (*connect.ServerStreamForClient[v1.DeployEvent], error) {
+func (c *providerServiceClient) DestroyProject(ctx context.Context, req *v1.DestroyProjectRequest) (*connect.ServerStreamForClient[v11.OperationEvent], error) {
 	return c.destroyProject.CallServerStream(ctx, connect.NewRequest(req))
 }
 
@@ -384,12 +385,12 @@ func (c *providerServiceClient) Rollback(ctx context.Context, req *v1.RollbackRe
 }
 
 // Prune calls deployments.v1.ProviderService.Prune.
-func (c *providerServiceClient) Prune(ctx context.Context, req *v1.PruneRequest) (*connect.ServerStreamForClient[v1.DeployEvent], error) {
+func (c *providerServiceClient) Prune(ctx context.Context, req *v1.PruneRequest) (*connect.ServerStreamForClient[v11.OperationEvent], error) {
 	return c.prune.CallServerStream(ctx, connect.NewRequest(req))
 }
 
 // UseDomain calls deployments.v1.ProviderService.UseDomain.
-func (c *providerServiceClient) UseDomain(ctx context.Context, req *v1.UseDomainRequest) (*connect.ServerStreamForClient[v1.DeployEvent], error) {
+func (c *providerServiceClient) UseDomain(ctx context.Context, req *v1.UseDomainRequest) (*connect.ServerStreamForClient[v11.OperationEvent], error) {
 	return c.useDomain.CallServerStream(ctx, connect.NewRequest(req))
 }
 
@@ -412,17 +413,17 @@ func (c *providerServiceClient) PlanReleaseDomain(ctx context.Context, req *v1.P
 }
 
 // ReleaseDomain calls deployments.v1.ProviderService.ReleaseDomain.
-func (c *providerServiceClient) ReleaseDomain(ctx context.Context, req *v1.ReleaseDomainRequest) (*connect.ServerStreamForClient[v1.DeployEvent], error) {
+func (c *providerServiceClient) ReleaseDomain(ctx context.Context, req *v1.ReleaseDomainRequest) (*connect.ServerStreamForClient[v11.OperationEvent], error) {
 	return c.releaseDomain.CallServerStream(ctx, connect.NewRequest(req))
 }
 
 // AddDomain calls deployments.v1.ProviderService.AddDomain.
-func (c *providerServiceClient) AddDomain(ctx context.Context, req *v1.AddDomainRequest) (*connect.ServerStreamForClient[v1.DeployEvent], error) {
+func (c *providerServiceClient) AddDomain(ctx context.Context, req *v1.AddDomainRequest) (*connect.ServerStreamForClient[v11.OperationEvent], error) {
 	return c.addDomain.CallServerStream(ctx, connect.NewRequest(req))
 }
 
 // RemoveDomain calls deployments.v1.ProviderService.RemoveDomain.
-func (c *providerServiceClient) RemoveDomain(ctx context.Context, req *v1.RemoveDomainRequest) (*connect.ServerStreamForClient[v1.DeployEvent], error) {
+func (c *providerServiceClient) RemoveDomain(ctx context.Context, req *v1.RemoveDomainRequest) (*connect.ServerStreamForClient[v11.OperationEvent], error) {
 	return c.removeDomain.CallServerStream(ctx, connect.NewRequest(req))
 }
 
@@ -438,25 +439,25 @@ func (c *providerServiceClient) DomainStatus(ctx context.Context, req *v1.Domain
 // ProviderServiceHandler is an implementation of the deployments.v1.ProviderService service.
 type ProviderServiceHandler interface {
 	Configure(context.Context, *v1.ConfigureRequest) (*v1.ConfigureResponse, error)
-	Deploy(context.Context, *v1.DeployRequest, *connect.ServerStream[v1.DeployEvent]) error
-	Bootstrap(context.Context, *v1.BootstrapRequest, *connect.ServerStream[v1.DeployEvent]) error
+	Deploy(context.Context, *v1.DeployRequest, *connect.ServerStream[v11.OperationEvent]) error
+	Bootstrap(context.Context, *v1.BootstrapRequest, *connect.ServerStream[v11.OperationEvent]) error
 	DescribeBootstrap(context.Context, *v1.DescribeBootstrapRequest) (*v1.DescribeBootstrapResponse, error)
-	Teardown(context.Context, *v1.TeardownRequest, *connect.ServerStream[v1.DeployEvent]) error
+	Teardown(context.Context, *v1.TeardownRequest, *connect.ServerStream[v11.OperationEvent]) error
 	PlanTeardown(context.Context, *v1.PlanTeardownRequest) (*v1.PlanTeardownResponse, error)
-	DestroyPreview(context.Context, *v1.DestroyPreviewRequest, *connect.ServerStream[v1.DeployEvent]) error
-	DestroyProject(context.Context, *v1.DestroyProjectRequest, *connect.ServerStream[v1.DeployEvent]) error
+	DestroyPreview(context.Context, *v1.DestroyPreviewRequest, *connect.ServerStream[v11.OperationEvent]) error
+	DestroyProject(context.Context, *v1.DestroyProjectRequest, *connect.ServerStream[v11.OperationEvent]) error
 	PlanDestroyProject(context.Context, *v1.PlanDestroyProjectRequest) (*v1.PlanDestroyProjectResponse, error)
 	ListEnvironments(context.Context, *v1.ListEnvironmentsRequest) (*v1.ListEnvironmentsResponse, error)
 	Preflight(context.Context, *v1.PreflightRequest) (*v1.PreflightResponse, error)
 	ListPromotions(context.Context, *v1.ListPromotionsRequest) (*v1.ListPromotionsResponse, error)
 	Rollback(context.Context, *v1.RollbackRequest) (*v1.RollbackResponse, error)
-	Prune(context.Context, *v1.PruneRequest, *connect.ServerStream[v1.DeployEvent]) error
-	UseDomain(context.Context, *v1.UseDomainRequest, *connect.ServerStream[v1.DeployEvent]) error
+	Prune(context.Context, *v1.PruneRequest, *connect.ServerStream[v11.OperationEvent]) error
+	UseDomain(context.Context, *v1.UseDomainRequest, *connect.ServerStream[v11.OperationEvent]) error
 	ListDomain(context.Context, *v1.ListDomainRequest) (*v1.ListDomainResponse, error)
 	PlanReleaseDomain(context.Context, *v1.PlanReleaseDomainRequest) (*v1.PlanReleaseDomainResponse, error)
-	ReleaseDomain(context.Context, *v1.ReleaseDomainRequest, *connect.ServerStream[v1.DeployEvent]) error
-	AddDomain(context.Context, *v1.AddDomainRequest, *connect.ServerStream[v1.DeployEvent]) error
-	RemoveDomain(context.Context, *v1.RemoveDomainRequest, *connect.ServerStream[v1.DeployEvent]) error
+	ReleaseDomain(context.Context, *v1.ReleaseDomainRequest, *connect.ServerStream[v11.OperationEvent]) error
+	AddDomain(context.Context, *v1.AddDomainRequest, *connect.ServerStream[v11.OperationEvent]) error
+	RemoveDomain(context.Context, *v1.RemoveDomainRequest, *connect.ServerStream[v11.OperationEvent]) error
 	DomainStatus(context.Context, *v1.DomainStatusRequest) (*v1.DomainStatusResponse, error)
 }
 
@@ -650,11 +651,11 @@ func (UnimplementedProviderServiceHandler) Configure(context.Context, *v1.Config
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("deployments.v1.ProviderService.Configure is not implemented"))
 }
 
-func (UnimplementedProviderServiceHandler) Deploy(context.Context, *v1.DeployRequest, *connect.ServerStream[v1.DeployEvent]) error {
+func (UnimplementedProviderServiceHandler) Deploy(context.Context, *v1.DeployRequest, *connect.ServerStream[v11.OperationEvent]) error {
 	return connect.NewError(connect.CodeUnimplemented, errors.New("deployments.v1.ProviderService.Deploy is not implemented"))
 }
 
-func (UnimplementedProviderServiceHandler) Bootstrap(context.Context, *v1.BootstrapRequest, *connect.ServerStream[v1.DeployEvent]) error {
+func (UnimplementedProviderServiceHandler) Bootstrap(context.Context, *v1.BootstrapRequest, *connect.ServerStream[v11.OperationEvent]) error {
 	return connect.NewError(connect.CodeUnimplemented, errors.New("deployments.v1.ProviderService.Bootstrap is not implemented"))
 }
 
@@ -662,7 +663,7 @@ func (UnimplementedProviderServiceHandler) DescribeBootstrap(context.Context, *v
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("deployments.v1.ProviderService.DescribeBootstrap is not implemented"))
 }
 
-func (UnimplementedProviderServiceHandler) Teardown(context.Context, *v1.TeardownRequest, *connect.ServerStream[v1.DeployEvent]) error {
+func (UnimplementedProviderServiceHandler) Teardown(context.Context, *v1.TeardownRequest, *connect.ServerStream[v11.OperationEvent]) error {
 	return connect.NewError(connect.CodeUnimplemented, errors.New("deployments.v1.ProviderService.Teardown is not implemented"))
 }
 
@@ -670,11 +671,11 @@ func (UnimplementedProviderServiceHandler) PlanTeardown(context.Context, *v1.Pla
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("deployments.v1.ProviderService.PlanTeardown is not implemented"))
 }
 
-func (UnimplementedProviderServiceHandler) DestroyPreview(context.Context, *v1.DestroyPreviewRequest, *connect.ServerStream[v1.DeployEvent]) error {
+func (UnimplementedProviderServiceHandler) DestroyPreview(context.Context, *v1.DestroyPreviewRequest, *connect.ServerStream[v11.OperationEvent]) error {
 	return connect.NewError(connect.CodeUnimplemented, errors.New("deployments.v1.ProviderService.DestroyPreview is not implemented"))
 }
 
-func (UnimplementedProviderServiceHandler) DestroyProject(context.Context, *v1.DestroyProjectRequest, *connect.ServerStream[v1.DeployEvent]) error {
+func (UnimplementedProviderServiceHandler) DestroyProject(context.Context, *v1.DestroyProjectRequest, *connect.ServerStream[v11.OperationEvent]) error {
 	return connect.NewError(connect.CodeUnimplemented, errors.New("deployments.v1.ProviderService.DestroyProject is not implemented"))
 }
 
@@ -698,11 +699,11 @@ func (UnimplementedProviderServiceHandler) Rollback(context.Context, *v1.Rollbac
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("deployments.v1.ProviderService.Rollback is not implemented"))
 }
 
-func (UnimplementedProviderServiceHandler) Prune(context.Context, *v1.PruneRequest, *connect.ServerStream[v1.DeployEvent]) error {
+func (UnimplementedProviderServiceHandler) Prune(context.Context, *v1.PruneRequest, *connect.ServerStream[v11.OperationEvent]) error {
 	return connect.NewError(connect.CodeUnimplemented, errors.New("deployments.v1.ProviderService.Prune is not implemented"))
 }
 
-func (UnimplementedProviderServiceHandler) UseDomain(context.Context, *v1.UseDomainRequest, *connect.ServerStream[v1.DeployEvent]) error {
+func (UnimplementedProviderServiceHandler) UseDomain(context.Context, *v1.UseDomainRequest, *connect.ServerStream[v11.OperationEvent]) error {
 	return connect.NewError(connect.CodeUnimplemented, errors.New("deployments.v1.ProviderService.UseDomain is not implemented"))
 }
 
@@ -714,15 +715,15 @@ func (UnimplementedProviderServiceHandler) PlanReleaseDomain(context.Context, *v
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("deployments.v1.ProviderService.PlanReleaseDomain is not implemented"))
 }
 
-func (UnimplementedProviderServiceHandler) ReleaseDomain(context.Context, *v1.ReleaseDomainRequest, *connect.ServerStream[v1.DeployEvent]) error {
+func (UnimplementedProviderServiceHandler) ReleaseDomain(context.Context, *v1.ReleaseDomainRequest, *connect.ServerStream[v11.OperationEvent]) error {
 	return connect.NewError(connect.CodeUnimplemented, errors.New("deployments.v1.ProviderService.ReleaseDomain is not implemented"))
 }
 
-func (UnimplementedProviderServiceHandler) AddDomain(context.Context, *v1.AddDomainRequest, *connect.ServerStream[v1.DeployEvent]) error {
+func (UnimplementedProviderServiceHandler) AddDomain(context.Context, *v1.AddDomainRequest, *connect.ServerStream[v11.OperationEvent]) error {
 	return connect.NewError(connect.CodeUnimplemented, errors.New("deployments.v1.ProviderService.AddDomain is not implemented"))
 }
 
-func (UnimplementedProviderServiceHandler) RemoveDomain(context.Context, *v1.RemoveDomainRequest, *connect.ServerStream[v1.DeployEvent]) error {
+func (UnimplementedProviderServiceHandler) RemoveDomain(context.Context, *v1.RemoveDomainRequest, *connect.ServerStream[v11.OperationEvent]) error {
 	return connect.NewError(connect.CodeUnimplemented, errors.New("deployments.v1.ProviderService.RemoveDomain is not implemented"))
 }
 

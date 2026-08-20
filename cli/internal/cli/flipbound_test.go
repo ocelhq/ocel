@@ -6,40 +6,40 @@ import (
 	"strings"
 	"testing"
 
-	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
+	progressv1 "github.com/ocelhq/ocel/pkg/proto/progress/v1"
 )
 
 func TestFlipNote(t *testing.T) {
 	cases := []struct {
 		name  string
-		bound *deploymentsv1.FlipBound
+		bound *progressv1.FlipBound
 		want  string
 	}{
 		{name: "an unrecorded bound says nothing"},
-		{name: "an instant flip says nothing", bound: &deploymentsv1.FlipBound{}},
+		{name: "an instant flip says nothing", bound: &progressv1.FlipBound{}},
 		{
 			name:  "a published bound promises the duration",
-			bound: &deploymentsv1.FlipBound{TypicalMs: 5000, Published: true},
+			bound: &progressv1.FlipBound{TypicalMs: 5000, Published: true},
 			want:  "propagates within ~5 s",
 		},
 		{
 			name:  "an unpublished bound qualifies the duration",
-			bound: &deploymentsv1.FlipBound{TypicalMs: 5000},
+			bound: &progressv1.FlipBound{TypicalMs: 5000},
 			want:  "propagates in ~5 s (typical, not guaranteed)",
 		},
 		{
 			name:  "the duration comes from the recorded milliseconds",
-			bound: &deploymentsv1.FlipBound{TypicalMs: 90000, Published: true},
+			bound: &progressv1.FlipBound{TypicalMs: 90000, Published: true},
 			want:  "propagates within ~90 s",
 		},
 		{
 			name:  "a fractional second keeps its fraction",
-			bound: &deploymentsv1.FlipBound{TypicalMs: 1500},
+			bound: &progressv1.FlipBound{TypicalMs: 1500},
 			want:  "propagates in ~1.5 s (typical, not guaranteed)",
 		},
 		{
 			name:  "a sub-second bound stays in milliseconds",
-			bound: &deploymentsv1.FlipBound{TypicalMs: 250, Published: true},
+			bound: &progressv1.FlipBound{TypicalMs: 250, Published: true},
 			want:  "propagates within ~250 ms",
 		},
 	}

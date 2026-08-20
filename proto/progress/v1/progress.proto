@@ -1,0 +1,151 @@
+syntax = "proto3";
+package progress.v1;
+
+option go_package = "github.com/ocelhq/ocel/pkg/proto/progress/v1;progressv1";
+
+import "buf/validate/validate.proto";
+import "links/v1/links.proto";
+
+message OperationEvent {
+  oneof event {
+    option (buf.validate.oneof).required = true;
+
+    ProgressEvent progress = 1;
+    LogEvent log = 2;
+    ResultEvent result = 3;
+    StagePlanEvent stage_plan = 4;
+    SpanEvent span = 5;
+    DegradedEvent degraded = 6;
+    DnsOwedEvent dns_owed = 7;
+  }
+}
+
+enum Phase {
+  PHASE_UNSPECIFIED = 0;
+  PHASE_UPLOADING = 1;
+  PHASE_PROVISIONING = 2;
+  PHASE_FINALIZING = 3;
+  PHASE_DELETING = 4;
+}
+
+message Stage {
+  bytes id = 1;
+
+  bytes parent_id = 2;
+
+  string title = 3;
+}
+
+message StagePlanEvent {
+  repeated Stage stages = 1;
+
+  bool final = 2;
+}
+
+enum SpanStatus {
+  SPAN_STATUS_UNSPECIFIED = 0;
+  SPAN_STATUS_OK = 1;
+  SPAN_STATUS_ERROR = 2;
+}
+
+enum AttributeKey {
+  ATTRIBUTE_KEY_UNSPECIFIED = 0;
+  ATTRIBUTE_KEY_COMMAND = 1;
+  ATTRIBUTE_KEY_STAGE = 2;
+  ATTRIBUTE_KEY_APP = 3;
+  ATTRIBUTE_KEY_PHASE = 4;
+  ATTRIBUTE_KEY_PROVIDER = 5;
+  ATTRIBUTE_KEY_EXIT_CODE = 6;
+  ATTRIBUTE_KEY_ERROR_KIND = 7;
+  ATTRIBUTE_KEY_RESOURCE_COUNT = 8;
+  ATTRIBUTE_KEY_BYTES = 9;
+  ATTRIBUTE_KEY_RETRY_COUNT = 10;
+  ATTRIBUTE_KEY_DURATION_MS = 11;
+  ATTRIBUTE_KEY_RESOURCE_TYPE = 12;
+  ATTRIBUTE_KEY_RESOURCE_NAME = 13;
+}
+
+message SpanAttribute {
+  AttributeKey key = 1;
+  string value = 2;
+}
+
+message SpanEvent {
+  bytes span_id = 1 [(buf.validate.field).bytes.len = 8];
+  bytes parent_span_id = 2 [(buf.validate.field).bytes.len = 8, (buf.validate.field).ignore = IGNORE_IF_ZERO_VALUE];
+
+  string name = 3;
+
+  int64 start_time_unix_nano = 4;
+  int64 end_time_unix_nano = 5;
+
+  SpanStatus status = 6;
+
+  repeated SpanAttribute attributes = 7;
+}
+
+message ProgressEvent {
+  string message = 1;
+
+  Phase phase = 2;
+
+  optional uint32 current = 3;
+  optional uint32 total = 4;
+
+  bytes stage_id = 5;
+}
+
+message LogEvent {
+  string message = 1;
+}
+
+message DnsRecord {
+  string name = 1;
+
+  string type = 2;
+
+  string value = 3;
+
+  bool proxied = 4;
+}
+
+message DnsOwedEvent {
+  string headline = 1;
+
+  repeated DnsRecord records = 2;
+
+  repeated string notes = 3;
+}
+
+message DegradedEvent {
+  string need = 1;
+
+  string detail = 2;
+}
+
+message ResultEvent {
+  bool success = 1;
+  string error = 2;
+
+  repeated links.v1.Link links = 3;
+
+  repeated FunctionOutput functions = 4;
+
+  repeated string app_urls = 5;
+
+  string promotion_id = 6;
+
+  FlipBound flip_bound = 7;
+
+  string url_note = 8;
+}
+
+message FunctionOutput {
+  string logical_name = 2;
+  string url = 1;
+}
+
+message FlipBound {
+  int64 typical_ms = 1;
+  bool published = 2;
+}

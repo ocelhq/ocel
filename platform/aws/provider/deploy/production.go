@@ -15,6 +15,7 @@ import (
 	"time"
 
 	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
+	progressv1 "github.com/ocelhq/ocel/pkg/proto/progress/v1"
 	"github.com/ocelhq/ocel/platform/aws/provider/dns"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
@@ -370,7 +371,7 @@ func readRoutingManifest(cfg Config, app string) (any, bool, error) {
 	return routing, true, nil
 }
 
-func buildDeploymentRecord(cfg Config, needs needRecords, manifest *deploymentsv1.Manifest, app *deploymentsv1.ManifestApp, id Identity, outs []*deploymentsv1.FunctionOutput, builds appBuilds, functionNames map[string]string) (edge.DeploymentRecord, error) {
+func buildDeploymentRecord(cfg Config, needs needRecords, manifest *deploymentsv1.Manifest, app *deploymentsv1.ManifestApp, id Identity, outs []*progressv1.FunctionOutput, builds appBuilds, functionNames map[string]string) (edge.DeploymentRecord, error) {
 	name := app.GetName()
 	urlByLogical := functionURLsByLogicalName(outs)
 	fingerprint, variables := recordedAudit(cfg, app)
@@ -437,7 +438,7 @@ func entryLogicalName(manifest *deploymentsv1.Manifest, app, entry string) strin
 	return ""
 }
 
-func workerURLOutputs(cfg Config, manifest *deploymentsv1.Manifest) []*deploymentsv1.FunctionOutput {
+func workerURLOutputs(cfg Config, manifest *deploymentsv1.Manifest) []*progressv1.FunctionOutput {
 	apps := workerApps(cfg.ArtifactRoot, manifest)
 	if len(apps) == 0 {
 		return nil
@@ -446,7 +447,7 @@ func workerURLOutputs(cfg Config, manifest *deploymentsv1.Manifest) []*deploymen
 	if err != nil {
 		return nil
 	}
-	var outs []*deploymentsv1.FunctionOutput
+	var outs []*progressv1.FunctionOutput
 	for _, app := range apps {
 		if url := workerAppURL(resolved.hosts[app.GetName()]); url != "" {
 			outs = append(outs, collectFunctionOutput(workerOutputName(app.GetName()), url))

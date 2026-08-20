@@ -13,6 +13,7 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/naming"
 	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
+	progressv1 "github.com/ocelhq/ocel/pkg/proto/progress/v1"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/resources/v1"
 	"github.com/ocelhq/ocel/platform/aws/provider/edges/apigateway"
 	"github.com/ocelhq/ocel/platform/aws/provider/edges/cloudfront"
@@ -880,7 +881,7 @@ func TestBuildDeploymentRecord(t *testing.T) {
 		manifest := nodeManifest()
 		builds := appBuildsFor(t, cfg, manifest)
 		id := builds.identities["api"]
-		outs := []*deploymentsv1.FunctionOutput{fnOutput("api_handler", "https://api-fn.lambda-url.aws/")}
+		outs := []*progressv1.FunctionOutput{fnOutput("api_handler", "https://api-fn.lambda-url.aws/")}
 
 		record, err := buildDeploymentRecord(cfg, nil, manifest, manifest.GetApps()[0], id, outs, builds, nil)
 		if err != nil {

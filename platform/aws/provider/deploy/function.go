@@ -15,6 +15,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/naming"
 	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
 	linksv1 "github.com/ocelhq/ocel/pkg/proto/links/v1"
+	progressv1 "github.com/ocelhq/ocel/pkg/proto/progress/v1"
 	"github.com/ocelhq/ocel/platform/aws/provider/payloads"
 )
 
@@ -369,8 +370,8 @@ func artifactArchivePath(root, artifactPath string) string {
 	return filepath.Join(root, artifactPath)
 }
 
-func collectFunctionOutput(logicalName, url string) *deploymentsv1.FunctionOutput {
-	return &deploymentsv1.FunctionOutput{LogicalName: logicalName, Url: url}
+func collectFunctionOutput(logicalName, url string) *progressv1.FunctionOutput {
+	return &progressv1.FunctionOutput{LogicalName: logicalName, Url: url}
 }
 
 type executionRole struct {

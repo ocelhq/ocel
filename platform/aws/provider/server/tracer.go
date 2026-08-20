@@ -3,7 +3,7 @@ package server
 import (
 	"time"
 
-	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
+	progressv1 "github.com/ocelhq/ocel/pkg/proto/progress/v1"
 	"github.com/ocelhq/ocel/platform/aws/provider/deploy"
 )
 
@@ -19,16 +19,16 @@ func (t *eventTracer) DeclareStages(final bool, stages ...deploy.Stage) {
 	if len(stages) == 0 && !final {
 		return
 	}
-	pb := make([]*deploymentsv1.Stage, len(stages))
+	pb := make([]*progressv1.Stage, len(stages))
 	for i, s := range stages {
-		pb[i] = &deploymentsv1.Stage{
+		pb[i] = &progressv1.Stage{
 			Id:       s.ID[:],
 			ParentId: nonZeroStageID(s.ParentID),
 			Title:    s.Title,
 		}
 	}
-	t.sender.send(&deploymentsv1.DeployEvent{
-		Event: &deploymentsv1.DeployEvent_StagePlan{StagePlan: &deploymentsv1.StagePlanEvent{
+	t.sender.send(&progressv1.OperationEvent{
+		Event: &progressv1.OperationEvent_StagePlan{StagePlan: &progressv1.StagePlanEvent{
 			Stages: pb,
 			Final:  final,
 		}},
@@ -36,22 +36,22 @@ func (t *eventTracer) DeclareStages(final bool, stages ...deploy.Stage) {
 }
 
 func (t *eventTracer) Span(id, parentID deploy.StageID, name string, start, end time.Time, err error, attrs ...deploy.Attr) {
-	status := deploymentsv1.SpanStatus_SPAN_STATUS_OK
+	status := progressv1.SpanStatus_SPAN_STATUS_OK
 	if err != nil {
-		status = deploymentsv1.SpanStatus_SPAN_STATUS_ERROR
+		status = progressv1.SpanStatus_SPAN_STATUS_ERROR
 		attrs = append(attrs, deploy.Attr{
-			Key:   deploymentsv1.AttributeKey_ATTRIBUTE_KEY_ERROR_KIND,
+			Key:   progressv1.AttributeKey_ATTRIBUTE_KEY_ERROR_KIND,
 			Value: deploy.ClassifyError(err),
 		})
 	}
 
-	pbAttrs := make([]*deploymentsv1.SpanAttribute, len(attrs))
+	pbAttrs := make([]*progressv1.SpanAttribute, len(attrs))
 	for i, a := range attrs {
-		pbAttrs[i] = &deploymentsv1.SpanAttribute{Key: a.Key, Value: a.Value}
+		pbAttrs[i] = &progressv1.SpanAttribute{Key: a.Key, Value: a.Value}
 	}
 
-	t.sender.send(&deploymentsv1.DeployEvent{
-		Event: &deploymentsv1.DeployEvent_Span{Span: &deploymentsv1.SpanEvent{
+	t.sender.send(&progressv1.OperationEvent{
+		Event: &progressv1.OperationEvent_Span{Span: &progressv1.SpanEvent{
 			SpanId:            id[:],
 			ParentSpanId:      nonZeroStageID(parentID),
 			Name:              name,

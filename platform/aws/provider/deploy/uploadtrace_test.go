@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
+	progressv1 "github.com/ocelhq/ocel/pkg/proto/progress/v1"
 )
 
 func TestUploadBatchStatsCountsAndSumsBytes(t *testing.T) {
@@ -421,7 +421,7 @@ func TestUploadFailuresNeverCarryTheRawErrorPastRecord(t *testing.T) {
 	}
 }
 
-func attrValue(attrs []Attr, key deploymentsv1.AttributeKey) string {
+func attrValue(attrs []Attr, key progressv1.AttributeKey) string {
 	for _, a := range attrs {
 		if a.Key == key {
 			return a.Value

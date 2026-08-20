@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
+	progressv1 "github.com/ocelhq/ocel/pkg/proto/progress/v1"
 )
 
 func TestAppURLs(t *testing.T) {
@@ -18,7 +19,7 @@ func TestAppURLs(t *testing.T) {
 				{LogicalName: "index", Framework: "next", App: "web"},
 			},
 		}
-		outputs := []*deploymentsv1.FunctionOutput{
+		outputs := []*progressv1.FunctionOutput{
 			fnOutput("index", "https://index.lambda-url.example"),
 			fnOutput(workerOutputName("web"), "https://app.workers.dev"),
 		}
@@ -43,7 +44,7 @@ func TestAppURLs(t *testing.T) {
 				{LogicalName: "web_index", Framework: "next", App: "web"},
 			},
 		}
-		outputs := []*deploymentsv1.FunctionOutput{
+		outputs := []*progressv1.FunctionOutput{
 			fnOutput("api_handler", "https://handler.lambda-url.example"),
 			fnOutput("api_worker", "https://worker.lambda-url.example"),
 			fnOutput("web_index", "https://index.lambda-url.example"),

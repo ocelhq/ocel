@@ -11,12 +11,13 @@ import (
 	"testing"
 
 	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
+	progressv1 "github.com/ocelhq/ocel/pkg/proto/progress/v1"
 	cloudflare "github.com/ocelhq/ocel/platform/edge/cloudflare/deploy"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
-func fnOutput(logicalName, url string) *deploymentsv1.FunctionOutput {
-	return &deploymentsv1.FunctionOutput{LogicalName: logicalName, Url: url}
+func fnOutput(logicalName, url string) *progressv1.FunctionOutput {
+	return &progressv1.FunctionOutput{LogicalName: logicalName, Url: url}
 }
 
 func TestWorkerOutputName(t *testing.T) {

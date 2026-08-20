@@ -4,7 +4,7 @@ import (
 	"context"
 	"sync"
 
-	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
+	progressv1 "github.com/ocelhq/ocel/pkg/proto/progress/v1"
 	"github.com/ocelhq/ocel/platform/aws/provider/deploy"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
@@ -12,7 +12,7 @@ import (
 const eventSenderBuffer = 256
 
 type eventSender struct {
-	events chan *deploymentsv1.DeployEvent
+	events chan *progressv1.OperationEvent
 	done   chan struct{}
 	ctx    context.Context
 
@@ -21,9 +21,9 @@ type eventSender struct {
 	err    error
 }
 
-func newEventSender(ctx context.Context, send func(*deploymentsv1.DeployEvent) error) *eventSender {
+func newEventSender(ctx context.Context, send func(*progressv1.OperationEvent) error) *eventSender {
 	s := &eventSender{
-		events: make(chan *deploymentsv1.DeployEvent, eventSenderBuffer),
+		events: make(chan *progressv1.OperationEvent, eventSenderBuffer),
 		done:   make(chan struct{}),
 		ctx:    ctx,
 	}
@@ -31,7 +31,7 @@ func newEventSender(ctx context.Context, send func(*deploymentsv1.DeployEvent) e
 	return s
 }
 
-func (s *eventSender) drain(send func(*deploymentsv1.DeployEvent) error) {
+func (s *eventSender) drain(send func(*progressv1.OperationEvent) error) {
 	defer close(s.done)
 	for ev := range s.events {
 		if err := send(ev); err != nil && s.err == nil {
@@ -40,7 +40,7 @@ func (s *eventSender) drain(send func(*deploymentsv1.DeployEvent) error) {
 	}
 }
 
-func (s *eventSender) send(ev *deploymentsv1.DeployEvent) {
+func (s *eventSender) send(ev *progressv1.OperationEvent) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	if s.closed {
@@ -62,13 +62,13 @@ func (s *eventSender) close() error {
 }
 
 func newDeployReporter(sender *eventSender, stages deployStages) (deploy.Progress, func(deploy.StageID) func(string), func(string), func(edge.Need, string)) {
-	byPhase := map[deploymentsv1.Phase]deploy.StageID{
-		deploymentsv1.Phase_PHASE_UNSPECIFIED:  stages.preparing.ID,
-		deploymentsv1.Phase_PHASE_UPLOADING:    stages.uploading.ID,
-		deploymentsv1.Phase_PHASE_PROVISIONING: stages.provisioning.ID,
-		deploymentsv1.Phase_PHASE_FINALIZING:   stages.finalizing.ID,
+	byPhase := map[progressv1.Phase]deploy.StageID{
+		progressv1.Phase_PHASE_UNSPECIFIED:  stages.preparing.ID,
+		progressv1.Phase_PHASE_UPLOADING:    stages.uploading.ID,
+		progressv1.Phase_PHASE_PROVISIONING: stages.provisioning.ID,
+		progressv1.Phase_PHASE_FINALIZING:   stages.finalizing.ID,
 	}
-	progress := func(phase deploymentsv1.Phase, m string, current, total uint32) {
+	progress := func(phase progressv1.Phase, m string, current, total uint32) {
 		var id []byte
 		if stageID, ok := byPhase[phase]; ok {
 			id = stageID[:]
@@ -76,7 +76,7 @@ func newDeployReporter(sender *eventSender, stages deployStages) (deploy.Progres
 		sender.send(phaseProgressEvent(id, phase, m, current, total))
 	}
 	stageReport := func(id deploy.StageID) func(string) {
-		return func(m string) { sender.send(stageProgressEvent(id, deploymentsv1.Phase_PHASE_PROVISIONING, m)) }
+		return func(m string) { sender.send(stageProgressEvent(id, progressv1.Phase_PHASE_PROVISIONING, m)) }
 	}
 	logf := func(m string) { sender.send(logEvent(m)) }
 	degraded := func(need edge.Need, detail string) { sender.send(degradedEvent(need, detail)) }
@@ -85,7 +85,7 @@ func newDeployReporter(sender *eventSender, stages deployStages) (deploy.Progres
 
 func newTeardownReporter(sender *eventSender) (func(deploy.StageID) func(string), func(string)) {
 	stageReport := func(id deploy.StageID) func(string) {
-		return func(m string) { sender.send(stageProgressEvent(id, deploymentsv1.Phase_PHASE_DELETING, m)) }
+		return func(m string) { sender.send(stageProgressEvent(id, progressv1.Phase_PHASE_DELETING, m)) }
 	}
 	logf := func(m string) { sender.send(logEvent(m)) }
 	return stageReport, logf

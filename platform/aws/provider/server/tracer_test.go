@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
+	progressv1 "github.com/ocelhq/ocel/pkg/proto/progress/v1"
 	"github.com/ocelhq/ocel/platform/aws/provider/deploy"
 )
 
@@ -91,7 +91,7 @@ func TestEventTracerSpanUsesTheStageIDAsTheSpanID(t *testing.T) {
 	if span.GetName() != "web" {
 		t.Errorf("SpanEvent.Name = %q, want %q", span.GetName(), "web")
 	}
-	if span.GetStatus() != deploymentsv1.SpanStatus_SPAN_STATUS_OK {
+	if span.GetStatus() != progressv1.SpanStatus_SPAN_STATUS_OK {
 		t.Errorf("SpanEvent.Status = %v, want OK", span.GetStatus())
 	}
 	if span.GetStartTimeUnixNano() != start.UnixNano() || span.GetEndTimeUnixNano() != end.UnixNano() {
@@ -114,13 +114,13 @@ func TestEventTracerSpanRecordsAFailureAsAnErrorKindNeverRawText(t *testing.T) {
 		t.Fatalf("close() error = %v", err)
 	}
 	span := stream.events[0].GetSpan()
-	if span.GetStatus() != deploymentsv1.SpanStatus_SPAN_STATUS_ERROR {
+	if span.GetStatus() != progressv1.SpanStatus_SPAN_STATUS_ERROR {
 		t.Fatalf("SpanEvent.Status = %v, want ERROR", span.GetStatus())
 	}
 
 	var sawErrorKind bool
 	for _, a := range span.GetAttributes() {
-		if a.GetKey() == deploymentsv1.AttributeKey_ATTRIBUTE_KEY_ERROR_KIND {
+		if a.GetKey() == progressv1.AttributeKey_ATTRIBUTE_KEY_ERROR_KIND {
 			sawErrorKind = true
 			if a.GetValue() == secret {
 				t.Fatal("ERROR_KIND attribute carried the raw error text")
@@ -158,12 +158,12 @@ func TestEventTracerSpanCarriesResourceIdentityNeverTheURN(t *testing.T) {
 	var sawType, sawName bool
 	for _, a := range span.GetAttributes() {
 		switch a.GetKey() {
-		case deploymentsv1.AttributeKey_ATTRIBUTE_KEY_RESOURCE_TYPE:
+		case progressv1.AttributeKey_ATTRIBUTE_KEY_RESOURCE_TYPE:
 			sawType = true
 			if a.GetValue() != "aws:s3/bucket:Bucket" {
 				t.Errorf("RESOURCE_TYPE = %q, want the type token", a.GetValue())
 			}
-		case deploymentsv1.AttributeKey_ATTRIBUTE_KEY_RESOURCE_NAME:
+		case progressv1.AttributeKey_ATTRIBUTE_KEY_RESOURCE_NAME:
 			sawName = true
 			if a.GetValue() != "my-bucket" {
 				t.Errorf("RESOURCE_NAME = %q, want the logical name", a.GetValue())

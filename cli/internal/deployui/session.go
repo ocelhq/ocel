@@ -13,8 +13,8 @@ import (
 	"go.opentelemetry.io/otel/attribute"
 
 	"github.com/ocelhq/ocel/cli/internal/obs"
-	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
 	linksv1 "github.com/ocelhq/ocel/pkg/proto/links/v1"
+	progressv1 "github.com/ocelhq/ocel/pkg/proto/progress/v1"
 )
 
 type Session struct {
@@ -96,7 +96,7 @@ func (s *Session) Resume() {
 	s.r.Resume()
 }
 
-func (s *Session) Event(ev *deploymentsv1.DeployEvent) {
+func (s *Session) Event(ev *progressv1.OperationEvent) {
 	if p := ev.GetProgress(); p != nil {
 		s.logf("[%s] %s", phaseTag(p.GetPhase()), progressLogLine(p.GetMessage(), p.GetCurrent(), p.Total))
 		s.r.Progress(p.GetStageId(), p.GetPhase(), p.GetMessage(), p.GetCurrent(), p.Total)
@@ -127,7 +127,7 @@ func (s *Session) Event(ev *deploymentsv1.DeployEvent) {
 	}
 }
 
-func dnsLogLine(records []*deploymentsv1.DnsRecord) string {
+func dnsLogLine(records []*progressv1.DnsRecord) string {
 	lines := make([]string, 0, len(records))
 	for _, rec := range records {
 		lines = append(lines, fmt.Sprintf("%s %s %s", rec.GetName(), rec.GetType(), rec.GetValue()))
@@ -135,7 +135,7 @@ func dnsLogLine(records []*deploymentsv1.DnsRecord) string {
 	return strings.Join(lines, "; ")
 }
 
-func (s *Session) ingestSpan(span *deploymentsv1.SpanEvent) {
+func (s *Session) ingestSpan(span *progressv1.SpanEvent) {
 	var spanID, parentSpanID [8]byte
 	if id := span.GetSpanId(); len(id) == 8 {
 		copy(spanID[:], id)
@@ -167,7 +167,7 @@ func (s *Session) ingestSpan(span *deploymentsv1.SpanEvent) {
 		spanAttributes(span.GetAttributes()),
 	)
 
-	s.r.StageEnd(spanID[:], span.GetStatus() == deploymentsv1.SpanStatus_SPAN_STATUS_ERROR, end.Sub(start))
+	s.r.StageEnd(spanID[:], span.GetStatus() == progressv1.SpanStatus_SPAN_STATUS_ERROR, end.Sub(start))
 }
 
 func (s *Session) now() time.Time {
@@ -176,7 +176,7 @@ func (s *Session) now() time.Time {
 	return s.r.plan.now().UTC()
 }
 
-func (s *Session) Deployed(headline string, appURLs []string, note string, flip Flip, links []*linksv1.Link, functions []*deploymentsv1.FunctionOutput) {
+func (s *Session) Deployed(headline string, appURLs []string, note string, flip Flip, links []*linksv1.Link, functions []*progressv1.FunctionOutput) {
 	s.logOutputs(links, functions)
 	s.r.Deployed(headline, appURLs, note, flip, s.logPath)
 }
@@ -210,7 +210,7 @@ func (s *Session) logf(format string, args ...any) {
 	_, _ = s.logWriter.Write([]byte(fmt.Sprintf(format, args...) + "\n"))
 }
 
-func (s *Session) logOutputs(links []*linksv1.Link, functions []*deploymentsv1.FunctionOutput) {
+func (s *Session) logOutputs(links []*linksv1.Link, functions []*progressv1.FunctionOutput) {
 	for _, l := range links {
 		s.logf("[output] %s", formatLink(l))
 	}
@@ -273,11 +273,11 @@ func formatLink(l *linksv1.Link) string {
 	return l.GetName()
 }
 
-func spanStatus(s deploymentsv1.SpanStatus) obs.SpanStatus {
+func spanStatus(s progressv1.SpanStatus) obs.SpanStatus {
 	switch s {
-	case deploymentsv1.SpanStatus_SPAN_STATUS_OK:
+	case progressv1.SpanStatus_SPAN_STATUS_OK:
 		return obs.SpanStatusOK
-	case deploymentsv1.SpanStatus_SPAN_STATUS_ERROR:
+	case progressv1.SpanStatus_SPAN_STATUS_ERROR:
 		return obs.SpanStatusError
 	default:
 		return obs.SpanStatusUnset
@@ -292,7 +292,7 @@ var numericAttributeKeys = map[attribute.Key]struct{}{
 	obs.AttrDurationMS:    {},
 }
 
-func spanAttributes(attrs []*deploymentsv1.SpanAttribute) []attribute.KeyValue {
+func spanAttributes(attrs []*progressv1.SpanAttribute) []attribute.KeyValue {
 	if len(attrs) == 0 {
 		return nil
 	}
@@ -316,33 +316,33 @@ func attributeValue(key attribute.Key, value string) attribute.KeyValue {
 	return key.String(value)
 }
 
-func attributeKey(k deploymentsv1.AttributeKey) (attribute.Key, bool) {
+func attributeKey(k progressv1.AttributeKey) (attribute.Key, bool) {
 	switch k {
-	case deploymentsv1.AttributeKey_ATTRIBUTE_KEY_COMMAND:
+	case progressv1.AttributeKey_ATTRIBUTE_KEY_COMMAND:
 		return obs.AttrCommand, true
-	case deploymentsv1.AttributeKey_ATTRIBUTE_KEY_STAGE:
+	case progressv1.AttributeKey_ATTRIBUTE_KEY_STAGE:
 		return obs.AttrStage, true
-	case deploymentsv1.AttributeKey_ATTRIBUTE_KEY_APP:
+	case progressv1.AttributeKey_ATTRIBUTE_KEY_APP:
 		return obs.AttrApp, true
-	case deploymentsv1.AttributeKey_ATTRIBUTE_KEY_PHASE:
+	case progressv1.AttributeKey_ATTRIBUTE_KEY_PHASE:
 		return obs.AttrPhase, true
-	case deploymentsv1.AttributeKey_ATTRIBUTE_KEY_PROVIDER:
+	case progressv1.AttributeKey_ATTRIBUTE_KEY_PROVIDER:
 		return obs.AttrProvider, true
-	case deploymentsv1.AttributeKey_ATTRIBUTE_KEY_EXIT_CODE:
+	case progressv1.AttributeKey_ATTRIBUTE_KEY_EXIT_CODE:
 		return obs.AttrExitCode, true
-	case deploymentsv1.AttributeKey_ATTRIBUTE_KEY_ERROR_KIND:
+	case progressv1.AttributeKey_ATTRIBUTE_KEY_ERROR_KIND:
 		return obs.AttrErrorKind, true
-	case deploymentsv1.AttributeKey_ATTRIBUTE_KEY_RESOURCE_COUNT:
+	case progressv1.AttributeKey_ATTRIBUTE_KEY_RESOURCE_COUNT:
 		return obs.AttrResourceCount, true
-	case deploymentsv1.AttributeKey_ATTRIBUTE_KEY_BYTES:
+	case progressv1.AttributeKey_ATTRIBUTE_KEY_BYTES:
 		return obs.AttrBytes, true
-	case deploymentsv1.AttributeKey_ATTRIBUTE_KEY_RETRY_COUNT:
+	case progressv1.AttributeKey_ATTRIBUTE_KEY_RETRY_COUNT:
 		return obs.AttrRetryCount, true
-	case deploymentsv1.AttributeKey_ATTRIBUTE_KEY_DURATION_MS:
+	case progressv1.AttributeKey_ATTRIBUTE_KEY_DURATION_MS:
 		return obs.AttrDurationMS, true
-	case deploymentsv1.AttributeKey_ATTRIBUTE_KEY_RESOURCE_TYPE:
+	case progressv1.AttributeKey_ATTRIBUTE_KEY_RESOURCE_TYPE:
 		return obs.AttrResourceType, true
-	case deploymentsv1.AttributeKey_ATTRIBUTE_KEY_RESOURCE_NAME:
+	case progressv1.AttributeKey_ATTRIBUTE_KEY_RESOURCE_NAME:
 		return obs.AttrResourceName, true
 	default:
 		return "", false

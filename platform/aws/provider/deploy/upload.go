@@ -4,6 +4,7 @@ import (
 	"context"
 
 	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
+	progressv1 "github.com/ocelhq/ocel/pkg/proto/progress/v1"
 	"github.com/ocelhq/ocel/platform/aws/provider/payloads"
 )
 
@@ -36,15 +37,15 @@ func uploadArtifacts(ctx context.Context, cfg Config, manifest *deploymentsv1.Ma
 		}
 	}
 
-	progress.report(deploymentsv1.Phase_PHASE_UPLOADING, "Uploading prerender assets", 0, 0)
+	progress.report(progressv1.Phase_PHASE_UPLOADING, "Uploading prerender assets", 0, 0)
 	if err := uploadPrerenderAssets(ctx, cfg, plan.builds); err != nil {
 		return uploadedArtifacts{}, err
 	}
-	progress.report(deploymentsv1.Phase_PHASE_UPLOADING, "Uploading static assets", 0, 0)
+	progress.report(progressv1.Phase_PHASE_UPLOADING, "Uploading static assets", 0, 0)
 	if err := uploadStaticAssets(ctx, cfg, manifest, plan.builds); err != nil {
 		return uploadedArtifacts{}, err
 	}
-	progress.report(deploymentsv1.Phase_PHASE_UPLOADING, "Uploading edge bundles", 0, 0)
+	progress.report(progressv1.Phase_PHASE_UPLOADING, "Uploading edge bundles", 0, 0)
 	if err := uploadEdgeBundles(ctx, cfg, manifest, plan.builds); err != nil {
 		return uploadedArtifacts{}, err
 	}

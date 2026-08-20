@@ -29,6 +29,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/naming"
 	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
 	linksv1 "github.com/ocelhq/ocel/pkg/proto/links/v1"
+	progressv1 "github.com/ocelhq/ocel/pkg/proto/progress/v1"
 	"github.com/ocelhq/ocel/platform/aws/provider/bootstrap"
 	"github.com/ocelhq/ocel/platform/aws/provider/certs"
 	"github.com/ocelhq/ocel/platform/aws/provider/deploy"
@@ -148,7 +149,7 @@ func (s *Server) callerIdentity(ctx context.Context, api STSAPI, region string) 
 	})
 }
 
-func (s *Server) Deploy(ctx context.Context, req *deploymentsv1.DeployRequest, stream *connect.ServerStream[deploymentsv1.DeployEvent]) (err error) {
+func (s *Server) Deploy(ctx context.Context, req *deploymentsv1.DeployRequest, stream *connect.ServerStream[progressv1.OperationEvent]) (err error) {
 	manifest := req.GetManifest()
 	if err := validateManifest(manifest); err != nil {
 		return connect.NewError(connect.CodeInvalidArgument, err)
@@ -217,7 +218,7 @@ func (s *Server) runDeploy(ctx context.Context, req *deploymentsv1.DeployRequest
 	preview := env.GetClass() == deploymentsv1.Environment_CLASS_PREVIEW
 	bootstrapCmd := bootstrapCommand(preview)
 
-	progress(deploymentsv1.Phase_PHASE_UNSPECIFIED, "Checking account bootstrap", 0, 0)
+	progress(progressv1.Phase_PHASE_UNSPECIFIED, "Checking account bootstrap", 0, 0)
 	deployed, err := s.deployed(ctx, cfn, opts.Region, preview)
 	if err != nil {
 		return deploy.Result{}, finishPreparing(err)
@@ -275,7 +276,7 @@ func (s *Server) runDeploy(ctx context.Context, req *deploymentsv1.DeployRequest
 	group.Go(func() error {
 		var err error
 		pulumiCmd, err = pulumiruntime.Ensure(gctx, func(m string) {
-			progress(deploymentsv1.Phase_PHASE_UPLOADING, m, 0, 0)
+			progress(progressv1.Phase_PHASE_UPLOADING, m, 0, 0)
 		})
 		return err
 	})
@@ -446,7 +447,7 @@ func previewExpiry(lifecycle deploymentsv1.Environment_Lifecycle, now time.Time)
 	return now.Add(previewTTL).Unix()
 }
 
-func (s *Server) Bootstrap(ctx context.Context, req *deploymentsv1.BootstrapRequest, stream *connect.ServerStream[deploymentsv1.DeployEvent]) error {
+func (s *Server) Bootstrap(ctx context.Context, req *deploymentsv1.BootstrapRequest, stream *connect.ServerStream[progressv1.OperationEvent]) error {
 	progress := func(m string) { _ = stream.Send(progressEvent(m)) }
 	logf := func(m string) { _ = stream.Send(logEvent(m)) }
 
@@ -648,26 +649,26 @@ func configMatchesType(r *deploymentsv1.ManifestResource, t linksv1.LinkType) bo
 	return false
 }
 
-func progressEvent(message string) *deploymentsv1.DeployEvent {
-	return &deploymentsv1.DeployEvent{
-		Event: &deploymentsv1.DeployEvent_Progress{Progress: &deploymentsv1.ProgressEvent{Message: message}},
+func progressEvent(message string) *progressv1.OperationEvent {
+	return &progressv1.OperationEvent{
+		Event: &progressv1.OperationEvent_Progress{Progress: &progressv1.ProgressEvent{Message: message}},
 	}
 }
 
-func phaseProgressEvent(stageID []byte, phase deploymentsv1.Phase, message string, current, total uint32) *deploymentsv1.DeployEvent {
-	p := &deploymentsv1.ProgressEvent{Message: message, Phase: phase, StageId: stageID}
+func phaseProgressEvent(stageID []byte, phase progressv1.Phase, message string, current, total uint32) *progressv1.OperationEvent {
+	p := &progressv1.ProgressEvent{Message: message, Phase: phase, StageId: stageID}
 	if total > 0 {
 		p.Current = &current
 		p.Total = &total
 	}
-	return &deploymentsv1.DeployEvent{
-		Event: &deploymentsv1.DeployEvent_Progress{Progress: p},
+	return &progressv1.OperationEvent{
+		Event: &progressv1.OperationEvent_Progress{Progress: p},
 	}
 }
 
-func stageProgressEvent(id deploy.StageID, phase deploymentsv1.Phase, message string) *deploymentsv1.DeployEvent {
-	return &deploymentsv1.DeployEvent{
-		Event: &deploymentsv1.DeployEvent_Progress{Progress: &deploymentsv1.ProgressEvent{
+func stageProgressEvent(id deploy.StageID, phase progressv1.Phase, message string) *progressv1.OperationEvent {
+	return &progressv1.OperationEvent{
+		Event: &progressv1.OperationEvent_Progress{Progress: &progressv1.ProgressEvent{
 			Message: message,
 			Phase:   phase,
 			StageId: id[:],
@@ -679,27 +680,27 @@ func closeStages(tracer deploy.Tracer) {
 	deploy.DeclareStages(tracer, true)
 }
 
-func degradedEvent(need edge.Need, detail string) *deploymentsv1.DeployEvent {
-	return &deploymentsv1.DeployEvent{
-		Event: &deploymentsv1.DeployEvent_Degraded{Degraded: &deploymentsv1.DegradedEvent{
+func degradedEvent(need edge.Need, detail string) *progressv1.OperationEvent {
+	return &progressv1.OperationEvent{
+		Event: &progressv1.OperationEvent_Degraded{Degraded: &progressv1.DegradedEvent{
 			Need:   string(need),
 			Detail: detail,
 		}},
 	}
 }
 
-func dnsOwedEvent(headline string, records []edge.Record, notes ...string) *deploymentsv1.DeployEvent {
-	owed := make([]*deploymentsv1.DnsRecord, 0, len(records))
+func dnsOwedEvent(headline string, records []edge.Record, notes ...string) *progressv1.OperationEvent {
+	owed := make([]*progressv1.DnsRecord, 0, len(records))
 	for _, rec := range records {
-		owed = append(owed, &deploymentsv1.DnsRecord{
+		owed = append(owed, &progressv1.DnsRecord{
 			Name:    rec.Name,
 			Type:    string(rec.Type),
 			Value:   rec.Value,
 			Proxied: rec.Proxied,
 		})
 	}
-	return &deploymentsv1.DeployEvent{
-		Event: &deploymentsv1.DeployEvent_DnsOwed{DnsOwed: &deploymentsv1.DnsOwedEvent{
+	return &progressv1.OperationEvent{
+		Event: &progressv1.OperationEvent_DnsOwed{DnsOwed: &progressv1.DnsOwedEvent{
 			Headline: headline,
 			Records:  owed,
 			Notes:    notes,
@@ -707,30 +708,30 @@ func dnsOwedEvent(headline string, records []edge.Record, notes ...string) *depl
 	}
 }
 
-func logEvent(message string) *deploymentsv1.DeployEvent {
-	return &deploymentsv1.DeployEvent{
-		Event: &deploymentsv1.DeployEvent_Log{Log: &deploymentsv1.LogEvent{Message: message}},
+func logEvent(message string) *progressv1.OperationEvent {
+	return &progressv1.OperationEvent{
+		Event: &progressv1.OperationEvent_Log{Log: &progressv1.LogEvent{Message: message}},
 	}
 }
 
-func failureResult(err error) *deploymentsv1.DeployEvent {
-	return &deploymentsv1.DeployEvent{
-		Event: &deploymentsv1.DeployEvent_Result{Result: &deploymentsv1.ResultEvent{
+func failureResult(err error) *progressv1.OperationEvent {
+	return &progressv1.OperationEvent{
+		Event: &progressv1.OperationEvent_Result{Result: &progressv1.ResultEvent{
 			Success: false,
 			Error:   err.Error(),
 		}},
 	}
 }
 
-func okResult() *deploymentsv1.DeployEvent {
-	return &deploymentsv1.DeployEvent{
-		Event: &deploymentsv1.DeployEvent_Result{Result: &deploymentsv1.ResultEvent{Success: true}},
+func okResult() *progressv1.OperationEvent {
+	return &progressv1.OperationEvent{
+		Event: &progressv1.OperationEvent_Result{Result: &progressv1.ResultEvent{Success: true}},
 	}
 }
 
-func deployedResult(res deploy.Result) *deploymentsv1.DeployEvent {
-	return &deploymentsv1.DeployEvent{
-		Event: &deploymentsv1.DeployEvent_Result{Result: &deploymentsv1.ResultEvent{
+func deployedResult(res deploy.Result) *progressv1.OperationEvent {
+	return &progressv1.OperationEvent{
+		Event: &progressv1.OperationEvent_Result{Result: &progressv1.ResultEvent{
 			Success:     true,
 			Links:       res.Links,
 			Functions:   res.Functions,

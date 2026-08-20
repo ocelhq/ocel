@@ -25,6 +25,7 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/naming"
 	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
+	progressv1 "github.com/ocelhq/ocel/pkg/proto/progress/v1"
 	"github.com/ocelhq/ocel/platform/aws/provider/payloads"
 )
 
@@ -288,7 +289,7 @@ func uploadFunctionArtifacts(ctx context.Context, cfg Config, manifest *deployme
 
 	total := uint32(len(functions))
 	var done atomic.Uint32
-	progress.report(deploymentsv1.Phase_PHASE_UPLOADING, "Uploading function artifacts", 0, total)
+	progress.report(progressv1.Phase_PHASE_UPLOADING, "Uploading function artifacts", 0, total)
 
 	phaseStart := time.Now()
 	g, ctx := errgroup.WithContext(ctx)
@@ -319,7 +320,7 @@ func uploadFunctionArtifacts(ctx context.Context, cfg Config, manifest *deployme
 			}
 			mu.Lock()
 			refs[fn.GetLogicalName()] = artifactRef{Bucket: cfg.ArtifactBucket, Key: key}
-			progress.report(deploymentsv1.Phase_PHASE_UPLOADING, "Uploading function artifacts", done.Add(1), total)
+			progress.report(progressv1.Phase_PHASE_UPLOADING, "Uploading function artifacts", done.Add(1), total)
 			mu.Unlock()
 			return nil
 		})
