@@ -8,6 +8,7 @@ import (
 	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
 	"github.com/ocelhq/ocel/platform/aws/provider/bootstrap"
 	"github.com/ocelhq/ocel/platform/aws/provider/certs"
+	"github.com/ocelhq/ocel/platform/aws/provider/domains"
 	"github.com/ocelhq/ocel/platform/aws/provider/edges"
 	"github.com/ocelhq/ocel/platform/aws/provider/edges/apigateway"
 	"github.com/ocelhq/ocel/platform/aws/provider/edges/cloudfront"
@@ -105,10 +106,11 @@ func TestReleasePlanItems(t *testing.T) {
 	owed := edge.Record{Name: "*.preview.acme.com", Type: edge.RecordTypeCNAME, Value: "d1.cloudfront.net"}
 	written := edge.Record{Name: "_ocel.preview.acme.com", Type: edge.RecordTypeCNAME, Value: "_v.acm-validations.aws"}
 	recorded := bootstrap.PreviewDomain{
-		BaseDomain:  "preview.acme.com",
-		Records:     []edge.Record{written},
-		Owed:        []edge.Record{owed},
-		Certificate: certs.Certificate{ARN: "arn:ocel"},
+		BaseDomain: "preview.acme.com",
+		Settlement: domains.Settlement{
+			Certificate: certs.Certificate{ARN: "arn:ocel"},
+			Validation:  domains.Records{Written: []edge.Record{written}, Owed: []edge.Record{owed}},
+		},
 	}
 
 	t.Run("the CloudFront edge disables the wildcard distribution before deleting it", func(t *testing.T) {
@@ -150,7 +152,7 @@ func TestReleasePlanItems(t *testing.T) {
 		t.Parallel()
 
 		adopted := recorded
-		adopted.Certificate = certs.Certificate{ARN: "arn:yours", Adopted: true}
+		adopted.Settlement.Certificate = certs.Certificate{ARN: "arn:yours", Adopted: true}
 		if got := itemFor(t, releasePlanItems(planEdge(t, cloudflare.Kind), adopted), "certificate", "arn:yours").GetAction(); got != deploymentsv1.TeardownItem_ACTION_KEEP {
 			t.Errorf("adopted certificate action = %v, want KEEP", got)
 		}

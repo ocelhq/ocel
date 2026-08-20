@@ -11,9 +11,9 @@ import (
 	connect "connectrpc.com/connect"
 
 	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
-	"github.com/ocelhq/ocel/platform/aws/provider/bootstrap"
 	"github.com/ocelhq/ocel/platform/aws/provider/certs"
 	"github.com/ocelhq/ocel/platform/aws/provider/deploy"
+	"github.com/ocelhq/ocel/platform/aws/provider/domains"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
@@ -25,12 +25,12 @@ const (
 
 type certLookup struct {
 	issuer   certs.Issuer
-	recorded bootstrap.Production
+	recorded domains.Settlement
 	pins     map[string]string
 	seen     map[string]certs.Certificate
 }
 
-func newCertLookup(issuer certs.Issuer, recorded bootstrap.Production, pins map[string]string) *certLookup {
+func newCertLookup(issuer certs.Issuer, recorded domains.Settlement, pins map[string]string) *certLookup {
 	return &certLookup{issuer: issuer, recorded: recorded, pins: pins, seen: map[string]certs.Certificate{}}
 }
 
@@ -71,7 +71,7 @@ type domainGate struct {
 	servesUnbound bool
 
 	state     edge.StackState
-	recorded  bootstrap.Production
+	recorded  domains.Settlement
 	issuer    certs.Issuer
 	prober    certs.Prober
 	pins      map[string]string
@@ -174,7 +174,7 @@ func (g domainGate) probeAll(ctx context.Context, hosts []string) error {
 		go func() {
 			defer wg.Done()
 			defer func() { <-at }()
-			if _, err := fresh.Await(ctx, host, g.kind, g.recorded.Host(host).Owed, func(string) {}); err != nil {
+			if _, err := fresh.Await(ctx, host, g.kind, g.recorded.Host(host).Records.Owed, func(string) {}); err != nil {
 				failures[i] = fmt.Errorf("%s does not answer as the %s edge yet, so its DNS record has not taken: %w — run `ocel domain status --wait` to watch it, or `ocel domain add` to settle what is missing", host, g.kind, err)
 			}
 		}()

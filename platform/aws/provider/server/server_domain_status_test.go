@@ -14,8 +14,8 @@ import (
 	acmtypes "github.com/aws/aws-sdk-go-v2/service/acm/types"
 
 	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
-	"github.com/ocelhq/ocel/platform/aws/provider/bootstrap"
 	"github.com/ocelhq/ocel/platform/aws/provider/certs"
+	"github.com/ocelhq/ocel/platform/aws/provider/domains"
 	"github.com/ocelhq/ocel/platform/aws/provider/edges/apigateway"
 	"github.com/ocelhq/ocel/platform/aws/provider/edges/cloudfront"
 	cloudflare "github.com/ocelhq/ocel/platform/edge/cloudflare/deploy"
@@ -49,18 +49,18 @@ func certARNFor(kind edge.Kind) string {
 	return "arn:aws:acm:" + region + ":111122223333:certificate/live"
 }
 
-func issuedProduction(arn string, hosts ...string) bootstrap.Production {
-	recorded := bootstrap.Production{Certificate: certs.Certificate{
+func issuedProduction(arn string, hosts ...string) domains.Settlement {
+	recorded := domains.Settlement{Certificate: certs.Certificate{
 		ARN:     arn,
 		Region:  certs.RegionOfARN(arn),
 		Status:  certs.StatusIssued,
 		Domains: hosts,
 	}}
 	for _, host := range hosts {
-		recorded = recorded.WithHost(bootstrap.Provisioned{
+		recorded = recorded.WithHost(domains.Host{
 			Hostname:    host,
 			Certificate: arn,
-			Written:     []edge.Record{{Name: host, Type: edge.RecordTypeAAAA, Value: edge.ProxyPlaceholder, Proxied: true}},
+			Records:     domains.Records{Written: []edge.Record{{Name: host, Type: edge.RecordTypeAAAA, Value: edge.ProxyPlaceholder, Proxied: true}}},
 			Probe:       certs.Probe{At: time.Unix(1755500000, 0).UTC(), Edge: cloudflare.Kind, OK: true},
 		})
 	}
@@ -247,8 +247,10 @@ func TestDomainStatus(t *testing.T) {
 		t.Parallel()
 
 		prior := issuedProduction(domainCertARN, "shop.app.com", "www.app.com")
-		prior.Written = []edge.Record{{Name: "_acme.app.com", Type: edge.RecordTypeCNAME, Value: "validate.acm-validations.aws"}}
-		prior.Owed = []edge.Record{{Name: "_acme2.app.com", Type: edge.RecordTypeCNAME, Value: "validate2.acm-validations.aws"}}
+		prior.Validation = domains.Records{
+			Written: []edge.Record{{Name: "_acme.app.com", Type: edge.RecordTypeCNAME, Value: "validate.acm-validations.aws"}},
+			Owed:    []edge.Record{{Name: "_acme2.app.com", Type: edge.RecordTypeCNAME, Value: "validate2.acm-validations.aws"}},
+		}
 
 		f := newDomainFixture(domainFixtureOptions{
 			kind:       cloudflare.Kind,
@@ -376,7 +378,7 @@ func TestDomainStatus(t *testing.T) {
 			kind:       cloudflare.Kind,
 			configured: []string{"shop.app.com"},
 			stack:      &boundStack{name: string(cloudflare.Kind), state: edge.StackState{edge.StackKeySlug: domainSlug}},
-			prior:      bootstrap.Production{},
+			prior:      domains.Settlement{},
 		})
 
 		resp, err := f.session.status(t.Context())
@@ -394,7 +396,7 @@ func TestAddDomainAcrossEdgeModes(t *testing.T) {
 	t.Parallel()
 
 	prior := issuedProduction(domainCertARN, "shop.app.com")
-	prior = prior.WithHost(bootstrap.Provisioned{
+	prior = prior.WithHost(domains.Host{
 		Hostname:    "shop.app.com",
 		Certificate: domainCertARN,
 		Probe:       certs.Probe{At: time.Unix(1, 0), Edge: cloudfront.Kind, OK: true},
@@ -441,7 +443,7 @@ func TestAddDomainAcrossEdgeModes(t *testing.T) {
 	}
 }
 
-func liveGate(t *testing.T, kind edge.Kind, api *domainACM, answering bool, prior bootstrap.Production, bound ...string) domainGate {
+func liveGate(t *testing.T, kind edge.Kind, api *domainACM, answering bool, prior domains.Settlement, bound ...string) domainGate {
 	t.Helper()
 	state := edge.StackState{edge.StackKeySlug: domainSlug}
 	for _, host := range bound {
@@ -535,7 +537,7 @@ func TestAdmitDomains(t *testing.T) {
 	t.Run("the first production deploy is admitted, and withholds the vendor hostnames it would otherwise print", func(t *testing.T) {
 		t.Parallel()
 
-		gate := liveGate(t, cloudfront.Kind, newDomainACM(), false, bootstrap.Production{})
+		gate := liveGate(t, cloudfront.Kind, newDomainACM(), false, domains.Settlement{})
 		gate.state = nil
 		admitted, err := admitDomains(t.Context(), gate, deploymentsv1.Environment_CLASS_PRODUCTION, productionManifest("shop.app.com"), func(string) {})
 		if err != nil {
@@ -567,7 +569,7 @@ func TestAdmitDomains(t *testing.T) {
 		t.Run("a hostname with no certificate on the "+string(kind)+" edge is refused, naming the certificate", func(t *testing.T) {
 			t.Parallel()
 
-			gate := liveGate(t, kind, newDomainACM(), true, bootstrap.Production{}, "shop.app.com")
+			gate := liveGate(t, kind, newDomainACM(), true, domains.Settlement{}, "shop.app.com")
 			_, err := admitDomains(t.Context(), gate, deploymentsv1.Environment_CLASS_PRODUCTION, productionManifest("shop.app.com"), func(string) {})
 			if err == nil {
 				t.Fatal("admitDomains err = nil, want a refusal without a certificate")
@@ -685,7 +687,7 @@ func TestAdmitDomains(t *testing.T) {
 		t.Parallel()
 
 		api := newDomainACM()
-		gate := liveGate(t, cloudflare.Kind, api, true, bootstrap.Production{}, "shop.app.com")
+		gate := liveGate(t, cloudflare.Kind, api, true, domains.Settlement{}, "shop.app.com")
 		if _, err := admitDomains(t.Context(), gate, deploymentsv1.Environment_CLASS_PRODUCTION, productionManifest("shop.app.com"), func(string) {}); err != nil {
 			t.Fatalf("admitDomains err = %v, want a bound, answering host admitted without a certificate of ocel's own", err)
 		}
@@ -693,17 +695,17 @@ func TestAdmitDomains(t *testing.T) {
 			t.Errorf("described = %v, want no ACM call for an edge that terminates TLS with its own certificate", api.described)
 		}
 
-		unbound := liveGate(t, cloudflare.Kind, api, true, bootstrap.Production{})
+		unbound := liveGate(t, cloudflare.Kind, api, true, domains.Settlement{})
 		if _, err := admitDomains(t.Context(), unbound, deploymentsv1.Environment_CLASS_PRODUCTION, productionManifest("shop.app.com"), func(string) {}); err == nil {
 			t.Error("admitDomains err = nil, want the surface still demanded on cloudflare")
 		}
 
-		silent := liveGate(t, cloudflare.Kind, api, false, bootstrap.Production{}, "shop.app.com")
+		silent := liveGate(t, cloudflare.Kind, api, false, domains.Settlement{}, "shop.app.com")
 		if _, err := admitDomains(t.Context(), silent, deploymentsv1.Environment_CLASS_PRODUCTION, productionManifest("shop.app.com"), func(string) {}); err == nil {
 			t.Error("admitDomains err = nil, want a fresh probe still demanded on cloudflare")
 		}
 
-		pinned := liveGate(t, cloudflare.Kind, api, true, bootstrap.Production{}, "shop.app.com")
+		pinned := liveGate(t, cloudflare.Kind, api, true, domains.Settlement{}, "shop.app.com")
 		pinned.pins = map[string]string{"shop.app.com": domainCertARN}
 		var warned []string
 		if _, err := admitDomains(t.Context(), pinned, deploymentsv1.Environment_CLASS_PRODUCTION, productionManifest("shop.app.com"), func(m string) { warned = append(warned, m) }); err != nil {
