@@ -29,6 +29,7 @@ beforeAll(async () => {
   await writeFile(launcherPath, launcherModule);
 
   process.env.OCEL_EDGE_KIND = "cloudfront";
+  process.env.OCEL_ORIGIN_ROUTER = "1";
   delete process.env.OCEL_ROUTING_MANIFEST;
   process.env.OCEL_CONTROL_SOCKET = sockPath;
   process.env.OCEL_HANDLER = launcherPath;

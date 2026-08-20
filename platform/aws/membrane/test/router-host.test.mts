@@ -79,6 +79,7 @@ function host(): RouterHost {
   return {
     manifest,
     edgeKind: EDGE_KIND,
+    keepCacheTags: true,
     localOrigin,
     functionUrls: { [SIBLING_BUNDLE]: SIBLING_URL },
     slug: "p1",
@@ -165,11 +166,10 @@ test("withoutClientControl keeps everything the app is allowed to see", () => {
   expect([...kept.keys()].sort()).toEqual(["cookie", "x-keep"]);
 });
 
-test("no edge kind and no cloudflare edge kind hosts no router", () => {
-  expect(routerMode(undefined)).toBe(false);
-  expect(routerMode("")).toBe(false);
-  expect(routerMode("cloudflare")).toBe(false);
-  expect(routerMode("cloudfront")).toBe(true);
+test("only a deploy that declared an origin router hosts one", () => {
+  expect(routerMode({} as NodeJS.ProcessEnv)).toBe(false);
+  expect(routerMode({ OCEL_ORIGIN_ROUTER: "" } as NodeJS.ProcessEnv)).toBe(false);
+  expect(routerMode({ OCEL_ORIGIN_ROUTER: "1" } as NodeJS.ProcessEnv)).toBe(true);
 });
 
 test("router mode without a routing manifest refuses to boot", () => {

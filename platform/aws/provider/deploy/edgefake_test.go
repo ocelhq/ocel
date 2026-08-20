@@ -97,6 +97,8 @@ func (f *recordingEdge) ServesUnbound() bool { return edge.ServesUnbound(f.decla
 
 func (f *recordingEdge) SignsOriginForwards() bool { return edge.SignsOriginForwards(f.declared()) }
 
+func (f *recordingEdge) InvalidatesByCacheTag() bool { return edge.InvalidatesByCacheTag(f.declared()) }
+
 func (f *recordingEdge) ProjectSurfaces(scope edge.ProjectScope) []edge.Surface {
 	return f.declared().ProjectSurfaces(scope)
 }

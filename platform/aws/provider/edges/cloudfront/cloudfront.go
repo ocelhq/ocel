@@ -164,6 +164,8 @@ func (p *provider) CertificateRegion(string) string { return certs.CloudFrontReg
 
 func (p *provider) SignsOriginForwards() bool { return false }
 
+func (p *provider) InvalidatesByCacheTag() bool { return true }
+
 const distributionDeleteReason = "CloudFront only deletes a disabled distribution once the disable has reached every edge"
 
 func (p *provider) ProjectSurfaces(scope edge.ProjectScope) []edge.Surface {

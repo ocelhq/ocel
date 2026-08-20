@@ -152,16 +152,16 @@ export async function drainWaitUntil(pending: Promise<unknown>[]): Promise<void>
   }
 }
 
-const cloudflareEdgeKind = "cloudflare";
+const originRouterVar = "OCEL_ORIGIN_ROUTER";
 
-const cloudfrontEdgeKind = "cloudfront";
-
-export function routerMode(edgeKind: string | undefined): boolean {
-  return edgeKind !== undefined && edgeKind !== "" && edgeKind !== cloudflareEdgeKind;
+export function routerMode(env: NodeJS.ProcessEnv): boolean {
+  return Boolean(env[originRouterVar]);
 }
 
-export function invalidatesByCacheTag(edgeKind: string | undefined): boolean {
-  return edgeKind === cloudfrontEdgeKind;
+const cacheTagPurgeVar = "OCEL_CACHE_TAG_PURGE";
+
+export function invalidatesByCacheTag(env: NodeJS.ProcessEnv): boolean {
+  return Boolean(env[cacheTagPurgeVar]);
 }
 
 const originSecretVar = "OCEL_ORIGIN_SECRET";
@@ -185,7 +185,7 @@ function presentedSecret(headers: http.IncomingHttpHeaders): string {
 function originGuard(env: NodeJS.ProcessEnv): OriginGuard | undefined {
   const secret = env[originSecretVar];
   delete env[originSecretVar];
-  if (!routerMode(env.OCEL_EDGE_KIND) || env[originSignedVar]) return undefined;
+  if (!routerMode(env) || env[originSignedVar]) return undefined;
   if (!secret) return () => false;
   const expected = digest(secret);
   return (headers) => timingSafeEqual(digest(presentedSecret(headers)), expected);

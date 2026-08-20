@@ -142,7 +142,6 @@ beforeAll(async () => {
   (globalThis as any).__ocelTestRevalidate = noteRevalidation;
 
   process.env.OCEL_ISR_PREFIX = "prod/shop/web/r0a1b2c3d/isr";
-  process.env.OCEL_EDGE_KIND = "cloudflare";
   process.env.OCEL_CONTROL_SOCKET = sockPath;
   process.env.OCEL_HANDLER = launcherPath;
   await import("../src/next/entrypoint.mjs");

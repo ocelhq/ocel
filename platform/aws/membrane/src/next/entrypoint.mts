@@ -78,7 +78,7 @@ async function boot(): Promise<void> {
     );
   };
 
-  if (!routerMode(process.env.OCEL_EDGE_KIND)) {
+  if (!routerMode(process.env)) {
     await serveInvoke(invoke, (port) => {
       process.env.__NEXT_PRIVATE_ORIGIN = `http://127.0.0.1:${port}`;
     });

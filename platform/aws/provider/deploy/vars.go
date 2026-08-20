@@ -80,7 +80,11 @@ func appEnv(manifest *deploymentsv1.Manifest, app *deploymentsv1.ManifestApp, bu
 	if cfg.Edge != nil {
 		env[edgeKindEnv] = string(cfg.Edge.Kind())
 		if _, programmable := cfg.Edge.(edge.Programmable); !programmable {
+			env[edge.OriginRouterVar] = "1"
 			env[edge.OriginSignedVar] = "1"
+		}
+		if edge.InvalidatesByCacheTag(cfg.Edge) {
+			env[edge.CacheTagPurgeVar] = "1"
 		}
 	}
 	if appCrossesMembrane(manifest, app.GetName()) {
