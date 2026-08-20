@@ -18,7 +18,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
 	"github.com/ocelhq/ocel/cli/internal/providerrunner"
 	"github.com/ocelhq/ocel/pkg/naming"
-	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
+	envv1 "github.com/ocelhq/ocel/pkg/proto/env/v1"
 	linksv1 "github.com/ocelhq/ocel/pkg/proto/links/v1"
 )
 
@@ -127,11 +127,11 @@ func runLinkSet(ctx context.Context, d deps, cwd string, stdin io.Reader, opts l
 	}
 	owner := opts.publisher()
 	return envSession(ctx, d, cwd, opts.substrate(), stdout, stderr, func(runner *providerrunner.Runner, cfg *projectconfig.Config, _ *projectconfig.ProviderDescriptor) error {
-		client, err := runner.Deployments()
+		client, err := runner.Vars()
 		if err != nil {
 			return err
 		}
-		resp, err := client.SetLink(ctx, &deploymentsv1.SetLinkRequest{
+		resp, err := client.SetLink(ctx, &envv1.SetLinkRequest{
 			Slug:        cfg.Slug,
 			Class:       envClass(opts.substrate()),
 			Environment: opts.environment,
@@ -166,11 +166,11 @@ func decodeLink(stdin io.Reader) (*linksv1.Link, error) {
 
 func runLinkRm(ctx context.Context, d deps, cwd, name string, opts linkOptions, stdout, stderr io.Writer) error {
 	return envSession(ctx, d, cwd, opts.substrate(), stdout, stderr, func(runner *providerrunner.Runner, cfg *projectconfig.Config, _ *projectconfig.ProviderDescriptor) error {
-		client, err := runner.Deployments()
+		client, err := runner.Vars()
 		if err != nil {
 			return err
 		}
-		resp, err := client.RemoveLink(ctx, &deploymentsv1.RemoveLinkRequest{
+		resp, err := client.RemoveLink(ctx, &envv1.RemoveLinkRequest{
 			Slug:        cfg.Slug,
 			Class:       envClass(opts.substrate()),
 			Environment: opts.environment,
@@ -193,11 +193,11 @@ func runLinkRm(ctx context.Context, d deps, cwd, name string, opts linkOptions, 
 
 func runLinkLs(ctx context.Context, d deps, cwd string, opts linkOptions, stdout, stderr io.Writer) error {
 	return envSession(ctx, d, cwd, opts.substrate(), stdout, stderr, func(runner *providerrunner.Runner, cfg *projectconfig.Config, _ *projectconfig.ProviderDescriptor) error {
-		client, err := runner.Deployments()
+		client, err := runner.Vars()
 		if err != nil {
 			return err
 		}
-		resp, err := client.ListLinks(ctx, &deploymentsv1.ListLinksRequest{
+		resp, err := client.ListLinks(ctx, &envv1.ListLinksRequest{
 			Slug:        cfg.Slug,
 			Class:       envClass(opts.substrate()),
 			Environment: opts.environment,
@@ -215,11 +215,11 @@ func runLinkLs(ctx context.Context, d deps, cwd string, opts linkOptions, stdout
 
 func runLinkGenerate(ctx context.Context, d deps, cwd string, opts linkOptions, stdout, stderr io.Writer) error {
 	return envSession(ctx, d, cwd, opts.substrate(), stdout, stderr, func(runner *providerrunner.Runner, cfg *projectconfig.Config, provider *projectconfig.ProviderDescriptor) error {
-		client, err := runner.Deployments()
+		client, err := runner.Vars()
 		if err != nil {
 			return err
 		}
-		resp, err := client.ListLinks(ctx, &deploymentsv1.ListLinksRequest{
+		resp, err := client.ListLinks(ctx, &envv1.ListLinksRequest{
 			Slug:        cfg.Slug,
 			Class:       envClass(opts.substrate()),
 			Environment: opts.environment,
@@ -283,7 +283,7 @@ type linkReport struct {
 	Version uint64 `json:"version"`
 }
 
-func linkReports(links []*deploymentsv1.LinkSummary) []linkReport {
+func linkReports(links []*envv1.LinkSummary) []linkReport {
 	out := make([]linkReport, 0, len(links))
 	for _, l := range links {
 		out = append(out, linkReport{
@@ -303,7 +303,7 @@ func writeLinkJSON(stdout io.Writer, report any) error {
 	return encoder.Encode(report)
 }
 
-func renderLinks(stdout io.Writer, links []*deploymentsv1.LinkSummary) {
+func renderLinks(stdout io.Writer, links []*envv1.LinkSummary) {
 	if len(links) == 0 {
 		fmt.Fprintln(stdout, "No links published. Publish one with `ocel link set < link.json`.")
 		return

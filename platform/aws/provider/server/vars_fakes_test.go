@@ -228,8 +228,8 @@ func testAccount(cfn *countingCFN, ddb *fakeDynamo, crypto *fakeKMS) *VarsServer
 	return &VarsServer{stores: testStores(cfn, ddb, crypto)}
 }
 
-func testStores(cfn *countingCFN, ddb *fakeDynamo, crypto *fakeKMS) stores {
-	return stores{openAccount: func(context.Context, string) (account, error) {
+func testStores(cfn *countingCFN, ddb *fakeDynamo, crypto *fakeKMS) *stores {
+	return &stores{openAccount: func(context.Context, string) (account, error) {
 		return account{CFN: cfn, Dynamo: ddb, KMS: crypto}, nil
 	}}
 }

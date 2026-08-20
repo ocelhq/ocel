@@ -39,12 +39,12 @@ func (a authHeaderInterceptor) WrapStreamingHandler(next connect.StreamingHandle
 	return next
 }
 
-func newTestClient(t *testing.T, token string) deploymentsv1connect.DeploymentServiceClient {
+func newTestClient(t *testing.T, token string) deploymentsv1connect.ProviderServiceClient {
 	t.Helper()
 	return newTestClientFor(t, &Server{}, token)
 }
 
-func newTestClientFor(t *testing.T, deployments *Server, token string) deploymentsv1connect.DeploymentServiceClient {
+func newTestClientFor(t *testing.T, deployments *Server, token string) deploymentsv1connect.ProviderServiceClient {
 	t.Helper()
 	srv := httptest.NewServer(newMux(deployments, testToken))
 	t.Cleanup(srv.Close)
@@ -53,7 +53,7 @@ func newTestClientFor(t *testing.T, deployments *Server, token string) deploymen
 	if token != "" {
 		opts = append(opts, connect.WithInterceptors(authHeaderInterceptor{token: token}))
 	}
-	return deploymentsv1connect.NewDeploymentServiceClient(srv.Client(), srv.URL, opts...)
+	return deploymentsv1connect.NewProviderServiceClient(srv.Client(), srv.URL, opts...)
 }
 
 func drainStream(stream *connect.ServerStreamForClient[deploymentsv1.DeployEvent]) ([]*deploymentsv1.DeployEvent, error) {
@@ -122,9 +122,9 @@ func TestUnsupportedEdgeKind(t *testing.T) {
 
 	calls := []struct {
 		name string
-		call func(deploymentsv1connect.DeploymentServiceClient) error
+		call func(deploymentsv1connect.ProviderServiceClient) error
 	}{
-		{"Deploy", func(client deploymentsv1connect.DeploymentServiceClient) error {
+		{"Deploy", func(client deploymentsv1connect.ProviderServiceClient) error {
 			stream, err := client.Deploy(context.Background(), &deploymentsv1.DeployRequest{
 				Manifest: wellFormedManifest(),
 				Edge: &deploymentsv1.EdgeSelection{
@@ -138,13 +138,13 @@ func TestUnsupportedEdgeKind(t *testing.T) {
 			_, err = drainStream(stream)
 			return err
 		}},
-		{"PlanTeardown", func(client deploymentsv1connect.DeploymentServiceClient) error {
+		{"PlanTeardown", func(client deploymentsv1connect.ProviderServiceClient) error {
 			_, err := client.PlanTeardown(context.Background(), &deploymentsv1.PlanTeardownRequest{
 				Edge: &deploymentsv1.EdgeSelection{Kind: string(unfrontedKind)},
 			})
 			return err
 		}},
-		{"Teardown", func(client deploymentsv1connect.DeploymentServiceClient) error {
+		{"Teardown", func(client deploymentsv1connect.ProviderServiceClient) error {
 			stream, err := client.Teardown(context.Background(), &deploymentsv1.TeardownRequest{
 				Edge: &deploymentsv1.EdgeSelection{Kind: string(unfrontedKind)},
 			})

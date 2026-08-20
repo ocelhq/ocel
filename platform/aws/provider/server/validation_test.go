@@ -10,6 +10,7 @@ import (
 	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
 	deploymentsv1connect "github.com/ocelhq/ocel/pkg/proto/deployments/v1/deploymentsv1connect"
 	envv1 "github.com/ocelhq/ocel/pkg/proto/env/v1"
+	"github.com/ocelhq/ocel/pkg/proto/env/v1/envv1connect"
 )
 
 func refusedCode(t *testing.T, err error) connect.Code {
@@ -26,9 +27,9 @@ func TestContractRefusesMalformedRequests(t *testing.T) {
 
 	cases := []struct {
 		name string
-		call func(deploymentsv1connect.DeploymentServiceClient) error
+		call func(deploymentsv1connect.ProviderServiceClient) error
 	}{
-		{"a tag carrying a path separator", func(c deploymentsv1connect.DeploymentServiceClient) error {
+		{"a tag carrying a path separator", func(c deploymentsv1connect.ProviderServiceClient) error {
 			stream, err := c.Deploy(context.Background(), &deploymentsv1.DeployRequest{
 				Manifest: wellFormedManifest(),
 				Tag:      "feature/x",
@@ -39,7 +40,7 @@ func TestContractRefusesMalformedRequests(t *testing.T) {
 			_, err = drainStream(stream)
 			return err
 		}},
-		{"a slug that would open a second segment of the parameter path", func(c deploymentsv1connect.DeploymentServiceClient) error {
+		{"a slug that would open a second segment of the parameter path", func(c deploymentsv1connect.ProviderServiceClient) error {
 			manifest := wellFormedManifest()
 			manifest.Slug = "acme/../root"
 			stream, err := c.Deploy(context.Background(), &deploymentsv1.DeployRequest{Manifest: manifest})
@@ -49,7 +50,7 @@ func TestContractRefusesMalformedRequests(t *testing.T) {
 			_, err = drainStream(stream)
 			return err
 		}},
-		{"a prune keeping a negative number of promotions", func(c deploymentsv1connect.DeploymentServiceClient) error {
+		{"a prune keeping a negative number of promotions", func(c deploymentsv1connect.ProviderServiceClient) error {
 			stream, err := c.Prune(context.Background(), &deploymentsv1.PruneRequest{Slug: "acme", KeepN: -1})
 			if err != nil {
 				return err
@@ -57,19 +58,8 @@ func TestContractRefusesMalformedRequests(t *testing.T) {
 			_, err = drainStream(stream)
 			return err
 		}},
-		{"a global preview domain asked for under the production class", func(c deploymentsv1connect.DeploymentServiceClient) error {
+		{"a global preview domain asked for under the production class", func(c deploymentsv1connect.ProviderServiceClient) error {
 			_, err := c.ListDomain(context.Background(), &deploymentsv1.ListDomainRequest{
-				Class: deploymentsv1.Environment_CLASS_PRODUCTION,
-			})
-			return err
-		}},
-		{"a link published to no class at all", func(c deploymentsv1connect.DeploymentServiceClient) error {
-			_, err := c.ListLinks(context.Background(), &deploymentsv1.ListLinksRequest{Slug: "acme"})
-			return err
-		}},
-		{"a link set request carrying no link", func(c deploymentsv1connect.DeploymentServiceClient) error {
-			_, err := c.SetLink(context.Background(), &deploymentsv1.SetLinkRequest{
-				Slug:  "acme",
 				Class: deploymentsv1.Environment_CLASS_PRODUCTION,
 			})
 			return err
@@ -79,6 +69,35 @@ func TestContractRefusesMalformedRequests(t *testing.T) {
 		t.Run(tc.name+" is refused", func(t *testing.T) {
 			t.Parallel()
 			if got := refusedCode(t, tc.call(newTestClient(t, testToken))); got != connect.CodeInvalidArgument {
+				t.Fatalf("code = %v, want %v", got, connect.CodeInvalidArgument)
+			}
+		})
+	}
+}
+
+func TestVarStoreRefusesMalformedRequests(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		name string
+		call func(envv1connect.EnvVarsServiceClient) error
+	}{
+		{"a link published to no class at all", func(c envv1connect.EnvVarsServiceClient) error {
+			_, err := c.ListLinks(context.Background(), &envv1.ListLinksRequest{Slug: "acme"})
+			return err
+		}},
+		{"a link set request carrying no link", func(c envv1connect.EnvVarsServiceClient) error {
+			_, err := c.SetLink(context.Background(), &envv1.SetLinkRequest{
+				Slug:  "acme",
+				Class: deploymentsv1.Environment_CLASS_PRODUCTION,
+			})
+			return err
+		}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name+" is refused", func(t *testing.T) {
+			t.Parallel()
+			if got := refusedCode(t, tc.call(newTestVarsClient(t, testToken))); got != connect.CodeInvalidArgument {
 				t.Fatalf("code = %v, want %v", got, connect.CodeInvalidArgument)
 			}
 		})

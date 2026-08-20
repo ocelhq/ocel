@@ -540,7 +540,7 @@ func runDomainStatus(ctx context.Context, d deps, cwd string, opts domainOptions
 
 const domainWaitFailures = 4
 
-func awaitDomainStatus(ctx context.Context, client deploymentsv1connect.DeploymentServiceClient, req *deploymentsv1.DomainStatusRequest, wait bool, out io.Writer) (*deploymentsv1.DomainStatusResponse, error) {
+func awaitDomainStatus(ctx context.Context, client deploymentsv1connect.ProviderServiceClient, req *deploymentsv1.DomainStatusRequest, wait bool, out io.Writer) (*deploymentsv1.DomainStatusResponse, error) {
 	resp, err := client.DomainStatus(ctx, req)
 	if err != nil || !wait || resp.GetReady() {
 		return resp, err
