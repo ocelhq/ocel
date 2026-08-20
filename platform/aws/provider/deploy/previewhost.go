@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
+	environmentv1 "github.com/ocelhq/ocel/pkg/proto/environment/v1"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
@@ -59,7 +60,7 @@ const (
 )
 
 func hostingWorldFor(cfg Config, manifest *deploymentsv1.Manifest) hostingWorld {
-	if cfg.Class != deploymentsv1.Environment_CLASS_PREVIEW {
+	if cfg.Tier != environmentv1.Tier_TIER_PREVIEW {
 		return hostingProduction
 	}
 	if cfg.GlobalPreviewDomain != "" && !declaresPreviewDomain(manifest) {

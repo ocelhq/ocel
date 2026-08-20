@@ -13,6 +13,7 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/naming"
 	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
+	environmentv1 "github.com/ocelhq/ocel/pkg/proto/environment/v1"
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/progress/v1"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/resources/v1"
 	"github.com/ocelhq/ocel/platform/aws/provider/edges/apigateway"
@@ -76,7 +77,7 @@ func TestEdgeStackSpecs(t *testing.T) {
 	})
 
 	t.Run("production prunes stale routes", func(t *testing.T) {
-		cfg := Config{Edge: &recordingEdge{kind: cloudflare.Kind}, Class: deploymentsv1.Environment_CLASS_PRODUCTION, ArtifactRoot: t.TempDir()}
+		cfg := Config{Edge: &recordingEdge{kind: cloudflare.Kind}, Tier: environmentv1.Tier_TIER_PRODUCTION, ArtifactRoot: t.TempDir()}
 
 		specs, err := stackSpecs(cfg, &deploymentsv1.Manifest{Slug: "proj"}, "v1", nil)
 		if err != nil {
@@ -95,7 +96,7 @@ func TestEdgeStackSpecs(t *testing.T) {
 
 	t.Run("preview with no declared domain is refused", func(t *testing.T) {
 		manifest := webManifest()
-		cfg := Config{Edge: &recordingEdge{kind: cloudflare.Kind}, Slug: "proj", Class: deploymentsv1.Environment_CLASS_PREVIEW, Identity: "pr-42", ArtifactRoot: specsArtifactRoot(t, manifest)}
+		cfg := Config{Edge: &recordingEdge{kind: cloudflare.Kind}, Slug: "proj", Tier: environmentv1.Tier_TIER_PREVIEW, Identity: "pr-42", ArtifactRoot: specsArtifactRoot(t, manifest)}
 
 		_, err := stackSpecs(cfg, manifest, "v1", nil)
 		if err == nil {
@@ -109,7 +110,7 @@ func TestEdgeStackSpecs(t *testing.T) {
 	t.Run("preview without a wildcard fails the deploy", func(t *testing.T) {
 		manifest := webManifest()
 		manifest.Domains = map[string]*deploymentsv1.DomainList{"preview": {Hostnames: []string{"app.acme.com"}}}
-		cfg := Config{Edge: &recordingEdge{kind: cloudflare.Kind}, Slug: "proj", Class: deploymentsv1.Environment_CLASS_PREVIEW, Identity: "pr-42", ArtifactRoot: specsArtifactRoot(t, manifest)}
+		cfg := Config{Edge: &recordingEdge{kind: cloudflare.Kind}, Slug: "proj", Tier: environmentv1.Tier_TIER_PREVIEW, Identity: "pr-42", ArtifactRoot: specsArtifactRoot(t, manifest)}
 
 		_, err := stackSpecs(cfg, manifest, "v1", nil)
 		if err == nil {
@@ -133,7 +134,7 @@ func TestEdgeStackSpecs(t *testing.T) {
 		cfg := Config{
 			Edge:         &recordingEdge{kind: cloudflare.Kind},
 			Slug:         "proj",
-			Class:        deploymentsv1.Environment_CLASS_PREVIEW,
+			Tier:         environmentv1.Tier_TIER_PREVIEW,
 			Identity:     "pr-42",
 			ArtifactRoot: specsArtifactRoot(t, manifest),
 		}
@@ -177,7 +178,7 @@ func TestEdgeStackSpecs(t *testing.T) {
 
 	t.Run("preview always binds the app list", func(t *testing.T) {
 		manifest := &deploymentsv1.Manifest{Slug: "proj"}
-		cfg := Config{Edge: &recordingEdge{kind: cloudflare.Kind}, Slug: "proj", Class: deploymentsv1.Environment_CLASS_PREVIEW, Identity: "pr-42", ArtifactRoot: specsArtifactRoot(t, manifest)}
+		cfg := Config{Edge: &recordingEdge{kind: cloudflare.Kind}, Slug: "proj", Tier: environmentv1.Tier_TIER_PREVIEW, Identity: "pr-42", ArtifactRoot: specsArtifactRoot(t, manifest)}
 
 		specs, err := stackSpecs(cfg, manifest, "v1", nil)
 		if err != nil {
@@ -190,7 +191,7 @@ func TestEdgeStackSpecs(t *testing.T) {
 
 	t.Run("every worker declares Lambda's invoke-payload budget to the edge", func(t *testing.T) {
 		manifest := webManifest()
-		cfg := Config{Edge: &recordingEdge{kind: cloudflare.Kind}, Slug: "proj", Class: deploymentsv1.Environment_CLASS_PRODUCTION, ArtifactRoot: specsArtifactRoot(t, manifest)}
+		cfg := Config{Edge: &recordingEdge{kind: cloudflare.Kind}, Slug: "proj", Tier: environmentv1.Tier_TIER_PRODUCTION, ArtifactRoot: specsArtifactRoot(t, manifest)}
 
 		specs, err := stackSpecs(cfg, manifest, "v1", nil)
 		if err != nil {
@@ -209,7 +210,7 @@ func TestEdgeStackSpecs(t *testing.T) {
 	t.Run("production keeps declarative hostnames", func(t *testing.T) {
 		manifest := webManifest()
 		manifest.Domains = map[string]*deploymentsv1.DomainList{"production": {Hostnames: []string{"acme.com", "www.acme.com"}}}
-		cfg := Config{Edge: &recordingEdge{kind: cloudflare.Kind}, Slug: "proj", Class: deploymentsv1.Environment_CLASS_PRODUCTION, ArtifactRoot: specsArtifactRoot(t, manifest)}
+		cfg := Config{Edge: &recordingEdge{kind: cloudflare.Kind}, Slug: "proj", Tier: environmentv1.Tier_TIER_PRODUCTION, ArtifactRoot: specsArtifactRoot(t, manifest)}
 
 		specs, err := stackSpecs(cfg, manifest, "v1", nil)
 		if err != nil {
@@ -357,7 +358,7 @@ func TestAmbientPreview(t *testing.T) {
 		return Config{
 			Edge:                &recordingEdge{kind: cloudflare.Kind},
 			Slug:                "proj",
-			Class:               deploymentsv1.Environment_CLASS_PREVIEW,
+			Tier:                environmentv1.Tier_TIER_PREVIEW,
 			Identity:            "pr-42",
 			GlobalPreviewDomain: "preview.acme.com",
 			ArtifactRoot:        specsArtifactRoot(t, m),
@@ -619,19 +620,19 @@ func varsManifest(variables ...*deploymentsv1.ManifestVariable) *deploymentsv1.M
 	}
 }
 
-func varsConfig(t *testing.T, class deploymentsv1.Environment_Class) Config {
+func varsConfig(t *testing.T, tier environmentv1.Tier) Config {
 	t.Helper()
 	return Config{
 		ArtifactRoot: writeTree(t, map[string]string{"apps/web/routing-manifest.json": `{"buildId":"WEB1"}`}),
 		Slug:         "proj",
-		Class:        class,
+		Tier:         tier,
 	}
 }
 
 func recordVariables(t *testing.T, variables ...*deploymentsv1.ManifestVariable) edge.DeploymentRecord {
 	t.Helper()
 	manifest := varsManifest(variables...)
-	cfg := varsConfig(t, deploymentsv1.Environment_CLASS_PRODUCTION)
+	cfg := varsConfig(t, environmentv1.Tier_TIER_PRODUCTION)
 	record, err := buildDeploymentRecord(cfg, nil, manifest, manifest.GetApps()[0], deployedAs("WEB1"), nil, appBuildsFor(t, cfg, manifest), nil)
 	if err != nil {
 		t.Fatalf("buildDeploymentRecord: %v", err)
@@ -653,7 +654,7 @@ func TestBuildDeploymentRecord(t *testing.T) {
 		cfg := Config{
 			ArtifactRoot: writeTree(t, map[string]string{"apps/web/routing-manifest.json": `{"buildId":"WEB1"}`}),
 			Slug:         "proj",
-			Class:        deploymentsv1.Environment_CLASS_PREVIEW,
+			Tier:         environmentv1.Tier_TIER_PREVIEW,
 			Identity:     "pr-42",
 		}
 
@@ -800,22 +801,22 @@ func TestBuildDeploymentRecord(t *testing.T) {
 			&deploymentsv1.ManifestVariable{Key: "POSTHOG_ID", Class: resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN, Version: 2},
 		)
 		id := fingerprinted("WEB1", "abc123")
-		build := func(class deploymentsv1.Environment_Class) edge.DeploymentRecord {
+		build := func(tier environmentv1.Tier) edge.DeploymentRecord {
 			t.Helper()
-			cfg := varsConfig(t, class)
+			cfg := varsConfig(t, tier)
 			record, err := buildDeploymentRecord(cfg, nil, manifest, manifest.GetApps()[0], id, nil, appBuildsFor(t, cfg, manifest), nil)
 			if err != nil {
-				t.Fatalf("buildDeploymentRecord under %s: %v", class, err)
+				t.Fatalf("buildDeploymentRecord under %s: %v", tier, err)
 			}
 			return record
 		}
 
-		preview := build(deploymentsv1.Environment_CLASS_PREVIEW)
+		preview := build(environmentv1.Tier_TIER_PREVIEW)
 		if preview.Variables != nil || preview.ValueFingerprint != "" {
 			t.Errorf("preview record = %+v, want no audit fields at all", preview)
 		}
 
-		production := build(deploymentsv1.Environment_CLASS_PRODUCTION)
+		production := build(environmentv1.Tier_TIER_PRODUCTION)
 		production.Variables, production.ValueFingerprint = nil, ""
 		if preview.CreatedAt == 0 || production.CreatedAt == 0 {
 			t.Errorf("CreatedAt = %d (preview) and %d (production), want both stamped", preview.CreatedAt, production.CreatedAt)
@@ -1296,14 +1297,14 @@ func TestPromotePointer(t *testing.T) {
 
 	t.Run("empty for production", func(t *testing.T) {
 		t.Parallel()
-		if got := promotePointer(Config{Class: deploymentsv1.Environment_CLASS_PRODUCTION, Identity: "ignored"}); got != "" {
+		if got := promotePointer(Config{Tier: environmentv1.Tier_TIER_PRODUCTION, Identity: "ignored"}); got != "" {
 			t.Errorf("promotePointer(production) = %q, want empty", got)
 		}
 	})
 
 	t.Run("the identity for preview", func(t *testing.T) {
 		t.Parallel()
-		if got := promotePointer(Config{Class: deploymentsv1.Environment_CLASS_PREVIEW, Identity: "pr-42"}); got != "pr-42" {
+		if got := promotePointer(Config{Tier: environmentv1.Tier_TIER_PREVIEW, Identity: "pr-42"}); got != "pr-42" {
 			t.Errorf("promotePointer(preview) = %q, want pr-42", got)
 		}
 	})
@@ -1315,15 +1316,15 @@ func TestPlanEnvironment(t *testing.T) {
 	t.Run("threads class lifecycle identity", func(t *testing.T) {
 		t.Parallel()
 		cfg := Config{
-			Class:     deploymentsv1.Environment_CLASS_PREVIEW,
-			Lifecycle: deploymentsv1.Environment_LIFECYCLE_EPHEMERAL,
+			Tier:      environmentv1.Tier_TIER_PREVIEW,
+			Lifecycle: environmentv1.Lifecycle_LIFECYCLE_EPHEMERAL,
 			Identity:  "pr-42",
 		}
 		env := planEnvironment(cfg)
-		if env.GetClass() != deploymentsv1.Environment_CLASS_PREVIEW {
-			t.Errorf("class = %s, want preview", env.GetClass())
+		if env.GetTier() != environmentv1.Tier_TIER_PREVIEW {
+			t.Errorf("class = %s, want preview", env.GetTier())
 		}
-		if env.GetLifecycle() != deploymentsv1.Environment_LIFECYCLE_EPHEMERAL {
+		if env.GetLifecycle() != environmentv1.Lifecycle_LIFECYCLE_EPHEMERAL {
 			t.Errorf("lifecycle = %s, want ephemeral", env.GetLifecycle())
 		}
 		if env.GetIdentity() != "pr-42" {
@@ -1335,17 +1336,17 @@ func TestPlanEnvironment(t *testing.T) {
 func TestBootstrapCommand(t *testing.T) {
 	t.Parallel()
 	cases := []struct {
-		name  string
-		class deploymentsv1.Environment_Class
-		want  string
+		name string
+		tier environmentv1.Tier
+		want string
 	}{
-		{"production", deploymentsv1.Environment_CLASS_PRODUCTION, "ocel bootstrap"},
-		{"preview", deploymentsv1.Environment_CLASS_PREVIEW, "ocel bootstrap --preview"},
+		{"production", environmentv1.Tier_TIER_PRODUCTION, "ocel bootstrap"},
+		{"preview", environmentv1.Tier_TIER_PREVIEW, "ocel bootstrap --preview"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			if got := bootstrapCommand(Config{Class: tc.class}); got != tc.want {
+			if got := bootstrapCommand(Config{Tier: tc.tier}); got != tc.want {
 				t.Errorf("bootstrapCommand(%s) = %q", tc.name, got)
 			}
 		})
@@ -1600,7 +1601,7 @@ func TestReconcileStack(t *testing.T) {
 
 	t.Run("a stack that never reconciled escapes with no state", func(t *testing.T) {
 		fake := &recordingEdge{kind: cloudflare.Kind, reconcileErr: errors.New("the preview substrate is not bootstrapped")}
-		cfg := Config{Class: deploymentsv1.Environment_CLASS_PREVIEW, Slug: "proj", GlobalPreviewDomain: "preview.acme.com"}
+		cfg := Config{Tier: environmentv1.Tier_TIER_PREVIEW, Slug: "proj", GlobalPreviewDomain: "preview.acme.com"}
 		marked := MarkGlobalPreview(edge.StackState{}, cfg, &deploymentsv1.Manifest{Slug: "proj"})
 
 		stack, err := reconcileStack(context.Background(), fake, []edge.StackSpec{{Version: "v1", Slug: "proj"}}, marked)
@@ -1775,7 +1776,7 @@ func TestStackSpecsOnAnEdgeThatRunsNoCode(t *testing.T) {
 		manifest.Apps[0].Domains = classDomains("production", "web.acme.com")
 		manifest.Apps[1].Domains = classDomains("production", "api.acme.com")
 		cfg := codeless()
-		cfg.Class = deploymentsv1.Environment_CLASS_PRODUCTION
+		cfg.Tier = environmentv1.Tier_TIER_PRODUCTION
 		cfg.ArtifactRoot = specsArtifactRoot(t, manifest)
 
 		specs, err := stackSpecs(cfg, manifest, "v1", nil)
@@ -1792,7 +1793,7 @@ func TestStackSpecsOnAnEdgeThatRunsNoCode(t *testing.T) {
 		manifest := twoApps()
 		manifest.Domains = map[string]*deploymentsv1.DomainList{"preview": {Hostnames: []string{"*.preview.acme.com"}}}
 		cfg := codeless()
-		cfg.Class = deploymentsv1.Environment_CLASS_PREVIEW
+		cfg.Tier = environmentv1.Tier_TIER_PREVIEW
 		cfg.Identity = "pr-42"
 		cfg.ArtifactRoot = specsArtifactRoot(t, manifest)
 
@@ -1808,7 +1809,7 @@ func TestStackSpecsOnAnEdgeThatRunsNoCode(t *testing.T) {
 
 	t.Run("preview with no app to front", func(t *testing.T) {
 		cfg := codeless()
-		cfg.Class = deploymentsv1.Environment_CLASS_PREVIEW
+		cfg.Tier = environmentv1.Tier_TIER_PREVIEW
 		cfg.Identity = "pr-42"
 
 		specs, err := stackSpecs(cfg, &deploymentsv1.Manifest{Slug: "proj"}, "v1", nil)
@@ -1824,7 +1825,7 @@ func TestStackSpecsOnAnEdgeThatRunsNoCode(t *testing.T) {
 	t.Run("preview on the global preview domain", func(t *testing.T) {
 		manifest := twoApps()
 		cfg := codeless()
-		cfg.Class = deploymentsv1.Environment_CLASS_PREVIEW
+		cfg.Tier = environmentv1.Tier_TIER_PREVIEW
 		cfg.Identity = "pr-42"
 		cfg.GlobalPreviewDomain = "preview.ocel.dev"
 		cfg.ArtifactRoot = specsArtifactRoot(t, manifest)

@@ -15,6 +15,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/ssm"
 
 	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
+	environmentv1 "github.com/ocelhq/ocel/pkg/proto/environment/v1"
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/progress/v1"
 	"github.com/ocelhq/ocel/platform/aws/provider/bootstrap"
 	"github.com/ocelhq/ocel/platform/aws/provider/stackindex"
@@ -40,14 +41,14 @@ type teardownDeps struct {
 	index    indexedProjectsAPI
 }
 
-func substrateClassOf(class deploymentsv1.Environment_Class) (string, error) {
-	switch class {
-	case deploymentsv1.Environment_CLASS_PRODUCTION, deploymentsv1.Environment_CLASS_UNSPECIFIED:
+func substrateClassOf(tier environmentv1.Tier) (string, error) {
+	switch tier {
+	case environmentv1.Tier_TIER_PRODUCTION, environmentv1.Tier_TIER_UNSPECIFIED:
 		return bootstrap.ClassProduction, nil
-	case deploymentsv1.Environment_CLASS_PREVIEW:
+	case environmentv1.Tier_TIER_PREVIEW:
 		return bootstrap.ClassPreview, nil
 	default:
-		return "", fmt.Errorf("there is no %s substrate to tear down; a substrate is either production or preview", strings.ToLower(strings.TrimPrefix(class.String(), "CLASS_")))
+		return "", fmt.Errorf("there is no %s substrate to tear down; a substrate is either production or preview", strings.ToLower(strings.TrimPrefix(tier.String(), "TIER_")))
 	}
 }
 
@@ -240,7 +241,7 @@ func (s *Server) PlanRemoveSubstrate(ctx context.Context, req *deploymentsv1.Pla
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInvalidArgument, err)
 	}
-	class, err := substrateClassOf(req.GetClass())
+	class, err := substrateClassOf(req.GetTier())
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInvalidArgument, err)
 	}
@@ -280,7 +281,7 @@ func (s *Server) RemoveSubstrate(ctx context.Context, req *deploymentsv1.RemoveS
 	progress := func(m string) { _ = stream.Send(progressEvent(m)) }
 	logf := func(m string) { _ = stream.Send(logEvent(m)) }
 
-	class, err := substrateClassOf(req.GetClass())
+	class, err := substrateClassOf(req.GetTier())
 	if err != nil {
 		return stream.Send(failureResult(err))
 	}

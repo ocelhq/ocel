@@ -7,6 +7,7 @@ import (
 	"time"
 
 	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
+	environmentv1 "github.com/ocelhq/ocel/pkg/proto/environment/v1"
 	"github.com/ocelhq/ocel/platform/aws/provider/bootstrap"
 	"github.com/ocelhq/ocel/platform/aws/provider/certs"
 	"github.com/ocelhq/ocel/platform/aws/provider/dns"
@@ -147,7 +148,7 @@ func TestUsePreviewWildcardWhole(t *testing.T) {
 	}
 
 	req := &deploymentsv1.UsePreviewWildcardRequest{
-		Class:      deploymentsv1.Environment_CLASS_PREVIEW,
+		Tier:       environmentv1.Tier_TIER_PREVIEW,
 		BaseDomain: "preview.acme.com",
 		Edge:       &deploymentsv1.EdgeSelection{Kind: string(wholeEdgeKind)},
 	}

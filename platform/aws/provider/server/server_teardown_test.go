@@ -16,6 +16,7 @@ import (
 	smithy "github.com/aws/smithy-go"
 
 	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
+	environmentv1 "github.com/ocelhq/ocel/pkg/proto/environment/v1"
 	"github.com/ocelhq/ocel/platform/aws/provider/bootstrap"
 	cloudflare "github.com/ocelhq/ocel/platform/edge/cloudflare/deploy"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
@@ -25,24 +26,24 @@ func TestSubstrateClassOf(t *testing.T) {
 	t.Parallel()
 
 	cases := []struct {
-		name  string
-		class deploymentsv1.Environment_Class
-		want  string
+		name string
+		tier environmentv1.Tier
+		want string
 	}{
-		{name: "an unspecified class is the production substrate", class: deploymentsv1.Environment_CLASS_UNSPECIFIED, want: bootstrap.ClassProduction},
-		{name: "production", class: deploymentsv1.Environment_CLASS_PRODUCTION, want: bootstrap.ClassProduction},
-		{name: "preview", class: deploymentsv1.Environment_CLASS_PREVIEW, want: bootstrap.ClassPreview},
+		{name: "an unspecified class is the production substrate", tier: environmentv1.Tier_TIER_UNSPECIFIED, want: bootstrap.ClassProduction},
+		{name: "production", tier: environmentv1.Tier_TIER_PRODUCTION, want: bootstrap.ClassProduction},
+		{name: "preview", tier: environmentv1.Tier_TIER_PREVIEW, want: bootstrap.ClassPreview},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 
-			got, err := substrateClassOf(tc.class)
+			got, err := substrateClassOf(tc.tier)
 			if err != nil {
-				t.Fatalf("substrateClassOf(%v): %v", tc.class, err)
+				t.Fatalf("substrateClassOf(%v): %v", tc.tier, err)
 			}
 			if got != tc.want {
-				t.Errorf("substrateClassOf(%v) = %q, want %q", tc.class, got, tc.want)
+				t.Errorf("substrateClassOf(%v) = %q, want %q", tc.tier, got, tc.want)
 			}
 		})
 	}
@@ -50,7 +51,7 @@ func TestSubstrateClassOf(t *testing.T) {
 	t.Run("a class this build does not know is not a substrate", func(t *testing.T) {
 		t.Parallel()
 
-		if _, err := substrateClassOf(deploymentsv1.Environment_Class(99)); err == nil {
+		if _, err := substrateClassOf(environmentv1.Tier(99)); err == nil {
 			t.Error("a class naming no substrate, want a refusal")
 		}
 	})

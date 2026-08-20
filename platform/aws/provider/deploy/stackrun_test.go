@@ -16,7 +16,7 @@ import (
 	"github.com/pulumi/pulumi/sdk/v3/go/common/workspace"
 
 	"github.com/ocelhq/ocel/pkg/naming"
-	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
+	environmentv1 "github.com/ocelhq/ocel/pkg/proto/environment/v1"
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/progress/v1"
 )
 
@@ -28,7 +28,7 @@ func TestStackTags(t *testing.T) {
 	t.Run("an app stack carries every fact constant across it", func(t *testing.T) {
 		t.Parallel()
 
-		cfg := Config{Slug: "shop", Class: deploymentsv1.Environment_CLASS_PRODUCTION}
+		cfg := Config{Slug: "shop", Tier: environmentv1.Tier_TIER_PRODUCTION}
 		stack := naming.AppStack("prod", "web", release)
 
 		tags := stackTags(cfg, stack, "p7", "d1", "B1")
@@ -53,7 +53,7 @@ func TestStackTags(t *testing.T) {
 	t.Run("together with the resource's own tags the set is complete", func(t *testing.T) {
 		t.Parallel()
 
-		cfg := Config{Slug: "shop", Class: deploymentsv1.Environment_CLASS_PREVIEW, ExpiresAt: 1760000000}
+		cfg := Config{Slug: "shop", Tier: environmentv1.Tier_TIER_PREVIEW, ExpiresAt: 1760000000}
 		stack := naming.AppStack("pr-7", "web", release)
 
 		keys := map[string]bool{}
@@ -78,7 +78,7 @@ func TestStackTags(t *testing.T) {
 	t.Run("a preview is classed as such and stamped with its expiry", func(t *testing.T) {
 		t.Parallel()
 
-		cfg := Config{Slug: "shop", Class: deploymentsv1.Environment_CLASS_PREVIEW, ExpiresAt: 1760000000}
+		cfg := Config{Slug: "shop", Tier: environmentv1.Tier_TIER_PREVIEW, ExpiresAt: 1760000000}
 
 		tags := stackTags(cfg, naming.AppStack("pr-7", "web", release), "p7", "d1", "B1")
 
@@ -93,7 +93,7 @@ func TestStackTags(t *testing.T) {
 	t.Run("the infra stack names itself and claims nothing that changes between deploys", func(t *testing.T) {
 		t.Parallel()
 
-		cfg := Config{Slug: "shop", Class: deploymentsv1.Environment_CLASS_PRODUCTION}
+		cfg := Config{Slug: "shop", Tier: environmentv1.Tier_TIER_PRODUCTION}
 
 		tags := infraStackTags(cfg, naming.InfraStack("prod"))
 

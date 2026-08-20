@@ -24,7 +24,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/channel"
 	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
 	"github.com/ocelhq/ocel/pkg/proto/deployments/v1/deploymentsv1connect"
-	"github.com/ocelhq/ocel/pkg/proto/env/v1/envv1connect"
+	"github.com/ocelhq/ocel/pkg/proto/envvars/v1/envvarsv1connect"
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/progress/v1"
 )
 
@@ -108,7 +108,7 @@ type Runner struct {
 	mu               sync.Mutex
 	network, address string
 	client           deploymentsv1connect.ProviderServiceClient
-	vars             envv1connect.EnvVarsServiceClient
+	vars             envvarsv1connect.EnvVarsServiceClient
 
 	closeOnce sync.Once
 }
@@ -274,11 +274,11 @@ func (r *Runner) dial(addr string) error {
 	defer r.mu.Unlock()
 	r.network, r.address = network, address
 	r.client = deploymentsv1connect.NewProviderServiceClient(httpClient, "http://provider", auth)
-	r.vars = envv1connect.NewEnvVarsServiceClient(httpClient, "http://provider", auth)
+	r.vars = envvarsv1connect.NewEnvVarsServiceClient(httpClient, "http://provider", auth)
 	return nil
 }
 
-func (r *Runner) Vars() (envv1connect.EnvVarsServiceClient, error) {
+func (r *Runner) Vars() (envvarsv1connect.EnvVarsServiceClient, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	if r.vars == nil {

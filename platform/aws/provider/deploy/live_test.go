@@ -11,6 +11,7 @@ import (
 	"testing"
 
 	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
+	environmentv1 "github.com/ocelhq/ocel/pkg/proto/environment/v1"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/resources/v1"
 	"github.com/ocelhq/ocel/platform/aws/provider/vars"
 	"github.com/ocelhq/ocel/platform/aws/provider/vars/baked"
@@ -37,7 +38,7 @@ func scopedVariable(key, folder string, class resourcesv1.VariableClass) *deploy
 }
 
 func previewOf(cfg Config, identity string) Config {
-	cfg.Class, cfg.Identity = deploymentsv1.Environment_CLASS_PREVIEW, identity
+	cfg.Tier, cfg.Identity = environmentv1.Tier_TIER_PREVIEW, identity
 	return cfg
 }
 
@@ -103,7 +104,7 @@ func TestRenderAppBundle(t *testing.T) {
 		}
 
 		production := liveConfig()
-		production.Class, production.Identity = deploymentsv1.Environment_CLASS_PRODUCTION, "prod"
+		production.Tier, production.Identity = environmentv1.Tier_TIER_PRODUCTION, "prod"
 
 		for _, tc := range []struct {
 			name string

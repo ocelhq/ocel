@@ -28,6 +28,7 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/naming"
 	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
+	environmentv1 "github.com/ocelhq/ocel/pkg/proto/environment/v1"
 	linksv1 "github.com/ocelhq/ocel/pkg/proto/links/v1"
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/progress/v1"
 	"github.com/ocelhq/ocel/platform/aws/provider/bootstrap"
@@ -215,7 +216,7 @@ func (s *Server) runDeploy(ctx context.Context, req *deploymentsv1.DeployRequest
 	if err != nil {
 		return deploy.Result{}, finishPreparing(connect.NewError(connect.CodeInvalidArgument, err))
 	}
-	preview := env.GetClass() == deploymentsv1.Environment_CLASS_PREVIEW
+	preview := env.GetTier() == environmentv1.Tier_TIER_PREVIEW
 	bootstrapCmd := bootstrapCommand(preview)
 
 	progress(progressv1.Phase_PHASE_UNSPECIFIED, "Checking account bootstrap", 0, 0)
@@ -294,7 +295,7 @@ func (s *Server) runDeploy(ctx context.Context, req *deploymentsv1.DeployRequest
 		prober:    certs.NewProber(),
 		pins:      normalizePins(opts.Certificates),
 		previewOn: params.PreviewDomain.BaseDomain,
-	}, env.GetClass(), manifest, logf)
+	}, env.GetTier(), manifest, logf)
 	if err != nil {
 		return deploy.Result{}, finishPreparing(err)
 	}
@@ -388,7 +389,7 @@ func (s *Server) runDeploy(ctx context.Context, req *deploymentsv1.DeployRequest
 		DNSAwait:      dns.NewPoller(),
 		AllowDegraded: req.GetEdge().GetAllowDegraded(),
 		Degraded:      degraded,
-		Class:         env.GetClass(),
+		Tier:          env.GetTier(),
 		Lifecycle:     env.GetLifecycle(),
 		Identity:      env.GetIdentity(),
 		ExpiresAt:     previewExpiry(env.GetLifecycle(), time.Now()),
@@ -440,8 +441,8 @@ func cacheStoreUploader(store bootstrap.CacheStore) deploy.ArtifactUploader {
 	})
 }
 
-func previewExpiry(lifecycle deploymentsv1.Environment_Lifecycle, now time.Time) int64 {
-	if lifecycle != deploymentsv1.Environment_LIFECYCLE_EPHEMERAL {
+func previewExpiry(lifecycle environmentv1.Lifecycle, now time.Time) int64 {
+	if lifecycle != environmentv1.Lifecycle_LIFECYCLE_EPHEMERAL {
 		return 0
 	}
 	return now.Add(previewTTL).Unix()
@@ -458,7 +459,7 @@ func (s *Server) Bootstrap(ctx context.Context, req *deploymentsv1.BootstrapRequ
 	}
 	cfn := cloudformation.NewFromConfig(awscfg)
 
-	preview := req.GetClass() == deploymentsv1.Environment_CLASS_PREVIEW
+	preview := req.GetTier() == environmentv1.Tier_TIER_PREVIEW
 
 	deployed, err := checkBootstrap(ctx, cfn, preview)
 	if err != nil {
@@ -512,7 +513,7 @@ func (s *Server) DescribeBootstrap(ctx context.Context, req *deploymentsv1.Descr
 	if err != nil {
 		return nil, err
 	}
-	deployed, err := s.deployed(ctx, cloudformation.NewFromConfig(awscfg), opts.Region, req.GetClass() == deploymentsv1.Environment_CLASS_PREVIEW)
+	deployed, err := s.deployed(ctx, cloudformation.NewFromConfig(awscfg), opts.Region, req.GetTier() == environmentv1.Tier_TIER_PREVIEW)
 	if err != nil {
 		return nil, err
 	}

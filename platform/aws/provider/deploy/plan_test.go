@@ -8,10 +8,11 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/naming"
 	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
+	environmentv1 "github.com/ocelhq/ocel/pkg/proto/environment/v1"
 )
 
-func prodEnv() *deploymentsv1.Environment {
-	return &deploymentsv1.Environment{Class: deploymentsv1.Environment_CLASS_PRODUCTION}
+func prodEnv() *environmentv1.Environment {
+	return &environmentv1.Environment{Tier: environmentv1.Tier_TIER_PRODUCTION}
 }
 
 const testDeploymentID = "d1a2b3c4d5e6f708192a3b4c5d6e7f80"
@@ -38,9 +39,9 @@ func deployedInto(environment, deploymentID, values string) Identity {
 	return id
 }
 
-func previewEnv(lifecycle deploymentsv1.Environment_Lifecycle) *deploymentsv1.Environment {
-	return &deploymentsv1.Environment{
-		Class:     deploymentsv1.Environment_CLASS_PREVIEW,
+func previewEnv(lifecycle environmentv1.Lifecycle) *environmentv1.Environment {
+	return &environmentv1.Environment{
+		Tier:      environmentv1.Tier_TIER_PREVIEW,
 		Lifecycle: lifecycle,
 		Identity:  "staging",
 	}
@@ -67,7 +68,7 @@ func TestEnvName(t *testing.T) {
 
 	t.Run("a preview environment is named by its pointer", func(t *testing.T) {
 		t.Parallel()
-		got, err := EnvName(previewEnv(deploymentsv1.Environment_LIFECYCLE_PERSISTENT))
+		got, err := EnvName(previewEnv(environmentv1.Lifecycle_LIFECYCLE_PERSISTENT))
 		if err != nil {
 			t.Fatalf("EnvName: %v", err)
 		}
@@ -78,8 +79,8 @@ func TestEnvName(t *testing.T) {
 
 	t.Run("a preview named prod is refused", func(t *testing.T) {
 		t.Parallel()
-		env := &deploymentsv1.Environment{
-			Class:    deploymentsv1.Environment_CLASS_PREVIEW,
+		env := &environmentv1.Environment{
+			Tier:     environmentv1.Tier_TIER_PREVIEW,
 			Identity: ProductionEnv,
 		}
 		_, err := EnvName(env)
@@ -94,8 +95,8 @@ func TestEnvName(t *testing.T) {
 	t.Run("an unusable preview name is refused at ingest", func(t *testing.T) {
 		t.Parallel()
 		for _, pointer := range []string{"", "PR-7", "pr--7", "-pr7", "pr_7", "pr 7"} {
-			env := &deploymentsv1.Environment{
-				Class:    deploymentsv1.Environment_CLASS_PREVIEW,
+			env := &environmentv1.Environment{
+				Tier:     environmentv1.Tier_TIER_PREVIEW,
 				Identity: pointer,
 			}
 			if _, err := EnvName(env); err == nil {
@@ -106,7 +107,7 @@ func TestEnvName(t *testing.T) {
 
 	t.Run("an unspecified class is refused", func(t *testing.T) {
 		t.Parallel()
-		if _, err := EnvName(&deploymentsv1.Environment{}); err == nil {
+		if _, err := EnvName(&environmentv1.Environment{}); err == nil {
 			t.Fatal("EnvName err = nil, want an unspecified class refused")
 		}
 	})
@@ -117,7 +118,7 @@ func TestEnvScope(t *testing.T) {
 
 	t.Run("a preview class with no pointer scopes every preview", func(t *testing.T) {
 		t.Parallel()
-		got, err := EnvScope(&deploymentsv1.Environment{Class: deploymentsv1.Environment_CLASS_PREVIEW})
+		got, err := EnvScope(&environmentv1.Environment{Tier: environmentv1.Tier_TIER_PREVIEW})
 		if err != nil {
 			t.Fatalf("EnvScope: %v", err)
 		}
@@ -128,7 +129,7 @@ func TestEnvScope(t *testing.T) {
 
 	t.Run("a pointed preview keeps its name", func(t *testing.T) {
 		t.Parallel()
-		got, err := EnvScope(previewEnv(deploymentsv1.Environment_LIFECYCLE_PERSISTENT))
+		got, err := EnvScope(previewEnv(environmentv1.Lifecycle_LIFECYCLE_PERSISTENT))
 		if err != nil {
 			t.Fatalf("EnvScope: %v", err)
 		}
@@ -139,8 +140,8 @@ func TestEnvScope(t *testing.T) {
 
 	t.Run("an unusable preview name is still refused", func(t *testing.T) {
 		t.Parallel()
-		env := &deploymentsv1.Environment{
-			Class:    deploymentsv1.Environment_CLASS_PREVIEW,
+		env := &environmentv1.Environment{
+			Tier:     environmentv1.Tier_TIER_PREVIEW,
 			Identity: ProductionEnv,
 		}
 		if _, err := EnvScope(env); err == nil {
@@ -157,7 +158,7 @@ func TestEnvScope(t *testing.T) {
 		if got != ProductionEnv {
 			t.Errorf("EnvScope = %q, want %q", got, ProductionEnv)
 		}
-		if _, err := EnvScope(&deploymentsv1.Environment{}); err == nil {
+		if _, err := EnvScope(&environmentv1.Environment{}); err == nil {
 			t.Fatal("EnvScope err = nil, want an unspecified class refused")
 		}
 	})
@@ -328,7 +329,7 @@ func TestBuildPlan(t *testing.T) {
 			Apps: []*deploymentsv1.ManifestApp{{Name: "web"}},
 		}
 
-		if _, err := BuildPlan(manifest, &deploymentsv1.Environment{}, "promo1", Identities{"web": deployedAs("b")}); err == nil {
+		if _, err := BuildPlan(manifest, &environmentv1.Environment{}, "promo1", Identities{"web": deployedAs("b")}); err == nil {
 			t.Fatal("BuildPlan for an unspecified class should error, got nil")
 		}
 	})
@@ -340,7 +341,7 @@ func TestBuildPlan(t *testing.T) {
 			Apps: []*deploymentsv1.ManifestApp{{Name: "web"}},
 		}
 
-		plan, err := BuildPlan(manifest, previewEnv(deploymentsv1.Environment_LIFECYCLE_PERSISTENT), "promo1", Identities{"web": deployedAs("b")})
+		plan, err := BuildPlan(manifest, previewEnv(environmentv1.Lifecycle_LIFECYCLE_PERSISTENT), "promo1", Identities{"web": deployedAs("b")})
 		if err != nil {
 			t.Fatalf("BuildPlan: %v", err)
 		}
@@ -362,7 +363,7 @@ func TestBuildPlan(t *testing.T) {
 			Apps: []*deploymentsv1.ManifestApp{{Name: "web"}},
 		}
 
-		plan, err := BuildPlan(manifest, previewEnv(deploymentsv1.Environment_LIFECYCLE_EPHEMERAL), "promo1", Identities{"web": deployedAs("b")})
+		plan, err := BuildPlan(manifest, previewEnv(environmentv1.Lifecycle_LIFECYCLE_EPHEMERAL), "promo1", Identities{"web": deployedAs("b")})
 		if err != nil {
 			t.Fatalf("BuildPlan: %v", err)
 		}
@@ -380,7 +381,7 @@ func TestBuildPlan(t *testing.T) {
 			Slug: "proj",
 			Apps: []*deploymentsv1.ManifestApp{{Name: "web"}},
 		}
-		env := &deploymentsv1.Environment{Class: deploymentsv1.Environment_CLASS_PREVIEW}
+		env := &environmentv1.Environment{Tier: environmentv1.Tier_TIER_PREVIEW}
 
 		if _, err := BuildPlan(manifest, env, "promo1", Identities{"web": deployedAs("b")}); err == nil {
 			t.Fatal("BuildPlan for a preview with no identity should error, got nil")
@@ -390,8 +391,8 @@ func TestBuildPlan(t *testing.T) {
 	t.Run("two persistent previews do not collide", func(t *testing.T) {
 		t.Parallel()
 		manifest := &deploymentsv1.Manifest{Slug: "proj", Apps: []*deploymentsv1.ManifestApp{{Name: "web"}}}
-		staging := &deploymentsv1.Environment{Class: deploymentsv1.Environment_CLASS_PREVIEW, Lifecycle: deploymentsv1.Environment_LIFECYCLE_PERSISTENT, Identity: "staging"}
-		demo := &deploymentsv1.Environment{Class: deploymentsv1.Environment_CLASS_PREVIEW, Lifecycle: deploymentsv1.Environment_LIFECYCLE_PERSISTENT, Identity: "demo"}
+		staging := &environmentv1.Environment{Tier: environmentv1.Tier_TIER_PREVIEW, Lifecycle: environmentv1.Lifecycle_LIFECYCLE_PERSISTENT, Identity: "staging"}
+		demo := &environmentv1.Environment{Tier: environmentv1.Tier_TIER_PREVIEW, Lifecycle: environmentv1.Lifecycle_LIFECYCLE_PERSISTENT, Identity: "demo"}
 
 		a, _ := BuildPlan(manifest, staging, "p", Identities{"web": deployedAs("b")})
 		b, _ := BuildPlan(manifest, demo, "p", Identities{"web": deployedAs("b")})
@@ -420,7 +421,7 @@ func TestBuildPlan(t *testing.T) {
 		t.Parallel()
 		manifest := &deploymentsv1.Manifest{Slug: "proj", Apps: []*deploymentsv1.ManifestApp{{Name: "web"}, {Name: "api"}}}
 
-		plan, err := BuildPlan(manifest, previewEnv(deploymentsv1.Environment_LIFECYCLE_PERSISTENT), "p", Identities{
+		plan, err := BuildPlan(manifest, previewEnv(environmentv1.Lifecycle_LIFECYCLE_PERSISTENT), "p", Identities{
 			"web": deployedAs("b1"),
 			"api": fingerprinted("b2", "fp"),
 		})

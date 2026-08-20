@@ -1,7 +1,7 @@
 package deploy
 
 import (
-	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
+	environmentv1 "github.com/ocelhq/ocel/pkg/proto/environment/v1"
 	linksv1 "github.com/ocelhq/ocel/pkg/proto/links/v1"
 )
 
@@ -12,8 +12,8 @@ const (
 	RealizationLogicalSlice
 )
 
-func realizationFor(t linksv1.LinkType, lifecycle deploymentsv1.Environment_Lifecycle) Realization {
-	if t == linksv1.LinkType_LINK_TYPE_POSTGRES && lifecycle == deploymentsv1.Environment_LIFECYCLE_EPHEMERAL {
+func realizationFor(t linksv1.LinkType, lifecycle environmentv1.Lifecycle) Realization {
+	if t == linksv1.LinkType_LINK_TYPE_POSTGRES && lifecycle == environmentv1.Lifecycle_LIFECYCLE_EPHEMERAL {
 		return RealizationLogicalSlice
 	}
 	return RealizationReal

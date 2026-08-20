@@ -20,7 +20,8 @@ import (
 	"github.com/ocelhq/ocel/pkg/naming"
 	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
 	"github.com/ocelhq/ocel/pkg/proto/deployments/v1/deploymentsv1connect"
-	"github.com/ocelhq/ocel/pkg/proto/env/v1/envv1connect"
+	environmentv1 "github.com/ocelhq/ocel/pkg/proto/environment/v1"
+	"github.com/ocelhq/ocel/pkg/proto/envvars/v1/envvarsv1connect"
 	linksv1 "github.com/ocelhq/ocel/pkg/proto/links/v1"
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/progress/v1"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
@@ -114,7 +115,7 @@ func runDeployFakeProvider() int {
 	path, handler := deploymentsv1connect.NewProviderServiceHandler(fake)
 	mux.Handle(path, handler)
 
-	path, handler = envv1connect.NewEnvVarsServiceHandler(fake)
+	path, handler = envvarsv1connect.NewEnvVarsServiceHandler(fake)
 	mux.Handle(path, handler)
 
 	fmt.Println(channel.FormatReadinessLine(channel.FormatUnixAddr(sockPath)))
@@ -135,19 +136,19 @@ type deployFakeProviderServer struct {
 	domainStatusCalls int
 	preflightSlug     string
 	preflightDomains  []string
-	preflightClass    deploymentsv1.Environment_Class
+	preflightTier     environmentv1.Tier
 }
 
-func (s *deployFakeProviderServer) recordPreflight(slug string, domains []string, class deploymentsv1.Environment_Class) {
+func (s *deployFakeProviderServer) recordPreflight(slug string, domains []string, tier environmentv1.Tier) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	s.preflightSlug, s.preflightDomains, s.preflightClass = slug, domains, class
+	s.preflightSlug, s.preflightDomains, s.preflightTier = slug, domains, tier
 }
 
-func (s *deployFakeProviderServer) lastPreflight() (string, []string, deploymentsv1.Environment_Class) {
+func (s *deployFakeProviderServer) lastPreflight() (string, []string, environmentv1.Tier) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	return s.preflightSlug, s.preflightDomains, s.preflightClass
+	return s.preflightSlug, s.preflightDomains, s.preflightTier
 }
 
 func (s *deployFakeProviderServer) Deploy(ctx context.Context, req *deploymentsv1.DeployRequest, stream *connect.ServerStream[progressv1.OperationEvent]) error {
@@ -179,7 +180,7 @@ func (s *deployFakeProviderServer) Deploy(ctx context.Context, req *deploymentsv
 
 	slug, domains, class := s.lastPreflight()
 	if err := stream.Send(&progressv1.OperationEvent{
-		Event: &progressv1.OperationEvent_Progress{Progress: &progressv1.ProgressEvent{Message: "PREFLIGHT slug=" + slug + " domains=" + strings.Join(domains, ",") + " class=" + class.String()}},
+		Event: &progressv1.OperationEvent_Progress{Progress: &progressv1.ProgressEvent{Message: "PREFLIGHT slug=" + slug + " domains=" + strings.Join(domains, ",") + " tier=" + class.String()}},
 	}); err != nil {
 		return err
 	}
@@ -381,7 +382,7 @@ func (s *deployFakeProviderServer) PlanRemoveSubstrate(ctx context.Context, req 
 	if err := refuseEdge(); err != nil {
 		return nil, err
 	}
-	class := strings.ToLower(strings.TrimPrefix(req.GetClass().String(), "CLASS_"))
+	class := strings.ToLower(strings.TrimPrefix(req.GetTier().String(), "TIER_"))
 	return &deploymentsv1.PlanRemoveSubstrateResponse{
 		EdgeKind: resolvedEdgeKind(req.GetEdge().GetKind()),
 		Items: []*deploymentsv1.RemovalItem{
@@ -417,7 +418,7 @@ func (s *deployFakeProviderServer) RemoveSubstrate(ctx context.Context, req *dep
 		return err
 	}
 	if err := stream.Send(&progressv1.OperationEvent{
-		Event: &progressv1.OperationEvent_Progress{Progress: &progressv1.ProgressEvent{Message: "TEARDOWN class=" + req.GetClass().String()}},
+		Event: &progressv1.OperationEvent_Progress{Progress: &progressv1.ProgressEvent{Message: "TEARDOWN tier=" + req.GetTier().String()}},
 	}); err != nil {
 		return err
 	}
@@ -430,10 +431,10 @@ func (s *deployFakeProviderServer) Preflight(ctx context.Context, req *deploymen
 	if err := s.checkToken(ctx); err != nil {
 		return nil, err
 	}
-	s.recordPreflight(req.GetSlug(), req.GetDomains(), req.GetRequiredClass())
+	s.recordPreflight(req.GetSlug(), req.GetDomains(), req.GetRequiredTier())
 	journalPreflight(req)
 	resp := &deploymentsv1.PreflightResponse{
-		InfraClass:            parseInfraClass(os.Getenv(fakeInfraClassEnvVar)),
+		InfraTier:             parseInfraTier(os.Getenv(fakeInfraClassEnvVar)),
 		InfrastructurePresent: os.Getenv(fakeInfraPresentEnvVar) != "0",
 		Identity: &deploymentsv1.Identity{
 			AwsAccount: os.Getenv(fakeIDAwsAccountEnvVar),
@@ -442,7 +443,7 @@ func (s *deployFakeProviderServer) Preflight(ctx context.Context, req *deploymen
 			EdgeScope:  os.Getenv(fakeIDCfAccountEnvVar),
 		},
 	}
-	if req.GetSlug() != "" && req.GetRequiredClass() == deploymentsv1.Environment_CLASS_PRODUCTION {
+	if req.GetSlug() != "" && req.GetRequiredTier() == environmentv1.Tier_TIER_PRODUCTION {
 		for _, s := range strings.Split(os.Getenv(fakeKnownSlugsEnvVar), ",") {
 			if s = strings.TrimSpace(s); s != "" {
 				resp.KnownSlugs = append(resp.KnownSlugs, s)
@@ -479,7 +480,7 @@ func journalPreflight(req *deploymentsv1.PreflightRequest) {
 		return
 	}
 	defer f.Close()
-	fmt.Fprintf(f, "slug=%s domains=%s class=%s\n", req.GetSlug(), strings.Join(req.GetDomains(), ","), req.GetRequiredClass())
+	fmt.Fprintf(f, "slug=%s domains=%s tier=%s\n", req.GetSlug(), strings.Join(req.GetDomains(), ","), req.GetRequiredTier())
 }
 
 func resolvedEdgeKind(kind string) string {
@@ -622,7 +623,7 @@ func (s *deployFakeProviderServer) UsePreviewWildcard(ctx context.Context, req *
 		return err
 	}
 	if err := stream.Send(&progressv1.OperationEvent{
-		Event: &progressv1.OperationEvent_Progress{Progress: &progressv1.ProgressEvent{Message: "USE DOMAIN class=" + req.GetClass().String() + " base=" + req.GetBaseDomain() + " dns=" + req.GetEdge().GetDns().GetKind()}},
+		Event: &progressv1.OperationEvent_Progress{Progress: &progressv1.ProgressEvent{Message: "USE DOMAIN tier=" + req.GetTier().String() + " base=" + req.GetBaseDomain() + " dns=" + req.GetEdge().GetDns().GetKind()}},
 	}); err != nil {
 		return err
 	}
@@ -689,7 +690,7 @@ func (s *deployFakeProviderServer) RemovePreviewWildcard(ctx context.Context, re
 		return err
 	}
 	if err := stream.Send(&progressv1.OperationEvent{
-		Event: &progressv1.OperationEvent_Progress{Progress: &progressv1.ProgressEvent{Message: "RELEASE DOMAIN class=" + req.GetClass().String() + " dns=" + req.GetEdge().GetDns().GetKind()}},
+		Event: &progressv1.OperationEvent_Progress{Progress: &progressv1.ProgressEvent{Message: "RELEASE DOMAIN tier=" + req.GetTier().String() + " dns=" + req.GetEdge().GetDns().GetKind()}},
 	}); err != nil {
 		return err
 	}
@@ -873,7 +874,7 @@ func (s *deployFakeProviderServer) PlanRemoveProject(ctx context.Context, req *d
 	}
 	journalEdge(req.GetEdge().GetKind(), nil, nil)
 	slug := req.GetSlug()
-	if req.GetEnvironment().GetClass() == deploymentsv1.Environment_CLASS_PREVIEW {
+	if req.GetEnvironment().GetTier() == environmentv1.Tier_TIER_PREVIEW {
 		return &deploymentsv1.PlanRemoveProjectResponse{
 			EdgeStack: &deploymentsv1.EdgeStackPlan{
 				EdgeKind: resolvedEdgeKind(req.GetEdge().GetKind()),
@@ -952,7 +953,7 @@ func (s *deployFakeProviderServer) ListEnvironments(ctx context.Context, req *de
 		for _, identity := range strings.Split(scripted, ",") {
 			resp.Environments = append(resp.Environments, &deploymentsv1.PreviewEnvironment{
 				Identity:  identity,
-				Lifecycle: deploymentsv1.Environment_LIFECYCLE_PERSISTENT,
+				Lifecycle: environmentv1.Lifecycle_LIFECYCLE_PERSISTENT,
 			})
 		}
 		return resp, nil
@@ -961,17 +962,17 @@ func (s *deployFakeProviderServer) ListEnvironments(ctx context.Context, req *de
 		Environments: []*deploymentsv1.PreviewEnvironment{
 			{
 				Identity:  "project:" + req.GetSlug(),
-				Lifecycle: deploymentsv1.Environment_LIFECYCLE_EPHEMERAL,
+				Lifecycle: environmentv1.Lifecycle_LIFECYCLE_EPHEMERAL,
 			},
 			{
 				Identity:  "feature_login_ab12cd34",
-				Lifecycle: deploymentsv1.Environment_LIFECYCLE_EPHEMERAL,
+				Lifecycle: environmentv1.Lifecycle_LIFECYCLE_EPHEMERAL,
 				Label:     "pr-7",
 				CreatedAt: 1700000000,
 			},
 			{
 				Identity:  "staging",
-				Lifecycle: deploymentsv1.Environment_LIFECYCLE_PERSISTENT,
+				Lifecycle: environmentv1.Lifecycle_LIFECYCLE_PERSISTENT,
 			},
 		},
 	}, nil
@@ -989,9 +990,9 @@ func (s *deployFakeProviderServer) checkToken(ctx context.Context) error {
 	return nil
 }
 
-func describeEnv(env *deploymentsv1.Environment) string {
-	return fmt.Sprintf("class=%s lifecycle=%s identity=%s",
-		env.GetClass(), env.GetLifecycle(), env.GetIdentity())
+func describeEnv(env *environmentv1.Environment) string {
+	return fmt.Sprintf("tier=%s lifecycle=%s identity=%s",
+		env.GetTier(), env.GetLifecycle(), env.GetIdentity())
 }
 
 func describeFunction(f *deploymentsv1.ManifestFunction) string {
@@ -1029,14 +1030,14 @@ func describeApp(a *deploymentsv1.ManifestApp) string {
 		a.GetName(), a.GetFramework(), strings.Join(a.GetDomains()["production"].GetHostnames(), ","), strings.Join(keys, ","), a.GetDeploymentId())
 }
 
-func parseInfraClass(s string) deploymentsv1.Environment_Class {
+func parseInfraTier(s string) environmentv1.Tier {
 	switch s {
 	case "preview":
-		return deploymentsv1.Environment_CLASS_PREVIEW
+		return environmentv1.Tier_TIER_PREVIEW
 	case "production":
-		return deploymentsv1.Environment_CLASS_PRODUCTION
+		return environmentv1.Tier_TIER_PRODUCTION
 	default:
-		return deploymentsv1.Environment_CLASS_UNSPECIFIED
+		return environmentv1.Tier_TIER_UNSPECIFIED
 	}
 }
 

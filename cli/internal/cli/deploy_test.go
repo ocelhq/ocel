@@ -234,7 +234,7 @@ export default {
 			}
 		})
 		t.Run("sends a production environment", func(t *testing.T) {
-			if !strings.Contains(out, "DEPLOY class=CLASS_PRODUCTION lifecycle=LIFECYCLE_UNSPECIFIED") {
+			if !strings.Contains(out, "DEPLOY tier=TIER_PRODUCTION lifecycle=LIFECYCLE_UNSPECIFIED") {
 				t.Errorf("stdout = %q, want deploy to send a production Environment", out)
 			}
 		})

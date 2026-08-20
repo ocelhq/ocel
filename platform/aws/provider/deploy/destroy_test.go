@@ -10,7 +10,7 @@ import (
 	"github.com/pulumi/pulumi/sdk/v3/go/auto/optdestroy"
 
 	"github.com/ocelhq/ocel/pkg/naming"
-	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
+	environmentv1 "github.com/ocelhq/ocel/pkg/proto/environment/v1"
 )
 
 func TestLockRecoveryHint(t *testing.T) {
@@ -156,8 +156,8 @@ func TestPreviewStacksFromNames(t *testing.T) {
 		})
 
 		want := []PreviewStack{
-			{Identity: "pr-1", Lifecycle: deploymentsv1.Environment_LIFECYCLE_EPHEMERAL},
-			{Identity: "staging", Lifecycle: deploymentsv1.Environment_LIFECYCLE_PERSISTENT},
+			{Identity: "pr-1", Lifecycle: environmentv1.Lifecycle_LIFECYCLE_EPHEMERAL},
+			{Identity: "staging", Lifecycle: environmentv1.Lifecycle_LIFECYCLE_PERSISTENT},
 		}
 		if !reflect.DeepEqual(got, want) {
 			t.Errorf("previewStacksFromNames = %+v, want %+v", got, want)

@@ -18,5 +18,6 @@ breaking:
   ignore:
     - proto/deployments
     - proto/dev
-    - proto/env
+    - proto/environment
+    - proto/envvars
     - proto/resources

@@ -2,7 +2,7 @@
 // versions:
 // 	protoc-gen-go v1.36.12
 // 	protoc        (unknown)
-// source: resources/v1/env.proto
+// source: resources/v1/variables.proto
 
 package resourcesv1
 
@@ -61,11 +61,11 @@ func (x VariableClass) String() string {
 }
 
 func (VariableClass) Descriptor() protoreflect.EnumDescriptor {
-	return file_resources_v1_env_proto_enumTypes[0].Descriptor()
+	return file_resources_v1_variables_proto_enumTypes[0].Descriptor()
 }
 
 func (VariableClass) Type() protoreflect.EnumType {
-	return &file_resources_v1_env_proto_enumTypes[0]
+	return &file_resources_v1_variables_proto_enumTypes[0]
 }
 
 func (x VariableClass) Number() protoreflect.EnumNumber {
@@ -74,7 +74,7 @@ func (x VariableClass) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use VariableClass.Descriptor instead.
 func (VariableClass) EnumDescriptor() ([]byte, []int) {
-	return file_resources_v1_env_proto_rawDescGZIP(), []int{0}
+	return file_resources_v1_variables_proto_rawDescGZIP(), []int{0}
 }
 
 type VariableProblem_Kind int32
@@ -110,11 +110,11 @@ func (x VariableProblem_Kind) String() string {
 }
 
 func (VariableProblem_Kind) Descriptor() protoreflect.EnumDescriptor {
-	return file_resources_v1_env_proto_enumTypes[1].Descriptor()
+	return file_resources_v1_variables_proto_enumTypes[1].Descriptor()
 }
 
 func (VariableProblem_Kind) Type() protoreflect.EnumType {
-	return &file_resources_v1_env_proto_enumTypes[1]
+	return &file_resources_v1_variables_proto_enumTypes[1]
 }
 
 func (x VariableProblem_Kind) Number() protoreflect.EnumNumber {
@@ -123,7 +123,7 @@ func (x VariableProblem_Kind) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use VariableProblem_Kind.Descriptor instead.
 func (VariableProblem_Kind) EnumDescriptor() ([]byte, []int) {
-	return file_resources_v1_env_proto_rawDescGZIP(), []int{4, 0}
+	return file_resources_v1_variables_proto_rawDescGZIP(), []int{4, 0}
 }
 
 type VariableDefinition struct {
@@ -140,7 +140,7 @@ type VariableDefinition struct {
 
 func (x *VariableDefinition) Reset() {
 	*x = VariableDefinition{}
-	mi := &file_resources_v1_env_proto_msgTypes[0]
+	mi := &file_resources_v1_variables_proto_msgTypes[0]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -152,7 +152,7 @@ func (x *VariableDefinition) String() string {
 func (*VariableDefinition) ProtoMessage() {}
 
 func (x *VariableDefinition) ProtoReflect() protoreflect.Message {
-	mi := &file_resources_v1_env_proto_msgTypes[0]
+	mi := &file_resources_v1_variables_proto_msgTypes[0]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -165,7 +165,7 @@ func (x *VariableDefinition) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use VariableDefinition.ProtoReflect.Descriptor instead.
 func (*VariableDefinition) Descriptor() ([]byte, []int) {
-	return file_resources_v1_env_proto_rawDescGZIP(), []int{0}
+	return file_resources_v1_variables_proto_rawDescGZIP(), []int{0}
 }
 
 func (x *VariableDefinition) GetKey() string {
@@ -219,7 +219,7 @@ type DeclareEnvRequest struct {
 
 func (x *DeclareEnvRequest) Reset() {
 	*x = DeclareEnvRequest{}
-	mi := &file_resources_v1_env_proto_msgTypes[1]
+	mi := &file_resources_v1_variables_proto_msgTypes[1]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -231,7 +231,7 @@ func (x *DeclareEnvRequest) String() string {
 func (*DeclareEnvRequest) ProtoMessage() {}
 
 func (x *DeclareEnvRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_resources_v1_env_proto_msgTypes[1]
+	mi := &file_resources_v1_variables_proto_msgTypes[1]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -244,7 +244,7 @@ func (x *DeclareEnvRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DeclareEnvRequest.ProtoReflect.Descriptor instead.
 func (*DeclareEnvRequest) Descriptor() ([]byte, []int) {
-	return file_resources_v1_env_proto_rawDescGZIP(), []int{1}
+	return file_resources_v1_variables_proto_rawDescGZIP(), []int{1}
 }
 
 func (x *DeclareEnvRequest) GetDefinitions() []*VariableDefinition {
@@ -265,7 +265,7 @@ type VariableCell struct {
 
 func (x *VariableCell) Reset() {
 	*x = VariableCell{}
-	mi := &file_resources_v1_env_proto_msgTypes[2]
+	mi := &file_resources_v1_variables_proto_msgTypes[2]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -277,7 +277,7 @@ func (x *VariableCell) String() string {
 func (*VariableCell) ProtoMessage() {}
 
 func (x *VariableCell) ProtoReflect() protoreflect.Message {
-	mi := &file_resources_v1_env_proto_msgTypes[2]
+	mi := &file_resources_v1_variables_proto_msgTypes[2]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -290,7 +290,7 @@ func (x *VariableCell) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use VariableCell.ProtoReflect.Descriptor instead.
 func (*VariableCell) Descriptor() ([]byte, []int) {
-	return file_resources_v1_env_proto_rawDescGZIP(), []int{2}
+	return file_resources_v1_variables_proto_rawDescGZIP(), []int{2}
 }
 
 func (x *VariableCell) GetKey() string {
@@ -323,7 +323,7 @@ type DeclareEnvResponse struct {
 
 func (x *DeclareEnvResponse) Reset() {
 	*x = DeclareEnvResponse{}
-	mi := &file_resources_v1_env_proto_msgTypes[3]
+	mi := &file_resources_v1_variables_proto_msgTypes[3]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -335,7 +335,7 @@ func (x *DeclareEnvResponse) String() string {
 func (*DeclareEnvResponse) ProtoMessage() {}
 
 func (x *DeclareEnvResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_resources_v1_env_proto_msgTypes[3]
+	mi := &file_resources_v1_variables_proto_msgTypes[3]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -348,7 +348,7 @@ func (x *DeclareEnvResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DeclareEnvResponse.ProtoReflect.Descriptor instead.
 func (*DeclareEnvResponse) Descriptor() ([]byte, []int) {
-	return file_resources_v1_env_proto_rawDescGZIP(), []int{3}
+	return file_resources_v1_variables_proto_rawDescGZIP(), []int{3}
 }
 
 func (x *DeclareEnvResponse) GetCells() []*VariableCell {
@@ -370,7 +370,7 @@ type VariableProblem struct {
 
 func (x *VariableProblem) Reset() {
 	*x = VariableProblem{}
-	mi := &file_resources_v1_env_proto_msgTypes[4]
+	mi := &file_resources_v1_variables_proto_msgTypes[4]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -382,7 +382,7 @@ func (x *VariableProblem) String() string {
 func (*VariableProblem) ProtoMessage() {}
 
 func (x *VariableProblem) ProtoReflect() protoreflect.Message {
-	mi := &file_resources_v1_env_proto_msgTypes[4]
+	mi := &file_resources_v1_variables_proto_msgTypes[4]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -395,7 +395,7 @@ func (x *VariableProblem) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use VariableProblem.ProtoReflect.Descriptor instead.
 func (*VariableProblem) Descriptor() ([]byte, []int) {
-	return file_resources_v1_env_proto_rawDescGZIP(), []int{4}
+	return file_resources_v1_variables_proto_rawDescGZIP(), []int{4}
 }
 
 func (x *VariableProblem) GetKey() string {
@@ -435,7 +435,7 @@ type ReportEnvProblemsRequest struct {
 
 func (x *ReportEnvProblemsRequest) Reset() {
 	*x = ReportEnvProblemsRequest{}
-	mi := &file_resources_v1_env_proto_msgTypes[5]
+	mi := &file_resources_v1_variables_proto_msgTypes[5]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -447,7 +447,7 @@ func (x *ReportEnvProblemsRequest) String() string {
 func (*ReportEnvProblemsRequest) ProtoMessage() {}
 
 func (x *ReportEnvProblemsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_resources_v1_env_proto_msgTypes[5]
+	mi := &file_resources_v1_variables_proto_msgTypes[5]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -460,7 +460,7 @@ func (x *ReportEnvProblemsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ReportEnvProblemsRequest.ProtoReflect.Descriptor instead.
 func (*ReportEnvProblemsRequest) Descriptor() ([]byte, []int) {
-	return file_resources_v1_env_proto_rawDescGZIP(), []int{5}
+	return file_resources_v1_variables_proto_rawDescGZIP(), []int{5}
 }
 
 func (x *ReportEnvProblemsRequest) GetProblems() []*VariableProblem {
@@ -478,7 +478,7 @@ type ReportEnvProblemsResponse struct {
 
 func (x *ReportEnvProblemsResponse) Reset() {
 	*x = ReportEnvProblemsResponse{}
-	mi := &file_resources_v1_env_proto_msgTypes[6]
+	mi := &file_resources_v1_variables_proto_msgTypes[6]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -490,7 +490,7 @@ func (x *ReportEnvProblemsResponse) String() string {
 func (*ReportEnvProblemsResponse) ProtoMessage() {}
 
 func (x *ReportEnvProblemsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_resources_v1_env_proto_msgTypes[6]
+	mi := &file_resources_v1_variables_proto_msgTypes[6]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -503,14 +503,14 @@ func (x *ReportEnvProblemsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ReportEnvProblemsResponse.ProtoReflect.Descriptor instead.
 func (*ReportEnvProblemsResponse) Descriptor() ([]byte, []int) {
-	return file_resources_v1_env_proto_rawDescGZIP(), []int{6}
+	return file_resources_v1_variables_proto_rawDescGZIP(), []int{6}
 }
 
-var File_resources_v1_env_proto protoreflect.FileDescriptor
+var File_resources_v1_variables_proto protoreflect.FileDescriptor
 
-const file_resources_v1_env_proto_rawDesc = "" +
+const file_resources_v1_variables_proto_rawDesc = "" +
 	"\n" +
-	"\x16resources/v1/env.proto\x12\fresources.v1\x1a\x1bbuf/validate/validate.proto\"\x83\x02\n" +
+	"\x1cresources/v1/variables.proto\x12\fresources.v1\x1a\x1bbuf/validate/validate.proto\"\x83\x02\n" +
 	"\x12VariableDefinition\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12;\n" +
 	"\x05class\x18\x02 \x01(\x0e2\x1b.resources.v1.VariableClassB\b\xbaH\x05\x82\x01\x02\x10\x01R\x05class\x12+\n" +
@@ -546,20 +546,20 @@ const file_resources_v1_env_proto_rawDesc = "" +
 	"\x16VARIABLE_CLASS_DERIVED\x10\x04B;Z9github.com/ocelhq/ocel/pkg/proto/resources/v1;resourcesv1b\x06proto3"
 
 var (
-	file_resources_v1_env_proto_rawDescOnce sync.Once
-	file_resources_v1_env_proto_rawDescData []byte
+	file_resources_v1_variables_proto_rawDescOnce sync.Once
+	file_resources_v1_variables_proto_rawDescData []byte
 )
 
-func file_resources_v1_env_proto_rawDescGZIP() []byte {
-	file_resources_v1_env_proto_rawDescOnce.Do(func() {
-		file_resources_v1_env_proto_rawDescData = protoimpl.X.CompressGZIP(unsafe.Slice(unsafe.StringData(file_resources_v1_env_proto_rawDesc), len(file_resources_v1_env_proto_rawDesc)))
+func file_resources_v1_variables_proto_rawDescGZIP() []byte {
+	file_resources_v1_variables_proto_rawDescOnce.Do(func() {
+		file_resources_v1_variables_proto_rawDescData = protoimpl.X.CompressGZIP(unsafe.Slice(unsafe.StringData(file_resources_v1_variables_proto_rawDesc), len(file_resources_v1_variables_proto_rawDesc)))
 	})
-	return file_resources_v1_env_proto_rawDescData
+	return file_resources_v1_variables_proto_rawDescData
 }
 
-var file_resources_v1_env_proto_enumTypes = make([]protoimpl.EnumInfo, 2)
-var file_resources_v1_env_proto_msgTypes = make([]protoimpl.MessageInfo, 7)
-var file_resources_v1_env_proto_goTypes = []any{
+var file_resources_v1_variables_proto_enumTypes = make([]protoimpl.EnumInfo, 2)
+var file_resources_v1_variables_proto_msgTypes = make([]protoimpl.MessageInfo, 7)
+var file_resources_v1_variables_proto_goTypes = []any{
 	(VariableClass)(0),                // 0: resources.v1.VariableClass
 	(VariableProblem_Kind)(0),         // 1: resources.v1.VariableProblem.Kind
 	(*VariableDefinition)(nil),        // 2: resources.v1.VariableDefinition
@@ -570,7 +570,7 @@ var file_resources_v1_env_proto_goTypes = []any{
 	(*ReportEnvProblemsRequest)(nil),  // 7: resources.v1.ReportEnvProblemsRequest
 	(*ReportEnvProblemsResponse)(nil), // 8: resources.v1.ReportEnvProblemsResponse
 }
-var file_resources_v1_env_proto_depIdxs = []int32{
+var file_resources_v1_variables_proto_depIdxs = []int32{
 	0, // 0: resources.v1.VariableDefinition.class:type_name -> resources.v1.VariableClass
 	2, // 1: resources.v1.DeclareEnvRequest.definitions:type_name -> resources.v1.VariableDefinition
 	4, // 2: resources.v1.DeclareEnvResponse.cells:type_name -> resources.v1.VariableCell
@@ -583,27 +583,27 @@ var file_resources_v1_env_proto_depIdxs = []int32{
 	0, // [0:5] is the sub-list for field type_name
 }
 
-func init() { file_resources_v1_env_proto_init() }
-func file_resources_v1_env_proto_init() {
-	if File_resources_v1_env_proto != nil {
+func init() { file_resources_v1_variables_proto_init() }
+func file_resources_v1_variables_proto_init() {
+	if File_resources_v1_variables_proto != nil {
 		return
 	}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
-			RawDescriptor: unsafe.Slice(unsafe.StringData(file_resources_v1_env_proto_rawDesc), len(file_resources_v1_env_proto_rawDesc)),
+			RawDescriptor: unsafe.Slice(unsafe.StringData(file_resources_v1_variables_proto_rawDesc), len(file_resources_v1_variables_proto_rawDesc)),
 			NumEnums:      2,
 			NumMessages:   7,
 			NumExtensions: 0,
 			NumServices:   0,
 		},
-		GoTypes:           file_resources_v1_env_proto_goTypes,
-		DependencyIndexes: file_resources_v1_env_proto_depIdxs,
-		EnumInfos:         file_resources_v1_env_proto_enumTypes,
-		MessageInfos:      file_resources_v1_env_proto_msgTypes,
+		GoTypes:           file_resources_v1_variables_proto_goTypes,
+		DependencyIndexes: file_resources_v1_variables_proto_depIdxs,
+		EnumInfos:         file_resources_v1_variables_proto_enumTypes,
+		MessageInfos:      file_resources_v1_variables_proto_msgTypes,
 	}.Build()
-	File_resources_v1_env_proto = out.File
-	file_resources_v1_env_proto_goTypes = nil
-	file_resources_v1_env_proto_depIdxs = nil
+	File_resources_v1_variables_proto = out.File
+	file_resources_v1_variables_proto_goTypes = nil
+	file_resources_v1_variables_proto_depIdxs = nil
 }

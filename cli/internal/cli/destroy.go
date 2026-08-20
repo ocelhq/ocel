@@ -15,6 +15,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/providerrunner"
 	"github.com/ocelhq/ocel/cli/node"
 	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
+	environmentv1 "github.com/ocelhq/ocel/pkg/proto/environment/v1"
 )
 
 var destroyCmd = &cobra.Command{
@@ -113,7 +114,7 @@ func runDestroy(ctx context.Context, d deps, cwd string, stdout, stderr io.Write
 
 	provW := ui.BuildWriter()
 	err = runProviderSession(ctx, d, cfg, provider, provW, provW, func(runner *providerrunner.Runner) error {
-		if err := preflightClass(ctx, d, runner, cfg, deploymentsv1.Environment_CLASS_PRODUCTION, "ocel bootstrap", stdout); err != nil {
+		if err := preflightTier(ctx, d, runner, cfg, environmentv1.Tier_TIER_PRODUCTION, "ocel bootstrap", stdout); err != nil {
 			return err
 		}
 
@@ -193,7 +194,7 @@ func runDestroyPreviewProject(ctx context.Context, d deps, cwd string, yes bool,
 
 	provW := ui.BuildWriter()
 	err = runProviderSession(ctx, d, cfg, provider, provW, provW, func(runner *providerrunner.Runner) error {
-		if err := preflightClass(ctx, d, runner, cfg, deploymentsv1.Environment_CLASS_PREVIEW, "ocel bootstrap --preview", stdout); err != nil {
+		if err := preflightTier(ctx, d, runner, cfg, environmentv1.Tier_TIER_PREVIEW, "ocel bootstrap --preview", stdout); err != nil {
 			return err
 		}
 
@@ -205,7 +206,7 @@ func runDestroyPreviewProject(ctx context.Context, d deps, cwd string, yes bool,
 		spinner := deployui.StartSpinner(stdout, "Enumerating what would be destroyed")
 		plan, err := client.PlanRemoveProject(ctx, &deploymentsv1.PlanRemoveProjectRequest{
 			Slug:        cfg.Slug,
-			Environment: &deploymentsv1.Environment{Class: deploymentsv1.Environment_CLASS_PREVIEW},
+			Environment: &environmentv1.Environment{Tier: environmentv1.Tier_TIER_PREVIEW},
 			Edge:        edgeSelection(cfg),
 		})
 		spinner.Stop()
@@ -232,7 +233,7 @@ func runDestroyPreviewProject(ctx context.Context, d deps, cwd string, yes bool,
 
 		req := &deploymentsv1.RemoveProjectRequest{
 			Slug:        cfg.Slug,
-			Environment: &deploymentsv1.Environment{Class: deploymentsv1.Environment_CLASS_PREVIEW},
+			Environment: &environmentv1.Environment{Tier: environmentv1.Tier_TIER_PREVIEW},
 			Edge:        edgeSelection(cfg),
 		}
 		if err := runner.RemoveProject(ctx, req, ui.Event); err != nil {

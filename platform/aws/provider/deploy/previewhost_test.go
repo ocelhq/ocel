@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
+	environmentv1 "github.com/ocelhq/ocel/pkg/proto/environment/v1"
 )
 
 func TestPreviewHost(t *testing.T) {
@@ -103,7 +104,7 @@ func TestPreviewHostnames(t *testing.T) {
 
 	t.Run("resolves the wildcard to the pointer hosts, a single app elides the app label", func(t *testing.T) {
 		t.Parallel()
-		cfg := Config{Class: deploymentsv1.Environment_CLASS_PREVIEW, Slug: "proj", Identity: "pr-42"}
+		cfg := Config{Tier: environmentv1.Tier_TIER_PREVIEW, Slug: "proj", Identity: "pr-42"}
 		apps := []*deploymentsv1.ManifestApp{{Name: "web"}}
 		got, err := previewHostnames(cfg, apps, map[string][]string{"web": {"*.preview.acme.com"}})
 		if err != nil {
@@ -119,7 +120,7 @@ func TestPreviewHostnames(t *testing.T) {
 
 	t.Run("resolves the wildcard to the pointer hosts, two apps qualify the label", func(t *testing.T) {
 		t.Parallel()
-		cfg := Config{Class: deploymentsv1.Environment_CLASS_PREVIEW, Slug: "proj", Identity: "pr-42"}
+		cfg := Config{Tier: environmentv1.Tier_TIER_PREVIEW, Slug: "proj", Identity: "pr-42"}
 		apps := []*deploymentsv1.ManifestApp{{Name: "web"}, {Name: "api"}}
 		declared := map[string][]string{"web": {"*.preview.acme.com"}, "api": {"*.preview.acme.com"}}
 		got, err := previewHostnames(cfg, apps, declared)
@@ -136,7 +137,7 @@ func TestPreviewHostnames(t *testing.T) {
 
 	t.Run("serves an app that declares nothing under the project wildcard", func(t *testing.T) {
 		t.Parallel()
-		cfg := Config{Class: deploymentsv1.Environment_CLASS_PREVIEW, Slug: "proj", Identity: "pr-42"}
+		cfg := Config{Tier: environmentv1.Tier_TIER_PREVIEW, Slug: "proj", Identity: "pr-42"}
 		apps := []*deploymentsv1.ManifestApp{{Name: "web"}, {Name: "api"}}
 
 		got, err := previewHostnames(cfg, apps, map[string][]string{"web": {"*.preview.acme.com"}})
@@ -150,7 +151,7 @@ func TestPreviewHostnames(t *testing.T) {
 
 	t.Run("two preview domains in one project are refused", func(t *testing.T) {
 		t.Parallel()
-		cfg := Config{Class: deploymentsv1.Environment_CLASS_PREVIEW, Slug: "proj", Identity: "pr-42"}
+		cfg := Config{Tier: environmentv1.Tier_TIER_PREVIEW, Slug: "proj", Identity: "pr-42"}
 		apps := []*deploymentsv1.ManifestApp{{Name: "web"}, {Name: "api"}}
 		declared := map[string][]string{"web": {"*.preview.acme.com"}, "api": {"*.preview.other.com"}}
 
@@ -178,7 +179,7 @@ func TestResolveWorkerHostnames(t *testing.T) {
 		}
 		artifactRoot := t.TempDir()
 		writeRoutingManifest(t, artifactRoot, "web", `{"buildId":"b1"}`)
-		cfg := Config{Class: deploymentsv1.Environment_CLASS_PRODUCTION, Slug: "proj", ArtifactRoot: artifactRoot}
+		cfg := Config{Tier: environmentv1.Tier_TIER_PRODUCTION, Slug: "proj", ArtifactRoot: artifactRoot}
 
 		apps := workerApps(artifactRoot, manifest)
 		resolved, err := hostingWorldFor(cfg, manifest).hostnames(cfg, manifest, apps)

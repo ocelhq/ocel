@@ -14,6 +14,7 @@ import (
 	acmtypes "github.com/aws/aws-sdk-go-v2/service/acm/types"
 
 	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
+	environmentv1 "github.com/ocelhq/ocel/pkg/proto/environment/v1"
 	"github.com/ocelhq/ocel/platform/aws/provider/certs"
 	"github.com/ocelhq/ocel/platform/aws/provider/domains"
 	"github.com/ocelhq/ocel/platform/aws/provider/edges/apigateway"
@@ -488,7 +489,7 @@ func TestAdmitDomains(t *testing.T) {
 	t.Run("a production deploy without a declared hostname is refused", func(t *testing.T) {
 		t.Parallel()
 
-		_, err := admitDomains(t.Context(), domainGate{kind: cloudflare.Kind, servesUnbound: true}, deploymentsv1.Environment_CLASS_PRODUCTION, &deploymentsv1.Manifest{}, func(string) {})
+		_, err := admitDomains(t.Context(), domainGate{kind: cloudflare.Kind, servesUnbound: true}, environmentv1.Tier_TIER_PRODUCTION, &deploymentsv1.Manifest{}, func(string) {})
 		if err == nil {
 			t.Fatal("admitDomains err = nil, want a refusal with nothing declared")
 		}
@@ -502,7 +503,7 @@ func TestAdmitDomains(t *testing.T) {
 	t.Run("a preview deploy without a wildcard is refused", func(t *testing.T) {
 		t.Parallel()
 
-		_, err := admitDomains(t.Context(), domainGate{kind: cloudflare.Kind, servesUnbound: true}, deploymentsv1.Environment_CLASS_PREVIEW, &deploymentsv1.Manifest{}, func(string) {})
+		_, err := admitDomains(t.Context(), domainGate{kind: cloudflare.Kind, servesUnbound: true}, environmentv1.Tier_TIER_PREVIEW, &deploymentsv1.Manifest{}, func(string) {})
 		if err == nil {
 			t.Fatal("admitDomains err = nil, want a refusal with no preview wildcard")
 		}
@@ -517,7 +518,7 @@ func TestAdmitDomains(t *testing.T) {
 		t.Parallel()
 
 		gate := domainGate{kind: cloudflare.Kind, servesUnbound: true, previewOn: "preview.acme.com"}
-		if _, err := admitDomains(t.Context(), gate, deploymentsv1.Environment_CLASS_PREVIEW, &deploymentsv1.Manifest{}, func(string) {}); err != nil {
+		if _, err := admitDomains(t.Context(), gate, environmentv1.Tier_TIER_PREVIEW, &deploymentsv1.Manifest{}, func(string) {}); err != nil {
 			t.Fatalf("admitDomains err = %v, want the global wildcard to be enough", err)
 		}
 	})
@@ -529,7 +530,7 @@ func TestAdmitDomains(t *testing.T) {
 			Name:    "web",
 			Domains: map[string]*deploymentsv1.DomainList{"preview": {Hostnames: []string{"*.preview.acme.com"}}},
 		}}}
-		if _, err := admitDomains(t.Context(), domainGate{kind: cloudflare.Kind, servesUnbound: true}, deploymentsv1.Environment_CLASS_PREVIEW, manifest, func(string) {}); err != nil {
+		if _, err := admitDomains(t.Context(), domainGate{kind: cloudflare.Kind, servesUnbound: true}, environmentv1.Tier_TIER_PREVIEW, manifest, func(string) {}); err != nil {
 			t.Fatalf("admitDomains err = %v, want an app-declared wildcard to be enough", err)
 		}
 	})
@@ -539,7 +540,7 @@ func TestAdmitDomains(t *testing.T) {
 
 		gate := liveGate(t, cloudfront.Kind, newDomainACM(), false, domains.Settlement{})
 		gate.state = edge.StackState{}
-		admitted, err := admitDomains(t.Context(), gate, deploymentsv1.Environment_CLASS_PRODUCTION, productionManifest("shop.app.com"), func(string) {})
+		admitted, err := admitDomains(t.Context(), gate, environmentv1.Tier_TIER_PRODUCTION, productionManifest("shop.app.com"), func(string) {})
 		if err != nil {
 			t.Fatalf("admitDomains err = %v, want the deploy that creates the stack admitted", err)
 		}
@@ -556,7 +557,7 @@ func TestAdmitDomains(t *testing.T) {
 		api := newDomainACM()
 		api.issue(certARNFor(cloudfront.Kind), "shop.app.com")
 		gate := liveGate(t, cloudfront.Kind, api, true, issuedProduction(certARNFor(cloudfront.Kind), "shop.app.com"), "shop.app.com")
-		admitted, err := admitDomains(t.Context(), gate, deploymentsv1.Environment_CLASS_PRODUCTION, productionManifest("shop.app.com"), func(string) {})
+		admitted, err := admitDomains(t.Context(), gate, environmentv1.Tier_TIER_PRODUCTION, productionManifest("shop.app.com"), func(string) {})
 		if err != nil {
 			t.Fatalf("admitDomains err = %v", err)
 		}
@@ -570,7 +571,7 @@ func TestAdmitDomains(t *testing.T) {
 			t.Parallel()
 
 			gate := liveGate(t, kind, newDomainACM(), true, domains.Settlement{}, "shop.app.com")
-			_, err := admitDomains(t.Context(), gate, deploymentsv1.Environment_CLASS_PRODUCTION, productionManifest("shop.app.com"), func(string) {})
+			_, err := admitDomains(t.Context(), gate, environmentv1.Tier_TIER_PRODUCTION, productionManifest("shop.app.com"), func(string) {})
 			if err == nil {
 				t.Fatal("admitDomains err = nil, want a refusal without a certificate")
 			}
@@ -588,7 +589,7 @@ func TestAdmitDomains(t *testing.T) {
 			api := newDomainACM()
 			api.issue(arn, "www.app.com")
 			gate := liveGate(t, kind, api, true, issuedProduction(arn, "shop.app.com"), "shop.app.com")
-			_, err := admitDomains(t.Context(), gate, deploymentsv1.Environment_CLASS_PRODUCTION, productionManifest("shop.app.com"), func(string) {})
+			_, err := admitDomains(t.Context(), gate, environmentv1.Tier_TIER_PRODUCTION, productionManifest("shop.app.com"), func(string) {})
 			if err == nil {
 				t.Fatal("admitDomains err = nil, want a refusal for a certificate that does not cover the host")
 			}
@@ -603,7 +604,7 @@ func TestAdmitDomains(t *testing.T) {
 			api := newDomainACM()
 			api.describeErr = errDescribeRefused
 			gate := liveGate(t, kind, api, true, issuedProduction(certARNFor(kind), "shop.app.com"), "shop.app.com")
-			_, err := admitDomains(t.Context(), gate, deploymentsv1.Environment_CLASS_PRODUCTION, productionManifest("shop.app.com"), func(string) {})
+			_, err := admitDomains(t.Context(), gate, environmentv1.Tier_TIER_PRODUCTION, productionManifest("shop.app.com"), func(string) {})
 			if err == nil || !strings.Contains(err.Error(), "AccessDenied") {
 				t.Fatalf("admitDomains err = %v, want the ACM failure surfaced rather than the recorded certificate trusted", err)
 			}
@@ -615,7 +616,7 @@ func TestAdmitDomains(t *testing.T) {
 			api := newDomainACM()
 			recorded := issuedProduction("arn:aws:acm:ap-south-1:111122223333:certificate/elsewhere", "shop.app.com")
 			gate := liveGate(t, kind, api, true, recorded, "shop.app.com")
-			_, err := admitDomains(t.Context(), gate, deploymentsv1.Environment_CLASS_PRODUCTION, productionManifest("shop.app.com"), func(string) {})
+			_, err := admitDomains(t.Context(), gate, environmentv1.Tier_TIER_PRODUCTION, productionManifest("shop.app.com"), func(string) {})
 			if err == nil {
 				t.Fatal("admitDomains err = nil, want a refusal for a certificate in another region")
 			}
@@ -639,7 +640,7 @@ func TestAdmitDomains(t *testing.T) {
 			gate := liveGate(t, kind, api, true, issuedProduction(arn, "shop.app.com"), "shop.app.com")
 
 			var warned []string
-			if _, err := admitDomains(t.Context(), gate, deploymentsv1.Environment_CLASS_PRODUCTION, productionManifest("shop.app.com"), func(m string) { warned = append(warned, m) }); err != nil {
+			if _, err := admitDomains(t.Context(), gate, environmentv1.Tier_TIER_PRODUCTION, productionManifest("shop.app.com"), func(m string) { warned = append(warned, m) }); err != nil {
 				t.Fatalf("admitDomains err = %v, want a settled hostname admitted", err)
 			}
 			if len(warned) != 1 || !strings.Contains(warned[0], "expires") {
@@ -658,7 +659,7 @@ func TestAdmitDomains(t *testing.T) {
 			gate := liveGate(t, kind, api, true, issuedProduction(arn, "shop.app.com"), "shop.app.com")
 
 			var warned []string
-			if _, err := admitDomains(t.Context(), gate, deploymentsv1.Environment_CLASS_PRODUCTION, productionManifest("shop.app.com"), func(m string) { warned = append(warned, m) }); err != nil {
+			if _, err := admitDomains(t.Context(), gate, environmentv1.Tier_TIER_PRODUCTION, productionManifest("shop.app.com"), func(m string) { warned = append(warned, m) }); err != nil {
 				t.Fatalf("admitDomains err = %v", err)
 			}
 			if len(warned) != 0 {
@@ -675,7 +676,7 @@ func TestAdmitDomains(t *testing.T) {
 		api.issue(arn, "shop.app.com", "www.app.com")
 		gate := liveGate(t, cloudfront.Kind, api, true, issuedProduction(arn, "shop.app.com", "www.app.com"), "shop.app.com", "www.app.com")
 
-		if _, err := admitDomains(t.Context(), gate, deploymentsv1.Environment_CLASS_PRODUCTION, productionManifest("shop.app.com", "www.app.com"), func(string) {}); err != nil {
+		if _, err := admitDomains(t.Context(), gate, environmentv1.Tier_TIER_PRODUCTION, productionManifest("shop.app.com", "www.app.com"), func(string) {}); err != nil {
 			t.Fatalf("admitDomains err = %v", err)
 		}
 		if len(api.described) != 1 {
@@ -688,7 +689,7 @@ func TestAdmitDomains(t *testing.T) {
 
 		api := newDomainACM()
 		gate := liveGate(t, cloudflare.Kind, api, true, domains.Settlement{}, "shop.app.com")
-		if _, err := admitDomains(t.Context(), gate, deploymentsv1.Environment_CLASS_PRODUCTION, productionManifest("shop.app.com"), func(string) {}); err != nil {
+		if _, err := admitDomains(t.Context(), gate, environmentv1.Tier_TIER_PRODUCTION, productionManifest("shop.app.com"), func(string) {}); err != nil {
 			t.Fatalf("admitDomains err = %v, want a bound, answering host admitted without a certificate of ocel's own", err)
 		}
 		if len(api.described) != 0 {
@@ -696,19 +697,19 @@ func TestAdmitDomains(t *testing.T) {
 		}
 
 		unbound := liveGate(t, cloudflare.Kind, api, true, domains.Settlement{})
-		if _, err := admitDomains(t.Context(), unbound, deploymentsv1.Environment_CLASS_PRODUCTION, productionManifest("shop.app.com"), func(string) {}); err == nil {
+		if _, err := admitDomains(t.Context(), unbound, environmentv1.Tier_TIER_PRODUCTION, productionManifest("shop.app.com"), func(string) {}); err == nil {
 			t.Error("admitDomains err = nil, want the surface still demanded on cloudflare")
 		}
 
 		silent := liveGate(t, cloudflare.Kind, api, false, domains.Settlement{}, "shop.app.com")
-		if _, err := admitDomains(t.Context(), silent, deploymentsv1.Environment_CLASS_PRODUCTION, productionManifest("shop.app.com"), func(string) {}); err == nil {
+		if _, err := admitDomains(t.Context(), silent, environmentv1.Tier_TIER_PRODUCTION, productionManifest("shop.app.com"), func(string) {}); err == nil {
 			t.Error("admitDomains err = nil, want a fresh probe still demanded on cloudflare")
 		}
 
 		pinned := liveGate(t, cloudflare.Kind, api, true, domains.Settlement{}, "shop.app.com")
 		pinned.pins = map[string]string{"shop.app.com": domainCertARN}
 		var warned []string
-		if _, err := admitDomains(t.Context(), pinned, deploymentsv1.Environment_CLASS_PRODUCTION, productionManifest("shop.app.com"), func(m string) { warned = append(warned, m) }); err != nil {
+		if _, err := admitDomains(t.Context(), pinned, environmentv1.Tier_TIER_PRODUCTION, productionManifest("shop.app.com"), func(m string) { warned = append(warned, m) }); err != nil {
 			t.Fatalf("admitDomains err = %v", err)
 		}
 		if len(warned) != 1 || !strings.Contains(warned[0], "ignored") {
@@ -723,7 +724,7 @@ func TestAdmitDomains(t *testing.T) {
 		api := newDomainACM()
 		api.issue(arn, "shop.app.com")
 		gate := liveGate(t, cloudfront.Kind, api, true, issuedProduction(arn, "shop.app.com"))
-		_, err := admitDomains(t.Context(), gate, deploymentsv1.Environment_CLASS_PRODUCTION, productionManifest("shop.app.com"), func(string) {})
+		_, err := admitDomains(t.Context(), gate, environmentv1.Tier_TIER_PRODUCTION, productionManifest("shop.app.com"), func(string) {})
 		if err == nil {
 			t.Fatal("admitDomains err = nil, want a refusal without an edge surface")
 		}
@@ -741,7 +742,7 @@ func TestAdmitDomains(t *testing.T) {
 		api := newDomainACM()
 		api.issue(arn, "shop.app.com")
 		gate := liveGate(t, cloudfront.Kind, api, false, issuedProduction(arn, "shop.app.com"), "shop.app.com")
-		_, err := admitDomains(t.Context(), gate, deploymentsv1.Environment_CLASS_PRODUCTION, productionManifest("shop.app.com"), func(string) {})
+		_, err := admitDomains(t.Context(), gate, environmentv1.Tier_TIER_PRODUCTION, productionManifest("shop.app.com"), func(string) {})
 		if err == nil {
 			t.Fatal("admitDomains err = nil, want a refusal while nothing answers")
 		}
@@ -767,7 +768,7 @@ func TestAdmitDomains(t *testing.T) {
 			header.Set(edge.HeaderEdge, "someone-else")
 			return header, nil
 		}
-		_, err := admitDomains(t.Context(), gate, deploymentsv1.Environment_CLASS_PRODUCTION, productionManifest("shop.app.com", "www.app.com"), func(string) {})
+		_, err := admitDomains(t.Context(), gate, environmentv1.Tier_TIER_PRODUCTION, productionManifest("shop.app.com", "www.app.com"), func(string) {})
 		if err == nil || !strings.Contains(err.Error(), "shop.app.com") {
 			t.Fatalf("admitDomains err = %v, want the first declared host named", err)
 		}

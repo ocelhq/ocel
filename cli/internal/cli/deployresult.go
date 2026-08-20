@@ -7,9 +7,10 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/deployresult"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
 	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
+	environmentv1 "github.com/ocelhq/ocel/pkg/proto/environment/v1"
 )
 
-func recordDeployResult(cfg *projectconfig.Config, manifest *deploymentsv1.Manifest, env *deploymentsv1.Environment, tag, promotionID string, appURLs []string) error {
+func recordDeployResult(cfg *projectconfig.Config, manifest *deploymentsv1.Manifest, env *environmentv1.Environment, tag, promotionID string, appURLs []string) error {
 	apps := make([]deployresult.App, 0, len(manifest.GetApps()))
 	for _, a := range manifest.GetApps() {
 		apps = append(apps, deployresult.App{
@@ -22,7 +23,7 @@ func recordDeployResult(cfg *projectconfig.Config, manifest *deploymentsv1.Manif
 	if err := deployresult.Write(cfg.Dir, deployresult.Result{
 		Slug: cfg.Slug,
 		Environment: deployresult.Environment{
-			Class:    environmentClassKey(env.GetClass()),
+			Class:    environmentClassKey(env.GetTier()),
 			Identity: env.GetIdentity(),
 		},
 		PromotionID: promotionID,
@@ -35,11 +36,11 @@ func recordDeployResult(cfg *projectconfig.Config, manifest *deploymentsv1.Manif
 	return nil
 }
 
-func environmentClassKey(class deploymentsv1.Environment_Class) string {
-	switch class {
-	case deploymentsv1.Environment_CLASS_PRODUCTION:
+func environmentClassKey(tier environmentv1.Tier) string {
+	switch tier {
+	case environmentv1.Tier_TIER_PRODUCTION:
 		return "production"
-	case deploymentsv1.Environment_CLASS_PREVIEW:
+	case environmentv1.Tier_TIER_PREVIEW:
 		return "preview"
 	default:
 		return "unspecified"

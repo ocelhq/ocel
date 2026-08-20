@@ -181,7 +181,7 @@ func TestRunDestroyPreviewProject(t *testing.T) {
 			"The account-level preview bootstrap is left intact. This cannot be undone.",
 			"Left in place:",
 			"keep preview wildcard *.preview.acme.com — substrate-scoped",
-			"DESTROY PROJECT project=test-app dns= class=CLASS_PREVIEW",
+			"DESTROY PROJECT project=test-app dns= tier=TIER_PREVIEW",
 		} {
 			if !strings.Contains(out, want) {
 				t.Errorf("stdout = %q, want it to contain %q", out, want)

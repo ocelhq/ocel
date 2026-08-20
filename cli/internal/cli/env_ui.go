@@ -14,7 +14,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/providerrunner"
 	"github.com/ocelhq/ocel/cli/internal/varsui"
 	"github.com/ocelhq/ocel/cli/node"
-	envv1 "github.com/ocelhq/ocel/pkg/proto/env/v1"
+	envvarsv1 "github.com/ocelhq/ocel/pkg/proto/envvars/v1"
 )
 
 var envUICmd = &cobra.Command{
@@ -89,7 +89,7 @@ func startVarsUI(
 	store := runnerValues{
 		runner: runner,
 		slug:   cfg.Slug,
-		class:  envClass(envOptions{preview: preview}),
+		tier:   envTier(envOptions{preview: preview}),
 	}
 
 	var environments []string
@@ -122,12 +122,12 @@ func envGate(cfg *projectconfig.Config, runner *providerrunner.Runner, opts envO
 	return envgate.New(runnerValues{
 		runner: runner,
 		slug:   cfg.Slug,
-		class:  envClass(opts),
+		tier:   envTier(opts),
 	}, envScope(cfg, opts.preview, ""))
 }
 
-func (v runnerValues) coordinate(at envgate.Address) *envv1.Coordinate {
-	return &envv1.Coordinate{Slug: v.slug, Folder: at.Cell.Folder, Key: at.Cell.Key, Environment: at.Environment}
+func (v runnerValues) coordinate(at envgate.Address) *envvarsv1.Coordinate {
+	return &envvarsv1.Coordinate{Slug: v.slug, Folder: at.Cell.Folder, Key: at.Cell.Key, Environment: at.Environment}
 }
 
 func (v runnerValues) Set(ctx context.Context, at envgate.Address, value string, expected *int64) error {
@@ -135,8 +135,8 @@ func (v runnerValues) Set(ctx context.Context, at envgate.Address, value string,
 	if err != nil {
 		return err
 	}
-	_, err = vars.SetValue(ctx, &envv1.SetValueRequest{
-		Class:           v.class,
+	_, err = vars.SetValue(ctx, &envvarsv1.SetValueRequest{
+		Tier:            v.tier,
 		Coordinate:      v.coordinate(at),
 		Value:           value,
 		ExpectedVersion: expected,
@@ -149,8 +149,8 @@ func (v runnerValues) Delete(ctx context.Context, at envgate.Address, expected *
 	if err != nil {
 		return err
 	}
-	_, err = vars.DeleteValue(ctx, &envv1.DeleteValueRequest{
-		Class:           v.class,
+	_, err = vars.DeleteValue(ctx, &envvarsv1.DeleteValueRequest{
+		Tier:            v.tier,
 		Coordinate:      v.coordinate(at),
 		ExpectedVersion: expected,
 	})
@@ -169,8 +169,8 @@ func (v runnerValues) History(ctx context.Context, at envgate.Address) ([]varsui
 	if err != nil {
 		return nil, err
 	}
-	resp, err := vars.ListVersions(ctx, &envv1.ListVersionsRequest{
-		Class:      v.class,
+	resp, err := vars.ListVersions(ctx, &envvarsv1.ListVersionsRequest{
+		Tier:       v.tier,
 		Coordinate: v.coordinate(at),
 	})
 	if err != nil {

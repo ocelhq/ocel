@@ -6,8 +6,8 @@ import (
 	"strings"
 	"testing"
 
-	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
-	envv1 "github.com/ocelhq/ocel/pkg/proto/env/v1"
+	environmentv1 "github.com/ocelhq/ocel/pkg/proto/environment/v1"
+	envvarsv1 "github.com/ocelhq/ocel/pkg/proto/envvars/v1"
 )
 
 func ownedElsewhere(t *testing.T, key, value string) {
@@ -16,8 +16,8 @@ func ownedElsewhere(t *testing.T, key, value string) {
 	if err != nil {
 		t.Fatalf("load the fake store: %v", err)
 	}
-	c := &envv1.Coordinate{Slug: "platform", Key: key}
-	if err := store.write(deploymentsv1.Environment_CLASS_PRODUCTION, c, fakeCellData{Value: value}); err != nil {
+	c := &envvarsv1.Coordinate{Slug: "platform", Key: key}
+	if err := store.write(environmentv1.Tier_TIER_PRODUCTION, c, fakeCellData{Value: value}); err != nil {
 		t.Fatalf("seed %s: %v", key, err)
 	}
 }
@@ -108,10 +108,10 @@ func TestRunEnvRefs(t *testing.T) {
 		if err != nil {
 			t.Fatalf("load the fake store: %v", err)
 		}
-		target := &envv1.Coordinate{Slug: "test-app", Key: "STRIPE_API_KEY"}
-		consumer := &envv1.Coordinate{Slug: "billing", Folder: "/api", Key: "STRIPE_API_KEY"}
+		target := &envvarsv1.Coordinate{Slug: "test-app", Key: "STRIPE_API_KEY"}
+		consumer := &envvarsv1.Coordinate{Slug: "billing", Folder: "/api", Key: "STRIPE_API_KEY"}
 		pointer := coordinateOf(target)
-		if err := store.write(deploymentsv1.Environment_CLASS_PRODUCTION, consumer, fakeCellData{Target: &pointer}); err != nil {
+		if err := store.write(environmentv1.Tier_TIER_PRODUCTION, consumer, fakeCellData{Target: &pointer}); err != nil {
 			t.Fatalf("seed the consumer: %v", err)
 		}
 
@@ -189,11 +189,11 @@ func TestEnvReferences(t *testing.T) {
 		if err != nil {
 			t.Fatalf("load the fake store: %v", err)
 		}
-		source := store[fakeCoordinateID(deploymentsv1.Environment_CLASS_PRODUCTION, &envv1.Coordinate{Slug: "platform", Key: "STRIPE_API_KEY"})]
+		source := store[fakeCoordinateID(environmentv1.Tier_TIER_PRODUCTION, &envvarsv1.Coordinate{Slug: "platform", Key: "STRIPE_API_KEY"})]
 		if source.liveVersion() == 0 {
 			t.Fatal("the source value went with the reference, want removing a consumer to leave it alone")
 		}
-		if got, err := store.resolve(deploymentsv1.Environment_CLASS_PRODUCTION, source); err != nil || got != "sk_live_secret" {
+		if got, err := store.resolve(environmentv1.Tier_TIER_PRODUCTION, source); err != nil || got != "sk_live_secret" {
 			t.Errorf("source value = %q (err %v), want it untouched", got, err)
 		}
 	})

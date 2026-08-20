@@ -5,6 +5,7 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/naming"
 	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
+	environmentv1 "github.com/ocelhq/ocel/pkg/proto/environment/v1"
 )
 
 const (
@@ -23,19 +24,19 @@ type Plan struct {
 	Promotion  Promotion
 }
 
-func EnvName(env *deploymentsv1.Environment) (string, error) {
-	switch env.GetClass() {
-	case deploymentsv1.Environment_CLASS_PRODUCTION:
+func EnvName(env *environmentv1.Environment) (string, error) {
+	switch env.GetTier() {
+	case environmentv1.Tier_TIER_PRODUCTION:
 		return ProductionEnv, nil
-	case deploymentsv1.Environment_CLASS_PREVIEW:
+	case environmentv1.Tier_TIER_PREVIEW:
 		return previewEnvName(env.GetIdentity())
 	default:
-		return "", fmt.Errorf("deploys support production and preview, got class %s", env.GetClass())
+		return "", fmt.Errorf("deploys support production and preview, got class %s", env.GetTier())
 	}
 }
 
-func EnvScope(env *deploymentsv1.Environment) (string, error) {
-	if env.GetClass() == deploymentsv1.Environment_CLASS_PREVIEW && env.GetIdentity() == "" {
+func EnvScope(env *environmentv1.Environment) (string, error) {
+	if env.GetTier() == environmentv1.Tier_TIER_PREVIEW && env.GetIdentity() == "" {
 		return EveryPreview, nil
 	}
 	return EnvName(env)
@@ -58,7 +59,7 @@ func releaseOf(id Identity) naming.Release {
 	return naming.NewRelease(id.DeploymentID(), id.Fingerprint())
 }
 
-func BuildPlan(manifest *deploymentsv1.Manifest, env *deploymentsv1.Environment, promotionID string, identities Identities) (Plan, error) {
+func BuildPlan(manifest *deploymentsv1.Manifest, env *environmentv1.Environment, promotionID string, identities Identities) (Plan, error) {
 	envName, err := EnvName(env)
 	if err != nil {
 		return Plan{}, err
@@ -90,7 +91,7 @@ func BuildPlan(manifest *deploymentsv1.Manifest, env *deploymentsv1.Environment,
 	return plan, nil
 }
 
-func ephemeralPreview(env *deploymentsv1.Environment) bool {
-	return env.GetClass() == deploymentsv1.Environment_CLASS_PREVIEW &&
-		env.GetLifecycle() == deploymentsv1.Environment_LIFECYCLE_EPHEMERAL
+func ephemeralPreview(env *environmentv1.Environment) bool {
+	return env.GetTier() == environmentv1.Tier_TIER_PREVIEW &&
+		env.GetLifecycle() == environmentv1.Lifecycle_LIFECYCLE_EPHEMERAL
 }

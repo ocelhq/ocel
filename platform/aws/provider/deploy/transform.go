@@ -26,7 +26,7 @@ func resolveTransforms(ctx context.Context, cfg Config, manifest *deploymentsv1.
 		return nil, nil
 	}
 
-	req := transform.Request{EnvClass: envClass(cfg.Class), Env: cfg.Env}
+	req := transform.Request{EnvClass: envClass(cfg.Tier), Env: cfg.Env}
 	var candidates []transformCandidate
 
 	for _, r := range manifest.GetResources() {

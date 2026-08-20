@@ -16,7 +16,8 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
 	"github.com/ocelhq/ocel/cli/internal/providerrunner"
 	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
-	envv1 "github.com/ocelhq/ocel/pkg/proto/env/v1"
+	environmentv1 "github.com/ocelhq/ocel/pkg/proto/environment/v1"
+	envvarsv1 "github.com/ocelhq/ocel/pkg/proto/envvars/v1"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/resources/v1"
 )
 
@@ -44,7 +45,7 @@ type envRefOptions struct {
 
 var envRefOpts envRefOptions
 
-func (o envRefOptions) target(slug, key string) *envv1.Coordinate {
+func (o envRefOptions) target(slug, key string) *envvarsv1.Coordinate {
 	project, name := o.project, o.key
 	if project == "" {
 		project = slug
@@ -52,7 +53,7 @@ func (o envRefOptions) target(slug, key string) *envv1.Coordinate {
 	if name == "" {
 		name = key
 	}
-	return &envv1.Coordinate{Slug: project, Folder: o.folder, Key: name}
+	return &envvarsv1.Coordinate{Slug: project, Folder: o.folder, Key: name}
 }
 
 var envCmd = &cobra.Command{
@@ -187,28 +188,28 @@ func envSession(ctx context.Context, d deps, cwd string, opts envOptions, stdout
 		return err
 	}
 
-	class, hint := deploymentsv1.Environment_CLASS_PRODUCTION, "ocel bootstrap"
+	tier, hint := environmentv1.Tier_TIER_PRODUCTION, "ocel bootstrap"
 	if opts.preview {
-		class, hint = deploymentsv1.Environment_CLASS_PREVIEW, "ocel bootstrap --preview"
+		tier, hint = environmentv1.Tier_TIER_PREVIEW, "ocel bootstrap --preview"
 	}
 
 	return runProviderSession(ctx, d, cfg, provider, stderr, stderr, func(runner *providerrunner.Runner) error {
-		if err := preflightClass(ctx, d, runner, cfg, class, hint, stderr); err != nil {
+		if err := preflightTier(ctx, d, runner, cfg, tier, hint, stderr); err != nil {
 			return err
 		}
 		return drive(runner, cfg, provider)
 	})
 }
 
-func envClass(opts envOptions) deploymentsv1.Environment_Class {
+func envTier(opts envOptions) environmentv1.Tier {
 	if opts.preview {
-		return deploymentsv1.Environment_CLASS_PREVIEW
+		return environmentv1.Tier_TIER_PREVIEW
 	}
-	return deploymentsv1.Environment_CLASS_PRODUCTION
+	return environmentv1.Tier_TIER_PRODUCTION
 }
 
-func envCoordinate(slug, key string, opts envOptions) *envv1.Coordinate {
-	return &envv1.Coordinate{Slug: slug, Folder: opts.folder, Key: key, Environment: opts.environment}
+func envCoordinate(slug, key string, opts envOptions) *envvarsv1.Coordinate {
+	return &envvarsv1.Coordinate{Slug: slug, Folder: opts.folder, Key: key, Environment: opts.environment}
 }
 
 func namedEnvironments(ctx context.Context, runner *providerrunner.Runner, slug string) ([]string, error) {
@@ -247,8 +248,8 @@ func runEnvSet(ctx context.Context, d deps, cwd, key, value string, opts envOpti
 		if err != nil {
 			return err
 		}
-		resp, err := vars.SetValue(ctx, &envv1.SetValueRequest{
-			Class:      envClass(opts),
+		resp, err := vars.SetValue(ctx, &envvarsv1.SetValueRequest{
+			Tier:       envTier(opts),
 			Coordinate: envCoordinate(cfg.Slug, key, opts),
 			Value:      value,
 		})
@@ -295,9 +296,9 @@ func runEnvLs(ctx context.Context, d deps, cwd string, opts envOptions, stdout, 
 		if err != nil {
 			return err
 		}
-		resp, err := vars.ListValues(ctx, &envv1.ListValuesRequest{
-			Class: envClass(opts),
-			Slug:  cfg.Slug,
+		resp, err := vars.ListValues(ctx, &envvarsv1.ListValuesRequest{
+			Tier: envTier(opts),
+			Slug: cfg.Slug,
 		})
 		if err != nil {
 			return err
@@ -313,8 +314,8 @@ func runEnvLs(ctx context.Context, d deps, cwd string, opts envOptions, stdout, 
 	})
 }
 
-func overridden(values []*envv1.ValueMetadata) bool {
-	return slices.ContainsFunc(values, func(v *envv1.ValueMetadata) bool {
+func overridden(values []*envvarsv1.ValueMetadata) bool {
+	return slices.ContainsFunc(values, func(v *envvarsv1.ValueMetadata) bool {
 		return v.GetCoordinate().GetEnvironment() != ""
 	})
 }
@@ -325,8 +326,8 @@ func runEnvGet(ctx context.Context, d deps, cwd, key string, opts envOptions, st
 		if err != nil {
 			return err
 		}
-		resp, err := vars.GetValue(ctx, &envv1.GetValueRequest{
-			Class:      envClass(opts),
+		resp, err := vars.GetValue(ctx, &envvarsv1.GetValueRequest{
+			Tier:       envTier(opts),
 			Coordinate: envCoordinate(cfg.Slug, key, opts),
 			Reveal:     opts.reveal,
 		})
@@ -359,8 +360,8 @@ func runEnvRm(ctx context.Context, d deps, cwd, key string, opts envOptions, std
 		if err != nil {
 			return err
 		}
-		resp, err := vars.DeleteValue(ctx, &envv1.DeleteValueRequest{
-			Class:      envClass(opts),
+		resp, err := vars.DeleteValue(ctx, &envvarsv1.DeleteValueRequest{
+			Tier:       envTier(opts),
 			Coordinate: envCoordinate(cfg.Slug, key, opts),
 		})
 		if err != nil {
@@ -397,8 +398,8 @@ func runEnvRef(ctx context.Context, d deps, cwd, key string, opts envOptions, re
 		if err != nil {
 			return err
 		}
-		resp, err := vars.SetReference(ctx, &envv1.SetReferenceRequest{
-			Class:      envClass(opts),
+		resp, err := vars.SetReference(ctx, &envvarsv1.SetReferenceRequest{
+			Tier:       envTier(opts),
 			Coordinate: envCoordinate(cfg.Slug, key, opts),
 			Target:     target,
 		})
@@ -416,8 +417,8 @@ func runEnvRefs(ctx context.Context, d deps, cwd, key string, opts envOptions, s
 		if err != nil {
 			return err
 		}
-		resp, err := vars.ListReferences(ctx, &envv1.ListReferencesRequest{
-			Class:      envClass(opts),
+		resp, err := vars.ListReferences(ctx, &envvarsv1.ListReferencesRequest{
+			Tier:       envTier(opts),
 			Coordinate: envCoordinate(cfg.Slug, key, opts),
 		})
 		if err != nil {
@@ -434,8 +435,8 @@ func runEnvHistory(ctx context.Context, d deps, cwd, key string, opts envOptions
 		if err != nil {
 			return err
 		}
-		resp, err := vars.ListVersions(ctx, &envv1.ListVersionsRequest{
-			Class:      envClass(opts),
+		resp, err := vars.ListVersions(ctx, &envvarsv1.ListVersionsRequest{
+			Tier:       envTier(opts),
 			Coordinate: envCoordinate(cfg.Slug, key, opts),
 		})
 		if err != nil {
@@ -457,7 +458,7 @@ func describeCell(key string, opts envOptions) string {
 	return out
 }
 
-func describeCoordinate(c *envv1.Coordinate) string {
+func describeCoordinate(c *envvarsv1.Coordinate) string {
 	out := c.GetSlug() + "/" + c.GetKey()
 	if c.GetFolder() != "" {
 		out += " in " + c.GetFolder()
@@ -468,7 +469,7 @@ func describeCoordinate(c *envv1.Coordinate) string {
 	return out
 }
 
-func renderReferences(stdout io.Writer, cell string, references []*envv1.Coordinate) {
+func renderReferences(stdout io.Writer, cell string, references []*envvarsv1.Coordinate) {
 	if len(references) == 0 {
 		fmt.Fprintf(stdout, "Nothing references %s.\n", cell)
 		return
@@ -484,7 +485,7 @@ func renderReferences(stdout io.Writer, cell string, references []*envv1.Coordin
 	fmt.Fprintln(stdout, "\nEditing this value changes what every one of them reads.")
 }
 
-func renderValues(stdout io.Writer, values []*envv1.ValueMetadata, environments []string) {
+func renderValues(stdout io.Writer, values []*envvarsv1.ValueMetadata, environments []string) {
 	if len(values) == 0 {
 		fmt.Fprintln(stdout, "No values set. Set one with `ocel env set <KEY> <VALUE>`.")
 		return
@@ -515,7 +516,7 @@ func renderValues(stdout io.Writer, values []*envv1.ValueMetadata, environments 
 	}
 }
 
-func renderVersions(stdout io.Writer, cell string, versions []*envv1.VersionEntry) {
+func renderVersions(stdout io.Writer, cell string, versions []*envvarsv1.VersionEntry) {
 	if len(versions) == 0 {
 		fmt.Fprintf(stdout, "No history for %s.\n", cell)
 		return

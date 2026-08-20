@@ -14,6 +14,7 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/naming"
 	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
+	environmentv1 "github.com/ocelhq/ocel/pkg/proto/environment/v1"
 	linksv1 "github.com/ocelhq/ocel/pkg/proto/links/v1"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/resources/v1"
 	cloudflare "github.com/ocelhq/ocel/platform/edge/cloudflare/deploy"
@@ -385,7 +386,7 @@ func TestInlinePolicyBudgetPreflight(t *testing.T) {
 		_, err := Run(context.Background(), Config{
 			Edge:          fake,
 			StoreEndpoint: fakeStoreEndpoint,
-			Class:         deploymentsv1.Environment_CLASS_PRODUCTION,
+			Tier:          environmentv1.Tier_TIER_PRODUCTION,
 			StateTableARN: stateTableARN,
 		}, deployedManifest(manifest), nil, func(string) {})
 

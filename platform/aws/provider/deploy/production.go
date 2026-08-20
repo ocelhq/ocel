@@ -15,6 +15,7 @@ import (
 	"time"
 
 	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
+	environmentv1 "github.com/ocelhq/ocel/pkg/proto/environment/v1"
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/progress/v1"
 	"github.com/ocelhq/ocel/platform/aws/provider/dns"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
@@ -32,7 +33,7 @@ type appDeployResult struct {
 func openStoreStack(cfg Config) (edge.EdgeStack, error) {
 	state := cfg.StackState
 	state.Slug = cfg.Slug
-	state.Class = edgeClass(cfg.Class)
+	state.Class = edgeClass(cfg.Tier)
 	if cfg.StoreEndpoint != "" {
 		state.Endpoint = cfg.StoreEndpoint
 	}
@@ -219,23 +220,23 @@ func promote(ctx context.Context, e edge.Edge, stack edge.EdgeStack, promotion e
 	return promotion, nil
 }
 
-func planEnvironment(cfg Config) *deploymentsv1.Environment {
-	return &deploymentsv1.Environment{
-		Class:     cfg.Class,
+func planEnvironment(cfg Config) *environmentv1.Environment {
+	return &environmentv1.Environment{
+		Tier:      cfg.Tier,
 		Lifecycle: cfg.Lifecycle,
 		Identity:  cfg.Identity,
 	}
 }
 
 func promotePointer(cfg Config) string {
-	if cfg.Class == deploymentsv1.Environment_CLASS_PREVIEW {
+	if cfg.Tier == environmentv1.Tier_TIER_PREVIEW {
 		return cfg.Identity
 	}
 	return ""
 }
 
 func bootstrapCommand(cfg Config) string {
-	if cfg.Class == deploymentsv1.Environment_CLASS_PREVIEW {
+	if cfg.Tier == environmentv1.Tier_TIER_PREVIEW {
 		return "ocel bootstrap --preview"
 	}
 	return "ocel bootstrap"
@@ -264,7 +265,7 @@ func stackSpecs(cfg Config, manifest *deploymentsv1.Manifest, version string, wa
 
 	base := edge.StackSpec{
 		Version:     version,
-		Class:       edgeClass(cfg.Class),
+		Class:       edgeClass(cfg.Tier),
 		Slug:        cfg.Slug,
 		Values:      cfg.EdgeValues,
 		PruneRoutes: true,
@@ -341,8 +342,8 @@ func stackSpecs(cfg Config, manifest *deploymentsv1.Manifest, version string, wa
 	return specs, nil
 }
 
-func edgeClass(class deploymentsv1.Environment_Class) edge.Class {
-	if class == deploymentsv1.Environment_CLASS_PREVIEW {
+func edgeClass(tier environmentv1.Tier) edge.Class {
+	if tier == environmentv1.Tier_TIER_PREVIEW {
 		return edge.ClassPreview
 	}
 	return edge.ClassProduction

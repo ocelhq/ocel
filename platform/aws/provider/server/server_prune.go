@@ -15,6 +15,7 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/naming"
 	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
+	environmentv1 "github.com/ocelhq/ocel/pkg/proto/environment/v1"
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/progress/v1"
 	"github.com/ocelhq/ocel/platform/aws/provider/bootstrap"
 	"github.com/ocelhq/ocel/platform/aws/provider/deploy"
@@ -57,7 +58,7 @@ func (s *Server) runPrune(ctx context.Context, req *deploymentsv1.RemoveStalePro
 
 	opts := s.config.get()
 
-	if env := req.GetEnvironment(); env.GetClass() == deploymentsv1.Environment_CLASS_PREVIEW {
+	if env := req.GetEnvironment(); env.GetTier() == environmentv1.Tier_TIER_PREVIEW {
 		pointer, err := deploy.EnvName(env)
 		if err != nil {
 			return finish(connect.NewError(connect.CodeInvalidArgument, err))

@@ -10,8 +10,8 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
 	"github.com/ocelhq/ocel/cli/internal/providerrunner"
 	"github.com/ocelhq/ocel/cli/internal/varsui"
-	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
-	envv1 "github.com/ocelhq/ocel/pkg/proto/env/v1"
+	environmentv1 "github.com/ocelhq/ocel/pkg/proto/environment/v1"
+	envvarsv1 "github.com/ocelhq/ocel/pkg/proto/envvars/v1"
 )
 
 func withRunnerValues(t *testing.T, root string, opts envOptions, drive func(ctx context.Context, slug string, runner *providerrunner.Runner, values runnerValues) error) {
@@ -21,7 +21,7 @@ func withRunnerValues(t *testing.T, root string, opts envOptions, drive func(ctx
 		return drive(ctx, cfg.Slug, runner, runnerValues{
 			runner: runner,
 			slug:   cfg.Slug,
-			class:  envClass(opts),
+			tier:   envTier(opts),
 		})
 	})
 	if err != nil {
@@ -29,14 +29,14 @@ func withRunnerValues(t *testing.T, root string, opts envOptions, drive func(ctx
 	}
 }
 
-func storeValue(t *testing.T, ctx context.Context, runner *providerrunner.Runner, class deploymentsv1.Environment_Class, coordinate *envv1.Coordinate, value string) {
+func storeValue(t *testing.T, ctx context.Context, runner *providerrunner.Runner, tier environmentv1.Tier, coordinate *envvarsv1.Coordinate, value string) {
 	t.Helper()
 	vars, err := runner.Vars()
 	if err != nil {
 		t.Fatalf("reach the provider's variable store: %v", err)
 	}
-	if _, err := vars.SetValue(ctx, &envv1.SetValueRequest{
-		Class:      class,
+	if _, err := vars.SetValue(ctx, &envvarsv1.SetValueRequest{
+		Tier:       tier,
 		Coordinate: coordinate,
 		Value:      value,
 	}); err != nil {
@@ -71,8 +71,8 @@ func TestRunnerValues(t *testing.T) {
 		preview := envOptions{preview: true}
 
 		withRunnerValues(t, root, preview, func(ctx context.Context, slug string, runner *providerrunner.Runner, values runnerValues) error {
-			storeValue(t, ctx, runner, envClass(preview), &envv1.Coordinate{Slug: slug, Key: "API_URL"}, "https://root.example")
-			storeValue(t, ctx, runner, envClass(preview), &envv1.Coordinate{Slug: slug, Key: "STRIPE_API_KEY", Environment: "staging"}, "sk_pr")
+			storeValue(t, ctx, runner, envTier(preview), &envvarsv1.Coordinate{Slug: slug, Key: "API_URL"}, "https://root.example")
+			storeValue(t, ctx, runner, envTier(preview), &envvarsv1.Coordinate{Slug: slug, Key: "STRIPE_API_KEY", Environment: "staging"}, "sk_pr")
 
 			rows, err := values.List(ctx)
 			if err != nil {
@@ -98,7 +98,7 @@ func TestRunnerValues(t *testing.T) {
 		root := setUpEnvFixture(t)
 
 		withRunnerValues(t, root, envOptions{}, func(ctx context.Context, slug string, runner *providerrunner.Runner, values runnerValues) error {
-			storeValue(t, ctx, runner, envClass(envOptions{}), &envv1.Coordinate{Slug: slug, Key: "API_URL"}, "https://someone-elses.example")
+			storeValue(t, ctx, runner, envTier(envOptions{}), &envvarsv1.Coordinate{Slug: slug, Key: "API_URL"}, "https://someone-elses.example")
 			at := envgate.Address{Cell: envgate.Cell{Key: "API_URL"}}
 
 			unset := int64(0)
@@ -124,9 +124,9 @@ func TestRunnerValues(t *testing.T) {
 		root := setUpEnvFixture(t)
 
 		withRunnerValues(t, root, envOptions{}, func(ctx context.Context, slug string, runner *providerrunner.Runner, values runnerValues) error {
-			coordinate := &envv1.Coordinate{Slug: slug, Key: "API_URL"}
-			storeValue(t, ctx, runner, envClass(envOptions{}), coordinate, "https://first.example")
-			storeValue(t, ctx, runner, envClass(envOptions{}), coordinate, "https://someone-elses.example")
+			coordinate := &envvarsv1.Coordinate{Slug: slug, Key: "API_URL"}
+			storeValue(t, ctx, runner, envTier(envOptions{}), coordinate, "https://first.example")
+			storeValue(t, ctx, runner, envTier(envOptions{}), coordinate, "https://someone-elses.example")
 			at := envgate.Address{Cell: envgate.Cell{Key: "API_URL"}}
 
 			rendered := int64(1)

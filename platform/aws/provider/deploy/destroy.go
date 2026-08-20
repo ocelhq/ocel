@@ -11,7 +11,7 @@ import (
 	"github.com/pulumi/pulumi/sdk/v3/go/auto/optdestroy"
 
 	"github.com/ocelhq/ocel/pkg/naming"
-	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
+	environmentv1 "github.com/ocelhq/ocel/pkg/proto/environment/v1"
 )
 
 type StackTeardown struct {
@@ -125,7 +125,7 @@ func lockRecoveryHint(err error, cfg StackTeardown) string {
 
 type PreviewStack struct {
 	Identity  string
-	Lifecycle deploymentsv1.Environment_Lifecycle
+	Lifecycle environmentv1.Lifecycle
 	Label     string
 	CreatedAt int64
 	ExpiresAt int64
@@ -148,9 +148,9 @@ func previewStacksFromNames(stacks []naming.StackName) []PreviewStack {
 
 	previews := make([]PreviewStack, 0, len(plan.Pointers))
 	for _, pointer := range plan.Pointers {
-		lifecycle := deploymentsv1.Environment_LIFECYCLE_EPHEMERAL
+		lifecycle := environmentv1.Lifecycle_LIFECYCLE_EPHEMERAL
 		if _, ok := persistent[pointer]; ok {
-			lifecycle = deploymentsv1.Environment_LIFECYCLE_PERSISTENT
+			lifecycle = environmentv1.Lifecycle_LIFECYCLE_PERSISTENT
 		}
 		previews = append(previews, PreviewStack{Identity: pointer, Lifecycle: lifecycle})
 	}
