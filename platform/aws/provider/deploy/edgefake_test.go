@@ -87,17 +87,19 @@ func (f *recordingEdge) declared() edge.Edge {
 	return real
 }
 
-func (f *recordingEdge) Supports(need edge.Need) bool { return f.declared().Supports(need) }
-
 func (f *recordingEdge) Supported() []edge.Need { return f.declared().Supported() }
 
 func (f *recordingEdge) FlipBound() edge.FlipBound { return f.declared().FlipBound() }
 
-func (f *recordingEdge) ServesUnbound() bool { return edge.ServesUnbound(f.declared()) }
-
-func (f *recordingEdge) SignsOriginForwards() bool { return edge.SignsOriginForwards(f.declared()) }
-
-func (f *recordingEdge) InvalidatesByCacheTag() bool { return edge.InvalidatesByCacheTag(f.declared()) }
+func (f *recordingEdge) Facts() edge.Facts {
+	declared := f.declared().Facts()
+	return edge.Facts{
+		RunsCode:              true,
+		ServesUnbound:         declared.ServesUnbound,
+		SignsOriginForwards:   declared.SignsOriginForwards,
+		InvalidatesByCacheTag: declared.InvalidatesByCacheTag,
+	}
+}
 
 func (f *recordingEdge) ProjectSurfaces(scope edge.ProjectScope) []edge.Surface {
 	return f.declared().ProjectSurfaces(scope)
@@ -347,7 +349,7 @@ func withEdge(cfg Config, e edge.Edge) Config {
 
 func fakeEdgeOf(kind edge.Kind) edge.Edge {
 	f := &recordingEdge{kind: kind}
-	if slices.ContainsFunc(edge.CodeNeeds(), f.Supports) {
+	if slices.ContainsFunc(edge.CodeNeeds(), func(need edge.Need) bool { return edge.Supports(f, need) }) {
 		return f
 	}
 	return unprogrammableEdge{f}

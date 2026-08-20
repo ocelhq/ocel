@@ -147,7 +147,7 @@ func (s *Server) domainSession(ctx context.Context, req domainRequest) (*domainS
 		ssm:           ssmClient,
 		slug:          req.slug,
 		kind:          edgeFront.Kind(),
-		servesUnbound: edge.ServesUnbound(edgeFront),
+		servesUnbound: edgeFront.Facts().ServesUnbound,
 
 		stack:  stack,
 		writer: writer,

@@ -17,10 +17,11 @@ func resolveOriginGuard(cfg Config, app *deploymentsv1.ManifestApp) (*originGuar
 	if cfg.Edge == nil {
 		return nil, nil
 	}
-	if _, programmable := cfg.Edge.(edge.Programmable); programmable {
+	facts := cfg.Edge.Facts()
+	if facts.RunsCode {
 		return nil, nil
 	}
-	if edge.SignsOriginForwards(cfg.Edge) {
+	if facts.SignsOriginForwards {
 		return nil, nil
 	}
 	name := app.GetName()

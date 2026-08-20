@@ -317,7 +317,7 @@ func (s *Server) runDeploy(ctx context.Context, req *deploymentsv1.DeployRequest
 	}
 	admitted, err := admitDomains(ctx, domainGate{
 		kind:          edgeFront.Kind(),
-		servesUnbound: edge.ServesUnbound(edgeFront),
+		servesUnbound: edgeFront.Facts().ServesUnbound,
 
 		state:     params.StackState,
 		recorded:  recordedDomains,

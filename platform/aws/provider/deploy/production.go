@@ -311,7 +311,7 @@ func sharedWorker(e edge.Edge, f WorkerFacts) (edge.Worker, error) {
 }
 
 func stackSpecs(cfg Config, manifest *deploymentsv1.Manifest, version string, warn func(string)) ([]edge.StackSpec, error) {
-	_, programmable := cfg.Edge.(edge.Programmable)
+	programmable := cfg.Edge.Facts().RunsCode
 	var generic edge.Worker
 	if programmable {
 		var err error

@@ -146,7 +146,7 @@ func useDomain(ctx context.Context, run domainRun, recorded bootstrap.PreviewDom
 	domain := bootstrap.PreviewDomain{
 		BaseDomain:  baseDomain,
 		Edge:        run.edge.Kind(),
-		Scope:       edge.CredentialScope(run.edge),
+		Scope:       run.edge.Facts().CredentialScope,
 		GrammarMin:  edge.PreviewGrammarMin,
 		GrammarMax:  edge.PreviewGrammarMax,
 		Certificate: recorded.Certificate,
@@ -187,7 +187,7 @@ func useDomain(ctx context.Context, run domainRun, recorded bootstrap.PreviewDom
 		return err
 	}
 
-	target := edge.DNSTarget{Kind: run.edge.Kind(), ServesUnbound: edge.ServesUnbound(run.edge), Front: front}
+	target := edge.DNSTarget{Kind: run.edge.Kind(), ServesUnbound: run.edge.Facts().ServesUnbound, Front: front}
 	records, err := edge.RecordsFor(target, []string{wildcard})
 	if err != nil {
 		return err
@@ -566,7 +566,7 @@ func refuseRehomingPreviewWildcard(recorded bootstrap.PreviewDomain, kind edge.K
 }
 
 func globalPreviewScopeMismatch(recorded bootstrap.PreviewDomain, edgeFront edge.Edge) error {
-	ambient := edge.CredentialScope(edgeFront)
+	ambient := edgeFront.Facts().CredentialScope
 	if recorded.BaseDomain == "" || recorded.Scope == "" || ambient == "" || recorded.Scope == ambient {
 		return nil
 	}

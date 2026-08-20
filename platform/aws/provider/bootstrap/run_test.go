@@ -303,7 +303,7 @@ func (f *fakeEdge) Bootstrap(_ context.Context, class edge.Class) (edge.Bootstra
 
 func (f *fakeEdge) Teardown(context.Context, edge.Class) error { return nil }
 
-func (f *fakeEdge) Supports(need edge.Need) bool { return slices.Contains(f.needs, need) }
+func (f *fakeEdge) Facts() edge.Facts { return edge.Facts{} }
 
 func (f *fakeEdge) Supported() []edge.Need { return slices.Clone(f.needs) }
 

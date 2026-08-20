@@ -275,7 +275,7 @@ func newDomainFixture(opts domainFixtureOptions) *domainFixture {
 		ssm:           f.ssm,
 		slug:          domainSlug,
 		kind:          kind,
-		servesUnbound: edge.ServesUnbound(registeredEdge(kind)),
+		servesUnbound: registeredEdge(kind).Facts().ServesUnbound,
 
 		stack:  front,
 		writer: writer,

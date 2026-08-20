@@ -146,11 +146,11 @@ func FromConfig(load func(context.Context) (aws.Config, error)) func(context.Con
 
 func (p *provider) Kind() edge.Kind { return Kind }
 
-var supported = []edge.Need{edge.NeedEdgeCache, edge.NeedStreaming}
-
-func (p *provider) Supports(need edge.Need) bool {
-	return slices.Contains(supported, need)
+func (p *provider) Facts() edge.Facts {
+	return edge.Facts{InvalidatesByCacheTag: true}
 }
+
+var supported = []edge.Need{edge.NeedEdgeCache, edge.NeedStreaming}
 
 func (p *provider) Supported() []edge.Need {
 	return slices.Clone(supported)
@@ -161,10 +161,6 @@ func (p *provider) FlipBound() edge.FlipBound {
 }
 
 func (p *provider) CertificateRegion(string) string { return certs.CloudFrontRegion }
-
-func (p *provider) SignsOriginForwards() bool { return false }
-
-func (p *provider) InvalidatesByCacheTag() bool { return true }
 
 const distributionDeleteReason = "CloudFront only deletes a disabled distribution once the disable has reached every edge"
 

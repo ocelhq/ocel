@@ -626,7 +626,7 @@ type scopedEdge struct {
 
 func (e *scopedEdge) Kind() edge.Kind { return cloudflare.Kind }
 
-func (e *scopedEdge) CredentialScope() string { return e.scope }
+func (e *scopedEdge) Facts() edge.Facts { return edge.Facts{CredentialScope: e.scope} }
 
 type wildcardEdge struct {
 	edge.Edge
@@ -635,6 +635,8 @@ type wildcardEdge struct {
 }
 
 func (e *wildcardEdge) Kind() edge.Kind { return cloudfront.Kind }
+
+func (e *wildcardEdge) Facts() edge.Facts { return edge.Facts{} }
 
 func (e *wildcardEdge) ReconcilePreviewWildcard(_ context.Context, spec edge.PreviewWildcardSpec) (string, error) {
 	e.specs = append(e.specs, spec)
@@ -645,11 +647,11 @@ type unboundWildcardEdge struct {
 	edge.Edge
 }
 
-func (e *unboundWildcardEdge) CredentialScope() string { return "cf-ambient" }
+func (e *unboundWildcardEdge) Facts() edge.Facts {
+	return edge.Facts{ServesUnbound: true, CredentialScope: "cf-ambient"}
+}
 
 func (e *unboundWildcardEdge) Kind() edge.Kind { return cloudflare.Kind }
-
-func (e *unboundWildcardEdge) ServesUnbound() bool { return true }
 
 func (e *unboundWildcardEdge) ReconcilePreviewWildcard(context.Context, edge.PreviewWildcardSpec) (string, error) {
 	return "", nil

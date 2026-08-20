@@ -38,7 +38,7 @@ func PreviewWildcardSpecFor(w PreviewWildcard, baseDomain string, warn func(stri
 		Values:     w.Values,
 		Warn:       warn,
 	}
-	if _, programmable := w.Edge.(edge.Programmable); !programmable {
+	if !w.Edge.Facts().RunsCode {
 		return spec, nil
 	}
 	generic, err := sharedWorker(w.Edge, w.Worker)

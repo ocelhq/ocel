@@ -2,6 +2,7 @@ package edge
 
 import (
 	"context"
+	"slices"
 	"time"
 )
 
@@ -33,6 +34,10 @@ func NeedNames(needs []Need) []string {
 	return names
 }
 
+func Supports(e Edge, need Need) bool {
+	return slices.Contains(e.Supported(), need)
+}
+
 func ValidNeed(need Need) bool {
 	for _, n := range AllNeeds() {
 		if n == need {
@@ -47,10 +52,18 @@ type FlipBound struct {
 	Published bool          `json:"published"`
 }
 
+type Facts struct {
+	RunsCode              bool
+	ServesUnbound         bool
+	SignsOriginForwards   bool
+	InvalidatesByCacheTag bool
+	CredentialScope       string
+}
+
 type Edge interface {
 	Kind() Kind
 
-	Supports(need Need) bool
+	Facts() Facts
 
 	Supported() []Need
 
@@ -153,35 +166,6 @@ type Programmable interface {
 
 type CredentialVerifier interface {
 	VerifyCredentials(ctx context.Context) (CredentialIdentity, error)
-}
-
-type OriginSigner interface {
-	SignsOriginForwards() bool
-}
-
-func SignsOriginForwards(e Edge) bool {
-	signer, ok := e.(OriginSigner)
-	return ok && signer.SignsOriginForwards()
-}
-
-type CacheTagInvalidator interface {
-	InvalidatesByCacheTag() bool
-}
-
-func InvalidatesByCacheTag(e Edge) bool {
-	invalidator, ok := e.(CacheTagInvalidator)
-	return ok && invalidator.InvalidatesByCacheTag()
-}
-
-type ScopeBound interface {
-	CredentialScope() string
-}
-
-func CredentialScope(e Edge) string {
-	if bound, ok := e.(ScopeBound); ok {
-		return bound.CredentialScope()
-	}
-	return ""
 }
 
 type CredentialIdentity struct {

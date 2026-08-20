@@ -133,17 +133,8 @@ func ForgetHostFront(state StackState, hostname string) StackState {
 	return RecordHostFront(state, hostname, "")
 }
 
-type UnboundServer interface {
-	ServesUnbound() bool
-}
-
-func ServesUnbound(e Edge) bool {
-	server, ok := e.(UnboundServer)
-	return ok && server.ServesUnbound()
-}
-
 func TargetFor(e Edge, state StackState) DNSTarget {
-	return TargetOf(e.Kind(), ServesUnbound(e), state)
+	return TargetOf(e.Kind(), e.Facts().ServesUnbound, state)
 }
 
 func TargetOf(kind Kind, servesUnbound bool, state StackState) DNSTarget {
