@@ -342,13 +342,13 @@ func (r *Runner) RemovePreviewWildcard(ctx context.Context, req *contractv1.Prev
 	})
 }
 
-func (r *Runner) AddHostname(ctx context.Context, req *contractv1.AddHostnameRequest, onEvent func(*progressv1.OperationEvent)) error {
+func (r *Runner) AddHostname(ctx context.Context, req *contractv1.HostnameRequest, onEvent func(*progressv1.OperationEvent)) error {
 	return r.stream(ctx, "AddHostname", onEvent, func(client contractv1connect.ProviderServiceClient) (*connect.ServerStreamForClient[progressv1.OperationEvent], error) {
 		return client.AddHostname(ctx, req)
 	})
 }
 
-func (r *Runner) RemoveHostname(ctx context.Context, req *contractv1.RemoveHostnameRequest, onEvent func(*progressv1.OperationEvent)) error {
+func (r *Runner) RemoveHostname(ctx context.Context, req *contractv1.HostnameRequest, onEvent func(*progressv1.OperationEvent)) error {
 	return r.stream(ctx, "RemoveHostname", onEvent, func(client contractv1connect.ProviderServiceClient) (*connect.ServerStreamForClient[progressv1.OperationEvent], error) {
 		return client.RemoveHostname(ctx, req)
 	})

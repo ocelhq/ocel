@@ -11,7 +11,7 @@ import (
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
-func (s *Server) GetHostnameStatus(ctx context.Context, req *contractv1.GetHostnameStatusRequest) (*contractv1.GetHostnameStatusResponse, error) {
+func (s *Server) GetHostnameStatus(ctx context.Context, req *contractv1.HostnameRequest) (*contractv1.GetHostnameStatusResponse, error) {
 	session, err := s.hostnameSession(ctx, hostnameRequest{
 		slug:        req.GetSlug(),
 		edgeKind:    string(requestedEdge(req)),

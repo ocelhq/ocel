@@ -700,7 +700,7 @@ func (s *deployFakeProviderServer) RemovePreviewWildcard(ctx context.Context, re
 
 const fakeDomainTimeoutEnvVar = "OCEL_TEST_FAKE_DOMAIN_TIMEOUT"
 
-func (s *deployFakeProviderServer) AddHostname(ctx context.Context, req *contractv1.AddHostnameRequest, stream *connect.ServerStream[progressv1.OperationEvent]) error {
+func (s *deployFakeProviderServer) AddHostname(ctx context.Context, req *contractv1.HostnameRequest, stream *connect.ServerStream[progressv1.OperationEvent]) error {
 	if err := s.checkToken(ctx); err != nil {
 		return err
 	}
@@ -758,7 +758,7 @@ func (s *deployFakeProviderServer) AddHostname(ctx context.Context, req *contrac
 	})
 }
 
-func (s *deployFakeProviderServer) RemoveHostname(ctx context.Context, req *contractv1.RemoveHostnameRequest, stream *connect.ServerStream[progressv1.OperationEvent]) error {
+func (s *deployFakeProviderServer) RemoveHostname(ctx context.Context, req *contractv1.HostnameRequest, stream *connect.ServerStream[progressv1.OperationEvent]) error {
 	if err := s.checkToken(ctx); err != nil {
 		return err
 	}
@@ -795,7 +795,7 @@ const (
 	fakeDomainFailUntilEnvVar  = "OCEL_TEST_FAKE_DOMAIN_FAIL_UNTIL"
 )
 
-func (s *deployFakeProviderServer) GetHostnameStatus(ctx context.Context, req *contractv1.GetHostnameStatusRequest) (*contractv1.GetHostnameStatusResponse, error) {
+func (s *deployFakeProviderServer) GetHostnameStatus(ctx context.Context, req *contractv1.HostnameRequest) (*contractv1.GetHostnameStatusResponse, error) {
 	if err := s.checkToken(ctx); err != nil {
 		return nil, err
 	}

@@ -46,11 +46,11 @@ service ProviderService {
 
     rpc RemovePreviewWildcard(PreviewWildcardRequest) returns (stream common.progress.v1.OperationEvent);
 
-    rpc AddHostname(AddHostnameRequest) returns (stream common.progress.v1.OperationEvent);
+    rpc AddHostname(HostnameRequest) returns (stream common.progress.v1.OperationEvent);
 
-    rpc RemoveHostname(RemoveHostnameRequest) returns (stream common.progress.v1.OperationEvent);
+    rpc RemoveHostname(HostnameRequest) returns (stream common.progress.v1.OperationEvent);
 
-    rpc GetHostnameStatus(GetHostnameStatusRequest) returns (GetHostnameStatusResponse);
+    rpc GetHostnameStatus(HostnameRequest) returns (GetHostnameStatusResponse);
 }
 
 message AwsProviderConfig {
@@ -93,7 +93,7 @@ message GetPreviewWildcardResponse {
   repeated string projects = 2;
 }
 
-message AddHostnameRequest {
+message HostnameRequest {
   string slug = 1 [(buf.validate.field).string = {pattern: "^[a-z0-9]+(-[a-z0-9]+)*$", max_len: 63}];
 
   repeated string configured = 2;
@@ -101,24 +101,6 @@ message AddHostnameRequest {
   string host = 3;
 
   EdgeSelection edge = 4;
-}
-
-message RemoveHostnameRequest {
-  string slug = 1 [(buf.validate.field).string = {pattern: "^[a-z0-9]+(-[a-z0-9]+)*$", max_len: 63}];
-
-  repeated string configured = 2;
-
-  string host = 3;
-
-  EdgeSelection edge = 4;
-}
-
-message GetHostnameStatusRequest {
-  string slug = 1 [(buf.validate.field).string = {pattern: "^[a-z0-9]+(-[a-z0-9]+)*$", max_len: 63}];
-
-  repeated string configured = 2;
-
-  EdgeSelection edge = 3;
 }
 
 message GetHostnameStatusResponse {

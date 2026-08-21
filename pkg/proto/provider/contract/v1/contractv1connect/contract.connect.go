@@ -118,9 +118,9 @@ type ProviderServiceClient interface {
 	GetPreviewWildcard(context.Context, *v1.PreviewWildcardRequest) (*v1.GetPreviewWildcardResponse, error)
 	PlanRemovePreviewWildcard(context.Context, *v1.PreviewWildcardRequest) (*v1.RemovalPlan, error)
 	RemovePreviewWildcard(context.Context, *v1.PreviewWildcardRequest) (*connect.ServerStreamForClient[v11.OperationEvent], error)
-	AddHostname(context.Context, *v1.AddHostnameRequest) (*connect.ServerStreamForClient[v11.OperationEvent], error)
-	RemoveHostname(context.Context, *v1.RemoveHostnameRequest) (*connect.ServerStreamForClient[v11.OperationEvent], error)
-	GetHostnameStatus(context.Context, *v1.GetHostnameStatusRequest) (*v1.GetHostnameStatusResponse, error)
+	AddHostname(context.Context, *v1.HostnameRequest) (*connect.ServerStreamForClient[v11.OperationEvent], error)
+	RemoveHostname(context.Context, *v1.HostnameRequest) (*connect.ServerStreamForClient[v11.OperationEvent], error)
+	GetHostnameStatus(context.Context, *v1.HostnameRequest) (*v1.GetHostnameStatusResponse, error)
 }
 
 // NewProviderServiceClient constructs a client for the provider.contract.v1.ProviderService
@@ -242,19 +242,19 @@ func NewProviderServiceClient(httpClient connect.HTTPClient, baseURL string, opt
 			connect.WithSchema(providerServiceMethods.ByName("RemovePreviewWildcard")),
 			connect.WithClientOptions(opts...),
 		),
-		addHostname: connect.NewClient[v1.AddHostnameRequest, v11.OperationEvent](
+		addHostname: connect.NewClient[v1.HostnameRequest, v11.OperationEvent](
 			httpClient,
 			baseURL+ProviderServiceAddHostnameProcedure,
 			connect.WithSchema(providerServiceMethods.ByName("AddHostname")),
 			connect.WithClientOptions(opts...),
 		),
-		removeHostname: connect.NewClient[v1.RemoveHostnameRequest, v11.OperationEvent](
+		removeHostname: connect.NewClient[v1.HostnameRequest, v11.OperationEvent](
 			httpClient,
 			baseURL+ProviderServiceRemoveHostnameProcedure,
 			connect.WithSchema(providerServiceMethods.ByName("RemoveHostname")),
 			connect.WithClientOptions(opts...),
 		),
-		getHostnameStatus: connect.NewClient[v1.GetHostnameStatusRequest, v1.GetHostnameStatusResponse](
+		getHostnameStatus: connect.NewClient[v1.HostnameRequest, v1.GetHostnameStatusResponse](
 			httpClient,
 			baseURL+ProviderServiceGetHostnameStatusProcedure,
 			connect.WithSchema(providerServiceMethods.ByName("GetHostnameStatus")),
@@ -283,9 +283,9 @@ type providerServiceClient struct {
 	getPreviewWildcard        *connect.Client[v1.PreviewWildcardRequest, v1.GetPreviewWildcardResponse]
 	planRemovePreviewWildcard *connect.Client[v1.PreviewWildcardRequest, v1.RemovalPlan]
 	removePreviewWildcard     *connect.Client[v1.PreviewWildcardRequest, v11.OperationEvent]
-	addHostname               *connect.Client[v1.AddHostnameRequest, v11.OperationEvent]
-	removeHostname            *connect.Client[v1.RemoveHostnameRequest, v11.OperationEvent]
-	getHostnameStatus         *connect.Client[v1.GetHostnameStatusRequest, v1.GetHostnameStatusResponse]
+	addHostname               *connect.Client[v1.HostnameRequest, v11.OperationEvent]
+	removeHostname            *connect.Client[v1.HostnameRequest, v11.OperationEvent]
+	getHostnameStatus         *connect.Client[v1.HostnameRequest, v1.GetHostnameStatusResponse]
 }
 
 // Configure calls provider.contract.v1.ProviderService.Configure.
@@ -419,17 +419,17 @@ func (c *providerServiceClient) RemovePreviewWildcard(ctx context.Context, req *
 }
 
 // AddHostname calls provider.contract.v1.ProviderService.AddHostname.
-func (c *providerServiceClient) AddHostname(ctx context.Context, req *v1.AddHostnameRequest) (*connect.ServerStreamForClient[v11.OperationEvent], error) {
+func (c *providerServiceClient) AddHostname(ctx context.Context, req *v1.HostnameRequest) (*connect.ServerStreamForClient[v11.OperationEvent], error) {
 	return c.addHostname.CallServerStream(ctx, connect.NewRequest(req))
 }
 
 // RemoveHostname calls provider.contract.v1.ProviderService.RemoveHostname.
-func (c *providerServiceClient) RemoveHostname(ctx context.Context, req *v1.RemoveHostnameRequest) (*connect.ServerStreamForClient[v11.OperationEvent], error) {
+func (c *providerServiceClient) RemoveHostname(ctx context.Context, req *v1.HostnameRequest) (*connect.ServerStreamForClient[v11.OperationEvent], error) {
 	return c.removeHostname.CallServerStream(ctx, connect.NewRequest(req))
 }
 
 // GetHostnameStatus calls provider.contract.v1.ProviderService.GetHostnameStatus.
-func (c *providerServiceClient) GetHostnameStatus(ctx context.Context, req *v1.GetHostnameStatusRequest) (*v1.GetHostnameStatusResponse, error) {
+func (c *providerServiceClient) GetHostnameStatus(ctx context.Context, req *v1.HostnameRequest) (*v1.GetHostnameStatusResponse, error) {
 	response, err := c.getHostnameStatus.CallUnary(ctx, connect.NewRequest(req))
 	if response != nil {
 		return response.Msg, err
@@ -457,9 +457,9 @@ type ProviderServiceHandler interface {
 	GetPreviewWildcard(context.Context, *v1.PreviewWildcardRequest) (*v1.GetPreviewWildcardResponse, error)
 	PlanRemovePreviewWildcard(context.Context, *v1.PreviewWildcardRequest) (*v1.RemovalPlan, error)
 	RemovePreviewWildcard(context.Context, *v1.PreviewWildcardRequest, *connect.ServerStream[v11.OperationEvent]) error
-	AddHostname(context.Context, *v1.AddHostnameRequest, *connect.ServerStream[v11.OperationEvent]) error
-	RemoveHostname(context.Context, *v1.RemoveHostnameRequest, *connect.ServerStream[v11.OperationEvent]) error
-	GetHostnameStatus(context.Context, *v1.GetHostnameStatusRequest) (*v1.GetHostnameStatusResponse, error)
+	AddHostname(context.Context, *v1.HostnameRequest, *connect.ServerStream[v11.OperationEvent]) error
+	RemoveHostname(context.Context, *v1.HostnameRequest, *connect.ServerStream[v11.OperationEvent]) error
+	GetHostnameStatus(context.Context, *v1.HostnameRequest) (*v1.GetHostnameStatusResponse, error)
 }
 
 // NewProviderServiceHandler builds an HTTP handler from the service implementation. It returns the
@@ -720,14 +720,14 @@ func (UnimplementedProviderServiceHandler) RemovePreviewWildcard(context.Context
 	return connect.NewError(connect.CodeUnimplemented, errors.New("provider.contract.v1.ProviderService.RemovePreviewWildcard is not implemented"))
 }
 
-func (UnimplementedProviderServiceHandler) AddHostname(context.Context, *v1.AddHostnameRequest, *connect.ServerStream[v11.OperationEvent]) error {
+func (UnimplementedProviderServiceHandler) AddHostname(context.Context, *v1.HostnameRequest, *connect.ServerStream[v11.OperationEvent]) error {
 	return connect.NewError(connect.CodeUnimplemented, errors.New("provider.contract.v1.ProviderService.AddHostname is not implemented"))
 }
 
-func (UnimplementedProviderServiceHandler) RemoveHostname(context.Context, *v1.RemoveHostnameRequest, *connect.ServerStream[v11.OperationEvent]) error {
+func (UnimplementedProviderServiceHandler) RemoveHostname(context.Context, *v1.HostnameRequest, *connect.ServerStream[v11.OperationEvent]) error {
 	return connect.NewError(connect.CodeUnimplemented, errors.New("provider.contract.v1.ProviderService.RemoveHostname is not implemented"))
 }
 
-func (UnimplementedProviderServiceHandler) GetHostnameStatus(context.Context, *v1.GetHostnameStatusRequest) (*v1.GetHostnameStatusResponse, error) {
+func (UnimplementedProviderServiceHandler) GetHostnameStatus(context.Context, *v1.HostnameRequest) (*v1.GetHostnameStatusResponse, error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("provider.contract.v1.ProviderService.GetHostnameStatus is not implemented"))
 }
