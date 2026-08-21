@@ -1,3 +1,4 @@
+/** A value SST accepts before its final value is available. */
 export type Input<T> =
   | T
   | Promise<T>
@@ -68,6 +69,18 @@ export function scoped(
   return grants;
 }
 
+/** Grants whose resource inputs reject wildcards when SST resolves them. */
+export function scopedInputs(
+  name: string,
+  grants: Grant[] | undefined,
+): Grant[] | undefined {
+  const checked = scoped(name, grants);
+  return checked?.map((grant) => ({
+    ...grant,
+    resources: grant.resources.map((resource) => scopedInput(name, resource)),
+  }));
+}
+
 const awsPermission = "aws.permission";
 
 const wildcard = "*";
@@ -81,4 +94,21 @@ function unscopedAction(action: string): boolean {
     action.slice(0, separator) === wildcard ||
     action.slice(separator + 1) === wildcard
   );
+}
+
+function scopedInput(name: string, resource: Input<string>): Input<string> {
+  if (typeof resource === "string") return scopedResource(name, resource);
+  if (resource instanceof Promise) {
+    return resource.then((value) => scopedResource(name, value));
+  }
+  return resource.apply((value) => scopedResource(name, value)) as Input<string>;
+}
+
+function scopedResource(name: string, resource: string): string {
+  if (resource === wildcard) {
+    throw new Error(
+      `link ${name} carries a grant over ${wildcard}: an app receives permissions for the resource it links and nothing else`,
+    );
+  }
+  return resource;
 }

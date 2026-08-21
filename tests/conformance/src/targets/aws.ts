@@ -304,7 +304,8 @@ export function createAwsTarget(token: string): Target {
       }
       try {
         if (example.linkTool) {
-          external = await provisionExternalLinks(example, slug, ref);
+          external = provisionExternalLinks(example, slug, ref);
+          await external.provision();
           await external.assertPublished();
         }
         await runOcel("ocel build", ["build"], example, env);

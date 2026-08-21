@@ -1,7 +1,7 @@
 import { execFileSync } from "node:child_process";
-import { access, mkdir, rm } from "node:fs/promises";
 import path from "node:path";
-import { pathToFileURL } from "node:url";
+import { provisionPulumi, removePulumi } from "./aws-links/pulumi";
+import { provisionSst, removeSst } from "./aws-links/sst";
 import { examples } from "./examples";
 import {
   customLinkName,
@@ -15,7 +15,6 @@ import {
   pairProblem,
   publishedRecordProblem,
   recordSortKey,
-  splitIds,
   valueSortKey,
   varsReachProblem,
   vpcPlacementProblem,
@@ -24,7 +23,7 @@ import {
   type LinkSource,
   type StoreRow,
 } from "./links";
-import { run, successful } from "./process";
+import { successful } from "./process";
 import type { Example, LinkReport, LinkTool } from "./types";
 
 const timeoutMs = 45 * 60_000;
@@ -39,8 +38,9 @@ type FunctionConfiguration = {
 };
 
 export type ExternalLinks = {
-  outputs: LinkOutputs;
-  report: LinkReport;
+  readonly outputs: LinkOutputs;
+  readonly report: LinkReport;
+  provision: () => Promise<void>;
   teardown: () => Promise<void>;
   assertPublished: () => Promise<void>;
   assertConsumed: (appName: string) => Promise<void>;
@@ -197,10 +197,6 @@ function stackToken() {
   return `e2e-${token || "local"}`;
 }
 
-function pulumiStateDir(example: Example) {
-  return path.join(example.dir, ".ocel", "conformance-pulumi");
-}
-
 function baseEnvironment(example: Example, slug: string, environment: string) {
   return {
     ...process.env,
@@ -208,167 +204,6 @@ function baseEnvironment(example: Example, slug: string, environment: string) {
     OCEL_LINK_ENVIRONMENT: environment,
     OCEL_LINK_PROJECT: example.dir,
     OCEL_TEST_PROJECT_SLUG: slug,
-  };
-}
-
-function outputsFromSst(stdout: string): LinkOutputs {
-  const values: Record<string, string> = {};
-  for (const line of stdout.split("\n")) {
-    const match = /^\s*([A-Za-z][A-Za-z0-9_]*)\s*:\s*(\S.*?)\s*$/.exec(line);
-    if (match) values[match[1]!] = match[2]!;
-  }
-  return outputs({
-    host: values.host,
-    port: values.port,
-    database: values.database,
-    subnetIds: values.subnetIds,
-    securityGroupIds: values.securityGroupIds,
-  });
-}
-
-function outputs(values: Record<string, unknown>): LinkOutputs {
-  for (const name of ["host", "port", "database"] as const) {
-    if (values[name] === undefined || values[name] === "") {
-      throw new Error(`the external stack returned no ${name}`);
-    }
-  }
-  const subnetIds = splitIds(values.subnetIds);
-  const securityGroupIds = splitIds(values.securityGroupIds);
-  if (!subnetIds.length || !securityGroupIds.length) {
-    throw new Error("the external stack returned no network placement");
-  }
-  return {
-    host: String(values.host),
-    port: String(values.port),
-    database: String(values.database),
-    subnetIds,
-    securityGroupIds,
-  };
-}
-
-async function provisionSst(
-  example: Example,
-  env: NodeJS.ProcessEnv,
-  stack: string,
-) {
-  await successful(
-    "sst deploy",
-    "pnpm",
-    ["exec", "sst", "deploy", "--stage", stack],
-    { cwd: example.dir, env, timeoutMs },
-  );
-  const result = await successful(
-    "sst outputs",
-    "pnpm",
-    ["exec", "sst", "outputs", "--stage", stack],
-    { cwd: example.dir, env, timeoutMs },
-  );
-  return {
-    outputs: outputsFromSst(result.stdout),
-    teardown: async () => {
-      await successful(
-        "sst remove",
-        "pnpm",
-        ["exec", "sst", "remove", "--stage", stack],
-        { cwd: example.dir, env, timeoutMs },
-      );
-    },
-  };
-}
-
-function pulumiEnvironment(example: Example, env: NodeJS.ProcessEnv) {
-  const state = pulumiStateDir(example);
-  const passphrase = process.env.PULUMI_CONFIG_PASSPHRASE;
-  if (!passphrase) {
-    throw new Error("PULUMI_CONFIG_PASSPHRASE is required by the Pulumi fixture");
-  }
-  return {
-    state,
-    env: {
-      ...env,
-      PULUMI_BACKEND_URL: pathToFileURL(state).href,
-      PULUMI_CONFIG_PASSPHRASE: passphrase,
-    },
-  };
-}
-
-async function provisionPulumi(
-  example: Example,
-  env: NodeJS.ProcessEnv,
-  stack: string,
-) {
-  const local = pulumiEnvironment(example, env);
-  await mkdir(local.state, { recursive: true });
-  await successful("pulumi login", "pulumi", ["login", local.env.PULUMI_BACKEND_URL], {
-    cwd: example.dir,
-    env: local.env,
-    timeoutMs,
-  });
-  await successful(
-    "pulumi stack init",
-    "pulumi",
-    ["stack", "init", stack, "--non-interactive"],
-    { cwd: example.dir, env: local.env, timeoutMs },
-  );
-  const region = process.env.AWS_REGION;
-  if (!region) throw new Error("AWS_REGION is required by the Pulumi fixture");
-  await successful(
-    "pulumi aws region",
-    "pulumi",
-    ["config", "set", "aws:region", region, "--stack", stack, "--non-interactive"],
-    { cwd: example.dir, env: local.env, timeoutMs },
-  );
-  await successful(
-    "pulumi database password",
-    "pulumi",
-    [
-      "config",
-      "set",
-      "--secret",
-      "dbPassword",
-      crypto.randomUUID().replaceAll("-", ""),
-      "--stack",
-      stack,
-      "--non-interactive",
-    ],
-    { cwd: example.dir, env: local.env, timeoutMs },
-  );
-  await successful(
-    "pulumi up",
-    "pulumi",
-    ["up", "--stack", stack, "--yes", "--skip-preview", "--non-interactive"],
-    { cwd: example.dir, env: local.env, timeoutMs },
-  );
-  const result = await successful(
-    "pulumi stack output",
-    "pulumi",
-    ["stack", "output", "--json", "--stack", stack],
-    { cwd: example.dir, env: local.env, timeoutMs },
-  );
-  const parsed = JSON.parse(result.stdout) as Record<string, unknown>;
-  return {
-    outputs: outputs({
-      host: parsed.host,
-      port: parsed.port,
-      database: parsed.database,
-      subnetIds: parsed.publishedSubnetIds,
-      securityGroupIds: parsed.publishedSecurityGroupIds,
-    }),
-    teardown: async () => {
-      await successful(
-        "pulumi destroy",
-        "pulumi",
-        ["destroy", "--stack", stack, "--yes", "--skip-preview", "--non-interactive"],
-        { cwd: example.dir, env: local.env, timeoutMs },
-      );
-      await successful(
-        "pulumi stack rm",
-        "pulumi",
-        ["stack", "rm", stack, "--yes", "--non-interactive"],
-        { cwd: example.dir, env: local.env, timeoutMs },
-      );
-      await rm(local.state, { recursive: true, force: true });
-    },
   };
 }
 
@@ -430,34 +265,51 @@ function records(
   };
 }
 
-export async function provisionExternalLinks(
+export function provisionExternalLinks(
   example: Example,
   slug: string,
   environment: string,
-): Promise<ExternalLinks> {
+): ExternalLinks {
   const tool = example.linkTool;
   if (!tool) throw new Error(`${example.name} names no external link tool`);
   const stack = stackToken();
   const env = baseEnvironment(example, slug, environment);
-  const provisioned =
-    tool === "sst"
-      ? await provisionSst(example, env, stack)
-      : await provisionPulumi(example, env, stack);
   const expected = expectations(tool, example.name, stack);
-  const report = {
-    host: provisioned.outputs.host,
-    port: provisioned.outputs.port,
-    database: provisioned.outputs.database,
-    hasPassword: true,
-    connected: true,
+  let provisioned: { outputs: LinkOutputs } | undefined;
+  let table: string | undefined;
+  const ready = () => {
+    if (!provisioned) throw new Error(`${tool} external links are not provisioned`);
+    return provisioned;
   };
+  const tableForFixture = () => (table ??= varsTable());
   return {
-    outputs: provisioned.outputs,
-    report,
-    teardown: provisioned.teardown,
+    get outputs() {
+      return ready().outputs;
+    },
+    get report() {
+      const published = ready().outputs;
+      return {
+        host: published.host,
+        port: published.port,
+        database: published.database,
+        hasPassword: true,
+        connected: true,
+      };
+    },
+    provision: async () => {
+      provisioned =
+        tool === "sst"
+          ? await provisionSst(example, env, stack)
+          : await provisionPulumi(example, env, stack);
+    },
+    teardown: async () => {
+      if (tool === "sst") await removeSst(example, env, stack);
+      else await removePulumi(example, env, stack);
+    },
     assertPublished: async () => {
+      ready();
       const links = await listedLinks(example, env, environment);
-      const table = varsTable();
+      const table = tableForFixture();
       for (const expectation of expected) {
         requireValid(
           `${expectation.name} listing`,
@@ -486,7 +338,8 @@ export async function provisionExternalLinks(
       }
     },
     assertConsumed: async (appName) => {
-      const table = varsTable();
+      const published = ready();
+      const table = tableForFixture();
       const postgres = records(table, slug, environment, expected[0]);
       requireValid(
         "consumed postgres record",
@@ -514,14 +367,14 @@ export async function provisionExternalLinks(
         if (!("OCEL_RESOURCE_POSTGRES_orders" in variables)) {
           throw new Error(`${configuration.FunctionName} has no orders link environment`);
         }
-        for (const value of [provisioned.outputs.host, provisioned.outputs.database]) {
+        for (const value of [published.outputs.host, published.outputs.database]) {
           if (Object.values(variables).some((entry) => entry.includes(value))) {
             throw new Error(`${configuration.FunctionName} carries a link value in cleartext`);
           }
         }
         requireValid(
           `${configuration.FunctionName} placement`,
-          vpcPlacementProblem(configuration, provisioned.outputs),
+          vpcPlacementProblem(configuration, published.outputs),
         );
       }
       const roles = [...new Set(configurations.map((config) => roleName(config.Role)))];
@@ -539,11 +392,11 @@ export async function provisionExternalLinks(
       );
     },
     assertConsumerRemoved: () => {
-      const row = records(varsTable(), slug, environment, expected[0]).record;
+      const row = records(tableForFixture(), slug, environment, expected[0]).record;
       if (!row) throw new Error("consumer removal deleted the publisher's record");
     },
     assertPublisherRemoved: () => {
-      const table = varsTable();
+      const table = tableForFixture();
       for (const expectation of expected) {
         const rows = partitionRows(table, linkPartitionKey(slug, expectation.name));
         if (rows[recordSortKey(environment)] || rows[valueSortKey(environment)]) {
@@ -554,65 +407,15 @@ export async function provisionExternalLinks(
   };
 }
 
-async function removeSst(example: Example, slug: string, stack: string) {
-  const env = baseEnvironment(example, slug, `conformance-${example.name}`);
-  const result = await run("pnpm", ["exec", "sst", "remove", "--stage", stack], {
-    cwd: example.dir,
-    env,
-    timeoutMs,
-  });
-  if (
-    result.code !== 0 &&
-    !`${result.stdout}\n${result.stderr}`.toLowerCase().includes("not found")
-  ) {
-    throw new Error(`sst remove failed\n${result.stdout}\n${result.stderr}`);
-  }
-}
-
-async function removePulumi(example: Example, slug: string, stack: string) {
-  const env = baseEnvironment(example, slug, `conformance-${example.name}`);
-  const local = pulumiEnvironment(example, env);
-  try {
-    await access(local.state);
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === "ENOENT") return;
-    throw error;
-  }
-  await successful("pulumi login", "pulumi", ["login", local.env.PULUMI_BACKEND_URL], {
-    cwd: example.dir,
-    env: local.env,
-    timeoutMs,
-  });
-  const selected = await run(
-    "pulumi",
-    ["stack", "select", stack, "--non-interactive"],
-    { cwd: example.dir, env: local.env, timeoutMs },
-  );
-  if (selected.code === 0) {
-    await successful(
-      "pulumi destroy",
-      "pulumi",
-      ["destroy", "--stack", stack, "--yes", "--skip-preview", "--non-interactive"],
-      { cwd: example.dir, env: local.env, timeoutMs },
-    );
-    await successful(
-      "pulumi stack rm",
-      "pulumi",
-      ["stack", "rm", stack, "--yes", "--non-interactive"],
-      { cwd: example.dir, env: local.env, timeoutMs },
-    );
-  }
-  await rm(local.state, { recursive: true, force: true });
-}
-
 export async function teardownExternalLinks(slug: string) {
   const stack = stackToken();
   const failures: unknown[] = [];
   for (const example of examples) {
     const tool = "linkTool" in example ? (example.linkTool as LinkTool) : undefined;
+    const env = baseEnvironment(example, slug, `conformance-${example.name}`);
     try {
-      if (tool === "sst") await removeSst(example, slug, stack);
-      if (tool === "pulumi") await removePulumi(example, slug, stack);
+      if (tool === "sst") await removeSst(example, env, stack);
+      if (tool === "pulumi") await removePulumi(example, env, stack);
     } catch (error) {
       failures.push(error);
     }

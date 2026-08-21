@@ -1,6 +1,7 @@
 import { spawnSync } from "node:child_process";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { link } from "./index.js";
 import { custom, customProvider, postgres, postgresProvider } from "./resource.js";
 
 vi.mock("node:child_process", () => ({ spawnSync: vi.fn() }));
@@ -74,6 +75,43 @@ function argv() {
   return { command: call[0], args: call[1] as string[], options: call[2] };
 }
 
+function applied<T>(value: T) {
+  return {
+    apply<U>(transform: (resolved: T) => U) {
+      return Promise.resolve(value).then(transform);
+    },
+  };
+}
+
+async function inputs(one: Built) {
+  const props = one.props as {
+    grants?: Array<{ actions: string[]; resources: unknown[] }>;
+  };
+  if (!props.grants) return one.props as never;
+  return {
+    ...one.props,
+    grants: await Promise.all(
+      props.grants.map(async (grant) => ({
+        ...grant,
+        resources: await Promise.all(
+          grant.resources.map(async (resource) => {
+            if (
+              typeof resource === "object" &&
+              resource !== null &&
+              "apply" in resource
+            ) {
+              return await (
+                resource as { apply: (transform: (value: string) => string) => unknown }
+              ).apply((value) => value);
+            }
+            return await resource;
+          }),
+        ),
+      })),
+    ),
+  } as never;
+}
+
 describe("declaring a postgres link", () => {
   it("builds one resource per call, owned by that resource alone", () => {
     const one = declare();
@@ -117,6 +155,40 @@ describe("declaring a postgres link", () => {
 });
 
 describe("publishing a postgres link", () => {
+  it("refuses a dynamic wildcard before publishing", async () => {
+    link.postgres("orders", {
+      ...properties,
+      grants: [
+        {
+          actions: ["rds-db:connect"],
+          resources: [applied("*")],
+        },
+      ],
+    });
+
+    await expect(inputs(latest())).rejects.toThrow(/nothing else/);
+    expect(run).not.toHaveBeenCalled();
+  });
+
+  it("publishes a dynamic scoped resource after it resolves", async () => {
+    const arn = "arn:aws:rds-db:us-east-1:1:dbuser:cluster/operator";
+    link.postgres("orders", {
+      ...properties,
+      grants: [
+        {
+          actions: ["rds-db:connect"],
+          resources: [applied(arn)],
+        },
+      ],
+    });
+
+    await postgresProvider.create(await inputs(latest()));
+
+    expect(JSON.parse(String(argv().options?.input)).grants).toEqual([
+      { actions: ["rds-db:connect"], resources: [arn] },
+    ]);
+  });
+
   it("runs ocel link set in the project, owned by this resource", async () => {
     const created = await postgresProvider.create(declare().props as never);
 

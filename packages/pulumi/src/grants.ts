@@ -1,4 +1,4 @@
-import type { Input } from "@pulumi/pulumi";
+import { output, type Input } from "@pulumi/pulumi";
 
 /** A provider-native permission an app receives along with the link's properties. */
 export interface Grant {
@@ -32,6 +32,24 @@ export function scoped(
   return grants;
 }
 
+/** Grants whose resource inputs reject wildcards when Pulumi resolves them. */
+export function scopedInputs(
+  name: string,
+  grants: Grant[] | undefined,
+): Grant[] | undefined {
+  const checked = scoped(name, grants);
+  return checked?.map((grant) => ({
+    ...grant,
+    resources: grant.resources.map((resource) =>
+      typeof resource === "string"
+        ? scopedResource(name, resource)
+        : resource instanceof Promise
+          ? resource.then((value) => scopedResource(name, value))
+          : output(resource).apply((value) => scopedResource(name, value)),
+    ),
+  }));
+}
+
 const wildcard = "*";
 
 function unscopedAction(action: string): boolean {
@@ -43,4 +61,13 @@ function unscopedAction(action: string): boolean {
     action.slice(0, separator) === wildcard ||
     action.slice(separator + 1) === wildcard
   );
+}
+
+function scopedResource(name: string, resource: string): string {
+  if (resource === wildcard) {
+    throw new Error(
+      `link ${name} carries a grant over ${wildcard}: an app receives permissions for the resource it links and nothing else`,
+    );
+  }
+  return resource;
 }

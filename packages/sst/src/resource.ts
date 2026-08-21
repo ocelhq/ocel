@@ -1,7 +1,12 @@
 import { createHash } from "node:crypto";
 import { checkTarget, runLink, type Target } from "./cli.js";
 import { customLink, type DescribedCustom } from "./custom.js";
-import type { Grant, Input, SSTInclude } from "./grants.js";
+import {
+  scopedInputs,
+  type Grant,
+  type Input,
+  type SSTInclude,
+} from "./grants.js";
 import { postgresLink, type DescribedPostgres } from "./postgres.js";
 
 /** An SST component, as SST already describes itself to its own link consumers. */
@@ -147,7 +152,7 @@ export function postgres(
     ...target,
     name,
     owner: ownerFor(util, logical),
-    ...describe(resource),
+    ...describe(name, resource),
   });
 }
 
@@ -216,6 +221,7 @@ const linkFields = [
 ] as const;
 
 function describe(
+  name: string,
   resource: SSTPostgresLinkable | DescribedPostgresResource,
 ): DescribedPostgres {
   if (typeof (resource as SSTPostgresLinkable).getSSTLink === "function") {
@@ -228,7 +234,7 @@ function describe(
   const described = resource as DescribedPostgresResource;
   return {
     properties: pick(described as unknown as Record<string, unknown>),
-    grants: described.grants,
+    grants: scopedInputs(name, described.grants),
   };
 }
 
