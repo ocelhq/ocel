@@ -121,7 +121,7 @@ export function resolveBootstrapBucket(logicalId, envHint, fail) {
     "text",
   ]);
   if (!found || found === "None") {
-    fail(`could not resolve the substrate's ${logicalId}; set ${envHint}`);
+    fail(`could not resolve the bootstrap's ${logicalId}; set ${envHint}`);
   }
   return found;
 }

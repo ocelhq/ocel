@@ -22,7 +22,7 @@ import (
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
-func TestSubstrateClassOf(t *testing.T) {
+func TestClassOf(t *testing.T) {
 	t.Parallel()
 
 	cases := []struct {
@@ -30,7 +30,7 @@ func TestSubstrateClassOf(t *testing.T) {
 		tier environmentv1.Tier
 		want string
 	}{
-		{name: "an unspecified class is the production substrate", tier: environmentv1.Tier_TIER_UNSPECIFIED, want: bootstrap.ClassProduction},
+		{name: "an unspecified class is the production bootstrap", tier: environmentv1.Tier_TIER_UNSPECIFIED, want: bootstrap.ClassProduction},
 		{name: "production", tier: environmentv1.Tier_TIER_PRODUCTION, want: bootstrap.ClassProduction},
 		{name: "preview", tier: environmentv1.Tier_TIER_PREVIEW, want: bootstrap.ClassPreview},
 	}
@@ -38,57 +38,57 @@ func TestSubstrateClassOf(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 
-			got, err := substrateClassOf(tc.tier)
+			got, err := classOf(tc.tier)
 			if err != nil {
-				t.Fatalf("substrateClassOf(%v): %v", tc.tier, err)
+				t.Fatalf("classOf(%v): %v", tc.tier, err)
 			}
 			if got != tc.want {
-				t.Errorf("substrateClassOf(%v) = %q, want %q", tc.tier, got, tc.want)
+				t.Errorf("classOf(%v) = %q, want %q", tc.tier, got, tc.want)
 			}
 		})
 	}
 
-	t.Run("a class this build does not know is not a substrate", func(t *testing.T) {
+	t.Run("a class this build does not know is not a bootstrap", func(t *testing.T) {
 		t.Parallel()
 
-		if _, err := substrateClassOf(environmentv1.Tier(99)); err == nil {
-			t.Error("a class naming no substrate, want a refusal")
+		if _, err := classOf(environmentv1.Tier(99)); err == nil {
+			t.Error("a class naming no bootstrap, want a refusal")
 		}
 	})
 }
 
-func TestSubstrateOccupancyRefuse(t *testing.T) {
+func TestBootstrapOccupancyRefuse(t *testing.T) {
 	t.Parallel()
 
 	cases := []struct {
 		name      string
 		class     string
-		occupancy substrateOccupancy
+		occupancy bootstrapOccupancy
 		wantOK    bool
 		wants     []string
 	}{
 		{
-			name:      "an empty substrate is free to go",
+			name:      "an empty bootstrap is free to go",
 			class:     bootstrap.ClassProduction,
-			occupancy: substrateOccupancy{},
+			occupancy: bootstrapOccupancy{},
 			wantOK:    true,
 		},
 		{
 			name:      "live projects are named, one command each",
 			class:     bootstrap.ClassProduction,
-			occupancy: substrateOccupancy{projects: []string{"shop", "docs"}},
+			occupancy: bootstrapOccupancy{projects: []string{"shop", "docs"}},
 			wants:     []string{"shop", "docs", "ocel destroy"},
 		},
 		{
 			name:      "a preview wildcard is named with the command that releases it",
 			class:     bootstrap.ClassPreview,
-			occupancy: substrateOccupancy{wildcard: "preview.acme.com"},
+			occupancy: bootstrapOccupancy{wildcard: "preview.acme.com"},
 			wants:     []string{"*.preview.acme.com", "ocel domain release --preview"},
 		},
 		{
 			name:      "both are reported together",
 			class:     bootstrap.ClassPreview,
-			occupancy: substrateOccupancy{projects: []string{"shop"}, wildcard: "preview.acme.com"},
+			occupancy: bootstrapOccupancy{projects: []string{"shop"}, wildcard: "preview.acme.com"},
 			wants:     []string{"shop", "ocel destroy --preview", "*.preview.acme.com", "ocel domain release --preview"},
 		},
 	}
@@ -115,7 +115,7 @@ func TestSubstrateOccupancyRefuse(t *testing.T) {
 	}
 }
 
-func TestReadSubstrateOccupancy(t *testing.T) {
+func TestReadBootstrapOccupancy(t *testing.T) {
 	t.Parallel()
 
 	ctx := context.Background()
@@ -128,9 +128,9 @@ func TestReadSubstrateOccupancy(t *testing.T) {
 	}
 
 	deps := teardownDeps{ssm: ssmc, index: &teardownIndex{projects: []string{"shop", "docs"}}}
-	got, err := readSubstrateOccupancy(ctx, deps, bootstrap.ClassPreview)
+	got, err := readBootstrapOccupancy(ctx, deps, bootstrap.ClassPreview)
 	if err != nil {
-		t.Fatalf("readSubstrateOccupancy: %v", err)
+		t.Fatalf("readBootstrapOccupancy: %v", err)
 	}
 	if !slices.Equal(got.projects, []string{"docs", "shop"}) {
 		t.Errorf("projects = %v, want the stack index and the recorded edge stacks merged", got.projects)
@@ -139,9 +139,9 @@ func TestReadSubstrateOccupancy(t *testing.T) {
 		t.Errorf("wildcard = %q, want the recorded base domain", got.wildcard)
 	}
 
-	production, err := readSubstrateOccupancy(ctx, teardownDeps{ssm: ssmc}, bootstrap.ClassProduction)
+	production, err := readBootstrapOccupancy(ctx, teardownDeps{ssm: ssmc}, bootstrap.ClassProduction)
 	if err != nil {
-		t.Fatalf("readSubstrateOccupancy(production): %v", err)
+		t.Fatalf("readBootstrapOccupancy(production): %v", err)
 	}
 	if len(production.projects) != 0 || production.wildcard != "" {
 		t.Errorf("production occupancy = %+v, want nothing: a preview stack is not a production one", production)
@@ -198,7 +198,7 @@ func TestTeardownPlanItems(t *testing.T) {
 			}
 		}
 		if got := findPlanItem(items, bootstrap.PassphraseParamName); got.GetAction() != contractv1.RemovalItem_ACTION_DELETE {
-			t.Errorf("passphrase action = %v, want it deleted when no sibling substrate holds it", got.GetAction())
+			t.Errorf("passphrase action = %v, want it deleted when no sibling bootstrap holds it", got.GetAction())
 		}
 		if findPlanItem(items, bootstrap.PreviewDomainParamName) != nil {
 			t.Error("the production plan must not name the preview domain parameter")
@@ -217,7 +217,7 @@ func TestTeardownPlanItems(t *testing.T) {
 			t.Fatalf("passphrase action = %v, want it kept", kept.GetAction())
 		}
 		if !strings.Contains(kept.GetReason(), bootstrap.ClassProduction) {
-			t.Errorf("reason = %q, want it to name the substrate still holding it", kept.GetReason())
+			t.Errorf("reason = %q, want it to name the bootstrap still holding it", kept.GetReason())
 		}
 		if findPlanItem(items, bootstrap.PreviewDomainParamName) == nil {
 			t.Error("the preview plan must name the preview domain parameter")
@@ -234,10 +234,10 @@ func TestTeardownPlanItems(t *testing.T) {
 			t.Fatalf("teardownPlanItems: %v", err)
 		}
 		if findPlanItem(items, bootstrap.EdgeUserName) != nil {
-			t.Errorf("plan names an edge reader this substrate never stood up; got %s", planNames(items))
+			t.Errorf("plan names an edge reader this bootstrap never stood up; got %s", planNames(items))
 		}
 		if findPlanItem(items, bootstrap.FeatureStackName(bootstrap.FeatureCloudflareEdge, bootstrap.ClassProduction)) != nil {
-			t.Errorf("plan names a feature stack this substrate does not carry; got %s", planNames(items))
+			t.Errorf("plan names a feature stack this bootstrap does not carry; got %s", planNames(items))
 		}
 	})
 
@@ -257,7 +257,7 @@ func TestTeardownPlanItems(t *testing.T) {
 		}
 	})
 
-	t.Run("an unbootstrapped substrate still plans its leftovers", func(t *testing.T) {
+	t.Run("an absent bootstrap still plans its leftovers", func(t *testing.T) {
 		t.Parallel()
 
 		items, err := teardownPlanItems(bootstrap.ClassProduction, cloudflare.Kind, bootstrap.Deployed{}, false)
@@ -268,7 +268,7 @@ func TestTeardownPlanItems(t *testing.T) {
 			t.Error("no stack is deployed, so none is planned for deletion")
 		}
 		if findPlanItem(items, bootstrap.EdgeCredentialsParamName) == nil {
-			t.Error("the parameters the substrate left behind are still planned")
+			t.Error("the parameters the bootstrap left behind are still planned")
 		}
 	})
 }
@@ -327,7 +327,7 @@ func TestPlanTeardown(t *testing.T) {
 		}
 	})
 
-	t.Run("it reports the edge fronting the substrate", func(t *testing.T) {
+	t.Run("it reports the edge fronting the bootstrap", func(t *testing.T) {
 		t.Parallel()
 
 		deps := newTeardownFakes(t, bootstrap.ClassProduction)
@@ -388,7 +388,7 @@ func TestRunTeardown(t *testing.T) {
 		}
 	})
 
-	t.Run("it tears the edge down for the class, then the AWS substrate", func(t *testing.T) {
+	t.Run("it tears the edge down for the class, then the AWS bootstrap", func(t *testing.T) {
 		t.Parallel()
 
 		deps := newTeardownFakes(t, bootstrap.ClassProduction)
@@ -430,10 +430,10 @@ func TestRunTeardown(t *testing.T) {
 			t.Fatalf("runTeardown: %v", err)
 		}
 		if _, held := deps.ssm.(*stateSSM).params[bootstrap.PassphraseParamName]; !held {
-			t.Error("the passphrase the production substrate still needs was deleted")
+			t.Error("the passphrase the production bootstrap still needs was deleted")
 		}
 		if _, held := deps.ssm.(*stateSSM).params[bootstrap.EdgeCredentialsPreviewParamName]; held {
-			t.Error("the preview substrate's own parameters must go")
+			t.Error("the preview bootstrap's own parameters must go")
 		}
 	})
 }

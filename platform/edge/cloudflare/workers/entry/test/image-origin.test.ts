@@ -185,7 +185,7 @@ describe("functionUrlImageOrigin", () => {
     }
   });
 
-  it("is unbound when the substrate named no optimizer", () => {
+  it("is unbound when the bootstrap named no optimizer", () => {
     expect(functionUrlImageOrigin(undefined, fetch)).toBeUndefined();
     expect(functionUrlImageOrigin("", fetch)).toBeUndefined();
   });

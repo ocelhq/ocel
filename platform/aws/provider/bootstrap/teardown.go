@@ -46,7 +46,7 @@ func StackNameFor(class string) (string, error) {
 	case ClassPreview:
 		return PreviewStackName, nil
 	default:
-		return "", fmt.Errorf("bootstrap: unknown substrate class %q", class)
+		return "", fmt.Errorf("bootstrap: unknown class %q", class)
 	}
 }
 
@@ -57,7 +57,7 @@ func SiblingClassOf(class string) (string, error) {
 	case ClassPreview:
 		return ClassProduction, nil
 	default:
-		return "", fmt.Errorf("bootstrap: unknown substrate class %q", class)
+		return "", fmt.Errorf("bootstrap: unknown class %q", class)
 	}
 }
 
@@ -161,7 +161,7 @@ func Teardown(ctx context.Context, apis TeardownAPIs, class string, progress, lo
 		return err
 	}
 
-	deployed, _, err := readSubstrate(ctx, apis.CFN, class)
+	deployed, _, err := readBootstrap(ctx, apis.CFN, class)
 	if err != nil {
 		return err
 	}
@@ -202,7 +202,7 @@ func Teardown(ctx context.Context, apis TeardownAPIs, class string, progress, lo
 		report(log, fmt.Sprintf("no %s stack in this account; only the parameters it left behind are removed", stackName))
 	}
 
-	report(progress, "Deleting the substrate's stored parameters (SSM)")
+	report(progress, "Deleting the bootstrap's stored parameters (SSM)")
 	shared, err := PassphraseHeldBySibling(ctx, apis.CFN, class)
 	if err != nil {
 		return err
@@ -210,7 +210,7 @@ func Teardown(ctx context.Context, apis TeardownAPIs, class string, progress, lo
 	if !shared {
 		params = append(params, PassphraseParamName)
 	} else {
-		report(log, fmt.Sprintf("the %s substrate is still bootstrapped and its Pulumi state is encrypted under the shared passphrase in %s; it stays", siblingName(class), PassphraseParamName))
+		report(log, fmt.Sprintf("the %s bootstrap still stands and its Pulumi state is encrypted under the shared passphrase in %s; it stays", siblingName(class), PassphraseParamName))
 	}
 	for _, name := range params {
 		if err := deleteParam(ctx, apis.SSM, name); err != nil {

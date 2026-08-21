@@ -47,7 +47,7 @@ func (p *provider) ReconcilePreviewWildcard(ctx context.Context, spec edge.Previ
 	if err != nil {
 		return "", err
 	}
-	if err := substrateLedger(c, edge.ClassPreview, deployed).NoteInvalidationTarget(ctx, held.id); err != nil {
+	if err := bootstrapLedger(c, edge.ClassPreview, deployed).NoteInvalidationTarget(ctx, held.id); err != nil {
 		return "", err
 	}
 	return held.domainName, nil
@@ -81,7 +81,7 @@ func reconcileWildcardDistribution(ctx context.Context, c Clients, plan distribu
 	return held, nil
 }
 
-func substrateLedger(c Clients, class edge.Class, deployed bootstrap.Deployed) *edgeledger.Ledger {
+func bootstrapLedger(c Clients, class edge.Class, deployed bootstrap.Deployed) *edgeledger.Ledger {
 	return &edgeledger.Ledger{
 		Dynamo: c.Dynamo,
 		Table:  deployed.StateTable,
@@ -118,12 +118,12 @@ func convergeWildcard(ctx context.Context, c Clients, plan distributionPlan, id,
 }
 
 func (p *provider) previewWildcardPlan(ctx context.Context, c Clients, baseDomain string) (distributionPlan, bootstrap.Deployed, error) {
-	deployed, err := p.substrate(ctx, c, edge.ClassPreview)
+	deployed, err := p.bootstrap(ctx, c, edge.ClassPreview)
 	if err != nil {
 		return distributionPlan{}, bootstrap.Deployed{}, err
 	}
 	if !deployed.Present {
-		return distributionPlan{}, bootstrap.Deployed{}, fmt.Errorf("the preview substrate is not bootstrapped, so nothing would answer a hostname on %s; run `ocel bootstrap --preview` first", edge.PreviewWildcard(baseDomain))
+		return distributionPlan{}, bootstrap.Deployed{}, fmt.Errorf("the preview bootstrap is not standing, so nothing would answer a hostname on %s; run `ocel bootstrap --preview` first", edge.PreviewWildcard(baseDomain))
 	}
 	set, err := findEdgeSet(ctx, c, edge.ClassPreview, edgeSet{})
 	if err != nil {
@@ -166,14 +166,14 @@ func (p *provider) DestroyPreviewWildcard(ctx context.Context, baseDomain string
 }
 
 func (p *provider) forgetPreviewWildcardTarget(ctx context.Context, c Clients, distribution string) error {
-	deployed, err := p.substrate(ctx, c, edge.ClassPreview)
+	deployed, err := p.bootstrap(ctx, c, edge.ClassPreview)
 	if err != nil {
 		return err
 	}
 	if !deployed.Present {
 		return nil
 	}
-	return substrateLedger(c, edge.ClassPreview, deployed).ForgetInvalidationTarget(ctx, distribution)
+	return bootstrapLedger(c, edge.ClassPreview, deployed).ForgetInvalidationTarget(ctx, distribution)
 }
 
 func sweepPreviewRoutes(ctx context.Context, c Clients, baseDomain string) error {

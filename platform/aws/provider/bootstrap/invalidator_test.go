@@ -53,7 +53,7 @@ func TestTagInvalidator(t *testing.T) {
 					t.Errorf("EventSourceArn = %q, want the state table's stream, which is where a raise lands", esm.Properties.EventSourceArn)
 				}
 				if got := esm.Properties.FilterCriteria.Filters; len(got) != 1 || got[0].Pattern != tagRecordStreamFilter {
-					t.Errorf("FilterCriteria.Filters = %+v, want the tag record filter; without it every write in the substrate wakes this function", got)
+					t.Errorf("FilterCriteria.Filters = %+v, want the tag record filter; without it every write in the bootstrap wakes this function", got)
 				}
 				if w := esm.Properties.MaximumBatchingWindowInSeconds; w == nil || *w != 0 {
 					t.Errorf("MaximumBatchingWindowInSeconds = %v, want 0 — an invalidation must not wait on a batch filling", w)
@@ -82,7 +82,7 @@ func TestTagInvalidator(t *testing.T) {
 		}
 	})
 
-	t.Run("reads the ledger of its own substrate class", func(t *testing.T) {
+	t.Run("reads the ledger of its own class", func(t *testing.T) {
 		for _, tc := range []struct {
 			name     string
 			template string
@@ -94,10 +94,10 @@ func TestTagInvalidator(t *testing.T) {
 			t.Run(tc.name, func(t *testing.T) {
 				env := parsePublisherTemplate(t, tc.template).Resources["TagInvalidator"].Properties.Environment.Variables
 				if env[tagInvalidatorClassEnvVar] != tc.class {
-					t.Errorf("%s = %q, want %q — the class scopes every ledger read to its own substrate", tagInvalidatorClassEnvVar, env[tagInvalidatorClassEnvVar], tc.class)
+					t.Errorf("%s = %q, want %q — the class scopes every ledger read to its own bootstrap", tagInvalidatorClassEnvVar, env[tagInvalidatorClassEnvVar], tc.class)
 				}
 				if env[tagInvalidatorStateTableEnvVar] != paramStateTableName {
-					t.Errorf("%s = %q, want the substrate's state table", tagInvalidatorStateTableEnvVar, env[tagInvalidatorStateTableEnvVar])
+					t.Errorf("%s = %q, want the bootstrap's state table", tagInvalidatorStateTableEnvVar, env[tagInvalidatorStateTableEnvVar])
 				}
 			})
 		}
@@ -152,20 +152,20 @@ func TestTagInvalidator(t *testing.T) {
 		}
 	})
 
-	t.Run("every substrate that carries isr carries one", func(t *testing.T) {
+	t.Run("every bootstrap that carries isr carries one", func(t *testing.T) {
 		for _, tc := range []struct {
 			name      string
-			sub       substrate
+			target    spec
 			stackName string
 		}{
-			{"production", productionSubstrate(), isrStack(ClassProduction)},
-			{"preview", previewSubstrate(), isrStack(ClassPreview)},
+			{"production", productionBootstrap(), isrStack(ClassProduction)},
+			{"preview", previewBootstrap(), isrStack(ClassPreview)},
 		} {
 			t.Run(tc.name, func(t *testing.T) {
 				cfn := newFakeCFN()
 				standInCloudflare(t, &fakeEdge{kind: "cloudflare"})
 
-				if err := runAll(context.Background(), apisOf(cfn, newFakeSSM(), &fakeIAM{}, preloadedStore()), tc.sub); err != nil {
+				if err := runAll(context.Background(), apisOf(cfn, newFakeSSM(), &fakeIAM{}, preloadedStore()), tc.target); err != nil {
 					t.Fatalf("run: %v", err)
 				}
 				for _, name := range invalidatorResourceNames {

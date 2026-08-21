@@ -191,7 +191,7 @@ func (p *provider) SharedPreviewSurface() edge.Surface {
 		Kind:   "preview fallback API",
 		Name:   "404 responder",
 		Action: edge.SurfaceKeep,
-		Reason: "substrate-scoped: it answers every preview hostname no project claims",
+		Reason: "bootstrap-scoped: it answers every preview hostname no project claims",
 	}
 }
 
@@ -214,12 +214,12 @@ func (p *provider) clientsFor(ctx context.Context) (Clients, error) {
 
 func knownClass(class edge.Class) error {
 	if class != edge.ClassProduction && class != edge.ClassPreview {
-		return fmt.Errorf("the %q edge does not know the substrate class %q", Kind, class)
+		return fmt.Errorf("the %q edge does not know the class %q", Kind, class)
 	}
 	return nil
 }
 
-func (p *provider) substrate(ctx context.Context, c Clients, class edge.Class) (bootstrap.Deployed, error) {
+func (p *provider) bootstrap(ctx context.Context, c Clients, class edge.Class) (bootstrap.Deployed, error) {
 	if err := knownClass(class); err != nil {
 		return bootstrap.Deployed{}, err
 	}
@@ -234,7 +234,7 @@ func (p *provider) Bootstrap(ctx context.Context, class edge.Class) (edge.Bootst
 	if err != nil {
 		return edge.BootstrapOutput{}, err
 	}
-	deployed, err := p.substrate(ctx, c, class)
+	deployed, err := p.bootstrap(ctx, c, class)
 	if err != nil {
 		return edge.BootstrapOutput{}, err
 	}
@@ -279,12 +279,12 @@ func (p *provider) Reconcile(ctx context.Context, spec edge.StackSpec, prior edg
 	if spec.Slug == "" {
 		return nil, fmt.Errorf("the %q edge fronts a project by slug; this stack carries none", Kind)
 	}
-	deployed, err := p.substrate(ctx, c, spec.Class)
+	deployed, err := p.bootstrap(ctx, c, spec.Class)
 	if err != nil {
 		return nil, err
 	}
 	if !deployed.Present {
-		return nil, fmt.Errorf("the %s substrate is not bootstrapped, so the %q edge has no state table to keep %s's deployments in", spec.Class, Kind, spec.Slug)
+		return nil, fmt.Errorf("the %s bootstrap is not standing, so the %q edge has no state table to keep %s's deployments in", spec.Class, Kind, spec.Slug)
 	}
 	role, err := requireInvokeRole(ctx, c, spec.Class)
 	if err != nil {

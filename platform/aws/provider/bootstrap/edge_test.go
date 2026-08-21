@@ -218,7 +218,7 @@ func TestReadEdgeCredentials(t *testing.T) {
 func TestEdgeCredentials(t *testing.T) {
 	t.Run("unknown class", func(t *testing.T) {
 		if _, err := ensureEdgeCredentials(context.Background(), &fakeIAM{}, newFakeSSM(), "nonsense"); err == nil {
-			t.Error("expected an error for an unknown substrate class")
+			t.Error("expected an error for an unknown class")
 		}
 	})
 }
@@ -342,7 +342,7 @@ func TestAdoptCacheStore(t *testing.T) {
 
 	t.Run("unknown class", func(t *testing.T) {
 		if err := adoptCacheStore(context.Background(), newFakeSSM(), "nonsense", "fake", offeredStore()); err == nil {
-			t.Error("expected an error for an unknown substrate class")
+			t.Error("expected an error for an unknown class")
 		}
 	})
 }
@@ -536,7 +536,7 @@ func TestEnsureISRWriterSeed(t *testing.T) {
 			t.Fatalf("ensureISRWriterSeed (preview): %v", err)
 		}
 		if preview == first {
-			t.Error("preview and production share a seed; each substrate has its own writer")
+			t.Error("preview and production share a seed; each bootstrap has its own writer")
 		}
 	})
 

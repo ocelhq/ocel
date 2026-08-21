@@ -27,9 +27,9 @@ func checkISRWriterAgrees(stores ObjectStores, w ISRWriterAccess) error {
 	adopted, writer := isrEntriesAdopted(stores), isrWriterConfigured(w)
 	switch {
 	case adopted && !writer:
-		return fmt.Errorf("this substrate adopted an edge cache store but no ISR writer to write into it, so this build could not revalidate anything it cached; re-run `ocel bootstrap`")
+		return fmt.Errorf("this bootstrap adopted an edge cache store but no ISR writer to write into it, so this build could not revalidate anything it cached; re-run `ocel bootstrap`")
 	case !adopted && writer:
-		return fmt.Errorf("this substrate adopted an ISR writer but no edge cache store, so entries would be written where nothing reads them; re-run `ocel bootstrap`")
+		return fmt.Errorf("this bootstrap adopted an ISR writer but no edge cache store, so entries would be written where nothing reads them; re-run `ocel bootstrap`")
 	}
 	return nil
 }

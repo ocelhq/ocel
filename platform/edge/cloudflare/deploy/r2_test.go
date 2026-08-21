@@ -383,12 +383,12 @@ func TestCacheStoreBootstrap(t *testing.T) {
 		}
 	})
 
-	t.Run("a substrate class with no cache store is an error", func(t *testing.T) {
+	t.Run("a class with no cache store is an error", func(t *testing.T) {
 		t.Parallel()
 
 		_, err := newTestStore(&fakeBuckets{}, &fakeTokens{}, &fakeGroups{}).bootstrap(t.Context(), testAccountID, edge.Class("staging"))
 		if err == nil {
-			t.Fatal("expected an error for a substrate class with no cache store")
+			t.Fatal("expected an error for a class with no cache store")
 		}
 	})
 }

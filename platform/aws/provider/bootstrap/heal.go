@@ -43,7 +43,7 @@ func restampOnly(c cfntypes.ResourceChange) bool {
 
 func healable(stackName string, changes []cfntypes.ResourceChange) error {
 	if isCoreStack(stackName) {
-		return fmt.Errorf("%s is the substrate's core, and the core is only ever written by an explicit bootstrap", stackName)
+		return fmt.Errorf("%s is the bootstrap's core, and the core is only ever written by an explicit bootstrap", stackName)
 	}
 	for _, c := range changes {
 		id := aws.ToString(c.LogicalResourceId)
@@ -83,7 +83,7 @@ func admitReplacements(accept bool, log func(string)) changeReview {
 		}
 		if isCoreStack(stackName) {
 			return fmt.Errorf(
-				"writing %s would replace %s rather than update it in place, and every Pulumi state this account holds lives in it: every app deployed from this substrate would be orphaned.\nNo flag writes it anyway. Upgrade to a CLI whose core is an in-place update of this one",
+				"writing %s would replace %s rather than update it in place, and every Pulumi state this account holds lives in it: every app deployed from this bootstrap would be orphaned.\nNo flag writes it anyway. Upgrade to a CLI whose core is an in-place update of this one",
 				stackName, strings.Join(replaced, ", "),
 			)
 		}
@@ -118,18 +118,18 @@ func healRefused(err error) bool {
 }
 
 func Heal(ctx context.Context, apis APIs, req HealRequest, log func(string)) (bool, error) {
-	return heal(ctx, apis, productionSubstrate(), req, log)
+	return heal(ctx, apis, productionBootstrap(), req, log)
 }
 
 func HealPreview(ctx context.Context, apis APIs, req HealRequest, log func(string)) (bool, error) {
-	return heal(ctx, apis, previewSubstrate(), req, log)
+	return heal(ctx, apis, previewBootstrap(), req, log)
 }
 
-func heal(ctx context.Context, apis APIs, sub substrate, req HealRequest, log func(string)) (bool, error) {
+func heal(ctx context.Context, apis APIs, target spec, req HealRequest, log func(string)) (bool, error) {
 	if log == nil {
 		log = func(string) {}
 	}
-	deployed, refs, err := readSubstrate(ctx, apis.CFN, sub.class)
+	deployed, refs, err := readBootstrap(ctx, apis.CFN, target.class)
 	if err != nil {
 		return false, err
 	}
@@ -155,7 +155,7 @@ func heal(ctx context.Context, apis APIs, sub substrate, req HealRequest, log fu
 			if i < 0 {
 				continue
 			}
-			done, err := healStack(ctx, apis, sub.class, stale[i], deployed, refs, req.Writer, log)
+			done, err := healStack(ctx, apis, target.class, stale[i], deployed, refs, req.Writer, log)
 			if err != nil {
 				if healRefused(err) {
 					return healed, ErrHealNotPermitted

@@ -21,7 +21,7 @@ func TestMissingFeatures(t *testing.T) {
 		return bootstrap.Deployed{Present: true, Features: set}
 	}
 
-	t.Run("a substrate carrying what the project needs waves it through", func(t *testing.T) {
+	t.Run("a bootstrap carrying what the project needs waves it through", func(t *testing.T) {
 		t.Parallel()
 		deployed := carrying(bootstrap.FeatureISR, bootstrap.FeatureImageOptimization)
 		if err := missingFeatures(deployed, []string{bootstrap.FeatureISR}, false); err != nil {
@@ -29,7 +29,7 @@ func TestMissingFeatures(t *testing.T) {
 		}
 	})
 
-	t.Run("a project needing nothing deploys onto a bare substrate", func(t *testing.T) {
+	t.Run("a project needing nothing deploys onto a bare bootstrap", func(t *testing.T) {
 		t.Parallel()
 		if err := missingFeatures(carrying(), nil, false); err != nil {
 			t.Errorf("missingFeatures = %v, want the deploy admitted", err)
@@ -41,7 +41,7 @@ func TestMissingFeatures(t *testing.T) {
 		deployed := carrying(bootstrap.FeatureISR)
 		err := missingFeatures(deployed, []string{bootstrap.FeatureImageOptimization, bootstrap.FeatureISR}, false)
 		if err == nil {
-			t.Fatal("a deploy needing a feature this substrate lacks was admitted")
+			t.Fatal("a deploy needing a feature this bootstrap lacks was admitted")
 		}
 		if !strings.Contains(err.Error(), bootstrap.FeatureImageOptimization) {
 			t.Errorf("error %q does not name what is missing", err)
@@ -52,11 +52,11 @@ func TestMissingFeatures(t *testing.T) {
 		}
 	})
 
-	t.Run("the preview substrate is remediated with its own command", func(t *testing.T) {
+	t.Run("the preview bootstrap is remediated with its own command", func(t *testing.T) {
 		t.Parallel()
 		err := missingFeatures(carrying(), []string{bootstrap.FeatureISR}, true)
 		if err == nil {
-			t.Fatal("a preview deploy needing a feature this substrate lacks was admitted")
+			t.Fatal("a preview deploy needing a feature this bootstrap lacks was admitted")
 		}
 		if !strings.Contains(err.Error(), "ocel bootstrap --preview --features "+bootstrap.FeatureISR) {
 			t.Errorf("error %q does not name the preview bootstrap", err)
@@ -67,7 +67,7 @@ func TestMissingFeatures(t *testing.T) {
 		t.Parallel()
 		err := missingFeatures(carrying(), []string{bootstrap.FeatureISR, bootstrap.FeatureISR}, false)
 		if err == nil {
-			t.Fatal("a deploy needing a feature this substrate lacks was admitted")
+			t.Fatal("a deploy needing a feature this bootstrap lacks was admitted")
 		}
 		if strings.Count(err.Error(), bootstrap.FeatureISR) != 2 {
 			t.Errorf("error %q repeats a name; it appears once in the list and once in the command", err)

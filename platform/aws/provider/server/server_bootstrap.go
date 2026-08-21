@@ -16,8 +16,8 @@ import (
 	"github.com/ocelhq/ocel/platform/aws/provider/bootstrap"
 )
 
-func (s *Server) substrateStatus(deployed bootstrap.Deployed, tier environmentv1.Tier, required []string) *contractv1.SubstrateStatus {
-	status := &contractv1.SubstrateStatus{
+func (s *Server) bootstrapStatus(deployed bootstrap.Deployed, tier environmentv1.Tier, required []string) *contractv1.BootstrapStatus {
+	status := &contractv1.BootstrapStatus{
 		Tier:           tier,
 		Present:        deployed.Present,
 		Schema:         uint32(deployed.Schema),
@@ -26,7 +26,7 @@ func (s *Server) substrateStatus(deployed bootstrap.Deployed, tier environmentv1
 		Writer:         s.writer.String(),
 	}
 	for _, stack := range deployed.Stacks {
-		status.Stacks = append(status.Stacks, &contractv1.SubstrateStack{
+		status.Stacks = append(status.Stacks, &contractv1.BootstrapStack{
 			Name:          stack.Name,
 			Feature:       stack.Feature,
 			Present:       stack.Present,
@@ -74,7 +74,7 @@ func healableStacks(deployed bootstrap.Deployed, required []string) []string {
 	return out
 }
 
-func substrateWriter(deployed bootstrap.Deployed) bootstrap.Writer {
+func bootstrapWriter(deployed bootstrap.Deployed) bootstrap.Writer {
 	for _, stack := range deployed.Stacks {
 		if stack.Feature == "" {
 			return bootstrap.Writer(stack.WrittenBy)
@@ -83,7 +83,7 @@ func substrateWriter(deployed bootstrap.Deployed) bootstrap.Writer {
 	return ""
 }
 
-func (s *Server) healSubstrate(ctx context.Context, awscfg aws.Config, deployed bootstrap.Deployed, required []string, preview bool, logf func(string)) (bool, error) {
+func (s *Server) healBootstrap(ctx context.Context, awscfg aws.Config, deployed bootstrap.Deployed, required []string, preview bool, logf func(string)) (bool, error) {
 	if !deployed.AutoHeal || len(healableStacks(deployed, required)) == 0 {
 		return false, nil
 	}
@@ -91,7 +91,7 @@ func (s *Server) healSubstrate(ctx context.Context, awscfg aws.Config, deployed 
 		logf(fmt.Sprintf("this provider is a development build (%s), so it leaves the account's stale bootstrap stacks as they are", s.writer))
 		return false, nil
 	}
-	if written := substrateWriter(deployed); !written.Release() {
+	if written := bootstrapWriter(deployed); !written.Release() {
 		logf(fmt.Sprintf("this account's bootstrap was written by a development build (%s), so it is refreshed only by the run that writes it next", written))
 		return false, nil
 	}
@@ -101,7 +101,7 @@ func (s *Server) healSubstrate(ctx context.Context, awscfg aws.Config, deployed 
 	}
 	healed, err := healRunner(preview)(ctx, apis, bootstrap.HealRequest{Features: required, Writer: s.writer}, logf)
 	if errors.Is(err, bootstrap.ErrHealNotPermitted) {
-		logf("refreshing this account's stale bootstrap stacks needs bootstrap-tier credentials and this run holds deploy-tier ones, so the substrate is left as it stands")
+		logf("refreshing this account's stale bootstrap stacks needs bootstrap-tier credentials and this run holds deploy-tier ones, so the bootstrap is left as it stands")
 		return healed, nil
 	}
 	return healed, err

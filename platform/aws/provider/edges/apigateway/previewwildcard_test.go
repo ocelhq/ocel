@@ -166,7 +166,7 @@ func TestReconcilePreviewWildcardConvergesADomainThatDrifted(t *testing.T) {
 
 	ctx := context.Background()
 
-	t.Run("onto the certificate the substrate now holds", func(t *testing.T) {
+	t.Run("onto the certificate the bootstrap now holds", func(t *testing.T) {
 		t.Parallel()
 
 		w := newWorld()
@@ -223,7 +223,7 @@ func TestReconcilePreviewWildcardConvergesADomainThatDrifted(t *testing.T) {
 	})
 }
 
-func TestReconcilePreviewWildcardRefusesAnUnbootstrappedSubstrate(t *testing.T) {
+func TestReconcilePreviewWildcardRefusesAnAbsentBootstrap(t *testing.T) {
 	t.Parallel()
 
 	w := newWorld()
@@ -232,7 +232,7 @@ func TestReconcilePreviewWildcardRefusesAnUnbootstrappedSubstrate(t *testing.T) 
 		t.Fatal("ReconcilePreviewWildcard succeeded without the not-found API every unclaimed host answers from")
 	}
 	if !strings.Contains(err.Error(), "ocel bootstrap --preview") {
-		t.Errorf("error = %v, want it to name the command that raises the substrate", err)
+		t.Errorf("error = %v, want it to name the command that raises the bootstrap", err)
 	}
 	if len(w.gateway.mutations()) != 0 {
 		t.Errorf("a refused reconcile called %v, want nothing", w.gateway.mutations())
@@ -392,7 +392,7 @@ func TestDestroyTakesEveryPreviewItRouted(t *testing.T) {
 		}
 	}
 	if left[anyHost] == nil {
-		t.Error("destroying one project's stack took the catch-all rule with it; the wildcard belongs to the substrate, not to a project")
+		t.Error("destroying one project's stack took the catch-all rule with it; the wildcard belongs to the bootstrap, not to a project")
 	}
 }
 

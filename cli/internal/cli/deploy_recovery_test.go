@@ -136,7 +136,7 @@ func problemsFile(t *testing.T, problems string) string {
 	return path
 }
 
-func varsUISubstrate(t *testing.T, address, token string) string {
+func varsUIBootstrap(t *testing.T, address, token string) string {
 	t.Helper()
 	req, err := http.NewRequest(http.MethodGet, address+"/api/state", nil)
 	if err != nil {
@@ -149,12 +149,12 @@ func varsUISubstrate(t *testing.T, address, token string) string {
 	}
 	defer res.Body.Close()
 	var state struct {
-		Substrate string `json:"substrate"`
+		Bootstrap string `json:"bootstrap"`
 	}
 	if err := json.NewDecoder(res.Body).Decode(&state); err != nil {
 		t.Fatalf("decode the page's state: %v", err)
 	}
-	return state.Substrate
+	return state.Bootstrap
 }
 
 const missingStripeKey = `[{"key":"STRIPE_API_KEY","folder":"","kind":"KIND_MISSING"}]`
@@ -558,8 +558,8 @@ func TestGateRecoveryOnPreviewUp(t *testing.T) {
 		}()
 
 		address, token := awaitVarsUI(t, &out, 1)
-		if got := varsUISubstrate(t, address, token); got != "preview" {
-			t.Errorf("substrate = %q, want the preview's own", got)
+		if got := varsUIBootstrap(t, address, token); got != "preview" {
+			t.Errorf("bootstrap = %q, want the preview's own", got)
 		}
 		setCell(t, address, token, "STRIPE_API_KEY", "sk_live_filled_in")
 		writeFile(t, problems, "[]")

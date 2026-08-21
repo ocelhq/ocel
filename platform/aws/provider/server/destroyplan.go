@@ -26,7 +26,7 @@ func destroyPlanItems(edgeFront edge.Edge, scope projectPlanScope) []*contractv1
 	items = append(items, certificateItems(recorded)...)
 	items = append(items, recordItems(scope.record.Edge.Records, recorded)...)
 	items = append(items, storeItems(edgeFront, scope)...)
-	return append(items, substrateItems(edgeFront, scope)...)
+	return append(items, bootstrapItems(edgeFront, scope)...)
 }
 
 func stackItems(infra, app []naming.StackName) []*contractv1.RemovalItem {
@@ -204,15 +204,15 @@ func storeItems(edgeFront edge.Edge, scope projectPlanScope) []*contractv1.Remov
 	})
 }
 
-func substrateItems(edgeFront edge.Edge, scope projectPlanScope) []*contractv1.RemovalItem {
+func bootstrapItems(edgeFront edge.Edge, scope projectPlanScope) []*contractv1.RemovalItem {
 	keep := &contractv1.RemovalItem{
 		Kind:   "state table",
 		Name:   scope.stateTable,
 		Action: contractv1.RemovalItem_ACTION_KEEP,
-		Reason: fmt.Sprintf("substrate-scoped: every %s project shares it — `%s` removes it", scope.class, teardownCommand(scope.class)),
+		Reason: fmt.Sprintf("bootstrap-scoped: every %s project shares it — `%s` removes it", scope.class, teardownCommand(scope.class)),
 	}
 	if scope.stateTable == "" {
-		keep.Name = scope.class + " substrate"
+		keep.Name = scope.class + " bootstrap"
 	}
 	items := []*contractv1.RemovalItem{keep}
 
@@ -221,7 +221,7 @@ func substrateItems(edgeFront edge.Edge, scope projectPlanScope) []*contractv1.R
 			Kind:   "preview wildcard",
 			Name:   edge.PreviewWildcard(base),
 			Action: contractv1.RemovalItem_ACTION_KEEP,
-			Reason: "substrate-scoped: every project's previews are served on it — `ocel domain release --preview` releases it",
+			Reason: "bootstrap-scoped: every project's previews are served on it — `ocel domain release --preview` releases it",
 		})
 	}
 	return append(items, surfaceItem(edgeFront.SharedPreviewSurface()))

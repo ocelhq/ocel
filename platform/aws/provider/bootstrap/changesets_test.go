@@ -16,7 +16,7 @@ import (
 func TestCoreRefusesReplacementWhateverTheCallerAccepts(t *testing.T) {
 	for _, accept := range []bool{false, true} {
 		t.Run(fmt.Sprintf("acceptReplacements=%t", accept), func(t *testing.T) {
-			cfn, apis := standingSubstrate(t)
+			cfn, apis := standingBootstrap(t)
 			cfn.fallBehind(StackName)
 			cfn.plan(StackName, change(cfntypes.ChangeActionModify, "StateTable", "AWS::DynamoDB::Table", cfntypes.ReplacementTrue))
 			before := cfn.updates
@@ -44,8 +44,8 @@ func TestCoreRefusesReplacementWhateverTheCallerAccepts(t *testing.T) {
 }
 
 func TestTagOnlyDeltaIsStillWritten(t *testing.T) {
-	t.Run("opting into auto-heal writes the tag through a substrate that has not otherwise moved", func(t *testing.T) {
-		cfn, apis := standingSubstrate(t)
+	t.Run("opting into auto-heal writes the tag through a bootstrap that has not otherwise moved", func(t *testing.T) {
+		cfn, apis := standingBootstrap(t)
 		before := cfn.updates
 
 		on := true
@@ -65,8 +65,8 @@ func TestTagOnlyDeltaIsStillWritten(t *testing.T) {
 		}
 	})
 
-	t.Run("a substrate whose tags already stand is left alone", func(t *testing.T) {
-		cfn, apis := standingSubstrate(t)
+	t.Run("a bootstrap whose tags already stand is left alone", func(t *testing.T) {
+		cfn, apis := standingBootstrap(t)
 		before := cfn.restamps
 
 		if err := Run(context.Background(), apis, everything(), nil, nil); err != nil {
@@ -83,7 +83,7 @@ func TestChangeSetsAreDiscardedWhateverEndsTheRun(t *testing.T) {
 	staleTags := stampTags(Stamp{Schema: RequiredSchema, Digest: "beef", WrittenBy: "1.4.0"})
 
 	t.Run("a caller context that is already gone still takes the change set down", func(t *testing.T) {
-		cfn, _ := standingSubstrate(t)
+		cfn, _ := standingBootstrap(t)
 
 		ctx, cancel := context.WithCancel(context.Background())
 		defer cancel()
@@ -101,7 +101,7 @@ func TestChangeSetsAreDiscardedWhateverEndsTheRun(t *testing.T) {
 	})
 
 	t.Run("a panic between planning and executing still takes the change set down", func(t *testing.T) {
-		cfn, _ := standingSubstrate(t)
+		cfn, _ := standingBootstrap(t)
 
 		func() {
 			defer func() { _ = recover() }()
@@ -142,7 +142,7 @@ func (deniedChangeSets) CreateChangeSet(context.Context, *cloudformation.CreateC
 }
 
 func TestHealRefusedByTheseCredentialsSaysSoOnce(t *testing.T) {
-	cfn, apis := standingSubstrate(t)
+	cfn, apis := standingBootstrap(t)
 	cfn.fallBehind(isrStack(ClassProduction))
 	apis.CFN = deniedChangeSets{cfn}
 	var log healLog
@@ -161,7 +161,7 @@ func TestHealRefusedByTheseCredentialsSaysSoOnce(t *testing.T) {
 
 func TestSettlingIsBoundedAndReported(t *testing.T) {
 	waits := holdNothing(t)
-	cfn, apis := standingSubstrate(t)
+	cfn, apis := standingBootstrap(t)
 	stack := isrStack(ClassProduction)
 	cfn.fallBehind(stack)
 	cfn.busy(stack, settleAttempts*4)
@@ -179,7 +179,7 @@ func TestSettlingIsBoundedAndReported(t *testing.T) {
 }
 
 func TestAStackTagPropagatedOntoAPrincipalDoesNotBlockAHeal(t *testing.T) {
-	cfn, apis := standingSubstrate(t)
+	cfn, apis := standingBootstrap(t)
 	stack := edgeStack(ClassProduction)
 	cfn.fallBehind(stack)
 	cfn.plan(stack,
@@ -206,7 +206,7 @@ func TestAStackTagPropagatedOntoAPrincipalDoesNotBlockAHeal(t *testing.T) {
 }
 
 func TestAPrincipalWhoseShapeChangesStillStopsAHeal(t *testing.T) {
-	cfn, apis := standingSubstrate(t)
+	cfn, apis := standingBootstrap(t)
 	stack := edgeStack(ClassProduction)
 	cfn.fallBehind(stack)
 	cfn.plan(stack, cfntypes.ResourceChange{

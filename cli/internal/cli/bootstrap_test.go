@@ -30,7 +30,7 @@ func TestRunBootstrapDestroy(t *testing.T) {
 			"delete bucket ocel-state-preview",
 			"(this one is slow)",
 			"Left in place:",
-			"keep parameter /ocel/pulumi/passphrase — the production substrate is still bootstrapped",
+			"keep parameter /ocel/pulumi/passphrase — the production bootstrap still stands",
 			"Type the class name (preview) to confirm:",
 			"TEARDOWN tier=TIER_PREVIEW",
 		} {
@@ -104,7 +104,7 @@ func TestRunBootstrapDestroy(t *testing.T) {
 		}
 	})
 
-	t.Run("a bypass naming the other substrate is refused, not ignored", func(t *testing.T) {
+	t.Run("a bypass naming the other bootstrap is refused, not ignored", func(t *testing.T) {
 		root, _ := setUpDeployFixture(t)
 		d := defaultDeps()
 		setLoggedIn(&d)

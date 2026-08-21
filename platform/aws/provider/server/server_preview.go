@@ -77,7 +77,7 @@ func (s *Server) Preflight(ctx context.Context, req *contractv1.PreflightRequest
 
 	if awsOK {
 		cfn := cloudformation.NewFromConfig(awscfg)
-		preview, production, err := s.preflightSubstrates(ctx, cfn, opts.Region, req.GetRequiredTier())
+		preview, production, err := s.preflightBootstraps(ctx, cfn, opts.Region, req.GetRequiredTier())
 		if err != nil {
 			return nil, err
 		}
@@ -86,8 +86,8 @@ func (s *Server) Preflight(ctx context.Context, req *contractv1.PreflightRequest
 		resp.InfraTier = pf.GetInfraTier()
 		resp.InfrastructurePresent = pf.GetInfrastructurePresent()
 
-		wanted, _ := requiredSubstrate(req.GetRequiredTier(), preview, production)
-		resp.Substrate = s.substrateStatus(wanted, req.GetRequiredTier(), req.GetRequiredFeatures())
+		wanted, _ := requiredBootstrap(req.GetRequiredTier(), preview, production)
+		resp.Bootstrap = s.bootstrapStatus(wanted, req.GetRequiredTier(), req.GetRequiredFeatures())
 		if wanted.Present {
 			compat := bootstrap.CheckCompat(wanted.Schema, true, bootstrap.RequiredSchema)
 			if err := compat.Explain(wanted.Schema, bootstrap.RequiredSchema, bootstrapCommand(previewTier)); err != nil {
@@ -183,11 +183,11 @@ func domainClaims(ctx context.Context, owner routeOwnerFunc, slug string, domain
 	return claims
 }
 
-func knownSlugs(ctx context.Context, awscfg aws.Config, substrate bootstrap.Deployed, slug string) []string {
-	if slug == "" || !substrate.Present {
+func knownSlugs(ctx context.Context, awscfg aws.Config, deployed bootstrap.Deployed, slug string) []string {
+	if slug == "" || !deployed.Present {
 		return nil
 	}
-	index, err := stackIndexFor(awscfg, substrate, bootstrapCommand(false))
+	index, err := stackIndexFor(awscfg, deployed, bootstrapCommand(false))
 	if err != nil {
 		return nil
 	}
@@ -198,7 +198,7 @@ func knownSlugs(ctx context.Context, awscfg aws.Config, substrate bootstrap.Depl
 	return slugs
 }
 
-func (s *Server) preflightSubstrates(ctx context.Context, cfn bootstrap.CFNDescriber, region string, required environmentv1.Tier) (preview, production bootstrap.Deployed, err error) {
+func (s *Server) preflightBootstraps(ctx context.Context, cfn bootstrap.CFNDescriber, region string, required environmentv1.Tier) (preview, production bootstrap.Deployed, err error) {
 	previewRequired := required == environmentv1.Tier_TIER_PREVIEW
 
 	wanted, err := s.deployed(ctx, cfn, region, previewRequired)
@@ -218,7 +218,7 @@ func (s *Server) preflightSubstrates(ctx context.Context, cfn bootstrap.CFNDescr
 }
 
 func preflightResponse(required environmentv1.Tier, preview, production bootstrap.Deployed) *contractv1.PreflightResponse {
-	wanted, other := requiredSubstrate(required, preview, production)
+	wanted, other := requiredBootstrap(required, preview, production)
 	switch {
 	case wanted.Present:
 		return &contractv1.PreflightResponse{InfraTier: classToTier(wanted.Class), InfrastructurePresent: true}
@@ -229,7 +229,7 @@ func preflightResponse(required environmentv1.Tier, preview, production bootstra
 	}
 }
 
-func requiredSubstrate(required environmentv1.Tier, preview, production bootstrap.Deployed) (wanted, other bootstrap.Deployed) {
+func requiredBootstrap(required environmentv1.Tier, preview, production bootstrap.Deployed) (wanted, other bootstrap.Deployed) {
 	if required == environmentv1.Tier_TIER_PREVIEW {
 		return preview, production
 	}

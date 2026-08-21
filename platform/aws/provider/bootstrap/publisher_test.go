@@ -237,7 +237,7 @@ func TestTagPublisher(t *testing.T) {
 					t.Errorf("role does not grant %s", tc.seedParam)
 				}
 				if strings.Contains(tc.template, "parameter"+tc.otherParam+"'") {
-					t.Errorf("role reaches the other substrate's seed %s", tc.otherParam)
+					t.Errorf("role reaches the other bootstrap's seed %s", tc.otherParam)
 				}
 
 				env := tmpl.Resources["TagPublisher"].Properties.Environment.Variables

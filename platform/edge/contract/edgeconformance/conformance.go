@@ -99,7 +99,7 @@ func Run(t *testing.T, suite Suite) {
 		shared := e.SharedPreviewSurface()
 		checkSurface(t, "SharedPreviewSurface", shared)
 		if shared.Action != edge.SurfaceKeep {
-			t.Errorf("SharedPreviewSurface action = %q, want %q: it is substrate-scoped", shared.Action, edge.SurfaceKeep)
+			t.Errorf("SharedPreviewSurface action = %q, want %q: it is bootstrap-scoped", shared.Action, edge.SurfaceKeep)
 		}
 	})
 

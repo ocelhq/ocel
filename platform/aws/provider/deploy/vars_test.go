@@ -53,7 +53,7 @@ func TestVarsDecryptPolicy(t *testing.T) {
 			t.Errorf("Action = %v, want %v", st.Action, want)
 		}
 		if st.Resource != productionVarsKeyARN {
-			t.Errorf("Resource = %q, want the substrate's own key ARN", st.Resource)
+			t.Errorf("Resource = %q, want the bootstrap's own key ARN", st.Resource)
 		}
 		if strings.Contains(raw, previewVarsKeyARN) {
 			t.Errorf("policy = %s, must not reach another class's key", raw)
@@ -64,14 +64,14 @@ func TestVarsDecryptPolicy(t *testing.T) {
 func TestAppExecutionRole(t *testing.T) {
 	t.Parallel()
 
-	t.Run("carries the substrate's vars key", func(t *testing.T) {
+	t.Run("carries the bootstrap's vars key", func(t *testing.T) {
 		t.Parallel()
 
 		caches := map[string]*isrConfig{"web": {Prefix: "prod/proj/web/WEB1"}}
 
 		role := appExecutionRole(Config{VarsKeyARN: productionVarsKeyARN}, "web", caches, nil, appBundle{}, nil, nil, false, nil)
 		if role.VarsKeyARN != productionVarsKeyARN {
-			t.Errorf("VarsKeyARN = %q, want the substrate's own key", role.VarsKeyARN)
+			t.Errorf("VarsKeyARN = %q, want the bootstrap's own key", role.VarsKeyARN)
 		}
 		if role.Cache != caches["web"] {
 			t.Errorf("Cache = %+v, want the app's own cache", role.Cache)
@@ -79,7 +79,7 @@ func TestAppExecutionRole(t *testing.T) {
 
 		preview := appExecutionRole(Config{VarsKeyARN: previewVarsKeyARN}, "api", caches, nil, appBundle{}, nil, nil, false, nil)
 		if preview.VarsKeyARN != previewVarsKeyARN {
-			t.Errorf("VarsKeyARN = %q, want the preview substrate's key", preview.VarsKeyARN)
+			t.Errorf("VarsKeyARN = %q, want the preview bootstrap's key", preview.VarsKeyARN)
 		}
 		if preview.Cache != nil {
 			t.Errorf("Cache = %+v, want none for an app that keeps no cache", preview.Cache)

@@ -218,7 +218,7 @@ func (l *healLog) says(substr string) bool {
 	return false
 }
 
-func standingSubstrate(t *testing.T) (*fakeCFN, APIs) {
+func standingBootstrap(t *testing.T) (*fakeCFN, APIs) {
 	t.Helper()
 	cfn, ssmc, iamc := newFakeCFN(), newFakeSSM(), &fakeIAM{}
 	standInCloudflare(t, &fakeEdge{kind: "cloudflare"})
@@ -230,15 +230,15 @@ func standingSubstrate(t *testing.T) (*fakeCFN, APIs) {
 }
 
 func TestChangeSets(t *testing.T) {
-	t.Run("a substrate that has not moved plans nothing and leaves nothing behind", func(t *testing.T) {
-		cfn, apis := standingSubstrate(t)
+	t.Run("a bootstrap that has not moved plans nothing and leaves nothing behind", func(t *testing.T) {
+		cfn, apis := standingBootstrap(t)
 		before := cfn.updates
 
 		if err := Run(context.Background(), apis, everything(), nil, nil); err != nil {
 			t.Fatalf("Run: %v", err)
 		}
 		if cfn.updates != before {
-			t.Errorf("a re-run applied %d change sets, want none: an unchanged substrate is left alone", cfn.updates-before)
+			t.Errorf("a re-run applied %d change sets, want none: an unchanged bootstrap is left alone", cfn.updates-before)
 		}
 		if left := cfn.leftBehind(); len(left) != 0 {
 			t.Errorf("change sets %v were neither applied nor deleted", left)
@@ -246,7 +246,7 @@ func TestChangeSets(t *testing.T) {
 	})
 
 	t.Run("a replacement stops a bootstrap that was not told to accept one", func(t *testing.T) {
-		cfn, apis := standingSubstrate(t)
+		cfn, apis := standingBootstrap(t)
 		stack := isrStack(ClassProduction)
 		cfn.fallBehind(stack)
 		cfn.plan(stack, change(cfntypes.ChangeActionModify, "RevalidateQueue", "AWS::SQS::Queue", cfntypes.ReplacementTrue))
@@ -264,7 +264,7 @@ func TestChangeSets(t *testing.T) {
 	})
 
 	t.Run("accepting replacements writes the stack", func(t *testing.T) {
-		cfn, apis := standingSubstrate(t)
+		cfn, apis := standingBootstrap(t)
 		stack := isrStack(ClassProduction)
 		cfn.fallBehind(stack)
 		cfn.plan(stack, change(cfntypes.ChangeActionModify, "RevalidateQueue", "AWS::SQS::Queue", cfntypes.ReplacementTrue))
@@ -284,7 +284,7 @@ func TestHeal(t *testing.T) {
 	all := HealRequest{Features: featureNames(), Writer: "1.4.0"}
 
 	t.Run("a required feature stack that has fallen behind is written back", func(t *testing.T) {
-		cfn, apis := standingSubstrate(t)
+		cfn, apis := standingBootstrap(t)
 		stack := isrStack(ClassProduction)
 		cfn.fallBehind(stack)
 		var log healLog
@@ -305,7 +305,7 @@ func TestHeal(t *testing.T) {
 	})
 
 	t.Run("core never heals", func(t *testing.T) {
-		cfn, apis := standingSubstrate(t)
+		cfn, apis := standingBootstrap(t)
 		cfn.fallBehind(StackName)
 		var log healLog
 
@@ -314,12 +314,12 @@ func TestHeal(t *testing.T) {
 			t.Fatalf("Heal: %v", err)
 		}
 		if healed || cfn.template(StackName) != behindTemplate {
-			t.Error("the substrate's core was rewritten by a heal; only an explicit bootstrap may write it")
+			t.Error("the bootstrap's core was rewritten by a heal; only an explicit bootstrap may write it")
 		}
 	})
 
 	t.Run("a stack this deploy does not need is left alone", func(t *testing.T) {
-		cfn, apis := standingSubstrate(t)
+		cfn, apis := standingBootstrap(t)
 		stack := optStack(ClassProduction)
 		cfn.fallBehind(stack)
 		var log healLog
@@ -334,7 +334,7 @@ func TestHeal(t *testing.T) {
 	})
 
 	t.Run("a change the rule refuses leaves the stack as it stands", func(t *testing.T) {
-		cfn, apis := standingSubstrate(t)
+		cfn, apis := standingBootstrap(t)
 		stack := isrStack(ClassProduction)
 		cfn.fallBehind(stack)
 		cfn.plan(stack, change(cfntypes.ChangeActionRemove, "RevalidateQueue", "AWS::SQS::Queue", cfntypes.ReplacementFalse))
@@ -357,7 +357,7 @@ func TestHeal(t *testing.T) {
 
 	t.Run("a stack another run is writing is left to that run", func(t *testing.T) {
 		holdNothing(t)
-		cfn, apis := standingSubstrate(t)
+		cfn, apis := standingBootstrap(t)
 		stack := isrStack(ClassProduction)
 		cfn.fallBehind(stack)
 		cfn.busy(stack, changeSetAttempts*2)
@@ -377,7 +377,7 @@ func TestHeal(t *testing.T) {
 
 	t.Run("a stack that settles still behind is left to whoever wrote it", func(t *testing.T) {
 		holdNothing(t)
-		cfn, apis := standingSubstrate(t)
+		cfn, apis := standingBootstrap(t)
 		stack := isrStack(ClassProduction)
 		cfn.fallBehind(stack)
 		cfn.busy(stack, 3)

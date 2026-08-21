@@ -74,7 +74,7 @@ func TestRenderAppBundle(t *testing.T) {
 			t.Fatalf("parse the live manifest: %v", err)
 		}
 		if manifest.Slug != "shop" || manifest.Table != varsTable || manifest.KeyARN != productionVarsKeyARN || manifest.Class != varsClass {
-			t.Errorf("manifest = %+v, want the substrate's own store", manifest)
+			t.Errorf("manifest = %+v, want the bootstrap's own store", manifest)
 		}
 		want := []live.Key{{Key: "DB_PASSWORD"}, {Key: "SESSION_SECRET", Folder: "/web"}}
 		got := slices.Clone(manifest.Keys)
@@ -130,7 +130,7 @@ func TestRenderAppBundle(t *testing.T) {
 		}
 	})
 
-	t.Run("a live value needs the substrate's store", func(t *testing.T) {
+	t.Run("a live value needs the bootstrap's store", func(t *testing.T) {
 		t.Parallel()
 		app := &contractv1.ManifestApp{
 			Name:      "web",

@@ -239,7 +239,7 @@ export default {
 		}
 	})
 
-	t.Run("a project with no preview domain serves on the substrate's global one", func(t *testing.T) {
+	t.Run("a project with no preview domain serves on the bootstrap's global one", func(t *testing.T) {
 		root, sockPath := setUpDeployFixture(t)
 		writeFile(t, filepath.Join(root, "ocel.config.ts"), `
 export default {

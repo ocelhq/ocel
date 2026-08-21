@@ -74,7 +74,7 @@ func TestStackState(t *testing.T) {
 			t.Errorf("production secret = %q, want prod-secret", prod.Edge.Secret)
 		}
 		if preview.Edge.Secret != "preview-secret" {
-			t.Errorf("preview secret = %q, want preview-secret: the two substrates must not share state", preview.Edge.Secret)
+			t.Errorf("preview secret = %q, want preview-secret: the two bootstraps must not share state", preview.Edge.Secret)
 		}
 		if StackStateParamPrefix == PreviewStackStateParamPrefix {
 			t.Error("production and preview root-stack state prefixes must differ")

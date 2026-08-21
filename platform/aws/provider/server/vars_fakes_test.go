@@ -40,10 +40,10 @@ func (c *countingCFN) DescribeStacks(_ context.Context, in *cloudformation.Descr
 	}}}, nil
 }
 
-func (c *countingCFN) substrates() []string {
+func (c *countingCFN) bootstraps() []string {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	return substrateDescribes(c.stacks)
+	return bootstrapDescribes(c.stacks)
 }
 
 type fakeDynamo struct {

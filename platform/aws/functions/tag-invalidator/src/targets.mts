@@ -12,12 +12,12 @@ export interface DynamoCommands {
   GetItemCommand: new (input: any) => any;
 }
 
-export function substratePartition(substrateClass: string): string {
-  return `${partitionPrefix}${substrateClass}`;
+export function bootstrapPartition(bootstrapClass: string): string {
+  return `${partitionPrefix}${bootstrapClass}`;
 }
 
-export function ledgerPartition(substrateClass: string, project: string): string {
-  return `${substratePartition(substrateClass)}/${project}`;
+export function ledgerPartition(bootstrapClass: string, project: string): string {
+  return `${bootstrapPartition(bootstrapClass)}/${project}`;
 }
 
 async function notedAt(
@@ -44,17 +44,17 @@ export async function targetsOf(
   dynamo: DynamoLike,
   commands: DynamoCommands,
   table: string,
-  substrateClass: string,
+  bootstrapClass: string,
   project: string,
 ): Promise<string[]> {
   const [wildcard, owned] = await Promise.all([
-    notedAt(dynamo, commands, table, substratePartition(substrateClass)),
-    notedAt(dynamo, commands, table, ledgerPartition(substrateClass, project)),
+    notedAt(dynamo, commands, table, bootstrapPartition(bootstrapClass)),
+    notedAt(dynamo, commands, table, ledgerPartition(bootstrapClass, project)),
   ]);
   const targets = [...new Set([...wildcard, ...owned])].sort();
   if (targets.length === 0) {
     console.warn(
-      `ocel: the ${substrateClass} ledger names no front to invalidate for ${project}, so its raised tags reach nothing`,
+      `ocel: the ${bootstrapClass} ledger names no front to invalidate for ${project}, so its raised tags reach nothing`,
     );
   }
   return targets;

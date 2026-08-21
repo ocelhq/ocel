@@ -17,11 +17,11 @@ export function upstreamFailure(detail: unknown): ImageError {
   );
 }
 
-export class SubstrateError extends Error {
+export class BootstrapError extends Error {
   constructor(message: string, readonly detail?: unknown) {
     super(message);
-    this.name = "SubstrateError";
+    this.name = "BootstrapError";
   }
 }
 
-export const SUBSTRATE_MESSAGE = "The image optimizer could not serve this request.";
+export const BOOTSTRAP_MESSAGE = "The image optimizer could not serve this request.";

@@ -66,7 +66,7 @@ func revalidateQueueResources(class string) string {
   RevalidateQueue:
     Type: AWS::SQS::Queue
     Metadata:
-      Description: "The queue the edge sends admitted ISR refreshes to and the revalidator drains, FIFO and explicitly deduplicated so a stampede on one page renders once. Shared by every app in this substrate; delete it and background revalidation stops for all of them."
+      Description: "The queue the edge sends admitted ISR refreshes to and the revalidator drains, FIFO and explicitly deduplicated so a stampede on one page renders once. Shared by every app in this bootstrap; delete it and background revalidation stops for all of them."
     Properties:
       QueueName: %s
       FifoQueue: true
@@ -85,7 +85,7 @@ func revalidatorResources(code payloads.Placement) string {
 	return fmt.Sprintf(`  RevalidatorRole:
     Type: AWS::IAM::Role
     Properties:
-      Description: "Execution role for this substrate's ISR revalidator. Grants it the revalidation queue, the origin descriptors in the asset bucket and invoke on app functions only, so it can re-render an app but cannot touch state, variables or any other function Ocel runs in this account. Managed by ocel bootstrap; deleting it leaves the queue undrained."
+      Description: "Execution role for this bootstrap's ISR revalidator. Grants it the revalidation queue, the origin descriptors in the asset bucket and invoke on app functions only, so it can re-render an app but cannot touch state, variables or any other function Ocel runs in this account. Managed by ocel bootstrap; deleting it leaves the queue undrained."
       AssumeRolePolicyDocument:
         Version: '2012-10-17'
         Statement:
@@ -126,7 +126,7 @@ func revalidatorResources(code payloads.Placement) string {
   Revalidator:
     Type: AWS::Lambda::Function
     Properties:
-      Description: "Ocel ISR revalidator - drains this substrate's revalidation queue, turning one deduplicated message into one signed render at the app's own origin. Managed by ocel bootstrap; delete it and stale pages stay stale."
+      Description: "Ocel ISR revalidator - drains this bootstrap's revalidation queue, turning one deduplicated message into one signed render at the app's own origin. Managed by ocel bootstrap; delete it and stale pages stay stale."
       Runtime: %s
       Architectures:
         - %s
@@ -160,10 +160,10 @@ func revalidatorResources(code payloads.Placement) string {
 
 func revalidateQueueOutputs() string {
 	return fmt.Sprintf(`  %s:
-    Description: "URL of this substrate's ISR revalidation queue. The edge sends admitted refreshes to it and the revalidator drains it."
+    Description: "URL of this bootstrap's ISR revalidation queue. The edge sends admitted refreshes to it and the revalidator drains it."
     Value: !Ref RevalidateQueue
   %s:
-    Description: "ARN of this substrate's ISR revalidation queue, handed to whichever feature stack has to grant send on it."
+    Description: "ARN of this bootstrap's ISR revalidation queue, handed to whichever feature stack has to grant send on it."
     Value: !GetAtt RevalidateQueue.Arn
 `, outputRevalidateQueueURL, outputRevalidateQueueARN)
 }

@@ -110,7 +110,7 @@ function resolveAssetBucket() {
     "text",
   ]);
   if (!found || found === "None") {
-    fail("could not resolve the substrate's asset bucket; set $OCEL_ASSET_BUCKET");
+    fail("could not resolve the bootstrap's asset bucket; set $OCEL_ASSET_BUCKET");
   }
   return found;
 }

@@ -30,7 +30,7 @@ type linkOptions struct {
 	owner       string
 }
 
-func (o linkOptions) substrate() envOptions {
+func (o linkOptions) bootstrap() envOptions {
 	return envOptions{preview: o.preview, environment: o.environment}
 }
 
@@ -112,7 +112,7 @@ var linkGenerateCmd = &cobra.Command{
 
 func init() {
 	for _, c := range []*cobra.Command{linkSetCmd, linkRmCmd, linkLsCmd, linkGenerateCmd} {
-		c.Flags().BoolVar(&linkOpts.preview, "preview", false, "Act on the preview substrate instead of production")
+		c.Flags().BoolVar(&linkOpts.preview, "preview", false, "Act on the preview bootstrap instead of production")
 		c.Flags().StringVar(&linkOpts.environment, "environment", "", "Address the link this named preview environment holds instead of the class-wide one")
 		linkCmd.AddCommand(c)
 	}
@@ -126,14 +126,14 @@ func runLinkSet(ctx context.Context, d deps, cwd string, stdin io.Reader, opts l
 		return err
 	}
 	owner := opts.publisher()
-	return envSession(ctx, d, cwd, opts.substrate(), stdout, stderr, func(runner *providerrunner.Runner, cfg *projectconfig.Config, _ *projectconfig.ProviderDescriptor) error {
+	return envSession(ctx, d, cwd, opts.bootstrap(), stdout, stderr, func(runner *providerrunner.Runner, cfg *projectconfig.Config, _ *projectconfig.ProviderDescriptor) error {
 		client, err := runner.Vars()
 		if err != nil {
 			return err
 		}
 		resp, err := client.SetLink(ctx, &envvarsv1.SetLinkRequest{
 			Slug:        cfg.Slug,
-			Tier:        envTier(opts.substrate()),
+			Tier:        envTier(opts.bootstrap()),
 			Environment: opts.environment,
 			Link:        link,
 			Owner:       owner,
@@ -165,14 +165,14 @@ func decodeLink(stdin io.Reader) (*linksv1.Link, error) {
 }
 
 func runLinkRm(ctx context.Context, d deps, cwd, name string, opts linkOptions, stdout, stderr io.Writer) error {
-	return envSession(ctx, d, cwd, opts.substrate(), stdout, stderr, func(runner *providerrunner.Runner, cfg *projectconfig.Config, _ *projectconfig.ProviderDescriptor) error {
+	return envSession(ctx, d, cwd, opts.bootstrap(), stdout, stderr, func(runner *providerrunner.Runner, cfg *projectconfig.Config, _ *projectconfig.ProviderDescriptor) error {
 		client, err := runner.Vars()
 		if err != nil {
 			return err
 		}
 		resp, err := client.RemoveLink(ctx, &envvarsv1.RemoveLinkRequest{
 			Slug:        cfg.Slug,
-			Tier:        envTier(opts.substrate()),
+			Tier:        envTier(opts.bootstrap()),
 			Environment: opts.environment,
 			Name:        name,
 		})
@@ -192,14 +192,14 @@ func runLinkRm(ctx context.Context, d deps, cwd, name string, opts linkOptions, 
 }
 
 func runLinkLs(ctx context.Context, d deps, cwd string, opts linkOptions, stdout, stderr io.Writer) error {
-	return envSession(ctx, d, cwd, opts.substrate(), stdout, stderr, func(runner *providerrunner.Runner, cfg *projectconfig.Config, _ *projectconfig.ProviderDescriptor) error {
+	return envSession(ctx, d, cwd, opts.bootstrap(), stdout, stderr, func(runner *providerrunner.Runner, cfg *projectconfig.Config, _ *projectconfig.ProviderDescriptor) error {
 		client, err := runner.Vars()
 		if err != nil {
 			return err
 		}
 		resp, err := client.ListLinks(ctx, &envvarsv1.ListLinksRequest{
 			Slug:        cfg.Slug,
-			Tier:        envTier(opts.substrate()),
+			Tier:        envTier(opts.bootstrap()),
 			Environment: opts.environment,
 		})
 		if err != nil {
@@ -214,14 +214,14 @@ func runLinkLs(ctx context.Context, d deps, cwd string, opts linkOptions, stdout
 }
 
 func runLinkGenerate(ctx context.Context, d deps, cwd string, opts linkOptions, stdout, stderr io.Writer) error {
-	return envSession(ctx, d, cwd, opts.substrate(), stdout, stderr, func(runner *providerrunner.Runner, cfg *projectconfig.Config, provider *projectconfig.ProviderDescriptor) error {
+	return envSession(ctx, d, cwd, opts.bootstrap(), stdout, stderr, func(runner *providerrunner.Runner, cfg *projectconfig.Config, provider *projectconfig.ProviderDescriptor) error {
 		client, err := runner.Vars()
 		if err != nil {
 			return err
 		}
 		resp, err := client.ListLinks(ctx, &envvarsv1.ListLinksRequest{
 			Slug:        cfg.Slug,
-			Tier:        envTier(opts.substrate()),
+			Tier:        envTier(opts.bootstrap()),
 			Environment: opts.environment,
 		})
 		if err != nil {

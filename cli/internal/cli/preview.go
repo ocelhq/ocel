@@ -249,7 +249,7 @@ func requirePreviewDomain(cfg *projectconfig.Config, wildcard *contractv1.Previe
 
 	switch {
 	case declared == "" && base == "":
-		return fmt.Errorf("this project declares no preview domain and this substrate has no global one, so a preview deploy has nowhere to serve: "+
+		return fmt.Errorf("this project declares no preview domain and this bootstrap has no global one, so a preview deploy has nowhere to serve: "+
 			"add a project-level domains.preview wildcard (e.g. `domains: { preview: \"*.preview.acme.com\" }`) to %s, "+
 			"or run `ocel domain use '*.preview.acme.com' --preview` once to serve every project's previews on one shared wildcard — "+
 			"a preview domain binds to the whole project, which serves every app and every preview under that one wildcard, so it is never declared per app",
@@ -540,7 +540,7 @@ func preflightPreviewUp(ctx context.Context, d deps, runner *providerrunner.Runn
 	if err := refuseClaimedDomains(resp.GetDomainClaims(), filepath.Base(cfg.Path)); err != nil {
 		return err
 	}
-	if err := offerBootstrap(ctx, runner, resp.GetSubstrate(), environmentv1.Tier_TIER_PREVIEW, d.stdinIsTerminal(stdin), out, stdin); err != nil {
+	if err := offerBootstrap(ctx, runner, resp.GetBootstrap(), environmentv1.Tier_TIER_PREVIEW, d.stdinIsTerminal(stdin), out, stdin); err != nil {
 		return err
 	}
 	return requirePreviewDomain(cfg, resp.GetPreviewWildcard(), resp.GetIdentity(), pointer, out)
@@ -559,7 +559,7 @@ func preflightDeploy(ctx context.Context, d deps, runner *providerrunner.Runner,
 	if err := refuseClaimedDomains(resp.GetDomainClaims(), filepath.Base(cfg.Path)); err != nil {
 		return nil, err
 	}
-	if err := offerBootstrap(ctx, runner, resp.GetSubstrate(), environmentv1.Tier_TIER_PRODUCTION, interactive, out, stdin); err != nil {
+	if err := offerBootstrap(ctx, runner, resp.GetBootstrap(), environmentv1.Tier_TIER_PRODUCTION, interactive, out, stdin); err != nil {
 		return nil, err
 	}
 	return resp.GetKnownSlugs(), nil
@@ -611,7 +611,7 @@ func preflightTier(ctx context.Context, d deps, runner *providerrunner.Runner, c
 	if err != nil {
 		return err
 	}
-	return planSubstrate(resp.GetSubstrate()).refusal(required)
+	return planBootstrap(resp.GetBootstrap()).refusal(required)
 }
 
 func preflightSchema(ctx context.Context, d deps, runner *providerrunner.Runner, cfg *projectconfig.Config, required environmentv1.Tier, bootstrapHint string, out io.Writer) error {

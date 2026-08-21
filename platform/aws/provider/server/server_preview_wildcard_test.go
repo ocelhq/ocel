@@ -287,7 +287,7 @@ func TestGlobalPreviewProjects(t *testing.T) {
 		t.Fatalf("globalPreviewProjects: %v", err)
 	}
 	if len(served) != 1 || served[0] != "ambient" {
-		t.Errorf("served = %v, want [ambient]: a project on its own preview domain is not served by the substrate's", served)
+		t.Errorf("served = %v, want [ambient]: a project on its own preview domain is not served by the bootstrap's", served)
 	}
 }
 

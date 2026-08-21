@@ -168,7 +168,7 @@ func TestDestroyTakesARuleTheLedgerNeverRecorded(t *testing.T) {
 		t.Errorf("%s is still routed after the stack that served it was destroyed", previewHostname())
 	}
 	if left[neighbour] == nil {
-		t.Errorf("destroying one project took %s with it; the wildcard is shared by every project on the substrate", neighbour)
+		t.Errorf("destroying one project took %s with it; the wildcard is shared by every project on the bootstrap", neighbour)
 	}
 	if left[anyHost] == nil {
 		t.Error("destroying one project's stack took the catch-all rule with it")

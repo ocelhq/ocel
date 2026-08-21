@@ -16,11 +16,11 @@ credentials are the human's to hand over.
 
 ## One-time setup (out of band, by a human)
 
-The same disposable AWS and Cloudflare accounts and the same preview substrate
+The same disposable AWS and Cloudflare accounts and the same preview bootstrap
 that `scripts/e2e-next/README.md` describes — read its "One-time setup" and do
 that. This suite adds nothing to it. It does **not** share the next suite's
 project: slugs here are prefixed `e2en-` where the next suite's are `e2e-`, so
-the two can run at the same time against one substrate and one wildcard.
+the two can run at the same time against one bootstrap and one wildcard.
 
 Environment the scripts read:
 
@@ -145,7 +145,7 @@ ADAPTER_DIR=… node scripts/e2e-node/project-teardown.mjs e2en-<run id>
 ```
 
 `sweep-projects.mjs` does the same for every `e2en-` project except the current
-run's, reading the substrate's root-stack parameters to find them. It never
+run's, reading the bootstrap's root-stack parameters to find them. It never
 touches the next suite's `e2e-` projects.
 
 ## Adding a framework

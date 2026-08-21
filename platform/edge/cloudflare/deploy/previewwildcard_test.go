@@ -57,7 +57,7 @@ func previewWildcardSpec() edge.PreviewWildcardSpec {
 func TestReconcilePreviewWildcard(t *testing.T) {
 	t.Setenv(envAccountID, "acct")
 
-	t.Run("the shared worker claims the substrate wildcard and plants nothing", func(t *testing.T) {
+	t.Run("the shared worker claims the bootstrap wildcard and plants nothing", func(t *testing.T) {
 		m := &cfMock{
 			zoneID:   "zone1",
 			zoneName: "app.com",
@@ -77,7 +77,7 @@ func TestReconcilePreviewWildcard(t *testing.T) {
 			t.Errorf("uploaded scripts = %v, want [%s]", m.putScripts, previewEntryScript)
 		}
 		if len(m.createdRoutes) != 1 || m.createdRoutes[0]["pattern"] != "*.preview.app.com/*" {
-			t.Errorf("created routes = %v, want the substrate wildcard *.preview.app.com/*", m.createdRoutes)
+			t.Errorf("created routes = %v, want the bootstrap wildcard *.preview.app.com/*", m.createdRoutes)
 		}
 		if m.createdRoutes[0]["script"] != previewEntryScript {
 			t.Errorf("route script = %v, want %s", m.createdRoutes[0]["script"], previewEntryScript)

@@ -267,7 +267,7 @@ func TestEdgeStackSpecsGlobalPreview(t *testing.T) {
 		}
 	})
 
-	t.Run("a declared preview domain beats the substrate's", func(t *testing.T) {
+	t.Run("a declared preview domain beats the bootstrap's", func(t *testing.T) {
 		m := manifest()
 		m.Domains = []*contractv1.TierDomains{{Tier: environmentv1.Tier_TIER_PREVIEW, Hostnames: []string{"*.preview.proj.com"}}}
 		cfg := Config{
@@ -291,7 +291,7 @@ func TestEdgeStackSpecsGlobalPreview(t *testing.T) {
 		}
 	})
 
-	t.Run("an app-level preview domain beats the substrate's", func(t *testing.T) {
+	t.Run("an app-level preview domain beats the bootstrap's", func(t *testing.T) {
 		m := manifest()
 		m.Apps[0].Domains = []*contractv1.TierDomains{{Tier: environmentv1.Tier_TIER_PREVIEW, Hostnames: []string{"*.preview.proj.com"}}}
 		cfg := Config{

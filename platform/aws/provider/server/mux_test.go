@@ -139,14 +139,14 @@ func TestUnsupportedEdgeKind(t *testing.T) {
 			_, err = drainStream(stream)
 			return err
 		}},
-		{"PlanRemoveSubstrate", func(client contractv1connect.ProviderServiceClient) error {
-			_, err := client.PlanRemoveSubstrate(context.Background(), &contractv1.SubstrateRequest{
+		{"PlanRemoveBootstrap", func(client contractv1connect.ProviderServiceClient) error {
+			_, err := client.PlanRemoveBootstrap(context.Background(), &contractv1.BootstrapScope{
 				Edge: &contractv1.EdgeSelection{Kind: string(unfrontedKind)},
 			})
 			return err
 		}},
-		{"RemoveSubstrate", func(client contractv1connect.ProviderServiceClient) error {
-			stream, err := client.RemoveSubstrate(context.Background(), &contractv1.SubstrateRequest{
+		{"RemoveBootstrap", func(client contractv1connect.ProviderServiceClient) error {
+			stream, err := client.RemoveBootstrap(context.Background(), &contractv1.BootstrapScope{
 				Edge: &contractv1.EdgeSelection{Kind: string(unfrontedKind)},
 			})
 			if err != nil {

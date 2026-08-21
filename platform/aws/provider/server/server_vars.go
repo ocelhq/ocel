@@ -103,21 +103,21 @@ func (s *stores) open(ctx context.Context, key storeKey) (*vars.Store, error) {
 		return nil, fmt.Errorf("account bootstrap is present but its variable store is missing (a partial rollback?); re-run `%s`", bootstrapCmd)
 	}
 
-	substrateClass := bootstrap.ClassProduction
+	class := bootstrap.ClassProduction
 	if key.preview {
-		substrateClass = bootstrap.ClassPreview
+		class = bootstrap.ClassPreview
 	}
 	return &vars.Store{
 		Dynamo: cloud.Dynamo,
 		KMS:    cloud.KMS,
 		Table:  deployed.VarsTable,
 		KeyARN: deployed.VarsKeyARN,
-		Class:  substrateClass,
+		Class:  class,
 	}, nil
 }
 
 func linkStore(awscfg aws.Config, deployed bootstrap.Deployed, class string) deploy.LinkStore {
-	store := substrateStore(awscfg, deployed, class)
+	store := bootstrapStore(awscfg, deployed, class)
 	if store == nil {
 		return nil
 	}
@@ -125,14 +125,14 @@ func linkStore(awscfg aws.Config, deployed bootstrap.Deployed, class string) dep
 }
 
 func teardownValues(awscfg aws.Config, deployed bootstrap.Deployed, class string) deploy.ValueStore {
-	store := substrateStore(awscfg, deployed, class)
+	store := bootstrapStore(awscfg, deployed, class)
 	if store == nil {
 		return nil
 	}
 	return store
 }
 
-func substrateStore(awscfg aws.Config, deployed bootstrap.Deployed, class string) *vars.Store {
+func bootstrapStore(awscfg aws.Config, deployed bootstrap.Deployed, class string) *vars.Store {
 	if deployed.VarsTable == "" || deployed.VarsKeyARN == "" {
 		return nil
 	}
@@ -146,7 +146,7 @@ func substrateStore(awscfg aws.Config, deployed bootstrap.Deployed, class string
 }
 
 func referenceOwners(ctx context.Context, awscfg aws.Config, deployed bootstrap.Deployed, class, slug string) (map[vars.Coordinate]string, error) {
-	store := substrateStore(awscfg, deployed, class)
+	store := bootstrapStore(awscfg, deployed, class)
 	if store == nil {
 		return nil, nil
 	}

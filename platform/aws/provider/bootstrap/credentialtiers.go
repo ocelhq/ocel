@@ -19,17 +19,17 @@ const (
 )
 
 const (
-	substrateBucketARN = "arn:aws:s3:::" + StackName + "*"
-	substrateObjectARN = substrateBucketARN + "/*"
+	bootstrapBucketARN = "arn:aws:s3:::" + StackName + "*"
+	bootstrapObjectARN = bootstrapBucketARN + "/*"
 
-	substrateTableARN     = "arn:aws:dynamodb:*:*:table/" + StackName + "*"
-	substrateTablePartARN = substrateTableARN + "/*"
+	bootstrapTableARN     = "arn:aws:dynamodb:*:*:table/" + StackName + "*"
+	bootstrapTablePartARN = bootstrapTableARN + "/*"
 
-	substrateStackARN     = "arn:aws:cloudformation:*:*:stack/" + StackName + "*/*"
-	substrateChangeSetARN = "arn:aws:cloudformation:*:*:changeSet/ocel-*/*"
-	substrateRoleARN      = "arn:aws:iam::*:role/" + StackName + "*"
-	substrateFunctionARN  = "arn:aws:lambda:*:*:function:" + StackName + "*"
-	substrateQueueARN     = "arn:aws:sqs:*:*:ocel-*"
+	bootstrapStackARN     = "arn:aws:cloudformation:*:*:stack/" + StackName + "*/*"
+	bootstrapChangeSetARN = "arn:aws:cloudformation:*:*:changeSet/ocel-*/*"
+	bootstrapRoleARN      = "arn:aws:iam::*:role/" + StackName + "*"
+	bootstrapFunctionARN  = "arn:aws:lambda:*:*:function:" + StackName + "*"
+	bootstrapQueueARN     = "arn:aws:sqs:*:*:ocel-*"
 
 	edgeUserARN = "arn:aws:iam::*:user/" + EdgeUserName + "*"
 
@@ -57,7 +57,7 @@ const (
 	appSecurityGroupARN = "arn:aws:ec2:*:*:security-group/*"
 	appVPCARN           = "arn:aws:ec2:*:*:vpc/*"
 
-	substrateEventSourceARN = "arn:aws:lambda:*:*:event-source-mapping:*"
+	bootstrapEventSourceARN = "arn:aws:lambda:*:*:event-source-mapping:*"
 
 	unscopedResource = "*"
 )
@@ -141,7 +141,7 @@ func varsKeyLifecycleActions() []string {
 	}
 }
 
-func substrateAccess() []grantStatement {
+func bootstrapAccess() []grantStatement {
 	return []grantStatement{
 		{
 			actions: []string{
@@ -151,12 +151,12 @@ func substrateAccess() []grantStatement {
 				"s3:ListMultipartUploadParts",
 				"s3:PutObject",
 			},
-			resources: []string{substrateObjectARN},
+			resources: []string{bootstrapObjectARN},
 			condition: inCallerAccount(),
 		},
 		{
 			actions:   []string{"s3:GetBucketLocation", "s3:ListBucket", "s3:ListBucketMultipartUploads"},
-			resources: []string{substrateBucketARN},
+			resources: []string{bootstrapBucketARN},
 			condition: inCallerAccount(),
 		},
 		{
@@ -170,7 +170,7 @@ func substrateAccess() []grantStatement {
 				"dynamodb:Query",
 				"dynamodb:UpdateItem",
 			},
-			resources: []string{substrateTableARN, substrateTablePartARN},
+			resources: []string{bootstrapTableARN, bootstrapTablePartARN},
 		},
 		{
 			actions:   []string{"ssm:GetParameter", "ssm:GetParameters"},
@@ -189,7 +189,7 @@ func substrateAccess() []grantStatement {
 		},
 		{
 			actions:   []string{"cloudformation:DescribeStacks"},
-			resources: []string{substrateStackARN},
+			resources: []string{bootstrapStackARN},
 		},
 		{
 			actions:   []string{"sts:GetCallerIdentity"},
@@ -368,7 +368,7 @@ func appProvisioning() []grantStatement {
 	}
 }
 
-func substrateProvisioning() []grantStatement {
+func bootstrapProvisioning() []grantStatement {
 	return []grantStatement{
 		{
 			actions: []string{
@@ -377,7 +377,7 @@ func substrateProvisioning() []grantStatement {
 				"cloudformation:DeleteStack",
 				"cloudformation:DescribeStackEvents",
 			},
-			resources: []string{substrateStackARN},
+			resources: []string{bootstrapStackARN},
 		},
 		{
 			actions: []string{
@@ -385,11 +385,11 @@ func substrateProvisioning() []grantStatement {
 				"cloudformation:DescribeChangeSet",
 				"cloudformation:ExecuteChangeSet",
 			},
-			resources: []string{substrateStackARN, substrateChangeSetARN},
+			resources: []string{bootstrapStackARN, bootstrapChangeSetARN},
 		},
 		{
 			actions:   []string{"s3:CreateBucket"},
-			resources: []string{substrateBucketARN},
+			resources: []string{bootstrapBucketARN},
 		},
 		{
 			actions: []string{
@@ -406,12 +406,12 @@ func substrateProvisioning() []grantStatement {
 				"s3:PutEncryptionConfiguration",
 				"s3:PutLifecycleConfiguration",
 			},
-			resources: []string{substrateBucketARN},
+			resources: []string{bootstrapBucketARN},
 			condition: inCallerAccount(),
 		},
 		{
 			actions:   []string{"s3:DeleteObjectVersion", "s3:GetObjectVersion"},
-			resources: []string{substrateObjectARN},
+			resources: []string{bootstrapObjectARN},
 			condition: inCallerAccount(),
 		},
 		{
@@ -429,7 +429,7 @@ func substrateProvisioning() []grantStatement {
 				"dynamodb:UpdateTable",
 				"dynamodb:UpdateTimeToLive",
 			},
-			resources: []string{substrateTableARN, substrateTablePartARN},
+			resources: []string{bootstrapTableARN, bootstrapTablePartARN},
 		},
 		{
 			actions:   []string{"kms:CreateKey", "kms:TagResource"},
@@ -481,7 +481,7 @@ func substrateProvisioning() []grantStatement {
 		},
 		{
 			actions:   []string{"iam:CreateRole", "iam:TagRole"},
-			resources: []string{substrateRoleARN},
+			resources: []string{bootstrapRoleARN},
 		},
 		{
 			actions: []string{
@@ -497,16 +497,16 @@ func substrateProvisioning() []grantStatement {
 				"iam:UpdateAssumeRolePolicy",
 				"iam:UpdateRole",
 			},
-			resources: []string{substrateRoleARN},
+			resources: []string{bootstrapRoleARN},
 		},
 		{
 			actions:   []string{"iam:AttachRolePolicy", "iam:DetachRolePolicy"},
-			resources: []string{substrateRoleARN},
+			resources: []string{bootstrapRoleARN},
 			condition: attachedPolicyIsAWSLambdaExecution(false),
 		},
 		{
 			actions:   []string{"iam:PassRole"},
-			resources: []string{substrateRoleARN},
+			resources: []string{bootstrapRoleARN},
 			condition: passedToLambda(false),
 		},
 		{
@@ -528,13 +528,13 @@ func substrateProvisioning() []grantStatement {
 				"lambda:UpdateFunctionConfiguration",
 				"lambda:UpdateFunctionUrlConfig",
 			},
-			resources: []string{substrateFunctionARN},
+			resources: []string{bootstrapFunctionARN},
 		},
 		{
 			actions:   []string{"lambda:CreateEventSourceMapping"},
 			resources: []string{unscopedResource},
 			condition: map[string]any{
-				"ArnLike": map[string]any{"lambda:FunctionArn": substrateFunctionARN},
+				"ArnLike": map[string]any{"lambda:FunctionArn": bootstrapFunctionARN},
 			},
 		},
 		{
@@ -543,7 +543,7 @@ func substrateProvisioning() []grantStatement {
 				"lambda:GetEventSourceMapping",
 				"lambda:UpdateEventSourceMapping",
 			},
-			resources: []string{substrateEventSourceARN},
+			resources: []string{bootstrapEventSourceARN},
 			condition: inCallerAccount(),
 		},
 		{
@@ -557,7 +557,7 @@ func substrateProvisioning() []grantStatement {
 				"sqs:TagQueue",
 				"sqs:UntagQueue",
 			},
-			resources: []string{substrateQueueARN},
+			resources: []string{bootstrapQueueARN},
 		},
 		{
 			actions:   []string{"ssm:AddTagsToResource", "ssm:DeleteParameter", "ssm:DeleteParameters", "ssm:PutParameter"},
@@ -595,11 +595,11 @@ func edgePrincipal() []grantStatement {
 }
 
 func deployTier() []grantStatement {
-	return slices.Concat(substrateAccess(), appProvisioning())
+	return slices.Concat(bootstrapAccess(), appProvisioning())
 }
 
 func bootstrapTier() []grantStatement {
-	return slices.Concat(substrateAccess(), appProvisioning(), substrateProvisioning(), edgePrincipal())
+	return slices.Concat(bootstrapAccess(), appProvisioning(), bootstrapProvisioning(), edgePrincipal())
 }
 
 func DeployCredentialPolicy() (string, error) {

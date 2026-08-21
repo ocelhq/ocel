@@ -46,7 +46,7 @@ func PreviewWildcardSpecFor(w PreviewWildcard, baseDomain string, warn func(stri
 		return edge.PreviewWildcardSpec{}, err
 	}
 	if w.StoreScriptName == "" {
-		return edge.PreviewWildcardSpec{}, fmt.Errorf("no deployments-store worker found for the preview substrate; re-run `ocel bootstrap --preview` to provision it")
+		return edge.PreviewWildcardSpec{}, fmt.Errorf("no deployments-store worker found for the preview bootstrap; re-run `ocel bootstrap --preview` to provision it")
 	}
 	generic = withService(generic, storeServiceBinding, w.StoreScriptName)
 	generic = withVar(generic, envPreview, "1")

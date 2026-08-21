@@ -387,7 +387,7 @@ it("reports a raise it has no writer to make", async () => {
   ).rejects.toThrow(/no isr writer/);
 });
 
-it("answers like an empty cache on a substrate that binds no coordinates", async () => {
+it("answers like an empty cache on a bootstrap that binds no coordinates", async () => {
   const entrypoint = new CacheEntrypoint(createExecutionContext(), {} as Env);
 
   expect(await entrypoint.fetchGet(scope, "abc123", ["posts"])).toBeNull();

@@ -88,7 +88,7 @@ func TestProjectRemovalPlan(t *testing.T) {
 		}
 	})
 
-	t.Run("a deployed stack plans the workers, the store and the shared substrate it leaves", func(t *testing.T) {
+	t.Run("a deployed stack plans the workers, the store and the shared bootstrap it leaves", func(t *testing.T) {
 		t.Parallel()
 
 		items := planFor(t, edge.StackState{Adapter: edge.Own(map[string]string{"instance": "shop-abc"})}).GetItems()

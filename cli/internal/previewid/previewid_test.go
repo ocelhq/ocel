@@ -50,7 +50,7 @@ func TestResolve(t *testing.T) {
 			id := mustResolve(t, tc.ref, tc.prNumber)
 
 			if !validKey.MatchString(id.Key) {
-				t.Errorf("Resolve(%q).Key = %q, not a substrate-safe key", tc.ref, id.Key)
+				t.Errorf("Resolve(%q).Key = %q, not a bootstrap-safe key", tc.ref, id.Key)
 			}
 			if err := ValidateLabel(id.Key); err != nil {
 				t.Errorf("Resolve(%q).Key = %q, ValidateLabel = %v, want nil", tc.ref, id.Key, err)

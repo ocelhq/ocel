@@ -264,7 +264,7 @@ func TestSetLinkRefusesANameAnotherPublisherHolds(t *testing.T) {
 	}
 }
 
-func TestLinkHandlersNameAnAbsentSubstrate(t *testing.T) {
+func TestLinkHandlersNameAnAbsentBootstrap(t *testing.T) {
 	ctx := context.Background()
 
 	t.Run("no bootstrap stack at all", func(t *testing.T) {
@@ -272,7 +272,7 @@ func TestLinkHandlersNameAnAbsentSubstrate(t *testing.T) {
 			Slug: "shop", Tier: environmentv1.Tier_TIER_PRODUCTION,
 		})
 		if err == nil {
-			t.Fatal("ListLinks read an account holding no ocel substrate")
+			t.Fatal("ListLinks read an account holding no ocel bootstrap")
 		}
 		if !strings.Contains(err.Error(), "ocel bootstrap") {
 			t.Errorf("ListLinks said %q, which never names what a user runs to fix it", err)
@@ -284,7 +284,7 @@ func TestLinkHandlersNameAnAbsentSubstrate(t *testing.T) {
 			Slug: "shop", Tier: environmentv1.Tier_TIER_PRODUCTION, Name: "orders",
 		})
 		if err == nil {
-			t.Fatal("RemoveLink reported an account holding no ocel substrate as a store with nothing to remove")
+			t.Fatal("RemoveLink reported an account holding no ocel bootstrap as a store with nothing to remove")
 		}
 		if !strings.Contains(err.Error(), "ocel bootstrap") {
 			t.Errorf("RemoveLink said %q, which never names what a user runs to fix it", err)
@@ -298,7 +298,7 @@ func TestLinkHandlersNameAnAbsentSubstrate(t *testing.T) {
 			Slug: "shop", Tier: environmentv1.Tier_TIER_PRODUCTION, Owner: "sst", Link: ordersLink(),
 		})
 		if err == nil {
-			t.Fatal("SetLink published into a substrate carrying no variable store")
+			t.Fatal("SetLink published into a bootstrap carrying no variable store")
 		}
 		if !strings.Contains(err.Error(), "ocel bootstrap") {
 			t.Errorf("SetLink said %q, which never names what a user runs to fix it", err)

@@ -199,7 +199,7 @@ describe("renderOcelConfig", () => {
     expect(renderOcelConfig(args)).toContain(`slug: ${JSON.stringify(args.slug)}`);
   });
 
-  it("declares no preview domain, so previews serve on the substrate's", () => {
+  it("declares no preview domain, so previews serve on the bootstrap's", () => {
     expect(config).not.toContain("domains");
   });
 });

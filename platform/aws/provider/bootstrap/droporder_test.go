@@ -6,7 +6,7 @@ import (
 )
 
 func TestAFeatureIsDroppedBeforeWhatRendersAgainstIt(t *testing.T) {
-	cfn, apis := standingSubstrate(t)
+	cfn, apis := standingBootstrap(t)
 	edge, dropped := edgeStack(ClassProduction), optStack(ClassProduction)
 
 	if err := Run(context.Background(), apis, Request{Features: []string{FeatureISR, FeatureCloudflareEdge}}, nil, nil); err != nil {
@@ -29,6 +29,6 @@ func TestAFeatureIsDroppedBeforeWhatRendersAgainstIt(t *testing.T) {
 		t.Fatalf("CheckDeployed: %v", err)
 	}
 	if stale := deployed.Stale([]string{FeatureISR, FeatureCloudflareEdge}); len(stale) != 0 {
-		t.Errorf("a substrate this run just wrote reads as stale: %+v", stale)
+		t.Errorf("a bootstrap this run just wrote reads as stale: %+v", stale)
 	}
 }

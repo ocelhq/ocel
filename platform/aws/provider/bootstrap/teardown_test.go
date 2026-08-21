@@ -273,10 +273,10 @@ func TestTeardownRereadsTheSiblingBeforeDroppingThePassphrase(t *testing.T) {
 				t.Fatalf("Teardown: %v", err)
 			}
 			if _, held := ssmc.params[PassphraseParamName]; !held {
-				t.Error("the preview substrate landed mid-teardown; its Pulumi state is encrypted under the passphrase that was deleted")
+				t.Error("the preview bootstrap landed mid-teardown; its Pulumi state is encrypted under the passphrase that was deleted")
 			}
 			if _, held := ssmc.params[EdgeCredentialsParamName]; held {
-				t.Error("the torn-down substrate's own parameters must still go")
+				t.Error("the torn-down bootstrap's own parameters must still go")
 			}
 		})
 	}
@@ -306,7 +306,7 @@ func TestTeardownReclaimsTheClassOriginSecret(t *testing.T) {
 			for _, name := range names {
 				ssmc.params[name] = "{}"
 			}
-			ssmc.params[tc.other] = "the other substrate's secret"
+			ssmc.params[tc.other] = "the other bootstrap's secret"
 			user, err := EdgeUserNameFor(tc.class)
 			if err != nil {
 				t.Fatalf("EdgeUserNameFor: %v", err)
@@ -322,10 +322,10 @@ func TestTeardownReclaimsTheClassOriginSecret(t *testing.T) {
 				t.Fatalf("Teardown: %v", err)
 			}
 			if _, held := ssmc.params[tc.mine]; held {
-				t.Errorf("%s outlived its substrate; the next bootstrap adopts a secret no release demands", tc.mine)
+				t.Errorf("%s outlived its bootstrap; the next bootstrap adopts a secret no release demands", tc.mine)
 			}
 			if _, held := ssmc.params[tc.other]; !held {
-				t.Errorf("tearing down %s took %s with it, stranding every release the other substrate still serves", tc.class, tc.other)
+				t.Errorf("tearing down %s took %s with it, stranding every release the other bootstrap still serves", tc.class, tc.other)
 			}
 		})
 	}
@@ -340,7 +340,7 @@ func TestTeardownDropsThePassphraseWithNoSibling(t *testing.T) {
 		t.Fatalf("Teardown: %v", err)
 	}
 	if _, held := ssmc.params[PassphraseParamName]; held {
-		t.Error("nothing else is bootstrapped, so the passphrase must go with the substrate")
+		t.Error("nothing else is bootstrapped, so the passphrase must go with the bootstrap")
 	}
 }
 

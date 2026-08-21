@@ -65,7 +65,7 @@ const fakeConfigureJournalEnvVar = "OCEL_TEST_FAKE_CONFIGURE_JOURNAL"
 
 const fakeEnabledFeaturesEnvVar = "OCEL_TEST_FAKE_ENABLED_FEATURES"
 
-const fakeSubstrateEnvVar = "OCEL_TEST_FAKE_SUBSTRATE"
+const fakeBootstrapEnvVar = "OCEL_TEST_FAKE_BOOTSTRAP"
 
 const fakeDescribeJournalEnvVar = "OCEL_TEST_FAKE_DESCRIBE_JOURNAL"
 
@@ -371,7 +371,7 @@ func (s *deployFakeProviderServer) DescribeBootstrap(ctx context.Context, req *c
 			feature("image-optimization", "on-demand image optimization"),
 			feature("cloudflare-edge", "a Cloudflare front", "isr"),
 		},
-		Substrate: fakeSubstrate(req.GetTier()),
+		Bootstrap: fakeBootstrap(req.GetTier()),
 	}, nil
 }
 
@@ -389,18 +389,18 @@ func journalDescribeBootstrap(req *contractv1.DescribeBootstrapRequest) {
 	fmt.Fprintf(f, "tier=%s withDependents=%t\n", req.GetTier(), req.GetWithDependents())
 }
 
-func fakeSubstrate(tier environmentv1.Tier) *contractv1.SubstrateStatus {
-	shape := os.Getenv(fakeSubstrateEnvVar)
+func fakeBootstrap(tier environmentv1.Tier) *contractv1.BootstrapStatus {
+	shape := os.Getenv(fakeBootstrapEnvVar)
 	if shape == "" || tier == environmentv1.Tier_TIER_PREVIEW {
-		return &contractv1.SubstrateStatus{Tier: tier, RequiredSchema: 1, Writer: "1.4.0"}
+		return &contractv1.BootstrapStatus{Tier: tier, RequiredSchema: 1, Writer: "1.4.0"}
 	}
-	status := &contractv1.SubstrateStatus{
+	status := &contractv1.BootstrapStatus{
 		Tier:           tier,
 		Present:        true,
 		Schema:         1,
 		RequiredSchema: 1,
 		Writer:         "1.4.0",
-		Stacks: []*contractv1.SubstrateStack{
+		Stacks: []*contractv1.BootstrapStack{
 			{Name: "ocel-bootstrap", Present: true, Schema: 1, DigestCurrent: true, WrittenBy: "1.4.0", Required: true},
 			{Name: "ocel-bootstrap-isr", Feature: "isr", Present: true, Schema: 1, DigestCurrent: true, WrittenBy: "1.4.0", Required: true},
 			{Name: "ocel-bootstrap-image-optimization", Feature: "image-optimization"},
@@ -441,7 +441,7 @@ func (s *deployFakeProviderServer) Bootstrap(ctx context.Context, req *contractv
 	})
 }
 
-func (s *deployFakeProviderServer) PlanRemoveSubstrate(ctx context.Context, req *contractv1.SubstrateRequest) (*contractv1.RemovalPlan, error) {
+func (s *deployFakeProviderServer) PlanRemoveBootstrap(ctx context.Context, req *contractv1.BootstrapScope) (*contractv1.RemovalPlan, error) {
 	if err := s.checkToken(ctx); err != nil {
 		return nil, err
 	}
@@ -458,26 +458,26 @@ func (s *deployFakeProviderServer) PlanRemoveSubstrate(ctx context.Context, req 
 				Kind:   "edge bootstrap",
 				Name:   resolvedEdgeKind(req.GetEdge().GetKind()),
 				Action: contractv1.RemovalItem_ACTION_DELETE,
-				Reason: "every worker the edge stood up for the " + class + " substrate",
+				Reason: "every worker the edge stood up for the " + class + " bootstrap",
 			},
 			{
 				Kind:   "bucket",
 				Name:   "ocel-state-" + class,
 				Action: contractv1.RemovalItem_ACTION_DELETE,
-				Reason: "the Pulumi state of every stack this substrate deployed",
+				Reason: "the Pulumi state of every stack this bootstrap deployed",
 				Slow:   true,
 			},
 			{
 				Kind:   "parameter",
 				Name:   "/ocel/pulumi/passphrase",
 				Action: contractv1.RemovalItem_ACTION_KEEP,
-				Reason: "the production substrate is still bootstrapped and its Pulumi state is encrypted under it",
+				Reason: "the production bootstrap still stands and its Pulumi state is encrypted under it",
 			},
 		},
 	}, nil
 }
 
-func (s *deployFakeProviderServer) RemoveSubstrate(ctx context.Context, req *contractv1.SubstrateRequest, stream *connect.ServerStream[progressv1.OperationEvent]) error {
+func (s *deployFakeProviderServer) RemoveBootstrap(ctx context.Context, req *contractv1.BootstrapScope, stream *connect.ServerStream[progressv1.OperationEvent]) error {
 	if err := s.checkToken(ctx); err != nil {
 		return err
 	}
@@ -529,7 +529,7 @@ func (s *deployFakeProviderServer) Preflight(ctx context.Context, req *contractv
 		}
 		resp.DomainClaims = append(resp.DomainClaims, claim)
 	}
-	resp.Substrate = fakeSubstrate(req.GetRequiredTier())
+	resp.Bootstrap = fakeBootstrap(req.GetRequiredTier())
 	resp.PreviewWildcard = fakeGlobalDomain()
 	if p := os.Getenv(fakeCredProblemEnvVar); p != "" {
 		resp.CredentialProblems = append(resp.CredentialProblems, &contractv1.CredentialProblem{
@@ -997,7 +997,7 @@ func (s *deployFakeProviderServer) PlanRemoveProject(ctx context.Context, req *c
 					Kind:   "preview wildcard",
 					Name:   "*.preview.acme.com",
 					Action: contractv1.RemovalItem_ACTION_KEEP,
-					Reason: "substrate-scoped: every project's previews are served on it",
+					Reason: "bootstrap-scoped: every project's previews are served on it",
 				},
 				fakeInfraStackItem(slug + "--pr-1--infra"),
 				fakeInfraStackItem(slug + "--pr-2--infra"),

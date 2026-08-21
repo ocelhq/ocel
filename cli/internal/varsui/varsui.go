@@ -38,7 +38,7 @@ type Version struct {
 
 type State struct {
 	Slug         string         `json:"slug"`
-	Substrate    string         `json:"substrate"`
+	Bootstrap    string         `json:"bootstrap"`
 	Environments []string       `json:"environments"`
 	Matrix       envgate.Matrix `json:"matrix"`
 }
@@ -307,13 +307,13 @@ func (s *Session) writeState(ctx context.Context, w http.ResponseWriter) {
 	}
 	writeJSON(w, State{
 		Slug:         s.opts.Slug,
-		Substrate:    s.substrate(),
+		Bootstrap:    s.bootstrap(),
 		Environments: s.opts.Environments,
 		Matrix:       s.opts.Gate.Matrix(s.opts.Environments),
 	})
 }
 
-func (s *Session) substrate() string {
+func (s *Session) bootstrap() string {
 	if s.opts.Preview {
 		return "preview"
 	}

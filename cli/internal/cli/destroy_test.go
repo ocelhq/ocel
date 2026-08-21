@@ -29,7 +29,7 @@ func TestConfirmPhrase(t *testing.T) {
 		{"closed stdin aborts", "project name", "proj_shop", "", false, "Type the project name (proj_shop) to confirm:"},
 		{"the base domain is its own scope", "domain", "preview.acme.com", "preview.acme.com\n", true, "Type the domain (preview.acme.com) to confirm:"},
 		{"another scope's phrase does not carry", "domain", "preview.acme.com", "proj_shop\n", false, "Type the domain (preview.acme.com) to confirm:"},
-		{"the class name is the substrate's phrase", "class name", "preview", "preview\n", true, "Type the class name (preview) to confirm:"},
+		{"the class name is the bootstrap's phrase", "class name", "preview", "preview\n", true, "Type the class name (preview) to confirm:"},
 		{"the other class does not confirm this one", "class name", "preview", "production\n", false, "Type the class name (preview) to confirm:"},
 		{"a phrase the provider never sent confirms nothing", "project name", "", "\n", false, "Type the project name () to confirm:"},
 	}
@@ -179,7 +179,7 @@ func TestRunDestroyPreviewProject(t *testing.T) {
 			"every preview variable value",
 			"The account-level preview bootstrap is left intact. This cannot be undone.",
 			"Left in place:",
-			"keep preview wildcard *.preview.acme.com — substrate-scoped",
+			"keep preview wildcard *.preview.acme.com — bootstrap-scoped",
 			"DESTROY PROJECT project=test-app dns= tier=TIER_PREVIEW",
 		} {
 			if !strings.Contains(out, want) {

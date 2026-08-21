@@ -190,7 +190,7 @@ func (p *provider) SharedPreviewSurface() edge.Surface {
 		Kind:   "preview resolver",
 		Name:   "function and key-value store",
 		Action: edge.SurfaceKeep,
-		Reason: "substrate-scoped: every project's routes are read from it",
+		Reason: "bootstrap-scoped: every project's routes are read from it",
 	}
 }
 
@@ -220,12 +220,12 @@ func (p *provider) settler() Settler {
 
 func knownClass(class edge.Class) error {
 	if class != edge.ClassProduction && class != edge.ClassPreview {
-		return fmt.Errorf("the %q edge does not know the substrate class %q", Kind, class)
+		return fmt.Errorf("the %q edge does not know the class %q", Kind, class)
 	}
 	return nil
 }
 
-func (p *provider) substrate(ctx context.Context, c Clients, class edge.Class) (bootstrap.Deployed, error) {
+func (p *provider) bootstrap(ctx context.Context, c Clients, class edge.Class) (bootstrap.Deployed, error) {
 	if err := knownClass(class); err != nil {
 		return bootstrap.Deployed{}, err
 	}
@@ -268,12 +268,12 @@ func (p *provider) Reconcile(ctx context.Context, spec edge.StackSpec, prior edg
 	if spec.Slug == "" {
 		return nil, fmt.Errorf("the %q edge fronts a project by slug; this stack carries none", Kind)
 	}
-	deployed, err := p.substrate(ctx, c, spec.Class)
+	deployed, err := p.bootstrap(ctx, c, spec.Class)
 	if err != nil {
 		return nil, err
 	}
 	if !deployed.Present {
-		return nil, fmt.Errorf("the %s substrate is not bootstrapped, so the %q edge has no state table to keep %s's deployments in", spec.Class, Kind, spec.Slug)
+		return nil, fmt.Errorf("the %s bootstrap is not standing, so the %q edge has no state table to keep %s's deployments in", spec.Class, Kind, spec.Slug)
 	}
 	var own private
 	if err := prior.Adapter.Into(&own); err != nil {

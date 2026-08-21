@@ -22,7 +22,7 @@ import (
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
-type substrateSSMAPI interface {
+type bootstrapSSMAPI interface {
 	bootstrap.SSMAPI
 	bootstrap.SSMPathAPI
 }
@@ -34,21 +34,21 @@ type indexedProjectsAPI interface {
 type teardownDeps struct {
 	edge     edge.Edge
 	cfn      bootstrap.CFNTeardownAPI
-	ssm      substrateSSMAPI
+	ssm      bootstrapSSMAPI
 	iam      bootstrap.IAMKeyAPI
 	buckets  bootstrap.BucketEmptierAPI
 	deployed bootstrap.Deployed
 	index    indexedProjectsAPI
 }
 
-func substrateClassOf(tier environmentv1.Tier) (string, error) {
+func classOf(tier environmentv1.Tier) (string, error) {
 	switch tier {
 	case environmentv1.Tier_TIER_PRODUCTION, environmentv1.Tier_TIER_UNSPECIFIED:
 		return bootstrap.ClassProduction, nil
 	case environmentv1.Tier_TIER_PREVIEW:
 		return bootstrap.ClassPreview, nil
 	default:
-		return "", fmt.Errorf("there is no %s substrate to tear down; a substrate is either production or preview", strings.ToLower(strings.TrimPrefix(tier.String(), "TIER_")))
+		return "", fmt.Errorf("there is no %s bootstrap to tear down; a bootstrap is either production or preview", strings.ToLower(strings.TrimPrefix(tier.String(), "TIER_")))
 	}
 }
 
@@ -59,30 +59,30 @@ func teardownCommand(class string) string {
 	return "ocel bootstrap --destroy"
 }
 
-type substrateOccupancy struct {
+type bootstrapOccupancy struct {
 	projects []string
 	wildcard string
 }
 
-func readSubstrateOccupancy(ctx context.Context, deps teardownDeps, class string) (substrateOccupancy, error) {
+func readBootstrapOccupancy(ctx context.Context, deps teardownDeps, class string) (bootstrapOccupancy, error) {
 	edgeStacks, err := bootstrap.StackSlugsFor(ctx, deps.ssm, class)
 	if err != nil {
-		return substrateOccupancy{}, err
+		return bootstrapOccupancy{}, err
 	}
 	var indexed []string
 	if deps.index != nil {
 		indexed, err = deps.index.Projects(ctx)
 		if err != nil {
-			return substrateOccupancy{}, err
+			return bootstrapOccupancy{}, err
 		}
 	}
-	occupancy := substrateOccupancy{projects: mergeSlugs(edgeStacks, indexed)}
+	occupancy := bootstrapOccupancy{projects: mergeSlugs(edgeStacks, indexed)}
 	if class != bootstrap.ClassPreview {
 		return occupancy, nil
 	}
 	recorded, err := bootstrap.ReadPreviewDomain(ctx, deps.ssm, class)
 	if err != nil {
-		return substrateOccupancy{}, err
+		return bootstrapOccupancy{}, err
 	}
 	occupancy.wildcard = recorded.BaseDomain
 	return occupancy, nil
@@ -97,7 +97,7 @@ func mergeSlugs(lists ...[]string) []string {
 	return slices.Compact(all)
 }
 
-func (o substrateOccupancy) refuse(class string) error {
+func (o bootstrapOccupancy) refuse(class string) error {
 	if len(o.projects) == 0 && o.wildcard == "" {
 		return nil
 	}
@@ -118,7 +118,7 @@ func (o substrateOccupancy) refuse(class string) error {
 			edge.PreviewWildcard(o.wildcard),
 		))
 	}
-	return fmt.Errorf("the %s substrate is still in use, so `%s` will not remove it: %s",
+	return fmt.Errorf("the %s bootstrap is still in use, so `%s` will not remove it: %s",
 		class, teardownCommand(class), strings.Join(reasons, "; "))
 }
 
@@ -140,14 +140,14 @@ func teardownPlanItems(class string, edgeKind edge.Kind, deployed bootstrap.Depl
 		Kind:   "edge bootstrap",
 		Name:   string(edgeKind),
 		Action: contractv1.RemovalItem_ACTION_DELETE,
-		Reason: fmt.Sprintf("every worker, cache store and credential the %s edge stood up for the %s substrate", edgeKind, class),
+		Reason: fmt.Sprintf("every worker, cache store and credential the %s edge stood up for the %s bootstrap", edgeKind, class),
 		Slow:   true,
 	}}
 
 	if deployed.Present {
 		for _, bucket := range []struct{ name, reason string }{
-			{deployed.StateBucket, "the Pulumi state of every stack this substrate deployed, all versions of it; nothing can describe or remove those resources afterwards"},
-			{deployed.ArtifactBucket, "the function code staged for this substrate"},
+			{deployed.StateBucket, "the Pulumi state of every stack this bootstrap deployed, all versions of it; nothing can describe or remove those resources afterwards"},
+			{deployed.ArtifactBucket, "the function code staged for this bootstrap"},
 			{deployed.AssetBucket, "every build's static assets, prerender fallbacks and edge fetch cache"},
 		} {
 			if bucket.name == "" {
@@ -188,7 +188,7 @@ func teardownPlanItems(class string, edgeKind edge.Kind, deployed bootstrap.Depl
 				Kind:   "feature stack",
 				Name:   bootstrap.FeatureStackName(feature, class),
 				Action: contractv1.RemovalItem_ACTION_DELETE,
-				Reason: fmt.Sprintf("the CloudFormation stack carrying the %s feature of this substrate", feature),
+				Reason: fmt.Sprintf("the CloudFormation stack carrying the %s feature of this bootstrap", feature),
 			})
 		}
 		items = append(items, &contractv1.RemovalItem{
@@ -204,7 +204,7 @@ func teardownPlanItems(class string, edgeKind edge.Kind, deployed bootstrap.Depl
 			Kind:   "parameter",
 			Name:   name,
 			Action: contractv1.RemovalItem_ACTION_DELETE,
-			Reason: "a handle this substrate stored; nothing reads it once the substrate is gone",
+			Reason: "a handle this bootstrap stored; nothing reads it once the bootstrap is gone",
 		})
 	}
 
@@ -220,7 +220,7 @@ func teardownPlanItems(class string, edgeKind edge.Kind, deployed bootstrap.Depl
 			return nil, err
 		}
 		passphrase.Action = contractv1.RemovalItem_ACTION_KEEP
-		passphrase.Reason = fmt.Sprintf("the %s substrate is still bootstrapped and its Pulumi state is encrypted under it", sibling)
+		passphrase.Reason = fmt.Sprintf("the %s bootstrap still stands and its Pulumi state is encrypted under it", sibling)
 	}
 	return append(items, passphrase), nil
 }
@@ -235,13 +235,13 @@ func bucketItem(name, reason string) *contractv1.RemovalItem {
 	}
 }
 
-func (s *Server) PlanRemoveSubstrate(ctx context.Context, req *contractv1.SubstrateRequest) (*contractv1.RemovalPlan, error) {
+func (s *Server) PlanRemoveBootstrap(ctx context.Context, req *contractv1.BootstrapScope) (*contractv1.RemovalPlan, error) {
 	opts := s.config.get()
 	edgeFront, err := s.edge(requestedEdge(req), opts.Region)
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInvalidArgument, err)
 	}
-	class, err := substrateClassOf(req.GetTier())
+	class, err := classOf(req.GetTier())
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInvalidArgument, err)
 	}
@@ -253,7 +253,7 @@ func (s *Server) PlanRemoveSubstrate(ctx context.Context, req *contractv1.Substr
 }
 
 func planTeardown(ctx context.Context, deps teardownDeps, class string) (*contractv1.RemovalPlan, error) {
-	occupancy, err := readSubstrateOccupancy(ctx, deps, class)
+	occupancy, err := readBootstrapOccupancy(ctx, deps, class)
 	if err != nil {
 		return nil, err
 	}
@@ -271,14 +271,14 @@ func planTeardown(ctx context.Context, deps teardownDeps, class string) (*contra
 	return &contractv1.RemovalPlan{EdgeKind: string(deps.edge.Kind()), Items: items, Subject: class}, nil
 }
 
-func (s *Server) RemoveSubstrate(ctx context.Context, req *contractv1.SubstrateRequest, stream *connect.ServerStream[progressv1.OperationEvent]) error {
+func (s *Server) RemoveBootstrap(ctx context.Context, req *contractv1.BootstrapScope, stream *connect.ServerStream[progressv1.OperationEvent]) error {
 	opts := s.config.get()
 	edgeFront, err := s.edge(requestedEdge(req), opts.Region)
 	if err != nil {
 		return connect.NewError(connect.CodeInvalidArgument, err)
 	}
 
-	class, err := substrateClassOf(req.GetTier())
+	class, err := classOf(req.GetTier())
 	if err != nil {
 		return connect.NewError(connect.CodeInvalidArgument, err)
 	}
@@ -298,7 +298,7 @@ func (s *Server) RemoveSubstrate(ctx context.Context, req *contractv1.SubstrateR
 }
 
 func runTeardown(ctx context.Context, deps teardownDeps, class string, progress, logf func(string)) error {
-	occupancy, err := readSubstrateOccupancy(ctx, deps, class)
+	occupancy, err := readBootstrapOccupancy(ctx, deps, class)
 	if err != nil {
 		return err
 	}

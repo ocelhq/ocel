@@ -1569,7 +1569,7 @@ func (x *DescribeBootstrapRequest) GetWithDependents() bool {
 type DescribeBootstrapResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Features      []*Feature             `protobuf:"bytes,1,rep,name=features,proto3" json:"features,omitempty"`
-	Substrate     *SubstrateStatus       `protobuf:"bytes,2,opt,name=substrate,proto3" json:"substrate,omitempty"`
+	Bootstrap     *BootstrapStatus       `protobuf:"bytes,2,opt,name=bootstrap,proto3" json:"bootstrap,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1611,14 +1611,14 @@ func (x *DescribeBootstrapResponse) GetFeatures() []*Feature {
 	return nil
 }
 
-func (x *DescribeBootstrapResponse) GetSubstrate() *SubstrateStatus {
+func (x *DescribeBootstrapResponse) GetBootstrap() *BootstrapStatus {
 	if x != nil {
-		return x.Substrate
+		return x.Bootstrap
 	}
 	return nil
 }
 
-type SubstrateStack struct {
+type BootstrapStack struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Name          string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
 	Feature       string                 `protobuf:"bytes,2,opt,name=feature,proto3" json:"feature,omitempty"`
@@ -1631,20 +1631,20 @@ type SubstrateStack struct {
 	sizeCache     protoimpl.SizeCache
 }
 
-func (x *SubstrateStack) Reset() {
-	*x = SubstrateStack{}
+func (x *BootstrapStack) Reset() {
+	*x = BootstrapStack{}
 	mi := &file_provider_contract_v1_contract_proto_msgTypes[21]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *SubstrateStack) String() string {
+func (x *BootstrapStack) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*SubstrateStack) ProtoMessage() {}
+func (*BootstrapStack) ProtoMessage() {}
 
-func (x *SubstrateStack) ProtoReflect() protoreflect.Message {
+func (x *BootstrapStack) ProtoReflect() protoreflect.Message {
 	mi := &file_provider_contract_v1_contract_proto_msgTypes[21]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -1656,88 +1656,88 @@ func (x *SubstrateStack) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use SubstrateStack.ProtoReflect.Descriptor instead.
-func (*SubstrateStack) Descriptor() ([]byte, []int) {
+// Deprecated: Use BootstrapStack.ProtoReflect.Descriptor instead.
+func (*BootstrapStack) Descriptor() ([]byte, []int) {
 	return file_provider_contract_v1_contract_proto_rawDescGZIP(), []int{21}
 }
 
-func (x *SubstrateStack) GetName() string {
+func (x *BootstrapStack) GetName() string {
 	if x != nil {
 		return x.Name
 	}
 	return ""
 }
 
-func (x *SubstrateStack) GetFeature() string {
+func (x *BootstrapStack) GetFeature() string {
 	if x != nil {
 		return x.Feature
 	}
 	return ""
 }
 
-func (x *SubstrateStack) GetPresent() bool {
+func (x *BootstrapStack) GetPresent() bool {
 	if x != nil {
 		return x.Present
 	}
 	return false
 }
 
-func (x *SubstrateStack) GetSchema() uint32 {
+func (x *BootstrapStack) GetSchema() uint32 {
 	if x != nil {
 		return x.Schema
 	}
 	return 0
 }
 
-func (x *SubstrateStack) GetDigestCurrent() bool {
+func (x *BootstrapStack) GetDigestCurrent() bool {
 	if x != nil {
 		return x.DigestCurrent
 	}
 	return false
 }
 
-func (x *SubstrateStack) GetWrittenBy() string {
+func (x *BootstrapStack) GetWrittenBy() string {
 	if x != nil {
 		return x.WrittenBy
 	}
 	return ""
 }
 
-func (x *SubstrateStack) GetRequired() bool {
+func (x *BootstrapStack) GetRequired() bool {
 	if x != nil {
 		return x.Required
 	}
 	return false
 }
 
-type SubstrateStatus struct {
+type BootstrapStatus struct {
 	state          protoimpl.MessageState `protogen:"open.v1"`
 	Tier           v1.Tier                `protobuf:"varint,1,opt,name=tier,proto3,enum=common.environment.v1.Tier" json:"tier,omitempty"`
 	Present        bool                   `protobuf:"varint,2,opt,name=present,proto3" json:"present,omitempty"`
 	Schema         uint32                 `protobuf:"varint,3,opt,name=schema,proto3" json:"schema,omitempty"`
 	RequiredSchema uint32                 `protobuf:"varint,4,opt,name=required_schema,json=requiredSchema,proto3" json:"required_schema,omitempty"`
 	AutoHeal       bool                   `protobuf:"varint,5,opt,name=auto_heal,json=autoHeal,proto3" json:"auto_heal,omitempty"`
-	Stacks         []*SubstrateStack      `protobuf:"bytes,6,rep,name=stacks,proto3" json:"stacks,omitempty"`
+	Stacks         []*BootstrapStack      `protobuf:"bytes,6,rep,name=stacks,proto3" json:"stacks,omitempty"`
 	Writer         string                 `protobuf:"bytes,7,opt,name=writer,proto3" json:"writer,omitempty"`
 	Downgrade      bool                   `protobuf:"varint,8,opt,name=downgrade,proto3" json:"downgrade,omitempty"`
 	unknownFields  protoimpl.UnknownFields
 	sizeCache      protoimpl.SizeCache
 }
 
-func (x *SubstrateStatus) Reset() {
-	*x = SubstrateStatus{}
+func (x *BootstrapStatus) Reset() {
+	*x = BootstrapStatus{}
 	mi := &file_provider_contract_v1_contract_proto_msgTypes[22]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *SubstrateStatus) String() string {
+func (x *BootstrapStatus) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*SubstrateStatus) ProtoMessage() {}
+func (*BootstrapStatus) ProtoMessage() {}
 
-func (x *SubstrateStatus) ProtoReflect() protoreflect.Message {
+func (x *BootstrapStatus) ProtoReflect() protoreflect.Message {
 	mi := &file_provider_contract_v1_contract_proto_msgTypes[22]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -1749,61 +1749,61 @@ func (x *SubstrateStatus) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use SubstrateStatus.ProtoReflect.Descriptor instead.
-func (*SubstrateStatus) Descriptor() ([]byte, []int) {
+// Deprecated: Use BootstrapStatus.ProtoReflect.Descriptor instead.
+func (*BootstrapStatus) Descriptor() ([]byte, []int) {
 	return file_provider_contract_v1_contract_proto_rawDescGZIP(), []int{22}
 }
 
-func (x *SubstrateStatus) GetTier() v1.Tier {
+func (x *BootstrapStatus) GetTier() v1.Tier {
 	if x != nil {
 		return x.Tier
 	}
 	return v1.Tier(0)
 }
 
-func (x *SubstrateStatus) GetPresent() bool {
+func (x *BootstrapStatus) GetPresent() bool {
 	if x != nil {
 		return x.Present
 	}
 	return false
 }
 
-func (x *SubstrateStatus) GetSchema() uint32 {
+func (x *BootstrapStatus) GetSchema() uint32 {
 	if x != nil {
 		return x.Schema
 	}
 	return 0
 }
 
-func (x *SubstrateStatus) GetRequiredSchema() uint32 {
+func (x *BootstrapStatus) GetRequiredSchema() uint32 {
 	if x != nil {
 		return x.RequiredSchema
 	}
 	return 0
 }
 
-func (x *SubstrateStatus) GetAutoHeal() bool {
+func (x *BootstrapStatus) GetAutoHeal() bool {
 	if x != nil {
 		return x.AutoHeal
 	}
 	return false
 }
 
-func (x *SubstrateStatus) GetStacks() []*SubstrateStack {
+func (x *BootstrapStatus) GetStacks() []*BootstrapStack {
 	if x != nil {
 		return x.Stacks
 	}
 	return nil
 }
 
-func (x *SubstrateStatus) GetWriter() string {
+func (x *BootstrapStatus) GetWriter() string {
 	if x != nil {
 		return x.Writer
 	}
 	return ""
 }
 
-func (x *SubstrateStatus) GetDowngrade() bool {
+func (x *BootstrapStatus) GetDowngrade() bool {
 	if x != nil {
 		return x.Downgrade
 	}
@@ -2086,7 +2086,7 @@ func (x *EdgeSelection) GetAllowDegraded() []string {
 	return nil
 }
 
-type SubstrateRequest struct {
+type BootstrapScope struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Tier          v1.Tier                `protobuf:"varint,1,opt,name=tier,proto3,enum=common.environment.v1.Tier" json:"tier,omitempty"`
 	Edge          *EdgeSelection         `protobuf:"bytes,2,opt,name=edge,proto3" json:"edge,omitempty"`
@@ -2094,20 +2094,20 @@ type SubstrateRequest struct {
 	sizeCache     protoimpl.SizeCache
 }
 
-func (x *SubstrateRequest) Reset() {
-	*x = SubstrateRequest{}
+func (x *BootstrapScope) Reset() {
+	*x = BootstrapScope{}
 	mi := &file_provider_contract_v1_contract_proto_msgTypes[28]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *SubstrateRequest) String() string {
+func (x *BootstrapScope) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*SubstrateRequest) ProtoMessage() {}
+func (*BootstrapScope) ProtoMessage() {}
 
-func (x *SubstrateRequest) ProtoReflect() protoreflect.Message {
+func (x *BootstrapScope) ProtoReflect() protoreflect.Message {
 	mi := &file_provider_contract_v1_contract_proto_msgTypes[28]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -2119,19 +2119,19 @@ func (x *SubstrateRequest) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use SubstrateRequest.ProtoReflect.Descriptor instead.
-func (*SubstrateRequest) Descriptor() ([]byte, []int) {
+// Deprecated: Use BootstrapScope.ProtoReflect.Descriptor instead.
+func (*BootstrapScope) Descriptor() ([]byte, []int) {
 	return file_provider_contract_v1_contract_proto_rawDescGZIP(), []int{28}
 }
 
-func (x *SubstrateRequest) GetTier() v1.Tier {
+func (x *BootstrapScope) GetTier() v1.Tier {
 	if x != nil {
 		return x.Tier
 	}
 	return v1.Tier(0)
 }
 
-func (x *SubstrateRequest) GetEdge() *EdgeSelection {
+func (x *BootstrapScope) GetEdge() *EdgeSelection {
 	if x != nil {
 		return x.Edge
 	}
@@ -2643,7 +2643,7 @@ type PreflightResponse struct {
 	KnownSlugs            []string               `protobuf:"bytes,5,rep,name=known_slugs,json=knownSlugs,proto3" json:"known_slugs,omitempty"`
 	DomainClaims          []*DomainClaim         `protobuf:"bytes,6,rep,name=domain_claims,json=domainClaims,proto3" json:"domain_claims,omitempty"`
 	PreviewWildcard       *PreviewWildcard       `protobuf:"bytes,7,opt,name=preview_wildcard,json=previewWildcard,proto3" json:"preview_wildcard,omitempty"`
-	Substrate             *SubstrateStatus       `protobuf:"bytes,8,opt,name=substrate,proto3" json:"substrate,omitempty"`
+	Bootstrap             *BootstrapStatus       `protobuf:"bytes,8,opt,name=bootstrap,proto3" json:"bootstrap,omitempty"`
 	unknownFields         protoimpl.UnknownFields
 	sizeCache             protoimpl.SizeCache
 }
@@ -2727,9 +2727,9 @@ func (x *PreflightResponse) GetPreviewWildcard() *PreviewWildcard {
 	return nil
 }
 
-func (x *PreflightResponse) GetSubstrate() *SubstrateStatus {
+func (x *PreflightResponse) GetBootstrap() *BootstrapStatus {
 	if x != nil {
-		return x.Substrate
+		return x.Bootstrap
 	}
 	return nil
 }
@@ -3585,8 +3585,8 @@ const file_provider_contract_v1_contract_proto_rawDesc = "" +
 	"\x0fwith_dependents\x18\x02 \x01(\bR\x0ewithDependents\"\x9b\x01\n" +
 	"\x19DescribeBootstrapResponse\x129\n" +
 	"\bfeatures\x18\x01 \x03(\v2\x1d.provider.contract.v1.FeatureR\bfeatures\x12C\n" +
-	"\tsubstrate\x18\x02 \x01(\v2%.provider.contract.v1.SubstrateStatusR\tsubstrate\"\xd2\x01\n" +
-	"\x0eSubstrateStack\x12\x12\n" +
+	"\tbootstrap\x18\x02 \x01(\v2%.provider.contract.v1.BootstrapStatusR\tbootstrap\"\xd2\x01\n" +
+	"\x0eBootstrapStack\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12\x18\n" +
 	"\afeature\x18\x02 \x01(\tR\afeature\x12\x18\n" +
 	"\apresent\x18\x03 \x01(\bR\apresent\x12\x16\n" +
@@ -3595,13 +3595,13 @@ const file_provider_contract_v1_contract_proto_rawDesc = "" +
 	"\n" +
 	"written_by\x18\x06 \x01(\tR\twrittenBy\x12\x1a\n" +
 	"\brequired\x18\a \x01(\bR\brequired\"\xae\x02\n" +
-	"\x0fSubstrateStatus\x12/\n" +
+	"\x0fBootstrapStatus\x12/\n" +
 	"\x04tier\x18\x01 \x01(\x0e2\x1b.common.environment.v1.TierR\x04tier\x12\x18\n" +
 	"\apresent\x18\x02 \x01(\bR\apresent\x12\x16\n" +
 	"\x06schema\x18\x03 \x01(\rR\x06schema\x12'\n" +
 	"\x0frequired_schema\x18\x04 \x01(\rR\x0erequiredSchema\x12\x1b\n" +
 	"\tauto_heal\x18\x05 \x01(\bR\bautoHeal\x12<\n" +
-	"\x06stacks\x18\x06 \x03(\v2$.provider.contract.v1.SubstrateStackR\x06stacks\x12\x16\n" +
+	"\x06stacks\x18\x06 \x03(\v2$.provider.contract.v1.BootstrapStackR\x06stacks\x12\x16\n" +
 	"\x06writer\x18\a \x01(\tR\x06writer\x12\x1c\n" +
 	"\tdowngrade\x18\b \x01(\bR\tdowngrade\"]\n" +
 	"\x17CredentialPolicyRequest\x12B\n" +
@@ -3623,8 +3623,8 @@ const file_provider_contract_v1_contract_proto_rawDesc = "" +
 	"\rEdgeSelection\x12\x12\n" +
 	"\x04kind\x18\x01 \x01(\tR\x04kind\x12+\n" +
 	"\x03dns\x18\x02 \x01(\v2\x19.provider.contract.v1.DnsR\x03dns\x12%\n" +
-	"\x0eallow_degraded\x18\x03 \x03(\tR\rallowDegraded\"\x86\x01\n" +
-	"\x10SubstrateRequest\x129\n" +
+	"\x0eallow_degraded\x18\x03 \x03(\tR\rallowDegraded\"\x84\x01\n" +
+	"\x0eBootstrapScope\x129\n" +
 	"\x04tier\x18\x01 \x01(\x0e2\x1b.common.environment.v1.TierB\b\xbaH\x05\x82\x01\x02\x10\x01R\x04tier\x127\n" +
 	"\x04edge\x18\x02 \x01(\v2#.provider.contract.v1.EdgeSelectionR\x04edge\"\xd0\x01\n" +
 	"\x18RemoveEnvironmentRequest\x12D\n" +
@@ -3678,7 +3678,7 @@ const file_provider_contract_v1_contract_proto_rawDesc = "" +
 	"knownSlugs\x12F\n" +
 	"\rdomain_claims\x18\x06 \x03(\v2!.provider.contract.v1.DomainClaimR\fdomainClaims\x12P\n" +
 	"\x10preview_wildcard\x18\a \x01(\v2%.provider.contract.v1.PreviewWildcardR\x0fpreviewWildcard\x12C\n" +
-	"\tsubstrate\x18\b \x01(\v2%.provider.contract.v1.SubstrateStatusR\tsubstrate\"\x86\x02\n" +
+	"\tbootstrap\x18\b \x01(\v2%.provider.contract.v1.BootstrapStatusR\tbootstrap\"\x86\x02\n" +
 	"\x0fPreviewWildcard\x12\x1f\n" +
 	"\vbase_domain\x18\x01 \x01(\tR\n" +
 	"baseDomain\x12\x1d\n" +
@@ -3747,15 +3747,15 @@ const file_provider_contract_v1_contract_proto_rawDesc = "" +
 	"\x0eCredentialTier\x12\x1f\n" +
 	"\x1bCREDENTIAL_TIER_UNSPECIFIED\x10\x00\x12\x1d\n" +
 	"\x19CREDENTIAL_TIER_BOOTSTRAP\x10\x01\x12\x1a\n" +
-	"\x16CREDENTIAL_TIER_DEPLOY\x10\x022\xe6\x11\n" +
+	"\x16CREDENTIAL_TIER_DEPLOY\x10\x022\xe2\x11\n" +
 	"\x0fProviderService\x12\\\n" +
 	"\tConfigure\x12&.provider.contract.v1.ConfigureRequest\x1a'.provider.contract.v1.ConfigureResponse\x12S\n" +
 	"\x06Deploy\x12#.provider.contract.v1.DeployRequest\x1a\".common.progress.v1.OperationEvent0\x01\x12Y\n" +
 	"\tBootstrap\x12&.provider.contract.v1.BootstrapRequest\x1a\".common.progress.v1.OperationEvent0\x01\x12t\n" +
 	"\x11DescribeBootstrap\x12..provider.contract.v1.DescribeBootstrapRequest\x1a/.provider.contract.v1.DescribeBootstrapResponse\x12t\n" +
-	"\x13GetCredentialPolicy\x12-.provider.contract.v1.CredentialPolicyRequest\x1a..provider.contract.v1.CredentialPolicyResponse\x12_\n" +
-	"\x0fRemoveSubstrate\x12&.provider.contract.v1.SubstrateRequest\x1a\".common.progress.v1.OperationEvent0\x01\x12`\n" +
-	"\x13PlanRemoveSubstrate\x12&.provider.contract.v1.SubstrateRequest\x1a!.provider.contract.v1.RemovalPlan\x12i\n" +
+	"\x13GetCredentialPolicy\x12-.provider.contract.v1.CredentialPolicyRequest\x1a..provider.contract.v1.CredentialPolicyResponse\x12]\n" +
+	"\x0fRemoveBootstrap\x12$.provider.contract.v1.BootstrapScope\x1a\".common.progress.v1.OperationEvent0\x01\x12^\n" +
+	"\x13PlanRemoveBootstrap\x12$.provider.contract.v1.BootstrapScope\x1a!.provider.contract.v1.RemovalPlan\x12i\n" +
 	"\x11RemoveEnvironment\x12..provider.contract.v1.RemoveEnvironmentRequest\x1a\".common.progress.v1.OperationEvent0\x01\x12[\n" +
 	"\rRemoveProject\x12$.provider.contract.v1.ProjectRequest\x1a\".common.progress.v1.OperationEvent0\x01\x12\\\n" +
 	"\x11PlanRemoveProject\x12$.provider.contract.v1.ProjectRequest\x1a!.provider.contract.v1.RemovalPlan\x12q\n" +
@@ -3811,14 +3811,14 @@ var file_provider_contract_v1_contract_proto_goTypes = []any{
 	(*BootstrapRequest)(nil),             // 21: provider.contract.v1.BootstrapRequest
 	(*DescribeBootstrapRequest)(nil),     // 22: provider.contract.v1.DescribeBootstrapRequest
 	(*DescribeBootstrapResponse)(nil),    // 23: provider.contract.v1.DescribeBootstrapResponse
-	(*SubstrateStack)(nil),               // 24: provider.contract.v1.SubstrateStack
-	(*SubstrateStatus)(nil),              // 25: provider.contract.v1.SubstrateStatus
+	(*BootstrapStack)(nil),               // 24: provider.contract.v1.BootstrapStack
+	(*BootstrapStatus)(nil),              // 25: provider.contract.v1.BootstrapStatus
 	(*CredentialPolicyRequest)(nil),      // 26: provider.contract.v1.CredentialPolicyRequest
 	(*CredentialPolicyResponse)(nil),     // 27: provider.contract.v1.CredentialPolicyResponse
 	(*Feature)(nil),                      // 28: provider.contract.v1.Feature
 	(*Dns)(nil),                          // 29: provider.contract.v1.Dns
 	(*EdgeSelection)(nil),                // 30: provider.contract.v1.EdgeSelection
-	(*SubstrateRequest)(nil),             // 31: provider.contract.v1.SubstrateRequest
+	(*BootstrapScope)(nil),               // 31: provider.contract.v1.BootstrapScope
 	(*RemoveEnvironmentRequest)(nil),     // 32: provider.contract.v1.RemoveEnvironmentRequest
 	(*ProjectRequest)(nil),               // 33: provider.contract.v1.ProjectRequest
 	(*RemovalPlan)(nil),                  // 34: provider.contract.v1.RemovalPlan
@@ -3881,13 +3881,13 @@ var file_provider_contract_v1_contract_proto_depIdxs = []int32{
 	55, // 25: provider.contract.v1.BootstrapRequest.tier:type_name -> common.environment.v1.Tier
 	55, // 26: provider.contract.v1.DescribeBootstrapRequest.tier:type_name -> common.environment.v1.Tier
 	28, // 27: provider.contract.v1.DescribeBootstrapResponse.features:type_name -> provider.contract.v1.Feature
-	25, // 28: provider.contract.v1.DescribeBootstrapResponse.substrate:type_name -> provider.contract.v1.SubstrateStatus
-	55, // 29: provider.contract.v1.SubstrateStatus.tier:type_name -> common.environment.v1.Tier
-	24, // 30: provider.contract.v1.SubstrateStatus.stacks:type_name -> provider.contract.v1.SubstrateStack
+	25, // 28: provider.contract.v1.DescribeBootstrapResponse.bootstrap:type_name -> provider.contract.v1.BootstrapStatus
+	55, // 29: provider.contract.v1.BootstrapStatus.tier:type_name -> common.environment.v1.Tier
+	24, // 30: provider.contract.v1.BootstrapStatus.stacks:type_name -> provider.contract.v1.BootstrapStack
 	0,  // 31: provider.contract.v1.CredentialPolicyRequest.tier:type_name -> provider.contract.v1.CredentialTier
 	29, // 32: provider.contract.v1.EdgeSelection.dns:type_name -> provider.contract.v1.Dns
-	55, // 33: provider.contract.v1.SubstrateRequest.tier:type_name -> common.environment.v1.Tier
-	30, // 34: provider.contract.v1.SubstrateRequest.edge:type_name -> provider.contract.v1.EdgeSelection
+	55, // 33: provider.contract.v1.BootstrapScope.tier:type_name -> common.environment.v1.Tier
+	30, // 34: provider.contract.v1.BootstrapScope.edge:type_name -> provider.contract.v1.EdgeSelection
 	60, // 35: provider.contract.v1.RemoveEnvironmentRequest.environment:type_name -> common.environment.v1.Environment
 	30, // 36: provider.contract.v1.RemoveEnvironmentRequest.edge:type_name -> provider.contract.v1.EdgeSelection
 	60, // 37: provider.contract.v1.ProjectRequest.environment:type_name -> common.environment.v1.Environment
@@ -3903,7 +3903,7 @@ var file_provider_contract_v1_contract_proto_depIdxs = []int32{
 	45, // 47: provider.contract.v1.PreflightResponse.credential_problems:type_name -> provider.contract.v1.CredentialProblem
 	42, // 48: provider.contract.v1.PreflightResponse.domain_claims:type_name -> provider.contract.v1.DomainClaim
 	41, // 49: provider.contract.v1.PreflightResponse.preview_wildcard:type_name -> provider.contract.v1.PreviewWildcard
-	25, // 50: provider.contract.v1.PreflightResponse.substrate:type_name -> provider.contract.v1.SubstrateStatus
+	25, // 50: provider.contract.v1.PreflightResponse.bootstrap:type_name -> provider.contract.v1.BootstrapStatus
 	11, // 51: provider.contract.v1.PreviewWildcard.certificate:type_name -> provider.contract.v1.CertificateState
 	2,  // 52: provider.contract.v1.DomainClaim.status:type_name -> provider.contract.v1.DomainClaim.Status
 	44, // 53: provider.contract.v1.Identity.details:type_name -> provider.contract.v1.Detail
@@ -3921,8 +3921,8 @@ var file_provider_contract_v1_contract_proto_depIdxs = []int32{
 	21, // 65: provider.contract.v1.ProviderService.Bootstrap:input_type -> provider.contract.v1.BootstrapRequest
 	22, // 66: provider.contract.v1.ProviderService.DescribeBootstrap:input_type -> provider.contract.v1.DescribeBootstrapRequest
 	26, // 67: provider.contract.v1.ProviderService.GetCredentialPolicy:input_type -> provider.contract.v1.CredentialPolicyRequest
-	31, // 68: provider.contract.v1.ProviderService.RemoveSubstrate:input_type -> provider.contract.v1.SubstrateRequest
-	31, // 69: provider.contract.v1.ProviderService.PlanRemoveSubstrate:input_type -> provider.contract.v1.SubstrateRequest
+	31, // 68: provider.contract.v1.ProviderService.RemoveBootstrap:input_type -> provider.contract.v1.BootstrapScope
+	31, // 69: provider.contract.v1.ProviderService.PlanRemoveBootstrap:input_type -> provider.contract.v1.BootstrapScope
 	32, // 70: provider.contract.v1.ProviderService.RemoveEnvironment:input_type -> provider.contract.v1.RemoveEnvironmentRequest
 	33, // 71: provider.contract.v1.ProviderService.RemoveProject:input_type -> provider.contract.v1.ProjectRequest
 	33, // 72: provider.contract.v1.ProviderService.PlanRemoveProject:input_type -> provider.contract.v1.ProjectRequest
@@ -3943,8 +3943,8 @@ var file_provider_contract_v1_contract_proto_depIdxs = []int32{
 	63, // 87: provider.contract.v1.ProviderService.Bootstrap:output_type -> common.progress.v1.OperationEvent
 	23, // 88: provider.contract.v1.ProviderService.DescribeBootstrap:output_type -> provider.contract.v1.DescribeBootstrapResponse
 	27, // 89: provider.contract.v1.ProviderService.GetCredentialPolicy:output_type -> provider.contract.v1.CredentialPolicyResponse
-	63, // 90: provider.contract.v1.ProviderService.RemoveSubstrate:output_type -> common.progress.v1.OperationEvent
-	34, // 91: provider.contract.v1.ProviderService.PlanRemoveSubstrate:output_type -> provider.contract.v1.RemovalPlan
+	63, // 90: provider.contract.v1.ProviderService.RemoveBootstrap:output_type -> common.progress.v1.OperationEvent
+	34, // 91: provider.contract.v1.ProviderService.PlanRemoveBootstrap:output_type -> provider.contract.v1.RemovalPlan
 	63, // 92: provider.contract.v1.ProviderService.RemoveEnvironment:output_type -> common.progress.v1.OperationEvent
 	63, // 93: provider.contract.v1.ProviderService.RemoveProject:output_type -> common.progress.v1.OperationEvent
 	34, // 94: provider.contract.v1.ProviderService.PlanRemoveProject:output_type -> provider.contract.v1.RemovalPlan

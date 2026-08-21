@@ -17,7 +17,7 @@ export interface Invalidator {
   dynamo: DynamoLike;
   commands: Commands;
   table: string;
-  substrateClass: string;
+  bootstrapClass: string;
   sleep?: (ms: number) => Promise<void>;
 }
 
@@ -164,7 +164,7 @@ export async function invalidateAll(inv: Invalidator, raises: Raises): Promise<s
 
     let held = targets.get(project);
     if (held === undefined) {
-      held = targetsOf(inv.dynamo, inv.commands, inv.table, inv.substrateClass, project);
+      held = targetsOf(inv.dynamo, inv.commands, inv.table, inv.bootstrapClass, project);
       targets.set(project, held);
     }
     await invalidateOne(inv, await held, release, raise);

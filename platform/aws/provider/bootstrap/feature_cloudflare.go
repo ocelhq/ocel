@@ -54,7 +54,7 @@ func cloudflareEdgeTemplate(in featureInputs) featureStack {
 	return featureStack{
 		params: values,
 		body: fmt.Sprintf(`AWSTemplateFormatVersion: '2010-09-09'
-Description: "Ocel bootstrap feature (%s, %s) - what a Cloudflare front needs inside this AWS account: the IAM user it signs its calls with, scoped to the assets, tag items, app functions and revalidation queue of this substrate alone, and the publisher that carries each build's tag snapshot from the state table stream out to the edge's ISR writer. Created and updated by ocel bootstrap --features. Deleting this stack severs the Cloudflare front from this account."
+Description: "Ocel bootstrap feature (%s, %s) - what a Cloudflare front needs inside this AWS account: the IAM user it signs its calls with, scoped to the assets, tag items, app functions and revalidation queue of this bootstrap alone, and the publisher that carries each build's tag snapshot from the state table stream out to the edge's ISR writer. Created and updated by ocel bootstrap --features. Deleting this stack severs the Cloudflare front from this account."
 %sResources:
 %s%s`,
 			FeatureCloudflareEdge, in.class, params,

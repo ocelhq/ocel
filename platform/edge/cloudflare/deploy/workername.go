@@ -24,7 +24,7 @@ func workerEnvFor(class edge.Class) (string, error) {
 	case edge.ClassPreview:
 		return previewWorkerEnv, nil
 	default:
-		return "", fmt.Errorf("stack workers: unknown substrate class %q", class)
+		return "", fmt.Errorf("stack workers: unknown class %q", class)
 	}
 }
 

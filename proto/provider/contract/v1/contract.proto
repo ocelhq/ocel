@@ -21,9 +21,9 @@ service ProviderService {
 
     rpc GetCredentialPolicy(CredentialPolicyRequest) returns (CredentialPolicyResponse);
 
-    rpc RemoveSubstrate(SubstrateRequest) returns (stream common.progress.v1.OperationEvent);
+    rpc RemoveBootstrap(BootstrapScope) returns (stream common.progress.v1.OperationEvent);
 
-    rpc PlanRemoveSubstrate(SubstrateRequest) returns (RemovalPlan);
+    rpc PlanRemoveBootstrap(BootstrapScope) returns (RemovalPlan);
 
     rpc RemoveEnvironment(RemoveEnvironmentRequest) returns (stream common.progress.v1.OperationEvent);
 
@@ -246,10 +246,10 @@ message DescribeBootstrapRequest {
 message DescribeBootstrapResponse {
   repeated Feature features = 1;
 
-  SubstrateStatus substrate = 2;
+  BootstrapStatus bootstrap = 2;
 }
 
-message SubstrateStack {
+message BootstrapStack {
   string name = 1;
 
   string feature = 2;
@@ -265,7 +265,7 @@ message SubstrateStack {
   bool required = 7;
 }
 
-message SubstrateStatus {
+message BootstrapStatus {
   common.environment.v1.Tier tier = 1;
 
   bool present = 2;
@@ -276,7 +276,7 @@ message SubstrateStatus {
 
   bool auto_heal = 5;
 
-  repeated SubstrateStack stacks = 6;
+  repeated BootstrapStack stacks = 6;
 
   string writer = 7;
 
@@ -325,7 +325,7 @@ message EdgeSelection {
   repeated string allow_degraded = 3;
 }
 
-message SubstrateRequest {
+message BootstrapScope {
   common.environment.v1.Tier tier = 1 [(buf.validate.field).enum.defined_only = true];
 
   EdgeSelection edge = 2;
@@ -415,7 +415,7 @@ message PreflightResponse {
 
   PreviewWildcard preview_wildcard = 7;
 
-  SubstrateStatus substrate = 8;
+  BootstrapStatus bootstrap = 8;
 }
 
 message PreviewWildcard {

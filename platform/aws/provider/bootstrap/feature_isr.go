@@ -41,7 +41,7 @@ func isrTemplate(in featureInputs) featureStack {
 	return featureStack{
 		params: values,
 		body: fmt.Sprintf(`AWSTemplateFormatVersion: '2010-09-09'
-Description: "Ocel bootstrap feature (%s, %s) - incremental static regeneration for every app in this substrate: the queue a front sends an admitted refresh to, the revalidator that turns it into one signed render at the app's own origin, and the invalidator that reads each tag raise off the state table stream and invalidates the fronts holding the stale copy. Created and updated by ocel bootstrap --features. Deleting this stack leaves apps serving stale pages until they are redeployed without it."
+Description: "Ocel bootstrap feature (%s, %s) - incremental static regeneration for every app in this bootstrap: the queue a front sends an admitted refresh to, the revalidator that turns it into one signed render at the app's own origin, and the invalidator that reads each tag raise off the state table stream and invalidates the fronts holding the stale copy. Created and updated by ocel bootstrap --features. Deleting this stack leaves apps serving stale pages until they are redeployed without it."
 %sResources:
 %s%s%sOutputs:
 %s`,

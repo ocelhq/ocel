@@ -97,7 +97,7 @@ func TestFeatureTemplates(t *testing.T) {
 
 				t.Run("no version output", func(t *testing.T) {
 					if _, ok := tmpl.Outputs["BootstrapVersion"]; ok {
-						t.Error("the substrate's shape is carried by the ocel:schema tag; no stack Output restates it")
+						t.Error("the bootstrap's shape is carried by the ocel:schema tag; no stack Output restates it")
 					}
 				})
 			})

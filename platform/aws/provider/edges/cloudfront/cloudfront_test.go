@@ -214,7 +214,7 @@ func TestBootstrap(t *testing.T) {
 		}
 	})
 
-	t.Run("an unknown substrate class is refused", func(t *testing.T) {
+	t.Run("an unknown class is refused", func(t *testing.T) {
 		t.Parallel()
 
 		if _, err := newWorld().edge().Bootstrap(context.Background(), "staging"); err == nil {

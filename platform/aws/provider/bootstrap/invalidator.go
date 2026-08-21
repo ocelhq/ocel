@@ -47,7 +47,7 @@ func tagInvalidatorResources(code payloads.Placement, class string) string {
   TagInvalidatorRole:
     Type: AWS::IAM::Role
     Properties:
-      Description: "Execution role for this substrate's tag invalidator. Grants it the state table's stream, the ledger items naming which distributions to reach, and invalidation on this account's distributions - and nothing else. Managed by ocel bootstrap; deleting it leaves every front serving pages the origin already considers stale."
+      Description: "Execution role for this bootstrap's tag invalidator. Grants it the state table's stream, the ledger items naming which distributions to reach, and invalidation on this account's distributions - and nothing else. Managed by ocel bootstrap; deleting it leaves every front serving pages the origin already considers stale."
       AssumeRolePolicyDocument:
         Version: '2012-10-17'
         Statement:

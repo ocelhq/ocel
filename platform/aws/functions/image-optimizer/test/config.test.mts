@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, test } from "vitest";
 import { loadImageConfig, resetConfigMemo } from "../src/config.mjs";
-import { SubstrateError } from "../src/errors.mjs";
+import { BootstrapError } from "../src/errors.mjs";
 import {
   ASSET_PREFIX,
   CONFIG_KEY,
@@ -30,7 +30,7 @@ test("the digest is over the stored bytes, not over a re-serialization", async (
   });
   const reordered = serialize(config) !== JSON.stringify(config);
   expect(reordered).toBe(true);
-  await expect(loadImageConfig(store, ASSET_PREFIX, configHash(config))).rejects.toThrow(SubstrateError);
+  await expect(loadImageConfig(store, ASSET_PREFIX, configHash(config))).rejects.toThrow(BootstrapError);
 });
 
 test("refuses a config that does not hash to configHash", async () => {
@@ -43,7 +43,7 @@ test("refuses a config that does not hash to configHash", async () => {
 
 test("refuses a configHash that is not a sha256 digest", async () => {
   const store = storeWithConfig(imageConfig());
-  await expect(loadImageConfig(store, ASSET_PREFIX, "../../etc/passwd")).rejects.toThrow(SubstrateError);
+  await expect(loadImageConfig(store, ASSET_PREFIX, "../../etc/passwd")).rejects.toThrow(BootstrapError);
   expect(store.reads).toEqual([]);
 });
 
@@ -135,6 +135,6 @@ test("caps the config read", async () => {
   const store = fakeStore();
   store.put(KEY, { bytes: new Uint8Array(2 * 1024 * 1024) });
   await expect(loadImageConfig(store, ASSET_PREFIX, configHash(imageConfig()))).rejects.toThrow(
-    SubstrateError,
+    BootstrapError,
   );
 });
