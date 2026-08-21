@@ -175,7 +175,7 @@ func TestResolveWorkerHostnames(t *testing.T) {
 			Slug:      "proj",
 			Apps:      []*contractv1.ManifestApp{{Name: "web", Framework: "next"}},
 			Functions: []*contractv1.ManifestFunction{{LogicalName: "web_index", Framework: "next", App: "web", RouteId: "/"}},
-			Domains:   map[string]*contractv1.DomainList{"production": {Hostnames: []string{"acme.com", "www.acme.com"}}},
+			Domains:   []*contractv1.TierDomains{{Tier: environmentv1.Tier_TIER_PRODUCTION, Hostnames: []string{"acme.com", "www.acme.com"}}},
 		}
 		artifactRoot := t.TempDir()
 		writeRoutingManifest(t, artifactRoot, "web", `{"buildId":"b1"}`)

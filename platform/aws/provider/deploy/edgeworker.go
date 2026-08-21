@@ -114,7 +114,6 @@ func appFunctionURLsByRoute(functions []*contractv1.ManifestFunction, app string
 }
 
 func DeclaredHostnames(manifest *contractv1.Manifest, tier environmentv1.Tier) []string {
-	key := domainClassKeyFor(tier)
 	var hosts []string
 	add := func(names []string) {
 		for _, host := range names {
@@ -123,18 +122,20 @@ func DeclaredHostnames(manifest *contractv1.Manifest, tier environmentv1.Tier) [
 			}
 		}
 	}
-	add(manifest.GetDomains()[key].GetHostnames())
+	add(hostnamesFor(manifest.GetDomains(), tier))
 	for _, app := range manifestApps(manifest) {
-		add(app.GetDomains()[key].GetHostnames())
+		add(hostnamesFor(app.GetDomains(), tier))
 	}
 	return hosts
 }
 
-func domainClassKeyFor(tier environmentv1.Tier) string {
-	if tier == environmentv1.Tier_TIER_PREVIEW {
-		return "preview"
+func hostnamesFor(domains []*contractv1.TierDomains, tier environmentv1.Tier) []string {
+	for _, d := range domains {
+		if d.GetTier() == tier {
+			return d.GetHostnames()
+		}
 	}
-	return "production"
+	return nil
 }
 
 func workerDomains(cfg Config, manifest *contractv1.Manifest, apps []*contractv1.ManifestApp) (map[string][]string, error) {
@@ -142,19 +143,17 @@ func workerDomains(cfg Config, manifest *contractv1.Manifest, apps []*contractv1
 		cfg.Tier != environmentv1.Tier_TIER_PREVIEW {
 		return nil, nil
 	}
-	domainClassKey := domainClassKeyFor(cfg.Tier)
-
 	domains := map[string][]string{}
 	var undeclared []string
 	for _, app := range apps {
-		if d := app.GetDomains()[domainClassKey].GetHostnames(); len(d) > 0 {
+		if d := hostnamesFor(app.GetDomains(), cfg.Tier); len(d) > 0 {
 			domains[app.GetName()] = d
 			continue
 		}
 		undeclared = append(undeclared, app.GetName())
 	}
 
-	project := manifest.GetDomains()[domainClassKey].GetHostnames()
+	project := hostnamesFor(manifest.GetDomains(), cfg.Tier)
 	switch {
 	case len(project) == 0 || len(undeclared) == 0:
 		return domains, nil

@@ -10,6 +10,7 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/naming"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
+	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 	linksv1 "github.com/ocelhq/ocel/pkg/proto/common/links/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 )
@@ -409,8 +410,25 @@ func TestBuild(t *testing.T) {
 		if err != nil {
 			t.Fatalf("Build: %v", err)
 		}
-		if got := manifest.GetDomains()["production"].GetHostnames(); len(got) != 2 || got[0] != "app.acme.com" || got[1] != "www.acme.com" {
-			t.Fatalf("Domains[production] = %v, want [app.acme.com www.acme.com]", got)
+		if got := manifest.GetDomains(); len(got) != 1 || got[0].GetTier() != environmentv1.Tier_TIER_PRODUCTION {
+			t.Fatalf("Domains = %v, want one production entry", got)
+		}
+		if got := manifest.GetDomains()[0].GetHostnames(); len(got) != 2 || got[0] != "app.acme.com" || got[1] != "www.acme.com" {
+			t.Fatalf("production domains = %v, want [app.acme.com www.acme.com]", got)
+		}
+	})
+
+	t.Run("refuses a domain class that names no tier", func(t *testing.T) {
+		t.Parallel()
+
+		_, err := Build("proj-1", map[string][]string{"staging": {"app.acme.com"}}, nil, nil, nil, nil, nil)
+		if err == nil || !strings.Contains(err.Error(), "staging") {
+			t.Fatalf("Build: %v, want an error naming %q", err, "staging")
+		}
+
+		_, err = Build("proj-1", nil, []App{{Name: "web", Domains: map[string][]string{"staging": {"app.acme.com"}}}}, nil, nil, nil, nil)
+		if err == nil || !strings.Contains(err.Error(), "staging") {
+			t.Fatalf("Build: %v, want an error naming %q", err, "staging")
 		}
 	})
 
@@ -474,8 +492,8 @@ func TestBuild(t *testing.T) {
 		if got[1].GetFramework() != "next" {
 			t.Fatalf("web framework = %q, want %q", got[1].GetFramework(), "next")
 		}
-		if got := got[1].GetDomains()["production"].GetHostnames(); len(got) != 1 || got[0] != "example.com" {
-			t.Fatalf("web production domain = %v, want [example.com]", got)
+		if got := got[1].GetDomains(); len(got) != 1 || got[0].GetTier() != environmentv1.Tier_TIER_PRODUCTION || len(got[0].GetHostnames()) != 1 || got[0].GetHostnames()[0] != "example.com" {
+			t.Fatalf("web domains = %v, want one production entry [example.com]", got)
 		}
 		if len(got[0].GetDomains()) != 0 {
 			t.Fatalf("admin domains = %v, want empty", got[0].GetDomains())

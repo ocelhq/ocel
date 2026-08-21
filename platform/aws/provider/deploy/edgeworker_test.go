@@ -10,6 +10,7 @@ import (
 	"strings"
 	"testing"
 
+	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	cloudflare "github.com/ocelhq/ocel/platform/edge/cloudflare/deploy"
@@ -197,11 +198,11 @@ func setWorkerBundle(t *testing.T) {
 	t.Setenv(edge.EnvWorkerBundles, string(raw))
 }
 
-func classDomains(class string, hostnames ...string) map[string]*contractv1.DomainList {
+func tierDomains(tier environmentv1.Tier, hostnames ...string) []*contractv1.TierDomains {
 	if len(hostnames) == 0 {
 		return nil
 	}
-	return map[string]*contractv1.DomainList{class: {Hostnames: hostnames}}
+	return []*contractv1.TierDomains{{Tier: tier, Hostnames: hostnames}}
 }
 
 func slicesEqual(got, want []string) bool {

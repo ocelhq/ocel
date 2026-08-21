@@ -478,8 +478,8 @@ func liveGate(t *testing.T, kind edge.Kind, api *domainACM, answering bool, prio
 }
 
 func productionManifest(hosts ...string) *contractv1.Manifest {
-	return &contractv1.Manifest{Domains: map[string]*contractv1.DomainList{
-		"production": {Hostnames: hosts},
+	return &contractv1.Manifest{Domains: []*contractv1.TierDomains{
+		{Tier: environmentv1.Tier_TIER_PRODUCTION, Hostnames: hosts},
 	}}
 }
 
@@ -528,7 +528,7 @@ func TestAdmitDomains(t *testing.T) {
 
 		manifest := &contractv1.Manifest{Apps: []*contractv1.ManifestApp{{
 			Name:    "web",
-			Domains: map[string]*contractv1.DomainList{"preview": {Hostnames: []string{"*.preview.acme.com"}}},
+			Domains: []*contractv1.TierDomains{{Tier: environmentv1.Tier_TIER_PREVIEW, Hostnames: []string{"*.preview.acme.com"}}},
 		}}}
 		if _, err := admitDomains(t.Context(), domainGate{kind: cloudflare.Kind, servesUnbound: true}, environmentv1.Tier_TIER_PREVIEW, manifest, func(string) {}); err != nil {
 			t.Fatalf("admitDomains err = %v, want an app-declared wildcard to be enough", err)

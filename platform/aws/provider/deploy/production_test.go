@@ -109,7 +109,7 @@ func TestEdgeStackSpecs(t *testing.T) {
 
 	t.Run("preview without a wildcard fails the deploy", func(t *testing.T) {
 		manifest := webManifest()
-		manifest.Domains = map[string]*contractv1.DomainList{"preview": {Hostnames: []string{"app.acme.com"}}}
+		manifest.Domains = []*contractv1.TierDomains{{Tier: environmentv1.Tier_TIER_PREVIEW, Hostnames: []string{"app.acme.com"}}}
 		cfg := Config{Edge: &recordingEdge{kind: cloudflare.Kind}, Slug: "proj", Tier: environmentv1.Tier_TIER_PREVIEW, Identity: "pr-42", ArtifactRoot: specsArtifactRoot(t, manifest)}
 
 		_, err := stackSpecs(cfg, manifest, "v1", nil)
@@ -129,7 +129,7 @@ func TestEdgeStackSpecs(t *testing.T) {
 				{LogicalName: "web_index", Framework: "next", App: "web", RouteId: "/"},
 				{LogicalName: "api_index", Framework: "next", App: "api", RouteId: "/"},
 			},
-			Domains: map[string]*contractv1.DomainList{"preview": {Hostnames: []string{"*.preview.acme.com"}}},
+			Domains: []*contractv1.TierDomains{{Tier: environmentv1.Tier_TIER_PREVIEW, Hostnames: []string{"*.preview.acme.com"}}},
 		}
 		cfg := Config{
 			Edge:         &recordingEdge{kind: cloudflare.Kind},
@@ -209,7 +209,7 @@ func TestEdgeStackSpecs(t *testing.T) {
 
 	t.Run("production keeps declarative hostnames", func(t *testing.T) {
 		manifest := webManifest()
-		manifest.Domains = map[string]*contractv1.DomainList{"production": {Hostnames: []string{"acme.com", "www.acme.com"}}}
+		manifest.Domains = []*contractv1.TierDomains{{Tier: environmentv1.Tier_TIER_PRODUCTION, Hostnames: []string{"acme.com", "www.acme.com"}}}
 		cfg := Config{Edge: &recordingEdge{kind: cloudflare.Kind}, Slug: "proj", Tier: environmentv1.Tier_TIER_PRODUCTION, ArtifactRoot: specsArtifactRoot(t, manifest)}
 
 		specs, err := stackSpecs(cfg, manifest, "v1", nil)
@@ -427,7 +427,7 @@ func TestAmbientPreview(t *testing.T) {
 
 	t.Run("a preview on its own domain still ships a worker", func(t *testing.T) {
 		m := manifest("web")
-		m.Domains = map[string]*contractv1.DomainList{"preview": {Hostnames: []string{"*.preview.proj.com"}}}
+		m.Domains = []*contractv1.TierDomains{{Tier: environmentv1.Tier_TIER_PREVIEW, Hostnames: []string{"*.preview.proj.com"}}}
 		specs, err := stackSpecs(ambient(t, m), m, "v1", nil)
 		if err != nil {
 			t.Fatalf("stackSpecs: %v", err)
@@ -440,7 +440,7 @@ func TestAmbientPreview(t *testing.T) {
 	t.Run("a preview with no apps exposes nothing, on any domain", func(t *testing.T) {
 		for _, base := range []string{"preview.acme.com", ""} {
 			m := manifest()
-			m.Domains = map[string]*contractv1.DomainList{"preview": {Hostnames: []string{"*.preview.proj.com"}}}
+			m.Domains = []*contractv1.TierDomains{{Tier: environmentv1.Tier_TIER_PREVIEW, Hostnames: []string{"*.preview.proj.com"}}}
 			cfg := ambient(t, m)
 			cfg.GlobalPreviewDomain = base
 			specs, err := stackSpecs(cfg, m, "v1", nil)
@@ -508,7 +508,7 @@ func TestAmbientPreview(t *testing.T) {
 	t.Run("declaring its own preview domain clears the mark", func(t *testing.T) {
 		m := manifest("web")
 		cfg := ambient(t, m)
-		m.Domains = map[string]*contractv1.DomainList{"preview": {Hostnames: []string{"*.preview.proj.com"}}}
+		m.Domains = []*contractv1.TierDomains{{Tier: environmentv1.Tier_TIER_PREVIEW, Hostnames: []string{"*.preview.proj.com"}}}
 		specs, err := stackSpecs(cfg, m, "v1", nil)
 		if err != nil {
 			t.Fatalf("stackSpecs: %v", err)
@@ -555,7 +555,7 @@ func TestAmbientPreview(t *testing.T) {
 
 		t.Run("on the project's own wildcard", func(t *testing.T) {
 			m := manifest("web")
-			m.Domains = map[string]*contractv1.DomainList{"preview": {Hostnames: []string{"*.preview.proj.com"}}}
+			m.Domains = []*contractv1.TierDomains{{Tier: environmentv1.Tier_TIER_PREVIEW, Hostnames: []string{"*.preview.proj.com"}}}
 			cfg := ambient(t, m)
 			cfg.Identity = pointer + "pppppp"
 
@@ -573,7 +573,7 @@ func TestAmbientPreview(t *testing.T) {
 
 	t.Run("a project that declares its own preview domain ignores the global one", func(t *testing.T) {
 		m := manifest("web")
-		m.Domains = map[string]*contractv1.DomainList{"preview": {Hostnames: []string{"*.preview.proj.com"}}}
+		m.Domains = []*contractv1.TierDomains{{Tier: environmentv1.Tier_TIER_PREVIEW, Hostnames: []string{"*.preview.proj.com"}}}
 		cfg := ambient(t, m)
 
 		specs, err := stackSpecs(cfg, m, "v1", nil)
@@ -649,7 +649,7 @@ func TestBuildDeploymentRecord(t *testing.T) {
 			Slug:      "proj",
 			Apps:      []*contractv1.ManifestApp{{Name: "web", Framework: "next"}},
 			Functions: []*contractv1.ManifestFunction{{LogicalName: "web_index", Framework: "next", App: "web", RouteId: "/"}},
-			Domains:   map[string]*contractv1.DomainList{"preview": {Hostnames: []string{"*.preview.acme.com"}}},
+			Domains:   []*contractv1.TierDomains{{Tier: environmentv1.Tier_TIER_PREVIEW, Hostnames: []string{"*.preview.acme.com"}}},
 		}
 		cfg := Config{
 			ArtifactRoot: writeTree(t, map[string]string{"apps/web/routing-manifest.json": `{"buildId":"WEB1"}`}),
@@ -1773,8 +1773,8 @@ func TestStackSpecsOnAnEdgeThatRunsNoCode(t *testing.T) {
 
 	t.Run("production with worker-fronted apps", func(t *testing.T) {
 		manifest := twoApps()
-		manifest.Apps[0].Domains = classDomains("production", "web.acme.com")
-		manifest.Apps[1].Domains = classDomains("production", "api.acme.com")
+		manifest.Apps[0].Domains = tierDomains(environmentv1.Tier_TIER_PRODUCTION, "web.acme.com")
+		manifest.Apps[1].Domains = tierDomains(environmentv1.Tier_TIER_PRODUCTION, "api.acme.com")
 		cfg := codeless()
 		cfg.Tier = environmentv1.Tier_TIER_PRODUCTION
 		cfg.ArtifactRoot = specsArtifactRoot(t, manifest)
@@ -1791,7 +1791,7 @@ func TestStackSpecsOnAnEdgeThatRunsNoCode(t *testing.T) {
 
 	t.Run("preview on the project's own wildcard", func(t *testing.T) {
 		manifest := twoApps()
-		manifest.Domains = map[string]*contractv1.DomainList{"preview": {Hostnames: []string{"*.preview.acme.com"}}}
+		manifest.Domains = []*contractv1.TierDomains{{Tier: environmentv1.Tier_TIER_PREVIEW, Hostnames: []string{"*.preview.acme.com"}}}
 		cfg := codeless()
 		cfg.Tier = environmentv1.Tier_TIER_PREVIEW
 		cfg.Identity = "pr-42"
