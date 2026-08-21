@@ -2592,11 +2592,12 @@ func (x *DomainClaim) GetOwner() string {
 
 type Identity struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	AwsAccount    string                 `protobuf:"bytes,1,opt,name=aws_account,json=awsAccount,proto3" json:"aws_account,omitempty"`
-	AwsProfile    string                 `protobuf:"bytes,2,opt,name=aws_profile,json=awsProfile,proto3" json:"aws_profile,omitempty"`
-	AwsRegion     string                 `protobuf:"bytes,3,opt,name=aws_region,json=awsRegion,proto3" json:"aws_region,omitempty"`
-	AwsArn        string                 `protobuf:"bytes,4,opt,name=aws_arn,json=awsArn,proto3" json:"aws_arn,omitempty"`
-	EdgeScope     string                 `protobuf:"bytes,5,opt,name=edge_scope,json=edgeScope,proto3" json:"edge_scope,omitempty"`
+	Provider      string                 `protobuf:"bytes,1,opt,name=provider,proto3" json:"provider,omitempty"`
+	Account       string                 `protobuf:"bytes,2,opt,name=account,proto3" json:"account,omitempty"`
+	Principal     string                 `protobuf:"bytes,3,opt,name=principal,proto3" json:"principal,omitempty"`
+	Region        string                 `protobuf:"bytes,4,opt,name=region,proto3" json:"region,omitempty"`
+	Profile       string                 `protobuf:"bytes,5,opt,name=profile,proto3" json:"profile,omitempty"`
+	EdgeScope     string                 `protobuf:"bytes,6,opt,name=edge_scope,json=edgeScope,proto3" json:"edge_scope,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -2631,30 +2632,37 @@ func (*Identity) Descriptor() ([]byte, []int) {
 	return file_provider_contract_v1_contract_proto_rawDescGZIP(), []int{37}
 }
 
-func (x *Identity) GetAwsAccount() string {
+func (x *Identity) GetProvider() string {
 	if x != nil {
-		return x.AwsAccount
+		return x.Provider
 	}
 	return ""
 }
 
-func (x *Identity) GetAwsProfile() string {
+func (x *Identity) GetAccount() string {
 	if x != nil {
-		return x.AwsProfile
+		return x.Account
 	}
 	return ""
 }
 
-func (x *Identity) GetAwsRegion() string {
+func (x *Identity) GetPrincipal() string {
 	if x != nil {
-		return x.AwsRegion
+		return x.Principal
 	}
 	return ""
 }
 
-func (x *Identity) GetAwsArn() string {
+func (x *Identity) GetRegion() string {
 	if x != nil {
-		return x.AwsArn
+		return x.Region
+	}
+	return ""
+}
+
+func (x *Identity) GetProfile() string {
+	if x != nil {
+		return x.Profile
 	}
 	return ""
 }
@@ -3339,17 +3347,15 @@ const file_provider_contract_v1_contract_proto_rawDesc = "" +
 	"\x06Status\x12\x16\n" +
 	"\x12STATUS_UNSPECIFIED\x10\x00\x12\x14\n" +
 	"\x10STATUS_UNCLAIMED\x10\x01\x12\x12\n" +
-	"\x0eSTATUS_CLAIMED\x10\x02\"\xa3\x01\n" +
-	"\bIdentity\x12\x1f\n" +
-	"\vaws_account\x18\x01 \x01(\tR\n" +
-	"awsAccount\x12\x1f\n" +
-	"\vaws_profile\x18\x02 \x01(\tR\n" +
-	"awsProfile\x12\x1d\n" +
+	"\x0eSTATUS_CLAIMED\x10\x02\"\xaf\x01\n" +
+	"\bIdentity\x12\x1a\n" +
+	"\bprovider\x18\x01 \x01(\tR\bprovider\x12\x18\n" +
+	"\aaccount\x18\x02 \x01(\tR\aaccount\x12\x1c\n" +
+	"\tprincipal\x18\x03 \x01(\tR\tprincipal\x12\x16\n" +
+	"\x06region\x18\x04 \x01(\tR\x06region\x12\x18\n" +
+	"\aprofile\x18\x05 \x01(\tR\aprofile\x12\x1d\n" +
 	"\n" +
-	"aws_region\x18\x03 \x01(\tR\tawsRegion\x12\x17\n" +
-	"\aaws_arn\x18\x04 \x01(\tR\x06awsArn\x12\x1d\n" +
-	"\n" +
-	"edge_scope\x18\x05 \x01(\tR\tedgeScope\"]\n" +
+	"edge_scope\x18\x06 \x01(\tR\tedgeScope\"]\n" +
 	"\x11CredentialProblem\x12\x1a\n" +
 	"\bprovider\x18\x01 \x01(\tR\bprovider\x12\x18\n" +
 	"\amessage\x18\x02 \x01(\tR\amessage\x12\x12\n" +

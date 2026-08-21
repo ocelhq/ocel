@@ -39,11 +39,12 @@ const (
 )
 
 const (
-	fakeIDAwsAccountEnvVar = "OCEL_TEST_FAKE_AWS_ACCOUNT"
-	fakeIDAwsProfileEnvVar = "OCEL_TEST_FAKE_AWS_PROFILE"
-	fakeIDAwsRegionEnvVar  = "OCEL_TEST_FAKE_AWS_REGION"
-	fakeIDCfAccountEnvVar  = "OCEL_TEST_FAKE_CF_ACCOUNT"
-	fakeCredProblemEnvVar  = "OCEL_TEST_FAKE_CRED_PROBLEM"
+	fakeIDProviderEnvVar  = "OCEL_TEST_FAKE_ID_PROVIDER"
+	fakeIDAccountEnvVar   = "OCEL_TEST_FAKE_ID_ACCOUNT"
+	fakeIDProfileEnvVar   = "OCEL_TEST_FAKE_ID_PROFILE"
+	fakeIDRegionEnvVar    = "OCEL_TEST_FAKE_ID_REGION"
+	fakeIDEdgeScopeEnvVar = "OCEL_TEST_FAKE_ID_EDGE_SCOPE"
+	fakeCredProblemEnvVar = "OCEL_TEST_FAKE_CRED_PROBLEM"
 )
 
 const fakeFlipBoundEnvVar = "OCEL_TEST_FAKE_FLIP_BOUND"
@@ -438,10 +439,11 @@ func (s *deployFakeProviderServer) Preflight(ctx context.Context, req *contractv
 		InfraTier:             parseInfraTier(os.Getenv(fakeInfraClassEnvVar)),
 		InfrastructurePresent: os.Getenv(fakeInfraPresentEnvVar) != "0",
 		Identity: &contractv1.Identity{
-			AwsAccount: os.Getenv(fakeIDAwsAccountEnvVar),
-			AwsProfile: os.Getenv(fakeIDAwsProfileEnvVar),
-			AwsRegion:  os.Getenv(fakeIDAwsRegionEnvVar),
-			EdgeScope:  os.Getenv(fakeIDCfAccountEnvVar),
+			Provider:  os.Getenv(fakeIDProviderEnvVar),
+			Account:   os.Getenv(fakeIDAccountEnvVar),
+			Profile:   os.Getenv(fakeIDProfileEnvVar),
+			Region:    os.Getenv(fakeIDRegionEnvVar),
+			EdgeScope: os.Getenv(fakeIDEdgeScopeEnvVar),
 		},
 	}
 	if req.GetSlug() != "" && req.GetRequiredTier() == environmentv1.Tier_TIER_PRODUCTION {

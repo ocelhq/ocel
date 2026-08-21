@@ -394,12 +394,17 @@ message DomainClaim {
 }
 
 message Identity {
-  string aws_account = 1;
-  string aws_profile = 2;
-  string aws_region = 3;
-  string aws_arn = 4;
+  string provider = 1;
 
-  string edge_scope = 5;
+  string account = 2;
+
+  string principal = 3;
+
+  string region = 4;
+
+  string profile = 5;
+
+  string edge_scope = 6;
 }
 
 message CredentialProblem {
