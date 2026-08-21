@@ -25,7 +25,8 @@ resolve_cloudflare_account() {
   body=$(mktemp)
 
   while [ "$attempt" -le 5 ]; do
-    if status=$(curl -sS -o "$body" -w "%{http_code}" \
+    if status=$(curl -sS --connect-timeout 5 --max-time 15 \
+      -o "$body" -w "%{http_code}" \
       -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" \
       "https://api.cloudflare.com/client/v4/accounts/${CLOUDFLARE_ACCOUNT_ID}"); then
       if [ "$status" = "200" ]; then
