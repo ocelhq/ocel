@@ -293,6 +293,32 @@ func TestRunDestroy(t *testing.T) {
 		}
 	})
 
+	t.Run("an empty plan destroys nothing and never asks for the project name", func(t *testing.T) {
+		root, _ := setUpDeployFixture(t)
+		d := defaultDeps()
+		setLoggedIn(&d)
+		stubAppFunctions(&d, nil)
+		t.Setenv(fakeInfraClassEnvVar, "production")
+		t.Setenv(fakeInfraPresentEnvVar, "1")
+		t.Setenv(fakeEmptyRemovalPlanEnvVar, "1")
+		t.Setenv(destroyBypassEnv, "test-app")
+
+		var stdout, stderr bytes.Buffer
+		if err := runDestroy(context.Background(), d, root, &stdout, &stderr, strings.NewReader("")); err != nil {
+			t.Fatalf("runDestroy err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
+		}
+
+		out := stdout.String()
+		if !strings.Contains(out, "Nothing to destroy") {
+			t.Errorf("stdout = %q, want it to say nothing was there to destroy", out)
+		}
+		for _, unwanted := range []string{"This will permanently destroy", "DESTROY PROJECT"} {
+			if strings.Contains(out, unwanted) {
+				t.Errorf("stdout = %q, want no %q: an empty plan must stop before the plan is rendered", out, unwanted)
+			}
+		}
+	})
+
 	t.Run("a value that is not this project's name is refused without a terminal", func(t *testing.T) {
 		root, _ := setUpDeployFixture(t)
 		d := defaultDeps()
