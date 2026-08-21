@@ -24,7 +24,7 @@ func TestRunDestroyProjectDeclaresTheStagePlanBeforeAnyWork(t *testing.T) {
 
 	s := &Server{}
 	tracer := &fakeTracer{}
-	req := &contractv1.RemoveProjectRequest{Slug: "shop"}
+	req := &contractv1.ProjectRequest{Slug: "shop"}
 
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()

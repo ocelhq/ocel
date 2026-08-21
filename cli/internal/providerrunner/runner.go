@@ -312,7 +312,7 @@ func (r *Runner) Bootstrap(ctx context.Context, req *contractv1.BootstrapRequest
 	})
 }
 
-func (r *Runner) RemoveSubstrate(ctx context.Context, req *contractv1.RemoveSubstrateRequest, onEvent func(*progressv1.OperationEvent)) error {
+func (r *Runner) RemoveSubstrate(ctx context.Context, req *contractv1.SubstrateRequest, onEvent func(*progressv1.OperationEvent)) error {
 	return r.stream(ctx, "RemoveSubstrate", onEvent, func(client contractv1connect.ProviderServiceClient) (*connect.ServerStreamForClient[progressv1.OperationEvent], error) {
 		return client.RemoveSubstrate(ctx, req)
 	})
@@ -324,7 +324,7 @@ func (r *Runner) RemovePreview(ctx context.Context, req *contractv1.RemovePrevie
 	})
 }
 
-func (r *Runner) RemoveProject(ctx context.Context, req *contractv1.RemoveProjectRequest, onEvent func(*progressv1.OperationEvent)) error {
+func (r *Runner) RemoveProject(ctx context.Context, req *contractv1.ProjectRequest, onEvent func(*progressv1.OperationEvent)) error {
 	return r.stream(ctx, "RemoveProject", onEvent, func(client contractv1connect.ProviderServiceClient) (*connect.ServerStreamForClient[progressv1.OperationEvent], error) {
 		return client.RemoveProject(ctx, req)
 	})
@@ -336,7 +336,7 @@ func (r *Runner) UsePreviewWildcard(ctx context.Context, req *contractv1.UsePrev
 	})
 }
 
-func (r *Runner) RemovePreviewWildcard(ctx context.Context, req *contractv1.RemovePreviewWildcardRequest, onEvent func(*progressv1.OperationEvent)) error {
+func (r *Runner) RemovePreviewWildcard(ctx context.Context, req *contractv1.PreviewWildcardRequest, onEvent func(*progressv1.OperationEvent)) error {
 	return r.stream(ctx, "RemovePreviewWildcard", onEvent, func(client contractv1connect.ProviderServiceClient) (*connect.ServerStreamForClient[progressv1.OperationEvent], error) {
 		return client.RemovePreviewWildcard(ctx, req)
 	})

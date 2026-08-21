@@ -248,7 +248,7 @@ func runBootstrapDestroy(ctx context.Context, d deps, cfg *projectconfig.Config,
 		}
 
 		spinner := deployui.StartSpinner(stdout, "Enumerating what would be removed")
-		plan, err := client.PlanRemoveSubstrate(ctx, &contractv1.PlanRemoveSubstrateRequest{
+		plan, err := client.PlanRemoveSubstrate(ctx, &contractv1.SubstrateRequest{
 			Tier: tier,
 			Edge: edgeSelection(cfg),
 		})
@@ -269,7 +269,7 @@ func runBootstrapDestroy(ctx context.Context, d deps, cfg *projectconfig.Config,
 			}
 		}
 
-		req := &contractv1.RemoveSubstrateRequest{
+		req := &contractv1.SubstrateRequest{
 			Tier: tier,
 			Edge: edgeSelection(cfg),
 		}

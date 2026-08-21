@@ -18,15 +18,15 @@ service ProviderService {
 
     rpc DescribeBootstrap(DescribeBootstrapRequest) returns (DescribeBootstrapResponse);
 
-    rpc RemoveSubstrate(RemoveSubstrateRequest) returns (stream common.progress.v1.OperationEvent);
+    rpc RemoveSubstrate(SubstrateRequest) returns (stream common.progress.v1.OperationEvent);
 
-    rpc PlanRemoveSubstrate(PlanRemoveSubstrateRequest) returns (RemovalPlan);
+    rpc PlanRemoveSubstrate(SubstrateRequest) returns (RemovalPlan);
 
     rpc RemovePreview(RemovePreviewRequest) returns (stream common.progress.v1.OperationEvent);
 
-    rpc RemoveProject(RemoveProjectRequest) returns (stream common.progress.v1.OperationEvent);
+    rpc RemoveProject(ProjectRequest) returns (stream common.progress.v1.OperationEvent);
 
-    rpc PlanRemoveProject(PlanRemoveProjectRequest) returns (RemovalPlan);
+    rpc PlanRemoveProject(ProjectRequest) returns (RemovalPlan);
 
     rpc ListEnvironments(ListEnvironmentsRequest) returns (ListEnvironmentsResponse);
 
@@ -44,7 +44,7 @@ service ProviderService {
 
     rpc PlanRemovePreviewWildcard(PreviewWildcardRequest) returns (RemovalPlan);
 
-    rpc RemovePreviewWildcard(RemovePreviewWildcardRequest) returns (stream common.progress.v1.OperationEvent);
+    rpc RemovePreviewWildcard(PreviewWildcardRequest) returns (stream common.progress.v1.OperationEvent);
 
     rpc AddHostname(AddHostnameRequest) returns (stream common.progress.v1.OperationEvent);
 
@@ -83,18 +83,14 @@ message UsePreviewWildcardRequest {
 
 message PreviewWildcardRequest {
   common.environment.v1.Tier tier = 1 [(buf.validate.field).enum.const = 1];
+
+  EdgeSelection edge = 2;
 }
 
 message GetPreviewWildcardResponse {
   PreviewWildcard wildcard = 1;
 
   repeated string projects = 2;
-}
-
-message RemovePreviewWildcardRequest {
-  common.environment.v1.Tier tier = 1 [(buf.validate.field).enum.const = 1];
-
-  EdgeSelection edge = 2;
 }
 
 message AddHostnameRequest {
@@ -294,13 +290,7 @@ message EdgeSelection {
   repeated string allow_degraded = 3;
 }
 
-message RemoveSubstrateRequest {
-  common.environment.v1.Tier tier = 1 [(buf.validate.field).enum.defined_only = true];
-
-  EdgeSelection edge = 2;
-}
-
-message PlanRemoveSubstrateRequest {
+message SubstrateRequest {
   common.environment.v1.Tier tier = 1 [(buf.validate.field).enum.defined_only = true];
 
   EdgeSelection edge = 2;
@@ -314,15 +304,7 @@ message RemovePreviewRequest {
   EdgeSelection edge = 3;
 }
 
-message RemoveProjectRequest {
-  string slug = 1 [(buf.validate.field).string = {pattern: "^[a-z0-9]+(-[a-z0-9]+)*$", max_len: 63}];
-
-  common.environment.v1.Environment environment = 2;
-
-  EdgeSelection edge = 3;
-}
-
-message PlanRemoveProjectRequest {
+message ProjectRequest {
   string slug = 1 [(buf.validate.field).string = {pattern: "^[a-z0-9]+(-[a-z0-9]+)*$", max_len: 63}];
 
   common.environment.v1.Environment environment = 2;

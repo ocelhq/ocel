@@ -374,7 +374,7 @@ func (s *deployFakeProviderServer) Bootstrap(ctx context.Context, req *contractv
 	})
 }
 
-func (s *deployFakeProviderServer) PlanRemoveSubstrate(ctx context.Context, req *contractv1.PlanRemoveSubstrateRequest) (*contractv1.RemovalPlan, error) {
+func (s *deployFakeProviderServer) PlanRemoveSubstrate(ctx context.Context, req *contractv1.SubstrateRequest) (*contractv1.RemovalPlan, error) {
 	if err := s.checkToken(ctx); err != nil {
 		return nil, err
 	}
@@ -410,7 +410,7 @@ func (s *deployFakeProviderServer) PlanRemoveSubstrate(ctx context.Context, req 
 	}, nil
 }
 
-func (s *deployFakeProviderServer) RemoveSubstrate(ctx context.Context, req *contractv1.RemoveSubstrateRequest, stream *connect.ServerStream[progressv1.OperationEvent]) error {
+func (s *deployFakeProviderServer) RemoveSubstrate(ctx context.Context, req *contractv1.SubstrateRequest, stream *connect.ServerStream[progressv1.OperationEvent]) error {
 	if err := s.checkToken(ctx); err != nil {
 		return err
 	}
@@ -684,7 +684,7 @@ func (s *deployFakeProviderServer) PlanRemovePreviewWildcard(ctx context.Context
 	}, nil
 }
 
-func (s *deployFakeProviderServer) RemovePreviewWildcard(ctx context.Context, req *contractv1.RemovePreviewWildcardRequest, stream *connect.ServerStream[progressv1.OperationEvent]) error {
+func (s *deployFakeProviderServer) RemovePreviewWildcard(ctx context.Context, req *contractv1.PreviewWildcardRequest, stream *connect.ServerStream[progressv1.OperationEvent]) error {
 	if err := s.checkToken(ctx); err != nil {
 		return err
 	}
@@ -867,7 +867,7 @@ func (s *deployFakeProviderServer) RemovePreview(ctx context.Context, req *contr
 	})
 }
 
-func (s *deployFakeProviderServer) PlanRemoveProject(ctx context.Context, req *contractv1.PlanRemoveProjectRequest) (*contractv1.RemovalPlan, error) {
+func (s *deployFakeProviderServer) PlanRemoveProject(ctx context.Context, req *contractv1.ProjectRequest) (*contractv1.RemovalPlan, error) {
 	if err := s.checkToken(ctx); err != nil {
 		return nil, err
 	}
@@ -939,7 +939,7 @@ func fakeAppStackItem(name string) *contractv1.RemovalItem {
 	}
 }
 
-func (s *deployFakeProviderServer) RemoveProject(ctx context.Context, req *contractv1.RemoveProjectRequest, stream *connect.ServerStream[progressv1.OperationEvent]) error {
+func (s *deployFakeProviderServer) RemoveProject(ctx context.Context, req *contractv1.ProjectRequest, stream *connect.ServerStream[progressv1.OperationEvent]) error {
 	if err := s.checkToken(ctx); err != nil {
 		return err
 	}

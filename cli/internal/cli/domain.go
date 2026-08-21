@@ -297,7 +297,7 @@ func runDomainRelease(ctx context.Context, d deps, cwd string, opts domainOption
 			}
 		}
 
-		req := &contractv1.RemovePreviewWildcardRequest{Tier: environmentv1.Tier_TIER_PREVIEW, Edge: edgeSelection(cfg)}
+		req := &contractv1.PreviewWildcardRequest{Tier: environmentv1.Tier_TIER_PREVIEW, Edge: edgeSelection(cfg)}
 		if err := runner.RemovePreviewWildcard(ctx, req, ui.Event); err != nil {
 			return err
 		}
