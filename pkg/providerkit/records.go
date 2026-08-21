@@ -2,6 +2,7 @@ package providerkit
 
 import (
 	"context"
+	"errors"
 	"strings"
 )
 
@@ -15,11 +16,14 @@ import (
 // a SQLite file and a directory each satisfy it without the kit learning which
 // one it is talking to.
 //
-// The hypothesis for [#508] to confirm or overturn: a vendor supplies durable
-// bytes and nothing more, and every record's shape, key and migration is kit
-// logic, so two vendors cannot drift into remembering different things.
+// A vendor supplies durable bytes with revisions and nothing more. Every
+// record's name, shape and migration is kit logic, so two vendors cannot drift
+// into remembering different things. The one memory that is not reached here is
+// the edge ledger: the kit reaches it only through the edge, and
+// [providerkit/ledger] is what an edge composes when it hosts no ledger of its
+// own.
 //
-// [#508]: https://github.com/ocelhq/ocel/issues/508
+// [providerkit/ledger]: https://pkg.go.dev/github.com/ocelhq/ocel/pkg/providerkit/ledger
 type RecordStore interface {
 	// Read returns the record at a name. A name that was never written is not an
 	// error: it is a zero Record, and its zero Revision is what Write then treats
@@ -27,18 +31,27 @@ type RecordStore interface {
 	Read(ctx context.Context, name RecordName) (Record, error)
 
 	// Write stores bytes at a name if the record's Revision still matches what is
-	// stored. A mismatch is a Refusal with CodeOccupied — someone else got there
-	// first, and the kit decides whether to re-read and retry or to tell the user.
-	// This is not a nicety: a promotion pointer flip is a compare-and-set or it is
-	// a race, and rollback is that same flip.
+	// stored. A mismatch is [ErrStale]. This is not a nicety: a promotion pointer
+	// flip is a compare-and-set or it is a race, and rollback is that same flip.
 	Write(ctx context.Context, record Record) (Revision, error)
 
+	// Remove drops a name if expected still matches, and returns [ErrStale] if it
+	// does not.
 	Remove(ctx context.Context, name RecordName, expected Revision) error
 
-	// List returns the names beneath a name. Depth is the store's problem, not the
-	// kit's: everything under the prefix, in any order.
-	List(ctx context.Context, under RecordName) ([]RecordName, error)
+	// List returns the records beneath a name — bytes and revisions, not names.
+	// Every candidate store already answers in whole records (a Query, a
+	// collection get, a SELECT, a readdir and read), and a names-only List would
+	// make History N+1 for no store's benefit. Depth is the store's problem, not
+	// the kit's: everything under the prefix, in any order.
+	List(ctx context.Context, under RecordName) ([]Record, error)
 }
+
+// ErrStale is a Write or Remove whose expected Revision no longer matches what
+// is stored. It is deliberately not a Refusal: the call site decides what it
+// means, and the two answers are far apart — a CAS loop re-reads and retries,
+// while a pointer flip tells the user another deploy moved it.
+var ErrStale = errors.New("the record moved since it was read")
 
 // RecordName is a path, built entirely by the kit. A store maps it to whatever it
 // has — two key columns, one string, a row id, a filename — and the kit never

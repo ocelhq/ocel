@@ -37,13 +37,15 @@ func (h *handlers) Deploy(context.Context, *contractv1.DeployRequest, *connect.S
 }
 
 // Bootstrap: Bootstrapper.Apply, with the kit deciding what the request needs and
-// whether this build would downgrade what is there.
+// whether this build would downgrade what is there, then the kit writes the root
+// schema record.
 func (h *handlers) Bootstrap(context.Context, *contractv1.BootstrapRequest, *connect.ServerStream[progressv1.OperationEvent]) error {
 	return notLifted("Bootstrap")
 }
 
 // DescribeBootstrap: Bootstrapper.Describe, plus the staleness and downgrade
-// rules over the facts it returned.
+// rules over the facts it returned, and the root schema record — a tree older
+// than this build is stale however current the vendor's own substrate is.
 func (h *handlers) DescribeBootstrap(context.Context, *contractv1.DescribeBootstrapRequest) (*contractv1.DescribeBootstrapResponse, error) {
 	return nil, notLifted("DescribeBootstrap")
 }
@@ -81,7 +83,7 @@ func (h *handlers) PlanRemoveProject(context.Context, *contractv1.ProjectRequest
 	return nil, notLifted("PlanRemoveProject")
 }
 
-// ListEnvironments: RecordStore reads. No vendor call at all.
+// ListEnvironments: the project and stack records. No vendor call at all.
 func (h *handlers) ListEnvironments(context.Context, *contractv1.ListEnvironmentsRequest) (*contractv1.ListEnvironmentsResponse, error) {
 	return nil, notLifted("ListEnvironments")
 }
@@ -92,20 +94,23 @@ func (h *handlers) Preflight(context.Context, *contractv1.PreflightRequest) (*co
 	return nil, notLifted("Preflight")
 }
 
-// ListPromotions: RecordStore reads, ledger-derived.
+// ListPromotions: the edge-stack record, the edge opened from it, then
+// Ledger().History. The kit never reads promotions from records directly.
 func (h *handlers) ListPromotions(context.Context, *contractv1.ListPromotionsRequest) (*contractv1.ListPromotionsResponse, error) {
 	return nil, notLifted("ListPromotions")
 }
 
-// Rollback: a pointer flip through the edge, then a RecordStore.Write with the
-// revision it was read at. This is the handler that made Write a compare-and-set.
+// Rollback: the edge-stack record, then EdgeStack.Promote. The flip is the
+// edge's compare-and-set — in the kit's ledger adapter or in the edge's own —
+// which is the handler that made Write a compare-and-set.
 func (h *handlers) Rollback(context.Context, *contractv1.RollbackRequest) (*contractv1.RollbackResponse, error) {
 	return nil, notLifted("Rollback")
 }
 
-// RemoveStalePromotions: keep-N is the kit's, and so is the sweep — the stale
-// releases come from the records, each app stack goes through Releaser.Destroy
-// and each artifact prefix through ArtifactStore.RemovePrefix.
+// RemoveStalePromotions: N is the kit's and so is the sweep, but the selection
+// is Ledger().Prune per the contract. Each stale release's app stack then goes
+// through Releaser.Destroy and each artifact prefix through
+// ArtifactStore.RemovePrefix.
 func (h *handlers) RemoveStalePromotions(context.Context, *contractv1.RemoveStalePromotionsRequest, *connect.ServerStream[progressv1.OperationEvent]) error {
 	return notLifted("RemoveStalePromotions")
 }

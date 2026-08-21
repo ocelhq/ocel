@@ -111,9 +111,13 @@ func (artifacts) Open(context.Context, providerkit.ArtifactRef) (io.ReadCloser, 
 func (artifacts) RemovePrefix(context.Context, string, providerkit.Reporter) error { return nil }
 
 // records: one SQLite file, or a directory of JSON with an flock. A RecordName
-// becomes a path and a Revision becomes the row version; on DynamoDB the same
-// name becomes two key columns and the revision an attribute, and neither store
-// had to tell the kit which it was.
+// becomes a path and a Revision becomes the row version — or the file's mtime;
+// on DynamoDB the same name becomes two key columns and the revision an
+// attribute, and neither store had to tell the kit which it was. List returning
+// whole records is free here too: a readdir is followed by a read either way.
+//
+// The host's edge has no ledger of its own, so it composes providerkit/ledger
+// over this store and the four verbs carry the promotions.
 type records struct{}
 
 func (records) Read(context.Context, providerkit.RecordName) (providerkit.Record, error) {
@@ -128,7 +132,7 @@ func (records) Remove(context.Context, providerkit.RecordName, providerkit.Revis
 	return nil
 }
 
-func (records) List(context.Context, providerkit.RecordName) ([]providerkit.RecordName, error) {
+func (records) List(context.Context, providerkit.RecordName) ([]providerkit.Record, error) {
 	return nil, nil
 }
 
