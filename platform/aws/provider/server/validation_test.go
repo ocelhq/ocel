@@ -66,7 +66,7 @@ func TestContractRefusesMalformedRequests(t *testing.T) {
 			return err
 		}},
 		{"a preview removal naming no environment identity", func(c contractv1connect.ProviderServiceClient) error {
-			stream, err := c.RemovePreview(context.Background(), &contractv1.RemovePreviewRequest{
+			stream, err := c.RemoveEnvironment(context.Background(), &contractv1.RemoveEnvironmentRequest{
 				Slug:        "acme",
 				Environment: &environmentv1.Environment{Tier: environmentv1.Tier_TIER_PREVIEW},
 			})

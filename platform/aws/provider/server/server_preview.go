@@ -236,7 +236,7 @@ func classToTier(class string) environmentv1.Tier {
 	}
 }
 
-func (s *Server) RemovePreview(ctx context.Context, req *contractv1.RemovePreviewRequest, stream *connect.ServerStream[progressv1.OperationEvent]) (err error) {
+func (s *Server) RemoveEnvironment(ctx context.Context, req *contractv1.RemoveEnvironmentRequest, stream *connect.ServerStream[progressv1.OperationEvent]) (err error) {
 	sender := newEventSender(ctx, stream.Send)
 	defer func() { err = errors.Join(err, sender.close()) }()
 	tracer := newEventTracer(sender)
@@ -260,7 +260,7 @@ func newPreviewRemovalStages(persistent bool) deploy.PreviewRemovalStages {
 	return stages
 }
 
-func (s *Server) runDestroyPreview(ctx context.Context, req *contractv1.RemovePreviewRequest, tracer deploy.Tracer, stageReport func(deploy.StageID) func(string), logf func(string)) error {
+func (s *Server) runDestroyPreview(ctx context.Context, req *contractv1.RemoveEnvironmentRequest, tracer deploy.Tracer, stageReport func(deploy.StageID) func(string), logf func(string)) error {
 	env := req.GetEnvironment()
 	persistent := env.GetLifecycle() == environmentv1.Lifecycle_LIFECYCLE_PERSISTENT
 

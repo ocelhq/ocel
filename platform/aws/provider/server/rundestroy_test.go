@@ -78,7 +78,7 @@ func TestRunDestroyPreviewDeclaresTheStagePlanBeforeAnyWork(t *testing.T) {
 		t.Parallel()
 		s := &Server{}
 		tracer := &fakeTracer{}
-		req := &contractv1.RemovePreviewRequest{
+		req := &contractv1.RemoveEnvironmentRequest{
 			Slug:        "shop",
 			Environment: &environmentv1.Environment{Tier: environmentv1.Tier_TIER_PREVIEW, Identity: "pr-1"},
 		}
@@ -105,7 +105,7 @@ func TestRunDestroyPreviewDeclaresTheStagePlanBeforeAnyWork(t *testing.T) {
 		t.Parallel()
 		s := &Server{}
 		tracer := &fakeTracer{}
-		req := &contractv1.RemovePreviewRequest{
+		req := &contractv1.RemoveEnvironmentRequest{
 			Slug: "shop",
 			Environment: &environmentv1.Environment{
 				Tier:      environmentv1.Tier_TIER_PREVIEW,

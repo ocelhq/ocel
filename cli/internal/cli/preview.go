@@ -357,12 +357,12 @@ func runPreviewRm(ctx context.Context, d deps, cwd string, opts previewRmOptions
 			return err
 		}
 
-		req := &contractv1.RemovePreviewRequest{
+		req := &contractv1.RemoveEnvironmentRequest{
 			Environment: env,
 			Slug:        cfg.Slug,
 			Edge:        edgeSelection(cfg),
 		}
-		if err := runner.RemovePreview(ctx, req, ui.Event); err != nil {
+		if err := runner.RemoveEnvironment(ctx, req, ui.Event); err != nil {
 			return err
 		}
 		ui.Finish(fmt.Sprintf("Preview %s torn down", env.GetIdentity()))
