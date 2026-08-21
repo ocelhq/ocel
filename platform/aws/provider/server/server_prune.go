@@ -25,14 +25,13 @@ import (
 
 func (s *Server) RemoveStalePromotions(ctx context.Context, req *contractv1.RemoveStalePromotionsRequest, stream *connect.ServerStream[progressv1.OperationEvent]) (err error) {
 	sender := newEventSender(ctx, stream.Send)
-	defer func() { err = sender.close() }()
+	defer func() { err = errors.Join(err, sender.close()) }()
 	tracer := newEventTracer(sender)
 	stageReport, logf := newTeardownReporter(sender)
 
 	result, perr := s.runPrune(ctx, req, tracer, stageReport, logf)
 	if perr != nil {
-		sender.send(failureResult(perr))
-		return nil
+		return sender.fail(perr)
 	}
 	for _, line := range pruneSummaryLines(result) {
 		sender.send(progressEvent(line))

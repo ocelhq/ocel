@@ -30,13 +30,13 @@ func (s *Server) AddHostname(ctx context.Context, req *contractv1.HostnameReques
 		certificate: true,
 	})
 	if err != nil {
-		return stream.Send(failureResult(err))
+		return failStream(stream, err)
 	}
 	session.engine.Ask = func(headline string, records []edge.Record, notes ...string) {
 		_ = stream.Send(dnsOwedEvent(headline, records, notes...))
 	}
 	if err := session.add(ctx, progress); err != nil {
-		return stream.Send(failureResult(err))
+		return failStream(stream, err)
 	}
 	return stream.Send(okResult())
 }
@@ -52,10 +52,10 @@ func (s *Server) RemoveHostname(ctx context.Context, req *contractv1.HostnameReq
 		host:       req.GetHost(),
 	})
 	if err != nil {
-		return stream.Send(failureResult(err))
+		return failStream(stream, err)
 	}
 	if err := session.remove(ctx, progress); err != nil {
-		return stream.Send(failureResult(err))
+		return failStream(stream, err)
 	}
 	return stream.Send(okResult())
 }

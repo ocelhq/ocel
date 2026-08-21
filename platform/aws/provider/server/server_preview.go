@@ -237,13 +237,12 @@ func classToTier(class string) environmentv1.Tier {
 
 func (s *Server) RemovePreview(ctx context.Context, req *contractv1.RemovePreviewRequest, stream *connect.ServerStream[progressv1.OperationEvent]) (err error) {
 	sender := newEventSender(ctx, stream.Send)
-	defer func() { err = sender.close() }()
+	defer func() { err = errors.Join(err, sender.close()) }()
 	tracer := newEventTracer(sender)
 	stageReport, logf := newTeardownReporter(sender)
 
 	if derr := s.runDestroyPreview(ctx, req, tracer, stageReport, logf); derr != nil {
-		sender.send(failureResult(derr))
-		return nil
+		return sender.fail(derr)
 	}
 	sender.send(okResult())
 	return nil

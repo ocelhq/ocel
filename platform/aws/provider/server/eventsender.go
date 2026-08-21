@@ -52,6 +52,14 @@ func (s *eventSender) send(ev *progressv1.OperationEvent) {
 	}
 }
 
+func (s *eventSender) fail(err error) error {
+	if refusedRequest(err) {
+		return err
+	}
+	s.send(failureResult(err))
+	return nil
+}
+
 func (s *eventSender) close() error {
 	s.mu.Lock()
 	s.closed = true

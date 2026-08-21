@@ -28,7 +28,7 @@ func (s *Server) UsePreviewWildcard(ctx context.Context, req *contractv1.UsePrev
 	}
 
 	if err := s.runUsePreviewWildcard(ctx, req, progress, ask, logf); err != nil {
-		return stream.Send(failureResult(err))
+		return failStream(stream, err)
 	}
 	return stream.Send(okResult())
 }
@@ -37,7 +37,7 @@ func (s *Server) runUsePreviewWildcard(ctx context.Context, req *contractv1.UseP
 	opts := s.config.get()
 	baseDomain, err := previewBaseDomainArg(req.GetBaseDomain())
 	if err != nil {
-		return err
+		return connect.NewError(connect.CodeInvalidArgument, err)
 	}
 	clients, err := s.domainClients(ctx, opts.Region)
 	if err != nil {
@@ -83,7 +83,7 @@ func (s *Server) runUsePreviewWildcard(ctx context.Context, req *contractv1.UseP
 
 	edgeFront, err := s.edge(requestedEdge(req), clients.region)
 	if err != nil {
-		return err
+		return connect.NewError(connect.CodeInvalidArgument, err)
 	}
 	if err := refuseRehomingPreviewWildcard(recorded, edgeFront.Kind()); err != nil {
 		return err
@@ -245,7 +245,7 @@ func (s *Server) RemovePreviewWildcard(ctx context.Context, req *contractv1.Prev
 	progress := func(m string) { _ = stream.Send(progressEvent(m)) }
 
 	if err := s.runRemovePreviewWildcard(ctx, req, progress); err != nil {
-		return stream.Send(failureResult(err))
+		return failStream(stream, err)
 	}
 	return stream.Send(okResult())
 }
