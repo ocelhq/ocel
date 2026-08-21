@@ -2,6 +2,7 @@ package server
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -160,7 +161,7 @@ func (s *Server) Deploy(ctx context.Context, req *contractv1.DeployRequest, stre
 		return connect.NewError(connect.CodeInvalidArgument, edgeErr)
 	}
 	sender := newEventSender(ctx, stream.Send)
-	defer func() { err = sender.close() }()
+	defer func() { err = errors.Join(err, sender.close()) }()
 
 	stages := newDeployStages()
 	appStages, appDeclared := deploy.AppStages(stages.provisioning, manifest)
@@ -169,10 +170,9 @@ func (s *Server) Deploy(ctx context.Context, req *contractv1.DeployRequest, stre
 
 	res, deployErr := s.runDeploy(ctx, req, manifest, edgeFront, stages, appStages, appDeclared, progress, stageReport, logf, degraded, tracer)
 	if deployErr != nil {
-		sender.send(failureResult(deployErr))
-	} else {
-		sender.send(deployedResult(res))
+		return sender.fail(deployErr)
 	}
+	sender.send(deployedResult(res))
 	return nil
 }
 
@@ -455,7 +455,7 @@ func (s *Server) Bootstrap(ctx context.Context, req *contractv1.BootstrapRequest
 	opts := s.config.get()
 	awscfg, err := loadAWS(ctx, opts.Region)
 	if err != nil {
-		return stream.Send(failureResult(err))
+		return failStream(stream, err)
 	}
 	cfn := cloudformation.NewFromConfig(awscfg)
 
@@ -463,10 +463,10 @@ func (s *Server) Bootstrap(ctx context.Context, req *contractv1.BootstrapRequest
 
 	deployed, err := checkBootstrap(ctx, cfn, preview)
 	if err != nil {
-		return stream.Send(failureResult(err))
+		return failStream(stream, err)
 	}
 	if compat := bootstrap.CheckCompat(deployed.Version, deployed.Present, bootstrap.RequiredBootstrapVersion); compat == bootstrap.NeedsCLIUpgrade {
-		return stream.Send(failureResult(compat.Explain(deployed.Version, bootstrap.RequiredBootstrapVersion, bootstrapCommand(preview))))
+		return failStream(stream, compat.Explain(deployed.Version, bootstrap.RequiredBootstrapVersion, bootstrapCommand(preview)))
 	}
 
 	defaultEdge, err := s.edge(edges.DefaultKind, opts.Region)
@@ -485,7 +485,7 @@ func (s *Server) Bootstrap(ctx context.Context, req *contractv1.BootstrapRequest
 	}
 	request := bootstrap.Request{Features: req.GetFeatures(), Force: req.GetForce()}
 	if err := s.runBootstrap(ctx, bootstrapRunner(preview), apis, request, progress, logf); err != nil {
-		return stream.Send(failureResult(err))
+		return failStream(stream, err)
 	}
 	return stream.Send(okResult())
 }
@@ -713,6 +713,17 @@ func logEvent(message string) *progressv1.OperationEvent {
 	return &progressv1.OperationEvent{
 		Event: &progressv1.OperationEvent_Log{Log: &progressv1.LogEvent{Message: message}},
 	}
+}
+
+func refusedRequest(err error) bool {
+	return connect.CodeOf(err) == connect.CodeInvalidArgument
+}
+
+func failStream(stream *connect.ServerStream[progressv1.OperationEvent], err error) error {
+	if refusedRequest(err) {
+		return err
+	}
+	return stream.Send(failureResult(err))
 }
 
 func failureResult(err error) *progressv1.OperationEvent {

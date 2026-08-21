@@ -65,6 +65,59 @@ func TestContractRefusesMalformedRequests(t *testing.T) {
 			})
 			return err
 		}},
+		{"a preview removal naming no environment identity", func(c contractv1connect.ProviderServiceClient) error {
+			stream, err := c.RemovePreview(context.Background(), &contractv1.RemovePreviewRequest{
+				Slug:        "acme",
+				Environment: &environmentv1.Environment{Tier: environmentv1.Tier_TIER_PREVIEW},
+			})
+			if err != nil {
+				return err
+			}
+			_, err = drainStream(stream)
+			return err
+		}},
+		{"a prune of a preview naming no environment identity", func(c contractv1connect.ProviderServiceClient) error {
+			stream, err := c.RemoveStalePromotions(context.Background(), &contractv1.RemoveStalePromotionsRequest{
+				Slug:        "acme",
+				KeepN:       1,
+				Environment: &environmentv1.Environment{Tier: environmentv1.Tier_TIER_PREVIEW},
+			})
+			if err != nil {
+				return err
+			}
+			_, err = drainStream(stream)
+			return err
+		}},
+		{"a production hostname that is not a hostname", func(c contractv1connect.ProviderServiceClient) error {
+			stream, err := c.AddHostname(context.Background(), &contractv1.HostnameRequest{Slug: "acme", Host: "app"})
+			if err != nil {
+				return err
+			}
+			_, err = drainStream(stream)
+			return err
+		}},
+		{"a withdrawal naming a declared host that is not a hostname", func(c contractv1connect.ProviderServiceClient) error {
+			stream, err := c.RemoveHostname(context.Background(), &contractv1.HostnameRequest{
+				Slug:       "acme",
+				Configured: []string{"app.acme.com", "*.acme.com"},
+			})
+			if err != nil {
+				return err
+			}
+			_, err = drainStream(stream)
+			return err
+		}},
+		{"a global preview domain given as a wildcard", func(c contractv1connect.ProviderServiceClient) error {
+			stream, err := c.UsePreviewWildcard(context.Background(), &contractv1.UsePreviewWildcardRequest{
+				Tier:       environmentv1.Tier_TIER_PREVIEW,
+				BaseDomain: "*.preview.acme.com",
+			})
+			if err != nil {
+				return err
+			}
+			_, err = drainStream(stream)
+			return err
+		}},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name+" is refused", func(t *testing.T) {

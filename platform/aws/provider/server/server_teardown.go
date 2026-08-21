@@ -278,19 +278,20 @@ func (s *Server) RemoveSubstrate(ctx context.Context, req *contractv1.SubstrateR
 		return connect.NewError(connect.CodeInvalidArgument, err)
 	}
 
+	class, err := substrateClassOf(req.GetTier())
+	if err != nil {
+		return connect.NewError(connect.CodeInvalidArgument, err)
+	}
+
 	progress := func(m string) { _ = stream.Send(progressEvent(m)) }
 	logf := func(m string) { _ = stream.Send(logEvent(m)) }
 
-	class, err := substrateClassOf(req.GetTier())
-	if err != nil {
-		return stream.Send(failureResult(err))
-	}
 	deps, err := newTeardownDeps(ctx, opts, class, edgeFront)
 	if err != nil {
-		return stream.Send(failureResult(err))
+		return failStream(stream, err)
 	}
 	if err := runTeardown(ctx, deps, class, progress, logf); err != nil {
-		return stream.Send(failureResult(err))
+		return failStream(stream, err)
 	}
 	s.memo.forgetDeployed()
 	return stream.Send(okResult())

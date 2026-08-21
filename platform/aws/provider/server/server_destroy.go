@@ -134,13 +134,12 @@ func (s *Server) projectRemovalPlan(edgeFront edge.Edge, scope projectPlanScope)
 
 func (s *Server) RemoveProject(ctx context.Context, req *contractv1.ProjectRequest, stream *connect.ServerStream[progressv1.OperationEvent]) (err error) {
 	sender := newEventSender(ctx, stream.Send)
-	defer func() { err = sender.close() }()
+	defer func() { err = errors.Join(err, sender.close()) }()
 	tracer := newEventTracer(sender)
 	stageReport, logf := newTeardownReporter(sender)
 
 	if derr := s.runDestroyProject(ctx, req, tracer, stageReport, logf); derr != nil {
-		sender.send(failureResult(derr))
-		return nil
+		return sender.fail(derr)
 	}
 	sender.send(okResult())
 	return nil
