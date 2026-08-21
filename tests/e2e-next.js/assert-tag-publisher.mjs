@@ -8,9 +8,9 @@ import { TAG_PROBE_ROUTE, tagProbeTag } from "./lib.mjs";
 const PUBLISH_DEADLINE_MS = 180_000;
 const POLL_INTERVAL_MS = 5_000;
 
-const base = process.argv[2] || process.env.NEXT_TEST_DEPLOY_URL || process.env.SMOKE_URL;
+const base = process.argv[2] || process.env.NEXT_TEST_DEPLOY_URL;
 if (!base) {
-  fail("no deployment url given (argument, $NEXT_TEST_DEPLOY_URL or $SMOKE_URL)");
+  fail("no deployment url given (argument or $NEXT_TEST_DEPLOY_URL)");
 }
 
 const bucket = process.env.OCEL_ASSET_BUCKET || resolveAssetBucket();

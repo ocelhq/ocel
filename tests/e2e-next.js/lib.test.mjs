@@ -1,4 +1,5 @@
-import { readFileSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
 import { describe, expect, it, vi } from "vitest";
 
 import {
@@ -55,6 +56,52 @@ import {
   TYPESCRIPT_PIN,
   zipEntryNames,
 } from "./lib.mjs";
+
+const repoRoot = fileURLToPath(new URL("../..", import.meta.url));
+
+describe("runner location", () => {
+  it("is wired from its tests/e2e-next.js package path", () => {
+    const workflow = readFileSync(
+      new URL("../../.github/workflows/test-e2e-deploy.yml", import.meta.url),
+      "utf8",
+    );
+    const action = readFileSync(
+      new URL("../../.github/actions/e2e-session/action.yml", import.meta.url),
+      "utf8",
+    );
+
+    expect(workflow).toContain("tests/e2e-next.js/");
+    expect(workflow).not.toContain(["scripts", "e2e-next", ""].join("/"));
+    expect(action).toContain("adapter/tests/e2e-next.js/guard-accounts.sh");
+    expect(action).not.toContain(
+      ["adapter", "scripts", "e2e-next", ""].join("/"),
+    );
+    expect(workflow).toContain(
+      'NEXT_EXTERNAL_TESTS_FILTERS: ${{ env.TESTS_FILTERS }}',
+    );
+    expect(workflow).toContain(
+      "node adapter/tests/e2e-next.js/assert-filter-scope.mjs nextjs \"$TESTS_FILTERS\"",
+    );
+  });
+
+  it("keeps every upstream suite in exactly one of twenty shards", () => {
+    const workflow = readFileSync(
+      new URL("../../.github/workflows/test-e2e-deploy.yml", import.meta.url),
+      "utf8",
+    );
+
+    expect(workflow.match(/^\s+\d+\/20,$/gm)).toEqual(
+      Array.from({ length: 20 }, (_, index) => `            ${index + 1}/20,`),
+    );
+    expect(workflow).toContain(
+      "node run-tests.js --timings -g ${{ matrix.group }} -c 3 --type e2e",
+    );
+  });
+
+  it("leaves scripts without an e2e harness", () => {
+    expect(readdirSync(`${repoRoot}/scripts`)).not.toContain("e2e-next");
+  });
+});
 
 describe("projectSlug", () => {
   it("is a valid single DNS label carrying the run id", () => {
@@ -292,10 +339,10 @@ describe("isrToken", () => {
     expect(isrToken(undefined)).toBeNull();
   });
 
-  it("matches the marker the smoke app's page emits", () => {
-    const page = readFileSync(new URL("./smoke-app/app/isr/page.tsx", import.meta.url), "utf8");
+  it("matches the marker the next fixture's page emits", () => {
+    const page = readFileSync(new URL("../../examples/next/app/isr/page.tsx", import.meta.url), "utf8");
     expect(page).toContain("isr-token:");
-    expect(page).toContain(`export const revalidate = ${ISR_REVALIDATE_SECONDS};`);
+    expect(page).toContain(`revalidate: ${ISR_REVALIDATE_SECONDS}`);
     expect(ISR_ROUTE).toBe("/isr");
   });
 });
@@ -358,8 +405,8 @@ describe("goldenDifferences", () => {
     expect(goldenDifferences(leg({ headers }), leg())).toEqual([]);
   });
 
-  it("matches the marker the smoke app's probe page emits", () => {
-    const page = readFileSync(new URL("./smoke-app/app/golden/page.tsx", import.meta.url), "utf8");
+  it("matches the marker the next fixture's probe page emits", () => {
+    const page = readFileSync(new URL("../../examples/next/app/golden/page.tsx", import.meta.url), "utf8");
     expect(page).toContain(GOLDEN_MARKER);
     expect(GOLDEN_ROUTE).toBe("/golden");
     expect(page).not.toContain("Date.now");
@@ -367,9 +414,9 @@ describe("goldenDifferences", () => {
   });
 
   it("waits out the window the probe page actually declares", () => {
-    const page = readFileSync(new URL("./smoke-app/app/golden/page.tsx", import.meta.url), "utf8");
+    const page = readFileSync(new URL("../../examples/next/app/golden/page.tsx", import.meta.url), "utf8");
 
-    expect(page).toContain(`export const revalidate = ${GOLDEN_REVALIDATE_SECONDS};`);
+    expect(page).toContain(`revalidate: ${GOLDEN_REVALIDATE_SECONDS}`);
   });
 });
 

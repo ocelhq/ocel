@@ -57,9 +57,9 @@ if (!bytecodeEmbedEnabled(process.env)) {
   process.exit(0);
 }
 
-const base = process.argv[2] || process.env.NEXT_TEST_DEPLOY_URL || process.env.SMOKE_URL;
+const base = process.argv[2] || process.env.NEXT_TEST_DEPLOY_URL;
 if (!base) {
-  fail("no deployment url given (argument, $NEXT_TEST_DEPLOY_URL or $SMOKE_URL)");
+  fail("no deployment url given (argument or $NEXT_TEST_DEPLOY_URL)");
 }
 
 const resultPath = join(process.cwd(), DEPLOY_RESULT_FILE);

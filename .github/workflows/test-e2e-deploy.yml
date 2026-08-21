@@ -18,7 +18,7 @@ concurrency:
 
 env:
   BASELINE_MANIFEST: test/ocel-deploy-tests-manifest.json
-  ADAPTER_BASELINE: scripts/e2e-next/baseline-manifest.json
+  ADAPTER_BASELINE: tests/e2e-next.js/baseline-manifest.json
   NODE_VERSION: "22"
   PNPM_VERSION: "11.10.0"
   # FIXME: must match pinnedPulumiVersion in platform/aws/provider/pulumiruntime/runtime.go —
@@ -157,138 +157,16 @@ jobs:
           expected-cloudflare-account-id: ${{ secrets.E2E_EXPECTED_CLOUDFLARE_ACCOUNT_ID }}
 
       - name: Reclaim every e2e project that is not this run's
-        run: node adapter/scripts/e2e-next/sweep-projects.mjs
+        run: node adapter/tests/e2e-next.js/sweep-projects.mjs
 
       - name: Reconcile the shared preview entry worker
         env:
           OCEL_E2E_PREVIEW_DOMAIN: ${{ vars.E2E_PREVIEW_DOMAIN }}
-        run: node adapter/scripts/e2e-next/reconcile-entry.mjs
-
-  smoke:
-    name: Smoke (one app through deploy/logs, kept as the run's canary)
-    needs: sweep
-    runs-on: ubuntu-latest
-    timeout-minutes: 45
-    permissions:
-      contents: read
-      id-token: write
-    env:
-      ADAPTER_DIR: ${{ github.workspace }}/adapter
-      OCEL_ACCESS_TOKEN: ${{ secrets.E2E_OCEL_ACCESS_TOKEN }}
-      OCEL_API_URL: ${{ vars.E2E_OCEL_API_URL }}
-      OCEL_E2E_SIDECAR_DIR: ${{ github.workspace }}/sidecar
-      AWS_REGION: ${{ vars.E2E_AWS_REGION }}
-      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.E2E_CLOUDFLARE_ACCOUNT_ID }}
-      CLOUDFLARE_API_TOKEN: ${{ secrets.E2E_CLOUDFLARE_API_TOKEN }}
-    steps:
-      - uses: actions/cache/restore@v4
-        with:
-          path: |
-            nextjs
-            adapter
-            sidecar
-            ~/.cache/ms-playwright
-          key: build-${{ github.sha }}-${{ github.run_id }}
-          fail-on-cache-miss: true
-
-      - uses: ./adapter/.github/actions/e2e-session
-        with:
-          node-version: ${{ env.NODE_VERSION }}
-          pnpm-version: ${{ env.PNPM_VERSION }}
-          aws-region: ${{ vars.E2E_AWS_REGION }}
-          role-to-assume: ${{ secrets.E2E_AWS_ROLE_ARN }}
-          role-session-name: ocel-e2e-smoke-${{ github.run_id }}
-          expected-aws-account-id: ${{ secrets.E2E_EXPECTED_AWS_ACCOUNT_ID }}
-          expected-cloudflare-account-id: ${{ secrets.E2E_EXPECTED_CLOUDFLARE_ACCOUNT_ID }}
-
-      - name: Warm the Pulumi runtime the provider installs on first deploy
-        run: |
-          set -euo pipefail
-          root="$HOME/.ocel/pulumi/$PULUMI_VERSION"
-          curl -fsSL https://get.pulumi.com/install.sh | sh -s -- \
-            --no-edit-path --install-root "$root" --version "$PULUMI_VERSION"
-          "$root/bin/pulumi" version
-
-      - name: Stage the smoke app
-        run: |
-          set -euo pipefail
-          node adapter/scripts/e2e-next/stage-smoke-app.mjs nextjs adapter/scripts/e2e-next/smoke-app "$RUNNER_TEMP/smoke-app-dir"
-          app=$(cat "$RUNNER_TEMP/smoke-app-dir")
-          echo "SMOKE_APP=$app" >> "$GITHUB_ENV"
-          echo "staged in $app"
-
-      - name: Deploy the smoke app
-        working-directory: ${{ env.SMOKE_APP }}
-        env:
-          NEXT_TEST_DIR: ${{ env.SMOKE_APP }}
-        run: |
-          set -euo pipefail
-          url=$(node "$ADAPTER_DIR/scripts/e2e-next/deploy.mjs")
-          echo "SMOKE_URL=$url" >> "$GITHUB_ENV"
-          echo "deployed to $url"
-
-      - name: Assert the deployment serves a 200
-        run: |
-          set -euo pipefail
-          for attempt in $(seq 1 10); do
-            code=$(curl -s -o /dev/null -w '%{http_code}' "$SMOKE_URL" || true)
-            echo "attempt $attempt: $code"
-            if [ "$code" = "200" ]; then
-              exit 0
-            fi
-            sleep 15
-          done
-          echo "::error::$SMOKE_URL never returned 200"
-          exit 1
-
-      - name: Assert the ISR route's cache entry is rewritten
-        env:
-          NEXT_TEST_DEPLOY_URL: ${{ env.SMOKE_URL }}
-        run: node "$ADAPTER_DIR/scripts/e2e-next/assert-isr.mjs"
-
-      # A 200 from / cannot see whether node middleware ever ran at all — the
-      # top-level-await bug this guards against 502'd every matched request,
-      # forever, from a message pointing at the wrong thing.
-      - name: Assert node middleware (proxy.ts) actually runs
-        env:
-          NEXT_TEST_DEPLOY_URL: ${{ env.SMOKE_URL }}
-        run: node "$ADAPTER_DIR/scripts/e2e-next/assert-proxy.mjs"
-
-      - name: Assert the logs script emits all three markers
-        working-directory: ${{ env.SMOKE_APP }}
-        env:
-          NEXT_TEST_DIR: ${{ env.SMOKE_APP }}
-          NEXT_TEST_DEPLOY_URL: ${{ env.SMOKE_URL }}
-        run: |
-          set -euo pipefail
-          node "$ADAPTER_DIR/scripts/e2e-next/logs.mjs" > logs.txt
-          for marker in BUILD_ID DEPLOYMENT_ID IMMUTABLE_ASSET_TOKEN; do
-            line=$(grep -m1 "^$marker: " logs.txt || true)
-            if [ -z "$line" ]; then
-              echo "::error::logs script emitted no $marker marker"
-              exit 1
-            fi
-            echo "$line"
-            if [ "$marker" != IMMUTABLE_ASSET_TOKEN ] && [ "$line" = "$marker: undefined" ]; then
-              echo "::error::$marker resolved to undefined"
-              exit 1
-            fi
-          done
-
-      - name: Upload the smoke logs
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: smoke-logs
-          path: |
-            ${{ env.SMOKE_APP }}/.adapter-build.log
-            ${{ env.SMOKE_APP }}/.ocel/logs/ocel.log
-            ${{ env.SMOKE_APP }}/logs.txt
-          if-no-files-found: ignore
+        run: node adapter/tests/e2e-next.js/reconcile-entry.mjs
 
   test:
     name: Tests (${{ matrix.group }})
-    needs: smoke
+    needs: sweep
     runs-on: ubuntu-latest
     timeout-minutes: 360
     permissions:
@@ -364,7 +242,7 @@ jobs:
         run: cp "adapter/$ADAPTER_BASELINE" "nextjs/$BASELINE_MANIFEST"
 
       - name: Assert the manifest chain puts the same suites in scope the baseline assumes
-        run: node adapter/scripts/e2e-next/assert-filter-scope.mjs nextjs "$TESTS_FILTERS"
+        run: node adapter/tests/e2e-next.js/assert-filter-scope.mjs nextjs "$TESTS_FILTERS"
 
       - name: Run deploy tests
         working-directory: nextjs
@@ -380,9 +258,9 @@ jobs:
           NEXT_TEST_EMIT_ALL_OUTPUT: ${{ inputs.recordBaseline && '1' || '' }}
 
           ADAPTER_DIR: ${{ github.workspace }}/adapter
-          NEXT_TEST_DEPLOY_SCRIPT_PATH: ${{ github.workspace }}/adapter/scripts/e2e-next/deploy.mjs
-          NEXT_TEST_DEPLOY_LOGS_SCRIPT_PATH: ${{ github.workspace }}/adapter/scripts/e2e-next/logs.mjs
-          NEXT_TEST_CLEANUP_SCRIPT_PATH: ${{ github.workspace }}/adapter/scripts/e2e-next/cleanup.mjs
+          NEXT_TEST_DEPLOY_SCRIPT_PATH: ${{ github.workspace }}/adapter/tests/e2e-next.js/deploy.mjs
+          NEXT_TEST_DEPLOY_LOGS_SCRIPT_PATH: ${{ github.workspace }}/adapter/tests/e2e-next.js/logs.mjs
+          NEXT_TEST_CLEANUP_SCRIPT_PATH: ${{ github.workspace }}/adapter/tests/e2e-next.js/cleanup.mjs
 
           OCEL_ACCESS_TOKEN: ${{ secrets.E2E_OCEL_ACCESS_TOKEN }}
           OCEL_API_URL: ${{ vars.E2E_OCEL_API_URL }}
@@ -397,7 +275,7 @@ jobs:
         run: |
           set -euo pipefail
           group="$(echo '${{ matrix.group }}' | tr '/' '-')"
-          node adapter/scripts/e2e-next/merge-baseline.mjs collect \
+          node adapter/tests/e2e-next.js/merge-baseline.mjs collect \
             nextjs "$RUNNER_TEMP/deploy-tests.log" "baseline-$group.json"
           echo "BASELINE_FRAGMENT=baseline-$group.json" >> "$GITHUB_ENV"
 
@@ -411,7 +289,7 @@ jobs:
 
   destroy:
     name: Destroy this run's project
-    needs: [smoke, test]
+    needs: test
     if: always()
     runs-on: ubuntu-latest
     timeout-minutes: 60
@@ -448,7 +326,7 @@ jobs:
           expected-cloudflare-account-id: ${{ secrets.E2E_EXPECTED_CLOUDFLARE_ACCOUNT_ID }}
 
       - name: Destroy the project this run deployed into
-        run: node adapter/scripts/e2e-next/project-teardown.mjs
+        run: node adapter/tests/e2e-next.js/project-teardown.mjs
 
   baseline:
     name: Merge the recorded baseline
@@ -474,7 +352,7 @@ jobs:
       - name: Merge every group's fragment
         run: |
           set -euo pipefail
-          node adapter/scripts/e2e-next/merge-baseline.mjs merge baseline-manifest.json fragments/*.json
+          node adapter/tests/e2e-next.js/merge-baseline.mjs merge baseline-manifest.json fragments/*.json
 
       - name: Upload the merged baseline for review
         uses: actions/upload-artifact@v4

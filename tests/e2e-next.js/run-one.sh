@@ -32,7 +32,7 @@ SUITE=${1:-}
 : "${OCEL_E2E_SIDECAR_DIR:?OCEL_E2E_SIDECAR_DIR is required}"
 
 ADAPTER_DIR=${ADAPTER_DIR:-$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)}
-E2E_DIR="$ADAPTER_DIR/scripts/e2e-next"
+E2E_DIR="$ADAPTER_DIR/tests/e2e-next.js"
 NAME=$(printf '%s' "$SUITE" | sed -e 's|^test/e2e/||' -e 's|\.test\.[jt]sx*$||' -e 's|[^A-Za-z0-9]|-|g')
 WORK="$OUT_DIR/$NAME"
 LOG="$WORK/run.log"

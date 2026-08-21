@@ -35,6 +35,7 @@ for (const example of examples.filter(
     const context = {
       example,
       runId,
+      targetName: target.name,
       baseUrl: () => {
         if (!handle) throw new Error(`${example.name} target is not up`);
         return handle.baseUrl;
@@ -43,6 +44,7 @@ for (const example of examples.filter(
         if (!handle) throw new Error(`${example.name} target is not up`);
         return handle.headObject(key);
       },
+      output: () => handle?.output?.() ?? "",
       linkReport: () => {
         if (!handle?.linkReport) {
           throw new Error(`${example.name} target has no published link report`);

@@ -20,9 +20,9 @@ const VARIANTS = [
   { name: "rsc", headers: { accept: "text/x-component", RSC: "1" } },
 ];
 
-const base = process.argv[2] || process.env.NEXT_TEST_DEPLOY_URL || process.env.SMOKE_URL;
+const base = process.argv[2] || process.env.NEXT_TEST_DEPLOY_URL;
 if (!base) {
-  fail("no deployment url given (argument, $NEXT_TEST_DEPLOY_URL or $SMOKE_URL)");
+  fail("no deployment url given (argument or $NEXT_TEST_DEPLOY_URL)");
 }
 const target = new URL(GOLDEN_ROUTE, base).toString();
 

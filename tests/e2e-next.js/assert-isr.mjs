@@ -8,9 +8,9 @@ const CHANGE_DEADLINE_MS = 150_000;
 
 const CACHED_TIERS = new Set(["HIT", "PRERENDER", "STALE"]);
 
-const base = process.argv[2] || process.env.NEXT_TEST_DEPLOY_URL || process.env.SMOKE_URL;
+const base = process.argv[2] || process.env.NEXT_TEST_DEPLOY_URL;
 if (!base) {
-  fail("no deployment url given (argument, $NEXT_TEST_DEPLOY_URL or $SMOKE_URL)");
+  fail("no deployment url given (argument or $NEXT_TEST_DEPLOY_URL)");
 }
 const target = new URL(ISR_ROUTE, base).toString();
 

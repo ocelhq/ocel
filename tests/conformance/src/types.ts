@@ -1,4 +1,4 @@
-export const sdkCapabilities = [
+export const conformanceCapabilities = [
   "http",
   "static",
   "postgres",
@@ -7,10 +7,13 @@ export const sdkCapabilities = [
   "native",
   "isr",
   "revalidate",
+  "proxy",
+  "golden",
+  "bytecode",
   "links",
 ] as const;
 
-export type Capability = (typeof sdkCapabilities)[number];
+export type Capability = (typeof conformanceCapabilities)[number];
 
 export type TargetName = "dev" | "aws";
 
@@ -60,6 +63,8 @@ export type CheckContext = {
   baseUrl: () => string;
   headObject: (key: string) => Promise<{ contentType?: string }>;
   runId: string;
+  targetName: TargetName;
+  output: () => string;
   linkReport: () => LinkReport;
 };
 

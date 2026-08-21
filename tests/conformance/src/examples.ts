@@ -37,6 +37,9 @@ export const examples = [
       "env",
       "isr",
       "revalidate",
+      "proxy",
+      "golden",
+      "bytecode",
     ],
   },
   {

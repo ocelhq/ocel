@@ -104,25 +104,6 @@ outstanding-work list; it is empty when the adapter is green.
 **Do not re-record a full baseline to promote a fix** — that silently adopts
 every new failure alongside it.
 
-## Assertions run by hand
-
-Not wired into the workflow. Run each against a real deployment; their pure
-halves are covered by `pnpm --filter @ocel-scripts/e2e-next test`, which proves
-the comparison and not the Lambda.
-
-| script                          | how to run                                                    |
-| ------------------------------- | ------------------------------------------------------------- |
-| `assert-suppression-golden.mjs` | `node …/assert-suppression-golden.mjs "$SMOKE_URL"`            |
-| `assert-tag-publisher.mjs`      | same, with a deployment URL                                    |
-| `assert-bytecode.mjs`           | from the deployed app's directory; deploy with `OCEL_BYTECODE_CACHE=1` first, or it has nothing to find |
-| `assert-embed.mjs`              | same, and additionally `OCEL_BYTECODE_EMBED=1`                 |
-
-Under `OCEL_BYTECODE_EMBED=1` the last two are complementary and **both must
-run**: embedding makes the S3 rehydrate line `assert-bytecode.mjs` looks for
-false, so it drops that leg and warns, and `assert-embed.mjs` covers it instead.
-Both read slug, environment, app, build id and deploy time from
-`.ocel/deploy-result.json` in the deployed app's directory.
-
 ## Repacking the sidecar
 
 The sidecar is the only thing a temp app sees of Ocel. CI builds one per run;
@@ -160,7 +141,7 @@ stranded run no longer blocks another from deploying previews.
 
 ```bash
 ADAPTER_DIR=… OCEL_E2E_SIDECAR_DIR=… \
-  node scripts/e2e-next/project-teardown.mjs e2e-<run id>
+  node tests/e2e-next.js/project-teardown.mjs e2e-<run id>
 ```
 
 ## Debugging a failing suite

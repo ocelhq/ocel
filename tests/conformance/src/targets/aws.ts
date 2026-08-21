@@ -36,6 +36,7 @@ function childEnv(
   token: string,
   slug: string,
   bootstrapToken: string,
+  example: Example,
 ): NodeJS.ProcessEnv {
   return {
     ...process.env,
@@ -44,6 +45,9 @@ function childEnv(
     OCEL_CONFIG: config,
     OCEL_EDGE_OBSERVABILITY: "off",
     OCEL_TEST_PROJECT_SLUG: slug,
+    ...(example.capabilities.includes("bytecode")
+      ? { OCEL_BYTECODE_CACHE: "1", OCEL_BYTECODE_EMBED: "1" }
+      : {}),
     ...skipDriftChecks,
   };
 }
@@ -287,7 +291,7 @@ export function createAwsTarget(token: string): Target {
     name: "aws",
     async up(example) {
       const bootstrapToken = crypto.randomUUID();
-      const env = childEnv(token, slug, bootstrapToken);
+      const env = childEnv(token, slug, bootstrapToken, example);
       const ref = `conformance-${example.name}`;
       let createdEnv = false;
       let external: ExternalLinks | undefined;
@@ -308,8 +312,8 @@ export function createAwsTarget(token: string): Target {
           await external.provision();
           await external.assertPublished();
         }
-        await runOcel("ocel build", ["build"], example, env);
-        await runOcel(
+        const build = await runOcel("ocel build", ["build"], example, env);
+        const deploy = await runOcel(
           "ocel preview up",
           ["preview", "up", "--ref", ref, "--prebuilt", "--no-ui"],
           example,
@@ -336,6 +340,10 @@ export function createAwsTarget(token: string): Target {
         });
         return {
           baseUrl,
+          output: () =>
+            [build.stdout, build.stderr, deploy.stdout, deploy.stderr].join(
+              "\n",
+            ),
           linkReport: external?.report,
           headObject: async (key) => {
             const metadata = await objectStore.send(

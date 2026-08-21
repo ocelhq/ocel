@@ -1,5 +1,5 @@
 {
-  "name": "@ocel-scripts/e2e-next",
+  "name": "@ocel-tests/e2e-next.js",
   "version": "0.0.0",
   "private": true,
   "type": "module",
