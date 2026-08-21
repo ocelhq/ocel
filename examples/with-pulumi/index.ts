@@ -4,6 +4,14 @@ import { link } from "@ocel/pulumi";
 
 const region = aws.config.requireRegion();
 const password = new Config().requireSecret("dbPassword");
+const environment = process.env.OCEL_LINK_ENVIRONMENT;
+const target = environment
+  ? {
+      project: process.env.OCEL_LINK_PROJECT,
+      class: "preview" as const,
+      environment,
+    }
+  : undefined;
 
 const vpc = new aws.ec2.Vpc("orders", {
   cidrBlock: "10.0.0.0/16",
@@ -32,7 +40,10 @@ const subnetIds = subnets.map((subnet) => subnet.id);
 
 const security = new aws.ec2.SecurityGroup("orders", {
   vpcId: vpc.id,
-  ingress: [{ protocol: "tcp", fromPort: 5432, toPort: 5432, self: true }],
+  ingress: [
+    { protocol: "tcp", fromPort: 443, toPort: 443, self: true },
+    { protocol: "tcp", fromPort: 5432, toPort: 5432, self: true },
+  ],
   egress: [
     { protocol: "-1", fromPort: 0, toPort: 0, cidrBlocks: ["0.0.0.0/0"] },
   ],
@@ -46,6 +57,15 @@ for (const service of ["s3", "dynamodb"]) {
     routeTableIds: [routes.id],
   });
 }
+
+new aws.ec2.VpcEndpoint("kms", {
+  vpcId: vpc.id,
+  serviceName: interpolate`com.amazonaws.${region}.kms`,
+  vpcEndpointType: "Interface",
+  privateDnsEnabled: true,
+  subnetIds,
+  securityGroupIds: [security.id],
+});
 
 const group = new aws.rds.SubnetGroup("orders", { subnetIds });
 
@@ -63,19 +83,44 @@ const orders = new aws.rds.Instance("orders", {
   skipFinalSnapshot: true,
 });
 
-link.postgres("orders", {
-  host: orders.address,
-  port: orders.port,
-  database: orders.dbName,
-  username: orders.username,
-  password,
-});
+const account = aws.getCallerIdentityOutput().accountId;
 
-link.custom("network", {
-  properties: {
-    subnetIds,
-    securityGroupIds: [security.id],
+link.postgres(
+  "orders",
+  {
+    host: orders.address,
+    port: orders.port,
+    database: orders.dbName,
+    username: orders.username,
+    password,
+    grants: [
+      {
+        label: "connect",
+        actions: ["rds-db:connect"],
+        resources: [
+          interpolate`arn:aws:rds-db:${region}:${account}:dbuser:${orders.resourceId}/${orders.username}`,
+        ],
+      },
+    ],
   },
-});
+  target,
+);
+
+link.custom(
+  "network",
+  {
+    properties: {
+      subnetIds,
+      securityGroupIds: [security.id],
+    },
+  },
+  target,
+);
 
 export const endpoint = interpolate`${orders.address}:${orders.port}`;
+export const host = orders.address;
+export const port = orders.port;
+export const database = orders.dbName;
+export const publishedSubnetIds =
+  interpolate`${subnets[0]!.id},${subnets[1]!.id}`;
+export const publishedSecurityGroupIds = security.id;

@@ -6,8 +6,24 @@ app.use(express.json());
 
 const PORT = Number(process.env.PORT ?? 3402);
 
-app.get("/health", (_req, res) => {
+app.get("/api/health", (_req, res) => {
   res.json({ ok: true });
+});
+
+app.get("/api/link", async (_req, res) => {
+  try {
+    const url = new URL(orders.connectionString);
+    const result = await orders.query("SELECT 1 AS connected");
+    res.json({
+      host: url.hostname,
+      port: url.port,
+      database: url.pathname.replace(/^\//, ""),
+      hasPassword: url.password.length > 0,
+      connected: result.rows[0]?.connected === 1,
+    });
+  } catch {
+    res.status(503).json({ error: "link unavailable" });
+  }
 });
 
 app.post("/orders", async (req, res) => {

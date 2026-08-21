@@ -7,28 +7,51 @@ export const sdkCapabilities = [
   "native",
   "isr",
   "revalidate",
+  "links",
 ] as const;
 
 export type Capability = (typeof sdkCapabilities)[number];
 
+export type TargetName = "dev" | "aws";
+
+export type LinkTool = "sst" | "pulumi";
+
 export type Example = {
-  name: "express" | "hono" | "next" | "fastify" | "with-transforms";
+  name:
+    | "express"
+    | "hono"
+    | "next"
+    | "fastify"
+    | "with-transforms"
+    | "with-sst"
+    | "with-pulumi";
   framework: "next" | "express" | "hono" | "fastify";
   appName: string;
   dir: string;
   startCmd: string[];
   capabilities: readonly Capability[];
+  targets?: readonly TargetName[];
+  linkTool?: LinkTool;
+};
+
+export type LinkReport = {
+  host: string;
+  port: string;
+  database: string;
+  hasPassword: boolean;
+  connected: boolean;
 };
 
 export type TargetHandle = {
   baseUrl: string;
   teardown: () => Promise<void>;
   headObject: (key: string) => Promise<{ contentType?: string }>;
+  linkReport?: LinkReport;
   output?: () => string;
 };
 
 export type Target = {
-  name: "dev" | "aws";
+  name: TargetName;
   up: (example: Example) => Promise<TargetHandle>;
 };
 
@@ -37,6 +60,7 @@ export type CheckContext = {
   baseUrl: () => string;
   headObject: (key: string) => Promise<{ contentType?: string }>;
   runId: string;
+  linkReport: () => LinkReport;
 };
 
 export type Check = (context: CheckContext) => void;

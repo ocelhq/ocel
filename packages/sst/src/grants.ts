@@ -1,7 +1,12 @@
+export type Input<T> =
+  | T
+  | Promise<T>
+  | { apply(f: (value: T) => unknown): unknown };
+
 /** A provider-native permission an app receives along with the link's properties. */
 export interface Grant {
   actions: string[];
-  resources: string[];
+  resources: Input<string>[];
   label?: string;
 }
 
@@ -51,7 +56,10 @@ export function scoped(
         `link ${name} carries a grant over ${grant.actions.join(", ") || "no action"}: an action naming a whole service reaches past the resource the link names`,
       );
     }
-    if (grant.resources.length === 0 || grant.resources.includes(wildcard)) {
+    if (
+      grant.resources.length === 0 ||
+      grant.resources.some((resource) => resource === wildcard)
+    ) {
       throw new Error(
         `link ${name} carries a grant over ${grant.resources.join(", ") || "no resource"}: an app receives permissions for the resource it links and nothing else`,
       );

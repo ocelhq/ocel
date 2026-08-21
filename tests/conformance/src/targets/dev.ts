@@ -16,6 +16,8 @@ const ports: Record<Example["name"], number> = {
   hono: 3103,
   fastify: 3104,
   "with-transforms": 3106,
+  "with-sst": 3107,
+  "with-pulumi": 3108,
 };
 
 function env(

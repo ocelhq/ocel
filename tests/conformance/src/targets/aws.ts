@@ -5,11 +5,14 @@ import { setTimeout as delay } from "node:timers/promises";
 import { HeadObjectCommand, S3Client } from "@aws-sdk/client-s3";
 import { nextDotenv } from "../env";
 import { repoRoot } from "../examples";
-import { successful } from "../process";
+import { provisionExternalLinks, type ExternalLinks } from "../aws-links";
+import { refusalProblem } from "../links";
+import { run, successful } from "../process";
 import type { Example, Target } from "../types";
 
 const deployResult = path.join(".ocel", "deploy-result.json");
 const config = "ocel.aws.config.ts";
+const refusalConfig = ".ocel.conformance-refused.config.ts";
 const skipDriftChecks = {
   OCEL_SKIP_EDGE_RECONCILE: "1",
   OCEL_SKIP_TEARDOWN_REFRESH: "1",
@@ -209,6 +212,65 @@ async function bootstrapFixture(baseUrl: string, token: string) {
   }
 }
 
+function refusalConfigSource() {
+  return `import awsProvider from "@ocel/provider-aws";
+import { defineConfig } from "ocel/config";
+import { cloudflare } from "ocel/edge";
+import base from "./ocel.config";
+
+export default defineConfig({
+  ...base,
+  links: [],
+  provider: awsProvider({ transforms: ["./infra/network.transform.ts"] }),
+  edge: cloudflare(),
+});
+`;
+}
+
+async function assertRefused(
+  example: Example,
+  ref: string,
+  env: NodeJS.ProcessEnv,
+) {
+  const configPath = path.join(example.dir, refusalConfig);
+  await writeFile(configPath, refusalConfigSource(), { flag: "wx" });
+  const refusedEnv = { ...env, OCEL_CONFIG: refusalConfig };
+  try {
+    await runOcel("ocel refusal build", ["build"], example, refusedEnv);
+    const [command, prefix] = ocelCommand();
+    const result = await run(
+      command,
+      [
+        ...prefix,
+        "preview",
+        "up",
+        "--ref",
+        ref,
+        "--prebuilt",
+        "--no-ui",
+      ],
+      { cwd: example.dir, env: refusedEnv, timeoutMs: 25 * 60_000 },
+    );
+    const problem = refusalProblem(
+      result.code,
+      `${result.stdout}\n${result.stderr}`,
+    );
+    if (problem) {
+      if (result.code === 0) {
+        await runOcel(
+          "ocel refusal cleanup",
+          ["preview", "rm", "--ref", ref, "--yes"],
+          example,
+          refusedEnv,
+        );
+      }
+      throw new Error(problem);
+    }
+  } finally {
+    await rm(configPath, { force: true });
+  }
+}
+
 export function projectSlugForRun() {
   const raw = process.env.GITHUB_RUN_ID ?? "local";
   const run = raw
@@ -228,6 +290,8 @@ export function createAwsTarget(token: string): Target {
       const env = childEnv(token, slug, bootstrapToken);
       const ref = `conformance-${example.name}`;
       let createdEnv = false;
+      let external: ExternalLinks | undefined;
+      let deployed = false;
       if (example.capabilities.includes("env")) {
         try {
           await writeFile(path.join(example.dir, ".env"), nextDotenv(), {
@@ -239,6 +303,10 @@ export function createAwsTarget(token: string): Target {
         }
       }
       try {
+        if (example.linkTool) {
+          external = await provisionExternalLinks(example, slug, ref);
+          await external.assertPublished();
+        }
         await runOcel("ocel build", ["build"], example, env);
         await runOcel(
           "ocel preview up",
@@ -246,6 +314,7 @@ export function createAwsTarget(token: string): Target {
           example,
           env,
         );
+        deployed = true;
         const result = JSON.parse(
           await readFile(path.join(example.dir, deployResult), "utf8"),
         ) as Result;
@@ -256,13 +325,17 @@ export function createAwsTarget(token: string): Target {
         }
         const baseUrl = result.appUrls[0];
         await assertWorkerPath(result, example, baseUrl);
-        await bootstrapFixture(baseUrl, bootstrapToken);
+        if (!example.capabilities.includes("links")) {
+          await bootstrapFixture(baseUrl, bootstrapToken);
+        }
+        await external?.assertConsumed(example.appName);
         const objectStore = new S3Client({
           maxAttempts: 4,
           retryMode: "standard",
         });
         return {
           baseUrl,
+          linkReport: external?.report,
           headObject: async (key) => {
             const metadata = await objectStore.send(
               new HeadObjectCommand({
@@ -281,15 +354,41 @@ export function createAwsTarget(token: string): Target {
                 example,
                 env,
               );
+              external?.assertConsumerRemoved();
             } finally {
-              if (createdEnv) {
-                await rm(path.join(example.dir, ".env"), { force: true });
+              try {
+                if (external) {
+                  await external.teardown();
+                  external.assertPublisherRemoved();
+                  await assertRefused(example, ref, env);
+                }
+              } finally {
+                if (createdEnv) {
+                  await rm(path.join(example.dir, ".env"), { force: true });
+                }
               }
             }
           },
         };
       } catch (error) {
-        if (createdEnv) await rm(path.join(example.dir, ".env"), { force: true });
+        try {
+          if (deployed) {
+            await runOcel(
+              "ocel preview rm",
+              ["preview", "rm", "--ref", ref, "--yes"],
+              example,
+              env,
+            );
+          }
+        } finally {
+          try {
+            await external?.teardown();
+          } finally {
+            if (createdEnv) {
+              await rm(path.join(example.dir, ".env"), { force: true });
+            }
+          }
+        }
         throw error;
       }
     },

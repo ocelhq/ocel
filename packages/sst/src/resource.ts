@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import { checkTarget, runLink, type Target } from "./cli.js";
 import { customLink, type DescribedCustom } from "./custom.js";
-import type { Grant, SSTInclude } from "./grants.js";
+import type { Grant, Input, SSTInclude } from "./grants.js";
 import { postgresLink, type DescribedPostgres } from "./postgres.js";
 
 /** An SST component, as SST already describes itself to its own link consumers. */
@@ -11,8 +11,6 @@ export interface SSTPostgresLinkable {
     include?: SSTInclude[];
   };
 }
-
-type Input<T> = T | Promise<T> | { apply(f: (value: T) => unknown): unknown };
 
 /**
  * A postgres resource described by hand, for anything SST does not describe.
