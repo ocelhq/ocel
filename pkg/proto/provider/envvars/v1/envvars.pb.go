@@ -1619,13 +1619,13 @@ const file_provider_envvars_v1_envvars_proto_rawDesc = "" +
 	"\aversion\x18\x01 \x01(\x03R\aversion\x12\x1d\n" +
 	"\n" +
 	"created_at\x18\x02 \x01(\x03R\tcreatedAt\x12\x12\n" +
-	"\x04size\x18\x03 \x01(\x03R\x04size\"\xf0\x01\n" +
+	"\x04size\x18\x03 \x01(\x03R\x04size\"\xf5\x01\n" +
 	"\x0fSetValueRequest\x129\n" +
 	"\x04tier\x18\x01 \x01(\x0e2\x1b.common.environment.v1.TierB\b\xbaH\x05\x82\x01\x02\x10\x01R\x04tier\x12G\n" +
 	"\n" +
 	"coordinate\x18\x02 \x01(\v2\x1f.provider.envvars.v1.CoordinateB\x06\xbaH\x03\xc8\x01\x01R\n" +
-	"coordinate\x12\x14\n" +
-	"\x05value\x18\x03 \x01(\tR\x05value\x12.\n" +
+	"coordinate\x12\x19\n" +
+	"\x05value\x18\x03 \x01(\tB\x03\x80\x01\x01R\x05value\x12.\n" +
 	"\x10expected_version\x18\x04 \x01(\x03H\x00R\x0fexpectedVersion\x88\x01\x01B\x13\n" +
 	"\x11_expected_version\"R\n" +
 	"\x10SetValueResponse\x12>\n" +
@@ -1640,20 +1640,20 @@ const file_provider_envvars_v1_envvars_proto_rawDesc = "" +
 	"\n" +
 	"coordinate\x18\x02 \x01(\v2\x1f.provider.envvars.v1.CoordinateB\x06\xbaH\x03\xc8\x01\x01R\n" +
 	"coordinate\x12\x16\n" +
-	"\x06reveal\x18\x03 \x01(\bR\x06reveal\"~\n" +
+	"\x06reveal\x18\x03 \x01(\bR\x06reveal\"\x83\x01\n" +
 	"\x10GetValueResponse\x12\x14\n" +
 	"\x05found\x18\x01 \x01(\bR\x05found\x12>\n" +
-	"\bmetadata\x18\x02 \x01(\v2\".provider.envvars.v1.ValueMetadataR\bmetadata\x12\x14\n" +
-	"\x05value\x18\x03 \x01(\tR\x05value\"\xbe\x01\n" +
+	"\bmetadata\x18\x02 \x01(\v2\".provider.envvars.v1.ValueMetadataR\bmetadata\x12\x19\n" +
+	"\x05value\x18\x03 \x01(\tB\x03\x80\x01\x01R\x05value\"\xbe\x01\n" +
 	"\x13RevealValuesRequest\x129\n" +
 	"\x04tier\x18\x01 \x01(\x0e2\x1b.common.environment.v1.TierB\b\xbaH\x05\x82\x01\x02\x10\x01R\x04tier\x125\n" +
 	"\x04slug\x18\x02 \x01(\tB!\xbaH\x1er\x1c\x18?2\x18^[a-z0-9]+(-[a-z0-9]+)*$R\x04slug\x125\n" +
 	"\x05cells\x18\x03 \x03(\v2\x1f.provider.envvars.v1.CoordinateR\x05cells\"R\n" +
 	"\x14RevealValuesResponse\x12:\n" +
-	"\x06values\x18\x01 \x03(\v2\".provider.envvars.v1.RevealedValueR\x06values\"e\n" +
+	"\x06values\x18\x01 \x03(\v2\".provider.envvars.v1.RevealedValueR\x06values\"j\n" +
 	"\rRevealedValue\x12>\n" +
-	"\bmetadata\x18\x01 \x01(\v2\".provider.envvars.v1.ValueMetadataR\bmetadata\x12\x14\n" +
-	"\x05value\x18\x02 \x01(\tR\x05value\"\xdd\x01\n" +
+	"\bmetadata\x18\x01 \x01(\v2\".provider.envvars.v1.ValueMetadataR\bmetadata\x12\x19\n" +
+	"\x05value\x18\x02 \x01(\tB\x03\x80\x01\x01R\x05value\"\xdd\x01\n" +
 	"\x12DeleteValueRequest\x129\n" +
 	"\x04tier\x18\x01 \x01(\x0e2\x1b.common.environment.v1.TierB\b\xbaH\x05\x82\x01\x02\x10\x01R\x04tier\x12G\n" +
 	"\n" +

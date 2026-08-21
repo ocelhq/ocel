@@ -211,7 +211,7 @@ message ManifestVariable {
   string key = 1 [(buf.validate.field).string = {min_len: 1, pattern: "^[^#[:cntrl:]]*$"}];
   app.resources.v1.VariableClass class = 2 [(buf.validate.field).enum.defined_only = true];
 
-  string value = 3;
+  string value = 3 [debug_redact = true];
 
   string folder = 4 [(buf.validate.field).string.pattern = "^(/[^/#[:cntrl:]]+)*$"];
 
