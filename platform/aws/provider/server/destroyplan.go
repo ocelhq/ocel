@@ -3,6 +3,7 @@ package server
 import (
 	"fmt"
 
+	"github.com/ocelhq/ocel/pkg/naming"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/platform/aws/provider/bootstrap"
 	"github.com/ocelhq/ocel/platform/aws/provider/certs"
@@ -26,6 +27,35 @@ func destroyPlanItems(edgeFront edge.Edge, scope projectPlanScope) []*contractv1
 	items = append(items, recordItems(scope.record.Edge.Records, recorded)...)
 	items = append(items, storeItems(edgeFront, scope)...)
 	return append(items, substrateItems(edgeFront, scope)...)
+}
+
+func stackItems(infra, app []naming.StackName) []*contractv1.RemovalItem {
+	items := make([]*contractv1.RemovalItem, 0, len(infra)+len(app))
+	for _, stack := range infra {
+		items = append(items, &contractv1.RemovalItem{
+			Kind:   "infra stack",
+			Name:   stack.String(),
+			Action: contractv1.RemovalItem_ACTION_DELETE,
+			Reason: "databases and buckets, INCLUDING ALL DATA",
+		})
+	}
+	for _, stack := range app {
+		items = append(items, &contractv1.RemovalItem{
+			Kind:   "app stack",
+			Name:   stack.String(),
+			Action: contractv1.RemovalItem_ACTION_DELETE,
+		})
+	}
+	return items
+}
+
+func projectIndexItem(slug string) *contractv1.RemovalItem {
+	return &contractv1.RemovalItem{
+		Kind:   "project index entry",
+		Name:   slug,
+		Action: contractv1.RemovalItem_ACTION_DELETE,
+		Reason: "the record that this account knows this project at all",
+	}
 }
 
 func surfaceItems(edgeFront edge.Edge, scope projectPlanScope) []*contractv1.RemovalItem {

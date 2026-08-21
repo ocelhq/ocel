@@ -256,9 +256,10 @@ func runBootstrapDestroy(ctx context.Context, d deps, cfg *projectconfig.Config,
 		if err != nil {
 			return err
 		}
-		printTeardownPlan(stdout, substrate, plan)
+		printRemovalPlan(stdout, fmt.Sprintf("This will permanently remove the %s substrate of this account", substrate), plan,
+			"Every app already deployed from it keeps running and nothing can describe, update or remove it again. This cannot be undone.")
 		if !skipConfirmation {
-			confirmed, err := confirmPhrase(ctx, "class name", substrate, stdout, stdin)
+			confirmed, err := confirmPhrase(ctx, "class name", plan.GetSubject(), stdout, stdin)
 			if err != nil {
 				return err
 			}
@@ -289,29 +290,4 @@ func bootstrapDestroyCommand(preview bool) string {
 		return "ocel bootstrap --destroy --preview"
 	}
 	return "ocel bootstrap --destroy"
-}
-
-func printTeardownPlan(out io.Writer, substrate string, plan *contractv1.PlanRemoveSubstrateResponse) {
-	header := fmt.Sprintf("This will permanently remove the %s substrate of this account", substrate)
-	if kind := plan.GetEdgeKind(); kind != "" {
-		header += fmt.Sprintf(", fronted by the %s edge", kind)
-	}
-	fmt.Fprintf(out, "%s:\n", header)
-
-	var kept []*contractv1.RemovalItem
-	for _, item := range plan.GetItems() {
-		if item.GetAction() == contractv1.RemovalItem_ACTION_KEEP {
-			kept = append(kept, item)
-			continue
-		}
-		fmt.Fprintf(out, "  • %s\n", removalItemLine(item))
-	}
-	fmt.Fprintln(out, "Every app already deployed from it keeps running and nothing can describe, update or remove it again. This cannot be undone.")
-
-	if len(kept) > 0 {
-		fmt.Fprintln(out, "Left in place:")
-		for _, item := range kept {
-			fmt.Fprintf(out, "  • %s\n", removalItemLine(item))
-		}
-	}
 }

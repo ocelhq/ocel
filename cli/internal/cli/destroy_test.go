@@ -31,6 +31,7 @@ func TestConfirmPhrase(t *testing.T) {
 		{"another scope's phrase does not carry", "domain", "preview.acme.com", "proj_shop\n", false, "Type the domain (preview.acme.com) to confirm:"},
 		{"the class name is the substrate's phrase", "class name", "preview", "preview\n", true, "Type the class name (preview) to confirm:"},
 		{"the other class does not confirm this one", "class name", "preview", "production\n", false, "Type the class name (preview) to confirm:"},
+		{"a phrase the provider never sent confirms nothing", "project name", "", "\n", false, "Type the project name () to confirm:"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -58,17 +59,17 @@ func TestPrintDestroyPlan(t *testing.T) {
 		t.Parallel()
 
 		var out bytes.Buffer
-		printDestroyPlan(&out, "proj_shop", false, &contractv1.PlanRemoveProjectResponse{
-			EdgeStack: &contractv1.EdgeStackPlan{
-				EdgeKind: "cloudflare",
-				Items: []*contractv1.RemovalItem{
-					{Kind: "edge stack", Name: "shop", Action: contractv1.RemovalItem_ACTION_DELETE},
-					{Kind: "distribution", Name: "E1SHOP", Action: contractv1.RemovalItem_ACTION_DISABLE_THEN_DELETE, Slow: true},
-					{Kind: "certificate", Name: "shop.example.com", Action: contractv1.RemovalItem_ACTION_KEEP, Reason: "you pinned this certificate"},
-				},
+		printDestroyPlan(&out, "proj_shop", false, &contractv1.RemovalPlan{
+			EdgeKind: "cloudflare",
+			Subject:  "proj_shop",
+			Items: []*contractv1.RemovalItem{
+				{Kind: "edge stack", Name: "shop", Action: contractv1.RemovalItem_ACTION_DELETE},
+				{Kind: "distribution", Name: "E1SHOP", Action: contractv1.RemovalItem_ACTION_DISABLE_THEN_DELETE, Slow: true},
+				{Kind: "certificate", Name: "shop.example.com", Action: contractv1.RemovalItem_ACTION_KEEP, Reason: "you pinned this certificate"},
+				{Kind: "infra stack", Name: "shop--infra", Action: contractv1.RemovalItem_ACTION_DELETE, Reason: "databases and buckets, INCLUDING ALL DATA"},
+				{Kind: "app stack", Name: "shop--web--b1", Action: contractv1.RemovalItem_ACTION_DELETE},
+				{Kind: "app stack", Name: "shop--api--b2", Action: contractv1.RemovalItem_ACTION_DELETE},
 			},
-			InfraStacks: []string{"shop--infra"},
-			AppStacks:   []string{"shop--web--b1", "shop--api--b2"},
 		})
 		got := out.String()
 		for _, want := range []string{
@@ -98,13 +99,11 @@ func TestPrintDestroyPlan(t *testing.T) {
 		t.Parallel()
 
 		var out bytes.Buffer
-		printDestroyPlan(&out, "proj_shop", false, &contractv1.PlanRemoveProjectResponse{
-			EdgeStack: &contractv1.EdgeStackPlan{
-				EdgeKind: "api-gateway",
-				Items: []*contractv1.RemovalItem{
-					{Kind: "REST APIs", Name: "shop", Action: contractv1.RemovalItem_ACTION_DELETE, Slow: true},
-					{Kind: "domain names", Name: "shop.example.com", Action: contractv1.RemovalItem_ACTION_DELETE},
-				},
+		printDestroyPlan(&out, "proj_shop", false, &contractv1.RemovalPlan{
+			EdgeKind: "api-gateway",
+			Items: []*contractv1.RemovalItem{
+				{Kind: "REST APIs", Name: "shop", Action: contractv1.RemovalItem_ACTION_DELETE, Slow: true},
+				{Kind: "domain names", Name: "shop.example.com", Action: contractv1.RemovalItem_ACTION_DELETE},
 			},
 		})
 		got := out.String()

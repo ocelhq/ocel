@@ -20,13 +20,13 @@ service ProviderService {
 
     rpc RemoveSubstrate(RemoveSubstrateRequest) returns (stream common.progress.v1.OperationEvent);
 
-    rpc PlanRemoveSubstrate(PlanRemoveSubstrateRequest) returns (PlanRemoveSubstrateResponse);
+    rpc PlanRemoveSubstrate(PlanRemoveSubstrateRequest) returns (RemovalPlan);
 
     rpc RemovePreview(RemovePreviewRequest) returns (stream common.progress.v1.OperationEvent);
 
     rpc RemoveProject(RemoveProjectRequest) returns (stream common.progress.v1.OperationEvent);
 
-    rpc PlanRemoveProject(PlanRemoveProjectRequest) returns (PlanRemoveProjectResponse);
+    rpc PlanRemoveProject(PlanRemoveProjectRequest) returns (RemovalPlan);
 
     rpc ListEnvironments(ListEnvironmentsRequest) returns (ListEnvironmentsResponse);
 
@@ -42,7 +42,7 @@ service ProviderService {
 
     rpc GetPreviewWildcard(PreviewWildcardRequest) returns (GetPreviewWildcardResponse);
 
-    rpc PlanRemovePreviewWildcard(PreviewWildcardRequest) returns (PlanRemovePreviewWildcardResponse);
+    rpc PlanRemovePreviewWildcard(PreviewWildcardRequest) returns (RemovalPlan);
 
     rpc RemovePreviewWildcard(RemovePreviewWildcardRequest) returns (stream common.progress.v1.OperationEvent);
 
@@ -306,12 +306,6 @@ message PlanRemoveSubstrateRequest {
   EdgeSelection edge = 2;
 }
 
-message PlanRemoveSubstrateResponse {
-  string edge_kind = 1;
-
-  repeated RemovalItem items = 2;
-}
-
 message RemovePreviewRequest {
   common.environment.v1.Environment environment = 1;
 
@@ -336,20 +330,12 @@ message PlanRemoveProjectRequest {
   EdgeSelection edge = 3;
 }
 
-message PlanRemoveProjectResponse {
-  repeated string app_stacks = 1;
+message RemovalPlan {
+  string edge_kind = 1;
 
-  repeated string infra_stacks = 2;
+  repeated RemovalItem items = 2;
 
-  EdgeStackPlan edge_stack = 3;
-
-  bool nothing_to_remove = 4;
-}
-
-message PlanRemovePreviewWildcardResponse {
-  string base_domain = 1;
-
-  EdgeStackPlan edge_stack = 2;
+  string subject = 3;
 }
 
 message RemovalItem {
@@ -365,12 +351,6 @@ message RemovalItem {
   Action action = 3;
   string reason = 4;
   bool slow = 5;
-}
-
-message EdgeStackPlan {
-  string edge_kind = 1;
-
-  repeated RemovalItem items = 2;
 }
 
 message ListEnvironmentsRequest {

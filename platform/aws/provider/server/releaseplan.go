@@ -19,10 +19,11 @@ func refusePreviewRelease(baseDomain string, projects []string) error {
 	)
 }
 
-func releaseEdgeStackPlan(edgeFront edge.Edge, recorded bootstrap.PreviewDomain) *contractv1.EdgeStackPlan {
-	return &contractv1.EdgeStackPlan{
+func releasePlan(edgeFront edge.Edge, recorded bootstrap.PreviewDomain) *contractv1.RemovalPlan {
+	return &contractv1.RemovalPlan{
 		EdgeKind: string(edgeFront.Kind()),
 		Items:    releasePlanItems(edgeFront, recorded),
+		Subject:  recorded.BaseDomain,
 	}
 }
 

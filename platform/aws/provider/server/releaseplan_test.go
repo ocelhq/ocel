@@ -73,7 +73,7 @@ func TestRefusePreviewReleaseWhileProjectsAreServed(t *testing.T) {
 	}
 }
 
-func TestReleaseEdgeStackPlan(t *testing.T) {
+func TestReleasePlan(t *testing.T) {
 	t.Parallel()
 
 	recorded := bootstrap.PreviewDomain{BaseDomain: "preview.acme.com", Edge: cloudflare.Kind}
@@ -81,9 +81,12 @@ func TestReleaseEdgeStackPlan(t *testing.T) {
 	t.Run("describes the edge that holds the wildcard, not the project asking", func(t *testing.T) {
 		t.Parallel()
 
-		plan := releaseEdgeStackPlan(planEdge(t, cloudflare.Kind), recorded)
+		plan := releasePlan(planEdge(t, cloudflare.Kind), recorded)
 		if plan.GetEdgeKind() != string(cloudflare.Kind) {
 			t.Errorf("edge kind = %q, want %q", plan.GetEdgeKind(), cloudflare.Kind)
+		}
+		if plan.GetSubject() != recorded.BaseDomain {
+			t.Errorf("subject = %q, want the base domain the operator types to confirm", plan.GetSubject())
 		}
 		itemFor(t, plan.GetItems(), "preview entry worker", "*.preview.acme.com")
 	})

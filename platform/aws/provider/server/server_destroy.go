@@ -21,7 +21,7 @@ import (
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
-func (s *Server) PlanRemoveProject(ctx context.Context, req *contractv1.PlanRemoveProjectRequest) (*contractv1.PlanRemoveProjectResponse, error) {
+func (s *Server) PlanRemoveProject(ctx context.Context, req *contractv1.PlanRemoveProjectRequest) (*contractv1.RemovalPlan, error) {
 	opts := s.config.get()
 
 	edgeFront, err := s.edge(requestedEdge(req), opts.Region)
@@ -49,11 +49,11 @@ func (s *Server) PlanRemoveProject(ctx context.Context, req *contractv1.PlanRemo
 		return nil, err
 	}
 
-	var infraStacks []string
+	var infraStacks []naming.StackName
 	if !plan.InfraStack.IsZero() {
-		infraStacks = []string{plan.InfraStack.String()}
+		infraStacks = []naming.StackName{plan.InfraStack}
 	}
-	edgeStack, err := s.edgeStackPlan(edgeFront, projectPlanScope{
+	removal, err := s.projectRemovalPlan(edgeFront, projectPlanScope{
 		class:      bootstrap.ClassProduction,
 		slug:       req.GetSlug(),
 		stateTable: deployed.StateTable,
@@ -67,20 +67,11 @@ func (s *Server) PlanRemoveProject(ctx context.Context, req *contractv1.PlanRemo
 	if err != nil {
 		return nil, err
 	}
-	appStacks := stackNames(plan.AppStacks)
-	return &contractv1.PlanRemoveProjectResponse{
-		AppStacks:       appStacks,
-		InfraStacks:     infraStacks,
-		EdgeStack:       edgeStack,
-		NothingToRemove: nothingToRemove(indexed, edgeStack, appStacks, infraStacks),
-	}, nil
+	removal.Items = append(removal.Items, stackItems(infraStacks, plan.AppStacks)...)
+	return withProjectIndex(removal, indexed, req.GetSlug()), nil
 }
 
-func nothingToRemove(indexed bool, edgeStack *contractv1.EdgeStackPlan, appStacks, infraStacks []string) bool {
-	return !indexed && len(edgeStack.GetItems()) == 0 && len(appStacks) == 0 && len(infraStacks) == 0
-}
-
-func (s *Server) planDestroyPreviewProject(ctx context.Context, opts providerConfig, edgeFront edge.Edge, slug string) (*contractv1.PlanRemoveProjectResponse, error) {
+func (s *Server) planDestroyPreviewProject(ctx context.Context, opts providerConfig, edgeFront edge.Edge, slug string) (*contractv1.RemovalPlan, error) {
 	awscfg, err := loadAWS(ctx, opts.Region)
 	if err != nil {
 		return nil, err
@@ -102,7 +93,7 @@ func (s *Server) planDestroyPreviewProject(ctx context.Context, opts providerCon
 		return nil, err
 	}
 
-	edgeStack, err := s.edgeStackPlan(edgeFront, projectPlanScope{
+	removal, err := s.projectRemovalPlan(edgeFront, projectPlanScope{
 		class:      bootstrap.ClassPreview,
 		slug:       slug,
 		stateTable: deployed.StateTable,
@@ -116,25 +107,19 @@ func (s *Server) planDestroyPreviewProject(ctx context.Context, opts providerCon
 	if err != nil {
 		return nil, err
 	}
-	appStacks, infraStacks := stackNames(plan.AppStacks), stackNames(plan.InfraStacks)
-	return &contractv1.PlanRemoveProjectResponse{
-		AppStacks:       appStacks,
-		InfraStacks:     infraStacks,
-		EdgeStack:       edgeStack,
-		NothingToRemove: nothingToRemove(indexed, edgeStack, appStacks, infraStacks),
-	}, nil
+	removal.Items = append(removal.Items, stackItems(plan.InfraStacks, plan.AppStacks)...)
+	return withProjectIndex(removal, indexed, slug), nil
 }
 
-func stackNames(stacks []naming.StackName) []string {
-	names := make([]string, 0, len(stacks))
-	for _, stack := range stacks {
-		names = append(names, stack.String())
+func withProjectIndex(plan *contractv1.RemovalPlan, indexed bool, slug string) *contractv1.RemovalPlan {
+	if indexed {
+		plan.Items = append(plan.Items, projectIndexItem(slug))
 	}
-	return names
+	return plan
 }
 
-func (s *Server) edgeStackPlan(edgeFront edge.Edge, scope projectPlanScope) (*contractv1.EdgeStackPlan, error) {
-	plan := &contractv1.EdgeStackPlan{EdgeKind: string(edgeFront.Kind())}
+func (s *Server) projectRemovalPlan(edgeFront edge.Edge, scope projectPlanScope) (*contractv1.RemovalPlan, error) {
+	plan := &contractv1.RemovalPlan{EdgeKind: string(edgeFront.Kind()), Subject: scope.slug}
 
 	if _, err := openStackOn(edgeFront, scope.record); err != nil {
 		if errors.Is(err, errNoProductionDeploy) {
