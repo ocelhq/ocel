@@ -56,7 +56,9 @@ entry before it needs files. Dotfile directories are tooling and are exempt.
   embedded into it.
 - **`sdk/`** — the Go SDK apps import to declare resources and talk to the dev server.
   Deliberately lean; never depends on the CLI.
-- **`pkg/`** — small shared Go modules any module may depend on.
+- **`pkg/`** — small shared Go modules any module may depend on. They may import each other
+  and `platform/edge/contract`, the one `platform/` path open to them, and nothing else in
+  the repo — never a vendor SDK, the CLI, the SDK or the console.
 - **`proto/`** — source of truth for the wire format. Bindings are **generated** — never
   hand-edit generated output.
 - **`scripts/`** — development and release tooling, and the e2e harnesses.
