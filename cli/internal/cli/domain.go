@@ -320,7 +320,7 @@ func runAddDomain(ctx context.Context, d deps, cwd, host string, stdout, stderr 
 		return fmt.Errorf("this project declares no domains.production in %s, so there is no production hostname to add: declare one and run `ocel domain add` again — no command edits the config", filepath.Base(cfg.Path))
 	}
 	return runDomainStream(ctx, d, cfg, provider, "ocel domain add", stdout, stderr, func(runner *providerrunner.Runner, ui *deployui.Session) error {
-		req := &contractv1.AddHostnameRequest{
+		req := &contractv1.HostnameRequest{
 			Slug:       cfg.Slug,
 			Configured: configured,
 			Host:       host,
@@ -348,7 +348,7 @@ func runDomainRm(ctx context.Context, d deps, cwd, host string, stdout, stderr i
 	}
 
 	return runDomainStream(ctx, d, cfg, provider, "ocel domain rm", stdout, stderr, func(runner *providerrunner.Runner, ui *deployui.Session) error {
-		req := &contractv1.RemoveHostnameRequest{
+		req := &contractv1.HostnameRequest{
 			Slug:       cfg.Slug,
 			Configured: declaredHostnames(cfg, "production"),
 			Host:       host,
@@ -517,7 +517,7 @@ func runDomainStatus(ctx context.Context, d deps, cwd string, opts domainOptions
 		if err != nil {
 			return err
 		}
-		req := &contractv1.GetHostnameStatusRequest{
+		req := &contractv1.HostnameRequest{
 			Slug:       cfg.Slug,
 			Configured: configured,
 			Edge:       edgeSelection(cfg),
@@ -536,7 +536,7 @@ func runDomainStatus(ctx context.Context, d deps, cwd string, opts domainOptions
 
 const domainWaitFailures = 4
 
-func awaitDomainStatus(ctx context.Context, client contractv1connect.ProviderServiceClient, req *contractv1.GetHostnameStatusRequest, wait bool, out io.Writer) (*contractv1.GetHostnameStatusResponse, error) {
+func awaitDomainStatus(ctx context.Context, client contractv1connect.ProviderServiceClient, req *contractv1.HostnameRequest, wait bool, out io.Writer) (*contractv1.GetHostnameStatusResponse, error) {
 	resp, err := client.GetHostnameStatus(ctx, req)
 	if err != nil || !wait || resp.GetReady() {
 		return resp, err

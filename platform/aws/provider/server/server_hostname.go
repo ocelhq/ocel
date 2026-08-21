@@ -18,7 +18,7 @@ import (
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
-func (s *Server) AddHostname(ctx context.Context, req *contractv1.AddHostnameRequest, stream *connect.ServerStream[progressv1.OperationEvent]) error {
+func (s *Server) AddHostname(ctx context.Context, req *contractv1.HostnameRequest, stream *connect.ServerStream[progressv1.OperationEvent]) error {
 	progress := func(m string) { _ = stream.Send(progressEvent(m)) }
 
 	session, err := s.hostnameSession(ctx, hostnameRequest{
@@ -41,7 +41,7 @@ func (s *Server) AddHostname(ctx context.Context, req *contractv1.AddHostnameReq
 	return stream.Send(okResult())
 }
 
-func (s *Server) RemoveHostname(ctx context.Context, req *contractv1.RemoveHostnameRequest, stream *connect.ServerStream[progressv1.OperationEvent]) error {
+func (s *Server) RemoveHostname(ctx context.Context, req *contractv1.HostnameRequest, stream *connect.ServerStream[progressv1.OperationEvent]) error {
 	progress := func(m string) { _ = stream.Send(progressEvent(m)) }
 
 	session, err := s.hostnameSession(ctx, hostnameRequest{
