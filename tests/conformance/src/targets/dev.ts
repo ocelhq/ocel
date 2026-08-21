@@ -142,6 +142,9 @@ export function createDevTarget(token: string): Target {
           baseUrl: `http://localhost:${ports[example.name]}`,
           output: () => captured,
           headObject,
+          assertBytecodeArchive: unsupportedBytecodeAssertion,
+          assertBytecodeEmbeddedArtifact: unsupportedBytecodeAssertion,
+          assertBytecodeColdStart: unsupportedBytecodeAssertion,
           teardown: async () => {
             await stop(child!);
             await rm(path.join(example.dir, ".ocel", "console.json"), {
@@ -164,4 +167,8 @@ export function createDevTarget(token: string): Target {
       }
     },
   };
+}
+
+async function unsupportedBytecodeAssertion() {
+  throw new Error("bytecode assertions require the AWS target");
 }

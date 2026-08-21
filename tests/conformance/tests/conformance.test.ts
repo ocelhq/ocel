@@ -35,6 +35,7 @@ for (const example of examples.filter(
     const context = {
       example,
       runId,
+      targetName: target.name,
       baseUrl: () => {
         if (!handle) throw new Error(`${example.name} target is not up`);
         return handle.baseUrl;
@@ -42,6 +43,19 @@ for (const example of examples.filter(
       headObject: (key: string) => {
         if (!handle) throw new Error(`${example.name} target is not up`);
         return handle.headObject(key);
+      },
+      output: () => handle?.output?.() ?? "",
+      assertBytecodeArchive: () => {
+        if (!handle) throw new Error(`${example.name} target is not up`);
+        return handle.assertBytecodeArchive();
+      },
+      assertBytecodeEmbeddedArtifact: () => {
+        if (!handle) throw new Error(`${example.name} target is not up`);
+        return handle.assertBytecodeEmbeddedArtifact();
+      },
+      assertBytecodeColdStart: () => {
+        if (!handle) throw new Error(`${example.name} target is not up`);
+        return handle.assertBytecodeColdStart();
       },
       linkReport: () => {
         if (!handle?.linkReport) {

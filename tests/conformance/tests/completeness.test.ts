@@ -4,7 +4,7 @@ import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import { checks } from "../src/checks/registry";
 import { examples } from "../src/examples";
-import { sdkCapabilities } from "../src/types";
+import { conformanceCapabilities } from "../src/types";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const checkModules = readdirSync(path.join(here, "..", "src", "checks"))
@@ -13,14 +13,16 @@ const checkModules = readdirSync(path.join(here, "..", "src", "checks"))
   .sort();
 
 describe("conformance registry", () => {
-  it("registers one check module for every SDK capability", () => {
-    expect(Object.keys(checks).sort()).toEqual([...sdkCapabilities].sort());
+  it("registers one check module for every conformance capability", () => {
+    expect(Object.keys(checks).sort()).toEqual(
+      [...conformanceCapabilities].sort(),
+    );
     expect(checkModules).toEqual(Object.keys(checks).sort());
   });
 
-  it("has a fixture for every SDK capability and every check", () => {
+  it("has a fixture for every conformance capability and every check", () => {
     const claimed = new Set(examples.flatMap((example) => example.capabilities));
-    for (const capability of sdkCapabilities) {
+    for (const capability of conformanceCapabilities) {
       expect(claimed.has(capability), `${capability} has no fixture`).toBe(true);
     }
     for (const check of Object.keys(checks)) {

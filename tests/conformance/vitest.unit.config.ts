@@ -3,6 +3,11 @@ import { defineConfig } from "vitest/config";
 export default defineConfig({
   test: {
     environment: "node",
-    include: ["tests/completeness.test.ts", "tests/links.test.ts"],
+    include: [
+      "tests/completeness.test.ts",
+      "tests/links.test.ts",
+      "tests/bytecode.test.ts",
+      "tests/filter-scope.test.ts",
+    ],
   },
 });

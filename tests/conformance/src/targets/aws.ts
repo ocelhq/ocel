@@ -3,6 +3,7 @@ import { readFile, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
 import { HeadObjectCommand, S3Client } from "@aws-sdk/client-s3";
+import { createBytecodeAssertions } from "../aws-bytecode";
 import { nextDotenv } from "../env";
 import { repoRoot } from "../examples";
 import { provisionExternalLinks, type ExternalLinks } from "../aws-links";
@@ -22,6 +23,7 @@ type Result = {
   slug: string;
   environment: { class: string; identity?: string };
   appUrls: string[];
+  apps?: Array<{ name?: string; buildId?: string }>;
 };
 
 function ocelCommand() {
@@ -36,6 +38,7 @@ function childEnv(
   token: string,
   slug: string,
   bootstrapToken: string,
+  example: Example,
 ): NodeJS.ProcessEnv {
   return {
     ...process.env,
@@ -44,6 +47,9 @@ function childEnv(
     OCEL_CONFIG: config,
     OCEL_EDGE_OBSERVABILITY: "off",
     OCEL_TEST_PROJECT_SLUG: slug,
+    ...(example.capabilities.includes("bytecode")
+      ? { OCEL_BYTECODE_CACHE: "1", OCEL_BYTECODE_EMBED: "1" }
+      : {}),
     ...skipDriftChecks,
   };
 }
@@ -137,9 +143,8 @@ function bucketName(result: Result, example: Example) {
 }
 
 async function assertWorkerPath(
-  result: Result,
-  example: Example,
   baseUrl: string,
+  name: string,
 ) {
   const host = new URL(baseUrl).hostname.toLowerCase();
   if (/\.lambda-url\.[a-z0-9-]+\.on\.aws$/.test(host)) {
@@ -165,7 +170,6 @@ async function assertWorkerPath(
     throw new Error(`${baseUrl} answered without a cf-ray header`);
   }
 
-  const name = functionName(result, example);
   let raw: string;
   try {
     raw = aws([
@@ -287,7 +291,7 @@ export function createAwsTarget(token: string): Target {
     name: "aws",
     async up(example) {
       const bootstrapToken = crypto.randomUUID();
-      const env = childEnv(token, slug, bootstrapToken);
+      const env = childEnv(token, slug, bootstrapToken, example);
       const ref = `conformance-${example.name}`;
       let createdEnv = false;
       let external: ExternalLinks | undefined;
@@ -308,8 +312,8 @@ export function createAwsTarget(token: string): Target {
           await external.provision();
           await external.assertPublished();
         }
-        await runOcel("ocel build", ["build"], example, env);
-        await runOcel(
+        const build = await runOcel("ocel build", ["build"], example, env);
+        const deploy = await runOcel(
           "ocel preview up",
           ["preview", "up", "--ref", ref, "--prebuilt", "--no-ui"],
           example,
@@ -325,7 +329,11 @@ export function createAwsTarget(token: string): Target {
           );
         }
         const baseUrl = result.appUrls[0];
-        await assertWorkerPath(result, example, baseUrl);
+        const name = functionName(result, example);
+        await assertWorkerPath(baseUrl, name);
+        const bytecode = example.capabilities.includes("bytecode")
+          ? createBytecodeAssertions(result, example.appName, name, baseUrl)
+          : undefined;
         if (!example.capabilities.includes("links")) {
           await bootstrapFixture(baseUrl, bootstrapToken);
         }
@@ -336,6 +344,10 @@ export function createAwsTarget(token: string): Target {
         });
         return {
           baseUrl,
+          output: () =>
+            [build.stdout, build.stderr, deploy.stdout, deploy.stderr].join(
+              "\n",
+            ),
           linkReport: external?.report,
           headObject: async (key) => {
             const metadata = await objectStore.send(
@@ -346,6 +358,12 @@ export function createAwsTarget(token: string): Target {
             );
             return { contentType: metadata.ContentType };
           },
+          assertBytecodeArchive:
+            bytecode?.archive ?? unsupportedBytecodeAssertion,
+          assertBytecodeEmbeddedArtifact:
+            bytecode?.artifact ?? unsupportedBytecodeAssertion,
+          assertBytecodeColdStart:
+            bytecode?.coldStart ?? unsupportedBytecodeAssertion,
           teardown: async () => {
             objectStore.destroy();
             try {
@@ -394,4 +412,8 @@ export function createAwsTarget(token: string): Target {
       }
     },
   };
+}
+
+async function unsupportedBytecodeAssertion() {
+  throw new Error("example does not declare bytecode conformance");
 }

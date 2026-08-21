@@ -39,7 +39,7 @@ inputs:
   guard-script:
     description: Account guard to run after assuming the deploy role.
     required: false
-    default: adapter/scripts/e2e-next/guard-accounts.sh
+    default: adapter/tests/e2e-next.js/guard-accounts.sh
 
 runs:
   using: composite

@@ -1,0 +1,13 @@
+{
+  "name": "@ocel-tests/e2e-next.js",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Lifecycle scripts driving the Next.js deployment-adapter compatibility harness against Ocel",
+  "scripts": {
+    "test": "vitest run"
+  },
+  "devDependencies": {
+    "vitest": "^4.1.9"
+  }
+}
