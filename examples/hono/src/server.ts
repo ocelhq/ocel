@@ -7,9 +7,9 @@ const app = new Hono();
 
 const PORT = Number(process.env.PORT ?? 3103);
 
-app.get("/health", (c) => c.json({ ok: true }));
+app.get("/api/health", (c) => c.json({ ok: true }));
 
-app.post("/todos", async (c) => {
+app.post("/api/todos", async (c) => {
   const body = (await c.req.json().catch(() => null)) as {
     title?: unknown;
   } | null;
@@ -23,14 +23,14 @@ app.post("/todos", async (c) => {
   return c.json(rows[0], 201);
 });
 
-app.get("/todos", async (c) => {
+app.get("/api/todos", async (c) => {
   const { rows } = await pg.query(
     "SELECT id, title, done FROM todos ORDER BY id",
   );
   return c.json(rows);
 });
 
-app.get("/todos/:id", async (c) => {
+app.get("/api/todos/:id", async (c) => {
   const { rows } = await pg.query(
     "SELECT id, title, done FROM todos WHERE id = $1",
     [Number(c.req.param("id"))],
@@ -41,7 +41,30 @@ app.get("/todos/:id", async (c) => {
   return c.json(rows[0]);
 });
 
-app.delete("/todos/:id", async (c) => {
+app.put("/api/todos/:id", async (c) => {
+  const body = (await c.req.json().catch(() => null)) as {
+    title?: unknown;
+    done?: unknown;
+  } | null;
+  if (
+    !body ||
+    typeof body.title !== "string" ||
+    body.title.length === 0 ||
+    typeof body.done !== "boolean"
+  ) {
+    return c.json({ error: "title and done are required" }, 400);
+  }
+  const { rows } = await pg.query(
+    "UPDATE todos SET title = $1, done = $2 WHERE id = $3 RETURNING id, title, done",
+    [body.title, body.done, Number(c.req.param("id"))],
+  );
+  if (rows.length === 0) {
+    return c.json({ error: "not found" }, 404);
+  }
+  return c.json(rows[0]);
+});
+
+app.delete("/api/todos/:id", async (c) => {
   const { rowCount } = await pg.query("DELETE FROM todos WHERE id = $1", [
     Number(c.req.param("id")),
   ]);
@@ -53,9 +76,9 @@ app.delete("/todos/:id", async (c) => {
 
 app.on(["GET", "POST"], "/api/upload", createRouteHandler(uploads));
 
-app.get("/documents", async (c) => {
+app.get("/api/documents", async (c) => {
   const { rows } = await pg.query(
-    "SELECT id, key, name, mime_type, size, owner_id FROM documents ORDER BY id",
+    "SELECT id, key, name, mime_type, size, owner_id, thumbnail_key FROM documents ORDER BY id",
   );
   return c.json(rows);
 });
