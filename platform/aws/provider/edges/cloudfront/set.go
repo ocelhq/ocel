@@ -126,7 +126,7 @@ func ensureKeyValueStore(ctx context.Context, c Clients, class edge.Class) (stri
 	}
 	created, err := c.CloudFront.CreateKeyValueStore(ctx, &cloudfront.CreateKeyValueStoreInput{
 		Name:    aws.String(name),
-		Comment: aws.String("Ocel: one entry per hostname naming the release that answers on it. Written at promote, read by the resolver function on every request."),
+		Comment: aws.String("Ocel: one entry per hostname naming the release that answers on it. Written at promote, read by the resolver on every request."),
 	})
 	if err != nil {
 		return "", createError("key value store", name, err)
@@ -137,7 +137,7 @@ func ensureKeyValueStore(ctx context.Context, c Clients, class edge.Class) (stri
 func ensureResolver(ctx context.Context, c Clients, class edge.Class, kvsARN string) (string, error) {
 	name := functionName(class)
 	config := &cftypes.FunctionConfig{
-		Comment: aws.String("Ocel: reads the hostname's release out of the key value store and points the request at the release's assets or its entry function."),
+		Comment: aws.String("Ocel: reads the hostname's release out of the key value store and points the request at the release's assets or entry function."),
 		Runtime: cftypes.FunctionRuntimeCloudfrontJs20,
 		KeyValueStoreAssociations: &cftypes.KeyValueStoreAssociations{
 			Quantity: ptr(int32(1)),
@@ -208,7 +208,7 @@ func ensureCachePolicy(ctx context.Context, c Clients, class edge.Class) (string
 	out, err := c.CloudFront.CreateCachePolicy(ctx, &cloudfront.CreateCachePolicyInput{
 		CachePolicyConfig: &cftypes.CachePolicyConfig{
 			Name:       aws.String(name),
-			Comment:    aws.String("Ocel: keys the cache on the hostname and the variant the resolver function computed, and lets the origin's Cache-Control govern how long anything is held."),
+			Comment:    aws.String("Ocel: keys the cache on the hostname and the resolver's variant; the origin's Cache-Control governs how long anything is held."),
 			MinTTL:     ptr(int64(0)),
 			DefaultTTL: ptr(int64(0)),
 			MaxTTL:     ptr(cacheMaxTTL),
@@ -250,7 +250,7 @@ func ensureHeadersPolicy(ctx context.Context, c Clients, class edge.Class) (stri
 	out, err := c.CloudFront.CreateResponseHeadersPolicy(ctx, &cloudfront.CreateResponseHeadersPolicyInput{
 		ResponseHeadersPolicyConfig: &cftypes.ResponseHeadersPolicyConfig{
 			Name:    aws.String(name),
-			Comment: aws.String(fmt.Sprintf("Ocel: marks every response the %q edge served, so a liveness probe can tell which front answered, and keeps the origin's cache tags off the wire to the viewer.", Kind)),
+			Comment: aws.String(fmt.Sprintf("Ocel: marks every response the %q edge served, so a probe can tell which front answered, and drops cache tags.", Kind)),
 			CustomHeadersConfig: &cftypes.ResponseHeadersPolicyCustomHeadersConfig{
 				Quantity: ptr(int32(1)),
 				Items: []cftypes.ResponseHeadersPolicyCustomHeader{{
