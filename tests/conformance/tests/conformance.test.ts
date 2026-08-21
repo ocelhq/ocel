@@ -45,6 +45,18 @@ for (const example of examples.filter(
         return handle.headObject(key);
       },
       output: () => handle?.output?.() ?? "",
+      assertBytecodeArchive: () => {
+        if (!handle) throw new Error(`${example.name} target is not up`);
+        return handle.assertBytecodeArchive();
+      },
+      assertBytecodeEmbeddedArtifact: () => {
+        if (!handle) throw new Error(`${example.name} target is not up`);
+        return handle.assertBytecodeEmbeddedArtifact();
+      },
+      assertBytecodeColdStart: () => {
+        if (!handle) throw new Error(`${example.name} target is not up`);
+        return handle.assertBytecodeColdStart();
+      },
       linkReport: () => {
         if (!handle?.linkReport) {
           throw new Error(`${example.name} target has no published link report`);

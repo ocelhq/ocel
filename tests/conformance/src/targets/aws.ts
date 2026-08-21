@@ -3,6 +3,7 @@ import { readFile, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
 import { HeadObjectCommand, S3Client } from "@aws-sdk/client-s3";
+import { createBytecodeAssertions } from "../aws-bytecode";
 import { nextDotenv } from "../env";
 import { repoRoot } from "../examples";
 import { provisionExternalLinks, type ExternalLinks } from "../aws-links";
@@ -22,6 +23,7 @@ type Result = {
   slug: string;
   environment: { class: string; identity?: string };
   appUrls: string[];
+  apps?: Array<{ name?: string; buildId?: string }>;
 };
 
 function ocelCommand() {
@@ -330,6 +332,12 @@ export function createAwsTarget(token: string): Target {
         }
         const baseUrl = result.appUrls[0];
         await assertWorkerPath(result, example, baseUrl);
+        const bytecode = createBytecodeAssertions(
+          result,
+          example.appName,
+          functionName(result, example),
+          baseUrl,
+        );
         if (!example.capabilities.includes("links")) {
           await bootstrapFixture(baseUrl, bootstrapToken);
         }
@@ -354,6 +362,9 @@ export function createAwsTarget(token: string): Target {
             );
             return { contentType: metadata.ContentType };
           },
+          assertBytecodeArchive: bytecode.archive,
+          assertBytecodeEmbeddedArtifact: bytecode.artifact,
+          assertBytecodeColdStart: bytecode.coldStart,
           teardown: async () => {
             objectStore.destroy();
             try {

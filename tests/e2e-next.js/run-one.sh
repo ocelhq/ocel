@@ -1,5 +1,4 @@
 #!/usr/bin/env bash
-# One deploy-mode suite, N invocations in parallel. See run-suite-prompt.md.
 set -uo pipefail
 
 usage() {
