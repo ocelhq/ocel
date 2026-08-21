@@ -233,7 +233,7 @@ func (s *Server) runDeploy(ctx context.Context, req *contractv1.DeployRequest, m
 	if err := missingFeatures(deployed, req.GetRequiredFeatures(), preview); err != nil {
 		return deploy.Result{}, finishPreparing(err)
 	}
-	healed, err := s.healSubstrate(ctx, awscfg, deployed, req.GetRequiredFeatures(), preview, logf)
+	healed, err := s.healBootstrap(ctx, awscfg, deployed, req.GetRequiredFeatures(), preview, logf)
 	if err != nil {
 		logf(fmt.Sprintf("could not refresh this account's bootstrap, and this deploy runs against it as it stands: %v", err))
 	}
@@ -262,9 +262,9 @@ func (s *Server) runDeploy(ctx context.Context, req *contractv1.DeployRequest, m
 		return deploy.Result{}, finishPreparing(fmt.Errorf("account bootstrap is present but its variable store is missing (a partial rollback?); re-run `%s`", bootstrapCmd))
 	}
 
-	substrateClass := bootstrap.ClassProduction
+	class := bootstrap.ClassProduction
 	if preview {
-		substrateClass = bootstrap.ClassPreview
+		class = bootstrap.ClassPreview
 	}
 
 	var (
@@ -276,7 +276,7 @@ func (s *Server) runDeploy(ctx context.Context, req *contractv1.DeployRequest, m
 	group, gctx := errgroup.WithContext(ctx)
 	group.Go(func() error {
 		var err error
-		params, err = bootstrap.ReadClassParams(gctx, ssmClient, substrateClass, manifest.GetSlug())
+		params, err = bootstrap.ReadClassParams(gctx, ssmClient, class, manifest.GetSlug())
 		return err
 	})
 	group.Go(func() error {
@@ -286,7 +286,7 @@ func (s *Server) runDeploy(ctx context.Context, req *contractv1.DeployRequest, m
 	})
 	group.Go(func() error {
 		var err error
-		varsReferenced, err = referenceOwners(gctx, awscfg, deployed, substrateClass, manifest.GetSlug())
+		varsReferenced, err = referenceOwners(gctx, awscfg, deployed, class, manifest.GetSlug())
 		return err
 	})
 	group.Go(func() error {
@@ -362,10 +362,10 @@ func (s *Server) runDeploy(ctx context.Context, req *contractv1.DeployRequest, m
 		AppBoundaryARN:     deployed.AppBoundaryARN,
 		VarsTable:          deployed.VarsTable,
 		VarsTableARN:       fmt.Sprintf("arn:aws:dynamodb:%s:%s:table/%s", awscfg.Region, account, deployed.VarsTable),
-		VarsClass:          substrateClass,
+		VarsClass:          class,
 		VarsSiblingClasses: []string{bootstrap.ClassProduction, bootstrap.ClassPreview},
 		VarsReferenced:     varsReferenced,
-		Links:              linkStore(awscfg, deployed, substrateClass),
+		Links:              linkStore(awscfg, deployed, class),
 
 		CacheStoreBucket:   params.CacheStore.Bucket,
 		CacheStoreUploader: cacheStoreUploader(params.CacheStore),
@@ -428,7 +428,7 @@ func (s *Server) runDeploy(ctx context.Context, req *contractv1.DeployRequest, m
 
 	if stackStateChanged(priorStackState, res.StackState) {
 		record := bootstrap.StackRecord{Edge: res.StackState, Production: params.Stack.Production}
-		if writeErr := bootstrap.WriteStackRecordFor(ctx, ssmClient, substrateClass, manifest.GetSlug(), record); writeErr != nil {
+		if writeErr := bootstrap.WriteStackRecordFor(ctx, ssmClient, class, manifest.GetSlug(), record); writeErr != nil {
 			if err != nil {
 				return res, fmt.Errorf("%w (additionally failed to persist edge-stack state: %v)", err, writeErr)
 			}
@@ -570,7 +570,7 @@ func (s *Server) GetCredentialPolicy(_ context.Context, req *contractv1.Credenti
 }
 
 func (s *Server) describedBootstrap(deployed bootstrap.Deployed, tier environmentv1.Tier, recorded map[string][]string) *contractv1.DescribeBootstrapResponse {
-	resp := &contractv1.DescribeBootstrapResponse{Substrate: s.substrateStatus(deployed, tier, deployed.Features.Names())}
+	resp := &contractv1.DescribeBootstrapResponse{Bootstrap: s.bootstrapStatus(deployed, tier, deployed.Features.Names())}
 	for _, f := range bootstrap.Catalogue() {
 		resp.Features = append(resp.Features, &contractv1.Feature{
 			Name:       f.Name,

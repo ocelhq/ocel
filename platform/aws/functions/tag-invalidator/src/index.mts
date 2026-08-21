@@ -18,14 +18,14 @@ export const handler = async (event: { Records?: StreamRecord[] }): Promise<Batc
   const raises = raisesOf(event.Records ?? []);
   if (raises.size === 0) return { batchItemFailures: [] };
 
-  const { table, substrateClass } = config(process.env);
+  const { table, bootstrapClass } = config(process.env);
   const failed = await invalidateAll(
     {
       cloudfront,
       dynamo,
       commands: { CreateInvalidationCommand, GetItemCommand },
       table,
-      substrateClass,
+      bootstrapClass,
     },
     raises,
   );

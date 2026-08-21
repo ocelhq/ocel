@@ -48,12 +48,12 @@ const (
 	// ProviderServiceGetCredentialPolicyProcedure is the fully-qualified name of the ProviderService's
 	// GetCredentialPolicy RPC.
 	ProviderServiceGetCredentialPolicyProcedure = "/provider.contract.v1.ProviderService/GetCredentialPolicy"
-	// ProviderServiceRemoveSubstrateProcedure is the fully-qualified name of the ProviderService's
-	// RemoveSubstrate RPC.
-	ProviderServiceRemoveSubstrateProcedure = "/provider.contract.v1.ProviderService/RemoveSubstrate"
-	// ProviderServicePlanRemoveSubstrateProcedure is the fully-qualified name of the ProviderService's
-	// PlanRemoveSubstrate RPC.
-	ProviderServicePlanRemoveSubstrateProcedure = "/provider.contract.v1.ProviderService/PlanRemoveSubstrate"
+	// ProviderServiceRemoveBootstrapProcedure is the fully-qualified name of the ProviderService's
+	// RemoveBootstrap RPC.
+	ProviderServiceRemoveBootstrapProcedure = "/provider.contract.v1.ProviderService/RemoveBootstrap"
+	// ProviderServicePlanRemoveBootstrapProcedure is the fully-qualified name of the ProviderService's
+	// PlanRemoveBootstrap RPC.
+	ProviderServicePlanRemoveBootstrapProcedure = "/provider.contract.v1.ProviderService/PlanRemoveBootstrap"
 	// ProviderServiceRemoveEnvironmentProcedure is the fully-qualified name of the ProviderService's
 	// RemoveEnvironment RPC.
 	ProviderServiceRemoveEnvironmentProcedure = "/provider.contract.v1.ProviderService/RemoveEnvironment"
@@ -108,8 +108,8 @@ type ProviderServiceClient interface {
 	Bootstrap(context.Context, *v1.BootstrapRequest) (*connect.ServerStreamForClient[v11.OperationEvent], error)
 	DescribeBootstrap(context.Context, *v1.DescribeBootstrapRequest) (*v1.DescribeBootstrapResponse, error)
 	GetCredentialPolicy(context.Context, *v1.CredentialPolicyRequest) (*v1.CredentialPolicyResponse, error)
-	RemoveSubstrate(context.Context, *v1.SubstrateRequest) (*connect.ServerStreamForClient[v11.OperationEvent], error)
-	PlanRemoveSubstrate(context.Context, *v1.SubstrateRequest) (*v1.RemovalPlan, error)
+	RemoveBootstrap(context.Context, *v1.BootstrapScope) (*connect.ServerStreamForClient[v11.OperationEvent], error)
+	PlanRemoveBootstrap(context.Context, *v1.BootstrapScope) (*v1.RemovalPlan, error)
 	RemoveEnvironment(context.Context, *v1.RemoveEnvironmentRequest) (*connect.ServerStreamForClient[v11.OperationEvent], error)
 	RemoveProject(context.Context, *v1.ProjectRequest) (*connect.ServerStreamForClient[v11.OperationEvent], error)
 	PlanRemoveProject(context.Context, *v1.ProjectRequest) (*v1.RemovalPlan, error)
@@ -168,16 +168,16 @@ func NewProviderServiceClient(httpClient connect.HTTPClient, baseURL string, opt
 			connect.WithSchema(providerServiceMethods.ByName("GetCredentialPolicy")),
 			connect.WithClientOptions(opts...),
 		),
-		removeSubstrate: connect.NewClient[v1.SubstrateRequest, v11.OperationEvent](
+		removeBootstrap: connect.NewClient[v1.BootstrapScope, v11.OperationEvent](
 			httpClient,
-			baseURL+ProviderServiceRemoveSubstrateProcedure,
-			connect.WithSchema(providerServiceMethods.ByName("RemoveSubstrate")),
+			baseURL+ProviderServiceRemoveBootstrapProcedure,
+			connect.WithSchema(providerServiceMethods.ByName("RemoveBootstrap")),
 			connect.WithClientOptions(opts...),
 		),
-		planRemoveSubstrate: connect.NewClient[v1.SubstrateRequest, v1.RemovalPlan](
+		planRemoveBootstrap: connect.NewClient[v1.BootstrapScope, v1.RemovalPlan](
 			httpClient,
-			baseURL+ProviderServicePlanRemoveSubstrateProcedure,
-			connect.WithSchema(providerServiceMethods.ByName("PlanRemoveSubstrate")),
+			baseURL+ProviderServicePlanRemoveBootstrapProcedure,
+			connect.WithSchema(providerServiceMethods.ByName("PlanRemoveBootstrap")),
 			connect.WithClientOptions(opts...),
 		),
 		removeEnvironment: connect.NewClient[v1.RemoveEnvironmentRequest, v11.OperationEvent](
@@ -280,8 +280,8 @@ type providerServiceClient struct {
 	bootstrap                 *connect.Client[v1.BootstrapRequest, v11.OperationEvent]
 	describeBootstrap         *connect.Client[v1.DescribeBootstrapRequest, v1.DescribeBootstrapResponse]
 	getCredentialPolicy       *connect.Client[v1.CredentialPolicyRequest, v1.CredentialPolicyResponse]
-	removeSubstrate           *connect.Client[v1.SubstrateRequest, v11.OperationEvent]
-	planRemoveSubstrate       *connect.Client[v1.SubstrateRequest, v1.RemovalPlan]
+	removeBootstrap           *connect.Client[v1.BootstrapScope, v11.OperationEvent]
+	planRemoveBootstrap       *connect.Client[v1.BootstrapScope, v1.RemovalPlan]
 	removeEnvironment         *connect.Client[v1.RemoveEnvironmentRequest, v11.OperationEvent]
 	removeProject             *connect.Client[v1.ProjectRequest, v11.OperationEvent]
 	planRemoveProject         *connect.Client[v1.ProjectRequest, v1.RemovalPlan]
@@ -336,14 +336,14 @@ func (c *providerServiceClient) GetCredentialPolicy(ctx context.Context, req *v1
 	return nil, err
 }
 
-// RemoveSubstrate calls provider.contract.v1.ProviderService.RemoveSubstrate.
-func (c *providerServiceClient) RemoveSubstrate(ctx context.Context, req *v1.SubstrateRequest) (*connect.ServerStreamForClient[v11.OperationEvent], error) {
-	return c.removeSubstrate.CallServerStream(ctx, connect.NewRequest(req))
+// RemoveBootstrap calls provider.contract.v1.ProviderService.RemoveBootstrap.
+func (c *providerServiceClient) RemoveBootstrap(ctx context.Context, req *v1.BootstrapScope) (*connect.ServerStreamForClient[v11.OperationEvent], error) {
+	return c.removeBootstrap.CallServerStream(ctx, connect.NewRequest(req))
 }
 
-// PlanRemoveSubstrate calls provider.contract.v1.ProviderService.PlanRemoveSubstrate.
-func (c *providerServiceClient) PlanRemoveSubstrate(ctx context.Context, req *v1.SubstrateRequest) (*v1.RemovalPlan, error) {
-	response, err := c.planRemoveSubstrate.CallUnary(ctx, connect.NewRequest(req))
+// PlanRemoveBootstrap calls provider.contract.v1.ProviderService.PlanRemoveBootstrap.
+func (c *providerServiceClient) PlanRemoveBootstrap(ctx context.Context, req *v1.BootstrapScope) (*v1.RemovalPlan, error) {
+	response, err := c.planRemoveBootstrap.CallUnary(ctx, connect.NewRequest(req))
 	if response != nil {
 		return response.Msg, err
 	}
@@ -464,8 +464,8 @@ type ProviderServiceHandler interface {
 	Bootstrap(context.Context, *v1.BootstrapRequest, *connect.ServerStream[v11.OperationEvent]) error
 	DescribeBootstrap(context.Context, *v1.DescribeBootstrapRequest) (*v1.DescribeBootstrapResponse, error)
 	GetCredentialPolicy(context.Context, *v1.CredentialPolicyRequest) (*v1.CredentialPolicyResponse, error)
-	RemoveSubstrate(context.Context, *v1.SubstrateRequest, *connect.ServerStream[v11.OperationEvent]) error
-	PlanRemoveSubstrate(context.Context, *v1.SubstrateRequest) (*v1.RemovalPlan, error)
+	RemoveBootstrap(context.Context, *v1.BootstrapScope, *connect.ServerStream[v11.OperationEvent]) error
+	PlanRemoveBootstrap(context.Context, *v1.BootstrapScope) (*v1.RemovalPlan, error)
 	RemoveEnvironment(context.Context, *v1.RemoveEnvironmentRequest, *connect.ServerStream[v11.OperationEvent]) error
 	RemoveProject(context.Context, *v1.ProjectRequest, *connect.ServerStream[v11.OperationEvent]) error
 	PlanRemoveProject(context.Context, *v1.ProjectRequest) (*v1.RemovalPlan, error)
@@ -520,16 +520,16 @@ func NewProviderServiceHandler(svc ProviderServiceHandler, opts ...connect.Handl
 		connect.WithSchema(providerServiceMethods.ByName("GetCredentialPolicy")),
 		connect.WithHandlerOptions(opts...),
 	)
-	providerServiceRemoveSubstrateHandler := connect.NewServerStreamHandlerSimple(
-		ProviderServiceRemoveSubstrateProcedure,
-		svc.RemoveSubstrate,
-		connect.WithSchema(providerServiceMethods.ByName("RemoveSubstrate")),
+	providerServiceRemoveBootstrapHandler := connect.NewServerStreamHandlerSimple(
+		ProviderServiceRemoveBootstrapProcedure,
+		svc.RemoveBootstrap,
+		connect.WithSchema(providerServiceMethods.ByName("RemoveBootstrap")),
 		connect.WithHandlerOptions(opts...),
 	)
-	providerServicePlanRemoveSubstrateHandler := connect.NewUnaryHandlerSimple(
-		ProviderServicePlanRemoveSubstrateProcedure,
-		svc.PlanRemoveSubstrate,
-		connect.WithSchema(providerServiceMethods.ByName("PlanRemoveSubstrate")),
+	providerServicePlanRemoveBootstrapHandler := connect.NewUnaryHandlerSimple(
+		ProviderServicePlanRemoveBootstrapProcedure,
+		svc.PlanRemoveBootstrap,
+		connect.WithSchema(providerServiceMethods.ByName("PlanRemoveBootstrap")),
 		connect.WithHandlerOptions(opts...),
 	)
 	providerServiceRemoveEnvironmentHandler := connect.NewServerStreamHandlerSimple(
@@ -634,10 +634,10 @@ func NewProviderServiceHandler(svc ProviderServiceHandler, opts ...connect.Handl
 			providerServiceDescribeBootstrapHandler.ServeHTTP(w, r)
 		case ProviderServiceGetCredentialPolicyProcedure:
 			providerServiceGetCredentialPolicyHandler.ServeHTTP(w, r)
-		case ProviderServiceRemoveSubstrateProcedure:
-			providerServiceRemoveSubstrateHandler.ServeHTTP(w, r)
-		case ProviderServicePlanRemoveSubstrateProcedure:
-			providerServicePlanRemoveSubstrateHandler.ServeHTTP(w, r)
+		case ProviderServiceRemoveBootstrapProcedure:
+			providerServiceRemoveBootstrapHandler.ServeHTTP(w, r)
+		case ProviderServicePlanRemoveBootstrapProcedure:
+			providerServicePlanRemoveBootstrapHandler.ServeHTTP(w, r)
 		case ProviderServiceRemoveEnvironmentProcedure:
 			providerServiceRemoveEnvironmentHandler.ServeHTTP(w, r)
 		case ProviderServiceRemoveProjectProcedure:
@@ -697,12 +697,12 @@ func (UnimplementedProviderServiceHandler) GetCredentialPolicy(context.Context, 
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("provider.contract.v1.ProviderService.GetCredentialPolicy is not implemented"))
 }
 
-func (UnimplementedProviderServiceHandler) RemoveSubstrate(context.Context, *v1.SubstrateRequest, *connect.ServerStream[v11.OperationEvent]) error {
-	return connect.NewError(connect.CodeUnimplemented, errors.New("provider.contract.v1.ProviderService.RemoveSubstrate is not implemented"))
+func (UnimplementedProviderServiceHandler) RemoveBootstrap(context.Context, *v1.BootstrapScope, *connect.ServerStream[v11.OperationEvent]) error {
+	return connect.NewError(connect.CodeUnimplemented, errors.New("provider.contract.v1.ProviderService.RemoveBootstrap is not implemented"))
 }
 
-func (UnimplementedProviderServiceHandler) PlanRemoveSubstrate(context.Context, *v1.SubstrateRequest) (*v1.RemovalPlan, error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("provider.contract.v1.ProviderService.PlanRemoveSubstrate is not implemented"))
+func (UnimplementedProviderServiceHandler) PlanRemoveBootstrap(context.Context, *v1.BootstrapScope) (*v1.RemovalPlan, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("provider.contract.v1.ProviderService.PlanRemoveBootstrap is not implemented"))
 }
 
 func (UnimplementedProviderServiceHandler) RemoveEnvironment(context.Context, *v1.RemoveEnvironmentRequest, *connect.ServerStream[v11.OperationEvent]) error {

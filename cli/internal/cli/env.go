@@ -149,7 +149,7 @@ var envHistoryCmd = &cobra.Command{
 
 func init() {
 	for _, c := range []*cobra.Command{envLsCmd, envSetCmd, envGetCmd, envRmCmd, envHistoryCmd, envRefCmd, envRefsCmd} {
-		c.Flags().BoolVar(&envOpts.preview, "preview", false, "Act on the preview substrate instead of production")
+		c.Flags().BoolVar(&envOpts.preview, "preview", false, "Act on the preview bootstrap instead of production")
 		envCmd.AddCommand(c)
 	}
 	for _, c := range []*cobra.Command{envSetCmd, envGetCmd, envRmCmd, envHistoryCmd, envRefCmd, envRefsCmd} {

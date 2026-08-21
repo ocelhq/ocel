@@ -52,7 +52,7 @@ var bootstrapCmd = &cobra.Command{
 		"account state, buckets, credentials and stored parameters that were built on it. It " +
 		"refuses while any project or the preview wildcard is still deployed into the class, and " +
 		"names what has to go first. Nothing cascades.\n\n" +
-		"Removing a substrate is irreversible and requires typing the class name to confirm; " +
+		"Removing a bootstrap is irreversible and requires typing the class name to confirm; " +
 		"--yes skips that, as does " + destroyBypassEnv + " set to the class name.",
 	Args: cobra.NoArgs,
 	RunE: func(cmd *cobra.Command, args []string) error {
@@ -84,10 +84,10 @@ func init() {
 
 func runBootstrap(ctx context.Context, d deps, cwd string, opts bootstrapOptions, stdout, stderr io.Writer, stdin io.Reader) error {
 	if opts.declared && opts.destroy {
-		return errors.New("--features chooses what a bootstrap carries and --destroy removes the whole substrate; pass one or the other")
+		return errors.New("--features chooses what a bootstrap carries and --destroy removes the whole bootstrap; pass one or the other")
 	}
 	if opts.printPolicy != "" && opts.destroy {
-		return errors.New("--print-policy writes out the permissions a tier needs and --destroy removes the whole substrate; pass one or the other")
+		return errors.New("--print-policy writes out the permissions a tier needs and --destroy removes the whole bootstrap; pass one or the other")
 	}
 	if opts.printPolicy != "" {
 		return runPrintPolicy(ctx, d, cwd, opts.printPolicy, stdout, stderr)
@@ -158,7 +158,7 @@ func runBootstrap(ctx context.Context, d deps, cwd string, opts bootstrapOptions
 		if len(dropped) > 0 && !force {
 			if !interactive {
 				return fmt.Errorf("this would remove %s from the %s bootstrap; projects deployed against it break when it goes, so re-run with --force to remove it anyway",
-					strings.Join(dropped, ", "), substrateName(tier))
+					strings.Join(dropped, ", "), bootstrapName(tier))
 			}
 			confirmed, err := confirmDrop(ctx, tier, dropped, dependentProjects(catalogue, dropped), stdout, stdin)
 			if err != nil {
@@ -171,8 +171,8 @@ func runBootstrap(ctx context.Context, d deps, cwd string, opts bootstrapOptions
 			force = true
 		}
 
-		if substrate := described.GetSubstrate(); substrate.GetDowngrade() {
-			fmt.Fprintln(stdout, downgradeWarning(tier, substrate))
+		if bootstrap := described.GetBootstrap(); bootstrap.GetDowngrade() {
+			fmt.Fprintln(stdout, downgradeWarning(tier, bootstrap))
 			if interactive {
 				proceed, err := confirmYN(ctx, "Write the older content anyway?", stdout, stdin)
 				if err != nil {
@@ -278,7 +278,7 @@ func chooseFeatures(ctx context.Context, opts bootstrapOptions, catalogue []*con
 }
 
 func confirmDrop(ctx context.Context, tier environmentv1.Tier, dropped, dependents []string, stdout io.Writer, stdin io.Reader) (bool, error) {
-	fmt.Fprintf(stdout, "Removing %s from the %s bootstrap tears down what it stood up.\n", strings.Join(dropped, ", "), substrateName(tier))
+	fmt.Fprintf(stdout, "Removing %s from the %s bootstrap tears down what it stood up.\n", strings.Join(dropped, ", "), bootstrapName(tier))
 	if len(dependents) > 0 {
 		fmt.Fprintf(stdout, "These projects were deployed against it and break when it goes: %s\n", strings.Join(dependents, ", "))
 	} else {
@@ -287,24 +287,24 @@ func confirmDrop(ctx context.Context, tier environmentv1.Tier, dropped, dependen
 	return confirmYN(ctx, "Remove it anyway?", stdout, stdin)
 }
 
-func downgradeWarning(tier environmentv1.Tier, substrate *contractv1.SubstrateStatus) string {
+func downgradeWarning(tier environmentv1.Tier, bootstrap *contractv1.BootstrapStatus) string {
 	var wroteIt string
-	for _, stack := range substrate.GetStacks() {
+	for _, stack := range bootstrap.GetStacks() {
 		if stack.GetFeature() == "" {
 			wroteIt = stack.GetWrittenBy()
 		}
 	}
 	return fmt.Sprintf(
-		"The %s substrate was last written by %s and this one is %s: the same shape, older content.\nEvery stack it writes goes back to what this build carries.",
-		substrateName(tier), wroteIt, substrate.GetWriter(),
+		"The %s bootstrap was last written by %s and this one is %s: the same shape, older content.\nEvery stack it writes goes back to what this build carries.",
+		bootstrapName(tier), wroteIt, bootstrap.GetWriter(),
 	)
 }
 
 func confirmBootstrap(ctx context.Context, tier environmentv1.Tier, providerPackage string, stdout io.Writer, stdin io.Reader) (bool, error) {
-	return confirmYN(ctx, fmt.Sprintf("Bootstrap %s infrastructure with %s?", substrateName(tier), providerPackage), stdout, stdin)
+	return confirmYN(ctx, fmt.Sprintf("Bootstrap %s infrastructure with %s?", bootstrapName(tier), providerPackage), stdout, stdin)
 }
 
-func substrateName(tier environmentv1.Tier) string {
+func bootstrapName(tier environmentv1.Tier) string {
 	if tier == environmentv1.Tier_TIER_PREVIEW {
 		return "preview"
 	}
@@ -312,23 +312,23 @@ func substrateName(tier environmentv1.Tier) string {
 }
 
 func runBootstrapDestroy(ctx context.Context, d deps, cfg *projectconfig.Config, provider *projectconfig.ProviderDescriptor, tier environmentv1.Tier, opts bootstrapOptions, stdout, stderr io.Writer, stdin io.Reader) error {
-	substrate := substrateName(tier)
+	name := bootstrapName(tier)
 	requested := destroyBypassRequest()
-	bypass := requested == substrate
+	bypass := requested == name
 	tty := d.stdinIsTerminal(stdin)
 	switch {
 	case bypass:
-		fmt.Fprintf(stderr, "%s=%s: removing the %s substrate without confirmation\n", destroyBypassEnv, substrate, substrate)
+		fmt.Fprintf(stderr, "%s=%s: removing the %s bootstrap without confirmation\n", destroyBypassEnv, name, name)
 	case requested == "" || opts.yes:
 	case !tty:
-		return fmt.Errorf("%s is set to %q, but this is the %s substrate; it must name the substrate being removed", destroyBypassEnv, requested, substrate)
+		return fmt.Errorf("%s is set to %q, but this is the %s bootstrap; it must name the bootstrap being removed", destroyBypassEnv, requested, name)
 	default:
-		fmt.Fprintf(stderr, "%s is set to %q, not this substrate (%s); confirming interactively instead\n", destroyBypassEnv, requested, substrate)
+		fmt.Fprintf(stderr, "%s is set to %q, not this bootstrap (%s); confirming interactively instead\n", destroyBypassEnv, requested, name)
 	}
 	skipConfirmation := opts.yes || bypass
 	if !skipConfirmation && !tty {
 		return fmt.Errorf("`%s` needs an interactive terminal to confirm the class name; re-run with --yes, or set %s to %q, to remove it unattended",
-			bootstrapDestroyCommand(opts.preview), destroyBypassEnv, substrate)
+			bootstrapDestroyCommand(opts.preview), destroyBypassEnv, name)
 	}
 
 	ctx, run, err := startRun(ctx, cfg, bootstrapDestroyCommand(opts.preview))
@@ -348,7 +348,7 @@ func runBootstrapDestroy(ctx context.Context, d deps, cfg *projectconfig.Config,
 		}
 
 		spinner := deployui.StartSpinner(stdout, "Enumerating what would be removed")
-		plan, err := client.PlanRemoveSubstrate(ctx, &contractv1.SubstrateRequest{
+		plan, err := client.PlanRemoveBootstrap(ctx, &contractv1.BootstrapScope{
 			Tier: tier,
 			Edge: edgeSelection(cfg),
 		})
@@ -356,7 +356,7 @@ func runBootstrapDestroy(ctx context.Context, d deps, cfg *projectconfig.Config,
 		if err != nil {
 			return err
 		}
-		printRemovalPlan(stdout, fmt.Sprintf("This will permanently remove the %s substrate of this account", substrate), plan,
+		printRemovalPlan(stdout, fmt.Sprintf("This will permanently remove the %s bootstrap of this account", name), plan,
 			"Every app already deployed from it keeps running and nothing can describe, update or remove it again. This cannot be undone.")
 		if !skipConfirmation {
 			confirmed, err := confirmPhrase(ctx, "class name", plan.GetSubject(), stdout, stdin)
@@ -369,14 +369,14 @@ func runBootstrapDestroy(ctx context.Context, d deps, cfg *projectconfig.Config,
 			}
 		}
 
-		req := &contractv1.SubstrateRequest{
+		req := &contractv1.BootstrapScope{
 			Tier: tier,
 			Edge: edgeSelection(cfg),
 		}
-		if err := providerrunner.Stream(ctx, runner, "RemoveSubstrate", req, contractv1connect.ProviderServiceClient.RemoveSubstrate, ui.Event); err != nil {
+		if err := providerrunner.Stream(ctx, runner, "RemoveBootstrap", req, contractv1connect.ProviderServiceClient.RemoveBootstrap, ui.Event); err != nil {
 			return err
 		}
-		ui.Finish(fmt.Sprintf("Removed the %s substrate", substrate))
+		ui.Finish(fmt.Sprintf("Removed the %s bootstrap", name))
 		return nil
 	})
 	if err != nil {

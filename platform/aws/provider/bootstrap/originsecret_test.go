@@ -50,7 +50,7 @@ func TestEnsureOriginSecret(t *testing.T) {
 
 	t.Run("refuses a class it has no parameter for", func(t *testing.T) {
 		if _, err := ensureOriginSecret(context.Background(), newFakeSSM(), "staging"); err == nil {
-			t.Error("an unknown substrate class minted a secret, want the class refused")
+			t.Error("an unknown class minted a secret, want the class refused")
 		}
 	})
 }

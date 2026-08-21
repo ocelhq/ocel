@@ -722,21 +722,21 @@ func TestForgetInvalidationTargetLeavesTheLiveFrontsAlone(t *testing.T) {
 	}
 }
 
-func TestSubstrateScopeHoldsTheFrontsEveryProjectShares(t *testing.T) {
+func TestBootstrapScopeHoldsTheFrontsEveryProjectShares(t *testing.T) {
 	t.Parallel()
 
 	ctx := context.Background()
 	dynamo := newFakeDynamo()
-	substrate := &Ledger{Dynamo: dynamo, Table: table, Scope: Scope(edge.ClassPreview, "")}
+	bootstrap := &Ledger{Dynamo: dynamo, Table: table, Scope: Scope(edge.ClassPreview, "")}
 
-	if err := substrate.NoteInvalidationTarget(ctx, "EWILDCARD"); err != nil {
+	if err := bootstrap.NoteInvalidationTarget(ctx, "EWILDCARD"); err != nil {
 		t.Fatalf("NoteInvalidationTarget: %v", err)
 	}
 	if got := targetsHeld(t, dynamo, string(edge.ClassPreview)); !slices.Equal(got, []string{"EWILDCARD"}) {
-		t.Errorf("substrate targets = %v, want the wildcard every preview is served from", got)
+		t.Errorf("bootstrap targets = %v, want the wildcard every preview is served from", got)
 	}
 	if got := targetsHeld(t, dynamo, scope); got != nil {
-		t.Errorf("project targets = %v, want a substrate-wide front recorded once rather than per project", got)
+		t.Errorf("project targets = %v, want a bootstrap-wide front recorded once rather than per project", got)
 	}
 }
 

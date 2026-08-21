@@ -263,18 +263,18 @@ func TestKnownSlugs(t *testing.T) {
 	present := bootstrap.Deployed{Present: true, StateBucket: "ocel-state"}
 
 	cases := []struct {
-		name      string
-		substrate bootstrap.Deployed
-		slug      string
+		name     string
+		deployed bootstrap.Deployed
+		slug     string
 	}{
 		{"no slug sent, so there is nothing to look up", present, ""},
-		{"a substrate that is not bootstrapped", bootstrap.Deployed{Present: false}, "my-app"},
-		{"a substrate present but holding no state bucket", bootstrap.Deployed{Present: true}, "my-app"},
+		{"a bootstrap that was never stood up", bootstrap.Deployed{Present: false}, "my-app"},
+		{"a bootstrap present but holding no state bucket", bootstrap.Deployed{Present: true}, "my-app"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			if got := knownSlugs(context.Background(), aws.Config{}, tc.substrate, tc.slug); got != nil {
+			if got := knownSlugs(context.Background(), aws.Config{}, tc.deployed, tc.slug); got != nil {
 				t.Errorf("knownSlugs() = %v, want nil", got)
 			}
 		})
@@ -312,7 +312,7 @@ func TestToPreviewEnvironments(t *testing.T) {
 	})
 }
 
-func TestPreflightSubstrates(t *testing.T) {
+func TestPreflightBootstraps(t *testing.T) {
 	t.Parallel()
 
 	cases := []struct {
@@ -364,9 +364,9 @@ func TestPreflightSubstrates(t *testing.T) {
 			t.Parallel()
 			cfn := &presenceCFN{present: tc.present}
 
-			preview, production, err := (&Server{}).preflightSubstrates(context.Background(), cfn, "eu-west-1", tc.required)
+			preview, production, err := (&Server{}).preflightBootstraps(context.Background(), cfn, "eu-west-1", tc.required)
 			if err != nil {
-				t.Fatalf("preflightSubstrates: %v", err)
+				t.Fatalf("preflightBootstraps: %v", err)
 			}
 			if asked := cfn.questions(); !slices.Equal(asked, tc.wantAsked) {
 				t.Errorf("describes = %v, want %v", asked, tc.wantAsked)
@@ -379,13 +379,13 @@ func TestPreflightSubstrates(t *testing.T) {
 	}
 }
 
-func TestPreflightSubstratesFallbackMessage(t *testing.T) {
+func TestPreflightBootstrapsFallbackMessage(t *testing.T) {
 	t.Parallel()
 
 	cfn := &presenceCFN{present: map[string]bool{bootstrap.StackName: true}}
-	preview, production, err := (&Server{}).preflightSubstrates(context.Background(), cfn, "eu-west-1", environmentv1.Tier_TIER_PREVIEW)
+	preview, production, err := (&Server{}).preflightBootstraps(context.Background(), cfn, "eu-west-1", environmentv1.Tier_TIER_PREVIEW)
 	if err != nil {
-		t.Fatalf("preflightSubstrates: %v", err)
+		t.Fatalf("preflightBootstraps: %v", err)
 	}
 
 	got := preflightResponse(environmentv1.Tier_TIER_PREVIEW, preview, production)

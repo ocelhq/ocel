@@ -14,14 +14,14 @@ import (
 	"github.com/ocelhq/ocel/pkg/proto/provider/contract/v1/contractv1connect"
 )
 
-type substratePlan struct {
+type bootstrapPlan struct {
 	missing  []string
 	stale    []string
 	features []string
 }
 
-func planSubstrate(status *contractv1.SubstrateStatus) substratePlan {
-	var plan substratePlan
+func planBootstrap(status *contractv1.BootstrapStatus) bootstrapPlan {
+	var plan bootstrapPlan
 	if !status.GetPresent() {
 		return plan
 	}
@@ -44,11 +44,11 @@ func planSubstrate(status *contractv1.SubstrateStatus) substratePlan {
 	return plan
 }
 
-func (p substratePlan) empty() bool {
+func (p bootstrapPlan) empty() bool {
 	return len(p.missing) == 0 && len(p.stale) == 0
 }
 
-func (p substratePlan) summary() string {
+func (p bootstrapPlan) summary() string {
 	var parts []string
 	if len(p.missing) > 0 {
 		parts = append(parts, "add "+strings.Join(p.missing, ", "))
@@ -59,7 +59,7 @@ func (p substratePlan) summary() string {
 	return strings.Join(parts, " and ")
 }
 
-func (p substratePlan) command(tier environmentv1.Tier) string {
+func (p bootstrapPlan) command(tier environmentv1.Tier) string {
 	cmd := "ocel bootstrap"
 	if tier == environmentv1.Tier_TIER_PREVIEW {
 		cmd += " --preview"
@@ -70,27 +70,27 @@ func (p substratePlan) command(tier environmentv1.Tier) string {
 	return cmd
 }
 
-func (p substratePlan) refusal(tier environmentv1.Tier) error {
+func (p bootstrapPlan) refusal(tier environmentv1.Tier) error {
 	if len(p.missing) == 0 {
 		return nil
 	}
 	return fmt.Errorf(
 		"the %s bootstrap does not carry what this project needs: %s.\nRun `%s` and try again",
-		substrateName(tier), strings.Join(p.missing, ", "), p.command(tier),
+		bootstrapName(tier), strings.Join(p.missing, ", "), p.command(tier),
 	)
 }
 
-func (p substratePlan) unattended(tier environmentv1.Tier, out io.Writer) error {
+func (p bootstrapPlan) unattended(tier environmentv1.Tier, out io.Writer) error {
 	if err := p.refusal(tier); err != nil {
 		return err
 	}
 	fmt.Fprintf(out, "The %s bootstrap is behind what this build carries: %s.\nRun `%s` to refresh it.\n",
-		substrateName(tier), strings.Join(p.stale, ", "), p.command(tier))
+		bootstrapName(tier), strings.Join(p.stale, ", "), p.command(tier))
 	return nil
 }
 
-func offerBootstrap(ctx context.Context, runner *providerrunner.Runner, status *contractv1.SubstrateStatus, tier environmentv1.Tier, interactive bool, out io.Writer, stdin io.Reader) error {
-	plan := planSubstrate(status)
+func offerBootstrap(ctx context.Context, runner *providerrunner.Runner, status *contractv1.BootstrapStatus, tier environmentv1.Tier, interactive bool, out io.Writer, stdin io.Reader) error {
+	plan := planBootstrap(status)
 	if plan.empty() {
 		return nil
 	}
@@ -98,7 +98,7 @@ func offerBootstrap(ctx context.Context, runner *providerrunner.Runner, status *
 		return plan.unattended(tier, out)
 	}
 
-	fmt.Fprintf(out, "The %s bootstrap is not what this project needs: %s.\n", substrateName(tier), plan.summary())
+	fmt.Fprintf(out, "The %s bootstrap is not what this project needs: %s.\n", bootstrapName(tier), plan.summary())
 	proceed, err := confirmYN(ctx, fmt.Sprintf("Run `%s` now?", plan.command(tier)), out, stdin)
 	if err != nil {
 		return err

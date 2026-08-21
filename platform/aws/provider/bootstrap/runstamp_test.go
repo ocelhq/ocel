@@ -35,7 +35,7 @@ func TestRunStamps(t *testing.T) {
 			t.Fatalf("CheckDeployed: %v", err)
 		}
 		if stale := deployed.Stale(featureNames()); len(stale) != 0 {
-			t.Errorf("a substrate this build just wrote reads as stale: %+v", stale)
+			t.Errorf("a bootstrap this build just wrote reads as stale: %+v", stale)
 		}
 	})
 

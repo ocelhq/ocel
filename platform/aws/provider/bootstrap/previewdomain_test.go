@@ -73,7 +73,7 @@ func TestPreviewDomainParam(t *testing.T) {
 			t.Fatalf("WritePreviewDomain: %v", err)
 		}
 		if !strings.Contains(fake.params[PreviewDomainParamName], want.Settlement.Certificate.ARN) {
-			t.Fatalf("param = %q, want the certificate ARN on the substrate's state", fake.params[PreviewDomainParamName])
+			t.Fatalf("param = %q, want the certificate ARN on the bootstrap's state", fake.params[PreviewDomainParamName])
 		}
 		if !strings.Contains(fake.params[PreviewDomainParamName], "preview.acme.com") {
 			t.Fatalf("param = %q", fake.params[PreviewDomainParamName])

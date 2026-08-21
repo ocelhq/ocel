@@ -13,8 +13,8 @@ import (
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 )
 
-func substrateOf(stacks ...*contractv1.SubstrateStack) *contractv1.SubstrateStatus {
-	return &contractv1.SubstrateStatus{
+func bootstrapOf(stacks ...*contractv1.BootstrapStack) *contractv1.BootstrapStatus {
+	return &contractv1.BootstrapStatus{
 		Tier:           environmentv1.Tier_TIER_PRODUCTION,
 		Present:        true,
 		Schema:         1,
@@ -23,66 +23,66 @@ func substrateOf(stacks ...*contractv1.SubstrateStack) *contractv1.SubstrateStat
 	}
 }
 
-func TestPlanSubstrate(t *testing.T) {
-	core := &contractv1.SubstrateStack{Name: "ocel-bootstrap", Present: true, DigestCurrent: true, Required: true}
+func TestPlanBootstrap(t *testing.T) {
+	core := &contractv1.BootstrapStack{Name: "ocel-bootstrap", Present: true, DigestCurrent: true, Required: true}
 
 	tests := []struct {
 		name     string
-		status   *contractv1.SubstrateStatus
+		status   *contractv1.BootstrapStatus
 		missing  []string
 		stale    []string
 		features []string
 	}{
 		{
-			name:   "a substrate nothing has been bootstrapped into asks for nothing",
-			status: &contractv1.SubstrateStatus{Tier: environmentv1.Tier_TIER_PRODUCTION},
+			name:   "a bootstrap nothing has been deployed into asks for nothing",
+			status: &contractv1.BootstrapStatus{Tier: environmentv1.Tier_TIER_PRODUCTION},
 		},
 		{
 			name: "everything this project needs is there and current",
-			status: substrateOf(core,
-				&contractv1.SubstrateStack{Name: "ocel-bootstrap-isr", Feature: "isr", Present: true, DigestCurrent: true, Required: true},
+			status: bootstrapOf(core,
+				&contractv1.BootstrapStack{Name: "ocel-bootstrap-isr", Feature: "isr", Present: true, DigestCurrent: true, Required: true},
 			),
 			features: []string{"isr"},
 		},
 		{
 			name: "a required feature that is not there is added",
-			status: substrateOf(core,
-				&contractv1.SubstrateStack{Name: "ocel-bootstrap-isr", Feature: "isr", Present: true, DigestCurrent: true, Required: true},
-				&contractv1.SubstrateStack{Name: "ocel-bootstrap-image-optimization", Feature: "image-optimization", Required: true},
+			status: bootstrapOf(core,
+				&contractv1.BootstrapStack{Name: "ocel-bootstrap-isr", Feature: "isr", Present: true, DigestCurrent: true, Required: true},
+				&contractv1.BootstrapStack{Name: "ocel-bootstrap-image-optimization", Feature: "image-optimization", Required: true},
 			),
 			missing:  []string{"image-optimization"},
 			features: []string{"image-optimization", "isr"},
 		},
 		{
 			name: "a required feature that has fallen behind is refreshed",
-			status: substrateOf(core,
-				&contractv1.SubstrateStack{Name: "ocel-bootstrap-isr", Feature: "isr", Present: true, Required: true},
+			status: bootstrapOf(core,
+				&contractv1.BootstrapStack{Name: "ocel-bootstrap-isr", Feature: "isr", Present: true, Required: true},
 			),
 			stale:    []string{"ocel-bootstrap-isr"},
 			features: []string{"isr"},
 		},
 		{
 			name: "the core falling behind is a refresh of its own",
-			status: substrateOf(
-				&contractv1.SubstrateStack{Name: "ocel-bootstrap", Present: true, Required: true},
-				&contractv1.SubstrateStack{Name: "ocel-bootstrap-isr", Feature: "isr", Present: true, DigestCurrent: true, Required: true},
+			status: bootstrapOf(
+				&contractv1.BootstrapStack{Name: "ocel-bootstrap", Present: true, Required: true},
+				&contractv1.BootstrapStack{Name: "ocel-bootstrap-isr", Feature: "isr", Present: true, DigestCurrent: true, Required: true},
 			),
 			stale:    []string{"ocel-bootstrap"},
 			features: []string{"isr"},
 		},
 		{
 			name: "a feature no project here needs is neither added nor refreshed",
-			status: substrateOf(core,
-				&contractv1.SubstrateStack{Name: "ocel-bootstrap-isr", Feature: "isr", Present: true},
-				&contractv1.SubstrateStack{Name: "ocel-bootstrap-image-optimization", Feature: "image-optimization"},
+			status: bootstrapOf(core,
+				&contractv1.BootstrapStack{Name: "ocel-bootstrap-isr", Feature: "isr", Present: true},
+				&contractv1.BootstrapStack{Name: "ocel-bootstrap-image-optimization", Feature: "image-optimization"},
 			),
 			features: []string{"isr"},
 		},
 		{
 			name: "one set covers both what is missing and what is behind",
-			status: substrateOf(core,
-				&contractv1.SubstrateStack{Name: "ocel-bootstrap-isr", Feature: "isr", Present: true, Required: true},
-				&contractv1.SubstrateStack{Name: "ocel-bootstrap-image-optimization", Feature: "image-optimization", Required: true},
+			status: bootstrapOf(core,
+				&contractv1.BootstrapStack{Name: "ocel-bootstrap-isr", Feature: "isr", Present: true, Required: true},
+				&contractv1.BootstrapStack{Name: "ocel-bootstrap-image-optimization", Feature: "image-optimization", Required: true},
 			),
 			missing:  []string{"image-optimization"},
 			stale:    []string{"ocel-bootstrap-isr"},
@@ -92,7 +92,7 @@ func TestPlanSubstrate(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			plan := planSubstrate(tt.status)
+			plan := planBootstrap(tt.status)
 			if !slices.Equal(plan.missing, tt.missing) {
 				t.Errorf("missing = %v, want %v", plan.missing, tt.missing)
 			}
@@ -121,17 +121,17 @@ func (r *lineByLine) Read(p []byte) (int, error) {
 }
 
 func TestOfferBootstrapWithoutATerminal(t *testing.T) {
-	core := &contractv1.SubstrateStack{Name: "ocel-bootstrap", Present: true, DigestCurrent: true, Required: true}
+	core := &contractv1.BootstrapStack{Name: "ocel-bootstrap", Present: true, DigestCurrent: true, Required: true}
 
 	t.Run("a missing feature stops the run and names the command", func(t *testing.T) {
-		status := substrateOf(core,
-			&contractv1.SubstrateStack{Name: "ocel-bootstrap-isr", Feature: "isr", Present: true, DigestCurrent: true, Required: true},
-			&contractv1.SubstrateStack{Name: "ocel-bootstrap-image-optimization", Feature: "image-optimization", Required: true},
+		status := bootstrapOf(core,
+			&contractv1.BootstrapStack{Name: "ocel-bootstrap-isr", Feature: "isr", Present: true, DigestCurrent: true, Required: true},
+			&contractv1.BootstrapStack{Name: "ocel-bootstrap-image-optimization", Feature: "image-optimization", Required: true},
 		)
 		var out bytes.Buffer
 		err := offerBootstrap(context.Background(), nil, status, environmentv1.Tier_TIER_PRODUCTION, false, &out, strings.NewReader(""))
 		if err == nil {
-			t.Fatal("a deploy against a substrate missing a feature it needs was allowed through")
+			t.Fatal("a deploy against a bootstrap missing a feature it needs was allowed through")
 		}
 		if !strings.Contains(err.Error(), "ocel bootstrap --features image-optimization,isr") {
 			t.Errorf("refusal = %q, want the literal command to run", err)
@@ -139,12 +139,12 @@ func TestOfferBootstrapWithoutATerminal(t *testing.T) {
 	})
 
 	t.Run("a stale stack warns and lets the deploy through", func(t *testing.T) {
-		status := substrateOf(core,
-			&contractv1.SubstrateStack{Name: "ocel-bootstrap-isr", Feature: "isr", Present: true, Required: true},
+		status := bootstrapOf(core,
+			&contractv1.BootstrapStack{Name: "ocel-bootstrap-isr", Feature: "isr", Present: true, Required: true},
 		)
 		var out bytes.Buffer
 		if err := offerBootstrap(context.Background(), nil, status, environmentv1.Tier_TIER_PREVIEW, false, &out, strings.NewReader("")); err != nil {
-			t.Fatalf("a substrate that is merely behind stopped the deploy: %v", err)
+			t.Fatalf("a bootstrap that is merely behind stopped the deploy: %v", err)
 		}
 		for _, want := range []string{"ocel-bootstrap-isr", "ocel bootstrap --preview --features isr"} {
 			if !strings.Contains(out.String(), want) {
@@ -153,30 +153,30 @@ func TestOfferBootstrapWithoutATerminal(t *testing.T) {
 		}
 	})
 
-	t.Run("a substrate that carries what this project needs says nothing", func(t *testing.T) {
-		status := substrateOf(core,
-			&contractv1.SubstrateStack{Name: "ocel-bootstrap-isr", Feature: "isr", Present: true, DigestCurrent: true, Required: true},
+	t.Run("a bootstrap that carries what this project needs says nothing", func(t *testing.T) {
+		status := bootstrapOf(core,
+			&contractv1.BootstrapStack{Name: "ocel-bootstrap-isr", Feature: "isr", Present: true, DigestCurrent: true, Required: true},
 		)
 		var out bytes.Buffer
 		if err := offerBootstrap(context.Background(), nil, status, environmentv1.Tier_TIER_PRODUCTION, false, &out, strings.NewReader("")); err != nil {
 			t.Fatalf("offerBootstrap err = %v", err)
 		}
 		if out.Len() != 0 {
-			t.Errorf("stdout = %q, want nothing said about a substrate that is what it should be", out.String())
+			t.Errorf("stdout = %q, want nothing said about a bootstrap that is what it should be", out.String())
 		}
 	})
 }
 
 func TestOfferBootstrapDeclined(t *testing.T) {
-	status := substrateOf(
-		&contractv1.SubstrateStack{Name: "ocel-bootstrap", Present: true, DigestCurrent: true, Required: true},
-		&contractv1.SubstrateStack{Name: "ocel-bootstrap-isr", Feature: "isr", Required: true},
+	status := bootstrapOf(
+		&contractv1.BootstrapStack{Name: "ocel-bootstrap", Present: true, DigestCurrent: true, Required: true},
+		&contractv1.BootstrapStack{Name: "ocel-bootstrap-isr", Feature: "isr", Required: true},
 	)
 
 	var out bytes.Buffer
 	err := offerBootstrap(context.Background(), nil, status, environmentv1.Tier_TIER_PRODUCTION, true, &out, strings.NewReader("n\n"))
 	if err == nil {
-		t.Fatal("declining the offer let a deploy run against a substrate without the feature it needs")
+		t.Fatal("declining the offer let a deploy run against a bootstrap without the feature it needs")
 	}
 	if !strings.Contains(out.String(), "add isr") {
 		t.Errorf("stdout = %q, want the offer to name what it would add", out.String())
@@ -185,7 +185,7 @@ func TestOfferBootstrapDeclined(t *testing.T) {
 
 func TestDeployOffersToBootstrapTheExactSet(t *testing.T) {
 	root, journal, d := setUpEdgeFixture(t, "")
-	t.Setenv(fakeSubstrateEnvVar, "missing")
+	t.Setenv(fakeBootstrapEnvVar, "missing")
 	d.stdinIsTerminal = func(io.Reader) bool { return true }
 
 	var stdout, stderr bytes.Buffer
@@ -207,13 +207,13 @@ func TestDeployOffersToBootstrapTheExactSet(t *testing.T) {
 
 func TestDeployYesNeverStopsToAsk(t *testing.T) {
 	root, journal, d := setUpEdgeFixture(t, "")
-	t.Setenv(fakeSubstrateEnvVar, "missing")
+	t.Setenv(fakeBootstrapEnvVar, "missing")
 	d.stdinIsTerminal = func(io.Reader) bool { return true }
 
 	var stdout, stderr bytes.Buffer
 	err := runDeploy(context.Background(), d, root, deployOptions{yes: true}, &stdout, &stderr, strings.NewReader(""))
 	if err == nil {
-		t.Fatal("an unattended deploy against a substrate missing a feature it needs was allowed through")
+		t.Fatal("an unattended deploy against a bootstrap missing a feature it needs was allowed through")
 	}
 	if !strings.Contains(stdout.String(), "Run `ocel bootstrap --features image-optimization,isr` and try again") {
 		t.Errorf("stdout = %q, want the literal command to run", stdout.String())

@@ -51,7 +51,7 @@ func tagPublisherResources(code payloads.Placement, class string) string {
   TagPublisherRole:
     Type: AWS::IAM::Role
     Properties:
-      Description: "Execution role for this substrate's tag-snapshot publisher. Grants it the state table's stream, the asset bucket and the two ISR writer parameters, and nothing else. Managed by ocel bootstrap; deleting it stops every origin-raised invalidation before it reaches the edge."
+      Description: "Execution role for this bootstrap's tag-snapshot publisher. Grants it the state table's stream, the asset bucket and the two ISR writer parameters, and nothing else. Managed by ocel bootstrap; deleting it stops every origin-raised invalidation before it reaches the edge."
       AssumeRolePolicyDocument:
         Version: '2012-10-17'
         Statement:
@@ -99,7 +99,7 @@ func tagPublisherResources(code payloads.Placement, class string) string {
   TagPublisher:
     Type: AWS::Lambda::Function
     Properties:
-      Description: "Ocel tag-snapshot publisher - the single writer of every build's tag clock in this substrate, fed by the state table stream. Managed by ocel bootstrap; delete it and origin-raised invalidations never reach the edge."
+      Description: "Ocel tag-snapshot publisher - the single writer of every build's tag clock in this bootstrap, fed by the state table stream. Managed by ocel bootstrap; delete it and origin-raised invalidations never reach the edge."
       Runtime: %s
       Architectures:
         - %s

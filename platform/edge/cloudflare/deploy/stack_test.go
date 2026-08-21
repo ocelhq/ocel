@@ -217,7 +217,7 @@ func TestAccountScriptNameFor(t *testing.T) {
 				}
 			})
 
-			t.Run("an unknown substrate class is an error", func(t *testing.T) {
+			t.Run("an unknown class is an error", func(t *testing.T) {
 				t.Parallel()
 
 				if _, err := tc.nameFor(edge.Class("nonsense")); err == nil {
@@ -868,7 +868,7 @@ func TestWorkerDecoration(t *testing.T) {
 		}
 	})
 
-	t.Run("the isr writer is left unbound when the substrate offers none", func(t *testing.T) {
+	t.Run("the isr writer is left unbound when the bootstrap offers none", func(t *testing.T) {
 		t.Parallel()
 
 		spec := edge.StackSpec{Program: &edge.ProgramSpec{Worker: testStoreWorker(), StoreScriptName: "ocel-deployments-store"}}

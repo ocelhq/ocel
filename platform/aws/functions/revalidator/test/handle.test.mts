@@ -9,7 +9,7 @@ function record(messageId: string, group: string, overrides: Record<string, unkn
   return { messageId, body: body(overrides), attributes: { MessageGroupId: group } };
 }
 
-function substrate(answers: Record<string, Response | Error> = {}): {
+function bootstrap(answers: Record<string, Response | Error> = {}): {
   deps: HandlerDeps;
   requested: string[];
 } {
@@ -52,14 +52,14 @@ beforeEach(() => {
 afterEach(() => vi.restoreAllMocks());
 
 it("answers an empty batch without reaching the origin", async () => {
-  const { deps, requested } = substrate();
+  const { deps, requested } = bootstrap();
 
   await expect(handle(deps, { Records: [] })).resolves.toEqual({ batchItemFailures: [] });
   expect(requested).toEqual([]);
 });
 
 it("stops a group at its first failure and reports the rest of that group, unprocessed", async () => {
-  const { deps, requested } = substrate({
+  const { deps, requested } = bootstrap({
     "/a/1": new Response(null, { status: 500 }),
     "/a/2": revalidated,
     "/b/1": revalidated,
@@ -80,7 +80,7 @@ it("stops a group at its first failure and reports the rest of that group, unpro
 });
 
 it("keeps a record carrying no group from stopping the records after it", async () => {
-  const { deps, requested } = substrate({ "/a": new Response(null, { status: 500 }), "/b": revalidated });
+  const { deps, requested } = bootstrap({ "/a": new Response(null, { status: 500 }), "/b": revalidated });
 
   const response = await handle(deps, {
     Records: [
@@ -94,7 +94,7 @@ it("keeps a record carrying no group from stopping the records after it", async 
 });
 
 it("treats an empty group id the same as a missing one", async () => {
-  const { deps, requested } = substrate({ "/a": new Response(null, { status: 500 }), "/b": revalidated });
+  const { deps, requested } = bootstrap({ "/a": new Response(null, { status: 500 }), "/b": revalidated });
 
   const response = await handle(deps, {
     Records: [
@@ -108,7 +108,7 @@ it("treats an empty group id the same as a missing one", async () => {
 });
 
 it("logs the record it skipped for a stopped group, as well as reporting it", async () => {
-  const { deps } = substrate({ "/a/1": new Response(null, { status: 500 }) });
+  const { deps } = bootstrap({ "/a/1": new Response(null, { status: 500 }) });
 
   await handle(deps, {
     Records: [record("a-1", "group-a", { routePath: "/a/1" }), record("a-2", "group-a", { routePath: "/a/2" })],
@@ -123,7 +123,7 @@ it("logs the record it skipped for a stopped group, as well as reporting it", as
 });
 
 it("rejects an unknown message version as an item failure", async () => {
-  const { deps, requested } = substrate();
+  const { deps, requested } = bootstrap();
 
   const response = await handle(deps, { Records: [record("m-1", "group-a", { v: 2 })] });
 
@@ -132,7 +132,7 @@ it("rejects an unknown message version as an item failure", async () => {
 });
 
 it("fails a record whose route the deploy never recorded, without triggering", async () => {
-  const { deps, requested } = substrate();
+  const { deps, requested } = bootstrap();
 
   const response = await handle(deps, { Records: [record("m-1", "group-a", { routeId: "/not-a-route" })] });
 
@@ -143,7 +143,7 @@ it("fails a record whose route the deploy never recorded, without triggering", a
 
 it("reads nothing at all for an isrPrefix that names a key the edge could have planted", async () => {
   const fetched: string[] = [];
-  const { deps } = substrate();
+  const { deps } = bootstrap();
   const watched: HandlerDeps = {
     ...deps,
     fetch: (async (input: string | Request) => {
@@ -170,7 +170,7 @@ it("reads nothing at all for an isrPrefix that names a key the edge could have p
 });
 
 it("keeps a record whose expectation missed out of the failures, and logs it", async () => {
-  const { deps } = substrate({ "/blog/post": new Response(null, { status: 200 }) });
+  const { deps } = bootstrap({ "/blog/post": new Response(null, { status: 200 }) });
 
   const response = await handle(deps, { Records: [record("m-1", "group-a")] });
 
@@ -179,7 +179,7 @@ it("keeps a record whose expectation missed out of the failures, and logs it", a
 });
 
 it("fails the item, never the batch, when signing itself throws", async () => {
-  const { deps } = substrate();
+  const { deps } = bootstrap();
   const broken: HandlerDeps = {
     ...deps,
     origins: new Map(),
@@ -195,7 +195,7 @@ it("fails the item, never the batch, when signing itself throws", async () => {
 });
 
 it("never emits the bypass token, on the success path or any failure path", async () => {
-  const { deps } = substrate({
+  const { deps } = bootstrap({
     "/ok": revalidated,
     "/miss": new Response(null, { status: 200 }),
     "/down": new Response(null, { status: 503 }),

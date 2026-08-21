@@ -228,7 +228,7 @@ func TestEdgeStackSpecs(t *testing.T) {
 		}
 	})
 
-	t.Run("binds edge signing credentials when the substrate has them", func(t *testing.T) {
+	t.Run("binds edge signing credentials when the bootstrap has them", func(t *testing.T) {
 		cfg := Config{Edge: &recordingEdge{kind: cloudflare.Kind}, EdgeAccessKeyID: "AKIAEDGE", EdgeSecretKey: "secret-edge"}
 		specs, err := stackSpecs(cfg, webManifest(), "v1", nil)
 		if err != nil {
@@ -246,7 +246,7 @@ func TestEdgeStackSpecs(t *testing.T) {
 		}
 	})
 
-	t.Run("edge signing credentials are absent on a substrate predating them", func(t *testing.T) {
+	t.Run("edge signing credentials are absent on a bootstrap predating them", func(t *testing.T) {
 		cfg := Config{Edge: &recordingEdge{kind: cloudflare.Kind}}
 		specs, err := stackSpecs(cfg, webManifest(), "v1", nil)
 		if err != nil {
@@ -261,7 +261,7 @@ func TestEdgeStackSpecs(t *testing.T) {
 		}
 	})
 
-	t.Run("binds cache coordinates from the substrate's stores", func(t *testing.T) {
+	t.Run("binds cache coordinates from the bootstrap's stores", func(t *testing.T) {
 		cfg := Config{Edge: &recordingEdge{kind: cloudflare.Kind}, Region: "eu-west-1", StateTable: "state-abc", AssetBucket: "assets-xyz"}
 		specs, err := stackSpecs(cfg, webManifest(), "v1", nil)
 		if err != nil {
@@ -279,7 +279,7 @@ func TestEdgeStackSpecs(t *testing.T) {
 		}
 	})
 
-	t.Run("cache coordinates are absent on a substrate predating a store", func(t *testing.T) {
+	t.Run("cache coordinates are absent on a bootstrap predating a store", func(t *testing.T) {
 		cfg := Config{Edge: &recordingEdge{kind: cloudflare.Kind}, Region: "eu-west-1"}
 		specs, err := stackSpecs(cfg, webManifest(), "v1", nil)
 		if err != nil {
@@ -293,7 +293,7 @@ func TestEdgeStackSpecs(t *testing.T) {
 		}
 	})
 
-	t.Run("binds the image optimizer URL from the substrate's optimizer", func(t *testing.T) {
+	t.Run("binds the image optimizer URL from the bootstrap's optimizer", func(t *testing.T) {
 		url := "https://opt123.lambda-url.eu-west-1.on.aws/"
 		cfg := Config{Edge: &recordingEdge{kind: cloudflare.Kind}, Region: "eu-west-1", ImageOptimizerURL: url}
 		specs, err := stackSpecs(cfg, webManifest(), "v1", nil)
@@ -305,7 +305,7 @@ func TestEdgeStackSpecs(t *testing.T) {
 		}
 	})
 
-	t.Run("the image optimizer URL is absent on a substrate with no optimizer", func(t *testing.T) {
+	t.Run("the image optimizer URL is absent on a bootstrap with no optimizer", func(t *testing.T) {
 		cfg := Config{Edge: &recordingEdge{kind: cloudflare.Kind}, Region: "eu-west-1"}
 		specs, err := stackSpecs(cfg, webManifest(), "v1", nil)
 		if err != nil {
@@ -316,7 +316,7 @@ func TestEdgeStackSpecs(t *testing.T) {
 		}
 	})
 
-	t.Run("binds the revalidate queue URL when the substrate published one", func(t *testing.T) {
+	t.Run("binds the revalidate queue URL when the bootstrap published one", func(t *testing.T) {
 		url := "https://sqs.eu-west-1.amazonaws.com/1234/ocel-revalidate.fifo"
 		cfg := Config{Edge: &recordingEdge{kind: cloudflare.Kind}, Region: "eu-west-1", RevalidateQueueURL: url}
 		specs, err := stackSpecs(cfg, webManifest(), "v1", nil)
@@ -1600,7 +1600,7 @@ func TestReconcileStack(t *testing.T) {
 	})
 
 	t.Run("a stack that never reconciled escapes with no state", func(t *testing.T) {
-		fake := &recordingEdge{kind: cloudflare.Kind, reconcileErr: errors.New("the preview substrate is not bootstrapped")}
+		fake := &recordingEdge{kind: cloudflare.Kind, reconcileErr: errors.New("the preview bootstrap is not standing")}
 		cfg := Config{Tier: environmentv1.Tier_TIER_PREVIEW, Slug: "proj", GlobalPreviewDomain: "preview.acme.com"}
 		marked := MarkGlobalPreview(edge.StackState{}, cfg, &contractv1.Manifest{Slug: "proj"})
 
@@ -1836,7 +1836,7 @@ func TestStackSpecsOnAnEdgeThatRunsNoCode(t *testing.T) {
 		}
 		assertProgramless(t, specs, 1)
 		if !specs[0].PruneOnly {
-			t.Error("PruneOnly = false, want the global preview wildcard left to the substrate")
+			t.Error("PruneOnly = false, want the global preview wildcard left to the bootstrap")
 		}
 	})
 }

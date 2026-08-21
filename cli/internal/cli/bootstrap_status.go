@@ -65,7 +65,7 @@ func runBootstrapStatus(ctx context.Context, d deps, cwd string, opts bootstrapS
 		return err
 	}
 
-	var statuses []*contractv1.SubstrateStatus
+	var statuses []*contractv1.BootstrapStatus
 	err = runProviderSession(ctx, d, cfg, provider, stderr, stderr, func(runner *providerrunner.Runner) error {
 		client, err := runner.Deployments()
 		if err != nil {
@@ -79,9 +79,9 @@ func runBootstrapStatus(ctx context.Context, d deps, cwd string, opts bootstrapS
 				}
 				return err
 			}
-			status := described.GetSubstrate()
+			status := described.GetBootstrap()
 			if status == nil {
-				return fmt.Errorf("%s answered without saying anything about the %s substrate. Upgrade the provider pinned in this project and try again", provider.Package, substrateName(tier))
+				return fmt.Errorf("%s answered without saying anything about the %s bootstrap. Upgrade the provider pinned in this project and try again", provider.Package, bootstrapName(tier))
 			}
 			statuses = append(statuses, status)
 		}
@@ -91,24 +91,24 @@ func runBootstrapStatus(ctx context.Context, d deps, cwd string, opts bootstrapS
 		return err
 	}
 
-	renderSubstrateStatuses(stdout, statuses)
+	renderBootstrapStatuses(stdout, statuses)
 	if !opts.check {
 		return nil
 	}
-	return substrateCheck(statuses)
+	return bootstrapCheck(statuses)
 }
 
-func renderSubstrateStatuses(out io.Writer, statuses []*contractv1.SubstrateStatus) {
+func renderBootstrapStatuses(out io.Writer, statuses []*contractv1.BootstrapStatus) {
 	for i, status := range statuses {
 		if i > 0 {
 			fmt.Fprintln(out)
 		}
-		renderSubstrateStatus(out, status)
+		renderBootstrapStatus(out, status)
 	}
 }
 
-func renderSubstrateStatus(out io.Writer, status *contractv1.SubstrateStatus) {
-	name := substrateName(status.GetTier())
+func renderBootstrapStatus(out io.Writer, status *contractv1.BootstrapStatus) {
+	name := bootstrapName(status.GetTier())
 	if !status.GetPresent() {
 		fmt.Fprintf(out, "%s: not bootstrapped\n", name)
 		return
@@ -130,19 +130,19 @@ func renderSubstrateStatus(out io.Writer, status *contractv1.SubstrateStatus) {
 	}
 	tw.Flush()
 
-	if problem := substrateProblem(status); problem != "" {
+	if problem := bootstrapProblem(status); problem != "" {
 		fmt.Fprintf(out, "  %s\n", problem)
 	}
 }
 
-func substrateProblem(status *contractv1.SubstrateStatus) string {
+func bootstrapProblem(status *contractv1.BootstrapStatus) string {
 	switch {
 	case !status.GetPresent():
 		return ""
 	case status.GetSchema() < status.GetRequiredSchema():
-		return "this substrate is an older shape than this CLI speaks; run `ocel bootstrap` to upgrade it"
+		return "this bootstrap is an older shape than this CLI speaks; run `ocel bootstrap` to upgrade it"
 	case status.GetSchema() > status.GetRequiredSchema():
-		return "this substrate is a newer shape than this CLI speaks; upgrade the Ocel CLI"
+		return "this bootstrap is a newer shape than this CLI speaks; upgrade the Ocel CLI"
 	}
 	stale := staleStacks(status)
 	if len(stale) == 0 {
@@ -151,7 +151,7 @@ func substrateProblem(status *contractv1.SubstrateStatus) string {
 	return fmt.Sprintf("stale, and refreshed by the next `ocel bootstrap`: %s", strings.Join(stale, ", "))
 }
 
-func staleStacks(status *contractv1.SubstrateStatus) []string {
+func staleStacks(status *contractv1.BootstrapStatus) []string {
 	var out []string
 	for _, stack := range status.GetStacks() {
 		if stack.GetPresent() && !stack.GetDigestCurrent() {
@@ -161,11 +161,11 @@ func staleStacks(status *contractv1.SubstrateStatus) []string {
 	return out
 }
 
-func substrateCheck(statuses []*contractv1.SubstrateStatus) error {
+func bootstrapCheck(statuses []*contractv1.BootstrapStatus) error {
 	var problems []string
 	for _, status := range statuses {
-		if problem := substrateProblem(status); problem != "" {
-			problems = append(problems, fmt.Sprintf("%s: %s", substrateName(status.GetTier()), problem))
+		if problem := bootstrapProblem(status); problem != "" {
+			problems = append(problems, fmt.Sprintf("%s: %s", bootstrapName(status.GetTier()), problem))
 		}
 	}
 	if len(problems) == 0 {
@@ -174,7 +174,7 @@ func substrateCheck(statuses []*contractv1.SubstrateStatus) error {
 	return errors.New(strings.Join(problems, "\n"))
 }
 
-func digestState(stack *contractv1.SubstrateStack) string {
+func digestState(stack *contractv1.BootstrapStack) string {
 	if !stack.GetPresent() {
 		return "-"
 	}
@@ -184,7 +184,7 @@ func digestState(stack *contractv1.SubstrateStack) string {
 	return "stale"
 }
 
-func autoHealState(status *contractv1.SubstrateStatus, stack *contractv1.SubstrateStack) string {
+func autoHealState(status *contractv1.BootstrapStatus, stack *contractv1.BootstrapStack) string {
 	if stack.GetFeature() != "" {
 		return "-"
 	}

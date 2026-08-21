@@ -61,7 +61,7 @@ func (d PreviewDomain) Holder() (edge.Kind, bool) {
 
 func previewDomainParamFor(class string) (string, error) {
 	if class != ClassPreview {
-		return "", fmt.Errorf("preview domain: only the %s substrate class has one, not %q", ClassPreview, class)
+		return "", fmt.Errorf("preview domain: only the %s class has one, not %q", ClassPreview, class)
 	}
 	return PreviewDomainParamName, nil
 }
@@ -165,7 +165,7 @@ func (n edgeNames) edgeParams() []string {
 func edgeNamesFor(class string) (edgeNames, error) {
 	names, ok := edgeNamesByClass[class]
 	if !ok {
-		return edgeNames{}, fmt.Errorf("edge: unknown substrate class %q", class)
+		return edgeNames{}, fmt.Errorf("edge: unknown class %q", class)
 	}
 	return names, nil
 }
@@ -197,7 +197,7 @@ func writeEdgeValues(ctx context.Context, ssmClient SSMAPI, class string, values
 	}
 	if _, err := ssmClient.PutParameter(ctx, &ssm.PutParameterInput{
 		Name:        aws.String(names.valuesParam),
-		Description: aws.String(fmt.Sprintf("Ocel: everything the %s edge handed back when it was bootstrapped, read on every deploy into this substrate to reach it. Rewritten in full by each bootstrap of this class, so deleting it costs a re-run of ocel bootstrap and nothing more.", class)),
+		Description: aws.String(fmt.Sprintf("Ocel: everything the %s edge handed back when it was bootstrapped, read on every deploy into this bootstrap to reach it. Rewritten in full by each bootstrap of this class, so deleting it costs a re-run of ocel bootstrap and nothing more.", class)),
 		Value:       aws.String(string(payload)),
 		Type:        ssmtypes.ParameterTypeSecureString,
 		Overwrite:   aws.Bool(true),
@@ -365,7 +365,7 @@ func adoptDeploymentsStore(ctx context.Context, ssmClient SSMAPI, class string, 
 	}
 	if _, err := ssmClient.PutParameter(ctx, &ssm.PutParameterInput{
 		Name:        aws.String(paramName),
-		Description: aws.String(fmt.Sprintf("Ocel: endpoint and bootstrap credential for the %s edge's deployments store, the worker that tells the edge which build a request belongs to. Every deploy into this substrate publishes its routing through it. Re-adopted whole by ocel bootstrap, so deleting it costs a re-run.", class)),
+		Description: aws.String(fmt.Sprintf("Ocel: endpoint and bootstrap credential for the %s edge's deployments store, the worker that tells the edge which build a request belongs to. Every deploy into this bootstrap publishes its routing through it. Re-adopted whole by ocel bootstrap, so deleting it costs a re-run.", class)),
 		Value:       aws.String(string(payload)),
 		Type:        ssmtypes.ParameterTypeSecureString,
 		Overwrite:   aws.Bool(true),

@@ -549,8 +549,8 @@ func apisFronting(cfn *fakeCFN, ssmc *fakeSSM, iamc *fakeIAM, store ObjectStore,
 
 func everything() Request { return Request{Features: featureNames()} }
 
-func runAll(ctx context.Context, apis APIs, sub substrate) error {
-	return run(ctx, apis, sub, everything(), nil, nil)
+func runAll(ctx context.Context, apis APIs, target spec) error {
+	return run(ctx, apis, target, everything(), nil, nil)
 }
 
 func isrStack(class string) string  { return FeatureStackName(FeatureISR, class) }
@@ -572,10 +572,10 @@ func TestRun(t *testing.T) {
 			t.Errorf("stacks = %v, want only %s", got, StackName)
 		}
 		if ed.bootstraps != 0 {
-			t.Errorf("an edge was bootstrapped %d times for a core-only substrate", ed.bootstraps)
+			t.Errorf("an edge was bootstrapped %d times for a core-only bootstrap", ed.bootstraps)
 		}
 		if len(iamc.created) != 0 {
-			t.Errorf("minted %v for a core-only substrate", iamc.created)
+			t.Errorf("minted %v for a core-only bootstrap", iamc.created)
 		}
 	})
 
@@ -672,7 +672,7 @@ func TestRun(t *testing.T) {
 		assertMintedSecrets(t, ssmc, OriginSecretParamName, ISRWriterSeedParamName)
 	})
 
-	t.Run("bootstraps the edge for its own substrate class", func(t *testing.T) {
+	t.Run("bootstraps the edge for its own class", func(t *testing.T) {
 		for _, tc := range []struct {
 			run  func(context.Context, APIs, Request, func(string), func(string)) error
 			want edge.Class

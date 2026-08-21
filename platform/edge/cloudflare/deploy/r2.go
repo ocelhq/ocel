@@ -110,7 +110,7 @@ func s3Objects(endpoint string, creds r2.TemporaryCredentialNewResponse) objectA
 func (s cacheStore) bootstrap(ctx context.Context, accountID string, class edge.Class) (edge.BootstrapOutput, error) {
 	name, ok := cacheStoreNameByClass[class]
 	if !ok {
-		return edge.BootstrapOutput{}, fmt.Errorf("cloudflare: unknown substrate class %q", class)
+		return edge.BootstrapOutput{}, fmt.Errorf("cloudflare: unknown class %q", class)
 	}
 	if err := s.ensureBucket(ctx, accountID, name); err != nil {
 		return edge.BootstrapOutput{}, err
@@ -141,7 +141,7 @@ func (s cacheStore) bootstrap(ctx context.Context, accountID string, class edge.
 func (s cacheStore) teardown(ctx context.Context, accountID string, class edge.Class) error {
 	name, ok := cacheStoreNameByClass[class]
 	if !ok {
-		return fmt.Errorf("cloudflare: unknown substrate class %q", class)
+		return fmt.Errorf("cloudflare: unknown class %q", class)
 	}
 	token, held, err := s.findToken(ctx, name)
 	if err != nil {

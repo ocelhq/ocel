@@ -1,6 +1,6 @@
 export interface Config {
   table: string;
-  substrateClass: string;
+  bootstrapClass: string;
 }
 
 function required(env: NodeJS.ProcessEnv, name: string): string {
@@ -14,6 +14,6 @@ function required(env: NodeJS.ProcessEnv, name: string): string {
 export function config(env: NodeJS.ProcessEnv): Config {
   return {
     table: required(env, "OCEL_STATE_TABLE"),
-    substrateClass: required(env, "OCEL_INFRA_CLASS"),
+    bootstrapClass: required(env, "OCEL_INFRA_CLASS"),
   };
 }

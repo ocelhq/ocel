@@ -110,12 +110,12 @@ func TestVarsServerStoreLookup(t *testing.T) {
 			}
 		}
 
-		if got := cfn.substrates(); len(got) != 1 {
+		if got := cfn.bootstraps(); len(got) != 1 {
 			t.Errorf("six reads cost %d bootstrap describes, want 1", len(got))
 		}
 	})
 
-	t.Run("finds each substrate's own store", func(t *testing.T) {
+	t.Run("finds each bootstrap's own store", func(t *testing.T) {
 		t.Parallel()
 		cfn := &countingCFN{}
 		s := testAccount(cfn, newFakeDynamo(), &fakeKMS{})
@@ -132,9 +132,9 @@ func TestVarsServerStoreLookup(t *testing.T) {
 			}
 		}
 
-		got := cfn.substrates()
+		got := cfn.bootstraps()
 		if len(got) != 2 {
-			t.Errorf("reads across both substrates cost %d bootstrap describes, want 2 (one each)", len(got))
+			t.Errorf("reads across both bootstraps cost %d bootstrap describes, want 2 (one each)", len(got))
 		}
 		want := []string{bootstrap.StackName, bootstrap.PreviewStackName}
 		if !slices.Equal(got, want) {
@@ -460,7 +460,7 @@ func TestTeardownValues(t *testing.T) {
 		}
 	})
 
-	t.Run("opens the bootstrap's own table under the substrate's class", func(t *testing.T) {
+	t.Run("opens the bootstrap's own table under the bootstrap's class", func(t *testing.T) {
 		t.Parallel()
 		deployed := bootstrap.Deployed{Present: true, VarsTable: "ocel-vars", VarsKeyARN: "arn:aws:kms:us-east-1:111122223333:key/abcd"}
 		store, ok := teardownValues(aws.Config{}, deployed, bootstrap.ClassPreview).(*vars.Store)
@@ -471,7 +471,7 @@ func TestTeardownValues(t *testing.T) {
 			t.Errorf("store = %+v, want the bootstrap's own table and key", store)
 		}
 		if store.Class != bootstrap.ClassPreview {
-			t.Errorf("store class = %q, want the substrate's own class", store.Class)
+			t.Errorf("store class = %q, want the bootstrap's own class", store.Class)
 		}
 	})
 }

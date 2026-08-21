@@ -17,9 +17,9 @@ func describeJournal(t *testing.T) string {
 }
 
 func TestOnlyTheCommandThatRendersDependentsAsksForThem(t *testing.T) {
-	t.Run("status reads the substrate and nothing that grows with the account", func(t *testing.T) {
+	t.Run("status reads the bootstrap and nothing that grows with the account", func(t *testing.T) {
 		root, _ := setUpDeployFixture(t)
-		t.Setenv(fakeSubstrateEnvVar, "current")
+		t.Setenv(fakeBootstrapEnvVar, "current")
 		journal := describeJournal(t)
 		d := defaultDeps()
 		setLoggedIn(&d)

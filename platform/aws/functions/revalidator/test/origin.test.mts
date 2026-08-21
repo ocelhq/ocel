@@ -11,7 +11,7 @@ function message(overrides: Record<string, unknown> = {}): RevalidationMessage {
   return parsed.message;
 }
 
-function substrate(answer: Response | Error | (() => Response)): {
+function harness(answer: Response | Error | (() => Response)): {
   deps: OriginDeps;
   requests: Request[];
 } {
@@ -36,7 +36,7 @@ function record(document: string = originDocument()): () => Response {
 
 // a comment: `@ts-expect-error` is itself an error when the error it names does
 it("cannot be spelled from a literal, or from a copy of a real one", async () => {
-  const { deps } = substrate(record());
+  const { deps } = harness(record());
   const resolution = await resolve(deps, message());
   if (!resolution.ok) throw new Error(resolution.reason);
 
@@ -49,7 +49,7 @@ it("cannot be spelled from a literal, or from a copy of a real one", async () =>
 });
 
 it("reads the deploy's own record, under the isrPrefix, signed as the function's role", async () => {
-  const { deps, requests } = substrate(record());
+  const { deps, requests } = harness(record());
 
   const resolution = await resolve(deps, message());
 
@@ -59,7 +59,7 @@ it("reads the deploy's own record, under the isrPrefix, signed as the function's
 });
 
 it("composes the trigger from the recorded origin and the message's route path", async () => {
-  const { deps } = substrate(record());
+  const { deps } = harness(record());
 
   const resolution = await resolve(deps, message({ routePath: "/deep/route" }));
 
@@ -67,7 +67,7 @@ it("composes the trigger from the recorded origin and the message's route path",
 });
 
 it("refuses a route path that would leave the recorded origin", async () => {
-  const { deps } = substrate(record());
+  const { deps } = harness(record());
 
   await expect(resolve(deps, message({ routePath: "//attacker.example.com/x" }))).resolves.toEqual({
     ok: false,
@@ -76,7 +76,7 @@ it("refuses a route path that would leave the recorded origin", async () => {
 });
 
 it("refuses a route id the deploy never recorded", async () => {
-  const { deps } = substrate(record());
+  const { deps } = harness(record());
 
   await expect(resolve(deps, message({ routeId: "/not-a-route" }))).resolves.toEqual({
     ok: false,
@@ -90,45 +90,45 @@ it.each([
   ["a deeper name under the real suffix", "https://a.b.lambda-url.us-east-1.on.aws/"],
   ["a suffix that merely ends the same way", "https://abc123.lambda-url.us-east-1.not-on.aws/"],
 ])("refuses a recorded origin that is not a Function URL: %s", async (_name, origin) => {
-  const { deps } = substrate(record(originDocument({ "/": origin })));
+  const { deps } = harness(record(originDocument({ "/": origin })));
 
   await expect(resolve(deps, message())).resolves.toEqual({ ok: false, reason: "origin-unusable" });
 });
 
 it("refuses a recorded origin reached over http", async () => {
-  const { deps } = substrate(record(originDocument({ "/": `http://${host}/` })));
+  const { deps } = harness(record(originDocument({ "/": `http://${host}/` })));
 
   await expect(resolve(deps, message())).resolves.toEqual({ ok: false, reason: "origin-unusable" });
 });
 
 it("refuses a record of an unknown version", async () => {
-  const { deps } = substrate(record(JSON.stringify({ v: 2, functionUrls: { "/": `https://${host}/` } })));
+  const { deps } = harness(record(JSON.stringify({ v: 2, functionUrls: { "/": `https://${host}/` } })));
 
   await expect(resolve(deps, message())).resolves.toEqual({ ok: false, reason: "origin-unusable" });
 });
 
 it("refuses a record that is not JSON", async () => {
-  const { deps } = substrate(record("{"));
+  const { deps } = harness(record("{"));
 
   await expect(resolve(deps, message())).resolves.toEqual({ ok: false, reason: "origin-unusable" });
 });
 
 it("calls a missing record unusable and a failing read unavailable", async () => {
-  const missing = substrate(() => new Response(null, { status: 404 }));
-  const failing = substrate(() => new Response(null, { status: 503 }));
+  const missing = harness(() => new Response(null, { status: 404 }));
+  const failing = harness(() => new Response(null, { status: 503 }));
 
   await expect(resolve(missing.deps, message())).resolves.toEqual({ ok: false, reason: "origin-unusable" });
   await expect(resolve(failing.deps, message())).resolves.toEqual({ ok: false, reason: "origin-unavailable" });
 });
 
 it("reports an unreachable record as unavailable rather than throwing", async () => {
-  const { deps } = substrate(new Error("connect ECONNREFUSED"));
+  const { deps } = harness(new Error("connect ECONNREFUSED"));
 
   await expect(resolve(deps, message())).resolves.toEqual({ ok: false, reason: "origin-unavailable" });
 });
 
 it("reads on the documented budget when no caller overrides it", async () => {
-  const { deps } = substrate(record());
+  const { deps } = harness(record());
   const timeout = vi.spyOn(AbortSignal, "timeout");
   const signals: (AbortSignal | null | undefined)[] = [];
   deps.fetch = (async (_input: string, init: RequestInit) => {
@@ -144,7 +144,7 @@ it("reads on the documented budget when no caller overrides it", async () => {
 });
 
 it("resolves nothing, and reads nothing, when no asset bucket is configured", async () => {
-  const { deps, requests } = substrate(record());
+  const { deps, requests } = harness(record());
   deps.bucket = undefined;
 
   await expect(resolve(deps, message())).resolves.toEqual({ ok: false, reason: "origin-unconfigured" });
@@ -152,7 +152,7 @@ it("resolves nothing, and reads nothing, when no asset bucket is configured", as
 });
 
 it("reads one record per isrPrefix, however many routes of it a batch carries", async () => {
-  const { deps, requests } = substrate(record());
+  const { deps, requests } = harness(record());
 
   await resolve(deps, message({ routePath: "/a" }));
   await resolve(deps, message({ routePath: "/b" }));

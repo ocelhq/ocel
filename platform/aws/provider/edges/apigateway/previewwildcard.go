@@ -29,7 +29,7 @@ func (p *provider) ReconcilePreviewWildcard(ctx context.Context, spec edge.Previ
 		return "", err
 	}
 	if !found {
-		return "", fmt.Errorf("the preview substrate has no not-found API, so nothing would answer a hostname on %s that no preview claims; run `ocel bootstrap --preview` first", wildcard)
+		return "", fmt.Errorf("the preview bootstrap has no not-found API, so nothing would answer a hostname on %s that no preview claims; run `ocel bootstrap --preview` first", wildcard)
 	}
 	front, err := ensurePreviewDomain(ctx, c, wildcard, spec.Certificate)
 	if err != nil {
@@ -117,7 +117,7 @@ func convergePreviewDomain(ctx context.Context, c Clients, wildcard, certificate
 		PatchOperations: patch,
 	})
 	if err != nil {
-		return "", fmt.Errorf("move the API Gateway domain name for %s onto the certificate this substrate holds and the routing mode every preview rule needs: %w", wildcard, err)
+		return "", fmt.Errorf("move the API Gateway domain name for %s onto the certificate this bootstrap holds and the routing mode every preview rule needs: %w", wildcard, err)
 	}
 	return aws.ToString(updated.RegionalDomainName), nil
 }

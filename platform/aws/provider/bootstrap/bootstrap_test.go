@@ -186,7 +186,7 @@ func TestStackTemplate(t *testing.T) {
 	t.Run("no version output", func(t *testing.T) {
 		tmpl := parseTemplate(t)
 		if _, ok := tmpl.Outputs["BootstrapVersion"]; ok {
-			t.Error("the substrate's shape is carried by the ocel:schema tag; no stack Output restates it")
+			t.Error("the bootstrap's shape is carried by the ocel:schema tag; no stack Output restates it")
 		}
 	})
 }
@@ -460,7 +460,7 @@ func TestCheckDeployed(t *testing.T) {
 		}
 	})
 
-	t.Run("an untagged substrate reads as schema zero", func(t *testing.T) {
+	t.Run("an untagged bootstrap reads as schema zero", func(t *testing.T) {
 		api := stubDescriber{StackName: outputs(map[string]string{outputInfraClass: ClassProduction})}
 
 		got, err := CheckDeployed(context.Background(), api)
@@ -468,7 +468,7 @@ func TestCheckDeployed(t *testing.T) {
 			t.Fatalf("CheckDeployed: %v", err)
 		}
 		if got.Schema != 0 {
-			t.Errorf("Schema = %d, want 0 for a substrate written before the tag existed", got.Schema)
+			t.Errorf("Schema = %d, want 0 for a bootstrap written before the tag existed", got.Schema)
 		}
 		if compat := CheckCompat(got.Schema, got.Present, RequiredSchema); compat != NeedsBootstrapUpgrade {
 			t.Errorf("CheckCompat = %v, want NeedsBootstrapUpgrade", compat)

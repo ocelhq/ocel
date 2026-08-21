@@ -75,7 +75,7 @@ destination, so it carries no part of the decision above.
 
 | Variable | Required | Meaning |
 | --- | --- | --- |
-| `OCEL_ASSET_BUCKET` | yes | The substrate's asset bucket, holding each deploy's `<isrPrefix>/origin.json`. Same variable and same bucket the tag publisher reads. Unset ⇒ the consumer resolves nothing and triggers nothing. |
+| `OCEL_ASSET_BUCKET` | yes | The bootstrap's asset bucket, holding each deploy's `<isrPrefix>/origin.json`. Same variable and same bucket the tag publisher reads. Unset ⇒ the consumer resolves nothing and triggers nothing. |
 | `AWS_REGION` | Lambda | The bucket's region, used to address and sign the record read. |
 | `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY` / `AWS_SESSION_TOKEN` | Lambda | The function role's credentials. The message carries none. |
 

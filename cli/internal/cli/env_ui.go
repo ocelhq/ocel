@@ -34,7 +34,7 @@ var envUICmd = &cobra.Command{
 }
 
 func init() {
-	envUICmd.Flags().BoolVar(&envOpts.preview, "preview", false, "Manage the preview substrate instead of production")
+	envUICmd.Flags().BoolVar(&envOpts.preview, "preview", false, "Manage the preview bootstrap instead of production")
 	envCmd.AddCommand(envUICmd)
 }
 

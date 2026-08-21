@@ -48,7 +48,7 @@ export function destroyProject(slug) {
       `[ocel-e2e] PROJECT TEARDOWN FAILED for ${slug}: ${why}\n` +
         `[ocel-e2e] its preview footprint is still billing — store instance, staged ` +
         `deployments and assets — and the slug stays taken. Other projects keep deploying ` +
-        `onto the substrate's preview domain regardless. Retry with ` +
+        `onto the bootstrap's preview domain regardless. Retry with ` +
         `\`node scripts/e2e-next/project-teardown.mjs ${slug}\`.`,
     );
     return false;

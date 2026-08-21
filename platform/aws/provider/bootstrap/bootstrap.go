@@ -119,16 +119,16 @@ type Request struct {
 }
 
 func CheckDeployed(ctx context.Context, api CFNDescriber) (Deployed, error) {
-	deployed, _, err := readSubstrate(ctx, api, ClassProduction)
+	deployed, _, err := readBootstrap(ctx, api, ClassProduction)
 	return deployed, err
 }
 
 func CheckDeployedPreview(ctx context.Context, api CFNDescriber) (Deployed, error) {
-	deployed, _, err := readSubstrate(ctx, api, ClassPreview)
+	deployed, _, err := readBootstrap(ctx, api, ClassPreview)
 	return deployed, err
 }
 
-func readSubstrate(ctx context.Context, api CFNDescriber, class string) (Deployed, stackRefs, error) {
+func readBootstrap(ctx context.Context, api CFNDescriber, class string) (Deployed, stackRefs, error) {
 	coreStack, err := StackNameFor(class)
 	if err != nil {
 		return Deployed{}, stackRefs{}, err
@@ -165,16 +165,16 @@ func readSubstrate(ctx context.Context, api CFNDescriber, class string) (Deploye
 		}
 	}
 
-	sub, err := substrateFor(class)
+	target, err := bootstrapFor(class)
 	if err != nil {
 		return Deployed{}, stackRefs{}, err
 	}
 	d.Stacks = append(d.Stacks, StackStamp{
-		Name:      sub.stackName,
+		Name:      target.stackName,
 		Present:   true,
 		Schema:    coreStamp.Schema,
 		Digest:    coreStamp.Digest,
-		Intended:  TemplateDigest(sub.template()),
+		Intended:  TemplateDigest(target.template()),
 		WrittenBy: coreStamp.WrittenBy,
 	})
 	for _, f := range featureRegistry {
@@ -303,15 +303,15 @@ type stackPayloads struct {
 	revalidator payloads.Placement
 }
 
-type substrate struct {
+type spec struct {
 	class     string
 	stackName string
 	stackStep string
 	template  func() string
 }
 
-func productionSubstrate() substrate {
-	return substrate{
+func productionBootstrap() spec {
+	return spec{
 		class:     ClassProduction,
 		stackName: StackName,
 		stackStep: "Ensuring Pulumi state bucket and state table (CloudFormation)",
@@ -319,8 +319,8 @@ func productionSubstrate() substrate {
 	}
 }
 
-func previewSubstrate() substrate {
-	return substrate{
+func previewBootstrap() spec {
+	return spec{
 		class:     ClassPreview,
 		stackName: PreviewStackName,
 		stackStep: "Ensuring preview infrastructure (CloudFormation)",
@@ -328,26 +328,26 @@ func previewSubstrate() substrate {
 	}
 }
 
-func substrateFor(class string) (substrate, error) {
+func bootstrapFor(class string) (spec, error) {
 	switch class {
 	case ClassProduction:
-		return productionSubstrate(), nil
+		return productionBootstrap(), nil
 	case ClassPreview:
-		return previewSubstrate(), nil
+		return previewBootstrap(), nil
 	default:
-		return substrate{}, fmt.Errorf("bootstrap: unknown substrate class %q", class)
+		return spec{}, fmt.Errorf("bootstrap: unknown class %q", class)
 	}
 }
 
 func Run(ctx context.Context, apis APIs, req Request, progress, log func(string)) error {
-	return run(ctx, apis, productionSubstrate(), req, progress, log)
+	return run(ctx, apis, productionBootstrap(), req, progress, log)
 }
 
 func RunPreview(ctx context.Context, apis APIs, req Request, progress, log func(string)) error {
-	return run(ctx, apis, previewSubstrate(), req, progress, log)
+	return run(ctx, apis, previewBootstrap(), req, progress, log)
 }
 
-func run(ctx context.Context, apis APIs, sub substrate, req Request, progress, log func(string)) error {
+func run(ctx context.Context, apis APIs, target spec, req Request, progress, log func(string)) error {
 	var reporting sync.Mutex
 	report := func(f func(string), msg string) {
 		if f == nil {
@@ -369,7 +369,7 @@ func run(ctx context.Context, apis APIs, sub substrate, req Request, progress, l
 		return err
 	}
 
-	standing, err := standingFeatures(ctx, apis.CFN, sub.class)
+	standing, err := standingFeatures(ctx, apis.CFN, target.class)
 	if err != nil {
 		return err
 	}
@@ -380,13 +380,13 @@ func run(ctx context.Context, apis APIs, sub substrate, req Request, progress, l
 	}
 
 	progressf("Ensuring the secret the origin's own front authenticates with (SSM SecureString)")
-	if _, err := ensureOriginSecret(ctx, apis.SSM, sub.class); err != nil {
+	if _, err := ensureOriginSecret(ctx, apis.SSM, target.class); err != nil {
 		return err
 	}
 
-	progressf(sub.stackStep)
+	progressf(target.stackStep)
 	namedIAM := []cfntypes.Capability{cfntypes.CapabilityCapabilityNamedIam}
-	autoHeal, err := standingAutoHeal(ctx, apis.CFN, sub.stackName)
+	autoHeal, err := standingAutoHeal(ctx, apis.CFN, target.stackName)
 	if err != nil {
 		return err
 	}
@@ -394,16 +394,16 @@ func run(ctx context.Context, apis APIs, sub substrate, req Request, progress, l
 		autoHeal = *req.AutoHeal
 	}
 	review := admitReplacements(req.AcceptReplacements, logf)
-	coreBody := sub.template()
+	coreBody := target.template()
 	coreTags := stampTags(Stamp{Schema: RequiredSchema, Digest: TemplateDigest(coreBody), WrittenBy: req.Writer.String(), AutoHeal: autoHeal})
-	if err := upsertCFNStack(ctx, apis.CFN, sub.stackName, coreBody, nil, namedIAM, coreTags, review); err != nil {
+	if err := upsertCFNStack(ctx, apis.CFN, target.stackName, coreBody, nil, namedIAM, coreTags, review); err != nil {
 		return err
 	}
-	deployed, refs, err := readSubstrate(ctx, apis.CFN, sub.class)
+	deployed, refs, err := readBootstrap(ctx, apis.CFN, target.class)
 	if err != nil {
 		return err
 	}
-	steps := stepDeps{class: sub.class, ssm: apis.SSM, iam: apis.IAM, progress: progressf, log: logf}
+	steps := stepDeps{class: target.class, ssm: apis.SSM, iam: apis.IAM, progress: progressf, log: logf}
 	if err := bootstrapEdge(ctx, steps, apis.Edge); err != nil {
 		return err
 	}
@@ -419,7 +419,7 @@ func run(ctx context.Context, apis APIs, sub substrate, req Request, progress, l
 		logf("reused the existing Pulumi passphrase")
 	}
 
-	if err := dropFeatures(ctx, apis.CFN, steps, sub.class, drop, progressf, logf); err != nil {
+	if err := dropFeatures(ctx, apis.CFN, steps, target.class, drop, progressf, logf); err != nil {
 		return err
 	}
 
@@ -439,19 +439,19 @@ func run(ctx context.Context, apis APIs, sub substrate, req Request, progress, l
 			}
 		}
 
-		progressf(fmt.Sprintf("Applying %s (CloudFormation)", strings.Join(featureStackNames(level, sub.class), ", ")))
+		progressf(fmt.Sprintf("Applying %s (CloudFormation)", strings.Join(featureStackNames(level, target.class), ", ")))
 		produced := make([]map[string]string, len(level))
 		group, gctx := errgroup.WithContext(ctx)
 		for i, name := range level {
 			group.Go(func() error {
 				f, _ := featureNamed(name)
-				stackName := f.stackName(sub.class)
+				stackName := f.stackName(target.class)
 				code, err := f.payloads(gctx, apis.Store, deployed.ArtifactBucket)
 				if err != nil {
 					return fmt.Errorf("%s: %w", name, err)
 				}
 				stack := f.template(featureInputs{
-					class:     sub.class,
+					class:     target.class,
 					code:      code,
 					refs:      refs,
 					alongside: alongside,
@@ -913,7 +913,7 @@ Resources:
     Description: "S3 bucket holding the Pulumi state Ocel plans every production deploy and teardown from. One versioned object per app stack."
     Value: !Ref StateBucket
 %s%s%s%s%s  %s:
-    Description: "Class this substrate is stamped with, verified before an action runs so that a preview deploy cannot reach production state, variables or caches."
+    Description: "Class this bootstrap is stamped with, verified before an action runs so that a preview deploy cannot reach production state, variables or caches."
     Value: '%s'
 `, stateBucketResource(ClassProduction), stateTableResource(), artifactBucketResource(), assetBucketResource(), assetBucketPolicyResource(), varsResources(ClassProduction), appBoundaryResource(ClassProduction), outputStateBucket, stateTableOutputs(), artifactBucketOutput(), assetBucketOutputs(), varsOutputs(), appBoundaryOutput(), outputInfraClass, ClassProduction)
 }
@@ -927,7 +927,7 @@ Resources:
     Description: "S3 bucket holding the Pulumi state Ocel plans every preview deploy and teardown from. One versioned object per preview stack."
     Value: !Ref StateBucket
 %s%s%s%s%s  %s:
-    Description: "Class this substrate is stamped with, verified before an action runs so that a preview deploy cannot reach production state, variables or caches."
+    Description: "Class this bootstrap is stamped with, verified before an action runs so that a preview deploy cannot reach production state, variables or caches."
     Value: '%s'
 `, stateBucketResource(ClassPreview), stateTableResource(), artifactBucketResource(), assetBucketResource(), assetBucketPolicyResource(), varsResources(ClassPreview), appBoundaryResource(ClassPreview), outputStateBucket, stateTableOutputs(), artifactBucketOutput(), assetBucketOutputs(), varsOutputs(), appBoundaryOutput(), outputInfraClass, ClassPreview)
 }
@@ -971,7 +971,7 @@ func stateTableResource() string {
 	return fmt.Sprintf(`  StateTable:
     Type: AWS::DynamoDB::Table
     Metadata:
-      Description: "Account-global Ocel state, keyed by pk/sk: the index of every stack this substrate has deployed, which prune and teardown walk, and the tag clock the edge reads and updates to decide whether a cached page is still fresh. Deleting it loses both - Ocel forgets what it deployed here, and every tag's invalidation history starts over."
+      Description: "Account-global Ocel state, keyed by pk/sk: the index of every stack this bootstrap has deployed, which prune and teardown walk, and the tag clock the edge reads and updates to decide whether a cached page is still fresh. Deleting it loses both - Ocel forgets what it deployed here, and every tag's invalidation history starts over."
     Properties:
       BillingMode: PAY_PER_REQUEST
       AttributeDefinitions:
@@ -1011,7 +1011,7 @@ func stateTableResource() string {
 
 func stateTableOutputs() string {
 	return fmt.Sprintf(`  %s:
-    Description: "DynamoDB table holding account-global Ocel state keyed by pk/sk: the stack index prune and teardown walk, and the ISR tag clock every app in this substrate shares with the edge."
+    Description: "DynamoDB table holding account-global Ocel state keyed by pk/sk: the stack index prune and teardown walk, and the ISR tag clock every app in this bootstrap shares with the edge."
     Value: !Ref StateTable
   %s:
     Description: "ARN of that table, handed to every feature stack that has to grant an item read or write on it."
@@ -1058,7 +1058,7 @@ func assetBucketResource() string {
 	return fmt.Sprintf(`  AssetBucket:
     Type: AWS::S3::Bucket
     Metadata:
-      Description: "Per-build static assets, prerender fallbacks, image-optimizer config and the edge's fetch cache, keyed by build id. The edge, the image optimizer, the tag publisher and the revalidator all read it directly, so deleting it breaks static assets and image optimization for every app in this substrate until each is redeployed."
+      Description: "Per-build static assets, prerender fallbacks, image-optimizer config and the edge's fetch cache, keyed by build id. The edge, the image optimizer, the tag publisher and the revalidator all read it directly, so deleting it breaks static assets and image optimization for every app in this bootstrap until each is redeployed."
     Properties:
       BucketEncryption:
         ServerSideEncryptionConfiguration:

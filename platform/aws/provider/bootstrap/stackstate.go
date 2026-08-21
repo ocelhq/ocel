@@ -37,7 +37,7 @@ func stackStateParamPrefixFor(class string) (string, error) {
 	case ClassPreview:
 		return PreviewStackStateParamPrefix, nil
 	default:
-		return "", fmt.Errorf("edge stack state: unknown substrate class %q", class)
+		return "", fmt.Errorf("edge stack state: unknown class %q", class)
 	}
 }
 

@@ -231,7 +231,7 @@ func TestNoTierMintsARoleThatCanOutgrowItsBoundary(t *testing.T) {
 					continue
 				}
 				for _, resource := range stringsOf(t, statement.Resource, "Resource") {
-					if resource == substrateRoleARN {
+					if resource == bootstrapRoleARN {
 						continue
 					}
 					if !boundaryScopes(statement.Condition) {

@@ -316,7 +316,7 @@ func TestRevalidator(t *testing.T) {
 
 				env := parseRevalidatorTemplate(t, tc.template).Resources["Revalidator"].Properties.Environment.Variables
 				if got := env[revalidatorAssetBucketEnvVar]; got != paramAssetBucketName {
-					t.Errorf("%s = %q, want a !Ref of this substrate's own asset bucket; unset, the consumer resolves nothing and triggers nothing", revalidatorAssetBucketEnvVar, got)
+					t.Errorf("%s = %q, want a !Ref of this bootstrap's own asset bucket; unset, the consumer resolves nothing and triggers nothing", revalidatorAssetBucketEnvVar, got)
 				}
 			})
 		}

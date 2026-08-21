@@ -112,7 +112,7 @@ func TestResourceSummary(t *testing.T) {
 func TestStackIndexFor(t *testing.T) {
 	t.Parallel()
 
-	t.Run("an unindexed substrate is refused up front", func(t *testing.T) {
+	t.Run("an unindexed bootstrap is refused up front", func(t *testing.T) {
 		t.Parallel()
 
 		_, err := stackIndexFor(aws.Config{Region: "us-east-1"}, bootstrap.Deployed{Present: true}, "ocel bootstrap")
@@ -124,7 +124,7 @@ func TestStackIndexFor(t *testing.T) {
 		}
 	})
 
-	t.Run("an indexed substrate yields its table", func(t *testing.T) {
+	t.Run("an indexed bootstrap yields its table", func(t *testing.T) {
 		t.Parallel()
 
 		index, err := stackIndexFor(aws.Config{Region: "us-east-1"}, bootstrap.Deployed{Present: true, StateTable: "ocel-state"}, "ocel bootstrap")
@@ -282,10 +282,10 @@ func (p *presenceCFN) DescribeStacks(_ context.Context, in *cloudformation.Descr
 func (p *presenceCFN) questions() []string {
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	return substrateDescribes(p.asked)
+	return bootstrapDescribes(p.asked)
 }
 
-func substrateDescribes(asked []string) []string {
+func bootstrapDescribes(asked []string) []string {
 	var out []string
 	for _, name := range asked {
 		if name == bootstrap.StackName || name == bootstrap.PreviewStackName {

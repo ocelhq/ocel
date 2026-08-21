@@ -1,5 +1,5 @@
 import { describe, expect, test, vi } from "vitest";
-import { ImageError, SubstrateError } from "../src/errors.mjs";
+import { ImageError, BootstrapError } from "../src/errors.mjs";
 import { sharp } from "../src/sharp.mjs";
 import { AVIF, GIF, ICO, JPEG, PNG, SVG, WEBP } from "../src/sniff.mjs";
 import { fallbackOr400, transform } from "../src/transform.mjs";
@@ -197,14 +197,14 @@ describe("the negotiated mimeType", () => {
           config: imageConfig({ formats: [WEBP] }),
         }),
       ),
-    ).rejects.toBeInstanceOf(SubstrateError);
+    ).rejects.toBeInstanceOf(BootstrapError);
   });
 
   test("is refused when it is not an image type at all", async () => {
     for (const mimeType of ["text/html", "application/javascript", "*/*", 42]) {
       await expect(
         transform(await solid("jpeg").then((b) => input(b, { mimeType }))),
-      ).rejects.toBeInstanceOf(SubstrateError);
+      ).rejects.toBeInstanceOf(BootstrapError);
     }
   });
 

@@ -142,12 +142,12 @@ path:
   `pnpm --filter @platform/cf-entry build && node scripts/build-native.mjs --host --target cli`.
   Previews additionally need the shared entry worker reinstalled with
   `ocel domain use '<wildcard>' --preview`, and that worker is a **global singleton**: it
-  serves every preview on the substrate, so two worktrees cannot hold different edge
+  serves every preview on the bootstrap, so two worktrees cannot hold different edge
   bundles at once. Serialize edge verification, or stack the edge fixes and verify them
   together.
 - **Membrane** (`platform/aws/provider/cmd/membrane/**`, `platform/aws/membrane/**`) and
-  **substrate functions** (`platform/aws/functions/**`) — `make provider`, repack the
-  sidecar, then redeploy; for the substrate functions, `ocel bootstrap` after the repack.
+  **bootstrap functions** (`platform/aws/functions/**`) — `make provider`, repack the
+  sidecar, then redeploy; for the bootstrap functions, `ocel bootstrap` after the repack.
   There is nothing to publish or release by hand.
 - **Sidecar** — repack only for `ocel/config` resolution or the `@ocel/provider-aws*`
   binaries. Nothing else needs it.

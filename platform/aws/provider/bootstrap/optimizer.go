@@ -42,7 +42,7 @@ func imageOptimizerResources(code payloads.Placement) string {
 	return fmt.Sprintf(`  ImageOptimizerRole:
     Type: AWS::IAM::Role
     Properties:
-      Description: "Execution role for this substrate's shared image optimizer. Grants read on the asset bucket's assets and image-config prefixes and nothing else, so a compromised optimizer cannot reach state, variables or another app's data. Managed by ocel bootstrap; deleting it breaks /_next/image for every app in this substrate."
+      Description: "Execution role for this bootstrap's shared image optimizer. Grants read on the asset bucket's assets and image-config prefixes and nothing else, so a compromised optimizer cannot reach state, variables or another app's data. Managed by ocel bootstrap; deleting it breaks /_next/image for every app in this bootstrap."
       AssumeRolePolicyDocument:
         Version: '2012-10-17'
         Statement:
@@ -65,7 +65,7 @@ func imageOptimizerResources(code payloads.Placement) string {
   ImageOptimizer:
     Type: AWS::Lambda::Function
     Properties:
-      Description: "Ocel image optimizer - one shared function transforming /_next/image for every app in this substrate, invoked by the edge. Managed by ocel bootstrap; delete it and /_next/image answers 502 everywhere here."
+      Description: "Ocel image optimizer - one shared function transforming /_next/image for every app in this bootstrap, invoked by the edge. Managed by ocel bootstrap; delete it and /_next/image answers 502 everywhere here."
       Runtime: %s
       Architectures:
         - %s
@@ -98,10 +98,10 @@ func imageOptimizerResources(code payloads.Placement) string {
 
 func imageOptimizerOutputs() string {
 	return fmt.Sprintf(`  %s:
-    Description: "Function URL of this substrate's shared image optimizer. The edge calls it with requests signed by the edge user."
+    Description: "Function URL of this bootstrap's shared image optimizer. The edge calls it with requests signed by the edge user."
     Value: !GetAtt ImageOptimizerUrl.FunctionUrl
   %s:
-    Description: "ARN of this substrate's shared image optimizer, handed to whichever feature stack has to grant invoke on it."
+    Description: "ARN of this bootstrap's shared image optimizer, handed to whichever feature stack has to grant invoke on it."
     Value: !GetAtt ImageOptimizer.Arn
 `, outputImageOptimizerURL, outputImageOptimizerARN)
 }

@@ -178,7 +178,7 @@ func TestRunEnvSet(t *testing.T) {
 			t.Fatal("runEnvSet --environment against production err = nil, want a refusal")
 		}
 		if !strings.Contains(err.Error(), "--preview") {
-			t.Errorf("err = %v, want it to name the flag that selects the substrate overrides live on", err)
+			t.Errorf("err = %v, want it to name the flag that selects the bootstrap overrides live on", err)
 		}
 	})
 

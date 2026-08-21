@@ -1,6 +1,6 @@
 import { S3Client } from "@aws-sdk/client-s3";
 import type { ImageOriginRequest, OriginResponse } from "./contract.mjs";
-import { SUBSTRATE_MESSAGE } from "./errors.mjs";
+import { BOOTSTRAP_MESSAGE } from "./errors.mjs";
 import { optimize, type OptimizeDeps } from "./optimize.mjs";
 import { s3Store } from "./store.mjs";
 
@@ -67,7 +67,7 @@ export async function handle(
     resolved = deps ?? { store: assetStore() };
   } catch (error) {
     console.error("ocel image optimizer: not configured", error);
-    return { status: 502, headers: {}, body: encode(SUBSTRATE_MESSAGE) };
+    return { status: 502, headers: {}, body: encode(BOOTSTRAP_MESSAGE) };
   }
   return optimize(payload, resolved);
 }

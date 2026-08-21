@@ -351,7 +351,7 @@ func TestRunLinkGenerate(t *testing.T) {
 	})
 }
 
-func TestLinkSubstrate(t *testing.T) {
+func TestLinkBootstrap(t *testing.T) {
 	t.Run("refuses --environment without --preview", func(t *testing.T) {
 		root := setUpLinkFixture(t)
 
@@ -366,7 +366,7 @@ func TestLinkSubstrate(t *testing.T) {
 				continue
 			}
 			if !strings.Contains(err.Error(), "--preview") {
-				t.Errorf("`ocel link %s` err = %v, want it to name the flag that selects the substrate overrides live on", name, err)
+				t.Errorf("`ocel link %s` err = %v, want it to name the flag that selects the bootstrap overrides live on", name, err)
 			}
 		}
 	})
@@ -426,7 +426,7 @@ func TestRunLinkJSONOutput(t *testing.T) {
 func TestLinkCommands(t *testing.T) {
 	t.Parallel()
 
-	t.Run("every subcommand addresses a substrate", func(t *testing.T) {
+	t.Run("every subcommand addresses a bootstrap", func(t *testing.T) {
 		t.Parallel()
 
 		for _, c := range []*cobra.Command{linkSetCmd, linkRmCmd, linkLsCmd, linkGenerateCmd} {

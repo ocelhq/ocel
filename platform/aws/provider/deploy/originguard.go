@@ -34,7 +34,7 @@ func resolveOriginGuard(cfg Config, app *contractv1.ManifestApp) (*originGuard, 
 	}
 	if cfg.OriginSecret == "" {
 		return nil, fmt.Errorf(
-			"the %s edge reaches %s over a Function URL no signature guards, and this substrate holds no secret for the entry function to demand of it; re-run `ocel bootstrap`",
+			"the %s edge reaches %s over a Function URL no signature guards, and this bootstrap holds no secret for the entry function to demand of it; re-run `ocel bootstrap`",
 			cfg.Edge.Kind(), name,
 		)
 	}

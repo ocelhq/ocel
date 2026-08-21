@@ -127,10 +127,10 @@ func (p *provider) PreviewWildcardSurfaces(wildcard string) (edge.Surface, edge.
 		Reason: "the shared entry worker holding this wildcard, and the route that reaches it",
 	}
 	kept := edge.Surface{
-		Kind:   "preview substrate",
+		Kind:   "preview bootstrap",
 		Name:   string(edge.ClassPreview),
 		Action: edge.SurfaceKeep,
-		Reason: "substrate-scoped: `ocel bootstrap --destroy --preview` removes what it stood up",
+		Reason: "bootstrap-scoped: `ocel bootstrap --destroy --preview` removes what it stood up",
 	}
 	return removed, kept
 }
@@ -140,7 +140,7 @@ func (p *provider) SharedPreviewSurface() edge.Surface {
 		Kind:   "shared preview entry worker",
 		Name:   edge.PreviewEntryOwner,
 		Action: edge.SurfaceKeep,
-		Reason: "substrate-scoped: it fronts every project's previews",
+		Reason: "bootstrap-scoped: it fronts every project's previews",
 	}
 }
 

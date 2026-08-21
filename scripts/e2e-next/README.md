@@ -24,7 +24,7 @@ prepared:
    `ocel domain use` plants a proxied placeholder record and binds the shared
    entry worker; a record you made yourself is left alone but must be **proxied
    (orange cloud)**, since an unproxied hostname never reaches a worker.
-2. Provision the preview substrate once and give it the wildcard — both are
+2. Provision the preview bootstrap once and give it the wildcard — both are
    account-global, not per-project. From a scratch directory holding an
    `ocel.config.ts` that declares the AWS provider:
    ```bash

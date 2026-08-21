@@ -36,8 +36,8 @@ func TestCheckTier_Mismatches(t *testing.T) {
 			t.Errorf("checkTier(%v, %v) = nil, want error", c.infra, c.required)
 			continue
 		}
-		if strings.Contains(strings.ToLower(err.Error()), "substrate") {
-			t.Errorf("checkTier(%v, %v) error uses abstract word 'substrate': %q", c.infra, c.required, err)
+		if !strings.Contains(err.Error(), "infrastructure") {
+			t.Errorf("checkTier(%v, %v) error names no infrastructure: %q", c.infra, c.required, err)
 		}
 	}
 }

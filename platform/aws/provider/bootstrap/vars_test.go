@@ -71,7 +71,7 @@ func parseVarsTemplate(t *testing.T, template string) varsTemplate {
 	return tmpl
 }
 
-func varsSubstrates() []struct {
+func varsBootstraps() []struct {
 	name     string
 	class    string
 	template string
@@ -87,7 +87,7 @@ func varsSubstrates() []struct {
 }
 
 func TestVarsTable(t *testing.T) {
-	for _, tc := range varsSubstrates() {
+	for _, tc := range varsBootstraps() {
 		t.Run(tc.name, func(t *testing.T) {
 			tmpl := parseVarsTemplate(t, tc.template)
 
@@ -146,7 +146,7 @@ func TestVarsTable(t *testing.T) {
 
 func TestVarsKey(t *testing.T) {
 	aliases := map[string]string{}
-	for _, tc := range varsSubstrates() {
+	for _, tc := range varsBootstraps() {
 		t.Run(tc.name, func(t *testing.T) {
 			tmpl := parseVarsTemplate(t, tc.template)
 
@@ -204,7 +204,7 @@ func TestVarsKey(t *testing.T) {
 }
 
 func TestVarsResourcesAreStackOwned(t *testing.T) {
-	for _, tc := range varsSubstrates() {
+	for _, tc := range varsBootstraps() {
 		t.Run(tc.name, func(t *testing.T) {
 			tmpl := parseVarsTemplate(t, tc.template)
 			for _, name := range []string{"VarsTable", "VarsKey", "VarsKeyAlias"} {
@@ -224,7 +224,7 @@ func TestVarsResourcesAreStackOwned(t *testing.T) {
 func TestVarsDescriptions(t *testing.T) {
 	const maxDescriptionLen = 1024
 
-	for _, tc := range varsSubstrates() {
+	for _, tc := range varsBootstraps() {
 		t.Run(tc.name, func(t *testing.T) {
 			tmpl := parseVarsTemplate(t, tc.template)
 

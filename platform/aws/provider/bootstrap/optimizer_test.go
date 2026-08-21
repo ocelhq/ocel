@@ -86,7 +86,7 @@ func (f *fakeObjectStore) PutObject(_ context.Context, in *s3.PutObjectInput, _ 
 	return &s3.PutObjectOutput{}, nil
 }
 
-func substratePayloads() map[string]payloads.Payload {
+func bootstrapPayloads() map[string]payloads.Payload {
 	return map[string]payloads.Payload{
 		optimizerKeyPrefix:      payloads.ImageOptimizer(),
 		tagPublisherKeyPrefix:   payloads.TagPublisher(),
@@ -97,7 +97,7 @@ func substratePayloads() map[string]payloads.Payload {
 
 func preloadedStore() *fakeObjectStore {
 	store := newFakeObjectStore()
-	for prefix, p := range substratePayloads() {
+	for prefix, p := range bootstrapPayloads() {
 		store.putVerified(payloads.Key(prefix, p.SHA256), p.Bytes)
 	}
 	return store
@@ -186,7 +186,7 @@ func TestStackTemplateOptimizer(t *testing.T) {
 					t.Errorf("Code = %s/%s, want the payload placed in this account", p.Code.S3Bucket, p.Code.S3Key)
 				}
 				if got := p.Environment.Variables[optimizerBucketEnvVar]; got != paramAssetBucketName {
-					t.Errorf("%s = %q, want this substrate's own asset bucket", optimizerBucketEnvVar, got)
+					t.Errorf("%s = %q, want this bootstrap's own asset bucket", optimizerBucketEnvVar, got)
 				}
 				if !strings.Contains(tc.template, optimizerBucketEnvVar+": !Ref "+paramAssetBucketName) {
 					t.Errorf("%s is not a reference to the asset bucket the core stack handed over", optimizerBucketEnvVar)
@@ -220,7 +220,7 @@ func TestStackTemplateOptimizer(t *testing.T) {
 		}
 	})
 
-	t.Run("optimizer reads only its own substrate asset", func(t *testing.T) {
+	t.Run("optimizer reads only its own bootstrap asset", func(t *testing.T) {
 		tmpl := parseOptimizerTemplate(t, featureTemplate(FeatureImageOptimization, ClassProduction))
 		role, ok := tmpl.Resources["ImageOptimizerRole"]
 		if !ok {
@@ -308,7 +308,7 @@ func TestEdgeUserOptimizer(t *testing.T) {
 	t.Run("no optimizer alongside is no invoke grant", func(t *testing.T) {
 		template := featureTemplateWith(FeatureCloudflareEdge, ClassProduction, FeatureSet{FeatureISR: true, FeatureCloudflareEdge: true})
 		if strings.Contains(template, paramImageOptimizerARN) {
-			t.Errorf("the edge reader is granted an optimizer this substrate does not carry:\n%s", template)
+			t.Errorf("the edge reader is granted an optimizer this bootstrap does not carry:\n%s", template)
 		}
 	})
 }
@@ -319,11 +319,11 @@ func TestRunOptimizer(t *testing.T) {
 		store := newFakeObjectStore()
 		standInCloudflare(t, &fakeEdge{kind: "cloudflare"})
 
-		if err := runAll(context.Background(), apisOf(cfn, ssmc, iamc, store), productionSubstrate()); err != nil {
+		if err := runAll(context.Background(), apisOf(cfn, ssmc, iamc, store), productionBootstrap()); err != nil {
 			t.Fatalf("run: %v", err)
 		}
 		if cfn.creates != 4 || cfn.updates != 0 {
-			t.Errorf("settled the substrate in %d creates + %d updates, want one create each for core and its three features", cfn.creates, cfn.updates)
+			t.Errorf("settled the bootstrap in %d creates + %d updates, want one create each for core and its three features", cfn.creates, cfn.updates)
 		}
 		final := cfn.template(optStack(ClassProduction))
 		if !strings.Contains(final, "AWS::Lambda::Url") {
@@ -339,7 +339,7 @@ func TestRunOptimizer(t *testing.T) {
 		store := preloadedStore()
 		standInCloudflare(t, &fakeEdge{kind: "cloudflare"})
 
-		if err := runAll(context.Background(), apisOf(cfn, ssmc, iamc, store), productionSubstrate()); err != nil {
+		if err := runAll(context.Background(), apisOf(cfn, ssmc, iamc, store), productionBootstrap()); err != nil {
 			t.Fatalf("run: %v", err)
 		}
 		if store.puts != 0 {
@@ -369,7 +369,7 @@ func TestCheckDeployedOptimizer(t *testing.T) {
 			t.Fatalf("CheckDeployed: %v", err)
 		}
 		if deployed.ImageOptimizerURL != "" {
-			t.Errorf("a substrate with no optimizer read back %q", deployed.ImageOptimizerURL)
+			t.Errorf("a bootstrap with no optimizer read back %q", deployed.ImageOptimizerURL)
 		}
 	})
 }

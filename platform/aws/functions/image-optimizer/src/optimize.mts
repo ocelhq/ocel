@@ -6,7 +6,7 @@ import {
   type OriginResponse,
 } from "./contract.mjs";
 import { loadImageConfig } from "./config.mjs";
-import { ImageError, SUBSTRATE_MESSAGE, upstreamFailure } from "./errors.mjs";
+import { ImageError, BOOTSTRAP_MESSAGE, upstreamFailure } from "./errors.mjs";
 import { assetKey, releaseAssetPrefix } from "./keys.mjs";
 import { extensionFor } from "./sniff.mjs";
 import type { ObjectStore } from "./store.mjs";
@@ -32,8 +32,8 @@ export async function optimize(
       }
       return { status: error.status, headers: {}, body: encode(error.message) };
     }
-    console.error("ocel image optimizer: substrate failure", error);
-    return { status: 502, headers: {}, body: encode(SUBSTRATE_MESSAGE) };
+    console.error("ocel image optimizer: bootstrap failure", error);
+    return { status: 502, headers: {}, body: encode(BOOTSTRAP_MESSAGE) };
   }
 }
 

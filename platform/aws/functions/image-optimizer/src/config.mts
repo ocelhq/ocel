@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import type { CompiledImageConfig } from "./contract.mjs";
-import { SubstrateError } from "./errors.mjs";
+import { BootstrapError } from "./errors.mjs";
 import { imageConfigKey } from "./keys.mjs";
 import type { ObjectStore } from "./store.mjs";
 
@@ -19,7 +19,7 @@ export async function loadImageConfig(
   configHash: string,
 ): Promise<CompiledImageConfig> {
   if (!/^[0-9a-f]{64}$/.test(configHash)) {
-    throw new SubstrateError("configHash is not a sha256 digest", configHash);
+    throw new BootstrapError("configHash is not a sha256 digest", configHash);
   }
   const cached = memo.get(configHash);
   if (cached) return cached;
@@ -29,13 +29,13 @@ export async function loadImageConfig(
   try {
     object = await store.get(key, CONFIG_LIMIT);
   } catch (error) {
-    throw new SubstrateError(`reading ${key}`, error);
+    throw new BootstrapError(`reading ${key}`, error);
   }
-  if (!object) throw new SubstrateError(`no image config at ${key}`);
+  if (!object) throw new BootstrapError(`no image config at ${key}`);
 
   const digest = createHash("sha256").update(object.bytes).digest("hex");
   if (digest !== configHash) {
-    throw new SubstrateError(`image config at ${key} does not match configHash`, {
+    throw new BootstrapError(`image config at ${key} does not match configHash`, {
       expected: configHash,
       actual: digest,
     });
@@ -45,7 +45,7 @@ export async function loadImageConfig(
   try {
     config = JSON.parse(new TextDecoder().decode(object.bytes)) as CompiledImageConfig;
   } catch (error) {
-    throw new SubstrateError(`image config at ${key} is not JSON`, error);
+    throw new BootstrapError(`image config at ${key} is not JSON`, error);
   }
   assertShape(config, key);
 
@@ -73,6 +73,6 @@ function assertShape(config: CompiledImageConfig, key: string): void {
     .filter(([, ok]) => !ok)
     .map(([name]) => name);
   if (missing.length > 0) {
-    throw new SubstrateError(`image config at ${key} is missing ${missing.join(", ")}`);
+    throw new BootstrapError(`image config at ${key} is missing ${missing.join(", ")}`);
   }
 }

@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest";
-import { SubstrateError } from "../src/errors.mjs";
+import { BootstrapError } from "../src/errors.mjs";
 import { assetKey, assetPath, imageConfigKey, releaseAssetPrefix } from "../src/keys.mjs";
 
 const PREFIX = "prod/proj1/web/r3f8a1c9d/assets";
@@ -33,20 +33,20 @@ describe("traversal guard", () => {
   ];
   for (const pathname of escapes) {
     test(`refuses ${pathname}`, () => {
-      expect(() => assetPath(pathname)).toThrow(SubstrateError);
+      expect(() => assetPath(pathname)).toThrow(BootstrapError);
     });
   }
 
   test("refuses a path that is not absolute", () => {
-    expect(() => assetPath("logo.png")).toThrow(SubstrateError);
+    expect(() => assetPath("logo.png")).toThrow(BootstrapError);
   });
 
   test("refuses an undecodable path", () => {
-    expect(() => assetPath("/a%zz.png")).toThrow(SubstrateError);
+    expect(() => assetPath("/a%zz.png")).toThrow(BootstrapError);
   });
 
   test("refuses a NUL, which truncates a key downstream", () => {
-    expect(() => assetPath("/logo.png%00.txt")).toThrow(SubstrateError);
+    expect(() => assetPath("/logo.png%00.txt")).toThrow(BootstrapError);
   });
 });
 
@@ -56,19 +56,19 @@ describe("asset prefix", () => {
   });
 
   test("refuses a prefix that does not end in the assets segment", () => {
-    expect(() => releaseAssetPrefix("prod/proj1/web/r3f8a1c9d")).toThrow(SubstrateError);
-    expect(() => releaseAssetPrefix("prod/proj1/web/r3f8a1c9d/isr")).toThrow(SubstrateError);
+    expect(() => releaseAssetPrefix("prod/proj1/web/r3f8a1c9d")).toThrow(BootstrapError);
+    expect(() => releaseAssetPrefix("prod/proj1/web/r3f8a1c9d/isr")).toThrow(BootstrapError);
   });
 
   test("refuses a traversal in any segment", () => {
-    expect(() => releaseAssetPrefix("prod/proj1/web/../assets")).toThrow(SubstrateError);
-    expect(() => releaseAssetPrefix("prod/proj1/web/.../assets")).toThrow(SubstrateError);
-    expect(() => releaseAssetPrefix("prod//web/r3f8a1c9d/assets")).toThrow(SubstrateError);
+    expect(() => releaseAssetPrefix("prod/proj1/web/../assets")).toThrow(BootstrapError);
+    expect(() => releaseAssetPrefix("prod/proj1/web/.../assets")).toThrow(BootstrapError);
+    expect(() => releaseAssetPrefix("prod//web/r3f8a1c9d/assets")).toThrow(BootstrapError);
   });
 
   test("refuses a missing or empty prefix", () => {
-    expect(() => releaseAssetPrefix(undefined)).toThrow(SubstrateError);
-    expect(() => releaseAssetPrefix("")).toThrow(SubstrateError);
-    expect(() => releaseAssetPrefix(42)).toThrow(SubstrateError);
+    expect(() => releaseAssetPrefix(undefined)).toThrow(BootstrapError);
+    expect(() => releaseAssetPrefix("")).toThrow(BootstrapError);
+    expect(() => releaseAssetPrefix(42)).toThrow(BootstrapError);
   });
 });

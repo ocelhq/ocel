@@ -118,7 +118,7 @@ func TestTheEntryFunctionAnswersWithoutSigV4AndDemandsTheSecret(t *testing.T) {
 
 	entry := functionEnvOf(t, rec, functionCoordinate("shop", stack, "fn--web--entry").PhysicalName(maxLambdaBaseNameLen))
 	if entry[edge.OriginSecretVar] != testOriginSecret {
-		t.Errorf("%s = %q, want the secret the substrate holds", edge.OriginSecretVar, entry[edge.OriginSecretVar])
+		t.Errorf("%s = %q, want the secret the bootstrap holds", edge.OriginSecretVar, entry[edge.OriginSecretVar])
 	}
 	if _, signed := entry[edge.OriginSignedVar]; signed {
 		t.Errorf("the entry carries %s, which waves its membrane past a URL nothing signs", edge.OriginSignedVar)

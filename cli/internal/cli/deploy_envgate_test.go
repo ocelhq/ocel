@@ -343,7 +343,7 @@ func TestEnvGateOnPreviewUp(t *testing.T) {
 
 		out := stdout.String() + stderr.String() + err.Error()
 		if !strings.Contains(out, "STRIPE_API_KEY") {
-			t.Errorf("output = %q, want it to name the cell the preview substrate is missing", out)
+			t.Errorf("output = %q, want it to name the cell the preview bootstrap is missing", out)
 		}
 		if strings.Contains(out, "sk_live_secret") {
 			t.Errorf("output = %q, want no production value reachable from a preview", out)

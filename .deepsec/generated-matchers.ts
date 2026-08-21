@@ -460,7 +460,7 @@ const specs = [
         "label": "Image optimizer request pipeline primitive"
       },
       {
-        "source": "export (?:class|const) (?:ImageError|SubstrateError|TooLargeError|IMAGE_PASSTHROUGH)\\b",
+        "source": "export (?:class|const) (?:ImageError|BootstrapError|TooLargeError|IMAGE_PASSTHROUGH)\\b",
         "label": "Image optimizer boundary contract"
       }
     ],

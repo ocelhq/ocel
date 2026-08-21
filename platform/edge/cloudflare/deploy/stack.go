@@ -47,7 +47,7 @@ func accountScriptNameFor(worker string, class edge.Class, production, preview s
 	case edge.ClassPreview:
 		return preview, nil
 	default:
-		return "", fmt.Errorf("%s: unknown substrate class %q", worker, class)
+		return "", fmt.Errorf("%s: unknown class %q", worker, class)
 	}
 }
 

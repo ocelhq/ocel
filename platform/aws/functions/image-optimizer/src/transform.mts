@@ -1,5 +1,5 @@
 import type { CompiledImageConfig } from "./contract.mjs";
-import { ImageError, SubstrateError } from "./errors.mjs";
+import { ImageError, BootstrapError } from "./errors.mjs";
 import { sharp } from "./sharp.mjs";
 import {
   ANIMATABLE_TYPES,
@@ -98,7 +98,7 @@ function outputType(
 ): string {
   if (mimeType) {
     if (!config.formats.includes(mimeType)) {
-      throw new SubstrateError("mimeType is not a configured output format", mimeType);
+      throw new BootstrapError("mimeType is not a configured output format", mimeType);
     }
     return mimeType;
   }

@@ -637,7 +637,7 @@ func TestBootstrapRaisesTheNotFoundAPIAndTheRole(t *testing.T) {
 		t.Errorf("Trust = %q, want internal; this edge runs inside the account it serves", out.Trust)
 	}
 	if len(out.Offers) != 0 {
-		t.Errorf("Offers = %v, want none; the api-gateway edge hosts no store the substrate adopts", out.Offers)
+		t.Errorf("Offers = %v, want none; the api-gateway edge hosts no store the bootstrap adopts", out.Offers)
 	}
 
 	api := w.gateway.named(notFoundAPIName(edge.ClassProduction))
@@ -704,14 +704,14 @@ func TestReconcileLeavesTheSharedRoleAlone(t *testing.T) {
 func TestReconcileRefusesAnAccountThatWasNeverBootstrapped(t *testing.T) {
 	t.Parallel()
 
-	t.Run("without the substrate", func(t *testing.T) {
+	t.Run("without the bootstrap", func(t *testing.T) {
 		t.Parallel()
 
 		w := newWorld()
 		w.cfn.absent = true
 
 		if _, err := w.edge().Reconcile(context.Background(), testSpec(), edge.StackState{}); err == nil {
-			t.Fatal("Reconcile succeeded against a substrate that was never bootstrapped")
+			t.Fatal("Reconcile succeeded against a bootstrap that was never bootstrapped")
 		}
 	})
 

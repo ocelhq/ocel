@@ -8,7 +8,7 @@ import (
 	"github.com/ocelhq/ocel/platform/aws/provider/bootstrap"
 )
 
-func TestSubstrateStatus(t *testing.T) {
+func TestBootstrapStatus(t *testing.T) {
 	t.Parallel()
 
 	deployed := bootstrap.Deployed{
@@ -24,7 +24,7 @@ func TestSubstrateStatus(t *testing.T) {
 	t.Run("it carries every stack it read", func(t *testing.T) {
 		t.Parallel()
 
-		status := (&Server{writer: "1.4.0"}).substrateStatus(deployed, environmentv1.Tier_TIER_PRODUCTION, []string{"isr"})
+		status := (&Server{writer: "1.4.0"}).bootstrapStatus(deployed, environmentv1.Tier_TIER_PRODUCTION, []string{"isr"})
 		if len(status.GetStacks()) != 2 {
 			t.Fatalf("described %d stacks, want 2", len(status.GetStacks()))
 		}
@@ -45,13 +45,13 @@ func TestSubstrateStatus(t *testing.T) {
 	t.Run("a newer writer at equal schema reads as a downgrade", func(t *testing.T) {
 		t.Parallel()
 
-		if !(&Server{writer: "1.3.9"}).substrateStatus(deployed, environmentv1.Tier_TIER_PRODUCTION, []string{"isr"}).GetDowngrade() {
-			t.Error("an older build writing over a substrate a newer one wrote is not flagged")
+		if !(&Server{writer: "1.3.9"}).bootstrapStatus(deployed, environmentv1.Tier_TIER_PRODUCTION, []string{"isr"}).GetDowngrade() {
+			t.Error("an older build writing over a bootstrap a newer one wrote is not flagged")
 		}
-		if (&Server{writer: "1.4.0"}).substrateStatus(deployed, environmentv1.Tier_TIER_PRODUCTION, []string{"isr"}).GetDowngrade() {
-			t.Error("the build that wrote the substrate is flagged as downgrading it")
+		if (&Server{writer: "1.4.0"}).bootstrapStatus(deployed, environmentv1.Tier_TIER_PRODUCTION, []string{"isr"}).GetDowngrade() {
+			t.Error("the build that wrote the bootstrap is flagged as downgrading it")
 		}
-		if (&Server{writer: "dev+cafe"}).substrateStatus(deployed, environmentv1.Tier_TIER_PRODUCTION, []string{"isr"}).GetDowngrade() {
+		if (&Server{writer: "dev+cafe"}).bootstrapStatus(deployed, environmentv1.Tier_TIER_PRODUCTION, []string{"isr"}).GetDowngrade() {
 			t.Error("a dev build cannot be ordered against a release and must not claim a downgrade")
 		}
 	})
@@ -84,7 +84,7 @@ func TestDriftReport(t *testing.T) {
 		}
 	})
 
-	t.Run("a substrate this build wrote reports nothing", func(t *testing.T) {
+	t.Run("a bootstrap this build wrote reports nothing", func(t *testing.T) {
 		t.Parallel()
 
 		current := bootstrap.Deployed{Present: true, Stacks: []bootstrap.StackStamp{
@@ -116,8 +116,8 @@ func TestHealableStacks(t *testing.T) {
 	if len(healableStacks(deployed, nil)) != 0 {
 		t.Error("a stack no required feature names was offered to heal")
 	}
-	if written := substrateWriter(deployed); written != "1.4.0" {
-		t.Errorf("substrate writer = %q, want the core's", written)
+	if written := bootstrapWriter(deployed); written != "1.4.0" {
+		t.Errorf("bootstrap writer = %q, want the core's", written)
 	}
 }
 
@@ -126,7 +126,7 @@ func TestSchemaAheadRefusal(t *testing.T) {
 
 	msg := schemaAheadRefusal(bootstrap.RequiredSchema+1, false).Error()
 	if !strings.Contains(msg, "ocel bootstrap --destroy") {
-		t.Errorf("refusal = %q, want it to name what drops the substrate", msg)
+		t.Errorf("refusal = %q, want it to name what drops the bootstrap", msg)
 	}
 	if strings.Contains(msg, "--force") {
 		t.Errorf("refusal = %q, want no escape hatch offered", msg)

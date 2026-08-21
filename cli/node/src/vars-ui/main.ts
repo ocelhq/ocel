@@ -41,7 +41,7 @@ interface AppResolution {
 
 interface State {
   slug: string;
-  substrate: string;
+  bootstrap: string;
   environments: string[];
   matrix: {
     columns: string[];
@@ -263,7 +263,7 @@ function renderMasthead(current: State): HTMLElement {
   const masthead = element("header", "masthead");
   const slug = element("h1", "slug");
   slug.append(current.slug, " ");
-  slug.append(element("span", "substrate", `· ${current.substrate}`));
+  slug.append(element("span", "bootstrap", `· ${current.bootstrap}`));
   masthead.append(slug);
 
   const owed = owedCount(current);

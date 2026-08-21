@@ -107,7 +107,7 @@ func TestAssembleApp(t *testing.T) {
 		}
 	})
 
-	t.Run("a substrate offering no credentials omits the signing bindings", func(t *testing.T) {
+	t.Run("a bootstrap offering no credentials omits the signing bindings", func(t *testing.T) {
 		t.Parallel()
 
 		src := writeAppArtifacts(t)
@@ -116,7 +116,7 @@ func TestAssembleApp(t *testing.T) {
 
 		w, err := assembleFor(t)(src, r)
 		if err != nil {
-			t.Fatalf("a substrate predating edge credentials must not fail the deploy: %v", err)
+			t.Fatalf("a bootstrap predating edge credentials must not fail the deploy: %v", err)
 		}
 		if w.Secrets != nil {
 			t.Errorf("Secrets = %v, want none", w.Secrets)

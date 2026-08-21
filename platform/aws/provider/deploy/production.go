@@ -154,7 +154,7 @@ func pointableRecords(target edge.DNSTarget, state edge.StackState, hosts []stri
 		}
 		if strings.HasPrefix(host, "*.") {
 			return nil, fmt.Errorf(
-				"nothing to point %s at, and no command binds a wildcard to it: serve this project's previews on the substrate-wide wildcard with `ocel domain use '%s' --preview` and drop domains.preview from its config, or deploy onto an edge that fronts the wildcard the config declares",
+				"nothing to point %s at, and no command binds a wildcard to it: serve this project's previews on the bootstrap-wide wildcard with `ocel domain use '%s' --preview` and drop domains.preview from its config, or deploy onto an edge that fronts the wildcard the config declares",
 				host, host,
 			)
 		}

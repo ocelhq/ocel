@@ -34,9 +34,9 @@ var domainOpts domainOptions
 var domainCmd = &cobra.Command{
 	Use:   "domain",
 	Short: "Manage this project's production hostnames, and the domain every project's previews are served on",
-	Long: "Manage this project's production hostnames, and the substrate-wide domain every project's previews are served on.\n\n" +
+	Long: "Manage this project's production hostnames, and the bootstrap-wide domain every project's previews are served on.\n\n" +
 		"`add` and `rm` are project-scoped and read domains.production, which is the declaration: " +
-		"no command edits it. `use`, `ls` and `release` take --preview and act on the substrate, where " +
+		"no command edits it. `use`, `ls` and `release` take --preview and act on the bootstrap, where " +
 		"one shared entry worker on one wildcard serves every project bootstrapped into the preview " +
 		"class, at \"<project>--<preview>[--<app>].<domain>\". A project that declares its own " +
 		"domains.preview keeps it and ignores this one.",

@@ -154,7 +154,7 @@ func TestCheck(t *testing.T) {
 		}
 	})
 
-	t.Run("a preview refusal names the preview substrate", func(t *testing.T) {
+	t.Run("a preview refusal names the preview bootstrap", func(t *testing.T) {
 		t.Parallel()
 		g := prefetched(t, newFakeValues(), envgate.Scope{Preview: true})
 		declare(t, g, def("STRIPE_API_KEY", resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN))

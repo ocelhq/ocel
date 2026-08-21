@@ -33,10 +33,10 @@ directory path: `previewRef` (`lib.mjs`) hashes `NEXT_TEST_DIR || appDir` into
   app's own directory.
 - Set `GITHUB_RUN_ID` to a short greppable token so stranded projects are
   attributable. The run id is truncated to 46 chars inside the slug.
-- Previews serve on the substrate's preview domain, which the shared entry
+- Previews serve on the bootstrap's preview domain, which the shared entry
   worker holds — no project claims it. Runs are separated by slug, so a local
   run and a CI run no longer collide over the wildcard, though they still share
-  the substrate's store, cache bucket and Cloudflare limits.
+  the bootstrap's store, cache bucket and Cloudflare limits.
 - **The harness deletes the temp app dir when a suite finishes**
   (`rmSync` in `test/lib/next-modes/base.ts`, guarded only by
   `NEXT_TEST_SKIP_CLEANUP`). There is nothing left to redeploy in place.
@@ -59,7 +59,7 @@ Hard-stop on any of these; a bad preflight makes the result meaningless.
    `aws sts get-caller-identity` and the `CLOUDFLARE_ACCOUNT_ID` in `.env` — and
    match them against the `E2E_EXPECTED_*` secrets. This provisions real
    infrastructure into whichever account the credentials resolve to.
-3. **Proxied wildcard DNS.** The substrate's preview wildcard must exist as a
+3. **Proxied wildcard DNS.** The bootstrap's preview wildcard must exist as a
    Cloudflare record on that zone and be **orange-clouded**. Deploys only verify
    it; a missing or grey record fails every deploy. Check with
    `ocel domain ls --preview`; `unimplemented: 404` there is a stale sidecar

@@ -123,7 +123,7 @@ func TestReconcilePreviewWildcard(t *testing.T) {
 			t.Errorf("function association = %q, want the preview resolver", arn)
 		}
 		if origin := aws.ToString(held.config.Origins.Items[0].DomainName); origin != assetOriginDomain(fakeAssetBucket, fakeRegion) {
-			t.Errorf("origin = %q, want the preview substrate's asset bucket", origin)
+			t.Errorf("origin = %q, want the preview bootstrap's asset bucket", origin)
 		}
 	})
 
@@ -236,7 +236,7 @@ func TestReconcilePreviewWildcard(t *testing.T) {
 		}
 	})
 
-	t.Run("without a base domain, a certificate or a substrate there is nothing to raise", func(t *testing.T) {
+	t.Run("without a base domain, a certificate or a bootstrap there is nothing to raise", func(t *testing.T) {
 		ctx := context.Background()
 
 		spec := previewWildcardSpec()
@@ -254,7 +254,7 @@ func TestReconcilePreviewWildcard(t *testing.T) {
 		w := newWorld()
 		w.cfn.absent = true
 		if _, err := previewBootstrapped(t, w).ReconcilePreviewWildcard(ctx, previewWildcardSpec()); err == nil {
-			t.Error("ReconcilePreviewWildcard without a preview substrate err = nil, want an error")
+			t.Error("ReconcilePreviewWildcard without a preview bootstrap err = nil, want an error")
 		}
 
 		if _, err := newWorld().edge().ReconcilePreviewWildcard(ctx, previewWildcardSpec()); err == nil {
@@ -273,7 +273,7 @@ func TestTheWildcardIsAFrontTheTagInvalidatorReaches(t *testing.T) {
 		raised := w.front.named(previewWildcardName(previewBase))
 		held := w.invalidationTargets(edgeledger.Scope(edge.ClassPreview, ""))
 		if !slices.Equal(held, []string{raised.id}) {
-			t.Errorf("substrate invalidation targets = %v, want the wildcard every preview is served from (%q)", held, raised.id)
+			t.Errorf("bootstrap invalidation targets = %v, want the wildcard every preview is served from (%q)", held, raised.id)
 		}
 		if perProject := w.invalidationTargets(edgeledger.Scope(edge.ClassPreview, conformanceSlug)); perProject != nil {
 			t.Errorf("project invalidation targets = %v, want a shared front named once rather than per project", perProject)
@@ -291,7 +291,7 @@ func TestTheWildcardIsAFrontTheTagInvalidatorReaches(t *testing.T) {
 			t.Fatalf("DestroyPreviewWildcard: %v", err)
 		}
 		if held := w.invalidationTargets(edgeledger.Scope(edge.ClassPreview, "")); len(held) != 0 {
-			t.Errorf("substrate invalidation targets = %v, want a torn-down wildcard invalidated by nobody", held)
+			t.Errorf("bootstrap invalidation targets = %v, want a torn-down wildcard invalidated by nobody", held)
 		}
 	})
 }
@@ -374,7 +374,7 @@ func TestPreviewPromoteWritesTheHostnameKey(t *testing.T) {
 			t.Errorf("route = %+v, want the release's entry function URL", published)
 		}
 		if published.Assets != assetOriginDomain(fakeAssetBucket, fakeRegion) || published.AssetPrefix != "/"+fakeAssetPrefix {
-			t.Errorf("route = %+v, want the preview substrate's assets", published)
+			t.Errorf("route = %+v, want the preview bootstrap's assets", published)
 		}
 		if published.Secret != fakeSecret {
 			t.Errorf("route = %+v, want the origin secret the entry function demands", published)

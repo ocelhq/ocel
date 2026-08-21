@@ -59,7 +59,7 @@ func (s *Server) runUsePreviewWildcard(ctx context.Context, req *contractv1.UseP
 	}
 	if recorded.BaseDomain != "" && recorded.BaseDomain != baseDomain {
 		return fmt.Errorf(
-			"this preview substrate already serves previews on %q: release it with `ocel domain release --preview` first, then use %q — every project on %q loses its preview hostnames the moment the substrate changes domain, so that is two deliberate commands",
+			"this preview bootstrap already serves previews on %q: release it with `ocel domain release --preview` first, then use %q — every project on %q loses its preview hostnames the moment the bootstrap changes domain, so that is two deliberate commands",
 			recorded.BaseDomain, baseDomain, recorded.BaseDomain,
 		)
 	}
@@ -219,7 +219,7 @@ func (s *Server) livePreviewStacks(awscfg aws.Config) func(context.Context, stri
 	}
 }
 
-func refusePreviewReleaseWhileServed(ctx context.Context, ssmClient substrateSSMAPI, baseDomain string, live func(context.Context, string) (int, error)) error {
+func refusePreviewReleaseWhileServed(ctx context.Context, ssmClient bootstrapSSMAPI, baseDomain string, live func(context.Context, string) (int, error)) error {
 	slugs, err := bootstrap.StackSlugsFor(ctx, ssmClient, bootstrap.ClassPreview)
 	if err != nil {
 		return err
@@ -267,7 +267,7 @@ func (s *Server) runRemovePreviewWildcard(ctx context.Context, req *contractv1.P
 		return err
 	}
 	if recorded.BaseDomain == "" {
-		progress("This preview substrate has no global preview domain")
+		progress("This preview bootstrap has no global preview domain")
 		return nil
 	}
 
